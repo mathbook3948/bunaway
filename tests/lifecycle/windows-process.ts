@@ -786,6 +786,53 @@ try {
       assert.equal((await probe.stop()).failed, false);
     });
   }
+  for (const command of ["probe.add", "probe.echo"] as const) {
+    await test(`compact large numbers are received and ${command} keeps the runtime alive`, async () => {
+      const probe = launch();
+      await probe.ready();
+      const request = {
+        ...base,
+        kind: "web",
+        context: "probe-view",
+        payload: {
+          kind: "invoke",
+          protocol: PROTOCOL_VERSION,
+          id: "compact",
+          command,
+          payload: "NUMBERS",
+        },
+      };
+      const text = JSON.stringify(request).replace(
+        '"NUMBERS"',
+        `[${Array<string>(50000).fill("1e20").join(",")}]`,
+      );
+      assert.ok(Buffer.byteLength(text) < MAX_MESSAGE_BYTES);
+      assert.ok(Buffer.byteLength(JSON.stringify(JSON.parse(text))) > MAX_MESSAGE_BYTES);
+      // More failures than queue slots must not consume output capacity.
+      const attempts = command === "probe.echo" ? 129 : 1;
+      for (let i = 0; i < attempts; i++) {
+        const id = `compact-${i}`;
+        probe.child.stdin.write(`${text.replace('"id":"compact"', `"id":"${id}"`)}\n`);
+        const response = await probe.response(id);
+        if (command === "probe.add") {
+          assert.equal(response.kind, "result");
+          if (response.kind !== "result") throw new Error("Expected sum");
+          assert.equal(response.payload, 4);
+        } else {
+          assert.equal(response.kind, "error");
+          if (response.kind !== "error") throw new Error("Expected oversized response error");
+          assert.equal(response.error.code, "INTERNAL");
+        }
+      }
+      const followup = await probe.request("followup", "probe.add");
+      assert.equal(followup.kind, "result");
+      assert.equal(
+        probe.frames.some((frame) => frame.kind === "host-error" || frame.kind === "fatal"),
+        false,
+      );
+      assert.equal((await probe.stop()).failed, false);
+    });
+  }
   await test("native input accepts exactly 1 MiB", async () => {
     const probe = launch();
     await probe.ready();

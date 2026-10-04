@@ -4,6 +4,7 @@ import {
   parseProcessFrame,
   PROCESS_IPC_VERSION,
   PROTOCOL_VERSION,
+  ProtocolError,
   serializeProcessFrame,
   type JsonValue,
   type Hello,
@@ -32,8 +33,9 @@ const completed = new Set<string>();
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function send(frame: ProcessFrame): Promise<void> {
-  if (++queued > 128) throw new Error("Output queue full.");
   const line = `${serializeProcessFrame(frame)}\n`;
+  if (queued >= 128) throw new Error("Output queue full.");
+  queued++;
   writer = writer.then(
     () =>
       new Promise<void>((resolve, reject) => {
@@ -59,14 +61,27 @@ function web(message: Message): Promise<void> {
 
 function result(id: string, payload: JsonValue) {
   if (completed.has(id)) throw new Error("Duplicate request ID.");
+  let pending: Promise<void>;
+  try {
+    pending = web({ kind: "result", protocol: PROTOCOL_VERSION, id, payload });
+  } catch (cause) {
+    if (!(cause instanceof ProtocolError)) throw cause;
+    pending = web({
+      kind: "error",
+      protocol: PROTOCOL_VERSION,
+      id,
+      error: { code: "INTERNAL", message: "Invalid probe response." },
+    });
+  }
   completed.add(id);
-  return web({ kind: "result", protocol: PROTOCOL_VERSION, id, payload });
+  return pending;
 }
 
 function error(id: string, code: "INTERNAL" | "INVALID_ARGUMENT" | "CANCELLED", message: string) {
   if (completed.has(id)) throw new Error("Duplicate request ID.");
+  const pending = web({ kind: "error", protocol: PROTOCOL_VERSION, id, error: { code, message } });
   completed.add(id);
-  return web({ kind: "error", protocol: PROTOCOL_VERSION, id, error: { code, message } });
+  return pending;
 }
 
 async function dispatch(frame: ProcessFrame) {

@@ -132,7 +132,7 @@ function snapshotJson(
   value: unknown,
   ancestors: Set<object>,
   depth: number,
-  budget: { remaining: number },
+  budget: { remaining: number; mode: "value" | "serialized" },
 ): JsonValue {
   if (depth > MAX_JSON_DEPTH) invalid();
   if (value === null || typeof value === "boolean" || typeof value === "string") {
@@ -144,7 +144,9 @@ function snapshotJson(
   }
   if (typeof value === "number") {
     if (!Number.isFinite(value)) invalid();
-    budget.remaining -= JSON.stringify(value).length;
+    // Value validation charges the shortest possible number token to bound work
+    // without imposing a reserialized byte limit on already received JSON.
+    budget.remaining -= budget.mode === "serialized" ? JSON.stringify(value).length : 1;
     if (budget.remaining < 0) invalid();
     return value;
   }
@@ -247,16 +249,24 @@ function matches(schema: Schema, value: JsonValue): boolean {
   }
 }
 
-export function validate<S extends Schema>(schema: S, value: unknown): Infer<S> {
+function checkedSnapshot<S extends Schema>(
+  schema: S,
+  value: unknown,
+  mode: "value" | "serialized",
+): Infer<S> {
   // Inspect descriptors once, then validate/serialize only the detached JSON
   // snapshot. Proxy traps must not leak diagnostics or alter the second read.
   try {
-    const snapshot = snapshotJson(value, new Set(), 0, { remaining: MAX_MESSAGE_BYTES });
+    const snapshot = snapshotJson(value, new Set(), 0, { remaining: MAX_MESSAGE_BYTES, mode });
     if (!matches(schema, snapshot)) invalid();
     return snapshot as Infer<S>;
   } catch {
     invalid();
   }
+}
+
+export function validate<S extends Schema>(schema: S, value: unknown): Infer<S> {
+  return checkedSnapshot(schema, value, "value");
 }
 
 export function parse<S extends Schema>(schema: S, text: string): Infer<S> {
@@ -271,7 +281,7 @@ export function parse<S extends Schema>(schema: S, text: string): Infer<S> {
 }
 
 export function serialize<S extends Schema>(schema: S, value: unknown): string {
-  const snapshot = validate(schema, value);
+  const snapshot = checkedSnapshot(schema, value, "serialized");
   const text = JSON.stringify(snapshot);
   if (utf8Size(text) > MAX_MESSAGE_BYTES) invalid();
   return text;

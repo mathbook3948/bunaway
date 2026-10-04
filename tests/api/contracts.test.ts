@@ -171,6 +171,21 @@ function context(host: CommandContext["host"], signal: CancellationSignal): Comm
   };
 }
 
+test("command value validation accepts decoded numbers without applying a send byte limit", async () => {
+  const signal = new AbortController().signal;
+  const ctx = context(
+    bindHostAPI(contextId, signal, async () => ({ kind: "result", payload: null })),
+    signal,
+  );
+  const definition = command({
+    input: { type: "array", items: {} },
+    output: { type: "integer" },
+    handle: (input) => input.length,
+  });
+  expect(await definition.run(Array<number>(50000).fill(1e20), ctx)).toBe(50000);
+  await expect(definition.run([Infinity], ctx)).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
+});
+
 test("empty object command schemas retain object and array shapes at runtime", async () => {
   const signal = new AbortController().signal;
   const ctx = context(
