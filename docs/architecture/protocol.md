@@ -6,8 +6,9 @@
 
 호스트↔Bun은 번들된 자식 프로세스와 IPC로 연결한다. 아래 Web 메시지는 별도 내부
 envelope의 payload로 운반하며 호스트 발급 컨텍스트·수명주기 제어는 Web JSON에
-추가하지 않는다. 프로세스 IPC envelope와 프레이밍은 아직 미구현이며
-[B 단계 계획](./runtime-feasibility.md)에서 정의·검증한다.
+추가하지 않는다. `processSchema`와 `parseProcessFrame`·`serializeProcessFrame`,
+`runtime-bun`의 `readJsonLines`를 구현하고 Windows B 단계에서 실제 파이프로 검증했다.
+[실행 결과](./windows-probe-results.md)를 참고한다.
 
 ## 하나의 스키마 정의
 
@@ -16,7 +17,9 @@ envelope의 payload로 운반하며 호스트 발급 컨텍스트·수명주기 
 `native/host-api/generated/`에 내보낸다. `mise run test`가 생성 파일의 일치를 검사한다.
 호스트 전용 bootstrap과 Host API 응답도 같은 소스에서 생성하며 WebView 메시지와 분리한다.
 현재 검증기는 실제 사용한 키워드만 지원한다. 새 키워드는 검증기·테스트와 함께 추가한다.
-네이티브 검증기는 아직 없으며 생성 파일만으로 네이티브 경계가 보호되는 것은 아니다.
+Windows 실험 호스트는 생성된 process 스키마와 같은 키워드를 해석하고 런타임 세대,
+방향·컨텍스트·요청 ID·이벤트 구독과 sequence를 별도로 검사한다.
+제품용 권한 집행과 WebView 신뢰 경계는 C 단계에서 구현한다.
 
 JSON 전송은 UTF-8 최대 1 MiB, 루트 깊이 0에서 최대 깊이 64다. 모든 payload도 같은
 제한을 받는다. 유한한 숫자, 문자열, boolean, null, 밀집 배열과 일반 객체만 허용한다.
@@ -34,8 +37,22 @@ JSON Schema 외에도 바이트·깊이 제한과 정책 view ID 중복 금지�
 이벤트 sequence는 별도로 정수 범위를 제한한다. `-0`은 송신 시 `0`으로 정규화된다.
 객체 안의 중복 키는 JSON.parse처럼 마지막 값을 사용한다. 네이티브 파서도 모든 깊이에서
 같은 숫자·중복 키 규칙을 적용한 뒤 정책·스키마를 검사해야 한다. 첫 값만 읽는 권한 검사나
-JSON 원문에서 필드를 부분 추출하는 구현을 허용하지 않는다. 아직 네이티브 파서가 없으므로
-이 규칙의 실제 교차 언어 검증은 후속 conformance 테스트에서 수행한다.
+JSON 원문에서 필드를 부분 추출하는 구현을 허용하지 않는다. Windows 실험은 C++ 파서의
+숫자를 binary64로 정규화하고 중첩 객체의 중복 키, 큰 숫자와 음수 0을 실제 IPC로 검증한다.
+
+## 호스트 전용 프로세스 envelope
+
+`process.schema.json`은 별도 `ipc: { major: 1, minor: 0 }` 버전과 문자열
+`runtime: { id, generation }`을 요구한다. `web`은 호스트 발급 `context`와 기존
+Web `payload`를 운반한다. `boot`, `hello`, `ready`, `revoke`, `shutdown`, `stopping`,
+`fatal`은 부트·협상·수명주기를 처리한다. `host-request`·`host-response`에는
+`context`, 문자열 `requestId`와 요청 operation을 넣는다. Host API 호출 실행은 C 단계다.
+
+Windows 실험은 `ready` 전 요청, 중복 ID와 다른 runtime 세대·방향을 거부한다.
+stdout은 NDJSON 전용이며 stderr는 별도로 소비하고 실험 로그 전달량은 64 KiB로 제한한다.
+프레임 크기는 개행 제외 1 MiB, 깊이는 envelope 전체 루트 기준 64다.
+송신 큐와 미완료 요청은 각각 128개, 런타임당 요청 ID 기록은 1024개로 제한한다.
+종료 제어는 대기 송신 큐를 비우고 우선 전달하며 남은 요청은 실패 또는 취소로 끝낸다.
 
 ## 메시지와 버전
 

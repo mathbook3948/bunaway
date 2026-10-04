@@ -8,8 +8,9 @@ Bun을 찾지 않는다. DLL, 동일 PID, 전용 Bun VM 스레드는 통과 조�
 
 ## 현재 상태와 중단한 실험
 
-개발·검사 도구는 mise의 Bun 1.4.2다. 배포할 Bun 실행 파일의 고정과 새 B 단계의
-호스트·IPC는 아직 미구현·미검증이다.
+개발·검사 도구와 번들 실행 파일은 Bun 1.4.2다. Windows B 단계의 독립 패키지,
+C++ 호스트·IPC·프로세스 정리 검증을 완료했다.
+[실행 결과와 재현 명령](./windows-probe-results.md)에 증거를 기록했다.
 
 이전 DLL 실험에서는 공식 Bun 1.4.0 태그의 전체 SHA
 `34cbb9a40b4bd1bd767d134a7065e66c2432a676`을 확인하고 소스를 내려받았다.
@@ -20,10 +21,10 @@ Bun을 찾지 않는다. DLL, 동일 PID, 전용 Bun VM 스레드는 통과 조�
 
 ## 배포물과 호스트
 
-공식 Windows x64 Bun 1.4.2 실행 파일을 첫 후보로 삼되 실제 배포물 확인 전에는 고정 완료로
-표시하지 않는다. `runtime/build-manifests/`에 버전, 소스 revision, 공식 배포 URL,
+공식 Windows x64 baseline Bun 1.4.2 실행 파일을 고정했다.
+`runtime/build-manifests/windows-x64.json`에 버전, 소스 revision, 공식 배포 URL,
 아카이브·실행 파일의 SHA-256, OS·CPU·baseline, 라이선스 고지를 기록한다. 받은 파일과
-패키징 결과의 해시를 검사한다. 공식 배포물 사용을 기본으로 하며 소스 패치는 필요해진
+패키징 결과의 해시를 검사한다. 현재 소스 패치는 없다. 추가 패치는 필요해진
 경우에만 원인·소스 SHA·패치 해시·빌드 도구와 함께 관리한다.
 
 최소 패키지는 C/C++ 콘솔 호스트, `runtime/bun.exe`, 실험용 백엔드 스크립트와 manifest다.
@@ -45,7 +46,8 @@ stdout과 stderr를 동시에 소비하고 읽기 단위와 프레임 경계를 
 Host API 요청·응답, 컨텍스트 폐기와 종료 제어를 구분한다. 기존 `protocol`의 Web JSON은
 envelope payload로 운반한다. 호스트가 발급한 런타임 세대·컨텍스트·Host API 요청 ID는
 내부 envelope에서만 전달하고 큰 정수 ID는 문자열로 표현한다. WebView의 자기 신고값을
-권한 컨텍스트로 사용하지 않는다. envelope 스키마와 전송기는 B 단계에서 구현·검증한다.
+권한 컨텍스트로 사용하지 않는다. envelope 스키마와 전송기는 B 단계에서 구현·검증했다.
+실험에서는 `probe` 런타임과 `probe-view` 컨텍스트를 고정하고 Host API 호출은 스키마만 정의했다.
 
 코어·SDK 없이 작은 실험용 백엔드로 요청 ID의 응답 매칭, 구독·이벤트·해제를 확인한다.
 `ready` 전에는 일반 요청을 보내지 않고 요청은 응답 또는 오류로 한 번만 완료한다.

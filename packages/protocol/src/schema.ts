@@ -233,7 +233,7 @@ export const bootstrapSchema = {
   additionalProperties: false,
 } as const;
 
-// Correlation and authorization context travel as C ABI arguments, not JSON.
+// Correlation and authorization context travel in the host-only process envelope.
 export const hostResponseSchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   anyOf: [
@@ -249,5 +249,67 @@ export const hostResponseSchema = {
       required: ["kind", "error"],
       additionalProperties: false,
     },
+  ],
+} as const;
+
+const processBase = {
+  ipc: {
+    type: "object",
+    properties: { major: { const: 1 }, minor: { const: 0 } },
+    required: ["major", "minor"],
+    additionalProperties: false,
+  },
+  runtime: {
+    type: "object",
+    properties: { id: identifier, generation: identifier },
+    required: ["id", "generation"],
+    additionalProperties: false,
+  },
+} as const;
+
+function processVariant<const K extends string, const P extends Record<string, object>>(
+  kind: K,
+  properties: P,
+) {
+  return {
+    type: "object",
+    properties: { ...processBase, kind: { const: kind }, ...properties },
+    required: ["ipc", "runtime", "kind", ...Object.keys(properties)] as (
+      | "ipc"
+      | "runtime"
+      | "kind"
+      | keyof P
+    )[],
+    additionalProperties: false,
+  } as const;
+}
+
+// This envelope is carried only by host-owned pipes, never a WebView bridge.
+export const processSchema = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  anyOf: [
+    processVariant("boot", { payload: bootstrapSchema }),
+    processVariant("hello", { payload: messageSchema.anyOf[0] }),
+    processVariant("ready", {
+      pid: { type: "integer", minimum: 1, maximum: 4294967295 },
+      bunVersion: identifier,
+      revision: identifier,
+    } as const),
+    processVariant("web", { context: identifier, payload: messageSchema }),
+    processVariant("host-request", {
+      context: identifier,
+      requestId: identifier,
+      operation: identifier,
+      payload: {},
+    }),
+    processVariant("host-response", {
+      context: identifier,
+      requestId: identifier,
+      payload: hostResponseSchema,
+    }),
+    processVariant("revoke", { context: identifier }),
+    processVariant("shutdown", {}),
+    processVariant("stopping", {}),
+    processVariant("fatal", { error: errorSchema }),
   ],
 } as const;

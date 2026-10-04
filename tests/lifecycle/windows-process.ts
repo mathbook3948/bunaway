@@ -1,0 +1,535 @@
+// Standalone integration runner: mise run probe:windows builds its native package first.
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { cp, mkdir, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
+import { release } from "node:os";
+import {
+  type JsonValue,
+  type Message,
+  type ProcessFrame,
+  MAX_MESSAGE_BYTES,
+  PROCESS_IPC_VERSION,
+  PROTOCOL_VERSION,
+  serializeProcessFrame,
+} from "../../packages/protocol/src/index.ts";
+import { readJsonLines } from "../../packages/runtime-bun/src/process-ipc.ts";
+
+const original = resolve(process.argv[process.argv.indexOf("--package") + 1] ?? "");
+assert.ok(process.argv.includes("--package"), "--package is required");
+const packagePath = join(dirname(original), "B 단계 한글 package");
+await cp(original, packagePath, { recursive: true, force: true });
+const cwd = join(dirname(original), "hostile-cwd");
+await mkdir(cwd, { recursive: true });
+await writeFile(join(cwd, ".env"), "BUNAWAY_HOSTILE=from-dotenv\n");
+await writeFile(join(cwd, "bunfig.toml"), 'preload = ["./hostile.ts"]\n');
+await writeFile(join(cwd, "hostile.ts"), 'throw new Error("hostile preload");');
+const host = join(packagePath, "bunaway-probe.exe");
+const runtime = { id: "probe", generation: "1" };
+const base = { ipc: PROCESS_IPC_VERSION, runtime };
+type Observation = { kind: string; payload?: Message; [key: string]: unknown };
+const live = new Set<ReturnType<typeof launch>>();
+const results: { name: string; durationMs: number }[] = [];
+const executions: (() => {
+  mode: string;
+  hostPid: number;
+  frames: Observation[];
+  stderrBytes: number;
+  descendantPid: number | null;
+})[] = [];
+
+function launch(mode = "normal") {
+  const child = Bun.spawn([host, mode], {
+    cwd,
+    env: {
+      PATH: `${process.env.SystemRoot}\\System32`,
+      SystemRoot: process.env.SystemRoot,
+      BUN_OPTIONS: "--preload ./hostile.ts",
+      BUNAWAY_HOSTILE: "from-parent",
+    },
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const frames: Observation[] = [];
+  let logs = "";
+  let done = false;
+  let readError: unknown;
+  const output = (async () => {
+    try {
+      for await (const line of readJsonLines(child.stdout))
+        frames.push(JSON.parse(line) as Observation);
+    } catch (cause) {
+      readError = cause;
+    } finally {
+      done = true;
+    }
+  })();
+  const stderr = (async () => {
+    for await (const bytes of child.stderr) logs += new TextDecoder().decode(bytes);
+  })();
+  async function wait(match: (frame: Observation) => boolean, timeout = 8000) {
+    const deadline = performance.now() + timeout;
+    while (true) {
+      const found = frames.find(match);
+      if (found) return found;
+      if (done || performance.now() > deadline)
+        throw new Error(
+          `Missing frame; ${JSON.stringify(frames)}; stderr=${logs.slice(0, 1000)}; read=${readError}`,
+        );
+      await Bun.sleep(5);
+    }
+  }
+  const api = {
+    child,
+    frames,
+    wait,
+    trace: () => ({
+      mode,
+      hostPid: child.pid,
+      frames,
+      stderrBytes: Buffer.byteLength(logs),
+      descendantPid: Number(/descendant=(\d+)/.exec(logs)?.[1]) || null,
+    }),
+    logs: () => logs,
+    async ready() {
+      const started = await wait((frame) => frame.kind === "host-started");
+      const ready = await wait((frame) => frame.kind === "ready");
+      assert.equal(started.hostPid, child.pid);
+      assert.equal(ready.pid, started.childPid);
+      assert.notEqual(started.hostPid, started.childPid);
+      assert.equal(resolve(started.bunPath as string), join(packagePath, "runtime/bun.exe"));
+      return started.childPid as number;
+    },
+    send(frame: ProcessFrame) {
+      child.stdin.write(`${serializeProcessFrame(frame)}\n`);
+    },
+    request(id: string, command: string, payload: JsonValue = null) {
+      api.send({
+        ...base,
+        kind: "web",
+        context: "probe-view",
+        payload: { kind: "invoke", protocol: PROTOCOL_VERSION, id, command, payload },
+      });
+      return api.response(id);
+    },
+    async response(id: string) {
+      const found = await wait(
+        (frame) =>
+          frame.kind === "web" &&
+          (frame.payload?.kind === "result" || frame.payload?.kind === "error") &&
+          frame.payload.id === id,
+      );
+      return found.payload as Extract<Message, { kind: "result" | "error" }>;
+    },
+    async finish(expectedExit = 0) {
+      const stopped = await wait((frame) => frame.kind === "host-stopped", 12000);
+      assert.equal(await child.exited, expectedExit);
+      await output;
+      await stderr;
+      assert.equal(stopped.activeProcesses, 0);
+      live.delete(api);
+      return stopped;
+    },
+    async stop() {
+      api.send({ ...base, kind: "shutdown" });
+      return api.finish();
+    },
+  };
+  live.add(api);
+  executions.push(api.trace);
+  return api;
+}
+
+async function watch(pids: number[]) {
+  const watcher = Bun.spawn([host, "--watch", ...pids.map(String)], {
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const reader = watcher.stdout.getReader();
+  const first = await reader.read();
+  reader.releaseLock();
+  assert.equal(new TextDecoder().decode(first.value), "watch-ready\n");
+  return async () => {
+    assert.equal(await watcher.exited, 0, "Captured OS process handles must signal exit");
+    assert.equal(await new Response(watcher.stderr).text(), "");
+  };
+}
+
+async function test(name: string, body: () => Promise<void>) {
+  const start = performance.now();
+  try {
+    await body();
+  } catch (cause) {
+    throw new Error(`${name} failed`, { cause });
+  }
+  results.push({ name, durationMs: Math.round(performance.now() - start) });
+  console.log(`PASS ${name}`);
+}
+
+try {
+  await test("bundled Bun, distinct OS PID, Korean/space path, isolated environment", async () => {
+    const probe = launch();
+    const pid = await probe.ready();
+    const exited = await watch([pid]);
+    const response = await probe.request("environment", "probe.environment");
+    assert.equal(response.kind, "result");
+    if (response.kind !== "result") throw new Error("Expected environment");
+    const env = response.payload as Record<string, JsonValue>;
+    assert.equal(env.cwd, join(packagePath, "assets"));
+    assert.equal(env.injected, null);
+    assert.equal(env.bunOptions, null);
+    assert.deepEqual(env.args, ["normal"]);
+    assert.equal((await probe.stop()).failed, false);
+    await exited();
+  });
+  await test("arithmetic, Promise, timer and out-of-order request correlation", async () => {
+    const probe = launch();
+    await probe.ready();
+    const timer = probe.request("timer", "probe.timer");
+    assert.deepEqual(await probe.request("add", "probe.add"), {
+      kind: "result",
+      protocol: PROTOCOL_VERSION,
+      id: "add",
+      payload: 4,
+    });
+    assert.equal(
+      ((await probe.request("promise", "probe.promise")) as Extract<Message, { kind: "result" }>)
+        .payload,
+      42,
+    );
+    assert.equal(((await timer) as Extract<Message, { kind: "result" }>).payload, "timer-done");
+    await probe.stop();
+  });
+  await test("subscribe, events, unlisten, late discard and context revocation", async () => {
+    const probe = launch();
+    await probe.ready();
+    probe.send({
+      ...base,
+      kind: "web",
+      context: "probe-view",
+      payload: { kind: "listen", protocol: PROTOCOL_VERSION, id: "listen", event: "probe.changed" },
+    });
+    await probe.response("listen");
+    await probe.request("emit", "probe.emit", { text: "한글 😀" });
+    const event = await probe.wait((frame) => frame.payload?.kind === "event");
+    assert.equal((event.payload as Extract<Message, { kind: "event" }>).sequence, 1);
+    assert.deepEqual((event.payload as Extract<Message, { kind: "event" }>).payload, {
+      text: "한글 😀",
+    });
+    probe.send({
+      ...base,
+      kind: "web",
+      context: "probe-view",
+      payload: {
+        kind: "unlisten",
+        protocol: PROTOCOL_VERSION,
+        id: "unlisten",
+        subscriptionId: "probe-sub",
+      },
+    });
+    await probe.response("unlisten");
+    await probe.request("late", "probe.late-event");
+    await probe.wait(
+      (frame) => frame.kind === "host-discarded" && frame.reason === "inactive-subscription",
+    );
+    probe.send({
+      ...base,
+      kind: "web",
+      context: "probe-view",
+      payload: {
+        kind: "listen",
+        protocol: PROTOCOL_VERSION,
+        id: "listen2",
+        event: "probe.changed",
+      },
+    });
+    await probe.response("listen2");
+    probe.send({ ...base, kind: "revoke", context: "probe-view" });
+    await probe.request("revoked-late", "probe.late-event");
+    await probe.stop();
+    assert.equal(probe.frames.filter((frame) => frame.payload?.kind === "event").length, 1);
+    assert.equal(probe.frames.filter((frame) => frame.kind === "host-discarded").length, 2);
+  });
+  await test("throw and rejected Promise deliver sanitized errors", async () => {
+    const probe = launch();
+    await probe.ready();
+    for (const operation of ["throw", "reject"]) {
+      assert.deepEqual(await probe.request(operation, `probe.${operation}`), {
+        kind: "error",
+        protocol: PROTOCOL_VERSION,
+        id: operation,
+        error: { code: "INTERNAL", message: "Probe operation failed." },
+      });
+    }
+    await probe.stop();
+    assert.ok(!JSON.stringify(probe.frames).includes("private-details"));
+  });
+  await test("stderr flood drains without blocking IPC", async () => {
+    const probe = launch();
+    await probe.ready();
+    assert.equal(
+      ((await probe.request("logs", "probe.log-flood")) as Extract<Message, { kind: "result" }>)
+        .payload,
+      "logs-drained",
+    );
+    await probe.stop();
+    assert.equal(Buffer.byteLength(probe.logs()), 65536);
+  });
+  await test("split/coalesced UTF-8 frames and IDs beyond JS integer precision", async () => {
+    const probe = launch();
+    await probe.ready();
+    const first = serializeProcessFrame({
+      ...base,
+      kind: "web",
+      context: "probe-view",
+      payload: {
+        kind: "invoke",
+        protocol: PROTOCOL_VERSION,
+        id: "9007199254740993",
+        command: "probe.add",
+        payload: "한글 😀",
+      },
+    });
+    const bytes = Buffer.from(`${first}\n`);
+    const at = bytes.indexOf(Buffer.from("한")) + 1;
+    probe.child.stdin.write(bytes.subarray(0, at));
+    await Bun.sleep(5);
+    probe.child.stdin.write(bytes.subarray(at));
+    const lines = ["b", "c"].map((id) =>
+      serializeProcessFrame({
+        ...base,
+        kind: "web",
+        context: "probe-view",
+        payload: {
+          kind: "invoke",
+          protocol: PROTOCOL_VERSION,
+          id,
+          command: "probe.promise",
+          payload: null,
+        },
+      }),
+    );
+    probe.child.stdin.write(`${lines.join("\n")}\n`);
+    for (const id of ["9007199254740993", "b", "c"])
+      assert.equal((await probe.response(id)).kind, "result");
+    await probe.stop();
+  });
+  await test("shutdown cancels pending timer and waits for actual exit", async () => {
+    const probe = launch();
+    const pid = await probe.ready();
+    const exited = await watch([pid]);
+    const pending = probe.request("pending-timer", "probe.hold");
+    probe.send({ ...base, kind: "shutdown" });
+    assert.equal((await pending).kind, "error");
+    await probe.finish();
+    await exited();
+  });
+  await test("backend crash fails pending request and records exit status", async () => {
+    const probe = launch();
+    const pid = await probe.ready();
+    const exited = await watch([pid]);
+    const response = await probe.request("crash", "probe.crash");
+    assert.equal(response.kind, "error");
+    const stopped = await probe.finish(1);
+    assert.equal(stopped.exitCode, 17);
+    assert.equal(stopped.failed, true);
+    await exited();
+  });
+  await test("shutdown timeout forcibly kills Bun", async () => {
+    const probe = launch("ignore-stop");
+    const pid = await probe.ready();
+    const exited = await watch([pid]);
+    probe.send({ ...base, kind: "shutdown" });
+    const stopped = await probe.finish(1);
+    assert.equal(stopped.forced, true);
+    await exited();
+  });
+  for (const termination of ["normal", "kill"] as const) {
+    await test(`${termination} host exit kills Bun and its descendant`, async () => {
+      const probe = launch("child");
+      const pid = await probe.ready();
+      const deadline = performance.now() + 5000;
+      while (!probe.logs().includes("descendant=") && performance.now() < deadline)
+        await Bun.sleep(5);
+      const descendant = Number(/descendant=(\d+)/.exec(probe.logs())?.[1]);
+      assert.ok(descendant > 0);
+      const exited = await watch([pid, descendant]);
+      if (termination === "normal") await probe.stop();
+      else {
+        probe.child.kill();
+        await probe.child.exited;
+        live.delete(probe);
+      }
+      await exited();
+    });
+  }
+  await test("controller EOF shuts down Bun", async () => {
+    const probe = launch();
+    await probe.ready();
+    probe.child.stdin.end();
+    await probe.finish();
+  });
+  for (const mode of ["json", "utf8", "large", "partial", "stdout", "stale", "version", "eof"]) {
+    await test(`backend ${mode} failure closes the runtime`, async () => {
+      const probe = launch(`fault-${mode}`);
+      const stopped = await probe.finish(1);
+      assert.equal(stopped.failed, true);
+    });
+  }
+  for (const [name, bytes] of [
+    ["malformed JSON", Buffer.from("bad\n")],
+    ["invalid UTF-8", Buffer.from([255, 10])],
+    ["oversized frame", Buffer.from(`${"x".repeat(1_048_577)}\n`)],
+    ["incomplete EOF", Buffer.from("{")],
+    ["empty frame", Buffer.from("\n")],
+    [
+      "wrong generation",
+      Buffer.from(
+        `${JSON.stringify({ ...base, runtime: { id: "probe", generation: "0" }, kind: "shutdown" })}\n`,
+      ),
+    ],
+  ] as const) {
+    await test(`controller ${name} is rejected`, async () => {
+      const probe = launch();
+      await probe.ready();
+      probe.child.stdin.write(bytes);
+      probe.child.stdin.end();
+      const stopped = await probe.finish(1);
+      assert.equal(stopped.failed, true);
+    });
+  }
+  await test("request IDs cannot be reused", async () => {
+    const probe = launch();
+    await probe.ready();
+    await probe.request("same", "probe.add");
+    probe.send({
+      ...base,
+      kind: "web",
+      context: "probe-view",
+      payload: {
+        kind: "invoke",
+        protocol: PROTOCOL_VERSION,
+        id: "same",
+        command: "probe.add",
+        payload: null,
+      },
+    });
+    assert.equal((await probe.finish(1)).failed, true);
+  });
+  await test("late duplicate response is discarded", async () => {
+    const probe = launch();
+    await probe.ready();
+    await probe.request("late-response", "probe.late-response");
+    await probe.wait(
+      (frame) => frame.kind === "host-discarded" && frame.reason === "late-response",
+    );
+    await probe.stop();
+    assert.equal(probe.frames.filter((frame) => frame.payload?.kind === "result").length, 1);
+  });
+  await test("native numbers and duplicate keys match JavaScript parsing", async () => {
+    const probe = launch();
+    await probe.ready();
+    const text =
+      '{"kind":"web","ipc":{"major":1,"minor":0},"runtime":{"id":"probe","generation":"1"},"context":"probe-view","payload":{"kind":"invoke","protocol":{"major":1,"minor":0},"id":"echo","command":"probe.echo","payload":{"n":9007199254740993,"z":-0,"nested":{"value":1,"value":2}}}}';
+    probe.child.stdin.write(`${text}\n`);
+    const response = await probe.response("echo");
+    assert.equal(response.kind, "result");
+    if (response.kind === "result")
+      assert.deepEqual(response.payload, { n: 9007199254740992, z: 0, nested: { value: 2 } });
+    await probe.stop();
+  });
+  await test("native input accepts exactly 1 MiB", async () => {
+    const probe = launch();
+    await probe.ready();
+    const frame: ProcessFrame = {
+      ...base,
+      kind: "web",
+      context: "probe-view",
+      payload: {
+        kind: "invoke",
+        protocol: PROTOCOL_VERSION,
+        id: "max",
+        command: "probe.add",
+        payload: "",
+      },
+    };
+    if (frame.payload.kind !== "invoke") throw new Error("Expected invoke");
+    const large: ProcessFrame = {
+      ...frame,
+      payload: {
+        ...frame.payload,
+        payload: "x".repeat(MAX_MESSAGE_BYTES - Buffer.byteLength(serializeProcessFrame(frame))),
+      },
+    };
+    assert.equal(Buffer.byteLength(serializeProcessFrame(large)), MAX_MESSAGE_BYTES);
+    probe.send(large);
+    assert.equal((await probe.response("max")).kind, "result");
+    await probe.stop();
+  });
+  for (const [depth, accepted] of [
+    [64, true],
+    [65, false],
+  ] as const) {
+    await test(`native JSON depth ${depth} ${accepted ? "accepted" : "rejected"}`, async () => {
+      const probe = launch();
+      await probe.ready();
+      let payload: JsonValue = 0;
+      for (let i = 0; i < depth - 2; i++) payload = { child: payload };
+      const frame = {
+        ...base,
+        kind: "web",
+        context: "probe-view",
+        payload: {
+          kind: "invoke",
+          protocol: PROTOCOL_VERSION,
+          id: "depth",
+          command: "probe.add",
+          payload,
+        },
+      };
+      probe.child.stdin.write(`${JSON.stringify(frame)}\n`);
+      if (accepted) {
+        assert.equal((await probe.response("depth")).kind, "result");
+        await probe.stop();
+      } else assert.equal((await probe.finish(1)).failed, true);
+    });
+  }
+  await test("pending request limit rejects overload without leaving Bun", async () => {
+    const probe = launch();
+    await probe.ready();
+    const lines = Array.from({ length: 129 }, (_, i) =>
+      serializeProcessFrame({
+        ...base,
+        kind: "web",
+        context: "probe-view",
+        payload: {
+          kind: "invoke",
+          protocol: PROTOCOL_VERSION,
+          id: `hold-${i}`,
+          command: "probe.hold",
+          payload: null,
+        },
+      }),
+    );
+    probe.child.stdin.write(`${lines.join("\n")}\n`);
+    assert.equal((await probe.finish(1)).failed, true);
+    assert.equal(probe.frames.filter((frame) => frame.payload?.kind === "error").length, 128);
+  });
+  const manifest = await Bun.file(join(original, "manifest.json")).json();
+  const hostSha256 = createHash("sha256")
+    .update(await Bun.file(host).bytes())
+    .digest("hex");
+  await writeFile(
+    join(dirname(original), "windows-probe-results.json"),
+    `${JSON.stringify({ testedAt: new Date().toISOString(), platform: process.platform, osRelease: release(), architecture: process.arch, packagePath, hostSha256, manifest, count: results.length, results, executions: executions.map((trace) => trace()) }, null, 2)}\n`,
+  );
+  console.log(`Windows process probe: ${results.length} passed.`);
+} finally {
+  for (const probe of live) {
+    probe.child.kill();
+    probe.child.stdin.end();
+  }
+  await Promise.all([...live].map((probe) => probe.child.exited));
+}

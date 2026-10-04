@@ -1,0 +1,989 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "ipc": {
+          "type": "object",
+          "properties": {
+            "major": {
+              "const": 1
+            },
+            "minor": {
+              "const": 0
+            }
+          },
+          "required": ["major", "minor"],
+          "additionalProperties": false
+        },
+        "runtime": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            },
+            "generation": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            }
+          },
+          "required": ["id", "generation"],
+          "additionalProperties": false
+        },
+        "kind": {
+          "const": "boot"
+        },
+        "payload": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "entrypoint": {
+              "type": "string",
+              "pattern": "^(?:[A-Za-z]:[\\\\/]|/)[^\\u0000\\r\\n]+$(?![\\s\\S])",
+              "maxLength": 4096
+            },
+            "buildId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            }
+          },
+          "required": ["entrypoint", "buildId"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["ipc", "runtime", "kind", "payload"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ipc": {
+          "type": "object",
+          "properties": {
+            "major": {
+              "const": 1
+            },
+            "minor": {
+              "const": 0
+            }
+          },
+          "required": ["major", "minor"],
+          "additionalProperties": false
+        },
+        "runtime": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            },
+            "generation": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            }
+          },
+          "required": ["id", "generation"],
+          "additionalProperties": false
+        },
+        "kind": {
+          "const": "hello"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "hello"
+            },
+            "protocol": {
+              "type": "object",
+              "properties": {
+                "major": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535
+                },
+                "minor": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535
+                }
+              },
+              "required": ["major", "minor"],
+              "additionalProperties": false
+            },
+            "features": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                "maxLength": 128
+              },
+              "maxItems": 256,
+              "uniqueItems": true
+            },
+            "buildId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            }
+          },
+          "required": ["kind", "protocol", "features", "buildId"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["ipc", "runtime", "kind", "payload"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ipc": {
+          "type": "object",
+          "properties": {
+            "major": {
+              "const": 1
+            },
+            "minor": {
+              "const": 0
+            }
+          },
+          "required": ["major", "minor"],
+          "additionalProperties": false
+        },
+        "runtime": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            },
+            "generation": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            }
+          },
+          "required": ["id", "generation"],
+          "additionalProperties": false
+        },
+        "kind": {
+          "const": "ready"
+        },
+        "pid": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "bunVersion": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+          "maxLength": 128
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+          "maxLength": 128
+        }
+      },
+      "required": ["ipc", "runtime", "kind", "pid", "bunVersion", "revision"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ipc": {
+          "type": "object",
+          "properties": {
+            "major": {
+              "const": 1
+            },
+            "minor": {
+              "const": 0
+            }
+          },
+          "required": ["major", "minor"],
+          "additionalProperties": false
+        },
+        "runtime": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            },
+            "generation": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            }
+          },
+          "required": ["id", "generation"],
+          "additionalProperties": false
+        },
+        "kind": {
+          "const": "web"
+        },
+        "context": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+          "maxLength": 128
+        },
+        "payload": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "hello"
+                },
+                "protocol": {
+                  "type": "object",
+                  "properties": {
+                    "major": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    },
+                    "minor": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    }
+                  },
+                  "required": ["major", "minor"],
+                  "additionalProperties": false
+                },
+                "features": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                    "maxLength": 128
+                  },
+                  "maxItems": 256,
+                  "uniqueItems": true
+                },
+                "buildId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                  "maxLength": 128
+                }
+              },
+              "required": ["kind", "protocol", "features", "buildId"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "invoke"
+                },
+                "protocol": {
+                  "type": "object",
+                  "properties": {
+                    "major": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    },
+                    "minor": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    }
+                  },
+                  "required": ["major", "minor"],
+                  "additionalProperties": false
+                },
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                  "maxLength": 128
+                },
+                "command": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                  "maxLength": 128
+                },
+                "payload": {},
+                "deadline": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": ["kind", "protocol", "id", "command", "payload"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "cancel"
+                },
+                "protocol": {
+                  "type": "object",
+                  "properties": {
+                    "major": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    },
+                    "minor": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    }
+                  },
+                  "required": ["major", "minor"],
+                  "additionalProperties": false
+                },
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                  "maxLength": 128
+                }
+              },
+              "required": ["kind", "protocol", "id"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "listen"
+                },
+                "protocol": {
+                  "type": "object",
+                  "properties": {
+                    "major": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    },
+                    "minor": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    }
+                  },
+                  "required": ["major", "minor"],
+                  "additionalProperties": false
+                },
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                  "maxLength": 128
+                },
+                "event": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                  "maxLength": 128
+                }
+              },
+              "required": ["kind", "protocol", "id", "event"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "unlisten"
+                },
+                "protocol": {
+                  "type": "object",
+                  "properties": {
+                    "major": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    },
+                    "minor": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    }
+                  },
+                  "required": ["major", "minor"],
+                  "additionalProperties": false
+                },
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                  "maxLength": 128
+                },
+                "subscriptionId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                  "maxLength": 128
+                }
+              },
+              "required": ["kind", "protocol", "id", "subscriptionId"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "result"
+                },
+                "protocol": {
+                  "type": "object",
+                  "properties": {
+                    "major": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    },
+                    "minor": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    }
+                  },
+                  "required": ["major", "minor"],
+                  "additionalProperties": false
+                },
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                  "maxLength": 128
+                },
+                "payload": {}
+              },
+              "required": ["kind", "protocol", "id", "payload"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "error"
+                },
+                "protocol": {
+                  "type": "object",
+                  "properties": {
+                    "major": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    },
+                    "minor": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    }
+                  },
+                  "required": ["major", "minor"],
+                  "additionalProperties": false
+                },
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                  "maxLength": 128
+                },
+                "error": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "INVALID_ARGUMENT",
+                        "PERMISSION_DENIED",
+                        "UNSUPPORTED",
+                        "TIMEOUT",
+                        "CANCELLED",
+                        "BUSY",
+                        "INTERNAL"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "maxLength": 1024
+                    },
+                    "details": {}
+                  },
+                  "required": ["code", "message"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["kind", "protocol", "id", "error"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "event"
+                },
+                "protocol": {
+                  "type": "object",
+                  "properties": {
+                    "major": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    },
+                    "minor": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    }
+                  },
+                  "required": ["major", "minor"],
+                  "additionalProperties": false
+                },
+                "subscriptionId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                  "maxLength": 128
+                },
+                "source": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                  "maxLength": 128
+                },
+                "target": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                  "maxLength": 128
+                },
+                "event": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                  "maxLength": 128
+                },
+                "sequence": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "payload": {}
+              },
+              "required": [
+                "kind",
+                "protocol",
+                "subscriptionId",
+                "source",
+                "target",
+                "event",
+                "sequence",
+                "payload"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "subscription-error"
+                },
+                "protocol": {
+                  "type": "object",
+                  "properties": {
+                    "major": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    },
+                    "minor": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    }
+                  },
+                  "required": ["major", "minor"],
+                  "additionalProperties": false
+                },
+                "subscriptionId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                  "maxLength": 128
+                },
+                "error": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "INVALID_ARGUMENT",
+                        "PERMISSION_DENIED",
+                        "UNSUPPORTED",
+                        "TIMEOUT",
+                        "CANCELLED",
+                        "BUSY",
+                        "INTERNAL"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "maxLength": 1024
+                    },
+                    "details": {}
+                  },
+                  "required": ["code", "message"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["kind", "protocol", "subscriptionId", "error"],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": ["ipc", "runtime", "kind", "context", "payload"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ipc": {
+          "type": "object",
+          "properties": {
+            "major": {
+              "const": 1
+            },
+            "minor": {
+              "const": 0
+            }
+          },
+          "required": ["major", "minor"],
+          "additionalProperties": false
+        },
+        "runtime": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            },
+            "generation": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            }
+          },
+          "required": ["id", "generation"],
+          "additionalProperties": false
+        },
+        "kind": {
+          "const": "host-request"
+        },
+        "context": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+          "maxLength": 128
+        },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+          "maxLength": 128
+        },
+        "operation": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+          "maxLength": 128
+        },
+        "payload": {}
+      },
+      "required": ["ipc", "runtime", "kind", "context", "requestId", "operation", "payload"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ipc": {
+          "type": "object",
+          "properties": {
+            "major": {
+              "const": 1
+            },
+            "minor": {
+              "const": 0
+            }
+          },
+          "required": ["major", "minor"],
+          "additionalProperties": false
+        },
+        "runtime": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            },
+            "generation": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            }
+          },
+          "required": ["id", "generation"],
+          "additionalProperties": false
+        },
+        "kind": {
+          "const": "host-response"
+        },
+        "context": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+          "maxLength": 128
+        },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+          "maxLength": 128
+        },
+        "payload": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "result"
+                },
+                "payload": {}
+              },
+              "required": ["kind", "payload"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "error"
+                },
+                "error": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "INVALID_ARGUMENT",
+                        "PERMISSION_DENIED",
+                        "UNSUPPORTED",
+                        "TIMEOUT",
+                        "CANCELLED",
+                        "BUSY",
+                        "INTERNAL"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "maxLength": 1024
+                    },
+                    "details": {}
+                  },
+                  "required": ["code", "message"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["kind", "error"],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": ["ipc", "runtime", "kind", "context", "requestId", "payload"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ipc": {
+          "type": "object",
+          "properties": {
+            "major": {
+              "const": 1
+            },
+            "minor": {
+              "const": 0
+            }
+          },
+          "required": ["major", "minor"],
+          "additionalProperties": false
+        },
+        "runtime": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            },
+            "generation": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            }
+          },
+          "required": ["id", "generation"],
+          "additionalProperties": false
+        },
+        "kind": {
+          "const": "revoke"
+        },
+        "context": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+          "maxLength": 128
+        }
+      },
+      "required": ["ipc", "runtime", "kind", "context"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ipc": {
+          "type": "object",
+          "properties": {
+            "major": {
+              "const": 1
+            },
+            "minor": {
+              "const": 0
+            }
+          },
+          "required": ["major", "minor"],
+          "additionalProperties": false
+        },
+        "runtime": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            },
+            "generation": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            }
+          },
+          "required": ["id", "generation"],
+          "additionalProperties": false
+        },
+        "kind": {
+          "const": "shutdown"
+        }
+      },
+      "required": ["ipc", "runtime", "kind"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ipc": {
+          "type": "object",
+          "properties": {
+            "major": {
+              "const": 1
+            },
+            "minor": {
+              "const": 0
+            }
+          },
+          "required": ["major", "minor"],
+          "additionalProperties": false
+        },
+        "runtime": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            },
+            "generation": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            }
+          },
+          "required": ["id", "generation"],
+          "additionalProperties": false
+        },
+        "kind": {
+          "const": "stopping"
+        }
+      },
+      "required": ["ipc", "runtime", "kind"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ipc": {
+          "type": "object",
+          "properties": {
+            "major": {
+              "const": 1
+            },
+            "minor": {
+              "const": 0
+            }
+          },
+          "required": ["major", "minor"],
+          "additionalProperties": false
+        },
+        "runtime": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            },
+            "generation": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            }
+          },
+          "required": ["id", "generation"],
+          "additionalProperties": false
+        },
+        "kind": {
+          "const": "fatal"
+        },
+        "error": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "enum": [
+                "INVALID_ARGUMENT",
+                "PERMISSION_DENIED",
+                "UNSUPPORTED",
+                "TIMEOUT",
+                "CANCELLED",
+                "BUSY",
+                "INTERNAL"
+              ]
+            },
+            "message": {
+              "type": "string",
+              "maxLength": 1024
+            },
+            "details": {}
+          },
+          "required": ["code", "message"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["ipc", "runtime", "kind", "error"],
+      "additionalProperties": false
+    }
+  ]
+}

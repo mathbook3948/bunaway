@@ -3,5 +3,5 @@
   "compilerOptions": {
     "types": ["bun"]
   },
-  "include": ["**/*.ts", "../packages/protocol/scripts/*.ts"]
+  "include": ["**/*.ts", "../packages/protocol/scripts/*.ts", "../native/windows/probe/*.ts"]
 }

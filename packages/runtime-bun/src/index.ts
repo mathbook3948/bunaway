@@ -1,2 +1,2 @@
-// Bun 서비스 어댑터와 내장 런타임 연결. 공개 계약은 설계 단계에서 확정합니다.
-export {};
+// Bun 서비스 어댑터와 프로세스 IPC 연결.
+export { readJsonLines } from "./process-ipc.ts";

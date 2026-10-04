@@ -1,0 +1,21 @@
+{
+  "bun": {
+    "version": "1.4.2",
+    "sourceRevision": "744846f844374847c902b5e7fd59b4342a51ef99",
+    "sourceUrl": "https://github.com/oven-sh/bun/tree/744846f844374847c902b5e7fd59b4342a51ef99",
+    "target": "windows-x64-baseline",
+    "archiveUrl": "https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-windows-x64-baseline.zip",
+    "archiveSha256": "78c221c2376f79731ccf4e4af0b3bb46d81fefa3296c5abee09ad8a1b21e68c6",
+    "executableSha256": "15277c59ccd6c6c20f8dc9716c2b59c1776320d606b6a8658f70be8799519ca4",
+    "licenseUrl": "https://raw.githubusercontent.com/oven-sh/bun/744846f844374847c902b5e7fd59b4342a51ef99/LICENSE.md",
+    "licenseSha256": "b9caf52728691b4057e371232c221a132883198be2f3d2ddf92c90404c984b1a",
+    "patches": []
+  },
+  "json": {
+    "version": "3.12.0",
+    "headerUrl": "https://raw.githubusercontent.com/nlohmann/json/v3.12.0/single_include/nlohmann/json.hpp",
+    "headerSha256": "aaf127c04cb31c406e5b04a63f1ae89369fccde6d8fa7cdda1ed4f32dfc5de63",
+    "licenseUrl": "https://raw.githubusercontent.com/nlohmann/json/v3.12.0/LICENSE.MIT",
+    "licenseSha256": "46a65cffd1ea955132d95a8dd921640714a8d6b537d2e4e482d31145ae95b603"
+  }
+}

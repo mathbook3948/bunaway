@@ -32,3 +32,7 @@ run = "bun test ./tests"
 [tasks."protocol:generate"]
 description = "Export the protocol and policy schemas for native hosts"
 run = ["bun packages/protocol/scripts/generate.ts", "bunx --no-install biome format --write native/host-api/generated"]
+
+[tasks."probe:windows"]
+description = "Build the standalone Windows Bun package and verify process IPC and cleanup"
+run = "pwsh -NoProfile -File native/windows/probe/run.ps1"

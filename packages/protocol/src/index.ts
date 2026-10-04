@@ -4,6 +4,7 @@ import {
   hostResponseSchema,
   messageSchema,
   policySchema,
+  processSchema,
 } from "./schema.ts";
 import { type Infer, parse, ProtocolError, serialize, validate } from "./validation.ts";
 
@@ -13,6 +14,7 @@ export {
   hostResponseSchema,
   messageSchema,
   policySchema,
+  processSchema,
 } from "./schema.ts";
 export { type JsonValue, MAX_JSON_DEPTH, MAX_MESSAGE_BYTES, ProtocolError } from "./validation.ts";
 
@@ -22,6 +24,11 @@ export type WireError = Infer<typeof errorSchema>;
 export type Policy = Infer<typeof policySchema>;
 export type Bootstrap = Infer<typeof bootstrapSchema>;
 export type HostResponse = Infer<typeof hostResponseSchema>;
+export type ProcessFrame = Infer<typeof processSchema>;
+export const PROCESS_IPC_VERSION = { major: 1, minor: 0 } as const;
+export const parseProcessFrame = (text: string): ProcessFrame => parse(processSchema, text);
+export const serializeProcessFrame = (frame: ProcessFrame): string =>
+  serialize(processSchema, frame);
 
 export const PROTOCOL_VERSION = { major: 1, minor: 0 } as const;
 

@@ -4,6 +4,7 @@ import {
   hostResponseSchema,
   messageSchema,
   policySchema,
+  processSchema,
   parseBootstrap,
   parseHostResponse,
   parseMessage,
@@ -16,6 +17,7 @@ test("native schemas are generated from the same definitions as TypeScript", asy
     policy: policySchema,
     bootstrap: bootstrapSchema,
     "host-response": hostResponseSchema,
+    process: processSchema,
   })) {
     const file = Bun.file(
       new URL(`../../native/host-api/generated/${name}.schema.json`, import.meta.url),
