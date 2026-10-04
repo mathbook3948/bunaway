@@ -199,7 +199,7 @@ class Probe {
     std::deque<std::string> queue;
     bool writerDone = false;
     std::atomic<bool> ready = false, closing = false, failed = false, exited = false, forced = false, controllerDone = false, ioDone = false, outputAborted = false;
-    bool helloSeen = false;
+    bool helloSeen = false, contextRevoked = false;
     std::atomic<ULONGLONG> closeTime = 0;
     std::map<std::string, std::string> pending;
     std::set<std::string> used;
@@ -228,6 +228,10 @@ class Probe {
         queued.notify_one();
     }
     Json frame(const char* kind) { return { { "kind", kind }, { "ipc", ipc }, { "runtime", runtime } }; }
+    void cancelled(const std::string& id) {
+        auto response = frame("web"); response["context"] = "probe-view";
+        response["payload"] = { { "kind", "error" }, { "protocol", ipc }, { "id", id }, { "error", { { "code", "CANCELLED" }, { "message", "Context revoked." } } } }; emit(response);
+    }
     void stop() {
         if (!closing.exchange(true)) {
             closeTime.store(GetTickCount64());
@@ -249,6 +253,7 @@ class Probe {
             auto message = value["payload"];
             auto tag = message["kind"].get<std::string>();
             std::lock_guard lock(stateMutex);
+            if (contextRevoked) { emit({ { "kind", "host-discarded" }, { "reason", tag == "result" || tag == "error" ? "late-response" : "inactive-subscription" } }); return; }
             if (tag == "result" || tag == "error") {
                 auto id = message["id"].get<std::string>();
                 auto request = pending.find(id);
@@ -264,6 +269,9 @@ class Probe {
                 require(message["source"] == "backend" && message["target"] == "probe-view" && message["event"] == "probe.changed" && message["sequence"].get<uint64_t>() == ++sub->second, "Invalid event order.");
             } else if (tag == "subscription-error") subscriptions.erase(message["subscriptionId"].get<std::string>());
             else throw std::runtime_error("Unexpected backend message.");
+            // Delivery and revocation must use the same ordering under stateMutex.
+            emit(value);
+            return;
         } else if (kind == "stopping") require(closing, "Unexpected stop.");
         else if (kind == "fatal") { emit(value); fail(); return; }
         else throw std::runtime_error("Invalid backend direction.");
@@ -276,7 +284,13 @@ class Probe {
         require(ready && !closing, "Backend not ready.");
         if (value["kind"] == "revoke") {
             require(value["context"] == "probe-view", "Invalid context.");
-            { std::lock_guard lock(stateMutex); subscriptions.clear(); }
+            {
+                std::lock_guard lock(stateMutex);
+                contextRevoked = true;
+                subscriptions.clear();
+                for (const auto& [id, _] : pending) cancelled(id);
+                pending.clear();
+            }
         } else {
             require(value["kind"] == "web" && value["context"] == "probe-view", "Invalid controller direction.");
             auto message = value["payload"];
@@ -286,6 +300,7 @@ class Probe {
             std::lock_guard lock(stateMutex);
             auto id = message["id"].get<std::string>();
             require(used.size() < 1024 && used.insert(id).second && pending.size() < 128, "Request ID reused or limit exceeded.");
+            if (contextRevoked) { cancelled(id); return; }
             pending[id] = kind;
             if (kind == "unlisten") subscriptions.erase(message["subscriptionId"].get<std::string>());
         }

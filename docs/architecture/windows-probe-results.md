@@ -43,13 +43,13 @@ mise run probe:windows
 
 ## 실제 관찰
 
-**Windows 통합 검증 38개, 계약 테스트 35개 통과.**
+**Windows 통합 검증 39개, 계약 테스트 36개 통과.**
 
 | 항목 | 확인 결과 |
 | --- | --- |
 | 번들 실행·PID | 한글·공백 경로, 사용자 Bun 없는 PATH, 다른 cwd에서 ready. OS 자식 PID = Bun PID, 호스트 PID와 다름 |
 | 계산 | `2 + 2 → 4`, Promise `→ 42`, 타이머 `→ timer-done`, 동시 요청 ID 매칭 |
-| 이벤트 | 구독→sequence 1 이벤트→해제. 해제·구독 컨텍스트 폐기 후 늦은 이벤트 폐기 |
+| 이벤트 | 구독→sequence 1 이벤트→해제. 폐기 시 대기 요청 CANCELLED·이후 요청 거부. 폐기 뒤 listen 성공 응답과 늦은 이벤트 폐기 |
 | 오류 | throw·rejection의 안정된 code/message, 원본 오류 정보 제외. exit 17·Bun이 살아 있는 stdout EOF 시 미완료 요청 실패 |
 | 로그 | stderr 288 KiB를 별도로 배출하고 전달량 64 KiB로 제한. IPC 응답 완료 |
 | 프레이밍 | UTF-8 문자 내부 분할, 여러 프레임 병합, 정확히 1 MiB·깊이 64 수신 |
@@ -57,13 +57,14 @@ mise run probe:windows
 | JSON 일치 | 큰 숫자는 binary64, 음수 0은 0, 중첩 객체 중복 키는 마지막 값 |
 | 스키마 일치 | 공통 입력 51개로 조건 결합·anyOf 공통 필수 필드·중첩 값 중복·Unicode 길이·단독 surrogate·줄 구분자 경로 검사 일치. 이모지 600자의 오류도 실제 IPC 통과 |
 | 문자열 계약 | 단독 surrogate 값·객체 키는 송신 전에 거부해 호스트 연결 유지. 정상 surrogate 쌍은 키·값 모두 IPC 왕복 |
+| 타입 추론 | 빈 객체의 숫자·배열 입력과 출력 거부. 속성 없는 객체·items 없는 배열·중첩 빈 객체도 형태 유지. 타입 검사와 명령 실행 검증 |
 | 과부하 | 128개 미완료 요청 한도 초과 시 실패·프로세스 정리, 남은 요청은 오류로 완료 |
 | 정상 종료 | 진행 중 타이머 취소, 종료 응답 이후 실제 Bun 종료·EOF·Job 활성 프로세스 0개 확인 |
 | 강제 종료 | 종료를 무시하는 Bun은 2초 기한 후 강제 종료. 호스트를 죽여도 Bun과 자손 정리 |
 | 출력 정체 | 80만 자 echo 응답 소비를 중단해도 종료 후 출력 정리 2초 기한으로 동기 I/O 취소. 출력을 다시 읽기 전에 호스트와 Bun 종료 확인 |
 
-2026-10-04 08:14:21 UTC 실행에서 호스트 PID `34164`, OS 자식 PID와 Bun ready PID
-`54332`였다. 정상 종료는 `exitCode: 0`, `forced: false`, `failed: false`,
+2026-10-04 10:28:26 UTC 실행에서 호스트 PID `36148`, OS 자식 PID와 Bun ready PID
+`8904`였다. 정상 종료는 `exitCode: 0`, `forced: false`, `failed: false`,
 `activeProcesses: 0`으로 끝났다. 테스트 PID는 실행마다 바뀐다.
 
 네이티브 `--watch` 검증기는 종료 전에 `OpenProcess(SYNCHRONIZE)`로 실제 Bun·자손

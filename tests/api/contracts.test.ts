@@ -47,6 +47,18 @@ const input = {
   additionalProperties: false,
 } as const;
 const output = { type: "string" } as const;
+const emptyObject = { type: "object", properties: {}, additionalProperties: false } as const;
+const emptyApp = {
+  commands: {
+    "empty.object": command({ input: emptyObject, output: emptyObject, handle: (input) => input }),
+    "empty.array": command({
+      input: { type: "array", items: emptyObject },
+      output: { type: "array", items: emptyObject },
+      handle: (input) => input,
+    }),
+  },
+  events: {},
+} satisfies AppDefinition;
 const optionalInput = { type: "object", properties: { note: { type: "string" } } } as const;
 const optionalApp = {
   commands: {
@@ -127,6 +139,30 @@ function context(host: CommandContext["host"], signal: CancellationSignal): Comm
     events: { async emit() {} },
   };
 }
+
+test("empty object command schemas retain object and array shapes at runtime", async () => {
+  const signal = new AbortController().signal;
+  const ctx = context(
+    bindHostAPI(contextId, signal, async () => ({ kind: "result", payload: null })),
+    signal,
+  );
+  expect(await emptyApp.commands["empty.object"].run({}, ctx)).toEqual({});
+  expect(await emptyApp.commands["empty.array"].run([{}], ctx)).toEqual([{}]);
+  for (const value of [42, null, [], { extra: true }]) {
+    await expect(emptyApp.commands["empty.object"].run(value, ctx)).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+    const badOutput = command({
+      input: {},
+      output: emptyObject,
+      handle: () => value as unknown as Infer<typeof emptyObject>,
+    });
+    await expect(badOutput.run(null, ctx)).rejects.toMatchObject({ code: "INTERNAL" });
+  }
+  await expect(emptyApp.commands["empty.array"].run([42], ctx)).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+});
 
 test("anyOf commands retain common required fields and discriminate branch fields", async () => {
   const signal = new AbortController().signal;
@@ -426,6 +462,59 @@ test("pending Host calls abort promptly and release their cancellation listener"
 });
 
 // Type assertions below are not executed by the runtime tests.
+export function checkContainerSchemaTypes(client: Client<CommandsOf<typeof emptyApp>>) {
+  const objectResult: Promise<Infer<typeof emptyObject>> = client.invoke("empty.object", {});
+  const arrayResult: Promise<Infer<typeof emptyObject>[]> = client.invoke("empty.array", [{}]);
+  void objectResult;
+  void arrayResult;
+  // @ts-expect-error an empty object schema does not accept a number
+  client.invoke("empty.object", 42);
+  // @ts-expect-error an empty object schema does not accept an array
+  client.invoke("empty.object", []);
+  // @ts-expect-error a closed empty object schema does not accept extra properties
+  client.invoke("empty.object", { extra: true });
+  // @ts-expect-error nested empty objects do not accept numeric items
+  client.invoke("empty.array", [42]);
+  command({
+    input: emptyObject,
+    output: emptyObject,
+    // @ts-expect-error empty object outputs cannot be numbers
+    handle: () => 42,
+  });
+  command({
+    input: emptyObject,
+    output: emptyObject,
+    // @ts-expect-error empty object outputs cannot be arrays
+    handle: () => [],
+  });
+  const objectOnly = { type: "object" } as const;
+  const openEmpty = { type: "object", properties: {} } as const;
+  const closedOnly = { type: "object", additionalProperties: false } as const;
+  const arrayOnly = { type: "array" } as const;
+  const containers: [
+    Infer<typeof objectOnly>,
+    Infer<typeof openEmpty>,
+    Infer<typeof closedOnly>,
+    Infer<typeof arrayOnly>,
+  ] = [{ anything: [42] }, { anything: null }, {}, [42, {}]];
+  void containers;
+  // @ts-expect-error an object without properties is still an object
+  const numericObject: Infer<typeof objectOnly> = 42;
+  // @ts-expect-error an open empty object is not an array
+  const arrayObject: Infer<typeof openEmpty> = [];
+  // @ts-expect-error a closed object without properties remains empty
+  const extraObject: Infer<typeof closedOnly> = { extra: true };
+  // @ts-expect-error an array without items is still an array
+  const objectArray: Infer<typeof arrayOnly> = {};
+  // @ts-expect-error even optional properties named length must not admit arrays
+  const optionalArray: Infer<{ type: "object"; properties: { length: { type: "integer" } } }> = [];
+  void numericObject;
+  void arrayObject;
+  void extraObject;
+  void objectArray;
+  void optionalArray;
+}
+
 export function checkCombinedSchemaTypes(
   client: Client<CommandsOf<typeof combinedApp>, EventsOf<typeof combinedApp>>,
 ) {

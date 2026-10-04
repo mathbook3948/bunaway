@@ -290,10 +290,61 @@ try {
     });
     await probe.response("listen2");
     probe.send({ ...base, kind: "revoke", context: "probe-view" });
-    await probe.request("revoked-late", "probe.late-event");
+    assert.equal((await probe.request("revoked-late", "probe.late-event")).kind, "error");
     await probe.stop();
     assert.equal(probe.frames.filter((frame) => frame.payload?.kind === "event").length, 1);
-    assert.equal(probe.frames.filter((frame) => frame.kind === "host-discarded").length, 2);
+    assert.equal(probe.frames.filter((frame) => frame.kind === "host-discarded").length, 1);
+  });
+  await test("revocation cancels pending requests and cannot be undone by a late listen result", async () => {
+    const probe = launch("late-listen");
+    await probe.ready();
+    probe.send({
+      ...base,
+      kind: "web",
+      context: "probe-view",
+      payload: { kind: "listen", protocol: PROTOCOL_VERSION, id: "listen", event: "probe.changed" },
+    });
+    const pendingInvoke = probe.request("hold", "probe.hold");
+    probe.send({ ...base, kind: "revoke", context: "probe-view" });
+    for (const response of [await probe.response("listen"), await pendingInvoke]) {
+      assert.equal(response.kind, "error");
+      if (response.kind !== "error") throw new Error("Expected cancellation");
+      assert.equal(response.error.code, "CANCELLED");
+    }
+    await probe.wait(
+      (frame) => frame.kind === "host-discarded" && frame.reason === "late-response",
+    );
+    await probe.wait(
+      (frame) => frame.kind === "host-discarded" && frame.reason === "inactive-subscription",
+    );
+    probe.send({
+      ...base,
+      kind: "web",
+      context: "probe-view",
+      payload: {
+        kind: "listen",
+        protocol: PROTOCOL_VERSION,
+        id: "listen-again",
+        event: "probe.changed",
+      },
+    });
+    const again = await probe.response("listen-again");
+    assert.equal(again.kind, "error");
+    if (again.kind !== "error") throw new Error("Expected cancellation");
+    assert.equal(again.error.code, "CANCELLED");
+    await probe.stop();
+    assert.equal(probe.frames.filter((frame) => frame.payload?.kind === "event").length, 0);
+    for (const id of ["listen", "hold", "listen-again"]) {
+      assert.equal(
+        probe.frames.filter(
+          (frame) =>
+            frame.kind === "web" &&
+            "id" in (frame.payload ?? {}) &&
+            (frame.payload as { id: string }).id === id,
+        ).length,
+        1,
+      );
+    }
   });
   await test("throw and rejected Promise deliver sanitized errors", async () => {
     const probe = launch();

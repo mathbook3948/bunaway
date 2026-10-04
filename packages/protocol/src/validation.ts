@@ -31,6 +31,18 @@ type RequiredKeys<S> = S extends { readonly required: readonly string[] }
   ? S["required"][number]
   : never;
 
+type ObjectProperties<S> = S extends { readonly properties: infer P } ? P : object;
+// Exclude primitives and arrays without adding an index signature to closed shapes.
+type InferObject<S, P = ObjectProperties<S>> = keyof P extends never
+  ? S extends { readonly additionalProperties: false }
+    ? Record<string, never>
+    : Record<string, JsonValue>
+  : object & { [Symbol.iterator]?: never } & {
+      [K in keyof P as K extends RequiredKeys<S> ? K : never]: Infer<P[K]>;
+    } & {
+      [K in keyof P as K extends RequiredKeys<S> ? never : K]?: Infer<P[K]>;
+    };
+
 export type Infer<S> = S extends { readonly anyOf: readonly (infer V)[] }
   ? InferShape<S> & Infer<V>
   : unknown extends InferShape<S>
@@ -48,15 +60,12 @@ type InferShape<S> = S extends { readonly const: infer C }
         ? number
         : S extends { readonly type: "boolean" }
           ? boolean
-          : S extends { readonly type: "array"; readonly items: infer I }
-            ? Infer<I>[]
-            : S extends {
-                  readonly type: "object";
-                  readonly properties: infer P;
-                }
-              ? { [K in keyof P as K extends RequiredKeys<S> ? K : never]: Infer<P[K]> } & {
-                  [K in keyof P as K extends RequiredKeys<S> ? never : K]?: Infer<P[K]>;
-                }
+          : S extends { readonly type: "array" }
+            ? S extends { readonly items: infer I }
+              ? Infer<I>[]
+              : JsonValue[]
+            : S extends { readonly type: "object" }
+              ? InferObject<S>
               : unknown;
 
 export const MAX_MESSAGE_BYTES = 1_048_576;

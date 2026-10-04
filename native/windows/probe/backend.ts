@@ -26,6 +26,7 @@ let booted = false;
 let ready = false;
 let stopping = false;
 let subscribed = false;
+let pendingListen: string | undefined;
 let sequence = 0;
 const completed = new Set<string>();
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -134,6 +135,21 @@ async function dispatch(frame: ProcessFrame) {
   }
   if (frame.kind === "revoke") {
     subscribed = false;
+    if (mode === "late-listen" && pendingListen !== undefined) {
+      // Intentionally acknowledge a listen only after the host has revoked it.
+      await result(pendingListen, { subscriptionId: "probe-sub" });
+      pendingListen = undefined;
+      await web({
+        kind: "event",
+        protocol: PROTOCOL_VERSION,
+        subscriptionId: "probe-sub",
+        source: "backend",
+        target: "probe-view",
+        event: "probe.changed",
+        sequence: ++sequence,
+        payload: "revoked-event",
+      });
+    }
     return;
   }
   if (frame.kind !== "web" || frame.context !== "probe-view")
@@ -143,6 +159,10 @@ async function dispatch(frame: ProcessFrame) {
     if (message.event !== "probe.changed") throw new Error("Unknown event.");
     subscribed = true;
     sequence = 0;
+    if (mode === "late-listen") {
+      pendingListen = message.id;
+      return;
+    }
     await result(message.id, { subscriptionId: "probe-sub" });
     return;
   }
