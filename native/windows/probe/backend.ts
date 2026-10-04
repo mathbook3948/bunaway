@@ -178,6 +178,16 @@ async function dispatch(frame: ProcessFrame) {
     case "probe.echo":
       await result(message.id, message.payload);
       break;
+    case "probe.number-array":
+      if (
+        typeof message.payload !== "number" ||
+        !Number.isSafeInteger(message.payload) ||
+        message.payload < 0 ||
+        message.payload > 210000
+      )
+        throw new Error("Invalid array size.");
+      await result(message.id, Array(message.payload).fill(1e-7));
+      break;
     case "probe.add":
       await result(message.id, 2 + 2);
       break;

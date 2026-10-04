@@ -206,14 +206,15 @@ class Probe {
     std::map<std::string, uint64_t> subscriptions;
     Json schema, manifest;
 
-    void emit(const Json& value) {
-        auto text = value.dump() + "\n";
-        require(text.size() <= maxFrame + 1, "Controller frame too large.");
+    void emitLine(std::string text) {
+        require(text.size() <= maxFrame, "Controller frame too large.");
+        text += '\n';
         std::lock_guard lock(outputMutex);
         require(!outputAborted && !outputDone && outputQueue.size() < 128, "Host output unavailable or full.");
         outputQueue.push_back(std::move(text));
         outputQueued.notify_one();
     }
+    void emit(const Json& value) { emitLine(value.dump()); }
     void fail() {
         // Cleanup must start even when the controller is not consuming stdout.
         TerminateJobObject(job.value, 1);
@@ -221,15 +222,16 @@ class Probe {
             try { emit({ { "kind", "host-error" }, { "code", "INTERNAL" }, { "message", "Process IPC failed." } }); } catch (...) {}
         }
     }
-    void send(const Json& frame, bool control = false) {
-        std::string text = frame.dump() + "\n";
-        require(text.size() <= maxFrame + 1, "Outgoing frame too large.");
+    void sendLine(std::string text, bool control = false) {
+        require(text.size() <= maxFrame, "Outgoing frame too large.");
+        text += '\n';
         std::lock_guard lock(queueMutex);
         if (control) queue.clear();
         require(!writerDone && (control || queue.size() < 128), "Host output queue full.");
         queue.push_back(std::move(text));
         queued.notify_one();
     }
+    void send(const Json& value, bool control = false) { sendLine(value.dump(), control); }
     Json frame(const char* kind) { return { { "kind", kind }, { "ipc", ipc }, { "runtime", runtime } }; }
     void cancelled(const std::string& id) {
         auto response = frame("web"); response["context"] = "probe-view";
@@ -273,12 +275,12 @@ class Probe {
             } else if (tag == "subscription-error") subscriptions.erase(message["subscriptionId"].get<std::string>());
             else throw std::runtime_error("Unexpected backend message.");
             // Commit output order under stateMutex; the output writer never takes it.
-            emit(value);
+            emitLine(line);
             return;
         } else if (kind == "stopping") require(closing, "Unexpected stop.");
-        else if (kind == "fatal") { emit(value); fail(); return; }
+        else if (kind == "fatal") { emitLine(line); fail(); return; }
         else throw std::runtime_error("Invalid backend direction.");
-        emit(value);
+        emitLine(line);
     }
     void fromController(const std::string& line) {
         auto value = parse(line);
@@ -307,7 +309,8 @@ class Probe {
             pending[id] = kind;
             if (kind == "unlisten") subscriptions.erase(message["subscriptionId"].get<std::string>());
         }
-        send(value);
+        // Relay only after validation and routing; keep the original wire byte size.
+        sendLine(line);
     }
 public:
     int run(const fs::path& package, const std::wstring& mode) {

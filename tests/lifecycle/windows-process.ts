@@ -742,6 +742,50 @@ try {
       assert.deepEqual(response.payload, { n: 9007199254740992, z: 0, nested: { value: 2 } });
     await probe.stop();
   });
+  for (const direction of ["echo", "backend"] as const) {
+    await test(`near-limit numeric array survives ${direction} relay without disconnecting`, async () => {
+      const probe = launch();
+      await probe.ready();
+      const id = `numbers-${direction}`;
+      const command = direction === "echo" ? "probe.echo" : "probe.number-array";
+      const emptyFrame: ProcessFrame = {
+        ...base,
+        kind: "web",
+        context: "probe-view",
+        payload:
+          direction === "echo"
+            ? { kind: "invoke", protocol: PROTOCOL_VERSION, id, command, payload: [] }
+            : { kind: "result", protocol: PROTOCOL_VERSION, id, payload: [] },
+      };
+      // N values add N * (token bytes + comma) - 1 bytes to the empty array.
+      const tokenBytes = JSON.stringify(1e-7).length + 1;
+      const count = Math.floor(
+        (MAX_MESSAGE_BYTES - Buffer.byteLength(serializeProcessFrame(emptyFrame)) + 1) / tokenBytes,
+      );
+      const numbers = Array<number>(count).fill(1e-7);
+      if (emptyFrame.payload.kind !== "invoke" && emptyFrame.payload.kind !== "result")
+        throw new Error("Expected numeric array frame");
+      const boundaryFrame: ProcessFrame = {
+        ...emptyFrame,
+        payload: { ...emptyFrame.payload, payload: numbers },
+      };
+      const size = Buffer.byteLength(serializeProcessFrame(boundaryFrame));
+      assert.ok(size <= MAX_MESSAGE_BYTES && size > MAX_MESSAGE_BYTES - tokenBytes);
+      const response = await probe.request(id, command, direction === "echo" ? numbers : count);
+      assert.equal(response.kind, "result");
+      if (response.kind !== "result") throw new Error("Expected numeric array");
+      assert.deepEqual(response.payload, numbers);
+      const followup = await probe.request("still-alive", "probe.add");
+      assert.equal(followup.kind, "result");
+      if (followup.kind !== "result") throw new Error("Expected followup result");
+      assert.equal(followup.payload, 4);
+      assert.equal(
+        probe.frames.some((frame) => frame.kind === "host-error"),
+        false,
+      );
+      assert.equal((await probe.stop()).failed, false);
+    });
+  }
   await test("native input accepts exactly 1 MiB", async () => {
     const probe = launch();
     await probe.ready();
