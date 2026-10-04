@@ -774,7 +774,7 @@ public:
             require(ready, "Backend web frame before ready.");
             onBackendWeb(value["context"].get<std::string>(), value["payload"]);
         } else if (kind == "host-request") {
-            require(ready, "Backend host request before ready.");
+            require(helloSeen && !closing, "Backend host request outside active runtime.");
             onHostRequest(value);
         } else if (kind == "host-cancel") {
             onHostCancel(value["context"].get<std::string>(), value["requestId"].get<std::string>());
@@ -1144,6 +1144,13 @@ public:
     }
 
     // ---------- WebView2 (UI thread) ----------
+    bool initialNavigationStarted = false;
+    void navigateWhenReady() {
+        if (ready && webviewReady && webview && !closing && !failed && !initialNavigationStarted) {
+            initialNavigationStarted = true;
+            if (FAILED(webview->Navigate(utf16(home).c_str()))) runtimeFailure();
+        }
+    }
     void initWebView() {
         auto udf = (scopes.webData).wstring();
         HRESULT hr = CreateCoreWebView2EnvironmentWithOptions(nullptr, udf.c_str(), nullptr,
@@ -1161,8 +1168,8 @@ public:
                                 controller->put_Bounds(bounds);
                                 controller->put_IsVisible(TRUE);
                                 configureWebView();
-                                webview->Navigate(utf16(home).c_str());
                                 webviewReady.store(true);
+                                navigateWhenReady();
                                 hostLog->event("webview-ready");
                                 return S_OK;
                             }).Get());
@@ -1338,7 +1345,7 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             // queue is full. Timer delivery provides a queue-independent fallback.
             if (app->failed) app->beginClose(1);
             if (app->exited) SendMessageW(hwnd, WM_APP_RUNTIME_EXITED, 0, 0);
-            else app->scanDeadlines();
+            else { app->navigateWhenReady(); app->scanDeadlines(); }
         }
         return 0;
     case WM_APP_WEB_MESSAGE: {

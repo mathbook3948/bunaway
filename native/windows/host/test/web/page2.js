@@ -1,40 +1,28 @@
 // Second page: verifies the old session was revoked and a new session works,
 // then tries a blocked remote navigation and confirms the session survives.
-const pending = new Map();
-let seq = 0;
-let helloResolve;
-window.chrome.webview.addEventListener("message", (event) => {
-  const m = event.data;
-  if (!m || typeof m !== "object") return;
-  if (m.kind === "hello") helloResolve?.(m);
-  else if (m.kind === "result" || m.kind === "error") {
-    const p = pending.get(m.id);
-    if (p) {
-      pending.delete(m.id);
-      p(m);
-    }
-  }
+import {
+  createClient,
+  createWebViewTransport,
+} from "../../../../../packages/client-sdk/src/index.ts";
+const client = createClient({
+  transport: createWebViewTransport(window.chrome.webview),
+  hello: {
+    kind: "hello",
+    protocol: { major: 1, minor: 0 },
+    features: [],
+    buildId: "windows-sdk-page2",
+  },
 });
-function send(m) {
-  m.protocol = { major: 1, minor: 0 };
-  window.chrome.webview.postMessage(m);
-}
-const call = (command, payload = null) => {
-  const id = `p2-${++seq}`;
-  return new Promise((resolve) => {
-    pending.set(id, resolve);
-    send({ kind: "invoke", id, command, payload });
-  });
-};
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+window.addEventListener("pagehide", () => {
+  void client.close();
+});
+const call = async (command, payload = null) => ({
+  kind: "result",
+  payload: await client.invoke(command, payload),
+});
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function connect() {
-  for (let i = 0; i < 300; i++) {
-    const p = new Promise((r) => (helloResolve = r));
-    send({ kind: "hello", features: [], buildId: "test-page2" });
-    const m = await Promise.race([p, sleep(150)]);
-    if (m?.kind === "hello") return m;
-  }
-  throw new Error("hello never answered");
+  return client.ready;
 }
 async function report(file, results) {
   await call("test.report", { file, report: { page: "page2", results } });
@@ -57,6 +45,12 @@ async function run() {
     await connect();
     const r = await call("test.ping");
     assert(r.kind === "result" && r.payload === "pong", `ping failed ${JSON.stringify(r)}`);
+  });
+  await test("memo survives view recreation", async () => {
+    assert(
+      (await client.invoke("memo.read", null)) === "재실행 후에도 남는 메모 😀",
+      "memo lost after navigation",
+    );
   });
   await report("report2.json", results);
 

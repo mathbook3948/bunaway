@@ -25,6 +25,7 @@ import {
   validateValue,
   type WireError,
 } from "@bunaway/protocol";
+export { createWebViewTransport, type WebViewBridge } from "./webview.ts";
 
 export type InvokeOptions = { signal?: CancellationSignal; deadline?: number };
 export type ListenOptions = { signal?: CancellationSignal; onError: (error: WireError) => void };
