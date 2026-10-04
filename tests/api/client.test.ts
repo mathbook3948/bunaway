@@ -584,3 +584,130 @@ test("aborting an established subscription releases it", async () => {
   // An abort-driven release is a normal end, not a subscription failure.
   expect(errors).toHaveLength(0);
 });
+
+test("listen registers before the next frame in the same receive batch", async () => {
+  const { transport, client } = await connected();
+  const deliveries: number[] = [];
+  const errors: WireError[] = [];
+  const pending = client.listen("notes.changed", (event) => deliveries.push(event.sequence), {
+    onError: (error) => errors.push(error),
+  });
+  await flush();
+  const request = must(transport.requests("listen").at(-1));
+  transport.emit(serverResult(request.id, { subscriptionId: "sub-1" }));
+  transport.emit(eventMessage("sub-1", 1, { key: "first" }));
+  await pending;
+  transport.emit(eventMessage("sub-1", 2, { key: "second" }));
+  expect(deliveries).toEqual([1, 2]);
+  expect(errors).toEqual([]);
+  await client.close();
+});
+
+test("listen observes subscription-error in the same receive batch", async () => {
+  const { transport, client } = await connected();
+  const errors: WireError[] = [];
+  const pending = client.listen("notes.changed", () => {}, {
+    onError: (error) => errors.push(error),
+  });
+  await flush();
+  transport.emit(
+    serverResult(must(transport.requests("listen").at(-1)).id, {
+      subscriptionId: "sub-1",
+    }),
+  );
+  transport.emit({
+    kind: "subscription-error",
+    protocol: hello.protocol,
+    subscriptionId: "sub-1",
+    error: { code: "BUSY", message: "Overflow." },
+  });
+  const release = await pending;
+  expect(errors).toMatchObject([{ code: "BUSY" }]);
+  await release();
+  expect(transport.requests("unlisten")).toHaveLength(0);
+  await client.close();
+});
+
+test("cancelled listen releases a late successful subscription exactly once", async () => {
+  const { transport, client } = await connected();
+  const controller = new AbortController();
+  const deliveries: number[] = [];
+  const pending = client.listen("notes.changed", (event) => deliveries.push(event.sequence), {
+    signal: controller.signal,
+    onError: () => {},
+  });
+  await flush();
+  const request = must(transport.requests("listen").at(-1));
+  controller.abort();
+  await expect(pending).rejects.toMatchObject({ code: "CANCELLED" });
+  const result = serverResult(request.id, { subscriptionId: "sub-1" });
+  transport.emit(result);
+  transport.emit(result);
+  transport.emit(eventMessage("sub-1", 1, { key: "ignored" }));
+  await flush();
+  expect(deliveries).toEqual([]);
+  const unlistens = transport.requests("unlisten");
+  expect(unlistens).toHaveLength(1);
+  expect(unlistens[0]).toMatchObject({ subscriptionId: "sub-1" });
+  transport.emit(serverResult(must(unlistens[0]).id, null));
+  await client.close();
+});
+
+test("release retries a rejected send and concurrent releases await the same result", async () => {
+  const { transport, client } = await connected();
+  const deliveries: number[] = [];
+  const pending = client.listen("notes.changed", (event) => deliveries.push(event.sequence), {
+    onError: () => {},
+  });
+  await flush();
+  transport.emit(
+    serverResult(must(transport.requests("listen").at(-1)).id, {
+      subscriptionId: "sub-1",
+    }),
+  );
+  const release = await pending;
+  const send = transport.send.bind(transport);
+  transport.send = (text) =>
+    parseMessage(text).kind === "unlisten"
+      ? Promise.reject({ code: "BUSY", message: "Queue full." })
+      : send(text);
+  await expect(release()).rejects.toMatchObject({ code: "BUSY" });
+  transport.emit(eventMessage("sub-1", 1, { key: "ignored" }));
+  expect(deliveries).toEqual([]);
+  transport.send = send;
+  const retry = release();
+  const concurrent = release();
+  expect(concurrent).toBe(retry);
+  let completed = false;
+  void concurrent.then(() => {
+    completed = true;
+  });
+  await flush();
+  expect(completed).toBe(false);
+  const unlistens = transport.requests("unlisten");
+  expect(unlistens).toHaveLength(1);
+  transport.emit(serverResult(must(unlistens[0]).id, null));
+  await retry;
+  await concurrent;
+  await release();
+  expect(transport.requests("unlisten")).toHaveLength(1);
+  await client.close();
+});
+
+test("failed cleanup of a cancelled listen closes the session", async () => {
+  const { transport, client } = await connected();
+  const controller = new AbortController();
+  const pending = client.listen("notes.changed", () => {}, {
+    signal: controller.signal,
+    onError: () => {},
+  });
+  await flush();
+  const request = must(transport.requests("listen").at(-1));
+  controller.abort();
+  await expect(pending).rejects.toMatchObject({ code: "CANCELLED" });
+  transport.send = () => Promise.reject({ code: "BUSY", message: "Queue full." });
+  transport.emit(serverResult(request.id, { subscriptionId: "sub-1" }));
+  await flush();
+  expect(transport.closed).toBe(true);
+  await client.close();
+});

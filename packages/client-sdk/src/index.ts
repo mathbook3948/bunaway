@@ -62,6 +62,7 @@ type EventMessage = Extract<Message, { kind: "event" }>;
 type SubscriptionErrorMessage = Extract<Message, { kind: "subscription-error" }>;
 
 type PendingRequest = {
+  onCancelledResult?: (payload: JsonValue) => void;
   // Set once the wire send is dispatched; a late settle then owes a cancel.
   sent: boolean;
   resolve: (payload: JsonValue) => void;
@@ -117,6 +118,7 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
   private readonly transport: Transport;
   private readonly hello: Hello;
   private readonly requests = new Map<string, PendingRequest>();
+  private readonly cancelledListens = new Map<string, (payload: JsonValue) => void>();
   private readonly subscriptions = new Map<string, ActiveSubscription>();
   private readonly unsubscribeTransport: Dispose;
   private negotiated: NegotiatedProtocol | undefined;
@@ -191,18 +193,36 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
   ): Promise<AsyncDispose> {
     if (this.subscriptions.size >= API_LIMITS.maxSubscriptions)
       throw requestError("BUSY", "Subscription limit reached.");
-    const payload = await this.request(
-      (id, protocol) => ({ kind: "listen", protocol, id, event }),
-      {
-        signal: options.signal,
+    let release: AsyncDispose = async () => {};
+    await this.request((id, protocol) => ({ kind: "listen", protocol, id, event }), {
+      signal: options.signal,
+      onResult: (payload) => {
+        release = this.registerSubscription(event, listener, options, payload);
       },
-    );
+      onCancelledResult: (payload) => {
+        this.bestEffortUnlisten(this.subscriptionId(payload));
+      },
+    });
+    return release;
+  }
+
+  private subscriptionId(payload: JsonValue): string {
     const subscriptionId =
       typeof payload === "object" && payload !== null && !Array.isArray(payload)
         ? (payload as { subscriptionId?: unknown }).subscriptionId
         : undefined;
     if (typeof subscriptionId !== "string" || subscriptionId.length === 0)
       throw requestError("INTERNAL", "Invalid listen response.");
+    return subscriptionId;
+  }
+
+  private registerSubscription<K extends keyof E & string>(
+    event: K,
+    listener: (event: EventDelivery<E[K]>) => void,
+    options: ListenOptions,
+    payload: JsonValue,
+  ): AsyncDispose {
+    const subscriptionId = this.subscriptionId(payload);
     const subscription: ActiveSubscription = {
       subscriptionId,
       event,
@@ -211,17 +231,26 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
       expectedSequence: 1,
       released: false,
     };
-    const release = async (): Promise<void> => {
-      if (subscription.released) return;
+    let releaseRequested = false;
+    let releasePromise: Promise<void> | undefined;
+    const release = (): Promise<void> => {
+      if (this.terminated || (subscription.released && !releaseRequested)) return Promise.resolve();
+      if (releasePromise) return releasePromise;
+      releaseRequested = true;
       subscription.released = true;
       this.subscriptions.delete(subscriptionId);
       this.detachSubscription(subscription);
-      // A closed connection finishes release without a network call.
-      if (this.terminated) return;
-      await this.request(
+      releasePromise = this.request(
         (id, protocol) => ({ kind: "unlisten", protocol, id, subscriptionId }),
         {},
+      ).then(
+        () => {},
+        (cause) => {
+          releasePromise = undefined;
+          throw cause;
+        },
       );
+      return releasePromise;
     };
     if (this.terminated) {
       this.endSubscription(subscription, this.failure);
@@ -233,17 +262,13 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
       const onAbort = () => {
         void release().then(
           () => {},
-          () => {},
+          () => this.terminate(CONNECTION_CLOSED),
         );
       };
       subscription.signal = signal;
       subscription.onAbort = onAbort;
       signal.addEventListener("abort", onAbort);
-      if (signal.aborted)
-        void release().then(
-          () => {},
-          () => {},
-        );
+      if (signal.aborted) onAbort();
     }
     return release;
   }
@@ -298,7 +323,12 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
 
   private request(
     build: (id: string, protocol: Protocol) => ClientMessage,
-    options: { signal?: CancellationSignal | undefined; deadlineAt?: number },
+    options: {
+      signal?: CancellationSignal | undefined;
+      deadlineAt?: number;
+      onResult?: (payload: JsonValue) => void;
+      onCancelledResult?: (payload: JsonValue) => void;
+    },
   ): Promise<JsonValue> {
     return new Promise<JsonValue>((resolve, reject) => {
       if (this.terminated) {
@@ -331,10 +361,16 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
       // Map membership is the settled flag: first completion deletes the entry.
       const pending: PendingRequest = {
         sent: false,
+        ...(options.onCancelledResult ? { onCancelledResult: options.onCancelledResult } : {}),
         resolve: (result) => {
           if (!this.requests.delete(id)) return;
           cleanup();
-          resolve(result);
+          try {
+            options.onResult?.(result);
+            resolve(result);
+          } catch (cause) {
+            reject(cause);
+          }
         },
         reject: (error) => {
           if (!this.requests.delete(id)) return;
@@ -385,6 +421,7 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
     const pending = this.requests.get(id);
     if (!pending) return;
     const sent = pending.sent;
+    if (sent && pending.onCancelledResult) this.cancelledListens.set(id, pending.onCancelledResult);
     pending.reject(requestError("CANCELLED", "Request cancelled."));
     if (sent) this.sendCancel(id);
   }
@@ -441,10 +478,21 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
     }
     switch (message.kind) {
       case "result": {
+        const onCancelledResult = this.cancelledListens.get(message.id);
+        if (onCancelledResult) {
+          this.cancelledListens.delete(message.id);
+          try {
+            onCancelledResult(message.payload);
+          } catch {
+            this.terminate(VIOLATION);
+          }
+          break;
+        }
         this.requests.get(message.id)?.resolve(message.payload);
         break;
       }
       case "error": {
+        this.cancelledListens.delete(message.id);
         this.requests.get(message.id)?.reject(toBunawayError(message.error, CONNECTION_CLOSED));
         break;
       }
@@ -532,13 +580,14 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
       {},
     ).then(
       () => {},
-      () => {},
+      () => this.terminate(CONNECTION_CLOSED),
     );
   }
 
   private terminate(error: WireError): void {
     if (this.terminated) return;
     this.terminated = true;
+    this.cancelledListens.clear();
     this.failure = error;
     this.rejection = toBunawayError(error, CONNECTION_CLOSED);
     if (this.handshakeTimer !== undefined) {
