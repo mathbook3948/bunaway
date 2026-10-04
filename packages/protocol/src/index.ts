@@ -60,24 +60,38 @@ export type Bootstrap = Infer<typeof bootstrapSchema>;
 export type HostResponse = Infer<typeof hostResponseSchema>;
 export type ProcessFrame = Infer<typeof processSchema>;
 export const PROCESS_IPC_VERSION = { major: 1, minor: 0 } as const;
-export const parseProcessFrame = (text: string): ProcessFrame => parse(processSchema, text);
+export const parseProcessFrame = (text: string): ProcessFrame =>
+  checkProcessPolicy(parse(processSchema, text));
 export const serializeProcessFrame = (frame: ProcessFrame): string =>
-  serialize(processSchema, frame);
+  serialize(processSchema, checkProcessPolicy(validate(processSchema, frame)));
 
 export const PROTOCOL_VERSION = { major: 1, minor: 0 } as const;
 
 export const parseMessage = (text: string): Message => parse(messageSchema, text);
 export const serializeMessage = (message: Message): string => serialize(messageSchema, message);
-export const parseBootstrap = (text: string): Bootstrap => parse(bootstrapSchema, text);
+export function parseBootstrap(text: string): Bootstrap {
+  const bootstrap = parse(bootstrapSchema, text);
+  assertUniquePolicyViews(bootstrap.policy);
+  return bootstrap;
+}
 export const parseHostResponse = (text: string): HostResponse => parse(hostResponseSchema, text);
 export const serializeHostResponse = (response: HostResponse): string =>
   serialize(hostResponseSchema, response);
 
-export function parsePolicy(text: string): Policy {
-  const policy = parse(policySchema, text);
-  if (new Set(policy.views.map((view) => view.id)).size !== policy.views.length) {
+function assertUniquePolicyViews(policy: Policy | undefined): void {
+  if (policy && new Set(policy.views.map((view) => view.id)).size !== policy.views.length) {
     throw new ProtocolError("INVALID_ARGUMENT", "Duplicate policy view.");
   }
+}
+
+function checkProcessPolicy(frame: ProcessFrame): ProcessFrame {
+  if (frame.kind === "boot") assertUniquePolicyViews(frame.payload.policy);
+  return frame;
+}
+
+export function parsePolicy(text: string): Policy {
+  const policy = parse(policySchema, text);
+  assertUniquePolicyViews(policy);
   return policy;
 }
 

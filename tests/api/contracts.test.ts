@@ -22,6 +22,8 @@ import {
   type HostResponse,
   type JsonValue,
   type Policy,
+  type Infer,
+  type ProcessFrame,
   type ServerMessage,
   type Transport,
   type TransportEvent,
@@ -29,12 +31,14 @@ import {
   parseHostCall,
   parseMessage,
   parseProcessFrame,
+  parsePolicy,
   serializeHostCall,
+  serializeProcessFrame,
   validateHostOutput,
   validateValue,
 } from "../../packages/protocol/src/index.ts";
 import { bindHostAPI } from "../../packages/runtime-bun/src/index.ts";
-import { validationCases } from "../protocol/validation-cases.ts";
+import { combinedSchema, validationCases } from "../protocol/validation-cases.ts";
 
 const input = {
   type: "object",
@@ -56,6 +60,29 @@ const optionalApp = {
     }),
   },
   events: { "notes.optionalChanged": optionalInput },
+} satisfies AppDefinition;
+const combinedApp = {
+  commands: {
+    "notes.combined": command({
+      input: combinedSchema,
+      output: combinedSchema,
+      handle(input) {
+        const base: string = input.base;
+        const note: string | undefined = input.note;
+        void base;
+        void note;
+        if (input.kind === "a") {
+          const value: string = input.value;
+          void value;
+        } else {
+          const value: number = input.value;
+          void value;
+        }
+        return input;
+      },
+    }),
+  },
+  events: { "notes.combinedChanged": combinedSchema },
 } satisfies AppDefinition;
 const app = {
   commands: {
@@ -100,6 +127,53 @@ function context(host: CommandContext["host"], signal: CancellationSignal): Comm
     events: { async emit() {} },
   };
 }
+
+test("anyOf commands retain common required fields and discriminate branch fields", async () => {
+  const signal = new AbortController().signal;
+  const ctx = context(
+    bindHostAPI(contextId, signal, async () => ({ kind: "result", payload: null })),
+    signal,
+  );
+  const definition = combinedApp.commands["notes.combined"];
+  for (const value of [
+    { base: "root", kind: "a", value: "text" },
+    { base: "root", kind: "b", value: 42 },
+  ]) {
+    expect(await definition.run(value, ctx)).toEqual(value);
+  }
+  await expect(definition.run({ kind: "a", value: "text" }, ctx)).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+});
+
+test("duplicate policy view IDs fail on standalone, bootstrap and process boot routes", () => {
+  const duplicate: Policy = {
+    ...policy,
+    views: [
+      ...policy.views,
+      ...policy.views.map((view) => ({ ...view, commands: ["notes.delete"] })),
+    ],
+  };
+  for (const candidate of [policy, duplicate]) {
+    const bootstrap = { entrypoint: "C:/app/backend.js", buildId: "test", policy: candidate };
+    const frame: ProcessFrame = {
+      kind: "boot",
+      ipc: { major: 1, minor: 0 },
+      runtime: { id: "test", generation: "1" },
+      payload: bootstrap,
+    };
+    const actions = [
+      () => parsePolicy(JSON.stringify(candidate)),
+      () => parseBootstrap(JSON.stringify(bootstrap)),
+      () => parseProcessFrame(JSON.stringify(frame)),
+      () => serializeProcessFrame(frame),
+    ];
+    for (const action of actions) {
+      if (candidate === duplicate) expect(action).toThrow("Duplicate policy view.");
+      else expect(action).not.toThrow();
+    }
+  }
+});
 
 test("command input properties are optional when required is omitted", async () => {
   const signal = new AbortController().signal;
@@ -352,6 +426,38 @@ test("pending Host calls abort promptly and release their cancellation listener"
 });
 
 // Type assertions below are not executed by the runtime tests.
+export function checkCombinedSchemaTypes(
+  client: Client<CommandsOf<typeof combinedApp>, EventsOf<typeof combinedApp>>,
+) {
+  const result: Promise<Infer<typeof combinedSchema>> = client.invoke("notes.combined", {
+    base: "root",
+    kind: "a",
+    value: "text",
+  });
+  result.then((input) => {
+    const base: string = input.base;
+    void base;
+    if (input.kind === "b") {
+      const value: number = input.value;
+      void value;
+    }
+  });
+  // @ts-expect-error anyOf does not remove the common required base
+  client.invoke("notes.combined", { kind: "a", value: "text" });
+  // @ts-expect-error branch a still requires a string value
+  client.invoke("notes.combined", { base: "root", kind: "a", value: 42 });
+  // @ts-expect-error the shared base must be a string
+  client.invoke("notes.combined", { base: 42, kind: "b", value: 42 });
+  client.listen(
+    "notes.combinedChanged",
+    (event) => {
+      const base: string = event.payload.base;
+      void base;
+    },
+    { onError() {} },
+  );
+}
+
 export function checkOptionalObjectTypes(
   client: Client<CommandsOf<typeof optionalApp>, EventsOf<typeof optionalApp>>,
 ) {

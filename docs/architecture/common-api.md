@@ -70,6 +70,15 @@ listener에는 payload와 공개 source·target·subscriptionId·sequence가 전
 클라이언트 hello 전의 invoke는 실행하지 않는다. 일반 명령을 await하며 전체 수신을 막지 않는다.
 허용 명령·이벤트와 입력·출력 스키마는 코어에서도 검사한다.
 
+전송 실패 시 정리 책임은 `CoreServices`를 제공하는 어댑터에 있다. 오류 응답도 전송할 수 없거나
+transport가 closed를 통지하면 해당 경로를 먼저 닫고 새 송수신을 차단한다.
+WebView 경로에서는 Windows 호스트가 컨텍스트를 폐기하고, 프로세스 IPC가 살아 있으면 revoke를
+보낸다. runtime-bun은 INTERNAL 오류 객체를 전달해 해당 `CoreSession.close`를 호출한다.
+공유 프로세스 파이프가 끊기면 runtime-bun은 모든 연결 세션을 닫고 코어를 정리하며,
+네이티브 호스트는 Bun 프로세스 정리를 확인한다. 서로 독립된 뷰의 전송 실패는 해당 세션만 닫는다.
+어댑터는 멱등 정리를 보장하고 고장 난 경로로 오류를 재전송하지 않는다. 실패한 send는 즉시
+reject하며 세션 정리는 별도로 진행해, send와 세션 close가 서로의 완료를 기다리지 않게 한다.
+
 `CommandContext`는 요청 signal과 해당 요청에 묶인 host·state·events를 제공한다.
 state.get/set은 JSON 스냅샷을 다루며 get 결과 수정으로 저장 값이 바뀌지 않는다.
 events.emit은 선언된 이벤트 스키마를 검사하고 broadcast 또는 명시한 view로 전달한다.
@@ -109,6 +118,7 @@ U+2028·U+2029가 들어간 경로도 전체 문자열에서 점 경로 요소�
 
 제품 부트에서는 `boot.payload.policy`와 호스트 발급 `backendContext`가 필수다.
 스키마의 optional은 기존 B 실험과의 호환 용도다.
+정책이 포함된 모든 부트 파싱·프로세스 직렬화 경로는 중복 view ID를 거부한다.
 누락을 전체 허용으로 해석하지 않는다. 호스트가 선택한 뷰와 세션은 `session-open`
 `{ context, viewId }` 제어 프레임으로 알린다. 이는 Web 메시지로 입력받지 않는다.
 runtime은 세대·방향·정책을 검사한 뒤 CoreSession을 만들고 web 프레임을 해당 세션으로 전달한다.

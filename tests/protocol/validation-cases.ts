@@ -145,6 +145,50 @@ export const validationCases: {
   },
 ];
 
+export const combinedSchema = {
+  type: "object",
+  properties: { base: { type: "string" }, note: { type: "string" } },
+  required: ["base"],
+  anyOf: [
+    {
+      type: "object",
+      properties: { kind: { const: "a" }, value: { type: "string" } },
+      required: ["kind", "value"],
+    },
+    {
+      type: "object",
+      properties: { kind: { const: "b" }, value: { type: "integer" } },
+      required: ["kind", "value"],
+    },
+  ],
+} as const;
+validationCases.push(
+  {
+    name: "anyOf with common required field branch a",
+    schema: combinedSchema,
+    value: { base: "root", kind: "a", value: "text" },
+    accepted: true,
+  },
+  {
+    name: "anyOf with common required field branch b",
+    schema: combinedSchema,
+    value: { base: "root", kind: "b", value: 42 },
+    accepted: true,
+  },
+  {
+    name: "anyOf missing common required field",
+    schema: combinedSchema,
+    value: { kind: "a", value: "text" },
+    accepted: false,
+  },
+  {
+    name: "anyOf wrong common field type",
+    schema: combinedSchema,
+    value: { base: 42, kind: "a", value: "text" },
+    accepted: false,
+  },
+);
+
 const malformedUnicode: [string, JsonValue][] = [
   ["lone high surrogate", "\uD800"],
   ["lone low surrogate", "\uDFFF"],

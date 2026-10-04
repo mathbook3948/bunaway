@@ -118,6 +118,7 @@ bool valid(const Json& schema, const Json& value) {
         if (!value.is_string()) return false;
         const auto& string = value.get_ref<const std::string&>();
         if (schema.contains("maxLength") && unicodeSize(string) > schema["maxLength"].get<size_t>()) return false;
+        // UTF-8 byte regex: supports the tested built-in patterns, not arbitrary app schemas.
         if (schema.contains("pattern") && !std::regex_search(string, std::regex(schema["pattern"].get<std::string>()))) return false;
     } else if (type == "integer" || type == "number") {
         if (!value.is_number() || !std::isfinite(value.get<double>())) return false;

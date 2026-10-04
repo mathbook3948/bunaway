@@ -21,9 +21,17 @@ envelope의 payload로 운반하며 호스트 발급 컨텍스트·수명주기 
 문자열 `maxLength`는 Unicode 코드 포인트 수이며 결합 문자는 각각 센다.
 `uniqueItems`는 중첩 JSON 값으로 비교한다. 객체의 속성 순서는 무시하고 배열 순서는 보존한다.
 객체 스키마에서 `required`를 생략하면 선언한 속성은 모두 선택 속성으로 추론·검증한다.
+`anyOf` 타입은 분기들의 합집합과 바깥 스키마의 공통 타입을 교차해 필수 속성을 보존한다.
 Windows 실험 호스트는 생성된 process 스키마와 같은 키워드를 해석하고 런타임 세대,
 방향·컨텍스트·요청 ID·이벤트 구독과 sequence를 별도로 검사한다.
 제품용 권한 집행과 WebView 신뢰 경계는 C 단계에서 구현한다.
+
+Windows B 호스트의 `pattern`은 UTF-8 바이트 문자열의 `std::regex`다.
+지원 범위는 공통 입력으로 검증한 내장 IPC·정책·Host operation 패턴이다.
+임의 앱 패턴의 JavaScript와 같은 문자 의미는 보장하지 않는다. 예를 들어 `^.$`와 `한`은
+JavaScript에서는 일치하지만 C++ 바이트 정규식에서는 일치하지 않는다.
+앱 명령·이벤트의 패턴 검증은 JavaScript 코어·backend-sdk가 담당한다. 네이티브가 임의 앱
+패턴을 실행하는 기능은 현재 지원하지 않으며, 추가하려면 정규식 문자·문법 범위를 먼저 맞춘다.
 
 JSON 전송은 UTF-8 최대 1 MiB, 루트 깊이 0에서 최대 깊이 64다. 모든 payload도 같은
 제한을 받는다. 유한한 숫자, 문자열, boolean, null, 밀집 배열과 일반 객체만 허용한다.
@@ -38,6 +46,9 @@ JSON으로 보존되지 않는 속성은 보내기 전에 거부한다. 수신�
 같은 표준 함수를 사용한다. 배열은 일반 배열로 반환한다.
 형태가 잘못된 입력의 오류에는 원본 payload나 JSON 파서 진단을 포함하지 않는다.
 JSON Schema 외에도 바이트·깊이 제한과 정책 view ID 중복 금지를 네이티브에서 적용해야 한다.
+TypeScript는 `parsePolicy`, `parseBootstrap`, `parseProcessFrame`의 boot 경로와
+`serializeProcessFrame`에서 같은 중복 검사를 적용한다. `validateValue`와 생성 JSON Schema의
+형태 검사만으로 view ID의 유일성을 확인한 것으로 취급하지 않는다.
 
 숫자는 JavaScript와 같은 유한한 IEEE-754 binary64다. 큰 정수의 정확한 보존은 보장하지
 않으므로 정밀한 ID·금액·64비트 값은 문자열이나 앱 스키마로 표현한다. 요청 deadline·버전·

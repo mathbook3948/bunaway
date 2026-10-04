@@ -31,28 +31,33 @@ type RequiredKeys<S> = S extends { readonly required: readonly string[] }
   ? S["required"][number]
   : never;
 
-export type Infer<S> = S extends { readonly const: infer C }
+export type Infer<S> = S extends { readonly anyOf: readonly (infer V)[] }
+  ? InferShape<S> & Infer<V>
+  : unknown extends InferShape<S>
+    ? JsonValue
+    : InferShape<S>;
+
+// Without an outer shape, anyOf contributes only its branch union.
+type InferShape<S> = S extends { readonly const: infer C }
   ? C
   : S extends { readonly enum: readonly (infer E)[] }
     ? E
-    : S extends { readonly anyOf: readonly (infer V)[] }
-      ? Infer<V>
-      : S extends { readonly type: "string" }
-        ? string
-        : S extends { readonly type: "integer" }
-          ? number
-          : S extends { readonly type: "boolean" }
-            ? boolean
-            : S extends { readonly type: "array"; readonly items: infer I }
-              ? Infer<I>[]
-              : S extends {
-                    readonly type: "object";
-                    readonly properties: infer P;
-                  }
-                ? { [K in keyof P as K extends RequiredKeys<S> ? K : never]: Infer<P[K]> } & {
-                    [K in keyof P as K extends RequiredKeys<S> ? never : K]?: Infer<P[K]>;
-                  }
-                : JsonValue;
+    : S extends { readonly type: "string" }
+      ? string
+      : S extends { readonly type: "integer" }
+        ? number
+        : S extends { readonly type: "boolean" }
+          ? boolean
+          : S extends { readonly type: "array"; readonly items: infer I }
+            ? Infer<I>[]
+            : S extends {
+                  readonly type: "object";
+                  readonly properties: infer P;
+                }
+              ? { [K in keyof P as K extends RequiredKeys<S> ? K : never]: Infer<P[K]> } & {
+                  [K in keyof P as K extends RequiredKeys<S> ? never : K]?: Infer<P[K]>;
+                }
+              : unknown;
 
 export const MAX_MESSAGE_BYTES = 1_048_576;
 export const MAX_JSON_DEPTH = 64;

@@ -82,6 +82,7 @@ export type CoreServices = {
   readonly platform: Platform;
   readonly backendContext: HostContext;
   readonly runtime: RuntimeServices;
+  // The adapter closes the transport and bound session(s) on terminal send failure.
   send(context: HostContext, message: ServerMessage): Promise<void>;
   callHost(context: HostContext, call: HostCall, signal: CancellationSignal): Promise<HostResponse>;
 };
