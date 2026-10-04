@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "entrypoint": {
+      "type": "string",
+      "pattern": "^(?:[A-Za-z]:[\\\\/]|/)[^\\u0000\\r\\n]+$(?![\\s\\S])",
+      "maxLength": 4096
+    },
+    "buildId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+      "maxLength": 128
+    }
+  },
+  "required": ["entrypoint", "buildId"],
+  "additionalProperties": false
+}

@@ -7,5 +7,8 @@
 - `android/`: Kotlin 수명주기·WebView·JNI 연결.
 - `ios/`: Swift 수명주기·WKWebView·C ABI 연결.
 
-현재는 디렉터리만 준비했다. 언어·빌드 도구의 버전은 실제 호스트 구현과 함께
-고정한다. 공통 TypeScript 코어는 이 디렉터리의 구현을 직접 import하지 않는다.
+`host-api/bunaway.h`에 내부 C ABI 초안이 있고 `host-api/generated/`에는 공통 정의에서
+생성한 IPC·정책 JSON Schema가 있다. 실제 호스트와 네이티브 검증기는 미구현이다.
+[ABI 계약](../docs/architecture/native-abi.md)을 참고한다. 언어·빌드 도구의 버전은
+실제 호스트 구현과 함께 고정한다. 공통 TypeScript 코어는 이 디렉터리의 구현을
+직접 import하지 않는다.

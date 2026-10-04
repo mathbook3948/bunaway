@@ -1,0 +1,253 @@
+// This JSON Schema subset is also exported for native host implementations.
+const identifier = {
+  type: "string",
+  pattern: "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+  maxLength: 128,
+} as const;
+const text = { type: "string", maxLength: 1024 } as const;
+const names = { type: "array", items: identifier, maxItems: 256, uniqueItems: true } as const;
+const version = {
+  type: "object",
+  properties: {
+    major: { type: "integer", minimum: 0, maximum: 65535 },
+    minor: { type: "integer", minimum: 0, maximum: 65535 },
+  },
+  required: ["major", "minor"],
+  additionalProperties: false,
+} as const;
+
+export const errorSchema = {
+  type: "object",
+  properties: {
+    code: {
+      enum: [
+        "INVALID_ARGUMENT",
+        "PERMISSION_DENIED",
+        "UNSUPPORTED",
+        "TIMEOUT",
+        "CANCELLED",
+        "BUSY",
+        "INTERNAL",
+      ],
+    },
+    message: text,
+    details: {},
+  },
+  required: ["code", "message"],
+  additionalProperties: false,
+} as const;
+
+export const messageSchema = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  anyOf: [
+    {
+      type: "object",
+      properties: {
+        kind: { const: "hello" },
+        protocol: version,
+        features: names,
+        buildId: identifier,
+      },
+      required: ["kind", "protocol", "features", "buildId"],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        kind: { const: "invoke" },
+        protocol: version,
+        id: identifier,
+        command: identifier,
+        payload: {},
+        deadline: { type: "integer", minimum: 0, maximum: 9007199254740991 },
+      },
+      required: ["kind", "protocol", "id", "command", "payload"],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: { kind: { const: "cancel" }, protocol: version, id: identifier },
+      required: ["kind", "protocol", "id"],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        kind: { const: "listen" },
+        protocol: version,
+        id: identifier,
+        event: identifier,
+      },
+      required: ["kind", "protocol", "id", "event"],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        kind: { const: "unlisten" },
+        protocol: version,
+        id: identifier,
+        subscriptionId: identifier,
+      },
+      required: ["kind", "protocol", "id", "subscriptionId"],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: { kind: { const: "result" }, protocol: version, id: identifier, payload: {} },
+      required: ["kind", "protocol", "id", "payload"],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        kind: { const: "error" },
+        protocol: version,
+        id: identifier,
+        error: errorSchema,
+      },
+      required: ["kind", "protocol", "id", "error"],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        kind: { const: "event" },
+        protocol: version,
+        subscriptionId: identifier,
+        source: identifier,
+        target: identifier,
+        event: identifier,
+        sequence: { type: "integer", minimum: 1, maximum: 9007199254740991 },
+        payload: {},
+      },
+      required: [
+        "kind",
+        "protocol",
+        "subscriptionId",
+        "source",
+        "target",
+        "event",
+        "sequence",
+        "payload",
+      ],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        kind: { const: "subscription-error" },
+        protocol: version,
+        subscriptionId: identifier,
+        error: errorSchema,
+      },
+      required: ["kind", "protocol", "subscriptionId", "error"],
+      additionalProperties: false,
+    },
+  ],
+} as const;
+
+const hostPermissions = {
+  type: "object",
+  properties: {
+    log: { type: "boolean" },
+    storage: {
+      type: "array",
+      maxItems: 128,
+      items: {
+        type: "object",
+        properties: {
+          scope: { enum: ["appData", "temp"] },
+          // Named directories only; empty means the entire named scope.
+          pathPrefix: {
+            type: "string",
+            pattern: "^(?:[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*)?$(?![\\s\\S])",
+            maxLength: 256,
+          },
+          access: {
+            type: "array",
+            items: { enum: ["read", "write"] },
+            minItems: 1,
+            maxItems: 2,
+            uniqueItems: true,
+          },
+        },
+        required: ["scope", "pathPrefix", "access"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["log", "storage"],
+  additionalProperties: false,
+} as const;
+
+export const policySchema = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  type: "object",
+  properties: {
+    version: { const: 1 },
+    views: {
+      type: "array",
+      maxItems: 128,
+      items: {
+        type: "object",
+        properties: {
+          id: identifier,
+          origins: {
+            type: "array",
+            maxItems: 16,
+            uniqueItems: true,
+            items: {
+              type: "string",
+              pattern: "^https?://[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[1-9][0-9]{0,4})?$(?![\\s\\S])",
+              maxLength: 256,
+            },
+          },
+          commands: names,
+          events: names,
+          host: hostPermissions,
+        },
+        required: ["id", "origins", "commands", "events", "host"],
+        additionalProperties: false,
+      },
+    },
+    backend: hostPermissions,
+  },
+  required: ["version", "views", "backend"],
+  additionalProperties: false,
+} as const;
+
+// Native-host-only JSON: never accepted from a WebView transport.
+export const bootstrapSchema = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  type: "object",
+  properties: {
+    entrypoint: {
+      type: "string",
+      pattern: "^(?:[A-Za-z]:[\\\\/]|/)[^\\u0000\\r\\n]+$(?![\\s\\S])",
+      maxLength: 4096,
+    },
+    buildId: identifier,
+  },
+  required: ["entrypoint", "buildId"],
+  additionalProperties: false,
+} as const;
+
+// Correlation and authorization context travel as C ABI arguments, not JSON.
+export const hostResponseSchema = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  anyOf: [
+    {
+      type: "object",
+      properties: { kind: { const: "result" }, payload: {} },
+      required: ["kind", "payload"],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: { kind: { const: "error" }, error: errorSchema },
+      required: ["kind", "error"],
+      additionalProperties: false,
+    },
+  ],
+} as const;

@@ -19,6 +19,8 @@ Bun workspaces는 `packages/*`와 `plugins/*`에만 적용한다.
 공통 베이스에 Bun·Node·DOM 타입을 전역으로 넣지 않는다.
 패키지의 의존성은 `workspace:*`로 선언하며 경로 별칭으로 우회하지 않는다.
 
-모든 패키지는 비공개이고 현재 entrypoint는 빈 모듈이다.
-공개 패키지 이름과 API, CLI bin, 배포 exports는 구현 단계에서 확정한다.
+모든 패키지는 비공개다. `protocol`은 스키마·검증·직렬화·버전 협상을 구현했고
+나머지 패키지 entrypoint는 아직 빈 모듈이다. 테스트와 스키마 생성 스크립트만
+별도 `tests/tsconfig.json`에서 Bun 타입을 사용한다. portable 패키지에는 전파하지 않는다.
+공개 SDK API, CLI bin, 배포 exports는 구현 단계에서 확정한다.
 빌드와 배포 설정은 실제 코드와 산출물 사용처가 생길 때 추가한다.

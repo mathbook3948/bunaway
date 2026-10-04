@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "result"
+        },
+        "payload": {}
+      },
+      "required": ["kind", "payload"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "error"
+        },
+        "error": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "enum": [
+                "INVALID_ARGUMENT",
+                "PERMISSION_DENIED",
+                "UNSUPPORTED",
+                "TIMEOUT",
+                "CANCELLED",
+                "BUSY",
+                "INTERNAL"
+              ]
+            },
+            "message": {
+              "type": "string",
+              "maxLength": 1024
+            },
+            "details": {}
+          },
+          "required": ["code", "message"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["kind", "error"],
+      "additionalProperties": false
+    }
+  ]
+}
