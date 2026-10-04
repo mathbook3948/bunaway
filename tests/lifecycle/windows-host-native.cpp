@@ -157,6 +157,38 @@ int wmain(int argc, wchar_t** argv) {
             require(!PeekMessageW(&message, nullptr, WM_APP_WEB_MESSAGE, WM_APP_WEB_MESSAGE, PM_NOREMOVE), "Expired request completed more than once.");
         }
         std::cout << "PASS expired backend success/error produce exactly one TIMEOUT before timer\n";
+
+        // Only a trusted same-document source update can change the URL binding.
+        app.queue.clear();
+        const auto document = app.documentGeneration;
+        app.updateSameDocumentSource("https://example.org/forged");
+        require(app.sessions.at(readContext).source == "https://app.bunaway.local/index.html", "Foreign origin changed the session source.");
+        app.updateSameDocumentSource("https://app.bunaway.local/spa?step=1");
+        require(app.activeContext == readContext && app.documentGeneration == document, "Same-document source update replaced the session.");
+        Json ping = { { "kind", "invoke" }, { "protocol", ipc }, { "id", "spa" }, { "command", "test.ping" }, { "payload", nullptr } };
+        app.onWebMessage(L"https://app.bunaway.local/spa?step=1", "https://app.bunaway.local/spa?step=1", ping.dump());
+        require(app.queue.size() == 1 && app.sessions.at(readContext).pending.count("spa"), "Updated document source could not invoke.");
+        ping["id"] = "foreign";
+        app.onWebMessage(L"https://example.org/forged", "https://example.org/forged", ping.dump());
+        require(receive()["error"]["code"] == "PERMISSION_DENIED" && app.queue.size() == 1, "Foreign source reached the backend.");
+        std::cout << "PASS same-document source update preserves context and rejects foreign origins\n";
+
+        // Saturate the actual Win32 queue, including space for failure notifications.
+        // A terminal response must fail the runtime instead of disappearing silently.
+        size_t filled = 0;
+        while (PostMessageW(nullptr, WM_APP + 50, 0, 0)) ++filled;
+        require(filled > 0 && GetLastError() == ERROR_NOT_ENOUGH_QUOTA, "Could not saturate UI queue.");
+        app.onBackendWeb(readContext, { { "kind", "result" }, { "protocol", ipc }, { "id", "spa" }, { "payload", "pong" } });
+        require(app.failed && !app.closing, "Lost Web response did not fail the runtime.");
+        require(!app.canDeliverWeb(App::WebDelivery{ L"{}", readContext, document }), "Failed session can still receive queued Web responses.");
+        require(!PeekMessageW(&message, nullptr, WM_APP_WEB_MESSAGE, WM_APP_WEB_MESSAGE, PM_NOREMOVE), "Full queue unexpectedly accepted a response.");
+        while (PeekMessageW(&message, nullptr, WM_APP + 50, WM_APP + 50, PM_REMOVE)) {}
+        g_app = &app;
+        wndProc(nullptr, WM_TIMER, 1, 0);
+        g_app = nullptr;
+        require(app.closing && app.shuttingDown && app.exitCode == 1, "Timer did not recover the lost failure notification.");
+        require(!app.canDeliverWeb(App::WebDelivery{ L"{}", readContext, document }), "Failed session can still receive Web responses.");
+        std::cout << "PASS UI queue saturation fails runtime and timer initiates shutdown\n";
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

@@ -80,6 +80,47 @@ async function run() {
     const r = await call("test.echo", { msg: "한글 😀\n" });
     assert(r.kind === "result" && r.payload.msg === "한글 😀\n", `bad echo ${JSON.stringify(r)}`);
   });
+  await test("History API preserves session and subscriptions", async () => {
+    const original = location.href;
+    const l = await listen("test.changed");
+    assert(l.kind === "result", "listen failed before History API navigation");
+    const sub = l.payload.subscriptionId;
+    const seen = [];
+    subs.set(sub, (m) => seen.push(m));
+    try {
+      history.pushState({}, "", "/spa/route?step=1");
+      const immediate = await call("test.ping");
+      assert(immediate.kind === "result", "immediate invoke after pushState failed");
+      await sleep(100);
+      const ping = await call("test.ping");
+      assert(ping.kind === "result" && ping.payload === "pong", "pushState broke invoke");
+      await call("test.emit", { step: 1 });
+      history.replaceState({}, "", "/spa/route?step=2");
+      const immediateReplace = await call("test.ping");
+      assert(immediateReplace.kind === "result", "immediate invoke after replaceState failed");
+      await sleep(100);
+      const replaced = await call("test.ping");
+      assert(replaced.kind === "result", "replaceState broke invoke");
+      await call("test.emit", { step: 2 });
+      const back = new Promise((resolve) =>
+        window.addEventListener("popstate", resolve, { once: true }),
+      );
+      history.back();
+      await back;
+      await sleep(100);
+      const restored = await call("test.ping");
+      assert(restored.kind === "result", "history.back broke invoke");
+      assert(
+        seen.length === 2 && seen[0].sequence === 1 && seen[1].sequence === 2,
+        "History API navigation lost the subscription",
+      );
+    } finally {
+      history.replaceState({}, "", original);
+      await sleep(100);
+      await unlisten(sub);
+      subs.delete(sub);
+    }
+  });
   await test("denied command", async () => {
     const before = (await call("test.count")).payload;
     const r = await call("test.notAllowed", null);

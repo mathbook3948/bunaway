@@ -25,6 +25,8 @@ Bun에는 `--no-env-file --no-install`과 패키지의 `bunfig.toml`·`tsconfig.
   내부 제어 프레임을 선택할 수 없다. 거부 로그에 payload를 남기지 않는다.
 - 세션 컨텍스트는 호스트가 `ctx-<random>`으로 발급한다. 탐색·뷰 폐기·종료는
   `session-open`/`revoke` 호스트 전용 프레임으로 백엔드에 알린다.
+  History API의 같은 문서 URL 변경은 WebView2 `SourceChanged`로 추적하며
+  기존 세션·구독을 유지한다. 새 문서 탐색은 기존대로 세션을 폐기한다.
 - 런타임 식별자·세대를 프레임 봉투로 검증해 지연·교차 프레임을 폐기한다.
 - 명령·이벤트는 `policy.json`의 뷰 정책을 매 연산마다 다시 확인한다.
 - Host operation(`storage.readText`·`storage.writeText`·`log.write`·
@@ -40,6 +42,8 @@ Bun에는 `--no-env-file --no-install`과 패키지의 `bunfig.toml`·`tsconfig.
 - 프레임 1 MiB·깊이 64, 송신 큐·미완료 요청·구독 128개, 요청 ID 기록 1024개,
   부팅 10초·종료 2초·요청 기한 30초 한도를 둔다. `deadline` 필드로 더 짧은
   기한을 요청할 수 있고 초과 시 `TIMEOUT` 오류와 `cancel` 프레임을 보낸다.
+  UI 메시지 큐 포화로 응답·이벤트를 전달하지 못하면 런타임을 실패 처리한다.
+  실패·종료 알림도 큐에 들어가지 못한 경우 UI 타이머가 종료를 진행한다.
 - Bun 자식은 중단 상태로 생성해 Job Object에 넣은 뒤 재개한다. 뷰 폐기·창 종료·
   backend 장애·큐 초과·기한 초과는 Job kill로 정리한다. 호스트를 강제 종료해도
   Job이 Bun과 자손을 정리한다.

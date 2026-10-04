@@ -604,12 +604,18 @@ public:
     };
     // Caller holds stateMutex; preserve the destination until UI dispatch.
     void postToWeb(const std::string& context, const std::string& jsonText) {
+        if (failed || shuttingDown) return;
         auto* heap = new WebDelivery{ utf16(jsonText), context, documentGeneration };
-        if (!PostMessageW(hwnd, WM_APP_WEB_MESSAGE, 0, reinterpret_cast<LPARAM>(heap))) delete heap;
+        if (!PostMessageW(hwnd, WM_APP_WEB_MESSAGE, 0, reinterpret_cast<LPARAM>(heap))) {
+            delete heap;
+            // A lost result/event cannot be recovered by silently continuing the
+            // session. The UI timer also observes failure if this queue is full.
+            runtimeFailure();
+        }
     }
     bool canDeliverWeb(const WebDelivery& delivery) {
         std::lock_guard lock(stateMutex);
-        return !shuttingDown && delivery.documentGeneration == documentGeneration &&
+        return !failed && !shuttingDown && delivery.documentGeneration == documentGeneration &&
             (delivery.context.empty() || (delivery.context == activeContext && sessions.count(delivery.context)));
     }
     void webError(const std::string& id, const char* code, const char* message) {
@@ -619,6 +625,13 @@ public:
     }
     static std::string documentKey(const std::string& uri) {
         return uri.substr(0, uri.find('#'));
+    }
+    void updateSameDocumentSource(const std::string& source) {
+        std::lock_guard lock(stateMutex);
+        auto it = sessions.find(activeContext);
+        if (it != sessions.end() && originOf(utf16(source)) == it->second.origin) {
+            it->second.source = source;
+        }
     }
 
     // ---------- WebView -> backend boundary (UI thread) ----------
@@ -1213,6 +1226,21 @@ public:
                 CoTaskMemFree(uri);
                 return S_OK;
             }).Get(), nullptr);
+        webview->add_SourceChanged(Callback<ICoreWebView2SourceChangedEventHandler>(
+            [this](ICoreWebView2*, ICoreWebView2SourceChangedEventArgs* args) -> HRESULT {
+                BOOL newDocument = TRUE;
+                args->get_IsNewDocument(&newDocument);
+                if (!newDocument) {
+                    LPWSTR uri = nullptr;
+                    if (SUCCEEDED(webview->get_Source(&uri)) && uri) {
+                        // History API changes keep the current document/session.
+                        // Document replacements are revoked by NavigationStarting.
+                        updateSameDocumentSource(utf8(uri));
+                    }
+                    CoTaskMemFree(uri);
+                }
+                return S_OK;
+            }).Get(), nullptr);
         webview->add_WebMessageReceived(Callback<ICoreWebView2WebMessageReceivedEventHandler>(
             [this](ICoreWebView2*, ICoreWebView2WebMessageReceivedEventArgs* args) -> HRESULT {
                 LPWSTR source = nullptr, json = nullptr;
@@ -1305,7 +1333,13 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
         return 0;
     case WM_TIMER:
-        if (app) app->scanDeadlines();
+        if (app) {
+            // Posted failure/exit notifications can themselves fail when the UI
+            // queue is full. Timer delivery provides a queue-independent fallback.
+            if (app->failed) app->beginClose(1);
+            if (app->exited) SendMessageW(hwnd, WM_APP_RUNTIME_EXITED, 0, 0);
+            else app->scanDeadlines();
+        }
         return 0;
     case WM_APP_WEB_MESSAGE: {
         auto* delivery = reinterpret_cast<App::WebDelivery*>(lParam);
@@ -1320,6 +1354,7 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         return 0;
     case WM_APP_RUNTIME_EXITED:
         if (app) {
+            if (app->failed) app->exitCode = 1;
             if (app->controller) app->controller->Close();
             DestroyWindow(hwnd);
         }
