@@ -9,6 +9,8 @@
 - [SDK·코어·Host API 공통 계약](./architecture/common-api.md)
 - [번들 Bun 실행 방식과 실험 범위](./architecture/runtime-feasibility.md)
 - [Windows B 실행 결과](./architecture/windows-probe-results.md)
+- [Windows C 호스트·SDK·코어·메모 실행 결과](./architecture/windows-host-results.md)
+- [Windows 메모 샘플 실행 방법](../examples/memo/README.md)
 
 ## 설계 결정
 

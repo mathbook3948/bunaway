@@ -84,10 +84,11 @@ mise run probe:windows
 ## 다음 단계의 경계
 
 B 실험은 `probe` 런타임·세대 `1`·`probe-view`를 고정하고 테스트 명령만 처리한다.
-Host API 요청·응답은 스키마만 정의했다. 제품의 client-sdk·core·WebView2, 세션·origin·frame
-검증, 권한 정책과 파일 저장 경계는 C 단계에서 구현한다.
-현재 임시 경로는 쓰기 가능한 실험 패키지의 `assets/tmp`다. 설치 앱에서는 읽기 전용
-패키지와 앱 데이터·임시 디렉터리를 분리해야 한다.
+이 B 실험에서 Host API 요청·응답은 스키마만 정의했다. 이후 C 단계에서는 실제
+client-sdk·core·WebView2, 세션·origin·frame 검증·권한 정책과 파일 저장 경계를 구현했다.
+[C 실행 결과](./windows-host-results.md)의 단일 창/뷰 검증은 이 B 기록과 별개다.
+B 실험의 임시 경로는 쓰기 가능한 패키지의 `assets/tmp`다. C 호스트는 패키지 자산과
+`%LOCALAPPDATA%/bunaway/<appId>`의 앱 데이터·임시 디렉터리를 분리한다.
 
 설치 프로그램·서명·최소 Windows/CPU 지원 범위, macOS·Linux·Android·iOS 실행은
 이 결과에 포함하지 않는다. Windows B 성공을 다른 플랫폼의 완료로 확대하지 않는다.

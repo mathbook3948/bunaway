@@ -7,14 +7,16 @@
 - `security/`: 권한·origin·세션·파일 범위.
 - `lifecycle/`: 종료·재연결·모바일 수명주기.
 
-`mise run test`는 구현된 프로토콜·정책의 계약 테스트와 네이티브용 생성 스키마의
-일치 여부를 검사한다. `mise run check`에는 테스트와 테스트 코드의 타입 검사도 포함한다.
+`mise run test`는 프로토콜·정책·SDK·코어·Host API의 계약 테스트와 네이티브용 생성
+스키마 일치 검사를 실행한다. `mise run check`에는 테스트와 테스트 코드의 타입 검사도 포함한다.
 코어·SDK 테스트와 `runtime-bun.test.ts`의 실제 Bun 프로세스 IPC 테스트를 포함한다.
 런타임 테스트는 플러그인 초기화 중 Host API, 응답 컨텍스트, 취소·폐기·늦은 응답,
 새 세션, 종료 훅·EOF와 부팅 전/초기화 중 종료를 확인한다.
 `mise run host:windows`는 실제 Windows WebView2에서 SDK 명령·이벤트·권한·저장,
 메모 버튼 저장·화면 갱신·재실행 후 복원, 렌더러 강제 종료 뒤 뷰 재생성과 Bun 정리를
 검증한다. [메모 샘플](../examples/memo/README.md)은 별도 패키지로 실행할 수 있다.
+실제 실행 기록은 [Windows C 결과](../docs/architecture/windows-host-results.md)에 있으며,
+단일 창/뷰에 한정한다. 테스트 디렉터리 목록은 다른 플랫폼·모바일 수명주기의 검증 완료를 뜻하지 않는다.
 `mise run probe:windows`는 별도로 Windows 네이티브 패키지를 빌드하고 실제 Bun 프로세스
 IPC·정상/강제 종료 통합 검증 50개를 실행한다. TypeScript와 C++에 같은 입력 59개를
 넣는 검증기 회귀 테스트, 출력 소비 중단·살아 있는 Bun의 stdout EOF·Unicode 오류도 포함한다.
