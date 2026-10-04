@@ -1,41 +1,93 @@
-# Bun 런타임 내장 실현성
+# 번들된 Bun 실행과 B 단계 계획
 
-확인일: 2026-10-04 · 범위: PRD 단계 A 후보 정리와 단계 B 준비
+기준일: 2026-10-04 · 대상: WebView 없는 Windows x64 최소 호스트
 
-이 기록은 공식 문서·고정 후보 링크와 현재 Windows 개발 도구를 확인한 결과다. 저장소를 내려받거나 설치·빌드하지 않았고, 앱 프로세스 내 Bun 실행이나 기기 실행은 검증하지 않았다. `bun run`이나 `bun build --compile` 성공은 네이티브 앱 내부에서 Bun VM을 실행했다는 증거가 아니다.
+앱 패키지에 Bun 실행 파일을 포함하고 네이티브 호스트가 별도 자식 프로세스로 실행한다.
+호스트↔Bun은 IPC로 통신한다. 사용자 기기에 별도 Bun 설치를 요구하지 않고 시스템 PATH에서
+Bun을 찾지 않는다. DLL, 동일 PID, 전용 Bun VM 스레드는 통과 조건에서 제외했다.
 
-## 후보와 근거
+## 현재 상태와 중단한 실험
 
-| 후보와 고정 기준 | 이번에 확인한 사실 | 상태와 미확인 항목 |
-| --- | --- | --- |
-| 공식 Bun `bun-v1.4.0` 태그. PRD에는 Bun 소스 전체 SHA가 따로 고정돼 있지 않다. | [공식 릴리스](https://github.com/oven-sh/bun/releases/tag/bun-v1.4.0)는 태그와 짧은 revision `34cbb9a`를 표시한다. [v1.4 발표](https://bun.com/blog/bun-v1.4#experimental-android-support)는 Android aarch64·x64 빌드를 experimental로 소개한다. [실행 파일 문서](https://bun.com/docs/bundler/executables)는 `--compile` 결과에 Bun 런타임을 포함하지만, 지원 타깃 표는 Windows·macOS·Linux다. | Android용 CLI 빌드와 데스크톱 독립 실행 파일의 근거다. 이 자료만으로 앱 프로세스 내 Android 실행, Windows 런타임 DLL, 공개 C embedding API는 확인되지 않는다. 태그의 전체 SHA와 빌드 재현성은 별도 고정해야 한다. |
-| Android 참고 구현 `skal-multiplatform/skal@7edb44aceb8c69ac1abd76549e2c09cf6cdc8a57` | PRD는 이 커밋을 VM 큐·타이머 연결 후보로 들며 singleton, 빈 dispose 구현과 링크 설정도 기록한다. 이번 웹 확인에서는 [고정 소스 링크](https://github.com/skal-multiplatform/skal/tree/7edb44aceb8c69ac1abd76549e2c09cf6cdc8a57)를 열지 못했다. | SHA는 PRD의 후보 그대로 보존한다. 위 구현 세부는 이번에 독립 재확인하지 못한 PRD 기록이며, 코드 검토나 APK·기기 실행 증거로 취급하지 않는다. 의존성 채택 여부도 미결이다. |
-| iOS 참고 구현 `dannote/bun@a3f7a71a950b81109c39a755dca3a018ea121e1c` | [고정 문서](https://github.com/dannote/bun/blob/a3f7a71a950b81109c39a755dca3a018ea121e1c/docs/guides/runtime/ios-embedding.mdx)는 정적 라이브러리와 `bun_start`·`bun_eval`·`bun_run` C API, 전용 스레드 실행을 설명한다. 같은 문서는 iOS 17+, Xcode/iOS SDK, CMake 3.20+, Zig 0.13+를 적고, JIT·FFI/TCC·프로세스 생성 제약을 든다. | 고정 커밋의 문서가 제시하는 접근 방식은 확인했다. 실제 코드 빌드, 시뮬레이터·기기 실행, 앱 수명주기, 서명·스토어 배포는 확인하지 않았다. 제3자 포크의 문서는 플랫폼 승인이나 유지보수 보증이 아니다. |
-| Tauri 구조 비교 | [Tauri 아키텍처 문서](https://v2.tauri.app/concept/architecture/)는 웹 프런트엔드와 네이티브 백엔드를 분리하는 구조 참고 자료다. | Bun 내장 경로나 API 근거는 아니다. |
+개발·검사 도구는 mise의 Bun 1.4.2다. 배포할 Bun 실행 파일의 고정과 새 B 단계의
+호스트·IPC는 아직 미구현·미검증이다.
 
-공식 Bun 자료에서 확인한 것은 Bun을 포함한 독립 실행 파일과 실험적 Android 빌드다. Windows 앱 안에서 같은 프로세스로 Bun VM을 시작하는 공식 C ABI는 이번에 확인한 문서에 나오지 않는다. 이는 확인한 문서 범위의 공백이며, Bun 전체 소스에 그런 내부 진입점이 없다는 증명은 아니다.
+이전 DLL 실험에서는 공식 Bun 1.4.0 태그의 전체 SHA
+`34cbb9a40b4bd1bd767d134a7065e66c2432a676`을 확인하고 소스를 내려받았다.
+빌드는 zstd의 Windows 심볼릭 링크 추출 오류로 완료되지 않았다. 사용자 요청으로 DLL
+빌드·실험을 중단하고 실험용 호스트와 Bun 소스 변경을 제거했다. DLL 실행·동일 PID·VM 종료는
+검증하지 않았다. 무시되는 `runtime/bun-embed/vendor/` 소스와 `build/` 도구·캐시는
+남겨 두며 새 방식의 제품 의존성으로 채택하지 않는다.
 
-패치 후보는 아직 적용하거나 확정하지 않았다. Windows는 Bun 내부에서 호스트가 소유하는 `start`·작업 전달·`stop` C ABI를 노출할 수 있는지 최소 DLL 실험으로 판정한다. Android는 Skal 고정 커밋을 다시 읽은 뒤 JNI와 라이브러리 링크 경로, singleton·종료 처리만 실제 코드에서 패치 대상으로 확정한다. iOS는 고정 포크의 C ABI 문서와 실제 구현을 대조하고 종료·콜백 수명을 확인한다. 확인하지 못한 linker flag나 `dispose` 구현을 패치 요구사항으로 옮기지 않는다.
+## 배포물과 호스트
 
-## 현재 Windows 도구
+공식 Windows x64 Bun 1.4.2 실행 파일을 첫 후보로 삼되 실제 배포물 확인 전에는 고정 완료로
+표시하지 않는다. `runtime/build-manifests/`에 버전, 소스 revision, 공식 배포 URL,
+아카이브·실행 파일의 SHA-256, OS·CPU·baseline, 라이선스 고지를 기록한다. 받은 파일과
+패키징 결과의 해시를 검사한다. 공식 배포물 사용을 기본으로 하며 소스 패치는 필요해진
+경우에만 원인·소스 SHA·패치 해시·빌드 도구와 함께 관리한다.
 
-프로젝트의 `mise exec -- bun --version`은 `1.4.2`이고 이번 계약 검사는 이 런타임으로 실행했다.
-기본 PATH의 Bun은 별도로 `1.3.9` (`cf6cdbbbadd50604bc17f21ed5d0612c920a5d9a`)가 있어
-프로젝트 작업에는 직접 `bun` 명령을 사용하지 않는다. 둘 다 개발 CLI이며 내장 Bun 검증 결과가 아니다.
-MSVC `14.50.35717`의 x64 `cl.exe`, Windows SDK `10.0.26100.0`, CMake `4.3.1`, Rust `1.94.0`
-(`x86_64-pc-windows-msvc`), Java `17.0.12`도 확인했다. `cl.exe`는 Visual Studio Build Tools의
-전체 경로에서 찾았고 기본 PATH에는 없다.
+최소 패키지는 C/C++ 콘솔 호스트, `runtime/bun.exe`, 실험용 백엔드 스크립트와 manifest다.
+호스트는 자신의 실행 파일 위치를 기준으로 자산의 절대 경로를 계산해 `CreateProcessW`로
+Bun을 실행한다. shell 명령을 거치지 않으며 Windows 인자 인용 규칙을 적용한다.
+임의 cwd의 `.env`·설정·스크립트가 자동 로드되지 않도록 실행 옵션과 환경을 제한한다.
+호스트 PID·OS 자식 PID·Bun `process.pid`, 실행 경로·버전·해시를 기록한다.
 
-`zig`, `adb`, `sdkmanager`, `ndk-build`, `gradle`, `kotlinc`, `swift`, `xcodebuild` 명령은 찾지 못했다. 이 결과는 현재 PATH에서 실행 파일을 찾지 못했다는 뜻이며, Android SDK 전체가 없다는 뜻으로 확대하지 않는다. iOS 빌드와 Apple 시뮬레이터는 Xcode가 필요하므로 이 Windows 환경에서 수행할 수 없다.
+## IPC와 오류
 
-## 가장 작은 Windows 내장 실험
+호스트가 만든 전용 stdin/stdout 파이프로 UTF-8 JSON을 한 줄에 한 프레임씩 전달한다.
+JSON 내부 개행은 이스케이프하고 stdout은 IPC 전용, 로그는 stderr로 분리한다.
+stdout과 stderr를 동시에 소비하고 읽기 단위와 프레임 경계를 구분한다. 분할·병합 수신,
+잘못된 UTF-8·JSON, EOF와 미완성 프레임을 처리한다. 전체 프레임은 줄 구분자를 제외하고
+최대 1 MiB이며 수신 버퍼·송신 큐·진행 중 요청에도 상한을 둔다. UI 스레드는 입출력·종료를
+동기 대기하지 않는다.
 
-첫 실험은 WebView 없는 Win32 x64 콘솔 호스트 하나로 제한한다. PRD의 Bun 후보를 전체 SHA로 고정한 뒤, 해당 소스에서 실험용 DLL과 최소 C ABI를 만든다. 호스트는 `LoadLibrary`/`GetProcAddress`로 DLL의 `start`, 비동기 `eval`/메시지 전달, `stop`만 호출하고 Bun VM은 전용 작업 스레드에서 실행한다. 별도 Bun 프로세스를 시작하는 코드는 넣지 않는다.
+내부 envelope는 Web IPC와 별도 버전을 갖고 부트 설정, `hello`/`ready`, Web 메시지,
+Host API 요청·응답, 컨텍스트 폐기와 종료 제어를 구분한다. 기존 `protocol`의 Web JSON은
+envelope payload로 운반한다. 호스트가 발급한 런타임 세대·컨텍스트·Host API 요청 ID는
+내부 envelope에서만 전달하고 큰 정수 ID는 문자열로 표현한다. WebView의 자기 신고값을
+권한 컨텍스트로 사용하지 않는다. envelope 스키마와 전송기는 B 단계에서 구현·검증한다.
 
-통과 증거는 네이티브 호스트 PID와 Bun 안의 `process.pid`가 같고, `2 + 2` 결과·Promise와 타이머 완료·JS 오류 전달·정상 종료를 받는 것이다. 실제 GUI를 붙이기 전에 DLL 링크 가능성, 재진입 없는 시작/종료, 콜백 수명만 본다. upstream 내부를 광범위하게 바꾸거나 프로세스 실행으로 우회해야만 성공한다면 그 비용을 단계 B의 차단 사유로 기록한다. 이 실험은 구현 제안이며 아직 수행하지 않았다.
+코어·SDK 없이 작은 실험용 백엔드로 요청 ID의 응답 매칭, 구독·이벤트·해제를 확인한다.
+`ready` 전에는 일반 요청을 보내지 않고 요청은 응답 또는 오류로 한 번만 완료한다.
+JS 오류는 안정된 code/message로 전달하며 원본 스택·비밀값을 노출하지 않는다.
+프로세스 비정상 종료·IPC 단절은 미완료 요청을 실패시킨다. 자동 재시작·자동 재전송은 추가하지 않는다.
 
-## 모바일 실험에 필요한 조건과 공백
+## 종료와 프로세스 소유권
 
-Android에서는 공식 Bun 1.4 Android 빌드를 CLI 기준선으로 삼을 수 있지만, 이를 Activity에서 실행하는 것으로 앱 프로세스 내장 조건을 통과하지 않는다. 최소 호스트는 Kotlin Activity와 JNI를 가진 앱이고, Bun C ABI 구현은 NDK로 빌드해 APK에 포함해야 한다. [Android NDK CMake 안내](https://developer.android.com/ndk/guides/cmake)는 NDK와 CMake를 통한 네이티브 라이브러리 빌드 흐름을 문서화한다. 개발·기기 확인에는 JDK, Android SDK/플랫폼 도구, NDK, Gradle과 ARM64 Android 기기가 필요하다. APK 안에서 JNI 호출로 런타임을 시작하고, Java와 Bun 양쪽 PID 일치 및 산술·비동기 작업·임시 파일·로그·오류 전달을 확인해야 한다. 현재 조사한 셸에서는 Java와 CMake만 확인했고 Android 명령 도구와 기기 실행은 확인하지 못했다. Skal 후보의 고정 소스 내용도 다시 열어 검증해야 한다.
+Bun을 suspended 상태로 생성해 kill-on-close Job Object에 배정한 뒤 실행한다. Job 핸들은
+자식에 상속하지 않고 필요한 파이프 핸들만 전달한다. Job 배정 실패 시 자식을 정리하고
+시작을 실패시킨다. 자식의 Job breakaway를 허용하지 않는다.
 
-iOS의 고정 포크 문서는 Xcode/iOS SDK 17+, CMake, Zig로 정적 라이브러리를 만들고 Swift에서 C API를 호출하는 경로를 제시한다. 최소 증거는 시뮬레이터 컴파일과 실제 iPhone 앱 프로세스 내 실행을 따로 남기는 것이다. 해당 문서의 interpreter-only, 파일 샌드박스, FFI/TCC·`spawn` 제약을 API 지원표에 반영해야 한다. 이 Windows 호스트에는 Xcode와 Zig가 발견되지 않아 iOS 빌드 준비가 되어 있지 않다. 소스 문서만으로 앱스토어 배포 가능성을 판단할 수 없다.
+정상 종료는 새 요청 차단→IPC 종료 요청→작업·구독 정리→실제 자식 종료·파이프 EOF 확인→
+핸들 회수 순서다. 종료 응답만으로 `stopped`를 선언하지 않는다. 기한 초과 시 관리하는
+프로세스 트리를 강제 종료하고 실제 종료와 강제 종료 사실을 기록한다. 호스트 비정상 종료
+때도 Bun이 남지 않는지 외부 테스트 제어기로 관찰한다.
+
+## 통과 조건과 증거
+
+| 검증 | 통과 조건 |
+| --- | --- |
+| 번들 실행 | PATH에 사용자 Bun이 없는 환경, 공백·한글 앱 경로, 다른 cwd에서도 패키지 Bun으로 시작·ready 성공 |
+| PID | OS 자식 PID와 Bun `process.pid`가 같고 호스트 PID와 다름 |
+| 산술 | IPC 요청의 `2 + 2`가 동일 요청 ID의 응답으로 `4` |
+| Promise | Promise 완료 값을 IPC 응답으로 정확히 전달 |
+| 타이머 | 타이머 콜백 완료 후 응답 수신. 고정 sleep으로 성공을 추정하지 않음 |
+| 요청·응답 | 여러 비동기 요청의 ID 매칭, 중복·늦은 응답 처리 확인 |
+| 이벤트 | 구독 성공→sequence가 있는 이벤트→해제 성공. 해제 후 이벤트를 보내 수신 측 폐기 확인 |
+| 오류 | throw·Promise rejection의 구조화 오류, 비정상 종료·EOF 시 미완료 요청 실패 |
+| 프레이밍 | 분할·병합 수신, 크기 초과·손상·미완성 프레임 거부, stdout 로그 혼입 감지 |
+| 앱 종료 | 정상 종료, 종료 요청을 무시하는 자식의 기한 초과, 호스트 강제 종료 모두에서 Bun과 관리 대상 하위 프로세스가 남지 않음 |
+
+실행 환경·manifest·명령·PID·응답·이벤트·오류·종료 코드와 관찰 결과를 남긴다.
+실행하지 못한 항목은 미검증으로 표시하며 기존 계약 테스트 성공만으로 B를 통과시키지 않는다.
+
+## 다음 단계와 플랫폼 범위
+
+Windows B 단계가 모두 통과하면 `client-sdk`와 `core`를 구현하고
+WebView→명령 호출→범위 제한 저장→이벤트를 연결한다. C 단계에서 실제 WebView의
+세션·origin·frame 검증, 정책 집행, 취소와 창 종료도 확인한다.
+
+macOS·Linux는 각 플랫폼의 프로세스·IPC·종료·서명·패키징을 검증한다. Android·iOS의
+Bun 번들·실행 가능 경로, 수명주기와 배포 제약은 D 단계에서 별도로 검증한다.
+Windows 성공을 모바일 지원 완료로 확대하지 않는다. 이전 Skal·iOS 포크와 C ABI 조사 자료는
+현행 Windows 구현의 의존성이나 완료 조건이 아니다.

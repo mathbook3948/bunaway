@@ -14,3 +14,4 @@ Thumbs.db
 .idea/
 .vs/
 runtime/bun-embed/vendor/
+runtime/bun-bundle/vendor/

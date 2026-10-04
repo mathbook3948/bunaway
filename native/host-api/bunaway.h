@@ -1,6 +1,9 @@
 #ifndef BUNAWAY_HOST_API_H
 #define BUNAWAY_HOST_API_H
 
+/* Historical in-process ABI draft. The current bundled-process architecture
+ * uses IPC and does not implement or require these runtime entry points. */
+
 #include <stddef.h>
 #include <stdint.h>
 

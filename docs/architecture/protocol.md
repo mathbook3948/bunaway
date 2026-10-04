@@ -4,6 +4,11 @@
 세션 관리, 명령 실행, 권한 집행, 취소 처리와 이벤트 큐는 아직 구현하지 않았다.
 이 문서의 실행 규칙은 이후 SDK·코어·네이티브 구현이 충족해야 할 계약이다.
 
+호스트↔Bun은 번들된 자식 프로세스와 IPC로 연결한다. 아래 Web 메시지는 별도 내부
+envelope의 payload로 운반하며 호스트 발급 컨텍스트·수명주기 제어는 Web JSON에
+추가하지 않는다. 프로세스 IPC envelope와 프레이밍은 아직 미구현이며
+[B 단계 계획](./runtime-feasibility.md)에서 정의·검증한다.
+
 ## 하나의 스키마 정의
 
 `packages/protocol/src/schema.ts`가 원본이다. TypeScript 타입과 검증기는 이 정의를

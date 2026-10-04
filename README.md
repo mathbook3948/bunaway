@@ -1,10 +1,12 @@
 # bunaway
 
-웹 UI와 TypeScript 백엔드, 앱 내부 Bun 런타임을 결합하는 크로스플랫폼
+웹 UI와 TypeScript 백엔드, 앱 패키지에 번들된 Bun 런타임을 결합하는 크로스플랫폼
 앱 프레임워크다. 제품 요구사항은 [PRD](./PRD.md)에 정리되어 있다.
 
-현재는 PRD A 단계의 계약을 구현하고 있다. `protocol`의 메시지·정책 스키마,
-JSON 검증·직렬화와 버전 협상이 동작하며 네이티브 C ABI는 초안이다.
+`protocol`의 메시지·정책 스키마, JSON 검증·직렬화와 버전 협상이 동작한다.
+다음 B 단계는 Windows 호스트가 번들된 Bun을 별도 프로세스로 실행하고 IPC·종료를
+검증하는 작업이다. 사용자 기기에 Bun 설치를 요구하지 않는다. 이전 런타임 C ABI는
+동일 프로세스 설계의 기록으로 보존한다.
 SDK, CLI, 코어 실행과 네이티브 호스트는 아직 구현하지 않았고 모바일 실행도
 검증하지 않았다. [진행 상태](./docs/architecture/progress.md)를 참고한다.
 
@@ -44,7 +46,7 @@ Bun은 `mise.toml`과 `package.json`에 **1.4.2**로 고정되어 있다.
 ```text
 packages/   protocol/  client-sdk/  backend-sdk/  core/  runtime-bun/  cli/
 native/     host-api/  windows/  macos/  linux/  android/  ios/
-runtime/    bun-embed/  patches/  build-manifests/
+runtime/    bun-bundle/  patches/  build-manifests/
 renderers/  system-webview/  chromium/
 plugins/    log/  storage/
 templates/  vanilla/  react/  vue/  svelte/
@@ -65,4 +67,5 @@ Bun 변경 시 `mise.toml`의 `tools.bun`과 `package.json`의
 `bun upgrade`로 mise가 관리하는 실행 파일을 직접 바꾸지 않는다.
 
 외부 개발 의존성도 정확한 버전으로 고정하고 `bun.lock`을 관리한다.
-내장 Bun의 commit·패치 고정은 [runtime](./runtime/README.md)의 별도 작업이다.
+배포할 Bun 실행 파일의 버전·소스 revision·해시 고정은
+[runtime](./runtime/README.md)의 별도 작업이다.

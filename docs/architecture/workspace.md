@@ -1,7 +1,7 @@
 # Workspace structure
 
 Bun workspaces는 `packages/*`와 `plugins/*`에만 적용한다.
-네이티브 코드, 내장 소스, 렌더러, 템플릿과 예제는 독립 영역이다.
+네이티브 코드, 번들된 Bun 배포물, 렌더러, 템플릿과 예제는 독립 영역이다.
 
 | 경로 | 패키지 | TypeScript 환경 | 직접 workspace 의존성 |
 | --- | --- | --- | --- |
