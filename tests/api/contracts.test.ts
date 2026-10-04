@@ -38,7 +38,13 @@ import {
   validateValue,
 } from "../../packages/protocol/src/index.ts";
 import { bindHostAPI } from "../../packages/runtime-bun/src/index.ts";
-import { combinedSchema, validationCases } from "../protocol/validation-cases.ts";
+import {
+  combinedSchema,
+  implicitObjectSchema,
+  implicitMixedSchema,
+  type implicitRequiredSchema,
+  validationCases,
+} from "../protocol/validation-cases.ts";
 
 const input = {
   type: "object",
@@ -95,6 +101,31 @@ const combinedApp = {
     }),
   },
   events: { "notes.combinedChanged": combinedSchema },
+} satisfies AppDefinition;
+const implicitApp = {
+  commands: {
+    "implicit.object": command({
+      input: implicitObjectSchema,
+      output: implicitObjectSchema,
+      handle(input) {
+        const id: string = input.id;
+        void id;
+        return input;
+      },
+    }),
+    "implicit.mixed": command({
+      input: implicitMixedSchema,
+      output: implicitMixedSchema,
+      handle(input) {
+        if (input !== null) {
+          const id: string = input.id;
+          void id;
+        }
+        return input;
+      },
+    }),
+  },
+  events: {},
 } satisfies AppDefinition;
 const app = {
   commands: {
@@ -180,6 +211,21 @@ test("anyOf commands retain common required fields and discriminate branch field
   await expect(definition.run({ kind: "a", value: "text" }, ctx)).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
   });
+});
+test("implicit outer object constraints apply to object branches while preserving null branches", async () => {
+  const signal = new AbortController().signal;
+  const ctx = context(
+    bindHostAPI(contextId, signal, async () => ({ kind: "result", payload: null })),
+    signal,
+  );
+  for (const kind of ["a", "b"]) {
+    const value = { id: "root", kind };
+    expect(await implicitApp.commands["implicit.object"].run(value, ctx)).toEqual(value);
+  }
+  await expect(
+    implicitApp.commands["implicit.object"].run({ kind: "a" }, ctx),
+  ).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
+  expect(await implicitApp.commands["implicit.mixed"].run(null, ctx)).toBeNull();
 });
 
 test("duplicate policy view IDs fail on standalone, bootstrap and process boot routes", () => {
@@ -462,6 +508,36 @@ test("pending Host calls abort promptly and release their cancellation listener"
 });
 
 // Type assertions below are not executed by the runtime tests.
+export function checkImplicitObjectTypes(client: Client<CommandsOf<typeof implicitApp>>) {
+  client.invoke("implicit.object", { id: "root", kind: "a" });
+  client.invoke("implicit.object", { id: "root", kind: "b" });
+  client.invoke("implicit.mixed", null);
+  // @ts-expect-error implicit outer required id cannot disappear
+  client.invoke("implicit.object", { kind: "a" });
+  // @ts-expect-error implicit properties constrain the common id type
+  client.invoke("implicit.object", { id: 42, kind: "a" });
+  // @ts-expect-error common fields do not widen branch discriminants
+  client.invoke("implicit.object", { id: "root", kind: "c" });
+  command({
+    input: implicitObjectSchema,
+    output: implicitObjectSchema,
+    // @ts-expect-error output must also retain common required fields
+    handle: () => ({ kind: "a" }) as const,
+  });
+  const required: Infer<typeof implicitRequiredSchema> = { id: 42, kind: "a" };
+  const present: JsonValue = required.id;
+  void present;
+  // @ts-expect-error required applies even without a properties declaration
+  const missing: Infer<typeof implicitRequiredSchema> = { kind: "a" };
+  void missing;
+  const implicit = { properties: implicitObjectSchema.properties, required: ["id"] } as const;
+  const nonObjects: Infer<typeof implicit>[] = [42, null, [42], "text"];
+  void nonObjects;
+  // @ts-expect-error implicit keywords still constrain object values
+  const wrong: Infer<typeof implicit> = { id: 42 };
+  void wrong;
+}
+
 export function checkContainerSchemaTypes(client: Client<CommandsOf<typeof emptyApp>>) {
   const objectResult: Promise<Infer<typeof emptyObject>> = client.invoke("empty.object", {});
   const arrayResult: Promise<Infer<typeof emptyObject>[]> = client.invoke("empty.array", [{}]);

@@ -162,6 +162,73 @@ export const combinedSchema = {
     },
   ],
 } as const;
+export const implicitObjectSchema = {
+  properties: { id: { type: "string" } },
+  required: ["id"],
+  anyOf: [
+    { type: "object", properties: { kind: { const: "a" } }, required: ["kind"] },
+    { type: "object", properties: { kind: { const: "b" } }, required: ["kind"] },
+  ],
+} as const;
+export const implicitMixedSchema = {
+  properties: implicitObjectSchema.properties,
+  required: implicitObjectSchema.required,
+  anyOf: [implicitObjectSchema.anyOf[0], { const: null }],
+} as const;
+export const implicitRequiredSchema = {
+  required: ["id"],
+  anyOf: implicitObjectSchema.anyOf,
+} as const;
+validationCases.push(
+  {
+    name: "implicit required without properties accepts JSON value",
+    schema: implicitRequiredSchema,
+    value: { id: 42, kind: "a" },
+    accepted: true,
+  },
+  {
+    name: "implicit required without properties rejects missing key",
+    schema: implicitRequiredSchema,
+    value: { kind: "a" },
+    accepted: false,
+  },
+  {
+    name: "implicit object keywords leave arrays unconstrained",
+    schema: { properties: { id: { type: "string" } }, required: ["id"] },
+    value: [42],
+    accepted: true,
+  },
+  {
+    name: "implicit outer object valid branch a",
+    schema: implicitObjectSchema,
+    value: { id: "root", kind: "a" },
+    accepted: true,
+  },
+  {
+    name: "implicit outer object valid branch b",
+    schema: implicitObjectSchema,
+    value: { id: "root", kind: "b" },
+    accepted: true,
+  },
+  {
+    name: "implicit outer object missing required id",
+    schema: implicitObjectSchema,
+    value: { kind: "a" },
+    accepted: false,
+  },
+  {
+    name: "implicit outer object wrong id type",
+    schema: implicitObjectSchema,
+    value: { id: 42, kind: "a" },
+    accepted: false,
+  },
+  {
+    name: "implicit object constraints allow non-object branch",
+    schema: implicitMixedSchema,
+    value: null,
+    accepted: true,
+  },
+);
 validationCases.push(
   {
     name: "anyOf with common required field branch a",

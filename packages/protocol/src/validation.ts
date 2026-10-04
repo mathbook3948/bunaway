@@ -33,21 +33,42 @@ type RequiredKeys<S> = S extends { readonly required: readonly string[] }
 
 type ObjectProperties<S> = S extends { readonly properties: infer P } ? P : object;
 // Exclude primitives and arrays without adding an index signature to closed shapes.
-type InferObject<S, P = ObjectProperties<S>> = keyof P extends never
+type InferObject<S, P = ObjectProperties<S>> = keyof P | RequiredKeys<S> extends never
   ? S extends { readonly additionalProperties: false }
     ? Record<string, never>
     : Record<string, JsonValue>
   : object & { [Symbol.iterator]?: never } & {
-      [K in keyof P as K extends RequiredKeys<S> ? K : never]: Infer<P[K]>;
+      [K in RequiredKeys<S>]: K extends keyof P
+        ? Infer<P[K]>
+        : S extends { readonly additionalProperties: false }
+          ? never
+          : JsonValue;
     } & {
       [K in keyof P as K extends RequiredKeys<S> ? never : K]?: Infer<P[K]>;
     };
 
-export type Infer<S> = S extends { readonly anyOf: readonly (infer V)[] }
-  ? InferShape<S> & Infer<V>
-  : unknown extends InferShape<S>
-    ? JsonValue
-    : InferShape<S>;
+// Without type, object keywords constrain only the object members of the inferred union.
+type RefineObjects<S, V> = S extends { readonly type: string }
+  ? V
+  : S extends
+        | { readonly properties: unknown }
+        | { readonly required: readonly string[] }
+        | { readonly additionalProperties: false }
+    ? V extends object
+      ? V extends readonly unknown[]
+        ? V
+        : V & InferObject<S>
+      : V
+    : V;
+
+export type Infer<S> = RefineObjects<
+  S,
+  S extends { readonly anyOf: readonly (infer V)[] }
+    ? InferShape<S> & Infer<V>
+    : unknown extends InferShape<S>
+      ? JsonValue
+      : InferShape<S>
+>;
 
 // Without an outer shape, anyOf contributes only its branch union.
 type InferShape<S> = S extends { readonly const: infer C }

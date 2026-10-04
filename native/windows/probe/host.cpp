@@ -195,9 +195,9 @@ class Probe {
     Handle job, process, input, output, stderrPipe, mainThread;
     DWORD childPid = 0;
     std::mutex outputMutex, queueMutex, stateMutex;
-    std::condition_variable queued;
-    std::deque<std::string> queue;
-    bool writerDone = false;
+    std::condition_variable queued, outputQueued;
+    std::deque<std::string> queue, outputQueue;
+    bool writerDone = false, outputDone = false;
     std::atomic<bool> ready = false, closing = false, failed = false, exited = false, forced = false, controllerDone = false, ioDone = false, outputAborted = false;
     bool helloSeen = false, contextRevoked = false;
     std::atomic<ULONGLONG> closeTime = 0;
@@ -207,9 +207,12 @@ class Probe {
     Json schema, manifest;
 
     void emit(const Json& value) {
+        auto text = value.dump() + "\n";
+        require(text.size() <= maxFrame + 1, "Controller frame too large.");
         std::lock_guard lock(outputMutex);
-        require(!outputAborted, "Host output cancelled.");
-        writeAll(GetStdHandle(STD_OUTPUT_HANDLE), value.dump() + "\n");
+        require(!outputAborted && !outputDone && outputQueue.size() < 128, "Host output unavailable or full.");
+        outputQueue.push_back(std::move(text));
+        outputQueued.notify_one();
     }
     void fail() {
         // Cleanup must start even when the controller is not consuming stdout.
@@ -269,7 +272,7 @@ class Probe {
                 require(message["source"] == "backend" && message["target"] == "probe-view" && message["event"] == "probe.changed" && message["sequence"].get<uint64_t>() == ++sub->second, "Invalid event order.");
             } else if (tag == "subscription-error") subscriptions.erase(message["subscriptionId"].get<std::string>());
             else throw std::runtime_error("Unexpected backend message.");
-            // Delivery and revocation must use the same ordering under stateMutex.
+            // Commit output order under stateMutex; the output writer never takes it.
             emit(value);
             return;
         } else if (kind == "stopping") require(closing, "Unexpected stop.");
@@ -360,6 +363,20 @@ public:
         } catch (...) { TerminateJobObject(job.value, 1); WaitForSingleObject(process.value, 5000); throw; }
         childInput.reset(); childOutput.reset(); childError.reset();
         mainThread.reset(duplicateThread(GetCurrentThread()));
+        std::thread outputWriter([&] {
+            try {
+                for (;;) {
+                    std::string next;
+                    {
+                        std::unique_lock lock(outputMutex);
+                        outputQueued.wait(lock, [&] { return outputDone || !outputQueue.empty(); });
+                        if (outputAborted || (outputDone && outputQueue.empty())) break;
+                        next = std::move(outputQueue.front()); outputQueue.pop_front();
+                    }
+                    writeAll(GetStdHandle(STD_OUTPUT_HANDLE), next);
+                }
+            } catch (...) { outputAborted.store(true); fail(); }
+        });
         std::thread writer([&] {
             try {
                 for (;;) {
@@ -385,6 +402,7 @@ public:
         Handle writerThread(duplicateThread(writer.native_handle()));
         Handle readerThread(duplicateThread(reader.native_handle()));
         Handle logsThread(duplicateThread(logs.native_handle()));
+        Handle outputThread(duplicateThread(outputWriter.native_handle()));
         std::thread monitor([&] {
             ULONGLONG started = GetTickCount64();
             while (WaitForSingleObject(process.value, 10) == WAIT_TIMEOUT) {
@@ -406,6 +424,7 @@ public:
                     CancelSynchronousIo(mainThread.value);
                     CancelSynchronousIo(readerThread.value);
                     CancelSynchronousIo(logsThread.value);
+                    CancelSynchronousIo(outputThread.value);
                 }
                 Sleep(5);
             }
@@ -436,6 +455,8 @@ public:
             emit({ { "kind", "host-stopped" }, { "exitCode", code }, { "forced", forced.load() }, { "failed", failed.load() || !closing }, { "activeProcesses", accounting.ActiveProcesses }, { "childPid", childPid } });
             result = failed || forced || code != 0 || !closing ? 1 : 0;
         } catch (...) { failed.store(true); }
+        { std::lock_guard lock(outputMutex); outputDone = true; outputQueued.notify_one(); }
+        outputWriter.join();
         ioDone.store(true);
         monitor.join();
         return failed ? 1 : result;

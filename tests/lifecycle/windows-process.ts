@@ -404,7 +404,64 @@ try {
     if (response.kind === "result") assert.deepEqual(response.payload, payload);
     await probe.stop();
   });
-  await test("shutdown is bounded when controller stops reading stdout", async () => {
+  for (const action of ["direct", "invoke", "revoke", "ignore-stop"] as const) {
+    await test(`blocked stdout remains bounded through ${action} then shutdown`, async () => {
+      const probe = launch(action === "ignore-stop" ? "ignore-stop" : "normal", true);
+      const pid = await probe.ready();
+      const exited = await watch([pid]);
+      probe.send({
+        ...base,
+        kind: "web",
+        context: "probe-view",
+        payload: {
+          kind: "invoke",
+          protocol: PROTOCOL_VERSION,
+          id: "blocked",
+          command: "probe.echo",
+          payload: "x".repeat(800000),
+        },
+      });
+      await Bun.sleep(100);
+      const started = performance.now();
+      if (action === "invoke") {
+        probe.send({
+          ...base,
+          kind: "web",
+          context: "probe-view",
+          payload: {
+            kind: "invoke",
+            protocol: PROTOCOL_VERSION,
+            id: "next",
+            command: "probe.add",
+            payload: null,
+          },
+        });
+      } else if (action === "revoke") {
+        probe.send({ ...base, kind: "revoke", context: "probe-view" });
+        probe.send({
+          ...base,
+          kind: "web",
+          context: "probe-view",
+          payload: {
+            kind: "listen",
+            protocol: PROTOCOL_VERSION,
+            id: "revoked",
+            event: "probe.changed",
+          },
+        });
+      }
+      probe.send({ ...base, kind: "shutdown" });
+      const exit = await Promise.race([probe.child.exited, Bun.sleep(4500).then(() => "timeout")]);
+      assert.equal(exit, 1, "stdout remained blocked after shutdown");
+      assert.ok(performance.now() - started < 4500);
+      await exited();
+      // Reading resumes only AFTER both host and Bun have exited.
+      probe.releaseOutput();
+      await probe.drainOutput();
+      live.delete(probe);
+    });
+  }
+  await test("blocked controller output queue overflow cleans up without shutdown", async () => {
     const probe = launch("normal", true);
     const pid = await probe.ready();
     const exited = await watch([pid]);
@@ -421,16 +478,92 @@ try {
       },
     });
     await Bun.sleep(100);
-    const started = performance.now();
-    probe.send({ ...base, kind: "shutdown" });
+    // Each request produces a result and a late-response diagnostic. Pace requests
+    // so output accumulates while the pending-request queue remains small.
+    for (let i = 0; i < 65; i++) {
+      probe.send({
+        ...base,
+        kind: "web",
+        context: "probe-view",
+        payload: {
+          kind: "invoke",
+          protocol: PROTOCOL_VERSION,
+          id: `duplicate-${i}`,
+          command: "probe.late-response",
+          payload: null,
+        },
+      });
+      await Bun.sleep(10);
+    }
     const exit = await Promise.race([probe.child.exited, Bun.sleep(4500).then(() => "timeout")]);
-    assert.equal(exit, 1, "stdout remained blocked after shutdown");
-    assert.ok(performance.now() - started < 4500);
+    assert.equal(exit, 1, "output overflow must terminate host and Bun without shutdown");
     await exited();
-    // Reading resumes only AFTER both host and Bun have exited.
     probe.releaseOutput();
     await probe.drainOutput();
     live.delete(probe);
+  });
+  await test("resuming stdout preserves response and revocation order", async () => {
+    const probe = launch("normal", true);
+    await probe.ready();
+    probe.send({
+      ...base,
+      kind: "web",
+      context: "probe-view",
+      payload: {
+        kind: "invoke",
+        protocol: PROTOCOL_VERSION,
+        id: "hold",
+        command: "probe.hold",
+        payload: null,
+      },
+    });
+    probe.send({
+      ...base,
+      kind: "web",
+      context: "probe-view",
+      payload: {
+        kind: "invoke",
+        protocol: PROTOCOL_VERSION,
+        id: "echo",
+        command: "probe.echo",
+        payload: "x".repeat(800000),
+      },
+    });
+    await Bun.sleep(100);
+    probe.send({ ...base, kind: "revoke", context: "probe-view" });
+    probe.send({
+      ...base,
+      kind: "web",
+      context: "probe-view",
+      payload: {
+        kind: "listen",
+        protocol: PROTOCOL_VERSION,
+        id: "after-revoke",
+        event: "probe.changed",
+      },
+    });
+    probe.releaseOutput();
+    const echo = await probe.response("echo");
+    assert.equal(echo.kind, "result");
+    if (echo.kind !== "result") throw new Error("Expected echo result");
+    assert.equal((echo.payload as string).length, 800000);
+    for (const id of ["hold", "after-revoke"]) {
+      const response = await probe.response(id);
+      assert.equal(response.kind, "error");
+      if (response.kind !== "error") throw new Error("Expected cancellation");
+      assert.equal(response.error.code, "CANCELLED");
+    }
+    await probe.stop();
+    const responses = probe.frames.flatMap((frame) => {
+      if (
+        frame.kind === "web" &&
+        (frame.payload?.kind === "result" || frame.payload?.kind === "error")
+      )
+        return [frame.payload.id];
+      return [];
+    });
+    assert.deepEqual(responses, ["echo", "hold", "after-revoke"]);
+    assert.equal(probe.frames.filter((frame) => frame.payload?.kind === "event").length, 0);
   });
   await test("split/coalesced UTF-8 frames and IDs beyond JS integer precision", async () => {
     const probe = launch();
