@@ -10,6 +10,7 @@
 #include <deque>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <map>
 #include <mutex>
@@ -191,19 +192,94 @@ template<typename F> void readLines(HANDLE pipe, F receive) {
     require(pending.empty(), "Incomplete process frame.");
 }
 
+// State transitions and their controller output commit under the same lock.
+// The sink only enqueues output; it must not block on pipe I/O or reenter this object.
+class ProbeContext {
+    std::mutex mutex;
+    bool revoked = false;
+    std::map<std::string, std::string> pending;
+    std::set<std::string> used;
+    std::map<std::string, uint64_t> subscriptions;
+    std::function<void(std::string)> output;
+
+    void reject(const std::string& id, const char* code, const char* message) {
+        output(Json { { "kind", "web" }, { "ipc", ipc }, { "runtime", runtime }, { "context", "probe-view" },
+            { "payload", { { "kind", "error" }, { "protocol", ipc }, { "id", id },
+                { "error", { { "code", code }, { "message", message } } } } } }.dump());
+    }
+    void finish(const char* code, const char* message) {
+        revoked = true;
+        subscriptions.clear();
+        for (const auto& [id, _] : pending) reject(id, code, message);
+        pending.clear();
+    }
+    void discard(const char* reason) {
+        output(Json { { "kind", "host-discarded" }, { "reason", reason } }.dump());
+    }
+public:
+    explicit ProbeContext(std::function<void(std::string)> sink) : output(std::move(sink)) {}
+
+    // Called only after envelope validation. False means the request was answered locally.
+    bool accept(const Json& value) {
+        std::lock_guard lock(mutex);
+        if (value["kind"] == "revoke") {
+            require(value["context"] == "probe-view", "Invalid context.");
+            finish("CANCELLED", "Context revoked.");
+            return true;
+        }
+        require(value["kind"] == "web" && value["context"] == "probe-view", "Invalid controller direction.");
+        auto message = value["payload"];
+        require(message["protocol"] == ipc, "Wrong negotiated protocol.");
+        auto kind = message["kind"].get<std::string>();
+        require(kind == "invoke" || kind == "listen" || kind == "unlisten", "Invalid controller message.");
+        auto id = message["id"].get<std::string>();
+        require(used.size() < 1024 && used.insert(id).second && pending.size() < 128, "Request ID reused or limit exceeded.");
+        if (revoked) { reject(id, "CANCELLED", "Context revoked."); return false; }
+        pending[id] = kind;
+        if (kind == "unlisten") subscriptions.erase(message["subscriptionId"].get<std::string>());
+        return true;
+    }
+    // Preserve validated wire bytes rather than reserializing received numbers.
+    void deliver(const Json& value, const std::string& line) {
+        require(value["context"] == "probe-view" && value["payload"]["protocol"] == ipc, "Invalid backend route.");
+        auto message = value["payload"];
+        auto tag = message["kind"].get<std::string>();
+        std::lock_guard lock(mutex);
+        if (revoked) { discard(tag == "result" || tag == "error" ? "late-response" : "inactive-subscription"); return; }
+        if (tag == "result" || tag == "error") {
+            auto id = message["id"].get<std::string>();
+            auto request = pending.find(id);
+            if (request == pending.end()) { discard("late-response"); return; }
+            if (tag == "result" && request->second == "listen") {
+                require(message["payload"].is_object() && message["payload"].size() == 1 && message["payload"]["subscriptionId"].is_string(), "Invalid subscription result.");
+                subscriptions[message["payload"]["subscriptionId"].get<std::string>()] = 0;
+            }
+            pending.erase(request);
+        } else if (tag == "event") {
+            auto sub = subscriptions.find(message["subscriptionId"].get<std::string>());
+            if (sub == subscriptions.end()) { discard("inactive-subscription"); return; }
+            require(message["source"] == "backend" && message["target"] == "probe-view" && message["event"] == "probe.changed" && message["sequence"].get<uint64_t>() == ++sub->second, "Invalid event order.");
+        } else if (tag == "subscription-error") subscriptions.erase(message["subscriptionId"].get<std::string>());
+        else throw std::runtime_error("Unexpected backend message.");
+        output(line);
+    }
+    void close() {
+        std::lock_guard lock(mutex);
+        finish("INTERNAL", "Backend connection closed.");
+    }
+};
+
 class Probe {
     Handle job, process, input, output, stderrPipe, mainThread;
     DWORD childPid = 0;
-    std::mutex outputMutex, queueMutex, stateMutex;
+    std::mutex outputMutex, queueMutex;
     std::condition_variable queued, outputQueued;
     std::deque<std::string> queue, outputQueue;
     bool writerDone = false, outputDone = false;
     std::atomic<bool> ready = false, closing = false, failed = false, exited = false, forced = false, controllerDone = false, ioDone = false, outputAborted = false;
-    bool helloSeen = false, contextRevoked = false;
+    bool helloSeen = false;
     std::atomic<ULONGLONG> closeTime = 0;
-    std::map<std::string, std::string> pending;
-    std::set<std::string> used;
-    std::map<std::string, uint64_t> subscriptions;
+    ProbeContext context { [this](std::string line) { emitLine(std::move(line)); } };
     Json schema, manifest;
 
     void emitLine(std::string text) {
@@ -233,10 +309,6 @@ class Probe {
     }
     void send(const Json& value, bool control = false) { sendLine(value.dump(), control); }
     Json frame(const char* kind) { return { { "kind", kind }, { "ipc", ipc }, { "runtime", runtime } }; }
-    void cancelled(const std::string& id) {
-        auto response = frame("web"); response["context"] = "probe-view";
-        response["payload"] = { { "kind", "error" }, { "protocol", ipc }, { "id", id }, { "error", { { "code", "CANCELLED" }, { "message", "Context revoked." } } } }; emit(response);
-    }
     void stop() {
         if (!closing.exchange(true)) {
             closeTime.store(GetTickCount64());
@@ -254,28 +326,8 @@ class Probe {
             require(helloSeen && !ready && value["pid"] == childPid && value["bunVersion"] == manifest["bun"]["version"] && value["revision"] == manifest["bun"]["sourceRevision"], "Unexpected runtime identity.");
             ready.store(true);
         } else if (kind == "web") {
-            require(ready && value["context"] == "probe-view" && value["payload"]["protocol"] == ipc, "Invalid backend route.");
-            auto message = value["payload"];
-            auto tag = message["kind"].get<std::string>();
-            std::lock_guard lock(stateMutex);
-            if (contextRevoked) { emit({ { "kind", "host-discarded" }, { "reason", tag == "result" || tag == "error" ? "late-response" : "inactive-subscription" } }); return; }
-            if (tag == "result" || tag == "error") {
-                auto id = message["id"].get<std::string>();
-                auto request = pending.find(id);
-                if (request == pending.end()) { emit({ { "kind", "host-discarded" }, { "reason", "late-response" } }); return; }
-                if (tag == "result" && request->second == "listen") {
-                    require(message["payload"].is_object() && message["payload"].size() == 1 && message["payload"]["subscriptionId"].is_string(), "Invalid subscription result.");
-                    subscriptions[message["payload"]["subscriptionId"].get<std::string>()] = 0;
-                }
-                pending.erase(request);
-            } else if (tag == "event") {
-                auto sub = subscriptions.find(message["subscriptionId"].get<std::string>());
-                if (sub == subscriptions.end()) { emit({ { "kind", "host-discarded" }, { "reason", "inactive-subscription" } }); return; }
-                require(message["source"] == "backend" && message["target"] == "probe-view" && message["event"] == "probe.changed" && message["sequence"].get<uint64_t>() == ++sub->second, "Invalid event order.");
-            } else if (tag == "subscription-error") subscriptions.erase(message["subscriptionId"].get<std::string>());
-            else throw std::runtime_error("Unexpected backend message.");
-            // Commit output order under stateMutex; the output writer never takes it.
-            emitLine(line);
+            require(ready, "Invalid backend route.");
+            context.deliver(value, line);
             return;
         } else if (kind == "stopping") require(closing, "Unexpected stop.");
         else if (kind == "fatal") { emitLine(line); fail(); return; }
@@ -287,28 +339,7 @@ class Probe {
         require(valid(schema, value) && value["runtime"] == runtime, "Invalid controller envelope.");
         if (value["kind"] == "shutdown") { stop(); return; }
         require(ready && !closing, "Backend not ready.");
-        if (value["kind"] == "revoke") {
-            require(value["context"] == "probe-view", "Invalid context.");
-            {
-                std::lock_guard lock(stateMutex);
-                contextRevoked = true;
-                subscriptions.clear();
-                for (const auto& [id, _] : pending) cancelled(id);
-                pending.clear();
-            }
-        } else {
-            require(value["kind"] == "web" && value["context"] == "probe-view", "Invalid controller direction.");
-            auto message = value["payload"];
-            require(message["protocol"] == ipc, "Wrong negotiated protocol.");
-            auto kind = message["kind"].get<std::string>();
-            require(kind == "invoke" || kind == "listen" || kind == "unlisten", "Invalid controller message.");
-            std::lock_guard lock(stateMutex);
-            auto id = message["id"].get<std::string>();
-            require(used.size() < 1024 && used.insert(id).second && pending.size() < 128, "Request ID reused or limit exceeded.");
-            if (contextRevoked) { cancelled(id); return; }
-            pending[id] = kind;
-            if (kind == "unlisten") subscriptions.erase(message["subscriptionId"].get<std::string>());
-        }
+        if (!context.accept(value)) return;
         // Relay only after validation and routing; keep the original wire byte size.
         sendLine(line);
     }
@@ -443,10 +474,7 @@ public:
         int result = 1;
         try {
             DWORD code = 1; require(GetExitCodeProcess(process.value, &code), "Exit code failed.");
-            { std::lock_guard lock(stateMutex); for (const auto& [id, _] : pending) {
-                auto response = frame("web"); response["context"] = "probe-view";
-                response["payload"] = { { "kind", "error" }, { "protocol", ipc }, { "id", id }, { "error", { { "code", "INTERNAL" }, { "message", "Backend connection closed." } } } }; emit(response);
-            } }
+            context.close();
             JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accounting {};
             ULONGLONG deadline = GetTickCount64() + 5000;
             do {
