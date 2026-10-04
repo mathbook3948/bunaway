@@ -104,6 +104,59 @@ int wmain(int argc, wchar_t** argv) {
         auto outcome = readOutcome("ordinary read");
         require(outcome["kind"] == "result" && outcome["payload"] == "ordinary read", "Normal read failed after oversized responses.");
         std::cout << "PASS oversized and escaped reads return errors; normal reads recover\n";
+
+        app.messageSchema = readJson(assets / "message.schema.json");
+        app.ready = true;
+        app.sessions.at(readContext).negotiated = true;
+        auto receive = [&] {
+            require(PeekMessageW(&message, nullptr, WM_APP_WEB_MESSAGE, WM_APP_WEB_MESSAGE, PM_REMOVE), "Expected Web response.");
+            std::unique_ptr<App::WebDelivery> response(reinterpret_cast<App::WebDelivery*>(message.lParam));
+            require(app.canDeliverWeb(*response), "Response destination is inactive.");
+            return parse(utf8(response->text));
+        };
+        auto submit = [&](const Json& web) {
+            app.onWebMessage(L"https://app.bunaway.local/index.html", "https://app.bunaway.local/index.html", web.dump());
+        };
+        Json invoke = { { "kind", "invoke" }, { "protocol", ipc }, { "id", "boundary" }, { "command", "test.echo" }, { "payload", "" } };
+        invoke["payload"] = std::string(maxFrame - invoke.dump().size(), 'a');
+        Json nested = nullptr;
+        for (size_t i = 0; i < maxDepth - 1; ++i) nested = Json::array({ nested });
+        auto deep = invoke;
+        deep["payload"] = nested;
+        for (const auto& rejectedFrame : { invoke, deep }) {
+            app.queue.clear();
+            require(valid(app.messageSchema, parse(rejectedFrame.dump())), "Fixture must be valid Web IPC.");
+            submit(rejectedFrame);
+            auto response = receive();
+            require(response["kind"] == "error" && response["error"]["code"] == "INVALID_ARGUMENT", "Envelope overflow must return INVALID_ARGUMENT.");
+            require(app.queue.empty(), "Invalid internal frame reached backend.");
+            require(app.sessions.at(readContext).pending.empty() && app.sessions.at(readContext).usedIds.empty(), "Rejected frame reserved request state.");
+        }
+        // The same ID remains usable, and the deepest allowed internal frame is sent.
+        deep["payload"] = nested.at(0);
+        submit(deep);
+        require(app.queue.size() == 1, "Valid boundary frame was not sent.");
+        parse(app.queue.front());
+        app.onBackendWeb(readContext, { { "kind", "result" }, { "protocol", ipc }, { "id", "boundary" }, { "payload", "ok" } });
+        require(receive()["payload"] == "ok", "Session did not recover after rejected frames.");
+        std::cout << "PASS internal envelope size/depth rejection preserves session and request IDs\n";
+
+        // A response must lose to its deadline even before the UI timer runs.
+        for (const auto& kind : { "result", "error" }) {
+            app.queue.clear();
+            app.sessions.at(readContext).pending["expired"] = { "invoke", GetTickCount64() - 1 };
+            Json response = { { "kind", kind }, { "protocol", ipc }, { "id", "expired" } };
+            if (std::string(kind) == "result") response["payload"] = "late success";
+            else response["error"] = { { "code", "INTERNAL" }, { "message", "late error" } };
+            app.onBackendWeb(readContext, response);
+            require(receive()["error"]["code"] == "TIMEOUT", "Expired response was delivered instead of TIMEOUT.");
+            require(app.sessions.at(readContext).pending.empty(), "Expired request retained pending state.");
+            require(app.queue.size() == 1 && parse(app.queue.front())["payload"]["kind"] == "cancel", "Expired request must cancel backend work.");
+            app.onBackendWeb(readContext, response);
+            app.scanDeadlines();
+            require(!PeekMessageW(&message, nullptr, WM_APP_WEB_MESSAGE, WM_APP_WEB_MESSAGE, PM_NOREMOVE), "Expired request completed more than once.");
+        }
+        std::cout << "PASS expired backend success/error produce exactly one TIMEOUT before timer\n";
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

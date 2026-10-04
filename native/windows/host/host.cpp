@@ -568,9 +568,16 @@ public:
     }
     void send(const Json& value, bool control = false) { sendLine(value.dump(), control); }
     // Relays the already-validated raw payload so number spellings stay unchanged.
+    std::string encodeWebFrame(const std::string& context, const std::string& rawPayload) {
+        auto text = "{\"kind\":\"web\",\"ipc\":{\"major\":1,\"minor\":0},\"runtime\":{\"id\":\"" + runtimeId +
+            "\",\"generation\":\"" + generation + "\"},\"context\":\"" + context + "\",\"payload\":" + rawPayload + "}";
+        // The internal envelope adds bytes and one level of JSON nesting.
+        try { parse(text); }
+        catch (...) { throw HostError("INVALID_ARGUMENT", "Web message exceeds internal IPC limits."); }
+        return text;
+    }
     void sendWebFrame(const std::string& context, const std::string& rawPayload) {
-        sendLine("{\"kind\":\"web\",\"ipc\":{\"major\":1,\"minor\":0},\"runtime\":{\"id\":\"" + runtimeId +
-            "\",\"generation\":\"" + generation + "\"},\"context\":\"" + context + "\",\"payload\":" + rawPayload + "}");
+        sendLine(encodeWebFrame(context, rawPayload));
     }
     void sendControlContext(const char* kind, const std::string& context) {
         auto value = frame(kind); value["context"] = context; send(value);
@@ -657,6 +664,8 @@ public:
             }
             if (kind == "hello") throw HostError("INVALID_ARGUMENT", "Duplicate hello.");
             if (kind != "cancel" && !session->negotiated) throw HostError("INVALID_ARGUMENT", "Session is not negotiated.");
+            // Reject envelope overflow before reserving an ID or changing subscriptions.
+            auto outgoing = encodeWebFrame(session->context, raw);
             if (kind == "invoke") {
                 if (!view->commands.count(message["command"].get<std::string>())) {
                     hostLog->event("permission-denied", { { "kind", "command" }, { "name", message["command"].get<std::string>() }, { "view", viewId } });
@@ -677,7 +686,7 @@ public:
                 if (target == session->pending.end()) { hostLog->event("web-message", { { "context", session->context }, { "kind", "cancel" }, { "id", message["id"].get<std::string>() }, { "result", "dropped" } }); return; }
             }
             hostLog->event("web-message", { { "context", session->context }, { "kind", kind }, { "id", id } });
-            sendWebFrame(session->context, raw);
+            sendLine(std::move(outgoing));
         } catch (const HostError& error) {
             hostLog->event("web-message-rejected", { { "reason", error.code }, { "source", sourceText } });
             webError(id, error.code.c_str(), error.what());
@@ -775,6 +784,11 @@ public:
             auto id = message["id"].get<std::string>();
             auto pending = session.pending.find(id);
             if (pending == session.pending.end()) { hostLog->event("discarded", { { "reason", "late-response" }, { "context", context }, { "id", id } }); return; }
+            if (GetTickCount64() >= pending->second.deadlineTick) {
+                session.pending.erase(pending);
+                notifyTimeout(context, id);
+                return;
+            }
             if (tag == "result" && pending->second.kind == "listen") {
                 if (!message["payload"].is_object() || message["payload"].size() != 1 || !message["payload"]["subscriptionId"].is_string()) {
                     hostLog->event("discarded", { { "reason", "invalid-subscription-result" }, { "id", id } });
@@ -939,6 +953,15 @@ public:
     }
 
     // ---------- request deadlines (UI timer) ----------
+    // Caller holds stateMutex and has removed the pending request.
+    void notifyTimeout(const std::string& context, const std::string& id) {
+        try {
+            sendWebFrame(context, Json({ { "kind", "cancel" }, { "protocol", ipc }, { "id", id } }).dump());
+        } catch (...) {}
+        postToWeb(context, Json({ { "kind", "error" }, { "protocol", ipc }, { "id", id },
+            { "error", { { "code", "TIMEOUT" }, { "message", "Request deadline exceeded." } } } }).dump());
+        hostLog->event("request-timeout", { { "context", context }, { "id", id } });
+    }
     void scanDeadlines() {
         std::vector<std::pair<std::string, std::string>> expired;
         {
@@ -951,14 +974,8 @@ public:
                 }
             }
             for (const auto& [context, id] : expired) {
-                try {
-                    sendWebFrame(context, Json({ { "kind", "cancel" }, { "protocol", ipc }, { "id", id } }).dump());
-                } catch (...) {}
+                notifyTimeout(context, id);
             }
-        }
-        for (const auto& [context, id] : expired) {
-            hostLog->event("request-timeout", { { "context", context }, { "id", id } });
-            webError(id, "TIMEOUT", "Request deadline exceeded.");
         }
     }
 
