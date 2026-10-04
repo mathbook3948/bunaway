@@ -1193,3 +1193,62 @@ for (const shutdown of ["close", "stop"] as const) {
     await core.stop();
   });
 }
+
+for (const shutdown of ["cancel", "timeout", "close"] as const) {
+  test(`late command events cannot reach a new session after ${shutdown}`, async () => {
+    const clock = createClock();
+    const { services, sent } = createServices(clock);
+    const gate = deferred<null>();
+    let emissionFailure: unknown;
+    const { core, session } = await openSession(
+      services,
+      "old" as HostContext,
+      "main",
+      createApp({
+        commands: {
+          "notes.slow": command({
+            input: { const: null },
+            output: { const: null },
+            async handle(_input, context) {
+              await gate.promise;
+              try {
+                await context.events.emit("notes.changed", { key: "stale" }, { kind: "broadcast" });
+              } catch (cause) {
+                emissionFailure = cause;
+              }
+              return null;
+            },
+          }),
+        },
+      }),
+    );
+    await session.receive({
+      kind: "invoke",
+      protocol: helloMessage.protocol,
+      id: "slow",
+      command: "notes.slow",
+      payload: null,
+    });
+    if (shutdown === "cancel")
+      await session.receive({ kind: "cancel", protocol: helloMessage.protocol, id: "slow" });
+    else if (shutdown === "timeout") clock.advance(API_LIMITS.maxCommandDurationMs);
+    else await session.close();
+
+    const fresh = core.openSession("fresh" as HostContext, "main");
+    await fresh.receive(helloMessage);
+    await fresh.receive({
+      kind: "listen",
+      protocol: helloMessage.protocol,
+      id: "listen",
+      event: "notes.changed",
+    });
+    gate.resolve(null);
+    await flush();
+    expect(emissionFailure).toMatchObject({ code: "CANCELLED" });
+    expect(sent.filter(({ message }) => message.kind === "event")).toEqual([]);
+    expect(results(sent, "slow")).toMatchObject([
+      { kind: "error", error: { code: shutdown === "timeout" ? "TIMEOUT" : "CANCELLED" } },
+    ]);
+    await core.stop();
+  });
+}

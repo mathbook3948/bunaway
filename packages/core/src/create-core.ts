@@ -452,7 +452,11 @@ class SessionImpl implements CoreSession {
       host: createHostAPI(this.context, signal, this.core.services.callHost),
       state: this.core.state,
       events: {
-        emit: (event, payload, target) => this.core.emit(event, payload, target, this.view.id),
+        emit: async (event, payload, target) => {
+          if (signal.aborted || this.closed || this.failed)
+            fail("CANCELLED", "Event emission cancelled.");
+          await this.core.emit(event, payload, target, this.view.id);
+        },
       },
     };
   }
