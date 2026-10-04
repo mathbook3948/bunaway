@@ -331,7 +331,7 @@ test("requests before hello fail without running the command", async () => {
   ]);
 });
 
-test("incompatible hello closes the session and suppresses later work", async () => {
+test("incompatible hello reports the backend version and suppresses later work", async () => {
   const clock = createClock();
   const { services, sent } = createServices(clock);
   const core = await createCore(createApp(), services);
@@ -350,7 +350,9 @@ test("incompatible hello closes the session and suppresses later work", async ()
     payload: { key: "a" },
   });
   await flush();
-  expect(sent).toEqual([]);
+  expect(sent).toEqual([{ context: "ctx" as HostContext, message: services.hello }]);
+  expect(core.openSession("ctx" as HostContext, "main")).toBeDefined();
+  await core.stop();
 });
 
 test("duplicate request IDs and request ID records are bounded", async () => {

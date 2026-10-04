@@ -313,6 +313,9 @@ class SessionImpl implements CoreSession {
     } catch (cause) {
       const code = cause instanceof ProtocolError ? cause.code : "INVALID_ARGUMENT";
       await this.close({ code, message: "Protocol negotiation failed." });
+      // The SDK must receive our hello to reject an incompatible major version
+      // immediately; silently closing only the core session leaves ready pending.
+      if (code === "UNSUPPORTED") await this.sendOrFail(this.core.services.hello);
       return;
     }
     this.helloDone = true;
