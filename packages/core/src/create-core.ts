@@ -570,14 +570,15 @@ class SessionImpl implements CoreSession {
     if (subscription.dead) return;
     subscription.dead = true;
     this.subscriptions.delete(subscription.id);
-    subscription.chain = subscription.chain.then(() =>
-      this.sendOrFail({
+    subscription.chain = subscription.chain.then(() => {
+      if (this.closed) return;
+      return this.sendOrFail({
         kind: "subscription-error",
         protocol: this.outProtocol,
         subscriptionId: subscription.id,
         error,
-      }),
-    );
+      });
+    });
   }
 }
 

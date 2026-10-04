@@ -1145,3 +1145,49 @@ test("failed startup bounds plugin cleanup by the shutdown deadline", async () =
   clock.advance(API_LIMITS.shutdownTimeoutMs);
   expect(await failure).toMatchObject({ code: "TIMEOUT" });
 });
+
+for (const shutdown of ["close", "stop"] as const) {
+  test(`queued subscription overflow error is discarded after ${shutdown}`, async () => {
+    const clock = createClock();
+    const gate = deferred<void>();
+    const sent: ServerMessage[] = [];
+    const { services } = createServices(clock, {
+      send: async (_context, message) => {
+        sent.push(message);
+        if (message.kind === "result") await gate.promise;
+      },
+    });
+    let emit!: () => Promise<void>;
+    const { core, session } = await openSession(
+      services,
+      "ctx" as HostContext,
+      "main",
+      createApp({
+        plugins: [
+          {
+            name: "emitter",
+            version: "1",
+            setup(context) {
+              emit = () =>
+                context.events.emit("notes.changed", { key: "x" }, { kind: "broadcast" });
+            },
+          },
+        ],
+      }),
+    );
+    await session.receive({
+      kind: "listen",
+      protocol: helloMessage.protocol,
+      id: "l1",
+      event: "notes.changed",
+    });
+    for (let i = 0; i <= API_LIMITS.maxPending; i++) await emit();
+    if (shutdown === "close") await session.close();
+    else await core.stop();
+    expect(sent.map((message) => message.kind)).toEqual(["hello", "result"]);
+    gate.resolve();
+    await flush(600);
+    expect(sent.map((message) => message.kind)).toEqual(["hello", "result"]);
+    await core.stop();
+  });
+}
