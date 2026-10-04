@@ -199,6 +199,18 @@ async function run() {
       `read failed ${JSON.stringify(r)}`,
     );
   });
+  await test("junction inside appData cannot bypass pathPrefix", async () => {
+    const r = await call("test.readEscape", { path: "notes/internal-link/x.txt" });
+    assert(
+      r.kind === "result" && r.payload.ok === false && r.payload.code === "PERMISSION_DENIED",
+      `expected junction denial ${JSON.stringify(r)}`,
+    );
+    const w = await call("test.writeNote", { name: "internal-link/x", text: "forbidden" });
+    assert(
+      w.kind === "result" && w.payload.ok === false && w.payload.code === "PERMISSION_DENIED",
+      `expected junction write denial ${JSON.stringify(w)}`,
+    );
+  });
   await test("storage scope escape denied", async () => {
     const r = await call("test.readEscape", { path: "secrets/x.txt" });
     assert(

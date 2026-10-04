@@ -33,6 +33,9 @@ Bun에는 `--no-env-file --no-install`과 패키지의 `bunfig.toml`·`tsconfig.
 - 저장은 `%LOCALAPPDATA%/bunaway/<appId>`의 `appData`·`temp` 범위로 제한한다.
   경로는 어휘 검사 후 실제 파일을 여는 경계에서 다시 검사한다. reparse point·
   다중 링크·디렉터리·최종 경로의 canonical 범위 이탈을 거부하고 읽기는 4 MiB다.
+  읽기·쓰기 모두 루트와 중간 디렉터리 핸들을 최종 파일 검사까지 유지해 junction
+  탐색과 검사 중 경로 교체를 막는다. 읽은 내용의 JSON 응답이 IPC 1 MiB 한도를
+  넘으면 `INTERNAL` 오류를 반환한다.
   설치 자산과 쓰기 가능한 데이터는 분리한다.
 - 프레임 1 MiB·깊이 64, 송신 큐·미완료 요청·구독 128개, 요청 ID 기록 1024개,
   부팅 10초·종료 2초·요청 기한 30초 한도를 둔다. `deadline` 필드로 더 짧은
@@ -55,7 +58,9 @@ host-request 응답을 기다릴 수 있으므로 stdin 읽기 루프와 invoke 
 
 `tests/lifecycle/windows-host-native.cpp`는 실제 호스트 코드를 사용하는 네이티브
 회귀 테스트다. 세션 폐기 후 대기 중 저장 작업·늦은 응답 폐기, UI 큐에서 이전
-문서의 메시지 차단, 파일 축소에 따른 조기 EOF 처리를 검증한다.
+문서의 메시지 차단, 파일 축소에 따른 조기 EOF 처리, 큰 파일·이스케이프 문자로
+인한 응답 크기 초과와 이후 일반 읽기 복구를 검증한다. WebView2 통합 검증은
+같은 저장 영역 안의 junction으로 `pathPrefix`를 우회하는 읽기·쓰기 거부도 확인한다.
 `run.ps1`은 이 테스트를 WebView2 통합 검증 전에 실행한다. 이미 시작한 파일
 작업은 세션 폐기로 롤백하지 않으며, 폐기 이후 그 결과는 전달하지 않는다.
 

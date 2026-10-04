@@ -77,6 +77,33 @@ int wmain(int argc, wchar_t** argv) {
         require(readStorageText(reader.value, 5) == "short", "Ordinary read failed.");
         require(readStorageText(reader.value, 0).empty(), "Empty read failed.");
         std::cout << "PASS early EOF terminates; normal and empty reads succeed\n";
+
+        const auto readContext = app.openSession("main", "https://app.bunaway.local/index.html", "https://app.bunaway.local");
+        auto readOutcome = [&](const std::string& text) {
+            { std::ofstream out(testRoot / "response.txt", std::ios::binary); out << text; }
+            app.queue.clear();
+            auto read = app.frame("host-request");
+            read["context"] = readContext;
+            read["requestId"] = "read-response";
+            read["operation"] = "storage.readText";
+            read["payload"] = { { "scope", "temp" }, { "path", "response.txt" } };
+            app.onHostRequest(read);
+            auto readTask = std::move(app.workQueue.front());
+            app.workQueue.pop_front();
+            readTask();
+            require(app.queue.size() == 1, "Storage read must send exactly one outcome.");
+            require(app.hostPending.empty(), "Completed read retained its pending record.");
+            const auto response = parse(app.queue.front().substr(0, app.queue.front().size() - 1));
+            require(response["context"] == readContext && response["requestId"] == "read-response", "Read response correlation changed.");
+            return response["payload"];
+        };
+        for (const auto& text : { std::string(maxFrame, 'a'), std::string(200000, '\x01') }) {
+            auto outcome = readOutcome(text);
+            require(outcome["kind"] == "error" && outcome["error"]["code"] == "INTERNAL", "Oversized serialized read must return an error.");
+        }
+        auto outcome = readOutcome("ordinary read");
+        require(outcome["kind"] == "result" && outcome["payload"] == "ordinary read", "Normal read failed after oversized responses.");
+        std::cout << "PASS oversized and escaped reads return errors; normal reads recover\n";
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

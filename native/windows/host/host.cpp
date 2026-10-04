@@ -431,19 +431,30 @@ Handle openScopedFile(const Scopes& scopes, const std::string& scope, const std:
         full += L'\\';
         full += utf16(segment);
     }
-    if (write) {
-        // Create intermediate directories, verifying each stays inside the scope.
-        std::wstring dir = rootCanonical;
-        for (size_t i = 0; i + 1 < segments.size(); ++i) {
-            dir += L'\\' + utf16(segments[i]);
-            if (CreateDirectoryW(dir.c_str(), nullptr) || GetLastError() == ERROR_ALREADY_EXISTS) {
-                BY_HANDLE_FILE_INFORMATION info {};
-                Handle check(CreateFileW(dir.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
-                if (!check.value || check.value == INVALID_HANDLE_VALUE) throw HostError("INTERNAL", "Storage directory failed.");
-                if (!GetFileInformationByHandle(check.value, &info)) throw HostError("INTERNAL", "Storage directory check failed.");
-                if (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) throw HostError("PERMISSION_DENIED", "Storage path escapes scope.");
-            } else throw HostError("INTERNAL", "Storage directory failed.");
+    // Pin the root and every parent for reads as well as writes. Do not share
+    // write/delete access: a checked directory must not become a junction or be
+    // renamed while the remaining path is resolved. Keep pins through final open.
+    std::vector<Handle> parents;
+    std::wstring dir = rootCanonical;
+    for (size_t i = 0; i < segments.size(); ++i) {
+        if (i != 0) {
+            dir += L'\\' + utf16(segments[i - 1]);
+            if (write && !CreateDirectoryW(dir.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS) {
+                throw HostError("INTERNAL", "Storage directory failed.");
+            }
         }
+        Handle parent(CreateFileW(dir.c_str(), FILE_READ_ATTRIBUTES, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+        if (!parent.value || parent.value == INVALID_HANDLE_VALUE) {
+            auto error = GetLastError();
+            if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND) throw HostError("INVALID_ARGUMENT", "Storage target not found.");
+            throw HostError("INTERNAL", "Storage directory failed.");
+        }
+        BY_HANDLE_FILE_INFORMATION info {};
+        require(GetFileInformationByHandle(parent.value, &info), "Storage directory check failed.");
+        if ((info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) || !(info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+            throw HostError("PERMISSION_DENIED", "Storage path is not a plain directory.");
+        }
+        parents.push_back(std::move(parent));
     }
     DWORD access = write ? GENERIC_WRITE : GENERIC_READ;
     DWORD disposition = write ? OPEN_ALWAYS : OPEN_EXISTING;
@@ -837,13 +848,21 @@ public:
         auto it = hostPending.find(key);
         if (it == hostPending.end()) return;
         if (it->second.cancelled) { hostPending.erase(it); hostLog->event("host-response-discarded", { { "requestId", requestId } }); return; }
-        hostPending.erase(it);
         auto response = frame("host-response");
         response["context"] = context;
         response["requestId"] = requestId;
         response["payload"] = payload;
-        send(response);
-        hostLog->event("host-response", { { "requestId", requestId }, { "kind", payload["kind"].get<std::string>() } });
+        auto text = response.dump();
+        if (text.size() > maxFrame) {
+            response["payload"] = { { "kind", "error" }, { "error", { { "code", "INTERNAL" }, { "message", "Host response exceeds IPC frame limit." } } } };
+            text = response.dump();
+        }
+        // Keep correlation state until serialization and enqueue succeed. A full or
+        // closed transport cannot deliver even an error; fail the runtime explicitly.
+        try { sendLine(std::move(text)); }
+        catch (...) { hostPending.erase(it); runtimeFailure(); return; }
+        hostPending.erase(it);
+        hostLog->event("host-response", { { "requestId", requestId }, { "kind", response["payload"]["kind"].get<std::string>() } });
     }
     void executeHostOp(const std::string& key, const std::string& context, const std::string& requestId, const std::string& operation, const Json& payload) {
         Json result;

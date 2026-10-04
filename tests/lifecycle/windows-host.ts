@@ -2,7 +2,7 @@
 // Drives the real host end-to-end: packaged Bun backend, WebView2 boundary, policy,
 // storage scope enforcement, session revocation on navigation, and process cleanup.
 import assert from "node:assert/strict";
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { validateValue } from "../../packages/protocol/src/index.ts";
@@ -39,6 +39,11 @@ async function resetData() {
   await mkdir(join(dataRoot, "data", "notes"), { recursive: true });
   await mkdir(join(dataRoot, "data", "secrets"), { recursive: true });
   await writeFile(join(dataRoot, "data", "secrets", "x.txt"), "out-of-scope-secret");
+  await symlink(
+    join(dataRoot, "data", "secrets"),
+    join(dataRoot, "data", "notes", "internal-link"),
+    "junction",
+  );
   const outside = join(dataRoot, "outside");
   await mkdir(outside, { recursive: true });
   await writeFile(join(outside, "secret.txt"), "junction-target-secret");
@@ -195,6 +200,10 @@ try {
 
       const note = await readFile(join(dataRoot, "data", "notes", "a.txt"), "utf-8");
       assert.equal(note, "hello 파일");
+      assert.equal(
+        await readFile(join(dataRoot, "data", "secrets", "x.txt"), "utf-8"),
+        "out-of-scope-secret",
+      );
       const appLogText = await readFile(join(dataRoot, "logs", "app.log"), "utf-8");
       assert.ok(appLogText.includes("page-log-테스트"));
       assert.equal(
