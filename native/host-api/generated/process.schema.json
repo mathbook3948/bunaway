@@ -50,6 +50,144 @@
               "type": "string",
               "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
               "maxLength": 128
+            },
+            "policy": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "object",
+              "properties": {
+                "version": {
+                  "const": 1
+                },
+                "views": {
+                  "type": "array",
+                  "maxItems": 128,
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                        "maxLength": 128
+                      },
+                      "origins": {
+                        "type": "array",
+                        "maxItems": 16,
+                        "uniqueItems": true,
+                        "items": {
+                          "type": "string",
+                          "pattern": "^https?://[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[1-9][0-9]{0,4})?$(?![\\s\\S])",
+                          "maxLength": 256
+                        }
+                      },
+                      "commands": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                          "maxLength": 128
+                        },
+                        "maxItems": 256,
+                        "uniqueItems": true
+                      },
+                      "events": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                          "maxLength": 128
+                        },
+                        "maxItems": 256,
+                        "uniqueItems": true
+                      },
+                      "host": {
+                        "type": "object",
+                        "properties": {
+                          "log": {
+                            "type": "boolean"
+                          },
+                          "storage": {
+                            "type": "array",
+                            "maxItems": 128,
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "scope": {
+                                  "enum": ["appData", "temp"]
+                                },
+                                "pathPrefix": {
+                                  "type": "string",
+                                  "pattern": "^(?:[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*)?$(?![\\s\\S])",
+                                  "maxLength": 256
+                                },
+                                "access": {
+                                  "type": "array",
+                                  "items": {
+                                    "enum": ["read", "write"]
+                                  },
+                                  "minItems": 1,
+                                  "maxItems": 2,
+                                  "uniqueItems": true
+                                }
+                              },
+                              "required": ["scope", "pathPrefix", "access"],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": ["log", "storage"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["id", "origins", "commands", "events", "host"],
+                    "additionalProperties": false
+                  }
+                },
+                "backend": {
+                  "type": "object",
+                  "properties": {
+                    "log": {
+                      "type": "boolean"
+                    },
+                    "storage": {
+                      "type": "array",
+                      "maxItems": 128,
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "scope": {
+                            "enum": ["appData", "temp"]
+                          },
+                          "pathPrefix": {
+                            "type": "string",
+                            "pattern": "^(?:[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*)?$(?![\\s\\S])",
+                            "maxLength": 256
+                          },
+                          "access": {
+                            "type": "array",
+                            "items": {
+                              "enum": ["read", "write"]
+                            },
+                            "minItems": 1,
+                            "maxItems": 2,
+                            "uniqueItems": true
+                          }
+                        },
+                        "required": ["scope", "pathPrefix", "access"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["log", "storage"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["version", "views", "backend"],
+              "additionalProperties": false
+            },
+            "backendContext": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
             }
           },
           "required": ["entrypoint", "buildId"],
@@ -831,6 +969,56 @@
           "additionalProperties": false
         },
         "kind": {
+          "const": "host-cancel"
+        },
+        "context": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+          "maxLength": 128
+        },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+          "maxLength": 128
+        }
+      },
+      "required": ["ipc", "runtime", "kind", "context", "requestId"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ipc": {
+          "type": "object",
+          "properties": {
+            "major": {
+              "const": 1
+            },
+            "minor": {
+              "const": 0
+            }
+          },
+          "required": ["major", "minor"],
+          "additionalProperties": false
+        },
+        "runtime": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            },
+            "generation": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            }
+          },
+          "required": ["id", "generation"],
+          "additionalProperties": false
+        },
+        "kind": {
           "const": "revoke"
         },
         "context": {
@@ -840,6 +1028,56 @@
         }
       },
       "required": ["ipc", "runtime", "kind", "context"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ipc": {
+          "type": "object",
+          "properties": {
+            "major": {
+              "const": 1
+            },
+            "minor": {
+              "const": 0
+            }
+          },
+          "required": ["major", "minor"],
+          "additionalProperties": false
+        },
+        "runtime": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            },
+            "generation": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            }
+          },
+          "required": ["id", "generation"],
+          "additionalProperties": false
+        },
+        "kind": {
+          "const": "session-open"
+        },
+        "context": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+          "maxLength": 128
+        },
+        "viewId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+          "maxLength": 128
+        }
+      },
+      "required": ["ipc", "runtime", "kind", "context", "viewId"],
       "additionalProperties": false
     },
     {

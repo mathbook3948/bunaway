@@ -120,32 +120,41 @@ OS 권한 선언과 런타임 사용자 동의는 프레임워크 권한과 별�
 
 공개 SDK는 프런트엔드용 `client`와 신뢰 백엔드용 `backend` 진입점을 분리한다. 명령 정의에서 클라이언트 타입을 생성하되 백엔드 코드나 비밀 설정이 프런트엔드 번들에 들어가지 않게 한다. 필수 API는 명령 등록·호출, 앱 상태, 이벤트 구독·해제, 수명주기와 기능 조회다.
 
-다음은 제안 API다. 패키지 이름, 함수와 스키마 문법은 아직 구현되지 않았다.
+공통 타입과 명령 입력·출력 검증은 [C 공통 API](./docs/architecture/common-api.md)로 고정했다.
+SDK·코어 factory 실행 구현은 각 병렬 작업에서 연결한다. 다음은 이 계약을 사용하는 앱 정의다.
 
 ```ts
 // backend/main.ts
-import { defineApp, command, schema } from "@framework/backend";
+import { command, type AppDefinition } from "@bunaway/backend";
 
-export default defineApp({
+export default {
   commands: {
     "notes.read": command({
-      input: schema.object({ key: schema.string().pattern(/^[a-z0-9_-]+$/) }),
-      permission: "notes:read",
+      input: {
+        type: "object",
+        properties: { key: { type: "string", pattern: "^[a-z0-9_-]+$(?![\\s\\S])" } },
+        required: ["key"],
+        additionalProperties: false,
+      },
+      output: { type: "string" },
       async handle({ key }, ctx) {
         // 원래 요청의 컨텍스트로 Host API의 appData 범위를 검사한다.
-        return ctx.storage.readText("appData", `notes/${key}.txt`);
+        return ctx.host.call("storage.readText", { scope: "appData", path: `notes/${key}.txt` });
       },
     }),
   },
-});
+  events: {},
+} satisfies AppDefinition;
 
 // frontend/main.ts
-import { invoke } from "@framework/client";
+import type { Client } from "@bunaway/client";
 import type { Commands } from "../generated/commands";
-const text = await invoke<Commands>("notes.read", { key: "welcome" });
+// ClientFactory를 구현한 SDK가 주입된 Transport로 client를 만든다.
+declare const client: Client<Commands>;
+const text = await client.invoke("notes.read", { key: "welcome" });
 ```
 
-위 예제를 허용하는 정책에는 해당 뷰의 `notes:read` 명령 권한과 `appData/notes` 읽기 범위를 함께 선언한다. 입력 패턴은 편의 검증이며 네이티브 파일 범위 검사를 대체하지 않는다.
+위 예제를 허용하는 정책에는 해당 뷰의 `notes.read` 명령과 `appData/notes` 읽기 범위를 함께 선언한다. 입력 패턴은 편의 검증이며 네이티브 파일 범위 검사를 대체하지 않는다.
 
 플러그인은 이름·버전·의존성·지원 플랫폼·필요 권한·명령 스키마·초기화·종료 훅을 선언한다. 순수 TypeScript 플러그인과 네이티브 구현이 필요한 플러그인을 구분한다. 네이티브 플러그인은 호스트 계약을 따르며 ABI 호환성을 빌드 시 검사한다. 첫 기본 플러그인은 로그와 범위 제한 저장소로 좁힌다. 권한, 네이티브 바이너리와 코드 변경을 포함한 플러그인은 앱을 다시 빌드해 배포한다.
 

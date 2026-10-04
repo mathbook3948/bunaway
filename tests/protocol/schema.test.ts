@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import {
   bootstrapSchema,
   hostResponseSchema,
+  hostCallSchema,
+  hostOperations,
   messageSchema,
   policySchema,
   processSchema,
@@ -18,12 +20,17 @@ test("native schemas are generated from the same definitions as TypeScript", asy
     bootstrap: bootstrapSchema,
     "host-response": hostResponseSchema,
     process: processSchema,
+    "host-call": hostCallSchema,
   })) {
     const file = Bun.file(
       new URL(`../../native/host-api/generated/${name}.schema.json`, import.meta.url),
     );
     expect(await file.json()).toEqual(schema);
   }
+  const operations = Bun.file(
+    new URL("../../native/host-api/generated/host-operations.json", import.meta.url),
+  );
+  expect(await operations.json()).toEqual(hostOperations);
 });
 
 test("bootstrap requires a local absolute entrypoint and rejects WebView messages", () => {

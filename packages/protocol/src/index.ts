@@ -17,6 +17,40 @@ export {
   processSchema,
 } from "./schema.ts";
 export { type JsonValue, MAX_JSON_DEPTH, MAX_MESSAGE_BYTES, ProtocolError } from "./validation.ts";
+export { type Infer, type Schema, validate as validateValue } from "./validation.ts";
+export { API_LIMITS } from "./contracts.ts";
+export {
+  BunawayError,
+  type AsyncDispose,
+  type CancellationSignal,
+  type CancellationController,
+  type ClientMessage,
+  type CommandContract,
+  type CommandMap,
+  type Dispose,
+  type EventMap,
+  type HostContext,
+  type NegotiatedProtocol,
+  type RuntimeIdentity,
+  type ServerMessage,
+  type Transport,
+  type TransportEvent,
+} from "./contracts.ts";
+export {
+  CAPABILITIES_COMMAND,
+  type Capabilities,
+  type FrameworkCommands,
+  type HostAPI,
+  type HostCall,
+  type HostInput,
+  type HostOperation,
+  type HostOutput,
+  hostCallSchema,
+  hostOperations,
+  parseHostCall,
+  serializeHostCall,
+  validateHostOutput,
+} from "./host-api.ts";
 
 export type Message = Infer<typeof messageSchema>;
 export type Hello = Extract<Message, { kind: "hello" }>;

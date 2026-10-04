@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "const": "storage.readText"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "scope": {
+              "enum": ["appData", "temp"]
+            },
+            "path": {
+              "type": "string",
+              "maxLength": 4096,
+              "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^\\\\\\u0000\\r\\n]+$(?![\\s\\S])"
+            }
+          },
+          "required": ["scope", "path"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["operation", "payload"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "const": "storage.writeText"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "scope": {
+              "enum": ["appData", "temp"]
+            },
+            "path": {
+              "type": "string",
+              "maxLength": 4096,
+              "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^\\\\\\u0000\\r\\n]+$(?![\\s\\S])"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": ["scope", "path", "text"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["operation", "payload"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "const": "log.write"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "level": {
+              "enum": ["debug", "info", "warn", "error"]
+            },
+            "message": {
+              "type": "string",
+              "maxLength": 1024
+            },
+            "details": {}
+          },
+          "required": ["level", "message"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["operation", "payload"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "const": "capabilities.get"
+        },
+        "payload": {
+          "const": null
+        }
+      },
+      "required": ["operation", "payload"],
+      "additionalProperties": false
+    }
+  ]
+}

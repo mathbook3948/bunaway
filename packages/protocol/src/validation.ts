@@ -11,7 +11,7 @@ export type JsonValue =
 export type Schema = {
   readonly $schema?: string;
   readonly type?: "object" | "array" | "string" | "integer" | "boolean";
-  readonly const?: string | number;
+  readonly const?: string | number | boolean | null;
   readonly enum?: readonly string[];
   readonly anyOf?: readonly Schema[];
   readonly properties?: { readonly [key: string]: Schema };

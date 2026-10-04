@@ -8,7 +8,8 @@ Windows B 단계는 WebView 없는 C++ 호스트와 번들 Bun 1.4.2로 실행·
 검증했다. 사용자 기기에 Bun 설치를 요구하지 않는다.
 [실행 결과](./docs/architecture/windows-probe-results.md)와
 [진행 상태](./docs/architecture/progress.md)를 참고한다.
-SDK, CLI, 코어와 실제 WebView 앱은 아직 구현하지 않았고 모바일 실행도 검증하지 않았다.
+SDK·코어·호스트를 병렬 구현할 [공통 API](./docs/architecture/common-api.md)를 준비했다.
+SDK·코어 실행, CLI와 실제 WebView 앱은 아직 구현하지 않았고 모바일 실행도 검증하지 않았다.
 이전 런타임 C ABI는 동일 프로세스 설계의 기록으로 보존한다.
 
 ## 시작하기
