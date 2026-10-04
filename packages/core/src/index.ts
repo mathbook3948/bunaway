@@ -101,3 +101,5 @@ export interface Core {
 
 // Resolves after registration and plugin setup; runtime ready must wait for this.
 export type CoreFactory = (app: AppDefinition, services: CoreServices) => Promise<Core>;
+
+export { createCore } from "./create-core.ts";

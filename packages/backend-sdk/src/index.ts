@@ -7,6 +7,7 @@ import {
   validateValue,
 } from "@bunaway/protocol";
 
+export { createCore } from "@bunaway/core";
 export type {
   AppDefinition,
   CommandContext,
