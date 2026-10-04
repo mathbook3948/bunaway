@@ -1,13 +1,28 @@
-// Minimal client transport + boundary test suite. Not the product client SDK.
+import {
+  createClient,
+  createWebViewTransport,
+} from "../../../../../packages/client-sdk/src/index.ts";
+const client = createClient({
+  transport: createWebViewTransport(window.chrome.webview),
+  hello: {
+    kind: "hello",
+    protocol: { major: 1, minor: 0 },
+    features: [],
+    buildId: "windows-sdk-ui",
+  },
+});
+window.addEventListener("pagehide", () => {
+  void client.close();
+});
+const releases = new Map();
+// Raw inputs below exercise malformed messages that the SDK deliberately cannot send.
 const pending = new Map();
 const subs = new Map();
 let seq = 0;
-let helloResolve;
 window.chrome.webview.addEventListener("message", (event) => {
   const m = event.data;
   if (!m || typeof m !== "object") return;
-  if (m.kind === "hello") helloResolve?.(m);
-  else if (m.kind === "event") subs.get(m.subscriptionId)?.(m);
+  if (m.kind === "event") subs.get(m.subscriptionId)?.(m);
   else if (m.kind === "result" || m.kind === "error") {
     const p = pending.get(m.id);
     if (p) {
@@ -35,21 +50,37 @@ window.onerror = (msg, _src, line) => {
     payload: { pageError: `${msg}@${line}` },
   });
 };
-const call = (command, payload = null, extra = {}) =>
-  request("invoke", { command, payload, ...extra });
-const listen = (event) => request("listen", { event });
-const unlisten = (subscriptionId) => request("unlisten", { subscriptionId });
+const call = async (command, payload = null, extra = {}) => {
+  try {
+    return { kind: "result", payload: await client.invoke(command, payload, extra) };
+  } catch (error) {
+    return { kind: "error", error: { code: error.code, message: error.message } };
+  }
+};
+const listen = async (event) => {
+  const key = `sdk-sub-${++seq}`;
+  try {
+    releases.set(
+      key,
+      await client.listen(event, (message) => subs.get(key)?.(message), {
+        onError: () => subs.delete(key),
+      }),
+    );
+    return { kind: "result", payload: { subscriptionId: key } };
+  } catch (error) {
+    return { kind: "error", error: { code: error.code } };
+  }
+};
+const unlisten = async (key) => {
+  await releases.get(key)?.();
+  releases.delete(key);
+  return { kind: "result" };
+};
 const cancel = (id) => send({ kind: "cancel", id });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function connect() {
-  for (let i = 0; i < 300; i++) {
-    const p = new Promise((r) => (helloResolve = r));
-    send({ kind: "hello", features: [], buildId: "test-page" });
-    const m = await Promise.race([p, sleep(150)]);
-    if (m?.kind === "hello") return m;
-  }
-  throw new Error("hello never answered");
+  return client.ready;
 }
 
 async function run() {
@@ -297,12 +328,54 @@ async function run() {
     const r = await call("test.log", { message: "page-log-테스트" });
     assert(r.kind === "result" && r.payload.ok, `log failed ${JSON.stringify(r)}`);
   });
-  await test("host cancel", async () => {
-    const r = await call("test.hostCancel");
+  await test("SDK cancellation", async () => {
+    const controller = new AbortController();
+    const outcome = call("test.hold", null, { signal: controller.signal });
+    await sleep(100);
+    controller.abort();
+    assert((await outcome).error?.code === "CANCELLED", "SDK cancellation failed");
+  });
+  await test("SDK Host API cancellation", async () => {
+    const controller = new AbortController();
+    const outcome = call("test.hostCancel", null, { signal: controller.signal });
+    // Let invoke dispatch, then send cancellation in the same UI turn.
+    await Promise.resolve();
+    controller.abort();
+    assert((await outcome).error?.code === "CANCELLED", "Host API cancellation failed");
+  });
+  await test("command error is safe", async () => {
+    const result = await call("test.fail");
     assert(
-      r.kind === "result" && r.payload.outcome !== undefined,
-      `bad outcome ${JSON.stringify(r)}`,
+      result.error?.code === "INTERNAL" && !result.error.message.includes("private"),
+      "unsafe command error",
     );
+  });
+  await test("memo input validation", async () => {
+    assert(
+      (await call("memo.save", 123)).error?.code === "INVALID_ARGUMENT",
+      "invalid memo accepted",
+    );
+  });
+  await test("memo input save event refresh", async () => {
+    const input = document.getElementById("memo");
+    const display = document.getElementById("saved-memo");
+    const release = await client.listen(
+      "memo.saved",
+      (event) => {
+        display.textContent = event.payload;
+      },
+      {
+        onError: (error) => {
+          display.textContent = error.code;
+        },
+      },
+    );
+    input.value = "재실행 후에도 남는 메모 😀";
+    await client.invoke("memo.save", input.value);
+    await sleep(100);
+    assert(display.textContent === input.value, "completion event did not update screen");
+    assert((await client.invoke("memo.read", null)) === input.value, "memo read differs");
+    await release();
   });
 
   await report(results);

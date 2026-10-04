@@ -1,0 +1,10 @@
+{
+  "appId": "examples.bunaway.memo",
+  "view": "main",
+  "home": "https://app.bunaway.local/memo.html",
+  "title": "bunaway 메모",
+  "window": {
+    "width": 1024,
+    "height": 768
+  }
+}

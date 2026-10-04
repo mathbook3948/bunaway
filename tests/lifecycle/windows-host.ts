@@ -192,9 +192,10 @@ try {
       assert.ok(count("permission-denied", (e) => e.kind === "event") >= 1);
       assert.ok(count("web-message-rejected", (e) => e.reason === "malformed") >= 2);
       assert.ok(count("web-message-rejected", (e) => e.reason === "INVALID_ARGUMENT") >= 1);
-      assert.ok(count("request-timeout") >= 1, "deadline enforcement");
+      // TIMEOUT is asserted by the page; either core or native deadline may win.
       assert.ok(count("host-request-denied") >= 1, "scope escape denial");
-      assert.ok(count("host-cancel") >= 1);
+
+      assert.ok(count("host-cancel") >= 1, "runtime forwarded Host API cancellation");
       // The child-frame message must never reach the backend.
       assert.equal(JSON.stringify(log).includes("iframe-1"), false, "iframe message leaked");
 
@@ -231,6 +232,97 @@ try {
       await child.exited;
     }
   });
+
+  for (const phase of ["write", "read"])
+    await test(`memo sample ${phase} in a new host and Bun process`, async () => {
+      const configPath = join(packagePath, "assets", "app.json");
+      const config = JSON.parse(await readFile(configPath, "utf-8"));
+      config.home = `https://app.bunaway.local/memo.html?test=${phase}`;
+      const text = `${JSON.stringify(config, null, 2)}\n`;
+      await writeFile(configPath, text);
+      const manifestPath = join(packagePath, "manifest.json");
+      const manifest = JSON.parse(await readFile(manifestPath, "utf-8"));
+      manifest.assets["assets/app.json"] = new Bun.CryptoHasher("sha256")
+        .update(text)
+        .digest("hex");
+      await writeFile(manifestPath, JSON.stringify(manifest));
+      const previousCount = (await hostLog()).length;
+      const child = launch();
+      try {
+        const report = await reportFile(`${phase}.json`);
+        assert.ok(report.results.length > 0);
+        for (const result of report.results) assert.equal(result.ok, true, result.name);
+        if (phase === "read") {
+          // Select only renderers belonging to this test app's WebView user-data directory.
+          const inventory = Bun.spawn(
+            [
+              "powershell",
+              "-NoProfile",
+              "-Command",
+              "@(Get-CimInstance Win32_Process -Filter \"Name = 'msedgewebview2.exe'\" | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($env:BUNAWAY_TEST_WEB_DATA) -and $_.CommandLine.Contains('--type=renderer') } | Select-Object -ExpandProperty ProcessId) | ConvertTo-Json -Compress",
+            ],
+            {
+              env: { ...process.env, BUNAWAY_TEST_WEB_DATA: join(dataRoot, "webview") },
+              stdout: "pipe",
+              stderr: "pipe",
+            },
+          );
+          const pidsText = await new Response(inventory.stdout).text();
+          assert.equal(await inventory.exited, 0, await new Response(inventory.stderr).text());
+          const parsed = JSON.parse(pidsText) as number[] | number;
+          const pids = Array.isArray(parsed) ? parsed : [parsed];
+          assert.ok(pids.length > 0, "test app renderer missing");
+          const beforeCrash = (await hostLog()).length;
+          await rm(join(dataRoot, "temp", "read.json"));
+          for (const pid of pids) {
+            const killer = Bun.spawn(["taskkill", "/F", "/PID", String(pid)], {
+              stdout: "pipe",
+              stderr: "pipe",
+            });
+            assert.equal(await killer.exited, 0, "test renderer termination failed");
+          }
+          await waitFor(
+            async () =>
+              (await hostLog())
+                .slice(beforeCrash)
+                .find((entry) => entry.event === "webview-process-failed") ?? null,
+          );
+          const restored = await reportFile("read.json");
+          for (const result of restored.results)
+            assert.equal(result.ok, true, `renderer recreation: ${result.name}`);
+          const recovery = (await hostLog()).slice(beforeCrash);
+          assert.ok(
+            recovery.some((entry) => entry.event === "revoke" && entry.reason === "process-failed"),
+          );
+          assert.ok(recovery.some((entry) => entry.event === "session-open"));
+          assert.equal(
+            recovery.some((entry) => entry.event === "host-started"),
+            false,
+            "renderer failure restarted Bun",
+          );
+        }
+        const started = (await hostLog())
+          .slice(previousCount)
+          .find((entry) => entry.event === "host-started");
+        assert.ok(started);
+        const exited = await watch([started.childPid as number]);
+        const taskkill = Bun.spawn(["taskkill", "/PID", String(child.pid)], {
+          stdout: "pipe",
+          stderr: "pipe",
+        });
+        assert.equal(await taskkill.exited, 0);
+        assert.equal(await child.exited, 0);
+        await exited();
+        const stopped = (await hostLog())
+          .slice(previousCount)
+          .find((entry) => entry.event === "host-stopped");
+        assert.equal(stopped?.activeProcesses, 0);
+        assert.equal(stopped?.forced, false);
+      } finally {
+        if (!child.killed) child.kill();
+        await child.exited;
+      }
+    });
 
   await test("killing the host still removes bundled Bun via the Job Object", async () => {
     await resetData();

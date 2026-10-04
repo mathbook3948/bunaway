@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "views": [
+    {
+      "id": "main",
+      "origins": ["https://app.bunaway.local"],
+      "commands": ["memo.save", "memo.read"],
+      "events": ["memo.saved"],
+      "host": {
+        "log": false,
+        "storage": [
+          {
+            "scope": "appData",
+            "pathPrefix": "notes",
+            "access": ["read", "write"]
+          }
+        ]
+      }
+    }
+  ],
+  "backend": {
+    "log": false,
+    "storage": []
+  }
+}

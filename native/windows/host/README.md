@@ -7,7 +7,8 @@ PowerShell 7, MSVC C++ Build Tools, CMake/Ninja와 WebView2 Evergreen 런타임�
 내려받아 정적 CRT C++ 호스트와 번들 Bun 백엔드·Web 자산을 패키지로 만든 뒤
 실제 Windows 통합 검증을 실행한다. `-SkipTests`는 패키지만 만들고
 `-Bun <path>`는 고정 버전의 개발 Bun을 직접 지정한다.
-출력 패키지는 `build/windows-host-package/`다. `bunaway-host.exe`,
+`-Sample`은 [메모 앱](../../../examples/memo/README.md)을 `build/windows-memo-package/`로
+패키징한다. 기본 출력 패키지는 `build/windows-host-package/`다. `bunaway-host.exe`,
 `runtime/bun.exe`, `assets/`에 백엔드·Web 자산·스키마·정책·앱 설정,
 `manifest.json`에 자산 해시, `licenses/`에 라이선스를 담는다.
 
@@ -55,10 +56,12 @@ Bun에는 `--no-env-file --no-install`과 패키지의 `bunfig.toml`·`tsconfig.
 종료를 관찰하는 테스트 보조 모드, `--validate`는 stdin의 `{schema,value}`
 NDJSON을 C++ 검증기로 검사하는 테스트 모드다.
 
-테스트 백엔드 `test/backend.ts`는 최소 계약 구현이다. invoke 안에서
-host-request 응답을 기다릴 수 있으므로 stdin 읽기 루프와 invoke 디스패치를
-분리한다 — 응답이 같은 stdin으로 도착하므로 읽기를 막으면 교착한다.
-제품 client-sdk·core 연결은 이 패키지에 포함하지 않는다.
+백엔드 `test/backend.ts`와 메모 샘플은 `runtime-bun.runBunApp`으로 실제 `createCore`를
+부팅한다. Web 자산은 `createClient`·`createWebViewTransport`를 브라우저 대상으로
+번들한다. 위조·잘못된 메시지 테스트만 SDK 밖에서 원시 입력을 보낸다.
+코어 등록·플러그인 초기화가 끝난 뒤 ready를 보내며, 호스트는 ready와 WebView 준비가
+모두 끝난 후 첫 문서를 탐색한다. 플러그인 초기화의 Host API도 허용하며 IPC 읽기는
+코어 초기화와 명령 완료를 기다리지 않아 같은 파이프의 응답을 계속 처리한다.
 
 `tests/lifecycle/windows-host-native.cpp`는 실제 호스트 코드를 사용하는 네이티브
 회귀 테스트다. 세션 폐기 후 대기 중 저장 작업·늦은 응답 폐기, UI 큐에서 이전

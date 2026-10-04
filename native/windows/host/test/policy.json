@@ -18,14 +18,25 @@
         "test.log",
         "test.emit",
         "test.hostCancel",
-        "test.report"
+        "test.report",
+        "memo.save",
+        "memo.read",
+        "test.fail"
       ],
-      "events": ["test.changed"],
+      "events": ["test.changed", "memo.saved"],
       "host": {
         "log": true,
         "storage": [
-          { "scope": "appData", "pathPrefix": "notes", "access": ["read", "write"] },
-          { "scope": "temp", "pathPrefix": "", "access": ["read", "write"] }
+          {
+            "scope": "appData",
+            "pathPrefix": "notes",
+            "access": ["read", "write"]
+          },
+          {
+            "scope": "temp",
+            "pathPrefix": "",
+            "access": ["read", "write"]
+          }
         ]
       }
     }
@@ -33,8 +44,16 @@
   "backend": {
     "log": true,
     "storage": [
-      { "scope": "appData", "pathPrefix": "", "access": ["read", "write"] },
-      { "scope": "temp", "pathPrefix": "", "access": ["read", "write"] }
+      {
+        "scope": "appData",
+        "pathPrefix": "",
+        "access": ["read", "write"]
+      },
+      {
+        "scope": "temp",
+        "pathPrefix": "",
+        "access": ["read", "write"]
+      }
     ]
   }
 }

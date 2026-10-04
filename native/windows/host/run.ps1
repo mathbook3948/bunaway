@@ -1,4 +1,4 @@
-param([string]$Bun = (Get-Command bun -ErrorAction Stop).Source, [switch]$SkipTests)
+param([string]$Bun = (Get-Command bun -ErrorAction Stop).Source, [switch]$SkipTests, [switch]$Sample)
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path
 $pin = Get-Content -LiteralPath (Join-Path $root 'runtime/build-manifests/windows-x64.json') -Raw | ConvertFrom-Json
@@ -59,7 +59,7 @@ Run 'cmake' @('-S', $PSScriptRoot, '-B', $build, '-G', 'Ninja', '-DCMAKE_BUILD_T
 Run 'cmake' @('--build', $build)
 Run $Bun @((Join-Path $root 'packages/protocol/scripts/generate.ts'))
 Run $Bun @((Join-Path $root 'node_modules/@biomejs/biome/bin/biome'), 'format', '--write', (Join-Path $root 'native/host-api/generated'))
-$package = Join-Path $root 'build/windows-host-package'
+$package = Join-Path $root $(if ($Sample) { 'build/windows-memo-package' } else { 'build/windows-host-package' })
 New-Item -ItemType Directory -Force -Path $package, (Join-Path $package 'assets'), (Join-Path $package 'assets/web'), (Join-Path $package 'runtime'), (Join-Path $package 'licenses') | Out-Null
 Copy-Item -LiteralPath (Join-Path $build 'bunaway-host.exe') -Destination $package -Force
 Copy-Item -LiteralPath $bundled -Destination (Join-Path $package 'runtime/bun.exe') -Force
@@ -70,10 +70,21 @@ foreach ($name in $assets) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot "te
 foreach ($name in @('process.schema.json', 'message.schema.json', 'policy.schema.json', 'host-call.schema.json', 'host-operations.json')) {
     Copy-Item -LiteralPath (Join-Path $generated $name) -Destination (Join-Path $package 'assets') -Force
 }
-foreach ($file in Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'test/web') -File) {
-    Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $package 'assets/web') -Force
+if (!$Sample) {
+    foreach ($file in Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'test/web') -File) {
+        Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $package 'assets/web') -Force
+    }
+    foreach ($entry in @('app.js', 'page2.js')) {
+        Run $Bun @('build', (Join-Path $PSScriptRoot "test/web/$entry"), '--target=browser', '--outfile', (Join-Path $package "assets/web/$entry"))
+    }
 }
-Run $Bun @('build', (Join-Path $PSScriptRoot 'test/backend.ts'), '--target=bun', '--outfile', (Join-Path $package 'assets/backend.js'))
+Copy-Item -LiteralPath (Join-Path $root 'examples/memo/web/memo.html') -Destination (Join-Path $package 'assets/web') -Force
+Run $Bun @('build', (Join-Path $root 'examples/memo/web/memo.js'), '--target=browser', '--outfile', (Join-Path $package 'assets/web/memo.js'))
+$backendEntry = if ($Sample) { Join-Path $root 'examples/memo/backend.ts' } else { Join-Path $PSScriptRoot 'test/backend.ts' }
+if ($Sample) {
+    foreach ($name in @('app.json', 'policy.json')) { Copy-Item -LiteralPath (Join-Path $root "examples/memo/$name") -Destination (Join-Path $package 'assets') -Force }
+}
+Run $Bun @('build', $backendEntry, '--target=bun', '--outfile', (Join-Path $package 'assets/backend.js'))
 $hashes = [ordered]@{}
 foreach ($directory in @('assets', 'licenses')) {
     foreach ($file in Get-ChildItem -LiteralPath (Join-Path $package $directory) -File -Recurse) {
@@ -84,7 +95,7 @@ foreach ($directory in @('assets', 'licenses')) {
 $pin | Add-Member -NotePropertyName assets -NotePropertyValue $hashes -Force
 $pin | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath (Join-Path $package 'manifest.json') -Encoding utf8NoBOM
 Write-Output "Host package: $package"
-if (!$SkipTests) {
+if (!$SkipTests -and !$Sample) {
     Run (Join-Path $build 'windows-host-regressions.exe') @($package)
     Run $Bun @((Join-Path $root 'tests/lifecycle/windows-host.ts'), '--package', $package)
 }
