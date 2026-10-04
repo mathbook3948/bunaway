@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "views": [
+    {
+      "id": "main",
+      "origins": ["https://app.bunaway.local"],
+      "commands": [
+        "test.echo",
+        "test.ping",
+        "test.count",
+        "test.hold",
+        "test.writeNote",
+        "test.readNote",
+        "test.readEscape",
+        "test.tempRead",
+        "test.tempWrite",
+        "test.capabilities",
+        "test.log",
+        "test.emit",
+        "test.hostCancel",
+        "test.report"
+      ],
+      "events": ["test.changed"],
+      "host": {
+        "log": true,
+        "storage": [
+          { "scope": "appData", "pathPrefix": "notes", "access": ["read", "write"] },
+          { "scope": "temp", "pathPrefix": "", "access": ["read", "write"] }
+        ]
+      }
+    }
+  ],
+  "backend": {
+    "log": true,
+    "storage": [
+      { "scope": "appData", "pathPrefix": "", "access": ["read", "write"] },
+      { "scope": "temp", "pathPrefix": "", "access": ["read", "write"] }
+    ]
+  }
+}
