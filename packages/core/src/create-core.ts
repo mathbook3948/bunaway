@@ -77,11 +77,13 @@ function coversPathPrefix(granted: string, required: string): boolean {
 function coversHostPermissions(granted: HostPermissions, required: HostPermissions): boolean {
   if (required.log && !granted.log) return false;
   return required.storage.every((need) =>
-    granted.storage.some(
-      (have) =>
-        have.scope === need.scope &&
-        coversPathPrefix(have.pathPrefix, need.pathPrefix) &&
-        need.access.every((access) => have.access.includes(access)),
+    need.access.every((access) =>
+      granted.storage.some(
+        (have) =>
+          have.scope === need.scope &&
+          coversPathPrefix(have.pathPrefix, need.pathPrefix) &&
+          have.access.includes(access),
+      ),
     ),
   );
 }
@@ -337,10 +339,8 @@ class SessionImpl implements CoreSession {
   // request is executed, rejected, cancelled, or expired.
   private acceptRequest(id: string): boolean {
     if (this.closed || this.failed) return false;
-    if (this.requestIds.has(id)) {
-      this.respondError(id, { code: "INVALID_ARGUMENT", message: "Duplicate request ID." });
-      return false;
-    }
+    // A duplicate is not a new request and must not settle the original again.
+    if (this.requestIds.has(id)) return false;
     if (this.requestIds.size >= API_LIMITS.maxRequestIds) {
       this.respondError(id, { code: "BUSY", message: "Request limit reached." });
       return false;
@@ -719,7 +719,7 @@ export const createCore: CoreFactory = async (app, services) => {
       if (typeof hook === "function") core.addStopHook(hook);
     }
   } catch (cause) {
-    await core.cleanupPlugins();
+    await core.stop();
     if (cause instanceof BunawayError) throw cause;
     throw new BunawayError({ code: "INTERNAL", message: "Plugin setup failed." });
   }

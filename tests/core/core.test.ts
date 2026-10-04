@@ -370,7 +370,6 @@ test("duplicate request IDs and request ID records are bounded", async () => {
   await flush();
   expect(results(sent, "r1")).toMatchObject([
     { kind: "error", error: { code: "INVALID_ARGUMENT", message: "Unknown command." } },
-    { kind: "error", error: { code: "INVALID_ARGUMENT", message: "Duplicate request ID." } },
   ]);
   for (let i = 2; i <= API_LIMITS.maxRequestIds; i++) await invoke(`id-${i}`);
   await invoke("overflow");
@@ -973,4 +972,176 @@ test("stop aborts backend work, closes sessions, and reports slow cleanup as TIM
     failure = cause;
   }
   expect(failure).toMatchObject({ code: "TIMEOUT" });
+});
+
+test("duplicate IDs preserve a pending request and never repeat its result", async () => {
+  const clock = createClock();
+  const { services, sent } = createServices(clock);
+  const gate = deferred<null>();
+  let runs = 0;
+  const { core, session } = await openSession(
+    services,
+    "ctx" as HostContext,
+    "main",
+    createApp({
+      commands: {
+        "notes.slow": command({
+          input: { const: null },
+          output: { const: null },
+          handle: () => {
+            runs++;
+            return gate.promise;
+          },
+        }),
+      },
+    }),
+  );
+  const request = {
+    kind: "invoke" as const,
+    protocol: helloMessage.protocol,
+    id: "same",
+    command: "notes.slow",
+    payload: null,
+  };
+  await session.receive(request);
+  await session.receive(request);
+  await session.receive({
+    kind: "listen",
+    protocol: helloMessage.protocol,
+    id: "same",
+    event: "notes.changed",
+  });
+  await flush();
+  expect(results(sent, "same")).toEqual([]);
+  gate.resolve(null);
+  await flush();
+  await session.receive(request);
+  expect(runs).toBe(1);
+  expect(results(sent, "same")).toMatchObject([{ kind: "result", payload: null }]);
+  await core.stop();
+});
+
+test("storage permissions combine grants without widening scope or path", async () => {
+  const clock = createClock();
+  const { services } = createServices(clock);
+  const splitServices: CoreServices = {
+    ...services,
+    policy: {
+      ...policy,
+      backend: {
+        log: true,
+        storage: [
+          { scope: "appData", pathPrefix: "", access: ["read"] },
+          { scope: "appData", pathPrefix: "notes", access: ["write"] },
+        ],
+      },
+    },
+  };
+  const app = (scope: "appData" | "temp", pathPrefix: string) =>
+    createApp({
+      plugins: [
+        {
+          name: "notes",
+          version: "1",
+          requiredHost: {
+            log: false,
+            storage: [{ scope, pathPrefix, access: ["read", "write"] }],
+          },
+        },
+      ],
+    });
+  for (const path of ["notes", "notes/nested"]) {
+    const core = await createCore(app("appData", path), splitServices);
+    await core.stop();
+  }
+  for (const path of ["", "notes-private", "other"]) {
+    await expect(createCore(app("appData", path), splitServices)).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+  }
+  await expect(createCore(app("temp", "notes"), splitServices)).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+});
+
+test("failed startup cancels backend Host calls before reverse cleanup", async () => {
+  const clock = createClock();
+  let hostSignal: Parameters<CoreServices["callHost"]>[2] | undefined;
+  const { services } = createServices(clock, {
+    callHost: async (_context, _call, signal) => {
+      hostSignal = signal;
+      return new Promise(() => {});
+    },
+  });
+  let saved: Parameters<NonNullable<PluginDefinition["setup"]>>[0] | undefined;
+  let pending: Promise<unknown> | undefined;
+  const stops: string[] = [];
+  await expect(
+    createCore(
+      createApp({
+        plugins: [
+          {
+            name: "first",
+            version: "1",
+            setup: () => () => {
+              stops.push("first");
+            },
+          },
+          {
+            name: "worker",
+            version: "1",
+            setup(context) {
+              saved = context;
+              pending = context.host
+                .call("log.write", { level: "info", message: "pending" })
+                .catch((error: unknown) => error);
+              return () => {
+                expect(context.signal.aborted).toBe(true);
+                stops.push("worker");
+              };
+            },
+          },
+          {
+            name: "broken",
+            version: "1",
+            setup() {
+              throw new Error("private details");
+            },
+          },
+        ],
+      }),
+      services,
+    ),
+  ).rejects.toMatchObject({ code: "INTERNAL", message: "Plugin setup failed." });
+  expect(stops).toEqual(["worker", "first"]);
+  expect(hostSignal?.aborted).toBe(true);
+  expect(await pending).toMatchObject({ code: "CANCELLED" });
+  if (!saved) throw new Error("Plugin context was not captured.");
+  await expect(
+    saved.host.call("log.write", { level: "info", message: "late" }),
+  ).rejects.toMatchObject({ code: "CANCELLED" });
+});
+
+test("failed startup bounds plugin cleanup by the shutdown deadline", async () => {
+  const clock = createClock();
+  const { services } = createServices(clock);
+  const creation = createCore(
+    createApp({
+      plugins: [
+        { name: "worker", version: "1", setup: () => () => new Promise<void>(() => {}) },
+        {
+          name: "broken",
+          version: "1",
+          setup() {
+            throw new Error("private details");
+          },
+        },
+      ],
+    }),
+    services,
+  );
+  const failure = creation.catch((error: unknown) => error);
+  await flush();
+  clock.advance(API_LIMITS.shutdownTimeoutMs);
+  expect(await failure).toMatchObject({ code: "TIMEOUT" });
 });
