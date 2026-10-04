@@ -88,6 +88,20 @@ async function dispatch(frame: ProcessFrame) {
   if (frame.runtime.id !== runtime.id || frame.runtime.generation !== runtime.generation) {
     throw new Error("Stale runtime.");
   }
+  // Shutdown may replace queued boot/hello frames before initialization finishes.
+  if (frame.kind === "shutdown") {
+    if (mode === "ignore-stop") return;
+    stopping = true;
+    for (const [id, timer] of timers) {
+      clearTimeout(timer);
+      await error(id, "CANCELLED", "Runtime stopped.");
+    }
+    timers.clear();
+    subscribed = false;
+    await send({ kind: "stopping", ipc: PROCESS_IPC_VERSION, runtime });
+    process.stdin.destroy();
+    return;
+  }
   if (frame.kind === "boot" && !booted) {
     booted = true;
     await send({ kind: "hello", ipc: PROCESS_IPC_VERSION, runtime, payload: hello });
@@ -135,19 +149,6 @@ async function dispatch(frame: ProcessFrame) {
     return;
   }
   if (!ready || stopping) throw new Error("Runtime not ready.");
-  if (frame.kind === "shutdown") {
-    if (mode === "ignore-stop") return;
-    stopping = true;
-    for (const [id, timer] of timers) {
-      clearTimeout(timer);
-      await error(id, "CANCELLED", "Runtime stopped.");
-    }
-    timers.clear();
-    subscribed = false;
-    await send({ kind: "stopping", ipc: PROCESS_IPC_VERSION, runtime });
-    process.stdin.destroy();
-    return;
-  }
   if (frame.kind === "revoke") {
     subscribed = false;
     if (mode === "late-listen" && pendingListen !== undefined) {

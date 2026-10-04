@@ -43,7 +43,7 @@ mise run probe:windows
 
 ## 실제 관찰
 
-**Windows 통합 검증 48개, 계약 테스트 40개 통과.**
+**Windows 통합 검증 50개, 계약 테스트 43개 통과.**
 
 | 항목 | 확인 결과 |
 | --- | --- |
@@ -62,11 +62,12 @@ mise run probe:windows
 | 타입 추론 | 빈 객체의 숫자·배열 입력과 출력 거부. type 없는 바깥 객체 제약과 required 단독 선언도 반영하고 비객체 분기는 유지. 타입 검사와 명령 실행 검증 |
 | 과부하 | 128개 미완료 요청 한도 초과 시 실패·프로세스 정리, 남은 요청은 오류로 완료 |
 | 정상 종료 | 진행 중 타이머 취소, 종료 응답 이후 실제 Bun 종료·EOF·Job 활성 프로세스 0개 확인 |
+| 시작 중 취소 | 실행 직후 EOF·shutdown 각각 5회가 fatal 없이 정상 종료. boot 이전·이후 종료도 허용하며 준비 전 버전·세대 검증 유지 |
 | 강제 종료 | 종료를 무시하는 Bun은 2초 기한 후 강제 종료. 호스트를 죽여도 Bun과 자손 정리 |
 | 출력 정체 | 80만 자 echo 소비 중단 뒤 추가 invoke·revoke를 보내도 shutdown 처리. 종료 무시와 출력 큐 초과도 정리. 출력 재개 시 응답·취소 순서 유지. 소비 재개 없이 OS 핸들로 호스트와 Bun 종료 확인 |
 
-2026-10-04 11:36:47 UTC 실행에서 호스트 PID `13840`, OS 자식 PID와 Bun ready PID
-`18080`이었다. 정상 종료는 `exitCode: 0`, `forced: false`, `failed: false`,
+2026-10-04 11:58:54 UTC 실행에서 호스트 PID `40808`, OS 자식 PID와 Bun ready PID
+`1772`였다. 정상 종료는 `exitCode: 0`, `forced: false`, `failed: false`,
 `activeProcesses: 0`으로 끝났다. 테스트 PID는 실행마다 바뀐다.
 
 네이티브 `--watch` 검증기는 종료 전에 `OpenProcess(SYNCHRONIZE)`로 실제 Bun·자손

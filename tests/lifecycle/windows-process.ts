@@ -212,6 +212,24 @@ try {
     }
     assert.equal(await errors, "");
   });
+  for (const termination of ["EOF", "shutdown"] as const) {
+    await test(`immediate controller ${termination} cancels startup normally`, async () => {
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const probe = launch();
+        if (termination === "EOF") probe.child.stdin.end();
+        else probe.send({ ...base, kind: "shutdown" });
+        const stopped = await probe.finish();
+        assert.equal(stopped.exitCode, 0);
+        assert.equal(stopped.failed, false);
+        assert.equal(stopped.forced, false);
+        assert.ok(probe.frames.some((frame) => frame.kind === "stopping"));
+        assert.equal(
+          probe.frames.some((frame) => frame.kind === "fatal" || frame.kind === "host-error"),
+          false,
+        );
+      }
+    });
+  }
   await test("bundled Bun, distinct OS PID, Korean/space path, isolated environment", async () => {
     const probe = launch();
     const pid = await probe.ready();
