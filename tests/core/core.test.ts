@@ -1252,3 +1252,71 @@ for (const shutdown of ["cancel", "timeout", "close"] as const) {
     await core.stop();
   });
 }
+
+for (const outcome of ["result", "error"] as const) {
+  for (const shutdown of ["close", "stop"] as const) {
+    test(`settled ${outcome} cancels Host work and stays cancelled after ${shutdown}`, async () => {
+      const clock = createClock();
+      const hostGate = deferred<null>();
+      let hostCalls = 0;
+      const { services, sent } = createServices(clock, {
+        callHost: async () => {
+          hostCalls++;
+          await hostGate.promise;
+          return { kind: "result", payload: null };
+        },
+      });
+      let saved: Parameters<NonNullable<PluginDefinition["setup"]>>[0] | undefined;
+      let hostWork: Promise<unknown> | undefined;
+      const { core, session } = await openSession(
+        services,
+        "ctx" as HostContext,
+        "main",
+        createApp({
+          commands: {
+            "notes.slow": command({
+              input: { const: null },
+              output: { const: null },
+              async handle(_input, context) {
+                saved = context;
+                hostWork = context.host
+                  .call("log.write", { level: "info", message: "pending" })
+                  .catch((error: unknown) => error);
+                await flush();
+                if (outcome === "error") throw new Error("handler failed");
+                return null;
+              },
+            }),
+          },
+        }),
+      );
+      await session.receive({
+        kind: "invoke",
+        protocol: helloMessage.protocol,
+        id: "r1",
+        command: "notes.slow",
+        payload: null,
+      });
+      await flush(100);
+      expect(results(sent, "r1")).toMatchObject([{ kind: outcome }]);
+      expect(hostCalls).toBe(1);
+      expect(saved?.signal.aborted).toBe(true);
+      if (shutdown === "close") await session.close();
+      else await core.stop();
+      if (!saved) throw new Error("Command context was not captured.");
+      expect(saved.signal.aborted).toBe(true);
+      expect(await hostWork).toMatchObject({ code: "CANCELLED" });
+      await expect(
+        saved.host.call("log.write", { level: "info", message: "late" }),
+      ).rejects.toMatchObject({ code: "CANCELLED" });
+      await expect(
+        saved.events.emit("notes.changed", { key: "late" }, { kind: "broadcast" }),
+      ).rejects.toMatchObject({ code: "CANCELLED" });
+      expect(hostCalls).toBe(1);
+      hostGate.resolve(null);
+      await flush();
+      expect(results(sent, "r1")).toHaveLength(1);
+      await core.stop();
+    });
+  }
+}

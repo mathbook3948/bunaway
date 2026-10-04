@@ -466,6 +466,7 @@ class SessionImpl implements CoreSession {
     pending.done = true;
     this.pending.delete(pending.id);
     pending.timer?.();
+    pending.controller.abort();
     await this.sendOrFail(reply);
   }
 
