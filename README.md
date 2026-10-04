@@ -1,7 +1,7 @@
 # bunaway
 
 웹 UI와 TypeScript 백엔드, 앱 패키지에 번들된 Bun 런타임을 결합하는 크로스플랫폼
-앱 프레임워크다. 제품 요구사항은 [PRD](./PRD.md)에 정리되어 있다.
+앱 프레임워크다. 제품 요구사항은 [PRD](./docs/PRD.md)에 정리되어 있다.
 
 `protocol`의 메시지·정책 스키마, JSON 검증·직렬화와 버전 협상이 동작한다.
 Windows B 단계는 WebView 없는 C++ 호스트와 번들 Bun 1.4.2로 실행·IPC·종료를
@@ -57,7 +57,7 @@ plugins/    log/  storage/
 templates/  vanilla/  react/  vue/  svelte/
 examples/   commands/  lifecycle/  permissions/
 tests/      protocol/  core/  conformance/  security/  lifecycle/
-docs/       architecture/  api/  platform-support/  decisions/
+docs/       architecture/  api/  platform-support/  decisions/  agents/
 ```
 
 [모듈 의존성과 타입 환경](./docs/architecture/workspace.md)을 참고한다.
