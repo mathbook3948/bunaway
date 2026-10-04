@@ -53,4 +53,10 @@ host-request 응답을 기다릴 수 있으므로 stdin 읽기 루프와 invoke 
 분리한다 — 응답이 같은 stdin으로 도착하므로 읽기를 막으면 교착한다.
 제품 client-sdk·core 연결은 이 패키지에 포함하지 않는다.
 
+`tests/lifecycle/windows-host-native.cpp`는 실제 호스트 코드를 사용하는 네이티브
+회귀 테스트다. 세션 폐기 후 대기 중 저장 작업·늦은 응답 폐기, UI 큐에서 이전
+문서의 메시지 차단, 파일 축소에 따른 조기 EOF 처리를 검증한다.
+`run.ps1`은 이 테스트를 WebView2 통합 검증 전에 실행한다. 이미 시작한 파일
+작업은 세션 폐기로 롤백하지 않으며, 폐기 이후 그 결과는 전달하지 않는다.
+
 [실행 결과](../../../docs/architecture/windows-host-results.md)를 참고한다.

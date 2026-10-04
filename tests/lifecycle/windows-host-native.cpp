@@ -1,0 +1,85 @@
+// Exercise the production router and Win32 file reads without timing-dependent UI races.
+#define wmain productHostMain
+#include "../../native/windows/host/host.cpp"
+#undef wmain
+
+int wmain(int argc, wchar_t** argv) {
+    try {
+        require(argc == 2, "Expected package path.");
+        const fs::path assets = fs::path(argv[1]) / "assets";
+        const fs::path testRoot = fs::path(argv[1]).parent_path() / ("host-regression-" + randomHex(8));
+        fs::create_directories(testRoot);
+        App app;
+        app.hostLog = std::make_unique<Log>(testRoot / "host.log", 1024 * 1024);
+        app.appLog = std::make_unique<Log>(testRoot / "app.log", 1024 * 1024);
+        app.policy = Policy::load(readJson(assets / "policy.schema.json"), assets / "policy.json");
+        app.hostCallSchema = readJson(assets / "host-call.schema.json");
+        app.hostOps = readJson(assets / "host-operations.json");
+        app.runtimeId = "regression";
+        app.generation = "1";
+        app.backendContext = "backend-test";
+        app.viewId = "main";
+        app.scopes.temp = testRoot;
+        app.scopes.tempCanonical = Scopes::canonicalOf(testRoot);
+
+        // Establish a real message queue; postToWeb uses thread messages when hwnd is null.
+        MSG message;
+        PeekMessageW(&message, nullptr, 0, 0, PM_NOREMOVE);
+        const auto context = app.openSession("main", "https://app.bunaway.local/index.html", "https://app.bunaway.local");
+        auto request = app.frame("host-request");
+        request["context"] = context;
+        request["requestId"] = "write-1";
+        request["operation"] = "storage.writeText";
+        request["payload"] = { { "scope", "temp" }, { "path", "queued.txt" }, { "text", "must not be written" } };
+        app.onHostRequest(request);
+        app.postToWeb(context, R"({"kind":"result","id":"reused-id"})");
+        require(PeekMessageW(&message, nullptr, WM_APP_WEB_MESSAGE, WM_APP_WEB_MESSAGE, PM_REMOVE), "Expected queued delivery.");
+        std::unique_ptr<App::WebDelivery> delivery(reinterpret_cast<App::WebDelivery*>(message.lParam));
+        require(app.canDeliverWeb(*delivery), "Active-session response was rejected.");
+
+        app.revokeSession("navigation");
+        app.openSession("main", "https://app.bunaway.local/page2.html", "https://app.bunaway.local");
+        auto task = std::move(app.workQueue.front());
+        app.workQueue.pop_front();
+        task();
+        require(!fs::exists(testRoot / "queued.txt"), "Revoked queued write was executed.");
+        require(app.hostPending.empty(), "Revoked host requests were retained.");
+        const auto queued = app.queue.size();
+        app.hostRespond(context + "|write-1", context, "write-1", { { "kind", "result" }, { "payload", nullptr } });
+        require(app.queue.size() == queued, "Revoked host response was sent.");
+        require(!app.canDeliverWeb(*delivery), "Previous document received a queued response.");
+        std::cout << "PASS revoked queued work and stale UI delivery\n";
+
+        // Even pre-handshake errors belong to one document generation.
+        app.revokeSession("navigation");
+        app.webError("bad-id", "INVALID_ARGUMENT", "Bad request.");
+        require(PeekMessageW(&message, nullptr, WM_APP_WEB_MESSAGE, WM_APP_WEB_MESSAGE, PM_REMOVE), "Expected queued error.");
+        delivery.reset(reinterpret_cast<App::WebDelivery*>(message.lParam));
+        require(app.canDeliverWeb(*delivery), "Current document error was rejected.");
+        app.revokeSession("navigation");
+        require(!app.canDeliverWeb(*delivery), "Pre-session error crossed documents.");
+        std::cout << "PASS pre-session error document generation\n";
+
+        // Force truncation after measuring size, before the production read loop.
+        const auto path = testRoot / "shrinking.txt";
+        { std::ofstream out(path); out << "original contents"; }
+        Handle reader(CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, 0, nullptr));
+        require(reader.value != INVALID_HANDLE_VALUE, "Read handle failed.");
+        LARGE_INTEGER size;
+        require(GetFileSizeEx(reader.value, &size), "File size failed.");
+        { std::ofstream truncate(path, std::ios::trunc); truncate << "short"; }
+        bool rejected = false;
+        try { readStorageText(reader.value, static_cast<size_t>(size.QuadPart)); }
+        catch (const std::runtime_error&) { rejected = true; }
+        require(rejected, "Truncated file was accepted.");
+        LARGE_INTEGER zero {};
+        require(SetFilePointerEx(reader.value, zero, nullptr, FILE_BEGIN), "File rewind failed.");
+        require(readStorageText(reader.value, 5) == "short", "Ordinary read failed.");
+        require(readStorageText(reader.value, 0).empty(), "Empty read failed.");
+        std::cout << "PASS early EOF terminates; normal and empty reads succeed\n";
+        return 0;
+    } catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
+}

@@ -469,6 +469,18 @@ Handle openScopedFile(const Scopes& scopes, const std::string& scope, const std:
     return file;
 }
 
+std::string readStorageText(HANDLE file, size_t size) {
+    std::string text(size, '\0');
+    size_t offset = 0;
+    while (offset < text.size()) {
+        DWORD read = 0;
+        require(ReadFile(file, text.data() + offset, static_cast<DWORD>(text.size() - offset), &read, nullptr), "Storage read failed.");
+        require(read != 0, "Storage file changed during read.");
+        offset += read;
+    }
+    return text;
+}
+
 // ---------- application ----------
 // Owns the window, WebView2, the Bun child process and all routing state. WebView2
 // callbacks run on the UI thread; backend frames arrive on the reader thread. Router
@@ -518,6 +530,7 @@ public:
     std::map<std::string, Session> sessions;
     std::map<std::string, HostRequest> hostPending;
     std::string activeContext;
+    uint64_t documentGeneration = 0;
 
     // ---- UI ----
     HWND hwnd = nullptr;
@@ -566,13 +579,25 @@ public:
     }
 
     // ---------- UI helpers ----------
-    void postToWeb(const std::string& jsonText) {
-        auto* heap = new std::wstring(utf16(jsonText));
+    struct WebDelivery {
+        std::wstring text;
+        std::string context;
+        uint64_t documentGeneration;
+    };
+    // Caller holds stateMutex; preserve the destination until UI dispatch.
+    void postToWeb(const std::string& context, const std::string& jsonText) {
+        auto* heap = new WebDelivery{ utf16(jsonText), context, documentGeneration };
         if (!PostMessageW(hwnd, WM_APP_WEB_MESSAGE, 0, reinterpret_cast<LPARAM>(heap))) delete heap;
+    }
+    bool canDeliverWeb(const WebDelivery& delivery) {
+        std::lock_guard lock(stateMutex);
+        return !shuttingDown && delivery.documentGeneration == documentGeneration &&
+            (delivery.context.empty() || (delivery.context == activeContext && sessions.count(delivery.context)));
     }
     void webError(const std::string& id, const char* code, const char* message) {
         if (id.empty()) return;
-        postToWeb(Json({ { "kind", "error" }, { "protocol", ipc }, { "id", id }, { "error", { { "code", code }, { "message", message } } } }).dump());
+        std::lock_guard lock(stateMutex);
+        postToWeb(activeContext, Json({ { "kind", "error" }, { "protocol", ipc }, { "id", id }, { "error", { { "code", code }, { "message", message } } } }).dump());
     }
     static std::string documentKey(const std::string& uri) {
         return uri.substr(0, uri.find('#'));
@@ -688,17 +713,12 @@ public:
     // Revokes the view's active session: cancels pending work and tells the backend.
     void revokeSession(const char* reason) {
         std::lock_guard lock(stateMutex);
+        ++documentGeneration;
         if (activeContext.empty()) return;
         auto context = activeContext;
         activeContext.clear();
-        auto it = sessions.find(context);
-        if (it != sessions.end()) {
-            for (const auto& item : it->second.pending) {
-                auto& id = item.first;
-                postToWeb(Json({ { "kind", "error" }, { "protocol", ipc }, { "id", id }, { "error", { { "code", "CANCELLED" }, { "message", "Session was revoked." } } } }).dump());
-            }
-            sessions.erase(it);
-        }
+        sessions.erase(context);
+        std::erase_if(hostPending, [&](const auto& item) { return item.second.context == context; });
         hostLog->event("revoke", { { "context", context }, { "reason", reason } });
         try { sendControlContext("revoke", context); } catch (...) {}
     }
@@ -774,7 +794,7 @@ public:
         } else {
             throw std::runtime_error("Invalid backend web direction.");
         }
-        postToWeb(message.dump());
+        postToWeb(context, message.dump());
         hostLog->event("web-delivered", { { "context", context }, { "kind", tag }, { "id", message.contains("id") ? message["id"].get<std::string>() : "" } });
     }
 
@@ -790,18 +810,16 @@ public:
         auto requestId = value["requestId"].get<std::string>();
         auto operation = value["operation"].get<std::string>();
         auto key = context + "|" + requestId;
-        const HostPermissions* permissions;
         {
             std::lock_guard lock(stateMutex);
             require(hostPending.emplace(key, HostRequest{ context, operation }).second, "Duplicate host request ID.");
-            permissions = permissionsFor(context);
         }
         hostLog->event("host-request", { { "context", context }, { "requestId", requestId }, { "operation", operation } });
         {
             std::lock_guard lock(workMutex);
             require(!workDone && workQueue.size() < maxSendQueue, "Host operation queue full.");
-            workQueue.push_back([this, key, context, requestId, operation, payload = value["payload"], permissions] {
-                executeHostOp(key, context, requestId, operation, payload, permissions);
+            workQueue.push_back([this, key, context, requestId, operation, payload = value["payload"]] {
+                executeHostOp(key, context, requestId, operation, payload);
             });
         }
         workCv.notify_one();
@@ -814,13 +832,12 @@ public:
         hostLog->event("host-cancel", { { "requestId", requestId }, { "operation", it->second.operation } });
     }
     void hostRespond(const std::string& key, const std::string& context, const std::string& requestId, const Json& payload) {
-        {
-            std::lock_guard lock(stateMutex);
-            auto it = hostPending.find(key);
-            if (it == hostPending.end()) return;
-            if (it->second.cancelled) { hostPending.erase(it); hostLog->event("host-response-discarded", { { "requestId", requestId } }); return; }
-            hostPending.erase(it);
-        }
+        // Commit the response to the send queue before revoke can invalidate it.
+        std::lock_guard lock(stateMutex);
+        auto it = hostPending.find(key);
+        if (it == hostPending.end()) return;
+        if (it->second.cancelled) { hostPending.erase(it); hostLog->event("host-response-discarded", { { "requestId", requestId } }); return; }
+        hostPending.erase(it);
         auto response = frame("host-response");
         response["context"] = context;
         response["requestId"] = requestId;
@@ -828,19 +845,25 @@ public:
         send(response);
         hostLog->event("host-response", { { "requestId", requestId }, { "kind", payload["kind"].get<std::string>() } });
     }
-    void executeHostOp(const std::string& key, const std::string& context, const std::string& requestId, const std::string& operation, const Json& payload, const HostPermissions* permissions) {
+    void executeHostOp(const std::string& key, const std::string& context, const std::string& requestId, const std::string& operation, const Json& payload) {
         Json result;
         try {
+            HostPermissions permissions;
             {
                 std::lock_guard lock(stateMutex);
                 auto it = hostPending.find(key);
-                if (it != hostPending.end() && it->second.cancelled) {
+                if (it == hostPending.end()) return;
+                if (it->second.cancelled) {
                     hostPending.erase(it);
                     hostLog->event("host-request-cancelled", { { "requestId", requestId } });
                     return;
                 }
+                const auto* current = permissionsFor(context);
+                if (!current) throw HostError("PERMISSION_DENIED", "Host context is not active.");
+                // This marks the operation as started. Revocation prevents queued
+                // operations and discards results, but cannot roll back active I/O.
+                permissions = *current;
             }
-            if (!permissions) throw HostError("PERMISSION_DENIED", "Host context is not active.");
             Json call = { { "operation", operation }, { "payload", payload } };
             if (!valid(hostCallSchema, call)) throw HostError("INVALID_ARGUMENT", "Invalid host request.");
             if (operation == "capabilities.get") {
@@ -851,7 +874,7 @@ public:
                     { { "name", "capabilities.get" }, { "support", "supported" }, { "permission", "not-required" } },
                 });
             } else if (operation == "log.write") {
-                if (!permissions->log) throw HostError("PERMISSION_DENIED", "Logging is not allowed for this context.");
+                if (!permissions.log) throw HostError("PERMISSION_DENIED", "Logging is not allowed for this context.");
                 Json entry = {
                     { "t", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() },
                     { "level", payload["level"].get<std::string>() },
@@ -865,7 +888,7 @@ public:
                 auto scope = payload["scope"].get<std::string>();
                 auto segments = splitPath(payload["path"].get<std::string>());
                 bool write = operation == "storage.writeText";
-                if (!storageAllowed(*permissions, scope, segments, write)) {
+                if (!storageAllowed(permissions, scope, segments, write)) {
                     hostLog->event("host-request-denied", { { "operation", operation }, { "scope", scope }, { "path", payload["path"].get<std::string>() } });
                     throw HostError("PERMISSION_DENIED", "Storage scope is not allowed for this context.");
                 }
@@ -884,14 +907,7 @@ public:
                     LARGE_INTEGER size;
                     require(GetFileSizeEx(file.value, &size), "Storage size failed.");
                     require(size.QuadPart <= static_cast<LONGLONG>(maxFileBytes), "Storage file too large.");
-                    std::string text(static_cast<size_t>(size.QuadPart), '\0');
-                    size_t offset = 0;
-                    while (offset < text.size()) {
-                        DWORD read = 0;
-                        require(ReadFile(file.value, text.data() + offset, static_cast<DWORD>(text.size() - offset), &read, nullptr), "Storage read failed.");
-                        offset += read;
-                    }
-                    result = text;
+                    result = readStorageText(file.value, static_cast<size_t>(size.QuadPart));
                 }
             }
             if (!valid(hostOps.at(operation)["output"], result)) throw HostError("INTERNAL", "Host operation produced an invalid result.");
@@ -1053,7 +1069,7 @@ public:
                 std::lock_guard lock(stateMutex);
                 for (auto& [context, session] : sessions) {
                     for (const auto& [id, pending] : session.pending) {
-                        postToWeb(Json({ { "kind", "error" }, { "protocol", ipc }, { "id", id }, { "error", { { "code", "INTERNAL" }, { "message", "Backend connection closed." } } } }).dump());
+                        postToWeb(context, Json({ { "kind", "error" }, { "protocol", ipc }, { "id", id }, { "error", { { "code", "INTERNAL" }, { "message", "Backend connection closed." } } } }).dump());
                     }
                 }
                 sessions.clear();
@@ -1256,11 +1272,11 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         if (app) app->scanDeadlines();
         return 0;
     case WM_APP_WEB_MESSAGE: {
-        auto* text = reinterpret_cast<std::wstring*>(lParam);
-        if (app && app->webview && !app->shuttingDown) {
-            app->webview->PostWebMessageAsJson(text->c_str());
+        auto* delivery = reinterpret_cast<App::WebDelivery*>(lParam);
+        if (app && app->webview && app->canDeliverWeb(*delivery)) {
+            app->webview->PostWebMessageAsJson(delivery->text.c_str());
         }
-        delete text;
+        delete delivery;
         return 0;
     }
     case WM_APP_RUNTIME_FAILED:
@@ -1431,4 +1447,3 @@ int wmain(int argc, wchar_t** argv) {
         return 1;
     }
 }
-

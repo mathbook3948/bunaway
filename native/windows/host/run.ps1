@@ -84,4 +84,7 @@ foreach ($directory in @('assets', 'licenses')) {
 $pin | Add-Member -NotePropertyName assets -NotePropertyValue $hashes -Force
 $pin | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath (Join-Path $package 'manifest.json') -Encoding utf8NoBOM
 Write-Output "Host package: $package"
-if (!$SkipTests) { Run $Bun @((Join-Path $root 'tests/lifecycle/windows-host.ts'), '--package', $package) }
+if (!$SkipTests) {
+    Run (Join-Path $build 'windows-host-regressions.exe') @($package)
+    Run $Bun @((Join-Path $root 'tests/lifecycle/windows-host.ts'), '--package', $package)
+}
