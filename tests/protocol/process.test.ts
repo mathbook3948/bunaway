@@ -46,6 +46,20 @@ test("NDJSON handles every UTF-8 split boundary and several frames in one chunk"
   expect(await lines(Array.from(bytes, (byte) => new Uint8Array([byte])))).toHaveLength(2);
 });
 
+for (const buffer of [Buffer.alloc(4).subarray(1, 3), new Uint8Array(4).subarray(1, 3)]) {
+  test(`NDJSON copies reused ${buffer.constructor.name} chunks`, async () => {
+    async function* chunks() {
+      buffer.set([49, 50]);
+      yield buffer;
+      buffer.set([51, 52]);
+      yield buffer;
+      buffer[0] = 10;
+      yield buffer.subarray(0, 1);
+    }
+    expect(await Array.fromAsync(readJsonLines(chunks()))).toEqual(["1234"]);
+  });
+}
+
 test("NDJSON rejects invalid UTF-8, blank frames, incomplete EOF and byte overflow", async () => {
   for (const parts of [
     [Buffer.from([255, 10])],

@@ -11,7 +11,7 @@ export async function* readJsonLines(chunks: AsyncIterable<Uint8Array>): AsyncGe
       const part = chunk.subarray(start, end);
       size += part.length;
       if (size > MAX_MESSAGE_BYTES) throw new Error("Process frame exceeds limit.");
-      if (part.length) parts.push(part.slice());
+      if (part.length) parts.push(new Uint8Array(part));
       if (end < chunk.length) {
         if (!size) throw new Error("Empty process frame.");
         yield decoder.decode(Buffer.concat(parts, size));
