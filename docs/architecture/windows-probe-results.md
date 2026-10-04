@@ -43,21 +43,23 @@ mise run probe:windows
 
 ## 실제 관찰
 
-**Windows 통합 검증 33개, 계약 테스트 23개 통과.**
+**Windows 통합 검증 37개, 계약 테스트 31개 통과.**
 
 | 항목 | 확인 결과 |
 | --- | --- |
 | 번들 실행·PID | 한글·공백 경로, 사용자 Bun 없는 PATH, 다른 cwd에서 ready. OS 자식 PID = Bun PID, 호스트 PID와 다름 |
 | 계산 | `2 + 2 → 4`, Promise `→ 42`, 타이머 `→ timer-done`, 동시 요청 ID 매칭 |
 | 이벤트 | 구독→sequence 1 이벤트→해제. 해제·구독 컨텍스트 폐기 후 늦은 이벤트 폐기 |
-| 오류 | throw·rejection의 안정된 code/message, 원본 오류 정보 제외. exit 17·EOF 시 미완료 요청 실패 |
+| 오류 | throw·rejection의 안정된 code/message, 원본 오류 정보 제외. exit 17·Bun이 살아 있는 stdout EOF 시 미완료 요청 실패 |
 | 로그 | stderr 288 KiB를 별도로 배출하고 전달량 64 KiB로 제한. IPC 응답 완료 |
 | 프레이밍 | UTF-8 문자 내부 분할, 여러 프레임 병합, 정확히 1 MiB·깊이 64 수신 |
 | 거부·폐기 | 손상 JSON·UTF-8, 1 MiB 초과·깊이 65, 빈 줄·미완성 EOF·stdout 로그, 다른 세대·버전·ID 재사용 거부. 늦은 중복 응답 폐기 |
 | JSON 일치 | 큰 숫자는 binary64, 음수 0은 0, 중첩 객체 중복 키는 마지막 값 |
+| 스키마 일치 | 공통 입력 25개로 조건 결합·중첩 값 중복·Unicode 코드 포인트 길이 일치. 이모지 600자의 오류도 실제 IPC 통과 |
 | 과부하 | 128개 미완료 요청 한도 초과 시 실패·프로세스 정리, 남은 요청은 오류로 완료 |
 | 정상 종료 | 진행 중 타이머 취소, 종료 응답 이후 실제 Bun 종료·EOF·Job 활성 프로세스 0개 확인 |
 | 강제 종료 | 종료를 무시하는 Bun은 2초 기한 후 강제 종료. 호스트를 죽여도 Bun과 자손 정리 |
+| 출력 정체 | 80만 자 echo 응답 소비를 중단해도 종료 후 출력 정리 2초 기한으로 동기 I/O 취소. 출력을 다시 읽기 전에 호스트와 Bun 종료 확인 |
 
 2026-10-04 08:14:21 UTC 실행에서 호스트 PID `34164`, OS 자식 PID와 Bun ready PID
 `54332`였다. 정상 종료는 `exitCode: 0`, `forced: false`, `failed: false`,
@@ -69,6 +71,8 @@ mise run probe:windows
 
 `build/windows-probe-results.json`에 실행 시각·OS·호스트 해시·패키지 manifest,
 테스트별 결과와 실제 PID·ready·요청·응답·이벤트·오류·종료 프레임을 남긴다.
+출력이 막힌 경로에서는 오류·최종 진단 프레임이 잘릴 수 있다. 이 테스트는 프레임 대신
+호스트 종료 코드와 미리 확보한 OS 프로세스 핸들로 종료를 확인한다.
 실험의 `host-started`·`host-stopped`·`host-error`·`host-discarded`는 외부 검증용 진단이며
 제품의 Web IPC 메시지가 아니다.
 

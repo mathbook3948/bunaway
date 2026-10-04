@@ -36,6 +36,12 @@ struct Handle {
 
 void require(bool condition, const char* message) { if (!condition) throw std::runtime_error(message); }
 
+HANDLE duplicateThread(HANDLE source) {
+    HANDLE result = nullptr;
+    require(DuplicateHandle(GetCurrentProcess(), source, GetCurrentProcess(), &result, THREAD_TERMINATE, FALSE, 0), "Thread handle failed.");
+    return result;
+}
+
 std::string utf8(const std::wstring& value) {
     int n = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value.data(), static_cast<int>(value.size()), nullptr, 0, nullptr, nullptr);
     require(n > 0 || value.empty(), "Invalid path encoding.");
@@ -44,10 +50,12 @@ std::string utf8(const std::wstring& value) {
     return result;
 }
 
-size_t utf16Size(const std::string& value) {
+size_t unicodeSize(const std::string& value) {
     int n = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(), static_cast<int>(value.size()), nullptr, 0);
     require(n > 0 || value.empty(), "Invalid UTF-8.");
-    return static_cast<size_t>(n);
+    size_t count = 0;
+    for (unsigned char byte : value) if ((byte & 0xc0) != 0x80) ++count;
+    return count;
 }
 
 Json parse(const std::string& text) {
@@ -72,8 +80,9 @@ Json readJson(const fs::path& path) {
 
 bool valid(const Json& schema, const Json& value) {
     if (schema.contains("anyOf")) {
-        for (const auto& variant : schema["anyOf"]) if (valid(variant, value)) return true;
-        return false;
+        bool found = false;
+        for (const auto& variant : schema["anyOf"]) if (valid(variant, value)) { found = true; break; }
+        if (!found) return false;
     }
     if (schema.contains("const") && schema["const"] != value) return false;
     if (schema.contains("enum")) {
@@ -82,6 +91,12 @@ bool valid(const Json& schema, const Json& value) {
         if (!found) return false;
     }
     auto type = schema.value("type", "");
+    if (type.empty()) {
+        if (value.is_object()) type = "object";
+        else if (value.is_array()) type = "array";
+        else if (value.is_string()) type = "string";
+        else if (value.is_number()) type = "number";
+    }
     if (type == "object") {
         if (!value.is_object()) return false;
         for (const auto& key : schema.value("required", Json::array())) if (!value.contains(key.get<std::string>())) return false;
@@ -102,10 +117,11 @@ bool valid(const Json& schema, const Json& value) {
     } else if (type == "string") {
         if (!value.is_string()) return false;
         const auto& string = value.get_ref<const std::string&>();
-        if (schema.contains("maxLength") && utf16Size(string) > schema["maxLength"].get<size_t>()) return false;
+        if (schema.contains("maxLength") && unicodeSize(string) > schema["maxLength"].get<size_t>()) return false;
         if (schema.contains("pattern") && !std::regex_search(string, std::regex(schema["pattern"].get<std::string>()))) return false;
-    } else if (type == "integer") {
-        if (!value.is_number() || !std::isfinite(value.get<double>()) || std::floor(value.get<double>()) != value.get<double>()) return false;
+    } else if (type == "integer" || type == "number") {
+        if (!value.is_number() || !std::isfinite(value.get<double>())) return false;
+        if (type == "integer" && (std::floor(value.get<double>()) != value.get<double>() || std::abs(value.get<double>()) > 9007199254740991.0)) return false;
         if (schema.contains("minimum") && value.get<double>() < schema["minimum"].get<double>()) return false;
         if (schema.contains("maximum") && value.get<double>() > schema["maximum"].get<double>()) return false;
     } else if (type == "boolean" && !value.is_boolean()) return false;
@@ -181,7 +197,7 @@ class Probe {
     std::condition_variable queued;
     std::deque<std::string> queue;
     bool writerDone = false;
-    std::atomic<bool> ready = false, closing = false, failed = false, exited = false, forced = false, controllerDone = false;
+    std::atomic<bool> ready = false, closing = false, failed = false, exited = false, forced = false, controllerDone = false, ioDone = false, outputAborted = false;
     bool helloSeen = false;
     std::atomic<ULONGLONG> closeTime = 0;
     std::map<std::string, std::string> pending;
@@ -191,13 +207,15 @@ class Probe {
 
     void emit(const Json& value) {
         std::lock_guard lock(outputMutex);
+        require(!outputAborted, "Host output cancelled.");
         writeAll(GetStdHandle(STD_OUTPUT_HANDLE), value.dump() + "\n");
     }
     void fail() {
+        // Cleanup must start even when the controller is not consuming stdout.
+        TerminateJobObject(job.value, 1);
         if (!failed.exchange(true)) {
             try { emit({ { "kind", "host-error" }, { "code", "INTERNAL" }, { "message", "Process IPC failed." } }); } catch (...) {}
         }
-        TerminateJobObject(job.value, 1);
     }
     void send(const Json& frame, bool control = false) {
         std::string text = frame.dump() + "\n";
@@ -325,8 +343,7 @@ public:
             require(ResumeThread(thread.value) != static_cast<DWORD>(-1), "Bun resume failed.");
         } catch (...) { TerminateJobObject(job.value, 1); WaitForSingleObject(process.value, 5000); throw; }
         childInput.reset(); childOutput.reset(); childError.reset();
-        HANDLE mainHandle = nullptr;
-        require(DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(), &mainHandle, THREAD_TERMINATE, FALSE, 0), "Thread handle failed."); mainThread.reset(mainHandle);
+        mainThread.reset(duplicateThread(GetCurrentThread()));
         std::thread writer([&] {
             try {
                 for (;;) {
@@ -336,13 +353,22 @@ public:
                 }
             } catch (...) { if (!exited) fail(); }
         });
-        std::thread reader([&] { try { readLines(output.value, [&](const std::string& line) { fromBackend(line); }); } catch (...) { fail(); } });
+        std::thread reader([&] {
+            try {
+                readLines(output.value, [&](const std::string& line) { fromBackend(line); });
+                if (!closing && !outputAborted) fail();
+            } catch (...) { if (!outputAborted) fail(); }
+        });
         std::thread logs([&] {
             char data[8192]; DWORD n = 0; size_t forwarded = 0;
-            while (ReadFile(stderrPipe.value, data, sizeof data, &n, nullptr) && n) {
-                if (forwarded < 65536) { auto bytes = std::min<size_t>(n, 65536 - forwarded); try { writeAll(GetStdHandle(STD_ERROR_HANDLE), std::string(data, bytes)); } catch (...) {} forwarded += bytes; }
+            while (!outputAborted && ReadFile(stderrPipe.value, data, sizeof data, &n, nullptr) && n) {
+                if (!outputAborted && forwarded < 65536) { auto bytes = std::min<size_t>(n, 65536 - forwarded); try { writeAll(GetStdHandle(STD_ERROR_HANDLE), std::string(data, bytes)); } catch (...) {} forwarded += bytes; }
             }
         });
+        // Own stable handles while the main thread joins the std::threads.
+        Handle writerThread(duplicateThread(writer.native_handle()));
+        Handle readerThread(duplicateThread(reader.native_handle()));
+        Handle logsThread(duplicateThread(logs.native_handle()));
         std::thread monitor([&] {
             ULONGLONG started = GetTickCount64();
             while (WaitForSingleObject(process.value, 10) == WAIT_TIMEOUT) {
@@ -352,9 +378,21 @@ public:
             }
             exited.store(true);
             TerminateJobObject(job.value, 1);
-            do { CancelSynchronousIo(mainThread.value); Sleep(5); } while (!controllerDone);
             { std::lock_guard lock(queueMutex); writerDone = true; queued.notify_one(); }
-            CancelSynchronousIo(writer.native_handle());
+            const auto deadline = GetTickCount64() + 2000;
+            // Keep cancellation active through joins AND final diagnostic writes.
+            // A single cancellation can race with the next synchronous I/O call.
+            while (!ioDone) {
+                if (!controllerDone) CancelSynchronousIo(mainThread.value);
+                CancelSynchronousIo(writerThread.value);
+                if (GetTickCount64() >= deadline) {
+                    outputAborted.store(true); failed.store(true);
+                    CancelSynchronousIo(mainThread.value);
+                    CancelSynchronousIo(readerThread.value);
+                    CancelSynchronousIo(logsThread.value);
+                }
+                Sleep(5);
+            }
         });
         try {
             auto boot = frame("boot"); boot["payload"] = { { "entrypoint", utf8((assets / "backend.js").wstring()) }, { "buildId", "windows-probe" } }; send(boot);
@@ -363,28 +401,42 @@ public:
             if (!exited) stop();
         } catch (...) { if (!exited) fail(); }
         controllerDone.store(true);
-        monitor.join(); writer.join(); reader.join(); logs.join();
-        DWORD code = 1; require(GetExitCodeProcess(process.value, &code), "Exit code failed.");
-        { std::lock_guard lock(stateMutex); for (const auto& [id, _] : pending) {
-            auto response = frame("web"); response["context"] = "probe-view";
-            response["payload"] = { { "kind", "error" }, { "protocol", ipc }, { "id", id }, { "error", { { "code", "INTERNAL" }, { "message", "Backend connection closed." } } } }; emit(response);
-        } }
-        JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accounting {};
-        ULONGLONG deadline = GetTickCount64() + 5000;
-        do {
-            require(QueryInformationJobObject(job.value, JobObjectBasicAccountingInformation, &accounting, sizeof accounting, nullptr), "Job accounting failed.");
-            if (!accounting.ActiveProcesses) break;
-            Sleep(10);
-        } while (GetTickCount64() < deadline);
-        require(accounting.ActiveProcesses == 0, "Child processes remain.");
-        emit({ { "kind", "host-stopped" }, { "exitCode", code }, { "forced", forced.load() }, { "failed", failed.load() || !closing }, { "activeProcesses", accounting.ActiveProcesses }, { "childPid", childPid } });
-        return failed || forced || code != 0 || !closing ? 1 : 0;
+        writer.join(); reader.join(); logs.join();
+        int result = 1;
+        try {
+            DWORD code = 1; require(GetExitCodeProcess(process.value, &code), "Exit code failed.");
+            { std::lock_guard lock(stateMutex); for (const auto& [id, _] : pending) {
+                auto response = frame("web"); response["context"] = "probe-view";
+                response["payload"] = { { "kind", "error" }, { "protocol", ipc }, { "id", id }, { "error", { { "code", "INTERNAL" }, { "message", "Backend connection closed." } } } }; emit(response);
+            } }
+            JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accounting {};
+            ULONGLONG deadline = GetTickCount64() + 5000;
+            do {
+                require(QueryInformationJobObject(job.value, JobObjectBasicAccountingInformation, &accounting, sizeof accounting, nullptr), "Job accounting failed.");
+                if (!accounting.ActiveProcesses) break;
+                Sleep(10);
+            } while (GetTickCount64() < deadline);
+            require(accounting.ActiveProcesses == 0, "Child processes remain.");
+            emit({ { "kind", "host-stopped" }, { "exitCode", code }, { "forced", forced.load() }, { "failed", failed.load() || !closing }, { "activeProcesses", accounting.ActiveProcesses }, { "childPid", childPid } });
+            result = failed || forced || code != 0 || !closing ? 1 : 0;
+        } catch (...) { failed.store(true); }
+        ioDone.store(true);
+        monitor.join();
+        return failed ? 1 : result;
     }
 };
 
 int wmain(int argc, wchar_t** argv) {
     _setmode(_fileno(stdout), _O_BINARY); _setmode(_fileno(stderr), _O_BINARY);
     try {
+        if (argc == 2 && std::wstring(argv[1]) == L"--validate") {
+            // Test-only mode: exercise the exact validator used by both IPC routes.
+            readLines(GetStdHandle(STD_INPUT_HANDLE), [](const std::string& line) {
+                auto input = parse(line);
+                writeAll(GetStdHandle(STD_OUTPUT_HANDLE), valid(input.at("schema"), input.at("value")) ? "true\n" : "false\n");
+            });
+            return 0;
+        }
         if (argc > 2 && std::wstring(argv[1]) == L"--watch") {
             std::vector<HANDLE> watched;
             for (int i = 2; i < argc; ++i) {

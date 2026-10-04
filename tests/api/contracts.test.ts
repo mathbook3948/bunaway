@@ -34,6 +34,7 @@ import {
   validateValue,
 } from "../../packages/protocol/src/index.ts";
 import { bindHostAPI } from "../../packages/runtime-bun/src/index.ts";
+import { validationCases } from "../protocol/validation-cases.ts";
 
 const input = {
   type: "object",
@@ -85,6 +86,31 @@ function context(host: CommandContext["host"], signal: CancellationSignal): Comm
     events: { async emit() {} },
   };
 }
+
+test("invalid combined constraints and duplicate JSON values never reach command handlers", async () => {
+  const controller = new AbortController();
+  const host = bindHostAPI(contextId, controller.signal, async () => ({
+    kind: "result",
+    payload: null,
+  }));
+  const ctx = context(host, controller.signal);
+  for (const { schema, value, accepted } of validationCases) {
+    if (accepted) continue;
+    let called = false;
+    const definition = command({
+      input: schema,
+      output: {},
+      handle() {
+        called = true;
+        return null;
+      },
+    });
+    await expect(definition.run(value, ctx)).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
+    expect(called).toBe(false);
+    const badOutput = command({ input: {}, output: schema, handle: () => value });
+    await expect(badOutput.run(null, ctx)).rejects.toMatchObject({ code: "INTERNAL" });
+  }
+});
 
 test("a typed backend command validates input/output and preserves its bound Host context", async () => {
   const controller = new AbortController();

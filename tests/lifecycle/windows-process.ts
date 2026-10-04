@@ -12,8 +12,10 @@ import {
   PROCESS_IPC_VERSION,
   PROTOCOL_VERSION,
   serializeProcessFrame,
+  validateValue,
 } from "../../packages/protocol/src/index.ts";
 import { readJsonLines } from "../../packages/runtime-bun/src/process-ipc.ts";
+import { validationCases } from "../protocol/validation-cases.ts";
 
 const original = resolve(process.argv[process.argv.indexOf("--package") + 1] ?? "");
 assert.ok(process.argv.includes("--package"), "--package is required");
@@ -38,7 +40,7 @@ const executions: (() => {
   descendantPid: number | null;
 })[] = [];
 
-function launch(mode = "normal") {
+function launch(mode = "normal", pauseStdout = false) {
   const child = Bun.spawn([host, mode], {
     cwd,
     env: {
@@ -55,10 +57,17 @@ function launch(mode = "normal") {
   let logs = "";
   let done = false;
   let readError: unknown;
+  let releaseOutput = () => {};
+  const resumed = new Promise<void>((resolve) => {
+    releaseOutput = resolve;
+  });
   const output = (async () => {
     try {
-      for await (const line of readJsonLines(child.stdout))
-        frames.push(JSON.parse(line) as Observation);
+      for await (const line of readJsonLines(child.stdout)) {
+        const frame = JSON.parse(line) as Observation;
+        frames.push(frame);
+        if (pauseStdout && frame.kind === "ready") await resumed;
+      }
     } catch (cause) {
       readError = cause;
     } finally {
@@ -82,6 +91,11 @@ function launch(mode = "normal") {
   }
   const api = {
     child,
+    releaseOutput,
+    async drainOutput() {
+      await output;
+      await stderr;
+    },
     frames,
     wait,
     trace: () => ({
@@ -169,6 +183,35 @@ async function test(name: string, body: () => Promise<void>) {
 }
 
 try {
+  await test("TypeScript and native validators agree on shared regression inputs", async () => {
+    const validator = Bun.spawn([host, "--validate"], {
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const output = new Response(validator.stdout).text();
+    const errors = new Response(validator.stderr).text();
+    for (const { schema, value } of validationCases)
+      validator.stdin.write(`${JSON.stringify({ schema, value })}\n`);
+    validator.stdin.end();
+    assert.equal(await validator.exited, 0);
+    const answers = (await output)
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as boolean);
+    assert.equal(answers.length, validationCases.length);
+    for (const [i, { name, schema, value, accepted }] of validationCases.entries()) {
+      let tsAccepted = true;
+      try {
+        validateValue(schema, value);
+      } catch {
+        tsAccepted = false;
+      }
+      assert.equal(tsAccepted, accepted, `TypeScript: ${name}`);
+      assert.equal(answers[i], accepted, `native: ${name}`);
+    }
+    assert.equal(await errors, "");
+  });
   await test("bundled Bun, distinct OS PID, Korean/space path, isolated environment", async () => {
     const probe = launch();
     const pid = await probe.ready();
@@ -277,6 +320,42 @@ try {
     await probe.stop();
     assert.equal(Buffer.byteLength(probe.logs()), 65536);
   });
+  await test("astral Unicode error message survives native IPC validation", async () => {
+    const probe = launch();
+    await probe.ready();
+    const response = await probe.request("unicode-error", "probe.unicode-error");
+    assert.equal(response.kind, "error");
+    if (response.kind === "error") assert.equal(response.error.message, "😀".repeat(600));
+    await probe.stop();
+  });
+  await test("shutdown is bounded when controller stops reading stdout", async () => {
+    const probe = launch("normal", true);
+    const pid = await probe.ready();
+    const exited = await watch([pid]);
+    probe.send({
+      ...base,
+      kind: "web",
+      context: "probe-view",
+      payload: {
+        kind: "invoke",
+        protocol: PROTOCOL_VERSION,
+        id: "blocked",
+        command: "probe.echo",
+        payload: "x".repeat(800000),
+      },
+    });
+    await Bun.sleep(100);
+    const started = performance.now();
+    probe.send({ ...base, kind: "shutdown" });
+    const exit = await Promise.race([probe.child.exited, Bun.sleep(4500).then(() => "timeout")]);
+    assert.equal(exit, 1, "stdout remained blocked after shutdown");
+    assert.ok(performance.now() - started < 4500);
+    await exited();
+    // Reading resumes only AFTER both host and Bun have exited.
+    probe.releaseOutput();
+    await probe.drainOutput();
+    live.delete(probe);
+  });
   await test("split/coalesced UTF-8 frames and IDs beyond JS integer precision", async () => {
     const probe = launch();
     await probe.ready();
@@ -335,6 +414,20 @@ try {
     const stopped = await probe.finish(1);
     assert.equal(stopped.exitCode, 17);
     assert.equal(stopped.failed, true);
+    await exited();
+  });
+  await test("backend stdout EOF fails pending requests while Bun is still alive", async () => {
+    const probe = launch();
+    const pid = await probe.ready();
+    const exited = await watch([pid]);
+    const pending = probe.request("held", "probe.hold");
+    const close = probe.request("close-stdout", "probe.close-stdout");
+    const started = performance.now();
+    const [held, closed] = await Promise.all([pending, close]);
+    assert.equal(held.kind, "error");
+    assert.equal(closed.kind, "error");
+    assert.equal((await probe.finish(1)).failed, true);
+    assert.ok(performance.now() - started < 4500);
     await exited();
   });
   await test("shutdown timeout forcibly kills Bun", async () => {
@@ -530,6 +623,7 @@ try {
   for (const probe of live) {
     probe.child.kill();
     probe.child.stdin.end();
+    probe.releaseOutput();
   }
   await Promise.all([...live].map((probe) => probe.child.exited));
 }

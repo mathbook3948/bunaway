@@ -1,3 +1,4 @@
+import { closeSync } from "node:fs";
 import {
   negotiateProtocol,
   parseProcessFrame,
@@ -216,6 +217,23 @@ async function dispatch(frame: ProcessFrame) {
     }
     case "probe.crash":
       process.exit(17);
+      break;
+    case "probe.close-stdout": {
+      // Bun's descriptor and the inherited Win32 handle can be distinct on Windows.
+      const { dlopen } = await import("bun:ffi");
+      const kernel = dlopen("kernel32.dll", {
+        GetStdHandle: { args: ["i32"], returns: "u64" },
+        CloseHandle: { args: ["u64"], returns: "i32" },
+      });
+      const stdout = kernel.symbols.GetStdHandle(-11);
+      closeSync(1);
+      kernel.symbols.CloseHandle(stdout);
+      kernel.close();
+      setInterval(() => {}, 1000);
+      break;
+    }
+    case "probe.unicode-error":
+      await error(message.id, "INTERNAL", "😀".repeat(600));
       break;
     case "probe.log-flood":
       await new Promise<void>((resolve, reject) => {

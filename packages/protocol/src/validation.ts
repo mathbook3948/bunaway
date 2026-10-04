@@ -146,11 +146,25 @@ function snapshotJson(
   return copy;
 }
 
+// Object property order does not affect JSON equality; array order does.
+function jsonKey(value: JsonValue): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(jsonKey).join(",")}]`;
+  return `{${Object.keys(value)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${jsonKey(value[key] as JsonValue)}`)
+    .join(",")}}`;
+}
+
 function matches(schema: Schema, value: JsonValue): boolean {
-  if ("const" in schema) return value === schema.const;
-  if (schema.enum) return typeof value === "string" && schema.enum.includes(value);
-  if (schema.anyOf) return schema.anyOf.some((option) => matches(option, value));
-  switch (schema.type) {
+  if ("const" in schema && value !== schema.const) return false;
+  if (schema.enum && (typeof value !== "string" || !schema.enum.includes(value))) return false;
+  if (schema.anyOf && !schema.anyOf.some((option) => matches(option, value))) return false;
+  // Keywords also apply without an explicit type (for example enum + maxLength).
+  switch (
+    schema.type ??
+    (value === null ? "null" : Array.isArray(value) ? "array" : typeof value)
+  ) {
     case "object": {
       if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
       const properties = schema.properties ?? {};
@@ -168,7 +182,7 @@ function matches(schema: Schema, value: JsonValue): boolean {
         Array.isArray(value) &&
         value.length >= (schema.minItems ?? 0) &&
         value.length <= (schema.maxItems ?? Infinity) &&
-        (!schema.uniqueItems || new Set(value).size === value.length) &&
+        (!schema.uniqueItems || new Set(value.map(jsonKey)).size === value.length) &&
         value.every((item) => matches(schema.items ?? {}, item))
       );
     case "string":
@@ -178,9 +192,10 @@ function matches(schema: Schema, value: JsonValue): boolean {
         (!schema.pattern || new RegExp(schema.pattern).test(value))
       );
     case "integer":
+    case "number":
       return (
         typeof value === "number" &&
-        Number.isSafeInteger(value) &&
+        (schema.type !== "integer" || Number.isSafeInteger(value)) &&
         value >= (schema.minimum ?? -Infinity) &&
         value <= (schema.maximum ?? Infinity)
       );

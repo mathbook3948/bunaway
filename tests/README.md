@@ -11,4 +11,5 @@
 일치 여부를 검사한다. `mise run check`에는 테스트와 테스트 코드의 타입 검사도 포함한다.
 제품 코어·SDK·WebView·보안 집행 테스트는 해당 구현 뒤 추가한다.
 `mise run probe:windows`는 별도로 Windows 네이티브 패키지를 빌드하고 실제 Bun 프로세스
-IPC·정상/강제 종료 통합 검증 33개를 실행한다.
+IPC·정상/강제 종료 통합 검증 37개를 실행한다. TypeScript와 C++에 같은 입력 25개를
+넣는 검증기 회귀 테스트, 출력 소비 중단·살아 있는 Bun의 stdout EOF·Unicode 오류도 포함한다.
