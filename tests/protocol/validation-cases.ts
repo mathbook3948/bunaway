@@ -1,4 +1,4 @@
-import type { JsonValue, Schema } from "../../packages/protocol/src/index.ts";
+import { hostOperations, type JsonValue, type Schema } from "../../packages/protocol/src/index.ts";
 
 // The same inputs exercise TypeScript and the actual Windows IPC validator.
 export const validationCases: {
@@ -144,3 +144,59 @@ export const validationCases: {
     accepted: false,
   },
 ];
+
+const malformedUnicode: [string, JsonValue][] = [
+  ["lone high surrogate", "\uD800"],
+  ["lone low surrogate", "\uDFFF"],
+  ["reversed surrogate pair", "\uDC00\uD800"],
+  ["high surrogate before BMP", "\uD800a"],
+  ["low surrogate after BMP", "a\uDC00"],
+  ["sliced emoji", "😀".slice(0, 1)],
+  ["nested surrogate value", { nested: ["\uD800"] }],
+  ["surrogate object key", { "\uD800": "value" }],
+  ["nested surrogate key", { nested: { "\uDC00": null } }],
+];
+for (const [name, value] of malformedUnicode) {
+  validationCases.push({ name, schema: {}, value, accepted: false });
+}
+
+validationCases.push(
+  { name: "empty string", schema: {}, value: "", accepted: true },
+  { name: "BMP surrogate boundaries", schema: {}, value: "\uD7FF\uE000", accepted: true },
+  {
+    name: "valid surrogate pairs in key and value",
+    schema: {},
+    value: { "\uD800\uDC00": "\uDBFF\uDFFF" },
+    accepted: true,
+  },
+  {
+    name: "omitted required accepts empty object",
+    schema: { type: "object", properties: { note: { type: "string" } } },
+    value: {},
+    accepted: true,
+  },
+  {
+    name: "omitted required validates present property",
+    schema: { type: "object", properties: { note: { type: "string" } } },
+    value: { note: 42 },
+    accepted: false,
+  },
+);
+
+for (const [path, accepted] of [
+  ["notes\u2028/../escape", false],
+  ["notes\u2029/../escape", false],
+  ["notes\u2028/./escape", false],
+  ["notes\u2029/./escape", false],
+  ["notes/../\u2028escape", false],
+  ["notes/./\u2029escape", false],
+  ["notes\u2028/file.txt", true],
+  ["notes\u2029/file.txt", true],
+] as const) {
+  validationCases.push({
+    name: `Unicode path ${JSON.stringify(path)}`,
+    schema: hostOperations["storage.readText"].input,
+    value: { scope: "appData", path },
+    accepted,
+  });
+}

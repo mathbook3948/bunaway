@@ -432,8 +432,9 @@ int wmain(int argc, wchar_t** argv) {
         if (argc == 2 && std::wstring(argv[1]) == L"--validate") {
             // Test-only mode: exercise the exact validator used by both IPC routes.
             readLines(GetStdHandle(STD_INPUT_HANDLE), [](const std::string& line) {
-                auto input = parse(line);
-                writeAll(GetStdHandle(STD_OUTPUT_HANDLE), valid(input.at("schema"), input.at("value")) ? "true\n" : "false\n");
+                bool accepted = false;
+                try { auto input = parse(line); accepted = valid(input.at("schema"), input.at("value")); } catch (...) {}
+                writeAll(GetStdHandle(STD_OUTPUT_HANDLE), accepted ? "true\n" : "false\n");
             });
             return 0;
         }

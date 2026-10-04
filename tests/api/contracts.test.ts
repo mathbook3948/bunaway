@@ -43,6 +43,20 @@ const input = {
   additionalProperties: false,
 } as const;
 const output = { type: "string" } as const;
+const optionalInput = { type: "object", properties: { note: { type: "string" } } } as const;
+const optionalApp = {
+  commands: {
+    "notes.optional": command({
+      input: optionalInput,
+      output,
+      handle(input) {
+        const note: string | undefined = input.note;
+        return note ?? "default";
+      },
+    }),
+  },
+  events: { "notes.optionalChanged": optionalInput },
+} satisfies AppDefinition;
 const app = {
   commands: {
     "notes.read": command({
@@ -86,6 +100,20 @@ function context(host: CommandContext["host"], signal: CancellationSignal): Comm
     events: { async emit() {} },
   };
 }
+
+test("command input properties are optional when required is omitted", async () => {
+  const signal = new AbortController().signal;
+  const ctx = context(
+    bindHostAPI(contextId, signal, async () => ({ kind: "result", payload: null })),
+    signal,
+  );
+  const definition = optionalApp.commands["notes.optional"];
+  expect(await definition.run({}, ctx)).toBe("default");
+  expect(await definition.run({ note: "present" }, ctx)).toBe("present");
+  await expect(definition.run({ note: 42 }, ctx)).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+});
 
 test("invalid combined constraints and duplicate JSON values never reach command handlers", async () => {
   const controller = new AbortController();
@@ -238,6 +266,10 @@ test("Host paths use relative forward-slash paths while native access checks rem
     "notes/../escape",
     "notes/./a",
     "notes\\a",
+    "notes\u2028/../escape",
+    "notes\u2029/../escape",
+    "notes\u2028/./a",
+    "notes\u2029/./a",
   ]) {
     expect(() =>
       parseHostCall(
@@ -320,6 +352,38 @@ test("pending Host calls abort promptly and release their cancellation listener"
 });
 
 // Type assertions below are not executed by the runtime tests.
+export function checkOptionalObjectTypes(
+  client: Client<CommandsOf<typeof optionalApp>, EventsOf<typeof optionalApp>>,
+) {
+  const missing: Promise<string> = client.invoke("notes.optional", {});
+  const present: Promise<string> = client.invoke("notes.optional", { note: "present" });
+  void missing;
+  void present;
+  // @ts-expect-error a present optional field must still be a string
+  client.invoke("notes.optional", { note: 42 });
+  // @ts-expect-error the optional object is not nullable
+  client.invoke("notes.optional", null);
+  client.listen(
+    "notes.optionalChanged",
+    (event) => {
+      const note: string | undefined = event.payload.note;
+      void note;
+      // @ts-expect-error note may be absent
+      const required: string = event.payload.note;
+      void required;
+    },
+    { onError() {} },
+  );
+  const nested = command({
+    input: { type: "object", properties: { options: optionalInput }, required: [] },
+    output,
+    handle(input) {
+      return input.options?.note ?? "nested-default";
+    },
+  });
+  void nested;
+}
+
 export function checkClientTypes(
   client: Client<CommandsOf<typeof app>, EventsOf<typeof app>>,
   factory: ClientFactory,

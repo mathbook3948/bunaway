@@ -27,6 +27,10 @@ export type Schema = {
   readonly pattern?: string;
 };
 
+type RequiredKeys<S> = S extends { readonly required: readonly string[] }
+  ? S["required"][number]
+  : never;
+
 export type Infer<S> = S extends { readonly const: infer C }
   ? C
   : S extends { readonly enum: readonly (infer E)[] }
@@ -44,15 +48,16 @@ export type Infer<S> = S extends { readonly const: infer C }
               : S extends {
                     readonly type: "object";
                     readonly properties: infer P;
-                    readonly required: readonly (infer R)[];
                   }
-                ? { [K in keyof P as K extends R ? K : never]: Infer<P[K]> } & {
-                    [K in keyof P as K extends R ? never : K]?: Infer<P[K]>;
+                ? { [K in keyof P as K extends RequiredKeys<S> ? K : never]: Infer<P[K]> } & {
+                    [K in keyof P as K extends RequiredKeys<S> ? never : K]?: Infer<P[K]>;
                   }
                 : JsonValue;
 
 export const MAX_MESSAGE_BYTES = 1_048_576;
 export const MAX_JSON_DEPTH = 64;
+// Unicode mode matches lone UTF-16 surrogates, but leaves valid pairs intact.
+const loneSurrogate = /[\uD800-\uDFFF]/u;
 
 export class ProtocolError extends Error {
   constructor(
@@ -96,7 +101,8 @@ function snapshotJson(
 ): JsonValue {
   if (depth > MAX_JSON_DEPTH) invalid();
   if (value === null || typeof value === "boolean" || typeof value === "string") {
-    if (typeof value === "string" && value.length > budget.remaining) invalid();
+    if (typeof value === "string" && (value.length > budget.remaining || loneSurrogate.test(value)))
+      invalid();
     budget.remaining -= utf8Size(JSON.stringify(value));
     if (budget.remaining < 0) invalid();
     return value;
@@ -131,7 +137,7 @@ function snapshotJson(
     if (!first) budget.remaining--;
     first = false;
     if (!array) {
-      if (key.length > budget.remaining) invalid();
+      if (key.length > budget.remaining || loneSurrogate.test(key)) invalid();
       budget.remaining -= utf8Size(JSON.stringify(key)) + 1;
     }
     if (budget.remaining < 0) invalid();

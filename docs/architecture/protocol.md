@@ -20,12 +20,16 @@ envelope의 payload로 운반하며 호스트 발급 컨텍스트·수명주기 
 `const`·`enum`·`anyOf`와 같은 객체에 선언한 조건은 모두 함께 적용한다.
 문자열 `maxLength`는 Unicode 코드 포인트 수이며 결합 문자는 각각 센다.
 `uniqueItems`는 중첩 JSON 값으로 비교한다. 객체의 속성 순서는 무시하고 배열 순서는 보존한다.
+객체 스키마에서 `required`를 생략하면 선언한 속성은 모두 선택 속성으로 추론·검증한다.
 Windows 실험 호스트는 생성된 process 스키마와 같은 키워드를 해석하고 런타임 세대,
 방향·컨텍스트·요청 ID·이벤트 구독과 sequence를 별도로 검사한다.
 제품용 권한 집행과 WebView 신뢰 경계는 C 단계에서 구현한다.
 
 JSON 전송은 UTF-8 최대 1 MiB, 루트 깊이 0에서 최대 깊이 64다. 모든 payload도 같은
 제한을 받는다. 유한한 숫자, 문자열, boolean, null, 밀집 배열과 일반 객체만 허용한다.
+문자열 값과 모든 깊이의 객체 키에는 단독 UTF-16 surrogate를 허용하지 않는다.
+정상 surrogate 쌍은 보존하고 단독 surrogate는 송신 전·JSON 파싱 후에 INVALID_ARGUMENT로
+거부한다. 네이티브 파서도 같은 값을 거부하므로 송신자가 먼저 검증해야 한다.
 함수, undefined, BigInt, 비유한 숫자, 순환 참조, 클래스, getter, symbol 속성과
 JSON으로 보존되지 않는 속성은 보내기 전에 거부한다. 수신측은 파싱 결과도 검증한다.
 송신은 속성 descriptor에서 복사한 JSON 데이터만 검증·직렬화한다. 검증 이후 원본의

@@ -328,6 +328,31 @@ try {
     if (response.kind === "error") assert.equal(response.error.message, "😀".repeat(600));
     await probe.stop();
   });
+  await test("unpaired surrogates are rejected before IPC without closing the host", async () => {
+    const probe = launch();
+    await probe.ready();
+    for (const payload of ["\uD800", "\uDC00", { "\uD800": "key" }, { nested: ["\uDC00"] }]) {
+      assert.throws(() =>
+        probe.send({
+          ...base,
+          kind: "web",
+          context: "probe-view",
+          payload: {
+            kind: "invoke",
+            protocol: PROTOCOL_VERSION,
+            id: "bad-unicode",
+            command: "probe.echo",
+            payload,
+          },
+        }),
+      );
+    }
+    const payload = { "😀": ["\uD800\uDC00", "\uDBFF\uDFFF"] };
+    const response = await probe.request("valid-unicode", "probe.echo", payload);
+    assert.equal(response.kind, "result");
+    if (response.kind === "result") assert.deepEqual(response.payload, payload);
+    await probe.stop();
+  });
   await test("shutdown is bounded when controller stops reading stdout", async () => {
     const probe = launch("normal", true);
     const pid = await probe.ready();
