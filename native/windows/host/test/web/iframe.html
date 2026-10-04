@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>iframe</title></head>
+<body>
+<script>
+// Attempts to bypass the host boundary from a child frame. The host must not
+// forward this because WebView2 delivers frame messages through a frame-level
+// channel the host does not subscribe to.
+window.chrome.webview.postMessage({ kind: "invoke", protocol: { major: 1, minor: 0 }, id: "iframe-1", command: "test.ping", payload: null });
+</script>
+</body>
+</html>

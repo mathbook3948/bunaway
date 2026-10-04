@@ -1,0 +1,7 @@
+{
+  "appId": "tests.bunaway.host",
+  "view": "main",
+  "home": "https://app.bunaway.local/index.html",
+  "title": "bunaway host test",
+  "window": { "width": 1024, "height": 768 }
+}

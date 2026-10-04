@@ -16,3 +16,4 @@ Thumbs.db
 runtime/bun-embed/vendor/
 runtime/bun-bundle/vendor/
 native/windows/vendor/
+native/windows/host/vendor/
