@@ -1,0 +1,26 @@
+[tools]
+bun = "1.4.2"
+
+[tasks.install]
+description = "Install the locked workspace dependencies"
+run = "bun install --frozen-lockfile"
+
+[tasks.typecheck]
+description = "Check all workspace TypeScript types"
+run = "bun run --workspaces typecheck"
+
+[tasks.lint]
+description = "Lint source files without changing them"
+run = "bunx --no-install biome lint ."
+
+[tasks.format]
+description = "Format source files and project configuration"
+run = "bunx --no-install biome format --write ."
+
+[tasks."format:check"]
+description = "Check formatting without changing files"
+run = "bunx --no-install biome format ."
+
+[tasks.check]
+description = "Check formatting and TypeScript types"
+depends = ["lint", "format:check", "typecheck"]

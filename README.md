@@ -1,0 +1,64 @@
+# bunaway
+
+웹 UI와 TypeScript 백엔드, 앱 내부 Bun 런타임을 결합하는 크로스플랫폼
+앱 프레임워크다. 제품 요구사항은 [PRD](./PRD.md)에 정리되어 있다.
+
+현재는 저장소와 개발 도구 구성 단계다. SDK, CLI와 네이티브 호스트는 아직
+구현하지 않았고 모바일 실행도 검증하지 않았다.
+
+## 시작하기
+
+[mise](https://mise.jdx.dev/getting-started)를 설치한 뒤 저장소 루트에서 실행한다.
+
+```sh
+mise trust
+mise install
+mise run install
+mise run check
+```
+
+Bun은 `mise.toml`과 `package.json`에 **1.4.2**로 고정되어 있다.
+전역 Bun 대신 `mise run` 또는 `mise exec -- bun ...`을 사용한다.
+새 환경은 `bun.lock`을 사용하는 frozen install로 의존성을 재현한다.
+
+## 명령
+
+| 명령 | 동작 |
+| --- | --- |
+| `mise run install` | lockfile을 변경하지 않고 의존성 설치 |
+| `mise run check` | 포맷·린트·TypeScript 검사 |
+| `mise run typecheck` | 각 workspace 타입 검사 |
+| `mise run format` | 코드와 JSON 포맷 적용 |
+| `mise run format:check` | 포맷 검사 |
+| `mise run lint` | 코드 린트 |
+
+루트 명령은 mise에서 관리하고, 패키지에는 `typecheck`만 둔다.
+실행 가능한 앱이 없으므로 `dev`·`build`·`test` 명령은 구현과 함께 추가한다.
+
+## 디렉터리
+
+```text
+packages/   protocol/  client-sdk/  backend-sdk/  core/  runtime-bun/  cli/
+native/     host-api/  windows/  macos/  linux/  android/  ios/
+runtime/    bun-embed/  patches/  build-manifests/
+renderers/  system-webview/  chromium/
+plugins/    log/  storage/
+templates/  vanilla/  react/  vue/  svelte/
+examples/   commands/  lifecycle/  permissions/
+tests/      protocol/  core/  conformance/  security/  lifecycle/
+docs/       architecture/  api/  platform-support/  decisions/
+```
+
+[모듈 의존성과 타입 환경](./docs/architecture/workspace.md)을 참고한다.
+폴더만 준비한 영역은 각 영역의 README에 구현 상태를 기록했다.
+
+## 버전 변경
+
+Bun 변경 시 `mise.toml`의 `tools.bun`과 `package.json`의
+`packageManager`·`engines.bun`을 함께 수정한다.
+`mise install` 후 `mise exec -- bun install`로 필요한 lockfile 변경을 만들고
+`mise run check`를 확인한다.
+`bun upgrade`로 mise가 관리하는 실행 파일을 직접 바꾸지 않는다.
+
+외부 개발 의존성도 정확한 버전으로 고정하고 `bun.lock`을 관리한다.
+내장 Bun의 commit·패치 고정은 [runtime](./runtime/README.md)의 별도 작업이다.
