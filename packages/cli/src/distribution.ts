@@ -201,7 +201,9 @@ export async function checkArtifact(root: string): Promise<void> {
     ...requiredFrameworkFiles(),
     "packages/cli/dist/distribution-main.js",
     "packages/cli/dist/index.js",
+    "packages/cli/dist/types/cli/src/index.d.ts",
     "packages/cli/templates/vanilla/package.json",
+    "packages/cli/templates/vanilla/gitattributes",
   ]) {
     if (!inventory[name]) throw new Error(`Artifact is missing required input: ${name}`);
   }

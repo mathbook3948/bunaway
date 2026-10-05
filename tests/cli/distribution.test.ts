@@ -6,8 +6,12 @@ import { packFramework } from "../../packages/cli/scripts/pack.ts";
 import { checkArtifact, snapshotHashes } from "../../packages/cli/src/distribution.ts";
 import { json, verifyHash, writeJson } from "../../packages/cli/src/files.ts";
 
-async function command(cwd: string, args: string[]): Promise<string> {
-  const child = Bun.spawn([process.execPath, ...args], { cwd, stdout: "pipe", stderr: "pipe" });
+async function command(
+  cwd: string,
+  args: string[],
+  executable = process.execPath,
+): Promise<string> {
+  const child = Bun.spawn([executable, ...args], { cwd, stdout: "pipe", stderr: "pipe" });
   const stdout = new Response(child.stdout).text();
   const stderr = new Response(child.stderr).text();
   const code = await child.exited;
@@ -22,7 +26,11 @@ test("packed CLI installs outside the checkout, creates a relocatable version-lo
     const artifact = await packFramework(resolve(home, "artifacts"));
     const consumer = resolve(home, "consumer");
     await mkdir(consumer);
-    await writeJson(resolve(consumer, "package.json"), { name: "local-consumer", private: true });
+    await writeJson(resolve(consumer, "package.json"), {
+      name: "local-consumer",
+      private: true,
+      type: "module",
+    });
     await command(consumer, ["add", "--exact", artifact]);
     const installed = resolve(consumer, "node_modules/@bunaway/cli");
     await checkArtifact(installed);
@@ -33,6 +41,54 @@ test("packed CLI installs outside the checkout, creates a relocatable version-lo
         "import { createProject } from '@bunaway/cli'; console.log(typeof createProject)",
       ]),
     ).toContain("function");
+    await command(consumer, ["add", "--dev", "--exact", "typescript@7.0.2", "@types/bun@1.4.2"]);
+    await writeFile(
+      resolve(consumer, "api.ts"),
+      `
+import {
+  createProject, validateProject, buildProject, prepareNative,
+  currentTarget, devProject, RestartController, doctor,
+} from "@bunaway/cli";
+
+const created: Promise<string> = createProject("./typed-app");
+const target: "windows-x64" | "macos-arm64" = currentTarget();
+const native = prepareNative(target);
+const project = await validateProject("./typed-app");
+const view: string | undefined = project.policy.views[0]?.id;
+const built: Promise<string> = buildProject(project.root).then(value => value.executable);
+const healthy: Promise<boolean> = doctor(project.root);
+const development: Promise<void> = devProject(project.root);
+const controller = new RestartController({
+  stop: async () => {}, build: async () => "built",
+  start: async (value: string) => {}, error: (error: unknown) => {},
+});
+// @ts-expect-error createProject requires a path string.
+createProject(42);
+// @ts-expect-error currentTarget does not return a number.
+const invalidTarget: number = currentTarget();
+// @ts-expect-error policy retains the protocol's declared structure.
+project.policy.invalidField;
+// @ts-expect-error RestartController keeps its build result type.
+new RestartController<string>({ stop: async () => {}, build: async () => 42, start: async () => {}, error: () => {} });
+`,
+    );
+    for (const modules of [
+      { module: "Preserve", moduleResolution: "Bundler" },
+      { module: "NodeNext", moduleResolution: "NodeNext" },
+    ]) {
+      await writeJson(resolve(consumer, "tsconfig.json"), {
+        compilerOptions: {
+          ...modules,
+          target: "ES2022",
+          strict: true,
+          noEmit: true,
+          types: ["bun"],
+          skipLibCheck: false,
+        },
+        include: ["api.ts"],
+      });
+      await command(consumer, ["run", "tsc", "--project", "tsconfig.json"]);
+    }
     await command(consumer, ["run", "bunaway", "create", "../created app"]);
     const project = resolve(home, "moved app");
     await rename(resolve(home, "created app"), project);
@@ -42,6 +98,32 @@ test("packed CLI installs outside the checkout, creates a relocatable version-lo
     await command(project, ["install"]);
     expect(await command(project, ["run", "validate"])).toContain("valid");
     await command(project, ["run", "typecheck"]);
+    await command(project, ["init"], "git");
+    await command(project, ["-c", "core.autocrlf=true", "add", "."], "git");
+    const frameworkLock = (await json(resolve(project, "bunaway.lock.json"))) as {
+      files: Record<string, string>;
+    };
+    for (const autocrlf of ["false", "true"]) {
+      const checkout = resolve(home, `checkout-${autocrlf}`);
+      await mkdir(checkout);
+      await command(
+        project,
+        [
+          "-c",
+          `core.autocrlf=${autocrlf}`,
+          "checkout-index",
+          "--all",
+          `--prefix=${checkout.replaceAll("\\", "/")}/`,
+        ],
+        "git",
+      );
+      expect(await snapshotHashes(resolve(checkout, "vendor/bunaway"))).toEqual(
+        frameworkLock.files,
+      );
+      await command(checkout, ["install", "--frozen-lockfile"]);
+      expect(await command(checkout, ["run", "validate"])).toContain("valid");
+      await command(checkout, ["run", "typecheck"]);
+    }
     if (process.env.BUNAWAY_NATIVE_DISTRIBUTION_TEST === "1") {
       await command(project, ["run", "doctor"]);
       expect(await command(project, ["run", "build"])).toContain("Built");
@@ -112,7 +194,7 @@ test("packed CLI installs outside the checkout, creates a relocatable version-lo
   }
 }, 180000);
 
-test("artifact audit rejects omitted schemas even if someone regenerates the inventory", async () => {
+test("artifact audit rejects omitted schemas, declarations and Git attributes with a regenerated inventory", async () => {
   const home = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-audit-")));
   try {
     const artifact = await packFramework(home);
@@ -124,12 +206,24 @@ test("artifact audit rejects omitted schemas even if someone regenerates the inv
     expect(await extract.exited, await errors).toBe(0);
     const root = resolve(home, "package");
     await checkArtifact(root);
-    await rm(resolve(root, "native/host-api/generated/process.schema.json"));
-    await expect(checkArtifact(root)).rejects.toThrow("inventory mismatch");
-    const hashes = await snapshotHashes(root);
-    delete hashes["artifact.files.json"];
-    await writeJson(resolve(root, "artifact.files.json"), hashes);
-    await expect(checkArtifact(root)).rejects.toThrow("missing required input");
+    const inventoryPath = resolve(root, "artifact.files.json");
+    const inventory = await readFile(inventoryPath);
+    for (const name of [
+      "native/host-api/generated/process.schema.json",
+      "packages/cli/dist/types/cli/src/index.d.ts",
+      "packages/cli/templates/vanilla/gitattributes",
+    ]) {
+      const path = resolve(root, name);
+      const original = await readFile(path);
+      await rm(path);
+      await expect(checkArtifact(root)).rejects.toThrow("inventory mismatch");
+      const hashes = await snapshotHashes(root);
+      delete hashes["artifact.files.json"];
+      await writeJson(inventoryPath, hashes);
+      await expect(checkArtifact(root)).rejects.toThrow("missing required input");
+      await writeFile(path, original);
+      await writeFile(inventoryPath, inventory);
+    }
   } finally {
     await rm(home, { recursive: true, force: true });
   }

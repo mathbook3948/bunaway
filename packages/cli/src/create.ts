@@ -21,6 +21,7 @@ export async function createProject(directory: string): Promise<string> {
       recursive: true,
     });
     await rename(resolve(staging, "gitignore"), resolve(staging, ".gitignore"));
+    await rename(resolve(staging, "gitattributes"), resolve(staging, ".gitattributes"));
     const snapshot = resolve(staging, "vendor/bunaway");
     await copyFramework(snapshot);
     await writeFrameworkLock(staging);

@@ -37,11 +37,17 @@ CLI를 전역 설치할 필요는 없다. 설치 artifact의 bin은 Bun용 JS �
 `package.json`, `bun.lock`, `bunaway.lock.json`, `vendor/bunaway`를 앱 저장소에 함께
 커밋한다. `node_modules`, 네이티브 다운로드 캐시, `.bunaway`, `dist`는 제외한다.
 첫 설치 뒤 재현 설치에는 `bun install --frozen-lockfile`을 쓴다.
+생성된 `.gitattributes`도 함께 커밋한다. `vendor/bunaway/** -text`는 Git의
+줄바꿈 변환을 막아 Windows/macOS checkout에서도 snapshot과 upstream 라이선스의
+원본 바이트 및 잠금 해시를 보존한다.
 
 ## Artifact 구성과 SDK 설치 방식
 
 배포 단위는 `@bunaway/cli` 로컬 tarball 하나다. 외부 runtime dependency가 없는 CLI
 bin/API 번들과 아래 소스 payload를 함께 포함한다.
+CLI API의 `types` export는 생성된 선언 트리를 가리킨다. 내부 `@bunaway/*`
+타입 참조도 artifact 안의 상대 경로로 연결하므로 별도 SDK registry 패키지 없이
+strict TypeScript에서 `@bunaway/cli`를 import할 수 있다.
 
 | 입력 | 포함 내용 |
 | --- | --- |
@@ -102,6 +108,9 @@ minor)를 올린다. 호환 수정은 patch, 새 호환 기능은 minor를 올�
    workspace 경로, `@bunaway/*`의 `workspace:*`, TypeScript/@types/bun 핀과 CLI script를
    맞춘다. 자신의 앱 이름·버전·의존성은 보존한다. Bun 핀이 변경됐다면 개발용 Bun도
    먼저 맞춘다. 릴리스의 breaking-change 안내에 따라 앱 코드를 직접 마이그레이션한다.
+   기존 `.gitattributes`에도 임시 프로젝트의 `vendor/bunaway/** -text` 규칙을
+   반영하여 snapshot 줄바꿈 변환을 막는다. 이미 추적 중인 파일은
+   `git add --renormalize vendor/bunaway`로 새 snapshot의 원본 바이트를 index에 기록한다.
 5. 원래 앱에서 `bun install`로 앱 bun.lock을 갱신하고 `bun run validate`,
    `bun run typecheck`, `bun run doctor`, `bun run build`를 실행한다. 앱 테스트·기능
    회귀도 확인한다. `app.json`, `policy.json`, `src`와 사용자 데이터는 자동 교체하지 않는다.
@@ -146,3 +155,5 @@ Windows PowerShell은 마지막 명령 전에 `$env:BUNAWAY_NATIVE_DISTRIBUTION_
 SDK/host/Web/IPC 버전 혼합과 vendor 변조도 거부하는지 검사한다. 공개 publish나
 자격증명은 필요 없다. 새 테스트는 기존 공통 CI의 `bun test ./tests`에 포함되지만
 옵션 native artifact build가 기존 native CI와 동일하다고 주장하지 않는다.
+strict TypeScript 소비자의 Bundler/NodeNext 해석과 잘못된 API 인자의 거부,
+Git의 `core.autocrlf=false/true` checkout 후 snapshot 해시 및 frozen install도 검사한다.
