@@ -46,6 +46,14 @@ const runtimeAssets = [
   "assets/policy.schema.json",
 ] as const;
 
+const appConfig = {
+  appId: "app.test",
+  title: "Test App",
+  view: "main",
+  home: "https://app.bunaway.local/index.html",
+  window: { width: 800, height: 600 },
+};
+
 const sha256 = async (path: string) =>
   createHash("sha256")
     .update(await Bun.file(path).bytes())
@@ -74,8 +82,10 @@ async function makeArtifact(
   await writeFile(artifact.executable, "fake host");
   await writeFile(runtime, "fake bun");
   const assets: Record<string, string> = {};
+  await writeJson(resolve(dir, "assets/app.json"), appConfig);
+  assets["assets/app.json"] = await sha256(resolve(dir, "assets/app.json"));
   for (const path of [
-    "assets/app.json",
+    "assets/web/index.html",
     "assets/policy.json",
     "assets/backend.js",
     "assets/bunfig.toml",
@@ -85,12 +95,14 @@ async function makeArtifact(
     "licenses/LICENSE.nlohmann-json",
     ...(windows ? ["licenses/License-WebView2.txt"] : []),
   ]) {
+    await mkdir(resolve(dir, path, ".."), { recursive: true });
     await writeFile(resolve(dir, path), "{}");
     assets[path] = await sha256(resolve(dir, path));
   }
   const manifest: PackageManifest = {
     bun: {
       version: "1.4.2",
+      sourceRevision: "744846f844374847c902b5e7fd59b4342a51ef99",
       target: windows ? "windows-x64-baseline" : "darwin-aarch64",
       executableSha256: await sha256(runtime),
       licenseSha256: assets["licenses/LICENSE.bun"] ?? "",
@@ -319,7 +331,7 @@ test("verify stage rejects missing and tampered build inputs", async () => {
   await writeFile(resolve(artifactDir, "assets/app.json"), "tampered");
   diagnostics = await verifyArtifact({ artifact, manifest, channel: "win-direct" });
   expect(diagnostics.map((d) => d.code)).toContain(CODES.INPUT_TAMPERED);
-  await writeFile(resolve(artifactDir, "assets/app.json"), "{}");
+  await writeJson(resolve(artifactDir, "assets/app.json"), appConfig);
   expect(await verifyArtifact({ artifact, manifest, channel: "win-direct" })).toEqual([]);
   await rm(resolve(artifactDir, "runtime/bun.exe"));
   diagnostics = await verifyArtifact({ artifact, manifest, channel: "win-direct" });
@@ -758,6 +770,125 @@ test("publication errors restore previous output and write a failed report", asy
   ).toBe(false);
 });
 
+test.each(
+  (["write", "rename"] as const).flatMap((failure) =>
+    [false, true].map((previous) => ({ failure, previous })),
+  ),
+)(
+  "report $failure failure preserves publication state (previous=$previous)",
+  async ({ failure, previous }) => {
+    const projectRoot = await mkdtemp(join(home, "report-publication-"));
+    await makeArtifact(projectRoot);
+    const packaged = resolve(projectRoot, "dist/windows-x64/packaged");
+    const output = resolve(packaged, "win-direct/setup.exe");
+    const reportPath = packagingReportPath(projectRoot, "windows-x64", "win-direct");
+    if (previous) await Bun.write(output, "last good installer");
+    await writeJson(reportPath, { previous: true });
+    const fs = await import("node:fs/promises");
+    const rename = fs.rename;
+    const write = Bun.write;
+    const publication = spyOn(fs, "rename").mockImplementation(async (from, to) => {
+      if (failure === "rename" && to === reportPath) throw new Error("Report rename failed.");
+      await rename(from, to);
+    });
+    const writing = spyOn(Bun, "write").mockImplementation(async (...args) => {
+      if (failure === "write" && typeof args[0] === "string" && args[0].startsWith(reportPath)) {
+        await write(args[0], '{"partial":');
+        throw new Error("Report write failed.");
+      }
+      return await Reflect.apply(write, Bun, args);
+    });
+    let report: PackageReport;
+    try {
+      report = await runAdapter(
+        projectRoot,
+        stubAdapter({
+          async run(ctx) {
+            await Bun.write(resolve(ctx.staging, "setup.exe"), "new installer");
+            ctx.addArtifact("setup.exe", "installer", { signed: true });
+          },
+        }),
+      );
+    } finally {
+      publication.mockRestore();
+      writing.mockRestore();
+    }
+    expect(report.ok).toBe(false);
+    expect(report.usable).toBe(false);
+    expect(report.submittable).toBe(false);
+    expect(report.signing.performed).toBe(false);
+    expect(report.artifacts).toEqual([]);
+    expect(
+      report.diagnostics.some((d) => d.stage === "report" && d.code === CODES.STAGE_FAILED),
+    ).toBe(true);
+    if (previous) expect(await Bun.file(output).text()).toBe("last good installer");
+    else expect(await Bun.file(output).exists()).toBe(false);
+    expect(await Bun.file(reportPath).json()).toEqual({ previous: true });
+    expect(
+      (await readdir(packaged)).some(
+        (name) => name.includes(".building-") || name.includes(".previous-"),
+      ),
+    ).toBe(false);
+  },
+);
+
+test("an unwritable report destination preserves previous output", async () => {
+  const projectRoot = await mkdtemp(join(home, "report-directory-"));
+  await makeArtifact(projectRoot);
+  const output = resolve(projectRoot, "dist/windows-x64/packaged/win-direct/setup.exe");
+  await Bun.write(output, "last good installer");
+  const reportPath = packagingReportPath(projectRoot, "windows-x64", "win-direct");
+  await mkdir(reportPath);
+  const report = await runAdapter(
+    projectRoot,
+    stubAdapter({
+      async run(ctx) {
+        await Bun.write(resolve(ctx.staging, "setup.exe"), "new installer");
+        ctx.addArtifact("setup.exe", "installer", { signed: true });
+      },
+    }),
+  );
+  expect(report.ok).toBe(false);
+  expect(report.artifacts).toEqual([]);
+  expect(await Bun.file(output).text()).toBe("last good installer");
+});
+
+test("backup cleanup warnings are persisted without failing a committed package", async () => {
+  const projectRoot = await mkdtemp(join(home, "backup-cleanup-"));
+  await makeArtifact(projectRoot);
+  const output = resolve(projectRoot, "dist/windows-x64/packaged/win-direct/setup.exe");
+  await Bun.write(output, "last good installer");
+  const fs = await import("node:fs/promises");
+  const rm = fs.rm;
+  const cleanup = spyOn(fs, "rm").mockImplementation(async (path, options) => {
+    if (String(path).includes(".previous-")) throw new Error("Backup cleanup failed.");
+    await rm(path, options);
+  });
+  let report: PackageReport;
+  try {
+    report = await runAdapter(
+      projectRoot,
+      stubAdapter({
+        async run(ctx) {
+          await Bun.write(resolve(ctx.staging, "setup.exe"), "new installer");
+          ctx.addArtifact("setup.exe", "installer", { signed: true });
+        },
+      }),
+    );
+  } finally {
+    cleanup.mockRestore();
+  }
+  expect(report.ok).toBe(true);
+  expect(report.submittable).toBe(true);
+  expect(report.diagnostics.some((d) => d.stage === "report" && d.severity === "warning")).toBe(
+    true,
+  );
+  expect(await Bun.file(output).text()).toBe("new installer");
+  expect(
+    await Bun.file(packagingReportPath(projectRoot, "windows-x64", "win-direct")).json(),
+  ).toEqual(report);
+});
+
 test("reported stage errors mark the stage failed and preserve the previous output", async () => {
   const projectRoot = await mkdtemp(join(home, "diagnostic-"));
   await makeArtifact(projectRoot);
@@ -850,6 +981,146 @@ test("artifacts reached through internal directory links remain valid after publ
   expect(await Bun.file(report.artifacts[0]?.path ?? "").text()).toBe("installer");
   expect(report.artifacts[0]?.sha256).toBe(await sha256(report.artifacts[0]?.path ?? ""));
 });
+
+test.each(
+  (["windows-x64", "macos-arm64"] as const).flatMap((target) =>
+    (["version", "sourceRevision"] as const).flatMap((field) =>
+      [undefined, null, "", "   ", 123].map((value) => ({ target, field, value })),
+    ),
+  ),
+)(
+  "Bun identity $field rejects $value on $target before adapters run",
+  async ({ target, field, value }) => {
+    const projectRoot = await mkdtemp(join(home, "runtime-identity-"));
+    const manifest = await makeArtifact(projectRoot, target);
+    const artifact = artifactPaths({ root: projectRoot, target, appId: "app.test" });
+    const invalid = { ...manifest, bun: { ...manifest.bun, [field]: value } };
+    await writeJson(resolve(artifact.packageDir, "manifest.json"), invalid);
+    await expect(loadManifest(artifact)).rejects.toThrow("Package manifest");
+    expect(
+      (
+        await verifyArtifact({
+          artifact,
+          manifest: invalid as PackageManifest,
+          channel: target === "windows-x64" ? "win-direct" : "mac-direct",
+        })
+      ).some((d) => d.code === CODES.INPUT_MISSING),
+    ).toBe(true);
+    await expectRejectedInputs(projectRoot, CODES.INPUT_MISSING, { target });
+  },
+);
+
+test.each(
+  (["windows-x64", "macos-arm64"] as const).flatMap((target) =>
+    (["manifest", "file", "both", "tampered", "directory"] as const).map((mode) => ({
+      target,
+      mode,
+    })),
+  ),
+)("initial home document rejects $mode on $target", async ({ target, mode }) => {
+  const projectRoot = await mkdtemp(join(home, "home-document-"));
+  const manifest = await makeArtifact(projectRoot, target);
+  const artifact = artifactPaths({ root: projectRoot, target, appId: "app.test" });
+  const path = "assets/web/index.html";
+  const file = resolve(artifact.packageDir, path);
+  if (mode === "manifest" || mode === "both") delete manifest.assets[path];
+  if (mode === "file" || mode === "both" || mode === "directory") await rm(file);
+  if (mode === "directory") await mkdir(file);
+  if (mode === "tampered") await writeFile(file, "modified home");
+  await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
+  await expectRejectedInputs(
+    projectRoot,
+    mode === "tampered" ? CODES.INPUT_TAMPERED : CODES.INPUT_MISSING,
+    { target },
+  );
+});
+
+test.each(
+  (["windows-x64", "macos-arm64"] as const).flatMap((target) =>
+    [
+      { url: "https://app.bunaway.local/", asset: "assets/web/index.html" },
+      { url: "https://app.bunaway.local/index.html?theme=dark", asset: "assets/web/index.html" },
+      {
+        url: "https://app.bunaway.local/pages/welcome%20page.html?theme=dark",
+        asset: "assets/web/pages/welcome page.html",
+      },
+    ].map((entry) => ({ target, ...entry })),
+  ),
+)("home URL $url resolves its manifest asset on $target", async ({ target, url, asset }) => {
+  const projectRoot = await mkdtemp(join(home, "home-url-"));
+  const manifest = await makeArtifact(projectRoot, target);
+  const artifact = artifactPaths({ root: projectRoot, target, appId: "app.test" });
+  const appPath = resolve(artifact.packageDir, "assets/app.json");
+  await writeJson(appPath, { ...appConfig, home: url });
+  manifest.assets["assets/app.json"] = await sha256(appPath);
+  if (asset !== "assets/web/index.html") {
+    await rm(resolve(artifact.packageDir, "assets/web/index.html"));
+    delete manifest.assets["assets/web/index.html"];
+    await Bun.write(resolve(artifact.packageDir, asset), "home document");
+    manifest.assets[asset] = await sha256(resolve(artifact.packageDir, asset));
+  }
+  await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
+  const report = await runAdapter(
+    projectRoot,
+    stubAdapter({
+      channel: target === "windows-x64" ? "win-direct" : "mac-direct",
+      async run(ctx) {
+        await Bun.write(resolve(ctx.staging, "setup.exe"), "installer");
+        ctx.addArtifact("setup.exe", "installer");
+      },
+    }),
+    { target },
+  );
+  expect(report.ok).toBe(true);
+  expect(report.usable).toBe(true);
+});
+
+test.each([
+  { value: undefined, code: CODES.INPUT_MISSING },
+  { value: null, code: CODES.INPUT_MISSING },
+  { value: 123, code: CODES.INPUT_MISSING },
+  { value: "", code: CODES.INPUT_MISSING },
+  { value: "not-a-url", code: CODES.INPUT_UNEXPECTED },
+  { value: "https://example.com/index.html", code: CODES.INPUT_UNEXPECTED },
+  { value: "https://user@app.bunaway.local/index.html", code: CODES.INPUT_UNEXPECTED },
+  { value: "https://app.bunaway.local/index.html#fragment", code: CODES.INPUT_UNEXPECTED },
+  { value: "https://app.bunaway.local/%ZZ", code: CODES.INPUT_UNEXPECTED },
+  { value: "https://app.bunaway.local/..%2fbackend.js", code: CODES.INPUT_UNEXPECTED },
+  { value: "https://app.bunaway.local/..%5cbackend.js", code: CODES.INPUT_UNEXPECTED },
+  { value: "https://app.bunaway.local/%00.html", code: CODES.INPUT_UNEXPECTED },
+])("invalid built home URL $value fails before adapters run", async ({ value, code }) => {
+  const projectRoot = await mkdtemp(join(home, "invalid-home-"));
+  const manifest = await makeArtifact(projectRoot);
+  const artifact = artifactPaths({ root: projectRoot, target: "windows-x64", appId: "app.test" });
+  const appPath = resolve(artifact.packageDir, "assets/app.json");
+  await writeJson(appPath, { ...appConfig, home: value });
+  manifest.assets["assets/app.json"] = await sha256(appPath);
+  await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
+  await expectRejectedInputs(projectRoot, code);
+});
+
+test.each(["package", "web"] as const)(
+  "home directory links cannot escape the %s root",
+  async (boundary) => {
+    const projectRoot = await mkdtemp(join(home, "home-link-"));
+    const manifest = await makeArtifact(projectRoot);
+    const artifact = artifactPaths({ root: projectRoot, target: "windows-x64", appId: "app.test" });
+    const destination = resolve(
+      boundary === "package" ? projectRoot : artifact.packageDir,
+      "outside-web",
+    );
+    await Bun.write(resolve(destination, "index.html"), "outside home");
+    await symlink(destination, resolve(artifact.packageDir, "assets/web/linked"), "junction");
+    const appPath = resolve(artifact.packageDir, "assets/app.json");
+    await writeJson(appPath, { ...appConfig, home: "https://app.bunaway.local/linked/index.html" });
+    manifest.assets["assets/app.json"] = await sha256(appPath);
+    manifest.assets["assets/web/linked/index.html"] = await sha256(
+      resolve(destination, "index.html"),
+    );
+    await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
+    await expectRejectedInputs(projectRoot, CODES.INPUT_UNEXPECTED);
+  },
+);
 
 test("invalid Bun digests fail closed even when the runtime has been changed", async () => {
   const projectRoot = await mkdtemp(join(home, "digest-"));

@@ -151,7 +151,7 @@ export interface PackageManifest {
     target: string;
     executableSha256: string;
     licenseSha256: string;
-    sourceRevision?: string;
+    sourceRevision: string;
     // Written by adapters that re-sign bun inside the package.
     packagedSha256?: string;
     [key: string]: unknown;

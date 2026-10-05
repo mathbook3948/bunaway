@@ -54,7 +54,7 @@ function inside(root: string, path: string): boolean {
 }
 
 const EMPTY_MANIFEST: PackageManifest = {
-  bun: { version: "", target: "", executableSha256: "", licenseSha256: "" },
+  bun: { version: "", sourceRevision: "", target: "", executableSha256: "", licenseSha256: "" },
   assets: {},
   app: { id: "", version: "" },
 };
@@ -72,6 +72,9 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
   const output = resolve(packagingOutputDir(metadata.root, target), channel);
   await mkdir(dirname(output), { recursive: true });
   const staging = `${output}.building-${crypto.randomUUID()}`;
+  const reportPath = packagingReportPath(metadata.root, target, channel);
+  const stagedReport = `${reportPath}.building-${crypto.randomUUID()}`;
+  let reportPublished = false;
 
   let manifest = EMPTY_MANIFEST;
   const platform = platformOf(channel);
@@ -135,6 +138,23 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
   };
 
   let failed = diagnostics.length > 0;
+  function reportFailure(error: unknown) {
+    report.ok = false;
+    report.usable = false;
+    report.submittable = false;
+    report.signing.performed = false;
+    report.artifacts = [];
+    diagnostics.push({
+      stage: "report",
+      code: CODES.STAGE_FAILED,
+      severity: "error",
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+  async function writeReport() {
+    await Bun.write(stagedReport, `${JSON.stringify(report, null, 2)}\n`);
+    await rename(stagedReport, reportPath);
+  }
   try {
     if (!failed) {
       const started = Date.now();
@@ -301,6 +321,11 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
     report.submittable = report.ok && allSigned;
 
     if (report.ok) {
+      report.artifacts = verified.map((entry) => ({
+        ...entry,
+        path: resolve(output, relative(staging, entry.path)),
+      }));
+      await Bun.write(stagedReport, `${JSON.stringify(report, null, 2)}\n`);
       const backup = `${output}.previous-${crypto.randomUUID()}`;
       let moved = false;
       try {
@@ -309,18 +334,19 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
+      let outputPublished = false;
       try {
         await rename(staging, output);
+        outputPublished = true;
+        await rename(stagedReport, reportPath);
+        reportPublished = true;
       } catch (error) {
+        if (outputPublished) await rm(output, { recursive: true, force: true });
         if (moved) await rename(backup, output);
         throw error;
       }
-      report.artifacts = verified.map((entry) => ({
-        ...entry,
-        path: resolve(output, relative(staging, entry.path)),
-      }));
       if (moved) {
-        await rm(backup, { recursive: true, force: true }).catch((error: unknown) => {
+        await rm(backup, { recursive: true, force: true }).catch(async (error: unknown) => {
           diagnostics.push({
             stage: "report",
             code: CODES.STAGE_FAILED,
@@ -328,26 +354,22 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
             message: `Cannot remove previous output backup: ${error instanceof Error ? error.message : String(error)}`,
             path: backup,
           });
+          await writeReport().catch(() => undefined);
         });
       }
     }
   } catch (error) {
-    report.ok = false;
-    report.usable = false;
-    report.submittable = false;
-    report.signing.performed = false;
-    report.artifacts = [];
-    diagnostics.push({
-      stage: "report",
-      code: CODES.STAGE_FAILED,
-      severity: "error",
-      message: error instanceof Error ? error.message : String(error),
-    });
+    reportFailure(error);
   } finally {
     await rm(staging, { recursive: true, force: true });
-    const reportPath = packagingReportPath(metadata.root, target, channel);
-    await mkdir(dirname(reportPath), { recursive: true });
-    await Bun.write(reportPath, `${JSON.stringify(report, null, 2)}\n`);
+    if (!reportPublished) {
+      try {
+        await writeReport();
+      } catch (error) {
+        reportFailure(error);
+      }
+    }
+    await rm(stagedReport, { force: true });
   }
   return report;
 }

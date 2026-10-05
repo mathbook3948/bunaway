@@ -82,10 +82,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+function isIdentity(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.trim() === value;
+}
+
 function validateManifest(value: unknown): asserts value is PackageManifest {
   if (
     !isRecord(value) ||
     !isRecord(value.bun) ||
+    !isIdentity(value.bun.version) ||
+    !isIdentity(value.bun.sourceRevision) ||
     !isDigest(value.bun.executableSha256) ||
     !isDigest(value.bun.licenseSha256) ||
     !isRecord(value.assets) ||
@@ -140,6 +146,42 @@ const REQUIRED_ASSETS = [
   "licenses/LICENSE.bun",
   "licenses/LICENSE.nlohmann-json",
 ];
+
+function homeAsset(value: unknown): string {
+  if (!isIdentity(value)) {
+    throw new ArtifactInputError(CODES.INPUT_MISSING, "Build app config is missing its home URL.");
+  }
+  let url: URL;
+  let path: string;
+  try {
+    url = new URL(value);
+    path = decodeURIComponent(url.pathname);
+  } catch {
+    throw new ArtifactInputError(
+      CODES.INPUT_UNEXPECTED,
+      "Build app config has an invalid home URL.",
+    );
+  }
+  if (url.origin !== "https://app.bunaway.local" || url.username || url.password || url.hash) {
+    throw new ArtifactInputError(
+      CODES.INPUT_UNEXPECTED,
+      "Home must use the host-owned https://app.bunaway.local origin.",
+    );
+  }
+  if (path === "/") path = "/index.html";
+  const name = path.slice(1);
+  if (
+    name.includes("\\") ||
+    name.includes("\0") ||
+    name.split("/").some((part) => part === "" || part === "." || part === "..")
+  ) {
+    throw new ArtifactInputError(
+      CODES.INPUT_UNEXPECTED,
+      "Home document path must stay inside assets/web.",
+    );
+  }
+  return `assets/web/${name}`;
+}
 
 export async function loadManifest(artifact: BuildArtifact): Promise<PackageManifest> {
   const path = resolve(artifact.packageDir, "manifest.json");
@@ -244,6 +286,30 @@ export async function verifyArtifact(args: {
         path: resolve(artifact.packageDir, path),
       });
     }
+  }
+  let homePath = resolve(artifact.packageDir, "assets/app.json");
+  try {
+    const appPath = await inputPath(artifact.packageDir, homePath);
+    const app: unknown = JSON.parse(await readFile(appPath, "utf8"));
+    const asset = homeAsset(isRecord(app) ? app.home : undefined);
+    homePath = resolve(artifact.packageDir, asset);
+    const web = resolve(artifact.packageDir, "assets/web");
+    await inputPath(artifact.packageDir, web, true);
+    await inputPath(web, homePath);
+    if (!Object.hasOwn(manifest.assets, asset)) {
+      throw new ArtifactInputError(
+        CODES.INPUT_MISSING,
+        `Home document is missing from the manifest: ${asset}`,
+      );
+    }
+  } catch (error) {
+    diagnostics.push({
+      stage,
+      code: error instanceof ArtifactInputError ? error.code : CODES.INPUT_MISSING,
+      severity: "error",
+      message: error instanceof Error ? error.message : String(error),
+      path: homePath,
+    });
   }
   for (const [relative, expected] of Object.entries(manifest.assets)) {
     const path = resolve(artifact.packageDir, relative);

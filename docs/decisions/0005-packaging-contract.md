@@ -35,11 +35,19 @@ status: accepted
   Windows는 WebView2 라이선스도 포함한다. 파일뿐 아니라 manifest 등재도 확인한다.
   manifest·호스트는 빌드 산출물 루트, 자산·Bun은 패키지 루트 안의 실제 경로여야 한다.
   외부 symlink/junction 탈출은 `PKG_INPUT_UNEXPECTED`로 어댑터 실행 전에 거부한다.
+- Bun hello의 런타임 식별에 쓰는 `manifest.bun.version`·`sourceRevision`은 비어 있지
+  않은 문자열이어야 한다. `assets/app.json`의 `home`은 호스트 소유 origin을 사용하며,
+  URL 경로를 디코딩해 찾은 `assets/web` 내 초기 문서(`/`는 `index.html`)는 실제 파일이고
+  manifest에 등재돼 있어야 한다. query는 파일 경로에 포함하지 않으며 웹 루트 밖의
+  실제 경로도 거부한다.
 - 어댑터는 `resolve → verify → stage → sign → assemble → verify-artifact → report`
   순서의 stage 목록을 정의하고, runner가 단계별 실행·타이밍·실패 포착을 담당한다.
 - 진단은 `{stage, code: PKG_*, severity, message, path?}` 형식으로 통일하고 결과는
   `dist/<target>/packaged/<channel>/`과 `packaging-report.<channel>.json`에 남긴다.
   실패한 실행은 직전 정상 산출물을 덮지 않는다(스테이징→원자적 rename).
+- 리포트도 임시 파일을 원자적 rename하여 저장한다. 성공 리포트 게시 전까지 이전
+  산출물 백업을 유지하고 리포트 게시 실패 시 산출물을 복구한다. 실패 리포트를
+  저장할 수 없는 경우에도 기존 리포트를 훼손하지 않고 실패 진단을 호출자에게 반환한다.
 - 어댑터는 registry에 자기 채널을 등록한다. 새 채널은 `src/channels/<platform>/`
   아래 파일만 추가하며 공통 진입점을 수정하지 않는다.
 
