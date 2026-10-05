@@ -1693,6 +1693,10 @@ int wmain(int argc, wchar_t** argv) {
             });
             return 0;
         }
+        if (argc == 3 && std::wstring(argv[1]) == L"--package") {
+            return run(fs::canonical(fs::path(argv[2])));
+        }
+        require(argc == 1, "Usage: app-host [--package <dir>]");
         wchar_t location[32768]; DWORD n = GetModuleFileNameW(nullptr, location, 32768);
         require(n && n < 32768, "Host path failed.");
         return run(fs::path(location).parent_path());

@@ -17,11 +17,13 @@ WIN_TEST="$ROOT/native/windows/host/test"
 SKIP_TESTS=0
 SAMPLE=0
 MAKE_APP=0
+HOST_ONLY=0
 for arg in "$@"; do
   case "$arg" in
     --skip-tests) SKIP_TESTS=1 ;;
     --sample) SAMPLE=1 ;;
     --app) MAKE_APP=1 ;;
+    --host-only) HOST_ONLY=1 ;;
   esac
 done
 
@@ -61,6 +63,10 @@ PACKAGE="$ROOT/build/$( ((SAMPLE)) && echo 'macos-memo-package' || echo 'macos-h
 mkdir -p "$BUILD" "$PACKAGE/assets/web" "$PACKAGE/assets/tmp" "$PACKAGE/licenses" "$PACKAGE/runtime"
 clang++ -std=c++20 -O2 -Wall -Wextra -fobjc-arc -I"$JSON_DIR" \
   "$HERE/main.mm" -framework Cocoa -framework WebKit -o "$BUILD/bunaway-host"
+if (( HOST_ONLY )); then
+  echo "Native host: $BUILD/bunaway-host"
+  exit 0
+fi
 cp "$BUILD/bunaway-host" "$PACKAGE/bunaway-host"
 cp "$BUNDLED" "$PACKAGE/runtime/bun"
 chmod +x "$PACKAGE/bunaway-host" "$PACKAGE/runtime/bun"

@@ -1,4 +1,4 @@
-param([string]$Bun = (Get-Command bun -ErrorAction Stop).Source, [switch]$SkipTests, [switch]$Sample)
+param([string]$Bun = (Get-Command bun -ErrorAction Stop).Source, [switch]$SkipTests, [switch]$Sample, [switch]$BuildHostOnly)
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path
 $pin = Get-Content -LiteralPath (Join-Path $root 'runtime/build-manifests/windows-x64.json') -Raw | ConvertFrom-Json
@@ -55,8 +55,9 @@ if (!$vs) { throw 'MSVC C++ build tools are required to build this host.' }
 . (Join-Path $vs 'Common7/Tools/Launch-VsDevShell.ps1') -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
 $env:VSLANG = '1033'
 $build = Join-Path $root 'build/windows-host'
-Run 'cmake' @('-S', $PSScriptRoot, '-B', $build, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release')
+Run 'cmake' @('-S', $PSScriptRoot, '-B', $build, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', "-DBUNAWAY_BUILD_TESTS=$(if ($BuildHostOnly) { 'OFF' } else { 'ON' })")
 Run 'cmake' @('--build', $build)
+if ($BuildHostOnly) { Write-Output "Native host: $build"; return }
 Run $Bun @((Join-Path $root 'packages/protocol/scripts/generate.ts'))
 Run $Bun @((Join-Path $root 'node_modules/@biomejs/biome/bin/biome'), 'format', '--write', (Join-Path $root 'native/host-api/generated'))
 $package = Join-Path $root $(if ($Sample) { 'build/windows-memo-package' } else { 'build/windows-host-package' })

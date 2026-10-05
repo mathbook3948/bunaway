@@ -1,0 +1,26 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color-scheme: light dark;
+}
+body {
+  margin: 0;
+}
+main {
+  max-width: 640px;
+  padding: 32px;
+  margin: auto;
+}
+textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 12px 0;
+  padding: 12px;
+}
+button {
+  padding: 10px 20px;
+}
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

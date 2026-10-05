@@ -1731,7 +1731,7 @@ int main(int argc, char** argv) {
                 return run(fs::path([[[NSBundle mainBundle] resourcePath] UTF8String]));
             }
             require(argc == 3 && std::string(argv[1]) == "--package", "Usage: app-host [--package <dir>]");
-            return run(fs::path(argv[2]));
+            return run(fs::canonical(fs::path(argv[2])));
         } catch (const std::exception& e) {
             std::fprintf(stderr, "app-host failed: %s\n", e.what());
             return 1;
