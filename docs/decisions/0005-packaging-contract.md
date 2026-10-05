@@ -29,7 +29,9 @@ status: accepted
   맵·해석된 패키징 메타데이터. runner의 `verify` 단계가 manifest의 자산·Bun 해시로
   입력을 재검증하고 누락/변조는 `PKG_INPUT_MISSING`/`PKG_INPUT_TAMPERED`로 거부한다.
 - 자산 맵은 상대 경로와 SHA-256으로 구성된 객체여야 한다. `app.json`·`policy.json`·
-  `backend.js`·`bunfig.toml`·`tsconfig.json` 및 Bun·JSON 라이선스는 필수 입력이며,
+  `backend.js`·`bunfig.toml`·`tsconfig.json`, 네이티브 호스트 시작에 필요한
+  `process.schema.json`·`message.schema.json`·`host-call.schema.json`·
+  `host-operations.json`·`policy.schema.json` 및 Bun·JSON 라이선스는 필수 입력이며,
   Windows는 WebView2 라이선스도 포함한다. 파일뿐 아니라 manifest 등재도 확인한다.
   manifest·호스트는 빌드 산출물 루트, 자산·Bun은 패키지 루트 안의 실제 경로여야 한다.
   외부 symlink/junction 탈출은 `PKG_INPUT_UNEXPECTED`로 어댑터 실행 전에 거부한다.

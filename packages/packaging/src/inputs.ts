@@ -4,12 +4,12 @@ import { isAbsolute, relative, resolve, sep, win32 } from "node:path";
 import {
   type BuildArtifact,
   type BuildTarget,
+  type ChannelId,
   CODES,
   type Diagnostic,
   type PackageManifest,
   packagedDigest,
   platformOf,
-  type ChannelId,
 } from "./contract.ts";
 
 // Locates the channel-neutral artifact produced by `bunaway build`.
@@ -132,6 +132,11 @@ const REQUIRED_ASSETS = [
   "assets/backend.js",
   "assets/bunfig.toml",
   "assets/tsconfig.json",
+  "assets/process.schema.json",
+  "assets/message.schema.json",
+  "assets/host-call.schema.json",
+  "assets/host-operations.json",
+  "assets/policy.schema.json",
   "licenses/LICENSE.bun",
   "licenses/LICENSE.nlohmann-json",
 ];

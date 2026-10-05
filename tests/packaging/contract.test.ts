@@ -18,12 +18,12 @@ import {
   type BuildTarget,
   CODES,
   isChannelId,
-  loadPackaging,
   loadManifest,
-  packagedDigest,
+  loadPackaging,
   type PackageAdapter,
   type PackageManifest,
   type PackageReport,
+  packagedDigest,
   packagingReportPath,
   parsePackaging,
   platformOf,
@@ -37,6 +37,14 @@ import {
 let home: string;
 let root: string;
 let artifactDir: string;
+
+const runtimeAssets = [
+  "assets/process.schema.json",
+  "assets/message.schema.json",
+  "assets/host-call.schema.json",
+  "assets/host-operations.json",
+  "assets/policy.schema.json",
+] as const;
 
 const sha256 = async (path: string) =>
   createHash("sha256")
@@ -72,6 +80,7 @@ async function makeArtifact(
     "assets/backend.js",
     "assets/bunfig.toml",
     "assets/tsconfig.json",
+    ...runtimeAssets,
     "licenses/LICENSE.bun",
     "licenses/LICENSE.nlohmann-json",
     ...(windows ? ["licenses/License-WebView2.txt"] : []),
@@ -925,6 +934,32 @@ test.each([
   await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
   const report = await expectRejectedInputs(projectRoot, CODES.INPUT_MISSING);
   expect(report.diagnostics.some((d) => d.path === resolve(artifact.packageDir, path))).toBe(true);
+});
+
+test.each(
+  (["windows-x64", "macos-arm64"] as const).flatMap((target) =>
+    runtimeAssets.flatMap((path) =>
+      (["manifest", "file", "both", "tampered"] as const).map((mode) => ({
+        target,
+        path,
+        mode,
+      })),
+    ),
+  ),
+)("required runtime input $path rejects $mode on $target", async ({ target, path, mode }) => {
+  const projectRoot = await mkdtemp(join(home, "runtime-input-"));
+  const manifest = await makeArtifact(projectRoot, target);
+  const artifact = artifactPaths({ root: projectRoot, target, appId: "app.test" });
+  const asset = resolve(artifact.packageDir, path);
+  if (mode === "manifest" || mode === "both") delete manifest.assets[path];
+  if (mode === "file" || mode === "both") await rm(asset);
+  if (mode === "tampered") await writeFile(asset, "changed runtime asset");
+  await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
+  const code = mode === "tampered" ? CODES.INPUT_TAMPERED : CODES.INPUT_MISSING;
+  const report = await expectRejectedInputs(projectRoot, code, { target });
+  expect(
+    report.diagnostics.some((d) => d.stage === "verify" && d.code === code && d.path === asset),
+  ).toBe(true);
 });
 
 test("empty assets with no app or licenses are rejected before adapters run", async () => {
