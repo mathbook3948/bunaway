@@ -1,6 +1,6 @@
 # Bun 기반 크로스플랫폼 앱 프레임워크 PRD
 
-작성일: 2026-10-04 · 구현 상태 갱신: 2026-10-05 (PR #5 머지 후) · 상태: 제품 요구사항·단계별 구현 진행 중 · 제품명: bunaway
+작성일: 2026-10-04 · 구현 상태 갱신: 2026-10-05 (macOS native CI 작업) · 상태: 제품 요구사항·단계별 구현 진행 중 · 제품명: bunaway
 
 ## 1 목표와 범위
 
@@ -8,7 +8,7 @@
 
 Tauri에서 참고할 부분은 웹 UI, 백엔드 코어, 네이티브 호스트를 나누는 구조다. 명령 처리, 상태, 이벤트, 플러그인 관리 등 백엔드 기반을 Bun과 TypeScript 중심으로 설계한다. 네이티브 코드는 창, WebView, 운영체제 기능과 Bun 내장에 필요한 경계에 둔다.
 
-이 문서는 책임, 인터페이스, 보안 규칙과 단계별 완료 조건을 정한다. A 단계의 계약 구현과 Windows B 단계의 번들 Bun 프로세스·IPC 실험을 완료했다. C 단계에서는 실제 SDK·코어·Host API와 Windows WebView2 호스트를 연결했다. 세 창의 다중 창/뷰와 뷰별 정책 분리에서 메모 저장·이벤트·재실행 후 복원과 오류·취소·권한·렌더러 재생성·창별 종료를 검증한 기록이 있다([Windows C 실행 결과](./architecture/windows-host-results.md)). 이 문서 정리는 코드와 기존 기록을 대조했으며 앱·테스트를 재실행하지 않았다. [Windows B 실행 결과](./architecture/windows-probe-results.md)는 별도 실험 기록이다. 다른 플랫폼·설치 프로그램·서명·배포는 미검증이다. 아래 요구사항 전체를 완료한 것은 아니며, 현재 범위는 [진행 상태](./architecture/progress.md)를 따른다.
+이 문서는 책임, 인터페이스, 보안 규칙과 단계별 완료 조건을 정한다. A 단계의 계약 구현과 Windows B 단계의 번들 Bun 프로세스·IPC 실험을 완료했다. C 단계에서는 실제 SDK·코어·Host API와 Windows WebView2 호스트를 연결했다. 세 창의 다중 창/뷰와 뷰별 정책 분리에서 메모 저장·이벤트·재실행 후 복원과 오류·취소·권한·렌더러 재생성·창별 종료를 검증한 기록이 있다([Windows C 실행 결과](./architecture/windows-host-results.md)). macOS arm64의 POSIX probe와 AppKit·WKWebView 단일 창/뷰 호스트도 구현돼 있다. [macOS 실행 기록](./architecture/macos-native-results.md)은 기존 로컬 기록, 이번 재실행과 실제 CI 결과를 구분한다. [Windows B 실행 결과](./architecture/windows-probe-results.md)는 별도 실험 기록이다. macOS Intel·다중 창/뷰, Linux·모바일 호스트와 설치·배포는 미검증이다. macOS `.app` 생성·ad-hoc 서명은 Developer ID·공증·설치 검증이 아니다. 아래 요구사항 전체를 완료한 것은 아니며, 현재 범위는 [진행 상태](./architecture/progress.md)와 [플랫폼 지원 표](./platform-support/README.md)를 따른다.
 
 ### 제품 요구사항
 
@@ -245,10 +245,10 @@ Skal의 고정 commit `7edb44aceb8c69ac1abd76549e2c09cf6cdc8a57`에서는 VM 작
 
 현재 결정된 항목과 남은 결정은 다음과 같다.
 
-- Windows 번들 Bun 1.4.2의 소스 revision·실행 파일 해시·라이선스는 [manifest](../runtime/build-manifests/windows-x64.json)로 고정했다. 다른 플랫폼 배포물과 upstream 업데이트 검증 책임은 후속 결정이다.
+- Windows x64 baseline과 macOS arm64 번들 Bun 1.4.2의 소스 revision·실행 파일 해시·라이선스는 각각 [Windows manifest](../runtime/build-manifests/windows-x64.json)와 [macOS manifest](../runtime/build-manifests/darwin-aarch64.json)로 고정했다. 다른 CPU/플랫폼 배포물과 upstream 업데이트 검증 책임은 후속 결정이다.
 - 모바일의 Bun 실행·배포 경로와 지원할 Bun·Node.js API 목록, native addon 지원 범위
-- 프로세스 IPC envelope·프레이밍·큐 상한·종료·오류 처리와 Windows Job 정리는 구현했다. 다른 플랫폼의 프로세스 정리 방식은 미결정이다.
-- Windows의 WebView2 SDK·네이티브 의존성·라이선스와 가상 자산 origin은 구현에 고정했다. 최소 OS·CPU·WebView 런타임 지원 범위 및 다른 플랫폼의 호스트·자산 origin은 별도 검증·결정이 필요하다.
+- 프로세스 IPC envelope·프레이밍·큐 상한·종료·오류 처리와 Windows Job 정리는 구현했다. macOS는 프로세스 그룹·guard로 정리하며 spawn 직후 guard 연결 전 race 제약이 남는다. Linux·모바일 정리 방식은 미결정이다.
+- Windows의 WebView2 SDK·네이티브 의존성·라이선스와 가상 자산 origin, macOS의 `WKURLSchemeHandler` 자산 origin 매핑은 구현에 고정했다. 최소 OS·CPU·WebView 런타임 지원 범위 및 Linux·모바일 호스트·자산 origin은 별도 검증·결정이 필요하다.
 - 서명·공증·스토어 제출에 필요한 조건과 iOS 코드 실행·업데이트 정책. 검토 전 스토어 배포 가능성을 보장하지 않음
 
-현재 다음 작업은 Windows 검증 범위 확대, CLI·템플릿·기본 플러그인, 플랫폼 확장과 설치·서명·배포 검증이다. A·B 및 Windows C의 다중 창/뷰 성공으로 초기 버전 출시 기준 전체를 충족했다고 판단하지 않는다.
+현재 다음 작업은 플랫폼별 검증 범위 확대, macOS 다중 창/뷰, CLI·템플릿·기본 플러그인, Linux·모바일 확장과 설치·서명·배포 검증이다. A·B 및 Windows C·macOS 단일 창/뷰 성공으로 초기 버전 출시 기준 전체를 충족했다고 판단하지 않는다.

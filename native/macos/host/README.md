@@ -3,8 +3,10 @@
 ObjC++ port of `native/windows/host/host.cpp`: a minimal AppKit shell that runs
 the bundled Bun backend as a separate child process and bridges a `WKWebView`
 to it over NDJSON frames. The backend contract, assets, limits, and log events
-are identical to the Windows host — the test package is assembled from the
-same files (`native/windows/host/test`).
+are shared with the Windows host (`native/windows/host/test`), except for
+`test/app.json`: this host still requires a single `view`/`home` declaration,
+whereas Windows now uses `windows[]`. macOS multi-window/view isolation is not
+implemented or tested. See the [support table](../../../docs/platform-support/README.md).
 
 ## Platform mapping
 
@@ -12,7 +14,7 @@ same files (`native/windows/host/test`).
   and localhost servers are rejected by PRD. Assets are served under
   `bunaway://`; every comparison point (origin checks, navigation gate, scheme
   handler, home check) normalizes `bunaway://<host>[:port]` -> `https://<host>[:port]` per
-  `docs/architecture/protocol.md`, so `policy.json`, `app.json`, the schemas,
+  `docs/architecture/protocol.md`, so `policy.json`, the schemas,
   and the boot payload stay byte-identical to Windows. Normalization applies
   only to the host-owned asset scheme and only after real URL checks, including
   rejection of userinfo and preservation of non-default ports; a
@@ -59,12 +61,26 @@ run.sh    build + package + test pipeline (see below)
 mise run host:macos   # same entry point
 ```
 
+Requires macOS arm64, pinned Bun 1.4.2, Xcode CLT and a GUI session. Run the
+probe before the host serially: both populate `runtime/bun-bundle/vendor`.
+The current memo sample declaration uses Windows `windows[]`; `--sample`
+copies it but this macOS host cannot run it. The regression suite instead
+tests the shared memo code in a single-window package. Do not interpret a
+successful sample build as a successful app run.
+
 The driver runs the full shared suite against the real host: validator
 agreement, WebView boundary/policy/storage scope, session revocation,
 renderer kill/recreation, memo persistence across a fresh Bun process, and
 guard cleanup after `kill -9`. `host-home/` under the package dir is used as a
 hermetic HOME; the data root resolves to
 `$HOME/Library/Application Support/bunaway/<appId>`.
+
+CI executes this actual WKWebView suite, not a mocked browser. Launch failure
+or missing page reports fail the job. Test-level errors are recorded with
+`ok: false` in `build/macos-host-results.json`; host stderr and per-test
+logs/temp snapshots are under `build/macos-host-diagnostics/`. FIFO/symlink
+fixtures are excluded from diagnostic copies. Both success and failure paths
+are uploaded by the native workflow. See the [execution record](../../../docs/architecture/macos-native-results.md).
 
 The native regression executable calls the production scheme handler with
 default/non-default ports and userinfo, rejects peerless FIFO reads/writes,
@@ -91,3 +107,6 @@ and ad-hoc signs it. Inside a bundle the binary self-locates the package via
 Release packaging needs Developer ID signing, notarization
 (`xcrun notarytool submit`), and a per-channel decision on App Sandbox
 entitlements — all deferred to the release milestone.
+
+Ad-hoc signing is not Developer ID signing, notarization, Gatekeeper or
+installation verification. The native CI does not build/test `.app` bundles.

@@ -10,6 +10,8 @@
 - [번들 Bun 실행 방식과 실험 범위](./architecture/runtime-feasibility.md)
 - [Windows B 실행 결과](./architecture/windows-probe-results.md)
 - [Windows C 호스트·SDK·코어·메모 실행 결과](./architecture/windows-host-results.md)
+- [macOS probe·WKWebView 회귀 검증: 기존/새 실행 기록](./architecture/macos-native-results.md)
+- [플랫폼 지원·CPU·CI와 출시 검증 범위](./platform-support/README.md)
 - [Windows 메모 샘플 실행 방법](../examples/memo/README.md)
 
 ## 설계 결정
@@ -19,6 +21,7 @@
 - [0001 — 번들 Bun의 별도 프로세스 실행](./decisions/0001-bundled-bun-process.md)
 - [0002 — 호스트가 소유하는 호출 컨텍스트](./decisions/0002-host-owned-call-context.md)
 - [0003 — 단일 스키마와 분리된 프로토콜](./decisions/0003-shared-schema-separate-protocols.md)
+- [0004 — Windows 창/뷰별 정책과 수명 분리](./decisions/0004-multi-window-per-view-policy.md)
 
 [이전 C ABI 초안](./architecture/native-abi.md)은 동일 프로세스 설계 당시의 기록이다. 현재 구현 기준은 프로세스 IPC 계약이다.
 

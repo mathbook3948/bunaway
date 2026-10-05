@@ -35,7 +35,7 @@ const runtime = { id: "probe", generation: "1" };
 const base = { ipc: PROCESS_IPC_VERSION, runtime };
 type Observation = { kind: string; payload?: Message; [key: string]: unknown };
 const live = new Set<ReturnType<typeof launch>>();
-const results: { name: string; durationMs: number }[] = [];
+const results: { name: string; ok: boolean; durationMs: number; error?: string }[] = [];
 const executions: (() => {
   mode: string;
   hostPid: number;
@@ -260,9 +260,15 @@ async function test(name: string, body: () => Promise<void>) {
   try {
     await body();
   } catch (cause) {
+    results.push({
+      name,
+      ok: false,
+      durationMs: Math.round(performance.now() - start),
+      error: String(cause),
+    });
     throw new Error(`${name} failed`, { cause });
   }
-  results.push({ name, durationMs: Math.round(performance.now() - start) });
+  results.push({ name, ok: true, durationMs: Math.round(performance.now() - start) });
   console.log(`PASS ${name}`);
 }
 
@@ -1017,14 +1023,6 @@ try {
     assert.equal((await probe.finish(1)).failed, true);
     assert.equal(probe.frames.filter((frame) => frame.payload?.kind === "error").length, 128);
   });
-  const manifest = await Bun.file(join(original, "manifest.json")).json();
-  const hostSha256 = createHash("sha256")
-    .update(await Bun.file(host).bytes())
-    .digest("hex");
-  await writeFile(
-    join(dirname(original), "macos-probe-results.json"),
-    `${JSON.stringify({ testedAt: new Date().toISOString(), platform: process.platform, osRelease: release(), architecture: process.arch, packagePath, hostSha256, manifest, count: results.length, results, executions: executions.map((trace) => trace()) }, null, 2)}\n`,
-  );
   console.log(`macOS process probe: ${results.length} passed.`);
 } finally {
   for (const probe of live) {
@@ -1039,4 +1037,12 @@ try {
       unlinkSync(path);
     } catch {}
   }
+  const manifest = await Bun.file(join(original, "manifest.json")).json();
+  const hostSha256 = createHash("sha256")
+    .update(await Bun.file(host).bytes())
+    .digest("hex");
+  await writeFile(
+    join(dirname(original), "macos-probe-results.json"),
+    `${JSON.stringify({ testedAt: new Date().toISOString(), platform: process.platform, osRelease: release(), architecture: process.arch, packagePath, hostSha256, manifest, count: results.length, results, executions: executions.map((trace) => trace()) }, null, 2)}\n`,
+  );
 }

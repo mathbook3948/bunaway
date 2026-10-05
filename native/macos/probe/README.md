@@ -18,8 +18,15 @@ workspace history):
 - **`CancelSynchronousIo` -> `poll(2)` stdin loop; `TerminateProcess` ->
   `killpg(SIGKILL)`; blocking stdout writes -> `O_NONBLOCK` + bounded write.**
 
-Build and run (requires Xcode CLT `clang++`, network for the first pin
+Build and run (requires macOS arm64, Xcode CLT `clang++`, network for the first pin
 download):
+
+The script verifies the fixed archive/executable hashes, Mach-O arm64 CPU and
+Bun version. Run it serially before the macOS host: both populate the same
+Bun extraction cache. CI preserves the result JSON (including `ok: false`
+entries on test-level failures), IPC traces and build/driver log even when
+the job fails. Setup failures may precede JSON creation. See the
+[execution record](../../../docs/architecture/macos-native-results.md).
 
 ```zsh
 ./run.sh              # verify pins -> build -> package -> tests/lifecycle/macos-process.ts
