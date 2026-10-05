@@ -1091,7 +1091,6 @@ public:
         int inPipe[2], outPipe[2], errPipe[2], deathPipe[2];
         makePipe(inPipe); makePipe(outPipe); makePipe(errPipe); makePipe(deathPipe);
         input.reset(inPipe[1]); output.reset(outPipe[0]); stderrPipe.reset(errPipe[0]); deathWrite.reset(deathPipe[1]);
-        fs::create_directories(assets / "tmp");
         auto entry = (assets / "backend.js").string();
         auto config = std::string("--config=") + (assets / "bunfig.toml").string();
         auto tsconfig = std::string("--tsconfig-override=") + (assets / "tsconfig.json").string();

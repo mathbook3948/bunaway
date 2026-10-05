@@ -132,6 +132,91 @@ test("generated UI and backend bundle independently; source failures propagate",
   }
 }, 15000);
 
+test("frontend bundles retain nested entry paths and emit imported CSS when there is no collision", async () => {
+  const assets = resolve(home, "nested-assets");
+  const entry = resolve(project, "src/web/nested/widget.ts");
+  const stylesheet = resolve(project, "src/web/nested/theme.css");
+  try {
+    await Bun.write(entry, 'import "./theme.css"; export const widget = 1;\n');
+    await Bun.write(stylesheet, ".widget { color: red; }\n");
+    await bundleAssets(await validateProject(project), assets);
+    expect(await Bun.file(resolve(assets, "web/nested/widget.js")).text()).toContain("widget");
+    expect(await Bun.file(resolve(assets, "web/nested/widget.css")).text()).toContain(".widget");
+    expect(await Bun.file(resolve(assets, "web/nested/theme.css")).text()).toContain(".widget");
+  } finally {
+    await rm(resolve(project, "src/web/nested"), { recursive: true, force: true });
+  }
+});
+
+test("frontend rejects secondary CSS collisions before writing any assets", async () => {
+  const assets = resolve(home, "css-collision-assets");
+  const stylesheet = resolve(project, "src/web/main.css");
+  const imported = resolve(project, "src/web/imported.css");
+  const output = resolve(assets, "web/main.css");
+  await Bun.write(output, "previous successful output");
+  try {
+    await Bun.write(stylesheet, ".original { color: blue; }\n");
+    await Bun.write(imported, ".imported { color: red; }\n");
+    await Bun.write(
+      resolve(project, "src/web/main.ts"),
+      `import "./imported.css";\n${originals["src/web/main.ts"]}`,
+    );
+    await expect(bundleAssets(await validateProject(project), assets)).rejects.toThrow(
+      "Frontend output collision: main.css",
+    );
+    expect(await Bun.file(output).text()).toBe("previous successful output");
+    expect(await readdir(resolve(assets, "web"))).toEqual(["main.css"]);
+    expect(await Bun.file(resolve(assets, "backend.js")).exists()).toBe(false);
+  } finally {
+    await Bun.write(resolve(project, "src/web/main.ts"), originals["src/web/main.ts"] ?? "");
+    await rm(stylesheet, { force: true });
+    await rm(imported, { force: true });
+  }
+});
+
+test("frontend rejects case-insensitive entry output collisions before writing any assets", async () => {
+  const assets = resolve(home, "case-collision-assets");
+  const upper = resolve(project, "src/web/Foo.ts");
+  const lower = resolve(project, "src/web/foo.js");
+  const output = resolve(assets, "web/keep.txt");
+  await Bun.write(output, "previous successful output");
+  try {
+    await Bun.write(upper, "export const upper = 1;\n");
+    await Bun.write(lower, "export const lower = 2;\n");
+    await expect(bundleAssets(await validateProject(project), assets)).rejects.toThrow(
+      /Frontend output collision: foo.js/i,
+    );
+    expect(await Bun.file(output).text()).toBe("previous successful output");
+    expect(await readdir(resolve(assets, "web"))).toEqual(["keep.txt"]);
+    expect(await Bun.file(resolve(assets, "backend.js")).exists()).toBe(false);
+  } finally {
+    await rm(upper, { force: true });
+    await rm(lower, { force: true });
+  }
+});
+
+test("frontend rejects case-insensitive collisions between static assets and secondary CSS", async () => {
+  const assets = resolve(home, "case-css-collision-assets");
+  const stylesheet = resolve(project, "src/web/MAIN.css");
+  const imported = resolve(project, "src/web/imported.css");
+  try {
+    await Bun.write(stylesheet, ".original { color: blue; }\n");
+    await Bun.write(imported, ".imported { color: red; }\n");
+    await Bun.write(
+      resolve(project, "src/web/main.ts"),
+      `import "./imported.css";\n${originals["src/web/main.ts"]}`,
+    );
+    await expect(bundleAssets(await validateProject(project), assets)).rejects.toThrow(
+      /Frontend output collision: main.css/i,
+    );
+    expect(await Bun.file(resolve(assets, "web/index.html")).exists()).toBe(false);
+  } finally {
+    await Bun.write(resolve(project, "src/web/main.ts"), originals["src/web/main.ts"] ?? "");
+    await rm(stylesheet, { force: true });
+    await rm(imported, { force: true });
+  }
+});
+
 test("build rejects corrupted bundled Bun and leaves the last production package intact", async () => {
   const old = resolve(project, "dist/windows-x64/keep.txt");
   await Bun.write(old, "previous successful build");

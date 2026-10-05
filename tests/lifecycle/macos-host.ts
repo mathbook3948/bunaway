@@ -7,7 +7,7 @@
 // delta snapshot, LOCALAPPDATA -> HOME/Library/Application Support.
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { cp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { validateValue } from "../../packages/protocol/src/index.ts";
 import { validationCases } from "../protocol/validation-cases.ts";
@@ -483,6 +483,26 @@ try {
     } finally {
       if (!child.killed) child.kill();
       await child.exited;
+    }
+  });
+
+  await test("runtime starts with read-only assets and no bundled tmp directory", async () => {
+    await resetData();
+    const assets = join(packagePath, "assets");
+    await rm(join(assets, "tmp"), { recursive: true, force: true });
+    await chmod(assets, 0o555);
+    let child: ReturnType<typeof launch> | undefined;
+    try {
+      child = launch();
+      await waitLog((entry) => entry.event === "backend-ready");
+      assert.equal(existsSync(join(assets, "tmp")), false);
+      await gracefulStop(child);
+    } finally {
+      if (child) {
+        if (!child.killed) child.kill();
+        await child.exited;
+      }
+      await chmod(assets, 0o755);
     }
   });
 } finally {

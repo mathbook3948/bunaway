@@ -1,7 +1,7 @@
 import { chmod, cp, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
 import { validateProject, type Project } from "./config.ts";
-import { files, frameworkRoot, hash, json, run, verifyHash, writeJson } from "./files.ts";
+import { files, frameworkRoot, hash, inside, json, run, verifyHash, writeJson } from "./files.ts";
 
 export type Target = "windows-x64" | "macos-arm64";
 export interface NativeInputs {
@@ -86,37 +86,40 @@ export async function prepareNative(target: Target = currentTarget()): Promise<N
   };
 }
 
-async function bundle(
-  entrypoints: string[],
-  outdir: string,
-  target: "browser" | "bun",
-  root: string,
-): Promise<void> {
-  if (entrypoints.length === 0) return;
-  const result = await Bun.build({ entrypoints, outdir, root, target, splitting: false });
+async function bundle(entrypoints: string[], root: string): Promise<Bun.BuildArtifact[]> {
+  if (entrypoints.length === 0) return [];
+  const result = await Bun.build({ entrypoints, root, target: "browser", splitting: false });
   if (!result.success) {
     throw new Error(`Bundle failed:\n${result.logs.map(String).join("\n")}`);
   }
+  return result.outputs;
 }
 
 async function webAssets(project: Project, destination: string): Promise<void> {
   const sources = await files(project.frontend);
   const entries: string[] = [];
-  const outputs = new Set<string>();
+  const outputs = new Map<string, { path: string; source: string | Bun.BuildArtifact }>();
+  const addOutput = (name: string, source: string | Bun.BuildArtifact) => {
+    const path = resolve(destination, name);
+    if (!inside(destination, path)) throw new Error(`Frontend output escapes destination: ${name}`);
+    const rel = relative(destination, path).replaceAll("\\", "/");
+    const key = rel.toLowerCase();
+    if (outputs.has(key)) throw new Error(`Frontend output collision: ${rel}`);
+    outputs.set(key, { path, source });
+  };
   for (const source of sources) {
     const rel = relative(project.frontend, source);
     if (rel.endsWith(".d.ts")) continue;
     const isEntry = /\.(ts|js)$/.test(rel);
-    const out = isEntry ? rel.replace(/\.ts$/, ".js") : rel;
-    if (outputs.has(out)) throw new Error(`Frontend output collision: ${out}`);
-    outputs.add(out);
     if (isEntry) entries.push(source);
-    else {
-      await mkdir(dirname(resolve(destination, out)), { recursive: true });
-      await cp(source, resolve(destination, out));
-    }
+    else addOutput(rel, source);
   }
-  await bundle(entries, destination, "browser", project.frontend);
+  for (const output of await bundle(entries, project.frontend)) addOutput(output.path, output);
+  for (const { path, source } of outputs.values()) {
+    await mkdir(dirname(path), { recursive: true });
+    if (typeof source === "string") await cp(source, path);
+    else await writeFile(path, new Uint8Array(await source.arrayBuffer()));
+  }
 }
 
 export async function bundleAssets(project: Project, assets: string): Promise<void> {
