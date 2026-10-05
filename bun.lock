@@ -25,6 +25,7 @@
         "bunaway": "./src/main.ts",
       },
       "dependencies": {
+        "@bunaway/packaging": "workspace:*",
         "@bunaway/protocol": "workspace:*",
       },
     },
@@ -37,6 +38,13 @@
     },
     "packages/core": {
       "name": "@bunaway/core",
+      "version": "0.0.0",
+      "dependencies": {
+        "@bunaway/protocol": "workspace:*",
+      },
+    },
+    "packages/packaging": {
+      "name": "@bunaway/packaging",
       "version": "0.0.0",
       "dependencies": {
         "@bunaway/protocol": "workspace:*",
@@ -95,6 +103,8 @@
     "@bunaway/client": ["@bunaway/client@workspace:packages/client-sdk"],
 
     "@bunaway/core": ["@bunaway/core@workspace:packages/core"],
+
+    "@bunaway/packaging": ["@bunaway/packaging@workspace:packages/packaging"],
 
     "@bunaway/plugin-log": ["@bunaway/plugin-log@workspace:plugins/log"],
 

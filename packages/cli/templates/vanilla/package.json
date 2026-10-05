@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "bun vendor/bunaway/packages/cli/src/main.ts dev",
     "build": "bun vendor/bunaway/packages/cli/src/main.ts build",
+    "package": "bun vendor/bunaway/packages/cli/src/main.ts package",
     "validate": "bun vendor/bunaway/packages/cli/src/main.ts validate",
     "doctor": "bun vendor/bunaway/packages/cli/src/main.ts doctor",
     "typecheck": "tsc --project tsconfig.json"

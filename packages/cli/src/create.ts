@@ -18,7 +18,15 @@ export async function createProject(directory: string): Promise<string> {
     });
     const snapshot = resolve(staging, "vendor/bunaway");
     await mkdir(snapshot, { recursive: true });
-    for (const name of ["backend-sdk", "client-sdk", "core", "protocol", "runtime-bun", "cli"]) {
+    for (const name of [
+      "backend-sdk",
+      "client-sdk",
+      "core",
+      "protocol",
+      "runtime-bun",
+      "cli",
+      "packaging",
+    ]) {
       await cp(resolve(frameworkRoot, `packages/${name}`), resolve(snapshot, `packages/${name}`), {
         recursive: true,
         filter: (path) =>

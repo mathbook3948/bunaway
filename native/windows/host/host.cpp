@@ -1582,7 +1582,13 @@ int run(const fs::path& package) {
     }
 
     const fs::path bun = package / "runtime/bun.exe";
-    require(sha256(bun) == app.manifest["bun"]["executableSha256"].get<std::string>(), "Bun executable hash mismatch.");
+    // Signing changes executable bytes: when a packaging adapter re-signs the
+    // bundled runtime it records packagedSha256 next to the immutable upstream
+    // executableSha256; integrity checks verify the shipped bytes.
+    const std::string expectedBunSha = app.manifest["bun"].contains("packagedSha256")
+        ? app.manifest["bun"]["packagedSha256"].get<std::string>()
+        : app.manifest["bun"]["executableSha256"].get<std::string>();
+    require(sha256(bun) == expectedBunSha, "Bun executable hash mismatch.");
     for (auto it = app.manifest["assets"].begin(); it != app.manifest["assets"].end(); ++it) {
         require(sha256(app.package / fs::path(std::u8string(it.key().begin(), it.key().end()))) == it.value().get<std::string>(), "Package asset hash mismatch.");
     }

@@ -1,20 +1,46 @@
 #!/usr/bin/env bun
-import { buildProject, createProject, devProject, doctor, validateProject } from "./index.ts";
+import {
+  buildProject,
+  createProject,
+  devProject,
+  doctor,
+  packageProject,
+  validatePackagingConfig,
+  validateProject,
+} from "./index.ts";
 
 const help = `bunaway (vanilla MVP)
-  create <new-directory>  Generate an independent project (then bun install)
-  validate [directory]   Validate configuration and deny-by-default policy
-  dev [directory]        Watch sources; rebuild and restart the native host
-  build [directory]      Build a native package with pinned bundled Bun
-  doctor [directory]     Check project, runtime version and native tools
+  create <new-directory>   Generate an independent project (then bun install)
+  validate [directory]    Validate configuration and deny-by-default policy
+  dev [directory]         Watch sources; rebuild and restart the native host
+  build [directory]       Build a native package with pinned bundled Bun
+  package <channel> [dir] Package a build artifact for a channel [--build]
+  doctor [directory]      Check project, runtime version and native tools
 Builds are native only: Windows x64 / macOS arm64.`;
 
 export async function main(args: string[]): Promise<number> {
-  const [command, directory, ...extra] = args;
+  const [command, ...rest] = args;
   if (!command || command === "--help" || command === "help") {
     console.log(help);
     return 0;
   }
+  if (command === "package") {
+    const [channel, ...tail] = rest;
+    if (!channel) {
+      throw new Error("package requires a channel, e.g. bunaway package win-direct.");
+    }
+    let directory = ".";
+    let build = false;
+    for (const arg of tail) {
+      if (arg === "--build") build = true;
+      else if (arg.startsWith("--")) throw new Error(`Unknown option: ${arg}. Use --help.`);
+      else if (directory !== ".") throw new Error("Unexpected extra argument. Use --help.");
+      else directory = arg;
+    }
+    const report = await packageProject(directory, channel, { build });
+    return report.ok ? 0 : 1;
+  }
+  const [directory, ...extra] = rest;
   if (extra.length || directory?.startsWith("--"))
     throw new Error("Unexpected argument. Use --help.");
   switch (command) {
@@ -26,10 +52,12 @@ export async function main(args: string[]): Promise<number> {
       );
       return 0;
     }
-    case "validate":
-      await validateProject(directory ?? ".");
+    case "validate": {
+      const project = await validateProject(directory ?? ".");
+      await validatePackagingConfig(project.root);
       console.log("Configuration and policy are valid.");
       return 0;
+    }
     case "dev":
       await devProject(directory ?? ".");
       return 0;
