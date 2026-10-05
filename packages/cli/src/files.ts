@@ -92,9 +92,9 @@ export async function runWorker(
     [
       process.execPath,
       "-e",
-      `const task = await import(${JSON.stringify(url)}); await task[${JSON.stringify(method)}](...${JSON.stringify(args)});`,
+      `const task = await import(${JSON.stringify(url)}); await task[${JSON.stringify(method)}](...await Bun.stdin.json());`,
     ],
-    { cwd, stdin: "ignore", stdout: "pipe", stderr: "pipe" },
+    { cwd, stdin: Buffer.from(JSON.stringify(args)), stdout: "pipe", stderr: "pipe" },
   );
   const output = new Response(child.stdout).text();
   const errors = new Response(child.stderr).text();

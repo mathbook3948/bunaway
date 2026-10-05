@@ -33,6 +33,14 @@ export const frameworkPaths = [
   "runtime/build-manifests",
 ] as const;
 
+const generatedDirectories = [
+  "build",
+  "runtime/bun-bundle/vendor",
+  "native/windows/vendor",
+  "native/windows/host/vendor",
+  "native/macos/vendor",
+] as const;
+
 export interface Release {
   format: number;
   version: string;
@@ -51,6 +59,11 @@ const packageNames: Record<string, string> = {
   protocol: "@bunaway/protocol",
   "runtime-bun": "@bunaway/runtime-bun",
 };
+
+const snapshotGeneratedDirectories = [
+  ...generatedDirectories,
+  ...Object.keys(packageNames).map((directory) => `packages/${directory}/node_modules`),
+];
 
 interface PackageDependencies {
   dependencies?: Record<string, string>;
@@ -183,6 +196,12 @@ export async function validateFramework(
     }
     await verifyHash(await projectPath(root, name), expected);
   }
+  for (const path of await files(root, snapshotGeneratedDirectories)) {
+    const name = relative(root, path).replaceAll("\\", "/");
+    if (!Object.hasOwn(lock.files, name)) {
+      throw new Error(`Unexpected framework snapshot file: ${name}`);
+    }
+  }
   const pkg = JSON.parse(
     await readFile(resolve(project, "package.json"), "utf8"),
   ) as PackageDependencies & {
@@ -249,13 +268,7 @@ function requiredFrameworkFiles(): string[] {
 export async function checkArtifact(root: string): Promise<void> {
   await release(root);
   const inventory = (await json(resolve(root, "artifact.files.json"))) as Record<string, string>;
-  const actual = await snapshotHashes(root, [
-    "build",
-    "runtime/bun-bundle/vendor",
-    "native/windows/vendor",
-    "native/windows/host/vendor",
-    "native/macos/vendor",
-  ]);
+  const actual = await snapshotHashes(root, generatedDirectories);
   delete actual["artifact.files.json"];
   if (JSON.stringify(actual) !== JSON.stringify(inventory)) {
     throw new Error("Artifact inventory mismatch: missing, extra or modified file.");

@@ -84,7 +84,9 @@ SDK를 독립 registry 패키지로 설치하지 않고 tarball의 소스를 `ve
 | 개발/번들 Bun | 현재 1.4.2. 두 타깃 핀과 개발용 Bun 버전 일치. final 앱은 내부 실행 파일의 절대 경로·해시만 사용 |
 
 `validate`, `doctor`, `dev`, `build`는 SDK 메타데이터,
-핀, vendor 소스/스키마/고지 해시와 앱의 workspace 선언을 확인한다. 앱의
+핀, vendor 소스/스키마/고지 해시와 앱의 workspace 선언을 확인한다.
+잠금에 없는 snapshot 파일도 거부한다. 위에서 지정한 네이티브 build/vendor 캐시와
+Bun이 생성하는 각 framework workspace의 node_modules만 제외한다. 앱의
 dependencies/devDependencies/optionalDependencies/peerDependencies 모두에서
 `@bunaway/*`는 `workspace:*`여야 하며, 외부 SDK로 덮어쓰는 선언은 거부한다.
 `overrides`/`resolutions`에서 `@bunaway/*`를 대상으로 하는 선택자도 거부한다

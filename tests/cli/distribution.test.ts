@@ -343,6 +343,61 @@ new RestartController<string>({ stop: async () => {}, build: async () => 42, sta
   }
 }, 180000);
 
+test("asset workers accept policies larger than the Windows command-line limit", async () => {
+  const home = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-worker args-")));
+  try {
+    const project = await createProject(resolve(home, "app"));
+    await command(project, ["install"]);
+    const { policy } = await validateProject(project);
+    const view = policy.views[0];
+    if (!view) throw new Error("Missing policy view.");
+    view.commands = Array.from({ length: 256 }, (_, index) => `command.${index}`.padEnd(128, "a"));
+    view.events = Array.from({ length: 256 }, (_, index) => `event.${index}`.padEnd(128, "a"));
+    await writeJson(resolve(project, "policy.json"), policy);
+    const valid = await validateProject(project);
+    const assets = resolve(home, "bundled assets");
+    expect(JSON.stringify([valid, assets]).length).toBeGreaterThan(32767);
+    await bundleAssets(valid, assets);
+    expect(await Bun.file(resolve(assets, "backend.js")).exists()).toBe(true);
+    expect(await Bun.file(resolve(assets, "web/main.js")).exists()).toBe(true);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+}, 30000);
+
+test("framework validation rejects extra snapshot inputs but permits designated native caches", async () => {
+  const home = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-snapshot-inputs-")));
+  try {
+    const project = await createProject(resolve(home, "app"));
+    await command(project, ["install"]);
+    const root = resolve(project, "vendor/bunaway");
+    for (const directory of [
+      "build",
+      "runtime/bun-bundle/vendor",
+      "native/windows/vendor",
+      "native/windows/host/vendor",
+      "native/macos/vendor",
+    ]) {
+      await Bun.write(resolve(root, directory, "nested/cache.txt"), "generated native cache");
+    }
+    await validateProject(project);
+    for (const name of [
+      "native/windows/host/json.hpp",
+      "native/windows/host/vendor-extra/json.hpp",
+      "packages/core/src/extra.ts",
+      "packages/core/src/node_modules/extra.ts",
+    ]) {
+      const path = resolve(root, name);
+      await Bun.write(path, "unexpected immutable input");
+      await expect(validateProject(project)).rejects.toThrow("Unexpected framework snapshot file");
+      await rm(path);
+    }
+    await validateProject(project);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+}, 30000);
+
 test("framework validation rejects reserved SDK override selectors without an install", async () => {
   const home = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-overrides-")));
   try {
