@@ -49,7 +49,14 @@ const CHANNEL_KEYS: Record<string, string[]> = {
     "capabilities",
     "signing",
   ],
-  "win-store-unpackaged": ["webView2", "signing"],
+  "win-store-unpackaged": [
+    "scope",
+    "webView2",
+    "desktopShortcut",
+    "startMenuShortcut",
+    "uninstall",
+    "signing",
+  ],
   "mac-direct": ["format", "bundleId", "minVersion", "entitlements", "signing"],
   "mac-store": ["bundleId", "minVersion", "entitlements", "signing"],
 };

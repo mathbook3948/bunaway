@@ -10,3 +10,54 @@
 채널 어댑터는 `src/channels/<platform>/<channel>.ts`에 두고
 `registerAdapter`로 등록한다. 어댑터는 build 산출물을 수정하지 않으며,
 서명으로 바뀐 실행 파일은 `packagedSha256`로 기록한다.
+
+## Windows 채널
+
+세 채널 모두 개발자 자격증명(`signing`)으로 서명한다. 서명이 필요한 채널에서
+서명이 없으면 `usable`/`submittable`이 `false`인 진단으로 끝난다.
+
+### `win-direct` — 직접 배포 인스톨러
+
+Inno Setup 스크립트를 생성·컴파일한다. 채널 설정:
+
+- `scope`: `perUser`(기본, `%LOCALAPPDATA%\Programs\<name>`, 관리자 불필요)
+  또는 `perMachine`(`{autopf}`, 관리자 필요).
+- `webView2`: `bootstrap`(기본 — 설치 시 런타임이 없으면 Microsoft 공식
+  Evergreen 부트스트랩을 무인 실행) 또는 `check`(감지만).
+- `desktopShortcut`(기본 false), `startMenuShortcut`(기본 true).
+- `uninstall.preserveUserData`(기본 true): 제거해도
+  `%LOCALAPPDATA%\bunaway\<appId>`를 지우지 않는다. 업데이트는 상위
+  설치(over-install)로 데이터를 유지한다.
+
+WebView2는 레지스트리 `Clients\{F3017226-...}\pv` 존재로 감지하고,
+없으면 번들된 `MicrosoftEdgeWebview2Setup.exe`를 `/silent /install`로
+실행한다(부트스트랩 다운로드가 실패하면 check 모드로 폴백).
+
+### `win-store-msix` — Microsoft Store MSIX
+
+`AppxManifest.xml`을 생성하고 `makeappx`로 패킹, `signtool`로 서명한다.
+`publisher.identity`(예: `CN=...`)와 `icons.windows.square44/square150/
+storeLogo`가 필수다. 서명은 **실행에 필수**다(`required-to-run`): 서명 없이는
+패키지를 설치할 수 없다. 테스트 인증서는 사용자/머신의 `TrustedPeople` 등에
+설치되어 있어야 한다.
+
+- `unvirtualizedData`(기본 true): `FileSystemWriteVirtualization`을 끄고
+  `%LOCALAPPDATA%\bunaway\<appId>`를 제외 디렉터리로 선언해 쓰기 가상화와
+  제거 시 데이터 삭제를 막는다. 제한 기능 `unvirtualizedResources`가 필요하며
+  **Store 제출 시 Microsoft 승인이 필요**하다. false면 OS 기본 동작(가상화 +
+  제거 시 정리)이고, 이 경우 데이터 보존은 보장하지 않는다.
+- `maxVersionTested`(기본 `10.0.26100.0`), `capabilities`, `packageName`,
+  `minVersion`은 채널 설정으로 바꿀 수 있다.
+
+### `win-store-unpackaged` — Store EXE/MSI 제출
+
+MSIX와 **다른 업데이트 계약**을 따른다. Store 요구사항에 맞춰:
+
+- standalone 오프라인 인스톨러만 허용 — 다운로드 부트스트랩을 쓰지 않는다
+  (`webView2`는 `check`만, `bootstrap`은 검증 단계에서 거부).
+- 인스톨러와 내부 모든 PE는 신뢰된 루트 CA 체인으로 서명해야 제출 가능.
+- 무인 설치 `/VERYSILENT`를 지원(UAC 허용).
+- 버전별 불변 HTTPS URL이 필요 — `submission.json`에 체크리스트를 같이 낸다.
+
+검증 범위: 패키지 생성·서명·사일런트 설치/제거까지 검증했다. Partner Center
+제출·프로덕션 인증서·MSIX 인앱 실행은 이 환경에서 검증하지 않았다.
