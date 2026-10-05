@@ -187,7 +187,13 @@ try {
       assert.ok(count("session-open") >= 2, "index + page2 sessions");
       assert.ok(count("revoke", (e) => e.reason === "navigation") >= 1);
       assert.ok(count("navigation-blocked") >= 1);
-      assert.ok(count("web-resource-blocked") >= 1, "remote iframe must be blocked");
+      assert.ok(
+        count(
+          "web-resource-blocked",
+          (e) => e.uri === "https://example.org/" && e.reason === "frame-navigation",
+        ) >= 1,
+        "remote iframe navigation must be canceled",
+      );
       assert.ok(count("permission-denied", (e) => e.kind === "command") >= 1);
       assert.ok(count("permission-denied", (e) => e.kind === "event") >= 1);
       assert.ok(count("web-message-rejected", (e) => e.reason === "malformed") >= 2);

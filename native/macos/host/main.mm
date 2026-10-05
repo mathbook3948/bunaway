@@ -1422,7 +1422,7 @@ static NSString* kBridgeShim =
     const ViewPolicy& view = app->policy.views.at(app->viewId);
     if (!action.targetFrame.isMainFrame) {
         // Subframe navigation: allowed origins pass, anything else is blocked.
-        // WebView2 reports this through WebResourceRequested -> web-resource-blocked.
+        // Both hosts report blocked subframe navigation as web-resource-blocked.
         if (origin.empty() || !view.origins.count(origin)) {
             app->hostLog->event("web-resource-blocked", { { "uri", target } });
             decisionHandler(WKNavigationActionPolicyCancel);
