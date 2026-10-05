@@ -1,6 +1,7 @@
-import { parsePolicy, type Policy } from "@bunaway/protocol";
 import { lstat, realpath } from "node:fs/promises";
 import { resolve } from "node:path";
+import { type Policy, parsePolicy } from "@bunaway/protocol";
+import { validateFramework } from "./distribution.ts";
 import { json, projectPath } from "./files.ts";
 
 export interface Project {
@@ -45,6 +46,7 @@ export async function validateProject(directory: string): Promise<Project> {
   if (!(await lstat(backend)).isFile() || !(await lstat(frontend)).isDirectory()) {
     throw new Error("backend must be a file; frontend must be a directory.");
   }
+  await validateFramework(root, [backend, frontend]);
   const raw = record(await json(resolve(root, "app.json")));
   keys(raw, ["appId", "title", "view", "home", "window"]);
   const appId = string(raw.appId);

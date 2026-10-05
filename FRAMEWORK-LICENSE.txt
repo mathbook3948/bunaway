@@ -1,0 +1,9 @@
+bunaway framework and templates
+
+No framework license has been selected by the owner. The package license field
+is UNLICENSED; this notice does not grant a license. Local pack/install is an
+engineering verification, not authorization for public distribution.
+
+Before publishing, the owner must select a framework/template license and
+replace this notice and the package license field together. Third-party license
+texts are separate and must remain included; they do not license bunaway.

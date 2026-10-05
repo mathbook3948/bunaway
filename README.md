@@ -15,13 +15,20 @@
 [macOS 검증 기록](./docs/architecture/macos-native-results.md),
 [진행 상태](./docs/architecture/progress.md)를 참고한다.
 [공통 API](./docs/architecture/common-api.md)는 SDK·코어·Host API가 따르는 계약이다.
-CLI·기본 로그/저장 플러그인·템플릿은 미구현이다. macOS Intel·다중 창/뷰,
+CLI의 create/validate/doctor/dev/build와 vanilla 템플릿은 구현했다.
+[프레임워크 artifact 설치·업그레이드](./docs/framework-distribution.md)는 저장소 체크아웃
+없는 개발 흐름과 정확한 버전·vendor snapshot을 제공한다. 공개 registry publish는 하지
+않았으며 프레임워크 라이선스 결정은 미해결이다. 기본 로그/저장 플러그인은 미구현이다.
+macOS Intel·다중 창/뷰,
 Linux·모바일 네이티브 호스트와 설치·배포 검증은 포함하지 않는다.
 macOS `.app` 생성·ad-hoc 서명은 Developer ID 서명·공증·설치 검증과 다르다.
 [플랫폼 지원 범위](./docs/platform-support/README.md)에서 환경과 제한을 확인한다.
 이전 런타임 C ABI는 동일 프로세스 설계의 기록으로 보존한다.
 
 ## 시작하기
+
+자기 앱을 만드는 개발자는 [로컬 tarball 설치 안내](./docs/framework-distribution.md)를
+따른다. 아래 mise 절차는 bunaway 프레임워크 자체를 개발하는 저장소 기여자용이다.
 
 [mise](https://mise.jdx.dev/getting-started)를 설치한 뒤 저장소 루트에서 실행한다.
 
@@ -53,8 +60,10 @@ Bun은 `mise.toml`과 `package.json`에 **1.4.2**로 고정되어 있다.
 | `mise run format:check` | 포맷 검사 |
 | `mise run lint` | 코드 린트 |
 
-루트 명령은 mise에서 관리하고, 패키지에는 `typecheck`만 둔다.
-범용 CLI의 `dev`·`build` 명령은 아직 없다. Windows 호스트의 빌드·패키징은
+저장소 검사 명령은 mise에서 관리한다. 루트의 `bun run framework:pack`과
+`bun run framework:check <추출한 package 경로>`는 개발자 설치 artifact를 검증한다.
+생성 앱의 `bun run dev`·`bun run build`는 기존 SDK/네이티브 빌드를 재사용한다.
+Windows 호스트의 빌드·패키징은
 `native/windows/host/run.ps1`이 담당한다. [메모 샘플](./examples/memo/README.md)의
 `-Sample` 빌드로 독립 앱 패키지를 만들고 실행할 수 있다.
 Windows 빌드는 PowerShell 7, MSVC C++ Build Tools와 CMake/Ninja가 필요하며,

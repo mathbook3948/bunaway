@@ -164,6 +164,24 @@ function launch(mode = "normal", stall = false) {
     pauseOutput: () => {
       paused = true;
     },
+    async waitForBlockedOutput() {
+      assert.ok(stall && paused, "output must be paused on a FIFO");
+      const byte = Buffer.alloc(1);
+      const deadline = performance.now() + 8000;
+      while (!done && performance.now() < deadline) {
+        try {
+          if (readSync(fifoFd, byte, 0, byte.length, null) > 0) {
+            // One byte confirms a committed frame without draining the blocked FIFO.
+            feed(byte.toString());
+            return;
+          }
+        } catch (cause) {
+          if ((cause as { code?: string }).code !== "EAGAIN") throw cause;
+        }
+        await Bun.sleep(5);
+      }
+      throw new Error(`Missing blocked output; stderr=${logs.slice(0, 1000)}`);
+    },
     closeFifo() {
       if (fifoFd >= 0) {
         paused = false;
@@ -642,7 +660,7 @@ try {
         payload: "x".repeat(800000),
       },
     });
-    await Bun.sleep(100);
+    await probe.waitForBlockedOutput();
     probe.send({ ...base, kind: "revoke", context: "probe-view" });
     probe.send({
       ...base,
