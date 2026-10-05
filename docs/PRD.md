@@ -1,6 +1,6 @@
 # Bun 기반 크로스플랫폼 앱 프레임워크 PRD
 
-작성일: 2026-10-04 · 상태: 설계 초안 · 제품명: bunaway
+작성일: 2026-10-04 · 구현 상태 갱신: 2026-10-05 (PR #5 머지 후) · 상태: 제품 요구사항·단계별 구현 진행 중 · 제품명: bunaway
 
 ## 1 목표와 범위
 
@@ -8,7 +8,7 @@
 
 Tauri에서 참고할 부분은 웹 UI, 백엔드 코어, 네이티브 호스트를 나누는 구조다. 명령 처리, 상태, 이벤트, 플러그인 관리 등 백엔드 기반을 Bun과 TypeScript 중심으로 설계한다. 네이티브 코드는 창, WebView, 운영체제 기능과 Bun 내장에 필요한 경계에 둔다.
 
-이 문서는 구현자가 모듈을 나눠 작업할 수 있도록 책임, 인터페이스, 보안 규칙과 단계별 완료 조건을 정한다. A 단계의 계약 구현과 Windows B 단계의 번들 Bun 프로세스·IPC 실험을 완료했다. C 단계의 Windows WebView2 앱에서 실제 SDK·코어·Host API를 연결한 메모 저장·이벤트·재실행 후 복원과 오류·취소·권한·렌더러 재생성·종료를 검증했다([실행 결과](./architecture/windows-host-results.md)). 설치 프로그램과 모바일 기기 실행은 아직 검증하지 않았다. [실행 증거](./architecture/windows-probe-results.md) 외의 테스트는 이후 구현 단계의 요구사항이다.
+이 문서는 책임, 인터페이스, 보안 규칙과 단계별 완료 조건을 정한다. A 단계의 계약 구현과 Windows B 단계의 번들 Bun 프로세스·IPC 실험을 완료했다. C 단계에서는 실제 SDK·코어·Host API와 Windows WebView2 호스트를 연결했다. 단일 창·단일 뷰에서 메모 저장·이벤트·재실행 후 복원과 오류·취소·권한·렌더러 재생성·종료를 검증한 기록이 있다([Windows C 실행 결과](./architecture/windows-host-results.md)). 이 문서 정리는 코드와 기존 기록을 대조했으며 앱·테스트를 재실행하지 않았다. [Windows B 실행 결과](./architecture/windows-probe-results.md)는 별도 실험 기록이다. 다중 창/뷰·다른 플랫폼·설치 프로그램·서명·배포는 미검증이다. 아래 요구사항 전체를 완료한 것은 아니며, 현재 범위는 [진행 상태](./architecture/progress.md)를 따른다.
 
 ### 제품 요구사항
 
@@ -61,15 +61,15 @@ Bun 자식 프로세스 ── TypeScript 코어 ── 앱 명령·상태·플�
 
 `core`는 Swift, Kotlin, JNI, Win32 또는 WebView 라이브러리를 직접 참조하지 않는다. 렌더러는 앱 명령의 의미를 알지 못한다. 빌드 도구는 앱 실행에 포함하지 않는다. TypeScript와 네이티브 양쪽에서 쓰는 프로토콜·정책 스키마는 한 정의에서 생성한다.
 
-### 네이티브 구현 후보
+### 네이티브 구현과 플랫폼 후보
 
-- Windows: Win32와 WebView2를 연결하는 C++ 호스트
+- Windows: Win32와 WebView2를 연결하는 C++ 호스트 구현 및 단일 창/뷰 실행 검증 완료
 - macOS: AppKit·WKWebView를 연결하는 Swift/Objective-C++ 호스트
 - Linux: GTK·WebKitGTK 기반 C/C++ 호스트
 - Android: Kotlin 앱 수명주기·Android WebView, Bun 실행·패키징 경로 별도 검증
 - iOS: Swift 앱 수명주기·WKWebView, Bun 실행·패키징 경로 별도 검증
 
-위 언어와 바인딩 선택은 초기 제안이다. 기존 경량 호스트 라이브러리 재사용 여부는 라이선스, UI 스레드 제어, 모바일 경계와 유지보수 비용을 검토한 뒤 결정한다. 앱 개발자에게 Rust 작성을 요구하지 않으며 코어를 Rust로 다시 구현하지 않는다.
+Windows는 현재 C++ 호스트를 사용한다. 나머지 플랫폼의 언어와 바인딩은 초기 제안이며 미구현이다. 기존 경량 호스트 라이브러리 재사용 여부는 라이선스, UI 스레드 제어, 모바일 경계와 유지보수 비용을 검토한 뒤 결정한다. 앱 개발자에게 Rust 작성을 요구하지 않으며 코어를 Rust로 다시 구현하지 않는다.
 
 ## 3 실행 경계와 수명주기
 
@@ -121,7 +121,10 @@ OS 권한 선언과 런타임 사용자 동의는 프레임워크 권한과 별�
 공개 SDK는 프런트엔드용 `client`와 신뢰 백엔드용 `backend` 진입점을 분리한다. 명령 정의에서 클라이언트 타입을 생성하되 백엔드 코드나 비밀 설정이 프런트엔드 번들에 들어가지 않게 한다. 필수 API는 명령 등록·호출, 앱 상태, 이벤트 구독·해제, 수명주기와 기능 조회다.
 
 공통 타입과 명령 입력·출력 검증은 [C 공통 API](./architecture/common-api.md)로 고정했다.
-SDK·코어 factory 실행 구현은 각 병렬 작업에서 연결한다. 다음은 이 계약을 사용하는 앱 정의다.
+`createClient`·`createCore`와 Windows용 `runBunApp`의 실행 연결을 구현했다.
+명령 타입 생성 CLI와 기본 로그·저장 플러그인은 미구현이다. 다음은 계약 사용 예시이며,
+생성된 타입과 `notes.read` 앱 전체의 실행 검증을 뜻하지 않는다. 실제 실행 샘플은
+[메모 앱](../examples/memo/README.md)이다.
 
 ```ts
 // backend/main.ts
@@ -149,7 +152,7 @@ export default {
 // frontend/main.ts
 import type { Client } from "@bunaway/client";
 import type { Commands } from "../generated/commands";
-// ClientFactory를 구현한 SDK가 주입된 Transport로 client를 만든다.
+// 실행 시 createClient({ transport, hello })로 생성한다. 아래는 타입 사용 예시다.
 declare const client: Client<Commands>;
 const text = await client.invoke("notes.read", { key: "welcome" });
 ```
@@ -164,7 +167,7 @@ const text = await client.invoke("notes.read", { key: "welcome" });
 
 | 대상 | 기본 렌더러 | 백엔드 배포 경로 | 초기 상태와 통과 조건 |
 | --- | --- | --- | --- |
-| Windows | WebView2 | 번들된 Bun 자식 프로세스 + 네이티브 호스트 | WebView 없는 B 실험 통과. WebView·설치·배포는 후속 검증 |
+| Windows | WebView2 | 번들된 Bun 자식 프로세스 + 네이티브 호스트 | B 실험 및 C 단일 창/뷰의 실제 SDK·코어·저장·이벤트·복원 검증 통과. 최소 OS/CPU·다중 창/뷰·설치·서명·배포 미검증 |
 | macOS | WKWebView | 번들된 Bun 자식 프로세스 + 네이티브 호스트 | 계획. 앱 번들·서명·IPC·프로세스 정리 검증 필요 |
 | Linux | WebKitGTK | 번들된 Bun 자식 프로세스 + 네이티브 호스트 | 계획. 대상 배포판·라이브러리·IPC·패키지 검증 필요 |
 | Android | Android WebView | 미확정 | 미검증. Bun 번들·실행방식·수명주기·배포 제약을 별도 검증 |
@@ -199,7 +202,7 @@ runtime/    bun-bundle/  patches/  build-manifests/
 renderers/  system-webview/  chromium/
 plugins/    log/  storage/
 templates/  vanilla/  react/  vue/  svelte/
-examples/   commands/  lifecycle/  permissions/
+examples/   memo/  commands/  lifecycle/  permissions/
 tests/      protocol/  core/  conformance/  security/  lifecycle/
 docs/       architecture/  api/  platform-support/  decisions/
 ```
@@ -219,7 +222,7 @@ docs/       architecture/  api/  platform-support/  decisions/
 
 B 단계는 Windows 자식 프로세스 방식에 집중한다. 번들된 Bun의 절대 경로·버전·해시와 호스트/자식 PID를 기록하고, 각 계산 결과를 실제 IPC 응답으로 확인한다. 이벤트 구독·전달·해제, JS 오류와 비정상 종료, 정상 종료·종료 기한 초과·호스트 비정상 종료 때 남은 Bun 프로세스가 없는지 검증한다. 사용자에게 별도 Bun 설치를 요구하지 않는 실행 환경도 확인한다. 구체적인 실험과 증거는 [B 단계 계획](./architecture/runtime-feasibility.md)에 따른다.
 
-Windows B 단계가 통과하면 C 단계의 client-sdk와 core를 구현하고 WebView→명령 호출→범위 제한 저장→이벤트를 연결한다. Android·iOS의 실행 방식, 앱 수명주기와 배포 제약은 D 단계에서 각각 검증한다. 데스크톱의 별도 프로세스 실행 성공을 모바일 지원 완료로 간주하지 않는다.
+Windows B 실험 통과 후 C 단계의 client-sdk·core·runtime-bun과 WebView→명령 호출→범위 제한 저장→이벤트를 연결했고, 메모 앱과 단일 창/뷰의 오류·취소·권한·종료를 검증했다. 단계 표는 목표와 완료 조건이며 전체 플랫폼의 완료 표가 아니다. 남은 C 범위와 D~F 작업은 [진행 상태](./architecture/progress.md)를 따른다. Android·iOS의 실행 방식, 앱 수명주기와 배포 제약은 D 단계에서 각각 검증한다. Windows 성공을 모바일 지원 완료로 간주하지 않는다.
 
 ### 초기 버전 출시 기준
 
@@ -240,12 +243,12 @@ Skal의 고정 commit `7edb44aceb8c69ac1abd76549e2c09cf6cdc8a57`에서는 VM 작
 
 `dannote/bun`의 iOS 포트 commit `a3f7a71a950b81109c39a755dca3a018ea121e1c`에는 pthread에서 `bun_main`을 실행하는 내장 경로와 JITless 제약이 있다. 프로세스 전역 상태와 표준 출력 리디렉션의 영향, FFI·TCC·프로세스 실행 제한을 검토해야 한다. 두 프로젝트는 이전 동일 프로세스 설계에서 조사한 참고 자료이며 현재 Windows 번들 프로세스 방식의 의존성이 아니다. 실제 실행 검증 결과로 취급하지 않는다. [iOS 포트 문서](https://github.com/dannote/bun/blob/a3f7a71a950b81109c39a755dca3a018ea121e1c/docs/guides/runtime/ios-embedding.mdx)
 
-구현 전에 결정할 항목은 다음과 같다.
+현재 결정된 항목과 남은 결정은 다음과 같다.
 
-- 번들할 Bun 버전·소스 revision·실행 파일 해시, 라이선스 고지와 upstream 업데이트 검증 책임
+- Windows 번들 Bun 1.4.2의 소스 revision·실행 파일 해시·라이선스는 [manifest](../runtime/build-manifests/windows-x64.json)로 고정했다. 다른 플랫폼 배포물과 upstream 업데이트 검증 책임은 후속 결정이다.
 - 모바일의 Bun 실행·배포 경로와 지원할 Bun·Node.js API 목록, native addon 지원 범위
-- 프로세스 IPC envelope·프레이밍·역압과 자식 프로세스 종료·오류 처리, 플랫폼별 프로세스 정리 방식
-- 플랫폼별 최소 OS·CPU·WebView 버전, 자산 origin 구현, 네이티브 호스트 라이브러리와 라이선스
+- 프로세스 IPC envelope·프레이밍·큐 상한·종료·오류 처리와 Windows Job 정리는 구현했다. 다른 플랫폼의 프로세스 정리 방식은 미결정이다.
+- Windows의 WebView2 SDK·네이티브 의존성·라이선스와 가상 자산 origin은 구현에 고정했다. 최소 OS·CPU·WebView 런타임 지원 범위 및 다른 플랫폼의 호스트·자산 origin은 별도 검증·결정이 필요하다.
 - 서명·공증·스토어 제출에 필요한 조건과 iOS 코드 실행·업데이트 정책. 검토 전 스토어 배포 가능성을 보장하지 않음
 
-첫 구현 작업은 A 단계 산출물과 B 단계의 독립 실행 호스트를 만드는 것이다.
+현재 다음 작업은 Windows 검증 범위 확대, CLI·템플릿·기본 플러그인, 플랫폼 확장과 설치·서명·배포 검증이다. A·B 및 Windows C의 단일 창/뷰 성공으로 초기 버전 출시 기준 전체를 충족했다고 판단하지 않는다.

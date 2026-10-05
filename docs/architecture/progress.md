@@ -1,47 +1,58 @@
 # 구현 진행 상태
 
-기준일: 2026-10-04. Windows B 단계의 번들 Bun 프로세스·IPC 검증을 완료했다.
+기준일: 2026-10-05. PR #5 머지 후 main `e5c72963c306dad6782bdf7fc2391e3c019319c7`의
+코드와 저장소 실행 기록을 기준으로 정리했다. 이 문서 정리에서는 앱·테스트를 재실행하지 않았다.
+검증 완료는 아래에 연결한 기록의 환경과 항목에 한정한다.
 
-| 단계 | 현재 결과 | 남은 작업 |
-| --- | --- | --- |
-| 개발 환경 | mise 기반 Bun 1.4.2, 8개 workspace, 타입 환경 분리, 포맷·린트 | 실제 앱의 dev/build 추가 |
-| A 계약 | Web·프로세스 IPC·정책 단일 스키마, 타입 추론, JSON 검증·직렬화, 버전 협상, 네이티브 스키마 생성 | 제품용 세션·권한 집행 연결 |
-| B 번들 실행 실현성 | Windows x64 baseline Bun 1.4.2 고정, C++ 독립 패키지, IPC·계산·이벤트·오류·정상/강제 종료 검증 통과 | 다른 OS와 설치·배포는 후속 단계 |
-| C 수직 기능 | 공통 API·Host operation 스키마·명령 검증·컨텍스트 바인딩과 계약 테스트 준비 | client-sdk·core·WebView 호스트 병렬 구현과 실제 저장·이벤트 연결 |
-| D~F | 미착수 | 플랫폼 확장·배포·선택 렌더러 |
+| 단계 | 구현 상태 | 검증 완료 범위 | 남은 작업·미검증 |
+| --- | --- | --- | --- |
+| 개발 환경 | mise 기반 Bun 1.4.2, 8개 workspace, 타입 환경 분리, 포맷·린트 | PR #5 기록의 workspace·테스트·메모 앱·호스트 백엔드 타입 및 lint·format 검사 | 범용 CLI의 dev/build·프로젝트 생성 |
+| A 계약 | Web·프로세스 IPC·정책 단일 스키마, 타입 추론, JSON 검증·직렬화, 버전 협상, 네이티브 스키마 생성 | 계약 테스트 및 Windows 네이티브 검증기 회귀 | 다른 플랫폼의 계약 준수 검증 |
+| B 번들 실행 실현성 | Windows x64 baseline Bun 1.4.2 고정, WebView 없는 C++ 독립 패키지 | B 실행 기록의 IPC·계산·이벤트·오류·정상/강제 종료 | PR #5에서는 B 실험 미재실행. 다른 OS와 설치·배포 미검증 |
+| C 수직 기능 | 실제 client-sdk·core·runtime-bun, Win32·WebView2 호스트, 메모 앱 연결 | Windows 단일 창/뷰의 명령→범위 제한 저장→이벤트→화면 갱신, 재실행 후 읽기, 렌더러 복구, 오류·취소·권한·종료 | 다중 창/뷰와 뷰별 정책 분리의 실제 호스트 검증 |
+| D 플랫폼 확장 | Windows 외 호스트 미구현, 모바일 런타임 경로 미확정 | 없음 | macOS·Linux·Android·iOS의 실행·수명주기·패키징 |
+| E 배포 가능한 초기 버전 | Windows 앱 패키지 빌드 스크립트·메모 샘플 있음. CLI·기본 플러그인·템플릿 미구현 | 독립 메모 패키지 빌드 성공 기록 | 설치 프로그램·서명·공증·스토어 배포·출시 기준 미충족 |
+| F 선택 기능 | Chromium 렌더러 등 미구현 | 없음 | 선택 렌더러·추가 네이티브 플러그인 |
 
-## 구현된 API와 검증
+## 구현 근거
 
-`@bunaway/protocol`의 Web 메시지·정책·부트 설정·Host API 응답과 프로세스 envelope를
-파싱·직렬화하고 버전을 협상할 수 있다. `@bunaway/runtime-bun`은 파이프 읽기 단위와
-별개로 NDJSON 프레임을 조립하고 UTF-8·크기·EOF를 검사한다.
+- `packages/client-sdk/src/index.ts`의 `createClient`는 hello 협상, 명령 호출,
+  이벤트 구독·해제, deadline·취소·종료를 구현한다. `src/webview.ts`가 WebView 전송을 연결한다.
+- `packages/core/src/create-core.ts`의 `createCore`는 명령·상태·이벤트·세션·정책 검사와
+  플러그인 초기화·역순 정리를 구현한다. 다중 세션의 코어 계약 테스트가 실제 다중 창 검증을 뜻하지 않는다.
+- `packages/runtime-bun/src/runtime.ts`의 `runBunApp`은 boot/hello/ready,
+  session-open/web/revoke, Host API 왕복·취소와 코어 종료를 프로세스 IPC에 연결한다.
+  플러그인 초기화 중에도 응답을 읽는다. 현재 플랫폼 서비스는 `windows`로 고정된다.
+- `native/windows/host/host.cpp`는 ready 후 첫 WebView 탐색, 호스트 발급 컨텍스트,
+  origin·frame·세션·정책 검사, 범위 제한 파일 open, 렌더러 장애 후 세션 재생성과 Job 정리를 구현한다.
+- `examples/memo/`는 `memo.save`→`appData/notes/memo.txt`→`memo.saved`와
+  시작·뷰 재생성 시 `memo.read`를 연결한다. 실제 저장 후 취소가 파일 변경을 롤백하지 않는다.
+- `packages/cli`, `plugins/log`, `plugins/storage`는 빈 모듈이다. Host API의 로그·저장
+  구현과 배포할 기본 플러그인의 구현 완료는 구분한다.
 
-`native/windows/probe/`는 WebView 없는 C++ 실험 호스트다. 생성 process 스키마를 읽고,
-자신의 위치에서 검증한 Bun을 suspended 생성→Job 배정→실행한다. 전용 파이프로
-실험 백엔드와 통신하고 실제 종료·관리 대상 프로세스 0개를 확인한다.
-고정된 실험 컨텍스트의 구독·이벤트·해제·늦은 응답 폐기와 종료 시 요청 실패를 구현했다.
-제품용 명령 레지스트리·세션 인증·권한 집행·다중 뷰 라우팅은 아직 없다.
+## 실행 근거
 
-[C 공통 API](./common-api.md)를 타입과 계약 테스트로 고정했다. Transport·ClientFactory,
-CoreFactory·세션·RuntimeServices, 앱·플러그인 정의와 Host API를 각 패키지에서 공유한다.
-backend의 command는 실제 input/output 검증을 수행하고 runtime-bun의 bindHostAPI는
-호출 컨텍스트를 유지하며 취소·오류·응답 스키마를 검사한다.
-SDK·코어 factory의 실행 구현과 네이티브 Host operation 실행은 다음 병렬 작업이다.
+[Windows C 실행 결과](./windows-host-results.md)에는 2026-10-05 환경과 재현 명령,
+Windows 통합 검증 5개·페이지 검사 28개·메모 화면 검사 3회·네이티브 회귀 8개,
+계약 테스트 108개(861 assertions)의 통과 기록이 있다.
+메모 저장 버튼·이벤트 화면 갱신·호스트와 Bun 재실행 후 복원·렌더러 강제 종료 후
+새 세션 연결·정상/강제 종료 시 Bun 정리를 확인했다. 메모 UI 통합 검증은 같은 앱 정의와
+화면에 테스트 보고 명령을 더한 패키지에서 실행했고, 독립 메모 패키지는 빌드 성공을 기록했다.
 
-`mise run check`로 포맷·린트·8개 패키지와 테스트의 타입·계약 테스트를 확인한다.
-`mise run protocol:generate`로 네이티브 JSON Schema를 갱신하며 원본과 다르면 테스트가 실패한다.
-`mise run probe:windows`로 독립 패키지를 만들고 실제 Windows 프로세스 검증을 실행한다.
-[Windows B 실행 결과](./windows-probe-results.md)에 환경·manifest·관찰과 제한을 기록했다.
+[Windows B 실행 결과](./windows-probe-results.md)는 별도 실험 호스트의 기록이다.
+PR #5에서 이를 재실행하지 않았으므로 C 실행 기록과 합쳐 새 검증 결과로 보고하지 않는다.
+실행 로그·JSON은 `build/` 산출물이며 저장소에 포함되지 않는다. 재현 경로는
+`mise run check`, `mise run host:windows`, 별도의 `mise run probe:windows`다.
 
 ## 이어서 할 작업
 
-1. [IPC 계약](./protocol.md)을 따르는 client-sdk와 core의 명령 왕복을 구현한다.
-   테스트용 transport 성공과 실제 네이티브 경계 통과를 구분한다.
-2. WebView2 브리지의 세션·origin·frame 검증과 정책 집행을 연결한다.
-3. 파일을 실제로 여는 네이티브 경계에서 저장 범위를 검사하고, 명령→저장→이벤트를 검증한다.
-   읽기 전용 설치 디렉터리와 앱 데이터·임시 디렉터리를 분리한다.
-4. Android·iOS의 Bun 실행·배포 경로는 D 단계에서 전용 도구·기기로 별도 검증한다.
-   Windows 자식 프로세스 방식의 성공을 모바일 성공으로 간주하지 않는다.
+1. Windows 다중 창/뷰와 뷰별 정책 분리를 실제 호스트에서 검증한다.
+2. CLI·프로젝트 템플릿·명령 타입 생성·기본 로그/저장 플러그인을 구현한다.
+3. WebView2 설치 경로, 설치 프로그램·서명·배포와 최소 OS·CPU 지원 범위를 검증한다.
+4. macOS·Linux 호스트와 Android·iOS의 Bun 실행·배포 경로를 각 플랫폼에서 구현·검증한다.
+5. PRD의 출시 기준에 따라 UI 프레임워크 예제, 성능·패키지 크기와 지원 표를 확인한다.
 
+Windows 단일 창·단일 뷰(`main`) 성공은 다른 플랫폼·다중 창/뷰·설치·서명·배포 완료를 뜻하지 않는다.
+WebView2 Evergreen 런타임은 별도로 필요하다.
+[C 공통 API](./common-api.md)와 [모듈 의존성](./workspace.md)이 현재 실행 계약이며,
 [C ABI 초안](./native-abi.md)은 이전 동일 프로세스 설계의 기록이다.
-현재 구현은 프로세스 IPC와 [모듈 의존성](./workspace.md)을 따른다.

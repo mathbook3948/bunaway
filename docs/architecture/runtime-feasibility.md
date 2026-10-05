@@ -85,9 +85,10 @@ Bun을 suspended 상태로 생성해 kill-on-close Job Object에 배정한 뒤 �
 
 ## 다음 단계와 플랫폼 범위
 
-Windows B 단계가 모두 통과하면 `client-sdk`와 `core`를 구현하고
-WebView→명령 호출→범위 제한 저장→이벤트를 연결한다. C 단계에서 실제 WebView의
-세션·origin·frame 검증, 정책 집행, 취소와 창 종료도 확인한다.
+Windows B 단계 통과 후 `client-sdk`·`core`·`runtime-bun`을 Windows WebView2 호스트에
+연결했다. WebView→명령 호출→범위 제한 저장→이벤트와 메모 재실행 후 복원,
+세션·origin·frame·정책·취소·창 종료의 단일 창/뷰 검증은
+[C 실행 결과](./windows-host-results.md)에 기록했다. 이 문서의 B 실험과 구분한다.
 
 macOS·Linux는 각 플랫폼의 프로세스·IPC·종료·서명·패키징을 검증한다. Android·iOS의
 Bun 번들·실행 가능 경로, 수명주기와 배포 제약은 D 단계에서 별도로 검증한다.

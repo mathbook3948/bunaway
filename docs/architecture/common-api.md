@@ -1,8 +1,9 @@
 # C 단계 공통 API
 
-이 계약을 기준으로 client-sdk, core/backend-sdk, Windows 호스트를 병렬 구현한다.
-타입과 실행 가능한 명령·Host API 검증 헬퍼를 구현했다. `ClientFactory`, `CoreFactory`는
-구현자가 맞춰야 할 타입이며 실제 `createClient`·`createCore` 구현은 각 작업에서 만든다.
+이 계약에 맞춰 client-sdk, core/backend-sdk와 Windows 호스트를 구현했다.
+`ClientFactory`, `CoreFactory`는 공개 실행 계약이며 실제 `createClient`·`createCore`와
+Windows용 `runBunApp`이 이를 연결한다. 명령·Host API 검증 헬퍼와 WebView Transport도 구현했다.
+실제 호스트의 검증 범위는 [Windows 단일 창/뷰 실행 결과](./windows-host-results.md)를 따른다.
 기존 Web·프로세스 IPC 버전 1.0과 [프로토콜 규칙](./protocol.md)을 사용한다.
 
 ## 공유하는 코드
@@ -56,8 +57,8 @@ listener에는 payload와 공개 source·target·subscriptionId·sequence가 전
 앱은 `{ commands, events, state?, plugins? } satisfies AppDefinition`으로 정의한다.
 명령·이벤트 이름을 직접 정책에 허용한다. 별도 permission 별칭은 없다.
 `CommandsOf`·`EventsOf`는 앱에 직접 선언한 스키마에서 타입을 추론한다.
-프런트엔드에는 tooling이 생성한 데이터 타입만 전달하며 백엔드 구현을 번들에 import하지 않는다.
-플러그인까지 합친 전체 등록 목록의 타입 생성은 CLI 작업에서 구현한다.
+프런트엔드에는 데이터 타입만 전달하고 백엔드 구현을 번들에 import하지 않는다.
+명령 타입 생성 tooling과 플러그인까지 합친 전체 등록 목록의 타입 생성은 CLI 작업으로 남아 있다.
 
 `CoreFactory(app, services)`는 명령·이벤트 등록과 플러그인 setup이 끝난 뒤 Core를 반환한다.
 중복·예약 이름, 플러그인 의존 순환·지원 플랫폼·권한 요구사항 불일치는 시작을 실패시킨다.
@@ -131,15 +132,19 @@ callHost는 signal 취소 시 같은 context·requestId의 `host-cancel`을 보�
 네이티브는 시작 전 작업을 취소하고 가능한 자원을 정리하며, 이미 완료된 작업은 무시한다.
 취소가 끝난 외부 부작용을 롤백한다고 보장하지 않는다. 응답은 한 번만 완료하고 늦은 결과는 폐기한다.
 
-## 병렬 구현과 검증
+## 구현과 검증 범위
 
-1. client-sdk: ClientFactory에 맞는 createClient, 요청·구독·취소·종료 및 Transport 계약 테스트.
-2. core/backend-sdk: CoreFactory에 맞는 createCore, 등록·세션·상태·이벤트·플러그인 실행.
-3. Windows 호스트: WebView2·Transport 경계, session-open/revoke, 정책·파일·Host operations.
+1. client-sdk: `createClient`와 요청·구독·취소·종료, `createWebViewTransport` 구현.
+2. core/backend-sdk: `createCore`와 등록·세션·상태·이벤트·플러그인 실행, 명령 검증 구현.
+3. Windows 호스트: WebView2 경계, session-open/revoke, 정책·파일·Host operations 구현.
 
-runtime-bun은 공통 CoreServices로 모듈을 연결한다. 프로토콜·공통 타입 변경은 한 작업에서 관리한다.
-저장·로그 플러그인은 이 API로 구현할 수 있으며, CLI·패키징은 실제 산출물 계약을 추가로 기다린다.
+runtime-bun의 `runBunApp`은 공통 CoreServices로 모듈을 연결한다. 저장·로그 Host API는
+Windows 호스트에서 실행하지만 기본 저장·로그 플러그인 모듈은 비어 있다.
+Windows 패키징 스크립트와 메모 샘플은 있으며, CLI·설치·서명·배포는 후속 작업이다.
 
 `tests/api/contracts.test.ts`는 명령 input/output, Host 컨텍스트 유지·오류·취소,
 부트 정책·Web 경계와 compile-time 소비자 타입을 검증한다. `mise run check`에 포함한다.
-실제 createClient/createCore 실행·WebView·파일 권한 집행은 각 구현 뒤 별도로 검증한다.
+SDK·코어 실행과 실제 Bun 프로세스 IPC 테스트도 `mise run check`에 포함한다.
+`mise run host:windows`의 실행 기록은 실제 SDK·코어·메모 저장·이벤트와 네이티브
+파일 권한 집행을 Windows 단일 창/뷰에서 확인한다. 코어 다중 세션 계약 테스트는
+실제 호스트의 다중 창/뷰나 다른 플랫폼 지원 완료를 뜻하지 않는다.
