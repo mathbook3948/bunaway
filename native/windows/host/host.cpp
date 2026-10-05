@@ -358,14 +358,13 @@ struct Policy {
     }
 };
 
-// View ids follow the package identifier grammar ([A-Za-z0-9_.:-]). Escape any
-// byte that is not plainly filename-safe so distinct ids get distinct
-// user-data directories and no id can become a relative path segment.
+// Escape uppercase and punctuation so case-sensitive view ids stay distinct on
+// Windows' case-insensitive filesystem and cannot become relative path segments.
 std::string viewDirName(const std::string& viewId) {
     static const char* digits = "0123456789abcdef";
     std::string name = "v";
     for (unsigned char c : viewId) {
-        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) name += static_cast<char>(c);
+        if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) name += static_cast<char>(c);
         else { name += '-'; name += digits[c >> 4]; name += digits[c & 15]; }
     }
     return name;

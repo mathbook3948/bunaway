@@ -9,6 +9,17 @@ int wmain(int argc, wchar_t** argv) {
         const fs::path assets = fs::path(argv[1]) / "assets";
         const fs::path testRoot = fs::path(argv[1]).parent_path() / ("host-regression-" + randomHex(8));
         fs::create_directories(testRoot);
+        const auto profileRoot = testRoot / "profiles";
+        fs::create_directory(profileRoot);
+        const std::string identifierChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.:-";
+        std::vector<std::string> viewIds = { "main", "Main", "MAIN", "mAin", "..", "-2e-2e", "-3a", "con", "nul" };
+        for (char c : identifierChars) viewIds.emplace_back(1, c);
+        for (const auto& id : viewIds) {
+            const auto name = viewDirName(id);
+            require(std::regex_match(name, std::regex("^v[a-z0-9-]+$")), "Profile directory must be lowercase and filename-safe.");
+            require(fs::create_directory(profileRoot / name), "Distinct view ids share a profile directory.");
+        }
+        std::cout << "PASS case-sensitive view ids have distinct Windows profile directories\n";
         App app;
         app.hostLog = std::make_unique<Log>(testRoot / "host.log", 1024 * 1024);
         app.appLog = std::make_unique<Log>(testRoot / "app.log", 1024 * 1024);

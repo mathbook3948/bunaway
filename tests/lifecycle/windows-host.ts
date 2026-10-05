@@ -27,7 +27,7 @@ const results: { name: string; durationMs: number }[] = [];
 
 // The host maps each view id to a user-data directory through viewDirName.
 const viewDir = (viewId: string) =>
-  `v${[...viewId].map((c) => (/[A-Za-z0-9]/.test(c) ? c : `-${c.charCodeAt(0).toString(16).padStart(2, "0")}`)).join("")}`;
+  `v${[...viewId].map((c) => (/[a-z0-9]/.test(c) ? c : `-${c.charCodeAt(0).toString(16).padStart(2, "0")}`)).join("")}`;
 
 async function resetData() {
   // WebView2 renderer processes can hold the user-data folder briefly after the
