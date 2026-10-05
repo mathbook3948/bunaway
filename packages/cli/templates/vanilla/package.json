@@ -1,0 +1,26 @@
+{
+  "name": "bunaway-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.2",
+  "workspaces": [
+    "vendor/bunaway/packages/*"
+  ],
+  "scripts": {
+    "dev": "bun vendor/bunaway/packages/cli/src/main.ts dev",
+    "build": "bun vendor/bunaway/packages/cli/src/main.ts build",
+    "validate": "bun vendor/bunaway/packages/cli/src/main.ts validate",
+    "doctor": "bun vendor/bunaway/packages/cli/src/main.ts doctor",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@bunaway/backend": "workspace:*",
+    "@bunaway/client": "workspace:*",
+    "@bunaway/runtime-bun": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.2",
+    "typescript": "7.0.2"
+  }
+}

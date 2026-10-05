@@ -1091,7 +1091,6 @@ public:
         int inPipe[2], outPipe[2], errPipe[2], deathPipe[2];
         makePipe(inPipe); makePipe(outPipe); makePipe(errPipe); makePipe(deathPipe);
         input.reset(inPipe[1]); output.reset(outPipe[0]); stderrPipe.reset(errPipe[0]); deathWrite.reset(deathPipe[1]);
-        fs::create_directories(assets / "tmp");
         auto entry = (assets / "backend.js").string();
         auto config = std::string("--config=") + (assets / "bunfig.toml").string();
         auto tsconfig = std::string("--tsconfig-override=") + (assets / "tsconfig.json").string();
@@ -1731,7 +1730,7 @@ int main(int argc, char** argv) {
                 return run(fs::path([[[NSBundle mainBundle] resourcePath] UTF8String]));
             }
             require(argc == 3 && std::string(argv[1]) == "--package", "Usage: app-host [--package <dir>]");
-            return run(fs::path(argv[2]));
+            return run(fs::canonical(fs::path(argv[2])));
         } catch (const std::exception& e) {
             std::fprintf(stderr, "app-host failed: %s\n", e.what());
             return 1;

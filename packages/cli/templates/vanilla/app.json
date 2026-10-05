@@ -1,0 +1,7 @@
+{
+  "appId": "app.vanilla",
+  "title": "bunaway vanilla",
+  "view": "main",
+  "home": "https://app.bunaway.local/index.html",
+  "window": { "width": 800, "height": 600 }
+}

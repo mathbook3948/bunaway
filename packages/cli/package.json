@@ -6,6 +6,12 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "bin": {
+    "bunaway": "./src/main.ts"
+  },
+  "dependencies": {
+    "@bunaway/protocol": "workspace:*"
+  },
   "scripts": {
     "typecheck": "tsc --project tsconfig.json"
   }

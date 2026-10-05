@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.bunaway/
+vendor/bunaway/build/
+vendor/bunaway/runtime/bun-bundle/vendor/
+vendor/bunaway/native/windows/vendor/
+vendor/bunaway/native/windows/host/vendor/
+vendor/bunaway/native/macos/vendor/
+*.log

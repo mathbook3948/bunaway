@@ -21,6 +21,12 @@
     "packages/cli": {
       "name": "@bunaway/cli",
       "version": "0.0.0",
+      "bin": {
+        "bunaway": "./src/main.ts",
+      },
+      "dependencies": {
+        "@bunaway/protocol": "workspace:*",
+      },
     },
     "packages/client-sdk": {
       "name": "@bunaway/client",

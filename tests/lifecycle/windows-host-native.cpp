@@ -56,6 +56,26 @@ int wmain(int argc, wchar_t** argv) {
         PeekMessageW(&message, nullptr, 0, 0, PM_NOREMOVE);
         const auto context = app.openSession(*mainView, "https://app.bunaway.local/index.html", "https://app.bunaway.local");
         {
+            auto cancelled = app.frame("host-request");
+            cancelled["context"] = context;
+            cancelled["requestId"] = "cancelled-write";
+            cancelled["operation"] = "storage.writeText";
+            cancelled["payload"] = { { "scope", "temp" }, { "path", "cancelled.txt" }, { "text", "must not be written" } };
+            app.onHostRequest(cancelled);
+            app.onHostCancel(context, "cancelled-write");
+            require(app.hostPending.at(context + "|cancelled-write").cancelled, "Host cancellation did not mark pending work.");
+            const auto queued = app.queue.size();
+            auto task = std::move(app.workQueue.front());
+            app.workQueue.pop_front();
+            task();
+            require(!fs::exists(testRoot / "cancelled.txt"), "Cancelled queued write was executed.");
+            require(app.hostPending.empty(), "Cancelled host request was retained.");
+            app.hostRespond(context + "|cancelled-write", context, "cancelled-write", { { "kind", "result" }, { "payload", nullptr } });
+            app.onHostCancel(context, "cancelled-write");
+            require(app.queue.size() == queued, "Cancelled host request produced a late response.");
+            std::cout << "PASS Host cancellation prevents queued writes and late responses\n";
+        }
+        {
             App::LiveView closedView;
             closedView.closed = true;
             for (auto result : { E_ABORT, E_FAIL, S_OK }) {
