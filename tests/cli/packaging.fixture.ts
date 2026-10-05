@@ -1,8 +1,9 @@
-import { expect, mock } from "bun:test";
+import { expect, mock, spyOn } from "bun:test";
+import { rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import * as build from "../../packages/cli/src/build.ts";
 import * as files from "../../packages/cli/src/files.ts";
-import { registerAdapter } from "../../packages/packaging/src/index.ts";
+import { CODES, registerAdapter } from "../../packages/packaging/src/index.ts";
 
 const project = process.argv[2];
 if (!project) throw new Error("Expected a generated project path.");
@@ -160,3 +161,26 @@ expect((await packageProject(project, "win-direct", { build: true })).ok).toBe(t
 expect(await Bun.file(previous).text()).toBe("installer 3");
 expect(await Bun.file(other).text()).toBe("another channel");
 expect(await Bun.file(otherReport).text()).toBe("another report");
+
+const lockPath = resolve(packaged, "win-direct.lock");
+const reportPath = resolve(packaged, "win-direct-report.json");
+const savedReport = await Bun.file(reportPath).text();
+const savedAssemblies = assembled;
+await Bun.write(lockPath, "active package run");
+const lines: string[] = [];
+const logging = spyOn(console, "log").mockImplementation((message) => {
+  lines.push(String(message));
+});
+try {
+  const blocked = await packageProject(project, "win-direct");
+  expect(blocked.ok).toBe(false);
+  expect(blocked.diagnostics.some((d) => d.code === CODES.LOCK_FAILED)).toBe(true);
+  expect(lines.some((line) => line.startsWith("Report:"))).toBe(false);
+  expect(lines.some((line) => line.includes("no report was published"))).toBe(true);
+  expect(assembled).toBe(savedAssemblies);
+  expect(await Bun.file(reportPath).text()).toBe(savedReport);
+  expect(await Bun.file(previous).text()).toBe("installer 3");
+} finally {
+  logging.mockRestore();
+  await rm(lockPath);
+}

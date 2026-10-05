@@ -3,6 +3,7 @@ import {
   artifactPaths,
   type BuildArtifact,
   type ChannelId,
+  CODES,
   isChannelId,
   loadPackaging,
   PACKAGING_CHANNELS,
@@ -102,7 +103,8 @@ export async function packageProject(
     adapter,
     notes,
   });
-  console.log(`Report: ${packagingReportPath(project.root, target, channel)}`);
+  const lockFailed = report.diagnostics.some((diagnostic) => diagnostic.code === CODES.LOCK_FAILED);
+  if (!lockFailed) console.log(`Report: ${packagingReportPath(project.root, target, channel)}`);
   for (const diagnostic of report.diagnostics) {
     if (diagnostic.severity === "info") continue;
     console.log(
@@ -115,7 +117,9 @@ export async function packageProject(
   console.log(
     report.ok
       ? `Packaged ${channel}: usable=${report.usable} submittable=${report.submittable}`
-      : `Packaging ${channel} failed; see the report for diagnostics.`,
+      : lockFailed
+        ? `Packaging ${channel} failed; no report was published. See diagnostics above.`
+        : `Packaging ${channel} failed; see the report for diagnostics.`,
   );
   return report;
 }

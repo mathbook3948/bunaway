@@ -7,7 +7,8 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@bunaway/protocol": "workspace:*"
+    "@bunaway/protocol": "workspace:*",
+    "fast-xml-parser": "4.5.7"
   },
   "scripts": {
     "typecheck": "tsc --project tsconfig.json"

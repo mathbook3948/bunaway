@@ -80,6 +80,18 @@ async function makeArtifact(
   await mkdir(resolve(dir, "licenses"), { recursive: true });
   await mkdir(resolve(artifact.executable, ".."), { recursive: true });
   await writeFile(artifact.executable, "fake host");
+  if (!windows) {
+    await writeFile(
+      resolve(artifact.dir, "Contents/Info.plist"),
+      `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleExecutable</key><string>bunaway-host</string>
+<key>CFBundleIdentifier</key><string>app.test</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+</dict></plist>`,
+    );
+  }
   await writeFile(runtime, "fake bun");
   const assets: Record<string, string> = {};
   await writeJson(resolve(dir, "assets/app.json"), appConfig);
@@ -191,6 +203,200 @@ function runAdapter(
     adapter,
   });
 }
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+test("the package lock excludes another Bun process and is released afterwards", async () => {
+  const projectRoot = resolve(home, "cross-process-lock");
+  await makeArtifact(projectRoot);
+  const entrypoint = new URL("../../packages/packaging/src/index.ts", import.meta.url).href;
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      "--eval",
+      `
+    import { runPackage, artifactPaths } from ${JSON.stringify(entrypoint)};
+    const root = ${JSON.stringify(projectRoot)};
+    const report = await runPackage({
+      metadata: { root, name: "Test", identifier: "app.test", publisher: { display: "Test" },
+        version: { semver: "0.1.0", build: 0, msix: "0.1.0.0" }, icons: {}, targets: [] },
+      appId: "app.test", channel: "win-direct", channelConfig: {}, target: "windows-x64",
+      artifact: artifactPaths({ root, target: "windows-x64", appId: "app.test" }),
+      adapter: { channel: "win-direct", platform: "windows", signingRequirement: "optional",
+        stages: () => [{ id: "assemble", title: "Assemble", run: async (ctx) => {
+          await Bun.write(Bun.stdout, "ready\\n");
+          await new Response(Bun.stdin).text();
+          await Bun.write(ctx.staging + "/app.zip", "child");
+          ctx.addArtifact("app.zip", "archive");
+        } }] },
+    });
+    if (!report.ok) { console.error(JSON.stringify(report)); process.exitCode = 1; }
+  `,
+    ],
+    { stdin: "pipe", stdout: "pipe", stderr: "pipe" },
+  );
+  const reader = child.stdout.getReader();
+  try {
+    const ready = await reader.read();
+    expect(new TextDecoder().decode(ready.value)).toBe("ready\n");
+    let ran = false;
+    const blocked = await runAdapter(
+      projectRoot,
+      stubAdapter({
+        run: async () => {
+          ran = true;
+        },
+      }),
+    );
+    expect(blocked.ok).toBe(false);
+    expect(blocked.diagnostics.some((d) => d.code === CODES.LOCK_FAILED)).toBe(true);
+    expect(ran).toBe(false);
+    expect(
+      await Bun.file(packagingReportPath(projectRoot, "windows-x64", "win-direct")).exists(),
+    ).toBe(false);
+  } finally {
+    child.stdin.end();
+    await child.exited;
+    reader.releaseLock();
+  }
+  expect(await child.exited, await new Response(child.stderr).text()).toBe(0);
+  const retry = await runAdapter(
+    projectRoot,
+    stubAdapter({
+      run: async (ctx) => {
+        await Bun.write(resolve(ctx.staging, "app.zip"), "retry");
+        ctx.addArtifact("app.zip", "archive");
+      },
+    }),
+  );
+  expect(retry.ok).toBe(true);
+}, 10000);
+
+test("an active channel does not block a different channel", async () => {
+  const projectRoot = resolve(home, "independent-channel-locks");
+  await makeArtifact(projectRoot);
+  const entered = deferred();
+  const resume = deferred();
+  const first = runAdapter(
+    projectRoot,
+    stubAdapter({
+      run: async (ctx) => {
+        entered.resolve();
+        await resume.promise;
+        await Bun.write(resolve(ctx.staging, "app.zip"), "first");
+        ctx.addArtifact("app.zip", "archive");
+      },
+    }),
+  );
+  try {
+    await entered.promise;
+    const second = await runAdapter(
+      projectRoot,
+      stubAdapter({
+        channel: "win-store-msix",
+        run: async (ctx) => {
+          await Bun.write(resolve(ctx.staging, "app.msix"), "second");
+          ctx.addArtifact("app.msix", "msix", { signed: true });
+        },
+      }),
+    );
+    expect(second.ok).toBe(true);
+  } finally {
+    resume.resolve();
+    await first;
+  }
+  expect((await first).ok).toBe(true);
+});
+
+test("an existing package lock is not removed or overwritten by a rejected run", async () => {
+  const projectRoot = resolve(home, "existing-channel-lock");
+  await makeArtifact(projectRoot);
+  const lockPath = resolve(projectRoot, "dist/windows-x64/packaged/win-direct.lock");
+  await Bun.write(lockPath, "another owner");
+  const result = await runAdapter(projectRoot, stubAdapter({}));
+  expect(result.ok).toBe(false);
+  expect(await Bun.file(lockPath).text()).toBe("another owner");
+  expect(
+    await Bun.file(packagingReportPath(projectRoot, "windows-x64", "win-direct")).exists(),
+  ).toBe(false);
+});
+
+test.each([false, true])(
+  "concurrent publication is rejected without touching the active run (rollback=%s)",
+  async (rollback) => {
+    const projectRoot = resolve(home, `concurrent-${rollback}`);
+    await makeArtifact(projectRoot);
+    const adapter = (payload: string) =>
+      stubAdapter({
+        run: async (ctx) => {
+          await Bun.write(resolve(ctx.staging, "app.zip"), payload);
+          ctx.addArtifact("app.zip", "archive");
+        },
+      });
+    await runAdapter(projectRoot, adapter("old"));
+    const reportPath = packagingReportPath(projectRoot, "windows-x64", "win-direct");
+    const previousReport = await Bun.file(reportPath).text();
+    const entered = deferred();
+    const resume = deferred();
+    const fs = await import("node:fs/promises");
+    const rename = fs.rename;
+    let blocked = false;
+    const publication = spyOn(fs, "rename").mockImplementation(async (from, to) => {
+      if (to === reportPath && !blocked) {
+        blocked = true;
+        entered.resolve();
+        await resume.promise;
+        if (rollback) throw new Error("Injected report failure.");
+      }
+      await rename(from, to);
+    });
+    const first = runAdapter(projectRoot, adapter("first"));
+    try {
+      await entered.promise;
+      let ran = false;
+      const second = await runAdapter(
+        projectRoot,
+        stubAdapter({
+          run: async (ctx) => {
+            ran = true;
+            await Bun.write(resolve(ctx.staging, "app.zip"), "second");
+            ctx.addArtifact("app.zip", "archive");
+          },
+        }),
+      );
+      expect(second.ok).toBe(false);
+      expect(second.diagnostics.some((d) => d.code === CODES.LOCK_FAILED)).toBe(true);
+      expect(ran).toBe(false);
+      expect(await Bun.file(reportPath).text()).toBe(previousReport);
+    } finally {
+      resume.resolve();
+      await first;
+      publication.mockRestore();
+    }
+    const result = await first;
+    expect(result.ok).toBe(!rollback);
+    const output = resolve(projectRoot, "dist/windows-x64/packaged/win-direct/app.zip");
+    expect(await Bun.file(output).text()).toBe(rollback ? "old" : "first");
+    if (!rollback) {
+      const published = (await Bun.file(reportPath).json()) as PackageReport;
+      expect(published.artifacts[0]?.sha256).toBe(await sha256(output));
+    }
+    expect((await runAdapter(projectRoot, adapter("second"))).ok).toBe(true);
+    expect(await Bun.file(output).text()).toBe("second");
+    expect(
+      (await readdir(resolve(projectRoot, "dist/windows-x64/packaged"))).some(
+        (name) =>
+          name.includes(".lock") || name.includes(".building-") || name.includes(".previous-"),
+      ),
+    ).toBe(false);
+  },
+);
 
 async function expectRejectedInputs(
   projectRoot: string,
@@ -1310,6 +1516,118 @@ test.each(["Contents/MacOS", "Contents/Resources"])(
     await rename(path, external);
     await symlink(external, path, "junction");
     await expectRejectedInputs(projectRoot, CODES.INPUT_UNEXPECTED, { target: "macos-arm64" });
+  },
+);
+
+test.each(["missing", "directory", "symlink"] as const)(
+  "macOS Info.plist must be a regular bundle input (%s)",
+  async (kind) => {
+    const projectRoot = await mkdtemp(join(home, "plist-input-"));
+    const manifest = await makeArtifact(projectRoot, "macos-arm64");
+    const artifact = artifactPaths({ root: projectRoot, target: "macos-arm64", appId: "app.test" });
+    const plist = resolve(artifact.dir, "Contents/Info.plist");
+    const outside = resolve(projectRoot, "outside.plist");
+    await rename(plist, outside);
+    if (kind === "directory") await mkdir(plist);
+    if (kind === "symlink") await symlink(outside, plist);
+    const diagnostics = await verifyArtifact({ artifact, manifest, channel: "mac-direct" });
+    expect(diagnostics.some((d) => d.path === plist && d.code === CODES.INPUT_MISSING)).toBe(true);
+    await expectRejectedInputs(projectRoot, CODES.INPUT_MISSING, { target: "macos-arm64" });
+  },
+);
+
+test.each([
+  { name: "malformed XML", dict: "<key>CFBundleExecutable</key><string>bunaway-host" },
+  { name: "missing executable", dict: "" },
+  { name: "wrong executable", dict: "<key>CFBundleExecutable</key><string>other-host</string>" },
+  {
+    name: "escaping executable",
+    dict: "<key>CFBundleExecutable</key><string>../Resources/assets/backend.js</string>",
+  },
+  {
+    name: "non-string executable",
+    dict: "<key>CFBundleExecutable</key><array><string>bunaway-host</string></array>",
+  },
+  {
+    name: "nested executable",
+    dict: "<key>Nested</key><dict><key>CFBundleExecutable</key><string>bunaway-host</string></dict>",
+  },
+  {
+    name: "duplicate executable",
+    dict: "<key>CFBundleExecutable</key><string>other-host</string><key>CFBundleExecutable</key><string>bunaway-host</string>",
+  },
+  {
+    name: "wrong identifier",
+    dict: "<key>CFBundleExecutable</key><string>bunaway-host</string>",
+    identifier: "other.app",
+  },
+  {
+    name: "wrong package type",
+    dict: "<key>CFBundleExecutable</key><string>bunaway-host</string>",
+    packageType: "BNDL",
+  },
+  { name: "missing value", dict: "<key>CFBundleExecutable</key>" },
+])(
+  "macOS Info.plist rejects $name before adapter execution",
+  async ({ dict, identifier, packageType }) => {
+    const projectRoot = await mkdtemp(join(home, "plist-metadata-"));
+    await makeArtifact(projectRoot, "macos-arm64");
+    const artifact = artifactPaths({ root: projectRoot, target: "macos-arm64", appId: "app.test" });
+    await writeFile(
+      resolve(artifact.dir, "Contents/Info.plist"),
+      `<plist version="1.0"><dict>${dict}
+<key>CFBundleIdentifier</key><string>${identifier ?? "app.test"}</string>
+<key>CFBundlePackageType</key><string>${packageType ?? "APPL"}</string></dict></plist>`,
+    );
+    await expectRejectedInputs(projectRoot, CODES.INPUT_TAMPERED, { target: "macos-arm64" });
+  },
+);
+
+test.each(["<dict/>", "<plist><array/></plist>", "<plist><dict/></plist><plist><dict/></plist>"])(
+  "macOS Info.plist rejects a non-bundle root: %s",
+  async (xml) => {
+    const projectRoot = await mkdtemp(join(home, "plist-root-"));
+    await makeArtifact(projectRoot, "macos-arm64");
+    const artifact = artifactPaths({ root: projectRoot, target: "macos-arm64", appId: "app.test" });
+    await writeFile(resolve(artifact.dir, "Contents/Info.plist"), xml);
+    await expectRejectedInputs(projectRoot, CODES.INPUT_TAMPERED, { target: "macos-arm64" });
+  },
+);
+
+test("macOS Info.plist accepts XML entities and unrelated bundle metadata", async () => {
+  const projectRoot = await mkdtemp(join(home, "plist-valid-"));
+  const manifest = await makeArtifact(projectRoot, "macos-arm64");
+  const artifact = artifactPaths({ root: projectRoot, target: "macos-arm64", appId: "app.test" });
+  await writeFile(
+    resolve(artifact.dir, "Contents/Info.plist"),
+    `<?xml version="1.0"?><plist version="1.0"><dict>
+<!-- Key order and unrelated metadata do not change bundle identity. -->
+<key>CFBundleName</key><string>Test &amp; App</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleIdentifier</key><string>app&#x2e;test</string>
+<key>CFBundleExecutable</key><string>bunaway-host</string>
+<key>LSUIElement</key><true/></dict></plist>`,
+  );
+  expect(await verifyArtifact({ artifact, manifest, channel: "mac-direct" })).toEqual([]);
+});
+
+test.each([false, true])(
+  "macOS Info.plist requires Contents to remain inside the bundle (external=%s)",
+  async (external) => {
+    const projectRoot = await mkdtemp(join(home, "plist-contents-link-"));
+    const manifest = await makeArtifact(projectRoot, "macos-arm64");
+    const artifact = artifactPaths({ root: projectRoot, target: "macos-arm64", appId: "app.test" });
+    const contents = resolve(artifact.dir, "Contents");
+    const destination = external
+      ? resolve(projectRoot, "external-contents")
+      : resolve(artifact.dir, "original-contents");
+    await rename(contents, destination);
+    await symlink(destination, contents, "junction");
+    if (external) {
+      await expectRejectedInputs(projectRoot, CODES.INPUT_UNEXPECTED, { target: "macos-arm64" });
+    } else {
+      expect(await verifyArtifact({ artifact, manifest, channel: "mac-direct" })).toEqual([]);
+    }
   },
 );
 

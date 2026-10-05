@@ -35,6 +35,10 @@ status: accepted
   Windows는 WebView2 라이선스도 포함한다. 파일뿐 아니라 manifest 등재도 확인한다.
   manifest·호스트는 빌드 산출물 루트, 자산·Bun은 패키지 루트 안의 실제 경로여야 한다.
   외부 symlink/junction 탈출은 `PKG_INPUT_UNEXPECTED`로 어댑터 실행 전에 거부한다.
+- macOS는 build가 생성한 XML `Contents/Info.plist`도 필수 입력이다. 번들 안의 정규
+  파일이어야 하며, `CFBundleExecutable`이 실제 `Contents/MacOS` 호스트를 가리키고
+  `CFBundleIdentifier`가 manifest 앱 ID, `CFBundlePackageType`이 `APPL`이어야 한다.
+  XML 구문 오류·중복 키·필수 metadata 불일치는 어댑터 실행 전에 거부한다.
 - Bun hello의 런타임 식별에 쓰는 `manifest.bun.version`·`sourceRevision`은 비어 있지
   않은 문자열이어야 한다. `assets/app.json`의 `home`은 호스트 소유 origin을 사용하며,
   URL 경로를 디코딩해 찾은 `assets/web` 내 초기 문서(`/`는 `index.html`)는 실제 파일이고
@@ -48,6 +52,11 @@ status: accepted
 - 리포트도 임시 파일을 원자적 rename하여 저장한다. 성공 리포트 게시 전까지 이전
   산출물 백업을 유지하고 리포트 게시 실패 시 산출물을 복구한다. 실패 리포트를
   저장할 수 없는 경우에도 기존 리포트를 훼손하지 않고 실패 진단을 호출자에게 반환한다.
+- runner는 채널별 `<channel>.lock` 파일을 exclusive-create하여 실행·게시·rollback·
+  리포트 저장·정리 전체를 프로세스 간 상호 배제한다. 다른 채널은 독립 실행할 수 있다.
+  잠금 획득 실패는 `PKG_LOCK_FAILED`로 호출자에게 실패 리포트만 반환하며, 실행 중인
+  채널의 디스크 리포트나 출력은 건드리지 않는다. 잠금은 정상 종료·실패 시 해제된다. 프로세스 강제 종료로
+  남은 잠금은 자동 탈취하지 않으며, 실행 중인 작업이 없음을 확인한 뒤 수동 삭제한다.
 - 어댑터는 registry에 자기 채널을 등록한다. 새 채널은 `src/channels/<platform>/`
   아래 파일만 추가하며 공통 진입점을 수정하지 않는다.
 

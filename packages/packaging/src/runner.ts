@@ -1,4 +1,4 @@
-import { lstat, mkdir, realpath, rename, rm } from "node:fs/promises";
+import { type FileHandle, lstat, mkdir, open, realpath, rename, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
@@ -154,6 +154,23 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
   async function writeReport() {
     await Bun.write(stagedReport, `${JSON.stringify(report, null, 2)}\n`);
     await rename(stagedReport, reportPath);
+  }
+  const lockPath = `${output}.lock`;
+  let lock: FileHandle;
+  try {
+    lock = await open(lockPath, "wx");
+  } catch (error) {
+    diagnostics.push({
+      stage: "resolve",
+      code: CODES.LOCK_FAILED,
+      severity: "error",
+      message:
+        (error as NodeJS.ErrnoException).code === "EEXIST"
+          ? `Packaging channel ${channel} is locked; another run may be active.`
+          : `Cannot acquire package lock: ${error instanceof Error ? error.message : String(error)}`,
+      path: lockPath,
+    });
+    return report;
   }
   try {
     if (!failed) {
@@ -361,15 +378,23 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
   } catch (error) {
     reportFailure(error);
   } finally {
-    await rm(staging, { recursive: true, force: true });
-    if (!reportPublished) {
+    try {
+      await rm(staging, { recursive: true, force: true });
+      if (!reportPublished) {
+        try {
+          await writeReport();
+        } catch (error) {
+          reportFailure(error);
+        }
+      }
+      await rm(stagedReport, { force: true });
+    } finally {
       try {
-        await writeReport();
-      } catch (error) {
-        reportFailure(error);
+        await lock.close();
+      } finally {
+        await rm(lockPath, { force: true });
       }
     }
-    await rm(stagedReport, { force: true });
   }
   return report;
 }

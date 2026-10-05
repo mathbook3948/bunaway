@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { lstat, readFile, realpath } from "node:fs/promises";
-import { isAbsolute, relative, resolve, sep, win32 } from "node:path";
+import { basename, isAbsolute, relative, resolve, sep, win32 } from "node:path";
+import { XMLParser } from "fast-xml-parser";
 import {
   type BuildArtifact,
   type BuildTarget,
@@ -84,6 +85,62 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isIdentity(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.trim() === value;
+}
+
+type XmlNode = Record<string, XmlNode[] | string>;
+
+function plistChildren(node: XmlNode | undefined, tag: string): XmlNode[] {
+  const children = node?.[tag];
+  if (!node || Object.keys(node).length !== 1 || !Array.isArray(children)) {
+    throw new Error(`Expected a plist ${tag} element.`);
+  }
+  return children.filter((child) => {
+    const text = child["#text"];
+    return typeof text !== "string" || text.trim().length > 0;
+  });
+}
+
+function plistString(node: XmlNode | undefined, tag: string): string {
+  const children = plistChildren(node, tag);
+  const text = children[0]?.["#text"];
+  if (children.length !== 1 || typeof text !== "string") {
+    throw new Error(`Expected plist ${tag} text.`);
+  }
+  return text;
+}
+
+function bundleMetadata(xml: string): Map<string, XmlNode> {
+  const parser = new XMLParser({
+    preserveOrder: true,
+    parseTagValue: false,
+    trimValues: false,
+    ignoreDeclaration: true,
+    ignorePiTags: true,
+    htmlEntities: true,
+  });
+  const roots = parser.parse(xml, true) as XmlNode[];
+  if (roots.length !== 1) throw new Error("Expected one plist root.");
+  const plist = plistChildren(roots[0], "plist");
+  if (plist.length !== 1) throw new Error("Expected one plist dictionary.");
+  const entries = plistChildren(plist[0], "dict");
+  const metadata = new Map<string, XmlNode>();
+  for (let i = 0; i < entries.length; i += 2) {
+    const key = plistString(entries[i], "key");
+    const value = entries[i + 1];
+    if (
+      !value ||
+      metadata.has(key) ||
+      !Object.keys(value).some((tag) =>
+        ["string", "integer", "real", "true", "false", "date", "data", "array", "dict"].includes(
+          tag,
+        ),
+      )
+    ) {
+      throw new Error(`Invalid or duplicate plist entry: ${key}`);
+    }
+    metadata.set(key, value);
+  }
+  return metadata;
 }
 
 function validateManifest(value: unknown): asserts value is PackageManifest {
@@ -250,6 +307,38 @@ export async function verifyArtifact(args: {
         severity: "error",
         message: `${label}: ${error instanceof Error ? error.message : String(error)}`,
         path,
+      });
+    }
+  }
+
+  if (platform === "macos") {
+    const plistPath = resolve(artifact.dir, "Contents/Info.plist");
+    try {
+      const canonicalPath = await inputPath(artifact.dir, plistPath);
+      const metadata = bundleMetadata(await readFile(canonicalPath, "utf8"));
+      for (const [key, expected] of [
+        ["CFBundleExecutable", basename(artifact.executable)],
+        ["CFBundleIdentifier", manifest.app.id],
+        ["CFBundlePackageType", "APPL"],
+      ] as const) {
+        if (plistString(metadata.get(key), "string") !== expected) {
+          throw new Error(`Info.plist ${key} does not match the build artifact.`);
+        }
+      }
+      const bundleExecutable = await inputPath(
+        artifact.dir,
+        resolve(artifact.dir, "Contents/MacOS", basename(artifact.executable)),
+      );
+      if (bundleExecutable !== (await inputPath(artifact.dir, artifact.executable))) {
+        throw new Error("Info.plist executable does not resolve to the build host.");
+      }
+    } catch (error) {
+      diagnostics.push({
+        stage,
+        code: error instanceof ArtifactInputError ? error.code : CODES.INPUT_TAMPERED,
+        severity: "error",
+        message: `Info.plist: ${error instanceof Error ? error.message : String(error)}`,
+        path: plistPath,
       });
     }
   }
