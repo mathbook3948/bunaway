@@ -1,19 +1,38 @@
-import { createCore, type AppDefinition, type Core, type CoreSession } from "@bunaway/core";
+import {
+  type AppDefinition,
+  type Core,
+  type CoreSession,
+  createCore,
+  type Platform,
+} from "@bunaway/core";
 import {
   API_LIMITS,
   BunawayError,
   type ClientMessage,
   type HostContext,
   type HostResponse,
-  type ProcessFrame,
-  type RuntimeIdentity,
+  negotiateProtocol,
   PROCESS_IPC_VERSION,
   PROTOCOL_VERSION,
-  negotiateProtocol,
+  type ProcessFrame,
   parseProcessFrame,
+  type RuntimeIdentity,
   serializeProcessFrame,
 } from "@bunaway/protocol";
 import { readJsonLines } from "./process-ipc.ts";
+
+const PLATFORMS: Record<string, Platform> = {
+  win32: "windows",
+  darwin: "macos",
+  linux: "linux",
+  android: "android",
+};
+
+function currentPlatform(): Platform {
+  const platform = PLATFORMS[process.platform];
+  if (!platform) throw new Error(`Unsupported platform: ${process.platform}`);
+  return platform;
+}
 
 // Keep the reader free while core setup/commands await replies on the same pipe.
 export async function runBunApp(app: AppDefinition): Promise<void> {
@@ -83,7 +102,7 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
         booting = createCore(app, {
           policy: frame.payload.policy,
           hello,
-          platform: "windows",
+          platform: currentPlatform(),
           backendContext: frame.payload.backendContext as HostContext,
           runtime: {
             createCancellation: () => new AbortController(),

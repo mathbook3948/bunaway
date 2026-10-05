@@ -2,6 +2,7 @@ import {
   createClient,
   createWebViewTransport,
 } from "../../../../../packages/client-sdk/src/index.ts";
+
 const client = createClient({
   transport: createWebViewTransport(window.chrome.webview),
   hello: {
@@ -376,6 +377,20 @@ async function run() {
     assert(display.textContent === input.value, "completion event did not update screen");
     assert((await client.invoke("memo.read", null)) === input.value, "memo read differs");
     await release();
+  });
+  await test("remote iframe never navigates", async () => {
+    // Behavior-level check: a blocked subframe stays on the initial empty
+    // document instead of reaching the remote URL (works on every platform —
+    // does not rely on a host log event).
+    const frame = document.getElementById("remote-frame");
+    await sleep(300);
+    let href = "inaccessible";
+    try {
+      href = frame.contentWindow.location.href;
+    } catch {
+      href = "inaccessible";
+    }
+    assert(href === "about:blank" || href === "", `remote iframe was not blocked: ${href}`);
   });
 
   await report(results);
