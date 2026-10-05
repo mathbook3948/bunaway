@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile } from "node:fs/promises";
+import { cp, mkdir, readFile, realpath } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import { PROCESS_IPC_VERSION, PROTOCOL_VERSION } from "@bunaway/protocol";
 import { files, frameworkRoot, hash, json, projectPath, verifyHash, writeJson } from "./files.ts";
@@ -42,6 +42,74 @@ const packageNames: Record<string, string> = {
   protocol: "@bunaway/protocol",
   "runtime-bun": "@bunaway/runtime-bun",
 };
+
+interface PackageDependencies {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
+  peerDependencies?: Record<string, string>;
+}
+
+function sdkDependencies(pkg: PackageDependencies): [string, string][] {
+  return [pkg.dependencies, pkg.devDependencies, pkg.optionalDependencies, pkg.peerDependencies]
+    .flatMap((dependencies) => Object.entries(dependencies ?? {}))
+    .filter(([name]) => name.startsWith("@bunaway/"));
+}
+
+function hasSdkOverride(value: unknown): boolean {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    Object.entries(value).some(
+      ([selector, rule]) => selector.includes("@bunaway/") || hasSdkOverride(rule),
+    )
+  );
+}
+
+async function validateSdkResolutions(
+  project: string,
+  references: { name: string; parent: string }[],
+): Promise<void> {
+  // Dev/API processes must not reuse Bun's cached paths after a reinstall.
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      "-e",
+      `console.log(JSON.stringify(${JSON.stringify(references)}.map(({ name, parent }) => {
+        try { return Bun.resolveSync(name, parent); } catch { return null; }
+      })))`,
+    ],
+    { cwd: project, stdout: "pipe", stderr: "pipe" },
+  );
+  const output = new Response(child.stdout).text();
+  const errors = new Response(child.stderr).text();
+  if ((await child.exited) !== 0) {
+    throw new Error(`SDK resolution check failed: ${await errors}`);
+  }
+  const paths = JSON.parse(await output) as (string | null)[];
+  const root = resolve(project, "vendor/bunaway");
+  for (const [index, { name, parent }] of references.entries()) {
+    const directory = Object.entries(packageNames).find(
+      ([, packageName]) => packageName === name,
+    )?.[0];
+    const path = paths[index];
+    try {
+      if (
+        directory &&
+        path &&
+        relative(
+          await realpath(resolve(root, `packages/${directory}/src/index.ts`)),
+          await realpath(path),
+        ) === ""
+      ) {
+        continue;
+      }
+    } catch {}
+    throw new Error(
+      `Incompatible SDK resolution: ${name} from ${parent}; run bun install to restore the pinned vendor workspaces.`,
+    );
+  }
+}
 
 export async function release(root = frameworkRoot): Promise<Release> {
   const value = (await json(resolve(root, "framework.json"))) as Release;
@@ -118,7 +186,10 @@ export async function writeFrameworkLock(project: string): Promise<void> {
   });
 }
 
-export async function validateFramework(project: string): Promise<void> {
+export async function validateFramework(
+  project: string,
+  sources: readonly string[] = [],
+): Promise<void> {
   const root = resolve(project, "vendor/bunaway");
   const lockPath = resolve(project, "bunaway.lock.json");
   if (!(await Bun.file(lockPath).exists())) {
@@ -148,13 +219,13 @@ export async function validateFramework(project: string): Promise<void> {
     }
     await verifyHash(await projectPath(root, name), expected);
   }
-  const pkg = JSON.parse(await readFile(resolve(project, "package.json"), "utf8")) as {
-    dependencies: Record<string, string>;
-    devDependencies?: Record<string, string>;
-    optionalDependencies?: Record<string, string>;
-    peerDependencies?: Record<string, string>;
+  const pkg = JSON.parse(
+    await readFile(resolve(project, "package.json"), "utf8"),
+  ) as PackageDependencies & {
     workspaces: string[];
     packageManager: string;
+    overrides?: unknown;
+    resolutions?: unknown;
   };
   if (
     pkg.packageManager !== `bun@${actual.bun}` ||
@@ -162,17 +233,28 @@ export async function validateFramework(project: string): Promise<void> {
     ["@bunaway/backend", "@bunaway/client", "@bunaway/runtime-bun"].some(
       (name) => pkg.dependencies?.[name] !== "workspace:*",
     ) ||
-    [pkg.dependencies, pkg.devDependencies, pkg.optionalDependencies, pkg.peerDependencies].some(
-      (dependencies) =>
-        Object.entries(dependencies ?? {}).some(
-          ([name, version]) => name.startsWith("@bunaway/") && version !== "workspace:*",
-        ),
-    )
+    sdkDependencies(pkg).some(([, version]) => version !== "workspace:*") ||
+    hasSdkOverride(pkg.overrides) ||
+    hasSdkOverride(pkg.resolutions)
   ) {
     throw new Error(
       "Incompatible Bun/SDK dependency declaration; keep the pinned vendor workspaces.",
     );
   }
+  const references: { name: string; parent: string }[] = [];
+  for (const name of new Set(sdkDependencies(pkg).map(([name]) => name))) {
+    for (const parent of [project, ...sources]) {
+      references.push({ name, parent });
+    }
+  }
+  for (const directory of Object.keys(packageNames)) {
+    const workspace = resolve(root, `packages/${directory}`);
+    const manifest = (await json(resolve(workspace, "package.json"))) as PackageDependencies;
+    for (const [name] of sdkDependencies(manifest)) {
+      references.push({ name, parent: resolve(workspace, "src/index.ts") });
+    }
+  }
+  await validateSdkResolutions(project, references);
 }
 
 function requiredFrameworkFiles(): string[] {

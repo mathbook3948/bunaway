@@ -83,10 +83,15 @@ SDK를 독립 registry 패키지로 설치하지 않고 tarball의 소스를 `ve
 | 설치 조합 | 릴리스가 명시한 Web/IPC 버전과 정확히 같아야 함. wire 협상이 가능하더라도 임의 교차 릴리스 조합은 지원하지 않음 |
 | 개발/번들 Bun | 현재 1.4.2. 두 타깃 핀과 개발용 Bun 버전 일치. final 앱은 내부 실행 파일의 절대 경로·해시만 사용 |
 
-`validate`, `doctor`, `dev`, `build`는 앱 설정/정책 검사 전에 SDK 메타데이터,
+`validate`, `doctor`, `dev`, `build`는 SDK 메타데이터,
 핀, vendor 소스/스키마/고지 해시와 앱의 workspace 선언을 확인한다. 앱의
 dependencies/devDependencies/optionalDependencies/peerDependencies 모두에서
-`@bunaway/*`는 `workspace:*`여야 하며, 외부 SDK로 덮어쓰는 선언은 거부한다. `bunaway.lock.json`
+`@bunaway/*`는 `workspace:*`여야 하며, 외부 SDK로 덮어쓰는 선언은 거부한다.
+`overrides`/`resolutions`에서 `@bunaway/*`를 대상으로 하는 선택자도 거부한다
+(중첩·버전·경로 선택자 포함). 앱 루트·백엔드·프런트엔드 및 프레임워크 패키지에서
+실제로 해석되는 SDK 진입점은 잠긴 vendor 소스와 같은 실제 경로여야 한다.
+선언만 복원하고 외부 SDK 설치를 남겨 두거나 경로 별칭으로 바꾸는 경우도 실패하며,
+선언을 수정한 뒤 `bun install`로 vendor workspace 연결을 복원해야 한다. `bunaway.lock.json`
 없음(이전 생성 프로젝트), 다른 버전, 부분 변경은 명시적으로 오류가 된다. 전역 CLI가
 다른 릴리스라면 프로젝트의 `bun run ...`을 사용하거나 전체 업그레이드를 해야 한다.
 잠금 파일은 무결성과 조합 기록이지 서명된 신뢰 증명이나 공격자 방어 경계는 아니다.

@@ -3,7 +3,12 @@ import { cp, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from "n
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { packFramework } from "../../packages/cli/scripts/pack.ts";
-import { checkArtifact, snapshotHashes } from "../../packages/cli/src/distribution.ts";
+import { createProject } from "../../packages/cli/src/create.ts";
+import {
+  checkArtifact,
+  snapshotHashes,
+  validateFramework,
+} from "../../packages/cli/src/distribution.ts";
 import { json, verifyHash, writeJson } from "../../packages/cli/src/files.ts";
 
 async function command(
@@ -231,10 +236,91 @@ new RestartController<string>({ stop: async () => {}, build: async () => 42, sta
     const workspaceApp = JSON.parse(appOriginal);
     workspaceApp.devDependencies["@bunaway/client"] = "workspace:*";
     await writeJson(appPackage, workspaceApp);
+    await expect(command(project, ["run", "validate"])).rejects.toThrow(
+      "Incompatible SDK resolution",
+    );
+    await command(project, ["install"]);
     expect(await command(project, ["run", "validate"])).toContain("valid");
     await writeFile(appPackage, appOriginal);
+    for (const field of ["overrides", "resolutions"]) {
+      const app = JSON.parse(appOriginal);
+      app[field] = foreignDependency;
+      await writeJson(appPackage, app);
+      await expect(command(project, ["run", "validate"])).rejects.toThrow("Incompatible Bun/SDK");
+      await rm(resolve(project, "node_modules"), { recursive: true, force: true });
+      await rm(resolve(project, "bun.lock"), { force: true });
+      await command(project, ["install"]);
+      expect(
+        await command(project, [
+          "-e",
+          "console.log(Bun.resolveSync('@bunaway/client', process.cwd()))",
+        ]),
+      ).toContain("foreign-client");
+      await expect(command(project, ["run", "validate"])).rejects.toThrow("Incompatible Bun/SDK");
+      await expect(command(project, ["run", "build"])).rejects.toThrow("Incompatible Bun/SDK");
+      await writeFile(appPackage, appOriginal);
+      await expect(command(project, ["run", "validate"])).rejects.toThrow(
+        "Incompatible SDK resolution",
+      );
+      await command(project, ["install"]);
+      expect(await command(project, ["run", "validate"])).toContain("valid");
+    }
+    const tsconfig = resolve(project, "tsconfig.json");
+    const tsconfigOriginal = await readFile(tsconfig, "utf8");
+    for (const parent of [project, resolve(project, "src/backend"), resolve(project, "src/web")]) {
+      const configPath = resolve(parent, "tsconfig.json");
+      const root = parent === project;
+      const original = root ? JSON.parse(tsconfigOriginal) : {};
+      await writeJson(configPath, {
+        ...original,
+        compilerOptions: {
+          ...original.compilerOptions,
+          paths: {
+            "@bunaway/client": [`${root ? "./" : "../../"}foreign-client/src/index.ts`],
+          },
+        },
+      });
+      expect(
+        await command(project, [
+          "-e",
+          `console.log(Bun.resolveSync('@bunaway/client', ${JSON.stringify(parent)}))`,
+        ]),
+      ).toContain("foreign-client");
+      await expect(command(project, ["run", "validate"])).rejects.toThrow(
+        "Incompatible SDK resolution",
+      );
+      if (root) await writeFile(configPath, tsconfigOriginal);
+      else await rm(configPath);
+      expect(await command(project, ["run", "validate"])).toContain("valid");
+    }
+    const foreignCore = resolve(project, "foreign-core");
+    await cp(resolve(project, "vendor/bunaway/packages/core"), foreignCore, { recursive: true });
+    const corePackage = (await json(resolve(foreignCore, "package.json"))) as Record<
+      string,
+      unknown
+    >;
+    await writeJson(resolve(foreignCore, "package.json"), { ...corePackage, version: "99.0.0" });
+    await writeJson(appPackage, {
+      ...JSON.parse(appOriginal),
+      overrides: { "@bunaway/core": "file:./foreign-core" },
+    });
     await command(project, ["install"]);
+    expect(
+      await command(project, [
+        "-e",
+        `console.log(Bun.resolveSync('@bunaway/core', ${JSON.stringify(
+          resolve(project, "vendor/bunaway/packages/backend-sdk/src/index.ts"),
+        )}))`,
+      ]),
+    ).toContain("foreign-core");
+    await writeFile(appPackage, appOriginal);
+    await expect(command(project, ["run", "validate"])).rejects.toThrow(
+      "Incompatible SDK resolution",
+    );
+    await command(project, ["install"]);
+    expect(await command(project, ["run", "validate"])).toContain("valid");
     await rm(foreignSdk, { recursive: true, force: true });
+    await rm(foreignCore, { recursive: true, force: true });
     await writeFile(
       resolve(project, "vendor/bunaway/native/windows/host/host.cpp"),
       "changed host",
@@ -246,6 +332,72 @@ new RestartController<string>({ stop: async () => {}, build: async () => 42, sta
     await rm(home, { recursive: true, force: true });
   }
 }, 180000);
+
+test("framework validation rejects reserved SDK override selectors without an install", async () => {
+  const home = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-overrides-")));
+  try {
+    const project = await createProject(resolve(home, "app"));
+    const packagePath = resolve(project, "package.json");
+    const original = (await json(packagePath)) as Record<string, unknown>;
+    for (const field of ["overrides", "resolutions"]) {
+      for (const rule of [
+        { "@bunaway/backend": "workspace:*" },
+        { "@bunaway/client": "99.0.0" },
+        { "@bunaway/core@^0.0.0": "99.0.0" },
+        { consumer: { "@bunaway/protocol": "99.0.0" } },
+        { "consumer>@bunaway/runtime-bun": "99.0.0" },
+        { "**/@bunaway/cli": "99.0.0" },
+        { "consumer/**/@bunaway/client": "99.0.0" },
+      ]) {
+        await writeJson(packagePath, { ...original, [field]: rule });
+        await expect(validateFramework(project)).rejects.toThrow("Incompatible Bun/SDK");
+      }
+    }
+    await writeJson(packagePath, {
+      ...original,
+      overrides: { typescript: "7.0.2" },
+      resolutions: { "@types/bun": "1.4.2" },
+    });
+    await command(project, ["install"]);
+    expect(await command(project, ["run", "validate"])).toContain("valid");
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+}, 30000);
+
+test("repeated API validation rejects changed SDK links despite Bun's resolver cache", async () => {
+  const home = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-resolution-cache-")));
+  try {
+    const project = await createProject(resolve(home, "app"));
+    await command(project, ["install"]);
+    await validateFramework(project);
+    expect(Bun.resolveSync("@bunaway/client", project)).toContain("client-sdk");
+    await cp(
+      resolve(project, "vendor/bunaway/packages/client-sdk"),
+      resolve(project, "foreign-client"),
+      { recursive: true },
+    );
+    const packagePath = resolve(project, "package.json");
+    const original = await readFile(packagePath, "utf8");
+    await writeJson(packagePath, {
+      ...JSON.parse(original),
+      overrides: { "@bunaway/client": "file:./foreign-client" },
+    });
+    await command(project, ["install"]);
+    expect(
+      await command(project, [
+        "-e",
+        "console.log(Bun.resolveSync('@bunaway/client', process.cwd()))",
+      ]),
+    ).toContain("foreign-client");
+    await writeFile(packagePath, original);
+    await expect(validateFramework(project)).rejects.toThrow("Incompatible SDK resolution");
+    await command(project, ["install"]);
+    await validateFramework(project);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+}, 30000);
 
 test("artifact audit rejects omitted schemas, declarations and Git attributes with a regenerated inventory", async () => {
   const home = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-audit-")));

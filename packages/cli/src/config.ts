@@ -38,7 +38,6 @@ function string(value: unknown): string {
 
 export async function validateProject(directory: string): Promise<Project> {
   const root = await realpath(resolve(directory));
-  await validateFramework(root);
   const config = record(await json(resolve(root, "bunaway.json")));
   keys(config, ["version", "backend", "frontend"]);
   if (config.version !== 1) throw new Error("Unsupported bunaway.json version.");
@@ -47,6 +46,7 @@ export async function validateProject(directory: string): Promise<Project> {
   if (!(await lstat(backend)).isFile() || !(await lstat(frontend)).isDirectory()) {
     throw new Error("backend must be a file; frontend must be a directory.");
   }
+  await validateFramework(root, [backend, frontend]);
   const raw = record(await json(resolve(root, "app.json")));
   keys(raw, ["appId", "title", "view", "home", "window"]);
   const appId = string(raw.appId);
