@@ -97,6 +97,8 @@ the identifier, entitlements, requirements and hardened-runtime flags/version.
 mode; `BUNAWAY_NATIVE_TEST_EXEC` defaults to `build/macos-host/host-native-tests`
 independently of the package location. Scratch, diagnostics, HOME and results
 stay in the external workspace; `BUNAWAY_DATA_ROOT` must also stay outside any
-`.app` (in its container for App Sandbox). Symlinked outputs into apps are
-rejected. Default copied-package hostile-path and asset-mutation tests remain
+`.app` (in its container for App Sandbox). App extensions are checked without
+regard to case. Symlinked outputs into apps and output paths containing `..`
+components are rejected before creating scratch files or mutating the package.
+Default copied-package hostile-path and asset-mutation tests remain
 unchanged. A sandboxed WKWebView failure is still a failure, not a skipped test.

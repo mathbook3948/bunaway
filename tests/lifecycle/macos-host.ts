@@ -20,7 +20,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { release } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { validateValue } from "../../packages/protocol/src/index.ts";
 import { validationCases } from "../protocol/validation-cases.ts";
 
@@ -28,7 +28,7 @@ const original = resolve(process.argv[process.argv.indexOf("--package") + 1] ?? 
 assert.ok(process.argv.includes("--package"), "--package is required");
 const inPlace = process.env.BUNAWAY_PACKAGE_IN_PLACE === "1";
 const buildRoot = resolve(import.meta.dir, "../../build");
-const workspace = resolve(
+const workspace = await resolveTestOutput(
   process.env.BUNAWAY_TEST_WORKSPACE ??
     (inPlace ? join(buildRoot, "macos-host-in-place") : dirname(original)),
 );
@@ -46,21 +46,27 @@ const nativeTests = resolve(
 );
 function enclosingApp(path: string): string | undefined {
   for (let current = path; current !== dirname(current); current = dirname(current)) {
-    if (basename(current).endsWith(".app")) return current;
+    if (basename(current).toLowerCase().endsWith(".app")) return current;
   }
 }
-async function assertOutsideApp(path: string) {
-  assert.equal(enclosingApp(resolve(path)), undefined, `test output must be outside .app: ${path}`);
+async function resolveTestOutput(path: string) {
+  const components = sep === "\\" ? path.split(/[\\/]/) : path.split(sep);
+  assert.ok(
+    !components.includes(".."),
+    `test output must not contain parent-directory components: ${path}`,
+  );
+  const output = resolve(path);
+  assert.equal(enclosingApp(output), undefined, `test output must be outside .app: ${path}`);
   // Resolve existing ancestors too, so a workspace symlink cannot write into the bundle.
-  let ancestor = resolve(path);
+  let ancestor = output;
   while (!existsSync(ancestor)) ancestor = dirname(ancestor);
   assert.equal(
     enclosingApp(await realpath(ancestor)),
     undefined,
     `test output resolves inside .app: ${path}`,
   );
+  return output;
 }
-await assertOutsideApp(workspace);
 const app = inPlace ? enclosingApp(await realpath(host)) : undefined;
 const packageApp = inPlace ? enclosingApp(await realpath(original)) : undefined;
 assert.equal(
@@ -100,26 +106,26 @@ assert.ok(
   existsSync(nativeTests),
   `native tests not found: ${nativeTests}; run native/macos/host/run.sh first`,
 );
-await mkdir(workspace, { recursive: true });
-if (packagePath !== original) await cp(original, packagePath, { recursive: true, force: true });
 const cwd = join(workspace, "hostile-host-cwd");
-await assertOutsideApp(cwd);
-await mkdir(cwd, { recursive: true });
-await writeFile(join(cwd, ".env"), "BUNAWAY_HOSTILE=from-dotenv\n");
-await writeFile(join(cwd, "bunfig.toml"), 'preload = ["./hostile.ts"]\n');
-await writeFile(join(cwd, "hostile.ts"), 'throw new Error("hostile preload");');
+await resolveTestOutput(cwd);
 
 // Hermetic HOME: the host resolves its data root under it. BUNAWAY_DATA_ROOT
 // overrides that location — under App Sandbox HOME is rewritten to the app
 // container, so callers point this at
 // ~/Library/Containers/<bundle-id>/Data/Library/Application Support/bunaway/<appId>.
 const sandboxHome = join(workspace, "host-home");
-await assertOutsideApp(sandboxHome);
-await mkdir(sandboxHome, { recursive: true });
-const dataRoot =
+await resolveTestOutput(sandboxHome);
+const dataRoot = await resolveTestOutput(
   process.env.BUNAWAY_DATA_ROOT ??
-  join(sandboxHome, "Library/Application Support/bunaway", "tests.bunaway.host");
-await assertOutsideApp(dataRoot);
+    join(sandboxHome, "Library/Application Support/bunaway", "tests.bunaway.host"),
+);
+await mkdir(workspace, { recursive: true });
+if (packagePath !== original) await cp(original, packagePath, { recursive: true, force: true });
+await mkdir(cwd, { recursive: true });
+await writeFile(join(cwd, ".env"), "BUNAWAY_HOSTILE=from-dotenv\n");
+await writeFile(join(cwd, "bunfig.toml"), 'preload = ["./hostile.ts"]\n');
+await writeFile(join(cwd, "hostile.ts"), 'throw new Error("hostile preload");');
+await mkdir(sandboxHome, { recursive: true });
 const results: { name: string; ok: boolean; durationMs: number; error?: string }[] = [];
 const diagnostics = join(workspace, "macos-host-diagnostics");
 await rm(diagnostics, { recursive: true, force: true });
