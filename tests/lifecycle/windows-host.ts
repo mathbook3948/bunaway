@@ -8,6 +8,7 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { validateValue } from "../../packages/protocol/src/index.ts";
 import { validationCases } from "../protocol/validation-cases.ts";
+import { readReport } from "./reports.ts";
 
 const original = resolve(process.argv[process.argv.indexOf("--package") + 1] ?? "");
 assert.ok(process.argv.includes("--package"), "--package is required");
@@ -90,20 +91,7 @@ async function waitLog(match: (entry: LogEntry) => boolean, timeout = 90000) {
   return waitFor(async () => (await hostLog()).find(match) ?? null, timeout);
 }
 async function reportFile(name: string) {
-  return waitFor(async () => {
-    const path = join(dataRoot, "temp", name);
-    if (!existsSync(path)) return null;
-    const text = await readFile(path, "utf-8");
-    try {
-      return JSON.parse(text) as {
-        page: string;
-        results: { name: string; ok: boolean; error?: string }[];
-      };
-    } catch (cause) {
-      if (!(cause instanceof SyntaxError)) throw cause;
-      return null;
-    }
-  });
+  return waitFor(() => readReport(join(dataRoot, "temp", name)));
 }
 
 function launch() {

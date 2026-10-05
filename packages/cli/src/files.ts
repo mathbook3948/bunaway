@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { lstat, readdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const frameworkRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -31,11 +31,20 @@ export async function projectPath(root: string, name: string): Promise<string> {
   return path;
 }
 
-export async function files(root: string): Promise<string[]> {
+export async function files(
+  root: string,
+  excludedDirectories: readonly string[] = [],
+): Promise<string[]> {
   const result: string[] = [];
   async function visit(dir: string): Promise<void> {
     for (const item of await readdir(dir, { withFileTypes: true })) {
       const path = resolve(dir, item.name);
+      if (
+        item.isDirectory() &&
+        excludedDirectories.includes(relative(root, path).replaceAll("\\", "/"))
+      ) {
+        continue;
+      }
       if ((await lstat(path)).isSymbolicLink()) throw new Error(`Symlink not allowed: ${path}`);
       if (item.isDirectory()) await visit(path);
       else if (item.isFile()) result.push(path);
@@ -70,4 +79,27 @@ export async function run(
   });
   const code = await child.exited;
   if (code !== 0) throw new Error(`${args[0]} failed (exit ${code}).`);
+}
+
+export async function runWorker(
+  module: string,
+  method: string,
+  args: unknown[],
+  cwd: string,
+): Promise<void> {
+  const url = pathToFileURL(resolve(frameworkRoot, "packages/cli/src", module)).href;
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      "-e",
+      `const task = await import(${JSON.stringify(url)}); await task[${JSON.stringify(method)}](...await Bun.stdin.json());`,
+    ],
+    { cwd, stdin: Buffer.from(JSON.stringify(args)), stdout: "pipe", stderr: "pipe" },
+  );
+  const output = new Response(child.stdout).text();
+  const errors = new Response(child.stderr).text();
+  const code = await child.exited;
+  await output;
+  if (code !== 0) throw new Error((await errors) || `${method} failed (exit ${code}).`);
+  await errors;
 }

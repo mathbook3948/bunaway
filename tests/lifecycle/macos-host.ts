@@ -12,6 +12,7 @@ import { release } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { validateValue } from "../../packages/protocol/src/index.ts";
 import { validationCases } from "../protocol/validation-cases.ts";
+import { readReport } from "./reports.ts";
 
 const original = resolve(process.argv[process.argv.indexOf("--package") + 1] ?? "");
 assert.ok(process.argv.includes("--package"), "--package is required");
@@ -90,14 +91,7 @@ async function waitLog(match: (entry: LogEntry) => boolean, timeout = 90000) {
   return waitFor(async () => (await hostLog()).find(match) ?? null, timeout);
 }
 async function reportFile(name: string) {
-  return waitFor(async () => {
-    const path = join(dataRoot, "temp", name);
-    if (!existsSync(path)) return null;
-    return JSON.parse(await readFile(path, "utf-8")) as {
-      page: string;
-      results: { name: string; ok: boolean; error?: string }[];
-    };
-  });
+  return waitFor(() => readReport(join(dataRoot, "temp", name)));
 }
 
 async function updateAsset(name: string, text: string) {
