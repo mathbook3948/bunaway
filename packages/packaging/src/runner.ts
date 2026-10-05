@@ -12,6 +12,7 @@ import {
   type PackageAdapter,
   type PackageManifest,
   type PackageReport,
+  platformOf,
   type ProducedArtifact,
   type ResolvedPackaging,
   type SigningConfig,
@@ -73,16 +74,31 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
   const staging = `${output}.building-${crypto.randomUUID()}`;
 
   let manifest = EMPTY_MANIFEST;
-  try {
-    manifest = await loadManifest(artifact);
-  } catch (error) {
+  const platform = platformOf(channel);
+  if (
+    adapter.channel !== channel ||
+    adapter.platform !== platform ||
+    !target.startsWith(`${platform}-`)
+  ) {
     diagnostics.push({
       stage: "resolve",
-      code: CODES.INPUT_MISSING,
+      code: CODES.CONFIG_INVALID,
       severity: "error",
-      message: error instanceof Error ? error.message : String(error),
-      path: resolve(artifact.packageDir, "manifest.json"),
+      message: `Channel ${channel} (${platform}), adapter ${adapter.channel} (${adapter.platform}) and target ${target} must use the same channel and platform.`,
     });
+  }
+  if (diagnostics.length === 0) {
+    try {
+      manifest = await loadManifest(artifact);
+    } catch (error) {
+      diagnostics.push({
+        stage: "resolve",
+        code: CODES.INPUT_MISSING,
+        severity: "error",
+        message: error instanceof Error ? error.message : String(error),
+        path: resolve(artifact.packageDir, "manifest.json"),
+      });
+    }
   }
 
   const input: AdapterInput = {

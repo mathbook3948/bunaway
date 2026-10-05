@@ -57,9 +57,18 @@ export async function packageProject(
     channel,
   });
   const platform = platformOf(channel);
+  const nativeTarget = currentTarget();
+  if (!nativeTarget.startsWith(`${platform}-`)) {
+    throw new Error(
+      `Channel ${channel} requires ${platform}; the native host target is ${nativeTarget}.`,
+    );
+  }
   const declared = metadata.targets.find((target) => target.platform === platform);
-  const target = declared ? targetFor(platform, declared.arch) : currentTarget();
-  if (target !== currentTarget()) {
+  if (metadata.targets.length > 0 && !declared) {
+    throw new Error(`Channel ${channel} has no ${platform} target declared in packaging.json.`);
+  }
+  const target = declared ? targetFor(platform, declared.arch) : nativeTarget;
+  if (target !== nativeTarget) {
     throw new Error(
       `Channel ${channel} targets ${target}; the MVP packages only the native host target.`,
     );

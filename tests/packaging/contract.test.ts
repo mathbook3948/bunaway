@@ -405,6 +405,69 @@ test("channel helpers stay consistent", () => {
   expect(isChannelId("exe")).toBe(false);
 });
 
+test.each([
+  {
+    channel: "win-direct",
+    adapterChannel: "win-store-msix",
+    platform: "windows",
+    target: "windows-x64",
+  },
+  { channel: "win-direct", adapterChannel: "mac-direct", platform: "macos", target: "windows-x64" },
+  { channel: "win-direct", adapterChannel: "win-direct", platform: "macos", target: "windows-x64" },
+  {
+    channel: "win-direct",
+    adapterChannel: "win-direct",
+    platform: "windows",
+    target: "macos-arm64",
+  },
+  { channel: "mac-direct", adapterChannel: "mac-direct", platform: "macos", target: "windows-x64" },
+] as const)(
+  "runner rejects mismatched channel/adapter/target: %j",
+  async ({ channel, adapterChannel, platform, target }) => {
+    const projectRoot = await mkdtemp(join(home, "platform-"));
+    await makeArtifact(projectRoot);
+    const previous = resolve(projectRoot, "dist", target, "packaged", channel, "previous.txt");
+    await Bun.write(previous, "previous output");
+    let resolved = false;
+    const adapter: PackageAdapter = {
+      ...stubAdapter({ channel: adapterChannel }),
+      platform,
+      stages: () => {
+        resolved = true;
+        return [];
+      },
+    };
+    const report = await runPackage({
+      metadata: {
+        root: projectRoot,
+        name: "Test App",
+        identifier: "app.test",
+        publisher: { display: "Test" },
+        version: { semver: "0.1.0", build: 0, msix: "0.1.0.0" },
+        icons: {},
+        targets: [],
+      },
+      appId: "app.test",
+      channel,
+      channelConfig: {},
+      target,
+      artifact: artifactPaths({ root: projectRoot, target: "windows-x64", appId: "app.test" }),
+      adapter,
+    });
+    expect(resolved).toBe(false);
+    expect(report.ok).toBe(false);
+    expect(report.usable).toBe(false);
+    expect(report.submittable).toBe(false);
+    expect(report.artifacts).toEqual([]);
+    expect(report.diagnostics.filter((d) => d.severity === "error")).toEqual([
+      expect.objectContaining({ stage: "resolve", code: CODES.CONFIG_INVALID }),
+    ]);
+    expect(await Bun.file(previous).text()).toBe("previous output");
+    const saved = await Bun.file(packagingReportPath(projectRoot, target, channel)).json();
+    expect(saved.ok).toBe(false);
+  },
+);
+
 test("host digests require final Windows hashes and reject tampering before adapters run", async () => {
   const projectRoot = await mkdtemp(join(home, "host-"));
   const manifest = await makeArtifact(projectRoot);

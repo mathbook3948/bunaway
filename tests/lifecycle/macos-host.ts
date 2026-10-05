@@ -199,12 +199,15 @@ async function test(name: string, body: () => Promise<void>) {
 }
 
 try {
-  await test("native FIFO, scheme handler and resource-filter regressions", async () => {
-    const native = Bun.spawn([join(workspace, "macos-host", "host-native-tests"), workspace], {
-      stdout: "pipe",
-      stderr: "pipe",
-      timeout: 10000,
-    });
+  await test("native Bun integrity, FIFO, scheme handler and resource-filter regressions", async () => {
+    const native = Bun.spawn(
+      [join(workspace, "macos-host", "host-native-tests"), workspace, original],
+      {
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 10000,
+      },
+    );
     const output = new Response(native.stdout).text();
     const errors = new Response(native.stderr).text();
     const exitCode = await native.exited;

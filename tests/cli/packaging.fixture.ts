@@ -27,6 +27,7 @@ const readJson = files.json;
 const pinPath = resolve(files.frameworkRoot, "runtime/build-manifests/windows-x64.json");
 const depsPath = resolve(files.frameworkRoot, "native/windows/host/deps.json");
 let builds = 0;
+let nativeTarget: build.NativeInputs["target"] = "windows-x64";
 mock.module(import.meta.resolve("../../packages/cli/src/files.ts"), () => ({
   ...files,
   json: async (path: string) => {
@@ -58,7 +59,7 @@ mock.module(import.meta.resolve("../../packages/cli/src/files.ts"), () => ({
 }));
 mock.module(import.meta.resolve("../../packages/cli/src/build.ts"), () => ({
   ...build,
-  currentTarget: () => "windows-x64",
+  currentTarget: () => nativeTarget,
   buildProject: async (directory: string) => {
     builds++;
     return buildProject(directory, { native });
@@ -67,7 +68,10 @@ mock.module(import.meta.resolve("../../packages/cli/src/build.ts"), () => ({
 const { packageProject } = await import("../../packages/cli/src/package.ts");
 await Bun.write(
   resolve(project, "packaging.json"),
-  JSON.stringify({ version: 1, channels: { "win-direct": {}, "win-store-msix": {} } }),
+  JSON.stringify({
+    version: 1,
+    channels: { "win-direct": {}, "win-store-msix": {}, "mac-direct": {} },
+  }),
 );
 await expect(packageProject(project, "win-store-msix", { build: true })).rejects.toThrow(
   "No adapter registered",
@@ -93,6 +97,42 @@ registerAdapter({
     },
   ],
 });
+registerAdapter({
+  channel: "mac-direct",
+  platform: "macos",
+  signingRequirement: "optional",
+  stages: () => {
+    throw new Error("Wrong-platform adapter must not be resolved.");
+  },
+});
+for (const buildFirst of [false, true]) {
+  await expect(packageProject(project, "mac-direct", { build: buildFirst })).rejects.toThrow(
+    "Channel mac-direct requires macos; the native host target is windows-x64",
+  );
+  nativeTarget = "macos-arm64";
+  await expect(packageProject(project, "win-direct", { build: buildFirst })).rejects.toThrow(
+    "Channel win-direct requires windows; the native host target is macos-arm64",
+  );
+  nativeTarget = "windows-x64";
+}
+expect(builds).toBe(0);
+expect(assembled).toBe(0);
+await Bun.write(
+  resolve(project, "packaging.json"),
+  JSON.stringify({
+    version: 1,
+    targets: [{ platform: "macos", arch: "arm64" }],
+    channels: { "win-direct": {} },
+  }),
+);
+await expect(packageProject(project, "win-direct", { build: true })).rejects.toThrow(
+  "no windows target declared",
+);
+expect(builds).toBe(0);
+await Bun.write(
+  resolve(project, "packaging.json"),
+  JSON.stringify({ version: 1, channels: { "win-direct": {}, "win-store-msix": {} } }),
+);
 expect((await packageProject(project, "win-direct", { build: true })).ok).toBe(true);
 const packaged = resolve(project, "dist/windows-x64/packaged");
 const previous = resolve(packaged, "win-direct/setup.exe");

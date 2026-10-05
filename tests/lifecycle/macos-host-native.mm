@@ -17,11 +17,70 @@
 
 int main(int argc, char** argv) {
     @autoreleasepool {
+        if (argc == 3 && std::string(argv[1]) == "--guard") return guard(argv[2]);
         fs::path testRoot;
         try {
-            require(argc == 2, "Expected workspace path.");
-            testRoot = fs::path(argv[1]) / ("host-security-" + randomHex(8));
+            require(argc == 3, "Expected workspace and package paths.");
+            testRoot = fs::absolute(fs::path(argv[1])) / ("host-security-" + randomHex(8));
             fs::create_directories(testRoot / "web");
+            {
+                const auto originalBun = fs::path(argv[2]) / "runtime/bun";
+                const auto signedBun = testRoot / "bun";
+                fs::copy_file(originalBun, signedBun);
+                App runtime;
+                const auto upstream = sha256(originalBun);
+                runtime.manifest = { { "bun", { { "executableSha256", upstream } } } };
+                runtime.verifyBun(signedBun);
+                std::vector<std::string> args = { "/usr/bin/codesign", "--force", "--sign", "-",
+                    "--identifier", "tests.bunaway.resigned", signedBun.string() };
+                std::vector<char*> signArgv;
+                for (auto& arg : args) signArgv.push_back(arg.data());
+                signArgv.push_back(nullptr);
+                char path[] = "PATH=/usr/bin:/bin";
+                char* env[] = { path, nullptr };
+                pid_t signer;
+                require(posix_spawn(&signer, args[0].c_str(), nullptr, nullptr, signArgv.data(), env) == 0, "codesign spawn failed.");
+                int status = 0;
+                require(waitpid(signer, &status, 0) == signer && WIFEXITED(status) && WEXITSTATUS(status) == 0, "codesign failed.");
+                const auto packaged = sha256(signedBun);
+                require(packaged != upstream, "Re-signing must change Bun bytes.");
+                runtime.manifest["bun"]["packagedSha256"] = packaged;
+                runtime.verifyBun(signedBun);
+                runtime.assets = testRoot;
+                runtime.scopes.dataRoot = testRoot;
+                runtime.scopes.temp = testRoot;
+                runtime.hostLog = std::make_unique<Log>(testRoot / "runtime.log", 1024 * 1024);
+                { std::ofstream out(testRoot / "backend.js"); out << "console.log('signed-runtime-ok');"; }
+                { std::ofstream out(testRoot / "bunfig.toml"); }
+                { std::ofstream out(testRoot / "tsconfig.json"); out << "{}"; }
+                runtime.spawnBun(signedBun);
+                std::string output;
+                readLines(runtime.output.value, [&](const std::string& line) { output += line; });
+                require(waitpid(runtime.childPid, &status, 0) == runtime.childPid, "Bun wait failed.");
+                runtime.deathWrite.reset();
+                int guardStatus = 0;
+                require(waitpid(runtime.guardPid, &guardStatus, 0) == runtime.guardPid, "Guard wait failed.");
+                require(WIFEXITED(status) && WEXITSTATUS(status) == 0 && output == "signed-runtime-ok", "Re-signed Bun failed to run.");
+                for (const auto& digest : { Json(upstream), Json(""), Json(nullptr) }) {
+                    runtime.manifest["bun"]["packagedSha256"] = digest;
+                    bool denied = false;
+                    try { runtime.verifyBun(signedBun); } catch (...) { denied = true; }
+                    require(denied, "Invalid packaged digest must fail preflight.");
+                    denied = false;
+                    runtime.childPid = 0;
+                    try { runtime.spawnBun(signedBun); } catch (...) { denied = true; }
+                    require(denied && runtime.childPid == 0, "Invalid packaged digest must fail before spawn.");
+                }
+                runtime.manifest["bun"]["executableSha256"] = packaged;
+                runtime.manifest["bun"]["packagedSha256"] = upstream;
+                bool denied = false;
+                try { runtime.verifyBun(signedBun); } catch (...) { denied = true; }
+                require(denied, "A matching upstream digest cannot override a wrong packaged digest.");
+                runtime.manifest["bun"].erase("packagedSha256");
+                runtime.verifyBun(signedBun);
+                require(sha256(originalBun) == upstream, "Original bundled Bun was mutated.");
+                std::puts("PASS re-signed Bun preflight, spawn, digest precedence and unsigned fallback");
+            }
             Scopes scopes;
             scopes.temp = testRoot;
             scopes.tempCanonical = Scopes::canonicalOf(testRoot);
