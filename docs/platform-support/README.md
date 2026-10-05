@@ -6,7 +6,7 @@
 | 플랫폼 | 네이티브 구현 | 검증 환경·범위 | 미검증·제약 |
 | --- | --- | --- | --- |
 | Windows x64 | Win32·WebView2, 번들 Bun x64 baseline | 기존 Server 2022 기록·native CI, B probe·C 다중 창/뷰 정책/복구/종료 | 최소 Windows·CPU, WebView2 설치 경로, 설치 프로그램·서명·배포 |
-| macOS arm64 | AppKit·WKWebView, 번들 Bun darwin-aarch64, 단일 창/뷰 | 기존 26.5.2 로컬 기록; 새 로컬 및 macos-15 CI 결과는 [별도 기록](../architecture/macos-native-results.md) | Intel·다중 창/뷰·최소 OS, 현재 Windows 다중 창 메모 샘플, Developer ID·공증·설치 |
+| macOS arm64 | AppKit·WKWebView, 번들 Bun darwin-aarch64, 단일 창/뷰 | 이번 로컬 26.5.2·Actions 15.7.9: probe 50/50·실제 WKWebView 8/8. 기존/새 실행은 [별도 기록](../architecture/macos-native-results.md) | Intel·다중 창/뷰·최소 OS, 현재 Windows 다중 창 메모 샘플, Developer ID·공증·설치 |
 | macOS Intel | 고정 Bun 배포물·해시 없음 | 없음. arm64 빌드 스크립트가 명시적으로 거부 | 별도 pin·빌드·실제 실행 검증 필요 |
 | Linux | GTK·WebKitGTK 후보, 호스트 미구현 | Ubuntu 공통 검사·생성 스키마 검사만 있음 | 네이티브 실행·UI·프로세스 정리·패키징 |
 | Android | Kotlin·WebView 후보, 호스트 미구현 | 없음 | Bun 실행 경로·수명주기·배포 제약 |

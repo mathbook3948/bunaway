@@ -28,7 +28,15 @@ Windows 영속 브라우저 프로필을 기본 기대값으로 유지하고, ma
 | --- | --- | --- |
 | 로컬 재실행(2026-10-05) | macOS 26.5.2 arm64, Darwin 25.5.0 | probe 50/50, 실제 WKWebView host 8/8, 계약 테스트 108/108; format·lint·workspace/tests 타입 검사·생성 스키마 diff·zsh 문법 검사 통과 |
 | 첫 Actions 실행(2026-10-05) | macOS 15.7.9 arm64, Xcode 16.4 | [run 37264442220](https://github.com/mathbook3948/bunaway/actions/runs/37264442220/job/111618163806): CPU/pin 확인과 다운로드 해시 확인 후 probe 컴파일 실패. 실제 WKWebView는 아직 실행되지 않음. [실패 로그 artifact](https://github.com/mathbook3948/bunaway/actions/runs/37264442220/artifacts/11326345199) 업로드 성공(3개 로그, JSON 생성 전 실패) |
-| 수정 후 Actions | `macos-15` ARM64 | 아래 SDK 호환 수정 후 실제 실행을 다시 확인한다. 아직 성공으로 기록하지 않음 |
+| 수정 후 Actions(2026-10-05) | macOS 15.7.9 arm64, Xcode 16.4, `macos-15-arm64` image `20260907.0337.1`, Aqua 세션 | head `e610121d7e4797430b900fc5cca92c32e8f775a8`의 [run 37264579408](https://github.com/mathbook3948/bunaway/actions/runs/37264579408/job/111618580621): probe **50/50**, 실제 WKWebView host **8/8**, skip 없음. [성공 진단 artifact](https://github.com/mathbook3948/bunaway/actions/runs/37264579408/artifacts/11326286235) 업로드 성공(43개 파일, 55,440 bytes) |
+
+수정 후 run은 공통 검사 3개 OS·기존 Windows native까지 **5/5 job 성공**이다.
+Windows 회귀도 이번 run에서 다시 성공했다([job](https://github.com/mathbook3948/bunaway/actions/runs/37264579408/job/111618580420),
+[artifact](https://github.com/mathbook3948/bunaway/actions/runs/37264579408/artifacts/11325980985)).
+이는 기존 Windows 기록과 별도의 이번 CI 결과이며 로컬 Windows 재실행은 하지 않았다.
+실제 WKWebView 페이지 보고서, 리소스 수신/차단, 메모 파일 복원, renderer 강제 종료 후
+복구, host 강제 종료 후 Bun 정리를 요구하는 suite가 runner에서 실행되어 통과했다.
+artifact 업로드 성공·파일 수는 Actions 로그로 확인했다.
 
 로컬에는 mise 명령이 없어 `mise.toml`의 동일 Bun/zsh 명령으로 검사했다.
 이번 로컬 실행에서는 `.app`·서명·공증·설치를 재검증하지 않았다.
@@ -39,7 +47,7 @@ macOS 10.15부터 제공되는 동등 `posix_spawn_file_actions_addchdir_np`를 
 수정했다. 로컬 성공을 runner 성공으로 간주하지 않음으로써 이 차이를 확인했다.
 현재 26 SDK에서는 해당 이전 이름의 deprecation 경고가 있지만 빌드 실패는 아니다.
 또한 격리한 build 복사본의 네이티브 실행 파일을 실패 파일로 바꿔 양 driver의
-`ok: false` JSON·비영(非零) 종료 코드가 `tee` 뒤에도 보존되고 host 진단 파일이
+`ok: false` JSON·0이 아닌 종료 코드가 `tee` 뒤에도 보존되고 host 진단 파일이
 남는 것을 별도로 확인했다(제품 정상 실행 결과와 합산하지 않음).
 
 ## 고정 배포물과 재현
