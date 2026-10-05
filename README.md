@@ -56,6 +56,23 @@ Windows 빌드는 PowerShell 7, MSVC C++ Build Tools와 CMake/Ninja가 필요하
 WebView 앱 실행에는 WebView2 Evergreen 런타임이 필요하다.
 생성된 `build/windows-probe-package/`는 Bun 개발 도구 없이 실행되는 독립 실험 패키지다.
 
+## CI
+
+[GitHub Actions CI](https://github.com/mathbook3948/bunaway/actions/workflows/ci.yml)는
+모든 PR과 `main` push에서 실행하며 Actions 화면에서 수동 실행도 가능하다.
+
+- Ubuntu 24.04·macOS 14·Windows Server 2022에서 `mise run install`과
+  `mise run check`로 frozen install·포맷·린트·타입·계약 테스트를 검사한다.
+- Ubuntu에서 `mise run protocol:generate` 후 diff를 검사해 커밋된 네이티브
+  스키마가 현재 TypeScript 정의와 일치하는지 확인한다.
+- 별도 Windows 작업에서 `mise run probe:windows`와 `mise run host:windows`로
+  C++ 빌드·번들 Bun 프로세스 IPC·네이티브 회귀·WebView2 통합 검증을 실행한다.
+  결과 JSON과 호스트 로그는 성공·실패 시 모두 `windows-native-diagnostics`
+  artifact로 7일간 보관한다. 생성 전 실패한 경우에는 파일이 없을 수 있다.
+
+CI도 `mise.toml`의 Bun 버전을 사용한다. 같은 PR·브랜치의 새 실행은 이전 실행을
+취소한다. 배포·서명·릴리스는 포함하지 않으며 다른 OS의 네이티브 호스트는 검사하지 않는다.
+
 ## 디렉터리
 
 ```text
