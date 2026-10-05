@@ -3,8 +3,8 @@
 ObjC++ port of `native/windows/host/host.cpp`: a minimal AppKit shell that runs
 the bundled Bun backend as a separate child process and bridges a `WKWebView`
 to it over NDJSON frames. The backend contract, assets, limits, and log events
-are identical to the Windows host — the test package is assembled from the
-same files (`native/windows/host/test`).
+are identical to the Windows host. The test package shares the Windows policy,
+schemas, backend, and web entries, but uses a single-view macOS `app.json`.
 
 ## Platform mapping
 
@@ -12,8 +12,8 @@ same files (`native/windows/host/test`).
   and localhost servers are rejected by PRD. Assets are served under
   `bunaway://`; every comparison point (origin checks, navigation gate, scheme
   handler, home check) normalizes `bunaway://<host>[:port]` -> `https://<host>[:port]` per
-  `docs/architecture/protocol.md`, so `policy.json`, `app.json`, the schemas,
-  and the boot payload stay byte-identical to Windows. Normalization applies
+  `docs/architecture/protocol.md`, so `policy.json`, the schemas, and the boot
+  payload stay byte-identical to Windows. Normalization applies
   only to the host-owned asset scheme and only after real URL checks, including
   rejection of userinfo and preservation of non-default ports; a
   web-supplied origin is never normalized into trust.
@@ -38,6 +38,10 @@ same files (`native/windows/host/test`).
   re-checked with `fstatat`.
 - **Renderer recovery** -> `webViewWebContentProcessDidTerminate` revokes the
   session, fails pending web requests, and reloads home without restarting Bun.
+- **Browser profile** -> An identified persistent WebKit data store preserves
+  cookies and local storage across launches. Its stable identifier is derived
+  from the canonical app web-data path and view ID, keeping apps isolated even
+  without an `.app` bundle. WebKit manages the profile files in its own storage.
 - **Process cleanup** -> Bun runs in its own process group; a `--guard`
   watchdog kills the group when the host dies (Job Object analogue with a
   documented spawn-window race).

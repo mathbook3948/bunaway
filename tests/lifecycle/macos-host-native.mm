@@ -50,6 +50,16 @@ int main(int argc, char** argv) {
             }
             std::puts("PASS FIFO read/write rejection and regular-file recovery");
 
+            fs::create_directories(testRoot / "webview");
+            fs::create_directories(testRoot / "other-app/webview");
+            NSUUID* profile = webProfileId(testRoot / "webview", "main");
+            require([profile isEqual:webProfileId(testRoot / "webview", "main")], "Profile identifier must survive restarts.");
+            require([profile isEqual:webProfileId(testRoot / "webview/../webview", "main")], "Profile path must be canonicalized.");
+            require(![profile isEqual:webProfileId(testRoot / "other-app/webview", "main")], "Apps must not share browser profiles.");
+            require(![profile isEqual:webProfileId(testRoot / "webview", "reader")], "Views must not share browser profiles.");
+            require([WKWebsiteDataStore dataStoreForIdentifier:profile].persistent, "Browser profile must be persistent.");
+            std::puts("PASS persistent browser profiles are stable and app/view isolated");
+
             App app;
             app.assets = testRoot;
             app.viewId = "main";

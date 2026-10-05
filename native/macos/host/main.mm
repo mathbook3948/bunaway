@@ -1541,6 +1541,17 @@ static NSString* kBridgeShim =
 }
 @end
 
+NSUUID* webProfileId(const fs::path& webData, const std::string& viewId) {
+    auto key = fs::canonical(webData).string() + "\n" + viewId;
+    Sha256 hash;
+    hash.update(reinterpret_cast<const uint8_t*>(key.data()), key.size());
+    uint8_t digest[32];
+    hash.finish(digest);
+    digest[6] = (digest[6] & 0x0f) | 0x80; // UUID v8, derived from the profile path.
+    digest[8] = (digest[8] & 0x3f) | 0x80;
+    return [[NSUUID alloc] initWithUUIDBytes:digest];
+}
+
 static int run(const fs::path& package) {
     App app;
     g_app = &app;
@@ -1639,9 +1650,8 @@ static int run(const fs::path& package) {
             g_app->navigateWhenReady();
         }];
     wkconfig.userContentController = ucc;
-    // Non-persistent data store keeps web state inside the process and inside
-    // the app's data root (no writes to ~/Library/WebKit).
-    wkconfig.websiteDataStore = [WKWebsiteDataStore nonPersistentDataStore];
+    // Keep persistent profiles isolated even when running without an .app bundle.
+    wkconfig.websiteDataStore = [WKWebsiteDataStore dataStoreForIdentifier:webProfileId(app.scopes.webData, app.viewId)];
 
     app.webview = [[WKWebView alloc] initWithFrame:rect configuration:wkconfig];
     BWNavDelegate* navDelegate = [[BWNavDelegate alloc] init];
