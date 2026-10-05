@@ -1,15 +1,15 @@
 import { closeSync, fstatSync, readdirSync } from "node:fs";
 import {
+  type Hello,
+  type JsonValue,
+  type Message,
   negotiateProtocol,
-  parseProcessFrame,
   PROCESS_IPC_VERSION,
   PROTOCOL_VERSION,
-  ProtocolError,
-  serializeProcessFrame,
-  type JsonValue,
-  type Hello,
-  type Message,
   type ProcessFrame,
+  ProtocolError,
+  parseProcessFrame,
+  serializeProcessFrame,
 } from "../../../packages/protocol/src/index.ts";
 import { readJsonLines } from "../../../packages/runtime-bun/src/process-ipc.ts";
 
