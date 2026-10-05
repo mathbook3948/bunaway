@@ -39,6 +39,10 @@ async function exists(path: string, file = true): Promise<boolean> {
   return file ? (stat?.isFile() ?? false) : (stat?.isDirectory() ?? false);
 }
 
+function isDigest(value: unknown): value is string {
+  return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+}
+
 export async function loadManifest(artifact: BuildArtifact): Promise<PackageManifest> {
   const path = resolve(artifact.packageDir, "manifest.json");
   let parsed: unknown;
@@ -49,11 +53,16 @@ export async function loadManifest(artifact: BuildArtifact): Promise<PackageMani
   }
   const manifest = parsed as PackageManifest;
   if (
-    typeof manifest.bun?.executableSha256 !== "string" ||
+    !isDigest(manifest.bun?.executableSha256) ||
     !manifest.assets ||
     typeof manifest.app?.id !== "string"
   ) {
     throw new Error(`Package manifest is missing required fields: ${path}`);
+  }
+  for (const key of ["packagedSha256", "sha256", "sourceSha256"]) {
+    if (manifest.bun[key] !== undefined && !isDigest(manifest.bun[key])) {
+      throw new Error(`Package manifest has an invalid bun.${key} digest: ${path}`);
+    }
   }
   return manifest;
 }
@@ -131,7 +140,15 @@ export async function verifyArtifact(args: {
   } else {
     const expected = packagedDigest(manifest.bun);
     const actual = await sha256(runtime);
-    if (expected && actual !== expected) {
+    if (!isDigest(expected)) {
+      diagnostics.push({
+        stage,
+        code: CODES.INPUT_MISSING,
+        severity: "error",
+        message: "Build manifest is missing a valid Bun executable hash; run bunaway build again.",
+        path: runtime,
+      });
+    } else if (actual !== expected) {
       diagnostics.push({
         stage,
         code: CODES.INPUT_TAMPERED,

@@ -75,6 +75,7 @@ await expect(packageProject(project, "win-store-msix", { build: true })).rejects
 expect(builds).toBe(0);
 
 let fail = false;
+let assembled = 0;
 registerAdapter({
   channel: "win-direct",
   platform: "windows",
@@ -84,6 +85,7 @@ registerAdapter({
       id: "assemble",
       title: "Assemble installer",
       async run(ctx) {
+        assembled++;
         if (fail) throw new Error("Installer assembly failed.");
         await Bun.write(resolve(ctx.staging, "setup.exe"), `installer ${builds}`);
         ctx.addArtifact("setup.exe", "installer");
@@ -103,6 +105,16 @@ expect((await packageProject(project, "win-direct", { build: true })).ok).toBe(f
 expect(await Bun.file(previous).text()).toBe("installer 1");
 expect(await Bun.file(other).text()).toBe("another channel");
 expect(await Bun.file(otherReport).text()).toBe("another report");
+const appPath = resolve(project, "app.json");
+const originalApp = (await readJson(appPath)) as Record<string, unknown>;
+await Bun.write(appPath, JSON.stringify({ ...originalApp, appId: "app.changed" }));
+const previousAssemblies = assembled;
+const stale = await packageProject(project, "win-direct");
+expect(stale.ok).toBe(false);
+expect(stale.diagnostics.some((d) => d.code === "PKG_INPUT_UNEXPECTED")).toBe(true);
+expect(assembled).toBe(previousAssemblies);
+expect(await Bun.file(previous).text()).toBe("installer 1");
+await Bun.write(appPath, JSON.stringify(originalApp));
 fail = false;
 expect((await packageProject(project, "win-direct", { build: true })).ok).toBe(true);
 expect(await Bun.file(previous).text()).toBe("installer 3");

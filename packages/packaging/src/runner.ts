@@ -1,4 +1,4 @@
-import { lstat, mkdir, rename, rm } from "node:fs/promises";
+import { lstat, mkdir, realpath, rename, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
@@ -47,11 +47,9 @@ export function packagingReportPath(root: string, target: BuildTarget, channel: 
   return resolve(packagingOutputDir(root, target), `${channel}-report.json`);
 }
 
-function publishedPath(staging: string, output: string, path: string): string {
-  const rel = relative(staging, path);
-  return rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel)
-    ? resolve(output, rel)
-    : path;
+function inside(root: string, path: string): boolean {
+  const rel = relative(root, path);
+  return rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
 
 const EMPTY_MANIFEST: PackageManifest = {
@@ -125,6 +123,15 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
     if (!failed) {
       const started = Date.now();
       const integrity = await verifyArtifact({ artifact, manifest: input.manifest, channel });
+      if (input.manifest.app.id !== appId) {
+        integrity.push({
+          stage: "verify",
+          code: CODES.INPUT_UNEXPECTED,
+          severity: "error",
+          message: `Build artifact belongs to app ${input.manifest.app.id}, not ${appId}; run bunaway build again.`,
+          path: resolve(artifact.packageDir, "manifest.json"),
+        });
+      }
       diagnostics.push(...integrity);
       failed = integrity.some((d) => d.severity === "error");
       stages.push({
@@ -206,10 +213,16 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
       for (const entry of produced) {
         const path = isAbsolute(entry.path) ? entry.path : resolve(staging, entry.path);
         try {
+          if (!inside(staging, path)) throw new Error("Artifact path escapes staging.");
           const file = await lstat(path);
           if (!file.isFile()) throw new Error("Artifact is not a regular file.");
+          const canonicalStaging = await realpath(staging);
+          const canonicalPath = await realpath(path);
+          if (!inside(canonicalStaging, canonicalPath)) {
+            throw new Error("Artifact real path escapes staging.");
+          }
           verified.push({
-            path,
+            path: resolve(staging, relative(canonicalStaging, canonicalPath)),
             kind: entry.kind,
             signed: entry.signed,
             sha256: await sha256(path),
@@ -281,7 +294,7 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
       }
       report.artifacts = verified.map((entry) => ({
         ...entry,
-        path: publishedPath(staging, output, entry.path),
+        path: resolve(output, relative(staging, entry.path)),
       }));
       if (moved) {
         await rm(backup, { recursive: true, force: true }).catch((error: unknown) => {

@@ -1,6 +1,6 @@
-import { afterAll, beforeAll, expect, test } from "bun:test";
+import { afterAll, beforeAll, expect, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -8,9 +8,11 @@ import {
   CODES,
   isChannelId,
   loadPackaging,
+  loadManifest,
   packagedDigest,
   type PackageAdapter,
   type PackageManifest,
+  type PackageReport,
   packagingReportPath,
   parsePackaging,
   platformOf,
@@ -506,17 +508,28 @@ test("publication errors restore previous output and write a failed report", asy
   await makeArtifact(projectRoot);
   const previous = resolve(projectRoot, "dist/windows-x64/packaged/win-direct/setup.exe");
   await Bun.write(previous, "last good installer");
-  const report = await runAdapter(
-    projectRoot,
-    stubAdapter({
-      async run(ctx) {
-        const external = resolve(projectRoot, "external.exe");
-        await Bun.write(external, "verified external artifact");
-        ctx.addArtifact(external, "installer", { signed: true });
-        await rm(ctx.staging, { recursive: true, force: true });
-      },
-    }),
-  );
+  const fs = await import("node:fs/promises");
+  const rename = fs.rename;
+  let staging = "";
+  const publication = spyOn(fs, "rename").mockImplementation(async (from, to) => {
+    if (from === staging) throw new Error("Output publication failed.");
+    await rename(from, to);
+  });
+  let report: PackageReport;
+  try {
+    report = await runAdapter(
+      projectRoot,
+      stubAdapter({
+        async run(ctx) {
+          staging = ctx.staging;
+          await Bun.write(resolve(ctx.staging, "setup.exe"), "new installer");
+          ctx.addArtifact("setup.exe", "installer", { signed: true });
+        },
+      }),
+    );
+  } finally {
+    publication.mockRestore();
+  }
   expect(report.ok).toBe(false);
   expect(report.usable).toBe(false);
   expect(report.submittable).toBe(false);
@@ -548,4 +561,138 @@ test("reported stage errors mark the stage failed and preserve the previous outp
   expect(report.stages.find((s) => s.id === "stub")?.status).toBe("failed");
   expect(report.stages.find((s) => s.id === "verify-artifact")?.status).toBe("skipped");
   expect(await Bun.file(previous).text()).toBe("last good installer");
+});
+
+test("artifacts outside staging are rejected before replacing previous output", async () => {
+  for (const mode of ["previous-output", "relative-escape"]) {
+    const projectRoot = await mkdtemp(join(home, "outside-"));
+    await makeArtifact(projectRoot);
+    const output = resolve(projectRoot, "dist/windows-x64/packaged/win-direct");
+    const previous = resolve(output, "setup.exe");
+    await Bun.write(previous, "last good installer");
+    const report = await runAdapter(
+      projectRoot,
+      stubAdapter({
+        async run(ctx) {
+          await Bun.write(resolve(ctx.staging, "other.txt"), "new contents");
+          ctx.addArtifact(
+            mode === "previous-output" ? previous : "../win-direct/setup.exe",
+            "installer",
+            { signed: true },
+          );
+        },
+      }),
+    );
+    expect(report.ok).toBe(false);
+    expect(report.usable).toBe(false);
+    expect(report.submittable).toBe(false);
+    expect(report.artifacts).toEqual([]);
+    expect(report.diagnostics.some((d) => d.code === CODES.VERIFY_FAILED)).toBe(true);
+    expect(await Bun.file(previous).text()).toBe("last good installer");
+  }
+});
+
+test("artifact directory links cannot escape staging", async () => {
+  const projectRoot = await mkdtemp(join(home, "artifact-link-"));
+  await makeArtifact(projectRoot);
+  const external = resolve(projectRoot, "external");
+  await Bun.write(resolve(external, "setup.exe"), "external installer");
+  const previous = resolve(projectRoot, "dist/windows-x64/packaged/win-direct/setup.exe");
+  await Bun.write(previous, "last good installer");
+  const report = await runAdapter(
+    projectRoot,
+    stubAdapter({
+      async run(ctx) {
+        await symlink(external, resolve(ctx.staging, "linked"), "junction");
+        ctx.addArtifact("linked/setup.exe", "installer", { signed: true });
+      },
+    }),
+  );
+  expect(report.ok).toBe(false);
+  expect(report.artifacts).toEqual([]);
+  expect(report.diagnostics.some((d) => d.code === CODES.VERIFY_FAILED)).toBe(true);
+  expect(await Bun.file(previous).text()).toBe("last good installer");
+  expect(await Bun.file(resolve(external, "setup.exe")).text()).toBe("external installer");
+});
+
+test("artifacts reached through internal directory links remain valid after publication", async () => {
+  const projectRoot = await mkdtemp(join(home, "internal-link-"));
+  await makeArtifact(projectRoot);
+  const report = await runAdapter(
+    projectRoot,
+    stubAdapter({
+      async run(ctx) {
+        const payload = resolve(ctx.staging, "payload");
+        await Bun.write(resolve(payload, "setup.exe"), "installer");
+        await symlink(payload, resolve(ctx.staging, "linked"), "junction");
+        ctx.addArtifact("linked/setup.exe", "installer");
+      },
+    }),
+  );
+  expect(report.ok).toBe(true);
+  expect(report.artifacts[0]?.path).toBe(
+    resolve(projectRoot, "dist/windows-x64/packaged/win-direct/payload/setup.exe"),
+  );
+  expect(await Bun.file(report.artifacts[0]?.path ?? "").text()).toBe("installer");
+  expect(report.artifacts[0]?.sha256).toBe(await sha256(report.artifacts[0]?.path ?? ""));
+});
+
+test("invalid Bun digests fail closed even when the runtime has been changed", async () => {
+  const projectRoot = await mkdtemp(join(home, "digest-"));
+  const original = await makeArtifact(projectRoot);
+  const artifact = artifactPaths({ root: projectRoot, target: "windows-x64", appId: "app.test" });
+  await writeFile(resolve(artifact.packageDir, "runtime/bun.exe"), "changed runtime");
+  for (const key of ["executableSha256", "packagedSha256", "sha256", "sourceSha256"]) {
+    for (const invalid of ["", "not-a-digest", "a".repeat(63), "g".repeat(64), null, 123]) {
+      const manifest = { ...original, bun: { ...original.bun, [key]: invalid } };
+      await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
+      await expect(loadManifest(artifact)).rejects.toThrow("Package manifest");
+    }
+  }
+  const malformed = { ...original, bun: { ...original.bun, packagedSha256: "" } };
+  expect(
+    (await verifyArtifact({ artifact, manifest: malformed, channel: "win-direct" })).some(
+      (d) => d.code === CODES.INPUT_MISSING && d.severity === "error",
+    ),
+  ).toBe(true);
+  await writeJson(resolve(artifact.packageDir, "manifest.json"), malformed);
+  let ran = false;
+  const report = await runAdapter(
+    projectRoot,
+    stubAdapter({
+      run: async () => {
+        ran = true;
+      },
+    }),
+  );
+  expect(report.ok).toBe(false);
+  expect(ran).toBe(false);
+});
+
+test("icon directory links cannot resolve outside the project", async () => {
+  const projectRoot = await mkdtemp(join(home, "icons-"));
+  const external = resolve(home, "external-icons");
+  await Bun.write(resolve(external, "logo.ico"), "external icon");
+  await symlink(external, resolve(projectRoot, "icons"), "junction");
+  const config = parsePackaging(
+    JSON.stringify({
+      version: 1,
+      channels: { "win-direct": {} },
+      icons: { directory: "icons", windows: { installer: "logo.ico" } },
+    }),
+  );
+  await expect(
+    resolvePackaging({ root: projectRoot, config, channel: "win-direct", ...resolveArgs }),
+  ).rejects.toThrow("icon path escapes the project");
+  await rm(resolve(projectRoot, "icons"));
+  await Bun.write(resolve(projectRoot, "icons/logo.ico"), "project icon");
+  const { metadata } = await resolvePackaging({
+    root: projectRoot,
+    config,
+    channel: "win-direct",
+    ...resolveArgs,
+  });
+  expect(metadata.icons["windows.installer"]).toBe(
+    await realpath(resolve(projectRoot, "icons/logo.ico")),
+  );
 });

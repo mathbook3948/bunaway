@@ -210,7 +210,7 @@ export interface StageContext {
   // Report a structured diagnostic for the current stage.
   report(diagnostic: Omit<Diagnostic, "stage">): void;
   // Register a produced artifact (installers, msix, submission bundles) so the
-  // runner can hash/size it and list it in the report.
+  // runner can hash/size it and list it in the report. Paths must resolve inside staging.
   addArtifact(path: string, kind: string, options?: { signed?: boolean }): void;
 }
 
