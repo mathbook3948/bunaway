@@ -251,4 +251,8 @@ Skal의 고정 commit `7edb44aceb8c69ac1abd76549e2c09cf6cdc8a57`에서는 VM 작
 - Windows의 WebView2 SDK·네이티브 의존성·라이선스와 가상 자산 origin, macOS의 `WKURLSchemeHandler` 자산 origin 매핑은 구현에 고정했다. 최소 OS·CPU·WebView 런타임 지원 범위 및 Linux·모바일 호스트·자산 origin은 별도 검증·결정이 필요하다.
 - 서명·공증·스토어 제출에 필요한 조건과 iOS 코드 실행·업데이트 정책. 검토 전 스토어 배포 가능성을 보장하지 않음
 
-현재 다음 작업은 플랫폼별 검증 범위 확대, macOS 다중 창/뷰, CLI·템플릿·기본 플러그인, Linux·모바일 확장과 설치·서명·배포 검증이다. A·B 및 Windows C·macOS 단일 창/뷰 성공으로 초기 버전 출시 기준 전체를 충족했다고 판단하지 않는다.
+CLI create/validate/doctor/dev/build와 vanilla 템플릿, 로컬 프레임워크 설치 artifact·버전 검증은 구현했다.
+[프레임워크 배포 문서](./framework-distribution.md)에 저장소 밖 설치·업그레이드와 개발/최종 사용자 요구사항을 구분한다.
+현재 다음 작업은 플랫폼별 검증 범위 확대, macOS 다중 창/뷰, UI framework 템플릿·기본 플러그인,
+공개 릴리스/프레임워크 라이선스 결정, Linux·모바일 확장과 설치·서명·배포 검증이다.
+A·B 및 Windows C·macOS 단일 창/뷰 성공으로 초기 버전 출시 기준 전체를 충족했다고 판단하지 않는다.

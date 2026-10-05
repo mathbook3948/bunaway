@@ -5,6 +5,11 @@
 
 ## 생성 → 개발 → 빌드 → 독립 실행
 
+저장소 체크아웃 없는 설치, SDK/native artifact 구성·버전 규칙·전체 snapshot 업그레이드는
+[개발자 설치 안내](../../docs/framework-distribution.md)를 따른다. 로컬 tarball에는 CLI
+bin/API JS 번들과 모든 생성 입력이 포함된다. 공개 registry publish는 하지 않는다.
+아래는 프레임워크 저장소 기여자용 직접 소스 실행 경로다.
+
 저장소에서 `bun install` 후 실행한다. Windows에서 전역 Bun이 없으면
 `runtime/bun-bundle/vendor/bun-windows-x64-baseline/bun.exe`로 아래 `bun`을 대체한다.
 
@@ -42,6 +47,7 @@ my-app/
     packages/{cli,backend-sdk,client-sdk,core,protocol,runtime-bun}/
     native/{windows/host,macos/host,host-api/generated}/
     runtime/build-manifests/, tsconfig.base.json, package.json
+  bunaway.lock.json
 ```
 
 `bunaway.json` v1의 `backend`(파일)와 `frontend`(디렉터리)는 프로젝트 상대 경로다.
@@ -120,7 +126,7 @@ macOS 패키지에는 로컬 실행용 ad-hoc 서명만 적용하며 번들 Bun�
 manifest의 macOS `host.sourceSha256`은 서명 전 원본 호스트 해시다(서명된 실행 파일을
 자신의 서명 대상 manifest에 해싱하는 순환을 피한다). Windows `host.sha256`은 패키지 호스트 해시다.
 설치 프로그램, Developer ID 서명,
-공증, React/Vue/Svelte, 공개 플러그인 API, 공개 framework 배포/라이선스 결정은 후속 범위다.
+공증, React/Vue/Svelte, 공개 플러그인 API, 공개 registry publish/라이선스 결정은 후속 범위다.
 공통 네이티브 스크립트에 추가한 `-BuildHostOnly`/`--host-only`는 고정 의존성 검증과 호스트
 컴파일까지만 실행해 CLI가 테스트/메모 자산 없이 앱 자산을 직접 조립하도록 한다.
 기존 샘플/계약 테스트 경로와 기본 빌드 동작은 유지한다.

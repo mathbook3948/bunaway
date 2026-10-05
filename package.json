@@ -3,6 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "license": "UNLICENSED",
+  "scripts": {
+    "framework:pack": "bun packages/cli/scripts/pack.ts",
+    "framework:check": "bun packages/cli/scripts/check.ts"
+  },
   "packageManager": "bun@1.4.2",
   "engines": {
     "bun": "1.4.2"

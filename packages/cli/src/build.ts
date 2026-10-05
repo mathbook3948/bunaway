@@ -1,6 +1,6 @@
 import { chmod, cp, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
-import { validateProject, type Project } from "./config.ts";
+import { type Project, validateProject } from "./config.ts";
 import { files, frameworkRoot, hash, inside, json, run, verifyHash, writeJson } from "./files.ts";
 
 export type Target = "windows-x64" | "macos-arm64";
@@ -64,6 +64,8 @@ export async function prepareNative(target: Target = currentTarget()): Promise<N
   const pin = await readPin(target);
   const vendor = resolve(frameworkRoot, "runtime/bun-bundle/vendor");
   const licenses: Record<string, string> = {
+    "FRAMEWORK-LICENSE.txt": resolve(frameworkRoot, "FRAMEWORK-LICENSE.txt"),
+    "THIRD-PARTY-NOTICES.txt": resolve(frameworkRoot, "THIRD-PARTY-NOTICES.txt"),
     "LICENSE.bun": resolve(vendor, "LICENSE.bun"),
     "LICENSE.nlohmann-json": resolve(
       frameworkRoot,

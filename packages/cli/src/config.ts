@@ -1,6 +1,7 @@
-import { parsePolicy, type Policy } from "@bunaway/protocol";
 import { lstat, realpath } from "node:fs/promises";
 import { resolve } from "node:path";
+import { type Policy, parsePolicy } from "@bunaway/protocol";
+import { validateFramework } from "./distribution.ts";
 import { json, projectPath } from "./files.ts";
 
 export interface Project {
@@ -37,6 +38,7 @@ function string(value: unknown): string {
 
 export async function validateProject(directory: string): Promise<Project> {
   const root = await realpath(resolve(directory));
+  await validateFramework(root);
   const config = record(await json(resolve(root, "bunaway.json")));
   keys(config, ["version", "backend", "frontend"]);
   if (config.version !== 1) throw new Error("Unsupported bunaway.json version.");
