@@ -379,6 +379,33 @@ std::string platformUrl(const std::string& uri) {
     return uri;
 }
 
+Json resourceRules(const std::set<std::string>& origins) {
+    Json rules = Json::array({ {
+        { "trigger", { { "url-filter", "^https?://" } } },
+        { "action", { { "type", "block" } } }
+    } });
+    for (const auto& declared : origins) {
+        auto origin = originOf(declared);
+        require(!origin.empty(), "Invalid resource origin.");
+        std::string filter = "^";
+        for (char c : origin) {
+            if (c == '.') filter += '\\';
+            filter += c;
+        }
+        auto authority = origin.substr(origin.find("://") + 3);
+        if (authority.find(':') == std::string::npos)
+            filter += origin.rfind("https://", 0) == 0 ? "(:443)?" : "(:80)?";
+        // WebKit does not support regex alternation: keep the two URL endings separate.
+        for (const auto& ending : { "[/?#]", "$" }) {
+            rules.push_back({
+                { "trigger", { { "url-filter", filter + ending } } },
+                { "action", { { "type", "ignore-previous-rules" } } }
+            });
+        }
+    }
+    return rules;
+}
+
 // ---------- policy (identical shape to the Windows host) ----------
 struct StorageGrant {
     std::string scope;
@@ -543,11 +570,11 @@ Fd openScopedFile(const Scopes& scopes, const std::string& scope, const std::vec
         if (fstat(next, &st) != 0 || !S_ISDIR(st.st_mode)) { close(next); throw HostError("PERMISSION_DENIED", "Storage path is not a plain directory."); }
         parents.push_back(Fd(next));
     }
-    int flags = write ? (O_WRONLY | O_CREAT | O_NOFOLLOW) : (O_RDONLY | O_NOFOLLOW);
+    int flags = (write ? (O_WRONLY | O_CREAT) : O_RDONLY) | O_NOFOLLOW | O_NONBLOCK;
     Fd file(segments.empty() ? -1 : openat(parents.back().value, segments.back().c_str(), flags, 0660));
     if (file.value < 0) {
         if (errno == ENOENT || errno == ENOTDIR) throw HostError("INVALID_ARGUMENT", "Storage target not found.");
-        if (errno == ELOOP) throw HostError("PERMISSION_DENIED", "Storage target is not a plain in-scope file.");
+        if (errno == ELOOP || errno == ENXIO) throw HostError("PERMISSION_DENIED", "Storage target is not a plain in-scope file.");
         throw HostError("INTERNAL", "Storage open failed.");
     }
     struct stat st {};
@@ -1319,10 +1346,10 @@ static NSString* kBridgeShim =
     @autoreleasepool {
         App* app = g_app;
         NSURL* url = task.request.URL;
-        NSString* host = url.host ?: @"";
-        // The custom scheme is our asset namespace: any host outside the
-        // policy's declared origins is denied before touching the filesystem.
-        std::string origin = originOf([[NSString stringWithFormat:@"bunaway://%@", host] UTF8String]);
+        // Validate the real authority before normalizing the host-owned asset scheme.
+        std::string origin;
+        if (url && [url.scheme caseInsensitiveCompare:@"bunaway"] == NSOrderedSame && !url.user && !url.password)
+            origin = originOf(utf8(url.absoluteString));
         bool allowed = app && !origin.empty() && app->policy.views.count(app->viewId) &&
             app->policy.views.at(app->viewId).origins.count(origin);
         fs::path file;
@@ -1596,25 +1623,21 @@ static int run(const fs::path& package) {
     WKUserScript* shim = [[WKUserScript alloc] initWithSource:kBridgeShim
         injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:NO];
     [ucc addUserScript:shim];
-    // Subresource boundary: WKWebView has no per-request interception, so the
-    // allowlist compiles into a content rule list that silently blocks every
-    // http(s) load outside the declared origins' hosts.
-    NSMutableArray* domains = [NSMutableArray array];
-    for (const auto& o : app.policy.views.at(app.viewId).origins) {
-        auto rest = o.substr(o.find("://") + 3);
-        auto hostOnly = rest.substr(0, rest.find(':'));
-        [domains addObject:nsstr("*" + hostOnly)];
-        [domains addObject:nsstr(hostOnly)];
-    }
-    NSString* domainJson = [[NSString alloc] initWithData:[NSJSONSerialization dataWithJSONObject:domains options:0 error:nil] encoding:NSUTF8StringEncoding];
-    NSString* rulesJson = [NSString stringWithFormat:
-        @"[{\"trigger\":{\"url-filter\":\"^https?://\",\"unless-domain\":%@},\"action\":{\"type\":\"block\"}}]", domainJson];
+    // Match resource destinations, not the top document's domain.
+    NSString* rulesJson = nsstr(resourceRules(app.policy.views.at(app.viewId).origins).dump());
     [[WKContentRuleListStore defaultStore] compileContentRuleListForIdentifier:@"bunaway-boundary"
         encodedContentRuleList:rulesJson
         completionHandler:^(WKContentRuleList* list, NSError* error) {
-            (void)error;
-            if (list) [ucc addContentRuleList:list];
-            else if (g_app) { g_app->hostLog->event("content-rules-failed"); g_app->runtimeFailure(); }
+            if (!g_app || g_app->shuttingDown) return;
+            if (!list || error) {
+                g_app->hostLog->event("content-rules-failed");
+                g_app->runtimeFailure();
+                return;
+            }
+            [ucc addContentRuleList:list];
+            g_app->webviewReady.store(true);
+            g_app->hostLog->event("webview-ready");
+            g_app->navigateWhenReady();
         }];
     wkconfig.userContentController = ucc;
     // Non-persistent data store keeps web state inside the process and inside
@@ -1629,9 +1652,6 @@ static int run(const fs::path& package) {
 
     [app.window makeKeyAndOrderFront:nil];
     [NSApp activateIgnoringOtherApps:YES];
-    app.webviewReady.store(true);
-    app.hostLog->event("webview-ready");
-    app.navigateWhenReady();
 
     BWTickTarget* tickTarget = [[BWTickTarget alloc] init];
     [NSTimer scheduledTimerWithTimeInterval:0.25 target:tickTarget selector:@selector(tick:) userInfo:nil repeats:YES];

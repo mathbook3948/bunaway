@@ -95,6 +95,14 @@ async function reportFile(name: string) {
   });
 }
 
+async function updateAsset(name: string, text: string) {
+  await writeFile(join(packagePath, name), text);
+  const manifestPath = join(packagePath, "manifest.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf-8"));
+  manifest.assets[name] = new Bun.CryptoHasher("sha256").update(text).digest("hex");
+  await writeFile(manifestPath, JSON.stringify(manifest));
+}
+
 // WebContent renderers are spawned by launchd, not by our host: inventory is a
 // delta over the baseline snapshot taken at driver start.
 async function webContentPids(): Promise<number[]> {
@@ -163,6 +171,18 @@ async function test(name: string, body: () => Promise<void>) {
 }
 
 try {
+  await test("native FIFO, scheme handler and resource-filter regressions", async () => {
+    const native = Bun.spawn([join(workspace, "macos-host", "host-native-tests"), workspace], {
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 10000,
+    });
+    const output = new Response(native.stdout).text();
+    const errors = new Response(native.stderr).text();
+    assert.equal(await native.exited, 0, await errors);
+    assert.ok((await output).includes("PASS scheme handler"));
+  });
+
   await test("TypeScript and native validators agree on shared regression inputs", async () => {
     const validator = Bun.spawn([host, "--validate"], {
       stdin: "pipe",
@@ -294,6 +314,84 @@ try {
     } finally {
       if (!child.killed) child.kill();
       await child.exited;
+    }
+  });
+
+  await test("real script, image and fetch requests obey destination origins before first load", async () => {
+    await resetData();
+    await mkdir(join(dataRoot, "temp"), { recursive: true });
+    const fifo = Bun.spawn(["/usr/bin/mkfifo", join(dataRoot, "temp", "pipe")]);
+    assert.equal(await fifo.exited, 0);
+    const allowedRequests: string[] = [];
+    const blockedRequests: string[] = [];
+    const serve = (requests: string[]) =>
+      Bun.serve({
+        hostname: "127.0.0.1",
+        port: 0,
+        fetch(request) {
+          const path = new URL(request.url).pathname;
+          requests.push(path);
+          const headers = { "Access-Control-Allow-Origin": "*" };
+          if (path === "/script")
+            return new Response("globalThis.bunawayResourceLoaded = true;", {
+              headers: { ...headers, "Content-Type": "application/javascript" },
+            });
+          if (path === "/img")
+            return new Response('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>', {
+              headers: { ...headers, "Content-Type": "image/svg+xml" },
+            });
+          return new Response("resource-ok", { headers });
+        },
+      });
+    const allowed = serve(allowedRequests);
+    const blocked = serve(blockedRequests);
+    const configText = await readFile(join(packagePath, "assets/app.json"), "utf-8");
+    const policyText = await readFile(join(packagePath, "assets/policy.json"), "utf-8");
+    let child: ReturnType<typeof launch> | undefined;
+    try {
+      const allowedOrigin = `http://127.0.0.1:${allowed.port}`;
+      const params = new URLSearchParams({
+        allowed: allowedOrigin,
+        blocked: `http://127.0.0.1:${blocked.port}`,
+      });
+      const config = JSON.parse(configText);
+      config.home = `https://app.bunaway.local:8443/security.html?${params}`;
+      const policy = JSON.parse(policyText);
+      policy.views[0].origins = ["https://app.bunaway.local:8443", allowedOrigin];
+      await updateAsset("assets/app.json", JSON.stringify(config));
+      await updateAsset("assets/policy.json", JSON.stringify(policy));
+      child = launch();
+      const report = await reportFile("security.json");
+      assert.equal(report.results.length, 8);
+      for (const result of report.results) assert.equal(result.ok, true, JSON.stringify(result));
+      assert.deepEqual(allowedRequests.sort(), ["/fetch", "/img", "/script"]);
+      assert.deepEqual(blockedRequests, [], "blocked resources reached the server");
+      const log = await hostLog();
+      const readyIndex = log.findIndex((entry) => entry.event === "webview-ready");
+      const navigationIndex = log.findIndex((entry) => entry.event === "navigation");
+      assert.ok(
+        readyIndex >= 0 && navigationIndex > readyIndex,
+        "navigation preceded rule installation",
+      );
+      process.kill(child.pid, "SIGTERM");
+      assert.equal(
+        await Promise.race([child.exited, Bun.sleep(5000).then(() => "timeout")]),
+        0,
+        "FIFO rejection must not stall graceful shutdown",
+      );
+      assert.equal(
+        (await hostLog()).find((entry) => entry.event === "host-stopped")?.forced,
+        false,
+      );
+    } finally {
+      if (child) {
+        if (!child.killed) child.kill("SIGKILL");
+        await child.exited;
+      }
+      allowed.stop(true);
+      blocked.stop(true);
+      await updateAsset("assets/app.json", configText);
+      await updateAsset("assets/policy.json", policyText);
     }
   });
 

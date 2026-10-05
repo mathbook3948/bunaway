@@ -78,6 +78,8 @@ if (( ! SAMPLE )); then
   for entry in app.js page2.js; do
     (cd "$ROOT" && "$BUILD_BUN" build "$WIN_TEST/web/$entry" --target=browser --outfile "$PACKAGE/assets/web/$entry")
   done
+  cp "$HERE/test/web/security.html" "$PACKAGE/assets/web/security.html"
+  (cd "$ROOT" && "$BUILD_BUN" build "$HERE/test/web/security.js" --target=browser --outfile "$PACKAGE/assets/web/security.js")
 fi
 cp "$ROOT/examples/memo/web/memo.html" "$PACKAGE/assets/web/memo.html"
 (cd "$ROOT" && "$BUILD_BUN" build examples/memo/web/memo.js --target=browser --outfile "$PACKAGE/assets/web/memo.js")
@@ -124,4 +126,8 @@ if (( MAKE_APP )); then
   echo "App bundle: $APP (ad-hoc signed; verify: $APP/Contents/MacOS/bunaway-host --package $APP/Contents/Resources)"
 fi
 
-[[ "$SKIP_TESTS" == 1 || "$SAMPLE" == 1 ]] || "$BUILD_BUN" "$ROOT/tests/lifecycle/macos-host.ts" --package "$PACKAGE"
+if (( ! SKIP_TESTS && ! SAMPLE )); then
+  clang++ -std=c++20 -O2 -Wall -Wextra -fobjc-arc -I"$JSON_DIR" \
+    "$ROOT/tests/lifecycle/macos-host-native.mm" -framework Cocoa -framework WebKit -o "$BUILD/host-native-tests"
+  "$BUILD_BUN" "$ROOT/tests/lifecycle/macos-host.ts" --package "$PACKAGE"
+fi

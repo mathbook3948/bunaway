@@ -11,10 +11,11 @@ same files (`native/windows/host/test`).
 - **Virtual host -> custom scheme.** `WKURLSchemeHandler` cannot serve `https`,
   and localhost servers are rejected by PRD. Assets are served under
   `bunaway://`; every comparison point (origin checks, navigation gate, scheme
-  handler, home check) normalizes `bunaway://<host>` -> `https://<host>` per
+  handler, home check) normalizes `bunaway://<host>[:port]` -> `https://<host>[:port]` per
   `docs/architecture/protocol.md`, so `policy.json`, `app.json`, the schemas,
   and the boot payload stay byte-identical to Windows. Normalization applies
-  only to the host-owned asset scheme and only after real URL checks; a
+  only to the host-owned asset scheme and only after real URL checks, including
+  rejection of userinfo and preservation of non-default ports; a
   web-supplied origin is never normalized into trust.
 - **Bridge -> `webkit.messageHandlers.bunaway`** plus a `WKUserScript` shim
   exposing `window.chrome.webview` (all frames) so shared test pages run
@@ -23,11 +24,15 @@ same files (`native/windows/host/test`).
   are dropped at `message.frameInfo.isMainFrame` and logged as
   `frame-message-ignored`.
 - **Resource blocking.** Subresource interception does not exist in WebKit:
-  `WKContentRuleList` blocks non-declared http(s) loads silently;
+  `WKContentRuleList` blocks http(s) loads by default and makes destination-URL
+  exceptions for exact declared scheme/host/port tuples (not subdomains).
+  The rule list is installed before the first navigation; compilation failure
+  fails startup closed. Non-declared loads are blocked silently;
   `web-resource-blocked` is emitted only for blocked subframe navigations and
   is a platform diagnostic, not part of the common contract.
 - **Storage -> `openat` chain + `O_NOFOLLOW` + `F_GETPATH`** under the canonical
-  scope root; symlinks, hard links (nlink > 1), and directories are
+  scope root; the final open uses `O_NONBLOCK` so FIFO rejection cannot stall
+  a worker or shutdown. Non-regular files, symlinks and hard links (nlink > 1) are
   `PERMISSION_DENIED`. macOS reports `ENOTDIR` (not `ELOOP`) for
   `O_NOFOLLOW|O_DIRECTORY` on a symlink, so intermediate components are
   re-checked with `fstatat`.
@@ -60,6 +65,14 @@ renderer kill/recreation, memo persistence across a fresh Bun process, and
 guard cleanup after `kill -9`. `host-home/` under the package dir is used as a
 hermetic HOME; the data root resolves to
 `$HOME/Library/Application Support/bunaway/<appId>`.
+
+The native regression executable calls the production scheme handler with
+default/non-default ports and userinfo, rejects peerless FIFO reads/writes,
+and checks destination filters. A separate WKWebView page loads scripts,
+images and fetches against two local test servers on different ports: allowed
+requests must reach one server and blocked requests must never reach the other.
+It also checks FIFO Host API errors and graceful shutdown. These tests require
+macOS; the servers are test fixtures only, not a production asset-serving path.
 
 ### Deterministic cancel test hook
 
