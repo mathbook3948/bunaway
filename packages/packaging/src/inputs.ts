@@ -95,6 +95,26 @@ export async function verifyArtifact(args: {
       message: "Host executable is missing from the build artifact.",
       path: artifact.executable,
     });
+  } else {
+    // sourceSha256 predates macOS bundle signing and is provenance, not a final digest.
+    const expected = manifest.host?.packagedSha256 ?? manifest.host?.sha256;
+    if (!expected && platform === "windows") {
+      diagnostics.push({
+        stage,
+        code: CODES.INPUT_MISSING,
+        severity: "error",
+        message: "Build manifest is missing the host executable hash; run bunaway build again.",
+        path: artifact.executable,
+      });
+    } else if (expected && (await sha256(artifact.executable)) !== expected) {
+      diagnostics.push({
+        stage,
+        code: CODES.INPUT_TAMPERED,
+        severity: "error",
+        message: "Host executable hash mismatch.",
+        path: artifact.executable,
+      });
+    }
   }
   const runtime = resolve(
     artifact.packageDir,

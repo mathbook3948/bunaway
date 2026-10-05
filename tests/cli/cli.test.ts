@@ -233,6 +233,16 @@ test("build rejects corrupted bundled Bun and leaves the last production package
   );
 });
 
+test("package --build preserves channel outputs on failure and checks adapters before building", async () => {
+  const child = Bun.spawn(
+    [process.execPath, resolve(import.meta.dir, "packaging.fixture.ts"), project],
+    { stdout: "pipe", stderr: "pipe" },
+  );
+  const output = new Response(child.stdout).text();
+  const errors = new Response(child.stderr).text();
+  expect(await child.exited, `${await output}\n${await errors}`).toBe(0);
+}, 30000);
+
 function gate() {
   let release: (() => void) | undefined;
   const promise = new Promise<void>((resolveDone) => {

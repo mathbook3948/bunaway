@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -37,9 +37,9 @@ async function writeJson(path: string, value: unknown) {
 
 // Builds a minimal valid dist/windows-x64 artifact: bunaway-host.exe,
 // runtime/bun.exe, assets/, licenses/ and manifest.json matching every hash.
-async function makeArtifact(): Promise<PackageManifest> {
-  const dir = resolve(root, "dist/windows-x64");
-  artifactDir = dir;
+async function makeArtifact(projectRoot = root): Promise<PackageManifest> {
+  const dir = resolve(projectRoot, "dist/windows-x64");
+  if (projectRoot === root) artifactDir = dir;
   await mkdir(resolve(dir, "assets"), { recursive: true });
   await mkdir(resolve(dir, "runtime"), { recursive: true });
   await mkdir(resolve(dir, "licenses"), { recursive: true });
@@ -107,6 +107,26 @@ function stubAdapter(options: {
         },
       ]),
   };
+}
+
+function runAdapter(projectRoot: string, adapter: PackageAdapter) {
+  return runPackage({
+    metadata: {
+      root: projectRoot,
+      name: "Test App",
+      identifier: "app.test",
+      publisher: { display: "Test" },
+      version: { semver: "0.1.0", build: 0, msix: "0.1.0.0" },
+      icons: {},
+      targets: [{ platform: "windows", arch: "x64" }],
+    },
+    appId: "app.test",
+    channel: adapter.channel,
+    channelConfig: {},
+    target: "windows-x64",
+    artifact: artifactPaths({ root: projectRoot, target: "windows-x64", appId: "app.test" }),
+    adapter,
+  });
 }
 
 test("packaging.json rejects malformed shapes before adapters run", async () => {
@@ -204,8 +224,18 @@ test("verify stage rejects missing and tampered build inputs", async () => {
   const manifest = await makeArtifact();
   const artifact = artifactPaths({ root, target: "windows-x64", appId: "app.test" });
   expect(await verifyArtifact({ artifact, manifest, channel: "win-direct" })).toEqual([]);
-  await writeFile(resolve(artifactDir, "assets/app.json"), "tampered");
+  await writeFile(artifact.executable, "tampered host");
   let diagnostics = await verifyArtifact({ artifact, manifest, channel: "win-direct" });
+  expect(diagnostics).toContainEqual({
+    stage: "verify",
+    code: CODES.INPUT_TAMPERED,
+    severity: "error",
+    message: "Host executable hash mismatch.",
+    path: artifact.executable,
+  });
+  await writeFile(artifact.executable, "fake host");
+  await writeFile(resolve(artifactDir, "assets/app.json"), "tampered");
+  diagnostics = await verifyArtifact({ artifact, manifest, channel: "win-direct" });
   expect(diagnostics.map((d) => d.code)).toContain(CODES.INPUT_TAMPERED);
   await writeFile(resolve(artifactDir, "assets/app.json"), "{}");
   expect(await verifyArtifact({ artifact, manifest, channel: "win-direct" })).toEqual([]);
@@ -371,4 +401,151 @@ test("channel helpers stay consistent", () => {
   expect(() => targetFor("windows", "arm64")).toThrow();
   expect(isChannelId("win-direct")).toBe(true);
   expect(isChannelId("exe")).toBe(false);
+});
+
+test("host digests require final Windows hashes and reject tampering before adapters run", async () => {
+  const projectRoot = await mkdtemp(join(home, "host-"));
+  const manifest = await makeArtifact(projectRoot);
+  const artifact = artifactPaths({ root: projectRoot, target: "windows-x64", appId: "app.test" });
+  const original = await sha256(artifact.executable);
+  manifest.host = { target: "windows-x64", sourceSha256: original };
+  expect(
+    (await verifyArtifact({ artifact, manifest, channel: "win-direct" })).map((d) => d.code),
+  ).toContain(CODES.INPUT_MISSING);
+  manifest.host.packagedSha256 = original;
+  manifest.host.sha256 = "upstream";
+  expect(await verifyArtifact({ artifact, manifest, channel: "win-direct" })).toEqual([]);
+  await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
+  await writeFile(artifact.executable, "tampered host");
+  let ran = false;
+  const report = await runAdapter(
+    projectRoot,
+    stubAdapter({
+      run: async () => {
+        ran = true;
+      },
+    }),
+  );
+  expect(report.ok).toBe(false);
+  expect(report.diagnostics.map((d) => d.code)).toContain(CODES.INPUT_TAMPERED);
+  expect(ran).toBe(false);
+});
+
+test("missing, partial, empty and non-file outputs fail before replacing previous artifacts", async () => {
+  for (const mode of ["missing", "partial", "empty", "directory"]) {
+    const projectRoot = await mkdtemp(join(home, `${mode}-`));
+    await makeArtifact(projectRoot);
+    const packaged = resolve(projectRoot, "dist/windows-x64/packaged");
+    const previous = resolve(packaged, "win-direct/setup.exe");
+    await Bun.write(previous, "last good installer");
+    const report = await runAdapter(
+      projectRoot,
+      stubAdapter({
+        async run(ctx) {
+          if (mode === "empty") return;
+          if (mode === "partial") {
+            await Bun.write(resolve(ctx.staging, "setup.exe"), "new installer");
+            ctx.addArtifact("setup.exe", "installer", { signed: true });
+          }
+          if (mode === "directory") await mkdir(resolve(ctx.staging, "missing.exe"));
+          ctx.addArtifact("missing.exe", "installer", { signed: true });
+        },
+      }),
+    );
+    expect(report.ok).toBe(false);
+    expect(report.usable).toBe(false);
+    expect(report.submittable).toBe(false);
+    expect(report.signing.performed).toBe(false);
+    expect(report.artifacts).toEqual([]);
+    expect(
+      report.diagnostics.some((d) => d.code === CODES.VERIFY_FAILED && d.severity === "error"),
+    ).toBe(true);
+    expect(report.stages.find((s) => s.id === "verify-artifact")?.status).toBe("failed");
+    expect(await Bun.file(previous).text()).toBe("last good installer");
+    expect(
+      (await readdir(packaged)).some(
+        (name) => name.includes(".building-") || name.includes(".previous-"),
+      ),
+    ).toBe(false);
+    const saved = await Bun.file(
+      packagingReportPath(projectRoot, "windows-x64", "win-direct"),
+    ).json();
+    expect(saved.ok).toBe(false);
+    expect(saved.submittable).toBe(false);
+    expect(saved.artifacts).toEqual([]);
+  }
+});
+
+test("signed output is submittable only after its file has been verified and published", async () => {
+  const projectRoot = await mkdtemp(join(home, "signed-"));
+  await makeArtifact(projectRoot);
+  const report = await runAdapter(
+    projectRoot,
+    stubAdapter({
+      channel: "win-store-msix",
+      requirement: "required-to-run",
+      async run(ctx) {
+        const path = resolve(ctx.staging, "app.msix");
+        await Bun.write(path, "signed artifact");
+        ctx.addArtifact(path, "msix", { signed: true });
+      },
+    }),
+  );
+  expect(report.ok).toBe(true);
+  expect(report.usable).toBe(true);
+  expect(report.submittable).toBe(true);
+  expect(report.signing.performed).toBe(true);
+  expect(report.artifacts[0]?.path).toBe(
+    resolve(projectRoot, "dist/windows-x64/packaged/win-store-msix/app.msix"),
+  );
+  expect(report.artifacts[0]?.sha256).toBe(await sha256(report.artifacts[0]?.path ?? ""));
+});
+
+test("publication errors restore previous output and write a failed report", async () => {
+  const projectRoot = await mkdtemp(join(home, "publish-"));
+  await makeArtifact(projectRoot);
+  const previous = resolve(projectRoot, "dist/windows-x64/packaged/win-direct/setup.exe");
+  await Bun.write(previous, "last good installer");
+  const report = await runAdapter(
+    projectRoot,
+    stubAdapter({
+      async run(ctx) {
+        const external = resolve(projectRoot, "external.exe");
+        await Bun.write(external, "verified external artifact");
+        ctx.addArtifact(external, "installer", { signed: true });
+        await rm(ctx.staging, { recursive: true, force: true });
+      },
+    }),
+  );
+  expect(report.ok).toBe(false);
+  expect(report.usable).toBe(false);
+  expect(report.submittable).toBe(false);
+  expect(report.signing.performed).toBe(false);
+  expect(report.artifacts).toEqual([]);
+  expect(
+    report.diagnostics.some((d) => d.stage === "report" && d.code === CODES.STAGE_FAILED),
+  ).toBe(true);
+  expect(await Bun.file(previous).text()).toBe("last good installer");
+  expect(
+    (await Bun.file(packagingReportPath(projectRoot, "windows-x64", "win-direct")).json()).ok,
+  ).toBe(false);
+});
+
+test("reported stage errors mark the stage failed and preserve the previous output", async () => {
+  const projectRoot = await mkdtemp(join(home, "diagnostic-"));
+  await makeArtifact(projectRoot);
+  const previous = resolve(projectRoot, "dist/windows-x64/packaged/win-direct/setup.exe");
+  await Bun.write(previous, "last good installer");
+  const report = await runAdapter(
+    projectRoot,
+    stubAdapter({
+      async run(ctx) {
+        ctx.report({ code: CODES.TOOL_FAILED, severity: "error", message: "Assembly failed." });
+      },
+    }),
+  );
+  expect(report.ok).toBe(false);
+  expect(report.stages.find((s) => s.id === "stub")?.status).toBe("failed");
+  expect(report.stages.find((s) => s.id === "verify-artifact")?.status).toBe("skipped");
+  expect(await Bun.file(previous).text()).toBe("last good installer");
 });

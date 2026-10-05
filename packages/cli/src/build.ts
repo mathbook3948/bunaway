@@ -238,6 +238,15 @@ export async function buildProject(
       await run(["/usr/bin/codesign", "--force", "--sign", "-", staging], project.root);
       await verifyHash(resolve(packageRoot, "runtime/bun"), pin.bun.executableSha256);
     }
+    if (windows && !options.development) {
+      // Channel packages live inside the Windows build output, but survive rebuilds.
+      const packaged = resolve(output, "packaged");
+      const previous = await stat(packaged).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+        return undefined;
+      });
+      if (previous) await cp(packaged, resolve(staging, "packaged"), { recursive: true });
+    }
     const backup = `${output}.previous-${crypto.randomUUID()}`;
     let moved = false;
     try {

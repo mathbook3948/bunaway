@@ -64,15 +64,6 @@ export async function packageProject(
       `Channel ${channel} targets ${target}; the MVP packages only the native host target.`,
     );
   }
-  const notes: string[] = [];
-  let artifact: BuildArtifact;
-  if (options.build) {
-    const built = await buildProject(directory);
-    artifact = { dir: built.output, packageDir: built.package, executable: built.executable };
-    notes.push("Build artifact produced in this run.");
-  } else {
-    artifact = artifactPaths({ root: project.root, target, appId: project.app.appId });
-  }
   const adapter = adapterFor(channel);
   if (!adapter) {
     const available = registeredChannels();
@@ -81,6 +72,15 @@ export async function packageProject(
         (available.length ? ` (available: ${available.join(", ")})` : " (no adapters installed)") +
         ".",
     );
+  }
+  const notes: string[] = [];
+  let artifact: BuildArtifact;
+  if (options.build) {
+    const built = await buildProject(directory);
+    artifact = { dir: built.output, packageDir: built.package, executable: built.executable };
+    notes.push("Build artifact produced in this run.");
+  } else {
+    artifact = artifactPaths({ root: project.root, target, appId: project.app.appId });
   }
   const report = await runPackage({
     metadata,
