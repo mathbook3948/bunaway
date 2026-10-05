@@ -8,7 +8,7 @@
 
 Tauri에서 참고할 부분은 웹 UI, 백엔드 코어, 네이티브 호스트를 나누는 구조다. 명령 처리, 상태, 이벤트, 플러그인 관리 등 백엔드 기반을 Bun과 TypeScript 중심으로 설계한다. 네이티브 코드는 창, WebView, 운영체제 기능과 Bun 내장에 필요한 경계에 둔다.
 
-이 문서는 책임, 인터페이스, 보안 규칙과 단계별 완료 조건을 정한다. A 단계의 계약 구현과 Windows B 단계의 번들 Bun 프로세스·IPC 실험을 완료했다. C 단계에서는 실제 SDK·코어·Host API와 Windows WebView2 호스트를 연결했다. 단일 창·단일 뷰에서 메모 저장·이벤트·재실행 후 복원과 오류·취소·권한·렌더러 재생성·종료를 검증한 기록이 있다([Windows C 실행 결과](./architecture/windows-host-results.md)). 이 문서 정리는 코드와 기존 기록을 대조했으며 앱·테스트를 재실행하지 않았다. [Windows B 실행 결과](./architecture/windows-probe-results.md)는 별도 실험 기록이다. 다중 창/뷰·다른 플랫폼·설치 프로그램·서명·배포는 미검증이다. 아래 요구사항 전체를 완료한 것은 아니며, 현재 범위는 [진행 상태](./architecture/progress.md)를 따른다.
+이 문서는 책임, 인터페이스, 보안 규칙과 단계별 완료 조건을 정한다. A 단계의 계약 구현과 Windows B 단계의 번들 Bun 프로세스·IPC 실험을 완료했다. C 단계에서는 실제 SDK·코어·Host API와 Windows WebView2 호스트를 연결했다. 세 창의 다중 창/뷰와 뷰별 정책 분리에서 메모 저장·이벤트·재실행 후 복원과 오류·취소·권한·렌더러 재생성·창별 종료를 검증한 기록이 있다([Windows C 실행 결과](./architecture/windows-host-results.md)). 이 문서 정리는 코드와 기존 기록을 대조했으며 앱·테스트를 재실행하지 않았다. [Windows B 실행 결과](./architecture/windows-probe-results.md)는 별도 실험 기록이다. 다른 플랫폼·설치 프로그램·서명·배포는 미검증이다. 아래 요구사항 전체를 완료한 것은 아니며, 현재 범위는 [진행 상태](./architecture/progress.md)를 따른다.
 
 ### 제품 요구사항
 
@@ -63,7 +63,7 @@ Bun 자식 프로세스 ── TypeScript 코어 ── 앱 명령·상태·플�
 
 ### 네이티브 구현과 플랫폼 후보
 
-- Windows: Win32와 WebView2를 연결하는 C++ 호스트 구현 및 단일 창/뷰 실행 검증 완료
+- Windows: Win32와 WebView2를 연결하는 C++ 호스트 구현 및 다중 창/뷰·뷰별 정책 실행 검증 완료
 - macOS: AppKit·WKWebView를 연결하는 Swift/Objective-C++ 호스트
 - Linux: GTK·WebKitGTK 기반 C/C++ 호스트
 - Android: Kotlin 앱 수명주기·Android WebView, Bun 실행·패키징 경로 별도 검증
@@ -167,7 +167,7 @@ const text = await client.invoke("notes.read", { key: "welcome" });
 
 | 대상 | 기본 렌더러 | 백엔드 배포 경로 | 초기 상태와 통과 조건 |
 | --- | --- | --- | --- |
-| Windows | WebView2 | 번들된 Bun 자식 프로세스 + 네이티브 호스트 | B 실험 및 C 단일 창/뷰의 실제 SDK·코어·저장·이벤트·복원 검증 통과. 최소 OS/CPU·다중 창/뷰·설치·서명·배포 미검증 |
+| Windows | WebView2 | 번들된 Bun 자식 프로세스 + 네이티브 호스트 | B 실험 및 C 다중 창/뷰·뷰별 정책의 실제 SDK·코어·저장·이벤트·복원 검증 통과. 최소 OS/CPU·설치·서명·배포 미검증 |
 | macOS | WKWebView | 번들된 Bun 자식 프로세스 + 네이티브 호스트 | 계획. 앱 번들·서명·IPC·프로세스 정리 검증 필요 |
 | Linux | WebKitGTK | 번들된 Bun 자식 프로세스 + 네이티브 호스트 | 계획. 대상 배포판·라이브러리·IPC·패키지 검증 필요 |
 | Android | Android WebView | 미확정 | 미검증. Bun 번들·실행방식·수명주기·배포 제약을 별도 검증 |
@@ -222,7 +222,7 @@ docs/       architecture/  api/  platform-support/  decisions/
 
 B 단계는 Windows 자식 프로세스 방식에 집중한다. 번들된 Bun의 절대 경로·버전·해시와 호스트/자식 PID를 기록하고, 각 계산 결과를 실제 IPC 응답으로 확인한다. 이벤트 구독·전달·해제, JS 오류와 비정상 종료, 정상 종료·종료 기한 초과·호스트 비정상 종료 때 남은 Bun 프로세스가 없는지 검증한다. 사용자에게 별도 Bun 설치를 요구하지 않는 실행 환경도 확인한다. 구체적인 실험과 증거는 [B 단계 계획](./architecture/runtime-feasibility.md)에 따른다.
 
-Windows B 실험 통과 후 C 단계의 client-sdk·core·runtime-bun과 WebView→명령 호출→범위 제한 저장→이벤트를 연결했고, 메모 앱과 단일 창/뷰의 오류·취소·권한·종료를 검증했다. 단계 표는 목표와 완료 조건이며 전체 플랫폼의 완료 표가 아니다. 남은 C 범위와 D~F 작업은 [진행 상태](./architecture/progress.md)를 따른다. Android·iOS의 실행 방식, 앱 수명주기와 배포 제약은 D 단계에서 각각 검증한다. Windows 성공을 모바일 지원 완료로 간주하지 않는다.
+Windows B 실험 통과 후 C 단계의 client-sdk·core·runtime-bun과 WebView→명령 호출→범위 제한 저장→이벤트를 연결했고, 메모 앱과 다중 창/뷰의 오류·취소·권한·창별 종료를 검증했다. 단계 표는 목표와 완료 조건이며 전체 플랫폼의 완료 표가 아니다. 남은 C 범위와 D~F 작업은 [진행 상태](./architecture/progress.md)를 따른다. Android·iOS의 실행 방식, 앱 수명주기와 배포 제약은 D 단계에서 각각 검증한다. Windows 성공을 모바일 지원 완료로 간주하지 않는다.
 
 ### 초기 버전 출시 기준
 
@@ -251,4 +251,4 @@ Skal의 고정 commit `7edb44aceb8c69ac1abd76549e2c09cf6cdc8a57`에서는 VM 작
 - Windows의 WebView2 SDK·네이티브 의존성·라이선스와 가상 자산 origin은 구현에 고정했다. 최소 OS·CPU·WebView 런타임 지원 범위 및 다른 플랫폼의 호스트·자산 origin은 별도 검증·결정이 필요하다.
 - 서명·공증·스토어 제출에 필요한 조건과 iOS 코드 실행·업데이트 정책. 검토 전 스토어 배포 가능성을 보장하지 않음
 
-현재 다음 작업은 Windows 검증 범위 확대, CLI·템플릿·기본 플러그인, 플랫폼 확장과 설치·서명·배포 검증이다. A·B 및 Windows C의 단일 창/뷰 성공으로 초기 버전 출시 기준 전체를 충족했다고 판단하지 않는다.
+현재 다음 작업은 Windows 검증 범위 확대, CLI·템플릿·기본 플러그인, 플랫폼 확장과 설치·서명·배포 검증이다. A·B 및 Windows C의 다중 창/뷰 성공으로 초기 버전 출시 기준 전체를 충족했다고 판단하지 않는다.

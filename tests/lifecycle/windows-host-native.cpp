@@ -9,6 +9,17 @@ int wmain(int argc, wchar_t** argv) {
         const fs::path assets = fs::path(argv[1]) / "assets";
         const fs::path testRoot = fs::path(argv[1]).parent_path() / ("host-regression-" + randomHex(8));
         fs::create_directories(testRoot);
+        const auto profileRoot = testRoot / "profiles";
+        fs::create_directory(profileRoot);
+        const std::string identifierChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.:-";
+        std::vector<std::string> viewIds = { "main", "Main", "MAIN", "mAin", "..", "-2e-2e", "-3a", "con", "nul" };
+        for (char c : identifierChars) viewIds.emplace_back(1, c);
+        for (const auto& id : viewIds) {
+            const auto name = viewDirName(id);
+            require(std::regex_match(name, std::regex("^v[a-z0-9-]+$")), "Profile directory must be lowercase and filename-safe.");
+            require(fs::create_directory(profileRoot / name), "Distinct view ids share a profile directory.");
+        }
+        std::cout << "PASS case-sensitive view ids have distinct Windows profile directories\n";
         App app;
         app.hostLog = std::make_unique<Log>(testRoot / "host.log", 1024 * 1024);
         app.appLog = std::make_unique<Log>(testRoot / "app.log", 1024 * 1024);
@@ -18,14 +29,47 @@ int wmain(int argc, wchar_t** argv) {
         app.runtimeId = "regression";
         app.generation = "1";
         app.backendContext = "backend-test";
-        app.viewId = "main";
         app.scopes.temp = testRoot;
         app.scopes.tempCanonical = Scopes::canonicalOf(testRoot);
+        auto makeView = [&](const char* id, const char* home) {
+            auto view = std::make_unique<App::LiveView>();
+            view->policy = &app.policy.views.at(id);
+            view->viewId = id;
+            view->home = home;
+            auto* raw = view.get();
+            app.liveViews.emplace(raw->viewId, std::move(view));
+            return raw;
+        };
+        auto* mainView = makeView("main", "https://app.bunaway.local/index.html");
+        auto* readerView = makeView("reader", "https://app.bunaway.local/reader.html");
+        app.scopes.webData = profileRoot;
+        require(app.webViewDataPath(*mainView) == profileRoot / viewDirName("main"), "Multi-window main profile is not isolated.");
+        require(app.webViewDataPath(*readerView) == profileRoot / viewDirName("reader"), "Multi-window reader profile is not isolated.");
+        app.legacyProfile = true;
+        require(app.webViewDataPath(*mainView) == profileRoot, "Legacy browser profile path changed on upgrade.");
+        app.legacyProfile = false;
+        std::cout << "PASS legacy profile path preserved and multi-window profiles isolated\n";
 
-        // Establish a real message queue; postToWeb uses thread messages when hwnd is null.
+        // Establish a real message queue; postToWeb uses thread messages when the
+        // notify window is null.
         MSG message;
         PeekMessageW(&message, nullptr, 0, 0, PM_NOREMOVE);
-        const auto context = app.openSession("main", "https://app.bunaway.local/index.html", "https://app.bunaway.local");
+        const auto context = app.openSession(*mainView, "https://app.bunaway.local/index.html", "https://app.bunaway.local");
+        {
+            App::LiveView closedView;
+            closedView.closed = true;
+            for (auto result : { E_ABORT, E_FAIL, S_OK }) {
+                app.environmentCompleted(closedView)->Invoke(result, nullptr);
+                app.controllerCompleted(closedView)->Invoke(result, nullptr);
+                require(!app.failed && !app.shuttingDown && app.sessions.count(context), "Closed view initialization killed a sibling session.");
+            }
+            app.shuttingDown = true;
+            app.environmentCompleted(*readerView)->Invoke(E_ABORT, nullptr);
+            app.controllerCompleted(*readerView)->Invoke(E_ABORT, nullptr);
+            require(!app.failed, "Initialization callback failed an app that is already shutting down.");
+            app.shuttingDown = false;
+            std::cout << "PASS closed-view initialization callbacks preserve sibling sessions\n";
+        }
         auto request = app.frame("host-request");
         request["context"] = context;
         request["requestId"] = "write-1";
@@ -37,8 +81,8 @@ int wmain(int argc, wchar_t** argv) {
         std::unique_ptr<App::WebDelivery> delivery(reinterpret_cast<App::WebDelivery*>(message.lParam));
         require(app.canDeliverWeb(*delivery), "Active-session response was rejected.");
 
-        app.revokeSession("navigation");
-        app.openSession("main", "https://app.bunaway.local/page2.html", "https://app.bunaway.local");
+        app.revokeSession(*mainView, "navigation");
+        app.openSession(*mainView, "https://app.bunaway.local/page2.html", "https://app.bunaway.local");
         auto task = std::move(app.workQueue.front());
         app.workQueue.pop_front();
         task();
@@ -47,16 +91,19 @@ int wmain(int argc, wchar_t** argv) {
         const auto queued = app.queue.size();
         app.hostRespond(context + "|write-1", context, "write-1", { { "kind", "result" }, { "payload", nullptr } });
         require(app.queue.size() == queued, "Revoked host response was sent.");
+        // A backend frame for the revoked context is discarded at the boundary.
+        app.onBackendWeb(context, { { "kind", "result" }, { "protocol", ipc }, { "id", "late-1" }, { "payload", nullptr } });
+        require(!PeekMessageW(&message, nullptr, WM_APP_WEB_MESSAGE, WM_APP_WEB_MESSAGE, PM_NOREMOVE), "Revoked context produced a delivery.");
         require(!app.canDeliverWeb(*delivery), "Previous document received a queued response.");
         std::cout << "PASS revoked queued work and stale UI delivery\n";
 
         // Even pre-handshake errors belong to one document generation.
-        app.revokeSession("navigation");
-        app.webError("bad-id", "INVALID_ARGUMENT", "Bad request.");
+        app.revokeSession(*mainView, "navigation");
+        app.webError(*mainView, "bad-id", "INVALID_ARGUMENT", "Bad request.");
         require(PeekMessageW(&message, nullptr, WM_APP_WEB_MESSAGE, WM_APP_WEB_MESSAGE, PM_REMOVE), "Expected queued error.");
         delivery.reset(reinterpret_cast<App::WebDelivery*>(message.lParam));
         require(app.canDeliverWeb(*delivery), "Current document error was rejected.");
-        app.revokeSession("navigation");
+        app.revokeSession(*mainView, "navigation");
         require(!app.canDeliverWeb(*delivery), "Pre-session error crossed documents.");
         std::cout << "PASS pre-session error document generation\n";
 
@@ -78,7 +125,7 @@ int wmain(int argc, wchar_t** argv) {
         require(readStorageText(reader.value, 0).empty(), "Empty read failed.");
         std::cout << "PASS early EOF terminates; normal and empty reads succeed\n";
 
-        const auto readContext = app.openSession("main", "https://app.bunaway.local/index.html", "https://app.bunaway.local");
+        const auto readContext = app.openSession(*mainView, "https://app.bunaway.local/index.html", "https://app.bunaway.local");
         auto readOutcome = [&](const std::string& text) {
             { std::ofstream out(testRoot / "response.txt", std::ios::binary); out << text; }
             app.queue.clear();
@@ -114,8 +161,11 @@ int wmain(int argc, wchar_t** argv) {
             require(app.canDeliverWeb(*response), "Response destination is inactive.");
             return parse(utf8(response->text));
         };
-        auto submit = [&](const Json& web) {
-            app.onWebMessage(L"https://app.bunaway.local/index.html", "https://app.bunaway.local/index.html", web.dump());
+        auto submit = [&](App::LiveView& view, const Json& web) {
+            app.onWebMessage(view, L"https://app.bunaway.local/index.html", "https://app.bunaway.local/index.html", web.dump());
+        };
+        auto submitTo = [&](App::LiveView& view, const std::wstring& uri, const Json& web) {
+            app.onWebMessage(view, uri, utf8(uri), web.dump());
         };
         Json invoke = { { "kind", "invoke" }, { "protocol", ipc }, { "id", "boundary" }, { "command", "test.echo" }, { "payload", "" } };
         invoke["payload"] = std::string(maxFrame - invoke.dump().size(), 'a');
@@ -126,7 +176,7 @@ int wmain(int argc, wchar_t** argv) {
         for (const auto& rejectedFrame : { invoke, deep }) {
             app.queue.clear();
             require(valid(app.messageSchema, parse(rejectedFrame.dump())), "Fixture must be valid Web IPC.");
-            submit(rejectedFrame);
+            submit(*mainView, rejectedFrame);
             auto response = receive();
             require(response["kind"] == "error" && response["error"]["code"] == "INVALID_ARGUMENT", "Envelope overflow must return INVALID_ARGUMENT.");
             require(app.queue.empty(), "Invalid internal frame reached backend.");
@@ -134,7 +184,7 @@ int wmain(int argc, wchar_t** argv) {
         }
         // The same ID remains usable, and the deepest allowed internal frame is sent.
         deep["payload"] = nested.at(0);
-        submit(deep);
+        submit(*mainView, deep);
         require(app.queue.size() == 1, "Valid boundary frame was not sent.");
         parse(app.queue.front());
         app.onBackendWeb(readContext, { { "kind", "result" }, { "protocol", ipc }, { "id", "boundary" }, { "payload", "ok" } });
@@ -158,18 +208,70 @@ int wmain(int argc, wchar_t** argv) {
         }
         std::cout << "PASS expired backend success/error produce exactly one TIMEOUT before timer\n";
 
+        // Two views share one router. Identical request ids stay scoped to their
+        // sessions, deliveries carry their view, and closing one view must not
+        // disturb the other view's session or queued work.
+        const auto readerContext = app.openSession(*readerView, "https://app.bunaway.local/reader.html", "https://app.bunaway.local");
+        app.sessions.at(readerContext).negotiated = true;
+        Json shared = { { "kind", "invoke" }, { "protocol", ipc }, { "id", "shared-1" }, { "command", "test.echo" }, { "payload", "from-reader" } };
+        app.queue.clear();
+        submitTo(*readerView, L"https://app.bunaway.local/reader.html", shared);
+        shared["payload"] = "from-main";
+        submit(*mainView, shared);
+        require(app.sessions.at(readerContext).pending.count("shared-1") && app.sessions.at(readContext).pending.count("shared-1"), "Shared request id was not scoped per session.");
+        require(app.queue.size() == 2, "Both views' frames must reach the backend.");
+        Json delivered;
+        for (const auto& frame : { app.queue.front(), app.queue.back() }) {
+            auto parsed = parse(frame);
+            require(parsed["kind"] == "web", "Non-web frame escaped to the backend.");
+            delivered[parsed["context"].get<std::string>()] = parsed["payload"]["payload"].get<std::string>();
+        }
+        require(delivered[readerContext] == "from-reader" && delivered[readContext] == "from-main", "Identical ids crossed views.");
+
+        // A view-level host policy denial: reader may invoke the command but its
+        // storage grant is read-only, so the write op is refused per context.
+        {
+            auto denied = app.frame("host-request");
+            denied["context"] = readerContext;
+            denied["requestId"] = "deny-1";
+            denied["operation"] = "storage.writeText";
+            denied["payload"] = { { "scope", "appData" }, { "path", "notes/x.txt" }, { "text", "nope" } };
+            app.onHostRequest(denied);
+            auto deniedTask = std::move(app.workQueue.back());
+            app.workQueue.pop_back();
+            deniedTask();
+            require(!app.queue.empty(), "Denied host request produced no response.");
+            auto deniedResponse = parse(app.queue.back());
+            require(deniedResponse["payload"]["kind"] == "error" && deniedResponse["payload"]["error"]["code"] == "PERMISSION_DENIED", "Read-only view storage write was not denied.");
+        }
+
+        app.postToWeb(readerContext, R"({"kind":"result","id":"shared-1"})");
+        require(PeekMessageW(&message, nullptr, WM_APP_WEB_MESSAGE, WM_APP_WEB_MESSAGE, PM_REMOVE), "Expected reader delivery.");
+        std::unique_ptr<App::WebDelivery> readerDelivery(reinterpret_cast<App::WebDelivery*>(message.lParam));
+        require(readerDelivery->viewId == "reader", "Delivery lost its target view.");
+        require(app.canDeliverWeb(*readerDelivery), "Reader delivery rejected while active.");
+        app.closeViewWindow(*readerView);
+        require(readerView->closed, "Closed view not marked closed.");
+        require(!app.canDeliverWeb(*readerDelivery), "Closed view still receives deliveries.");
+        require(app.sessions.count(readerContext) == 0, "Closed view kept its session.");
+        require(!app.sessions.at(readContext).pending.empty(), "Sibling view lost its pending requests.");
+        // An event for a subscription the session never opened is discarded too.
+        app.onBackendWeb(readContext, { { "kind", "event" }, { "protocol", ipc }, { "subscriptionId", "ghost" }, { "event", "memo.saved" }, { "target", "main" }, { "source", "backend" }, { "sequence", 1 }, { "payload", "late" } });
+        require(!PeekMessageW(&message, nullptr, WM_APP_WEB_MESSAGE, WM_APP_WEB_MESSAGE, PM_NOREMOVE), "Inactive subscription produced a delivery.");
+        std::cout << "PASS per-view request scope, denied storage and close isolation\n";
+
         // Only a trusted same-document source update can change the URL binding.
         app.queue.clear();
-        const auto document = app.documentGeneration;
-        app.updateSameDocumentSource("https://example.org/forged");
+        const auto document = mainView->documentGeneration;
+        app.updateSameDocumentSource(*mainView, "https://example.org/forged");
         require(app.sessions.at(readContext).source == "https://app.bunaway.local/index.html", "Foreign origin changed the session source.");
-        app.updateSameDocumentSource("https://app.bunaway.local/spa?step=1");
-        require(app.activeContext == readContext && app.documentGeneration == document, "Same-document source update replaced the session.");
+        app.updateSameDocumentSource(*mainView, "https://app.bunaway.local/spa?step=1");
+        require(mainView->activeContext == readContext && mainView->documentGeneration == document, "Same-document source update replaced the session.");
         Json ping = { { "kind", "invoke" }, { "protocol", ipc }, { "id", "spa" }, { "command", "test.ping" }, { "payload", nullptr } };
-        app.onWebMessage(L"https://app.bunaway.local/spa?step=1", "https://app.bunaway.local/spa?step=1", ping.dump());
+        submitTo(*mainView, L"https://app.bunaway.local/spa?step=1", ping);
         require(app.queue.size() == 1 && app.sessions.at(readContext).pending.count("spa"), "Updated document source could not invoke.");
         ping["id"] = "foreign";
-        app.onWebMessage(L"https://example.org/forged", "https://example.org/forged", ping.dump());
+        submitTo(*mainView, L"https://example.org/forged", ping);
         require(receive()["error"]["code"] == "PERMISSION_DENIED" && app.queue.size() == 1, "Foreign source reached the backend.");
         std::cout << "PASS same-document source update preserves context and rejects foreign origins\n";
 
@@ -180,14 +282,14 @@ int wmain(int argc, wchar_t** argv) {
         require(filled > 0 && GetLastError() == ERROR_NOT_ENOUGH_QUOTA, "Could not saturate UI queue.");
         app.onBackendWeb(readContext, { { "kind", "result" }, { "protocol", ipc }, { "id", "spa" }, { "payload", "pong" } });
         require(app.failed && !app.closing, "Lost Web response did not fail the runtime.");
-        require(!app.canDeliverWeb(App::WebDelivery{ L"{}", readContext, document }), "Failed session can still receive queued Web responses.");
+        require(!app.canDeliverWeb(App::WebDelivery{ L"{}", readContext, "main", document }), "Failed session can still receive queued Web responses.");
         require(!PeekMessageW(&message, nullptr, WM_APP_WEB_MESSAGE, WM_APP_WEB_MESSAGE, PM_NOREMOVE), "Full queue unexpectedly accepted a response.");
         while (PeekMessageW(&message, nullptr, WM_APP + 50, WM_APP + 50, PM_REMOVE)) {}
         g_app = &app;
-        wndProc(nullptr, WM_TIMER, 1, 0);
+        wndProc(app.notifyHwnd, WM_TIMER, 1, 0);
         g_app = nullptr;
         require(app.closing && app.shuttingDown && app.exitCode == 1, "Timer did not recover the lost failure notification.");
-        require(!app.canDeliverWeb(App::WebDelivery{ L"{}", readContext, document }), "Failed session can still receive Web responses.");
+        require(!app.canDeliverWeb(App::WebDelivery{ L"{}", readContext, "main", document }), "Failed session can still receive Web responses.");
         std::cout << "PASS UI queue saturation fails runtime and timer initiates shutdown\n";
         return 0;
     } catch (const std::exception& error) {

@@ -52,6 +52,35 @@ async function start() {
     const deadline = Date.now() + 5000;
     while (button.disabled && Date.now() < deadline)
       await new Promise((resolve) => setTimeout(resolve, 25));
+    localStorage.setItem("bunaway-profile-regression", "legacy-profile");
+  }
+  if (testPhase === "editor") {
+    // Multi-view integration: the writable memo view saves, observes its own
+    // memo.saved broadcast and reports so the reader view's assertions can run.
+    const editorResults = [];
+    try {
+      input.value = "편집 뷰가 저장한 메모 ✏️";
+      await client.invoke("memo.save", input.value);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      editorResults.push({
+        name: "editor save broadcasts to subscribed views",
+        ok: saved.textContent === input.value,
+      });
+      editorResults.push({
+        name: "editor reads back shared storage",
+        ok: (await client.invoke("memo.read", null)) === input.value,
+      });
+    } catch (error) {
+      editorResults.push({
+        name: "editor save",
+        ok: false,
+        error: String(error?.message ?? error),
+      });
+    }
+    await client.invoke("test.report", {
+      file: "editor.json",
+      report: { page: "editor", results: editorResults },
+    });
   }
   if (testPhase === "read" || testPhase === "write") {
     await client.invoke("test.report", {
@@ -59,6 +88,10 @@ async function start() {
       report: {
         page: "memo",
         results: [
+          {
+            name: "legacy browser profile storage persists across restart",
+            ok: localStorage.getItem("bunaway-profile-regression") === "legacy-profile",
+          },
           {
             name:
               testPhase === "write"
