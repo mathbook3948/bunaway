@@ -61,7 +61,10 @@ strict TypeScript에서 `@bunaway/cli`를 import할 수 있다.
 큰 Bun 실행 파일·네이티브 헤더/SDK·컴파일러는 이 tarball에 넣지 않는다. 기존
 네이티브 스크립트가 최초 빌드에 핀을 다운로드하고 해시를 검사한다. 따라서 첫 빌드는
 완전 offline이 아니다. 최종 앱은 고정 Bun과 자산·라이선스를 포함하므로 Bun 설치나
-개발 의존성 다운로드가 필요 없다. 캐시는 생성 프로젝트 안에만 기록한다.
+개발 의존성 다운로드가 필요 없다. 캐시는 실행한 CLI의 프레임워크 트리에 기록한다.
+생성 앱의 CLI는 `vendor/bunaway`, 설치 artifact의 bin/API는 설치 패키지 안에
+캐시를 만든다. Artifact 감사는 지정된 `build/`, runtime vendor 및 플랫폼별 native
+vendor 캐시만 제외하며, 소스·계약·라이선스와 다른 추가 파일은 계속 검사한다.
 
 SDK를 독립 registry 패키지로 설치하지 않고 tarball의 소스를 `vendor/bunaway`에
 복사해 `workspace:*`로 연결한다. 이유와 비용은 [ADR 0005](./decisions/0005-framework-artifact.md)에
@@ -81,7 +84,9 @@ SDK를 독립 registry 패키지로 설치하지 않고 tarball의 소스를 `ve
 | 개발/번들 Bun | 현재 1.4.2. 두 타깃 핀과 개발용 Bun 버전 일치. final 앱은 내부 실행 파일의 절대 경로·해시만 사용 |
 
 `validate`, `doctor`, `dev`, `build`는 앱 설정/정책 검사 전에 SDK 메타데이터,
-핀, vendor 소스/스키마/고지 해시와 앱의 workspace 선언을 확인한다. `bunaway.lock.json`
+핀, vendor 소스/스키마/고지 해시와 앱의 workspace 선언을 확인한다. 앱의
+dependencies/devDependencies/optionalDependencies/peerDependencies 모두에서
+`@bunaway/*`는 `workspace:*`여야 하며, 외부 SDK로 덮어쓰는 선언은 거부한다. `bunaway.lock.json`
 없음(이전 생성 프로젝트), 다른 버전, 부분 변경은 명시적으로 오류가 된다. 전역 CLI가
 다른 릴리스라면 프로젝트의 `bun run ...`을 사용하거나 전체 업그레이드를 해야 한다.
 잠금 파일은 무결성과 조합 기록이지 서명된 신뢰 증명이나 공격자 방어 경계는 아니다.

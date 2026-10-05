@@ -31,11 +31,20 @@ export async function projectPath(root: string, name: string): Promise<string> {
   return path;
 }
 
-export async function files(root: string): Promise<string[]> {
+export async function files(
+  root: string,
+  excludedDirectories: readonly string[] = [],
+): Promise<string[]> {
   const result: string[] = [];
   async function visit(dir: string): Promise<void> {
     for (const item of await readdir(dir, { withFileTypes: true })) {
       const path = resolve(dir, item.name);
+      if (
+        item.isDirectory() &&
+        excludedDirectories.includes(relative(root, path).replaceAll("\\", "/"))
+      ) {
+        continue;
+      }
       if ((await lstat(path)).isSymbolicLink()) throw new Error(`Symlink not allowed: ${path}`);
       if (item.isDirectory()) await visit(path);
       else if (item.isFile()) result.push(path);

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { packFramework } from "../../packages/cli/scripts/pack.ts";
@@ -89,13 +89,34 @@ new RestartController<string>({ stop: async () => {}, build: async () => 42, sta
       });
       await command(consumer, ["run", "tsc", "--project", "tsconfig.json"]);
     }
+    for (const directory of [
+      "build",
+      "runtime/bun-bundle/vendor",
+      "native/windows/vendor",
+      "native/windows/host/vendor",
+      "native/macos/vendor",
+    ]) {
+      await mkdir(resolve(installed, directory), { recursive: true });
+      await writeFile(resolve(installed, directory, "cache.txt"), "native cache");
+    }
+    await checkArtifact(installed);
     await command(consumer, ["run", "bunaway", "create", "../created app"]);
     const project = resolve(home, "moved app");
     await rename(resolve(home, "created app"), project);
+    await command(project, ["install"]);
+    if (process.env.BUNAWAY_NATIVE_DISTRIBUTION_TEST === "1") {
+      await command(consumer, [
+        "-e",
+        "import { prepareNative } from '@bunaway/cli'; await prepareNative();",
+      ]);
+      expect(await command(consumer, ["run", "bunaway", "build", project])).toContain("Built");
+      await checkArtifact(installed);
+      await command(consumer, ["run", "bunaway", "create", "../second app"]);
+      await rm(resolve(home, "second app"), { recursive: true, force: true });
+    }
     // Removing the installer proves the app only uses its own vendor snapshot.
     await rm(consumer, { recursive: true, force: true });
     await rm(resolve(home, "artifacts"), { recursive: true, force: true });
-    await command(project, ["install"]);
     expect(await command(project, ["run", "validate"])).toContain("valid");
     await command(project, ["run", "typecheck"]);
     await command(project, ["init"], "git");
@@ -182,6 +203,38 @@ new RestartController<string>({ stop: async () => {}, build: async () => 42, sta
     await writeJson(appPackage, app);
     await expect(command(project, ["run", "validate"])).rejects.toThrow("Incompatible Bun/SDK");
     await writeFile(appPackage, appOriginal);
+    const foreignSdk = resolve(project, "foreign-client");
+    await cp(resolve(project, "vendor/bunaway/packages/client-sdk"), foreignSdk, {
+      recursive: true,
+    });
+    const foreignPackage = (await json(resolve(foreignSdk, "package.json"))) as Record<
+      string,
+      unknown
+    >;
+    await writeJson(resolve(foreignSdk, "package.json"), { ...foreignPackage, version: "99.0.0" });
+    const foreignDependency = { "@bunaway/client": "file:./foreign-client" };
+    for (const field of ["devDependencies", "optionalDependencies", "peerDependencies"]) {
+      const app = JSON.parse(appOriginal);
+      app[field] = { ...app[field], ...foreignDependency };
+      await writeJson(appPackage, app);
+      if (field === "devDependencies") {
+        await command(project, ["install"]);
+        expect(
+          await command(project, [
+            "-e",
+            "console.log(Bun.resolveSync('@bunaway/client', process.cwd()))",
+          ]),
+        ).toContain("foreign-client");
+      }
+      await expect(command(project, ["run", "validate"])).rejects.toThrow("Incompatible Bun/SDK");
+    }
+    const workspaceApp = JSON.parse(appOriginal);
+    workspaceApp.devDependencies["@bunaway/client"] = "workspace:*";
+    await writeJson(appPackage, workspaceApp);
+    expect(await command(project, ["run", "validate"])).toContain("valid");
+    await writeFile(appPackage, appOriginal);
+    await command(project, ["install"]);
+    await rm(foreignSdk, { recursive: true, force: true });
     await writeFile(
       resolve(project, "vendor/bunaway/native/windows/host/host.cpp"),
       "changed host",
@@ -208,6 +261,15 @@ test("artifact audit rejects omitted schemas, declarations and Git attributes wi
     await checkArtifact(root);
     const inventoryPath = resolve(root, "artifact.files.json");
     const inventory = await readFile(inventoryPath);
+    const extra = resolve(root, "native/windows/host/unexpected.txt");
+    await writeFile(extra, "not a native cache");
+    await expect(checkArtifact(root)).rejects.toThrow("inventory mismatch");
+    await rm(extra);
+    const source = resolve(root, "native/windows/host/host.cpp");
+    const sourceOriginal = await readFile(source);
+    await writeFile(source, "modified host");
+    await expect(checkArtifact(root)).rejects.toThrow("inventory mismatch");
+    await writeFile(source, sourceOriginal);
     for (const name of [
       "native/host-api/generated/process.schema.json",
       "packages/cli/dist/types/cli/src/index.d.ts",

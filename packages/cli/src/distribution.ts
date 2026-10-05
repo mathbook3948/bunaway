@@ -98,9 +98,12 @@ export async function copyFramework(destination: string): Promise<void> {
   }
 }
 
-export async function snapshotHashes(root: string): Promise<Record<string, string>> {
+export async function snapshotHashes(
+  root: string,
+  excludedDirectories: readonly string[] = [],
+): Promise<Record<string, string>> {
   const hashes: Record<string, string> = {};
-  for (const path of await files(root)) {
+  for (const path of await files(root, excludedDirectories)) {
     const name = relative(root, path).replaceAll("\\", "/");
     hashes[name] = await hash(path);
   }
@@ -147,6 +150,9 @@ export async function validateFramework(project: string): Promise<void> {
   }
   const pkg = JSON.parse(await readFile(resolve(project, "package.json"), "utf8")) as {
     dependencies: Record<string, string>;
+    devDependencies?: Record<string, string>;
+    optionalDependencies?: Record<string, string>;
+    peerDependencies?: Record<string, string>;
     workspaces: string[];
     packageManager: string;
   };
@@ -156,8 +162,11 @@ export async function validateFramework(project: string): Promise<void> {
     ["@bunaway/backend", "@bunaway/client", "@bunaway/runtime-bun"].some(
       (name) => pkg.dependencies?.[name] !== "workspace:*",
     ) ||
-    Object.entries(pkg.dependencies).some(
-      ([name, version]) => name.startsWith("@bunaway/") && version !== "workspace:*",
+    [pkg.dependencies, pkg.devDependencies, pkg.optionalDependencies, pkg.peerDependencies].some(
+      (dependencies) =>
+        Object.entries(dependencies ?? {}).some(
+          ([name, version]) => name.startsWith("@bunaway/") && version !== "workspace:*",
+        ),
     )
   ) {
     throw new Error(
@@ -192,7 +201,13 @@ function requiredFrameworkFiles(): string[] {
 export async function checkArtifact(root: string): Promise<void> {
   await release(root);
   const inventory = (await json(resolve(root, "artifact.files.json"))) as Record<string, string>;
-  const actual = await snapshotHashes(root);
+  const actual = await snapshotHashes(root, [
+    "build",
+    "runtime/bun-bundle/vendor",
+    "native/windows/vendor",
+    "native/windows/host/vendor",
+    "native/macos/vendor",
+  ]);
   delete actual["artifact.files.json"];
   if (JSON.stringify(actual) !== JSON.stringify(inventory)) {
     throw new Error("Artifact inventory mismatch: missing, extra or modified file.");
