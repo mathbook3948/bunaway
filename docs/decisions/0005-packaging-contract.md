@@ -85,6 +85,12 @@ Bun의 `packagedSha256`을 우선 읽고 없으면 `executableSha256`만 사용�
 Bun의 `sha256`/`sourceSha256`은 이 fallback을 대체하지 않는다.
 호스트의 `sha256`/`sourceSha256`은 별도 규칙이며, macOS 서명 전 호스트의
 `sourceSha256`은 provenance이므로 최종 호스트 바이트와 직접 비교하지 않는다.
+최종 호스트 해시(`packagedSha256`/`sha256`)가 없는 macOS build 입력은 기존 번들의
+코드 서명을 `codesign --verify --deep --strict`로 검증한다. 정상 ad-hoc 서명도 허용하되
+호스트·봉인 자산·서명 손상과 검증 도구 실행 실패는 `PKG_INPUT_TAMPERED`로 어댑터 실행
+전에 거부한다. macOS 외 OS에서 최종 호스트 해시도 검증할 수 없으면
+`PKG_INPUT_MISSING`으로 거부한다. 이 검사는 빌드 입력 무결성 확인이며 Developer ID·
+공증·스토어 제출 가능 여부를 보증하거나 어댑터의 배포 서명을 대신하지 않는다.
 
 ## 검토한 대안
 

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
+  copyFile,
   mkdir,
   mkdtemp,
   readdir,
@@ -123,13 +124,26 @@ async function makeArtifact(
     app: { id: "app.test", version: "0.1.0" },
     host: {
       target,
-      ...(windows
-        ? { sha256: await sha256(artifact.executable) }
-        : { sourceSha256: await sha256(artifact.executable) }),
+      sha256: await sha256(artifact.executable),
     },
   };
   await writeJson(resolve(dir, "manifest.json"), manifest);
   return manifest;
+}
+
+async function makeSignedMacArtifact(projectRoot: string) {
+  const manifest = await makeArtifact(projectRoot, "macos-arm64");
+  const artifact = artifactPaths({ root: projectRoot, target: "macos-arm64", appId: "app.test" });
+  await copyFile("/bin/echo", artifact.executable);
+  manifest.host = { target: "macos-arm64", sourceSha256: await sha256(artifact.executable) };
+  await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
+  const signing = Bun.spawn(["/usr/bin/codesign", "--force", "--sign", "-", artifact.dir], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [exit, stderr] = await Promise.all([signing.exited, new Response(signing.stderr).text()]);
+  expect(exit, stderr).toBe(0);
+  return { artifact, manifest };
 }
 
 beforeAll(async () => {
@@ -1691,7 +1705,7 @@ test("input directory links inside the package remain valid", async () => {
   expect(await verifyArtifact({ artifact, manifest, channel: "win-direct" })).toEqual([]);
 });
 
-test("macOS inputs stay inside the bundle without requiring WebView2 or a pre-sign host digest", async () => {
+test("macOS inputs with a final host digest do not require WebView2", async () => {
   const projectRoot = await mkdtemp(join(home, "mac-inputs-"));
   const manifest = await makeArtifact(projectRoot, "macos-arm64");
   const artifact = artifactPaths({ root: projectRoot, target: "macos-arm64", appId: "app.test" });
@@ -1710,6 +1724,121 @@ test("macOS inputs stay inside the bundle without requiring WebView2 or a pre-si
   );
   expect(report.ok).toBe(true);
 });
+
+for (const channel of ["mac-direct", "mac-store"] as const) {
+  test.skipIf(process.platform !== "darwin")(
+    `${channel} accepts an ad-hoc signed bundle with only host provenance`,
+    async () => {
+      const projectRoot = await mkdtemp(join(home, "mac-signed-"));
+      const { artifact, manifest } = await makeSignedMacArtifact(projectRoot);
+      expect(manifest.host?.sourceSha256).not.toBe(await sha256(artifact.executable));
+      expect(await verifyArtifact({ artifact, manifest, channel })).toEqual([]);
+      const report = await runAdapter(
+        projectRoot,
+        stubAdapter({
+          channel,
+          run: async (ctx) => {
+            await Bun.write(resolve(ctx.staging, "app.zip"), "package");
+            ctx.addArtifact("app.zip", "archive");
+          },
+        }),
+        { target: "macos-arm64" },
+      );
+      expect(report.ok).toBe(true);
+      expect(report.usable).toBe(true);
+      expect(report.submittable).toBe(false);
+    },
+  );
+  for (const change of ["host", "plist", "resources", "signature"] as const) {
+    test.skipIf(process.platform !== "darwin")(
+      `${channel} rejects signed bundle ${change} tampering before adapter execution`,
+      async () => {
+        const projectRoot = await mkdtemp(join(home, "mac-tampered-"));
+        const { artifact, manifest } = await makeSignedMacArtifact(projectRoot);
+        expect(await verifyArtifact({ artifact, manifest, channel })).toEqual([]);
+        if (change === "host") {
+          const bytes = await Bun.file(artifact.executable).bytes();
+          bytes[4096] = (bytes[4096] ?? 0) ^ 1;
+          await writeFile(artifact.executable, bytes);
+        } else if (change === "plist") {
+          const plist = resolve(artifact.dir, "Contents/Info.plist");
+          await writeFile(
+            plist,
+            (await Bun.file(plist).text()).replace(
+              "</dict>",
+              "<key>CFBundleName</key><string>Changed name</string></dict>",
+            ),
+          );
+        } else if (change === "resources") {
+          const asset = "assets/backend.js";
+          await writeFile(resolve(artifact.packageDir, asset), "changed backend");
+          manifest.assets[asset] = await sha256(resolve(artifact.packageDir, asset));
+          await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
+        } else {
+          await rm(resolve(artifact.dir, "Contents/_CodeSignature"), { recursive: true });
+        }
+        const previous = resolve(projectRoot, `dist/macos-arm64/packaged/${channel}/app.zip`);
+        await Bun.write(previous, "previous package");
+        let ran = false;
+        const report = await runAdapter(
+          projectRoot,
+          stubAdapter({
+            channel,
+            run: async () => {
+              ran = true;
+            },
+          }),
+          { target: "macos-arm64" },
+        );
+        expect(report.diagnostics).toContainEqual(
+          expect.objectContaining({ stage: "verify", code: CODES.INPUT_TAMPERED }),
+        );
+        expect(report.ok).toBe(false);
+        expect(report.usable).toBe(false);
+        expect(ran).toBe(false);
+        expect(await Bun.file(previous).text()).toBe("previous package");
+      },
+    );
+  }
+}
+
+test.skipIf(process.platform !== "darwin")(
+  "macOS signature verification fails closed if codesign cannot run",
+  async () => {
+    const projectRoot = await mkdtemp(join(home, "mac-codesign-unavailable-"));
+    const { artifact, manifest } = await makeSignedMacArtifact(projectRoot);
+    const spawn = Bun.spawn;
+    const unavailable = spyOn(Bun, "spawn").mockImplementation((...args) => {
+      if (Array.isArray(args[0]) && args[0][0] === "/usr/bin/codesign") {
+        throw new Error("codesign unavailable");
+      }
+      return Reflect.apply(spawn, Bun, args);
+    });
+    try {
+      const diagnostics = await verifyArtifact({ artifact, manifest, channel: "mac-direct" });
+      expect(diagnostics).toContainEqual(
+        expect.objectContaining({
+          code: CODES.INPUT_TAMPERED,
+          message: expect.stringContaining("codesign unavailable"),
+        }),
+      );
+    } finally {
+      unavailable.mockRestore();
+    }
+  },
+);
+
+test.skipIf(process.platform === "darwin")(
+  "macOS provenance alone cannot skip integrity verification on another OS",
+  async () => {
+    const projectRoot = await mkdtemp(join(home, "mac-provenance-"));
+    const manifest = await makeArtifact(projectRoot, "macos-arm64");
+    const artifact = artifactPaths({ root: projectRoot, target: "macos-arm64", appId: "app.test" });
+    manifest.host = { target: "macos-arm64", sourceSha256: await sha256(artifact.executable) };
+    await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
+    await expectRejectedInputs(projectRoot, CODES.INPUT_MISSING, { target: "macos-arm64" });
+  },
+);
 
 test("a manifest outside the artifact is rejected before it is read", async () => {
   const projectRoot = await mkdtemp(join(home, "outside-manifest-"));

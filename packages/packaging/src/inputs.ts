@@ -420,12 +420,15 @@ export async function verifyArtifact(args: {
 
   // sourceSha256 predates macOS bundle signing and is provenance, not a final digest.
   const hostDigest = manifest.host?.packagedSha256 ?? manifest.host?.sha256;
-  if (!hostDigest && platform === "windows") {
+  if (!hostDigest && (platform === "windows" || process.platform !== "darwin")) {
     diagnostics.push({
       stage,
       code: CODES.INPUT_MISSING,
       severity: "error",
-      message: "Build manifest is missing the host executable hash; run bunaway build again.",
+      message:
+        platform === "windows"
+          ? "Build manifest is missing the host executable hash; run bunaway build again."
+          : "Build manifest has no final host executable hash; verify this signed bundle on macOS.",
       path: artifact.executable,
     });
   }
@@ -478,6 +481,28 @@ export async function verifyArtifact(args: {
   for (const [relative, expected] of Object.entries(manifest.assets)) {
     const path = resolve(artifact.packageDir, relative);
     await verifyFile(artifact.packageDir, path, `Manifest asset ${relative}`, expected);
+  }
+  if (platform === "macos" && !hostDigest && diagnostics.length === 0) {
+    try {
+      const validation = Bun.spawn(
+        ["/usr/bin/codesign", "--verify", "--deep", "--strict", artifact.dir],
+        { stdout: "pipe", stderr: "pipe" },
+      );
+      const [exit, stdout, stderr] = await Promise.all([
+        validation.exited,
+        new Response(validation.stdout).text(),
+        new Response(validation.stderr).text(),
+      ]);
+      if (exit !== 0) throw new Error(`Invalid code signature: ${(stdout + stderr).trim()}`);
+    } catch (error) {
+      diagnostics.push({
+        stage,
+        code: CODES.INPUT_TAMPERED,
+        severity: "error",
+        message: `macOS bundle integrity: ${error instanceof Error ? error.message : String(error)}`,
+        path: artifact.dir,
+      });
+    }
   }
   return diagnostics;
 }
