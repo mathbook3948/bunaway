@@ -7,29 +7,103 @@
 // delta snapshot, LOCALAPPDATA -> HOME/Library/Application Support.
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { chmod, cp, lstat, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  cp,
+  lstat,
+  mkdir,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { release } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { validateValue } from "../../packages/protocol/src/index.ts";
 import { validationCases } from "../protocol/validation-cases.ts";
 
 const original = resolve(process.argv[process.argv.indexOf("--package") + 1] ?? "");
 assert.ok(process.argv.includes("--package"), "--package is required");
-const workspace = dirname(original);
+const inPlace = process.env.BUNAWAY_PACKAGE_IN_PLACE === "1";
+const buildRoot = resolve(import.meta.dir, "../../build");
+const workspace = resolve(
+  process.env.BUNAWAY_TEST_WORKSPACE ??
+    (inPlace ? join(buildRoot, "macos-host-in-place") : dirname(original)),
+);
 // BUNAWAY_PACKAGE_IN_PLACE=1 runs the package where it sits — e.g. inside a
 // signed .app for App Sandbox runs — while the default copy keeps the
 // hostile-name path coverage.
-const packagePath =
-  process.env.BUNAWAY_PACKAGE_IN_PLACE === "1"
-    ? original
-    : join(workspace, "C 호스트 한글 package");
-if (packagePath !== original) await cp(original, packagePath, { recursive: true, force: true });
+const packagePath = inPlace ? original : join(workspace, "C 호스트 한글 package");
 // BUNAWAY_HOST_EXEC overrides the host binary: under App Sandbox the binary
 // must exec from inside the .app while --package points at Contents/Resources.
 const host = process.env.BUNAWAY_HOST_EXEC
   ? resolve(process.env.BUNAWAY_HOST_EXEC)
   : join(packagePath, "bunaway-host");
+const nativeTests = resolve(
+  process.env.BUNAWAY_NATIVE_TEST_EXEC ?? join(buildRoot, "macos-host", "host-native-tests"),
+);
+function enclosingApp(path: string): string | undefined {
+  for (let current = path; current !== dirname(current); current = dirname(current)) {
+    if (basename(current).endsWith(".app")) return current;
+  }
+}
+async function assertOutsideApp(path: string) {
+  assert.equal(enclosingApp(resolve(path)), undefined, `test output must be outside .app: ${path}`);
+  // Resolve existing ancestors too, so a workspace symlink cannot write into the bundle.
+  let ancestor = resolve(path);
+  while (!existsSync(ancestor)) ancestor = dirname(ancestor);
+  assert.equal(
+    enclosingApp(await realpath(ancestor)),
+    undefined,
+    `test output resolves inside .app: ${path}`,
+  );
+}
+await assertOutsideApp(workspace);
+const app = inPlace ? enclosingApp(await realpath(host)) : undefined;
+const packageApp = inPlace ? enclosingApp(await realpath(original)) : undefined;
+assert.equal(
+  packageApp,
+  app,
+  "in-place package and host must be in the same .app (or both outside)",
+);
+const identity = process.env.BUNAWAY_TEST_SIGN_IDENTITY;
+function codesign(args: string[]) {
+  const result = Bun.spawnSync(["/usr/bin/codesign", ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  assert.equal(result.exitCode, 0, result.stderr.toString());
+}
+function verifyApp() {
+  if (app) codesign(["--verify", "--deep", "--strict", app]);
+}
+function sealApp() {
+  if (app) {
+    assert.ok(identity);
+    codesign([
+      "--force",
+      "--sign",
+      identity,
+      "--preserve-metadata=identifier,entitlements,requirements,flags,runtime",
+      app,
+    ]);
+    verifyApp();
+  }
+}
+if (app) {
+  assert.ok(identity, "BUNAWAY_TEST_SIGN_IDENTITY is required for a mutable signed test fixture");
+  verifyApp();
+}
+assert.ok(
+  existsSync(nativeTests),
+  `native tests not found: ${nativeTests}; run native/macos/host/run.sh first`,
+);
+await mkdir(workspace, { recursive: true });
+if (packagePath !== original) await cp(original, packagePath, { recursive: true, force: true });
 const cwd = join(workspace, "hostile-host-cwd");
+await assertOutsideApp(cwd);
 await mkdir(cwd, { recursive: true });
 await writeFile(join(cwd, ".env"), "BUNAWAY_HOSTILE=from-dotenv\n");
 await writeFile(join(cwd, "bunfig.toml"), 'preload = ["./hostile.ts"]\n');
@@ -40,15 +114,31 @@ await writeFile(join(cwd, "hostile.ts"), 'throw new Error("hostile preload");');
 // container, so callers point this at
 // ~/Library/Containers/<bundle-id>/Data/Library/Application Support/bunaway/<appId>.
 const sandboxHome = join(workspace, "host-home");
+await assertOutsideApp(sandboxHome);
 await mkdir(sandboxHome, { recursive: true });
 const dataRoot =
   process.env.BUNAWAY_DATA_ROOT ??
   join(sandboxHome, "Library/Application Support/bunaway", "tests.bunaway.host");
+await assertOutsideApp(dataRoot);
 const results: { name: string; ok: boolean; durationMs: number; error?: string }[] = [];
 const diagnostics = join(workspace, "macos-host-diagnostics");
 await rm(diagnostics, { recursive: true, force: true });
 await mkdir(diagnostics, { recursive: true });
 let launchCount = 0;
+const assets = join(packagePath, "assets");
+const assetMode = (await stat(assets)).mode & 0o777;
+const savedResources = app
+  ? await Promise.all(
+      ["assets/app.json", "assets/policy.json", "manifest.json"].map(async (path) => ({
+        path: join(packagePath, path),
+        bytes: await readFile(join(packagePath, path)),
+      })),
+    )
+  : [];
+const assetsTmp = join(assets, "tmp");
+const savedTmp = join(diagnostics, "original-assets-tmp");
+const hadTmp = app && existsSync(assetsTmp);
+if (hadTmp) await cp(assetsTmp, savedTmp, { recursive: true });
 
 async function resetData() {
   // WebContent renderers may hold the data folder briefly after the host exits;
@@ -144,6 +234,7 @@ async function newWebContentPids(): Promise<number[]> {
 }
 
 function launch(extraEnv: Record<string, string> = {}) {
+  sealApp();
   const child = Bun.spawn([host, "--package", packagePath], {
     cwd,
     env: {
@@ -215,7 +306,7 @@ async function test(name: string, body: () => Promise<void>) {
 
 try {
   await test("native FIFO, scheme handler and resource-filter regressions", async () => {
-    const native = Bun.spawn([join(workspace, "macos-host", "host-native-tests"), workspace], {
+    const native = Bun.spawn([nativeTests, workspace], {
       stdout: "pipe",
       stderr: "pipe",
       timeout: 10000,
@@ -552,6 +643,14 @@ try {
     }
   });
 } finally {
+  if (app) {
+    await chmod(assets, 0o755);
+    for (const { path, bytes } of savedResources) await writeFile(path, bytes);
+    await rm(assetsTmp, { recursive: true, force: true });
+    if (hadTmp) await cp(savedTmp, assetsTmp, { recursive: true });
+    await chmod(assets, assetMode);
+    sealApp();
+  }
   const summary = {
     host: "macos",
     osRelease: release(),
@@ -560,7 +659,7 @@ try {
     results,
     generatedAt: new Date().toISOString(),
   };
-  const out = join(dirname(original), "macos-host-results.json");
+  const out = join(workspace, "macos-host-results.json");
   await writeFile(out, `${JSON.stringify(summary, null, 2)}\n`);
   console.log(`Wrote ${out}`);
 }

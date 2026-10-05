@@ -2,7 +2,7 @@
 # App Sandbox validation harness for bunaway's macOS host (E1-E8).
 # Verifies, on a real macOS machine, the properties MAS packaging depends on:
 #   - sandbox applies to .app bundles (ad-hoc and dev-cert signatures)
-#   - child-process spawn rules (inside-bundle only, inherit pair)
+#   - custom helper spawn rules (bundled inherit pair) and system exec controls
 #   - sandboxed Bun child + JIT entitlement requirement under hardened runtime
 #   - container-scoped data root, guard re-exec, orphan cleanup, read-only exec
 #   - WebKit XPC-service entitlement gate findings (see docs/architecture/
@@ -72,8 +72,16 @@ grep -q '"k":"outside-container","v":1' "$OUT/e1.json" \
 # -------------------------------------------- E2: child spawn topology rules
 say "== E2 spawn rules =="
 "$APP/Contents/MacOS/probe" spawn "$OUT/bin/child" >"$OUT/e2-outside.json" 2>&1
-grep -q '"k":"posix_spawn","v":1' "$OUT/e2-outside.json" && pass "child outside bundle: posix_spawn EPERM" \
-  || fail "outside-bundle child unexpectedly ran: $(cat "$OUT/e2-outside.json")"
+grep -q '"k":"posix_spawn","v":1' "$OUT/e2-outside.json" && pass "linker-signed custom helper outside bundle: posix_spawn EPERM" \
+  || fail "linker-signed outside-bundle helper unexpectedly ran: $(cat "$OUT/e2-outside.json")"
+
+for binary in /usr/bin/true /bin/echo; do
+  "$APP/Contents/MacOS/probe" spawn "$binary" allowed-outside-bundle >"$OUT/e2-${binary:t}.json" 2>&1
+  grep -q '"k":"posix_spawn","v":0' "$OUT/e2-${binary:t}.json" \
+    && grep -q '"k":"exit","v":0' "$OUT/e2-${binary:t}.json" \
+    && pass "system executable $binary outside bundle ran" \
+    || fail "system executable $binary failed: $(cat "$OUT/e2-${binary:t}.json")"
+done
 
 APP2=$(mkapp ProbePair "$OUT/bin/probe" "$SBX/entitlements/app-sandbox.plist")
 mkdir -p "$APP2/Contents/Helpers"
@@ -82,7 +90,7 @@ codesign --force --sign "$IDENT" --entitlements "$SBX/entitlements/child.plist" 
   "$APP2/Contents/Helpers/child" 2>/dev/null
 codesign --force --sign "$IDENT" --entitlements "$SBX/entitlements/app-sandbox.plist" "$APP2" 2>/dev/null
 "$APP2/Contents/MacOS/probe" spawn "$APP2/Contents/Helpers/child" >"$OUT/e2-pair.json" 2>&1
-grep -q 'child-ok' "$OUT/e2-pair.json" && pass "Helpers child w/ sandbox+inherit pair ran" \
+grep -q 'child-ok.*sandboxed=1' "$OUT/e2-pair.json" && pass "Helpers child w/ sandbox+inherit pair ran sandboxed" \
   || fail "paired child failed: $(cat "$OUT/e2-pair.json")"
 
 # child signed app-sandbox WITHOUT inherit -> SIGTRAP expected
@@ -116,7 +124,7 @@ grep -q '"k":"connect-127.0.0.1:9","v":1' "$OUT/e1.json" \
 say ""
 if [ "$FAILED" = 0 ]; then
   say "ALL SANDBOX ASSERTIONS PASSED  (results in $OUT)"
-  say "WebKit XPC-service gate: see docs/architecture/macos-sandbox-results.md (UNVERIFIED w/o Apple identity)"
+  say "WebKit XPC-service gate: see docs/architecture/macos-sandbox-results.md (cause and MAS behavior UNVERIFIED)"
   exit 0
 else
   say "SANDBOX ASSERTIONS FAILED — see $OUT/*.json"

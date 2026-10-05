@@ -2,16 +2,14 @@
 // Registers a user-domain Mach service; for each connection it reports what
 // xpc_connection_copy_entitlement_value(3) returns for the peer — the same
 // peer-view WebKit's XPC services use in checkEntitlements().
-// Runs UNSANDBOXED and unsigned; it only exists to observe the peer's
+// Runs UNSANDBOXED without an entitlement profile; it only observes the peer's
 // registered entitlements.
 //
 //   entsrv <log-path>
 //     appends lines: "<entitlement> => <xpc description or <null>>"
 
 #include <Foundation/Foundation.h>
-#include <arpa/inet.h>
 #include <dispatch/dispatch.h>
-#include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -67,19 +65,6 @@ static void report(xpc_connection_t peer, xpc_object_t msg) {
     }
     int wrc = sandbox_check_by_audit_token(at, "file-write-data", 1, "/private/tmp");
     fprintf(g_log, "sandbox_check_by_audit_token file-write-data /private/tmp => %d\n", wrc);
-    // Network sandbox ops — with and without an address filter.
-    {
-        struct sockaddr_in sa = {};
-        sa.sin_family = AF_INET;
-        sa.sin_port = htons(443);
-        sa.sin_addr.s_addr = htonl(0x0A000001); // 10.0.0.1
-        static const char* kNetOps[] = {"network-outbound", "network-inbound", "system-socket"};
-        for (const char* op : kNetOps) {
-            int rc0 = sandbox_check_by_audit_token(at, op, 0);
-            int rc4 = sandbox_check_by_audit_token(at, op, 4, &sa, sizeof sa);
-            fprintf(g_log, "sandbox_check_by_audit_token %s none => %d ; sockaddr => %d\n", op, rc0, rc4);
-        }
-    }
     // Candidate entitlement names a shipped WebKit build might require.
     static const char* kExtraEnts[] = {
         "com.apple.developer.networking.networkextension",
