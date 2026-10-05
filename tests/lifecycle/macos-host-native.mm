@@ -44,6 +44,14 @@ int main(int argc, char** argv) {
                 require(waitpid(signer, &status, 0) == signer && WIFEXITED(status) && WEXITSTATUS(status) == 0, "codesign failed.");
                 const auto packaged = sha256(signedBun);
                 require(packaged != upstream, "Re-signing must change Bun bytes.");
+                runtime.manifest["bun"]["sha256"] = packaged;
+                runtime.manifest["bun"]["sourceSha256"] = packaged;
+                bool aliasDenied = false;
+                try { runtime.verifyBun(signedBun); } catch (...) { aliasDenied = true; }
+                require(aliasDenied, "Bun sha256/sourceSha256 cannot replace packagedSha256.");
+                aliasDenied = false;
+                try { runtime.spawnBun(signedBun); } catch (...) { aliasDenied = true; }
+                require(aliasDenied && runtime.childPid == 0, "Bun digest aliases must fail before spawn.");
                 runtime.manifest["bun"]["packagedSha256"] = packaged;
                 runtime.verifyBun(signedBun);
                 runtime.assets = testRoot;
@@ -77,6 +85,8 @@ int main(int argc, char** argv) {
                 try { runtime.verifyBun(signedBun); } catch (...) { denied = true; }
                 require(denied, "A matching upstream digest cannot override a wrong packaged digest.");
                 runtime.manifest["bun"].erase("packagedSha256");
+                runtime.manifest["bun"]["sha256"] = upstream;
+                runtime.manifest["bun"]["sourceSha256"] = upstream;
                 runtime.verifyBun(signedBun);
                 require(sha256(originalBun) == upstream, "Original bundled Bun was mutated.");
                 std::puts("PASS re-signed Bun preflight, spawn, digest precedence and unsigned fallback");

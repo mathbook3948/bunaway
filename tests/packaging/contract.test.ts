@@ -1,10 +1,21 @@
 import { afterAll, beforeAll, expect, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  realpath,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   artifactPaths,
+  type BuildArtifact,
+  type BuildTarget,
   CODES,
   isChannelId,
   loadPackaging,
@@ -39,29 +50,50 @@ async function writeJson(path: string, value: unknown) {
 
 // Builds a minimal valid dist/windows-x64 artifact: bunaway-host.exe,
 // runtime/bun.exe, assets/, licenses/ and manifest.json matching every hash.
-async function makeArtifact(projectRoot = root): Promise<PackageManifest> {
-  const dir = resolve(projectRoot, "dist/windows-x64");
+async function makeArtifact(
+  projectRoot = root,
+  target: BuildTarget = "windows-x64",
+): Promise<PackageManifest> {
+  const artifact = artifactPaths({ root: projectRoot, target, appId: "app.test" });
+  const dir = artifact.packageDir;
+  const windows = target === "windows-x64";
+  const runtime = resolve(dir, windows ? "runtime/bun.exe" : "runtime/bun");
   if (projectRoot === root) artifactDir = dir;
   await mkdir(resolve(dir, "assets"), { recursive: true });
   await mkdir(resolve(dir, "runtime"), { recursive: true });
   await mkdir(resolve(dir, "licenses"), { recursive: true });
-  await writeFile(resolve(dir, "bunaway-host.exe"), "fake host");
-  await writeFile(resolve(dir, "runtime/bun.exe"), "fake bun");
-  await writeFile(resolve(dir, "assets/app.json"), "{}");
-  await writeFile(resolve(dir, "licenses/LICENSE.bun"), "license");
+  await mkdir(resolve(artifact.executable, ".."), { recursive: true });
+  await writeFile(artifact.executable, "fake host");
+  await writeFile(runtime, "fake bun");
+  const assets: Record<string, string> = {};
+  for (const path of [
+    "assets/app.json",
+    "assets/policy.json",
+    "assets/backend.js",
+    "assets/bunfig.toml",
+    "assets/tsconfig.json",
+    "licenses/LICENSE.bun",
+    "licenses/LICENSE.nlohmann-json",
+    ...(windows ? ["licenses/License-WebView2.txt"] : []),
+  ]) {
+    await writeFile(resolve(dir, path), "{}");
+    assets[path] = await sha256(resolve(dir, path));
+  }
   const manifest: PackageManifest = {
     bun: {
       version: "1.4.2",
-      target: "windows-x64-baseline",
-      executableSha256: await sha256(resolve(dir, "runtime/bun.exe")),
-      licenseSha256: "x",
+      target: windows ? "windows-x64-baseline" : "darwin-aarch64",
+      executableSha256: await sha256(runtime),
+      licenseSha256: assets["licenses/LICENSE.bun"] ?? "",
     },
-    assets: {
-      "assets/app.json": await sha256(resolve(dir, "assets/app.json")),
-      "licenses/LICENSE.bun": await sha256(resolve(dir, "licenses/LICENSE.bun")),
-    },
+    assets,
     app: { id: "app.test", version: "0.1.0" },
-    host: { target: "windows-x64", sha256: await sha256(resolve(dir, "bunaway-host.exe")) },
+    host: {
+      target,
+      ...(windows
+        ? { sha256: await sha256(artifact.executable) }
+        : { sourceSha256: await sha256(artifact.executable) }),
+    },
   };
   await writeJson(resolve(dir, "manifest.json"), manifest);
   return manifest;
@@ -111,7 +143,12 @@ function stubAdapter(options: {
   };
 }
 
-function runAdapter(projectRoot: string, adapter: PackageAdapter) {
+function runAdapter(
+  projectRoot: string,
+  adapter: PackageAdapter,
+  options: { target?: BuildTarget; artifact?: BuildArtifact } = {},
+) {
+  const target = options.target ?? "windows-x64";
   return runPackage({
     metadata: {
       root: projectRoot,
@@ -120,15 +157,49 @@ function runAdapter(projectRoot: string, adapter: PackageAdapter) {
       publisher: { display: "Test" },
       version: { semver: "0.1.0", build: 0, msix: "0.1.0.0" },
       icons: {},
-      targets: [{ platform: "windows", arch: "x64" }],
+      targets:
+        target === "windows-x64"
+          ? [{ platform: "windows", arch: "x64" }]
+          : [{ platform: "macos", arch: "arm64" }],
     },
     appId: "app.test",
     channel: adapter.channel,
     channelConfig: {},
-    target: "windows-x64",
-    artifact: artifactPaths({ root: projectRoot, target: "windows-x64", appId: "app.test" }),
+    target,
+    artifact: options.artifact ?? artifactPaths({ root: projectRoot, target, appId: "app.test" }),
     adapter,
   });
+}
+
+async function expectRejectedInputs(
+  projectRoot: string,
+  code: string,
+  options: { target?: BuildTarget; artifact?: BuildArtifact } = {},
+) {
+  const target = options.target ?? "windows-x64";
+  const channel = target === "windows-x64" ? "win-direct" : "mac-direct";
+  const previous = resolve(projectRoot, "dist", target, "packaged", channel, "setup.exe");
+  await Bun.write(previous, "previous output");
+  let ran = false;
+  const report = await runAdapter(
+    projectRoot,
+    stubAdapter({
+      channel,
+      run: async (ctx) => {
+        ran = true;
+        await Bun.write(resolve(ctx.staging, "setup.exe"), "new output");
+        ctx.addArtifact("setup.exe", "installer");
+      },
+    }),
+    options,
+  );
+  expect(report.ok).toBe(false);
+  expect(report.usable).toBe(false);
+  expect(report.submittable).toBe(false);
+  expect(report.diagnostics.some((d) => d.code === code && d.severity === "error")).toBe(true);
+  expect(ran).toBe(false);
+  expect(await Bun.file(previous).text()).toBe("previous output");
+  return report;
 }
 
 test("packaging.json rejects malformed shapes before adapters run", async () => {
@@ -357,6 +428,74 @@ test("required-to-run channels mark unsigned output unusable", async () => {
   ).toBe(true);
 });
 
+test.each(["optional", "required-to-run", "required-to-submit"] as const)(
+  "%s channels cannot use a signed helper to cover an unsigned distribution artifact",
+  async (requirement) => {
+    const projectRoot = await mkdtemp(join(home, "mixed-signing-"));
+    await makeArtifact(projectRoot);
+    const report = await runAdapter(
+      projectRoot,
+      stubAdapter({
+        channel: "win-store-msix",
+        requirement,
+        run: async (ctx) => {
+          await Bun.write(resolve(ctx.staging, "app.msix"), "unsigned package");
+          ctx.addArtifact("app.msix", "msix");
+          await Bun.write(resolve(ctx.staging, "helper.exe"), "signed helper");
+          ctx.addArtifact("helper.exe", "helper", { signed: true });
+        },
+      }),
+    );
+    expect(report.ok).toBe(true);
+    expect(report.signing.performed).toBe(true);
+    expect(report.usable).toBe(requirement !== "required-to-run");
+    expect(report.submittable).toBe(false);
+    expect(report.artifacts.find((a) => a.kind === "msix")?.signed).toBe(false);
+  },
+);
+
+test("unsigned sidecars do not invalidate signed distribution artifacts", async () => {
+  const projectRoot = await mkdtemp(join(home, "signed-sidecar-"));
+  await makeArtifact(projectRoot);
+  const report = await runAdapter(
+    projectRoot,
+    stubAdapter({
+      channel: "win-store-msix",
+      requirement: "required-to-run",
+      run: async (ctx) => {
+        await Bun.write(resolve(ctx.staging, "app.msix"), "signed package");
+        ctx.addArtifact("app.msix", "msix", { signed: true });
+        await Bun.write(resolve(ctx.staging, "checksums.txt"), "checksums");
+        ctx.addArtifact("checksums.txt", "checksum", { signingRequired: false });
+      },
+    }),
+  );
+  expect(report.ok).toBe(true);
+  expect(report.usable).toBe(true);
+  expect(report.submittable).toBe(true);
+  expect(report.diagnostics.some((d) => d.code === CODES.SIGNING_MISSING)).toBe(false);
+  expect(report.artifacts.find((a) => a.kind === "checksum")?.signingRequired).toBe(false);
+});
+
+test("signed sidecars alone do not make a channel submittable", async () => {
+  const projectRoot = await mkdtemp(join(home, "only-sidecar-"));
+  await makeArtifact(projectRoot);
+  const report = await runAdapter(
+    projectRoot,
+    stubAdapter({
+      channel: "win-store-msix",
+      requirement: "required-to-run",
+      run: async (ctx) => {
+        await Bun.write(resolve(ctx.staging, "checksums.txt"), "signed checksums");
+        ctx.addArtifact("checksums.txt", "checksum", { signed: true, signingRequired: false });
+      },
+    }),
+  );
+  expect(report.ok).toBe(true);
+  expect(report.usable).toBe(false);
+  expect(report.submittable).toBe(false);
+});
+
 test("tampered inputs abort before adapter stages run", async () => {
   await writeFile(resolve(artifactDir, "assets/app.json"), "tampered");
   let ran = false;
@@ -391,6 +530,9 @@ test("tampered inputs abort before adapter stages run", async () => {
 test("packagedSha256 is preferred over the upstream digest", () => {
   expect(packagedDigest({ executableSha256: "upstream", packagedSha256: "signed" })).toBe("signed");
   expect(packagedDigest({ executableSha256: "upstream" })).toBe("upstream");
+  expect(
+    packagedDigest({ executableSha256: "upstream", sha256: "signed", sourceSha256: "signed" }),
+  ).toBe("upstream");
   expect(packagedDigest({ sourceSha256: "pre", sha256: "final" })).toBe("final");
   expect(packagedDigest({})).toBeUndefined();
 });
@@ -730,6 +872,178 @@ test("invalid Bun digests fail closed even when the runtime has been changed", a
   );
   expect(report.ok).toBe(false);
   expect(ran).toBe(false);
+});
+
+test.each([
+  { target: "windows-x64", alias: "sha256" },
+  { target: "windows-x64", alias: "sourceSha256" },
+  { target: "macos-arm64", alias: "sha256" },
+  { target: "macos-arm64", alias: "sourceSha256" },
+] as const)("Bun ignores $alias as a final digest on $target", async ({ target, alias }) => {
+  const projectRoot = await mkdtemp(join(home, "bun-fallback-"));
+  const manifest = await makeArtifact(projectRoot, target);
+  const artifact = artifactPaths({ root: projectRoot, target, appId: "app.test" });
+  const runtime = resolve(
+    artifact.packageDir,
+    target === "windows-x64" ? "runtime/bun.exe" : "runtime/bun",
+  );
+  const channel = target === "windows-x64" ? "win-direct" : "mac-direct";
+  await Bun.write(runtime, "re-signed runtime bytes");
+  const finalDigest = await sha256(runtime);
+  manifest.bun[alias] = finalDigest;
+  await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
+  const report = await expectRejectedInputs(projectRoot, CODES.INPUT_TAMPERED, { target });
+  expect(
+    report.diagnostics.some((d) => d.code === CODES.INPUT_TAMPERED && d.path === runtime),
+  ).toBe(true);
+
+  manifest.bun.packagedSha256 = finalDigest;
+  expect(await verifyArtifact({ artifact, manifest, channel })).toEqual([]);
+  manifest.bun.packagedSha256 = manifest.bun.executableSha256;
+  expect(
+    (await verifyArtifact({ artifact, manifest, channel })).some(
+      (d) => d.code === CODES.INPUT_TAMPERED && d.path === runtime,
+    ),
+  ).toBe(true);
+});
+
+test.each([
+  "assets/app.json",
+  "assets/policy.json",
+  "assets/backend.js",
+  "assets/bunfig.toml",
+  "assets/tsconfig.json",
+  "licenses/LICENSE.bun",
+  "licenses/LICENSE.nlohmann-json",
+  "licenses/License-WebView2.txt",
+])("required build input %s cannot be omitted from the manifest", async (path) => {
+  const projectRoot = await mkdtemp(join(home, "missing-required-"));
+  const manifest = await makeArtifact(projectRoot);
+  const artifact = artifactPaths({ root: projectRoot, target: "windows-x64", appId: "app.test" });
+  delete manifest.assets[path];
+  await rm(resolve(artifact.packageDir, path));
+  await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
+  const report = await expectRejectedInputs(projectRoot, CODES.INPUT_MISSING);
+  expect(report.diagnostics.some((d) => d.path === resolve(artifact.packageDir, path))).toBe(true);
+});
+
+test("empty assets with no app or licenses are rejected before adapters run", async () => {
+  const projectRoot = await mkdtemp(join(home, "empty-assets-"));
+  const manifest = await makeArtifact(projectRoot);
+  const artifact = artifactPaths({ root: projectRoot, target: "windows-x64", appId: "app.test" });
+  manifest.assets = {};
+  await rm(resolve(artifact.packageDir, "assets"), { recursive: true });
+  await rm(resolve(artifact.packageDir, "licenses"), { recursive: true });
+  await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
+  await expectRejectedInputs(projectRoot, CODES.INPUT_MISSING);
+});
+
+test.each(
+  [[], null, "assets", 1, true, { "assets/app.json": 1 }, { "assets/app.json": "bad" }].map(
+    (assets) => ({ assets }),
+  ),
+)("malformed manifest assets %j fail closed", async ({ assets }) => {
+  const projectRoot = await mkdtemp(join(home, "invalid-assets-"));
+  const manifest = await makeArtifact(projectRoot);
+  const artifact = artifactPaths({ root: projectRoot, target: "windows-x64", appId: "app.test" });
+  const invalid = { ...manifest, assets };
+  await writeJson(resolve(artifact.packageDir, "manifest.json"), invalid);
+  await expect(loadManifest(artifact)).rejects.toThrow();
+  expect(
+    (
+      await verifyArtifact({
+        artifact,
+        manifest: invalid as PackageManifest,
+        channel: "win-direct",
+      })
+    ).some((d) => d.code === CODES.INPUT_MISSING),
+  ).toBe(true);
+  await expectRejectedInputs(projectRoot, CODES.INPUT_MISSING);
+});
+
+test.each([
+  "../outside.txt",
+  "assets/../../outside.txt",
+  "/outside.txt",
+  "C:/outside.txt",
+  "C:outside.txt",
+  "\\\\server\\share\\outside.txt",
+  "assets\\..\\outside.txt",
+])("manifest asset path %s cannot escape the package", async (path) => {
+  const projectRoot = await mkdtemp(join(home, "asset-path-"));
+  const manifest = await makeArtifact(projectRoot);
+  const artifact = artifactPaths({ root: projectRoot, target: "windows-x64", appId: "app.test" });
+  manifest.assets[path] = manifest.bun.executableSha256;
+  await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
+  await expectRejectedInputs(projectRoot, CODES.INPUT_UNEXPECTED);
+});
+
+test.each(["runtime", "assets", "licenses"])(
+  "input directory %s cannot link outside the package",
+  async (directory) => {
+    const projectRoot = await mkdtemp(join(home, "input-link-"));
+    await makeArtifact(projectRoot);
+    const artifact = artifactPaths({ root: projectRoot, target: "windows-x64", appId: "app.test" });
+    const path = resolve(artifact.packageDir, directory);
+    const external = resolve(projectRoot, "external-input");
+    await rename(path, external);
+    await symlink(external, path, "junction");
+    const report = await expectRejectedInputs(projectRoot, CODES.INPUT_UNEXPECTED);
+    expect(report.diagnostics.some((d) => d.path?.startsWith(path))).toBe(true);
+  },
+);
+
+test.each(["Contents/MacOS", "Contents/Resources"])(
+  "macOS input directory %s cannot link outside the app bundle",
+  async (directory) => {
+    const projectRoot = await mkdtemp(join(home, "mac-input-link-"));
+    await makeArtifact(projectRoot, "macos-arm64");
+    const artifact = artifactPaths({ root: projectRoot, target: "macos-arm64", appId: "app.test" });
+    const path = resolve(artifact.dir, directory);
+    const external = resolve(projectRoot, "external-input");
+    await rename(path, external);
+    await symlink(external, path, "junction");
+    await expectRejectedInputs(projectRoot, CODES.INPUT_UNEXPECTED, { target: "macos-arm64" });
+  },
+);
+
+test("input directory links inside the package remain valid", async () => {
+  const projectRoot = await mkdtemp(join(home, "internal-input-link-"));
+  const manifest = await makeArtifact(projectRoot);
+  const artifact = artifactPaths({ root: projectRoot, target: "windows-x64", appId: "app.test" });
+  const runtime = resolve(artifact.packageDir, "runtime");
+  const internal = resolve(artifact.packageDir, "original-runtime");
+  await rename(runtime, internal);
+  await symlink(internal, runtime, "junction");
+  expect(await verifyArtifact({ artifact, manifest, channel: "win-direct" })).toEqual([]);
+});
+
+test("macOS inputs stay inside the bundle without requiring WebView2 or a pre-sign host digest", async () => {
+  const projectRoot = await mkdtemp(join(home, "mac-inputs-"));
+  const manifest = await makeArtifact(projectRoot, "macos-arm64");
+  const artifact = artifactPaths({ root: projectRoot, target: "macos-arm64", appId: "app.test" });
+  expect(await loadManifest(artifact)).toEqual(manifest);
+  expect(await verifyArtifact({ artifact, manifest, channel: "mac-direct" })).toEqual([]);
+  const report = await runAdapter(
+    projectRoot,
+    stubAdapter({
+      channel: "mac-direct",
+      run: async (ctx) => {
+        await Bun.write(resolve(ctx.staging, "app.zip"), "package");
+        ctx.addArtifact("app.zip", "archive");
+      },
+    }),
+    { target: "macos-arm64" },
+  );
+  expect(report.ok).toBe(true);
+});
+
+test("a manifest outside the artifact is rejected before it is read", async () => {
+  const projectRoot = await mkdtemp(join(home, "outside-manifest-"));
+  await makeArtifact(projectRoot);
+  const artifact = artifactPaths({ root: projectRoot, target: "windows-x64", appId: "app.test" });
+  artifact.packageDir = resolve(projectRoot, "external");
+  await expectRejectedInputs(projectRoot, CODES.INPUT_UNEXPECTED, { artifact });
 });
 
 test("icon directory links cannot resolve outside the project", async () => {

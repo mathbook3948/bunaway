@@ -19,7 +19,7 @@ import {
   type StageContext,
   type StageResult,
 } from "./contract.ts";
-import { loadManifest, verifyArtifact } from "./inputs.ts";
+import { ArtifactInputError, loadManifest, verifyArtifact } from "./inputs.ts";
 
 export interface RunPackageArgs {
   metadata: ResolvedPackaging;
@@ -93,7 +93,7 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
     } catch (error) {
       diagnostics.push({
         stage: "resolve",
-        code: CODES.INPUT_MISSING,
+        code: error instanceof ArtifactInputError ? error.code : CODES.INPUT_MISSING,
         severity: "error",
         message: error instanceof Error ? error.message : String(error),
         path: resolve(artifact.packageDir, "manifest.json"),
@@ -184,7 +184,12 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
           diagnostics.push({ stage: stage.id, ...diagnostic });
         },
         addArtifact(path, kind, options) {
-          produced.push({ path, kind, signed: options?.signed ?? false });
+          produced.push({
+            path,
+            kind,
+            signed: options?.signed ?? false,
+            signingRequired: options?.signingRequired ?? true,
+          });
         },
       };
       try {
@@ -241,6 +246,7 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
             path: resolve(staging, relative(canonicalStaging, canonicalPath)),
             kind: entry.kind,
             signed: entry.signed,
+            signingRequired: entry.signingRequired,
             sha256: await sha256(path),
             size: file.size,
           });
@@ -271,10 +277,12 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
     }
 
     report.signing.performed = !failed && verified.some((p) => p.signed);
-    if (signing && !report.signing.performed) {
-      notes.push("Signing was configured but no artifact was signed; check the sign stage output.");
+    const distributables = verified.filter((p) => p.signingRequired);
+    const allSigned = !failed && distributables.length > 0 && distributables.every((p) => p.signed);
+    if (signing && !allSigned) {
+      notes.push("Signing was configured but not all distribution artifacts were signed.");
     }
-    if (!signing) {
+    if (!failed && !allSigned) {
       const requirement = adapter.signingRequirement;
       diagnostics.push({
         stage: "report",
@@ -282,16 +290,15 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
         severity: requirement === "optional" ? "info" : "warning",
         message:
           requirement === "optional"
-            ? "No signing configured; artifacts run locally but expect user-trust warnings."
-            : `Signing is ${requirement} for channel ${channel}; unsigned output is not distributable or submittable.`,
+            ? "Unsigned distribution artifacts run locally but are not store-submittable."
+            : `Signing is ${requirement} for channel ${channel}; all distribution artifacts must be signed to be ${requirement === "required-to-run" ? "usable and submittable" : "submittable"}.`,
       });
     }
 
     failed = failed || diagnostics.some((d) => d.severity === "error");
     report.ok = !failed;
-    report.usable =
-      report.ok && !(adapter.signingRequirement === "required-to-run" && !report.signing.performed);
-    report.submittable = report.ok && report.signing.performed;
+    report.usable = report.ok && !(adapter.signingRequirement === "required-to-run" && !allSigned);
+    report.submittable = report.ok && allSigned;
 
     if (report.ok) {
       const backup = `${output}.previous-${crypto.randomUUID()}`;

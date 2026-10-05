@@ -17,7 +17,7 @@
 // Diagnostics are structured: every stage reports {stage, code, severity,
 // message, path?} entries into the packaging report instead of only throwing.
 // Codes are stable (`PKG_*`) so tests, CI and sibling adapters can rely on
-// them. An unsigned artifact is never reported as store-submittable.
+// them. An unsigned distribution artifact is never reported as store-submittable.
 
 export const PACKAGING_CHANNELS = [
   "win-direct",
@@ -168,14 +168,18 @@ export interface PackageManifest {
   [key: string]: unknown;
 }
 
-// The digest the runtime integrity check must use for a packaged file.
+// Bun uses only packagedSha256/executableSha256, matching both native hosts.
+// Host entries without executableSha256 retain their sha256/sourceSha256 fallback.
 export function packagedDigest(entry: {
   executableSha256?: string;
   sourceSha256?: string;
   sha256?: string;
   packagedSha256?: string;
 }): string | undefined {
-  return entry.packagedSha256 ?? entry.sha256 ?? entry.sourceSha256 ?? entry.executableSha256;
+  if ("executableSha256" in entry) {
+    return entry.packagedSha256 ?? entry.executableSha256;
+  }
+  return entry.packagedSha256 ?? entry.sha256 ?? entry.sourceSha256;
 }
 
 // How much weight a channel puts on signing:
@@ -211,13 +215,19 @@ export interface StageContext {
   report(diagnostic: Omit<Diagnostic, "stage">): void;
   // Register a produced artifact (installers, msix, submission bundles) so the
   // runner can hash/size it and list it in the report. Paths must resolve inside staging.
-  addArtifact(path: string, kind: string, options?: { signed?: boolean }): void;
+  // Only non-distributable sidecars (e.g. checksums) may opt out of signing.
+  addArtifact(
+    path: string,
+    kind: string,
+    options?: { signed?: boolean; signingRequired?: boolean },
+  ): void;
 }
 
 export interface ProducedArtifact {
   path: string;
   kind: string;
   signed: boolean;
+  signingRequired: boolean;
 }
 
 export type StageStatus = "ok" | "failed" | "skipped";
@@ -245,13 +255,10 @@ export interface PackageReport {
   };
   stages: StageResult[];
   diagnostics: Diagnostic[];
-  artifacts: {
-    path: string;
-    kind: string;
-    signed: boolean;
+  artifacts: (ProducedArtifact & {
     sha256: string;
     size: number;
-  }[];
+  })[];
   // Free-form notes for verified vs unverified scope (e.g. "locally sideloaded
   // only; store signing not performed").
   notes: string[];

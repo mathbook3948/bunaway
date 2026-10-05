@@ -28,6 +28,11 @@ status: accepted
 - 어댑터 입력: 산출물 디렉터리·`manifest.json`·`policy.json`·`app.json`·라이선스
   맵·해석된 패키징 메타데이터. runner의 `verify` 단계가 manifest의 자산·Bun 해시로
   입력을 재검증하고 누락/변조는 `PKG_INPUT_MISSING`/`PKG_INPUT_TAMPERED`로 거부한다.
+- 자산 맵은 상대 경로와 SHA-256으로 구성된 객체여야 한다. `app.json`·`policy.json`·
+  `backend.js`·`bunfig.toml`·`tsconfig.json` 및 Bun·JSON 라이선스는 필수 입력이며,
+  Windows는 WebView2 라이선스도 포함한다. 파일뿐 아니라 manifest 등재도 확인한다.
+  manifest·호스트는 빌드 산출물 루트, 자산·Bun은 패키지 루트 안의 실제 경로여야 한다.
+  외부 symlink/junction 탈출은 `PKG_INPUT_UNEXPECTED`로 어댑터 실행 전에 거부한다.
 - 어댑터는 `resolve → verify → stage → sign → assemble → verify-artifact → report`
   순서의 stage 목록을 정의하고, runner가 단계별 실행·타이밍·실패 포착을 담당한다.
 - 진단은 `{stage, code: PKG_*, severity, message, path?}` 형식으로 통일하고 결과는
@@ -40,12 +45,20 @@ status: accepted
 
 서명은 어댑터의 선택적 단계로 분리하고 자격증명은 개발자가 제공한다(인증서 파일·
 thumbprint·비밀번호 env 이름만 저장소에 참조). 채널은 `signingRequirement`로
-`optional`/`required-to-run`/`required-to-submit`을 선언한다. 미서명 결과는
-`submittable:false`로만 기록하고, 실행에 서명이 필요한 채널에서는 `usable:false`다.
-서명으로 바이너가 바뀌는 채널을 위해 manifest의 해시를 둘로 나눈다:
-`sha256`/`sourceSha256`은 upstream 출처(불변 기록), `packagedSha256`은 서명 후 최종
-바이트. 호스트의 런타임 무결성 검사는 `packagedSha256`을 우선 읽고 없으면 기존
-필드를 사용하므로 서명이 없는 채널의 검사는 그대로다.
+`optional`/`required-to-run`/`required-to-submit`을 선언한다. 배포물 중 하나라도 미서명이면
+`submittable:false`이며, 실행에 서명이 필요한 채널에서는 `usable:false`다.
+`addArtifact`의 `signingRequired`는 기본값이 true다. 체크섬 같은 비배포 부가 파일만
+false로 제외할 수 있고, 설치 패키지·실행 파일·제출 번들은 제외할 수 없다.
+서명 대상 배포물이 하나 이상 있어야 하며, 그 모두가 서명되어야 실행/제출 요건을
+충족한다. `signing.performed`는 서명된 파일이 있는지를 기록할 뿐 이 판정을 대체하지 않는다.
+
+서명으로 바이너리가 바뀌는 채널을 위해 manifest의 해시를 둘로 나눈다.
+Bun은 upstream의 `executableSha256`을 보존하고, 서명 후 최종 바이트는
+`packagedSha256`에 기록한다. 패키징 검증과 Windows/macOS 런타임 무결성 검사는
+Bun의 `packagedSha256`을 우선 읽고 없으면 `executableSha256`만 사용한다.
+Bun의 `sha256`/`sourceSha256`은 이 fallback을 대체하지 않는다.
+호스트의 `sha256`/`sourceSha256`은 별도 규칙이며, macOS 서명 전 호스트의
+`sourceSha256`은 provenance이므로 최종 호스트 바이트와 직접 비교하지 않는다.
 
 ## 검토한 대안
 
