@@ -100,5 +100,10 @@ stay in the external workspace; `BUNAWAY_DATA_ROOT` must also stay outside any
 `.app` (in its container for App Sandbox). App extensions are checked without
 regard to case. Symlinked outputs into apps and output paths containing `..`
 components are rejected before creating scratch files or mutating the package.
+Deletion roots must not contain the fixture, host/native binaries, workspace or
+other test outputs, including through symlink aliases. Scratch and result file
+leaves are checked before setup; symlinks and non-regular files are rejected.
+Output writes use a temporary sibling and rename rather than following an
+existing leaf, and the final app seal is checked after publishing the results.
 Default copied-package hostile-path and asset-mutation tests remain
 unchanged. A sandboxed WKWebView failure is still a failure, not a skipped test.

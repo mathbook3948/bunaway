@@ -12,15 +12,17 @@ import {
   cp,
   lstat,
   mkdir,
+  mkdtemp,
   readFile,
   realpath,
+  rename,
   rm,
   stat,
   symlink,
   writeFile,
 } from "node:fs/promises";
 import { release } from "node:os";
-import { basename, dirname, join, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { validateValue } from "../../packages/protocol/src/index.ts";
 import { validationCases } from "../protocol/validation-cases.ts";
 
@@ -57,15 +59,23 @@ async function resolveTestOutput(path: string) {
   );
   const output = resolve(path);
   assert.equal(enclosingApp(output), undefined, `test output must be outside .app: ${path}`);
-  // Resolve existing ancestors too, so a workspace symlink cannot write into the bundle.
-  let ancestor = output;
-  while (!existsSync(ancestor)) ancestor = dirname(ancestor);
   assert.equal(
-    enclosingApp(await realpath(ancestor)),
+    enclosingApp(await canonicalPath(output)),
     undefined,
     `test output resolves inside .app: ${path}`,
   );
   return output;
+}
+async function canonicalPath(output: string) {
+  let ancestor = output;
+  while (!existsSync(ancestor)) ancestor = dirname(ancestor);
+  return resolve(await realpath(ancestor), relative(ancestor, output));
+}
+function containsPath(root: string, path: string) {
+  const suffix = relative(root, path);
+  return (
+    suffix === "" || (!isAbsolute(suffix) && suffix !== ".." && !suffix.startsWith(`..${sep}`))
+  );
 }
 const app = inPlace ? enclosingApp(await realpath(host)) : undefined;
 const packageApp = inPlace ? enclosingApp(await realpath(original)) : undefined;
@@ -98,14 +108,6 @@ function sealApp() {
     verifyApp();
   }
 }
-if (app) {
-  assert.ok(identity, "BUNAWAY_TEST_SIGN_IDENTITY is required for a mutable signed test fixture");
-  verifyApp();
-}
-assert.ok(
-  existsSync(nativeTests),
-  `native tests not found: ${nativeTests}; run native/macos/host/run.sh first`,
-);
 const cwd = join(workspace, "hostile-host-cwd");
 await resolveTestOutput(cwd);
 
@@ -119,15 +121,70 @@ const dataRoot = await resolveTestOutput(
   process.env.BUNAWAY_DATA_ROOT ??
     join(sandboxHome, "Library/Application Support/bunaway", "tests.bunaway.host"),
 );
+const diagnostics = await resolveTestOutput(join(workspace, "macos-host-diagnostics"));
+const out = join(workspace, "macos-host-results.json");
+const protectedPaths = await Promise.all(
+  [
+    original,
+    packagePath,
+    host,
+    nativeTests,
+    workspace,
+    cwd,
+    sandboxHome,
+    ...(app ? [app] : []),
+  ].map(canonicalPath),
+);
+async function assertDeletionOutput(path: string, keep: string[] = []) {
+  await resolveTestOutput(path);
+  const canonical = await canonicalPath(path);
+  for (const target of [...protectedPaths, ...(await Promise.all(keep.map(canonicalPath)))]) {
+    assert.ok(
+      !containsPath(canonical, target),
+      `test deletion root contains protected path: ${path}`,
+    );
+  }
+}
+async function assertOutputFile(path: string) {
+  await resolveTestOutput(path);
+  const entry = await lstat(path).catch((cause: NodeJS.ErrnoException) => {
+    if (cause.code !== "ENOENT") throw cause;
+  });
+  assert.ok(!entry || entry.isFile(), `test output must be a regular file, not a symlink: ${path}`);
+}
+async function writeTestOutput(path: string, text: string) {
+  await assertOutputFile(path);
+  const staging = await mkdtemp(join(dirname(path), ".bunaway-test-output-"));
+  try {
+    const staged = join(staging, "output");
+    await writeFile(staged, text, { flag: "wx" });
+    await assertOutputFile(path);
+    await rename(staged, path);
+  } finally {
+    await rm(staging, { recursive: true, force: true });
+  }
+}
+await assertDeletionOutput(dataRoot, [diagnostics]);
+await assertDeletionOutput(diagnostics, [dataRoot]);
+const scratchFiles = [join(cwd, ".env"), join(cwd, "bunfig.toml"), join(cwd, "hostile.ts")];
+for (const path of [...scratchFiles, out]) await assertOutputFile(path);
+if (app) {
+  assert.ok(identity, "BUNAWAY_TEST_SIGN_IDENTITY is required for a mutable signed test fixture");
+  verifyApp();
+}
+assert.ok(
+  existsSync(nativeTests),
+  `native tests not found: ${nativeTests}; run native/macos/host/run.sh first`,
+);
 await mkdir(workspace, { recursive: true });
 if (packagePath !== original) await cp(original, packagePath, { recursive: true, force: true });
 await mkdir(cwd, { recursive: true });
-await writeFile(join(cwd, ".env"), "BUNAWAY_HOSTILE=from-dotenv\n");
-await writeFile(join(cwd, "bunfig.toml"), 'preload = ["./hostile.ts"]\n');
-await writeFile(join(cwd, "hostile.ts"), 'throw new Error("hostile preload");');
+await writeTestOutput(join(cwd, ".env"), "BUNAWAY_HOSTILE=from-dotenv\n");
+await writeTestOutput(join(cwd, "bunfig.toml"), 'preload = ["./hostile.ts"]\n');
+await writeTestOutput(join(cwd, "hostile.ts"), 'throw new Error("hostile preload");');
 await mkdir(sandboxHome, { recursive: true });
 const results: { name: string; ok: boolean; durationMs: number; error?: string }[] = [];
-const diagnostics = join(workspace, "macos-host-diagnostics");
+await assertDeletionOutput(diagnostics, [dataRoot]);
 await rm(diagnostics, { recursive: true, force: true });
 await mkdir(diagnostics, { recursive: true });
 let launchCount = 0;
@@ -151,6 +208,7 @@ async function resetData() {
   // they live outside the Bun process group so their handles drain late.
   for (let attempt = 0; ; attempt++) {
     try {
+      await assertDeletionOutput(dataRoot, [diagnostics]);
       await rm(dataRoot, { recursive: true, force: true });
       break;
     } catch (cause) {
@@ -160,14 +218,14 @@ async function resetData() {
   }
   await mkdir(join(dataRoot, "data", "notes"), { recursive: true });
   await mkdir(join(dataRoot, "data", "secrets"), { recursive: true });
-  await writeFile(join(dataRoot, "data", "secrets", "x.txt"), "out-of-scope-secret");
+  await writeTestOutput(join(dataRoot, "data", "secrets", "x.txt"), "out-of-scope-secret");
   await symlink(
     join(dataRoot, "data", "secrets"),
     join(dataRoot, "data", "notes", "internal-link"),
   );
   const outside = join(dataRoot, "outside");
   await mkdir(outside, { recursive: true });
-  await writeFile(join(outside, "secret.txt"), "junction-target-secret");
+  await writeTestOutput(join(outside, "secret.txt"), "junction-target-secret");
   await symlink(outside, join(dataRoot, "data", "notes", "link"));
 }
 
@@ -320,8 +378,8 @@ try {
     const output = new Response(native.stdout).text();
     const errors = new Response(native.stderr).text();
     const exitCode = await native.exited;
-    await writeFile(join(diagnostics, "native.stdout.log"), await output);
-    await writeFile(join(diagnostics, "native.stderr.log"), await errors);
+    await writeTestOutput(join(diagnostics, "native.stdout.log"), await output);
+    await writeTestOutput(join(diagnostics, "native.stderr.log"), await errors);
     assert.equal(exitCode, 0, await errors);
     assert.ok((await output).includes("PASS scheme handler"));
   });
@@ -674,8 +732,8 @@ try {
     results,
     generatedAt: new Date().toISOString(),
   };
-  const out = join(workspace, "macos-host-results.json");
-  await writeFile(out, `${JSON.stringify(summary, null, 2)}\n`);
+  await writeTestOutput(out, `${JSON.stringify(summary, null, 2)}\n`);
+  verifyApp();
   console.log(`Wrote ${out}`);
 }
 console.log("macos-host: all checks passed");

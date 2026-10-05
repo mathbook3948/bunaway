@@ -150,3 +150,70 @@ for (const appName of ["Signed.APP", "Signed.App"]) {
     await rejectsSetup(f, {}, "BUNAWAY_TEST_SIGN_IDENTITY is required");
   });
 }
+
+for (const alias of [false, true]) {
+  test(`in-place runner rejects a data root containing the signed fixture${alias ? " via an alias" : ""}`, async () => {
+    const f = await makeFixture();
+    f.original = join(f.app, "Contents", "Resources");
+    f.host = join(f.original, "sealed.txt");
+    let dataRoot = f.root;
+    if (alias) {
+      dataRoot = join(f.root, "parent-alias");
+      await symlink(f.root, dataRoot, process.platform === "win32" ? "junction" : "dir");
+    }
+    await rejectsSetup(
+      f,
+      { BUNAWAY_DATA_ROOT: dataRoot },
+      "test deletion root contains protected path",
+    );
+  });
+}
+
+for (const target of ["workspace", "hostile-host-cwd", "host-home", "macos-host-diagnostics"]) {
+  test(`in-place runner rejects a data root containing ${target}`, async () => {
+    const f = await makeFixture();
+    const workspace = join(f.root, "workspace");
+    await rejectsSetup(
+      f,
+      { BUNAWAY_DATA_ROOT: target === "workspace" ? workspace : join(workspace, target) },
+      "test deletion root contains protected path",
+    );
+  });
+}
+
+test("in-place runner rejects diagnostics that contain the fixture", async () => {
+  const f = await makeFixture();
+  const workspace = join(f.root, "workspace");
+  const diagnostics = join(workspace, "macos-host-diagnostics");
+  await mkdir(diagnostics, { recursive: true });
+  f.original = diagnostics;
+  await rejectsSetup(f, {}, "test deletion root contains protected path");
+});
+
+for (const output of ["macos-host-results.json", "hostile-host-cwd/.env"]) {
+  for (const dangling of [false, true]) {
+    test(`in-place runner rejects ${output} symlinks${dangling ? " with a missing target" : " into a sealed resource"}`, async () => {
+      const f = await makeFixture();
+      const workspace = join(f.root, "workspace");
+      const leaf = join(workspace, output);
+      await mkdir(resolve(leaf, ".."), { recursive: true });
+      const target = dangling
+        ? join(f.root, "missing-output.txt")
+        : join(f.app, "Contents", "Resources", "sealed.txt");
+      await symlink(target, leaf);
+      await rejectsSetup(
+        f,
+        {},
+        dangling ? "test output must be a regular file" : "test output resolves inside .app",
+      );
+      expect(await readdir(resolve(leaf, ".."))).toEqual([output.split("/").at(-1) as string]);
+    });
+  }
+}
+
+test("in-place runner rejects result directories before writing scratch files", async () => {
+  const f = await makeFixture();
+  await mkdir(join(f.root, "workspace", "macos-host-results.json"), { recursive: true });
+  await rejectsSetup(f, {}, "test output must be a regular file");
+  expect(await readdir(join(f.root, "workspace"))).toEqual(["macos-host-results.json"]);
+});
