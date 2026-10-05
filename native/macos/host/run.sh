@@ -11,8 +11,8 @@ cd "$(dirname "$0")"
 HERE=$PWD
 ROOT=$(cd ../../.. && pwd)
 PIN="$ROOT/runtime/build-manifests/darwin-aarch64.json"
-# Test assets are shared with Windows except for app.json: the Windows host
-# exercises multiple windows, while the macOS host currently accepts one view.
+# Test assets are shared with Windows on purpose: the packaged assets must stay
+# byte-identical across platforms (policy.json/app.json/schemas/web entries).
 WIN_TEST="$ROOT/native/windows/host/test"
 SKIP_TESTS=0
 SAMPLE=0
@@ -73,10 +73,9 @@ chmod +x "$PACKAGE/bunaway-host" "$PACKAGE/runtime/bun"
 cp "$CACHE/LICENSE.bun" "$JSON_DIR/LICENSE.nlohmann-json" "$PACKAGE/licenses/"
 
 GENERATED="$ROOT/native/host-api/generated"
-for name in bunfig.toml tsconfig.json policy.json; do
+for name in bunfig.toml tsconfig.json app.json policy.json; do
   cp "$WIN_TEST/$name" "$PACKAGE/assets/$name"
 done
-cp "$HERE/test/app.json" "$PACKAGE/assets/app.json"
 for name in process.schema.json message.schema.json policy.schema.json host-call.schema.json host-operations.json; do
   cp "$GENERATED/$name" "$PACKAGE/assets/$name"
 done
