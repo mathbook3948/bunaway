@@ -6,7 +6,7 @@ const client = createClient({
 });
 const input = document.getElementById("memo");
 const saved = document.getElementById("saved-memo");
-const status = document.getElementById("status");
+const statusEl = document.getElementById("status");
 const button = document.getElementById("save");
 const testPhase = new URL(location.href).searchParams.get("test");
 window.addEventListener("pagehide", () => {
@@ -19,20 +19,20 @@ async function start() {
     "memo.saved",
     (event) => {
       saved.textContent = event.payload;
-      status.textContent = "저장 완료";
+      statusEl.textContent = "저장 완료";
     },
     {
       onError: (error) => {
-        status.textContent = `연결 오류: ${error.code}`;
+        statusEl.textContent = `연결 오류: ${error.code}`;
       },
     },
   );
   try {
     input.value = await client.invoke("memo.read", null);
     saved.textContent = input.value;
-    status.textContent = "저장된 메모를 불러왔습니다.";
+    statusEl.textContent = "저장된 메모를 불러왔습니다.";
   } catch (error) {
-    status.textContent = `메모를 읽지 못했습니다: ${error.code}`;
+    statusEl.textContent = `메모를 읽지 못했습니다: ${error.code}`;
   }
   button.disabled = false;
   button.addEventListener("click", async () => {
@@ -40,7 +40,7 @@ async function start() {
     try {
       await client.invoke("memo.save", input.value);
     } catch (error) {
-      status.textContent = `저장 실패: ${error.code}`;
+      statusEl.textContent = `저장 실패: ${error.code}`;
     } finally {
       button.disabled = false;
     }
@@ -75,5 +75,5 @@ async function start() {
   }
 }
 start().catch((error) => {
-  status.textContent = `연결 실패: ${error.code ?? "INTERNAL"}`;
+  statusEl.textContent = `연결 실패: ${error.code ?? "INTERNAL"}`;
 });
