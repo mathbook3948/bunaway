@@ -79,6 +79,7 @@ const unlisten = async (key) => {
 };
 const cancel = (id) => send({ kind: "cancel", id });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const multiView = new URL(location.href).searchParams.get("test") === "multi-view";
 
 async function connect() {
   return client.ready;
@@ -367,11 +368,13 @@ async function run() {
     );
   });
   await test("memo input save event refresh", async () => {
-    // The editor checks the same shared memo; finish that check before overwriting it.
-    const deadline = Date.now() + 60000;
-    while ((await call("test.tempRead", { path: "editor.json" })).payload?.ok !== true) {
-      assert(Date.now() < deadline, "editor did not finish its memo checks");
-      await sleep(25);
+    if (multiView) {
+      // The editor checks the same shared memo; finish before overwriting it.
+      const deadline = Date.now() + 60000;
+      while ((await call("test.tempRead", { path: "editor.json" })).payload?.ok !== true) {
+        assert(Date.now() < deadline, "editor did not finish its memo checks");
+        await sleep(100);
+      }
     }
     const input = document.getElementById("memo");
     const display = document.getElementById("saved-memo");
