@@ -1,5 +1,6 @@
-import { chmod, cp, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
+import { acquireBuildOutputLock, PACKAGING_CHANNELS } from "@bunaway/packaging";
 import { type Project, validateProject } from "./config.ts";
 import {
   files,
@@ -142,6 +143,7 @@ export async function buildProject(
   const executable = windows
     ? resolve(staging, "bunaway-host.exe")
     : resolve(staging, "Contents/MacOS/bunaway-host");
+  let releaseTarget: (() => Promise<void>) | undefined;
   try {
     const assets = resolve(packageRoot, "assets");
     await mkdir(resolve(assets, "web"), { recursive: true });
@@ -202,6 +204,9 @@ export async function buildProject(
       await run(["/usr/bin/codesign", "--force", "--sign", "-", staging], project.root);
       await verifyHash(resolve(packageRoot, "runtime/bun"), pin.bun.executableSha256);
     }
+    if (!options.development) {
+      releaseTarget = await acquireBuildOutputLock(project.root, target);
+    }
     if (windows && !options.development) {
       // Channel packages live inside the Windows build output, but survive rebuilds.
       const packaged = resolve(output, "packaged");
@@ -209,7 +214,20 @@ export async function buildProject(
         if (error.code !== "ENOENT") throw error;
         return undefined;
       });
-      if (previous) await cp(packaged, resolve(staging, "packaged"), { recursive: true });
+      if (previous) {
+        await mkdir(resolve(staging, "packaged"), { recursive: true });
+        for (const entry of await readdir(packaged)) {
+          if (
+            PACKAGING_CHANNELS.some(
+              (channel) => entry === channel || entry === `${channel}-report.json`,
+            )
+          ) {
+            await cp(resolve(packaged, entry), resolve(staging, "packaged", entry), {
+              recursive: true,
+            });
+          }
+        }
+      }
     }
     const backup = `${output}.previous-${crypto.randomUUID()}`;
     let moved = false;
@@ -236,5 +254,7 @@ export async function buildProject(
   } catch (error) {
     await rm(staging, { recursive: true, force: true });
     throw error;
+  } finally {
+    await releaseTarget?.();
   }
 }

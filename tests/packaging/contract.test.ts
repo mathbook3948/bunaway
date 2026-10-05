@@ -1606,10 +1606,59 @@ test("macOS Info.plist accepts XML entities and unrelated bundle metadata", asyn
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleIdentifier</key><string>app&#x2e;test</string>
 <key>CFBundleExecutable</key><string>bunaway-host</string>
-<key>LSUIElement</key><true/></dict></plist>`,
+<key>LSUIElement</key><true/>
+<key>Extra</key><dict><key>values</key><array>
+<string/><string>  padded text  </string><string>&amp;nbsp;</string>
+<string><![CDATA[a & b]]></string><integer>-42</integer><integer>0x2a</integer>
+<real>1.5e-2</real><date>2026-10-05T23:13:00Z</date><data>YQ==</data>
+<false/><array/><dict/></array></dict></dict></plist>`,
   );
   expect(await verifyArtifact({ artifact, manifest, channel: "mac-direct" })).toEqual([]);
 });
+
+test.each([
+  ["HTML entity", "<string>Test&nbsp;App</string>"],
+  ["invalid character reference", "<string>&#0;</string>"],
+  ["invalid integer", "<integer>not-an-integer</integer>"],
+  ["empty integer", "<integer/>"],
+  ["invalid boolean", "<true>oops</true>"],
+  ["nested boolean content", "<false><string/></false>"],
+  ["orphan nested key", "<dict><key>orphan</key></dict>"],
+  ["duplicate nested key", "<dict><key>a</key><string/><key>a</key><string/></dict>"],
+  ["unknown array value", "<array><unknown/></array>"],
+  ["nested integer", "<array><dict><key>n</key><integer>1oops</integer></dict></array>"],
+  ["nested string markup", "<string><string>text</string></string>"],
+  ["invalid real", "<real>not-a-real</real>"],
+  ["invalid date", "<date>not-a-date</date>"],
+  ["invalid data", "<data>!not-base64!</data>"],
+])("macOS Info.plist rejects %s in unrelated metadata", async (_name, value) => {
+  const projectRoot = await mkdtemp(join(home, "plist-values-"));
+  await makeArtifact(projectRoot, "macos-arm64");
+  const artifact = artifactPaths({ root: projectRoot, target: "macos-arm64", appId: "app.test" });
+  const path = resolve(artifact.dir, "Contents/Info.plist");
+  const valid = await Bun.file(path).text();
+  const invalid = valid.replace("</dict>", `<key>Extra</key>${value}</dict>`);
+  await writeFile(path, invalid);
+  await expectRejectedInputs(projectRoot, CODES.INPUT_TAMPERED, { target: "macos-arm64" });
+});
+
+test.skipIf(process.platform !== "darwin")(
+  "macOS also validates plist with Apple's parser",
+  async () => {
+    const projectRoot = await mkdtemp(join(home, "plist-native-"));
+    await makeArtifact(projectRoot, "macos-arm64");
+    const artifact = artifactPaths({ root: projectRoot, target: "macos-arm64", appId: "app.test" });
+    const path = resolve(artifact.dir, "Contents/Info.plist");
+    await writeFile(
+      path,
+      (await Bun.file(path).text()).replace("</dict>", "<key>Extra</key><data/></dict>"),
+    );
+    const manifest = await loadManifest(artifact);
+    const diagnostics = await verifyArtifact({ artifact, manifest, channel: "mac-direct" });
+    expect(diagnostics.some((d) => d.message.includes("Invalid Apple plist"))).toBe(true);
+    await expectRejectedInputs(projectRoot, CODES.INPUT_TAMPERED, { target: "macos-arm64" });
+  },
+);
 
 test.each([false, true])(
   "macOS Info.plist requires Contents to remain inside the bundle (external=%s)",

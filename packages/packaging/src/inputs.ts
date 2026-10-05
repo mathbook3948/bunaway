@@ -89,24 +89,104 @@ function isIdentity(value: unknown): value is string {
 
 type XmlNode = Record<string, XmlNode[] | string>;
 
-function plistChildren(node: XmlNode | undefined, tag: string): XmlNode[] {
+function plistContent(node: XmlNode | undefined, tag: string): XmlNode[] {
   const children = node?.[tag];
   if (!node || Object.keys(node).length !== 1 || !Array.isArray(children)) {
     throw new Error(`Expected a plist ${tag} element.`);
   }
-  return children.filter((child) => {
+  return children;
+}
+
+function plistChildren(node: XmlNode | undefined, tag: string): XmlNode[] {
+  return plistContent(node, tag).filter((child) => {
     const text = child["#text"];
     return typeof text !== "string" || text.trim().length > 0;
   });
 }
 
 function plistString(node: XmlNode | undefined, tag: string): string {
-  const children = plistChildren(node, tag);
-  const text = children[0]?.["#text"];
-  if (children.length !== 1 || typeof text !== "string") {
-    throw new Error(`Expected plist ${tag} text.`);
+  return plistContent(node, tag)
+    .map((child) => {
+      if (Object.keys(child).length !== 1) throw new Error(`Expected plist ${tag} text.`);
+      if (typeof child["#text"] === "string") return xmlText(child["#text"]);
+      const cdata = child["#cdata"];
+      if (Array.isArray(cdata) && cdata.length === 1 && typeof cdata[0]?.["#text"] === "string") {
+        return cdata[0]["#text"];
+      }
+      throw new Error(`Expected plist ${tag} text.`);
+    })
+    .join("");
+}
+
+function xmlText(text: string): string {
+  const entities: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
+  return text.replace(/&([^;]*);|&/g, (_match, entity: string | undefined) => {
+    if (entity && Object.hasOwn(entities, entity)) return entities[entity] ?? "";
+    if (entity && /^#(?:[0-9]+|x[0-9a-fA-F]+)$/.test(entity)) {
+      const point = entity.startsWith("#x")
+        ? Number.parseInt(entity.slice(2), 16)
+        : Number(entity.slice(1));
+      if (
+        point === 9 ||
+        point === 10 ||
+        point === 13 ||
+        (point >= 0x20 && point <= 0xd7ff) ||
+        (point >= 0xe000 && point <= 0xfffd) ||
+        (point >= 0x10000 && point <= 0x10ffff)
+      )
+        return String.fromCodePoint(point);
+    }
+    throw new Error(`Invalid XML entity: &${entity ?? ""};`);
+  });
+}
+
+function plistDictionary(node: XmlNode | undefined): Map<string, XmlNode> {
+  const entries = plistChildren(node, "dict");
+  const metadata = new Map<string, XmlNode>();
+  for (let i = 0; i < entries.length; i += 2) {
+    const key = plistString(entries[i], "key");
+    const value = entries[i + 1];
+    if (!value || metadata.has(key)) throw new Error(`Invalid or duplicate plist entry: ${key}`);
+    validatePlistValue(value);
+    metadata.set(key, value);
   }
-  return text;
+  return metadata;
+}
+
+function validatePlistValue(node: XmlNode): void {
+  const tag = Object.keys(node)[0] ?? "";
+  if (tag === "dict") {
+    plistDictionary(node);
+    return;
+  }
+  if (tag === "array") {
+    for (const value of plistChildren(node, tag)) validatePlistValue(value);
+    return;
+  }
+  if (tag === "true" || tag === "false") {
+    if (plistContent(node, tag).length !== 0) throw new Error(`Non-empty plist ${tag}.`);
+    return;
+  }
+  if (!["string", "integer", "real", "date", "data"].includes(tag)) {
+    throw new Error(`Invalid plist value: ${tag}`);
+  }
+  const text = plistString(node, tag);
+  if (tag === "string") return;
+  const value = text.trim();
+  const valid =
+    tag === "integer"
+      ? /^[+-]?(?:0[xX][0-9a-fA-F]+|[0-9]+)$/.test(value)
+      : tag === "real"
+        ? /^[+-]?(?:(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?|inf(?:inity)?|nan)$/i.test(
+            value,
+          )
+        : tag === "date"
+          ? /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value) &&
+            Number.isFinite(Date.parse(value))
+          : /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
+              text.replace(/\s/g, ""),
+            );
+  if (!valid) throw new Error(`Invalid plist ${tag} value.`);
 }
 
 function bundleMetadata(xml: string): Map<string, XmlNode> {
@@ -116,31 +196,14 @@ function bundleMetadata(xml: string): Map<string, XmlNode> {
     trimValues: false,
     ignoreDeclaration: true,
     ignorePiTags: true,
-    htmlEntities: true,
+    processEntities: false,
+    cdataPropName: "#cdata",
   });
   const roots = parser.parse(xml, true) as XmlNode[];
   if (roots.length !== 1) throw new Error("Expected one plist root.");
   const plist = plistChildren(roots[0], "plist");
   if (plist.length !== 1) throw new Error("Expected one plist dictionary.");
-  const entries = plistChildren(plist[0], "dict");
-  const metadata = new Map<string, XmlNode>();
-  for (let i = 0; i < entries.length; i += 2) {
-    const key = plistString(entries[i], "key");
-    const value = entries[i + 1];
-    if (
-      !value ||
-      metadata.has(key) ||
-      !Object.keys(value).some((tag) =>
-        ["string", "integer", "real", "true", "false", "date", "data", "array", "dict"].includes(
-          tag,
-        ),
-      )
-    ) {
-      throw new Error(`Invalid or duplicate plist entry: ${key}`);
-    }
-    metadata.set(key, value);
-  }
-  return metadata;
+  return plistDictionary(plist[0]);
 }
 
 function validateManifest(value: unknown): asserts value is PackageManifest {
@@ -316,6 +379,18 @@ export async function verifyArtifact(args: {
     try {
       const canonicalPath = await inputPath(artifact.dir, plistPath);
       const metadata = bundleMetadata(await readFile(canonicalPath, "utf8"));
+      if (process.platform === "darwin") {
+        const validation = Bun.spawn(["/usr/bin/plutil", "-lint", "--", canonicalPath], {
+          stdout: "pipe",
+          stderr: "pipe",
+        });
+        const [exit, stdout, stderr] = await Promise.all([
+          validation.exited,
+          new Response(validation.stdout).text(),
+          new Response(validation.stderr).text(),
+        ]);
+        if (exit !== 0) throw new Error(`Invalid Apple plist: ${(stdout + stderr).trim()}`);
+      }
       for (const [key, expected] of [
         ["CFBundleExecutable", basename(artifact.executable)],
         ["CFBundleIdentifier", manifest.app.id],

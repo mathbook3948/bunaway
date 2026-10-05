@@ -1,5 +1,6 @@
 import { expect, mock, spyOn } from "bun:test";
-import { rm } from "node:fs/promises";
+import * as fs from "node:fs/promises";
+import { readdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import * as build from "../../packages/cli/src/build.ts";
 import * as files from "../../packages/cli/src/files.ts";
@@ -81,6 +82,7 @@ expect(builds).toBe(0);
 
 let fail = false;
 let assembled = 0;
+let pause: (() => Promise<void>) | undefined;
 registerAdapter({
   channel: "win-direct",
   platform: "windows",
@@ -91,6 +93,7 @@ registerAdapter({
       title: "Assemble installer",
       async run(ctx) {
         assembled++;
+        await pause?.();
         if (fail) throw new Error("Installer assembly failed.");
         await Bun.write(resolve(ctx.staging, "setup.exe"), `installer ${builds}`);
         ctx.addArtifact("setup.exe", "installer");
@@ -184,3 +187,72 @@ try {
   logging.mockRestore();
   await rm(lockPath);
 }
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+// A live package reader prevents the build from copying or replacing its target.
+const entered = deferred();
+const resume = deferred();
+pause = async () => {
+  entered.resolve();
+  await resume.promise;
+};
+const activePackage = packageProject(project, "win-direct");
+try {
+  await entered.promise;
+  await expect(buildProject(project, { native })).rejects.toThrow("in use by packaging");
+  expect(await Bun.file(previous).text()).toBe("installer 3");
+  expect(await Bun.file(reportPath).text()).toBe(savedReport);
+} finally {
+  pause = undefined;
+  resume.resolve();
+  await activePackage;
+}
+expect((await activePackage).ok).toBe(true);
+const publishedReport = await Bun.file(reportPath).text();
+
+// A build paused after its preservation copy rejects new packaging, without publishing a report.
+const copied = deferred();
+const publish = deferred();
+const originalCp = fs.cp;
+const preservation = spyOn(fs, "cp").mockImplementation(async (...args) => {
+  await originalCp(...args);
+  if (String(args[0]) === resolve(packaged, "win-direct")) {
+    copied.resolve();
+    await publish.promise;
+  }
+});
+const activeBuild = buildProject(project, { native });
+try {
+  await copied.promise;
+  const rejected = await packageProject(project, "win-direct");
+  expect(rejected.ok).toBe(false);
+  expect(rejected.diagnostics.some((d) => d.code === CODES.LOCK_FAILED)).toBe(true);
+  expect(await Bun.file(reportPath).text()).toBe(publishedReport);
+} finally {
+  publish.resolve();
+  await activeBuild;
+  preservation.mockRestore();
+}
+expect(await Bun.file(reportPath).text()).toBe(publishedReport);
+
+// Stale transient entries are not propagated into a fresh build.
+await Bun.write(resolve(packaged, "win-direct.lock"), "stale lock");
+await Bun.write(resolve(packaged, "win-direct.building-stale/setup.exe"), "unfinished");
+await Bun.write(resolve(packaged, "win-direct.previous-stale/setup.exe"), "backup");
+await Bun.write(resolve(packaged, "win-direct-report.json.building-stale"), "unfinished report");
+await buildProject(project, { native });
+expect(await Bun.file(reportPath).text()).toBe(publishedReport);
+expect(await Bun.file(other).text()).toBe("another channel");
+expect(await Bun.file(otherReport).text()).toBe("another report");
+expect((await readdir(packaged)).some((name) => /\.lock|\.building-|\.previous-/.test(name))).toBe(
+  false,
+);
+expect((await packageProject(project, "win-direct")).ok).toBe(true);
+expect(await readdir(resolve(project, "dist/.bunaway-locks/windows-x64"))).toEqual([]);

@@ -1,16 +1,17 @@
+export { loadPackaging, type PackagingConfig, parsePackaging } from "./config.ts";
 export * from "./contract.ts";
-export { parsePackaging, loadPackaging, type PackagingConfig } from "./config.ts";
+export { artifactPaths, loadManifest, verifyArtifact } from "./inputs.ts";
+export { acquireBuildOutputLock, acquirePackageInputLock, TargetLockError } from "./locks.ts";
+export { adapterFor, registerAdapter, registeredChannels } from "./registry.ts";
 export {
-  resolvePackaging,
   deriveIdentifier,
   deriveMsixPackageName,
   type ResolvedChannel,
+  resolvePackaging,
 } from "./resolve.ts";
-export { artifactPaths, loadManifest, verifyArtifact } from "./inputs.ts";
 export {
-  runPackage,
   packagingOutputDir,
   packagingReportPath,
   type RunPackageArgs,
+  runPackage,
 } from "./runner.ts";
-export { registerAdapter, adapterFor, registeredChannels } from "./registry.ts";

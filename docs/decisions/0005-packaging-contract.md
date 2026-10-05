@@ -38,7 +38,8 @@ status: accepted
 - macOS는 build가 생성한 XML `Contents/Info.plist`도 필수 입력이다. 번들 안의 정규
   파일이어야 하며, `CFBundleExecutable`이 실제 `Contents/MacOS` 호스트를 가리키고
   `CFBundleIdentifier`가 manifest 앱 ID, `CFBundlePackageType`이 `APPL`이어야 한다.
-  XML 구문 오류·중복 키·필수 metadata 불일치는 어댑터 실행 전에 거부한다.
+  XML entity·scalar 값·중첩 array/dict 구조·중복 키·필수 metadata 불일치는 어댑터
+  실행 전에 거부하며, macOS에서는 Apple `plutil -lint`로도 전체 문서를 검증한다.
 - Bun hello의 런타임 식별에 쓰는 `manifest.bun.version`·`sourceRevision`은 비어 있지
   않은 문자열이어야 한다. `assets/app.json`의 `home`은 호스트 소유 origin을 사용하며,
   URL 경로를 디코딩해 찾은 `assets/web` 내 초기 문서(`/`는 `index.html`)는 실제 파일이고
@@ -57,6 +58,12 @@ status: accepted
   잠금 획득 실패는 `PKG_LOCK_FAILED`로 호출자에게 실패 리포트만 반환하며, 실행 중인
   채널의 디스크 리포트나 출력은 건드리지 않는다. 잠금은 정상 종료·실패 시 해제된다. 프로세스 강제 종료로
   남은 잠금은 자동 탈취하지 않으며, 실행 중인 작업이 없음을 확인한 뒤 수동 삭제한다.
+- build 교체와 runner는 교체되는 산출물 밖의 `dist/.bunaway-locks/<target>/`에서
+  동기화한다. runner는 manifest 읽기 전부터 정리 완료까지 공유 reader 잠금을 유지하고,
+  build는 보존 복사·교체·rollback 전체에 `build.lock` 배타 잠금을 유지한다. 경합 시
+  상대 작업의 출력/리포트를 건드리지 않고 실패한다. 다른 채널 reader는 병렬 실행할 수
+  있다. Windows 보존 복사는 완성된 채널 디렉터리와 리포트만 포함하고 lock/staging/backup은
+  제외한다. 강제 종료로 남은 타깃 잠금도 활성 작업이 없음을 확인한 뒤 수동 삭제한다.
 - 어댑터는 registry에 자기 채널을 등록한다. 새 채널은 `src/channels/<platform>/`
   아래 파일만 추가하며 공통 진입점을 수정하지 않는다.
 

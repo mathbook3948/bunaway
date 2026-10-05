@@ -1,6 +1,14 @@
-import { type FileHandle, lstat, mkdir, open, realpath, rename, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import {
+  type FileHandle,
+  lstat,
+  mkdir,
+  open,
+  readFile,
+  realpath,
+  rename,
+  rm,
+} from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import {
   type AdapterInput,
@@ -12,14 +20,15 @@ import {
   type PackageAdapter,
   type PackageManifest,
   type PackageReport,
-  platformOf,
   type ProducedArtifact,
+  platformOf,
   type ResolvedPackaging,
   type SigningConfig,
   type StageContext,
   type StageResult,
 } from "./contract.ts";
 import { ArtifactInputError, loadManifest, verifyArtifact } from "./inputs.ts";
+import { acquirePackageInputLock, TargetLockError } from "./locks.ts";
 
 export interface RunPackageArgs {
   metadata: ResolvedPackaging;
@@ -70,13 +79,11 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
   const verified: PackageReport["artifacts"] = [];
   const notes: string[] = [...(args.notes ?? [])];
   const output = resolve(packagingOutputDir(metadata.root, target), channel);
-  await mkdir(dirname(output), { recursive: true });
   const staging = `${output}.building-${crypto.randomUUID()}`;
   const reportPath = packagingReportPath(metadata.root, target, channel);
   const stagedReport = `${reportPath}.building-${crypto.randomUUID()}`;
   let reportPublished = false;
 
-  let manifest = EMPTY_MANIFEST;
   const platform = platformOf(channel);
   if (
     adapter.channel !== channel ||
@@ -90,19 +97,6 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
       message: `Channel ${channel} (${platform}), adapter ${adapter.channel} (${adapter.platform}) and target ${target} must use the same channel and platform.`,
     });
   }
-  if (diagnostics.length === 0) {
-    try {
-      manifest = await loadManifest(artifact);
-    } catch (error) {
-      diagnostics.push({
-        stage: "resolve",
-        code: error instanceof ArtifactInputError ? error.code : CODES.INPUT_MISSING,
-        severity: "error",
-        message: error instanceof Error ? error.message : String(error),
-        path: resolve(artifact.packageDir, "manifest.json"),
-      });
-    }
-  }
 
   const input: AdapterInput = {
     channel,
@@ -110,7 +104,7 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
     metadata,
     target,
     artifact,
-    manifest,
+    manifest: EMPTY_MANIFEST,
     ...(signing ? { signing } : {}),
   };
   const report: PackageReport = {
@@ -157,22 +151,42 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
   }
   const lockPath = `${output}.lock`;
   let lock: FileHandle;
+  let releaseTarget: (() => Promise<void>) | undefined;
   try {
+    releaseTarget = await acquirePackageInputLock(metadata.root, target);
+    await mkdir(dirname(output), { recursive: true });
     lock = await open(lockPath, "wx");
   } catch (error) {
+    await releaseTarget?.();
     diagnostics.push({
       stage: "resolve",
       code: CODES.LOCK_FAILED,
       severity: "error",
       message:
-        (error as NodeJS.ErrnoException).code === "EEXIST"
-          ? `Packaging channel ${channel} is locked; another run may be active.`
-          : `Cannot acquire package lock: ${error instanceof Error ? error.message : String(error)}`,
-      path: lockPath,
+        error instanceof TargetLockError
+          ? error.message
+          : (error as NodeJS.ErrnoException).code === "EEXIST"
+            ? `Packaging channel ${channel} is locked; another run may be active.`
+            : `Cannot acquire package lock: ${error instanceof Error ? error.message : String(error)}`,
+      path: error instanceof TargetLockError ? error.path : lockPath,
     });
     return report;
   }
   try {
+    if (!failed) {
+      try {
+        input.manifest = await loadManifest(artifact);
+      } catch (error) {
+        diagnostics.push({
+          stage: "resolve",
+          code: error instanceof ArtifactInputError ? error.code : CODES.INPUT_MISSING,
+          severity: "error",
+          message: error instanceof Error ? error.message : String(error),
+          path: resolve(artifact.packageDir, "manifest.json"),
+        });
+        failed = true;
+      }
+    }
     if (!failed) {
       const started = Date.now();
       const integrity = await verifyArtifact({ artifact, manifest: input.manifest, channel });
@@ -390,9 +404,13 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
       await rm(stagedReport, { force: true });
     } finally {
       try {
-        await lock.close();
+        try {
+          await lock.close();
+        } finally {
+          await rm(lockPath, { force: true });
+        }
       } finally {
-        await rm(lockPath, { force: true });
+        await releaseTarget?.();
       }
     }
   }
