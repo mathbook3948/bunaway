@@ -2,7 +2,7 @@
 
 - `host-api/`: 호스트 호출·렌더러·생성된 정책의 네이티브 경계와 이전 C ABI 기록.
 - `windows/`: Win32·WebView2 제품 호스트와 WebView 없는 실험 호스트 구현.
-- `macos/`: AppKit·WKWebView 호스트 예정 영역, 미구현.
+- `macos/`: AppKit·WKWebView 단일 창/뷰 제품 호스트와 POSIX probe 구현(arm64).
 - `linux/`: GTK·WebKitGTK 호스트 예정 영역, 미구현.
 - `android/`: Kotlin 수명주기·WebView 예정 영역, 미구현. Bun 실행·배포 경로 미검증.
 - `ios/`: Swift 수명주기·WKWebView 예정 영역, 미구현. Bun 실행·배포 경로 미검증.
@@ -14,8 +14,10 @@ IPC·정책 JSON Schema는 계속 사용한다. `windows/probe/`에 WebView 없�
 생성 스키마를 읽는 네이티브 검증기, Bun 백엔드와 빌드 스크립트를 구현했다.
 [Windows B 결과](../docs/architecture/windows-probe-results.md)는 실험 호스트 기록이다.
 `windows/host/`는 실제 SDK·코어·Host API를 연결한 제품 호스트다. origin·frame·세션·
-정책·저장 범위와 메모 앱을 [Windows 단일 창/뷰에서 검증](../docs/architecture/windows-host-results.md)했다.
-다중 창/뷰·다른 플랫폼·설치 프로그램·서명·배포는 이 결과에 포함하지 않는다.
+정책·저장 범위와 메모 앱을 [Windows 다중 창/뷰에서 검증](../docs/architecture/windows-host-results.md)했다.
+macOS는 [별도 단일 창/뷰 검증](../docs/architecture/macos-native-results.md)과 native CI를 갖는다.
+공유 Bun 캐시 초기화 때문에 macOS probe→host는 직렬 실행한다. `.app` 생성·ad-hoc 서명은
+Developer ID·공증·설치 검증이 아니다. [플랫폼 지원 범위](../docs/platform-support/README.md)를 따른다.
 [B 단계 계획](../docs/architecture/runtime-feasibility.md)을 참고한다. 언어·빌드 도구의 버전은
 실행 결과에 기록한다. 공통 TypeScript 코어는 이 디렉터리의 구현을
 직접 import하지 않는다.

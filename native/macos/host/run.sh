@@ -11,8 +11,12 @@ cd "$(dirname "$0")"
 HERE=$PWD
 ROOT=$(cd ../../.. && pwd)
 PIN="$ROOT/runtime/build-manifests/darwin-aarch64.json"
-# Test assets are shared with Windows on purpose: the packaged assets must stay
-# byte-identical across platforms (policy.json/app.json/schemas/web entries).
+[[ "$(uname -s)" == Darwin && "$(uname -m)" == arm64 ]] || {
+  echo "macOS arm64 is required by the pinned darwin-aarch64 runtime; Intel is not supported." >&2
+  exit 1
+}
+# Policy, schemas and web entries are shared with Windows. The macOS test
+# app declaration remains single-window until this host supports windows[].
 WIN_TEST="$ROOT/native/windows/host/test"
 SKIP_TESTS=0
 SAMPLE=0
@@ -39,6 +43,7 @@ download() {
 }
 
 BUN_TARGET=$(field bun target)
+[[ "$BUN_TARGET" == darwin-aarch64 ]] || { echo "Unexpected Bun target: $BUN_TARGET" >&2; exit 1; }
 CACHE="$ROOT/runtime/bun-bundle/vendor"
 JSON_DIR="$ROOT/native/macos/vendor"
 mkdir -p "$CACHE" "$JSON_DIR"
@@ -48,6 +53,8 @@ download "$(field bun archiveUrl)" "$ARCHIVE" "$(field bun archiveSha256)"
 BUNDLED="$CACHE/bun-$BUN_TARGET/bun"
 check "$BUNDLED" "$(field bun executableSha256)"
 chmod +x "$BUNDLED"
+[[ "$(/usr/bin/lipo -archs "$BUNDLED")" == arm64 ]] || { echo "Bundled Bun must be arm64." >&2; exit 1; }
+[[ "$("$BUNDLED" --version)" == "$(field bun version)" ]] || { echo "Bundled Bun version mismatch." >&2; exit 1; }
 download "$(field bun licenseUrl)" "$CACHE/LICENSE.bun" "$(field bun licenseSha256)"
 download "$(field json headerUrl)" "$JSON_DIR/json.hpp" "$(field json headerSha256)"
 download "$(field json licenseUrl)" "$JSON_DIR/LICENSE.nlohmann-json" "$(field json licenseSha256)"
@@ -73,9 +80,10 @@ chmod +x "$PACKAGE/bunaway-host" "$PACKAGE/runtime/bun"
 cp "$CACHE/LICENSE.bun" "$JSON_DIR/LICENSE.nlohmann-json" "$PACKAGE/licenses/"
 
 GENERATED="$ROOT/native/host-api/generated"
-for name in bunfig.toml tsconfig.json app.json policy.json; do
+for name in bunfig.toml tsconfig.json policy.json; do
   cp "$WIN_TEST/$name" "$PACKAGE/assets/$name"
 done
+cp "$HERE/test/app.json" "$PACKAGE/assets/app.json"
 for name in process.schema.json message.schema.json policy.schema.json host-call.schema.json host-operations.json; do
   cp "$GENERATED/$name" "$PACKAGE/assets/$name"
 done

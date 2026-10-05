@@ -6,16 +6,19 @@
 [문서 안내](./docs/README.md)에서 공통 용어, 설계 결정과 구현 계약을 찾을 수 있다.
 
 `protocol`의 메시지·정책 스키마, JSON 검증·직렬화와 버전 협상이 동작한다.
-`createClient`·`createCore`·`runBunApp`과 Windows Win32·WebView2 호스트를 구현했다.
-번들 Bun 1.4.2를 사용하는 Windows 단일 창·단일 뷰에서 메모 저장→완료 이벤트→
-화면 갱신, 호스트/Bun 재실행 후 복원과 렌더러 장애 후 새 세션 연결을 검증했다.
+`createClient`·`createCore`·`runBunApp`, Windows Win32·WebView2와 macOS AppKit·WKWebView
+호스트를 구현했다. Windows는 다중 창·뷰별 정책 분리, macOS는 단일 창/뷰의
+메모 저장→완료 이벤트→화면 갱신, 재실행 후 복원과 렌더러 복구를 검증한다.
 이 앱 패키지의 실행은 사용자 Bun 설치·PATH에 의존하지 않는다.
 [Windows C 실행 결과](./docs/architecture/windows-host-results.md),
 [이전 B 실험 결과](./docs/architecture/windows-probe-results.md)와
+[macOS 검증 기록](./docs/architecture/macos-native-results.md),
 [진행 상태](./docs/architecture/progress.md)를 참고한다.
 [공통 API](./docs/architecture/common-api.md)는 SDK·코어·Host API가 따르는 계약이다.
-CLI·기본 로그/저장 플러그인·템플릿은 미구현이다. 다른 플랫폼과 다중 창/뷰,
-설치 프로그램·서명·배포는 미검증이며 Windows 단일 창/뷰의 성공 범위에 포함하지 않는다.
+CLI·기본 로그/저장 플러그인·템플릿은 미구현이다. macOS Intel·다중 창/뷰,
+Linux·모바일 네이티브 호스트와 설치·배포 검증은 포함하지 않는다.
+macOS `.app` 생성·ad-hoc 서명은 Developer ID 서명·공증·설치 검증과 다르다.
+[플랫폼 지원 범위](./docs/platform-support/README.md)에서 환경과 제한을 확인한다.
 이전 런타임 C ABI는 동일 프로세스 설계의 기록으로 보존한다.
 
 ## 시작하기
@@ -43,6 +46,8 @@ Bun은 `mise.toml`과 `package.json`에 **1.4.2**로 고정되어 있다.
 | `mise run protocol:generate` | 네이티브용 JSON Schema 생성 |
 | `mise run probe:windows` | C++ 호스트·Bun 패키지 빌드와 프로세스 IPC·종료 통합 검증 |
 | `mise run host:windows` | Windows WebView2 앱 패키지 빌드와 SDK·코어·메모·경계·종료 통합 검증 |
+| `mise run probe:macos` | macOS arm64 번들 Bun 패키지 빌드와 프로세스 IPC·종료 통합 검증 |
+| `mise run host:macos` | macOS arm64 실제 WKWebView·SDK·코어·메모·경계·종료 회귀 검증 |
 | `mise run typecheck` | 각 workspace 타입 검사 |
 | `mise run format` | 코드와 JSON 포맷 적용 |
 | `mise run format:check` | 포맷 검사 |
@@ -55,6 +60,12 @@ Bun은 `mise.toml`과 `package.json`에 **1.4.2**로 고정되어 있다.
 Windows 빌드는 PowerShell 7, MSVC C++ Build Tools와 CMake/Ninja가 필요하며,
 WebView 앱 실행에는 WebView2 Evergreen 런타임이 필요하다.
 생성된 `build/windows-probe-package/`는 Bun 개발 도구 없이 실행되는 독립 실험 패키지다.
+
+macOS는 Apple Silicon, Xcode Command Line Tools와 GUI 세션이 필요하다.
+`probe:macos` 다음 `host:macos`를 **직렬 실행**한다. 두 빌드가 공유 Bun 캐시를
+초기 다운로드·추출하므로 병렬 cold-cache 실행은 안전하지 않다.
+`native/macos/host/run.sh --app`은 회귀 앱의 `.app` 생성과 ad-hoc 서명을 추가한다.
+현재 Windows 다중 창 메모 설정은 macOS에서 실행할 수 없다(`--sample` 제한).
 
 ## CI
 
@@ -69,9 +80,19 @@ WebView 앱 실행에는 WebView2 Evergreen 런타임이 필요하다.
   C++ 빌드·번들 Bun 프로세스 IPC·네이티브 회귀·WebView2 통합 검증을 실행한다.
   결과 JSON과 호스트 로그는 성공·실패 시 모두 `windows-native-diagnostics`
   artifact로 7일간 보관한다. 생성 전 실패한 경우에는 파일이 없을 수 있다.
+- 별도 `macos-15` ARM64 작업에서 runner CPU와 `darwin-aarch64` pin을 확인하고
+  `mise run probe:macos`→`mise run host:macos`를 직렬 실행한다. 다운로드·실행 파일
+  해시·아키텍처·버전을 확인하고, 실제 AppKit/WKWebView 페이지 결과·리소스 요청·
+  렌더러 재생성·Bun 종료를 검사한다. GUI가 실행되지 않으면 timeout/오류로 실패한다.
+  결과 JSON, 빌드·드라이버 로그, 호스트 stderr와 테스트별 호스트/페이지 로그는
+  성공·실패 모두 `macos-native-diagnostics` artifact로 7일간 보관한다.
+  `bash -e -o pipefail`로 `tee`가 테스트 실패를 숨기지 않게 한다. 빌드/초기 설정 실패나
+  강제 취소 전에는 JSON이 없을 수 있으며, 그 경우 생성된 로그를 확인한다.
 
 CI도 `mise.toml`의 Bun 버전을 사용한다. 같은 PR·브랜치의 새 실행은 이전 실행을
-취소한다. 배포·서명·릴리스는 포함하지 않으며 다른 OS의 네이티브 호스트는 검사하지 않는다.
+취소한다. `.app`·서명·공증·설치·배포·릴리스와 Linux/모바일 네이티브 호스트는 검사하지 않는다.
+기존 로컬 결과를 다른 OS/CPU의 CI 성공으로 간주하지 않는다. 실제 실행 환경과 결과는
+[macOS 기록](./docs/architecture/macos-native-results.md)에 분리해서 남긴다.
 
 ## 디렉터리
 
@@ -99,5 +120,5 @@ Bun 변경 시 `mise.toml`의 `tools.bun`과 `package.json`의
 `bun upgrade`로 mise가 관리하는 실행 파일을 직접 바꾸지 않는다.
 
 외부 개발 의존성도 정확한 버전으로 고정하고 `bun.lock`을 관리한다.
-앱 패키지에 포함하는 Windows Bun 실행 파일의 버전·소스 revision·해시는
+앱 패키지에 포함하는 Windows/macOS Bun 실행 파일의 버전·소스 revision·해시는
 [runtime](./runtime/README.md)의 manifest로 별도 고정한다.

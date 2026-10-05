@@ -9,6 +9,10 @@ cd "$(dirname "$0")"
 HERE=$PWD
 ROOT=$(cd ../../.. && pwd)
 PIN="$ROOT/runtime/build-manifests/darwin-aarch64.json"
+[[ "$(uname -s)" == Darwin && "$(uname -m)" == arm64 ]] || {
+  echo "macOS arm64 is required by the pinned darwin-aarch64 runtime; Intel is not supported." >&2
+  exit 1
+}
 SKIP_TESTS=0
 for arg in "$@"; do [[ "$arg" == "--skip-tests" ]] && SKIP_TESTS=1; done
 
@@ -26,6 +30,7 @@ download() { # download <url> <file> <sha256>
 }
 
 BUN_TARGET=$(field bun target)
+[[ "$BUN_TARGET" == darwin-aarch64 ]] || { echo "Unexpected Bun target: $BUN_TARGET" >&2; exit 1; }
 CACHE="$ROOT/runtime/bun-bundle/vendor"
 JSON_DIR="$HERE/vendor"
 mkdir -p "$CACHE" "$JSON_DIR"
@@ -35,6 +40,8 @@ download "$(field bun archiveUrl)" "$ARCHIVE" "$(field bun archiveSha256)"
 BUNDLED="$CACHE/bun-$BUN_TARGET/bun"
 check "$BUNDLED" "$(field bun executableSha256)"
 chmod +x "$BUNDLED"
+[[ "$(/usr/bin/lipo -archs "$BUNDLED")" == arm64 ]] || { echo "Bundled Bun must be arm64." >&2; exit 1; }
+[[ "$("$BUNDLED" --version)" == "$(field bun version)" ]] || { echo "Bundled Bun version mismatch." >&2; exit 1; }
 download "$(field bun licenseUrl)" "$CACHE/LICENSE.bun" "$(field bun licenseSha256)"
 download "$(field json headerUrl)" "$JSON_DIR/json.hpp" "$(field json headerSha256)"
 download "$(field json licenseUrl)" "$JSON_DIR/LICENSE.nlohmann-json" "$(field json licenseSha256)"

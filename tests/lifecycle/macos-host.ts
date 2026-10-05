@@ -7,7 +7,8 @@
 // delta snapshot, LOCALAPPDATA -> HOME/Library/Application Support.
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { chmod, cp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, cp, lstat, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { release } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { validateValue } from "../../packages/protocol/src/index.ts";
 import { validationCases } from "../protocol/validation-cases.ts";
@@ -28,7 +29,11 @@ await writeFile(join(cwd, "hostile.ts"), 'throw new Error("hostile preload");');
 const sandboxHome = join(workspace, "host-home");
 await mkdir(sandboxHome, { recursive: true });
 const dataRoot = join(sandboxHome, "Library/Application Support/bunaway", "tests.bunaway.host");
-const results: { name: string; durationMs: number }[] = [];
+const results: { name: string; ok: boolean; durationMs: number; error?: string }[] = [];
+const diagnostics = join(workspace, "macos-host-diagnostics");
+await rm(diagnostics, { recursive: true, force: true });
+await mkdir(diagnostics, { recursive: true });
+let launchCount = 0;
 
 async function resetData() {
   // WebContent renderers may hold the data folder briefly after the host exits;
@@ -135,7 +140,7 @@ function launch(extraEnv: Record<string, string> = {}) {
     },
     stdin: "ignore",
     stdout: "ignore",
-    stderr: "pipe",
+    stderr: Bun.file(join(diagnostics, `host-${++launchCount}.stderr.log`)),
   });
   return child;
 }
@@ -161,12 +166,35 @@ async function watch(pids: (number | string)[]) {
 }
 async function test(name: string, body: () => Promise<void>) {
   const start = performance.now();
+  const testIndex = results.length + 1;
   try {
-    await body();
+    try {
+      await body();
+    } finally {
+      const snapshot = join(diagnostics, `test-${testIndex}`);
+      await mkdir(snapshot, { recursive: true });
+      for (const dir of ["logs", "temp"]) {
+        const source = join(dataRoot, dir);
+        if (existsSync(source))
+          await cp(source, join(snapshot, dir), {
+            recursive: true,
+            filter: async (path) => {
+              const entry = await lstat(path);
+              return entry.isDirectory() || entry.isFile();
+            },
+          });
+      }
+    }
   } catch (cause) {
+    results.push({
+      name,
+      ok: false,
+      durationMs: Math.round(performance.now() - start),
+      error: String(cause),
+    });
     throw new Error(`${name} failed`, { cause });
   }
-  results.push({ name, durationMs: Math.round(performance.now() - start) });
+  results.push({ name, ok: true, durationMs: Math.round(performance.now() - start) });
   console.log(`PASS ${name}`);
 }
 
@@ -179,7 +207,10 @@ try {
     });
     const output = new Response(native.stdout).text();
     const errors = new Response(native.stderr).text();
-    assert.equal(await native.exited, 0, await errors);
+    const exitCode = await native.exited;
+    await writeFile(join(diagnostics, "native.stdout.log"), await output);
+    await writeFile(join(diagnostics, "native.stderr.log"), await errors);
+    assert.equal(exitCode, 0, await errors);
     assert.ok((await output).includes("PASS scheme handler"));
   });
 
@@ -399,7 +430,7 @@ try {
     await test(`memo sample ${phase} in a new host and Bun process`, async () => {
       const configPath = join(packagePath, "assets", "app.json");
       const config = JSON.parse(await readFile(configPath, "utf-8"));
-      config.home = `https://app.bunaway.local/memo.html?test=${phase}`;
+      config.home = `https://app.bunaway.local/memo.html?test=${phase}&browserStorage=ephemeral`;
       const text = `${JSON.stringify(config, null, 2)}\n`;
       await writeFile(configPath, text);
       const manifestPath = join(packagePath, "manifest.json");
@@ -508,6 +539,8 @@ try {
 } finally {
   const summary = {
     host: "macos",
+    osRelease: release(),
+    architecture: process.arch,
     suites: "product-host",
     results,
     generatedAt: new Date().toISOString(),

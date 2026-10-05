@@ -9,6 +9,8 @@ const saved = document.getElementById("saved-memo");
 const statusEl = document.getElementById("status");
 const button = document.getElementById("save");
 const testPhase = new URL(location.href).searchParams.get("test");
+const ephemeralBrowserStorage =
+  new URL(location.href).searchParams.get("browserStorage") === "ephemeral";
 window.addEventListener("pagehide", () => {
   void client.close();
 });
@@ -89,8 +91,12 @@ async function start() {
         page: "memo",
         results: [
           {
-            name: "legacy browser profile storage persists across restart",
-            ok: localStorage.getItem("bunaway-profile-regression") === "legacy-profile",
+            name: ephemeralBrowserStorage
+              ? "ephemeral browser storage is cleared across restart"
+              : "legacy browser profile storage persists across restart",
+            ok:
+              localStorage.getItem("bunaway-profile-regression") ===
+              (ephemeralBrowserStorage && testPhase === "read" ? null : "legacy-profile"),
           },
           {
             name:

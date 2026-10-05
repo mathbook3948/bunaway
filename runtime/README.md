@@ -13,6 +13,13 @@ revision·아카이브·실행 파일·라이선스 해시를 [manifest](./build
 고정했다. 소스 패치는 없다. [Windows B 실험](../docs/architecture/windows-probe-results.md)에서
 사용자 Bun이 없는 PATH, 한글·공백 경로와 다른 cwd의 패키지 실행을 검증했다.
 
+macOS arm64 공식 배포물은 [darwin-aarch64 manifest](./build-manifests/darwin-aarch64.json)에
+같은 Bun 버전과 별도의 ZIP·실행 파일·라이선스 해시로 고정했다. macOS probe와 WKWebView
+호스트는 해시·Mach-O CPU·버전을 검사하며, `runtime/bun-bundle/vendor`를 공유하므로
+초기 다운로드·추출은 직렬 실행한다. Intel macOS 배포물/pin은 없다.
+[macOS 실행 기록](../docs/architecture/macos-native-results.md)과
+[플랫폼 지원 표](../docs/platform-support/README.md)를 참고한다.
+
 이전 DLL 실험은 중단하고 실험용 코드·소스 변경을 제거했다. 무시되는
 `bun-embed/vendor/` 소스와 프로젝트 `build/` 도구·캐시는 제품 의존성으로 사용하지 않는다.
 [B 단계 계획](../docs/architecture/runtime-feasibility.md)을 따른다.
