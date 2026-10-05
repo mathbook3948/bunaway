@@ -378,17 +378,8 @@ try {
       // TIMEOUT is asserted by the page; either core or native deadline may win.
       assert.ok(count("host-request-denied") >= 1, "scope escape denial");
 
-      // The backend->host host-cancel path must be exercised. On Windows the
-      // cancel usually beats the worker's CreateFileW (AV-scanned I/O), while
-      // macOS openat completes in microseconds, so the cancel can land after
-      // the response ("late-host-cancel"). Either proves the cancel frame path.
-      assert.ok(
-        count("host-cancel") +
-          count("host-request-cancelled") +
-          count("discarded", (e) => e.reason === "late-host-cancel") >=
-          1,
-        "runtime forwarded Host API cancellation",
-      );
+      // Same-turn SDK cancellation can precede Host dispatch. The delayed
+      // suite below checks native Host cancellation after a backend barrier.
       // The child-frame message must never reach the backend.
       assert.equal(JSON.stringify(log).includes("iframe-1"), false, "iframe message leaked");
       assert.ok(count("frame-message-ignored") >= 1, "iframe message was seen and dropped");
@@ -423,12 +414,18 @@ try {
   });
 
   await test("cancel arriving first blocks the late host result", async () => {
-    // Deterministic cancel-first path: BUNAWAY_HOST_OP_DELAY_MS makes every
-    // host operation wait on its worker, so the cancel always wins. Verifies
-    // that cancelled requests never produce a (duplicate) response.
+    // The UI's backend round trip lets Host dispatch precede cancellation;
+    // delayed workers keep the native request pending until cancel arrives.
     await resetData();
-    const child = launch({ BUNAWAY_HOST_OP_DELAY_MS: "500" });
+    const configText = await readFile(join(packagePath, "assets/app.json"), "utf-8");
+    const config = JSON.parse(configText);
+    const home = new URL(config.home);
+    home.searchParams.set("hostCancelBarrier", "1");
+    config.home = home.href;
+    await updateAsset("assets/app.json", JSON.stringify(config));
+    let child: ReturnType<typeof launch> | undefined;
     try {
+      child = launch({ BUNAWAY_HOST_OP_DELAY_MS: "500" });
       const report = await reportFile("report.json");
       const failed = report.results.filter((r) => !r.ok);
       assert.equal(failed.length, 0, `page failures: ${JSON.stringify(failed)}`);
@@ -443,14 +440,26 @@ try {
           .map((e) => e.requestId as string),
       );
       assert.ok(blocked.size >= 1, "no host request was cancelled or had its result discarded");
+      assert.ok(
+        log.some(
+          (e) =>
+            e.event === "host-request" &&
+            e.operation === "storage.readText" &&
+            blocked.has(e.requestId as string),
+        ),
+        "cancelled read must have reached the native Host",
+      );
       const responded = new Set(
         log.filter((e) => e.event === "host-response").map((e) => e.requestId as string),
       );
       for (const id of blocked) assert.ok(!responded.has(id), `late result escaped for ${id}`);
       await gracefulStop(child);
     } finally {
-      if (!child.killed) child.kill();
-      await child.exited;
+      if (child) {
+        if (!child.killed) child.kill();
+        await child.exited;
+      }
+      await updateAsset("assets/app.json", configText);
     }
   });
 
