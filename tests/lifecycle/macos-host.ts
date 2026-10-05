@@ -632,13 +632,16 @@ try {
           });
           const beforeCrash = (await hostLog()).length;
           await rm(join(dataRoot, "temp", "read.json"));
+          let terminated = 0;
           for (const pid of pids) {
-            const killer = Bun.spawn(["/bin/kill", "-9", String(pid)], {
-              stdout: "pipe",
-              stderr: "pipe",
-            });
-            assert.equal(await killer.exited, 0, "test renderer termination failed");
+            try {
+              process.kill(pid, "SIGKILL");
+              terminated++;
+            } catch (cause) {
+              if ((cause as NodeJS.ErrnoException).code !== "ESRCH") throw cause;
+            }
           }
+          assert.ok(terminated > 0, "no live test renderer was terminated");
           await waitFor(
             async () =>
               (await hostLog())
