@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { createClient } from "../../packages/client-sdk/src/index.ts";
@@ -7,6 +7,7 @@ import { bundleAssets } from "../../packages/cli/src/build.ts";
 import { validateProject } from "../../packages/cli/src/config.ts";
 import { createProject } from "../../packages/cli/src/create.ts";
 import {
+  parseHostCall,
   parseProcessFrame,
   PROTOCOL_VERSION,
   type ProcessFrame,
@@ -15,7 +16,7 @@ import {
 import { readJsonLines } from "../../packages/runtime-bun/src/index.ts";
 
 test("external generated backend uses actual SDK command/storage/event; revoked saves are not replayed", async () => {
-  const root = await mkdtemp(resolve(tmpdir(), "bunaway-template-"));
+  const root = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-template-")));
   let child: ReturnType<typeof Bun.spawn> | undefined;
   try {
     const project = await createProject(resolve(root, "independent"));
@@ -89,7 +90,9 @@ test("external generated backend uses actual SDK command/storage/event; revoked 
             });
           if (frame.kind === "host-request") {
             expect(frame.context).toMatch(/^ctx-/);
-            const call = frame.payload;
+            const call = parseHostCall(
+              JSON.stringify({ operation: frame.operation, payload: frame.payload }),
+            );
             if (call.operation === "storage.writeText" && call.payload.text === "pending save") {
               held = frame;
               holdReached?.();

@@ -114,7 +114,10 @@ Bun/자산 해시를 검사하고 내부 Bun **절대 경로**를 실행한다. 
 전역 Bun fallback은 없다. 사용자 환경·`.env`·preload·자동 의존성 설치를 차단하는
 기존 자식 실행 설정을 유지한다. 해시는 무결성 검사이며 서명된 신뢰의 증명은 아니다.
 
-macOS 패키지에는 로컬 실행용 ad-hoc 서명만 적용한다. 설치 프로그램, Developer ID 서명,
+macOS 패키지에는 로컬 실행용 ad-hoc 서명만 적용하며 번들 Bun을 재서명하지 않는다.
+manifest의 macOS `host.sourceSha256`은 서명 전 원본 호스트 해시다(서명된 실행 파일을
+자신의 서명 대상 manifest에 해싱하는 순환을 피한다). Windows `host.sha256`은 패키지 호스트 해시다.
+설치 프로그램, Developer ID 서명,
 공증, React/Vue/Svelte, 공개 플러그인 API, 공개 framework 배포/라이선스 결정은 후속 범위다.
 공통 네이티브 스크립트에 추가한 `-BuildHostOnly`/`--host-only`는 고정 의존성 검증과 호스트
 컴파일까지만 실행해 CLI가 테스트/메모 자산 없이 앱 자산을 직접 조립하도록 한다.

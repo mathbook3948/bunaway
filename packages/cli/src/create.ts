@@ -1,10 +1,10 @@
-import { cp, mkdir, rename, rm, stat } from "node:fs/promises";
+import { cp, mkdir, realpath, rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import { frameworkRoot, json, writeJson } from "./files.ts";
 
 export async function createProject(directory: string): Promise<string> {
-  const target = resolve(directory);
-  await stat(dirname(target));
+  const requested = resolve(directory);
+  const target = resolve(await realpath(dirname(requested)), basename(requested));
   try {
     await stat(target);
     throw new Error("Target exists; choose a new directory.");

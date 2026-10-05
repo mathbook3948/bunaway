@@ -11,6 +11,7 @@ const status = document.querySelector<HTMLElement>("#status");
 const button = document.querySelector<HTMLButtonElement>("#save");
 if (!input || !saved || !status || !button) throw new Error("Missing UI elements.");
 const ui = { input, saved, status, button };
+let sessionEnded = false;
 
 window.addEventListener("pagehide", () => {
   void client.close();
@@ -30,6 +31,7 @@ async function start(): Promise<void> {
     },
     {
       onError: () => {
+        sessionEnded = true;
         ui.button.disabled = true;
         ui.status.textContent = "Session ended. Requests will not be replayed.";
       },
@@ -43,7 +45,7 @@ async function start(): Promise<void> {
   } catch (error) {
     ui.status.textContent = `No saved message yet, or read failed: ${errorText(error)}`;
   }
-  ui.button.disabled = false;
+  ui.button.disabled = sessionEnded;
   ui.button.addEventListener("click", async () => {
     ui.button.disabled = true;
     try {
@@ -51,7 +53,7 @@ async function start(): Promise<void> {
     } catch (error) {
       ui.status.textContent = `Save failed (not retried): ${errorText(error)}`;
     } finally {
-      ui.button.disabled = false;
+      ui.button.disabled = sessionEnded;
     }
   });
 }

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { lstat, readdir, realpath } from "node:fs/promises";
+import { lstat, readdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -7,14 +7,14 @@ export const frameworkRoot = resolve(dirname(fileURLToPath(import.meta.url)), ".
 
 export async function json(path: string): Promise<unknown> {
   try {
-    return await Bun.file(path).json();
+    return JSON.parse(await readFile(path, "utf8"));
   } catch {
     throw new Error(`Cannot read JSON: ${path}`);
   }
 }
 
 export async function writeJson(path: string, value: unknown): Promise<void> {
-  await Bun.write(path, `${JSON.stringify(value, null, 2)}\n`);
+  await writeFile(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 export function inside(root: string, path: string): boolean {
@@ -48,7 +48,7 @@ export async function files(root: string): Promise<string[]> {
 
 export async function hash(path: string): Promise<string> {
   return createHash("sha256")
-    .update(await Bun.file(path).bytes())
+    .update(await readFile(path))
     .digest("hex");
 }
 

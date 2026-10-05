@@ -1,4 +1,4 @@
-import { chmod, cp, mkdir, rename, rm, stat } from "node:fs/promises";
+import { chmod, cp, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
 import { validateProject, type Project } from "./config.ts";
 import { files, frameworkRoot, hash, json, run, verifyHash, writeJson } from "./files.ts";
@@ -131,7 +131,7 @@ export async function bundleAssets(project: Project, assets: string): Promise<vo
   }
   const backendOutput = backend.outputs[0];
   if (!backendOutput) throw new Error("Missing backend bundle.");
-  await Bun.write(resolve(assets, "backend.js"), backendOutput);
+  await writeFile(resolve(assets, "backend.js"), new Uint8Array(await backendOutput.arrayBuffer()));
 }
 
 function xml(text: string): string {
@@ -190,7 +190,7 @@ export async function buildProject(
     }
     await writeJson(resolve(assets, "app.json"), project.app);
     await writeJson(resolve(assets, "policy.json"), project.policy);
-    await Bun.write(resolve(assets, "bunfig.toml"), "env = false\n");
+    await writeFile(resolve(assets, "bunfig.toml"), "env = false\n");
     await writeJson(resolve(assets, "tsconfig.json"), {});
     for (const schema of await files(resolve(frameworkRoot, "native/host-api/generated"))) {
       await cp(schema, resolve(assets, basename(schema)));
@@ -209,10 +209,15 @@ export async function buildProject(
       assets: hashes,
       app: { id: project.app.appId, version: appPackage.version },
       framework: { version: framework.version },
-      host: { target, sha256: await hash(executable) },
+      host: {
+        target,
+        ...(windows
+          ? { sha256: await hash(executable) }
+          : { sourceSha256: await hash(native.host) }),
+      },
     });
     if (!windows) {
-      await Bun.write(
+      await writeFile(
         resolve(staging, "Contents/Info.plist"),
         `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -227,7 +232,8 @@ export async function buildProject(
 <key>NSPrincipalClass</key><string>NSApplication</string>
 </dict></plist>\n`,
       );
-      await run(["/usr/bin/codesign", "--force", "--deep", "--sign", "-", staging], project.root);
+      await run(["/usr/bin/codesign", "--force", "--sign", "-", staging], project.root);
+      await verifyHash(resolve(packageRoot, "runtime/bun"), pin.bun.executableSha256);
     }
     const backup = `${output}.previous-${crypto.randomUUID()}`;
     let moved = false;

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readdir, rename, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, realpath, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { buildProject, bundleAssets } from "../../packages/cli/src/build.ts";
@@ -13,7 +13,7 @@ let project: string;
 let originals: Record<string, string>;
 
 beforeAll(async () => {
-  home = await mkdtemp(resolve(tmpdir(), "bunaway-cli-"));
+  home = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-cli-")));
   const first = resolve(home, "created app");
   await createProject(first);
   project = resolve(home, "relocated app");
@@ -63,7 +63,7 @@ test("create produces a relocatable project with real SDK dependencies and no re
 
 test("create refuses existing paths and missing parents without modifying them", async () => {
   await expect(createProject(project)).rejects.toThrow("exists");
-  expect(await Bun.file(resolve(project, "app.json")).text()).toBe(originals["app.json"]);
+  expect(await Bun.file(resolve(project, "app.json")).text()).toBe(originals["app.json"] ?? "");
   await expect(createProject(resolve(home, "missing/child"))).rejects.toThrow();
   expect((await readdir(home)).some((name) => name.includes(".creating-"))).toBe(false);
 });
