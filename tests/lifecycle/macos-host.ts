@@ -16,19 +16,34 @@ import { validationCases } from "../protocol/validation-cases.ts";
 const original = resolve(process.argv[process.argv.indexOf("--package") + 1] ?? "");
 assert.ok(process.argv.includes("--package"), "--package is required");
 const workspace = dirname(original);
-const packagePath = join(workspace, "C 호스트 한글 package");
-await cp(original, packagePath, { recursive: true, force: true });
-const host = join(packagePath, "bunaway-host");
+// BUNAWAY_PACKAGE_IN_PLACE=1 runs the package where it sits — e.g. inside a
+// signed .app for App Sandbox runs — while the default copy keeps the
+// hostile-name path coverage.
+const packagePath =
+  process.env.BUNAWAY_PACKAGE_IN_PLACE === "1"
+    ? original
+    : join(workspace, "C 호스트 한글 package");
+if (packagePath !== original) await cp(original, packagePath, { recursive: true, force: true });
+// BUNAWAY_HOST_EXEC overrides the host binary: under App Sandbox the binary
+// must exec from inside the .app while --package points at Contents/Resources.
+const host = process.env.BUNAWAY_HOST_EXEC
+  ? resolve(process.env.BUNAWAY_HOST_EXEC)
+  : join(packagePath, "bunaway-host");
 const cwd = join(workspace, "hostile-host-cwd");
 await mkdir(cwd, { recursive: true });
 await writeFile(join(cwd, ".env"), "BUNAWAY_HOSTILE=from-dotenv\n");
 await writeFile(join(cwd, "bunfig.toml"), 'preload = ["./hostile.ts"]\n');
 await writeFile(join(cwd, "hostile.ts"), 'throw new Error("hostile preload");');
 
-// Hermetic HOME: the host resolves its data root under it.
+// Hermetic HOME: the host resolves its data root under it. BUNAWAY_DATA_ROOT
+// overrides that location — under App Sandbox HOME is rewritten to the app
+// container, so callers point this at
+// ~/Library/Containers/<bundle-id>/Data/Library/Application Support/bunaway/<appId>.
 const sandboxHome = join(workspace, "host-home");
 await mkdir(sandboxHome, { recursive: true });
-const dataRoot = join(sandboxHome, "Library/Application Support/bunaway", "tests.bunaway.host");
+const dataRoot =
+  process.env.BUNAWAY_DATA_ROOT ??
+  join(sandboxHome, "Library/Application Support/bunaway", "tests.bunaway.host");
 const results: { name: string; ok: boolean; durationMs: number; error?: string }[] = [];
 const diagnostics = join(workspace, "macos-host-diagnostics");
 await rm(diagnostics, { recursive: true, force: true });
