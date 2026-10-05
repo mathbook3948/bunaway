@@ -1284,6 +1284,19 @@ public:
                 }
                 return S_OK;
             }).Get(), nullptr);
+        view.webview->add_FrameNavigationStarting(Callback<ICoreWebView2NavigationStartingEventHandler>(
+            [this, &view](ICoreWebView2*, ICoreWebView2NavigationStartingEventArgs* args) -> HRESULT {
+                LPWSTR uri = nullptr;
+                args->get_Uri(&uri);
+                std::wstring target = uri ? uri : L"";
+                CoTaskMemFree(uri);
+                auto origin = originOf(target);
+                if (origin.empty() || !view.policy->origins.count(origin)) {
+                    args->put_Cancel(TRUE);
+                    hostLog->event("web-resource-blocked", { { "uri", utf8(target) }, { "reason", "frame-navigation" }, { "view", view.viewId } });
+                }
+                return S_OK;
+            }).Get(), nullptr);
         view.webview->add_NavigationCompleted(Callback<ICoreWebView2NavigationCompletedEventHandler>(
             [this, &view](ICoreWebView2*, ICoreWebView2NavigationCompletedEventArgs* args) -> HRESULT {
                 BOOL success = FALSE;

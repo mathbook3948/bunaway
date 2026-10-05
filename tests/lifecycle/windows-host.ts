@@ -363,7 +363,16 @@ try {
       assert.ok(count2("backend-ready") >= 1);
       assert.ok(count2("revoke", (e) => e.reason === "navigation" && e.view === "main") >= 1);
       assert.ok(count2("navigation-blocked", (e) => e.view === "main") >= 1);
-      assert.ok(count2("web-resource-blocked", (e) => e.view === "main") >= 1);
+      assert.ok(
+        count2(
+          "web-resource-blocked",
+          (e) =>
+            e.view === "main" &&
+            e.uri === "https://example.org/" &&
+            e.reason === "frame-navigation",
+        ) >= 1,
+        "remote iframe navigation must be canceled for the main view",
+      );
       assert.ok(count2("permission-denied", (e) => e.kind === "command" && e.view === "main") >= 1);
       assert.ok(count2("web-message-rejected", (e) => e.reason === "malformed") >= 2);
       assert.ok(count2("web-message-rejected", (e) => e.reason === "INVALID_ARGUMENT") >= 1);
