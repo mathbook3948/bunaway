@@ -52,6 +52,7 @@ async function start() {
     const deadline = Date.now() + 5000;
     while (button.disabled && Date.now() < deadline)
       await new Promise((resolve) => setTimeout(resolve, 25));
+    localStorage.setItem("bunaway-profile-regression", "legacy-profile");
   }
   if (testPhase === "editor") {
     // Multi-view integration: the writable memo view saves, observes its own
@@ -87,6 +88,10 @@ async function start() {
       report: {
         page: "memo",
         results: [
+          {
+            name: "legacy browser profile storage persists across restart",
+            ok: localStorage.getItem("bunaway-profile-regression") === "legacy-profile",
+          },
           {
             name:
               testPhase === "write"

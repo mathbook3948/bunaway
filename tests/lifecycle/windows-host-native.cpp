@@ -42,12 +42,34 @@ int wmain(int argc, wchar_t** argv) {
         };
         auto* mainView = makeView("main", "https://app.bunaway.local/index.html");
         auto* readerView = makeView("reader", "https://app.bunaway.local/reader.html");
+        app.scopes.webData = profileRoot;
+        require(app.webViewDataPath(*mainView) == profileRoot / viewDirName("main"), "Multi-window main profile is not isolated.");
+        require(app.webViewDataPath(*readerView) == profileRoot / viewDirName("reader"), "Multi-window reader profile is not isolated.");
+        app.legacyProfile = true;
+        require(app.webViewDataPath(*mainView) == profileRoot, "Legacy browser profile path changed on upgrade.");
+        app.legacyProfile = false;
+        std::cout << "PASS legacy profile path preserved and multi-window profiles isolated\n";
 
         // Establish a real message queue; postToWeb uses thread messages when the
         // notify window is null.
         MSG message;
         PeekMessageW(&message, nullptr, 0, 0, PM_NOREMOVE);
         const auto context = app.openSession(*mainView, "https://app.bunaway.local/index.html", "https://app.bunaway.local");
+        {
+            App::LiveView closedView;
+            closedView.closed = true;
+            for (auto result : { E_ABORT, E_FAIL, S_OK }) {
+                app.environmentCompleted(closedView)->Invoke(result, nullptr);
+                app.controllerCompleted(closedView)->Invoke(result, nullptr);
+                require(!app.failed && !app.shuttingDown && app.sessions.count(context), "Closed view initialization killed a sibling session.");
+            }
+            app.shuttingDown = true;
+            app.environmentCompleted(*readerView)->Invoke(E_ABORT, nullptr);
+            app.controllerCompleted(*readerView)->Invoke(E_ABORT, nullptr);
+            require(!app.failed, "Initialization callback failed an app that is already shutting down.");
+            app.shuttingDown = false;
+            std::cout << "PASS closed-view initialization callbacks preserve sibling sessions\n";
+        }
         auto request = app.frame("host-request");
         request["context"] = context;
         request["requestId"] = "write-1";

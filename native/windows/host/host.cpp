@@ -520,6 +520,7 @@ public:
     Json manifest, processSchema, messageSchema, hostCallSchema, hostOps;
     Policy policy;
     std::string appId;
+    bool legacyProfile = false;
     Scopes scopes;
     std::unique_ptr<Log> hostLog, appLog;
 
@@ -1207,36 +1208,46 @@ public:
     void navigateAll() {
         for (auto& [id, view] : liveViews) navigateWhenReady(*view);
     }
-    // Every view gets its own WebView2 environment and user-data directory, so the
-    // browser/renderer process stacks are isolated per view.
+    auto controllerCompleted(LiveView& view) {
+        return Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
+            [this, &view](HRESULT result, ICoreWebView2Controller* created) -> HRESULT {
+                if (view.closed || shuttingDown) {
+                    if (created) created->Close();
+                    return S_OK;
+                }
+                if (FAILED(result) || !created) { hostLog->event("webview2-init-failed", { { "hr", static_cast<int64_t>(result) }, { "view", view.viewId } }); runtimeFailure(); return S_OK; }
+                view.controller = created;
+                view.controller->get_CoreWebView2(&view.webview);
+                RECT bounds; GetClientRect(view.hwnd, &bounds);
+                view.controller->put_Bounds(bounds);
+                view.controller->put_IsVisible(TRUE);
+                configureWebView(view);
+                view.webviewReady = true;
+                navigateWhenReady(view);
+                hostLog->event("webview-ready", { { "view", view.viewId } });
+                return S_OK;
+            });
+    }
+    auto environmentCompleted(LiveView& view) {
+        return Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
+            [this, &view](HRESULT result, ICoreWebView2Environment* environment) -> HRESULT {
+                if (view.closed || shuttingDown) return S_OK;
+                if (FAILED(result) || !environment) { hostLog->event("webview2-init-failed", { { "hr", static_cast<int64_t>(result) }, { "view", view.viewId } }); runtimeFailure(); return S_OK; }
+                view.env = environment;
+                view.env->CreateCoreWebView2Controller(view.hwnd, controllerCompleted(view).Get());
+                return S_OK;
+            });
+    }
+    fs::path webViewDataPath(const LiveView& view) const {
+        return legacyProfile ? scopes.webData : scopes.webData / utf16(viewDirName(view.viewId));
+    }
+    // Multi-window declarations isolate profiles; legacy single-window apps keep
+    // their original folder so upgrades retain cookies and browser storage.
     void initWebView(LiveView& view) {
-        auto udf = (scopes.webData / utf16(viewDirName(view.viewId))).wstring();
+        auto udf = webViewDataPath(view).wstring();
         std::error_code ignored;
         fs::create_directories(udf, ignored);
-        HRESULT hr = CreateCoreWebView2EnvironmentWithOptions(nullptr, udf.c_str(), nullptr,
-            Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
-                [this, &view](HRESULT result, ICoreWebView2Environment* environment) -> HRESULT {
-                    if (FAILED(result) || !environment) { hostLog->event("webview2-init-failed", { { "hr", static_cast<int64_t>(result) }, { "view", view.viewId } }); runtimeFailure(); return S_OK; }
-                    if (view.closed || shuttingDown) return S_OK;
-                    view.env = environment;
-                    view.env->CreateCoreWebView2Controller(view.hwnd,
-                        Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
-                            [this, &view](HRESULT result, ICoreWebView2Controller* created) -> HRESULT {
-                                if (FAILED(result) || !created) { hostLog->event("webview2-init-failed", { { "hr", static_cast<int64_t>(result) }, { "view", view.viewId } }); runtimeFailure(); return S_OK; }
-                                if (view.closed || shuttingDown) return S_OK;
-                                view.controller = created;
-                                view.controller->get_CoreWebView2(&view.webview);
-                                RECT bounds; GetClientRect(view.hwnd, &bounds);
-                                view.controller->put_Bounds(bounds);
-                                view.controller->put_IsVisible(TRUE);
-                                configureWebView(view);
-                                view.webviewReady = true;
-                                navigateWhenReady(view);
-                                hostLog->event("webview-ready", { { "view", view.viewId } });
-                                return S_OK;
-                            }).Get());
-                    return S_OK;
-                }).Get());
+        HRESULT hr = CreateCoreWebView2EnvironmentWithOptions(nullptr, udf.c_str(), nullptr, environmentCompleted(view).Get());
         require(SUCCEEDED(hr), "WebView2 environment creation failed.");
     }
     void configureWebView(LiveView& view) {
@@ -1553,6 +1564,7 @@ int run(const fs::path& package) {
     app.appId = config.value("appId", "");
     require(std::regex_match(app.appId, appIdPattern), "Invalid appId.");
     auto specs = viewSpecs(config);
+    app.legacyProfile = !config.contains("windows");
 
     app.policy = Policy::load(readJson(app.assets / "policy.schema.json"), app.assets / "policy.json");
     for (auto& spec : specs) {

@@ -116,7 +116,7 @@ function launch() {
   });
   return child;
 }
-async function rendererPids(viewId: string) {
+async function rendererPids(viewId: string, legacyProfile = false) {
   // Select only renderers belonging to this view's WebView user-data directory.
   const inventory = Bun.spawn(
     [
@@ -126,7 +126,12 @@ async function rendererPids(viewId: string) {
       "@(Get-CimInstance Win32_Process -Filter \"Name = 'msedgewebview2.exe'\" | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($env:BUNAWAY_TEST_WEB_DATA) -and $_.CommandLine.Contains('--type=renderer') } | Select-Object -ExpandProperty ProcessId) | ConvertTo-Json -Compress",
     ],
     {
-      env: { ...process.env, BUNAWAY_TEST_WEB_DATA: join(dataRoot, "webview", viewDir(viewId)) },
+      env: {
+        ...process.env,
+        BUNAWAY_TEST_WEB_DATA: legacyProfile
+          ? join(dataRoot, "webview")
+          : join(dataRoot, "webview", viewDir(viewId)),
+      },
       stdout: "pipe",
       stderr: "pipe",
     },
@@ -449,7 +454,7 @@ try {
           "legacy config opened more than one view",
         );
         if (phase === "read") {
-          const pids = await rendererPids("main");
+          const pids = await rendererPids("main", true);
           assert.ok(pids.length > 0, "test app renderer missing");
           const beforeCrash = (await hostLog()).length;
           await rm(join(dataRoot, "temp", "read.json"));
