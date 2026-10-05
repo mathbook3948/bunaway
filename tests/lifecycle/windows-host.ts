@@ -93,10 +93,16 @@ async function reportFile(name: string) {
   return waitFor(async () => {
     const path = join(dataRoot, "temp", name);
     if (!existsSync(path)) return null;
-    return JSON.parse(await readFile(path, "utf-8")) as {
-      page: string;
-      results: { name: string; ok: boolean; error?: string }[];
-    };
+    const text = await readFile(path, "utf-8");
+    try {
+      return JSON.parse(text) as {
+        page: string;
+        results: { name: string; ok: boolean; error?: string }[];
+      };
+    } catch (cause) {
+      if (!(cause instanceof SyntaxError)) throw cause;
+      return null;
+    }
   });
 }
 
