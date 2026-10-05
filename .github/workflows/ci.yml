@@ -56,10 +56,15 @@ jobs:
         run: mise run probe:windows
       - name: Build and test WebView2 host
         run: mise run host:windows
-      - name: Locate host diagnostics
+      - name: Collect host diagnostics
         if: always()
         shell: pwsh
-        run: '"HOST_LOGS=$env:LOCALAPPDATA/bunaway/tests.bunaway.host/logs" >> $env:GITHUB_ENV'
+        run: |
+          $logs = Join-Path $env:LOCALAPPDATA 'bunaway/tests.bunaway.host/logs'
+          if (Test-Path -LiteralPath $logs) {
+            New-Item -ItemType Directory -Force -Path build/windows-host-logs | Out-Null
+            Copy-Item -Path "$logs/*" -Destination build/windows-host-logs -Recurse -Force
+          }
       - name: Upload native test reports and logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -67,6 +72,6 @@ jobs:
           name: windows-native-diagnostics
           path: |
             build/windows-*-results.json
-            ${{ env.HOST_LOGS }}/
+            build/windows-host-logs/
           if-no-files-found: ignore
           retention-days: 7
