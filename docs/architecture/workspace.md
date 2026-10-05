@@ -29,4 +29,4 @@ Bun workspaces는 `packages/*`와 `plugins/*`에만 적용한다.
 SDK·코어 실행은 공통 Factory 타입을 구현한다. Windows WebView2 호스트와 메모 샘플의
 빌드·패키징은 `native/windows/host/run.ps1`에 있다. CLI bin과 공개 배포 exports,
 설치·서명·다른 플랫폼 빌드는 후속 작업이다. [실행 결과](./windows-host-results.md)는
-Windows 단일 창/뷰에 한정한다.
+Windows에 한정한다.

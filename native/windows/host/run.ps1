@@ -70,20 +70,27 @@ foreach ($name in $assets) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot "te
 foreach ($name in @('process.schema.json', 'message.schema.json', 'policy.schema.json', 'host-call.schema.json', 'host-operations.json')) {
     Copy-Item -LiteralPath (Join-Path $generated $name) -Destination (Join-Path $package 'assets') -Force
 }
-if (!$Sample) {
+if ($Sample) {
+    foreach ($file in Get-ChildItem -LiteralPath (Join-Path $root 'examples/memo/web') -File) {
+        $name = $file.Name
+        if ($name.EndsWith('.html')) {
+            Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $package 'assets/web') -Force
+        } elseif ($name.EndsWith('.js')) {
+            Run $Bun @('build', $file.FullName, '--target=browser', '--outfile', (Join-Path $package "assets/web/$name"))
+        }
+    }
+    foreach ($name in @('app.json', 'policy.json')) { Copy-Item -LiteralPath (Join-Path $root "examples/memo/$name") -Destination (Join-Path $package 'assets') -Force }
+} else {
     foreach ($file in Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'test/web') -File) {
         Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $package 'assets/web') -Force
     }
-    foreach ($entry in @('app.js', 'page2.js')) {
+    foreach ($entry in @('app.js', 'page2.js', 'reader.js')) {
         Run $Bun @('build', (Join-Path $PSScriptRoot "test/web/$entry"), '--target=browser', '--outfile', (Join-Path $package "assets/web/$entry"))
     }
+    Copy-Item -LiteralPath (Join-Path $root 'examples/memo/web/memo.html') -Destination (Join-Path $package 'assets/web') -Force
+    Run $Bun @('build', (Join-Path $root 'examples/memo/web/memo.js'), '--target=browser', '--outfile', (Join-Path $package 'assets/web/memo.js'))
 }
-Copy-Item -LiteralPath (Join-Path $root 'examples/memo/web/memo.html') -Destination (Join-Path $package 'assets/web') -Force
-Run $Bun @('build', (Join-Path $root 'examples/memo/web/memo.js'), '--target=browser', '--outfile', (Join-Path $package 'assets/web/memo.js'))
 $backendEntry = if ($Sample) { Join-Path $root 'examples/memo/backend.ts' } else { Join-Path $PSScriptRoot 'test/backend.ts' }
-if ($Sample) {
-    foreach ($name in @('app.json', 'policy.json')) { Copy-Item -LiteralPath (Join-Path $root "examples/memo/$name") -Destination (Join-Path $package 'assets') -Force }
-}
 Run $Bun @('build', $backendEntry, '--target=bun', '--outfile', (Join-Path $package 'assets/backend.js'))
 $hashes = [ordered]@{}
 foreach ($directory in @('assets', 'licenses')) {

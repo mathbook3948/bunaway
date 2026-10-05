@@ -107,6 +107,15 @@ async function run() {
   }
   results.push({ name: "connect", ok: true });
 
+  await test("shared request id stays in this view", async () => {
+    // The reader page uses the same request id concurrently; each view must
+    // receive the response carrying its own payload.
+    const r = await new Promise((resolve) => {
+      pending.set("shared-1", resolve);
+      send({ kind: "invoke", id: "shared-1", command: "test.echo", payload: { who: "main" } });
+    });
+    assert(r.kind === "result" && r.payload.who === "main", `wrong delivery ${JSON.stringify(r)}`);
+  });
   await test("echo unicode", async () => {
     const r = await call("test.echo", { msg: "한글 😀\n" });
     assert(r.kind === "result" && r.payload.msg === "한글 😀\n", `bad echo ${JSON.stringify(r)}`);

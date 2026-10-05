@@ -1,6 +1,7 @@
 // Windows product host integration runner: mise run host:windows builds the package first.
-// Drives the real host end-to-end: packaged Bun backend, WebView2 boundary, policy,
-// storage scope enforcement, session revocation on navigation, and process cleanup.
+// Drives the real host end-to-end: packaged Bun backend, per-view WebView2 windows,
+// per-view policy/storage scope enforcement, session revocation, window-close and
+// renderer-failure isolation, and process cleanup.
 import assert from "node:assert/strict";
 import { cp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -24,6 +25,10 @@ assert.ok(localAppData, "LOCALAPPDATA is required");
 const dataRoot = join(localAppData, "bunaway", "tests.bunaway.host");
 const results: { name: string; durationMs: number }[] = [];
 
+// The host maps each view id to a user-data directory through viewDirName.
+const viewDir = (viewId: string) =>
+  `v${[...viewId].map((c) => (/[A-Za-z0-9]/.test(c) ? c : `-${c.charCodeAt(0).toString(16).padStart(2, "0")}`)).join("")}`;
+
 async function resetData() {
   // WebView2 renderer processes can hold the user-data folder briefly after the
   // host exits; they live outside the Job Object so their handles drain late.
@@ -37,6 +42,7 @@ async function resetData() {
     }
   }
   await mkdir(join(dataRoot, "data", "notes"), { recursive: true });
+  await writeFile(join(dataRoot, "data", "notes", "public.txt"), "shared-note");
   await mkdir(join(dataRoot, "data", "secrets"), { recursive: true });
   await writeFile(join(dataRoot, "data", "secrets", "x.txt"), "out-of-scope-secret");
   await symlink(
@@ -110,6 +116,58 @@ function launch() {
   });
   return child;
 }
+async function rendererPids(viewId: string) {
+  // Select only renderers belonging to this view's WebView user-data directory.
+  const inventory = Bun.spawn(
+    [
+      "powershell",
+      "-NoProfile",
+      "-Command",
+      "@(Get-CimInstance Win32_Process -Filter \"Name = 'msedgewebview2.exe'\" | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($env:BUNAWAY_TEST_WEB_DATA) -and $_.CommandLine.Contains('--type=renderer') } | Select-Object -ExpandProperty ProcessId) | ConvertTo-Json -Compress",
+    ],
+    {
+      env: { ...process.env, BUNAWAY_TEST_WEB_DATA: join(dataRoot, "webview", viewDir(viewId)) },
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+  const pidsText = await new Response(inventory.stdout).text();
+  assert.equal(await inventory.exited, 0, await new Response(inventory.stderr).text());
+  const parsed = JSON.parse(pidsText || "[]") as number[] | number;
+  return Array.isArray(parsed) ? parsed : [parsed];
+}
+// taskkill delivers WM_CLOSE to only one top-level window per call. A real
+// multi-window app needs WM_CLOSE on every window, like a session logoff does.
+async function closeAllWindows(pid: number) {
+  const script = `
+$src = @'
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+public static class Win32 {
+  [DllImport("user32.dll")] public static extern bool PostMessageW(IntPtr h, uint m, IntPtr w, IntPtr l);
+  [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc cb, IntPtr l);
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  delegate bool EnumProc(IntPtr h, IntPtr l);
+  public static List<IntPtr> WindowsOf(uint pid) {
+    var list = new List<IntPtr>();
+    EnumWindows((h, l) => { uint p; GetWindowThreadProcessId(h, out p); if (p == pid) list.Add(h); return true; }, IntPtr.Zero);
+    return list;
+  }
+}
+'@
+Add-Type -TypeDefinition $src
+foreach ($h in [Win32]::WindowsOf([uint32]$env:BUNAWAY_CLOSE_PID)) {
+  [void][Win32]::PostMessageW($h, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)
+}
+`;
+  const poster = Bun.spawn(["powershell", "-NoProfile", "-Command", script], {
+    env: { ...process.env, BUNAWAY_CLOSE_PID: String(pid) },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  assert.equal(await poster.exited, 0, await new Response(poster.stderr).text());
+}
 async function watch(pids: number[]) {
   const watcher = Bun.spawn([host, "--watch", ...pids.map(String)], {
     stdin: "ignore",
@@ -135,6 +193,10 @@ async function test(name: string, body: () => Promise<void>) {
   results.push({ name, durationMs: Math.round(performance.now() - start) });
   console.log(`PASS ${name}`);
 }
+const contextsOf = (log: LogEntry[], viewId: string) =>
+  new Set(
+    log.filter((e) => e.event === "session-open" && e.viewId === viewId).map((e) => e.context),
+  );
 
 try {
   await test("TypeScript and native validators agree on shared regression inputs", async () => {
@@ -167,10 +229,127 @@ try {
     assert.equal(await errors, "");
   });
 
-  await test("WebView boundary, policy, storage scope and Bun cleanup", async () => {
+  await test("multi-view windows share one backend with per-view policy", async () => {
     await resetData();
     const child = launch();
     try {
+      // The writable editor view saves first; the read-only reader view waits on
+      // the allowed memo.saved event inside its checks.
+      const editorReport = await reportFile("editor.json");
+      for (const r of editorReport.results) assert.equal(r.ok, true, r.name);
+      const readerReport = await reportFile("reader.json");
+      for (const r of readerReport.results) assert.equal(r.ok, true, r.name);
+
+      const log1 = await hostLog();
+      const count = (event: string, extra: (e: LogEntry) => boolean = () => true) =>
+        log1.filter((entry) => entry.event === event && extra(entry)).length;
+      assert.ok(count("host-started") === 1, "one backend for all windows");
+      assert.ok(count("webview-ready", (e) => e.view === "main") >= 1);
+      assert.ok(count("webview-ready", (e) => e.view === "editor") >= 1);
+      assert.ok(count("webview-ready", (e) => e.view === "reader") >= 1);
+      assert.ok(count("session-open", (e) => e.viewId === "main") >= 1);
+      assert.ok(count("session-open", (e) => e.viewId === "editor") >= 1);
+      assert.ok(count("session-open", (e) => e.viewId === "reader") >= 1);
+      assert.ok(
+        count("permission-denied", (e) => e.kind === "command" && e.view === "reader") >= 1,
+        "reader save denial missing",
+      );
+      assert.ok(
+        count("permission-denied", (e) => e.kind === "event" && e.view === "reader") >= 1,
+        "reader event denial missing",
+      );
+      assert.ok(count("host-request-denied") >= 1, "read-only storage denial missing");
+      // The denied write must not exist.
+      assert.equal(existsSync(join(dataRoot, "data", "notes", "reader.txt")), false);
+      // test.changed is only allowed for the main view: event deliveries must
+      // never reach editor/reader sessions.
+      const mainCtxs = contextsOf(log1, "main");
+      for (const entry of log1.filter(
+        (e) => e.event === "web-delivered" && e.kind === "event" && e.name === "test.changed",
+      )) {
+        assert.ok(mainCtxs.has(entry.context), "test.changed left the main view");
+      }
+      const readerCtxs = contextsOf(log1, "reader");
+      const editorCtxs = contextsOf(log1, "editor");
+      const savedDeliveries = log1.filter(
+        (e) => e.event === "web-delivered" && e.kind === "event" && e.name === "memo.saved",
+      );
+      // memo.saved is allowed for editor and reader; both subscribed views must
+      // have received the broadcast by the time reader reported.
+      for (const ctxs of [editorCtxs, readerCtxs])
+        assert.ok(
+          savedDeliveries.some((e) => ctxs.has(e.context)),
+          "memo.saved missed an allowed view",
+        );
+      for (const entry of savedDeliveries)
+        assert.ok(
+          mainCtxs.has(entry.context) ||
+            editorCtxs.has(entry.context) ||
+            readerCtxs.has(entry.context),
+          "memo.saved delivered outside declared views",
+        );
+      // The reader view closed its own window after reporting: sibling views and
+      // the backend keep running. Its pending invoke (leaving-1) settles after
+      // the revoke — the backend drops the reply for the dead session and the
+      // host must never deliver anything to the revoked context again.
+      await waitLog((e) => e.event === "view-window-closed" && e.view === "reader");
+      assert.equal(child.exitCode, null, "host exited while sibling windows are open");
+      const readerCtx = [...contextsOf(await hostLog(), "reader")].pop();
+      assert.ok(readerCtx, "reader session-open context missing");
+      const afterClose = await hostLog();
+      const revokeIndex = afterClose.findIndex(
+        (e) => e.event === "revoke" && e.context === readerCtx,
+      );
+      assert.ok(revokeIndex >= 0, "reader revoke missing");
+      assert.equal(
+        afterClose
+          .slice(revokeIndex + 1)
+          .some((e) => e.event === "web-delivered" && e.context === readerCtx),
+        false,
+        "revoked session still received deliveries",
+      );
+
+      // Kill the editor view's renderer processes only. The view must revoke its
+      // session and recover alone; other views and Bun must keep running.
+      const pids = await rendererPids("editor");
+      assert.ok(pids.length > 0, "editor renderer missing");
+      const beforeCrash = (await hostLog()).length;
+      await rm(join(dataRoot, "temp", "editor.json"));
+      for (const pid of pids) {
+        const killer = Bun.spawn(["taskkill", "/F", "/PID", String(pid)], {
+          stdout: "pipe",
+          stderr: "pipe",
+        });
+        assert.equal(await killer.exited, 0, "editor renderer termination failed");
+      }
+      await waitLog((e) => e.event === "webview-process-failed" && e.view === "editor", 30000);
+      const recovered = await reportFile("editor.json");
+      for (const r of recovered.results) assert.equal(r.ok, true, `editor recovery: ${r.name}`);
+      const recovery = (await hostLog()).slice(beforeCrash);
+      assert.ok(
+        recovery.some(
+          (e) => e.event === "revoke" && e.reason === "process-failed" && e.view === "editor",
+        ),
+        "editor session not revoked on renderer failure",
+      );
+      assert.ok(
+        recovery.some((e) => e.event === "session-open" && e.viewId === "editor"),
+        "editor did not reopen its session",
+      );
+      assert.equal(
+        recovery.some((e) => e.event === "host-started"),
+        false,
+        "renderer failure restarted Bun",
+      );
+      assert.equal(
+        recovery.some((e) => e.event === "revoke" && e.view !== "editor"),
+        false,
+        "renderer failure touched another view's session",
+      );
+      assert.equal(child.exitCode, null, "host exited on single-view renderer failure");
+
+      // The main view finishes its suite, then navigates to page2: that view's
+      // revoke/reopen must not touch other views.
       const report = await reportFile("report.json");
       const failed = report.results.filter((r) => !r.ok);
       assert.equal(failed.length, 0, `page failures: ${JSON.stringify(failed)}`);
@@ -179,23 +358,16 @@ try {
       for (const r of [...report2.results, ...report3.results]) assert.equal(r.ok, true, r.name);
 
       const log = await hostLog();
-      const count = (event: string, extra: (e: LogEntry) => boolean = () => true) =>
+      const count2 = (event: string, extra: (e: LogEntry) => boolean = () => true) =>
         log.filter((entry) => entry.event === event && extra(entry)).length;
-      assert.ok(count("host-started") >= 1);
-      assert.ok(count("backend-ready") >= 1);
-      assert.ok(count("webview-ready") >= 1);
-      assert.ok(count("session-open") >= 2, "index + page2 sessions");
-      assert.ok(count("revoke", (e) => e.reason === "navigation") >= 1);
-      assert.ok(count("navigation-blocked") >= 1);
-      assert.ok(count("web-resource-blocked") >= 1, "remote iframe must be blocked");
-      assert.ok(count("permission-denied", (e) => e.kind === "command") >= 1);
-      assert.ok(count("permission-denied", (e) => e.kind === "event") >= 1);
-      assert.ok(count("web-message-rejected", (e) => e.reason === "malformed") >= 2);
-      assert.ok(count("web-message-rejected", (e) => e.reason === "INVALID_ARGUMENT") >= 1);
-      // TIMEOUT is asserted by the page; either core or native deadline may win.
-      assert.ok(count("host-request-denied") >= 1, "scope escape denial");
-
-      assert.ok(count("host-cancel") >= 1, "runtime forwarded Host API cancellation");
+      assert.ok(count2("backend-ready") >= 1);
+      assert.ok(count2("revoke", (e) => e.reason === "navigation" && e.view === "main") >= 1);
+      assert.ok(count2("navigation-blocked", (e) => e.view === "main") >= 1);
+      assert.ok(count2("web-resource-blocked", (e) => e.view === "main") >= 1);
+      assert.ok(count2("permission-denied", (e) => e.kind === "command" && e.view === "main") >= 1);
+      assert.ok(count2("web-message-rejected", (e) => e.reason === "malformed") >= 2);
+      assert.ok(count2("web-message-rejected", (e) => e.reason === "INVALID_ARGUMENT") >= 1);
+      assert.ok(count2("host-cancel") >= 1, "runtime forwarded Host API cancellation");
       // The child-frame message must never reach the backend.
       assert.equal(JSON.stringify(log).includes("iframe-1"), false, "iframe message leaked");
 
@@ -207,20 +379,22 @@ try {
       );
       const appLogText = await readFile(join(dataRoot, "logs", "app.log"), "utf-8");
       assert.ok(appLogText.includes("page-log-테스트"));
+      assert.ok(
+        appLogText.includes('"source":"view:main"'),
+        "view label missing on view log entries",
+      );
       assert.equal(
         await readFile(join(dataRoot, "outside", "secret.txt"), "utf-8"),
         "junction-target-secret",
       );
 
+      // Closing the last windows must shut the shared backend down and drain
+      // the Job Object cleanly.
       const started = log.find((e) => e.event === "host-started");
       assert.ok(started, "host-started missing");
       const childPid = started.childPid as number;
       const exited = await watch([childPid]);
-      const taskkill = Bun.spawn(["taskkill", "/PID", String(child.pid)], {
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-      assert.equal(await taskkill.exited, 0);
+      await closeAllWindows(child.pid);
       assert.equal(await child.exited, 0, "WM_CLOSE shutdown must exit cleanly");
       const stopped = (await hostLog()).find((e) => e.event === "host-stopped");
       assert.ok(stopped, "host-stopped missing");
@@ -234,10 +408,17 @@ try {
   });
 
   for (const phase of ["write", "read"])
-    await test(`memo sample ${phase} in a new host and Bun process`, async () => {
+    await test(`memo sample ${phase} in a new host and Bun process (legacy config)`, async () => {
       const configPath = join(packagePath, "assets", "app.json");
-      const config = JSON.parse(await readFile(configPath, "utf-8"));
-      config.home = `https://app.bunaway.local/memo.html?test=${phase}`;
+      // The legacy single-window declaration must keep working: a fresh app.json
+      // without the windows array opens exactly one view.
+      const config = {
+        appId: "tests.bunaway.host",
+        view: "main",
+        home: `https://app.bunaway.local/memo.html?test=${phase}`,
+        title: "bunaway host test",
+        window: { width: 1024, height: 768 },
+      };
       const text = `${JSON.stringify(config, null, 2)}\n`;
       await writeFile(configPath, text);
       const manifestPath = join(packagePath, "manifest.json");
@@ -252,25 +433,14 @@ try {
         const report = await reportFile(`${phase}.json`);
         assert.ok(report.results.length > 0);
         for (const result of report.results) assert.equal(result.ok, true, result.name);
+        const phaseLog = (await hostLog()).slice(previousCount);
+        assert.equal(
+          phaseLog.filter((e) => e.event === "session-open").length,
+          1,
+          "legacy config opened more than one view",
+        );
         if (phase === "read") {
-          // Select only renderers belonging to this test app's WebView user-data directory.
-          const inventory = Bun.spawn(
-            [
-              "powershell",
-              "-NoProfile",
-              "-Command",
-              "@(Get-CimInstance Win32_Process -Filter \"Name = 'msedgewebview2.exe'\" | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($env:BUNAWAY_TEST_WEB_DATA) -and $_.CommandLine.Contains('--type=renderer') } | Select-Object -ExpandProperty ProcessId) | ConvertTo-Json -Compress",
-            ],
-            {
-              env: { ...process.env, BUNAWAY_TEST_WEB_DATA: join(dataRoot, "webview") },
-              stdout: "pipe",
-              stderr: "pipe",
-            },
-          );
-          const pidsText = await new Response(inventory.stdout).text();
-          assert.equal(await inventory.exited, 0, await new Response(inventory.stderr).text());
-          const parsed = JSON.parse(pidsText) as number[] | number;
-          const pids = Array.isArray(parsed) ? parsed : [parsed];
+          const pids = await rendererPids("main");
           assert.ok(pids.length > 0, "test app renderer missing");
           const beforeCrash = (await hostLog()).length;
           await rm(join(dataRoot, "temp", "read.json"));
@@ -285,7 +455,9 @@ try {
             async () =>
               (await hostLog())
                 .slice(beforeCrash)
-                .find((entry) => entry.event === "webview-process-failed") ?? null,
+                .find(
+                  (entry) => entry.event === "webview-process-failed" && entry.view === "main",
+                ) ?? null,
           );
           const restored = await reportFile("read.json");
           for (const result of restored.results)
@@ -306,11 +478,7 @@ try {
           .find((entry) => entry.event === "host-started");
         assert.ok(started);
         const exited = await watch([started.childPid as number]);
-        const taskkill = Bun.spawn(["taskkill", "/PID", String(child.pid)], {
-          stdout: "pipe",
-          stderr: "pipe",
-        });
-        assert.equal(await taskkill.exited, 0);
+        await closeAllWindows(child.pid);
         assert.equal(await child.exited, 0);
         await exited();
         const stopped = (await hostLog())

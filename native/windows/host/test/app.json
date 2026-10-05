@@ -1,7 +1,24 @@
 {
   "appId": "tests.bunaway.host",
-  "view": "main",
-  "home": "https://app.bunaway.local/index.html",
   "title": "bunaway host test",
-  "window": { "width": 1024, "height": 768 }
+  "windows": [
+    {
+      "view": "main",
+      "home": "https://app.bunaway.local/index.html",
+      "title": "bunaway host test — main",
+      "window": { "width": 1024, "height": 768 }
+    },
+    {
+      "view": "editor",
+      "home": "https://app.bunaway.local/memo.html?test=editor",
+      "title": "bunaway host test — memo editor",
+      "window": { "width": 800, "height": 600 }
+    },
+    {
+      "view": "reader",
+      "home": "https://app.bunaway.local/reader.html",
+      "title": "bunaway host test — reader",
+      "window": { "width": 800, "height": 600 }
+    }
+  ]
 }

@@ -358,6 +358,19 @@ struct Policy {
     }
 };
 
+// View ids follow the package identifier grammar ([A-Za-z0-9_.:-]). Escape any
+// byte that is not plainly filename-safe so distinct ids get distinct
+// user-data directories and no id can become a relative path segment.
+std::string viewDirName(const std::string& viewId) {
+    static const char* digits = "0123456789abcdef";
+    std::string name = "v";
+    for (unsigned char c : viewId) {
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) name += static_cast<char>(c);
+        else { name += '-'; name += digits[c >> 4]; name += digits[c & 15]; }
+    }
+    return name;
+}
+
 bool storageAllowed(const HostPermissions& permissions, const std::string& scope, const std::vector<std::string>& segments, bool write) {
     for (const auto& grant : permissions.storage) {
         if (grant.scope != scope || (write ? !grant.write : !grant.read) || grant.segments.size() > segments.size()) continue;
@@ -493,21 +506,44 @@ std::string readStorageText(HANDLE file, size_t size) {
 }
 
 // ---------- application ----------
-// Owns the window, WebView2, the Bun child process and all routing state. WebView2
-// callbacks run on the UI thread; backend frames arrive on the reader thread. Router
-// state is always taken under stateMutex and the send queue is only appended to while
-// holding it, so frame order is committed consistently.
+// Owns the windows, WebView2 views, the Bun child process and all routing state.
+// Each declared view owns one window, one WebView2 environment with its own
+// user-data directory (a separate browser/renderer process stack), one active
+// session context and one document generation, so per-view policy, requests,
+// subscriptions and deliveries stay isolated while sharing a single Bun backend.
+// WebView2 callbacks run on the UI thread; backend frames arrive on the reader
+// thread. Router state is always taken under stateMutex and the send queue is
+// only appended to while holding it, so frame order is committed consistently.
 class App {
 public:
     // ---- config ----
     fs::path package, assets;
     Json manifest, processSchema, messageSchema, hostCallSchema, hostOps;
     Policy policy;
-    std::string appId, viewId, home;
-    int windowWidth = 1024, windowHeight = 768;
-    std::wstring windowTitle;
+    std::string appId;
     Scopes scopes;
     std::unique_ptr<Log> hostLog, appLog;
+
+    // ---- views ----
+    // One window per declared view. Closing a view's window revokes only that
+    // view's session; sibling views and the backend keep running.
+    struct LiveView {
+        const ViewPolicy* policy = nullptr;
+        std::string viewId, home;
+        std::wstring title;
+        int width = 1024, height = 768;
+        HWND hwnd = nullptr;
+        ComPtr<ICoreWebView2Environment> env;
+        ComPtr<ICoreWebView2> webview;
+        ComPtr<ICoreWebView2Controller> controller;
+        bool webviewReady = false, navigationStarted = false, closed = false;
+        std::string activeContext;
+        uint64_t documentGeneration = 0;
+    };
+    std::map<std::string, std::unique_ptr<LiveView>> liveViews;
+    // Hidden message-only window: the durable runtime->UI post target. Deliveries
+    // never land on a view window that may be mid-teardown.
+    HWND notifyHwnd = nullptr;
 
     // ---- Bun child process ----
     Handle job, process, input, output, stderrPipe;
@@ -540,17 +576,10 @@ public:
     std::mutex stateMutex;
     std::map<std::string, Session> sessions;
     std::map<std::string, HostRequest> hostPending;
-    std::string activeContext;
-    uint64_t documentGeneration = 0;
 
     // ---- UI ----
-    HWND hwnd = nullptr;
-    ComPtr<ICoreWebView2Environment> env;
-    ComPtr<ICoreWebView2> webview;
-    ComPtr<ICoreWebView2Controller> controller;
     int exitCode = 1;
-    std::atomic<bool> shuttingDown = false, webviewReady = false;
-    HWND hwndStatic() const { return hwnd; }
+    std::atomic<bool> shuttingDown = false;
 
     Json frame(const char* kind) const {
         return { { "kind", kind }, { "ipc", ipc }, { "runtime", { { "id", runtimeId }, { "generation", generation } } } };
@@ -592,52 +621,73 @@ public:
         if (!failed.exchange(true)) {
             hostLog->event("runtime-failed");
             TerminateJobObject(job.value, 1);
-            PostMessageW(hwnd, WM_APP_RUNTIME_FAILED, 0, 0);
+            PostMessageW(notifyHwnd, WM_APP_RUNTIME_FAILED, 0, 0);
         }
     }
 
     // ---------- UI helpers ----------
     struct WebDelivery {
         std::wstring text;
-        std::string context;
+        std::string context, viewId;
         uint64_t documentGeneration;
     };
-    // Caller holds stateMutex; preserve the destination until UI dispatch.
-    void postToWeb(const std::string& context, const std::string& jsonText) {
+    // Caller holds stateMutex; the delivery is pinned to the view's current
+    // document generation so stale frames die in the queue.
+    void postToView(LiveView& view, const std::string& context, const std::string& jsonText) {
         if (failed || shuttingDown) return;
-        auto* heap = new WebDelivery{ utf16(jsonText), context, documentGeneration };
-        if (!PostMessageW(hwnd, WM_APP_WEB_MESSAGE, 0, reinterpret_cast<LPARAM>(heap))) {
+        auto* heap = new WebDelivery{ utf16(jsonText), context, view.viewId, view.documentGeneration };
+        if (!PostMessageW(notifyHwnd, WM_APP_WEB_MESSAGE, 0, reinterpret_cast<LPARAM>(heap))) {
             delete heap;
             // A lost result/event cannot be recovered by silently continuing the
             // session. The UI timer also observes failure if this queue is full.
             runtimeFailure();
         }
     }
+    // Backend-originated delivery: the session decides which view receives it.
+    void postToWeb(const std::string& context, const std::string& jsonText) {
+        auto session = sessions.find(context);
+        if (session == sessions.end()) return;
+        postToView(*liveViews.at(session->second.viewId), context, jsonText);
+    }
+    bool canDeliverWebLocked(const WebDelivery& delivery) {
+        auto view = liveViews.find(delivery.viewId);
+        if (view == liveViews.end()) return false;
+        return !failed && !shuttingDown && !view->second->closed &&
+            delivery.documentGeneration == view->second->documentGeneration &&
+            (delivery.context.empty() ||
+                (delivery.context == view->second->activeContext && sessions.count(delivery.context)));
+    }
     bool canDeliverWeb(const WebDelivery& delivery) {
         std::lock_guard lock(stateMutex);
-        return !failed && !shuttingDown && delivery.documentGeneration == documentGeneration &&
-            (delivery.context.empty() || (delivery.context == activeContext && sessions.count(delivery.context)));
+        return canDeliverWebLocked(delivery);
     }
-    void webError(const std::string& id, const char* code, const char* message) {
+    // Runs on the UI thread; re-check the pinned destination under the lock.
+    void dispatchWebDelivery(const WebDelivery& delivery) {
+        std::lock_guard lock(stateMutex);
+        if (!canDeliverWebLocked(delivery)) return;
+        auto& view = *liveViews.at(delivery.viewId);
+        if (view.webview) view.webview->PostWebMessageAsJson(delivery.text.c_str());
+    }
+    void webError(LiveView& view, const std::string& id, const char* code, const char* message) {
         if (id.empty()) return;
         std::lock_guard lock(stateMutex);
-        postToWeb(activeContext, Json({ { "kind", "error" }, { "protocol", ipc }, { "id", id }, { "error", { { "code", code }, { "message", message } } } }).dump());
+        postToView(view, view.activeContext, Json({ { "kind", "error" }, { "protocol", ipc }, { "id", id }, { "error", { { "code", code }, { "message", message } } } }).dump());
     }
     static std::string documentKey(const std::string& uri) {
         return uri.substr(0, uri.find('#'));
     }
-    void updateSameDocumentSource(const std::string& source) {
+    void updateSameDocumentSource(LiveView& view, const std::string& source) {
         std::lock_guard lock(stateMutex);
-        auto it = sessions.find(activeContext);
+        auto it = sessions.find(view.activeContext);
         if (it != sessions.end() && originOf(utf16(source)) == it->second.origin) {
             it->second.source = source;
         }
     }
 
     // ---------- WebView -> backend boundary (UI thread) ----------
-    void onWebMessage(const std::wstring& sourceUri, const std::string& sourceText, const std::string& raw) {
+    void onWebMessage(LiveView& view, const std::wstring& sourceUri, const std::string& sourceText, const std::string& raw) {
         std::string id, reason;
-        const ViewPolicy* view = &policy.views.at(viewId);
+        const ViewPolicy& viewPolicy = *view.policy;
         try {
             auto message = parse(raw);
             // Recover the request id before schema validation so failures can still
@@ -645,8 +695,8 @@ public:
             // payloads are never echoed to the log.
             if (message.is_object() && message.contains("id") && message["id"].is_string()) id = message["id"].get<std::string>();
             if (!message.is_object()) {
-                hostLog->event("web-message-rejected", { { "reason", "malformed" }, { "source", sourceText } });
-                webError(id, "INVALID_ARGUMENT", "Web message is not an object.");
+                hostLog->event("web-message-rejected", { { "reason", "malformed" }, { "source", sourceText }, { "view", view.viewId } });
+                webError(view, id, "INVALID_ARGUMENT", "Web message is not an object.");
                 return;
             }
             if (!valid(messageSchema, message)) throw HostError("INVALID_ARGUMENT", "Rejected web message.");
@@ -658,21 +708,21 @@ public:
             if (!ready) throw HostError("BUSY", "Backend is not ready.");
             std::lock_guard lock(stateMutex);
             Session* session = nullptr;
-            if (activeContext.empty()) {
+            if (view.activeContext.empty()) {
                 if (kind != "hello") throw HostError("INVALID_ARGUMENT", "First web message must be hello.");
                 auto origin = originOf(sourceUri);
-                if (origin.empty() || !view->origins.count(origin)) {
-                    hostLog->event("web-message-rejected", { { "reason", "origin" }, { "source", sourceText } });
+                if (origin.empty() || !viewPolicy.origins.count(origin)) {
+                    hostLog->event("web-message-rejected", { { "reason", "origin" }, { "source", sourceText }, { "view", view.viewId } });
                     throw HostError("PERMISSION_DENIED", "Origin is not allowed.");
                 }
-                session = &sessions[openSession(viewId, sourceText, origin)];
+                session = &sessions[openSession(view, sourceText, origin)];
                 hostLog->event("web-message", { { "context", session->context }, { "kind", "hello" } });
                 sendWebFrame(session->context, raw);
                 return;
             }
-            session = &sessions[activeContext];
+            session = &sessions[view.activeContext];
             if (documentKey(session->source) != documentKey(sourceText)) {
-                hostLog->event("web-message-rejected", { { "reason", "source" }, { "source", sourceText } });
+                hostLog->event("web-message-rejected", { { "reason", "source" }, { "source", sourceText }, { "view", view.viewId } });
                 throw HostError("PERMISSION_DENIED", "Message source does not match the session document.");
             }
             if (kind == "hello") throw HostError("INVALID_ARGUMENT", "Duplicate hello.");
@@ -680,14 +730,14 @@ public:
             // Reject envelope overflow before reserving an ID or changing subscriptions.
             auto outgoing = encodeWebFrame(session->context, raw);
             if (kind == "invoke") {
-                if (!view->commands.count(message["command"].get<std::string>())) {
-                    hostLog->event("permission-denied", { { "kind", "command" }, { "name", message["command"].get<std::string>() }, { "view", viewId } });
+                if (!viewPolicy.commands.count(message["command"].get<std::string>())) {
+                    hostLog->event("permission-denied", { { "kind", "command" }, { "name", message["command"].get<std::string>() }, { "view", view.viewId } });
                     throw HostError("PERMISSION_DENIED", "Command is not allowed for this view.");
                 }
                 registerRequest(*session, message, "invoke");
             } else if (kind == "listen") {
-                if (!view->events.count(message["event"].get<std::string>())) {
-                    hostLog->event("permission-denied", { { "kind", "event" }, { "name", message["event"].get<std::string>() }, { "view", viewId } });
+                if (!viewPolicy.events.count(message["event"].get<std::string>())) {
+                    hostLog->event("permission-denied", { { "kind", "event" }, { "name", message["event"].get<std::string>() }, { "view", view.viewId } });
                     throw HostError("PERMISSION_DENIED", "Event is not allowed for this view.");
                 }
                 registerRequest(*session, message, "listen");
@@ -701,10 +751,10 @@ public:
             hostLog->event("web-message", { { "context", session->context }, { "kind", kind }, { "id", id } });
             sendLine(std::move(outgoing));
         } catch (const HostError& error) {
-            hostLog->event("web-message-rejected", { { "reason", error.code }, { "source", sourceText } });
-            webError(id, error.code.c_str(), error.what());
+            hostLog->event("web-message-rejected", { { "reason", error.code }, { "source", sourceText }, { "view", view.viewId } });
+            webError(view, id, error.code.c_str(), error.what());
         } catch (...) {
-            hostLog->event("web-message-rejected", { { "reason", "malformed" }, { "source", sourceText } });
+            hostLog->event("web-message-rejected", { { "reason", "malformed" }, { "source", sourceText }, { "view", view.viewId } });
         }
     }
     // Caller holds stateMutex.
@@ -725,34 +775,35 @@ public:
         session.pending[id] = { kind, expiry };
     }
     // Returns the issued context. Caller holds stateMutex.
-    std::string openSession(const std::string& view, const std::string& source, const std::string& origin) {
+    std::string openSession(LiveView& view, const std::string& source, const std::string& origin) {
         Session session;
         session.context = "ctx-" + randomHex(12);
-        session.viewId = view;
+        session.viewId = view.viewId;
         session.source = source;
         session.origin = origin;
         auto context = session.context;
         sessions.emplace(context, std::move(session));
-        activeContext = context;
+        view.activeContext = context;
         {
             auto open = frame("session-open");
             open["context"] = context;
-            open["viewId"] = view;
+            open["viewId"] = view.viewId;
             send(open);
         }
-        hostLog->event("session-open", { { "context", context }, { "viewId", view }, { "origin", origin } });
+        hostLog->event("session-open", { { "context", context }, { "viewId", view.viewId }, { "origin", origin } });
         return context;
     }
     // Revokes the view's active session: cancels pending work and tells the backend.
-    void revokeSession(const char* reason) {
+    // Sibling views keep their sessions, requests and subscriptions untouched.
+    void revokeSession(LiveView& view, const char* reason) {
         std::lock_guard lock(stateMutex);
-        ++documentGeneration;
-        if (activeContext.empty()) return;
-        auto context = activeContext;
-        activeContext.clear();
+        ++view.documentGeneration;
+        if (view.activeContext.empty()) return;
+        auto context = view.activeContext;
+        view.activeContext.clear();
         sessions.erase(context);
         std::erase_if(hostPending, [&](const auto& item) { return item.second.context == context; });
-        hostLog->event("revoke", { { "context", context }, { "reason", reason } });
+        hostLog->event("revoke", { { "context", context }, { "reason", reason }, { "view", view.viewId } });
         try { sendControlContext("revoke", context); } catch (...) {}
     }
 
@@ -833,7 +884,9 @@ public:
             throw std::runtime_error("Invalid backend web direction.");
         }
         postToWeb(context, message.dump());
-        hostLog->event("web-delivered", { { "context", context }, { "kind", tag }, { "id", message.contains("id") ? message["id"].get<std::string>() : "" } });
+        Json delivered = { { "context", context }, { "kind", tag }, { "id", message.contains("id") ? message["id"].get<std::string>() : "" } };
+        if (tag == "event") delivered["name"] = message["event"].get<std::string>();
+        hostLog->event("web-delivered", delivered);
     }
 
     // ---------- Host operations ----------
@@ -895,6 +948,7 @@ public:
         Json result;
         try {
             HostPermissions permissions;
+            std::string contextLabel;
             {
                 std::lock_guard lock(stateMutex);
                 auto it = hostPending.find(key);
@@ -909,6 +963,7 @@ public:
                 // This marks the operation as started. Revocation prevents queued
                 // operations and discards results, but cannot roll back active I/O.
                 permissions = *current;
+                contextLabel = context == backendContext ? "backend" : "view:" + sessions.at(context).viewId;
             }
             Json call = { { "operation", operation }, { "payload", payload } };
             if (!valid(hostCallSchema, call)) throw HostError("INVALID_ARGUMENT", "Invalid host request.");
@@ -924,7 +979,7 @@ public:
                 Json entry = {
                     { "t", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() },
                     { "level", payload["level"].get<std::string>() },
-                    { "source", context == backendContext ? "backend" : "view:" + viewId },
+                    { "source", contextLabel },
                     { "message", payload["message"].get<std::string>() },
                 };
                 if (payload.contains("details")) entry["details"] = payload["details"];
@@ -1122,10 +1177,10 @@ public:
                     }
                 }
                 sessions.clear();
-                activeContext.clear();
+                for (auto& [id, view] : liveViews) view->activeContext.clear();
             }
             hostLog->event("host-stopped", { { "exitCode", code }, { "forced", forced.load() }, { "failed", failed.load() }, { "activeProcesses", accounting.ActiveProcesses }, { "childPid", childPid } });
-            PostMessageW(hwnd, WM_APP_RUNTIME_EXITED, 0, 0);
+            PostMessageW(notifyHwnd, WM_APP_RUNTIME_EXITED, 0, 0);
         } catch (...) {
             failed.store(true);
             exited.store(true);
@@ -1139,47 +1194,55 @@ public:
             if (readerThread.joinable()) readerThread.join();
             if (stderrThread.joinable()) stderrThread.join();
             for (auto& worker : hostWorkers) if (worker.joinable()) worker.join();
-            PostMessageW(hwnd, WM_APP_RUNTIME_EXITED, 0, 0);
+            PostMessageW(notifyHwnd, WM_APP_RUNTIME_EXITED, 0, 0);
         }
     }
 
     // ---------- WebView2 (UI thread) ----------
-    bool initialNavigationStarted = false;
-    void navigateWhenReady() {
-        if (ready && webviewReady && webview && !closing && !failed && !initialNavigationStarted) {
-            initialNavigationStarted = true;
-            if (FAILED(webview->Navigate(utf16(home).c_str()))) runtimeFailure();
+    void navigateWhenReady(LiveView& view) {
+        if (ready && view.webviewReady && view.webview && !closing && !failed && !view.closed && !view.navigationStarted) {
+            view.navigationStarted = true;
+            if (FAILED(view.webview->Navigate(utf16(view.home).c_str()))) runtimeFailure();
         }
     }
-    void initWebView() {
-        auto udf = (scopes.webData).wstring();
+    void navigateAll() {
+        for (auto& [id, view] : liveViews) navigateWhenReady(*view);
+    }
+    // Every view gets its own WebView2 environment and user-data directory, so the
+    // browser/renderer process stacks are isolated per view.
+    void initWebView(LiveView& view) {
+        auto udf = (scopes.webData / utf16(viewDirName(view.viewId))).wstring();
+        std::error_code ignored;
+        fs::create_directories(udf, ignored);
         HRESULT hr = CreateCoreWebView2EnvironmentWithOptions(nullptr, udf.c_str(), nullptr,
             Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
-                [this](HRESULT result, ICoreWebView2Environment* environment) -> HRESULT {
-                    if (FAILED(result) || !environment) { hostLog->event("webview2-init-failed", { { "hr", static_cast<int64_t>(result) } }); runtimeFailure(); return S_OK; }
-                    env = environment;
-                    env->CreateCoreWebView2Controller(hwnd,
+                [this, &view](HRESULT result, ICoreWebView2Environment* environment) -> HRESULT {
+                    if (FAILED(result) || !environment) { hostLog->event("webview2-init-failed", { { "hr", static_cast<int64_t>(result) }, { "view", view.viewId } }); runtimeFailure(); return S_OK; }
+                    if (view.closed || shuttingDown) return S_OK;
+                    view.env = environment;
+                    view.env->CreateCoreWebView2Controller(view.hwnd,
                         Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
-                            [this](HRESULT result, ICoreWebView2Controller* created) -> HRESULT {
-                                if (FAILED(result) || !created) { hostLog->event("webview2-init-failed", { { "hr", static_cast<int64_t>(result) } }); runtimeFailure(); return S_OK; }
-                                controller = created;
-                                controller->get_CoreWebView2(&webview);
-                                RECT bounds; GetClientRect(hwnd, &bounds);
-                                controller->put_Bounds(bounds);
-                                controller->put_IsVisible(TRUE);
-                                configureWebView();
-                                webviewReady.store(true);
-                                navigateWhenReady();
-                                hostLog->event("webview-ready");
+                            [this, &view](HRESULT result, ICoreWebView2Controller* created) -> HRESULT {
+                                if (FAILED(result) || !created) { hostLog->event("webview2-init-failed", { { "hr", static_cast<int64_t>(result) }, { "view", view.viewId } }); runtimeFailure(); return S_OK; }
+                                if (view.closed || shuttingDown) return S_OK;
+                                view.controller = created;
+                                view.controller->get_CoreWebView2(&view.webview);
+                                RECT bounds; GetClientRect(view.hwnd, &bounds);
+                                view.controller->put_Bounds(bounds);
+                                view.controller->put_IsVisible(TRUE);
+                                configureWebView(view);
+                                view.webviewReady = true;
+                                navigateWhenReady(view);
+                                hostLog->event("webview-ready", { { "view", view.viewId } });
                                 return S_OK;
                             }).Get());
                     return S_OK;
                 }).Get());
         require(SUCCEEDED(hr), "WebView2 environment creation failed.");
     }
-    void configureWebView() {
+    void configureWebView(LiveView& view) {
         ComPtr<ICoreWebView2Settings> settings;
-        webview->get_Settings(&settings);
+        view.webview->get_Settings(&settings);
         settings->put_IsWebMessageEnabled(TRUE);
         settings->put_AreDefaultScriptDialogsEnabled(FALSE);
         settings->put_IsStatusBarEnabled(FALSE);
@@ -1195,61 +1258,61 @@ public:
             settings4->put_IsGeneralAutofillEnabled(FALSE);
             settings4->put_IsPasswordAutosaveEnabled(FALSE);
         }
-        auto hostPart = home.substr(home.find("://") + 3);
+        auto hostPart = view.home.substr(view.home.find("://") + 3);
         hostPart = hostPart.substr(0, hostPart.find_first_of("/:&#"));
         auto virtualHost = utf16(hostPart);
         ComPtr<ICoreWebView2_3> webview3;
-        require(SUCCEEDED(webview.As(&webview3)) && webview3, "WebView2 virtual host mapping unsupported.");
+        require(SUCCEEDED(view.webview.As(&webview3)) && webview3, "WebView2 virtual host mapping unsupported.");
         require(SUCCEEDED(webview3->SetVirtualHostNameToFolderMapping(virtualHost.c_str(), (assets / "web").wstring().c_str(), COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_DENY_CORS)), "Virtual host mapping failed.");
-        webview->AddWebResourceRequestedFilter(L"http://*/*", COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL);
-        webview->AddWebResourceRequestedFilter(L"https://*/*", COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL);
-        webview->add_NavigationStarting(Callback<ICoreWebView2NavigationStartingEventHandler>(
-            [this](ICoreWebView2*, ICoreWebView2NavigationStartingEventArgs* args) -> HRESULT {
+        view.webview->AddWebResourceRequestedFilter(L"http://*/*", COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL);
+        view.webview->AddWebResourceRequestedFilter(L"https://*/*", COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL);
+        view.webview->add_NavigationStarting(Callback<ICoreWebView2NavigationStartingEventHandler>(
+            [this, &view](ICoreWebView2*, ICoreWebView2NavigationStartingEventArgs* args) -> HRESULT {
                 LPWSTR uri = nullptr;
                 args->get_Uri(&uri);
                 std::wstring target = uri ? uri : L"";
                 CoTaskMemFree(uri);
                 auto origin = originOf(target);
-                if (origin.empty() || !policy.views.at(viewId).origins.count(origin)) {
+                if (origin.empty() || !view.policy->origins.count(origin)) {
                     args->put_Cancel(TRUE);
-                    hostLog->event("navigation-blocked", { { "uri", utf8(target) } });
+                    hostLog->event("navigation-blocked", { { "uri", utf8(target) }, { "view", view.viewId } });
                 } else {
                     // The committed document is replaced, so the old session and
                     // its pending requests are revoked before it can be reused.
-                    revokeSession("navigation");
-                    hostLog->event("navigation", { { "uri", utf8(target) } });
+                    revokeSession(view, "navigation");
+                    hostLog->event("navigation", { { "uri", utf8(target) }, { "view", view.viewId } });
                 }
                 return S_OK;
             }).Get(), nullptr);
-        webview->add_NavigationCompleted(Callback<ICoreWebView2NavigationCompletedEventHandler>(
-            [this](ICoreWebView2*, ICoreWebView2NavigationCompletedEventArgs* args) -> HRESULT {
+        view.webview->add_NavigationCompleted(Callback<ICoreWebView2NavigationCompletedEventHandler>(
+            [this, &view](ICoreWebView2*, ICoreWebView2NavigationCompletedEventArgs* args) -> HRESULT {
                 BOOL success = FALSE;
                 args->get_IsSuccess(&success);
                 COREWEBVIEW2_WEB_ERROR_STATUS status = COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN;
                 args->get_WebErrorStatus(&status);
                 LPWSTR uri = nullptr;
-                webview->get_Source(&uri);
-                hostLog->event("navigation-completed", { { "success", success == TRUE }, { "webErrorStatus", static_cast<int64_t>(status) }, { "source", uri ? utf8(uri) : "" } });
+                view.webview->get_Source(&uri);
+                hostLog->event("navigation-completed", { { "success", success == TRUE }, { "webErrorStatus", static_cast<int64_t>(status) }, { "source", uri ? utf8(uri) : "" }, { "view", view.viewId } });
                 CoTaskMemFree(uri);
                 return S_OK;
             }).Get(), nullptr);
-        webview->add_SourceChanged(Callback<ICoreWebView2SourceChangedEventHandler>(
-            [this](ICoreWebView2*, ICoreWebView2SourceChangedEventArgs* args) -> HRESULT {
+        view.webview->add_SourceChanged(Callback<ICoreWebView2SourceChangedEventHandler>(
+            [this, &view](ICoreWebView2*, ICoreWebView2SourceChangedEventArgs* args) -> HRESULT {
                 BOOL newDocument = TRUE;
                 args->get_IsNewDocument(&newDocument);
                 if (!newDocument) {
                     LPWSTR uri = nullptr;
-                    if (SUCCEEDED(webview->get_Source(&uri)) && uri) {
+                    if (SUCCEEDED(view.webview->get_Source(&uri)) && uri) {
                         // History API changes keep the current document/session.
                         // Document replacements are revoked by NavigationStarting.
-                        updateSameDocumentSource(utf8(uri));
+                        updateSameDocumentSource(view, utf8(uri));
                     }
                     CoTaskMemFree(uri);
                 }
                 return S_OK;
             }).Get(), nullptr);
-        webview->add_WebMessageReceived(Callback<ICoreWebView2WebMessageReceivedEventHandler>(
-            [this](ICoreWebView2*, ICoreWebView2WebMessageReceivedEventArgs* args) -> HRESULT {
+        view.webview->add_WebMessageReceived(Callback<ICoreWebView2WebMessageReceivedEventHandler>(
+            [this, &view](ICoreWebView2*, ICoreWebView2WebMessageReceivedEventArgs* args) -> HRESULT {
                 LPWSTR source = nullptr, json = nullptr;
                 args->get_Source(&source);
                 args->get_WebMessageAsJson(&json);
@@ -1257,44 +1320,54 @@ public:
                 std::string sourceText, raw;
                 try { sourceText = utf8(sourceCopy); raw = utf8(json ? json : L""); } catch (...) {}
                 CoTaskMemFree(source); CoTaskMemFree(json);
-                onWebMessage(sourceCopy, sourceText, raw);
+                onWebMessage(view, sourceCopy, sourceText, raw);
                 return S_OK;
             }).Get(), nullptr);
-        webview->add_NewWindowRequested(Callback<ICoreWebView2NewWindowRequestedEventHandler>(
-            [this](ICoreWebView2*, ICoreWebView2NewWindowRequestedEventArgs* args) -> HRESULT {
+        view.webview->add_NewWindowRequested(Callback<ICoreWebView2NewWindowRequestedEventHandler>(
+            [this, &view](ICoreWebView2*, ICoreWebView2NewWindowRequestedEventArgs* args) -> HRESULT {
                 LPWSTR uri = nullptr;
                 args->get_Uri(&uri);
-                hostLog->event("new-window-blocked", { { "uri", uri ? utf8(uri) : "" } });
+                hostLog->event("new-window-blocked", { { "uri", uri ? utf8(uri) : "" }, { "view", view.viewId } });
                 CoTaskMemFree(uri);
                 args->put_Handled(TRUE);
                 return S_OK;
             }).Get(), nullptr);
-        webview->add_PermissionRequested(Callback<ICoreWebView2PermissionRequestedEventHandler>(
-            [this](ICoreWebView2*, ICoreWebView2PermissionRequestedEventArgs* args) -> HRESULT {
+        view.webview->add_PermissionRequested(Callback<ICoreWebView2PermissionRequestedEventHandler>(
+            [this, &view](ICoreWebView2*, ICoreWebView2PermissionRequestedEventArgs* args) -> HRESULT {
                 COREWEBVIEW2_PERMISSION_KIND permissionKind;
                 args->get_PermissionKind(&permissionKind);
-                hostLog->event("permission-request-denied", { { "kind", static_cast<int64_t>(permissionKind) } });
+                hostLog->event("permission-request-denied", { { "kind", static_cast<int64_t>(permissionKind) }, { "view", view.viewId } });
                 ComPtr<ICoreWebView2PermissionRequestedEventArgs3> args3;
                 if (SUCCEEDED(args->QueryInterface(IID_PPV_ARGS(args3.ReleaseAndGetAddressOf()))) && args3) args3->put_SavesInProfile(FALSE);
                 args->put_State(COREWEBVIEW2_PERMISSION_STATE_DENY);
                 return S_OK;
             }).Get(), nullptr);
-        webview->add_ProcessFailed(Callback<ICoreWebView2ProcessFailedEventHandler>(
-            [this](ICoreWebView2*, ICoreWebView2ProcessFailedEventArgs* args) -> HRESULT {
+        // Script-initiated window.close() is treated exactly like the user closing
+        // the window: only this view's window and session are torn down.
+        view.webview->add_WindowCloseRequested(Callback<ICoreWebView2WindowCloseRequestedEventHandler>(
+            [this, &view](ICoreWebView2*, IUnknown*) -> HRESULT {
+                hostLog->event("view-close-requested", { { "view", view.viewId } });
+                closeViewWindow(view);
+                return S_OK;
+            }).Get(), nullptr);
+        view.webview->add_ProcessFailed(Callback<ICoreWebView2ProcessFailedEventHandler>(
+            [this, &view](ICoreWebView2*, ICoreWebView2ProcessFailedEventArgs* args) -> HRESULT {
                 COREWEBVIEW2_PROCESS_FAILED_KIND failedKind;
                 args->get_ProcessFailedKind(&failedKind);
-                hostLog->event("webview-process-failed", { { "kind", static_cast<int64_t>(failedKind) } });
-                revokeSession("process-failed");
+                hostLog->event("webview-process-failed", { { "kind", static_cast<int64_t>(failedKind) }, { "view", view.viewId } });
+                revokeSession(view, "process-failed");
                 if (failedKind == COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED) {
-                    shuttingDown.store(true);
-                    beginShutdown();
-                } else if (!shuttingDown) {
-                    webview->Navigate(utf16(home).c_str());
+                    // Each view runs on its own WebView2 environment, so a dead
+                    // browser process is scoped to this view. Tear down just this
+                    // window; the last window still ends the app.
+                    closeViewWindow(view);
+                } else if (!shuttingDown && !view.closed && view.webview) {
+                    view.webview->Navigate(utf16(view.home).c_str());
                 }
                 return S_OK;
             }).Get(), nullptr);
-        webview->add_WebResourceRequested(Callback<ICoreWebView2WebResourceRequestedEventHandler>(
-            [this](ICoreWebView2*, ICoreWebView2WebResourceRequestedEventArgs* args) -> HRESULT {
+        view.webview->add_WebResourceRequested(Callback<ICoreWebView2WebResourceRequestedEventHandler>(
+            [this, &view](ICoreWebView2*, ICoreWebView2WebResourceRequestedEventArgs* args) -> HRESULT {
                 ComPtr<ICoreWebView2WebResourceRequest> request;
                 args->get_Request(&request);
                 LPWSTR uri = nullptr;
@@ -1302,22 +1375,47 @@ public:
                 std::wstring target = uri ? uri : L"";
                 auto origin = originOf(target);
                 CoTaskMemFree(uri);
-                if (origin.empty() || !policy.views.at(viewId).origins.count(origin)) {
+                if (origin.empty() || !view.policy->origins.count(origin)) {
                     ComPtr<ICoreWebView2WebResourceResponse> response;
-                    if (env && SUCCEEDED(env->CreateWebResourceResponse(nullptr, 403, L"Forbidden", L"Content-Type: text/plain", &response))) {
+                    if (view.env && SUCCEEDED(view.env->CreateWebResourceResponse(nullptr, 403, L"Forbidden", L"Content-Type: text/plain", &response))) {
                         args->put_Response(response.Get());
                     }
-                    hostLog->event("web-resource-blocked", { { "uri", utf8(target) } });
+                    hostLog->event("web-resource-blocked", { { "uri", utf8(target) }, { "view", view.viewId } });
                 }
                 return S_OK;
             }).Get(), nullptr);
+    }
+
+    // ---------- view window lifecycle ----------
+    void releaseViewWindow(LiveView& view) {
+        view.closed = true;
+        view.hwnd = nullptr;
+        view.webview.Reset();
+        view.controller.Reset();
+        view.webviewReady = false;
+        if (!shuttingDown && allViewsClosed()) beginClose(failed ? 1 : 0);
+    }
+    bool allViewsClosed() const {
+        for (const auto& [id, view] : liveViews) if (!view->closed) return false;
+        return true;
+    }
+    // A view window going away (user close, script close or a dead browser
+    // process) revokes that view's session. The view itself and its policy
+    // stay declared; other views keep their sessions, requests and windows.
+    void closeViewWindow(LiveView& view) {
+        if (view.closed) return;
+        revokeSession(view, "closing");
+        hostLog->event("view-window-closed", { { "view", view.viewId } });
+        if (view.controller) view.controller->Close();
+        if (view.hwnd) DestroyWindow(view.hwnd);
+        else releaseViewWindow(view);
     }
 
     // ---------- shutdown ----------
     void beginClose(int code) {
         if (shuttingDown.exchange(true)) return;
         exitCode = code;
-        if (webview) revokeSession("closing");
+        for (auto& [id, view] : liveViews) revokeSession(*view, "closing");
         beginShutdown();
         hostLog->event("closing");
     }
@@ -1332,27 +1430,27 @@ static App* g_app = nullptr;
 
 LRESULT CALLBACK wndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
     auto* app = g_app;
+    auto* view = app && hwnd != app->notifyHwnd
+        ? reinterpret_cast<App::LiveView*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA)) : nullptr;
     switch (message) {
     case WM_SIZE:
-        if (app && app->controller) {
+        if (view && view->controller) {
             RECT bounds; GetClientRect(hwnd, &bounds);
-            app->controller->put_Bounds(bounds);
+            view->controller->put_Bounds(bounds);
         }
         return 0;
     case WM_TIMER:
-        if (app) {
+        if (app && hwnd == app->notifyHwnd) {
             // Posted failure/exit notifications can themselves fail when the UI
             // queue is full. Timer delivery provides a queue-independent fallback.
             if (app->failed) app->beginClose(1);
             if (app->exited) SendMessageW(hwnd, WM_APP_RUNTIME_EXITED, 0, 0);
-            else { app->navigateWhenReady(); app->scanDeadlines(); }
+            else { app->navigateAll(); app->scanDeadlines(); }
         }
         return 0;
     case WM_APP_WEB_MESSAGE: {
         auto* delivery = reinterpret_cast<App::WebDelivery*>(lParam);
-        if (app && app->webview && app->canDeliverWeb(*delivery)) {
-            app->webview->PostWebMessageAsJson(delivery->text.c_str());
-        }
+        if (app && hwnd == app->notifyHwnd) app->dispatchWebDelivery(*delivery);
         delete delivery;
         return 0;
     }
@@ -1361,31 +1459,71 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         return 0;
     case WM_APP_RUNTIME_EXITED:
         if (app) {
+            for (auto& [id, v] : app->liveViews) {
+                if (v->closed) continue;
+                if (v->controller) v->controller->Close();
+                if (v->hwnd) DestroyWindow(v->hwnd);
+                else v->closed = true;
+            }
             if (app->failed) app->exitCode = 1;
-            if (app->controller) app->controller->Close();
-            DestroyWindow(hwnd);
+            DestroyWindow(hwnd);  // the notify window's WM_DESTROY quits the loop
         }
         return 0;
     case WM_CLOSE:
-        if (app) {
-            app->beginClose(0);
+        if (app && view) {
+            // Closing one window tears down only its view; the last window ends
+            // the app through WM_DESTROY -> beginClose -> backend shutdown.
+            app->closeViewWindow(*view);
             return 0;
         }
         DestroyWindow(hwnd);
         return 0;
     case WM_DESTROY:
-        PostQuitMessage(0);
+        if (app && view) app->releaseViewWindow(*view);
+        else PostQuitMessage(0);
         return 0;
     }
     return DefWindowProcW(hwnd, message, wParam, lParam);
 }
 
-static void windowSet(App& app, const Json& config) {
-    app.windowTitle = utf16(config.value("title", std::string("bunaway app")));
-    if (config.contains("window")) {
-        app.windowWidth = config["window"].value("width", 1024);
-        app.windowHeight = config["window"].value("height", 768);
+// ---------- window/view declarations ----------
+// New form: "windows": [ { "view", "home", "title"?, "window"?{width,height} } ]
+// with one window per policy view. Legacy single-window form {view,home,title,
+// window} is still accepted and produces one entry.
+struct WindowSpec {
+    std::string viewId, home, title;
+    int width = 1024, height = 768;
+};
+
+constexpr size_t maxWindows = 8;
+static const std::regex identifierPattern("^[A-Za-z0-9_.:-]+$");
+
+std::vector<WindowSpec> viewSpecs(const Json& config) {
+    const std::string baseTitle = config.value("title", std::string("bunaway app"));
+    std::vector<WindowSpec> specs;
+    auto parseEntry = [&](const Json& entry) {
+        require(entry.is_object(), "Window entry must be an object.");
+        WindowSpec spec;
+        spec.viewId = entry.value("view", "");
+        spec.home = entry.value("home", "");
+        spec.title = entry.value("title", baseTitle);
+        if (entry.contains("window") && entry["window"].is_object()) {
+            spec.width = entry["window"].value("width", 1024);
+            spec.height = entry["window"].value("height", 768);
+        }
+        require(std::regex_match(spec.viewId, identifierPattern), "Invalid view id in windows.");
+        require(!spec.home.empty(), "Window entry requires a home URL.");
+        require(spec.width >= 100 && spec.width <= 32767 && spec.height >= 100 && spec.height <= 32767, "Invalid window size.");
+        specs.push_back(std::move(spec));
+    };
+    if (config.contains("windows")) {
+        const auto& windows = config["windows"];
+        require(windows.is_array() && !windows.empty() && windows.size() <= maxWindows, "Invalid windows declaration.");
+        for (const auto& entry : windows) parseEntry(entry);
+    } else {
+        parseEntry(config);
     }
+    return specs;
 }
 
 int run(const fs::path& package) {
@@ -1402,14 +1540,22 @@ int run(const fs::path& package) {
     static const std::regex appIdPattern("^[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$");
     app.appId = config.value("appId", "");
     require(std::regex_match(app.appId, appIdPattern), "Invalid appId.");
-    app.viewId = config.value("view", "");
-    app.home = config.value("home", "");
-    windowSet(app, config);
+    auto specs = viewSpecs(config);
 
     app.policy = Policy::load(readJson(app.assets / "policy.schema.json"), app.assets / "policy.json");
-    require(app.policy.views.count(app.viewId), "Configured view is not in the policy.");
-    auto homeOrigin = originOf(utf16(app.home));
-    require(!homeOrigin.empty() && app.policy.views.at(app.viewId).origins.count(homeOrigin), "Home origin is not an allowed origin.");
+    for (auto& spec : specs) {
+        require(app.policy.views.count(spec.viewId), "Configured view is not in the policy.");
+        auto homeOrigin = originOf(utf16(spec.home));
+        require(!homeOrigin.empty() && app.policy.views.at(spec.viewId).origins.count(homeOrigin), "Home origin is not an allowed origin for its view.");
+        auto view = std::make_unique<App::LiveView>();
+        view->policy = &app.policy.views.at(spec.viewId);
+        view->viewId = spec.viewId;
+        view->home = spec.home;
+        view->title = utf16(spec.title);
+        view->width = spec.width;
+        view->height = spec.height;
+        require(app.liveViews.emplace(view->viewId, std::move(view)).second, "Duplicate view in windows.");
+    }
 
     const fs::path bun = package / "runtime/bun.exe";
     require(sha256(bun) == app.manifest["bun"]["executableSha256"].get<std::string>(), "Bun executable hash mismatch.");
@@ -1436,7 +1582,9 @@ int run(const fs::path& package) {
     app.runtimeId = app.appId;
     app.generation = randomHex(16);
     app.backendContext = "backend-" + randomHex(12);
-    app.hostLog->event("host-init", { { "appId", app.appId }, { "runtime", { { "id", app.runtimeId }, { "generation", app.generation } } } });
+    Json viewIds = Json::array();
+    for (const auto& [id, view] : app.liveViews) viewIds.push_back(id);
+    app.hostLog->event("host-init", { { "appId", app.appId }, { "views", viewIds }, { "runtime", { { "id", app.runtimeId }, { "generation", app.generation } } } });
 
     HANDLE rawJob = CreateJobObjectW(nullptr, nullptr);
     require(rawJob != nullptr, "Job creation failed.");
@@ -1455,20 +1603,28 @@ int run(const fs::path& package) {
     wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
     wc.lpszClassName = L"bunaway-host";
     require(RegisterClassExW(&wc), "Window class failed.");
+    // The message-only window carries timers and backend->UI deliveries; it is
+    // created first and destroyed last so posts always have a stable target.
+    app.notifyHwnd = CreateWindowExW(0, wc.lpszClassName, L"bunaway-host-notify", 0,
+        0, 0, 0, 0, HWND_MESSAGE, nullptr, wc.hInstance, nullptr);
+    require(app.notifyHwnd != nullptr, "Notify window creation failed.");
+    SetTimer(app.notifyHwnd, 1, 250, nullptr);
     DWORD style = WS_OVERLAPPEDWINDOW;
-    RECT rect { 0, 0, app.windowWidth, app.windowHeight };
-    AdjustWindowRect(&rect, style, FALSE);
-    app.hwnd = CreateWindowExW(0, wc.lpszClassName, app.windowTitle.c_str(), style,
-        CW_USEDEFAULT, CW_USEDEFAULT, rect.right - rect.left, rect.bottom - rect.top,
-        nullptr, nullptr, wc.hInstance, nullptr);
-    require(app.hwnd != nullptr, "Window creation failed.");
-    SetTimer(app.hwnd, 1, 250, nullptr);
-    ShowWindow(app.hwnd, SW_SHOW);
-    UpdateWindow(app.hwnd);
+    for (auto& [id, view] : app.liveViews) {
+        RECT rect { 0, 0, view->width, view->height };
+        AdjustWindowRect(&rect, style, FALSE);
+        view->hwnd = CreateWindowExW(0, wc.lpszClassName, view->title.c_str(), style,
+            CW_USEDEFAULT, CW_USEDEFAULT, rect.right - rect.left, rect.bottom - rect.top,
+            nullptr, nullptr, wc.hInstance, nullptr);
+        require(view->hwnd != nullptr, "Window creation failed.");
+        SetWindowLongPtrW(view->hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(view.get()));
+        ShowWindow(view->hwnd, SW_SHOW);
+        UpdateWindow(view->hwnd);
+    }
 
     app.runtimeThread = std::thread([&app, bun] { app.runtimeMain(bun); });
     try {
-        app.initWebView();
+        for (auto& [id, view] : app.liveViews) app.initWebView(*view);
     } catch (...) {
         app.beginClose(1);
         if (app.runtimeThread.joinable()) app.runtimeThread.join();

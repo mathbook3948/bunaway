@@ -39,6 +39,57 @@
           }
         ]
       }
+    },
+    {
+      "id": "editor",
+      "origins": ["https://app.bunaway.local"],
+      "commands": ["test.report", "memo.save", "memo.read"],
+      "events": ["memo.saved"],
+      "host": {
+        "log": true,
+        "storage": [
+          {
+            "scope": "appData",
+            "pathPrefix": "notes",
+            "access": ["read", "write"]
+          },
+          {
+            "scope": "temp",
+            "pathPrefix": "",
+            "access": ["read", "write"]
+          }
+        ]
+      }
+    },
+    {
+      "id": "reader",
+      "origins": ["https://app.bunaway.local"],
+      "commands": [
+        "test.echo",
+        "test.ping",
+        "test.hold",
+        "test.writeNote",
+        "test.readNote",
+        "test.log",
+        "test.report",
+        "memo.read"
+      ],
+      "events": ["memo.saved"],
+      "host": {
+        "log": false,
+        "storage": [
+          {
+            "scope": "appData",
+            "pathPrefix": "notes",
+            "access": ["read"]
+          },
+          {
+            "scope": "temp",
+            "pathPrefix": "",
+            "access": ["read", "write"]
+          }
+        ]
+      }
     }
   ],
   "backend": {
