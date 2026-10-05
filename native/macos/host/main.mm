@@ -1568,7 +1568,13 @@ static int run(const fs::path& package) {
     auto homeOrigin = originOf(app.home);
     require(!homeOrigin.empty() && app.policy.views.at(app.viewId).origins.count(homeOrigin), "Home origin is not an allowed origin.");
 
-    const fs::path bun = package / "runtime/bun";
+    fs::path bun = package / "runtime/bun";
+    if (!fs::exists(bun)) {
+        // Distribution packages may relocate the nested executable to
+        // Contents/Helpers (Apple's convention for helper binaries).
+        fs::path helper = package.parent_path() / "Helpers/bun";
+        if (fs::exists(helper)) bun = helper;
+    }
     require(sha256(bun) == app.manifest["bun"]["executableSha256"].get<std::string>(), "Bun executable hash mismatch.");
     for (auto it = app.manifest["assets"].begin(); it != app.manifest["assets"].end(); ++it) {
         require(sha256(app.package / fs::path(it.key())) == it.value().get<std::string>(), "Package asset hash mismatch.");
