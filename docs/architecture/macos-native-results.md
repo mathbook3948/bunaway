@@ -27,10 +27,20 @@ Windows 영속 브라우저 프로필을 기본 기대값으로 유지하고, ma
 | 실행 | 환경 | 새 결과 |
 | --- | --- | --- |
 | 로컬 재실행(2026-10-05) | macOS 26.5.2 arm64, Darwin 25.5.0 | probe 50/50, 실제 WKWebView host 8/8, 계약 테스트 108/108; format·lint·workspace/tests 타입 검사·생성 스키마 diff·zsh 문법 검사 통과 |
-| 이번 GitHub Actions | `macos-15` ARM64 예정 | PR 생성 후 실제 실행 결과를 확인한다. 아직 성공으로 기록하지 않음 |
+| 첫 Actions 실행(2026-10-05) | macOS 15.7.9 arm64, Xcode 16.4 | [run 37264442220](https://github.com/mathbook3948/bunaway/actions/runs/37264442220/job/111618163806): CPU/pin 확인과 다운로드 해시 확인 후 probe 컴파일 실패. 실제 WKWebView는 아직 실행되지 않음. [실패 로그 artifact](https://github.com/mathbook3948/bunaway/actions/runs/37264442220/artifacts/11326345199) 업로드 성공(3개 로그, JSON 생성 전 실패) |
+| 수정 후 Actions | `macos-15` ARM64 | 아래 SDK 호환 수정 후 실제 실행을 다시 확인한다. 아직 성공으로 기록하지 않음 |
 
 로컬에는 mise 명령이 없어 `mise.toml`의 동일 Bun/zsh 명령으로 검사했다.
 이번 로컬 실행에서는 `.app`·서명·공증·설치를 재검증하지 않았다.
+
+첫 CI는 로컬 macOS 26 SDK에 존재하는 `posix_spawn_file_actions_addchdir`가
+macOS 15 SDK에는 없어 컴파일 실패했다. probe·host 양쪽의 cwd 지정에
+macOS 10.15부터 제공되는 동등 `posix_spawn_file_actions_addchdir_np`를 사용하도록
+수정했다. 로컬 성공을 runner 성공으로 간주하지 않음으로써 이 차이를 확인했다.
+현재 26 SDK에서는 해당 이전 이름의 deprecation 경고가 있지만 빌드 실패는 아니다.
+또한 격리한 build 복사본의 네이티브 실행 파일을 실패 파일로 바꿔 양 driver의
+`ok: false` JSON·비영(非零) 종료 코드가 `tee` 뒤에도 보존되고 host 진단 파일이
+남는 것을 별도로 확인했다(제품 정상 실행 결과와 합산하지 않음).
 
 ## 고정 배포물과 재현
 

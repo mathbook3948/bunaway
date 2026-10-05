@@ -1114,7 +1114,7 @@ public:
         require(posix_spawn_file_actions_adddup2(&actions, inPipe[0], 0) == 0, "stdin dup2 failed.");
         require(posix_spawn_file_actions_adddup2(&actions, outPipe[1], 1) == 0, "stdout dup2 failed.");
         require(posix_spawn_file_actions_adddup2(&actions, errPipe[1], 2) == 0, "stderr dup2 failed.");
-        require(posix_spawn_file_actions_addchdir(&actions, assets.c_str()) == 0, "cwd failed.");
+        require(posix_spawn_file_actions_addchdir_np(&actions, assets.c_str()) == 0, "cwd failed.");
         posix_spawnattr_t attr;
         posix_spawnattr_init(&attr);
         require(posix_spawnattr_setpgroup(&attr, 0) == 0, "Spawn group failed.");
