@@ -117,15 +117,15 @@ test("policy rejects duplicate views, unsafe scope prefixes, unknown permissions
 test("generated UI and backend bundle independently; source failures propagate", async () => {
   const assets = resolve(home, "assets");
   await mkdir(resolve(assets, "web"), { recursive: true });
-  await bundleAssets(await validateProject(project), assets);
+  const valid = await validateProject(project);
+  await bundleAssets(valid, assets);
   expect(await Bun.file(resolve(assets, "web/main.js")).text()).toContain("message.saved");
   expect(await Bun.file(resolve(assets, "backend.js")).text()).toContain("messages/current.txt");
   for (const name of ["src/backend/index.ts", "src/web/main.ts"]) {
     try {
       await Bun.write(resolve(project, name), "export const broken = ;\n");
-      await expect(bundleAssets(await validateProject(project), assets)).rejects.toThrow(
-        /bundle failed/i,
-      );
+      await expect(validateProject(project)).rejects.toThrow(/bundle failed/i);
+      await expect(bundleAssets(valid, assets)).rejects.toThrow(/bundle failed/i);
     } finally {
       await Bun.write(resolve(project, name), originals[name] ?? "");
     }

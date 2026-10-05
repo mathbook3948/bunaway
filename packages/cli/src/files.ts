@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { lstat, readdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const frameworkRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -79,4 +79,27 @@ export async function run(
   });
   const code = await child.exited;
   if (code !== 0) throw new Error(`${args[0]} failed (exit ${code}).`);
+}
+
+export async function runWorker(
+  module: string,
+  method: string,
+  args: unknown[],
+  cwd: string,
+): Promise<void> {
+  const url = pathToFileURL(resolve(frameworkRoot, "packages/cli/src", module)).href;
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      "-e",
+      `const task = await import(${JSON.stringify(url)}); await task[${JSON.stringify(method)}](...${JSON.stringify(args)});`,
+    ],
+    { cwd, stdin: "ignore", stdout: "pipe", stderr: "pipe" },
+  );
+  const output = new Response(child.stdout).text();
+  const errors = new Response(child.stderr).text();
+  const code = await child.exited;
+  await output;
+  if (code !== 0) throw new Error((await errors) || `${method} failed (exit ${code}).`);
+  await errors;
 }

@@ -90,6 +90,12 @@ dependencies/devDependencies/optionalDependencies/peerDependencies 모두에서
 `overrides`/`resolutions`에서 `@bunaway/*`를 대상으로 하는 선택자도 거부한다
 (중첩·버전·경로 선택자 포함). 앱 루트·백엔드·프런트엔드 및 프레임워크 패키지에서
 실제로 해석되는 SDK 진입점은 잠긴 vendor 소스와 같은 실제 경로여야 한다.
+백엔드와 모든 프런트엔드 진입점을 메모리에서 번들해 실제 import 그래프도 검사한다.
+하위 모듈이나 소스 루트 밖에서 import한 모듈의 `tsconfig.json` 경로 별칭도 포함하며,
+일반 의존성·로컬 별칭과 잠긴 SDK 소스를 가리키는 별칭은 허용한다. 따라서 검증에는
+번들 가능한 앱 소스가 필요하다. 검증과 자산 번들은 각각 새 Bun 프로세스에서 같은
+SDK 검사 플러그인을 사용한다. 설치를 복원한 뒤 장기 실행 dev/API 프로세스에 남은
+외부 SDK 해석 캐시는 다음 번들에 사용하지 않는다.
 선언만 복원하고 외부 SDK 설치를 남겨 두거나 경로 별칭으로 바꾸는 경우도 실패하며,
 선언을 수정한 뒤 `bun install`로 vendor workspace 연결을 복원해야 한다. `bunaway.lock.json`
 없음(이전 생성 프로젝트), 다른 버전, 부분 변경은 명시적으로 오류가 된다. 전역 CLI가

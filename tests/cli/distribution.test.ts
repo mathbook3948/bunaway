@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test";
 import { cp, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import { packFramework } from "../../packages/cli/scripts/pack.ts";
+import { bundleAssets } from "../../packages/cli/src/build.ts";
+import { validateProject } from "../../packages/cli/src/config.ts";
 import { createProject } from "../../packages/cli/src/create.ts";
 import {
   checkArtifact,
@@ -109,6 +111,14 @@ new RestartController<string>({ stop: async () => {}, build: async () => 42, sta
     const project = resolve(home, "moved app");
     await rename(resolve(home, "created app"), project);
     await command(project, ["install"]);
+    expect(
+      await command(consumer, [
+        "-e",
+        "import { validateProject } from '@bunaway/cli'; await validateProject(process.argv[1]); console.log('valid');",
+        project,
+      ]),
+    ).toContain("valid");
+    expect(await command(consumer, ["run", "bunaway", "validate", project])).toContain("valid");
     if (process.env.BUNAWAY_NATIVE_DISTRIBUTION_TEST === "1") {
       await command(consumer, [
         "-e",
@@ -399,6 +409,125 @@ test("repeated API validation rejects changed SDK links despite Bun's resolver c
   }
 }, 30000);
 
+test("validation and bundling reject SDK aliases from nested and transitive importers", async () => {
+  const home = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-nested-sdk-")));
+  try {
+    const project = await createProject(resolve(home, "app"));
+    await command(project, ["install"]);
+    const valid = await validateProject(project);
+    const foreign = resolve(project, "foreign-sdk/index.ts");
+    await Bun.write(foreign, 'export const marker = "FOREIGN_SDK_99_0_0";\n');
+    for (const [directory, entry, name] of [
+      ["src/web/nested", "src/web/main.ts", "@bunaway/client"],
+      ["src/backend/nested", "src/backend/index.ts", "@bunaway/core"],
+      ["shared", "src/web/main.ts", "@bunaway/client"],
+    ] as const) {
+      const parent = resolve(project, directory);
+      const source = resolve(parent, "mapped.ts");
+      const entryPath = resolve(project, entry);
+      const original = await readFile(entryPath, "utf8");
+      try {
+        await Bun.write(source, `import { marker } from "${name}"; console.log(marker);\n`);
+        await writeJson(resolve(parent, "tsconfig.json"), {
+          compilerOptions: { paths: { [name]: [relative(parent, foreign)] } },
+        });
+        await Bun.write(
+          entryPath,
+          `${original}\nimport ${JSON.stringify(`./${relative(dirname(entryPath), source).replaceAll("\\", "/")}`)};\n`,
+        );
+        await expect(validateProject(project)).rejects.toThrow("Incompatible SDK resolution");
+        await expect(bundleAssets(valid, resolve(home, "assets"))).rejects.toThrow(
+          "Incompatible SDK resolution",
+        );
+      } finally {
+        await writeFile(entryPath, original);
+        await rm(parent, { recursive: true, force: true });
+      }
+    }
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+}, 30000);
+
+test("nested aliases to pinned SDK sources and unrelated local modules remain valid", async () => {
+  const home = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-pinned-alias-")));
+  try {
+    const project = await createProject(resolve(home, "app"));
+    await command(project, ["install"]);
+    const nested = resolve(project, "src/web/nested");
+    await Bun.write(resolve(nested, "message.ts"), 'export const message = "LOCAL_ALIAS_OK";\n');
+    await Bun.write(
+      resolve(nested, "mapped.ts"),
+      'import * as sdk from "@bunaway/client"; import { message } from "local-message"; console.log(sdk, message);\n',
+    );
+    await writeJson(resolve(nested, "tsconfig.json"), {
+      compilerOptions: {
+        paths: {
+          "@bunaway/client": ["../../../vendor/bunaway/packages/client-sdk/src/index.ts"],
+          "local-message": ["./message.ts"],
+        },
+      },
+    });
+    const assets = resolve(home, "assets");
+    await bundleAssets(await validateProject(project), assets);
+    expect(await Bun.file(resolve(assets, "web/nested/mapped.js")).text()).toContain(
+      "LOCAL_ALIAS_OK",
+    );
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+}, 30000);
+
+test("bundling after reinstall does not reuse the calling process's foreign SDK cache", async () => {
+  const home = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-bundle-cache-")));
+  try {
+    const project = await createProject(resolve(home, "app"));
+    await command(project, ["install"]);
+    const foreign = resolve(project, "foreign-client");
+    await cp(resolve(project, "vendor/bunaway/packages/client-sdk"), foreign, {
+      recursive: true,
+    });
+    const foreignPackage = (await json(resolve(foreign, "package.json"))) as Record<
+      string,
+      unknown
+    >;
+    await writeJson(resolve(foreign, "package.json"), { ...foreignPackage, version: "99.0.0" });
+    const foreignIndex = resolve(foreign, "src/index.ts");
+    await Bun.write(
+      foreignIndex,
+      `${await readFile(foreignIndex, "utf8")}\nconsole.log("FOREIGN_SDK_99_0_0");\n`,
+    );
+    const packagePath = resolve(project, "package.json");
+    const original = await readFile(packagePath, "utf8");
+    await writeJson(packagePath, {
+      ...JSON.parse(original),
+      overrides: { "@bunaway/client": "file:./foreign-client" },
+    });
+    await command(project, ["install"]);
+    expect(Bun.resolveSync("@bunaway/client", project)).toContain("foreign-client");
+    const cached = await Bun.build({
+      entrypoints: [resolve(project, "src/web/main.ts")],
+      target: "browser",
+    });
+    expect(cached.success).toBe(true);
+    expect(await cached.outputs[0]?.text()).toContain("FOREIGN_SDK_99_0_0");
+    await writeFile(packagePath, original);
+    await command(project, ["install"]);
+    const valid = await validateProject(project);
+    expect(Bun.resolveSync("@bunaway/client", project)).toContain("foreign-client");
+    for (const name of ["first-assets", "second-assets"]) {
+      const assets = resolve(home, name);
+      await bundleAssets(valid, assets);
+      expect(await Bun.file(resolve(assets, "web/main.js")).text()).not.toContain(
+        "FOREIGN_SDK_99_0_0",
+      );
+      await rm(foreign, { recursive: true, force: true });
+    }
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+}, 30000);
+
 test("artifact audit rejects omitted schemas, declarations and Git attributes with a regenerated inventory", async () => {
   const home = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-audit-")));
   try {
@@ -426,6 +555,8 @@ test("artifact audit rejects omitted schemas, declarations and Git attributes wi
       "native/host-api/generated/process.schema.json",
       "packages/cli/dist/types/cli/src/index.d.ts",
       "packages/cli/templates/vanilla/gitattributes",
+      "packages/cli/src/assets.ts",
+      "packages/cli/src/sdk.ts",
     ]) {
       const path = resolve(root, name);
       const original = await readFile(path);

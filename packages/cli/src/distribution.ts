@@ -1,7 +1,16 @@
-import { cp, mkdir, readFile, realpath } from "node:fs/promises";
+import { cp, mkdir, readFile } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import { PROCESS_IPC_VERSION, PROTOCOL_VERSION } from "@bunaway/protocol";
-import { files, frameworkRoot, hash, json, projectPath, verifyHash, writeJson } from "./files.ts";
+import {
+  files,
+  frameworkRoot,
+  hash,
+  json,
+  projectPath,
+  runWorker,
+  verifyHash,
+  writeJson,
+} from "./files.ts";
 
 export const frameworkPaths = [
   "framework.json",
@@ -64,51 +73,6 @@ function hasSdkOverride(value: unknown): boolean {
       ([selector, rule]) => selector.includes("@bunaway/") || hasSdkOverride(rule),
     )
   );
-}
-
-async function validateSdkResolutions(
-  project: string,
-  references: { name: string; parent: string }[],
-): Promise<void> {
-  // Dev/API processes must not reuse Bun's cached paths after a reinstall.
-  const child = Bun.spawn(
-    [
-      process.execPath,
-      "-e",
-      `console.log(JSON.stringify(${JSON.stringify(references)}.map(({ name, parent }) => {
-        try { return Bun.resolveSync(name, parent); } catch { return null; }
-      })))`,
-    ],
-    { cwd: project, stdout: "pipe", stderr: "pipe" },
-  );
-  const output = new Response(child.stdout).text();
-  const errors = new Response(child.stderr).text();
-  if ((await child.exited) !== 0) {
-    throw new Error(`SDK resolution check failed: ${await errors}`);
-  }
-  const paths = JSON.parse(await output) as (string | null)[];
-  const root = resolve(project, "vendor/bunaway");
-  for (const [index, { name, parent }] of references.entries()) {
-    const directory = Object.entries(packageNames).find(
-      ([, packageName]) => packageName === name,
-    )?.[0];
-    const path = paths[index];
-    try {
-      if (
-        directory &&
-        path &&
-        relative(
-          await realpath(resolve(root, `packages/${directory}/src/index.ts`)),
-          await realpath(path),
-        ) === ""
-      ) {
-        continue;
-      }
-    } catch {}
-    throw new Error(
-      `Incompatible SDK resolution: ${name} from ${parent}; run bun install to restore the pinned vendor workspaces.`,
-    );
-  }
 }
 
 export async function release(root = frameworkRoot): Promise<Release> {
@@ -254,7 +218,7 @@ export async function validateFramework(
       references.push({ name, parent: resolve(workspace, "src/index.ts") });
     }
   }
-  await validateSdkResolutions(project, references);
+  await runWorker("sdk.ts", "validateSdkGraph", [project, references, sources], project);
 }
 
 function requiredFrameworkFiles(): string[] {
@@ -272,6 +236,8 @@ function requiredFrameworkFiles(): string[] {
     "native/host-api/generated/host-operations.json",
     "runtime/build-manifests/windows-x64.json",
     "runtime/build-manifests/darwin-aarch64.json",
+    "packages/cli/src/assets.ts",
+    "packages/cli/src/sdk.ts",
     ...Object.keys(packageNames).flatMap((directory) =>
       ["package.json", "src/index.ts", "tsconfig.json"].map(
         (name) => `packages/${directory}/${name}`,
