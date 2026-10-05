@@ -402,13 +402,13 @@ async function report(results) {
   await call("test.report", { file: "report.json", report: { page: "index", results } });
 }
 
-const status = document.getElementById("status");
+const statusEl = document.getElementById("status");
 run()
   .then(() => {
-    status.textContent = "done";
+    statusEl.textContent = "done";
   })
   .catch(async (e) => {
-    status.textContent = "failed";
+    statusEl.textContent = "failed";
     try {
       await report([{ name: "run", ok: false, error: String(e?.message ?? e) }]);
     } catch {}
