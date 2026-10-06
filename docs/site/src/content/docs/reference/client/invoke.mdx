@@ -34,7 +34,7 @@ await client.invoke("message.read", null, { deadline: Date.now() + 5000 });
 ```
 
 기본 명령 최대 시간은 30초입니다. 더 먼 deadline을 주어도 최대 시간을 연장하지 않습니다.
-기한은 invoke를 호출할 때부터 계산하며 연결 협상을 기다리는 시간도 포함합니다.
+기한은 invoke를 호출할 때부터 계산하며 연결 준비를 기다리는 시간도 포함합니다.
 기한이 이미 지났으면 명령을 보내지 않고 `TIMEOUT`으로 실패합니다. 음수나 유한하지 않은 deadline은 `INVALID_ARGUMENT`입니다.
 
 ## 취소
@@ -46,9 +46,9 @@ controller.abort();
 try { await request; } catch (error) { console.error(error); }
 ```
 
-이미 취소된 신호는 전송 전에 `CANCELLED`로 실패합니다.
-전송 후 취소는 로컬 요청을 실패시키고 필요한 cancel을 보냅니다.
-백엔드 핸들러도 `context.signal`과 요청에 묶인 Host API를 통해 취소를 관찰합니다.
+이미 취소된 신호를 전달하면 `CANCELLED`로 실패합니다.
+요청 중 신호를 취소하면 Promise가 `CANCELLED`로 실패합니다.
+백엔드 핸들러에서는 `context.signal`로 취소를 확인합니다.
 취소는 이미 완료된 저장 작업을 롤백하지 않습니다.
 
 ## 오류와 제한
@@ -61,6 +61,6 @@ try { await request; } catch (error) { console.error(error); }
 | `TIMEOUT` / `CANCELLED` | 기한 초과, 취소 |
 | `INTERNAL` | 핸들러 일반 예외, 잘못된 출력, 연결 실패 |
 
-세션의 요청 ID는 재사용하지 않습니다. 기록 상한인 1,024개에 도달하면 새 요청은 `BUSY`로 실패합니다.
+명령 호출과 구독 및 해제 요청을 합쳐 한 세션에서 최대 1,024개까지 요청할 수 있습니다. 제한에 도달하면 새 요청은 `BUSY`로 실패하며 새 세션으로 다시 연결해야 합니다.
 기한이 끝난 요청의 늦은 응답은 폐기합니다. 재시도가 필요하면 현재 상태를 확인한 뒤 앱에서 다시 호출합니다. SDK는 요청을 자동 재전송하지 않습니다.
 [오류 처리](/guides/cancellation-and-errors/)에서 사용자 재시도와 상태 복원을 설명합니다.

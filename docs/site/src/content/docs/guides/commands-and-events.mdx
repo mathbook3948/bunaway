@@ -55,7 +55,7 @@ import uiSource from '@repo/packages/cli/templates/vanilla/src/main.ts?raw';
 코드는 아래 순서로 실행합니다.
 
 1. 호스트가 제공하는 브리지를 `createWebViewTransport()`에 전달합니다.
-2. `createClient()`로 클라이언트를 만들고 `client.ready`에서 연결 협상을 기다립니다.
+2. `createClient()`로 클라이언트를 만들고 `client.ready`에서 연결 준비를 기다립니다.
 3. `client.listen("message.saved", ...)`으로 저장 알림을 먼저 구독합니다.
 4. `client.invoke("message.read", null)`로 이전 저장 내용을 복원합니다.
 5. 버튼 클릭 시 `client.invoke("message.save", text)`를 호출합니다.

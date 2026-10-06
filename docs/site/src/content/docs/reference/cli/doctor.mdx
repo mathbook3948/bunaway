@@ -20,12 +20,11 @@ bunaway doctor [directory]
 | target | Windows x64 또는 macOS arm64 |
 | configuration/policy | development 모드의 프로젝트 검증 |
 | Windows 도구 | PATH의 pwsh |
-| Windows WebView2 | 레지스트리에 설치된 Evergreen 탐지 |
+| Windows WebView2 | WebView2 Evergreen 설치 여부 |
 | macOS 도구 | PATH의 zsh, clang++, codesign |
 
 Vite 앱은 웹 프로덕션 빌드 결과가 아직 없어도 개발 환경을 검사할 수 있습니다.
 HMR은 개발 서버를 실행해 확인하고, 네이티브 패키지는 build 명령으로 만듭니다.
-고정된 Bun과 SDK, Loader의 다운로드 및 해시 검사는 빌드 준비 스크립트에서 수행합니다.
 
 ## FAIL 처리
 

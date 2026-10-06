@@ -8,7 +8,7 @@ sidebar: { order: 5 }
 client.close(): Promise<void>
 ```
 
-클라이언트 세션과 전송을 닫습니다. 운영체제 창과 앱 백엔드는 계속 실행됩니다.
+클라이언트 연결을 닫습니다. 운영체제 창과 앱 백엔드는 계속 실행됩니다.
 
 ## 사용법
 
@@ -22,9 +22,8 @@ window.addEventListener("pagehide", () => { void client.close(); });
 ## 동작
 
 새 호출을 차단하고 준비 중인 `ready`, 미완료 요청을 실패시킵니다.
-활성 구독은 오류 통지를 통해 정리하고 전송의 `close()`를 호출합니다.
-여러 번 호출해도 같은 완료 Promise를 사용합니다.
-전송의 close가 실패해도 클라이언트의 종료 Promise는 정상 완료됩니다.
+활성 구독은 `onError`로 종료를 알립니다.
+여러 번 호출해도 한 번만 정리합니다.
 
 닫힌 클라이언트로 다시 `invoke`, `listen`을 시작하면 실패합니다.
 이미 끝난 파일 저장은 되돌리지 않습니다.
@@ -32,6 +31,5 @@ window.addEventListener("pagehide", () => { void client.close(); });
 
 ## 관련 수명
 
-호스트는 탐색, 렌더러 복구, 창 닫기 때 세션을 폐기합니다.
-창의 OS 자원은 호스트가 창을 닫을 때 회수합니다.
-[세션과 수명주기](/guides/sessions-and-lifecycle/)에서 각 단계의 책임을 확인하세요.
+페이지가 바뀌거나 복구되면 새 클라이언트가 필요합니다.
+[세션과 수명주기](/guides/sessions-and-lifecycle/)에서 재연결과 창 종료 시 처리할 일을 확인하세요.

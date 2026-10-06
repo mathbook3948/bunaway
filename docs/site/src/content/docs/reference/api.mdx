@@ -10,7 +10,7 @@ description: 프런트엔드와 백엔드 API부터 설정, CLI, 패키징까지
 
 | API | 용도 |
 | --- | --- |
-| [createClient, ready](/reference/client/create-client/) | 클라이언트 생성, 협상 |
+| [createClient, ready](/reference/client/create-client/) | 클라이언트 생성과 연결 준비 |
 | [createWebViewTransport, Transport](/reference/client/transport/) | 네이티브 브리지 연결 |
 | [invoke](/reference/client/invoke/) | 명령, 취소, deadline |
 | [listen](/reference/client/listen/) | 구독, 이벤트 순서, 해제 |
@@ -46,10 +46,9 @@ description: 프런트엔드와 백엔드 API부터 설정, CLI, 패키징까지
 `bunaway --help` 또는 `bunaway help`는 사용법을 출력하고 종료 코드 0으로 끝납니다.
 하위 명령을 생략해도 사용법을 출력합니다. 알 수 없는 명령이나 옵션, 추가 인자를 전달하면 오류를 반환합니다.
 
-## 배포와 통신 규약, 개발 도구
+## 배포와 데이터 형식
 
 - [배포 채널](/reference/packaging/channels/), [서명](/reference/packaging/signing/), [보고서](/reference/packaging/report/)
-- [Schema, JsonValue, Infer](/reference/schema/), [오류와 제한](/reference/errors/), [메시지와 프로세스 IPC](/reference/protocol/)
-- [Core와 Bun 런타임](/reference/tooling/core-and-runtime/), [CLI 프로그램 API](/reference/tooling/cli-api/), [패키징 프로그램 API](/reference/tooling/packaging-api/)
+- [Schema, JsonValue, Infer](/reference/schema/), [오류와 제한](/reference/errors/)
 
-[문서 범위와 누락 검사](/reference/coverage/)에서 실제 공개 export와 레퍼런스의 대응을 확인할 수 있습니다.
+CLI 자동화나 프레임워크 확장에 사용하는 API는 [프레임워크 기여 자료](/reference/design/)에서 찾아볼 수 있습니다.

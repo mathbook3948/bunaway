@@ -10,12 +10,11 @@ sidebar: { order: 2 }
 | --- | --- | --- |
 | `win-direct` | Inno Setup 설치 파일 생성 구현 | 선택적. 미서명은 경고 포함 |
 | `win-store-unpackaged` | Store EXE/MSI용 설치 파일, 제출 자료 생성 구현 | 제출하려면 Trusted Root 체인 서명 필요 |
-| `win-store-msix` | 어댑터 등록, 현재 stages 실행 거부 | MSIX 실행에는 서명 필요 |
-| `mac-direct` | 설정 예약, 어댑터 없음 | 패키징 실행 미지원 |
-| `mac-store` | 설정 예약, 어댑터 없음 | 패키징 실행 미지원 |
+| `win-store-msix` | 패키징 미지원 | MSIX 실행에는 서명 필요 |
+| `mac-direct` | 설정만 허용, 패키징 미지원 | 패키징 실행 미지원 |
+| `mac-store` | 설정만 허용, 패키징 미지원 | 패키징 실행 미지원 |
 
-macOS에서는 네이티브 `.app`을 빌드할 수 있지만 배포 채널의 패키징 어댑터는 아직 없습니다.
-MSIX도 packaged activation과 Bun FFI 환경의 실행 검증이 남아 있어 현재 생성할 수 없습니다.
+macOS에서는 네이티브 `.app`을 빌드할 수 있습니다. macOS 배포 채널과 MSIX 패키징은 아직 지원하지 않습니다.
 
 ## Windows 직접 배포와 Store unpackaged
 
@@ -91,10 +90,10 @@ PE와 설치 파일이 제출용 서명 조건 및 오프라인 설치 조건을
 | `signing` | 예 | 예 | 서명 객체 |
 
 설정 파일에서는 위 필드를 허용합니다. `format`의 설치 형식은 아직 구현되지 않았습니다.
-두 채널 모두 어댑터가 없으므로 실행 시 `PKG_ADAPTER_MISSING`으로 실패합니다.
+두 채널의 패키징을 실행하면 `PKG_ADAPTER_MISSING`으로 실패합니다.
 
 ## OS 최소 버전
 
 Windows 설치 경로는 Windows 10 build 17763 이상을 기준으로 합니다.
-`targets[].minVersion`을 선언하면 Windows 버전 계약과 Inno 버전으로 해석합니다.
+설치할 최소 OS 버전은 `targets[].minVersion`에 지정합니다.
 지원 기준보다 낮거나 형식이 잘못된 버전 문자열은 거부합니다.

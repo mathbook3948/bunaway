@@ -6,28 +6,16 @@
 [개발 가이드 사이트](./docs/site/README.md)에서 전체 구조와 첫 앱 실행을 익힌 뒤 뷰별 정책과 명령, 이벤트를 살펴본다. 로컬에서 `bun run docs:dev`로 열 수 있다.
 [문서 안내](./docs/README.md)에서 공통 용어, 설계 결정과 구현 계약을 찾을 수 있다.
 
-`protocol`은 메시지와 정책 스키마를 정의하고 JSON 검증, 직렬화, 버전 협상을 처리한다.
-`createClient`, `createCore`, `runBunApp`, Windows Win32, WebView2와 macOS AppKit, WKWebView
-호스트를 구현했다. Windows에서는 여러 창과 뷰별 정책 분리를 검증했다.
-macOS에서는 단일 창과 뷰에서 메모 저장, 완료 이벤트 수신, 화면 갱신을 확인했다.
-재실행 후 메모 복원과 렌더러 복구도 검증했다. 앱은 패키지에 포함된 Bun으로 실행한다.
-[Windows Bun FFI 실행 결과](./docs/architecture/windows-bun-results.md),
-[기존 Windows C 실행 결과](./docs/architecture/windows-host-results.md),
-[이전 B 실험 결과](./docs/architecture/windows-probe-results.md)와
-[macOS 검증 기록](./docs/architecture/macos-native-results.md),
-[진행 상태](./docs/architecture/progress.md)를 참고한다.
-[공통 API](./docs/architecture/common-api.md)는 SDK, 코어, Host API가 따르는 계약이다.
-CLI의 create/validate/doctor/dev/build와 vanilla 템플릿은 구현했다.
-[프레임워크 설치와 업그레이드 안내](./docs/framework-distribution.md)에는 저장소를 체크아웃하지 않고
-정확한 버전의 CLI와 SDK를 설치하는 방법이 있다. 공개 registry에는 아직 배포하지 않았고
-프레임워크 라이선스도 결정되지 않았다. 기본 로그와 저장 플러그인은 아직 구현하지 않았다.
-macOS Intel과 macOS 다중 창 및 뷰, Linux와 모바일 네이티브 호스트는 지원하지 않는다.
-설치와 배포 검증은 남아 있다. macOS 빌드는 `.app` 생성과 로컬 실행용 ad-hoc 서명을 지원하며
-배포용 Developer ID 서명과 공증, 설치 동작은 별도로 검증해야 한다.
-[플랫폼 지원 범위](./docs/platform-support/README.md)에서 환경과 제한을 확인한다.
-이전 런타임 C ABI는 동일 프로세스 설계의 기록으로 보존한다.
+현재 Windows x64와 macOS arm64에서 명령 호출과 이벤트 구독, 파일 저장을 사용할 수 있다.
+CLI는 vanilla와 Vite 템플릿으로 단일 창 앱을 생성한다.
+앱 실행에는 패키지에 포함된 Bun을 사용하므로 최종 사용자가 Bun을 설치할 필요는 없다.
+Windows 앱 실행에는 WebView2 런타임이 필요하다.
 
-## 시작하기
+공개 registry에는 아직 배포하지 않았다. 첫 앱은 [로컬 패키지 설치 안내](./docs/framework-distribution.md)를 따른다.
+프레임워크 라이선스는 아직 결정되지 않았다.
+플랫폼별 지원 상태와 배포 검증 범위는 [플랫폼 지원 범위](./docs/platform-support/README.md)에서 확인한다.
+
+## 프레임워크 개발 환경
 
 자기 앱을 만드는 개발자는 [로컬 tarball 설치 안내](./docs/framework-distribution.md)를
 따른다. 아래 mise 절차는 bunaway 프레임워크 자체를 개발하는 저장소 기여자용이다.

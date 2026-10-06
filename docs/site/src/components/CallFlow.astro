@@ -5,19 +5,19 @@ const steps = [
     label: "UI",
     title: "1. UI에서 요청",
     detail:
-      '웹 UI가 client.invoke("message.save", text)로 저장을 요청합니다. 이 요청은 네이티브 브리지를 거쳐 앱 백엔드로 전달됩니다.',
+      '웹 UI에서 client.invoke("message.save", text)를 호출합니다. text는 저장할 메시지이며 명령의 input 스키마에 맞는 문자열이어야 합니다.',
   },
   {
     label: "뷰 정책",
     title: "2. 뷰의 명령 권한 확인",
     detail:
-      "호스트가 실제 문서 출처와 활성 세션을 확인합니다. 뷰의 commands에 message.save가 있어야 하며 코어에서도 이 허용 목록을 검사합니다.",
+      "요청한 뷰의 commands에 message.save를 허용해야 합니다. 이름이 없으면 저장 명령은 PERMISSION_DENIED로 실패합니다.",
   },
   {
     label: "앱 명령",
     title: "3. 앱 백엔드에서 실행",
     detail:
-      "코어가 입력 스키마를 검사한 뒤 app.ts의 message.save 핸들러를 실행합니다. 요청에 묶인 context.host와 context.events를 사용합니다.",
+      "app.ts에 등록한 message.save 핸들러가 저장 작업을 수행합니다. 파일 작업에는 context.host를, 저장 알림에는 context.events를 사용합니다.",
   },
   {
     label: "Host API",

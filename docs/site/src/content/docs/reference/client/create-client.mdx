@@ -1,11 +1,11 @@
 ---
 title: createClient
-description: 클라이언트 생성, hello 협상, ready의 반환값과 연결 실패 동작.
+description: 클라이언트를 만들고 연결 준비 상태와 오류를 확인합니다.
 sidebar: { order: 1 }
 ---
 
 `@bunaway/client`의 `createClient()`는 세션 하나에 사용할 클라이언트를 즉시 반환합니다.
-생성 시 수신을 먼저 등록한 뒤 `hello`를 전송합니다.
+명령을 호출하거나 이벤트를 구독할 때 이 클라이언트를 사용합니다.
 
 ## 사용법
 
@@ -37,13 +37,12 @@ const negotiated = await client.ready;
 | `hello.features` | 예 | 원하는 feature 이름 배열. 필요 없으면 `[]` |
 | `hello.buildId` | 예 | 1–128자의 식별자. 영숫자, `_ . : -` 사용 |
 
-hello는 호출자가 위 필드를 모두 작성합니다. 자세한 형식은 [메시지 계약](/reference/protocol/)에 있습니다.
+hello는 예시처럼 위 필드를 모두 작성합니다.
 
 ## 반환값과 ready
 
 `Client`에는 `ready`, `invoke`, `listen`, `capabilities`, `close`가 있습니다.
 `ready`는 `{ protocol, features, buildId }`의 Promise이며 `buildId`는 상대 백엔드의 값입니다.
-major가 같으면 작은 쪽의 minor를 사용하고 공통 feature를 정렬해 반환합니다.
 
 `invoke()`와 `listen()`은 ready가 완료될 때까지 기다립니다.
 연결 상태를 UI에 표시하려면 예시처럼 `ready`를 직접 await하고 실패를 처리합니다.
@@ -52,7 +51,7 @@ major가 같으면 작은 쪽의 minor를 사용하고 공통 feature를 정렬�
 
 - major 불일치: `UNSUPPORTED`로 준비와 대기 요청이 실패합니다.
 - hello 준비 기한 10초 초과: `TIMEOUT`으로 연결을 종료합니다.
-- 잘못된 메시지, 방향, 협상 순서: 프로토콜 위반으로 클라이언트를 종료합니다.
+- 유효하지 않은 응답: 연결을 종료합니다.
 - 전송 종료: 대기 요청과 구독을 정리합니다.
 
 다시 연결하려면 새 전송과 클라이언트를 만듭니다. 이벤트를 구독하고 현재 상태를 다시 읽어 UI를 복원합니다.
@@ -61,5 +60,5 @@ major가 같으면 작은 쪽의 minor를 사용하고 공통 feature를 정렬�
 ## 타입
 
 `createClient<Commands, Events>()`로 명령의 입력과 출력 타입, 이벤트 payload 타입을 지정할 수 있습니다.
-예약 기능 조회 명령 타입은 프레임워크가 더합니다.
+기능 조회는 별도 명령 타입을 선언하지 않고 `client.capabilities()`를 사용합니다.
 [타입과 스키마](/guides/types-and-validation/)에서 실제 앱 정의와 연결하는 방법을 확인하세요.

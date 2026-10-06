@@ -22,12 +22,12 @@ await context.host.call("storage.writeText", {
 
 `scope`, `path`는 [storage.readText](/reference/host/storage-read-text/)와 같은 필수 경로 계약입니다.
 `text`는 필수 JSON 문자열이며 추가 필드는 허용하지 않습니다.
-Host 스키마는 text의 maxLength를 따로 정하지 않습니다. 전체 요청은 UTF-8 기준 1 MiB 이하여야 합니다.
+text에는 별도 글자 수 제한이 없지만 전체 요청은 UTF-8 기준 1 MiB 이하여야 합니다.
 앱 명령의 입력 스키마에 더 작은 상한을 정할 수 있으며 템플릿은 10,000자로 제한합니다.
 
 해당 출처의 storage grant에 `write`가 필요합니다.
 저장 명령을 `commands`에 허용한 뒤 파일 범위에도 write를 추가합니다. read만 있는 범위에서는 쓰기를 거부합니다.
-디렉터리, 파일의 실제 범위는 호스트가 작업 직전에 확인합니다.
+허용한 디렉터리와 파일 범위 안에서만 저장할 수 있습니다.
 
 ## 반환과 이벤트
 

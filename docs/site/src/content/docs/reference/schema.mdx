@@ -42,7 +42,7 @@ const input = {
 } as const;
 ```
 
-pattern은 플래그 없이 JavaScript 정규식의 test로 검사합니다. 전체 문자열을 검사하려면 `^`와 `$`로 시작과 끝을 지정하세요.
+pattern에는 플래그 없는 JavaScript 정규식을 문자열로 적습니다. 전체 문자열을 검사하려면 `^`와 `$`로 시작과 끝을 지정하세요.
 uniqueItems는 객체의 property 순서가 달라도 같은 값으로 비교합니다. 배열은 원소 순서까지 비교합니다.
 
 ## JSON 값 제한
@@ -50,7 +50,7 @@ uniqueItems는 객체의 property 순서가 달라도 같은 값으로 비교합
 전송할 수 있는 값은 JSON 값입니다. 함수와 undefined, bigint, symbol, Date 및 임의 클래스 인스턴스, 순환 참조, getter는 거부합니다.
 NaN, Infinity, 희소 배열과 단독 UTF-16 surrogate도 거부합니다.
 순환 참조가 없다면 같은 객체를 여러 위치에서 참조하는 구조도 복사할 수 있습니다. 이때도 크기와 깊이 제한은 적용됩니다.
-검증 결과는 원본과 분리된 스냅샷입니다. 복사 과정에서 getter를 실행하지 않습니다.
+검증 결과는 원본과 분리된 복사본입니다.
 
 ## validateValue와 Infer
 
@@ -60,9 +60,8 @@ type Input = Infer<typeof input>;
 const parsed: Input = validateValue(input, { name: "Kim" });
 ```
 
-validateValue는 JSON 값과 스키마를 검증한 뒤 추론한 타입의 스냅샷을 반환합니다.
-전송 크기는 메시지를 파싱하거나 직렬화할 때 별도로 검사합니다.
-`parseMessage`는 원문 JSON 크기를, `serializeMessage`는 실제 직렬화 크기를 검사합니다.
-스키마 위반은 ProtocolError입니다. 명령 래퍼는 입력 위반을 INVALID_ARGUMENT, 출력 위반을 INTERNAL로 바꿉니다.
+validateValue는 JSON 값과 스키마를 검증한 뒤 추론한 타입의 복사본을 반환합니다.
+스키마 위반은 ProtocolError입니다. 명령의 입력이 스키마와 다르면 INVALID_ARGUMENT, 출력이 다르면 INTERNAL로 실패합니다.
+명령과 이벤트의 데이터 크기 제한은 [오류와 실행 제한](/reference/errors/)에서 확인하세요.
 
 [타입 연결 가이드](/guides/types-and-validation/)에서 CommandsOf, EventsOf 사용 예시를 확인하세요.

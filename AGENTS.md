@@ -33,6 +33,15 @@ long chains of nouns and repetitive cautions such as asking readers not to assum
 support. State current limits once where they affect the task, and preserve API
 names, examples, values and technical meaning when editing prose.
 
+Keep app-development documentation focused on tasks, public API usage, inputs,
+results, required permissions, errors and lifecycle behavior the app must handle.
+Do not narrate SDK internals, message forwarding, worker layout, internal IDs or
+validation-layer sequences in these pages. Explain required configuration names
+where users must write them, without describing their implementation. Put
+protocol, runtime and adapter implementation details in the framework-contribution
+section or architecture documents, and keep them out of the main app-development
+navigation.
+
 ### Development priority
 
 Read `docs/decisions/0010-windows-first-platform-model.md` before runtime, CLI,

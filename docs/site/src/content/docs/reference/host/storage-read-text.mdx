@@ -30,7 +30,7 @@ scope는 호스트가 정한 저장 영역을 선택합니다.
 
 호출 출처에 해당하는 `host.storage` 또는 `backend.storage`에 같은 scope와 pathPrefix의 `read`가 필요합니다.
 `messages` 접두사는 `messages/` 디렉터리와 그 아래를 허용합니다. 이름이 다른 `messages-old/`는 범위 밖입니다.
-입력을 스키마로 검사한 뒤 파일 작업 직전에 실제 경로와 핸들, 저장 권한을 검사합니다.
+허용 범위를 벗어나는 경로나 링크는 접근할 수 없습니다.
 
 ## 결과와 오류
 

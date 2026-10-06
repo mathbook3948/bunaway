@@ -16,10 +16,8 @@ interface WebViewBridge {
 }
 ```
 
-어댑터는 보내는 JSON 문자열을 객체로 변환해 `postMessage`하고
-들어오는 `event.data`를 JSON 문자열로 바꿔 SDK에 전달합니다.
-종료하면 브리지 리스너를 제거하고 전송 구독자에게 closed를 알립니다.
-닫힌 전송으로 보내면 실패합니다. 권한은 호스트가 원래 요청의 정책으로 검사합니다.
+네이티브 WebView가 제공하는 `window.chrome.webview`를 전달하고, 반환값을 createClient의 transport로 사용합니다.
+클라이언트 사용 예시는 [createClient](/reference/client/create-client/)에서 확인하세요.
 
 ## 사용자 정의 Transport
 
@@ -34,7 +32,5 @@ interface WebViewBridge {
 이벤트는 `{ kind: "message", text }` 또는 `{ kind: "closed", error? }`입니다.
 `subscribe`는 첫 send 전에 등록할 수 있어야 하며, 이미 닫힌 전송에 나중에 등록해도 closed를 관찰해야 합니다.
 
-SDK는 프로토콜을 검증하고 응답을 요청에 연결합니다. 기한과 구독도 관리합니다.
-어댑터는 송신 순서를 유지하고 종료를 알린 뒤 전송 자원을 회수합니다. send의 완료는 큐 접수까지이며 명령의 실행 결과는 invoke가 반환합니다.
-새 전송 경로를 만들어도 신뢰된 호스트의 실제 출처, 세션, 권한 검사를 유지해야 합니다.
-권한은 프런트엔드가 보낸 문자열 대신 호스트가 발급한 `HostContext`로 검사합니다.
+send는 명령의 실행 결과를 반환하지 않습니다. 앱 명령의 결과는 client.invoke로 받습니다.
+전송을 직접 구현할 때의 메시지 형식은 [프로토콜 레퍼런스](/reference/protocol/)를 참고하세요.

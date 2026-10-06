@@ -23,20 +23,20 @@ sidebar: { order: 6 }
 
 ## 초기화와 실패
 
-코어는 의존 플러그인을 먼저 초기화합니다.
+dependencies에 지정한 플러그인을 먼저 초기화합니다.
 중복 플러그인 이름, 없는 의존성, 의존 순환은 `INVALID_ARGUMENT`입니다.
 미지원 플랫폼은 `UNSUPPORTED`, backend Host 권한 요구 미충족은 `PERMISSION_DENIED`로 시작이 실패합니다.
 등록 명령, 이벤트 이름은 앱과 다른 플러그인 사이에서도 중복, 예약 이름 검사를 받습니다.
 
-`requiredHost`에 필요한 권한을 적으면 코어가 `policy.backend`에 그 권한이 있는지 검사합니다.
+`requiredHost`에 적은 권한이 `policy.backend`에도 있어야 앱을 시작할 수 있습니다.
 같은 범위의 여러 storage grant로 read/write를 충족할 수 있습니다. 각 grant의 scope와 경로 안에서만 허용합니다.
 setup에는 `policy.backend`의 권한을 사용하는 컨텍스트를 전달합니다.
 
 ## 종료
 
 setup이 반환한 함수가 StopHook입니다. 앱 종료와 초기화 실패에서 이미 초기화된 훅을 역순으로 실행합니다.
-코어의 종료 기한은 2초이며 훅이 끝나지 않으면 `TIMEOUT`입니다.
+정리 작업은 종료 기한인 2초 안에 끝나야 합니다. 기한을 넘기면 `TIMEOUT`이 발생합니다.
 플러그인이 연 연결과 타이머 등은 StopHook에서 정리합니다.
 
 [플러그인 작성 가이드](/guides/plugins/)에 최소 예시와 정책 변경 방법이 있습니다.
-기본 log/storage 플러그인 패키지는 아직 빈 모듈입니다. 로그와 파일 작업은 구현된 Host API를 사용합니다.
+기본 로그와 저장 플러그인은 아직 제공하지 않습니다. 로그와 파일 작업은 Host API를 사용합니다.

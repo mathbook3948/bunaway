@@ -21,14 +21,13 @@ bunaway create <new-directory> [--template vanilla|vite] [--package-dir <tarball
 
 ## 생성 동작
 
-임시 작업 디렉터리에 템플릿을 복사한 뒤 대상 폴더로 이동합니다.
-실패하면 작업 디렉터리를 정리합니다. 기존 폴더는 덮어쓰지 않습니다.
+지정한 새 폴더에 앱을 생성합니다. 기존 폴더는 덮어쓰지 않습니다.
 앱 ID는 디렉터리 이름을 정규화한 `app.<slug>`, 창 제목은 디렉터리 이름입니다.
 `bunaway.json`, `policy.json`, 공통 `app.ts`와 UI가 생성됩니다.
 
 vanilla 템플릿에는 정적 UI와 네이티브 dev/build 스크립트가 있습니다.
 vite 템플릿에는 웹 dev/build/preview 스크립트와 `bunaway` CLI 스크립트가 있습니다.
-`--package-dir`는 같은 릴리스 버전의 각 tarball을 실제 경로로 확인합니다.
+`--package-dir`에는 같은 릴리스 버전의 tarball 묶음이 있는 경로를 지정합니다.
 생략하면 의존성에 정확한 registry 버전을 기록합니다. 해당 버전은 현재 공개 registry에서 설치할 수 없습니다.
 
 생성이 끝나면 출력된 안내에 따라 `bun install`로 의존성을 설치하고 앱을 검증한 뒤 실행하세요.

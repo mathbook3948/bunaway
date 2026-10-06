@@ -8,11 +8,11 @@ sidebar: { order: 4 }
 client.capabilities(): Promise<Capabilities>
 ```
 
-내부적으로 예약 명령 `bunaway.capabilities`에 `null`을 보내 플랫폼 기능 정보를 조회합니다.
+현재 플랫폼에서 사용할 수 있는 기능과 OS 권한 상태를 반환합니다.
 
 ## 정책과 사용법
 
-호출할 뷰의 기존 `commands` 배열에 이름을 추가합니다. 기본 메시지 템플릿에는 들어 있지 않습니다.
+호출할 뷰의 `commands` 배열에 `bunaway.capabilities`를 허용해야 합니다. 기본 메시지 템플릿에는 이 권한이 없으므로 다음처럼 추가합니다.
 
 ```json
 { "commands": ["message.read", "message.save", "bunaway.capabilities"] }
@@ -31,7 +31,6 @@ console.log(read?.support, read?.permission);
 `name`, `support`, `permission`, 선택적 `reason`을 가진 배열입니다.
 `support`는 `supported`, `experimental`, `unsupported` 중 하나입니다.
 `permission`은 `granted`, `denied`, `prompt`, `not-required`, `unknown` 중 하나입니다.
-최대 256개이고 같은 기능 이름의 중복 응답은 유효하지 않습니다.
 
 ## 의미와 실패
 

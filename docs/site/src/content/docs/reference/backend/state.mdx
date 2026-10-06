@@ -12,7 +12,7 @@ sidebar: { order: 4 }
 
 | 메서드 | 반환값 | 동작 |
 | --- | --- | --- |
-| `get(key: string)` | `JsonValue \| undefined` | 저장 값의 분리된 스냅샷. 없는 키는 undefined |
+| `get(key: string)` | `JsonValue \| undefined` | 저장 값의 복사본. 없는 키는 undefined |
 | `set(key: string, value: JsonValue)` | `void` | JSON 값을 검증, 복사해 저장 |
 | `delete(key: string)` | `boolean` | 제거. 이전에 존재했다면 true |
 
@@ -22,7 +22,7 @@ const draft = context.state.get("draft");
 const removed = context.state.delete("draft");
 ```
 
-## 스냅샷
+## 저장 값 바꾸기
 
 get은 저장 값의 복사본을 반환하고 set은 전달한 값을 복사해 보관합니다.
 원래 객체나 반환 객체를 수정해도 저장 값은 그대로입니다. 변경할 때는 set을 호출합니다.

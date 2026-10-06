@@ -10,12 +10,12 @@ bunaway는 **Windows를 먼저 완성하고 다른 플랫폼을 같은 Bun 기�
 
 | 구분 | Windows x64 | macOS arm64 | Linux, 모바일 |
 | --- | --- | --- | --- |
-| 네이티브 호스트 | Bun 메인 + FFI UI Worker + WebView2 | AppKit, WKWebView + 별도 Bun 자식 | 미구현 |
+| 앱 화면 | WebView2 | WKWebView | 미지원 |
 | CLI 앱 생성, 개발, 빌드 | 단일 창과 뷰 | 단일 창과 뷰 | 네이티브 실행 미지원 |
 | 런타임 여러 창과 뷰 | 구현, 세 창 실행 검증 기록 | 미구현 | 미구현 |
-| 명령, 이벤트, 저장 | 실행 검증 기록 | 실행 검증 기록 | 공통 계약과 네이티브 검증은 별개 |
+| 명령, 이벤트, 저장 | 지원 | 지원 | 네이티브 실행 미지원 |
 
-`policy.json.views`는 여러 뷰의 정책을 담고 공통 코어는 여러 세션을 처리합니다.
+`policy.json.views`에 뷰별로 호출할 명령과 받을 이벤트, 저장 범위를 적습니다.
 현재 CLI의 앱 설정은 창과 뷰 하나를 지원합니다.
 [창과 뷰의 정책](/concepts/views-and-policy/)을 함께 읽으세요.
 
@@ -34,7 +34,7 @@ bunaway는 **Windows를 먼저 완성하고 다른 플랫폼을 같은 Bun 기�
 ## 플랫폼에서 검증한 동작
 
 Windows의 실제 GUI 검증에는 명령, 이벤트, 파일 권한, 다중 창, 복구, 종료가 포함됩니다.
-macOS arm64에는 probe, 실제 WKWebView 단일 창 검증 기록이 있습니다.
+macOS arm64에서는 단일 창에서 명령과 이벤트, 파일 저장 및 재실행 후 복원을 검증했습니다.
 배포 서명과 설치, 스토어 제출은 아직 검증이 남아 있습니다.
 
 macOS Intel과 macOS 다중 창, Linux, Android, iOS 호스트는 현재 지원하지 않습니다.
