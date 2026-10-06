@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { CODES, type StageContext } from "../../contract.ts";
 import { findWindowsKitTool, must } from "./common.ts";
 
@@ -22,7 +23,7 @@ export function signingArgs(ctx: StageContext): string[] {
     signing.timestampUrl ?? DEFAULT_TIMESTAMP_URL,
   ];
   if (signing.certificateFile) {
-    args.push("/f", signing.certificateFile);
+    args.push("/f", resolve(ctx.input.metadata.root, signing.certificateFile));
     if (signing.passwordEnv) {
       const password = process.env[signing.passwordEnv];
       if (!password) {

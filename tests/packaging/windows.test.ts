@@ -9,6 +9,7 @@ import {
   renderInnoScript,
 } from "../../packages/packaging/src/channels/windows/inno.ts";
 import { renderAppxManifest } from "../../packages/packaging/src/channels/windows/msix.ts";
+import { signingArgs } from "../../packages/packaging/src/channels/windows/sign.ts";
 import {
   type AdapterInput,
   type AdapterStage,
@@ -24,7 +25,7 @@ const metadata: ResolvedPackaging = {
   name: "Test App",
   identifier: "com.example.app",
   publisher: { display: "Example", identity: "CN=Example" },
-  version: { semver: "1.2.3", build: 4, msix: "1.2.3.4" },
+  version: { semver: "1.2.3", build: 0, msix: "1.2.3.0" },
   icons: {},
   targets: [{ platform: "windows", arch: "x64" }],
 };
@@ -145,6 +146,16 @@ test("win-store-msix requires publisher.identity and MSIX icons up front", () =>
   };
   const stages = adapter.stages(msixInput({}, fullIcons));
   expect(runIds(stages)).toEqual(["stage", "assemble", "sign", "verify-artifact"]);
+  expect(() =>
+    adapter.stages(
+      msixInput(
+        {
+          version: { semver: "1.2.3", build: 4, msix: "1.2.3.4" },
+        },
+        fullIcons,
+      ),
+    ),
+  ).toThrow(/release.build=0/);
 });
 
 test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data policy", () => {
@@ -163,7 +174,9 @@ test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data pol
     preserveUserData: true,
   };
   const perUser = renderInnoScript({ ...base, scope: "perUser" });
-  expect(perUser).toContain("DefaultDirName={localappdata}\\Programs\\Test App");
+  expect(perUser).toContain("DefaultDirName={localappdata}\\Programs\\com.example.app");
+  expect(perUser).toContain("DefaultGroupName=com.example.app");
+  expect(perUser).toContain("{autodesktop}\\Test App (com.example.app)");
   expect(perUser).toContain("PrivilegesRequired=lowest");
   expect(perUser).toContain('Name: "desktopicon"');
   expect(perUser).toContain("{group}\\Test App");
@@ -183,7 +196,7 @@ test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data pol
     webView2: "bootstrap",
     signed: true,
   });
-  expect(perMachine).toContain("DefaultDirName={autopf}\\Test App");
+  expect(perMachine).toContain("DefaultDirName={autopf}\\com.example.app");
   expect(perMachine).toContain("PrivilegesRequired=admin");
   expect(perMachine).toContain(
     'Type: filesandordirs; Name: "{localappdata}\\bunaway\\com.example.app"',
@@ -196,20 +209,30 @@ test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data pol
   const escaped = renderInnoScript({ ...base, scope: "perUser", name: 'My "App" {Beta}' });
   expect(escaped).toContain('AppName=My "App" {{Beta}');
   expect(escaped).toContain('Description: "Launch My ""App"" {{Beta}"');
-  expect(escaped).toContain("DefaultDirName={localappdata}\\Programs\\My _App_ {{Beta}");
+  expect(escaped).toContain("DefaultDirName={localappdata}\\Programs\\com.example.app");
+  expect(escaped).toContain("{autodesktop}\\My _App_ {{Beta} (com.example.app)");
+  for (const scope of ["perUser", "perMachine"] as const) {
+    const first = renderInnoScript({ ...base, scope });
+    const second = renderInnoScript({ ...base, scope, identifier: "com.other.app" });
+    for (const directive of ["DefaultDirName", "DefaultGroupName", "AppId"]) {
+      const pattern = new RegExp(`^${directive}=.*$`, "m");
+      expect(first.match(pattern)?.[0]).not.toBe(second.match(pattern)?.[0]);
+    }
+    expect(second).toContain("{autodesktop}\\Test App (com.other.app)");
+  }
   expect(() => renderInnoScript({ ...base, scope: "perUser", name: "App\n[Run]" })).toThrow(
     /line breaks/,
   );
 });
 
 test("AppxManifest declares full trust, virtualization opt-out and icon resources", () => {
-  const xml = renderAppxManifest({
+  const manifestOptions = {
     packageName: "Example.TestApp",
     appId: "com.example.app",
     name: "Test App",
     publisherDisplay: "Example",
     publisherIdentity: "CN=Example",
-    version: "1.2.3.4",
+    version: "1.2.3.0",
     minVersion: "10.0.17763.0",
     unvirtualizedData: true,
     capabilities: [],
@@ -220,10 +243,11 @@ test("AppxManifest declares full trust, virtualization opt-out and icon resource
       storeLogo: "StoreLogo.png",
       wide: "Wide310x150Logo.png",
     },
-  });
+  };
+  const xml = renderAppxManifest(manifestOptions);
   expect(xml).toContain('Name="Example.TestApp"');
   expect(xml).toContain('Publisher="CN=Example"');
-  expect(xml).toContain('Version="1.2.3.4"');
+  expect(xml).toContain('Version="1.2.3.0"');
   expect(xml).toContain('Executable="bunaway-host.exe"');
   expect(xml).toContain('EntryPoint="Windows.FullTrustApplication"');
   expect(xml).toContain('Name="runFullTrust"');
@@ -241,10 +265,15 @@ test("AppxManifest declares full trust, virtualization opt-out and icon resource
     name: "Test App",
     publisherDisplay: "Example",
     publisherIdentity: "CN=Example",
-    version: "1.2.3.4",
+    version: "1.2.3.0",
     minVersion: "10.0.17763.0",
     unvirtualizedData: false,
-    capabilities: ["privateNetworkClientServer"],
+    capabilities: [
+      "internetClient",
+      "privateNetworkClientServer",
+      "picturesLibrary",
+      "broadFileSystemAccess",
+    ],
     executable: "bunaway-host.exe",
     logo: {
       square44: "Square44x44Logo.png",
@@ -254,7 +283,36 @@ test("AppxManifest declares full trust, virtualization opt-out and icon resource
   });
   expect(virtualized).not.toContain("unvirtualizedResources");
   expect(virtualized).not.toContain("ExcludedDirectories");
-  expect(virtualized).toContain("privateNetworkClientServer");
+  expect(virtualized).toContain('<Capability Name="internetClient"/>');
+  expect(virtualized).toContain('<Capability Name="privateNetworkClientServer"/>');
+  expect(virtualized).toContain('<uap:Capability Name="picturesLibrary"/>');
+  expect(virtualized).toContain('<rescap:Capability Name="broadFileSystemAccess"/>');
+  expect(virtualized).not.toContain('<rescap:Capability Name="privateNetworkClientServer"');
+  for (const version of [
+    "1.2.3.4",
+    "0.1.0.0",
+    "65536.0.0.0",
+    "1.65536.0.0",
+    "1.0.65536.0",
+    "1.2.3",
+    "1.2.3.0\n",
+  ]) {
+    expect(() => renderAppxManifest({ ...manifestOptions, version })).toThrow(/win-store-msix/);
+  }
+});
+
+test("Windows signing resolves certificates from the project root, independent of cwd", () => {
+  const root = resolve(tmpdir(), "bunaway-certificate-project");
+  for (const certificateFile of ["certs/developer.pfx", resolve(tmpdir(), "external.pfx")]) {
+    const ctx: StageContext = {
+      input: { ...input({}, { certificateFile }), metadata: { ...metadata, root } },
+      staging: "unused",
+      report() {},
+      addArtifact() {},
+    };
+    const args = signingArgs(ctx);
+    expect(args[args.indexOf("/f") + 1]).toBe(resolve(root, certificateFile));
+  }
 });
 
 test("payload staging refuses internal junctions before signing can mutate the build", async () => {
@@ -315,6 +373,9 @@ test.each(["success", "sign", "verify"])("Inno signing callback: %s", async (fai
     expect(await readFile(callback, "utf8")).not.toContain(password);
     expect(signing.args.join(" ")).not.toContain(password);
     expect(JSON.parse(signing.env.BUNAWAY_INNO_SIGN_COMMANDS)[0]).toContain(password);
+    expect(JSON.parse(signing.env.BUNAWAY_INNO_SIGN_COMMANDS)[0]).toContain(
+      resolve(ctx.input.metadata.root, "developer.pfx"),
+    );
     const trace = join(root, "trace.txt");
     const tool = join(root, "fake-signtool.js");
     await writeFile(

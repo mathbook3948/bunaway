@@ -32,8 +32,10 @@ Bun의 최종 해시는 `packagedSha256`이며, 없으면 네이티브 호스트
 
 Inno Setup 스크립트를 생성·컴파일한다. 채널 설정:
 
-- `scope`: `perUser`(기본, `%LOCALAPPDATA%\Programs\<name>`, 관리자 불필요)
+- `scope`: `perUser`(기본, `%LOCALAPPDATA%\Programs\<identifier>`, 관리자 불필요)
   또는 `perMachine`(`{autopf}`, 관리자 필요).
+  새 설치 폴더와 시작 메뉴 그룹은 identifier로 구분하며, 기존 설치의 업데이트는
+  이전에 선택한 폴더를 유지한다. 바탕화면 바로가기에도 identifier를 붙인다.
 - `webView2`: `bootstrap`(기본 — 설치 시 런타임이 없으면 Microsoft 공식
   Evergreen 부트스트랩을 무인 실행) 또는 `check`(감지만).
 - `desktopShortcut`(기본 false), `startMenuShortcut`(기본 true).
@@ -52,6 +54,10 @@ WebView2는 레지스트리 `Clients\{F3017226-...}\pv`의 버전이 `0.0.0.0`�
 storeLogo`가 필수다. 서명은 **실행에 필수**다(`required-to-run`): 서명 없이는
 패키지를 설치할 수 없다. 테스트 인증서는 사용자/머신의 `TrustedPeople` 등에
 설치되어 있어야 한다.
+
+Store용 버전은 major가 1 이상이고 `release.build`가 0이어야 한다.
+`capabilities`의 일반 기능과 UAP 기능은 각각 기본·`uap` namespace로,
+나머지 제한 기능은 `rescap` namespace로 출력한다.
 
 - `unvirtualizedData`(기본 true): `FileSystemWriteVirtualization`을 끄고
   `%LOCALAPPDATA%\bunaway\<appId>`를 제외 디렉터리로 선언해 쓰기 가상화와
@@ -75,3 +81,6 @@ MSIX와 **다른 업데이트 계약**을 따른다. Store 요구사항에 맞�
 
 검증 범위: 패키지 생성·서명·사일런트 설치/제거까지 검증했다. Partner Center
 제출·프로덕션 인증서·MSIX 인앱 실행은 이 환경에서 검증하지 않았다.
+
+Windows의 `signing.certificateFile` 상대 경로는 프로젝트 루트를 기준으로 해석한다.
+절대 경로는 그대로 사용한다.

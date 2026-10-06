@@ -26,6 +26,33 @@ const DEFAULT_MIN_VERSION = "10.0.17763.0";
 // this tooling was verified on. Channels override via maxVersionTested.
 const DEFAULT_MAX_TESTED = "10.0.26100.0";
 
+// Names defined by the foundation and UAP schemas; other capabilities retain
+// the restricted namespace used by this adapter.
+const GENERAL_CAPABILITIES = new Set([
+  "internetClient",
+  "internetClientServer",
+  "privateNetworkClientServer",
+  "allJoyn",
+  "codeGeneration",
+]);
+const UAP_CAPABILITIES = new Set([
+  "documentsLibrary",
+  "picturesLibrary",
+  "videosLibrary",
+  "musicLibrary",
+  "enterpriseAuthentication",
+  "sharedUserCertificates",
+  "userAccountInformation",
+  "removableStorage",
+  "appointments",
+  "contacts",
+  "phoneCall",
+  "blockedChatMessages",
+  "objects3D",
+  "voipCall",
+  "chat",
+]);
+
 interface MsixOptions {
   packageName: string;
   appId: string;
@@ -51,6 +78,15 @@ function escapeXml(value: string): string {
 }
 
 export function renderAppxManifest(options: MsixOptions): string {
+  if (
+    options.version.trim() !== options.version ||
+    !/^[1-9]\d*\.\d+\.\d+\.0$/.test(options.version) ||
+    options.version.split(".").some((part) => Number(part) > 65535)
+  ) {
+    throw new Error(
+      "win-store-msix requires a four-part version with major 1..65535 and release.build=0 (the fourth part is reserved for the Store).",
+    );
+  }
   // Virtualization opt-outs live under <Properties>: the desktop6 element
   // disables all AppData write virtualization on older OSes, and the Win11+
   // virtualization element lists targeted exclusions (takes precedence there).
@@ -67,7 +103,14 @@ export function renderAppxManifest(options: MsixOptions): string {
   const capabilities = [
     '<rescap:Capability Name="runFullTrust"/>',
     ...(options.unvirtualizedData ? ['<rescap:Capability Name="unvirtualizedResources"/>'] : []),
-    ...options.capabilities.map((cap) => `<rescap:Capability Name="${escapeXml(cap)}"/>`),
+    ...options.capabilities.map((cap) => {
+      const prefix = GENERAL_CAPABILITIES.has(cap)
+        ? ""
+        : UAP_CAPABILITIES.has(cap)
+          ? "uap:"
+          : "rescap:";
+      return `<${prefix}Capability Name="${escapeXml(cap)}"/>`;
+    }),
   ];
   return `<?xml version="1.0" encoding="utf-8"?>
 <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
