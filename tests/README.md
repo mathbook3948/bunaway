@@ -12,23 +12,11 @@
 코어·SDK 테스트와 `runtime-bun.test.ts`의 실제 Bun 프로세스 IPC 테스트를 포함한다.
 런타임 테스트는 플러그인 초기화 중 Host API, 응답 컨텍스트, 취소·폐기·늦은 응답,
 새 세션, 종료 훅·EOF와 부팅 전/초기화 중 종료를 확인한다.
-`mise run host:windows`는 실제 Windows WebView2에서 SDK 명령·이벤트·권한·저장,
-메모 버튼 저장·화면 갱신·재실행 후 복원, 렌더러 강제 종료 뒤 뷰 재생성과 Bun 정리를
-검증한다. [메모 샘플](../examples/memo/README.md)은 별도 패키지로 실행할 수 있다.
-실제 실행 기록은 [Windows C 결과](../docs/architecture/windows-host-results.md)에 있으며,
-단일 창/뷰에 한정한다. 테스트 디렉터리 목록은 다른 플랫폼·모바일 수명주기의 검증 완료를 뜻하지 않는다.
-`mise run probe:windows`는 별도로 Windows 네이티브 패키지를 빌드하고 실제 Bun 프로세스
-IPC·정상/강제 종료 통합 검증 50개를 실행한다. TypeScript와 C++에 같은 입력 59개를
-넣는 검증기 회귀 테스트, 출력 소비 중단·살아 있는 Bun의 stdout EOF·Unicode 오류도 포함한다.
-단독 surrogate는 값·객체 키에서 송신 전에 거부하고 정상 이모지는 IPC로 왕복한다.
-U+2028·U+2029 경로 순회 우회와 `required` 생략 시 선택 속성의 타입 추론도 검사한다.
-`anyOf`의 공통 필수 필드·분기 타입과 정책·bootstrap·boot 프레임의 중복 view ID 거부도 검사한다.
-폐기 뒤에 listen 성공 응답을 보내는 테스트 백엔드로 구독 복원·이벤트 전달을 차단하는지 검사한다.
-빈 객체와 배열 스키마의 입력·출력 형태는 컴파일 오류 검증과 실제 명령 실행으로 확인한다.
-출력 정체 중 추가 요청·폐기 후 shutdown, 종료 무시, 출력 재개 순서와 큐 초과 정리도 검사한다.
-`type` 없는 바깥 객체 제약·`required` 단독 선언과 유효한 비객체 분기도 타입·실행 검사에 포함한다.
-`1e-7` 숫자 배열의 경계 크기 요청·백엔드 생성 응답을 중계한 뒤 추가 호출과 정상 종료까지 확인한다.
-`1e20` 50,000개의 수신 원문 크기와 송신 직렬화 크기를 구분하고 값 검증은 유지하는지 검사한다.
-초과 echo 결과 129회가 요청별 오류로 끝나며 송신 큐를 소모하지 않고 후속 호출·정상 종료도 통과한다.
-실행 직후 EOF·shutdown을 각각 5회 보내 시작 중 취소가 정상 종료로 처리되는지 확인한다.
-`backend-startup.test.ts`는 boot 이전·이후 종료를 직접 검사하고 준비 전에도 버전·세대 검증이 유지되는지 확인한다.
+`mise run host:windows`는 C++ 컴파일 없이 Bun UI Worker의 실제 WebView2·SDK·권한·
+다중 창·저장·메모 복원·렌더러 복구·정상/비정상 종료를 검증한다.
+모달 중 메인의 타이머·Promise·네트워크와 초기화 중 닫기·생성 실패·파일 핸들 경계,
+이동한 독립 CLI 프로젝트도 포함한다. [실행 결과](../docs/architecture/windows-bun-results.md).
+공통 앱·화면 데이터는 `tests/fixtures/desktop/host/`에서 Windows/macOS가 공유한다.
+예전 Windows C++ 호스트/probe와 전용 실행기·테스트는 삭제했다.
+`backend-startup.test.ts`는 macOS 프로세스 probe 백엔드로 boot 전후 종료와 버전·세대 검증을 확인한다.
+다른 플랫폼·모바일 수명주기의 검증 완료를 뜻하지 않는다.

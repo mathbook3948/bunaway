@@ -8,6 +8,7 @@ export interface Project {
   root: string;
   backend: string;
   frontend: string;
+  windowsApp?: string;
   app: {
     appId: string;
     title: string;
@@ -39,14 +40,20 @@ function string(value: unknown): string {
 export async function validateProject(directory: string): Promise<Project> {
   const root = await realpath(resolve(directory));
   const config = record(await json(resolve(root, "bunaway.json")));
-  keys(config, ["version", "backend", "frontend"]);
+  keys(config, ["version", "backend", "frontend", "windowsApp"]);
   if (config.version !== 1) throw new Error("Unsupported bunaway.json version.");
   const backend = await projectPath(root, string(config.backend));
   const frontend = await projectPath(root, string(config.frontend));
+  const windowsApp =
+    config.windowsApp === undefined
+      ? undefined
+      : await projectPath(root, string(config.windowsApp));
   if (!(await lstat(backend)).isFile() || !(await lstat(frontend)).isDirectory()) {
     throw new Error("backend must be a file; frontend must be a directory.");
   }
-  await validateFramework(root, [backend, frontend]);
+  if (windowsApp && !(await lstat(windowsApp)).isFile())
+    throw new Error("windowsApp must be a file.");
+  await validateFramework(root, [backend, frontend, ...(windowsApp ? [windowsApp] : [])]);
   const raw = record(await json(resolve(root, "app.json")));
   keys(raw, ["appId", "title", "view", "home", "window"]);
   const appId = string(raw.appId);
@@ -80,6 +87,7 @@ export async function validateProject(directory: string): Promise<Project> {
   return {
     root,
     backend,
+    ...(windowsApp ? { windowsApp } : {}),
     frontend,
     policy,
     app: {

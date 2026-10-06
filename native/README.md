@@ -1,20 +1,18 @@
 # Native hosts
 
 - `host-api/`: 호스트 호출·렌더러·생성된 정책의 네이티브 경계와 이전 C ABI 기록.
-- `windows/`: Win32·WebView2 제품 호스트와 WebView 없는 실험 호스트 구현.
+- `windows/`: Bun 직접 FFI Win32·WebView2 제품 호스트와 최소 FFI 실험.
 - `macos/`: AppKit·WKWebView 단일 창/뷰 제품 호스트와 POSIX probe 구현(arm64).
 - `linux/`: GTK·WebKitGTK 호스트 예정 영역, 미구현.
 - `android/`: Kotlin 수명주기·WebView 예정 영역, 미구현. Bun 실행·배포 경로 미검증.
 - `ios/`: Swift 수명주기·WKWebView 예정 영역, 미구현. Bun 실행·배포 경로 미검증.
 
-Windows 호스트는 앱에 번들된 Bun을 자식 프로세스로 실행하고 전용 파이프로 통신한다.
-`host-api/bunaway.h`와 [ABI 문서](../docs/architecture/native-abi.md)는 이전 동일 프로세스
-설계의 기록이며 현행 런타임 연결에 사용하지 않는다. `host-api/generated/`의 공통
-IPC·정책 JSON Schema는 계속 사용한다. `windows/probe/`에 WebView 없는 C++ 실험 호스트와
-생성 스키마를 읽는 네이티브 검증기, Bun 백엔드와 빌드 스크립트를 구현했다.
-[Windows B 결과](../docs/architecture/windows-probe-results.md)는 실험 호스트 기록이다.
-`windows/host/`는 실제 SDK·코어·Host API를 연결한 제품 호스트다. origin·frame·세션·
-정책·저장 범위와 메모 앱을 [Windows 다중 창/뷰에서 검증](../docs/architecture/windows-host-results.md)했다.
+Windows는 번들 Bun이 진입점이고 같은 프로세스의 UI Worker가 직접 FFI로 Win32·
+WebView2를 소유한다. `windows/bun/`에서 실제 SDK·코어·Host API·정책·파일 경계·다중 창을
+[검증](../docs/architecture/windows-bun-results.md)한다. 기존 Windows C++ 호스트·probe·CMake와
+전용 실행기는 삭제했다. 공용 데이터는 `tests/fixtures/desktop/host/`에 있다.
+`windows/ffi-probe/`는 직접 FFI 최소 실험이며 제품 진입점이 아니다.
+`host-api/generated/`의 공통 IPC·정책 JSON Schema는 macOS 등 프로세스 플랫폼이 사용한다.
 macOS는 [별도 단일 창/뷰 검증](../docs/architecture/macos-native-results.md)과 native CI를 갖는다.
 공유 Bun 캐시 초기화 때문에 macOS probe→host는 직렬 실행한다. `.app` 생성·ad-hoc 서명은
 Developer ID·공증·설치 검증이 아니다. [플랫폼 지원 범위](../docs/platform-support/README.md)를 따른다.

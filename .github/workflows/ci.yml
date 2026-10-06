@@ -52,9 +52,7 @@ jobs:
         uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
       - name: Install locked dependencies
         run: mise run install
-      - name: Build and test bundled-process probe
-        run: mise run probe:windows
-      - name: Build and test WebView2 host
+      - name: Build and test Bun FFI WebView2 host
         run: mise run host:windows
       - name: Collect host diagnostics
         if: always()

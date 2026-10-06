@@ -12,6 +12,7 @@
 - [번들 Bun 실행 방식과 실험 범위](./architecture/runtime-feasibility.md)
 - [Windows B 실행 결과](./architecture/windows-probe-results.md)
 - [Windows C 호스트·SDK·코어·메모 실행 결과](./architecture/windows-host-results.md)
+- [Windows Bun FFI 제품 실행 결과·제약](./architecture/windows-bun-results.md)
 - [macOS probe·WKWebView 회귀 검증: 기존/새 실행 기록](./architecture/macos-native-results.md)
 - [플랫폼 지원·CPU·CI와 출시 검증 범위](./platform-support/README.md)
 - [Windows 메모 샘플 실행 방법](../examples/memo/README.md)
@@ -25,8 +26,10 @@
 - [0003 — 단일 스키마와 분리된 프로토콜](./decisions/0003-shared-schema-separate-protocols.md)
 - [0004 — Windows 창/뷰별 정책과 수명 분리](./decisions/0004-multi-window-per-view-policy.md)
 - [0005 — 설치 artifact와 생성 앱의 vendor snapshot](./decisions/0005-framework-artifact.md)
+- [0006 — Windows Bun 진입점·UI Worker·직접 FFI](./decisions/0006-windows-bun-ui-worker.md)
 
-[이전 C ABI 초안](./architecture/native-abi.md)은 동일 프로세스 설계 당시의 기록이다. 현재 구현 기준은 프로세스 IPC 계약이다.
+[이전 C ABI 초안](./architecture/native-abi.md)은 과거 설계 기록이다. 현재 Windows는 Worker 연결,
+macOS는 프로세스 IPC 계약을 사용한다.
 
 ## 에이전트 작업 규칙
 

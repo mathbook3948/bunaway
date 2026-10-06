@@ -4,9 +4,6 @@
     "archiveUrl": "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/1.0.4129.50/microsoft.web.webview2.1.0.4129.50.nupkg",
     "archiveSha256": "d3934f482d484b89fb4825df720c710664e1143a1e90f7b3a60794ef33f473d2",
     "files": {
-      "build/native/include/WebView2.h": "dff1e3181ec7ec203a34ef6efa966590e0ef0ba1a5c3fe3b69da6508c2f8a02e",
-      "build/native/include/WebView2EnvironmentOptions.h": "06f44f0569f1415c37ccd9eb6bade28b803646a73edce78b40f7aa8548d015b9",
-      "build/native/x64/WebView2LoaderStatic.lib": "482f24196b20e784c4d29b752ea760946cb54e22c2532a29699ef538d2d5c28c",
       "build/native/x64/WebView2Loader.dll": "a9a09232c25805323d4cfb3fc8f545a190a9c8a99c93262ea99d0b88df99ec90",
       "LICENSE.txt": "0af8f1b807512aae39c2ac1aa4d0cae65cabecb6fd554b8439a5162a0d6eca55"
     },

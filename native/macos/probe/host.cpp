@@ -1,4 +1,4 @@
-// macOS minimal probe host — POSIX port of native/windows/probe/host.cpp.
+// macOS minimal probe host — POSIX bundled-process feasibility probe.
 // Spawns the bundled Bun executable as a child process in its own process
 // group, talks NDJSON over dedicated stdin/stdout pipes, and cleans the
 // process tree on clean, timed-out and abnormal exit.

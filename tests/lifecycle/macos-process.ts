@@ -1,5 +1,5 @@
 // Standalone integration runner: native/macos/probe/run.sh builds the package first.
-// POSIX port of windows-process.ts: mkfifo backpressure for stall tests,
+// POSIX runtime probe: mkfifo backpressure for stall tests,
 // SIGTERM/SIGKILL for shutdown checks, --guard watchdog for host-death cleanup.
 import assert from "node:assert/strict";
 import { execSync } from "node:child_process";

@@ -1,0 +1,306 @@
+import { existsSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
+import { resolve } from "node:path";
+import { Worker } from "node:worker_threads";
+import {
+  type AppDefinition,
+  type Core,
+  type CoreSession,
+  createCore,
+} from "../../../packages/core/src/index.ts";
+import {
+  API_LIMITS,
+  BunawayError,
+  type CancellationSignal,
+  type HostContext,
+  type HostResponse,
+  PROTOCOL_VERSION,
+} from "../../../packages/protocol/src/index.ts";
+import { Channel, type Packet, type Route, type UIConfig } from "./channel.ts";
+import { DiagnosticLog } from "./log.ts";
+import { activeDescendants, containAppProcess } from "./job.ts";
+
+export async function runWindowsApp(app: AppDefinition, config: UIConfig): Promise<void> {
+  containAppProcess();
+  const sessions = new Map<HostContext, { route: Route; session: CoreSession }>();
+  const log = new DiagnosticLog(resolve(config.dataRoot, "logs/host.log"));
+  const calls = new Map<
+    string,
+    {
+      context: HostContext;
+      signal: CancellationSignal;
+      resolve(value: HostResponse): void;
+      reject(error: unknown): void;
+      abort(): void;
+      authorized?: boolean;
+    }
+  >();
+  let stopping = false;
+  let sequence = 0;
+  let core: Core | undefined;
+  let booting: Promise<Core> | undefined;
+  let failure: unknown;
+  let cleaned = false;
+  let ioCleaned = false;
+  let readyResolve: () => void = () => {};
+  const ready = new Promise<void>((resolveReady) => {
+    readyResolve = resolveReady;
+  });
+  let stopResolve: () => void = () => {};
+  const stopRequested = new Promise<void>((resolveStop) => {
+    stopResolve = resolveStop;
+  });
+  const workerPath = new URL(
+    existsSync(resolve(import.meta.dir, "ui.ts")) ? "./ui.ts" : "./ui.js",
+    import.meta.url,
+  );
+  const worker = new Worker(workerPath, { workerData: config });
+  const io = new Worker(
+    new URL(
+      existsSync(resolve(import.meta.dir, "host-operations.ts"))
+        ? "./host-operations.ts"
+        : "./host-operations.js",
+      import.meta.url,
+    ),
+    { workerData: { runtime: config.runtime, dataRoot: config.dataRoot } },
+  );
+  let exitResolve: (value: number) => void = () => {};
+  const exited = new Promise<number>((resolveExit) => {
+    exitResolve = resolveExit;
+  });
+  const fail = (error: unknown) => {
+    failure ??= error;
+    stopping = true;
+    readyResolve();
+    stopResolve();
+  };
+  const channel = new Channel(worker, config.runtime, "main", receive, fail);
+  const ioChannel = new Channel(
+    io,
+    config.runtime,
+    "main-io",
+    async (packet) => {
+      if (packet.kind === "cleaned") {
+        ioCleaned = true;
+        return;
+      }
+      if (packet.kind === "fatal") {
+        fail(new Error(packet.error.message));
+        return;
+      }
+      if (packet.kind !== "prepare" && packet.kind !== "host-response")
+        throw new Error("Unexpected I/O reply");
+      const call = calls.get(packet.requestId);
+      if (!call || call.context !== packet.context || stopping) return;
+      if (packet.kind === "prepare") await channel.send({ ...packet, kind: "authorize" });
+      else if (call.authorized) await channel.send({ ...packet, kind: "host-result" });
+      else finishCall(packet.requestId, packet.response);
+    },
+    fail,
+  );
+  io.on("error", (error) => {
+    fail(error);
+    ioChannel.close();
+  });
+  const ioExited = new Promise<number>((resolveExit) =>
+    io.on("exit", (code) => {
+      if (!ioCleaned || code !== 0) fail(new Error(`I/O Worker exited without cleanup (${code})`));
+      ioChannel.close();
+      resolveExit(code);
+    }),
+  );
+  worker.on("error", (error) => {
+    fail(error);
+    channel.close();
+  });
+  worker.on("exit", (code) => {
+    if (!cleaned || code !== 0) fail(new Error(`UI Worker exited without cleanup (${code})`));
+    channel.close();
+    exitResolve(code);
+  });
+  function cancelCalls(context?: HostContext) {
+    for (const [id, call] of calls) {
+      if (context !== undefined && call.context !== context) continue;
+      calls.delete(id);
+      call.signal.removeEventListener("abort", call.abort);
+      call.reject(new BunawayError({ code: "CANCELLED", message: "Host context closed." }));
+    }
+    // Revocation cancels a whole context without overflowing per-request control slots.
+    if (context !== undefined) ioChannel.notify({ kind: "cancel-context", context });
+  }
+  async function receive(packet: Packet) {
+    if (packet.kind === "diagnostic") {
+      await log.write(packet.event, packet.fields);
+      return;
+    }
+    if (packet.kind === "ready") {
+      readyResolve();
+      return;
+    }
+    if (packet.kind === "closing") {
+      stopping = true;
+      stopResolve();
+      return;
+    }
+    if (packet.kind === "fatal") {
+      fail(new Error(packet.error.message));
+      return;
+    }
+    if (packet.kind === "cleaned") {
+      cleaned = true;
+      return;
+    }
+    if (packet.kind === "revoke") {
+      const session = sessions.get(packet.route.context);
+      sessions.delete(packet.route.context);
+      cancelCalls(packet.route.context);
+      await session?.session.close();
+      return;
+    }
+    if (stopping) return;
+    if (packet.kind === "session-open") {
+      if (!core || sessions.has(packet.route.context)) throw new Error("Invalid session-open");
+      sessions.set(packet.route.context, {
+        route: packet.route,
+        session: core.openSession(packet.route.context, packet.route.viewId),
+      });
+    } else if (packet.kind === "client") {
+      const session = sessions.get(packet.route.context);
+      if (
+        !session ||
+        session.route.documentGeneration !== packet.route.documentGeneration ||
+        session.route.viewId !== packet.route.viewId
+      )
+        throw new Error("Invalid client route");
+      await session.session.receive(packet.message);
+    } else if (packet.kind === "authorized") {
+      const call = calls.get(packet.requestId);
+      if (!call || call.context !== packet.context) return;
+      call.authorized = packet.allowed;
+      await ioChannel.send({ ...packet, kind: "grant" });
+    } else if (packet.kind === "host-response") {
+      const call = calls.get(packet.requestId);
+      if (!call || call.context !== packet.context) return;
+      finishCall(packet.requestId, packet.response);
+    } else throw new Error("Unexpected main packet");
+  }
+  function finishCall(id: string, response: HostResponse) {
+    const call = calls.get(id);
+    if (!call) return;
+    calls.delete(id);
+    call.signal.removeEventListener("abort", call.abort);
+    call.resolve(response);
+  }
+  const onSignal = () => {
+    stopping = true;
+    stopResolve();
+  };
+  process.on("SIGINT", onSignal);
+  process.on("SIGTERM", onSignal);
+  const startupTimer = setTimeout(() => fail(new Error("Windows startup timed out")), 30000);
+  try {
+    await mkdir(resolve(config.dataRoot, "logs"), { recursive: true });
+    await log.write("host-started", { pid: process.pid, ui: "worker", runtime: config.runtime });
+    await ready;
+    if (failure) throw failure;
+    booting = createCore(app, {
+      policy: config.policy,
+      hello: { kind: "hello", protocol: PROTOCOL_VERSION, features: [], buildId: "bunaway" },
+      platform: "windows",
+      backendContext: config.backendContext,
+      runtime: {
+        createCancellation: () => new AbortController(),
+        now: () => Date.now(),
+        schedule: (callback, delay) => {
+          const timer = setTimeout(callback, delay);
+          return () => clearTimeout(timer);
+        },
+      },
+      send: async (context, message) => {
+        const session = sessions.get(context);
+        if (!session || stopping) return;
+        try {
+          await channel.send({ kind: "server", route: session.route, message });
+        } catch (error) {
+          fail(error);
+          throw error;
+        }
+      },
+      callHost: (context, call, signal) => {
+        if (stopping || signal.aborted)
+          return Promise.reject(
+            new BunawayError({ code: "CANCELLED", message: "Host operation cancelled." }),
+          );
+        if (calls.size >= API_LIMITS.maxPending)
+          return Promise.reject(
+            new BunawayError({ code: "BUSY", message: "Host request limit reached." }),
+          );
+        const requestId = `host-${++sequence}`;
+        return new Promise<HostResponse>((resolveCall, reject) => {
+          const abort = () => {
+            if (!calls.delete(requestId)) return;
+            signal.removeEventListener("abort", abort);
+            channel.notify({ kind: "cancel", context, requestId });
+            ioChannel.notify({ kind: "cancel", context, requestId });
+            reject(new BunawayError({ code: "CANCELLED", message: "Host context closed." }));
+          };
+          calls.set(requestId, { context, signal, resolve: resolveCall, reject, abort });
+          signal.addEventListener("abort", abort);
+          const source =
+            context === config.backendContext
+              ? "backend"
+              : `view:${sessions.get(context)?.route.viewId ?? "invalid"}`;
+          void ioChannel
+            .send({ kind: "operation", context, requestId, call, source })
+            .catch((error) => {
+              abort();
+              fail(error);
+            });
+        });
+      },
+    }).then((created) => {
+      core = created;
+      if (stopping) void created.stop().catch(fail);
+      return created;
+    });
+    core = await Promise.race([booting, stopRequested.then(() => undefined)]);
+    clearTimeout(startupTimer);
+    if (core && !stopping)
+      await log.write("backend-ready", { pid: process.pid, bunVersion: Bun.version });
+    if (!stopping) await channel.send({ kind: "start" });
+    await stopRequested;
+  } catch (error) {
+    fail(error);
+  } finally {
+    clearTimeout(startupTimer);
+    stopping = true;
+    cancelCalls();
+    const timeout = setTimeout(() => {
+      console.error("Windows cleanup timed out; ending failed app process.");
+      process.exit(1);
+    }, 40000);
+    if (!core)
+      core = await booting?.catch((error) => {
+        if (failure) fail(error);
+        return undefined;
+      });
+    await core?.stop().catch(fail);
+    sessions.clear();
+    await channel.send({ kind: "shutdown" }).catch(fail);
+    await ioChannel.send({ kind: "shutdown" }).catch(fail);
+    await Promise.all([exited, ioExited]);
+    clearTimeout(timeout);
+    channel.close();
+    ioChannel.close();
+    const descendants = activeDescendants();
+    await log.write("host-stopped", {
+      activeProcesses: cleaned && ioCleaned ? descendants : null,
+      forced: descendants > 0,
+      failed: !!failure,
+    });
+    await log.drain();
+    process.off("SIGINT", onSignal);
+    process.off("SIGTERM", onSignal);
+  }
+  if (failure) throw failure;
+}

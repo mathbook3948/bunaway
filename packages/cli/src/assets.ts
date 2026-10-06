@@ -1,5 +1,5 @@
 import { cp, mkdir, writeFile } from "node:fs/promises";
-import { dirname, relative, resolve } from "node:path";
+import { basename, dirname, relative, resolve } from "node:path";
 import type { BunPlugin } from "bun";
 import type { Project } from "./config.ts";
 import { files, inside } from "./files.ts";
@@ -52,4 +52,64 @@ export async function bundleAssets(project: Project, assets: string): Promise<vo
   const backendOutput = backend[0];
   if (backend.length !== 1 || !backendOutput) throw new Error("Missing backend bundle.");
   await writeFile(resolve(assets, "backend.js"), new Uint8Array(await backendOutput.arrayBuffer()));
+  if (project.windowsApp) {
+    const app = await buildWithSdk(
+      { entrypoints: [project.windowsApp], target: "bun", packages: "bundle" },
+      plugin,
+    );
+    if (app.length !== 1 || !app[0]) throw new Error("Missing Windows AppDefinition bundle.");
+    await writeFile(resolve(assets, "app.js"), new Uint8Array(await app[0].arrayBuffer()));
+  }
+}
+
+export async function bundleWindowsAssets(project: Project, assets: string): Promise<void> {
+  if (!project.windowsApp)
+    throw new Error("Windows requires windowsApp: a module default-exporting AppDefinition.");
+  await webAssets(project, resolve(assets, "web"), await sdkPlugin(project.root));
+  await bundleWindowsHost(
+    resolve(project.root, "vendor/bunaway/native/windows/bun"),
+    assets,
+    project.windowsApp,
+    project.root,
+  );
+}
+
+export async function bundleWindowsHost(
+  source: string,
+  destination: string,
+  appEntry: string,
+  project?: string,
+): Promise<void> {
+  // A shared chunk preserves class identity (e.g. BunawayError) between core and app.
+  const options: Bun.BuildConfig = {
+    entrypoints: [resolve(source, "boot.ts"), appEntry],
+    target: "bun",
+    packages: "bundle",
+    splitting: true,
+    naming: "[name].[ext]",
+  };
+  const artifacts = project
+    ? await buildWithSdk(options, await sdkPlugin(project))
+    : (await Bun.build(options)).outputs;
+  if (!artifacts.some((output) => basename(output.path) === "boot.js"))
+    throw new Error("Windows bootstrap bundle failed");
+  const appName = basename(appEntry).replace(/\.[^.]+$/, ".js");
+  for (const output of artifacts)
+    await writeFile(
+      resolve(destination, basename(output.path) === appName ? "app.js" : basename(output.path)),
+      new Uint8Array(await output.arrayBuffer()),
+    );
+  for (const name of ["ui", "host-operations"]) {
+    const result = await Bun.build({
+      entrypoints: [resolve(source, `${name}.ts`)],
+      target: "bun",
+      packages: "bundle",
+    });
+    if (!result.success || result.outputs.length !== 1 || !result.outputs[0])
+      throw new Error(`Windows host bundle failed: ${result.logs.join("\n")}`);
+    await writeFile(
+      resolve(destination, `${name}.js`),
+      new Uint8Array(await result.outputs[0].arrayBuffer()),
+    );
+  }
 }

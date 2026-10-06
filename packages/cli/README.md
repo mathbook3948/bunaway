@@ -45,12 +45,13 @@ my-app/
   src/web/{index.html,main.ts,style.css}
   vendor/bunaway/
     packages/{cli,backend-sdk,client-sdk,core,protocol,runtime-bun}/
-    native/{windows/host,macos/host,host-api/generated}/
+    native/{windows/bun,macos/host,host-api/generated}/
     runtime/build-manifests/, tsconfig.base.json, package.json
   bunaway.lock.json
 ```
 
-`bunaway.json` v1의 `backend`(파일)와 `frontend`(디렉터리)는 프로젝트 상대 경로다.
+`bunaway.json` v1의 `backend`(기존 프로세스 진입점), `windowsApp`(default export AppDefinition),
+`frontend`(디렉터리)는 프로젝트 상대 경로다. Windows 빌드에는 `windowsApp`이 필요하다.
 프런트엔드의 `.ts`/`.js`는 브라우저 번들로 변환하고 나머지 정적 자산은 복사한다.
 `.d.ts`는 배포하지 않는다. CSS 등 번들의 추가 출력까지 정적 자산과 대조해 기록 전에
 충돌을 거부한다. 출력 이름은 Windows/macOS 이식성을 위해 대소문자를 구분하지 않고
@@ -71,8 +72,8 @@ macOS는 기존 `bunaway://` 매핑이다. HTTP 개발 origin은 여기서 허�
 프로젝트 소스·설정 변경을 debounce 후 직렬 처리한다(의존성/출력 디렉터리는 제외).
 프런트엔드 변경도 **전체 네이티브 호스트/창 재시작**으로 갱신한다. HMR은 후속 범위다.
 이전 호스트 종료를 확인한 후 자산을 다시 빌드하고 새 호스트를 시작한다.
-호스트가 새 런타임 세대와 새 호출 컨텍스트/세션을 발급한다. 기존 네이티브 Job/guard가
-Bun 자식을 정리한다. SDK는 세션 종료 시 미완료 요청/구독을 폐기하며 CLI는 요청을
+호스트가 새 런타임 세대와 새 호출 컨텍스트/세션을 발급한다. Windows는 WM_CLOSE로 코어·Worker·WebView를 정리하고 Bun Job이 자손을 회수한다.
+macOS의 기존 guard는 Bun 자식을 정리한다. SDK는 세션 종료 시 미완료 요청/구독을 폐기하며 CLI는 요청을
 보관하거나 재전송하지 않는다. 이미 완료된 외부 저장 작업은 롤백하지 않는다.
 개발 중 입력하지 않은 UI 상태도 재시작으로 사라지므로 저장 후 확인한다.
 
@@ -82,16 +83,16 @@ Bun 자식을 정리한다. SDK는 세션 종료 시 미완료 요청/구독을 
 
 ## 패키지 / 배포 조사용 경계
 
-Windows x64에는 PowerShell 7, MSVC C++ Build Tools, CMake/Ninja와
+Windows x64에는 PowerShell 7과
 WebView2 Evergreen이 필요하다. 네이티브 SDK는 기존 스크립트의 핀으로 받는다.
 macOS arm64에는 macOS 14+, Xcode CLT, zsh/codesign이 필요하다. 교차 빌드는 없다.
 
 ```text
 dist/windows-x64/
-  bunaway-host.exe
-  assets/{web/,backend.js,app.json,policy.json,bunfig.toml,tsconfig.json,*schema.json,host-operations.json}
+  bunaway.cmd, launch.ps1
+  assets/{web/,boot.js,app.js,ui.js,host-operations.js,chunk-*.js,WebView2Loader.dll,app.json,policy.json,bunfig.toml,tsconfig.json}
   runtime/bun.exe
-  licenses/{LICENSE.bun,LICENSE.nlohmann-json,License-WebView2.txt}
+  licenses/{LICENSE.bun,License-WebView2.txt}
   manifest.json
 
 dist/macos-arm64/<appId>.app/Contents/
@@ -101,13 +102,13 @@ dist/macos-arm64/<appId>.app/Contents/
 ```
 
 개발 패키지는 동일한 구조로 `.bunaway/<target>/` 아래 생성한다.
-호스트 실행 인자는 양쪽 모두 `--package <절대 패키지 경로>`다. macOS 인자의 패키지
-경로는 `.app/Contents/Resources`다. Windows는 인자 없이 실행 파일 옆에서,
+Windows launcher는 절대 경로의 번들 Bun과 검증된 `boot.js --package <패키지>`를 실행한다.
+macOS 호스트 인자는 `--package <절대 패키지 경로>`이고 `.app/Contents/Resources`다.
 macOS는 Finder/.app 실행 시 NSBundle Resources에서 패키지를 찾는다.
 
 ```powershell
 # 다른 cwd에서도, PATH에 Bun이 없어도 실행:
-& 'C:\path\my-app\dist\windows-x64\bunaway-host.exe'
+& 'C:\path\my-app\dist\windows-x64\bunaway.cmd'
 ```
 
 ```sh
@@ -124,9 +125,9 @@ Bun/자산 해시를 검사하고 내부 Bun **절대 경로**를 실행한다. 
 
 macOS 패키지에는 로컬 실행용 ad-hoc 서명만 적용하며 번들 Bun을 재서명하지 않는다.
 manifest의 macOS `host.sourceSha256`은 서명 전 원본 호스트 해시다(서명된 실행 파일을
-자신의 서명 대상 manifest에 해싱하는 순환을 피한다). Windows `host.sha256`은 패키지 호스트 해시다.
+자신의 서명 대상 manifest에 해싱하는 순환을 피한다). Windows `host.kind=bun-ffi`와 `host.sha256`은 `boot.js` 해시다.
 설치 프로그램, Developer ID 서명,
 공증, React/Vue/Svelte, 공개 플러그인 API, 공개 registry publish/라이선스 결정은 후속 범위다.
-공통 네이티브 스크립트에 추가한 `-BuildHostOnly`/`--host-only`는 고정 의존성 검증과 호스트
-컴파일까지만 실행해 CLI가 테스트/메모 자산 없이 앱 자산을 직접 조립하도록 한다.
+Windows `native/windows/bun/prepare.ps1`은 고정 Bun/공식 Loader만 준비한다.
+macOS `--host-only`는 기존 네이티브 컴파일까지만 실행한다. CLI는 앱 자산을 직접 조립한다.
 기존 샘플/계약 테스트 경로와 기본 빌드 동작은 유지한다.

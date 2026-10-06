@@ -57,7 +57,7 @@ export async function runProbe(uiWorker: ProbeWorkerData | null = null) {
     KillTimer: { args: ["u64", "u64"], returns: "i32" },
   });
   const loader = dlopen(
-    resolve(import.meta.dir, "../host/vendor/sdk/build/native/x64/WebView2Loader.dll"),
+    resolve(import.meta.dir, "../bun/vendor/sdk/build/native/x64/WebView2Loader.dll"),
     {
       CreateCoreWebView2EnvironmentWithOptions: {
         args: ["ptr", "ptr", "ptr", "ptr"],

@@ -1,6 +1,11 @@
 # Windows 메모 샘플
 
-실제 `createClient`와 `runBunApp` 내부의 `createCore`를 사용하는 앱이다.
+현재 Windows 기본 경로는 [Bun FFI 호스트](../../native/windows/bun/README.md)다.
+`pwsh -NoProfile -File native/windows/bun/run.ps1`이 같은 메모 앱 정의·화면으로
+저장·재실행 복원·렌더러 복구를 실제 검증한다. C++ 빌드 도구는 필요 없다.
+새 사용자 앱은 CLI 템플릿의 `windowsApp`에 default export AppDefinition을 지정한다.
+
+실제 `createClient`와 Bun 메인의 `createCore`를 사용하는 앱이다.
 `windows` 선언으로 두 창이 하나의 Bun 백엔드를 공유한다. 편집 창(`main` 뷰)의
 저장 버튼은 `memo.save`를 호출한다. 백엔드는 Host API로 `appData/notes/memo.txt`에
 기록한 뒤 `memo.saved`를 발행하고, 두 창 모두 구독한 `memo.saved`로 화면을 갱신한다.
@@ -12,12 +17,11 @@
 저장소 루트에서 실행한다. 개발 Bun도 고정 버전 1.4.2를 사용한다.
 
 ```powershell
-pwsh -NoProfile -File native/windows/host/run.ps1 -Sample -Bun runtime/bun-bundle/vendor/bun-windows-x64-baseline/bun.exe
-./build/windows-memo-package/bunaway-host.exe
+pwsh -NoProfile -File native/windows/bun/run.ps1
 ```
 
-MSVC Build Tools·CMake/Ninja·WebView2 Evergreen이 필요하다. 배포 패키지는
-`build/windows-memo-package/`이며 사용자 전역 Bun은 필요 없다.
+PowerShell 7·고정 Bun·WebView2 Evergreen이 필요하다. 회귀 패키지는
+`build/windows-bun-package/`이며 사용자 전역 Bun은 필요 없다.
 메모는 `%LOCALAPPDATA%/bunaway/examples.bunaway.memo/data/notes/memo.txt`에 저장된다.
 `main` 뷰 정책은 메모 명령·완료 이벤트와 `notes/` 읽기·쓰기만 허용하고,
 `reader` 뷰는 읽기만 허용한다.

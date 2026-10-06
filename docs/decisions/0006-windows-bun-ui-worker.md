@@ -1,13 +1,14 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Windows는 Bun 진입점과 전용 UI Worker로 이식한다
 
-이 문서는 구현할 구조와 전환 조건이다. 현재 제품 실행은 기존 C++ 호스트다.
+2026-10-06 Windows 기본 제품 실행을 이 구조로 전환했다. 기존 C++ 호스트·probe·CMake·전용 실행기와 테스트는 삭제했다.
 [직접 FFI 실험](../../native/windows/ffi-probe/README.md)에서 같은 Bun 프로세스의
 UI Worker가 Win32·WebView2를 소유하고, 메인 스레드의 비동기 작업과 두 창의
-개별 수명을 유지함을 확인했다. 제품의 정책·Host API·배포 경로는 아직 옮기지 않았다.
+개별 수명을 유지함을 확인했다. 기존 코어·정책·Host API·CLI 연결과 실제 다중 창 회귀는
+[제품 실행 기록](../architecture/windows-bun-results.md)에 정리했다. 서명·설치·출시 완료와는 구분한다.
 
 Windows 전환 후에는 ADR [0001](./0001-bundled-bun-process.md)의 호스트→Bun 자식
 소유권과 [0004](./0004-multi-window-per-view-policy.md)의 프로세스 IPC·Job 종료
@@ -34,12 +35,11 @@ Bun API 사용을 차단하는 샌드박스라고 주장하지 않는다.
 | UI Worker 하나 | STA, 모든 창·뷰, 하나의 메시지 pump, COM·콜백 수명, 실제 출처·프레임 검증, 컨텍스트 발급·폐기, 작업 권한 승인 | 앱 명령 실행, 블로킹 파일 I/O |
 | I/O Worker 하나 | 검증된 작업의 Win32 파일 핸들·읽기/쓰기, 제한된 작업 큐 | COM·창, 임의 컨텍스트의 권한 생성 |
 
-I/O Worker는 기존 C++ 작업 큐의 동기 파일 작업을 옮길 때 도입한다. 초기 화면
-왕복 단계에서는 필요 없다. Worker 풀·범용 RPC 프레임워크·별도 Rust/C++ 래퍼는 만들지 않는다.
+I/O Worker는 기존 C++ 작업 큐의 동기 파일 작업을 이식해 사용한다. Worker 풀·범용 RPC 프레임워크·별도 Rust/C++ 래퍼는 만들지 않는다.
 
 ## 배치할 코드
 
-아래 새 경로는 구현 순서에 따라 만든다. 빈 파일이나 미구현 공개 API를 먼저 추가하지 않는다.
+아래 경로에 구현했다. `boot.ts`는 패키지 검증과 앱 import를, `job.ts`는 비정상 종료 자손 회수를 담당한다.
 
 | 경로 | 내용 |
 | --- | --- |
@@ -138,7 +138,9 @@ WebView renderer 장애는 해당 뷰의 세션 폐기·재탐색, browser 장�
 
 프로브의 5초는 진단 기준으로 남긴다. 공식 컨트롤에서도 초과했으므로 제품 종료
 기한은 자원 정리 보장·실제 종료 확인과 별도로 정한다. 네이티브 호출이 영구 정지한
-경우의 프로세스 강제 종료·WebView 자손 회수는 배포 전 별도 검증 항목이다.
+경우의 정상 정리는 보장하지 않는다. Bun 자신을 앱 import 전에 kill-on-close Job에 배정하여
+강제 종료·앱 import 중 생성한 자식·WebView 자손 회수를 실제 검증했다. 정상 WebView 종료는
+30초, UI/메인은 35/40초 제한을 적용하고 초과를 실패 처리한다.
 
 ## 적용 순서와 완료 조건
 
@@ -153,25 +155,24 @@ WebView renderer 장애는 해당 뷰의 세션 폐기·재탐색, browser 장�
 첫 연결은 `examples/memo/app.ts`처럼 부작용 없는 AppDefinition 모듈을 사용한다.
 기존 `backend.ts`/`backend.js`는 import하면 `runBunApp()`가 stdin을 기다리므로
 새 호스트의 앱 정의로 import하지 않는다. 제품의 새 bootstrap은 검증 후 앱 정의를
-불러오는 진입점으로 번들해야 한다. 그 공개 설정/API 변경은 5단계에서 CLI·템플릿과
-함께 적용하며, 현재 backend 진입점을 암묵적으로 새 모드로 해석하지 않는다.
+불러오는 진입점으로 번들해야 한다. CLI·템플릿에 `windowsApp` 설정과 default export AppDefinition을 적용했다.
+기존 backend 진입점을 암묵적으로 새 모드로 해석하지 않는다.
 
 한 exe 배포·콘솔 없는 시작은 아직 검증하지 않았다. Bun compile을 채택한다면 고정
 버전에서 Worker 경로·FFI DLL 동봉·manifest·기동 환경을 먼저 검증해야 한다. 런타임이
 자기 해시를 확인하는 것만으로 실행 전 바이너리 검증을 대체했다고 주장하지 않는다.
-설치/서명/기동 경계를 확정하기 전에는 C++ 없는 제품 배포가 완료됐다고 표시하지 않는다.
+C++ 없는 독립 프로젝트 빌드·앱 기동은 검증했다. 설치/서명 완료를 의미하지 않는다.
 
 기존 `tests/core`, `tests/api`, `tests/protocol`은 재사용한다. 실제 호스트 검증은
 `tests/lifecycle/windows-host.ts`의 기대값을 유지하고 실행기/프로세스 구조 확인만
-새 모델에 맞춘다. 기존 C++ 경로 전용 검증도 전환 완료까지 유지한다.
-`windows-host-native.cpp`의 신뢰 경계 입력은 새 어댑터에서도 같은 거부 결과를
-검사한다. `runtime-bun.test.ts`의 setup·취소·revoke·shutdown 사례는 Worker 연결에
+새 모델에 맞춘다. 기존 네이티브 경계 검사의 취소·폐기·EOF·응답 크기·deadline·프로필
+사례는 Bun 회귀로 옮겼으며 C++ 전용 실행기는 삭제했다.
+`runtime-bun.test.ts`의 setup·취소·revoke·shutdown 사례는 Worker 연결에
 대응시킨다. Windows 링크 생성 권한 부재는 누락 검증으로 기록하며 통과로 바꾸지 않는다.
 
-모든 단계 통과 후 ADR 0001/0004의 Windows 적용 범위, PRD, 플랫폼 지원 표와
-실행 문서를 실제 구조로 갱신하고 기본 실행을 전환한다. 그 전에는 기존 호스트를
-자동 대안으로 실행하지도, 삭제하지도 않는다.
+ADR 0001/0004의 Windows 적용 범위, PRD, 플랫폼 지원 표와 실행 문서를 갱신하고 기본 실행을 전환했다.
+기존 호스트를 자동 대안으로 실행하지 않는다. 새 GUI 회귀의 기존 거부 기대값은 유지했다.
 
 구현 기준: [코어 계약](../../packages/core/src/index.ts), [기존 런타임](../../packages/runtime-bun/src/runtime.ts),
-[Windows 호스트](../../native/windows/host/host.cpp), [CLI 번들](../../packages/cli/src/assets.ts),
+[Windows 호스트](../../native/windows/bun/entry.ts), [CLI 번들](../../packages/cli/src/assets.ts),
 [CLI 배포](../../packages/cli/src/build.ts), [기존 Windows 회귀](../../tests/lifecycle/windows-host.ts).

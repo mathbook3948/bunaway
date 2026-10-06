@@ -1,22 +1,20 @@
 import { memoApp } from "../../../../examples/memo/app.ts";
 import type {
   AppDefinition,
-  CommandDefinition,
   CommandContext,
+  CommandDefinition,
 } from "../../../../packages/core/src/index.ts";
 import {
   BunawayError,
   type HostOperation,
   type JsonValue,
 } from "../../../../packages/protocol/src/index.ts";
-import { runBunApp } from "../../../../packages/runtime-bun/src/index.ts";
 
 let invokeCount = 0;
 const command = (run: CommandDefinition["run"]): CommandDefinition => ({
   input: {},
   output: {},
   async run(payload, context) {
-    invokeCount++;
     return run(payload, context);
   },
 });
@@ -52,6 +50,10 @@ const app: AppDefinition = {
     "test.echo": command(async (payload) => payload as JsonValue),
     "test.ping": command(async () => "pong"),
     "test.count": command(async () => invokeCount),
+    "test.notAllowed": command(async () => {
+      invokeCount++;
+      return null;
+    }),
     "test.hold": command(
       async (_payload, { signal }) =>
         new Promise((_, reject) => {
@@ -112,4 +114,4 @@ const app: AppDefinition = {
     ...memoApp.commands,
   },
 };
-await runBunApp(app);
+export default app;

@@ -1,11 +1,11 @@
 # 플랫폼 지원과 검증 범위
 
-기준일: 2026-10-05. “구현”은 출시 지원 보장이 아니다. 실제 OS·CPU와 테스트 범위를
+기준일: 2026-10-06. “구현”은 출시 지원 보장이 아니다. 실제 OS·CPU와 테스트 범위를
 기록하며, 공통 TypeScript 검사의 성공을 네이티브 호스트 성공으로 확대하지 않는다.
 
 | 플랫폼 | 네이티브 구현 | 검증 환경·범위 | 미검증·제약 |
 | --- | --- | --- | --- |
-| Windows x64 | Win32·WebView2, 번들 Bun x64 baseline | 기존 Server 2022 기록·native CI, B probe·C 다중 창/뷰 정책/복구/종료 | 최소 Windows·CPU, WebView2 설치 경로, 설치 프로그램·서명·배포 |
+| Windows x64 | Bun 진입점·직접 FFI UI Worker·WebView2, 번들 Bun x64 baseline | 로컬 FFI/모달/Host API/다중 창/복구/종료/독립 CLI 검증([기록](../architecture/windows-bun-results.md)); 기존 C++ CI와 구분 | 최소 Windows·CPU, WebView2 설치 경로, 설치 프로그램·서명·배포 |
 | macOS arm64 | AppKit·WKWebView, 번들 Bun darwin-aarch64, 단일 창/뷰 | 이번 로컬 26.5.2·Actions 15.7.9: probe 50/50·실제 WKWebView 8/8. 기존/새 실행은 [별도 기록](../architecture/macos-native-results.md) | Intel·다중 창/뷰·최소 OS, 현재 Windows 다중 창 메모 샘플, Developer ID·공증·설치 |
 | macOS Intel | 고정 Bun 배포물·해시 없음 | 없음. arm64 빌드 스크립트가 명시적으로 거부 | 별도 pin·빌드·실제 실행 검증 필요 |
 | Linux | GTK·WebKitGTK 후보, 호스트 미구현 | Ubuntu 공통 검사·생성 스키마 검사만 있음 | 네이티브 실행·UI·프로세스 정리·패키징 |
@@ -39,4 +39,4 @@ macOS WKWebView는 현재 비영속 `WKWebsiteDataStore`를 사용한다. Window
 - `LSMinimumSystemVersion=14.0`은 생성 plist의 값일 뿐 macOS 14 전체 지원 검증이 아니다.
 - **Developer ID 서명·hardened runtime/entitlements·공증·stapling·Gatekeeper·설치**와
   App Sandbox·배포 채널 결정은 별도 작업이다. ad-hoc 서명 성공은 이를 보장하지 않는다.
-- CLI·템플릿·기본 플러그인·릴리스 자동화는 미구현이며 PRD 출시 기준은 미충족이다.
+- CLI·vanilla 템플릿은 구현했다. 기본 플러그인·릴리스 자동화와 PRD 출시 기준은 미충족이다.

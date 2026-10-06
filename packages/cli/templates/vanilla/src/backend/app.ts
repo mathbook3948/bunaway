@@ -28,3 +28,5 @@ export const app = {
     }),
   },
 } satisfies AppDefinition;
+
+export default app;

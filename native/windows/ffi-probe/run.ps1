@@ -3,32 +3,10 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path
-$pin = Get-Content -LiteralPath (Join-Path $root 'runtime/build-manifests/windows-x64.json') -Raw | ConvertFrom-Json
-$deps = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../host/deps.json') -Raw | ConvertFrom-Json
-function Check-Hash([string]$Path, [string]$Hash) {
-    if ((Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Hash) { throw "Hash mismatch: $Path" }
-}
-function Download([string]$Url, [string]$Path, [string]$Hash) {
-    if (!(Test-Path -LiteralPath $Path)) { Invoke-WebRequest -Uri $Url -OutFile $Path }
-    Check-Hash $Path $Hash
-}
-$cache = Join-Path $root 'runtime/bun-bundle/vendor'
-$sdkCache = Join-Path $PSScriptRoot '../host/vendor'
+& (Join-Path $PSScriptRoot '../bun/prepare.ps1')
+$bun = Join-Path $root 'runtime/bun-bundle/vendor/bun-windows-x64-baseline/bun.exe'
 $results = Join-Path $root 'build/windows-ffi-probe'
-New-Item -ItemType Directory -Force -Path $cache, $sdkCache, $results | Out-Null
-$archive = Join-Path $cache 'bun-windows-x64-baseline.zip'
-Download $pin.bun.archiveUrl $archive $pin.bun.archiveSha256
-$bun = Join-Path $cache 'bun-windows-x64-baseline/bun.exe'
-if (!(Test-Path -LiteralPath $bun)) { Expand-Archive -LiteralPath $archive -DestinationPath $cache }
-Check-Hash $bun $pin.bun.executableSha256
-Download $pin.bun.licenseUrl (Join-Path $cache 'LICENSE.bun') $pin.bun.licenseSha256
-$sdkArchive = Join-Path $sdkCache ('webview2-sdk-' + $deps.webview2Sdk.version + '.nupkg')
-Download $deps.webview2Sdk.archiveUrl $sdkArchive $deps.webview2Sdk.archiveSha256
-$sdk = Join-Path $sdkCache 'sdk'
-if (!(Test-Path -LiteralPath $sdk)) { Expand-Archive -LiteralPath $sdkArchive -DestinationPath $sdk }
-foreach ($entry in $deps.webview2Sdk.files.PSObject.Properties) {
-    Check-Hash (Join-Path $sdk $entry.Name) $entry.Value
-}
+New-Item -ItemType Directory -Force -Path $results | Out-Null
 # This child is the test subject, not a native app host. No C/C++ build is involved.
 $start = [Diagnostics.ProcessStartInfo]::new($bun)
 $start.UseShellExecute = $false

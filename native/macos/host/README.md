@@ -1,9 +1,9 @@
 # macOS product host
 
-ObjC++ port of `native/windows/host/host.cpp`: a minimal AppKit shell that runs
+ObjC++ AppKit/WKWebView host: a minimal AppKit shell that runs
 the bundled Bun backend as a separate child process and bridges a `WKWebView`
 to it over NDJSON frames. The backend contract, assets, limits, and log events
-are shared with the Windows host (`native/windows/host/test`), except for
+are shared with the Windows host (`tests/fixtures/desktop/host`), except for
 `test/app.json`: this host still requires a single `view`/`home` declaration,
 whereas Windows now uses `windows[]`. macOS multi-window/view isolation is not
 implemented or tested. See the [support table](../../../docs/platform-support/README.md).

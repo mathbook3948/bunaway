@@ -13,7 +13,7 @@ probe 50/50, 제품 호스트 8/8, 계약 108개, ad-hoc `.app` 서명 확인과
 macOS 호환성을 증명하지 않는다.
 
 작업 시작 main `5a9641eeac9c44a670d43cefb23069db833ed221`에는 Windows 다중 창 변경이
-포함돼 공유 `native/windows/host/test/app.json`이 `windows[]` 설정으로 바뀌었다.
+포함돼 공유 `tests/fixtures/desktop/host/app.json`이 `windows[]` 설정으로 바뀌었다.
 macOS 호스트는 단일 `view`/`home`만 읽으므로 기존 “로컬 통과”를 현재 성공으로
 취급하지 않았다. 새 최초 실행은 `Configured view is not in the policy.`로 실패했고,
 실패 JSON과 stderr를 확인했다. 회귀용 macOS 단일 창 선언을 별도 fixture로 분리했다.

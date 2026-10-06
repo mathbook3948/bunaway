@@ -10,4 +10,4 @@ WebView에서 전달한 출처나 권한을 그대로 믿으면 앱 명령이 �
 
 현재 Windows 호스트는 실제 WebView의 출처·최상위 문서와 활성 세션을 검사하고 컨텍스트를 발급·폐기한다. runtime-bun은 이 컨텍스트로 코어 세션을 열고 Host API 호출에 유지하며, 호스트는 작업 직전 정책·저장 범위를 다시 검사한다. 다중 창/뷰의 위조·권한 거부·폐기와 파일 경계를 [실제 Windows에서 검증](../architecture/windows-host-results.md)했다. 뷰별 정책 분리는 [창/뷰 ADR](./0004-multi-window-per-view-policy.md)에 정리하고, 다른 플랫폼은 미검증이다.
 
-근거: [PRD의 권한 모델](../PRD.md), [Host API와 세션 계약](../architecture/common-api.md), [컨텍스트 바인딩](../../packages/runtime-bun/src/host-api.ts), [런타임 연결](../../packages/runtime-bun/src/runtime.ts), [코어 구현](../../packages/core/src/create-core.ts), [Windows 호스트](../../native/windows/host/host.cpp).
+근거: [PRD의 권한 모델](../PRD.md), [Host API와 세션 계약](../architecture/common-api.md), [컨텍스트 바인딩](../../packages/runtime-bun/src/host-api.ts), [런타임 연결](../../packages/runtime-bun/src/runtime.ts), [코어 구현](../../packages/core/src/create-core.ts), [Windows 호스트](../../native/windows/bun/entry.ts).

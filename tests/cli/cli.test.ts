@@ -45,7 +45,7 @@ afterAll(async () => {
 test("create produces a relocatable project with real SDK dependencies and no repository/sample paths", async () => {
   expect((await validateProject(project)).app.appId).toBe("app.created-app");
   expect(
-    await Bun.file(resolve(project, "vendor/bunaway/native/windows/host/host.cpp")).exists(),
+    await Bun.file(resolve(project, "vendor/bunaway/native/windows/bun/boot.ts")).exists(),
   ).toBe(true);
   const projectPackage = await Bun.file(resolve(project, "package.json")).json();
   expect(projectPackage.dependencies["@bunaway/client"]).toBe("workspace:*");

@@ -1,6 +1,7 @@
 import { chmod, cp, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
 import { type Project, validateProject } from "./config.ts";
+import { writeWindowsLauncher } from "./launch.ts";
 import {
   files,
   frameworkRoot,
@@ -18,15 +19,17 @@ export interface NativeInputs {
   host: string;
   bun: string;
   licenses: Record<string, string>;
+  loader?: string;
 }
 interface Pin {
   bun: { version: string; target: string; executableSha256: string; licenseSha256: string };
-  json: { licenseSha256: string };
+  json?: { licenseSha256: string };
 }
 export interface BuiltPackage {
   output: string;
   package: string;
   executable: string;
+  arguments: string[];
 }
 
 export function currentTarget(): Target {
@@ -57,15 +60,7 @@ export async function prepareNative(target: Target = currentTarget()): Promise<N
   const windows = target === "windows-x64";
   await run(
     windows
-      ? [
-          "pwsh",
-          "-NoProfile",
-          "-File",
-          resolve(frameworkRoot, "native/windows/host/run.ps1"),
-          "-BuildHostOnly",
-          "-Bun",
-          process.execPath,
-        ]
+      ? ["pwsh", "-NoProfile", "-File", resolve(frameworkRoot, "native/windows/bun/prepare.ps1")]
       : ["zsh", resolve(frameworkRoot, "native/macos/host/run.sh"), "--host-only"],
     frameworkRoot,
     { BUN: process.execPath },
@@ -76,29 +71,47 @@ export async function prepareNative(target: Target = currentTarget()): Promise<N
     "FRAMEWORK-LICENSE.txt": resolve(frameworkRoot, "FRAMEWORK-LICENSE.txt"),
     "THIRD-PARTY-NOTICES.txt": resolve(frameworkRoot, "THIRD-PARTY-NOTICES.txt"),
     "LICENSE.bun": resolve(vendor, "LICENSE.bun"),
-    "LICENSE.nlohmann-json": resolve(
-      frameworkRoot,
-      `native/${windows ? "windows" : "macos"}/vendor/LICENSE.nlohmann-json`,
-    ),
   };
   if (windows)
     licenses["License-WebView2.txt"] = resolve(
       frameworkRoot,
-      "native/windows/host/vendor/webview2/License-WebView2.txt",
+      "native/windows/bun/vendor/sdk/LICENSE.txt",
+    );
+  else
+    licenses["LICENSE.nlohmann-json"] = resolve(
+      frameworkRoot,
+      "native/macos/vendor/LICENSE.nlohmann-json",
     );
   return {
     target,
     host: resolve(
       frameworkRoot,
-      `build/${windows ? "windows" : "macos"}-host/bunaway-host${windows ? ".exe" : ""}`,
+      windows ? "native/windows/bun/boot.ts" : "build/macos-host/bunaway-host",
     ),
+    ...(windows
+      ? {
+          loader: resolve(
+            frameworkRoot,
+            "native/windows/bun/vendor/sdk/build/native/x64/WebView2Loader.dll",
+          ),
+        }
+      : {}),
     bun: resolve(vendor, `bun-${pin.bun.target}/bun${windows ? ".exe" : ""}`),
     licenses,
   };
 }
 
-export async function bundleAssets(project: Project, assets: string): Promise<void> {
-  await runWorker("assets.ts", "bundleAssets", [project, assets], project.root);
+export async function bundleAssets(
+  project: Project,
+  assets: string,
+  windows = false,
+): Promise<void> {
+  await runWorker(
+    "assets.ts",
+    windows ? "bundleWindowsAssets" : "bundleAssets",
+    [project, assets],
+    project.root,
+  );
 }
 
 function xml(text: string): string {
@@ -122,9 +135,10 @@ export async function buildProject(
   const pin = await readPin(target);
   await verifyHash(native.bun, pin.bun.executableSha256);
   await verifyHash(native.licenses["LICENSE.bun"] ?? "", pin.bun.licenseSha256);
-  await verifyHash(native.licenses["LICENSE.nlohmann-json"] ?? "", pin.json.licenseSha256);
+  if (!windows)
+    await verifyHash(native.licenses["LICENSE.nlohmann-json"] ?? "", pin.json?.licenseSha256 ?? "");
   if (windows) {
-    const deps = (await json(resolve(frameworkRoot, "native/windows/host/deps.json"))) as {
+    const deps = (await json(resolve(frameworkRoot, "native/windows/bun/deps.json"))) as {
       webview2Sdk: { files: Record<string, string> };
     };
     await verifyHash(
@@ -140,7 +154,7 @@ export async function buildProject(
   const staging = `${output}.building-${crypto.randomUUID()}`;
   const packageRoot = windows ? staging : resolve(staging, "Contents/Resources");
   const executable = windows
-    ? resolve(staging, "bunaway-host.exe")
+    ? resolve(staging, "runtime/bun.exe")
     : resolve(staging, "Contents/MacOS/bunaway-host");
   try {
     const assets = resolve(packageRoot, "assets");
@@ -148,7 +162,7 @@ export async function buildProject(
     await mkdir(resolve(packageRoot, "runtime"), { recursive: true });
     await mkdir(resolve(packageRoot, "licenses"), { recursive: true });
     await mkdir(dirname(executable), { recursive: true });
-    await cp(native.host, executable);
+    if (!windows) await cp(native.host, executable);
     await cp(native.bun, resolve(packageRoot, `runtime/bun${windows ? ".exe" : ""}`));
     await chmod(executable, 0o755);
     await chmod(resolve(packageRoot, `runtime/bun${windows ? ".exe" : ""}`), 0o755);
@@ -159,10 +173,34 @@ export async function buildProject(
     await writeJson(resolve(assets, "policy.json"), project.policy);
     await writeFile(resolve(assets, "bunfig.toml"), "env = false\n");
     await writeJson(resolve(assets, "tsconfig.json"), {});
-    for (const schema of await files(resolve(frameworkRoot, "native/host-api/generated"))) {
-      await cp(schema, resolve(assets, basename(schema)));
+    if (!windows)
+      for (const schema of await files(resolve(frameworkRoot, "native/host-api/generated"))) {
+        await cp(schema, resolve(assets, basename(schema)));
+      }
+    await bundleAssets(project, assets, windows);
+    if (windows) {
+      if (!project.windowsApp)
+        throw new Error(
+          "Windows requires windowsApp: a module default-exporting AppDefinition. See the Windows migration guide.",
+        );
+      if (!native.loader) throw new Error("Windows requires the pinned WebView2Loader DLL.");
+      const deps = (await json(resolve(frameworkRoot, "native/windows/bun/deps.json"))) as {
+        webview2Sdk: { files: Record<string, string> };
+      };
+      await verifyHash(
+        native.loader,
+        deps.webview2Sdk.files["build/native/x64/WebView2Loader.dll"] ?? "",
+      );
+      await cp(native.loader, resolve(assets, "WebView2Loader.dll"));
+      await writeWindowsLauncher(
+        resolve(frameworkRoot, "native/windows/bun/launch.ps1"),
+        resolve(packageRoot, "launch.ps1"),
+      );
+      await writeFile(
+        resolve(packageRoot, "bunaway.cmd"),
+        '@echo off\r\n"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "%~dp0launch.ps1"\r\n',
+      );
     }
-    await bundleAssets(project, assets);
     const hashes: Record<string, string> = {};
     for (const dir of ["assets", "licenses"]) {
       for (const file of await files(resolve(packageRoot, dir))) {
@@ -179,7 +217,7 @@ export async function buildProject(
       host: {
         target,
         ...(windows
-          ? { sha256: await hash(executable) }
+          ? { kind: "bun-ffi", sha256: await hash(resolve(assets, "boot.js")) }
           : { sourceSha256: await hash(native.host) }),
       },
     });
@@ -221,8 +259,17 @@ export async function buildProject(
       output,
       package: windows ? output : resolve(output, "Contents/Resources"),
       executable: windows
-        ? resolve(output, "bunaway-host.exe")
+        ? resolve(output, "runtime/bun.exe")
         : resolve(output, "Contents/MacOS/bunaway-host"),
+      arguments: windows
+        ? [
+            "--no-env-file",
+            "--no-install",
+            `--config=${resolve(output, "assets/bunfig.toml")}`,
+            `--tsconfig-override=${resolve(output, "assets/tsconfig.json")}`,
+            resolve(output, "assets/boot.js"),
+          ]
+        : ["--package", resolve(output, "Contents/Resources")],
     };
   } catch (error) {
     await rm(staging, { recursive: true, force: true });

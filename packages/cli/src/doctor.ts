@@ -1,6 +1,5 @@
 import { currentTarget } from "./build.ts";
 import { validateProject } from "./config.ts";
-import { resolve } from "node:path";
 
 export async function doctor(directory: string): Promise<boolean> {
   let ok = true;
@@ -20,37 +19,10 @@ export async function doctor(directory: string): Promise<boolean> {
   } catch (error) {
     check("configuration/policy", false, String(error));
   }
-  for (const name of process.platform === "win32"
-    ? ["pwsh", "cmake", "ninja"]
-    : ["zsh", "clang++", "codesign"]) {
+  for (const name of process.platform === "win32" ? ["pwsh"] : ["zsh", "clang++", "codesign"]) {
     check(name, Bun.which(name) !== null, Bun.which(name) ?? "not on PATH");
   }
   if (process.platform === "win32") {
-    const vswhere = resolve(
-      process.env["ProgramFiles(x86)"] ?? "C:/Program Files (x86)",
-      "Microsoft Visual Studio/Installer/vswhere.exe",
-    );
-    if (await Bun.file(vswhere).exists()) {
-      const child = Bun.spawn(
-        [
-          vswhere,
-          "-latest",
-          "-products",
-          "*",
-          "-requires",
-          "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
-          "-property",
-          "installationPath",
-        ],
-        { stdout: "pipe", stderr: "pipe" },
-      );
-      const installation = (await new Response(child.stdout).text()).trim();
-      check(
-        "MSVC",
-        (await child.exited) === 0 && !!installation,
-        installation || "C++ Build Tools missing",
-      );
-    } else check("MSVC", false, "Visual Studio Installer/vswhere.exe missing");
     const webview = Bun.spawn(
       [
         "powershell.exe",
@@ -66,7 +38,7 @@ export async function doctor(directory: string): Promise<boolean> {
   }
   console.log(
     process.platform === "win32"
-      ? "Native build also requires MSVC C++ Build Tools; execution requires WebView2 Evergreen. The native script verifies SDK/runtime pins."
+      ? "Windows uses bundled Bun FFI; execution requires WebView2 Evergreen. The prepare script verifies Bun and Loader pins."
       : "Native build requires Xcode CLT; macOS 14+ arm64. Local ad-hoc signing only, no notarization.",
   );
   return ok;

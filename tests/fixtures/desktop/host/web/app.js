@@ -170,7 +170,8 @@ async function run() {
       `expected denial ${JSON.stringify(r)}`,
     );
     const after = (await call("test.count")).payload;
-    assert(after === before + 1, "denied command reached the backend");
+    // Count only the registered forbidden handler: sibling-view commands may run concurrently.
+    assert(after === before, "denied command handler ran");
   });
   await test("denied event listen", async () => {
     const r = await listen("other.event");

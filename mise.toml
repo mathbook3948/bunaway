@@ -33,13 +33,9 @@ run = "bun test ./tests"
 description = "Export the protocol and policy schemas for native hosts"
 run = ["bun packages/protocol/scripts/generate.ts", "bunx --no-install biome format --write native/host-api/generated"]
 
-[tasks."probe:windows"]
-description = "Build the standalone Windows Bun package and verify process IPC and cleanup"
-run = "pwsh -NoProfile -File native/windows/probe/run.ps1"
-
 [tasks."host:windows"]
 description = "Build the Windows product host package and verify the WebView boundary, policy, storage scope and cleanup"
-run = "pwsh -NoProfile -File native/windows/host/run.ps1"
+run = "pwsh -NoProfile -File native/windows/bun/run.ps1"
 
 [tasks."probe:windows-ffi"]
 description = "Check direct Bun FFI and UI Worker lifecycle scenarios"
