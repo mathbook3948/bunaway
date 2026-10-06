@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { createClient } from "../../packages/client-sdk/src/index.ts";
 import { bundleAssets } from "../../packages/cli/src/build.ts";
 import { validateProject } from "../../packages/cli/src/config.ts";
-import { createProject } from "../../packages/cli/src/create.ts";
+import { createProject } from "./project.ts";
 import {
   parseHostCall,
   parseProcessFrame,

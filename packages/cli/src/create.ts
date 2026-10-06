@@ -1,9 +1,12 @@
 import { cp, realpath, rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
-import { checkArtifact, copyFramework, writeFrameworkLock } from "./distribution.ts";
+import { checkArtifact, packageFilename, release } from "./distribution.ts";
 import { frameworkRoot, json, writeJson } from "./files.ts";
 
-export async function createProject(directory: string): Promise<string> {
+export async function createProject(
+  directory: string,
+  options: { packageDirectory?: string } = {},
+): Promise<string> {
   const requested = resolve(directory);
   const target = resolve(await realpath(dirname(requested)), basename(requested));
   try {
@@ -22,9 +25,22 @@ export async function createProject(directory: string): Promise<string> {
     });
     await rename(resolve(staging, "gitignore"), resolve(staging, ".gitignore"));
     await rename(resolve(staging, "gitattributes"), resolve(staging, ".gitattributes"));
-    const snapshot = resolve(staging, "vendor/bunaway");
-    await copyFramework(snapshot);
-    await writeFrameworkLock(staging);
+    const info = await release();
+    const pkg = (await json(resolve(staging, "package.json"))) as {
+      dependencies: Record<string, string>;
+      devDependencies: Record<string, string>;
+    };
+    for (const dependencies of [pkg.dependencies, pkg.devDependencies]) {
+      for (const name of Object.keys(dependencies).filter((name) => name.startsWith("@bunaway/"))) {
+        if (options.packageDirectory) {
+          const artifact = await realpath(
+            resolve(options.packageDirectory, packageFilename(name, info.version)),
+          );
+          dependencies[name] = `file:${artifact.replaceAll("\\", "/")}`;
+        } else dependencies[name] = info.version;
+      }
+    }
+    await writeJson(resolve(staging, "package.json"), pkg);
     const configPath = resolve(staging, "src-bunaway/bunaway.json");
     const config = (await json(configPath)) as { app: Record<string, unknown> };
     const app = config.app;

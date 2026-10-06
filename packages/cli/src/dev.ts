@@ -51,7 +51,7 @@ export class RestartController<T> {
 
 export async function devProject(directory: string): Promise<void> {
   const project = await validateProject(directory);
-  const native = await prepareNative();
+  const native = await prepareNative(undefined, project.frameworkRoot);
   let child: ReturnType<typeof Bun.spawn> | undefined;
   let restarting = false;
   let resolveExit: (() => void) | undefined;

@@ -1,9 +1,25 @@
 import { createHash } from "node:crypto";
-import { lstat, readdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { lstat, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const frameworkRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+
+export async function installedPackageRoot(project: string, name: string): Promise<string> {
+  let parent = resolve(project);
+  while (true) {
+    const candidate = resolve(parent, "node_modules", name);
+    try {
+      await stat(resolve(candidate, "package.json"));
+      return await realpath(candidate);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    const next = dirname(parent);
+    if (next === parent) throw new Error(`Missing installed ${name}; run bun install.`);
+    parent = next;
+  }
+}
 
 export async function json(path: string): Promise<unknown> {
   try {
@@ -86,8 +102,9 @@ export async function runWorker(
   method: string,
   args: unknown[],
   cwd: string,
+  root = frameworkRoot,
 ): Promise<void> {
-  const url = pathToFileURL(resolve(frameworkRoot, "packages/cli/src", module)).href;
+  const url = pathToFileURL(resolve(root, "packages/cli/src", module)).href;
   const child = Bun.spawn(
     [
       process.execPath,

@@ -56,8 +56,8 @@ Bun UI Worker의 창·WebView2·비동기 작업·다중 창·종료를 검증�
   제공하고 단일 뷰 vanilla 템플릿을 생성한다. `plugins/log`, `plugins/storage`는 빈 모듈이며
   네이티브 Host API 로그/저장 구현과 배포할 기본 플러그인 완료는 다르다.
 - 개발자용 CLI tarball은 SDK·스키마·runtime pin·native source/tools·라이선스 원문을
-  함께 포함한다. 생성 앱의 vendor snapshot과 버전/파일 해시는 `bunaway.lock.json`으로
-  고정한다. [설치·버전 정책](../framework-distribution.md)은 공개 publish나 채널별 앱 설치
+  함께 포함한다. 현재 생성 앱은 CLI·SDK 패키지를 node_modules에 설치하며
+  package.json과 bun.lock으로 버전을 고정한다. [설치·버전 정책](../framework-distribution.md)은 공개 publish나 채널별 앱 설치
   검증과 별개다. `dev`의 UI 갱신은 전체 호스트 재시작이며 HMR은 미구현이다.
 
 ## 실행 근거: 기존 기록과 새 실행을 분리

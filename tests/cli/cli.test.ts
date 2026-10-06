@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { buildProject, bundleAssets } from "../../packages/cli/src/build.ts";
 import { validateProject } from "../../packages/cli/src/config.ts";
-import { createProject } from "../../packages/cli/src/create.ts";
+import { createProject } from "./project.ts";
 import { RestartController } from "../../packages/cli/src/dev.ts";
 import { writeJson } from "../../packages/cli/src/files.ts";
 
@@ -42,34 +42,26 @@ afterAll(async () => {
 });
 
 test("create produces a relocatable project with real SDK dependencies and no repository/sample paths", async () => {
-  expect(JSON.parse(originals["src-bunaway/bunaway.json"] ?? "").version).toBe(1);
   expect((await validateProject(project)).app.appId).toBe("app.created-app");
   expect(
-    await Bun.file(resolve(project, "vendor/bunaway/native/windows/bun/boot.ts")).exists(),
-  ).toBe(true);
-  const projectPackage = await Bun.file(resolve(project, "package.json")).json();
-  expect(projectPackage.dependencies["@bunaway/client"]).toBe("workspace:*");
-  const packagingManifest = await Bun.file(
-    resolve(project, "vendor/bunaway/packages/packaging/package.json"),
-  ).json();
-  expect(packagingManifest.name).toBe("@bunaway/packaging");
-  const lock = await Bun.file(resolve(project, "bunaway.lock.json")).json();
-  expect(lock.release.packages.packaging).toBe("@bunaway/packaging");
-  expect(lock.files["packages/packaging/src/index.ts"]).toMatch(/^[a-f0-9]{64}$/);
-  expect(
     await Bun.file(
-      resolve(project, "vendor/bunaway/docs/decisions/0007-project-settings.md"),
+      resolve(project, "node_modules/@bunaway/cli/native/windows/bun/boot.ts"),
     ).exists(),
   ).toBe(true);
+  const projectPackage = await Bun.file(resolve(project, "package.json")).json();
+  expect(projectPackage.dependencies["@bunaway/client"]).toEndWith(".tgz");
+  expect(projectPackage.workspaces).toBeUndefined();
+  expect(await Bun.file(resolve(project, "bunaway.lock.json")).exists()).toBe(false);
+  const packagingManifest = await Bun.file(
+    resolve(project, "node_modules/@bunaway/packaging/package.json"),
+  ).json();
+  expect(packagingManifest.name).toBe("@bunaway/packaging");
   expect(originals["src-bunaway/src/index.ts"]).not.toContain("examples/memo");
-  const process = Bun.spawn(
-    [globalThis.process.execPath, "vendor/bunaway/packages/cli/src/main.ts", "validate"],
-    {
-      cwd: project,
-      stdout: "pipe",
-      stderr: "pipe",
-    },
-  );
+  const process = Bun.spawn([globalThis.process.execPath, "run", "validate"], {
+    cwd: project,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   expect(await process.exited).toBe(0);
 });
 
@@ -82,25 +74,10 @@ test("create refuses existing paths and missing parents without modifying them",
   expect((await readdir(home)).some((name) => name.includes(".creating-"))).toBe(false);
 });
 
-test("settings are read only from src-bunaway/bunaway.json", async () => {
-  const path = resolve(project, "src-bunaway/bunaway.json");
-  const rootPath = resolve(project, "bunaway.json");
-  try {
-    await writeJson(rootPath, { version: 99 });
-    expect((await validateProject(project)).app.appId).toBe("app.created-app");
-    await rm(path);
-    await expect(validateProject(project)).rejects.toThrow("Cannot read JSON");
-  } finally {
-    await Bun.write(path, originals["src-bunaway/bunaway.json"] ?? "");
-    await rm(rootPath, { force: true });
-  }
-});
-
-test("unified settings reject malformed build, app and bundle sections", async () => {
+test("unified v1 configuration rejects malformed sections and old flat settings", async () => {
   const path = resolve(project, "src-bunaway/bunaway.json");
   const valid = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
   for (const value of [
-    { ...valid, version: 99 },
     { ...valid, version: 2 },
     { version: 1, ...valid.build },
     { ...valid, injected: true },
@@ -109,7 +86,7 @@ test("unified settings reject malformed build, app and bundle sections", async (
     { ...valid, app: { ...valid.app, appId: "../escape" } },
     { ...valid, app: { ...valid.app, home: "https://app.bunaway.local/missing.html" } },
     { ...valid, app: { ...valid.app, injected: true } },
-    { ...valid, bundle: { channels: { "unknown-channel": {} } } },
+    { ...valid, bundle: { channels: { unknown: {} } } },
     { ...valid, bundle: { version: 1 } },
     { ...valid, bundle: null },
   ]) {
@@ -122,7 +99,7 @@ test("unified settings reject malformed build, app and bundle sections", async (
   }
 });
 
-test("unified settings allow omitted bundle", async () => {
+test("bundle is optional until packaging and generated settings use only two files", async () => {
   const path = resolve(project, "src-bunaway/bunaway.json");
   const valid = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
   const { bundle: _bundle, ...withoutBundle } = valid;

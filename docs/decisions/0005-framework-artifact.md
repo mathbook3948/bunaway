@@ -4,6 +4,9 @@ status: accepted
 
 # 개발자용 artifact는 완전한 프레임워크 소스를 제공하고 생성 앱은 vendor snapshot을 유지한다
 
+2026-10-06 생성 앱 vendor snapshot과 별도 잠금 파일은
+[설치 패키지 결정](./0008-installed-framework-packages.md)으로 대체했다. 아래는 이전 결정의 기록이다.
+
 개발자는 bunaway 저장소를 체크아웃하지 않고 create → dev → build를 실행해야 한다.
 현재 네이티브 도구는 고정 runtime manifest·스키마·네이티브 소스가 같은 프레임워크
 트리에 있다고 가정한다. SDK만 registry에 올리면 생성 앱의 native build 도구가

@@ -23,6 +23,22 @@ export async function main(args: string[]): Promise<number> {
     console.log(help);
     return 0;
   }
+  if (command === "create") {
+    const [directory, option, packageDirectory, ...extra] = rest;
+    if (
+      !directory ||
+      directory.startsWith("--") ||
+      extra.length ||
+      (option !== undefined && (option !== "--package-dir" || !packageDirectory))
+    ) {
+      throw new Error("Usage: bunaway create <directory> [--package-dir <tarball-directory>].");
+    }
+    const path = await createProject(directory, packageDirectory ? { packageDirectory } : {});
+    console.log(
+      `Created ${path}\nNext: enter the directory, run bun install, then bun run doctor / dev / build.`,
+    );
+    return 0;
+  }
   if (command === "package") {
     const [channel, ...tail] = rest;
     if (!channel) {
@@ -43,14 +59,6 @@ export async function main(args: string[]): Promise<number> {
   if (extra.length || directory?.startsWith("--"))
     throw new Error("Unexpected argument. Use --help.");
   switch (command) {
-    case "create": {
-      if (!directory) throw new Error("create requires a new directory.");
-      const path = await createProject(directory);
-      console.log(
-        `Created ${path}\nNext: enter the directory, run bun install, then bun run doctor / dev / build.`,
-      );
-      return 0;
-    }
     case "validate": {
       await validateProject(directory ?? ".");
       console.log("Configuration and policy are valid.");

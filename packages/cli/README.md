@@ -5,7 +5,7 @@
 
 ## 생성 → 개발 → 빌드 → 독립 실행
 
-저장소 체크아웃 없는 설치, SDK/native artifact 구성·버전 규칙·전체 snapshot 업그레이드는
+저장소 체크아웃 없는 설치, SDK/native artifact 구성·버전 규칙·CLI·SDK 일괄 업그레이드는
 [개발자 설치 안내](../../docs/framework-distribution.md)를 따른다. 로컬 tarball에는 CLI
 bin/API JS 번들과 모든 생성 입력이 포함된다. 공개 registry publish는 하지 않는다.
 아래는 프레임워크 저장소 기여자용 직접 소스 실행 경로다.
@@ -14,7 +14,8 @@ bin/API JS 번들과 모든 생성 입력이 포함된다. 공개 registry publi
 `runtime/bun-bundle/vendor/bun-windows-x64-baseline/bun.exe`로 아래 `bun`을 대체한다.
 
 ```sh
-bun packages/cli/src/main.ts create ../my-app
+bun run framework:pack --local
+bun packages/cli/src/main.ts create ../my-app --package-dir build/framework
 cd ../my-app
 bun install
 bun run doctor
@@ -25,17 +26,18 @@ bun run build
 ```
 
 `create`는 기존 경로를 덮어쓰지 않는다. 설치를 자동 실행하지 않으며 마지막에 다음
-단계를 안내한다. 생성 프로젝트는 SDK·CLI·네이티브 소스·스키마·핀의 **로컬 스냅샷**을
-포함한다. 생성 후 원본 저장소를 삭제하거나 프로젝트를 이동해도 동작한다.
-SDK 의존성은 workspace 이름으로 연결하며 메모 샘플/원본 저장소 경로를 사용하지 않는다.
+단계를 안내한다. 생성 프로젝트는 @bunaway/cli와 SDK의 패키지 의존성을 선언한다.
+프레임워크는 앱의 node_modules에 설치되며 원본 저장소 없이 동작한다.
+package.json과 bun.lock을 커밋한다. vendor 복사와 별도 프레임워크 잠금 파일은 없다.
+로컬 tarball 묶음은 깨끗한 재설치를 위해 보관한다.
 개발 도구 설치에는 Bun 패키지 레지스트리, 최초 네이티브 빌드에는 고정 런타임/헤더/SDK
 다운로드 접근이 필요하다. 앱 실행에는 네트워크나 Bun 설치가 필요 없다.
 
-명령은 `create <new-directory>`와 `dev|validate|build|doctor [directory]`,
+명령은 `create <new-directory> [--package-dir <tarball-directory>]`와 `dev|validate|build|doctor [directory]`,
 `package <channel> [directory] [--build]`다.
 옵션/알 수 없는 명령·설정 필드는 오류로 종료한다. `validate`는 버전·앱 ID·소스 경로·홈
 자산·단일 뷰/정확한 origin·기존 정책 스키마를 검사한다. `package`는
-`bunaway.json`의 `bundle`(없으면 거부)을 읽어
+`bunaway.json.bundle`(패키징에 필요, 선언 시 dev/build에서도 형식 검사)을 읽어
 `bunaway build`의 채널 중립 산출물을 채널별 패키지로 조립한다. 산출물은
 `dist/<target>/packaged/<channel>/`, 결과는 `packaging-report.<channel>.json`에
 기록한다. `--build`는 패키징 전에 빌드를 먼저 실행한다. 채널·어댑터 계약·서명/해시
@@ -52,28 +54,18 @@ my-app/
   src-bunaway/
     src/{app.ts,index.ts}
     bunaway.json, policy.json
-  vendor/bunaway/
-    packages/{cli,backend-sdk,client-sdk,core,protocol,runtime-bun}/
-    native/{windows/bun,macos/host,host-api/generated}/
-    runtime/build-manifests/, tsconfig.base.json, package.json
-  bunaway.lock.json
+  bun.lock (bun install 후 생성)
 ```
 
-`src-bunaway/bunaway.json` v1는 `build`(소스 경로), `app`(앱 ID·창·시작 페이지),
-`bundle`(채널별 배포 설정)을 통합한다. `bundle`은 dev/build에서 생략할 수 있지만
-선언한 경우 형식을 검증한다. 권한은 `policy.json`으로 분리한다.
-`build.backend`(기존 프로세스 진입점), `build.windowsApp`(default export AppDefinition),
-`build.frontend`(디렉터리)와 아이콘·인증서 경로는 프로젝트 루트 상대 경로다.
-Windows 빌드에는 `build.windowsApp`이 필요하다.
-
-설정은 `src-bunaway/bunaway.json` v1 한 형식만 사용한다.
-루트 설정 파일과 별도 앱·패키징 설정 파일은 읽지 않는다.
-작성 형식은 [설정 결정](../../docs/decisions/0007-project-settings.md)을 따른다.
+`src-bunaway/bunaway.json` v1에 build·app·bundle을 통합한다. 권한은 policy.json에 둔다.
+`build.backend`, `build.windowsApp`(default export AppDefinition), `build.frontend`와
+패키징 파일 경로는 프로젝트 루트 상대 경로다. Windows 빌드에는 build.windowsApp이 필요하다.
+배포 전에는 현재 v1만 사용하고 이전 분리 설정·vendor 구조 호환을 제공하지 않는다.
 프런트엔드의 `.ts`/`.js`는 브라우저 번들로 변환하고 나머지 정적 자산은 복사한다.
 `.d.ts`는 배포하지 않는다. CSS 등 번들의 추가 출력까지 정적 자산과 대조해 기록 전에
 충돌을 거부한다. 출력 이름은 Windows/macOS 이식성을 위해 대소문자를 구분하지 않고
 비교하며 자산 심볼릭 링크도 거부한다.
-vanilla MVP의 `app`은 양쪽 호스트가 공통으로 지원하는 단일 뷰 설정과
+vanilla MVP는 양쪽 호스트가 공통으로 지원하는 단일 뷰 `app` 설정과
 `https://app.bunaway.local`의 호스트 소유 로컬 자산만 사용한다. Windows는 가상 호스트,
 macOS는 기존 `bunaway://` 매핑이다. HTTP 개발 origin은 여기서 허용하지 않는다.
 

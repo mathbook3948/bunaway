@@ -18,7 +18,7 @@
 [공통 API](./docs/architecture/common-api.md)는 SDK·코어·Host API가 따르는 계약이다.
 CLI의 create/validate/doctor/dev/build와 vanilla 템플릿은 구현했다.
 [프레임워크 artifact 설치·업그레이드](./docs/framework-distribution.md)는 저장소 체크아웃
-없는 개발 흐름과 정확한 버전·vendor snapshot을 제공한다. 공개 registry publish는 하지
+없는 개발 흐름과 정확한 버전의 CLI·SDK 패키지 설치을 제공한다. 공개 registry publish는 하지
 않았으며 프레임워크 라이선스 결정은 미해결이다. 기본 로그/저장 플러그인은 미구현이다.
 macOS Intel·다중 창/뷰,
 Linux·모바일 네이티브 호스트와 설치·배포 검증은 포함하지 않는다.

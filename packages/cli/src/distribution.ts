@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile } from "node:fs/promises";
+import { cp, mkdir } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import { PROCESS_IPC_VERSION, PROTOCOL_VERSION } from "@bunaway/protocol";
 import {
@@ -6,10 +6,9 @@ import {
   frameworkRoot,
   hash,
   json,
-  projectPath,
+  installedPackageRoot,
   runWorker,
   verifyHash,
-  writeJson,
 } from "./files.ts";
 
 export const frameworkPaths = [
@@ -19,9 +18,10 @@ export const frameworkPaths = [
   "licenses",
   "docs/framework-distribution.md",
   "docs/decisions/0005-framework-artifact.md",
+  "docs/decisions/0007-project-settings.md",
+  "docs/decisions/0008-installed-framework-packages.md",
   "docs/decisions/0001-bundled-bun-process.md",
   "docs/decisions/0006-windows-bun-ui-worker.md",
-  "docs/decisions/0007-project-settings.md",
   "docs/architecture/windows-bun-results.md",
   "docs/platform-support/README.md",
   "tsconfig.base.json",
@@ -75,11 +75,6 @@ const packageNames: Record<string, string> = {
   packaging: "@bunaway/packaging",
 };
 
-const snapshotGeneratedDirectories = [
-  ...generatedDirectories,
-  ...Object.keys(packageNames).map((directory) => `packages/${directory}/node_modules`),
-];
-
 interface PackageDependencies {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
@@ -118,7 +113,7 @@ export async function release(root = frameworkRoot): Promise<Release> {
     value.processProtocol?.minor !== PROCESS_IPC_VERSION.minor
   ) {
     throw new Error(
-      "Incompatible framework/native host/Web/IPC release; upgrade the whole snapshot.",
+      "Incompatible framework/native host/Web/IPC release; install one matching package release.",
     );
   }
   for (const [directory, name] of Object.entries(value.packages)) {
@@ -170,89 +165,76 @@ export async function snapshotHashes(
   return hashes;
 }
 
-export async function writeFrameworkLock(project: string): Promise<void> {
-  const root = resolve(project, "vendor/bunaway");
-  await writeJson(resolve(project, "bunaway.lock.json"), {
-    release: await release(root),
-    files: await snapshotHashes(root),
-  });
-}
-
 export async function validateFramework(
   project: string,
   sources: readonly string[] = [],
-): Promise<void> {
-  const root = resolve(project, "vendor/bunaway");
-  const lockPath = resolve(project, "bunaway.lock.json");
-  if (!(await Bun.file(lockPath).exists())) {
-    throw new Error(
-      "Missing bunaway.lock.json (legacy project). Follow the framework upgrade guide.",
-    );
-  }
-  const lock = (await json(lockPath)) as { release: Release; files: Record<string, string> };
-  const actual = await release(root);
-  const active = await release();
-  if (
-    JSON.stringify(lock.release) !== JSON.stringify(actual) ||
-    actual.version !== active.version
-  ) {
-    throw new Error(
-      "Incompatible framework snapshot/CLI; use the project's CLI or upgrade the whole snapshot.",
-    );
-  }
-  for (const name of requiredFrameworkFiles()) {
-    if (!lock.files[name]) {
-      throw new Error(`Framework lock is missing required input: ${name}`);
-    }
-  }
-  for (const [name, expected] of Object.entries(lock.files)) {
-    if (name.includes("\\") || name.split("/").includes("..") || name.startsWith("/")) {
-      throw new Error("Invalid framework lock path.");
-    }
-    await verifyHash(await projectPath(root, name), expected);
-  }
-  for (const path of await files(root, snapshotGeneratedDirectories)) {
-    const name = relative(root, path).replaceAll("\\", "/");
-    if (!Object.hasOwn(lock.files, name)) {
-      throw new Error(`Unexpected framework snapshot file: ${name}`);
-    }
-  }
-  const pkg = JSON.parse(
-    await readFile(resolve(project, "package.json"), "utf8"),
-  ) as PackageDependencies & {
-    workspaces: string[];
+): Promise<string> {
+  const pkg = (await json(resolve(project, "package.json"))) as PackageDependencies & {
     packageManager: string;
     overrides?: unknown;
     resolutions?: unknown;
   };
-  if (
-    pkg.packageManager !== `bun@${actual.bun}` ||
-    JSON.stringify(pkg.workspaces) !== JSON.stringify(["vendor/bunaway/packages/*"]) ||
-    ["@bunaway/backend", "@bunaway/client", "@bunaway/runtime-bun"].some(
-      (name) => pkg.dependencies?.[name] !== "workspace:*",
-    ) ||
-    sdkDependencies(pkg).some(([, version]) => version !== "workspace:*") ||
-    hasSdkOverride(pkg.overrides) ||
-    hasSdkOverride(pkg.resolutions)
-  ) {
+  if (hasSdkOverride(pkg.overrides) || hasSdkOverride(pkg.resolutions)) {
     throw new Error(
-      "Incompatible Bun/SDK dependency declaration; keep the pinned vendor workspaces.",
+      "Incompatible Bun/SDK dependency override; install one matching framework release.",
     );
   }
+  const root = await installedPackageRoot(project, "@bunaway/cli");
+  const actual = await release(root);
+  const active = await release();
+  if (actual.version !== active.version) {
+    throw new Error("Incompatible framework/CLI; use the project's installed bunaway command.");
+  }
+  if (pkg.packageManager !== `bun@${actual.bun}`) {
+    throw new Error("Incompatible Bun/SDK dependency declaration; use the pinned Bun version.");
+  }
+  await checkArtifact(root);
   const references: { name: string; parent: string }[] = [];
-  for (const name of new Set(sdkDependencies(pkg).map(([name]) => name))) {
-    for (const parent of [project, ...sources]) {
-      references.push({ name, parent });
+  for (const name of Object.values(packageNames)) {
+    const installed = await installedPackageRoot(project, name);
+    const manifest = (await json(resolve(installed, "package.json"))) as PackageDependencies & {
+      name: string;
+      version: string;
+    };
+    if (manifest.name !== name || manifest.version !== actual.version) {
+      throw new Error(`Incompatible SDK/CLI package: ${name}; expected ${actual.version}.`);
+    }
+    for (const [dependency, version] of sdkDependencies(manifest)) {
+      if (version !== actual.version && !version.endsWith(".tgz"))
+        throw new Error(`Incompatible SDK dependency: ${dependency}.`);
+      if (dependency !== "@bunaway/cli") references.push({ name: dependency, parent: installed });
+    }
+    if (name !== "@bunaway/cli") {
+      for (const parent of [project, ...sources]) references.push({ name, parent });
     }
   }
-  for (const directory of Object.keys(packageNames)) {
-    const workspace = resolve(root, `packages/${directory}`);
-    const manifest = (await json(resolve(workspace, "package.json"))) as PackageDependencies;
-    for (const [name] of sdkDependencies(manifest)) {
-      references.push({ name, parent: resolve(workspace, "src/index.ts") });
+  const declarations = sdkDependencies(pkg);
+  for (const name of [
+    "@bunaway/cli",
+    "@bunaway/backend",
+    "@bunaway/client",
+    "@bunaway/runtime-bun",
+  ]) {
+    if (!declarations.some(([dependency]) => dependency === name)) {
+      throw new Error(`Missing framework dependency: ${name}; follow the installation guide.`);
     }
   }
-  await runWorker("sdk.ts", "validateSdkGraph", [project, references, sources], project);
+  for (const [name, specifier] of declarations) {
+    if (
+      !Object.values(packageNames).includes(name) ||
+      (specifier !== actual.version && !specifier.endsWith(".tgz"))
+    ) {
+      throw new Error(
+        `Incompatible Bun/SDK dependency declaration: ${name}; pin ${actual.version}.`,
+      );
+    }
+  }
+  await runWorker("sdk.ts", "validateSdkGraph", [project, references, sources], project, root);
+  return root;
+}
+
+export function packageFilename(name: string, version: string): string {
+  return `${name.replace("@bunaway/", "bunaway-")}-${version}.tgz`;
 }
 
 function requiredFrameworkFiles(): string[] {

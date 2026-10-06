@@ -26,6 +26,8 @@
 - [0003 — 단일 스키마와 분리된 프로토콜](./decisions/0003-shared-schema-separate-protocols.md)
 - [0004 — Windows 창/뷰별 정책과 수명 분리](./decisions/0004-multi-window-per-view-policy.md)
 - [0005 — 설치 artifact와 생성 앱의 vendor snapshot](./decisions/0005-framework-artifact.md)
+- [0007 — 통합 v1 앱 설정과 생성 폴더 구조](./decisions/0007-project-settings.md)
+- [0008 — 설치 패키지와 bun.lock 기반 프레임워크 의존성](./decisions/0008-installed-framework-packages.md)
 - [0006 — Windows Bun 진입점·UI Worker·직접 FFI](./decisions/0006-windows-bun-ui-worker.md)
 
 [이전 C ABI 초안](./architecture/native-abi.md)은 과거 설계 기록이다. 현재 Windows는 Worker 연결,
