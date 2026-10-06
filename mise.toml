@@ -41,6 +41,10 @@ run = "pwsh -NoProfile -File native/windows/probe/run.ps1"
 description = "Build the Windows product host package and verify the WebView boundary, policy, storage scope and cleanup"
 run = "pwsh -NoProfile -File native/windows/host/run.ps1"
 
+[tasks."probe:windows-ffi"]
+description = "Check direct Bun FFI and UI Worker lifecycle scenarios"
+run = "pwsh -NoProfile -File native/windows/ffi-probe/repeat.ps1 -Repeat 1"
+
 [tasks."probe:macos"]
 description = "Build the standalone macOS Bun package and verify process IPC and cleanup"
 run = "zsh native/macos/probe/run.sh"

@@ -6,6 +6,10 @@
 맞지 않는다. 아래는 요구사항 전체 완료 선언이 아니라 구현 및 검증 범위다.
 새 macOS 회귀 실행은 [macOS 기록](./macos-native-results.md)에서 기존 검증과 구분한다.
 
+2026-10-06 [Windows 직접 FFI 예제](../../native/windows/ffi-probe/README.md)에서
+Bun UI Worker의 창·WebView2·비동기 작업·다중 창·종료를 검증했다. 5초 종료 기준
+초과는 공식 컨트롤에서도 재현됐다. 제품 실행 구조와 보안 정책의 이식은 아직 진행하지 않았다.
+
 | 단계 | 구현 상태 | 검증 범위·근거 | 남은 작업·미검증 |
 | --- | --- | --- | --- |
 | 개발 환경 | mise 기반 Bun 1.4.2, 8개 workspace, 타입 환경 분리, 개발자용 로컬 CLI artifact | 공통 CI 및 실제 tarball 외부 설치·생성·이동·검증/typecheck 테스트 | 공개 publish·프레임워크 라이선스 결정 |

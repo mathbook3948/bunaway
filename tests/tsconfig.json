@@ -8,6 +8,7 @@
     "../packages/protocol/scripts/*.ts",
     "../packages/cli/scripts/*.ts",
     "../native/windows/probe/*.ts",
+    "../native/windows/ffi-probe/*.ts",
     "../native/macos/probe/*.ts",
     "../examples/memo/**/*.ts",
     "../native/windows/host/test/backend.ts"
