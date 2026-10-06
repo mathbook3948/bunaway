@@ -1,6 +1,6 @@
 ---
 title: storage.writeText
-description: 텍스트 저장의 입력·쓰기 권한·덮어쓰기·취소 및 완료 의미.
+description: 텍스트 저장의 입력, 쓰기 권한, 덮어쓰기, 취소 및 완료 의미.
 sidebar: { order: 2 }
 ---
 
@@ -20,27 +20,27 @@ await context.host.call("storage.writeText", {
 
 ## 입력과 정책
 
-`scope`·`path`는 [storage.readText](/reference/host/storage-read-text/)와 같은 필수 경로 계약입니다.
+`scope`, `path`는 [storage.readText](/reference/host/storage-read-text/)와 같은 필수 경로 계약입니다.
 `text`는 필수 JSON 문자열이며 추가 필드는 허용하지 않습니다.
 문자열 자체의 별도 maxLength는 Host 스키마에 없지만 전체 요청의 1 MiB UTF-8 메시지 제한을 받습니다.
 앱 명령에서 더 작은 입력 상한을 지정할 수 있으며 템플릿은 10,000자입니다.
 
 해당 출처의 storage grant에 `write`가 필요합니다.
 read만 허용하거나 `commands`에 저장 명령만 추가해 놓은 상태는 쓰기 권한을 주지 않습니다.
-디렉터리·파일의 실제 범위는 호스트가 작업 직전에 확인합니다.
+디렉터리, 파일의 실제 범위는 호스트가 작업 직전에 확인합니다.
 
 ## 반환과 이벤트
 
 성공은 `null`입니다. 템플릿은 저장 성공 뒤 `message.saved`를 발행합니다.
 쓰기 성공과 이벤트 전달은 별도의 동작이며, 이벤트 실패가 이미 끝난 파일 저장을 되돌리지 않습니다.
-이 API가 데이터베이스 트랜잭션·여러 파일 원자적 갱신·자동 버전 이력을 제공하지는 않습니다.
+이 API가 데이터베이스 트랜잭션, 여러 파일 원자적 갱신, 자동 버전 이력을 제공하지는 않습니다.
 
 ## 취소와 재시도
 
 진행 전 취소는 작업을 막습니다. 이미 시작하거나 끝난 쓰기는 자동 롤백하지 않습니다.
-클라이언트의 `TIMEOUT`·연결 종료만으로 파일이 저장되지 않았다고 단정하지 않습니다.
+클라이언트의 `TIMEOUT`, 연결 종료만으로 파일이 저장되지 않았다고 단정하지 않습니다.
 다시 읽어 상태를 확인한 뒤 사용자가 재시도하도록 처리하세요.
 
-잘못된 입력은 `INVALID_ARGUMENT`, 권한·경로 거부는 `PERMISSION_DENIED`,
-취소는 `CANCELLED`, 일반 작업·응답 실패는 `INTERNAL`일 수 있습니다.
-삭제·append·바이너리 쓰기는 현재 별도의 Host operation으로 제공하지 않습니다.
+잘못된 입력은 `INVALID_ARGUMENT`, 권한, 경로 거부는 `PERMISSION_DENIED`,
+취소는 `CANCELLED`, 일반 작업, 응답 실패는 `INTERNAL`일 수 있습니다.
+삭제, append, 바이너리 쓰기는 현재 별도의 Host operation으로 제공하지 않습니다.

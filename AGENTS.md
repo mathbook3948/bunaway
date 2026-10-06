@@ -22,6 +22,11 @@ Run `bun run docs:check` and `bun run docs:build` after documentation changes to
 verify coverage, types, rendering and internal links. Automated coverage checks
 do not replace reviewing the accuracy of the explanations and examples.
 
+### Writing style
+
+Do not use em dashes (U+2014) or middle dots (U+00B7) in documentation or
+user-facing text. Use sentences, commas, colons or conjunctions instead.
+
 ### Development priority
 
 Read `docs/decisions/0010-windows-first-platform-model.md` before runtime, CLI,

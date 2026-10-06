@@ -1,6 +1,6 @@
 ---
 title: 첫 앱 실행하기
-description: 로컬 프레임워크 패키지로 생성한 앱에서 저장·이벤트·재실행 후 복원을 확인합니다.
+description: 로컬 프레임워크 패키지로 생성한 앱에서 저장, 이벤트, 재실행 후 복원을 확인합니다.
 ---
 
 ## 개발 환경 준비
@@ -68,7 +68,7 @@ bun run doctor
 bun run dev
 ```
 
-`validate`는 소스·설정·정책, `typecheck`는 앱 타입, `doctor`는 개발 환경을 검사합니다.
+`validate`는 소스, 설정, 정책, `typecheck`는 앱 타입, `doctor`는 개발 환경을 검사합니다.
 첫 네이티브 빌드에서는 고정된 런타임과 플랫폼 의존성을 내려받습니다.
 
 ## 4. 저장 흐름 확인
@@ -85,7 +85,7 @@ bun run dev
 ## 5. 파일을 살펴보기
 
 [프로젝트와 세 파일](/concepts/project-layout/)에서 `app.ts`, `bunaway.json`, `policy.json`을 연결해 읽어보세요.
-[명령과 이벤트](/guides/commands-and-events/)에는 템플릿의 실제 백엔드·프런트엔드 코드가 있습니다.
+[명령과 이벤트](/guides/commands-and-events/)에는 템플릿의 실제 백엔드, 프런트엔드 코드가 있습니다.
 
 UI HMR을 원하면 [Vite와 개발 흐름](/guides/development/)의 `vite` 템플릿을 사용하세요.
-두 템플릿의 `dev`·`build` 스크립트 역할이 다르므로 해당 가이드의 실행 명령을 따릅니다.
+두 템플릿의 `dev`, `build` 스크립트 역할이 다르므로 해당 가이드의 실행 명령을 따릅니다.

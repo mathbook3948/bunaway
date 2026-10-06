@@ -1,6 +1,6 @@
 ---
 title: dev
-description: 감시·debounce·직렬 재시작·외부 서버·종료와 개발 산출물.
+description: 감시, debounce, 직렬 재시작, 외부 서버, 종료와 개발 산출물.
 sidebar: { order: 4 }
 ---
 
@@ -8,21 +8,21 @@ sidebar: { order: 4 }
 bunaway dev [directory]
 ```
 
-설정·정책을 개발 모드로 검증하고 네이티브 도구를 준비한 뒤 앱을 실행합니다.
+설정, 정책을 개발 모드로 검증하고 네이티브 도구를 준비한 뒤 앱을 실행합니다.
 `dev` 설정이 있으면 외부 UI 서버를 시작하고 HTTP 준비를 기다립니다.
 생성 앱 스크립트는 vanilla의 `bun run dev`, Vite의 `bun run bunaway dev`입니다.
 
 ## 파일 감시
 
 변경을 150 ms debounce한 뒤 직렬 처리합니다.
-node_modules·vendor·dist·.bunaway·.git·.next·.turbo는 호스트 재시작 감시에서 제외합니다.
+node_modules, vendor, dist, .bunaway, .git, .next, .turbo는 호스트 재시작 감시에서 제외합니다.
 
 외부 서버가 없으면 UI 변경도 전체 앱을 재시작합니다.
 외부 서버가 있으면 UI HMR은 서버에 맡기고 아래를 감시합니다.
 
 - `src-bunaway/`.
 - `build.app`이 있는 디렉터리.
-- 루트의 package.json·bun.lock·tsconfig.json.
+- 루트의 package.json, bun.lock, tsconfig.json.
 
 앱 정의가 프로젝트 루트에 있으면 루트 파일만 감시하고 UI 하위 디렉터리는 제외합니다.
 이 범위 밖의 공유 백엔드 모듈을 수정했다면 dev를 다시 실행하세요.
@@ -34,12 +34,12 @@ node_modules·vendor·dist·.bunaway·.git·.next·.turbo는 호스트 재시작
 빌드 실패는 오류를 표시하고 다음 저장을 기다리며 이전 앱을 다시 띄우지 않습니다.
 외부 서버는 백엔드 변경에서 유지하고 서버 설정이 바뀌면 교체합니다.
 
-새 호스트는 새 런타임 세대·세션·메모리 상태를 사용합니다.
-미완료 요청·구독은 정리하고 자동 재전송하지 않습니다. 완료한 파일 저장은 롤백하지 않습니다.
+새 호스트는 새 런타임 세대, 세션, 메모리 상태를 사용합니다.
+미완료 요청, 구독은 정리하고 자동 재전송하지 않습니다. 완료한 파일 저장은 롤백하지 않습니다.
 
 ## 종료
 
-Ctrl+C·창 닫기·서버 종료·준비 timeout 때 앱과 관리한 서버 자손을 정리합니다.
+Ctrl+C, 창 닫기, 서버 종료, 준비 timeout 때 앱과 관리한 서버 자손을 정리합니다.
 Windows 재시작 정리는 WM_CLOSE 후 종료를 확인하며 40초 안에 끝나지 않으면 중단합니다.
 이미 켜진 외부 서버를 채택하지 않고 포트 충돌은 오류입니다.
 

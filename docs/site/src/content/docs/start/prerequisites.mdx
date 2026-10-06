@@ -3,7 +3,7 @@ title: 개발 환경 준비
 description: 앱 개발과 문서 기여, 최종 사용자 요구사항을 플랫폼별로 구분합니다.
 ---
 
-앱 개발에는 HTML·CSS·TypeScript의 기본 지식과 **Bun 1.4.2**가 필요합니다.
+앱 개발에는 HTML, CSS, TypeScript의 기본 지식과 **Bun 1.4.2**가 필요합니다.
 현재 Windows를 우선으로 개발하며 네이티브 빌드는 대상 머신에서 수행합니다.
 
 ## Windows x64
@@ -14,20 +14,20 @@ description: 앱 개발과 문서 기여, 최종 사용자 요구사항을 플�
 - 실제 창을 열 수 있는 GUI 세션.
 
 Windows 호스트는 Bun FFI이므로 앱 개발에 C++ 컴파일러를 요구하지 않습니다.
-앱 설치 파일 `win-direct`·`win-store-unpackaged`를 만들 때는 Inno Setup 6.3 이상이 필요합니다.
+앱 설치 파일 `win-direct`, `win-store-unpackaged`를 만들 때는 Inno Setup 6.3 이상이 필요합니다.
 서명할 때는 Windows SDK의 signtool 및 해당 서명 자격이 필요합니다.
 자세한 도구 요구는 [패키징 채널](/reference/packaging/channels/)을 따릅니다.
 
 ## macOS arm64
 
 Bun 1.4.2, Xcode Command Line Tools, GUI 세션이 필요합니다.
-현재 호스트·CLI 기준은 macOS 14 이상 Apple Silicon입니다.
-Intel·다중 창은 현재 지원하지 않습니다.
-개발 build의 ad-hoc 서명과 Developer ID·공증은 서로 다릅니다.
+현재 호스트, CLI 기준은 macOS 14 이상 Apple Silicon입니다.
+Intel, 다중 창은 현재 지원하지 않습니다.
+개발 build의 ad-hoc 서명과 Developer ID, 공증은 서로 다릅니다.
 
 ## 환경 확인
 
-앱을 생성·설치한 뒤 해당 앱 폴더에서 실행합니다.
+앱을 생성, 설치한 뒤 해당 앱 폴더에서 실행합니다.
 
 ```sh
 bun --version
@@ -37,8 +37,8 @@ bun run doctor
 bun run bunaway doctor
 ```
 
-Linux에서는 문서 사이트·공통 계약 검사 작업을 할 수 있지만 앱 호스트는 아직 없습니다.
-네이티브 GUI 검증을 공통 타입·계약 테스트로 대체하지 않습니다.
+Linux에서는 문서 사이트, 공통 계약 검사 작업을 할 수 있지만 앱 호스트는 아직 없습니다.
+네이티브 GUI 검증을 공통 타입, 계약 테스트로 대체하지 않습니다.
 
 ## 문서 사이트와 최종 사용자
 
@@ -46,4 +46,4 @@ Linux에서는 문서 사이트·공통 계약 검사 작업을 할 수 있지�
 이는 Astro 문서 사이트의 요구이며 bunaway 최종 앱 사용자에게 Node.js 설치를 요구하는 것이 아닙니다.
 최종 앱은 번들 Bun을 사용합니다. Windows 사용자는 WebView2가 있어야 합니다.
 
-[첫 앱 실행하기](/start/quickstart/) · [지원 범위](/reference/platforms/)
+[첫 앱 실행하기](/start/quickstart/), [지원 범위](/reference/platforms/)

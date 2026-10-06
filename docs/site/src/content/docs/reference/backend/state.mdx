@@ -1,6 +1,6 @@
 ---
 title: StateStore
-description: get·set·delete, JSON 스냅샷, 초기 상태와 동시 실행의 의미.
+description: get, set, delete, JSON 스냅샷, 초기 상태와 동시 실행의 의미.
 sidebar: { order: 4 }
 ---
 
@@ -13,7 +13,7 @@ sidebar: { order: 4 }
 | 메서드 | 반환값 | 동작 |
 | --- | --- | --- |
 | `get(key: string)` | `JsonValue \| undefined` | 저장 값의 분리된 스냅샷. 없는 키는 undefined |
-| `set(key: string, value: JsonValue)` | `void` | JSON 값을 검증·복사해 저장 |
+| `set(key: string, value: JsonValue)` | `void` | JSON 값을 검증, 복사해 저장 |
 | `delete(key: string)` | `boolean` | 제거. 이전에 존재했다면 true |
 
 ```ts
@@ -26,15 +26,15 @@ const removed = context.state.delete("draft");
 
 반환 객체를 직접 수정해도 저장 값은 바뀌지 않습니다.
 `set`에 넘긴 원래 객체를 나중에 바꿔도 저장 값을 수정하지 않습니다.
-함수·Date·순환 객체·undefined 등을 값으로 저장하지 않습니다.
+함수, Date, 순환 객체, undefined 등을 값으로 저장하지 않습니다.
 JSON 제약은 [스키마와 JSON](/reference/schema/)를 따릅니다.
 
 ## 공유와 동시 실행
 
-여러 뷰·플러그인은 공통 앱 상태를 공유합니다.
+여러 뷰, 플러그인은 공통 앱 상태를 공유합니다.
 호출 세션을 분리한다고 데이터가 자동으로 분리되지 않습니다.
 필요하면 앱의 키 구성과 명령 구현에서 논리적 범위를 나눕니다.
 
 `get`→`await 외부 작업`→`set` 패턴은 다른 요청의 업데이트를 덮어쓸 수 있습니다.
-앱에서 직렬 실행·최신 값 재확인 등 필요한 동시 실행 규칙을 정합니다.
-내장 트랜잭션·자동 파일 저장·영구 상태 복원 기능은 없습니다.
+앱에서 직렬 실행, 최신 값 재확인 등 필요한 동시 실행 규칙을 정합니다.
+내장 트랜잭션, 자동 파일 저장, 영구 상태 복원 기능은 없습니다.

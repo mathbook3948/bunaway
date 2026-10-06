@@ -1,6 +1,6 @@
 ---
 title: 배포 채널
-description: Windows·macOS 채널별 옵션, 설치 동작, 구현 제한.
+description: Windows, macOS 채널별 옵션, 설치 동작, 구현 제한.
 sidebar: { order: 2 }
 ---
 
@@ -9,14 +9,14 @@ sidebar: { order: 2 }
 | 채널 | 상태 | 서명 요구 |
 | --- | --- | --- |
 | `win-direct` | Inno Setup 설치 파일 생성 구현 | 선택적. 미서명은 경고 포함 |
-| `win-store-unpackaged` | Store EXE/MSI용 설치 파일·제출 자료 생성 구현 | 제출하려면 Trusted Root 체인 서명 필요 |
+| `win-store-unpackaged` | Store EXE/MSI용 설치 파일, 제출 자료 생성 구현 | 제출하려면 Trusted Root 체인 서명 필요 |
 | `win-store-msix` | 어댑터 등록, 현재 stages 실행 거부 | MSIX 실행에는 서명 필요 |
 | `mac-direct` | 설정 예약, 어댑터 없음 | 패키징 실행 미지원 |
 | `mac-store` | 설정 예약, 어댑터 없음 | 패키징 실행 미지원 |
 
 macOS 네이티브 `.app` **빌드**와 macOS 배포 채널 **패키징**은 별개입니다.
 MSIX는 packaged activation과 Bun FFI 환경의 실행 검증이 준비될 때까지 생성하지 않습니다.
-예약 설정을 성공적으로 검증했다고 설치·스토어 제출이 가능한 것은 아닙니다.
+예약 설정을 성공적으로 검증했다고 설치, 스토어 제출이 가능한 것은 아닙니다.
 
 ## Windows 직접 배포와 Store unpackaged
 
@@ -34,7 +34,7 @@ MSIX는 packaged activation과 Bun FFI 환경의 실행 검증이 준비될 때�
 `scope: "perMachine"`과 `preserveUserData: false`는 함께 사용할 수 없습니다.
 설치한 사용자와 데이터 소유자가 다를 수 있기 때문입니다.
 
-`bootstrap`은 WebView2 bootstrapper를 준비·검증하고 설치 중 런타임을 준비하는 경로입니다.
+`bootstrap`은 WebView2 bootstrapper를 준비, 검증하고 설치 중 런타임을 준비하는 경로입니다.
 설치 때 네트워크가 필요할 수 있습니다.
 `check`는 이미 설치된 WebView2를 검사하며 없는 런타임을 다운로드하지 않습니다.
 Store unpackaged는 설치 중 다운로드를 허용하지 않으므로 `bootstrap` 설정을 거부합니다.
@@ -58,7 +58,7 @@ Store unpackaged는 설치 중 다운로드를 허용하지 않으므로 `bootst
 ```
 
 미서명 설치 파일도 로컬 실행용으로 생성할 수 있습니다. 서명 여부는 보고서에 기록하며,
-설치 파일 생성 성공으로 SmartScreen 평판·실제 설치 시험이 완료되지는 않습니다.
+설치 파일 생성 성공으로 SmartScreen 평판, 실제 설치 시험이 완료되지는 않습니다.
 
 ### win-store-unpackaged
 
@@ -72,14 +72,14 @@ PE와 설치 파일의 제출용 서명 조건, 오프라인 설치 조건을 �
 
 | 옵션 | 형식 |
 | --- | --- |
-| `packageName` | 3–50자. 영숫자로 시작, 나머지 영숫자·`. _ -` |
+| `packageName` | 3–50자. 영숫자로 시작, 나머지 영숫자, `. _ -` |
 | `unvirtualizedData` | boolean |
 | `minVersion` | 비어 있지 않은 문자열, 최대 64자 |
 | `maxVersionTested` | 비어 있지 않은 문자열, 최대 64자 |
 | `capabilities` | 비어 있지 않은 문자열의 배열 |
 | `signing` | 서명 객체 |
 
-이 필드는 형식 검사용 계약입니다. 현재 생성되는 MSIX의 동작·기본값으로 해석하지 않습니다.
+이 필드는 형식 검사용 계약입니다. 현재 생성되는 MSIX의 동작, 기본값으로 해석하지 않습니다.
 
 ## macOS 예약 옵션
 

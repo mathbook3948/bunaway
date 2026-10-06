@@ -24,7 +24,7 @@ import uiSource from '@repo/packages/cli/templates/vanilla/src/main.ts?raw';
 | `output` | 응답 데이터의 런타임 스키마 | `null` |
 | `handle` | 입력이 유효할 때 실행할 함수 | 파일 저장 후 이벤트 발행 |
 
-입력·출력은 실제로 검증합니다. TypeScript 타입만으로 요청을 신뢰하지 않습니다.
+입력과 출력은 실제로 검증합니다. TypeScript 타입만으로 요청을 신뢰하지 않습니다.
 입력에 객체를 보내면 문자열 스키마에 맞지 않아 `INVALID_ARGUMENT`로 거부됩니다.
 
 `context`에는 요청의 취소 신호(`signal`), 호출 권한에 묶인 `host`,
@@ -33,7 +33,7 @@ import uiSource from '@repo/packages/cli/templates/vanilla/src/main.ts?raw';
 ## 2. 해당 뷰의 정책에 허용
 
 기본 정책은 아래 이름을 명시적으로 허용합니다.
-나머지 `origins`·`host` 필드까지 포함한 전체 파일은 [창 · 뷰 · 정책](/concepts/views-and-policy/)에서 확인하세요.
+나머지 `origins`, `host` 필드까지 포함한 전체 파일은 [창, 뷰, 정책](/concepts/views-and-policy/)에서 확인하세요.
 
 ```json
 {
@@ -45,7 +45,7 @@ import uiSource from '@repo/packages/cli/templates/vanilla/src/main.ts?raw';
 새 명령을 추가하면 `app.ts.commands`에 구현을 등록한 뒤 호출할 뷰의 `commands`에 같은 이름을 넣습니다.
 이벤트도 `app.ts.events`에 데이터 스키마를 선언하고, 받을 뷰의 `events`에 허용해야 합니다.
 
-## 3. UI에서 연결·구독·호출
+## 3. UI에서 연결, 구독, 호출
 
 아래 코드는 템플릿 HTML의 `#message`, `#saved`, `#status`, `#save` 요소와 함께 사용합니다.
 일반 브라우저에는 네이티브 브리지가 없으므로 **bunaway가 연 WebView 안에서** 실행합니다.
@@ -74,9 +74,9 @@ import uiSource from '@repo/packages/cli/templates/vanilla/src/main.ts?raw';
 이벤트는 영구 저장되지 않습니다. 재연결한 UI는 과거 이벤트를 기다리기보다
 `message.read` 같은 스냅샷 명령으로 현재 상태를 가져옵니다.
 
-## 실패·취소를 다루기
+## 실패와 취소를 다루기
 
-`invoke()`는 실패하면 Promise를 reject합니다. 연결 종료·타임아웃·취소 뒤의 늦은 결과는 폐기합니다.
+`invoke()`는 실패하면 Promise를 reject합니다. 연결 종료, 타임아웃, 취소 뒤의 늦은 결과는 폐기합니다.
 저장 명령을 자동 재시도하지 않으며, 취소가 이미 완료된 파일 쓰기를 되돌리지는 않습니다.
 
 선택적 `signal`에는 `AbortController.signal`을, `deadline`에는 Unix epoch 밀리초를 전달할 수 있습니다.

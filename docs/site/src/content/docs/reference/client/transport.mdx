@@ -1,6 +1,6 @@
 ---
 title: WebViewTransport와 Transport
-description: 브리지 연결과 사용자 정의 전송의 send·subscribe·close 계약.
+description: 브리지 연결과 사용자 정의 전송의 send, subscribe, close 계약.
 sidebar: { order: 6 }
 ---
 
@@ -34,7 +34,7 @@ interface WebViewBridge {
 이벤트는 `{ kind: "message", text }` 또는 `{ kind: "closed", error? }`입니다.
 `subscribe`는 첫 send 전에 등록할 수 있어야 하며, 이미 닫힌 전송에 나중에 등록해도 closed를 관찰해야 합니다.
 
-SDK는 프로토콜 검증·요청 매칭·기한·구독을 맡지만,
-전송의 자원 회수·송신 순서·종료 통지는 어댑터가 맡습니다.
-새 전송 경로를 만들어도 신뢰된 호스트의 실제 출처·세션·권한 검사를 유지해야 합니다.
+SDK는 프로토콜 검증, 요청 매칭, 기한, 구독을 맡지만,
+전송의 자원 회수, 송신 순서, 종료 통지는 어댑터가 맡습니다.
+새 전송 경로를 만들어도 신뢰된 호스트의 실제 출처, 세션, 권한 검사를 유지해야 합니다.
 `HostContext` 문자열을 프런트엔드가 자기 신고한다고 권한이 생기지 않습니다.

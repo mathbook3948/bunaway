@@ -20,16 +20,16 @@ sidebar: { order: 4 }
 
 | 필드 | 의미 |
 | --- | --- |
-| `channel`, `target` | 실행한 채널·네이티브 대상 |
+| `channel`, `target` | 실행한 채널, 네이티브 대상 |
 | `app` | `id`, `name`, `identifier`, `version` |
 | `startedAt` | 실행 시작 시간 문자열 |
 | `ok` | 패키징 단계 성공 |
-| `usable` | 채널의 로컬 사용·실행 조건 충족 |
+| `usable` | 채널의 로컬 사용, 실행 조건 충족 |
 | `submittable` | 채널의 제출 조건 충족 |
 | `signing` | `requirement`, `configured`, `performed`, 선택적 `detail` |
 | `stages` | 실행 순서와 단계별 결과 |
-| `diagnostics` | 구조화된 경고·오류 |
-| `artifacts` | 배포 파일 경로·종류·서명 여부·SHA-256·바이트 수 |
+| `diagnostics` | 구조화된 경고, 오류 |
+| `artifacts` | 배포 파일 경로, 종류, 서명 여부, SHA-256, 바이트 수 |
 | `notes` | 실행 검증 범위와 미검증 사항 |
 
 `ok: true`라도 Store 제출이나 실제 설치가 검증됐다는 뜻은 아닙니다.
@@ -43,7 +43,7 @@ CLI의 종료 코드는 `ok`를 기준으로 합니다.
 
 | 코드 | 확인할 사항 |
 | --- | --- |
-| `PKG_CONFIG_INVALID` | bundle 필드·값 |
+| `PKG_CONFIG_INVALID` | bundle 필드, 값 |
 | `PKG_CHANNEL_UNKNOWN` | 채널 ID |
 | `PKG_CHANNEL_NOT_CONFIGURED` | channels 선언 |
 | `PKG_TARGET_MISSING` | 현재 대상 선언 |
@@ -51,15 +51,15 @@ CLI의 종료 코드는 `ok`를 기준으로 합니다.
 | `PKG_INPUT_TAMPERED` | manifest와 파일 digest |
 | `PKG_INPUT_UNEXPECTED` | 예상하지 않은 빌드 파일 |
 | `PKG_ADAPTER_MISSING` | 구현된 채널인지 확인 |
-| `PKG_TOOL_MISSING` | Inno·서명 도구 설치 |
+| `PKG_TOOL_MISSING` | Inno, 서명 도구 설치 |
 | `PKG_TOOL_FAILED` | 도구 출력과 실행 환경 |
 | `PKG_SIGNING_MISSING` | 채널 서명 요구 |
-| `PKG_SIGNING_FAILED` | 인증서·서명 결과 |
+| `PKG_SIGNING_FAILED` | 인증서, 서명 결과 |
 | `PKG_STAGE_FAILED` | 실패한 단계의 메시지 |
-| `PKG_LOCK_FAILED` | 동시 빌드·패키징 실행 |
+| `PKG_LOCK_FAILED` | 동시 빌드, 패키징 실행 |
 | `PKG_VERIFY_FAILED` | 최종 산출물 검사 |
 
-## 실패·동시 실행
+## 실패와 동시 실행
 
 원본 빌드는 수정하지 않습니다. staging에서 작업하고 성공 후 채널 출력으로 이동합니다.
 실패한 패키징이 이전 성공 산출물을 덮어쓰지 않습니다.

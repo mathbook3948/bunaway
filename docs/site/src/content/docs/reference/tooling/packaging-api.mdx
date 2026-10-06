@@ -4,7 +4,7 @@ description: 설정 해석, 원본 검증, 잠금, 어댑터와 단계 실행의
 sidebar: { order: 3 }
 ---
 
-`@bunaway/packaging`에서 export하는 자동화·어댑터 API입니다.
+`@bunaway/packaging`에서 export하는 자동화, 어댑터 API입니다.
 일반 배포는 [CLI package](/reference/cli/package/)를 사용하세요.
 아래 함수는 검증한 입력과 소유한 디렉터리를 다루는 도구 작성자용입니다.
 
@@ -22,34 +22,34 @@ sidebar: { order: 3 }
 
 ## 설정 해석
 
-| 함수 | 입력·반환 |
+| 함수 | 입력, 반환 |
 | --- | --- |
 | `parsePackaging(text)` | bundle JSON 문자열 → PackagingConfig |
 | `deriveIdentifier(appId)` | 점이 없으면 `.app`을 붙이는 기본 식별자 |
 | `deriveMsixPackageName(identifier)` | 허용 문자로 바꾸고 최대 50자로 제한한 MSIX 이름 |
-| `resolvePackaging(args)` | 메타데이터·채널·서명 해석 Promise |
+| `resolvePackaging(args)` | 메타데이터, 채널, 서명 해석 Promise |
 
 resolve 인자는 `{ root, config, appId, title, projectVersion, channel }`입니다.
 반환은 `{ metadata: ResolvedPackaging, channel: ResolvedChannel }`입니다.
-metadata는 이름·식별자·publisher·버전·절대 아이콘 경로·targets,
+metadata는 이름, 식별자, publisher, 버전, 절대 아이콘 경로, targets,
 channel은 channelConfig와 선택적 signing을 담습니다.
-아이콘 실제 파일·식별자·버전·대상 조합을 확인합니다.
-MSIX 이름 파생 후에도 유효한 시작 문자·이름 조건을 충족해야 합니다.
+아이콘 실제 파일, 식별자, 버전, 대상 조합을 확인합니다.
+MSIX 이름 파생 후에도 유효한 시작 문자, 이름 조건을 충족해야 합니다.
 
 ## 원본 산출물
 
-| 함수 | 입력·반환 |
+| 함수 | 입력, 반환 |
 | --- | --- |
-| `artifactPaths({ root, target, appId })` | `BuildArtifact`의 dir·packageDir·executable |
+| `artifactPaths({ root, target, appId })` | `BuildArtifact`의 dir, packageDir, executable |
 | `loadManifest(artifact)` | `Promise<PackageManifest>` |
-| `verifyArtifact({ artifact, manifest, channel })` | 입력 누락·변조·예상 밖 파일 `Promise<Diagnostic[]>` |
+| `verifyArtifact({ artifact, manifest, channel })` | 입력 누락, 변조, 예상 밖 파일 `Promise<Diagnostic[]>` |
 | `packagedDigest(entry)` | 최종 SHA-256 문자열 또는 undefined |
-| `ownedDirectory(root, path, create = false)` | 경계·소유 확인 `Promise<boolean>`, 필요 시 생성 |
+| `ownedDirectory(root, path, create = false)` | 경계, 소유 확인 `Promise<boolean>`, 필요 시 생성 |
 
 packagedDigest는 executableSha256 필드가 있으면 packagedSha256 → executableSha256,
 그 외에는 packagedSha256 → sha256 → sourceSha256 순서입니다.
 서명 뒤 manifest 검사와 실제 배포 바이트가 일치하도록 이 규칙을 사용합니다.
-ownedDirectory는 프로젝트 밖·링크 경계를 거부하며 쓰기 경로 확인에 사용합니다.
+ownedDirectory는 프로젝트 밖, 링크 경계를 거부하며 쓰기 경로 확인에 사용합니다.
 
 ## 잠금
 
@@ -72,22 +72,22 @@ stages는 실행 순서의 AdapterStage 배열을 반환합니다.
 
 | StageContext | 계약 |
 | --- | --- |
-| `input` | 채널 설정·해석한 메타데이터·원본·manifest·선택적 signing |
+| `input` | 채널 설정, 해석한 메타데이터, 원본, manifest, 선택적 signing |
 | `staging` | runner가 소유한 임시 출력 디렉터리 |
 | `report(diagnostic)` | 현재 stage를 붙여 진단 기록 |
 | `addArtifact(path, kind, options?)` | staging 내부 파일을 배포 산출물로 등록 |
 
 addArtifact options는 `signed?: boolean`, `signingRequired?: boolean`입니다.
 서명 요구 제외는 체크섬처럼 배포 실행 파일이 아닌 sidecar에 사용합니다.
-원본을 수정하거나 staging 밖·절대 링크 산출물을 게시하지 않습니다.
+원본을 수정하거나 staging 밖, 절대 링크 산출물을 게시하지 않습니다.
 
 ## runner
 
 `runPackage(args): Promise<PackageReport>`의 인자는
 `{ metadata, appId, channel, channelConfig, signing?, target, artifact, adapter, notes? }`입니다.
-원본을 검사·잠그고 staging의 단계를 실행하며 성공한 출력을 게시합니다.
-실패 진단·서명·사용 가능 상태를 보고서로 반환합니다.
+원본을 검사, 잠그고 staging의 단계를 실행하며 성공한 출력을 게시합니다.
+실패 진단, 서명, 사용 가능 상태를 보고서로 반환합니다.
 
 `packagingOutputDir(root, target)`는 `dist/<target>/packaged`,
 `packagingReportPath(root, target, channel)`은 그 안의 `<channel>-report.json`을 반환합니다.
-전체 실패 보존·보고서 필드는 [산출물과 보고서](/reference/packaging/report/)를 따릅니다.
+전체 실패 보존, 보고서 필드는 [산출물과 보고서](/reference/packaging/report/)를 따릅니다.

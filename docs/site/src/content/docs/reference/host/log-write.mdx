@@ -1,6 +1,6 @@
 ---
 title: log.write
-description: 앱 로그 레벨·메시지·details, log 권한과 플랫폼 기록 동작.
+description: 앱 로그 레벨, 메시지, details, log 권한과 플랫폼 기록 동작.
 sidebar: { order: 3 }
 ---
 
@@ -20,7 +20,7 @@ await context.host.call("log.write", {
 
 | 필드 | 필수 | 제약 |
 | --- | --- | --- |
-| `level` | 예 | debug·info·warn·error |
+| `level` | 예 | debug, info, warn, error |
 | `message` | 예 | 문자열, 최대 1,024자 |
 | `details` | 아니요 | JSON 데이터. 전체 메시지 제한 적용 |
 
@@ -33,7 +33,7 @@ await context.host.call("log.write", {
 
 Windows 구현은 앱 데이터의 `logs/app.log`에 JSON 줄을 추가하고,
 기록에 시간과 원래 `source`를 포함합니다. 1 MiB를 넘은 기존 로그는 다음 기록 시 한 번 회전합니다.
-정확한 저장 위치·회전 방식은 플랫폼 구현의 동작이므로 공통 출력 형식으로 모든 플랫폼에 강제하지 않습니다.
+정확한 저장 위치, 회전 방식은 플랫폼 구현의 동작이므로 공통 출력 형식으로 모든 플랫폼에 강제하지 않습니다.
 
 권한 부족은 `PERMISSION_DENIED`, 입력 위반은 `INVALID_ARGUMENT`, 일반 기록 실패는 `INTERNAL`입니다.
 민감한 데이터는 앱에서 기록 내용을 정해 제외해야 합니다. 전달한 임의 details를 자동으로 모두 비밀값 제거한다고 가정하지 않습니다.

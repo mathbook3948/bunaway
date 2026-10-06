@@ -33,9 +33,9 @@ const negotiated = await client.ready;
 | --- | --- | --- |
 | `transport` | 예 | `send`, `subscribe`, `close`를 제공하는 전송 |
 | `hello.kind` | 예 | `"hello"` |
-| `hello.protocol` | 예 | major·minor 정수. 현재 프레임워크는 1.0 |
+| `hello.protocol` | 예 | major, minor 정수. 현재 프레임워크는 1.0 |
 | `hello.features` | 예 | 원하는 feature 이름 배열. 필요 없으면 `[]` |
-| `hello.buildId` | 예 | 1–128자의 식별자. 영숫자·`_ . : -` 사용 |
+| `hello.buildId` | 예 | 1–128자의 식별자. 영숫자, `_ . : -` 사용 |
 
 자동 생성하는 hello 기본값은 없습니다. 프로토콜 구조는 [메시지 계약](/reference/protocol/)을 따릅니다.
 
@@ -52,14 +52,14 @@ major가 같으면 더 작은 minor와 양쪽 공통 feature를 정렬해 협상
 
 - major 불일치: `UNSUPPORTED`로 준비와 대기 요청이 실패합니다.
 - hello 준비 기한 10초 초과: `TIMEOUT`으로 연결을 종료합니다.
-- 잘못된 메시지·방향·협상 순서: 프로토콜 위반으로 클라이언트를 종료합니다.
+- 잘못된 메시지, 방향, 협상 순서: 프로토콜 위반으로 클라이언트를 종료합니다.
 - 전송 종료: 대기 요청과 구독을 정리합니다.
 
-닫힌 클라이언트가 자동으로 재연결되지는 않습니다. 새 전송과 새 클라이언트를 만들고 구독·상태 읽기를 다시 수행합니다.
+닫힌 클라이언트가 자동으로 재연결되지는 않습니다. 새 전송과 새 클라이언트를 만들고 구독, 상태 읽기를 다시 수행합니다.
 운영체제 창의 수명과 클라이언트의 수명은 다릅니다. [close](/reference/client/close/)를 참고하세요.
 
 ## 타입
 
-`createClient<Commands, Events>()`로 명령 입력·출력과 이벤트 payload를 지정할 수 있습니다.
+`createClient<Commands, Events>()`로 명령 입력과 출력과 이벤트 payload를 지정할 수 있습니다.
 예약 기능 조회 명령 타입은 프레임워크가 더합니다.
 [타입과 스키마](/guides/types-and-validation/)에서 실제 앱 정의와 연결하는 방법을 확인하세요.

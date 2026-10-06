@@ -5,14 +5,14 @@ description: 현재 구현 기준의 문서 범위, 공개 API 지도와 자동 
 
 import catalog from '../../../reference-map.json';
 
-이 사이트는 현재 저장소 구현을 기준으로 시작하기·기능별 가이드·세부 레퍼런스를 제공합니다.
-입문 페이지에서 개념을 배우고 레퍼런스에서 인자·반환값·기본값·권한·실패·수명을 확인합니다.
-플랫폼·패키징의 구현 상태는 [지원 범위](/reference/platforms/)와 [배포 채널](/reference/packaging/channels/)에 구분합니다.
+이 사이트는 현재 저장소 구현을 기준으로 시작하기, 기능별 가이드, 세부 레퍼런스를 제공합니다.
+입문 페이지에서 개념을 배우고 레퍼런스에서 인자, 반환값, 기본값, 권한, 실패, 수명을 확인합니다.
+플랫폼, 패키징의 구현 상태는 [지원 범위](/reference/platforms/)와 [배포 채널](/reference/packaging/channels/)에 구분합니다.
 
 ## 공개 API 지도
 
 아래 목록은 누락 검사 도구가 사용하는 실제 매핑입니다.
-함수·상수 export와 Client·Host·상태·이벤트·Core의 주요 메서드를 추적합니다.
+함수, 상수 export와 Client, Host, 상태, 이벤트, Core의 주요 메서드를 추적합니다.
 
 {catalog.packages.map((entry) => (
   <section>
@@ -30,19 +30,19 @@ import catalog from '../../../reference-map.json';
 `bun run docs:check`와 `bun run docs:build`는 다음을 검사합니다.
 
 - 일곱 공개 패키지 진입점의 실행 시 export와 재수출이 레퍼런스에 매핑되어 있는지
-- Client·HostAPI·StateStore·EventEmitter·Core·CoreSession·RuntimeServices·Transport 멤버 누락
+- Client, HostAPI, StateStore, EventEmitter, Core, CoreSession, RuntimeServices, Transport 멤버 누락
 - CLI 명령과 Host operation이 각 문서에 있는지
-- Schema 키워드와 policy·CLI·패키징의 허용 설정 필드가 문서에 있는지
+- Schema 키워드와 policy, CLI, 패키징의 허용 설정 필드가 문서에 있는지
 - 매핑한 페이지가 실제로 존재하고 해당 API 이름이 본문에 있는지
-- 생산 빌드의 내부 페이지 링크·목차 anchor가 유효한지
+- 생산 빌드의 내부 페이지 링크, 목차 anchor가 유효한지
 
-export·메서드·설정 키를 추가하면 문서 매핑·설명이 없을 때 검사가 실패합니다.
+export, 메서드, 설정 키를 추가하면 문서 매핑, 설명이 없을 때 검사가 실패합니다.
 키워드가 있다는 사실만으로 설명의 정확성을 자동 증명하지는 않습니다.
-기존 API의 동작을 바꾸는 변경은 소스·계약·예제를 함께 검토해야 합니다.
+기존 API의 동작을 바꾸는 변경은 소스, 계약, 예제를 함께 검토해야 합니다.
 
 ## 검사 범위 밖
 
-모든 private helper·분기·내부 구현을 사용자 API로 문서화하지는 않습니다.
+모든 private helper, 분기, 내부 구현을 사용자 API로 문서화하지는 않습니다.
 TypeScript의 모든 보조 타입 alias도 개별 페이지 대상으로 세지 않습니다.
 주요 타입은 관련 API 페이지에서 설명합니다.
 실제 Windows/macOS 실행 결과와 배포 시험은 각 플랫폼 실행 기록을 확인합니다.
@@ -50,6 +50,6 @@ TypeScript의 모든 보조 타입 alias도 개별 페이지 대상으로 세지
 
 ## 문서 구성 참고
 
-[Next.js 문서](https://nextjs.org/docs)의 시작하기·가이드·API 레퍼런스 구분과
-[Tauri 시작하기](https://v2.tauri.app/start/)의 개발 환경·프로젝트 구조·첫 앱 흐름을 참고했습니다.
-동작·지원 범위·설정 이름은 bunaway의 실제 구현을 따릅니다.
+[Next.js 문서](https://nextjs.org/docs)의 시작하기, 가이드, API 레퍼런스 구분과
+[Tauri 시작하기](https://v2.tauri.app/start/)의 개발 환경, 프로젝트 구조, 첫 앱 흐름을 참고했습니다.
+동작, 지원 범위, 설정 이름은 bunaway의 실제 구현을 따릅니다.

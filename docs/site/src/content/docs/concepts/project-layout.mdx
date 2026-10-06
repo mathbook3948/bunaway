@@ -1,13 +1,13 @@
 ---
 title: 프로젝트와 세 파일
-description: UI 소스와 앱 정의·설정·정책이 각각 어디에 있고 어떻게 연결되는지 설명합니다.
+description: UI 소스와 앱 정의, 설정, 정책이 각각 어디에 있고 어떻게 연결되는지 설명합니다.
 ---
 
 ## 생성 앱의 파일 구조
 
 ```text
 my-app/
-├─ package.json             개발 명령과 CLI·SDK 의존성
+├─ package.json             개발 명령과 CLI, SDK 의존성
 ├─ bun.lock                 설치 버전 고정
 ├─ tsconfig.json            앱 TypeScript 설정
 ├─ src/                     웹 UI
@@ -16,23 +16,23 @@ my-app/
 │  └─ style.css
 └─ src-bunaway/
    ├─ app.ts                공통 앱 정의
-   ├─ bunaway.json           빌드·앱·배포 설정
-   └─ policy.json            뷰·백엔드 접근 정책
+   ├─ bunaway.json           빌드, 앱, 배포 설정
+   └─ policy.json            뷰, 백엔드 접근 정책
 ```
 
 위 구조는 `vanilla` 템플릿입니다. `vite` 템플릿은 `index.html`이 프로젝트 루트에 있고,
 `vite.config.ts`가 추가됩니다. 웹 생산 빌드 출력은 `web-dist/`입니다.
 
-## app.ts — 어떤 작업을 제공하나요?
+## app.ts: 어떤 작업을 제공하나요?
 
-앱 전체의 명령 구현과 이벤트 계약, 선택적 상태·플러그인을 정의하고 default export합니다.
+앱 전체의 명령 구현과 이벤트 계약, 선택적 상태, 플러그인을 정의하고 default export합니다.
 기본 템플릿은 `message.read`, `message.save`, `message.saved`를 제공합니다.
 
 프런트엔드는 이 파일의 핸들러를 import해 실행하지 않습니다.
 명령 이름과 JSON 데이터로 SDK를 통해 호출합니다.
 [명령과 이벤트](/guides/commands-and-events/)에서 실제 코드를 읽어보세요.
 
-## bunaway.json — 무엇을 빌드하고 어떤 창을 열까요?
+## bunaway.json: 무엇을 빌드하고 어떤 창을 열까요?
 
 ```json
 {
@@ -54,10 +54,10 @@ my-app/
 `app.view: "main"`은 아래 정책에서 `id: "main"`인 뷰를 선택합니다.
 `home`은 그 창의 시작 페이지입니다. 로컬 자산용 가상 origin으로, 별도 원격 웹 서버를 의미하지 않습니다.
 
-`bundle`은 설치·배포 채널 설정, `dev`는 선택적 UI 개발 서버 설정입니다.
+`bundle`은 설치, 배포 채널 설정, `dev`는 선택적 UI 개발 서버 설정입니다.
 [설정 레퍼런스](/reference/configuration/)에서 전체 필드를 확인하세요.
 
-## policy.json — 해당 뷰가 무엇을 사용할 수 있나요?
+## policy.json: 해당 뷰가 무엇을 사용할 수 있나요?
 
 `views`에는 뷰별 접근 정책을, `backend`에는 백엔드 자체 작업의 Host API 권한을 선언합니다.
 기본 템플릿에서는 `main` 뷰만 메시지를 읽고 쓸 수 있습니다.
@@ -66,15 +66,15 @@ my-app/
 `app.ts`에 등록한 명령 중 해당 뷰가 호출할 수 있는 것을 정합니다.
 반대로 `views`에 항목을 추가한다고 창이 자동으로 생기지도 않습니다.
 
-[창 · 뷰 · 정책](/concepts/views-and-policy/)에서 각 필드와 실제 검사를 이어서 읽어보세요.
+[창, 뷰, 정책](/concepts/views-and-policy/)에서 각 필드와 실제 검사를 이어서 읽어보세요.
 
 ## 개발 중 생기는 디렉터리
 
 | 디렉터리 | 내용 |
 | --- | --- |
-| `node_modules/` | 설치된 CLI·SDK와 의존성 |
+| `node_modules/` | 설치된 CLI, SDK와 의존성 |
 | `.bunaway/` | 개발 실행용 앱 산출물 |
-| `dist/` | 네이티브 빌드·패키징 산출물 |
+| `dist/` | 네이티브 빌드, 패키징 산출물 |
 | `web-dist/` | Vite 템플릿의 웹 생산 빌드 |
 
 앱 실행에 포함할 Bun은 프레임워크가 준비합니다.

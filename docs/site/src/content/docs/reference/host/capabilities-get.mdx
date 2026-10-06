@@ -1,6 +1,6 @@
 ---
 title: capabilities.get
-description: 백엔드 기능 조회 입력·응답·지원·OS 권한 값과 정책의 차이.
+description: 백엔드 기능 조회 입력, 응답, 지원, OS 권한 값과 정책의 차이.
 sidebar: { order: 4 }
 ---
 
@@ -17,21 +17,21 @@ const capabilities = await context.host.call("capabilities.get", null);
 
 ## 응답 필드
 
-| 필드 | 필수 | 값·제약 |
+| 필드 | 필수 | 값, 제약 |
 | --- | --- | --- |
-| `name` | 예 | 영숫자·`_ . : -`, 1–128자 |
-| `support` | 예 | supported·experimental·unsupported |
-| `permission` | 예 | granted·denied·prompt·not-required·unknown |
+| `name` | 예 | 영숫자, `_ . : -`, 1–128자 |
+| `support` | 예 | supported, experimental, unsupported |
+| `permission` | 예 | granted, denied, prompt, not-required, unknown |
 | `reason` | 아니요 | 문자열, 최대 1,024자 |
 
 최대 256개이며 같은 name의 중복을 거부합니다.
-현재 Windows는 storage.readText·storage.writeText·log.write·capabilities.get을
-supported·not-required로 보고합니다.
+현재 Windows는 storage.readText, storage.writeText, log.write, capabilities.get을
+supported, not-required로 보고합니다.
 
 ## 권한 의미
 
 support는 플랫폼 구현 여부, permission은 현재 OS 권한에 관한 값입니다.
-뷰 정책의 파일 범위·명령 허용 여부와는 다른 정보입니다.
+뷰 정책의 파일 범위, 명령 허용 여부와는 다른 정보입니다.
 조회가 정책을 늘리거나 OS 사용자 동의를 요청하지 않습니다.
 실제 호출은 항상 활성 컨텍스트와 해당 작업의 정책 검사를 통과해야 합니다.
 

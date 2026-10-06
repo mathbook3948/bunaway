@@ -1,6 +1,6 @@
 ---
 title: invoke
-description: 명령 입력·결과, signal·deadline, 대기·실행 제한과 재시도 의미.
+description: 명령 입력, 결과, signal, deadline, 대기, 실행 제한과 재시도 의미.
 sidebar: { order: 2 }
 ---
 
@@ -35,7 +35,7 @@ await client.invoke("message.read", null, { deadline: Date.now() + 5000 });
 
 기본 명령 최대 시간은 30초입니다. 더 먼 deadline을 주어도 최대 시간을 연장하지 않습니다.
 클라이언트의 기한 계산은 호출 시 시작하므로 준비 협상을 기다리는 시간도 소비합니다.
-이미 지난 기한은 실행하지 않고 `TIMEOUT`으로 실패하며, 음수·비유한 deadline은 `INVALID_ARGUMENT`입니다.
+이미 지난 기한은 실행하지 않고 `TIMEOUT`으로 실패하며, 음수, 비유한 deadline은 `INVALID_ARGUMENT`입니다.
 
 ## 취소
 
@@ -51,16 +51,16 @@ try { await request; } catch (error) { console.error(error); }
 백엔드 핸들러도 `context.signal`과 요청에 묶인 Host API를 통해 취소를 관찰합니다.
 취소는 이미 완료된 저장 작업을 롤백하지 않습니다.
 
-## 오류·제한
+## 오류와 제한
 
 | 코드 | 예 |
 | --- | --- |
-| `INVALID_ARGUMENT` | 미등록 명령, 잘못된 입력·프로토콜 데이터 |
+| `INVALID_ARGUMENT` | 미등록 명령, 잘못된 입력, 프로토콜 데이터 |
 | `PERMISSION_DENIED` | 뷰에 없는 명령, 핸들러 내부 Host API 권한 부족 |
 | `BUSY` | 세션의 미완료 요청 128개 등 자원 제한 |
-| `TIMEOUT` / `CANCELLED` | 기한 초과·취소 |
+| `TIMEOUT` / `CANCELLED` | 기한 초과, 취소 |
 | `INTERNAL` | 핸들러 일반 예외, 잘못된 출력, 연결 실패 |
 
 세션 요청 ID는 재사용하지 않으며 기록 상한은 1,024개입니다. 장시간 세션의 모든 작업이 무제한으로 허용되지는 않습니다.
-늦은 응답은 폐기합니다. 자동 재시도·자동 요청 재전송은 없습니다.
+늦은 응답은 폐기합니다. 자동 재시도, 자동 요청 재전송은 없습니다.
 [오류 처리](/guides/cancellation-and-errors/)에서 사용자 재시도와 상태 복원을 설명합니다.

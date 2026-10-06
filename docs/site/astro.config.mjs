@@ -27,7 +27,7 @@ export default defineConfig({
           label: "구조 이해하기",
           items: [
             { label: "프로젝트와 세 파일", slug: "concepts/project-layout" },
-            { label: "창 · 뷰 · 정책", slug: "concepts/views-and-policy" },
+            { label: "창, 뷰, 정책", slug: "concepts/views-and-policy" },
           ],
         },
         {
@@ -78,7 +78,7 @@ export default defineConfig({
               items: [{ autogenerate: { directory: "reference/packaging" } }],
             },
             {
-              label: "도구·런타임 API",
+              label: "도구와 런타임 API",
               collapsed: true,
               items: [{ autogenerate: { directory: "reference/tooling" } }],
             },

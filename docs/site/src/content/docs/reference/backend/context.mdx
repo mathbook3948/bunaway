@@ -1,6 +1,6 @@
 ---
 title: CommandContext
-description: 요청 signal·host·state·events와 뷰/백엔드 작업의 권한 출처.
+description: 요청 signal, host, state, events와 뷰/백엔드 작업의 권한 출처.
 sidebar: { order: 3 }
 ---
 
@@ -9,17 +9,17 @@ sidebar: { order: 3 }
 
 | 필드 | 역할 |
 | --- | --- |
-| `signal` | 취소·기한·세션 종료를 관찰하는 신호 |
+| `signal` | 취소, 기한, 세션 종료를 관찰하는 신호 |
 | `host` | 원래 출처의 권한에 묶인 Host API |
 | `state` | 공통 앱 메모리 상태 저장소 |
 | `events` | 선언된 이벤트 발행자 |
 
 ## signal
 
-`CancellationSignal`은 표준 AbortSignal의 `aborted`와 abort 리스너 등록·해제 부분입니다.
+`CancellationSignal`은 표준 AbortSignal의 `aborted`와 abort 리스너 등록, 해제 부분입니다.
 코어가 요청을 취소해도 핸들러의 일반 Promise를 강제로 멈추지는 않습니다.
 긴 루프나 외부 작업은 신호를 확인하고 자신이 가진 자원을 정리해야 합니다.
-명령이 완료된 뒤 이 컨텍스트를 오래 보관해 Host API·이벤트를 계속 실행하는 방식은 지원하지 않습니다.
+명령이 완료된 뒤 이 컨텍스트를 오래 보관해 Host API, 이벤트를 계속 실행하는 방식은 지원하지 않습니다.
 
 ## host.call
 
@@ -31,18 +31,18 @@ await context.host.call("storage.readText", {
 
 뷰 명령은 해당 뷰의 Host 정책, 백엔드 자체 setup 작업은 `policy.backend`로 검사합니다.
 핸들러가 컨텍스트를 선택하거나 뷰 요청을 backend 권한으로 승격하지 않습니다.
-호출 전·진행 중·응답 후 취소와 입력·응답 스키마를 검사합니다.
+호출 전, 진행 중, 응답 후 취소와 입력, 응답 스키마를 검사합니다.
 파일의 실제 범위 검사는 작업 직전 네이티브 호스트에서 다시 수행합니다.
 
 ## 상태와 이벤트
 
 `state`는 뷰별 저장소가 아니라 앱 백엔드 전체가 공유합니다.
-`events`의 발신 출처는 컨텍스트에서 정하고, 대상 뷰의 정책·구독을 확인합니다.
+`events`의 발신 출처는 컨텍스트에서 정하고, 대상 뷰의 정책, 구독을 확인합니다.
 [상태](/reference/backend/state/)와 [이벤트 발행](/reference/backend/events/)을 참고하세요.
 
 ## 신뢰 경계
 
 호스트가 발급한 `HostContext`는 내부 라우팅 식별자입니다.
 타입 브랜드는 잘못된 타입 사용을 막는 장치이며 인증 토큰 자체는 아닙니다.
-웹 payload에 context·view ID를 적어 보냈다고 그 권한으로 처리하지 않습니다.
+웹 payload에 context, view ID를 적어 보냈다고 그 권한으로 처리하지 않습니다.
 정책은 신뢰된 앱 백엔드의 직접 Bun API 사용을 샌드박싱하지 않습니다.

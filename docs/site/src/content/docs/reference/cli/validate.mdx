@@ -1,6 +1,6 @@
 ---
 title: validate
-description: 프로덕션 설정·정책·자산·SDK 검증 범위와 개발 검증의 차이.
+description: 프로덕션 설정, 정책, 자산, SDK 검증 범위와 개발 검증의 차이.
 sidebar: { order: 2 }
 ---
 
@@ -14,16 +14,16 @@ bunaway validate [directory]
 ## 검사 범위
 
 - `src-bunaway/bunaway.json` v1 및 허용 필드.
-- 앱 정의 파일·프런트엔드 디렉터리·홈 자산과 프로젝트 내부 경로.
+- 앱 정의 파일, 프런트엔드 디렉터리, 홈 자산과 프로젝트 내부 경로.
 - AppDefinition의 default export 계약과 설치된 프레임워크/SDK 참조.
-- 정확한 SDK 릴리스 버전·설치 artifact inventory·alias/override 제한.
-- 앱 ID·창 크기·로컬 home origin.
-- 정책 스키마·중복 뷰·HTTP origin 금지·정확히 한 뷰와 app.view 일치.
+- 정확한 SDK 릴리스 버전, 설치 artifact inventory, alias/override 제한.
+- 앱 ID, 창 크기, 로컬 home origin.
+- 정책 스키마, 중복 뷰, HTTP origin 금지, 정확히 한 뷰와 app.view 일치.
 - 선언한 bundle의 형식. bundle 생략 자체는 허용.
 
 등록 명령을 호출해 결과를 검사하는 명령이 아닙니다.
 백엔드를 실행해 권한을 추측하거나 자동으로 목록에 추가하지 않습니다.
-실제 Host API 경계·사용자 OS 권한·앱 GUI 동작까지 검증 완료를 의미하지 않습니다.
+실제 Host API 경계, 사용자 OS 권한, 앱 GUI 동작까지 검증 완료를 의미하지 않습니다.
 
 ## Vite 앱
 
@@ -40,6 +40,6 @@ doctor와 dev의 개발 검증은 외부 서버가 있을 때 아직 없는 웹 
 ## 프로그램 API
 
 `validateProject(directory, { development?: boolean }): Promise<Project>`.
-development 기본값은 false입니다. 반환 객체에는 root·frameworkRoot·appEntry·frontend·app·policy와
-선언된 선택적 bundle·dev가 있습니다.
+development 기본값은 false입니다. 반환 객체에는 root, frameworkRoot, appEntry, frontend, app, policy와
+선언된 선택적 bundle, dev가 있습니다.
 지원 필드는 [설정](/reference/configuration/)과 [정책](/reference/policy/)을 따릅니다.
