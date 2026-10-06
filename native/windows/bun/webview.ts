@@ -194,7 +194,7 @@ export class WebView {
     const webview3 = query(this.webview, "a0d6df20-3b92-416d-aa0c-437a9c727857");
     try {
       hr(
-        withWide(new URL(this.spec.home).hostname, (host) =>
+        withWide("app.bunaway.local", (host) =>
           withWide(resolve(assets, "web"), (folder) =>
             method(webview3, 71, ["ptr", "ptr", "i32"])(host, folder, 2),
           ),

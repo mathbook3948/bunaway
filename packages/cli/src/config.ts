@@ -1,9 +1,39 @@
 import { lstat, realpath } from "node:fs/promises";
-import { resolve } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 import { type Policy, parsePolicy } from "@bunaway/protocol";
-import { type PackagingConfig, parsePackaging } from "@bunaway/packaging";
+import { type PackagingConfig, ownedDirectory, parsePackaging } from "@bunaway/packaging";
 import { validateFramework } from "./distribution.ts";
 import { json, projectPath } from "./files.ts";
+import { developmentUrl } from "../../runtime-bun/src/development.ts";
+
+export interface DevServerConfig {
+  command: string[];
+  url: string;
+  timeoutMs: number;
+}
+
+export function readDevSettings(value: unknown): DevServerConfig | undefined {
+  if (value === undefined) return undefined;
+  const dev = record(value);
+  keys(dev, ["command", "url", "timeoutMs"]);
+  if (
+    !Array.isArray(dev.command) ||
+    !dev.command.length ||
+    dev.command.some((arg) => typeof arg !== "string" || !arg || arg.includes("\0"))
+  ) {
+    throw new Error("dev.command must be a nonempty array of executable and arguments.");
+  }
+  const timeoutMs = dev.timeoutMs ?? 30000;
+  if (
+    typeof timeoutMs !== "number" ||
+    !Number.isInteger(timeoutMs) ||
+    timeoutMs < 100 ||
+    timeoutMs > 300000
+  ) {
+    throw new Error("dev.timeoutMs must be an integer between 100 and 300000.");
+  }
+  return { command: dev.command as string[], url: developmentUrl(dev.url).href, timeoutMs };
+}
 
 export interface Project {
   root: string;
@@ -12,6 +42,7 @@ export interface Project {
   frontend: string;
   windowsApp?: string;
   bundle?: PackagingConfig;
+  dev?: DevServerConfig;
   app: {
     appId: string;
     title: string;
@@ -46,42 +77,54 @@ export async function readProjectSettings(root: string): Promise<{
   build: Record<string, unknown>;
   app: Record<string, unknown>;
   bundle?: PackagingConfig;
+  dev?: DevServerConfig;
 }> {
   const directory = await projectPath(root, "src-bunaway");
   const config = record(await json(resolve(directory, "bunaway.json")));
   if (config.version !== 1) throw new Error("Unsupported bunaway.json version (expected 1).");
-  keys(config, ["version", "build", "app", "bundle"]);
+  keys(config, ["version", "build", "app", "bundle", "dev"]);
   const build = record(config.build);
   keys(build, ["backend", "frontend", "windowsApp"]);
   const bundle =
     config.bundle === undefined ? undefined : parsePackaging(JSON.stringify(config.bundle));
+  const dev = readDevSettings(config.dev);
   return {
     directory,
     build,
     app: record(config.app),
     ...(bundle ? { bundle } : {}),
+    ...(dev ? { dev } : {}),
   };
 }
 
-export async function validateProject(directory: string): Promise<Project> {
+export async function validateProject(
+  directory: string,
+  options: { development?: boolean } = {},
+): Promise<Project> {
   const root = await realpath(resolve(directory));
   const settings = await readProjectSettings(root);
   const configDirectory = settings.directory;
   const config = settings.build;
+  const server = options.development && settings.dev;
   const backend = await projectPath(root, string(config.backend));
-  const frontend = await projectPath(root, string(config.frontend));
+  const frontendName = string(config.frontend);
+  if (isAbsolute(frontendName) || frontendName.split(/[\\/]/).includes("..")) {
+    throw new Error("build.frontend must be a project-relative directory without '..'.");
+  }
+  const frontend = server ? resolve(root, frontendName) : await projectPath(root, frontendName);
+  if (server) await ownedDirectory(root, frontend);
   const windowsApp =
     config.windowsApp === undefined
       ? undefined
       : await projectPath(root, string(config.windowsApp));
-  if (!(await lstat(backend)).isFile() || !(await lstat(frontend)).isDirectory()) {
+  if (!(await lstat(backend)).isFile() || (!server && !(await lstat(frontend)).isDirectory())) {
     throw new Error("backend must be a file; frontend must be a directory.");
   }
   if (windowsApp && !(await lstat(windowsApp)).isFile())
     throw new Error("windowsApp must be a file.");
   const frameworkRoot = await validateFramework(root, [
     backend,
-    frontend,
+    ...(server ? [] : [frontend]),
     ...(windowsApp ? [windowsApp] : []),
   ]);
   const raw = settings.app;
@@ -102,11 +145,15 @@ export async function validateProject(directory: string): Promise<Project> {
   if (url.origin !== "https://app.bunaway.local" || url.username || url.password || url.hash) {
     throw new Error("The MVP home must use the host-owned https://app.bunaway.local origin.");
   }
-  const homePath = await projectPath(frontend, decodeURIComponent(url.pathname).slice(1));
-  if (!(await lstat(homePath)).isFile()) throw new Error("Home document is not a file.");
+  if (!server) {
+    const homePath = await projectPath(frontend, decodeURIComponent(url.pathname).slice(1));
+    if (!(await lstat(homePath)).isFile()) throw new Error("Home document is not a file.");
+  }
   const policy = parsePolicy(await Bun.file(resolve(configDirectory, "policy.json")).text());
   if (policy.views.some((view) => view.origins.some((origin) => origin.startsWith("http:")))) {
-    throw new Error("HTTP origins are not allowed; dev also uses native local assets.");
+    throw new Error(
+      "HTTP origins are not allowed in policy.json; use dev.url for a development server.",
+    );
   }
   const view = string(raw.view);
   if (policy.views.length !== 1 || policy.views[0]?.id !== view) {
@@ -121,6 +168,7 @@ export async function validateProject(directory: string): Promise<Project> {
     ...(windowsApp ? { windowsApp } : {}),
     frontend,
     ...(settings.bundle ? { bundle: settings.bundle } : {}),
+    ...(settings.dev ? { dev: settings.dev } : {}),
     policy,
     app: {
       appId,

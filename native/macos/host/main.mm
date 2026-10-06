@@ -375,7 +375,19 @@ std::string originOf(const std::string& uri) {
 
 // Declared https://H asset URL -> the URL the webview actually loads.
 std::string platformUrl(const std::string& uri) {
-    if (uri.rfind("https://", 0) == 0) return "bunaway://" + uri.substr(8);
+    auto origin = originOf(uri);
+    if ((origin == "https://app.bunaway.local" || origin.rfind("https://app.bunaway.local:", 0) == 0) && uri.rfind("https://", 0) == 0)
+        return "bunaway://" + uri.substr(8);
+    return uri;
+}
+
+std::string developmentUrl(const std::string& uri) {
+    NSURL* url = [NSURL URLWithString:nsstr(uri)];
+    auto origin = originOf(uri);
+    auto host = utf8(url.host);
+    auto scheme = utf8(url.scheme);
+    require(url && (scheme == "http" || scheme == "https") && !origin.empty() && (host == "localhost" || host == "127.0.0.1") &&
+        !url.user && !url.password && !url.fragment, "Development URL must be a loopback HTTP(S) URL.");
     return uri;
 }
 
@@ -1547,7 +1559,7 @@ static NSString* kBridgeShim =
 }
 @end
 
-static int run(const fs::path& package) {
+static int run(const fs::path& package, const std::string& devUrl = "") {
     App app;
     g_app = &app;
     app.package = package;
@@ -1558,6 +1570,13 @@ static int run(const fs::path& package) {
     app.hostOps = readJson(app.assets / "host-operations.json");
     app.manifest = readJson(package / "manifest.json");
     auto config = readJson(app.assets / "app.json");
+    if (config.contains("development") || !devUrl.empty()) {
+        require(config.contains("development") && config["development"].is_object() &&
+            config["development"].size() == 1 && config["development"].value("url", "") == devUrl &&
+            !devUrl.empty(), "Development URL requires a matching development artifact and --dev-url launch flag.");
+        developmentUrl(devUrl);
+        require(config.value("home", "") == devUrl, "Development home does not match --dev-url.");
+    }
     static const std::regex appIdPattern("^[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$");
     app.appId = config.value("appId", "");
     require(std::regex_match(app.appId, appIdPattern), "Invalid appId.");
@@ -1741,8 +1760,9 @@ int main(int argc, char** argv) {
                 // Bundled launch: the package root is the .app Resources dir.
                 return run(fs::path([[[NSBundle mainBundle] resourcePath] UTF8String]));
             }
-            require(argc == 3 && std::string(argv[1]) == "--package", "Usage: app-host [--package <dir>]");
-            return run(fs::canonical(fs::path(argv[2])));
+            require((argc == 3 || (argc == 5 && std::string(argv[3]) == "--dev-url")) &&
+                std::string(argv[1]) == "--package", "Usage: app-host [--package <dir> [--dev-url <url>]]");
+            return run(fs::canonical(fs::path(argv[2])), argc == 5 ? argv[4] : "");
         } catch (const std::exception& e) {
             std::fprintf(stderr, "app-host failed: %s\n", e.what());
             return 1;

@@ -294,9 +294,9 @@ async function newWebContentPids(): Promise<number[]> {
   return current.filter((pid) => !webContentBaseline.has(pid));
 }
 
-function launch(extraEnv: Record<string, string> = {}) {
+function launch(extraEnv: Record<string, string> = {}, arguments_: string[] = []) {
   sealApp();
-  const child = Bun.spawn([host, "--package", packagePath], {
+  const child = Bun.spawn([host, "--package", packagePath, ...arguments_], {
     cwd,
     env: {
       PATH: "/usr/bin:/bin",
@@ -597,6 +597,85 @@ try {
       }
       allowed.stop(true);
       blocked.stop(true);
+      await updateAsset("assets/app.json", configText);
+      await updateAsset("assets/policy.json", policyText);
+    }
+  });
+
+  await test("loopback development page uses the SDK bridge and websocket updates without restarting the host", async () => {
+    await resetData();
+    const entry = join(diagnostics, "development-page.ts");
+    await writeFile(
+      entry,
+      `
+      import { createClient, createWebViewTransport } from ${JSON.stringify(resolve(import.meta.dir, "../../packages/client-sdk/src/index.ts"))};
+      const client = createClient({ transport: createWebViewTransport(window.chrome.webview), hello: { kind: 'hello', protocol: { major: 1, minor: 0 }, features: [], buildId: 'development-page' } });
+      await client.ready;
+      const echo = await client.invoke('test.echo', { message: 'development bridge' });
+      const socket = new WebSocket(location.origin.replace('http', 'ws') + '/hmr');
+      socket.onmessage = async (event) => {
+        document.body.textContent = event.data;
+        await client.invoke('test.report', { file: 'development.json', report: { page: 'development', results: [{ name: 'bridge', ok: echo.message === 'development bridge' }, { name: event.data, ok: true }] } });
+      };
+    `,
+    );
+    const bundle = await Bun.build({ entrypoints: [entry], target: "browser" });
+    assert(bundle.success && bundle.outputs[0], bundle.logs.join("\n"));
+    const script = await bundle.outputs[0].text();
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch(request, server) {
+        const path = new URL(request.url).pathname;
+        if (path === "/hmr" && server.upgrade(request)) return;
+        if (path === "/main.js")
+          return new Response(script, { headers: { "Content-Type": "application/javascript" } });
+        return new Response('<script type="module" src="/main.js"></script>', {
+          headers: { "Content-Type": "text/html" },
+        });
+      },
+      websocket: {
+        open(socket) {
+          socket.subscribe("hmr");
+          socket.send("first");
+        },
+        message() {},
+      },
+    });
+    const url = `http://127.0.0.1:${server.port}/`;
+    const configText = await readFile(join(packagePath, "assets/app.json"), "utf8");
+    const policyText = await readFile(join(packagePath, "assets/policy.json"), "utf8");
+    let child: ReturnType<typeof launch> | undefined;
+    try {
+      const config = JSON.parse(configText);
+      const policy = JSON.parse(policyText);
+      config.home = url;
+      config.development = { url };
+      policy.views[0].origins = [new URL(url).origin];
+      await updateAsset("assets/app.json", JSON.stringify(config));
+      await updateAsset("assets/policy.json", JSON.stringify(policy));
+      const unflagged = launch();
+      assert.notEqual(await unflagged.exited, 0, "Development artifacts require --dev-url.");
+      child = launch({}, ["--dev-url", url]);
+      const first = await reportFile("development.json");
+      assert.deepEqual(first.results, [
+        { name: "bridge", ok: true },
+        { name: "first", ok: true },
+      ]);
+      server.publish("hmr", "updated");
+      await waitFor(async () =>
+        (await readReport(join(dataRoot, "temp/development.json")))?.results[1]?.name === "updated"
+          ? true
+          : null,
+      );
+      const sessions = (await hostLog()).filter((entry) => entry.event === "session-open");
+      assert.equal(sessions.length, 1, "UI update restarted the bridge session.");
+      assert.equal(sessions[0]?.origin, new URL(url).origin);
+      await gracefulStop(child);
+    } finally {
+      if (child && child.exitCode === null) child.kill("SIGKILL");
+      await child?.exited;
+      server.stop(true);
       await updateAsset("assets/app.json", configText);
       await updateAsset("assets/policy.json", policyText);
     }

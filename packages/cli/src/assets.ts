@@ -42,9 +42,13 @@ async function webAssets(project: Project, destination: string, plugin: BunPlugi
   }
 }
 
-export async function bundleAssets(project: Project, assets: string): Promise<void> {
+export async function bundleAssets(
+  project: Project,
+  assets: string,
+  developmentServer = false,
+): Promise<void> {
   const plugin = await sdkPlugin(project.root);
-  await webAssets(project, resolve(assets, "web"), plugin);
+  if (!developmentServer) await webAssets(project, resolve(assets, "web"), plugin);
   const backend = await buildWithSdk(
     { entrypoints: [project.backend], target: "bun", packages: "bundle" },
     plugin,
@@ -62,10 +66,15 @@ export async function bundleAssets(project: Project, assets: string): Promise<vo
   }
 }
 
-export async function bundleWindowsAssets(project: Project, assets: string): Promise<void> {
+export async function bundleWindowsAssets(
+  project: Project,
+  assets: string,
+  developmentServer = false,
+): Promise<void> {
   if (!project.windowsApp)
     throw new Error("Windows requires windowsApp: a module default-exporting AppDefinition.");
-  await webAssets(project, resolve(assets, "web"), await sdkPlugin(project.root));
+  if (!developmentServer)
+    await webAssets(project, resolve(assets, "web"), await sdkPlugin(project.root));
   await bundleWindowsHost(
     resolve(project.frameworkRoot, "native/windows/bun"),
     assets,

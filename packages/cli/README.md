@@ -61,13 +61,17 @@ my-app/
 `build.backend`, `build.windowsApp`(default export AppDefinition), `build.frontend`와
 패키징 파일 경로는 프로젝트 루트 상대 경로다. Windows 빌드에는 build.windowsApp이 필요하다.
 배포 전에는 현재 v1만 사용하고 이전 분리 설정·vendor 구조 호환을 제공하지 않는다.
+
+선택적 `dev`에 외부 UI 개발 서버의 `command`(인자 배열), `url`, `timeoutMs`를 지정한다.
+[Vite·Next.js 개발 서버 연결](../../docs/development-server.md)을 따른다.
 프런트엔드의 `.ts`/`.js`는 브라우저 번들로 변환하고 나머지 정적 자산은 복사한다.
 `.d.ts`는 배포하지 않는다. CSS 등 번들의 추가 출력까지 정적 자산과 대조해 기록 전에
 충돌을 거부한다. 출력 이름은 Windows/macOS 이식성을 위해 대소문자를 구분하지 않고
 비교하며 자산 심볼릭 링크도 거부한다.
 vanilla MVP는 양쪽 호스트가 공통으로 지원하는 단일 뷰 `app` 설정과
 `https://app.bunaway.local`의 호스트 소유 로컬 자산만 사용한다. Windows는 가상 호스트,
-macOS는 기존 `bunaway://` 매핑이다. HTTP 개발 origin은 여기서 허용하지 않는다.
+macOS는 기존 `bunaway://` 매핑이다. policy.json의 HTTP origin은 허용하지 않는다.
+`dev.url`의 정확한 loopback origin은 개발 산출물에만 적용하며 프로덕션에 포함하지 않는다.
 
 템플릿은 실제 `createClient`/`command`/`runBunApp`을 사용한다.
 `message.save` → 호출 컨텍스트의 Host API `storage.writeText` →
@@ -78,8 +82,11 @@ macOS는 기존 `bunaway://` 매핑이다. HTTP 개발 origin은 여기서 허�
 
 ## 개발 수명주기
 
-프로젝트 소스·설정 변경을 debounce 후 직렬 처리한다(의존성/출력 디렉터리는 제외).
-프런트엔드 변경도 **전체 네이티브 호스트/창 재시작**으로 갱신한다. HMR은 후속 범위다.
+`dev`가 없으면 프로젝트 소스·설정 변경을 debounce 후 직렬 처리한다(의존성/출력 디렉터리는 제외).
+프런트엔드 변경도 **전체 네이티브 호스트/창 재시작**으로 갱신한다.
+외부 개발 서버 모드에서는 UI 갱신·HMR을 서버에 맡기고 CLI는 백엔드·설정 변경만
+처리한다. 서버를 한 번 실행하고 HTTP 준비를 기다린 뒤 호스트를 시작한다.
+서버 설정 변경은 서버도 교체하며 Ctrl+C·창 닫기·서버 종료·timeout 시 서버 자손을 정리한다.
 이전 호스트 종료를 확인한 후 자산을 다시 빌드하고 새 호스트를 시작한다.
 호스트가 새 런타임 세대와 새 호출 컨텍스트/세션을 발급한다. Windows는 WM_CLOSE로 코어·Worker·WebView를 정리하고 Bun Job이 자손을 회수한다.
 macOS의 기존 guard는 Bun 자식을 정리한다. SDK는 세션 종료 시 미완료 요청/구독을 폐기하며 CLI는 요청을
@@ -111,7 +118,7 @@ dist/macos-arm64/<appId>.app/Contents/
 ```
 
 개발 패키지는 동일한 구조로 `.bunaway/<target>/` 아래 생성한다.
-Windows launcher는 절대 경로의 번들 Bun과 검증된 `boot.js --package <패키지>`를 실행한다.
+Windows launcher는 절대 경로의 번들 Bun과 검증된 `boot.js`를 실행한다.
 macOS 호스트 인자는 `--package <절대 패키지 경로>`이고 `.app/Contents/Resources`다.
 macOS는 Finder/.app 실행 시 NSBundle Resources에서 패키지를 찾는다.
 

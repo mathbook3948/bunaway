@@ -167,6 +167,16 @@ int main(int argc, char** argv) {
                     "https://user@app.bunaway.local/a.js" })
                 require(!allowed(uri), "Undeclared resource origin was allowed.");
             std::puts("PASS resource filters match exact scheme, host and port");
+            require(platformUrl("https://app.bunaway.local:8443/index.html") == "bunaway://app.bunaway.local:8443/index.html", "Local asset mapping lost its port.");
+            for (const auto& url : { "http://127.0.0.1:5173/", "https://localhost:5173/" }) {
+                require(developmentUrl(url) == url && platformUrl(url) == url, "Development URL was remapped to local assets.");
+            }
+            for (const auto& url : { "https://example.com/", "http://localhost.evil/", "http://user@localhost:5173/", "http://127.0.0.1:5173/#fragment", "bunaway://localhost:5173/", "file://localhost/index.html" }) {
+                bool rejected = false;
+                try { developmentUrl(url); } catch (...) { rejected = true; }
+                require(rejected, "Invalid development URL was accepted.");
+            }
+            std::puts("PASS development URLs stay on loopback HTTP(S)");
             fs::remove_all(testRoot);
             return 0;
         } catch (const std::exception& error) {

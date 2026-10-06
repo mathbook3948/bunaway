@@ -32,3 +32,5 @@ assets/policy.json, manifest 및 패키징 어댑터 계약은 바꾸지 않는�
 루트 설정 탐색과 분리 설정 로딩, 이전 작성 형식으로의 fallback은 제공하지 않는다.
 `bundle`에는 별도 version을 두지 않는다. 플랫폼별 override나 HMR 설정은
 이번 결정에 추가하지 않는다.
+
+외부 UI 개발 서버의 `dev` 설정과 HMR 연결은 후속 [ADR 0009](./0009-development-server.md)이 확장한다.

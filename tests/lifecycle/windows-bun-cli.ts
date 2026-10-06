@@ -258,6 +258,66 @@ try {
   } else {
     console.log("SKIP Windows Bun FFI installer: Inno Setup is unavailable");
   }
+  // Serve the real SDK UI over HTTP; dev owns that server and cleans it up when the window closes.
+  const reservation = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("") });
+  const devPort = reservation.port;
+  reservation.stop(true);
+  const devUrl = `http://127.0.0.1:${devPort}/`;
+  const requested = resolve(project, "development-page-requested.txt");
+  await writeFile(
+    resolve(project, "development-server.ts"),
+    `
+    import { resolve } from 'node:path';
+    Bun.serve({ hostname: '127.0.0.1', port: ${devPort}, async fetch(request) {
+      const path = new URL(request.url).pathname;
+      if (path === '/main.js') await Bun.write(${JSON.stringify(requested)}, 'requested');
+      if (!['/', '/index.html', '/main.js', '/style.css'].includes(path)) return new Response('', {status:404});
+      return new Response(Bun.file(resolve('dist/windows-x64/assets/web', path === '/' ? 'index.html' : path.slice(1))));
+    }});
+  `,
+  );
+  const previousConfig = await readFile(configPath, "utf8");
+  await writeFile(
+    configPath,
+    JSON.stringify({
+      ...JSON.parse(previousConfig),
+      dev: { command: ["bun", "development-server.ts"], url: devUrl },
+    }),
+  );
+  const development = Bun.spawn([process.execPath, "run", "dev"], {
+    cwd: project,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const devOutput = new Response(development.stdout).text();
+  const devErrors = new Response(development.stderr).text();
+  const devDeadline = setTimeout(() => development.kill(), 90000);
+  try {
+    assert.equal(await development.exited, 0, await devErrors);
+    assert.match(await devOutput, /Frontend server ready/);
+    assert.equal(
+      await readFile(requested, "utf8"),
+      "requested",
+      "WebView did not load the HTTP SDK UI.",
+    );
+    const devApp = JSON.parse(
+      await readFile(resolve(project, ".bunaway/windows-x64/assets/app.json"), "utf8"),
+    );
+    assert.equal(devApp.home, devUrl);
+    assert.deepEqual(devApp.development, { url: devUrl });
+    await assert.rejects(
+      fetch(devUrl, { signal: AbortSignal.timeout(1000) }),
+      "Dev server survived window close.",
+    );
+  } finally {
+    clearTimeout(devDeadline);
+    if (development.exitCode === null) development.kill();
+    await development.exited;
+    await writeFile(configPath, previousConfig);
+  }
+  console.log(
+    "PASS loopback development server, real WebView SDK/storage roundtrip and server teardown",
+  );
   console.log(
     "PASS moved project uses its own Windows Bun/FFI snapshot, real SDK/storage, sanitized launch, post-signing digests, tamper rejection and Job cleanup",
   );

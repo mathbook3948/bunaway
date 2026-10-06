@@ -3,6 +3,7 @@ import { basename, dirname, relative, resolve } from "node:path";
 import { acquireBuildOutputLock, ownedDirectory, PACKAGING_CHANNELS } from "@bunaway/packaging";
 import { type Project, validateProject } from "./config.ts";
 import { writeWindowsLauncher } from "./launch.ts";
+import { developmentPolicy } from "../../runtime-bun/src/development.ts";
 import {
   files,
   frameworkRoot,
@@ -100,11 +101,12 @@ export async function bundleAssets(
   project: Project,
   assets: string,
   windows = false,
+  developmentServer = false,
 ): Promise<void> {
   await runWorker(
     "assets.ts",
     windows ? "bundleWindowsAssets" : "bundleAssets",
-    [project, assets],
+    [project, assets, developmentServer],
     project.root,
     project.frameworkRoot,
   );
@@ -123,8 +125,9 @@ export async function buildProject(
   directory: string,
   options: { development?: boolean; native?: NativeInputs } = {},
 ): Promise<BuiltPackage> {
-  const project = await validateProject(directory);
+  const project = await validateProject(directory, { development: options.development ?? false });
   const root = project.frameworkRoot;
+  const server = options.development ? project.dev : undefined;
   const target = options.native?.target ?? currentTarget();
   await assertBuildBun(target, root);
   const native = options.native ?? (await prepareNative(target, root));
@@ -169,15 +172,21 @@ export async function buildProject(
     for (const [name, path] of Object.entries(native.licenses)) {
       await cp(path, resolve(packageRoot, "licenses", name));
     }
-    await writeJson(resolve(assets, "app.json"), project.app);
-    await writeJson(resolve(assets, "policy.json"), project.policy);
+    await writeJson(
+      resolve(assets, "app.json"),
+      server ? { ...project.app, home: server.url, development: { url: server.url } } : project.app,
+    );
+    await writeJson(
+      resolve(assets, "policy.json"),
+      server ? developmentPolicy(project.policy, project.app.view, server.url) : project.policy,
+    );
     await writeFile(resolve(assets, "bunfig.toml"), "env = false\n");
     await writeJson(resolve(assets, "tsconfig.json"), {});
     if (!windows)
       for (const schema of await files(resolve(root, "native/host-api/generated"))) {
         await cp(schema, resolve(assets, basename(schema)));
       }
-    await bundleAssets(project, assets, windows);
+    await bundleAssets(project, assets, windows, !!server);
     if (windows) {
       if (!project.windowsApp)
         throw new Error(
@@ -235,6 +244,7 @@ export async function buildProject(
 <key>CFBundleVersion</key><string>1</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSPrincipalClass</key><string>NSApplication</string>
+${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>" : ""}
 </dict></plist>\n`,
       );
       await run(["/usr/bin/codesign", "--force", "--sign", "-", staging], project.root);
@@ -308,8 +318,13 @@ export async function buildProject(
             `--config=${resolve(output, "assets/bunfig.toml")}`,
             `--tsconfig-override=${resolve(output, "assets/tsconfig.json")}`,
             resolve(output, "assets/boot.js"),
+            ...(server ? ["--dev-url", server.url] : []),
           ]
-        : ["--package", resolve(output, "Contents/Resources")],
+        : [
+            "--package",
+            resolve(output, "Contents/Resources"),
+            ...(server ? ["--dev-url", server.url] : []),
+          ],
     };
   } catch (error) {
     if (!published) {

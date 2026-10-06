@@ -73,6 +73,29 @@ async function setBundle(value: Record<string, unknown>) {
   await files.writeJson(configPath, { ...config, bundle: value });
 }
 const { packageProject } = await import("../../packages/cli/src/package.ts");
+// A dev URL is included only in development output; production stays on local assets.
+const settings = (await readJson(configPath)) as Record<string, unknown>;
+const devUrl = "http://127.0.0.1:5173/";
+await files.writeJson(configPath, {
+  ...settings,
+  dev: { command: ["bun", "run", "web:dev"], url: devUrl },
+});
+const development = await buildProject(project, { native, development: true });
+const developmentApp = await Bun.file(resolve(development.package, "assets/app.json")).json();
+const developmentPolicy = await Bun.file(resolve(development.package, "assets/policy.json")).json();
+expect(developmentApp.home).toBe(devUrl);
+expect(developmentApp.development).toEqual({ url: devUrl });
+expect(developmentPolicy.views[0].origins).toEqual(["http://127.0.0.1:5173"]);
+expect(development.arguments.slice(-2)).toEqual(["--dev-url", devUrl]);
+expect(await readdir(resolve(development.package, "assets/web"))).toEqual([]);
+const production = await buildProject(project, { native });
+const productionApp = await Bun.file(resolve(production.package, "assets/app.json")).json();
+const productionPolicy = await Bun.file(resolve(production.package, "assets/policy.json")).json();
+expect(productionApp.home).toBe("https://app.bunaway.local/index.html");
+expect(productionApp.development).toBeUndefined();
+expect(productionPolicy.views[0].origins).toEqual(["https://app.bunaway.local"]);
+expect(production.arguments).not.toContain("--dev-url");
+await files.writeJson(configPath, settings);
 await setBundle({
   channels: { "win-direct": {}, "win-store-msix": {}, "mac-direct": {}, "mac-store": {} },
 });

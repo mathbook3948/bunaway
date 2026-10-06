@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { buildProject, bundleAssets } from "../../packages/cli/src/build.ts";
 import { validateProject } from "../../packages/cli/src/config.ts";
 import { createProject } from "./project.ts";
-import { RestartController } from "../../packages/cli/src/dev.ts";
+import { RestartController, shouldRestartHost } from "../../packages/cli/src/dev.ts";
 import { writeJson } from "../../packages/cli/src/files.ts";
 
 let home: string;
@@ -115,6 +115,41 @@ test("bundle is optional until packaging and generated settings use only two fil
     await expect(packageProject(project, "win-direct")).rejects.toThrow("bunaway.json.bundle");
   } finally {
     await Bun.write(path, originals["src-bunaway/bunaway.json"] ?? "");
+  }
+});
+
+test("external development delegates frontend compilation and missing build output to the server", async () => {
+  const path = resolve(project, "src-bunaway/bunaway.json");
+  const valid = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
+  const frontend = resolve(project, "src/main.ts");
+  try {
+    await writeJson(path, {
+      ...valid,
+      build: { ...valid.build, frontend: "web-output" },
+      dev: { command: ["bun", "run", "web:dev"], url: "http://127.0.0.1:5173" },
+    });
+    await Bun.write(frontend, "this is intentionally not valid JavaScript;");
+    const development = await validateProject(project, { development: true });
+    expect(development.dev?.url).toBe("http://127.0.0.1:5173/");
+    expect(development.policy.views[0]?.origins).toEqual(["https://app.bunaway.local"]);
+    expect(shouldRestartHost(development, "src/main.ts")).toBe(false);
+    expect(shouldRestartHost(development, "public/icon.png")).toBe(false);
+    expect(shouldRestartHost(development, ".next/cache/changed")).toBe(false);
+    expect(shouldRestartHost(development, "src-bunaway/src/app.ts")).toBe(true);
+    expect(shouldRestartHost(development, "src-bunaway/bunaway.json")).toBe(true);
+    const rootBackend = { ...development, backend: resolve(project, "backend.ts") };
+    expect(shouldRestartHost(rootBackend, "src/main.ts")).toBe(false);
+    expect(shouldRestartHost(rootBackend, "public/icon.png")).toBe(false);
+    expect(shouldRestartHost(rootBackend, "backend.ts")).toBe(true);
+    await expect(validateProject(project)).rejects.toThrow();
+    const assets = resolve(home, "external-development-assets");
+    await mkdir(assets, { recursive: true });
+    await bundleAssets(development, assets, false, true);
+    expect(await Bun.file(resolve(assets, "backend.js")).exists()).toBe(true);
+    expect(await Bun.file(resolve(assets, "web/main.js")).exists()).toBe(false);
+  } finally {
+    await Bun.write(path, originals["src-bunaway/bunaway.json"] ?? "");
+    await Bun.write(frontend, originals["src/main.ts"] ?? "");
   }
 });
 
@@ -272,6 +307,24 @@ test("package checks platforms and adapters before building and preserves output
   const errors = new Response(child.stderr).text();
   expect(await child.exited, `${await output}\n${await errors}`).toBe(0);
 }, 60000);
+
+test("external development orchestrates UI updates, backend restarts and server replacement", async () => {
+  const child = Bun.spawn([process.execPath, resolve(import.meta.dir, "dev.fixture.ts"), project], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const output = new Response(child.stdout).text();
+  const errors = new Response(child.stderr).text();
+  const timer = setTimeout(() => child.kill(), 25000);
+  try {
+    expect(await child.exited, await errors).toBe(0);
+    expect(await output).toContain("PASS frontend HMR ownership");
+  } finally {
+    clearTimeout(timer);
+    if (child.exitCode === null) child.kill();
+    await child.exited;
+  }
+}, 30000);
 
 function gate() {
   let release: (() => void) | undefined;

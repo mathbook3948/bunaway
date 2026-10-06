@@ -63,6 +63,8 @@ Bun은 `mise.toml`과 `package.json`에 **1.4.2**로 고정되어 있다.
 저장소 검사 명령은 mise에서 관리한다. 루트의 `bun run framework:pack`과
 `bun run framework:check <추출한 package 경로>`는 개발자 설치 artifact를 검증한다.
 생성 앱의 `bun run dev`·`bun run build`는 기존 SDK/네이티브 빌드를 재사용한다.
+선택적 `dev.command`·`dev.url`로 [외부 Vite·Next.js UI 개발 서버](./docs/development-server.md)를
+연결하면 UI 갱신은 해당 서버에 맡기고 CLI는 서버 수명주기와 백엔드 재시작을 관리한다.
 Windows 호스트의 빌드·패키징은
 `native/windows/bun/run.ps1`이 담당한다. Bun이 앱 진입점이고 UI Worker가
 Win32·WebView2 COM을 직접 소유한다. 생성 앱은 `windowsApp`에 AppDefinition 모듈을 지정한다.
