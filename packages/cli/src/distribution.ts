@@ -22,6 +22,8 @@ export const frameworkPaths = [
   "docs/decisions/0008-installed-framework-packages.md",
   "docs/decisions/0001-bundled-bun-process.md",
   "docs/decisions/0006-windows-bun-ui-worker.md",
+  "docs/decisions/0009-development-server.md",
+  "docs/development-server.md",
   "docs/architecture/windows-bun-results.md",
   "docs/platform-support/README.md",
   "tsconfig.base.json",
@@ -256,6 +258,9 @@ function requiredFrameworkFiles(): string[] {
     "runtime/build-manifests/darwin-aarch64.json",
     "packages/cli/src/assets.ts",
     "packages/cli/src/sdk.ts",
+    "packages/cli/src/dev-server.ts",
+    "packages/cli/src/dev-server-worker.ts",
+    "packages/runtime-bun/src/development.ts",
     ...Object.keys(packageNames).flatMap((directory) =>
       ["package.json", "src/index.ts", "tsconfig.json"].map(
         (name) => `packages/${directory}/${name}`,

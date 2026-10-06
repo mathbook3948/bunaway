@@ -14,7 +14,7 @@ export async function doctor(directory: string): Promise<boolean> {
     check("target", false, String(error));
   }
   try {
-    await validateProject(directory);
+    await validateProject(directory, { development: true });
     check("configuration/policy", true, "valid");
   } catch (error) {
     check("configuration/policy", false, String(error));

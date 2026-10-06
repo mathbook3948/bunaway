@@ -15,6 +15,9 @@ function openBindings() {
     SetInformationJobObject: { args: ["u64", "i32", "ptr", "u32"], returns: "i32" },
     QueryInformationJobObject: { args: ["u64", "i32", "ptr", "u32", "ptr"], returns: "i32" },
     AssignProcessToJobObject: { args: ["u64", "u64"], returns: "i32" },
+    OpenProcess: { args: ["u32", "i32", "u32"], returns: "u64" },
+    TerminateProcess: { args: ["u64", "u32"], returns: "i32" },
+    WaitForSingleObject: { args: ["u64", "u32"], returns: "u32" },
     CloseHandle: { args: ["u64"], returns: "i32" },
   });
 }
@@ -75,4 +78,43 @@ export function activeDescendants(): number {
     "App Job query failed",
   );
   return Math.max(0, accounting.readUInt32LE(40) - 1); // exclude this Bun process
+}
+
+// The development-server worker remains alive until its Job descendants exit.
+// A worker exit notification alone does not establish that their ports are free.
+export async function terminateAppDescendants(timeoutMs = 5000): Promise<void> {
+  assert(owned);
+  const { api, handle } = owned;
+  const deadline = Date.now() + timeoutMs;
+  while (activeDescendants() > 0) {
+    assert(Date.now() < deadline, "App Job descendant cleanup timed out");
+    let list = Buffer.alloc(8 + 8 * 128); // JOBOBJECT_BASIC_PROCESS_ID_LIST, Win64
+    while (!api.symbols.QueryInformationJobObject(handle, 3, ptr(list), list.length, null)) {
+      assert.equal(api.symbols.GetLastError(), 234, "App Job process inventory failed"); // ERROR_MORE_DATA
+      assert(list.length < 16 * 1024 * 1024, "App Job process inventory is too large");
+      list = Buffer.alloc(list.length * 2);
+    }
+    const count = list.readUInt32LE(4);
+    for (let index = 0; index < count; index++) {
+      const pid = Number(list.readBigUInt64LE(8 + index * 8));
+      if (pid === process.pid) continue;
+      const processHandle = api.symbols.OpenProcess(0x100001, 0, pid); // SYNCHRONIZE | PROCESS_TERMINATE
+      if (!processHandle) {
+        assert.equal(api.symbols.GetLastError(), 87, `Cannot open Job descendant ${pid}`); // already exited
+        continue;
+      }
+      try {
+        if (api.symbols.WaitForSingleObject(processHandle, 0) !== 0) {
+          const terminated = api.symbols.TerminateProcess(processHandle, 1);
+          assert(
+            terminated || api.symbols.WaitForSingleObject(processHandle, 0) === 0,
+            `Cannot terminate Job descendant ${pid}`,
+          );
+        }
+      } finally {
+        api.symbols.CloseHandle(processHandle);
+      }
+    }
+    await Bun.sleep(10);
+  }
 }

@@ -136,6 +136,11 @@ if (( MAKE_APP )); then
   /usr/libexec/PlistBuddy -c 'Add :CFBundleVersion string 0' "$APP/Contents/Info.plist"
   /usr/libexec/PlistBuddy -c 'Add :LSMinimumSystemVersion string 14.0' "$APP/Contents/Info.plist"
   /usr/libexec/PlistBuddy -c 'Add :NSPrincipalClass string NSApplication' "$APP/Contents/Info.plist"
+  if (( ! SAMPLE )); then
+    # The integration suite loads loopback development pages, as a CLI dev bundle does.
+    /usr/libexec/PlistBuddy -c 'Add :NSAppTransportSecurity dict' "$APP/Contents/Info.plist"
+    /usr/libexec/PlistBuddy -c 'Add :NSAppTransportSecurity:NSAllowsLocalNetworking bool true' "$APP/Contents/Info.plist"
+  fi
   /usr/bin/codesign --force --deep --sign - "$APP"
   echo "App bundle: $APP (ad-hoc signed; verify: $APP/Contents/MacOS/bunaway-host --package $APP/Contents/Resources)"
 fi

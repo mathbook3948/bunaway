@@ -25,7 +25,10 @@ macOS `~/Library/Application Support/bunaway/<appId>/data/messages/current.txt`�
 
 개발 변경은 UI/백엔드를 다시 번들하고 **전체 호스트/창을 재시작**한다.
 이전 세션·요청·구독을 무효화하고 저장 요청을 자동 재전송하지 않는다.
-HMR/입력 상태 보존은 제공하지 않는다. Ctrl+C 또는 창 닫기로 종료한다.
+기본 흐름에서는 HMR/입력 상태 보존을 제공하지 않는다. Ctrl+C 또는 창 닫기로 종료한다.
+외부 Vite·Next.js 개발 서버는 bunaway.json의 선택적 `dev.command`·`dev.url`로 연결한다.
+[포함된 개발 서버 안내](node_modules/@bunaway/cli/docs/development-server.md)를 따른다.
+이 모드의 UI 변경은 서버가 처리하고 백엔드·설정 변경만 호스트를 재시작한다.
 
 빌드 실패는 오류로 종료하고 마지막 성공 산출물을 유지한다.
 Windows 패키지는 `dist/windows-x64/bunaway.cmd`를 실행한다.
