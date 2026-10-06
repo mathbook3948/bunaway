@@ -11,6 +11,8 @@ const button = document.getElementById("save");
 const testPhase = new URL(location.href).searchParams.get("test");
 const ephemeralBrowserStorage =
   new URL(location.href).searchParams.get("browserStorage") === "ephemeral";
+let expectedEditorSave;
+let resolveEditorSave;
 window.addEventListener("pagehide", () => {
   void client.close();
 });
@@ -28,6 +30,7 @@ async function start() {
     (event) => {
       saved.textContent = event.payload;
       statusEl.textContent = "저장 완료";
+      if (event.payload === expectedEditorSave) resolveEditorSave?.();
     },
     {
       onError: (error) => {
@@ -66,8 +69,17 @@ async function start() {
     const editorResults = [];
     try {
       input.value = "편집 뷰가 저장한 메모 ✏️";
+      expectedEditorSave = input.value;
+      const savedEvent = new Promise((resolve) => {
+        resolveEditorSave = resolve;
+      });
       await client.invoke("memo.save", input.value);
-      await waitForSaved();
+      await Promise.race([
+        savedEvent,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("memo.saved event was not delivered")), 5000),
+        ),
+      ]);
       editorResults.push({
         name: "editor save broadcasts to subscribed views",
         ok: saved.textContent === input.value,
@@ -82,6 +94,9 @@ async function start() {
         ok: false,
         error: String(error?.message ?? error),
       });
+    } finally {
+      expectedEditorSave = undefined;
+      resolveEditorSave = undefined;
     }
     await client.invoke("test.report", {
       file: "editor.json",

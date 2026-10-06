@@ -109,8 +109,8 @@ jobs:
       # Both scripts populate runtime/bun-bundle/vendor: never run cold builds in parallel.
       - name: Build and test bundled-process probe
         run: mise run probe:macos 2>&1 | tee build/macos-native-logs/probe.log
-      - name: Build and test real WKWebView host
-        run: mise run host:macos 2>&1 | tee build/macos-native-logs/host.log
+      - name: Build and test real WKWebView host and signed in-place app
+        run: mise exec -- zsh native/macos/host/run.sh --app 2>&1 | tee build/macos-native-logs/host.log
       - name: Upload native test reports and logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -121,5 +121,7 @@ jobs:
             build/macos-host-results.json
             build/macos-native-logs/
             build/macos-host-diagnostics/
+            build/macos-host-in-place/macos-host-results.json
+            build/macos-host-in-place/macos-host-diagnostics/
           if-no-files-found: warn
           retention-days: 7
