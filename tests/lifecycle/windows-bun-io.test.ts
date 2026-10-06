@@ -7,6 +7,23 @@ import { Channel, type Packet } from "../../native/windows/bun/channel.ts";
 import type { HostContext } from "../../packages/protocol/src/index.ts";
 
 test.skipIf(process.platform !== "win32")(
+  "oversized Web strings do not poison COM callbacks",
+  async () => {
+    const child = Bun.spawn(
+      [process.execPath, "--no-env-file", resolve(import.meta.dir, "windows-bun-com.ts")],
+      {
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const output = new Response(child.stdout).text();
+    const errors = new Response(child.stderr).text();
+    expect(await child.exited, await errors).toBe(0);
+    expect(await output).toContain("PASS oversized native string rejected");
+  },
+);
+
+test.skipIf(process.platform !== "win32")(
   "view profile names preserve case-sensitive identities on Windows",
   async () => {
     const { viewDirName } = await import("../../native/windows/bun/webview.ts");

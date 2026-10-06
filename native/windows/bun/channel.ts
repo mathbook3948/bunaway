@@ -187,9 +187,10 @@ export class Channel {
   private sequence = 0;
   private expected = 1;
   private closed = false;
+  private droppedDiagnostics = 0;
   private readonly pending = new Map<
     number,
-    { control: boolean; resolve(): void; reject(error: Error): void }
+    { lane: "data" | "control" | "diagnostic"; resolve(): void; reject(error: Error): void }
   >();
   constructor(
     private readonly port: Pick<MessagePort | Worker, "postMessage" | "on" | "off">,
@@ -241,13 +242,32 @@ export class Channel {
       const opposite: Side = { main: "ui", ui: "main", io: "main-io", "main-io": "io" }[
         this.side
       ] as Side;
+      const lane =
+        packet.kind === "diagnostic"
+          ? "diagnostic"
+          : controlKinds.has(packet.kind)
+            ? "control"
+            : "data";
+      const count = [...this.pending.values()].filter((item) => item.lane === lane).length;
+      if (packet.kind === "diagnostic" && count >= 16) {
+        // Diagnostics must not consume request/control capacity or turn BUSY into app failure.
+        // Report suppressed entries when the receiver next has room, without another queue.
+        this.droppedDiagnostics++;
+        return Promise.resolve();
+      }
+      if (packet.kind === "diagnostic" && this.droppedDiagnostics) {
+        packet = {
+          ...packet,
+          fields: { ...packet.fields, droppedDiagnostics: this.droppedDiagnostics },
+        };
+        this.droppedDiagnostics = 0;
+      }
       validatePacket(packet, opposite);
-      const control = controlKinds.has(packet.kind);
-      const count = [...this.pending.values()].filter((item) => item.control === control).length;
-      if (count >= (control ? 16 : API_LIMITS.maxPending)) throw new Error("Worker channel full");
+      if (count >= (lane === "data" ? API_LIMITS.maxPending : 16))
+        throw new Error("Worker channel full");
       const sequence = ++this.sequence;
       return new Promise((resolve, reject) => {
-        this.pending.set(sequence, { control, resolve, reject });
+        this.pending.set(sequence, { lane, resolve, reject });
         try {
           this.port.postMessage({ runtime: this.runtime, sequence, packet }, []);
         } catch (error) {
@@ -264,7 +284,7 @@ export class Channel {
   }
   canSend(count = 1) {
     return (
-      [...this.pending.values()].filter((item) => !item.control).length + count <=
+      [...this.pending.values()].filter((item) => item.lane === "data").length + count <=
       API_LIMITS.maxPending
     );
   }

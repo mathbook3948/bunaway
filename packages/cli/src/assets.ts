@@ -81,22 +81,39 @@ export async function bundleWindowsHost(
   project?: string,
 ): Promise<void> {
   // A shared chunk preserves class identity (e.g. BunawayError) between core and app.
+  const sdk = project ? await sdkPlugin(project) : undefined;
+  const entries: BunPlugin = {
+    name: "windows-app-entry",
+    setup(build) {
+      sdk?.setup(build);
+      build.onResolve({ filter: /^bunaway-windows-app\/app\.ts$/ }, () => ({
+        path: "app.ts",
+        namespace: "bunaway-windows-entry",
+      }));
+      build.onLoad({ filter: /.*/, namespace: "bunaway-windows-entry" }, () => ({
+        contents: `export { default } from ${JSON.stringify(resolve(appEntry))};`,
+        loader: "ts",
+        resolveDir: dirname(resolve(appEntry)),
+      }));
+    },
+  };
   const options: Bun.BuildConfig = {
-    entrypoints: [resolve(source, "boot.ts"), appEntry],
+    entrypoints: [resolve(source, "boot.ts"), "bunaway-windows-app/app.ts"],
     target: "bun",
     packages: "bundle",
     splitting: true,
     naming: "[name].[ext]",
   };
-  const artifacts = project
-    ? await buildWithSdk(options, await sdkPlugin(project))
-    : (await Bun.build(options)).outputs;
-  if (!artifacts.some((output) => basename(output.path) === "boot.js"))
+  const artifacts = await buildWithSdk(options, entries);
+  if (
+    !["boot.js", "app.js"].every((name) =>
+      artifacts.some((output) => basename(output.path) === name),
+    )
+  )
     throw new Error("Windows bootstrap bundle failed");
-  const appName = basename(appEntry).replace(/\.[^.]+$/, ".js");
   for (const output of artifacts)
     await writeFile(
-      resolve(destination, basename(output.path) === appName ? "app.js" : basename(output.path)),
+      resolve(destination, basename(output.path)),
       new Uint8Array(await output.arrayBuffer()),
     );
   for (const name of ["ui", "host-operations"]) {

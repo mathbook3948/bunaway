@@ -13,6 +13,22 @@ const assert = (value) => {
   if (!value) throw new Error("SDK/core gate failed");
 };
 await client.ready;
+// Reject hostile Web inputs without losing the UI Worker or the negotiated session.
+window.chrome.webview.postMessage({
+  kind: "invoke",
+  protocol: { major: 1, minor: 0 },
+  id: "oversized-native",
+  command: "test.echo",
+  payload: "x".repeat(1024 * 1024 + 1),
+});
+for (let index = 0; index < 256; index++)
+  window.chrome.webview.postMessage({
+    kind: "invoke",
+    protocol: { major: 1, minor: 0 },
+    id: `rejected-${index}`,
+    command: "not.allowed",
+    payload: null,
+  });
 let event;
 const off = await client.listen(
   "test.changed",

@@ -43,6 +43,14 @@ await appendFile(
   resolve(project, "src/backend/app.ts"),
   '\nconst fixtureChild = Bun.spawn([process.execPath, "-e", "setInterval(() => {}, 1000)"], { stdin: "ignore", stdout: "ignore", stderr: "ignore" }); console.log(JSON.stringify({ event: "fixture-child", pid: fixtureChild.pid }));\n',
 );
+// A user entry named boot.ts must coexist with the framework's bootstrap.
+await writeFile(resolve(project, "src/backend/boot.ts"), 'export { default } from "./app.ts";\n');
+const configPath = resolve(project, "bunaway.json");
+const projectConfig = JSON.parse(await readFile(configPath, "utf8"));
+await writeFile(
+  configPath,
+  JSON.stringify({ ...projectConfig, windowsApp: "src/backend/boot.ts" }),
+);
 await appendFile(
   resolve(project, "src/web/main.ts"),
   '\nawait client.ready; await client.invoke("message.save", "CLI FFI 한글"); if (await client.invoke("message.read", null) !== "CLI FFI 한글") throw new Error("CLI storage roundtrip failed"); window.close();\n',

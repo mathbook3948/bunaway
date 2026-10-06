@@ -1,6 +1,7 @@
 import type { FFIType, Pointer } from "bun:ffi";
 import { CFunction, JSCallback, ptr, read, toArrayBuffer } from "bun:ffi";
 import assert from "node:assert/strict";
+import { MAX_MESSAGE_BYTES } from "../../../packages/protocol/src/index.ts";
 import { hr, kernel, ole, withBuffer } from "./win32.ts";
 
 const thread = kernel.symbols.GetCurrentThreadId();
@@ -32,8 +33,10 @@ export function getString(object: Pointer, slot: number) {
   if (!address) return "";
   try {
     let bytes = 0;
-    while (bytes < 2 * 1024 * 1024 && read.u16(address, bytes)) bytes += 2;
-    assert(bytes < 2 * 1024 * 1024, "String limit exceeded");
+    while (bytes <= 2 * MAX_MESSAGE_BYTES && read.u16(address, bytes)) bytes += 2;
+    // Empty is invalid for both a Web message and an allowed URL. Reject oversized
+    // input without returning a truncated value or poisoning the COM callback state.
+    if (bytes > 2 * MAX_MESSAGE_BYTES) return "";
     return Buffer.from(toArrayBuffer(address, 0, bytes)).toString("utf16le");
   } finally {
     ole.symbols.CoTaskMemFree(address);

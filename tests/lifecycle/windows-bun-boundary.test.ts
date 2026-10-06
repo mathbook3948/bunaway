@@ -234,3 +234,99 @@ test("Windows channel bounds unacknowledged data and reserved control slots", as
   port2.close();
   await Promise.allSettled([...holds, ...controls]);
 });
+
+test("diagnostic saturation preserves request capacity, BUSY rejection and control delivery", async () => {
+  const { port1, port2 } = new MessageChannel();
+  const failures: unknown[] = [];
+  const output: ServerMessage[] = [];
+  const runtime = { id: "test", generation: "1" };
+  const received: { sequence: number; packet: Packet }[] = [];
+  let hold = false;
+  let fullResolve = () => {};
+  const full = new Promise<void>((done) => {
+    fullResolve = done;
+  });
+  port2.on("message", (envelope) => {
+    received.push(envelope);
+    if (!hold) port2.postMessage({ runtime, ack: envelope.sequence });
+    if (received.length === API_LIMITS.maxPending + 16 + 1) fullResolve();
+  });
+  const channel = new Channel(
+    port1,
+    runtime,
+    "ui",
+    () => {},
+    (error) => failures.push(error),
+  );
+  const source = "https://app.bunaway.local/index.html";
+  const boundary = new ViewBoundary(
+    {
+      id: "main",
+      origins: ["https://app.bunaway.local"],
+      commands: ["echo"],
+      events: [],
+      host: { log: false, storage: [] },
+    },
+    {
+      origin: (text) => new URL(text).origin,
+      source: () => source,
+      ready: () => true,
+      forward: (packet) => channel.notify(packet),
+      capacity: (count) => channel.canSend(count),
+      deliver: (text) => output.push(JSON.parse(text)),
+      log: (event, fields = {}) =>
+        channel.notify({ kind: "diagnostic", event, fields: { ...fields } }),
+    },
+  );
+  try {
+    const hello = {
+      kind: "hello" as const,
+      protocol: PROTOCOL_VERSION,
+      features: [],
+      buildId: "test",
+    };
+    boundary.receive(source, JSON.stringify(hello));
+    await channel.drain();
+    const opened = received.find((envelope) => envelope.packet.kind === "session-open")?.packet;
+    if (opened?.kind !== "session-open") throw new Error("Missing session");
+    boundary.send(opened.route, hello);
+    await channel.drain();
+    received.length = 0;
+    hold = true;
+    for (let index = 0; index <= API_LIMITS.maxPending; index++)
+      boundary.receive(
+        source,
+        JSON.stringify({
+          kind: "invoke",
+          protocol: PROTOCOL_VERSION,
+          id: `request-${index}`,
+          command: "echo",
+          payload: null,
+        }),
+      );
+    // Even with both data and diagnostics full, lifecycle control must be accepted.
+    const closing = channel.send({ kind: "closing" });
+    void closing.catch(() => {});
+    await full;
+    expect(received.filter(({ packet }) => packet.kind === "client")).toHaveLength(
+      API_LIMITS.maxPending,
+    );
+    expect(received.filter(({ packet }) => packet.kind === "diagnostic")).toHaveLength(16);
+    expect(output.at(-1)).toMatchObject({ kind: "error", error: { code: "BUSY" } });
+    expect(failures).toHaveLength(0);
+    hold = false;
+    for (const envelope of received) port2.postMessage({ runtime, ack: envelope.sequence });
+    await closing;
+    await channel.drain();
+    await channel.send({ kind: "diagnostic", event: "resumed", fields: {} });
+    expect(received.at(-1)?.packet).toMatchObject({
+      kind: "diagnostic",
+      fields: { droppedDiagnostics: API_LIMITS.maxPending + 1 - 16 },
+    });
+    expect(failures).toHaveLength(0);
+  } finally {
+    channel.close();
+    port1.close();
+    port2.close();
+  }
+});

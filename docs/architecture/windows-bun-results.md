@@ -26,6 +26,14 @@
 프로젝트·launcher도 재실행해 통과했다. workspace/테스트 TypeScript·린트·포맷 검사는 통과했다.
 예전 C++ 프로세스 테스트 결과는 [별도 기록](./windows-host-results.md)으로 유지한다.
 
+2026-10-06 리뷰 후 회귀: 진단 로그 포화 시 요청·제어 슬롯 유지, 과대한 COM 문자열
+거부 후 세션 유지, 앱 진입점 이름 `boot.ts`·`app.ts`·`ui.ts`의 번들 충돌을 검사했다.
+공통 계약·Windows 경계·I/O·새 번들 테스트는 116 통과·0 실패였다. 실제 WebView에서
+1 MiB 초과 메시지와 연속 권한 거부 요청 256개 이후 SDK 명령·이벤트·취소·정상 종료를
+검증했고, 이동한 독립 CLI 프로젝트의 `boot.ts` 진입점 빌드·저장·launcher·Job 정리도
+통과했다. 실행 명령은 `bun tests/lifecycle/windows-bun.ts`와
+`bun tests/lifecycle/windows-bun-cli.ts`다. 실제 GUI 검증은 샌드박스 밖에서 실행했다.
+
 기본 Windows CLI·템플릿·mise·CI는 C++ 컴파일을 호출하지 않는다. 기존 C++ 소스·probe·
 CMake·전용 실행기와 테스트는 삭제했다. 회귀 데이터는 공용 `tests/fixtures/desktop/host/`로 옮겼다.
 공식 WebView2Loader와 Windows DLL은 계속 필요하다. 자체 네이티브 shim은 없다.
