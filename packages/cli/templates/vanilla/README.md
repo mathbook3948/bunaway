@@ -13,9 +13,12 @@
 - 최초 빌드의 고정 Bun/네이티브 의존성 다운로드와 개발 의존성 설치에는 네트워크가 필요하다.
 - 프로덕션 앱 실행은 패키지 내부 Bun을 사용하며 전역 Bun이나 node_modules는 필요 없다.
 
-`src/web`는 실제 클라이언트 SDK로 명령을 호출하고 이벤트를 구독한다.
-`src/backend`는 실제 백엔드 SDK로 범위 제한 Host API 저장 후 이벤트를 발행한다.
-`policy.json`은 `main` 뷰의 `messages/` 읽기/쓰기만 허용한다.
+`src`는 실제 클라이언트 SDK로 명령을 호출하고 이벤트를 구독한다.
+`src-bunaway/src`는 실제 백엔드 SDK로 범위 제한 Host API 저장 후 이벤트를 발행한다.
+`src-bunaway/bunaway.json` v2에 `build`(소스 경로), `app`(앱·창),
+`bundle`(배포 채널) 설정을 모은다. 권한은 `policy.json`에 둔다.
+설정의 소스·패키징 파일 경로는 프로젝트 루트 기준이다.
+`src-bunaway/policy.json`은 `main` 뷰의 `messages/` 읽기/쓰기만 허용한다.
 저장 위치는 Windows `%LOCALAPPDATA%/bunaway/<appId>/data/messages/current.txt`,
 macOS `~/Library/Application Support/bunaway/<appId>/data/messages/current.txt`다.
 
@@ -25,7 +28,7 @@ HMR/입력 상태 보존은 제공하지 않는다. Ctrl+C 또는 창 닫기로 
 
 빌드 실패는 오류로 종료하고 마지막 성공 산출물을 유지한다.
 Windows 패키지는 `dist/windows-x64/bunaway.cmd`를 실행한다.
-`windowsApp`의 default export AppDefinition을 같은 Bun 프로세스에서 실행한다.
+`build.windowsApp`의 default export AppDefinition을 같은 Bun 프로세스에서 실행한다.
 macOS는 `dist/macos-arm64/<appId>.app`을 연다.
 Windows는 함께 제공된 `launch.ps1`이 내부 Bun을 검증하고 실행한다.
 macOS 명시적 인자는 `--package <절대 리소스 경로>`이며 `.app/Contents/Resources`다.

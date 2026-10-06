@@ -1,14 +1,16 @@
 import { lstat, realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 import { type Policy, parsePolicy } from "@bunaway/protocol";
+import { type PackagingConfig, parsePackaging } from "@bunaway/packaging";
 import { validateFramework } from "./distribution.ts";
-import { json, projectPath } from "./files.ts";
+import { json, projectConfigDirectory, projectPath } from "./files.ts";
 
 export interface Project {
   root: string;
   backend: string;
   frontend: string;
   windowsApp?: string;
+  bundle?: PackagingConfig;
   app: {
     appId: string;
     title: string;
@@ -37,11 +39,58 @@ function string(value: unknown): string {
   return value;
 }
 
+// Normalize authoring formats while keeping the native build contracts intact.
+export async function readProjectSettings(root: string): Promise<{
+  directory: string;
+  build: Record<string, unknown>;
+  app: Record<string, unknown>;
+  bundle?: PackagingConfig;
+}> {
+  const directory = await projectConfigDirectory(root);
+  const config = record(await json(resolve(directory, "bunaway.json")));
+  if (config.version === 2) {
+    keys(config, ["version", "build", "app", "bundle"]);
+    for (const name of ["app.json", "packaging.json"]) {
+      if (await Bun.file(resolve(directory, name)).exists()) {
+        throw new Error(`bunaway.json v2 replaces ${name}; remove the separate file.`);
+      }
+    }
+    const build = record(config.build);
+    keys(build, ["backend", "frontend", "windowsApp"]);
+    let bundle: PackagingConfig | undefined;
+    if (config.bundle !== undefined) {
+      const raw = record(config.bundle);
+      if ("version" in raw)
+        throw new Error("Use the top-level bunaway.json version, not bundle.version.");
+      try {
+        bundle = parsePackaging(JSON.stringify({ version: 1, ...raw }));
+      } catch (error) {
+        if (error instanceof Error)
+          error.message = error.message.replaceAll("packaging.json", "bunaway.json.bundle");
+        throw error;
+      }
+    }
+    return { directory, build, app: record(config.app), ...(bundle ? { bundle } : {}) };
+  }
+  if (config.version !== 1) throw new Error("Unsupported bunaway.json version.");
+  keys(config, ["version", "backend", "frontend", "windowsApp"]);
+  const packagingPath = resolve(directory, "packaging.json");
+  const bundle = (await Bun.file(packagingPath).exists())
+    ? parsePackaging(await Bun.file(packagingPath).text())
+    : undefined;
+  return {
+    directory,
+    build: config,
+    app: record(await json(resolve(directory, "app.json"))),
+    ...(bundle ? { bundle } : {}),
+  };
+}
+
 export async function validateProject(directory: string): Promise<Project> {
   const root = await realpath(resolve(directory));
-  const config = record(await json(resolve(root, "bunaway.json")));
-  keys(config, ["version", "backend", "frontend", "windowsApp"]);
-  if (config.version !== 1) throw new Error("Unsupported bunaway.json version.");
+  const settings = await readProjectSettings(root);
+  const configDirectory = settings.directory;
+  const config = settings.build;
   const backend = await projectPath(root, string(config.backend));
   const frontend = await projectPath(root, string(config.frontend));
   const windowsApp =
@@ -54,7 +103,7 @@ export async function validateProject(directory: string): Promise<Project> {
   if (windowsApp && !(await lstat(windowsApp)).isFile())
     throw new Error("windowsApp must be a file.");
   await validateFramework(root, [backend, frontend, ...(windowsApp ? [windowsApp] : [])]);
-  const raw = record(await json(resolve(root, "app.json")));
+  const raw = settings.app;
   keys(raw, ["appId", "title", "view", "home", "window"]);
   const appId = string(raw.appId);
   if (!/^[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$/.test(appId)) {
@@ -74,7 +123,7 @@ export async function validateProject(directory: string): Promise<Project> {
   }
   const homePath = await projectPath(frontend, decodeURIComponent(url.pathname).slice(1));
   if (!(await lstat(homePath)).isFile()) throw new Error("Home document is not a file.");
-  const policy = parsePolicy(await Bun.file(resolve(root, "policy.json")).text());
+  const policy = parsePolicy(await Bun.file(resolve(configDirectory, "policy.json")).text());
   if (policy.views.some((view) => view.origins.some((origin) => origin.startsWith("http:")))) {
     throw new Error("HTTP origins are not allowed; dev also uses native local assets.");
   }
@@ -89,6 +138,7 @@ export async function validateProject(directory: string): Promise<Project> {
     backend,
     ...(windowsApp ? { windowsApp } : {}),
     frontend,
+    ...(settings.bundle ? { bundle: settings.bundle } : {}),
     policy,
     app: {
       appId,

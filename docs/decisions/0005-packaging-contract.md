@@ -11,6 +11,11 @@ status: accepted
 
 ## 단일 소스와 검증
 
+2026-10-06 생성 앱의 작성 형식은 [통합 설정 v2](./0007-project-settings.md)가 대체한다.
+패키징 설정은 `bunaway.json.bundle`에서 읽어 기존 어댑터 입력으로 변환하며, 아래의
+v1 `packaging.json`은 기존 앱 호환 형식으로 지원한다. build/package 책임과 산출물
+계약은 유지한다.
+
 - 프로젝트 루트의 `packaging.json`(version 1)이 앱 이름·식별자·버전·게시자·아이콘·
   대상 OS/CPU·채널별 설정·서명 참조의 단일 소스다. 앱 ID·버전·제목의 기본값은
   `app.json`/`package.json`에서 가져오며 명시 값이 우선한다.

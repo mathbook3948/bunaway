@@ -5,6 +5,15 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const frameworkRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
+// Generated apps group native configuration under src-bunaway. Existing apps
+// keep their root configuration; never silently choose between two definitions.
+export async function projectConfigDirectory(root: string): Promise<string> {
+  const nested = await Bun.file(resolve(root, "src-bunaway/bunaway.json")).exists();
+  const legacy = await Bun.file(resolve(root, "bunaway.json")).exists();
+  if (nested && legacy) throw new Error("Ambiguous project: two bunaway.json files.");
+  return nested ? projectPath(root, "src-bunaway") : root;
+}
+
 export async function json(path: string): Promise<unknown> {
   try {
     return JSON.parse(await readFile(path, "utf8"));

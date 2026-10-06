@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "build": {
+    "backend": "src-bunaway/src/index.ts",
+    "windowsApp": "src-bunaway/src/app.ts",
+    "frontend": "src"
+  },
+  "app": {
+    "appId": "app.vanilla",
+    "title": "bunaway vanilla",
+    "view": "main",
+    "home": "https://app.bunaway.local/index.html",
+    "window": {
+      "width": 800,
+      "height": 600
+    }
+  },
+  "bundle": {
+    "channels": {
+      "win-direct": {}
+    }
+  }
+}

@@ -44,20 +44,26 @@ assert(
   "Windows snapshot must not include the old host or process probe",
 );
 await appendFile(
-  resolve(project, "src/backend/app.ts"),
+  resolve(project, "src-bunaway/src/app.ts"),
   `\nawait Bun.write(${JSON.stringify(launchMarker)}, "started");\n` +
     'const fixtureChild = Bun.spawn([process.execPath, "-e", "setInterval(() => {}, 1000)"], { stdin: "ignore", stdout: "ignore", stderr: "ignore" }); console.log(JSON.stringify({ event: "fixture-child", pid: fixtureChild.pid }));\n',
 );
 // A user entry named boot.ts must coexist with the framework's bootstrap.
-await writeFile(resolve(project, "src/backend/boot.ts"), 'export { default } from "./app.ts";\n');
-const configPath = resolve(project, "bunaway.json");
+await writeFile(
+  resolve(project, "src-bunaway/src/boot.ts"),
+  'export { default } from "./app.ts";\n',
+);
+const configPath = resolve(project, "src-bunaway/bunaway.json");
 const projectConfig = JSON.parse(await readFile(configPath, "utf8"));
 await writeFile(
   configPath,
-  JSON.stringify({ ...projectConfig, windowsApp: "src/backend/boot.ts" }),
+  JSON.stringify({
+    ...projectConfig,
+    build: { ...projectConfig.build, windowsApp: "src-bunaway/src/boot.ts" },
+  }),
 );
 await appendFile(
-  resolve(project, "src/web/main.ts"),
+  resolve(project, "src/main.ts"),
   '\nawait client.ready; await client.invoke("message.save", "CLI FFI 한글"); if (await client.invoke("message.read", null) !== "CLI FFI 한글") throw new Error("CLI storage roundtrip failed"); window.close();\n',
 );
 console.log(await command(["run", "build"]));
@@ -200,12 +206,14 @@ try {
   assert(!existsSync(launchMarker), "Tampered runtime must be rejected before app import");
   if (await findIscc()) {
     await writeFile(
-      resolve(project, "packaging.json"),
+      configPath,
       JSON.stringify({
-        version: 1,
-        identifier: `test.bunaway.${crypto.randomUUID()}`,
-        channels: {
-          "win-direct": { webView2: "check", startMenuShortcut: false, desktopShortcut: false },
+        ...JSON.parse(await readFile(configPath, "utf8")),
+        bundle: {
+          identifier: `test.bunaway.${crypto.randomUUID()}`,
+          channels: {
+            "win-direct": { webView2: "check", startMenuShortcut: false, desktopShortcut: false },
+          },
         },
       }),
     );

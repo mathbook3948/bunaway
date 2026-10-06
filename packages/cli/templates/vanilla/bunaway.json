@@ -1,6 +1,0 @@
-{
-  "version": 1,
-  "backend": "src/backend/index.ts",
-  "windowsApp": "src/backend/app.ts",
-  "frontend": "src/web"
-}

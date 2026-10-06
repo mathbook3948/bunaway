@@ -276,7 +276,7 @@ new RestartController<string>({ stop: async () => {}, build: async () => 42, sta
     }
     const tsconfig = resolve(project, "tsconfig.json");
     const tsconfigOriginal = await readFile(tsconfig, "utf8");
-    for (const parent of [project, resolve(project, "src/backend"), resolve(project, "src/web")]) {
+    for (const parent of [project, resolve(project, "src-bunaway/src"), resolve(project, "src")]) {
       const configPath = resolve(parent, "tsconfig.json");
       const root = parent === project;
       const original = root ? JSON.parse(tsconfigOriginal) : {};
@@ -285,7 +285,9 @@ new RestartController<string>({ stop: async () => {}, build: async () => 42, sta
         compilerOptions: {
           ...original.compilerOptions,
           paths: {
-            "@bunaway/client": [`${root ? "./" : "../../"}foreign-client/src/index.ts`],
+            "@bunaway/client": [
+              `${root ? "./" : parent === resolve(project, "src") ? "../" : "../../"}foreign-client/src/index.ts`,
+            ],
           },
         },
       });
@@ -349,7 +351,7 @@ test("asset workers accept policies larger than the Windows command-line limit",
     if (!view) throw new Error("Missing policy view.");
     view.commands = Array.from({ length: 256 }, (_, index) => `command.${index}`.padEnd(128, "a"));
     view.events = Array.from({ length: 256 }, (_, index) => `event.${index}`.padEnd(128, "a"));
-    await writeJson(resolve(project, "policy.json"), policy);
+    await writeJson(resolve(project, "src-bunaway/policy.json"), policy);
     const valid = await validateProject(project);
     const assets = resolve(home, "bundled assets");
     expect(JSON.stringify([valid, assets]).length).toBeGreaterThan(32767);
@@ -468,9 +470,9 @@ test("validation and bundling reject SDK aliases from nested and transitive impo
     const foreign = resolve(project, "foreign-sdk/index.ts");
     await Bun.write(foreign, 'export const marker = "FOREIGN_SDK_99_0_0";\n');
     for (const [directory, entry, name] of [
-      ["src/web/nested", "src/web/main.ts", "@bunaway/client"],
-      ["src/backend/nested", "src/backend/index.ts", "@bunaway/core"],
-      ["shared", "src/web/main.ts", "@bunaway/client"],
+      ["src/nested", "src/main.ts", "@bunaway/client"],
+      ["src-bunaway/src/nested", "src-bunaway/src/index.ts", "@bunaway/core"],
+      ["shared", "src/main.ts", "@bunaway/client"],
     ] as const) {
       const parent = resolve(project, directory);
       const source = resolve(parent, "mapped.ts");
@@ -504,7 +506,7 @@ test("nested aliases to pinned SDK sources and unrelated local modules remain va
   try {
     const project = await createProject(resolve(home, "app"));
     await command(project, ["install"]);
-    const nested = resolve(project, "src/web/nested");
+    const nested = resolve(project, "src/nested");
     await Bun.write(resolve(nested, "message.ts"), 'export const message = "LOCAL_ALIAS_OK";\n');
     await Bun.write(
       resolve(nested, "mapped.ts"),
@@ -556,7 +558,7 @@ test("bundling after reinstall does not reuse the calling process's foreign SDK 
     await command(project, ["install"]);
     expect(Bun.resolveSync("@bunaway/client", project)).toContain("foreign-client");
     const cached = await Bun.build({
-      entrypoints: [resolve(project, "src/web/main.ts")],
+      entrypoints: [resolve(project, "src/main.ts")],
       target: "browser",
     });
     expect(cached.success).toBe(true);

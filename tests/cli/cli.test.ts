@@ -28,11 +28,10 @@ beforeAll(async () => {
   expect(await child.exited, `${await output}\n${await errors}`).toBe(0);
   originals = {};
   for (const name of [
-    "app.json",
-    "policy.json",
-    "bunaway.json",
-    "src/backend/index.ts",
-    "src/web/main.ts",
+    "src-bunaway/policy.json",
+    "src-bunaway/bunaway.json",
+    "src-bunaway/src/index.ts",
+    "src/main.ts",
   ]) {
     originals[name] = await Bun.file(resolve(project, name)).text();
   }
@@ -56,7 +55,12 @@ test("create produces a relocatable project with real SDK dependencies and no re
   const lock = await Bun.file(resolve(project, "bunaway.lock.json")).json();
   expect(lock.release.packages.packaging).toBe("@bunaway/packaging");
   expect(lock.files["packages/packaging/src/index.ts"]).toMatch(/^[a-f0-9]{64}$/);
-  expect(originals["src/backend/index.ts"]).not.toContain("examples/memo");
+  expect(
+    await Bun.file(
+      resolve(project, "vendor/bunaway/docs/decisions/0007-project-settings.md"),
+    ).exists(),
+  ).toBe(true);
+  expect(originals["src-bunaway/src/index.ts"]).not.toContain("examples/memo");
   const process = Bun.spawn(
     [globalThis.process.execPath, "vendor/bunaway/packages/cli/src/main.ts", "validate"],
     {
@@ -70,36 +74,108 @@ test("create produces a relocatable project with real SDK dependencies and no re
 
 test("create refuses existing paths and missing parents without modifying them", async () => {
   await expect(createProject(project)).rejects.toThrow("exists");
-  expect(await Bun.file(resolve(project, "app.json")).text()).toBe(originals["app.json"] ?? "");
+  expect(await Bun.file(resolve(project, "src-bunaway/bunaway.json")).text()).toBe(
+    originals["src-bunaway/bunaway.json"] ?? "",
+  );
   await expect(createProject(resolve(home, "missing/child"))).rejects.toThrow();
   expect((await readdir(home)).some((name) => name.includes(".creating-"))).toBe(false);
 });
 
-test("configuration rejects unknown fields, source escapes, invalid identity and missing home assets", async () => {
-  for (const [name, value] of [
-    ["bunaway.json", { version: 2, backend: "src/backend/index.ts", frontend: "src/web" }],
-    ["bunaway.json", { version: 1, backend: "../outside.ts", frontend: "src/web" }],
-    ["app.json", { ...JSON.parse(originals["app.json"] ?? ""), appId: "../escape" }],
-    [
-      "app.json",
-      {
-        ...JSON.parse(originals["app.json"] ?? ""),
-        home: "https://app.bunaway.local/missing.html",
-      },
-    ],
-    ["app.json", { ...JSON.parse(originals["app.json"] ?? ""), injected: true }],
-  ] as const) {
+test("root configuration remains compatible and duplicate layouts are rejected", async () => {
+  const names = ["bunaway.json", "app.json", "policy.json", "packaging.json"];
+  const moved: string[] = [];
+  const unified = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
+  try {
+    await writeJson(resolve(project, "src-bunaway/bunaway.json"), { version: 1, ...unified.build });
+    await writeJson(resolve(project, "src-bunaway/app.json"), unified.app);
+    await writeJson(resolve(project, "src-bunaway/packaging.json"), {
+      version: 1,
+      ...unified.bundle,
+    });
+    expect((await validateProject(project)).app.appId).toBe(unified.app.appId);
+    for (const name of names) {
+      await rename(resolve(project, "src-bunaway", name), resolve(project, name));
+      moved.push(name);
+    }
+    expect((await validateProject(project)).frontend).toBe(resolve(project, "src"));
+    const child = Bun.spawn(
+      [globalThis.process.execPath, "vendor/bunaway/packages/cli/src/main.ts", "validate"],
+      { cwd: project, stdout: "pipe", stderr: "pipe" },
+    );
+    expect(await child.exited).toBe(0);
+    await Bun.write(
+      resolve(project, "src-bunaway/bunaway.json"),
+      originals["src-bunaway/bunaway.json"] ?? "",
+    );
+    await expect(validateProject(project)).rejects.toThrow("Ambiguous project");
+  } finally {
+    await rm(resolve(project, "src-bunaway/bunaway.json"), { force: true });
+    for (const name of moved) {
+      await rename(resolve(project, name), resolve(project, "src-bunaway", name));
+    }
+    await Bun.write(
+      resolve(project, "src-bunaway/bunaway.json"),
+      originals["src-bunaway/bunaway.json"] ?? "",
+    );
+    await rm(resolve(project, "src-bunaway/app.json"), { force: true });
+    await rm(resolve(project, "src-bunaway/packaging.json"), { force: true });
+  }
+});
+
+test("unified settings reject malformed build, app and bundle sections", async () => {
+  const path = resolve(project, "src-bunaway/bunaway.json");
+  const valid = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
+  for (const value of [
+    { ...valid, version: 99 },
+    { ...valid, injected: true },
+    { ...valid, build: { ...valid.build, backend: "../outside.ts" } },
+    { ...valid, build: { ...valid.build, injected: true } },
+    { ...valid, app: { ...valid.app, appId: "../escape" } },
+    { ...valid, app: { ...valid.app, home: "https://app.bunaway.local/missing.html" } },
+    { ...valid, app: { ...valid.app, injected: true } },
+    { ...valid, bundle: { channels: { "unknown-channel": {} } } },
+    { ...valid, bundle: { version: 1 } },
+    { ...valid, bundle: null },
+  ]) {
     try {
-      await writeJson(resolve(project, name), value);
+      await writeJson(path, value);
       await expect(validateProject(project)).rejects.toThrow();
     } finally {
-      await Bun.write(resolve(project, name), originals[name] ?? "");
+      await Bun.write(path, originals["src-bunaway/bunaway.json"] ?? "");
     }
   }
 });
 
+test("unified settings allow omitted bundle and refuse conflicting split files", async () => {
+  const path = resolve(project, "src-bunaway/bunaway.json");
+  const valid = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
+  const { bundle: _bundle, ...withoutBundle } = valid;
+  try {
+    expect((await readdir(resolve(project, "src-bunaway"))).sort()).toEqual([
+      "bunaway.json",
+      "policy.json",
+      "src",
+    ]);
+    await writeJson(path, withoutBundle);
+    expect((await validateProject(project)).bundle).toBeUndefined();
+    const { packageProject } = await import("../../packages/cli/src/package.ts");
+    await expect(packageProject(project, "win-direct")).rejects.toThrow("bunaway.json.bundle");
+    for (const name of ["app.json", "packaging.json"]) {
+      const extra = resolve(project, "src-bunaway", name);
+      await writeJson(extra, {});
+      try {
+        await expect(validateProject(project)).rejects.toThrow(`replaces ${name}`);
+      } finally {
+        await rm(extra);
+      }
+    }
+  } finally {
+    await Bun.write(path, originals["src-bunaway/bunaway.json"] ?? "");
+  }
+});
+
 test("policy rejects duplicate views, unsafe scope prefixes, unknown permissions and HTTP origins", async () => {
-  const policy = JSON.parse(originals["policy.json"] ?? "");
+  const policy = JSON.parse(originals["src-bunaway/policy.json"] ?? "");
   for (const invalid of [
     { ...policy, views: [policy.views[0], policy.views[0]] },
     { ...policy, views: [{ ...policy.views[0], origins: ["http://app.bunaway.local"] }] },
@@ -113,10 +189,13 @@ test("policy rejects duplicate views, unsafe scope prefixes, unknown permissions
     { ...policy, backend: { log: false, storage: [], arbitraryNativeCall: true } },
   ]) {
     try {
-      await writeJson(resolve(project, "policy.json"), invalid);
+      await writeJson(resolve(project, "src-bunaway/policy.json"), invalid);
       await expect(validateProject(project)).rejects.toThrow();
     } finally {
-      await Bun.write(resolve(project, "policy.json"), originals["policy.json"] ?? "");
+      await Bun.write(
+        resolve(project, "src-bunaway/policy.json"),
+        originals["src-bunaway/policy.json"] ?? "",
+      );
     }
   }
 });
@@ -128,7 +207,7 @@ test("generated UI and backend bundle independently; source failures propagate",
   await bundleAssets(valid, assets);
   expect(await Bun.file(resolve(assets, "web/main.js")).text()).toContain("message.saved");
   expect(await Bun.file(resolve(assets, "backend.js")).text()).toContain("messages/current.txt");
-  for (const name of ["src/backend/index.ts", "src/web/main.ts"]) {
+  for (const name of ["src-bunaway/src/index.ts", "src/main.ts"]) {
     try {
       await Bun.write(resolve(project, name), "export const broken = ;\n");
       await expect(validateProject(project)).rejects.toThrow(/bundle failed/i);
@@ -141,8 +220,8 @@ test("generated UI and backend bundle independently; source failures propagate",
 
 test("frontend bundles retain nested entry paths and emit imported CSS when there is no collision", async () => {
   const assets = resolve(home, "nested-assets");
-  const entry = resolve(project, "src/web/nested/widget.ts");
-  const stylesheet = resolve(project, "src/web/nested/theme.css");
+  const entry = resolve(project, "src/nested/widget.ts");
+  const stylesheet = resolve(project, "src/nested/theme.css");
   try {
     await Bun.write(entry, 'import "./theme.css"; export const widget = 1;\n');
     await Bun.write(stylesheet, ".widget { color: red; }\n");
@@ -151,22 +230,22 @@ test("frontend bundles retain nested entry paths and emit imported CSS when ther
     expect(await Bun.file(resolve(assets, "web/nested/widget.css")).text()).toContain(".widget");
     expect(await Bun.file(resolve(assets, "web/nested/theme.css")).text()).toContain(".widget");
   } finally {
-    await rm(resolve(project, "src/web/nested"), { recursive: true, force: true });
+    await rm(resolve(project, "src/nested"), { recursive: true, force: true });
   }
 });
 
 test("frontend rejects secondary CSS collisions before writing any assets", async () => {
   const assets = resolve(home, "css-collision-assets");
-  const stylesheet = resolve(project, "src/web/main.css");
-  const imported = resolve(project, "src/web/imported.css");
+  const stylesheet = resolve(project, "src/main.css");
+  const imported = resolve(project, "src/imported.css");
   const output = resolve(assets, "web/main.css");
   await Bun.write(output, "previous successful output");
   try {
     await Bun.write(stylesheet, ".original { color: blue; }\n");
     await Bun.write(imported, ".imported { color: red; }\n");
     await Bun.write(
-      resolve(project, "src/web/main.ts"),
-      `import "./imported.css";\n${originals["src/web/main.ts"]}`,
+      resolve(project, "src/main.ts"),
+      `import "./imported.css";\n${originals["src/main.ts"]}`,
     );
     await expect(bundleAssets(await validateProject(project), assets)).rejects.toThrow(
       "Frontend output collision: main.css",
@@ -175,7 +254,7 @@ test("frontend rejects secondary CSS collisions before writing any assets", asyn
     expect(await readdir(resolve(assets, "web"))).toEqual(["main.css"]);
     expect(await Bun.file(resolve(assets, "backend.js")).exists()).toBe(false);
   } finally {
-    await Bun.write(resolve(project, "src/web/main.ts"), originals["src/web/main.ts"] ?? "");
+    await Bun.write(resolve(project, "src/main.ts"), originals["src/main.ts"] ?? "");
     await rm(stylesheet, { force: true });
     await rm(imported, { force: true });
   }
@@ -183,8 +262,8 @@ test("frontend rejects secondary CSS collisions before writing any assets", asyn
 
 test("frontend rejects case-insensitive entry output collisions before writing any assets", async () => {
   const assets = resolve(home, "case-collision-assets");
-  const upper = resolve(project, "src/web/Foo.ts");
-  const lower = resolve(project, "src/web/foo.js");
+  const upper = resolve(project, "src/Foo.ts");
+  const lower = resolve(project, "src/foo.js");
   const output = resolve(assets, "web/keep.txt");
   await Bun.write(output, "previous successful output");
   try {
@@ -204,21 +283,21 @@ test("frontend rejects case-insensitive entry output collisions before writing a
 
 test("frontend rejects case-insensitive collisions between static assets and secondary CSS", async () => {
   const assets = resolve(home, "case-css-collision-assets");
-  const stylesheet = resolve(project, "src/web/MAIN.css");
-  const imported = resolve(project, "src/web/imported.css");
+  const stylesheet = resolve(project, "src/MAIN.css");
+  const imported = resolve(project, "src/imported.css");
   try {
     await Bun.write(stylesheet, ".original { color: blue; }\n");
     await Bun.write(imported, ".imported { color: red; }\n");
     await Bun.write(
-      resolve(project, "src/web/main.ts"),
-      `import "./imported.css";\n${originals["src/web/main.ts"]}`,
+      resolve(project, "src/main.ts"),
+      `import "./imported.css";\n${originals["src/main.ts"]}`,
     );
     await expect(bundleAssets(await validateProject(project), assets)).rejects.toThrow(
       /Frontend output collision: main.css/i,
     );
     expect(await Bun.file(resolve(assets, "web/index.html")).exists()).toBe(false);
   } finally {
-    await Bun.write(resolve(project, "src/web/main.ts"), originals["src/web/main.ts"] ?? "");
+    await Bun.write(resolve(project, "src/main.ts"), originals["src/main.ts"] ?? "");
     await rm(stylesheet, { force: true });
     await rm(imported, { force: true });
   }

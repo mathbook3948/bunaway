@@ -21,6 +21,7 @@ export const frameworkPaths = [
   "docs/decisions/0005-framework-artifact.md",
   "docs/decisions/0001-bundled-bun-process.md",
   "docs/decisions/0006-windows-bun-ui-worker.md",
+  "docs/decisions/0007-project-settings.md",
   "docs/architecture/windows-bun-results.md",
   "docs/platform-support/README.md",
   "tsconfig.base.json",

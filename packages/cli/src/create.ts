@@ -25,7 +25,9 @@ export async function createProject(directory: string): Promise<string> {
     const snapshot = resolve(staging, "vendor/bunaway");
     await copyFramework(snapshot);
     await writeFrameworkLock(staging);
-    const app = (await json(resolve(staging, "app.json"))) as Record<string, unknown>;
+    const configPath = resolve(staging, "src-bunaway/bunaway.json");
+    const config = (await json(configPath)) as { app: Record<string, unknown> };
+    const app = config.app;
     const slug =
       basename(target)
         .toLowerCase()
@@ -33,7 +35,7 @@ export async function createProject(directory: string): Promise<string> {
         .slice(0, 40) || "app";
     app.appId = `app.${slug.replace(/^-+|-+$/g, "") || "app"}`;
     app.title = basename(target);
-    await writeJson(resolve(staging, "app.json"), app);
+    await writeJson(configPath, config);
     await rename(staging, target);
     return target;
   } catch (error) {
