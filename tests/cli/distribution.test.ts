@@ -22,7 +22,7 @@ import {
   snapshotHashes,
   validateFramework,
 } from "../../packages/cli/src/distribution.ts";
-import { json, writeJson } from "../../packages/cli/src/files.ts";
+import { installedPackageRoot, json, writeJson } from "../../packages/cli/src/files.ts";
 import { buildWithSdk, sdkPlugin } from "../../packages/cli/src/sdk.ts";
 
 async function command(
@@ -38,6 +38,54 @@ async function command(
   if (code !== 0) throw new Error(output);
   return output;
 }
+
+test("workspace and isolated installs resolve transitive SDKs from their declaring packages", async () => {
+  const home = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-isolated-")));
+  try {
+    for (const workspace of [false, true]) {
+      const root = resolve(home, workspace ? "workspace" : "standalone");
+      await mkdir(resolve(root, "apps"), { recursive: true });
+      const project = await createProject(resolve(root, "apps/app"));
+      if (workspace) {
+        await writeJson(resolve(root, "package.json"), {
+          private: true,
+          workspaces: ["apps/*"],
+        });
+        await command(root, ["install"]);
+      } else {
+        await command(project, ["install", "--linker", "isolated"]);
+      }
+      expect(
+        await Bun.file(resolve(project, "node_modules/@bunaway/protocol/package.json")).exists(),
+      ).toBe(false);
+      const cli = await installedPackageRoot(project, "@bunaway/cli");
+      const protocol = await installedPackageRoot(cli, "@bunaway/protocol");
+      expect(((await json(resolve(protocol, "package.json"))) as { name: string }).name).toBe(
+        "@bunaway/protocol",
+      );
+      expect(await command(project, ["run", "validate"])).toContain("valid");
+      await command(project, ["run", "typecheck"]);
+      const valid = await validateProject(project);
+      const assets = resolve(root, "assets");
+      await mkdir(assets);
+      await bundleAssets(valid, assets, true);
+      expect(await Bun.file(resolve(assets, "boot.js")).exists()).toBe(true);
+      expect(await Bun.file(resolve(assets, "app.js")).exists()).toBe(true);
+      const manifestPath = resolve(protocol, "package.json");
+      const original = await readFile(manifestPath, "utf8");
+      try {
+        await writeJson(manifestPath, { ...JSON.parse(original), version: "99.0.0" });
+        await expect(command(project, ["run", "validate"])).rejects.toThrow(
+          "Incompatible SDK/CLI package",
+        );
+      } finally {
+        await writeFile(manifestPath, original);
+      }
+    }
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+}, 60000);
 
 test("Windows host relative SDK imports share the installed app's error class", async () => {
   const home = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-sdk-identity-")));

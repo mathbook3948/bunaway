@@ -21,7 +21,7 @@ export async function sdkPlugin(
     if (name !== "@bunaway/cli")
       entries.set(
         name,
-        await realpath(resolve(await installedPackageRoot(project, name), "src/index.ts")),
+        await realpath(resolve(await installedPackageRoot(root, name), "src/index.ts")),
       );
   }
   async function check(name: string, parent: string): Promise<string> {

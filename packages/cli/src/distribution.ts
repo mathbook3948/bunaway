@@ -190,9 +190,11 @@ export async function validateFramework(
     throw new Error("Incompatible Bun/SDK dependency declaration; use the pinned Bun version.");
   }
   await checkArtifact(root);
+  const declarations = sdkDependencies(pkg);
   const references: { name: string; parent: string }[] = [];
   for (const name of Object.values(packageNames)) {
-    const installed = await installedPackageRoot(project, name);
+    // The CLI declares all SDKs; transitive packages need not be hoisted into the app.
+    const installed = name === "@bunaway/cli" ? root : await installedPackageRoot(root, name);
     const manifest = (await json(resolve(installed, "package.json"))) as PackageDependencies & {
       name: string;
       version: string;
@@ -205,11 +207,10 @@ export async function validateFramework(
         throw new Error(`Incompatible SDK dependency: ${dependency}.`);
       if (dependency !== "@bunaway/cli") references.push({ name: dependency, parent: installed });
     }
-    if (name !== "@bunaway/cli") {
+    if (name !== "@bunaway/cli" && declarations.some(([dependency]) => dependency === name)) {
       for (const parent of [project, ...sources]) references.push({ name, parent });
     }
   }
-  const declarations = sdkDependencies(pkg);
   for (const name of [
     "@bunaway/cli",
     "@bunaway/backend",
