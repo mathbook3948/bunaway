@@ -195,6 +195,74 @@ test("Windows boundary uses actual source, issues view-specific contexts and dro
   expect(first.active(route.context)).toBe(false);
 });
 
+test.each(["ui", "main-io"] as const)(
+  "%s revokes all 128 views without consuming lifecycle capacity",
+  async (side) => {
+    const { port1, port2 } = new MessageChannel();
+    const runtime = { id: "test", generation: "1" };
+    const failures: unknown[] = [];
+    const received: Packet[] = [];
+    let release = () => {};
+    const held = new Promise<void>((done) => {
+      release = done;
+    });
+    const sender = new Channel(
+      port1,
+      runtime,
+      side,
+      () => {},
+      (error) => failures.push(error),
+    );
+    const receiver = new Channel(
+      port2,
+      runtime,
+      side === "ui" ? "main" : "io",
+      (packet) => {
+        received.push(packet);
+        return held;
+      },
+      (error) => failures.push(error),
+    );
+    const revoke = (index: number): Packet => {
+      const context = `ctx-${index}` as Route["context"];
+      return side === "ui"
+        ? { kind: "revoke", route: { viewId: `view-${index}`, documentGeneration: 0, context } }
+        : { kind: "cancel-context", context };
+    };
+    const sends: Promise<void>[] = [];
+    try {
+      // One synchronous shutdown burst, with every acknowledgement held back.
+      for (let index = 0; index < 128; index++) {
+        const pending = sender.send(revoke(index));
+        void pending.catch((error) => failures.push(error));
+        sends.push(pending);
+      }
+      for (let index = 0; index < 16; index++) {
+        const pending = sender.send({ kind: side === "ui" ? "closing" : "shutdown" });
+        void pending.catch((error) => failures.push(error));
+        sends.push(pending);
+      }
+      await expect(sender.send(revoke(128))).rejects.toThrow("full");
+      await expect(sender.send({ kind: side === "ui" ? "closing" : "shutdown" })).rejects.toThrow(
+        "full",
+      );
+      release();
+      await Promise.all(sends);
+      expect(received).toHaveLength(144);
+      expect(failures).toHaveLength(0);
+      // The acknowledged revocation slots can be reused.
+      await sender.send(revoke(129));
+    } finally {
+      release();
+      sender.close();
+      receiver.close();
+      port1.close();
+      port2.close();
+      await Promise.allSettled(sends);
+    }
+  },
+);
+
 test("Windows channel bounds unacknowledged data and reserved control slots", async () => {
   const { port1, port2 } = new MessageChannel();
   const failures: unknown[] = [];

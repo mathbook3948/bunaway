@@ -8,7 +8,7 @@ import type { AppDefinition } from "../../../packages/core/src/index.ts";
 import { type HostContext, parsePolicy } from "../../../packages/protocol/src/index.ts";
 import pin from "../../../runtime/build-manifests/windows-x64.json";
 import deps from "./deps.json";
-import type { UIConfig, WindowSpec } from "./channel.ts";
+import { MAX_WINDOWS, type UIConfig, type WindowSpec } from "./channel.ts";
 import { runWindowsApp } from "./entry.ts";
 import { containAppProcess } from "./job.ts";
 
@@ -115,7 +115,10 @@ export async function verifyWindowsPackage(directory: string): Promise<UIConfig>
   const specs = config.windows ?? [
     { view: config.view, home: config.home, title: config.title, window: config.window },
   ];
-  assert(Array.isArray(specs) && specs.length > 0 && specs.length <= 128, "Invalid windows");
+  assert(
+    Array.isArray(specs) && specs.length > 0 && specs.length <= MAX_WINDOWS,
+    "Invalid windows",
+  );
   const windows: WindowSpec[] = specs.map((value) => {
     const spec = object(value);
     const size = object(spec.window);

@@ -18,6 +18,7 @@ import {
 } from "../../../packages/protocol/src/index.ts";
 
 export type Route = { viewId: string; documentGeneration: number; context: HostContext };
+export const MAX_WINDOWS = 128;
 export type WindowSpec = {
   view: string;
   home: string;
@@ -71,16 +72,7 @@ const mainKinds = ["start", "server", "authorize", "cancel", "host-result", "shu
 const ioKinds = ["prepare", "host-response", "cleaned", "fatal"];
 const ioMainKinds = ["operation", "grant", "cancel", "cancel-context", "shutdown"];
 type Side = "main" | "ui" | "io" | "main-io";
-const controlKinds = new Set([
-  "start",
-  "shutdown",
-  "closing",
-  "cleaned",
-  "revoke",
-  "cancel-context",
-  "fatal",
-  "ready",
-]);
+const controlKinds = new Set(["start", "shutdown", "closing", "cleaned", "fatal", "ready"]);
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("Invalid Worker packet");
@@ -190,7 +182,7 @@ export class Channel {
   private readonly pending = new Map<
     number,
     {
-      lane: "data" | "cancel" | "control" | "diagnostic";
+      lane: "data" | "cancel" | "revoke" | "control" | "diagnostic";
       resolve(): void;
       reject(error: Error): void;
     }
@@ -251,9 +243,11 @@ export class Channel {
           : packet.kind === "cancel" ||
               (packet.kind === "client" && packet.message.kind === "cancel")
             ? "cancel"
-            : controlKinds.has(packet.kind)
-              ? "control"
-              : "data";
+            : packet.kind === "revoke" || packet.kind === "cancel-context"
+              ? "revoke"
+              : controlKinds.has(packet.kind)
+                ? "control"
+                : "data";
       const count = [...this.pending.values()].filter((item) => item.lane === lane).length;
       if (packet.kind === "diagnostic" && count >= 16) {
         // Diagnostics must not consume request/control capacity or turn BUSY into app failure.
@@ -269,9 +263,14 @@ export class Channel {
         this.droppedDiagnostics = 0;
       }
       validatePacket(packet, opposite);
-      // Cancelling every pending request must leave lifecycle control slots free.
-      if (count >= (lane === "data" || lane === "cancel" ? API_LIMITS.maxPending : 16))
-        throw new Error("Worker channel full");
+      // Cancelling all requests or revoking all views leaves lifecycle control slots free.
+      const limit =
+        lane === "revoke"
+          ? MAX_WINDOWS
+          : lane === "data" || lane === "cancel"
+            ? API_LIMITS.maxPending
+            : 16;
+      if (count >= limit) throw new Error("Worker channel full");
       const sequence = ++this.sequence;
       return new Promise((resolve, reject) => {
         this.pending.set(sequence, { lane, resolve, reject });

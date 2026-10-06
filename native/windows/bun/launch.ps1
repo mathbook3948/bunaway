@@ -1,7 +1,7 @@
 param([switch]$Wait)
 $ErrorActionPreference = 'Stop'
 $package = $PSScriptRoot
-$manifest = Get-Content -LiteralPath (Join-Path $package 'manifest.json') -Raw | ConvertFrom-Json
+$manifest = Get-Content -LiteralPath (Join-Path $package 'manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 function Check([string]$Path, [string]$Expected) {
     if ((Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Expected) { throw "Package hash mismatch: $Path" }
 }
