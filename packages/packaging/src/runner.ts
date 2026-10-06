@@ -4,7 +4,9 @@ import {
   lstat,
   mkdir,
   open,
+  readdir,
   readFile,
+  readlink,
   realpath,
   rename,
   rm,
@@ -60,6 +62,29 @@ export function packagingReportPath(root: string, target: BuildTarget, channel: 
 function inside(root: string, path: string): boolean {
   const rel = relative(root, path);
   return rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+}
+
+async function verifyStagingLinks(staging: string): Promise<void> {
+  if (!(await lstat(staging)).isDirectory()) {
+    throw new Error("Staging root is not a regular directory.");
+  }
+  const canonicalStaging = await realpath(staging);
+  const directories = [staging];
+  for (const directory of directories) {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const path = resolve(directory, entry.name);
+      if (entry.isDirectory()) directories.push(path);
+      else if (entry.isSymbolicLink()) {
+        // Absolute targets still point at the old staging path after publication.
+        if (isAbsolute(await readlink(path))) {
+          throw new Error(`Absolute staging links cannot survive publication: ${path}`);
+        }
+        if (!inside(canonicalStaging, await realpath(path))) {
+          throw new Error(`Staging link escapes staging: ${path}`);
+        }
+      }
+    }
+  }
 }
 
 const EMPTY_MANIFEST: PackageManifest = {
@@ -281,6 +306,20 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
           message: "The adapter produced no artifacts.",
         });
         failed = true;
+      }
+      if (!failed) {
+        try {
+          await verifyStagingLinks(staging);
+        } catch (error) {
+          diagnostics.push({
+            stage: "verify-artifact",
+            code: CODES.VERIFY_FAILED,
+            severity: "error",
+            message: error instanceof Error ? error.message : String(error),
+            path: staging,
+          });
+          failed = true;
+        }
       }
       for (const entry of produced) {
         let path = entry.path;

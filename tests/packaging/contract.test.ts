@@ -1289,7 +1289,8 @@ test.each(
   },
 );
 
-test.each(["relative", "dot-relative", "dot-absolute"])(
+const relativeLinkTest = process.platform === "win32" ? test.skip : test;
+relativeLinkTest.each(["relative", "dot-relative", "dot-absolute"])(
   "%s artifacts reached through internal directory links remain valid after publication",
   async (form) => {
     const projectRoot = await mkdtemp(join(home, "internal-link-"));
@@ -1300,7 +1301,7 @@ test.each(["relative", "dot-relative", "dot-absolute"])(
         async run(ctx) {
           const payload = resolve(ctx.staging, "payload");
           await Bun.write(resolve(payload, "setup.exe"), "installer");
-          await symlink(payload, resolve(ctx.staging, "linked"), "junction");
+          await symlink("payload", resolve(ctx.staging, "linked"), "dir");
           ctx.addArtifact(
             form === "dot-absolute"
               ? `${ctx.staging}/linked/./setup.exe`
@@ -1317,8 +1318,53 @@ test.each(["relative", "dot-relative", "dot-absolute"])(
       resolve(projectRoot, "dist/windows-x64/packaged/win-direct/payload/setup.exe"),
     );
     expect(await Bun.file(report.artifacts[0]?.path ?? "").text()).toBe("installer");
+    expect(
+      await Bun.file(
+        resolve(projectRoot, "dist/windows-x64/packaged/win-direct/linked/setup.exe"),
+      ).text(),
+    ).toBe("installer");
     expect(report.artifacts[0]?.size).toBe(Buffer.byteLength("installer"));
     expect(report.artifacts[0]?.sha256).toBe(await sha256(report.artifacts[0]?.path ?? ""));
+  },
+);
+
+test.each([false, true])(
+  "absolute internal junctions are rejected before publication (declared=%s)",
+  async (declared) => {
+    const projectRoot = await mkdtemp(join(home, "absolute-link-"));
+    await makeArtifact(projectRoot);
+    const output = resolve(projectRoot, "dist/windows-x64/packaged/win-direct");
+    await Bun.write(resolve(output, "setup.exe"), "last good installer");
+    const report = await runAdapter(
+      projectRoot,
+      stubAdapter({
+        async run(ctx) {
+          const payload = resolve(ctx.staging, "payload");
+          await Bun.write(resolve(payload, "setup.exe"), "new installer");
+          await symlink(payload, resolve(ctx.staging, "linked"), "junction");
+          ctx.addArtifact(declared ? "linked/setup.exe" : "payload/setup.exe", "installer");
+        },
+      }),
+    );
+    expect(report.ok).toBe(false);
+    expect(report.usable).toBe(false);
+    expect(report.submittable).toBe(false);
+    expect(report.artifacts).toEqual([]);
+    expect(
+      report.diagnostics.some(
+        (d) => d.code === CODES.VERIFY_FAILED && d.message.includes("Absolute staging links"),
+      ),
+    ).toBe(true);
+    expect(await Bun.file(resolve(output, "setup.exe")).text()).toBe("last good installer");
+    expect(
+      (await readdir(resolve(output, ".."))).some((name) =>
+        /\.building-|\.previous-|\.lock$/.test(name),
+      ),
+    ).toBe(false);
+    expect(await readdir(resolve(projectRoot, "dist/.bunaway-locks/windows-x64"))).toEqual([]);
+    expect(
+      await Bun.file(packagingReportPath(projectRoot, "windows-x64", "win-direct")).json(),
+    ).toEqual(report);
   },
 );
 
