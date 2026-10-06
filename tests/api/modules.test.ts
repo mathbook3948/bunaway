@@ -214,6 +214,15 @@ test("empty apps and direct definitions produce ordinary AppDefinitions", () => 
   expect(defineApp({ modules: [] })).toEqual({ commands: {}, events: {} });
 });
 
+test("dynamic module arrays and tuple tails may be empty", () => {
+  const dynamic: (typeof memo)[] = [];
+  expect(defineApp({ modules: dynamic })).toEqual({ commands: {}, events: {} });
+  const tail: (typeof settings)[] = [];
+  const composed = defineApp({ modules: [memo, ...tail] });
+  expect(Object.keys(composed.commands)).toEqual(["memo.save", "memo.read"]);
+  expect(Object.keys(composed.events)).toEqual(["memo.saved"]);
+});
+
 test("invalid and reserved qualified names fail during authoring", () => {
   for (const name of ["", "has space"])
     expect(() => defineModule(name)).toThrow("invalid module name");
@@ -302,4 +311,76 @@ export function checkMixedModuleTypes(client: Client<CommandsOf<ReturnType<typeo
   void result;
   // @ts-expect-error settings is optional but memo remains registered
   client.invoke("settings.save", 1);
+}
+
+export function checkDynamicModuleTypes() {
+  const dynamic: (typeof memo)[] = [];
+  const dynamicApp = defineApp({ modules: dynamic });
+  // @ts-expect-error even homogeneous arrays may contain no modules
+  dynamicApp.commands["memo.save"];
+  // @ts-expect-error even homogeneous arrays may contain no modules
+  dynamicApp.events["memo.saved"];
+
+  const tail: (typeof settings)[] = [];
+  const tupleApp = defineApp({ modules: [memo, ...tail] });
+  const save: (typeof memo.commands)["memo.save"] = tupleApp.commands["memo.save"];
+  const saved: typeof textSchema = tupleApp.events["memo.saved"];
+  void [save, saved];
+  // @ts-expect-error optional tail modules do not add guaranteed commands
+  tupleApp.commands["settings.save"];
+
+  const eventTail: (typeof memo)[] = [];
+  const eventTupleApp = defineApp({ modules: [settings, ...eventTail] });
+  const setting: (typeof settings.commands)["settings.save"] =
+    eventTupleApp.commands["settings.save"];
+  void setting;
+  // @ts-expect-error optional tail modules do not add guaranteed events
+  eventTupleApp.events["memo.saved"];
+}
+
+export function checkDynamicRegistrationNames(
+  namespace: "memo" | "settings",
+  localName: "save" | "read",
+  dynamicNamespace: string,
+  dynamicLocalName: string,
+) {
+  const selectedModule = defineModule(namespace)
+    .command("save", contract, () => null)
+    .event("saved", textSchema);
+  const selectedApp = defineApp({ modules: [selectedModule] });
+  // @ts-expect-error only the selected namespace registers its command
+  selectedApp.commands["memo.save"];
+  // @ts-expect-error only the selected namespace registers its command
+  selectedApp.commands["settings.save"];
+  // @ts-expect-error only the selected namespace registers its event
+  selectedApp.events["memo.saved"];
+
+  const selectedName = defineModule("memo")
+    .command(localName, contract, () => null)
+    .event(localName, textSchema);
+  // @ts-expect-error only the selected local name is registered
+  selectedName.commands["memo.save"];
+  // @ts-expect-error only the selected local name is registered
+  selectedName.commands["memo.read"];
+  // @ts-expect-error only the selected local name is registered
+  selectedName.events["memo.save"];
+
+  const unknownNamespace = defineModule(dynamicNamespace)
+    .command("save", contract, () => null)
+    .event("saved", textSchema);
+  // @ts-expect-error a widened namespace cannot guarantee any particular command
+  unknownNamespace.commands["memo.save"];
+  // @ts-expect-error a widened namespace cannot guarantee any particular event
+  unknownNamespace.events["memo.saved"];
+
+  const unknownLocalName = defineModule("memo")
+    .command(dynamicLocalName, contract, () => null)
+    .event(dynamicLocalName, textSchema)
+    .command("known", contract, () => null);
+  const known: (typeof memo.commands)["memo.save"] = unknownLocalName.commands["memo.known"];
+  void known;
+  // @ts-expect-error a widened local name cannot guarantee any particular command
+  unknownLocalName.commands["memo.save"];
+  // @ts-expect-error a widened local name cannot guarantee any particular event
+  unknownLocalName.events["memo.saved"];
 }

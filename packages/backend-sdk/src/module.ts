@@ -3,6 +3,13 @@ import type { Schema } from "@bunaway/protocol";
 import { command, type CommandContract, type CommandHandler } from "./command.ts";
 import { checkName, claimName, type RegistrationKind } from "./registration.ts";
 
+type SingleEntry<K extends string, T> = K extends unknown ? Readonly<Record<K, T>> : never;
+// A runtime name selects one entry. Union names are alternatives, and widened
+// strings cannot guarantee any particular entry.
+type RegisteredEntry<N extends string, K extends string, T> = string extends N | K
+  ? Record<never, never>
+  : SingleEntry<`${N}.${K}`, T>;
+
 export type ModuleDefinition<
   C extends CommandRegistry = CommandRegistry,
   E extends EventRegistry = EventRegistry,
@@ -22,24 +29,26 @@ export interface ModuleBuilder<
     name: K,
     contract: CommandContract<I, O>,
     handle: CommandHandler<I, O>,
-  ): ModuleBuilder<N, C & Readonly<Record<`${N}.${K}`, CommandDefinition<I, O>>>, E>;
+  ): ModuleBuilder<N, C & RegisteredEntry<N, K, CommandDefinition<I, O>>, E>;
   event<const K extends string, const S extends Schema>(
     name: K,
     schema: S,
-  ): ModuleBuilder<N, C, E & Readonly<Record<`${N}.${K}`, S>>>;
+  ): ModuleBuilder<N, C, E & RegisteredEntry<N, K, S>>;
 }
 
-function add<R extends Readonly<Record<string, unknown>>, K extends string, T>(
+function add<R extends Readonly<Record<string, unknown>>, N extends string, K extends string, T>(
   entries: R,
-  name: K,
+  namespace: N,
+  localName: K,
   value: T,
   kind: RegistrationKind,
   owner: string,
-): R & Readonly<Record<K, T>> {
+): R & RegisteredEntry<N, K, T> {
+  const name = `${namespace}.${localName}`;
   const owners = new Map(Object.keys(entries).map((key) => [key, owner]));
   claimName(owners, name, kind, owner);
   // The computed key matches the template literal used by ModuleBuilder's types.
-  return Object.freeze({ ...entries, [name]: value }) as R & Readonly<Record<K, T>>;
+  return Object.freeze({ ...entries, [name]: value }) as R & RegisteredEntry<N, K, T>;
 }
 
 function buildModule<N extends string, C extends CommandRegistry, E extends EventRegistry>(
@@ -56,17 +65,13 @@ function buildModule<N extends string, C extends CommandRegistry, E extends Even
       checkName(localName, "command", owner);
       return buildModule(
         name,
-        add(commands, `${name}.${localName}`, command({ ...contract, handle }), "command", owner),
+        add(commands, name, localName, command({ ...contract, handle }), "command", owner),
         events,
       );
     },
     event(localName, schema) {
       checkName(localName, "event", owner);
-      return buildModule(
-        name,
-        commands,
-        add(events, `${name}.${localName}`, schema, "event", owner),
-      );
+      return buildModule(name, commands, add(events, name, localName, schema, "event", owner));
     },
   };
   return Object.freeze(builder);

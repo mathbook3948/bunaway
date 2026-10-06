@@ -2,8 +2,8 @@ import type { AppDefinition, CommandRegistry, EventRegistry } from "@bunaway/cor
 import type { ModuleDefinition } from "./module.ts";
 import { claimName, type RegistrationKind } from "./registration.ts";
 
-// Merge tuple positions without treating alternative modules at one position as
-// simultaneously registered. Dynamic arrays only expose their shared keys.
+// Merge required tuple positions without treating alternative modules at one
+// position as simultaneously registered. Dynamic tails may be empty.
 type ModuleEntries<
   M extends readonly ModuleDefinition[],
   K extends "commands" | "events",
@@ -13,9 +13,7 @@ type ModuleEntries<
   ...infer Rest extends readonly ModuleDefinition[],
 ]
   ? ModuleEntries<Rest, K, Collected & First[K]>
-  : [M[number]] extends [never]
-    ? Collected
-    : Collected & M[number][K];
+  : Collected;
 
 type AppOptions<
   M extends readonly ModuleDefinition[],
