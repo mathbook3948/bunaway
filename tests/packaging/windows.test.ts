@@ -437,7 +437,6 @@ test.skipIf(!iscc)(
           ...silent,
           `/DIR=${install}`,
           `/TASKS=${index < 2 ? "desktopicon" : "!desktopicon"}`,
-          `/LOG=${setupLog}`,
         ]);
         if (index === 0) {
           await Bun.write(data, "memo");
