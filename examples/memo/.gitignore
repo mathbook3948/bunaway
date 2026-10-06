@@ -1,5 +1,6 @@
 node_modules/
 .bunaway/
 dist/
+web-dist/
 # Local framework tarballs contain machine-specific dependency paths.
 bun.lock

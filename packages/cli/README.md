@@ -1,4 +1,4 @@
-# CLI · vanilla MVP
+# CLI · vanilla / Vite
 
 기존 SDK/정책/Host API와 네이티브 호스트를 그대로 사용한다. 패키지 런타임은
 고정 Bun 1.4.2이며 개발/빌드에도 같은 버전이 필요하다. 공개 npm 배포는 아직 없다.
@@ -33,7 +33,7 @@ package.json과 bun.lock을 커밋한다. vendor 복사와 별도 프레임워�
 개발 도구 설치에는 Bun 패키지 레지스트리, 최초 네이티브 빌드에는 고정 런타임/헤더/SDK
 다운로드 접근이 필요하다. 앱 실행에는 네트워크나 Bun 설치가 필요 없다.
 
-명령은 `create <new-directory> [--package-dir <tarball-directory>]`와 `dev|validate|build|doctor [directory]`,
+명령은 `create <new-directory> [--template vanilla|vite] [--package-dir <tarball-directory>]`와 `dev|validate|build|doctor [directory]`,
 `package <channel> [directory] [--build]`다.
 옵션/알 수 없는 명령·설정 필드는 오류로 종료한다. `validate`는 버전·앱 ID·소스 경로·홈
 자산·단일 뷰/정확한 origin·기존 정책 스키마를 검사한다. `package`는
@@ -44,6 +44,23 @@ package.json과 bun.lock을 커밋한다. vendor 복사와 별도 프레임워�
 규칙은 `@bunaway/packaging`과 `docs/decisions/0005-packaging-contract.md`에 있다.
 권한의 실제 집행은 호스트/코어의 기존 계약을 따른다. 백엔드를 실행해 명령 목록을
 추측하거나 자동으로 권한을 추가하지 않는다.
+
+`create`의 기본 템플릿은 기존 `vanilla`다. Vite의 CSS HMR과 페이지 갱신을 사용하는
+vanilla TypeScript 앱은 다음과 같이 생성한다.
+
+```sh
+bun packages/cli/src/main.ts create ../my-vite-app --template vite --package-dir build/framework
+cd ../my-vite-app
+bun install
+bun run bunaway dev
+```
+
+`vite` 템플릿은 루트 `index.html`과 `src/` UI 소스를 사용한다.
+`dev`·`build`·`preview`는 Vite 프런트엔드 명령이며 `bunaway` script로 네이티브 CLI를 호출한다.
+UI 변경은 Vite가 처리하고 백엔드 변경은 CLI가 호스트를 재시작한다.
+네이티브 검증·빌드·패키징 전에는 `bun run build`로 `web-dist/`를 생성한다.
+CLI 자체는 외부 프런트엔드 생산 빌드를 자동 실행하지 않는다.
+[템플릿 구성 근거](../../templates/README.md)는 공식 Tauri 초기화 구현을 참조한다.
 
 ## 생성 구조
 
@@ -64,6 +81,8 @@ my-app/
 
 선택적 `dev`에 외부 UI 개발 서버의 `command`(인자 배열), `url`, `timeoutMs`를 지정한다.
 [Vite·Next.js 개발 서버 연결](../../docs/development-server.md)을 따른다.
+`vite` 템플릿은 위 vanilla 구조의 `src/index.html`을 루트로 옮기고
+`vite.config.ts`와 `dev` 설정을 포함한다. `build.frontend`는 `web-dist`다.
 프런트엔드의 `.ts`/`.js`는 브라우저 번들로 변환하고 나머지 정적 자산은 복사한다.
 `.d.ts`는 배포하지 않는다. CSS 등 번들의 추가 출력까지 정적 자산과 대조해 기록 전에
 충돌을 거부한다. 출력 이름은 Windows/macOS 이식성을 위해 대소문자를 구분하지 않고

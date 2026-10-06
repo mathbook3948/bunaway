@@ -289,6 +289,15 @@ export async function checkArtifact(root: string): Promise<void> {
     "packages/cli/dist/types/cli/src/index.d.ts",
     "packages/cli/templates/vanilla/package.json",
     "packages/cli/templates/vanilla/gitattributes",
+    ...[
+      "package.json",
+      "src-bunaway/bunaway.json",
+      "vite.config.ts",
+      "index.html",
+      "README.md",
+      "gitignore",
+      "tsconfig.json",
+    ].map((name) => `packages/cli/templates/vite/${name}`),
   ]) {
     if (!inventory[name]) throw new Error(`Artifact is missing required input: ${name}`);
   }

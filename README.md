@@ -65,6 +65,8 @@ Bun은 `mise.toml`과 `package.json`에 **1.4.2**로 고정되어 있다.
 생성 앱의 `bun run dev`·`bun run build`는 기존 SDK/네이티브 빌드를 재사용한다.
 선택적 `dev.command`·`dev.url`로 [외부 Vite·Next.js UI 개발 서버](./docs/development-server.md)를
 연결하면 UI 갱신은 해당 서버에 맡기고 CLI는 서버 수명주기와 백엔드 재시작을 관리한다.
+`bunaway create <directory> --template vite`는 Vite 개발 서버와 생산 빌드를 연결한
+vanilla TypeScript 앱을 생성한다. 기본 템플릿은 기존 `vanilla`다.
 Windows 호스트의 빌드·패키징은
 `native/windows/bun/run.ps1`이 담당한다. Bun이 앱 진입점이고 UI Worker가
 Win32·WebView2 COM을 직접 소유한다. 생성 앱은 `windowsApp`에 AppDefinition 모듈을 지정한다.
@@ -76,7 +78,7 @@ macOS는 Apple Silicon, Xcode Command Line Tools와 GUI 세션이 필요하다.
 `probe:macos` 다음 `host:macos`를 **직렬 실행**한다. 두 빌드가 공유 Bun 캐시를
 초기 다운로드·추출하므로 병렬 cold-cache 실행은 안전하지 않다.
 `native/macos/host/run.sh --app`은 회귀 앱의 `.app` 생성과 ad-hoc 서명을 추가한다.
-[메모 예제](examples/memo/README.md)는 CLI 생성 앱과 같은 구조이며 예제 폴더에서 `bun run dev`로 실행한다.
+[메모 예제](examples/memo/README.md)는 CLI 생성 앱과 같은 구조이며 예제 폴더에서 `bun run bunaway dev`로 실행한다.
 
 ## CI
 

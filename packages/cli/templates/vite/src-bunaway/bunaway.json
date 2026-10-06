@@ -6,22 +6,22 @@
     "frontend": "web-dist"
   },
   "app": {
-    "appId": "examples.bunaway.memo",
-    "title": "bunaway \uba54\ubaa8",
+    "appId": "app.vite",
+    "title": "bunaway Vite",
     "view": "main",
     "home": "https://app.bunaway.local/index.html",
     "window": {
-      "width": 1024,
-      "height": 768
+      "width": 800,
+      "height": 600
     }
-  },
-  "dev": {
-    "command": ["bun", "run", "dev"],
-    "url": "http://127.0.0.1:5173/"
   },
   "bundle": {
     "channels": {
       "win-direct": {}
     }
+  },
+  "dev": {
+    "command": ["bun", "run", "dev"],
+    "url": "http://127.0.0.1:5173/"
   }
 }
