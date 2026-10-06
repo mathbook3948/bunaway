@@ -541,7 +541,7 @@ public:
                         if (outputAborted || (outputDone && outputQueue.empty())) break;
                         next = std::move(outputQueue.front()); outputQueue.pop_front();
                     }
-                    if (!writeBounded(STDOUT_FILENO, next, &closing, &failed)) { outputAborted.store(true); break; }
+                    if (!writeBounded(STDOUT_FILENO, next, &closing, &failed)) { outputAborted.store(true); fail(); break; }
                 }
             } catch (...) { outputAborted.store(true); fail(); }
         });

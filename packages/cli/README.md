@@ -31,10 +31,17 @@ SDK 의존성은 workspace 이름으로 연결하며 메모 샘플/원본 저장
 개발 도구 설치에는 Bun 패키지 레지스트리, 최초 네이티브 빌드에는 고정 런타임/헤더/SDK
 다운로드 접근이 필요하다. 앱 실행에는 네트워크나 Bun 설치가 필요 없다.
 
-명령은 `create <new-directory>`와 `dev|validate|build|doctor [directory]`다.
+명령은 `create <new-directory>`와 `dev|validate|build|doctor [directory]`,
+`package <channel> [directory] [--build]`다.
 옵션/알 수 없는 명령·설정 필드는 오류로 종료한다. `validate`는 버전·앱 ID·소스 경로·홈
-자산·단일 뷰/정확한 origin·기존 정책 스키마를 검사한다. 권한의 실제 집행은 호스트/코어의
-기존 계약을 따른다. 백엔드를 실행해 명령 목록을 추측하거나 자동으로 권한을 추가하지 않는다.
+자산·단일 뷰/정확한 origin·기존 정책 스키마를 검사한다. `package`는
+`packaging.json`(없으면 거부, `validate`는 유무와 무관하게 형식만 검사)을 읽어
+`bunaway build`의 채널 중립 산출물을 채널별 패키지로 조립한다. 산출물은
+`dist/<target>/packaged/<channel>/`, 결과는 `packaging-report.<channel>.json`에
+기록한다. `--build`는 패키징 전에 빌드를 먼저 실행한다. 채널·어댑터 계약·서명/해시
+규칙은 `@bunaway/packaging`과 `docs/decisions/0005-packaging-contract.md`에 있다.
+권한의 실제 집행은 호스트/코어의 기존 계약을 따른다. 백엔드를 실행해 명령 목록을
+추측하거나 자동으로 권한을 추가하지 않는다.
 
 ## 생성 구조
 

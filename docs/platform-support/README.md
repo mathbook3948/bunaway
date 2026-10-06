@@ -40,3 +40,13 @@ macOS WKWebView는 현재 비영속 `WKWebsiteDataStore`를 사용한다. Window
 - **Developer ID 서명·hardened runtime/entitlements·공증·stapling·Gatekeeper·설치**와
   App Sandbox·배포 채널 결정은 별도 작업이다. ad-hoc 서명 성공은 이를 보장하지 않는다.
 - CLI·템플릿·기본 플러그인·릴리스 자동화는 미구현이며 PRD 출시 기준은 미충족이다.
+
+## 패키징(공통 계약)
+
+`packages/packaging`의 채널 중립 계약(`packaging.json` v1, 어댑터 입출력,
+`PKG_*` 진단, 서명 후 `packagedSha256` 규칙)과 `bunaway package <channel>` 진입점은
+구현됐다. **채널 어댑터 자체는 아직 없다** — Windows `win-direct`·`win-store-msix`·
+`win-store-unpackaged`와 macOS `mac-direct`·`mac-store` 어댑터는 별도 작업이며,
+설치·실행·제거의 실제 검증은 각 채널 구현 시 기록한다. 현재 패키징 검증은
+공통 계약의 단위 테스트(메타데이터 거부·입력 누락/변조·단계 실패 시 기존 산출물
+보존·미서명 `usable`/`submittable` 규칙)에 한정된다.

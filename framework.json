@@ -7,7 +7,8 @@
     "client-sdk": "@bunaway/client",
     "core": "@bunaway/core",
     "protocol": "@bunaway/protocol",
-    "runtime-bun": "@bunaway/runtime-bun"
+    "runtime-bun": "@bunaway/runtime-bun",
+    "packaging": "@bunaway/packaging"
   },
   "webProtocol": { "major": 1, "minor": 0 },
   "processProtocol": { "major": 1, "minor": 0 },

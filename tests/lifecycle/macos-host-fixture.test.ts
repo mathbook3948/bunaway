@@ -294,7 +294,7 @@ test.skipIf(process.platform !== "darwin")(
       expect(await readlink(join(directory, "relative-directory"))).toBe("nested");
     }
     expect(await errors).toContain(
-      "native FIFO, scheme handler and resource-filter regressions failed",
+      "native Bun integrity, FIFO, scheme handler and resource-filter regressions failed",
     );
     const summary = JSON.parse(await readFile(join(workspace, "macos-host-results.json"), "utf8"));
     expect(summary.results).toHaveLength(1);

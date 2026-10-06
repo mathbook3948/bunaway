@@ -17,6 +17,12 @@ window.addEventListener("pagehide", () => {
   void client.close();
 });
 
+async function waitForSaved() {
+  const deadline = Date.now() + 5000;
+  while ((button.disabled || saved.textContent !== input.value) && Date.now() < deadline)
+    await new Promise((resolve) => setTimeout(resolve, 25));
+}
+
 async function start() {
   await client.ready;
   await client.listen(
@@ -54,9 +60,7 @@ async function start() {
   if (testPhase === "write") {
     input.value = "재실행 후에도 남는 메모 😀";
     button.click();
-    const deadline = Date.now() + 5000;
-    while (button.disabled && Date.now() < deadline)
-      await new Promise((resolve) => setTimeout(resolve, 25));
+    await waitForSaved();
     localStorage.setItem("bunaway-profile-regression", "legacy-profile");
   }
   if (testPhase === "editor") {

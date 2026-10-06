@@ -58,6 +58,7 @@ const packageNames: Record<string, string> = {
   core: "@bunaway/core",
   protocol: "@bunaway/protocol",
   "runtime-bun": "@bunaway/runtime-bun",
+  packaging: "@bunaway/packaging",
 };
 
 const snapshotGeneratedDirectories = [
