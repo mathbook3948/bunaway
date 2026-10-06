@@ -1,10 +1,9 @@
 ---
 title: 타입과 입력 검증
-description: 앱 정의에서 CommandsOf, EventsOf 추론, UI type import와 런타임 스키마.
+description: 앱 정의에서 클라이언트 타입을 추론하고 스키마로 실제 데이터를 검사합니다.
 ---
 
-TypeScript 타입은 개발 중 호출 실수를 잡고, 런타임 스키마는 실제 WebView의 입력을 검사합니다.
-둘 중 하나를 다른 하나의 대체로 사용하지 않습니다.
+TypeScript 타입은 개발 중 호출 실수를 잡습니다. 실행할 때는 스키마로 WebView가 보낸 데이터를 검사합니다.
 
 ## 앱 정의에서 타입 추론
 
@@ -18,7 +17,7 @@ type AppCommands = CommandsOf<typeof app>;
 type AppEvents = EventsOf<typeof app>;
 ```
 
-UI의 import는 반드시 `import type`입니다. `app`을 실행 값으로 import해 백엔드 구현을 브라우저 번들에 넣지 않습니다.
+UI에서는 `import type`으로 타입만 가져옵니다. 이렇게 하면 백엔드 구현이 브라우저 번들에 포함되지 않습니다.
 이 타입을 UI 클라이언트에 지정합니다.
 
 ```ts
@@ -27,13 +26,13 @@ await client.invoke("message.save", "문자열");
 ```
 
 여기서 transport, hello는 [createClient](/reference/client/create-client/) 예시처럼 준비합니다.
-CommandsOf는 앱에 직접 선언한 명령의 input/output, EventsOf는 이벤트 payload를 추론합니다.
+CommandsOf는 앱에 직접 선언한 명령의 input/output을 추론합니다. 이벤트 payload는 EventsOf로 추론합니다.
 플러그인 전체 레지스트리를 합친 자동 타입 생성 CLI는 아직 없습니다.
 
 ## 런타임 계약
 
 명령 이름이 타입에 있어도 정책 허용은 별도로 필요합니다.
-핸들러 입력과 결과를 실제 Schema로 검증하며, 허용되지 않은 JSON 구조를 거부합니다.
+핸들러를 실행할 때 입력과 결과를 Schema로 검사하고 형식이 맞지 않으면 거부합니다.
 출력 스키마가 string이면 숫자를 반환하는 구현은 유효하지 않습니다.
 일반 프로토콜 데이터도 parse, serialize에서 검증합니다.
 
@@ -44,4 +43,4 @@ CommandsOf는 앱에 직접 선언한 명령의 input/output, EventsOf는 이벤
 
 잘못된 호출 입력은 INVALID_ARGUMENT, 앱 출력 계약 위반은 INTERNAL,
 뷰 권한 미충족은 PERMISSION_DENIED입니다.
-타입이 맞는 호출도 실제 환경, 정책, 기한에 따라 실패할 수 있으므로 Promise 오류를 처리합니다.
+타입이 맞아도 정책이나 실행 환경, 기한 때문에 요청이 실패할 수 있습니다. 호출한 Promise의 오류도 처리합니다.

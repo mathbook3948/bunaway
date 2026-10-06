@@ -1,17 +1,16 @@
 # bunaway
 
-웹 UI와 TypeScript 백엔드, 앱 패키지에 번들된 Bun 런타임을 결합하는 크로스플랫폼
-앱 프레임워크다. 제품 요구사항은 [PRD](./docs/PRD.md)에 정리되어 있다.
+웹 UI와 TypeScript 백엔드로 앱을 만드는 크로스플랫폼 프레임워크다.
+앱 패키지에 Bun 런타임을 함께 넣어 실행한다. 제품 요구사항은 [PRD](./docs/PRD.md)에 정리되어 있다.
 
-[개발 가이드 사이트](./docs/site/README.md)는 전체 구조 → 첫 앱 → 뷰, 정책 → 명령, 이벤트
-순서로 읽는다. 로컬에서 `bun run docs:dev`로 열 수 있다.
+[개발 가이드 사이트](./docs/site/README.md)에서 전체 구조와 첫 앱 실행을 익힌 뒤 뷰별 정책과 명령, 이벤트를 살펴본다. 로컬에서 `bun run docs:dev`로 열 수 있다.
 [문서 안내](./docs/README.md)에서 공통 용어, 설계 결정과 구현 계약을 찾을 수 있다.
 
-`protocol`의 메시지, 정책 스키마, JSON 검증, 직렬화와 버전 협상이 동작한다.
+`protocol`은 메시지와 정책 스키마를 정의하고 JSON 검증, 직렬화, 버전 협상을 처리한다.
 `createClient`, `createCore`, `runBunApp`, Windows Win32, WebView2와 macOS AppKit, WKWebView
-호스트를 구현했다. Windows는 여러 창과 뷰별 정책 분리, macOS는 단일 창/뷰의
-메모 저장→완료 이벤트→화면 갱신, 재실행 후 복원과 렌더러 복구를 검증한다.
-이 앱 패키지의 실행은 사용자 Bun 설치, PATH에 의존하지 않는다.
+호스트를 구현했다. Windows에서는 여러 창과 뷰별 정책 분리를 검증했다.
+macOS에서는 단일 창과 뷰에서 메모 저장, 완료 이벤트 수신, 화면 갱신을 확인했다.
+재실행 후 메모 복원과 렌더러 복구도 검증했다. 앱은 패키지에 포함된 Bun으로 실행한다.
 [Windows Bun FFI 실행 결과](./docs/architecture/windows-bun-results.md),
 [기존 Windows C 실행 결과](./docs/architecture/windows-host-results.md),
 [이전 B 실험 결과](./docs/architecture/windows-probe-results.md)와
@@ -19,12 +18,12 @@
 [진행 상태](./docs/architecture/progress.md)를 참고한다.
 [공통 API](./docs/architecture/common-api.md)는 SDK, 코어, Host API가 따르는 계약이다.
 CLI의 create/validate/doctor/dev/build와 vanilla 템플릿은 구현했다.
-[프레임워크 artifact 설치, 업그레이드](./docs/framework-distribution.md)는 저장소 체크아웃
-없는 개발 흐름과 정확한 버전의 CLI, SDK 패키지 설치을 제공한다. 공개 registry publish는 하지
-않았으며 프레임워크 라이선스 결정은 미해결이다. 기본 로그/저장 플러그인은 미구현이다.
-macOS Intel, 다중 창/뷰,
-Linux, 모바일 네이티브 호스트와 설치, 배포 검증은 포함하지 않는다.
-macOS `.app` 생성, ad-hoc 서명은 Developer ID 서명, 공증, 설치 검증과 다르다.
+[프레임워크 설치와 업그레이드 안내](./docs/framework-distribution.md)에는 저장소를 체크아웃하지 않고
+정확한 버전의 CLI와 SDK를 설치하는 방법이 있다. 공개 registry에는 아직 배포하지 않았고
+프레임워크 라이선스도 결정되지 않았다. 기본 로그와 저장 플러그인은 아직 구현하지 않았다.
+macOS Intel과 macOS 다중 창 및 뷰, Linux와 모바일 네이티브 호스트는 지원하지 않는다.
+설치와 배포 검증은 남아 있다. macOS 빌드는 `.app` 생성과 로컬 실행용 ad-hoc 서명을 지원하며
+배포용 Developer ID 서명과 공증, 설치 동작은 별도로 검증해야 한다.
 [플랫폼 지원 범위](./docs/platform-support/README.md)에서 환경과 제한을 확인한다.
 이전 런타임 C ABI는 동일 프로세스 설계의 기록으로 보존한다.
 
@@ -67,9 +66,9 @@ Bun은 `mise.toml`과 `package.json`에 **1.4.2**로 고정되어 있다.
 생성 앱의 `bun run dev`, `bun run build`는 기존 SDK/네이티브 빌드를 재사용한다.
 선택적 `dev.command`, `dev.url`로 [외부 Vite, Next.js UI 개발 서버](./docs/development-server.md)를
 연결하면 UI 갱신은 해당 서버에 맡기고 CLI는 서버 수명주기와 백엔드 재시작을 관리한다.
-`bunaway create <directory> --template vite`는 Vite 개발 서버와 생산 빌드를 연결한
+`bunaway create <directory> --template vite`는 Vite 개발 서버와 프로덕션 빌드를 연결한
 vanilla TypeScript 앱을 생성한다. 기본 템플릿은 기존 `vanilla`다.
-Windows 호스트의 빌드, 패키징은
+Windows 호스트의 빌드와 패키징은
 `native/windows/bun/run.ps1`이 담당한다. Bun이 앱 진입점이고 UI Worker가
 Win32, WebView2 COM을 직접 소유한다. 생성 앱은 `build.app`에 AppDefinition 모듈을 지정한다.
 Windows 빌드는 PowerShell 7과 고정 Bun만 필요하며 C++ 컴파일은 하지 않는다.
@@ -78,7 +77,7 @@ WebView 앱 실행에는 WebView2 Evergreen 런타임이 필요하다.
 
 macOS는 Apple Silicon, Xcode Command Line Tools와 GUI 세션이 필요하다.
 `probe:macos` 다음 `host:macos`를 **직렬 실행**한다. 두 빌드가 공유 Bun 캐시를
-초기 다운로드, 추출하므로 병렬 cold-cache 실행은 안전하지 않다.
+처음 다운로드하고 추출하므로 캐시가 없는 상태에서 두 작업을 동시에 실행하면 충돌할 수 있다.
 `native/macos/host/run.sh --app`은 회귀 앱의 `.app` 생성과 ad-hoc 서명을 추가한다.
 [메모 예제](examples/memo/README.md)는 CLI 생성 앱과 같은 구조이며 예제 폴더에서 `bun run bunaway dev`로 실행한다.
 
@@ -106,8 +105,8 @@ macOS는 Apple Silicon, Xcode Command Line Tools와 GUI 세션이 필요하다.
 
 CI도 `mise.toml`의 Bun 버전을 사용한다. 같은 PR, 브랜치의 새 실행은 이전 실행을
 취소한다. `.app`, 서명, 공증, 설치, 배포, 릴리스와 Linux/모바일 네이티브 호스트는 검사하지 않는다.
-기존 로컬 결과를 다른 OS/CPU의 CI 성공으로 간주하지 않는다. 실제 실행 환경과 결과는
-[macOS 기록](./docs/architecture/macos-native-results.md)에 분리해서 남긴다.
+실제 실행 환경과 결과는 [macOS 기록](./docs/architecture/macos-native-results.md)에 남긴다.
+로컬 검증 결과와 각 OS 및 CPU의 CI 결과를 따로 기록한다.
 
 ## 디렉터리
 

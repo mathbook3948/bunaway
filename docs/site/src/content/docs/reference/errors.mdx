@@ -5,7 +5,7 @@ description: 모든 WireError 코드, BunawayError, ProtocolError와 API_LIMITS.
 
 ## WireError와 BunawayError
 
-WireError는 필수 `code`, `message`와 선택적 JSON `details`입니다.
+WireError에는 필수 필드인 `code`와 `message`, 선택적 JSON 필드인 `details`가 있습니다.
 message는 최대 1,024자이며 오류 객체의 추가 필드는 거부합니다.
 `errorSchema`와 `BunawayError`는 `@bunaway/protocol`에서 가져옵니다.
 
@@ -14,8 +14,8 @@ import { BunawayError } from "@bunaway/protocol";
 throw new BunawayError({ code: "INVALID_ARGUMENT", message: "이름을 입력하세요." });
 ```
 
-생성자 자체도 오류 구조를 검증합니다. 클라이언트 Promise 거절은 code, message, 선택적 details를 가진 오류로 처리할 수 있습니다.
-일반 핸들러 예외, 잘못된 출력은 내부 정보를 포함하지 않는 INTERNAL로 전달합니다.
+생성자도 오류 구조를 검증합니다. 클라이언트에서 Promise가 실패하면 code와 message, 선택적 details를 읽어 처리할 수 있습니다.
+핸들러의 일반 예외나 잘못된 출력은 내부 정보를 제거한 INTERNAL 오류로 전달됩니다.
 
 ## 모든 코드
 
@@ -32,7 +32,7 @@ throw new BunawayError({ code: "INVALID_ARGUMENT", message: "이름을 입력하
 ## ProtocolError
 
 `new ProtocolError(code, message)`는 INVALID_ARGUMENT 또는 UNSUPPORTED를 가집니다.
-JSON, 스키마, 협상 헬퍼가 던지는 낮은 계층의 오류입니다.
+JSON과 스키마 검증, 버전 협상 헬퍼에서 발생하는 오류입니다.
 일반 앱 명령의 명시적 오류는 BunawayError를 사용합니다.
 
 ## API_LIMITS
@@ -47,8 +47,8 @@ JSON, 스키마, 협상 헬퍼가 던지는 낮은 계층의 오류입니다.
 | maxRequestIds | 1,024 | 세션 요청 ID 기록 |
 
 `MAX_MESSAGE_BYTES`는 1,048,576 UTF-8 바이트, `MAX_JSON_DEPTH`는 루트 0 기준 64입니다.
-바이트와 글자 수는 다르므로 한글, emoji 데이터에는 실제 인코딩 크기를 고려합니다.
+바이트 제한을 계산할 때는 한글과 emoji를 포함한 데이터의 UTF-8 인코딩 크기를 사용합니다.
 
-앱에서 이 값을 정책 옵션으로 임의 조정하는 기능은 없습니다.
-API 오류와 CLI/패키징 도구의 PKG_* 진단은 다른 계약입니다.
+이 상수는 프레임워크에서 정하며 앱의 정책 설정으로 바꿀 수 없습니다.
+CLI 패키징 도구는 API 오류 코드 대신 PKG_* 진단 코드를 사용합니다.
 [패키징 보고서](/reference/packaging/report/)에서 도구 오류를 확인하세요.

@@ -1,10 +1,10 @@
 ---
 title: 설치와 업그레이드
-description: 로컬 tarball, 정확한 버전, isolated 설치, lockfile, 업그레이드와 복구.
+description: 프레임워크 패키지를 설치하고 버전을 올리거나 이전 버전으로 되돌립니다.
 ---
 
 bunaway 개발 의존성은 앱의 package.json, bun.lock으로 관리합니다.
-SDK, CLI를 node_modules에서 읽으며 앱에 별도 vendor 프레임워크나 bunaway.lock.json을 만들지 않습니다.
+SDK와 CLI는 node_modules에 설치합니다. 설치 버전은 bun.lock에 기록하며 별도 vendor 복사본이나 bunaway.lock.json은 만들지 않습니다.
 첫 설치 명령은 [첫 앱](/start/quickstart/)에 있습니다.
 
 ## 현재 배포 방식
@@ -12,7 +12,7 @@ SDK, CLI를 node_modules에서 읽으며 앱에 별도 vendor 프레임워크나
 공개 registry publish는 아직 없습니다. 관리자가 `bun run framework:pack --local`로
 같은 버전의 CLI, SDK 묶음을 준비하고 create의 `--package-dir`로 연결합니다.
 `--local`의 의존성은 묶음의 절대 경로라서 묶음을 다른 위치로 옮기면 그 위치에서 다시 만들어야 합니다.
-깨끗한 재설치를 위해 참조한 tarball 묶음을 보관합니다.
+다시 설치할 때도 같은 파일을 사용하도록 tarball 묶음을 보관합니다.
 
 ## 설치하는 패키지
 
@@ -26,9 +26,9 @@ SDK, CLI를 node_modules에서 읽으며 앱에 별도 vendor 프레임워크나
 | @bunaway/packaging | 채널 중립 계약, 어댑터 |
 | @bunaway/cli | 생성, 검증, 개발, 빌드, 패키징과 플랫폼 입력 |
 
-앱이 직접/전이 의존하는 SDK는 같은 정확한 릴리스여야 합니다.
-isolated, workspace 설치에서 모든 SDK가 앱 루트에 hoist되어야 하는 것은 아닙니다.
-CLI는 의존성을 선언한 패키지 위치에서 전이 SDK를 해석합니다.
+앱이 직접 설치한 SDK와 다른 패키지가 의존하는 SDK는 같은 정확한 릴리스를 사용해야 합니다.
+isolated 설치나 workspace 설치에서는 SDK가 패키지별 위치에 설치될 수 있습니다.
+CLI는 의존성을 선언한 패키지 위치에서 SDK를 찾습니다.
 
 ## 재현 설치
 
@@ -40,20 +40,20 @@ bun install --frozen-lockfile
 
 node_modules, .bunaway, dist, web-dist는 생성물입니다.
 CLI는 릴리스, artifact inventory, SDK 해석을 검사합니다.
-SDK 버전을 바꾸는 overrides/resolutions, TS aliases나 일부 SDK만 교체한 조합은 거부될 수 있습니다.
+overrides/resolutions나 TS aliases로 SDK 버전을 바꾸면 이 검사가 실패할 수 있습니다. SDK는 같은 릴리스로 함께 갱신합니다.
 
 ## 업그레이드와 되돌리기
 
 1. 새 릴리스의 로컬 묶음을 준비합니다.
 2. 같은 묶음으로 만든 참조 앱과 @bunaway 의존성 선언을 비교해 모두 갱신합니다.
 3. `bun install`로 lockfile을 갱신합니다.
-4. 앱의 typecheck, validate, doctor, dev, build와 실제 회귀를 확인합니다.
+4. 앱의 typecheck, validate, doctor를 실행한 뒤 dev와 build로 기존 기능이 동작하는지 확인합니다.
 5. 실패하면 이전 package.json, bun.lock을 복원하고 frozen install합니다.
 
-Vite에서는 validate, build 전에 웹 생산 빌드가 필요합니다.
+Vite에서는 validate, build 전에 웹 프로덕션 빌드가 필요합니다.
 이전 tarball도 보관해야 롤백 설치가 가능합니다.
 현재 이전 vendor/분리 설정으로의 자동 마이그레이션이나 fallback은 없습니다.
 
 CLI 설치본 안의 다운로드 캐시는 node_modules를 지우면 없어질 수 있지만
 소스, 해시 pin은 설치 artifact에서 복원합니다.
-개발 도구 준비의 네트워크 요구와 최종 앱 실행 요구는 구분합니다.
+개발 도구를 준비할 때는 다운로드가 필요합니다. 배포한 앱은 포함된 런타임과 자산을 사용합니다.

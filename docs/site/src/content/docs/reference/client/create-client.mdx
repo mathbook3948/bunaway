@@ -37,16 +37,16 @@ const negotiated = await client.ready;
 | `hello.features` | 예 | 원하는 feature 이름 배열. 필요 없으면 `[]` |
 | `hello.buildId` | 예 | 1–128자의 식별자. 영숫자, `_ . : -` 사용 |
 
-자동 생성하는 hello 기본값은 없습니다. 프로토콜 구조는 [메시지 계약](/reference/protocol/)을 따릅니다.
+hello는 호출자가 위 필드를 모두 작성합니다. 자세한 형식은 [메시지 계약](/reference/protocol/)에 있습니다.
 
 ## 반환값과 ready
 
 `Client`에는 `ready`, `invoke`, `listen`, `capabilities`, `close`가 있습니다.
 `ready`는 `{ protocol, features, buildId }`의 Promise이며 `buildId`는 상대 백엔드의 값입니다.
-major가 같으면 더 작은 minor와 양쪽 공통 feature를 정렬해 협상합니다.
+major가 같으면 작은 쪽의 minor를 사용하고 공통 feature를 정렬해 반환합니다.
 
-`invoke()`와 `listen()`은 내부적으로 준비를 기다리므로 직접 `ready`를 await하는 것이 필수는 아닙니다.
-연결 성공/실패를 UI에 표시하려면 `ready`를 명시적으로 기다리는 편이 좋습니다.
+`invoke()`와 `listen()`은 ready가 완료될 때까지 기다립니다.
+연결 상태를 UI에 표시하려면 예시처럼 `ready`를 직접 await하고 실패를 처리합니다.
 
 ## 실패와 수명
 
@@ -55,7 +55,7 @@ major가 같으면 더 작은 minor와 양쪽 공통 feature를 정렬해 협상
 - 잘못된 메시지, 방향, 협상 순서: 프로토콜 위반으로 클라이언트를 종료합니다.
 - 전송 종료: 대기 요청과 구독을 정리합니다.
 
-닫힌 클라이언트가 자동으로 재연결되지는 않습니다. 새 전송과 새 클라이언트를 만들고 구독, 상태 읽기를 다시 수행합니다.
+다시 연결하려면 새 전송과 클라이언트를 만듭니다. 이벤트를 구독하고 현재 상태를 다시 읽어 UI를 복원합니다.
 운영체제 창의 수명과 클라이언트의 수명은 다릅니다. [close](/reference/client/close/)를 참고하세요.
 
 ## 타입

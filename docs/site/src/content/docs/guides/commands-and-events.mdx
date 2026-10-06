@@ -8,7 +8,7 @@ import appSource from '@repo/packages/cli/templates/vanilla/src-bunaway/app.ts?r
 import uiSource from '@repo/packages/cli/templates/vanilla/src/main.ts?raw';
 
 **명령**은 입력을 받아 결과를 반환하는 작업이고, **이벤트**는 구독한 UI에 전달하는 알림입니다.
-한 번의 저장에서 명령 응답과 이벤트를 둘 다 사용할 수 있지만 둘은 별도의 메시지입니다.
+저장 명령의 응답은 호출한 UI가 받고 저장 이벤트는 구독 중인 UI가 받습니다.
 
 ## 1. 앱 백엔드에서 계약과 구현 정의
 
@@ -24,16 +24,16 @@ import uiSource from '@repo/packages/cli/templates/vanilla/src/main.ts?raw';
 | `output` | 응답 데이터의 런타임 스키마 | `null` |
 | `handle` | 입력이 유효할 때 실행할 함수 | 파일 저장 후 이벤트 발행 |
 
-입력과 출력은 실제로 검증합니다. TypeScript 타입만으로 요청을 신뢰하지 않습니다.
+백엔드는 실행할 때 입력과 출력을 스키마로 검사합니다.
 입력에 객체를 보내면 문자열 스키마에 맞지 않아 `INVALID_ARGUMENT`로 거부됩니다.
 
 `context`에는 요청의 취소 신호(`signal`), 호출 권한에 묶인 `host`,
-앱 `state`, `events`가 있습니다. `host.call()`의 권한 출처를 앱 핸들러가 임의로 바꾸지 않습니다.
+앱 `state`와 이벤트 발행자 `events`가 있습니다. `host.call()`은 요청을 보낸 뷰의 권한으로 실행합니다.
 
 ## 2. 해당 뷰의 정책에 허용
 
 기본 정책은 아래 이름을 명시적으로 허용합니다.
-나머지 `origins`, `host` 필드까지 포함한 전체 파일은 [창, 뷰, 정책](/concepts/views-and-policy/)에서 확인하세요.
+나머지 `origins`, `host` 필드까지 포함한 전체 파일은 [창과 뷰의 정책](/concepts/views-and-policy/)에서 확인하세요.
 
 ```json
 {
@@ -43,7 +43,7 @@ import uiSource from '@repo/packages/cli/templates/vanilla/src/main.ts?raw';
 ```
 
 새 명령을 추가하면 `app.ts.commands`에 구현을 등록한 뒤 호출할 뷰의 `commands`에 같은 이름을 넣습니다.
-이벤트도 `app.ts.events`에 데이터 스키마를 선언하고, 받을 뷰의 `events`에 허용해야 합니다.
+이벤트는 `app.ts.events`에 데이터 스키마를 선언한 뒤 받을 뷰의 `events`에 추가합니다.
 
 ## 3. UI에서 연결, 구독, 호출
 
@@ -52,7 +52,7 @@ import uiSource from '@repo/packages/cli/templates/vanilla/src/main.ts?raw';
 
 <Code code={uiSource} lang="ts" title="src/main.ts" />
 
-흐름을 순서대로 읽으면 다음과 같습니다.
+코드는 아래 순서로 실행합니다.
 
 1. 호스트가 제공하는 브리지를 `createWebViewTransport()`에 전달합니다.
 2. `createClient()`로 클라이언트를 만들고 `client.ready`에서 연결 협상을 기다립니다.
@@ -62,7 +62,7 @@ import uiSource from '@repo/packages/cli/templates/vanilla/src/main.ts?raw';
 6. 이벤트 콜백의 `event.payload`로 화면을 갱신합니다.
 
 `listen()`의 `onError`는 필수입니다. 연결 종료나 구독 실패를 UI에 반영해야 합니다.
-`listen()`은 비동기 해제 함수를 반환하므로, 컴포넌트를 제거할 때 `await unlisten()`으로 정리할 수 있습니다.
+`listen()`이 반환한 해제 함수를 보관해 두었다가 컴포넌트를 제거할 때 `await unlisten()`으로 구독을 정리합니다.
 페이지가 종료되면 템플릿은 `client.close()`를 호출합니다.
 
 ## 응답과 이벤트는 어떻게 다르나요?
@@ -71,8 +71,8 @@ import uiSource from '@repo/packages/cli/templates/vanilla/src/main.ts?raw';
 `message.saved`는 **허용된 구독자에게 전달되는 알림**입니다.
 `{ kind: "broadcast" }`로 발행해도 정책에서 이벤트를 허용하고 구독 중인 세션에만 전달됩니다.
 
-이벤트는 영구 저장되지 않습니다. 재연결한 UI는 과거 이벤트를 기다리기보다
-`message.read` 같은 스냅샷 명령으로 현재 상태를 가져옵니다.
+이벤트는 활성 구독에만 전달합니다. 다시 연결한 UI는
+`message.read`로 현재 저장 내용을 읽습니다.
 
 ## 실패와 취소를 다루기
 

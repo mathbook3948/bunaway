@@ -5,7 +5,7 @@ sidebar: { order: 2 }
 ---
 
 `@bunaway/cli`의 공개 진입점입니다. CLI 명령의 동작과 같은 구현을 사용합니다.
-프로젝트 디렉터리 인자는 문자열이며 Promise의 예외는 호출자가 처리합니다.
+프로젝트 디렉터리는 문자열로 전달합니다. Promise가 실패하면 호출한 코드에서 오류를 처리하세요.
 
 ## 프로젝트 생성과 검증
 
@@ -15,10 +15,10 @@ sidebar: { order: 2 }
 | `validateProject(directory, options?)` | 해석한 `Promise<Project>` |
 | `doctor(directory)` | 환경 검사 성공 여부 `Promise<boolean>` |
 
-create 옵션: `packageDirectory?: string`, `template?: "vanilla" | "vite"` (기본 vanilla).
-기존 디렉터리를 덮어쓰지 않고 의존성 설치도 실행하지 않습니다.
-validate 옵션: `development?: boolean` (기본 false).
-개발 검증은 생산 UI 파일 준비를 요구하지 않는 대신 개발 URL을 검증합니다.
+create는 `packageDirectory?: string`과 `template?: "vanilla" | "vite"`를 받습니다. 기본 템플릿은 vanilla입니다.
+기존 디렉터리는 덮어쓰지 않습니다. 생성 후 의존성은 별도로 설치하세요.
+validate는 `development?: boolean`을 받으며 기본값은 false입니다.
+개발 검증에서는 프로덕션 UI 파일이 없어도 되며 개발 URL을 검증합니다.
 
 Project에는 `root`, `frameworkRoot`, `appEntry`, `frontend`, `app`, `policy`,
 선택적 `bundle`, `dev`가 있습니다. 파일 경로는 해석된 경로입니다.
@@ -36,18 +36,18 @@ prepareNative의 target 기본값은 currentTarget(), root 기본값은 framewor
 고정 Bun 버전, 대상을 검사하고 플랫폼 준비 도구를 실행합니다.
 NativeInputs는 `target`, `host`, `bun`, `licenses`, 선택적 `loader`입니다.
 
-build 옵션: `development?: boolean`, `native?: NativeInputs`.
-NativeInputs를 전달하면 준비 결과를 재사용합니다. 임의 플랫폼으로 교차 빌드하는 옵션은 아닙니다.
+build는 `development?: boolean`과 `native?: NativeInputs`를 받습니다.
+NativeInputs를 전달하면 현재 플랫폼에서 준비한 결과를 재사용합니다.
 BuiltPackage는 `output`, `package`, `executable`, `arguments: string[]`입니다.
-전체 단계, 원본 보존은 [build](/reference/cli/build/)를 따릅니다.
+전체 빌드 과정과 실패 시 산출물 처리 방법은 [build](/reference/cli/build/)에서 확인할 수 있습니다.
 
 ## 개발과 패키징
 
-`devProject(directory): Promise<void>`는 감시, 창 실행을 시작하고 종료 정리까지 기다립니다.
+`devProject(directory): Promise<void>`는 파일 감시와 창 실행을 시작하고 종료 후 정리가 끝날 때까지 기다립니다.
 `packageProject(directory, channelName, { build?: boolean } = {}): Promise<PackageReport>`는
-채널을 해석, 검증하고 패키징 결과를 반환합니다.
-보고서가 반환되어도 `ok`가 false일 수 있고 사전 검증은 예외로 실패할 수 있습니다.
---build와 마찬가지로 Vite 웹 생산 빌드를 대신 실행하지 않습니다.
+채널을 해석하고 검증한 뒤 패키징 보고서를 반환합니다.
+반환된 보고서의 `ok`로 성공 여부를 확인하세요. 사전 검증에 실패하면 예외가 발생합니다.
+Vite 앱은 호출 전에 웹 프로덕션 빌드를 실행해야 합니다.
 
 ## RestartController
 
@@ -66,5 +66,5 @@ await controller.close();
 constructor는 `stop`, `build`, `start`, `error` 훅을 받습니다.
 `change()`는 변경 revision을 늘리고 직렬 stop → build → start를 수행합니다.
 빌드 중 새 변경이 오면 오래된 결과는 시작하지 않고 최신 변경을 다시 적용합니다.
-실패는 error 훅으로 전달하며 다음 change를 처리할 수 있습니다.
+실패하면 error 훅을 호출합니다. 이후 change 호출은 계속 처리할 수 있습니다.
 `close()`는 진행 중 작업을 기다려 정리하며 이후 change는 재시작하지 않습니다.

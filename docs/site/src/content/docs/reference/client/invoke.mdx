@@ -1,6 +1,6 @@
 ---
 title: invoke
-description: 명령 입력, 결과, signal, deadline, 대기, 실행 제한과 재시도 의미.
+description: 명령을 호출하고 signal과 deadline으로 취소와 실행 기한을 설정합니다.
 sidebar: { order: 2 }
 ---
 
@@ -25,7 +25,7 @@ await client.invoke("message.save", "새 메시지");
 | `options.deadline` | 아니요 | Unix epoch 밀리초의 절대 기한 |
 
 입력이 없음을 `{ const: null }`로 선언했다면 `undefined` 대신 `null`을 전달합니다.
-Promise는 그 요청의 output으로 완료됩니다. 별도의 이벤트가 도착했다는 뜻은 아닙니다.
+Promise는 그 요청의 output을 반환합니다. 명령이 발행한 이벤트는 listen의 콜백에서 받습니다.
 
 ## 기한
 
@@ -34,8 +34,8 @@ await client.invoke("message.read", null, { deadline: Date.now() + 5000 });
 ```
 
 기본 명령 최대 시간은 30초입니다. 더 먼 deadline을 주어도 최대 시간을 연장하지 않습니다.
-클라이언트의 기한 계산은 호출 시 시작하므로 준비 협상을 기다리는 시간도 소비합니다.
-이미 지난 기한은 실행하지 않고 `TIMEOUT`으로 실패하며, 음수, 비유한 deadline은 `INVALID_ARGUMENT`입니다.
+기한은 invoke를 호출할 때부터 계산하며 연결 협상을 기다리는 시간도 포함합니다.
+기한이 이미 지났으면 명령을 보내지 않고 `TIMEOUT`으로 실패합니다. 음수나 유한하지 않은 deadline은 `INVALID_ARGUMENT`입니다.
 
 ## 취소
 
@@ -61,6 +61,6 @@ try { await request; } catch (error) { console.error(error); }
 | `TIMEOUT` / `CANCELLED` | 기한 초과, 취소 |
 | `INTERNAL` | 핸들러 일반 예외, 잘못된 출력, 연결 실패 |
 
-세션 요청 ID는 재사용하지 않으며 기록 상한은 1,024개입니다. 장시간 세션의 모든 작업이 무제한으로 허용되지는 않습니다.
-늦은 응답은 폐기합니다. 자동 재시도, 자동 요청 재전송은 없습니다.
+세션의 요청 ID는 재사용하지 않습니다. 기록 상한인 1,024개에 도달하면 새 요청은 `BUSY`로 실패합니다.
+기한이 끝난 요청의 늦은 응답은 폐기합니다. 재시도가 필요하면 현재 상태를 확인한 뒤 앱에서 다시 호출합니다. SDK는 요청을 자동 재전송하지 않습니다.
 [오류 처리](/guides/cancellation-and-errors/)에서 사용자 재시도와 상태 복원을 설명합니다.

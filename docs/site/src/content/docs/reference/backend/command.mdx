@@ -1,6 +1,6 @@
 ---
 title: command
-description: command의 입력과 출력 스키마, typed handle, run과 오류 전파.
+description: 스키마로 입력과 결과를 정하고 handle에 명령의 작업을 작성합니다.
 sidebar: { order: 2 }
 ---
 
@@ -31,17 +31,16 @@ const greet = command({
 | `output` | 예 | 결과 Schema |
 | `handle` | 예 | `(input, context) => Output \| Promise<Output>` |
 
-반환하는 `CommandDefinition`은 `input`, `output`, `run(payload, context)`를 가집니다.
-일반 앱에서는 코어가 `run`을 호출합니다. UI에서 `run`을 직접 호출하지 않습니다.
-`command()`는 즉시 작업을 실행하거나 정책에 등록하는 함수가 아닙니다.
+`command()`는 `input`, `output`, `run(payload, context)`가 있는 `CommandDefinition`을 반환합니다.
+이를 앱에 등록한 뒤 UI가 명령을 호출하면 코어가 `run`을 실행합니다. 호출 권한은 뷰 정책에 적습니다.
 
 ## 실행 순서
 
-1. 호스트, 코어의 뷰 명령 허용 검사.
-2. 입력 JSON 검증, 분리된 스냅샷 생성.
-3. `handle(input, context)` 실행 및 반환 Promise 대기.
-4. 결과 JSON 검증, 스냅샷 생성.
-5. 요청한 세션에 결과 또는 오류 전달.
+1. 호스트와 코어가 뷰의 명령 호출 권한을 검사합니다.
+2. 입력 JSON을 검사하고 원본과 분리된 스냅샷을 만듭니다.
+3. `handle(input, context)`를 실행하고 반환한 Promise를 기다립니다.
+4. 결과 JSON을 검사한 뒤 스냅샷을 만듭니다.
+5. 요청한 세션에 결과나 오류를 보냅니다.
 
 입력 위반은 `INVALID_ARGUMENT`, 출력 위반은 `INTERNAL`입니다.
 `{ const: null }` 결과를 선언하면 반드시 `null`을 반환합니다. `undefined`는 JSON 값이 아닙니다.
@@ -49,10 +48,10 @@ const greet = command({
 ## 예외와 동시 실행
 
 일반 핸들러 예외는 안전한 `INTERNAL`로 전달합니다.
-안정된 API 오류를 전달하려면 `@bunaway/protocol`의 `BunawayError`를 사용합니다.
+오류 코드와 공개할 메시지를 직접 정하려면 `@bunaway/protocol`의 `BunawayError`를 사용합니다.
 오류 생성자도 code, message, details 구조를 검증합니다.
 
-명령은 전체 수신 루프를 막지 않고 동시에 진행될 수 있습니다.
+명령이 비동기 작업을 기다리는 동안 다른 요청도 실행합니다.
 `await`를 사이에 둔 공유 상태 변경은 자동으로 직렬화되지 않습니다.
 취소된 핸들러가 늦게 반환해도 이미 끝난 요청을 다시 완료하지 않습니다.
 

@@ -4,8 +4,8 @@ description: 호스트 어댑터용 createCore, 세션, RuntimeServices와 Bun �
 sidebar: { order: 1 }
 ---
 
-일반 앱 개발자는 AppDefinition만 default export합니다.
-CLI가 플랫폼에 맞게 부팅하므로 앱의 개발, 생산 진입점에서 이 함수를 직접 호출할 필요는 없습니다.
+일반 앱은 AppDefinition을 default export하면 CLI가 플랫폼에 맞게 부팅합니다.
+이 페이지의 함수는 호스트나 런타임 어댑터를 작성할 때 사용합니다.
 
 ## createCore
 
@@ -20,7 +20,7 @@ await core.stop();
 
 `createCore(app: AppDefinition, services: CoreServices): Promise<Core>`입니다.
 `@bunaway/backend`도 같은 createCore를 재수출합니다.
-이름, 중복, 예약 명령, 플러그인 의존성과 권한을 검사하고 setup을 마친 뒤 반환합니다.
+이름의 유효성과 중복 여부, 예약 명령, 플러그인 의존성 및 권한을 검사합니다. setup이 끝나면 Core를 반환합니다.
 초기화 실패 시 이미 등록한 정리 훅을 역순 실행합니다.
 
 ## CoreServices
@@ -35,8 +35,8 @@ await core.stop();
 | `send(context, message)` | 서버 메시지를 해당 전송에 FIFO로 보내기 |
 | `callHost(context, call, signal)` | 원래 컨텍스트를 보존해 HostResponse 반환 |
 
-앱 입력 문자열을 HostContext로 캐스팅하는 것은 발급 절차를 대신하지 않습니다.
-send의 복구 불가능한 실패는 어댑터가 해당 전송, 세션을 닫아야 합니다.
+HostContext는 호스트가 발급한 값을 사용합니다. 앱의 입력 문자열을 캐스팅한 값은 유효한 컨텍스트로 인정되지 않습니다.
+send가 복구할 수 없는 오류로 실패하면 어댑터에서 전송과 세션을 닫아야 합니다.
 
 ## RuntimeServices
 
@@ -52,23 +52,23 @@ DOM 전역 없이도 사용할 수 있는 AbortSignal의 부분 계약입니다.
 
 ## 세션과 종료
 
-`core.openSession(context, viewId)`는 호스트가 검증, 선택한 뷰의 CoreSession을 만듭니다.
-세션은 각자의 요청 ID, 구독, 협상 상태를 가지며 앱 state, 명령 등록은 공유합니다.
+`core.openSession(context, viewId)`는 호스트가 검증하고 선택한 뷰의 CoreSession을 만듭니다.
+요청 ID와 구독, 협상 상태는 세션마다 따로 관리합니다. 앱 state와 등록된 명령은 모든 세션이 공유합니다.
 
-`session.receive(message): Promise<void>`는 수신의 수락, dispatch까지 기다립니다.
-명령 핸들러가 끝날 때까지 기다리는 함수가 아니며 최종 결과는 services.send로 전달합니다.
+`session.receive(message): Promise<void>`는 메시지를 받아 처리 경로로 전달할 때까지 기다립니다.
+명령 핸들러는 그 이후에도 실행될 수 있으며 최종 결과는 services.send로 전달됩니다.
 `session.close(error?: WireError)`는 요청, 구독, 컨텍스트를 정리합니다.
 `core.stop()`은 세션과 플러그인 훅을 정리하며 코어 종료 예산은 2초입니다.
-취소, 종료 후 완료한 핸들러가 유효한 Host 호출, 이벤트를 계속 수행하도록 허용하지 않습니다.
+취소되거나 종료된 컨텍스트에서는 핸들러가 뒤늦게 완료되더라도 Host 호출과 이벤트 발행이 거부됩니다.
 
 ## runBunApp
 
 `@bunaway/runtime-bun`의 `runBunApp(app: AppDefinition): Promise<void>`는
-stdin/stdout 프로세스 IPC를 붙이고 부팅, 세션, Host 응답, 종료를 연결합니다.
+stdin/stdout으로 프로세스 IPC를 연결하고 부팅부터 세션과 Host 응답 처리, 종료까지 관리합니다.
 CLI의 macOS 생성 bootstrap이 사용하는 어댑터입니다.
 Windows FFI 부팅과 동일한 AppDefinition을 사용합니다.
 
-stdout은 프로토콜 전용입니다. 프로세스 진단을 같은 스트림에 출력하지 않습니다.
+stdout은 프로토콜 전용이므로 프로세스 진단은 다른 스트림에 출력해야 합니다.
 boot의 정책, backendContext, 프레임 runtime generation, 방향을 검사합니다.
 준비 이전 플러그인 setup의 Host 응답도 처리하며 예상하지 않은 EOF는 연결 실패입니다.
 
@@ -76,9 +76,9 @@ boot의 정책, backendContext, 프레임 runtime generation, 방향을 검사�
 
 `bindHostAPI(context, signal, callHost): HostAPI`는 고정된 컨텍스트, 취소 신호를 Host 호출에 연결합니다.
 callHost는 `(context, HostCall, CancellationSignal) => Promise<HostResponse>`입니다.
-입력을 검증하고 취소 전후를 확인하며, abort 시 진행 중 호출을 취소 결과와 경쟁시킵니다.
-Host 오류를 보존하고 잘못된 출력, 일반 실패를 INTERNAL로 변환합니다.
-호스트의 파일, 권한 검사를 대신하는 함수는 아닙니다.
+입력을 검증하고 호출 전후에 취소 여부를 확인합니다. abort가 발생하면 진행 중인 호출과 취소 중 먼저 완료된 결과를 사용합니다.
+Host 오류는 그대로 전달하고 잘못된 출력이나 일반 실패는 INTERNAL로 변환합니다.
+파일 접근과 권한은 이 함수 이후에도 호스트에서 검사합니다.
 
 ## readJsonLines
 

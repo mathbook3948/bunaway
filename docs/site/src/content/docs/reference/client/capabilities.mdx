@@ -1,6 +1,6 @@
 ---
 title: capabilities
-description: 기능 지원 조회와 호출 권한, OS 권한의 차이.
+description: 플랫폼이 지원하는 기능과 현재 OS 권한을 조회합니다.
 sidebar: { order: 4 }
 ---
 
@@ -24,7 +24,7 @@ const read = features.find((feature) => feature.name === "storage.readText");
 console.log(read?.support, read?.permission);
 ```
 
-이 JSON은 뷰 객체의 일부입니다. 필수 정책 필드까지 포함한 파일을 유지하세요.
+위 JSON의 commands를 기존 뷰 객체에 추가합니다. 나머지 필수 정책 필드는 유지합니다.
 
 ## 결과
 
@@ -35,9 +35,9 @@ console.log(read?.support, read?.permission);
 
 ## 의미와 실패
 
-기능이 `supported`여도 뷰의 Host API 정책이 해당 작업을 허용한다는 뜻은 아닙니다.
-`permission: "not-required"`도 파일 범위를 마음대로 접근할 수 있다는 뜻은 아닙니다.
+`support`는 플랫폼의 구현 상태이고 `permission`은 OS 권한 상태입니다.
+실제 Host API 호출은 뷰 정책도 검사합니다. `permission: "not-required"`인 파일 작업도 허용된 저장 범위 안에서 실행합니다.
 정책 미허용은 `PERMISSION_DENIED`, 잘못된 기능 응답은 `INTERNAL`로 실패합니다.
-조회가 OS 권한 대화상자를 띄우거나 작업 권한을 부여하지 않습니다.
+조회는 현재 상태만 반환하며 OS 권한 요청이나 정책 변경은 실행하지 않습니다.
 
 백엔드에서 조회하려면 [capabilities.get](/reference/host/capabilities-get/)을 사용합니다.

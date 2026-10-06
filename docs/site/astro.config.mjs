@@ -26,8 +26,8 @@ export default defineConfig({
         {
           label: "구조 이해하기",
           items: [
-            { label: "프로젝트와 세 파일", slug: "concepts/project-layout" },
-            { label: "창, 뷰, 정책", slug: "concepts/views-and-policy" },
+            { label: "프로젝트 파일", slug: "concepts/project-layout" },
+            { label: "창과 뷰의 정책", slug: "concepts/views-and-policy" },
           ],
         },
         {

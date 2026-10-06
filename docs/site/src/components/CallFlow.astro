@@ -5,13 +5,13 @@ const steps = [
     label: "UI",
     title: "1. UI에서 요청",
     detail:
-      '웹 UI가 client.invoke("message.save", text)를 호출합니다. 프런트엔드는 앱 백엔드 구현을 직접 실행하지 않습니다.',
+      '웹 UI가 client.invoke("message.save", text)로 저장을 요청합니다. 이 요청은 네이티브 브리지를 거쳐 앱 백엔드로 전달됩니다.',
   },
   {
     label: "뷰 정책",
-    title: "2. 호출할 수 있는 명령인가?",
+    title: "2. 뷰의 명령 권한 확인",
     detail:
-      "호스트가 실제 문서 출처와 활성 세션을 확인하고, 해당 뷰의 commands에 message.save가 있는지 검사합니다. 코어에서도 허용 목록을 확인합니다.",
+      "호스트가 실제 문서 출처와 활성 세션을 확인합니다. 뷰의 commands에 message.save가 있어야 하며 코어에서도 이 허용 목록을 검사합니다.",
   },
   {
     label: "앱 명령",
@@ -26,10 +26,10 @@ const steps = [
       'context.host.call("storage.writeText", ...)이 원래 뷰의 권한으로 실행됩니다. host.storage가 appData의 messages/ 쓰기를 허용해야 파일을 저장할 수 있습니다.',
   },
   {
-    label: "이벤트, 응답",
+    label: "이벤트와 응답",
     title: "5. UI에 결과 전달",
     detail:
-      "핸들러가 message.saved 이벤트를 보내고 null을 반환합니다. 이벤트는 구독 중이며 해당 이벤트를 허용한 뷰에 전달되고, invoke 응답은 요청한 세션으로 돌아갑니다.",
+      "핸들러가 message.saved 이벤트를 발행하고 null을 반환합니다. 이벤트는 수신 권한이 있는 뷰의 활성 구독에 전달됩니다. invoke 응답은 저장을 요청한 세션으로 돌아갑니다.",
   },
 ];
 ---

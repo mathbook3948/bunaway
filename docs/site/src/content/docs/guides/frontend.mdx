@@ -1,16 +1,16 @@
 ---
 title: 프런트엔드 연결
-description: vanilla, Vite와 다른 UI 도구, 정적 출력, 브리지, CSP, 생산 빌드 요구.
+description: 웹 도구의 빌드 출력과 개발 서버를 bunaway 앱에 연결합니다.
 ---
 
 bunaway UI는 WebView에서 실행할 HTML, CSS, JavaScript 자산입니다.
-코어는 특정 UI 프레임워크를 import하지 않지만 현재 생성 템플릿은 vanilla와 Vite vanilla TypeScript뿐입니다.
+현재 CLI는 vanilla와 Vite vanilla TypeScript 템플릿을 제공합니다. 코어는 특정 UI 프레임워크에 의존하지 않습니다.
 
 ## 권장 시작점
 
-처음에는 [vanilla 첫 앱](/start/quickstart/)으로 명령, 정책을 이해하고,
+처음에는 [vanilla 첫 앱](/start/quickstart/)으로 명령과 정책을 살펴보고
 CSS HMR이 필요하면 [Vite 템플릿](/guides/development/)을 사용합니다.
-앱 백엔드는 프런트엔드 도구와 별개로 공통 app.ts에 둡니다.
+어떤 UI 도구를 사용하든 백엔드는 공통 app.ts에 작성합니다.
 
 ## 기존 웹 도구 연결
 
@@ -18,22 +18,21 @@ UI 도구를 바꿀 때 아래 항목을 연결합니다.
 
 | 설정 | 확인할 것 |
 | --- | --- |
-| UI 생산 빌드 | 로컬 앱에 포함할 정적 자산 출력 |
+| UI 프로덕션 빌드 | 로컬 앱에 포함할 정적 자산 출력 |
 | build.frontend | 실제 웹 출력 디렉터리 |
 | app.home | 출력 안의 시작 HTML에 대응하는 로컬 자산 URL |
 | dev.command | 개발 서버의 실행 파일, 인자 배열 |
 | dev.url | 정확한 loopback URL, 고정 포트, HTTP 준비 |
 | SDK | @bunaway/client와 호스트 브리지 연결 |
 
-production build 전에 웹 빌드를 명시적으로 실행합니다.
-개발 서버 연결이 Next.js SSR, 원격 서버를 최종 앱에 자동으로 넣는 기능은 아닙니다.
-동작 확인 없이 React, Vue, Svelte 공식 템플릿이 있다고 가정하지 않습니다.
+네이티브 프로덕션 빌드 전에 웹 자산을 빌드합니다. 최종 앱은 정적 출력물을 사용하며 Next.js의 SSR 서버는 포함하지 않습니다.
+React나 Vue, Svelte를 사용하려면 웹 프로젝트를 직접 구성하고 위 설정에 연결합니다. 해당 프레임워크의 생성 템플릿은 아직 없습니다.
 
 ## 브라우저와 WebView
 
 일반 브라우저에는 네이티브 브리지가 없습니다.
 UI가 SDK를 사용하면 실제 네이티브 창에서 확인해야 합니다.
-개발 중 browser preview를 추가하려면 앱에서 명시적 테스트 어댑터를 사용하고 실제 권한 검증과 구분합니다.
+브라우저 미리보기를 만들 때는 네이티브 브리지를 대신할 테스트 어댑터를 연결합니다. 권한 검사는 실제 WebView에서 확인합니다.
 백엔드 코드, 비밀 설정은 프런트엔드 번들에 넣지 않습니다.
 
 ## 자산과 CSP
@@ -41,4 +40,4 @@ UI가 SDK를 사용하면 실제 네이티브 창에서 확인해야 합니다.
 템플릿 HTML의 CSP를 유지하고 UI 의존성에 필요한 출처를 검토합니다.
 Vite 템플릿은 개발 페이지에서만 CSS 갱신과 해당 loopback HMR WebSocket을 허용합니다.
 production 정책에 HTTP 개발 origin을 추가하지 않습니다.
-기본 앱 통신은 공개 localhost 서버를 배포하는 방식이 아니라 호스트 브리지입니다.
+배포한 앱의 UI와 백엔드는 호스트 브리지로 통신합니다.

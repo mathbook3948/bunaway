@@ -27,6 +27,12 @@ do not replace reviewing the accuracy of the explanations and examples.
 Do not use em dashes (U+2014) or middle dots (U+00B7) in documentation or
 user-facing text. Use sentences, commas, colons or conjunctions instead.
 
+Write Korean documentation in natural, direct sentences. Describe supported
+behavior, inputs, results and failure conditions explicitly. Avoid translationese,
+long chains of nouns and repetitive cautions such as asking readers not to assume
+support. State current limits once where they affect the task, and preserve API
+names, examples, values and technical meaning when editing prose.
+
 ### Development priority
 
 Read `docs/decisions/0010-windows-first-platform-model.md` before runtime, CLI,
