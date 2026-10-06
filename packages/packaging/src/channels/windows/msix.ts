@@ -88,7 +88,8 @@ export function renderAppxManifest(options: MsixOptions): string {
   <Resources><Resource Language="en-US"/></Resources>
   <Applications>
     <Application Id="App" Executable="${escapeXml(options.executable)}" EntryPoint="Windows.FullTrustApplication">
-      <uap:VisualElements DisplayName="${escapeXml(options.name)}" Square150x150Logo="${options.logo.square150}" Square44x44Logo="${options.logo.square44}"${options.logo.wide ? ` Wide310x150Logo="${options.logo.wide}"` : ""} Description="${escapeXml(options.name)}" BackgroundColor="transparent"/>
+      <uap:VisualElements DisplayName="${escapeXml(options.name)}" Square150x150Logo="${options.logo.square150}" Square44x44Logo="${options.logo.square44}" Description="${escapeXml(options.name)}" BackgroundColor="transparent">${options.logo.wide ? `\n        <uap:DefaultTile Wide310x150Logo="${escapeXml(options.logo.wide)}"/>` : ""}
+      </uap:VisualElements>
     </Application>
   </Applications>
   <Capabilities>

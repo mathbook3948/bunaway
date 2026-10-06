@@ -1,5 +1,5 @@
-import { lstat } from "node:fs/promises";
-import { isAbsolute, resolve } from "node:path";
+import { lstat, realpath } from "node:fs/promises";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import {
   type ChannelId,
   CODES,
@@ -39,16 +39,21 @@ export function deriveMsixPackageName(identifier: string): string {
 }
 
 async function icon(root: string, directory: string, name: string): Promise<string> {
-  const relative = `${directory ? `${directory}/` : ""}${name}`;
-  if (isAbsolute(relative) || relative.split(/[\\/]/).includes("..")) {
-    fail(CODES.CONFIG_INVALID, `packaging.json: icon path escapes the project: ${relative}`);
+  const nameInProject = `${directory ? `${directory}/` : ""}${name}`;
+  if (isAbsolute(nameInProject) || nameInProject.split(/[\\/]/).includes("..")) {
+    fail(CODES.CONFIG_INVALID, `packaging.json: icon path escapes the project: ${nameInProject}`);
   }
-  const path = resolve(root, relative);
+  const path = resolve(root, nameInProject);
   const stat = await lstat(path).catch(() => undefined);
   if (!stat?.isFile()) {
-    fail(CODES.CONFIG_INVALID, `packaging.json: icon is not a file: ${relative}`);
+    fail(CODES.CONFIG_INVALID, `packaging.json: icon is not a file: ${nameInProject}`);
   }
-  return path;
+  const canonical = await realpath(path);
+  const rel = relative(await realpath(root), canonical);
+  if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+    fail(CODES.CONFIG_INVALID, `packaging.json: icon path escapes the project: ${nameInProject}`);
+  }
+  return canonical;
 }
 
 // Merge packaging.json with app.json/package.json into the single metadata

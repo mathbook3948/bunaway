@@ -3,6 +3,7 @@ import {
   artifactPaths,
   type BuildArtifact,
   type ChannelId,
+  CODES,
   isChannelId,
   loadPackaging,
   PACKAGING_CHANNELS,
@@ -57,11 +58,29 @@ export async function packageProject(
     channel,
   });
   const platform = platformOf(channel);
+  const nativeTarget = currentTarget();
+  if (!nativeTarget.startsWith(`${platform}-`)) {
+    throw new Error(
+      `Channel ${channel} requires ${platform}; the native host target is ${nativeTarget}.`,
+    );
+  }
   const declared = metadata.targets.find((target) => target.platform === platform);
-  const target = declared ? targetFor(platform, declared.arch) : currentTarget();
-  if (target !== currentTarget()) {
+  if (metadata.targets.length > 0 && !declared) {
+    throw new Error(`Channel ${channel} has no ${platform} target declared in packaging.json.`);
+  }
+  const target = declared ? targetFor(platform, declared.arch) : nativeTarget;
+  if (target !== nativeTarget) {
     throw new Error(
       `Channel ${channel} targets ${target}; the MVP packages only the native host target.`,
+    );
+  }
+  const adapter = adapterFor(channel);
+  if (!adapter) {
+    const available = registeredChannels();
+    throw new Error(
+      `No adapter registered for channel ${channel}` +
+        (available.length ? ` (available: ${available.join(", ")})` : " (no adapters installed)") +
+        ".",
     );
   }
   const notes: string[] = [];
@@ -72,15 +91,6 @@ export async function packageProject(
     notes.push("Build artifact produced in this run.");
   } else {
     artifact = artifactPaths({ root: project.root, target, appId: project.app.appId });
-  }
-  const adapter = adapterFor(channel);
-  if (!adapter) {
-    const available = registeredChannels();
-    throw new Error(
-      `No adapter registered for channel ${channel}` +
-        (available.length ? ` (available: ${available.join(", ")})` : " (no adapters installed)") +
-        ".",
-    );
   }
   const report = await runPackage({
     metadata,
@@ -93,7 +103,8 @@ export async function packageProject(
     adapter,
     notes,
   });
-  console.log(`Report: ${packagingReportPath(project.root, target, channel)}`);
+  const lockFailed = report.diagnostics.some((diagnostic) => diagnostic.code === CODES.LOCK_FAILED);
+  if (!lockFailed) console.log(`Report: ${packagingReportPath(project.root, target, channel)}`);
   for (const diagnostic of report.diagnostics) {
     if (diagnostic.severity === "info") continue;
     console.log(
@@ -106,7 +117,9 @@ export async function packageProject(
   console.log(
     report.ok
       ? `Packaged ${channel}: usable=${report.usable} submittable=${report.submittable}`
-      : `Packaging ${channel} failed; see the report for diagnostics.`,
+      : lockFailed
+        ? `Packaging ${channel} failed; no report was published. See diagnostics above.`
+        : `Packaging ${channel} failed; see the report for diagnostics.`,
   );
   return report;
 }

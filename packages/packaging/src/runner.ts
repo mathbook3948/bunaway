@@ -1,6 +1,14 @@
-import { mkdir, rename, rm, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import {
+  type FileHandle,
+  lstat,
+  mkdir,
+  open,
+  readFile,
+  realpath,
+  rename,
+  rm,
+} from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import {
   type AdapterInput,
@@ -13,12 +21,14 @@ import {
   type PackageManifest,
   type PackageReport,
   type ProducedArtifact,
+  platformOf,
   type ResolvedPackaging,
   type SigningConfig,
   type StageContext,
   type StageResult,
 } from "./contract.ts";
-import { loadManifest, verifyArtifact } from "./inputs.ts";
+import { ArtifactInputError, loadManifest, verifyArtifact } from "./inputs.ts";
+import { acquirePackageInputLock, TargetLockError } from "./locks.ts";
 
 export interface RunPackageArgs {
   metadata: ResolvedPackaging;
@@ -47,8 +57,13 @@ export function packagingReportPath(root: string, target: BuildTarget, channel: 
   return resolve(packagingOutputDir(root, target), `${channel}-report.json`);
 }
 
+function inside(root: string, path: string): boolean {
+  const rel = relative(root, path);
+  return rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+}
+
 const EMPTY_MANIFEST: PackageManifest = {
-  bun: { version: "", target: "", executableSha256: "", licenseSha256: "" },
+  bun: { version: "", sourceRevision: "", target: "", executableSha256: "", licenseSha256: "" },
   assets: {},
   app: { id: "", version: "" },
 };
@@ -61,21 +76,25 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
   const diagnostics: Diagnostic[] = [];
   const stages: StageResult[] = [];
   const produced: ProducedArtifact[] = [];
+  const verified: PackageReport["artifacts"] = [];
   const notes: string[] = [...(args.notes ?? [])];
   const output = resolve(packagingOutputDir(metadata.root, target), channel);
-  await mkdir(dirname(output), { recursive: true });
   const staging = `${output}.building-${crypto.randomUUID()}`;
+  const reportPath = packagingReportPath(metadata.root, target, channel);
+  const stagedReport = `${reportPath}.building-${crypto.randomUUID()}`;
+  let reportPublished = false;
 
-  let manifest = EMPTY_MANIFEST;
-  try {
-    manifest = await loadManifest(artifact);
-  } catch (error) {
+  const platform = platformOf(channel);
+  if (
+    adapter.channel !== channel ||
+    adapter.platform !== platform ||
+    !target.startsWith(`${platform}-`)
+  ) {
     diagnostics.push({
       stage: "resolve",
-      code: CODES.INPUT_MISSING,
+      code: CODES.CONFIG_INVALID,
       severity: "error",
-      message: error instanceof Error ? error.message : String(error),
-      path: resolve(artifact.packageDir, "manifest.json"),
+      message: `Channel ${channel} (${platform}), adapter ${adapter.channel} (${adapter.platform}) and target ${target} must use the same channel and platform.`,
     });
   }
 
@@ -85,7 +104,7 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
     metadata,
     target,
     artifact,
-    manifest,
+    manifest: EMPTY_MANIFEST,
     ...(signing ? { signing } : {}),
   };
   const report: PackageReport = {
@@ -113,10 +132,73 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
   };
 
   let failed = diagnostics.length > 0;
+  function reportFailure(error: unknown) {
+    report.ok = false;
+    report.usable = false;
+    report.submittable = false;
+    report.signing.performed = false;
+    report.artifacts = [];
+    diagnostics.push({
+      stage: "report",
+      code: CODES.STAGE_FAILED,
+      severity: "error",
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+  async function writeReport() {
+    await Bun.write(stagedReport, `${JSON.stringify(report, null, 2)}\n`);
+    await rename(stagedReport, reportPath);
+  }
+  const lockPath = `${output}.lock`;
+  let lock: FileHandle;
+  let releaseTarget: (() => Promise<void>) | undefined;
   try {
+    releaseTarget = await acquirePackageInputLock(metadata.root, target);
+    await mkdir(dirname(output), { recursive: true });
+    lock = await open(lockPath, "wx");
+  } catch (error) {
+    await releaseTarget?.();
+    diagnostics.push({
+      stage: "resolve",
+      code: CODES.LOCK_FAILED,
+      severity: "error",
+      message:
+        error instanceof TargetLockError
+          ? error.message
+          : (error as NodeJS.ErrnoException).code === "EEXIST"
+            ? `Packaging channel ${channel} is locked; another run may be active.`
+            : `Cannot acquire package lock: ${error instanceof Error ? error.message : String(error)}`,
+      path: error instanceof TargetLockError ? error.path : lockPath,
+    });
+    return report;
+  }
+  try {
+    if (!failed) {
+      try {
+        input.manifest = await loadManifest(artifact);
+      } catch (error) {
+        diagnostics.push({
+          stage: "resolve",
+          code: error instanceof ArtifactInputError ? error.code : CODES.INPUT_MISSING,
+          severity: "error",
+          message: error instanceof Error ? error.message : String(error),
+          path: resolve(artifact.packageDir, "manifest.json"),
+        });
+        failed = true;
+      }
+    }
     if (!failed) {
       const started = Date.now();
       const integrity = await verifyArtifact({ artifact, manifest: input.manifest, channel });
+      if (input.manifest.app.id !== appId) {
+        integrity.push({
+          stage: "verify",
+          code: CODES.INPUT_UNEXPECTED,
+          severity: "error",
+          message: `Build artifact belongs to app ${input.manifest.app.id}, not ${appId}; run bunaway build again.`,
+          path: resolve(artifact.packageDir, "manifest.json"),
+        });
+      }
       diagnostics.push(...integrity);
       failed = integrity.some((d) => d.severity === "error");
       stages.push({
@@ -153,7 +235,12 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
           diagnostics.push({ stage: stage.id, ...diagnostic });
         },
         addArtifact(path, kind, options) {
-          produced.push({ path, kind, signed: options?.signed ?? false });
+          produced.push({
+            path,
+            kind,
+            signed: options?.signed ?? false,
+            signingRequired: options?.signingRequired ?? true,
+          });
         },
       };
       try {
@@ -162,7 +249,9 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
         stages.push({
           id: stage.id,
           title: stage.title,
-          status: "ok",
+          status: diagnostics.some((d) => d.severity === "error" && d.stage === stage.id)
+            ? "failed"
+            : "ok",
           durationMs: Date.now() - started,
         });
       } catch (error) {
@@ -182,11 +271,77 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
       if (diagnostics.some((d) => d.severity === "error" && d.stage === stage.id)) failed = true;
     }
 
-    report.signing.performed = produced.some((p) => p.signed);
-    if (signing && !report.signing.performed) {
-      notes.push("Signing was configured but no artifact was signed; check the sign stage output.");
+    const started = Date.now();
+    if (!failed) {
+      if (produced.length === 0) {
+        diagnostics.push({
+          stage: "verify-artifact",
+          code: CODES.VERIFY_FAILED,
+          severity: "error",
+          message: "The adapter produced no artifacts.",
+        });
+        failed = true;
+      }
+      for (const entry of produced) {
+        let path = entry.path;
+        try {
+          if (entry.path.split(process.platform === "win32" ? /[\\/]/ : /\//).includes("..")) {
+            throw new Error("Artifact path contains ambiguous parent components.");
+          }
+          path = isAbsolute(entry.path) ? entry.path : resolve(staging, entry.path);
+          if (!(await lstat(staging)).isDirectory()) {
+            throw new Error("Staging root is not a regular directory.");
+          }
+          if (!inside(staging, path)) throw new Error("Artifact path escapes staging.");
+          if (!(await lstat(path)).isFile()) throw new Error("Artifact is not a regular file.");
+          const canonicalStaging = await realpath(staging);
+          const canonicalPath = await realpath(path);
+          if (!inside(canonicalStaging, canonicalPath)) {
+            throw new Error("Artifact real path escapes staging.");
+          }
+          const file = await lstat(canonicalPath);
+          if (!file.isFile()) throw new Error("Artifact is not a regular file.");
+          verified.push({
+            path: resolve(staging, relative(canonicalStaging, canonicalPath)),
+            kind: entry.kind,
+            signed: entry.signed,
+            signingRequired: entry.signingRequired,
+            sha256: await sha256(canonicalPath),
+            size: file.size,
+          });
+        } catch (error) {
+          diagnostics.push({
+            stage: "verify-artifact",
+            code: CODES.VERIFY_FAILED,
+            severity: "error",
+            message: `Cannot verify declared artifact ${entry.path}: ${error instanceof Error ? error.message : String(error)}`,
+            path,
+          });
+          failed = true;
+        }
+      }
+      stages.push({
+        id: "verify-artifact",
+        title: "Verify produced artifacts",
+        status: failed ? "failed" : "ok",
+        durationMs: Date.now() - started,
+      });
+    } else {
+      stages.push({
+        id: "verify-artifact",
+        title: "Verify produced artifacts",
+        status: "skipped",
+        durationMs: 0,
+      });
     }
-    if (!signing) {
+
+    report.signing.performed = !failed && verified.some((p) => p.signed);
+    const distributables = verified.filter((p) => p.signingRequired);
+    const allSigned = !failed && distributables.length > 0 && distributables.every((p) => p.signed);
+    if (signing && !allSigned) {
+      notes.push("Signing was configured but not all distribution artifacts were signed.");
+    }
+    if (!failed && !allSigned) {
       const requirement = adapter.signingRequirement;
       diagnostics.push({
         stage: "report",
@@ -194,18 +349,22 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
         severity: requirement === "optional" ? "info" : "warning",
         message:
           requirement === "optional"
-            ? "No signing configured; artifacts run locally but expect user-trust warnings."
-            : `Signing is ${requirement} for channel ${channel}; unsigned output is not distributable or submittable.`,
+            ? "Unsigned distribution artifacts run locally but are not store-submittable."
+            : `Signing is ${requirement} for channel ${channel}; all distribution artifacts must be signed to be ${requirement === "required-to-run" ? "usable and submittable" : "submittable"}.`,
       });
     }
 
     failed = failed || diagnostics.some((d) => d.severity === "error");
     report.ok = !failed;
-    report.usable =
-      report.ok && !(adapter.signingRequirement === "required-to-run" && !report.signing.performed);
-    report.submittable = report.ok && report.signing.performed;
+    report.usable = report.ok && !(adapter.signingRequirement === "required-to-run" && !allSigned);
+    report.submittable = report.ok && allSigned;
 
     if (report.ok) {
+      report.artifacts = verified.map((entry) => ({
+        ...entry,
+        path: resolve(output, relative(staging, entry.path)),
+      }));
+      await Bun.write(stagedReport, `${JSON.stringify(report, null, 2)}\n`);
       const backup = `${output}.previous-${crypto.randomUUID()}`;
       let moved = false;
       try {
@@ -214,51 +373,54 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
+      let outputPublished = false;
       try {
         await rename(staging, output);
+        outputPublished = true;
+        await rename(stagedReport, reportPath);
+        reportPublished = true;
       } catch (error) {
+        if (outputPublished) await rm(output, { recursive: true, force: true });
         if (moved) await rename(backup, output);
         throw error;
       }
-      if (moved) await rm(backup, { recursive: true, force: true });
-    }
-  } finally {
-    await rm(staging, { recursive: true, force: true });
-    for (const producedArtifact of produced) {
-      // Artifacts registered inside staging move with the atomic rename;
-      // anything else keeps its absolute path in the report.
-      const declared = isAbsolute(producedArtifact.path)
-        ? producedArtifact.path
-        : resolve(staging, producedArtifact.path);
-      const insideStaging = (() => {
-        const rel = relative(staging, declared);
-        return (
-          rel !== ".." && !rel.startsWith(`..${sep}`) && !rel.startsWith("../") && !isAbsolute(rel)
-        );
-      })();
-      const path =
-        report.ok && insideStaging ? resolve(output, relative(staging, declared)) : declared;
-      try {
-        report.artifacts.push({
-          path,
-          kind: producedArtifact.kind,
-          signed: producedArtifact.signed,
-          sha256: await sha256(path),
-          size: (await stat(path)).size,
-        });
-      } catch {
-        diagnostics.push({
-          stage: "report",
-          code: CODES.INPUT_UNEXPECTED,
-          severity: "warning",
-          message: `Declared artifact is missing: ${producedArtifact.path}`,
-          path,
+      if (moved) {
+        await rm(backup, { recursive: true, force: true }).catch(async (error: unknown) => {
+          diagnostics.push({
+            stage: "report",
+            code: CODES.STAGE_FAILED,
+            severity: "warning",
+            message: `Cannot remove previous output backup: ${error instanceof Error ? error.message : String(error)}`,
+            path: backup,
+          });
+          await writeReport().catch(() => undefined);
         });
       }
     }
-    const reportPath = packagingReportPath(metadata.root, target, channel);
-    await mkdir(dirname(reportPath), { recursive: true });
-    await Bun.write(reportPath, `${JSON.stringify(report, null, 2)}\n`);
+  } catch (error) {
+    reportFailure(error);
+  } finally {
+    try {
+      await rm(staging, { recursive: true, force: true });
+      if (!reportPublished) {
+        try {
+          await writeReport();
+        } catch (error) {
+          reportFailure(error);
+        }
+      }
+      await rm(stagedReport, { force: true });
+    } finally {
+      try {
+        try {
+          await lock.close();
+        } finally {
+          await rm(lockPath, { force: true });
+        }
+      } finally {
+        await releaseTarget?.();
+      }
+    }
   }
   return report;
 }

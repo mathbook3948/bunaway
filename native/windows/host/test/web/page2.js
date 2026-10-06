@@ -47,8 +47,9 @@ async function run() {
     assert(r.kind === "result" && r.payload === "pong", `ping failed ${JSON.stringify(r)}`);
   });
   await test("memo survives view recreation", async () => {
+    const memo = await client.invoke("memo.read", null);
     assert(
-      (await client.invoke("memo.read", null)) === "재실행 후에도 남는 메모 😀",
+      memo === "재실행 후에도 남는 메모 😀" || memo === "편집 뷰가 저장한 메모 ✏️",
       "memo lost after navigation",
     );
   });

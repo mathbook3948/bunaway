@@ -4,7 +4,7 @@
   "windows": [
     {
       "view": "main",
-      "home": "https://app.bunaway.local/index.html",
+      "home": "https://app.bunaway.local/index.html?test=multi-view",
       "title": "bunaway host test — main",
       "window": { "width": 1024, "height": 768 }
     },

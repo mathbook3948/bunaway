@@ -2,7 +2,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { type AdapterInput, type AdapterStage, CODES } from "../../contract.ts";
 import { copyPayload } from "./common.ts";
-import { compileInno, type InnoOptions, renderInnoScript } from "./inno.ts";
+import { compileInno, type InnoOptions, installerDirectoryName, renderInnoScript } from "./inno.ts";
 import { recordPackagedHashes } from "./manifest.ts";
 import { signFiles, verifySignatures } from "./sign.ts";
 
@@ -127,6 +127,7 @@ export function installerStages(input: AdapterInput, options: InstallerOptions):
           webView2,
           appDataDir: `{localappdata}\\bunaway\\${input.manifest.app.id}`,
           preserveUserData,
+          signed: ctx.input.signing !== undefined,
           ...(metadata.icons["windows.installer"]
             ? { iconFile: metadata.icons["windows.installer"] }
             : {}),
@@ -183,7 +184,7 @@ export function installerStages(input: AdapterInput, options: InstallerOptions):
           code: CODES.VERIFY_FAILED,
           severity: "info",
           message: [
-            `Install dir: ${scope === "perUser" ? "%LOCALAPPDATA%\\Programs" : "Program Files"}\\${metadata.name}.`,
+            `Install dir: ${scope === "perUser" ? "%LOCALAPPDATA%\\Programs" : "Program Files"}\\${installerDirectoryName(metadata.name)}.`,
             `Data dir %LOCALAPPDATA%\\bunaway\\${input.manifest.app.id} is ${preserveUserData ? "preserved" : "removed"} on uninstall.`,
             "Updates are over-installs (same AppId): files are replaced, data is preserved.",
             "Silent install: <setup>.exe /VERYSILENT.",

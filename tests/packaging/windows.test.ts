@@ -1,17 +1,23 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { copyPayload, findIscc } from "../../packages/packaging/src/channels/windows/common.ts";
 import {
-  adapterFor,
+  compileInno,
+  prepareInnoSigning,
+  renderInnoScript,
+} from "../../packages/packaging/src/channels/windows/inno.ts";
+import { renderAppxManifest } from "../../packages/packaging/src/channels/windows/msix.ts";
+import {
   type AdapterInput,
   type AdapterStage,
+  adapterFor,
   type ResolvedPackaging,
   registeredChannels,
   type SigningConfig,
+  type StageContext,
 } from "../../packages/packaging/src/index.ts";
-import { renderInnoScript } from "../../packages/packaging/src/channels/windows/inno.ts";
-import { renderAppxManifest } from "../../packages/packaging/src/channels/windows/msix.ts";
 
 const metadata: ResolvedPackaging = {
   root: "C:\\proj",
@@ -36,6 +42,7 @@ const input = (channelConfig: Record<string, unknown>, signing?: SigningConfig):
   manifest: {
     bun: {
       version: "1.4.2",
+      sourceRevision: "744846f844374847c902b5e7fd59b4342a51ef99",
       target: "windows-x64-baseline",
       executableSha256: "aa",
       licenseSha256: "bb",
@@ -53,6 +60,46 @@ const adapterOrThrow = (channel: string) => {
   if (!adapter) throw new Error(`${channel} adapter missing`);
   return adapter;
 };
+
+const iscc = process.platform === "win32" ? await findIscc() : undefined;
+
+test.skipIf(!iscc)(
+  "Inno compiles literal display names and the WebView2 version check",
+  async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "bunaway-inno-compile-")));
+    try {
+      await Bun.write(join(root, "app", "bunaway-host.exe"), "host fixture");
+      await mkdir(join(root, "installer"));
+      const ctx: StageContext = {
+        input: input({}),
+        staging: root,
+        report() {},
+        addArtifact() {},
+      };
+      const script = renderInnoScript({
+        name: 'My "App" {Beta}',
+        identifier: metadata.identifier,
+        version: metadata.version.semver,
+        publisher: 'Example {Company} "Ltd"',
+        scope: "perUser",
+        payloadDir: join(root, "app"),
+        outputDir: join(root, "installer"),
+        outputBaseName: "setup",
+        desktopShortcut: true,
+        startMenuShortcut: true,
+        webView2: "check",
+        appDataDir: "{localappdata}\\bunaway\\test.app",
+        preserveUserData: true,
+      });
+      const installer = await compileInno(ctx, script, root, "setup");
+      expect(await Bun.file(installer).exists()).toBe(true);
+      expect(Bun.file(installer).size).toBeGreaterThan(0);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+  30000,
+);
 
 test("Windows adapters register all three channels", () => {
   expect(registeredChannels()).toEqual(["win-direct", "win-store-msix", "win-store-unpackaged"]);
@@ -122,6 +169,9 @@ test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data pol
   expect(perUser).toContain("{group}\\Test App");
   expect(perUser).toContain("HasWebView2Runtime");
   expect(perUser).toContain("F3017226-FE2A-4295-8BDF-00C3A9A7E4C5");
+  expect(perUser).toContain("StrToVersion(Version, PackedVersion)");
+  expect(perUser).toContain("ComparePackedVersion(PackedVersion, 0) > 0");
+  expect(perUser.match(/and HasRuntimeVersion\(Version\)/g)).toHaveLength(3);
   expect(perUser).not.toContain("MicrosoftEdgeWebview2Setup.exe");
   expect(perUser).not.toContain("[UninstallDelete]");
 
@@ -131,6 +181,7 @@ test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data pol
     preserveUserData: false,
     bootstrapperPath: "C:\\stage\\webview2\\MicrosoftEdgeWebview2Setup.exe",
     webView2: "bootstrap",
+    signed: true,
   });
   expect(perMachine).toContain("DefaultDirName={autopf}\\Test App");
   expect(perMachine).toContain("PrivilegesRequired=admin");
@@ -139,6 +190,16 @@ test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data pol
   );
   expect(perMachine).toContain("MicrosoftEdgeWebview2Setup.exe");
   expect(perMachine).toContain('Parameters: "/silent /install"');
+  expect(perMachine).toContain("SignTool=bunaway\nSignedUninstaller=yes");
+  expect(perUser).not.toContain("SignTool=bunaway");
+
+  const escaped = renderInnoScript({ ...base, scope: "perUser", name: 'My "App" {Beta}' });
+  expect(escaped).toContain('AppName=My "App" {{Beta}');
+  expect(escaped).toContain('Description: "Launch My ""App"" {{Beta}"');
+  expect(escaped).toContain("DefaultDirName={localappdata}\\Programs\\My _App_ {{Beta}");
+  expect(() => renderInnoScript({ ...base, scope: "perUser", name: "App\n[Run]" })).toThrow(
+    /line breaks/,
+  );
 });
 
 test("AppxManifest declares full trust, virtualization opt-out and icon resources", () => {
@@ -157,6 +218,7 @@ test("AppxManifest declares full trust, virtualization opt-out and icon resource
       square44: "Square44x44Logo.png",
       square150: "Square150x150Logo.png",
       storeLogo: "StoreLogo.png",
+      wide: "Wide310x150Logo.png",
     },
   });
   expect(xml).toContain('Name="Example.TestApp"');
@@ -168,6 +230,10 @@ test("AppxManifest declares full trust, virtualization opt-out and icon resource
   expect(xml).toContain('Name="unvirtualizedResources"');
   expect(xml).toContain("$(KnownFolder:LocalAppData)\\bunaway\\com.example.app");
   expect(xml).toContain("Square44x44Logo.png");
+  expect(xml.match(/<uap:VisualElements[^>]*>/)?.[0]).not.toContain("Wide310x150Logo");
+  expect(xml).toMatch(
+    /<uap:VisualElements[^>]*>\s*<uap:DefaultTile Wide310x150Logo="Wide310x150Logo.png"\/>\s*<\/uap:VisualElements>/,
+  );
 
   const virtualized = renderAppxManifest({
     packageName: "Example.TestApp",
@@ -191,6 +257,102 @@ test("AppxManifest declares full trust, virtualization opt-out and icon resource
   expect(virtualized).toContain("privateNetworkClientServer");
 });
 
+test("payload staging refuses internal junctions before signing can mutate the build", async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "bunaway-copy-")));
+  try {
+    const source = join(root, "source");
+    await mkdir(join(source, "real-runtime"), { recursive: true });
+    await writeFile(join(source, "real-runtime", "bun.exe"), "original runtime");
+    await symlink(join(source, "real-runtime"), join(source, "runtime"), "junction");
+    await expect(copyPayload(source, join(root, "stage"))).rejects.toThrow(/symlinks or junctions/);
+    expect(await readFile(join(source, "real-runtime", "bun.exe"), "utf8")).toBe(
+      "original runtime",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("plain staged payloads are independent and exclude previous package outputs", async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "bunaway-copy-")));
+  try {
+    const source = join(root, "source");
+    const stage = join(source, "packaged", "staging");
+    await Bun.write(join(source, "runtime", "bun.exe"), "original runtime");
+    await Bun.write(join(source, "packaged", "previous", "setup.exe"), "previous installer");
+    await copyPayload(source, stage);
+    await writeFile(join(stage, "runtime", "bun.exe"), "signed runtime");
+    expect(await readFile(join(source, "runtime", "bun.exe"), "utf8")).toBe("original runtime");
+    expect(await Bun.file(join(stage, "packaged", "previous", "setup.exe")).exists()).toBe(false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test.each(["success", "sign", "verify"])("Inno signing callback: %s", async (failure) => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "bunaway-inno-")));
+  try {
+    const ctx: StageContext = {
+      input: input(
+        {},
+        { certificateFile: "developer.pfx", passwordEnv: "BUNAWAY_TEST_PFX_PASSWORD" },
+      ),
+      staging: root,
+      report() {},
+      addArtifact() {},
+    };
+    const password = "test-password-never-written";
+    const previous = process.env.BUNAWAY_TEST_PFX_PASSWORD;
+    process.env.BUNAWAY_TEST_PFX_PASSWORD = password;
+    let signing: Awaited<ReturnType<typeof prepareInnoSigning>>;
+    try {
+      signing = await prepareInnoSigning(ctx, root, "signtool.exe");
+    } finally {
+      if (previous === undefined) delete process.env.BUNAWAY_TEST_PFX_PASSWORD;
+      else process.env.BUNAWAY_TEST_PFX_PASSWORD = previous;
+    }
+    const callback = join(root, "inno-signing", "sign.js");
+    expect(await readFile(callback, "utf8")).not.toContain(password);
+    expect(signing.args.join(" ")).not.toContain(password);
+    expect(JSON.parse(signing.env.BUNAWAY_INNO_SIGN_COMMANDS)[0]).toContain(password);
+    const trace = join(root, "trace.txt");
+    const tool = join(root, "fake-signtool.js");
+    await writeFile(
+      tool,
+      `import { appendFileSync } from "node:fs";
+appendFileSync(process.env.TRACE, process.argv[2] + "\\n");
+if (process.argv[2] === process.env.FAIL_STAGE) {
+  console.error(process.env.BUNAWAY_TEST_PFX_PASSWORD);
+  process.exit(1);
+}
+`,
+    );
+    const child = Bun.spawn([process.execPath, callback, join(root, "uninstaller.exe")], {
+      env: {
+        ...signing.env,
+        TRACE: trace,
+        FAIL_STAGE: failure,
+        BUNAWAY_INNO_SIGN_COMMANDS: JSON.stringify([
+          [process.execPath, tool, "sign"],
+          [process.execPath, tool, "verify"],
+        ]),
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [code, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(code).toBe(failure === "success" ? 0 : 1);
+    expect(await readFile(trace, "utf8")).toBe(failure === "sign" ? "sign\n" : "sign\nverify\n");
+    expect(stdout + stderr).not.toContain(password);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("packagedSha256 mirrors the shipped bytes in the staged manifest", async () => {
   const root = await realpath(await mkdtemp(join(tmpdir(), "bunaway-msix-")));
   try {
@@ -202,6 +364,7 @@ test("packagedSha256 mirrors the shipped bytes in the staged manifest", async ()
       JSON.stringify({
         bun: {
           version: "1",
+          sourceRevision: "test-revision",
           target: "windows-x64-baseline",
           executableSha256: "upstream",
           licenseSha256: "l",

@@ -1086,8 +1086,14 @@ public:
     }
 
     // ---------- Bun child process lifecycle (runtime thread) ----------
+    void verifyBun(const fs::path& bun) const {
+        const auto& runtime = manifest.at("bun");
+        const auto& expected = runtime.contains("packagedSha256")
+            ? runtime.at("packagedSha256") : runtime.at("executableSha256");
+        require(sha256(bun) == expected.get<std::string>(), "Bun executable hash mismatch.");
+    }
     void spawnBun(const fs::path& bun) {
-        require(sha256(bun) == manifest["bun"]["executableSha256"].get<std::string>(), "Bun executable hash mismatch.");
+        verifyBun(bun);
         int inPipe[2], outPipe[2], errPipe[2], deathPipe[2];
         makePipe(inPipe); makePipe(outPipe); makePipe(errPipe); makePipe(deathPipe);
         input.reset(inPipe[1]); output.reset(outPipe[0]); stderrPipe.reset(errPipe[0]); deathWrite.reset(deathPipe[1]);
@@ -1569,7 +1575,7 @@ static int run(const fs::path& package) {
     require(!homeOrigin.empty() && app.policy.views.at(app.viewId).origins.count(homeOrigin), "Home origin is not an allowed origin.");
 
     const fs::path bun = package / "runtime/bun";
-    require(sha256(bun) == app.manifest["bun"]["executableSha256"].get<std::string>(), "Bun executable hash mismatch.");
+    app.verifyBun(bun);
     for (auto it = app.manifest["assets"].begin(); it != app.manifest["assets"].end(); ++it) {
         require(sha256(app.package / fs::path(it.key())) == it.value().get<std::string>(), "Package asset hash mismatch.");
     }

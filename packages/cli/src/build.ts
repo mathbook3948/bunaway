@@ -1,7 +1,17 @@
-import { chmod, cp, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
-import { validateProject, type Project } from "./config.ts";
-import { files, frameworkRoot, hash, inside, json, run, verifyHash, writeJson } from "./files.ts";
+import { acquireBuildOutputLock, PACKAGING_CHANNELS } from "@bunaway/packaging";
+import { type Project, validateProject } from "./config.ts";
+import {
+  files,
+  frameworkRoot,
+  hash,
+  json,
+  run,
+  runWorker,
+  verifyHash,
+  writeJson,
+} from "./files.ts";
 
 export type Target = "windows-x64" | "macos-arm64";
 export interface NativeInputs {
@@ -64,6 +74,8 @@ export async function prepareNative(target: Target = currentTarget()): Promise<N
   const pin = await readPin(target);
   const vendor = resolve(frameworkRoot, "runtime/bun-bundle/vendor");
   const licenses: Record<string, string> = {
+    "FRAMEWORK-LICENSE.txt": resolve(frameworkRoot, "FRAMEWORK-LICENSE.txt"),
+    "THIRD-PARTY-NOTICES.txt": resolve(frameworkRoot, "THIRD-PARTY-NOTICES.txt"),
     "LICENSE.bun": resolve(vendor, "LICENSE.bun"),
     "LICENSE.nlohmann-json": resolve(
       frameworkRoot,
@@ -86,55 +98,8 @@ export async function prepareNative(target: Target = currentTarget()): Promise<N
   };
 }
 
-async function bundle(entrypoints: string[], root: string): Promise<Bun.BuildArtifact[]> {
-  if (entrypoints.length === 0) return [];
-  const result = await Bun.build({ entrypoints, root, target: "browser", splitting: false });
-  if (!result.success) {
-    throw new Error(`Bundle failed:\n${result.logs.map(String).join("\n")}`);
-  }
-  return result.outputs;
-}
-
-async function webAssets(project: Project, destination: string): Promise<void> {
-  const sources = await files(project.frontend);
-  const entries: string[] = [];
-  const outputs = new Map<string, { path: string; source: string | Bun.BuildArtifact }>();
-  const addOutput = (name: string, source: string | Bun.BuildArtifact) => {
-    const path = resolve(destination, name);
-    if (!inside(destination, path)) throw new Error(`Frontend output escapes destination: ${name}`);
-    const rel = relative(destination, path).replaceAll("\\", "/");
-    const key = rel.toLowerCase();
-    if (outputs.has(key)) throw new Error(`Frontend output collision: ${rel}`);
-    outputs.set(key, { path, source });
-  };
-  for (const source of sources) {
-    const rel = relative(project.frontend, source);
-    if (rel.endsWith(".d.ts")) continue;
-    const isEntry = /\.(ts|js)$/.test(rel);
-    if (isEntry) entries.push(source);
-    else addOutput(rel, source);
-  }
-  for (const output of await bundle(entries, project.frontend)) addOutput(output.path, output);
-  for (const { path, source } of outputs.values()) {
-    await mkdir(dirname(path), { recursive: true });
-    if (typeof source === "string") await cp(source, path);
-    else await writeFile(path, new Uint8Array(await source.arrayBuffer()));
-  }
-}
-
 export async function bundleAssets(project: Project, assets: string): Promise<void> {
-  await webAssets(project, resolve(assets, "web"));
-  const backend = await Bun.build({
-    entrypoints: [project.backend],
-    target: "bun",
-    packages: "bundle",
-  });
-  if (!backend.success || backend.outputs.length !== 1) {
-    throw new Error(`Backend bundle failed:\n${backend.logs.map(String).join("\n")}`);
-  }
-  const backendOutput = backend.outputs[0];
-  if (!backendOutput) throw new Error("Missing backend bundle.");
-  await writeFile(resolve(assets, "backend.js"), new Uint8Array(await backendOutput.arrayBuffer()));
+  await runWorker("assets.ts", "bundleAssets", [project, assets], project.root);
 }
 
 function xml(text: string): string {
@@ -178,6 +143,7 @@ export async function buildProject(
   const executable = windows
     ? resolve(staging, "bunaway-host.exe")
     : resolve(staging, "Contents/MacOS/bunaway-host");
+  let releaseTarget: (() => Promise<void>) | undefined;
   try {
     const assets = resolve(packageRoot, "assets");
     await mkdir(resolve(assets, "web"), { recursive: true });
@@ -238,6 +204,31 @@ export async function buildProject(
       await run(["/usr/bin/codesign", "--force", "--sign", "-", staging], project.root);
       await verifyHash(resolve(packageRoot, "runtime/bun"), pin.bun.executableSha256);
     }
+    if (!options.development) {
+      releaseTarget = await acquireBuildOutputLock(project.root, target);
+    }
+    if (windows && !options.development) {
+      // Channel packages live inside the Windows build output, but survive rebuilds.
+      const packaged = resolve(output, "packaged");
+      const previous = await stat(packaged).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+        return undefined;
+      });
+      if (previous) {
+        await mkdir(resolve(staging, "packaged"), { recursive: true });
+        for (const entry of await readdir(packaged)) {
+          if (
+            PACKAGING_CHANNELS.some(
+              (channel) => entry === channel || entry === `${channel}-report.json`,
+            )
+          ) {
+            await cp(resolve(packaged, entry), resolve(staging, "packaged", entry), {
+              recursive: true,
+            });
+          }
+        }
+      }
+    }
     const backup = `${output}.previous-${crypto.randomUUID()}`;
     let moved = false;
     try {
@@ -263,5 +254,7 @@ export async function buildProject(
   } catch (error) {
     await rm(staging, { recursive: true, force: true });
     throw error;
+  } finally {
+    await releaseTarget?.();
   }
 }

@@ -164,6 +164,30 @@ function launch(mode = "normal", stall = false) {
     pauseOutput: () => {
       paused = true;
     },
+    async waitForPartialResponse(id: string, payload: JsonValue) {
+      assert.ok(paused && fifoFd >= 0, "A paused FIFO is required");
+      const expected = serializeProcessFrame({
+        kind: "web",
+        ...base,
+        context: "probe-view",
+        payload: { kind: "result", protocol: PROTOCOL_VERSION, id, payload },
+      });
+      assert.ok(Buffer.byteLength(expected) > 65536, "Response must exceed the FIFO capacity");
+      const deadline = performance.now() + 8000;
+      const buffer = Buffer.alloc(512);
+      while (pendingLine.length < 512) {
+        assert.ok(!childExited && performance.now() < deadline, "Missing partial response");
+        try {
+          const n = readSync(fifoFd, buffer, 0, buffer.length, null);
+          if (n > 0) feed(buffer.subarray(0, n).toString());
+        } catch (cause) {
+          if ((cause as { code?: string }).code !== "EAGAIN") throw cause;
+        }
+        assert.ok(expected.startsWith(pendingLine), "Unexpected partial response");
+        if (pendingLine.length < 512) await Bun.sleep(5);
+      }
+      // Leave the large response in flight, with all remaining FIFO reads paused.
+    },
     closeFifo() {
       if (fifoFd >= 0) {
         paused = false;
@@ -512,8 +536,12 @@ try {
     if (response.kind === "result") assert.deepEqual(response.payload, payload);
     await probe.stop();
   });
-  for (const action of ["direct", "invoke", "revoke", "ignore-stop"] as const) {
-    await test(`blocked stdout remains bounded through ${action} then shutdown`, async () => {
+  for (const action of ["direct", "invoke", "revoke", "ignore-stop", "no-shutdown"] as const) {
+    const name =
+      action === "no-shutdown"
+        ? "blocked stdout remains bounded without controller shutdown"
+        : `blocked stdout remains bounded through ${action} then shutdown`;
+    await test(name, async () => {
       const probe = launch(action === "ignore-stop" ? "ignore-stop" : "normal", true);
       const pid = await probe.ready();
       const exited = await watch([pid]);
@@ -530,7 +558,7 @@ try {
           payload: "x".repeat(800000),
         },
       });
-      await Bun.sleep(100);
+      await probe.waitForPartialResponse("blocked", "x".repeat(800000));
       const started = performance.now();
       if (action === "invoke") {
         probe.send({
@@ -559,9 +587,9 @@ try {
           },
         });
       }
-      probe.send({ ...base, kind: "shutdown" });
+      if (action !== "no-shutdown") probe.send({ ...base, kind: "shutdown" });
       const exit = await Promise.race([probe.child.exited, Bun.sleep(4500).then(() => "timeout")]);
-      assert.equal(exit, 1, "stdout remained blocked after shutdown");
+      assert.equal(exit, 1, "host must fail while stdout remains blocked");
       assert.ok(performance.now() - started < 4500);
       await exited();
       // Reading resumes only AFTER both host and Bun have exited.
@@ -588,7 +616,7 @@ try {
         payload: "x".repeat(800000),
       },
     });
-    await Bun.sleep(100);
+    await probe.waitForPartialResponse("blocked", "x".repeat(800000));
     // Each request produces a result and a late-response diagnostic. Pace requests
     // so output accumulates while the pending-request queue remains small.
     for (let i = 0; i < 200; i++) {
@@ -642,7 +670,7 @@ try {
         payload: "x".repeat(800000),
       },
     });
-    await Bun.sleep(100);
+    await probe.waitForPartialResponse("echo", "x".repeat(800000));
     probe.send({ ...base, kind: "revoke", context: "probe-view" });
     probe.send({
       ...base,

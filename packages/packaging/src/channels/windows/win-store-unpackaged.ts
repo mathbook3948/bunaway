@@ -53,7 +53,10 @@ const adapter: PackageAdapter = {
         };
         const path = join(ctx.staging, "submission.json");
         await Bun.write(path, `${JSON.stringify(checklist, null, 2)}\n`);
-        ctx.addArtifact(relative(ctx.staging, path), "submission-metadata", { signed: false });
+        ctx.addArtifact(relative(ctx.staging, path), "submission-metadata", {
+          signed: false,
+          signingRequired: false,
+        });
       },
     });
     return stages;

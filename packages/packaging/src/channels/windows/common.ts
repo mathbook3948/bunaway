@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { cp, mkdir, readdir, readFile } from "node:fs/promises";
+import { cp, lstat, mkdir, readdir, readFile } from "node:fs/promises";
 import { join, sep } from "node:path";
 
 // Toolchain discovery and helpers shared by the Windows channel adapters.
@@ -15,10 +15,11 @@ export interface ToolResult {
 export async function run(
   exe: string,
   args: string[],
-  options: { cwd?: string } = {},
+  options: { cwd?: string; env?: Record<string, string | undefined> } = {},
 ): Promise<ToolResult> {
   const proc = Bun.spawn([exe, ...args], {
     ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
+    ...(options.env !== undefined ? { env: options.env } : {}),
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -34,7 +35,7 @@ export async function run(
 export async function must(
   exe: string,
   args: string[],
-  options: { cwd?: string } = {},
+  options: { cwd?: string; env?: Record<string, string | undefined> } = {},
 ): Promise<ToolResult> {
   const result = await run(exe, args, options);
   if (result.code !== 0) {
@@ -103,7 +104,16 @@ export async function copyPayload(packageDir: string, dest: string): Promise<voi
   // by name rather than by a filter.
   for (const entry of await readdir(packageDir)) {
     if (entry === "packaged") continue;
-    await cp(join(packageDir, entry), join(dest, entry), { recursive: true });
+    await cp(join(packageDir, entry), join(dest, entry), {
+      recursive: true,
+      async filter(source) {
+        // Even an internal junction would let signing modify the input tree.
+        if ((await lstat(source)).isSymbolicLink()) {
+          throw new Error(`Packaging payload must not contain symlinks or junctions: ${source}`);
+        }
+        return true;
+      },
+    });
   }
 }
 
