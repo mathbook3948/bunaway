@@ -29,6 +29,7 @@ for (const file of await files(resolve(root, "tests/fixtures/desktop/host/web"))
   );
 }
 await cp(resolve(root, "examples/memo/web/memo.html"), resolve(assets, "web/memo.html"));
+await cp(resolve(root, "examples/memo/web/memo.css"), resolve(assets, "web/memo.css"));
 const memo = await Bun.build({
   entrypoints: [resolve(root, "examples/memo/web/memo.js")],
   target: "browser",

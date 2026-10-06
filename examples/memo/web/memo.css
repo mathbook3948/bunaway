@@ -1,0 +1,389 @@
+:root {
+  color-scheme: light;
+  font-family: "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  color: #282d32;
+  background: #f6f5f1;
+  font-synthesis: none;
+  --muted: #727975;
+  --accent: #28594a;
+  --border: #e4e6df;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-width: 280px;
+}
+button,
+textarea {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+button:focus-visible,
+textarea:focus-visible,
+summary:focus-visible {
+  outline: 3px solid #7caf9b;
+  outline-offset: 4px;
+}
+.shell {
+  max-width: 1120px;
+  margin: auto;
+  padding: 0 44px;
+}
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 92px;
+  border-bottom: 1px solid var(--border);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.brand-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: white;
+  border-radius: 11px;
+}
+.brand-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.brand-name {
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.5px;
+}
+.brand-byline {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.local-badge {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #626d65;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.local-badge svg {
+  width: 14px;
+  height: 14px;
+}
+.intro {
+  padding: 38px 0 28px;
+}
+.eyebrow {
+  margin: 0 0 10px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+h1 {
+  margin: 0;
+  font-size: clamp(26px, 4vw, 34px);
+  font-weight: 650;
+  letter-spacing: -1.5px;
+  line-height: 1.35;
+}
+.description {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  gap: 22px;
+}
+.card {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #fff;
+  overflow: hidden;
+}
+.editor {
+  box-shadow: 0 5px 20px #28342804;
+}
+.card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 21px 24px 0;
+}
+.card-heading h2,
+.card-heading label {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+}
+.card-tag {
+  color: #81867c;
+  font-size: 11px;
+}
+textarea {
+  display: block;
+  width: 100%;
+  min-height: 310px;
+  padding: 22px 24px;
+  border: 0;
+  border-radius: 0;
+  resize: vertical;
+  background: transparent;
+  color: #303934;
+  font-size: 15px;
+  line-height: 1.9;
+}
+textarea::placeholder {
+  color: #a3aaa2;
+}
+textarea:focus-visible {
+  outline-offset: -5px;
+  border-radius: 12px;
+}
+.editor-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 74px;
+  padding: 14px 24px;
+  border-top: 1px solid #eff0eb;
+}
+.count {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.save-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--accent);
+  border-radius: 9px;
+  background: var(--accent);
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.save-button:hover:not(:disabled) {
+  background: #1c4438;
+}
+.save-button svg {
+  width: 15px;
+  height: 15px;
+}
+.snapshot {
+  display: flex;
+  flex-direction: column;
+  background: #eeefe7;
+  border-color: #e2e5d9;
+}
+.snapshot .card-heading {
+  padding-bottom: 20px;
+}
+.paper {
+  flex: 1;
+  margin: 0 20px 20px;
+  padding: 22px;
+  background: #fafbf6;
+  border: 1px solid #e2e5d8;
+  border-radius: 9px;
+  box-shadow: 0 3px 0 #e6e9dd;
+}
+.paper-label {
+  margin: 0 0 16px;
+  color: #858d79;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+}
+pre {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: #4b5548;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.9;
+}
+pre:empty::before {
+  content: "아직 저장된 메모가 없어요.\A첫 번째 생각을 남겨보세요.";
+  color: #959d8a;
+}
+.snapshot-note {
+  margin: 20px 0 0;
+  color: #868e7d;
+  font-size: 11px;
+  line-height: 1.7;
+}
+.status-bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 2px;
+}
+.status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.status::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: #a1a8a0;
+  vertical-align: middle;
+}
+.status[data-state="saved"]::before {
+  background: #518569;
+}
+.status[data-state="dirty"]::before {
+  background: #bf8d47;
+}
+.status[data-state="error"] {
+  color: #a04638;
+}
+.status[data-state="error"]::before {
+  background: #a04638;
+}
+.shortcut {
+  color: #93998f;
+  font-size: 11px;
+  white-space: nowrap;
+}
+kbd {
+  font: inherit;
+}
+.app-footer {
+  padding: 16px 0 26px;
+  color: #a0a59b;
+  font-size: 10px;
+  letter-spacing: 1.6px;
+}
+.reader .shell {
+  max-width: 760px;
+  padding: 0 30px;
+}
+.reader .app-header {
+  min-height: 74px;
+}
+.reader .intro {
+  padding: 25px 0 22px;
+}
+.reader h1 {
+  font-size: 27px;
+}
+.reader .snapshot {
+  min-height: 200px;
+}
+.reader .paper {
+  min-height: 140px;
+  margin-top: 20px;
+}
+.reader pre:empty::before {
+  content: "편집 창에서 메모를 저장하면\A이곳에도 함께 표시돼요.";
+}
+.permission-check {
+  margin: 0 0 22px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.permission-check summary {
+  cursor: pointer;
+  padding: 6px 0;
+}
+.permission-check p {
+  line-height: 1.7;
+}
+.secondary-button {
+  border: 1px solid #d5dad0;
+  border-radius: 7px;
+  background: transparent;
+  color: #64715f;
+  padding: 9px 12px;
+  font-size: 11px;
+}
+.secondary-button:hover:not(:disabled) {
+  background: #e9ede4;
+}
+@media (max-width: 720px) {
+  .shell {
+    padding: 0 24px;
+  }
+  .workspace {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .app-header {
+    min-height: 76px;
+  }
+  .intro {
+    padding: 28px 0 24px;
+  }
+  textarea {
+    min-height: 240px;
+  }
+  .paper {
+    min-height: 150px;
+  }
+}
+@media (max-width: 420px) {
+  .shell,
+  .reader .shell {
+    padding: 0 16px;
+  }
+  .brand-byline,
+  .shortcut {
+    display: none;
+  }
+  .local-badge {
+    font-size: 10px;
+  }
+  .card-heading,
+  .editor-footer {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+  textarea {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+  .status-bar {
+    flex-wrap: wrap;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .save-button {
+    transition: none;
+  }
+}

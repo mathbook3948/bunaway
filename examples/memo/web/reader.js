@@ -9,6 +9,11 @@ const client = createClient({
 const saved = document.getElementById("saved-memo");
 const statusEl = document.getElementById("status");
 const trySave = document.getElementById("try-save");
+let connected = false;
+function setStatus(message, state = "") {
+  statusEl.textContent = message;
+  statusEl.dataset.state = state;
+}
 window.addEventListener("pagehide", () => {
   void client.close();
 });
@@ -19,30 +24,38 @@ async function start() {
     "memo.saved",
     (event) => {
       saved.textContent = event.payload;
-      statusEl.textContent = "편집 뷰의 저장을 반영했습니다.";
+      setStatus("편집 창에서 저장한 메모를 반영했어요.", "saved");
     },
     {
-      onError: (error) => {
-        statusEl.textContent = `연결 오류: ${error.code}`;
+      onError: () => {
+        connected = false;
+        trySave.disabled = true;
+        setStatus("연결이 끊어졌어요. 앱을 다시 열어주세요.", "error");
       },
     },
   );
+  connected = true;
   try {
     saved.textContent = await client.invoke("memo.read", null);
-    statusEl.textContent = "저장된 메모를 불러왔습니다.";
-  } catch (error) {
-    statusEl.textContent = `메모를 읽지 못했습니다: ${error.code}`;
+    setStatus("저장된 메모를 불러왔어요.", "saved");
+  } catch {
+    setStatus("메모를 불러오지 못했어요.", "error");
   }
-  trySave.disabled = false;
+  trySave.disabled = !connected;
   trySave.addEventListener("click", async () => {
     try {
       await client.invoke("memo.save", "읽기 전용 뷰에서 쓴 메모");
-      statusEl.textContent = "저장됨 (예상 밖)";
+      setStatus("읽기 전용 창에서 저장됐어요. 권한 설정을 확인해주세요.", "error");
     } catch (error) {
-      statusEl.textContent = `저장 거부됨: ${error.code}`;
+      setStatus(
+        error.code === "PERMISSION_DENIED"
+          ? "읽기 전용이라 메모를 저장할 수 없어요."
+          : "저장하지 못했어요.",
+        error.code === "PERMISSION_DENIED" ? "" : "error",
+      );
     }
   });
 }
-start().catch((error) => {
-  statusEl.textContent = `연결 실패: ${error.code ?? "INTERNAL"}`;
+start().catch(() => {
+  setStatus("메모를 연결하지 못했어요. 앱을 다시 열어주세요.", "error");
 });

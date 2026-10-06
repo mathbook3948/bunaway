@@ -96,6 +96,7 @@ if (( ! SAMPLE )); then
   (cd "$ROOT" && "$BUILD_BUN" build "$HERE/test/web/security.js" --target=browser --outfile "$PACKAGE/assets/web/security.js")
 fi
 cp "$ROOT/examples/memo/web/memo.html" "$PACKAGE/assets/web/memo.html"
+cp "$ROOT/examples/memo/web/memo.css" "$PACKAGE/assets/web/memo.css"
 (cd "$ROOT" && "$BUILD_BUN" build examples/memo/web/memo.js --target=browser --outfile "$PACKAGE/assets/web/memo.js")
 if (( SAMPLE )); then
   cp "$ROOT/examples/memo/app.json" "$ROOT/examples/memo/policy.json" "$PACKAGE/assets/"
