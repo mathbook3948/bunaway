@@ -228,9 +228,11 @@ const publishedReport = await Bun.file(reportPath).text();
 const transferred = deferred();
 const publish = deferred();
 const originalRename = fs.rename;
+let stagedReportPath = "";
 const preservation = spyOn(fs, "rename").mockImplementation(async (...args) => {
   await originalRename(...args);
   if (String(args[0]) === resolve(packaged, "win-direct")) {
+    stagedReportPath = resolve(String(args[1]), "..", "win-direct-report.json");
     transferred.resolve();
     await publish.promise;
   }
@@ -241,7 +243,10 @@ try {
   const rejected = await packageProject(project, "win-direct");
   expect(rejected.ok).toBe(false);
   expect(rejected.diagnostics.some((d) => d.code === CODES.LOCK_FAILED)).toBe(true);
-  expect(await Bun.file(reportPath).text()).toBe(publishedReport);
+  // readdir order differs across filesystems: the old report may already
+  // have moved into staging while the exclusive build lock is held.
+  const report = (await Bun.file(reportPath).exists()) ? reportPath : stagedReportPath;
+  expect(await Bun.file(report).text()).toBe(publishedReport);
 } finally {
   publish.resolve();
   await activeBuild;
