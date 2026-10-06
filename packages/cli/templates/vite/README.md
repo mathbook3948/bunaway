@@ -38,6 +38,7 @@ Vite와 같이 루트 `index.html`에서 `/src/main.ts`를 불러온다.
 `src-bunaway/policy.json`은 `main` 뷰의 `message.save`·`message.read`·`message.saved`와
 `appData/messages/` 읽기/쓰기만 허용한다. 개발 서버 origin은 CLI가 개발 산출물에만 적용한다.
 백엔드·권한·SDK 호출 예시는 기본 vanilla 템플릿과 같다.
+`src-bunaway/app.ts`는 `defineApp`으로 `message/module.ts`의 명령·이벤트를 조립한다.
 
 package.json과 bun.lock을 커밋하고 재설치에는 `bun install --frozen-lockfile`을 사용한다.
 프레임워크 CLI·SDK를 함께 같은 버전으로 업그레이드하며 로컬 tarball 묶음은 보관한다.

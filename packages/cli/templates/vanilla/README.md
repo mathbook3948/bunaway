@@ -18,7 +18,9 @@ vendor/bunaway와 bunaway.lock.json은 없다. 같은 버전의 프레임워크 
 소스와 패키징 파일 경로는 프로젝트 루트 기준이다.
 
 `src`는 실제 클라이언트 SDK로 명령을 호출하고 이벤트를 구독한다.
-`src-bunaway/app.ts`는 공통 앱 정의를 default export하며 실제 백엔드 SDK로 범위 제한 Host API 저장 후 이벤트를 발행한다.
+`src-bunaway/app.ts`는 `defineApp`으로 기능 모듈을 조립한 공통 앱 정의를 default export한다.
+`src-bunaway/message/module.ts`는 명령·이벤트를 등록하고 범위 제한 Host API 저장 후 이벤트를 발행한다.
+작은 기능은 모듈 한 파일로 시작하고, 커지면 계약·서비스를 분리한다.
 `src-bunaway/policy.json`은 `main` 뷰의 `messages/` 읽기/쓰기만 허용한다.
 저장 위치는 Windows `%LOCALAPPDATA%/bunaway/<appId>/data/messages/current.txt`,
 macOS `~/Library/Application Support/bunaway/<appId>/data/messages/current.txt`다.

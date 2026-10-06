@@ -70,11 +70,15 @@ my-app/
   src/{index.html,main.ts,style.css}
   src-bunaway/
     app.ts
+    message/module.ts
     bunaway.json, policy.json
   bun.lock (bun install 후 생성)
 ```
 
 `src-bunaway/bunaway.json` v1에 build·app·bundle을 통합한다. 권한은 policy.json에 둔다.
+`app.ts`는 `defineApp({ modules: [message] })`로 기능을 조립하고
+`message/module.ts`는 `defineModule`로 공개 명령·이벤트를 등록한다.
+최종 이름이 중복되면 조립이 실패하며 기존 명령을 덮어쓰지 않는다.
 `build.app`은 공통 앱 정의(default export AppDefinition), `build.frontend`는 웹 UI
 디렉터리다. 두 소스 경로와 패키징 파일 경로는 프로젝트 루트 상대 경로다.
 플랫폼별 부팅은 프레임워크가 담당하며 개발자가 별도 `index.ts`를 작성하지 않는다.
