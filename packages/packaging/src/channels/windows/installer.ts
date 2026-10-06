@@ -147,6 +147,7 @@ export function installerStages(input: AdapterInput, options: InstallerOptions):
           webView2,
           appDataDir: `{localappdata}\\bunaway\\${input.manifest.app.id}`,
           preserveUserData,
+          assetPaths: Object.keys(input.manifest.assets),
           signed: ctx.input.signing !== undefined,
           ...(metadata.icons["windows.installer"]
             ? { iconFile: metadata.icons["windows.installer"] }

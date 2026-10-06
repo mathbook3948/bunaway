@@ -1,8 +1,22 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { copyPayload, findIscc } from "../../packages/packaging/src/channels/windows/common.ts";
+import {
+  copyPayload,
+  findIscc,
+  findWindowsKitTool,
+  must,
+} from "../../packages/packaging/src/channels/windows/common.ts";
 import {
   compileInno,
   prepareInnoSigning,
@@ -97,12 +111,139 @@ test.skipIf(!iscc)(
         bootstrapperPath: join(root, "bootstrapper.exe"),
         appDataDir: "{localappdata}\\bunaway\\test.app",
         preserveUserData: true,
+        assetPaths: [],
       });
       const installer = await compileInno(ctx, script, root, "setup");
       expect(await Bun.file(installer).exists()).toBe(true);
       expect(Bun.file(installer).size).toBeGreaterThan(0);
     } finally {
       await rm(resolve(root, ".."), { recursive: true, force: true });
+    }
+  },
+  30000,
+);
+
+test.skipIf(!iscc)(
+  "Inno upgrades replace legacy data deletion and prune retired assets without following junctions",
+  async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "bunaway-inno-upgrade-")));
+    const install = join(root, "install");
+    const data = join(root, "data", "memo.txt");
+    const uninstall = join(install, "unins000.exe");
+    const identifier = `app.test-${crypto.randomUUID()}`;
+    const silent = ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"];
+    async function removeInstallation() {
+      await must(uninstall, silent);
+      // Inno's launcher exits before its temporary copy finishes uninstalling.
+      for (let retry = 0; retry < 100; retry++) {
+        if (!(await Bun.file(uninstall).exists())) return;
+        await Bun.sleep(50);
+      }
+      throw new Error("The fixture uninstaller did not finish.");
+    }
+    try {
+      for (const version of [1, 2, 3]) {
+        const staging = join(root, String(version));
+        const payloadDir = join(staging, "app");
+        const assetPaths = ["assets/web/case.js", "assets/web/quote's.js", "licenses/current.txt"];
+        if (version === 1) assetPaths.push("assets/web/retired/page.html", "licenses/retired.txt");
+        await Bun.write(join(payloadDir, "bunaway-host.exe"), "host fixture");
+        for (const path of assetPaths) await Bun.write(join(payloadDir, path), String(version));
+        await mkdir(join(staging, "installer"));
+        const ctx: StageContext = {
+          input: input({}),
+          staging,
+          report() {},
+          addArtifact() {},
+        };
+        let script = renderInnoScript({
+          name: "Bunaway test fixture",
+          identifier,
+          version: `${version}.0.0`,
+          publisher: "Test",
+          scope: "perUser",
+          payloadDir,
+          outputDir: join(staging, "installer"),
+          outputBaseName: "setup",
+          desktopShortcut: false,
+          startMenuShortcut: false,
+          webView2: "check",
+          appDataDir: join(root, "data"),
+          preserveUserData: version === 2,
+          assetPaths,
+        });
+        // Reproduce an installer produced before uninstall-log replacement.
+        if (version === 1) script = script.replace("UninstallLogMode=overwrite\n", "");
+        const setup = await compileInno(ctx, script, staging, "setup");
+        await must(setup, ["/SP-", ...silent, `/DIR=${install}`]);
+        if (version === 1) {
+          await Bun.write(data, "memo");
+          await Bun.write(join(root, "external", "keep.txt"), "external data");
+          await symlink(join(root, "external"), join(install, "assets", "external"), "junction");
+          continue;
+        }
+        expect(await Bun.file(join(install, "assets/web/retired/page.html")).exists()).toBe(false);
+        expect(await Bun.file(join(install, "licenses/retired.txt")).exists()).toBe(false);
+        expect(await Bun.file(join(install, "assets/web/case.js")).text()).toBe(String(version));
+        expect(await Bun.file(join(install, "assets/web/quote's.js")).text()).toBe(String(version));
+        expect(await Bun.file(data).text()).toBe("memo");
+        expect(await Bun.file(join(root, "external", "keep.txt")).text()).toBe("external data");
+        if (version === 2) await rm(join(install, "assets", "external"));
+        await removeInstallation();
+        expect(await Bun.file(data).exists()).toBe(version === 2);
+      }
+    } finally {
+      if (await Bun.file(uninstall).exists()) await removeInstallation();
+      await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  },
+  60000,
+);
+
+const makeappx =
+  process.platform === "win32" ? await findWindowsKitTool("makeappx.exe") : undefined;
+
+test.skipIf(!makeappx)(
+  "makeappx accepts explicit automatic and duplicate capabilities",
+  async () => {
+    if (!makeappx) throw new Error("Expected makeappx.");
+    const root = await realpath(await mkdtemp(join(tmpdir(), "bunaway-msix-capabilities-")));
+    try {
+      const payload = join(root, "payload");
+      await mkdir(payload);
+      await copyFile(
+        join(process.env.SystemRoot ?? "C:\\Windows", "System32", "whoami.exe"),
+        join(payload, "bunaway-host.exe"),
+      );
+      const logo =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4V8AAAAASUVORK5CYII=";
+      await Bun.write(join(payload, "logo.png"), Buffer.from(logo, "base64"));
+      await Bun.write(
+        join(payload, "AppxManifest.xml"),
+        renderAppxManifest({
+          packageName: "Bunaway.Test",
+          appId: "app.test",
+          name: "Test",
+          publisherDisplay: "Test",
+          publisherIdentity: "CN=Test",
+          version: "1.0.0.0",
+          minVersion: "10.0.18362.0",
+          maxVersionTested: "10.0.26100.0",
+          unvirtualizedData: true,
+          capabilities: [
+            "runFullTrust",
+            "unvirtualizedResources",
+            "internetClient",
+            "internetClient",
+          ],
+          executable: "bunaway-host.exe",
+          logo: { square44: "logo.png", square150: "logo.png", storeLogo: "logo.png" },
+        }),
+      );
+      await must(makeappx, ["pack", "/d", payload, "/p", join(root, "test.msix"), "/o"]);
+      expect(await Bun.file(join(root, "test.msix")).exists()).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
     }
   },
   30000,
@@ -267,12 +408,17 @@ test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data pol
     webView2: "check" as const,
     appDataDir: "{localappdata}\\bunaway\\com.example.app",
     preserveUserData: true,
+    assetPaths: ["assets/web/current.html", "licenses/LICENSE.bun"],
   };
   const perUser = renderInnoScript({ ...base, scope: "perUser" });
   expect(perUser).toContain("DefaultDirName={localappdata}\\Programs\\com.example.app");
   expect(perUser).toContain("DefaultGroupName=com.example.app");
   expect(perUser).toContain("{autodesktop}\\Test App (com.example.app)");
   expect(perUser).toContain("PrivilegesRequired=lowest");
+  expect(perUser).toContain("UninstallLogMode=overwrite");
+  expect(perUser).toContain("Current.Add('assets\\web\\current.html')");
+  expect(perUser).toContain("if CurStep <> ssPostInstall then Exit");
+  expect(perUser).toContain("FILE_ATTRIBUTE_REPARSE_POINT");
   expect(perUser).toContain("ArchitecturesAllowed=x64compatible");
   expect(perUser).toContain('Name: "desktopicon"');
   expect(perUser).toContain("{group}\\Test App");
@@ -293,6 +439,7 @@ test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data pol
   });
   expect(perMachine).toContain("DefaultDirName={autopf}\\com.example.app");
   expect(perMachine).toContain("PrivilegesRequired=admin");
+  expect(perMachine).not.toContain("RegQueryStringValue(HKCU");
   expect(perMachine).toContain("ArchitecturesAllowed=x64compatible");
   expect(perMachine).not.toContain("[UninstallDelete]");
   expect(() => renderInnoScript({ ...base, scope: "perMachine", preserveUserData: false })).toThrow(
@@ -358,6 +505,13 @@ test("AppxManifest declares full trust, virtualization opt-out and icon resource
     },
   };
   const xml = renderAppxManifest(manifestOptions);
+  const duplicates = renderAppxManifest({
+    ...manifestOptions,
+    capabilities: ["runFullTrust", "unvirtualizedResources", "internetClient", "internetClient"],
+  });
+  for (const capability of ["runFullTrust", "unvirtualizedResources", "internetClient"]) {
+    expect(duplicates.match(new RegExp(`Name="${capability}"`, "g"))).toHaveLength(1);
+  }
   expect(() => renderAppxManifest({ ...manifestOptions, minVersion: "10.0.17763.0" })).toThrow(
     /unvirtualizedData requires minVersion/,
   );

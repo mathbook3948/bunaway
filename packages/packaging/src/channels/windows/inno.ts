@@ -31,6 +31,7 @@ export interface InnoOptions {
   // channel config opts out (uninstall.preserveUserData=false).
   appDataDir: string;
   preserveUserData: boolean;
+  assetPaths: string[];
   signed?: boolean;
 }
 
@@ -77,6 +78,9 @@ export function renderInnoScript(options: InnoOptions): string {
     "ArchitecturesAllowed=x64compatible",
     "ArchitecturesInstallIn64BitMode=x64compatible",
     "CloseApplications=yes",
+    // Each installer is a complete snapshot; old data-deletion records must
+    // not override the current uninstall policy.
+    "UninstallLogMode=overwrite",
     "UninstallDisplayIcon={app}\\bunaway-host.exe",
     `OutputDir=${options.outputDir}`,
     `OutputBaseFilename=${options.outputBaseName}`,
@@ -154,8 +158,64 @@ export function renderInnoScript(options: InnoOptions): string {
     "  Result := RegQueryStringValue(HKLM, 'SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', Version) and HasRuntimeVersion(Version);",
     "  if not Result then",
     "    Result := RegQueryStringValue(HKLM, 'SOFTWARE\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', Version) and HasRuntimeVersion(Version);",
-    "  if not Result then",
-    "    Result := RegQueryStringValue(HKCU, 'SOFTWARE\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', Version) and HasRuntimeVersion(Version);",
+    ...(perUser
+      ? [
+          "  if not Result then",
+          "    Result := RegQueryStringValue(HKCU, 'SOFTWARE\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', Version) and HasRuntimeVersion(Version);",
+        ]
+      : []),
+    "end;",
+    "",
+  );
+  lines.push(
+    "procedure PruneAssets(const Base, Relative: String; Current: TStringList);",
+    "var Entry: TFindRec; Path, Child: String;",
+    "begin",
+    "  Path := Base + '\\' + Relative;",
+    "  if not FindFirst(Path, Entry) then Exit;",
+    "  try",
+    "    if (Entry.Attributes and FILE_ATTRIBUTE_REPARSE_POINT) <> 0 then Exit;",
+    "  finally",
+    "    FindClose(Entry);",
+    "  end;",
+    "  if FindFirst(Path + '\\*', Entry) then begin",
+    "    try",
+    "      repeat",
+    "        if (Entry.Name <> '.') and (Entry.Name <> '..') and",
+    "           ((Entry.Attributes and FILE_ATTRIBUTE_REPARSE_POINT) = 0) then begin",
+    "          Child := Relative + '\\' + Entry.Name;",
+    "          if (Entry.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then begin",
+    "            PruneAssets(Base, Child, Current);",
+    "            RemoveDir(Base + '\\' + Child);",
+    "          end else if Current.IndexOf(Child) < 0 then begin",
+    "            if not DeleteFile(Base + '\\' + Child) then",
+    "              Log('Could not remove obsolete asset: ' + Child);",
+    "          end;",
+    "        end;",
+    "      until not FindNext(Entry);",
+    "    finally",
+    "      FindClose(Entry);",
+    "    end;",
+    "  end;",
+    "end;",
+    "",
+    "procedure CurStepChanged(CurStep: TSetupStep);",
+    "var Current: TStringList;",
+    "begin",
+    "  if CurStep <> ssPostInstall then Exit;",
+    "  Current := TStringList.Create;",
+    "  try",
+    "    Current.CaseSensitive := False;",
+    "    Current.Sorted := True;",
+    ...options.assetPaths.map(
+      (path) =>
+        `    Current.Add('${issLiteral(path, false).replace(/\//g, "\\").replace(/'/g, "''")}');`,
+    ),
+    "    PruneAssets(ExpandConstant('{app}'), 'assets', Current);",
+    "    PruneAssets(ExpandConstant('{app}'), 'licenses', Current);",
+    "  finally",
+    "    Current.Free;",
+    "  end;",
     "end;",
     "",
   );

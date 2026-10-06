@@ -114,17 +114,19 @@ export function renderAppxManifest(options: MsixOptions): string {
     </virtualization:FileSystemWriteVirtualization>`
     : "";
   const capabilities = [
-    '<rescap:Capability Name="runFullTrust"/>',
-    ...(options.unvirtualizedData ? ['<rescap:Capability Name="unvirtualizedResources"/>'] : []),
-    ...options.capabilities.map((cap) => {
-      const prefix = GENERAL_CAPABILITIES.has(cap)
-        ? ""
-        : UAP_CAPABILITIES.has(cap)
-          ? "uap:"
-          : "rescap:";
-      return `<${prefix}Capability Name="${escapeXml(cap)}"/>`;
-    }),
-  ];
+    ...new Set([
+      "runFullTrust",
+      ...(options.unvirtualizedData ? ["unvirtualizedResources"] : []),
+      ...options.capabilities,
+    ]),
+  ].map((cap) => {
+    const prefix = GENERAL_CAPABILITIES.has(cap)
+      ? ""
+      : UAP_CAPABILITIES.has(cap)
+        ? "uap:"
+        : "rescap:";
+    return `<${prefix}Capability Name="${escapeXml(cap)}"/>`;
+  });
   return `<?xml version="1.0" encoding="utf-8"?>
 <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
          xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
