@@ -7,7 +7,7 @@
   },
   "app": {
     "appId": "examples.bunaway.memo",
-    "title": "bunaway 메모",
+    "title": "bunaway \uba54\ubaa8",
     "view": "main",
     "home": "https://app.bunaway.local/index.html",
     "window": {
@@ -16,7 +16,7 @@
     }
   },
   "dev": {
-    "command": ["bun", "run", "web:dev"],
+    "command": ["bun", "run", "dev"],
     "url": "http://127.0.0.1:5173/"
   },
   "bundle": {

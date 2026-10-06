@@ -7,26 +7,28 @@ GUI 세션이 필요하다.
 
 ```sh
 bun install
-bun run doctor
-bun run dev
+bun run bunaway doctor
+bun run bunaway dev
 ```
 
-CLI가 `web:dev`를 실행하고 `http://127.0.0.1:5173/`의 준비를 기다린 뒤 네이티브 창을 연다.
+CLI가 프런트엔드 `dev` script를 실행하고 `http://127.0.0.1:5173/`의 준비를 기다린 뒤 네이티브 창을 연다.
 CSS는 HMR로 갱신하고 HTML·TypeScript 변경은 Vite가 페이지를 다시 로드한다.
 UI 변경은 호스트를 재시작하지 않으며, 백엔드·설정 변경은 새 호스트/세션으로 재시작한다.
 창 닫기·Ctrl+C는 서버도 종료한다. 5173 포트를 사용하는 기존 서버는 먼저 종료한다.
 페이지 갱신·백엔드 재시작 시 미완료 요청을 재전송하지 않으며 저장하지 않은 입력은 사라질 수 있다.
 
 ```sh
-bun run typecheck
-bun run validate
 bun run build
-bun run package win-direct
+bun run bunaway validate
+bun run bunaway build
+bun run bunaway package win-direct
 ```
 
-`web:build`는 `src/index.html`과 `src/main.ts`에서 `web-dist/`에 프로덕션 자산을 생성한다.
-`validate`·`build`·`package` script는 이 단계를 먼저 실행한 뒤 설치된 CLI를 호출한다.
-`bunaway build`를 직접 호출하려면 먼저 `bun run web:build`를 실행한다.
+Vite와 같이 루트 `index.html`에서 `/src/main.ts`를 불러온다.
+`dev`·`build`·`preview`는 프런트엔드 개발·타입 검사 및 빌드·미리보기 script다.
+`bunaway` script로 네이티브 CLI를 호출한다. 네이티브 빌드·검증·패키징 전에는
+`bun run build`로 `web-dist/`를 생성한다. CLI는 프런트엔드 빌드를 자동 실행하지 않는다.
+네이티브 출력이 `dist/`를 사용하므로 프런트엔드 출력은 `web-dist/`로 분리한다.
 `vite.config.ts`의 상대 `base`는 Windows 가상 호스트와 macOS 로컬 자산 매핑에 맞춘다.
 개발 페이지에만 CSS 갱신과 loopback WebSocket을 허용하는 CSP를 적용하며
 프로덕션 HTML은 `default-src 'self'; script-src 'self'; style-src 'self'`를 유지한다.

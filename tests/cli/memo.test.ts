@@ -27,7 +27,7 @@ test("memo example installs and bundles as a standalone CLI app with one view", 
       const errors = new Response(child.stderr).text();
       expect(await child.exited, await errors).toBe(0);
     };
-    for (const args of [["install"], ["run", "validate"], ["run", "typecheck"]])
+    for (const args of [["install"], ["run", "build"], ["run", "bunaway", "validate"]])
       await command(args);
     const definition = await validateProject(project);
     expect(definition.app.view).toBe("main");
@@ -53,8 +53,8 @@ test("memo example installs and bundles as a standalone CLI app with one view", 
       expect(Object.keys(app.default.commands).sort()).toEqual(["memo.read", "memo.save"]);
     }
     await command(["install", "--linker", "isolated", "--force"]);
-    await command(["run", "validate"]);
-    await command(["run", "typecheck"]);
+    await command(["run", "build"]);
+    await command(["run", "bunaway", "validate"]);
     await bundleAssets(await validateProject(project), resolve(root, "isolated-assets"), true);
     const clientEntry = resolve(project, "node_modules/@bunaway/client/src/index.ts");
     await writeFile(

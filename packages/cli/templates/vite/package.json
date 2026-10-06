@@ -8,14 +8,11 @@
     "bun": "1.4.2"
   },
   "scripts": {
-    "dev": "bunaway dev",
-    "build": "bun run web:build && bunaway build",
-    "package": "bun run web:build && bunaway package",
-    "validate": "bun run web:build && bunaway validate",
-    "doctor": "bunaway doctor",
-    "typecheck": "tsc --project tsconfig.json",
-    "web:dev": "bun --bun vite --host 127.0.0.1 --port 5173 --strictPort",
-    "web:build": "bun --bun vite build"
+    "dev": "bun --bun vite",
+    "build": "tsc --project tsconfig.json && bun --bun vite build",
+    "preview": "bun --bun vite preview",
+    "bunaway": "bunaway",
+    "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
     "@bunaway/backend": "0.0.0",

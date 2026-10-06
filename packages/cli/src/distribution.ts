@@ -293,7 +293,7 @@ export async function checkArtifact(root: string): Promise<void> {
       "package.json",
       "src-bunaway/bunaway.json",
       "vite.config.ts",
-      "src/index.html",
+      "index.html",
       "README.md",
       "gitignore",
       "tsconfig.json",

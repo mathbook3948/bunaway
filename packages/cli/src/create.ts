@@ -28,6 +28,7 @@ export async function createProject(
     });
     if (template === "vite") {
       await cp(resolve(frameworkRoot, "packages/cli/templates/vite"), staging, { recursive: true });
+      await rm(resolve(staging, "src/index.html"));
     }
     await rename(resolve(staging, "gitignore"), resolve(staging, ".gitignore"));
     await rename(resolve(staging, "gitattributes"), resolve(staging, ".gitattributes"));

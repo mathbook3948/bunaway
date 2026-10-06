@@ -1,13 +1,18 @@
-import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  root: fileURLToPath(new URL("./src", import.meta.url)),
+  clearScreen: false,
   base: "./",
   build: {
-    outDir: "../web-dist",
+    outDir: "web-dist",
     emptyOutDir: true,
     target: "es2022",
+  },
+  server: {
+    host: "127.0.0.1",
+    port: 5173,
+    strictPort: true,
+    watch: { ignored: ["**/src-bunaway/**", "**/.bunaway/**", "**/web-dist/**", "**/dist/**"] },
   },
   plugins: [
     {

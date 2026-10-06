@@ -43,16 +43,23 @@ test("Vite template generates a relocatable app with HMR and local production as
       });
       expect(await child.exited, await new Response(child.stderr).text()).toBe(0);
     }
+    expect(await Bun.file(resolve(project, "index.html")).exists()).toBe(true);
+    expect(await Bun.file(resolve(project, "src/index.html")).exists()).toBe(false);
     // Development works before a frontend production build exists.
     const development = await validateProject(project, { development: true });
     expect(await Bun.file(resolve(project, "web-dist/index.html")).exists()).toBe(false);
     await verifyViteDevelopment(development);
-    const validate = Bun.spawn([process.execPath, "run", "validate"], {
-      cwd: project,
-      stdout: "ignore",
-      stderr: "pipe",
-    });
-    expect(await validate.exited, await new Response(validate.stderr).text()).toBe(0);
+    for (const args of [
+      ["run", "build"],
+      ["run", "bunaway", "validate"],
+    ]) {
+      const child = Bun.spawn([process.execPath, ...args], {
+        cwd: project,
+        stdout: "ignore",
+        stderr: "pipe",
+      });
+      expect(await child.exited, await new Response(child.stderr).text()).toBe(0);
+    }
     const production = await validateProject(project);
     expect(production.app.home).toBe("https://app.bunaway.local/index.html");
     expect(production.policy.views[0]?.origins).toEqual(["https://app.bunaway.local"]);

@@ -52,14 +52,15 @@ vanilla TypeScript 앱은 다음과 같이 생성한다.
 bun packages/cli/src/main.ts create ../my-vite-app --template vite --package-dir build/framework
 cd ../my-vite-app
 bun install
-bun run dev
+bun run bunaway dev
 ```
 
-`vite` 템플릿은 Bun으로 Vite를 실행하고 고정 loopback 포트를 사용한다.
+`vite` 템플릿은 루트 `index.html`과 `src/` UI 소스를 사용한다.
+`dev`·`build`·`preview`는 Vite 프런트엔드 명령이며 `bunaway` script로 네이티브 CLI를 호출한다.
 UI 변경은 Vite가 처리하고 백엔드 변경은 CLI가 호스트를 재시작한다.
-`web:build`는 `web-dist/`에 상대 경로의 배포 자산을 생성하며 템플릿의
-`validate`·`build`·`package` script가 그 단계를 먼저 실행한다.
+네이티브 검증·빌드·패키징 전에는 `bun run build`로 `web-dist/`를 생성한다.
 CLI 자체는 외부 프런트엔드 생산 빌드를 자동 실행하지 않는다.
+[템플릿 구성 근거](../../templates/README.md)는 공식 Tauri 초기화 구현을 참조한다.
 
 ## 생성 구조
 
@@ -80,7 +81,8 @@ my-app/
 
 선택적 `dev`에 외부 UI 개발 서버의 `command`(인자 배열), `url`, `timeoutMs`를 지정한다.
 [Vite·Next.js 개발 서버 연결](../../docs/development-server.md)을 따른다.
-`vite` 템플릿은 `vite.config.ts`와 `dev` 설정을 포함하며 `build.frontend`는 `web-dist`다.
+`vite` 템플릿은 위 vanilla 구조의 `src/index.html`을 루트로 옮기고
+`vite.config.ts`와 `dev` 설정을 포함한다. `build.frontend`는 `web-dist`다.
 프런트엔드의 `.ts`/`.js`는 브라우저 번들로 변환하고 나머지 정적 자산은 복사한다.
 `.d.ts`는 배포하지 않는다. CSS 등 번들의 추가 출력까지 정적 자산과 대조해 기록 전에
 충돌을 거부한다. 출력 이름은 Windows/macOS 이식성을 위해 대소문자를 구분하지 않고

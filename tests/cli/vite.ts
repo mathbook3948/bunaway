@@ -17,7 +17,7 @@ export async function verifyViteDevelopment(project: Project): Promise<void> {
   if (!cssName) throw new Error("Missing UI stylesheet.");
   const cssPath = resolve(project.root, "src", cssName);
   const original = await readFile(cssPath, "utf8");
-  const sourceHtml = await readFile(resolve(project.root, "src/index.html"), "utf8");
+  const sourceHtml = await readFile(resolve(project.root, "index.html"), "utf8");
   const server = await startDevServer(
     {
       ...project.dev,
@@ -33,10 +33,10 @@ export async function verifyViteDevelopment(project: Project): Promise<void> {
   try {
     const html = await (await fetch(url)).text();
     expect(html).toContain('src="/@vite/client"');
-    expect(html).toContain('src="./main.ts"');
+    expect(html).toContain('src="/src/main.ts"');
     expect(html).toContain("style-src 'self' 'unsafe-inline'");
     expect(html).toContain(`connect-src 'self' ws://127.0.0.1:${port}`);
-    const ui = await fetch(new URL("main.ts", url));
+    const ui = await fetch(new URL("src/main.ts", url));
     expect(ui.ok).toBe(true);
     const script = await ui.text();
     const sdkPath = script.match(/from "([^"]+)"/)?.[1];
@@ -45,7 +45,7 @@ export async function verifyViteDevelopment(project: Project): Promise<void> {
     expect(sdk.ok).toBe(true);
     expect(await sdk.text()).toContain("createWebViewTransport");
     const cssRequest = { headers: { Accept: "text/css" } };
-    expect((await fetch(new URL(cssName, url), cssRequest)).ok).toBe(true);
+    expect((await fetch(new URL(`src/${cssName}`, url), cssRequest)).ok).toBe(true);
     const viteClient = await (await fetch(new URL("@vite/client", url))).text();
     const token = viteClient.match(/const wsToken = "([^"]+)"/)?.[1];
     if (!token) throw new Error("Missing Vite WebSocket token.");
@@ -66,14 +66,15 @@ export async function verifyViteDevelopment(project: Project): Promise<void> {
       messages.some((message) =>
         message.updates?.some(
           (update) =>
-            update.type === "css-update" && new URL(update.path, url).pathname === `/${cssName}`,
+            update.type === "css-update" &&
+            new URL(update.path, url).pathname === `/src/${cssName}`,
         ),
       ),
     );
-    expect(await (await fetch(new URL(cssName, url), cssRequest)).text()).toContain(
+    expect(await (await fetch(new URL(`src/${cssName}`, url), cssRequest)).text()).toContain(
       "--bunaway-hmr-check",
     );
-    expect(await readFile(resolve(project.root, "src/index.html"), "utf8")).toBe(sourceHtml);
+    expect(await readFile(resolve(project.root, "index.html"), "utf8")).toBe(sourceHtml);
   } finally {
     socket?.close();
     await server.stop();
