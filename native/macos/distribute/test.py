@@ -215,6 +215,11 @@ elif args[0] == "stapler":
             ticket.write_text("ticket")
         elif not ticket.is_file():
             sys.exit(65)
+    elif path.suffix == ".dmg":
+        if args[1] == "staple":
+            path.write_bytes(path.read_bytes() + b"ticket")
+        elif os.environ.get("FAIL_VALIDATE") == "1":
+            sys.exit(65)
 ''')
         self.env["NOTARY_LOG"] = str(self.root / "notary.log")
         self.mock("xcrun", "exec " + shlex.quote(sys.executable) + " " + shlex.quote(str(driver)) + ' "$@"')
@@ -256,10 +261,28 @@ elif args[0] == "stapler":
         self.notary_mock()
         self.run_script("notarize.sh", ["--artifact", dmg, "--profile", "test", "--app", self.app])
         calls = [json.loads(line) for line in (self.root / "notary.log").read_text().splitlines()]
+        staged_dmg = calls[1][2]
         self.assertEqual(calls[1:], [
-            ["stapler", "staple", str(dmg)], ["stapler", "validate", str(dmg)],
+            ["stapler", "staple", staged_dmg], ["stapler", "validate", staged_dmg],
             ["stapler", "staple", str(self.app)], ["stapler", "validate", str(self.app)],
         ])
+        self.assertEqual(Path(staged_dmg).name, "notarized.dmg")
+        self.assertTrue(Path(staged_dmg).parent.name.startswith(".bunaway-notary."))
+        self.assertEqual(Path(staged_dmg).parent.parent, self.root)
+        self.assertEqual(dmg.read_bytes(), b"mock-dmgticket")
+        self.assertEqual(list(self.root.glob(".bunaway-notary.*")), [])
+
+    def test_failed_dmg_validation_preserves_original_artifact(self):
+        dmg = self.root / "App.dmg"
+        dmg.write_bytes(b"last-good")
+        self.notary_mock()
+        self.env["FAIL_VALIDATE"] = "1"
+        self.run_script("notarize.sh", ["--artifact", dmg, "--profile", "test"], expected=1)
+        calls = [json.loads(line) for line in (self.root / "notary.log").read_text().splitlines()]
+        self.assertEqual([call[:2] for call in calls[1:]], [["stapler", "staple"], ["stapler", "validate"]])
+        self.assertEqual(calls[1][2], calls[2][2])
+        self.assertNotEqual(calls[1][2], str(dmg))
+        self.assertEqual(dmg.read_bytes(), b"last-good")
         self.assertEqual(list(self.root.glob(".bunaway-notary.*")), [])
 
     def test_invalid_notary_status_is_not_treated_as_accepted(self):

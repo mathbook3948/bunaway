@@ -71,8 +71,10 @@ case "$ARTIFACT" in
     ;;
   *.dmg)
     say "accepted — stapling $ARTIFACT"
-    xcrun stapler staple "$ARTIFACT" || die "stapler staple failed"
-    xcrun stapler validate "$ARTIFACT" || die "stapler validate failed"
+    ditto "$ARTIFACT" "$STAGE/notarized.dmg" || die "could not stage DMG"
+    xcrun stapler staple "$STAGE/notarized.dmg" || die "stapler staple failed"
+    xcrun stapler validate "$STAGE/notarized.dmg" || die "stapler validate failed"
+    mv "$STAGE/notarized.dmg" "$ARTIFACT" || die "could not place notarized DMG"
     ;;
 esac
 if [ -n "$APP" ]; then
