@@ -59,17 +59,16 @@ my-app/
   bunaway.lock.json
 ```
 
-`src-bunaway/bunaway.json` v2는 `build`(소스 경로), `app`(앱 ID·창·시작 페이지),
+`src-bunaway/bunaway.json` v1는 `build`(소스 경로), `app`(앱 ID·창·시작 페이지),
 `bundle`(채널별 배포 설정)을 통합한다. `bundle`은 dev/build에서 생략할 수 있지만
 선언한 경우 형식을 검증한다. 권한은 `policy.json`으로 분리한다.
 `build.backend`(기존 프로세스 진입점), `build.windowsApp`(default export AppDefinition),
 `build.frontend`(디렉터리)와 아이콘·인증서 경로는 프로젝트 루트 상대 경로다.
 Windows 빌드에는 `build.windowsApp`이 필요하다.
 
-기존 v1의 `bunaway.json` + `app.json` + 선택적 `packaging.json`도 루트 또는
-`src-bunaway/`에서 지원한다. 두 위치에 `bunaway.json`이 동시에 있거나, v2 옆에
-별도 `app.json`·`packaging.json`이 있으면 오류로 거부한다.
-v1→v2 변환은 [설정 결정](../../docs/decisions/0007-project-settings.md)을 따른다.
+설정은 `src-bunaway/bunaway.json` v1 한 형식만 사용한다.
+루트 설정 파일과 별도 앱·패키징 설정 파일은 읽지 않는다.
+작성 형식은 [설정 결정](../../docs/decisions/0007-project-settings.md)을 따른다.
 프런트엔드의 `.ts`/`.js`는 브라우저 번들로 변환하고 나머지 정적 자산은 복사한다.
 `.d.ts`는 배포하지 않는다. CSS 등 번들의 추가 출력까지 정적 자산과 대조해 기록 전에
 충돌을 거부한다. 출력 이름은 Windows/macOS 이식성을 위해 대소문자를 구분하지 않고

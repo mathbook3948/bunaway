@@ -1,8 +1,6 @@
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { CODES, isChannelId, PACKAGING_CHANNELS, type SigningConfig } from "./contract.ts";
 
-// packaging.json (version 1) — the single source for packaging metadata.
+// bunaway.json.bundle — the single source for packaging metadata.
 // Unknown fields and malformed values are rejected up front so adapters can
 // trust what they receive. Filesystem checks (icons, certificate files) live
 // in resolve.ts; this file validates shape only.
@@ -18,7 +16,6 @@ export interface PackagingConfig {
 }
 
 const TOP_LEVEL = [
-  "version",
   "name",
   "identifier",
   "publisher",
@@ -77,26 +74,26 @@ function fail(message: string): never {
 
 function record(value: unknown, what: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    fail(`packaging.json: ${what} must be an object.`);
+    fail(`bunaway.json.bundle: ${what} must be an object.`);
   }
   return value as Record<string, unknown>;
 }
 
 function keys(value: Record<string, unknown>, allowed: string[], what: string): void {
   const unknown = Object.keys(value).find((key) => !allowed.includes(key));
-  if (unknown) fail(`packaging.json: unknown field ${what}.${unknown}.`);
+  if (unknown) fail(`bunaway.json.bundle: unknown field ${what}.${unknown}.`);
 }
 
 function nonempty(value: unknown, what: string, max = 256): string {
   if (typeof value !== "string" || !value || value.length > max) {
-    fail(`packaging.json: ${what} must be a nonempty string of at most ${max} characters.`);
+    fail(`bunaway.json.bundle: ${what} must be a nonempty string of at most ${max} characters.`);
   }
   return value;
 }
 
 function optionalBoolean(value: unknown, what: string): boolean | undefined {
   if (value === undefined) return undefined;
-  if (typeof value !== "boolean") fail(`packaging.json: ${what} must be a boolean.`);
+  if (typeof value !== "boolean") fail(`bunaway.json.bundle: ${what} must be a boolean.`);
   return value;
 }
 
@@ -114,23 +111,23 @@ function signing(value: unknown, what: string): SigningConfig | undefined {
     const url = nonempty(raw.timestampUrl, `${what}.timestampUrl`);
     try {
       if (!/^https?:$/.test(new URL(url).protocol))
-        fail(`packaging.json: ${what}.timestampUrl must be http(s).`);
+        fail(`bunaway.json.bundle: ${what}.timestampUrl must be http(s).`);
     } catch (error) {
       if ((error as Error & { code?: string }).code === CODES.CONFIG_INVALID) throw error;
-      fail(`packaging.json: ${what}.timestampUrl must be a valid URL.`);
+      fail(`bunaway.json.bundle: ${what}.timestampUrl must be a valid URL.`);
     }
     result.timestampUrl = url;
   }
   if (raw.passwordEnv !== undefined) {
     const name = nonempty(raw.passwordEnv, `${what}.passwordEnv`, 128);
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
-      fail(`packaging.json: ${what}.passwordEnv must be an environment variable name.`);
+      fail(`bunaway.json.bundle: ${what}.passwordEnv must be an environment variable name.`);
     }
     result.passwordEnv = name;
   }
   if (!result.certificateFile && !result.thumbprint) {
     fail(
-      `packaging.json: ${what} needs certificateFile or thumbprint; secrets go in ${what}.passwordEnv, never in this file.`,
+      `bunaway.json.bundle: ${what} needs certificateFile or thumbprint; secrets go in ${what}.passwordEnv, never in this file.`,
     );
   }
   return result;
@@ -141,17 +138,16 @@ export function parsePackaging(text: string): PackagingConfig {
   try {
     rawValue = JSON.parse(text);
   } catch {
-    fail("packaging.json: not valid JSON.");
+    fail("bunaway.json.bundle: not valid JSON.");
   }
-  const raw = record(rawValue, "packaging.json");
-  keys(raw, TOP_LEVEL, "packaging.json");
-  if (raw.version !== 1) fail("packaging.json: unsupported version (expected 1).");
+  const raw = record(rawValue, "bunaway.json.bundle");
+  keys(raw, TOP_LEVEL, "bunaway.json.bundle");
   const config: PackagingConfig = {};
   if (raw.name !== undefined) config.name = nonempty(raw.name, "name");
   if (raw.identifier !== undefined) {
     const identifier = nonempty(raw.identifier, "identifier", 128);
     if (!IDENTIFIER_PATTERN.test(identifier)) {
-      fail("packaging.json: identifier must be reverse-DNS (letters, digits, dots, dashes).");
+      fail("bunaway.json.bundle: identifier must be reverse-DNS (letters, digits, dots, dashes).");
     }
     config.identifier = identifier;
   }
@@ -164,7 +160,7 @@ export function parsePackaging(text: string): PackagingConfig {
     if (publisher.identity !== undefined) {
       const identity = nonempty(publisher.identity, "publisher.identity");
       if (!/^CN=.+/i.test(identity)) {
-        fail('packaging.json: publisher.identity must be an X.500 subject like "CN=Example".');
+        fail('bunaway.json.bundle: publisher.identity must be an X.500 subject like "CN=Example".');
       }
       config.publisher.identity = identity;
     }
@@ -176,7 +172,7 @@ export function parsePackaging(text: string): PackagingConfig {
     if (release.version !== undefined) {
       const version = nonempty(release.version, "release.version", 64);
       if (!SEMVER_PATTERN.test(version)) {
-        fail("packaging.json: release.version must be numeric semver x.y.z.");
+        fail("bunaway.json.bundle: release.version must be numeric semver x.y.z.");
       }
       config.release.version = version;
     }
@@ -187,7 +183,7 @@ export function parsePackaging(text: string): PackagingConfig {
         release.build < 0 ||
         release.build > 65535
       ) {
-        fail("packaging.json: release.build must be an integer between 0 and 65535.");
+        fail("bunaway.json.bundle: release.build must be an integer between 0 and 65535.");
       }
       config.release.build = release.build;
     }
@@ -199,7 +195,7 @@ export function parsePackaging(text: string): PackagingConfig {
     if (icons.directory !== undefined) {
       const directory = nonempty(icons.directory, "icons.directory");
       if (/^(?:[A-Za-z]:[\\/]|[\\/])/.test(directory) || directory.split(/[\\/]/).includes("..")) {
-        fail("packaging.json: icons.directory must be project-relative without '..'.");
+        fail("bunaway.json.bundle: icons.directory must be project-relative without '..'.");
       }
       config.icons.directory = directory;
     }
@@ -219,7 +215,7 @@ export function parsePackaging(text: string): PackagingConfig {
   }
   if (raw.targets !== undefined) {
     if (!Array.isArray(raw.targets) || raw.targets.length === 0) {
-      fail("packaging.json: targets must be a nonempty array.");
+      fail("bunaway.json.bundle: targets must be a nonempty array.");
     }
     const seen = new Set<string>();
     config.targets = raw.targets.map((entry, index) => {
@@ -228,13 +224,13 @@ export function parsePackaging(text: string): PackagingConfig {
       const platform = nonempty(target.platform, `targets[${index}].platform`, 16);
       const arch = nonempty(target.arch, `targets[${index}].arch`, 16);
       if (!["windows", "macos"].includes(platform)) {
-        fail(`packaging.json: targets[${index}].platform must be windows or macos.`);
+        fail(`bunaway.json.bundle: targets[${index}].platform must be windows or macos.`);
       }
       if (!["x64", "arm64"].includes(arch)) {
-        fail(`packaging.json: targets[${index}].arch must be x64 or arm64.`);
+        fail(`bunaway.json.bundle: targets[${index}].arch must be x64 or arm64.`);
       }
       const id = `${platform}-${arch}`;
-      if (seen.has(id)) fail(`packaging.json: duplicate target ${id}.`);
+      if (seen.has(id)) fail(`bunaway.json.bundle: duplicate target ${id}.`);
       seen.add(id);
       const result: { platform: string; arch: string; minVersion?: string } = { platform, arch };
       if (target.minVersion !== undefined) {
@@ -250,7 +246,7 @@ export function parsePackaging(text: string): PackagingConfig {
     for (const [channel, value] of Object.entries(channels)) {
       if (!isChannelId(channel)) {
         fail(
-          `packaging.json: unknown channel channels.${channel} (supported: ${PACKAGING_CHANNELS.join(", ")}).`,
+          `bunaway.json.bundle: unknown channel channels.${channel} (supported: ${PACKAGING_CHANNELS.join(", ")}).`,
         );
       }
       const options = record(value, `channels.${channel}`);
@@ -262,18 +258,18 @@ export function parsePackaging(text: string): PackagingConfig {
         options.webView2 !== undefined &&
         !["check", "bootstrap"].includes(options.webView2 as string)
       ) {
-        fail(`packaging.json: channels.${channel}.webView2 must be "check" or "bootstrap".`);
+        fail(`bunaway.json.bundle: channels.${channel}.webView2 must be "check" or "bootstrap".`);
       }
       if (channel === "win-store-unpackaged" && options.webView2 === "bootstrap") {
         fail(
-          'packaging.json: channels.win-store-unpackaged.webView2 must be "check"; the Store EXE/MSI requirements forbid installer-time downloads.',
+          'bunaway.json.bundle: channels.win-store-unpackaged.webView2 must be "check"; the Store EXE/MSI requirements forbid installer-time downloads.',
         );
       }
       if (
         options.scope !== undefined &&
         !["perUser", "perMachine"].includes(options.scope as string)
       ) {
-        fail(`packaging.json: channels.${channel}.scope must be perUser or perMachine.`);
+        fail(`bunaway.json.bundle: channels.${channel}.scope must be perUser or perMachine.`);
       }
       for (const flag of ["desktopShortcut", "startMenuShortcut", "unvirtualizedData"]) {
         optionalBoolean(options[flag], `channels.${channel}.${flag}`);
@@ -287,7 +283,7 @@ export function parsePackaging(text: string): PackagingConfig {
         );
         if (options.scope === "perMachine" && uninstall.preserveUserData === false) {
           fail(
-            `packaging.json: channels.${channel}.uninstall.preserveUserData=false requires scope=perUser; perMachine installs cannot safely target user data.`,
+            `bunaway.json.bundle: channels.${channel}.uninstall.preserveUserData=false requires scope=perUser; perMachine installs cannot safely target user data.`,
           );
         }
       }
@@ -296,14 +292,14 @@ export function parsePackaging(text: string): PackagingConfig {
           !Array.isArray(options.capabilities) ||
           options.capabilities.some((cap) => typeof cap !== "string" || !cap)
         ) {
-          fail(`packaging.json: channels.${channel}.capabilities must be a list of strings.`);
+          fail(`bunaway.json.bundle: channels.${channel}.capabilities must be a list of strings.`);
         }
       }
       if (options.packageName !== undefined) {
         const name = nonempty(options.packageName, `channels.${channel}.packageName`, 50);
         if (!/^[A-Za-z0-9][A-Za-z0-9._-]{2,49}$/.test(name)) {
           fail(
-            `packaging.json: channels.${channel}.packageName must be 3..50 characters, alphanumeric plus . _ -.`,
+            `bunaway.json.bundle: channels.${channel}.packageName must be 3..50 characters, alphanumeric plus . _ -.`,
           );
         }
       }
@@ -317,21 +313,11 @@ export function parsePackaging(text: string): PackagingConfig {
           !Array.isArray(options.entitlements) ||
           options.entitlements.some((cap) => typeof cap !== "string" || !cap)
         ) {
-          fail(`packaging.json: channels.${channel}.entitlements must be a list of strings.`);
+          fail(`bunaway.json.bundle: channels.${channel}.entitlements must be a list of strings.`);
         }
       }
     }
     config.channels = channels as Partial<Record<string, Record<string, unknown>>>;
   }
   return config;
-}
-
-export async function loadPackaging(root: string): Promise<PackagingConfig> {
-  const path = resolve(root, "packaging.json");
-  if (!(await Bun.file(path).exists())) {
-    fail(
-      "packaging.json not found; create one (see docs/decisions/0005-packaging-contract.md) or run bunaway build/dev without packaging.",
-    );
-  }
-  return parsePackaging(await readFile(path, "utf8"));
 }

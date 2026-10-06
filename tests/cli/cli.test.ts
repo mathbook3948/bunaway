@@ -42,6 +42,7 @@ afterAll(async () => {
 });
 
 test("create produces a relocatable project with real SDK dependencies and no repository/sample paths", async () => {
+  expect(JSON.parse(originals["src-bunaway/bunaway.json"] ?? "").version).toBe(1);
   expect((await validateProject(project)).app.appId).toBe("app.created-app");
   expect(
     await Bun.file(resolve(project, "vendor/bunaway/native/windows/bun/boot.ts")).exists(),
@@ -81,44 +82,17 @@ test("create refuses existing paths and missing parents without modifying them",
   expect((await readdir(home)).some((name) => name.includes(".creating-"))).toBe(false);
 });
 
-test("root configuration remains compatible and duplicate layouts are rejected", async () => {
-  const names = ["bunaway.json", "app.json", "policy.json", "packaging.json"];
-  const moved: string[] = [];
-  const unified = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
+test("settings are read only from src-bunaway/bunaway.json", async () => {
+  const path = resolve(project, "src-bunaway/bunaway.json");
+  const rootPath = resolve(project, "bunaway.json");
   try {
-    await writeJson(resolve(project, "src-bunaway/bunaway.json"), { version: 1, ...unified.build });
-    await writeJson(resolve(project, "src-bunaway/app.json"), unified.app);
-    await writeJson(resolve(project, "src-bunaway/packaging.json"), {
-      version: 1,
-      ...unified.bundle,
-    });
-    expect((await validateProject(project)).app.appId).toBe(unified.app.appId);
-    for (const name of names) {
-      await rename(resolve(project, "src-bunaway", name), resolve(project, name));
-      moved.push(name);
-    }
-    expect((await validateProject(project)).frontend).toBe(resolve(project, "src"));
-    const child = Bun.spawn(
-      [globalThis.process.execPath, "vendor/bunaway/packages/cli/src/main.ts", "validate"],
-      { cwd: project, stdout: "pipe", stderr: "pipe" },
-    );
-    expect(await child.exited).toBe(0);
-    await Bun.write(
-      resolve(project, "src-bunaway/bunaway.json"),
-      originals["src-bunaway/bunaway.json"] ?? "",
-    );
-    await expect(validateProject(project)).rejects.toThrow("Ambiguous project");
+    await writeJson(rootPath, { version: 99 });
+    expect((await validateProject(project)).app.appId).toBe("app.created-app");
+    await rm(path);
+    await expect(validateProject(project)).rejects.toThrow("Cannot read JSON");
   } finally {
-    await rm(resolve(project, "src-bunaway/bunaway.json"), { force: true });
-    for (const name of moved) {
-      await rename(resolve(project, name), resolve(project, "src-bunaway", name));
-    }
-    await Bun.write(
-      resolve(project, "src-bunaway/bunaway.json"),
-      originals["src-bunaway/bunaway.json"] ?? "",
-    );
-    await rm(resolve(project, "src-bunaway/app.json"), { force: true });
-    await rm(resolve(project, "src-bunaway/packaging.json"), { force: true });
+    await Bun.write(path, originals["src-bunaway/bunaway.json"] ?? "");
+    await rm(rootPath, { force: true });
   }
 });
 
@@ -127,6 +101,8 @@ test("unified settings reject malformed build, app and bundle sections", async (
   const valid = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
   for (const value of [
     { ...valid, version: 99 },
+    { ...valid, version: 2 },
+    { version: 1, ...valid.build },
     { ...valid, injected: true },
     { ...valid, build: { ...valid.build, backend: "../outside.ts" } },
     { ...valid, build: { ...valid.build, injected: true } },
@@ -146,7 +122,7 @@ test("unified settings reject malformed build, app and bundle sections", async (
   }
 });
 
-test("unified settings allow omitted bundle and refuse conflicting split files", async () => {
+test("unified settings allow omitted bundle", async () => {
   const path = resolve(project, "src-bunaway/bunaway.json");
   const valid = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
   const { bundle: _bundle, ...withoutBundle } = valid;
@@ -160,15 +136,6 @@ test("unified settings allow omitted bundle and refuse conflicting split files",
     expect((await validateProject(project)).bundle).toBeUndefined();
     const { packageProject } = await import("../../packages/cli/src/package.ts");
     await expect(packageProject(project, "win-direct")).rejects.toThrow("bunaway.json.bundle");
-    for (const name of ["app.json", "packaging.json"]) {
-      const extra = resolve(project, "src-bunaway", name);
-      await writeJson(extra, {});
-      try {
-        await expect(validateProject(project)).rejects.toThrow(`replaces ${name}`);
-      } finally {
-        await rm(extra);
-      }
-    }
   } finally {
     await Bun.write(path, originals["src-bunaway/bunaway.json"] ?? "");
   }

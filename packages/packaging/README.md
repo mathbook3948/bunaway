@@ -4,7 +4,7 @@
 (`dist/<target>`)을 읽어 채널별 배포물로 포장한다.
 
 - 계약·검증 규칙: [ADR 0005](../../docs/decisions/0005-packaging-contract.md)
-- 단일 소스: 프로젝트 루트의 `packaging.json`(버전 1)
+- 단일 소스: `src-bunaway/bunaway.json` v1의 `bundle`
 - 진입점: `bunaway package <channel> [directory] [--build]`
 
 채널 어댑터는 `src/channels/<platform>/<channel>.ts`에 두고

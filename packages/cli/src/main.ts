@@ -5,7 +5,6 @@ import {
   devProject,
   doctor,
   packageProject,
-  validatePackagingConfig,
   validateProject,
 } from "./index.ts";
 
@@ -53,8 +52,7 @@ export async function main(args: string[]): Promise<number> {
       return 0;
     }
     case "validate": {
-      const project = await validateProject(directory ?? ".");
-      await validatePackagingConfig(project.root);
+      await validateProject(directory ?? ".");
       console.log("Configuration and policy are valid.");
       return 0;
     }

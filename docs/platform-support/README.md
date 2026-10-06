@@ -43,7 +43,7 @@ macOS WKWebView는 현재 비영속 `WKWebsiteDataStore`를 사용한다. Window
 
 ## 패키징(공통 계약)
 
-`packages/packaging`의 채널 중립 계약(`packaging.json` v1, 어댑터 입출력,
+`packages/packaging`의 채널 중립 계약(`bunaway.json` v1의 `bundle`, 어댑터 입출력,
 `PKG_*` 진단, 서명 후 `packagedSha256` 규칙)과 `bunaway package <channel>` 진입점이 있다.
 Windows `win-direct`와 `win-store-unpackaged`는 일반 Inno 설치 파일 경로를 제공한다.
 macOS `mac-direct`·`mac-store` 어댑터는 별도 작업이다.

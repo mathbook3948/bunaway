@@ -68,14 +68,12 @@ mock.module(import.meta.resolve("../../packages/cli/src/build.ts"), () => ({
   },
 }));
 const configPath = resolve(project, "src-bunaway/bunaway.json");
-async function setBundle(value: Record<string, unknown>) {
-  const { version: _version, ...bundle } = value;
+async function setBundle(bundle: Record<string, unknown>) {
   const config = (await readJson(configPath)) as Record<string, unknown>;
   await files.writeJson(configPath, { ...config, bundle });
 }
 const { packageProject } = await import("../../packages/cli/src/package.ts");
 await setBundle({
-  version: 1,
   channels: { "win-direct": {}, "win-store-msix": {}, "mac-direct": {}, "mac-store": {} },
 });
 nativeTarget = "macos-arm64";
@@ -131,7 +129,6 @@ for (const buildFirst of [false, true]) {
 expect(builds).toBe(0);
 expect(assembled).toBe(0);
 await setBundle({
-  version: 1,
   targets: [{ platform: "macos", arch: "arm64" }],
   channels: { "win-direct": {} },
 });
@@ -139,7 +136,7 @@ await expect(packageProject(project, "win-direct", { build: true })).rejects.toT
   "no windows target declared",
 );
 expect(builds).toBe(0);
-await setBundle({ version: 1, channels: { "win-direct": {}, "win-store-msix": {} } });
+await setBundle({ channels: { "win-direct": {}, "win-store-msix": {} } });
 expect((await packageProject(project, "win-direct", { build: true })).ok).toBe(true);
 const packaged = resolve(project, "dist/windows-x64/packaged");
 const previous = resolve(packaged, "win-direct/setup.exe");

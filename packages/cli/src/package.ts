@@ -16,13 +16,8 @@ import {
 } from "@bunaway/packaging";
 import { resolve } from "node:path";
 import { buildProject, currentTarget } from "./build.ts";
-import { readProjectSettings, validateProject } from "./config.ts";
+import { validateProject } from "./config.ts";
 import { json } from "./files.ts";
-
-// Bundle settings are optional for dev/build and required for packaging.
-export async function validatePackagingConfig(root: string): Promise<void> {
-  await readProjectSettings(root);
-}
 
 // `bunaway package <channel>` consumes the channel-neutral artifact produced
 // by `bunaway build` (or builds it first with --build) and runs the channel
@@ -41,8 +36,7 @@ export async function packageProject(
   const channel = channelName as ChannelId;
   const project = await validateProject(directory);
   const config = project.bundle;
-  if (!config)
-    throw new Error("Packaging requires bunaway.json.bundle (or legacy packaging.json).");
+  if (!config) throw new Error("Packaging requires src-bunaway/bunaway.json.bundle.");
   const appPackage = (await json(resolve(project.root, "package.json"))) as { version?: string };
   const { metadata, channel: resolvedChannel } = await resolvePackaging({
     root: project.root,

@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { type Policy, parsePolicy } from "@bunaway/protocol";
 import { type PackagingConfig, parsePackaging } from "@bunaway/packaging";
 import { validateFramework } from "./distribution.ts";
-import { json, projectConfigDirectory, projectPath } from "./files.ts";
+import { json, projectPath } from "./files.ts";
 
 export interface Project {
   root: string;
@@ -39,49 +39,25 @@ function string(value: unknown): string {
   return value;
 }
 
-// Normalize authoring formats while keeping the native build contracts intact.
+// Read the single project settings format used by generated apps.
 export async function readProjectSettings(root: string): Promise<{
   directory: string;
   build: Record<string, unknown>;
   app: Record<string, unknown>;
   bundle?: PackagingConfig;
 }> {
-  const directory = await projectConfigDirectory(root);
+  const directory = await projectPath(root, "src-bunaway");
   const config = record(await json(resolve(directory, "bunaway.json")));
-  if (config.version === 2) {
-    keys(config, ["version", "build", "app", "bundle"]);
-    for (const name of ["app.json", "packaging.json"]) {
-      if (await Bun.file(resolve(directory, name)).exists()) {
-        throw new Error(`bunaway.json v2 replaces ${name}; remove the separate file.`);
-      }
-    }
-    const build = record(config.build);
-    keys(build, ["backend", "frontend", "windowsApp"]);
-    let bundle: PackagingConfig | undefined;
-    if (config.bundle !== undefined) {
-      const raw = record(config.bundle);
-      if ("version" in raw)
-        throw new Error("Use the top-level bunaway.json version, not bundle.version.");
-      try {
-        bundle = parsePackaging(JSON.stringify({ version: 1, ...raw }));
-      } catch (error) {
-        if (error instanceof Error)
-          error.message = error.message.replaceAll("packaging.json", "bunaway.json.bundle");
-        throw error;
-      }
-    }
-    return { directory, build, app: record(config.app), ...(bundle ? { bundle } : {}) };
-  }
-  if (config.version !== 1) throw new Error("Unsupported bunaway.json version.");
-  keys(config, ["version", "backend", "frontend", "windowsApp"]);
-  const packagingPath = resolve(directory, "packaging.json");
-  const bundle = (await Bun.file(packagingPath).exists())
-    ? parsePackaging(await Bun.file(packagingPath).text())
-    : undefined;
+  if (config.version !== 1) throw new Error("Unsupported bunaway.json version (expected 1).");
+  keys(config, ["version", "build", "app", "bundle"]);
+  const build = record(config.build);
+  keys(build, ["backend", "frontend", "windowsApp"]);
+  const bundle =
+    config.bundle === undefined ? undefined : parsePackaging(JSON.stringify(config.bundle));
   return {
     directory,
-    build: config,
-    app: record(await json(resolve(directory, "app.json"))),
+    build,
+    app: record(config.app),
     ...(bundle ? { bundle } : {}),
   };
 }

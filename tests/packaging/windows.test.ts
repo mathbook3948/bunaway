@@ -212,7 +212,6 @@ test.each(["win-direct", "win-store-unpackaged"] as const)(
       const original = input({ webView2: "check" });
       const config = parsePackaging(
         JSON.stringify({
-          version: 1,
           targets: [
             { platform: "macos", arch: "arm64", minVersion: "14.0" },
             { platform: "windows", arch: "x64", minVersion: "10.0.22621.0" },
@@ -602,7 +601,7 @@ test.each(["win-direct", "win-store-unpackaged"])(
   "%s rejects machine-wide user data cleanup before packaging",
   (channel) => {
     const config = (options: Record<string, unknown>) =>
-      JSON.stringify({ version: 1, channels: { [channel]: options } });
+      JSON.stringify({ channels: { [channel]: options } });
     expect(() =>
       parsePackaging(config({ scope: "perMachine", uninstall: { preserveUserData: false } })),
     ).toThrow(/requires scope=perUser/);
@@ -774,17 +773,13 @@ test("AppxManifest declares full trust, virtualization opt-out and icon resource
   for (const packageName of ["a", "ab", "a".repeat(51)]) {
     expect(() => renderAppxManifest({ ...manifestOptions, packageName })).toThrow(/3\.\.50/);
     expect(() =>
-      parsePackaging(
-        JSON.stringify({ version: 1, channels: { "win-store-msix": { packageName } } }),
-      ),
+      parsePackaging(JSON.stringify({ channels: { "win-store-msix": { packageName } } })),
     ).toThrow();
   }
   for (const packageName of ["abc", "a".repeat(50)]) {
     expect(() => renderAppxManifest({ ...manifestOptions, packageName })).not.toThrow();
     expect(() =>
-      parsePackaging(
-        JSON.stringify({ version: 1, channels: { "win-store-msix": { packageName } } }),
-      ),
+      parsePackaging(JSON.stringify({ channels: { "win-store-msix": { packageName } } })),
     ).not.toThrow();
   }
   expect(xml).toContain('Name="Example.TestApp"');

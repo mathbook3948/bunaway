@@ -3,4 +3,4 @@ export { validateProject } from "./config.ts";
 export { buildProject, prepareNative, currentTarget } from "./build.ts";
 export { devProject, RestartController } from "./dev.ts";
 export { doctor } from "./doctor.ts";
-export { packageProject, validatePackagingConfig } from "./package.ts";
+export { packageProject } from "./package.ts";

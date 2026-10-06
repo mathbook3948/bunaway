@@ -11,16 +11,14 @@ status: accepted
 
 ## 단일 소스와 검증
 
-2026-10-06 생성 앱의 작성 형식은 [통합 설정 v2](./0007-project-settings.md)가 대체한다.
-패키징 설정은 `bunaway.json.bundle`에서 읽어 기존 어댑터 입력으로 변환하며, 아래의
-v1 `packaging.json`은 기존 앱 호환 형식으로 지원한다. build/package 책임과 산출물
-계약은 유지한다.
+패키징 설정은 [통합 설정 v1](./0007-project-settings.md)의
+`src-bunaway/bunaway.json.bundle`에서 읽어 어댑터 입력으로 변환한다.
 
-- 프로젝트 루트의 `packaging.json`(version 1)이 앱 이름·식별자·버전·게시자·아이콘·
-  대상 OS/CPU·채널별 설정·서명 참조의 단일 소스다. 앱 ID·버전·제목의 기본값은
-  `app.json`/`package.json`에서 가져오며 명시 값이 우선한다.
-- `packaging.json`은 없어도 된다. 없으면 `build`·`dev`·`validate`는 그대로 동작하고
-  `package`만 사용할 수 없다 — 기존 프로젝트의 마이그레이션은 필요 없다.
+- `bundle`은 앱 이름·식별자·버전·게시자·아이콘·대상 OS/CPU·채널별 설정·서명
+  참조의 단일 소스다. 앱 ID·제목은 `app`, 버전은 프로젝트 `package.json`에서
+  기본값을 가져오며 명시 값이 우선한다.
+- `bundle`은 없어도 된다. 없으면 `build`·`dev`·`validate`는 그대로 동작하고
+  `package`만 사용할 수 없다. 선언한 경우 모든 명령에서 형식을 검증한다.
 - 스키마는 기존 설정 파일들과 같은 규칙을 따른다: 알 수 없는 필드·경로 탈출·형식
   위반을 거부하고, 사용할 채널은 `channels.<id>`에 명시해야 한다(`{}`는 기본값).
 - 채널이 스토어의 제약을 강제할 수 있는 범위(예: `win-store-unpackaged`의

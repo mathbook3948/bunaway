@@ -15,7 +15,7 @@
 
 `src`는 실제 클라이언트 SDK로 명령을 호출하고 이벤트를 구독한다.
 `src-bunaway/src`는 실제 백엔드 SDK로 범위 제한 Host API 저장 후 이벤트를 발행한다.
-`src-bunaway/bunaway.json` v2에 `build`(소스 경로), `app`(앱·창),
+`src-bunaway/bunaway.json` v1에 `build`(소스 경로), `app`(앱·창),
 `bundle`(배포 채널) 설정을 모은다. 권한은 `policy.json`에 둔다.
 설정의 소스·패키징 파일 경로는 프로젝트 루트 기준이다.
 `src-bunaway/policy.json`은 `main` 뷰의 `messages/` 읽기/쓰기만 허용한다.
