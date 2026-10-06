@@ -184,5 +184,5 @@ export function readStorageText(file: bigint, size: number): string {
     if (!transferred[0]) throw new Error("Storage file changed during read");
     offset += transferred[0];
   }
-  return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
 }

@@ -23,6 +23,10 @@ try {
   assert.equal(storage.execute("appData", "notes/new/memo.txt"), "x");
   storage.execute("temp", "empty.txt", "");
   assert.equal(storage.execute("temp", "empty.txt"), "");
+  for (const text of ["\uFEFFhello", "\uFEFF", "\uFEFF\uFEFF한글"]) {
+    storage.execute("temp", "bom.txt", text);
+    assert.equal(storage.execute("temp", "bom.txt"), text);
+  }
   const api = dlopen("kernel32.dll", {
     CreateFileW: { args: ["ptr", "u32", "u32", "ptr", "u32", "u32", "u64"], returns: "u64" },
     CloseHandle: { args: ["u64"], returns: "i32" },

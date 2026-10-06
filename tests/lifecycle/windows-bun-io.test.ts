@@ -132,6 +132,7 @@ test.skipIf(process.platform !== "win32")(
         ["oversized", "a".repeat(1048576)],
         ["escaped", "\u0001".repeat(200000)],
         ["ordinary", "ordinary read"],
+        ["bom", "\uFEFF한글"],
       ] as const) {
         await writeFile(resolve(dataRoot, `temp/${id}.txt`), text);
         const prior = prepares.length;
@@ -147,7 +148,8 @@ test.skipIf(process.platform !== "win32")(
         await channel.send({ kind: "grant", requestId: id, context, allowed: true });
         await waitFor(() => replies.length === completed + 1);
         const response = replies.at(-1)?.response;
-        if (id === "ordinary") expect(response).toEqual({ kind: "result", payload: text });
+        if (id === "ordinary" || id === "bom")
+          expect(response).toEqual({ kind: "result", payload: text });
         else expect(response?.kind === "error" && response.error.code).toBe("INTERNAL");
       }
     } finally {

@@ -20,7 +20,7 @@ import { DiagnosticLog } from "./log.ts";
 import { activeDescendants, containAppProcess } from "./job.ts";
 
 export async function runWindowsApp(app: AppDefinition, config: UIConfig): Promise<void> {
-  containAppProcess();
+  containAppProcess(config.dataRoot);
   const sessions = new Map<HostContext, { route: Route; session: CoreSession }>();
   const log = new DiagnosticLog(resolve(config.dataRoot, "logs/host.log"));
   const calls = new Map<

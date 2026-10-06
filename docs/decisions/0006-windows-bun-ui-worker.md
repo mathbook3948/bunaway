@@ -130,6 +130,9 @@ HRESULT로 변환한다. 마지막 COM 참조 해제와 콜백 반환을 확인�
 
 1. 번들 Bun 버전/revision·manifest·정책·자산·Loader를 검증하고 실행 식별자를 만든다.
    앱 모듈은 자산 검증 뒤 불러온다. 전역 Bun이나 기존 C++ 호스트로 자동 fallback하지 않는다.
+   앱 import 전에 데이터 디렉터리의 `host.lock`을 공유 없는 Win32 파일 핸들로 연다.
+   같은 데이터 디렉터리의 중복 실행은 거부해 WebView 브라우저와 Job 소유권이 겹치지 않게 한다.
+   프로필은 유지하고, 잠금은 프로세스 종료 시 OS가 해제한다.
 2. UI/필요한 I/O Worker의 제어 채널과 백엔드 권한 컨텍스트를 먼저 준비한다.
    그 뒤 `createCore`를 호출한다. 플러그인 setup 중의 Host API도 처리할 수 있어야 한다.
 3. 코어와 WebView 준비가 모두 끝난 뒤 앱 문서를 탐색하고 SDK hello로 세션을 연다.

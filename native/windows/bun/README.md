@@ -23,6 +23,10 @@ CLI 생성 앱의 `bun run build` 결과는 `dist/windows-x64/bunaway.cmd` 또�
 Launcher는 내부 Bun 절대 경로와 실행 전 해시를 검사하고 환경을 정리한다.
 서명된 단일 exe나 설치 프로그램은 제공하지 않는다.
 
+같은 앱 데이터 디렉터리는 한 프로세스만 사용한다. 앱 import 전에 `host.lock`을
+Windows 파일 핸들로 독점하며, 중복 실행은 즉시 오류로 종료한다. 기존 WebView 프로필과
+저장 데이터는 유지한다. 잠금은 정상/강제 종료 때 OS가 해제하므로 남은 파일을 삭제할 필요가 없다.
+
 STA의 bounded PeekMessage pump는 64개 처리 후 Bun에 제어를 돌려준다. OS 모달 중에는
 UI Worker 메시지가 지연될 수 있으나 메인의 타이머·Promise·네트워크는 계속 진행한다.
 COM 콜백은 같은 OS 스레드에서 동기 HRESULT를 반환한다. `threadsafe: true`는 쓰지 않는다.

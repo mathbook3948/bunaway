@@ -159,7 +159,7 @@ export async function verifyWindowsPackage(directory: string): Promise<UIConfig>
 if (import.meta.main) {
   const root = resolve(dirname(import.meta.path), "..");
   const config = await verifyWindowsPackage(root);
-  containAppProcess();
+  containAppProcess(config.dataRoot);
   // Only import a side-effect-free default AppDefinition after all package checks.
   const module = await import(pathToFileURL(resolve(root, "assets/app.js")).href);
   const app = object(module.default);
