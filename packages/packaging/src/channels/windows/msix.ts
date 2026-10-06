@@ -6,6 +6,7 @@ import {
   CODES,
   type PackageAdapter,
 } from "../../contract.ts";
+import { deriveMsixPackageName } from "../../resolve.ts";
 import { copyPayload, findWindowsKitTool, must } from "./common.ts";
 import { recordPackagedHashes } from "./manifest.ts";
 import { signFiles, verifySignatures } from "./sign.ts";
@@ -78,6 +79,9 @@ function escapeXml(value: string): string {
 }
 
 export function renderAppxManifest(options: MsixOptions): string {
+  if (options.packageName.length < 3 || options.packageName.length > 50) {
+    throw new Error("win-store-msix requires packageName to be 3..50 characters.");
+  }
   if (
     options.version.trim() !== options.version ||
     !/^[1-9]\d*\.\d+\.\d+\.0$/.test(options.version) ||
@@ -164,7 +168,8 @@ const adapter: PackageAdapter = {
       );
     }
     const unvirtualizedData = (config.unvirtualizedData as boolean | undefined) ?? true;
-    const packageName = (config.packageName as string | undefined) ?? metadata.identifier;
+    const packageName =
+      (config.packageName as string | undefined) ?? deriveMsixPackageName(metadata.identifier);
     const capabilities = (config.capabilities as string[] | undefined) ?? [];
     const manifestXml = renderAppxManifest({
       packageName,

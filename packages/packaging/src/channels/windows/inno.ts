@@ -51,6 +51,11 @@ export function installerDirectoryName(name: string): string {
 
 export function renderInnoScript(options: InnoOptions): string {
   const perUser = options.scope === "perUser";
+  if (!perUser && !options.preserveUserData) {
+    throw new Error(
+      "perMachine installs must preserve user data; cleanup requires a perUser install.",
+    );
+  }
   const directoryName = issLiteral(installerDirectoryName(options.name));
   const identifier = issLiteral(options.identifier);
   const defaultDir = perUser
@@ -69,6 +74,7 @@ export function renderInnoScript(options: InnoOptions): string {
     "WizardStyle=modern",
     "Compression=lzma2",
     "SolidCompression=yes",
+    "ArchitecturesAllowed=x64compatible",
     "ArchitecturesInstallIn64BitMode=x64compatible",
     "CloseApplications=yes",
     "UninstallDisplayIcon={app}\\bunaway-host.exe",

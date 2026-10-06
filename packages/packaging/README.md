@@ -41,7 +41,10 @@ Inno Setup 스크립트를 생성·컴파일한다. 채널 설정:
 - `desktopShortcut`(기본 false), `startMenuShortcut`(기본 true).
 - `uninstall.preserveUserData`(기본 true): 제거해도
   `%LOCALAPPDATA%\bunaway\<appId>`를 지우지 않는다. 업데이트는 상위
-  설치(over-install)로 데이터를 유지한다.
+  설치(over-install)로 데이터를 유지한다. false는 `perUser`에서만 허용하며,
+  `perMachine`과의 조합은 관리자 계정의 데이터를 잘못 삭제하지 않도록 거부한다.
+
+인스톨러는 `x64compatible` 아키텍처에서만 설치할 수 있다.
 
 WebView2는 레지스트리 `Clients\{F3017226-...}\pv`의 버전이 `0.0.0.0`보다 큰지 확인하고,
 없으면 번들된 `MicrosoftEdgeWebview2Setup.exe`를 `/silent /install`로
@@ -66,6 +69,8 @@ Store용 버전은 major가 1 이상이고 `release.build`가 0이어야 한다.
   제거 시 정리)이고, 이 경우 데이터 보존은 보장하지 않는다.
 - `maxVersionTested`(기본 `10.0.26100.0`), `capabilities`, `packageName`,
   `minVersion`은 채널 설정으로 바꿀 수 있다.
+- `packageName`은 3~50자이며, 생략하면 identifier에서 생성하고 50자로 제한한다.
+  긴 identifier의 앞 50자가 다른 앱과 같다면 고유한 `packageName`을 명시한다.
 
 ### `win-store-unpackaged` — Store EXE/MSI 제출
 

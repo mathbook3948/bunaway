@@ -285,6 +285,11 @@ export function parsePackaging(text: string): PackagingConfig {
           uninstall.preserveUserData,
           `channels.${channel}.uninstall.preserveUserData`,
         );
+        if (options.scope === "perMachine" && uninstall.preserveUserData === false) {
+          fail(
+            `packaging.json: channels.${channel}.uninstall.preserveUserData=false requires scope=perUser; perMachine installs cannot safely target user data.`,
+          );
+        }
       }
       if (options.capabilities !== undefined) {
         if (
@@ -296,8 +301,10 @@ export function parsePackaging(text: string): PackagingConfig {
       }
       if (options.packageName !== undefined) {
         const name = nonempty(options.packageName, `channels.${channel}.packageName`, 50);
-        if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,49}$/.test(name)) {
-          fail(`packaging.json: channels.${channel}.packageName must be alphanumeric plus . _ -.`);
+        if (!/^[A-Za-z0-9][A-Za-z0-9._-]{2,49}$/.test(name)) {
+          fail(
+            `packaging.json: channels.${channel}.packageName must be 3..50 characters, alphanumeric plus . _ -.`,
+          );
         }
       }
       for (const key of ["minVersion", "maxVersionTested", "bundleId", "format"]) {

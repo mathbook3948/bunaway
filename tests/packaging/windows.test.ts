@@ -14,6 +14,7 @@ import {
   type AdapterInput,
   type AdapterStage,
   adapterFor,
+  parsePackaging,
   type ResolvedPackaging,
   registeredChannels,
   type SigningConfig,
@@ -127,6 +128,60 @@ test("win-store-unpackaged adds a submission checklist stage and forbids bootstr
   expect(ids[ids.length - 1]).toBe("submission");
 });
 
+test.each(["win-direct", "win-store-unpackaged"])(
+  "%s rejects machine-wide user data cleanup before packaging",
+  (channel) => {
+    const config = (options: Record<string, unknown>) =>
+      JSON.stringify({ version: 1, channels: { [channel]: options } });
+    expect(() =>
+      parsePackaging(config({ scope: "perMachine", uninstall: { preserveUserData: false } })),
+    ).toThrow(/requires scope=perUser/);
+    for (const options of [
+      { scope: "perMachine" },
+      { scope: "perMachine", uninstall: { preserveUserData: true } },
+      { scope: "perUser", uninstall: { preserveUserData: false } },
+      { uninstall: { preserveUserData: false } },
+    ]) {
+      expect(() => parsePackaging(config(options))).not.toThrow();
+    }
+  },
+);
+
+test("MSIX staging bounds derived package names and preserves explicit identities", async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "bunaway-msix-name-")));
+  try {
+    const source = join(root, "source");
+    const original = input({});
+    await Bun.write(join(source, "runtime", "bun.exe"), "bun fixture");
+    await Bun.write(join(source, "bunaway-host.exe"), "host fixture");
+    await Bun.write(join(source, "manifest.json"), JSON.stringify(original.manifest));
+    const icons = {
+      "windows.square44": join(root, "44.png"),
+      "windows.square150": join(root, "150.png"),
+      "windows.storeLogo": join(root, "store.png"),
+    };
+    for (const path of Object.values(icons)) await Bun.write(path, "icon fixture");
+    const identifier = "com.example.department.product.averylongapplicationname";
+    for (const packageName of [undefined, "Store.ReservedIdentity"]) {
+      const msixInput: AdapterInput = {
+        ...original,
+        channel: "win-store-msix",
+        channelConfig: packageName === undefined ? {} : { packageName },
+        metadata: { ...metadata, root, identifier, icons },
+        artifact: { dir: source, packageDir: source, executable: join(source, "bunaway-host.exe") },
+      };
+      const staging = join(root, packageName ?? "derived");
+      const stage = adapterOrThrow("win-store-msix").stages(msixInput)[0];
+      if (!stage) throw new Error("Expected MSIX staging.");
+      await stage.run({ input: msixInput, staging, report() {}, addArtifact() {} });
+      const xml = await readFile(join(staging, "package", "AppxManifest.xml"), "utf8");
+      expect(xml).toContain(`<Identity Name="${packageName ?? identifier.slice(0, 50)}"`);
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("win-store-msix requires publisher.identity and MSIX icons up front", () => {
   const adapter = adapterOrThrow("win-store-msix");
   const msixInput = (overrides: Partial<ResolvedPackaging>, icons = {}) =>
@@ -178,6 +233,7 @@ test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data pol
   expect(perUser).toContain("DefaultGroupName=com.example.app");
   expect(perUser).toContain("{autodesktop}\\Test App (com.example.app)");
   expect(perUser).toContain("PrivilegesRequired=lowest");
+  expect(perUser).toContain("ArchitecturesAllowed=x64compatible");
   expect(perUser).toContain('Name: "desktopicon"');
   expect(perUser).toContain("{group}\\Test App");
   expect(perUser).toContain("HasWebView2Runtime");
@@ -191,14 +247,19 @@ test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data pol
   const perMachine = renderInnoScript({
     ...base,
     scope: "perMachine",
-    preserveUserData: false,
     bootstrapperPath: "C:\\stage\\webview2\\MicrosoftEdgeWebview2Setup.exe",
     webView2: "bootstrap",
     signed: true,
   });
   expect(perMachine).toContain("DefaultDirName={autopf}\\com.example.app");
   expect(perMachine).toContain("PrivilegesRequired=admin");
-  expect(perMachine).toContain(
+  expect(perMachine).toContain("ArchitecturesAllowed=x64compatible");
+  expect(perMachine).not.toContain("[UninstallDelete]");
+  expect(() => renderInnoScript({ ...base, scope: "perMachine", preserveUserData: false })).toThrow(
+    /must preserve user data/,
+  );
+  const perUserCleanup = renderInnoScript({ ...base, scope: "perUser", preserveUserData: false });
+  expect(perUserCleanup).toContain(
     'Type: filesandordirs; Name: "{localappdata}\\bunaway\\com.example.app"',
   );
   expect(perMachine).toContain("MicrosoftEdgeWebview2Setup.exe");
@@ -245,6 +306,22 @@ test("AppxManifest declares full trust, virtualization opt-out and icon resource
     },
   };
   const xml = renderAppxManifest(manifestOptions);
+  for (const packageName of ["a", "ab", "a".repeat(51)]) {
+    expect(() => renderAppxManifest({ ...manifestOptions, packageName })).toThrow(/3\.\.50/);
+    expect(() =>
+      parsePackaging(
+        JSON.stringify({ version: 1, channels: { "win-store-msix": { packageName } } }),
+      ),
+    ).toThrow();
+  }
+  for (const packageName of ["abc", "a".repeat(50)]) {
+    expect(() => renderAppxManifest({ ...manifestOptions, packageName })).not.toThrow();
+    expect(() =>
+      parsePackaging(
+        JSON.stringify({ version: 1, channels: { "win-store-msix": { packageName } } }),
+      ),
+    ).not.toThrow();
+  }
   expect(xml).toContain('Name="Example.TestApp"');
   expect(xml).toContain('Publisher="CN=Example"');
   expect(xml).toContain('Version="1.2.3.0"');
