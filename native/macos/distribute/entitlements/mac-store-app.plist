@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Mac App Store app: App Sandbox is mandatory. network.client is
+	     required by WKWebView's Networking XPC service gate; see
+	     docs/architecture/macos-sandbox-results.md (UNVERIFIED until checked
+	     with an Apple-issued signature). application-groups is injected by
+	     sign.sh as <TEAM_ID>.<bundle-id> and enables shared container data. -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.application-identifier</key>
+	<string>${TEAM_ID}.${BUNDLE_ID}</string>
+	<key>com.apple.developer.team-identifier</key>
+	<string>${TEAM_ID}</string>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>${TEAM_ID}.${BUNDLE_ID}</string>
+	</array>
+</dict>
+</plist>
