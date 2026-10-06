@@ -56,17 +56,14 @@ run.sh    build + package + test pipeline (see below)
 ```zsh
 ./run.sh              # pins -> clang++ -> host package -> tests/lifecycle/macos-host.ts
 ./run.sh --skip-tests
-./run.sh --sample     # memo sample package
 ./run.sh --app        # also produce an ad-hoc signed build/Bunaway.app
 mise run host:macos   # same entry point
 ```
 
 Requires macOS arm64, pinned Bun 1.4.2, Xcode CLT and a GUI session. Run the
 probe before the host serially: both populate `runtime/bun-bundle/vendor`.
-The current memo sample declaration uses Windows `windows[]`; `--sample`
-copies it but this macOS host cannot run it. The regression suite instead
-tests the shared memo code in a single-window package. Do not interpret a
-successful sample build as a successful app run.
+The regression suite owns its memo fixture. To run the standalone memo app, use
+the CLI commands in [the example README](../../../examples/memo/README.md).
 
 The driver runs the full shared suite against the real host: validator
 agreement, WebView boundary/policy/storage scope, session revocation,

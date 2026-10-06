@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'">
+<title>bunaway 메모</title>
+<link rel="stylesheet" href="./memo.css">
+</head>
+<body>
+<div class="shell">
+<header class="app-header">
+<div class="brand">
+<span class="brand-icon" aria-hidden="true">
+<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+<rect x="5" y="3" width="14" height="18" rx="2"/>
+<path d="M9 8h6M9 12h6M9 16h3"/>
+</svg>
+</span>
+<span class="brand-name">메모<span class="brand-byline">by bunaway</span>
+</span>
+</div>
+<span class="local-badge">
+<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+<rect x="6" y="10" width="12" height="10" rx="2"/>
+<path d="M8 10V7a4 4 0 0 1 8 0v3"/>
+</svg>이 기기에 보관</span>
+</header>
+<main>
+<div class="intro">
+<p class="eyebrow">A LITTLE SPACE FOR YOUR THOUGHTS</p>
+<h1>작은 생각을 남기는 공간.</h1>
+<p class="description">해야 할 일, 문득 떠오른 아이디어, 오늘의 한 줄.<br>잊기 전에 가볍게 적어두세요.</p>
+</div>
+<div class="workspace">
+<section class="card editor" aria-labelledby="memo-label">
+<div class="card-heading">
+<label id="memo-label" for="memo">지금 떠오른 생각</label>
+<span class="card-tag">편집 가능</span>
+</div>
+<textarea id="memo" maxlength="10000" placeholder="오늘 기억하고 싶은 것은…" aria-describedby="memo-count" spellcheck="false">
+</textarea>
+<div class="editor-footer">
+<span class="count" id="memo-count">0 / 10,000자</span>
+<button type="button" class="save-button" id="save" disabled>
+<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+<path d="m5 12 4 4L19 6"/>
+</svg>
+<span id="save-label">메모 저장</span>
+</button>
+</div>
+</section>
+<section class="card snapshot" aria-labelledby="snapshot-title">
+<div class="card-heading">
+<h2 id="snapshot-title">저장된 메모</h2>
+<span class="card-tag">마지막 저장 내용</span>
+</div>
+<div class="paper">
+<p class="paper-label">KEEP THIS THOUGHT</p>
+<pre id="saved-memo">
+</pre>
+<p class="snapshot-note">앱을 닫아도, 다시 열어도 그대로.</p>
+</div>
+</section>
+</div>
+<div class="status-bar">
+<p id="status" class="status" role="status">연결 중…</p>
+<span class="shortcut" id="shortcut">
+<kbd>Ctrl</kbd> + <kbd>S</kbd>로 저장</span>
+</div>
+</main>
+<footer class="app-footer">MADE WITH BUNAWAY</footer>
+</div>
+<script type="module" src="./main.js">
+</script>
+</body>
+</html>

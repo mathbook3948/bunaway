@@ -1,4 +1,7 @@
-import { createClient, createWebViewTransport } from "../../../packages/client-sdk/src/index.ts";
+import {
+  createClient,
+  createWebViewTransport,
+} from "../../../../../packages/client-sdk/src/index.ts";
 
 const client = createClient({
   transport: createWebViewTransport(window.chrome.webview),

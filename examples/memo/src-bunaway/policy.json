@@ -16,22 +16,6 @@
           }
         ]
       }
-    },
-    {
-      "id": "reader",
-      "origins": ["https://app.bunaway.local"],
-      "commands": ["memo.read"],
-      "events": ["memo.saved"],
-      "host": {
-        "log": false,
-        "storage": [
-          {
-            "scope": "appData",
-            "pathPrefix": "notes",
-            "access": ["read"]
-          }
-        ]
-      }
     }
   ],
   "backend": {

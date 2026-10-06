@@ -3,7 +3,6 @@
 # Usage:
 #   ./run.sh                 # verify pins -> build -> package -> tests/lifecycle/macos-host.ts
 #   ./run.sh --skip-tests    # build+package only
-#   ./run.sh --sample        # package the memo sample instead of the test suite
 #   ./run.sh --app           # additionally build and test an ad-hoc signed build/Bunaway.app
 #   BUN=/path/to/bun ./run.sh
 set -euo pipefail
@@ -19,13 +18,11 @@ PIN="$ROOT/runtime/build-manifests/darwin-aarch64.json"
 # app declaration remains single-window until this host supports windows[].
 DESKTOP_TEST="$ROOT/tests/fixtures/desktop/host"
 SKIP_TESTS=0
-SAMPLE=0
 MAKE_APP=0
 HOST_ONLY=0
 for arg in "$@"; do
   case "$arg" in
     --skip-tests) SKIP_TESTS=1 ;;
-    --sample) SAMPLE=1 ;;
     --app) MAKE_APP=1 ;;
     --host-only) HOST_ONLY=1 ;;
   esac
@@ -66,7 +63,7 @@ BUILD_BUN=${BUN:-$(command -v bun || true)}
 command -v clang++ >/dev/null || { echo "Xcode CLT clang++ is required." >&2; exit 1; }
 
 BUILD="$ROOT/build/macos-host"
-PACKAGE="$ROOT/build/$( ((SAMPLE)) && echo 'macos-memo-package' || echo 'macos-host-package')"
+PACKAGE="$ROOT/build/macos-host-package"
 mkdir -p "$BUILD" "$PACKAGE/assets/web" "$PACKAGE/assets/tmp" "$PACKAGE/licenses" "$PACKAGE/runtime"
 clang++ -std=c++20 -O2 -Wall -Wextra -fobjc-arc -I"$JSON_DIR" \
   "$HERE/main.mm" -framework Cocoa -framework WebKit -o "$BUILD/bunaway-host"
@@ -87,22 +84,13 @@ cp "$HERE/test/app.json" "$PACKAGE/assets/app.json"
 for name in process.schema.json message.schema.json policy.schema.json host-call.schema.json host-operations.json; do
   cp "$GENERATED/$name" "$PACKAGE/assets/$name"
 done
-if (( ! SAMPLE )); then
-  for f in "$DESKTOP_TEST"/web/*; do cp "$f" "$PACKAGE/assets/web/"; done
-  for entry in app.js page2.js; do
-    (cd "$ROOT" && "$BUILD_BUN" build "$DESKTOP_TEST/web/$entry" --target=browser --outfile "$PACKAGE/assets/web/$entry")
-  done
-  cp "$HERE/test/web/security.html" "$PACKAGE/assets/web/security.html"
-  (cd "$ROOT" && "$BUILD_BUN" build "$HERE/test/web/security.js" --target=browser --outfile "$PACKAGE/assets/web/security.js")
-fi
-cp "$ROOT/examples/memo/web/memo.html" "$PACKAGE/assets/web/memo.html"
-(cd "$ROOT" && "$BUILD_BUN" build examples/memo/web/memo.js --target=browser --outfile "$PACKAGE/assets/web/memo.js")
-if (( SAMPLE )); then
-  cp "$ROOT/examples/memo/app.json" "$ROOT/examples/memo/policy.json" "$PACKAGE/assets/"
-  BACKEND_ENTRY="$ROOT/examples/memo/backend.ts"
-else
-  BACKEND_ENTRY="$DESKTOP_TEST/backend.ts"
-fi
+for f in "$DESKTOP_TEST"/web/*; do cp "$f" "$PACKAGE/assets/web/"; done
+for entry in app.js page2.js memo.js; do
+  (cd "$ROOT" && "$BUILD_BUN" build "$DESKTOP_TEST/web/$entry" --target=browser --outfile "$PACKAGE/assets/web/$entry")
+done
+cp "$HERE/test/web/security.html" "$PACKAGE/assets/web/security.html"
+(cd "$ROOT" && "$BUILD_BUN" build "$HERE/test/web/security.js" --target=browser --outfile "$PACKAGE/assets/web/security.js")
+BACKEND_ENTRY="$DESKTOP_TEST/backend.ts"
 (cd "$ROOT" && "$BUILD_BUN" build "$BACKEND_ENTRY" --target=bun --outfile "$PACKAGE/assets/backend.js")
 
 "$BUILD_BUN" -e '
@@ -140,7 +128,7 @@ if (( MAKE_APP )); then
   echo "App bundle: $APP (ad-hoc signed; verify: $APP/Contents/MacOS/bunaway-host --package $APP/Contents/Resources)"
 fi
 
-if (( ! SKIP_TESTS && ! SAMPLE )); then
+if (( ! SKIP_TESTS )); then
   clang++ -std=c++20 -O2 -Wall -Wextra -fobjc-arc -I"$JSON_DIR" \
     "$ROOT/tests/lifecycle/macos-host-native.mm" -framework Cocoa -framework WebKit -o "$BUILD/host-native-tests"
   "$BUILD_BUN" "$ROOT/tests/lifecycle/macos-host.ts" --package "$PACKAGE"

@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "build": {
+    "backend": "src-bunaway/src/index.ts",
+    "windowsApp": "src-bunaway/src/app.ts",
+    "frontend": "src"
+  },
+  "app": {
+    "appId": "examples.bunaway.memo",
+    "title": "bunaway 메모",
+    "view": "main",
+    "home": "https://app.bunaway.local/index.html",
+    "window": {
+      "width": 1024,
+      "height": 768
+    }
+  },
+  "bundle": {
+    "channels": {
+      "win-direct": {}
+    }
+  }
+}

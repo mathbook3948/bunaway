@@ -30,9 +30,10 @@ B 실험의 기존 증거는 [별도 실행 결과](./windows-probe-results.md)�
 `runtime-bun.runBunApp`이 `createCore`를 만들고 WebView는 `createClient`와
 `createWebViewTransport`를 사용한다. 다중 뷰 통합 패키지는 `windows` 선언으로
 세 창(주 뷰 `main`, 쓰기 가능 `editor`, 읽기 전용 `reader`)을 열고 하나의
-Bun 프로세스를 공유한다. 메모 샘플은 편집 창과 읽기 전용 창을 함께 여는
-[별도 패키지](../../examples/memo/README.md)로도 빌드·실행해 두 창의 세션이
-하나의 Bun에서 열리고 전체 창 종료로 `host-stopped` 정리를 확인했다.
+Bun 프로세스를 공유한다. 당시 메모 샘플의 별도 두 창 패키지도 빌드·실행해
+두 세션이 하나의 Bun에서 열리고 전체 창 종료로 `host-stopped` 정리를 확인했다.
+현재 [메모 예제](../../examples/memo/README.md)는 CLI로 실행하는 단일 창 앱이며,
+다중 창과 권한·복원 시나리오는 `tests/fixtures/desktop/host/`에서 검증한다.
 기존 `windows` 없는 단일 창 `app.json` 선언도 그대로 동작함을 메모 단계에서 검증했다.
 
 | 항목 | 확인 결과 |

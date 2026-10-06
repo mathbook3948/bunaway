@@ -50,9 +50,9 @@ Bun UI Worker의 창·WebView2·비동기 작업·다중 창·종료를 검증�
 - 공유 메모 회귀 페이지의 Windows 영속 프로필 검사는 기본값으로 유지한다.
   macOS driver만 비영속 브라우저 저장소의 재시작 초기화를 명시적으로 검사하며,
   범위 제한 Host API의 메모 파일 복원 검사는 양 플랫폼에서 그대로 유지한다.
-- `examples/memo/`의 앱 정의·화면은 macOS 회귀에서도 사용하지만 현재 배포용
-  `app.json`은 Windows 다중 창 선언이다. macOS `--sample`로 복사한 패키지의 실행은
-  지원하지 않는다. `packages/cli`는 빈 모듈이 아니라 실제 create/validate/doctor/dev/build를
+- `examples/memo/`는 CLI 생성 앱과 같은 `src/` + `src-bunaway/` 구조의 독립 단일 창 앱이다.
+  예제 폴더의 `dev/build/package`로 실행·빌드하며 여러 창과 자동 실행 시나리오는
+  `tests/fixtures/desktop/host/`가 소유한다. `packages/cli`는 실제 create/validate/doctor/dev/build를
   제공하고 단일 뷰 vanilla 템플릿을 생성한다. `plugins/log`, `plugins/storage`는 빈 모듈이며
   네이티브 Host API 로그/저장 구현과 배포할 기본 플러그인 완료는 다르다.
 - 개발자용 CLI tarball은 SDK·스키마·runtime pin·native source/tools·라이선스 원문을
