@@ -21,5 +21,3 @@ bun run build
 ```
 
 The desktop app is written to `dist/`.
-
-[Documentation](https://github.com/mathbook3948/bunaway/tree/main/docs)

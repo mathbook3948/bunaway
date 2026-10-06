@@ -23,4 +23,4 @@ bun run bunaway build
 
 The first command builds the frontend; the second creates the desktop app in `dist/`.
 
-[Documentation](https://github.com/mathbook3948/bunaway/tree/main/docs) · [Vite](https://vite.dev)
+[Vite](https://vite.dev)
