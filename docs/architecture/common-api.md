@@ -15,7 +15,7 @@ Windows용 `runBunApp`이 이를 연결한다. 명령·Host API 검증 헬퍼와
 | `AppDefinition`, `CommandDefinition`, `CommandContext`, 플러그인·상태·이벤트 | core, backend에서 재수출 | 앱·플러그인·코어 |
 | `Core`, `CoreSession`, `CoreFactory`, `CoreServices`, `RuntimeServices` | core | runtime-bun |
 | Host operation별 입력·출력 스키마, `HostAPI`, `HostContext` | protocol | 코어·플러그인·runtime·네이티브 |
-| `command`, `bindHostAPI` | backend, runtime-bun | 앱 정의·Host API 어댑터 |
+| `command`, `defineModule`, `defineApp`, `bindHostAPI` | backend, runtime-bun | 앱 정의·Host API 어댑터 |
 
 추가 의존성은 없다. portable 코어는 DOM·Bun·Node 전역 타입 없이 컴파일한다.
 `CancellationSignal`은 표준 AbortSignal의 `aborted`, abort 리스너 등록·해제 부분이며
@@ -54,9 +54,32 @@ listener에는 payload와 공개 source·target·subscriptionId·sequence가 전
 출력도 검증·복사한다. 스키마는 기존 JSON Schema subset이다. 별도 스키마 DSL은 도입하지 않는다.
 핸들러의 일반 예외는 코어가 안전한 INTERNAL로 바꾸며 `BunawayError`만 명시적인 API 오류로 취급한다.
 
-앱은 `{ commands, events, state?, plugins? } satisfies AppDefinition`으로 정의한다.
+앱은 `defineModule("memo").command("save", contract, handle).event("saved", schema)`로
+기능을 정의하고 `defineApp({ modules: [memo], state?, plugins? })`로 조립할 수 있다.
+`contract`는 기존 JSON Schema의 `{ input, output }`이며 `command`와 같은 검증을 거친다.
+서비스 구현은 일반 TypeScript 함수나 클래스로 작성하고 모듈에서 공개 명령과 연결한다.
+작은 기능에 계약·서비스 파일 분리를 강제하지 않는다.
+
+모듈의 로컬 이름은 `memo.save`, `memo.saved`로 등록한다. 앱 조립은 객체 spread 전에
+최종 이름의 중복을 검사한다. 모듈 내부, 모듈 간, 직접 앱 등록, 플러그인 등록의 충돌은
+`INVALID_ARGUMENT`으로 실패하며 명령·이벤트 이름과 양쪽 등록 소유자를 표시한다.
+`memo.save`와 `settings.save`는 다르지만 `memo.archive`의 `save`와 `memo`의
+`archive.save`는 충돌한다. 명령과 이벤트의 이름 공간은 서로 독립이다.
+체인의 각 단계와 조립한 명령·이벤트 목록은 불변 스냅샷이므로 이전 객체가 바뀌지 않는다.
+
+조립 결과는 기존 `AppDefinition`이다. 원래의
+`{ commands, events, state?, plugins? } satisfies AppDefinition` 형식도 사용할 수 있다.
+`defineApp`의 선택적 `commands`·`events`에는 완성된 이름을 직접 등록한다.
+등록 API에 전달하기 전에 객체 spread로 덮어쓴 항목은 복원·검사할 수 없으므로
+기능 조합에는 `modules`를 사용한다. 플러그인의 setup·정리는 기존 Core가 담당한다.
 명령·이벤트 이름을 직접 정책에 허용한다. 별도 permission 별칭은 없다.
-`CommandsOf`·`EventsOf`는 앱에 직접 선언한 스키마에서 타입을 추론한다.
+`CommandsOf`·`EventsOf`는 앱에 직접 선언하거나 모듈에서 조립한 스키마에서 타입을 추론한다.
+모듈 목록을 변수에 저장할 때는 `as const`로 tuple을 유지한다. 조건부 모듈은 공통으로
+존재하는 이름만 노출하고, 비어 있을 수 있는 동적 배열과 tuple의 동적 꼬리는 등록을
+보장하지 않으므로 타입에 명령·이벤트를 추가하지 않는다.
+모듈·로컬 이름이 union이면 하나의 이름만 선택되며, `string`으로 넓어진 이름이나
+`feature-${number}` 같은 무한한 문자열 패턴은 특정 등록 이름을 보장하지 않는다.
+고정된 이름으로 등록하면 해당 스키마의 타입을 유지한다.
 프런트엔드에는 데이터 타입만 전달하고 백엔드 구현을 번들에 import하지 않는다.
 명령 타입 생성 tooling과 플러그인까지 합친 전체 등록 목록의 타입 생성은 CLI 작업으로 남아 있다.
 
@@ -144,7 +167,8 @@ Windows 패키징 스크립트와 메모 샘플은 있으며, CLI·설치·서�
 
 `tests/api/contracts.test.ts`는 명령 input/output, Host 컨텍스트 유지·오류·취소,
 부트 정책·Web 경계와 compile-time 소비자 타입을 검증한다. `mise run check`에 포함한다.
-SDK·코어 실행과 실제 Bun 프로세스 IPC 테스트도 `mise run check`에 포함한다.
+`tests/api/modules.test.ts`는 조립한 앱의 타입 추론, 중복 등록, Core·Client 명령 호출과
+정책·이벤트를 검증한다. SDK·코어 실행과 실제 Bun 프로세스 IPC 테스트도 `mise run check`에 포함한다.
 `mise run host:windows`의 실행 기록은 실제 SDK·코어·메모 저장·이벤트와 네이티브
 파일 권한 집행·다중 창/뷰의 정책 분리를 Windows에서 확인한다. 다른 플랫폼 지원
 완료를 뜻하지는 않는다.
