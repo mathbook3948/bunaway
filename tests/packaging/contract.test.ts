@@ -1183,6 +1183,50 @@ test("artifact directory links cannot escape staging", async () => {
   expect(await Bun.file(resolve(external, "setup.exe")).text()).toBe("external installer");
 });
 
+test.each(["external", "previous-output"] as const)(
+  "staging root links to %s are rejected before replacing previous output",
+  async (destination) => {
+    const projectRoot = await mkdtemp(join(home, "staging-root-link-"));
+    await makeArtifact(projectRoot);
+    const output = resolve(projectRoot, "dist/windows-x64/packaged/win-direct");
+    const previous = resolve(output, "setup.exe");
+    await Bun.write(previous, "last good installer");
+    const external = resolve(projectRoot, "external");
+    await Bun.write(resolve(external, "setup.exe"), "external installer");
+    let staging = "";
+    const report = await runAdapter(
+      projectRoot,
+      stubAdapter({
+        async run(ctx) {
+          staging = ctx.staging;
+          await rm(staging, { recursive: true });
+          await symlink(destination === "external" ? external : output, staging, "junction");
+          ctx.addArtifact("setup.exe", "installer", { signed: true });
+        },
+      }),
+    );
+    expect(report.ok).toBe(false);
+    expect(report.usable).toBe(false);
+    expect(report.submittable).toBe(false);
+    expect(report.signing.performed).toBe(false);
+    expect(report.artifacts).toEqual([]);
+    expect(report.diagnostics.some((d) => d.code === CODES.VERIFY_FAILED)).toBe(true);
+    expect(report.stages.find((s) => s.id === "verify-artifact")?.status).toBe("failed");
+    expect(await Bun.file(previous).text()).toBe("last good installer");
+    expect(await Bun.file(resolve(external, "setup.exe")).text()).toBe("external installer");
+    expect(await Bun.file(resolve(staging, "setup.exe")).exists()).toBe(false);
+    expect(
+      (await readdir(resolve(output, ".."))).some((name) =>
+        /\.building-|\.previous-|\.lock$/.test(name),
+      ),
+    ).toBe(false);
+    expect(await readdir(resolve(projectRoot, "dist/.bunaway-locks/windows-x64"))).toEqual([]);
+    expect(
+      await Bun.file(packagingReportPath(projectRoot, "windows-x64", "win-direct")).json(),
+    ).toEqual(report);
+  },
+);
+
 test("artifacts reached through internal directory links remain valid after publication", async () => {
   const projectRoot = await mkdtemp(join(home, "internal-link-"));
   await makeArtifact(projectRoot);

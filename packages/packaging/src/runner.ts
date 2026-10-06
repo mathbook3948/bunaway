@@ -285,6 +285,9 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
       for (const entry of produced) {
         const path = isAbsolute(entry.path) ? entry.path : resolve(staging, entry.path);
         try {
+          if (!(await lstat(staging)).isDirectory()) {
+            throw new Error("Staging root is not a regular directory.");
+          }
           if (!inside(staging, path)) throw new Error("Artifact path escapes staging.");
           const file = await lstat(path);
           if (!file.isFile()) throw new Error("Artifact is not a regular file.");
