@@ -9,7 +9,6 @@ import {
   createCore,
 } from "../../../packages/core/src/index.ts";
 import {
-  API_LIMITS,
   BunawayError,
   type CancellationSignal,
   type HostContext,
@@ -231,7 +230,8 @@ export async function runWindowsApp(app: AppDefinition, config: UIConfig): Promi
           return Promise.reject(
             new BunawayError({ code: "CANCELLED", message: "Host operation cancelled." }),
           );
-        if (calls.size >= API_LIMITS.maxPending)
+        // Pending calls reserve cancellation capacity on both Workers until their acks arrive.
+        if (!channel.canSend(1, calls.size) || !ioChannel.canSend(1, calls.size))
           return Promise.reject(
             new BunawayError({ code: "BUSY", message: "Host request limit reached." }),
           );

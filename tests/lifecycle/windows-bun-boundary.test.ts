@@ -11,6 +11,24 @@ import {
   type TransportEvent,
 } from "../../packages/protocol/src/index.ts";
 
+test("Host calls remain BUSY until both Workers acknowledge cancellations, then recover", async () => {
+  const child = Bun.spawn(
+    [process.execPath, "--no-env-file", "test", `${import.meta.dir}/windows-bun-host-capacity.ts`],
+    { stdout: "pipe", stderr: "pipe" },
+  );
+  const output = new Response(child.stdout).text();
+  const errors = new Response(child.stderr).text();
+  const timeout = setTimeout(() => child.kill(), 10000);
+  try {
+    expect(await child.exited, await errors).toBe(0);
+    expect(await output).toContain("PASS Host capacity recovers");
+  } finally {
+    clearTimeout(timeout);
+    if (child.exitCode === null) child.kill();
+    await child.exited;
+  }
+}, 15000);
+
 test("Windows boundary rejects canonical overflow before reserving IDs and deadlines win before a scan", async () => {
   const packets: Packet[] = [];
   const output: ServerMessage[] = [];
