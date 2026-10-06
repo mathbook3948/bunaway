@@ -1,6 +1,8 @@
 # bunaway Vite
 
-vanilla TypeScript UI를 Vite 개발 서버와 연결하는 템플릿이다.
+공식 `create-vite@9.2.1`의 `vanilla-ts` 기본 화면을 사용하는 템플릿이다.
+HTML·UI 소스·스타일·이미지는 upstream 파일 그대로이며 Vite 로고와 카운터를 표시한다.
+Bunaway SDK를 사용하는 화면 예시는 별도 메모 예제를 참조한다.
 고정 Bun **1.4.2**로 실행하며 별도 Node.js 설치는 필요 없다.
 Windows x64에는 PowerShell 7·WebView2 Evergreen, macOS arm64에는 macOS 14+·Xcode CLT와
 GUI 세션이 필요하다.
@@ -30,14 +32,18 @@ Vite와 같이 루트 `index.html`에서 `/src/main.ts`를 불러온다.
 `bun run build`로 `web-dist/`를 생성한다. CLI는 프런트엔드 빌드를 자동 실행하지 않는다.
 네이티브 출력이 `dist/`를 사용하므로 프런트엔드 출력은 `web-dist/`로 분리한다.
 `vite.config.ts`의 상대 `base`는 Windows 가상 호스트와 macOS 로컬 자산 매핑에 맞춘다.
-개발 페이지에만 CSS 갱신과 loopback WebSocket을 허용하는 CSP를 적용하며
-프로덕션 HTML은 `default-src 'self'; script-src 'self'; style-src 'self'`를 유지한다.
+원본 `index.html`을 수정하지 않고 Vite HTML hook에서 CSP를 삽입한다.
+개발 페이지에만 CSS 갱신과 loopback WebSocket을 허용하며 프로덕션 HTML은 `default-src 'self'; script-src 'self'; style-src 'self'`를 유지한다.
 개발 서버 URL과 marker는 프로덕션 앱에 포함하지 않는다.
 
 `src-bunaway/bunaway.json`은 build·app·dev·bundle 설정을 담는다.
 `src-bunaway/policy.json`은 `main` 뷰의 `message.save`·`message.read`·`message.saved`와
 `appData/messages/` 읽기/쓰기만 허용한다. 개발 서버 origin은 CLI가 개발 산출물에만 적용한다.
-백엔드·권한·SDK 호출 예시는 기본 vanilla 템플릿과 같다.
+백엔드·권한 설정은 기본 vanilla 템플릿을 공유한다. Vite 기본 화면은 SDK를 호출하지 않는다.
+
+UI 출처는 [create-vite vanilla-ts](https://github.com/vitejs/vite/tree/fea5b21dd9524ed7308632407b996f1fe5942c9c/packages/create-vite/template-vanilla-ts)다.
+원본 UI 파일은 Biome 포맷·린트 대상에서 제외해 upstream 형식을 유지한다.
+`public/LICENSE.vite.txt`는 Vite의 MIT 라이선스이며 배포 자산에도 포함된다.
 
 package.json과 bun.lock을 커밋하고 재설치에는 `bun install --frozen-lockfile`을 사용한다.
 프레임워크 CLI·SDK를 함께 같은 버전으로 업그레이드하며 로컬 tarball 묶음은 보관한다.

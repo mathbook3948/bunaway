@@ -4,8 +4,11 @@ import { resolve } from "node:path";
 import type { Project } from "../../packages/cli/src/config.ts";
 import { startDevServer } from "../../packages/cli/src/dev-server.ts";
 
-// Verify the generated app's real Vite server, SDK resolution and HMR transport.
-export async function verifyViteDevelopment(project: Project): Promise<void> {
+// Verify the real Vite server, frontend modules/assets and HMR transport.
+export async function verifyViteDevelopment(
+  project: Project,
+  frontend: "sdk" | "vite" = "sdk",
+): Promise<void> {
   if (!project.dev) throw new Error("Expected a Vite development configuration.");
   const reservation = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("") });
   const port = reservation.port;
@@ -31,7 +34,7 @@ export async function verifyViteDevelopment(project: Project): Promise<void> {
   );
   let socket: WebSocket | undefined;
   try {
-    const html = await (await fetch(url)).text();
+    const html = (await (await fetch(url)).text()).replaceAll("&#39;", "'");
     expect(html).toContain('src="/@vite/client"');
     expect(html).toContain('src="/src/main.ts"');
     expect(html).toContain("style-src 'self' 'unsafe-inline'");
@@ -39,11 +42,27 @@ export async function verifyViteDevelopment(project: Project): Promise<void> {
     const ui = await fetch(new URL("src/main.ts", url));
     expect(ui.ok).toBe(true);
     const script = await ui.text();
-    const sdkPath = script.match(/from "([^"]+)"/)?.[1];
-    if (!sdkPath) throw new Error("Missing served SDK import.");
-    const sdk = await fetch(new URL(sdkPath, url));
-    expect(sdk.ok).toBe(true);
-    expect(await sdk.text()).toContain("createWebViewTransport");
+    if (frontend === "sdk") {
+      const sdkPath = script.match(/from "([^"]+)"/)?.[1];
+      if (!sdkPath) throw new Error("Missing served SDK import.");
+      const sdk = await fetch(new URL(sdkPath, url));
+      expect(sdk.ok).toBe(true);
+      expect(await sdk.text()).toContain("createWebViewTransport");
+    } else {
+      expect(script).toContain("setupCounter");
+      expect(script).toContain("Explore Vite");
+      const counter = await fetch(new URL("src/counter.ts", url));
+      expect(counter.ok).toBe(true);
+      expect(await counter.text()).toContain("Count is");
+      for (const path of [
+        "src/assets/hero.png",
+        "src/assets/vite.svg",
+        "src/assets/typescript.svg",
+        "favicon.svg",
+        "icons.svg",
+      ])
+        expect((await fetch(new URL(path, url))).ok).toBe(true);
+    }
     const cssRequest = { headers: { Accept: "text/css" } };
     expect((await fetch(new URL(`src/${cssName}`, url), cssRequest)).ok).toBe(true);
     const viteClient = await (await fetch(new URL("@vite/client", url))).text();

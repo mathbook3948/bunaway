@@ -14,8 +14,12 @@ React·Vue·Svelte 전용 템플릿은 아직 제공하지 않는다.
 기본 화면과 동일하지 않다.
 
 Bunaway Vite 템플릿도 같은 구조와 script 역할을 사용하고 `bunaway` script를 추가한다.
-UI는 Bunaway SDK 예제다. Bun으로 Vite를 실행하고, 네이티브 출력 `dist/`와 충돌하지
-않도록 프런트엔드 출력은 `web-dist/`다. 상대 자산 URL과 개발 전용 CSP는 Bunaway의
+UI는 npm에 배포된 `create-vite@9.2.1`의
+[공식 vanilla-ts 샘플](https://github.com/vitejs/vite/tree/fea5b21dd9524ed7308632407b996f1fe5942c9c/packages/create-vite/template-vanilla-ts)이다.
+`index.html`, `src/`, `public/`의 UI 파일은 원본 그대로 복사하며 Vite MIT 라이선스를 포함한다.
+카운터·로고·스타일을 Bunaway SDK 화면으로 바꾸지 않는다. SDK UI 예시는
+기본 vanilla 템플릿과 메모 예제에서 제공한다. Bun으로 Vite를 실행하고, 네이티브 출력 `dist/`와 충돌하지
+않도록 프런트엔드 출력은 `web-dist/`다. 상대 자산 URL과 개발/배포 HTML에 삽입하는 CSP는 Bunaway의
 로컬 자산·브리지 계약에 맞춘다. 기본 vanilla 템플릿은 그대로 제공한다.
 
 [Tauri CLI의 init 구현](https://github.com/tauri-apps/tauri/blob/7c87f907ebca5e46f59c99ed1d30381d6e5bda5d/crates/tauri-cli/src/init.rs)은
