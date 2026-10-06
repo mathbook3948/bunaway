@@ -4,7 +4,7 @@
 
 ## 1 목표와 범위
 
-웹으로 화면을 만들고 TypeScript로 앱 백엔드를 작성하는 독립 프레임워크를 만든다. Windows, macOS, Linux, Android, iOS를 대상으로 하며 기본 렌더러는 각 운영체제의 WebView다. Bun은 빌드 도구이자 앱 패키지에 포함하는 백엔드 런타임으로 사용한다. 첫 구현은 Windows에서 번들된 Bun 실행 파일을 자식 프로세스로 실행한다. 모바일의 실행·배포 경로는 별도 검증한다.
+웹으로 화면을 만들고 TypeScript로 앱 백엔드를 작성하는 독립 프레임워크를 만든다. Windows, macOS, Linux, Android, iOS를 대상으로 하며 기본 렌더러는 각 운영체제의 WebView다. Bun은 빌드 도구이자 앱 패키지에 포함하는 백엔드 런타임으로 사용한다. Windows는 번들 Bun을 앱 진입점으로 사용하고 같은 프로세스의 UI Worker가 직접 FFI로 Win32·WebView2를 소유한다. macOS는 별도 Bun 자식 프로세스를 유지한다. 모바일의 실행·배포 경로는 별도 검증한다.
 
 Tauri에서 참고할 부분은 웹 UI, 백엔드 코어, 네이티브 호스트를 나누는 구조다. 명령 처리, 상태, 이벤트, 플러그인 관리 등 백엔드 기반을 Bun과 TypeScript 중심으로 설계한다. 네이티브 코드는 창, WebView, 운영체제 기능과 Bun 내장에 필요한 경계에 둔다.
 
@@ -29,7 +29,12 @@ Tauri에서 참고할 부분은 웹 UI, 백엔드 코어, 네이티브 호스트
 
 ## 2 기본 실행 구조
 
-기본 구조는 네이티브 앱 호스트가 앱 패키지에 번들된 Bun 실행 파일을 별도 자식 프로세스로 실행하고 IPC로 통신하는 방식이다. UI 메인 스레드는 네이티브 호스트가 소유하며 Bun 백엔드는 독립 프로세스에서 실행한다. 여기서 내장은 실행 파일을 앱과 함께 배포한다는 뜻이다. 사용자 기기의 Bun 설치나 PATH에 의존하지 않는다. 호스트는 패키지 안에서 검증한 실행 파일의 절대 경로를 사용한다. WebView 렌더러의 실제 프로세스 배치는 운영체제 WebView 구현을 따른다.
+Windows의 기본 구조는 번들 Bun 진입점·앱/코어 메인·Win32/WebView2 UI STA Worker·파일 I/O Worker다.
+같은 프로세스에서 구조화 복사 채널로 연결하며 WebView 브라우저·렌더러 프로세스는 유지한다.
+실제 출처와 권한은 UI가 검증하고 코어와 SDK 계약은 재사용한다.
+사용자 Bun 설치나 PATH에 의존하지 않으며 검증한 내부 Bun의 절대 경로를 실행한다.
+[ADR 0006](./decisions/0006-windows-bun-ui-worker.md)이 Windows의 현재 계약이다.
+아래 별도 Bun/IPC 도식은 macOS와 기존 Windows B/C 실험의 구조를 설명한다.
 
 ```text
 웹 UI ── 클라이언트 SDK
@@ -63,13 +68,13 @@ Bun 자식 프로세스 ── TypeScript 코어 ── 앱 명령·상태·플�
 
 ### 네이티브 구현과 플랫폼 후보
 
-- Windows: Win32와 WebView2를 연결하는 C++ 호스트 구현 및 다중 창/뷰·뷰별 정책 실행 검증 완료
+- Windows: Bun 메인·UI STA Worker·I/O Worker, 직접 Win32/WebView2 FFI 및 다중 창/뷰·뷰별 정책·독립 CLI 실행 검증
 - macOS: AppKit·WKWebView를 연결하는 Swift/Objective-C++ 호스트
 - Linux: GTK·WebKitGTK 기반 C/C++ 호스트
 - Android: Kotlin 앱 수명주기·Android WebView, Bun 실행·패키징 경로 별도 검증
 - iOS: Swift 앱 수명주기·WKWebView, Bun 실행·패키징 경로 별도 검증
 
-Windows는 현재 C++ 호스트를 사용한다. 나머지 플랫폼의 언어와 바인딩은 초기 제안이며 미구현이다. 기존 경량 호스트 라이브러리 재사용 여부는 라이선스, UI 스레드 제어, 모바일 경계와 유지보수 비용을 검토한 뒤 결정한다. 앱 개발자에게 Rust 작성을 요구하지 않으며 코어를 Rust로 다시 구현하지 않는다.
+Windows는 현재 TypeScript Bun FFI 호스트를 사용하며 C++ 컴파일 의존이 없다. 나머지 플랫폼의 언어와 바인딩은 초기 제안이며 미구현이다. 기존 경량 호스트 라이브러리 재사용 여부는 라이선스, UI 스레드 제어, 모바일 경계와 유지보수 비용을 검토한 뒤 결정한다. 앱 개발자에게 Rust 작성을 요구하지 않으며 코어를 Rust로 다시 구현하지 않는다.
 
 ## 3 실행 경계와 수명주기
 
@@ -85,6 +90,10 @@ Windows는 현재 C++ 호스트를 사용한다. 나머지 플랫폼의 언어�
 ### 상태 전이
 
 `created → starting → ready → stopping → stopped`를 기본 상태로 삼고 초기화·실행 실패에는 `failed`를 기록한다. 모바일의 foreground/background와 WebView 생성·폐기는 별도 상태로 관리한다. 백그라운드 전환이 백엔드 종료를 뜻하지 않으며 OS가 앱을 정지하거나 종료할 수 있다.
+
+Windows의 현재 실행·채널·종료 계약은 [ADR 0006](./decisions/0006-windows-bun-ui-worker.md)과
+[실제 검증](./architecture/windows-bun-results.md)을 따른다. 아래 IPC·suspended spawn은
+기존 Windows B 실험 및 다른 프로세스 플랫폼의 기록이다.
 
 종료 시 새 요청 접수를 막고 IPC로 종료를 요청한다. 진행 중 요청과 구독을 기한 내 정리한 뒤 자식 프로세스의 실제 종료와 파이프 EOF를 확인하고 프로세스·파이프 핸들을 회수한다. 종료 응답만으로 `stopped`를 선언하지 않는다. 기한을 넘기면 호스트가 관리하는 자식 프로세스 트리를 강제 종료하고 실제 종료를 확인한다. Windows에서는 kill-on-close Job Object로 호스트 비정상 종료 때도 Bun이 남지 않게 한다. Bun을 suspended 상태로 생성해 Job에 배정한 뒤 실행하며 배정 실패 시 시작을 실패시킨다.
 
@@ -167,7 +176,7 @@ const text = await client.invoke("notes.read", { key: "welcome" });
 
 | 대상 | 기본 렌더러 | 백엔드 배포 경로 | 초기 상태와 통과 조건 |
 | --- | --- | --- | --- |
-| Windows | WebView2 | 번들된 Bun 자식 프로세스 + 네이티브 호스트 | B 실험 및 C 다중 창/뷰·뷰별 정책의 실제 SDK·코어·저장·이벤트·복원 검증 통과. 최소 OS/CPU·설치·서명·배포 미검증 |
+| Windows | WebView2 | 번들 Bun 진입점 + 직접 FFI UI Worker + I/O Worker | B 실험 및 C 다중 창/뷰·뷰별 정책의 실제 SDK·코어·저장·이벤트·복원 검증 통과. 최소 OS/CPU·설치·서명·배포 미검증 |
 | macOS | WKWebView | 번들된 Bun 자식 프로세스 + 네이티브 호스트 | 계획. 앱 번들·서명·IPC·프로세스 정리 검증 필요 |
 | Linux | WebKitGTK | 번들된 Bun 자식 프로세스 + 네이티브 호스트 | 계획. 대상 배포판·라이브러리·IPC·패키지 검증 필요 |
 | Android | Android WebView | 미확정 | 미검증. Bun 번들·실행방식·수명주기·배포 제약을 별도 검증 |

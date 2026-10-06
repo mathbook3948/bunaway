@@ -4,6 +4,12 @@ status: accepted
 
 # 창은 뷰의 수명을 갖고, 뷰별 정책은 창 단위로 분리한다
 
+2026-10-06: 창·뷰·정책·프로필·세션 분리는 그대로 유지한다. Windows의 별도 Bun 백엔드,
+프로세스 IPC와 message-only 창 전달은 [ADR 0006](./0006-windows-bun-ui-worker.md)의
+동일 프로세스 Worker 채널로 대체했다. 마지막 창 종료는 코어와 두 Worker를 정리하고
+실제 WebView 자식 종료를 확인한다. Bun 자신이 kill-on-close Job에 먼저 들어가 비정상
+종료 시 자손을 회수한다. 아래 프로세스 설명은 기존 호스트의 구현 기록이다.
+
 한 앱이 여러 웹 UI를 띄울 때 단일 HWND·WebView·활성 세션 구조로는 뷰별 정책 적용·전달·종료를 표현할 수 없다. Windows 호스트는 창과 뷰의 관계를 다음처럼 정한다.
 
 - 창은 OS 단위다. HWND와 그 창 전용의 WebView2 controller·environment를 소유한다.
@@ -20,4 +26,4 @@ status: accepted
 
 Windows에서 세 창(쓰기 가능 편집 뷰·읽기 전용 뷰·주 뷰)으로 정책 분리·공유 요청 ID 전달·이벤트 필터링·렌더러 장애 격리·폐기 세션 차단·창별 종료 규칙을 [실제 검증](../architecture/windows-host-results.md)했다. 다른 플랫폼·창 재생성·뷰 간 창 이동은 미구현이다.
 
-근거: [PRD의 권한 모델](../PRD.md), [호출 컨텍스트 ADR](./0002-host-owned-call-context.md), [Windows 호스트](../../native/windows/host/host.cpp), [Windows 실행 결과](../architecture/windows-host-results.md).
+근거: [PRD의 권한 모델](../PRD.md), [호출 컨텍스트 ADR](./0002-host-owned-call-context.md), [Windows 호스트](../../native/windows/bun/entry.ts), [Windows 실행 결과](../architecture/windows-host-results.md).

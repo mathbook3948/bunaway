@@ -97,7 +97,7 @@ export function renderInnoScript(options: InnoOptions): string {
     // Each installer is a complete snapshot; old data-deletion records must
     // not override the current uninstall policy.
     "UninstallLogMode=overwrite",
-    "UninstallDisplayIcon={app}\\bunaway-host.exe",
+    "UninstallDisplayIcon={app}\\runtime\\bun.exe",
     `OutputDir=${options.outputDir}`,
     `OutputBaseFilename=${options.outputBaseName}`,
     perUser ? "PrivilegesRequired=lowest" : "PrivilegesRequired=admin",
@@ -131,19 +131,21 @@ export function renderInnoScript(options: InnoOptions): string {
   if (options.startMenuShortcut || options.desktopShortcut) {
     lines.push("", "[Icons]");
     if (options.startMenuShortcut) {
-      lines.push(`Name: "{group}\\${directoryName}"; Filename: "{app}\\bunaway-host.exe"`);
+      lines.push(
+        `Name: "{group}\\${directoryName}"; Filename: "{sys}\\WindowsPowerShell\\v1.0\\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\\launch.ps1"""; WorkingDir: "{app}"; IconFilename: "{app}\\runtime\\bun.exe"`,
+      );
       lines.push(`Name: "{group}\\${directoryName} 제거"; Filename: "{uninstallexe}"`);
     }
     if (options.desktopShortcut) {
       lines.push(
-        `Name: "{autodesktop}\\${directoryName} (${identifier})"; Filename: "{app}\\bunaway-host.exe"; Tasks: desktopicon`,
+        `Name: "{autodesktop}\\${directoryName} (${identifier})"; Filename: "{sys}\\WindowsPowerShell\\v1.0\\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\\launch.ps1"""; WorkingDir: "{app}"; IconFilename: "{app}\\runtime\\bun.exe"; Tasks: desktopicon`,
       );
     }
   }
 
   const runEntries: string[] = [];
   runEntries.push(
-    `Filename: "{app}\\bunaway-host.exe"; Description: "${issParameter(`Launch ${options.name}`)}"; Flags: postinstall nowait skipifsilent unchecked`,
+    `Filename: "{sys}\\WindowsPowerShell\\v1.0\\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\\launch.ps1"""; WorkingDir: "{app}"; Description: "${issParameter(`Launch ${options.name}`)}"; Flags: postinstall nowait skipifsilent unchecked`,
   );
   if (runEntries.length) lines.push("", "[Run]", ...runEntries);
 
@@ -200,7 +202,7 @@ export function renderInnoScript(options: InnoOptions): string {
     "// Only prune generated links that still point to this installation.",
     "// Shell.Application preserves Unicode link paths that WScript.Shell can lose via ANSI conversion.",
     "procedure PruneShortcuts(const Directory, Pattern: String; Current: TStringList);",
-    "var Entry: TFindRec; Shell, Folder, Item, Link: Variant; Filename, Target: String;",
+    "var Entry: TFindRec; Shell, Folder, Item, Link: Variant; Filename, Target, Arguments, Launcher, PowerShell: String;",
     "begin",
     "  if not FindFirst(Directory, Entry) then Exit;",
     "  try",
@@ -212,6 +214,8 @@ export function renderInnoScript(options: InnoOptions): string {
     "  try",
     "    Shell := CreateOleObject('Shell.Application');",
     "    Folder := Shell.Namespace(Directory);",
+    "    Launcher := ExpandConstant('{app}\\launch.ps1');",
+    "    PowerShell := ExpandConstant('{sys}\\WindowsPowerShell\\v1.0\\powershell.exe');",
     "    repeat",
     "      if ((Entry.Attributes and (FILE_ATTRIBUTE_DIRECTORY or FILE_ATTRIBUTE_REPARSE_POINT)) = 0) and",
     "         (Current.IndexOf(Entry.Name) < 0) then begin",
@@ -220,12 +224,16 @@ export function renderInnoScript(options: InnoOptions): string {
     "          Item := Folder.ParseName(Entry.Name);",
     "          Link := Item.GetLink;",
     "          Target := Link.Path;",
+    "          Arguments := Link.Arguments;",
     "        except",
     "          Target := '';",
+    "          Arguments := '';",
     "          Log('Could not inspect shortcut: ' + Filename);",
     "        end;",
     "        if (CompareText(Target, ExpandConstant('{app}\\bunaway-host.exe')) = 0) or",
-    "           (CompareText(Target, ExpandConstant('{uninstallexe}')) = 0) then",
+    "           (CompareText(Target, ExpandConstant('{uninstallexe}')) = 0) or",
+    "           ((CompareText(Target, PowerShell) = 0) and",
+    "            (CompareText(Arguments, '-NoProfile -ExecutionPolicy Bypass -File \"' + Launcher + '\"') = 0)) then",
     "          if not DeleteFile(Filename) then",
     "            RaiseException('Could not remove obsolete shortcut: ' + Filename);",
     "      end;",
@@ -233,6 +241,14 @@ export function renderInnoScript(options: InnoOptions): string {
     "  finally",
     "    FindClose(Entry);",
     "  end;",
+    "end;",
+    "",
+    "procedure RemoveRetiredWindowsHost;",
+    "var Path: String;",
+    "begin",
+    "  Path := ExpandConstant('{app}\\bunaway-host.exe');",
+    "  if FileExists(Path) and not DeleteFile(Path) then",
+    "    RaiseException('Could not remove the retired Windows host: ' + Path);",
     "end;",
     "",
     "procedure PruneAssets(const Base, Relative: String; Current: TStringList);",
@@ -270,6 +286,7 @@ export function renderInnoScript(options: InnoOptions): string {
     "var Current: TStringList;",
     "begin",
     "  if CurStep <> ssPostInstall then Exit;",
+    "  RemoveRetiredWindowsHost;",
     "  Current := TStringList.Create;",
     "  try",
     "    Current.CaseSensitive := False;",

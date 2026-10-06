@@ -10,7 +10,8 @@
 호스트를 구현했다. Windows는 다중 창·뷰별 정책 분리, macOS는 단일 창/뷰의
 메모 저장→완료 이벤트→화면 갱신, 재실행 후 복원과 렌더러 복구를 검증한다.
 이 앱 패키지의 실행은 사용자 Bun 설치·PATH에 의존하지 않는다.
-[Windows C 실행 결과](./docs/architecture/windows-host-results.md),
+[Windows Bun FFI 실행 결과](./docs/architecture/windows-bun-results.md),
+[기존 Windows C 실행 결과](./docs/architecture/windows-host-results.md),
 [이전 B 실험 결과](./docs/architecture/windows-probe-results.md)와
 [macOS 검증 기록](./docs/architecture/macos-native-results.md),
 [진행 상태](./docs/architecture/progress.md)를 참고한다.
@@ -51,7 +52,6 @@ Bun은 `mise.toml`과 `package.json`에 **1.4.2**로 고정되어 있다.
 | `mise run check` | 포맷·린트·TypeScript·계약 테스트 검사 |
 | `mise run test` | 프로토콜·SDK·코어·Host API 계약과 Bun 프로세스 IPC 테스트 |
 | `mise run protocol:generate` | 네이티브용 JSON Schema 생성 |
-| `mise run probe:windows` | C++ 호스트·Bun 패키지 빌드와 프로세스 IPC·종료 통합 검증 |
 | `mise run host:windows` | Windows WebView2 앱 패키지 빌드와 SDK·코어·메모·경계·종료 통합 검증 |
 | `mise run probe:macos` | macOS arm64 번들 Bun 패키지 빌드와 프로세스 IPC·종료 통합 검증 |
 | `mise run host:macos` | macOS arm64 실제 WKWebView·SDK·코어·메모·경계·종료 회귀 검증 |
@@ -64,9 +64,9 @@ Bun은 `mise.toml`과 `package.json`에 **1.4.2**로 고정되어 있다.
 `bun run framework:check <추출한 package 경로>`는 개발자 설치 artifact를 검증한다.
 생성 앱의 `bun run dev`·`bun run build`는 기존 SDK/네이티브 빌드를 재사용한다.
 Windows 호스트의 빌드·패키징은
-`native/windows/host/run.ps1`이 담당한다. [메모 샘플](./examples/memo/README.md)의
-`-Sample` 빌드로 독립 앱 패키지를 만들고 실행할 수 있다.
-Windows 빌드는 PowerShell 7, MSVC C++ Build Tools와 CMake/Ninja가 필요하며,
+`native/windows/bun/run.ps1`이 담당한다. Bun이 앱 진입점이고 UI Worker가
+Win32·WebView2 COM을 직접 소유한다. 생성 앱은 `windowsApp`에 AppDefinition 모듈을 지정한다.
+Windows 빌드는 PowerShell 7과 고정 Bun만 필요하며 C++ 컴파일은 하지 않는다.
 WebView 앱 실행에는 WebView2 Evergreen 런타임이 필요하다.
 생성된 `build/windows-probe-package/`는 Bun 개발 도구 없이 실행되는 독립 실험 패키지다.
 
@@ -85,8 +85,8 @@ macOS는 Apple Silicon, Xcode Command Line Tools와 GUI 세션이 필요하다.
   `mise run check`로 frozen install·포맷·린트·타입·계약 테스트를 검사한다.
 - Ubuntu에서 `mise run protocol:generate` 후 diff를 검사해 커밋된 네이티브
   스키마가 현재 TypeScript 정의와 일치하는지 확인한다.
-- 별도 Windows 작업에서 `mise run probe:windows`와 `mise run host:windows`로
-  C++ 빌드·번들 Bun 프로세스 IPC·네이티브 회귀·WebView2 통합 검증을 실행한다.
+- 별도 Windows 작업에서 `mise run host:windows`로 Bun FFI·WebView2·모달 비동기 진행·
+  경계/파일/다중 창/정리와 이동한 독립 CLI 프로젝트를 검증한다. 기존 Windows C++ 호스트·probe는 삭제했다.
   결과 JSON과 호스트 로그는 성공·실패 시 모두 `windows-native-diagnostics`
   artifact로 7일간 보관한다. 생성 전 실패한 경우에는 파일이 없을 수 있다.
 - 별도 `macos-15` ARM64 작업에서 runner CPU와 `darwin-aarch64` pin을 확인하고

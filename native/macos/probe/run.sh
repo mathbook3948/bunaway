@@ -1,5 +1,5 @@
 #!/bin/zsh
-# macOS probe build+test: mirror of native/windows/probe/run.ps1.
+# macOS bundled-process probe build+test.
 # Usage:
 #   ./run.sh                 # download pins if missing, build, package, run driver
 #   ./run.sh --skip-tests    # build+package only

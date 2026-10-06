@@ -60,12 +60,9 @@ export function installerStages(input: AdapterInput, options: InstallerOptions):
       async run(ctx) {
         if (!state.payloadDir) throw new Error("stage did not produce a payload directory.");
         if (ctx.input.signing) {
-          await signFiles(ctx, [
-            join(state.payloadDir, "bunaway-host.exe"),
-            join(state.payloadDir, "runtime", "bun.exe"),
-          ]);
+          await signFiles(ctx, [join(state.payloadDir, "runtime", "bun.exe")]);
         }
-        // packagedSha256 is recorded signed-or-not so the hash rule is uniform.
+        // Bind runtime checks and the pre-start launcher to the final bytes.
         await recordPackagedHashes(state.payloadDir);
         if (ctx.input.signing && ctx.input.channel === "win-store-unpackaged") {
           // Preserve third-party signatures and asset hashes; reject untrusted

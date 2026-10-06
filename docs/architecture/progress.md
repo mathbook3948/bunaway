@@ -6,6 +6,13 @@
 맞지 않는다. 아래는 요구사항 전체 완료 선언이 아니라 구현 및 검증 범위다.
 새 macOS 회귀 실행은 [macOS 기록](./macos-native-results.md)에서 기존 검증과 구분한다.
 
+2026-10-06 [Windows 직접 FFI 예제](../../native/windows/ffi-probe/README.md)에서
+Bun UI Worker의 창·WebView2·비동기 작업·다중 창·종료를 검증했다. 5초 종료 기준
+초과는 공식 컨트롤에서도 재현됐다. C++ 프로브 결과만으로 제품 전환을 선언하지 않았고, 이후 실제 제품 회귀를 실행했다.
+같은 날 실제 제품의 코어·정책·Host API·다중 창·CLI를 이식하고 기본 실행을 전환했다.
+[실제 Bun FFI 검증](./windows-bun-results.md)은 기존 C++/CI 기록과 구분한다.
+책임 분리·채널·수명·이식 순서는 [Windows Bun UI Worker 구조안](../decisions/0006-windows-bun-ui-worker.md)에 정리했다.
+
 | 단계 | 구현 상태 | 검증 범위·근거 | 남은 작업·미검증 |
 | --- | --- | --- | --- |
 | 개발 환경 | mise 기반 Bun 1.4.2, 8개 workspace, 타입 환경 분리, 개발자용 로컬 CLI artifact | 공통 CI 및 실제 tarball 외부 설치·생성·이동·검증/typecheck 테스트 | 공개 publish·프레임워크 라이선스 결정 |
@@ -27,7 +34,9 @@
   session-open/web/revoke, Host API 왕복·취소·종료를 IPC에 연결한다.
   `process.platform`을 공통 `Platform`으로 변환한다(`darwin`→`macos`).
   이 매핑이 Linux/모바일 네이티브 호스트 구현을 뜻하지 않는다.
-- `native/windows/host/host.cpp`는 `windows[]`와 이전 단일 창 설정을 지원한다.
+- `native/windows/bun/`은 C++ 의존 없이 Bun 메인·UI STA Worker·I/O Worker를 연결한다.
+  기본 CLI/mise/CI는 이 경로를 사용한다. 기존 Windows C++ 호스트·probe와 전용 실행기는 삭제했다.
+  `windows[]`와 이전 단일 창 설정을 지원한다.
   창·뷰별 WebView2 환경·세션·정책, 뷰 단위 복구, 마지막 창 종료 시 Job 정리를 구현한다.
   [창/뷰 ADR](../decisions/0004-multi-window-per-view-policy.md)은 Windows 범위다.
 - `native/macos/host/main.mm`는 단일 `view`·`home`·`window` 설정을 사용한다.

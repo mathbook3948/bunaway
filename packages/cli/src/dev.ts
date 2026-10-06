@@ -1,6 +1,7 @@
 import { watch } from "node:fs";
-import { buildProject, type BuiltPackage, prepareNative } from "./build.ts";
+import { type BuiltPackage, buildProject, prepareNative } from "./build.ts";
 import { validateProject } from "./config.ts";
+import { closeWindowsApp, verifyWindowsLaunch, windowsLaunchEnvironment } from "./launch.ts";
 
 export class RestartController<T> {
   private revision = 0;
@@ -63,15 +64,30 @@ export async function devProject(directory: string): Promise<void> {
       restarting = true;
       const previous = child;
       child = undefined;
-      previous.kill();
+      if (process.platform === "win32") {
+        const deadline = Date.now() + 40000;
+        let posted = false;
+        while (previous.exitCode === null && Date.now() < deadline) {
+          if (!posted) posted = (await closeWindowsApp(previous.pid)) > 0;
+          await Bun.sleep(20);
+        }
+        if (previous.exitCode === null) {
+          previous.kill();
+          await previous.exited;
+          throw new Error("Windows app cleanup timed out; restart stopped.");
+        }
+      } else previous.kill();
       await previous.exited;
       restarting = false;
     },
     build: () => buildProject(project.root, { development: true, native }),
     async start(built) {
+      if (process.platform === "win32") await verifyWindowsLaunch(built.package);
       console.log("Starting a fresh host/runtime/session; pending requests are not replayed.");
-      const current = Bun.spawn([built.executable, "--package", built.package], {
-        cwd: project.root,
+      const environment = process.platform === "win32" ? windowsLaunchEnvironment() : process.env;
+      const current = Bun.spawn([built.executable, ...built.arguments], {
+        cwd: built.package,
+        env: environment,
         stdin: "ignore",
         stdout: "inherit",
         stderr: "inherit",

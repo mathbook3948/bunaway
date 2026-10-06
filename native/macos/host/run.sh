@@ -1,5 +1,5 @@
 #!/bin/zsh
-# macOS product host build+test: mirror of native/windows/host/run.ps1.
+# macOS product host build+test.
 # Usage:
 #   ./run.sh                 # verify pins -> build -> package -> tests/lifecycle/macos-host.ts
 #   ./run.sh --skip-tests    # build+package only
@@ -17,7 +17,7 @@ PIN="$ROOT/runtime/build-manifests/darwin-aarch64.json"
 }
 # Policy, schemas and web entries are shared with Windows. The macOS test
 # app declaration remains single-window until this host supports windows[].
-WIN_TEST="$ROOT/native/windows/host/test"
+DESKTOP_TEST="$ROOT/tests/fixtures/desktop/host"
 SKIP_TESTS=0
 SAMPLE=0
 MAKE_APP=0
@@ -81,16 +81,16 @@ cp "$CACHE/LICENSE.bun" "$JSON_DIR/LICENSE.nlohmann-json" "$PACKAGE/licenses/"
 
 GENERATED="$ROOT/native/host-api/generated"
 for name in bunfig.toml tsconfig.json policy.json; do
-  cp "$WIN_TEST/$name" "$PACKAGE/assets/$name"
+  cp "$DESKTOP_TEST/$name" "$PACKAGE/assets/$name"
 done
 cp "$HERE/test/app.json" "$PACKAGE/assets/app.json"
 for name in process.schema.json message.schema.json policy.schema.json host-call.schema.json host-operations.json; do
   cp "$GENERATED/$name" "$PACKAGE/assets/$name"
 done
 if (( ! SAMPLE )); then
-  for f in "$WIN_TEST"/web/*; do cp "$f" "$PACKAGE/assets/web/"; done
+  for f in "$DESKTOP_TEST"/web/*; do cp "$f" "$PACKAGE/assets/web/"; done
   for entry in app.js page2.js; do
-    (cd "$ROOT" && "$BUILD_BUN" build "$WIN_TEST/web/$entry" --target=browser --outfile "$PACKAGE/assets/web/$entry")
+    (cd "$ROOT" && "$BUILD_BUN" build "$DESKTOP_TEST/web/$entry" --target=browser --outfile "$PACKAGE/assets/web/$entry")
   done
   cp "$HERE/test/web/security.html" "$PACKAGE/assets/web/security.html"
   (cd "$ROOT" && "$BUILD_BUN" build "$HERE/test/web/security.js" --target=browser --outfile "$PACKAGE/assets/web/security.js")
@@ -101,7 +101,7 @@ if (( SAMPLE )); then
   cp "$ROOT/examples/memo/app.json" "$ROOT/examples/memo/policy.json" "$PACKAGE/assets/"
   BACKEND_ENTRY="$ROOT/examples/memo/backend.ts"
 else
-  BACKEND_ENTRY="$WIN_TEST/backend.ts"
+  BACKEND_ENTRY="$DESKTOP_TEST/backend.ts"
 fi
 (cd "$ROOT" && "$BUILD_BUN" build "$BACKEND_ENTRY" --target=bun --outfile "$PACKAGE/assets/backend.js")
 

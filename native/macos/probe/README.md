@@ -1,6 +1,6 @@
 # macOS probe host
 
-POSIX port of `native/windows/probe`: verifies the bundled Bun child process
+POSIX runtime probe: verifies the bundled Bun child process
 contract end to end — spawn, dedicated-pipe NDJSON IPC, clean/forced shutdown,
 and cleanup when the host dies abnormally.
 

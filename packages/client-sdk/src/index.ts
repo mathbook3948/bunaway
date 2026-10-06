@@ -493,8 +493,13 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
         break;
       }
       case "error": {
-        this.cancelledListens.delete(message.id);
-        this.requests.get(message.id)?.reject(toBunawayError(message.error, CONNECTION_CLOSED));
+        const pending = this.requests.get(message.id);
+        // A host deadline can precede delivery of an already-created subscription.
+        if (message.error.code === "TIMEOUT") {
+          if (pending?.onCancelledResult)
+            this.cancelledListens.set(message.id, pending.onCancelledResult);
+        } else this.cancelledListens.delete(message.id);
+        pending?.reject(toBunawayError(message.error, CONNECTION_CLOSED));
         break;
       }
       case "event":

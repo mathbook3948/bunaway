@@ -1,4 +1,4 @@
-// macOS product host — ObjC++/POSIX port of native/windows/host/host.cpp.
+// macOS product host — AppKit/WKWebView and POSIX bundled-process host.
 //
 // Platform mapping (the only semantic deltas, all inside the adapter boundary):
 //  - Win32 window/WebView2 -> NSApplication + NSWindow + WKWebView.

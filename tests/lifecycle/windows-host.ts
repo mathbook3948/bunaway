@@ -1,20 +1,20 @@
 // Windows product host integration runner: mise run host:windows builds the package first.
-// Drives the real host end-to-end: packaged Bun backend, per-view WebView2 windows,
+// Drives the real Bun entrypoint end-to-end: per-view WebView2 windows,
 // per-view policy/storage scope enforcement, session revocation, window-close and
 // renderer-failure isolation, and process cleanup.
 import assert from "node:assert/strict";
-import { cp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { cp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { windowsLaunchEnvironment } from "../../packages/cli/src/launch.ts";
 import { validateValue } from "../../packages/protocol/src/index.ts";
 import { validationCases } from "../protocol/validation-cases.ts";
 import { readReport } from "./reports.ts";
 
 const original = resolve(process.argv[process.argv.indexOf("--package") + 1] ?? "");
 assert.ok(process.argv.includes("--package"), "--package is required");
-const packagePath = join(dirname(original), "C 호스트 한글 package");
+const packagePath = join(dirname(original), "Bun 호스트 한글 package");
 await cp(original, packagePath, { recursive: true, force: true });
-const host = join(packagePath, "bunaway-host.exe");
 const cwd = join(dirname(original), "hostile-host-cwd");
 await mkdir(cwd, { recursive: true });
 await writeFile(join(cwd, ".env"), "BUNAWAY_HOSTILE=from-dotenv\n");
@@ -31,8 +31,7 @@ const viewDir = (viewId: string) =>
   `v${[...viewId].map((c) => (/[a-z0-9]/.test(c) ? c : `-${c.charCodeAt(0).toString(16).padStart(2, "0")}`)).join("")}`;
 
 async function resetData() {
-  // WebView2 renderer processes can hold the user-data folder briefly after the
-  // host exits; they live outside the Job Object so their handles drain late.
+  // Retry folder cleanup if the OS has not released a runtime file lock yet.
   for (let attempt = 0; ; attempt++) {
     try {
       await rm(dataRoot, { recursive: true, force: true });
@@ -95,18 +94,30 @@ async function reportFile(name: string) {
 }
 
 function launch() {
-  const child = Bun.spawn([host], {
+  const command = [
+    join(packagePath, "runtime/bun.exe"),
+    "--no-env-file",
+    "--no-install",
+    `--config=${join(packagePath, "assets/bunfig.toml")}`,
+    `--tsconfig-override=${join(packagePath, "assets/tsconfig.json")}`,
+    join(packagePath, "assets/boot.js"),
+  ];
+  const hostileEnvironment = {
+    PATH: `${process.env.SystemRoot}\\System32`,
+    SystemRoot: process.env.SystemRoot,
+    LOCALAPPDATA: localAppData,
+    BUN_OPTIONS: "--preload ./hostile.ts",
+    BUNAWAY_HOSTILE: "from-parent",
+  };
+  const child = Bun.spawn(command, {
     cwd,
-    env: {
-      PATH: `${process.env.SystemRoot}\\System32`,
-      SystemRoot: process.env.SystemRoot,
-      LOCALAPPDATA: localAppData,
-      BUN_OPTIONS: "--preload ./hostile.ts",
-      BUNAWAY_HOSTILE: "from-parent",
-    },
+    env: windowsLaunchEnvironment({ ...process.env, ...hostileEnvironment }),
     stdin: "ignore",
     stdout: "ignore",
     stderr: "pipe",
+  });
+  void new Response(child.stderr).text().then((errors) => {
+    if (errors) console.error(errors);
   });
   return child;
 }
@@ -168,11 +179,19 @@ foreach ($h in [Win32]::WindowsOf([uint32]$env:BUNAWAY_CLOSE_PID)) {
   assert.equal(await poster.exited, 0, await new Response(poster.stderr).text());
 }
 async function watch(pids: number[]) {
-  const watcher = Bun.spawn([host, "--watch", ...pids.map(String)], {
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  const watcher = Bun.spawn(
+    [
+      process.execPath,
+      resolve(import.meta.dir, "windows-bun-process.ts"),
+      "--watch",
+      ...pids.map(String),
+    ],
+    {
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
   const reader = watcher.stdout.getReader();
   const first = await reader.read();
   reader.releaseLock();
@@ -199,11 +218,14 @@ const contextsOf = (log: LogEntry[], viewId: string) =>
 
 try {
   await test("TypeScript and native validators agree on shared regression inputs", async () => {
-    const validator = Bun.spawn([host, "--validate"], {
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    const validator = Bun.spawn(
+      [process.execPath, resolve(import.meta.dir, "windows-bun-process.ts"), "--validate"],
+      {
+        stdin: "pipe",
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
     const output = new Response(validator.stdout).text();
     const errors = new Response(validator.stderr).text();
     for (const { schema, value } of validationCases)
@@ -238,6 +260,9 @@ try {
       for (const r of editorReport.results) assert.equal(r.ok, true, r.name);
       const readerReport = await reportFile("reader.json");
       for (const r of readerReport.results) assert.equal(r.ok, true, r.name);
+      // Document loading is independent per view; require every actual session,
+      // rather than infer main readiness from the faster reader's report.
+      await waitLog((entry) => entry.event === "session-open" && entry.viewId === "main");
 
       const log1 = await hostLog();
       const count = (event: string, extra: (e: LogEntry) => boolean = () => true) =>
@@ -310,6 +335,9 @@ try {
 
       // Kill the editor view's renderer processes only. The view must revoke its
       // session and recover alone; other views and Bun must keep running.
+      // Wait for main's intentional navigation first so its unrelated revoke
+      // cannot be mistaken for propagation from the editor crash.
+      await reportFile("report3.json");
       const pids = await rendererPids("editor");
       assert.ok(pids.length > 0, "editor renderer missing");
       const beforeCrash = (await hostLog()).length;
@@ -401,7 +429,8 @@ try {
       // the Job Object cleanly.
       const started = log.find((e) => e.event === "host-started");
       assert.ok(started, "host-started missing");
-      const childPid = started.childPid as number;
+      const childPid = started.pid as number;
+      assert.equal(childPid, child.pid, "Bun entrypoint owns all UI windows in the same process");
       const exited = await watch([childPid]);
       await closeAllWindows(child.pid);
       assert.equal(await child.exited, 0, "WM_CLOSE shutdown must exit cleanly");
@@ -486,7 +515,7 @@ try {
           .slice(previousCount)
           .find((entry) => entry.event === "host-started");
         assert.ok(started);
-        const exited = await watch([started.childPid as number]);
+        const exited = await watch([started.pid as number]);
         await closeAllWindows(child.pid);
         assert.equal(await child.exited, 0);
         await exited();
@@ -501,13 +530,19 @@ try {
       }
     });
 
-  await test("killing the host still removes bundled Bun via the Job Object", async () => {
+  await test("killing the Bun entrypoint removes its WebView descendants", async () => {
     await resetData();
     const child = launch();
     try {
       const started = await waitLog((e) => e.event === "host-started");
-      const childPid = started.childPid as number;
-      const exited = await watch([childPid]);
+      const childPid = started.pid as number;
+      assert.equal(childPid, child.pid);
+      const browser = await waitLog(
+        (entry) => entry.event === "webview-ready" && entry.view === "main",
+      );
+      const renderers = await rendererPids("main");
+      const targets = [childPid, browser.browserPid as number, ...renderers];
+      const exited = await watch(targets);
       child.kill();
       assert.notEqual(await child.exited, 0);
       await exited();
@@ -518,7 +553,7 @@ try {
   });
 } finally {
   const summary = {
-    host: "windows",
+    host: "windows-bun-ffi",
     suites: "product-host",
     results,
     generatedAt: new Date().toISOString(),

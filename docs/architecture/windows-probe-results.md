@@ -1,5 +1,9 @@
 # Windows B 단계 실행 결과
 
+이 문서는 이전 실행의 기록이다. 2026-10-06 기존 Windows C++ 소스·CMake·실행기·
+전용 테스트를 삭제했다. 현재 재현 명령과 결과는 [Bun FFI 실행 기록](./windows-bun-results.md)을 따른다.
+
+
 검증일: 2026-10-04. WebView 없는 C++ 호스트가 앱 패키지의 Bun을 별도 프로세스로
 실행하고 실제 파이프로 통신하는 B 단계가 통과했다. 사용자 Bun 설치·PATH에 의존하지 않는다.
 
@@ -19,27 +23,6 @@ URL·아카이브·실행 파일·라이선스 해시는
 [배포 manifest](../../runtime/build-manifests/windows-x64.json)에 있다.
 빌드 스크립트는 다운로드를 검사하고 라이선스와 백엔드·설정·생성 스키마를 패키징한다.
 호스트는 Bun과 패키지 자산 해시를 실행 전에 다시 검사한다.
-
-## 재현
-
-개발 환경의 PowerShell 7, MSVC C++ Build Tools, CMake/Ninja를 준비한 뒤 저장소 루트에서 실행한다.
-
-```powershell
-mise run install
-mise run check
-mise run probe:windows
-```
-
-빌드 스크립트는 `native/windows/probe/run.ps1`, 네이티브 호스트는 `host.cpp`,
-실험 백엔드는 `backend.ts`, 외부 검증기는 `tests/lifecycle/windows-process.ts`다.
-`build/windows-probe-package/`에 `bunaway-probe.exe`, `runtime/bun.exe`,
-백엔드·설정·스키마·manifest·라이선스를 모은다. 런타임 실행에는 MSVC·mise·개발 Bun이 필요 없다.
-호스트의 stdin/stdout을 NDJSON 제어기로 연결해 실행한다. 콘솔 실험 패키지이며 UI는 없다.
-
-검증기는 패키지를 `build/B 단계 한글 package/`로 복사하고, Bun이 없는 시스템 PATH와
-별도 cwd로 호스트를 실행한다. 부모 환경의 `BUN_OPTIONS`·임의 환경 변수와 cwd의
-`.env`·preload 설정을 넣어도 백엔드에 적용되지 않는 것을 확인한다.
-호스트는 `--config=...`·`--tsconfig-override=...`를 각각 하나의 인자로 전달한다.
 
 ## 실제 관찰
 

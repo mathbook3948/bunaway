@@ -6,9 +6,9 @@ import {
   type ProcessFrame,
 } from "../../packages/protocol/src/index.ts";
 
-const backend = fileURLToPath(new URL("../../native/windows/probe/backend.ts", import.meta.url));
+const backend = fileURLToPath(new URL("../../native/macos/probe/backend.ts", import.meta.url));
 const base = { ipc: PROCESS_IPC_VERSION, runtime: { id: "probe", generation: "1" } };
-const boot = { ...base, kind: "boot", payload: { entrypoint: backend, buildId: "windows-probe" } };
+const boot = { ...base, kind: "boot", payload: { entrypoint: backend, buildId: "macos-probe" } };
 const shutdown = { ...base, kind: "shutdown" };
 
 async function run(frames: unknown[]): Promise<{ exit: number; frames: ProcessFrame[] }> {

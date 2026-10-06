@@ -45,12 +45,25 @@ let home: string;
 let root: string;
 let artifactDir: string;
 
-const runtimeAssets = [
+const macRuntimeAssets = [
   "assets/process.schema.json",
   "assets/message.schema.json",
   "assets/host-call.schema.json",
   "assets/host-operations.json",
   "assets/policy.schema.json",
+] as const;
+const windowsAssets = [
+  "assets/web/index.html",
+  "assets/policy.json",
+  "assets/boot.js",
+  "assets/app.js",
+  "assets/ui.js",
+  "assets/host-operations.js",
+  "assets/WebView2Loader.dll",
+  "assets/bunfig.toml",
+  "assets/tsconfig.json",
+  "licenses/LICENSE.bun",
+  "licenses/License-WebView2.txt",
 ] as const;
 
 const appConfig = {
@@ -71,8 +84,7 @@ async function writeJson(path: string, value: unknown) {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-// Builds a minimal valid dist/windows-x64 artifact: bunaway-host.exe,
-// runtime/bun.exe, assets/, licenses/ and manifest.json matching every hash.
+// Builds a minimal valid Windows Bun FFI artifact or macOS native-host bundle.
 async function makeArtifact(
   projectRoot = root,
   target: BuildTarget = "windows-x64",
@@ -86,7 +98,7 @@ async function makeArtifact(
   await mkdir(resolve(dir, "runtime"), { recursive: true });
   await mkdir(resolve(dir, "licenses"), { recursive: true });
   await mkdir(resolve(artifact.executable, ".."), { recursive: true });
-  await writeFile(artifact.executable, "fake host");
+  if (!windows) await writeFile(artifact.executable, "fake host");
   if (!windows) {
     await chmod(artifact.executable, 0o755);
     await writeFile(
@@ -105,20 +117,30 @@ async function makeArtifact(
   const assets: Record<string, string> = {};
   await writeJson(resolve(dir, "assets/app.json"), appConfig);
   assets["assets/app.json"] = await sha256(resolve(dir, "assets/app.json"));
-  for (const path of [
-    "assets/web/index.html",
-    "assets/policy.json",
-    "assets/backend.js",
-    "assets/bunfig.toml",
-    "assets/tsconfig.json",
-    ...runtimeAssets,
-    "licenses/LICENSE.bun",
-    "licenses/LICENSE.nlohmann-json",
-    ...(windows ? ["licenses/License-WebView2.txt"] : []),
-  ]) {
+  const paths = windows
+    ? [...windowsAssets]
+    : [
+        "assets/web/index.html",
+        "assets/policy.json",
+        "assets/backend.js",
+        "assets/bunfig.toml",
+        "assets/tsconfig.json",
+        ...macRuntimeAssets,
+        "licenses/LICENSE.bun",
+        "licenses/LICENSE.nlohmann-json",
+      ];
+  for (const path of paths) {
     await mkdir(resolve(dir, path, ".."), { recursive: true });
     await writeFile(resolve(dir, path), "{}");
     assets[path] = await sha256(resolve(dir, path));
+  }
+  if (windows) {
+    const bunDigest = await sha256(runtime);
+    await writeFile(
+      resolve(dir, "launch.ps1"),
+      `function Check([string]$Path, [string]$Expected) { }\nCheck $bun '${bunDigest}'\n`,
+    );
+    await writeFile(resolve(dir, "bunaway.cmd"), "launcher fixture\n");
   }
   const manifest: PackageManifest = {
     bun: {
@@ -132,7 +154,9 @@ async function makeArtifact(
     app: { id: "app.test", version: "0.1.0" },
     host: {
       target,
-      sha256: await sha256(artifact.executable),
+      ...(windows
+        ? { kind: "bun-ffi", sha256: assets["assets/boot.js"] ?? "" }
+        : { sha256: await sha256(artifact.executable) }),
     },
   };
   await writeJson(resolve(dir, "manifest.json"), manifest);
@@ -690,16 +714,10 @@ test("verify stage rejects missing and tampered build inputs", async () => {
   const manifest = await makeArtifact();
   const artifact = artifactPaths({ root, target: "windows-x64", appId: "app.test" });
   expect(await verifyArtifact({ artifact, manifest, channel: "win-direct" })).toEqual([]);
-  await writeFile(artifact.executable, "tampered host");
+  await writeFile(artifact.executable, "tampered runtime");
   let diagnostics = await verifyArtifact({ artifact, manifest, channel: "win-direct" });
-  expect(diagnostics).toContainEqual({
-    stage: "verify",
-    code: CODES.INPUT_TAMPERED,
-    severity: "error",
-    message: "Host executable hash mismatch.",
-    path: artifact.executable,
-  });
-  await writeFile(artifact.executable, "fake host");
+  expect(diagnostics.some((entry) => entry.code === CODES.INPUT_TAMPERED)).toBe(true);
+  await writeFile(artifact.executable, "fake bun");
   await writeFile(resolve(artifactDir, "assets/app.json"), "tampered");
   diagnostics = await verifyArtifact({ artifact, manifest, channel: "win-direct" });
   expect(diagnostics.map((d) => d.code)).toContain(CODES.INPUT_TAMPERED);
@@ -954,13 +972,21 @@ test.each(["trusted", "unsigned", "private-root"])(
     pe.write("MZ");
     pe.writeUInt32LE(128, 0x3c);
     pe.write("PE\0\0", 128);
-    for (const file of ["bunaway-host.exe", "runtime/bun.exe", ...extraFiles]) {
+    for (const file of ["runtime/bun.exe", ...extraFiles]) {
       await Bun.write(resolve(artifact.packageDir, file), pe);
       if (extraFiles.includes(file))
         manifest.assets[file] = await sha256(resolve(artifact.packageDir, file));
     }
     manifest.bun.executableSha256 = await sha256(resolve(artifact.packageDir, "runtime/bun.exe"));
-    manifest.host = { target: "windows-x64", sha256: await sha256(artifact.executable) };
+    const launcherPath = resolve(artifact.packageDir, "launch.ps1");
+    const launcher = await Bun.file(launcherPath).text();
+    await writeFile(
+      launcherPath,
+      launcher.replace(
+        /Check \$bun '[a-f0-9]{64}'/,
+        `Check $bun '${manifest.bun.executableSha256}'`,
+      ),
+    );
     await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
     await Bun.write(resolve(artifact.packageDir, "plugins/truncated.data"), "MZ");
     const nonPe = Buffer.from(pe);
@@ -1039,10 +1065,10 @@ test.each(["trusted", "unsigned", "private-root"])(
       const verified = must.mock.calls
         .filter((call) => call[1][0] === "verify")
         .map((call) => call[1][2]);
-      for (const file of ["bunaway-host.exe", "runtime/bun.exe", ...extraFiles]) {
+      for (const file of ["runtime/bun.exe", ...extraFiles]) {
         expect(verified.some((path) => path?.endsWith(file.replaceAll("/", sep)))).toBe(true);
       }
-      expect(verified).toHaveLength(5);
+      expect(verified).toHaveLength(4);
       if (trust !== "trusted") {
         expect(await Bun.file(output).text()).toBe("previous installer");
         expect(report.diagnostics).toContainEqual(
@@ -1190,20 +1216,30 @@ test.each([
   },
 );
 
-test("host digests require final Windows hashes and reject tampering before adapters run", async () => {
-  const projectRoot = await mkdtemp(join(home, "host-"));
+test("Windows Bun FFI bootstrap hash rejects tampering before adapters run", async () => {
+  const projectRoot = await mkdtemp(join(home, "bun-ffi-bootstrap-"));
   const manifest = await makeArtifact(projectRoot);
   const artifact = artifactPaths({ root: projectRoot, target: "windows-x64", appId: "app.test" });
-  const original = await sha256(artifact.executable);
-  manifest.host = { target: "windows-x64", sourceSha256: original };
-  expect(
-    (await verifyArtifact({ artifact, manifest, channel: "win-direct" })).map((d) => d.code),
-  ).toContain(CODES.INPUT_MISSING);
-  manifest.host.packagedSha256 = original;
-  manifest.host.sha256 = "upstream";
+  expect(manifest.host?.kind).toBe("bun-ffi");
   expect(await verifyArtifact({ artifact, manifest, channel: "win-direct" })).toEqual([]);
+  await writeFile(resolve(artifact.packageDir, "assets/boot.js"), "tampered bootstrap");
+  expect(
+    (await verifyArtifact({ artifact, manifest, channel: "win-direct" })).some(
+      (diagnostic) => diagnostic.code === CODES.INPUT_TAMPERED,
+    ),
+  ).toBe(true);
+  await writeFile(resolve(artifact.packageDir, "assets/boot.js"), "{}");
+  const legacy = { ...manifest, host: { target: "windows-x64", sha256: "old-host" } };
+  const legacyDiagnostics = await verifyArtifact({
+    artifact,
+    manifest: legacy,
+    channel: "win-direct",
+  });
+  expect(
+    legacyDiagnostics.some((diagnostic) => diagnostic.message.includes("run bunaway build again")),
+  ).toBe(true);
   await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
-  await writeFile(artifact.executable, "tampered host");
+  await writeFile(artifact.executable, "tampered runtime");
   let ran = false;
   const report = await runAdapter(
     projectRoot,
@@ -1286,6 +1322,22 @@ test("signed output is submittable only after its file has been verified and pub
     resolve(projectRoot, "dist/windows-x64/packaged/win-store-msix/app.msix"),
   );
   expect(report.artifacts[0]?.sha256).toBe(await sha256(report.artifacts[0]?.path ?? ""));
+});
+
+test("MSIX fails closed before tool discovery or payload staging", async () => {
+  const adapter = adapterFor("win-store-msix");
+  if (!adapter) throw new Error("Expected the registered MSIX adapter.");
+  const findTool = spyOn(windowsTools, "findWindowsKitTool").mockImplementation(async () => {
+    throw new Error("MSIX must not discover packaging tools.");
+  });
+  try {
+    expect(() => adapter.stages({} as Parameters<typeof adapter.stages>[0])).toThrow(
+      /no verified clean pre-start environment.*win-direct.*win-store-unpackaged/,
+    );
+    expect(findTool).not.toHaveBeenCalled();
+  } finally {
+    findTool.mockRestore();
+  }
 });
 
 test("publication errors restore previous output and write a failed report", async () => {
@@ -1965,29 +2017,25 @@ test.each([
   ).toBe(true);
 });
 
-test.each([
-  "assets/app.json",
-  "assets/policy.json",
-  "assets/backend.js",
-  "assets/bunfig.toml",
-  "assets/tsconfig.json",
-  "licenses/LICENSE.bun",
-  "licenses/LICENSE.nlohmann-json",
-  "licenses/License-WebView2.txt",
-])("required build input %s cannot be omitted from the manifest", async (path) => {
-  const projectRoot = await mkdtemp(join(home, "missing-required-"));
-  const manifest = await makeArtifact(projectRoot);
-  const artifact = artifactPaths({ root: projectRoot, target: "windows-x64", appId: "app.test" });
-  delete manifest.assets[path];
-  await rm(resolve(artifact.packageDir, path));
-  await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
-  const report = await expectRejectedInputs(projectRoot, CODES.INPUT_MISSING);
-  expect(report.diagnostics.some((d) => d.path === resolve(artifact.packageDir, path))).toBe(true);
-});
+test.each([...windowsAssets])(
+  "required Windows Bun FFI input %s cannot be omitted from the manifest",
+  async (path) => {
+    const projectRoot = await mkdtemp(join(home, "missing-required-"));
+    const manifest = await makeArtifact(projectRoot);
+    const artifact = artifactPaths({ root: projectRoot, target: "windows-x64", appId: "app.test" });
+    delete manifest.assets[path];
+    await rm(resolve(artifact.packageDir, path));
+    await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
+    const report = await expectRejectedInputs(projectRoot, CODES.INPUT_MISSING);
+    expect(report.diagnostics.some((d) => d.path === resolve(artifact.packageDir, path))).toBe(
+      true,
+    );
+  },
+);
 
 test.each(
   (["windows-x64", "macos-arm64"] as const).flatMap((target) =>
-    runtimeAssets.flatMap((path) =>
+    (target === "windows-x64" ? windowsAssets : macRuntimeAssets).flatMap((path) =>
       (["manifest", "file", "both", "tampered"] as const).map((mode) => ({
         target,
         path,

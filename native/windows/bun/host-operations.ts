@@ -1,0 +1,141 @@
+import assert from "node:assert/strict";
+import { appendFileSync, mkdirSync, renameSync, rmSync, statSync } from "node:fs";
+import { resolve } from "node:path";
+import { parentPort, workerData } from "node:worker_threads";
+import {
+  API_LIMITS,
+  BunawayError,
+  type HostCall,
+  type HostContext,
+  type HostResponse,
+  type JsonValue,
+  type RuntimeIdentity,
+  serializeHostResponse,
+  validateHostOutput,
+} from "../../../packages/protocol/src/index.ts";
+import { Channel, type Packet } from "./channel.ts";
+import { disposeStorageBindings, ScopedStorage } from "./storage.ts";
+
+assert(parentPort);
+const config = workerData as { runtime: RuntimeIdentity; dataRoot: string };
+const storage = new ScopedStorage(config.dataRoot);
+const queue = new Map<string, { context: HostContext; call: HostCall; source: string }>();
+let active: string | undefined;
+let stopping = false;
+const channel = new Channel(parentPort, config.runtime, "io", receive, (error) => {
+  throw error;
+});
+function startNext() {
+  if (stopping || active) return;
+  const next = queue.entries().next().value;
+  if (!next) return;
+  active = next[0];
+  channel.notify({
+    kind: "prepare",
+    requestId: next[0],
+    context: next[1].context,
+    call: next[1].call,
+  });
+}
+function execute(call: HostCall, source: string): HostResponse {
+  try {
+    let payload: JsonValue;
+    if (call.operation === "capabilities.get")
+      payload = ["storage.readText", "storage.writeText", "log.write", "capabilities.get"].map(
+        (name) => ({ name, support: "supported", permission: "not-required" }),
+      );
+    else if (call.operation === "log.write") {
+      const path = resolve(config.dataRoot, "logs/app.log");
+      mkdirSync(resolve(config.dataRoot, "logs"), { recursive: true });
+      try {
+        if (statSync(path).size > 1024 * 1024) {
+          rmSync(`${path}.1`, { force: true });
+          renameSync(path, `${path}.1`);
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+      appendFileSync(path, `${JSON.stringify({ t: Date.now(), source, ...call.payload })}\n`);
+      payload = null;
+    } else
+      payload = storage.execute(
+        call.payload.scope,
+        call.payload.path,
+        call.operation === "storage.writeText" ? call.payload.text : undefined,
+      );
+    validateHostOutput(call.operation, payload);
+    const response = { kind: "result", payload } as HostResponse;
+    serializeHostResponse(response);
+    return response;
+  } catch (error) {
+    return {
+      kind: "error",
+      error:
+        error instanceof BunawayError
+          ? { code: error.code, message: error.message }
+          : { code: "INTERNAL", message: "Host operation failed." },
+    };
+  }
+}
+async function receive(packet: Packet) {
+  if (packet.kind === "operation") {
+    assert(
+      !stopping && !queue.has(packet.requestId) && queue.size < API_LIMITS.maxPending,
+      "Invalid I/O queue request",
+    );
+    queue.set(packet.requestId, {
+      context: packet.context,
+      call: packet.call,
+      source: packet.source,
+    });
+    startNext();
+  } else if (packet.kind === "grant") {
+    const call = queue.get(packet.requestId);
+    if (!call || active !== packet.requestId) return;
+    assert(call.context === packet.context);
+    queue.delete(packet.requestId);
+    active = undefined;
+    // No await or second queue between STA authorization and the checked-handle operation.
+    const response = packet.allowed
+      ? execute(call.call, call.source)
+      : ({
+          kind: "error",
+          error: { code: "PERMISSION_DENIED", message: "Host context or policy denied." },
+        } as HostResponse);
+    channel.notify({
+      kind: "host-response",
+      context: call.context,
+      requestId: packet.requestId,
+      response,
+    });
+    startNext();
+  } else if (packet.kind === "cancel") {
+    queue.delete(packet.requestId);
+    if (active === packet.requestId) active = undefined;
+    startNext();
+  } else if (packet.kind === "cancel-context") {
+    for (const [id, call] of queue)
+      if (call.context === packet.context) {
+        queue.delete(id);
+        if (active === id) active = undefined;
+      }
+    startNext();
+  } else if (packet.kind === "shutdown") {
+    stopping = true;
+    queue.clear();
+    active = undefined;
+    // Acknowledge shutdown acceptance before closing the port.
+    setTimeout(() => {
+      void finish().catch((error) => {
+        throw error;
+      });
+    }, 0);
+  } else throw new Error("Unexpected I/O packet");
+}
+async function finish() {
+  await channel.drain();
+  disposeStorageBindings();
+  await channel.send({ kind: "cleaned" });
+  channel.close();
+  parentPort?.close();
+}

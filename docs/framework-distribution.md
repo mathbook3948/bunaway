@@ -53,7 +53,7 @@ strict TypeScript에서 `@bunaway/cli`를 import할 수 있다.
 | --- | --- |
 | CLI/SDK | CLI, backend/client SDK, core, protocol, runtime-bun, packaging의 소스·package.json·타입 설정 |
 | 템플릿 | 실제 SDK를 쓰는 vanilla UI/백엔드·정책·설정·gitignore |
-| 네이티브 | Windows host.cpp·CMakeLists.txt·run.ps1·WebView2 deps.json, macOS main.mm·run.sh |
+| 네이티브 | Windows Bun FFI TypeScript·prepare/launch.ps1·WebView2 deps.json, macOS main.mm·run.sh |
 | 계약 | 생성된 Web/IPC/정책/Host API/bootstrap 스키마와 host-operations.json |
 | 런타임 핀 | Windows/macOS Bun의 버전·소스 revision·URL·archive/executable/license SHA-256 |
 | 버전·고지 | framework.json, artifact.files.json, FRAMEWORK-LICENSE.txt, THIRD-PARTY-NOTICES.txt, 세 upstream 라이선스 원문 |
@@ -140,7 +140,7 @@ minor)를 올린다. 호환 수정은 patch, 새 호환 기능은 minor를 올�
 
 | 대상 | 개발/create/validate | 네이티브 dev/build | 최종 앱 실행 |
 | --- | --- | --- | --- |
-| Windows x64 | Bun 1.4.2, 개발 의존성 설치 접근 | PowerShell 7, MSVC C++ Build Tools·Windows SDK, CMake 3.25+·Ninja, WebView2 SDK 핀 다운로드, Evergreen 실행 런타임 | 지원 OS/CPU와 WebView2 Evergreen. Bun·Node·TypeScript·컴파일러·SDK 불필요 |
+| Windows x64 | Bun 1.4.2, 개발 의존성 설치 접근 | PowerShell 7, 공식 WebView2 Loader 핀 다운로드, Evergreen 실행 런타임. C++ 빌드 도구 불필요 | 지원 OS/CPU와 WebView2 Evergreen. 전역 Bun·Node·TypeScript·컴파일러·SDK 불필요 |
 | macOS arm64 | Bun 1.4.2, 개발 의존성 설치 접근 | macOS 14+, Xcode CLT(Apple SDK·clang++), zsh·python3·curl·ditto·codesign | 지원 macOS/CPU와 OS WebKit. Bun·Node·Xcode 불필요 |
 
 현재 검증 머신과 정식 최소 OS 지원은 [플랫폼 표](./platform-support/README.md)를

@@ -15,8 +15,8 @@ import {
 } from "./contract.ts";
 
 // Locates the channel-neutral artifact produced by `bunaway build`.
-// Windows: dist/windows-x64/{bunaway-host.exe, runtime/, assets/, licenses/,
-// manifest.json}. macOS: dist/macos-arm64/<appId>.app with the package root at
+// Windows: dist/windows-x64/{runtime/bun.exe, assets/, licenses/, manifest.json}.
+// macOS: dist/macos-arm64/<appId>.app with the package root at
 // Contents/Resources. Adapters must treat these files as read-only.
 export function artifactPaths(args: {
   root: string;
@@ -26,7 +26,7 @@ export function artifactPaths(args: {
   const { root, target, appId } = args;
   if (target === "windows-x64") {
     const dir = resolve(root, "dist/windows-x64");
-    return { dir, packageDir: dir, executable: resolve(dir, "bunaway-host.exe") };
+    return { dir, packageDir: dir, executable: resolve(dir, "runtime/bun.exe") };
   }
   const dir = resolve(root, "dist/macos-arm64", `${appId}.app`);
   return {
@@ -253,20 +253,35 @@ function validateManifest(value: unknown): asserts value is PackageManifest {
   }
 }
 
-const REQUIRED_ASSETS = [
-  "assets/app.json",
-  "assets/policy.json",
-  "assets/backend.js",
-  "assets/bunfig.toml",
-  "assets/tsconfig.json",
-  "assets/process.schema.json",
-  "assets/message.schema.json",
-  "assets/host-call.schema.json",
-  "assets/host-operations.json",
-  "assets/policy.schema.json",
-  "licenses/LICENSE.bun",
-  "licenses/LICENSE.nlohmann-json",
-];
+const REQUIRED_ASSETS = {
+  windows: [
+    "assets/app.json",
+    "assets/policy.json",
+    "assets/boot.js",
+    "assets/app.js",
+    "assets/ui.js",
+    "assets/host-operations.js",
+    "assets/WebView2Loader.dll",
+    "assets/bunfig.toml",
+    "assets/tsconfig.json",
+    "licenses/LICENSE.bun",
+    "licenses/License-WebView2.txt",
+  ],
+  macos: [
+    "assets/app.json",
+    "assets/policy.json",
+    "assets/backend.js",
+    "assets/bunfig.toml",
+    "assets/tsconfig.json",
+    "assets/process.schema.json",
+    "assets/message.schema.json",
+    "assets/host-call.schema.json",
+    "assets/host-operations.json",
+    "assets/policy.schema.json",
+    "licenses/LICENSE.bun",
+    "licenses/LICENSE.nlohmann-json",
+  ],
+};
 
 function homeAsset(value: unknown): string {
   if (!isIdentity(value)) {
@@ -435,25 +450,70 @@ export async function verifyArtifact(args: {
 
   // sourceSha256 predates macOS bundle signing and is provenance, not a final digest.
   const hostDigest = manifest.host?.packagedSha256 ?? manifest.host?.sha256;
-  if (!hostDigest && (platform === "windows" || process.platform !== "darwin")) {
+  if (platform === "windows") {
+    if (manifest.host?.kind !== "bun-ffi") {
+      diagnostics.push({
+        stage,
+        code: CODES.INPUT_UNEXPECTED,
+        severity: "error",
+        message:
+          "This Windows artifact uses the retired native host layout; run bunaway build again for the Bun FFI host.",
+        path: manifestPath,
+      });
+    } else if (!isDigest(manifest.host.sha256)) {
+      diagnostics.push({
+        stage,
+        code: CODES.INPUT_MISSING,
+        severity: "error",
+        message:
+          "Windows build manifest is missing the Bun FFI bootstrap hash; run bunaway build again.",
+        path: manifestPath,
+      });
+    } else if (manifest.host.sha256 !== manifest.assets["assets/boot.js"]) {
+      diagnostics.push({
+        stage,
+        code: CODES.INPUT_TAMPERED,
+        severity: "error",
+        message: "Windows Bun FFI bootstrap hash does not match its asset inventory.",
+        path: manifestPath,
+      });
+    }
+    if (artifact.executable !== resolve(artifact.packageDir, "runtime/bun.exe")) {
+      diagnostics.push({
+        stage,
+        code: CODES.INPUT_UNEXPECTED,
+        severity: "error",
+        message:
+          "Windows app executable must be the bundled runtime/bun.exe; run bunaway build again.",
+        path: artifact.executable,
+      });
+    }
+    for (const name of ["launch.ps1", "bunaway.cmd"]) {
+      try {
+        await inputPath(artifact.packageDir, resolve(artifact.packageDir, name));
+      } catch (error) {
+        diagnostics.push({
+          stage,
+          code: error instanceof ArtifactInputError ? error.code : CODES.INPUT_MISSING,
+          severity: "error",
+          message: `Windows launcher ${name} is missing; run bunaway build again.`,
+          path: resolve(artifact.packageDir, name),
+        });
+      }
+    }
+  }
+  if (!hostDigest && platform === "macos" && process.platform !== "darwin") {
     diagnostics.push({
       stage,
       code: CODES.INPUT_MISSING,
       severity: "error",
       message:
-        platform === "windows"
-          ? "Build manifest is missing the host executable hash; run bunaway build again."
-          : "Build manifest has no final host executable hash; verify this signed bundle on macOS.",
+        "Build manifest has no final host executable hash; verify this signed bundle on macOS.",
       path: artifact.executable,
     });
   }
-  await verifyFile(
-    artifact.dir,
-    artifact.executable,
-    "Host executable",
-    hostDigest,
-    platform === "macos",
-  );
+  if (platform === "macos")
+    await verifyFile(artifact.dir, artifact.executable, "Host executable", hostDigest, true);
   const runtime = resolve(
     artifact.packageDir,
     platform === "windows" ? "runtime/bun.exe" : "runtime/bun",
@@ -466,10 +526,7 @@ export async function verifyArtifact(args: {
     platform === "macos",
   );
 
-  const required = [
-    ...REQUIRED_ASSETS,
-    ...(platform === "windows" ? ["licenses/License-WebView2.txt"] : []),
-  ];
+  const required = REQUIRED_ASSETS[platform];
   for (const path of required) {
     if (!Object.hasOwn(manifest.assets, path)) {
       diagnostics.push({

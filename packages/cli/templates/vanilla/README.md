@@ -8,7 +8,7 @@
 전체 snapshot 교체 절차를 따른다. 일부 SDK만 registry 버전으로 교체하지 않는다.
 프레임워크 라이선스는 미결정이며 포함된 FRAMEWORK-LICENSE.txt/third-party 고지를 확인한다.
 
-- Windows x64: PowerShell 7, MSVC C++ Build Tools, CMake/Ninja, WebView2 Evergreen.
+- Windows x64: PowerShell 7, WebView2 Evergreen. C++ 빌드 도구는 필요 없다.
 - macOS arm64: macOS 14+, Xcode CLT. 로컬 ad-hoc 서명만 제공한다.
 - 최초 빌드의 고정 Bun/네이티브 의존성 다운로드와 개발 의존성 설치에는 네트워크가 필요하다.
 - 프로덕션 앱 실행은 패키지 내부 Bun을 사용하며 전역 Bun이나 node_modules는 필요 없다.
@@ -24,7 +24,9 @@ macOS `~/Library/Application Support/bunaway/<appId>/data/messages/current.txt`�
 HMR/입력 상태 보존은 제공하지 않는다. Ctrl+C 또는 창 닫기로 종료한다.
 
 빌드 실패는 오류로 종료하고 마지막 성공 산출물을 유지한다.
-Windows 패키지는 `dist/windows-x64/bunaway-host.exe`를 직접 실행한다.
+Windows 패키지는 `dist/windows-x64/bunaway.cmd`를 실행한다.
+`windowsApp`의 default export AppDefinition을 같은 Bun 프로세스에서 실행한다.
 macOS는 `dist/macos-arm64/<appId>.app`을 연다.
-양쪽 명시적 실행 인자는 `--package <절대 리소스 경로>`이며 macOS는 `.app/Contents/Resources`다.
+Windows는 함께 제공된 `launch.ps1`이 내부 Bun을 검증하고 실행한다.
+macOS 명시적 인자는 `--package <절대 리소스 경로>`이며 `.app/Contents/Resources`다.
 설치 프로그램·정식 서명·공증은 포함하지 않는다.

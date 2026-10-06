@@ -99,8 +99,7 @@ new RestartController<string>({ stop: async () => {}, build: async () => 42, sta
     for (const directory of [
       "build",
       "runtime/bun-bundle/vendor",
-      "native/windows/vendor",
-      "native/windows/host/vendor",
+      "native/windows/bun/vendor",
       "native/macos/vendor",
     ]) {
       await mkdir(resolve(installed, directory), { recursive: true });
@@ -331,10 +330,7 @@ new RestartController<string>({ stop: async () => {}, build: async () => 42, sta
     expect(await command(project, ["run", "validate"])).toContain("valid");
     await rm(foreignSdk, { recursive: true, force: true });
     await rm(foreignCore, { recursive: true, force: true });
-    await writeFile(
-      resolve(project, "vendor/bunaway/native/windows/host/host.cpp"),
-      "changed host",
-    );
+    await writeFile(resolve(project, "vendor/bunaway/native/windows/bun/boot.ts"), "changed host");
     await expect(command(project, ["run", "validate"])).rejects.toThrow("Hash mismatch");
     await rm(resolve(project, "bunaway.lock.json"));
     await expect(command(project, ["run", "validate"])).rejects.toThrow("legacy project");
@@ -374,16 +370,15 @@ test("framework validation rejects extra snapshot inputs but permits designated 
     for (const directory of [
       "build",
       "runtime/bun-bundle/vendor",
-      "native/windows/vendor",
-      "native/windows/host/vendor",
+      "native/windows/bun/vendor",
       "native/macos/vendor",
     ]) {
       await Bun.write(resolve(root, directory, "nested/cache.txt"), "generated native cache");
     }
     await validateProject(project);
     for (const name of [
-      "native/windows/host/json.hpp",
-      "native/windows/host/vendor-extra/json.hpp",
+      "native/windows/bun/unexpected.hpp",
+      "native/windows/bun/vendor-extra/json.hpp",
       "packages/core/src/extra.ts",
       "packages/core/src/node_modules/extra.ts",
     ]) {
@@ -597,11 +592,11 @@ test("artifact audit rejects omitted schemas, declarations and Git attributes wi
     await checkArtifact(root);
     const inventoryPath = resolve(root, "artifact.files.json");
     const inventory = await readFile(inventoryPath);
-    const extra = resolve(root, "native/windows/host/unexpected.txt");
+    const extra = resolve(root, "native/windows/bun/unexpected.txt");
     await writeFile(extra, "not a native cache");
     await expect(checkArtifact(root)).rejects.toThrow("inventory mismatch");
     await rm(extra);
-    const source = resolve(root, "native/windows/host/host.cpp");
+    const source = resolve(root, "native/windows/bun/boot.ts");
     const sourceOriginal = await readFile(source);
     await writeFile(source, "modified host");
     await expect(checkArtifact(root)).rejects.toThrow("inventory mismatch");

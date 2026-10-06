@@ -20,14 +20,28 @@ export const frameworkPaths = [
   "docs/framework-distribution.md",
   "docs/decisions/0005-framework-artifact.md",
   "docs/decisions/0001-bundled-bun-process.md",
+  "docs/decisions/0006-windows-bun-ui-worker.md",
+  "docs/architecture/windows-bun-results.md",
   "docs/platform-support/README.md",
   "tsconfig.base.json",
   "package.json",
   "native/host-api/generated",
-  "native/windows/host/host.cpp",
-  "native/windows/host/CMakeLists.txt",
-  "native/windows/host/deps.json",
-  "native/windows/host/run.ps1",
+  "native/windows/bun/boot.ts",
+  "native/windows/bun/entry.ts",
+  "native/windows/bun/job.ts",
+  "native/windows/bun/deps.json",
+  "native/windows/bun/channel.ts",
+  "native/windows/bun/boundary.ts",
+  "native/windows/bun/ui.ts",
+  "native/windows/bun/webview.ts",
+  "native/windows/bun/com.ts",
+  "native/windows/bun/win32.ts",
+  "native/windows/bun/storage.ts",
+  "native/windows/bun/host-operations.ts",
+  "native/windows/bun/log.ts",
+  "native/windows/bun/launch.ps1",
+  "native/windows/bun/prepare.ps1",
+  "native/windows/bun/README.md",
   "native/macos/host/main.mm",
   "native/macos/host/run.sh",
   "runtime/build-manifests",
@@ -36,8 +50,7 @@ export const frameworkPaths = [
 const generatedDirectories = [
   "build",
   "runtime/bun-bundle/vendor",
-  "native/windows/vendor",
-  "native/windows/host/vendor",
+  "native/windows/bun/vendor",
   "native/macos/vendor",
 ] as const;
 
@@ -286,11 +299,13 @@ export async function checkArtifact(root: string): Promise<void> {
   }
   const pin = (await json(resolve(root, "runtime/build-manifests/windows-x64.json"))) as {
     bun: { licenseSha256: string };
-    json: { licenseSha256: string };
   };
   await verifyHash(resolve(root, "licenses/LICENSE.bun"), pin.bun.licenseSha256);
-  await verifyHash(resolve(root, "licenses/LICENSE.nlohmann-json"), pin.json.licenseSha256);
-  const deps = (await json(resolve(root, "native/windows/host/deps.json"))) as {
+  const macPin = (await json(resolve(root, "runtime/build-manifests/darwin-aarch64.json"))) as {
+    json: { licenseSha256: string };
+  };
+  await verifyHash(resolve(root, "licenses/LICENSE.nlohmann-json"), macPin.json.licenseSha256);
+  const deps = (await json(resolve(root, "native/windows/bun/deps.json"))) as {
     webview2Sdk: { files: Record<string, string> };
   };
   await verifyHash(

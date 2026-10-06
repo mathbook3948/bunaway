@@ -162,6 +162,7 @@ export interface PackageManifest {
   framework?: { version: string };
   host?: {
     target: string;
+    kind?: string;
     sha256?: string;
     sourceSha256?: string;
     packagedSha256?: string;

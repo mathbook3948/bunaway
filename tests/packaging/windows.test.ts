@@ -54,7 +54,7 @@ const input = (channelConfig: Record<string, unknown>, signing?: SigningConfig):
   artifact: {
     dir: "C:\\proj\\dist\\windows-x64",
     packageDir: "C:\\proj\\dist\\windows-x64",
-    executable: "C:\\proj\\dist\\windows-x64\\bunaway-host.exe",
+    executable: "C:\\proj\\dist\\windows-x64\\runtime\\bun.exe",
   },
   manifest: {
     bun: {
@@ -101,7 +101,9 @@ test.skipIf(!iscc)(
         const trace = join(staging, "bootstrap-ran");
         const host = join(install, "bunaway-host.exe");
         await Bun.write(host, "previous app");
-        await Bun.write(join(staging, "app", "bunaway-host.exe"), "new app");
+        await Bun.write(join(staging, "app", "runtime", "bun.exe"), "new app");
+        await Bun.write(join(staging, "app", "launch.ps1"), "launcher fixture");
+        await Bun.write(join(staging, "app", "bunaway.cmd"), "command fixture");
         await mkdir(join(staging, "installer"));
         const bootstrapper = join(staging, "installer", "bootstrapper.exe");
         if (outcome === "launch-error") await Bun.write(bootstrapper, "not an executable");
@@ -178,7 +180,9 @@ end;
         const success = outcome === "installed" || outcome === "existing";
         const exit = await proc.exited;
         expect(exit).toBe(success ? 0 : outcome === "old-os" ? 1 : 7);
-        expect(await Bun.file(host).text()).toBe(success ? "new app" : "previous app");
+        expect(await Bun.file(host).exists()).toBe(!success);
+        if (!success) expect(await Bun.file(host).text()).toBe("previous app");
+        else expect(await Bun.file(join(install, "runtime/bun.exe")).text()).toBe("new app");
         expect(await Bun.file(trace).exists()).toBe(
           !["launch-error", "existing", "old-os"].includes(outcome),
         );
@@ -202,7 +206,9 @@ test.each(["win-direct", "win-store-unpackaged"] as const)(
     });
     try {
       const source = join(root, "source");
-      await Bun.write(join(source, "bunaway-host.exe"), "fixture");
+      await Bun.write(join(source, "runtime", "bun.exe"), "fixture");
+      await Bun.write(join(source, "launch.ps1"), "fixture");
+      await Bun.write(join(source, "bunaway.cmd"), "fixture");
       const original = input({ webView2: "check" });
       const config = parsePackaging(
         JSON.stringify({
@@ -228,7 +234,11 @@ test.each(["win-direct", "win-store-unpackaged"] as const)(
         channel,
         metadata: resolved.metadata,
         channelConfig: resolved.channel.channelConfig,
-        artifact: { dir: source, packageDir: source, executable: join(source, "bunaway-host.exe") },
+        artifact: {
+          dir: source,
+          packageDir: source,
+          executable: join(source, "runtime", "bun.exe"),
+        },
       };
       const stages = adapterOrThrow(channel).stages(adapterInput);
       const ctx: StageContext = {
@@ -258,7 +268,9 @@ test.skipIf(!iscc)(
       "{demo}",
     );
     try {
-      await Bun.write(join(root, "app", "bunaway-host.exe"), "host fixture");
+      await Bun.write(join(root, "app", "runtime", "bun.exe"), "runtime fixture");
+      await Bun.write(join(root, "app", "launch.ps1"), "launcher fixture");
+      await Bun.write(join(root, "app", "bunaway.cmd"), "command fixture");
       await Bun.write(join(root, "bootstrapper.exe"), "bootstrapper fixture");
       await mkdir(join(root, "installer"));
       const ctx: StageContext = {
@@ -318,7 +330,12 @@ test.skipIf(!iscc)(
         const payloadDir = join(staging, "app");
         const assetPaths = ["assets/web/case.js", "assets/web/quote's.js", "licenses/current.txt"];
         if (version === 1) assetPaths.push("assets/web/retired/page.html", "licenses/retired.txt");
-        await Bun.write(join(payloadDir, "bunaway-host.exe"), "host fixture");
+        if (version === 1) await Bun.write(join(payloadDir, "bunaway-host.exe"), "legacy host");
+        else {
+          await Bun.write(join(payloadDir, "runtime", "bun.exe"), `runtime ${version}`);
+          await Bun.write(join(payloadDir, "launch.ps1"), `launcher ${version}`);
+          await Bun.write(join(payloadDir, "bunaway.cmd"), `command ${version}`);
+        }
         for (const path of assetPaths) await Bun.write(join(payloadDir, path), String(version));
         await mkdir(join(staging, "installer"));
         const ctx: StageContext = {
@@ -344,10 +361,15 @@ test.skipIf(!iscc)(
           assetPaths,
         });
         // Reproduce an installer produced before uninstall-log replacement.
-        if (version === 1) script = script.replace("UninstallLogMode=overwrite\n", "");
+        if (version === 1) {
+          script = script
+            .replace("UninstallLogMode=overwrite\n", "")
+            .replace("  RemoveRetiredWindowsHost;\n", "");
+        }
         const setup = await compileInno(ctx, script, staging, "setup");
         await must(setup, ["/SP-", ...silent, `/DIR=${install}`]);
         if (version === 1) {
+          expect(await Bun.file(join(install, "bunaway-host.exe")).text()).toBe("legacy host");
           await Bun.write(data, "memo");
           await Bun.write(join(root, "external", "keep.txt"), "external data");
           await symlink(join(root, "external"), join(install, "assets", "external"), "junction");
@@ -356,6 +378,9 @@ test.skipIf(!iscc)(
         expect(await Bun.file(join(install, "assets/web/retired/page.html")).exists()).toBe(false);
         expect(await Bun.file(join(install, "licenses/retired.txt")).exists()).toBe(false);
         expect(await Bun.file(join(install, "assets/web/case.js")).text()).toBe(String(version));
+        expect(await Bun.file(join(install, "bunaway-host.exe")).exists()).toBe(false);
+        expect(await Bun.file(join(install, "runtime/bun.exe")).text()).toBe(`runtime ${version}`);
+        expect(await Bun.file(join(install, "launch.ps1")).text()).toBe(`launcher ${version}`);
         expect(await Bun.file(join(install, "assets/web/quote's.js")).text()).toBe(String(version));
         expect(await Bun.file(data).text()).toBe("memo");
         expect(await Bun.file(join(root, "external", "keep.txt")).text()).toBe("external data");
@@ -397,7 +422,9 @@ test.skipIf(!iscc)(
       for (let index = 0; index < names.length; index++) {
         const name = names[index] as string;
         const staging = join(root, String(index));
-        await Bun.write(join(staging, "app", "bunaway-host.exe"), "host fixture");
+        await Bun.write(join(staging, "app", "runtime", "bun.exe"), "runtime fixture");
+        await Bun.write(join(staging, "app", "launch.ps1"), "launcher fixture");
+        await Bun.write(join(staging, "app", "bunaway.cmd"), "command fixture");
         await mkdir(join(staging, "installer"));
         const ctx: StageContext = {
           input: input({}),
@@ -428,7 +455,7 @@ test.skipIf(!iscc)(
           script = script.replace(/ {4}PruneShortcuts\([^\n]+\);\n/g, "");
           script = script.replace(
             "[Icons]\n",
-            `[Icons]\nName: "${menu}\\Unrelated"; Filename: "${root}\\other.exe"\nName: "${desktop}\\Other (${identifier})"; Filename: "${root}\\other.exe"\n`,
+            `[Icons]\nName: "${menu}\\Unrelated"; Filename: "${root}\\other.exe"\nName: "${desktop}\\Other (${identifier})"; Filename: "${root}\\other.exe"\nName: "${menu}\\PowerShell other file"; Filename: "{sys}\\WindowsPowerShell\\v1.0\\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\\other.ps1"" ""{app}\\launch.ps1"""\nName: "${menu}\\PowerShell mention"; Filename: "{sys}\\WindowsPowerShell\\v1.0\\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""Write-Output '{app}\\launch.ps1'"""\n`,
           );
         }
         const setup = await compileInno(ctx, script, staging, "setup");
@@ -453,8 +480,37 @@ test.skipIf(!iscc)(
           );
         }
         for (const link of unrelated) expect(await Bun.file(link).exists()).toBe(true);
+        expect(await Bun.file(join(menu, "PowerShell other file.lnk")).exists()).toBe(true);
+        expect(await Bun.file(join(menu, "PowerShell mention.lnk")).exists()).toBe(true);
         expect(await Bun.file(join(menu, "broken.lnk")).text()).toBe("not a shortcut");
         expect(await Bun.file(data).text()).toBe("memo");
+        if (index === 0) {
+          const powershell = join(
+            process.env.SystemRoot ?? "C:\\Windows",
+            "System32",
+            "WindowsPowerShell",
+            "v1.0",
+            "powershell.exe",
+          );
+          const linkPath = join(menu, `${name}.lnk`);
+          const psLiteral = (value: string) => `'${value.replaceAll("'", "''")}'`;
+          const command = `$folder=(New-Object -ComObject Shell.Application).Namespace(${psLiteral(menu)}); $link=$folder.ParseName(${psLiteral(`${name}.lnk`)}).GetLink(); [Console]::WriteLine((ConvertTo-Json -InputObject @{Target=$link.Path;Arguments=$link.Arguments} -Compress))`;
+          const output = await must(powershell, [
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            command,
+          ]);
+          const shortcut = JSON.parse(output.stdout.trim()) as {
+            Target: string;
+            Arguments: string;
+          };
+          expect(shortcut.Target.toLowerCase()).toBe(powershell.toLowerCase());
+          expect(shortcut.Arguments.toLowerCase()).toBe(
+            `-NoProfile -ExecutionPolicy Bypass -File "${join(install, "launch.ps1")}"`.toLowerCase(),
+          );
+          expect(await Bun.file(linkPath).exists()).toBe(true);
+        }
       }
       await removeInstallation();
       for (const link of unrelated) expect(await Bun.file(link).exists()).toBe(true);
@@ -478,9 +534,10 @@ test.skipIf(!makeappx)(
     try {
       const payload = join(root, "payload");
       await mkdir(payload);
+      await mkdir(join(payload, "runtime"));
       await copyFile(
         join(process.env.SystemRoot ?? "C:\\Windows", "System32", "whoami.exe"),
-        join(payload, "bunaway-host.exe"),
+        join(payload, "runtime", "bun.exe"),
       );
       const logo =
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4V8AAAAASUVORK5CYII=";
@@ -503,7 +560,7 @@ test.skipIf(!makeappx)(
             "internetClient",
             "internetClient",
           ],
-          executable: "bunaway-host.exe",
+          executable: "runtime/bun.exe",
           logo: { square44: "logo.png", square150: "logo.png", storeLogo: "logo.png" },
         }),
       );
@@ -560,122 +617,19 @@ test.each(["win-direct", "win-store-unpackaged"])(
   },
 );
 
-test("MSIX staging bounds derived package names and preserves explicit identities", async () => {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "bunaway-msix-name-")));
-  try {
-    const source = join(root, "source");
-    const original = input({});
-    await Bun.write(join(source, "runtime", "bun.exe"), "bun fixture");
-    await Bun.write(join(source, "bunaway-host.exe"), "host fixture");
-    await Bun.write(join(source, "manifest.json"), JSON.stringify(original.manifest));
-    const icons = {
-      "windows.square44": join(root, "44.png"),
-      "windows.square150": join(root, "150.png"),
-      "windows.storeLogo": join(root, "store.png"),
-    };
-    for (const path of Object.values(icons)) await Bun.write(path, "icon fixture");
-    const identifier = "com.example.department.product.averylongapplicationname";
-    for (const [packageName, minVersion, channelConfig] of [
-      [undefined, "10.0.18362.0", {}],
-      ["Store.ReservedIdentity", "10.0.22621.0", {}],
-      ["Store.ChannelOverride", "10.0.26100.0", { minVersion: "10.0.26100.0" }],
-      ["Store.Virtualized", "10.0.17763.0", { unvirtualizedData: false }],
-    ] as const) {
-      const msixInput: AdapterInput = {
-        ...original,
-        channel: "win-store-msix",
-        channelConfig: { ...channelConfig, ...(packageName ? { packageName } : {}) },
-        metadata: {
-          ...metadata,
-          root,
-          identifier,
-          icons,
-          targets: [
-            {
-              platform: "windows",
-              arch: "x64",
-              ...(packageName === "Store.ReservedIdentity" ||
-              packageName === "Store.ChannelOverride"
-                ? { minVersion: "10.0.22621.0" }
-                : {}),
-            },
-          ],
-        },
-        artifact: { dir: source, packageDir: source, executable: join(source, "bunaway-host.exe") },
-      };
-      const staging = join(root, packageName ?? "derived");
-      const stage = adapterOrThrow("win-store-msix").stages(msixInput)[0];
-      if (!stage) throw new Error("Expected MSIX staging.");
-      await stage.run({ input: msixInput, staging, report() {}, addArtifact() {} });
-      const xml = await readFile(join(staging, "package", "AppxManifest.xml"), "utf8");
-      expect(xml).toContain(`<Identity Name="${packageName ?? identifier.slice(0, 50)}"`);
-      expect(xml).toContain(`MinVersion="${minVersion}"`);
-    }
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-});
-
-test("win-store-msix requires publisher.identity and MSIX icons up front", () => {
+test("win-store-msix remains registered and fails before SDK discovery", () => {
   const adapter = adapterOrThrow("win-store-msix");
-  const msixInput = (overrides: Partial<ResolvedPackaging>, icons = {}) =>
-    ({
-      ...input({}),
-      channel: "win-store-msix",
-      metadata: { ...metadata, ...overrides, icons },
-    }) as AdapterInput;
-  expect(() => adapter.stages(msixInput({ publisher: { display: "NoId" } }))).toThrow(
-    /publisher\.identity/,
-  );
-  expect(() => adapter.stages(msixInput({}))).toThrow(/icons\.windows/);
-  const fullIcons = {
-    "windows.square44": "C:\\proj\\icons\\44.png",
-    "windows.square150": "C:\\proj\\icons\\150.png",
-    "windows.storeLogo": "C:\\proj\\icons\\store.png",
-  };
-  const stages = adapter.stages(msixInput({}, fullIcons));
-  expect(runIds(stages)).toEqual(["stage", "assemble", "sign", "verify-artifact"]);
-  const oldTarget = msixInput(
-    { targets: [{ platform: "windows", arch: "x64", minVersion: "10.0.17763.0" }] },
-    fullIcons,
-  );
-  expect(() => adapter.stages(oldTarget)).toThrow(/unvirtualizedData requires minVersion/);
-  expect(() =>
-    adapter.stages({ ...oldTarget, channelConfig: { unvirtualizedData: false } }),
-  ).not.toThrow();
-  expect(() =>
-    adapter.stages({ ...oldTarget, channelConfig: { minVersion: "10.0.18362.0" } }),
-  ).not.toThrow();
-  expect(() =>
-    adapter.stages({ ...oldTarget, channelConfig: { minVersion: "10.0.17763.0" } }),
-  ).toThrow(/unvirtualizedData requires minVersion/);
-  for (const minVersion of ["10.0.16299.0", "10.0.17762.0"]) {
-    for (const unvirtualizedData of [false, true]) {
-      expect(() =>
-        adapter.stages({ ...oldTarget, channelConfig: { minVersion, unvirtualizedData } }),
-      ).toThrow(/bundled Bun requirement/);
-      expect(() =>
-        adapter.stages({
-          ...oldTarget,
-          metadata: {
-            ...oldTarget.metadata,
-            targets: [{ platform: "windows", arch: "x64", minVersion }],
-          },
-          channelConfig: { unvirtualizedData },
-        }),
-      ).toThrow(/bundled Bun requirement/);
-    }
+  const findTool = spyOn(windowsTools, "findWindowsKitTool").mockImplementation(async () => {
+    throw new Error("MSIX gate must run before SDK discovery.");
+  });
+  try {
+    expect(() => adapter.stages({ ...input({}), channel: "win-store-msix" })).toThrow(
+      /no verified clean pre-start environment.*win-direct.*win-store-unpackaged/,
+    );
+    expect(findTool).not.toHaveBeenCalled();
+  } finally {
+    findTool.mockRestore();
   }
-  expect(() =>
-    adapter.stages(
-      msixInput(
-        {
-          version: { semver: "1.2.3", build: 4, msix: "1.2.3.4" },
-        },
-        fullIcons,
-      ),
-    ),
-  ).toThrow(/release.build=0/);
 });
 
 test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data policy", () => {
@@ -703,6 +657,10 @@ test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data pol
   expect(perUser).toContain("Current.Add('assets\\web\\current.html')");
   expect(perUser).toContain("if CurStep <> ssPostInstall then Exit");
   expect(perUser).toContain("FILE_ATTRIBUTE_REPARSE_POINT");
+  expect(perUser).toContain("CompareText(Target, PowerShell) = 0");
+  expect(perUser).toContain(
+    "CompareText(Arguments, '-NoProfile -ExecutionPolicy Bypass -File \"' + Launcher + '\"') = 0",
+  );
   expect(perUser).toContain("ArchitecturesAllowed=x64compatible");
   expect(perUser).toContain('Name: "desktopicon"');
   expect(perUser).toContain("{group}\\Test App");
@@ -794,7 +752,7 @@ test("AppxManifest declares full trust, virtualization opt-out and icon resource
     minVersion: "10.0.18362.0",
     unvirtualizedData: true,
     capabilities: [],
-    executable: "bunaway-host.exe",
+    executable: "runtime/bun.exe",
     logo: {
       square44: "Square44x44Logo.png",
       square150: "Square150x150Logo.png",
@@ -832,7 +790,7 @@ test("AppxManifest declares full trust, virtualization opt-out and icon resource
   expect(xml).toContain('Name="Example.TestApp"');
   expect(xml).toContain('Publisher="CN=Example"');
   expect(xml).toContain('Version="1.2.3.0"');
-  expect(xml).toContain('Executable="bunaway-host.exe"');
+  expect(xml).toContain('Executable="runtime/bun.exe"');
   expect(xml).toContain('EntryPoint="Windows.FullTrustApplication"');
   expect(xml).toContain('Name="runFullTrust"');
   expect(xml).toContain('Name="unvirtualizedResources"');
@@ -858,7 +816,7 @@ test("AppxManifest declares full trust, virtualization opt-out and icon resource
       "picturesLibrary",
       "broadFileSystemAccess",
     ],
-    executable: "bunaway-host.exe",
+    executable: "runtime/bun.exe",
     logo: {
       square44: "Square44x44Logo.png",
       square150: "Square150x150Logo.png",
@@ -999,11 +957,15 @@ if (process.argv[2] === process.env.FAIL_STAGE) {
 });
 
 test("packagedSha256 mirrors the shipped bytes in the staged manifest", async () => {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "bunaway-msix-")));
+  const root = await realpath(await mkdtemp(join(tmpdir(), "bunaway-packaged-hash-")));
   try {
     const payload = resolve(root, "package");
+    const upstream = "1".repeat(64);
     await Bun.write(resolve(payload, "runtime/bun.exe"), "bun bytes");
-    await Bun.write(resolve(payload, "bunaway-host.exe"), "host bytes");
+    await Bun.write(
+      resolve(payload, "launch.ps1"),
+      `function Check([string]$Path, [string]$Expected) { }\nCheck $bun '${upstream}'\n`,
+    );
     await Bun.write(
       resolve(payload, "manifest.json"),
       JSON.stringify({
@@ -1011,21 +973,25 @@ test("packagedSha256 mirrors the shipped bytes in the staged manifest", async ()
           version: "1",
           sourceRevision: "test-revision",
           target: "windows-x64-baseline",
-          executableSha256: "upstream",
+          executableSha256: upstream,
           licenseSha256: "l",
         },
         assets: {},
         app: { id: "x", version: "1" },
-        host: { target: "windows-x64", sha256: "oldhost" },
+        host: { target: "windows-x64", kind: "bun-ffi", sha256: "bootstrap" },
       }),
     );
     const { recordPackagedHashes } = await import(
       "../../packages/packaging/src/channels/windows/manifest.ts"
     );
     const manifest = await recordPackagedHashes(payload);
-    expect(manifest.bun.executableSha256).toBe("upstream"); // immutable provenance
-    expect(manifest.bun.packagedSha256).toMatch(/^[0-9a-f]{64}$/);
-    expect(manifest.host?.packagedSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(manifest.bun.executableSha256).toBe(upstream); // immutable provenance
+    const packaged = await windowsTools.sha256(resolve(payload, "runtime/bun.exe"));
+    expect(manifest.bun.packagedSha256).toBe(packaged);
+    expect(await Bun.file(resolve(payload, "launch.ps1")).text()).toContain(
+      `Check $bun '${packaged}'`,
+    );
+    expect(manifest.host?.packagedSha256).toBeUndefined();
     const written = JSON.parse(await Bun.file(resolve(payload, "manifest.json")).text());
     expect(written.bun.packagedSha256).toBe(manifest.bun.packagedSha256);
   } finally {

@@ -8,9 +8,9 @@ License texts included in licenses/ (verified against the manifests):
 - LICENSE.bun: Bun 1.4.2, source revision and license URL in
   runtime/build-manifests/{windows-x64,darwin-aarch64}.json. This upstream text
   includes Bun's third-party attributions; preserve it in full.
-- LICENSE.nlohmann-json: nlohmann-json 3.12.0, MIT; URL/hash in the same manifests.
+- LICENSE.nlohmann-json: nlohmann-json 3.12.0, MIT; used by macOS; URL/hash in runtime/build-manifests/darwin-aarch64.json.
 - License-WebView2.txt: Microsoft WebView2 SDK 1.0.4129.50; archive URL/hash and
-  license hash in native/windows/host/deps.json.
+  license hash in native/windows/bun/deps.json.
 
 Generated apps retain these notices. Final app builds include the runtime/native
 dependency license texts through the existing native build pipeline. App authors

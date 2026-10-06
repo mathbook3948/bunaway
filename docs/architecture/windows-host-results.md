@@ -1,5 +1,9 @@
 # Windows 제품 호스트 실행 결과
 
+이 문서는 이전 실행의 기록이다. 2026-10-06 기존 Windows C++ 소스·CMake·실행기·
+전용 테스트를 삭제했다. 현재 재현 명령과 결과는 [Bun FFI 실행 기록](./windows-bun-results.md)을 따른다.
+
+
 검증일: 2026-10-05. WebView2를 탑재한 네이티브 Win32 호스트가 앱 패키지의 Bun을
 별도 프로세스로 실행하고, Web 경계·세션·정책·저장 범위·프로세스 정리를 실제
 Windows에서 검증했다. 이번 실행에서는 다중 창/뷰와 뷰별 정책 분리를 포함해 검증했다.
@@ -16,20 +20,6 @@ B 실험의 기존 증거는 [별도 실행 결과](./windows-probe-results.md)�
 - Windows Server 2022 Standard, x64. MSVC 19.44.35207, C++20 `/MT /W4 /WX /utf-8`.
   `dumpbin /DEPENDENTS`의 의존성은 `bcrypt`·`ole32`·`shell32`·`user32`·
   `kernel32`·`advapi32`뿐이다. 별도 MSVC 런타임이 필요 없다.
-
-## 재현
-
-```powershell
-mise run install
-mise run check
-mise run host:windows
-```
-
-빌드·패키징 스크립트는 `native/windows/host/run.ps1`, 호스트는 `host.cpp`,
-실제 코어를 부팅하는 테스트 백엔드는 `test/backend.ts`, 테스트 Web 앱은 `test/web/`,
-외부 검증기는 `tests/lifecycle/windows-host.ts`다.
-검증기는 패키지를 `build/C 호스트 한글 package/`로 복사하고, Bun 없는 PATH와
-`BUN_OPTIONS` preload·cwd의 `.env`가 심어진 별도 cwd로 실행한다.
 
 ## 실제 관찰
 
