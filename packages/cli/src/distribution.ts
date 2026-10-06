@@ -49,6 +49,7 @@ export const frameworkPaths = [
 ] as const;
 
 const generatedDirectories = [
+  "node_modules",
   "build",
   "runtime/bun-bundle/vendor",
   "native/windows/bun/vendor",
@@ -267,8 +268,13 @@ export async function checkArtifact(root: string): Promise<void> {
   const inventory = (await json(resolve(root, "artifact.files.json"))) as Record<string, string>;
   const actual = await snapshotHashes(root, generatedDirectories);
   delete actual["artifact.files.json"];
-  if (JSON.stringify(actual) !== JSON.stringify(inventory)) {
-    throw new Error("Artifact inventory mismatch: missing, extra or modified file.");
+  const mismatches = [...new Set([...Object.keys(actual), ...Object.keys(inventory)])]
+    .filter((name) => actual[name] !== inventory[name])
+    .sort();
+  if (mismatches.length) {
+    throw new Error(
+      `Artifact inventory mismatch: missing, extra or modified file: ${mismatches.join(", ")}.`,
+    );
   }
   for (const name of [
     ...requiredFrameworkFiles(),

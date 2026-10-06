@@ -1,4 +1,4 @@
-import { chmod, cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import {
   checkArtifact,
@@ -60,6 +60,8 @@ export async function packFramework(
   options: { localDependencies?: boolean } = {},
 ): Promise<string> {
   destination = resolve(destination);
+  await mkdir(destination, { recursive: true });
+  destination = await realpath(destination);
   const info = await release();
   const dependency = (name: string) =>
     options.localDependencies

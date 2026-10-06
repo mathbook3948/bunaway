@@ -1,5 +1,15 @@
 import { expect, test } from "bun:test";
-import { cp, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, relative, resolve } from "node:path";
 import { packFramework } from "../../packages/cli/scripts/pack.ts";
@@ -140,7 +150,11 @@ test("installed packages create a vendor-free app that relocates and reinstalls 
   const home = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-installed-")));
   try {
     const directory = resolve(home, "artifacts");
-    const artifact = await packFramework(directory, { localDependencies: true });
+    await mkdir(directory);
+    const alias = resolve(home, "artifact alias");
+    await symlink(directory, alias, "junction");
+    const artifact = await packFramework(alias, { localDependencies: true });
+    expect(dirname(artifact)).toBe(directory);
     const consumer = resolve(home, "tools");
     await mkdir(consumer);
     await writeJson(resolve(consumer, "package.json"), { private: true, type: "module" });
@@ -148,7 +162,7 @@ test("installed packages create a vendor-free app that relocates and reinstalls 
     const installed = resolve(consumer, "node_modules/@bunaway/cli");
     await checkArtifact(installed);
     expect(await command(consumer, ["run", "bunaway", "--version"])).toContain("0.0.0");
-    await command(consumer, ["run", "bunaway", "create", "../app", "--package-dir", directory]);
+    await command(consumer, ["run", "bunaway", "create", "../app", "--package-dir", alias]);
     const project = resolve(home, "moved app");
     await rename(resolve(home, "app"), project);
     await command(project, ["install"]);
@@ -245,6 +259,7 @@ test("framework validation rejects extra installed inputs but permits designated
     await command(project, ["install"]);
     const root = resolve(project, "node_modules/@bunaway/cli");
     for (const directory of [
+      "node_modules/installer-managed-package",
       "build",
       "runtime/bun-bundle/vendor",
       "native/windows/bun/vendor",
