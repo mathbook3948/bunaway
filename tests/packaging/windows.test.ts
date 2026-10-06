@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import {
   copyFile,
   mkdir,
@@ -11,6 +11,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import * as windowsTools from "../../packages/packaging/src/channels/windows/common.ts";
 import {
   copyPayload,
   findIscc,
@@ -78,6 +79,176 @@ const adapterOrThrow = (channel: string) => {
 };
 
 const iscc = process.platform === "win32" ? await findIscc() : undefined;
+
+test.skipIf(!iscc)(
+  "Inno refuses failed prerequisites before replacing an installed app",
+  async () => {
+    if (!iscc) throw new Error("Expected ISCC.");
+    const root = await realpath(await mkdtemp(join(tmpdir(), "bunaway-inno-prerequisites-")));
+    const literal = (path: string) => path.replace(/'/g, "''");
+    try {
+      for (const outcome of [
+        "launch-error",
+        "exit-error",
+        "undetected",
+        "installed",
+        "existing",
+        "old-os",
+      ]) {
+        const staging = join(root, outcome);
+        const install = join(staging, "installed");
+        const marker = join(staging, "runtime-present");
+        const trace = join(staging, "bootstrap-ran");
+        const host = join(install, "bunaway-host.exe");
+        await Bun.write(host, "previous app");
+        await Bun.write(join(staging, "app", "bunaway-host.exe"), "new app");
+        await mkdir(join(staging, "installer"));
+        const bootstrapper = join(staging, "installer", "bootstrapper.exe");
+        if (outcome === "launch-error") await Bun.write(bootstrapper, "not an executable");
+        else {
+          const script = join(staging, "bootstrapper.iss");
+          await Bun.write(
+            script,
+            `[Setup]
+AppName=Prerequisite fixture
+AppVersion=1.0
+DefaultDirName=${join(staging, "unused")}
+OutputDir=${join(staging, "installer")}
+OutputBaseFilename=bootstrapper
+PrivilegesRequired=lowest
+CreateAppDir=no
+Uninstallable=no
+DisableStartupPrompt=yes
+[Code]
+function InitializeSetup: Boolean;
+begin
+  SaveStringToFile('${literal(trace)}', 'started', False);
+  ${outcome === "installed" ? `SaveStringToFile('${literal(marker)}', 'runtime', False);` : ""}
+  Result := True;
+end;
+function GetCustomSetupExitCode: Integer;
+begin
+  Result := ${outcome === "exit-error" ? 42 : 0};
+end;
+`,
+          );
+          await must(iscc, ["/Q", script]);
+        }
+        if (outcome === "existing") await Bun.write(marker, "runtime");
+        let script = renderInnoScript({
+          name: "Prerequisite fixture",
+          identifier: `app.test-${crypto.randomUUID()}`,
+          version: "1.0.0",
+          publisher: "Test",
+          scope: "perUser",
+          payloadDir: join(staging, "app"),
+          outputDir: join(staging, "installer"),
+          outputBaseName: "setup",
+          desktopShortcut: false,
+          startMenuShortcut: false,
+          webView2: "bootstrap",
+          bootstrapperPath: bootstrapper,
+          appDataDir: join(staging, "data"),
+          preserveUserData: true,
+          assetPaths: [],
+          minVersion: outcome === "old-os" ? "10.0.65535.0" : "10.0.17763.0",
+        })
+          .replace("UninstallLogMode=overwrite", "Uninstallable=no")
+          // Dummy executables do not need Restart Manager's machine-wide scan.
+          .replace("CloseApplications=yes", "CloseApplications=no");
+        // Probe a fixture marker, without changing the machine's WebView2 registry.
+        script = script.replace(
+          /function HasWebView2Runtime: Boolean;[\s\S]*?\nend;\n/,
+          `function HasWebView2Runtime: Boolean;\nbegin\n  Result := FileExists('${literal(marker)}');\nend;\n`,
+        );
+        const ctx: StageContext = { input: input({}), staging, report() {}, addArtifact() {} };
+        const setup = await compileInno(ctx, script, staging, "setup");
+        const proc = Bun.spawn(
+          [
+            setup,
+            "/SP-",
+            "/VERYSILENT",
+            "/SUPPRESSMSGBOXES",
+            "/NORESTART",
+            `/LOG=${join(staging, "setup.log")}`,
+            `/DIR=${install}`,
+          ],
+          { stdout: "ignore", stderr: "ignore" },
+        );
+        const success = outcome === "installed" || outcome === "existing";
+        const exit = await proc.exited;
+        expect(exit).toBe(success ? 0 : outcome === "old-os" ? 1 : 7);
+        expect(await Bun.file(host).text()).toBe(success ? "new app" : "previous app");
+        expect(await Bun.file(trace).exists()).toBe(
+          !["launch-error", "existing", "old-os"].includes(outcome),
+        );
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+  120000,
+);
+
+test.each(["win-direct", "win-store-unpackaged"] as const)(
+  "%s forwards the matching target minimum Windows version to Inno",
+  async (channel) => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "bunaway-inno-minimum-")));
+    const discovery = spyOn(windowsTools, "findIscc").mockResolvedValue("fixture-iscc");
+    const compiler = spyOn(windowsTools, "must").mockResolvedValue({
+      code: 0,
+      stdout: "",
+      stderr: "",
+    });
+    try {
+      const source = join(root, "source");
+      await Bun.write(join(source, "bunaway-host.exe"), "fixture");
+      const original = input({ webView2: "check" });
+      const config = parsePackaging(
+        JSON.stringify({
+          version: 1,
+          targets: [
+            { platform: "macos", arch: "arm64", minVersion: "14.0" },
+            { platform: "windows", arch: "x64", minVersion: "10.0.22621.0" },
+          ],
+          channels: { [channel]: { webView2: "check" } },
+        }),
+      );
+      const { resolvePackaging } = await import("../../packages/packaging/src/index.ts");
+      const resolved = await resolvePackaging({
+        root,
+        config,
+        appId: "app.test",
+        title: "Test",
+        projectVersion: "1.0.0",
+        channel,
+      });
+      const adapterInput: AdapterInput = {
+        ...original,
+        channel,
+        metadata: resolved.metadata,
+        channelConfig: resolved.channel.channelConfig,
+        artifact: { dir: source, packageDir: source, executable: join(source, "bunaway-host.exe") },
+      };
+      const stages = adapterOrThrow(channel).stages(adapterInput);
+      const ctx: StageContext = {
+        input: adapterInput,
+        staging: join(root, "stage"),
+        report() {},
+        addArtifact() {},
+      };
+      await stages.find((stage) => stage.id === "stage")?.run(ctx);
+      await stages.find((stage) => stage.id === "assemble")?.run(ctx);
+      expect(await Bun.file(join(ctx.staging, "app.test-setup-1.0.0.iss")).text()).toContain(
+        "MinVersion=10.0.22621\n",
+      );
+    } finally {
+      discovery.mockRestore();
+      compiler.mockRestore();
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
 
 test.skipIf(!iscc)(
   "Inno compiles literal display names and the WebView2 version check",
@@ -558,7 +729,21 @@ test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data pol
   expect(() =>
     renderInnoScript({ ...base, scope: "perUser", bootstrapperPath: "bad\npath" }),
   ).toThrow(/line breaks/);
-  expect(perMachine).toContain('Parameters: "/silent /install"');
+  expect(perMachine).toContain(
+    "'/silent /install', '', SW_HIDE, ewWaitUntilTerminated, ResultCode",
+  );
+  expect(perMachine).toContain("Flags: dontcopy");
+  expect(perMachine).toContain("function PrepareToInstall(var NeedsRestart: Boolean): String");
+  expect(perMachine).toContain("else if ResultCode <> 0 then");
+  expect(perMachine).toContain("else if not HasWebView2Runtime then");
+  expect(perMachine).not.toContain('Filename: "{tmp}\\MicrosoftEdgeWebview2Setup.exe"');
+  expect(perUser).toContain("MinVersion=10.0.17763\n");
+  expect(renderInnoScript({ ...base, scope: "perUser", minVersion: "10.0.22621.0" })).toContain(
+    "MinVersion=10.0.22621\n",
+  );
+  for (const minVersion of ["6.1", "10.0.10240.0", "10.0.22621.1", "10.0.22621.0\n[Run]", "bad"]) {
+    expect(() => renderInnoScript({ ...base, scope: "perUser", minVersion })).toThrow(/minVersion/);
+  }
   expect(perMachine).toContain("SignTool=bunaway\nSignedUninstaller=yes");
   expect(perUser).not.toContain("SignTool=bunaway");
 

@@ -33,6 +33,7 @@ export interface InnoOptions {
   preserveUserData: boolean;
   assetPaths: string[];
   signed?: boolean;
+  minVersion?: string;
 }
 
 function issLiteral(value: string, constants = true): string {
@@ -51,6 +52,18 @@ export function installerDirectoryName(name: string): string {
 }
 
 export function renderInnoScript(options: InnoOptions): string {
+  const minVersion = options.minVersion ?? "10.0.17763.0";
+  if (!/^\d+\.\d+(?:\.\d+)?(?:\.0)?$/.test(minVersion)) {
+    throw new Error("Windows minVersion must be major.minor[.build[.0]].");
+  }
+  const parts = minVersion.split(".").map(Number);
+  if (
+    parts.some((part) => part > 65535) ||
+    (parts[0] ?? 0) < 10 ||
+    (parts[0] === 10 && parts[1] === 0 && (parts[2] ?? 0) < 17763)
+  ) {
+    throw new Error("Windows minVersion must be >= 10.0.17763.0 (bundled Bun requirement).");
+  }
   const perUser = options.scope === "perUser";
   if (!perUser && !options.preserveUserData) {
     throw new Error(
@@ -78,6 +91,8 @@ export function renderInnoScript(options: InnoOptions): string {
     "SolidCompression=yes",
     "ArchitecturesAllowed=x64compatible",
     "ArchitecturesInstallIn64BitMode=x64compatible",
+    // Inno uses three parts; the optional MSIX-style revision must be zero.
+    `MinVersion=${parts.slice(0, 3).join(".")}`,
     "CloseApplications=yes",
     // Each installer is a complete snapshot; old data-deletion records must
     // not override the current uninstall policy.
@@ -102,7 +117,7 @@ export function renderInnoScript(options: InnoOptions): string {
   );
   if (options.bootstrapperPath) {
     lines.push(
-      `Source: "${issParameter(options.bootstrapperPath, false)}"; DestDir: "{tmp}"; DestName: "MicrosoftEdgeWebview2Setup.exe"; Flags: deleteafterinstall`,
+      `Source: "${issParameter(options.bootstrapperPath, false)}"; DestDir: "{tmp}"; DestName: "MicrosoftEdgeWebview2Setup.exe"; Flags: dontcopy`,
     );
   }
 
@@ -127,11 +142,6 @@ export function renderInnoScript(options: InnoOptions): string {
   }
 
   const runEntries: string[] = [];
-  if (options.bootstrapperPath) {
-    runEntries.push(
-      'Filename: "{tmp}\\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; StatusMsg: "Installing Microsoft Edge WebView2 Runtime..."; Check: not HasWebView2Runtime; Flags: waituntilterminated',
-    );
-  }
   runEntries.push(
     `Filename: "{app}\\bunaway-host.exe"; Description: "${issParameter(`Launch ${options.name}`)}"; Flags: postinstall nowait skipifsilent unchecked`,
   );
@@ -168,6 +178,24 @@ export function renderInnoScript(options: InnoOptions): string {
     "end;",
     "",
   );
+  if (options.bootstrapperPath) {
+    lines.push(
+      "function PrepareToInstall(var NeedsRestart: Boolean): String;",
+      "var ResultCode: Integer;",
+      "begin",
+      "  Result := '';",
+      "  if HasWebView2Runtime then Exit;",
+      "  ExtractTemporaryFile('MicrosoftEdgeWebview2Setup.exe');",
+      "  if not Exec(ExpandConstant('{tmp}\\MicrosoftEdgeWebview2Setup.exe'), '/silent /install', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then",
+      "    Result := 'Could not start the WebView2 Runtime installer: ' + SysErrorMessage(ResultCode)",
+      "  else if ResultCode <> 0 then",
+      "    Result := 'WebView2 Runtime installation failed (exit code ' + IntToStr(ResultCode) + '). Check your internet connection and retry.'",
+      "  else if not HasWebView2Runtime then",
+      "    Result := 'WebView2 Runtime was not detected after installation. Install the runtime and retry.';",
+      "end;",
+      "",
+    );
+  }
   lines.push(
     "// Only prune generated links that still point to this installation.",
     "procedure PruneShortcuts(const Directory, Pattern: String; Current: TStringList);",

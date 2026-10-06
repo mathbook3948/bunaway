@@ -47,10 +47,15 @@ Inno Setup 스크립트를 생성·컴파일한다. 채널 설정:
   `perMachine`과의 조합은 관리자 계정의 데이터를 잘못 삭제하지 않도록 거부한다.
 
 인스톨러는 `x64compatible` 아키텍처에서만 설치할 수 있다.
+`targets[].minVersion`을 Inno `MinVersion`으로 전달한다. 기본값은 번들 Bun이 요구하는
+Windows 10 1809(`10.0.17763.0`)이며 그보다 오래된 버전은 거부한다.
+네 부분 버전의 마지막 값은 0이어야 하며 Inno에는 앞의 세 부분을 전달한다.
 
 WebView2는 레지스트리 `Clients\{F3017226-...}\pv`의 버전이 `0.0.0.0`보다 큰지 확인하고,
 없으면 번들된 `MicrosoftEdgeWebview2Setup.exe`를 `/silent /install`로
 실행한다(부트스트랩 다운로드가 실패하면 check 모드로 폴백).
+부트스트랩 모드에서는 앱 파일 설치 전에 종료 코드와 런타임 존재를 재검사하며,
+실행 실패·설치 실패·런타임 미검출은 사일런트 설치에서도 실패로 끝난다.
 
 ### `win-store-msix` — Microsoft Store MSIX
 

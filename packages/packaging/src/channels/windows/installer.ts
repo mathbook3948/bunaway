@@ -37,6 +37,9 @@ export function installerStages(input: AdapterInput, options: InstallerOptions):
   const preserveUserData = uninstall.preserveUserData ?? true;
 
   const metadata = input.metadata;
+  const target = metadata.targets.find(
+    (target) => `${target.platform}-${target.arch}` === input.target,
+  );
   const state: { payloadDir?: string; bootstrapperPath?: string; installer?: string } = {};
 
   const outputBaseName = `${metadata.identifier}-setup-${metadata.version.semver}`;
@@ -149,6 +152,7 @@ export function installerStages(input: AdapterInput, options: InstallerOptions):
           preserveUserData,
           assetPaths: Object.keys(input.manifest.assets),
           signed: ctx.input.signing !== undefined,
+          ...(target?.minVersion ? { minVersion: target.minVersion } : {}),
           ...(metadata.icons["windows.installer"]
             ? { iconFile: metadata.icons["windows.installer"] }
             : {}),
