@@ -3,7 +3,7 @@ import { dlopen } from "bun:ffi";
 import { cp, mkdir, readFile, rename, writeFile, appendFile, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { createProject } from "../../packages/cli/src/create.ts";
+import { createProject } from "../cli/project.ts";
 import { verifyWindowsLaunch, windowsLaunchEnvironment } from "../../packages/cli/src/launch.ts";
 import { recordPackagedHashes } from "../../packages/packaging/src/channels/windows/manifest.ts";
 import { findIscc, must } from "../../packages/packaging/src/channels/windows/common.ts";
@@ -25,7 +25,7 @@ async function command(args: string[], cwd = project) {
   return out;
 }
 await command(["install"]);
-const snapshot = resolve(project, "vendor/bunaway");
+const snapshot = resolve(project, "node_modules/@bunaway/cli");
 const cache = resolve(snapshot, "runtime/bun-bundle/vendor");
 await mkdir(cache, { recursive: true });
 for (const name of ["bun-windows-x64-baseline.zip", "bun-windows-x64-baseline", "LICENSE.bun"])
@@ -41,7 +41,7 @@ await cp(
 assert(
   !existsSync(resolve(snapshot, "native/windows/host")) &&
     !existsSync(resolve(snapshot, "native/windows/probe")),
-  "Windows snapshot must not include the old host or process probe",
+  "Windows package must not include the old host or process probe",
 );
 await appendFile(
   resolve(project, "src-bunaway/src/app.ts"),

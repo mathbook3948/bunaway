@@ -39,60 +39,54 @@ export function currentTarget(): Target {
   throw new Error("MVP builds require Windows x64 or macOS arm64 (native builds only).");
 }
 
-async function readPin(target: Target): Promise<Pin> {
+async function readPin(target: Target, root = frameworkRoot): Promise<Pin> {
   return (await json(
     resolve(
-      frameworkRoot,
+      root,
       "runtime/build-manifests",
       target === "windows-x64" ? "windows-x64.json" : "darwin-aarch64.json",
     ),
   )) as Pin;
 }
 
-export async function assertBuildBun(target: Target): Promise<void> {
-  if (Bun.version !== (await readPin(target)).bun.version) {
+export async function assertBuildBun(target: Target, root = frameworkRoot): Promise<void> {
+  if (Bun.version !== (await readPin(target, root)).bun.version) {
     throw new Error("Development/build Bun must match the pinned version (1.4.2).");
   }
 }
 
-export async function prepareNative(target: Target = currentTarget()): Promise<NativeInputs> {
+export async function prepareNative(
+  target: Target = currentTarget(),
+  root = frameworkRoot,
+): Promise<NativeInputs> {
   if (target !== currentTarget()) throw new Error("Cross compilation is not supported in the MVP.");
-  await assertBuildBun(target);
+  await assertBuildBun(target, root);
   const windows = target === "windows-x64";
   await run(
     windows
-      ? ["pwsh", "-NoProfile", "-File", resolve(frameworkRoot, "native/windows/bun/prepare.ps1")]
-      : ["zsh", resolve(frameworkRoot, "native/macos/host/run.sh"), "--host-only"],
-    frameworkRoot,
+      ? ["pwsh", "-NoProfile", "-File", resolve(root, "native/windows/bun/prepare.ps1")]
+      : ["zsh", resolve(root, "native/macos/host/run.sh"), "--host-only"],
+    root,
     { BUN: process.execPath },
   );
-  const pin = await readPin(target);
-  const vendor = resolve(frameworkRoot, "runtime/bun-bundle/vendor");
+  const pin = await readPin(target, root);
+  const vendor = resolve(root, "runtime/bun-bundle/vendor");
   const licenses: Record<string, string> = {
-    "FRAMEWORK-LICENSE.txt": resolve(frameworkRoot, "FRAMEWORK-LICENSE.txt"),
-    "THIRD-PARTY-NOTICES.txt": resolve(frameworkRoot, "THIRD-PARTY-NOTICES.txt"),
+    "FRAMEWORK-LICENSE.txt": resolve(root, "FRAMEWORK-LICENSE.txt"),
+    "THIRD-PARTY-NOTICES.txt": resolve(root, "THIRD-PARTY-NOTICES.txt"),
     "LICENSE.bun": resolve(vendor, "LICENSE.bun"),
   };
   if (windows)
-    licenses["License-WebView2.txt"] = resolve(
-      frameworkRoot,
-      "native/windows/bun/vendor/sdk/LICENSE.txt",
-    );
+    licenses["License-WebView2.txt"] = resolve(root, "native/windows/bun/vendor/sdk/LICENSE.txt");
   else
-    licenses["LICENSE.nlohmann-json"] = resolve(
-      frameworkRoot,
-      "native/macos/vendor/LICENSE.nlohmann-json",
-    );
+    licenses["LICENSE.nlohmann-json"] = resolve(root, "native/macos/vendor/LICENSE.nlohmann-json");
   return {
     target,
-    host: resolve(
-      frameworkRoot,
-      windows ? "native/windows/bun/boot.ts" : "build/macos-host/bunaway-host",
-    ),
+    host: resolve(root, windows ? "native/windows/bun/boot.ts" : "build/macos-host/bunaway-host"),
     ...(windows
       ? {
           loader: resolve(
-            frameworkRoot,
+            root,
             "native/windows/bun/vendor/sdk/build/native/x64/WebView2Loader.dll",
           ),
         }
@@ -112,6 +106,7 @@ export async function bundleAssets(
     windows ? "bundleWindowsAssets" : "bundleAssets",
     [project, assets],
     project.root,
+    project.frameworkRoot,
   );
 }
 
@@ -129,17 +124,18 @@ export async function buildProject(
   options: { development?: boolean; native?: NativeInputs } = {},
 ): Promise<BuiltPackage> {
   const project = await validateProject(directory);
+  const root = project.frameworkRoot;
   const target = options.native?.target ?? currentTarget();
-  await assertBuildBun(target);
-  const native = options.native ?? (await prepareNative(target));
+  await assertBuildBun(target, root);
+  const native = options.native ?? (await prepareNative(target, root));
   const windows = target === "windows-x64";
-  const pin = await readPin(target);
+  const pin = await readPin(target, root);
   await verifyHash(native.bun, pin.bun.executableSha256);
   await verifyHash(native.licenses["LICENSE.bun"] ?? "", pin.bun.licenseSha256);
   if (!windows)
     await verifyHash(native.licenses["LICENSE.nlohmann-json"] ?? "", pin.json?.licenseSha256 ?? "");
   if (windows) {
-    const deps = (await json(resolve(frameworkRoot, "native/windows/bun/deps.json"))) as {
+    const deps = (await json(resolve(root, "native/windows/bun/deps.json"))) as {
       webview2Sdk: { files: Record<string, string> };
     };
     await verifyHash(
@@ -178,7 +174,7 @@ export async function buildProject(
     await writeFile(resolve(assets, "bunfig.toml"), "env = false\n");
     await writeJson(resolve(assets, "tsconfig.json"), {});
     if (!windows)
-      for (const schema of await files(resolve(frameworkRoot, "native/host-api/generated"))) {
+      for (const schema of await files(resolve(root, "native/host-api/generated"))) {
         await cp(schema, resolve(assets, basename(schema)));
       }
     await bundleAssets(project, assets, windows);
@@ -188,7 +184,7 @@ export async function buildProject(
           "Windows requires windowsApp: a module default-exporting AppDefinition. See the Windows migration guide.",
         );
       if (!native.loader) throw new Error("Windows requires the pinned WebView2Loader DLL.");
-      const deps = (await json(resolve(frameworkRoot, "native/windows/bun/deps.json"))) as {
+      const deps = (await json(resolve(root, "native/windows/bun/deps.json"))) as {
         webview2Sdk: { files: Record<string, string> };
       };
       await verifyHash(
@@ -197,7 +193,7 @@ export async function buildProject(
       );
       await cp(native.loader, resolve(assets, "WebView2Loader.dll"));
       await writeWindowsLauncher(
-        resolve(frameworkRoot, "native/windows/bun/launch.ps1"),
+        resolve(root, "native/windows/bun/launch.ps1"),
         resolve(packageRoot, "launch.ps1"),
       );
       await writeFile(
@@ -211,7 +207,7 @@ export async function buildProject(
         hashes[relative(packageRoot, file).replaceAll("\\", "/")] = await hash(file);
       }
     }
-    const framework = (await json(resolve(frameworkRoot, "package.json"))) as { version: string };
+    const framework = (await json(resolve(root, "package.json"))) as { version: string };
     const appPackage = (await json(resolve(project.root, "package.json"))) as { version: string };
     await writeJson(resolve(packageRoot, "manifest.json"), {
       ...pin,

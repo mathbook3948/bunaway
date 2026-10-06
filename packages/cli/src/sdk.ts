@@ -1,7 +1,7 @@
 import { lstat, realpath } from "node:fs/promises";
-import { relative, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import type { BunPlugin } from "bun";
-import { files, json } from "./files.ts";
+import { files, installedPackageRoot, json } from "./files.ts";
 
 interface SdkReference {
   name: string;
@@ -12,13 +12,17 @@ export async function sdkPlugin(
   project: string,
   references: readonly SdkReference[] = [],
 ): Promise<BunPlugin> {
-  const root = resolve(project, "vendor/bunaway");
+  const root = await installedPackageRoot(project, "@bunaway/cli");
   const release = (await json(resolve(root, "framework.json"))) as {
     packages: Record<string, string>;
   };
   const entries = new Map<string, string>();
-  for (const [directory, name] of Object.entries(release.packages)) {
-    entries.set(name, await realpath(resolve(root, `packages/${directory}/src/index.ts`)));
+  for (const name of Object.values(release.packages)) {
+    if (name !== "@bunaway/cli")
+      entries.set(
+        name,
+        await realpath(resolve(await installedPackageRoot(root, name), "src/index.ts")),
+      );
   }
   async function check(name: string, parent: string): Promise<string> {
     const expected = entries.get(name);
@@ -27,13 +31,26 @@ export async function sdkPlugin(
       if (expected && relative(expected, path) === "") return path;
     } catch {}
     throw new Error(
-      `Incompatible SDK resolution: ${name} from ${parent}; run bun install to restore the pinned vendor workspaces.`,
+      `Incompatible SDK resolution: ${name} from ${parent}; run bun install to restore the matching installed SDK packages.`,
     );
   }
   for (const { name, parent } of references) await check(name, parent);
   return {
     name: "pinned-bunaway-sdk",
     setup(build) {
+      // Native sources use relative imports inside the CLI artifact. Resolve
+      // those entries to the installed SDK too, preserving class identity.
+      build.onResolve({ filter: /packages\/[a-z-]+\/src\/index\.ts$/ }, ({ path, importer }) => {
+        for (const [directory, name] of Object.entries(release.packages)) {
+          if (
+            resolve(dirname(importer), path) === resolve(root, `packages/${directory}/src/index.ts`)
+          ) {
+            const entry = entries.get(name);
+            if (entry) return { path: entry };
+          }
+        }
+        return undefined;
+      });
       build.onResolve({ filter: /^@bunaway\// }, async ({ path, importer }) => ({
         path: await check(path, importer || project),
       }));

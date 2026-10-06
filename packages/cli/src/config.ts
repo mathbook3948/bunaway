@@ -7,6 +7,7 @@ import { json, projectPath } from "./files.ts";
 
 export interface Project {
   root: string;
+  frameworkRoot: string;
   backend: string;
   frontend: string;
   windowsApp?: string;
@@ -78,7 +79,11 @@ export async function validateProject(directory: string): Promise<Project> {
   }
   if (windowsApp && !(await lstat(windowsApp)).isFile())
     throw new Error("windowsApp must be a file.");
-  await validateFramework(root, [backend, frontend, ...(windowsApp ? [windowsApp] : [])]);
+  const frameworkRoot = await validateFramework(root, [
+    backend,
+    frontend,
+    ...(windowsApp ? [windowsApp] : []),
+  ]);
   const raw = settings.app;
   keys(raw, ["appId", "title", "view", "home", "window"]);
   const appId = string(raw.appId);
@@ -111,6 +116,7 @@ export async function validateProject(directory: string): Promise<Project> {
     throw new Error("Home origin is not permitted.");
   return {
     root,
+    frameworkRoot,
     backend,
     ...(windowsApp ? { windowsApp } : {}),
     frontend,

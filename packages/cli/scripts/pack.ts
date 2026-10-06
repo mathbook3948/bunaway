@@ -1,8 +1,9 @@
-import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import {
   checkArtifact,
   copyFramework,
+  packageFilename,
   release,
   type Release,
   snapshotHashes,
@@ -56,13 +57,73 @@ async function writeDeclarations(stage: string, info: Release): Promise<void> {
 
 export async function packFramework(
   destination = resolve(frameworkRoot, "build/framework"),
+  options: { localDependencies?: boolean } = {},
 ): Promise<string> {
+  destination = resolve(destination);
+  await mkdir(destination, { recursive: true });
+  destination = await realpath(destination);
   const info = await release();
+  const dependency = (name: string) =>
+    options.localDependencies
+      ? `file:${resolve(destination, packageFilename(name, info.version)).replaceAll("\\", "/")}`
+      : info.version;
   if (Bun.version !== info.bun) throw new Error(`Pack requires Bun ${info.bun}.`);
   const stage = resolve(destination, `staging-${crypto.randomUUID()}`);
   await mkdir(stage, { recursive: true });
   try {
     await copyFramework(stage);
+    // SDK packages are ordinary dependencies; native inputs stay in the CLI artifact.
+    for (const [directory, name] of Object.entries(info.packages)) {
+      if (name === "@bunaway/cli") continue;
+      const sdk = resolve(destination, `sdk-${crypto.randomUUID()}`);
+      await mkdir(sdk);
+      try {
+        await cp(resolve(frameworkRoot, `packages/${directory}/src`), resolve(sdk, "src"), {
+          recursive: true,
+        });
+        const manifest = JSON.parse(
+          await readFile(resolve(frameworkRoot, `packages/${directory}/package.json`), "utf8"),
+        );
+        delete manifest.scripts;
+        for (const field of ["dependencies", "peerDependencies"]) {
+          for (const dep of Object.keys(manifest[field] ?? {})) {
+            if (dep.startsWith("@bunaway/")) manifest[field][dep] = dependency(dep);
+          }
+        }
+        await writeJson(resolve(sdk, "package.json"), {
+          ...manifest,
+          files: ["src", "LICENSE.txt", "THIRD-PARTY-NOTICES.txt"],
+        });
+        await cp(resolve(frameworkRoot, "FRAMEWORK-LICENSE.txt"), resolve(sdk, "LICENSE.txt"));
+        await cp(
+          resolve(frameworkRoot, "THIRD-PARTY-NOTICES.txt"),
+          resolve(sdk, "THIRD-PARTY-NOTICES.txt"),
+        );
+        await run(
+          [
+            process.execPath,
+            "pm",
+            "pack",
+            "--ignore-scripts",
+            "--filename",
+            resolve(destination, packageFilename(name, info.version)),
+            "--quiet",
+          ],
+          sdk,
+        );
+      } finally {
+        await rm(sdk, { recursive: true, force: true });
+      }
+    }
+    // The internal source graph in the CLI must use the same installed release.
+    for (const directory of Object.keys(info.packages)) {
+      const path = resolve(stage, `packages/${directory}/package.json`);
+      const manifest = JSON.parse(await readFile(path, "utf8"));
+      for (const dep of Object.keys(manifest.dependencies ?? {})) {
+        if (dep.startsWith("@bunaway/")) manifest.dependencies[dep] = dependency(dep);
+      }
+      await writeJson(path, manifest);
+    }
     await writeFile(
       resolve(stage, "README.md"),
       "# bunaway developer framework\n\nBun 1.4.2 required. Local artifact only; no public registry release.\nSee [installation, versions and upgrades](docs/framework-distribution.md).\nFramework license is undecided; see FRAMEWORK-LICENSE.txt.\n",
@@ -74,9 +135,15 @@ export async function packFramework(
       type: "module",
       license: "UNLICENSED",
       engines: { bun: info.bun },
+      dependencies: Object.fromEntries(
+        Object.values(info.packages)
+          .filter((name) => name !== "@bunaway/cli")
+          .map((name) => [name, dependency(name)]),
+      ),
       bin: { bunaway: "./packages/cli/dist/distribution-main.js" },
       types: "./packages/cli/dist/types/cli/src/index.d.ts",
       exports: {
+        "./package.json": "./package.json",
         ".": {
           types: "./packages/cli/dist/types/cli/src/index.d.ts",
           default: "./packages/cli/dist/index.js",
@@ -118,7 +185,7 @@ export async function packFramework(
       [process.execPath, "pm", "pack", "--ignore-scripts", "--filename", temporary, "--quiet"],
       stage,
     );
-    const artifact = resolve(destination, `bunaway-cli-${info.version}.tgz`);
+    const artifact = resolve(destination, packageFilename("@bunaway/cli", info.version));
     await rm(artifact, { force: true });
     await rename(temporary, artifact);
     return artifact;
@@ -127,4 +194,10 @@ export async function packFramework(
   }
 }
 
-if (import.meta.main) console.log(await packFramework(process.argv[2]));
+if (import.meta.main)
+  console.log(
+    await packFramework(
+      process.argv.slice(2).find((arg) => arg !== "--local"),
+      { localDependencies: process.argv.includes("--local") },
+    ),
+  );

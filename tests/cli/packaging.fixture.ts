@@ -20,22 +20,22 @@ const native: build.NativeInputs = {
     "License-WebView2.txt": resolve(nativeDir, "License-WebView2.txt"),
   },
 };
-for (const path of [native.bun, loader, ...Object.values(native.licenses)]) {
-  await Bun.write(path, "test native input");
+for (const path of [native.bun, loader]) await Bun.write(path, "test native input");
+for (const [name, path] of Object.entries(native.licenses)) {
+  await fs.copyFile(resolve(files.frameworkRoot, "licenses", name), path);
 }
 
 // Isolate native inputs and their pins while exercising real build/package code.
 const buildProject = build.buildProject;
 const readJson = files.json;
-const pinPath = resolve(files.frameworkRoot, "runtime/build-manifests/windows-x64.json");
-const depsPath = resolve(files.frameworkRoot, "native/windows/bun/deps.json");
 let builds = 0;
 let nativeTarget: build.NativeInputs["target"] = "windows-x64";
 mock.module(import.meta.resolve("../../packages/cli/src/files.ts"), () => ({
   ...files,
   json: async (path: string) => {
     const value = await readJson(path);
-    if (path === pinPath) {
+    const normalized = path.replaceAll("\\", "/");
+    if (normalized.endsWith("runtime/build-manifests/windows-x64.json")) {
       const pin = value as { bun: Record<string, unknown> };
       return {
         ...pin,
@@ -46,7 +46,7 @@ mock.module(import.meta.resolve("../../packages/cli/src/files.ts"), () => ({
         },
       };
     }
-    if (path === depsPath) {
+    if (normalized.endsWith("native/windows/bun/deps.json")) {
       return {
         webview2Sdk: {
           files: {
@@ -68,9 +68,9 @@ mock.module(import.meta.resolve("../../packages/cli/src/build.ts"), () => ({
   },
 }));
 const configPath = resolve(project, "src-bunaway/bunaway.json");
-async function setBundle(bundle: Record<string, unknown>) {
+async function setBundle(value: Record<string, unknown>) {
   const config = (await readJson(configPath)) as Record<string, unknown>;
-  await files.writeJson(configPath, { ...config, bundle });
+  await files.writeJson(configPath, { ...config, bundle: value });
 }
 const { packageProject } = await import("../../packages/cli/src/package.ts");
 await setBundle({

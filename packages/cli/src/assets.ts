@@ -67,7 +67,7 @@ export async function bundleWindowsAssets(project: Project, assets: string): Pro
     throw new Error("Windows requires windowsApp: a module default-exporting AppDefinition.");
   await webAssets(project, resolve(assets, "web"), await sdkPlugin(project.root));
   await bundleWindowsHost(
-    resolve(project.root, "vendor/bunaway/native/windows/bun"),
+    resolve(project.frameworkRoot, "native/windows/bun"),
     assets,
     project.windowsApp,
     project.root,
