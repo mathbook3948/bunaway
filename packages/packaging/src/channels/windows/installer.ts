@@ -1,4 +1,4 @@
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, readdir, rm } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { type AdapterInput, type AdapterStage, CODES } from "../../contract.ts";
 import { copyPayload } from "./common.ts";
@@ -64,6 +64,26 @@ export function installerStages(input: AdapterInput, options: InstallerOptions):
         }
         // packagedSha256 is recorded signed-or-not so the hash rule is uniform.
         await recordPackagedHashes(state.payloadDir);
+        if (ctx.input.signing && ctx.input.channel === "win-store-unpackaged") {
+          // Preserve third-party signatures and asset hashes; reject untrusted
+          // payloads before assembly. Detect PE headers, including renamed DLLs.
+          const executables: string[] = [];
+          for (const entry of await readdir(state.payloadDir, {
+            recursive: true,
+            withFileTypes: true,
+          })) {
+            if (!entry.isFile()) continue;
+            const path = join(entry.parentPath, entry.name);
+            const file = Bun.file(path);
+            const header = Buffer.from(await file.slice(0, 64).arrayBuffer());
+            if (header.length < 64 || header.readUInt16LE(0) !== 0x5a4d) continue;
+            const offset = header.readUInt32LE(0x3c);
+            if ((await file.slice(offset, offset + 4).text()) === "PE\0\0") {
+              executables.push(path);
+            }
+          }
+          await verifySignatures(ctx, executables);
+        }
       },
     },
     {
