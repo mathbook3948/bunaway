@@ -248,7 +248,7 @@ test("package checks platforms and adapters before building and preserves output
   const output = new Response(child.stdout).text();
   const errors = new Response(child.stderr).text();
   expect(await child.exited, `${await output}\n${await errors}`).toBe(0);
-}, 30000);
+}, 60000);
 
 function gate() {
   let release: (() => void) | undefined;

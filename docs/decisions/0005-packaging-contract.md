@@ -60,10 +60,12 @@ status: accepted
   남은 잠금은 자동 탈취하지 않으며, 실행 중인 작업이 없음을 확인한 뒤 수동 삭제한다.
 - build 교체와 runner는 교체되는 산출물 밖의 `dist/.bunaway-locks/<target>/`에서
   동기화한다. runner는 manifest 읽기 전부터 정리 완료까지 공유 reader 잠금을 유지하고,
-  build는 보존 복사·교체·rollback 전체에 `build.lock` 배타 잠금을 유지한다. 경합 시
+  build는 보존 이동·교체·rollback 전체에 `build.lock` 배타 잠금을 유지한다. 경합 시
   상대 작업의 출력/리포트를 건드리지 않고 실패한다. 다른 채널 reader는 병렬 실행할 수
-  있다. Windows 보존 복사는 완성된 채널 디렉터리와 리포트만 포함하고 lock/staging/backup은
-  제외한다. 강제 종료로 남은 타깃 잠금도 활성 작업이 없음을 확인한 뒤 수동 삭제한다.
+  있다. Windows는 완성된 채널 디렉터리와 리포트만 staging으로 이동하고 lock/staging/backup은
+  제외한다. junction을 재생성하지 않아 symlink 생성 권한이 필요 없으며, 빌드 게시 실패 시
+  이동한 항목을 이전 빌드로 복구한다. 강제 종료로 남은 타깃 잠금도 활성 작업이 없음을
+  확인한 뒤 수동 삭제한다.
 - 어댑터는 registry에 자기 채널을 등록한다. 새 채널은 `src/channels/<platform>/`
   아래 파일만 추가하며 공통 진입점을 수정하지 않는다.
 

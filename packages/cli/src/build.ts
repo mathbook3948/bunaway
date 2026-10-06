@@ -144,6 +144,8 @@ export async function buildProject(
     ? resolve(staging, "bunaway-host.exe")
     : resolve(staging, "Contents/MacOS/bunaway-host");
   let releaseTarget: (() => Promise<void>) | undefined;
+  const preserved: { source: string; destination: string }[] = [];
+  let published = false;
   try {
     const assets = resolve(packageRoot, "assets");
     await mkdir(resolve(assets, "web"), { recursive: true });
@@ -222,9 +224,11 @@ export async function buildProject(
               (channel) => entry === channel || entry === `${channel}-report.json`,
             )
           ) {
-            await cp(resolve(packaged, entry), resolve(staging, "packaged", entry), {
-              recursive: true,
-            });
+            const source = resolve(packaged, entry);
+            const destination = resolve(staging, "packaged", entry);
+            // Move the existing tree so Windows junctions never need to be recreated.
+            await rename(source, destination);
+            preserved.push({ source, destination });
           }
         }
       }
@@ -239,6 +243,7 @@ export async function buildProject(
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
       await rename(staging, output);
+      published = true;
     } catch (error) {
       if (moved) await rename(backup, output);
       throw error;
@@ -252,6 +257,11 @@ export async function buildProject(
         : resolve(output, "Contents/MacOS/bunaway-host"),
     };
   } catch (error) {
+    if (!published) {
+      for (const { source, destination } of preserved.reverse()) {
+        await rename(destination, source);
+      }
+    }
     await rm(staging, { recursive: true, force: true });
     throw error;
   } finally {
