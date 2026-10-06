@@ -23,7 +23,7 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
     `src/`에서 HTML, CSS, TypeScript로 화면을 만듭니다. SDK로 명령을 호출하고 이벤트를 구독합니다.
   </Card>
   <Card title="작업은 앱 백엔드" icon="puzzle">
-    `src-bunaway/app.ts`에서 명령의 입력과 출력과 구현을 정의합니다. 플랫폼별 부팅은 프레임워크가 담당합니다.
+    `src-bunaway/app.ts`에서 명령의 입력과 출력 형식, 구현을 정의합니다. 플랫폼별 부팅은 프레임워크가 담당합니다.
   </Card>
   <Card title="접근 범위는 정책" icon="setting">
     `policy.json`에서 어떤 뷰가 어떤 명령, 이벤트, 저장 범위를 사용할지 정합니다.
@@ -43,7 +43,7 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 <CardGrid>
   <LinkCard title="기능별 가이드" description="취소, 오류, 상태, 플러그인, 여러 뷰, 개발, 배포 흐름" href="/guides/sessions-and-lifecycle/" />
-  <LinkCard title="API 레퍼런스" description="함수별 인자, 반환값, 권한, 오류, 수명과 설정과 CLI" href="/reference/api/" />
+  <LinkCard title="API 레퍼런스" description="SDK 함수의 사용법과 설정, CLI 명령" href="/reference/api/" />
   <LinkCard title="환경 준비" description="Windows와 macOS의 도구, 버전, 개발 환경 확인" href="/start/prerequisites/" />
   <LinkCard title="문서 범위" description="실제 공개 API와 문서 대응, 자동 누락 검사" href="/reference/coverage/" />
 </CardGrid>

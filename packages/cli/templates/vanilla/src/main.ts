@@ -27,7 +27,7 @@ async function start(): Promise<void> {
     "message.saved",
     (event) => {
       ui.saved.textContent = String(event.payload);
-      ui.status.textContent = "Saved — screen updated by message.saved event.";
+      ui.status.textContent = "Saved. Screen updated by message.saved event.";
     },
     {
       onError: () => {
