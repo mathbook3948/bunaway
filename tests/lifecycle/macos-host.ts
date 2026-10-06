@@ -7,40 +7,209 @@
 // delta snapshot, LOCALAPPDATA -> HOME/Library/Application Support.
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { chmod, cp, lstat, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  cp,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { release } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { validateValue } from "../../packages/protocol/src/index.ts";
 import { validationCases } from "../protocol/validation-cases.ts";
 import { readReport } from "./reports.ts";
 
 const original = resolve(process.argv[process.argv.indexOf("--package") + 1] ?? "");
 assert.ok(process.argv.includes("--package"), "--package is required");
-const workspace = dirname(original);
-const packagePath = join(workspace, "C 호스트 한글 package");
-await cp(original, packagePath, { recursive: true, force: true });
-const host = join(packagePath, "bunaway-host");
+const inPlace = process.env.BUNAWAY_PACKAGE_IN_PLACE === "1";
+const buildRoot = resolve(import.meta.dir, "../../build");
+const workspace = await resolveTestOutput(
+  process.env.BUNAWAY_TEST_WORKSPACE ??
+    (inPlace ? join(buildRoot, "macos-host-in-place") : dirname(original)),
+);
+// BUNAWAY_PACKAGE_IN_PLACE=1 runs the package where it sits — e.g. inside a
+// signed .app for App Sandbox runs — while the default copy keeps the
+// hostile-name path coverage.
+const packagePath = inPlace ? original : join(workspace, "C 호스트 한글 package");
+// BUNAWAY_HOST_EXEC overrides the host binary: under App Sandbox the binary
+// must exec from inside the .app while --package points at Contents/Resources.
+const host = process.env.BUNAWAY_HOST_EXEC
+  ? resolve(process.env.BUNAWAY_HOST_EXEC)
+  : join(packagePath, "bunaway-host");
+const nativeTests = resolve(
+  process.env.BUNAWAY_NATIVE_TEST_EXEC ?? join(buildRoot, "macos-host", "host-native-tests"),
+);
+function enclosingApp(path: string): string | undefined {
+  for (let current = path; current !== dirname(current); current = dirname(current)) {
+    if (basename(current).toLowerCase().endsWith(".app")) return current;
+  }
+}
+async function resolveTestOutput(path: string) {
+  const components = sep === "\\" ? path.split(/[\\/]/) : path.split(sep);
+  assert.ok(
+    !components.includes(".."),
+    `test output must not contain parent-directory components: ${path}`,
+  );
+  const output = resolve(path);
+  assert.equal(enclosingApp(output), undefined, `test output must be outside .app: ${path}`);
+  assert.equal(
+    enclosingApp(await canonicalPath(output)),
+    undefined,
+    `test output resolves inside .app: ${path}`,
+  );
+  return output;
+}
+async function canonicalPath(output: string) {
+  let ancestor = output;
+  while (!existsSync(ancestor)) ancestor = dirname(ancestor);
+  return resolve(await realpath(ancestor), relative(ancestor, output));
+}
+function containsPath(root: string, path: string) {
+  const suffix = relative(root, path);
+  return (
+    suffix === "" || (!isAbsolute(suffix) && suffix !== ".." && !suffix.startsWith(`..${sep}`))
+  );
+}
+const app = inPlace ? enclosingApp(await realpath(host)) : undefined;
+const packageApp = inPlace ? enclosingApp(await realpath(original)) : undefined;
+assert.equal(
+  packageApp,
+  app,
+  "in-place package and host must be in the same .app (or both outside)",
+);
+const identity = process.env.BUNAWAY_TEST_SIGN_IDENTITY;
+function codesign(args: string[]) {
+  const result = Bun.spawnSync(["/usr/bin/codesign", ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  assert.equal(result.exitCode, 0, result.stderr.toString());
+}
+function verifyApp() {
+  if (app) codesign(["--verify", "--deep", "--strict", app]);
+}
+function sealApp() {
+  if (app) {
+    assert.ok(identity);
+    codesign([
+      "--force",
+      "--sign",
+      identity,
+      "--preserve-metadata=identifier,entitlements,requirements,flags,runtime",
+      app,
+    ]);
+    verifyApp();
+  }
+}
 const cwd = join(workspace, "hostile-host-cwd");
-await mkdir(cwd, { recursive: true });
-await writeFile(join(cwd, ".env"), "BUNAWAY_HOSTILE=from-dotenv\n");
-await writeFile(join(cwd, "bunfig.toml"), 'preload = ["./hostile.ts"]\n');
-await writeFile(join(cwd, "hostile.ts"), 'throw new Error("hostile preload");');
+await resolveTestOutput(cwd);
 
-// Hermetic HOME: the host resolves its data root under it.
+// Hermetic HOME: the host resolves its data root under it. BUNAWAY_DATA_ROOT
+// overrides that location — under App Sandbox HOME is rewritten to the app
+// container, so callers point this at
+// ~/Library/Containers/<bundle-id>/Data/Library/Application Support/bunaway/<appId>.
 const sandboxHome = join(workspace, "host-home");
+await resolveTestOutput(sandboxHome);
+const dataRoot = await resolveTestOutput(
+  process.env.BUNAWAY_DATA_ROOT ??
+    join(sandboxHome, "Library/Application Support/bunaway", "tests.bunaway.host"),
+);
+const diagnostics = await resolveTestOutput(join(workspace, "macos-host-diagnostics"));
+const out = join(workspace, "macos-host-results.json");
+const protectedPaths = await Promise.all(
+  [
+    original,
+    packagePath,
+    host,
+    nativeTests,
+    workspace,
+    cwd,
+    sandboxHome,
+    ...(app ? [app] : []),
+  ].map(canonicalPath),
+);
+async function assertDeletionOutput(path: string, keep: string[] = []) {
+  await resolveTestOutput(path);
+  const canonical = await canonicalPath(path);
+  for (const target of [...protectedPaths, ...(await Promise.all(keep.map(canonicalPath)))]) {
+    assert.ok(
+      !containsPath(canonical, target),
+      `test deletion root contains protected path: ${path}`,
+    );
+  }
+}
+async function assertOutputFile(path: string) {
+  await resolveTestOutput(path);
+  const entry = await lstat(path).catch((cause: NodeJS.ErrnoException) => {
+    if (cause.code !== "ENOENT") throw cause;
+  });
+  assert.ok(!entry || entry.isFile(), `test output must be a regular file, not a symlink: ${path}`);
+}
+async function writeTestOutput(path: string, text: string) {
+  await assertOutputFile(path);
+  const staging = await mkdtemp(join(dirname(path), ".bunaway-test-output-"));
+  try {
+    const staged = join(staging, "output");
+    await writeFile(staged, text, { flag: "wx" });
+    await assertOutputFile(path);
+    await rename(staged, path);
+  } finally {
+    await rm(staging, { recursive: true, force: true });
+  }
+}
+await assertDeletionOutput(dataRoot, [diagnostics]);
+await assertDeletionOutput(diagnostics, [dataRoot]);
+const scratchFiles = [join(cwd, ".env"), join(cwd, "bunfig.toml"), join(cwd, "hostile.ts")];
+for (const path of [...scratchFiles, out]) await assertOutputFile(path);
+if (app) {
+  assert.ok(identity, "BUNAWAY_TEST_SIGN_IDENTITY is required for a mutable signed test fixture");
+  verifyApp();
+}
+assert.ok(
+  existsSync(nativeTests),
+  `native tests not found: ${nativeTests}; run native/macos/host/run.sh first`,
+);
+await mkdir(workspace, { recursive: true });
+if (packagePath !== original) await cp(original, packagePath, { recursive: true, force: true });
+await mkdir(cwd, { recursive: true });
+await writeTestOutput(join(cwd, ".env"), "BUNAWAY_HOSTILE=from-dotenv\n");
+await writeTestOutput(join(cwd, "bunfig.toml"), 'preload = ["./hostile.ts"]\n');
+await writeTestOutput(join(cwd, "hostile.ts"), 'throw new Error("hostile preload");');
 await mkdir(sandboxHome, { recursive: true });
-const dataRoot = join(sandboxHome, "Library/Application Support/bunaway", "tests.bunaway.host");
 const results: { name: string; ok: boolean; durationMs: number; error?: string }[] = [];
-const diagnostics = join(workspace, "macos-host-diagnostics");
+await assertDeletionOutput(diagnostics, [dataRoot]);
 await rm(diagnostics, { recursive: true, force: true });
 await mkdir(diagnostics, { recursive: true });
 let launchCount = 0;
+const assets = join(packagePath, "assets");
+const assetMode = (await stat(assets)).mode & 0o777;
+const savedResources = app
+  ? await Promise.all(
+      ["assets/app.json", "assets/policy.json", "manifest.json"].map(async (path) => ({
+        path: join(packagePath, path),
+        bytes: await readFile(join(packagePath, path)),
+      })),
+    )
+  : [];
+const assetsTmp = join(assets, "tmp");
+const savedTmp = join(diagnostics, "original-assets-tmp");
+const hadTmp = app && existsSync(assetsTmp);
+if (hadTmp) await cp(assetsTmp, savedTmp, { recursive: true, verbatimSymlinks: true });
 
 async function resetData() {
   // WebContent renderers may hold the data folder briefly after the host exits;
   // they live outside the Bun process group so their handles drain late.
   for (let attempt = 0; ; attempt++) {
     try {
+      await assertDeletionOutput(dataRoot, [diagnostics]);
       await rm(dataRoot, { recursive: true, force: true });
       break;
     } catch (cause) {
@@ -50,14 +219,14 @@ async function resetData() {
   }
   await mkdir(join(dataRoot, "data", "notes"), { recursive: true });
   await mkdir(join(dataRoot, "data", "secrets"), { recursive: true });
-  await writeFile(join(dataRoot, "data", "secrets", "x.txt"), "out-of-scope-secret");
+  await writeTestOutput(join(dataRoot, "data", "secrets", "x.txt"), "out-of-scope-secret");
   await symlink(
     join(dataRoot, "data", "secrets"),
     join(dataRoot, "data", "notes", "internal-link"),
   );
   const outside = join(dataRoot, "outside");
   await mkdir(outside, { recursive: true });
-  await writeFile(join(outside, "secret.txt"), "junction-target-secret");
+  await writeTestOutput(join(outside, "secret.txt"), "junction-target-secret");
   await symlink(outside, join(dataRoot, "data", "notes", "link"));
 }
 
@@ -123,6 +292,7 @@ async function newWebContentPids(): Promise<number[]> {
 }
 
 function launch(extraEnv: Record<string, string> = {}) {
+  sealApp();
   const child = Bun.spawn([host, "--package", packagePath], {
     cwd,
     env: {
@@ -194,7 +364,7 @@ async function test(name: string, body: () => Promise<void>) {
 
 try {
   await test("native FIFO, scheme handler and resource-filter regressions", async () => {
-    const native = Bun.spawn([join(workspace, "macos-host", "host-native-tests"), workspace], {
+    const native = Bun.spawn([nativeTests, workspace], {
       stdout: "pipe",
       stderr: "pipe",
       timeout: 10000,
@@ -202,8 +372,8 @@ try {
     const output = new Response(native.stdout).text();
     const errors = new Response(native.stderr).text();
     const exitCode = await native.exited;
-    await writeFile(join(diagnostics, "native.stdout.log"), await output);
-    await writeFile(join(diagnostics, "native.stderr.log"), await errors);
+    await writeTestOutput(join(diagnostics, "native.stdout.log"), await output);
+    await writeTestOutput(join(diagnostics, "native.stderr.log"), await errors);
     assert.equal(exitCode, 0, await errors);
     assert.ok((await output).includes("PASS scheme handler"));
   });
@@ -266,17 +436,8 @@ try {
       // TIMEOUT is asserted by the page; either core or native deadline may win.
       assert.ok(count("host-request-denied") >= 1, "scope escape denial");
 
-      // The backend->host host-cancel path must be exercised. On Windows the
-      // cancel usually beats the worker's CreateFileW (AV-scanned I/O), while
-      // macOS openat completes in microseconds, so the cancel can land after
-      // the response ("late-host-cancel"). Either proves the cancel frame path.
-      assert.ok(
-        count("host-cancel") +
-          count("host-request-cancelled") +
-          count("discarded", (e) => e.reason === "late-host-cancel") >=
-          1,
-        "runtime forwarded Host API cancellation",
-      );
+      // Same-turn SDK cancellation can precede Host dispatch. The delayed
+      // suite below checks native Host cancellation after a backend barrier.
       // The child-frame message must never reach the backend.
       assert.equal(JSON.stringify(log).includes("iframe-1"), false, "iframe message leaked");
       assert.ok(count("frame-message-ignored") >= 1, "iframe message was seen and dropped");
@@ -311,12 +472,18 @@ try {
   });
 
   await test("cancel arriving first blocks the late host result", async () => {
-    // Deterministic cancel-first path: BUNAWAY_HOST_OP_DELAY_MS makes every
-    // host operation wait on its worker, so the cancel always wins. Verifies
-    // that cancelled requests never produce a (duplicate) response.
+    // The UI's backend round trip lets Host dispatch precede cancellation;
+    // delayed workers keep the native request pending until cancel arrives.
     await resetData();
-    const child = launch({ BUNAWAY_HOST_OP_DELAY_MS: "500" });
+    const configText = await readFile(join(packagePath, "assets/app.json"), "utf-8");
+    const config = JSON.parse(configText);
+    const home = new URL(config.home);
+    home.searchParams.set("hostCancelBarrier", "1");
+    config.home = home.href;
+    await updateAsset("assets/app.json", JSON.stringify(config));
+    let child: ReturnType<typeof launch> | undefined;
     try {
+      child = launch({ BUNAWAY_HOST_OP_DELAY_MS: "500" });
       const report = await reportFile("report.json");
       const failed = report.results.filter((r) => !r.ok);
       assert.equal(failed.length, 0, `page failures: ${JSON.stringify(failed)}`);
@@ -331,14 +498,26 @@ try {
           .map((e) => e.requestId as string),
       );
       assert.ok(blocked.size >= 1, "no host request was cancelled or had its result discarded");
+      assert.ok(
+        log.some(
+          (e) =>
+            e.event === "host-request" &&
+            e.operation === "storage.readText" &&
+            blocked.has(e.requestId as string),
+        ),
+        "cancelled read must have reached the native Host",
+      );
       const responded = new Set(
         log.filter((e) => e.event === "host-response").map((e) => e.requestId as string),
       );
       for (const id of blocked) assert.ok(!responded.has(id), `late result escaped for ${id}`);
       await gracefulStop(child);
     } finally {
-      if (!child.killed) child.kill();
-      await child.exited;
+      if (child) {
+        if (!child.killed) child.kill();
+        await child.exited;
+      }
+      await updateAsset("assets/app.json", configText);
     }
   });
 
@@ -447,13 +626,16 @@ try {
           });
           const beforeCrash = (await hostLog()).length;
           await rm(join(dataRoot, "temp", "read.json"));
+          let terminated = 0;
           for (const pid of pids) {
-            const killer = Bun.spawn(["/bin/kill", "-9", String(pid)], {
-              stdout: "pipe",
-              stderr: "pipe",
-            });
-            assert.equal(await killer.exited, 0, "test renderer termination failed");
+            try {
+              process.kill(pid, "SIGKILL");
+              terminated++;
+            } catch (cause) {
+              if ((cause as NodeJS.ErrnoException).code !== "ESRCH") throw cause;
+            }
           }
+          assert.ok(terminated > 0, "no live test renderer was terminated");
           await waitFor(
             async () =>
               (await hostLog())
@@ -531,6 +713,14 @@ try {
     }
   });
 } finally {
+  if (app) {
+    await chmod(assets, 0o755);
+    for (const { path, bytes } of savedResources) await writeFile(path, bytes);
+    await rm(assetsTmp, { recursive: true, force: true });
+    if (hadTmp) await cp(savedTmp, assetsTmp, { recursive: true, verbatimSymlinks: true });
+    await chmod(assets, assetMode);
+    sealApp();
+  }
   const summary = {
     host: "macos",
     osRelease: release(),
@@ -539,8 +729,8 @@ try {
     results,
     generatedAt: new Date().toISOString(),
   };
-  const out = join(dirname(original), "macos-host-results.json");
-  await writeFile(out, `${JSON.stringify(summary, null, 2)}\n`);
+  await writeTestOutput(out, `${JSON.stringify(summary, null, 2)}\n`);
+  verifyApp();
   console.log(`Wrote ${out}`);
 }
 console.log("macos-host: all checks passed");

@@ -348,8 +348,12 @@ async function run() {
   await test("SDK Host API cancellation", async () => {
     const controller = new AbortController();
     const outcome = call("test.hostCancel", null, { signal: controller.signal });
-    // Let invoke dispatch, then send cancellation in the same UI turn.
-    await Promise.resolve();
+    if (new URL(location.href).searchParams.has("hostCancelBarrier")) {
+      // Native delayed-op tests require Host dispatch before cancellation.
+      await call("test.ping");
+    } else {
+      await Promise.resolve();
+    }
     controller.abort();
     assert((await outcome).error?.code === "CANCELLED", "Host API cancellation failed");
   });
