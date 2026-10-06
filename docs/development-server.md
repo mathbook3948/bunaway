@@ -4,6 +4,11 @@ Vite·Next.js/Turbopack 등 웹 도구가 UI 개발 서버와 HMR을 담당한�
 그 서버를 실행하고 준비를 기다린 뒤 네이티브 창과 SDK 브리지를 연결한다.
 `dev`가 없는 생성 앱은 기존 로컬 자산 개발 흐름을 사용한다.
 
+Vite용 vanilla TypeScript 앱은 `bunaway create <directory> --template vite`로 생성한다.
+로컬 패키지를 사용할 때는 `--package-dir <tarball-directory>`도 지정한다.
+설치 후 `bun run dev`로 개발하고 `bun run build`로 Vite 자산 빌드와 네이티브 빌드를 실행한다.
+[메모 예제](../examples/memo/README.md)도 같은 구성을 사용한다.
+
 ## 설정
 
 기존 `src-bunaway/bunaway.json`의 `build`, `app`, `bundle` 옆에 추가한다.
@@ -37,7 +42,8 @@ Vite 프로젝트의 package.json script 예시는 다음과 같다. 기존 Vite
 
 Next.js/Turbopack도 `web:dev`에 해당 버전의 `next dev` 명령을 지정하고 url의 포트를
 맞추면 같은 실행 구조를 사용한다. 이 연결은 Next.js SSR을 최종 앱에 번들하는 기능이
-아니다. React/Vite 템플릿·외부 프런트엔드 production build 자동화는 아직 제공하지 않는다.
+아니다. React 템플릿은 아직 제공하지 않으며, 외부 프런트엔드 production build는
+앱의 package.json script에서 명시적으로 연결한다.
 
 URL은 `http://localhost:<port>/...`, `http://127.0.0.1:<port>/...` 또는 HTTPS의 같은
 호스트만 허용한다. HTTPS 인증서는 정상 검증되어야 한다. 인증·redirect가 없는 HTTP

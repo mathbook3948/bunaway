@@ -8,8 +8,9 @@ import {
   validateProject,
 } from "./index.ts";
 
-const help = `bunaway (vanilla MVP)
+const help = `bunaway (vanilla / Vite)
   create <new-directory>   Generate an independent project (then bun install)
+                          [--template vanilla|vite] [--package-dir <tarball-directory>]
   validate [directory]    Validate configuration and deny-by-default policy
   dev [directory]         Watch sources; rebuild and restart the native host
   build [directory]       Build a native package with pinned bundled Bun
@@ -24,16 +25,27 @@ export async function main(args: string[]): Promise<number> {
     return 0;
   }
   if (command === "create") {
-    const [directory, option, packageDirectory, ...extra] = rest;
-    if (
-      !directory ||
-      directory.startsWith("--") ||
-      extra.length ||
-      (option !== undefined && (option !== "--package-dir" || !packageDirectory))
-    ) {
-      throw new Error("Usage: bunaway create <directory> [--package-dir <tarball-directory>].");
+    const [directory, ...options] = rest;
+    const usage =
+      "Usage: bunaway create <directory> [--template vanilla|vite] [--package-dir <tarball-directory>].";
+    if (!directory || directory.startsWith("--")) throw new Error(usage);
+    let packageDirectory: string | undefined;
+    let template: "vanilla" | "vite" = "vanilla";
+    const seen = new Set<string>();
+    for (let index = 0; index < options.length; index += 2) {
+      const option = options[index];
+      const value = options[index + 1];
+      if (!option || seen.has(option) || !value || value.startsWith("--")) throw new Error(usage);
+      seen.add(option);
+      if (option === "--package-dir") packageDirectory = value;
+      else if (option === "--template" && (value === "vanilla" || value === "vite"))
+        template = value;
+      else throw new Error(usage);
     }
-    const path = await createProject(directory, packageDirectory ? { packageDirectory } : {});
+    const path = await createProject(directory, {
+      template,
+      ...(packageDirectory ? { packageDirectory } : {}),
+    });
     console.log(
       `Created ${path}\nNext: enter the directory, run bun install, then bun run doctor / dev / build.`,
     );

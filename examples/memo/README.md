@@ -1,6 +1,6 @@
 # 메모 예제
 
-CLI로 생성한 앱과 같은 구조와 실행 명령을 사용하는 독립 앱이다.
+CLI의 `vite` 템플릿과 같은 구조와 실행 명령을 사용하는 독립 앱이다.
 메모 창 하나에서 작성 내용과 마지막 저장 내용을 표시한다.
 
 ```text
@@ -11,6 +11,7 @@ memo/
 │  ├─ index.html
 │  ├─ main.ts
 │  └─ memo.css
+├─ vite.config.ts
 └─ src-bunaway/
    ├─ src/
    │  ├─ app.ts
@@ -38,6 +39,14 @@ bun run dev
 프레임워크를 수정했다면 루트에서 다시 패킹한 뒤 예제 폴더에서 `bun install --force --no-cache`로 갱신한다.
 로컬 패키지의 경로를 기록하는 예제의 `bun.lock`은 커밋하지 않는다.
 
+`bun run dev`는 CLI가 `web:dev`의 Vite 서버를 `http://127.0.0.1:5173/`에 실행하고
+준비가 끝나면 네이티브 창을 연다. 별도 Node.js 설치 없이 Bun으로 Vite를 실행한다.
+5173 포트를 쓰는 서버가 이미 있다면 종료한 뒤 실행한다.
+CSS 수정은 HMR로 반영하며 HTML·TypeScript 수정은 Vite가 페이지를 갱신한다.
+UI 수정은 네이티브 호스트를 재시작하지 않고, `src-bunaway/`의 백엔드·설정 수정은
+새 호스트와 세션으로 재시작한다. 창 닫기·Ctrl+C는 Vite 서버도 정리한다.
+실행 구조와 URL 제약은 [외부 UI 개발 서버 안내](../../docs/development-server.md)를 따른다.
+
 ```sh
 bun run validate
 bun run typecheck
@@ -47,11 +56,17 @@ bun run package
 
 `dev`는 `.bunaway/`에 개발 앱을 만들고 실행한다. `build`는 `dist/`에 앱을 만들며,
 Windows의 `package`는 기본 `win-direct` 배포 패키지를 생성한다.
+`validate`·`build`·`package`는 먼저 `web:build`로 `web-dist/`에 Vite production build를
+만든 뒤 Bunaway가 그 결과를 로컬 자산으로 검증·번들한다. `vite.config.ts`는
+개발 페이지에서만 CSS 갱신과 loopback HMR WebSocket을 허용하는 CSP를 적용한다.
+배포 HTML의 CSP와 `app.home`, 작성한 `policy.json`의 권한·origin은 그대로 유지한다.
 네이티브 회귀 테스트 실행 스크립트는 여러 테스트 창을 열기 때문에 예제 실행에 사용하지 않는다.
 
 ## 구성과 동작
 
 - `src/`: 클라이언트 SDK를 사용하는 화면. 글자 수·저장 상태·`Ctrl+S`(`⌘+S`) 저장을 지원한다.
+- `vite.config.ts`: UI 소스 디렉터리와 개발 페이지의 진입점·CSP 설정.
+- `web-dist/`: Vite의 프로덕션 자산 출력. 생성 파일이므로 커밋하지 않는다.
 - `src-bunaway/src/app.ts`: `memo.save`, `memo.read` 명령과 `memo.saved` 이벤트 계약 및 구현.
 - `src-bunaway/src/index.ts`: Bun 백엔드 런타임 진입점.
 - `src-bunaway/bunaway.json`: 빌드 진입점과 앱 식별자·제목·단일 창 설정.

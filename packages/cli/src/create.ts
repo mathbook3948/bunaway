@@ -5,8 +5,11 @@ import { frameworkRoot, json, writeJson } from "./files.ts";
 
 export async function createProject(
   directory: string,
-  options: { packageDirectory?: string } = {},
+  options: { packageDirectory?: string; template?: "vanilla" | "vite" } = {},
 ): Promise<string> {
+  const template = options.template ?? "vanilla";
+  if (template !== "vanilla" && template !== "vite")
+    throw new Error(`Unknown template: ${template}.`);
   const requested = resolve(directory);
   const target = resolve(await realpath(dirname(requested)), basename(requested));
   try {
@@ -23,6 +26,9 @@ export async function createProject(
     await cp(resolve(frameworkRoot, "packages/cli/templates/vanilla"), staging, {
       recursive: true,
     });
+    if (template === "vite") {
+      await cp(resolve(frameworkRoot, "packages/cli/templates/vite"), staging, { recursive: true });
+    }
     await rename(resolve(staging, "gitignore"), resolve(staging, ".gitignore"));
     await rename(resolve(staging, "gitattributes"), resolve(staging, ".gitattributes"));
     const info = await release();

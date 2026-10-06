@@ -1,5 +1,6 @@
 # Project templates
 
-`vanilla/`, `react/`, `vue/`, `svelte/` 생성 템플릿을 둘 자리다.
-SDK·CLI 계약을 확정한 뒤 UI, 백엔드, manifest와 생성 타입을 분리해 구현한다.
-현재 프런트엔드 프레임워크나 번들러 의존성을 설치하지 않았다.
+현재 생성 템플릿은 [CLI 템플릿](../packages/cli/templates/)에 있다.
+`bunaway create <directory>`의 기본값은 `vanilla`이며,
+`--template vite`는 같은 SDK·백엔드·정책에 Vite 개발 서버와 프로덕션 자산 빌드를 연결한다.
+React·Vue·Svelte 전용 템플릿은 아직 제공하지 않는다.

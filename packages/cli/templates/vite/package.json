@@ -1,0 +1,32 @@
+{
+  "name": "bunaway-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.2",
+  "engines": {
+    "bun": "1.4.2"
+  },
+  "scripts": {
+    "dev": "bunaway dev",
+    "build": "bun run web:build && bunaway build",
+    "package": "bun run web:build && bunaway package",
+    "validate": "bun run web:build && bunaway validate",
+    "doctor": "bunaway doctor",
+    "typecheck": "tsc --project tsconfig.json",
+    "web:dev": "bun --bun vite --host 127.0.0.1 --port 5173 --strictPort",
+    "web:build": "bun --bun vite build"
+  },
+  "dependencies": {
+    "@bunaway/backend": "0.0.0",
+    "@bunaway/client": "0.0.0",
+    "@bunaway/runtime-bun": "0.0.0",
+    "@bunaway/core": "0.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.2",
+    "typescript": "7.0.2",
+    "@bunaway/cli": "0.0.0",
+    "vite": "8.3.3"
+  }
+}
