@@ -11,9 +11,17 @@ const button = document.getElementById("save");
 const testPhase = new URL(location.href).searchParams.get("test");
 const ephemeralBrowserStorage =
   new URL(location.href).searchParams.get("browserStorage") === "ephemeral";
+let expectedEditorSave;
+let resolveEditorSave;
 window.addEventListener("pagehide", () => {
   void client.close();
 });
+
+async function waitForSaved() {
+  const deadline = Date.now() + 5000;
+  while ((button.disabled || saved.textContent !== input.value) && Date.now() < deadline)
+    await new Promise((resolve) => setTimeout(resolve, 25));
+}
 
 async function start() {
   await client.ready;
@@ -22,6 +30,7 @@ async function start() {
     (event) => {
       saved.textContent = event.payload;
       statusEl.textContent = "저장 완료";
+      if (event.payload === expectedEditorSave) resolveEditorSave?.();
     },
     {
       onError: (error) => {
@@ -51,9 +60,7 @@ async function start() {
   if (testPhase === "write") {
     input.value = "재실행 후에도 남는 메모 😀";
     button.click();
-    const deadline = Date.now() + 5000;
-    while (button.disabled && Date.now() < deadline)
-      await new Promise((resolve) => setTimeout(resolve, 25));
+    await waitForSaved();
     localStorage.setItem("bunaway-profile-regression", "legacy-profile");
   }
   if (testPhase === "editor") {
@@ -62,8 +69,17 @@ async function start() {
     const editorResults = [];
     try {
       input.value = "편집 뷰가 저장한 메모 ✏️";
+      expectedEditorSave = input.value;
+      const savedEvent = new Promise((resolve) => {
+        resolveEditorSave = resolve;
+      });
       await client.invoke("memo.save", input.value);
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await Promise.race([
+        savedEvent,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("memo.saved event was not delivered")), 5000),
+        ),
+      ]);
       editorResults.push({
         name: "editor save broadcasts to subscribed views",
         ok: saved.textContent === input.value,
@@ -78,6 +94,9 @@ async function start() {
         ok: false,
         error: String(error?.message ?? error),
       });
+    } finally {
+      expectedEditorSave = undefined;
+      resolveEditorSave = undefined;
     }
     await client.invoke("test.report", {
       file: "editor.json",

@@ -4,7 +4,7 @@
 #   ./run.sh                 # verify pins -> build -> package -> tests/lifecycle/macos-host.ts
 #   ./run.sh --skip-tests    # build+package only
 #   ./run.sh --sample        # package the memo sample instead of the test suite
-#   ./run.sh --app           # additionally produce an ad-hoc signed build/Bunaway.app
+#   ./run.sh --app           # additionally build and test an ad-hoc signed build/Bunaway.app
 #   BUN=/path/to/bun ./run.sh
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -144,4 +144,13 @@ if (( ! SKIP_TESTS && ! SAMPLE )); then
   clang++ -std=c++20 -O2 -Wall -Wextra -fobjc-arc -I"$JSON_DIR" \
     "$ROOT/tests/lifecycle/macos-host-native.mm" -framework Cocoa -framework WebKit -o "$BUILD/host-native-tests"
   "$BUILD_BUN" "$ROOT/tests/lifecycle/macos-host.ts" --package "$PACKAGE"
+  if (( MAKE_APP )); then
+    BUNAWAY_PACKAGE_IN_PLACE=1 \
+    BUNAWAY_HOST_EXEC="$APP/Contents/MacOS/bunaway-host" \
+    BUNAWAY_TEST_WORKSPACE="$ROOT/build/macos-host-in-place" \
+    BUNAWAY_NATIVE_TEST_EXEC="$BUILD/host-native-tests" \
+    BUNAWAY_TEST_SIGN_IDENTITY=- \
+      "$BUILD_BUN" "$ROOT/tests/lifecycle/macos-host.ts" --package "$APP/Contents/Resources"
+    BUNAWAY_DISTRIBUTION_APP="$APP" python3 "$ROOT/native/macos/distribute/test.py"
+  fi
 fi

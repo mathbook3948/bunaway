@@ -14,7 +14,7 @@
 # login-keychain item name created once with `xcrun notarytool
 # store-credentials`. App-specific passwords / API keys must never be passed
 # here inline.
-set -u -o pipefail
+set -eu -o pipefail
 
 ARTIFACT=""; PROFILE=""; APP=""
 while [ $# -gt 0 ]; do
@@ -30,6 +30,11 @@ done
 die() { echo "notarize.sh: $*" >&2; exit 1; }
 [ -n "$ARTIFACT" ] || die "requires --artifact"
 [ -f "$ARTIFACT" ] || die "artifact not found: $ARTIFACT"
+[ -z "$APP" ] || [ -d "$APP" ] || die "app not found: $APP"
+case "$ARTIFACT" in
+  *.dmg|*.zip) ;;
+  *) die "artifact must be a .dmg or .zip";;
+esac
 
 if [ -z "$PROFILE" ]; then
   cat >&2 <<'MSG'
@@ -44,14 +49,35 @@ MSG
 fi
 
 say() { printf 'notarize.sh: %s\n' "$*"; }
+STAGE=$(mktemp -d "$(dirname "$ARTIFACT")/.bunaway-notary.XXXXXX")
+trap 'rm -rf "$STAGE"' EXIT
 say "submitting $ARTIFACT (profile '$PROFILE')…"
 xcrun notarytool submit "$ARTIFACT" --keychain-profile "$PROFILE" --wait \
+  --output-format json > "$STAGE/submission.json" \
   || die "notarytool submission failed or was rejected"
-say "accepted — stapling $ARTIFACT"
-xcrun stapler staple "$ARTIFACT" || die "stapler staple failed"
-xcrun stapler validate "$ARTIFACT" || die "stapler validate failed"
+RESULT=$(/usr/bin/plutil -extract status raw -o - "$STAGE/submission.json")
+[ "$RESULT" = "Accepted" ] || die "notarization was not accepted: $RESULT"
+case "$ARTIFACT" in
+  *.zip)
+    # ZIP has no place for a ticket. Staple the submitted app inside a copy
+    # of the archive, then rebuild on the same filesystem before replacing it.
+    ditto -x -k "$ARTIFACT" "$STAGE/unpacked"
+    APPS=("$STAGE/unpacked"/*.app(N))
+    [ ${#APPS[@]} -eq 1 ] || die "ZIP must contain exactly one top-level .app"
+    xcrun stapler staple "${APPS[1]}" || die "stapler staple on archived app failed"
+    xcrun stapler validate "${APPS[1]}" || die "stapler validate on archived app failed"
+    ditto -c -k "$STAGE/unpacked" "$STAGE/notarized.zip"
+    mv "$STAGE/notarized.zip" "$ARTIFACT" || die "could not place notarized ZIP"
+    ;;
+  *.dmg)
+    say "accepted — stapling $ARTIFACT"
+    xcrun stapler staple "$ARTIFACT" || die "stapler staple failed"
+    xcrun stapler validate "$ARTIFACT" || die "stapler validate failed"
+    ;;
+esac
 if [ -n "$APP" ]; then
   say "stapling $APP"
   xcrun stapler staple "$APP" || die "stapler staple on app failed"
+  xcrun stapler validate "$APP" || die "stapler validate on app failed"
 fi
 say "done"

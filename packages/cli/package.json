@@ -3,13 +3,15 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "license": "UNLICENSED",
   "exports": {
     ".": "./src/index.ts"
   },
   "bin": {
-    "bunaway": "./src/main.ts"
+    "bunaway": "./src/distribution-main.ts"
   },
   "dependencies": {
+    "@bunaway/packaging": "workspace:*",
     "@bunaway/protocol": "workspace:*"
   },
   "scripts": {

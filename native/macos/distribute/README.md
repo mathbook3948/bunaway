@@ -32,8 +32,9 @@ Order (measured requirement — see
 1. sign nested executables (`Contents/Helpers/bun` for store,
    `Contents/Resources/runtime/bun` for direct) with the channel's *child*
    entitlements;
-2. rewrite `manifest.json`'s `bun.executableSha256` with the **post-signing**
-   hash — the host re-verifies this at launch;
+2. record the **post-signing** hash in `manifest.json`'s `bun.packagedSha256`,
+   preserving the upstream `bun.executableSha256` — the host prefers the
+   packaged digest and re-verifies it at launch;
 3. sign the host binary and seal the bundle with the channel's *app*
    entitlements (`--options runtime` everywhere);
 4. `codesign --verify --deep --strict`.
@@ -77,6 +78,27 @@ zsh native/macos/distribute/notarize.sh \
 Without `--profile` it prints the setup it needs and exits `2` — **real
 notarization is UNVERIFIED in this repo until run with an Apple-issued
 credential**, as is `spctl`/`stapler` Gatekeeper acceptance.
+
+For ZIP distribution, the script extracts the submitted archive, staples and
+validates its single top-level `.app`, then rebuilds the ZIP before replacing
+the original. ZIP files cannot be stapled directly. An optional `--app` is
+stapled and validated separately; the archived app is always processed.
+
+## Regression checks
+
+```sh
+python3 native/macos/distribute/test.py
+# Include the actual host and pinned Bun built by the native integration suite:
+BUNAWAY_DISTRIBUTION_APP=build/Bunaway.app python3 native/macos/distribute/test.py
+```
+
+The existing macOS native CI runs these checks through
+`native/macos/host/run.sh --app`, after the signed host lifecycle suite. They
+use real ad-hoc signing, DMG creation/mounting and unsigned PKG assembly,
+check source/packaged hashes and both channel layouts, and inject failures
+to check output preservation, rollback and temporary-directory cleanup.
+Notary submission and tickets are mocked to test ZIP/DMG control flow;
+Apple-issued signing, real notarization and Store acceptance remain unverified.
 
 ## Entitlement profiles (`entitlements/`)
 

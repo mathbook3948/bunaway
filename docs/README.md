@@ -4,6 +4,8 @@
 
 ## 설계와 구현 계약
 
+- [개발자용 프레임워크 설치 artifact·버전·업그레이드](./framework-distribution.md)
+
 - [모듈 의존성과 타입 환경](./architecture/workspace.md)
 - [IPC와 정책 계약](./architecture/protocol.md)
 - [SDK·코어·Host API 공통 계약](./architecture/common-api.md)
@@ -22,6 +24,7 @@
 - [0002 — 호스트가 소유하는 호출 컨텍스트](./decisions/0002-host-owned-call-context.md)
 - [0003 — 단일 스키마와 분리된 프로토콜](./decisions/0003-shared-schema-separate-protocols.md)
 - [0004 — Windows 창/뷰별 정책과 수명 분리](./decisions/0004-multi-window-per-view-policy.md)
+- [0005 — 설치 artifact와 생성 앱의 vendor snapshot](./decisions/0005-framework-artifact.md)
 
 [이전 C ABI 초안](./architecture/native-abi.md)은 동일 프로세스 설계 당시의 기록이다. 현재 구현 기준은 프로세스 IPC 계약이다.
 

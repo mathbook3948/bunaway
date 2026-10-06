@@ -22,7 +22,7 @@
 # fallback next to Contents/Resources/runtime/bun.
 #
 # Never prints credential material; identities are keychain item NAMES only.
-set -u -o pipefail
+set -eu -o pipefail
 
 SELF="${0:A:h}"
 ENTS="$SELF/entitlements"
@@ -56,10 +56,22 @@ die() { echo "sign.sh: $*" >&2; exit 1; }
 [ -d "$APP" ] || die "input app not found: $APP"
 [ "$CHANNEL" = "mac-store" ] && [ -z "$TEAM_ID" ] && die "mac-store requires --team-id"
 command -v codesign >/dev/null || die "codesign not available"
+command -v python3 >/dev/null || die "python3 not available"
 
 # Stage: sign a copy, never in place; only move into $OUT on full success.
 STAGE=$(mktemp -d "${TMPDIR:-/tmp}/bunaway-sign.XXXXXX")
-trap 'rm -rf "$STAGE"' EXIT
+PUBLISH=""
+cleanup() {
+  rm -rf "$STAGE"
+  if [ -n "$PUBLISH" ]; then
+    if [ -e "$PUBLISH/previous.app" ]; then
+      echo "sign.sh: previous app preserved at $PUBLISH/previous.app" >&2
+    else
+      rm -rf "$PUBLISH"
+    fi
+  fi
+}
+trap cleanup EXIT
 STAGED="$STAGE/${${APP:t}%.app}.app"
 ditto "$APP" "$STAGED" || die "failed to stage $APP"
 MACOS_DIR="$STAGED/Contents/MacOS"
@@ -70,20 +82,24 @@ PLIST="$STAGED/Contents/Info.plist"
 PB=/usr/libexec/PlistBuddy
 
 # ------------------------------------------------------------- metadata ---
-[ -n "$BUNDLE_ID" ]  && "$PB" -c "Set :CFBundleIdentifier $BUNDLE_ID" "$PLIST"
-[ -n "$VERSION" ]    && "$PB" -c "Set :CFBundleShortVersionString $VERSION" "$PLIST"
-[ -n "$BUILD_NUM" ]  && "$PB" -c "Set :CFBundleVersion $BUILD_NUM" "$PLIST"
-[ -n "$DISPLAY" ]    && "$PB" -c "Set :CFBundleName $DISPLAY" "$PLIST" \
-                     && "$PB" -c "Set :CFBundleDisplayName $DISPLAY" "$PLIST" 2>/dev/null || true
-[ -n "$MINOS" ]      && { "$PB" -c "Add :LSMinimumSystemVersion string" "$PLIST" 2>/dev/null; \
-                        "$PB" -c "Set :LSMinimumSystemVersion $MINOS" "$PLIST"; }
+plist_string() {
+  "$PB" -c "Set :$1 $2" "$PLIST" 2>/dev/null \
+    || "$PB" -c "Add :$1 string $2" "$PLIST"
+}
+[ -n "$BUNDLE_ID" ] && plist_string CFBundleIdentifier "$BUNDLE_ID"
+[ -n "$VERSION" ]   && plist_string CFBundleShortVersionString "$VERSION"
+[ -n "$BUILD_NUM" ] && plist_string CFBundleVersion "$BUILD_NUM"
+if [ -n "$DISPLAY" ]; then
+  plist_string CFBundleName "$DISPLAY"
+  plist_string CFBundleDisplayName "$DISPLAY"
+fi
+[ -n "$MINOS" ] && plist_string LSMinimumSystemVersion "$MINOS"
 if [ -n "$ICON" ]; then
   [ -f "$ICON" ] || die "icon not found: $ICON"
   ditto "$ICON" "$RES_DIR/AppIcon.icns"
-  { "$PB" -c "Add :CFBundleIconFile string" "$PLIST" 2>/dev/null; }
-  "$PB" -c "Set :CFBundleIconFile AppIcon" "$PLIST"
+  plist_string CFBundleIconFile AppIcon
 fi
-BUNDLE_ID_FINAL=$("$PB" -c "Print :CFBundleIdentifier" "$PLIST" 2>/dev/null || echo "$BUNDLE_ID")
+BUNDLE_ID_FINAL=$("$PB" -c "Print :CFBundleIdentifier" "$PLIST")
 
 # ------------------------------------------------- store layout changes ---
 BUN_BIN="$RES_DIR/runtime/bun"
@@ -134,17 +150,23 @@ codesign --force --sign "$IDENTITY" --options runtime \
   --entitlements "$STAGE/child.ent.plist" "$BUN_BIN" \
   || die "codesign failed for bun child"
 
-# Manifest must record the POST-signing hash of the executable it protects.
-NEW_SHA=$(/usr/bin/shasum -a 256 "$BUN_BIN" | awk '{print $1}')
-NEW_SHA="$NEW_SHA" python3 - "$RES_DIR/manifest.json" <<'PY'
-import json, os, sys
-path = sys.argv[1]
-manifest = json.load(open(path))
-manifest.setdefault("bun", {})["executableSha256"] = os.environ["NEW_SHA"]
-json.dump(manifest, open(path, "w"), indent=2)
-open(path, "a").write("\n")
+# Preserve the upstream digest; the host prefers the signed packagedSha256.
+python3 - "$RES_DIR/manifest.json" "$BUN_BIN" <<'PY'
+import hashlib, json, sys
+path, bun = sys.argv[1:]
+with open(path) as f:
+    manifest = json.load(f)
+with open(bun, "rb") as f:
+    digest = hashlib.sha256(f.read()).hexdigest()
+manifest["bun"]["packagedSha256"] = digest
+with open(path, "w") as f:
+    json.dump(manifest, f, indent=2)
+    f.write("\n")
+with open(path) as f:
+    if json.load(f)["bun"]["packagedSha256"] != digest:
+        raise RuntimeError("Post-signing Bun hash was not recorded")
+print("manifest bun.packagedSha256 := " + digest[:12] + "...")
 PY
-say "manifest bun.executableSha256 := ${NEW_SHA:0:12}..."
 
 HOST_BIN="$MACOS_DIR/bunaway-host"
 [ -f "$HOST_BIN" ] || HOST_BIN=$(find "$MACOS_DIR" -type f -perm +111 | head -1)
@@ -163,17 +185,26 @@ codesign --force --sign "$IDENTITY" --options runtime \
 # --------------------------------------------------------------- verify ---
 codesign --verify --deep --strict --verbose=2 "$STAGED" \
   || die "codesign --verify --deep --strict failed"
-codesign -dvvv "$STAGED" 2>&1 | grep -E "Identifier|TeamIdentifier|flags|Signature" | head -4 \
+codesign -dvvv "$STAGED" 2>&1 | grep -E "Identifier|TeamIdentifier|flags|Signature" \
   | sed 's/^/  /'
 
 # ------------------------------------------------------ commit to output --
 # Verify passed — replace the previous artifact only now, so any earlier
 # failure leaves the last good signed app untouched.
 mkdir -p "$(dirname "$OUT")"
-OUT_TMP="${OUT}.tmp.$$"
-rm -rf "$OUT_TMP"
-mv "$STAGED" "$OUT_TMP" || die "could not stage signed app at $OUT_TMP"
-rm -rf "$OUT"
-mv "$OUT_TMP" "$OUT" || die "could not place signed app at $OUT"
+# Both renames stay on the output filesystem. Keep the old app until the
+# replacement succeeds; if rollback fails, cleanup leaves its backup intact.
+PUBLISH=$(mktemp -d "${OUT}.publish.XXXXXX")
+mv "$STAGED" "$PUBLISH/new.app" || die "could not stage signed app at $PUBLISH"
+if [ -e "$OUT" ] || [ -L "$OUT" ]; then
+  [ -d "$OUT" ] && [ ! -L "$OUT" ] || die "output must be a real app directory"
+  mv "$OUT" "$PUBLISH/previous.app" || die "could not preserve previous app"
+fi
+if ! mv "$PUBLISH/new.app" "$OUT"; then
+  if [ -d "$PUBLISH/previous.app" ]; then
+    mv "$PUBLISH/previous.app" "$OUT" || die "rollback failed; backup retained at $PUBLISH/previous.app"
+  fi
+  die "could not place signed app at $OUT"
+fi
+rm -rf "$PUBLISH/previous.app"
 say "signed app -> $OUT"
-trap - EXIT

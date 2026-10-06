@@ -1,19 +1,19 @@
 # 구현 진행 상태
 
-기준일: 2026-10-05. 작업 시작 시 최신 main
-`5a9641eeac9c44a670d43cefb23069db833ed221`의 코드, ADR과 기존 실행 기록을 대조했다.
+기준일: 2026-10-05. CLI/vanilla PR #11 및 macOS CI PR #12가 포함된 최신 main의
+코드, ADR과 기존 실행 기록을 대조했다.
 과거 진행 문서의 “Windows 외 미구현”, “runtime-bun 플랫폼 windows 고정”은 현재 코드와
 맞지 않는다. 아래는 요구사항 전체 완료 선언이 아니라 구현 및 검증 범위다.
 새 macOS 회귀 실행은 [macOS 기록](./macos-native-results.md)에서 기존 검증과 구분한다.
 
 | 단계 | 구현 상태 | 검증 범위·근거 | 남은 작업·미검증 |
 | --- | --- | --- | --- |
-| 개발 환경 | mise 기반 Bun 1.4.2, 8개 workspace, 타입 환경 분리 | 3개 OS 공통 CI의 frozen install·format·lint·typecheck·계약 테스트, Ubuntu 생성 스키마 diff | 범용 CLI dev/build·프로젝트 생성 |
+| 개발 환경 | mise 기반 Bun 1.4.2, 8개 workspace, 타입 환경 분리, 개발자용 로컬 CLI artifact | 공통 CI 및 실제 tarball 외부 설치·생성·이동·검증/typecheck 테스트 | 공개 publish·프레임워크 라이선스 결정 |
 | A 계약 | Web·프로세스 IPC·정책 단일 스키마, JSON 검증·직렬화·버전 협상 | 계약 테스트와 Windows/macOS 네이티브 검증기 회귀 | Linux·모바일 네이티브 계약 준수 |
 | B 번들 실행 실현성 | Windows x64 baseline·macOS arm64 Bun 1.4.2 고정, WebView 없는 독립 패키지 | 플랫폼별 probe의 IPC·계산·이벤트·오류·정상/강제 종료 | 다른 CPU/OS·설치·배포 |
 | C 수직 기능 | client-sdk·core·runtime-bun, Win32/WebView2·AppKit/WKWebView, 메모 연결 | Windows 다중 창(3개)·뷰별 정책, macOS 단일 창/뷰의 저장·이벤트·복원·렌더러 복구·경계·종료 | macOS 다중 창/뷰·다른 플랫폼 동등 검증 |
 | D 플랫폼 확장 | macOS probe·제품 호스트 구현. Linux·Android·iOS 호스트 미구현 | macOS arm64 로컬 기록 및 네이티브 CI(정확한 실행 결과는 별도 기록) | macOS Intel·최소 OS, Linux·모바일 실행·수명주기·패키징 |
-| E 배포 가능한 초기 버전 | Windows 앱 패키지·메모 샘플, macOS `.app` 생성·ad-hoc 서명 스크립트 | 기존 macOS 로컬 `.app` 서명 확인·실행 기록 | CLI·플러그인·템플릿, macOS 현재 다중 창 메모 설정, 설치·Developer ID·공증·스토어·출시 기준 |
+| E 배포 가능한 초기 버전 | CLI create/validate/doctor/dev/build, vanilla, SDK/native 소스 artifact·버전 lock, Windows 앱 패키지, macOS `.app`/ad-hoc | CLI·artifact 계약 테스트, 기존 native 검증 기록(새 artifact의 플랫폼별 검증과 구분) | 공개 publish·라이선스, 기본 플러그인·UI framework 템플릿, macOS 다중 창, 설치·Developer ID·공증·Store·출시 기준 |
 | F 선택 기능 | Chromium 렌더러 등 미구현 | 없음 | 선택 렌더러·추가 네이티브 플러그인 |
 
 ## 구현 근거와 플랫폼 차이
@@ -43,8 +43,13 @@
   범위 제한 Host API의 메모 파일 복원 검사는 양 플랫폼에서 그대로 유지한다.
 - `examples/memo/`의 앱 정의·화면은 macOS 회귀에서도 사용하지만 현재 배포용
   `app.json`은 Windows 다중 창 선언이다. macOS `--sample`로 복사한 패키지의 실행은
-  지원하지 않는다. `packages/cli`, `plugins/log`, `plugins/storage`는 빈 모듈이며
+  지원하지 않는다. `packages/cli`는 빈 모듈이 아니라 실제 create/validate/doctor/dev/build를
+  제공하고 단일 뷰 vanilla 템플릿을 생성한다. `plugins/log`, `plugins/storage`는 빈 모듈이며
   네이티브 Host API 로그/저장 구현과 배포할 기본 플러그인 완료는 다르다.
+- 개발자용 CLI tarball은 SDK·스키마·runtime pin·native source/tools·라이선스 원문을
+  함께 포함한다. 생성 앱의 vendor snapshot과 버전/파일 해시는 `bunaway.lock.json`으로
+  고정한다. [설치·버전 정책](../framework-distribution.md)은 공개 publish나 채널별 앱 설치
+  검증과 별개다. `dev`의 UI 갱신은 전체 호스트 재시작이며 HMR은 미구현이다.
 
 ## 실행 근거: 기존 기록과 새 실행을 분리
 
@@ -65,7 +70,7 @@ macOS 빌드는 공유 Bun 캐시 초기화 때문에 probe→host 직렬 실행
 ## 이어서 할 작업
 
 1. macOS 다중 창/뷰와 현재 Windows 다중 창 메모 설정 지원 여부를 별도 작업으로 결정한다.
-2. CLI·프로젝트 템플릿·명령 타입 생성·기본 로그/저장 플러그인을 구현한다.
+2. 명령 타입 생성·기본 로그/저장 플러그인·React/Vue/Svelte 템플릿과 공개 릴리스 절차를 구현한다.
 3. 최소 OS·CPU, Windows WebView2 설치, macOS Developer ID·공증·설치·배포를 검증한다.
 4. Linux·Android·iOS의 Bun 실행·배포·수명주기를 각 플랫폼에서 구현·검증한다.
 5. UI 프레임워크 예제·성능·패키지 크기와 PRD 출시 기준을 확인한다.

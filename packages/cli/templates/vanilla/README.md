@@ -3,6 +3,10 @@
 고정 Bun **1.4.2**로 `bun install` 후 `bun run doctor`, `bun run validate`,
 `bun run dev`, `bun run build`를 실행한다.
 프로젝트에 포함한 `vendor/bunaway` 스냅샷을 사용하므로 생성 원본 저장소는 필요 없다.
+`bunaway.lock.json`이 프레임워크/SDK/host/프로토콜 버전과 vendor 파일 해시를 고정한다.
+업그레이드는 [포함된 설치·버전 안내](vendor/bunaway/docs/framework-distribution.md)의
+전체 snapshot 교체 절차를 따른다. 일부 SDK만 registry 버전으로 교체하지 않는다.
+프레임워크 라이선스는 미결정이며 포함된 FRAMEWORK-LICENSE.txt/third-party 고지를 확인한다.
 
 - Windows x64: PowerShell 7, MSVC C++ Build Tools, CMake/Ninja, WebView2 Evergreen.
 - macOS arm64: macOS 14+, Xcode CLT. 로컬 ad-hoc 서명만 제공한다.

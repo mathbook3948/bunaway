@@ -6,6 +6,7 @@
   "include": [
     "**/*.ts",
     "../packages/protocol/scripts/*.ts",
+    "../packages/cli/scripts/*.ts",
     "../native/windows/probe/*.ts",
     "../native/macos/probe/*.ts",
     "../examples/memo/**/*.ts",

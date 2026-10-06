@@ -13,7 +13,7 @@
 #
 # Output goes to a staging dir and is only moved into place on success, so a
 # failed build never clobbers the previous artifact.
-set -u -o pipefail
+set -eu -o pipefail
 
 CHANNEL=""; APP=""; OUTDIR=""; NAME=""; INSTALLER=""
 while [ $# -gt 0 ]; do
@@ -70,4 +70,3 @@ else
   mv "$STAGE/$PKG" "$OUTDIR/$PKG" || die "could not place $PKG"
   say "pkg -> $OUTDIR/$PKG"
 fi
-trap - EXIT

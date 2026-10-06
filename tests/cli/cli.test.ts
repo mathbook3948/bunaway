@@ -49,6 +49,13 @@ test("create produces a relocatable project with real SDK dependencies and no re
   ).toBe(true);
   const projectPackage = await Bun.file(resolve(project, "package.json")).json();
   expect(projectPackage.dependencies["@bunaway/client"]).toBe("workspace:*");
+  const packagingManifest = await Bun.file(
+    resolve(project, "vendor/bunaway/packages/packaging/package.json"),
+  ).json();
+  expect(packagingManifest.name).toBe("@bunaway/packaging");
+  const lock = await Bun.file(resolve(project, "bunaway.lock.json")).json();
+  expect(lock.release.packages.packaging).toBe("@bunaway/packaging");
+  expect(lock.files["packages/packaging/src/index.ts"]).toMatch(/^[a-f0-9]{64}$/);
   expect(originals["src/backend/index.ts"]).not.toContain("examples/memo");
   const process = Bun.spawn(
     [globalThis.process.execPath, "vendor/bunaway/packages/cli/src/main.ts", "validate"],
@@ -117,15 +124,15 @@ test("policy rejects duplicate views, unsafe scope prefixes, unknown permissions
 test("generated UI and backend bundle independently; source failures propagate", async () => {
   const assets = resolve(home, "assets");
   await mkdir(resolve(assets, "web"), { recursive: true });
-  await bundleAssets(await validateProject(project), assets);
+  const valid = await validateProject(project);
+  await bundleAssets(valid, assets);
   expect(await Bun.file(resolve(assets, "web/main.js")).text()).toContain("message.saved");
   expect(await Bun.file(resolve(assets, "backend.js")).text()).toContain("messages/current.txt");
   for (const name of ["src/backend/index.ts", "src/web/main.ts"]) {
     try {
       await Bun.write(resolve(project, name), "export const broken = ;\n");
-      await expect(bundleAssets(await validateProject(project), assets)).rejects.toThrow(
-        /bundle failed/i,
-      );
+      await expect(validateProject(project)).rejects.toThrow(/bundle failed/i);
+      await expect(bundleAssets(valid, assets)).rejects.toThrow(/bundle failed/i);
     } finally {
       await Bun.write(resolve(project, name), originals[name] ?? "");
     }
@@ -232,6 +239,16 @@ test("build rejects corrupted bundled Bun and leaves the last production package
     false,
   );
 });
+
+test("package checks platforms and adapters before building and preserves outputs on failure", async () => {
+  const child = Bun.spawn(
+    [process.execPath, resolve(import.meta.dir, "packaging.fixture.ts"), project],
+    { stdout: "pipe", stderr: "pipe" },
+  );
+  const output = new Response(child.stdout).text();
+  const errors = new Response(child.stderr).text();
+  expect(await child.exited, `${await output}\n${await errors}`).toBe(0);
+}, 60000);
 
 function gate() {
   let release: (() => void) | undefined;
