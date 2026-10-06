@@ -82,6 +82,7 @@ expect(builds).toBe(0);
 
 let fail = false;
 let assembled = 0;
+let withJunction = false;
 let pause: (() => Promise<void>) | undefined;
 registerAdapter({
   channel: "win-direct",
@@ -97,6 +98,13 @@ registerAdapter({
         if (fail) throw new Error("Installer assembly failed.");
         await Bun.write(resolve(ctx.staging, "setup.exe"), `installer ${builds}`);
         ctx.addArtifact("setup.exe", "installer");
+        if (withJunction) {
+          const payload = resolve(ctx.staging, "payload");
+          await fs.mkdir(payload);
+          await Bun.write(resolve(payload, "helper.exe"), "linked artifact");
+          await fs.symlink(payload, resolve(ctx.staging, "linked"), "junction");
+          ctx.addArtifact("linked/helper.exe", "helper");
+        }
       },
     },
   ],
@@ -196,7 +204,7 @@ function deferred() {
   return { promise, resolve };
 }
 
-// A live package reader prevents the build from copying or replacing its target.
+// A live package reader prevents the build from moving or replacing its target.
 const entered = deferred();
 const resume = deferred();
 pause = async () => {
@@ -217,20 +225,20 @@ try {
 expect((await activePackage).ok).toBe(true);
 const publishedReport = await Bun.file(reportPath).text();
 
-// A build paused after its preservation copy rejects new packaging, without publishing a report.
-const copied = deferred();
+// A build paused after its preservation move rejects new packaging, without publishing a report.
+const transferred = deferred();
 const publish = deferred();
-const originalCp = fs.cp;
-const preservation = spyOn(fs, "cp").mockImplementation(async (...args) => {
-  await originalCp(...args);
+const originalRename = fs.rename;
+const preservation = spyOn(fs, "rename").mockImplementation(async (...args) => {
+  await originalRename(...args);
   if (String(args[0]) === resolve(packaged, "win-direct")) {
-    copied.resolve();
+    transferred.resolve();
     await publish.promise;
   }
 });
 const activeBuild = buildProject(project, { native });
 try {
-  await copied.promise;
+  await transferred.promise;
   const rejected = await packageProject(project, "win-direct");
   expect(rejected.ok).toBe(false);
   expect(rejected.diagnostics.some((d) => d.code === CODES.LOCK_FAILED)).toBe(true);
@@ -256,3 +264,50 @@ expect((await readdir(packaged)).some((name) => /\.lock|\.building-|\.previous-/
 );
 expect((await packageProject(project, "win-direct")).ok).toBe(true);
 expect(await readdir(resolve(project, "dist/.bunaway-locks/windows-x64"))).toEqual([]);
+
+// An accepted internal junction survives rebuilds without symlink creation privileges.
+withJunction = true;
+const linkedReport = await packageProject(project, "win-direct");
+expect(linkedReport.ok).toBe(true);
+const link = resolve(packaged, "win-direct/linked");
+const helper = resolve(packaged, "win-direct/payload/helper.exe");
+const originalLink = await fs.readlink(link);
+const linkedReportText = await Bun.file(reportPath).text();
+await buildProject(project, { native });
+expect(await fs.readlink(link)).toBe(originalLink);
+expect(await Bun.file(helper).text()).toBe("linked artifact");
+expect(await Bun.file(reportPath).text()).toBe(linkedReportText);
+expect(await Bun.file(other).text()).toBe("another channel");
+
+// Each failure boundary restores moved artifacts, junctions and reports to the old build.
+for (const failure of ["preservation", "backup", "publication"]) {
+  let transfers = 0;
+  const publication = spyOn(fs, "rename").mockImplementation(async (source, destination) => {
+    const from = String(source);
+    const to = String(destination);
+    if (
+      (failure === "preservation" && from.startsWith(packaged) && ++transfers === 2) ||
+      (failure === "backup" && from === resolve(project, "dist/windows-x64")) ||
+      (failure === "publication" &&
+        from.includes("windows-x64.building-") &&
+        to === resolve(project, "dist/windows-x64"))
+    ) {
+      throw new Error(`Build ${failure} failed.`);
+    }
+    await originalRename(source, destination);
+  });
+  try {
+    await expect(buildProject(project, { native })).rejects.toThrow(`Build ${failure} failed.`);
+  } finally {
+    publication.mockRestore();
+  }
+  expect(await fs.readlink(link)).toBe(originalLink);
+  expect(await Bun.file(helper).text()).toBe("linked artifact");
+  expect(await Bun.file(reportPath).text()).toBe(linkedReportText);
+  expect(await Bun.file(other).text()).toBe("another channel");
+  expect(await Bun.file(otherReport).text()).toBe("another report");
+  expect(
+    (await readdir(resolve(project, "dist"))).some((name) => /\.building-|\.previous-/.test(name)),
+  ).toBe(false);
+  expect(await readdir(resolve(project, "dist/.bunaway-locks/windows-x64"))).toEqual([]);
+}
