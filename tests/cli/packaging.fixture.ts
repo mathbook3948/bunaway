@@ -84,7 +84,7 @@ expect(builds).toBe(0);
 
 let fail = false;
 let assembled = 0;
-let withJunction = false;
+let withHelper = false;
 let pause: (() => Promise<void>) | undefined;
 const windowsAdapter = adapterFor("win-direct");
 if (!windowsAdapter) throw new Error("Expected the built-in Windows adapter.");
@@ -98,12 +98,11 @@ spyOn(windowsAdapter, "stages").mockImplementation(() => [
       if (fail) throw new Error("Installer assembly failed.");
       await Bun.write(resolve(ctx.staging, "setup.exe"), `installer ${builds}`);
       ctx.addArtifact("setup.exe", "installer");
-      if (withJunction) {
+      if (withHelper) {
         const payload = resolve(ctx.staging, "payload");
         await fs.mkdir(payload);
         await Bun.write(resolve(payload, "helper.exe"), "linked artifact");
-        await fs.symlink(payload, resolve(ctx.staging, "linked"), "junction");
-        ctx.addArtifact("linked/helper.exe", "helper");
+        ctx.addArtifact("payload/helper.exe", "helper");
       }
     },
   },
@@ -225,34 +224,43 @@ expect((await activePackage).ok).toBe(true);
 const publishedReport = await Bun.file(reportPath).text();
 
 // A build paused after its preservation move rejects new packaging, without publishing a report.
-const transferred = deferred();
-const publish = deferred();
 const originalRename = fs.rename;
-let stagedReportPath = "";
-const preservation = spyOn(fs, "rename").mockImplementation(async (...args) => {
-  await originalRename(...args);
-  if (String(args[0]) === resolve(packaged, "win-direct")) {
-    stagedReportPath = resolve(String(args[1]), "..", "win-direct-report.json");
-    transferred.resolve();
-    await publish.promise;
+const originalReaddir = fs.readdir;
+for (const reportFirst of [false, true]) {
+  const transferred = deferred();
+  const publish = deferred();
+  let movedReport = reportPath;
+  const enumeration = spyOn(fs, "readdir").mockImplementation(async (...args) => {
+    const entries = await Reflect.apply(originalReaddir, fs, args);
+    if (String(args[0]) === packaged) {
+      const first = reportFirst ? "win-direct-report.json" : "win-direct";
+      entries.sort((a: string, b: string) => Number(b === first) - Number(a === first));
+    }
+    return entries;
+  });
+  const preservation = spyOn(fs, "rename").mockImplementation(async (...args) => {
+    await originalRename(...args);
+    if (String(args[0]) === reportPath) movedReport = String(args[1]);
+    if (String(args[0]) === resolve(packaged, "win-direct")) {
+      transferred.resolve();
+      await publish.promise;
+    }
+  });
+  const activeBuild = buildProject(project, { native });
+  try {
+    await transferred.promise;
+    const rejected = await packageProject(project, "win-direct");
+    expect(rejected.ok).toBe(false);
+    expect(rejected.diagnostics.some((d) => d.code === CODES.LOCK_FAILED)).toBe(true);
+    expect(await Bun.file(movedReport).text()).toBe(publishedReport);
+  } finally {
+    publish.resolve();
+    await activeBuild;
+    preservation.mockRestore();
+    enumeration.mockRestore();
   }
-});
-const activeBuild = buildProject(project, { native });
-try {
-  await transferred.promise;
-  const rejected = await packageProject(project, "win-direct");
-  expect(rejected.ok).toBe(false);
-  expect(rejected.diagnostics.some((d) => d.code === CODES.LOCK_FAILED)).toBe(true);
-  // readdir order differs across filesystems: the old report may already
-  // have moved into staging while the exclusive build lock is held.
-  const report = (await Bun.file(reportPath).exists()) ? reportPath : stagedReportPath;
-  expect(await Bun.file(report).text()).toBe(publishedReport);
-} finally {
-  publish.resolve();
-  await activeBuild;
-  preservation.mockRestore();
+  expect(await Bun.file(reportPath).text()).toBe(publishedReport);
 }
-expect(await Bun.file(reportPath).text()).toBe(publishedReport);
 
 // Stale transient entries are not propagated into a fresh build.
 await Bun.write(resolve(packaged, "win-direct.lock"), "stale lock");
@@ -269,17 +277,19 @@ expect((await readdir(packaged)).some((name) => /\.lock|\.building-|\.previous-/
 expect((await packageProject(project, "win-direct")).ok).toBe(true);
 expect(await readdir(resolve(project, "dist/.bunaway-locks/windows-x64"))).toEqual([]);
 
-// An accepted internal junction survives rebuilds without symlink creation privileges.
-withJunction = true;
+// An existing junction in the published tree survives rebuilds without recreation.
+withHelper = true;
 const linkedReport = await packageProject(project, "win-direct");
 expect(linkedReport.ok).toBe(true);
 const link = resolve(packaged, "win-direct/linked");
 const helper = resolve(packaged, "win-direct/payload/helper.exe");
+await fs.symlink(resolve(helper, ".."), link, "junction");
 const originalLink = await fs.readlink(link);
 const linkedReportText = await Bun.file(reportPath).text();
 await buildProject(project, { native });
 expect(await fs.readlink(link)).toBe(originalLink);
 expect(await Bun.file(helper).text()).toBe("linked artifact");
+expect(await Bun.file(resolve(link, "helper.exe")).text()).toBe("linked artifact");
 expect(await Bun.file(reportPath).text()).toBe(linkedReportText);
 expect(await Bun.file(other).text()).toBe("another channel");
 
@@ -307,6 +317,7 @@ for (const failure of ["preservation", "backup", "publication"]) {
   }
   expect(await fs.readlink(link)).toBe(originalLink);
   expect(await Bun.file(helper).text()).toBe("linked artifact");
+  expect(await Bun.file(resolve(link, "helper.exe")).text()).toBe("linked artifact");
   expect(await Bun.file(reportPath).text()).toBe(linkedReportText);
   expect(await Bun.file(other).text()).toBe("another channel");
   expect(await Bun.file(otherReport).text()).toBe("another report");

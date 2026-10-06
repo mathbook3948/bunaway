@@ -50,6 +50,11 @@ status: accepted
 - 진단은 `{stage, code: PKG_*, severity, message, path?}` 형식으로 통일하고 결과는
   `dist/<target>/packaged/<channel>/`과 `packaging-report.<channel>.json`에 남긴다.
   실패한 실행은 직전 정상 산출물을 덮지 않는다(스테이징→원자적 rename).
+- staging의 링크는 상대 경로로 내부 파일/디렉터리를 가리켜야 한다. 절대 symlink와
+  Windows junction은 게시 후에도 이전 staging을 가리키므로 `PKG_VERIFY_FAILED`로
+  거부한다. 등록한 산출물뿐 아니라 부가 파일의 링크도 검사하며, 상대 링크의 외부 탈출과
+  끊어진 링크도 거부한다. 기존 Windows 출력의 junction을 재빌드 시 이동 보존하는
+  규칙은 유지한다.
 - 리포트도 임시 파일을 원자적 rename하여 저장한다. 성공 리포트 게시 전까지 이전
   산출물 백업을 유지하고 리포트 게시 실패 시 산출물을 복구한다. 실패 리포트를
   저장할 수 없는 경우에도 기존 리포트를 훼손하지 않고 실패 진단을 호출자에게 반환한다.

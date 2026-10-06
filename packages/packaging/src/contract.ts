@@ -211,6 +211,8 @@ export interface StageContext {
   input: AdapterInput;
   // Runner-owned staging directory. Everything the package needs goes here —
   // it is renamed into the output directory only after all stages succeed.
+  // Links must be relative and resolve inside staging; absolute links/junctions
+  // would break when staging is renamed and are rejected before publication.
   staging: string;
   // Report a structured diagnostic for the current stage.
   report(diagnostic: Omit<Diagnostic, "stage">): void;
