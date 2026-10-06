@@ -28,17 +28,6 @@ for (const file of await files(resolve(root, "tests/fixtures/desktop/host/web"))
     new Uint8Array(await result.outputs[0].arrayBuffer()),
   );
 }
-await cp(resolve(root, "examples/memo/web/memo.html"), resolve(assets, "web/memo.html"));
-await cp(resolve(root, "examples/memo/web/memo.css"), resolve(assets, "web/memo.css"));
-const memo = await Bun.build({
-  entrypoints: [resolve(root, "examples/memo/web/memo.js")],
-  target: "browser",
-});
-assert(memo.success && memo.outputs[0]);
-await writeFile(
-  resolve(assets, "web/memo.js"),
-  new Uint8Array(await memo.outputs[0].arrayBuffer()),
-);
 await bundleWindowsHost(
   import.meta.dir,
   assets,

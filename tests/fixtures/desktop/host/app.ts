@@ -1,4 +1,4 @@
-import { memoApp } from "../../../../examples/memo/app.ts";
+import { memoApp } from "./memo-app.ts";
 import type {
   AppDefinition,
   CommandContext,

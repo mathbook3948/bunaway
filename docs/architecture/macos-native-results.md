@@ -102,5 +102,5 @@ probe/host는 실패를 throw/nonzero로 전달하며, CI의 bash `-e -o pipefai
 
 [지원 표](../platform-support/README.md)를 따른다. Intel·다중 창/뷰·최소 OS,
 Developer ID·공증·설치·스토어 배포는 미검증이다. `run.sh --app`은 ad-hoc 서명이며
-현재 Windows 다중 창 메모 설정을 복사하는 `--sample`의 실행은 지원하지 않는다.
+메모 예제는 CLI로 실행하며 회귀용 메모 fixture는 테스트 폴더에 분리되어 있다.
 guard는 Bun을 spawn한 뒤 연결되므로 그 짧은 구간의 비정상 호스트 종료 race는 남는다.

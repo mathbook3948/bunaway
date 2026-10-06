@@ -290,52 +290,6 @@ kbd {
   font-size: 10px;
   letter-spacing: 1.6px;
 }
-.reader .shell {
-  max-width: 760px;
-  padding: 0 30px;
-}
-.reader .app-header {
-  min-height: 74px;
-}
-.reader .intro {
-  padding: 25px 0 22px;
-}
-.reader h1 {
-  font-size: 27px;
-}
-.reader .snapshot {
-  min-height: 200px;
-}
-.reader .paper {
-  min-height: 140px;
-  margin-top: 20px;
-}
-.reader pre:empty::before {
-  content: "편집 창에서 메모를 저장하면\A이곳에도 함께 표시돼요.";
-}
-.permission-check {
-  margin: 0 0 22px;
-  color: var(--muted);
-  font-size: 11px;
-}
-.permission-check summary {
-  cursor: pointer;
-  padding: 6px 0;
-}
-.permission-check p {
-  line-height: 1.7;
-}
-.secondary-button {
-  border: 1px solid #d5dad0;
-  border-radius: 7px;
-  background: transparent;
-  color: #64715f;
-  padding: 9px 12px;
-  font-size: 11px;
-}
-.secondary-button:hover:not(:disabled) {
-  background: #e9ede4;
-}
 @media (max-width: 720px) {
   .shell {
     padding: 0 24px;
@@ -358,8 +312,7 @@ kbd {
   }
 }
 @media (max-width: 420px) {
-  .shell,
-  .reader .shell {
+  .shell {
     padding: 0 16px;
   }
   .brand-byline,

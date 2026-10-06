@@ -1,7 +1,7 @@
 import { lstat, realpath } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import type { BunPlugin } from "bun";
-import { files, installedPackageRoot, json } from "./files.ts";
+import { files, hash, installedPackageRoot, json } from "./files.ts";
 
 interface SdkReference {
   name: string;
@@ -17,6 +17,7 @@ export async function sdkPlugin(
     packages: Record<string, string>;
   };
   const entries = new Map<string, string>();
+  const checked = new Map<string, Promise<boolean>>();
   for (const name of Object.values(release.packages)) {
     if (name !== "@bunaway/cli")
       entries.set(
@@ -29,6 +30,33 @@ export async function sdkPlugin(
     try {
       const path = await realpath(Bun.resolveSync(name, parent));
       if (expected && relative(expected, path) === "") return path;
+      if (expected && path === resolve(dirname(dirname(path)), "src/index.ts")) {
+        // Bun can install identical local tarballs twice when direct dependencies
+        // use relative paths and the CLI uses absolute paths. Compare the entire
+        // package before routing both imports to one SDK to preserve class identity.
+        const key = `${expected}\n${path}`;
+        let identical = checked.get(key);
+        if (!identical) {
+          identical = (async () => {
+            const expectedRoot = dirname(dirname(expected));
+            const actualRoot = dirname(dirname(path));
+            const expectedFiles = await files(expectedRoot, ["node_modules"]);
+            const actualFiles = await files(actualRoot, ["node_modules"]);
+            const names = expectedFiles.map((file) => relative(expectedRoot, file)).sort();
+            const actualNames = actualFiles.map((file) => relative(actualRoot, file)).sort();
+            if (JSON.stringify(names) !== JSON.stringify(actualNames)) return false;
+            for (const file of names)
+              if (
+                (await hash(resolve(expectedRoot, file))) !==
+                (await hash(resolve(actualRoot, file)))
+              )
+                return false;
+            return true;
+          })();
+          checked.set(key, identical);
+        }
+        if (await identical) return expected;
+      }
     } catch {}
     throw new Error(
       `Incompatible SDK resolution: ${name} from ${parent}; run bun install to restore the matching installed SDK packages.`,

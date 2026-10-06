@@ -165,7 +165,7 @@ WebView renderer 장애는 해당 뷰의 세션 폐기·재탐색, browser 장�
 | 4. 수명 회귀 | 기존 메모 앱과 다중 창 시나리오 | 개별 종료 뒤 나머지 창 동작, renderer 장애 격리, 모든 창·COM·브라우저·Worker 정리 |
 | 5. 제품 진입점 | CLI 번들·검증·배포와 실행 문서 전환 | 외부 artifact 설치·프로젝트 이동·독립 빌드, 절대 경로 번들 Bun 실행, 환경 오염 거부, 배포 기동 검증 |
 
-첫 연결은 `examples/memo/app.ts`처럼 부작용 없는 AppDefinition 모듈을 사용한다.
+첫 연결은 `examples/memo/src-bunaway/src/app.ts`처럼 부작용 없는 AppDefinition 모듈을 사용한다.
 기존 `backend.ts`/`backend.js`는 import하면 `runBunApp()`가 stdin을 기다리므로
 새 호스트의 앱 정의로 import하지 않는다. 제품의 새 bootstrap은 검증 후 앱 정의를
 불러오는 진입점으로 번들해야 한다. CLI·템플릿에 `windowsApp` 설정과 default export AppDefinition을 적용했다.

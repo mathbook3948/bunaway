@@ -10,6 +10,6 @@
     "../native/windows/ffi-probe/*.ts",
     "../native/windows/bun/*.ts",
     "../native/macos/probe/*.ts",
-    "../examples/memo/**/*.ts"
+    "../examples/memo/src-bunaway/src/**/*.ts"
   ]
 }
