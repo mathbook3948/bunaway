@@ -151,5 +151,6 @@ if (( ! SKIP_TESTS && ! SAMPLE )); then
     BUNAWAY_NATIVE_TEST_EXEC="$BUILD/host-native-tests" \
     BUNAWAY_TEST_SIGN_IDENTITY=- \
       "$BUILD_BUN" "$ROOT/tests/lifecycle/macos-host.ts" --package "$APP/Contents/Resources"
+    BUNAWAY_DISTRIBUTION_APP="$APP" python3 "$ROOT/native/macos/distribute/test.py"
   fi
 fi
