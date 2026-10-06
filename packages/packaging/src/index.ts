@@ -1,5 +1,6 @@
 export { loadPackaging, type PackagingConfig, parsePackaging } from "./config.ts";
 export * from "./contract.ts";
+export { ownedDirectory } from "./directories.ts";
 export { artifactPaths, loadManifest, verifyArtifact } from "./inputs.ts";
 export { acquireBuildOutputLock, acquirePackageInputLock, TargetLockError } from "./locks.ts";
 export { adapterFor, registerAdapter, registeredChannels } from "./registry.ts";

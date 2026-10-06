@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import {
   chmod,
   copyFile,
+  link,
   mkdir,
   mkdtemp,
   readdir,
@@ -18,6 +19,7 @@ import {
   artifactPaths,
   type BuildArtifact,
   type BuildTarget,
+  type ChannelId,
   CODES,
   isChannelId,
   loadManifest,
@@ -228,6 +230,150 @@ function deferred() {
   });
   return { promise, resolve };
 }
+
+test.each(
+  (["windows-x64", "macos-arm64"] as const).flatMap((target) =>
+    ["dist", "target", "packaged", "locks", "target-lock", "channel"].map((boundary) => ({
+      target,
+      boundary,
+    })),
+  ),
+)(
+  "runner rejects linked $boundary on $target before reads or writes",
+  async ({ target, boundary }) => {
+    const projectRoot = await mkdtemp(join(home, "output-link-"));
+    await makeArtifact(projectRoot, target);
+    const channel = target === "windows-x64" ? "win-direct" : "mac-direct";
+    const packaged = resolve(projectRoot, "dist", target, "packaged");
+    await Bun.write(resolve(packaged, channel, "previous.txt"), "previous package");
+    await writeJson(packagingReportPath(projectRoot, target, channel), { previous: true });
+    const locks = resolve(projectRoot, "dist/.bunaway-locks", target);
+    await mkdir(locks, { recursive: true });
+    const paths: Record<string, string> = {
+      dist: resolve(projectRoot, "dist"),
+      target: resolve(projectRoot, "dist", target),
+      packaged,
+      locks: dirname(locks),
+      "target-lock": locks,
+      channel: resolve(packaged, channel),
+    };
+    const path = paths[boundary] as string;
+    const external = resolve(home, `external-${crypto.randomUUID()}`);
+    await rename(path, external);
+    await symlink(external, path, "junction");
+    const sentinel = resolve(external, "sentinel.txt");
+    await writeFile(sentinel, "external bytes");
+    const entries = (await readdir(external, { recursive: true })).sort();
+    const previousReport = await Bun.file(packagingReportPath(projectRoot, target, channel)).text();
+    let ran = false;
+    const report = await runAdapter(
+      projectRoot,
+      stubAdapter({
+        channel,
+        async run() {
+          ran = true;
+        },
+      }),
+      { target },
+    );
+    expect(report.ok).toBe(false);
+    expect(ran).toBe(false);
+    expect(await Bun.file(sentinel).text()).toBe("external bytes");
+    expect((await readdir(external, { recursive: true })).sort()).toEqual(entries);
+    expect(await Bun.file(resolve(packaged, channel, "previous.txt")).text()).toBe(
+      "previous package",
+    );
+    if (boundary !== "channel" && boundary !== "locks" && boundary !== "target-lock") {
+      expect(await Bun.file(packagingReportPath(projectRoot, target, channel)).text()).toBe(
+        previousReport,
+      );
+    }
+  },
+);
+
+test("JS runner callers cannot use target or channel names as paths", async () => {
+  const projectRoot = await mkdtemp(join(home, "invalid-output-name-"));
+  for (const [channel, target] of [
+    ["win-direct", "windows-x64/../../escape"],
+    ["win-direct/../../escape", "windows-x64"],
+  ]) {
+    const report = await runAdapter(projectRoot, stubAdapter({ channel: channel as ChannelId }), {
+      target: target as BuildTarget,
+    });
+    expect(report.ok).toBe(false);
+    expect(report.diagnostics.some((entry) => entry.code === CODES.CONFIG_INVALID)).toBe(true);
+    expect(await readdir(projectRoot)).toEqual([]);
+  }
+});
+
+test("report staging never overwrites the target of an existing file link", async () => {
+  const projectRoot = await mkdtemp(join(home, "report-file-link-"));
+  await makeArtifact(projectRoot);
+  const reportPath = packagingReportPath(projectRoot, "windows-x64", "win-direct");
+  await mkdir(dirname(reportPath), { recursive: true });
+  const external = resolve(home, `report-sentinel-${crypto.randomUUID()}`);
+  await writeFile(external, "external report bytes");
+  const id = "00000000-0000-4000-8000-000000000014";
+  await link(external, `${reportPath}.building-${id}`);
+  const uuid = spyOn(crypto, "randomUUID").mockReturnValue(id);
+  try {
+    const report = await runAdapter(
+      projectRoot,
+      stubAdapter({
+        async run(ctx) {
+          await Bun.write(resolve(ctx.staging, "setup.exe"), "installer");
+          ctx.addArtifact("setup.exe", "installer");
+        },
+      }),
+    );
+    expect(report.ok).toBe(true);
+    expect(await Bun.file(reportPath).json()).toEqual(report);
+    expect(await Bun.file(external).text()).toBe("external report bytes");
+  } finally {
+    uuid.mockRestore();
+  }
+});
+
+// Windows keeps the directory anchored while its channel lock handle is open.
+test.skipIf(process.platform === "win32")(
+  "cleanup refuses a redirected output parent and preserves external staging and locks",
+  async () => {
+    const projectRoot = await mkdtemp(join(home, "redirected-cleanup-"));
+    await makeArtifact(projectRoot);
+    const packaged = resolve(projectRoot, "dist/windows-x64/packaged");
+    const saved = resolve(projectRoot, "saved-packaged");
+    const external = await mkdtemp(join(home, "external-cleanup-"));
+    try {
+      await expect(
+        runAdapter(
+          projectRoot,
+          stubAdapter({
+            async run(ctx) {
+              await rename(packaged, saved);
+              await symlink(external, packaged, "junction");
+              await Bun.write(resolve(ctx.staging, "sentinel.txt"), "external staging bytes");
+              await Bun.write(resolve(packaged, "win-direct.lock"), "external lock bytes");
+              throw new Error("Output parent redirected during assembly.");
+            },
+          }),
+        ),
+      ).rejects.toThrow("without links");
+      const staging = (await readdir(external)).find((name) =>
+        name.includes(".building-"),
+      ) as string;
+      expect(await Bun.file(resolve(external, staging, "sentinel.txt")).text()).toBe(
+        "external staging bytes",
+      );
+      expect(await Bun.file(resolve(external, "win-direct.lock")).text()).toBe(
+        "external lock bytes",
+      );
+      expect((await readdir(external)).sort()).toEqual([staging, "win-direct.lock"].sort());
+    } finally {
+      await (await import("node:fs/promises")).unlink(packaged);
+      await rename(saved, packaged);
+    }
+  },
+);
 
 test("the package lock excludes another Bun process and is released afterwards", async () => {
   const projectRoot = resolve(home, "cross-process-lock");
@@ -1009,17 +1155,17 @@ test.each(
     await writeJson(reportPath, { previous: true });
     const fs = await import("node:fs/promises");
     const rename = fs.rename;
-    const write = Bun.write;
+    const write = fs.writeFile;
     const publication = spyOn(fs, "rename").mockImplementation(async (from, to) => {
       if (failure === "rename" && to === reportPath) throw new Error("Report rename failed.");
       await rename(from, to);
     });
-    const writing = spyOn(Bun, "write").mockImplementation(async (...args) => {
+    const writing = spyOn(fs, "writeFile").mockImplementation(async (...args) => {
       if (failure === "write" && typeof args[0] === "string" && args[0].startsWith(reportPath)) {
         await write(args[0], '{"partial":');
         throw new Error("Report write failed.");
       }
-      return await Reflect.apply(write, Bun, args);
+      return await Reflect.apply(write, fs, args);
     });
     let report: PackageReport;
     try {
