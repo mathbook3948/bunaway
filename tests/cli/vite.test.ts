@@ -1,14 +1,15 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { bundleAssets } from "../../packages/cli/src/build.ts";
 import { validateProject } from "../../packages/cli/src/config.ts";
+import { hash, json, writeJson } from "../../packages/cli/src/files.ts";
 import { main } from "../../packages/cli/src/main.ts";
 import { packageDirectory } from "./project.ts";
 import { verifyViteDevelopment } from "./vite.ts";
 
-test("Vite template generates a relocatable app with HMR and local production assets", async () => {
+test("packed CLI creates independent templates and a Vite app with HMR and local assets", async () => {
   const root = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-vite-")));
   try {
     const project = resolve(root, "Vite app");
@@ -21,20 +22,40 @@ test("Vite template generates a relocatable app with HMR and local production as
       },
     );
     expect(await unpack.exited, await new Response(unpack.stderr).text()).toBe(0);
-    const create = Bun.spawn(
-      [
-        process.execPath,
-        resolve(root, "package/packages/cli/dist/distribution-main.js"),
-        "create",
-        project,
-        "--template",
-        "vite",
-        "--package-dir",
-        packages,
-      ],
-      { stdout: "ignore", stderr: "pipe" },
-    );
-    expect(await create.exited, await new Response(create.stderr).text()).toBe(0);
+    // Unselected template files must never leak into the generated app.
+    const artifact = resolve(root, "package");
+    const inventoryPath = resolve(artifact, "artifact.files.json");
+    const inventory = (await json(inventoryPath)) as Record<string, string>;
+    for (const template of ["vanilla", "vite"]) {
+      const name = `packages/cli/templates/${template}/${template}-only.txt`;
+      await writeFile(resolve(artifact, name), template);
+      inventory[name] = await hash(resolve(artifact, name));
+    }
+    await writeJson(inventoryPath, inventory);
+    for (const [template, directory] of [
+      ["vanilla", resolve(root, "Vanilla app")],
+      ["vite", project],
+    ] as const) {
+      const create = Bun.spawn(
+        [
+          process.execPath,
+          resolve(artifact, "packages/cli/dist/distribution-main.js"),
+          "create",
+          directory,
+          "--template",
+          template,
+          "--package-dir",
+          packages,
+        ],
+        { stdout: "ignore", stderr: "pipe" },
+      );
+      expect(await create.exited, await new Response(create.stderr).text()).toBe(0);
+      expect(await Bun.file(resolve(directory, `${template}-only.txt`)).text()).toBe(template);
+      const other = template === "vite" ? "vanilla" : "vite";
+      expect(await Bun.file(resolve(directory, `${other}-only.txt`)).exists()).toBe(false);
+      expect(await Bun.file(resolve(directory, ".gitignore")).exists()).toBe(true);
+      expect(await Bun.file(resolve(directory, ".gitattributes")).exists()).toBe(true);
+    }
     for (const args of [["install"], ["run", "typecheck"]]) {
       const child = Bun.spawn([process.execPath, ...args], {
         cwd: project,

@@ -64,6 +64,8 @@ UI 변경은 Vite가 처리하고 백엔드 변경은 CLI가 호스트를 재시
 CLI 자체는 외부 프런트엔드 생산 빌드를 자동 실행하지 않는다.
 생성 템플릿은 [templates/](./templates/)에서 관리한다. 구조와 script 역할은
 [Tauri vanilla-ts 템플릿](https://github.com/tauri-apps/create-tauri-app/tree/12db955f20162e7422cbeed76c2aa630760ccca3/templates/template-vanilla-ts)을 참조한다.
+각 템플릿은 UI·백엔드·정책·설정을 모두 포함하며, `create`는 선택한 폴더 하나만 복사한다.
+템플릿의 `gitignore`·`gitattributes`는 생성 앱에서 `.gitignore`·`.gitattributes`로 바꾼다.
 
 ## 생성 구조
 
@@ -84,8 +86,8 @@ my-app/
 
 선택적 `dev`에 외부 UI 개발 서버의 `command`(인자 배열), `url`, `timeoutMs`를 지정한다.
 [Vite·Next.js 개발 서버 연결](../../docs/development-server.md)을 따른다.
-`vite` 템플릿은 위 vanilla 구조의 `src/index.html`을 루트로 옮기고
-`vite.config.ts`와 `dev` 설정을 포함한다. `build.frontend`는 `web-dist`다.
+`vite` 템플릿은 루트 `index.html`, `public/`, `src/`, `src-bunaway/`와
+`vite.config.ts`, `dev` 설정을 포함한다. `build.frontend`는 `web-dist`다.
 프런트엔드의 `.ts`/`.js`는 브라우저 번들로 변환하고 나머지 정적 자산은 복사한다.
 `.d.ts`는 배포하지 않는다. CSS 등 번들의 추가 출력까지 정적 자산과 대조해 기록 전에
 충돌을 거부한다. 출력 이름은 Windows/macOS 이식성을 위해 대소문자를 구분하지 않고
@@ -95,7 +97,7 @@ vanilla MVP는 양쪽 호스트가 공통으로 지원하는 단일 뷰 `app` �
 macOS는 기존 `bunaway://` 매핑이다. policy.json의 HTTP origin은 허용하지 않는다.
 `dev.url`의 정확한 loopback origin은 개발 산출물에만 적용하며 프로덕션에 포함하지 않는다.
 
-템플릿은 실제 `createClient`/`command`/`runBunApp`을 사용한다.
+`vanilla` 템플릿은 실제 `createClient`/`command`/`runBunApp`을 사용한다.
 `message.save` → 호출 컨텍스트의 Host API `storage.writeText` →
 `appData/messages/current.txt` → `message.saved` → UI 갱신이다.
 `message.read`로 시작/재실행 시 복원한다. 첫 실행의 파일 없음은 UI에 표시한다.
