@@ -11,6 +11,7 @@
     "bunaway": "./src/distribution-main.ts"
   },
   "dependencies": {
+    "@bunaway/packaging": "workspace:*",
     "@bunaway/protocol": "workspace:*"
   },
   "scripts": {

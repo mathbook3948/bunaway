@@ -1,5 +1,5 @@
-import { resolve } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import pin from "../../../runtime/build-manifests/windows-x64.json";
 import { json, projectPath, verifyHash } from "./files.ts";
 
@@ -10,10 +10,18 @@ export async function writeWindowsLauncher(source: string, destination: string):
 }
 
 export async function verifyWindowsLaunch(root: string): Promise<void> {
-  await verifyHash(resolve(root, "runtime/bun.exe"), pin.bun.executableSha256);
   const manifest = (await json(resolve(root, "manifest.json"))) as {
+    bun?: { executableSha256?: string; sourceRevision?: string; packagedSha256?: string };
     assets: Record<string, string>;
   };
+  if (
+    manifest.bun?.executableSha256 !== pin.bun.executableSha256 ||
+    manifest.bun.sourceRevision !== pin.bun.sourceRevision
+  )
+    throw new Error("Package Bun provenance does not match the framework pin.");
+  const runtimeHash = manifest.bun.packagedSha256 ?? pin.bun.executableSha256;
+  if (!/^[a-f0-9]{64}$/.test(runtimeHash)) throw new Error("Invalid packaged Bun hash.");
+  await verifyHash(resolve(root, "runtime/bun.exe"), runtimeHash);
   if (!manifest.assets?.["assets/boot.js"]) throw new Error("Missing Windows bootstrap inventory.");
   for (const [name, expected] of Object.entries(manifest.assets))
     await verifyHash(await projectPath(root, name), expected);

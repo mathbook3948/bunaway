@@ -79,6 +79,7 @@ const unlisten = async (key) => {
 };
 const cancel = (id) => send({ kind: "cancel", id });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const multiView = new URL(location.href).searchParams.get("test") === "multi-view";
 
 async function connect() {
   return client.ready;
@@ -372,6 +373,14 @@ async function run() {
     );
   });
   await test("memo input save event refresh", async () => {
+    if (multiView) {
+      // The editor checks the same shared memo; finish before overwriting it.
+      const deadline = Date.now() + 60000;
+      while ((await call("test.tempRead", { path: "editor.json" })).payload?.ok !== true) {
+        assert(Date.now() < deadline, "editor did not finish its memo checks");
+        await sleep(100);
+      }
+    }
     const input = document.getElementById("memo");
     const display = document.getElementById("saved-memo");
     const release = await client.listen(
@@ -387,7 +396,8 @@ async function run() {
     );
     input.value = "재실행 후에도 남는 메모 😀";
     await client.invoke("memo.save", input.value);
-    await sleep(100);
+    const savedDeadline = Date.now() + 5000;
+    while (display.textContent !== input.value && Date.now() < savedDeadline) await sleep(25);
     assert(display.textContent === input.value, "completion event did not update screen");
     assert((await client.invoke("memo.read", null)) === input.value, "memo read differs");
     await release();

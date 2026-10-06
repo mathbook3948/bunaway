@@ -51,7 +51,7 @@ strict TypeScript에서 `@bunaway/cli`를 import할 수 있다.
 
 | 입력 | 포함 내용 |
 | --- | --- |
-| CLI/SDK | CLI, backend/client SDK, core, protocol, runtime-bun의 소스·package.json·타입 설정 |
+| CLI/SDK | CLI, backend/client SDK, core, protocol, runtime-bun, packaging의 소스·package.json·타입 설정 |
 | 템플릿 | 실제 SDK를 쓰는 vanilla UI/백엔드·정책·설정·gitignore |
 | 네이티브 | Windows Bun FFI TypeScript·prepare/launch.ps1·WebView2 deps.json, macOS main.mm·run.sh |
 | 계약 | 생성된 Web/IPC/정책/Host API/bootstrap 스키마와 host-operations.json |

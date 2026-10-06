@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- mac-direct app: NOT sandboxed. Notarization requires the hardened
+	     runtime flag (-o runtime, applied by sign.sh), not entitlements.
+	     Kept intentionally minimal — do not add keys without a measured need. -->
+</dict>
+</plist>

@@ -3,10 +3,21 @@ $ErrorActionPreference = 'Stop'
 $package = $PSScriptRoot
 $manifest = Get-Content -LiteralPath (Join-Path $package 'manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 function Check([string]$Path, [string]$Expected) {
-    if ((Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Expected) { throw "Package hash mismatch: $Path" }
+    # Do not depend on module discovery inherited from another PowerShell version.
+    $sha = [Security.Cryptography.SHA256]::Create()
+    $stream = $null
+    try {
+        $stream = [IO.File]::OpenRead($Path)
+        $actual = [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
+        if ($actual -ne $Expected) { throw "Package hash mismatch: $Path" }
+    } finally {
+        if ($stream) { $stream.Dispose() }
+        $sha.Dispose()
+    }
 }
 $bun = Join-Path $package 'runtime/bun.exe'
-# Filled from the framework pin at packaging; the manifest cannot choose a runtime.
+# Filled from the framework pin at build, then rebound to signed bytes at packaging.
+# The manifest alone cannot choose which runtime this launcher starts.
 Check $bun '__BUN_SHA256__'
 foreach ($asset in $manifest.assets.PSObject.Properties) {
     if ($asset.Name -match '(^/|\\|(^|/)\.\.(/|$))') { throw 'Invalid asset path' }

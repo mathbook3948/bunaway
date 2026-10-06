@@ -49,6 +49,13 @@ test("create produces a relocatable project with real SDK dependencies and no re
   ).toBe(true);
   const projectPackage = await Bun.file(resolve(project, "package.json")).json();
   expect(projectPackage.dependencies["@bunaway/client"]).toBe("workspace:*");
+  const packagingManifest = await Bun.file(
+    resolve(project, "vendor/bunaway/packages/packaging/package.json"),
+  ).json();
+  expect(packagingManifest.name).toBe("@bunaway/packaging");
+  const lock = await Bun.file(resolve(project, "bunaway.lock.json")).json();
+  expect(lock.release.packages.packaging).toBe("@bunaway/packaging");
+  expect(lock.files["packages/packaging/src/index.ts"]).toMatch(/^[a-f0-9]{64}$/);
   expect(originals["src/backend/index.ts"]).not.toContain("examples/memo");
   const process = Bun.spawn(
     [globalThis.process.execPath, "vendor/bunaway/packages/cli/src/main.ts", "validate"],
@@ -232,6 +239,16 @@ test("build rejects corrupted bundled Bun and leaves the last production package
     false,
   );
 });
+
+test("package checks platforms and adapters before building and preserves outputs on failure", async () => {
+  const child = Bun.spawn(
+    [process.execPath, resolve(import.meta.dir, "packaging.fixture.ts"), project],
+    { stdout: "pipe", stderr: "pipe" },
+  );
+  const output = new Response(child.stdout).text();
+  const errors = new Response(child.stderr).text();
+  expect(await child.exited, `${await output}\n${await errors}`).toBe(0);
+}, 60000);
 
 function gate() {
   let release: (() => void) | undefined;

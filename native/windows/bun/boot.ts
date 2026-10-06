@@ -7,8 +7,8 @@ import { pathToFileURL } from "node:url";
 import type { AppDefinition } from "../../../packages/core/src/index.ts";
 import { type HostContext, parsePolicy } from "../../../packages/protocol/src/index.ts";
 import pin from "../../../runtime/build-manifests/windows-x64.json";
-import deps from "./deps.json";
 import { MAX_WINDOWS, type UIConfig, type WindowSpec } from "./channel.ts";
+import deps from "./deps.json";
 import { runWindowsApp } from "./entry.ts";
 import { containAppProcess } from "./job.ts";
 
@@ -57,11 +57,12 @@ export async function verifyWindowsPackage(directory: string): Promise<UIConfig>
   const bun = object(manifest.bun);
   assert.equal(bun.executableSha256, pin.bun.executableSha256);
   assert.equal(bun.sourceRevision, pin.bun.sourceRevision);
-  assert.equal(
-    await hash(resolve(root, "runtime/bun.exe")),
-    pin.bun.executableSha256,
-    "Bun hash mismatch",
+  const packagedBunSha = bun.packagedSha256 ?? pin.bun.executableSha256;
+  assert(
+    typeof packagedBunSha === "string" && /^[a-f0-9]{64}$/.test(packagedBunSha),
+    "Invalid packaged Bun hash",
   );
+  assert.equal(await hash(resolve(root, "runtime/bun.exe")), packagedBunSha, "Bun hash mismatch");
   assert.equal(
     await realpath(process.execPath),
     await realpath(resolve(root, "runtime/bun.exe")),

@@ -1,0 +1,16 @@
+{
+  "name": "@bunaway/packaging",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@bunaway/protocol": "workspace:*",
+    "fast-xml-parser": "4.5.7"
+  },
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json"
+  }
+}

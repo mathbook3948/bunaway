@@ -21,7 +21,11 @@ MSVC·CMake·Ninja와 사용자 C/C++ 또는 Rust DLL은 필요 없다. Microsof
 CLI 생성 앱의 `bun run build` 결과는 `dist/windows-x64/bunaway.cmd` 또는
 `pwsh -NoProfile -File dist/windows-x64/launch.ps1 -Wait`로 실행한다.
 Launcher는 내부 Bun 절대 경로와 실행 전 해시를 검사하고 환경을 정리한다.
-서명된 단일 exe나 설치 프로그램은 제공하지 않는다.
+`bunaway package win-direct`와 `win-store-unpackaged`는 이 실행기를 사용하는
+Inno Setup 설치 프로그램을 만든다. 서명으로 Bun 파일이 바뀌면 배포본 해시로
+실행기를 갱신하며, 원본 Bun의 출처 해시는 별도로 유지한다.
+단일 앱 exe는 제공하지 않는다. `win-store-msix`는 안전한 패키지 실행 경로가
+검증될 때까지 명시적으로 거부한다. [패키징 안내](../../../packages/packaging/README.md).
 
 같은 앱 데이터 디렉터리는 한 프로세스만 사용한다. 앱 import 전에 `host.lock`을
 Windows 파일 핸들로 독점하며, 중복 실행은 즉시 오류로 종료한다. 기존 WebView 프로필과
