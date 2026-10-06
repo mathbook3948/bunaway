@@ -5,31 +5,19 @@ import {
   type ChannelId,
   CODES,
   isChannelId,
-  loadPackaging,
   PACKAGING_CHANNELS,
   type PackageReport,
   packagingReportPath,
-  parsePackaging,
   platformOf,
   registeredChannels,
   resolvePackaging,
   runPackage,
   targetFor,
 } from "@bunaway/packaging";
-import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { buildProject, currentTarget } from "./build.ts";
 import { validateProject } from "./config.ts";
 import { json } from "./files.ts";
-
-// Validates packaging.json when the project has one; build/dev keep working
-// without it, so absence is not an error here.
-export async function validatePackagingConfig(root: string): Promise<void> {
-  const path = resolve(root, "packaging.json");
-  if (await Bun.file(path).exists()) {
-    parsePackaging(await readFile(path, "utf8"));
-  }
-}
 
 // `bunaway package <channel>` consumes the channel-neutral artifact produced
 // by `bunaway build` (or builds it first with --build) and runs the channel
@@ -47,7 +35,8 @@ export async function packageProject(
   }
   const channel = channelName as ChannelId;
   const project = await validateProject(directory);
-  const config = await loadPackaging(project.root);
+  const config = project.bundle;
+  if (!config) throw new Error("Packaging requires src-bunaway/bunaway.json.bundle.");
   const appPackage = (await json(resolve(project.root, "package.json"))) as { version?: string };
   const { metadata, channel: resolvedChannel } = await resolvePackaging({
     root: project.root,
@@ -66,7 +55,7 @@ export async function packageProject(
   }
   const declared = metadata.targets.find((target) => target.platform === platform);
   if (metadata.targets.length > 0 && !declared) {
-    throw new Error(`Channel ${channel} has no ${platform} target declared in packaging.json.`);
+    throw new Error(`Channel ${channel} has no ${platform} target declared in bundle settings.`);
   }
   const target = declared ? targetFor(platform, declared.arch) : nativeTarget;
   if (target !== nativeTarget) {

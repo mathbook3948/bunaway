@@ -35,7 +35,7 @@ SDK 의존성은 workspace 이름으로 연결하며 메모 샘플/원본 저장
 `package <channel> [directory] [--build]`다.
 옵션/알 수 없는 명령·설정 필드는 오류로 종료한다. `validate`는 버전·앱 ID·소스 경로·홈
 자산·단일 뷰/정확한 origin·기존 정책 스키마를 검사한다. `package`는
-`packaging.json`(없으면 거부, `validate`는 유무와 무관하게 형식만 검사)을 읽어
+`bunaway.json`의 `bundle`(없으면 거부)을 읽어
 `bunaway build`의 채널 중립 산출물을 채널별 패키지로 조립한다. 산출물은
 `dist/<target>/packaged/<channel>/`, 결과는 `packaging-report.<channel>.json`에
 기록한다. `--build`는 패키징 전에 빌드를 먼저 실행한다. 채널·어댑터 계약·서명/해시
@@ -47,9 +47,11 @@ SDK 의존성은 workspace 이름으로 연결하며 메모 샘플/원본 저장
 
 ```text
 my-app/
-  package.json, bunaway.json, app.json, policy.json, tsconfig.json
-  src/backend/{app.ts,index.ts}
-  src/web/{index.html,main.ts,style.css}
+  package.json, tsconfig.json
+  src/{index.html,main.ts,style.css}
+  src-bunaway/
+    src/{app.ts,index.ts}
+    bunaway.json, policy.json
   vendor/bunaway/
     packages/{cli,backend-sdk,client-sdk,core,protocol,runtime-bun}/
     native/{windows/bun,macos/host,host-api/generated}/
@@ -57,13 +59,21 @@ my-app/
   bunaway.lock.json
 ```
 
-`bunaway.json` v1의 `backend`(기존 프로세스 진입점), `windowsApp`(default export AppDefinition),
-`frontend`(디렉터리)는 프로젝트 상대 경로다. Windows 빌드에는 `windowsApp`이 필요하다.
+`src-bunaway/bunaway.json` v1는 `build`(소스 경로), `app`(앱 ID·창·시작 페이지),
+`bundle`(채널별 배포 설정)을 통합한다. `bundle`은 dev/build에서 생략할 수 있지만
+선언한 경우 형식을 검증한다. 권한은 `policy.json`으로 분리한다.
+`build.backend`(기존 프로세스 진입점), `build.windowsApp`(default export AppDefinition),
+`build.frontend`(디렉터리)와 아이콘·인증서 경로는 프로젝트 루트 상대 경로다.
+Windows 빌드에는 `build.windowsApp`이 필요하다.
+
+설정은 `src-bunaway/bunaway.json` v1 한 형식만 사용한다.
+루트 설정 파일과 별도 앱·패키징 설정 파일은 읽지 않는다.
+작성 형식은 [설정 결정](../../docs/decisions/0007-project-settings.md)을 따른다.
 프런트엔드의 `.ts`/`.js`는 브라우저 번들로 변환하고 나머지 정적 자산은 복사한다.
 `.d.ts`는 배포하지 않는다. CSS 등 번들의 추가 출력까지 정적 자산과 대조해 기록 전에
 충돌을 거부한다. 출력 이름은 Windows/macOS 이식성을 위해 대소문자를 구분하지 않고
 비교하며 자산 심볼릭 링크도 거부한다.
-vanilla MVP는 양쪽 호스트가 공통으로 지원하는 단일 뷰 `app.json` 형식과
+vanilla MVP의 `app`은 양쪽 호스트가 공통으로 지원하는 단일 뷰 설정과
 `https://app.bunaway.local`의 호스트 소유 로컬 자산만 사용한다. Windows는 가상 호스트,
 macOS는 기존 `bunaway://` 매핑이다. HTTP 개발 origin은 여기서 허용하지 않는다.
 

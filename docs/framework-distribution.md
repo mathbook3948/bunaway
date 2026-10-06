@@ -131,7 +131,10 @@ minor)를 올린다. 호환 수정은 patch, 새 호환 기능은 minor를 올�
    `git add --renormalize vendor/bunaway`로 새 snapshot의 원본 바이트를 index에 기록한다.
 5. 원래 앱에서 `bun install`로 앱 bun.lock을 갱신하고 `bun run validate`,
    `bun run typecheck`, `bun run doctor`, `bun run build`를 실행한다. 앱 테스트·기능
-   회귀도 확인한다. `app.json`, `policy.json`, `src`와 사용자 데이터는 자동 교체하지 않는다.
+   회귀도 확인한다. `src`, `src-bunaway`와 사용자 데이터는 자동 교체하지 않는다.
+   앱 설정은 `src-bunaway/bunaway.json` v1의 `build`, `app`, `bundle`과
+   `src-bunaway/policy.json`을 사용한다. [설정 작성 형식](./decisions/0007-project-settings.md)을
+   따르고 소스 경로는 프로젝트 루트 기준으로 지정한다.
 6. 실패하면 백업 vendor/잠금 파일/package.json/bun.lock과 이전 개발용 Bun을 함께
    복원하고 재설치한다. 성공한 앱 소스와 두 잠금 파일을 함께 커밋하고 임시 프로젝트를
    삭제한다. 사용자 데이터 마이그레이션은 앱 개발자의 별도 책임이다.

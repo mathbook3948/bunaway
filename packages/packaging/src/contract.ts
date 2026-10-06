@@ -78,7 +78,7 @@ export const CODES = {
   VERIFY_FAILED: "PKG_VERIFY_FAILED",
 } as const;
 
-// Resolved, channel-independent metadata derived from packaging.json,
+// Resolved, channel-independent metadata derived from bunaway.json.bundle,
 // app.json and package.json. This is the single source adapters read — they
 // must not re-derive identity fields.
 export interface ResolvedPackaging {

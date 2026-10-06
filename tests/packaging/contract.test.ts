@@ -26,7 +26,6 @@ import {
   CODES,
   isChannelId,
   loadManifest,
-  loadPackaging,
   type PackageAdapter,
   type PackageManifest,
   type PackageReport,
@@ -188,8 +187,14 @@ afterAll(async () => {
   await rm(home, { recursive: true, force: true });
 });
 
-async function writeConfig(config: unknown) {
-  await writeFile(resolve(root, "packaging.json"), JSON.stringify(config));
+let bundleConfigText: string;
+
+function setBundleConfig(config: unknown) {
+  bundleConfigText = JSON.stringify(config);
+}
+
+function readBundleConfig() {
+  return parsePackaging(bundleConfigText);
 }
 
 const resolveArgs = {
@@ -619,35 +624,34 @@ async function expectRejectedInputs(
   return report;
 }
 
-test("packaging.json rejects malformed shapes before adapters run", async () => {
-  const valid = { version: 1, channels: { "win-direct": {} } };
+test("bundle settings reject malformed shapes before adapters run", async () => {
+  const valid = { channels: { "win-direct": {} } };
   for (const invalid of [
     { version: 2 },
-    { version: 1, unknownField: true },
-    { version: 1, name: "" },
-    { version: 1, identifier: "no-dots" },
-    { version: 1, identifier: "-bad.example.com" },
-    { version: 1, publisher: { identity: "Example Inc." } },
-    { version: 1, release: { version: "1.2" } },
-    { version: 1, release: { build: -1 } },
-    { version: 1, release: { build: 70000 } },
-    { version: 1, icons: { windows: { square128: "x.png" } } },
-    { version: 1, icons: { directory: "../escape" } },
-    { version: 1, targets: [] },
-    { version: 1, targets: [{ platform: "linux", arch: "x64" }] },
+    { unknownField: true },
+    { name: "" },
+    { identifier: "no-dots" },
+    { identifier: "-bad.example.com" },
+    { publisher: { identity: "Example Inc." } },
+    { release: { version: "1.2" } },
+    { release: { build: -1 } },
+    { release: { build: 70000 } },
+    { icons: { windows: { square128: "x.png" } } },
+    { icons: { directory: "../escape" } },
+    { targets: [] },
+    { targets: [{ platform: "linux", arch: "x64" }] },
     {
-      version: 1,
       targets: [
         { platform: "windows", arch: "x64" },
         { platform: "windows", arch: "x64" },
       ],
     },
-    { version: 1, channels: { "linux-flatpak": {} } },
-    { version: 1, channels: { "win-direct": { bogus: true } } },
-    { version: 1, channels: { "win-store-unpackaged": { webView2: "bootstrap" } } },
-    { version: 1, signing: {} },
-    { version: 1, signing: { certificateFile: "cert.pfx", passwordEnv: "9BAD" } },
-    { version: 1, channels: { "win-direct": { signing: { subject: "CN=X" } } } },
+    { channels: { "linux-flatpak": {} } },
+    { channels: { "win-direct": { bogus: true } } },
+    { channels: { "win-store-unpackaged": { webView2: "bootstrap" } } },
+    { signing: {} },
+    { signing: { certificateFile: "cert.pfx", passwordEnv: "9BAD" } },
+    { channels: { "win-direct": { signing: { subject: "CN=X" } } } },
   ]) {
     expect(() => parsePackaging(JSON.stringify(invalid))).toThrow();
   }
@@ -655,9 +659,9 @@ test("packaging.json rejects malformed shapes before adapters run", async () => 
   expect(() => parsePackaging("{ not json")).toThrow();
 });
 
-test("resolve derives identity from app.json/package.json and selects the channel", async () => {
-  await writeConfig({ version: 1, channels: { "win-direct": {}, "mac-direct": {} } });
-  const config = await loadPackaging(root);
+test("resolve derives identity from app settings/package.json and selects the channel", async () => {
+  setBundleConfig({ channels: { "win-direct": {}, "mac-direct": {} } });
+  const config = readBundleConfig();
   const { metadata, channel } = await resolvePackaging({
     root,
     config,
@@ -672,8 +676,7 @@ test("resolve derives identity from app.json/package.json and selects the channe
   await expect(
     resolvePackaging({ root, config, channel: "win-store-msix", ...resolveArgs }),
   ).rejects.toThrow("channels.win-store-msix");
-  await writeConfig({
-    version: 1,
+  setBundleConfig({
     name: "Renamed",
     identifier: "com.example.app",
     publisher: { display: "Example", identity: "CN=Example" },
@@ -694,7 +697,7 @@ test("resolve derives identity from app.json/package.json and selects the channe
   ).rejects.toThrow();
   const overridden = await resolvePackaging({
     root,
-    config: await loadPackaging(root),
+    config: readBundleConfig(),
     channel: "win-direct",
     ...resolveArgs,
   });
@@ -703,7 +706,7 @@ test("resolve derives identity from app.json/package.json and selects the channe
   expect(overridden.channel.signing?.thumbprint).toBe("abc123");
   const inherited = await resolvePackaging({
     root,
-    config: await loadPackaging(root),
+    config: readBundleConfig(),
     channel: "win-store-msix",
     ...resolveArgs,
   });
@@ -730,8 +733,8 @@ test("verify stage rejects missing and tampered build inputs", async () => {
 });
 
 test("runner produces a report, records diagnostics and labels unsigned output", async () => {
-  await writeConfig({ version: 1, channels: { "win-direct": {} } });
-  const config = await loadPackaging(root);
+  setBundleConfig({ channels: { "win-direct": {} } });
+  const config = readBundleConfig();
   const { metadata, channel } = await resolvePackaging({
     root,
     config,
@@ -771,8 +774,8 @@ test("runner produces a report, records diagnostics and labels unsigned output",
 });
 
 test("failed adapter stages keep the previous packaged output intact", async () => {
-  await writeConfig({ version: 1, channels: { "win-direct": {} } });
-  const config = await loadPackaging(root);
+  setBundleConfig({ channels: { "win-direct": {} } });
+  const config = readBundleConfig();
   const { metadata, channel } = await resolvePackaging({
     root,
     config,
@@ -2532,7 +2535,6 @@ test("icon directory links cannot resolve outside the project", async () => {
   await symlink(external, resolve(projectRoot, "icons"), "junction");
   const config = parsePackaging(
     JSON.stringify({
-      version: 1,
       channels: { "win-direct": {} },
       icons: { directory: "icons", windows: { installer: "logo.ico" } },
     }),

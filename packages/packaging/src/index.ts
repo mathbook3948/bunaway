@@ -1,4 +1,4 @@
-export { loadPackaging, type PackagingConfig, parsePackaging } from "./config.ts";
+export { type PackagingConfig, parsePackaging } from "./config.ts";
 export * from "./contract.ts";
 export { ownedDirectory } from "./directories.ts";
 export { artifactPaths, loadManifest, verifyArtifact } from "./inputs.ts";

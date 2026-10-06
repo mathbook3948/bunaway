@@ -11,7 +11,7 @@ import { installerStages } from "./installer.ts";
 // "Publish your app" unpackaged-app submission docs):
 //  - Standalone offline installer — downloader stubs are rejected, so this
 //    channel never embeds the WebView2 bootstrapper (webView2="check" only,
-//    enforced by packaging.json validation).
+//    enforced by bunaway.json.bundle validation).
 //  - Every PE file must carry an Authenticode signature chaining to a
 //    Microsoft Trusted Root Program CA — hence signingRequirement is
 //    "required-to-submit" and unsigned output is never submittable.

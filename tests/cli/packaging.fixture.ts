@@ -67,14 +67,15 @@ mock.module(import.meta.resolve("../../packages/cli/src/build.ts"), () => ({
     return buildProject(directory, { native });
   },
 }));
+const configPath = resolve(project, "src-bunaway/bunaway.json");
+async function setBundle(bundle: Record<string, unknown>) {
+  const config = (await readJson(configPath)) as Record<string, unknown>;
+  await files.writeJson(configPath, { ...config, bundle });
+}
 const { packageProject } = await import("../../packages/cli/src/package.ts");
-await Bun.write(
-  resolve(project, "packaging.json"),
-  JSON.stringify({
-    version: 1,
-    channels: { "win-direct": {}, "win-store-msix": {}, "mac-direct": {}, "mac-store": {} },
-  }),
-);
+await setBundle({
+  channels: { "win-direct": {}, "win-store-msix": {}, "mac-direct": {}, "mac-store": {} },
+});
 nativeTarget = "macos-arm64";
 await expect(packageProject(project, "mac-store", { build: true })).rejects.toThrow(
   "No adapter registered",
@@ -127,22 +128,15 @@ for (const buildFirst of [false, true]) {
 }
 expect(builds).toBe(0);
 expect(assembled).toBe(0);
-await Bun.write(
-  resolve(project, "packaging.json"),
-  JSON.stringify({
-    version: 1,
-    targets: [{ platform: "macos", arch: "arm64" }],
-    channels: { "win-direct": {} },
-  }),
-);
+await setBundle({
+  targets: [{ platform: "macos", arch: "arm64" }],
+  channels: { "win-direct": {} },
+});
 await expect(packageProject(project, "win-direct", { build: true })).rejects.toThrow(
   "no windows target declared",
 );
 expect(builds).toBe(0);
-await Bun.write(
-  resolve(project, "packaging.json"),
-  JSON.stringify({ version: 1, channels: { "win-direct": {}, "win-store-msix": {} } }),
-);
+await setBundle({ channels: { "win-direct": {}, "win-store-msix": {} } });
 expect((await packageProject(project, "win-direct", { build: true })).ok).toBe(true);
 const packaged = resolve(project, "dist/windows-x64/packaged");
 const previous = resolve(packaged, "win-direct/setup.exe");
@@ -155,9 +149,15 @@ expect((await packageProject(project, "win-direct", { build: true })).ok).toBe(f
 expect(await Bun.file(previous).text()).toBe("installer 1");
 expect(await Bun.file(other).text()).toBe("another channel");
 expect(await Bun.file(otherReport).text()).toBe("another report");
-const appPath = resolve(project, "app.json");
+const appPath = configPath;
 const originalApp = (await readJson(appPath)) as Record<string, unknown>;
-await Bun.write(appPath, JSON.stringify({ ...originalApp, appId: "app.changed" }));
+await Bun.write(
+  appPath,
+  JSON.stringify({
+    ...originalApp,
+    app: { ...(originalApp.app as Record<string, unknown>), appId: "app.changed" },
+  }),
+);
 const previousAssemblies = assembled;
 const stale = await packageProject(project, "win-direct");
 expect(stale.ok).toBe(false);
