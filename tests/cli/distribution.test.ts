@@ -508,6 +508,8 @@ test("artifact audit rejects omitted schemas, declarations and Git attributes wi
       "native/host-api/generated/process.schema.json",
       "packages/cli/dist/types/cli/src/index.d.ts",
       "packages/cli/templates/vanilla/gitattributes",
+      "packages/cli/templates/vite/gitattributes",
+      "packages/cli/templates/vite/src-bunaway/policy.json",
       "packages/cli/src/assets.ts",
       "packages/cli/src/sdk.ts",
     ]) {

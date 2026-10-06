@@ -23,13 +23,9 @@ export async function createProject(
     if (await Bun.file(resolve(frameworkRoot, "artifact.files.json")).exists()) {
       await checkArtifact(frameworkRoot);
     }
-    await cp(resolve(frameworkRoot, "packages/cli/templates/vanilla"), staging, {
+    await cp(resolve(frameworkRoot, `packages/cli/templates/${template}`), staging, {
       recursive: true,
     });
-    if (template === "vite") {
-      await cp(resolve(frameworkRoot, "packages/cli/templates/vite"), staging, { recursive: true });
-      await rm(resolve(staging, "src/index.html"));
-    }
     await rename(resolve(staging, "gitignore"), resolve(staging, ".gitignore"));
     await rename(resolve(staging, "gitattributes"), resolve(staging, ".gitattributes"));
     const info = await release();

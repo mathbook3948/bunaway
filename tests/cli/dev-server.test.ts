@@ -1,12 +1,12 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { resolve } from "node:path";
 import { readDevSettings } from "../../packages/cli/src/config.ts";
 import { startDevServer } from "../../packages/cli/src/dev-server.ts";
+import type { Policy } from "../../packages/protocol/src/index.ts";
 import {
   developmentPolicy,
   verifyDevelopmentLaunch,
 } from "../../packages/runtime-bun/src/development.ts";
-import type { Policy } from "../../packages/protocol/src/index.ts";
 
 function availablePort(): number {
   const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("") });
@@ -163,6 +163,29 @@ test("early exit reports the exit code and terminates descendants", async () => 
   await expect(
     startDevServer(config("exit-tree", childPort), import.meta.dir, new AbortController().signal),
   ).rejects.toThrow("exit 7");
+  expect(await reachable(childPort)).toBe(false);
+}, 10000);
+
+test("exit during an HTTP readiness probe preserves the command's exit code", async () => {
+  const childPort = availablePort();
+  const probe = spyOn(globalThis, "fetch").mockImplementation(
+    Object.assign(
+      async () => {
+        // Keep the probe pending through the fixture's exit, as a Windows connection failure can be.
+        await Bun.sleep(1000);
+        throw new Error("Delayed readiness connection failure.");
+      },
+      { preconnect: fetch.preconnect },
+    ),
+  );
+  try {
+    await expect(
+      startDevServer(config("exit-tree", childPort), import.meta.dir, new AbortController().signal),
+    ).rejects.toThrow("exit 7");
+    expect(probe).toHaveBeenCalled();
+  } finally {
+    probe.mockRestore();
+  }
   expect(await reachable(childPort)).toBe(false);
 }, 10000);
 

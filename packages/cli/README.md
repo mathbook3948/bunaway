@@ -55,12 +55,17 @@ bun install
 bun run bunaway dev
 ```
 
-`vite` 템플릿은 루트 `index.html`과 `src/` UI 소스를 사용한다.
+`vite` 템플릿은 공식 [create-vite@9.2.1의 vanilla-ts](https://github.com/vitejs/vite/tree/fea5b21dd9524ed7308632407b996f1fe5942c9c/packages/create-vite/template-vanilla-ts)
+기본 화면(로고·카운터)을 사용한다.
+루트 `index.html`, `src/` UI 코드·스타일·이미지, `public/` 정적 자산은 upstream 원본이다.
 `dev`·`build`·`preview`는 Vite 프런트엔드 명령이며 `bunaway` script로 네이티브 CLI를 호출한다.
 UI 변경은 Vite가 처리하고 백엔드 변경은 CLI가 호스트를 재시작한다.
 네이티브 검증·빌드·패키징 전에는 `bun run build`로 `web-dist/`를 생성한다.
 CLI 자체는 외부 프런트엔드 생산 빌드를 자동 실행하지 않는다.
-[템플릿 구성 근거](../../templates/README.md)는 공식 Tauri 초기화 구현을 참조한다.
+생성 템플릿은 [templates/](./templates/)에서 관리한다. 구조와 script 역할은
+[Tauri vanilla-ts 템플릿](https://github.com/tauri-apps/create-tauri-app/tree/12db955f20162e7422cbeed76c2aa630760ccca3/templates/template-vanilla-ts)을 참조한다.
+각 템플릿은 UI·백엔드·정책·설정을 모두 포함하며, `create`는 선택한 폴더 하나만 복사한다.
+템플릿의 `gitignore`·`gitattributes`는 생성 앱에서 `.gitignore`·`.gitattributes`로 바꾼다.
 
 ## 생성 구조
 
@@ -87,8 +92,8 @@ my-app/
 
 선택적 `dev`에 외부 UI 개발 서버의 `command`(인자 배열), `url`, `timeoutMs`를 지정한다.
 [Vite·Next.js 개발 서버 연결](../../docs/development-server.md)을 따른다.
-`vite` 템플릿은 위 vanilla 구조의 `src/index.html`을 루트로 옮기고
-`vite.config.ts`와 `dev` 설정을 포함한다. `build.frontend`는 `web-dist`다.
+`vite` 템플릿은 루트 `index.html`, `public/`, `src/`, `src-bunaway/`와
+`vite.config.ts`, `dev` 설정을 포함한다. `build.frontend`는 `web-dist`다.
 프런트엔드의 `.ts`/`.js`는 브라우저 번들로 변환하고 나머지 정적 자산은 복사한다.
 `.d.ts`는 배포하지 않는다. CSS 등 번들의 추가 출력까지 정적 자산과 대조해 기록 전에
 충돌을 거부한다. 출력 이름은 Windows/macOS 이식성을 위해 대소문자를 구분하지 않고
@@ -98,9 +103,10 @@ vanilla MVP는 양쪽 호스트가 공통으로 지원하는 단일 뷰 `app` �
 macOS는 기존 `bunaway://` 매핑이다. policy.json의 HTTP origin은 허용하지 않는다.
 `dev.url`의 정확한 loopback origin은 개발 산출물에만 적용하며 프로덕션에 포함하지 않는다.
 
-템플릿은 실제 `createClient`/`command`를 사용한다. Windows 부팅은 프레임워크가
-앱 정의를 import해 담당한다. 현재 macOS 프로세스 호스트용 `runBunApp` 호출은 CLI가
-번들 내부에 생성한다. 개발 우선순위는 [ADR 0010](../../docs/decisions/0010-windows-first-platform-model.md)을 따른다.
+`vanilla` 템플릿은 실제 `createClient`/`command`를 사용한다. Windows 부팅은
+프레임워크가 앱 정의를 import해 담당한다. 현재 macOS 프로세스 호스트용 `runBunApp`
+호출은 CLI가 번들 내부에 생성한다. 개발 우선순위는
+[ADR 0010](../../docs/decisions/0010-windows-first-platform-model.md)을 따른다.
 `message.save` → 호출 컨텍스트의 Host API `storage.writeText` →
 `appData/messages/current.txt` → `message.saved` → UI 갱신이다.
 `message.read`로 시작/재실행 시 복원한다. 첫 실행의 파일 없음은 UI에 표시한다.
