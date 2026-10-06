@@ -34,7 +34,8 @@ mock.module(import.meta.resolve("../../packages/cli/src/files.ts"), () => ({
   ...files,
   json: async (path: string) => {
     const value = await readJson(path);
-    if (path.endsWith("runtime/build-manifests/windows-x64.json")) {
+    const normalized = path.replaceAll("\\", "/");
+    if (normalized.endsWith("runtime/build-manifests/windows-x64.json")) {
       const pin = value as { bun: Record<string, unknown> };
       return {
         ...pin,
@@ -45,7 +46,7 @@ mock.module(import.meta.resolve("../../packages/cli/src/files.ts"), () => ({
         },
       };
     }
-    if (path.endsWith("native/windows/bun/deps.json")) {
+    if (normalized.endsWith("native/windows/bun/deps.json")) {
       return {
         webview2Sdk: {
           files: {
