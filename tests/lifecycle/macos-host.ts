@@ -201,7 +201,7 @@ const savedResources = app
 const assetsTmp = join(assets, "tmp");
 const savedTmp = join(diagnostics, "original-assets-tmp");
 const hadTmp = app && existsSync(assetsTmp);
-if (hadTmp) await cp(assetsTmp, savedTmp, { recursive: true });
+if (hadTmp) await cp(assetsTmp, savedTmp, { recursive: true, verbatimSymlinks: true });
 
 async function resetData() {
   // WebContent renderers may hold the data folder briefly after the host exits;
@@ -723,7 +723,7 @@ try {
     await chmod(assets, 0o755);
     for (const { path, bytes } of savedResources) await writeFile(path, bytes);
     await rm(assetsTmp, { recursive: true, force: true });
-    if (hadTmp) await cp(savedTmp, assetsTmp, { recursive: true });
+    if (hadTmp) await cp(savedTmp, assetsTmp, { recursive: true, verbatimSymlinks: true });
     await chmod(assets, assetMode);
     sealApp();
   }

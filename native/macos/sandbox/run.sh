@@ -30,7 +30,7 @@ FAILED=0
 say "== building probe/child/entsrv =="
 clang++ -std=c++20 -O2 -fobjc-arc "$SBX/src/probe.mm"  -framework Security -o "$OUT/bin/probe"  || exit 1
 clang   -O2 -fobjc-arc "$SBX/src/child.m"                               -o "$OUT/bin/child" || exit 1
-clang++ -std=c++20 -O2 -fobjc-arc "$SBX/src/entsrv.mm" -framework Security -o "$OUT/bin/entsrv" || exit 1
+clang++ -std=c++20 -O2 -fobjc-arc "$SBX/src/entsrv.mm" -framework Security -lbsm -o "$OUT/bin/entsrv" || exit 1
 
 mkapp() {  # mkapp <name> <binary-src> <entitlements-plist> [extra-files-dir]
   local app="$OUT/$1.app"; rm -rf "$app"

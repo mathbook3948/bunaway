@@ -1,5 +1,16 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  readlink,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 
@@ -217,3 +228,86 @@ test("in-place runner rejects result directories before writing scratch files", 
   await rejectsSetup(f, {}, "test output must be a regular file");
   expect(await readdir(join(f.root, "workspace"))).toEqual(["macos-host-results.json"]);
 });
+
+test.skipIf(process.platform !== "darwin")(
+  "failed in-place runner preserves signed tmp symlinks after moving the app",
+  async () => {
+    const f = await makeFixture();
+    const resources = join(f.app, "Contents", "Resources");
+    const assets = join(resources, "assets");
+    const tmp = join(assets, "tmp");
+    await mkdir(join(f.app, "Contents", "MacOS"));
+    f.host = join(f.app, "Contents", "MacOS", "host");
+    await copyFile("/usr/bin/true", f.host);
+    await writeFile(
+      join(f.app, "Contents", "Info.plist"),
+      `<?xml version="1.0"?><plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>tests.bunaway.fixture</string>
+<key>CFBundleExecutable</key><string>host</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+</dict></plist>`,
+    );
+    for (const path of ["assets/app.json", "assets/policy.json", "manifest.json"]) {
+      await mkdir(resolve(resources, path, ".."), { recursive: true });
+      await writeFile(join(resources, path), "{}\n");
+    }
+    await mkdir(join(tmp, "nested"), { recursive: true });
+    await writeFile(join(tmp, "sentinel.txt"), "original tmp bytes");
+    await writeFile(join(tmp, "nested", "sentinel.txt"), "nested tmp bytes");
+    await symlink("sentinel.txt", join(tmp, "relative-file"));
+    await symlink("nested", join(tmp, "relative-directory"));
+    const codesign = (...args: string[]) => {
+      const result = Bun.spawnSync(["/usr/bin/codesign", ...args]);
+      expect(result.stderr.toString()).not.toContain("invalid destination");
+      expect(result.exitCode).toBe(0);
+    };
+    codesign("--force", "--sign", "-", f.app);
+    codesign("--verify", "--deep", "--strict", f.app);
+
+    const workspace = join(f.root, "workspace");
+    const child = Bun.spawn(
+      [process.execPath, resolve(import.meta.dir, "macos-host.ts"), "--package", resources],
+      {
+        env: {
+          ...process.env,
+          BUNAWAY_PACKAGE_IN_PLACE: "1",
+          BUNAWAY_HOST_EXEC: f.host,
+          BUNAWAY_NATIVE_TEST_EXEC: "/usr/bin/false",
+          BUNAWAY_TEST_WORKSPACE: workspace,
+          BUNAWAY_DATA_ROOT: join(f.root, "data"),
+          BUNAWAY_TEST_SIGN_IDENTITY: "-",
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 10000,
+      },
+    );
+    const output = new Response(child.stdout).text();
+    const errors = new Response(child.stderr).text();
+    expect(await child.exited).toBe(1);
+    await output;
+    for (const directory of [
+      tmp,
+      join(workspace, "macos-host-diagnostics", "original-assets-tmp"),
+    ]) {
+      expect(await readlink(join(directory, "relative-file"))).toBe("sentinel.txt");
+      expect(await readlink(join(directory, "relative-directory"))).toBe("nested");
+    }
+    expect(await errors).toContain(
+      "native FIFO, scheme handler and resource-filter regressions failed",
+    );
+    const summary = JSON.parse(await readFile(join(workspace, "macos-host-results.json"), "utf8"));
+    expect(summary.results).toHaveLength(1);
+    expect(summary.results[0].ok).toBe(false);
+    codesign("--verify", "--deep", "--strict", f.app);
+
+    const moved = join(f.root, "Moved.app");
+    await rename(f.app, moved);
+    const movedTmp = join(moved, "Contents", "Resources", "assets", "tmp");
+    expect(await readFile(join(movedTmp, "relative-file"), "utf8")).toBe("original tmp bytes");
+    expect(await readFile(join(movedTmp, "relative-directory", "sentinel.txt"), "utf8")).toBe(
+      "nested tmp bytes",
+    );
+    codesign("--verify", "--deep", "--strict", moved);
+  },
+);

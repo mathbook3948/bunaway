@@ -9,6 +9,7 @@
 //     appends lines: "<entitlement> => <xpc description or <null>>"
 
 #include <Foundation/Foundation.h>
+#include <bsm/libbsm.h>
 #include <dispatch/dispatch.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,7 +43,8 @@ static void report(xpc_connection_t peer, xpc_object_t msg) {
     if (!op || strcmp(op, "dump") != 0) return;
     audit_token_t at = {};
     xpc_connection_get_audit_token(peer, &at);
-    fprintf(g_log, "peer audit_token pid=%d auid=%d euid=%d\n", at.val[0], at.val[1], at.val[2]);
+    fprintf(g_log, "peer audit_token pid=%d auid=%u euid=%u\n",
+            audit_token_to_pid(at), audit_token_to_auid(at), audit_token_to_euid(at));
     for (const char* name : kEntitlements) {
         xpc_object_t v = xpc_connection_copy_entitlement_value(peer, name);
         char* d = v ? xpc_copy_description(v) : nullptr;
