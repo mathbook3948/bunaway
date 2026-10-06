@@ -233,7 +233,7 @@ export class ViewBoundary {
       }
       if (performance.now() >= pending.expiry) {
         this.expire(message.id);
-        return;
+        if (pending.kind !== "listen") return;
       }
       if (pending.kind === "listen" && message.kind === "result") {
         const value = message.payload as { subscriptionId?: unknown };
@@ -270,12 +270,19 @@ export class ViewBoundary {
   }
   private expire(id: string) {
     const session = this.session;
-    if (!session?.pending.delete(id)) return;
-    this.hooks.forward({
-      kind: "client",
-      route: session.route,
-      message: { kind: "cancel", protocol: PROTOCOL_VERSION, id },
-    });
+    const pending = session?.pending.get(id);
+    if (!session || !pending) return;
+    if (pending.kind === "listen") {
+      // Keep the reservation and late subscription ID for SDK cleanup after TIMEOUT.
+      pending.expiry = Number.POSITIVE_INFINITY;
+    } else {
+      session.pending.delete(id);
+      this.hooks.forward({
+        kind: "client",
+        route: session.route,
+        message: { kind: "cancel", protocol: PROTOCOL_VERSION, id },
+      });
+    }
     this.error(id, { code: "TIMEOUT", message: "Request deadline exceeded." });
     this.hooks.log("request-timeout", { id });
   }

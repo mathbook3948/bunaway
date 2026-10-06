@@ -529,7 +529,7 @@ test.each(["main", "main-io"] as const)(
   },
 );
 
-test("cancelled listens retain late results until the SDK releases the core subscription", async () => {
+test.each(["abort", "timeout-scan", "timeout-response"])("%s listen cleanup", async (mode) => {
   const source = "https://app.bunaway.local/index.html";
   const policy = {
     version: 1 as const,
@@ -630,15 +630,18 @@ test("cancelled listens retain late results until the SDK releases the core subs
           onError: () => {},
         })
         .catch((error: unknown) => error);
-      await Bun.sleep(0); // Send listen, holding its core response until after abort.
-      controller.abort();
-      expect(await pending).toMatchObject({ code: "CANCELLED" });
+      await Bun.sleep(0); // Hold the listen response until after cancellation or timeout.
+      if (mode === "abort") controller.abort();
       const clock = spyOn(performance, "now").mockReturnValue(
         performance.now() + API_LIMITS.maxCommandDurationMs + 1,
       );
       try {
-        boundary.scanDeadlines();
+        if (mode !== "timeout-response") {
+          boundary.scanDeadlines();
+          expect(boundary.pendingCount).toBe(1); // Reserve capacity until late cleanup.
+        }
         await flush();
+        expect(await pending).toMatchObject({ code: mode === "abort" ? "CANCELLED" : "TIMEOUT" });
       } finally {
         clock.mockRestore();
       }

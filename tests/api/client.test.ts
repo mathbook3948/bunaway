@@ -628,7 +628,7 @@ test("listen observes subscription-error in the same receive batch", async () =>
   await client.close();
 });
 
-test("cancelled listen releases a late successful subscription exactly once", async () => {
+test.each(["abort", "timeout"])("%s listen cleans up late results once", async (mode) => {
   const { transport, client } = await connected();
   const controller = new AbortController();
   const deliveries: number[] = [];
@@ -638,8 +638,13 @@ test("cancelled listen releases a late successful subscription exactly once", as
   });
   await flush();
   const request = must(transport.requests("listen").at(-1));
-  controller.abort();
-  await expect(pending).rejects.toMatchObject({ code: "CANCELLED" });
+  if (mode === "abort") controller.abort();
+  else {
+    const timeout = serverError(request.id, { code: "TIMEOUT", message: "Host deadline." });
+    transport.emit(timeout);
+    transport.emit(timeout);
+  }
+  await expect(pending).rejects.toMatchObject({ code: mode === "abort" ? "CANCELLED" : "TIMEOUT" });
   const result = serverResult(request.id, { subscriptionId: "sub-1" });
   transport.emit(result);
   transport.emit(result);
