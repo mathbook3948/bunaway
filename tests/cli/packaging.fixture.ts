@@ -4,7 +4,7 @@ import { readdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import * as build from "../../packages/cli/src/build.ts";
 import * as files from "../../packages/cli/src/files.ts";
-import { CODES, registerAdapter } from "../../packages/packaging/src/index.ts";
+import { adapterFor, CODES, registerAdapter } from "../../packages/packaging/src/index.ts";
 
 const project = process.argv[2];
 if (!project) throw new Error("Expected a generated project path.");
@@ -72,42 +72,41 @@ await Bun.write(
   resolve(project, "packaging.json"),
   JSON.stringify({
     version: 1,
-    channels: { "win-direct": {}, "win-store-msix": {}, "mac-direct": {} },
+    channels: { "win-direct": {}, "win-store-msix": {}, "mac-direct": {}, "mac-store": {} },
   }),
 );
-await expect(packageProject(project, "win-store-msix", { build: true })).rejects.toThrow(
+nativeTarget = "macos-arm64";
+await expect(packageProject(project, "mac-store", { build: true })).rejects.toThrow(
   "No adapter registered",
 );
+nativeTarget = "windows-x64";
 expect(builds).toBe(0);
 
 let fail = false;
 let assembled = 0;
 let withHelper = false;
 let pause: (() => Promise<void>) | undefined;
-registerAdapter({
-  channel: "win-direct",
-  platform: "windows",
-  signingRequirement: "optional",
-  stages: () => [
-    {
-      id: "assemble",
-      title: "Assemble installer",
-      async run(ctx) {
-        assembled++;
-        await pause?.();
-        if (fail) throw new Error("Installer assembly failed.");
-        await Bun.write(resolve(ctx.staging, "setup.exe"), `installer ${builds}`);
-        ctx.addArtifact("setup.exe", "installer");
-        if (withHelper) {
-          const payload = resolve(ctx.staging, "payload");
-          await fs.mkdir(payload);
-          await Bun.write(resolve(payload, "helper.exe"), "linked artifact");
-          ctx.addArtifact("payload/helper.exe", "helper");
-        }
-      },
+const windowsAdapter = adapterFor("win-direct");
+if (!windowsAdapter) throw new Error("Expected the built-in Windows adapter.");
+spyOn(windowsAdapter, "stages").mockImplementation(() => [
+  {
+    id: "assemble",
+    title: "Assemble installer",
+    async run(ctx) {
+      assembled++;
+      await pause?.();
+      if (fail) throw new Error("Installer assembly failed.");
+      await Bun.write(resolve(ctx.staging, "setup.exe"), `installer ${builds}`);
+      ctx.addArtifact("setup.exe", "installer");
+      if (withHelper) {
+        const payload = resolve(ctx.staging, "payload");
+        await fs.mkdir(payload);
+        await Bun.write(resolve(payload, "helper.exe"), "linked artifact");
+        ctx.addArtifact("payload/helper.exe", "helper");
+      }
     },
-  ],
-});
+  },
+]);
 registerAdapter({
   channel: "mac-direct",
   platform: "macos",

@@ -44,9 +44,20 @@ macOS WKWebView는 현재 비영속 `WKWebsiteDataStore`를 사용한다. Window
 ## 패키징(공통 계약)
 
 `packages/packaging`의 채널 중립 계약(`packaging.json` v1, 어댑터 입출력,
-`PKG_*` 진단, 서명 후 `packagedSha256` 규칙)과 `bunaway package <channel>` 진입점은
-구현됐다. **채널 어댑터 자체는 아직 없다** — Windows `win-direct`·`win-store-msix`·
-`win-store-unpackaged`와 macOS `mac-direct`·`mac-store` 어댑터는 별도 작업이며,
-설치·실행·제거의 실제 검증은 각 채널 구현 시 기록한다. 현재 패키징 검증은
-공통 계약의 단위 테스트(메타데이터 거부·입력 누락/변조·단계 실패 시 기존 산출물
-보존·미서명 `usable`/`submittable` 규칙)에 한정된다.
+`PKG_*` 진단, 서명 후 `packagedSha256` 규칙)과 `bunaway package <channel>` 진입점,
+Windows 어댑터 3개(`win-direct` Inno 인스톨러·`win-store-msix`·
+`win-store-unpackaged` + 제출 체크리스트)가 구현됐다. macOS `mac-direct`·
+`mac-store` 어댑터는 별도 작업이다.
+
+Windows 검증 결과(Windows Server 2022, 자체 서명 테스트 인증서):
+- `win-direct`: 패키지 생성 → `/VERYSILENT` 설치 → 호스트 실행 →
+  데이터 디렉터리 생성 → `/VERYSILENT` 제거 → `%LOCALAPPDATA%\bunaway\<appId>`
+  보존까지 검증됐다.
+- `win-store-unpackaged`: 서명 인스톨러 생성·`signtool verify`·사일런트
+  설치/제거 검증. Partner Center 제출·프로덕션 CA는 미검증.
+- `win-store-msix`: `makeappx` 패킹·서명·`Add-AppxPackage` 설치·등록까지
+  검증됐다. **패키지 안에서의 실행(앱 활성화)은 이 테스트 환경에서 확인되지
+  않았다** — 활성화 시도가 이벤트 로그에는 성공으로 기록되지만 프로세스가
+  생성되지 않는다(같은 페이로드는 압축 해제 상태로 정상 실행되며, UWP
+  시스템 앱은 활성화된다). 환경 한계로 판단하며, 실제 배포/스토어 검증과
+  데이터 보존은 미검증으로 남겨둔다.

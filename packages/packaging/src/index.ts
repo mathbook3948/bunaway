@@ -16,3 +16,6 @@ export {
   type RunPackageArgs,
   runPackage,
 } from "./runner.ts";
+
+// Side-effect import: registers the built-in channel adapters.
+import "./channels/index.ts";

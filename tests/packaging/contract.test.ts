@@ -14,8 +14,11 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
+import * as windowsTools from "../../packages/packaging/src/channels/windows/common.ts";
+import { verifySignatures } from "../../packages/packaging/src/channels/windows/sign.ts";
 import {
+  adapterFor,
   artifactPaths,
   type BuildArtifact,
   type BuildTarget,
@@ -866,6 +869,193 @@ test("unsigned sidecars do not invalidate signed distribution artifacts", async 
   expect(report.diagnostics.some((d) => d.code === CODES.SIGNING_MISSING)).toBe(false);
   expect(report.artifacts.find((a) => a.kind === "checksum")?.signingRequired).toBe(false);
 });
+
+test.each([0, 1])(
+  "Store EXE submission requires a verified Microsoft CA root (CTL exit %s)",
+  async (ctlExit) => {
+    const projectRoot = await mkdtemp(join(home, "store-checklist-"));
+    await makeArtifact(projectRoot);
+    const store = adapterFor("win-store-unpackaged");
+    if (!store) throw new Error("Expected the Store EXE adapter.");
+    const findTool = spyOn(windowsTools, "findWindowsKitTool").mockResolvedValue("signtool.exe");
+    const must = spyOn(windowsTools, "must").mockImplementation(async (_exe, _args, options) => {
+      const rootFile = options?.env?.BUNAWAY_VERIFY_ROOT;
+      if (rootFile) await Bun.write(rootFile, "public root certificate fixture");
+      return { code: 0, stdout: "", stderr: "" };
+    });
+    const run = spyOn(windowsTools, "run").mockResolvedValue({
+      code: ctlExit,
+      stdout: "",
+      stderr: "",
+    });
+    try {
+      const report = await runAdapter(projectRoot, {
+        ...store,
+        stages(input) {
+          // Use the real submission stage after a fixture signed installer.
+          const submission = store.stages(input).find((stage) => stage.id === "submission");
+          if (!submission) throw new Error("Missing Store checklist stage.");
+          return [
+            {
+              id: "signed-fixture",
+              title: "Signed installer fixture",
+              async run(ctx) {
+                const installer = resolve(ctx.staging, "setup.exe");
+                await Bun.write(installer, "signed installer fixture");
+                ctx.addArtifact("setup.exe", "installer", { signed: true });
+                // Local Authenticode verification succeeds for both public and
+                // locally trusted private roots; the CTL distinguishes them.
+                await verifySignatures(ctx, [installer]);
+                expect((await readdir(ctx.staging)).some((file) => file.endsWith(".cer"))).toBe(
+                  false,
+                );
+              },
+            },
+            submission,
+          ];
+        },
+      });
+      expect(report.ok).toBe(ctlExit === 0);
+      expect(report.submittable).toBe(ctlExit === 0);
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(run.mock.calls[0]?.[1]?.slice(0, 2)).toEqual(["-verifyCTL", "AuthRoot"]);
+      if (ctlExit !== 0) {
+        expect(
+          report.diagnostics.some(
+            (d) => d.severity === "error" && /Microsoft Trusted Root Program/.test(d.message),
+          ),
+        ).toBe(true);
+        expect(report.artifacts).toEqual([]);
+        return;
+      }
+      expect(report.artifacts.find((a) => a.kind === "submission-metadata")?.signingRequired).toBe(
+        false,
+      );
+    } finally {
+      run.mockRestore();
+      must.mockRestore();
+      findTool.mockRestore();
+    }
+  },
+);
+
+test.each(["trusted", "unsigned", "private-root"])(
+  "Store EXE validates every payload PE before publication (%s)",
+  async (trust) => {
+    const projectRoot = await mkdtemp(join(home, "store-payload-"));
+    const manifest = await makeArtifact(projectRoot);
+    const artifact = artifactPaths({ root: projectRoot, target: "windows-x64", appId: "app.test" });
+    const extraFiles = [
+      "assets/web/helper.EXE",
+      "plugins/nested/helper.dll",
+      "plugins/renamed.data",
+    ];
+    const pe = Buffer.alloc(132);
+    pe.write("MZ");
+    pe.writeUInt32LE(128, 0x3c);
+    pe.write("PE\0\0", 128);
+    for (const file of ["bunaway-host.exe", "runtime/bun.exe", ...extraFiles]) {
+      await Bun.write(resolve(artifact.packageDir, file), pe);
+      if (extraFiles.includes(file))
+        manifest.assets[file] = await sha256(resolve(artifact.packageDir, file));
+    }
+    manifest.bun.executableSha256 = await sha256(resolve(artifact.packageDir, "runtime/bun.exe"));
+    manifest.host = { target: "windows-x64", sha256: await sha256(artifact.executable) };
+    await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
+    await Bun.write(resolve(artifact.packageDir, "plugins/truncated.data"), "MZ");
+    const nonPe = Buffer.from(pe);
+    nonPe.writeUInt32LE(0xffffffff, 0x3c);
+    await Bun.write(resolve(artifact.packageDir, "plugins/non-pe.data"), nonPe);
+    const store = adapterFor("win-store-unpackaged");
+    if (!store) throw new Error("Expected the Store EXE adapter.");
+    const output = resolve(artifact.packageDir, "packaged/win-store-unpackaged/setup.exe");
+    await Bun.write(output, "previous installer");
+    const findTool = spyOn(windowsTools, "findWindowsKitTool").mockResolvedValue("signtool.exe");
+    const must = spyOn(windowsTools, "must").mockImplementation(async (_exe, args, options) => {
+      if (args[0] === "verify" && args[2]?.endsWith("renamed.data") && trust === "unsigned") {
+        throw new Error("No signature found.");
+      }
+      const rootFile = options?.env?.BUNAWAY_VERIFY_ROOT;
+      if (rootFile) await Bun.write(rootFile, options?.env?.BUNAWAY_VERIFY_FILE ?? "");
+      return { code: 0, stdout: "", stderr: "" };
+    });
+    const run = spyOn(windowsTools, "run").mockImplementation(async (_exe, args) => ({
+      code:
+        trust === "private-root" &&
+        (await Bun.file(args[3] as string).text()).endsWith("renamed.data")
+          ? 1
+          : 0,
+      stdout: "",
+      stderr: "",
+    }));
+    const { metadata } = await resolvePackaging({
+      root: projectRoot,
+      ...resolveArgs,
+      channel: "win-store-unpackaged",
+      config: { channels: { "win-store-unpackaged": {} } },
+    });
+    let assembled = false;
+    try {
+      const report = await runPackage({
+        metadata,
+        appId: "app.test",
+        channel: "win-store-unpackaged",
+        channelConfig: {},
+        target: "windows-x64",
+        artifact,
+        signing: { thumbprint: "fixture" },
+        adapter: {
+          ...store,
+          stages(input) {
+            return [
+              ...store
+                .stages(input)
+                .filter((stage) => ["stage", "sign-runtime"].includes(stage.id)),
+              {
+                id: "assemble-fixture",
+                title: "Signed installer fixture",
+                async run(ctx) {
+                  assembled = true;
+                  for (const file of extraFiles) {
+                    expect(await sha256(resolve(ctx.staging, "app", file))).toBe(
+                      manifest.assets[file] ?? "",
+                    );
+                    expect(await sha256(resolve(artifact.packageDir, file))).toBe(
+                      manifest.assets[file] ?? "",
+                    );
+                  }
+                  await Bun.write(resolve(ctx.staging, "setup.exe"), "new signed installer");
+                  ctx.addArtifact("setup.exe", "installer", { signed: true });
+                  await rm(resolve(ctx.staging, "app"), { recursive: true });
+                },
+              },
+            ];
+          },
+        },
+      });
+      expect(report.ok).toBe(trust === "trusted");
+      expect(report.submittable).toBe(trust === "trusted");
+      expect(assembled).toBe(trust === "trusted");
+      const verified = must.mock.calls
+        .filter((call) => call[1][0] === "verify")
+        .map((call) => call[1][2]);
+      for (const file of ["bunaway-host.exe", "runtime/bun.exe", ...extraFiles]) {
+        expect(verified.some((path) => path?.endsWith(file.replaceAll("/", sep)))).toBe(true);
+      }
+      expect(verified).toHaveLength(5);
+      if (trust !== "trusted") {
+        expect(await Bun.file(output).text()).toBe("previous installer");
+        expect(report.diagnostics).toContainEqual(
+          expect.objectContaining({ code: CODES.VERIFY_FAILED, severity: "error" }),
+        );
+      }
+    } finally {
+      run.mockRestore();
+      must.mockRestore();
+      findTool.mockRestore();
+    }
+  },
+);
 
 test("signed sidecars alone do not make a channel submittable", async () => {
   const projectRoot = await mkdtemp(join(home, "only-sidecar-"));
