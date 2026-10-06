@@ -364,7 +364,7 @@ export async function compileInno(
     ctx.report({
       code: CODES.TOOL_MISSING,
       severity: "error",
-      message: "Inno Setup compiler (ISCC.exe) not found; install Inno Setup 6.",
+      message: "Inno Setup compiler (ISCC.exe) not found; install Inno Setup 6.3 or newer.",
     });
     throw new Error("ISCC.exe not found.");
   }

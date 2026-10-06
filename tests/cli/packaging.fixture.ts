@@ -293,6 +293,39 @@ expect(await Bun.file(resolve(link, "helper.exe")).text()).toBe("linked artifact
 expect(await Bun.file(reportPath).text()).toBe(linkedReportText);
 expect(await Bun.file(other).text()).toBe("another channel");
 
+// Directory ownership is checked at every output/lock boundary, not just at leaves.
+for (const boundary of [
+  ".bunaway",
+  "dist",
+  "dist/windows-x64",
+  "dist/windows-x64/packaged",
+  "dist/.bunaway-locks",
+  "dist/.bunaway-locks/windows-x64",
+  "dist/windows-x64/packaged/win-direct",
+]) {
+  const path = resolve(project, boundary);
+  const external = resolve(project, `../external-${crypto.randomUUID()}`);
+  await fs.rename(path, external);
+  await fs.symlink(external, path, "junction");
+  const sentinel = resolve(external, "sentinel.txt");
+  await Bun.write(sentinel, "external bytes");
+  const entries = (await fs.readdir(external, { recursive: true })).sort();
+  try {
+    await expect(
+      buildProject(project, { native, development: boundary === ".bunaway" }),
+    ).rejects.toThrow(/without links|regular file or directory/);
+    expect(await Bun.file(sentinel).text()).toBe("external bytes");
+    expect((await fs.readdir(external, { recursive: true })).sort()).toEqual(entries);
+    expect(await Bun.file(helper).text()).toBe("linked artifact");
+    expect(await Bun.file(reportPath).text()).toBe(linkedReportText);
+    expect(await Bun.file(other).text()).toBe("another channel");
+  } finally {
+    await fs.unlink(path);
+    await fs.rename(external, path);
+    await fs.rm(resolve(path, "sentinel.txt"));
+  }
+}
+
 // Each failure boundary restores moved artifacts, junctions and reports to the old build.
 for (const failure of ["preservation", "backup", "publication"]) {
   let transfers = 0;

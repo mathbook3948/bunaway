@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import {
   type FileHandle,
   lstat,
-  mkdir,
   open,
   readdir,
   readFile,
@@ -10,15 +9,18 @@ import {
   realpath,
   rename,
   rm,
+  writeFile,
 } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import {
   type AdapterInput,
+  BUILD_TARGETS,
   type BuildArtifact,
   type BuildTarget,
   type ChannelId,
   CODES,
   type Diagnostic,
+  isChannelId,
   type PackageAdapter,
   type PackageManifest,
   type PackageReport,
@@ -29,6 +31,7 @@ import {
   type StageContext,
   type StageResult,
 } from "./contract.ts";
+import { ownedDirectory } from "./directories.ts";
 import { ArtifactInputError, loadManifest, verifyArtifact } from "./inputs.ts";
 import { acquirePackageInputLock, TargetLockError } from "./locks.ts";
 
@@ -76,11 +79,17 @@ async function verifyStagingLinks(staging: string): Promise<void> {
       if (entry.isDirectory()) directories.push(path);
       else if (entry.isSymbolicLink()) {
         // Absolute targets still point at the old staging path after publication.
-        if (isAbsolute(await readlink(path))) {
+        const link = await readlink(path);
+        if (isAbsolute(link)) {
           throw new Error(`Absolute staging links cannot survive publication: ${path}`);
         }
-        if (!inside(canonicalStaging, await realpath(path))) {
-          throw new Error(`Staging link escapes staging: ${path}`);
+        let target = dirname(path);
+        // A relative link can leave and reenter through the staging name, then break on rename.
+        for (const part of link.split(process.platform === "win32" ? /[\\/]/ : /\//)) {
+          target = await realpath(`${target}${sep}${part}`);
+          if (!inside(canonicalStaging, target)) {
+            throw new Error(`Staging link escapes staging: ${path}`);
+          }
         }
       }
     }
@@ -110,7 +119,9 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
   let reportPublished = false;
 
   const platform = platformOf(channel);
+  const invalidName = !isChannelId(channel) || !BUILD_TARGETS.includes(target);
   if (
+    invalidName ||
     adapter.channel !== channel ||
     adapter.platform !== platform ||
     !target.startsWith(`${platform}-`)
@@ -155,6 +166,8 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
     artifacts: [],
     notes,
   };
+  // JS callers must not turn channel/target names into arbitrary filesystem paths.
+  if (invalidName) return report;
 
   let failed = diagnostics.length > 0;
   function reportFailure(error: unknown) {
@@ -170,8 +183,18 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
       message: error instanceof Error ? error.message : String(error),
     });
   }
+  async function remove(path: string, recursive = false) {
+    if (await ownedDirectory(metadata.root, dirname(path))) {
+      // rm unlinks a leaf symlink/junction; only its parent must be owned.
+      await rm(path, { recursive, force: true });
+    }
+  }
+  async function stageReport() {
+    await remove(stagedReport);
+    await writeFile(stagedReport, `${JSON.stringify(report, null, 2)}\n`, { flag: "wx" });
+  }
   async function writeReport() {
-    await Bun.write(stagedReport, `${JSON.stringify(report, null, 2)}\n`);
+    await stageReport();
     await rename(stagedReport, reportPath);
   }
   const lockPath = `${output}.lock`;
@@ -179,7 +202,7 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
   let releaseTarget: (() => Promise<void>) | undefined;
   try {
     releaseTarget = await acquirePackageInputLock(metadata.root, target);
-    await mkdir(dirname(output), { recursive: true });
+    await ownedDirectory(metadata.root, dirname(output), true);
     lock = await open(lockPath, "wx");
   } catch (error) {
     await releaseTarget?.();
@@ -198,6 +221,7 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
     return report;
   }
   try {
+    await ownedDirectory(metadata.root, output);
     if (!failed) {
       try {
         input.manifest = await loadManifest(artifact);
@@ -269,7 +293,7 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
         },
       };
       try {
-        await mkdir(staging, { recursive: true });
+        await ownedDirectory(metadata.root, staging, true);
         await stage.run(ctx);
         stages.push({
           id: stage.id,
@@ -403,7 +427,8 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
         ...entry,
         path: resolve(output, relative(staging, entry.path)),
       }));
-      await Bun.write(stagedReport, `${JSON.stringify(report, null, 2)}\n`);
+      await stageReport();
+      await ownedDirectory(metadata.root, output);
       const backup = `${output}.previous-${crypto.randomUUID()}`;
       let moved = false;
       try {
@@ -419,12 +444,15 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
         await rename(stagedReport, reportPath);
         reportPublished = true;
       } catch (error) {
-        if (outputPublished) await rm(output, { recursive: true, force: true });
-        if (moved) await rename(backup, output);
+        if (outputPublished) await remove(output, true);
+        if (moved) {
+          await ownedDirectory(metadata.root, dirname(output));
+          await rename(backup, output);
+        }
         throw error;
       }
       if (moved) {
-        await rm(backup, { recursive: true, force: true }).catch(async (error: unknown) => {
+        await remove(backup, true).catch(async (error: unknown) => {
           diagnostics.push({
             stage: "report",
             code: CODES.STAGE_FAILED,
@@ -440,7 +468,7 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
     reportFailure(error);
   } finally {
     try {
-      await rm(staging, { recursive: true, force: true });
+      await remove(staging, true);
       if (!reportPublished) {
         try {
           await writeReport();
@@ -448,13 +476,13 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
           reportFailure(error);
         }
       }
-      await rm(stagedReport, { force: true });
+      await remove(stagedReport);
     } finally {
       try {
         try {
           await lock.close();
         } finally {
-          await rm(lockPath, { force: true });
+          await remove(lockPath);
         }
       } finally {
         await releaseTarget?.();

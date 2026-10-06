@@ -27,6 +27,7 @@ Bun의 최종 해시는 `packagedSha256`이며, 없으면 네이티브 호스트
 
 세 채널 모두 개발자 자격증명(`signing`)으로 서명한다. 서명이 필요한 채널에서
 서명이 없으면 `usable`/`submittable`이 `false`인 진단으로 끝난다.
+Inno Setup을 사용하는 `win-direct`와 `win-store-unpackaged`는 6.3 이상이 필요하다.
 
 ### `win-direct` — 직접 배포 인스톨러
 

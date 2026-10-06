@@ -1,6 +1,7 @@
-import { lstat, mkdir, open, readdir, rm } from "node:fs/promises";
-import { resolve } from "node:path";
-import type { BuildTarget } from "./contract.ts";
+import { lstat, open, readdir, rm } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { BUILD_TARGETS, type BuildTarget } from "./contract.ts";
+import { ownedDirectory } from "./directories.ts";
 
 export class TargetLockError extends Error {
   constructor(
@@ -12,6 +13,7 @@ export class TargetLockError extends Error {
 }
 
 function lockDirectory(root: string, target: BuildTarget): string {
+  if (!BUILD_TARGETS.includes(target)) throw new Error(`Unsupported build target: ${target}`);
   return resolve(root, "dist", ".bunaway-locks", target);
 }
 
@@ -25,13 +27,13 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-async function createLock(path: string): Promise<() => Promise<void>> {
+async function createLock(root: string, path: string): Promise<() => Promise<void>> {
   const file = await open(path, "wx");
   return async () => {
     try {
       await file.close();
     } finally {
-      await rm(path, { force: true });
+      if (await ownedDirectory(root, dirname(path))) await rm(path, { force: true });
     }
   };
 }
@@ -41,12 +43,12 @@ export async function acquirePackageInputLock(
   target: BuildTarget,
 ): Promise<() => Promise<void>> {
   const directory = lockDirectory(root, target);
-  await mkdir(directory, { recursive: true });
+  await ownedDirectory(root, directory, true);
   const build = resolve(directory, "build.lock");
   if (await exists(build)) {
     throw new TargetLockError(build, `Build target ${target} is locked by a rebuild.`);
   }
-  const release = await createLock(resolve(directory, `package-${crypto.randomUUID()}.lock`));
+  const release = await createLock(root, resolve(directory, `package-${crypto.randomUUID()}.lock`));
   // Recheck after registering: a builder may have acquired its lock during registration.
   try {
     if (await exists(build)) {
@@ -64,11 +66,11 @@ export async function acquireBuildOutputLock(
   target: BuildTarget,
 ): Promise<() => Promise<void>> {
   const directory = lockDirectory(root, target);
-  await mkdir(directory, { recursive: true });
+  await ownedDirectory(root, directory, true);
   const build = resolve(directory, "build.lock");
   let release: () => Promise<void>;
   try {
-    release = await createLock(build);
+    release = await createLock(root, build);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     throw new TargetLockError(build, `Build target ${target} is locked by another rebuild.`);

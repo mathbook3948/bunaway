@@ -25,6 +25,7 @@ import { release } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { validateValue } from "../../packages/protocol/src/index.ts";
 import { validationCases } from "../protocol/validation-cases.ts";
+import { terminateRenderers } from "./macos-renderer.ts";
 import { readReport } from "./reports.ts";
 
 const original = resolve(process.argv[process.argv.indexOf("--package") + 1] ?? "");
@@ -271,15 +272,17 @@ async function updateAsset(name: string, text: string) {
   await writeFile(manifestPath, JSON.stringify(manifest));
 }
 
-// WebContent renderers are spawned by launchd, not by our host: inventory is a
-// delta over the baseline snapshot taken at driver start.
+// WebContent renderers are spawned by launchd, not by our host: inventory is the
+// current user's delta over the baseline snapshot taken at driver start.
 async function webContentPids(): Promise<number[]> {
-  const probe = Bun.spawn(["/usr/bin/pgrep", "-f", "com.apple.WebKit.WebContent"], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  assert.ok(process.getuid, "WebContent inventory requires a POSIX user ID");
+  const probe = Bun.spawn(
+    ["/usr/bin/pgrep", "-U", String(process.getuid()), "-f", "com.apple.WebKit.WebContent"],
+    { stdout: "pipe", stderr: "pipe" },
+  );
   const text = await new Response(probe.stdout).text();
-  await probe.exited;
+  const exit = await probe.exited;
+  assert.ok(exit === 0 || exit === 1, await new Response(probe.stderr).text());
   return text
     .split("\n")
     .map((line) => Number(line.trim()))
@@ -626,16 +629,7 @@ try {
           });
           const beforeCrash = (await hostLog()).length;
           await rm(join(dataRoot, "temp", "read.json"));
-          let terminated = 0;
-          for (const pid of pids) {
-            try {
-              process.kill(pid, "SIGKILL");
-              terminated++;
-            } catch (cause) {
-              if ((cause as NodeJS.ErrnoException).code !== "ESRCH") throw cause;
-            }
-          }
-          assert.ok(terminated > 0, "no live test renderer was terminated");
+          terminateRenderers(pids);
           await waitFor(
             async () =>
               (await hostLog())
