@@ -384,3 +384,41 @@ export function checkDynamicRegistrationNames(
   // @ts-expect-error a widened local name cannot guarantee any particular event
   unknownLocalName.events["memo.saved"];
 }
+
+function patternedNamespaceApp(namespace: `feature-${number}`) {
+  const module = defineModule(namespace)
+    .command("save", contract, () => null)
+    .event("saved", textSchema);
+  return defineApp({ modules: [module] });
+}
+
+function patternedLocalNameApp(localName: `${number}`) {
+  const module = defineModule("memo")
+    .command(localName, contract, () => null)
+    .event(localName, textSchema);
+  return defineApp({ modules: [module] });
+}
+
+export function checkPatternedNamespaceTypes(
+  client: Client<
+    CommandsOf<ReturnType<typeof patternedNamespaceApp>>,
+    EventsOf<ReturnType<typeof patternedNamespaceApp>>
+  >,
+) {
+  // @ts-expect-error a namespace pattern does not guarantee any particular command
+  client.invoke("feature-999.save", "text");
+  // @ts-expect-error a namespace pattern does not guarantee any particular event
+  client.listen("feature-999.saved", () => {}, { onError() {} });
+}
+
+export function checkPatternedLocalNameTypes(
+  client: Client<
+    CommandsOf<ReturnType<typeof patternedLocalNameApp>>,
+    EventsOf<ReturnType<typeof patternedLocalNameApp>>
+  >,
+) {
+  // @ts-expect-error a local name pattern does not guarantee any particular command
+  client.invoke("memo.999", "text");
+  // @ts-expect-error a local name pattern does not guarantee any particular event
+  client.listen("memo.999", () => {}, { onError() {} });
+}

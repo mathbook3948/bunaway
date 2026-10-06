@@ -3,9 +3,13 @@ import type { Schema } from "@bunaway/protocol";
 import { command, type CommandContract, type CommandHandler } from "./command.ts";
 import { checkName, claimName, type RegistrationKind } from "./registration.ts";
 
-type SingleEntry<K extends string, T> = K extends unknown ? Readonly<Record<K, T>> : never;
+type SingleEntry<K extends string, T> = K extends unknown
+  ? Record<never, never> extends Record<K, never>
+    ? Record<never, never>
+    : Readonly<Record<K, T>>
+  : never;
 // A runtime name selects one entry. Union names are alternatives, and widened
-// strings cannot guarantee any particular entry.
+// strings or template patterns cannot guarantee any particular entry.
 type RegisteredEntry<N extends string, K extends string, T> = string extends N | K
   ? Record<never, never>
   : SingleEntry<`${N}.${K}`, T>;
