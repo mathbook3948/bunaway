@@ -76,11 +76,17 @@ async function verifyStagingLinks(staging: string): Promise<void> {
       if (entry.isDirectory()) directories.push(path);
       else if (entry.isSymbolicLink()) {
         // Absolute targets still point at the old staging path after publication.
-        if (isAbsolute(await readlink(path))) {
+        const link = await readlink(path);
+        if (isAbsolute(link)) {
           throw new Error(`Absolute staging links cannot survive publication: ${path}`);
         }
-        if (!inside(canonicalStaging, await realpath(path))) {
-          throw new Error(`Staging link escapes staging: ${path}`);
+        let target = dirname(path);
+        // A relative link can leave and reenter through the staging name, then break on rename.
+        for (const part of link.split(process.platform === "win32" ? /[\\/]/ : /\//)) {
+          target = await realpath(`${target}${sep}${part}`);
+          if (!inside(canonicalStaging, target)) {
+            throw new Error(`Staging link escapes staging: ${path}`);
+          }
         }
       }
     }

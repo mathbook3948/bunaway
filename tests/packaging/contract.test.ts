@@ -13,7 +13,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import {
   artifactPaths,
   type BuildArtifact,
@@ -1290,7 +1290,53 @@ test.each(
 );
 
 const relativeLinkTest = process.platform === "win32" ? test.skip : test;
-relativeLinkTest.each(["relative", "dot-relative", "dot-absolute"])(
+relativeLinkTest.each(["staging-name", "root-link"])(
+  "%s relative links cannot leave staging and reenter before publication",
+  async (form) => {
+    const projectRoot = await mkdtemp(join(home, "unstable-relative-link-"));
+    await makeArtifact(projectRoot);
+    const output = resolve(projectRoot, "dist/windows-x64/packaged/win-direct");
+    const previous = resolve(output, "setup.exe");
+    await Bun.write(previous, "last good installer");
+    const report = await runAdapter(
+      projectRoot,
+      stubAdapter({
+        async run(ctx) {
+          const payload = resolve(ctx.staging, "payload");
+          await Bun.write(resolve(payload, "setup.exe"), "new installer");
+          let target = `../${basename(ctx.staging)}/payload`;
+          if (form === "root-link") {
+            await symlink(".", resolve(ctx.staging, "root"), "dir");
+            target = `root/${target}`;
+          }
+          const link = resolve(ctx.staging, "linked");
+          await symlink(target, link, "dir");
+          expect(await realpath(link)).toBe(await realpath(payload));
+          ctx.addArtifact("payload/setup.exe", "installer", { signed: true });
+        },
+      }),
+    );
+    expect(report.ok).toBe(false);
+    expect(report.usable).toBe(false);
+    expect(report.submittable).toBe(false);
+    expect(report.artifacts).toEqual([]);
+    expect(report.diagnostics).toContainEqual(
+      expect.objectContaining({ stage: "verify-artifact", code: CODES.VERIFY_FAILED }),
+    );
+    expect(await Bun.file(previous).text()).toBe("last good installer");
+    expect(
+      (await readdir(resolve(output, ".."))).some((name) =>
+        /\.building-|\.previous-|\.lock$/.test(name),
+      ),
+    ).toBe(false);
+    expect(await readdir(resolve(projectRoot, "dist/.bunaway-locks/windows-x64"))).toEqual([]);
+    expect(
+      await Bun.file(packagingReportPath(projectRoot, "windows-x64", "win-direct")).json(),
+    ).toEqual(report);
+  },
+);
+
+relativeLinkTest.each(["relative", "dot-relative", "dot-absolute", "parent-relative"])(
   "%s artifacts reached through internal directory links remain valid after publication",
   async (form) => {
     const projectRoot = await mkdtemp(join(home, "internal-link-"));
@@ -1301,13 +1347,19 @@ relativeLinkTest.each(["relative", "dot-relative", "dot-absolute"])(
         async run(ctx) {
           const payload = resolve(ctx.staging, "payload");
           await Bun.write(resolve(payload, "setup.exe"), "installer");
-          await symlink("payload", resolve(ctx.staging, "linked"), "dir");
+          const link = form === "parent-relative" ? "nested/linked" : "linked";
+          await mkdir(dirname(resolve(ctx.staging, link)), { recursive: true });
+          await symlink(
+            form === "parent-relative" ? "../payload" : "payload",
+            resolve(ctx.staging, link),
+            "dir",
+          );
           ctx.addArtifact(
             form === "dot-absolute"
               ? `${ctx.staging}/linked/./setup.exe`
               : form === "dot-relative"
                 ? "./linked/setup.exe"
-                : "linked/setup.exe",
+                : `${link}/setup.exe`,
             "installer",
           );
         },
@@ -1320,7 +1372,11 @@ relativeLinkTest.each(["relative", "dot-relative", "dot-absolute"])(
     expect(await Bun.file(report.artifacts[0]?.path ?? "").text()).toBe("installer");
     expect(
       await Bun.file(
-        resolve(projectRoot, "dist/windows-x64/packaged/win-direct/linked/setup.exe"),
+        resolve(
+          projectRoot,
+          "dist/windows-x64/packaged/win-direct",
+          form === "parent-relative" ? "nested/linked/setup.exe" : "linked/setup.exe",
+        ),
       ).text(),
     ).toBe("installer");
     expect(report.artifacts[0]?.size).toBe(Buffer.byteLength("installer"));
