@@ -14,6 +14,8 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import * as windowsTools from "../../packages/packaging/src/channels/windows/common.ts";
+import { verifySignatures } from "../../packages/packaging/src/channels/windows/sign.ts";
 import {
   adapterFor,
   artifactPaths,
@@ -722,36 +724,74 @@ test("unsigned sidecars do not invalidate signed distribution artifacts", async 
   expect(report.artifacts.find((a) => a.kind === "checksum")?.signingRequired).toBe(false);
 });
 
-test("Store EXE checklist does not prevent submission of a signed installer", async () => {
-  const projectRoot = await mkdtemp(join(home, "store-checklist-"));
-  await makeArtifact(projectRoot);
-  const store = adapterFor("win-store-unpackaged");
-  if (!store) throw new Error("Expected the Store EXE adapter.");
-  const report = await runAdapter(projectRoot, {
-    ...store,
-    stages(input) {
-      // Use the real submission stage after a fixture signed installer.
-      const submission = store.stages(input).find((stage) => stage.id === "submission");
-      if (!submission) throw new Error("Missing Store checklist stage.");
-      return [
-        {
-          id: "signed-fixture",
-          title: "Signed installer fixture",
-          async run(ctx) {
-            await Bun.write(resolve(ctx.staging, "setup.exe"), "signed installer fixture");
-            ctx.addArtifact("setup.exe", "installer", { signed: true });
-          },
+test.each([0, 1])(
+  "Store EXE submission requires a verified Microsoft CA root (CTL exit %s)",
+  async (ctlExit) => {
+    const projectRoot = await mkdtemp(join(home, "store-checklist-"));
+    await makeArtifact(projectRoot);
+    const store = adapterFor("win-store-unpackaged");
+    if (!store) throw new Error("Expected the Store EXE adapter.");
+    const findTool = spyOn(windowsTools, "findWindowsKitTool").mockResolvedValue("signtool.exe");
+    const must = spyOn(windowsTools, "must").mockImplementation(async (_exe, _args, options) => {
+      const rootFile = options?.env?.BUNAWAY_VERIFY_ROOT;
+      if (rootFile) await Bun.write(rootFile, "public root certificate fixture");
+      return { code: 0, stdout: "", stderr: "" };
+    });
+    const run = spyOn(windowsTools, "run").mockResolvedValue({
+      code: ctlExit,
+      stdout: "",
+      stderr: "",
+    });
+    try {
+      const report = await runAdapter(projectRoot, {
+        ...store,
+        stages(input) {
+          // Use the real submission stage after a fixture signed installer.
+          const submission = store.stages(input).find((stage) => stage.id === "submission");
+          if (!submission) throw new Error("Missing Store checklist stage.");
+          return [
+            {
+              id: "signed-fixture",
+              title: "Signed installer fixture",
+              async run(ctx) {
+                const installer = resolve(ctx.staging, "setup.exe");
+                await Bun.write(installer, "signed installer fixture");
+                ctx.addArtifact("setup.exe", "installer", { signed: true });
+                // Local Authenticode verification succeeds for both public and
+                // locally trusted private roots; the CTL distinguishes them.
+                await verifySignatures(ctx, [installer]);
+                expect((await readdir(ctx.staging)).some((file) => file.endsWith(".cer"))).toBe(
+                  false,
+                );
+              },
+            },
+            submission,
+          ];
         },
-        submission,
-      ];
-    },
-  });
-  expect(report.ok).toBe(true);
-  expect(report.submittable).toBe(true);
-  expect(report.artifacts.find((a) => a.kind === "submission-metadata")?.signingRequired).toBe(
-    false,
-  );
-});
+      });
+      expect(report.ok).toBe(ctlExit === 0);
+      expect(report.submittable).toBe(ctlExit === 0);
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(run.mock.calls[0]?.[1]?.slice(0, 2)).toEqual(["-verifyCTL", "AuthRoot"]);
+      if (ctlExit !== 0) {
+        expect(
+          report.diagnostics.some(
+            (d) => d.severity === "error" && /Microsoft Trusted Root Program/.test(d.message),
+          ),
+        ).toBe(true);
+        expect(report.artifacts).toEqual([]);
+        return;
+      }
+      expect(report.artifacts.find((a) => a.kind === "submission-metadata")?.signingRequired).toBe(
+        false,
+      );
+    } finally {
+      run.mockRestore();
+      must.mockRestore();
+      findTool.mockRestore();
+    }
+  },
+);
 
 test("signed sidecars alone do not make a channel submittable", async () => {
   const projectRoot = await mkdtemp(join(home, "only-sidecar-"));

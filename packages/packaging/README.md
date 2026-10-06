@@ -67,6 +67,9 @@ Store용 버전은 major가 1 이상이고 `release.build`가 0이어야 한다.
   제거 시 데이터 삭제를 막는다. 제한 기능 `unvirtualizedResources`가 필요하며
   **Store 제출 시 Microsoft 승인이 필요**하다. false면 OS 기본 동작(가상화 +
   제거 시 정리)이고, 이 경우 데이터 보존은 보장하지 않는다.
+- 데이터 보존을 요청하면 최소 Windows 버전은 `10.0.18362.0` 이상이어야 한다.
+  최소 버전은 채널의 `minVersion`, 일치하는 `targets[].minVersion`, 기본값 순으로
+  선택한다. 기본값은 데이터 보존 시 `18362`, 그 외에는 `17763`이다.
 - `maxVersionTested`(기본 `10.0.26100.0`), `capabilities`, `packageName`,
   `minVersion`은 채널 설정으로 바꿀 수 있다.
 - `packageName`은 3~50자이며, 생략하면 identifier에서 생성하고 50자로 제한한다.
@@ -79,6 +82,9 @@ MSIX와 **다른 업데이트 계약**을 따른다. Store 요구사항에 맞�
 - standalone 오프라인 인스톨러만 허용 — 다운로드 부트스트랩을 쓰지 않는다
   (`webView2`는 `check`만, `bootstrap`은 검증 단계에서 거부).
 - 인스톨러와 내부 모든 PE는 신뢰된 루트 CA 체인으로 서명해야 제출 가능.
+- 로컬 Authenticode 신뢰뿐 아니라 Windows의 캐시된 Microsoft AuthRoot CTL에서
+  서명 루트의 포함 여부를 검사한다. 개인/테스트 루트나 CTL 검증 실패는 제출 가능
+  판정을 거부한다. 오프라인 장비도 유효한 CTL 캐시가 필요하다.
 - Inno 컴파일 중 제거 프로그램과 setup 임시 복사본까지 서명·검증한다.
   비밀번호는 자식 프로세스 환경으로만 전달하며 생성 스크립트에 저장하지 않는다.
 - 무인 설치 `/VERYSILENT`를 지원(UAC 허용).

@@ -68,9 +68,13 @@ const iscc = process.platform === "win32" ? await findIscc() : undefined;
 test.skipIf(!iscc)(
   "Inno compiles literal display names and the WebView2 version check",
   async () => {
-    const root = await realpath(await mkdtemp(join(tmpdir(), "bunaway-inno-compile-")));
+    const root = join(
+      await realpath(await mkdtemp(join(tmpdir(), "bunaway-inno-compile-"))),
+      "{demo}",
+    );
     try {
       await Bun.write(join(root, "app", "bunaway-host.exe"), "host fixture");
+      await Bun.write(join(root, "bootstrapper.exe"), "bootstrapper fixture");
       await mkdir(join(root, "installer"));
       const ctx: StageContext = {
         input: input({}),
@@ -89,7 +93,8 @@ test.skipIf(!iscc)(
         outputBaseName: "setup",
         desktopShortcut: true,
         startMenuShortcut: true,
-        webView2: "check",
+        webView2: "bootstrap",
+        bootstrapperPath: join(root, "bootstrapper.exe"),
         appDataDir: "{localappdata}\\bunaway\\test.app",
         preserveUserData: true,
       });
@@ -97,7 +102,7 @@ test.skipIf(!iscc)(
       expect(await Bun.file(installer).exists()).toBe(true);
       expect(Bun.file(installer).size).toBeGreaterThan(0);
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await rm(resolve(root, ".."), { recursive: true, force: true });
     }
   },
   30000,
@@ -162,12 +167,32 @@ test("MSIX staging bounds derived package names and preserves explicit identitie
     };
     for (const path of Object.values(icons)) await Bun.write(path, "icon fixture");
     const identifier = "com.example.department.product.averylongapplicationname";
-    for (const packageName of [undefined, "Store.ReservedIdentity"]) {
+    for (const [packageName, minVersion, channelConfig] of [
+      [undefined, "10.0.18362.0", {}],
+      ["Store.ReservedIdentity", "10.0.22621.0", {}],
+      ["Store.ChannelOverride", "10.0.26100.0", { minVersion: "10.0.26100.0" }],
+      ["Store.Virtualized", "10.0.17763.0", { unvirtualizedData: false }],
+    ] as const) {
       const msixInput: AdapterInput = {
         ...original,
         channel: "win-store-msix",
-        channelConfig: packageName === undefined ? {} : { packageName },
-        metadata: { ...metadata, root, identifier, icons },
+        channelConfig: { ...channelConfig, ...(packageName ? { packageName } : {}) },
+        metadata: {
+          ...metadata,
+          root,
+          identifier,
+          icons,
+          targets: [
+            {
+              platform: "windows",
+              arch: "x64",
+              ...(packageName === "Store.ReservedIdentity" ||
+              packageName === "Store.ChannelOverride"
+                ? { minVersion: "10.0.22621.0" }
+                : {}),
+            },
+          ],
+        },
         artifact: { dir: source, packageDir: source, executable: join(source, "bunaway-host.exe") },
       };
       const staging = join(root, packageName ?? "derived");
@@ -176,6 +201,7 @@ test("MSIX staging bounds derived package names and preserves explicit identitie
       await stage.run({ input: msixInput, staging, report() {}, addArtifact() {} });
       const xml = await readFile(join(staging, "package", "AppxManifest.xml"), "utf8");
       expect(xml).toContain(`<Identity Name="${packageName ?? identifier.slice(0, 50)}"`);
+      expect(xml).toContain(`MinVersion="${minVersion}"`);
     }
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -201,6 +227,20 @@ test("win-store-msix requires publisher.identity and MSIX icons up front", () =>
   };
   const stages = adapter.stages(msixInput({}, fullIcons));
   expect(runIds(stages)).toEqual(["stage", "assemble", "sign", "verify-artifact"]);
+  const oldTarget = msixInput(
+    { targets: [{ platform: "windows", arch: "x64", minVersion: "10.0.17763.0" }] },
+    fullIcons,
+  );
+  expect(() => adapter.stages(oldTarget)).toThrow(/unvirtualizedData requires minVersion/);
+  expect(() =>
+    adapter.stages({ ...oldTarget, channelConfig: { unvirtualizedData: false } }),
+  ).not.toThrow();
+  expect(() =>
+    adapter.stages({ ...oldTarget, channelConfig: { minVersion: "10.0.18362.0" } }),
+  ).not.toThrow();
+  expect(() =>
+    adapter.stages({ ...oldTarget, channelConfig: { minVersion: "10.0.17763.0" } }),
+  ).toThrow(/unvirtualizedData requires minVersion/);
   expect(() =>
     adapter.stages(
       msixInput(
@@ -263,6 +303,18 @@ test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data pol
     'Type: filesandordirs; Name: "{localappdata}\\bunaway\\com.example.app"',
   );
   expect(perMachine).toContain("MicrosoftEdgeWebview2Setup.exe");
+  const bracePath = "C:\\project\\{demo}\\bootstrapper.exe";
+  const braceScript = renderInnoScript({
+    ...base,
+    scope: "perUser",
+    bootstrapperPath: bracePath,
+    webView2: "bootstrap",
+  });
+  expect(braceScript).toContain(`Source: "${bracePath}";`);
+  expect(braceScript).not.toContain("C:\\project\\{{demo}");
+  expect(() =>
+    renderInnoScript({ ...base, scope: "perUser", bootstrapperPath: "bad\npath" }),
+  ).toThrow(/line breaks/);
   expect(perMachine).toContain('Parameters: "/silent /install"');
   expect(perMachine).toContain("SignTool=bunaway\nSignedUninstaller=yes");
   expect(perUser).not.toContain("SignTool=bunaway");
@@ -294,7 +346,7 @@ test("AppxManifest declares full trust, virtualization opt-out and icon resource
     publisherDisplay: "Example",
     publisherIdentity: "CN=Example",
     version: "1.2.3.0",
-    minVersion: "10.0.17763.0",
+    minVersion: "10.0.18362.0",
     unvirtualizedData: true,
     capabilities: [],
     executable: "bunaway-host.exe",
@@ -306,6 +358,9 @@ test("AppxManifest declares full trust, virtualization opt-out and icon resource
     },
   };
   const xml = renderAppxManifest(manifestOptions);
+  expect(() => renderAppxManifest({ ...manifestOptions, minVersion: "10.0.17763.0" })).toThrow(
+    /unvirtualizedData requires minVersion/,
+  );
   for (const packageName of ["a", "ab", "a".repeat(51)]) {
     expect(() => renderAppxManifest({ ...manifestOptions, packageName })).toThrow(/3\.\.50/);
     expect(() =>

@@ -34,13 +34,13 @@ export interface InnoOptions {
   signed?: boolean;
 }
 
-function issLiteral(value: string): string {
+function issLiteral(value: string, constants = true): string {
   if (/[\r\n\0]/.test(value)) throw new Error("Inno values must not contain line breaks or NUL.");
-  return value.replace(/{/g, "{{");
+  return constants ? value.replace(/{/g, "{{") : value;
 }
 
-function issParameter(value: string): string {
-  return issLiteral(value).replace(/"/g, '""');
+function issParameter(value: string, constants = true): string {
+  return issLiteral(value, constants).replace(/"/g, '""');
 }
 
 // Display names can contain characters forbidden in Windows directory names.
@@ -93,11 +93,11 @@ export function renderInnoScript(options: InnoOptions): string {
 
   lines.push("", "[Files]");
   lines.push(
-    `Source: "${options.payloadDir}\\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs`,
+    `Source: "${issParameter(options.payloadDir, false)}\\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs`,
   );
   if (options.bootstrapperPath) {
     lines.push(
-      `Source: "${issParameter(options.bootstrapperPath)}"; DestDir: "{tmp}"; DestName: "MicrosoftEdgeWebview2Setup.exe"; Flags: deleteafterinstall`,
+      `Source: "${issParameter(options.bootstrapperPath, false)}"; DestDir: "{tmp}"; DestName: "MicrosoftEdgeWebview2Setup.exe"; Flags: deleteafterinstall`,
     );
   }
 

@@ -23,6 +23,7 @@ import { signFiles, verifySignatures } from "./sign.ts";
 // test — the report marks it unverified until then.
 
 const DEFAULT_MIN_VERSION = "10.0.17763.0";
+const UNVIRTUALIZED_MIN_VERSION = "10.0.18362.0";
 // TargetDeviceFamily requires MaxVersionTested; default to the SDK version
 // this tooling was verified on. Channels override via maxVersionTested.
 const DEFAULT_MAX_TESTED = "10.0.26100.0";
@@ -79,6 +80,14 @@ function escapeXml(value: string): string {
 }
 
 export function renderAppxManifest(options: MsixOptions): string {
+  if (
+    options.unvirtualizedData &&
+    options.minVersion.localeCompare(UNVIRTUALIZED_MIN_VERSION, undefined, { numeric: true }) < 0
+  ) {
+    throw new Error(
+      "unvirtualizedData requires minVersion >= 10.0.18362.0 to preserve data on uninstall.",
+    );
+  }
   if (options.packageName.length < 3 || options.packageName.length > 50) {
     throw new Error("win-store-msix requires packageName to be 3..50 characters.");
   }
@@ -171,6 +180,9 @@ const adapter: PackageAdapter = {
     const packageName =
       (config.packageName as string | undefined) ?? deriveMsixPackageName(metadata.identifier);
     const capabilities = (config.capabilities as string[] | undefined) ?? [];
+    const target = metadata.targets.find(
+      (target) => `${target.platform}-${target.arch}` === input.target,
+    );
     const manifestXml = renderAppxManifest({
       packageName,
       appId: input.manifest.app.id,
@@ -178,7 +190,10 @@ const adapter: PackageAdapter = {
       publisherDisplay: metadata.publisher.display,
       publisherIdentity: metadata.publisher.identity,
       version: metadata.version.msix,
-      minVersion: (config.minVersion as string | undefined) ?? DEFAULT_MIN_VERSION,
+      minVersion:
+        (config.minVersion as string | undefined) ??
+        target?.minVersion ??
+        (unvirtualizedData ? UNVIRTUALIZED_MIN_VERSION : DEFAULT_MIN_VERSION),
       maxVersionTested: (config.maxVersionTested as string | undefined) ?? DEFAULT_MAX_TESTED,
       unvirtualizedData,
       capabilities,
