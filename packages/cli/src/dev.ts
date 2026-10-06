@@ -1,6 +1,6 @@
 import { watch } from "node:fs";
 import { dirname, relative } from "node:path";
-import { type BuiltPackage, type NativeInputs, buildProject, prepareNative } from "./build.ts";
+import { type BuiltPackage, buildProject, type NativeInputs, prepareNative } from "./build.ts";
 import { type Project, validateProject } from "./config.ts";
 import { type DevServer, startDevServer } from "./dev-server.ts";
 import { closeWindowsApp, verifyWindowsLaunch, windowsLaunchEnvironment } from "./launch.ts";
@@ -56,10 +56,9 @@ export function shouldRestartHost(project: Project, name: string): boolean {
   if (/^(node_modules|vendor|dist|\.bunaway|\.git|\.next|\.turbo)(\/|$)/.test(path)) return false;
   if (!project.dev) return true;
   // Frontend files and dev-server outputs belong to that server's watcher.
-  const backendDirectories = [
-    project.backend,
-    ...(project.windowsApp ? [project.windowsApp] : []),
-  ].map((entry) => relative(project.root, dirname(entry)).replaceAll("\\", "/"));
+  const backendDirectories = [project.appEntry].map((entry) =>
+    relative(project.root, dirname(entry)).replaceAll("\\", "/"),
+  );
   return (
     ["package.json", "bun.lock", "tsconfig.json"].includes(path) ||
     path.startsWith("src-bunaway/") ||

@@ -5,8 +5,8 @@ import {
   files,
   frameworkRoot,
   hash,
-  json,
   installedPackageRoot,
+  json,
   runWorker,
   verifyHash,
 } from "./files.ts";
@@ -23,6 +23,7 @@ export const frameworkPaths = [
   "docs/decisions/0001-bundled-bun-process.md",
   "docs/decisions/0006-windows-bun-ui-worker.md",
   "docs/decisions/0009-development-server.md",
+  "docs/decisions/0010-windows-first-platform-model.md",
   "docs/development-server.md",
   "docs/architecture/windows-bun-results.md",
   "docs/platform-support/README.md",

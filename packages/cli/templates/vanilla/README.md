@@ -18,7 +18,7 @@ vendor/bunaway와 bunaway.lock.json은 없다. 같은 버전의 프레임워크 
 소스와 패키징 파일 경로는 프로젝트 루트 기준이다.
 
 `src`는 실제 클라이언트 SDK로 명령을 호출하고 이벤트를 구독한다.
-`src-bunaway/src`는 실제 백엔드 SDK로 범위 제한 Host API 저장 후 이벤트를 발행한다.
+`src-bunaway/app.ts`는 공통 앱 정의를 default export하며 실제 백엔드 SDK로 범위 제한 Host API 저장 후 이벤트를 발행한다.
 `src-bunaway/policy.json`은 `main` 뷰의 `messages/` 읽기/쓰기만 허용한다.
 저장 위치는 Windows `%LOCALAPPDATA%/bunaway/<appId>/data/messages/current.txt`,
 macOS `~/Library/Application Support/bunaway/<appId>/data/messages/current.txt`다.
@@ -32,7 +32,8 @@ macOS `~/Library/Application Support/bunaway/<appId>/data/messages/current.txt`�
 
 빌드 실패는 오류로 종료하고 마지막 성공 산출물을 유지한다.
 Windows 패키지는 `dist/windows-x64/bunaway.cmd`를 실행한다.
-`build.windowsApp`의 default export AppDefinition을 같은 Bun 프로세스에서 실행한다.
+`build.app`은 `src-bunaway/app.ts`를 지정한다. 앱 정의의 부팅은 프레임워크가 담당하며
+별도 `index.ts`나 플랫폼별 앱 진입점을 작성하지 않는다.
 macOS는 `dist/macos-arm64/<appId>.app`을 연다.
 Windows는 함께 제공된 `launch.ps1`이 내부 Bun을 검증하고 실행한다.
 macOS 명시적 인자는 `--package <절대 리소스 경로>`이며 `.app/Contents/Resources`다.

@@ -1,10 +1,10 @@
 import { lstat, realpath } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
+import { ownedDirectory, type PackagingConfig, parsePackaging } from "@bunaway/packaging";
 import { type Policy, parsePolicy } from "@bunaway/protocol";
-import { type PackagingConfig, ownedDirectory, parsePackaging } from "@bunaway/packaging";
+import { developmentUrl } from "../../runtime-bun/src/development.ts";
 import { validateFramework } from "./distribution.ts";
 import { json, projectPath } from "./files.ts";
-import { developmentUrl } from "../../runtime-bun/src/development.ts";
 
 export interface DevServerConfig {
   command: string[];
@@ -38,9 +38,8 @@ export function readDevSettings(value: unknown): DevServerConfig | undefined {
 export interface Project {
   root: string;
   frameworkRoot: string;
-  backend: string;
+  appEntry: string;
   frontend: string;
-  windowsApp?: string;
   bundle?: PackagingConfig;
   dev?: DevServerConfig;
   app: {
@@ -84,7 +83,12 @@ export async function readProjectSettings(root: string): Promise<{
   if (config.version !== 1) throw new Error("Unsupported bunaway.json version (expected 1).");
   keys(config, ["version", "build", "app", "bundle", "dev"]);
   const build = record(config.build);
-  keys(build, ["backend", "frontend", "windowsApp"]);
+  if ("backend" in build || "windowsApp" in build) {
+    throw new Error(
+      "Use build.app with a default-exported AppDefinition; remove build.backend and build.windowsApp.",
+    );
+  }
+  keys(build, ["app", "frontend"]);
   const bundle =
     config.bundle === undefined ? undefined : parsePackaging(JSON.stringify(config.bundle));
   const dev = readDevSettings(config.dev);
@@ -106,27 +110,17 @@ export async function validateProject(
   const configDirectory = settings.directory;
   const config = settings.build;
   const server = options.development && settings.dev;
-  const backend = await projectPath(root, string(config.backend));
+  const appEntry = await projectPath(root, string(config.app));
   const frontendName = string(config.frontend);
   if (isAbsolute(frontendName) || frontendName.split(/[\\/]/).includes("..")) {
     throw new Error("build.frontend must be a project-relative directory without '..'.");
   }
   const frontend = server ? resolve(root, frontendName) : await projectPath(root, frontendName);
   if (server) await ownedDirectory(root, frontend);
-  const windowsApp =
-    config.windowsApp === undefined
-      ? undefined
-      : await projectPath(root, string(config.windowsApp));
-  if (!(await lstat(backend)).isFile() || (!server && !(await lstat(frontend)).isDirectory())) {
-    throw new Error("backend must be a file; frontend must be a directory.");
+  if (!(await lstat(appEntry)).isFile() || (!server && !(await lstat(frontend)).isDirectory())) {
+    throw new Error("app must be a file; frontend must be a directory.");
   }
-  if (windowsApp && !(await lstat(windowsApp)).isFile())
-    throw new Error("windowsApp must be a file.");
-  const frameworkRoot = await validateFramework(root, [
-    backend,
-    ...(server ? [] : [frontend]),
-    ...(windowsApp ? [windowsApp] : []),
-  ]);
+  const frameworkRoot = await validateFramework(root, [appEntry, ...(server ? [] : [frontend])]);
   const raw = settings.app;
   keys(raw, ["appId", "title", "view", "home", "window"]);
   const appId = string(raw.appId);
@@ -164,8 +158,7 @@ export async function validateProject(
   return {
     root,
     frameworkRoot,
-    backend,
-    ...(windowsApp ? { windowsApp } : {}),
+    appEntry,
     frontend,
     ...(settings.bundle ? { bundle: settings.bundle } : {}),
     ...(settings.dev ? { dev: settings.dev } : {}),

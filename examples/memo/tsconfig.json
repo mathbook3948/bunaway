@@ -10,5 +10,5 @@
     "skipLibCheck": true,
     "types": ["bun"]
   },
-  "include": ["src/**/*.ts", "src-bunaway/src/**/*.ts", "vite.config.ts"]
+  "include": ["src/**/*.ts", "src-bunaway/**/*.ts", "vite.config.ts"]
 }

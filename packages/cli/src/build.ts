@@ -1,9 +1,8 @@
 import { chmod, cp, lstat, mkdir, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
 import { acquireBuildOutputLock, ownedDirectory, PACKAGING_CHANNELS } from "@bunaway/packaging";
-import { type Project, validateProject } from "./config.ts";
-import { writeWindowsLauncher } from "./launch.ts";
 import { developmentPolicy } from "../../runtime-bun/src/development.ts";
+import { type Project, validateProject } from "./config.ts";
 import {
   files,
   frameworkRoot,
@@ -14,6 +13,7 @@ import {
   verifyHash,
   writeJson,
 } from "./files.ts";
+import { writeWindowsLauncher } from "./launch.ts";
 
 export type Target = "windows-x64" | "macos-arm64";
 export interface NativeInputs {
@@ -188,10 +188,6 @@ export async function buildProject(
       }
     await bundleAssets(project, assets, windows, !!server);
     if (windows) {
-      if (!project.windowsApp)
-        throw new Error(
-          "Windows requires windowsApp: a module default-exporting AppDefinition. See the Windows migration guide.",
-        );
       if (!native.loader) throw new Error("Windows requires the pinned WebView2Loader DLL.");
       const deps = (await json(resolve(root, "native/windows/bun/deps.json"))) as {
         webview2Sdk: { files: Record<string, string> };

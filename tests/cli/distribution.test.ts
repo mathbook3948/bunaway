@@ -15,7 +15,6 @@ import { dirname, relative, resolve } from "node:path";
 import { packFramework } from "../../packages/cli/scripts/pack.ts";
 import { bundleAssets } from "../../packages/cli/src/build.ts";
 import { validateProject } from "../../packages/cli/src/config.ts";
-import { createProject } from "./project.ts";
 import {
   checkArtifact,
   packageFilename,
@@ -24,6 +23,7 @@ import {
 } from "../../packages/cli/src/distribution.ts";
 import { installedPackageRoot, json, writeJson } from "../../packages/cli/src/files.ts";
 import { buildWithSdk, sdkPlugin } from "../../packages/cli/src/sdk.ts";
+import { createProject } from "./project.ts";
 
 async function command(
   cwd: string,
@@ -394,7 +394,7 @@ test("validation and bundling reject SDK aliases from nested and transitive impo
     await Bun.write(foreign, 'export const marker = "FOREIGN_SDK_99_0_0";\n');
     for (const [directory, entry, name] of [
       ["src/nested", "src/main.ts", "@bunaway/client"],
-      ["src-bunaway/src/nested", "src-bunaway/src/index.ts", "@bunaway/core"],
+      ["src-bunaway/nested", "src-bunaway/app.ts", "@bunaway/core"],
       ["shared", "src/main.ts", "@bunaway/client"],
     ] as const) {
       const parent = resolve(project, directory);

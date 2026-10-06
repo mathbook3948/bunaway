@@ -65,7 +65,7 @@ Windows x64/macOS arm64의 기존 개발 도구 요구사항을 따른다. Linux
 
 - UI 변경: 서버의 HMR/페이지 갱신을 사용한다. CLI는 UI를 다시 번들하지 않는다.
 - 백엔드 변경: 이전 호스트 종료 → 백엔드·호스트 빌드 → 새 창/세션 시작. 서버는 유지한다.
-- 감시 대상: src-bunaway, backend/windowsApp 진입점의 디렉터리, 루트 package.json·bun.lock·tsconfig.json.
+- 감시 대상: src-bunaway, build.app 앱 정의의 디렉터리, 루트 package.json·bun.lock·tsconfig.json.
   진입점이 프로젝트 루트에 있으면 루트 파일만 감시하고 UI 하위 디렉터리는 제외한다.
   그 밖의 공유 백엔드 모듈을 바꾸면 CLI를 다시 실행한다.
 - dev 설정 변경: 기존 호스트와 개발 서버를 종료하고 새 설정으로 시작한다.

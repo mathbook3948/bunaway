@@ -4,6 +4,10 @@ status: accepted
 
 # 번들 Bun을 별도 자식 프로세스로 실행한다
 
+2026-10-06: [ADR 0010](./0010-windows-first-platform-model.md)에 따라 Windows를
+먼저 완성하고 다른 플랫폼을 같은 Bun 기반 개발 모델에 맞춘다. 아래 macOS 자식
+프로세스 구조는 현재 구현 기록이며, 향후 목표는 Bun을 앱 진입점으로 전환하는 것이다.
+
 2026-10-06: Windows 제품 경로는 [ADR 0006](./0006-windows-bun-ui-worker.md)으로 대체됐다.
 Windows는 번들 Bun이 앱 진입점이며 같은 프로세스의 UI Worker가 Win32·WebView2를 직접
 소유한다. 아래 Windows 설명은 기존 B 실험의 기록이다. macOS의 자식 프로세스 구조는 유지한다.
