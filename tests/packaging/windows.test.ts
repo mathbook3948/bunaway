@@ -200,6 +200,102 @@ test.skipIf(!iscc)(
   60000,
 );
 
+test.skipIf(!iscc)(
+  "Inno upgrades prune renamed and disabled shortcuts while preserving unrelated links and app data",
+  async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "bunaway-inno-shortcuts-")));
+    const install = join(root, "install");
+    const menu = join(root, "menu");
+    const desktop = join(root, "desktop");
+    const data = join(root, "data", "memo.txt");
+    const uninstall = join(install, "unins000.exe");
+    const identifier = `app.test-${crypto.randomUUID()}`;
+    const names = ["Old's {App}", "New's {App}", "New's {App}", "New's {App}"];
+    const silent = ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"];
+    const unrelated = [join(menu, "Unrelated.lnk"), join(desktop, `Other (${identifier}).lnk`)];
+    async function removeInstallation() {
+      await must(uninstall, silent);
+      for (let retry = 0; retry < 100; retry++) {
+        if (!(await Bun.file(uninstall).exists())) return;
+        await Bun.sleep(50);
+      }
+      throw new Error("The fixture uninstaller did not finish.");
+    }
+    try {
+      await Bun.write(join(root, "other.exe"), "unrelated executable");
+      for (let index = 0; index < names.length; index++) {
+        const name = names[index] as string;
+        const staging = join(root, String(index));
+        await Bun.write(join(staging, "app", "bunaway-host.exe"), "host fixture");
+        await mkdir(join(staging, "installer"));
+        const ctx: StageContext = {
+          input: input({}),
+          staging,
+          report() {},
+          addArtifact() {},
+        };
+        let script = renderInnoScript({
+          name,
+          identifier,
+          version: `${index + 1}.0.0`,
+          publisher: "Test",
+          scope: "perUser",
+          payloadDir: join(staging, "app"),
+          outputDir: join(staging, "installer"),
+          outputBaseName: "setup",
+          desktopShortcut: index < 3,
+          startMenuShortcut: index < 3,
+          webView2: "check",
+          appDataDir: join(root, "data"),
+          preserveUserData: true,
+          assetPaths: [],
+        })
+          .replaceAll("{group}", menu)
+          .replaceAll("{autodesktop}", desktop);
+        if (index === 0) {
+          // Start with a pre-fix installer that never pruned its links.
+          script = script.replace(/ {4}PruneShortcuts\([^\n]+\);\n/g, "");
+          script = script.replace(
+            "[Icons]\n",
+            `[Icons]\nName: "${menu}\\Unrelated"; Filename: "${root}\\other.exe"\nName: "${desktop}\\Other (${identifier})"; Filename: "${root}\\other.exe"\n`,
+          );
+        }
+        const setup = await compileInno(ctx, script, staging, "setup");
+        await must(setup, [
+          "/SP-",
+          ...silent,
+          `/DIR=${install}`,
+          `/TASKS=${index < 2 ? "desktopicon" : "!desktopicon"}`,
+        ]);
+        if (index === 0) {
+          await Bun.write(data, "memo");
+          await Bun.write(join(menu, "broken.lnk"), "not a shortcut");
+        }
+        for (const previous of new Set(names.slice(0, index + 1))) {
+          const current = previous === name;
+          expect(await Bun.file(join(menu, `${previous}.lnk`)).exists()).toBe(current && index < 3);
+          expect(await Bun.file(join(menu, `${previous} 제거.lnk`)).exists()).toBe(
+            current && index < 3,
+          );
+          expect(await Bun.file(join(desktop, `${previous} (${identifier}).lnk`)).exists()).toBe(
+            current && index < 2,
+          );
+        }
+        for (const link of unrelated) expect(await Bun.file(link).exists()).toBe(true);
+        expect(await Bun.file(join(menu, "broken.lnk")).text()).toBe("not a shortcut");
+        expect(await Bun.file(data).text()).toBe("memo");
+      }
+      await removeInstallation();
+      for (const link of unrelated) expect(await Bun.file(link).exists()).toBe(true);
+      expect(await Bun.file(data).text()).toBe("memo");
+    } finally {
+      if (await Bun.file(uninstall).exists()) await removeInstallation();
+      await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  },
+  60000,
+);
+
 const makeappx =
   process.platform === "win32" ? await findWindowsKitTool("makeappx.exe") : undefined;
 

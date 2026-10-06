@@ -36,6 +36,8 @@ Inno Setup 스크립트를 생성·컴파일한다. 채널 설정:
   또는 `perMachine`(`{autopf}`, 관리자 필요).
   새 설치 폴더와 시작 메뉴 그룹은 identifier로 구분하며, 기존 설치의 업데이트는
   이전에 선택한 폴더를 유지한다. 바탕화면 바로가기에도 identifier를 붙인다.
+  업데이트는 이름 변경·설정 변경·작업 선택 해제로 더 이상 사용하지 않는 앱
+  바로가기를 정리하며, 다른 설치를 가리키는 링크와 읽을 수 없는 링크는 유지한다.
 - `webView2`: `bootstrap`(기본 — 설치 시 런타임이 없으면 Microsoft 공식
   Evergreen 부트스트랩을 무인 실행) 또는 `check`(감지만).
 - `desktopShortcut`(기본 false), `startMenuShortcut`(기본 true).

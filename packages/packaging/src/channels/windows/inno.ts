@@ -57,7 +57,8 @@ export function renderInnoScript(options: InnoOptions): string {
       "perMachine installs must preserve user data; cleanup requires a perUser install.",
     );
   }
-  const directoryName = issLiteral(installerDirectoryName(options.name));
+  const shortcutName = installerDirectoryName(options.name);
+  const directoryName = issLiteral(shortcutName);
   const identifier = issLiteral(options.identifier);
   const defaultDir = perUser
     ? `{localappdata}\\Programs\\${identifier}`
@@ -168,6 +169,41 @@ export function renderInnoScript(options: InnoOptions): string {
     "",
   );
   lines.push(
+    "// Only prune generated links that still point to this installation.",
+    "procedure PruneShortcuts(const Directory, Pattern: String; Current: TStringList);",
+    "var Entry: TFindRec; Shell, Link: Variant; Filename, Target: String;",
+    "begin",
+    "  if not FindFirst(Directory, Entry) then Exit;",
+    "  try",
+    "    if (Entry.Attributes and FILE_ATTRIBUTE_REPARSE_POINT) <> 0 then Exit;",
+    "  finally",
+    "    FindClose(Entry);",
+    "  end;",
+    "  if not FindFirst(AddBackslash(Directory) + Pattern, Entry) then Exit;",
+    "  try",
+    "    Shell := CreateOleObject('WScript.Shell');",
+    "    repeat",
+    "      if ((Entry.Attributes and (FILE_ATTRIBUTE_DIRECTORY or FILE_ATTRIBUTE_REPARSE_POINT)) = 0) and",
+    "         (Current.IndexOf(Entry.Name) < 0) then begin",
+    "        Filename := AddBackslash(Directory) + Entry.Name;",
+    "        try",
+    "          Link := Shell.CreateShortcut(Filename);",
+    "          Target := Link.TargetPath;",
+    "        except",
+    "          Target := '';",
+    "          Log('Could not inspect shortcut: ' + Filename);",
+    "        end;",
+    "        if (CompareText(Target, ExpandConstant('{app}\\bunaway-host.exe')) = 0) or",
+    "           (CompareText(Target, ExpandConstant('{uninstallexe}')) = 0) then",
+    "          if not DeleteFile(Filename) then",
+    "            RaiseException('Could not remove obsolete shortcut: ' + Filename);",
+    "      end;",
+    "    until not FindNext(Entry);",
+    "  finally",
+    "    FindClose(Entry);",
+    "  end;",
+    "end;",
+    "",
     "procedure PruneAssets(const Base, Relative: String; Current: TStringList);",
     "var Entry: TFindRec; Path, Child: String;",
     "begin",
@@ -213,6 +249,22 @@ export function renderInnoScript(options: InnoOptions): string {
     ),
     "    PruneAssets(ExpandConstant('{app}'), 'assets', Current);",
     "    PruneAssets(ExpandConstant('{app}'), 'licenses', Current);",
+    "    Current.Clear;",
+    ...(options.startMenuShortcut
+      ? [
+          `    Current.Add('${shortcutName.replace(/'/g, "''")}.lnk');`,
+          `    Current.Add('${shortcutName.replace(/'/g, "''")} 제거.lnk');`,
+        ]
+      : []),
+    "    PruneShortcuts(ExpandConstant('{group}'), '*.lnk', Current);",
+    "    Current.Clear;",
+    ...(options.desktopShortcut
+      ? [
+          "    if WizardIsTaskSelected('desktopicon') then",
+          `      Current.Add('${shortcutName.replace(/'/g, "''")} (${identifier}).lnk');`,
+        ]
+      : []),
+    `    PruneShortcuts(ExpandConstant('{autodesktop}'), '* (${identifier}).lnk', Current);`,
     "  finally",
     "    Current.Free;",
     "  end;",
