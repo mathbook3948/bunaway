@@ -48,7 +48,7 @@ test("Vite template generates a relocatable app with HMR and local production as
     // Development works before a frontend production build exists.
     const development = await validateProject(project, { development: true });
     expect(await Bun.file(resolve(project, "web-dist/index.html")).exists()).toBe(false);
-    await verifyViteDevelopment(development);
+    await verifyViteDevelopment(development, "vite");
     for (const args of [
       ["run", "build"],
       ["run", "bunaway", "validate"],
@@ -66,13 +66,27 @@ test("Vite template generates a relocatable app with HMR and local production as
     for (const windows of [false, true]) {
       const assets = resolve(root, windows ? "windows-assets" : "backend-assets");
       await bundleAssets(production, assets, windows);
-      const html = await readFile(resolve(assets, "web/index.html"), "utf8");
+      const html = (await readFile(resolve(assets, "web/index.html"), "utf8")).replaceAll(
+        "&#39;",
+        "'",
+      );
       expect(html).not.toContain("/@vite/client");
       expect(html).not.toContain("unsafe-inline");
       expect(html).not.toContain("ws://");
+      expect(html).toContain("default-src 'self'");
+      expect(html).toContain("Vite + TS");
       const entry = html.match(/src="\.\/([^"]+\.js)"/)?.[1];
       if (!entry) throw new Error("Missing packaged UI entry.");
       expect(await Bun.file(resolve(assets, "web", entry)).exists()).toBe(true);
+      const script = await readFile(resolve(assets, "web", entry), "utf8");
+      expect(script).toContain("Count is");
+      expect(script).toContain("Explore Vite");
+      expect(script).not.toContain("data:image/");
+      expect(await Bun.file(resolve(assets, "web/icons.svg")).exists()).toBe(true);
+      expect(await Bun.file(resolve(assets, "web/favicon.svg")).exists()).toBe(true);
+      expect(await readFile(resolve(assets, "web/LICENSE.vite.txt"), "utf8")).toContain(
+        "MIT License",
+      );
     }
   } finally {
     await rm(root, { recursive: true, force: true });

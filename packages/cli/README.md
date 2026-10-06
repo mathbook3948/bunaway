@@ -55,7 +55,8 @@ bun install
 bun run bunaway dev
 ```
 
-`vite` 템플릿은 루트 `index.html`과 `src/` UI 소스를 사용한다.
+`vite` 템플릿은 공식 `create-vite@9.2.1`의 vanilla-ts 기본 화면(로고·카운터)을 사용한다.
+루트 `index.html`, `src/` UI 코드·스타일·이미지, `public/` 정적 자산은 upstream 원본이다.
 `dev`·`build`·`preview`는 Vite 프런트엔드 명령이며 `bunaway` script로 네이티브 CLI를 호출한다.
 UI 변경은 Vite가 처리하고 백엔드 변경은 CLI가 호스트를 재시작한다.
 네이티브 검증·빌드·패키징 전에는 `bun run build`로 `web-dist/`를 생성한다.

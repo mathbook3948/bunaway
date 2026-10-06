@@ -1,23 +1,13 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'" />
-    <title>bunaway Vite</title>
-    <link rel="stylesheet" href="/src/style.css" />
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vite + TS</title>
   </head>
   <body>
-    <main>
-      <h1>bunaway Vite</h1>
-      <p>UI → command → scoped Host API storage → event → UI</p>
-      <label for="message">Message</label>
-      <textarea id="message" maxlength="10000" rows="5"></textarea>
-      <button id="save" type="button" disabled>Save message</button>
-      <p id="status" role="status">Connecting…</p>
-      <h2>Saved message</h2>
-      <pre id="saved"></pre>
-    </main>
+    <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
