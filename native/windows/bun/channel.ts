@@ -289,10 +289,15 @@ export class Channel {
   notify(packet: Packet) {
     void this.send(packet).catch(this.fail);
   }
-  canSend(count = 1) {
+  canSend(count = 1, pendingRequests = 0) {
     return (
       [...this.pending.values()].filter((item) => item.lane === "data").length + count <=
-      API_LIMITS.maxPending
+        API_LIMITS.maxPending &&
+      // A request keeps its cancellation slot until completion or cancellation ack.
+      pendingRequests +
+        [...this.pending.values()].filter((item) => item.lane === "cancel").length +
+        count <=
+        API_LIMITS.maxPending
     );
   }
   async drain() {

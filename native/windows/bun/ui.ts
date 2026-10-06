@@ -107,7 +107,11 @@ try {
       origin: originOf,
       source: () => native.source(),
       ready: () => starting && !stopping && !closingSent,
-      capacity: (count) => channel.canSend(count),
+      capacity: (count) =>
+        channel.canSend(
+          count,
+          [...views.values()].reduce((total, view) => total + view.boundary.pendingCount, 0),
+        ),
       forward: (packet) => {
         if (packet.kind === "revoke")
           for (const [id, context] of approved)

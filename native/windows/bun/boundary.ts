@@ -163,6 +163,13 @@ export class ViewBoundary {
         });
         if (message.kind === "unlisten") session.subscriptions.delete(message.subscriptionId);
       } else if (message.kind === "cancel") {
+        const pending = session.pending.get(message.id);
+        if (pending?.kind === "listen") {
+          // Core creates subscriptions synchronously. Preserve the late result so
+          // the SDK can unlisten, even if delivery outlasts the original deadline.
+          pending.expiry = Number.POSITIVE_INFINITY;
+          return;
+        }
         // Ignore repeated/unknown cancellations so Web input cannot flood reserved slots.
         if (!session.pending.delete(message.id)) return;
         this.error(message.id, { code: "CANCELLED", message: "Request cancelled." });
@@ -275,6 +282,9 @@ export class ViewBoundary {
   scanDeadlines() {
     for (const [id, pending] of this.session?.pending ?? [])
       if (performance.now() >= pending.expiry) this.expire(id);
+  }
+  get pendingCount() {
+    return this.session?.pending.size ?? 0;
   }
 }
 
