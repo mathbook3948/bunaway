@@ -9,17 +9,18 @@ import { adapterFor, CODES, registerAdapter } from "../../packages/packaging/src
 const project = process.argv[2];
 if (!project) throw new Error("Expected a generated project path.");
 const nativeDir = resolve(project, ".bunaway/test-native");
+const loader = resolve(nativeDir, "WebView2Loader.dll");
 const native: build.NativeInputs = {
   target: "windows-x64",
-  host: resolve(nativeDir, "host.exe"),
+  host: resolve(nativeDir, "bun.exe"),
   bun: resolve(nativeDir, "bun.exe"),
+  loader,
   licenses: {
     "LICENSE.bun": resolve(nativeDir, "LICENSE.bun"),
-    "LICENSE.nlohmann-json": resolve(nativeDir, "LICENSE.nlohmann-json"),
     "License-WebView2.txt": resolve(nativeDir, "License-WebView2.txt"),
   },
 };
-for (const path of [native.host, native.bun, ...Object.values(native.licenses)]) {
+for (const path of [native.bun, loader, ...Object.values(native.licenses)]) {
   await Bun.write(path, "test native input");
 }
 
@@ -27,7 +28,7 @@ for (const path of [native.host, native.bun, ...Object.values(native.licenses)])
 const buildProject = build.buildProject;
 const readJson = files.json;
 const pinPath = resolve(files.frameworkRoot, "runtime/build-manifests/windows-x64.json");
-const depsPath = resolve(files.frameworkRoot, "native/windows/host/deps.json");
+const depsPath = resolve(files.frameworkRoot, "native/windows/bun/deps.json");
 let builds = 0;
 let nativeTarget: build.NativeInputs["target"] = "windows-x64";
 mock.module(import.meta.resolve("../../packages/cli/src/files.ts"), () => ({
@@ -35,7 +36,7 @@ mock.module(import.meta.resolve("../../packages/cli/src/files.ts"), () => ({
   json: async (path: string) => {
     const value = await readJson(path);
     if (path === pinPath) {
-      const pin = value as { bun: Record<string, unknown>; json: Record<string, unknown> };
+      const pin = value as { bun: Record<string, unknown> };
       return {
         ...pin,
         bun: {
@@ -43,16 +44,15 @@ mock.module(import.meta.resolve("../../packages/cli/src/files.ts"), () => ({
           executableSha256: await files.hash(native.bun),
           licenseSha256: await files.hash(native.licenses["LICENSE.bun"] ?? ""),
         },
-        json: {
-          ...pin.json,
-          licenseSha256: await files.hash(native.licenses["LICENSE.nlohmann-json"] ?? ""),
-        },
       };
     }
     if (path === depsPath) {
       return {
         webview2Sdk: {
-          files: { "LICENSE.txt": await files.hash(native.licenses["License-WebView2.txt"] ?? "") },
+          files: {
+            "LICENSE.txt": await files.hash(native.licenses["License-WebView2.txt"] ?? ""),
+            "build/native/x64/WebView2Loader.dll": await files.hash(loader),
+          },
         },
       };
     }
