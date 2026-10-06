@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { MessageChannel } from "node:worker_threads";
 import { ViewBoundary } from "../../native/windows/bun/boundary.ts";
 import { Channel, type Packet, type Route } from "../../native/windows/bun/channel.ts";
@@ -235,7 +235,7 @@ test("Windows channel bounds unacknowledged data and reserved control slots", as
   await Promise.allSettled([...holds, ...controls]);
 });
 
-test("diagnostic saturation preserves request capacity, BUSY rejection and control delivery", async () => {
+test("saturated data and diagnostics preserve cancellation, deadlines and lifecycle delivery", async () => {
   const { port1, port2 } = new MessageChannel();
   const failures: unknown[] = [];
   const output: ServerMessage[] = [];
@@ -314,14 +314,44 @@ test("diagnostic saturation preserves request capacity, BUSY rejection and contr
     expect(received.filter(({ packet }) => packet.kind === "diagnostic")).toHaveLength(16);
     expect(output.at(-1)).toMatchObject({ kind: "error", error: { code: "BUSY" } });
     expect(failures).toHaveLength(0);
+    for (let index = 0; index < API_LIMITS.maxPending / 2; index++)
+      boundary.receive(
+        source,
+        JSON.stringify({ kind: "cancel", protocol: PROTOCOL_VERSION, id: `request-${index}` }),
+      );
+    expect(output.at(-1)).toMatchObject({ kind: "error", error: { code: "CANCELLED" } });
+    const clock = spyOn(performance, "now").mockReturnValue(
+      performance.now() + API_LIMITS.maxCommandDurationMs + 1,
+    );
+    try {
+      boundary.scanDeadlines();
+      boundary.scanDeadlines();
+    } finally {
+      clock.mockRestore();
+    }
+    expect(output.at(-1)).toMatchObject({ kind: "error", error: { code: "TIMEOUT" } });
+    const outputCount = output.length;
+    for (let index = 0; index < API_LIMITS.maxPending * 2; index++) {
+      // Repeated and unknown IDs must not consume another cancellation slot.
+      boundary.receive(
+        source,
+        JSON.stringify({ kind: "cancel", protocol: PROTOCOL_VERSION, id: `request-${index}` }),
+      );
+    }
+    expect(output).toHaveLength(outputCount);
+    boundary.revoke("navigation");
     hold = false;
     for (const envelope of received) port2.postMessage({ runtime, ack: envelope.sequence });
     await closing;
     await channel.drain();
+    expect(
+      received.filter(({ packet }) => packet.kind === "client" && packet.message.kind === "cancel"),
+    ).toHaveLength(API_LIMITS.maxPending);
+    expect(received.some(({ packet }) => packet.kind === "revoke")).toBe(true);
     await channel.send({ kind: "diagnostic", event: "resumed", fields: {} });
     expect(received.at(-1)?.packet).toMatchObject({
       kind: "diagnostic",
-      fields: { droppedDiagnostics: API_LIMITS.maxPending + 1 - 16 },
+      fields: { droppedDiagnostics: API_LIMITS.maxPending * 2 + 2 - 16 },
     });
     expect(failures).toHaveLength(0);
   } finally {
@@ -330,3 +360,82 @@ test("diagnostic saturation preserves request capacity, BUSY rejection and contr
     port2.close();
   }
 });
+
+test.each(["main", "main-io"] as const)(
+  "%s cancels all pending Host calls without consuming shutdown capacity",
+  async (side) => {
+    const { port1, port2 } = new MessageChannel();
+    const runtime = { id: "test", generation: "1" };
+    const failures: unknown[] = [];
+    const received: Packet[] = [];
+    const channel = new Channel(
+      port1,
+      runtime,
+      side,
+      () => {},
+      (error) => failures.push(error),
+    );
+    let release = () => {};
+    const accepted = new Promise<void>((done) => {
+      release = done;
+    });
+    const receiver = new Channel(
+      port2,
+      runtime,
+      side === "main" ? "ui" : "io",
+      (packet) => {
+        received.push(packet);
+        if (packet.kind === "shutdown") release();
+        return accepted;
+      },
+      (error) => failures.push(error),
+    );
+    try {
+      for (let index = 0; index < API_LIMITS.maxPending; index++) {
+        const operation = {
+          context: "backend-test" as Route["context"],
+          requestId: `host-${index}`,
+          call: { operation: "capabilities.get", payload: null } as const,
+        };
+        channel.notify(
+          side === "main"
+            ? { ...operation, kind: "authorize" }
+            : { ...operation, kind: "operation", source: "backend" },
+        );
+      }
+      for (let index = 0; index < API_LIMITS.maxPending; index++)
+        channel.notify({
+          kind: "cancel",
+          context: "backend-test" as Route["context"],
+          requestId: `host-${index}`,
+        });
+      await expect(
+        channel.send({
+          kind: "cancel",
+          context: "backend-test" as Route["context"],
+          requestId: "overflow",
+        }),
+      ).rejects.toThrow("full");
+      await channel.send({ kind: "shutdown" });
+      await channel.drain();
+      expect(received.filter((packet) => packet.kind === "cancel")).toHaveLength(
+        API_LIMITS.maxPending,
+      );
+      expect(received.at(-1)?.kind).toBe("shutdown");
+      expect(failures).toHaveLength(0);
+      // Acknowledgements release cancellation capacity for subsequent work.
+      await channel.send({
+        kind: "cancel",
+        context: "backend-test" as Route["context"],
+        requestId: "next",
+      });
+      expect(failures).toHaveLength(0);
+    } finally {
+      release();
+      channel.close();
+      receiver.close();
+      port1.close();
+      port2.close();
+    }
+  },
+);

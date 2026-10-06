@@ -77,7 +77,6 @@ const controlKinds = new Set([
   "closing",
   "cleaned",
   "revoke",
-  "cancel",
   "cancel-context",
   "fatal",
   "ready",
@@ -190,7 +189,11 @@ export class Channel {
   private droppedDiagnostics = 0;
   private readonly pending = new Map<
     number,
-    { lane: "data" | "control" | "diagnostic"; resolve(): void; reject(error: Error): void }
+    {
+      lane: "data" | "cancel" | "control" | "diagnostic";
+      resolve(): void;
+      reject(error: Error): void;
+    }
   >();
   constructor(
     private readonly port: Pick<MessagePort | Worker, "postMessage" | "on" | "off">,
@@ -245,9 +248,12 @@ export class Channel {
       const lane =
         packet.kind === "diagnostic"
           ? "diagnostic"
-          : controlKinds.has(packet.kind)
-            ? "control"
-            : "data";
+          : packet.kind === "cancel" ||
+              (packet.kind === "client" && packet.message.kind === "cancel")
+            ? "cancel"
+            : controlKinds.has(packet.kind)
+              ? "control"
+              : "data";
       const count = [...this.pending.values()].filter((item) => item.lane === lane).length;
       if (packet.kind === "diagnostic" && count >= 16) {
         // Diagnostics must not consume request/control capacity or turn BUSY into app failure.
@@ -263,7 +269,8 @@ export class Channel {
         this.droppedDiagnostics = 0;
       }
       validatePacket(packet, opposite);
-      if (count >= (lane === "data" ? API_LIMITS.maxPending : 16))
+      // Cancelling every pending request must leave lifecycle control slots free.
+      if (count >= (lane === "data" || lane === "cancel" ? API_LIMITS.maxPending : 16))
         throw new Error("Worker channel full");
       const sequence = ++this.sequence;
       return new Promise((resolve, reject) => {

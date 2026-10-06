@@ -116,7 +116,7 @@ export class ViewBoundary {
             code: "INVALID_ARGUMENT",
             message: "Session is not negotiated.",
           });
-        if (!this.hooks.capacity(1))
+        if (message.kind !== "cancel" && !this.hooks.capacity(1))
           throw new BunawayError({ code: "BUSY", message: "UI channel is full." });
       }
       const session = this.session;
@@ -162,7 +162,9 @@ export class ViewBoundary {
           ...(message.kind === "listen" ? { event: message.event } : {}),
         });
         if (message.kind === "unlisten") session.subscriptions.delete(message.subscriptionId);
-      } else if (message.kind === "cancel" && session.pending.delete(message.id)) {
+      } else if (message.kind === "cancel") {
+        // Ignore repeated/unknown cancellations so Web input cannot flood reserved slots.
+        if (!session.pending.delete(message.id)) return;
         this.error(message.id, { code: "CANCELLED", message: "Request cancelled." });
       }
       this.hooks.forward({

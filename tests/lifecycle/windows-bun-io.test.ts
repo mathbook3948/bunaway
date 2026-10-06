@@ -4,7 +4,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Worker } from "node:worker_threads";
 import { Channel, type Packet } from "../../native/windows/bun/channel.ts";
-import type { HostContext } from "../../packages/protocol/src/index.ts";
+import { API_LIMITS, type HostContext } from "../../packages/protocol/src/index.ts";
 
 test.skipIf(process.platform !== "win32")(
   "oversized Web strings do not poison COM callbacks",
@@ -115,6 +115,19 @@ test.skipIf(process.platform !== "win32")(
       expect(existsSync(resolve(dataRoot, "temp/queued.txt"))).toBe(false);
       expect(existsSync(resolve(dataRoot, "temp/waiting.txt"))).toBe(false);
       expect(await readFile(resolve(dataRoot, "temp/started.txt"), "utf8")).toBe("written");
+      const batch = Array.from({ length: API_LIMITS.maxPending }, (_, index) => `batch-${index}`);
+      await Promise.all(batch.map(operation));
+      await Promise.all(
+        batch.map((requestId) => channel.send({ kind: "cancel", requestId, context })),
+      );
+      // Late approvals must not write any of the cancelled files.
+      await Promise.all(
+        batch.map((requestId) =>
+          channel.send({ kind: "grant", requestId, context, allowed: true }),
+        ),
+      );
+      for (const id of batch) expect(existsSync(resolve(dataRoot, `temp/${id}.txt`))).toBe(false);
+      expect(replies).toHaveLength(1);
       for (const [id, text] of [
         ["oversized", "a".repeat(1048576)],
         ["escaped", "\u0001".repeat(200000)],
