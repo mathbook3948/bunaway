@@ -15,8 +15,8 @@ pwsh -NoProfile -File native/windows/bun/prepare.ps1 -VerifyOnly
 개발/빌드에는 PowerShell 7과 고정 Bun, 실행에는 WebView2 Evergreen이 필요하다.
 MSVC·CMake·Ninja와 사용자 C/C++ 또는 Rust DLL은 필요 없다. Microsoft의 공식
 `WebView2Loader.dll`과 시스템 DLL은 사용한다. 생성 앱은 `bunaway.json`의
-`windowsApp`에 **default export AppDefinition** 파일을 지정한다.
-`backend`는 기존 프로세스 플랫폼의 `runBunApp` 진입점이다.
+`build.app`에 **default export AppDefinition** 파일을 지정한다.
+프레임워크가 이 앱 정의를 가져와 부팅하며 개발자가 별도 프로세스 진입점을 작성하지 않는다.
 
 CLI 생성 앱의 `bun run build` 결과는 `dist/windows-x64/bunaway.cmd` 또는
 `pwsh -NoProfile -File dist/windows-x64/launch.ps1 -Wait`로 실행한다.

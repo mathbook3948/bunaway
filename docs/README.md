@@ -31,6 +31,7 @@
 - [0008 — 설치 패키지와 bun.lock 기반 프레임워크 의존성](./decisions/0008-installed-framework-packages.md)
 - [0006 — Windows Bun 진입점·UI Worker·직접 FFI](./decisions/0006-windows-bun-ui-worker.md)
 - [0009 — 외부 UI 개발 서버와 CLI 수명주기](./decisions/0009-development-server.md)
+- [0010 — Windows 우선 개발과 공통 Bun 앱 정의](./decisions/0010-windows-first-platform-model.md)
 
 [이전 C ABI 초안](./architecture/native-abi.md)은 과거 설계 기록이다. 현재 Windows는 Worker 연결,
 macOS는 프로세스 IPC 계약을 사용한다.

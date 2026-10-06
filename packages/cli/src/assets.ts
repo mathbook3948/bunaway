@@ -2,8 +2,8 @@ import { cp, mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
 import type { BunPlugin } from "bun";
 import type { Project } from "./config.ts";
-import { files, inside } from "./files.ts";
-import { buildWithSdk, sdkPlugin } from "./sdk.ts";
+import { files, inside, installedPackageRoot } from "./files.ts";
+import { assertAppDefinitionExport, buildWithSdk, sdkPlugin } from "./sdk.ts";
 
 async function bundle(
   entrypoints: string[],
@@ -47,23 +47,38 @@ export async function bundleAssets(
   assets: string,
   developmentServer = false,
 ): Promise<void> {
+  await assertAppDefinitionExport(project.appEntry);
   const plugin = await sdkPlugin(project.root);
   if (!developmentServer) await webAssets(project, resolve(assets, "web"), plugin);
+  const runtimeEntry = resolve(
+    await installedPackageRoot(project.frameworkRoot, "@bunaway/runtime-bun"),
+    "src/index.ts",
+  );
+  // The current process host needs a bootstrap; app authors only supply the definition.
+  const entry: BunPlugin = {
+    name: "process-app-entry",
+    setup(build) {
+      plugin.setup(build);
+      build.onResolve({ filter: /^bunaway-process-app$/ }, () => ({
+        path: "backend.ts",
+        namespace: "bunaway-process-entry",
+      }));
+      build.onLoad({ filter: /.*/, namespace: "bunaway-process-entry" }, () => ({
+        contents: `import app from ${JSON.stringify(project.appEntry)};
+import { runBunApp } from ${JSON.stringify(runtimeEntry)};
+await runBunApp(app);`,
+        loader: "ts",
+        resolveDir: project.root,
+      }));
+    },
+  };
   const backend = await buildWithSdk(
-    { entrypoints: [project.backend], target: "bun", packages: "bundle" },
-    plugin,
+    { entrypoints: ["bunaway-process-app"], target: "bun", packages: "bundle" },
+    entry,
   );
   const backendOutput = backend[0];
   if (backend.length !== 1 || !backendOutput) throw new Error("Missing backend bundle.");
   await writeFile(resolve(assets, "backend.js"), new Uint8Array(await backendOutput.arrayBuffer()));
-  if (project.windowsApp) {
-    const app = await buildWithSdk(
-      { entrypoints: [project.windowsApp], target: "bun", packages: "bundle" },
-      plugin,
-    );
-    if (app.length !== 1 || !app[0]) throw new Error("Missing Windows AppDefinition bundle.");
-    await writeFile(resolve(assets, "app.js"), new Uint8Array(await app[0].arrayBuffer()));
-  }
 }
 
 export async function bundleWindowsAssets(
@@ -71,14 +86,13 @@ export async function bundleWindowsAssets(
   assets: string,
   developmentServer = false,
 ): Promise<void> {
-  if (!project.windowsApp)
-    throw new Error("Windows requires windowsApp: a module default-exporting AppDefinition.");
+  await assertAppDefinitionExport(project.appEntry);
   if (!developmentServer)
     await webAssets(project, resolve(assets, "web"), await sdkPlugin(project.root));
   await bundleWindowsHost(
     resolve(project.frameworkRoot, "native/windows/bun"),
     assets,
-    project.windowsApp,
+    project.appEntry,
     project.root,
   );
 }

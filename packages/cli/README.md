@@ -69,14 +69,16 @@ my-app/
   package.json, tsconfig.json
   src/{index.html,main.ts,style.css}
   src-bunaway/
-    src/{app.ts,index.ts}
+    app.ts
     bunaway.json, policy.json
   bun.lock (bun install 후 생성)
 ```
 
 `src-bunaway/bunaway.json` v1에 build·app·bundle을 통합한다. 권한은 policy.json에 둔다.
-`build.backend`, `build.windowsApp`(default export AppDefinition), `build.frontend`와
-패키징 파일 경로는 프로젝트 루트 상대 경로다. Windows 빌드에는 build.windowsApp이 필요하다.
+`build.app`은 공통 앱 정의(default export AppDefinition), `build.frontend`는 웹 UI
+디렉터리다. 두 소스 경로와 패키징 파일 경로는 프로젝트 루트 상대 경로다.
+플랫폼별 부팅은 프레임워크가 담당하며 개발자가 별도 `index.ts`를 작성하지 않는다.
+기존 `build.backend`·`build.windowsApp`은 제거하고 앱 정의 경로를 `build.app`에 지정한다.
 배포 전에는 현재 v1만 사용하고 이전 분리 설정·vendor 구조 호환을 제공하지 않는다.
 
 선택적 `dev`에 외부 UI 개발 서버의 `command`(인자 배열), `url`, `timeoutMs`를 지정한다.
@@ -92,7 +94,9 @@ vanilla MVP는 양쪽 호스트가 공통으로 지원하는 단일 뷰 `app` �
 macOS는 기존 `bunaway://` 매핑이다. policy.json의 HTTP origin은 허용하지 않는다.
 `dev.url`의 정확한 loopback origin은 개발 산출물에만 적용하며 프로덕션에 포함하지 않는다.
 
-템플릿은 실제 `createClient`/`command`/`runBunApp`을 사용한다.
+템플릿은 실제 `createClient`/`command`를 사용한다. Windows 부팅은 프레임워크가
+앱 정의를 import해 담당한다. 현재 macOS 프로세스 호스트용 `runBunApp` 호출은 CLI가
+번들 내부에 생성한다. 개발 우선순위는 [ADR 0010](../../docs/decisions/0010-windows-first-platform-model.md)을 따른다.
 `message.save` → 호출 컨텍스트의 Host API `storage.writeText` →
 `appData/messages/current.txt` → `message.saved` → UI 갱신이다.
 `message.read`로 시작/재실행 시 복원한다. 첫 실행의 파일 없음은 UI에 표시한다.

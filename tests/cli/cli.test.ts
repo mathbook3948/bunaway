@@ -2,11 +2,12 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readdir, realpath, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { buildProject, bundleAssets } from "../../packages/cli/src/build.ts";
 import { validateProject } from "../../packages/cli/src/config.ts";
-import { createProject } from "./project.ts";
 import { RestartController, shouldRestartHost } from "../../packages/cli/src/dev.ts";
 import { writeJson } from "../../packages/cli/src/files.ts";
+import { createProject } from "./project.ts";
 
 let home: string;
 let project: string;
@@ -30,7 +31,7 @@ beforeAll(async () => {
   for (const name of [
     "src-bunaway/policy.json",
     "src-bunaway/bunaway.json",
-    "src-bunaway/src/index.ts",
+    "src-bunaway/app.ts",
     "src/main.ts",
   ]) {
     originals[name] = await Bun.file(resolve(project, name)).text();
@@ -56,7 +57,15 @@ test("create produces a relocatable project with real SDK dependencies and no re
     resolve(project, "node_modules/@bunaway/packaging/package.json"),
   ).json();
   expect(packagingManifest.name).toBe("@bunaway/packaging");
-  expect(originals["src-bunaway/src/index.ts"]).not.toContain("examples/memo");
+  expect(
+    await Bun.file(
+      resolve(
+        project,
+        "node_modules/@bunaway/cli/docs/decisions/0010-windows-first-platform-model.md",
+      ),
+    ).exists(),
+  ).toBe(true);
+  expect(originals["src-bunaway/app.ts"]).not.toContain("examples/memo");
   const process = Bun.spawn([globalThis.process.execPath, "run", "validate"], {
     cwd: project,
     stdout: "pipe",
@@ -74,6 +83,58 @@ test("create refuses existing paths and missing parents without modifying them",
   expect((await readdir(home)).some((name) => name.includes(".creating-"))).toBe(false);
 });
 
+test("legacy platform entry settings require an explicit migration to build.app", async () => {
+  const path = resolve(project, "src-bunaway/bunaway.json");
+  const valid = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
+  try {
+    for (const field of ["backend", "windowsApp"]) {
+      await writeJson(path, { ...valid, build: { ...valid.build, [field]: valid.build.app } });
+      await expect(validateProject(project)).rejects.toThrow("Use build.app");
+    }
+  } finally {
+    await Bun.write(path, originals["src-bunaway/bunaway.json"] ?? "");
+  }
+});
+
+test("a single app definition bundles for Windows without executing app source during validation", async () => {
+  const entry = resolve(project, "src-bunaway/app.ts");
+  const marker = resolve(home, "app-imported.txt");
+  const assets = resolve(home, "windows-assets");
+  try {
+    await Bun.write(
+      entry,
+      `await Bun.write(${JSON.stringify(marker)}, "imported");\n${originals["src-bunaway/app.ts"]}`,
+    );
+    const valid = await validateProject(project);
+    expect(valid.appEntry).toBe(entry);
+    await bundleAssets(valid, assets, true);
+    expect(await Bun.file(marker).exists()).toBe(false);
+    expect(await Bun.file(resolve(assets, "backend.js")).exists()).toBe(false);
+    const app = (await import(pathToFileURL(resolve(assets, "app.js")).href)).default;
+    expect(Object.keys(app.commands).sort()).toEqual(["message.read", "message.save"]);
+    expect(Object.keys(app.events)).toEqual(["message.saved"]);
+    expect(await Bun.file(marker).text()).toBe("imported");
+  } finally {
+    await Bun.write(entry, originals["src-bunaway/app.ts"] ?? "");
+  }
+});
+
+test("app definitions must default-export for validation and both platform bundles", async () => {
+  const entry = resolve(project, "src-bunaway/app.ts");
+  const valid = await validateProject(project);
+  try {
+    await Bun.write(entry, "export const app = { commands: {}, events: {} };\n");
+    await expect(validateProject(project)).rejects.toThrow(/default/i);
+    for (const windows of [false, true]) {
+      await expect(
+        bundleAssets(valid, resolve(home, `missing-default-${windows}`), windows),
+      ).rejects.toThrow(/default/i);
+    }
+  } finally {
+    await Bun.write(entry, originals["src-bunaway/app.ts"] ?? "");
+  }
+});
+
 test("unified v1 configuration rejects malformed sections and old flat settings", async () => {
   const path = resolve(project, "src-bunaway/bunaway.json");
   const valid = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
@@ -81,7 +142,7 @@ test("unified v1 configuration rejects malformed sections and old flat settings"
     { ...valid, version: 2 },
     { version: 1, ...valid.build },
     { ...valid, injected: true },
-    { ...valid, build: { ...valid.build, backend: "../outside.ts" } },
+    { ...valid, build: { ...valid.build, app: "../outside.ts" } },
     { ...valid, build: { ...valid.build, injected: true } },
     { ...valid, app: { ...valid.app, appId: "../escape" } },
     { ...valid, app: { ...valid.app, home: "https://app.bunaway.local/missing.html" } },
@@ -105,9 +166,9 @@ test("bundle is optional until packaging and generated settings use only two fil
   const { bundle: _bundle, ...withoutBundle } = valid;
   try {
     expect((await readdir(resolve(project, "src-bunaway"))).sort()).toEqual([
+      "app.ts",
       "bunaway.json",
       "policy.json",
-      "src",
     ]);
     await writeJson(path, withoutBundle);
     expect((await validateProject(project)).bundle).toBeUndefined();
@@ -135,12 +196,12 @@ test("external development delegates frontend compilation and missing build outp
     expect(shouldRestartHost(development, "src/main.ts")).toBe(false);
     expect(shouldRestartHost(development, "public/icon.png")).toBe(false);
     expect(shouldRestartHost(development, ".next/cache/changed")).toBe(false);
-    expect(shouldRestartHost(development, "src-bunaway/src/app.ts")).toBe(true);
+    expect(shouldRestartHost(development, "src-bunaway/app.ts")).toBe(true);
     expect(shouldRestartHost(development, "src-bunaway/bunaway.json")).toBe(true);
-    const rootBackend = { ...development, backend: resolve(project, "backend.ts") };
+    const rootBackend = { ...development, appEntry: resolve(project, "app.ts") };
     expect(shouldRestartHost(rootBackend, "src/main.ts")).toBe(false);
     expect(shouldRestartHost(rootBackend, "public/icon.png")).toBe(false);
-    expect(shouldRestartHost(rootBackend, "backend.ts")).toBe(true);
+    expect(shouldRestartHost(rootBackend, "app.ts")).toBe(true);
     await expect(validateProject(project)).rejects.toThrow();
     const assets = resolve(home, "external-development-assets");
     await mkdir(assets, { recursive: true });
@@ -186,7 +247,7 @@ test("generated UI and backend bundle independently; source failures propagate",
   await bundleAssets(valid, assets);
   expect(await Bun.file(resolve(assets, "web/main.js")).text()).toContain("message.saved");
   expect(await Bun.file(resolve(assets, "backend.js")).text()).toContain("messages/current.txt");
-  for (const name of ["src-bunaway/src/index.ts", "src/main.ts"]) {
+  for (const name of ["src-bunaway/app.ts", "src/main.ts"]) {
     try {
       await Bun.write(resolve(project, name), "export const broken = ;\n");
       await expect(validateProject(project)).rejects.toThrow(/bundle failed/i);

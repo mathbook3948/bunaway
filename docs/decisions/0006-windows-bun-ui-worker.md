@@ -4,6 +4,10 @@ status: accepted
 
 # Windows는 Bun 진입점과 전용 UI Worker로 이식한다
 
+개발 순서는 [ADR 0010](./0010-windows-first-platform-model.md)에 따라 Windows를
+먼저 완성한 뒤 다른 플랫폼을 같은 Bun 기반 개발 모델에 맞춘다. 아래 `windowsApp`과
+기존 backend 진입점 분리는 당시 구현 기록이며, 공통 앱 정의 하나를 사용하는 방향으로 정리한다.
+
 2026-10-06 Windows 기본 제품 실행을 이 구조로 전환했다. 기존 C++ 호스트·probe·CMake·전용 실행기와 테스트는 삭제했다.
 [직접 FFI 실험](../../native/windows/ffi-probe/README.md)에서 같은 Bun 프로세스의
 UI Worker가 Win32·WebView2를 소유하고, 메인 스레드의 비동기 작업과 두 창의
@@ -165,7 +169,7 @@ WebView renderer 장애는 해당 뷰의 세션 폐기·재탐색, browser 장�
 | 4. 수명 회귀 | 기존 메모 앱과 다중 창 시나리오 | 개별 종료 뒤 나머지 창 동작, renderer 장애 격리, 모든 창·COM·브라우저·Worker 정리 |
 | 5. 제품 진입점 | CLI 번들·검증·배포와 실행 문서 전환 | 외부 artifact 설치·프로젝트 이동·독립 빌드, 절대 경로 번들 Bun 실행, 환경 오염 거부, 배포 기동 검증 |
 
-첫 연결은 `examples/memo/src-bunaway/src/app.ts`처럼 부작용 없는 AppDefinition 모듈을 사용한다.
+첫 연결은 `examples/memo/src-bunaway/app.ts`처럼 부작용 없는 AppDefinition 모듈을 사용한다.
 기존 `backend.ts`/`backend.js`는 import하면 `runBunApp()`가 stdin을 기다리므로
 새 호스트의 앱 정의로 import하지 않는다. 제품의 새 bootstrap은 검증 후 앱 정의를
 불러오는 진입점으로 번들해야 한다. CLI·템플릿에 `windowsApp` 설정과 default export AppDefinition을 적용했다.

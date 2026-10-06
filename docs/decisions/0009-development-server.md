@@ -27,7 +27,7 @@ macOS는 해당 자산 호스트만 bunaway://로 변환한다. 개발 서버 UR
 
 외부 서버 모드에서 CLI는 UI를 검증 번들하거나 배포 자산으로 복사하지 않는다.
 프런트엔드 출력 디렉터리가 아직 없어도 개발할 수 있다. UI의 변경·HMR·오류 화면은
-서버가 담당한다. CLI는 src-bunaway, backend/windowsApp 진입점 디렉터리와 루트
+서버가 담당한다. CLI는 src-bunaway, build.app 앱 정의 디렉터리와 루트
 package.json·bun.lock·tsconfig.json 변경을 감시한다. 백엔드 재시작은 세션을
 무효화하며 미완료 요청을 재전송하지 않는다. dev 설정 변경은 서버도 교체한다.
 

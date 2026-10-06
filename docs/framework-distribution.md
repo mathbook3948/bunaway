@@ -94,8 +94,10 @@ validate/typecheck/doctor/dev/build 및 앱 회귀를 확인한다. 일부 SDK�
 
 배포 전에는 현재 구조만 지원하며 설정 형식은 v1을 유지한다. 이전 vendor 구조나
 분리 설정을 읽는 호환 경로와 자동 마이그레이션은 제공하지 않는다.
-새 앱은 src/에 UI, src-bunaway/src/에 백엔드를 두고 src-bunaway/bunaway.json에
+새 앱은 src/에 UI, src-bunaway/app.ts에 공통 앱 정의를 두고 src-bunaway/bunaway.json에
 build·app·bundle을 통합한다. policy.json은 별도 권한 선언이다.
+기존 `build.backend`·`build.windowsApp`은 제거하고 AppDefinition을 default export하는
+모듈의 경로를 `build.app`에 지정한다. 개발자가 별도 `runBunApp` 부팅 코드를 작성하지 않는다.
 자세한 결정은 [통합 설정](./decisions/0007-project-settings.md)과
 [패키지 설치](./decisions/0008-installed-framework-packages.md)를 따른다.
 

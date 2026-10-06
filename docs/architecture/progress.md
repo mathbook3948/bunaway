@@ -1,5 +1,10 @@
 # 구현 진행 상태
 
+개발 우선순위는 [ADR 0010](../decisions/0010-windows-first-platform-model.md)에 따라
+Windows를 먼저 완성하고 다른 플랫폼을 같은 Bun 기반 개발 모델에 맞추는 것이다.
+아래 macOS 구현·검증 기록은 현재 상태이며, macOS 지원을 병행하거나 기존 자식
+프로세스 구조를 장기 목표로 유지한다는 뜻은 아니다.
+
 기준일: 2026-10-05. CLI/vanilla PR #11 및 macOS CI PR #12가 포함된 최신 main의
 코드, ADR과 기존 실행 기록을 대조했다.
 과거 진행 문서의 “Windows 외 미구현”, “runtime-bun 플랫폼 windows 고정”은 현재 코드와
