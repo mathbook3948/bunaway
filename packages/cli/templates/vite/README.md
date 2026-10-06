@@ -12,7 +12,10 @@ bun run bunaway doctor
 bun run bunaway dev
 ```
 
-Edit `src/` for the UI and `src-bunaway/src/` for the backend.
+Edit `src/` for the UI and `src-bunaway/` for the backend.
+`src-bunaway/app.ts` composes the app with `defineApp`;
+`src-bunaway/message/module.ts` registers commands and events with `defineModule`.
+The framework boots the app from `build.app` in `src-bunaway/bunaway.json`.
 
 ## Build
 

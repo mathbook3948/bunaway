@@ -13,9 +13,11 @@ memo/
 │  └─ memo.css
 ├─ vite.config.ts
 └─ src-bunaway/
-   ├─ src/
-   │  ├─ app.ts
-   │  └─ index.ts
+   ├─ app.ts
+   ├─ memo/
+   │  ├─ contracts.ts
+   │  ├─ module.ts
+   │  └─ service.ts
    ├─ bunaway.json
    └─ policy.json
 ```
@@ -70,8 +72,10 @@ Bunaway는 프런트엔드 빌드를 자동 실행하지 않는다. `vite.config
 - `index.html`: `/src/main.ts`를 불러오는 Vite 진입점.
 - `vite.config.ts`: 고정 loopback 포트·출력 경로·개발 페이지 CSP 설정.
 - `web-dist/`: Vite의 프로덕션 자산 출력. 생성 파일이므로 커밋하지 않는다.
-- `src-bunaway/src/app.ts`: `memo.save`, `memo.read` 명령과 `memo.saved` 이벤트 계약 및 구현.
-- `src-bunaway/src/index.ts`: Bun 백엔드 런타임 진입점.
+- `src-bunaway/app.ts`: `defineApp({ modules: [memo] })`로 기능을 조립하는 공통 앱 정의.
+- `src-bunaway/memo/contracts.ts`: 메모 명령 입력·출력과 이벤트의 JSON Schema 계약.
+- `src-bunaway/memo/module.ts`: `memo.save`, `memo.read`, `memo.saved`를 공개하고 서비스와 연결.
+- `src-bunaway/memo/service.ts`: 요청마다 전달받은 Host API로 메모 파일을 읽고 쓰는 서비스.
 - `src-bunaway/bunaway.json`: 빌드 진입점과 앱 식별자·제목·단일 창 설정.
 - `src-bunaway/policy.json`: `main` 뷰의 메모 명령·이벤트와 `appData/notes/` 읽기·쓰기 권한.
 

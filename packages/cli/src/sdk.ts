@@ -1,11 +1,31 @@
 import { lstat, realpath } from "node:fs/promises";
-import { dirname, relative, resolve } from "node:path";
+import { dirname, extname, relative, resolve } from "node:path";
 import type { BunPlugin } from "bun";
 import { files, hash, installedPackageRoot, json } from "./files.ts";
 
 interface SdkReference {
   name: string;
   parent: string;
+}
+
+export async function assertAppDefinitionExport(source: string): Promise<void> {
+  const extension = extname(source);
+  const loader =
+    extension === ".tsx"
+      ? "tsx"
+      : extension === ".jsx"
+        ? "jsx"
+        : /\.[cm]?ts$/.test(extension)
+          ? "ts"
+          : "js";
+  try {
+    const { exports } = new Bun.Transpiler({ loader }).scan(await Bun.file(source).text());
+    if (!exports.includes("default")) {
+      throw new Error("build.app must default-export an AppDefinition.");
+    }
+  } catch (error) {
+    throw new Error(`Bundle failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 export async function sdkPlugin(
@@ -98,6 +118,7 @@ export async function validateSdkGraph(
       ? (await files(source)).filter((path) => /\.(ts|js)$/.test(path) && !path.endsWith(".d.ts"))
       : [source];
     if (!entrypoints.length) continue;
+    if (!frontend) await assertAppDefinitionExport(source);
     await buildWithSdk(
       {
         entrypoints,

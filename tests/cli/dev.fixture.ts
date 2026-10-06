@@ -47,7 +47,7 @@ const { devProject } = await import("../../packages/cli/src/dev.ts");
 const configPath = resolve(root, "src-bunaway/bunaway.json");
 const configText = await Bun.file(configPath).text();
 const ui = resolve(root, "src/main.ts");
-const backend = resolve(root, "src-bunaway/src/index.ts");
+const backend = resolve(root, "src-bunaway/app.ts");
 const uiText = await Bun.file(ui).text();
 const backendText = await Bun.file(backend).text();
 function settings() {

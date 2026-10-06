@@ -55,6 +55,14 @@ test("packed CLI creates independent templates and a Vite app with HMR and local
       expect(await Bun.file(resolve(directory, `${other}-only.txt`)).exists()).toBe(false);
       expect(await Bun.file(resolve(directory, ".gitignore")).exists()).toBe(true);
       expect(await Bun.file(resolve(directory, ".gitattributes")).exists()).toBe(true);
+      expect(await Bun.file(resolve(directory, "src-bunaway/app.ts")).text()).toContain(
+        "defineApp",
+      );
+      expect(await Bun.file(resolve(directory, "src-bunaway/message/module.ts")).text()).toContain(
+        "defineModule",
+      );
+      expect(await Bun.file(resolve(directory, "src-bunaway/src/app.ts")).exists()).toBe(false);
+      expect(await Bun.file(resolve(directory, "src-bunaway/src/index.ts")).exists()).toBe(false);
     }
     for (const args of [["install"], ["run", "typecheck"]]) {
       const child = Bun.spawn([process.execPath, ...args], {

@@ -77,6 +77,10 @@ export async function startDevServer(
       done(exit);
     });
   });
+  const startupExitError = () =>
+    new Error(
+      `Development server exited before readiness (exit ${exit}): ${failure?.message ?? config.command[0]}`,
+    );
   // The Windows worker owns a kill-on-close Job; on POSIX this child owns a process group.
   const killGroup = (kind: NodeJS.Signals) => {
     if (!child.pid) return;
@@ -118,10 +122,7 @@ export async function startDevServer(
     console.log(`Starting frontend server: ${config.command.join(" ")}\nWaiting for ${config.url}`);
     while (Date.now() < deadline) {
       signal.throwIfAborted();
-      if (exit !== undefined)
-        throw new Error(
-          `Development server exited before readiness (exit ${exit}): ${failure?.message ?? config.command[0]}`,
-        );
+      if (exit !== undefined) throw startupExitError();
       try {
         const response = await fetch(config.url, {
           redirect: "manual",
@@ -135,7 +136,7 @@ export async function startDevServer(
         if (ready) {
           // Do not mask a startup failure with another process listening on the same port.
           await delay(50, undefined, { signal });
-          if (exit !== undefined) throw new Error("Development server exited during readiness.");
+          if (exit !== undefined) throw startupExitError();
           console.log(`Frontend server ready: ${config.url}`);
           return {
             exited,
@@ -145,9 +146,9 @@ export async function startDevServer(
             },
           };
         }
-      } catch (error) {
+      } catch {
         signal.throwIfAborted();
-        if (exit !== undefined) throw error;
+        if (exit !== undefined) throw startupExitError();
       }
       await delay(Math.min(100, Math.max(1, deadline - Date.now())), undefined, { signal });
     }

@@ -1,12 +1,12 @@
-import assert from "node:assert/strict";
 import { dlopen } from "bun:ffi";
-import { cp, mkdir, readFile, rename, writeFile, appendFile, rm } from "node:fs/promises";
+import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
+import { appendFile, cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createProject } from "../cli/project.ts";
 import { verifyWindowsLaunch, windowsLaunchEnvironment } from "../../packages/cli/src/launch.ts";
-import { recordPackagedHashes } from "../../packages/packaging/src/channels/windows/manifest.ts";
 import { findIscc, must } from "../../packages/packaging/src/channels/windows/common.ts";
+import { recordPackagedHashes } from "../../packages/packaging/src/channels/windows/manifest.ts";
 import type { PackageReport } from "../../packages/packaging/src/contract.ts";
 
 assert.equal(process.platform, "win32");
@@ -44,22 +44,19 @@ assert(
   "Windows package must not include the old host or process probe",
 );
 await appendFile(
-  resolve(project, "src-bunaway/src/app.ts"),
+  resolve(project, "src-bunaway/app.ts"),
   `\nawait Bun.write(${JSON.stringify(launchMarker)}, "started");\n` +
     'const fixtureChild = Bun.spawn([process.execPath, "-e", "setInterval(() => {}, 1000)"], { stdin: "ignore", stdout: "ignore", stderr: "ignore" }); console.log(JSON.stringify({ event: "fixture-child", pid: fixtureChild.pid }));\n',
 );
 // A user entry named boot.ts must coexist with the framework's bootstrap.
-await writeFile(
-  resolve(project, "src-bunaway/src/boot.ts"),
-  'export { default } from "./app.ts";\n',
-);
+await writeFile(resolve(project, "src-bunaway/boot.ts"), 'export { default } from "./app.ts";\n');
 const configPath = resolve(project, "src-bunaway/bunaway.json");
 const projectConfig = JSON.parse(await readFile(configPath, "utf8"));
 await writeFile(
   configPath,
   JSON.stringify({
     ...projectConfig,
-    build: { ...projectConfig.build, windowsApp: "src-bunaway/src/boot.ts" },
+    build: { ...projectConfig.build, app: "src-bunaway/boot.ts" },
   }),
 );
 await appendFile(
