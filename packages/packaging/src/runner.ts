@@ -283,25 +283,30 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
         failed = true;
       }
       for (const entry of produced) {
-        const path = isAbsolute(entry.path) ? entry.path : resolve(staging, entry.path);
+        let path = entry.path;
         try {
+          if (entry.path.split(process.platform === "win32" ? /[\\/]/ : /\//).includes("..")) {
+            throw new Error("Artifact path contains ambiguous parent components.");
+          }
+          path = isAbsolute(entry.path) ? entry.path : resolve(staging, entry.path);
           if (!(await lstat(staging)).isDirectory()) {
             throw new Error("Staging root is not a regular directory.");
           }
           if (!inside(staging, path)) throw new Error("Artifact path escapes staging.");
-          const file = await lstat(path);
-          if (!file.isFile()) throw new Error("Artifact is not a regular file.");
+          if (!(await lstat(path)).isFile()) throw new Error("Artifact is not a regular file.");
           const canonicalStaging = await realpath(staging);
           const canonicalPath = await realpath(path);
           if (!inside(canonicalStaging, canonicalPath)) {
             throw new Error("Artifact real path escapes staging.");
           }
+          const file = await lstat(canonicalPath);
+          if (!file.isFile()) throw new Error("Artifact is not a regular file.");
           verified.push({
             path: resolve(staging, relative(canonicalStaging, canonicalPath)),
             kind: entry.kind,
             signed: entry.signed,
             signingRequired: entry.signingRequired,
-            sha256: await sha256(path),
+            sha256: await sha256(canonicalPath),
             size: file.size,
           });
         } catch (error) {

@@ -1227,27 +1227,100 @@ test.each(["external", "previous-output"] as const)(
   },
 );
 
-test("artifacts reached through internal directory links remain valid after publication", async () => {
-  const projectRoot = await mkdtemp(join(home, "internal-link-"));
-  await makeArtifact(projectRoot);
-  const report = await runAdapter(
-    projectRoot,
-    stubAdapter({
-      async run(ctx) {
-        const payload = resolve(ctx.staging, "payload");
-        await Bun.write(resolve(payload, "setup.exe"), "installer");
-        await symlink(payload, resolve(ctx.staging, "linked"), "junction");
-        ctx.addArtifact("linked/setup.exe", "installer");
-      },
-    }),
-  );
-  expect(report.ok).toBe(true);
-  expect(report.artifacts[0]?.path).toBe(
-    resolve(projectRoot, "dist/windows-x64/packaged/win-direct/payload/setup.exe"),
-  );
-  expect(await Bun.file(report.artifacts[0]?.path ?? "").text()).toBe("installer");
-  expect(report.artifacts[0]?.sha256).toBe(await sha256(report.artifacts[0]?.path ?? ""));
-});
+test.each(
+  ["absolute", "relative"].flatMap((form) =>
+    (process.platform === "win32" ? ["/", "\\"] : ["/"]).map((separator) => ({ form, separator })),
+  ),
+)(
+  "artifact $form paths with .. and separator $separator fail before publication",
+  async ({ form, separator }) => {
+    const projectRoot = await mkdtemp(join(home, "artifact-dot-component-"));
+    await makeArtifact(projectRoot);
+    const output = resolve(projectRoot, "dist/windows-x64/packaged/win-direct");
+    const previous = resolve(output, "setup.exe");
+    await Bun.write(previous, "last good installer");
+    const external = resolve(projectRoot, "external");
+    await Bun.write(resolve(external, "payload/setup.exe"), "external payload bytes!");
+    await Bun.write(resolve(external, "setup.exe"), "external payload bytes!");
+    const report = await runAdapter(
+      projectRoot,
+      stubAdapter({
+        async run(ctx) {
+          await Bun.write(resolve(ctx.staging, "setup.exe"), "staging payload!");
+          await symlink(resolve(external, "payload"), resolve(ctx.staging, "linked"), "junction");
+          // Keep raw dot components: join/resolve would erase the regression trigger.
+          const path = ["linked", "..", "setup.exe"].join(separator);
+          ctx.addArtifact(
+            form === "absolute" ? `${ctx.staging}${separator}${path}` : path,
+            "installer",
+            { signed: true },
+          );
+        },
+      }),
+    );
+    expect(report.ok).toBe(false);
+    expect(report.usable).toBe(false);
+    expect(report.submittable).toBe(false);
+    expect(report.signing.performed).toBe(false);
+    expect(report.artifacts).toEqual([]);
+    expect(
+      report.diagnostics.some(
+        (d) =>
+          d.stage === "verify-artifact" &&
+          d.code === CODES.VERIFY_FAILED &&
+          d.message.includes("parent components"),
+      ),
+    ).toBe(true);
+    expect(report.stages.find((s) => s.id === "verify-artifact")?.status).toBe("failed");
+    expect(await Bun.file(previous).text()).toBe("last good installer");
+    expect(await Bun.file(resolve(external, "setup.exe")).text()).toBe("external payload bytes!");
+    expect(await Bun.file(resolve(external, "payload/setup.exe")).text()).toBe(
+      "external payload bytes!",
+    );
+    expect(
+      (await readdir(resolve(output, ".."))).some((name) =>
+        /\.building-|\.previous-|\.lock$/.test(name),
+      ),
+    ).toBe(false);
+    expect(await readdir(resolve(projectRoot, "dist/.bunaway-locks/windows-x64"))).toEqual([]);
+    expect(
+      await Bun.file(packagingReportPath(projectRoot, "windows-x64", "win-direct")).json(),
+    ).toEqual(report);
+  },
+);
+
+test.each(["relative", "dot-relative", "dot-absolute"])(
+  "%s artifacts reached through internal directory links remain valid after publication",
+  async (form) => {
+    const projectRoot = await mkdtemp(join(home, "internal-link-"));
+    await makeArtifact(projectRoot);
+    const report = await runAdapter(
+      projectRoot,
+      stubAdapter({
+        async run(ctx) {
+          const payload = resolve(ctx.staging, "payload");
+          await Bun.write(resolve(payload, "setup.exe"), "installer");
+          await symlink(payload, resolve(ctx.staging, "linked"), "junction");
+          ctx.addArtifact(
+            form === "dot-absolute"
+              ? `${ctx.staging}/linked/./setup.exe`
+              : form === "dot-relative"
+                ? "./linked/setup.exe"
+                : "linked/setup.exe",
+            "installer",
+          );
+        },
+      }),
+    );
+    expect(report.ok).toBe(true);
+    expect(report.artifacts[0]?.path).toBe(
+      resolve(projectRoot, "dist/windows-x64/packaged/win-direct/payload/setup.exe"),
+    );
+    expect(await Bun.file(report.artifacts[0]?.path ?? "").text()).toBe("installer");
+    expect(report.artifacts[0]?.size).toBe(Buffer.byteLength("installer"));
+    expect(report.artifacts[0]?.sha256).toBe(await sha256(report.artifacts[0]?.path ?? ""));
+  },
+);
 
 test.each(
   (["windows-x64", "macos-arm64"] as const).flatMap((target) =>
