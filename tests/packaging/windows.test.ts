@@ -649,6 +649,23 @@ test("win-store-msix requires publisher.identity and MSIX icons up front", () =>
   expect(() =>
     adapter.stages({ ...oldTarget, channelConfig: { minVersion: "10.0.17763.0" } }),
   ).toThrow(/unvirtualizedData requires minVersion/);
+  for (const minVersion of ["10.0.16299.0", "10.0.17762.0"]) {
+    for (const unvirtualizedData of [false, true]) {
+      expect(() =>
+        adapter.stages({ ...oldTarget, channelConfig: { minVersion, unvirtualizedData } }),
+      ).toThrow(/bundled Bun requirement/);
+      expect(() =>
+        adapter.stages({
+          ...oldTarget,
+          metadata: {
+            ...oldTarget.metadata,
+            targets: [{ platform: "windows", arch: "x64", minVersion }],
+          },
+          channelConfig: { unvirtualizedData },
+        }),
+      ).toThrow(/bundled Bun requirement/);
+    }
+  }
   expect(() =>
     adapter.stages(
       msixInput(

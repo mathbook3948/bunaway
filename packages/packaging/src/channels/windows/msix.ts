@@ -80,6 +80,9 @@ function escapeXml(value: string): string {
 }
 
 export function renderAppxManifest(options: MsixOptions): string {
+  if (options.minVersion.localeCompare(DEFAULT_MIN_VERSION, undefined, { numeric: true }) < 0) {
+    throw new Error("Windows minVersion must be >= 10.0.17763.0 (bundled Bun requirement).");
+  }
   if (
     options.unvirtualizedData &&
     options.minVersion.localeCompare(UNVIRTUALIZED_MIN_VERSION, undefined, { numeric: true }) < 0
