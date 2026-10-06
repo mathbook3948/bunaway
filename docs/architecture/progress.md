@@ -9,6 +9,7 @@
 2026-10-06 [Windows 직접 FFI 예제](../../native/windows/ffi-probe/README.md)에서
 Bun UI Worker의 창·WebView2·비동기 작업·다중 창·종료를 검증했다. 5초 종료 기준
 초과는 공식 컨트롤에서도 재현됐다. 제품 실행 구조와 보안 정책의 이식은 아직 진행하지 않았다.
+적용할 책임 분리·채널·수명·이식 순서는 [Windows Bun UI Worker 구조안](../decisions/0006-windows-bun-ui-worker.md)에 정리했다.
 
 | 단계 | 구현 상태 | 검증 범위·근거 | 남은 작업·미검증 |
 | --- | --- | --- | --- |

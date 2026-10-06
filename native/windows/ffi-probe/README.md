@@ -4,6 +4,7 @@
 Bun 프로세스의 `ui.ts` Worker가 `main.ts`의 Win32·WebView2 COM 구현을 소유한다.
 네이티브 포인터는 스레드 사이에 전달하지 않고 요청·결과만 postMessage로 전달한다.
 자체 C/C++·Rust 래퍼는 없으며 WebView2의 브라우저·렌더러 프로세스는 유지된다.
+제품 적용 구조와 단계별 검증 조건은 [ADR 0006](../../../docs/decisions/0006-windows-bun-ui-worker.md)을 따른다.
 
 ## 실행
 
