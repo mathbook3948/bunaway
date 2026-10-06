@@ -55,13 +55,15 @@ bun install
 bun run bunaway dev
 ```
 
-`vite` 템플릿은 공식 `create-vite@9.2.1`의 vanilla-ts 기본 화면(로고·카운터)을 사용한다.
+`vite` 템플릿은 공식 [create-vite@9.2.1의 vanilla-ts](https://github.com/vitejs/vite/tree/fea5b21dd9524ed7308632407b996f1fe5942c9c/packages/create-vite/template-vanilla-ts)
+기본 화면(로고·카운터)을 사용한다.
 루트 `index.html`, `src/` UI 코드·스타일·이미지, `public/` 정적 자산은 upstream 원본이다.
 `dev`·`build`·`preview`는 Vite 프런트엔드 명령이며 `bunaway` script로 네이티브 CLI를 호출한다.
 UI 변경은 Vite가 처리하고 백엔드 변경은 CLI가 호스트를 재시작한다.
 네이티브 검증·빌드·패키징 전에는 `bun run build`로 `web-dist/`를 생성한다.
 CLI 자체는 외부 프런트엔드 생산 빌드를 자동 실행하지 않는다.
-[템플릿 구성 근거](../../templates/README.md)는 공식 Tauri 초기화 구현을 참조한다.
+생성 템플릿은 [templates/](./templates/)에서 관리한다. 구조와 script 역할은
+[Tauri vanilla-ts 템플릿](https://github.com/tauri-apps/create-tauri-app/tree/12db955f20162e7422cbeed76c2aa630760ccca3/templates/template-vanilla-ts)을 참조한다.
 
 ## 생성 구조
 
