@@ -423,6 +423,11 @@ test.skipIf(!iscc)(
         })
           .replaceAll("{group}", menu)
           .replaceAll("{autodesktop}", desktop);
+        // Record the real Inno Shell target only for CI failure diagnosis.
+        script = script.replace(
+          "          Target := Link.TargetPath;",
+          "          Target := Link.TargetPath;\n          Log('BUNAWAY_SHORTCUT_TARGET: ' + Filename + ' -> ' + Target + ' | uninstaller=' + ExpandConstant('{uninstallexe}'));",
+        );
         if (index === 0) {
           // Start with a pre-fix installer that never pruned its links.
           script = script.replace(/ {4}PruneShortcuts\([^\n]+\);\n/g, "");
@@ -432,11 +437,13 @@ test.skipIf(!iscc)(
           );
         }
         const setup = await compileInno(ctx, script, staging, "setup");
+        const setupLog = join(staging, "setup.log");
         await must(setup, [
           "/SP-",
           ...silent,
           `/DIR=${install}`,
           `/TASKS=${index < 2 ? "desktopicon" : "!desktopicon"}`,
+          `/LOG=${setupLog}`,
         ]);
         if (index === 0) {
           await Bun.write(data, "memo");
@@ -445,9 +452,31 @@ test.skipIf(!iscc)(
         for (const previous of new Set(names.slice(0, index + 1))) {
           const current = previous === name;
           expect(await Bun.file(join(menu, `${previous}.lnk`)).exists()).toBe(current && index < 3);
-          expect(await Bun.file(join(menu, `${previous} 제거.lnk`)).exists()).toBe(
-            current && index < 3,
-          );
+          const uninstallLink = join(menu, `${previous} 제거.lnk`);
+          const expectedUninstallLink = current && index < 3;
+          const actualUninstallLink = await Bun.file(uninstallLink).exists();
+          if (actualUninstallLink !== expectedUninstallLink) {
+            const installLog = await Bun.file(setupLog)
+              .text()
+              .catch(() => "");
+            const shortcutTargets = installLog
+              .split(/\r?\n/)
+              .filter((line) => line.includes("BUNAWAY_SHORTCUT_TARGET:"));
+            console.error(
+              "[Inno shortcut prune diagnostic]",
+              JSON.stringify({
+                index,
+                current: name,
+                previous,
+                uninstallLink,
+                expected: expectedUninstallLink,
+                actual: actualUninstallLink,
+                setupLog,
+                shortcutTargets,
+              }),
+            );
+          }
+          expect(actualUninstallLink).toBe(expectedUninstallLink);
           expect(await Bun.file(join(desktop, `${previous} (${identifier}).lnk`)).exists()).toBe(
             current && index < 2,
           );
