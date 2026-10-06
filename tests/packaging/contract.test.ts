@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
+  chmod,
   copyFile,
   mkdir,
   mkdtemp,
@@ -82,6 +83,7 @@ async function makeArtifact(
   await mkdir(resolve(artifact.executable, ".."), { recursive: true });
   await writeFile(artifact.executable, "fake host");
   if (!windows) {
+    await chmod(artifact.executable, 0o755);
     await writeFile(
       resolve(artifact.dir, "Contents/Info.plist"),
       `<?xml version="1.0" encoding="UTF-8"?>
@@ -94,6 +96,7 @@ async function makeArtifact(
     );
   }
   await writeFile(runtime, "fake bun");
+  if (!windows) await chmod(runtime, 0o755);
   const assets: Record<string, string> = {};
   await writeJson(resolve(dir, "assets/app.json"), appConfig);
   assets["assets/app.json"] = await sha256(resolve(dir, "assets/app.json"));
@@ -1726,6 +1729,53 @@ test("macOS inputs with a final host digest do not require WebView2", async () =
 });
 
 for (const channel of ["mac-direct", "mac-store"] as const) {
+  for (const executable of ["host", "bun"] as const) {
+    test.skipIf(process.platform === "win32")(
+      `${channel} rejects non-executable ${executable} with a valid final digest`,
+      async () => {
+        const projectRoot = await mkdtemp(join(home, "mac-executable-"));
+        const manifest = await makeArtifact(projectRoot, "macos-arm64");
+        const artifact = artifactPaths({
+          root: projectRoot,
+          target: "macos-arm64",
+          appId: "app.test",
+        });
+        const path =
+          executable === "host" ? artifact.executable : resolve(artifact.packageDir, "runtime/bun");
+        const digest = await sha256(path);
+        await chmod(path, 0o555);
+        expect(await verifyArtifact({ artifact, manifest, channel })).toEqual([]);
+        await chmod(path, 0o644);
+        expect(await sha256(path)).toBe(digest);
+        expect(await verifyArtifact({ artifact, manifest, channel })).toEqual([
+          expect.objectContaining({
+            stage: "verify",
+            code: CODES.INPUT_TAMPERED,
+            severity: "error",
+            message: expect.stringContaining("not executable"),
+            path,
+          }),
+        ]);
+        let resolved = false;
+        const report = await runAdapter(
+          projectRoot,
+          stubAdapter({
+            channel,
+            stages: () => {
+              resolved = true;
+              return [];
+            },
+          }),
+          { target: "macos-arm64" },
+        );
+        expect(report.ok).toBe(false);
+        expect(report.usable).toBe(false);
+        expect(report.submittable).toBe(false);
+        expect(report.stages.find((s) => s.id === "verify")?.status).toBe("failed");
+        expect(resolved).toBe(false);
+      },
+    );
+  }
   test.skipIf(process.platform !== "darwin")(
     `${channel} accepts an ad-hoc signed bundle with only host provenance`,
     async () => {
@@ -1749,7 +1799,14 @@ for (const channel of ["mac-direct", "mac-store"] as const) {
       expect(report.submittable).toBe(false);
     },
   );
-  for (const change of ["host", "plist", "resources", "signature"] as const) {
+  for (const change of [
+    "host",
+    "plist",
+    "resources",
+    "signature",
+    "host-mode",
+    "bun-mode",
+  ] as const) {
     test.skipIf(process.platform !== "darwin")(
       `${channel} rejects signed bundle ${change} tampering before adapter execution`,
       async () => {
@@ -1774,8 +1831,25 @@ for (const channel of ["mac-direct", "mac-store"] as const) {
           await writeFile(resolve(artifact.packageDir, asset), "changed backend");
           manifest.assets[asset] = await sha256(resolve(artifact.packageDir, asset));
           await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
-        } else {
+        } else if (change === "signature") {
           await rm(resolve(artifact.dir, "Contents/_CodeSignature"), { recursive: true });
+        } else {
+          const path =
+            change === "host-mode"
+              ? artifact.executable
+              : resolve(artifact.packageDir, "runtime/bun");
+          const digest = await sha256(path);
+          await chmod(path, 0o644);
+          expect(await sha256(path)).toBe(digest);
+          const validation = Bun.spawn(
+            ["/usr/bin/codesign", "--verify", "--deep", "--strict", artifact.dir],
+            { stdout: "pipe", stderr: "pipe" },
+          );
+          const [exit, stderr] = await Promise.all([
+            validation.exited,
+            new Response(validation.stderr).text(),
+          ]);
+          expect(exit, stderr).toBe(0);
         }
         const previous = resolve(projectRoot, `dist/macos-arm64/packaged/${channel}/app.zip`);
         await Bun.write(previous, "previous package");

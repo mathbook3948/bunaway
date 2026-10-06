@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { lstat, readFile, realpath } from "node:fs/promises";
+import { constants } from "node:fs";
+import { access, lstat, readFile, realpath } from "node:fs/promises";
 import { basename, isAbsolute, relative, resolve, sep, win32 } from "node:path";
 import { XMLParser } from "fast-xml-parser";
 import {
@@ -351,9 +352,23 @@ export async function verifyArtifact(args: {
     return diagnostics;
   }
 
-  async function verifyFile(root: string, path: string, label: string, expected?: string) {
+  async function verifyFile(
+    root: string,
+    path: string,
+    label: string,
+    expected?: string,
+    executable = false,
+  ) {
     try {
       const canonicalPath = await inputPath(root, path);
+      // Windows does not expose POSIX execute permissions.
+      if (executable && process.platform !== "win32") {
+        try {
+          await access(canonicalPath, constants.X_OK);
+        } catch {
+          throw new ArtifactInputError(CODES.INPUT_TAMPERED, "Build input is not executable.");
+        }
+      }
       if (expected !== undefined && (await sha256(canonicalPath)) !== expected) {
         diagnostics.push({
           stage,
@@ -432,12 +447,24 @@ export async function verifyArtifact(args: {
       path: artifact.executable,
     });
   }
-  await verifyFile(artifact.dir, artifact.executable, "Host executable", hostDigest);
+  await verifyFile(
+    artifact.dir,
+    artifact.executable,
+    "Host executable",
+    hostDigest,
+    platform === "macos",
+  );
   const runtime = resolve(
     artifact.packageDir,
     platform === "windows" ? "runtime/bun.exe" : "runtime/bun",
   );
-  await verifyFile(artifact.packageDir, runtime, "Bundled Bun", packagedDigest(manifest.bun));
+  await verifyFile(
+    artifact.packageDir,
+    runtime,
+    "Bundled Bun",
+    packagedDigest(manifest.bun),
+    platform === "macos",
+  );
 
   const required = [
     ...REQUIRED_ASSETS,
