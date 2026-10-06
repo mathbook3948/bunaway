@@ -1,0 +1,65 @@
+---
+title: listen
+description: 이벤트 구독, onError, 전달 데이터, 해제·순서·재연결 동작.
+sidebar: { order: 3 }
+---
+
+```ts
+client.listen(name, listener, { onError, signal? }): Promise<AsyncDispose>
+```
+
+현재 세션에서 이벤트를 구독합니다. 구독이 성공하면 비동기 해제 함수를 반환합니다.
+
+## 예시
+
+```ts
+const unlisten = await client.listen(
+  "message.saved",
+  (event) => { console.log("저장 내용:", event.payload); },
+  { onError: (error) => { console.error(error.code, error.message); } },
+);
+// 화면 컴포넌트를 제거할 때
+await unlisten();
+```
+
+## 인자
+
+| 인자 | 필수 | 의미 |
+| --- | --- | --- |
+| `name` | 예 | 앱에 선언되고 뷰의 `events`에 허용된 이름 |
+| `listener` | 예 | 전달 이벤트 객체를 처리하는 콜백 |
+| `onError` | 예 | 활성 구독이 오류로 종료됐을 때 실행하는 콜백 |
+| `signal` | 아니요 | 구독 시작 및 활성 구독의 취소 신호 |
+
+구독 시작 자체가 실패하면 `listen()` Promise가 reject합니다.
+이미 활성인 구독의 연결 종료·순서 위반·subscription-error는 `onError`로 알립니다.
+콜백의 일반 예외 때문에 다른 요청이나 전송 수신 루프를 중단하지 않습니다.
+
+## 이벤트 객체
+
+| 필드 | 의미 |
+| --- | --- |
+| `payload` | 앱 이벤트 스키마로 정의한 데이터 |
+| `event` | 이벤트 이름 |
+| `source` | 공개 발신 출처: 뷰 ID 또는 backend |
+| `target` | 실제 대상 뷰 ID |
+| `subscriptionId` | 구독 식별자 |
+| `sequence` | 해당 구독의 1부터 시작하는 순서 |
+| `kind`, `protocol` | 이벤트 메시지 종류와 프로토콜 |
+
+구독별 순서를 검사합니다. 독립 생산자·여러 구독 사이의 전체 순서까지 보장하지 않습니다.
+`broadcast`도 모든 창에 무조건 전달하지 않고, 허용된 활성 구독만 대상으로 합니다.
+
+## 해제와 취소
+
+해제 함수는 멱등입니다. 동시 해제는 같은 작업의 완료를 기다리고, 해제 뒤 이벤트를 전달하지 않습니다.
+연결이 이미 닫혔다면 새 네트워크 요청 없이 완료합니다.
+`signal.abort()`는 활성 구독도 해제합니다. 취소 후 늦게 도착한 구독 성공에 대해서도 정리합니다.
+
+세션 구독 상한은 128개입니다. 이벤트 큐 포화는 `BUSY` 또는 구독/세션 종료로 드러나며 조용히 영구 누락시키지 않습니다.
+
+## 재연결
+
+이벤트는 영구 이력이 아닙니다. 새 세션에서 `listen()`을 다시 호출하고,
+`message.read` 같은 명령으로 현재 데이터를 읽습니다.
+초기 읽기와 갱신 이벤트의 순서는 앱이 필요한 동기화 방식에 맞춰 설계합니다.

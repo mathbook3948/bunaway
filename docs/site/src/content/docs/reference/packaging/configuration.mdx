@@ -1,0 +1,86 @@
+---
+title: bundle 설정
+description: 배포 메타데이터, 버전, 아이콘, 대상, 채널의 모든 공개 설정 필드.
+sidebar: { order: 1 }
+---
+
+`src-bunaway/bunaway.json`의 선택적 `bundle` 객체입니다.
+`package`에는 필요하며, 선언하면 `validate`, `doctor`, `dev`, `build`에서도 형식을 검사합니다.
+알 수 없는 필드는 거부합니다. 배포 채널을 선언하는 것과 그 채널의 패키저가 구현된 것은 다릅니다.
+
+## 예시
+
+```json
+{
+  "bundle": {
+    "name": "My Notes",
+    "identifier": "com.example.notes",
+    "publisher": { "display": "Example" },
+    "release": { "version": "1.0.0", "build": 0 },
+    "targets": [{ "platform": "windows", "arch": "x64" }],
+    "channels": { "win-direct": {} }
+  }
+}
+```
+
+## 메타데이터
+
+| 필드 | 생략 시 | 검증과 의미 |
+| --- | --- | --- |
+| `name` | `app.title` | 비어 있지 않은 문자열, 최대 256자 |
+| `identifier` | `app.appId`에서 파생 | 최대 128자 reverse-DNS. 영숫자·점·하이픈, 점으로 구분된 두 부분 이상 |
+| `publisher.display` | 배포 `name` | 최대 256자의 표시 이름 |
+| `publisher.identity` | 없음 | 최대 256자, `CN=`으로 시작하는 X.500 subject |
+| `release.version` | 루트 package.json의 `version` | 숫자 `x.y.z`. prerelease·build suffix 불허 |
+| `release.build` | `0` | 정수 0–65,535 |
+
+버전의 세 숫자는 메타데이터 해석 시 각각 65,534 이하를 요구합니다.
+MSIX 버전은 `x.y.z.build`로 계산합니다.
+`appId`에 점이 없으면 기본 배포 식별자에 `.app`을 붙입니다.
+명시적으로 설정한 식별자는 같은 검증을 거치므로 앱 ID 형식과 혼동하지 마세요.
+
+## icons
+
+| 필드 | 의미 |
+| --- | --- |
+| `icons.directory` | 프로젝트 기준 디렉터리. 생략 시 프로젝트 루트 |
+| `icons.windows.installer` | Windows 설치 파일 아이콘 |
+| `icons.windows.square44` | Windows 44 아이콘 자산 |
+| `icons.windows.square150` | Windows 150 아이콘 자산 |
+| `icons.windows.storeLogo` | Store 로고 자산 |
+| `icons.windows.wide` | Windows 가로 아이콘 자산 |
+| `icons.macos.icns` | macOS 아이콘 자산 |
+
+각 값은 디렉터리 안의 파일 이름입니다. `directory`는 상대 경로이고 `..`을 허용하지 않습니다.
+해석 시 선언된 아이콘 모두가 실제 일반 파일인지 확인하고 프로젝트 밖으로 나가는 링크를 거부합니다.
+아이콘 선언만으로 이미지 변환·모든 채널의 아이콘 생성이 실행되지는 않습니다.
+
+## targets
+
+선택적 배열이며 선언하면 비어 있을 수 없습니다.
+
+| 필드 | 허용 값 |
+| --- | --- |
+| `platform` | `windows`, `macos` |
+| `arch` | `x64`, `arm64` |
+| `minVersion` | 선택적 비어 있지 않은 문자열, 최대 32자 |
+
+같은 platform·arch 조합을 중복 선언할 수 없습니다.
+설정 형식에 두 아키텍처가 있어도 실제 빌드 대상은 **Windows x64와 macOS arm64**입니다.
+패키징 시 현재 대상과 일치하는 선언을 선택합니다. 교차 빌드를 활성화하는 옵션은 아닙니다.
+
+## channels와 signing
+
+`channels`는 [채널 ID](/reference/packaging/channels/)에서 채널별 옵션 객체로 가는 맵입니다.
+`"win-direct": {}`처럼 빈 객체를 명시해도 해당 채널을 활성화합니다.
+선언하지 않은 채널을 실행하면 `PKG_CHANNEL_NOT_CONFIGURED`입니다.
+
+최상위 `signing`은 기본 서명 설정입니다. 채널 내부 `signing`이 있으면 **객체 전체를 대체**합니다.
+필드별 병합은 하지 않습니다. [서명 설정](/reference/packaging/signing/)에 필드·실행 조건이 있습니다.
+
+## 관련 문서
+
+- [채널별 옵션·기본값·구현 상태](/reference/packaging/channels/)
+- [패키징 명령](/reference/cli/package/)
+- [산출물과 보고서](/reference/packaging/report/)
+- [프로그램에서 패키징 API 사용](/reference/tooling/packaging-api/)

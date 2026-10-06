@@ -1,0 +1,68 @@
+---
+title: Schema · JsonValue · 타입 추론
+description: 지원하는 모든 스키마 키워드와 JSON 복사·검증·추론 규칙.
+---
+
+`Schema`, `Infer`, `JsonValue`, `validateValue`는 `@bunaway/protocol`의 계약입니다.
+명령 input/output과 이벤트 payload에 같은 스키마 subset을 사용합니다.
+
+## 지원 키워드
+
+| 키워드 | 의미 |
+| --- | --- |
+| `$schema` | 스키마 식별 메타데이터 |
+| `type` | object·array·string·integer·boolean |
+| `const` | 문자열·숫자·boolean·null의 정확한 값 |
+| `enum` | 문자열 값 목록 |
+| `anyOf` | 적어도 한 분기의 제약을 충족 |
+| `properties`, `required` | 객체 필드 스키마·필수 이름 |
+| `additionalProperties: false` | 선언하지 않은 객체 필드 거부 |
+| `items`, `minItems`, `maxItems` | 배열 원소·개수 |
+| `uniqueItems` | JSON 구조적 동등성으로 배열 중복 검사 |
+| `minimum`, `maximum` | 숫자 범위 |
+| `maxLength` | 문자열 Unicode code point 개수 |
+| `pattern` | JavaScript 정규식 검사 |
+
+전체 JSON Schema 구현이 아닙니다. `$ref`, format, oneOf, allOf, minLength, 정규식 플래그 등을 지원한다고 가정하지 않습니다.
+`type: "number"`는 현재 공개 Schema 타입에 없습니다.
+제약 없는 `{}`는 유효한 JSON 값을 받으며, number 자체는 유한한 JSON 숫자로 사용할 수 있습니다.
+
+## 객체와 조합
+
+properties만 선언하면 모든 필드를 필수로 만들지는 않습니다. required에 적힌 이름만 필수입니다.
+additionalProperties를 생략하면 추가 JSON 필드를 허용합니다.
+anyOf와 바깥 keywords는 함께 적용됩니다. 바깥 객체 제약은 객체 분기에 적용하며 null 분기를 곧바로 객체로 바꾸지 않습니다.
+
+```ts
+const input = {
+  type: "object",
+  properties: { name: { type: "string" }, age: { type: "integer", minimum: 0 } },
+  required: ["name"],
+  additionalProperties: false,
+} as const;
+```
+
+pattern은 자동 전체 일치가 아니라 정규식 test입니다. 전체 문자열을 검사하려면 시작·끝 조건을 명시하세요.
+uniqueItems에서 객체의 property 순서는 비교에 영향을 주지 않고 배열 순서는 영향을 줍니다.
+
+## JSON 값 제한
+
+함수·undefined·bigint·symbol·Date/임의 클래스·순환 참조·getter 등은 전송 가능한 JSON으로 보지 않습니다.
+NaN·Infinity, 희소 배열과 단독 UTF-16 surrogate도 거부합니다.
+같은 객체가 여러 위치에 나타나는 비순환 구조는 복사할 수 있지만 크기·깊이 상한을 넘을 수 없습니다.
+검증은 분리된 스냅샷을 만들며 getter를 실행해 임의 객체를 직렬화하지 않습니다.
+
+## validateValue와 Infer
+
+```ts
+import { type Infer, validateValue } from "@bunaway/protocol";
+type Input = Infer<typeof input>;
+const parsed: Input = validateValue(input, { name: "Kim" });
+```
+
+validateValue는 JSON 값·스키마를 검증하고 typed 스냅샷을 반환합니다.
+전송의 원문 바이트 제한과 값 검증은 서로 다릅니다.
+`parseMessage`는 원문 JSON 크기를, `serializeMessage`는 실제 직렬화 크기를 검사합니다.
+스키마 위반은 ProtocolError입니다. 명령 래퍼는 입력 위반을 INVALID_ARGUMENT, 출력 위반을 INTERNAL로 바꿉니다.
+
+[타입 연결 가이드](/guides/types-and-validation/)에서 CommandsOf·EventsOf 사용 예시를 확인하세요.

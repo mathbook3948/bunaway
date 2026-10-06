@@ -1,0 +1,59 @@
+---
+title: command
+description: command의 입력·출력 스키마, typed handle, run과 오류 전파.
+sidebar: { order: 2 }
+---
+
+`@bunaway/backend`의 `command({ input, output, handle })`는 스키마에서 입력·결과 타입을 추론하고 런타임에도 검증합니다.
+
+```ts
+import { command } from "@bunaway/backend";
+
+const greet = command({
+  input: {
+    type: "object",
+    properties: { name: { type: "string", maxLength: 100 } },
+    required: ["name"],
+    additionalProperties: false,
+  },
+  output: { type: "string" },
+  handle(input) { return `안녕하세요, ${input.name}`; },
+});
+```
+
+`greet`를 `app.commands["greet"]`에 등록하고 해당 뷰의 정책에도 허용해야 UI가 호출할 수 있습니다.
+
+## 인자와 반환값
+
+| 필드 | 필수 | 의미 |
+| --- | --- | --- |
+| `input` | 예 | 입력 Schema |
+| `output` | 예 | 결과 Schema |
+| `handle` | 예 | `(input, context) => Output \| Promise<Output>` |
+
+반환하는 `CommandDefinition`은 `input`, `output`, `run(payload, context)`를 가집니다.
+일반 앱에서는 코어가 `run`을 호출합니다. UI에서 `run`을 직접 호출하지 않습니다.
+`command()`는 즉시 작업을 실행하거나 정책에 등록하는 함수가 아닙니다.
+
+## 실행 순서
+
+1. 호스트·코어의 뷰 명령 허용 검사.
+2. 입력 JSON 검증·분리된 스냅샷 생성.
+3. `handle(input, context)` 실행 및 반환 Promise 대기.
+4. 결과 JSON 검증·스냅샷 생성.
+5. 요청한 세션에 결과 또는 오류 전달.
+
+입력 위반은 `INVALID_ARGUMENT`, 출력 위반은 `INTERNAL`입니다.
+`{ const: null }` 결과를 선언하면 반드시 `null`을 반환합니다. `undefined`는 JSON 값이 아닙니다.
+
+## 예외와 동시 실행
+
+일반 핸들러 예외는 안전한 `INTERNAL`로 전달합니다.
+안정된 API 오류를 전달하려면 `@bunaway/protocol`의 `BunawayError`를 사용합니다.
+오류 생성자도 code·message·details 구조를 검증합니다.
+
+명령은 전체 수신 루프를 막지 않고 동시에 진행될 수 있습니다.
+`await`를 사이에 둔 공유 상태 변경은 자동으로 직렬화되지 않습니다.
+취소된 핸들러가 늦게 반환해도 이미 끝난 요청을 다시 완료하지 않습니다.
+
+[CommandContext](/reference/backend/context/) · [스키마](/reference/schema/) · [오류](/reference/errors/)

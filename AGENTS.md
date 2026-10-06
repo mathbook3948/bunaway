@@ -8,6 +8,20 @@ Issues and specs live in GitHub Issues for `mathbook3948/bunaway`. See `docs/age
 
 Use a single shared context: `docs/GLOSSARY.md` and ADRs in `docs/decisions/`. See `docs/agents/domain.md`.
 
+### Documentation maintenance
+
+After changing code, update the related documentation in the same change before
+considering the work complete. Keep usage examples, API signatures, defaults,
+permissions, errors, lifecycle behavior and platform support aligned with the
+implementation.
+
+Update the affected guides and references in `docs/site/src/content/docs/` and
+any relevant README, architecture document, glossary or ADR. When adding,
+removing or renaming a public API, also update `docs/site/src/reference-map.json`.
+Run `bun run docs:check` and `bun run docs:build` after documentation changes to
+verify coverage, types, rendering and internal links. Automated coverage checks
+do not replace reviewing the accuracy of the explanations and examples.
+
 ### Development priority
 
 Read `docs/decisions/0010-windows-first-platform-model.md` before runtime, CLI,

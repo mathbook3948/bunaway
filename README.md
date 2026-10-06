@@ -3,6 +3,8 @@
 웹 UI와 TypeScript 백엔드, 앱 패키지에 번들된 Bun 런타임을 결합하는 크로스플랫폼
 앱 프레임워크다. 제품 요구사항은 [PRD](./docs/PRD.md)에 정리되어 있다.
 
+[개발 가이드 사이트](./docs/site/README.md)는 전체 구조 → 첫 앱 → 뷰·정책 → 명령·이벤트
+순서로 읽는다. 로컬에서 `bun run docs:dev`로 열 수 있다.
 [문서 안내](./docs/README.md)에서 공통 용어, 설계 결정과 구현 계약을 찾을 수 있다.
 
 `protocol`의 메시지·정책 스키마, JSON 검증·직렬화와 버전 협상이 동작한다.
@@ -69,7 +71,7 @@ Bun은 `mise.toml`과 `package.json`에 **1.4.2**로 고정되어 있다.
 vanilla TypeScript 앱을 생성한다. 기본 템플릿은 기존 `vanilla`다.
 Windows 호스트의 빌드·패키징은
 `native/windows/bun/run.ps1`이 담당한다. Bun이 앱 진입점이고 UI Worker가
-Win32·WebView2 COM을 직접 소유한다. 생성 앱은 `windowsApp`에 AppDefinition 모듈을 지정한다.
+Win32·WebView2 COM을 직접 소유한다. 생성 앱은 `build.app`에 AppDefinition 모듈을 지정한다.
 Windows 빌드는 PowerShell 7과 고정 Bun만 필요하며 C++ 컴파일은 하지 않는다.
 WebView 앱 실행에는 WebView2 Evergreen 런타임이 필요하다.
 생성된 `build/windows-probe-package/`는 Bun 개발 도구 없이 실행되는 독립 실험 패키지다.

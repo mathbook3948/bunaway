@@ -1,0 +1,51 @@
+---
+title: 플러그인 작성하기
+description: 앱에 플러그인을 연결하고 setup·StopHook·정책·명령 이름을 관리합니다.
+---
+
+작은 앱은 명령을 app.ts에 직접 넣어도 됩니다.
+재사용할 명령·이벤트나 앱 수명의 초기화·정리가 필요할 때 PluginDefinition으로 묶습니다.
+
+## 최소 플러그인
+
+```ts
+import { command, type PluginDefinition } from "@bunaway/backend";
+
+export const greetingPlugin = {
+  name: "greeting",
+  version: "0.1.0",
+  commands: {
+    "greeting.read": command({
+      input: { const: null }, output: { type: "string" },
+      handle() { return "안녕하세요"; },
+    }),
+  },
+  setup(context) {
+    context.state.set("greeting.ready", true);
+    return () => { context.state.delete("greeting.ready"); };
+  },
+} satisfies PluginDefinition;
+```
+
+앱 정의의 `plugins: [greetingPlugin]`에 추가하고,
+호출할 뷰의 commands에 `greeting.read`를 허용합니다.
+setup에서 반환한 함수는 종료 시 실행할 StopHook입니다.
+
+## Host API를 사용하는 초기화
+
+setup의 context.host는 `policy.backend` 권한을 사용합니다.
+로그를 기록한다면 requiredHost에 `{ log: true, storage: [] }`를 선언하고 실제 backend.log도 true로 설정합니다.
+권한 요구를 선언하는 것만으로 정책에 자동 추가하지 않습니다.
+
+뷰에서 호출한 플러그인 명령은 그 뷰의 권한으로 실행됩니다.
+플러그인 setup의 backend 권한을 빌려 UI 요청의 권한을 높이지 않습니다.
+
+## 구성과 정리
+
+dependencies는 플러그인 이름 배열이며 의존성이 먼저 초기화됩니다.
+전체 등록에서 중복 명령·이벤트 이름을 피하고 플러그인 이름의 중복·의존 순환을 해결하세요.
+타이머·연결은 StopHook에서 정리합니다.
+초기화 중 실패하면 이미 등록한 StopHook을 역순으로 실행합니다.
+
+모든 필드와 시작 실패 조건은 [PluginDefinition](/reference/backend/plugins/)에 있습니다.
+원격 비신뢰 플러그인 설치·마켓·자동 업데이트 기능은 현재 제공하지 않습니다.

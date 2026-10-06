@@ -1,0 +1,44 @@
+---
+title: storage.readText
+description: 텍스트 읽기의 scope·상대 경로·정책·결과와 파일 없음 처리.
+sidebar: { order: 1 }
+---
+
+```ts
+context.host.call("storage.readText", { scope, path }): Promise<string>
+```
+
+명명된 저장 범위 안의 파일을 텍스트로 읽습니다. UI에서는 이 Host operation을 직접 호출하지 않고 앱 명령으로 감쌉니다.
+
+```ts
+return context.host.call("storage.readText", {
+  scope: "appData", path: "messages/current.txt",
+});
+```
+
+## 입력
+
+| 필드 | 필수 | 제약 |
+| --- | --- | --- |
+| `scope` | 예 | `appData` 또는 `temp` |
+| `path` | 예 | 비어 있지 않은 상대 경로, 최대 4,096자, `/` 구분 |
+
+추가 입력 필드는 허용하지 않습니다. 절대·드라이브 경로, `.`·`..` 요소, 역슬래시, NUL·개행은 거부합니다.
+scope는 호스트가 정한 영역이며 앱이 임의 절대 경로로 바꿀 수 없습니다.
+
+## 정책
+
+호출 출처에 해당하는 `host.storage` 또는 `backend.storage`에 같은 scope와 pathPrefix의 `read`가 필요합니다.
+`messages` 접두사는 `messages/` 디렉터리 범위이며, `messages-old/`까지 단순 문자열 접두사로 허용하지 않습니다.
+요청 입력 스키마 검사와 실제 파일 핸들·경로·저장 권한 검사는 별개입니다.
+
+## 결과와 오류
+
+결과는 JSON 문자열이며 응답 메시지 크기 제한도 적용됩니다.
+파일이 없으면 성공한 빈 문자열로 바꾸지 않고 실패합니다. 안정된 `NOT_FOUND` 코드는 현재 없습니다.
+`INVALID_ARGUMENT`는 잘못된 입력, `PERMISSION_DENIED`는 저장 권한·경로 경계 위반,
+`CANCELLED`는 요청 종료, `INTERNAL`은 일반 파일 작업 실패 등에 사용합니다.
+
+처음 실행하는 UI는 읽기 실패를 표시하고 저장 기능을 사용할 수 있게 합니다.
+모든 읽기 실패를 파일 없음으로 단정하지 않습니다.
+바이너리·디렉터리 목록·임의 파일 선택은 현재 이 API의 기능이 아닙니다.

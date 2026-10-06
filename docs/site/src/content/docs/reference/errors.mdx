@@ -1,0 +1,54 @@
+---
+title: 오류와 실행 제한
+description: 모든 WireError 코드, BunawayError·ProtocolError와 API_LIMITS.
+---
+
+## WireError와 BunawayError
+
+WireError는 필수 `code`, `message`와 선택적 JSON `details`입니다.
+message는 최대 1,024자이며 오류 객체의 추가 필드는 거부합니다.
+`errorSchema`와 `BunawayError`는 `@bunaway/protocol`에서 가져옵니다.
+
+```ts
+import { BunawayError } from "@bunaway/protocol";
+throw new BunawayError({ code: "INVALID_ARGUMENT", message: "이름을 입력하세요." });
+```
+
+생성자 자체도 오류 구조를 검증합니다. 클라이언트 Promise 거절은 code·message·선택적 details를 가진 오류로 처리할 수 있습니다.
+일반 핸들러 예외·잘못된 출력은 내부 정보를 포함하지 않는 INTERNAL로 전달합니다.
+
+## 모든 코드
+
+| 코드 | 의미 | 처리 방향 |
+| --- | --- | --- |
+| INVALID_ARGUMENT | 입력·등록·프로토콜 계약 위반 | payload·이름·설정 확인 |
+| PERMISSION_DENIED | 뷰·Host 기능·파일 범위 거부 | 원래 출처의 정책 확인 |
+| UNSUPPORTED | 프로토콜 major·플랫폼·기능 불일치 | 지원 범위 확인 |
+| TIMEOUT | 준비·요청·종료 기한 초과 | 실제 부작용 상태 확인 |
+| CANCELLED | 요청·클라이언트·컨텍스트 취소 | 작업 수명 종료 처리 |
+| BUSY | 대기 요청·구독·큐 등 상한 | 작업 수 감소, 상태 확인 후 사용자 재시도 |
+| INTERNAL | 일반 구현·전송·파일·응답 실패 | 안전한 안내와 호스트 로그 확인 |
+
+## ProtocolError
+
+`new ProtocolError(code, message)`는 INVALID_ARGUMENT 또는 UNSUPPORTED를 가집니다.
+JSON·스키마·협상 헬퍼가 던지는 낮은 계층의 오류입니다.
+일반 앱 명령의 명시적 오류는 BunawayError를 사용합니다.
+
+## API_LIMITS
+
+| 상수 | 값 | 범위 |
+| --- | --- | --- |
+| handshakeTimeoutMs | 10,000 ms | 클라이언트 준비 협상 |
+| shutdownTimeoutMs | 2,000 ms | 코어 정리 |
+| maxCommandDurationMs | 30,000 ms | 명령 최대 시간 |
+| maxPending | 128 | 세션 미완료 요청 등 사용 계층의 큐 상한 |
+| maxSubscriptions | 128 | 세션 구독 |
+| maxRequestIds | 1,024 | 세션 요청 ID 기록 |
+
+`MAX_MESSAGE_BYTES`는 1,048,576 UTF-8 바이트, `MAX_JSON_DEPTH`는 루트 0 기준 64입니다.
+바이트와 글자 수는 다르므로 한글·emoji 데이터에는 실제 인코딩 크기를 고려합니다.
+
+앱에서 이 값을 정책 옵션으로 임의 조정하는 기능은 없습니다.
+API 오류와 CLI/패키징 도구의 PKG_* 진단은 다른 계약입니다.
+[패키징 보고서](/reference/packaging/report/)에서 도구 오류를 확인하세요.

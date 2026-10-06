@@ -1,0 +1,65 @@
+---
+title: createClient
+description: 클라이언트 생성, hello 협상, ready의 반환값과 연결 실패 동작.
+sidebar: { order: 1 }
+---
+
+`@bunaway/client`의 `createClient()`는 세션 하나에 사용할 클라이언트를 즉시 반환합니다.
+생성 시 수신을 먼저 등록한 뒤 `hello`를 전송합니다.
+
+## 사용법
+
+```ts
+import { createClient, createWebViewTransport, type WebViewBridge } from "@bunaway/client";
+
+const bridge = (window as unknown as { chrome: { webview: WebViewBridge } }).chrome.webview;
+const client = createClient({
+  transport: createWebViewTransport(bridge),
+  hello: {
+    kind: "hello",
+    protocol: { major: 1, minor: 0 },
+    features: [],
+    buildId: "my-app-ui",
+  },
+});
+const negotiated = await client.ready;
+```
+
+이 코드는 네이티브 WebView 안에서 실행합니다. 일반 브라우저에는 해당 브리지가 없습니다.
+
+## 인자
+
+| 필드 | 필수 | 의미 |
+| --- | --- | --- |
+| `transport` | 예 | `send`, `subscribe`, `close`를 제공하는 전송 |
+| `hello.kind` | 예 | `"hello"` |
+| `hello.protocol` | 예 | major·minor 정수. 현재 프레임워크는 1.0 |
+| `hello.features` | 예 | 원하는 feature 이름 배열. 필요 없으면 `[]` |
+| `hello.buildId` | 예 | 1–128자의 식별자. 영숫자·`_ . : -` 사용 |
+
+자동 생성하는 hello 기본값은 없습니다. 프로토콜 구조는 [메시지 계약](/reference/protocol/)을 따릅니다.
+
+## 반환값과 ready
+
+`Client`에는 `ready`, `invoke`, `listen`, `capabilities`, `close`가 있습니다.
+`ready`는 `{ protocol, features, buildId }`의 Promise이며 `buildId`는 상대 백엔드의 값입니다.
+major가 같으면 더 작은 minor와 양쪽 공통 feature를 정렬해 협상합니다.
+
+`invoke()`와 `listen()`은 내부적으로 준비를 기다리므로 직접 `ready`를 await하는 것이 필수는 아닙니다.
+연결 성공/실패를 UI에 표시하려면 `ready`를 명시적으로 기다리는 편이 좋습니다.
+
+## 실패와 수명
+
+- major 불일치: `UNSUPPORTED`로 준비와 대기 요청이 실패합니다.
+- hello 준비 기한 10초 초과: `TIMEOUT`으로 연결을 종료합니다.
+- 잘못된 메시지·방향·협상 순서: 프로토콜 위반으로 클라이언트를 종료합니다.
+- 전송 종료: 대기 요청과 구독을 정리합니다.
+
+닫힌 클라이언트가 자동으로 재연결되지는 않습니다. 새 전송과 새 클라이언트를 만들고 구독·상태 읽기를 다시 수행합니다.
+운영체제 창의 수명과 클라이언트의 수명은 다릅니다. [close](/reference/client/close/)를 참고하세요.
+
+## 타입
+
+`createClient<Commands, Events>()`로 명령 입력·출력과 이벤트 payload를 지정할 수 있습니다.
+예약 기능 조회 명령 타입은 프레임워크가 더합니다.
+[타입과 스키마](/guides/types-and-validation/)에서 실제 앱 정의와 연결하는 방법을 확인하세요.

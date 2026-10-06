@@ -1,0 +1,43 @@
+---
+title: capabilities
+description: 기능 지원 조회와 호출 권한·OS 권한의 차이.
+sidebar: { order: 4 }
+---
+
+```ts
+client.capabilities(): Promise<Capabilities>
+```
+
+내부적으로 예약 명령 `bunaway.capabilities`에 `null`을 보내 플랫폼 기능 정보를 조회합니다.
+
+## 정책과 사용법
+
+호출할 뷰의 기존 `commands` 배열에 이름을 추가합니다. 기본 메시지 템플릿에는 들어 있지 않습니다.
+
+```json
+{ "commands": ["message.read", "message.save", "bunaway.capabilities"] }
+```
+
+```ts
+const features = await client.capabilities();
+const read = features.find((feature) => feature.name === "storage.readText");
+console.log(read?.support, read?.permission);
+```
+
+이 JSON은 뷰 객체의 일부입니다. 필수 정책 필드까지 포함한 파일을 유지하세요.
+
+## 결과
+
+`name`, `support`, `permission`, 선택적 `reason`을 가진 배열입니다.
+`support`는 `supported`, `experimental`, `unsupported` 중 하나입니다.
+`permission`은 `granted`, `denied`, `prompt`, `not-required`, `unknown` 중 하나입니다.
+최대 256개이고 같은 기능 이름의 중복 응답은 유효하지 않습니다.
+
+## 의미와 실패
+
+기능이 `supported`여도 뷰의 Host API 정책이 해당 작업을 허용한다는 뜻은 아닙니다.
+`permission: "not-required"`도 파일 범위를 마음대로 접근할 수 있다는 뜻은 아닙니다.
+정책 미허용은 `PERMISSION_DENIED`, 잘못된 기능 응답은 `INTERNAL`로 실패합니다.
+조회가 OS 권한 대화상자를 띄우거나 작업 권한을 부여하지 않습니다.
+
+백엔드에서 조회하려면 [capabilities.get](/reference/host/capabilities-get/)을 사용합니다.

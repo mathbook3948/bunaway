@@ -1,0 +1,83 @@
+---
+// biome-ignore lint/correctness/noUnusedVariables: Astro renders this array in the template below.
+const steps = [
+  {
+    label: "UI",
+    title: "1. UI에서 요청",
+    detail:
+      '웹 UI가 client.invoke("message.save", text)를 호출합니다. 프런트엔드는 앱 백엔드 구현을 직접 실행하지 않습니다.',
+  },
+  {
+    label: "뷰 정책",
+    title: "2. 호출할 수 있는 명령인가?",
+    detail:
+      "호스트가 실제 문서 출처와 활성 세션을 확인하고, 해당 뷰의 commands에 message.save가 있는지 검사합니다. 코어에서도 허용 목록을 확인합니다.",
+  },
+  {
+    label: "앱 명령",
+    title: "3. 앱 백엔드에서 실행",
+    detail:
+      "코어가 입력 스키마를 검사한 뒤 app.ts의 message.save 핸들러를 실행합니다. 요청에 묶인 context.host와 context.events를 사용합니다.",
+  },
+  {
+    label: "Host API",
+    title: "4. 저장 범위를 확인하고 쓰기",
+    detail:
+      'context.host.call("storage.writeText", ...)이 원래 뷰의 권한으로 실행됩니다. host.storage가 appData의 messages/ 쓰기를 허용해야 파일을 저장할 수 있습니다.',
+  },
+  {
+    label: "이벤트 · 응답",
+    title: "5. UI에 결과 전달",
+    detail:
+      "핸들러가 message.saved 이벤트를 보내고 null을 반환합니다. 이벤트는 구독 중이며 해당 이벤트를 허용한 뷰에 전달되고, invoke 응답은 요청한 세션으로 돌아갑니다.",
+  },
+];
+---
+
+<call-flow>
+  <div class="steps" role="group" aria-label="메시지 저장 요청의 단계">
+    {steps.map((step, index) => (
+      <button type="button" data-step={index} aria-pressed={index === 0 ? "true" : "false"} aria-controls={`call-flow-panel-${index}`}>
+        <span class="number">{index + 1}</span>{step.label}
+      </button>
+    ))}
+  </div>
+  <div class="panels" aria-live="polite" aria-atomic="true">
+    {steps.map((step, index) => (
+      <section id={`call-flow-panel-${index}`} hidden={index !== 0}>
+        <h3>{step.title}</h3>
+        <p>{step.detail}</p>
+      </section>
+    ))}
+  </div>
+</call-flow>
+
+<script>
+  class CallFlow extends HTMLElement {
+    connectedCallback() {
+      const buttons = this.querySelectorAll<HTMLButtonElement>("button[data-step]");
+      const panels = this.querySelectorAll<HTMLElement>("section");
+      for (const button of buttons) {
+        button.onclick = () => {
+          const selected = Number(button.dataset.step);
+          buttons.forEach((item, index) => item.setAttribute("aria-pressed", String(index === selected)));
+          panels.forEach((panel, index) => { panel.hidden = index !== selected; });
+        };
+      }
+    }
+  }
+  if (!customElements.get("call-flow")) customElements.define("call-flow", CallFlow);
+</script>
+
+<style>
+  call-flow { display: block; margin-block: 1.5rem; border: 1px solid var(--sl-color-gray-5); border-radius: 0.75rem; overflow: hidden; }
+  .steps { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 1rem; background: var(--sl-color-gray-6); }
+  button { display: flex; align-items: center; gap: 0.4rem; padding: 0.6rem 0.75rem; border: 1px solid var(--sl-color-gray-4); border-radius: 0.5rem; background: var(--sl-color-bg); color: var(--sl-color-text); font: inherit; font-size: 0.85rem; cursor: pointer; }
+  button[aria-pressed="true"] { border-color: var(--sl-color-accent); background: var(--sl-color-accent-low); color: var(--sl-color-accent-high); }
+  button:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 3px; }
+  .number { font-weight: 700; }
+  .panels { padding: 1.25rem; }
+  h3 { margin: 0; font-size: 1.1rem; }
+  p { margin-bottom: 0; word-break: keep-all; line-height: 1.8; }
+  section[hidden] { display: none; }
+</style>

@@ -1,0 +1,42 @@
+---
+title: PluginDefinition
+description: 플러그인의 등록·의존·플랫폼·권한 요구·setup·역순 종료.
+sidebar: { order: 6 }
+---
+
+플러그인은 `AppDefinition.plugins`에 추가하는 신뢰된 앱 확장입니다.
+명령·이벤트·초기화·종료와 필요한 플랫폼·Host 권한을 선언합니다.
+
+## 필드
+
+| 필드 | 필수 | 의미 |
+| --- | --- | --- |
+| `name`, `version` | 예 | 플러그인 식별·버전 문자열 |
+| `dependencies` | 아니요 | 먼저 초기화해야 할 플러그인 이름 배열 |
+| `platforms` | 아니요 | 실행 허용 플랫폼 배열. 미선언이면 플랫폼 제한 없음 |
+| `requiredHost` | 아니요 | 백엔드 작업에 필요한 log·storage 권한 |
+| `commands`, `events` | 아니요 | 앱과 공유하는 명령·이벤트 등록 목록 |
+| `setup(context)` | 아니요 | 동기/비동기 초기화. 선택적 StopHook 반환 |
+
+`platforms`의 계약 값은 windows·macos·linux·android·ios입니다.
+값이 존재한다는 것이 해당 플랫폼 호스트 지원 완료를 의미하지 않습니다.
+
+## 초기화와 실패
+
+코어는 의존 플러그인을 먼저 초기화합니다.
+중복 플러그인 이름, 없는 의존성, 의존 순환은 `INVALID_ARGUMENT`입니다.
+미지원 플랫폼은 `UNSUPPORTED`, backend Host 권한 요구 미충족은 `PERMISSION_DENIED`로 시작이 실패합니다.
+등록 명령·이벤트 이름은 앱과 다른 플러그인 사이에서도 중복·예약 이름 검사를 받습니다.
+
+`requiredHost`는 정책을 자동으로 넓히지 않습니다.
+여러 storage grant를 조합해 필요한 read/write를 충족할 수 있지만 scope·경로는 넓혀 해석하지 않습니다.
+setup에는 뷰 권한이 아니라 `policy.backend`에 묶인 컨텍스트를 전달합니다.
+
+## 종료
+
+setup이 반환한 함수가 StopHook입니다. 앱 종료와 초기화 실패에서 이미 초기화된 훅을 역순으로 실행합니다.
+코어의 종료 기한은 2초이며 훅이 끝나지 않으면 `TIMEOUT`입니다.
+플러그인이 가진 타이머·연결·외부 자원은 자신의 StopHook에서 정리해야 합니다.
+
+[플러그인 작성 가이드](/guides/plugins/)에 최소 예시와 정책 변경 방법이 있습니다.
+기본 log/storage 플러그인 패키지는 아직 빈 모듈입니다. 이미 구현된 Host API와 구분하세요.

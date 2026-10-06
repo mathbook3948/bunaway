@@ -1,0 +1,58 @@
+---
+title: bunaway 개발 가이드
+description: 앱 구조를 이해하고, 웹 UI와 TypeScript 백엔드로 첫 데스크톱 앱을 만드세요.
+template: splash
+hero:
+  title: 웹으로 화면을, Bun으로 앱을.
+  tagline: UI와 앱 백엔드는 어떻게 연결될까요? 명령 하나가 저장되고 화면에 돌아오는 과정부터 따라가 보세요.
+  actions:
+    - text: 구조부터 이해하기
+      link: /start/overview/
+      icon: right-arrow
+    - text: 첫 앱 실행하기
+      link: /start/quickstart/
+      variant: secondary
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## 세 가지를 알면 시작할 수 있어요
+
+<CardGrid>
+  <Card title="화면은 웹 UI" icon="window">
+    `src/`에서 HTML·CSS·TypeScript로 화면을 만듭니다. SDK로 명령을 호출하고 이벤트를 구독합니다.
+  </Card>
+  <Card title="작업은 앱 백엔드" icon="puzzle">
+    `src-bunaway/app.ts`에서 명령의 입력·출력과 구현을 정의합니다. 플랫폼별 부팅은 프레임워크가 담당합니다.
+  </Card>
+  <Card title="접근 범위는 정책" icon="setting">
+    `policy.json`에서 어떤 뷰가 어떤 명령·이벤트·저장 범위를 사용할지 정합니다.
+  </Card>
+</CardGrid>
+
+## 처음이라면 이 순서로 읽으세요
+
+<CardGrid>
+  <LinkCard title="01 · 전체 구조" description="웹 UI, 앱 백엔드, 코어, 네이티브 호스트의 역할과 요청 흐름" href="/start/overview/" />
+  <LinkCard title="02 · 첫 앱" description="현재 제공하는 로컬 패키지로 프로젝트 생성부터 실행까지" href="/start/quickstart/" />
+  <LinkCard title="03 · 창 · 뷰 · 정책" description="views가 배열인 이유와 commands·events·host의 의미" href="/concepts/views-and-policy/" />
+  <LinkCard title="04 · 명령과 이벤트" description="message.save → 파일 저장 → message.saved → 화면 갱신" href="/guides/commands-and-events/" />
+</CardGrid>
+
+## 기능을 구현하거나 동작을 확인할 때
+
+<CardGrid>
+  <LinkCard title="기능별 가이드" description="취소·오류, 상태, 플러그인, 여러 뷰, 개발·배포 흐름" href="/guides/sessions-and-lifecycle/" />
+  <LinkCard title="API 레퍼런스" description="함수별 인자·반환값·권한·오류·수명과 설정·CLI" href="/reference/api/" />
+  <LinkCard title="환경 준비" description="Windows와 macOS의 도구·버전·개발 환경 확인" href="/start/prerequisites/" />
+  <LinkCard title="문서 범위" description="실제 공개 API와 문서 대응, 자동 누락 검사" href="/reference/coverage/" />
+</CardGrid>
+
+## 현재 사용할 수 있는 범위
+
+Windows x64를 우선으로 개발합니다. **CLI 생성 앱은 현재 단일 창·뷰**를 사용합니다.
+Windows 런타임에는 다중 창·뷰별 정책이 구현돼 있고, macOS arm64 호스트는 단일 창·뷰입니다.
+공개 npm 배포는 아직 없어 첫 앱은 로컬 tarball 묶음으로 생성합니다.
+
+[지원 범위](/reference/platforms/)에서 구현, 실행 검증과 남은 작업을 확인하세요.
+[설계와 검증 자료](/reference/design/)는 기존 ADR·계약·실행 기록으로 이어집니다.

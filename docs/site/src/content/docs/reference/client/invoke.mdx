@@ -1,0 +1,66 @@
+---
+title: invoke
+description: 명령 입력·결과, signal·deadline, 대기·실행 제한과 재시도 의미.
+sidebar: { order: 2 }
+---
+
+```ts
+client.invoke(name, input, options?): Promise<Output>
+```
+
+등록된 앱 명령을 현재 세션에서 호출합니다. 명령 이름에 대응하는 결과를 Promise로 받습니다.
+
+## 인자와 예시
+
+```ts
+const text = await client.invoke("message.read", null);
+await client.invoke("message.save", "새 메시지");
+```
+
+| 인자 | 필수 | 의미 |
+| --- | --- | --- |
+| `name` | 예 | 정확한 명령 이름. `app.ts` 등록과 뷰 정책 허용 모두 필요 |
+| `input` | 예 | 명령 input 스키마와 일치하는 JSON 값 |
+| `options.signal` | 아니요 | AbortSignal과 호환되는 취소 신호 |
+| `options.deadline` | 아니요 | Unix epoch 밀리초의 절대 기한 |
+
+입력이 없음을 `{ const: null }`로 선언했다면 `undefined` 대신 `null`을 전달합니다.
+Promise는 그 요청의 output으로 완료됩니다. 별도의 이벤트가 도착했다는 뜻은 아닙니다.
+
+## 기한
+
+```ts
+await client.invoke("message.read", null, { deadline: Date.now() + 5000 });
+```
+
+기본 명령 최대 시간은 30초입니다. 더 먼 deadline을 주어도 최대 시간을 연장하지 않습니다.
+클라이언트의 기한 계산은 호출 시 시작하므로 준비 협상을 기다리는 시간도 소비합니다.
+이미 지난 기한은 실행하지 않고 `TIMEOUT`으로 실패하며, 음수·비유한 deadline은 `INVALID_ARGUMENT`입니다.
+
+## 취소
+
+```ts
+const controller = new AbortController();
+const request = client.invoke("message.read", null, { signal: controller.signal });
+controller.abort();
+try { await request; } catch (error) { console.error(error); }
+```
+
+이미 취소된 신호는 전송 전에 `CANCELLED`로 실패합니다.
+전송 후 취소는 로컬 요청을 실패시키고 필요한 cancel을 보냅니다.
+백엔드 핸들러도 `context.signal`과 요청에 묶인 Host API를 통해 취소를 관찰합니다.
+취소는 이미 완료된 저장 작업을 롤백하지 않습니다.
+
+## 오류·제한
+
+| 코드 | 예 |
+| --- | --- |
+| `INVALID_ARGUMENT` | 미등록 명령, 잘못된 입력·프로토콜 데이터 |
+| `PERMISSION_DENIED` | 뷰에 없는 명령, 핸들러 내부 Host API 권한 부족 |
+| `BUSY` | 세션의 미완료 요청 128개 등 자원 제한 |
+| `TIMEOUT` / `CANCELLED` | 기한 초과·취소 |
+| `INTERNAL` | 핸들러 일반 예외, 잘못된 출력, 연결 실패 |
+
+세션 요청 ID는 재사용하지 않으며 기록 상한은 1,024개입니다. 장시간 세션의 모든 작업이 무제한으로 허용되지는 않습니다.
+늦은 응답은 폐기합니다. 자동 재시도·자동 요청 재전송은 없습니다.
+[오류 처리](/guides/cancellation-and-errors/)에서 사용자 재시도와 상태 복원을 설명합니다.

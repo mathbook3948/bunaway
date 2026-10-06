@@ -29,10 +29,17 @@ jobs:
           persist-credentials: false
       - name: Set up mise and pinned Bun
         uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
+      - name: Set up Node for the documentation toolchain
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.19.0
       - name: Install locked dependencies
         run: mise run install
       - name: Check formatting, lint, types and contracts
         run: mise run check
+      - name: Build the documentation site and search index
+        if: runner.os == 'Linux'
+        run: bun run docs:build
       - name: Verify generated native schemas
         if: runner.os == 'Linux'
         run: |

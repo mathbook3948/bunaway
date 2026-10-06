@@ -1,0 +1,41 @@
+---
+title: create
+description: 프로젝트 생성의 옵션·템플릿·로컬 패키지·폴더 안전성과 생성 결과.
+sidebar: { order: 1 }
+---
+
+```sh
+bunaway create <new-directory> [--template vanilla|vite] [--package-dir <tarball-directory>]
+```
+
+## 옵션
+
+| 항목 | 기본값 | 의미 |
+| --- | --- | --- |
+| new-directory | 필수 | 아직 없는 앱 디렉터리. 부모 디렉터리는 존재해야 함 |
+| --template | vanilla | vanilla 또는 vite |
+| --package-dir | 없음 | 생성 앱의 @bunaway 의존성에 연결할 로컬 tarball 묶음 |
+
+현재 공개 registry 배포는 없으므로 실제 설치에는 로컬 묶음을 사용합니다.
+옵션의 중복·알 수 없는 옵션·누락된 값·지원하지 않는 템플릿은 거부합니다.
+
+## 생성 동작
+
+staging에 템플릿을 복사하고 성공한 결과를 대상 폴더로 이동합니다.
+실패 시 자신의 staging을 정리하고 기존 폴더를 덮어쓰지 않습니다.
+앱 ID는 디렉터리 이름을 정규화한 `app.<slug>`, 창 제목은 디렉터리 이름입니다.
+`bunaway.json`, `policy.json`, 공통 `app.ts`와 UI가 생성됩니다.
+
+vanilla는 정적 UI와 네이티브 dev/build 스크립트,
+vite는 웹 dev/build/preview 및 `bunaway` CLI 스크립트를 제공합니다.
+`--package-dir`는 같은 릴리스 버전의 각 tarball을 실제 경로로 확인합니다.
+생략하면 정확한 registry 버전 문자열을 선언하며, 현재 공개 설치 가능성을 보장하지 않습니다.
+
+create는 `bun install`을 자동 실행하지 않습니다. 출력한 다음 단계를 따라 설치·검증·실행합니다.
+[첫 앱](/start/quickstart/)과 [Vite 개발](/guides/development/)을 참고하세요.
+
+## 프로그램 API
+
+`createProject(directory, { packageDirectory?, template? }): Promise<string>`는 생성된 절대 경로를 반환합니다.
+CLI의 `--package-dir`는 API의 `packageDirectory`에 대응합니다.
+도구 API 사용법은 [CLI 프로그램 API](/reference/tooling/cli-api/)에 있습니다.

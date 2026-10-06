@@ -1,0 +1,82 @@
+---
+title: Vite와 개발 흐름
+description: vanilla 재시작과 Vite HMR을 구분하고 개발 서버·백엔드의 수명주기를 설명합니다.
+---
+
+## 두 템플릿의 명령을 구분하세요
+
+| 작업 | `vanilla` 템플릿 | `vite` 템플릿 |
+| --- | --- | --- |
+| 네이티브 개발 앱 | `bun run dev` | `bun run bunaway dev` |
+| 웹 생산 빌드 | CLI가 정적 UI 번들 | `bun run build` |
+| 네이티브 빌드 | `bun run build` | `bun run bunaway build` |
+
+`vite` 템플릿의 `bun run dev`는 웹 개발 서버만 실행합니다.
+네이티브 브리지를 사용하는 앱은 `bun run bunaway dev`로 실행해야 합니다.
+CLI가 Vite 서버를 시작하므로 같은 포트의 서버를 따로 먼저 띄우지 않습니다.
+
+## Vite 앱 생성
+
+[첫 앱](/start/quickstart/)과 같은 로컬 패키지 묶음을 준비한 뒤 저장소 루트에서 실행합니다.
+
+```sh
+bun packages/cli/src/main.ts create ../my-vite-app --template vite --package-dir build/framework
+cd ../my-vite-app
+bun install
+bun run bunaway doctor
+bun run bunaway dev
+```
+
+Vite 템플릿은 루트 `index.html`, `src/`, `vite.config.ts`를 사용합니다.
+`build.frontend`는 `web-dist`를 가리킵니다.
+
+## 개발 서버 연결 설정
+
+`src-bunaway/bunaway.json`의 다른 항목은 유지하고 아래 `dev`를 추가합니다.
+
+```json
+{
+  "dev": {
+    "command": ["bun", "run", "dev"],
+    "url": "http://127.0.0.1:5173/",
+    "timeoutMs": 30000
+  }
+}
+```
+
+`command`는 실행 파일과 인자 배열입니다. 정책의 앱 명령 목록 `commands`와는 다른 설정입니다.
+CLI는 프로젝트 루트에서 서버를 실행하고, 지정 URL의 HTTP 준비를 확인한 뒤 네이티브 창을 엽니다.
+템플릿의 Vite 설정은 포트 5173을 고정하고 `strictPort`를 사용합니다.
+
+`app.home`과 `policy.json.origins`는 계속 로컬 자산용 `https://app.bunaway.local`을 사용합니다.
+CLI가 **개발 산출물에만** 정확한 loopback origin을 적용합니다.
+정책에 HTTP origin을 직접 추가하면 CLI 검증이 거부합니다.
+
+## 변경 시 무엇이 재시작되나요?
+
+| 변경 | `dev` 설정 없음 | 외부 개발 서버 연결 |
+| --- | --- | --- |
+| UI 소스 | 앱 전체 재시작 | Vite의 HMR·페이지 갱신 |
+| 앱 백엔드 | 앱 전체 재시작 | 네이티브 앱 재시작, UI 서버 유지 |
+| 개발 서버 설정 | 앱 재시작 | 앱과 서버를 모두 교체 |
+
+백엔드 재시작은 새 앱 상태와 새 세션을 만듭니다.
+SDK는 미완료 요청·구독을 정리하고, 이전 요청을 자동으로 재전송하지 않습니다.
+이미 저장한 파일은 남지만 저장하지 않은 화면·메모리 상태는 사라질 수 있습니다.
+
+Ctrl+C, 창 닫기, 서버 종료·준비 timeout 때 CLI가 관리한 프로세스를 정리합니다.
+현재 외부 개발 서버를 별도로 실행해 연결만 하는 모드는 제공하지 않습니다.
+
+## 생산 빌드로 넘어가기
+
+Vite 템플릿에서는 먼저 웹 빌드 출력이 있어야 프로덕션 검증·네이티브 빌드를 할 수 있습니다.
+
+```sh
+bun run build
+bun run bunaway validate
+bun run bunaway build
+```
+
+CLI는 외부 프런트엔드 생산 빌드를 자동 실행하지 않습니다.
+Next.js 등의 개발 서버를 연결하더라도 SSR 서버가 최종 앱에 자동 패키징되는 기능은 아닙니다.
+[빌드와 패키징](/guides/build-and-package/)에서 다음 단계를 확인하세요.

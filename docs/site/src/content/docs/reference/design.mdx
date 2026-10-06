@@ -1,0 +1,56 @@
+---
+title: 설계와 검증 자료
+description: 사용자 가이드에서 원래의 용어집·ADR·구현 계약·검증 결과로 이어지는 자료 지도.
+---
+
+이 사이트의 시작하기·구조·사용 가이드는 **앱을 만드는 흐름**으로 읽도록 구성했습니다.
+아래는 프레임워크 구현을 더 깊게 볼 때 참고할 기존 자료입니다.
+설계 결정, 구현 계약, 실제 실행 결과는 역할이 다르므로 구분해서 읽으세요.
+
+## 공통 용어와 제품 방향
+
+| 자료 | 답하는 질문 |
+| --- | --- |
+| [용어집](https://github.com/mathbook3948/bunaway/blob/main/docs/GLOSSARY.md) | 명령·뷰·세션·호스트·정책은 어떤 의미인가? |
+| [PRD](https://github.com/mathbook3948/bunaway/blob/main/docs/PRD.md) | 제품 목표와 권한·수명주기 요구사항은 무엇인가? |
+| [진행 상태](https://github.com/mathbook3948/bunaway/blob/main/docs/architecture/progress.md) | 현재 무엇이 구현되고 무엇이 남아 있는가? |
+
+## 앱을 만드는 데 관련된 결정
+
+| 결정 | 내용 |
+| --- | --- |
+| [ADR 0010](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0010-windows-first-platform-model.md) | Windows 우선 개발, 공통 앱 정의 하나 |
+| [ADR 0007](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0007-project-settings.md) | 프로젝트 구조, 설정 통합과 정책 분리 |
+| [ADR 0008](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0008-installed-framework-packages.md) | 앱의 package.json·bun.lock 기반 프레임워크 설치 |
+| [ADR 0009](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0009-development-server.md) | 외부 UI 개발 서버와 CLI 수명주기 |
+| [프레임워크 설치](https://github.com/mathbook3948/bunaway/blob/main/docs/framework-distribution.md) | 로컬 패키지 묶음, 버전·업그레이드·도구 요구사항 |
+
+## 코어·정책·플랫폼 구현
+
+| 자료 | 내용 |
+| --- | --- |
+| [공통 API](https://github.com/mathbook3948/bunaway/blob/main/docs/architecture/common-api.md) | SDK·코어·명령·Host API 실행 계약 |
+| [프로토콜](https://github.com/mathbook3948/bunaway/blob/main/docs/architecture/protocol.md) | 메시지·정책 스키마, 버전·오류·제한 |
+| [ADR 0002](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0002-host-owned-call-context.md) | 호스트가 소유하는 호출 컨텍스트 |
+| [ADR 0004](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0004-multi-window-per-view-policy.md) | 창·뷰별 정책과 세션 수명 |
+| [ADR 0006](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0006-windows-bun-ui-worker.md) | Windows Bun 메인·UI Worker·I/O Worker |
+
+## 실제 검증 결과
+
+- [현재 Windows Bun FFI 기록](https://github.com/mathbook3948/bunaway/blob/main/docs/architecture/windows-bun-results.md)
+- [기존 Windows C 호스트 기록](https://github.com/mathbook3948/bunaway/blob/main/docs/architecture/windows-host-results.md)
+- [macOS probe·WKWebView 기록](https://github.com/mathbook3948/bunaway/blob/main/docs/architecture/macos-native-results.md)
+- [플랫폼 지원 표](https://github.com/mathbook3948/bunaway/blob/main/docs/platform-support/README.md)
+
+과거 문서의 플랫폼 구조나 예시 필드는 해당 문서의 갱신 시점도 확인하세요.
+현재 앱 진입점·설정은 ADR 0010과 실제 CLI의 `build.app`을 기준으로 합니다.
+설계의 채택 상태만으로 그 기능의 플랫폼 실행 검증이 완료됐다고 판단하지 않습니다.
+
+## 문서 기여
+
+개발자용 설명은 `docs/site/src/content/docs/`의 MDX에서 작성합니다.
+설계 결정은 기존 `docs/decisions/`, 용어는 `docs/GLOSSARY.md`, 실행 기록은 `docs/architecture/`에 유지합니다.
+페이지마다 관련 자료를 연결해서 시작 가이드에서 구현 근거까지 따라갈 수 있게 합니다.
+
+이 사이트의 앱 정의·정책·설정·UI 예제는 실제 CLI 템플릿을 빌드 시 읽어 표시합니다.
+템플릿의 이름이나 동작을 바꾸면 주변 설명과 지원 범위도 함께 갱신하세요.

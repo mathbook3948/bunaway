@@ -1,0 +1,47 @@
+---
+title: package
+description: 채널 선택·build 옵션·검증·출력·보고서·exit code.
+sidebar: { order: 6 }
+---
+
+```sh
+bunaway package <channel> [directory] [--build]
+```
+
+네이티브 build 산출물을 채널별 배포 파일로 조립합니다.
+channel은 필수, directory 기본값은 현재 앱, `--build` 기본값은 false입니다.
+
+## 전제와 실행 순서
+
+1. 유효한 프로젝트와 `bundle.channels.<channel>` 선언.
+2. 패키징 메타데이터·아이콘·서명 설정 확인.
+3. 현재 플랫폼·대상과 등록된 어댑터 확인.
+4. `--build`이면 네이티브 build 수행, 아니면 기존 산출물 사용.
+5. 입력 무결성 검사, staging에서 채널 stage 실행, 성공 출력 게시.
+
+Vite의 웹 build는 `--build`도 자동 실행하지 않습니다.
+플랫폼·어댑터 불일치를 먼저 확인하므로 지원되지 않는 채널 때문에 불필요한 build를 시작하지 않습니다.
+
+## 출력
+
+```text
+dist/<target>/packaged/
+├─ <channel>/             배포 산출물
+└─ <channel>-report.json  구조화된 보고서
+```
+
+원본 네이티브 build는 읽기 전용 입력이며 서명·조립은 staging 복사본에서 합니다.
+실패한 새 패키징이 이전 성공 출력을 덮어쓰지 않습니다.
+대상 lock 실패 시 보고서도 게시하지 않습니다.
+
+CLI 종료 코드는 `report.ok`가 true이면 0, false이면 1입니다.
+`ok`, `usable`, `submittable`은 서로 다르므로 종료 코드만 보고 스토어 제출 가능성을 판단하지 않습니다.
+
+## 현재 채널
+
+win-direct·win-store-unpackaged 어댑터가 있고,
+win-store-msix는 등록돼 있지만 현재 패키징을 명시적으로 거부합니다.
+mac-direct·mac-store는 설정 계약이 있지만 내장 어댑터가 없습니다.
+[채널 레퍼런스](/reference/packaging/channels/)에서 기본값·도구·제한을 확인하세요.
+
+프로그램 API는 `packageProject(directory, channelName, { build? }): Promise<PackageReport>`입니다.

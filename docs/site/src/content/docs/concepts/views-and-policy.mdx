@@ -1,0 +1,96 @@
+---
+title: 창 · 뷰 · 정책
+description: views가 배열인 이유와 id·origins·commands·events·host·backend의 역할.
+---
+
+import { Code } from '@astrojs/starlight/components';
+import policySource from '@repo/packages/cli/templates/vanilla/src-bunaway/policy.json?raw';
+
+## 창과 뷰는 어떤 관계인가요?
+
+**창**은 운영체제의 창입니다. **뷰**는 웹 UI와 접근 정책을 구분하는 단위입니다.
+프런트엔드 라우트 하나를 곧바로 뷰 하나로 보지는 않습니다.
+현재 Windows 구현은 한 창에 뷰 하나를 연결합니다.
+
+```text
+창 설정의 view: "main"
+         ↓ 같은 ID를 선택
+policy.views의 id: "main"
+         ↓ 해당 정책을 적용
+이 창의 WebView와 활성 세션
+```
+
+정책은 뷰별로 적용할 수 있어서 `views`가 배열입니다.
+새 정책 항목을 추가하는 것만으로 창이 만들어지지는 않습니다.
+
+## 기본 템플릿의 전체 정책
+
+<Code code={policySource} lang="json" title="src-bunaway/policy.json" />
+
+이 정책은 “`main` 뷰에서 메시지를 읽고 저장하고, 저장 이벤트를 받고,
+앱 데이터의 `messages/` 아래 파일만 읽고 쓸 수 있다”는 선언입니다.
+
+| 필드 | 의미 |
+| --- | --- |
+| `id` | 창 설정이 선택할 뷰 ID. 중복 ID는 허용하지 않음 |
+| `origins` | 브리지 요청을 허용할 정확한 문서 origin |
+| `commands` | 이 뷰에서 호출할 수 있는 앱 명령 이름 |
+| `events` | 이 뷰에서 구독·전달받을 수 있는 앱 이벤트 이름 |
+| `host.log` | 이 뷰에서 시작한 작업의 `log.write` 허용 여부 |
+| `host.storage` | 저장 범위·경로 접두사·읽기/쓰기 권한 |
+
+명령·이벤트는 정확한 이름을 선언합니다. `"*"` 와일드카드는 지원하지 않습니다.
+`commands: []`이면 해당 뷰의 명령 호출은 전부 거부됩니다. 필수 키를 삭제하면 정책 검증이 실패합니다.
+
+## app.ts에도 commands가 있는데 왜 여기에도 있나요?
+
+두 목록의 역할이 다릅니다.
+
+| 위치 | 답하는 질문 |
+| --- | --- |
+| `app.ts.commands` | 앱에 어떤 명령이 구현돼 있나요? |
+| `policy.views[].commands` | 이 뷰가 어떤 명령을 호출할 수 있나요? |
+
+명령을 등록해도 자동으로 모든 뷰에 허용되지 않습니다.
+읽기 전용 `reader`에는 `message.read`만, 편집 `editor`에는 두 명령을 모두 허용할 수 있습니다.
+WebView가 공격받더라도 해당 뷰에 허용하지 않은 앱 핸들러로 요청을 보내지 못하게 하는 경계입니다.
+
+## commands와 host.storage는 각각 검사합니다
+
+`message.save` 호출에는 두 검사가 필요합니다.
+
+1. `commands`에 `message.save`가 있어야 **앱 핸들러를 실행**할 수 있습니다.
+2. 핸들러가 `storage.writeText`를 요청하면 `host.storage`에서 **그 파일의 쓰기 범위**를 확인합니다.
+
+파일을 쓰지 않고 앱 상태만 바꾸는 명령도 있습니다.
+저장 권한만으로 모든 명령의 실행을 제한할 수는 없어서 두 정책을 별도로 둡니다.
+
+`scope: "appData"`, `pathPrefix: "messages"`는 명명된 앱 데이터 범위 안의
+`messages/` 디렉터리를 허용합니다. 임의 절대 경로를 허용하는 설정이 아닙니다.
+[저장소 가이드](/guides/storage-and-state/)에서 호출 경로와 정책을 함께 확인하세요.
+
+## backend.storage가 비어 있어도 저장이 되는 이유
+
+UI 명령 핸들러의 `context.host`는 **요청을 보낸 뷰의 권한**을 유지합니다.
+`main`에서 시작한 `message.save`는 `main.host.storage`로 검사합니다.
+
+루트의 `backend`는 플러그인 초기화 등 **백엔드 자체 작업**에 적용하는 별도 Host API 권한입니다.
+`backend.storage: []`는 백엔드 자체 저장을 허용하지 않는다는 뜻이지, 모든 뷰의 저장을 막는다는 뜻은 아닙니다.
+이 정책은 신뢰된 백엔드가 직접 사용하는 Bun API를 샌드박싱하는 장치는 아닙니다.
+
+## 멀티 뷰는 지금 가능한가요?
+
+| 경로 | 현재 상태 |
+| --- | --- |
+| Windows 런타임 | 다중 창·뷰, 뷰별 정책·세션 분리 구현. 세 창 실행 검증 기록 있음 |
+| CLI 생성 앱의 `bunaway.json` | 단일 창 설정만 받으며, 정책도 정확히 한 뷰여야 검증 통과 |
+| macOS 호스트 | 단일 창·뷰 |
+
+Windows 런타임 내부의 `app.json.windows[]`는 창마다 뷰 ID를 연결할 수 있습니다.
+이 필드를 현재 CLI의 `bunaway.json`에 그대로 추가하면 지원되지 않는 필드로 거부됩니다.
+
+여러 뷰는 공통 명령·앱 상태를 공유하지만 세션·권한·이벤트 구독은 분리됩니다.
+한 창을 닫으면 그 뷰의 세션이 폐기되고, 다른 창은 계속 실행됩니다.
+실제 다중 창 설정은 [Windows 테스트 fixture](https://github.com/mathbook3948/bunaway/blob/main/tests/fixtures/desktop/host/app.json)에 있습니다.
+
+다음으로 [명령과 이벤트](/guides/commands-and-events/)에서 이 정책이 적용되는 코드를 살펴보세요.

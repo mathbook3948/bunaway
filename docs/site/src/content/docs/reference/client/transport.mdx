@@ -1,0 +1,40 @@
+---
+title: WebViewTransport와 Transport
+description: 브리지 연결과 사용자 정의 전송의 send·subscribe·close 계약.
+sidebar: { order: 6 }
+---
+
+`createWebViewTransport(bridge)`는 호스트가 제공하는 WebView 메시지 브리지를 SDK의 `Transport`로 바꿉니다.
+
+## WebViewBridge
+
+```ts
+interface WebViewBridge {
+  postMessage(message: unknown): void;
+  addEventListener(type: "message", listener: (event: { data: unknown }) => void): void;
+  removeEventListener(type: "message", listener: (event: { data: unknown }) => void): void;
+}
+```
+
+어댑터는 보내는 JSON 문자열을 객체로 변환해 `postMessage`하고,
+들어오는 `event.data`를 JSON 문자열로 바꿔 SDK에 전달합니다.
+종료하면 브리지 리스너를 제거하고 전송 구독자에게 closed를 알립니다.
+닫힌 전송으로 보내면 실패합니다. 전송 자체는 정책 권한을 부여하지 않습니다.
+
+## 사용자 정의 Transport
+
+`Transport`와 `TransportEvent`는 `@bunaway/protocol`의 계약입니다.
+
+| 메서드 | 계약 |
+| --- | --- |
+| `send(text): Promise<void>` | FIFO 큐 접수까지 완료. 백엔드 작업 완료가 아님. 포화는 실패로 알림 |
+| `subscribe(listener): Dispose` | 원문 message 또는 closed를 전달하고 동기 해제 함수 반환 |
+| `close(): Promise<void>` | 멱등 자원 정리. 이후 전송 금지 |
+
+이벤트는 `{ kind: "message", text }` 또는 `{ kind: "closed", error? }`입니다.
+`subscribe`는 첫 send 전에 등록할 수 있어야 하며, 이미 닫힌 전송에 나중에 등록해도 closed를 관찰해야 합니다.
+
+SDK는 프로토콜 검증·요청 매칭·기한·구독을 맡지만,
+전송의 자원 회수·송신 순서·종료 통지는 어댑터가 맡습니다.
+새 전송 경로를 만들어도 신뢰된 호스트의 실제 출처·세션·권한 검사를 유지해야 합니다.
+`HostContext` 문자열을 프런트엔드가 자기 신고한다고 권한이 생기지 않습니다.

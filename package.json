@@ -5,6 +5,10 @@
   "type": "module",
   "license": "UNLICENSED",
   "scripts": {
+    "docs:dev": "bun run --cwd docs/site dev",
+    "docs:build": "bun run --cwd docs/site build",
+    "docs:preview": "bun run --cwd docs/site preview",
+    "docs:check": "bun run --cwd docs/site typecheck",
     "framework:pack": "bun packages/cli/scripts/pack.ts",
     "framework:check": "bun packages/cli/scripts/check.ts"
   },
@@ -13,6 +17,7 @@
     "bun": "1.4.2"
   },
   "workspaces": [
+    "docs/site",
     "packages/*",
     "plugins/*"
   ],

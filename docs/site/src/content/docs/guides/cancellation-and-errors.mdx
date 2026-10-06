@@ -1,0 +1,58 @@
+---
+title: 취소·기한·오류 처리
+description: 사용자 취소와 타임아웃, 안전한 오류, 완료한 부작용·재시도 처리.
+---
+
+요청 실패는 작업의 모든 외부 효과가 없었다는 뜻은 아닙니다.
+파일 쓰기 등은 실제 상태를 확인하고 사용자가 재시도할 수 있게 만듭니다.
+
+## UI에서 취소하기
+
+```ts
+const controller = new AbortController();
+const request = client.invoke("message.read", null, {
+  signal: controller.signal,
+  deadline: Date.now() + 5000,
+});
+// 사용자가 취소 버튼을 눌렀을 때
+controller.abort();
+try { await request; } catch (error) { console.error(error); }
+```
+
+신호를 취소하면 클라이언트가 로컬 요청을 종료하고 필요한 cancel을 전송합니다.
+이미 취소한 신호로는 요청을 시작하지 않습니다.
+deadline은 상대 timeout 숫자가 아니라 Unix epoch 밀리초입니다.
+
+## 백엔드에서 취소 관찰
+
+핸들러의 `context.signal.aborted`를 확인하거나 abort 리스너로 외부 자원을 정리합니다.
+표준 fetch 같은 API에는 호환되는 신호를 전달할 수 있지만 portable CancellationSignal 타입 자체는 전체 DOM AbortSignal을 약속하지 않습니다.
+필요하면 자신의 백엔드 어댑터에서 연결하세요.
+Host API는 컨텍스트 수명과 취소를 바인딩 계층에서 이미 검사합니다.
+
+취소는 일반 Promise를 강제로 중단하지 않습니다.
+UI가 사라진 뒤에도 계속 실행되는 외부 작업은 앱에서 정리해야 합니다.
+늦게 도착한 응답·이벤트로 폐기된 요청을 다시 완료하지 않습니다.
+
+## 명시적 앱 오류
+
+```ts
+import { BunawayError } from "@bunaway/protocol";
+throw new BunawayError({
+  code: "INVALID_ARGUMENT", message: "저장할 내용을 입력하세요.",
+});
+```
+
+일반 예외 메시지·스택을 UI로 그대로 전달하지 않습니다.
+code·안전한 message·선택적 JSON details가 공개 계약입니다.
+전체 코드와 상한은 [오류 레퍼런스](/reference/errors/)에서 확인하세요.
+
+## 재시도와 복원
+
+1. 연결이 끝났으면 새 연결·구독을 시작합니다.
+2. 읽기 명령으로 실제 저장 상태를 확인합니다.
+3. 이전 작업의 성공 여부를 UI에 알립니다.
+4. 필요할 때 사용자가 다시 저장하도록 합니다.
+
+프레임워크는 부작용 있는 명령의 자동 재시도, 요청 이력 재전송, 완료된 쓰기의 롤백을 제공하지 않습니다.
+구독 오류는 listen의 onError에서 UI 사용 가능 상태에 반영합니다.

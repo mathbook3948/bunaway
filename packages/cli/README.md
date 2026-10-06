@@ -39,7 +39,7 @@ package.json과 bun.lock을 커밋한다. vendor 복사와 별도 프레임워�
 자산·단일 뷰/정확한 origin·기존 정책 스키마를 검사한다. `package`는
 `bunaway.json.bundle`(패키징에 필요, 선언 시 dev/build에서도 형식 검사)을 읽어
 `bunaway build`의 채널 중립 산출물을 채널별 패키지로 조립한다. 산출물은
-`dist/<target>/packaged/<channel>/`, 결과는 `packaging-report.<channel>.json`에
+`dist/<target>/packaged/<channel>/`, 결과는 그 옆의 `<channel>-report.json`에
 기록한다. `--build`는 패키징 전에 빌드를 먼저 실행한다. 채널·어댑터 계약·서명/해시
 규칙은 `@bunaway/packaging`과 `docs/decisions/0005-packaging-contract.md`에 있다.
 권한의 실제 집행은 호스트/코어의 기존 계약을 따른다. 백엔드를 실행해 명령 목록을

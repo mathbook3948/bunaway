@@ -1,0 +1,49 @@
+---
+title: build
+description: 네이티브 앱 빌드·출력·해시·런처·실패 복구와 생산/개발 구분.
+sidebar: { order: 5 }
+---
+
+```sh
+bunaway build [directory]
+```
+
+현재 머신의 Windows x64 또는 macOS arm64 대상 앱 산출물을 만듭니다.
+교차 빌드·추가 target 옵션은 없습니다. 개발 Bun은 고정 버전 1.4.2와 같아야 합니다.
+
+## 준비와 자산
+
+프로덕션 프로젝트를 검증하고 플랫폼 네이티브 도구·Bun·라이선스·Loader를 준비·검증합니다.
+앱 백엔드와 UI를 별도로 번들하고 정적 자산·설정·정책·라이선스·manifest를 포함합니다.
+Vite 등 외부 UI의 생산 빌드는 먼저 앱의 웹 build 스크립트로 실행해야 합니다.
+CLI가 `dev.command`나 외부 웹 생산 빌드를 대신 실행하지 않습니다.
+
+자산 심볼릭 링크와 대소문자 비구분 출력 충돌을 거부합니다.
+프런트엔드 `.d.ts`는 배포하지 않으며 입력·출력 무결성은 manifest의 해시로 기록합니다.
+
+## 출력과 실행
+
+| 대상 | 출력 |
+| --- | --- |
+| Windows | `dist/windows-x64/` |
+| macOS | `dist/macos-arm64/<appId>.app/` |
+
+Windows 산출물은 `bunaway.cmd`, `launch.ps1`, assets·licenses·runtime/bun.exe를 포함합니다.
+앱 폴더 전체를 유지한 채 런처로 실행합니다. Bun exe 하나만 복사해 배포하지 않습니다.
+런처는 고정 Bun·앱 자산을 확인하고 깨끗한 실행 환경을 준비합니다.
+macOS는 `.app`와 로컬 ad-hoc 서명을 만듭니다. Developer ID·공증은 별도입니다.
+
+## 실패와 동시 작업
+
+staging을 만들고 검증 성공 후 산출물을 교체합니다. 실패하면 마지막 생산 산출물을 보존합니다.
+build output lock으로 같은 target의 재빌드와 패키징을 충돌 없이 조정합니다.
+기존 Windows `packaged/`의 인식된 채널 출력·보고서는 재빌드 시 유지합니다.
+
+## 프로그램 API
+
+`buildProject(directory, { development?, native? }): Promise<BuiltPackage>`.
+development는 기본 false이며 native는 준비한 NativeInputs를 재사용하는 도구용 옵션입니다.
+결과는 `output`, `package`, `executable`, `arguments`입니다.
+프로그램 실행은 반환한 executable과 arguments를 함께 사용합니다.
+
+[패키징](/reference/cli/package/) · [도구 API](/reference/tooling/cli-api/)
