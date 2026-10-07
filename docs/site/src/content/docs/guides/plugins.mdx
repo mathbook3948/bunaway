@@ -37,6 +37,28 @@ setup의 context.host는 `policy.backend` 권한을 사용합니다.
 로그를 기록하려면 requiredHost에 `{ log: true, storage: [] }`를 선언하고 policy의 backend.log도 true로 설정합니다.
 requiredHost는 시작할 때 필요한 권한을 검사하므로 정책에도 같은 권한이 있어야 합니다.
 
+`defineApp()`으로 플러그인을 연결하면 setup에서도 `storage`, `log`, `capabilities`를
+import해 직접 호출할 수 있습니다.
+
+```ts
+import { defineApp, log, type PluginDefinition } from "@bunaway/backend";
+
+const startup = {
+  name: "startup",
+  version: "1",
+  requiredHost: { log: true, storage: [] },
+  async setup() {
+    await log.info("앱을 시작했습니다.");
+  },
+} satisfies PluginDefinition;
+
+export default defineApp({ modules: [], plugins: [startup] });
+```
+
+이 예제는 `policy.backend.log: true`가 필요합니다.
+setup에서 시작한 비동기 작업은 앱 종료까지 백엔드 권한을 사용합니다.
+명령에서 시작한 작업은 해당 명령이 끝나면 Host API를 사용할 수 없습니다.
+
 뷰에서 호출한 플러그인 명령은 그 뷰의 권한으로 실행됩니다.
 setup의 권한은 백엔드 초기화 작업에만 적용합니다.
 

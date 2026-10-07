@@ -1,4 +1,5 @@
 import type { AppDefinition, CommandRegistry, EventRegistry } from "@bunaway/core";
+import { bindCommandHost, bindPluginHost } from "./host-context.ts";
 import type { ModuleDefinition } from "./module.ts";
 import { claimName, type RegistrationKind } from "./registration.ts";
 
@@ -64,13 +65,17 @@ export function defineApp<
   });
   return Object.freeze({
     // Prevent contextual AppDefinition types from widening absent direct registries.
-    commands: Object.freeze(Object.fromEntries(commands)) as Readonly<
-      NoInfer<C> & ModuleEntries<M, "commands">
-    >,
+    commands: Object.freeze(
+      Object.fromEntries(
+        [...commands].map(([name, definition]) => [name, bindCommandHost(definition)]),
+      ),
+    ) as Readonly<NoInfer<C> & ModuleEntries<M, "commands">>,
     events: Object.freeze(Object.fromEntries(events)) as Readonly<
       NoInfer<E> & ModuleEntries<M, "events">
     >,
     ...(options.state === undefined ? {} : { state: options.state }),
-    ...(options.plugins === undefined ? {} : { plugins: Object.freeze([...options.plugins]) }),
+    ...(options.plugins === undefined
+      ? {}
+      : { plugins: Object.freeze(options.plugins.map(bindPluginHost)) }),
   });
 }

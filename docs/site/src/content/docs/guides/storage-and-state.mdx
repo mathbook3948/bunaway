@@ -8,7 +8,10 @@ description: 메모리 상태와 영구 저장을 구분하고 Host API 경로�
 | 방식 | 용도 | 앱 재시작 후 |
 | --- | --- | --- |
 | `context.state` | 백엔드 메모리의 앱 데이터 | 초기 정의로 다시 시작 |
-| `context.host.call("storage.writeText", ...)` | 파일로 저장할 데이터 | 저장된 파일을 다시 읽을 수 있음 |
+| `storage.writeText(...)` | 파일로 저장할 데이터 | 저장된 파일을 다시 읽을 수 있음 |
+
+`storage`는 앱별 데이터 폴더와 임시 저장 영역을 쉽게 사용하기 위한 선택적 API입니다.
+일반 파일 작업에는 백엔드에서 `Bun.file()`과 `Bun.write()`를 직접 사용할 수 있습니다.
 
 여러 뷰가 있으면 같은 앱 백엔드의 상태를 공유합니다.
 뷰별 데이터가 필요하면 상태 키에 뷰 ID를 넣는 등 앱에서 구분합니다.
@@ -18,7 +21,9 @@ description: 메모리 상태와 영구 저장을 구분하고 Host API 경로�
 `message.save` 핸들러는 아래 Host API를 호출합니다.
 
 ```ts
-await context.host.call("storage.writeText", {
+import { storage } from "@bunaway/backend";
+
+await storage.writeText({
   scope: "appData",
   path: "messages/current.txt",
   text,
@@ -29,6 +34,11 @@ await context.host.call("storage.writeText", {
 `path`는 그 범위 안의 `/`로 구분한 상대 경로입니다.
 `messages/current.txt`가 실제로 어디에 위치할지는 플랫폼 호스트가 결정합니다.
 핸들러에는 사용자별 절대 경로 대신 scope와 상대 경로를 적습니다.
+
+`storage`는 명령의 실행 범위에서 사용합니다. 핸들러가 호출한 서비스 함수도
+`storage`를 import해 호출할 수 있으며 `context.host`를 전달할 필요가 없습니다.
+명령이 끝난 뒤에는 사용할 수 없으므로 저장 완료를 `await`해야 합니다.
+[백엔드 Host API](/reference/backend/host-api/)에서 실행 범위와 오류를 확인하세요.
 
 뷰의 정책은 이 호출에 대응하는 범위를 허용해야 합니다.
 
@@ -50,7 +60,7 @@ await context.host.call("storage.writeText", {
 ## 읽기와 첫 실행
 
 ```ts
-const text = await context.host.call("storage.readText", {
+const text = await storage.readText({
   scope: "appData",
   path: "messages/current.txt",
 });
@@ -91,6 +101,7 @@ export default {
 
 ## 정책이 적용되는 범위
 
-UI 명령의 `context.host`에는 원래 뷰의 권한이 적용됩니다.
+UI 명령의 `storage`, `log`, `capabilities`와 `context.host`에는 원래 뷰의 권한이 적용됩니다.
 백엔드 자체 작업은 루트의 `backend` 권한을 사용합니다.
 정책은 Host API 호출에 적용합니다. 신뢰된 백엔드가 직접 호출하는 Bun API는 이 검사 범위 밖입니다.
+`storage`를 사용하는 호출의 범위를 제한하며, 백엔드 전체의 파일 접근을 격리하지 않습니다.

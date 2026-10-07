@@ -6,9 +6,9 @@ const service = new MemoService();
 
 export const memo = defineModule("memo")
   .command("save", saveContract, async (text, context) => {
-    await service.save(text, context.host);
+    await service.save(text);
     await context.events.emit("memo.saved", text, { kind: "broadcast" });
     return null;
   })
-  .command("read", readContract, (_input, context) => service.read(context.host))
+  .command("read", readContract, () => service.read())
   .event("saved", savedSchema);

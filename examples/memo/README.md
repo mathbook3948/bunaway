@@ -75,7 +75,7 @@ Bunaway는 프런트엔드 빌드를 자동 실행하지 않는다. `vite.config
 - `src-bunaway/app.ts`: `defineApp({ modules: [memo] })`로 기능을 조립하는 공통 앱 정의.
 - `src-bunaway/memo/contracts.ts`: 메모 명령 입력, 출력과 이벤트의 JSON Schema 계약.
 - `src-bunaway/memo/module.ts`: `memo.save`, `memo.read`, `memo.saved`를 공개하고 서비스와 연결.
-- `src-bunaway/memo/service.ts`: 요청마다 전달받은 Host API로 메모 파일을 읽고 쓰는 서비스.
+- `src-bunaway/memo/service.ts`: `storage`를 import해 메모 파일을 읽고 쓰는 서비스. 명령의 Host 권한은 자동으로 연결된다.
 - `src-bunaway/bunaway.json`: 빌드 진입점과 앱 식별자, 제목, 단일 창 설정.
 - `src-bunaway/policy.json`: `main` 뷰의 메모 명령, 이벤트와 `appData/notes/` 읽기, 쓰기 권한.
 

@@ -1,8 +1,8 @@
-import type { HostAPI } from "@bunaway/backend";
+import { storage } from "@bunaway/backend";
 
 export class MemoService {
-  async save(text: string, host: HostAPI): Promise<null> {
-    await host.call("storage.writeText", {
+  async save(text: string): Promise<null> {
+    await storage.writeText({
       scope: "appData",
       path: "notes/memo.txt",
       text,
@@ -10,7 +10,7 @@ export class MemoService {
     return null;
   }
 
-  read(host: HostAPI): Promise<string> {
-    return host.call("storage.readText", { scope: "appData", path: "notes/memo.txt" });
+  read(): Promise<string> {
+    return storage.readText({ scope: "appData", path: "notes/memo.txt" });
   }
 }

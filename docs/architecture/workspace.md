@@ -7,7 +7,7 @@ Bun workspaces는 `docs/site`, `packages/*`와 `plugins/*`에 적용한다.
 | --- | --- | --- | --- |
 | `packages/protocol` | `@bunaway/protocol` | portable | 없음 |
 | `packages/client-sdk` | `@bunaway/client` | browser | `@bunaway/protocol` |
-| `packages/backend-sdk` | `@bunaway/backend` | portable | `@bunaway/core`, `@bunaway/protocol` |
+| `packages/backend-sdk` | `@bunaway/backend` | bun | `@bunaway/core`, `@bunaway/protocol` |
 | `packages/core` | `@bunaway/core` | portable | `@bunaway/protocol` |
 | `packages/runtime-bun` | `@bunaway/runtime-bun` | bun | `@bunaway/core`, `@bunaway/protocol` |
 | `packages/cli` | `@bunaway/cli` | bun | `@bunaway/protocol` |
@@ -24,7 +24,9 @@ Bun workspaces는 `docs/site`, `packages/*`와 `plugins/*`에 적용한다.
 제공하며 문서별 WebView 연결, hello, 준비 대기, 페이지 종료 시 정리를 내부에서 처리한다.
 명시적 `createClient({ transport, hello })`와 WebView Transport도 제공한다.
 `core`는 `createCore`로 명령, 상태, 이벤트, 세션, 플러그인 수명을 구현한다.
-backend-sdk는 명령 입력, 출력 검증을 제공한다.
+backend-sdk는 명령 입력과 출력 검증, `storage`, `log`, `capabilities` 편의 API와
+비동기 호출 범위 연결을 제공한다. backend-sdk의 `node:async_hooks`는 Bun이 제공하며
+core와 protocol은 portable 환경을 유지한다.
 `runtime-bun`은 UTF-8 NDJSON 수신기, Host API 바인딩과 `runBunApp`으로 코어를
 프로세스 IPC에 연결한다. CLI는 create/validate/doctor/dev/build와 vanilla, Vite, React, Vue, Svelte 템플릿을
 구현했다. 기본 로그/저장 플러그인은 아직 빈 모듈이다.

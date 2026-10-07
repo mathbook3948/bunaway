@@ -37,6 +37,9 @@ const greet = command({
 `command()`는 `input`, `output`, `run(payload, context)`가 있는 `CommandDefinition`을 반환합니다.
 반환값을 앱의 commands에 등록하고 호출 권한을 뷰 정책에 적습니다. UI에서는 `invoke`로 호출합니다.
 
+핸들러와 핸들러가 호출한 서비스에서는 [storage, log, capabilities](/reference/backend/host-api/)를
+import해 직접 호출할 수 있습니다. 원래 요청의 Host 권한과 취소 신호를 사용합니다.
+
 ## 입력 검증과 결과
 
 handle은 input 스키마에 맞는 데이터로 실행됩니다. 반환값은 output 스키마와 일치해야 하며 Promise를 반환하면 완료된 값을 검사합니다.

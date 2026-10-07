@@ -30,6 +30,13 @@ by `listen` when the UI component is removed. Backend calls work in the desktop
 window opened by `bun run bunaway dev`; calls from a regular browser or Vite
 preview fail with `UNSUPPORTED`.
 
+Backend commands and their services can import `storage`, `log`, and `capabilities`
+from `@bunaway/backend` directly. The SDK uses the current command's Host permissions
+and cancellation signal, without passing `context.host` through service arguments.
+Await Host operations before the command returns. Calls outside an execution context
+or after command completion are rejected. The starter allows storage under `appData/messages`;
+logging requires enabling `host.log` for the calling view in `policy.json`.
+
 ## Build
 
 ```sh

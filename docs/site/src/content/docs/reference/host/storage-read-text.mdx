@@ -5,18 +5,24 @@ sidebar: { order: 1 }
 ---
 
 ```ts
-context.host.call("storage.readText", { scope, path }): Promise<string>
+storage.readText({ scope, path }): Promise<string>
 ```
 
 지정한 저장 범위 안의 파일을 텍스트로 읽습니다. UI에서 사용하려면 이 Host operation을 호출하는 앱 명령을 작성합니다.
 
 ```ts
-return context.host.call("storage.readText", {
+import { storage } from "@bunaway/backend";
+
+return storage.readText({
   scope: "appData", path: "messages/current.txt",
 });
 ```
 
 ## 입력
+
+`storage`는 명령이나 `defineApp()`으로 연결한 플러그인 setup에서 호출합니다.
+실행 범위와 기존 `context.host.call("storage.readText", ...)` 사용법은
+[백엔드 Host API](/reference/backend/host-api/)에서 확인하세요.
 
 | 필드 | 필수 | 제약 |
 | --- | --- | --- |

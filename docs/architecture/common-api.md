@@ -175,7 +175,15 @@ U+2028, U+2029가 들어간 경로도 전체 문자열에서 점 경로 요소�
 기능 조회는 호출 권한을 부여하지 않으며 네이티브 정책은 실제 operation마다 다시 검사한다.
 
 `bindHostAPI(context, signal, services.callHost)`는 호출 컨텍스트를 고정한다.
-앱 핸들러는 `host.call(operation, payload)`만 사용하며 context를 선택할 수 없다.
+앱 핸들러는 `context.host.call(operation, payload)` 또는 backend-sdk의
+`storage`, `log`, `capabilities`를 사용하며 context를 선택할 수 없다.
+backend-sdk는 `AsyncLocalStorage`로 실행별 `CommandContext`를 연결한다.
+`command()`와 `defineModule().command()`는 명령 실행을 연결하고, `defineApp()`은
+직접 등록한 명령과 플러그인 명령, setup 및 StopHook도 연결한다.
+명령의 실행 범위는 핸들러 실행과 검증이 끝나면 비활성화되므로 지연된 작업이 Host API를 재사용할 수 없다.
+setup에서 시작한 작업은 backend 취소 신호로 앱 종료를 관찰한다.
+현재 범위가 없으면 `INVALID_ARGUMENT`, 종료하거나 취소된 범위이면 `CANCELLED`로 거부한다.
+편의 API는 기존 HostAPI.call에 위임하므로 입력과 출력 검증, 네이티브 권한 검사와 취소 계약을 유지한다.
 호출 전, 응답 후 취소를 검사하고 진행 중 취소는 즉시 실패시킨다.
 잘못된 응답, 일반 서비스 예외는 내부 정보를 제외한 INTERNAL로 전달한다.
 낮은 계층도 signal에 맞춰 자원을 정리하고 늦은 결과를 폐기해야 한다.

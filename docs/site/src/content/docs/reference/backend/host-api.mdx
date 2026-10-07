@@ -1,0 +1,98 @@
+---
+title: storage, log, capabilities
+description: 앱 백엔드에서 저장과 로그, 기능 조회를 직접 호출합니다.
+sidebar: { order: 4 }
+---
+
+`@bunaway/backend`에서 `storage`, `log`, `capabilities`를 import합니다.
+명령에서 호출한 서비스 함수도 같은 API를 사용할 수 있습니다. `context.host`를 인자로 전달하거나
+Host API를 별도로 초기화할 필요가 없습니다.
+
+```ts
+import { defineModule, storage, log, capabilities } from "@bunaway/backend";
+
+async function save(text: string) {
+  await storage.writeText({ scope: "appData", path: "notes/memo.txt", text });
+  await log.info("메모를 저장했습니다.", { length: text.length });
+  return null;
+}
+
+export const memo = defineModule("memo")
+  .command("save", {
+    input: { type: "string" }, output: { const: null },
+  }, save)
+  .command("support", { input: { const: null }, output: {} }, () => capabilities());
+```
+
+이 예제를 실행하려면 뷰의 정책에 `memo.save`, `memo.support` 명령과
+`appData/notes` 쓰기 권한, `host.log: true`를 선언해야 합니다.
+
+## 저장소
+
+```ts
+storage.readText({ scope, path }): Promise<string>
+storage.writeText({ scope, path, text }): Promise<null>
+```
+
+`scope`는 `appData` 또는 `temp`, `path`는 해당 범위 안의 상대 경로입니다.
+`text`는 저장할 문자열입니다. 읽기는 문자열, 쓰기는 `null`을 반환합니다.
+`storage`는 플랫폼이 정한 앱별 데이터 폴더와 임시 저장 영역을 사용하는 편의 API입니다.
+일반 파일 작업에는 백엔드에서 `Bun.file()`과 `Bun.write()`를 직접 사용할 수 있습니다.
+별도의 기본 저장 플러그인을 등록할 필요가 없습니다.
+입력 제약과 권한, 파일 오류는 [읽기](/reference/host/storage-read-text/)와
+[쓰기](/reference/host/storage-write-text/)에서 확인하세요.
+
+## 로그
+
+```ts
+log.write({ level, message, details? }): Promise<null>
+log.debug(message: string, details?: JsonValue): Promise<null>
+log.info(message: string, details?: JsonValue): Promise<null>
+log.warn(message: string, details?: JsonValue): Promise<null>
+log.error(message: string, details?: JsonValue): Promise<null>
+```
+
+`level`은 `debug`, `info`, `warn`, `error` 중 하나입니다.
+메시지는 최대 1,024자이며, 추가 데이터는 JSON 값입니다.
+`details`를 생략하면 추가 데이터를 보내지 않고, `null`은 그대로 기록합니다.
+모든 메서드의 성공 결과는 `null`입니다.
+호출 출처의 로그 권한이 필요하며, 저장 위치와 오류는 [log.write](/reference/host/log-write/)에서 설명합니다.
+
+## 기능 조회
+
+```ts
+capabilities(): Promise<HostOutput<"capabilities.get">>
+```
+
+기능 이름, 지원 수준과 OS 권한 상태를 반환합니다. 인자는 없습니다.
+조회 결과와 앱의 정책상 호출 권한은 별개입니다.
+[capabilities.get](/reference/host/capabilities-get/)에서 결과 필드를 확인하세요.
+이 함수는 백엔드용입니다. 화면에서는 `@bunaway/client`의
+[capabilities](/reference/client/capabilities/)를 사용합니다.
+
+## 실행 범위와 권한
+
+`command()`와 `defineModule().command()`로 작성한 핸들러 안에서 사용할 수 있습니다.
+`defineApp()`에 직접 전달한 명령과 플러그인 명령도 지원합니다.
+핸들러가 호출한 서비스와 `await` 이후에도 원래 요청의 권한과 취소 신호를 사용합니다.
+동시에 실행하는 다른 명령이나 다른 앱의 권한으로 바뀌지 않습니다.
+
+뷰 명령은 해당 뷰의 Host 정책을 사용합니다.
+`defineApp({ modules, plugins })`로 연결한 플러그인의 `setup`과
+setup에서 시작한 비동기 작업은 `policy.backend`를 사용하며 앱 종료까지 유효합니다.
+앱 종료 시 Host 호출은 취소되므로 StopHook에서는 타이머와 연결을 정리합니다.
+
+명령이 완료되거나 실패한 뒤 실행하는 타이머나 비동기 작업에서는 사용할 수 없습니다.
+명령에서 필요한 Host 호출을 `await`하고 결과를 반환하세요.
+모듈 최상위나 실행 범위 밖에서 호출하면 `INVALID_ARGUMENT`,
+완료한 명령이나 취소된 요청, 종료된 앱의 작업에서 호출하면 `CANCELLED`로 거부합니다.
+모든 함수는 Promise를 반환하며 실행 범위 오류도 Promise의 거부로 전달합니다.
+
+기존 [context.host.call](/reference/backend/context/)도 지원합니다.
+SDK의 `command()`와 `defineApp()`을 사용하지 않는 객체형 정의에서는 이 명시적 API를 사용하세요.
+권한 부족은 `PERMISSION_DENIED`, 입력 오류는 `INVALID_ARGUMENT`,
+지원하지 않는 기능은 `UNSUPPORTED` 등 기존 Host operation의 오류를 그대로 전달합니다.
+입력과 호스트 결과의 검증도 기존 Host API와 같습니다.
+
+정책은 이 API로 요청하는 작업에 적용합니다. 신뢰된 백엔드가 직접 호출하는 Bun API는 이 정책으로 제한하지 않습니다.
+`storage`는 백엔드 전체의 파일 접근을 격리하는 샌드박스가 아닙니다.
