@@ -22,7 +22,7 @@ zsh native/macos/sandbox/run.sh
 ```
 
 `BUNAWAY_SBX_IDENTITY` selects the codesign identity (`-` ad-hoc by default;
-a self-signed `bunaway-dev-codesign` cert in the login keychain works too —
+a self-signed `bunaway-dev-codesign` cert in the login keychain works too :
 both were verified to behave identically for sandbox activation).
 
 The harness asserts:
@@ -58,7 +58,7 @@ test for network access, not that diagnostic.
 A temporary Mach lookup exception worked in one local diagnostic configuration;
 it is not the shipping profile. Temporary exceptions require justification and
 Apple review, not categorical MAS exclusion. This specific exception's approval
-and stable MAS WKWebView behavior remain **UNVERIFIED** — see the results doc
+and stable MAS WKWebView behavior remain **UNVERIFIED**: see the results doc
 and [Apple's upload requirements](https://developer.apple.com/help/app-store-connect/reference/app-uploads/app-sandbox-information/).
 
 ## Signed product-host lifecycle fixture

@@ -13,7 +13,7 @@ pwsh -NoProfile -File native/windows/bun/prepare.ps1 -VerifyOnly
 ```
 
 개발/빌드에는 PowerShell 7과 고정 Bun, 실행에는 WebView2 Evergreen이 필요하다.
-MSVC·CMake·Ninja와 사용자 C/C++ 또는 Rust DLL은 필요 없다. Microsoft의 공식
+MSVC, CMake, Ninja와 사용자 C/C++ 또는 Rust DLL은 필요 없다. Microsoft의 공식
 `WebView2Loader.dll`과 시스템 DLL은 사용한다. 생성 앱은 `bunaway.json`의
 `build.app`에 **default export AppDefinition** 파일을 지정한다.
 프레임워크가 이 앱 정의를 가져와 부팅하며 개발자가 별도 프로세스 진입점을 작성하지 않는다.
@@ -32,12 +32,12 @@ Windows 파일 핸들로 독점하며, 중복 실행은 즉시 오류로 종료�
 저장 데이터는 유지한다. 잠금은 정상/강제 종료 때 OS가 해제하므로 남은 파일을 삭제할 필요가 없다.
 
 STA의 bounded PeekMessage pump는 64개 처리 후 Bun에 제어를 돌려준다. OS 모달 중에는
-UI Worker 메시지가 지연될 수 있으나 메인의 타이머·Promise·네트워크는 계속 진행한다.
+UI Worker 메시지가 지연될 수 있으나 메인의 타이머, Promise, 네트워크는 계속 진행한다.
 COM 콜백은 같은 OS 스레드에서 동기 HRESULT를 반환한다. `threadsafe: true`는 쓰지 않는다.
-이벤트 분리·Close·HWND 파괴·실제 프로세스 종료·COM 참조 0·콜백 정지 이후 해제한다.
+이벤트 분리, Close, HWND 파괴, 실제 프로세스 종료, COM 참조 0, 콜백 정지 이후 해제한다.
 정상 WebView 정리는 30초, UI/메인 종료는 35/40초 제한을 갖고 초과는 실패다.
 
 [실행 결과와 제약](../../../docs/architecture/windows-bun-results.md),
 [실행 구조 ADR](../../../docs/decisions/0006-windows-bun-ui-worker.md).
-기존 Windows C++ 호스트·probe·CMake와 전용 테스트는 삭제했다. macOS와 공유하는
-앱·화면 회귀 데이터는 `tests/fixtures/desktop/host/`에 있다.
+기존 Windows C++ 호스트, probe, CMake와 전용 테스트는 삭제했다. macOS와 공유하는
+앱, 화면 회귀 데이터는 `tests/fixtures/desktop/host/`에 있다.

@@ -37,11 +37,4 @@ macOS에서는 `.app`을 만들고 로컬 실행용 ad-hoc 서명을 적용합�
 같은 target의 빌드와 패키징은 동시에 실행하지 마세요. 충돌하면 잠금 오류로 실패합니다.
 Windows에서 다시 빌드해도 기존 `packaged/`에서 인식한 채널의 산출물과 보고서는 유지합니다.
 
-## 프로그램 API
-
-`buildProject(directory, { development?, native? }): Promise<BuiltPackage>`.
-`development`의 기본값은 false입니다. 도구에서 이미 준비한 NativeInputs를 재사용하려면 `native`를 전달합니다.
-결과는 `output`, `package`, `executable`, `arguments`입니다.
-프로그램 실행은 반환한 executable과 arguments를 함께 사용합니다.
-
-[패키징](/reference/cli/package/), [도구 API](/reference/tooling/cli-api/)
+[패키징](/reference/cli/package/)
