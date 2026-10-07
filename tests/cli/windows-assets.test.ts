@@ -1,5 +1,15 @@
 import { expect, test } from "bun:test";
-import { cp, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -101,7 +111,7 @@ test("Windows app entry names cannot collide with the host or break shared bundl
 });
 
 test("development Windows bundles map exceptions to the original TypeScript file and line", async () => {
-  const root = await mkdtemp(resolve(tmpdir(), "bunaway-debug-assets-"));
+  const root = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-debug-assets-")));
   const host = resolve(import.meta.dir, "../../native/windows/bun");
   const entry = resolve(root, "src-bunaway/app.ts");
   const source =
@@ -133,19 +143,20 @@ test("development Windows bundles map exceptions to the original TypeScript file
       const runner = resolve(destination, "run.ts");
       await writeFile(
         runner,
-        'import app from "./app.js"; try { app.run(); } catch (error) { console.error(error.stack); throw error; }',
+        'import app from "./app.js"; try { app.run(); } catch (error) { console.log(JSON.stringify(error.stack)); throw error; }',
       );
       const child = Bun.spawn([process.execPath, runner], {
         cwd: packageRoot,
-        stdout: "ignore",
+        stdout: "pipe",
         stderr: "pipe",
       });
+      const stack = new Response(child.stdout).json();
       const errors = new Response(child.stderr).text();
       expect(await child.exited).not.toBe(0);
       const output = await errors;
       expect(output).toContain("source-map-check");
       expect(output).toContain(development ? `${entry}:3:` : "app.js:");
-      if (development) expect(output.split(`${entry}:3:`).length).toBe(3);
+      expect(await stack).toContain(development ? `${entry}:3:` : "app.js:");
     }
   } finally {
     await rm(root, { recursive: true, force: true });
