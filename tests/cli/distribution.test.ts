@@ -1131,6 +1131,13 @@ test("a standalone plugin install does not install Core, Backend SDK or sibling 
       "isolated",
     ]);
     const plugin = await installedPackageRoot(home, "@bunaway/plugin-windows");
+    const manifest = (await json(resolve(plugin, "package.json"))) as {
+      dependencies: Record<string, string>;
+    };
+    expect(Object.keys(manifest.dependencies).sort()).toEqual([
+      "@bunaway/plugin-api",
+      "@bunaway/protocol",
+    ]);
     for (const name of [
       "@bunaway/core",
       "@bunaway/backend",

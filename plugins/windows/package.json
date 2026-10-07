@@ -11,6 +11,10 @@
   "scripts": {
     "typecheck": "tsc --project tsconfig.json"
   },
+  "dependencies": {
+    "@bunaway/plugin-api": "workspace:*",
+    "@bunaway/protocol": "workspace:*"
+  },
   "peerDependencies": {
     "@bunaway/plugin": "0.0.0"
   },

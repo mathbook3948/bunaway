@@ -20,7 +20,7 @@ Bun workspaces는 `docs/site`, `packages/*`와 `plugins/*`에 적용한다.
 | `plugins/log` | `@bunaway/plugin-log` | browser, bun | `@bunaway/plugin` |
 | `plugins/storage` | `@bunaway/plugin-storage` | browser, bun | `@bunaway/plugin` |
 | `plugins/capabilities` | `@bunaway/plugin-capabilities` | browser, bun | `@bunaway/plugin` |
-| `plugins/windows` | `@bunaway/plugin-windows` | browser, bun | `@bunaway/plugin` |
+| `plugins/windows` | `@bunaway/plugin-windows` | browser, bun | `@bunaway/plugin`, `@bunaway/plugin-api`, `@bunaway/protocol` |
 
 `portable` 설정은 ES2022 표준 라이브러리만 허용한다.
 `browser`는 DOM을 추가하고 `bun`만 Bun, Node 타입을 사용한다.
