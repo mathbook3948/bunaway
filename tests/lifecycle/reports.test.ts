@@ -12,11 +12,7 @@ test("native capability reports require the complete catalog and platform suppor
   for (const platform of ["win32", "darwin"]) {
     const capabilities = expectedCapabilityNames.map((name) => ({
       name,
-      support: name.startsWith("windows.")
-        ? platform === "win32"
-          ? "experimental"
-          : "unsupported"
-        : "supported",
+      support: name.startsWith("windows.") && platform === "darwin" ? "unsupported" : "supported",
       permission: "not-required",
     }));
     expect(matchesCapabilities(capabilities, platform)).toBe(true);
@@ -32,7 +28,23 @@ test("native capability reports require the complete catalog and platform suppor
     );
     expect(
       matchesCapabilities(
-        capabilities.map((c) => ({ ...c, support: "supported" })),
+        capabilities.map((c) => ({
+          ...c,
+          support: c.name.startsWith("windows.") ? "experimental" : c.support,
+        })),
+        platform,
+      ),
+    ).toBe(false);
+    expect(
+      matchesCapabilities(
+        capabilities.map((c) => ({
+          ...c,
+          support: c.name.startsWith("windows.")
+            ? platform === "win32"
+              ? "unsupported"
+              : "supported"
+            : c.support,
+        })),
         platform,
       ),
     ).toBe(false);

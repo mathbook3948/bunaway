@@ -146,7 +146,7 @@ export function createOperations(_environment: NativeEnvironment): NativeAdapter
 
 `NativeEnvironment`는 호스트가 정한 dataRoot와 capabilities 목록을 제공합니다.
 목록에는 `@bunaway/backend`의 프레임워크 창 작업과 앱에 등록된 네이티브 플러그인 작업이
-포함됩니다. 창 작업은 canonical `hostOperations` 계약에서 가져오며 `experimental`,
+포함됩니다. 창 작업은 canonical `hostOperations` 계약에서 가져오며 Windows에서 `supported`,
 `not-required`로 보고합니다. 플러그인 작업은 해당 패키지의 플랫폼 어댑터 상태와
 `osPermission` 선언을 반영합니다. `support` 값은 `supported`, `experimental`,
 `unsupported`이고 `permission`은 `unknown`, `not-required`입니다.

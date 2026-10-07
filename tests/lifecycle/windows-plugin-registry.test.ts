@@ -170,7 +170,7 @@ test("capability permission metadata comes from each registered operation contra
     expect(observed.capabilities).toEqual([
       ...Object.keys(hostOperations).map((name) => ({
         name,
-        support: "experimental" as const,
+        support: "supported" as const,
         permission: "not-required" as const,
       })),
       { name: "storage.read", support: "supported", permission: "unknown" },

@@ -19,11 +19,8 @@ export function matchesCapabilities(value: unknown, platform: string): boolean {
     const { name, support, permission } = capability;
     if (!names.includes(name) || seen.has(name)) return false;
     seen.add(name);
-    const expected = name.startsWith("windows.")
-      ? platform === "win32"
-        ? "experimental"
-        : "unsupported"
-      : "supported";
+    const expected =
+      name.startsWith("windows.") && platform === "darwin" ? "unsupported" : "supported";
     return support === expected && permission === "not-required";
   });
 }

@@ -68,7 +68,7 @@ export async function operations(
     capabilities: [
       ...Object.keys(hostOperations).map((name) => ({
         name,
-        support: "experimental" as const,
+        support: "supported" as const,
         permission: "not-required" as const,
       })),
       ...[...registry.operations.values()].map((operation) => ({

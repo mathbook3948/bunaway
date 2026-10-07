@@ -26,8 +26,8 @@ const support = await capabilities();
 | `permission` | 예 | granted, denied, prompt, not-required, unknown |
 | `reason` | 아니요 | 문자열, 최대 1,024자 |
 
-프레임워크의 창 API와 앱에 등록된 네이티브 플러그인 작업을 보고합니다. 창 API는
-`experimental`, `not-required`입니다. Windows의 저장, 로그와 기능 조회 작업은 해당
+프레임워크의 창 API와 앱에 등록된 네이티브 플러그인 작업을 보고합니다. Windows 창 API는
+`supported`, `not-required`입니다. Windows의 저장, 로그와 기능 조회 작업은 해당
 플러그인을 등록하고 어댑터를 사용할 수 있을 때 `supported`입니다. 플러그인 작업에
 OS 권한 선언이 없으면 `unknown`입니다.
 조회 결과에는 등록 가능한 네이티브 작업 256개와 프레임워크 창 작업을 모두 포함합니다.
