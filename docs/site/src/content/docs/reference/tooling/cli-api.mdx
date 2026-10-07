@@ -49,7 +49,11 @@ BuiltPackage는 `output`, `package`, `executable`, `arguments: string[]`입니�
 
 ## 개발과 패키징
 
-`devProject(directory): Promise<void>`는 파일 감시와 창 실행을 시작하고 종료 후 정리가 끝날 때까지 기다립니다.
+`devProject(directory, { inspect?: number } = {}): Promise<void>`는 파일 감시와 창 실행을 시작하고 종료 후 정리가 끝날 때까지 기다립니다.
+inspect를 지정하면 Windows x64에서 `127.0.0.1:<port>/bunaway`의 백엔드 inspector를 시작합니다.
+포트는 1부터 65535까지 정수여야 합니다. 생략하면 inspector를 시작하지 않습니다.
+Windows 개발 산출물과 실행 인자는 UI DevTools를 활성화하며, 개발 번들에는 inline 소스맵을 생성합니다.
+디버거 연결과 재시작 동작은 [개발 모드 디버깅](/guides/debugging/)을 따릅니다.
 `packageProject(directory, channelName, { build?: boolean } = {}): Promise<PackageReport>`는
 채널을 해석하고 검증한 뒤 패키징 보고서를 반환합니다.
 반환된 보고서의 `ok`로 성공 여부를 확인하세요. 사전 검증에 실패하면 예외가 발생합니다.

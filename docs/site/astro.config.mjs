@@ -42,6 +42,7 @@ export default defineConfig({
             { label: "세션과 앱 수명", slug: "guides/sessions-and-lifecycle" },
             { label: "플러그인", slug: "guides/plugins" },
             { label: "웹 UI와 개발 흐름", slug: "guides/development" },
+            { label: "개발 모드 디버깅", slug: "guides/debugging" },
             { label: "빌드와 패키징", slug: "guides/build-and-package" },
           ],
         },

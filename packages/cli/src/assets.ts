@@ -9,12 +9,27 @@ async function bundle(
   entrypoints: string[],
   root: string,
   plugin: BunPlugin,
+  development: boolean,
 ): Promise<Bun.BuildArtifact[]> {
   if (entrypoints.length === 0) return [];
-  return buildWithSdk({ entrypoints, root, target: "browser", splitting: false }, plugin);
+  return buildWithSdk(
+    {
+      entrypoints,
+      root,
+      target: "browser",
+      splitting: false,
+      sourcemap: development ? "inline" : "none",
+    },
+    plugin,
+  );
 }
 
-async function webAssets(project: Project, destination: string, plugin: BunPlugin): Promise<void> {
+async function webAssets(
+  project: Project,
+  destination: string,
+  plugin: BunPlugin,
+  development: boolean,
+): Promise<void> {
   const sources = await files(project.frontend);
   const entries: string[] = [];
   const outputs = new Map<string, { path: string; source: string | Bun.BuildArtifact }>();
@@ -33,7 +48,7 @@ async function webAssets(project: Project, destination: string, plugin: BunPlugi
     if (isEntry) entries.push(source);
     else addOutput(rel, source);
   }
-  for (const output of await bundle(entries, project.frontend, plugin))
+  for (const output of await bundle(entries, project.frontend, plugin, development))
     addOutput(output.path, output);
   for (const { path, source } of outputs.values()) {
     await mkdir(dirname(path), { recursive: true });
@@ -46,10 +61,11 @@ export async function bundleAssets(
   project: Project,
   assets: string,
   developmentServer = false,
+  development = false,
 ): Promise<void> {
   await assertAppDefinitionExport(project.appEntry);
   const plugin = await sdkPlugin(project.root);
-  if (!developmentServer) await webAssets(project, resolve(assets, "web"), plugin);
+  if (!developmentServer) await webAssets(project, resolve(assets, "web"), plugin, development);
   const runtimeEntry = resolve(
     await installedPackageRoot(project.frameworkRoot, "@bunaway/runtime-bun"),
     "src/index.ts",
@@ -73,7 +89,12 @@ await runBunApp(app);`,
     },
   };
   const backend = await buildWithSdk(
-    { entrypoints: ["bunaway-process-app"], target: "bun", packages: "bundle" },
+    {
+      entrypoints: ["bunaway-process-app"],
+      target: "bun",
+      packages: "bundle",
+      sourcemap: development ? "inline" : "none",
+    },
     entry,
   );
   const backendOutput = backend[0];
@@ -85,15 +106,17 @@ export async function bundleWindowsAssets(
   project: Project,
   assets: string,
   developmentServer = false,
+  development = false,
 ): Promise<void> {
   await assertAppDefinitionExport(project.appEntry);
   if (!developmentServer)
-    await webAssets(project, resolve(assets, "web"), await sdkPlugin(project.root));
+    await webAssets(project, resolve(assets, "web"), await sdkPlugin(project.root), development);
   await bundleWindowsHost(
     resolve(project.frameworkRoot, "native/windows/bun"),
     assets,
     project.appEntry,
     project.root,
+    development,
   );
 }
 
@@ -102,6 +125,7 @@ export async function bundleWindowsHost(
   destination: string,
   appEntry: string,
   project?: string,
+  development = false,
 ): Promise<void> {
   // A shared chunk preserves class identity (e.g. BunawayError) between core and app.
   const sdk = project ? await sdkPlugin(project) : undefined;
@@ -126,6 +150,7 @@ export async function bundleWindowsHost(
     packages: "bundle",
     splitting: true,
     naming: "[name].[ext]",
+    sourcemap: development ? "inline" : "none",
   };
   const artifacts = await buildWithSdk(options, entries);
   if (
@@ -144,6 +169,7 @@ export async function bundleWindowsHost(
       entrypoints: [resolve(source, `${name}.ts`)],
       target: "bun",
       packages: "bundle",
+      sourcemap: development ? "inline" : "none",
     });
     if (!result.success || result.outputs.length !== 1 || !result.outputs[0])
       throw new Error(`Windows host bundle failed: ${result.logs.join("\n")}`);

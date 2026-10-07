@@ -99,3 +99,42 @@ test("Windows app entry names cannot collide with the host or break shared bundl
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("development Windows bundles map exceptions to the original TypeScript file and line", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "bunaway-debug-assets-"));
+  const host = resolve(import.meta.dir, "../../native/windows/bun");
+  const entry = resolve(root, "app.ts");
+  const source =
+    'export default {\n  run() {\n    throw new Error("source-map-check");\n  },\n};\n';
+  try {
+    await writeFile(entry, source);
+    for (const development of [false, true]) {
+      const destination = resolve(root, development ? "development" : "production");
+      await mkdir(destination);
+      await bundleWindowsHost(host, destination, entry, undefined, development);
+      for (const name of await readdir(destination)) {
+        if (!name.endsWith(".js")) continue;
+        const text = await readFile(resolve(destination, name), "utf8");
+        expect(text.includes("sourceMappingURL=data:"), name).toBe(development);
+        if (name === "app.js" && development) {
+          const encoded = text.match(
+            /sourceMappingURL=data:application\/json;base64,([^\s]+)/,
+          )?.[1];
+          expect(encoded).toBeDefined();
+          const map = JSON.parse(Buffer.from(encoded ?? "", "base64").toString());
+          expect(map.sourcesContent).toContain(source);
+        }
+      }
+      const runner = resolve(destination, "run.ts");
+      await writeFile(runner, 'import app from "./app.js"; app.run();');
+      const child = Bun.spawn([process.execPath, runner], { stdout: "ignore", stderr: "pipe" });
+      const errors = new Response(child.stderr).text();
+      expect(await child.exited).not.toBe(0);
+      const output = await errors;
+      expect(output).toContain("source-map-check");
+      expect(output).toContain(development ? `${entry}:3:` : "app.js:");
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

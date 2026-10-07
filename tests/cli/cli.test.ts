@@ -7,7 +7,7 @@ import { runInNewContext } from "node:vm";
 import { buildProject, bundleAssets } from "../../packages/cli/src/build.ts";
 import { readProjectMetadata, validateProject } from "../../packages/cli/src/config.ts";
 import { RestartController, shouldRestartHost } from "../../packages/cli/src/dev.ts";
-import { writeJson } from "../../packages/cli/src/files.ts";
+import { hash, writeJson } from "../../packages/cli/src/files.ts";
 import { createProject } from "./project.ts";
 
 let home: string;
@@ -161,6 +161,26 @@ test("vanilla UI displays a missing WebView bridge error and keeps saving disabl
     "Connection failed: Bunaway bridge is unavailable. Open this page through bunaway dev or the desktop app.",
   );
   expect(elements["#save"].disabled).toBe(true);
+});
+
+test("development adds inline maps to local UI and backend bundles on both targets", async () => {
+  const valid = await validateProject(project);
+  for (const windows of [false, true]) {
+    for (const development of [false, true]) {
+      const assets = resolve(home, `source-map-assets-${windows}-${development}`);
+      await bundleAssets(valid, assets, windows, false, development);
+      for (const name of ["web/main.js", windows ? "app.js" : "backend.js"]) {
+        const text = await Bun.file(resolve(assets, name)).text();
+        const encoded = text.match(/sourceMappingURL=data:application\/json;base64,([^\s]+)/)?.[1];
+        expect(encoded !== undefined, name).toBe(development);
+        if (encoded) {
+          const map = JSON.parse(Buffer.from(encoded, "base64").toString());
+          const original = originals[name === "web/main.js" ? "src/main.ts" : "src-bunaway/app.ts"];
+          expect(map.sourcesContent).toContain(original);
+        }
+      }
+    }
+  }
 });
 
 test("create refuses existing paths and missing parents without modifying them", async () => {
@@ -512,6 +532,60 @@ test("build rejects corrupted bundled Bun and leaves the last production package
   expect((await readdir(resolve(project, "dist"))).some((name) => name.includes("building"))).toBe(
     false,
   );
+});
+
+test("Windows development artifacts enable DevTools only with their launch flag", async () => {
+  const configPath = resolve(project, "src-bunaway/bunaway.json");
+  const settings = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
+  async function buildFixture(development: boolean) {
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        resolve(import.meta.dir, "build.fixture.ts"),
+        project,
+        ...(development ? ["--development-artifact"] : []),
+      ],
+      { stdout: "pipe", stderr: "pipe" },
+    );
+    const output = new Response(child.stdout).text();
+    const errors = new Response(child.stderr).text();
+    expect(await child.exited, await errors).toBe(0);
+    return output;
+  }
+  try {
+    await buildFixture(false);
+    const production = resolve(project, "dist/windows-x64");
+    expect(
+      (await Bun.file(resolve(production, "assets/app.json")).json()).developmentTools,
+    ).toBeUndefined();
+    expect(await Bun.file(resolve(production, "assets/app.js")).text()).not.toContain(
+      "sourceMappingURL=data:",
+    );
+    for (const url of [undefined, "http://127.0.0.1:5173/"]) {
+      await writeJson(configPath, {
+        ...settings,
+        ...(url ? { dev: { command: ["bun", "run", "dev:web"], url } } : {}),
+      });
+      const built = JSON.parse(await buildFixture(true)) as {
+        package: string;
+        arguments: string[];
+      };
+      const config = await Bun.file(resolve(built.package, "assets/app.json")).json();
+      const manifest = await Bun.file(resolve(built.package, "manifest.json")).json();
+      expect(config.developmentTools).toBe(true);
+      expect(built.arguments).toContain("--devtools");
+      expect(built.arguments.includes("--dev-url")).toBe(url !== undefined);
+      expect(config.development?.url).toBe(url);
+      expect(manifest.assets["assets/app.json"]).toBe(
+        await hash(resolve(built.package, "assets/app.json")),
+      );
+      expect(await Bun.file(resolve(built.package, "assets/app.js")).text()).toContain(
+        "sourceMappingURL=data:",
+      );
+    }
+  } finally {
+    await Bun.write(configPath, originals["src-bunaway/bunaway.json"] ?? "");
+  }
 });
 
 test("package checks platforms and adapters before building and preserves outputs on failure", async () => {

@@ -1,0 +1,76 @@
+---
+title: 개발 모드 디버깅
+description: Windows DevTools와 Bun 백엔드 디버거에서 소스맵과 원본 오류 위치를 확인합니다.
+---
+
+Windows x64에서 `bunaway dev`로 실행하면 UI DevTools를 사용할 수 있습니다.
+백엔드 디버거는 `--inspect`를 지정할 때만 연결할 수 있습니다.
+macOS의 DevTools와 CLI 백엔드 디버거 연결은 현재 제공하지 않습니다.
+
+## UI 오류와 소스맵 확인
+
+1. 생성 앱에서 `bun run dev`를 실행합니다.
+2. 앱의 웹 화면에 포커스를 두고 F12 또는 Ctrl+Shift+I로 DevTools를 엽니다.
+3. Console에서 오류의 파일 링크를 선택합니다. Sources에서 원본 UI 파일과 줄 번호를 확인하고 중단점을 설정합니다.
+4. 오류를 다시 발생시켜 호출 스택과 변수 값을 확인합니다. 처리한 예외에서도 멈추려면 Sources의 예외 중단 설정에서 caught exceptions를 포함합니다.
+
+DevTools 설정의 JavaScript source maps를 켜세요. Vite 개발 서버는 변환한 UI 모듈의
+소스맵을 제공하며, 외부 서버 없이 개발하는 UI에는 CLI가 원본 소스를 포함한 inline 소스맵을 생성합니다.
+Sources에 번들만 보이면 Network에서 UI 모듈의 로드 오류를 확인하고 소스맵 설정을 다시 확인하세요.
+UI가 HMR로 갱신된 뒤에는 최신 파일에서 오류를 재현합니다.
+
+## 백엔드 디버거 연결
+
+```sh
+bun run dev --inspect
+# 포트를 바꾸려면
+bun run dev --inspect=6500
+```
+
+기본 연결 주소는 `ws://127.0.0.1:6499/bunaway`입니다. 포트는 1부터 65535까지 지정할 수 있습니다.
+호스트 주소를 지정하는 옵션은 없으며 inspector는 127.0.0.1에만 연결합니다.
+Bun이 터미널에 출력한 Listening 주소를 확인한 뒤 Inspect in browser 링크를 열거나,
+VS Code의 Bun 확장에서 다음 attach 설정을 사용합니다.
+
+```json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "bunaway backend",
+      "type": "bun",
+      "request": "attach",
+      "url": "ws://127.0.0.1:6499/bunaway"
+    }
+  ]
+}
+```
+
+설정은 앱 프로젝트의 `.vscode/launch.json`에 저장합니다. 사용자 지정 포트를 사용하면 url도 바꿉니다.
+이 연결에는 Bun의 WebKit inspector 프로토콜을 지원하는 디버거가 필요합니다.
+UI DevTools와 백엔드 디버거는 각각 연결합니다.
+포트 사용 오류가 출력되거나 Listening 주소가 없으면 실행을 종료하고 다른 포트로 다시 시작합니다.
+
+`src-bunaway/app.ts` 또는 그 파일이 import한 명령 핸들러에 중단점을 설정하고 UI에서 해당 명령을 호출합니다.
+개발 백엔드 번들의 inline 소스맵에는 원본 TypeScript 소스가 포함됩니다.
+원본 파일이 보이지 않으면 디버거의 scripts 목록에서 app.ts나 핸들러 파일을 찾고 소스맵 사용 설정을 확인합니다.
+`--inspect`는 시작 시 실행을 멈추지 않습니다. 디버거 연결 전에 발생한 초기화 오류는 터미널에서 확인합니다.
+
+백엔드 소스를 저장하면 앱이 재시작되어 기존 디버거 연결이 끊깁니다. 같은 주소로 다시 attach한 뒤
+중단점이 연결됐는지 확인하고 작업을 재현합니다. 재시작하면 메모리 상태와 세션도 새로 만들어집니다.
+중단점에서 오래 멈추면 명령의 deadline이나 앱 준비, 종료 기한을 넘길 수 있습니다.
+소스를 저장하거나 창을 닫기 전에 실행을 재개하세요.
+
+## 백엔드 오류 위치 확인
+
+일반 예외는 UI에 `INTERNAL` 오류로 전달됩니다. 원래 메시지와 스택은 개발 터미널에서
+`Command <name> failed:` 기록을 확인합니다. Windows에서는
+`%LOCALAPPDATA%/bunaway/<appId>/logs/host.log`의 `command-failed` 기록에도 남습니다.
+개발 소스맵은 스택의 파일, 줄과 열을 원본 TypeScript 위치로 연결합니다.
+
+예외가 SDK 호출에서 처리돼 디버거가 멈추지 않으면 백엔드 디버거에서 caught exceptions도
+중단하도록 설정하거나 핸들러의 해당 줄에 중단점을 둡니다. 명령 이름과 스택을 함께 확인해
+실패한 호출을 재현하세요. 문법 오류나 import 오류는 CLI가 터미널에 출력하며, 수정하고 저장하면 빌드를 재시도합니다.
+
+일반 `build`는 DevTools를 비활성화하고 inspector 실행 인자나 CLI가 생성하는 개발 소스맵을 추가하지 않습니다.
+외부 프런트엔드 빌드가 자체 소스맵을 출력하면 그 파일의 포함 여부는 해당 빌드 설정에서 정합니다.
