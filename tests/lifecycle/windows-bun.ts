@@ -137,13 +137,18 @@ if (!process.argv.includes("--child")) {
   let cancelled = false;
   let setup = false;
   let stopped = false;
+  const requests: Promise<void>[] = [];
   const timer = setInterval(() => {
     ticks++;
     void Promise.resolve().then(() => promises++);
     if (modal && ticks % 5 === 0)
-      void fetch(server.url)
-        .then((response) => response.text())
-        .then(() => network++);
+      requests.push(
+        fetch(server.url)
+          .then((response) => response.text())
+          .then(() => {
+            network++;
+          }),
+      );
     if (modal && ticks % 10 === 0)
       console.log(JSON.stringify({ event: "backend-tick", ticks, promises, network }));
   }, 10);
@@ -237,6 +242,7 @@ if (!process.argv.includes("--child")) {
     if (!earlyClose) assert(stopped);
   } finally {
     clearInterval(timer);
+    await Promise.all(requests);
     await server.stop(true);
   }
 }
