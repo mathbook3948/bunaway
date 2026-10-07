@@ -35,10 +35,3 @@ bun run bunaway validate
 
 doctor와 dev의 개발 검증은 외부 서버가 있을 때 아직 없는 웹 출력 디렉터리를 허용합니다.
 배포 전 검증에는 웹 빌드 결과가 필요합니다.
-
-## 프로그램 API
-
-`validateProject(directory, { development?: boolean }): Promise<Project>`.
-`development`의 기본값은 false입니다. 반환 객체에는 root, frameworkRoot, appEntry, frontend, app, policy가 있습니다.
-bundle과 dev를 선언했다면 함께 반환합니다.
-지원 필드는 [설정](/reference/configuration/)과 [정책](/reference/policy/)을 따릅니다.

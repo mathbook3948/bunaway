@@ -9,7 +9,7 @@ status: accepted
 ## 배경
 
 Windows는 [ADR 0006](./0006-windows-bun-ui-worker.md)에 따라 번들 Bun이 앱
-진입점이고 같은 프로세스의 UI Worker가 Win32·WebView2를 소유한다. 현재 macOS는
+진입점이고 같은 프로세스의 UI Worker가 Win32, WebView2를 소유한다. 현재 macOS는
 네이티브 호스트가 별도 Bun 자식 프로세스를 시작하는 이전 구조를 사용한다.
 이 구현 차이를 유지하려고 생성 앱에 앱 정의 `app.ts`와 프로세스 부팅용 `index.ts`,
 `build.windowsApp`과 `build.backend`를 함께 노출했다.
@@ -23,25 +23,25 @@ Windows는 [ADR 0006](./0006-windows-bun-ui-worker.md)에 따라 번들 Bun이 �
    앱 개발 경험이다. 다른 플랫폼 지원을 병행하거나 기존 macOS 구조와의 호환성을
    이유로 Windows의 설계를 복잡하게 만들지 않는다.
 2. Windows를 완성한 뒤 나머지 플랫폼을 그 개발 모델에 맞춰 지원한다. macOS도
-   Bun을 앱 진입점으로 사용하는 방향으로 전환한다. 현재 macOS의 별도 호스트·Bun
+   Bun을 앱 진입점으로 사용하는 방향으로 전환한다. 현재 macOS의 별도 호스트, Bun
    자식 프로세스 구조는 기존 구현 기록이며, 향후 목표 구조를 제약하지 않는다.
 3. 앱 개발자는 공통 앱 정의 하나를 작성한다. 기본 파일은 `src-bunaway/app.ts`이며
-   AppDefinition을 default export한다. 플랫폼별 부팅·실행·종료는 프레임워크가
+   AppDefinition을 default export한다. 플랫폼별 부팅, 실행, 종료는 프레임워크가
    담당한다. 개발자에게 별도의 `index.ts`와 플랫폼별 앱 진입점을 요구하지 않는다.
 4. 생성 템플릿과 설정도 공통 앱 정의 하나를 기준으로 정리한다. `build.app`에
    앱 정의 경로를 지정하고 `build.frontend`에 웹 UI 디렉터리를 지정한다.
-   기존 `build.backend`·`build.windowsApp`은 제거하며 마이그레이션은
+   기존 `build.backend`, `build.windowsApp`은 제거하며 마이그레이션은
    [ADR 0007](./0007-project-settings.md)의 작성 형식을 따른다.
 5. 플랫폼별 네이티브 API, 렌더러, UI 스레드와 수명주기의 차이는 프레임워크 내부에서
-   처리한다. 모든 플랫폼에 Windows의 Win32·COM·Worker 배치를 그대로 복제한다는
-   뜻은 아니다. 공통 명령·상태·이벤트·정책 계약과 앱 정의를 기준으로 맞춘다.
+   처리한다. 모든 플랫폼에 Windows의 Win32, COM, Worker 배치를 그대로 복제한다는
+   뜻은 아니다. 공통 명령, 상태, 이벤트, 정책 계약과 앱 정의를 기준으로 맞춘다.
 
 ## 기존 결정과의 관계
 
 - ADR 0001의 macOS 자식 프로세스 설명은 현재 구현에 대한 기록으로 유지한다.
   macOS의 장기 목표는 이 결정에 따른 Bun 앱 진입점이다.
 - ADR 0006의 Windows 실행 계약은 유지하며 후속 플랫폼 개발 모델의 기준으로 삼는다.
-- ADR 0007의 설정 통합과 정책 분리는 유지한다. 앱 정의·프로세스 진입점 파일을
+- ADR 0007의 설정 통합과 정책 분리는 유지한다. 앱 정의, 프로세스 진입점 파일을
   둘로 요구하고 플랫폼별 소스 경로를 노출하는 부분은 이 결정으로 대체한다.
 
 ## 후속 작업과 현재 상태
@@ -51,5 +51,5 @@ Windows 부팅은 프레임워크가 담당한다. 현재 macOS의 프로세스 
 부팅 코드는 CLI가 번들 내부에 생성하므로 개발자 소스에 노출하지 않는다.
 macOS의 Bun 앱 진입점 전환은 Windows 완성 이후의 별도 작업이며 아직 완료되지 않았다.
 
-Windows 완성 여부는 실제 기능·정책·수명주기·CLI·패키징의 구현과 검증 근거로
+Windows 완성 여부는 실제 기능, 정책, 수명주기, CLI, 패키징의 구현과 검증 근거로
 판단한다. 이 결정 자체로 Windows 완성이나 다른 플랫폼 지원을 선언하지 않는다.
