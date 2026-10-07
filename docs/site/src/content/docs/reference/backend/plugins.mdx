@@ -10,7 +10,7 @@ sidebar: { order: 6 }
 
 | 필드 | 필수 | 의미 |
 | --- | --- | --- |
-| `name`, `version` | 예 | 플러그인 이름과 설치 패키지 버전 |
+| `name`, `version` | 예 | 플러그인 식별자와 버전 문자열. 네이티브 플러그인은 설치 manifest와 일치해야 함 |
 | `dependencies` | 아니요 | 먼저 초기화할 플러그인 이름 배열 |
 | `platforms` | 아니요 | 실행 허용 플랫폼 배열. 미선언이면 플랫폼 제한 없음 |
 | `requiredPermissions` | 아니요 | backend.permissions에 명시해야 할 플러그인 권한 식별자 배열 |

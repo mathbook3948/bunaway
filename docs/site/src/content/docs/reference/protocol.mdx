@@ -96,8 +96,10 @@ buildId는 버전 협상에 사용하지 않습니다.
 
 ## HostCall과 HostResponse
 
-HostCall은 `{ operation, payload }`입니다. 전송은 작업 이름과 JSON envelope를 검증하고 등록한 플러그인의 계약이 입력과 결과를 검증합니다.
-응답은 `{ kind: "result", payload }` 또는 `{ kind: "error", error }`입니다.
+HostCall은 `{ operation, payload }`입니다. 전송은 JSON envelope를 검증합니다.
+등록된 플러그인 작업은 플러그인 계약으로 입력과 결과를 검사하고, 프레임워크 창 작업은
+`hostOperations` 계약으로 검사합니다. 응답은 `{ kind: "result", payload }` 또는
+`{ kind: "error", error }`입니다.
 네이티브 플러그인 화면 명령은 `plugin.<작업 이름>`입니다.
 WebView invoke의 command와 Host operation은 별도의 이름 공간, 권한 검사입니다.
 
