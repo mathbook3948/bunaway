@@ -38,7 +38,7 @@ const views = new Map<
   }
 >();
 const cancelled = new Set<string>();
-const windowRequests = new Set<string>();
+const windowRequests = new Map<string, HostContext>();
 const approved = new Map<string, HostContext>();
 const fail = (error: unknown) => {
   failure ??= error;
@@ -68,7 +68,7 @@ const channel = new Channel(
           ? config.policy.backend
           : view?.boundary.policy.host;
       let response: HostResponse;
-      windowRequests.add(packet.requestId);
+      windowRequests.set(packet.requestId, packet.context);
       try {
         if (stopping || closingSent || !permissions || !allowedHost(permissions, packet.call))
           throw new BunawayError({
@@ -265,9 +265,12 @@ function createWindow(spec: WindowSpec) {
         [...views.values()].reduce((total, view) => total + view.boundary.pendingCount, 0),
       ),
     forward: (packet) => {
-      if (packet.kind === "revoke")
+      if (packet.kind === "revoke") {
         for (const [id, context] of approved)
           if (context === packet.route.context) approved.delete(id);
+        for (const [id, context] of windowRequests)
+          if (context === packet.route.context) cancelled.add(id);
+      }
       channel.notify(packet);
     },
     deliver: (text) => native.send(text),

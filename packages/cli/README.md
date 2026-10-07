@@ -230,7 +230,7 @@ MSIX 앱 활성화 경로와 Developer ID 공증/배포는 후속 범위다. 기
 `window: { width, height }`를 정의한다. 단일 창의 `app.view/home/window`와 함께
 사용하지 않는다. `startup: false`인 창은 `@bunaway/backend`의 `windows.create`로
 연다. `policy.json`의 `host.windows` 또는 `backend.windows`에 제어할 대상 뷰 ID를
-선언한다. 새 창 API는 Windows에 구현했고 실제 GUI 회귀 검증은 남아 있다.
+선언한다. 새 창 API는 Windows에 구현했고 실제 GUI 회귀를 통과했다.
 macOS 빌드는 `app.windows`를 거부한다.
 
 설정 예제는 [여러 창 가이드](../../docs/site/src/content/docs/guides/windows.mdx),

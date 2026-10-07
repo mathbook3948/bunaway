@@ -93,6 +93,7 @@ if (!process.argv.includes("--child")) {
   const dialogClass = Buffer.from("#32770\0", "utf16le");
   const dialogTitle = Buffer.from("Window API editor\0", "utf16le");
   let confirmations = 0,
+    editorWindows = 0,
     geometry = false,
     pending = "";
   const decoder = new TextDecoder();
@@ -107,7 +108,13 @@ if (!process.argv.includes("--child")) {
           pending = pending.slice(end + 1);
           if (!line) continue;
           const event = JSON.parse(line);
-          if (event.event === "window-created") handles.set(event.view, BigInt(event.hwnd));
+          if (event.event === "window-created") {
+            handles.set(event.view, BigInt(event.hwnd));
+            if (event.view === "editor" && ++editorWindows > 4) {
+              child.kill();
+              throw new Error("Revoked creation reopened the editor window.");
+            }
+          }
           if (event.event === "window-api-geometry") {
             const hwnd = handles.get("editor");
             assert(hwnd);
@@ -151,9 +158,11 @@ if (!process.argv.includes("--child")) {
     assert(geometry);
     const report = JSON.parse(await readFile(reportPath, "utf8"));
     assert.equal(report.pass, true);
-    assert.equal(report.auxiliaryDocuments, 3);
+    assert.equal(report.auxiliaryDocuments, 4);
+    assert.equal(editorWindows, 4);
+    assert.equal(report.cancelledCreation, true);
     console.log(
-      "PASS Windows public window API: fullscreen visibility, geometry, close refusal, dynamic creation and fresh sessions",
+      "PASS Windows public window API: fullscreen visibility, geometry, close refusal, dynamic creation, fresh sessions and revoked creation",
     );
   } finally {
     clearTimeout(timeout);
@@ -243,12 +252,29 @@ if (!process.argv.includes("--child")) {
           } else {
             assert.equal(runs, 4);
             await Bun.sleep(50); // let the replacement readiness reply release its reservation
-            assert.equal(auxiliaryDocuments, 3);
+            await windows.create({ view: "editor" });
+            await waitFor(() => holds === 4);
+            assert.equal(await windows.close({ view: "editor" }), true);
+            const reopening = assert.rejects(
+              windows.create({ view: "editor" }),
+              (error: unknown) => (error as { code: string }).code === "CANCELLED",
+            );
+            await Bun.sleep(20); // revoke the caller while the editor still drains
+            await assert.rejects(
+              windows.close({ view: "main" }),
+              (error: unknown) => (error as { code: string }).code === "CANCELLED",
+            );
+            await reopening;
+            assert.equal(auxiliaryDocuments, 4);
             await writeFile(
               reportPath,
-              JSON.stringify({ pass: true, auxiliaryDocuments, cancellations }),
+              JSON.stringify({
+                pass: true,
+                auxiliaryDocuments,
+                cancellations,
+                cancelledCreation: true,
+              }),
             );
-            await windows.close({ view: "main" });
           }
           return null;
         },

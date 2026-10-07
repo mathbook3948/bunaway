@@ -26,7 +26,7 @@ Windows 앱은 `src-bunaway/bunaway.json`의 `app.windows`에 사용할 창을 �
 }
 ```
 
-이는 `app` 필드의 내용입니다. `build`와 `bundle` 등 기존 최상위 설정은 유지합니다.
+위 예제는 `app` 필드에 작성합니다. `build`와 `bundle` 등 기존 최상위 설정은 유지합니다.
 `editor.html`을 웹 자산에 추가하고 `policy.json.views`에 `main`, `editor` 정책을 선언합니다.
 main에서 editor를 여는 명령을 호출하려면 main의 `commands`에 `editor.open`과
 `editor.prepareClose`를, `host.windows`에 `["editor"]`를 추가하세요.
