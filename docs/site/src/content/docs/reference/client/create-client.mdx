@@ -1,64 +1,76 @@
 ---
 title: createClient
-description: 클라이언트를 만들고 연결 준비 상태와 오류를 확인합니다.
+description: 기본 클라이언트를 사용하고 앱 정의에서 호출 타입을 추론합니다.
 sidebar: { order: 1 }
 ---
 
-`@bunaway/client`의 `createClient()`는 세션 하나에 사용할 클라이언트를 즉시 반환합니다.
-명령을 호출하거나 이벤트를 구독할 때 이 클라이언트를 사용합니다.
+`@bunaway/client`의 `createClient()`는 현재 문서의 기본 클라이언트를 즉시 반환합니다.
+인자를 전달하지 않으면 연결 설정과 준비 대기, 페이지 종료 시 정리를 SDK가 처리합니다.
+같은 문서에서 여러 번 호출해도 같은 클라이언트를 반환합니다.
+직접 import한 `invoke`, `listen`, `capabilities`도 이 연결을 사용합니다.
 
 ## 사용법
 
 ```ts
-import { createClient, createWebViewTransport, type WebViewBridge } from "@bunaway/client";
+import { createClient } from "@bunaway/client";
 
-const bridge = (window as unknown as { chrome: { webview: WebViewBridge } }).chrome.webview;
-const client = createClient({
-  transport: createWebViewTransport(bridge),
-  hello: {
-    kind: "hello",
-    protocol: { major: 1, minor: 0 },
-    features: [],
-    buildId: "my-app-ui",
-  },
-});
-const negotiated = await client.ready;
+const client = createClient();
+await client.invoke("message.save", "새 메시지");
 ```
 
-이 코드는 네이티브 WebView 안에서 실행합니다. 일반 브라우저에는 해당 브리지가 없습니다.
+이 코드는 `bunaway dev`로 연 창이나 배포 앱의 WebView에서 실행합니다.
+일반 브라우저에서 기본 클라이언트를 만들면 `UNSUPPORTED` 오류를 동기적으로 던집니다.
 
-## 인자
+## 앱 정의에서 타입 추론
 
-| 필드 | 필수 | 의미 |
+```ts
+import { createClient } from "@bunaway/client";
+import type { CommandsOf, EventsOf } from "@bunaway/backend";
+import type { app } from "../src-bunaway/app.ts";
+
+const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
+const text = await client.invoke("message.read", null);
+```
+
+명령 이름과 입력, 반환값, 이벤트 payload 타입을 앱 정의에서 추론합니다.
+UI에서는 `import type`으로 앱 정의의 타입만 가져옵니다.
+[타입과 입력 검증](/guides/types-and-validation/)에서 지원 범위를 확인하세요.
+
+## 인자와 반환값
+
+| 인자 | 필수 | 의미 |
 | --- | --- | --- |
-| `transport` | 예 | `send`, `subscribe`, `close`를 제공하는 전송 |
-| `hello.kind` | 예 | `"hello"` |
-| `hello.protocol` | 예 | major, minor 정수. 현재 프레임워크는 1.0 |
-| `hello.features` | 예 | 원하는 feature 이름 배열. 필요 없으면 `[]` |
-| `hello.buildId` | 예 | 1–128자의 식별자. 영숫자, `_ . : -` 사용 |
+| `options` | 아니요 | 생략하면 기본 WebView 연결 사용. 사용자 정의 연결에는 `transport`, `hello`를 함께 전달 |
 
-hello는 예시처럼 위 필드를 모두 작성합니다.
+반환한 `Client`에는 `ready`, `invoke`, `listen`, `capabilities`, `close`가 있습니다.
+옵션을 전달한 `createClient({ transport, hello })`는 별도 클라이언트를 생성하며 기본 연결을 공유하지 않습니다.
+사용자 정의 전송과 초기 설정은 [Transport 레퍼런스](/reference/client/transport/)에서 설명합니다.
 
-## 반환값과 ready
+## ready
 
-`Client`에는 `ready`, `invoke`, `listen`, `capabilities`, `close`가 있습니다.
-`ready`는 `{ protocol, features, buildId }`의 Promise이며 `buildId`는 상대 백엔드의 값입니다.
+`invoke()`와 `listen()`은 연결 준비를 기다리므로 매번 `ready`를 직접 기다릴 필요는 없습니다.
+연결 상태를 UI에 표시할 때 사용합니다.
 
-`invoke()`와 `listen()`은 ready가 완료될 때까지 기다립니다.
-연결 상태를 UI에 표시하려면 예시처럼 `ready`를 직접 await하고 실패를 처리합니다.
+```ts
+try {
+  await client.ready;
+  console.log("앱에 연결했습니다.");
+} catch (error) {
+  console.error("앱에 연결하지 못했습니다.", error);
+}
+```
+
+`ready`는 `{ protocol, features, buildId }`의 Promise입니다.
+`buildId`는 상대 백엔드의 값이며 자세한 필드는 [프로토콜 레퍼런스](/reference/protocol/)에 있습니다.
 
 ## 실패와 수명
 
-- major 불일치: `UNSUPPORTED`로 준비와 대기 요청이 실패합니다.
-- hello 준비 기한 10초 초과: `TIMEOUT`으로 연결을 종료합니다.
-- 유효하지 않은 응답: 연결을 종료합니다.
-- 전송 종료: 대기 요청과 구독을 정리합니다.
+- 지원하지 않는 실행 환경이나 호환되지 않는 버전은 `UNSUPPORTED`로 실패합니다.
+- 연결 준비가 10초 안에 끝나지 않으면 `TIMEOUT`으로 준비와 대기 호출이 실패합니다.
+- 연결 종료는 대기 요청을 실패시키고 활성 구독의 `onError`로 알립니다.
+- 기본 클라이언트는 페이지 종료 때 자동으로 정리됩니다.
 
-다시 연결하려면 새 전송과 클라이언트를 만듭니다. 이벤트를 구독하고 현재 상태를 다시 읽어 UI를 복원합니다.
-운영체제 창의 수명과 클라이언트의 수명은 다릅니다. [close](/reference/client/close/)를 참고하세요.
-
-## 타입
-
-`createClient<Commands, Events>()`로 명령의 입력과 출력 타입, 이벤트 payload 타입을 지정할 수 있습니다.
-기능 조회는 별도 명령 타입을 선언하지 않고 `client.capabilities()`를 사용합니다.
-[타입과 스키마](/guides/types-and-validation/)에서 실제 앱 정의와 연결하는 방법을 확인하세요.
+기본 연결을 명시적으로 닫거나 연결에 실패하면 같은 문서에서 다시 호출해도 새 연결을 만들지 않습니다.
+앱 페이지를 다시 로드한 뒤 구독과 읽기 명령으로 화면 상태를 복원합니다.
+컴포넌트가 사라질 때는 그 컴포넌트의 구독만 해제합니다.
+[close](/reference/client/close/)와 [세션과 수명주기](/guides/sessions-and-lifecycle/)를 참고하세요.

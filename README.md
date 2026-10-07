@@ -33,6 +33,30 @@ Bun은 `mise.toml`과 `package.json`에 **1.4.2**로 고정되어 있다.
 전역 Bun 대신 `mise run` 또는 `mise exec -- bun ...`을 사용한다.
 새 환경은 `bun.lock`을 사용하는 frozen install로 의존성을 재현한다.
 
+## 화면에서 앱 기능 사용하기
+
+`invoke`는 백엔드 명령을 실행하고 결과를 받는다. `listen`은 백엔드 이벤트를 구독한다.
+
+```ts
+import { invoke, listen } from "@bunaway/client";
+
+const unlisten = await listen<string>(
+  "message.saved",
+  (event) => console.log("저장된 내용:", event.payload),
+  { onError: console.error },
+);
+await invoke("message.save", "안녕하세요");
+const text = await invoke<string>("message.read", null);
+await unlisten();
+```
+
+SDK는 첫 호출에서 문서별 연결 하나를 만들고 준비가 끝나면 요청을 보낸다.
+UI 컴포넌트가 사라지면 반환받은 `unlisten`으로 해당 구독을 해제한다.
+호출은 `bunaway dev`로 연 창이나 배포 앱의 WebView에서 동작한다. 일반 브라우저에는
+브리지가 없어 `UNSUPPORTED`로 실패한다. 기존 `createClient({ transport, hello })`는
+사용자 정의 연결, 테스트에 사용할 수 있다. 타입 추론을 사용하는 인자 없는
+`createClient()`와 취소, 오류, 수명 규칙은 [클라이언트 API](./docs/architecture/common-api.md#클라이언트와-transport)에 있다.
+
 ## 명령
 
 | 명령 | 동작 |

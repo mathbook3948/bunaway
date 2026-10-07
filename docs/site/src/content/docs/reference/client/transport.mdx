@@ -4,6 +4,9 @@ description: 브리지 연결과 사용자 정의 전송의 send, subscribe, clo
 sidebar: { order: 6 }
 ---
 
+일반 앱 화면은 직접 import한 `invoke`, `listen`이나 인자 없는 `createClient()`를 사용합니다.
+이 문서는 사용자 정의 연결과 테스트 어댑터를 작성할 때 참고합니다.
+
 `createWebViewTransport(bridge)`는 호스트가 제공하는 WebView 메시지 브리지를 SDK의 `Transport`로 바꿉니다.
 
 ## WebViewBridge
@@ -17,7 +20,29 @@ interface WebViewBridge {
 ```
 
 네이티브 WebView가 제공하는 `window.chrome.webview`를 전달하고, 반환값을 createClient의 transport로 사용합니다.
-클라이언트 사용 예시는 [createClient](/reference/client/create-client/)에서 확인하세요.
+사용자 정의 WebView 클라이언트는 다음처럼 만듭니다.
+
+```ts
+import { createClient, createWebViewTransport, type WebViewBridge } from "@bunaway/client";
+
+const bridge = (window as unknown as { chrome: { webview: WebViewBridge } }).chrome.webview;
+const client = createClient({
+  transport: createWebViewTransport(bridge),
+  hello: {
+    kind: "hello",
+    protocol: { major: 1, minor: 0 },
+    features: [],
+    buildId: "my-app-ui",
+  },
+});
+window.addEventListener("pagehide", () => { void client.close(); });
+```
+
+`transport`와 `hello`를 모두 전달합니다. hello의 protocol은 현재 1.0이고 features는 원하는
+기능 이름 배열입니다. buildId는 영숫자와 `_ . : -`를 사용하는 1자에서 128자의 식별자입니다.
+옵션을 전달한 클라이언트는 기본 연결을 공유하지 않으며 앱에서 수명을 관리합니다.
+직접 import한 함수도 이 사용자 정의 전송으로 전환되지 않습니다.
+반환값과 오류는 [createClient](/reference/client/create-client/)에서 확인하세요.
 
 ## 사용자 정의 Transport
 

@@ -1,10 +1,5 @@
-import { createClient, createWebViewTransport, type WebViewBridge } from "@bunaway/client";
+import { invoke, listen } from "@bunaway/client";
 
-const bridge = (window as unknown as { chrome: { webview: WebViewBridge } }).chrome.webview;
-const client = createClient({
-  transport: createWebViewTransport(bridge),
-  hello: { kind: "hello", protocol: { major: 1, minor: 0 }, features: [], buildId: "vanilla-ui" },
-});
 const input = document.querySelector<HTMLTextAreaElement>("#message");
 const saved = document.querySelector<HTMLElement>("#saved");
 const status = document.querySelector<HTMLElement>("#status");
@@ -13,20 +8,15 @@ if (!input || !saved || !status || !button) throw new Error("Missing UI elements
 const ui = { input, saved, status, button };
 let sessionEnded = false;
 
-window.addEventListener("pagehide", () => {
-  void client.close();
-});
-
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown error";
 }
 
 async function start(): Promise<void> {
-  await client.ready;
-  await client.listen(
+  await listen<string>(
     "message.saved",
     (event) => {
-      ui.saved.textContent = String(event.payload);
+      ui.saved.textContent = event.payload;
       ui.status.textContent = "Saved. Screen updated by message.saved event.";
     },
     {
@@ -38,7 +28,7 @@ async function start(): Promise<void> {
     },
   );
   try {
-    const text = String(await client.invoke("message.read", null));
+    const text = await invoke<string>("message.read", null);
     ui.input.value = text;
     ui.saved.textContent = text;
     ui.status.textContent = "Loaded from appData/messages/current.txt";
@@ -49,7 +39,7 @@ async function start(): Promise<void> {
   ui.button.addEventListener("click", async () => {
     ui.button.disabled = true;
     try {
-      await client.invoke("message.save", ui.input.value);
+      await invoke("message.save", ui.input.value);
     } catch (error) {
       ui.status.textContent = `Save failed (not retried): ${errorText(error)}`;
     } finally {

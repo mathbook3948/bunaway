@@ -103,7 +103,12 @@ vanilla MVP는 양쪽 호스트가 공통으로 지원하는 단일 뷰 `app` �
 macOS는 기존 `bunaway://` 매핑이다. policy.json의 HTTP origin은 허용하지 않는다.
 `dev.url`의 정확한 loopback origin은 개발 산출물에만 적용하며 프로덕션에 포함하지 않는다.
 
-`vanilla` 템플릿은 실제 `createClient`/`command`를 사용한다. Windows 부팅은
+`vanilla` 템플릿의 화면은 `@bunaway/client`의 `invoke`, `listen`을 직접 사용하고,
+백엔드는 `defineModule`, `defineApp`으로 명령, 이벤트를 등록한다. 브리지 연결, 프로토콜
+초기화, 준비 대기, 페이지 종료 시 연결 정리는 SDK가 담당한다. 직접 함수와 인자 없는
+`createClient()`는 문서별 연결 하나를 공유한다. 일반 브라우저에서 백엔드 호출은
+`UNSUPPORTED`로 실패하므로 `bunaway dev`로 연 앱 창을 사용한다.
+호출, 구독 해제, 타입 추론은 [클라이언트 API](../../docs/architecture/common-api.md#클라이언트와-transport)를 따른다. Windows 부팅은
 프레임워크가 앱 정의를 import해 담당한다. 현재 macOS 프로세스 호스트용 `runBunApp`
 호출은 CLI가 번들 내부에 생성한다. 개발 우선순위는
 [ADR 0010](../../docs/decisions/0010-windows-first-platform-model.md)을 따른다.

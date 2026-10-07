@@ -24,6 +24,44 @@ Windows용 `runBunApp`이 이를 연결한다. 명령·Host API 검증 헬퍼와
 
 ## 클라이언트와 Transport
 
+앱 화면의 기본 API는 `@bunaway/client`의 `invoke`, `listen`, `capabilities`다.
+첫 호출에서 SDK가 WebView 브리지를 찾아 Transport와 Client를 만들고 현재 프로토콜의
+hello를 교환한다. import만으로 연결하거나 브리지를 읽지 않으므로 SSR, 일반 브라우저에서
+모듈을 import할 수 있다. 브리지가 없는 환경에서 기본 API를 호출하면 `UNSUPPORTED`로
+Promise를 거부하며 앱 WebView에서 열도록 안내한다. 브라우저용 가짜 성공 응답은 없다.
+인자 없는 `createClient()`는 Client를 즉시 반환하는 동기 API이므로 브리지가 없으면
+같은 `UNSUPPORTED` 오류를 동기적으로 던진다.
+
+```ts
+import { invoke, listen } from "@bunaway/client";
+
+const unlisten = await listen<string>("memo.saved", event => {
+  console.log(event.payload);
+}, { onError: error => console.error(error) });
+const text = await invoke<string>("memo.read", null);
+await unlisten();
+```
+
+직접 함수의 타입 인자는 앱 작성자가 선언한 반환값, 이벤트 payload 타입이며 런타임
+검증기를 추가하지 않는다. 앱 정의에서 명령 이름, 입력, 출력, 이벤트 타입을 추론하려면
+`CommandsOf`, `EventsOf`와 인자 없는 `createClient`를 사용한다. 백엔드 import는 type-only다.
+
+```ts
+import { createClient } from "@bunaway/client";
+import type { CommandsOf, EventsOf } from "@bunaway/backend";
+import type { app } from "../src-bunaway/app.ts";
+
+const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
+const text = await client.invoke("message.read", null);
+```
+
+기본 함수와 인자 없는 `createClient()`는 문서별 Client 하나를 공유한다. SDK를 여러 번
+로드하거나 UI HMR이 호출 모듈을 교체해도 같은 연결, 요청 ID, 구독을 사용한다.
+`pagehide`에서 SDK가 연결을 닫고 리스너, 요청, 구독을 정리한다. UI 컴포넌트는 자신이
+등록한 구독의 해제 함수를 사용하며 공유 Client 전체를 닫지 않는다. 명시적 close나 연결
+실패 뒤 같은 문서에서 호출해도 새 hello나 자동 재전송은 하지 않는다. 새 문서 로드는
+새 세션을 만든다. BFCache 복원도 이미 종료된 세션을 자동으로 다시 연결하지 않는다.
+
 `ClientFactory({ transport, hello })`는 즉시 Client를 반환한다. Client는 먼저 수신을 구독하고
 hello를 교환하며 `ready`에서 협상 버전·features·백엔드 buildId를 반환한다.
 호출은 ready를 기다린다. major 불일치·부팅 기한 초과·연결 종료는 준비와 대기 호출을 실패시킨다.
@@ -34,7 +72,8 @@ closed는 한 번만 통지하고, 종료 뒤 등록한 구독자도 종료를 �
 `close()`는 자원을 회수하고 멱등 완료한다. 세션 하나에 transport·client 하나를 두며
 Client.close가 자신의 transport를 닫는다. 재연결은 새 객체·새 세션이다.
 
-`invoke(name, input, { signal, deadline })`는 생성된 명령 타입의 output Promise를 반환한다.
+타입이 연결된 `client.invoke(name, input, { signal, deadline })`는 명령 타입의 output
+Promise를 반환한다. 직접 함수 `invoke<T>`는 작성자가 지정한 T의 Promise를 반환한다.
 deadline은 Unix epoch 밀리초다. 로컬 취소·만료는 즉시 호출을 실패시키고 필요한 cancel을 전송한다.
 요청 ID를 재사용하지 않으며 늦은 결과를 폐기한다. 자동 재시도·부작용 롤백은 없다.
 
@@ -157,7 +196,9 @@ callHost는 signal 취소 시 같은 context·requestId의 `host-cancel`을 보�
 
 ## 구현과 검증 범위
 
-1. client-sdk: `createClient`와 요청·구독·취소·종료, `createWebViewTransport` 구현.
+1. client-sdk: 직접 `invoke`, `listen`, `capabilities`, 인자 없는 `createClient()`의 문서별
+   기본 연결과 자동 초기화, 정리, 명시적 `createClient`와 요청, 구독, 취소, 종료,
+   `createWebViewTransport` 구현.
 2. core/backend-sdk: `createCore`와 등록·세션·상태·이벤트·플러그인 실행, 명령 검증 구현.
 3. Windows 호스트: WebView2 경계, session-open/revoke, 정책·파일·Host operations 구현.
 
@@ -167,6 +208,8 @@ Windows 패키징 스크립트와 메모 샘플은 있으며, CLI·설치·서�
 
 `tests/api/contracts.test.ts`는 명령 input/output, Host 컨텍스트 유지·오류·취소,
 부트 정책·Web 경계와 compile-time 소비자 타입을 검증한다. `mise run check`에 포함한다.
+`tests/api/default-client.test.ts`는 기본 연결의 지연 초기화, HMR 공유, 준비 대기,
+직접 호출, 구독 해제, 기능 조회, 실패, 취소, 문서 종료와 새 문서의 세션 분리를 검증한다.
 `tests/api/modules.test.ts`는 조립한 앱의 타입 추론, 중복 등록, Core·Client 명령 호출과
 정책·이벤트를 검증한다. SDK·코어 실행과 실제 Bun 프로세스 IPC 테스트도 `mise run check`에 포함한다.
 `mise run host:windows`의 실행 기록은 실제 SDK·코어·메모 저장·이벤트와 네이티브

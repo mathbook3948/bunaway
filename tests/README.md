@@ -1,7 +1,8 @@
 # Tests
 
 - `protocol/`: 직렬화·버전 협상·오류 계약.
-- `api/`: 모듈 공통 타입, 명령 input/output, Host API 컨텍스트·취소·오류 계약.
+- `api/`: 모듈 공통 타입, 명령 input/output, Host API 컨텍스트, 취소, 오류 계약,
+  클라이언트 기본 연결의 지연 초기화, 문서/HMR 공유, 구독 해제, 실패, 취소, 문서 종료 정리.
 - `core/`: 명령·상태·이벤트·플러그인.
 - `conformance/`: 네이티브 호스트 간 공통 계약.
 - `security/`: 권한·origin·세션·파일 범위.

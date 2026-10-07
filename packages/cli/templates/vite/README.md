@@ -17,6 +17,19 @@ Edit `src/` for the UI and `src-bunaway/` for the backend.
 `src-bunaway/message/module.ts` registers commands and events with `defineModule`.
 The framework boots the app from `build.app` in `src-bunaway/bunaway.json`.
 
+Call backend commands from your UI without bridge setup:
+
+```ts
+import { invoke } from "@bunaway/client";
+
+const text = await invoke<string>("message.read", null);
+```
+
+The SDK connects lazily, waits for the handshake, and closes the connection when
+the page exits. Use `listen` for events and its returned disposer for component
+cleanup. Backend calls work in the desktop window opened by `bun run bunaway dev`;
+a regular browser or Vite preview has no Bunaway bridge.
+
 ## Build
 
 ```sh

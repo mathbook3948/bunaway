@@ -17,6 +17,19 @@ Edit `src/` for the UI and `src-bunaway/` for the backend.
 `src-bunaway/message/module.ts` registers commands and events with `defineModule`.
 The framework boots the app from `build.app` in `src-bunaway/bunaway.json`.
 
+Call backend commands directly from the UI:
+
+```ts
+import { invoke } from "@bunaway/client";
+
+const text = await invoke<string>("message.read", null);
+```
+
+The SDK connects to the app WebView, waits for the handshake, and closes the
+connection when the page exits. Use `listen` to subscribe to events and call its
+returned disposer when the UI component is removed. Backend calls require the
+desktop app; a regular browser has no Bunaway bridge.
+
 ## Build
 
 ```sh

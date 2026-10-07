@@ -6,7 +6,13 @@ import {
   type EventsOf,
   type PluginDefinition,
 } from "../../packages/backend-sdk/src/index.ts";
-import type { Client, ClientFactory } from "../../packages/client-sdk/src/index.ts";
+import {
+  createClient,
+  invoke,
+  listen,
+  type Client,
+  type ClientFactory,
+} from "../../packages/client-sdk/src/index.ts";
 import type {
   CommandContext,
   CoreFactory,
@@ -711,6 +717,38 @@ export function checkClientTypes(
   });
   created.invoke("bunaway.capabilities", null);
   created.capabilities();
+}
+
+export function checkDefaultClientTypes() {
+  const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
+  const result: Promise<string> = client.invoke("notes.read", { key: "welcome" });
+  void result;
+  // @ts-expect-error the default connection retains known command names
+  client.invoke("notes.missing", null);
+  // @ts-expect-error the default connection retains command input validation
+  client.invoke("notes.read", { key: 42 });
+  client.listen(
+    "notes.changed",
+    (event) => {
+      const key: string = event.payload.key;
+      void key;
+    },
+    { onError() {} },
+  );
+  const direct: Promise<string> = invoke<string>("notes.read", { key: "welcome" });
+  void direct;
+  listen<string>(
+    "notes.changed",
+    (event) => {
+      const payload: string = event.payload;
+      void payload;
+    },
+    { onError() {} },
+  );
+  // @ts-expect-error direct subscription failures still require an observer
+  listen("notes.changed", () => {});
+  // @ts-expect-error functions cannot be sent as command input
+  invoke("notes.read", () => {});
 }
 
 export function checkCoreTypes(
