@@ -177,6 +177,12 @@ test("development adds inline maps to local UI and backend bundles on both targe
           const map = JSON.parse(Buffer.from(encoded, "base64").toString());
           const original = originals[name === "web/main.js" ? "src/main.ts" : "src-bunaway/app.ts"];
           expect(map.sourcesContent).toContain(original);
+          expect(map.sources).toContain(
+            resolve(
+              project,
+              name === "web/main.js" ? "src/main.ts" : "src-bunaway/app.ts",
+            ).replaceAll("\\", "/"),
+          );
         }
       }
     }

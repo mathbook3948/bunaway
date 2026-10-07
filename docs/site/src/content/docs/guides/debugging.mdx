@@ -67,6 +67,8 @@ UI DevTools와 백엔드 디버거는 각각 연결합니다.
 `Command <name> failed:` 기록을 확인합니다. Windows에서는
 `%LOCALAPPDATA%/bunaway/<appId>/logs/host.log`의 `command-failed` 기록에도 남습니다.
 개발 소스맵은 스택의 파일, 줄과 열을 원본 TypeScript 위치로 연결합니다.
+파일 경로는 빌드할 때 사용한 원본 파일의 절대 경로입니다. 프로젝트를 옮겼다면
+개발 실행을 다시 시작해 소스맵을 갱신하세요.
 
 예외가 SDK 호출에서 처리돼 디버거가 멈추지 않으면 백엔드 디버거에서 caught exceptions도
 중단하도록 설정하거나 핸들러의 해당 줄에 중단점을 둡니다. 명령 이름과 스택을 함께 확인해

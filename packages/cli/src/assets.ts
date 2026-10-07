@@ -1,9 +1,30 @@
 import { cp, mkdir, writeFile } from "node:fs/promises";
-import { basename, dirname, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 import type { BunPlugin } from "bun";
 import type { Project } from "./config.ts";
 import { files, inside, installedPackageRoot } from "./files.ts";
 import { assertAppDefinitionExport, buildWithSdk, sdkPlugin } from "./sdk.ts";
+
+async function bundleBytes(output: Bun.BuildArtifact, development: boolean): Promise<Uint8Array> {
+  const bytes = new Uint8Array(await output.arrayBuffer());
+  if (!development || !output.path.endsWith(".js")) return bytes;
+  const text = new TextDecoder().decode(bytes);
+  return Buffer.from(
+    text.replace(
+      /(\/\/# sourceMappingURL=data:application\/json;base64,)([^\s]+)(?=\s*$)/,
+      (_, prefix, encoded) => {
+        const map = JSON.parse(Buffer.from(encoded, "base64").toString());
+        // Bun emits paths relative to the build cwd, but assets are saved elsewhere.
+        map.sources = map.sources.map((source: string) =>
+          isAbsolute(source) || !/^[\w-]+:/.test(source)
+            ? resolve(source).replaceAll("\\", "/")
+            : source,
+        );
+        return prefix + Buffer.from(JSON.stringify(map)).toString("base64");
+      },
+    ),
+  );
+}
 
 async function bundle(
   entrypoints: string[],
@@ -53,7 +74,7 @@ async function webAssets(
   for (const { path, source } of outputs.values()) {
     await mkdir(dirname(path), { recursive: true });
     if (typeof source === "string") await cp(source, path);
-    else await writeFile(path, new Uint8Array(await source.arrayBuffer()));
+    else await writeFile(path, await bundleBytes(source, development));
   }
 }
 
@@ -99,7 +120,7 @@ await runBunApp(app);`,
   );
   const backendOutput = backend[0];
   if (backend.length !== 1 || !backendOutput) throw new Error("Missing backend bundle.");
-  await writeFile(resolve(assets, "backend.js"), new Uint8Array(await backendOutput.arrayBuffer()));
+  await writeFile(resolve(assets, "backend.js"), await bundleBytes(backendOutput, development));
 }
 
 export async function bundleWindowsAssets(
@@ -162,7 +183,7 @@ export async function bundleWindowsHost(
   for (const output of artifacts)
     await writeFile(
       resolve(destination, basename(output.path)),
-      new Uint8Array(await output.arrayBuffer()),
+      await bundleBytes(output, development),
     );
   for (const name of ["ui", "host-operations"]) {
     const result = await Bun.build({
@@ -175,7 +196,7 @@ export async function bundleWindowsHost(
       throw new Error(`Windows host bundle failed: ${result.logs.join("\n")}`);
     await writeFile(
       resolve(destination, `${name}.js`),
-      new Uint8Array(await result.outputs[0].arrayBuffer()),
+      await bundleBytes(result.outputs[0], development),
     );
   }
 }
