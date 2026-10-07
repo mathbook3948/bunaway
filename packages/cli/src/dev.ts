@@ -60,6 +60,9 @@ export function shouldRestartHost(project: Project, name: string): boolean {
     relative(project.root, dirname(entry)).replaceAll("\\", "/"),
   );
   return (
+    project.backendDependencies?.some(
+      (dependency) => dependency === path || dependency.startsWith(`${path}/`),
+    ) ||
     ["package.json", "bun.lock", "tsconfig.json"].includes(path) ||
     path.startsWith("src-bunaway/") ||
     backendDirectories.some((directory) =>

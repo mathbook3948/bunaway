@@ -103,13 +103,13 @@ export async function runWorker(
   args: unknown[],
   cwd: string,
   root = frameworkRoot,
-): Promise<void> {
+): Promise<string> {
   const url = pathToFileURL(resolve(root, "packages/cli/src", module)).href;
   const child = Bun.spawn(
     [
       process.execPath,
       "-e",
-      `const task = await import(${JSON.stringify(url)}); await task[${JSON.stringify(method)}](...await Bun.stdin.json());`,
+      `const task = await import(${JSON.stringify(url)}); const result = await task[${JSON.stringify(method)}](...await Bun.stdin.json()); if (result !== undefined) process.stdout.write(JSON.stringify(result));`,
     ],
     { cwd, stdin: Buffer.from(JSON.stringify(args)), stdout: "pipe", stderr: "pipe" },
   );
@@ -119,4 +119,5 @@ export async function runWorker(
   await output;
   if (code !== 0) throw new Error((await errors) || `${method} failed (exit ${code}).`);
   await errors;
+  return output;
 }

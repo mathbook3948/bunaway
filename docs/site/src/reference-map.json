@@ -266,6 +266,23 @@
       "pages": {
         "reference/tooling/core-and-runtime": ["signal", "abort"]
       }
+    },
+    {
+      "source": "packages/cli/src/config.ts",
+      "type": "Project",
+      "pages": {
+        "reference/tooling/cli-api": [
+          "root",
+          "frameworkRoot",
+          "appEntry",
+          "frontend",
+          "backendDependencies",
+          "bundle",
+          "dev",
+          "app",
+          "policy"
+        ]
+      }
     }
   ],
   "commands": {
