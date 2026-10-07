@@ -40,6 +40,8 @@ export function bindCommandHost<T extends CommandDefinition>(definition: T): T {
   if (existing) return existing as T;
   const bound = {
     ...definition,
+    input: definition.input,
+    output: definition.output,
     run(payload: unknown, context: CommandContext) {
       return runWithHost(context, () => definition.run(payload, context));
     },
@@ -50,18 +52,33 @@ export function bindCommandHost<T extends CommandDefinition>(definition: T): T {
 }
 
 export function bindPluginHost(plugin: PluginDefinition): PluginDefinition {
-  const boundCommands = plugin.commands
+  const {
+    name,
+    version,
+    dependencies,
+    platforms,
+    requiredHost,
+    commands: pluginCommands,
+    events,
+    setup,
+  } = plugin;
+  const boundCommands = pluginCommands
     ? Object.fromEntries(
-        Object.entries(plugin.commands).map(([name, definition]) => [
+        Object.entries(pluginCommands).map(([name, definition]) => [
           name,
           bindCommandHost(definition),
         ]),
       )
     : undefined;
-  const setup = plugin.setup;
   if (!boundCommands && !setup) return plugin;
   return {
     ...plugin,
+    name,
+    version,
+    ...(dependencies === undefined ? {} : { dependencies }),
+    ...(platforms === undefined ? {} : { platforms }),
+    ...(requiredHost === undefined ? {} : { requiredHost }),
+    ...(events === undefined ? {} : { events }),
     ...(boundCommands ? { commands: Object.freeze(boundCommands) } : {}),
     ...(setup
       ? {

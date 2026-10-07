@@ -79,7 +79,8 @@ capabilities(): Promise<HostOutput<"capabilities.get">>
 
 뷰 명령은 해당 뷰의 Host 정책을 사용합니다.
 `defineApp({ modules, plugins })`로 연결한 플러그인의 `setup`과
-setup에서 시작한 비동기 작업은 `policy.backend`를 사용하며 앱 종료까지 유효합니다.
+setup에서 시작한 비동기 작업은 `policy.backend` 권한을 사용합니다.
+이 작업의 Host API는 앱이 종료될 때까지 사용할 수 있습니다.
 앱 종료 시 Host 호출은 취소되므로 StopHook에서는 타이머와 연결을 정리합니다.
 
 명령이 완료되거나 실패한 뒤 실행하는 타이머나 비동기 작업에서는 사용할 수 없습니다.

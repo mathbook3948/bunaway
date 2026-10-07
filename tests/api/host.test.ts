@@ -3,6 +3,7 @@ import { allowedHost } from "../../native/windows/bun/boundary.ts";
 import {
   type AppDefinition,
   type CommandContext,
+  type CommandDefinition,
   capabilities,
   command,
   createCore,
@@ -357,6 +358,118 @@ test("defineApp binds raw app, module and plugin command definitions without mut
     expect(await definition?.run(null, ctx)).toBeNull();
   }
   await expect(raw.run()).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
+});
+
+test("defineApp preserves class getter contracts and original method receivers", async () => {
+  class GetterCommand implements CommandDefinition {
+    #contract = nullContract;
+    get input() {
+      return this.#contract.input;
+    }
+    get output() {
+      return this.#contract.output;
+    }
+    async run() {
+      return storage.writeText({ ...location, text: "getter" });
+    }
+  }
+  const raw = new GetterCommand();
+  const setupOrder: string[] = [];
+  class GetterPlugin implements PluginDefinition {
+    #name = "getter";
+    get name() {
+      return this.#name;
+    }
+    get version() {
+      return "1";
+    }
+    get dependencies() {
+      return ["dependency"] as const;
+    }
+    get platforms() {
+      return ["windows"] as const;
+    }
+    get requiredHost() {
+      return { log: true, storage: [] };
+    }
+    get commands() {
+      return { "getter.write": raw };
+    }
+    get events() {
+      return { "getter.changed": { const: null } as const };
+    }
+    async setup() {
+      setupOrder.push(this.#name);
+      await log.info(this.#name);
+    }
+  }
+  const plugin = new GetterPlugin();
+  const app = defineApp({
+    modules: [{ name: "module", commands: { "module.getter": raw }, events: {} }],
+    commands: { "app.getter": raw },
+    plugins: [
+      plugin,
+      {
+        name: "dependency",
+        version: "1",
+        setup() {
+          setupOrder.push("dependency");
+        },
+      },
+    ],
+  });
+  const bound = app.plugins?.[0];
+  expect(bound).toMatchObject({
+    name: "getter",
+    version: "1",
+    dependencies: ["dependency"],
+    platforms: ["windows"],
+    requiredHost: { log: true, storage: [] },
+    events: { "getter.changed": { const: null } },
+  });
+  const ctx = context("getter", async () => ({ kind: "result", payload: null }));
+  for (const definition of [
+    app.commands["app.getter"],
+    app.commands["module.getter"],
+    bound?.commands?.["getter.write"],
+  ]) {
+    expect(definition?.input).toEqual(nullContract.input);
+    expect(definition?.output).toEqual(nullContract.output);
+    expect(await definition?.run(null, ctx)).toBeNull();
+  }
+  expect(plugin.commands["getter.write"]).toBe(raw);
+  const services: CoreServices = {
+    platform: "windows",
+    backendContext: "backend" as HostContext,
+    policy: { version: 1, views: [], backend: { log: false, storage: [] } },
+    hello: { kind: "hello", protocol: { major: 1, minor: 0 }, features: [], buildId: "getters" },
+    runtime: {
+      createCancellation: () => new AbortController(),
+      now: () => performance.now(),
+      schedule(callback, delay) {
+        const timer = setTimeout(callback, delay);
+        return () => clearTimeout(timer);
+      },
+    },
+    async send() {},
+    async callHost() {
+      return { kind: "result", payload: null };
+    },
+  };
+  await expect(createCore(app, { ...services, platform: "macos" })).rejects.toMatchObject({
+    code: "UNSUPPORTED",
+  });
+  await expect(createCore(app, services)).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
+  expect(setupOrder).toEqual([]);
+  const core = await createCore(app, {
+    ...services,
+    policy: { ...services.policy, backend: { log: true, storage: [] } },
+  });
+  try {
+    expect(setupOrder).toEqual(["dependency", "getter"]);
+  } finally {
+    await core.stop();
+  }
 });
 
 test("plugin setup descendants keep their own backend until shutdown, including simultaneous apps", async () => {
