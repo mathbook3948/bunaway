@@ -16,8 +16,8 @@ bunaway build [directory]
 앱 정의와 UI 자산을 빌드하고 정책 및 런타임을 포함한 앱 패키지를 만듭니다.
 `build.command`가 있으면 프로젝트 루트에서 웹 프로덕션 빌드를 먼저 실행합니다.
 기존 출력이 있어도 매번 실행하며, 종료 코드 0을 확인한 뒤 웹 출력 디렉터리와 시작 페이지, 앱 소스를 검증합니다.
-Vite 기반 생성 앱은 `bun run build:web`을 자동 실행하므로 `bun run build` 한 번으로 앱을 만듭니다.
-`build.command`를 생략한 vanilla 앱은 지정한 정적 UI를 CLI가 번들합니다.
+웹 빌드 명령이 연결된 앱도 `bun run build` 한 번으로 앱을 만듭니다.
+`build.command`를 생략하면 지정한 정적 UI를 CLI가 번들합니다.
 개발 서버 명령 `dev.command`는 실행하지 않습니다. [빌드 설정](/reference/configuration/#build)에서 기존 앱의 연결 방법을 확인하세요.
 
 자산에 심볼릭 링크가 있거나 대소문자만 다른 파일이 출력 경로에서 충돌하면 빌드에 실패합니다.

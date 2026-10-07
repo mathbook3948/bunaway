@@ -18,10 +18,9 @@ Windows x64 또는 macOS arm64 대상 머신에서 실행합니다. 현재 교�
 bun run build
 ```
 
-`vite`, `react`, `vue`, `svelte` 템플릿은 `build.command`로 `bun run build:web`을 호출합니다.
-웹 빌드가 끝나면 출력과 시작 페이지를 검증하고 앱을 빌드합니다. 기존 웹 출력이 있어도 매번 빌드합니다.
-vanilla는 별도 웹 빌드 명령 없이 정적 UI를 CLI가 번들합니다.
-웹 자산만 만들려면 Vite 기반 앱에서 `bun run build:web`을 실행합니다.
+`build.command`가 있으면 웹 빌드를 실행한 뒤 출력과 시작 페이지를 검증하고 앱을 빌드합니다.
+기존 웹 출력이 있어도 매번 명령을 실행합니다. 명령을 생략하면 지정한 정적 UI를 CLI가 번들합니다.
+웹 자산만 만들려면 앱의 웹 전용 빌드 스크립트를 실행합니다. 웹 빌드 도구를 포함한 생성 앱은 `build:web`을 제공합니다.
 
 산출물은 `dist/<target>/`에 만들어집니다.
 프로덕션 앱은 로컬 UI 자산을 사용합니다. `dev.command`와 개발 서버 URL은 개발 실행에서만 사용합니다.
