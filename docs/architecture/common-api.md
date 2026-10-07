@@ -24,10 +24,9 @@ Windows용 `runBunApp`이 이를 연결한다. 명령·Host API 검증 헬퍼와
 
 ## 클라이언트와 Transport
 
-모든 앱 UI는 앱 정의에서 `CommandsOf`, `EventsOf`로 추론한 타입을 지정해 `createClient`로
-클라이언트를 만든다. vanilla, Vite, React, Vue, Svelte와 기존 웹 프로젝트에 같은 원칙을
-적용한다. UI 초기화 과정에서 만들고 `client.invoke`, `client.listen`, `client.capabilities`로
-호출과 구독에 재사용한다. 백엔드 import는 type-only다.
+`CommandsOf`, `EventsOf`로 앱 정의에서 추론한 타입을 `createClient`에 지정하면
+명령과 이벤트의 이름, 입력, 출력과 이벤트 payload 타입을 검사할 수 있다.
+아래 예제는 UI 초기화 함수에서 클라이언트를 만든다. 백엔드 import는 type-only다.
 
 ```ts
 import { createClient } from "@bunaway/client";
@@ -47,8 +46,8 @@ void start().catch(console.error);
 hello를 교환한다. Client를 즉시 반환하는 동기 API이며 브리지가 없으면 `UNSUPPORTED`를
 동기적으로 던지므로 생성도 초기화 과정의 오류 처리 범위에 포함한다.
 import만으로 연결하거나 브리지를 읽지 않으므로 SSR, 일반 브라우저에서 모듈을 import할
-수 있다. 클라이언트 생성은 WebView UI의 초기화 때 실행하고 SSR이나 컴포넌트 렌더
-함수에서는 실행하지 않는다. 브라우저용 가짜 성공 응답은 없다.
+수 있다. 기본 클라이언트 생성에는 호스트가 제공하는 WebView 브리지가 필요하다.
+브라우저용 가짜 성공 응답은 없다.
 
 직접 import하는 `invoke`, `listen`, `capabilities`도 계속 지원한다. 이 함수들은 같은
 기본 연결을 사용하며 브리지가 없으면 Promise를 `UNSUPPORTED`로 거부한다.

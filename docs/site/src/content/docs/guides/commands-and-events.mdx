@@ -11,7 +11,7 @@ import uiSource from '@repo/packages/cli/templates/vanilla/src/main.ts?raw';
 **명령**은 입력을 받아 결과를 반환하는 작업이고, **이벤트**는 구독한 UI에 전달하는 알림입니다.
 저장 명령의 응답은 호출한 UI가 받고 저장 이벤트는 구독 중인 UI가 받습니다.
 
-모든 앱 UI는 앱 정의에서 추론한 명령과 이벤트 타입을 클라이언트에 지정합니다. UI 프레임워크와 관계없이 `client.invoke`로 호출하고 `client.listen`으로 구독합니다. 명령이나 이벤트 이름을 잘못 쓰거나 입력 타입이 다르면 `bun run typecheck`가 실패합니다.
+아래 템플릿은 앱 정의에서 추론한 타입으로 클라이언트를 만듭니다. 명령이나 이벤트 이름을 잘못 쓰거나 입력 타입이 다르면 `bun run typecheck`가 실패합니다.
 
 ## 1. 앱 백엔드에서 계약과 구현 정의
 

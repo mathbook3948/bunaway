@@ -75,10 +75,9 @@ React Fast Refresh의 인라인 preamble은 개발 CSP에서만 허용한다.
 모든 Vite 기반 템플릿의 프로덕션 CSP는 `script-src 'self'; style-src 'self'`이며
 이미지는 인라인 data URL 대신 로컬 파일로 출력한다.
 공통 `src-bunaway/`의 앱 정의, 메시지 명령, 이벤트, 저장 정책은 동일하다.
-모든 앱 UI는 앱 정의에서 추론한 명령과 이벤트 타입을 지정해 `createClient`로 클라이언트를 만든다.
-UI 초기화 때 만든 클라이언트를 공유하고 `client.invoke`, `client.listen`으로 호출하고 구독한다.
+앱 정의에서 추론한 타입을 `createClient`에 지정하면 명령 이름과 입력, 결과, 이벤트 데이터의 타입을 검사할 수 있다.
+이 클라이언트의 `client.invoke`, `client.listen`으로 호출하고 구독한다.
 생성과 호출 실패를 처리하고 컴포넌트를 제거할 때는 해당 구독만 해제한다.
-이 원칙은 vanilla, Vite, React, Vue, Svelte와 기존 웹 프로젝트에 공통으로 적용한다.
 
 `vite` 템플릿은 공식 [create-vite@9.2.1의 vanilla-ts](https://github.com/vitejs/vite/tree/fea5b21dd9524ed7308632407b996f1fe5942c9c/packages/create-vite/template-vanilla-ts)
 기본 화면(로고, 카운터)을 사용한다.

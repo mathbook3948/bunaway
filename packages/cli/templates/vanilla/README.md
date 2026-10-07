@@ -17,8 +17,7 @@ Edit `src/` for the UI and `src-bunaway/` for the backend.
 `src-bunaway/message/module.ts` registers commands and events with `defineModule`.
 The framework boots the app from `build.app` in `src-bunaway/bunaway.json`.
 
-All Bunaway UIs use a client typed from the app definition. The generated UI
-follows this principle:
+The generated UI uses command and event types inferred from the app definition:
 
 ```ts
 import type { CommandsOf, EventsOf } from "@bunaway/backend";

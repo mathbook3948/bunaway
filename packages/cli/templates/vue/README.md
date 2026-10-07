@@ -19,7 +19,7 @@ The framework boots the app from `build.app` in `src-bunaway/bunaway.json`.
 
 ## Backend calls
 
-All Bunaway UIs use a client typed from the app definition:
+The example below infers command and event types from the app definition:
 
 ```ts
 import type { CommandsOf, EventsOf } from "@bunaway/backend";
@@ -35,10 +35,10 @@ async function start(): Promise<void> {
 void start().catch(console.error);
 ```
 
-Create the client during WebView UI initialization, handling creation and call
-failures. Reuse it in components and event handlers. Do not create it during
-render or SSR. Dispose each component's `client.listen` subscriptions on cleanup,
-keeping the shared client open. Backend calls require the desktop WebView.
+The example creates the client in a startup function to handle creation and call
+failures. You can reuse it in components and event handlers. Dispose each
+component's `client.listen` subscriptions on cleanup, keeping the shared client
+open. Backend calls through the default connection require the desktop WebView.
 
 ## Build
 
