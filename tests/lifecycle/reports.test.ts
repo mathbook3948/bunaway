@@ -2,7 +2,26 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { readReport } from "./reports.ts";
+import { assertReport, readReport } from "./reports.ts";
+
+test("required page checks cannot pass with an empty, partial or failed report", () => {
+  const report = { page: "main", results: [{ name: "denied command", ok: true }] };
+  expect(() => assertReport(report, ["denied command"])).not.toThrow();
+  expect(() => assertReport({ ...report, results: [] }, ["denied command"])).toThrow(
+    "required check missing",
+  );
+  expect(() => assertReport(report, ["denied command", "forged context rejected"])).toThrow(
+    "forged context rejected",
+  );
+  expect(() =>
+    assertReport({ ...report, results: [{ name: "denied command", ok: false }] }),
+  ).toThrow("main: denied command");
+  expect(() =>
+    assertReport({ ...report, results: [...report.results, ...report.results] }, [
+      "denied command",
+    ]),
+  ).toThrow("duplicated");
+});
 
 test("host reports remain pending until complete JSON is available", async () => {
   const home = await mkdtemp(resolve(tmpdir(), "bunaway-report-"));
