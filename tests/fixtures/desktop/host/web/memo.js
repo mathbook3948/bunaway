@@ -5,7 +5,15 @@ import {
 
 const client = createClient({
   transport: createWebViewTransport(window.chrome.webview),
-  hello: { kind: "hello", protocol: { major: 1, minor: 0 }, features: [], buildId: "memo-ui" },
+  hello: {
+    kind: "hello",
+    protocol: {
+      major: 1,
+      minor: 0,
+    },
+    features: [],
+    buildId: "memo-ui",
+  },
 });
 const input = document.getElementById("memo");
 const saved = document.getElementById("saved-memo");
@@ -22,8 +30,12 @@ window.addEventListener("pagehide", () => {
 
 async function waitForSaved() {
   const deadline = Date.now() + 5000;
-  while ((button.disabled || saved.textContent !== input.value) && Date.now() < deadline)
+  while (
+    (button.disabled || saved.textContent !== input.value) &&
+    Date.now() < deadline
+  ) {
     await new Promise((resolve) => setTimeout(resolve, 25));
+  }
 }
 
 async function start() {
@@ -33,7 +45,9 @@ async function start() {
     (event) => {
       saved.textContent = event.payload;
       statusEl.textContent = "저장 완료";
-      if (event.payload === expectedEditorSave) resolveEditorSave?.();
+      if (event.payload === expectedEditorSave) {
+        resolveEditorSave?.();
+      }
     },
     {
       onError: (error) => {
@@ -80,7 +94,10 @@ async function start() {
       await Promise.race([
         savedEvent,
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("memo.saved event was not delivered")), 5000),
+          setTimeout(
+            () => reject(new Error("memo.saved event was not delivered")),
+            5000,
+          ),
         ),
       ]);
       editorResults.push({
@@ -103,7 +120,10 @@ async function start() {
     }
     await client.invoke("test.report", {
       file: "editor.json",
-      report: { page: "editor", results: editorResults },
+      report: {
+        page: "editor",
+        results: editorResults,
+      },
     });
   }
   if (testPhase === "read" || testPhase === "write") {
@@ -118,7 +138,9 @@ async function start() {
               : "legacy browser profile storage persists across restart",
             ok:
               localStorage.getItem("bunaway-profile-regression") ===
-              (ephemeralBrowserStorage && testPhase === "read" ? null : "legacy-profile"),
+              (ephemeralBrowserStorage && testPhase === "read"
+                ? null
+                : "legacy-profile"),
           },
           {
             name:

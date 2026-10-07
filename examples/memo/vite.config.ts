@@ -12,7 +12,14 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 5173,
     strictPort: true,
-    watch: { ignored: ["**/src-bunaway/**", "**/.bunaway/**", "**/web-dist/**", "**/dist/**"] },
+    watch: {
+      ignored: [
+        "**/src-bunaway/**",
+        "**/.bunaway/**",
+        "**/web-dist/**",
+        "**/dist/**",
+      ],
+    },
   },
   plugins: [
     {

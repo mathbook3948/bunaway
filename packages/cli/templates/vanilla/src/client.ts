@@ -4,4 +4,7 @@ import type { app } from "../src-bunaway/app.ts";
 
 type AppClient = Client<CommandsOf<typeof app>, EventsOf<typeof app>>;
 
-export const client: Pick<AppClient, "invoke" | "listen"> = { invoke, listen };
+export const client: Pick<AppClient, "invoke" | "listen"> = {
+  invoke,
+  listen,
+};

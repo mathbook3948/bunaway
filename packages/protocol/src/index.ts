@@ -6,7 +6,13 @@ import {
   policySchema,
   processSchema,
 } from "./schema.ts";
-import { type Infer, ProtocolError, parse, serialize, validate } from "./validation.ts";
+import {
+  type Infer,
+  ProtocolError,
+  parse,
+  serialize,
+  validate,
+} from "./validation.ts";
 
 export {
   API_LIMITS,
@@ -70,39 +76,58 @@ export {
 } from "./validation.ts";
 
 export type Message = Infer<typeof messageSchema>;
-export type Hello = Extract<Message, { kind: "hello" }>;
+export type Hello = Extract<
+  Message,
+  {
+    kind: "hello";
+  }
+>;
 export type WireError = Infer<typeof errorSchema>;
 export type Policy = Infer<typeof policySchema>;
 export type Bootstrap = Infer<typeof bootstrapSchema>;
 export type HostResponse = Infer<typeof hostResponseSchema>;
 export type ProcessFrame = Infer<typeof processSchema>;
-export const PROCESS_IPC_VERSION = { major: 1, minor: 0 } as const;
+export const PROCESS_IPC_VERSION = {
+  major: 1,
+  minor: 0,
+} as const;
 export const parseProcessFrame = (text: string): ProcessFrame =>
   checkProcessPolicy(parse(processSchema, text));
 export const serializeProcessFrame = (frame: ProcessFrame): string =>
   serialize(processSchema, checkProcessPolicy(validate(processSchema, frame)));
 
-export const PROTOCOL_VERSION = { major: 1, minor: 0 } as const;
+export const PROTOCOL_VERSION = {
+  major: 1,
+  minor: 0,
+} as const;
 
-export const parseMessage = (text: string): Message => parse(messageSchema, text);
-export const serializeMessage = (message: Message): string => serialize(messageSchema, message);
+export const parseMessage = (text: string): Message =>
+  parse(messageSchema, text);
+export const serializeMessage = (message: Message): string =>
+  serialize(messageSchema, message);
 export function parseBootstrap(text: string): Bootstrap {
   const bootstrap = parse(bootstrapSchema, text);
   assertUniquePolicyViews(bootstrap.policy);
   return bootstrap;
 }
-export const parseHostResponse = (text: string): HostResponse => parse(hostResponseSchema, text);
+export const parseHostResponse = (text: string): HostResponse =>
+  parse(hostResponseSchema, text);
 export const serializeHostResponse = (response: HostResponse): string =>
   serialize(hostResponseSchema, response);
 
 function assertUniquePolicyViews(policy: Policy | undefined): void {
-  if (policy && new Set(policy.views.map((view) => view.id)).size !== policy.views.length) {
+  if (
+    policy &&
+    new Set(policy.views.map((view) => view.id)).size !== policy.views.length
+  ) {
     throw new ProtocolError("INVALID_ARGUMENT", "Duplicate policy view.");
   }
 }
 
 function checkProcessPolicy(frame: ProcessFrame): ProcessFrame {
-  if (frame.kind === "boot") assertUniquePolicyViews(frame.payload.policy);
+  if (frame.kind === "boot") {
+    assertUniquePolicyViews(frame.payload.policy);
+  }
   return frame;
 }
 
@@ -122,7 +147,10 @@ export function negotiateProtocol(
     throw new ProtocolError("INVALID_ARGUMENT", "Expected protocol handshake.");
   }
   if (localHello.protocol.major !== remoteHello.protocol.major) {
-    throw new ProtocolError("UNSUPPORTED", "Incompatible protocol major version.");
+    throw new ProtocolError(
+      "UNSUPPORTED",
+      "Incompatible protocol major version.",
+    );
   }
   return {
     protocol: {

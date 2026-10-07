@@ -4,12 +4,21 @@ import type { BunPlugin } from "bun";
 import type { Project } from "./config.ts";
 import { release } from "./distribution.ts";
 import { files, inside, installedPackageRoot } from "./files.ts";
-import { type InstalledPlugin, installedPlugins, pluginTableSource } from "./plugins.ts";
+import {
+  type InstalledPlugin,
+  installedPlugins,
+  pluginTableSource,
+} from "./plugins.ts";
 import { assertAppDefinitionExport, buildWithSdk, sdkPlugin } from "./sdk.ts";
 
-async function bundleBytes(output: Bun.BuildArtifact, development: boolean): Promise<Uint8Array> {
+async function bundleBytes(
+  output: Bun.BuildArtifact,
+  development: boolean,
+): Promise<Uint8Array> {
   const bytes = new Uint8Array(await output.arrayBuffer());
-  if (!development || !output.path.endsWith(".js")) return bytes;
+  if (!development || !output.path.endsWith(".js")) {
+    return bytes;
+  }
   const text = new TextDecoder().decode(bytes);
   return Buffer.from(
     text.replace(
@@ -34,7 +43,9 @@ async function bundle(
   plugin: BunPlugin,
   development: boolean,
 ): Promise<Bun.BuildArtifact[]> {
-  if (entrypoints.length === 0) return [];
+  if (entrypoints.length === 0) {
+    return [];
+  }
   return buildWithSdk(
     {
       entrypoints,
@@ -55,28 +66,57 @@ async function webAssets(
 ): Promise<void> {
   const sources = await files(project.frontend);
   const entries: string[] = [];
-  const outputs = new Map<string, { path: string; source: string | Bun.BuildArtifact }>();
+  const outputs = new Map<
+    string,
+    {
+      path: string;
+      source: string | Bun.BuildArtifact;
+    }
+  >();
   const addOutput = (name: string, source: string | Bun.BuildArtifact) => {
     const path = resolve(destination, name);
-    if (!inside(destination, path)) throw new Error(`Frontend output escapes destination: ${name}`);
+    if (!inside(destination, path)) {
+      throw new Error(`Frontend output escapes destination: ${name}`);
+    }
     const rel = relative(destination, path).replaceAll("\\", "/");
     const key = rel.toLowerCase();
-    if (outputs.has(key)) throw new Error(`Frontend output collision: ${rel}`);
-    outputs.set(key, { path, source });
+    if (outputs.has(key)) {
+      throw new Error(`Frontend output collision: ${rel}`);
+    }
+    outputs.set(key, {
+      path,
+      source,
+    });
   };
   for (const source of sources) {
     const rel = relative(project.frontend, source);
-    if (rel.endsWith(".d.ts")) continue;
+    if (rel.endsWith(".d.ts")) {
+      continue;
+    }
     const isEntry = /\.(ts|js)$/.test(rel);
-    if (isEntry) entries.push(source);
-    else addOutput(rel, source);
+    if (isEntry) {
+      entries.push(source);
+    } else {
+      addOutput(rel, source);
+    }
   }
-  for (const output of await bundle(entries, project.frontend, plugin, development))
+  for (const output of await bundle(
+    entries,
+    project.frontend,
+    plugin,
+    development,
+  )) {
     addOutput(output.path, output);
+  }
   for (const { path, source } of outputs.values()) {
-    await mkdir(dirname(path), { recursive: true });
-    if (typeof source === "string") await cp(source, path);
-    else await writeFile(path, await bundleBytes(source, development));
+    await mkdir(dirname(path), {
+      recursive: true,
+    });
+    if (typeof source === "string") {
+      await cp(source, path);
+    } else {
+      await writeFile(path, await bundleBytes(source, development));
+    }
   }
 }
 
@@ -88,7 +128,9 @@ export async function bundleAssets(
 ): Promise<void> {
   await assertAppDefinitionExport(project.appEntry);
   const plugin = await sdkPlugin(project.root, [], project.nativePlugins);
-  if (!developmentServer) await webAssets(project, resolve(assets, "web"), plugin, development);
+  if (!developmentServer) {
+    await webAssets(project, resolve(assets, "web"), plugin, development);
+  }
   const runtimeEntry = resolve(
     await installedPackageRoot(project.frameworkRoot, "@bunaway/runtime-bun"),
     "src/index.ts",
@@ -98,22 +140,35 @@ export async function bundleAssets(
     name: "process-app-entry",
     setup(build) {
       plugin.setup(build);
-      build.onResolve({ filter: /^bunaway-process-app$/ }, () => ({
-        path: "backend.ts",
-        namespace: "bunaway-process-entry",
-      }));
-      build.onLoad({ filter: /.*/, namespace: "bunaway-process-entry" }, () => ({
-        contents: `import app from ${JSON.stringify(project.appEntry)};
+      build.onResolve(
+        {
+          filter: /^bunaway-process-app$/,
+        },
+        () => ({
+          path: "backend.ts",
+          namespace: "bunaway-process-entry",
+        }),
+      );
+      build.onLoad(
+        {
+          filter: /.*/,
+          namespace: "bunaway-process-entry",
+        },
+        () => ({
+          contents: `import app from ${JSON.stringify(project.appEntry)};
 import { runBunApp } from ${JSON.stringify(runtimeEntry)};
 await runBunApp(app);`,
-        loader: "ts",
-        resolveDir: project.root,
-      }));
+          loader: "ts",
+          resolveDir: project.root,
+        }),
+      );
     },
   };
   const backend = await buildWithSdk(
     {
-      entrypoints: ["bunaway-process-app"],
+      entrypoints: [
+        "bunaway-process-app",
+      ],
       target: "bun",
       packages: "bundle",
       sourcemap: development ? "inline" : "none",
@@ -121,8 +176,13 @@ await runBunApp(app);`,
     entry,
   );
   const backendOutput = backend[0];
-  if (backend.length !== 1 || !backendOutput) throw new Error("Missing backend bundle.");
-  await writeFile(resolve(assets, "backend.js"), await bundleBytes(backendOutput, development));
+  if (backend.length !== 1 || !backendOutput) {
+    throw new Error("Missing backend bundle.");
+  }
+  await writeFile(
+    resolve(assets, "backend.js"),
+    await bundleBytes(backendOutput, development),
+  );
 }
 
 export async function bundleWindowsAssets(
@@ -132,13 +192,14 @@ export async function bundleWindowsAssets(
   development = false,
 ): Promise<void> {
   await assertAppDefinitionExport(project.appEntry);
-  if (!developmentServer)
+  if (!developmentServer) {
     await webAssets(
       project,
       resolve(assets, "web"),
       await sdkPlugin(project.root, [], project.nativePlugins),
       development,
     );
+  }
   await bundleWindowsHost(
     resolve(project.frameworkRoot, "native/windows/bun"),
     assets,
@@ -161,7 +222,8 @@ export async function bundleWindowsHost(
   const pluginProject = project ?? dirname(appEntry);
   const plugins =
     installed ??
-    (project || (await Bun.file(resolve(pluginProject, "package.json")).exists())
+    (project ||
+    (await Bun.file(resolve(pluginProject, "package.json")).exists())
       ? await installedPlugins(pluginProject, (await release()).version)
       : []);
   const sdk = project ? await sdkPlugin(project, [], plugins) : undefined;
@@ -169,29 +231,61 @@ export async function bundleWindowsHost(
     name: "windows-app-entry",
     setup(build) {
       sdk?.setup(build);
-      build.onResolve({ filter: /(?:^|\/)plugin-table\.ts$/ }, ({ path, importer }) => {
-        if (resolve(dirname(importer), path) === resolve(source, "plugin-table.ts"))
-          return { path: "table", namespace: "native-plugins" };
-        return undefined;
-      });
-      build.onLoad({ filter: /.*/, namespace: "native-plugins" }, () => ({
-        contents: pluginTableSource(plugins),
-        loader: "ts",
-        resolveDir: source,
-      }));
-      build.onResolve({ filter: /^bunaway-windows-app\/app\.ts$/ }, () => ({
-        path: "app.ts",
-        namespace: "bunaway-windows-entry",
-      }));
-      build.onLoad({ filter: /.*/, namespace: "bunaway-windows-entry" }, () => ({
-        contents: `export { default } from ${JSON.stringify(resolve(appEntry))};`,
-        loader: "ts",
-        resolveDir: dirname(resolve(appEntry)),
-      }));
+      build.onResolve(
+        {
+          filter: /(?:^|\/)plugin-table\.ts$/,
+        },
+        ({ path, importer }) => {
+          if (
+            resolve(dirname(importer), path) ===
+            resolve(source, "plugin-table.ts")
+          ) {
+            return {
+              path: "table",
+              namespace: "native-plugins",
+            };
+          }
+          return undefined;
+        },
+      );
+      build.onLoad(
+        {
+          filter: /.*/,
+          namespace: "native-plugins",
+        },
+        () => ({
+          contents: pluginTableSource(plugins),
+          loader: "ts",
+          resolveDir: source,
+        }),
+      );
+      build.onResolve(
+        {
+          filter: /^bunaway-windows-app\/app\.ts$/,
+        },
+        () => ({
+          path: "app.ts",
+          namespace: "bunaway-windows-entry",
+        }),
+      );
+      build.onLoad(
+        {
+          filter: /.*/,
+          namespace: "bunaway-windows-entry",
+        },
+        () => ({
+          contents: `export { default } from ${JSON.stringify(resolve(appEntry))};`,
+          loader: "ts",
+          resolveDir: dirname(resolve(appEntry)),
+        }),
+      );
     },
   };
   const options: Bun.BuildConfig = {
-    entrypoints: [resolve(source, "boot.ts"), "bunaway-windows-app/app.ts"],
+    entrypoints: [
+      resolve(source, "boot.ts"),
+      "bunaway-windows-app/app.ts",
+    ],
     target: "bun",
     packages: "bundle",
     splitting: true,
@@ -200,20 +294,30 @@ export async function bundleWindowsHost(
   };
   const artifacts = await buildWithSdk(options, entries);
   if (
-    !["boot.js", "app.js"].every((name) =>
+    ![
+      "boot.js",
+      "app.js",
+    ].every((name) =>
       artifacts.some((output) => basename(output.path) === name),
     )
-  )
+  ) {
     throw new Error("Windows bootstrap bundle failed");
-  for (const output of artifacts)
+  }
+  for (const output of artifacts) {
     await writeFile(
       resolve(destination, basename(output.path)),
       await bundleBytes(output, development),
     );
-  for (const name of ["ui", "host-operations"]) {
+  }
+  for (const name of [
+    "ui",
+    "host-operations",
+  ]) {
     const outputs = await buildWithSdk(
       {
-        entrypoints: [resolve(source, `${name}.ts`)],
+        entrypoints: [
+          resolve(source, `${name}.ts`),
+        ],
         target: "bun",
         packages: "bundle",
         splitting: true,
@@ -222,10 +326,11 @@ export async function bundleWindowsHost(
       },
       entries,
     );
-    for (const output of outputs)
+    for (const output of outputs) {
       await writeFile(
         resolve(destination, basename(output.path)),
         await bundleBytes(output, development),
       );
+    }
   }
 }

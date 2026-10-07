@@ -9,22 +9,37 @@ export async function verifyViteDevelopment(
   project: Project,
   frontend: "sdk" | "vite" | "react" | "vue" | "svelte" = "sdk",
 ): Promise<void> {
-  if (!project.dev) throw new Error("Expected a Vite development configuration.");
-  const reservation = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("") });
+  if (!project.dev) {
+    throw new Error("Expected a Vite development configuration.");
+  }
+  const reservation = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => new Response(""),
+  });
   const port = reservation.port;
   reservation.stop(true);
   const url = `http://127.0.0.1:${port}/`;
   const cssName = (await readdir(resolve(project.root, "src"))).find((name) =>
     name.endsWith(".css"),
   );
-  if (!cssName) throw new Error("Missing UI stylesheet.");
+  if (!cssName) {
+    throw new Error("Missing UI stylesheet.");
+  }
   const cssPath = resolve(project.root, "src", cssName);
   const original = await readFile(cssPath, "utf8");
-  const sourceHtml = await readFile(resolve(project.root, "index.html"), "utf8");
+  const sourceHtml = await readFile(
+    resolve(project.root, "index.html"),
+    "utf8",
+  );
   const server = await startDevServer(
     {
       ...project.dev,
-      command: [...project.dev.command, "--port", String(port)],
+      command: [
+        ...project.dev.command,
+        "--port",
+        String(port),
+      ],
       url,
       timeoutMs: 15000,
     },
@@ -45,7 +60,9 @@ export async function verifyViteDevelopment(
     const script = await ui.text();
     if (frontend === "sdk") {
       const sdkPath = script.match(/from "([^"]+)"/)?.[1];
-      if (!sdkPath) throw new Error("Missing served SDK import.");
+      if (!sdkPath) {
+        throw new Error("Missing served SDK import.");
+      }
       const sdk = await fetch(new URL(sdkPath, url));
       expect(sdk.ok).toBe(true);
       expect(await sdk.text()).toContain("createWebViewTransport");
@@ -61,8 +78,9 @@ export async function verifyViteDevelopment(
         "src/assets/typescript.svg",
         "favicon.svg",
         "icons.svg",
-      ])
+      ]) {
         expect((await fetch(new URL(path, url))).ok).toBe(true);
+      }
     }
     if (frontend === "react" || frontend === "vue" || frontend === "svelte") {
       const component = {
@@ -76,34 +94,64 @@ export async function verifyViteDevelopment(
       if (frontend === "react") {
         expect(html).toContain("script-src 'self' 'unsafe-inline'");
         expect(html).toContain("@react-refresh");
-      } else expect(html).toContain("script-src 'self';");
+      } else {
+        expect(html).toContain("script-src 'self';");
+      }
       for (const path of [
         "src/assets/hero.png",
         "src/assets/vite.svg",
         `src/assets/${frontend}.svg`,
         "favicon.svg",
         "icons.svg",
-      ])
+      ]) {
         expect((await fetch(new URL(path, url))).ok).toBe(true);
+      }
     }
-    const cssRequest = { headers: { Accept: "text/css" } };
-    expect((await fetch(new URL(`src/${cssName}`, url), cssRequest)).ok).toBe(true);
+    const cssRequest = {
+      headers: {
+        Accept: "text/css",
+      },
+    };
+    expect((await fetch(new URL(`src/${cssName}`, url), cssRequest)).ok).toBe(
+      true,
+    );
     const viteClient = await (await fetch(new URL("@vite/client", url))).text();
     const token = viteClient.match(/const wsToken = "([^"]+)"/)?.[1];
-    if (!token) throw new Error("Missing Vite WebSocket token.");
-    socket = new WebSocket(`ws://127.0.0.1:${port}/?token=${token}`, "vite-hmr");
-    const messages: { type: string; updates?: { type: string; path: string }[] }[] = [];
-    socket.addEventListener("message", (event) => messages.push(JSON.parse(String(event.data))));
+    if (!token) {
+      throw new Error("Missing Vite WebSocket token.");
+    }
+    socket = new WebSocket(
+      `ws://127.0.0.1:${port}/?token=${token}`,
+      "vite-hmr",
+    );
+    const messages: {
+      type: string;
+      updates?: {
+        type: string;
+        path: string;
+      }[];
+    }[] = [];
+    socket.addEventListener("message", (event) =>
+      messages.push(JSON.parse(String(event.data))),
+    );
     async function waitFor(check: () => boolean) {
       const deadline = Date.now() + 5000;
       while (!check()) {
-        if (Date.now() > deadline)
-          throw new Error(`Timed out waiting for Vite HMR: ${JSON.stringify(messages)}`);
+        if (Date.now() > deadline) {
+          throw new Error(
+            `Timed out waiting for Vite HMR: ${JSON.stringify(messages)}`,
+          );
+        }
         await Bun.sleep(20);
       }
     }
-    await waitFor(() => messages.some((message) => message.type === "connected"));
-    await writeFile(cssPath, `${original}\n:root { --bunaway-hmr-check: 1; }\n`);
+    await waitFor(() =>
+      messages.some((message) => message.type === "connected"),
+    );
+    await writeFile(
+      cssPath,
+      `${original}\n:root { --bunaway-hmr-check: 1; }\n`,
+    );
     await waitFor(() =>
       messages.some((message) =>
         message.updates?.some(
@@ -113,9 +161,9 @@ export async function verifyViteDevelopment(
         ),
       ),
     );
-    expect(await (await fetch(new URL(`src/${cssName}`, url), cssRequest)).text()).toContain(
-      "--bunaway-hmr-check",
-    );
+    expect(
+      await (await fetch(new URL(`src/${cssName}`, url), cssRequest)).text(),
+    ).toContain("--bunaway-hmr-check");
     if (frontend === "react" || frontend === "vue" || frontend === "svelte") {
       const component = {
         react: "src/App.tsx",
@@ -125,7 +173,10 @@ export async function verifyViteDevelopment(
       const path = resolve(project.root, component);
       const source = await readFile(path, "utf8");
       try {
-        await writeFile(path, source.replace("Explore Vite", "Bunaway HMR verified"));
+        await writeFile(
+          path,
+          source.replace("Explore Vite", "Bunaway HMR verified"),
+        );
         await waitFor(() =>
           messages.some((message) =>
             message.updates?.some(
@@ -142,11 +193,17 @@ export async function verifyViteDevelopment(
         await writeFile(path, source);
       }
     }
-    expect(await readFile(resolve(project.root, "index.html"), "utf8")).toBe(sourceHtml);
+    expect(await readFile(resolve(project.root, "index.html"), "utf8")).toBe(
+      sourceHtml,
+    );
   } finally {
     socket?.close();
     await server.stop();
     await writeFile(cssPath, original);
   }
-  await expect(fetch(url, { signal: AbortSignal.timeout(1000) })).rejects.toThrow();
+  await expect(
+    fetch(url, {
+      signal: AbortSignal.timeout(1000),
+    }),
+  ).rejects.toThrow();
 }

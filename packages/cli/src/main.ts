@@ -30,22 +30,34 @@ export async function main(args: string[]): Promise<number> {
   if (command === "create") {
     const [directory, ...options] = rest;
     const usage = `Usage: bunaway create <directory> [--template ${templateNames.join("|")}] [--package-dir <tarball-directory>].`;
-    if (!directory || directory.startsWith("--")) throw new Error(usage);
+    if (!directory || directory.startsWith("--")) {
+      throw new Error(usage);
+    }
     let packageDirectory: string | undefined;
     let template: Template = "vanilla";
     const seen = new Set<string>();
     for (let index = 0; index < options.length; index += 2) {
       const option = options[index];
       const value = options[index + 1];
-      if (!option || seen.has(option) || !value || value.startsWith("--")) throw new Error(usage);
+      if (!option || seen.has(option) || !value || value.startsWith("--")) {
+        throw new Error(usage);
+      }
       seen.add(option);
-      if (option === "--package-dir") packageDirectory = value;
-      else if (option === "--template" && isTemplate(value)) template = value;
-      else throw new Error(usage);
+      if (option === "--package-dir") {
+        packageDirectory = value;
+      } else if (option === "--template" && isTemplate(value)) {
+        template = value;
+      } else {
+        throw new Error(usage);
+      }
     }
     const path = await createProject(directory, {
       template,
-      ...(packageDirectory ? { packageDirectory } : {}),
+      ...(packageDirectory
+        ? {
+            packageDirectory,
+          }
+        : {}),
     });
     console.log(
       `Created ${path}\nNext: enter the directory, run bun install, then bun run doctor and bun run dev.`,
@@ -55,17 +67,26 @@ export async function main(args: string[]): Promise<number> {
   if (command === "package") {
     const [channel, ...tail] = rest;
     if (!channel) {
-      throw new Error("package requires a channel, e.g. bunaway package win-direct.");
+      throw new Error(
+        "package requires a channel, e.g. bunaway package win-direct.",
+      );
     }
     let directory = ".";
     let build = false;
     for (const arg of tail) {
-      if (arg === "--build") build = true;
-      else if (arg.startsWith("--")) throw new Error(`Unknown option: ${arg}. Use --help.`);
-      else if (directory !== ".") throw new Error("Unexpected extra argument. Use --help.");
-      else directory = arg;
+      if (arg === "--build") {
+        build = true;
+      } else if (arg.startsWith("--")) {
+        throw new Error(`Unknown option: ${arg}. Use --help.`);
+      } else if (directory !== ".") {
+        throw new Error("Unexpected extra argument. Use --help.");
+      } else {
+        directory = arg;
+      }
     }
-    const report = await packageProject(directory, channel, { build });
+    const report = await packageProject(directory, channel, {
+      build,
+    });
     return report.ok ? 0 : 1;
   }
   if (command === "dev") {
@@ -74,8 +95,9 @@ export async function main(args: string[]): Promise<number> {
     return 0;
   }
   const [directory, ...extra] = rest;
-  if (extra.length || directory?.startsWith("--"))
+  if (extra.length || directory?.startsWith("--")) {
     throw new Error("Unexpected argument. Use --help.");
+  }
   switch (command) {
     case "validate": {
       await validateProject(directory ?? ".");
@@ -96,7 +118,9 @@ if (import.meta.main) {
   try {
     process.exitCode = await main(process.argv.slice(2));
   } catch (error) {
-    console.error(`bunaway: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(
+      `bunaway: ${error instanceof Error ? error.message : String(error)}`,
+    );
     process.exitCode = 1;
   }
 }

@@ -12,10 +12,11 @@ export async function call<I extends Schema, O extends Schema>(
   input: Infer<I>,
   options?: NativeInvokeOptions,
 ): Promise<Infer<O>> {
-  if (options !== undefined)
+  if (options !== undefined) {
     throw new BunawayError({
       code: "INVALID_ARGUMENT",
       message: "Backend calls inherit command cancellation and deadline.",
     });
+  }
   return host.call(operation, input);
 }

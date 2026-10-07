@@ -1,34 +1,49 @@
-import { createClient, createWebViewTransport } from "../../../packages/client-sdk/src/index.ts";
+import {
+  createClient,
+  createWebViewTransport,
+} from "../../../packages/client-sdk/src/index.ts";
 
 const client = createClient({
   transport: createWebViewTransport(window.chrome.webview),
   hello: {
     kind: "hello",
-    protocol: { major: 1, minor: 0 },
+    protocol: {
+      major: 1,
+      minor: 0,
+    },
     features: [],
     buildId: "windows-bun-core",
   },
 });
 const assert = (value) => {
-  if (!value) throw new Error("SDK/core gate failed");
+  if (!value) {
+    throw new Error("SDK/core gate failed");
+  }
 };
 await client.ready;
 // Reject hostile Web inputs without losing the UI Worker or the negotiated session.
 window.chrome.webview.postMessage({
   kind: "invoke",
-  protocol: { major: 1, minor: 0 },
+  protocol: {
+    major: 1,
+    minor: 0,
+  },
   id: "oversized-native",
   command: "test.echo",
   payload: "x".repeat(1024 * 1024 + 1),
 });
-for (let index = 0; index < 256; index++)
+for (let index = 0; index < 256; index++) {
   window.chrome.webview.postMessage({
     kind: "invoke",
-    protocol: { major: 1, minor: 0 },
+    protocol: {
+      major: 1,
+      minor: 0,
+    },
     id: `rejected-${index}`,
     command: "not.allowed",
     payload: null,
   });
+}
 let event;
 const off = await client.listen(
   "test.changed",
@@ -49,7 +64,9 @@ await client.invoke("test.emit", 42);
 assert(event === 42);
 await off();
 const abort = new AbortController();
-const pending = client.invoke("test.hold", null, { signal: abort.signal });
+const pending = client.invoke("test.hold", null, {
+  signal: abort.signal,
+});
 await new Promise((resolve) => setTimeout(resolve, 100));
 abort.abort();
 try {

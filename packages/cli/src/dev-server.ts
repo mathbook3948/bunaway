@@ -42,8 +42,12 @@ export async function startDevServer(
     );
   }
   signal.throwIfAborted();
-  const command = [...config.command];
-  if (command[0] === "bun") command[0] = process.execPath;
+  const command = [
+    ...config.command,
+  ];
+  if (command[0] === "bun") {
+    command[0] = process.execPath;
+  }
   const lease =
     process.platform === "win32"
       ? await mkdtemp(resolve(tmpdir(), "bunaway-dev-server-"))
@@ -59,7 +63,11 @@ export async function startDevServer(
       : command.slice(1),
     {
       cwd,
-      stdio: ["pipe", "inherit", "inherit"],
+      stdio: [
+        "pipe",
+        "inherit",
+        "inherit",
+      ],
       detached: process.platform !== "win32",
       windowsHide: true,
     },
@@ -83,11 +91,15 @@ export async function startDevServer(
     );
   // The Windows worker owns a kill-on-close Job; on POSIX this child owns a process group.
   const killGroup = (kind: NodeJS.Signals) => {
-    if (!child.pid) return;
+    if (!child.pid) {
+      return;
+    }
     try {
       process.kill(-child.pid, kind);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+      if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
+        throw error;
+      }
     }
   };
   let stopping: Promise<void> | undefined;
@@ -96,7 +108,12 @@ export async function startDevServer(
       try {
         if (process.platform === "win32") {
           child.stdin?.end(); // EOF asks the worker to terminate and await its Job descendants.
-          await Promise.race([exited, delay(6000, undefined, { ref: false })]);
+          await Promise.race([
+            exited,
+            delay(6000, undefined, {
+              ref: false,
+            }),
+          ]);
           if (exit === undefined) {
             child.kill();
             await exited;
@@ -109,34 +126,51 @@ export async function startDevServer(
         }
         await exited;
       } finally {
-        if (lease) await rm(lease, { recursive: true, force: true });
+        if (lease) {
+          await rm(lease, {
+            recursive: true,
+            force: true,
+          });
+        }
       }
     })());
   const aborted = () => {
     // The owner also awaits stop(), which reports any cleanup failure.
     void stop().catch(() => {});
   };
-  signal.addEventListener("abort", aborted, { once: true });
+  signal.addEventListener("abort", aborted, {
+    once: true,
+  });
   try {
     const deadline = Date.now() + config.timeoutMs;
-    console.log(`Starting frontend server: ${config.command.join(" ")}\nWaiting for ${config.url}`);
+    console.log(
+      `Starting frontend server: ${config.command.join(" ")}\nWaiting for ${config.url}`,
+    );
     while (Date.now() < deadline) {
       signal.throwIfAborted();
-      if (exit !== undefined) throw startupExitError();
+      if (exit !== undefined) {
+        throw startupExitError();
+      }
       try {
         const response = await fetch(config.url, {
           redirect: "manual",
           signal: AbortSignal.any([
             signal,
-            AbortSignal.timeout(Math.min(1000, Math.max(1, deadline - Date.now()))),
+            AbortSignal.timeout(
+              Math.min(1000, Math.max(1, deadline - Date.now())),
+            ),
           ]),
         });
         const ready = response.ok;
         await response.body?.cancel();
         if (ready) {
           // Do not mask a startup failure with another process listening on the same port.
-          await delay(50, undefined, { signal });
-          if (exit !== undefined) throw startupExitError();
+          await delay(50, undefined, {
+            signal,
+          });
+          if (exit !== undefined) {
+            throw startupExitError();
+          }
           console.log(`Frontend server ready: ${config.url}`);
           return {
             exited,
@@ -148,9 +182,17 @@ export async function startDevServer(
         }
       } catch {
         signal.throwIfAborted();
-        if (exit !== undefined) throw startupExitError();
+        if (exit !== undefined) {
+          throw startupExitError();
+        }
       }
-      await delay(Math.min(100, Math.max(1, deadline - Date.now())), undefined, { signal });
+      await delay(
+        Math.min(100, Math.max(1, deadline - Date.now())),
+        undefined,
+        {
+          signal,
+        },
+      );
     }
     throw new Error(
       `Development server did not return HTTP 2xx within ${config.timeoutMs}ms: ${config.url}. Check dev.command, dev.url and the server port.`,

@@ -4,8 +4,12 @@ await runBunApp({
   events: {},
   commands: {
     fail: {
-      input: { const: null },
-      output: { const: null },
+      input: {
+        const: null,
+      },
+      output: {
+        const: null,
+      },
       async run() {
         throw new TypeError("runtime diagnostic sentinel");
       },

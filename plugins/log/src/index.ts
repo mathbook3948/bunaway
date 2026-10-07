@@ -8,8 +8,15 @@ const plugin = defineNativePlugin({
   operations: {
     write: {
       input: s.object({
-        level: s.enum(["debug", "info", "warn", "error"]),
-        message: s.string({ maxLength: 1024 }),
+        level: s.enum([
+          "debug",
+          "info",
+          "warn",
+          "error",
+        ]),
+        message: s.string({
+          maxLength: 1024,
+        }),
         details: s.optional(s.json()),
       }),
       output: s.null(),

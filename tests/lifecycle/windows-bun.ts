@@ -28,18 +28,39 @@ const policy: Policy = {
   views: [
     {
       id: "main",
-      origins: ["https://app.bunaway.local"],
-      commands: ["test.echo", "test.emit", "test.hold", "test.report"],
-      events: ["test.changed"],
-      host: { permissions: ["log:write"] },
+      origins: [
+        "https://app.bunaway.local",
+      ],
+      commands: [
+        "test.echo",
+        "test.emit",
+        "test.hold",
+        "test.report",
+      ],
+      events: [
+        "test.changed",
+      ],
+      host: {
+        permissions: [
+          "log:write",
+        ],
+      },
     },
   ],
-  backend: { permissions: ["log:write"] },
+  backend: {
+    permissions: [
+      "log:write",
+    ],
+  },
 };
 if (!process.argv.includes("--child")) {
-  await mkdir(resolve(assets, "web"), { recursive: true });
+  await mkdir(resolve(assets, "web"), {
+    recursive: true,
+  });
   const built = await Bun.build({
-    entrypoints: [resolve(import.meta.dir, "windows-bun/web.js")],
+    entrypoints: [
+      resolve(import.meta.dir, "windows-bun/web.js"),
+    ],
     target: "browser",
   });
   assert(built.success);
@@ -73,14 +94,26 @@ if (!process.argv.includes("--child")) {
     },
   );
   const driver = dlopen("user32.dll", {
-    PostMessageW: { args: ["u64", "u32", "u64", "i64"], returns: "i32" },
+    PostMessageW: {
+      args: [
+        "u64",
+        "u32",
+        "u64",
+        "i64",
+      ],
+      returns: "i32",
+    },
   });
   let hwnd = 0n;
   let requested = false;
   let inModal = false;
   let entered = false;
   let left = false;
-  let latest = { ticks: 0, promises: 0, network: 0 };
+  let latest = {
+    ticks: 0,
+    promises: 0,
+    network: 0,
+  };
   let baseline = latest;
   let during = latest;
   let text = "";
@@ -89,23 +122,37 @@ if (!process.argv.includes("--child")) {
   const stdout = child.stdout.pipeTo(
     new WritableStream({
       async write(chunk) {
-        const value = decoder.decode(chunk, { stream: true });
+        const value = decoder.decode(chunk, {
+          stream: true,
+        });
         text += value;
         pending += value;
         while (pending.includes("\n")) {
           const end = pending.indexOf("\n");
           const line = pending.slice(0, end);
           pending = pending.slice(end + 1);
-          if (!line) continue;
+          if (!line) {
+            continue;
+          }
           const event = JSON.parse(line);
           if (event.event === "window-created") {
             hwnd = BigInt(event.hwnd);
-            if (earlyClose) assert.equal(await closeWindowsApp(child.pid), 1);
+            if (earlyClose) {
+              assert.equal(await closeWindowsApp(child.pid), 1);
+            }
           }
-          if (modal && !requested && event.event === "web-message" && event.kind === "invoke") {
+          if (
+            modal &&
+            !requested &&
+            event.event === "web-message" &&
+            event.kind === "invoke"
+          ) {
             requested = true;
             assert(driver.symbols.PostMessageW(hwnd, 0x112, 0xf010n, 0n));
-            setTimeout(() => driver.symbols.PostMessageW(hwnd, 0x1f, 0n, 0n), 700);
+            setTimeout(
+              () => driver.symbols.PostMessageW(hwnd, 0x1f, 0n, 0n),
+              700,
+            );
           }
           if (event.event === "modal-enter") {
             entered = true;
@@ -118,7 +165,9 @@ if (!process.argv.includes("--child")) {
           }
           if (event.event === "backend-tick") {
             latest = event;
-            if (inModal) during = latest;
+            if (inModal) {
+              during = latest;
+            }
           }
         }
       },
@@ -135,11 +184,18 @@ if (!process.argv.includes("--child")) {
   assert.equal(code, creationFailure ? 1 : 0);
   if (modal) {
     assert(entered && left);
-    for (const key of ["ticks", "promises", "network"] as const)
+    for (const key of [
+      "ticks",
+      "promises",
+      "network",
+    ] as const) {
       assert(during[key] > baseline[key], `${key} stalled during modal loop`);
+    }
   }
   if (!earlyClose && !creationFailure) {
-    const report = JSON.parse(await readFile(resolve(output, "report.json"), "utf8"));
+    const report = JSON.parse(
+      await readFile(resolve(output, "report.json"), "utf8"),
+    );
     assert.equal(report.pass, true);
   }
   console.log(
@@ -161,7 +217,7 @@ if (!process.argv.includes("--child")) {
   const timer = setInterval(() => {
     ticks++;
     void Promise.resolve().then(() => promises++);
-    if (modal && ticks % 5 === 0)
+    if (modal && ticks % 5 === 0) {
       requests.push(
         fetch(server.url)
           .then((response) => response.text())
@@ -169,11 +225,24 @@ if (!process.argv.includes("--child")) {
             network++;
           }),
       );
-    if (modal && ticks % 10 === 0)
-      console.log(JSON.stringify({ event: "backend-tick", ticks, promises, network }));
+    }
+    if (modal && ticks % 10 === 0) {
+      console.log(
+        JSON.stringify({
+          event: "backend-tick",
+          ticks,
+          promises,
+          network,
+        }),
+      );
+    }
   }, 10);
   const app: AppDefinition = {
-    events: { "test.changed": { type: "integer" } },
+    events: {
+      "test.changed": {
+        type: "integer",
+      },
+    },
     plugins: [
       logPlugin,
       {
@@ -194,8 +263,12 @@ if (!process.argv.includes("--child")) {
     ],
     commands: {
       "test.echo": {
-        input: { type: "integer" },
-        output: { type: "integer" },
+        input: {
+          type: "integer",
+        },
+        output: {
+          type: "integer",
+        },
         async run(value) {
           assert(setup);
           assert.equal(await (await fetch(server.url)).text(), "network-ok");
@@ -205,15 +278,23 @@ if (!process.argv.includes("--child")) {
         },
       },
       "test.emit": {
-        input: { type: "integer" },
-        output: { const: null },
+        input: {
+          type: "integer",
+        },
+        output: {
+          const: null,
+        },
         async run(value, context) {
-          await context.events.emit("test.changed", Number(value), { kind: "broadcast" });
+          await context.events.emit("test.changed", Number(value), {
+            kind: "broadcast",
+          });
           return null;
         },
       },
       "test.hold": {
-        input: { const: null },
+        input: {
+          const: null,
+        },
         output: {},
         async run(_value, context) {
           return new Promise((_resolve, reject) => {
@@ -225,13 +306,21 @@ if (!process.argv.includes("--child")) {
         },
       },
       "test.report": {
-        input: { const: true },
-        output: { const: null },
+        input: {
+          const: true,
+        },
+        output: {
+          const: null,
+        },
         async run() {
           assert(cancelled);
           await writeFile(
             resolve(output, "report.json"),
-            JSON.stringify({ pass: true, ticks, promises }),
+            JSON.stringify({
+              pass: true,
+              ticks,
+              promises,
+            }),
           );
           return null;
         },
@@ -240,24 +329,35 @@ if (!process.argv.includes("--child")) {
   };
   try {
     await runWindowsApp(app, {
-      runtime: { id: "core-gate", generation: crypto.randomUUID() },
+      runtime: {
+        id: "core-gate",
+        generation: crypto.randomUUID(),
+      },
       backendContext: "backend-core" as HostContext,
       policy,
       assets,
       dataRoot,
       loader: creationFailure
         ? resolve(output, "missing-loader.dll")
-        : resolve(repoRoot, "native/windows/bun/vendor/sdk/build/native/x64/WebView2Loader.dll"),
+        : resolve(
+            repoRoot,
+            "native/windows/bun/vendor/sdk/build/native/x64/WebView2Loader.dll",
+          ),
       windows: [
         {
           view: "main",
           title: "Bunaway Bun core gate",
           home: "https://app.bunaway.local/index.html",
-          window: { width: 640, height: 480 },
+          window: {
+            width: 640,
+            height: 480,
+          },
         },
       ],
     });
-    if (!earlyClose) assert(stopped);
+    if (!earlyClose) {
+      assert(stopped);
+    }
   } finally {
     clearInterval(timer);
     await Promise.all(requests);

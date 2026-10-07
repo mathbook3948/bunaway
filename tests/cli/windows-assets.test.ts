@@ -35,7 +35,9 @@ test.skipIf(process.platform !== "win32")(
         await writeFile(path, text);
         assets[`assets/${name}`] = await hash(path);
       }
-      await writeJson(resolve(root, "manifest.json"), { assets });
+      await writeJson(resolve(root, "manifest.json"), {
+        assets,
+      });
       const launcher = await readFile(
         resolve(import.meta.dir, "../../native/windows/bun/launch.ps1"),
         "utf8",
@@ -46,11 +48,34 @@ test.skipIf(process.platform !== "win32")(
       );
       for (const argv of [
         [],
-        ["한글 파일.txt", "memo://open?id=42&mode=edit"],
-        ["--", "-draft.txt", "-Wait", "-Verbose", "-Debug", "-ErrorAction", "Stop"],
-        ['a"b', "C:\\tail\\", ""],
-        ...[128, 256].map((count) =>
-          Array.from({ length: count }, (_, index) => `${"가".repeat(70)}${index}.txt`),
+        [
+          "한글 파일.txt",
+          "memo://open?id=42&mode=edit",
+        ],
+        [
+          "--",
+          "-draft.txt",
+          "-Wait",
+          "-Verbose",
+          "-Debug",
+          "-ErrorAction",
+          "Stop",
+        ],
+        [
+          'a"b',
+          "C:\\tail\\",
+          "",
+        ],
+        ...[
+          128,
+          256,
+        ].map((count) =>
+          Array.from(
+            {
+              length: count,
+            },
+            (_, index) => `${"가".repeat(70)}${index}.txt`,
+          ),
         ),
       ]) {
         const child = Bun.spawn(
@@ -68,7 +93,14 @@ test.skipIf(process.platform !== "win32")(
             ...argv,
           ],
           // Let Windows PowerShell use its own modules, not an inherited pwsh module path.
-          { stdout: "pipe", stderr: "pipe", env: { ...process.env, PSModulePath: undefined } },
+          {
+            stdout: "pipe",
+            stderr: "pipe",
+            env: {
+              ...process.env,
+              PSModulePath: undefined,
+            },
+          },
         );
         const output = new Response(child.stdout).text();
         const errors = new Response(child.stderr).text();
@@ -76,19 +108,28 @@ test.skipIf(process.platform !== "win32")(
         try {
           expect(await child.exited, await errors).toBe(0);
           await output;
-          expect(await readFile(resolve(root, "started.txt"), "utf8")).toBe("launcher verified");
-          expect(JSON.parse(await readFile(resolve(root, "launch.json"), "utf8"))).toEqual({
+          expect(await readFile(resolve(root, "started.txt"), "utf8")).toBe(
+            "launcher verified",
+          );
+          expect(
+            JSON.parse(await readFile(resolve(root, "launch.json"), "utf8")),
+          ).toEqual({
             argv,
             cwd: process.cwd(),
           });
         } finally {
           clearTimeout(timeout);
-          if (child.exitCode === null) child.kill();
+          if (child.exitCode === null) {
+            child.kill();
+          }
           await child.exited;
         }
       }
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, {
+        recursive: true,
+        force: true,
+      });
     }
   },
   30000,
@@ -97,14 +138,22 @@ test.skipIf(process.platform !== "win32")(
 test("Windows app entry names cannot collide with the host or break shared bundle imports", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "bunaway-windows-assets-"));
   const host = resolve(import.meta.dir, "../../native/windows/bun");
-  const protocol = resolve(import.meta.dir, "../../packages/protocol/src/index.ts");
+  const protocol = resolve(
+    import.meta.dir,
+    "../../packages/protocol/src/index.ts",
+  );
   try {
     await mkdir(resolve(root, "modules"));
     await writeFile(
       resolve(root, "modules/plugin-table.ts"),
       'export const userTable = "app table";',
     );
-    for (const name of ["boot.ts", "app.ts", "ui.ts", "plugin-table.ts"]) {
+    for (const name of [
+      "boot.ts",
+      "app.ts",
+      "ui.ts",
+      "plugin-table.ts",
+    ]) {
       const entry = resolve(root, name);
       const destination = resolve(root, `out-${name}`);
       await mkdir(destination);
@@ -114,10 +163,18 @@ test("Windows app entry names cannot collide with the host or break shared bundl
       );
       await bundleWindowsHost(host, destination, entry);
       const outputs = await readdir(destination);
-      for (const expected of ["boot.js", "app.js", "ui.js", "host-operations.js"])
+      for (const expected of [
+        "boot.js",
+        "app.js",
+        "ui.js",
+        "host-operations.js",
+      ]) {
         expect(outputs).toContain(expected);
+      }
       expect(outputs.some((output) => output.startsWith("chunk-"))).toBe(true);
-      const app = (await import(pathToFileURL(resolve(destination, "app.js")).href)).default;
+      const app = (
+        await import(pathToFileURL(resolve(destination, "app.js")).href)
+      ).default;
       expect(app.name).toBe(name);
       expect(app.userTable).toBe("app table");
       expect(app.error.code).toBe("CANCELLED");
@@ -126,12 +183,17 @@ test("Windows app entry names cannot collide with the host or break shared bundl
       );
     }
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, {
+      recursive: true,
+      force: true,
+    });
   }
 });
 
 test("development Windows bundles map exceptions to the original TypeScript file and line", async () => {
-  const root = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-debug-assets-")));
+  const root = await realpath(
+    await mkdtemp(resolve(tmpdir(), "bunaway-debug-assets-")),
+  );
   const host = resolve(import.meta.dir, "../../native/windows/bun");
   const entry = resolve(root, "src-bunaway/app.ts");
   const source =
@@ -139,15 +201,31 @@ test("development Windows bundles map exceptions to the original TypeScript file
   try {
     await mkdir(resolve(root, "src-bunaway"));
     await writeFile(entry, source);
-    for (const development of [false, true]) {
-      const packageRoot = resolve(root, development ? ".bunaway/windows-x64" : "dist/windows-x64");
+    for (const development of [
+      false,
+      true,
+    ]) {
+      const packageRoot = resolve(
+        root,
+        development ? ".bunaway/windows-x64" : "dist/windows-x64",
+      );
       const staging = `${packageRoot}.building`;
-      await mkdir(resolve(staging, "assets"), { recursive: true });
-      await bundleWindowsHost(host, resolve(staging, "assets"), entry, undefined, development);
+      await mkdir(resolve(staging, "assets"), {
+        recursive: true,
+      });
+      await bundleWindowsHost(
+        host,
+        resolve(staging, "assets"),
+        entry,
+        undefined,
+        development,
+      );
       await rename(staging, packageRoot);
       const destination = resolve(packageRoot, "assets");
       for (const name of await readdir(destination)) {
-        if (!name.endsWith(".js")) continue;
+        if (!name.endsWith(".js")) {
+          continue;
+        }
         const text = await readFile(resolve(destination, name), "utf8");
         expect(text.includes("sourceMappingURL=data:"), name).toBe(development);
         if (name === "app.js" && development) {
@@ -155,7 +233,9 @@ test("development Windows bundles map exceptions to the original TypeScript file
             /sourceMappingURL=data:application\/json;base64,([^\s]+)/,
           )?.[1];
           expect(encoded).toBeDefined();
-          const map = JSON.parse(Buffer.from(encoded ?? "", "base64").toString());
+          const map = JSON.parse(
+            Buffer.from(encoded ?? "", "base64").toString(),
+          );
           expect(map.sourcesContent).toContain(source);
           expect(map.sources).toContain(entry.replaceAll("\\", "/"));
         }
@@ -165,11 +245,17 @@ test("development Windows bundles map exceptions to the original TypeScript file
         runner,
         'import app from "./app.js"; try { app.run(); } catch (error) { console.log(JSON.stringify(error.stack)); throw error; }',
       );
-      const child = Bun.spawn([process.execPath, runner], {
-        cwd: packageRoot,
-        stdout: "pipe",
-        stderr: "pipe",
-      });
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          runner,
+        ],
+        {
+          cwd: packageRoot,
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
       const stack = new Response(child.stdout).json();
       const errors = new Response(child.stderr).text();
       expect(await child.exited).not.toBe(0);
@@ -179,6 +265,9 @@ test("development Windows bundles map exceptions to the original TypeScript file
       expect(await stack).toContain(development ? `${entry}:3:` : "app.js:");
     }
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, {
+      recursive: true,
+      force: true,
+    });
   }
 });

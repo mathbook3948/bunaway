@@ -16,7 +16,13 @@ import {
   hostOperations,
   PROTOCOL_VERSION,
 } from "../../../packages/protocol/src/index.ts";
-import { Channel, type Packet, type Route, type UIConfig, validatePacket } from "./channel.ts";
+import {
+  Channel,
+  type Packet,
+  type Route,
+  type UIConfig,
+  validatePacket,
+} from "./channel.ts";
 import { DesktopLifecycle } from "./desktop.ts";
 import type { LaunchArguments, listenForInstances } from "./instance.ts";
 import { activeDescendants, containAppProcess } from "./job.ts";
@@ -32,12 +38,29 @@ export async function runWindowsApp(
 ): Promise<void> {
   const plugins = (app.plugins ?? []).flatMap((plugin) => {
     const native = plugin.native;
-    return native ? [{ name: plugin.name, version: plugin.version, native }] : [];
+    return native
+      ? [
+          {
+            name: plugin.name,
+            version: plugin.version,
+            native,
+          },
+        ]
+      : [];
   });
   pluginRegistry(plugins).validatePolicy(config.policy);
-  config = { ...config, plugins };
+  config = {
+    ...config,
+    plugins,
+  };
   containAppProcess(config.dataRoot);
-  const sessions = new Map<HostContext, { route: Route; session: CoreSession }>();
+  const sessions = new Map<
+    HostContext,
+    {
+      route: Route;
+      session: CoreSession;
+    }
+  >();
   const log = new DiagnosticLog(resolve(config.dataRoot, "logs/host.log"));
   const calls = new Map<
     string,
@@ -71,7 +94,11 @@ export async function runWindowsApp(
   });
   const desktop = new DesktopLifecycle(
     app.desktop,
-    (action) => channel.send({ kind: "desktop-control", action }),
+    (action) =>
+      channel.send({
+        kind: "desktop-control",
+        action,
+      }),
     () => {
       stopping = true;
       stopResolve();
@@ -89,14 +116,22 @@ export async function runWindowsApp(
     ...config,
     desktop: {
       closeBehavior: app.desktop?.closeBehavior ?? "quit",
-      ...(app.desktop?.tray ? { tray: { tooltip: app.desktop.tray.tooltip } } : {}),
+      ...(app.desktop?.tray
+        ? {
+            tray: {
+              tooltip: app.desktop.tray.tooltip,
+            },
+          }
+        : {}),
     },
   };
   const workerPath = new URL(
     existsSync(resolve(import.meta.dir, "ui.ts")) ? "./ui.ts" : "./ui.js",
     import.meta.url,
   );
-  const worker = new Worker(workerPath, { workerData: config });
+  const worker = new Worker(workerPath, {
+    workerData: config,
+  });
   const io = new Worker(
     new URL(
       existsSync(resolve(import.meta.dir, "host-operations.ts"))
@@ -104,7 +139,13 @@ export async function runWindowsApp(
         : "./host-operations.js",
       import.meta.url,
     ),
-    { workerData: { runtime: config.runtime, dataRoot: config.dataRoot, plugins } },
+    {
+      workerData: {
+        runtime: config.runtime,
+        dataRoot: config.dataRoot,
+        plugins,
+      },
+    },
   );
   let exitResolve: (value: number) => void = () => {};
   const exited = new Promise<number>((resolveExit) => {
@@ -135,13 +176,26 @@ export async function runWindowsApp(
         fail(new Error(packet.error.message));
         return;
       }
-      if (packet.kind !== "prepare" && packet.kind !== "host-response")
+      if (packet.kind !== "prepare" && packet.kind !== "host-response") {
         throw new Error("Unexpected I/O reply");
+      }
       const call = calls.get(packet.requestId);
-      if (!call || call.context !== packet.context || stopping) return;
-      if (packet.kind === "prepare") await channel.send({ ...packet, kind: "authorize" });
-      else if (call.authorized) await channel.send({ ...packet, kind: "host-result" });
-      else finishCall(packet.requestId, packet.response);
+      if (!call || call.context !== packet.context || stopping) {
+        return;
+      }
+      if (packet.kind === "prepare") {
+        await channel.send({
+          ...packet,
+          kind: "authorize",
+        });
+      } else if (call.authorized) {
+        await channel.send({
+          ...packet,
+          kind: "host-result",
+        });
+      } else {
+        finishCall(packet.requestId, packet.response);
+      }
     },
     fail,
   );
@@ -151,7 +205,9 @@ export async function runWindowsApp(
   });
   const ioExited = new Promise<number>((resolveExit) =>
     io.on("exit", (code) => {
-      if (!ioCleaned || code !== 0) fail(new Error(`I/O Worker exited without cleanup (${code})`));
+      if (!ioCleaned || code !== 0) {
+        fail(new Error(`I/O Worker exited without cleanup (${code})`));
+      }
       ioChannel.close();
       resolveExit(code);
     }),
@@ -161,21 +217,36 @@ export async function runWindowsApp(
     channel.close();
   });
   worker.on("exit", (code) => {
-    if (!cleaned || code !== 0) fail(new Error(`UI Worker exited without cleanup (${code})`));
+    if (!cleaned || code !== 0) {
+      fail(new Error(`UI Worker exited without cleanup (${code})`));
+    }
     channel.close();
     exitResolve(code);
   });
   function cancelCalls(context?: HostContext) {
     for (const [id, call] of calls) {
-      if (context !== undefined && call.context !== context) continue;
+      if (context !== undefined && call.context !== context) {
+        continue;
+      }
       calls.delete(id);
       call.signal.removeEventListener("abort", call.abort);
-      call.reject(new BunawayError({ code: "CANCELLED", message: "Host context closed." }));
+      call.reject(
+        new BunawayError({
+          code: "CANCELLED",
+          message: "Host context closed.",
+        }),
+      );
     }
     // Revocation cancels a whole context without overflowing per-request control slots.
     if (context !== undefined) {
-      channel.notify({ kind: "cancel-context", context });
-      ioChannel.notify({ kind: "cancel-context", context });
+      channel.notify({
+        kind: "cancel-context",
+        context,
+      });
+      ioChannel.notify({
+        kind: "cancel-context",
+        context,
+      });
     }
   }
   async function receive(packet: Packet) {
@@ -193,7 +264,11 @@ export async function runWindowsApp(
       void desktop
         .quit(packet.reason)
         .then(async (allowed) => {
-          if (!allowed && !stopping) await channel.send({ kind: "quit-cancelled" });
+          if (!allowed && !stopping) {
+            await channel.send({
+              kind: "quit-cancelled",
+            });
+          }
         })
         .catch(fail);
       return;
@@ -218,9 +293,13 @@ export async function runWindowsApp(
       await session?.session.close();
       return;
     }
-    if (stopping) return;
+    if (stopping) {
+      return;
+    }
     if (packet.kind === "session-open") {
-      if (!core || sessions.has(packet.route.context)) throw new Error("Invalid session-open");
+      if (!core || sessions.has(packet.route.context)) {
+        throw new Error("Invalid session-open");
+      }
       sessions.set(packet.route.context, {
         route: packet.route,
         session: core.openSession(packet.route.context, packet.route.viewId),
@@ -231,12 +310,15 @@ export async function runWindowsApp(
         !session ||
         session.route.documentGeneration !== packet.route.documentGeneration ||
         session.route.viewId !== packet.route.viewId
-      )
+      ) {
         throw new Error("Invalid client route");
+      }
       await session.session.receive(packet.message);
     } else if (packet.kind === "prepare") {
       const call = calls.get(packet.requestId);
-      if (!call || call.context !== packet.context || call.signal.aborted) return;
+      if (!call || call.context !== packet.context || call.signal.aborted) {
+        return;
+      }
       await channel.send({
         kind: "grant",
         context: packet.context,
@@ -245,18 +327,29 @@ export async function runWindowsApp(
       });
     } else if (packet.kind === "authorized") {
       const call = calls.get(packet.requestId);
-      if (!call || call.context !== packet.context) return;
+      if (!call || call.context !== packet.context) {
+        return;
+      }
       call.authorized = packet.allowed;
-      await ioChannel.send({ ...packet, kind: "grant" });
+      await ioChannel.send({
+        ...packet,
+        kind: "grant",
+      });
     } else if (packet.kind === "host-response") {
       const call = calls.get(packet.requestId);
-      if (!call || call.context !== packet.context) return;
+      if (!call || call.context !== packet.context) {
+        return;
+      }
       finishCall(packet.requestId, packet.response);
-    } else throw new Error("Unexpected main packet");
+    } else {
+      throw new Error("Unexpected main packet");
+    }
   }
   function finishCall(id: string, response: HostResponse) {
     const call = calls.get(id);
-    if (!call) return;
+    if (!call) {
+      return;
+    }
     calls.delete(id);
     call.signal.removeEventListener("abort", call.abort);
     call.resolve(response);
@@ -267,15 +360,34 @@ export async function runWindowsApp(
   };
   process.on("SIGINT", onSignal);
   process.on("SIGTERM", onSignal);
-  const startupTimer = setTimeout(() => fail(new Error("Windows startup timed out")), 30000);
+  const startupTimer = setTimeout(
+    () => fail(new Error("Windows startup timed out")),
+    30000,
+  );
   try {
-    await mkdir(resolve(config.dataRoot, "logs"), { recursive: true });
-    await log.write("host-started", { pid: process.pid, ui: "worker", runtime: config.runtime });
-    await Promise.all([ready, ioReady]);
-    if (failure) throw failure;
+    await mkdir(resolve(config.dataRoot, "logs"), {
+      recursive: true,
+    });
+    await log.write("host-started", {
+      pid: process.pid,
+      ui: "worker",
+      runtime: config.runtime,
+    });
+    await Promise.all([
+      ready,
+      ioReady,
+    ]);
+    if (failure) {
+      throw failure;
+    }
     booting = createCore(app, {
       policy: config.policy,
-      hello: { kind: "hello", protocol: PROTOCOL_VERSION, features: [], buildId: "bunaway" },
+      hello: {
+        kind: "hello",
+        protocol: PROTOCOL_VERSION,
+        features: [],
+        buildId: "bunaway",
+      },
       platform: "windows",
       backendContext: config.backendContext,
       onPluginError(plugin, phase, cause) {
@@ -284,14 +396,19 @@ export async function runWindowsApp(
           phase === "setup" &&
           cause instanceof BunawayError &&
           cause.code === "CANCELLED"
-        )
+        ) {
           return;
+        }
         console.error(`Plugin ${plugin} ${phase} failed:`, cause);
         return log.write("plugin-failed", {
           plugin,
           phase,
           message: cause instanceof Error ? cause.message : String(cause),
-          ...(cause instanceof Error ? { stack: cause.stack } : {}),
+          ...(cause instanceof Error
+            ? {
+                stack: cause.stack,
+              }
+            : {}),
         });
       },
       onCommandError(command, cause) {
@@ -300,7 +417,11 @@ export async function runWindowsApp(
           .write("command-failed", {
             command,
             message: cause instanceof Error ? cause.message : String(cause),
-            ...(cause instanceof Error ? { stack: cause.stack } : {}),
+            ...(cause instanceof Error
+              ? {
+                  stack: cause.stack,
+                }
+              : {}),
           })
           .catch(() => {});
       },
@@ -314,69 +435,132 @@ export async function runWindowsApp(
       },
       send: async (context, message) => {
         const session = sessions.get(context);
-        if (!session || stopping) return;
+        if (!session || stopping) {
+          return;
+        }
         try {
-          await channel.send({ kind: "server", route: session.route, message });
+          await channel.send({
+            kind: "server",
+            route: session.route,
+            message,
+          });
         } catch (error) {
           fail(error);
           throw error;
         }
       },
       callHost: (context, call, signal) => {
-        if (stopping || signal.aborted)
+        if (stopping || signal.aborted) {
           return Promise.reject(
-            new BunawayError({ code: "CANCELLED", message: "Host operation cancelled." }),
+            new BunawayError({
+              code: "CANCELLED",
+              message: "Host operation cancelled.",
+            }),
           );
+        }
         // Pending calls reserve cancellation capacity on both Workers until their acks arrive.
-        if (!channel.canSend(1, calls.size) || !ioChannel.canSend(1, calls.size))
+        if (
+          !channel.canSend(1, calls.size) ||
+          !ioChannel.canSend(1, calls.size)
+        ) {
           return Promise.reject(
-            new BunawayError({ code: "BUSY", message: "Host request limit reached." }),
+            new BunawayError({
+              code: "BUSY",
+              message: "Host request limit reached.",
+            }),
           );
+        }
         const requestId = `host-${++sequence}`;
         const execution = Object.hasOwn(hostOperations, call.operation)
           ? "ui"
-          : packagedPlugins.find((plugin) => call.operation.startsWith(`${plugin.name}.`))
-              ?.execution;
+          : packagedPlugins.find((plugin) =>
+              call.operation.startsWith(`${plugin.name}.`),
+            )?.execution;
         const source =
           context === config.backendContext
             ? "backend"
             : `view:${sessions.get(context)?.route.viewId ?? "invalid"}`;
-        const packet = { kind: "operation", context, requestId, call, source } as const;
+        const packet = {
+          kind: "operation",
+          context,
+          requestId,
+          call,
+          source,
+        } as const;
         try {
           validatePacket(packet, execution === "ui" ? "ui" : "io");
         } catch {
           return Promise.reject(
-            new BunawayError({ code: "INVALID_ARGUMENT", message: "Invalid host request." }),
+            new BunawayError({
+              code: "INVALID_ARGUMENT",
+              message: "Invalid host request.",
+            }),
           );
         }
         return new Promise<HostResponse>((resolveCall, reject) => {
           const abort = () => {
-            if (!calls.delete(requestId)) return;
+            if (!calls.delete(requestId)) {
+              return;
+            }
             signal.removeEventListener("abort", abort);
-            channel.notify({ kind: "cancel", context, requestId });
-            ioChannel.notify({ kind: "cancel", context, requestId });
-            reject(new BunawayError({ code: "CANCELLED", message: "Host context closed." }));
+            channel.notify({
+              kind: "cancel",
+              context,
+              requestId,
+            });
+            ioChannel.notify({
+              kind: "cancel",
+              context,
+              requestId,
+            });
+            reject(
+              new BunawayError({
+                code: "CANCELLED",
+                message: "Host context closed.",
+              }),
+            );
           };
-          calls.set(requestId, { context, signal, resolve: resolveCall, reject, abort });
-          signal.addEventListener("abort", abort);
-          void (execution === "ui" ? channel : ioChannel).send(packet).catch((error) => {
-            abort();
-            fail(error);
+          calls.set(requestId, {
+            context,
+            signal,
+            resolve: resolveCall,
+            reject,
+            abort,
           });
+          signal.addEventListener("abort", abort);
+          void (execution === "ui" ? channel : ioChannel)
+            .send(packet)
+            .catch((error) => {
+              abort();
+              fail(error);
+            });
         });
       },
     }).then((created) => {
       core = created;
-      if (stopping) void created.stop().catch(fail);
+      if (stopping) {
+        void created.stop().catch(fail);
+      }
       return created;
     });
-    core = await Promise.race([booting, stopRequested.then(() => undefined)]);
+    core = await Promise.race([
+      booting,
+      stopRequested.then(() => undefined),
+    ]);
     clearTimeout(startupTimer);
-    if (core && !stopping)
-      await log.write("backend-ready", { pid: process.pid, bunVersion: Bun.version });
+    if (core && !stopping) {
+      await log.write("backend-ready", {
+        pid: process.pid,
+        bunVersion: Bun.version,
+      });
+    }
     if (!stopping) {
-      await channel.send({ kind: "start" });
-      if (launch) desktop.open(launch, "initial");
+      await channel.send({
+        kind: "start",
+      });
+      if (launch) {
+        desktop.open(launch, "initial");
+      }
       inbox?.start((input) => desktop.open(input, "second-instance"));
     }
     await stopRequested;
@@ -392,16 +576,30 @@ export async function runWindowsApp(
       console.error("Windows cleanup timed out; ending failed app process.");
       process.exit(1);
     }, 40000);
-    if (!core)
+    if (!core) {
       core = await booting?.catch((error) => {
-        if (failure) fail(error);
+        if (failure) {
+          fail(error);
+        }
         return undefined;
       });
+    }
     await core?.stop().catch(fail);
     sessions.clear();
-    await channel.send({ kind: "shutdown" }).catch(fail);
-    await ioChannel.send({ kind: "shutdown" }).catch(fail);
-    await Promise.all([exited, ioExited]);
+    await channel
+      .send({
+        kind: "shutdown",
+      })
+      .catch(fail);
+    await ioChannel
+      .send({
+        kind: "shutdown",
+      })
+      .catch(fail);
+    await Promise.all([
+      exited,
+      ioExited,
+    ]);
     clearTimeout(timeout);
     channel.close();
     ioChannel.close();
@@ -415,5 +613,7 @@ export async function runWindowsApp(
     process.off("SIGINT", onSignal);
     process.off("SIGTERM", onSignal);
   }
-  if (failure) throw failure;
+  if (failure) {
+    throw failure;
+  }
 }

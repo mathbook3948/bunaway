@@ -28,10 +28,16 @@ export const PACKAGING_CHANNELS = [
 ] as const;
 export type ChannelId = (typeof PACKAGING_CHANNELS)[number];
 
-export const PLATFORMS = ["windows", "macos"] as const;
+export const PLATFORMS = [
+  "windows",
+  "macos",
+] as const;
 export type PlatformId = (typeof PLATFORMS)[number];
 
-export const BUILD_TARGETS = ["windows-x64", "macos-arm64"] as const;
+export const BUILD_TARGETS = [
+  "windows-x64",
+  "macos-arm64",
+] as const;
 export type BuildTarget = (typeof BUILD_TARGETS)[number];
 
 export function isChannelId(value: string): value is ChannelId {
@@ -43,8 +49,12 @@ export function platformOf(channel: ChannelId): PlatformId {
 }
 
 export function targetFor(platform: PlatformId, arch: string): BuildTarget {
-  if (platform === "windows" && arch === "x64") return "windows-x64";
-  if (platform === "macos" && arch === "arm64") return "macos-arm64";
+  if (platform === "windows" && arch === "x64") {
+    return "windows-x64";
+  }
+  if (platform === "macos" && arch === "arm64") {
+    return "macos-arm64";
+  }
   throw new Error(`No build target for ${platform}-${arch}.`);
 }
 
@@ -158,8 +168,13 @@ export interface PackageManifest {
     [key: string]: unknown;
   };
   assets: Record<string, string>;
-  app: { id: string; version: string };
-  framework?: { version: string };
+  app: {
+    id: string;
+    version: string;
+  };
+  framework?: {
+    version: string;
+  };
   host?: {
     target: string;
     kind?: string;
@@ -191,7 +206,10 @@ export function packagedDigest(entry: {
 //   (MSIX refuses unsigned packages).
 // - "required-to-submit": unsigned runs locally but the store rejects it
 //   (Store EXE/MSI requires a Trusted Root chain).
-export type SigningRequirement = "optional" | "required-to-run" | "required-to-submit";
+export type SigningRequirement =
+  | "optional"
+  | "required-to-run"
+  | "required-to-submit";
 
 export interface PackageAdapter {
   readonly channel: ChannelId;
@@ -223,7 +241,10 @@ export interface StageContext {
   addArtifact(
     path: string,
     kind: string,
-    options?: { signed?: boolean; signingRequired?: boolean },
+    options?: {
+      signed?: boolean;
+      signingRequired?: boolean;
+    },
   ): void;
 }
 
@@ -246,7 +267,12 @@ export interface StageResult {
 export interface PackageReport {
   channel: ChannelId;
   target: BuildTarget;
-  app: { id: string; name: string; identifier: string; version: string };
+  app: {
+    id: string;
+    name: string;
+    identifier: string;
+    version: string;
+  };
   startedAt: string;
   ok: boolean;
   usable: boolean;

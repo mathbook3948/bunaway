@@ -18,10 +18,20 @@ import {
   type WireError,
 } from "../../../packages/protocol/src/index.ts";
 
-import { MAX_WINDOWS, type WindowSpec } from "../../../packages/runtime-bun/src/window-config.ts";
+import {
+  MAX_WINDOWS,
+  type WindowSpec,
+} from "../../../packages/runtime-bun/src/window-config.ts";
 
-export type Route = { viewId: string; documentGeneration: number; context: HostContext };
-export { MAX_WINDOWS, type WindowSpec } from "../../../packages/runtime-bun/src/window-config.ts";
+export type Route = {
+  viewId: string;
+  documentGeneration: number;
+  context: HostContext;
+};
+export {
+  MAX_WINDOWS,
+  type WindowSpec,
+} from "../../../packages/runtime-bun/src/window-config.ts";
 // WM_APP message for orderly CLI teardown, independent of user close behavior.
 export const APP_SHUTDOWN_MESSAGE = 0x8002;
 export type UIConfig = {
@@ -34,32 +44,98 @@ export type UIConfig = {
   loader: string;
   legacyProfile?: boolean;
   plugins?: NativeRegistration[];
-  desktop?: { closeBehavior: "quit" | "hide"; tray?: { tooltip: string } };
+  desktop?: {
+    closeBehavior: "quit" | "hide";
+    tray?: {
+      tooltip: string;
+    };
+  };
   devtools?: boolean;
 };
 export type Packet =
-  | { kind: "ready" | "start" | "shutdown" | "closing" | "cleaned" }
-  | { kind: "desktop-control"; action: "show" | "hide" }
-  | { kind: "quit-request"; reason: "last-window" | "tray" }
-  | { kind: "quit-cancelled" }
-  | { kind: "session-open" | "revoke"; route: Route }
-  | { kind: "client"; route: Route; message: ClientMessage }
-  | { kind: "server"; route: Route; message: ServerMessage }
-  | { kind: "authorize"; context: HostContext; requestId: string; call: HostCall }
-  | { kind: "prepare"; context: HostContext; requestId: string; call: HostCall }
-  | { kind: "operation"; context: HostContext; requestId: string; call: HostCall; source: string }
-  | { kind: "grant"; context: HostContext; requestId: string; allowed: boolean }
-  | { kind: "authorized"; context: HostContext; requestId: string; allowed: boolean }
-  | { kind: "cancel"; context: HostContext; requestId: string }
-  | { kind: "cancel-context"; context: HostContext }
+  | {
+      kind: "ready" | "start" | "shutdown" | "closing" | "cleaned";
+    }
+  | {
+      kind: "desktop-control";
+      action: "show" | "hide";
+    }
+  | {
+      kind: "quit-request";
+      reason: "last-window" | "tray";
+    }
+  | {
+      kind: "quit-cancelled";
+    }
+  | {
+      kind: "session-open" | "revoke";
+      route: Route;
+    }
+  | {
+      kind: "client";
+      route: Route;
+      message: ClientMessage;
+    }
+  | {
+      kind: "server";
+      route: Route;
+      message: ServerMessage;
+    }
+  | {
+      kind: "authorize";
+      context: HostContext;
+      requestId: string;
+      call: HostCall;
+    }
+  | {
+      kind: "prepare";
+      context: HostContext;
+      requestId: string;
+      call: HostCall;
+    }
+  | {
+      kind: "operation";
+      context: HostContext;
+      requestId: string;
+      call: HostCall;
+      source: string;
+    }
+  | {
+      kind: "grant";
+      context: HostContext;
+      requestId: string;
+      allowed: boolean;
+    }
+  | {
+      kind: "authorized";
+      context: HostContext;
+      requestId: string;
+      allowed: boolean;
+    }
+  | {
+      kind: "cancel";
+      context: HostContext;
+      requestId: string;
+    }
+  | {
+      kind: "cancel-context";
+      context: HostContext;
+    }
   | {
       kind: "host-result" | "host-response";
       context: HostContext;
       requestId: string;
       response: HostResponse;
     }
-  | { kind: "diagnostic"; event: string; fields: Record<string, unknown> }
-  | { kind: "fatal"; error: WireError };
+  | {
+      kind: "diagnostic";
+      event: string;
+      fields: Record<string, unknown>;
+    }
+  | {
+      kind: "fatal";
+      error: WireError;
+    };
 
 const uiKinds = [
   "ready",
@@ -88,8 +164,20 @@ const mainKinds = [
   "host-result",
   "shutdown",
 ];
-const ioKinds = ["ready", "prepare", "host-response", "cleaned", "fatal"];
-const ioMainKinds = ["operation", "grant", "cancel", "cancel-context", "shutdown"];
+const ioKinds = [
+  "ready",
+  "prepare",
+  "host-response",
+  "cleaned",
+  "fatal",
+];
+const ioMainKinds = [
+  "operation",
+  "grant",
+  "cancel",
+  "cancel-context",
+  "shutdown",
+];
 type Side = "main" | "ui" | "io" | "main-io";
 const controlKinds = new Set([
   "desktop-control",
@@ -102,79 +190,178 @@ const controlKinds = new Set([
   "fatal",
   "ready",
 ]);
-const approvalKinds = new Set(["prepare", "authorize", "authorized", "grant"]);
+const approvalKinds = new Set([
+  "prepare",
+  "authorize",
+  "authorized",
+  "grant",
+]);
 function record(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value))
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Invalid Worker packet");
+  }
   return value as Record<string, unknown>;
 }
 function identifier(value: unknown) {
-  if (typeof value !== "string" || !/^[A-Za-z0-9_.:-]{1,128}$/.test(value))
+  if (typeof value !== "string" || !/^[A-Za-z0-9_.:-]{1,128}$/.test(value)) {
     throw new Error("Invalid Worker identifier");
+  }
 }
 export function validatePacket(value: unknown, incoming: Side): Packet {
   const packet = record(value);
-  const allowed = { main: uiKinds, ui: mainKinds, io: ioMainKinds, "main-io": ioKinds }[incoming];
-  if (typeof packet.kind !== "string" || !allowed.includes(packet.kind))
+  const allowed = {
+    main: uiKinds,
+    ui: mainKinds,
+    io: ioMainKinds,
+    "main-io": ioKinds,
+  }[incoming];
+  if (typeof packet.kind !== "string" || !allowed.includes(packet.kind)) {
     throw new Error("Invalid Worker direction");
+  }
   const text = JSON.stringify(value);
-  if (Buffer.byteLength(text) > MAX_MESSAGE_BYTES + 1024)
+  if (Buffer.byteLength(text) > MAX_MESSAGE_BYTES + 1024) {
     throw new Error("Worker packet too large");
+  }
   const fields: Record<string, string[]> = {
-    "desktop-control": ["action"],
-    "quit-request": ["reason"],
+    "desktop-control": [
+      "action",
+    ],
+    "quit-request": [
+      "reason",
+    ],
     "quit-cancelled": [],
     ready: [],
     start: [],
     shutdown: [],
     closing: [],
     cleaned: [],
-    "session-open": ["route"],
-    revoke: ["route"],
-    client: ["route", "message"],
-    server: ["route", "message"],
-    authorize: ["context", "requestId", "call"],
-    prepare: ["context", "requestId", "call"],
-    operation: ["context", "requestId", "call", "source"],
-    authorized: ["context", "requestId", "allowed"],
-    grant: ["context", "requestId", "allowed"],
-    cancel: ["context", "requestId"],
-    "cancel-context": ["context"],
-    "host-result": ["context", "requestId", "response"],
-    "host-response": ["context", "requestId", "response"],
-    diagnostic: ["event", "fields"],
-    fatal: ["error"],
+    "session-open": [
+      "route",
+    ],
+    revoke: [
+      "route",
+    ],
+    client: [
+      "route",
+      "message",
+    ],
+    server: [
+      "route",
+      "message",
+    ],
+    authorize: [
+      "context",
+      "requestId",
+      "call",
+    ],
+    prepare: [
+      "context",
+      "requestId",
+      "call",
+    ],
+    operation: [
+      "context",
+      "requestId",
+      "call",
+      "source",
+    ],
+    authorized: [
+      "context",
+      "requestId",
+      "allowed",
+    ],
+    grant: [
+      "context",
+      "requestId",
+      "allowed",
+    ],
+    cancel: [
+      "context",
+      "requestId",
+    ],
+    "cancel-context": [
+      "context",
+    ],
+    "host-result": [
+      "context",
+      "requestId",
+      "response",
+    ],
+    "host-response": [
+      "context",
+      "requestId",
+      "response",
+    ],
+    diagnostic: [
+      "event",
+      "fields",
+    ],
+    fatal: [
+      "error",
+    ],
   };
   const required = fields[packet.kind];
   if (
     !required ||
     required.some((key) => !Object.hasOwn(packet, key)) ||
     Object.keys(packet).some((key) => key !== "kind" && !required.includes(key))
-  )
+  ) {
     throw new Error("Invalid Worker fields");
+  }
   if (
     packet.kind === "desktop-control" &&
-    (typeof packet.action !== "string" || !["show", "hide"].includes(packet.action))
-  )
+    (typeof packet.action !== "string" ||
+      ![
+        "show",
+        "hide",
+      ].includes(packet.action))
+  ) {
     throw new Error("Invalid desktop action");
+  }
   if (
     packet.kind === "quit-request" &&
-    (typeof packet.reason !== "string" || !["last-window", "tray"].includes(packet.reason))
-  )
+    (typeof packet.reason !== "string" ||
+      ![
+        "last-window",
+        "tray",
+      ].includes(packet.reason))
+  ) {
     throw new Error("Invalid quit reason");
+  }
   if (packet.route !== undefined) {
     const route = record(packet.route);
-    if (Object.keys(route).length !== 3) throw new Error("Invalid route fields");
+    if (Object.keys(route).length !== 3) {
+      throw new Error("Invalid route fields");
+    }
     identifier(route.viewId);
     identifier(route.context);
-    if (!Number.isSafeInteger(route.documentGeneration) || Number(route.documentGeneration) < 0)
+    if (
+      !Number.isSafeInteger(route.documentGeneration) ||
+      Number(route.documentGeneration) < 0
+    ) {
       throw new Error("Invalid document generation");
+    }
   }
-  if (["session-open", "revoke", "client", "server"].includes(packet.kind) && !packet.route)
+  if (
+    [
+      "session-open",
+      "revoke",
+      "client",
+      "server",
+    ].includes(packet.kind) &&
+    !packet.route
+  ) {
     throw new Error("Missing route");
-  if (packet.context !== undefined) identifier(packet.context);
-  if (packet.kind === "cancel-context") identifier(packet.context);
-  if (packet.requestId !== undefined) identifier(packet.requestId);
+  }
+  if (packet.context !== undefined) {
+    identifier(packet.context);
+  }
+  if (packet.kind === "cancel-context") {
+    identifier(packet.context);
+  }
+  if (packet.requestId !== undefined) {
+    identifier(packet.requestId);
+  }
   if (
     [
       "authorize",
@@ -192,27 +379,52 @@ export function validatePacket(value: unknown, incoming: Side): Packet {
   }
   if (packet.kind === "client" || packet.kind === "server") {
     const message = parseMessage(JSON.stringify(packet.message));
-    const client = ["hello", "invoke", "listen", "unlisten", "cancel"].includes(message.kind);
-    if (client !== (packet.kind === "client") && message.kind !== "hello")
+    const client = [
+      "hello",
+      "invoke",
+      "listen",
+      "unlisten",
+      "cancel",
+    ].includes(message.kind);
+    if (client !== (packet.kind === "client") && message.kind !== "hello") {
       throw new Error("Invalid Web direction");
+    }
   }
-  if (["authorize", "operation", "prepare"].includes(packet.kind))
+  if (
+    [
+      "authorize",
+      "operation",
+      "prepare",
+    ].includes(packet.kind)
+  ) {
     parseHostCall(JSON.stringify(packet.call));
-  if (["authorized", "grant"].includes(packet.kind) && typeof packet.allowed !== "boolean")
+  }
+  if (
+    [
+      "authorized",
+      "grant",
+    ].includes(packet.kind) &&
+    typeof packet.allowed !== "boolean"
+  ) {
     throw new Error("Invalid authorization");
+  }
   if (
     packet.kind === "operation" &&
     (typeof packet.source !== "string" ||
       !/^(backend|view:[A-Za-z0-9_.:-]{1,128})$/.test(packet.source))
-  )
+  ) {
     throw new Error("Invalid operation source");
-  if (packet.kind === "host-result" || packet.kind === "host-response")
+  }
+  if (packet.kind === "host-result" || packet.kind === "host-response") {
     parseHostResponse(JSON.stringify(packet.response));
+  }
   if (packet.kind === "diagnostic") {
     identifier(packet.event);
     record(packet.fields);
   }
-  if (packet.kind === "fatal") validateValue(errorSchema, packet.error);
+  if (packet.kind === "fatal") {
+    validateValue(errorSchema, packet.error);
+  }
   return packet as Packet;
 }
 
@@ -225,13 +437,22 @@ export class Channel {
   private readonly pending = new Map<
     number,
     {
-      lane: "data" | "approval" | "cancel" | "revoke" | "control" | "diagnostic";
+      lane:
+        | "data"
+        | "approval"
+        | "cancel"
+        | "revoke"
+        | "control"
+        | "diagnostic";
       resolve(): void;
       reject(error: Error): void;
     }
   >();
   constructor(
-    private readonly port: Pick<MessagePort | Worker, "postMessage" | "on" | "off">,
+    private readonly port: Pick<
+      MessagePort | Worker,
+      "postMessage" | "on" | "off"
+    >,
     private readonly runtime: RuntimeIdentity,
     private readonly side: Side,
     private readonly receive: (packet: Packet) => void | Promise<void>,
@@ -244,14 +465,23 @@ export class Channel {
     try {
       const envelope = record(raw);
       const runtime = record(envelope.runtime);
-      if (Object.keys(runtime).length !== 2) throw new Error("Invalid runtime fields");
-      if (runtime.id !== this.runtime.id || runtime.generation !== this.runtime.generation)
+      if (Object.keys(runtime).length !== 2) {
+        throw new Error("Invalid runtime fields");
+      }
+      if (
+        runtime.id !== this.runtime.id ||
+        runtime.generation !== this.runtime.generation
+      ) {
         throw new Error("Stale Worker runtime");
+      }
       if (envelope.ack !== undefined) {
-        if (!Number.isSafeInteger(envelope.ack) || Number(envelope.ack) < 1)
+        if (!Number.isSafeInteger(envelope.ack) || Number(envelope.ack) < 1) {
           throw new Error("Invalid Worker ack id");
+        }
         const pending = this.pending.get(Number(envelope.ack));
-        if (!pending || Object.keys(envelope).length !== 2) throw new Error("Invalid Worker ack");
+        if (!pending || Object.keys(envelope).length !== 2) {
+          throw new Error("Invalid Worker ack");
+        }
         this.pending.delete(Number(envelope.ack));
         pending.resolve();
         return;
@@ -260,13 +490,20 @@ export class Channel {
         this.closed ||
         envelope.sequence !== this.expected++ ||
         Object.keys(envelope).length !== 3
-      )
+      ) {
         throw new Error("Invalid Worker envelope");
+      }
       const packet = validatePacket(envelope.packet, this.side);
       // Dispatch without waiting on application work, keeping setup Host API replies live.
       Promise.resolve(this.receive(packet))
         .then(() => {
-          this.port.postMessage({ runtime: this.runtime, ack: envelope.sequence }, []);
+          this.port.postMessage(
+            {
+              runtime: this.runtime,
+              ack: envelope.sequence,
+            },
+            [],
+          );
         })
         .catch(this.fail);
     } catch (error) {
@@ -276,10 +513,15 @@ export class Channel {
 
   send(packet: Packet): Promise<void> {
     try {
-      if (this.closed) throw new Error("Worker channel closed");
-      const opposite: Side = { main: "ui", ui: "main", io: "main-io", "main-io": "io" }[
-        this.side
-      ] as Side;
+      if (this.closed) {
+        throw new Error("Worker channel closed");
+      }
+      const opposite: Side = {
+        main: "ui",
+        ui: "main",
+        io: "main-io",
+        "main-io": "io",
+      }[this.side] as Side;
       const lane =
         packet.kind === "diagnostic"
           ? "diagnostic"
@@ -293,7 +535,9 @@ export class Channel {
                 : controlKinds.has(packet.kind)
                   ? "control"
                   : "data";
-      const count = [...this.pending.values()].filter((item) => item.lane === lane).length;
+      const count = [
+        ...this.pending.values(),
+      ].filter((item) => item.lane === lane).length;
       if (packet.kind === "diagnostic" && count >= 16) {
         // Diagnostics must not consume request/control capacity or turn BUSY into app failure.
         // Report suppressed entries when the receiver next has room, without another queue.
@@ -303,7 +547,10 @@ export class Channel {
       if (packet.kind === "diagnostic" && this.droppedDiagnostics) {
         packet = {
           ...packet,
-          fields: { ...packet.fields, droppedDiagnostics: this.droppedDiagnostics },
+          fields: {
+            ...packet.fields,
+            droppedDiagnostics: this.droppedDiagnostics,
+          },
         };
         this.droppedDiagnostics = 0;
       }
@@ -315,12 +562,25 @@ export class Channel {
           : lane === "data" || lane === "approval" || lane === "cancel"
             ? API_LIMITS.maxPending
             : 16;
-      if (count >= limit) throw new Error("Worker channel full");
+      if (count >= limit) {
+        throw new Error("Worker channel full");
+      }
       const sequence = ++this.sequence;
       return new Promise((resolve, reject) => {
-        this.pending.set(sequence, { lane, resolve, reject });
+        this.pending.set(sequence, {
+          lane,
+          resolve,
+          reject,
+        });
         try {
-          this.port.postMessage({ runtime: this.runtime, sequence, packet }, []);
+          this.port.postMessage(
+            {
+              runtime: this.runtime,
+              sequence,
+              packet,
+            },
+            [],
+          );
         } catch (error) {
           this.pending.delete(sequence);
           reject(error);
@@ -335,13 +595,17 @@ export class Channel {
   }
   canSend(count = 1, pendingRequests = 0) {
     return (
-      [...this.pending.values()].filter((item) => item.lane === "data").length + count <=
+      [
+        ...this.pending.values(),
+      ].filter((item) => item.lane === "data").length +
+        count <=
         API_LIMITS.maxPending &&
       // Reserve room until cancellation and approval acknowledgements also arrive.
       pendingRequests +
-        [...this.pending.values()].filter(
-          (item) => item.lane === "cancel" || item.lane === "approval",
-        ).length +
+        [
+          ...this.pending.values(),
+        ].filter((item) => item.lane === "cancel" || item.lane === "approval")
+          .length +
         count <=
         API_LIMITS.maxPending
     );
@@ -349,14 +613,18 @@ export class Channel {
   async drain() {
     const deadline = Date.now() + 10000;
     while (this.pending.size) {
-      if (Date.now() > deadline) throw new Error("Worker channel drain timed out");
+      if (Date.now() > deadline) {
+        throw new Error("Worker channel drain timed out");
+      }
       await Bun.sleep(1);
     }
   }
   close() {
     this.closed = true;
     this.port.off("message", this.accept);
-    for (const pending of this.pending.values()) pending.reject(new Error("Worker channel closed"));
+    for (const pending of this.pending.values()) {
+      pending.reject(new Error("Worker channel closed"));
+    }
     this.pending.clear();
   }
 }

@@ -20,12 +20,16 @@ export async function assertAppDefinitionExport(source: string): Promise<void> {
           ? "ts"
           : "js";
   try {
-    const { exports } = new Bun.Transpiler({ loader }).scan(await Bun.file(source).text());
+    const { exports } = new Bun.Transpiler({
+      loader,
+    }).scan(await Bun.file(source).text());
     if (!exports.includes("default")) {
       throw new Error("build.app must default-export an AppDefinition.");
     }
   } catch (error) {
-    throw new Error(`Bundle failed: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(
+      `Bundle failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }
 
@@ -40,14 +44,18 @@ export async function sdkPlugin(
     version: string;
   };
   const entries = new Map<string, string>();
-  const nativePlugins = plugins ?? (await installedPlugins(project, release.version));
+  const nativePlugins =
+    plugins ?? (await installedPlugins(project, release.version));
   const checked = new Map<string, Promise<boolean>>();
   for (const name of Object.values(release.packages)) {
-    if (name !== "@bunaway/cli")
+    if (name !== "@bunaway/cli") {
       entries.set(
         name,
-        await realpath(resolve(await installedPackageRoot(root, name), "src/index.ts")),
+        await realpath(
+          resolve(await installedPackageRoot(root, name), "src/index.ts"),
+        ),
       );
+    }
   }
   async function check(name: string, parent: string): Promise<string> {
     const expected = entries.get(name);
@@ -56,7 +64,10 @@ export async function sdkPlugin(
       if (expected && relative(expected, path) === "") {
         return path;
       }
-      if (expected && path === resolve(dirname(dirname(path)), "src/index.ts")) {
+      if (
+        expected &&
+        path === resolve(dirname(dirname(path)), "src/index.ts")
+      ) {
         // Bun can install identical local tarballs twice when direct dependencies
         // use relative paths and the CLI uses absolute paths. Compare the entire
         // package before routing both imports to one SDK to preserve class identity.
@@ -66,56 +77,91 @@ export async function sdkPlugin(
           identical = (async () => {
             const expectedRoot = dirname(dirname(expected));
             const actualRoot = dirname(dirname(path));
-            const expectedFiles = await files(expectedRoot, ["node_modules"]);
-            const actualFiles = await files(actualRoot, ["node_modules"]);
-            const names = expectedFiles.map((file) => relative(expectedRoot, file)).sort();
-            const actualNames = actualFiles.map((file) => relative(actualRoot, file)).sort();
-            if (JSON.stringify(names) !== JSON.stringify(actualNames)) return false;
-            for (const file of names)
+            const expectedFiles = await files(expectedRoot, [
+              "node_modules",
+            ]);
+            const actualFiles = await files(actualRoot, [
+              "node_modules",
+            ]);
+            const names = expectedFiles
+              .map((file) => relative(expectedRoot, file))
+              .sort();
+            const actualNames = actualFiles
+              .map((file) => relative(actualRoot, file))
+              .sort();
+            if (JSON.stringify(names) !== JSON.stringify(actualNames)) {
+              return false;
+            }
+            for (const file of names) {
               if (
                 (await hash(resolve(expectedRoot, file))) !==
                 (await hash(resolve(actualRoot, file)))
-              )
+              ) {
                 return false;
+              }
+            }
             return true;
           })();
           checked.set(key, identical);
         }
-        if (await identical) return expected;
+        if (await identical) {
+          return expected;
+        }
       }
     } catch {}
     throw new Error(
       `Incompatible SDK resolution: ${name} from ${parent}; run bun install to restore the matching installed SDK packages.`,
     );
   }
-  for (const { name, parent } of references) await check(name, parent);
+  for (const { name, parent } of references) {
+    await check(name, parent);
+  }
   return {
     name: "pinned-bunaway-sdk",
     setup(build) {
       // Native sources use relative imports inside the CLI artifact. Resolve
       // those entries to the installed SDK too, preserving class identity.
-      build.onResolve({ filter: /packages\/[a-z-]+\/src\/index\.ts$/ }, ({ path, importer }) => {
-        for (const [directory, name] of Object.entries(release.packages)) {
-          if (
-            resolve(dirname(importer), path) === resolve(root, `packages/${directory}/src/index.ts`)
-          ) {
-            const entry = entries.get(name);
-            if (entry) return { path: entry };
+      build.onResolve(
+        {
+          filter: /packages\/[a-z-]+\/src\/index\.ts$/,
+        },
+        ({ path, importer }) => {
+          for (const [directory, name] of Object.entries(release.packages)) {
+            if (
+              resolve(dirname(importer), path) ===
+              resolve(root, `packages/${directory}/src/index.ts`)
+            ) {
+              const entry = entries.get(name);
+              if (entry) {
+                return {
+                  path: entry,
+                };
+              }
+            }
           }
-        }
-        return undefined;
-      });
-      build.onResolve({ filter: /^@bunaway\// }, async ({ path, importer }) => {
-        // Let Bun resolve plugin exports and target conditions. Only common SDKs
-        // need routing to one installation to preserve their runtime identity.
-        if (
-          nativePlugins.some(
-            ({ packageName }) => path === packageName || path.startsWith(`${packageName}/`),
-          )
-        )
           return undefined;
-        return { path: await check(path, importer || project) };
-      });
+        },
+      );
+      build.onResolve(
+        {
+          filter: /^@bunaway\//,
+        },
+        async ({ path, importer }) => {
+          // Let Bun resolve plugin exports and target conditions. Only common SDKs
+          // need routing to one installation to preserve their runtime identity.
+          if (
+            nativePlugins.some(
+              ({ packageName }) =>
+                path === packageName || path.startsWith(`${packageName}/`),
+            )
+          ) {
+            return undefined;
+          }
+          return {
+            path: await check(path, importer || project),
+          };
+        },
+      );
     },
   };
 }
@@ -131,15 +177,29 @@ export async function validateSdkGraph(
   for (const source of sources) {
     const frontend = (await lstat(source)).isDirectory();
     const entrypoints = frontend
-      ? (await files(source)).filter((path) => /\.(ts|js)$/.test(path) && !path.endsWith(".d.ts"))
-      : [source];
-    if (!entrypoints.length) continue;
-    if (!frontend) await assertAppDefinitionExport(source);
+      ? (await files(source)).filter(
+          (path) => /\.(ts|js)$/.test(path) && !path.endsWith(".d.ts"),
+        )
+      : [
+          source,
+        ];
+    if (!entrypoints.length) {
+      continue;
+    }
+    if (!frontend) {
+      await assertAppDefinitionExport(source);
+    }
     await buildWithSdk(
       {
         entrypoints,
         metafile: !frontend,
-        ...(frontend ? { root: source } : { packages: "bundle" as const }),
+        ...(frontend
+          ? {
+              root: source,
+            }
+          : {
+              packages: "bundle" as const,
+            }),
         target: frontend ? "browser" : "bun",
         splitting: false,
       },
@@ -147,13 +207,16 @@ export async function validateSdkGraph(
       (metadata) => {
         for (const name of Object.keys(metadata?.inputs ?? {})) {
           const path = resolve(project, name);
-          if (inside(project, path))
+          if (inside(project, path)) {
             dependencies.add(relative(project, path).replaceAll("\\", "/"));
+          }
         }
       },
     );
   }
-  return [...dependencies].sort();
+  return [
+    ...dependencies,
+  ].sort();
 }
 
 export async function buildWithSdk(
@@ -162,12 +225,24 @@ export async function buildWithSdk(
   onMetadata?: (metadata: Bun.BuildMetafile | undefined) => void,
 ): Promise<Bun.BuildArtifact[]> {
   try {
-    const result = await Bun.build({ ...options, plugins: [plugin] });
-    if (!result.success) throw new Error(result.logs.map(String).join("\n"));
+    const result = await Bun.build({
+      ...options,
+      plugins: [
+        plugin,
+      ],
+    });
+    if (!result.success) {
+      throw new Error(result.logs.map(String).join("\n"));
+    }
     onMetadata?.(result.metafile);
     return result.outputs;
   } catch (error) {
-    const errors = error instanceof AggregateError ? error.errors : [error];
+    const errors =
+      error instanceof AggregateError
+        ? error.errors
+        : [
+            error,
+          ];
     throw new Error(`Bundle failed:\n${errors.map(String).join("\n")}`);
   }
 }

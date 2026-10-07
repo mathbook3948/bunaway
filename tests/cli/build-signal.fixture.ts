@@ -5,7 +5,10 @@ const [project, signal] = process.argv.slice(2);
 if (!project || (signal !== "SIGINT" && signal !== "SIGTERM")) {
   throw new Error("Expected project and build signal.");
 }
-const initial = [process.listenerCount("SIGINT"), process.listenerCount("SIGTERM")];
+const initial = [
+  process.listenerCount("SIGINT"),
+  process.listenerCount("SIGTERM"),
+];
 // Windows process.kill terminates a process instead of delivering a console
 // event. Emit the same Node signal event there; POSIX tests send a real signal.
 const timer =
@@ -26,7 +29,12 @@ try {
 } finally {
   clearInterval(timer);
 }
-if (initial.some((count, index) => count !== process.listenerCount(index ? "SIGTERM" : "SIGINT"))) {
+if (
+  initial.some(
+    (count, index) =>
+      count !== process.listenerCount(index ? "SIGTERM" : "SIGINT"),
+  )
+) {
   throw new Error("Build left signal handlers registered.");
 }
 console.log("PASS build signal handler cleanup");

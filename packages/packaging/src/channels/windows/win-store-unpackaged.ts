@@ -1,5 +1,9 @@
 import { join, relative } from "node:path";
-import type { AdapterInput, AdapterStage, PackageAdapter } from "../../contract.ts";
+import type {
+  AdapterInput,
+  AdapterStage,
+  PackageAdapter,
+} from "../../contract.ts";
 import { installerStages } from "./installer.ts";
 
 // win-store-unpackaged: Microsoft Store submission as a classic EXE/MSI

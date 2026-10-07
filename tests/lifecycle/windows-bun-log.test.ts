@@ -10,18 +10,31 @@ test("Windows diagnostic writes recover after a failed command error log", async
   const log = new DiagnosticLog(path);
   try {
     await mkdir(path);
-    await expect(log.write("command-failed", { command: "notes.read" })).rejects.toThrow();
+    await expect(
+      log.write("command-failed", {
+        command: "notes.read",
+      }),
+    ).rejects.toThrow();
     await log.drain();
     await rmdir(path);
-    await Promise.all([log.write("renderer-ready"), log.write("host-stopped")]);
+    await Promise.all([
+      log.write("renderer-ready"),
+      log.write("host-stopped"),
+    ]);
     await log.drain();
     const records = (await Bun.file(path).text())
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line));
-    expect(records.map((record) => record.event)).toEqual(["renderer-ready", "host-stopped"]);
+    expect(records.map((record) => record.event)).toEqual([
+      "renderer-ready",
+      "host-stopped",
+    ]);
   } finally {
     await log.drain().catch(() => {});
-    await rm(home, { recursive: true, force: true });
+    await rm(home, {
+      recursive: true,
+      force: true,
+    });
   }
 });

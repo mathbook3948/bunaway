@@ -6,13 +6,20 @@ export type Dispose = () => void;
 export type AsyncDispose = () => Promise<void>;
 export type ClientMessage = Extract<
   Message,
-  { kind: "hello" | "invoke" | "cancel" | "listen" | "unlisten" }
+  {
+    kind: "hello" | "invoke" | "cancel" | "listen" | "unlisten";
+  }
 >;
 export type ServerMessage = Extract<
   Message,
-  { kind: "hello" | "result" | "error" | "event" | "subscription-error" }
+  {
+    kind: "hello" | "result" | "error" | "event" | "subscription-error";
+  }
 >;
-export type NegotiatedProtocol = Pick<Hello, "protocol" | "features" | "buildId">;
+export type NegotiatedProtocol = Pick<
+  Hello,
+  "protocol" | "features" | "buildId"
+>;
 export type RuntimeIdentity = ProcessFrame["runtime"];
 
 // Structural subset of the standard AbortSignal; portable packages need no DOM globals.
@@ -28,8 +35,14 @@ export interface CancellationController {
 }
 
 export type TransportEvent =
-  | { kind: "message"; text: string }
-  | { kind: "closed"; error?: WireError };
+  | {
+      kind: "message";
+      text: string;
+    }
+  | {
+      kind: "closed";
+      error?: WireError;
+    };
 
 export interface Transport {
   // FIFO acceptance, not request completion. Queue overflow rejects with BUSY.
@@ -40,7 +53,10 @@ export interface Transport {
   close(): Promise<void>;
 }
 
-export type CommandContract = { input: JsonValue; output: JsonValue };
+export type CommandContract = {
+  input: JsonValue;
+  output: JsonValue;
+};
 export type CommandMap = Record<string, CommandContract>;
 export type EventMap = Record<string, JsonValue>;
 
@@ -55,7 +71,9 @@ export const API_LIMITS = {
 
 // A typing boundary, not a security token. Only the trusted runtime brands host-issued IDs.
 declare const hostContext: unique symbol;
-export type HostContext = string & { readonly [hostContext]: true };
+export type HostContext = string & {
+  readonly [hostContext]: true;
+};
 
 export class BunawayError extends Error {
   readonly code: WireError["code"];
@@ -66,6 +84,8 @@ export class BunawayError extends Error {
     super(safe.message);
     this.name = "BunawayError";
     this.code = safe.code;
-    if (safe.details !== undefined) this.details = safe.details;
+    if (safe.details !== undefined) {
+      this.details = safe.details;
+    }
   }
 }

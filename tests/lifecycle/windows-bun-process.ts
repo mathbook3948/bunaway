@@ -4,7 +4,9 @@ import { validateValue } from "../../packages/protocol/src/index.ts";
 
 if (process.argv.includes("--validate")) {
   for await (const line of console) {
-    if (!line.trim()) continue;
+    if (!line.trim()) {
+      continue;
+    }
     const { schema, value } = JSON.parse(line);
     let accepted = true;
     try {
@@ -17,9 +19,27 @@ if (process.argv.includes("--validate")) {
 } else {
   assert(process.argv.includes("--watch"));
   const api = dlopen("kernel32.dll", {
-    OpenProcess: { args: ["u32", "i32", "u32"], returns: "u64" },
-    WaitForSingleObject: { args: ["u64", "u32"], returns: "u32" },
-    CloseHandle: { args: ["u64"], returns: "i32" },
+    OpenProcess: {
+      args: [
+        "u32",
+        "i32",
+        "u32",
+      ],
+      returns: "u64",
+    },
+    WaitForSingleObject: {
+      args: [
+        "u64",
+        "u32",
+      ],
+      returns: "u32",
+    },
+    CloseHandle: {
+      args: [
+        "u64",
+      ],
+      returns: "i32",
+    },
   });
   const handles = process.argv
     .slice(process.argv.indexOf("--watch") + 1)
@@ -28,13 +48,21 @@ if (process.argv.includes("--validate")) {
   try {
     console.log("watch-ready");
     const deadline = Date.now() + 60000;
-    while (handles.some((handle) => api.symbols.WaitForSingleObject(handle, 0) === 258)) {
+    while (
+      handles.some(
+        (handle) => api.symbols.WaitForSingleObject(handle, 0) === 258,
+      )
+    ) {
       assert(Date.now() < deadline, "Process handle exit timeout");
       await Bun.sleep(10);
     }
-    for (const handle of handles) assert.equal(api.symbols.WaitForSingleObject(handle, 0), 0);
+    for (const handle of handles) {
+      assert.equal(api.symbols.WaitForSingleObject(handle, 0), 0);
+    }
   } finally {
-    for (const handle of handles) assert(api.symbols.CloseHandle(handle));
+    for (const handle of handles) {
+      assert(api.symbols.CloseHandle(handle));
+    }
     api.close();
   }
 }

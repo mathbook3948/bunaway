@@ -6,7 +6,12 @@ import type {
   PermissionContract,
 } from "./host-api.ts";
 import { policySchema } from "./schema.ts";
-import { type Infer, type JsonValue, type Schema, validate } from "./validation.ts";
+import {
+  type Infer,
+  type JsonValue,
+  type Schema,
+  validate,
+} from "./validation.ts";
 
 export type NativeRegistration = {
   readonly name: string;
@@ -17,11 +22,18 @@ export type NativeRegistryOptions = {
   /** `runtime` enforces the aggregate active-plugin limits; `catalog` validates installed plugins. */
   readonly mode?: "runtime" | "catalog";
 };
-export type PermissionMatcher = (permission: string, input: JsonValue, scope: JsonValue) => boolean;
+export type PermissionMatcher = (
+  permission: string,
+  input: JsonValue,
+  scope: JsonValue,
+) => boolean;
 type HostPermissions = Infer<typeof policySchema>["backend"];
 
 function fail(message: string): never {
-  throw new BunawayError({ code: "INVALID_ARGUMENT", message });
+  throw new BunawayError({
+    code: "INVALID_ARGUMENT",
+    message,
+  });
 }
 
 // Reject unsupported schema keywords at registration rather than silently ignoring them.
@@ -49,43 +61,87 @@ function checkSchema(schema: Schema): void {
     typeof schema !== "object" ||
     Array.isArray(schema) ||
     Object.keys(schema).some((key) => !fields.has(key))
-  )
+  ) {
     fail("Invalid plugin schema.");
+  }
   if (
     schema.type !== undefined &&
-    !["object", "array", "string", "integer", "boolean"].includes(schema.type)
-  )
+    ![
+      "object",
+      "array",
+      "string",
+      "integer",
+      "boolean",
+    ].includes(schema.type)
+  ) {
     fail("Invalid plugin schema type.");
+  }
   if (
     schema.const !== undefined &&
     schema.const !== null &&
-    !["string", "number", "boolean"].includes(typeof schema.const)
-  )
+    ![
+      "string",
+      "number",
+      "boolean",
+    ].includes(typeof schema.const)
+  ) {
     fail("Invalid plugin schema constant.");
-  if (schema.$schema !== undefined && typeof schema.$schema !== "string")
+  }
+  if (schema.$schema !== undefined && typeof schema.$schema !== "string") {
     fail("Invalid plugin schema identifier.");
+  }
   if (
     schema.items !== undefined &&
-    (!schema.items || typeof schema.items !== "object" || Array.isArray(schema.items))
-  )
+    (!schema.items ||
+      typeof schema.items !== "object" ||
+      Array.isArray(schema.items))
+  ) {
     fail("Invalid plugin item schema.");
-  if (schema.additionalProperties !== undefined && schema.additionalProperties !== false)
+  }
+  if (
+    schema.additionalProperties !== undefined &&
+    schema.additionalProperties !== false
+  ) {
     fail("Invalid plugin object schema.");
-  for (const list of [schema.enum, schema.required])
+  }
+  for (const list of [
+    schema.enum,
+    schema.required,
+  ]) {
     if (
       list !== undefined &&
       (!Array.isArray(list) || list.some((value) => typeof value !== "string"))
-    )
+    ) {
       fail("Invalid plugin schema list.");
-  for (const count of [schema.minItems, schema.maxItems, schema.maxLength])
-    if (count !== undefined && (!Number.isSafeInteger(count) || count < 0))
+    }
+  }
+  for (const count of [
+    schema.minItems,
+    schema.maxItems,
+    schema.maxLength,
+  ]) {
+    if (count !== undefined && (!Number.isSafeInteger(count) || count < 0)) {
       fail("Invalid plugin schema limit.");
-  for (const number of [schema.minimum, schema.maximum])
-    if (number !== undefined && typeof number !== "number") fail("Invalid plugin schema bound.");
-  if (schema.uniqueItems !== undefined && typeof schema.uniqueItems !== "boolean")
+    }
+  }
+  for (const number of [
+    schema.minimum,
+    schema.maximum,
+  ]) {
+    if (number !== undefined && typeof number !== "number") {
+      fail("Invalid plugin schema bound.");
+    }
+  }
+  if (
+    schema.uniqueItems !== undefined &&
+    typeof schema.uniqueItems !== "boolean"
+  ) {
     fail("Invalid plugin schema uniqueness.");
+  }
   if (schema.pattern !== undefined) {
-    if (typeof schema.pattern !== "string") fail("Invalid plugin schema pattern.");
+    if (typeof schema.pattern !== "string") {
+      fail("Invalid plugin schema pattern.");
+    }
     try {
       new RegExp(schema.pattern, "u");
     } catch {
@@ -97,16 +153,26 @@ function checkSchema(schema: Schema): void {
     (!schema.properties ||
       typeof schema.properties !== "object" ||
       Array.isArray(schema.properties))
-  )
+  ) {
     fail("Invalid plugin schema properties.");
-  if (schema.anyOf !== undefined && (!Array.isArray(schema.anyOf) || !schema.anyOf.length))
+  }
+  if (
+    schema.anyOf !== undefined &&
+    (!Array.isArray(schema.anyOf) || !schema.anyOf.length)
+  ) {
     fail("Invalid plugin schema alternatives.");
+  }
   for (const child of [
     ...Object.values(schema.properties ?? {}),
     ...(schema.anyOf ?? []),
-    ...(schema.items ? [schema.items] : []),
-  ])
+    ...(schema.items
+      ? [
+          schema.items,
+        ]
+      : []),
+  ]) {
     checkSchema(child);
+  }
 }
 
 export class NativeRegistry {
@@ -114,9 +180,14 @@ export class NativeRegistry {
   readonly permissions = new Map<string, PermissionContract>();
   readonly plugins = new Set<string>();
 
-  constructor(plugins: readonly NativeRegistration[], options: NativeRegistryOptions = {}) {
+  constructor(
+    plugins: readonly NativeRegistration[],
+    options: NativeRegistryOptions = {},
+  ) {
     const mode = options.mode ?? "runtime";
-    if (mode !== "runtime" && mode !== "catalog") fail("Invalid plugin registry mode.");
+    if (mode !== "runtime" && mode !== "catalog") {
+      fail("Invalid plugin registry mode.");
+    }
     for (const plugin of plugins) {
       if (
         !/^[A-Za-z0-9_.:-]{1,128}$/.test(plugin.name) ||
@@ -124,11 +195,16 @@ export class NativeRegistry {
         this.plugins.has(plugin.name) ||
         typeof plugin.version !== "string" ||
         !plugin.version
-      )
+      ) {
         fail("Invalid or duplicate plugin name.");
+      }
       this.plugins.add(plugin.name);
-      if (!plugin.native) continue;
-      if (!/^[A-Za-z0-9_-]{1,64}$/.test(plugin.name)) fail("Invalid native plugin name.");
+      if (!plugin.native) {
+        continue;
+      }
+      if (!/^[A-Za-z0-9_-]{1,64}$/.test(plugin.name)) {
+        fail("Invalid native plugin name.");
+      }
       // Copy the contracts once: caller mutations cannot change registered validation.
       const native = validate(
         {
@@ -140,13 +216,28 @@ export class NativeRegistry {
               items: {
                 type: "object",
                 properties: {
-                  name: { type: "string" },
-                  permission: { type: "string" },
-                  input: { type: "object" },
-                  output: { type: "object" },
-                  osPermission: { const: "not-required" },
+                  name: {
+                    type: "string",
+                  },
+                  permission: {
+                    type: "string",
+                  },
+                  input: {
+                    type: "object",
+                  },
+                  output: {
+                    type: "object",
+                  },
+                  osPermission: {
+                    const: "not-required",
+                  },
                 },
-                required: ["name", "permission", "input", "output"],
+                required: [
+                  "name",
+                  "permission",
+                  "input",
+                  "output",
+                ],
                 additionalProperties: false,
               },
             },
@@ -155,13 +246,25 @@ export class NativeRegistry {
               maxItems: 256,
               items: {
                 type: "object",
-                properties: { name: { type: "string" }, scope: { type: "object" } },
-                required: ["name"],
+                properties: {
+                  name: {
+                    type: "string",
+                  },
+                  scope: {
+                    type: "object",
+                  },
+                },
+                required: [
+                  "name",
+                ],
                 additionalProperties: false,
               },
             },
           },
-          required: ["operations", "permissions"],
+          required: [
+            "operations",
+            "permissions",
+          ],
           additionalProperties: false,
         },
         plugin.native,
@@ -171,32 +274,46 @@ export class NativeRegistry {
           !permission.name.startsWith(`${plugin.name}:`) ||
           !/^[A-Za-z0-9_.:-]{1,128}$/.test(permission.name) ||
           this.permissions.has(permission.name)
-        )
+        ) {
           fail("Invalid or duplicate plugin permission.");
+        }
         this.permissions.set(permission.name, permission);
-        if (permission.scope) checkSchema(permission.scope);
+        if (permission.scope) {
+          checkSchema(permission.scope);
+        }
       }
       for (const operation of native.operations) {
         if (
           !operation.name.startsWith(`${plugin.name}.`) ||
           !/^[A-Za-z0-9_.:-]{1,121}$/.test(operation.name) ||
           this.operations.has(operation.name) ||
-          !native.permissions.some((permission) => permission.name === operation.permission)
-        )
+          !native.permissions.some(
+            (permission) => permission.name === operation.permission,
+          )
+        ) {
           fail("Invalid or duplicate plugin operation.");
+        }
         this.operations.set(operation.name, operation);
         checkSchema(operation.input);
         checkSchema(operation.output);
       }
     }
-    if (mode === "runtime" && (this.operations.size > 256 || this.permissions.size > 256))
+    if (
+      mode === "runtime" &&
+      (this.operations.size > 256 || this.permissions.size > 256)
+    ) {
       fail("Plugin contract limit reached.");
+    }
   }
 
   operation(name: string): HostOperationContract {
     const operation = this.operations.get(name);
-    if (!operation)
-      throw new BunawayError({ code: "UNSUPPORTED", message: "Host operation is not registered." });
+    if (!operation) {
+      throw new BunawayError({
+        code: "UNSUPPORTED",
+        message: "Host operation is not registered.",
+      });
+    }
     return operation;
   }
 
@@ -214,19 +331,31 @@ export class NativeRegistry {
   validatePolicy(policy: Infer<typeof policySchema>): void {
     validate(policySchema, policy);
     const viewIds = new Set(policy.views.map((view) => view.id));
-    for (const source of [policy.backend, ...policy.views.map((view) => view.host)]) {
-      if (source.windows?.some((view) => !viewIds.has(view)))
+    for (const source of [
+      policy.backend,
+      ...policy.views.map((view) => view.host),
+    ]) {
+      if (source.windows?.some((view) => !viewIds.has(view))) {
         fail("Policy references an unknown window.");
+      }
       for (const grant of source.permissions) {
         const permission = this.permissions.get(
           typeof grant === "string" ? grant : grant.identifier,
         );
-        if (!permission) fail("Policy references an unregistered permission.");
+        if (!permission) {
+          fail("Policy references an unregistered permission.");
+        }
         if (typeof grant === "string") {
-          if (permission.scope) fail("Scoped permission requires explicit allow scopes.");
+          if (permission.scope) {
+            fail("Scoped permission requires explicit allow scopes.");
+          }
         } else if (permission.scope) {
-          for (const scope of [...(grant.allow ?? []), ...(grant.deny ?? [])])
+          for (const scope of [
+            ...(grant.allow ?? []),
+            ...(grant.deny ?? []),
+          ]) {
             validate(permission.scope, scope);
+          }
         } else if (grant.allow !== undefined || grant.deny !== undefined) {
           fail("Unscoped permission cannot specify allow or deny scopes.");
         }
@@ -234,21 +363,40 @@ export class NativeRegistry {
     }
   }
 
-  allowed(source: HostPermissions, call: HostCall, matches: PermissionMatcher): boolean {
+  allowed(
+    source: HostPermissions,
+    call: HostCall,
+    matches: PermissionMatcher,
+  ): boolean {
     const operation = this.operation(call.operation);
     const permission = this.permissions.get(operation.permission);
-    if (!permission) fail("Unregistered operation permission.");
+    if (!permission) {
+      fail("Unregistered operation permission.");
+    }
     let allowed = false;
     for (const grant of source.permissions) {
       if (typeof grant === "string") {
-        if (grant === operation.permission && !permission.scope) allowed = true;
+        if (grant === operation.permission && !permission.scope) {
+          allowed = true;
+        }
       } else if (grant.identifier === operation.permission) {
-        if (!permission.scope) allowed = true;
-        else {
-          if (grant.deny?.some((scope) => matches(operation.permission, call.payload, scope)))
+        if (!permission.scope) {
+          allowed = true;
+        } else {
+          if (
+            grant.deny?.some((scope) =>
+              matches(operation.permission, call.payload, scope),
+            )
+          ) {
             return false;
-          if (grant.allow?.some((scope) => matches(operation.permission, call.payload, scope)))
+          }
+          if (
+            grant.allow?.some((scope) =>
+              matches(operation.permission, call.payload, scope),
+            )
+          ) {
             allowed = true;
+          }
         }
       }
     }

@@ -861,7 +861,15 @@
         },
         "payload": {}
       },
-      "required": ["ipc", "runtime", "kind", "context", "requestId", "operation", "payload"],
+      "required": [
+        "ipc",
+        "runtime",
+        "kind",
+        "context",
+        "requestId",
+        "operation",
+        "payload"
+      ],
       "additionalProperties": false
     },
     {

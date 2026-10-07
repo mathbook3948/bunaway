@@ -19,7 +19,9 @@ export { BunawayError } from "@bunaway/protocol";
 export type { NativeInvokeOptions } from "#transport";
 
 const optionalField = Symbol("optional field");
-type OptionalField<S extends Schema> = { readonly [optionalField]: S };
+type OptionalField<S extends Schema> = {
+  readonly [optionalField]: S;
+};
 type Field = Schema | OptionalField<Schema>;
 type ObjectSchema<P extends Record<string, Field>> = {
   readonly type: "object";
@@ -45,35 +47,58 @@ export const s = Object.freeze({
     return {
       type: "object",
       properties: Object.fromEntries(
-        entries.map(([key, field]) => [key, optionalField in field ? field[optionalField] : field]),
+        entries.map(([key, field]) => [
+          key,
+          optionalField in field ? field[optionalField] : field,
+        ]),
       ),
-      required: entries.filter(([, field]) => !(optionalField in field)).map(([key]) => key),
+      required: entries
+        .filter(([, field]) => !(optionalField in field))
+        .map(([key]) => key),
       additionalProperties: false,
     } as unknown as ObjectSchema<P>;
   },
   optional<const S extends Schema>(schema: S): OptionalField<S> {
-    return { [optionalField]: schema };
+    return {
+      [optionalField]: schema,
+    };
   },
   string(options: Pick<Schema, "maxLength" | "pattern"> = {}) {
-    return { type: "string", ...options } as const;
+    return {
+      type: "string",
+      ...options,
+    } as const;
   },
   enum<const T extends readonly string[]>(values: T) {
-    return { enum: values };
+    return {
+      enum: values,
+    };
   },
   array<const S extends Schema>(
     items: S,
     options: Pick<Schema, "minItems" | "maxItems" | "uniqueItems"> = {},
   ) {
-    return { type: "array", items, ...options } as const;
+    return {
+      type: "array",
+      items,
+      ...options,
+    } as const;
   },
   integer(options: Pick<Schema, "minimum" | "maximum"> = {}) {
-    return { type: "integer", ...options } as const;
+    return {
+      type: "integer",
+      ...options,
+    } as const;
   },
   boolean() {
-    return { type: "boolean" } as const;
+    return {
+      type: "boolean",
+    } as const;
   },
   null() {
-    return { const: null } as const;
+    return {
+      const: null,
+    } as const;
   },
   json() {
     return {};
@@ -105,7 +130,9 @@ export type NativePluginDefinition = {
   readonly scopes?: Readonly<Record<string, Schema>>;
   readonly matches?: PermissionMatcher;
 };
-export type NativePluginAPI<O extends Record<string, NativeOperationDefinition>> = {
+export type NativePluginAPI<
+  O extends Record<string, NativeOperationDefinition>,
+> = {
   readonly [K in keyof O]: (
     input: Infer<O[K]["input"]>,
     options?: NativeInvokeOptions,
@@ -117,12 +144,17 @@ type NativeOperation<D extends NativePluginDefinition> = {
     readonly permission: `${D["name"]}:${D["operations"][K]["permission"]}`;
     readonly input: D["operations"][K]["input"];
     readonly output: D["operations"][K]["output"];
-    readonly osPermission?: Extract<D["operations"][K]["osPermission"], "not-required">;
+    readonly osPermission?: Extract<
+      D["operations"][K]["osPermission"],
+      "not-required"
+    >;
   };
 }[keyof D["operations"] & (string | number)];
 
 /** Declare operations once and create their environment-specific callers. */
-export function defineNativePlugin<const D extends NativePluginDefinition>(definition: D) {
+export function defineNativePlugin<const D extends NativePluginDefinition>(
+  definition: D,
+) {
   const { operations: definitions, scopes, ...metadata } = definition;
   const permissions = new Map<string, PermissionContract>();
   const operations = Object.entries(definitions).map(([key, operation]) => {
@@ -131,31 +163,60 @@ export function defineNativePlugin<const D extends NativePluginDefinition>(defin
       scopes && Object.hasOwn(scopes, operation.permission)
         ? scopes[operation.permission]
         : undefined;
-    permissions.set(permission, { name: permission, ...(scope === undefined ? {} : { scope }) });
-    return { ...operation, name: `${definition.name}.${key}`, permission };
+    permissions.set(permission, {
+      name: permission,
+      ...(scope === undefined
+        ? {}
+        : {
+            scope,
+          }),
+    });
+    return {
+      ...operation,
+      name: `${definition.name}.${key}`,
+      permission,
+    };
   }) as NativeOperation<D>[];
-  for (const key of Object.keys(scopes ?? {}))
-    if (!permissions.has(`${definition.name}:${key}`))
+  for (const key of Object.keys(scopes ?? {})) {
+    if (!permissions.has(`${definition.name}:${key}`)) {
       throw new Error("Plugin scope references an unused permission.");
+    }
+  }
   const registration = {
     ...metadata,
-    native: { operations, permissions: [...permissions.values()] },
+    native: {
+      operations,
+      permissions: [
+        ...permissions.values(),
+      ],
+    },
   };
-  const registry = new NativeRegistry([registration]);
+  const registry = new NativeRegistry([
+    registration,
+  ]);
   if (
     registration.native.permissions.some((permission) => permission.scope) &&
     typeof definition.matches !== "function"
-  )
+  ) {
     throw new Error("Scoped plugin permissions require matches.");
+  }
   const api = Object.fromEntries(
-    [...registry.operations.values()].map((operation) => [
+    [
+      ...registry.operations.values(),
+    ].map((operation) => [
       operation.name.slice(definition.name.length + 1),
-      async (input: Infer<typeof operation.input>, options?: NativeInvokeOptions) => {
+      async (
+        input: Infer<typeof operation.input>,
+        options?: NativeInvokeOptions,
+      ) => {
         // Declaration imports never initialize the backend or a WebView connection.
         const { call } = await import("#transport");
         return call(operation, input, options);
       },
     ]),
   ) as unknown as NativePluginAPI<D["operations"]>;
-  return { definition: Object.freeze(registration), api: Object.freeze(api) };
+  return {
+    definition: Object.freeze(registration),
+    api: Object.freeze(api),
+  };
 }

@@ -9,7 +9,10 @@ const client = createClient({
   transport: createWebViewTransport(window.chrome.webview),
   hello: {
     kind: "hello",
-    protocol: { major: 1, minor: 0 },
+    protocol: {
+      major: 1,
+      minor: 0,
+    },
     features: [],
     buildId: "macos-security-ui",
   },
@@ -18,9 +21,16 @@ const client = createClient({
 async function test(name, body) {
   try {
     await body();
-    results.push({ name, ok: true });
+    results.push({
+      name,
+      ok: true,
+    });
   } catch (error) {
-    results.push({ name, ok: false, error: String(error) });
+    results.push({
+      name,
+      ok: false,
+      error: String(error),
+    });
   }
 }
 
@@ -44,29 +54,45 @@ function loadElement(kind, url) {
 }
 
 await client.ready;
-for (const kind of ["script", "img", "fetch"]) {
-  for (const allowed of [true, false]) {
+for (const kind of [
+  "script",
+  "img",
+  "fetch",
+]) {
+  for (const allowed of [
+    true,
+    false,
+  ]) {
     await test(`${kind} ${allowed ? "allowed" : "blocked"} by destination origin`, async () => {
       const base = params.get(allowed ? "allowed" : "blocked");
       const url = `${base}/${kind}`;
       let loaded;
       if (kind === "fetch") {
         try {
-          const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+          const response = await fetch(url, {
+            signal: AbortSignal.timeout(5000),
+          });
           loaded = response.ok && (await response.text()) === "resource-ok";
         } catch (error) {
-          if (error.name === "TimeoutError") throw error;
+          if (error.name === "TimeoutError") {
+            throw error;
+          }
           loaded = false;
         }
       } else {
         loaded = await loadElement(kind, url);
       }
-      if (loaded !== allowed) throw new Error(`Unexpected load result: ${url}`);
+      if (loaded !== allowed) {
+        throw new Error(`Unexpected load result: ${url}`);
+      }
     });
   }
 }
 
 await client.invoke("test.report", {
   file: "security.json",
-  report: { page: "security", results },
+  report: {
+    page: "security",
+    results,
+  },
 });

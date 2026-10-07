@@ -28,11 +28,18 @@ export function bindHostAPI(
   registry: NativeRegistry,
 ): HostAPI {
   const checkCancelled = () => {
-    if (signal.aborted)
-      throw new BunawayError({ code: "CANCELLED", message: "Host operation cancelled." });
+    if (signal.aborted) {
+      throw new BunawayError({
+        code: "CANCELLED",
+        message: "Host operation cancelled.",
+      });
+    }
   };
 
-  function call<K extends HostOperation>(operation: K, input: HostInput<K>): Promise<HostOutput<K>>;
+  function call<K extends HostOperation>(
+    operation: K,
+    input: HostInput<K>,
+  ): Promise<HostOutput<K>>;
   function call<I extends Schema, O extends Schema>(
     contract: HostOperationContract<I, O>,
     input: Infer<I>,
@@ -48,18 +55,30 @@ export function bindHostAPI(
     let registeredOperation: HostOperationContract | undefined;
     if (windowCall) {
       try {
-        if (!isWindowOperation(operationOrContract)) throw new Error("Unknown window operation.");
+        if (!isWindowOperation(operationOrContract)) {
+          throw new Error("Unknown window operation.");
+        }
         operationName = operationOrContract;
         call = validateWindowCall({
           operation: operationName,
           payload: payload as HostCall["payload"],
         });
       } catch {
-        throw new BunawayError({ code: "INVALID_ARGUMENT", message: "Invalid host request." });
+        throw new BunawayError({
+          code: "INVALID_ARGUMENT",
+          message: "Invalid host request.",
+        });
       }
     } else {
-      if (!operationOrContract || typeof operationOrContract.name !== "string")
-        throw new BunawayError({ code: "INVALID_ARGUMENT", message: "Invalid host contract." });
+      if (
+        !operationOrContract ||
+        typeof operationOrContract.name !== "string"
+      ) {
+        throw new BunawayError({
+          code: "INVALID_ARGUMENT",
+          message: "Invalid host contract.",
+        });
+      }
       // Preserve UNSUPPORTED for operations absent from the installed registry.
       registeredOperation = registry.operation(operationOrContract.name);
       operationName = registeredOperation.name;
@@ -72,7 +91,10 @@ export function bindHostAPI(
           }),
         );
       } catch {
-        throw new BunawayError({ code: "INVALID_ARGUMENT", message: "Invalid host request." });
+        throw new BunawayError({
+          code: "INVALID_ARGUMENT",
+          message: "Invalid host request.",
+        });
       }
     }
 
@@ -80,7 +102,12 @@ export function bindHostAPI(
     let onAbort = () => {};
     const aborted = new Promise<never>((_, reject) => {
       onAbort = () =>
-        reject(new BunawayError({ code: "CANCELLED", message: "Host operation cancelled." }));
+        reject(
+          new BunawayError({
+            code: "CANCELLED",
+            message: "Host operation cancelled.",
+          }),
+        );
       signal.addEventListener("abort", onAbort);
     });
     try {
@@ -96,21 +123,33 @@ export function bindHostAPI(
       );
     } catch (cause) {
       checkCancelled();
-      if (cause instanceof BunawayError) throw cause;
-      throw new BunawayError({ code: "INTERNAL", message: "Host operation failed." });
+      if (cause instanceof BunawayError) {
+        throw cause;
+      }
+      throw new BunawayError({
+        code: "INTERNAL",
+        message: "Host operation failed.",
+      });
     } finally {
       signal.removeEventListener("abort", onAbort);
     }
     checkCancelled();
-    if (response.kind === "error") throw new BunawayError(response.error);
+    if (response.kind === "error") {
+      throw new BunawayError(response.error);
+    }
     try {
       return windowCall
         ? validateHostOutput(operationName as HostOperation, response.payload)
         : registry.validateOutput(operationName, response.payload);
     } catch {
-      throw new BunawayError({ code: "INTERNAL", message: "Invalid host response." });
+      throw new BunawayError({
+        code: "INTERNAL",
+        message: "Invalid host response.",
+      });
     }
   }
 
-  return { call };
+  return {
+    call,
+  };
 }

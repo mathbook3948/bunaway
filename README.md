@@ -102,6 +102,14 @@ UI 컴포넌트가 사라지면 `client.listen`이 반환한 `unlisten`으로 �
 
 저장소 검사 명령은 mise에서 관리한다. 루트의 `bun run framework:pack`과
 `bun run framework:check <추출한 package 경로>`는 개발자 설치 artifact를 검증한다.
+
+코드 포맷은 루트 `biome.json`을 따른다. 들여쓰기는 공백 2칸, 줄 너비는 80이며
+JS/TS 객체와 배열은 여러 줄로 펼친다. JSX 속성도 여러 줄로 배치한다.
+조건문과 반복문에는 본문이 한 문장이어도 중괄호를 쓴다.
+초기화, 검증, 실행, 정리처럼 역할이 바뀌는 지점에는 빈 줄을 한 줄 둔다.
+Biome은 이 빈 줄을 자동으로 추가하지 않으므로 작성과 리뷰 때 구분한다.
+수정한 코드는 `mise run format`을 실행한 뒤 `mise run check`로 검증한다.
+
 생성 앱의 `bun run dev`, `bun run build`는 기존 SDK/네이티브 빌드를 재사용한다.
 선택적 `dev.command`, `dev.url`로 [외부 Vite, Next.js UI 개발 서버](./docs/development-server.md)를
 연결하면 UI 갱신은 해당 서버에 맡기고 CLI는 서버 수명주기와 백엔드 재시작을 관리한다.

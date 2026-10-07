@@ -23,7 +23,14 @@ export interface StateStore {
   delete(key: string): boolean;
 }
 
-export type EventTarget = { kind: "broadcast" } | { kind: "view"; viewId: string };
+export type EventTarget =
+  | {
+      kind: "broadcast";
+    }
+  | {
+      kind: "view";
+      viewId: string;
+    };
 export interface EventEmitter {
   emit(event: string, payload: JsonValue, target: EventTarget): Promise<void>;
 }
@@ -35,7 +42,10 @@ export type CommandContext = {
   readonly events: EventEmitter;
 };
 
-export type CommandDefinition<I extends Schema = Schema, O extends Schema = Schema> = {
+export type CommandDefinition<
+  I extends Schema = Schema,
+  O extends Schema = Schema,
+> = {
   readonly input: I;
   readonly output: O;
   run(payload: unknown, context: CommandContext): Promise<JsonValue>;
@@ -50,14 +60,23 @@ export type PluginDefinition = {
   readonly dependencies?: readonly string[];
   readonly platforms?: readonly Platform[];
   readonly requiredPermissions?: readonly string[];
-  readonly requiredHost?: { readonly windows?: readonly string[] };
+  readonly requiredHost?: {
+    readonly windows?: readonly string[];
+  };
   readonly native?: NativePluginContract;
   readonly commands?: CommandRegistry;
   readonly events?: EventRegistry;
-  setup?(context: CommandContext): void | StopHook | Promise<StopHook | undefined> | Promise<void>;
+  setup?(
+    context: CommandContext,
+  ): void | StopHook | Promise<StopHook | undefined> | Promise<void>;
 };
 
-export type { DesktopContext, DesktopOptions, OpenRequest, QuitReason } from "./desktop.ts";
+export type {
+  DesktopContext,
+  DesktopOptions,
+  OpenRequest,
+  QuitReason,
+} from "./desktop.ts";
 
 export type AppDefinition = {
   readonly commands: CommandRegistry;
@@ -73,7 +92,9 @@ export type CommandsOf<A extends AppDefinition> = {
     output: Infer<A["commands"][K]["output"]>;
   };
 };
-export type EventsOf<A extends AppDefinition> = { [K in keyof A["events"]]: Infer<A["events"][K]> };
+export type EventsOf<A extends AppDefinition> = {
+  [K in keyof A["events"]]: Infer<A["events"][K]>;
+};
 
 // UTC at the wire boundary; schedule uses a monotonic clock in each runtime adapter.
 export interface RuntimeServices {
@@ -90,10 +111,18 @@ export type CoreServices = {
   readonly runtime: RuntimeServices;
   // Trusted diagnostics only. Never include the cause in a WebView response.
   onCommandError?(command: string, cause: unknown): void | Promise<void>;
-  onPluginError?(plugin: string, phase: "setup" | "stop", cause: unknown): void | Promise<void>;
+  onPluginError?(
+    plugin: string,
+    phase: "setup" | "stop",
+    cause: unknown,
+  ): void | Promise<void>;
   // The adapter closes the transport and bound session(s) on terminal send failure.
   send(context: HostContext, message: ServerMessage): Promise<void>;
-  callHost(context: HostContext, call: HostCall, signal: CancellationSignal): Promise<HostResponse>;
+  callHost(
+    context: HostContext,
+    call: HostCall,
+    signal: CancellationSignal,
+  ): Promise<HostResponse>;
 };
 
 export interface CoreSession {
@@ -109,7 +138,10 @@ export interface Core {
 }
 
 // Resolves after registration and plugin setup; runtime ready must wait for this.
-export type CoreFactory = (app: AppDefinition, services: CoreServices) => Promise<Core>;
+export type CoreFactory = (
+  app: AppDefinition,
+  services: CoreServices,
+) => Promise<Core>;
 
 export { createCore } from "./create-core.ts";
 

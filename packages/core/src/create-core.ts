@@ -38,10 +38,15 @@ import { bindHostAPI } from "./host-api.ts";
 const NAME_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
 
 function fail(code: WireError["code"], message: string): never {
-  throw new BunawayError({ code, message });
+  throw new BunawayError({
+    code,
+    message,
+  });
 }
 
-function reportDiagnostic(report: () => void | Promise<void> | undefined): void {
+function reportDiagnostic(
+  report: () => void | Promise<void> | undefined,
+): void {
   try {
     void Promise.resolve(report()).catch(() => {});
   } catch {
@@ -49,11 +54,20 @@ function reportDiagnostic(report: () => void | Promise<void> | undefined): void 
   }
 }
 
-function checkRegistrationName(name: string, kind: "command" | "event", owner: string): void {
-  if (!NAME_PATTERN.test(name))
+function checkRegistrationName(
+  name: string,
+  kind: "command" | "event",
+  owner: string,
+): void {
+  if (!NAME_PATTERN.test(name)) {
     fail("INVALID_ARGUMENT", `${owner} registered an invalid ${kind} name.`);
-  if (kind === "command" && name.startsWith("plugin."))
-    fail("INVALID_ARGUMENT", `${owner} cannot register the reserved plugin namespace command.`);
+  }
+  if (kind === "command" && name.startsWith("plugin.")) {
+    fail(
+      "INVALID_ARGUMENT",
+      `${owner} cannot register the reserved plugin namespace command.`,
+    );
+  }
 }
 
 function registerAll<T>(
@@ -64,70 +78,101 @@ function registerAll<T>(
 ): void {
   for (const [name, definition] of Object.entries(entries)) {
     checkRegistrationName(name, kind, owner);
-    if (target.has(name)) fail("INVALID_ARGUMENT", `Duplicate ${kind} "${name}".`);
+    if (target.has(name)) {
+      fail("INVALID_ARGUMENT", `Duplicate ${kind} "${name}".`);
+    }
     target.set(name, definition);
   }
 }
 
 function coversHostPermissions(
   granted: Policy["backend"],
-  required: { readonly windows?: readonly string[] },
+  required: {
+    readonly windows?: readonly string[];
+  },
 ): boolean {
-  return (required.windows ?? []).every((view) => granted.windows?.includes(view));
+  return (required.windows ?? []).every((view) =>
+    granted.windows?.includes(view),
+  );
 }
-function orderPlugins(plugins: readonly PluginDefinition[], services: CoreServices) {
+function orderPlugins(
+  plugins: readonly PluginDefinition[],
+  services: CoreServices,
+) {
   const byName = new Map<string, PluginDefinition>();
   for (const plugin of plugins) {
-    if (byName.has(plugin.name)) fail("INVALID_ARGUMENT", `Duplicate plugin "${plugin.name}".`);
+    if (byName.has(plugin.name)) {
+      fail("INVALID_ARGUMENT", `Duplicate plugin "${plugin.name}".`);
+    }
     byName.set(plugin.name, plugin);
   }
   const ordered: PluginDefinition[] = [];
   const marks = new Map<string, "open" | "done">();
   const visit = (plugin: PluginDefinition): void => {
     const mark = marks.get(plugin.name);
-    if (mark === "done") return;
-    if (mark === "open") fail("INVALID_ARGUMENT", `Plugin dependency cycle at "${plugin.name}".`);
+    if (mark === "done") {
+      return;
+    }
+    if (mark === "open") {
+      fail("INVALID_ARGUMENT", `Plugin dependency cycle at "${plugin.name}".`);
+    }
     marks.set(plugin.name, "open");
     for (const dependency of plugin.dependencies ?? []) {
       const target = byName.get(dependency);
-      if (!target)
+      if (!target) {
         fail(
           "INVALID_ARGUMENT",
           `Plugin "${plugin.name}" requires unknown plugin "${dependency}".`,
         );
+      }
       visit(target);
     }
     marks.set(plugin.name, "done");
     ordered.push(plugin);
   };
-  for (const plugin of plugins) visit(plugin);
+  for (const plugin of plugins) {
+    visit(plugin);
+  }
   for (const plugin of ordered) {
-    if (plugin.platforms && !plugin.platforms.includes(services.platform))
-      fail("UNSUPPORTED", `Plugin "${plugin.name}" does not support ${services.platform}.`);
+    if (plugin.platforms && !plugin.platforms.includes(services.platform)) {
+      fail(
+        "UNSUPPORTED",
+        `Plugin "${plugin.name}" does not support ${services.platform}.`,
+      );
+    }
     if (
       plugin.requiredPermissions?.some(
         (permission) =>
           !services.policy.backend.permissions.some(
-            (grant) => (typeof grant === "string" ? grant : grant.identifier) === permission,
+            (grant) =>
+              (typeof grant === "string" ? grant : grant.identifier) ===
+              permission,
           ),
       )
-    )
+    ) {
       fail(
         "INVALID_ARGUMENT",
         `Plugin "${plugin.name}" requires host permissions outside the backend policy.`,
       );
-    if (plugin.requiredHost && !coversHostPermissions(services.policy.backend, plugin.requiredHost))
+    }
+    if (
+      plugin.requiredHost &&
+      !coversHostPermissions(services.policy.backend, plugin.requiredHost)
+    ) {
       fail(
         "INVALID_ARGUMENT",
         `Plugin "${plugin.name}" requires window grants outside the backend policy.`,
       );
+    }
   }
   return ordered;
 }
 
 // The store keeps validated snapshots; reads and writes both copy so callers
 // can never mutate retained state.
-function createStateStore(initial: Readonly<Record<string, JsonValue>> | undefined): StateStore {
+function createStateStore(
+  initial: Readonly<Record<string, JsonValue>> | undefined,
+): StateStore {
   const data = new Map<string, JsonValue>();
   for (const [key, value] of Object.entries(initial ?? {})) {
     data.set(key, validateValue({}, value));
@@ -147,10 +192,20 @@ function createStateStore(initial: Readonly<Record<string, JsonValue>> | undefin
 function toWireError(cause: unknown): WireError {
   if (cause instanceof BunawayError) {
     return cause.details === undefined
-      ? { code: cause.code, message: cause.message }
-      : { code: cause.code, message: cause.message, details: cause.details };
+      ? {
+          code: cause.code,
+          message: cause.message,
+        }
+      : {
+          code: cause.code,
+          message: cause.message,
+          details: cause.details,
+        };
   }
-  return { code: "INTERNAL", message: "Command failed." };
+  return {
+    code: "INTERNAL",
+    message: "Command failed.",
+  };
 }
 
 type PendingRequest = {
@@ -191,7 +246,9 @@ class SessionImpl implements CoreSession {
   }
 
   async receive(message: ClientMessage): Promise<void> {
-    if (this.closed) return;
+    if (this.closed) {
+      return;
+    }
     switch (message.kind) {
       case "hello":
         await this.handleHello(message);
@@ -218,7 +275,10 @@ class SessionImpl implements CoreSession {
 
   private async doClose(error?: WireError): Promise<void> {
     this.closed = true;
-    const failure = error ?? { code: "CANCELLED" as const, message: "Session closed." };
+    const failure = error ?? {
+      code: "CANCELLED" as const,
+      message: "Session closed.",
+    };
     const replies: Promise<void>[] = [];
     for (const pending of this.pending.values()) {
       pending.controller.abort();
@@ -231,7 +291,9 @@ class SessionImpl implements CoreSession {
         }),
       );
     }
-    for (const subscription of this.subscriptions.values()) subscription.dead = true;
+    for (const subscription of this.subscriptions.values()) {
+      subscription.dead = true;
+    }
     this.subscriptions.clear();
     await Promise.all(replies);
     this.core.releaseSession(this);
@@ -239,18 +301,27 @@ class SessionImpl implements CoreSession {
 
   private async handleHello(message: Hello): Promise<void> {
     if (this.helloDone) {
-      await this.close({ code: "INVALID_ARGUMENT", message: "Duplicate hello." });
+      await this.close({
+        code: "INVALID_ARGUMENT",
+        message: "Duplicate hello.",
+      });
       return;
     }
     try {
       const negotiated = negotiateProtocol(this.core.services.hello, message);
       this.outProtocol = negotiated.protocol;
     } catch (cause) {
-      const code = cause instanceof ProtocolError ? cause.code : "INVALID_ARGUMENT";
-      await this.close({ code, message: "Protocol negotiation failed." });
+      const code =
+        cause instanceof ProtocolError ? cause.code : "INVALID_ARGUMENT";
+      await this.close({
+        code,
+        message: "Protocol negotiation failed.",
+      });
       // The SDK must receive our hello to reject an incompatible major version
       // immediately; silently closing only the core session leaves ready pending.
-      if (code === "UNSUPPORTED") await this.sendOrFail(this.core.services.hello);
+      if (code === "UNSUPPORTED") {
+        await this.sendOrFail(this.core.services.hello);
+      }
       return;
     }
     this.helloDone = true;
@@ -260,7 +331,9 @@ class SessionImpl implements CoreSession {
   // A failed send means the transport path is broken: stop emitting and let the
   // adapter-driven close (also triggered here) tear the session down.
   private async sendOrFail(message: ServerMessage): Promise<void> {
-    if (this.failed) return;
+    if (this.failed) {
+      return;
+    }
     try {
       await this.core.services.send(this.context, message);
     } catch {
@@ -270,29 +343,53 @@ class SessionImpl implements CoreSession {
   }
 
   private respondError(id: string, error: WireError): void {
-    void this.sendOrFail({ kind: "error", protocol: this.outProtocol, id, error });
+    void this.sendOrFail({
+      kind: "error",
+      protocol: this.outProtocol,
+      id,
+      error,
+    });
   }
 
   // Every request ID is recorded once for the session lifetime, whether the
   // request is executed, rejected, cancelled, or expired.
   private acceptRequest(id: string): boolean {
-    if (this.closed || this.failed) return false;
+    if (this.closed || this.failed) {
+      return false;
+    }
     // A duplicate is not a new request and must not settle the original again.
-    if (this.requestIds.has(id)) return false;
+    if (this.requestIds.has(id)) {
+      return false;
+    }
     if (this.requestIds.size >= API_LIMITS.maxRequestIds) {
-      this.respondError(id, { code: "BUSY", message: "Request limit reached." });
+      this.respondError(id, {
+        code: "BUSY",
+        message: "Request limit reached.",
+      });
       return false;
     }
     this.requestIds.add(id);
     if (!this.helloDone) {
-      this.respondError(id, { code: "INVALID_ARGUMENT", message: "Protocol handshake required." });
+      this.respondError(id, {
+        code: "INVALID_ARGUMENT",
+        message: "Protocol handshake required.",
+      });
       return false;
     }
     return true;
   }
 
-  private handleInvoke(message: Extract<ClientMessage, { kind: "invoke" }>): void {
-    if (!this.acceptRequest(message.id)) return;
+  private handleInvoke(
+    message: Extract<
+      ClientMessage,
+      {
+        kind: "invoke";
+      }
+    >,
+  ): void {
+    if (!this.acceptRequest(message.id)) {
+      return;
+    }
     if (this.pending.size >= API_LIMITS.maxPending) {
       this.respondError(message.id, {
         code: "BUSY",
@@ -300,8 +397,14 @@ class SessionImpl implements CoreSession {
       });
       return;
     }
-    if (message.command.startsWith("plugin.") && !this.view.commands.includes(message.command)) {
-      this.respondError(message.id, { code: "PERMISSION_DENIED", message: "Command not allowed." });
+    if (
+      message.command.startsWith("plugin.") &&
+      !this.view.commands.includes(message.command)
+    ) {
+      this.respondError(message.id, {
+        code: "PERMISSION_DENIED",
+        message: "Command not allowed.",
+      });
       return;
     }
     const definition = this.core.commands.get(message.command);
@@ -348,7 +451,10 @@ class SessionImpl implements CoreSession {
         kind: "error",
         protocol: this.outProtocol,
         id: pending.id,
-        error: { code: "TIMEOUT", message: "Command timed out." },
+        error: {
+          code: "TIMEOUT",
+          message: "Command timed out.",
+        },
       });
     }, remaining);
     this.pending.set(message.id, pending);
@@ -369,21 +475,37 @@ class SessionImpl implements CoreSession {
       try {
         input = validateValue(definition.input, payload);
       } catch {
-        throw new BunawayError({ code: "INVALID_ARGUMENT", message: "Invalid command input." });
+        throw new BunawayError({
+          code: "INVALID_ARGUMENT",
+          message: "Invalid command input.",
+        });
       }
-      const result = await definition.run(input, this.makeContext(pending.controller.signal));
+      const result = await definition.run(
+        input,
+        this.makeContext(pending.controller.signal),
+      );
       let output: JsonValue;
       try {
         output = validateValue(definition.output, result);
-        reply = { kind: "result", protocol: this.outProtocol, id: pending.id, payload: output };
+        reply = {
+          kind: "result",
+          protocol: this.outProtocol,
+          id: pending.id,
+          payload: output,
+        };
         // Include protocol and correlation fields before handing the reply to a transport.
         serializeMessage(reply);
       } catch {
-        throw new BunawayError({ code: "INTERNAL", message: "Invalid command output." });
+        throw new BunawayError({
+          code: "INTERNAL",
+          message: "Invalid command output.",
+        });
       }
     } catch (cause) {
       if (!(cause instanceof BunawayError)) {
-        reportDiagnostic(() => this.core.services.onCommandError?.(command, cause));
+        reportDiagnostic(() =>
+          this.core.services.onCommandError?.(command, cause),
+        );
       }
       reply = {
         kind: "error",
@@ -398,20 +520,31 @@ class SessionImpl implements CoreSession {
   private makeContext(signal: CancellationSignal): CommandContext {
     return {
       signal,
-      host: bindHostAPI(this.context, signal, this.core.services.callHost, this.core.registry),
+      host: bindHostAPI(
+        this.context,
+        signal,
+        this.core.services.callHost,
+        this.core.registry,
+      ),
       state: this.core.state,
       events: {
         emit: async (event, payload, target) => {
-          if (signal.aborted || this.closed || this.failed)
+          if (signal.aborted || this.closed || this.failed) {
             fail("CANCELLED", "Event emission cancelled.");
+          }
           await this.core.emit(event, payload, target, this.view.id);
         },
       },
     };
   }
 
-  private async settle(pending: PendingRequest, reply: ServerMessage): Promise<void> {
-    if (pending.done) return;
+  private async settle(
+    pending: PendingRequest,
+    reply: ServerMessage,
+  ): Promise<void> {
+    if (pending.done) {
+      return;
+    }
     pending.done = true;
     this.pending.delete(pending.id);
     pending.timer?.();
@@ -419,22 +552,46 @@ class SessionImpl implements CoreSession {
     await this.sendOrFail(reply);
   }
 
-  private handleCancel(message: Extract<ClientMessage, { kind: "cancel" }>): void {
+  private handleCancel(
+    message: Extract<
+      ClientMessage,
+      {
+        kind: "cancel";
+      }
+    >,
+  ): void {
     const pending = this.pending.get(message.id);
-    if (!pending || pending.done) return;
+    if (!pending || pending.done) {
+      return;
+    }
     pending.controller.abort();
     void this.settle(pending, {
       kind: "error",
       protocol: this.outProtocol,
       id: pending.id,
-      error: { code: "CANCELLED", message: "Request cancelled." },
+      error: {
+        code: "CANCELLED",
+        message: "Request cancelled.",
+      },
     });
   }
 
-  private handleListen(message: Extract<ClientMessage, { kind: "listen" }>): void {
-    if (!this.acceptRequest(message.id)) return;
+  private handleListen(
+    message: Extract<
+      ClientMessage,
+      {
+        kind: "listen";
+      }
+    >,
+  ): void {
+    if (!this.acceptRequest(message.id)) {
+      return;
+    }
     if (!this.core.events.has(message.event)) {
-      this.respondError(message.id, { code: "INVALID_ARGUMENT", message: "Unknown event." });
+      this.respondError(message.id, {
+        code: "INVALID_ARGUMENT",
+        message: "Unknown event.",
+      });
       return;
     }
     if (!this.view.events.includes(message.event)) {
@@ -464,12 +621,23 @@ class SessionImpl implements CoreSession {
       kind: "result",
       protocol: this.outProtocol,
       id: message.id,
-      payload: { subscriptionId: subscription.id },
+      payload: {
+        subscriptionId: subscription.id,
+      },
     });
   }
 
-  private handleUnlisten(message: Extract<ClientMessage, { kind: "unlisten" }>): void {
-    if (!this.acceptRequest(message.id)) return;
+  private handleUnlisten(
+    message: Extract<
+      ClientMessage,
+      {
+        kind: "unlisten";
+      }
+    >,
+  ): void {
+    if (!this.acceptRequest(message.id)) {
+      return;
+    }
     const subscription = this.subscriptions.get(message.subscriptionId);
     if (!subscription) {
       this.respondError(message.id, {
@@ -490,7 +658,9 @@ class SessionImpl implements CoreSession {
 
   deliver(event: string, source: string, payload: JsonValue): void {
     for (const subscription of this.subscriptions.values()) {
-      if (subscription.event !== event || subscription.dead) continue;
+      if (subscription.event !== event || subscription.dead) {
+        continue;
+      }
       this.enqueueEvent(subscription, {
         kind: "event",
         protocol: this.outProtocol,
@@ -504,8 +674,13 @@ class SessionImpl implements CoreSession {
     }
   }
 
-  private enqueueEvent(subscription: Subscription, message: ServerMessage): void {
-    if (subscription.dead) return;
+  private enqueueEvent(
+    subscription: Subscription,
+    message: ServerMessage,
+  ): void {
+    if (subscription.dead) {
+      return;
+    }
     if (subscription.queued >= API_LIMITS.maxPending) {
       this.terminateSubscription(subscription, {
         code: "BUSY",
@@ -516,19 +691,28 @@ class SessionImpl implements CoreSession {
     subscription.queued += 1;
     subscription.chain = subscription.chain.then(async () => {
       subscription.queued -= 1;
-      if (subscription.dead) return;
+      if (subscription.dead) {
+        return;
+      }
       await this.sendOrFail(message);
     });
   }
 
   // The terminal subscription-error rides the same chain so it is the last
   // message the subscription can produce.
-  private terminateSubscription(subscription: Subscription, error: WireError): void {
-    if (subscription.dead) return;
+  private terminateSubscription(
+    subscription: Subscription,
+    error: WireError,
+  ): void {
+    if (subscription.dead) {
+      return;
+    }
     subscription.dead = true;
     this.subscriptions.delete(subscription.id);
     subscription.chain = subscription.chain.then(() => {
-      if (this.closed) return;
+      if (this.closed) {
+        return;
+      }
       return this.sendOrFail({
         kind: "subscription-error",
         protocol: this.outProtocol,
@@ -542,7 +726,10 @@ class SessionImpl implements CoreSession {
 class BunawayCore implements Core {
   readonly sessions = new Map<HostContext, SessionImpl>();
   private stopped = false;
-  private readonly stopHooks: { plugin: string; stop: StopHook }[] = [];
+  private readonly stopHooks: {
+    plugin: string;
+    stop: StopHook;
+  }[] = [];
   private stopPromise: Promise<void> | null = null;
   private readonly backendController: CancellationController;
 
@@ -559,16 +746,24 @@ class BunawayCore implements Core {
 
   openSession(context: HostContext, viewId: string): CoreSession {
     const view = this.views.get(viewId);
-    if (!view) fail("INVALID_ARGUMENT", `Unknown view "${viewId}".`);
-    if (this.stopped) fail("INVALID_ARGUMENT", "Core is stopped.");
-    if (this.sessions.has(context)) fail("INVALID_ARGUMENT", `Duplicate context "${context}".`);
+    if (!view) {
+      fail("INVALID_ARGUMENT", `Unknown view "${viewId}".`);
+    }
+    if (this.stopped) {
+      fail("INVALID_ARGUMENT", "Core is stopped.");
+    }
+    if (this.sessions.has(context)) {
+      fail("INVALID_ARGUMENT", `Duplicate context "${context}".`);
+    }
     const session = new SessionImpl(this, context, view);
     this.sessions.set(context, session);
     return session;
   }
 
   releaseSession(session: SessionImpl): void {
-    if (this.sessions.get(session.context) === session) this.sessions.delete(session.context);
+    if (this.sessions.get(session.context) === session) {
+      this.sessions.delete(session.context);
+    }
   }
 
   // The emitting context decides the public source: a view session reports its
@@ -581,19 +776,28 @@ class BunawayCore implements Core {
     source: string,
   ): Promise<void> {
     const schema = this.events.get(event);
-    if (!schema) fail("INVALID_ARGUMENT", `Undeclared event "${event}".`);
+    if (!schema) {
+      fail("INVALID_ARGUMENT", `Undeclared event "${event}".`);
+    }
     let data: JsonValue;
     try {
       data = validateValue(schema, payload);
     } catch {
       fail("INVALID_ARGUMENT", "Invalid event payload.");
     }
-    if (target.kind === "view" && !this.views.has(target.viewId))
+    if (target.kind === "view" && !this.views.has(target.viewId)) {
       fail("INVALID_ARGUMENT", `Unknown view "${target.viewId}".`);
+    }
     for (const session of this.sessions.values()) {
-      if (session.closed || session.failed || !session.helloDone) continue;
-      if (target.kind === "view" && session.view.id !== target.viewId) continue;
-      if (!session.view.events.includes(event)) continue;
+      if (session.closed || session.failed || !session.helloDone) {
+        continue;
+      }
+      if (target.kind === "view" && session.view.id !== target.viewId) {
+        continue;
+      }
+      if (!session.view.events.includes(event)) {
+        continue;
+      }
       session.deliver(event, source, data);
     }
   }
@@ -610,23 +814,31 @@ class BunawayCore implements Core {
       ),
       state: this.state,
       events: {
-        emit: (event, payload, target) => this.emit(event, payload, target, "backend"),
+        emit: (event, payload, target) =>
+          this.emit(event, payload, target, "backend"),
       },
     };
   }
 
   addStopHook(plugin: string, stop: StopHook): void {
-    this.stopHooks.push({ plugin, stop });
+    this.stopHooks.push({
+      plugin,
+      stop,
+    });
   }
 
   // Stop hooks best-effort in reverse setup order; individual failures never
   // skip later hooks.
   async cleanupPlugins(): Promise<void> {
-    for (const { plugin, stop } of [...this.stopHooks].reverse()) {
+    for (const { plugin, stop } of [
+      ...this.stopHooks,
+    ].reverse()) {
       try {
         await stop();
       } catch (cause) {
-        reportDiagnostic(() => this.services.onPluginError?.(plugin, "stop", cause));
+        reportDiagnostic(() =>
+          this.services.onPluginError?.(plugin, "stop", cause),
+        );
       }
     }
     this.stopHooks.length = 0;
@@ -641,19 +853,34 @@ class BunawayCore implements Core {
     this.stopped = true;
     this.backendController.abort();
     const cleanup = (async () => {
-      const sessions = [...this.sessions.values()];
+      const sessions = [
+        ...this.sessions.values(),
+      ];
       await Promise.all(sessions.map((session) => session.close()));
       await this.cleanupPlugins();
     })();
-    const guard: { timer: Dispose | null } = { timer: null };
+    const guard: {
+      timer: Dispose | null;
+    } = {
+      timer: null,
+    };
     const deadline = new Promise<never>((_, reject) => {
       guard.timer = this.services.runtime.schedule(
-        () => reject(new BunawayError({ code: "TIMEOUT", message: "Core shutdown timed out." })),
+        () =>
+          reject(
+            new BunawayError({
+              code: "TIMEOUT",
+              message: "Core shutdown timed out.",
+            }),
+          ),
         API_LIMITS.shutdownTimeoutMs,
       );
     });
     try {
-      await Promise.race([cleanup, deadline]);
+      await Promise.race([
+        cleanup,
+        deadline,
+      ]);
     } finally {
       guard.timer?.();
     }
@@ -667,8 +894,18 @@ export const createCore: CoreFactory = async (app, services) => {
   registerAll(commands, app.commands, "command", "app");
   registerAll(events, app.events, "event", "app");
   for (const plugin of ordered) {
-    registerAll(commands, plugin.commands ?? {}, "command", `plugin "${plugin.name}"`);
-    registerAll(events, plugin.events ?? {}, "event", `plugin "${plugin.name}"`);
+    registerAll(
+      commands,
+      plugin.commands ?? {},
+      "command",
+      `plugin "${plugin.name}"`,
+    );
+    registerAll(
+      events,
+      plugin.events ?? {},
+      "event",
+      `plugin "${plugin.name}"`,
+    );
   }
   const registry = new NativeRegistry(ordered);
   registry.validatePolicy(services.policy);
@@ -683,7 +920,9 @@ export const createCore: CoreFactory = async (app, services) => {
   }
   const views = new Map<string, ViewPolicy>();
   for (const view of services.policy.views) {
-    if (views.has(view.id)) fail("INVALID_ARGUMENT", `Duplicate policy view "${view.id}".`);
+    if (views.has(view.id)) {
+      fail("INVALID_ARGUMENT", `Duplicate policy view "${view.id}".`);
+    }
     views.set(view.id, view);
   }
   const core = new BunawayCore(
@@ -698,16 +937,25 @@ export const createCore: CoreFactory = async (app, services) => {
     for (const plugin of ordered) {
       try {
         const hook = await plugin.setup?.(core.makeBackendContext());
-        if (typeof hook === "function") core.addStopHook(plugin.name, hook);
+        if (typeof hook === "function") {
+          core.addStopHook(plugin.name, hook);
+        }
       } catch (cause) {
-        reportDiagnostic(() => services.onPluginError?.(plugin.name, "setup", cause));
+        reportDiagnostic(() =>
+          services.onPluginError?.(plugin.name, "setup", cause),
+        );
         throw cause;
       }
     }
   } catch (cause) {
     await core.stop();
-    if (cause instanceof BunawayError) throw cause;
-    throw new BunawayError({ code: "INTERNAL", message: "Plugin setup failed." });
+    if (cause instanceof BunawayError) {
+      throw cause;
+    }
+    throw new BunawayError({
+      code: "INTERNAL",
+      message: "Plugin setup failed.",
+    });
   }
   return core;
 };

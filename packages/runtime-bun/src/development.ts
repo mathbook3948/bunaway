@@ -2,18 +2,27 @@ import type { Policy } from "@bunaway/protocol";
 
 // Shared by the CLI and Windows host. Development never accepts a LAN or remote origin.
 export function developmentUrl(value: unknown): URL {
-  if (typeof value !== "string") throw new Error("dev.url must be a loopback HTTP(S) URL.");
+  if (typeof value !== "string") {
+    throw new Error("dev.url must be a loopback HTTP(S) URL.");
+  }
   const url = new URL(value);
   if (
-    !["http:", "https:"].includes(url.protocol) ||
-    !["localhost", "127.0.0.1"].includes(url.hostname) ||
+    ![
+      "http:",
+      "https:",
+    ].includes(url.protocol) ||
+    ![
+      "localhost",
+      "127.0.0.1",
+    ].includes(url.hostname) ||
     url.username ||
     url.password ||
     url.hash
-  )
+  ) {
     throw new Error(
       "dev.url must use http(s)://localhost or 127.0.0.1 without credentials or a fragment.",
     );
+  }
   return url;
 }
 
@@ -26,16 +35,30 @@ export function developmentPolicy(
   return {
     ...policy,
     views: policy.views.map((view) =>
-      (typeof viewId === "string" ? view.id === viewId : viewId.includes(view.id))
-        ? { ...view, origins: [origin] }
+      (
+        typeof viewId === "string"
+          ? view.id === viewId
+          : viewId.includes(view.id)
+      )
+        ? {
+            ...view,
+            origins: [
+              origin,
+            ],
+          }
         : view,
     ),
   };
 }
 
 // Both a development artifact and an explicit launch flag are required.
-export function verifyDevelopmentLaunch(marker: unknown, launchUrl?: string): string | undefined {
-  if (marker === undefined && launchUrl === undefined) return undefined;
+export function verifyDevelopmentLaunch(
+  marker: unknown,
+  launchUrl?: string,
+): string | undefined {
+  if (marker === undefined && launchUrl === undefined) {
+    return undefined;
+  }
   if (
     !marker ||
     typeof marker !== "object" ||
@@ -61,9 +84,17 @@ export function developmentWindowHome(home: string, server: string): string {
   return target.href;
 }
 
-export function verifyDevelopmentToolsLaunch(marker: unknown, requested = false): boolean {
-  if (marker === undefined && !requested) return false;
-  if (marker !== true || !requested)
-    throw new Error("DevTools require a development artifact and the --devtools launch flag.");
+export function verifyDevelopmentToolsLaunch(
+  marker: unknown,
+  requested = false,
+): boolean {
+  if (marker === undefined && !requested) {
+    return false;
+  }
+  if (marker !== true || !requested) {
+    throw new Error(
+      "DevTools require a development artifact and the --devtools launch flag.",
+    );
+  }
   return true;
 }

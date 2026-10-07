@@ -1,6 +1,14 @@
-import type { CommandDefinition, CommandRegistry, EventRegistry } from "@bunaway/core";
+import type {
+  CommandDefinition,
+  CommandRegistry,
+  EventRegistry,
+} from "@bunaway/core";
 import type { Schema } from "@bunaway/protocol";
-import { type CommandContract, type CommandHandler, command } from "./command.ts";
+import {
+  type CommandContract,
+  type CommandHandler,
+  command,
+} from "./command.ts";
 import { checkName, claimName, type RegistrationKind } from "./registration.ts";
 
 type SingleEntry<K extends string, T> = K extends unknown
@@ -10,7 +18,9 @@ type SingleEntry<K extends string, T> = K extends unknown
   : never;
 // A runtime name selects one entry. Union names are alternatives, and widened
 // strings or template patterns cannot guarantee any particular entry.
-type RegisteredEntry<N extends string, K extends string, T> = string extends N | K
+type RegisteredEntry<N extends string, K extends string, T> = string extends
+  | N
+  | K
   ? Record<never, never>
   : SingleEntry<`${N}.${K}`, T>;
 
@@ -29,7 +39,11 @@ export interface ModuleBuilder<
   E extends EventRegistry = Record<never, never>,
 > extends ModuleDefinition<C, E> {
   readonly name: N;
-  command<const K extends string, const I extends Schema, const O extends Schema>(
+  command<
+    const K extends string,
+    const I extends Schema,
+    const O extends Schema,
+  >(
     name: K,
     contract: CommandContract<I, O>,
     handle: CommandHandler<I, O>,
@@ -40,7 +54,12 @@ export interface ModuleBuilder<
   ): ModuleBuilder<N, C, E & RegisteredEntry<N, K, S>>;
 }
 
-function add<R extends Readonly<Record<string, unknown>>, N extends string, K extends string, T>(
+function add<
+  R extends Readonly<Record<string, unknown>>,
+  N extends string,
+  K extends string,
+  T,
+>(
   entries: R,
   namespace: N,
   localName: K,
@@ -49,17 +68,25 @@ function add<R extends Readonly<Record<string, unknown>>, N extends string, K ex
   owner: string,
 ): R & RegisteredEntry<N, K, T> {
   const name = `${namespace}.${localName}`;
-  const owners = new Map(Object.keys(entries).map((key) => [key, owner]));
+  const owners = new Map(
+    Object.keys(entries).map((key) => [
+      key,
+      owner,
+    ]),
+  );
   claimName(owners, name, kind, owner);
   // The computed key matches the template literal used by ModuleBuilder's types.
-  return Object.freeze({ ...entries, [name]: value }) as R & RegisteredEntry<N, K, T>;
+  return Object.freeze({
+    ...entries,
+    [name]: value,
+  }) as R & RegisteredEntry<N, K, T>;
 }
 
-function buildModule<N extends string, C extends CommandRegistry, E extends EventRegistry>(
-  name: N,
-  commands: C,
-  events: E,
-): ModuleBuilder<N, C, E> {
+function buildModule<
+  N extends string,
+  C extends CommandRegistry,
+  E extends EventRegistry,
+>(name: N, commands: C, events: E): ModuleBuilder<N, C, E> {
   const owner = `module "${name}"`;
   const builder: ModuleBuilder<N, C, E> = {
     name,
@@ -69,20 +96,36 @@ function buildModule<N extends string, C extends CommandRegistry, E extends Even
       checkName(localName, "command", owner);
       return buildModule(
         name,
-        add(commands, name, localName, command({ ...contract, handle }), "command", owner),
+        add(
+          commands,
+          name,
+          localName,
+          command({
+            ...contract,
+            handle,
+          }),
+          "command",
+          owner,
+        ),
         events,
       );
     },
     event(localName, schema) {
       checkName(localName, "event", owner);
-      return buildModule(name, commands, add(events, name, localName, schema, "event", owner));
+      return buildModule(
+        name,
+        commands,
+        add(events, name, localName, schema, "event", owner),
+      );
     },
   };
   return Object.freeze(builder);
 }
 
 // Each call returns a new snapshot so earlier builders retain their exact types.
-export function defineModule<const N extends string>(name: N): ModuleBuilder<N> {
+export function defineModule<const N extends string>(
+  name: N,
+): ModuleBuilder<N> {
   checkName(name, "module", "app");
   return buildModule(name, Object.freeze({}), Object.freeze({}));
 }

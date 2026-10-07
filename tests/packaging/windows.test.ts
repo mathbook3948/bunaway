@@ -40,13 +40,28 @@ const metadata: ResolvedPackaging = {
   root: "C:\\proj",
   name: "Test App",
   identifier: "com.example.app",
-  publisher: { display: "Example", identity: "CN=Example" },
-  version: { semver: "1.2.3", build: 0, msix: "1.2.3.0" },
+  publisher: {
+    display: "Example",
+    identity: "CN=Example",
+  },
+  version: {
+    semver: "1.2.3",
+    build: 0,
+    msix: "1.2.3.0",
+  },
   icons: {},
-  targets: [{ platform: "windows", arch: "x64" }],
+  targets: [
+    {
+      platform: "windows",
+      arch: "x64",
+    },
+  ],
 };
 
-const input = (channelConfig: Record<string, unknown>, signing?: SigningConfig): AdapterInput => ({
+const input = (
+  channelConfig: Record<string, unknown>,
+  signing?: SigningConfig,
+): AdapterInput => ({
   channel: "win-direct",
   channelConfig,
   metadata,
@@ -65,16 +80,25 @@ const input = (channelConfig: Record<string, unknown>, signing?: SigningConfig):
       licenseSha256: "bb",
     },
     assets: {},
-    app: { id: "com.example.app", version: "1.2.3" },
+    app: {
+      id: "com.example.app",
+      version: "1.2.3",
+    },
   },
-  ...(signing ? { signing } : {}),
+  ...(signing
+    ? {
+        signing,
+      }
+    : {}),
 });
 
 const runIds = (stages: AdapterStage[]) => stages.map((stage) => stage.id);
 
 const adapterOrThrow = (channel: string) => {
   const adapter = adapterFor(channel as never);
-  if (!adapter) throw new Error(`${channel} adapter missing`);
+  if (!adapter) {
+    throw new Error(`${channel} adapter missing`);
+  }
   return adapter;
 };
 
@@ -83,8 +107,12 @@ const iscc = process.platform === "win32" ? await findIscc() : undefined;
 test.skipIf(!iscc)(
   "Inno refuses failed prerequisites before replacing an installed app",
   async () => {
-    if (!iscc) throw new Error("Expected ISCC.");
-    const root = await realpath(await mkdtemp(join(tmpdir(), "bunaway-inno-prerequisites-")));
+    if (!iscc) {
+      throw new Error("Expected ISCC.");
+    }
+    const root = await realpath(
+      await mkdtemp(join(tmpdir(), "bunaway-inno-prerequisites-")),
+    );
     const literal = (path: string) => path.replace(/'/g, "''");
     try {
       for (const outcome of [
@@ -106,8 +134,9 @@ test.skipIf(!iscc)(
         await Bun.write(join(staging, "app", "bunaway.cmd"), "command fixture");
         await mkdir(join(staging, "installer"));
         const bootstrapper = join(staging, "installer", "bootstrapper.exe");
-        if (outcome === "launch-error") await Bun.write(bootstrapper, "not an executable");
-        else {
+        if (outcome === "launch-error") {
+          await Bun.write(bootstrapper, "not an executable");
+        } else {
           const script = join(staging, "bootstrapper.iss");
           await Bun.write(
             script,
@@ -134,9 +163,14 @@ begin
 end;
 `,
           );
-          await must(iscc, ["/Q", script]);
+          await must(iscc, [
+            "/Q",
+            script,
+          ]);
         }
-        if (outcome === "existing") await Bun.write(marker, "runtime");
+        if (outcome === "existing") {
+          await Bun.write(marker, "runtime");
+        }
         let script = renderInnoScript({
           name: "Prerequisite fixture",
           identifier: `app.test-${crypto.randomUUID()}`,
@@ -163,7 +197,12 @@ end;
           /function HasWebView2Runtime: Boolean;[\s\S]*?\nend;\n/,
           `function HasWebView2Runtime: Boolean;\nbegin\n  Result := FileExists('${literal(marker)}');\nend;\n`,
         );
-        const ctx: StageContext = { input: input({}), staging, report() {}, addArtifact() {} };
+        const ctx: StageContext = {
+          input: input({}),
+          staging,
+          report() {},
+          addArtifact() {},
+        };
         const setup = await compileInno(ctx, script, staging, "setup");
         const proc = Bun.spawn(
           [
@@ -175,30 +214,52 @@ end;
             `/LOG=${join(staging, "setup.log")}`,
             `/DIR=${install}`,
           ],
-          { stdout: "ignore", stderr: "ignore" },
+          {
+            stdout: "ignore",
+            stderr: "ignore",
+          },
         );
         const success = outcome === "installed" || outcome === "existing";
         const exit = await proc.exited;
         expect(exit).toBe(success ? 0 : outcome === "old-os" ? 1 : 7);
         expect(await Bun.file(host).exists()).toBe(!success);
-        if (!success) expect(await Bun.file(host).text()).toBe("previous app");
-        else expect(await Bun.file(join(install, "runtime/bun.exe")).text()).toBe("new app");
+        if (!success) {
+          expect(await Bun.file(host).text()).toBe("previous app");
+        } else {
+          expect(await Bun.file(join(install, "runtime/bun.exe")).text()).toBe(
+            "new app",
+          );
+        }
         expect(await Bun.file(trace).exists()).toBe(
-          !["launch-error", "existing", "old-os"].includes(outcome),
+          ![
+            "launch-error",
+            "existing",
+            "old-os",
+          ].includes(outcome),
         );
       }
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, {
+        recursive: true,
+        force: true,
+      });
     }
   },
   120000,
 );
 
-test.each(["win-direct", "win-store-unpackaged"] as const)(
+test.each([
+  "win-direct",
+  "win-store-unpackaged",
+] as const)(
   "%s forwards the matching target minimum Windows version to Inno",
   async (channel) => {
-    const root = await realpath(await mkdtemp(join(tmpdir(), "bunaway-inno-minimum-")));
-    const discovery = spyOn(windowsTools, "findIscc").mockResolvedValue("fixture-iscc");
+    const root = await realpath(
+      await mkdtemp(join(tmpdir(), "bunaway-inno-minimum-")),
+    );
+    const discovery = spyOn(windowsTools, "findIscc").mockResolvedValue(
+      "fixture-iscc",
+    );
     const compiler = spyOn(windowsTools, "must").mockResolvedValue({
       code: 0,
       stdout: "",
@@ -209,17 +270,33 @@ test.each(["win-direct", "win-store-unpackaged"] as const)(
       await Bun.write(join(source, "runtime", "bun.exe"), "fixture");
       await Bun.write(join(source, "launch.ps1"), "fixture");
       await Bun.write(join(source, "bunaway.cmd"), "fixture");
-      const original = input({ webView2: "check" });
+      const original = input({
+        webView2: "check",
+      });
       const config = parsePackaging(
         JSON.stringify({
           targets: [
-            { platform: "macos", arch: "arm64", minVersion: "14.0" },
-            { platform: "windows", arch: "x64", minVersion: "10.0.22621.0" },
+            {
+              platform: "macos",
+              arch: "arm64",
+              minVersion: "14.0",
+            },
+            {
+              platform: "windows",
+              arch: "x64",
+              minVersion: "10.0.22621.0",
+            },
           ],
-          channels: { [channel]: { webView2: "check" } },
+          channels: {
+            [channel]: {
+              webView2: "check",
+            },
+          },
         }),
       );
-      const { resolvePackaging } = await import("../../packages/packaging/src/index.ts");
+      const { resolvePackaging } = await import(
+        "../../packages/packaging/src/index.ts"
+      );
       const resolved = await resolvePackaging({
         root,
         config,
@@ -248,13 +325,16 @@ test.each(["win-direct", "win-store-unpackaged"] as const)(
       };
       await stages.find((stage) => stage.id === "stage")?.run(ctx);
       await stages.find((stage) => stage.id === "assemble")?.run(ctx);
-      expect(await Bun.file(join(ctx.staging, "app.test-setup-1.0.0.iss")).text()).toContain(
-        "MinVersion=10.0.22621\n",
-      );
+      expect(
+        await Bun.file(join(ctx.staging, "app.test-setup-1.0.0.iss")).text(),
+      ).toContain("MinVersion=10.0.22621\n");
     } finally {
       discovery.mockRestore();
       compiler.mockRestore();
-      await rm(root, { recursive: true, force: true });
+      await rm(root, {
+        recursive: true,
+        force: true,
+      });
     }
   },
 );
@@ -267,7 +347,10 @@ test.skipIf(!iscc)(
       "{demo}",
     );
     try {
-      await Bun.write(join(root, "app", "runtime", "bun.exe"), "runtime fixture");
+      await Bun.write(
+        join(root, "app", "runtime", "bun.exe"),
+        "runtime fixture",
+      );
       await Bun.write(join(root, "app", "launch.ps1"), "launcher fixture");
       await Bun.write(join(root, "app", "bunaway.cmd"), "command fixture");
       await Bun.write(join(root, "bootstrapper.exe"), "bootstrapper fixture");
@@ -299,7 +382,10 @@ test.skipIf(!iscc)(
       expect(await Bun.file(installer).exists()).toBe(true);
       expect(Bun.file(installer).size).toBeGreaterThan(0);
     } finally {
-      await rm(resolve(root, ".."), { recursive: true, force: true });
+      await rm(resolve(root, ".."), {
+        recursive: true,
+        force: true,
+      });
     }
   },
   30000,
@@ -308,34 +394,67 @@ test.skipIf(!iscc)(
 test.skipIf(!iscc)(
   "Inno upgrades replace legacy data deletion and prune retired assets without following junctions",
   async () => {
-    const root = await realpath(await mkdtemp(join(tmpdir(), "bunaway-inno-upgrade-")));
+    const root = await realpath(
+      await mkdtemp(join(tmpdir(), "bunaway-inno-upgrade-")),
+    );
     const install = join(root, "install");
     const data = join(root, "data", "memo.txt");
     const uninstall = join(install, "unins000.exe");
     const identifier = `app.test-${crypto.randomUUID()}`;
-    const silent = ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"];
+    const silent = [
+      "/VERYSILENT",
+      "/SUPPRESSMSGBOXES",
+      "/NORESTART",
+    ];
     async function removeInstallation() {
       await must(uninstall, silent);
       // Inno's launcher exits before its temporary copy finishes uninstalling.
       for (let retry = 0; retry < 100; retry++) {
-        if (!(await Bun.file(uninstall).exists())) return;
+        if (!(await Bun.file(uninstall).exists())) {
+          return;
+        }
         await Bun.sleep(50);
       }
       throw new Error("The fixture uninstaller did not finish.");
     }
     try {
-      for (const version of [1, 2, 3]) {
+      for (const version of [
+        1,
+        2,
+        3,
+      ]) {
         const staging = join(root, String(version));
         const payloadDir = join(staging, "app");
-        const assetPaths = ["assets/web/case.js", "assets/web/quote's.js", "licenses/current.txt"];
-        if (version === 1) assetPaths.push("assets/web/retired/page.html", "licenses/retired.txt");
-        if (version === 1) await Bun.write(join(payloadDir, "bunaway-host.exe"), "legacy host");
-        else {
-          await Bun.write(join(payloadDir, "runtime", "bun.exe"), `runtime ${version}`);
-          await Bun.write(join(payloadDir, "launch.ps1"), `launcher ${version}`);
-          await Bun.write(join(payloadDir, "bunaway.cmd"), `command ${version}`);
+        const assetPaths = [
+          "assets/web/case.js",
+          "assets/web/quote's.js",
+          "licenses/current.txt",
+        ];
+        if (version === 1) {
+          assetPaths.push(
+            "assets/web/retired/page.html",
+            "licenses/retired.txt",
+          );
         }
-        for (const path of assetPaths) await Bun.write(join(payloadDir, path), String(version));
+        if (version === 1) {
+          await Bun.write(join(payloadDir, "bunaway-host.exe"), "legacy host");
+        } else {
+          await Bun.write(
+            join(payloadDir, "runtime", "bun.exe"),
+            `runtime ${version}`,
+          );
+          await Bun.write(
+            join(payloadDir, "launch.ps1"),
+            `launcher ${version}`,
+          );
+          await Bun.write(
+            join(payloadDir, "bunaway.cmd"),
+            `command ${version}`,
+          );
+        }
+        for (const path of assetPaths) {
+          await Bun.write(join(payloadDir, path), String(version));
+        }
         await mkdir(join(staging, "installer"));
         const ctx: StageContext = {
           input: input({}),
@@ -366,30 +485,67 @@ test.skipIf(!iscc)(
             .replace("  RemoveRetiredWindowsHost;\n", "");
         }
         const setup = await compileInno(ctx, script, staging, "setup");
-        await must(setup, ["/SP-", ...silent, `/DIR=${install}`]);
+        await must(setup, [
+          "/SP-",
+          ...silent,
+          `/DIR=${install}`,
+        ]);
         if (version === 1) {
-          expect(await Bun.file(join(install, "bunaway-host.exe")).text()).toBe("legacy host");
+          expect(await Bun.file(join(install, "bunaway-host.exe")).text()).toBe(
+            "legacy host",
+          );
           await Bun.write(data, "memo");
           await Bun.write(join(root, "external", "keep.txt"), "external data");
-          await symlink(join(root, "external"), join(install, "assets", "external"), "junction");
+          await symlink(
+            join(root, "external"),
+            join(install, "assets", "external"),
+            "junction",
+          );
           continue;
         }
-        expect(await Bun.file(join(install, "assets/web/retired/page.html")).exists()).toBe(false);
-        expect(await Bun.file(join(install, "licenses/retired.txt")).exists()).toBe(false);
-        expect(await Bun.file(join(install, "assets/web/case.js")).text()).toBe(String(version));
-        expect(await Bun.file(join(install, "bunaway-host.exe")).exists()).toBe(false);
-        expect(await Bun.file(join(install, "runtime/bun.exe")).text()).toBe(`runtime ${version}`);
-        expect(await Bun.file(join(install, "launch.ps1")).text()).toBe(`launcher ${version}`);
-        expect(await Bun.file(join(install, "assets/web/quote's.js")).text()).toBe(String(version));
+        expect(
+          await Bun.file(
+            join(install, "assets/web/retired/page.html"),
+          ).exists(),
+        ).toBe(false);
+        expect(
+          await Bun.file(join(install, "licenses/retired.txt")).exists(),
+        ).toBe(false);
+        expect(await Bun.file(join(install, "assets/web/case.js")).text()).toBe(
+          String(version),
+        );
+        expect(await Bun.file(join(install, "bunaway-host.exe")).exists()).toBe(
+          false,
+        );
+        expect(await Bun.file(join(install, "runtime/bun.exe")).text()).toBe(
+          `runtime ${version}`,
+        );
+        expect(await Bun.file(join(install, "launch.ps1")).text()).toBe(
+          `launcher ${version}`,
+        );
+        expect(
+          await Bun.file(join(install, "assets/web/quote's.js")).text(),
+        ).toBe(String(version));
         expect(await Bun.file(data).text()).toBe("memo");
-        expect(await Bun.file(join(root, "external", "keep.txt")).text()).toBe("external data");
-        if (version === 2) await rm(join(install, "assets", "external"));
+        expect(await Bun.file(join(root, "external", "keep.txt")).text()).toBe(
+          "external data",
+        );
+        if (version === 2) {
+          await rm(join(install, "assets", "external"));
+        }
         await removeInstallation();
         expect(await Bun.file(data).exists()).toBe(version === 2);
       }
     } finally {
-      if (await Bun.file(uninstall).exists()) await removeInstallation();
-      await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+      if (await Bun.file(uninstall).exists()) {
+        await removeInstallation();
+      }
+      await rm(root, {
+        recursive: true,
+        force: true,
+        maxRetries: 5,
+        retryDelay: 100,
+      });
     }
   },
   60000,
@@ -398,20 +554,36 @@ test.skipIf(!iscc)(
 test.skipIf(!iscc)(
   "Inno upgrades prune renamed and disabled shortcuts while preserving unrelated links and app data",
   async () => {
-    const root = await realpath(await mkdtemp(join(tmpdir(), "bunaway-inno-shortcuts-")));
+    const root = await realpath(
+      await mkdtemp(join(tmpdir(), "bunaway-inno-shortcuts-")),
+    );
     const install = join(root, "install");
     const menu = join(root, "menu");
     const desktop = join(root, "desktop");
     const data = join(root, "data", "memo.txt");
     const uninstall = join(install, "unins000.exe");
     const identifier = `app.test-${crypto.randomUUID()}`;
-    const names = ["Old's 🚀 {App}", "New's 🚀 {App}", "New's 🚀 {App}", "New's 🚀 {App}"];
-    const silent = ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"];
-    const unrelated = [join(menu, "Unrelated.lnk"), join(desktop, `Other (${identifier}).lnk`)];
+    const names = [
+      "Old's 🚀 {App}",
+      "New's 🚀 {App}",
+      "New's 🚀 {App}",
+      "New's 🚀 {App}",
+    ];
+    const silent = [
+      "/VERYSILENT",
+      "/SUPPRESSMSGBOXES",
+      "/NORESTART",
+    ];
+    const unrelated = [
+      join(menu, "Unrelated.lnk"),
+      join(desktop, `Other (${identifier}).lnk`),
+    ];
     async function removeInstallation() {
       await must(uninstall, silent);
       for (let retry = 0; retry < 100; retry++) {
-        if (!(await Bun.file(uninstall).exists())) return;
+        if (!(await Bun.file(uninstall).exists())) {
+          return;
+        }
         await Bun.sleep(50);
       }
       throw new Error("The fixture uninstaller did not finish.");
@@ -421,7 +593,10 @@ test.skipIf(!iscc)(
       for (let index = 0; index < names.length; index++) {
         const name = names[index] as string;
         const staging = join(root, String(index));
-        await Bun.write(join(staging, "app", "runtime", "bun.exe"), "runtime fixture");
+        await Bun.write(
+          join(staging, "app", "runtime", "bun.exe"),
+          "runtime fixture",
+        );
         await Bun.write(join(staging, "app", "launch.ps1"), "launcher fixture");
         await Bun.write(join(staging, "app", "bunaway.cmd"), "command fixture");
         await mkdir(join(staging, "installer"));
@@ -470,18 +645,30 @@ test.skipIf(!iscc)(
         }
         for (const previous of new Set(names.slice(0, index + 1))) {
           const current = previous === name;
-          expect(await Bun.file(join(menu, `${previous}.lnk`)).exists()).toBe(current && index < 3);
-          expect(await Bun.file(join(menu, `${previous} 제거.lnk`)).exists()).toBe(
+          expect(await Bun.file(join(menu, `${previous}.lnk`)).exists()).toBe(
             current && index < 3,
           );
-          expect(await Bun.file(join(desktop, `${previous} (${identifier}).lnk`)).exists()).toBe(
-            current && index < 2,
-          );
+          expect(
+            await Bun.file(join(menu, `${previous} 제거.lnk`)).exists(),
+          ).toBe(current && index < 3);
+          expect(
+            await Bun.file(
+              join(desktop, `${previous} (${identifier}).lnk`),
+            ).exists(),
+          ).toBe(current && index < 2);
         }
-        for (const link of unrelated) expect(await Bun.file(link).exists()).toBe(true);
-        expect(await Bun.file(join(menu, "PowerShell other file.lnk")).exists()).toBe(true);
-        expect(await Bun.file(join(menu, "PowerShell mention.lnk")).exists()).toBe(true);
-        expect(await Bun.file(join(menu, "broken.lnk")).text()).toBe("not a shortcut");
+        for (const link of unrelated) {
+          expect(await Bun.file(link).exists()).toBe(true);
+        }
+        expect(
+          await Bun.file(join(menu, "PowerShell other file.lnk")).exists(),
+        ).toBe(true);
+        expect(
+          await Bun.file(join(menu, "PowerShell mention.lnk")).exists(),
+        ).toBe(true);
+        expect(await Bun.file(join(menu, "broken.lnk")).text()).toBe(
+          "not a shortcut",
+        );
         expect(await Bun.file(data).text()).toBe("memo");
         if (index === 0) {
           const powershell = join(
@@ -492,7 +679,8 @@ test.skipIf(!iscc)(
             "powershell.exe",
           );
           const linkPath = join(menu, `${name}.lnk`);
-          const psLiteral = (value: string) => `'${value.replaceAll("'", "''")}'`;
+          const psLiteral = (value: string) =>
+            `'${value.replaceAll("'", "''")}'`;
           const command = `$folder=(New-Object -ComObject Shell.Application).Namespace(${psLiteral(menu)}); $link=$folder.ParseName(${psLiteral(`${name}.lnk`)}).GetLink(); [Console]::WriteLine((ConvertTo-Json -InputObject @{Target=$link.Path;Arguments=$link.Arguments} -Compress))`;
           const output = await must(powershell, [
             "-NoProfile",
@@ -512,24 +700,39 @@ test.skipIf(!iscc)(
         }
       }
       await removeInstallation();
-      for (const link of unrelated) expect(await Bun.file(link).exists()).toBe(true);
+      for (const link of unrelated) {
+        expect(await Bun.file(link).exists()).toBe(true);
+      }
       expect(await Bun.file(data).text()).toBe("memo");
     } finally {
-      if (await Bun.file(uninstall).exists()) await removeInstallation();
-      await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+      if (await Bun.file(uninstall).exists()) {
+        await removeInstallation();
+      }
+      await rm(root, {
+        recursive: true,
+        force: true,
+        maxRetries: 5,
+        retryDelay: 100,
+      });
     }
   },
   60000,
 );
 
 const makeappx =
-  process.platform === "win32" ? await findWindowsKitTool("makeappx.exe") : undefined;
+  process.platform === "win32"
+    ? await findWindowsKitTool("makeappx.exe")
+    : undefined;
 
 test.skipIf(!makeappx)(
   "makeappx accepts explicit automatic and duplicate capabilities",
   async () => {
-    if (!makeappx) throw new Error("Expected makeappx.");
-    const root = await realpath(await mkdtemp(join(tmpdir(), "bunaway-msix-capabilities-")));
+    if (!makeappx) {
+      throw new Error("Expected makeappx.");
+    }
+    const root = await realpath(
+      await mkdtemp(join(tmpdir(), "bunaway-msix-capabilities-")),
+    );
     try {
       const payload = join(root, "payload");
       await mkdir(payload);
@@ -560,23 +763,45 @@ test.skipIf(!makeappx)(
             "internetClient",
           ],
           executable: "runtime/bun.exe",
-          logo: { square44: "logo.png", square150: "logo.png", storeLogo: "logo.png" },
+          logo: {
+            square44: "logo.png",
+            square150: "logo.png",
+            storeLogo: "logo.png",
+          },
         }),
       );
-      await must(makeappx, ["pack", "/d", payload, "/p", join(root, "test.msix"), "/o"]);
+      await must(makeappx, [
+        "pack",
+        "/d",
+        payload,
+        "/p",
+        join(root, "test.msix"),
+        "/o",
+      ]);
       expect(await Bun.file(join(root, "test.msix")).exists()).toBe(true);
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, {
+        recursive: true,
+        force: true,
+      });
     }
   },
   30000,
 );
 
 test("Windows adapters register all three channels", () => {
-  expect(registeredChannels()).toEqual(["win-direct", "win-store-msix", "win-store-unpackaged"]);
+  expect(registeredChannels()).toEqual([
+    "win-direct",
+    "win-store-msix",
+    "win-store-unpackaged",
+  ]);
   expect(adapterFor("win-direct")?.signingRequirement).toBe("optional");
-  expect(adapterFor("win-store-msix")?.signingRequirement).toBe("required-to-run");
-  expect(adapterFor("win-store-unpackaged")?.signingRequirement).toBe("required-to-submit");
+  expect(adapterFor("win-store-msix")?.signingRequirement).toBe(
+    "required-to-run",
+  );
+  expect(adapterFor("win-store-unpackaged")?.signingRequirement).toBe(
+    "required-to-submit",
+  );
   expect(adapterFor("mac-direct")).toBeUndefined();
 });
 
@@ -593,36 +818,75 @@ test("win-direct stages follow the contract pipeline", () => {
 
 test("win-store-unpackaged adds a submission checklist stage and forbids bootstrap", () => {
   const adapter = adapterOrThrow("win-store-unpackaged");
-  const ids = runIds(adapter.stages({ ...input({}), channel: "win-store-unpackaged" }));
+  const ids = runIds(
+    adapter.stages({
+      ...input({}),
+      channel: "win-store-unpackaged",
+    }),
+  );
   expect(ids[ids.length - 1]).toBe("submission");
 });
 
-test.each(["win-direct", "win-store-unpackaged"])(
-  "%s rejects machine-wide user data cleanup before packaging",
-  (channel) => {
-    const config = (options: Record<string, unknown>) =>
-      JSON.stringify({ channels: { [channel]: options } });
-    expect(() =>
-      parsePackaging(config({ scope: "perMachine", uninstall: { preserveUserData: false } })),
-    ).toThrow(/requires scope=perUser/);
-    for (const options of [
-      { scope: "perMachine" },
-      { scope: "perMachine", uninstall: { preserveUserData: true } },
-      { scope: "perUser", uninstall: { preserveUserData: false } },
-      { uninstall: { preserveUserData: false } },
-    ]) {
-      expect(() => parsePackaging(config(options))).not.toThrow();
-    }
-  },
-);
+test.each([
+  "win-direct",
+  "win-store-unpackaged",
+])("%s rejects machine-wide user data cleanup before packaging", (channel) => {
+  const config = (options: Record<string, unknown>) =>
+    JSON.stringify({
+      channels: {
+        [channel]: options,
+      },
+    });
+  expect(() =>
+    parsePackaging(
+      config({
+        scope: "perMachine",
+        uninstall: {
+          preserveUserData: false,
+        },
+      }),
+    ),
+  ).toThrow(/requires scope=perUser/);
+  for (const options of [
+    {
+      scope: "perMachine",
+    },
+    {
+      scope: "perMachine",
+      uninstall: {
+        preserveUserData: true,
+      },
+    },
+    {
+      scope: "perUser",
+      uninstall: {
+        preserveUserData: false,
+      },
+    },
+    {
+      uninstall: {
+        preserveUserData: false,
+      },
+    },
+  ]) {
+    expect(() => parsePackaging(config(options))).not.toThrow();
+  }
+});
 
 test("win-store-msix remains registered and fails before SDK discovery", () => {
   const adapter = adapterOrThrow("win-store-msix");
-  const findTool = spyOn(windowsTools, "findWindowsKitTool").mockImplementation(async () => {
-    throw new Error("MSIX gate must run before SDK discovery.");
-  });
+  const findTool = spyOn(windowsTools, "findWindowsKitTool").mockImplementation(
+    async () => {
+      throw new Error("MSIX gate must run before SDK discovery.");
+    },
+  );
   try {
-    expect(() => adapter.stages({ ...input({}), channel: "win-store-msix" })).toThrow(
+    expect(() =>
+      adapter.stages({
+        ...input({}),
+        channel: "win-store-msix",
+      }),
+    ).toThrow(
       /no verified clean pre-start environment.*win-direct.*win-store-unpackaged/,
     );
     expect(findTool).not.toHaveBeenCalled();
@@ -645,10 +909,18 @@ test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data pol
     webView2: "check" as const,
     appDataDir: "{localappdata}\\bunaway\\com.example.app",
     preserveUserData: true,
-    assetPaths: ["assets/web/current.html", "licenses/LICENSE.bun"],
+    assetPaths: [
+      "assets/web/current.html",
+      "licenses/LICENSE.bun",
+    ],
   };
-  const perUser = renderInnoScript({ ...base, scope: "perUser" });
-  expect(perUser).toContain("DefaultDirName={localappdata}\\Programs\\com.example.app");
+  const perUser = renderInnoScript({
+    ...base,
+    scope: "perUser",
+  });
+  expect(perUser).toContain(
+    "DefaultDirName={localappdata}\\Programs\\com.example.app",
+  );
   expect(perUser).toContain("DefaultGroupName=com.example.app");
   expect(perUser).toContain("{autodesktop}\\Test App (com.example.app)");
   expect(perUser).toContain("PrivilegesRequired=lowest");
@@ -683,10 +955,18 @@ test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data pol
   expect(perMachine).not.toContain("RegQueryStringValue(HKCU");
   expect(perMachine).toContain("ArchitecturesAllowed=x64compatible");
   expect(perMachine).not.toContain("[UninstallDelete]");
-  expect(() => renderInnoScript({ ...base, scope: "perMachine", preserveUserData: false })).toThrow(
-    /must preserve user data/,
-  );
-  const perUserCleanup = renderInnoScript({ ...base, scope: "perUser", preserveUserData: false });
+  expect(() =>
+    renderInnoScript({
+      ...base,
+      scope: "perMachine",
+      preserveUserData: false,
+    }),
+  ).toThrow(/must preserve user data/);
+  const perUserCleanup = renderInnoScript({
+    ...base,
+    scope: "perUser",
+    preserveUserData: false,
+  });
   expect(perUserCleanup).toContain(
     'Type: filesandordirs; Name: "{localappdata}\\bunaway\\com.example.app"',
   );
@@ -701,43 +981,93 @@ test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data pol
   expect(braceScript).toContain(`Source: "${bracePath}";`);
   expect(braceScript).not.toContain("C:\\project\\{{demo}");
   expect(() =>
-    renderInnoScript({ ...base, scope: "perUser", bootstrapperPath: "bad\npath" }),
+    renderInnoScript({
+      ...base,
+      scope: "perUser",
+      bootstrapperPath: "bad\npath",
+    }),
   ).toThrow(/line breaks/);
   expect(perMachine).toContain(
     "'/silent /install', '', SW_HIDE, ewWaitUntilTerminated, ResultCode",
   );
   expect(perMachine).toContain("Flags: dontcopy");
-  expect(perMachine).toContain("function PrepareToInstall(var NeedsRestart: Boolean): String");
+  expect(perMachine).toContain(
+    "function PrepareToInstall(var NeedsRestart: Boolean): String",
+  );
   expect(perMachine).toContain("else if ResultCode <> 0 then");
   expect(perMachine).toContain("else if not HasWebView2Runtime then");
-  expect(perMachine).not.toContain('Filename: "{tmp}\\MicrosoftEdgeWebview2Setup.exe"');
-  expect(perUser).toContain("MinVersion=10.0.17763\n");
-  expect(renderInnoScript({ ...base, scope: "perUser", minVersion: "10.0.22621.0" })).toContain(
-    "MinVersion=10.0.22621\n",
+  expect(perMachine).not.toContain(
+    'Filename: "{tmp}\\MicrosoftEdgeWebview2Setup.exe"',
   );
-  for (const minVersion of ["6.1", "10.0.10240.0", "10.0.22621.1", "10.0.22621.0\n[Run]", "bad"]) {
-    expect(() => renderInnoScript({ ...base, scope: "perUser", minVersion })).toThrow(/minVersion/);
+  expect(perUser).toContain("MinVersion=10.0.17763\n");
+  expect(
+    renderInnoScript({
+      ...base,
+      scope: "perUser",
+      minVersion: "10.0.22621.0",
+    }),
+  ).toContain("MinVersion=10.0.22621\n");
+  for (const minVersion of [
+    "6.1",
+    "10.0.10240.0",
+    "10.0.22621.1",
+    "10.0.22621.0\n[Run]",
+    "bad",
+  ]) {
+    expect(() =>
+      renderInnoScript({
+        ...base,
+        scope: "perUser",
+        minVersion,
+      }),
+    ).toThrow(/minVersion/);
   }
   expect(perMachine).toContain("SignTool=bunaway\nSignedUninstaller=yes");
   expect(perUser).not.toContain("SignTool=bunaway");
 
-  const escaped = renderInnoScript({ ...base, scope: "perUser", name: 'My "App" {Beta}' });
+  const escaped = renderInnoScript({
+    ...base,
+    scope: "perUser",
+    name: 'My "App" {Beta}',
+  });
   expect(escaped).toContain('AppName=My "App" {{Beta}');
   expect(escaped).toContain('Description: "Launch My ""App"" {{Beta}"');
-  expect(escaped).toContain("DefaultDirName={localappdata}\\Programs\\com.example.app");
-  expect(escaped).toContain("{autodesktop}\\My _App_ {{Beta} (com.example.app)");
-  for (const scope of ["perUser", "perMachine"] as const) {
-    const first = renderInnoScript({ ...base, scope });
-    const second = renderInnoScript({ ...base, scope, identifier: "com.other.app" });
-    for (const directive of ["DefaultDirName", "DefaultGroupName", "AppId"]) {
+  expect(escaped).toContain(
+    "DefaultDirName={localappdata}\\Programs\\com.example.app",
+  );
+  expect(escaped).toContain(
+    "{autodesktop}\\My _App_ {{Beta} (com.example.app)",
+  );
+  for (const scope of [
+    "perUser",
+    "perMachine",
+  ] as const) {
+    const first = renderInnoScript({
+      ...base,
+      scope,
+    });
+    const second = renderInnoScript({
+      ...base,
+      scope,
+      identifier: "com.other.app",
+    });
+    for (const directive of [
+      "DefaultDirName",
+      "DefaultGroupName",
+      "AppId",
+    ]) {
       const pattern = new RegExp(`^${directive}=.*$`, "m");
       expect(first.match(pattern)?.[0]).not.toBe(second.match(pattern)?.[0]);
     }
     expect(second).toContain("{autodesktop}\\Test App (com.other.app)");
   }
-  expect(() => renderInnoScript({ ...base, scope: "perUser", name: "App\n[Run]" })).toThrow(
-    /line breaks/,
-  );
+  expect(() =>
+    renderInnoScript({
+      ...base,
+      scope: "perUser",
+      name: "App\n[Run]",
+    }),
+  ).toThrow(/line breaks/);
 });
 
 test("AppxManifest declares full trust, virtualization opt-out and icon resources", () => {
@@ -762,24 +1092,71 @@ test("AppxManifest declares full trust, virtualization opt-out and icon resource
   const xml = renderAppxManifest(manifestOptions);
   const duplicates = renderAppxManifest({
     ...manifestOptions,
-    capabilities: ["runFullTrust", "unvirtualizedResources", "internetClient", "internetClient"],
+    capabilities: [
+      "runFullTrust",
+      "unvirtualizedResources",
+      "internetClient",
+      "internetClient",
+    ],
   });
-  for (const capability of ["runFullTrust", "unvirtualizedResources", "internetClient"]) {
-    expect(duplicates.match(new RegExp(`Name="${capability}"`, "g"))).toHaveLength(1);
+  for (const capability of [
+    "runFullTrust",
+    "unvirtualizedResources",
+    "internetClient",
+  ]) {
+    expect(
+      duplicates.match(new RegExp(`Name="${capability}"`, "g")),
+    ).toHaveLength(1);
   }
-  expect(() => renderAppxManifest({ ...manifestOptions, minVersion: "10.0.17763.0" })).toThrow(
-    /unvirtualizedData requires minVersion/,
-  );
-  for (const packageName of ["a", "ab", "a".repeat(51)]) {
-    expect(() => renderAppxManifest({ ...manifestOptions, packageName })).toThrow(/3\.\.50/);
+  expect(() =>
+    renderAppxManifest({
+      ...manifestOptions,
+      minVersion: "10.0.17763.0",
+    }),
+  ).toThrow(/unvirtualizedData requires minVersion/);
+  for (const packageName of [
+    "a",
+    "ab",
+    "a".repeat(51),
+  ]) {
     expect(() =>
-      parsePackaging(JSON.stringify({ channels: { "win-store-msix": { packageName } } })),
+      renderAppxManifest({
+        ...manifestOptions,
+        packageName,
+      }),
+    ).toThrow(/3\.\.50/);
+    expect(() =>
+      parsePackaging(
+        JSON.stringify({
+          channels: {
+            "win-store-msix": {
+              packageName,
+            },
+          },
+        }),
+      ),
     ).toThrow();
   }
-  for (const packageName of ["abc", "a".repeat(50)]) {
-    expect(() => renderAppxManifest({ ...manifestOptions, packageName })).not.toThrow();
+  for (const packageName of [
+    "abc",
+    "a".repeat(50),
+  ]) {
     expect(() =>
-      parsePackaging(JSON.stringify({ channels: { "win-store-msix": { packageName } } })),
+      renderAppxManifest({
+        ...manifestOptions,
+        packageName,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      parsePackaging(
+        JSON.stringify({
+          channels: {
+            "win-store-msix": {
+              packageName,
+            },
+          },
+        }),
+      ),
     ).not.toThrow();
   }
   expect(xml).toContain('Name="Example.TestApp"');
@@ -789,9 +1166,13 @@ test("AppxManifest declares full trust, virtualization opt-out and icon resource
   expect(xml).toContain('EntryPoint="Windows.FullTrustApplication"');
   expect(xml).toContain('Name="runFullTrust"');
   expect(xml).toContain('Name="unvirtualizedResources"');
-  expect(xml).toContain("$(KnownFolder:LocalAppData)\\bunaway\\com.example.app");
+  expect(xml).toContain(
+    "$(KnownFolder:LocalAppData)\\bunaway\\com.example.app",
+  );
   expect(xml).toContain("Square44x44Logo.png");
-  expect(xml.match(/<uap:VisualElements[^>]*>/)?.[0]).not.toContain("Wide310x150Logo");
+  expect(xml.match(/<uap:VisualElements[^>]*>/)?.[0]).not.toContain(
+    "Wide310x150Logo",
+  );
   expect(xml).toMatch(
     /<uap:VisualElements[^>]*>\s*<uap:DefaultTile Wide310x150Logo="Wide310x150Logo.png"\/>\s*<\/uap:VisualElements>/,
   );
@@ -821,10 +1202,16 @@ test("AppxManifest declares full trust, virtualization opt-out and icon resource
   expect(virtualized).not.toContain("unvirtualizedResources");
   expect(virtualized).not.toContain("ExcludedDirectories");
   expect(virtualized).toContain('<Capability Name="internetClient"/>');
-  expect(virtualized).toContain('<Capability Name="privateNetworkClientServer"/>');
+  expect(virtualized).toContain(
+    '<Capability Name="privateNetworkClientServer"/>',
+  );
   expect(virtualized).toContain('<uap:Capability Name="picturesLibrary"/>');
-  expect(virtualized).toContain('<rescap:Capability Name="broadFileSystemAccess"/>');
-  expect(virtualized).not.toContain('<rescap:Capability Name="privateNetworkClientServer"');
+  expect(virtualized).toContain(
+    '<rescap:Capability Name="broadFileSystemAccess"/>',
+  );
+  expect(virtualized).not.toContain(
+    '<rescap:Capability Name="privateNetworkClientServer"',
+  );
   for (const version of [
     "1.2.3.4",
     "0.1.0.0",
@@ -834,15 +1221,34 @@ test("AppxManifest declares full trust, virtualization opt-out and icon resource
     "1.2.3",
     "1.2.3.0\n",
   ]) {
-    expect(() => renderAppxManifest({ ...manifestOptions, version })).toThrow(/win-store-msix/);
+    expect(() =>
+      renderAppxManifest({
+        ...manifestOptions,
+        version,
+      }),
+    ).toThrow(/win-store-msix/);
   }
 });
 
 test("Windows signing resolves certificates from the project root, independent of cwd", () => {
   const root = resolve(tmpdir(), "bunaway-certificate-project");
-  for (const certificateFile of ["certs/developer.pfx", resolve(tmpdir(), "external.pfx")]) {
+  for (const certificateFile of [
+    "certs/developer.pfx",
+    resolve(tmpdir(), "external.pfx"),
+  ]) {
     const ctx: StageContext = {
-      input: { ...input({}, { certificateFile }), metadata: { ...metadata, root } },
+      input: {
+        ...input(
+          {},
+          {
+            certificateFile,
+          },
+        ),
+        metadata: {
+          ...metadata,
+          root,
+        },
+      },
       staging: "unused",
       report() {},
       addArtifact() {},
@@ -856,15 +1262,29 @@ test("payload staging refuses internal junctions before signing can mutate the b
   const root = await realpath(await mkdtemp(join(tmpdir(), "bunaway-copy-")));
   try {
     const source = join(root, "source");
-    await mkdir(join(source, "real-runtime"), { recursive: true });
-    await writeFile(join(source, "real-runtime", "bun.exe"), "original runtime");
-    await symlink(join(source, "real-runtime"), join(source, "runtime"), "junction");
-    await expect(copyPayload(source, join(root, "stage"))).rejects.toThrow(/symlinks or junctions/);
-    expect(await readFile(join(source, "real-runtime", "bun.exe"), "utf8")).toBe(
+    await mkdir(join(source, "real-runtime"), {
+      recursive: true,
+    });
+    await writeFile(
+      join(source, "real-runtime", "bun.exe"),
       "original runtime",
     );
+    await symlink(
+      join(source, "real-runtime"),
+      join(source, "runtime"),
+      "junction",
+    );
+    await expect(copyPayload(source, join(root, "stage"))).rejects.toThrow(
+      /symlinks or junctions/,
+    );
+    expect(
+      await readFile(join(source, "real-runtime", "bun.exe"), "utf8"),
+    ).toBe("original runtime");
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, {
+      recursive: true,
+      force: true,
+    });
   }
 });
 
@@ -874,23 +1294,40 @@ test("plain staged payloads are independent and exclude previous package outputs
     const source = join(root, "source");
     const stage = join(source, "packaged", "staging");
     await Bun.write(join(source, "runtime", "bun.exe"), "original runtime");
-    await Bun.write(join(source, "packaged", "previous", "setup.exe"), "previous installer");
+    await Bun.write(
+      join(source, "packaged", "previous", "setup.exe"),
+      "previous installer",
+    );
     await copyPayload(source, stage);
     await writeFile(join(stage, "runtime", "bun.exe"), "signed runtime");
-    expect(await readFile(join(source, "runtime", "bun.exe"), "utf8")).toBe("original runtime");
-    expect(await Bun.file(join(stage, "packaged", "previous", "setup.exe")).exists()).toBe(false);
+    expect(await readFile(join(source, "runtime", "bun.exe"), "utf8")).toBe(
+      "original runtime",
+    );
+    expect(
+      await Bun.file(join(stage, "packaged", "previous", "setup.exe")).exists(),
+    ).toBe(false);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, {
+      recursive: true,
+      force: true,
+    });
   }
 });
 
-test.each(["success", "sign", "verify"])("Inno signing callback: %s", async (failure) => {
+test.each([
+  "success",
+  "sign",
+  "verify",
+])("Inno signing callback: %s", async (failure) => {
   const root = await realpath(await mkdtemp(join(tmpdir(), "bunaway-inno-")));
   try {
     const ctx: StageContext = {
       input: input(
         {},
-        { certificateFile: "developer.pfx", passwordEnv: "BUNAWAY_TEST_PFX_PASSWORD" },
+        {
+          certificateFile: "developer.pfx",
+          passwordEnv: "BUNAWAY_TEST_PFX_PASSWORD",
+        },
       ),
       staging: root,
       report() {},
@@ -903,13 +1340,18 @@ test.each(["success", "sign", "verify"])("Inno signing callback: %s", async (fai
     try {
       signing = await prepareInnoSigning(ctx, root, "signtool.exe");
     } finally {
-      if (previous === undefined) delete process.env.BUNAWAY_TEST_PFX_PASSWORD;
-      else process.env.BUNAWAY_TEST_PFX_PASSWORD = previous;
+      if (previous === undefined) {
+        delete process.env.BUNAWAY_TEST_PFX_PASSWORD;
+      } else {
+        process.env.BUNAWAY_TEST_PFX_PASSWORD = previous;
+      }
     }
     const callback = join(root, "inno-signing", "sign.js");
     expect(await readFile(callback, "utf8")).not.toContain(password);
     expect(signing.args.join(" ")).not.toContain(password);
-    expect(JSON.parse(signing.env.BUNAWAY_INNO_SIGN_COMMANDS)[0]).toContain(password);
+    expect(JSON.parse(signing.env.BUNAWAY_INNO_SIGN_COMMANDS)[0]).toContain(
+      password,
+    );
     expect(JSON.parse(signing.env.BUNAWAY_INNO_SIGN_COMMANDS)[0]).toContain(
       resolve(ctx.input.metadata.root, "developer.pfx"),
     );
@@ -925,34 +1367,56 @@ if (process.argv[2] === process.env.FAIL_STAGE) {
 }
 `,
     );
-    const child = Bun.spawn([process.execPath, callback, join(root, "uninstaller.exe")], {
-      env: {
-        ...signing.env,
-        TRACE: trace,
-        FAIL_STAGE: failure,
-        BUNAWAY_INNO_SIGN_COMMANDS: JSON.stringify([
-          [process.execPath, tool, "sign"],
-          [process.execPath, tool, "verify"],
-        ]),
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        callback,
+        join(root, "uninstaller.exe"),
+      ],
+      {
+        env: {
+          ...signing.env,
+          TRACE: trace,
+          FAIL_STAGE: failure,
+          BUNAWAY_INNO_SIGN_COMMANDS: JSON.stringify([
+            [
+              process.execPath,
+              tool,
+              "sign",
+            ],
+            [
+              process.execPath,
+              tool,
+              "verify",
+            ],
+          ]),
+        },
+        stdout: "pipe",
+        stderr: "pipe",
       },
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    );
     const [code, stdout, stderr] = await Promise.all([
       child.exited,
       new Response(child.stdout).text(),
       new Response(child.stderr).text(),
     ]);
     expect(code).toBe(failure === "success" ? 0 : 1);
-    expect(await readFile(trace, "utf8")).toBe(failure === "sign" ? "sign\n" : "sign\nverify\n");
+    expect(await readFile(trace, "utf8")).toBe(
+      failure === "sign" ? "sign\n" : "sign\nverify\n",
+    );
     expect(stdout + stderr).not.toContain(password);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, {
+      recursive: true,
+      force: true,
+    });
   }
 });
 
 test("packagedSha256 mirrors the shipped bytes in the staged manifest", async () => {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "bunaway-packaged-hash-")));
+  const root = await realpath(
+    await mkdtemp(join(tmpdir(), "bunaway-packaged-hash-")),
+  );
   try {
     const payload = resolve(root, "package");
     const upstream = "1".repeat(64);
@@ -972,8 +1436,15 @@ test("packagedSha256 mirrors the shipped bytes in the staged manifest", async ()
           licenseSha256: "l",
         },
         assets: {},
-        app: { id: "x", version: "1" },
-        host: { target: "windows-x64", kind: "bun-ffi", sha256: "bootstrap" },
+        app: {
+          id: "x",
+          version: "1",
+        },
+        host: {
+          target: "windows-x64",
+          kind: "bun-ffi",
+          sha256: "bootstrap",
+        },
       }),
     );
     const { recordPackagedHashes } = await import(
@@ -981,15 +1452,22 @@ test("packagedSha256 mirrors the shipped bytes in the staged manifest", async ()
     );
     const manifest = await recordPackagedHashes(payload);
     expect(manifest.bun.executableSha256).toBe(upstream); // immutable provenance
-    const packaged = await windowsTools.sha256(resolve(payload, "runtime/bun.exe"));
+    const packaged = await windowsTools.sha256(
+      resolve(payload, "runtime/bun.exe"),
+    );
     expect(manifest.bun.packagedSha256).toBe(packaged);
     expect(await Bun.file(resolve(payload, "launch.ps1")).text()).toContain(
       `Check $bun '${packaged}'`,
     );
     expect(manifest.host?.packagedSha256).toBeUndefined();
-    const written = JSON.parse(await Bun.file(resolve(payload, "manifest.json")).text());
+    const written = JSON.parse(
+      await Bun.file(resolve(payload, "manifest.json")).text(),
+    );
     expect(written.bun.packagedSha256).toBe(manifest.bun.packagedSha256);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, {
+      recursive: true,
+      force: true,
+    });
   }
 });

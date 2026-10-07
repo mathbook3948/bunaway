@@ -11,6 +11,9 @@ export class MemoService {
   }
 
   read(): Promise<string> {
-    return storage.readText({ scope: "appData", path: "notes/memo.txt" });
+    return storage.readText({
+      scope: "appData",
+      path: "notes/memo.txt",
+    });
   }
 }

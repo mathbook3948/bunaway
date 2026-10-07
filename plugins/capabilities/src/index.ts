@@ -10,10 +10,27 @@ const plugin = defineNativePlugin({
       input: s.null(),
       output: s.array(
         s.object({
-          name: s.string({ pattern: "^[A-Za-z0-9_.:-]+$(?![\\s\\S])", maxLength: 128 }),
-          support: s.enum(["supported", "experimental", "unsupported"]),
-          permission: s.enum(["granted", "denied", "prompt", "not-required", "unknown"]),
-          reason: s.optional(s.string({ maxLength: 1024 })),
+          name: s.string({
+            pattern: "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+            maxLength: 128,
+          }),
+          support: s.enum([
+            "supported",
+            "experimental",
+            "unsupported",
+          ]),
+          permission: s.enum([
+            "granted",
+            "denied",
+            "prompt",
+            "not-required",
+            "unknown",
+          ]),
+          reason: s.optional(
+            s.string({
+              maxLength: 1024,
+            }),
+          ),
         }),
       ),
       permission: "get",

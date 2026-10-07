@@ -4,7 +4,14 @@
 import assert from "node:assert/strict";
 import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { closeSync, constants, openSync, readSync, realpathSync, unlinkSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  openSync,
+  readSync,
+  realpathSync,
+  unlinkSync,
+} from "node:fs";
 import { cp, mkdir, writeFile } from "node:fs/promises";
 import { release } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -21,21 +28,43 @@ import {
 import { readJsonLines } from "../../packages/runtime-bun/src/process-ipc.ts";
 import { validationCases } from "../protocol/validation-cases.ts";
 
-const original = resolve(process.argv[process.argv.indexOf("--package") + 1] ?? "");
+const original = resolve(
+  process.argv[process.argv.indexOf("--package") + 1] ?? "",
+);
 assert.ok(process.argv.includes("--package"), "--package is required");
 const packagePath = join(dirname(original), "macOS B 단계 한글 package");
-await cp(original, packagePath, { recursive: true, force: true });
+await cp(original, packagePath, {
+  recursive: true,
+  force: true,
+});
 const cwd = join(dirname(original), "hostile-cwd");
-await mkdir(cwd, { recursive: true });
+await mkdir(cwd, {
+  recursive: true,
+});
 await writeFile(join(cwd, ".env"), "BUNAWAY_HOSTILE=from-dotenv\n");
 await writeFile(join(cwd, "bunfig.toml"), 'preload = ["./hostile.ts"]\n');
 await writeFile(join(cwd, "hostile.ts"), 'throw new Error("hostile preload");');
 const host = join(packagePath, "bunaway-probe");
-const runtime = { id: "probe", generation: "1" };
-const base = { ipc: PROCESS_IPC_VERSION, runtime };
-type Observation = { kind: string; payload?: Message; [key: string]: unknown };
+const runtime = {
+  id: "probe",
+  generation: "1",
+};
+const base = {
+  ipc: PROCESS_IPC_VERSION,
+  runtime,
+};
+type Observation = {
+  kind: string;
+  payload?: Message;
+  [key: string]: unknown;
+};
 const live = new Set<ReturnType<typeof launch>>();
-const results: { name: string; ok: boolean; durationMs: number; error?: string }[] = [];
+const results: {
+  name: string;
+  ok: boolean;
+  durationMs: number;
+  error?: string;
+}[] = [];
 const executions: (() => {
   mode: string;
   hostPid: number;
@@ -55,14 +84,28 @@ function launch(mode = "normal", stall = false) {
   let paused = false;
   const args = stall
     ? (() => {
-        const fifoPath = join(cwd, `host-stdout-${process.pid}-${fifoCounter++}.fifo`);
+        const fifoPath = join(
+          cwd,
+          `host-stdout-${process.pid}-${fifoCounter++}.fifo`,
+        );
         execSync(`mkfifo "${fifoPath}"`);
         fifoPaths.push(fifoPath);
         fifoFd = openSync(fifoPath, constants.O_RDWR | constants.O_NONBLOCK);
         // exec keeps the shell's pid, so child.pid is the host pid.
-        return ["/bin/sh", "-c", 'exec "$1" "$2" >"$3"', "sh", host, mode, fifoPath];
+        return [
+          "/bin/sh",
+          "-c",
+          'exec "$1" "$2" >"$3"',
+          "sh",
+          host,
+          mode,
+          fifoPath,
+        ];
       })()
-    : [host, mode];
+    : [
+        host,
+        mode,
+      ];
   const child = Bun.spawn(args, {
     cwd,
     env: {
@@ -108,9 +151,19 @@ function launch(mode = "normal", stall = false) {
           if (!paused) {
             try {
               const n = readSync(fifoFd, buf, 0, buf.length, null);
-              if (n > 0) feed(buf.subarray(0, n).toString());
+              if (n > 0) {
+                feed(buf.subarray(0, n).toString());
+              }
             } catch (cause) {
-              if ((cause as { code?: string }).code !== "EAGAIN") readError = cause;
+              if (
+                (
+                  cause as {
+                    code?: string;
+                  }
+                ).code !== "EAGAIN"
+              ) {
+                readError = cause;
+              }
             }
           }
           if (childExited) {
@@ -122,7 +175,9 @@ function launch(mode = "normal", stall = false) {
               } catch {
                 n = 0;
               }
-              if (n <= 0) break;
+              if (n <= 0) {
+                break;
+              }
               feed(buf.subarray(0, n).toString());
             }
             break;
@@ -144,17 +199,22 @@ function launch(mode = "normal", stall = false) {
         }
       })();
   const stderr = (async () => {
-    for await (const bytes of child.stderr) logs += new TextDecoder().decode(bytes);
+    for await (const bytes of child.stderr) {
+      logs += new TextDecoder().decode(bytes);
+    }
   })();
   async function wait(match: (frame: Observation) => boolean, timeout = 8000) {
     const deadline = performance.now() + timeout;
     while (true) {
       const found = frames.find(match);
-      if (found) return found;
-      if (done || performance.now() > deadline)
+      if (found) {
+        return found;
+      }
+      if (done || performance.now() > deadline) {
         throw new Error(
           `Missing frame; ${JSON.stringify(frames)}; stderr=${logs.slice(0, 1000)}; read=${readError}`,
         );
+      }
       await Bun.sleep(5);
     }
   }
@@ -170,21 +230,47 @@ function launch(mode = "normal", stall = false) {
         kind: "web",
         ...base,
         context: "probe-view",
-        payload: { kind: "result", protocol: PROTOCOL_VERSION, id, payload },
+        payload: {
+          kind: "result",
+          protocol: PROTOCOL_VERSION,
+          id,
+          payload,
+        },
       });
-      assert.ok(Buffer.byteLength(expected) > 65536, "Response must exceed the FIFO capacity");
+      assert.ok(
+        Buffer.byteLength(expected) > 65536,
+        "Response must exceed the FIFO capacity",
+      );
       const deadline = performance.now() + 8000;
       const buffer = Buffer.alloc(512);
       while (pendingLine.length < 512) {
-        assert.ok(!childExited && performance.now() < deadline, "Missing partial response");
+        assert.ok(
+          !childExited && performance.now() < deadline,
+          "Missing partial response",
+        );
         try {
           const n = readSync(fifoFd, buffer, 0, buffer.length, null);
-          if (n > 0) feed(buffer.subarray(0, n).toString());
+          if (n > 0) {
+            feed(buffer.subarray(0, n).toString());
+          }
         } catch (cause) {
-          if ((cause as { code?: string }).code !== "EAGAIN") throw cause;
+          if (
+            (
+              cause as {
+                code?: string;
+              }
+            ).code !== "EAGAIN"
+          ) {
+            throw cause;
+          }
         }
-        assert.ok(expected.startsWith(pendingLine), "Unexpected partial response");
-        if (pendingLine.length < 512) await Bun.sleep(5);
+        assert.ok(
+          expected.startsWith(pendingLine),
+          "Unexpected partial response",
+        );
+        if (pendingLine.length < 512) {
+          await Bun.sleep(5);
+        }
       }
       // Leave the large response in flight, with all remaining FIFO reads paused.
     },
@@ -229,7 +315,13 @@ function launch(mode = "normal", stall = false) {
         ...base,
         kind: "web",
         context: "probe-view",
-        payload: { kind: "invoke", protocol: PROTOCOL_VERSION, id, command, payload },
+        payload: {
+          kind: "invoke",
+          protocol: PROTOCOL_VERSION,
+          id,
+          command,
+          payload,
+        },
       });
       return api.response(id);
     },
@@ -237,13 +329,22 @@ function launch(mode = "normal", stall = false) {
       const found = await wait(
         (frame) =>
           frame.kind === "web" &&
-          (frame.payload?.kind === "result" || frame.payload?.kind === "error") &&
+          (frame.payload?.kind === "result" ||
+            frame.payload?.kind === "error") &&
           frame.payload.id === id,
       );
-      return found.payload as Extract<Message, { kind: "result" | "error" }>;
+      return found.payload as Extract<
+        Message,
+        {
+          kind: "result" | "error";
+        }
+      >;
     },
     async finish(expectedExit = 0) {
-      const stopped = await wait((frame) => frame.kind === "host-stopped", 12000);
+      const stopped = await wait(
+        (frame) => frame.kind === "host-stopped",
+        12000,
+      );
       assert.equal(await child.exited, expectedExit);
       await output;
       await stderr;
@@ -252,7 +353,10 @@ function launch(mode = "normal", stall = false) {
       return stopped;
     },
     async stop() {
-      api.send({ ...base, kind: "shutdown" });
+      api.send({
+        ...base,
+        kind: "shutdown",
+      });
       return api.finish();
     },
   };
@@ -264,17 +368,28 @@ function launch(mode = "normal", stall = false) {
 // watch waits for PIDs and process groups ("g<pid>") to disappear via the
 // same host binary's --watch mode.
 async function watch(targets: (number | string)[]) {
-  const watcher = Bun.spawn([host, "--watch", ...targets.map(String)], {
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  const watcher = Bun.spawn(
+    [
+      host,
+      "--watch",
+      ...targets.map(String),
+    ],
+    {
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
   const reader = watcher.stdout.getReader();
   const first = await reader.read();
   reader.releaseLock();
   assert.equal(new TextDecoder().decode(first.value), "watch-ready\n");
   return async () => {
-    assert.equal(await watcher.exited, 0, "Watched processes/group must be gone");
+    assert.equal(
+      await watcher.exited,
+      0,
+      "Watched processes/group must be gone",
+    );
     assert.equal(await new Response(watcher.stderr).text(), "");
   };
 }
@@ -290,23 +405,41 @@ async function test(name: string, body: () => Promise<void>) {
       durationMs: Math.round(performance.now() - start),
       error: String(cause),
     });
-    throw new Error(`${name} failed`, { cause });
+    throw new Error(`${name} failed`, {
+      cause,
+    });
   }
-  results.push({ name, ok: true, durationMs: Math.round(performance.now() - start) });
+  results.push({
+    name,
+    ok: true,
+    durationMs: Math.round(performance.now() - start),
+  });
   console.log(`PASS ${name}`);
 }
 
 try {
   await test("TypeScript and native validators agree on shared regression inputs", async () => {
-    const validator = Bun.spawn([host, "--validate"], {
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    const validator = Bun.spawn(
+      [
+        host,
+        "--validate",
+      ],
+      {
+        stdin: "pipe",
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
     const output = new Response(validator.stdout).text();
     const errors = new Response(validator.stderr).text();
-    for (const { schema, value } of validationCases)
-      validator.stdin.write(`${JSON.stringify({ schema, value })}\n`);
+    for (const { schema, value } of validationCases) {
+      validator.stdin.write(
+        `${JSON.stringify({
+          schema,
+          value,
+        })}\n`,
+      );
+    }
     validator.stdin.end();
     assert.equal(await validator.exited, 0);
     const answers = (await output)
@@ -314,7 +447,10 @@ try {
       .split("\n")
       .map((line) => JSON.parse(line) as boolean);
     assert.equal(answers.length, validationCases.length);
-    for (const [i, { name, schema, value, accepted }] of validationCases.entries()) {
+    for (const [
+      i,
+      { name, schema, value, accepted },
+    ] of validationCases.entries()) {
       let tsAccepted = true;
       try {
         validateValue(schema, value);
@@ -326,19 +462,30 @@ try {
     }
     assert.equal(await errors, "");
   });
-  for (const termination of ["EOF", "shutdown"] as const) {
+  for (const termination of [
+    "EOF",
+    "shutdown",
+  ] as const) {
     await test(`immediate controller ${termination} cancels startup normally`, async () => {
       for (let attempt = 0; attempt < 5; attempt++) {
         const probe = launch();
-        if (termination === "EOF") probe.child.stdin.end();
-        else probe.send({ ...base, kind: "shutdown" });
+        if (termination === "EOF") {
+          probe.child.stdin.end();
+        } else {
+          probe.send({
+            ...base,
+            kind: "shutdown",
+          });
+        }
         const stopped = await probe.finish();
         assert.equal(stopped.exitCode, 0);
         assert.equal(stopped.failed, false);
         assert.equal(stopped.forced, false);
         assert.ok(probe.frames.some((frame) => frame.kind === "stopping"));
         assert.equal(
-          probe.frames.some((frame) => frame.kind === "fatal" || frame.kind === "host-error"),
+          probe.frames.some(
+            (frame) => frame.kind === "fatal" || frame.kind === "host-error",
+          ),
           false,
         );
       }
@@ -347,15 +494,21 @@ try {
   await test("bundled Bun, distinct OS PID, Korean/space path, isolated environment", async () => {
     const probe = launch();
     const pid = await probe.ready();
-    const exited = await watch([pid]);
+    const exited = await watch([
+      pid,
+    ]);
     const response = await probe.request("environment", "probe.environment");
     assert.equal(response.kind, "result");
-    if (response.kind !== "result") throw new Error("Expected environment");
+    if (response.kind !== "result") {
+      throw new Error("Expected environment");
+    }
     const env = response.payload as Record<string, JsonValue>;
     assert.equal(env.cwd, realpathSync(join(packagePath, "assets")));
     assert.equal(env.injected, null);
     assert.equal(env.bunOptions, null);
-    assert.deepEqual(env.args, ["normal"]);
+    assert.deepEqual(env.args, [
+      "normal",
+    ]);
     assert.equal((await probe.stop()).failed, false);
     await exited();
   });
@@ -370,11 +523,27 @@ try {
       payload: 4,
     });
     assert.equal(
-      ((await probe.request("promise", "probe.promise")) as Extract<Message, { kind: "result" }>)
-        .payload,
+      (
+        (await probe.request("promise", "probe.promise")) as Extract<
+          Message,
+          {
+            kind: "result";
+          }
+        >
+      ).payload,
       42,
     );
-    assert.equal(((await timer) as Extract<Message, { kind: "result" }>).payload, "timer-done");
+    assert.equal(
+      (
+        (await timer) as Extract<
+          Message,
+          {
+            kind: "result";
+          }
+        >
+      ).payload,
+      "timer-done",
+    );
     await probe.stop();
   });
   await test("subscribe, events, unlisten, late discard and context revocation", async () => {
@@ -384,15 +553,42 @@ try {
       ...base,
       kind: "web",
       context: "probe-view",
-      payload: { kind: "listen", protocol: PROTOCOL_VERSION, id: "listen", event: "probe.changed" },
+      payload: {
+        kind: "listen",
+        protocol: PROTOCOL_VERSION,
+        id: "listen",
+        event: "probe.changed",
+      },
     });
     await probe.response("listen");
-    await probe.request("emit", "probe.emit", { text: "한글 😀" });
-    const event = await probe.wait((frame) => frame.payload?.kind === "event");
-    assert.equal((event.payload as Extract<Message, { kind: "event" }>).sequence, 1);
-    assert.deepEqual((event.payload as Extract<Message, { kind: "event" }>).payload, {
+    await probe.request("emit", "probe.emit", {
       text: "한글 😀",
     });
+    const event = await probe.wait((frame) => frame.payload?.kind === "event");
+    assert.equal(
+      (
+        event.payload as Extract<
+          Message,
+          {
+            kind: "event";
+          }
+        >
+      ).sequence,
+      1,
+    );
+    assert.deepEqual(
+      (
+        event.payload as Extract<
+          Message,
+          {
+            kind: "event";
+          }
+        >
+      ).payload,
+      {
+        text: "한글 😀",
+      },
+    );
     probe.send({
       ...base,
       kind: "web",
@@ -407,7 +603,9 @@ try {
     await probe.response("unlisten");
     await probe.request("late", "probe.late-event");
     await probe.wait(
-      (frame) => frame.kind === "host-discarded" && frame.reason === "inactive-subscription",
+      (frame) =>
+        frame.kind === "host-discarded" &&
+        frame.reason === "inactive-subscription",
     );
     probe.send({
       ...base,
@@ -421,11 +619,24 @@ try {
       },
     });
     await probe.response("listen2");
-    probe.send({ ...base, kind: "revoke", context: "probe-view" });
-    assert.equal((await probe.request("revoked-late", "probe.late-event")).kind, "error");
+    probe.send({
+      ...base,
+      kind: "revoke",
+      context: "probe-view",
+    });
+    assert.equal(
+      (await probe.request("revoked-late", "probe.late-event")).kind,
+      "error",
+    );
     await probe.stop();
-    assert.equal(probe.frames.filter((frame) => frame.payload?.kind === "event").length, 1);
-    assert.equal(probe.frames.filter((frame) => frame.kind === "host-discarded").length, 1);
+    assert.equal(
+      probe.frames.filter((frame) => frame.payload?.kind === "event").length,
+      1,
+    );
+    assert.equal(
+      probe.frames.filter((frame) => frame.kind === "host-discarded").length,
+      1,
+    );
   });
   await test("revocation cancels pending requests and cannot be undone by a late listen result", async () => {
     const probe = launch("late-listen");
@@ -434,20 +645,37 @@ try {
       ...base,
       kind: "web",
       context: "probe-view",
-      payload: { kind: "listen", protocol: PROTOCOL_VERSION, id: "listen", event: "probe.changed" },
+      payload: {
+        kind: "listen",
+        protocol: PROTOCOL_VERSION,
+        id: "listen",
+        event: "probe.changed",
+      },
     });
     const pendingInvoke = probe.request("hold", "probe.hold");
-    probe.send({ ...base, kind: "revoke", context: "probe-view" });
-    for (const response of [await probe.response("listen"), await pendingInvoke]) {
+    probe.send({
+      ...base,
+      kind: "revoke",
+      context: "probe-view",
+    });
+    for (const response of [
+      await probe.response("listen"),
+      await pendingInvoke,
+    ]) {
       assert.equal(response.kind, "error");
-      if (response.kind !== "error") throw new Error("Expected cancellation");
+      if (response.kind !== "error") {
+        throw new Error("Expected cancellation");
+      }
       assert.equal(response.error.code, "CANCELLED");
     }
     await probe.wait(
-      (frame) => frame.kind === "host-discarded" && frame.reason === "late-response",
+      (frame) =>
+        frame.kind === "host-discarded" && frame.reason === "late-response",
     );
     await probe.wait(
-      (frame) => frame.kind === "host-discarded" && frame.reason === "inactive-subscription",
+      (frame) =>
+        frame.kind === "host-discarded" &&
+        frame.reason === "inactive-subscription",
     );
     probe.send({
       ...base,
@@ -462,17 +690,30 @@ try {
     });
     const again = await probe.response("listen-again");
     assert.equal(again.kind, "error");
-    if (again.kind !== "error") throw new Error("Expected cancellation");
+    if (again.kind !== "error") {
+      throw new Error("Expected cancellation");
+    }
     assert.equal(again.error.code, "CANCELLED");
     await probe.stop();
-    assert.equal(probe.frames.filter((frame) => frame.payload?.kind === "event").length, 0);
-    for (const id of ["listen", "hold", "listen-again"]) {
+    assert.equal(
+      probe.frames.filter((frame) => frame.payload?.kind === "event").length,
+      0,
+    );
+    for (const id of [
+      "listen",
+      "hold",
+      "listen-again",
+    ]) {
       assert.equal(
         probe.frames.filter(
           (frame) =>
             frame.kind === "web" &&
             "id" in (frame.payload ?? {}) &&
-            (frame.payload as { id: string }).id === id,
+            (
+              frame.payload as {
+                id: string;
+              }
+            ).id === id,
         ).length,
         1,
       );
@@ -481,12 +722,18 @@ try {
   await test("throw and rejected Promise deliver sanitized errors", async () => {
     const probe = launch();
     await probe.ready();
-    for (const operation of ["throw", "reject"]) {
+    for (const operation of [
+      "throw",
+      "reject",
+    ]) {
       assert.deepEqual(await probe.request(operation, `probe.${operation}`), {
         kind: "error",
         protocol: PROTOCOL_VERSION,
         id: operation,
-        error: { code: "INTERNAL", message: "Probe operation failed." },
+        error: {
+          code: "INTERNAL",
+          message: "Probe operation failed.",
+        },
       });
     }
     await probe.stop();
@@ -496,8 +743,14 @@ try {
     const probe = launch();
     await probe.ready();
     assert.equal(
-      ((await probe.request("logs", "probe.log-flood")) as Extract<Message, { kind: "result" }>)
-        .payload,
+      (
+        (await probe.request("logs", "probe.log-flood")) as Extract<
+          Message,
+          {
+            kind: "result";
+          }
+        >
+      ).payload,
       "logs-drained",
     );
     await probe.stop();
@@ -506,15 +759,31 @@ try {
   await test("astral Unicode error message survives native IPC validation", async () => {
     const probe = launch();
     await probe.ready();
-    const response = await probe.request("unicode-error", "probe.unicode-error");
+    const response = await probe.request(
+      "unicode-error",
+      "probe.unicode-error",
+    );
     assert.equal(response.kind, "error");
-    if (response.kind === "error") assert.equal(response.error.message, "😀".repeat(600));
+    if (response.kind === "error") {
+      assert.equal(response.error.message, "😀".repeat(600));
+    }
     await probe.stop();
   });
   await test("unpaired surrogates are rejected before IPC without closing the host", async () => {
     const probe = launch();
     await probe.ready();
-    for (const payload of ["\uD800", "\uDC00", { "\uD800": "key" }, { nested: ["\uDC00"] }]) {
+    for (const payload of [
+      "\uD800",
+      "\uDC00",
+      {
+        "\uD800": "key",
+      },
+      {
+        nested: [
+          "\uDC00",
+        ],
+      },
+    ]) {
       assert.throws(() =>
         probe.send({
           ...base,
@@ -530,21 +799,43 @@ try {
         }),
       );
     }
-    const payload = { "😀": ["\uD800\uDC00", "\uDBFF\uDFFF"] };
-    const response = await probe.request("valid-unicode", "probe.echo", payload);
+    const payload = {
+      "😀": [
+        "\uD800\uDC00",
+        "\uDBFF\uDFFF",
+      ],
+    };
+    const response = await probe.request(
+      "valid-unicode",
+      "probe.echo",
+      payload,
+    );
     assert.equal(response.kind, "result");
-    if (response.kind === "result") assert.deepEqual(response.payload, payload);
+    if (response.kind === "result") {
+      assert.deepEqual(response.payload, payload);
+    }
     await probe.stop();
   });
-  for (const action of ["direct", "invoke", "revoke", "ignore-stop", "no-shutdown"] as const) {
+  for (const action of [
+    "direct",
+    "invoke",
+    "revoke",
+    "ignore-stop",
+    "no-shutdown",
+  ] as const) {
     const name =
       action === "no-shutdown"
         ? "blocked stdout remains bounded without controller shutdown"
         : `blocked stdout remains bounded through ${action} then shutdown`;
     await test(name, async () => {
-      const probe = launch(action === "ignore-stop" ? "ignore-stop" : "normal", true);
+      const probe = launch(
+        action === "ignore-stop" ? "ignore-stop" : "normal",
+        true,
+      );
       const pid = await probe.ready();
-      const exited = await watch([pid]);
+      const exited = await watch([
+        pid,
+      ]);
       probe.pauseOutput();
       probe.send({
         ...base,
@@ -574,7 +865,11 @@ try {
           },
         });
       } else if (action === "revoke") {
-        probe.send({ ...base, kind: "revoke", context: "probe-view" });
+        probe.send({
+          ...base,
+          kind: "revoke",
+          context: "probe-view",
+        });
         probe.send({
           ...base,
           kind: "web",
@@ -587,8 +882,16 @@ try {
           },
         });
       }
-      if (action !== "no-shutdown") probe.send({ ...base, kind: "shutdown" });
-      const exit = await Promise.race([probe.child.exited, Bun.sleep(4500).then(() => "timeout")]);
+      if (action !== "no-shutdown") {
+        probe.send({
+          ...base,
+          kind: "shutdown",
+        });
+      }
+      const exit = await Promise.race([
+        probe.child.exited,
+        Bun.sleep(4500).then(() => "timeout"),
+      ]);
       assert.equal(exit, 1, "host must fail while stdout remains blocked");
       assert.ok(performance.now() - started < 4500);
       await exited();
@@ -602,7 +905,9 @@ try {
   await test("blocked controller output queue overflow cleans up without shutdown", async () => {
     const probe = launch("normal", true);
     const pid = await probe.ready();
-    const exited = await watch([pid]);
+    const exited = await watch([
+      pid,
+    ]);
     probe.pauseOutput();
     probe.send({
       ...base,
@@ -634,7 +939,10 @@ try {
       });
       await Bun.sleep(15);
     }
-    const exit = await Promise.race([probe.child.exited, Bun.sleep(8000).then(() => "timeout")]);
+    const exit = await Promise.race([
+      probe.child.exited,
+      Bun.sleep(8000).then(() => "timeout"),
+    ]);
     assert.equal(exit, 1, "host must fail without controller consumption");
     await exited();
     probe.releaseOutput();
@@ -671,7 +979,11 @@ try {
       },
     });
     await probe.waitForPartialResponse("echo", "x".repeat(800000));
-    probe.send({ ...base, kind: "revoke", context: "probe-view" });
+    probe.send({
+      ...base,
+      kind: "revoke",
+      context: "probe-view",
+    });
     probe.send({
       ...base,
       kind: "web",
@@ -686,12 +998,19 @@ try {
     probe.releaseOutput();
     const echo = await probe.response("echo");
     assert.equal(echo.kind, "result");
-    if (echo.kind !== "result") throw new Error("Expected echo result");
+    if (echo.kind !== "result") {
+      throw new Error("Expected echo result");
+    }
     assert.equal((echo.payload as string).length, 800000);
-    for (const id of ["hold", "after-revoke"]) {
+    for (const id of [
+      "hold",
+      "after-revoke",
+    ]) {
       const response = await probe.response(id);
       assert.equal(response.kind, "error");
-      if (response.kind !== "error") throw new Error("Expected cancellation");
+      if (response.kind !== "error") {
+        throw new Error("Expected cancellation");
+      }
       assert.equal(response.error.code, "CANCELLED");
     }
     await probe.stop();
@@ -699,12 +1018,22 @@ try {
       if (
         frame.kind === "web" &&
         (frame.payload?.kind === "result" || frame.payload?.kind === "error")
-      )
-        return [frame.payload.id];
+      ) {
+        return [
+          frame.payload.id,
+        ];
+      }
       return [];
     });
-    assert.deepEqual(responses, ["echo", "hold", "after-revoke"]);
-    assert.equal(probe.frames.filter((frame) => frame.payload?.kind === "event").length, 0);
+    assert.deepEqual(responses, [
+      "echo",
+      "hold",
+      "after-revoke",
+    ]);
+    assert.equal(
+      probe.frames.filter((frame) => frame.payload?.kind === "event").length,
+      0,
+    );
   });
   await test("split/coalesced UTF-8 frames and IDs beyond JS integer precision", async () => {
     const probe = launch();
@@ -726,7 +1055,10 @@ try {
     probe.child.stdin.write(bytes.subarray(0, at));
     await Bun.sleep(5);
     probe.child.stdin.write(bytes.subarray(at));
-    const lines = ["b", "c"].map((id) =>
+    const lines = [
+      "b",
+      "c",
+    ].map((id) =>
       serializeProcessFrame({
         ...base,
         kind: "web",
@@ -741,16 +1073,26 @@ try {
       }),
     );
     probe.child.stdin.write(`${lines.join("\n")}\n`);
-    for (const id of ["9007199254740993", "b", "c"])
+    for (const id of [
+      "9007199254740993",
+      "b",
+      "c",
+    ]) {
       assert.equal((await probe.response(id)).kind, "result");
+    }
     await probe.stop();
   });
   await test("shutdown cancels pending timer and waits for actual exit", async () => {
     const probe = launch();
     const pid = await probe.ready();
-    const exited = await watch([pid]);
+    const exited = await watch([
+      pid,
+    ]);
     const pending = probe.request("pending-timer", "probe.hold");
-    probe.send({ ...base, kind: "shutdown" });
+    probe.send({
+      ...base,
+      kind: "shutdown",
+    });
     assert.equal((await pending).kind, "error");
     await probe.finish();
     await exited();
@@ -758,7 +1100,9 @@ try {
   await test("backend crash fails pending request and records exit status", async () => {
     const probe = launch();
     const pid = await probe.ready();
-    const exited = await watch([pid]);
+    const exited = await watch([
+      pid,
+    ]);
     const response = await probe.request("crash", "probe.crash");
     assert.equal(response.kind, "error");
     const stopped = await probe.finish(1);
@@ -769,11 +1113,16 @@ try {
   await test("backend stdout EOF fails pending requests while Bun is still alive", async () => {
     const probe = launch();
     const pid = await probe.ready();
-    const exited = await watch([pid]);
+    const exited = await watch([
+      pid,
+    ]);
     const pending = probe.request("held", "probe.hold");
     const close = probe.request("close-stdout", "probe.close-stdout");
     const started = performance.now();
-    const [held, closed] = await Promise.all([pending, close]);
+    const [held, closed] = await Promise.all([
+      pending,
+      close,
+    ]);
     assert.equal(held.kind, "error");
     assert.equal(closed.kind, "error");
     assert.equal((await probe.finish(1)).failed, true);
@@ -783,24 +1132,41 @@ try {
   await test("shutdown timeout forcibly kills Bun", async () => {
     const probe = launch("ignore-stop");
     const pid = await probe.ready();
-    const exited = await watch([pid]);
-    probe.send({ ...base, kind: "shutdown" });
+    const exited = await watch([
+      pid,
+    ]);
+    probe.send({
+      ...base,
+      kind: "shutdown",
+    });
     const stopped = await probe.finish(1);
     assert.equal(stopped.forced, true);
     await exited();
   });
-  for (const termination of ["normal", "kill"] as const) {
+  for (const termination of [
+    "normal",
+    "kill",
+  ] as const) {
     await test(`${termination} host exit kills Bun and its descendant`, async () => {
       const probe = launch("child");
       const pid = await probe.ready();
       const deadline = performance.now() + 5000;
-      while (!probe.logs().includes("descendant=") && performance.now() < deadline)
+      while (
+        !probe.logs().includes("descendant=") &&
+        performance.now() < deadline
+      ) {
         await Bun.sleep(5);
+      }
       const descendant = Number(/descendant=(\d+)/.exec(probe.logs())?.[1]);
       assert.ok(descendant > 0);
-      const exited = await watch([pid, descendant, `g${pid}`]);
-      if (termination === "normal") await probe.stop();
-      else {
+      const exited = await watch([
+        pid,
+        descendant,
+        `g${pid}`,
+      ]);
+      if (termination === "normal") {
+        await probe.stop();
+      } else {
         probe.child.kill("SIGKILL");
         await probe.child.exited;
         live.delete(probe);
@@ -814,7 +1180,16 @@ try {
     probe.child.stdin.end();
     await probe.finish();
   });
-  for (const mode of ["json", "utf8", "large", "partial", "stdout", "stale", "version", "eof"]) {
+  for (const mode of [
+    "json",
+    "utf8",
+    "large",
+    "partial",
+    "stdout",
+    "stale",
+    "version",
+    "eof",
+  ]) {
     await test(`backend ${mode} failure closes the runtime`, async () => {
       const probe = launch(`fault-${mode}`);
       const stopped = await probe.finish(1);
@@ -822,15 +1197,40 @@ try {
     });
   }
   for (const [name, bytes] of [
-    ["malformed JSON", Buffer.from("bad\n")],
-    ["invalid UTF-8", Buffer.from([255, 10])],
-    ["oversized frame", Buffer.from(`${"x".repeat(1_048_577)}\n`)],
-    ["incomplete EOF", Buffer.from("{")],
-    ["empty frame", Buffer.from("\n")],
+    [
+      "malformed JSON",
+      Buffer.from("bad\n"),
+    ],
+    [
+      "invalid UTF-8",
+      Buffer.from([
+        255,
+        10,
+      ]),
+    ],
+    [
+      "oversized frame",
+      Buffer.from(`${"x".repeat(1_048_577)}\n`),
+    ],
+    [
+      "incomplete EOF",
+      Buffer.from("{"),
+    ],
+    [
+      "empty frame",
+      Buffer.from("\n"),
+    ],
     [
       "wrong generation",
       Buffer.from(
-        `${JSON.stringify({ ...base, runtime: { id: "probe", generation: "0" }, kind: "shutdown" })}\n`,
+        `${JSON.stringify({
+          ...base,
+          runtime: {
+            id: "probe",
+            generation: "0",
+          },
+          kind: "shutdown",
+        })}\n`,
       ),
     ],
   ] as const) {
@@ -866,10 +1266,14 @@ try {
     await probe.ready();
     await probe.request("late-response", "probe.late-response");
     await probe.wait(
-      (frame) => frame.kind === "host-discarded" && frame.reason === "late-response",
+      (frame) =>
+        frame.kind === "host-discarded" && frame.reason === "late-response",
     );
     await probe.stop();
-    assert.equal(probe.frames.filter((frame) => frame.payload?.kind === "result").length, 1);
+    assert.equal(
+      probe.frames.filter((frame) => frame.payload?.kind === "result").length,
+      1,
+    );
   });
   await test("native numbers and duplicate keys match JavaScript parsing", async () => {
     const probe = launch();
@@ -879,46 +1283,88 @@ try {
     probe.child.stdin.write(`${text}\n`);
     const response = await probe.response("echo");
     assert.equal(response.kind, "result");
-    if (response.kind === "result")
-      assert.deepEqual(response.payload, { n: 9007199254740992, z: 0, nested: { value: 2 } });
+    if (response.kind === "result") {
+      assert.deepEqual(response.payload, {
+        n: 9007199254740992,
+        z: 0,
+        nested: {
+          value: 2,
+        },
+      });
+    }
     await probe.stop();
   });
-  for (const direction of ["echo", "backend"] as const) {
+  for (const direction of [
+    "echo",
+    "backend",
+  ] as const) {
     await test(`near-limit numeric array survives ${direction} relay without disconnecting`, async () => {
       const probe = launch();
       await probe.ready();
       const id = `numbers-${direction}`;
-      const command = direction === "echo" ? "probe.echo" : "probe.number-array";
+      const command =
+        direction === "echo" ? "probe.echo" : "probe.number-array";
       const emptyFrame: ProcessFrame = {
         ...base,
         kind: "web",
         context: "probe-view",
         payload:
           direction === "echo"
-            ? { kind: "invoke", protocol: PROTOCOL_VERSION, id, command, payload: [] }
-            : { kind: "result", protocol: PROTOCOL_VERSION, id, payload: [] },
+            ? {
+                kind: "invoke",
+                protocol: PROTOCOL_VERSION,
+                id,
+                command,
+                payload: [],
+              }
+            : {
+                kind: "result",
+                protocol: PROTOCOL_VERSION,
+                id,
+                payload: [],
+              },
       };
       // N values add N * (token bytes + comma) - 1 bytes to the empty array.
       const tokenBytes = JSON.stringify(1e-7).length + 1;
       const count = Math.floor(
-        (MAX_MESSAGE_BYTES - Buffer.byteLength(serializeProcessFrame(emptyFrame)) + 1) / tokenBytes,
+        (MAX_MESSAGE_BYTES -
+          Buffer.byteLength(serializeProcessFrame(emptyFrame)) +
+          1) /
+          tokenBytes,
       );
       const numbers = Array<number>(count).fill(1e-7);
-      if (emptyFrame.payload.kind !== "invoke" && emptyFrame.payload.kind !== "result")
+      if (
+        emptyFrame.payload.kind !== "invoke" &&
+        emptyFrame.payload.kind !== "result"
+      ) {
         throw new Error("Expected numeric array frame");
+      }
       const boundaryFrame: ProcessFrame = {
         ...emptyFrame,
-        payload: { ...emptyFrame.payload, payload: numbers },
+        payload: {
+          ...emptyFrame.payload,
+          payload: numbers,
+        },
       };
       const size = Buffer.byteLength(serializeProcessFrame(boundaryFrame));
-      assert.ok(size <= MAX_MESSAGE_BYTES && size > MAX_MESSAGE_BYTES - tokenBytes);
-      const response = await probe.request(id, command, direction === "echo" ? numbers : count);
+      assert.ok(
+        size <= MAX_MESSAGE_BYTES && size > MAX_MESSAGE_BYTES - tokenBytes,
+      );
+      const response = await probe.request(
+        id,
+        command,
+        direction === "echo" ? numbers : count,
+      );
       assert.equal(response.kind, "result");
-      if (response.kind !== "result") throw new Error("Expected numeric array");
+      if (response.kind !== "result") {
+        throw new Error("Expected numeric array");
+      }
       assert.deepEqual(response.payload, numbers);
       const followup = await probe.request("still-alive", "probe.add");
       assert.equal(followup.kind, "result");
-      if (followup.kind !== "result") throw new Error("Expected followup result");
+      if (followup.kind !== "result") {
+        throw new Error("Expected followup result");
+      }
       assert.equal(followup.payload, 4);
       assert.equal(
         probe.frames.some((frame) => frame.kind === "host-error"),
@@ -927,7 +1373,10 @@ try {
       assert.equal((await probe.stop()).failed, false);
     });
   }
-  for (const command of ["probe.add", "probe.echo"] as const) {
+  for (const command of [
+    "probe.add",
+    "probe.echo",
+  ] as const) {
     await test(`compact large numbers are received and ${command} keeps the runtime alive`, async () => {
       const probe = launch();
       await probe.ready();
@@ -948,27 +1397,37 @@ try {
         `[${Array<string>(50000).fill("1e20").join(",")}]`,
       );
       assert.ok(Buffer.byteLength(text) < MAX_MESSAGE_BYTES);
-      assert.ok(Buffer.byteLength(JSON.stringify(JSON.parse(text))) > MAX_MESSAGE_BYTES);
+      assert.ok(
+        Buffer.byteLength(JSON.stringify(JSON.parse(text))) > MAX_MESSAGE_BYTES,
+      );
       // More failures than queue slots must not consume output capacity.
       const attempts = command === "probe.echo" ? 129 : 1;
       for (let i = 0; i < attempts; i++) {
         const id = `compact-${i}`;
-        probe.child.stdin.write(`${text.replace('"id":"compact"', `"id":"${id}"`)}\n`);
+        probe.child.stdin.write(
+          `${text.replace('"id":"compact"', `"id":"${id}"`)}\n`,
+        );
         const response = await probe.response(id);
         if (command === "probe.add") {
           assert.equal(response.kind, "result");
-          if (response.kind !== "result") throw new Error("Expected sum");
+          if (response.kind !== "result") {
+            throw new Error("Expected sum");
+          }
           assert.equal(response.payload, 4);
         } else {
           assert.equal(response.kind, "error");
-          if (response.kind !== "error") throw new Error("Expected oversized response error");
+          if (response.kind !== "error") {
+            throw new Error("Expected oversized response error");
+          }
           assert.equal(response.error.code, "INTERNAL");
         }
       }
       const followup = await probe.request("followup", "probe.add");
       assert.equal(followup.kind, "result");
       assert.equal(
-        probe.frames.some((frame) => frame.kind === "host-error" || frame.kind === "fatal"),
+        probe.frames.some(
+          (frame) => frame.kind === "host-error" || frame.kind === "fatal",
+        ),
         false,
       );
       assert.equal((await probe.stop()).failed, false);
@@ -989,28 +1448,45 @@ try {
         payload: "",
       },
     };
-    if (frame.payload.kind !== "invoke") throw new Error("Expected invoke");
+    if (frame.payload.kind !== "invoke") {
+      throw new Error("Expected invoke");
+    }
     const large: ProcessFrame = {
       ...frame,
       payload: {
         ...frame.payload,
-        payload: "x".repeat(MAX_MESSAGE_BYTES - Buffer.byteLength(serializeProcessFrame(frame))),
+        payload: "x".repeat(
+          MAX_MESSAGE_BYTES - Buffer.byteLength(serializeProcessFrame(frame)),
+        ),
       },
     };
-    assert.equal(Buffer.byteLength(serializeProcessFrame(large)), MAX_MESSAGE_BYTES);
+    assert.equal(
+      Buffer.byteLength(serializeProcessFrame(large)),
+      MAX_MESSAGE_BYTES,
+    );
     probe.send(large);
     assert.equal((await probe.response("max")).kind, "result");
     await probe.stop();
   });
   for (const [depth, accepted] of [
-    [64, true],
-    [65, false],
+    [
+      64,
+      true,
+    ],
+    [
+      65,
+      false,
+    ],
   ] as const) {
     await test(`native JSON depth ${depth} ${accepted ? "accepted" : "rejected"}`, async () => {
       const probe = launch();
       await probe.ready();
       let payload: JsonValue = 0;
-      for (let i = 0; i < depth - 2; i++) payload = { child: payload };
+      for (let i = 0; i < depth - 2; i++) {
+        payload = {
+          child: payload,
+        };
+      }
       const frame = {
         ...base,
         kind: "web",
@@ -1027,14 +1503,21 @@ try {
       if (accepted) {
         assert.equal((await probe.response("depth")).kind, "result");
         await probe.stop();
-      } else assert.equal((await probe.finish(1)).failed, true);
+      } else {
+        assert.equal((await probe.finish(1)).failed, true);
+      }
     });
   }
-  for (const stalled of [false, true]) {
+  for (const stalled of [
+    false,
+    true,
+  ]) {
     await test(`pending request limit drains teardown with ${stalled ? "paused" : "flowing"} stdout`, async () => {
       const probe = launch("normal", stalled);
       const pid = await probe.ready();
-      const exited = await watch([pid]);
+      const exited = await watch([
+        pid,
+      ]);
       if (stalled) {
         probe.pauseOutput();
         probe.send({
@@ -1051,19 +1534,23 @@ try {
         });
         await probe.waitForPartialResponse("blocked", "x".repeat(800000));
       }
-      const lines = Array.from({ length: 129 }, (_, i) =>
-        serializeProcessFrame({
-          ...base,
-          kind: "web",
-          context: "probe-view",
-          payload: {
-            kind: "invoke",
-            protocol: PROTOCOL_VERSION,
-            id: `hold-${i}`,
-            command: "probe.hold",
-            payload: null,
-          },
-        }),
+      const lines = Array.from(
+        {
+          length: 129,
+        },
+        (_, i) =>
+          serializeProcessFrame({
+            ...base,
+            kind: "web",
+            context: "probe-view",
+            payload: {
+              kind: "invoke",
+              protocol: PROTOCOL_VERSION,
+              id: `hold-${i}`,
+              command: "probe.hold",
+              payload: null,
+            },
+          }),
       );
       probe.child.stdin.write(`${lines.join("\n")}\n`);
       // Resume after failure has killed Bun. The partially written response and
@@ -1074,7 +1561,10 @@ try {
         probe.releaseOutput();
       }
       assert.equal((await probe.finish(1)).failed, true);
-      assert.equal(probe.frames.filter((frame) => frame.payload?.kind === "error").length, 128);
+      assert.equal(
+        probe.frames.filter((frame) => frame.payload?.kind === "error").length,
+        128,
+      );
       if (stalled) {
         assert.equal((await probe.response("blocked")).kind, "result");
         probe.closeFifo();
@@ -1089,7 +1579,11 @@ try {
     probe.releaseOutput();
     probe.closeFifo();
   }
-  await Promise.all([...live].map((probe) => probe.child.exited));
+  await Promise.all(
+    [
+      ...live,
+    ].map((probe) => probe.child.exited),
+  );
   for (const path of fifoPaths) {
     try {
       unlinkSync(path);
@@ -1101,6 +1595,21 @@ try {
     .digest("hex");
   await writeFile(
     join(dirname(original), "macos-probe-results.json"),
-    `${JSON.stringify({ testedAt: new Date().toISOString(), platform: process.platform, osRelease: release(), architecture: process.arch, packagePath, hostSha256, manifest, count: results.length, results, executions: executions.map((trace) => trace()) }, null, 2)}\n`,
+    `${JSON.stringify(
+      {
+        testedAt: new Date().toISOString(),
+        platform: process.platform,
+        osRelease: release(),
+        architecture: process.arch,
+        packagePath,
+        hostSha256,
+        manifest,
+        count: results.length,
+        results,
+        executions: executions.map((trace) => trace()),
+      },
+      null,
+      2,
+    )}\n`,
   );
 }

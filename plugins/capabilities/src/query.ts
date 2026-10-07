@@ -6,8 +6,12 @@ export function createCapabilities(
 ) {
   return async (options?: NativeInvokeOptions): Promise<Capabilities> => {
     const result = await get(null, options);
-    if (new Set(result.map((feature) => feature.name)).size !== result.length)
-      throw new BunawayError({ code: "INTERNAL", message: "Duplicate capability name." });
+    if (new Set(result.map((feature) => feature.name)).size !== result.length) {
+      throw new BunawayError({
+        code: "INTERNAL",
+        message: "Duplicate capability name.",
+      });
+    }
     return result;
   };
 }

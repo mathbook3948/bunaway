@@ -1,10 +1,24 @@
 import { dlopen } from "bun:ffi";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { appendFile, cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import {
+  appendFile,
+  cp,
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { resolve } from "node:path";
-import { verifyWindowsLaunch, windowsLaunchEnvironment } from "../../packages/cli/src/launch.ts";
-import { findIscc, must } from "../../packages/packaging/src/channels/windows/common.ts";
+import {
+  verifyWindowsLaunch,
+  windowsLaunchEnvironment,
+} from "../../packages/cli/src/launch.ts";
+import {
+  findIscc,
+  must,
+} from "../../packages/packaging/src/channels/windows/common.ts";
 import { recordPackagedHashes } from "../../packages/packaging/src/channels/windows/manifest.ts";
 import type { PackageReport } from "../../packages/packaging/src/contract.ts";
 import { createProject, storageRoundtripUI } from "../cli/project.ts";
@@ -13,34 +27,62 @@ assert.equal(process.platform, "win32");
 const root = resolve(import.meta.dir, "../..");
 const home = resolve(root, `build/windows-bun-cli-${crypto.randomUUID()}`);
 const launchMarker = resolve(home, "launch-marker.txt");
-await mkdir(home, { recursive: true });
+await mkdir(home, {
+  recursive: true,
+});
 await createProject(resolve(home, "created"));
 const project = resolve(home, "moved app 한글");
 await rename(resolve(home, "created"), project);
 const packagePath = resolve(project, "package.json");
 const packageJson = JSON.parse(await readFile(packagePath, "utf8"));
 packageJson.optionalDependencies = {
-  "@bunaway/plugin-storage": packageJson.dependencies["@bunaway/plugin-storage"],
+  "@bunaway/plugin-storage":
+    packageJson.dependencies["@bunaway/plugin-storage"],
 };
 delete packageJson.dependencies["@bunaway/plugin-storage"];
 await writeFile(packagePath, JSON.stringify(packageJson, null, 2));
 async function command(args: string[], cwd = project) {
-  const child = Bun.spawn([process.execPath, ...args], { cwd, stdout: "pipe", stderr: "pipe" });
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      ...args,
+    ],
+    {
+      cwd,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
   const out = new Response(child.stdout).text();
   const err = new Response(child.stderr).text();
   assert.equal(await child.exited, 0, `${await out}\n${await err}`);
   return out;
 }
-await command(["install"]);
+await command([
+  "install",
+]);
 const snapshot = resolve(project, "node_modules/@bunaway/cli");
 const cache = resolve(snapshot, "runtime/bun-bundle/vendor");
-await mkdir(cache, { recursive: true });
-for (const name of ["bun-windows-x64-baseline.zip", "bun-windows-x64-baseline", "LICENSE.bun"])
-  await cp(resolve(root, "runtime/bun-bundle/vendor", name), resolve(cache, name), {
-    recursive: true,
-  });
+await mkdir(cache, {
+  recursive: true,
+});
+for (const name of [
+  "bun-windows-x64-baseline.zip",
+  "bun-windows-x64-baseline",
+  "LICENSE.bun",
+]) {
+  await cp(
+    resolve(root, "runtime/bun-bundle/vendor", name),
+    resolve(cache, name),
+    {
+      recursive: true,
+    },
+  );
+}
 const sdk = resolve(snapshot, "native/windows/bun/vendor");
-await mkdir(sdk, { recursive: true });
+await mkdir(sdk, {
+  recursive: true,
+});
 await cp(
   resolve(root, "native/windows/bun/vendor/webview2-1.0.4129.50.nupkg"),
   resolve(sdk, "webview2-1.0.4129.50.nupkg"),
@@ -56,28 +98,60 @@ await appendFile(
     'const fixtureChild = Bun.spawn([process.execPath, "-e", "setInterval(() => {}, 1000)"], { stdin: "ignore", stdout: "ignore", stderr: "ignore" }); console.log(JSON.stringify({ event: "fixture-child", pid: fixtureChild.pid }));\n',
 );
 // A user entry named boot.ts must coexist with the framework's bootstrap.
-await writeFile(resolve(project, "src-bunaway/boot.ts"), 'export { default } from "./app.ts";\n');
+await writeFile(
+  resolve(project, "src-bunaway/boot.ts"),
+  'export { default } from "./app.ts";\n',
+);
 const configPath = resolve(project, "src-bunaway/bunaway.json");
 const projectConfig = JSON.parse(await readFile(configPath, "utf8"));
 await writeFile(
   configPath,
   JSON.stringify({
     ...projectConfig,
-    build: { ...projectConfig.build, app: "src-bunaway/boot.ts" },
+    build: {
+      ...projectConfig.build,
+      app: "src-bunaway/boot.ts",
+    },
   }),
 );
 await appendFile(resolve(project, "src/main.ts"), storageRoundtripUI);
-await command(["run", "typecheck"]);
-console.log(await command(["run", "build"]));
+await command([
+  "run",
+  "typecheck",
+]);
+console.log(
+  await command([
+    "run",
+    "build",
+  ]),
+);
 const packageRoot = resolve(project, "dist/windows-x64");
 assert(!existsSync(resolve(packageRoot, "bunaway-host.exe")));
 assert(!existsSync(resolve(packageRoot, "assets/backend.js")));
 assert(!existsSync(resolve(packageRoot, "licenses/LICENSE.nlohmann-json")));
 await verifyWindowsLaunch(packageRoot);
 const api = dlopen("kernel32.dll", {
-  OpenProcess: { args: ["u32", "i32", "u32"], returns: "u64" },
-  WaitForSingleObject: { args: ["u64", "u32"], returns: "u32" },
-  CloseHandle: { args: ["u64"], returns: "i32" },
+  OpenProcess: {
+    args: [
+      "u32",
+      "i32",
+      "u32",
+    ],
+    returns: "u64",
+  },
+  WaitForSingleObject: {
+    args: [
+      "u64",
+      "u32",
+    ],
+    returns: "u32",
+  },
+  CloseHandle: {
+    args: [
+      "u64",
+    ],
+    returns: "i32",
+  },
 });
 const child = Bun.spawn(
   [
@@ -105,12 +179,16 @@ const decoder = new TextDecoder();
 const output = child.stdout.pipeTo(
   new WritableStream({
     write(chunk) {
-      buffer += decoder.decode(chunk, { stream: true });
+      buffer += decoder.decode(chunk, {
+        stream: true,
+      });
       while (buffer.includes("\n")) {
         const end = buffer.indexOf("\n");
         const line = buffer.slice(0, end);
         buffer = buffer.slice(end + 1);
-        if (!line) continue;
+        if (!line) {
+          continue;
+        }
         const event = JSON.parse(line);
         if (event.event === "fixture-child") {
           handle = api.symbols.OpenProcess(0x100000, 0, event.pid);
@@ -132,10 +210,17 @@ try {
     0,
     "App Job must reap descendants spawned during module import",
   );
-  const config = JSON.parse(await readFile(resolve(packageRoot, "assets/app.json"), "utf8"));
+  const config = JSON.parse(
+    await readFile(resolve(packageRoot, "assets/app.json"), "utf8"),
+  );
   assert.equal(
     await readFile(
-      resolve(process.env.LOCALAPPDATA ?? "", "bunaway", config.appId, "data/messages/current.txt"),
+      resolve(
+        process.env.LOCALAPPDATA ?? "",
+        "bunaway",
+        config.appId,
+        "data/messages/current.txt",
+      ),
       "utf8",
     ),
     "CLI FFI 한글",
@@ -146,7 +231,9 @@ try {
   await assert.rejects(verifyWindowsLaunch(packageRoot), /Hash mismatch/);
   await writeFile(boot, original);
   async function launch(directory: string) {
-    await rm(launchMarker, { force: true });
+    await rm(launchMarker, {
+      force: true,
+    });
     const launcher = Bun.spawn(
       [
         resolve(
@@ -176,7 +263,11 @@ try {
     const stderr = new Response(launcher.stderr).text();
     const timeout = setTimeout(() => launcher.kill(), 60000);
     try {
-      return { code: await launcher.exited, stdout: await stdout, stderr: await stderr };
+      return {
+        code: await launcher.exited,
+        stdout: await stdout,
+        stderr: await stderr,
+      };
     } finally {
       clearTimeout(timeout);
     }
@@ -186,8 +277,12 @@ try {
   assert.equal(await readFile(launchMarker, "utf8"), "started");
 
   const packagedRoot = resolve(home, "packaged app 한글");
-  await cp(packageRoot, packagedRoot, { recursive: true });
-  const upstream = JSON.parse(await readFile(resolve(packageRoot, "manifest.json"), "utf8"));
+  await cp(packageRoot, packagedRoot, {
+    recursive: true,
+  });
+  const upstream = JSON.parse(
+    await readFile(resolve(packageRoot, "manifest.json"), "utf8"),
+  );
   // A PE overlay changes the bytes while preserving execution, without a test certificate.
   // This exercises the post-signing digest contract, not Authenticode trust.
   const packagedBun = resolve(packagedRoot, "runtime/bun.exe");
@@ -205,7 +300,10 @@ try {
   const tamperedLaunch = await launch(packagedRoot);
   assert.notEqual(tamperedLaunch.code, 0);
   assert.match(tamperedLaunch.stderr, /Package hash mismatch/);
-  assert(!existsSync(launchMarker), "Tampered runtime must be rejected before app import");
+  assert(
+    !existsSync(launchMarker),
+    "Tampered runtime must be rejected before app import",
+  );
   if (await findIscc()) {
     await writeFile(
       configPath,
@@ -214,23 +312,46 @@ try {
         bundle: {
           identifier: `test.bunaway.${crypto.randomUUID()}`,
           channels: {
-            "win-direct": { webView2: "check", startMenuShortcut: false, desktopShortcut: false },
+            "win-direct": {
+              webView2: "check",
+              startMenuShortcut: false,
+              desktopShortcut: false,
+            },
           },
         },
       }),
     );
-    console.log(await command(["run", "package", "win-direct"]));
+    console.log(
+      await command([
+        "run",
+        "package",
+        "win-direct",
+      ]),
+    );
     const report = JSON.parse(
-      await readFile(resolve(packageRoot, "packaged/win-direct-report.json"), "utf8"),
+      await readFile(
+        resolve(packageRoot, "packaged/win-direct-report.json"),
+        "utf8",
+      ),
     ) as PackageReport;
     assert(report.ok && report.usable);
-    const installer = report.artifacts.find((artifact) => artifact.kind === "installer");
+    const installer = report.artifacts.find(
+      (artifact) => artifact.kind === "installer",
+    );
     assert(installer);
     const installed = resolve(home, "installed app 한글");
     const uninstaller = resolve(installed, "unins000.exe");
-    const silent = ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"];
+    const silent = [
+      "/VERYSILENT",
+      "/SUPPRESSMSGBOXES",
+      "/NORESTART",
+    ];
     try {
-      await must(installer.path, ["/SP-", ...silent, `/DIR=${installed}`]);
+      await must(installer.path, [
+        "/SP-",
+        ...silent,
+        `/DIR=${installed}`,
+      ]);
       const installedLaunch = await launch(installed);
       assert.equal(installedLaunch.code, 0, installedLaunch.stderr);
       assert.equal(await readFile(launchMarker, "utf8"), "started");
@@ -238,7 +359,9 @@ try {
     } finally {
       if (existsSync(uninstaller)) {
         await must(uninstaller, silent);
-        for (let retry = 0; retry < 100 && existsSync(uninstaller); retry++) await Bun.sleep(50);
+        for (let retry = 0; retry < 100 && existsSync(uninstaller); retry++) {
+          await Bun.sleep(50);
+        }
         assert(!existsSync(uninstaller), "Fixture uninstaller did not finish");
       }
     }
@@ -261,7 +384,11 @@ try {
     console.log("SKIP Windows Bun FFI installer: Inno Setup is unavailable");
   }
   // Serve the real SDK UI over HTTP; dev owns that server and cleans it up when the window closes.
-  const reservation = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("") });
+  const reservation = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => new Response(""),
+  });
   const devPort = reservation.port;
   reservation.stop(true);
   const devUrl = `http://127.0.0.1:${devPort}/`;
@@ -283,14 +410,27 @@ try {
     configPath,
     JSON.stringify({
       ...JSON.parse(previousConfig),
-      dev: { command: ["bun", "development-server.ts"], url: devUrl },
+      dev: {
+        command: [
+          "bun",
+          "development-server.ts",
+        ],
+        url: devUrl,
+      },
     }),
   );
-  const development = Bun.spawn([process.execPath, "run", "dev"], {
-    cwd: project,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  const development = Bun.spawn(
+    [
+      process.execPath,
+      "run",
+      "dev",
+    ],
+    {
+      cwd: project,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
   const devOutput = new Response(development.stdout).text();
   const devErrors = new Response(development.stderr).text();
   const devDeadline = setTimeout(() => development.kill(), 90000);
@@ -303,17 +443,26 @@ try {
       "WebView did not load the HTTP SDK UI.",
     );
     const devApp = JSON.parse(
-      await readFile(resolve(project, ".bunaway/windows-x64/assets/app.json"), "utf8"),
+      await readFile(
+        resolve(project, ".bunaway/windows-x64/assets/app.json"),
+        "utf8",
+      ),
     );
     assert.equal(devApp.home, devUrl);
-    assert.deepEqual(devApp.development, { url: devUrl });
+    assert.deepEqual(devApp.development, {
+      url: devUrl,
+    });
     await assert.rejects(
-      fetch(devUrl, { signal: AbortSignal.timeout(1000) }),
+      fetch(devUrl, {
+        signal: AbortSignal.timeout(1000),
+      }),
       "Dev server survived window close.",
     );
   } finally {
     clearTimeout(devDeadline);
-    if (development.exitCode === null) development.kill();
+    if (development.exitCode === null) {
+      development.kill();
+    }
     await development.exited;
     await writeFile(configPath, previousConfig);
   }
@@ -325,6 +474,8 @@ try {
   );
 } finally {
   clearTimeout(deadline);
-  if (handle) assert(api.symbols.CloseHandle(handle));
+  if (handle) {
+    assert(api.symbols.CloseHandle(handle));
+  }
   api.close();
 }

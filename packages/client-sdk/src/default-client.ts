@@ -8,14 +8,23 @@ const sessionKey = Symbol.for("@bunaway/client.default-session.v1");
 
 interface WebViewWindow {
   readonly document: object;
-  readonly chrome?: { readonly webview?: WebViewBridge };
+  readonly chrome?: {
+    readonly webview?: WebViewBridge;
+  };
   addEventListener(type: "pagehide", listener: () => void): void;
   removeEventListener(type: "pagehide", listener: () => void): void;
-  [sessionKey]?: { document: object; client: Client };
+  [sessionKey]?: {
+    document: object;
+    client: Client;
+  };
 }
 
 export function defaultClient(factory: ClientFactory): Client {
-  const view = (globalThis as { window?: WebViewWindow }).window;
+  const view = (
+    globalThis as {
+      window?: WebViewWindow;
+    }
+  ).window;
   if (!view) {
     throw new BunawayError({
       code: "UNSUPPORTED",
@@ -24,7 +33,9 @@ export function defaultClient(factory: ClientFactory): Client {
     });
   }
   const previous = view[sessionKey];
-  if (previous?.document === view.document) return previous.client;
+  if (previous?.document === view.document) {
+    return previous.client;
+  }
 
   const bridge = view.chrome?.webview;
   if (
@@ -63,6 +74,9 @@ export function defaultClient(factory: ClientFactory): Client {
     },
   });
   client = created;
-  view[sessionKey] = { document: view.document, client: created };
+  view[sessionKey] = {
+    document: view.document,
+    client: created,
+  };
   return created;
 }

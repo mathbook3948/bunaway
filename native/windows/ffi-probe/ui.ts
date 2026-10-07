@@ -8,7 +8,11 @@ assert(views.length >= 1 && views.length <= 2);
 try {
   // Both windows and all their callbacks run on this one Bun UI thread.
   const results = await Promise.allSettled(views.map((view) => runProbe(view)));
-  for (const result of results) if (result.status === "rejected") throw result.reason;
+  for (const result of results) {
+    if (result.status === "rejected") {
+      throw result.reason;
+    }
+  }
 } finally {
   parentPort?.close();
 }

@@ -22,8 +22,12 @@ await runBunApp({
   events: {},
   commands: {
     read: {
-      input: { const: null },
-      output: { type: "string" },
+      input: {
+        const: null,
+      },
+      output: {
+        type: "string",
+      },
       async run(_payload, context) {
         return context.host.call(contracts["storage.readText"], {
           scope: "appData",

@@ -8,7 +8,10 @@ import {
 } from "@bunaway/packaging";
 import { NativeRegistry, type Policy, parsePolicy } from "@bunaway/protocol";
 import { developmentUrl } from "../../runtime-bun/src/development.ts";
-import { readWindowSpecs, type WindowSpec } from "../../runtime-bun/src/window-config.ts";
+import {
+  readWindowSpecs,
+  type WindowSpec,
+} from "../../runtime-bun/src/window-config.ts";
 import { validateFramework } from "./distribution.ts";
 import { inside, json, projectPath } from "./files.ts";
 import type { InstalledPlugin } from "./plugins.ts";
@@ -25,15 +28,27 @@ function command(value: unknown, field: string): string[] {
     !value.length ||
     value.some((arg) => typeof arg !== "string" || !arg || arg.includes("\0"))
   ) {
-    throw new Error(`bunaway.json: ${field} must be a nonempty array of executable and arguments.`);
+    throw new Error(
+      `bunaway.json: ${field} must be a nonempty array of executable and arguments.`,
+    );
   }
   return value as string[];
 }
 
 export function readDevSettings(value: unknown): DevServerConfig | undefined {
-  if (value === undefined) return undefined;
+  if (value === undefined) {
+    return undefined;
+  }
   const dev = record(value, "dev");
-  keys(dev, ["command", "url", "timeoutMs"], "dev");
+  keys(
+    dev,
+    [
+      "command",
+      "url",
+      "timeoutMs",
+    ],
+    "dev",
+  );
   const args = command(dev.command, "dev.command");
   const timeoutMs = dev.timeoutMs ?? 30000;
   if (
@@ -42,9 +57,15 @@ export function readDevSettings(value: unknown): DevServerConfig | undefined {
     timeoutMs < 100 ||
     timeoutMs > 300000
   ) {
-    throw new Error("bunaway.json: dev.timeoutMs must be an integer between 100 and 300000.");
+    throw new Error(
+      "bunaway.json: dev.timeoutMs must be an integer between 100 and 300000.",
+    );
   }
-  return { command: args, url: developmentUrl(dev.url).href, timeoutMs };
+  return {
+    command: args,
+    url: developmentUrl(dev.url).href,
+    timeoutMs,
+  };
 }
 
 export interface Project {
@@ -62,7 +83,10 @@ export interface Project {
     title: string;
     view: string;
     home: string;
-    window: { width: number; height: number };
+    window: {
+      width: number;
+      height: number;
+    };
     windows?: WindowSpec[];
   };
   policy: Policy;
@@ -75,7 +99,11 @@ function record(value: unknown, path: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function keys(value: Record<string, unknown>, allowed: string[], path: string): void {
+function keys(
+  value: Record<string, unknown>,
+  allowed: string[],
+  path: string,
+): void {
   const unknown = Object.keys(value).filter((key) => !allowed.includes(key));
   if (unknown.length) {
     throw new Error(
@@ -85,8 +113,9 @@ function keys(value: Record<string, unknown>, allowed: string[], path: string): 
 }
 
 function string(value: unknown, path: string): string {
-  if (typeof value !== "string" || !value)
+  if (typeof value !== "string" || !value) {
     throw new Error(`bunaway.json: ${path} must be a nonempty string.`);
+  }
   return value;
 }
 
@@ -97,9 +126,15 @@ async function frontendPath(root: string, name: string): Promise<string> {
     ...BUILD_TARGETS.map((t) => `dist/${t}`),
   ].map((path) => resolve(root, path).toLowerCase());
   const check = (path: string) => {
-    if (!inside(root, path)) throw new Error("Source path escapes the project.");
+    if (!inside(root, path)) {
+      throw new Error("Source path escapes the project.");
+    }
     const normalized = path.toLowerCase();
-    if (reserved.some((output) => inside(normalized, output) || inside(output, normalized))) {
+    if (
+      reserved.some(
+        (output) => inside(normalized, output) || inside(output, normalized),
+      )
+    ) {
       throw new Error(
         "build.frontend must not overlap app outputs or build locks; use a separate web output such as web-dist.",
       );
@@ -118,16 +153,28 @@ async function frontendPath(root: string, name: string): Promise<string> {
       check(canonical);
       return canonical;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      const entry = await lstat(ancestor).catch((error: NodeJS.ErrnoException) => {
-        if (error.code !== "ENOENT") throw error;
-        return undefined;
-      });
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
+      const entry = await lstat(ancestor).catch(
+        (error: NodeJS.ErrnoException) => {
+          if (error.code !== "ENOENT") {
+            throw error;
+          }
+          return undefined;
+        },
+      );
       if (entry?.isSymbolicLink()) {
-        if (++links > 40) throw new Error("Cannot resolve build.frontend directory links.");
+        if (++links > 40) {
+          throw new Error("Cannot resolve build.frontend directory links.");
+        }
         // A dangling link can become live when the build creates dist or its
         // locks. Check its target before treating the output as missing.
-        ancestor = resolve(dirname(ancestor), await readlink(ancestor), ...suffix);
+        ancestor = resolve(
+          dirname(ancestor),
+          await readlink(ancestor),
+          ...suffix,
+        );
         check(ancestor);
         suffix.length = 0;
         continue;
@@ -149,33 +196,73 @@ export async function readProjectSettings(root: string): Promise<{
 }> {
   const directory = await projectPath(root, "src-bunaway");
   const config = record(await json(resolve(directory, "bunaway.json")), "root");
-  if (config.version !== 1) throw new Error("Unsupported bunaway.json version (expected 1).");
-  keys(config, ["version", "build", "app", "bundle", "dev"], "");
+  if (config.version !== 1) {
+    throw new Error("Unsupported bunaway.json version (expected 1).");
+  }
+  keys(
+    config,
+    [
+      "version",
+      "build",
+      "app",
+      "bundle",
+      "dev",
+    ],
+    "",
+  );
   const build = record(config.build, "build");
   if ("backend" in build || "windowsApp" in build) {
     throw new Error(
       "Use build.app with a default-exported AppDefinition; remove build.backend and build.windowsApp.",
     );
   }
-  keys(build, ["app", "frontend", "command"], "build");
+  keys(
+    build,
+    [
+      "app",
+      "frontend",
+      "command",
+    ],
+    "build",
+  );
   const buildCommand =
-    build.command === undefined ? undefined : command(build.command, "build.command");
+    build.command === undefined
+      ? undefined
+      : command(build.command, "build.command");
   const bundle =
-    config.bundle === undefined ? undefined : parsePackaging(JSON.stringify(config.bundle));
+    config.bundle === undefined
+      ? undefined
+      : parsePackaging(JSON.stringify(config.bundle));
   const dev = readDevSettings(config.dev);
   return {
     directory,
     build,
     app: record(config.app, "app"),
-    ...(bundle ? { bundle } : {}),
-    ...(dev ? { dev } : {}),
-    ...(buildCommand ? { buildCommand } : {}),
+    ...(bundle
+      ? {
+          bundle,
+        }
+      : {}),
+    ...(dev
+      ? {
+          dev,
+        }
+      : {}),
+    ...(buildCommand
+      ? {
+          buildCommand,
+        }
+      : {}),
   };
 }
 
 async function loadProject(
   directory: string,
-  options: { development?: boolean; validateSources?: boolean; validateFiles?: boolean } = {},
+  options: {
+    development?: boolean;
+    validateSources?: boolean;
+    validateFiles?: boolean;
+  } = {},
 ): Promise<Project> {
   const root = await realpath(resolve(directory));
   const settings = await readProjectSettings(root);
@@ -187,16 +274,23 @@ async function loadProject(
   if (isAbsolute(appName) || appName.split(/[\\/]/).includes("..")) {
     throw new Error("build.app must be a project-relative file without '..'.");
   }
-  const appEntry = validateFiles ? await projectPath(root, appName) : resolve(root, appName);
+  const appEntry = validateFiles
+    ? await projectPath(root, appName)
+    : resolve(root, appName);
   const frontendName = string(config.frontend, "build.frontend");
   if (isAbsolute(frontendName) || frontendName.split(/[\\/]/).includes("..")) {
-    throw new Error("build.frontend must be a project-relative directory without '..'.");
+    throw new Error(
+      "build.frontend must be a project-relative directory without '..'.",
+    );
   }
   const frontend = await frontendPath(root, frontendName);
-  if (server && validateFiles) await ownedDirectory(root, frontend);
+  if (server && validateFiles) {
+    await ownedDirectory(root, frontend);
+  }
   if (
     validateFiles &&
-    (!(await lstat(appEntry)).isFile() || (!server && !(await lstat(frontend)).isDirectory()))
+    (!(await lstat(appEntry)).isFile() ||
+      (!server && !(await lstat(frontend)).isDirectory()))
   ) {
     throw new Error("app must be a file; frontend must be a directory.");
   }
@@ -206,40 +300,100 @@ async function loadProject(
     plugins,
   } = await validateFramework(
     root,
-    options.validateSources === false ? [] : [appEntry, ...(server ? [] : [frontend])],
+    options.validateSources === false
+      ? []
+      : [
+          appEntry,
+          ...(server
+            ? []
+            : [
+                frontend,
+              ]),
+        ],
   );
   const raw = settings.app;
-  keys(raw, ["appId", "title", "view", "home", "window", "windows"], "app");
+  keys(
+    raw,
+    [
+      "appId",
+      "title",
+      "view",
+      "home",
+      "window",
+      "windows",
+    ],
+    "app",
+  );
   const appId = string(raw.appId, "app.appId");
-  if (!/^[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$/.test(appId))
-    throw new Error("appId must match the native host's 1–64 character app ID grammar.");
+  if (!/^[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$/.test(appId)) {
+    throw new Error(
+      "appId must match the native host's 1–64 character app ID grammar.",
+    );
+  }
   const multiple = raw.windows !== undefined;
-  if (multiple && ["view", "home", "window"].some((key) => key in raw))
-    throw new Error("Use app.windows or app.view/home/window, without mixing the two formats.");
-  const policy = parsePolicy(await Bun.file(resolve(configDirectory, "policy.json")).text());
-  if (policy.views.some((view) => view.origins.some((origin) => origin.startsWith("http:"))))
+  if (
+    multiple &&
+    [
+      "view",
+      "home",
+      "window",
+    ].some((key) => key in raw)
+  ) {
+    throw new Error(
+      "Use app.windows or app.view/home/window, without mixing the two formats.",
+    );
+  }
+  const policy = parsePolicy(
+    await Bun.file(resolve(configDirectory, "policy.json")).text(),
+  );
+  if (
+    policy.views.some((view) =>
+      view.origins.some((origin) => origin.startsWith("http:")),
+    )
+  ) {
     throw new Error(
       "HTTP origins are not allowed in policy.json; use dev.url for a development server.",
     );
-  new NativeRegistry(plugins, { mode: "catalog" }).validatePolicy(policy);
+  }
+  new NativeRegistry(plugins, {
+    mode: "catalog",
+  }).validatePolicy(policy);
   const windows = readWindowSpecs(
     multiple
       ? raw.windows
-      : [{ view: raw.view, home: raw.home, title: raw.title, window: raw.window }],
+      : [
+          {
+            view: raw.view,
+            home: raw.home,
+            title: raw.title,
+            window: raw.window,
+          },
+        ],
     policy,
   );
-  if (!multiple && (policy.views.length !== 1 || policy.views[0]?.id !== windows[0]?.view))
-    throw new Error("Single-window settings require one configured policy view.");
-  if (!server && validateFiles)
+  if (
+    !multiple &&
+    (policy.views.length !== 1 || policy.views[0]?.id !== windows[0]?.view)
+  ) {
+    throw new Error(
+      "Single-window settings require one configured policy view.",
+    );
+  }
+  if (!server && validateFiles) {
     for (const spec of windows) {
       const homePath = await projectPath(
         frontend,
         decodeURIComponent(new URL(spec.home).pathname).slice(1),
       );
-      if (!(await lstat(homePath)).isFile()) throw new Error("Home document is not a file.");
+      if (!(await lstat(homePath)).isFile()) {
+        throw new Error("Home document is not a file.");
+      }
     }
+  }
   const primary = windows.find((spec) => spec.startup !== false);
-  if (!primary) throw new Error("At least one window must open at startup.");
+  if (!primary) {
+    throw new Error("At least one window must open at startup.");
+  }
   return {
     root,
     frameworkRoot,
@@ -247,9 +401,21 @@ async function loadProject(
     frontend,
     backendDependencies,
     nativePlugins: plugins,
-    ...(settings.bundle ? { bundle: settings.bundle } : {}),
-    ...(settings.dev ? { dev: settings.dev } : {}),
-    ...(settings.buildCommand ? { buildCommand: settings.buildCommand } : {}),
+    ...(settings.bundle
+      ? {
+          bundle: settings.bundle,
+        }
+      : {}),
+    ...(settings.dev
+      ? {
+          dev: settings.dev,
+        }
+      : {}),
+    ...(settings.buildCommand
+      ? {
+          buildCommand: settings.buildCommand,
+        }
+      : {}),
     policy,
     app: {
       appId,
@@ -257,7 +423,11 @@ async function loadProject(
       view: primary.view,
       home: primary.home,
       window: primary.window,
-      ...(multiple ? { windows } : {}),
+      ...(multiple
+        ? {
+            windows,
+          }
+        : {}),
     },
   };
 }
@@ -265,17 +435,25 @@ async function loadProject(
 // Build preflight and packaging need settings, policy and installed dependencies,
 // independently of the app sources and generated frontend output.
 export function readProjectMetadata(directory: string): Promise<Project> {
-  return loadProject(directory, { validateFiles: false, validateSources: false });
+  return loadProject(directory, {
+    validateFiles: false,
+    validateSources: false,
+  });
 }
 
 // Development must install its watcher before attempting source compilation.
 export function readProjectConfiguration(directory: string): Promise<Project> {
-  return loadProject(directory, { development: true, validateSources: false });
+  return loadProject(directory, {
+    development: true,
+    validateSources: false,
+  });
 }
 
 export function validateProject(
   directory: string,
-  options: { development?: boolean } = {},
+  options: {
+    development?: boolean;
+  } = {},
 ): Promise<Project> {
   return loadProject(directory, options);
 }
