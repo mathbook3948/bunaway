@@ -18,8 +18,8 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@bunaway/backend": "workspace:*",
     "@bunaway/client": "workspace:*",
-    "@bunaway/protocol": "workspace:*"
+    "@bunaway/protocol": "workspace:*",
+    "@bunaway/plugin-api": "workspace:*"
   }
 }

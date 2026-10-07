@@ -2,7 +2,7 @@ import type {
   AppDefinition,
   CommandRegistry,
   EventRegistry,
-} from "@bunaway/core";
+} from "@bunaway/plugin-api";
 import { bindCommandHost, bindPluginHost } from "./host-context.ts";
 import type { ModuleDefinition } from "./module.ts";
 import { claimName, type RegistrationKind } from "./registration.ts";

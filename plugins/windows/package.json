@@ -1,0 +1,20 @@
+{
+  "name": "@bunaway/plugin-windows",
+  "version": "0.0.0",
+  "type": "module",
+  "bunaway": {
+    "plugin": "./plugin.json"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "peerDependencies": {
+    "@bunaway/plugin": "0.0.0"
+  },
+  "devDependencies": {
+    "@bunaway/plugin": "workspace:*"
+  }
+}

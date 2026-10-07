@@ -1,4 +1,4 @@
-import { host } from "@bunaway/backend";
+import { currentHost } from "@bunaway/plugin-api/host";
 import {
   BunawayError,
   type HostOperationContract,
@@ -18,5 +18,5 @@ export async function call<I extends Schema, O extends Schema>(
       message: "Backend calls inherit command cancellation and deadline.",
     });
   }
-  return host.call(operation, input);
+  return currentHost().call(operation, input);
 }

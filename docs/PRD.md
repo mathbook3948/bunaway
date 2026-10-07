@@ -72,7 +72,9 @@ Bun 자식 프로세스 ── TypeScript 코어 ── 앱 명령, 상태, 플�
 | `protocol` | 메시지 스키마, 오류 코드, 버전 협상, 직렬화 규칙 | 플랫폼, Bun, UI 의존성 없음 |
 | `client-sdk` | `invoke`, `listen`과 구독 해제 함수, 요청 취소, 기본 WebView 연결, 초기화, 정리 | `protocol`, WebView 또는 주입받은 Transport |
 | `plugin-capabilities` | 등록된 네이티브 작업의 플랫폼 지원과 OS 권한 메타데이터 조회 | `plugin-sdk` |
-| `core` | 명령 레지스트리, 입력 검증, 상태 저장소, 이벤트 라우팅, 플러그인 수명 | `protocol`, 추상 Host API, Runtime Services |
+| `plugin-api` | 앱과 플러그인 공통 타입, 실행 컨텍스트 | `protocol` |
+| `plugin-windows` | 선택 창 제어, 생성과 재생성, 창별 권한 | `plugin-sdk`, 호스트 자원 인터페이스 |
+| `core` | 명령 레지스트리, 입력 검증, 상태 저장소, 이벤트 라우팅, 플러그인 수명 | `plugin-api`, `protocol`, 추상 Host API, Runtime Services |
 | `runtime-bun` | 자식 프로세스 안의 코어 부팅, Bun 서비스 어댑터, 프로세스 IPC 연결 | `core`, `protocol`, Bun API |
 | `bun-bundle` | 배포할 Bun 실행 파일, 버전, 소스 revision, 해시, 라이선스 고정 | 공식 플랫폼별 Bun 배포물, 필요한 경우 기록된 빌드, 패치 |
 | `native-host` | 앱 수명주기, Bun 프로세스 실행, 정리, IPC, 신뢰 경계, OS 권한, 창 | OS 프로세스 API, 생성된 프로토콜, 정책 자료, 렌더러 인터페이스 |

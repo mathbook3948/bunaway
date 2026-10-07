@@ -7,9 +7,9 @@ import { user, Windows } from "../../native/windows/bun/win32.ts";
 import {
   type CommandContext,
   defineApp,
-  windows,
 } from "../../packages/backend-sdk/src/index.ts";
 import type { HostContext, Policy } from "../../packages/protocol/src/index.ts";
+import { windows, windowsPlugin } from "../../plugins/windows/src/index.ts";
 
 assert.equal(process.platform, "win32");
 const root = resolve(import.meta.dir, "../..");
@@ -19,10 +19,19 @@ const reportPath = resolve(output, "report.json");
 const policy: Policy = {
   version: 1,
   backend: {
-    permissions: [],
-    windows: [
-      "main",
-      "editor",
+    permissions: [
+      "windows:list",
+      {
+        identifier: "windows:control",
+        allow: [
+          {
+            view: "main",
+          },
+          {
+            view: "editor",
+          },
+        ],
+      },
     ],
   },
   views: [
@@ -36,10 +45,19 @@ const policy: Policy = {
       ],
       events: [],
       host: {
-        permissions: [],
-        windows: [
-          "main",
-          "editor",
+        permissions: [
+          "windows:list",
+          {
+            identifier: "windows:control",
+            allow: [
+              {
+                view: "main",
+              },
+              {
+                view: "editor",
+              },
+            ],
+          },
         ],
       },
     },
@@ -55,7 +73,6 @@ const policy: Policy = {
       events: [],
       host: {
         permissions: [],
-        windows: [],
       },
     },
   ],
@@ -346,15 +363,18 @@ if (!process.argv.includes("--child")) {
   } as const;
   const app = defineApp({
     modules: [],
+    plugins: [
+      windowsPlugin,
+    ],
     desktop: {
       beforeQuit: () => ++quitAttempts > 1,
     },
     commands: {
       "test.aux": {
         ...contract,
-        async run(_input: unknown, context: CommandContext) {
+        async run(_input: unknown, _context: CommandContext) {
           await assert.rejects(
-            context.host.call("windows.show", {
+            windows.show({
               view: "main",
             }),
             (error: unknown) =>

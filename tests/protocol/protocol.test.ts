@@ -12,9 +12,9 @@ import {
   parseHostCall,
   parseMessage,
   parsePolicy,
-  parseWindowCall,
   serializeMessage,
 } from "../../packages/protocol/src/index.ts";
+import { parseWindowCall } from "../../plugins/windows/src/index.ts";
 import { registry } from "../fixtures/host-plugins.ts";
 
 const protocol = {
@@ -600,60 +600,19 @@ describe("policy validation", () => {
     expectProtocolError(() => parsePolicy(JSON.stringify(policy)));
   });
 
-  test("validates Windows grants against declared view IDs", () => {
-    const editor = {
-      ...validView,
-      id: "editor",
-    };
-    const valid = {
-      ...validPolicy,
-      views: [
-        validView,
-        editor,
-      ],
-      backend: {
-        permissions: [],
-        windows: [
-          "editor",
-        ],
-      },
-    };
+  test("the protocol rejects the former built-in window grants", () => {
     expect(() =>
-      registry.validatePolicy(parsePolicy(JSON.stringify(valid))),
-    ).not.toThrow();
-
-    const undeclaredBackendGrant = {
-      ...valid,
-      backend: {
-        permissions: [],
-        windows: [
-          "reader",
-        ],
-      },
-    };
-    expect(() =>
-      registry.validatePolicy(
-        parsePolicy(JSON.stringify(undeclaredBackendGrant)),
-      ),
-    ).toThrow();
-
-    const undeclaredViewGrant = {
-      ...valid,
-      views: [
-        validView,
-        {
-          ...editor,
-          host: {
+      parsePolicy(
+        JSON.stringify({
+          ...validPolicy,
+          backend: {
             permissions: [],
             windows: [
-              "reader",
+              "main",
             ],
           },
-        },
-      ],
-    };
-    expect(() =>
-      registry.validatePolicy(parsePolicy(JSON.stringify(undeclaredViewGrant))),
+        }),
+      ),
     ).toThrow();
   });
 });

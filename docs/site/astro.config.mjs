@@ -140,10 +140,18 @@ export default defineConfig({
                   slug: "reference/client/listen",
                 },
                 {
-                  slug: "reference/client/capabilities",
-                },
-                {
                   slug: "reference/client/close",
+                },
+              ],
+            },
+            {
+              label: "플러그인",
+              collapsed: true,
+              items: [
+                {
+                  autogenerate: {
+                    directory: "reference/plugins",
+                  },
                 },
               ],
             },

@@ -1,0 +1,18 @@
+{
+  "name": "@bunaway/plugin-api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "exports": {
+    ".": "./src/index.ts",
+    "./host": "./src/host.ts",
+    "./native": "./src/native.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@bunaway/protocol": "workspace:*"
+  }
+}

@@ -14,8 +14,8 @@ vendor/bunaway나 bunaway.lock.json을 만들지 않는다.
 bun run framework:pack --local
 ```
 
-build/framework/에 bunaway-cli, backend, client, plugin, core, protocol, runtime-bun,
-packaging 패키지와 plugin-storage, plugin-log, plugin-capabilities의 개별 tarball이 생성된다. --local은 서로의 의존성을 이 디렉터리의
+build/framework/에 bunaway-cli, backend, client, plugin, plugin-api, core, protocol, runtime-bun,
+packaging 패키지와 plugin-storage, plugin-log, plugin-capabilities, plugin-windows의 개별 tarball이 생성된다. --local은 서로의 의존성을 이 디렉터리의
 절대 tarball 경로로 연결한다. 이는 공개 registry가 없는 동안의 로컬 설치 경로다.
 파일을 다른 디렉터리/머신에 옮겼다면 그 위치에서 로컬 묶음을 다시 생성해야 한다.
 --local 없이 만들면 패키지 간 의존성은 정확한 릴리스 버전이며 공개 publish는 하지 않는다.
@@ -139,4 +139,4 @@ bun test tests/cli
 BUNAWAY_NATIVE_DISTRIBUTION_TEST=1은 대상 머신에서 doctor/build를 추가한다.
 Windows PowerShell에서는 실행 전 $env:BUNAWAY_NATIVE_DISTRIBUTION_TEST = '1'로 지정한다.
 
-선택 패키지는 @bunaway/plugin-storage, @bunaway/plugin-log, @bunaway/plugin-capabilities다. CLI의 의존성에는 포함하지 않는다. 기본 생성 앱은 저장 패키지만 설치하고 등록한다. 플러그인 추가 시 로컬 tarball을 bun add로 설치한 뒤 해당 객체를 plugins 배열에 추가하고 policy.json의 permissions를 허용한다. 현재 Windows 어댑터를 제공한다.
+선택 패키지는 @bunaway/plugin-storage, @bunaway/plugin-log, @bunaway/plugin-capabilities, @bunaway/plugin-windows다. CLI의 의존성에는 포함하지 않는다. 기본 생성 앱은 저장 패키지만 설치하고 등록한다. 플러그인 추가 시 로컬 tarball을 bun add로 설치한 뒤 해당 객체를 plugins 배열에 추가하고 policy.json의 permissions를 허용한다. 현재 Windows 어댑터를 제공한다.

@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "name": "windows",
+  "entry": "./src/index.ts",
+  "platforms": {
+    "windows": {
+      "execution": "ui",
+      "operations": "./src/windows.ts"
+    }
+  }
+}

@@ -62,11 +62,7 @@ const message = parseMessage(text);
 `validateOutput`은 등록 schema로 검사하며 `validatePolicy`는 permission 이름과 범위를
 검사합니다. `allowed(source, call, matches)`는 deny 우선으로 allow 범위를 평가합니다.
 
-`hostOperations`에는 프레임워크가 소유하는 창 API의 작업 schema가 있습니다.
-`isWindowOperation`은 이름이 그 목록에 있는지 확인합니다. `parseWindowCall`과
-`validateWindowCall`은 창 작업 요청을 파싱하고 입력을 검사하며, `validateHostOutput`은
-해당 작업의 결과를 검사합니다. 창 작업 이름과 앱에서 사용하는 API는
-[windows 레퍼런스](/reference/host/windows/)에 있습니다.
+공통 프로토콜은 작업 목록을 기본 등록하지 않습니다. 창 제어도 개별 플러그인의 NativePluginContract로 등록하고 검증합니다. 창 제어 계약과 앱에서 사용하는 API는 [windows 레퍼런스](/reference/host/windows/)에 있습니다.
 
 ```ts
 type NativeRegistryOptions = { mode?: "runtime" | "catalog" };
@@ -97,8 +93,7 @@ buildId는 버전 협상에 사용하지 않습니다.
 ## HostCall과 HostResponse
 
 HostCall은 `{ operation, payload }`입니다. 전송은 JSON envelope를 검증합니다.
-등록된 플러그인 작업은 플러그인 계약으로 입력과 결과를 검사하고, 프레임워크 창 작업은
-`hostOperations` 계약으로 검사합니다. 응답은 `{ kind: "result", payload }` 또는
+창 제어를 포함한 모든 등록 플러그인 작업은 플러그인 계약으로 입력과 결과를 검사합니다. 응답은 `{ kind: "result", payload }` 또는
 `{ kind: "error", error }`입니다.
 네이티브 플러그인 화면 명령은 `plugin.<작업 이름>`입니다.
 WebView invoke의 command와 Host operation은 별도의 이름 공간, 권한 검사입니다.

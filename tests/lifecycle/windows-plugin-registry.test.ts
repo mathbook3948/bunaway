@@ -19,10 +19,7 @@ import {
   type NativeEnvironment,
   s,
 } from "../../packages/plugin-sdk/src/index.ts";
-import {
-  hostOperations,
-  validateValue,
-} from "../../packages/protocol/src/index.ts";
+import { validateValue } from "../../packages/protocol/src/index.ts";
 import { capabilitiesPlugin } from "../../plugins/capabilities/src/index.ts";
 import { createOperations as createCapabilities } from "../../plugins/capabilities/src/windows.ts";
 
@@ -378,15 +375,8 @@ test("capability permission metadata comes from each registered operation contra
     if (!observed) {
       throw new Error("Plugin did not receive capability metadata.");
     }
-    expect(observed.capabilities).toHaveLength(
-      Object.keys(hostOperations).length + 2,
-    );
+    expect(observed.capabilities).toHaveLength(2);
     expect(observed.capabilities).toEqual([
-      ...Object.keys(hostOperations).map((name) => ({
-        name,
-        support: "supported" as const,
-        permission: "not-required" as const,
-      })),
       {
         name: "storage.read",
         support: "supported",
@@ -455,7 +445,7 @@ test("capability queries include every operation at the native registry limit", 
   );
   try {
     const result = adapters.execute("capabilities.get", null, "backend");
-    expect(result).toHaveLength(256 + Object.keys(hostOperations).length);
+    expect(result).toHaveLength(256);
     expect(
       (
         result as {
@@ -463,7 +453,6 @@ test("capability queries include every operation at the native registry limit", 
         }[]
       ).map(({ name }) => name),
     ).toEqual([
-      ...Object.keys(hostOperations),
       ...registry.operations.keys(),
     ]);
   } finally {

@@ -6,12 +6,11 @@ sidebar: { order: 4 }
 
 저장, 로그와 기능 조회는 개별 설치하는 선택 패키지입니다. 사용할 패키지를 설치한 뒤
 앱의 `plugins` 배열에 등록하세요. 현재 네이티브 플러그인 어댑터는 Windows를 지원합니다.
-Windows 창 제어는 `@bunaway/backend`의 `windows` API가 제공합니다. 별도 플러그인 등록은 필요하지 않으며,
-호출 출처의 `host.windows` 또는 `backend.windows`에 제어할 뷰 ID를 허용해야 합니다.
-예제의 `editor` 창은 앱 설정 `app.windows`에 정의하고 정책의 `views`에도 추가해야 합니다.
+창 제어도 `@bunaway/plugin-windows`를 설치하고 windowsPlugin을 등록한 뒤 호출합니다. `editor` 창은 앱 설정 `app.windows`와 정책의 `views`에 정의하고, 호출 출처의 permissions에 `windows:control`의 allow 범위를 허용합니다.
 
 ```ts
-import { defineApp, defineModule, windows } from "@bunaway/backend";
+import { defineApp, defineModule } from "@bunaway/backend";
+import { windows, windowsPlugin } from "@bunaway/plugin-windows";
 
 import { storage, storagePlugin } from "@bunaway/plugin-storage";
 
@@ -21,11 +20,11 @@ const memo = defineModule("memo").command("save", {
 const editor = defineModule("editor").command("open", {
   input: { const: null }, output: { const: null },
 }, async () => { await windows.create({ view: "editor" }); return null; });
-export default defineApp({ modules: [memo, editor], plugins: [storagePlugin] });
+export default defineApp({ modules: [memo, editor], plugins: [storagePlugin, windowsPlugin] });
 ```
 
 뷰 정책에는 `memo.save`와 `storage:write-text`의 `appData/notes` 허용 범위가 필요합니다.
-`editor.open`을 호출하는 뷰의 `commands`에는 해당 명령을, `host.windows`에는 `editor`를 지정합니다.
+`editor.open`을 호출하는 뷰의 `commands`에는 해당 명령을, `host.permissions`에는 `{ "identifier": "windows:control", "allow": [{ "view": "editor" }] }`를 지정합니다.
 패키지 설치나 플러그인 등록으로 권한을 부여하지 않습니다.
 
 ## 개별 API
@@ -35,7 +34,7 @@ export default defineApp({ modules: [memo, editor], plugins: [storagePlugin] });
 | `@bunaway/plugin-storage` | `storagePlugin` | `storage.readText({ scope, path }): Promise<string>`, `storage.writeText({ scope, path, text }): Promise<null>` |
 | `@bunaway/plugin-log` | `logPlugin` | `log.write({ level, message, details? })`, `log.debug`, `log.info`, `log.warn`, `log.error` |
 | `@bunaway/plugin-capabilities` | `capabilitiesPlugin` | `capabilities(): Promise<Capabilities>` |
-| `@bunaway/backend` | 등록 불필요 | `windows.list`, `windows.create`, `windows.recreate`, `windows.show`, `windows.hide`, `windows.focus`, `windows.close`, `windows.setSize`, `windows.setPosition`, `windows.setFullscreen`, `windows.setCloseConfirmation` |
+| `@bunaway/plugin-windows` | `windowsPlugin` | `windows.list`, `windows.create`, `windows.recreate`, `windows.show`, `windows.hide`, `windows.focus`, `windows.close`, `windows.setSize`, `windows.setPosition`, `windows.setFullscreen`, `windows.setCloseConfirmation` |
 
 로그의 모든 함수는 `Promise<null>`을 반환합니다. `level`은 debug, info, warn, error이며
 메시지는 최대 1,024자, `details`는 선택적 JSON 값입니다.
@@ -95,6 +94,6 @@ SDK의 `command()`와 `defineApp()`을 사용하지 않는 객체형 정의에�
 
 ## 창
 
-`windows`는 프레임워크에 포함된 Windows 전용 창 제어 API입니다. 선택 플러그인처럼 설치하거나 등록하지 않습니다.
-호출 뷰의 `host.windows`, 또는 setup의 `backend.windows`에 대상 뷰를 허용해야 합니다.
+`windows`는 선택 패키지인 `@bunaway/plugin-windows`의 창 제어 API입니다.
+호출 출처의 permissions에 `windows:list`와 대상 뷰의 `windows:control` 범위를 허용합니다.
 메서드와 권한은 [windows 레퍼런스](/reference/host/windows/)를 확인하세요.

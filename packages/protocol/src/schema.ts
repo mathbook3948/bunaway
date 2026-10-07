@@ -277,12 +277,6 @@ const hostPermissions = {
       },
       maxItems: 256,
     },
-    windows: {
-      type: "array",
-      maxItems: 128,
-      uniqueItems: true,
-      items: identifier,
-    },
   },
   required: [
     "permissions",

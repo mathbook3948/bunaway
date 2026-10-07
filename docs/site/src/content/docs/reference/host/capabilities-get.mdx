@@ -9,7 +9,7 @@ capabilities(): Promise<Capabilities>
 ```
 
 앱 백엔드에서 현재 플랫폼 기능 정보를 조회합니다.
-UI에서는 [capabilities](/reference/client/capabilities/)를 사용합니다.
+UI에서는 [capabilities](/reference/plugins/capabilities/)를 사용합니다.
 
 ```ts
 import { capabilities } from "@bunaway/plugin-capabilities";
@@ -30,7 +30,7 @@ const support = await capabilities();
 `supported`, `not-required`입니다. Windows의 저장, 로그와 기능 조회 작업은 해당
 플러그인을 등록하고 어댑터를 사용할 수 있을 때 `supported`입니다. 플러그인 작업에
 OS 권한 선언이 없으면 `unknown`입니다.
-조회 결과에는 등록 가능한 네이티브 작업 256개와 프레임워크 창 작업을 모두 포함합니다.
+조회 결과에는 등록한 네이티브 작업을 최대 256개 포함합니다. 창 작업도 windowsPlugin을 등록한 경우에만 포함됩니다.
 결과 전체에는 프로토콜의 JSON 깊이와 1 MiB 메시지 제한을 적용합니다.
 
 ## 권한 의미

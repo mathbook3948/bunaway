@@ -11,7 +11,15 @@ import {
 import { containAppProcess } from "../../native/windows/bun/job.ts";
 import { closeWindowsApp } from "../../packages/cli/src/launch.ts";
 import type { AppDefinition } from "../../packages/core/src/index.ts";
-import type { HostContext } from "../../packages/protocol/src/index.ts";
+import {
+  type HostContext,
+  NativeRegistry,
+} from "../../packages/protocol/src/index.ts";
+import { windowsPlugin } from "../../plugins/windows/src/index.ts";
+
+const windowRegistry = new NativeRegistry([
+  windowsPlugin,
+]);
 
 let uiReadyResolve: () => void = () => {};
 const uiReady = new Promise<void>((resolveReady) => {
@@ -22,6 +30,9 @@ const uiRestored = new Promise<void>((resolveRestored) => {
   uiRestoredResolve = resolveRestored;
 });
 export const desktopTestApp = {
+  plugins: [
+    windowsPlugin,
+  ],
   commands: {
     "test.ready": {
       input: {
@@ -45,7 +56,7 @@ export const desktopTestApp = {
       async run(_input, context) {
         if (scenario === "hide") {
           assert.equal(
-            await context.host.call("windows.close", {
+            await context.host.call(windowRegistry.operation("windows.close"), {
               view: "main",
             }),
             false,
@@ -54,7 +65,7 @@ export const desktopTestApp = {
             !context.signal.aborted,
             "close to tray must keep the request context alive",
           );
-          await context.host.call("windows.show", {
+          await context.host.call(windowRegistry.operation("windows.show"), {
             view: "main",
           });
         }
@@ -311,6 +322,7 @@ if (!process.argv.includes("--child")) {
       {
         ...desktopTestApp,
         plugins: [
+          ...desktopTestApp.plugins,
           {
             name: "desktop-test",
             version: "1",
@@ -421,9 +433,16 @@ if (!process.argv.includes("--child")) {
                 "test.reopen",
               ],
               host: {
-                permissions: [],
-                windows: [
-                  "main",
+                permissions: [
+                  "windows:list",
+                  {
+                    identifier: "windows:control",
+                    allow: [
+                      {
+                        view: "main",
+                      },
+                    ],
+                  },
                 ],
               },
             },

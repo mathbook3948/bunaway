@@ -1,9 +1,6 @@
-import {
-  BunawayError,
-  type JsonValue,
-  type WindowCall,
-} from "../../../packages/protocol/src/index.ts";
-import type { WindowSpec } from "../../../packages/runtime-bun/src/window-config.ts";
+import type { WindowSpec } from "@bunaway/plugin-api/native";
+import { BunawayError, type JsonValue } from "@bunaway/protocol";
+import type { WindowCall } from "./contract.ts";
 
 export type WindowState = {
   closed: boolean;

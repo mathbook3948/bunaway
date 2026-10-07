@@ -5,10 +5,6 @@ import {
   BunawayError,
   type HostContext,
   type HostResponse,
-  hostOperations,
-  validateHostOutput,
-  validateWindowCall,
-  type WindowCall,
 } from "../../../packages/protocol/src/index.ts";
 import { ViewBoundary } from "./boundary.ts";
 import {
@@ -35,7 +31,6 @@ import {
   user,
   Windows,
 } from "./win32.ts";
-import { WindowOperations } from "./window-operations.ts";
 
 const config = workerData as UIConfig;
 const registry = pluginRegistry(config.plugins ?? []);
@@ -190,26 +185,13 @@ const channel = new Channel(
           : view?.boundary.policy.host;
       let allowed = false;
       try {
-        const builtin = Object.hasOwn(hostOperations, operation.call.operation);
-        const call = builtin
-          ? validateWindowCall(operation.call)
-          : registry.validateCall(operation.call);
+        const call = registry.validateCall(operation.call);
         allowed =
           !stopping &&
           !closingSent &&
           (packet.kind !== "grant" || packet.allowed) &&
           !!permissions &&
-          (builtin
-            ? call.operation === "windows.list"
-              ? !!permissions.windows?.length
-              : permissions.windows?.includes(
-                  (
-                    call.payload as {
-                      view: string;
-                    }
-                  ).view,
-                ) === true
-            : registry.allowed(permissions, call, matches));
+          registry.allowed(permissions, call, matches);
       } catch {
         /* Invalid requests fail closed at the host boundary. */
       }
@@ -220,51 +202,37 @@ const channel = new Channel(
       }
       if (packet.kind === "grant") {
         assert(queued);
-        if (allowed && Object.hasOwn(hostOperations, queued.call.operation)) {
-          let response: HostResponse;
-          windowRequests.set(packet.requestId, packet.context);
-          try {
-            const call = validateWindowCall(queued.call);
-            const payload = await windowOperations.execute(
-              call,
-              permissions?.windows ?? [],
-              packet.requestId,
-            );
-            response = hostResponse(() =>
-              validateHostOutput(call.operation, payload),
-            );
-          } catch (error) {
-            response = hostResponse(() => {
-              throw error;
-            });
-          } finally {
-            windowRequests.delete(packet.requestId);
-          }
-          const wasCancelled = cancelled.delete(packet.requestId);
-          if (!stopping && !wasCancelled && activeContext(packet.context)) {
-            channel.notify({
-              kind: "host-response",
-              context: packet.context,
-              requestId: packet.requestId,
-              response,
-            });
-          }
-          return;
-        }
-        const response = hostResponse(() => {
-          if (!allowed) {
+        let response: HostResponse;
+        windowRequests.set(packet.requestId, packet.context);
+        try {
+          if (!allowed || !permissions) {
             throw new BunawayError({
               code: "PERMISSION_DENIED",
               message: "Host context or policy denied.",
             });
           }
           assert(adapters, "UI adapters are not initialized");
-          return adapters.execute(
+          const payload = await adapters.executeUI(
             queued.call.operation,
             queued.call.payload,
             queued.source,
+            {
+              requestId: packet.requestId,
+              permissions,
+            },
           );
-        });
+          response = hostResponse(() => payload);
+        } catch (error) {
+          response = hostResponse(() => {
+            throw error;
+          });
+        } finally {
+          windowRequests.delete(packet.requestId);
+        }
+        const wasCancelled = cancelled.delete(packet.requestId);
+        if (stopping || wasCancelled || !activeContext(packet.context)) {
+          return;
+        }
         channel.notify({
           kind: "host-response",
           context: packet.context,
@@ -408,83 +376,54 @@ async function closeWindow(
   });
   return true;
 }
-const windowOperations = new WindowOperations(config.windows, {
-  read: (viewId) => {
-    const view = views.get(viewId);
-    return view
-      ? {
-          closed: view.boundary.closed,
-          cleaned: view.cleaned,
-          ready: view.ready,
-          failure: view.native.failure,
-          deadline: view.deadline,
-        }
-      : undefined;
-  },
-  create: createWindow,
-  close: (viewId) => closeWindow(viewId, "recreate"),
-  apply: applyWindow,
-  stopping: () => stopping,
-  cancelled: (id) => cancelled.has(id),
-  now: () => Date.now(),
-  tick: () => Bun.sleep(5),
-});
-function applyWindow(call: WindowCall, viewId: string) {
-  assert(windows);
-  const view = views.get(viewId);
-  assert(view);
-  const hwnd = view.native.hwnd;
-  switch (call.operation) {
-    case "windows.show":
-      windows.show(hwnd, true);
-      break;
-    case "windows.hide":
-      windows.show(hwnd, false);
-      break;
-    case "windows.focus":
-      if (!windows.focus(hwnd)) {
-        throw new BunawayError({
-          code: "BUSY",
-          message: "OS declined window focus.",
-        });
-      }
-      break;
-    case "windows.close":
-      return closeWindow(viewId);
-    case "windows.setSize":
-      if (windows.isFullscreen(hwnd)) {
-        throw new BunawayError({
-          code: "INVALID_ARGUMENT",
-          message: "Exit fullscreen before changing size.",
-        });
-      }
-      windows.setSize(hwnd, call.payload.width, call.payload.height);
-      view.native.resize();
-      break;
-    case "windows.setPosition":
-      if (windows.isFullscreen(hwnd)) {
-        throw new BunawayError({
-          code: "INVALID_ARGUMENT",
-          message: "Exit fullscreen before changing position.",
-        });
-      }
-      windows.setPosition(hwnd, call.payload.x, call.payload.y);
-      break;
-    case "windows.setFullscreen":
-      windows.setFullscreen(hwnd, call.payload.fullscreen);
-      view.native.resize();
-      break;
-    case "windows.setCloseConfirmation":
-      view.confirmation = call.payload.message;
-      break;
-    default:
-      throw new BunawayError({
-        code: "INVALID_ARGUMENT",
-        message: "Expected a window operation.",
-      });
-  }
-  return null;
-}
+const windowServices: import("../../../packages/plugin-api/src/native.ts").NativeWindowServices =
+  {
+    specs: config.windows,
+    read: (viewId) => {
+      const view = views.get(viewId);
+      return view
+        ? {
+            closed: view.boundary.closed,
+            cleaned: view.cleaned,
+            ready: view.ready,
+            failure: view.native.failure,
+            deadline: view.deadline,
+          }
+        : undefined;
+    },
+    create: createWindow,
+    close: (viewId) => closeWindow(viewId, "recreate"),
+    stopping: () => stopping,
+    cancelled: (id) => cancelled.has(id),
+    now: () => Date.now(),
+    tick: () => Bun.sleep(5),
+
+    window(viewId) {
+      const view = views.get(viewId);
+      assert(view);
+      assert(windows);
+      const nativeWindows = windows;
+      const hwnd = view.native.hwnd;
+      return {
+        show: (visible) => nativeWindows.show(hwnd, visible),
+        focus: () => nativeWindows.focus(hwnd),
+        close: () => closeWindow(viewId),
+        isFullscreen: () => nativeWindows.isFullscreen(hwnd),
+        setSize(width, height) {
+          nativeWindows.setSize(hwnd, width, height);
+          view.native.resize();
+        },
+        setPosition: (x, y) => nativeWindows.setPosition(hwnd, x, y),
+        setFullscreen(fullscreen) {
+          nativeWindows.setFullscreen(hwnd, fullscreen);
+          view.native.resize();
+        },
+        setCloseConfirmation(message) {
+          view.confirmation = message;
+        },
+      };
+    },
+  };
 function createWindow(spec: WindowSpec) {
   assert(windows);
 
@@ -609,7 +548,12 @@ function createWindow(spec: WindowSpec) {
 try {
   hr(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
   initialized = true;
-  adapters = await operations(config.plugins ?? [], config.dataRoot, "ui");
+  adapters = await operations(
+    config.plugins ?? [],
+    config.dataRoot,
+    "ui",
+    windowServices,
+  );
   windows = new Windows(() => {
     if (closingSent) {
       return;
@@ -671,7 +615,7 @@ try {
     }
     if (
       !closingSent &&
-      !windowOperations.replacing.size &&
+      !adapters?.busy() &&
       [
         ...views.values(),
       ].every((view) => view.boundary.closed)

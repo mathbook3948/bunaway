@@ -1269,7 +1269,7 @@ test("dev build failure does not launch old assets; the next edit recovers, clos
   expect(calls).toEqual(before);
 });
 
-test("CLI validates, relocates and bundles a catalog of startup and deferred windows", async () => {
+test("CLI bundles startup and deferred window specs without implicitly selecting window control", async () => {
   const configPath = resolve(project, "src-bunaway/bunaway.json");
   const policyPath = resolve(project, "src-bunaway/policy.json");
   const config = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
@@ -1298,9 +1298,6 @@ test("CLI validates, relocates and bundles a catalog of startup and deferred win
       id: "editor",
       host: {
         ...policy.views[0].host,
-        windows: [
-          "editor",
-        ],
       },
     });
     await writeJson(policyPath, policy);
@@ -1310,7 +1307,7 @@ test("CLI validates, relocates and bundles a catalog of startup and deferred win
     expect(validated.app.windows?.[1]?.startup).toBe(false);
     const assets = resolve(home, "multi-window-assets");
     await bundleAssets(validated, assets, true);
-    expect(await Bun.file(resolve(assets, "ui.js")).text()).toContain(
+    expect(await Bun.file(resolve(assets, "ui.js")).text()).not.toContain(
       "Window cleanup did not complete.",
     );
     config.app.view = "main";

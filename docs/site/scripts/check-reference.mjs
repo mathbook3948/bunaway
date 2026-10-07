@@ -237,8 +237,8 @@ function objectPropertyNames(path, constantName) {
 checkNames(
   new Set([
     ...objectPropertyNames(
-      "packages/protocol/src/host-api.ts",
-      "hostOperations",
+      "plugins/windows/src/contract.ts",
+      "windowOperations",
     ),
     ...[
       "storage",
