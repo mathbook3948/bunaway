@@ -10,6 +10,7 @@ TypeScript 타입은 개발 중 호출 실수를 잡습니다. 실행할 때는 
 템플릿의 `app.ts`가 `app`을 named/default export하므로 아래처럼 데이터 타입을 만들 수 있습니다.
 
 ```ts
+import { createClient } from "@bunaway/client";
 import type { CommandsOf, EventsOf } from "@bunaway/backend";
 import type { app } from "../src-bunaway/app";
 
@@ -21,11 +22,12 @@ UI에서는 `import type`으로 타입만 가져옵니다. 이렇게 하면 백�
 이 타입을 UI 클라이언트에 지정합니다.
 
 ```ts
-const client = createClient<AppCommands, AppEvents>({ transport, hello });
+const client = createClient<AppCommands, AppEvents>();
 await client.invoke("message.save", "문자열");
 ```
 
-여기서 transport, hello는 [createClient](/reference/client/create-client/) 예시처럼 준비합니다.
+직접 import한 `invoke<string>`과 `listen<string>`의 타입 인자는 작성자가 선언하는 타입입니다.
+명령 이름과 입력, 이벤트까지 앱 정의에서 검사하려면 위의 타입이 연결된 클라이언트를 사용합니다.
 CommandsOf는 앱에 직접 선언한 명령과 `defineApp()`에 정적으로 나열한 모듈의 input/output을 추론합니다.
 이벤트 payload는 EventsOf로 추론합니다. 실행할 때 구성하는 모듈 배열이나 문자열로 정하는 이름은 정확한 목록을 추론하지 못할 수 있습니다.
 플러그인 전체 레지스트리를 합친 자동 타입 생성 CLI는 아직 없습니다.

@@ -1,7 +1,8 @@
 # Tests
 
 - `protocol/`: 직렬화·버전 협상·오류 계약.
-- `api/`: 모듈 공통 타입, 명령 input/output, Host API 컨텍스트·취소·오류 계약.
+- `api/`: 모듈 공통 타입, 명령 input/output, Host API 컨텍스트, 취소, 오류 계약,
+  클라이언트 기본 연결의 지연 초기화, 문서/HMR 공유, 구독 해제, 실패, 취소, 문서 종료 정리.
 - `core/`: 명령·상태·이벤트·플러그인.
 - `conformance/`: 네이티브 호스트 간 공통 계약.
 - `security/`: 권한·origin·세션·파일 범위.
@@ -16,6 +17,7 @@
 다중 창·저장·메모 복원·렌더러 복구·정상/비정상 종료를 검증한다.
 모달 중 메인의 타이머·Promise·네트워크와 초기화 중 닫기·생성 실패·파일 핸들 경계,
 이동한 독립 CLI 프로젝트도 포함한다. [실행 결과](../docs/architecture/windows-bun-results.md).
+독립 CLI 프로젝트는 테스트용 UI 명령 호출을 추가한 뒤 생성 앱의 타입 검사를 통과해야 빌드와 창 실행을 진행한다.
 공통 앱·화면 데이터는 `tests/fixtures/desktop/host/`에서 Windows/macOS가 공유한다.
 예전 Windows C++ 호스트/probe와 전용 실행기·테스트는 삭제했다.
 `backend-startup.test.ts`는 macOS 프로세스 probe 백엔드로 boot 전후 종료와 버전·세대 검증을 확인한다.

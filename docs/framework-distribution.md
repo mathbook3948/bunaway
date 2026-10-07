@@ -48,7 +48,8 @@ create는 설치를 자동 실행하지 않으며 기존 경로를 덮어쓰지 
 
 ## 설치 구성
 
-- @bunaway/client: WebView 클라이언트 SDK
+- @bunaway/client: 화면에서 `invoke`, `listen`, `capabilities`를 사용하는 WebView 클라이언트 SDK.
+  [기본 연결과 타입 추론](./architecture/common-api.md#클라이언트와-transport)을 참고한다.
 - @bunaway/backend: 명령·이벤트·앱 정의 SDK
 - @bunaway/core: 공통 실행 계층
 - @bunaway/runtime-bun: macOS 등 별도 프로세스 백엔드 연결

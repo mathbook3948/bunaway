@@ -62,7 +62,7 @@ Bun 자식 프로세스 ── TypeScript 코어 ── 앱 명령·상태·플�
 | 모듈 | 책임과 공개 계약 | 허용하는 의존성 |
 | --- | --- | --- |
 | `protocol` | 메시지 스키마, 오류 코드, 버전 협상, 직렬화 규칙 | 플랫폼·Bun·UI 의존성 없음 |
-| `client-sdk` | `invoke`, `listen`, `unlisten`, 기능 조회, 요청 취소 | `protocol`, 주입받은 Transport |
+| `client-sdk` | `invoke`, `listen`과 구독 해제 함수, 기능 조회, 요청 취소, 기본 WebView 연결, 초기화, 정리 | `protocol`, WebView 또는 주입받은 Transport |
 | `core` | 명령 레지스트리, 입력 검증, 상태 저장소, 이벤트 라우팅, 플러그인 수명 | `protocol`, 추상 Host API, Runtime Services |
 | `runtime-bun` | 자식 프로세스 안의 코어 부팅, Bun 서비스 어댑터, 프로세스 IPC 연결 | `core`, `protocol`, Bun API |
 | `bun-bundle` | 배포할 Bun 실행 파일, 버전·소스 revision·해시·라이선스 고정 | 공식 플랫폼별 Bun 배포물, 필요한 경우 기록된 빌드·패치 |
@@ -137,15 +137,18 @@ OS 권한 선언과 런타임 사용자 동의는 프레임워크 권한과 별�
 
 공통 타입과 명령 입력·출력 검증은 [C 공통 API](./architecture/common-api.md)로 고정했다.
 `createClient`·`createCore`와 Windows용 `runBunApp`의 실행 연결을 구현했다.
-명령 타입 생성 CLI와 기본 로그·저장 플러그인은 미구현이다. 다음은 계약 사용 예시이며,
-생성된 타입과 `notes.read` 앱 전체의 실행 검증을 뜻하지 않는다. 실제 실행 샘플은
+화면은 `invoke`, `listen`을 직접 사용하거나, 앱 정의에서 타입을 추론하는 인자 없는
+`createClient()`를 사용한다. 기본 연결의 브리지, 프로토콜 초기화, 준비 대기와 페이지
+종료 시 정리는 SDK가 담당한다. 일반 브라우저의 백엔드 호출은 `UNSUPPORTED`로 실패한다.
+명령 타입 생성 CLI와 기본 로그, 저장 플러그인은 미구현이다. 다음은 앱 정의의 타입을
+추론하는 계약 사용 예시이며 `notes.read` 앱 전체의 실행 검증을 뜻하지 않는다. 실제 실행 샘플은
 [메모 앱](../examples/memo/README.md)이다.
 
 ```ts
-// backend/main.ts
+// src-bunaway/app.ts
 import { command, type AppDefinition } from "@bunaway/backend";
 
-export default {
+export const app = {
   commands: {
     "notes.read": command({
       input: {
@@ -163,12 +166,13 @@ export default {
   },
   events: {},
 } satisfies AppDefinition;
+export default app;
 
-// frontend/main.ts
-import type { Client } from "@bunaway/client";
-import type { Commands } from "../generated/commands";
-// 실행 시 createClient({ transport, hello })로 생성한다. 아래는 타입 사용 예시다.
-declare const client: Client<Commands>;
+// src/main.ts
+import { createClient } from "@bunaway/client";
+import type { CommandsOf } from "@bunaway/backend";
+import type { app } from "../src-bunaway/app.ts";
+const client = createClient<CommandsOf<typeof app>>();
 const text = await client.invoke("notes.read", { key: "welcome" });
 ```
 

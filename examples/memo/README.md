@@ -80,6 +80,8 @@ Bunaway는 프런트엔드 빌드를 자동 실행하지 않는다. `vite.config
 - `src-bunaway/policy.json`: `main` 뷰의 메모 명령·이벤트와 `appData/notes/` 읽기·쓰기 권한.
 
 저장 버튼은 `memo.save`를 호출하고 백엔드는 Host API로 파일을 기록한 뒤 `memo.saved`를 발행한다.
+화면은 `@bunaway/client`의 `invoke`, `listen`을 별도 초기화 없이 사용한다.
+백엔드 호출은 `bun run bunaway dev`로 연 앱 창에서 동작하며 일반 브라우저에서는 지원하지 않는다.
 화면은 이벤트를 받아 저장 내용을 갱신하며, 앱을 다시 열면 `memo.read`로 파일을 불러온다.
 Windows 저장 위치는 `%LOCALAPPDATA%/bunaway/examples.bunaway.memo/data/notes/memo.txt`다.
 첫 실행에는 파일이 없어 읽기 실패를 표시하지만 새 메모를 저장할 수 있다.
