@@ -11,6 +11,8 @@ if (!root) throw new Error("Expected a generated project.");
 const marker = resolve(root, ".bunaway/host-starts.txt");
 const close = resolve(root, ".bunaway/close-host.txt");
 const host = resolve(root, ".bunaway/dev-host.ts");
+await rm(marker, { force: true });
+await rm(close, { force: true });
 await Bun.write(
   host,
   `
@@ -53,6 +55,14 @@ const uiText = await Bun.file(ui).text();
 const backendText = await Bun.file(backend).text();
 const shared = resolve(root, "shared/development-value.ts");
 const sharedImport = 'import "../shared/development-value.ts";\n';
+const failureMode = process.argv[3];
+const brokenStart = ["broken-start", "broken-shared", "missing-shared"].includes(failureMode ?? "");
+const originalError = console.error;
+let buildFailed = false;
+console.error = (...args: unknown[]) => {
+  if (String(args[0]).includes("Dev build failed")) buildFailed = true;
+  originalError(...args);
+};
 function settings() {
   const listener = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("") });
   const port = listener.port;
@@ -89,6 +99,9 @@ let finished = false;
 try {
   await Bun.write(shared, 'console.error("shared dependency");\n');
   await Bun.write(backend, sharedImport + backendText);
+  if (failureMode === "broken-start") await Bun.write(backend, "export default = ;\n");
+  if (failureMode === "broken-shared") await Bun.write(shared, "export const invalid = ;\n");
+  if (failureMode === "missing-shared") await rm(shared);
   await Bun.write(configPath, JSON.stringify({ ...JSON.parse(configText), dev: first }));
   running = devProject(root);
   void running.then(
@@ -99,6 +112,14 @@ try {
       finished = true;
     },
   );
+  if (brokenStart) {
+    await waitFor(async () => buildFailed);
+    expect(finished).toBe(false);
+    expect(await starts()).toBe(0);
+    await expect(fetch(first.url)).rejects.toThrow();
+    if (failureMode === "broken-start") await Bun.write(backend, sharedImport + backendText);
+    else await Bun.write(shared, 'console.error("repaired shared dependency");\n');
+  }
   await waitFor(async () => (await starts()) === 1);
   await Bun.write(ui, `${uiText}\n// frontend update\n`);
   await Bun.sleep(350);
@@ -128,4 +149,5 @@ try {
   await Bun.write(ui, uiText);
   await Bun.write(backend, backendText);
   await rm(shared, { force: true });
+  console.error = originalError;
 }

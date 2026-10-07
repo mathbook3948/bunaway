@@ -102,9 +102,9 @@ export async function readProjectSettings(root: string): Promise<{
   };
 }
 
-export async function validateProject(
+async function loadProject(
   directory: string,
-  options: { development?: boolean } = {},
+  options: { development?: boolean; validateSources?: boolean } = {},
 ): Promise<Project> {
   const root = await realpath(resolve(directory));
   const settings = await readProjectSettings(root);
@@ -121,10 +121,10 @@ export async function validateProject(
   if (!(await lstat(appEntry)).isFile() || (!server && !(await lstat(frontend)).isDirectory())) {
     throw new Error("app must be a file; frontend must be a directory.");
   }
-  const { root: frameworkRoot, backendDependencies } = await validateFramework(root, [
-    appEntry,
-    ...(server ? [] : [frontend]),
-  ]);
+  const { root: frameworkRoot, backendDependencies } = await validateFramework(
+    root,
+    options.validateSources === false ? [] : [appEntry, ...(server ? [] : [frontend])],
+  );
   const raw = settings.app;
   keys(raw, ["appId", "title", "view", "home", "window"]);
   const appId = string(raw.appId);
@@ -176,4 +176,16 @@ export async function validateProject(
       window: { width: window.width as number, height: window.height as number },
     },
   };
+}
+
+// Development must install its watcher before attempting source compilation.
+export function readProjectConfiguration(directory: string): Promise<Project> {
+  return loadProject(directory, { development: true, validateSources: false });
+}
+
+export function validateProject(
+  directory: string,
+  options: { development?: boolean } = {},
+): Promise<Project> {
+  return loadProject(directory, options);
 }

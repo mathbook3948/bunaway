@@ -422,6 +422,31 @@ test("external development orchestrates UI updates, backend restarts and server 
   }
 }, 30000);
 
+for (const failureMode of ["broken-start", "broken-shared", "missing-shared"])
+  test(`dev recovers from initial source failure: ${failureMode}`, async () => {
+    const child = Bun.spawn(
+      [process.execPath, resolve(import.meta.dir, "dev.fixture.ts"), project, failureMode],
+      {
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const output = new Response(child.stdout).text();
+    const errors = new Response(child.stderr).text();
+    const timer = setTimeout(() => child.kill(), 25000);
+    try {
+      const code = await child.exited;
+      const stderr = await errors;
+      expect(code, stderr).toBe(0);
+      expect(stderr).toContain("Dev build failed; fix sources and save to retry");
+      expect(await output).toContain("PASS frontend HMR ownership");
+    } finally {
+      clearTimeout(timer);
+      if (child.exitCode === null) child.kill();
+      await child.exited;
+    }
+  }, 30000);
+
 function gate() {
   let release: (() => void) | undefined;
   const promise = new Promise<void>((resolveDone) => {
