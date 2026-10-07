@@ -63,6 +63,23 @@ test("installed contracts accept validated JSON snapshots without hiding schema 
   expect(() => pluginRegistry([{ ...plugin, native: packaged }])).toThrow();
 });
 
+test("installed contracts normalize negative zero without hiding numeric changes", () => {
+  const plugin = defineNativePlugin({
+    name: "zero",
+    version: "1",
+    operations: {
+      echo: { input: s.integer({ minimum: -0 }), output: { const: -0 }, permission: "echo" },
+    },
+    scopes: { echo: s.integer({ minimum: -0 }) },
+    matches: (_permission, input, scope) => input === scope,
+  }).definition;
+  const installed = { ...plugin, native: JSON.parse(JSON.stringify(plugin.native)) };
+  table.push(installed);
+  expect(Object.is(plugin.native.operations[0]?.input.minimum, -0)).toBe(true);
+  expect(() => pluginRegistry([plugin])).not.toThrow();
+  installed.native.operations[0].input.minimum = 1;
+  expect(() => pluginRegistry([plugin])).toThrow("does not match");
+});
 test("shutdown and initialization failure clean every prepared adapter in reverse order", async () => {
   const cleaned: string[] = [];
   const failure = new Error("cleanup failed");

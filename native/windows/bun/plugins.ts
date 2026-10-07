@@ -9,6 +9,8 @@ import {
 } from "../../../packages/protocol/src/index.ts";
 import { type NativeAdapter, type NativeEnvironment, packagedPlugins } from "./plugin-table.ts";
 
+const contractJson = (value: unknown) => JSON.parse(JSON.stringify(validateValue({}, value)));
+
 export function pluginRegistry(plugins: readonly NativeRegistration[]) {
   const registry = new NativeRegistry(plugins);
   for (const plugin of plugins) {
@@ -17,7 +19,7 @@ export function pluginRegistry(plugins: readonly NativeRegistration[]) {
     if (
       !packaged ||
       packaged.version !== plugin.version ||
-      !isDeepStrictEqual(validateValue({}, packaged.native), validateValue({}, plugin.native))
+      !isDeepStrictEqual(contractJson(packaged.native), contractJson(plugin.native))
     )
       throw new BunawayError({
         code: "INVALID_ARGUMENT",
