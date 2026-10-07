@@ -231,9 +231,9 @@ void writeAll(int fd, const std::string& text) {
 }
 
 // Bounded non-blocking write: a consumer that stalls stdout must not wedge
-// the writer. Returns false when the deadline passes, the process is
-// closing/failed, or the fd is dead; the caller then aborts output.
-bool writeBounded(int fd, const std::string& text, std::atomic<bool>* closing, std::atomic<bool>* failed) {
+// the writer. Allow a consuming controller to receive teardown frames even
+// after failure; abort only when the deadline passes or the fd is dead.
+bool writeBounded(int fd, const std::string& text) {
     auto deadline = Clock::now() + std::chrono::seconds(2);
     size_t offset = 0;
     while (offset < text.size()) {
@@ -241,7 +241,7 @@ bool writeBounded(int fd, const std::string& text, std::atomic<bool>* closing, s
         if (written > 0) { offset += static_cast<size_t>(written); continue; }
         if (written < 0 && errno == EINTR) continue;
         if (written < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-            if ((closing && closing->load()) || (failed && failed->load()) || Clock::now() >= deadline) return false;
+            if (Clock::now() >= deadline) return false;
             struct pollfd pfd { fd, POLLOUT | POLLERR | POLLHUP, 0 };
             int rc = poll(&pfd, 1, 50);
             if (rc > 0 && (pfd.revents & (POLLERR | POLLHUP | POLLNVAL))) return false;
@@ -286,7 +286,8 @@ int groupSize(pid_t pgid) {
 }
 
 // State transitions and their controller output commit under the same lock.
-// The sink only enqueues output; it must not block on pipe I/O or reenter this object.
+// The sink only enqueues output and must not reenter this object. During normal
+// operation it never waits; final close may wait for bounded queue capacity.
 class ProbeContext {
     std::mutex mutex;
     bool revoked = false;
@@ -370,7 +371,7 @@ class Probe {
     std::mutex outputMutex, queueMutex;
     std::condition_variable queued, outputQueued;
     std::deque<std::string> queue, outputQueue;
-    bool writerDone = false, outputDone = false;
+    bool writerDone = false, outputDone = false, finalizingOutput = false;
     std::atomic<bool> ready = false, closing = false, failed = false, exited = false, forced = false, controllerDone = false, ioDone = false, outputAborted = false;
     bool helloSeen = false;
     std::atomic<int64_t> closeTimeMs = 0;
@@ -381,7 +382,13 @@ class Probe {
     void emitLine(std::string text) {
         require(text.size() <= maxFrame, "Controller frame too large.");
         text += '\n';
-        std::lock_guard lock(outputMutex);
+        std::unique_lock lock(outputMutex);
+        // The backend/controller producers have joined before final close. A
+        // burst of pending-request errors must not discard host-stopped merely
+        // because the output writer has not been scheduled yet.
+        if (finalizingOutput) outputQueued.wait_for(lock, std::chrono::seconds(2), [&] {
+            return outputAborted || outputDone || outputQueue.size() < 128;
+        });
         require(!outputAborted && !outputDone && outputQueue.size() < 128, "Host output unavailable or full.");
         outputQueue.push_back(std::move(text));
         outputQueued.notify_one();
@@ -540,10 +547,11 @@ public:
                         outputQueued.wait(lock, [&] { return outputDone || !outputQueue.empty(); });
                         if (outputAborted || (outputDone && outputQueue.empty())) break;
                         next = std::move(outputQueue.front()); outputQueue.pop_front();
+                        outputQueued.notify_all();
                     }
-                    if (!writeBounded(STDOUT_FILENO, next, &closing, &failed)) { outputAborted.store(true); fail(); break; }
+                    if (!writeBounded(STDOUT_FILENO, next)) { outputAborted.store(true); outputQueued.notify_all(); fail(); break; }
                 }
-            } catch (...) { outputAborted.store(true); fail(); }
+            } catch (...) { outputAborted.store(true); outputQueued.notify_all(); fail(); }
         });
         std::thread writer([&] {
             try {
@@ -608,6 +616,7 @@ public:
         } catch (...) { if (!exited) fail(); }
         controllerDone.store(true);
         writer.join(); reader.join(); logs.join();
+        { std::lock_guard lock(outputMutex); finalizingOutput = true; }
         int result = 1;
         try {
             int status = childStatus.load();

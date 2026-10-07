@@ -18,6 +18,15 @@ workspace history):
 - **`CancelSynchronousIo` -> `poll(2)` stdin loop; `TerminateProcess` ->
   `killpg(SIGKILL)`; blocking stdout writes -> `O_NONBLOCK` + bounded write.**
 
+Controller output keeps a 128-frame queue and a two-second write deadline.
+After backend and controller producers stop, teardown waits up to two seconds
+for queue capacity so all pending-request errors and `host-stopped` can drain
+to a consuming controller. A temporarily full pipe can resume during teardown;
+failure or shutdown alone does not discard partially written frames. A stalled
+or disconnected controller still causes bounded output failure and process cleanup.
+The overload regression covers both flowing stdout and a paused FIFO that resumes
+after Bun exits.
+
 Build and run (requires macOS arm64, Xcode CLT `clang++`, network for the first pin
 download):
 
