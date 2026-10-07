@@ -38,6 +38,8 @@ Vite 앱의 `build.frontend`는 생성물인 `web-dist`를 가리킨다. CLI가 
    최초 자식의 종료뿐 아니라 그룹의 실행 중인 프로세스가 모두 종료했는지
    최대 5초 동안 확인한다. 자원을 해제한 좀비는 정리 완료로 취급하며,
    프로세스 목록을 조회하지 못하거나 기한을 넘으면 빌드를 실패로 처리한다.
+   macOS에서 종료된 그룹의 신호 조회가 EPERM을 반환할 수 있으므로,
+   종료 확인은 `/bin/ps`의 그룹 ID와 프로세스 상태를 기준으로 수행한다.
 7. 모든 생성 앱의 `dev`, `build`, `package`, `validate`, `doctor`는 앱 CLI를 실행한다.
    Vite 기반 앱은 웹 도구용 `dev:web`, `build:web`, `preview`를 제공하고
    `dev.command`, `build.command`로 연결한다. 메모 예제도 같은 형식을 사용한다.

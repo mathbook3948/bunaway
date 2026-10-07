@@ -10,14 +10,8 @@ const inspectProcesses = promisify(execFile);
 async function waitForProcessGroupExit(pid: number): Promise<void> {
   const deadline = performance.now() + 5000;
   while (true) {
-    try {
-      process.kill(-pid, 0);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ESRCH") return;
-      throw error;
-    }
-    // kill(pid, 0) includes zombies. They have released their resources and
-    // may remain until an unrelated parent reaps them, so inspect live members.
+    // Signal-zero probes include zombies and may report EPERM on macOS after
+    // exit. Inspect live members instead; zombies have released their resources.
     const { stdout } = await inspectProcesses("/bin/ps", ["-A", "-o", "pgid=,stat="], {
       timeout: 1000,
       maxBuffer: 8 * 1024 * 1024,
