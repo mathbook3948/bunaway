@@ -1,10 +1,15 @@
-import { lstat, realpath } from "node:fs/promises";
-import { isAbsolute, resolve } from "node:path";
-import { ownedDirectory, type PackagingConfig, parsePackaging } from "@bunaway/packaging";
+import { lstat, readlink, realpath } from "node:fs/promises";
+import { basename, dirname, isAbsolute, resolve } from "node:path";
+import {
+  BUILD_TARGETS,
+  ownedDirectory,
+  type PackagingConfig,
+  parsePackaging,
+} from "@bunaway/packaging";
 import { type Policy, parsePolicy } from "@bunaway/protocol";
 import { developmentUrl } from "../../runtime-bun/src/development.ts";
 import { validateFramework } from "./distribution.ts";
-import { json, projectPath } from "./files.ts";
+import { inside, json, projectPath } from "./files.ts";
 
 export interface DevServerConfig {
   command: string[];
@@ -77,6 +82,54 @@ function string(value: unknown): string {
   return value;
 }
 
+async function frontendPath(root: string, name: string): Promise<string> {
+  const reserved = [
+    ".bunaway",
+    "dist/.bunaway-locks",
+    ...BUILD_TARGETS.map((t) => `dist/${t}`),
+  ].map((path) => resolve(root, path).toLowerCase());
+  const check = (path: string) => {
+    if (!inside(root, path)) throw new Error("Source path escapes the project.");
+    const normalized = path.toLowerCase();
+    if (reserved.some((output) => inside(normalized, output) || inside(output, normalized))) {
+      throw new Error(
+        "build.frontend must not overlap app outputs or build locks; use a separate web output such as web-dist.",
+      );
+    }
+  };
+  const path = resolve(root, name);
+  check(path);
+  // A first build may not have output yet. Resolve its nearest existing ancestor
+  // to detect aliases of reserved directories without requiring generated files.
+  let ancestor = path;
+  const suffix: string[] = [];
+  let links = 0;
+  while (true) {
+    try {
+      const canonical = resolve(await realpath(ancestor), ...suffix);
+      check(canonical);
+      return canonical;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      const entry = await lstat(ancestor).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+        return undefined;
+      });
+      if (entry?.isSymbolicLink()) {
+        if (++links > 40) throw new Error("Cannot resolve build.frontend directory links.");
+        // A dangling link can become live when the build creates dist or its
+        // locks. Check its target before treating the output as missing.
+        ancestor = resolve(dirname(ancestor), await readlink(ancestor), ...suffix);
+        check(ancestor);
+        suffix.length = 0;
+        continue;
+      }
+      suffix.unshift(basename(ancestor));
+      ancestor = dirname(ancestor);
+    }
+  }
+}
+
 // Read the single project settings format used by generated apps.
 export async function readProjectSettings(root: string): Promise<{
   directory: string;
@@ -131,8 +184,7 @@ async function loadProject(
   if (isAbsolute(frontendName) || frontendName.split(/[\\/]/).includes("..")) {
     throw new Error("build.frontend must be a project-relative directory without '..'.");
   }
-  const frontend =
-    server || !validateFiles ? resolve(root, frontendName) : await projectPath(root, frontendName);
+  const frontend = await frontendPath(root, frontendName);
   if (server && validateFiles) await ownedDirectory(root, frontend);
   if (
     validateFiles &&

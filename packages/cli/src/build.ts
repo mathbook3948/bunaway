@@ -3,7 +3,6 @@ import { basename, dirname, relative, resolve } from "node:path";
 import { acquireBuildOutputLock, ownedDirectory, PACKAGING_CHANNELS } from "@bunaway/packaging";
 import { developmentPolicy } from "../../runtime-bun/src/development.ts";
 import { type Project, readProjectMetadata, validateProject } from "./config.ts";
-import { assertNotFrontendBuild, buildFrontend } from "./frontend-build.ts";
 import {
   files,
   frameworkRoot,
@@ -14,7 +13,9 @@ import {
   verifyHash,
   writeJson,
 } from "./files.ts";
+import { assertNotFrontendBuild, buildFrontend } from "./frontend-build.ts";
 import { writeWindowsLauncher } from "./launch.ts";
+import { runManagedCommand } from "./managed-command.ts";
 
 export type Target = "windows-x64" | "macos-arm64";
 export interface NativeInputs {
@@ -61,16 +62,22 @@ export async function prepareNative(
   target: Target = currentTarget(),
   root = frameworkRoot,
 ): Promise<NativeInputs> {
+  return prepareNativeForBuild(target, root);
+}
+
+async function prepareNativeForBuild(
+  target: Target,
+  root: string,
+  signal?: AbortSignal,
+): Promise<NativeInputs> {
   if (target !== currentTarget()) throw new Error("Cross compilation is not supported in the MVP.");
   await assertBuildBun(target, root);
   const windows = target === "windows-x64";
-  await run(
-    windows
-      ? ["pwsh", "-NoProfile", "-File", resolve(root, "native/windows/bun/prepare.ps1")]
-      : ["zsh", resolve(root, "native/macos/host/run.sh"), "--host-only"],
-    root,
-    { BUN: process.execPath },
-  );
+  const args = windows
+    ? ["pwsh", "-NoProfile", "-File", resolve(root, "native/windows/bun/prepare.ps1")]
+    : ["zsh", resolve(root, "native/macos/host/run.sh"), "--host-only"];
+  if (signal) await runManagedCommand(args, root, { BUN: process.execPath }, signal, root);
+  else await run(args, root, { BUN: process.execPath });
   const pin = await readPin(target, root);
   const vendor = resolve(root, "runtime/bun-bundle/vendor");
   const licenses: Record<string, string> = {
@@ -136,24 +143,40 @@ export async function buildProject(
   await assertBuildBun(target, settings.frameworkRoot);
   // The lock covers frontend generation, asset validation and publication so
   // another build cannot change the web output while this build consumes it.
-  const release = await acquireBuildOutputLock(settings.root, target);
+  const abort = new AbortController();
+  const interrupted = () => abort.abort(new Error("App build cancelled (SIGINT)."));
+  const terminated = () => abort.abort(new Error("App build cancelled (SIGTERM)."));
+  process.on("SIGINT", interrupted);
+  process.on("SIGTERM", terminated);
+  let release: (() => Promise<void>) | undefined;
   try {
-    await buildFrontend(settings);
-    return await assembleProject(await validateProject(settings.root), options);
+    release = await acquireBuildOutputLock(settings.root, target);
+    await buildFrontend(settings, abort.signal);
+    const project = await validateProject(settings.root);
+    abort.signal.throwIfAborted();
+    return await assembleProject(project, options, abort.signal);
   } finally {
-    await release();
+    try {
+      await release?.();
+    } finally {
+      process.off("SIGINT", interrupted);
+      process.off("SIGTERM", terminated);
+    }
   }
 }
 
 async function assembleProject(
   project: Project,
   options: { development?: boolean; native?: NativeInputs },
+  signal?: AbortSignal,
 ): Promise<BuiltPackage> {
+  signal?.throwIfAborted();
   const root = project.frameworkRoot;
   const server = options.development ? project.dev : undefined;
   const target = options.native?.target ?? currentTarget();
   await assertBuildBun(target, root);
-  const native = options.native ?? (await prepareNative(target, root));
+  const native = options.native ?? (await prepareNativeForBuild(target, root, signal));
+  signal?.throwIfAborted();
   const windows = target === "windows-x64";
   const pin = await readPin(target, root);
   await verifyHash(native.bun, pin.bun.executableSha256);
@@ -209,6 +232,7 @@ async function assembleProject(
         await cp(schema, resolve(assets, basename(schema)));
       }
     await bundleAssets(project, assets, windows, !!server);
+    signal?.throwIfAborted();
     if (windows) {
       if (!native.loader) throw new Error("Windows requires the pinned WebView2Loader DLL.");
       const deps = (await json(resolve(root, "native/windows/bun/deps.json"))) as {
@@ -265,9 +289,12 @@ async function assembleProject(
 ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>" : ""}
 </dict></plist>\n`,
       );
-      await run(["/usr/bin/codesign", "--force", "--sign", "-", staging], project.root);
+      const args = ["/usr/bin/codesign", "--force", "--sign", "-", staging];
+      if (signal) await runManagedCommand(args, project.root, {}, signal, root);
+      else await run(args, project.root);
       await verifyHash(resolve(packageRoot, "runtime/bun"), pin.bun.executableSha256);
     }
+    signal?.throwIfAborted();
     await ownedDirectory(project.root, output);
     if (windows && !options.development) {
       // Channel packages live inside the Windows build output, but survive rebuilds.
@@ -297,6 +324,7 @@ ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking<
         }
       }
     }
+    signal?.throwIfAborted();
     const backup = `${output}.previous-${crypto.randomUUID()}`;
     let moved = false;
     await ownedDirectory(project.root, dirname(output));

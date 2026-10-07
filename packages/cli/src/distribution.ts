@@ -1,6 +1,5 @@
 import { cp, mkdir } from "node:fs/promises";
 import { relative, resolve } from "node:path";
-import { templateNames } from "./templates.ts";
 import { PROCESS_IPC_VERSION, PROTOCOL_VERSION } from "@bunaway/protocol";
 import {
   files,
@@ -11,6 +10,7 @@ import {
   runWorker,
   verifyHash,
 } from "./files.ts";
+import { templateNames } from "./templates.ts";
 
 export const frameworkPaths = [
   "framework.json",
@@ -25,6 +25,7 @@ export const frameworkPaths = [
   "docs/decisions/0006-windows-bun-ui-worker.md",
   "docs/decisions/0009-development-server.md",
   "docs/decisions/0010-windows-first-platform-model.md",
+  "docs/decisions/0012-integrated-app-build.md",
   "docs/development-server.md",
   "docs/architecture/windows-bun-results.md",
   "docs/platform-support/README.md",
@@ -268,6 +269,8 @@ function requiredFrameworkFiles(): string[] {
     "packages/cli/src/sdk.ts",
     "packages/cli/src/dev-server.ts",
     "packages/cli/src/dev-server-worker.ts",
+    "packages/cli/src/frontend-build.ts",
+    "packages/cli/src/managed-command.ts",
     "packages/runtime-bun/src/development.ts",
     ...Object.keys(packageNames).flatMap((directory) =>
       ["package.json", "src/index.ts", "tsconfig.json"].map(

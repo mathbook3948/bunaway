@@ -41,6 +41,7 @@ NativeInputs는 `target`, `host`, `bun`, `licenses`, 선택적 `loader`입니다
 
 build는 `development?: boolean`과 `native?: NativeInputs`를 받습니다.
 프로덕션에서는 build.command를 매번 실행한 뒤 자산을 검증하고 앱을 빌드합니다. development가 true이면 웹 프로덕션 빌드 명령을 실행하지 않습니다.
+프로덕션 빌드 중 SIGINT나 SIGTERM을 받으면 실행한 명령을 정리하고 잠금을 해제한 뒤 Promise가 실패합니다.
 NativeInputs를 전달하면 현재 플랫폼에서 준비한 결과를 재사용합니다.
 BuiltPackage는 `output`, `package`, `executable`, `arguments: string[]`입니다.
 앱을 실행할 때는 반환한 `executable`과 `arguments`를 함께 사용합니다.

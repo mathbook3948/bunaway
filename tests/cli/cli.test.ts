@@ -14,6 +14,15 @@ let home: string;
 let project: string;
 let originals: Record<string, string>;
 
+async function stopWebBuilder(pidFile: string): Promise<void> {
+  if (process.platform === "win32" || !(await Bun.file(pidFile).exists())) return;
+  try {
+    process.kill(-Number(await Bun.file(pidFile).text()), "SIGKILL");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+  }
+}
+
 beforeAll(async () => {
   home = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-cli-")));
   const first = resolve(home, "created app");
@@ -67,6 +76,14 @@ test("create produces a relocatable project with real SDK dependencies and no re
     ).exists(),
   ).toBe(true);
   expect(originals["src-bunaway/app.ts"]).not.toContain("examples/memo");
+  const installedCli = resolve(project, "node_modules/@bunaway/cli");
+  for (const name of ["docs/development-server.md", "docs/decisions/0009-development-server.md"]) {
+    const text = await Bun.file(resolve(installedCli, name)).text();
+    expect(text).toContain("0012-integrated-app-build.md");
+  }
+  expect(
+    await Bun.file(resolve(installedCli, "docs/decisions/0012-integrated-app-build.md")).text(),
+  ).toContain("build.command");
   const process = Bun.spawn([globalThis.process.execPath, "run", "validate"], {
     cwd: project,
     stdout: "pipe",
@@ -506,6 +523,91 @@ test("package checks platforms and adapters before building and preserves output
   const errors = new Response(child.stderr).text();
   expect(await child.exited, `${await output}\n${await errors}`).toBe(0);
 }, 60000);
+
+test.each(["SIGINT", "SIGTERM"] as const)(
+  "%s during a web build reaps descendants, releases the lock and allows retry",
+  async (signal) => {
+    const listener = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("") });
+    const port = listener.port;
+    listener.stop(true);
+    if (!port) throw new Error("No test port.");
+    const configPath = resolve(project, "src-bunaway/bunaway.json");
+    const source = resolve(project, "frontend-signal.ts");
+    const ready = resolve(project, "web-descendant-ready.txt");
+    const interrupt = resolve(project, "build-interrupt.txt");
+    const pid = resolve(project, "web-builder-pid.txt");
+    const manifestPath = resolve(project, "dist/windows-x64/manifest.json");
+    const manifest = await Bun.file(manifestPath).text();
+    const settings = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
+    await Bun.write(
+      source,
+      `
+    await Bun.write('web-builder-pid.txt', String(process.pid));
+    Bun.spawn([process.execPath, '-e', ${JSON.stringify(`
+      Bun.serve({hostname:'127.0.0.1', port:${port}, fetch:()=>new Response('descendant')});
+      await Bun.write('web-descendant-ready.txt', 'ready');
+    `)}], {stdin:'ignore', stdout:'inherit', stderr:'inherit'});
+    await Bun.sleep(600000);
+  `,
+    );
+    await writeJson(configPath, {
+      ...settings,
+      build: { ...settings.build, command: [process.execPath, "frontend-signal.ts"] },
+    });
+    const child = Bun.spawn(
+      [process.execPath, resolve(import.meta.dir, "build-signal.fixture.ts"), project, signal],
+      { stdout: "pipe", stderr: "pipe" },
+    );
+    const output = new Response(child.stdout).text();
+    const errors = new Response(child.stderr).text();
+    try {
+      const deadline = Date.now() + 10000;
+      while (!(await Bun.file(ready).exists())) {
+        if (child.exitCode !== null || Date.now() >= deadline)
+          throw new Error("Web build did not start.");
+        await Bun.sleep(20);
+      }
+      expect((await fetch(`http://127.0.0.1:${port}/`)).ok).toBe(true);
+      expect(
+        await Bun.file(resolve(project, "dist/.bunaway-locks/windows-x64/build.lock")).exists(),
+      ).toBe(true);
+      if (process.platform === "win32") await Bun.write(interrupt, signal);
+      else child.kill(signal);
+      const timeout = setTimeout(() => child.kill(), 10000);
+      try {
+        expect(await child.exited).not.toBe(0);
+      } finally {
+        clearTimeout(timeout);
+      }
+      expect(await output).toContain("PASS build signal handler cleanup");
+      expect(await errors).toContain(`cancelled (${signal})`);
+      expect(await readdir(resolve(project, "dist/.bunaway-locks/windows-x64"))).toEqual([]);
+      expect(await Bun.file(manifestPath).text()).toBe(manifest);
+      await expect(
+        fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(200) }),
+      ).rejects.toThrow();
+      await Bun.write(configPath, originals["src-bunaway/bunaway.json"] ?? "");
+      const retry = Bun.spawn(
+        [process.execPath, resolve(import.meta.dir, "build.fixture.ts"), project],
+        {
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+      const retryOutput = new Response(retry.stdout).text();
+      const retryErrors = new Response(retry.stderr).text();
+      expect(await retry.exited, `${await retryOutput}\n${await retryErrors}`).toBe(0);
+    } finally {
+      if (child.exitCode === null) child.kill();
+      await child.exited;
+      await stopWebBuilder(pid);
+      await Promise.all([output, errors]);
+      await Bun.write(configPath, originals["src-bunaway/bunaway.json"] ?? "");
+      for (const path of [source, ready, interrupt, pid]) await rm(path, { force: true });
+    }
+  },
+  30000,
+);
 
 test("external development orchestrates UI updates, backend restarts and server replacement", async () => {
   const child = Bun.spawn([process.execPath, resolve(import.meta.dir, "dev.fixture.ts"), project], {

@@ -97,6 +97,57 @@ expect(productionPolicy.views[0].origins).toEqual(["https://app.bunaway.local"])
 expect(production.arguments).not.toContain("--dev-url");
 await files.writeJson(configPath, settings);
 
+// Reject output overlap before a tool can clear app output or its locks.
+// Resolve aliases even when their frontend subdirectories do not exist yet.
+const overlapMarker = resolve(project, "unexpected-overlap-build.txt");
+const intactManifest = await Bun.file(resolve(production.package, "manifest.json")).text();
+const alias = resolve(project, "output-alias");
+const pendingAlias = resolve(project, "pending-output-alias");
+await fs.symlink(resolve(project, "dist"), alias, "junction");
+await fs.symlink(resolve(project, "dist/macos-arm64"), pendingAlias, "junction");
+try {
+  for (const frontend of [
+    ".",
+    "dist",
+    "DIST/windows-X64",
+    "dist/windows-x64",
+    "dist/windows-x64/assets/web",
+    "dist/macos-arm64",
+    "dist/.bunaway-locks",
+    ".bunaway/web",
+    "output-alias/windows-x64/not-built",
+    "pending-output-alias/not-built",
+  ]) {
+    await files.writeJson(configPath, {
+      ...settings,
+      build: {
+        ...(settings.build as object),
+        frontend,
+        command: [process.execPath, "-e", "await Bun.write('unexpected-overlap-build.txt', 'ran')"],
+      },
+    });
+    await expect(buildProject(project, { native })).rejects.toThrow(
+      "build.frontend must not overlap",
+    );
+    expect(await Bun.file(overlapMarker).exists()).toBe(false);
+    expect(await Bun.file(resolve(production.package, "manifest.json")).text()).toBe(
+      intactManifest,
+    );
+    expect(await readdir(resolve(project, "dist/.bunaway-locks/windows-x64"))).toEqual([]);
+  }
+  // A separate frontend output can share dist with the app without containing it.
+  await files.writeJson(configPath, {
+    ...settings,
+    build: { ...(settings.build as object), frontend: "dist/web" },
+  });
+  const { readProjectMetadata } = await import("../../packages/cli/src/config.ts");
+  expect((await readProjectMetadata(project)).frontend).toBe(resolve(project, "dist/web"));
+} finally {
+  await fs.unlink(alias);
+  await fs.unlink(pendingAlias);
+  await files.writeJson(configPath, settings);
+}
+
 // Production commands run before output validation, once per app build, and
 // failures never consume old web output or replace the last successful app.
 const webSettings = {

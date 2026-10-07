@@ -88,6 +88,9 @@ UI 변경은 Vite가 처리하고 백엔드 변경은 CLI가 호스트를 재시
 `build.command`는 `["bun", "run", "build:web"]`로 웹 빌드를 연결한다.
 `bunaway build`와 `package --build`는 기존 출력이 있어도 웹 빌드를 매번 실행하고,
 성공한 출력을 검증한 뒤 앱을 빌드한다. 웹 빌드가 실패하면 기존 앱 산출물을 유지하며 중단한다.
+웹 도구의 출력과 `build.frontend`는 앱 산출물 및 잠금 경로와 분리해야 한다.
+`dist` 자체는 거부하며 `web-dist`나 `dist/web`처럼 겹치지 않는 경로를 사용한다.
+Ctrl+C나 SIGTERM으로 중단하면 실행한 명령과 하위 프로세스를 정리하고 빌드 잠금을 해제한다.
 `validate`는 빌드 명령을 실행하지 않으므로 웹 자산만 검사할 때는 `bun run build:web` 다음 실행한다.
 `package` 단독 실행은 앱 소스나 웹 출력 없이도 기존 앱 산출물을 검증해 패키징한다.
 기존 앱은 웹 build/dev 스크립트를 build:web/dev:web으로 옮기고 build.command/dev.command를 연결한다.

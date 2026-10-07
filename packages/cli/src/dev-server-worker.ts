@@ -1,15 +1,15 @@
-// Windows development commands run in a dedicated Job so their process trees
+// Windows development and build commands run in a dedicated Job so their process trees
 // are reclaimed even when the command exits early or the owning CLI disappears.
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { frameworkRoot } from "./files.ts";
 
 if (import.meta.main) {
-  if (process.platform !== "win32") throw new Error("Development Job worker is Windows-only.");
+  if (process.platform !== "win32") throw new Error("Command Job worker is Windows-only.");
   const lease = process.argv[2];
   const command = JSON.parse(process.argv[3] ?? "null") as string[];
   if (!lease || !Array.isArray(command) || !command.length)
-    throw new Error("Invalid development worker input.");
+    throw new Error("Invalid command worker input.");
   const { containAppProcess, terminateAppDescendants } = await import(
     pathToFileURL(resolve(frameworkRoot, "native/windows/bun/job.ts")).href
   );
@@ -21,7 +21,7 @@ if (import.meta.main) {
       try {
         await terminateAppDescendants();
       } catch (error) {
-        console.error(`Development server cleanup failed: ${String(error)}`);
+        console.error(`Command cleanup failed: ${String(error)}`);
         code = 1;
       }
       process.exit(code);

@@ -1,5 +1,5 @@
 import type { Project } from "./config.ts";
-import { run } from "./files.ts";
+import { runManagedCommand } from "./managed-command.ts";
 
 const BUILD_STACK = "BUNAWAY_BUILD_STACK";
 
@@ -21,7 +21,8 @@ export function assertNotFrontendBuild(root: string): void {
   }
 }
 
-export async function buildFrontend(project: Project): Promise<void> {
+export async function buildFrontend(project: Project, signal: AbortSignal): Promise<void> {
+  signal.throwIfAborted();
   if (!project.buildCommand) return;
   assertNotFrontendBuild(project.root);
   console.log(`Building frontend: ${project.buildCommand.join(" ")}`);
@@ -30,9 +31,13 @@ export async function buildFrontend(project: Project): Promise<void> {
       ? [process.execPath, ...project.buildCommand.slice(1)]
       : project.buildCommand;
   try {
-    await run(args, project.root, {
-      [BUILD_STACK]: JSON.stringify([...buildStack(), project.root]),
-    });
+    await runManagedCommand(
+      args,
+      project.root,
+      { [BUILD_STACK]: JSON.stringify([...buildStack(), project.root]) },
+      signal,
+      project.frameworkRoot,
+    );
   } catch (error) {
     throw new Error(
       `Frontend build failed (build.command): ${error instanceof Error ? error.message : String(error)}`,
