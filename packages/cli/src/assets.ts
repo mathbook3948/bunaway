@@ -169,10 +169,11 @@ export async function bundleWindowsHost(
     name: "windows-app-entry",
     setup(build) {
       sdk?.setup(build);
-      build.onResolve({ filter: /(?:^|\/)plugin-table\.ts$/ }, () => ({
-        path: "table",
-        namespace: "native-plugins",
-      }));
+      build.onResolve({ filter: /(?:^|\/)plugin-table\.ts$/ }, ({ path, importer }) => {
+        if (resolve(dirname(importer), path) === resolve(source, "plugin-table.ts"))
+          return { path: "table", namespace: "native-plugins" };
+        return undefined;
+      });
       build.onLoad({ filter: /.*/, namespace: "native-plugins" }, () => ({
         contents: pluginTableSource(plugins),
         loader: "ts",

@@ -135,9 +135,12 @@ export class ScopedStorage {
         const attributes = this.info(parent).readUInt32LE(0);
         if (attributes & 0x400 || !(attributes & 0x10))
           deny("Storage path is not a plain directory.");
+        // Bind policy spelling to each pinned directory before creating the next child.
+        if (this.canonical(parent) !== dir) deny("Storage path must use its canonical spelling.");
       }
+      const target = `${root}\\${segments.join("\\")}`;
       file = this.open(
-        `${root}\\${segments.join("\\")}`,
+        target,
         text === undefined ? 0x80000000 : 0x40000000,
         7,
         text === undefined ? 3 : 4,
@@ -147,8 +150,7 @@ export class ScopedStorage {
       if (info.readUInt32LE(0) & 0x410 || info.readUInt32LE(40) > 1)
         deny("Storage target is not a plain in-scope file.");
       const actual = this.canonical(file);
-      if (!actual.toLowerCase().startsWith(`${root}\\`.toLowerCase()))
-        deny("Storage target is outside the named scope.");
+      if (actual !== target) deny("Storage path must use its canonical spelling.");
       const transferred = new Uint32Array(1);
       if (text !== undefined) {
         const bytes = Buffer.from(text);

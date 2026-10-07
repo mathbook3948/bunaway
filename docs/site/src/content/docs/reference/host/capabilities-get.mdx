@@ -30,6 +30,8 @@ const support = await capabilities();
 `experimental`, `not-required`입니다. Windows의 저장, 로그와 기능 조회 작업은 해당
 플러그인을 등록하고 어댑터를 사용할 수 있을 때 `supported`입니다. 플러그인 작업에
 OS 권한 선언이 없으면 `unknown`입니다.
+조회 결과에는 등록 가능한 네이티브 작업 256개와 프레임워크 창 작업을 모두 포함합니다.
+결과 전체에는 프로토콜의 JSON 깊이와 1 MiB 메시지 제한을 적용합니다.
 
 ## 권한 의미
 

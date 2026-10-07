@@ -44,15 +44,18 @@ await storage.writeText({
 
 ```json
 {
-  "scope": "appData",
-  "pathPrefix": "messages",
-  "access": ["read", "write"]
+  "permissions": [
+    { "identifier": "storage:read-text", "allow": [{ "scope": "appData", "pathPrefix": "messages" }] },
+    { "identifier": "storage:write-text", "allow": [{ "scope": "appData", "pathPrefix": "messages" }] }
+  ]
 }
 ```
 
 `pathPrefix`는 이름 붙은 디렉터리 범위입니다. `messages/` 아래만 허용합니다.
 빈 문자열은 scope 전체를 허용합니다. 특정 디렉터리에만 접근하려면 그 이름을 적습니다.
 `scope`는 `appData` 또는 `temp`입니다. `temp`는 영구 보관할 데이터에 사용하지 않습니다.
+경로에는 저장된 이름의 대소문자와 긴 파일명을 그대로 사용합니다.
+다른 대소문자 표기나 8.3 짧은 이름은 `PERMISSION_DENIED`로 실패합니다.
 
 절대 경로, `.` 또는 `..` 경로 요소, 역슬래시를 사용한 경로는 `INVALID_ARGUMENT`로 실패합니다.
 저장 권한이 없거나 허용 범위를 벗어나는 경로와 링크에 접근하면 `PERMISSION_DENIED`로 실패합니다.

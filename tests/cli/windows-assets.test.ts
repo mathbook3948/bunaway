@@ -3,8 +3,8 @@ import {
   cp,
   mkdir,
   mkdtemp,
-  readFile,
   readdir,
+  readFile,
   realpath,
   rename,
   rm,
@@ -99,13 +99,18 @@ test("Windows app entry names cannot collide with the host or break shared bundl
   const host = resolve(import.meta.dir, "../../native/windows/bun");
   const protocol = resolve(import.meta.dir, "../../packages/protocol/src/index.ts");
   try {
-    for (const name of ["boot.ts", "app.ts", "ui.ts"]) {
+    await mkdir(resolve(root, "modules"));
+    await writeFile(
+      resolve(root, "modules/plugin-table.ts"),
+      'export const userTable = "app table";',
+    );
+    for (const name of ["boot.ts", "app.ts", "ui.ts", "plugin-table.ts"]) {
       const entry = resolve(root, name);
       const destination = resolve(root, `out-${name}`);
       await mkdir(destination);
       await writeFile(
         entry,
-        `import { BunawayError } from ${JSON.stringify(protocol)}; export default { commands: {}, events: {}, name: ${JSON.stringify(name)}, error: new BunawayError({ code: "CANCELLED", message: "test" }) };`,
+        `import { BunawayError } from ${JSON.stringify(protocol)}; import { userTable } from "./modules/plugin-table.ts"; export default { commands: {}, events: {}, name: ${JSON.stringify(name)}, userTable, error: new BunawayError({ code: "CANCELLED", message: "test" }) };`,
       );
       await bundleWindowsHost(host, destination, entry);
       const outputs = await readdir(destination);
@@ -114,6 +119,7 @@ test("Windows app entry names cannot collide with the host or break shared bundl
       expect(outputs.some((output) => output.startsWith("chunk-"))).toBe(true);
       const app = (await import(pathToFileURL(resolve(destination, "app.js")).href)).default;
       expect(app.name).toBe(name);
+      expect(app.userTable).toBe("app table");
       expect(app.error.code).toBe("CANCELLED");
       expect(await readFile(resolve(destination, "boot.js"), "utf8")).toContain(
         "verifyWindowsPackage",

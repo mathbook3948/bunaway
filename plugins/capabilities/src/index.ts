@@ -15,7 +15,6 @@ const plugin = defineNativePlugin({
           permission: s.enum(["granted", "denied", "prompt", "not-required", "unknown"]),
           reason: s.optional(s.string({ maxLength: 1024 })),
         }),
-        { maxItems: 256 },
       ),
       permission: "get",
       osPermission: "not-required",

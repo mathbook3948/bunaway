@@ -66,6 +66,8 @@ allow와 deny는 각각 최대 128개이며 같은 식별자의 allow를 합칩�
 저장 권한의 범위에는 `scope`와 `pathPrefix`만 넣습니다. scope는 appData 또는 temp입니다.
 pathPrefix는 최대 256자이며 영숫자, `_`, `-` 디렉터리를 `/`로 구분합니다.
 빈 문자열은 지정한 scope 전체입니다. `notes`는 notes 디렉터리 아래를 허용하며 notes-other는 포함하지 않습니다.
+경로와 pathPrefix는 저장된 이름의 대소문자를 그대로 사용합니다.
+Windows에서도 다른 대소문자 표기나 8.3 짧은 이름으로 범위를 우회할 수 없습니다.
 절대 경로, `.`과 `..`, 개행은 거부합니다. 실제 파일 접근에서도 링크와 범위를 검사합니다.
 
 읽기와 쓰기는 각각 `storage:read-text`, `storage:write-text` permission으로 허용합니다.

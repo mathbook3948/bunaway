@@ -13,6 +13,7 @@ import {
 } from "../../native/windows/bun/plugins.ts";
 import type { NativeEnvironment } from "../../packages/plugin-sdk/src/index.ts";
 import { hostOperations } from "../../packages/protocol/src/index.ts";
+import { capabilitiesPlugin } from "../../plugins/capabilities/src/index.ts";
 import { createOperations as createCapabilities } from "../../plugins/capabilities/src/windows.ts";
 
 const table = packagedPlugins as PackagedPlugin[];
@@ -178,6 +179,40 @@ test("capability permission metadata comes from each registered operation contra
     expect(createCapabilities(observed).execute("capabilities.get", null, "backend")).toEqual(
       observed.capabilities,
     );
+  } finally {
+    await adapters.dispose();
+  }
+});
+
+test("capability queries include every operation at the native registry limit", async () => {
+  const plugin = {
+    name: "catalog",
+    version: "1",
+    native: {
+      operations: Array.from({ length: 255 }, (_, index) => ({
+        name: `catalog.call${index}`,
+        input: { const: null },
+        output: { const: null },
+        permission: "catalog:call",
+      })),
+      permissions: [{ name: "catalog:call" }],
+    },
+  } as const;
+  table.push(plugin, {
+    ...capabilitiesPlugin,
+    execution: "io",
+    operations: async () => ({ createOperations: createCapabilities }),
+  });
+  const registry = pluginRegistry([plugin, capabilitiesPlugin]);
+  expect(registry.operations.size).toBe(256);
+  const adapters = await operations([plugin, capabilitiesPlugin], ".", "io");
+  try {
+    const result = adapters.execute("capabilities.get", null, "backend");
+    expect(result).toHaveLength(256 + Object.keys(hostOperations).length);
+    expect((result as { name: string }[]).map(({ name }) => name)).toEqual([
+      ...Object.keys(hostOperations),
+      ...registry.operations.keys(),
+    ]);
   } finally {
     await adapters.dispose();
   }
