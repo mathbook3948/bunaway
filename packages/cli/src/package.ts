@@ -16,7 +16,7 @@ import {
 } from "@bunaway/packaging";
 import { resolve } from "node:path";
 import { buildProject, currentTarget } from "./build.ts";
-import { validateProject } from "./config.ts";
+import { readProjectMetadata } from "./config.ts";
 import { json } from "./files.ts";
 
 // `bunaway package <channel>` consumes the channel-neutral artifact produced
@@ -34,7 +34,7 @@ export async function packageProject(
     );
   }
   const channel = channelName as ChannelId;
-  const project = await validateProject(directory);
+  const project = await readProjectMetadata(directory);
   const config = project.bundle;
   if (!config) throw new Error("Packaging requires src-bunaway/bunaway.json.bundle.");
   const appPackage = (await json(resolve(project.root, "package.json"))) as { version?: string };

@@ -41,7 +41,7 @@ export default defineConfig({
             { label: "취소와 오류 처리", slug: "guides/cancellation-and-errors" },
             { label: "세션과 앱 수명", slug: "guides/sessions-and-lifecycle" },
             { label: "플러그인", slug: "guides/plugins" },
-            { label: "Vite와 개발 흐름", slug: "guides/development" },
+            { label: "웹 UI와 개발 흐름", slug: "guides/development" },
             { label: "빌드와 패키징", slug: "guides/build-and-package" },
           ],
         },

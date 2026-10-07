@@ -34,14 +34,14 @@ bun install --frozen-lockfile
 bun run framework:pack --local
 cd examples/memo
 bun install --no-cache
-bun run bunaway dev
+bun run dev
 ```
 
-이후에는 예제 폴더에서 `bun run bunaway dev`를 실행하면 된다.
+이후에는 예제 폴더에서 `bun run dev`를 실행하면 된다.
 프레임워크를 수정했다면 루트에서 다시 패킹한 뒤 예제 폴더에서 `bun install --force --no-cache`로 갱신한다.
 로컬 패키지의 경로를 기록하는 예제의 `bun.lock`은 커밋하지 않는다.
 
-`bun run bunaway dev`는 CLI가 프런트엔드 `dev` script의 Vite 서버를 `http://127.0.0.1:5173/`에 실행하고
+`bun run dev`는 CLI가 프런트엔드 `dev:web` script의 Vite 서버를 `http://127.0.0.1:5173/`에 실행하고
 준비가 끝나면 네이티브 창을 연다. 별도 Node.js 설치 없이 Bun으로 Vite를 실행한다.
 5173 포트를 쓰는 서버가 이미 있다면 종료한 뒤 실행한다.
 CSS 수정은 HMR로 반영하며 HTML, TypeScript 수정은 Vite가 페이지를 갱신한다.
@@ -51,17 +51,17 @@ UI 수정은 네이티브 호스트를 재시작하지 않고, `src-bunaway/`의
 
 ```sh
 bun run build
-bun run bunaway validate
-bun run bunaway build
-bun run bunaway package
+bun run validate
+bun run package win-direct
+# 웹 UI와 앱 빌드부터 패키징까지:
+bun run package win-direct --build
 ```
 
-`dev`, `build`, `preview`는 Vite 프런트엔드 개발, 타입 검사 및 빌드, 미리보기 명령이다.
-`bun run bunaway dev`는 `.bunaway/`에 개발 앱을 만들고 실행한다.
-`bun run bunaway build`는 `dist/`에 앱을 만들며, Windows의 `bunaway package`는
-기본 `win-direct` 배포 패키지를 생성한다. 네이티브 검증, 빌드, 패키징 전에는
-`bun run build`로 `web-dist/`에 프로덕션 자산을 생성한다.
-Bunaway는 프런트엔드 빌드를 자동 실행하지 않는다. `vite.config.ts`는
+`bun run dev`는 Vite 서버를 관리하고 `.bunaway/`에 개발 앱을 만들어 실행한다.
+`bun run build`는 `build.command`의 `build:web`을 매번 실행해 `web-dist/`를 만들고 검증한 뒤 `dist/`에 앱을 만든다.
+`bun run package win-direct --build`는 웹 UI와 앱 빌드를 한 번 실행한 뒤 배포 패키지를 만든다.
+웹 빌드 실패 시 이전 앱 산출물을 유지하고 중단한다. `package` 단독 실행은 기존 앱 산출물을 사용한다.
+웹 도구만 실행할 때는 `dev:web`, `build:web`, `preview`를 사용한다. `vite.config.ts`는
 개발 페이지에서만 CSS 갱신과 loopback HMR WebSocket을 허용하는 CSP를 적용한다.
 배포 HTML의 CSP와 `app.home`, 작성한 `policy.json`의 권한, origin은 그대로 유지한다.
 네이티브 회귀 테스트 실행 스크립트는 여러 테스트 창을 열기 때문에 예제 실행에 사용하지 않는다.
@@ -82,7 +82,7 @@ Bunaway는 프런트엔드 빌드를 자동 실행하지 않는다. `vite.config
 저장 버튼은 `memo.save`를 호출하고 백엔드는 Host API로 파일을 기록한 뒤 `memo.saved`를 발행한다.
 화면은 초기화 과정에서 `memoApp`의 명령과 이벤트 타입을 지정한 클라이언트를 만든다.
 이 클라이언트를 재사용해 `client.invoke`로 호출하고 `client.listen`으로 구독한다.
-백엔드 호출은 `bun run bunaway dev`로 연 앱 창에서 동작하며 일반 브라우저에서는 지원하지 않는다.
+백엔드 호출은 `bun run dev`로 연 앱 창에서 동작하며 일반 브라우저에서는 지원하지 않는다.
 화면은 이벤트를 받아 저장 내용을 갱신하며, 앱을 다시 열면 `memo.read`로 파일을 불러온다.
 Windows 저장 위치는 `%LOCALAPPDATA%/bunaway/examples.bunaway.memo/data/notes/memo.txt`다.
 첫 실행에는 파일이 없어 읽기 실패를 표시하지만 새 메모를 저장할 수 있다.

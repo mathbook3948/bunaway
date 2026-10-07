@@ -278,6 +278,7 @@
           "frameworkRoot",
           "appEntry",
           "frontend",
+          "buildCommand",
           "backendDependencies",
           "bundle",
           "dev",

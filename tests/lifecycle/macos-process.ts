@@ -1030,27 +1030,57 @@ try {
       } else assert.equal((await probe.finish(1)).failed, true);
     });
   }
-  await test("pending request limit rejects overload without leaving Bun", async () => {
-    const probe = launch();
-    await probe.ready();
-    const lines = Array.from({ length: 129 }, (_, i) =>
-      serializeProcessFrame({
-        ...base,
-        kind: "web",
-        context: "probe-view",
-        payload: {
-          kind: "invoke",
-          protocol: PROTOCOL_VERSION,
-          id: `hold-${i}`,
-          command: "probe.hold",
-          payload: null,
-        },
-      }),
-    );
-    probe.child.stdin.write(`${lines.join("\n")}\n`);
-    assert.equal((await probe.finish(1)).failed, true);
-    assert.equal(probe.frames.filter((frame) => frame.payload?.kind === "error").length, 128);
-  });
+  for (const stalled of [false, true]) {
+    await test(`pending request limit drains teardown with ${stalled ? "paused" : "flowing"} stdout`, async () => {
+      const probe = launch("normal", stalled);
+      const pid = await probe.ready();
+      const exited = await watch([pid]);
+      if (stalled) {
+        probe.pauseOutput();
+        probe.send({
+          ...base,
+          kind: "web",
+          context: "probe-view",
+          payload: {
+            kind: "invoke",
+            protocol: PROTOCOL_VERSION,
+            id: "blocked",
+            command: "probe.echo",
+            payload: "x".repeat(800000),
+          },
+        });
+        await probe.waitForPartialResponse("blocked", "x".repeat(800000));
+      }
+      const lines = Array.from({ length: 129 }, (_, i) =>
+        serializeProcessFrame({
+          ...base,
+          kind: "web",
+          context: "probe-view",
+          payload: {
+            kind: "invoke",
+            protocol: PROTOCOL_VERSION,
+            id: `hold-${i}`,
+            command: "probe.hold",
+            payload: null,
+          },
+        }),
+      );
+      probe.child.stdin.write(`${lines.join("\n")}\n`);
+      // Resume after failure has killed Bun. The partially written response and
+      // all 128 cancellation frames must drain before the terminal observation.
+      await exited();
+      if (stalled) {
+        await Bun.sleep(50);
+        probe.releaseOutput();
+      }
+      assert.equal((await probe.finish(1)).failed, true);
+      assert.equal(probe.frames.filter((frame) => frame.payload?.kind === "error").length, 128);
+      if (stalled) {
+        assert.equal((await probe.response("blocked")).kind, "result");
+        probe.closeFifo();
+      }
+    });
+  }
   console.log(`macOS process probe: ${results.length} passed.`);
 } finally {
   for (const probe of live) {
