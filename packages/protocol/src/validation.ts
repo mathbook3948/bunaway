@@ -232,7 +232,7 @@ function matches(schema: Schema, value: JsonValue): boolean {
       return (
         typeof value === "string" &&
         [...value].length <= (schema.maxLength ?? Infinity) &&
-        (!schema.pattern || new RegExp(schema.pattern).test(value))
+        (!schema.pattern || new RegExp(schema.pattern, "u").test(value))
       );
     case "integer":
     case "number":

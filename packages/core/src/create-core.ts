@@ -14,6 +14,7 @@ import {
   ProtocolError,
   type Schema,
   type ServerMessage,
+  serializeMessage,
   validateValue,
   type WireError,
 } from "@bunaway/protocol";
@@ -374,10 +375,12 @@ class SessionImpl implements CoreSession {
       let output: JsonValue;
       try {
         output = validateValue(definition.output, result);
+        reply = { kind: "result", protocol: this.outProtocol, id: pending.id, payload: output };
+        // Include protocol and correlation fields before handing the reply to a transport.
+        serializeMessage(reply);
       } catch {
         throw new BunawayError({ code: "INTERNAL", message: "Invalid command output." });
       }
-      reply = { kind: "result", protocol: this.outProtocol, id: pending.id, payload: output };
     } catch (cause) {
       if (!(cause instanceof BunawayError)) {
         reportDiagnostic(() => this.core.services.onCommandError?.(command, cause));

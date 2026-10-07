@@ -253,6 +253,7 @@ permission과 scope로 다시 검사한다. 단순한 기능 등록에는 backen
 권한 식별자는 `<plugin-name>:<permission-name>`이고 operation은
 `<plugin-name>.<operation-name>`이다. 플러그인 이름과 operation의 각 이름은 기존
 명령 식별자 제약에 맞춘다. 등록 목록과 scope도 기존 JSON 깊이, 크기 제한을 검사한다.
+pattern은 등록 검사와 입력, 출력, scope 검사에서 같은 JavaScript Unicode 모드(`u`)를 사용한다.
 
 ## 권한 정책 v1의 구조 변경
 
@@ -371,6 +372,11 @@ Host 호출 취소가 메인 스레드의 grant 전에 처리되면 실행을 �
 envelope의 크기 제한을 검사하며, 실패하면 안전한 `INTERNAL` 응답으로 바꾼다. 정책 거부는 실행하지 않고
 `PERMISSION_DENIED`를 반환하며, 응답 전에 진단 이벤트를 보낸다. 진단 채널이 포화되어
 이벤트를 버릴 수 있어도 거부 응답과 실행 차단은 유지한다.
+
+코어는 명령 결과에 요청 ID와 프로토콜 정보를 추가한 최종 Web 응답을 직렬화해
+1 MiB 제한을 검사한다. HostResponse에 들어가는 결과여도 최종 응답이 제한을 넘으면
+해당 요청에 `INTERNAL`을 반환한다. 전송 채널에 넘기기 전에 처리하므로 같은 세션의
+다음 명령은 계속 실행할 수 있다.
 
 entry의 default export에 `matches(permission, input, scope)`를 선언한다.
 scope가 있는 등록된 플러그인의 평가 모듈만 읽는다.

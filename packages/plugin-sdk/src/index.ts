@@ -117,7 +117,7 @@ type NativeOperation<D extends NativePluginDefinition> = {
     readonly permission: `${D["name"]}:${D["operations"][K]["permission"]}`;
     readonly input: D["operations"][K]["input"];
     readonly output: D["operations"][K]["output"];
-    readonly osPermission?: NonNullable<D["operations"][K]["osPermission"]>;
+    readonly osPermission?: Extract<D["operations"][K]["osPermission"], "not-required">;
   };
 }[keyof D["operations"] & (string | number)];
 

@@ -1,12 +1,17 @@
 import { expect, test } from "bun:test";
 import { resolve } from "node:path";
+import { validatePacket } from "../../native/windows/bun/channel.ts";
+import { hostResponse } from "../../native/windows/bun/host-response.ts";
 import { bindHostAPI, type CoreServices, createCore } from "../../packages/core/src/index.ts";
 import { defineNativePlugin, s } from "../../packages/plugin-sdk/src/index.ts";
 import {
   type HostContext,
+  MAX_MESSAGE_BYTES,
   NativeRegistry,
   type Policy,
   type ServerMessage,
+  serializeHostResponse,
+  serializeMessage,
 } from "../../packages/protocol/src/index.ts";
 import { storagePlugin } from "../../plugins/storage/src/index.ts";
 import { contracts } from "../fixtures/host-plugins.ts";
@@ -132,6 +137,131 @@ export function checkShortDeclarationTypes() {
 }
 
 const empty: Policy = { version: 1, views: [], backend: { permissions: [] } };
+
+test("plugin patterns use Unicode semantics for input, output and permission scopes", () => {
+  const letters = s.string({ pattern: "^\\p{L}+$" });
+  const plugin = defineNativePlugin({
+    name: "unicode",
+    version: "1",
+    operations: { text: { input: letters, output: letters, permission: "text" } },
+    scopes: { text: letters },
+    matches: (_permission, input, scope) => input === scope,
+  });
+  const registry = new NativeRegistry([plugin.definition]);
+  for (const text of ["abc", "한글", "𐐀"]) {
+    const call = registry.validateCall({ operation: "unicode.text", payload: text });
+    expect(call.payload).toBe(text);
+    expect(registry.validateOutput(call.operation, text)).toBe(text);
+    const policy: Policy = {
+      ...empty,
+      backend: { permissions: [{ identifier: "unicode:text", allow: [text] }] },
+    };
+    registry.validatePolicy(policy);
+    expect(registry.allowed(policy.backend, call, plugin.definition.matches)).toBe(true);
+  }
+  for (const text of ["123", "p{L}"]) {
+    expect(() => registry.validateCall({ operation: "unicode.text", payload: text })).toThrow();
+    expect(() => registry.validateOutput("unicode.text", text)).toThrow();
+    expect(() =>
+      registry.validatePolicy({
+        ...empty,
+        backend: { permissions: [{ identifier: "unicode:text", allow: [text] }] },
+      }),
+    ).toThrow();
+  }
+  const scalar = defineNativePlugin({
+    name: "scalar",
+    version: "1",
+    operations: {
+      one: { input: s.string({ pattern: "^.$" }), output: s.null(), permission: "one" },
+    },
+  });
+  expect(
+    new NativeRegistry([scalar.definition]).validateCall({ operation: "scalar.one", payload: "😀" })
+      .payload,
+  ).toBe("😀");
+});
+
+test("plugin results exceeding the Web envelope return INTERNAL and keep the session usable", async () => {
+  const plugin = defineNativePlugin({
+    name: "large",
+    version: "1",
+    operations: { read: { input: s.integer(), output: s.string(), permission: "read" } },
+  });
+  const id = "r".repeat(128);
+  const protocol = { major: 1, minor: 0 };
+  const overhead = Buffer.byteLength(
+    serializeMessage({ kind: "result", protocol, id, payload: "" }),
+  );
+  const tooLarge = "x".repeat(MAX_MESSAGE_BYTES - 30);
+  const payloads = [tooLarge, "x".repeat(MAX_MESSAGE_BYTES - overhead), "ok"];
+  const oversized = hostResponse(() => tooLarge);
+  expect(oversized.kind).toBe("result");
+  expect(Buffer.byteLength(serializeHostResponse(oversized))).toBe(MAX_MESSAGE_BYTES);
+  const replies: ServerMessage[] = [];
+  let sendFailures = 0;
+  const adapter: CoreServices = {
+    ...services({
+      ...empty,
+      views: [
+        {
+          id: "main",
+          origins: ["https://app.bunaway.local"],
+          commands: ["plugin.large.read"],
+          events: [],
+          host: { permissions: ["large:read"] },
+        },
+      ],
+    }),
+    async callHost(_context, call) {
+      const payload = payloads[call.payload as number];
+      if (payload === undefined) throw new Error("Missing fixture result.");
+      return hostResponse(() => payload);
+    },
+    async send(context, message) {
+      try {
+        validatePacket(
+          { kind: "server", route: { context, viewId: "main", documentGeneration: 1 }, message },
+          "ui",
+        );
+        serializeMessage(message);
+        replies.push(message);
+      } catch (error) {
+        sendFailures++;
+        throw error;
+      }
+    },
+  };
+  const core = await createCore(
+    { commands: {}, events: {}, plugins: [plugin.definition] },
+    adapter,
+  );
+  try {
+    const session = core.openSession("view" as HostContext, "main");
+    await session.receive(adapter.hello);
+    for (let index = 0; index < payloads.length; index++) {
+      const requestId = index === 1 ? id : `request-${index}`;
+      await session.receive({
+        kind: "invoke",
+        protocol,
+        id: requestId,
+        command: "plugin.large.read",
+        payload: index,
+      });
+      for (let turn = 0; turn < 20; turn++) await Promise.resolve();
+      expect(sendFailures).toBe(0);
+      const reply = replies.find((message) => "id" in message && message.id === requestId);
+      expect(reply?.kind).toBe(index === 0 ? "error" : "result");
+      if (index === 0 && reply?.kind === "error") expect(reply.error.code).toBe("INTERNAL");
+      if (index === 1 && reply)
+        expect(Buffer.byteLength(serializeMessage(reply))).toBe(MAX_MESSAGE_BYTES);
+      if (index === 2 && reply?.kind === "result") expect(reply.payload).toBe("ok");
+    }
+  } finally {
+    await core.stop();
+  }
+});
+
 function services(policy = empty): CoreServices {
   return {
     policy,
