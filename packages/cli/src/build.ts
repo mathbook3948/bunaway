@@ -1,7 +1,7 @@
 import { chmod, cp, lstat, mkdir, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
 import { acquireBuildOutputLock, ownedDirectory, PACKAGING_CHANNELS } from "@bunaway/packaging";
-import { developmentPolicy } from "../../runtime-bun/src/development.ts";
+import { developmentPolicy, developmentWindowHome } from "../../runtime-bun/src/development.ts";
 import { type Project, readProjectMetadata, validateProject } from "./config.ts";
 import {
   files,
@@ -141,6 +141,8 @@ export async function buildProject(
   assertNotFrontendBuild(settings.root);
   const target = options.native?.target ?? currentTarget();
   await assertBuildBun(target, settings.frameworkRoot);
+  if (target !== "windows-x64" && settings.app.windows)
+    throw new Error("app.windows currently requires the Windows target.");
   // The lock covers frontend generation, asset validation and publication so
   // another build cannot change the web output while this build consumes it.
   const abort = new AbortController();
@@ -175,9 +177,11 @@ async function assembleProject(
   const server = options.development ? project.dev : undefined;
   const target = options.native?.target ?? currentTarget();
   await assertBuildBun(target, root);
+  const windows = target === "windows-x64";
+  if (!windows && project.app.windows)
+    throw new Error("app.windows currently requires the Windows target.");
   const native = options.native ?? (await prepareNativeForBuild(target, root, signal));
   signal?.throwIfAborted();
-  const windows = target === "windows-x64";
   const pin = await readPin(target, root);
   await verifyHash(native.bun, pin.bun.executableSha256);
   await verifyHash(native.licenses["LICENSE.bun"] ?? "", pin.bun.licenseSha256);
@@ -219,11 +223,31 @@ async function assembleProject(
     }
     await writeJson(
       resolve(assets, "app.json"),
-      server ? { ...project.app, home: server.url, development: { url: server.url } } : project.app,
+      server
+        ? {
+            ...project.app,
+            home: server.url,
+            development: { url: server.url },
+            ...(project.app.windows
+              ? {
+                  windows: project.app.windows.map((spec) => ({
+                    ...spec,
+                    home: developmentWindowHome(spec.home, server.url),
+                  })),
+                }
+              : {}),
+          }
+        : project.app,
     );
     await writeJson(
       resolve(assets, "policy.json"),
-      server ? developmentPolicy(project.policy, project.app.view, server.url) : project.policy,
+      server
+        ? developmentPolicy(
+            project.policy,
+            project.app.windows?.map((spec) => spec.view) ?? project.app.view,
+            server.url,
+          )
+        : project.policy,
     );
     await writeFile(resolve(assets, "bunfig.toml"), "env = false\n");
     await writeJson(resolve(assets, "tsconfig.json"), {});

@@ -22,3 +22,9 @@
 예전 Windows C++ 호스트/probe와 전용 실행기, 테스트는 삭제했다.
 `backend-startup.test.ts`는 macOS 프로세스 probe 백엔드로 boot 전후 종료와 버전, 세대 검증을 확인한다.
 다른 플랫폼, 모바일 수명주기의 검증 완료를 뜻하지 않는다.
+
+공개 창 API의 계약, 대상 창 권한, 카탈로그와 개발 URL은 SDK, CLI 테스트에서 확인한다.
+`lifecycle/window-operations.test.ts`는 정리 대기 중 중복 생성, 마지막 창 재생성 예약,
+기존 문서 취소, 닫기 거절과 종료 경쟁을 검증한다. Windows 네이티브 실행기는
+`windows-bun-window-api.ts`로 크기와 위치, 전체화면 복원, 확인 대화상자 거절과 승인,
+보조 창의 반복 생성과 새로운 세션, 자기 창 재생성을 추가 검증한다.

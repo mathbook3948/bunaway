@@ -1027,6 +1027,12 @@ public:
                     { { "name", "log.write" }, { "support", "supported" }, { "permission", "not-required" } },
                     { { "name", "capabilities.get" }, { "support", "supported" }, { "permission", "not-required" } },
                 });
+                for (auto it = hostOps.begin(); it != hostOps.end(); ++it) {
+                    if (it.key().rfind("windows.", 0) == 0)
+                        result.push_back({ { "name", it.key() }, { "support", "unsupported" }, { "permission", "not-required" } });
+                }
+            } else if (operation.rfind("windows.", 0) == 0) {
+                throw HostError("UNSUPPORTED", "Window operations currently require Windows.");
             } else if (operation == "log.write") {
                 if (!permissions.log) throw HostError("PERMISSION_DENIED", "Logging is not allowed for this context.");
                 Json entry = {

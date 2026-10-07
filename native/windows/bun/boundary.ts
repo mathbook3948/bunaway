@@ -303,11 +303,15 @@ export function allowedHost(permissions: Policy["backend"], call: HostCall): boo
   }
   if (call.operation === "capabilities.get") return true;
   if (call.operation === "log.write") return permissions.log;
-  const segments = call.payload.path.split("/");
+  if (call.operation === "windows.list") return !!permissions.windows?.length;
+  if ("view" in call.payload) return permissions.windows?.includes(call.payload.view) ?? false;
+  if (call.operation !== "storage.readText" && call.operation !== "storage.writeText") return false;
+  const payload = call.payload;
+  const segments = payload.path.split("/");
   return permissions.storage.some((grant) => {
     const prefix = grant.pathPrefix ? grant.pathPrefix.split("/") : [];
     return (
-      grant.scope === call.payload.scope &&
+      grant.scope === payload.scope &&
       grant.access.includes(call.operation === "storage.writeText" ? "write" : "read") &&
       prefix.every((part, index) => part === segments[index])
     );

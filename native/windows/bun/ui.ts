@@ -1,8 +1,15 @@
 import assert from "node:assert/strict";
 import { parentPort, workerData } from "node:worker_threads";
-import type { HostContext } from "../../../packages/protocol/src/index.ts";
+import {
+  BunawayError,
+  type HostContext,
+  type HostCall,
+  type HostResponse,
+  validateHostOutput,
+} from "../../../packages/protocol/src/index.ts";
 import { allowedHost, ViewBoundary } from "./boundary.ts";
-import { Channel, type Packet, type UIConfig } from "./channel.ts";
+import { Channel, type Packet, type UIConfig, type WindowSpec } from "./channel.ts";
+import { WindowOperations } from "./window-operations.ts";
 import { callbackCalls, checkCallbacks, disposeCom } from "./com.ts";
 import { originOf, WebView } from "./webview.ts";
 import { disposeWin32Bindings, hr, kernel, ole, Windows } from "./win32.ts";
@@ -18,8 +25,20 @@ let initialized = false;
 let windows: Windows | undefined;
 const views = new Map<
   string,
-  { boundary: ViewBoundary; native: WebView; detached: boolean; cleaned: boolean; ready: boolean }
+  {
+    boundary: ViewBoundary;
+    native: WebView;
+    detached: boolean;
+    cleaned: boolean;
+    ready: boolean;
+    navigated: boolean;
+    pendingClose: boolean;
+    confirmation: string | null;
+    deadline: number;
+  }
 >();
+const cancelled = new Set<string>();
+const windowRequests = new Set<string>();
 const approved = new Map<string, HostContext>();
 const fail = (error: unknown) => {
   failure ??= error;
@@ -29,7 +48,7 @@ const channel = new Channel(
   parentPort,
   config.runtime,
   "ui",
-  (packet: Packet) => {
+  async (packet: Packet) => {
     if (packet.kind === "start") {
       assert(!startRequested && !stopping, "Invalid start");
       startRequested = true;
@@ -42,6 +61,46 @@ const channel = new Channel(
         view.boundary.closed = true;
         view.native.requestClose();
       }
+    } else if (packet.kind === "operation") {
+      const view = [...views.values()].find((view) => view.boundary.active(packet.context));
+      const permissions =
+        packet.context === config.backendContext
+          ? config.policy.backend
+          : view?.boundary.policy.host;
+      let response: HostResponse;
+      windowRequests.add(packet.requestId);
+      try {
+        if (stopping || closingSent || !permissions || !allowedHost(permissions, packet.call))
+          throw new BunawayError({
+            code: "PERMISSION_DENIED",
+            message: "Host context or window policy denied.",
+          });
+        const payload = await operations.execute(
+          packet.call,
+          permissions.windows ?? [],
+          packet.requestId,
+        );
+        validateHostOutput(packet.call.operation, payload);
+        response = { kind: "result", payload };
+      } catch (error) {
+        response = {
+          kind: "error",
+          error:
+            error instanceof BunawayError
+              ? { code: error.code, message: error.message }
+              : { code: "INTERNAL", message: "Window operation failed." },
+        };
+      } finally {
+        windowRequests.delete(packet.requestId);
+      }
+      const wasCancelled = cancelled.delete(packet.requestId);
+      if (!stopping && !wasCancelled && activeContext(packet.context))
+        channel.notify({
+          kind: "host-response",
+          context: packet.context,
+          requestId: packet.requestId,
+          response,
+        });
     } else if (packet.kind === "server")
       views.get(packet.route.viewId)?.boundary.send(packet.route, packet.message);
     else if (packet.kind === "authorize") {
@@ -63,8 +122,10 @@ const channel = new Channel(
         requestId: packet.requestId,
         allowed,
       });
-    } else if (packet.kind === "cancel") approved.delete(packet.requestId);
-    else if (packet.kind === "host-result") {
+    } else if (packet.kind === "cancel") {
+      approved.delete(packet.requestId);
+      if (windowRequests.has(packet.requestId)) cancelled.add(packet.requestId);
+    } else if (packet.kind === "host-result") {
       const active =
         packet.context === config.backendContext ||
         [...views.values()].some((view) => view.boundary.active(packet.context));
@@ -82,113 +143,204 @@ const log = (event: string, data: Record<string, unknown> = {}) => {
   console.log(JSON.stringify({ event, ...data }));
   channel.notify({ kind: "diagnostic", event, fields: data });
 };
+function activeContext(context: HostContext) {
+  return (
+    context === config.backendContext ||
+    [...views.values()].some((view) => view.boundary.active(context))
+  );
+}
 function startViews() {
   if (
     !startRequested ||
-    starting ||
     stopping ||
-    views.size !== config.windows.length ||
-    [...views.values()].some((view) => !view.ready && !view.boundary.closed)
+    (!starting && [...views.values()].some((view) => !view.ready && !view.boundary.closed))
   )
     return;
   starting = true;
-  for (const view of views.values()) if (!view.boundary.closed) view.native.navigate();
+  for (const view of views.values())
+    if (view.ready && !view.boundary.closed && !view.navigated) {
+      view.navigated = true;
+      view.native.navigate();
+    }
+}
+function closeWindow(viewId: string): boolean {
+  const view = views.get(viewId);
+  assert(view);
+  view.pendingClose = false;
+  if (view.boundary.closed) return true;
+  const spec = config.windows.find((spec) => spec.view === viewId);
+  assert(spec);
+  assert(windows);
+  if (view.confirmation) {
+    log("window-close-confirmation", { view: viewId });
+    if (!windows.confirmClose(view.native.hwnd, spec.title, view.confirmation)) return false;
+  }
+  view.boundary.revoke("closing");
+  view.boundary.closed = true;
+  view.native.requestClose();
+  log("view-window-closed", { view: viewId });
+  return true;
+}
+const operations = new WindowOperations(config.windows, {
+  read: (viewId) => {
+    const view = views.get(viewId);
+    return view
+      ? {
+          closed: view.boundary.closed,
+          cleaned: view.cleaned,
+          ready: view.ready,
+          failure: view.native.failure,
+          deadline: view.deadline,
+        }
+      : undefined;
+  },
+  create: createWindow,
+  close: closeWindow,
+  apply: applyWindow,
+  stopping: () => stopping,
+  cancelled: (id) => cancelled.has(id),
+  now: () => Date.now(),
+  tick: () => Bun.sleep(5),
+});
+function applyWindow(call: HostCall, viewId: string) {
+  assert(windows);
+  const view = views.get(viewId);
+  assert(view);
+  const hwnd = view.native.hwnd;
+  switch (call.operation) {
+    case "windows.show":
+      windows.show(hwnd, true);
+      break;
+    case "windows.hide":
+      windows.show(hwnd, false);
+      break;
+    case "windows.focus":
+      if (!windows.focus(hwnd))
+        throw new BunawayError({ code: "BUSY", message: "OS declined window focus." });
+      break;
+    case "windows.close":
+      return closeWindow(viewId);
+    case "windows.setSize":
+      if (windows.isFullscreen(hwnd))
+        throw new BunawayError({
+          code: "INVALID_ARGUMENT",
+          message: "Exit fullscreen before changing size.",
+        });
+      windows.setSize(hwnd, call.payload.width, call.payload.height);
+      view.native.resize();
+      break;
+    case "windows.setPosition":
+      if (windows.isFullscreen(hwnd))
+        throw new BunawayError({
+          code: "INVALID_ARGUMENT",
+          message: "Exit fullscreen before changing position.",
+        });
+      windows.setPosition(hwnd, call.payload.x, call.payload.y);
+      break;
+    case "windows.setFullscreen":
+      windows.setFullscreen(hwnd, call.payload.fullscreen);
+      view.native.resize();
+      break;
+    case "windows.setCloseConfirmation":
+      view.confirmation = call.payload.message;
+      break;
+    default:
+      throw new BunawayError({ code: "INVALID_ARGUMENT", message: "Expected a window operation." });
+  }
+  return null;
+}
+function createWindow(spec: WindowSpec) {
+  assert(windows);
+
+  const policy = config.policy.views.find((view) => view.id === spec.view);
+  assert(policy);
+  let native: WebView;
+  const boundary = new ViewBoundary(policy, {
+    origin: originOf,
+    source: () => native.source(),
+    ready: () => starting && !stopping && !closingSent,
+    capacity: (count) =>
+      channel.canSend(
+        count,
+        [...views.values()].reduce((total, view) => total + view.boundary.pendingCount, 0),
+      ),
+    forward: (packet) => {
+      if (packet.kind === "revoke")
+        for (const [id, context] of approved)
+          if (context === packet.route.context) approved.delete(id);
+      channel.notify(packet);
+    },
+    deliver: (text) => native.send(text),
+    log: (event, data) => log(event, { view: spec.view, ...data }),
+  });
+  const close = () => {
+    const view = views.get(spec.view);
+    if (view && !view.boundary.closed) view.pendingClose = true;
+  };
+  const window = windows.create(spec.title, spec.window.width, spec.window.height, (message) => {
+    if (message === 0x10) close();
+    else if (message === 5) native?.resize();
+    else if (message === 0x231) log("modal-enter", { view: spec.view });
+    else if (message === 0x232) log("modal-exit", { view: spec.view });
+  });
+  log("window-created", { view: spec.view, hwnd: window.toString() });
+  // Record partial HWND ownership before environment creation can fail.
+  try {
+    native = new WebView(
+      window,
+      spec,
+      config.assets,
+      config.dataRoot,
+      config.loader,
+      policy.origins,
+      {
+        message: (source, raw) => boundary.receive(source, raw),
+        revoke: (reason) => {
+          boundary.revoke(reason);
+          for (const [id, context] of approved) if (!activeContext(context)) approved.delete(id);
+        },
+        sameDocument: (source) => boundary.sameDocument(source),
+        close,
+        ready: () => {
+          const view = views.get(spec.view);
+          assert(view);
+          view.ready = true;
+          startViews();
+        },
+        log: (event, data) => log(event, { view: spec.view, ...data }),
+      },
+      config.legacyProfile,
+    );
+  } catch (error) {
+    windows.destroy(window);
+    throw error;
+  }
+  views.set(spec.view, {
+    boundary,
+    native,
+    detached: false,
+    cleaned: false,
+    ready: false,
+    navigated: false,
+    pendingClose: false,
+    confirmation: null,
+    deadline: Date.now() + 30000,
+  });
 }
 try {
   hr(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
   initialized = true;
   windows = new Windows();
   log("ui-thread", { pid: process.pid, thread: kernel.symbols.GetCurrentThreadId() });
-  for (const spec of config.windows) {
-    const policy = config.policy.views.find((view) => view.id === spec.view);
-    assert(policy);
-    let native: WebView;
-    const boundary = new ViewBoundary(policy, {
-      origin: originOf,
-      source: () => native.source(),
-      ready: () => starting && !stopping && !closingSent,
-      capacity: (count) =>
-        channel.canSend(
-          count,
-          [...views.values()].reduce((total, view) => total + view.boundary.pendingCount, 0),
-        ),
-      forward: (packet) => {
-        if (packet.kind === "revoke")
-          for (const [id, context] of approved)
-            if (context === packet.route.context) approved.delete(id);
-        channel.notify(packet);
-      },
-      deliver: (text) => native.send(text),
-      log: (event, data) => log(event, { view: spec.view, ...data }),
-    });
-    const close = () => {
-      boundary.revoke("closing");
-      boundary.closed = true;
-      native?.requestClose();
-      log("view-window-closed", { view: spec.view });
-      if (
-        !closingSent &&
-        views.size === config.windows.length &&
-        [...views.values()].every((view) => view.boundary.closed)
-      ) {
-        closingSent = true;
-        channel.notify({ kind: "closing" });
-      }
-    };
-    const window = windows.create(spec.title, spec.window.width, spec.window.height, (message) => {
-      if (message === 0x10) close();
-      else if (message === 5) native?.resize();
-      else if (message === 0x231) log("modal-enter", { view: spec.view });
-      else if (message === 0x232) log("modal-exit", { view: spec.view });
-    });
-    log("window-created", { view: spec.view, hwnd: window.toString() });
-    // Record partial HWND ownership before environment creation can fail.
-    try {
-      native = new WebView(
-        window,
-        spec,
-        config.assets,
-        config.dataRoot,
-        config.loader,
-        policy.origins,
-        {
-          message: (source, raw) => boundary.receive(source, raw),
-          revoke: (reason) => {
-            boundary.revoke(reason);
-            for (const [id, context] of approved) if (!activeContext(context)) approved.delete(id);
-          },
-          sameDocument: (source) => boundary.sameDocument(source),
-          close,
-          ready: () => {
-            const view = views.get(spec.view);
-            assert(view);
-            view.ready = true;
-            startViews();
-          },
-          log: (event, data) => log(event, { view: spec.view, ...data }),
-        },
-        config.legacyProfile,
-      );
-    } catch (error) {
-      windows.destroy(window);
-      throw error;
-    }
-    views.set(spec.view, { boundary, native, detached: false, cleaned: false, ready: false });
-  }
-  function activeContext(context: HostContext) {
-    return (
-      context === config.backendContext ||
-      [...views.values()].some((view) => view.boundary.active(context))
-    );
-  }
+  for (const spec of config.windows) if (spec.startup !== false) createWindow(spec);
   await channel.send({ kind: "ready" });
-  const startupDeadline = Date.now() + 30000;
   while (!stopping) {
     checkCallbacks();
     windows.pump();
-    for (const view of views.values()) {
+    for (const [viewId, view] of views) {
+      if (view.pendingClose) closeWindow(viewId);
       if (view.native.failure) throw view.native.failure;
-      if (!view.ready && !view.boundary.closed && Date.now() > startupDeadline)
+      if (!view.ready && !view.boundary.closed && Date.now() > view.deadline)
         throw new Error("WebView startup timed out");
       view.boundary.scanDeadlines();
       if (view.boundary.closed && !view.detached && view.native.detach()) {
@@ -197,7 +349,11 @@ try {
       }
       if (view.detached && !view.cleaned) view.cleaned = view.native.finish();
     }
-    if (!closingSent && [...views.values()].every((view) => view.boundary.closed)) {
+    if (
+      !closingSent &&
+      !operations.replacing.size &&
+      [...views.values()].every((view) => view.boundary.closed)
+    ) {
       closingSent = true;
       channel.notify({ kind: "closing" });
     }

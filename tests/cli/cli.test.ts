@@ -723,3 +723,58 @@ test("dev build failure does not launch old assets; the next edit recovers, clos
   await controller.change();
   expect(calls).toEqual(before);
 });
+
+test("CLI validates, relocates and bundles a catalog of startup and deferred windows", async () => {
+  const configPath = resolve(project, "src-bunaway/bunaway.json");
+  const policyPath = resolve(project, "src-bunaway/policy.json");
+  const config = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
+  const policy = JSON.parse(originals["src-bunaway/policy.json"] ?? "");
+  const spec = {
+    view: config.app.view,
+    home: config.app.home,
+    title: config.app.title,
+    window: config.app.window,
+  };
+  try {
+    config.app = {
+      appId: config.app.appId,
+      title: config.app.title,
+      windows: [spec, { ...spec, view: "editor", startup: false }],
+    };
+    policy.views.push({
+      ...policy.views[0],
+      id: "editor",
+      host: { log: false, storage: [], windows: ["editor"] },
+    });
+    await writeJson(policyPath, policy);
+    await writeJson(configPath, config);
+    const validated = await validateProject(project);
+    expect(validated.app.windows).toHaveLength(2);
+    expect(validated.app.windows?.[1]?.startup).toBe(false);
+    const assets = resolve(home, "multi-window-assets");
+    await bundleAssets(validated, assets, true);
+    expect(await Bun.file(resolve(assets, "ui.js")).text()).toContain(
+      "Window cleanup did not complete.",
+    );
+    config.app.view = "main";
+    await writeJson(configPath, config);
+    await expect(validateProject(project)).rejects.toThrow("without mixing");
+    delete config.app.view;
+    config.app.windows[1].home = "https://app.bunaway.local/missing.html";
+    await writeJson(configPath, config);
+    await expect(validateProject(project)).rejects.toThrow();
+    // Build preflight must accept a catalog before the web command creates its output.
+    config.build.frontend = "multi-window-web-dist";
+    await writeJson(configPath, config);
+    const metadata = await readProjectMetadata(project);
+    expect(metadata.app.windows?.[1]?.home).toEndWith("/missing.html");
+    await expect(
+      buildProject(project, {
+        native: { target: "macos-arm64", host: "unused", bun: "unused", licenses: {} },
+      }),
+    ).rejects.toThrow("app.windows currently requires the Windows target");
+  } finally {
+    await Bun.write(configPath, originals["src-bunaway/bunaway.json"] ?? "");
+    await Bun.write(policyPath, originals["src-bunaway/policy.json"] ?? "");
+  }
+}, 30000);

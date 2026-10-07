@@ -223,3 +223,15 @@ macOS `--host-only`는 기존 네이티브 컴파일까지만 실행한다. CLI�
 Windows 일반 Inno 설치는 `bunaway package win-direct`와 `win-store-unpackaged`를 사용한다.
 MSIX 앱 활성화 경로와 Developer ID 공증/배포는 후속 범위다. 기존 샘플/계약 테스트
 경로와 기본 빌드 동작은 유지한다.
+
+## Windows 창 API
+
+`src-bunaway/bunaway.json`의 `app.windows`에 창별 `view`, `title`, `home`,
+`window: { width, height }`를 정의한다. 단일 창의 `app.view/home/window`와 함께
+사용하지 않는다. `startup: false`인 창은 `@bunaway/backend`의 `windows.create`로
+연다. `policy.json`의 `host.windows` 또는 `backend.windows`에 제어할 대상 뷰 ID를
+선언한다. 새 창 API는 Windows에 구현했고 실제 GUI 회귀 검증은 남아 있다.
+macOS 빌드는 `app.windows`를 거부한다.
+
+설정 예제는 [여러 창 가이드](../../docs/site/src/content/docs/guides/windows.mdx),
+메서드와 권한, 수명은 [windows API](../../docs/site/src/content/docs/reference/host/windows.mdx)를 참고한다.

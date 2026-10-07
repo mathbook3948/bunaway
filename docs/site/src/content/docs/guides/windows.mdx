@@ -1,0 +1,70 @@
+---
+title: 여러 창 만들기
+description: 창 설정을 작성하고 앱 명령에서 보조 창을 생성하고 제어합니다.
+---
+
+Windows 앱은 `src-bunaway/bunaway.json`의 `app.windows`에 사용할 창을 정의합니다.
+기본 템플릿의 단일 창 설정에서 `view`, `home`, `window`를 제거하고 아래처럼 작성하세요.
+`app.title`은 앱 이름이며 각 창의 제목은 배열 항목의 `title`입니다.
+
+```json
+{
+  "appId": "app.notes",
+  "title": "Notes",
+  "windows": [
+    {
+      "view": "main", "title": "Notes",
+      "home": "https://app.bunaway.local/index.html",
+      "window": { "width": 800, "height": 600 }
+    },
+    {
+      "view": "editor", "title": "Editor", "startup": false,
+      "home": "https://app.bunaway.local/editor.html",
+      "window": { "width": 600, "height": 500 }
+    }
+  ]
+}
+```
+
+이는 `app` 필드의 내용입니다. `build`와 `bundle` 등 기존 최상위 설정은 유지합니다.
+`editor.html`을 웹 자산에 추가하고 `policy.json.views`에 `main`, `editor` 정책을 선언합니다.
+main에서 editor를 여는 명령을 호출하려면 main의 `commands`에 `editor.open`과
+`editor.prepareClose`를, `host.windows`에 `["editor"]`를 추가하세요.
+editor에는 필요한 명령과 이벤트, 저장 권한만 선언할 수 있습니다.
+
+```ts
+import { defineApp, defineModule, windows } from "@bunaway/backend";
+
+const editor = defineModule("editor")
+  .command("open", { input: { const: null }, output: { const: null } }, async () => {
+    const configured = await windows.list();
+    if (!configured.find((window) => window.view === "editor")?.open) {
+      await windows.create({ view: "editor" });
+    }
+    await windows.show({ view: "editor" });
+    return null;
+  })
+  .command("prepareClose", { input: { const: null }, output: { const: null } }, async () => {
+    await windows.setCloseConfirmation({ view: "editor", message: "편집 창을 닫을까요?" });
+    return null;
+  });
+
+export default defineApp({ modules: [editor] });
+```
+
+프런트엔드는 초기화한 클라이언트로 `client.invoke("editor.open", null)`을 호출합니다.
+[프런트엔드 가이드](/guides/frontend/)처럼 `CommandsOf`와 `EventsOf`로 타입을 연결하는 것을 권장합니다.
+동시에 창을 여는 요청이 겹치면 `BUSY`를 처리하세요.
+
+`startup`을 생략하면 앱 시작 때 엽니다. `false`인 창은 API로 생성합니다.
+닫은 보조 창을 다시 열 때도 `create`를 사용합니다. 새 문서로 다시 시작하려면
+`recreate`를 사용하고 기존 창의 정리가 완료될 때까지 기다립니다.
+모든 창을 닫으면 앱이 종료되므로 보조 창을 다시 열려면 주 창을 유지하세요.
+
+개발 서버를 사용하면 각 창의 `home` 경로와 query를 같은 loopback 서버에 연결합니다.
+위 예제에서는 `/index.html`, `/editor.html`을 각각 제공해야 합니다.
+`dev.url`은 서버의 준비 확인 주소이며 프로덕션 `home`은 그대로 둡니다.
+
+입력 제약, 권한, 전체화면과 포커스, 닫기 확인과 재생성 수명은
+[windows API](/reference/host/windows/)에서 확인할 수 있습니다.
+현재 새 창 API의 실제 Windows GUI 회귀 검증은 남아 있으며 macOS에서는 사용할 수 없습니다.

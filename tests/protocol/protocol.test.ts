@@ -4,6 +4,7 @@ import {
   MAX_MESSAGE_BYTES,
   negotiateProtocol,
   parseMessage,
+  parseHostCall,
   parsePolicy,
   ProtocolError,
   serializeMessage,
@@ -351,3 +352,31 @@ describe("policy validation", () => {
 function messagesHello(): Message {
   return { kind: "hello", protocol, features: [], buildId: "ui.1" };
 }
+
+test("window operations reject invalid geometry, arbitrary fields and invalid close messages", () => {
+  const invalid = [
+    { operation: "windows.create", payload: { view: "main", home: "https://remote.example" } },
+    { operation: "windows.setSize", payload: { view: "main", width: 199, height: 600 } },
+    { operation: "windows.setSize", payload: { view: "main", width: 800.5, height: 600 } },
+    { operation: "windows.setPosition", payload: { view: "main", x: 32768, y: 0 } },
+    { operation: "windows.setFullscreen", payload: { view: "main", fullscreen: 1 } },
+    { operation: "windows.setCloseConfirmation", payload: { view: "main", message: "" } },
+    {
+      operation: "windows.setCloseConfirmation",
+      payload: { view: "main", message: "bad\0message" },
+    },
+    { operation: "windows.show", payload: { view: "bad\n" } },
+  ];
+  for (const call of invalid) expect(() => parseHostCall(JSON.stringify(call))).toThrow();
+  expect(
+    parseHostCall(
+      JSON.stringify({
+        operation: "windows.setCloseConfirmation",
+        payload: { view: "main", message: null },
+      }),
+    ),
+  ).toEqual({
+    operation: "windows.setCloseConfirmation",
+    payload: { view: "main", message: null },
+  });
+});

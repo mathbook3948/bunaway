@@ -36,6 +36,7 @@ policy.views의 id: "main"
 | `origins` | 브리지 요청을 허용할 정확한 문서 origin |
 | `commands` | 이 뷰에서 호출할 수 있는 앱 명령 이름 |
 | `events` | 이 뷰에서 구독, 전달받을 수 있는 앱 이벤트 이름 |
+| `host.windows` | 생성하거나 제어할 대상 창의 뷰 ID 목록. 생략하면 거부 |
 | `host.log` | 이 뷰에서 시작한 작업의 `log.write` 허용 여부 |
 | `host.storage` | 저장 범위, 경로 접두사, 읽기/쓰기 권한 |
 
@@ -78,7 +79,9 @@ UI 명령 핸들러의 `context.host`는 **요청을 보낸 뷰의 권한**을 �
 `backend.storage: []`는 백엔드 자체 작업의 저장 접근을 거부합니다. 뷰에서 시작한 요청은 각 뷰의 정책을 따릅니다.
 정책은 Host API에 적용합니다. 신뢰된 백엔드가 직접 호출하는 Bun API는 이 검사 범위 밖입니다.
 
-CLI로 만드는 앱은 창과 뷰 하나를 사용합니다. `policy.json.views`에는 `app.view`와 일치하는 뷰 하나를 선언합니다.
+기본 템플릿은 창과 뷰 하나를 사용합니다. 단일 창 설정에서는 `app.view`와 일치하는 정책 뷰 하나를 선언합니다.
+Windows에서는 `app.windows`로 여러 창을 연결하고 각 창의 뷰를 정책에 선언합니다.
+[여러 창 만들기](/guides/windows/)에서 보조 창 설정과 공개 API를 사용할 수 있습니다.
 플랫폼별 여러 창 지원 상태는 [지원 범위](/reference/platforms/)에서 확인하세요.
 
 다음으로 [명령과 이벤트](/guides/commands-and-events/)에서 이 정책이 적용되는 코드를 살펴보세요.

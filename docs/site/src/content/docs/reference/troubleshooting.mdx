@@ -35,11 +35,11 @@ origin은 실제 문서 출처와 정확히 일치해야 합니다. 정책에는
 반복된다면 읽기 권한과 실제 저장 경로가 일치하는지 확인합니다.
 템플릿은 파일 없음과 다른 읽기 실패를 UI에서 함께 알리므로 오류 내용을 확인해야 합니다.
 
-## The vanilla MVP requires one configured policy view
+## Single-window settings require one configured policy view
 
-현재 CLI는 정책에 정확히 하나의 뷰를 요구하고 그 ID가 `app.view`와 같아야 합니다.
-Windows 런타임은 여러 창을 처리하지만 현재 CLI 설정은 단일 창만 지원합니다.
-`bunaway.json`에는 `windows` 배열을 넣을 수 없습니다.
+단일 창 설정은 정책에 정확히 하나의 뷰를 요구하고 그 ID가 `app.view`와 같아야 합니다.
+Windows에서 여러 창을 사용하려면 `app.windows`에 창을 정의하고 `policy.views`에 해당 뷰를 선언하세요. 단일 창 필드와 배열 형식은 함께 사용할 수 없습니다.
+`windows` 배열은 `bunaway.json`의 `app` 안에 작성합니다.
 
 ## Vite 페이지는 열리는데 네이티브 호출이 안 됨
 

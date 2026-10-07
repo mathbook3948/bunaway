@@ -1,10 +1,10 @@
 ---
-title: storage, log, capabilities
+title: storage, log, capabilities, windows
 description: 앱 백엔드에서 저장과 로그, 기능 조회를 직접 호출합니다.
 sidebar: { order: 4 }
 ---
 
-`@bunaway/backend`에서 `storage`, `log`, `capabilities`를 import합니다.
+`@bunaway/backend`에서 `storage`, `log`, `capabilities`, `windows`를 import합니다.
 명령에서 호출한 서비스 함수도 같은 API를 사용할 수 있습니다. `context.host`를 인자로 전달하거나
 Host API를 별도로 초기화할 필요가 없습니다.
 
@@ -97,3 +97,8 @@ SDK의 `command()`와 `defineApp()`을 사용하지 않는 객체형 정의에�
 
 정책은 이 API로 요청하는 작업에 적용합니다. 신뢰된 백엔드가 직접 호출하는 Bun API는 이 정책으로 제한하지 않습니다.
 `storage`는 백엔드 전체의 파일 접근을 격리하는 샌드박스가 아닙니다.
+
+## 창
+
+`windows`는 창 생성과 재생성, show/hide/focus, 크기와 위치, 전체화면과 닫기 확인을 제공합니다.
+메서드와 권한은 [windows 레퍼런스](/reference/host/windows/)를 확인하세요.

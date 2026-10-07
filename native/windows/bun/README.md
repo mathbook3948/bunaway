@@ -45,3 +45,21 @@ COM 콜백은 같은 OS 스레드에서 동기 HRESULT를 반환한다. `threads
 명령 핸들러의 예기치 않은 예외는 stderr와 앱 로그의 `command-failed`에 명령 이름, 원래 메시지와 스택을 기록한다. WebView 응답에는 내부 오류를 넣지 않는다. 진단 기록 실패는 명령 응답에 영향을 주지 않는다.
 
 실패한 로그 기록은 다시 시도하지 않는다. 쓰기 실패는 해당 호출에만 전달하며 이후 기록은 계속 처리한다. drain()은 대기 중인 기록 처리가 끝날 때까지 기다린다.
+
+## Public window operations
+
+The CLI accepts an `app.windows` catalog with one unique policy view per window.
+`startup: false` defers creation until `windows.create`. Window calls execute on
+the UI STA after the active caller's `windows` grants are checked. The I/O Worker
+reports them as experimental capabilities. `windows.recreate` reserves the view
+until the old WebView and processes finish, then creates a fresh boundary and
+WebView using the same profile. This also postpones last-window shutdown.
+Retired views release their COM handlers before a replacement is created.
+
+Show, hide, focus, client size, screen position and monitor fullscreen use Win32.
+Close confirmation uses a native Yes/No dialog with No selected by default.
+WM_CLOSE and WebView close requests defer confirmation outside native callbacks.
+Shutdown bypasses confirmation. `tests/lifecycle/windows-bun-window-api.ts` is
+part of `run.ps1` and covers native geometry, close refusal and acceptance,
+dynamic creation, fresh sessions and self-recreation. This scenario has not been
+run in the Linux development environment.

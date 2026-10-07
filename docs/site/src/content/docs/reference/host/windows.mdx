@@ -1,0 +1,74 @@
+---
+title: windows
+description: 창 생성과 재생성, 표시, 크기와 위치, 전체화면, 닫기 확인 API.
+---
+
+`@bunaway/backend`의 `windows`를 명령 핸들러나 플러그인 setup에서 사용합니다.
+화면에서는 앱 명령을 호출합니다. `context.host.call("windows.show", { view: "editor" })` 같은
+명시적 Host API 호출도 지원합니다. 실행 범위는 [백엔드 Host API](/reference/backend/host-api/)와 같습니다.
+
+현재 Windows x64에 구현했으며 새 API의 실제 GUI 회귀 검증은 남아 있습니다.
+Windows의 기능 조회 결과는 `experimental`입니다. macOS에서는 `UNSUPPORTED`를 반환합니다.
+Linux와 모바일은 네이티브 호스트를 지원하지 않습니다.
+
+## 설정과 권한
+
+대상 창은 [app.windows](/reference/configuration/)에 정의합니다.
+`view`는 해당 창에 연결할 정책 뷰의 ID입니다. 한 뷰에는 창 하나만 열 수 있습니다.
+`startup: false`로 설정하면 `windows.create`로 열 때까지 생성하지 않습니다.
+호출 인자로 임의 URL이나 새 정책을 전달할 수 없습니다.
+
+뷰 명령에는 해당 뷰의 `host.windows`, 플러그인 setup에는 `backend.windows`에
+작업할 대상 뷰 ID를 선언해야 합니다. `"windows": ["editor"]`는 editor 창의
+생성, 재생성과 모든 제어 작업을 허용합니다. 생략하거나 빈 배열로 두면 거부합니다.
+`windows.list`는 이 목록에 포함된 설정만 반환합니다.
+
+## 메서드
+
+아래 메서드 이름은 동일한 Host operation 이름에도 사용합니다.
+예를 들어 `windows.setSize`의 입력과 결과는 SDK와 `host.call`에서 같습니다.
+
+| API | 입력 | 결과와 동작 |
+| --- | --- | --- |
+| `windows.list` | 인자 없음. Host operation 입력은 `null` | `Promise<{ view: string; open: boolean }[]>`. 허용된 창 설정과 열림 여부 |
+| `windows.create` | `{ view }` | `Promise<null>`. 설정한 창을 생성하고 WebView 준비를 기다림. 열린 창은 `BUSY` |
+| `windows.recreate` | `{ view }` | `Promise<null>`. 닫기 확인 후 기존 창과 WebView를 정리하고 설정대로 다시 생성. 닫힌 창도 생성 가능 |
+| `windows.show` | `{ view }` | `Promise<null>`. 창 표시 |
+| `windows.hide` | `{ view }` | `Promise<null>`. 창 숨김. 창과 세션은 유지 |
+| `windows.focus` | `{ view }` | `Promise<null>`. 숨기거나 최소화한 창을 표시하고 포커스 요청. OS가 거부하면 `BUSY` |
+| `windows.setSize` | `{ view, width, height }` | `Promise<null>`. 내용 영역의 크기. 각 값은 정수 200–4096 |
+| `windows.setPosition` | `{ view, x, y }` | `Promise<null>`. 화면에서 창 바깥쪽 왼쪽 위 위치. 각 값은 정수 -32768–32767 |
+| `windows.setFullscreen` | `{ view, fullscreen: boolean }` | `Promise<null>`. 현재 모니터 전체화면. 해제하면 이전 창 위치와 표시 상태 복원 |
+| `windows.setCloseConfirmation` | `{ view, message: string \| null }` | `Promise<null>`. 창을 닫기 전에 표시할 확인 메시지 설정. 문자열은 1–1024자, NUL 금지. `null`이면 확인 해제 |
+| `windows.close` | `{ view }` | `Promise<boolean>`. 닫기 승인 시 `true`, 사용자가 거절하면 `false`. 정리 완료를 기다리지는 않음 |
+
+크기와 위치는 Windows 창 좌표의 픽셀 단위입니다. 전체화면 상태에서 크기나 위치를
+바꾸면 `INVALID_ARGUMENT`이므로 먼저 전체화면을 해제하세요.
+생성 완료는 WebView 준비를 뜻합니다. 웹 문서의 클라이언트 초기화 완료까지 기다리지는 않습니다.
+
+## 닫기 확인과 수명
+
+`setCloseConfirmation`은 창의 닫기 버튼, 웹 UI의 `window.close()`, `windows.close`,
+열린 창의 `windows.recreate`에 같은 운영체제 확인 대화상자를 적용합니다.
+기본 선택은 거절이며 거절하면 창과 세션을 유지합니다. 재생성을 거절하면 `CANCELLED`입니다.
+비동기 저장 훅은 제공하지 않습니다. 저장이 끝난 뒤 확인 메시지를 해제하는 앱 명령을 작성할 수 있습니다.
+확인 대화상자가 열려 있는 동안 같은 UI의 다른 Host 작업은 대기할 수 있습니다.
+
+숨긴 창도 열린 창입니다. 마지막 열린 창을 닫으면 앱이 종료되며, 종료 후 API로 창을
+다시 만들 수 없습니다. 재생성 중에는 교체가 끝날 때까지 앱의 자동 종료를 보류합니다.
+앱 종료 처리는 새 확인 대화상자를 띄우지 않습니다. 이미 열린 확인 대화상자가 있으면
+닫혀야 UI 정리가 진행됩니다. 강제 종료는 확인 결과를 기다리지 않습니다.
+
+재생성은 기존 창의 크기 변경, 전체화면과 확인 메시지를 초기화합니다.
+앱 상태와 뷰의 저장 프로필은 유지하며 새 웹 문서는 클라이언트와 구독을 다시 초기화합니다.
+자신의 창을 닫거나 재생성한 요청은 기존 세션 종료로 `CANCELLED`가 될 수 있습니다.
+이미 승인한 재생성은 이전 세션이 종료되어도 새 창을 만듭니다.
+이미 닫힌 창의 정리를 기다리는 생성 요청은 새 창을 만들기 전에 취소할 수 있습니다.
+
+## 오류
+
+`PERMISSION_DENIED`는 대상 창 권한이 없거나 호출 수명이 종료된 경우입니다.
+설정에 없는 창, 닫힌 창의 제어, 잘못된 입력은 `INVALID_ARGUMENT`입니다.
+동시에 같은 창을 생성하거나 재생성하는 작업은 `BUSY`입니다.
+종료 중인 작업과 닫기 확인 거절은 `CANCELLED`, 생성이나 네이티브 호출 실패는 `INTERNAL`입니다.
+[오류 처리](/guides/cancellation-and-errors/)도 확인하세요.

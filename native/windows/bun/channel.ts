@@ -17,14 +17,10 @@ import {
   type WireError,
 } from "../../../packages/protocol/src/index.ts";
 
+import { MAX_WINDOWS, type WindowSpec } from "../../../packages/runtime-bun/src/window-config.ts";
+
 export type Route = { viewId: string; documentGeneration: number; context: HostContext };
-export const MAX_WINDOWS = 128;
-export type WindowSpec = {
-  view: string;
-  home: string;
-  title: string;
-  window: { width: number; height: number };
-};
+export { MAX_WINDOWS, type WindowSpec } from "../../../packages/runtime-bun/src/window-config.ts";
 export type UIConfig = {
   runtime: RuntimeIdentity;
   policy: Policy;
@@ -68,7 +64,15 @@ const uiKinds = [
   "fatal",
   "diagnostic",
 ];
-const mainKinds = ["start", "server", "authorize", "cancel", "host-result", "shutdown"];
+const mainKinds = [
+  "operation",
+  "start",
+  "server",
+  "authorize",
+  "cancel",
+  "host-result",
+  "shutdown",
+];
 const ioKinds = ["prepare", "host-response", "cleaned", "fatal"];
 const ioMainKinds = ["operation", "grant", "cancel", "cancel-context", "shutdown"];
 type Side = "main" | "ui" | "io" | "main-io";

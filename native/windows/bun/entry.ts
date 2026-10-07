@@ -260,7 +260,8 @@ export async function runWindowsApp(app: AppDefinition, config: UIConfig): Promi
             context === config.backendContext
               ? "backend"
               : `view:${sessions.get(context)?.route.viewId ?? "invalid"}`;
-          void ioChannel
+          const destination = call.operation.startsWith("windows.") ? channel : ioChannel;
+          void destination
             .send({ kind: "operation", context, requestId, call, source })
             .catch((error) => {
               abort();

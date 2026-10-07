@@ -17,7 +17,7 @@ CLI는 **`src-bunaway/bunaway.json`의 v1 형식**을 읽습니다.
 | --- | --- | --- |
 | `version` | 예 | 현재 `1` |
 | `build` | 예 | 앱 정의, 프런트엔드 자산 위치와 웹 빌드 명령 |
-| `app` | 예 | 앱 ID, 단일 창, 시작 페이지 |
+| `app` | 예 | 앱 ID, 창 정의와 시작 페이지 |
 | `bundle` | 패키징 시 | 배포 채널 설정. 선언하면 일반 검증, 개발, 빌드에서도 형식 검사 |
 | `dev` | 아니요 | CLI가 관리할 외부 UI 개발 서버 |
 
@@ -58,15 +58,23 @@ Ctrl+C나 SIGTERM으로 빌드를 중단하면 실행한 명령과 하위 프로
 | 필드 | 설명 |
 | --- | --- |
 | `appId` | 1–64자의 소문자 영숫자, 점, 하이픈. 시작과 끝은 영숫자 |
-| `title` | 창 제목 |
-| `view` | 정책의 뷰 ID. 현재 CLI는 이 ID에 해당하는 뷰 정확히 하나를 요구 |
+| `title` | 앱 이름. 단일 창에서는 창 제목으로도 사용 |
+| `view` | 단일 창의 정책 뷰 ID. 이 형식에서는 정책 뷰 하나를 요구 |
 | `home` | 시작 페이지. 현재 로컬 자산 origin `https://app.bunaway.local` 사용 |
 | `window.width` | 정수, 200–4096 |
 | `window.height` | 정수, 200–4096 |
 
 `home`에는 URL 사용자 정보와 fragment를 넣을 수 없습니다.
 `validate`와 프로덕션 `build`는 시작 페이지의 실제 파일을 확인합니다.
-현재 CLI 설정은 단일 창만 지원합니다.
+Windows에서는 `app.windows` 배열로 여러 창을 정의할 수 있습니다.
+`appId`, `title`은 유지하고 단일 창 필드 `view`, `home`, `window`를 배열과 함께 쓰지 마세요.
+각 항목은 `view`, `title`, `home`, `window.width`, `window.height`와 선택적 `startup`을 받습니다.
+`startup`은 boolean이며 생략하면 `true`입니다. `false`인 창은 API로 생성합니다.
+창은 1–128개이며 뷰 ID는 중복할 수 없고 정책에 해당 뷰와 home origin이 있어야 합니다.
+시작할 때 여는 창이 최소 하나 필요합니다. 창 제목은 1–1024자이며 NUL을 넣을 수 없습니다.
+생성하지 않는 창도 프로덕션 시작 페이지 파일을 검증합니다.
+macOS 빌드는 `app.windows`를 거부합니다.
+[여러 창 만들기](/guides/windows/)에서 설정과 명령을 함께 작성할 수 있습니다.
 
 ## dev
 
@@ -78,7 +86,7 @@ Ctrl+C나 SIGTERM으로 빌드를 중단하면 실행한 명령과 하위 프로
 
 허용 URL 호스트는 `localhost` 또는 `127.0.0.1`입니다.
 서버의 준비 확인 경로는 인증과 redirect 없이 2xx를 반환해야 합니다. HTTPS를 쓰면 유효한 인증서가 필요합니다.
-`app.home`은 프로덕션 시작 페이지로 유지하고 개발 서버 주소는 `dev.url`에 지정합니다.
+`app.home` 또는 `app.windows[].home`은 프로덕션 시작 페이지로 유지하고 개발 서버 주소는 `dev.url`에 지정합니다.
 
 [개발 흐름](/guides/development/)에 Vite 설정과 명령 예시가 있습니다.
 

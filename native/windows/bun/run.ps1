@@ -12,6 +12,8 @@ if (!$SkipTests) {
         & $bun @arguments
         if ($LASTEXITCODE -ne 0) { throw "Windows core scenario failed: $scenario" }
     }
+    & $bun --no-env-file (Join-Path $root 'tests/lifecycle/windows-bun-window-api.ts')
+    if ($LASTEXITCODE -ne 0) { throw 'Windows public window API regression failed' }
     & $bun --no-env-file (Join-Path $root 'tests/lifecycle/windows-bun-storage.ts')
     if ($LASTEXITCODE -ne 0) { throw 'Windows handle storage regression failed' }
     & $bun --no-env-file (Join-Path $root 'tests/lifecycle/windows-bun-cli.ts')

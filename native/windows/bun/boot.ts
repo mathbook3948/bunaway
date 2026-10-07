@@ -7,7 +7,8 @@ import { pathToFileURL } from "node:url";
 import type { AppDefinition } from "../../../packages/core/src/index.ts";
 import { type HostContext, parsePolicy } from "../../../packages/protocol/src/index.ts";
 import pin from "../../../runtime/build-manifests/windows-x64.json";
-import { MAX_WINDOWS, type UIConfig, type WindowSpec } from "./channel.ts";
+import { readWindowSpecs } from "../../../packages/runtime-bun/src/window-config.ts";
+import type { UIConfig } from "./channel.ts";
 import deps from "./deps.json";
 import { runWindowsApp } from "./entry.ts";
 import { containAppProcess } from "./job.ts";
@@ -121,36 +122,7 @@ export async function verifyWindowsPackage(
   const specs = config.windows ?? [
     { view: config.view, home: config.home, title: config.title, window: config.window },
   ];
-  assert(
-    Array.isArray(specs) && specs.length > 0 && specs.length <= MAX_WINDOWS,
-    "Invalid windows",
-  );
-  const windows: WindowSpec[] = specs.map((value) => {
-    const spec = object(value);
-    const size = object(spec.window);
-    assert(typeof spec.view === "string" && /^[A-Za-z0-9_.:-]{1,128}$/.test(spec.view));
-    assert(typeof spec.title === "string" && spec.title.length > 0 && spec.title.length <= 1024);
-    assert(typeof spec.home === "string");
-    const url = new URL(spec.home);
-    assert.equal(url.origin, devUrl ? new URL(devUrl).origin : "https://app.bunaway.local");
-    if (devUrl) assert.equal(url.href, devUrl);
-    assert(!url.username && !url.password && !url.hash);
-    assert(policy.views.find((view) => view.id === spec.view)?.origins.includes(url.origin));
-    for (const dimension of [size.width, size.height])
-      assert(
-        typeof dimension === "number" &&
-          Number.isInteger(dimension) &&
-          dimension >= 200 &&
-          dimension <= 4096,
-      );
-    return {
-      view: spec.view,
-      home: spec.home,
-      title: spec.title,
-      window: { width: Number(size.width), height: Number(size.height) },
-    };
-  });
-  assert.equal(new Set(windows.map((spec) => spec.view)).size, windows.length);
+  const windows = readWindowSpecs(specs, policy, devUrl);
   return {
     runtime: { id: config.appId, generation: crypto.randomUUID() },
     backendContext: `backend-${crypto.randomUUID()}` as HostContext,

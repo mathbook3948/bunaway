@@ -67,3 +67,11 @@ Windows 배포 근거와 한계:
   명시적으로 차단한다. MSIX 앱 활성화에서 Bun을 시작하면서 런처와 동일한 제한된 초기
   환경을 보장하는 경로가 아직 검증되지 않았다. MSIX 패키징, 스토어 제출 지원을 주장하지
   않는다.
+
+## 공개 창 API
+
+Windows CLI는 `app.windows` 설정과 백엔드 `windows` API를 제공한다. 생성과 재생성,
+show/hide/focus, 크기와 위치, 전체화면, 닫기 확인을 구현했다. 새 API는
+`experimental`로 보고하며 실제 Windows GUI 회귀 검증은 남아 있다.
+Linux에서는 계약, 정책, 재생성 수명 조정과 CLI 번들을 검증한다.
+macOS의 창 API는 `UNSUPPORTED`이며 기존 단일 창 설정만 빌드할 수 있다.
