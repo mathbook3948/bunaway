@@ -66,14 +66,6 @@ for (const kind of ["script", "img", "fetch"]) {
   }
 }
 
-for (const command of ["test.tempRead", "test.tempWrite"]) {
-  await test(`${command} rejects FIFO without a peer`, async () => {
-    const outcome = await client.invoke(command, { path: "pipe", text: "forbidden" });
-    if (outcome.ok || outcome.code !== "PERMISSION_DENIED")
-      throw new Error(`Unexpected FIFO outcome: ${JSON.stringify(outcome)}`);
-  });
-}
-
 await client.invoke("test.report", {
   file: "security.json",
   report: { page: "security", results },

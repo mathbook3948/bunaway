@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@bunaway/plugin-storage": "workspace:*",
+    "@bunaway/plugin-log": "workspace:*",
+    "@bunaway/plugin-capabilities": "workspace:*"
+  },
+  "name": "@bunaway/test-desktop"
+}

@@ -1,0 +1,218 @@
+---
+title: 네이티브 플러그인 작성
+description: 기능을 한 번 선언하고 Windows 구현을 연결합니다.
+sidebar: { order: 3 }
+---
+
+기본 구조는 다음과 같습니다. 기능이 커지면 제작자가 필요한 폴더와 파일을 추가합니다.
+파일명은 관례이며 package.json과 plugin.json에 지정한 경로를 사용합니다.
+
+```text
+my-plugin/
+  package.json
+  plugin.json
+  src/
+    index.ts       기능과 권한 선언, 공개 export
+    windows.ts     Windows 구현
+```
+
+현재 네이티브 구현은 Windows를 기준으로 작성합니다. 앱에서 설치하고 등록하는 방법은
+[플러그인 API](/reference/backend/host-api/)를 참고하세요.
+
+## 패키지 설정
+
+플러그인 작성 도구는 `@bunaway/plugin`에서 import합니다. 호환하는 프레임워크 버전을
+peerDependencies에 지정하고 개발할 때도 같은 버전을 설치합니다. 공식 플러그인은
+현재 공통 SDK와 정확한 버전을 맞춥니다.
+`@bunaway/` 범위 밖의 외부 플러그인은 자체 패키지 버전을 사용합니다.
+예를 들어 플러그인 버전이 `1.2.3`이어도 peerDependencies의 `@bunaway/plugin`이
+프레임워크 버전과 정확히 일치하면 사용할 수 있습니다. 선언의 version은 플러그인 패키지 버전과 같아야 합니다.
+
+```json
+{
+  "name": "@example/plugin-system",
+  "version": "0.0.0",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "bunaway": { "plugin": "./plugin.json" },
+  "peerDependencies": { "@bunaway/plugin": "0.0.0" },
+  "devDependencies": { "@bunaway/plugin": "0.0.0" }
+}
+```
+
+## index.ts에서 한 번 선언하기
+
+`defineNativePlugin(definition)`은 등록할 `definition`과 호출 함수 객체 `api`를 반환합니다.
+입력과 결과의 타입은 schema에서 추론합니다. 선언을 default export하고 호출 함수를
+원하는 이름으로 export합니다. 앱 등록에 이름 있는 export가 필요하면 같은 definition을
+추가로 export할 수 있습니다.
+
+```ts
+import { defineNativePlugin, s } from "@bunaway/plugin";
+import manifest from "../package.json";
+
+const plugin = defineNativePlugin({
+  name: "system",
+  version: manifest.version,
+  operations: {
+    hostname: {
+      input: s.null(),
+      output: s.string(),
+      permission: "hostname",
+    },
+  },
+});
+
+export default plugin.definition;
+export const system = plugin.api;
+```
+
+`NativePluginDefinition`의 name과 version은 설치한 manifest와 일치해야 합니다.
+operations의 키는 공개 메서드 이름입니다. 각 `NativeOperationDefinition`에는
+input, output, permission을 작성합니다. 선택 필드 `osPermission`은 현재
+`"not-required"`만 허용하며 해당 작업에 OS 권한이 필요하지 않음을 표시합니다.
+생략하면 기능 조회의 permission 값은 `unknown`입니다. 이 필드는 앱 정책의 Host
+권한을 허용하지 않으며 OS 권한을 요청하거나 조회하지도 않습니다. permission에는
+플러그인 접두사를 붙이지 않습니다.
+SDK가 `system.hostname` 작업과 `system:hostname` 권한을 만들며 같은 권한을 사용하는
+작업들은 하나의 권한을 공유합니다. 선언 오류는 함수를 만들 때 거부합니다.
+
+`NativePluginAPI`의 메서드 이름은 operations의 키와 같습니다.
+위 예제는 `system.hostname(null): Promise<string>`을 만듭니다.
+화면과 백엔드는 같은 index.ts와 같은 함수를 사용합니다. 화면에서는 WebView로 호출하고,
+백엔드에서는 현재 명령이나 setup의 호출 권한을 유지합니다.
+화면용 함수와 백엔드용 함수를 따로 작성하지 않습니다.
+
+화면의 마지막 인자에는 `NativeInvokeOptions`로 signal과 deadline을 전달할 수 있습니다.
+이 옵션은 [invoke](/reference/client/invoke/) 규칙을 따릅니다. 백엔드는 진행 중 명령의
+취소와 기한을 따르며 별도 옵션을 받지 않습니다. 생성 앱은 TypeScript의 browser와 bun
+조건을 각각 적용해 화면과 백엔드 타입을 검사합니다. 직접 구성하는 프로젝트도 customConditions를 환경에 맞춰 지정합니다.
+
+`index.ts`는 플러그인의 정의와 공개 export를 담당합니다. 권한 범위 비교나 편의 함수의
+실제 처리는 역할에 맞는 내부 파일로 분리하고 생성한 호출 함수를 전달해서 연결합니다.
+storage의 범위 비교는 scope.ts, log의 수준별 호출은 logger.ts,
+capabilities의 결과 이름 중복 검사는 query.ts에 둡니다.
+내부 파일에서 index.ts의 타입이 필요하면 import type을 사용합니다.
+생성된 api를 그대로 공개하는 기능에는 추가 로직 파일이 필요하지 않습니다.
+최상위 코드에서 파일을 열거나 Windows
+구현을 import하지 않습니다. 선언을 읽는 것만으로 연결이나 플랫폼 자원을 만들지 않습니다.
+호출 함수는 설치, 앱 등록이나 권한 부여를 대신하지 않습니다.
+
+## `s`로 입력과 결과 스키마 정의하기
+
+```ts
+input: s.object({
+  level: s.enum(["debug", "info", "warn", "error"]),
+  message: s.string({ maxLength: 1024 }),
+  details: s.optional(s.json()),
+})
+```
+
+객체 필드는 기본적으로 필수이며 선언하지 않은 필드는 거부합니다.
+선택 필드는 s.optional로 감쌉니다. 위 예제에서 details는 생략할 수 있지만 지정하면
+JSON 값이어야 합니다. optional은 객체 필드에서만 사용합니다.
+제작자가 required 배열, additionalProperties나 as const를 따로 작성하지 않습니다.
+중첩 객체와 배열에도 같은 검증과 타입 추론을 적용합니다.
+
+| 함수 | 결과와 선택적 제약 |
+| --- | --- |
+| `s.object(fields)` | 필수 필드와 선택 필드가 있는 객체 |
+| `s.optional(schema)` | 생략 가능한 객체 필드 |
+| `s.string({ maxLength?, pattern? })` | 문자열, 최대 문자 수와 정규식 |
+| `s.enum(values)` | 지정한 문자열 중 하나 |
+| `s.array(items, { minItems?, maxItems?, uniqueItems? })` | 배열, 항목 수와 중복 제한 |
+| `s.integer({ minimum?, maximum? })` | 정수와 범위 |
+| `s.boolean()` | 참 또는 거짓 |
+| `s.null()` | null |
+| `s.json()` | 프로토콜 제한 안의 JSON 값 |
+
+string과 integer의 옵션, array의 두 번째 인자는 생략할 수 있습니다.
+이 함수들은 기존 JSON Schema를 만들며 별도의 검증기를 추가하지 않습니다.
+기존에 지원하는 Schema 객체도 input과 output 또는 s.object의 필드로 직접 사용할 수 있습니다.
+pattern은 선언 검사와 입력, 출력, 권한 범위 검사에서 모두 Unicode 모드(`u`)로 평가합니다.
+
+## windows.ts에서 구현하기
+
+```ts
+import { hostname } from "node:os";
+import type { NativeAdapter, NativeEnvironment } from "@bunaway/plugin";
+
+export function createOperations(_environment: NativeEnvironment): NativeAdapter {
+  return {
+    execute() { return hostname(); },
+    dispose() {},
+  };
+}
+```
+
+`NativeEnvironment`는 호스트가 정한 dataRoot와 capabilities 목록을 제공합니다.
+목록에는 `@bunaway/backend`의 프레임워크 창 작업과 앱에 등록된 네이티브 플러그인 작업이
+포함됩니다. 창 작업은 canonical `hostOperations` 계약에서 가져오며 Windows에서 `supported`,
+`not-required`로 보고합니다. 플러그인 작업은 해당 패키지의 플랫폼 어댑터 상태와
+`osPermission` 선언을 반영합니다. `support` 값은 `supported`, `experimental`,
+`unsupported`이고 `permission`은 `unknown`, `not-required`입니다.
+`NativeAdapter.execute(operation, input, source)`는 승인된 작업을 동기로 실행하고 JSON
+결과를 반환합니다. source는 호스트가 정한 출처입니다. `dispose()`는 자원을 정리하며
+`void` 또는 `Promise<void>`를 반환합니다. 실패를 호출자에게 전달하려면 공통 `BunawayError`를
+사용합니다. 예외의 상세 원인을 그대로 화면에 노출하지 않습니다.
+
+선언한 schema로 입력과 결과를 검증합니다. 입력이 schema와 다르면 `INVALID_ARGUMENT`,
+결과가 schema와 다르면 `INTERNAL`을 반환합니다. 권한 거부와 안전한 실행 오류는 호출자에게 전달합니다.
+화면으로 전달할 때는 결과와 요청 ID, 프로토콜 정보를 합친 응답에도 1 MiB 제한을 적용합니다.
+제한을 넘으면 해당 호출에 `INTERNAL`을 반환하고 연결을 유지합니다.
+
+호스트는 진행 중인 Host 호출과 전송 용량을 제한합니다. 여유가 없으면 새 호출을
+`BUSY`로 거부합니다. 작업 전송이 한도에 도달해도 이미 접수한 작업의 승인과 취소,
+종료를 처리할 용량은 별도로 유지합니다.
+
+## plugin.json에서 연결하기
+
+```json
+{
+  "format": 1,
+  "name": "system",
+  "entry": "./src/index.ts",
+  "platforms": {
+    "windows": {
+      "execution": "io",
+      "operations": "./src/windows.ts"
+    }
+  }
+}
+```
+
+entry는 default export한 선언을 읽을 경로입니다. operations는 createOperations를
+읽을 경로입니다. 모든 경로는 설치 패키지 안에 있어야 합니다.
+execution은 io 또는 ui이며, UI 스레드가 필요한 작업은 ui를 지정합니다.
+개발 중 manifest와 정책 형식은 v1입니다.
+
+## 리소스 범위가 필요한 기능
+
+파일이나 주소의 범위를 제한하는 기능은 scopes에 짧은 permission 이름과 schema를
+작성하고 `matches(permission, input, scope)`를 함께 제공합니다.
+
+```ts
+scopes: {
+  "read-text": s.object({ scope: s.enum(["appData", "temp"]), pathPrefix: s.string() }),
+}
+```
+
+matches에는 `storage:read-text`처럼 완전한 권한 이름을 전달합니다.
+operations에서 사용하지 않는 scopes 키는 선언 오류입니다.
+`PermissionMatcher`는 검증된 입력과 scope가 일치하는지 반환하는 순수 함수입니다.
+비교 함수는 scope.ts에 두고 index.ts의 matches에 연결합니다. 범위가 없는 기능에는 matches가 필요 없습니다.
+allow와 deny를 합치고 deny를 우선하는 처리는 프레임워크가 담당합니다.
+파일 링크와 최종 핸들 검사는 실제 플랫폼 구현에서 수행합니다.
+
+## 시작과 종료
+
+설치했어도 앱에 등록하지 않은 구현은 초기화하지 않습니다.
+설치한 선언과 등록한 선언이 다르면 시작을 거부합니다. 객체 키 순서는 비교에
+영향을 주지 않으며 배열 순서와 값은 비교합니다.
+일반 객체와 null prototype 객체는 같은 JSON 내용이면 같은 계약으로 취급합니다. 숫자 `-0`과 `0`도 같은 값으로 비교합니다.
+초기화 실패나 종료 때는 준비된 구현을 역순으로 정리합니다. 정리 실패가 있어도
+나머지 구현과 플랫폼 자원 회수를 시도한 뒤 오류를 보고합니다.
+
+공통 `invokePlugin(contract, input, options?)`은 화면 호출의 기반 함수입니다.
+defineNativePlugin을 사용하면 입력과 결과 검증, 공유 연결과 호출 옵션 전달을
+각 플러그인에서 다시 작성할 필요가 없습니다.

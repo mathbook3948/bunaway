@@ -57,6 +57,8 @@ export function bindPluginHost(plugin: PluginDefinition): PluginDefinition {
     version,
     dependencies,
     platforms,
+    native,
+    requiredPermissions,
     requiredHost,
     commands: pluginCommands,
     events,
@@ -77,7 +79,9 @@ export function bindPluginHost(plugin: PluginDefinition): PluginDefinition {
     version,
     ...(dependencies === undefined ? {} : { dependencies }),
     ...(platforms === undefined ? {} : { platforms }),
+    ...(requiredPermissions === undefined ? {} : { requiredPermissions }),
     ...(requiredHost === undefined ? {} : { requiredHost }),
+    ...(native === undefined ? {} : { native }),
     ...(events === undefined ? {} : { events }),
     ...(boundCommands ? { commands: Object.freeze(boundCommands) } : {}),
     ...(setup

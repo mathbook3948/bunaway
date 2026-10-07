@@ -1,17 +1,17 @@
 import { expect, test } from "bun:test";
 import {
-  command,
   type AppDefinition,
   type CommandsOf,
+  command,
   type EventsOf,
   type PluginDefinition,
 } from "../../packages/backend-sdk/src/index.ts";
 import {
+  type Client,
+  type ClientFactory,
   createClient,
   invoke,
   listen,
-  type Client,
-  type ClientFactory,
 } from "../../packages/client-sdk/src/index.ts";
 import type {
   CommandContext,
@@ -26,28 +26,28 @@ import {
   type ClientMessage,
   type HostContext,
   type HostResponse,
-  type JsonValue,
-  type Policy,
   type Infer,
+  type JsonValue,
+  NativeRegistry,
+  type Policy,
   type ProcessFrame,
-  type ServerMessage,
-  type Transport,
-  type TransportEvent,
   parseBootstrap,
   parseHostCall,
   parseMessage,
-  parseProcessFrame,
   parsePolicy,
+  parseProcessFrame,
+  type ServerMessage,
   serializeHostCall,
   serializeProcessFrame,
-  validateHostOutput,
+  type Transport,
+  type TransportEvent,
   validateValue,
 } from "../../packages/protocol/src/index.ts";
-import { bindHostAPI } from "../../packages/runtime-bun/src/index.ts";
+import { bindHostAPI, contracts, registry, validateHostOutput } from "../fixtures/host-plugins.ts";
 import {
   combinedSchema,
-  implicitObjectSchema,
   implicitMixedSchema,
+  implicitObjectSchema,
   type implicitRequiredSchema,
   validationCases,
 } from "../protocol/validation-cases.ts";
@@ -139,7 +139,10 @@ const app = {
       input,
       output,
       handle: ({ key }, context) =>
-        context.host.call("storage.readText", { scope: "appData", path: `notes/${key}.txt` }),
+        context.host.call(contracts["storage.readText"], {
+          scope: "appData",
+          path: `notes/${key}.txt`,
+        }),
     }),
   },
   events: { "notes.changed": input },
@@ -151,12 +154,16 @@ const policy: Policy = {
     {
       id: "main",
       origins: ["https://app.bunaway.local"],
-      commands: ["notes.read", "bunaway.capabilities"],
+      commands: ["notes.read", "plugin.capabilities.get"],
       events: ["notes.changed"],
-      host: { log: false, storage: [{ scope: "appData", pathPrefix: "notes", access: ["read"] }] },
+      host: {
+        permissions: [
+          { identifier: "storage:read-text", allow: [{ scope: "appData", pathPrefix: "notes" }] },
+        ],
+      },
     },
   ],
-  backend: { log: false, storage: [] },
+  backend: { permissions: [] },
 };
 // The fixture stands in for the trusted native/runtime adapter, not a Web payload.
 const contextId = "host-session-1" as HostContext;
@@ -370,7 +377,7 @@ test("Host operations share exact request/result schemas and safe errors", async
     { operation: "storage.readText", payload: { scope: "appData", path: "a", context: "backend" } },
     { operation: "capabilities.get", payload: {} },
   ])
-    expect(() => parseHostCall(JSON.stringify(call))).toThrow();
+    expect(() => registry.validateCall(parseHostCall(JSON.stringify(call)))).toThrow();
   expect(validateHostOutput("storage.writeText", null)).toBeNull();
   expect(() => validateHostOutput("storage.writeText", true)).toThrow();
   expect(
@@ -399,14 +406,16 @@ test("Host operations share exact request/result schemas and safe errors", async
   });
   const invalid = bindHostAPI(contextId, signal, async () => ({ kind: "result", payload: 42 }));
   await expect(
-    denied.call("storage.readText", { scope: "appData", path: "notes/a" }),
+    denied.call(contracts["storage.readText"], { scope: "appData", path: "notes/a" }),
   ).rejects.toMatchObject({ code: "PERMISSION_DENIED", message: "Access denied." });
-  await expect(raw.call("log.write", { level: "info", message: "safe" })).rejects.toMatchObject({
+  await expect(
+    raw.call(contracts["log.write"], { level: "info", message: "safe" }),
+  ).rejects.toMatchObject({
     code: "INTERNAL",
     message: "Host operation failed.",
   });
   await expect(
-    invalid.call("storage.readText", { scope: "appData", path: "notes/a" }),
+    invalid.call(contracts["storage.readText"], { scope: "appData", path: "notes/a" }),
   ).rejects.toMatchObject({ code: "INTERNAL", message: "Invalid host response." });
   expect(new BunawayError({ code: "BUSY", message: "Queue full." })).toBeInstanceOf(Error);
 });
@@ -420,7 +429,7 @@ test("cancelled Host calls cannot start or deliver a late successful result", as
   });
   controller.abort();
   await expect(
-    host.call("log.write", { level: "info", message: "cancelled" }),
+    host.call(contracts["log.write"], { level: "info", message: "cancelled" }),
   ).rejects.toMatchObject({ code: "CANCELLED" });
   expect(calls).toBe(0);
   const lateController = new AbortController();
@@ -428,7 +437,9 @@ test("cancelled Host calls cannot start or deliver a late successful result", as
     lateController.abort();
     return { kind: "result", payload: "late" };
   });
-  await expect(late.call("storage.readText", { scope: "temp", path: "a" })).rejects.toMatchObject({
+  await expect(
+    late.call(contracts["storage.readText"], { scope: "temp", path: "a" }),
+  ).rejects.toMatchObject({
     code: "CANCELLED",
   });
 });
@@ -449,8 +460,10 @@ test("Host paths use relative forward-slash paths while native access checks rem
     "notes\u2029/./a",
   ]) {
     expect(() =>
-      parseHostCall(
-        JSON.stringify({ operation: "storage.readText", payload: { scope: "appData", path } }),
+      registry.validateCall(
+        parseHostCall(
+          JSON.stringify({ operation: "storage.readText", payload: { scope: "appData", path } }),
+        ),
       ),
     ).toThrow();
   }
@@ -459,6 +472,15 @@ test("Host paths use relative forward-slash paths while native access checks rem
     payload: { scope: "appData", path: "notes/한글 파일.txt" },
   } as const;
   expect(parseHostCall(JSON.stringify(call))).toEqual(call);
+});
+
+test("the framework windows namespace is reserved from plugin registration", () => {
+  expect(
+    () =>
+      new NativeRegistry([
+        { name: "windows", version: "1.0.0", native: { operations: [], permissions: [] } },
+      ]),
+  ).toThrow();
 });
 
 test("host-only boot policy and session-open never enter the Web message bridge", () => {
@@ -517,7 +539,7 @@ test("pending Host calls abort promptly and release their cancellation listener"
     started = true;
     return pending;
   });
-  const task = host.call("storage.readText", { scope: "temp", path: "notes/a" });
+  const task = host.call(contracts["storage.readText"], { scope: "temp", path: "notes/a" });
   await Promise.resolve();
   expect(started).toBe(true);
   expect(listeners.size).toBe(1);
@@ -715,7 +737,9 @@ export function checkClientTypes(
     transport,
     hello: { kind: "hello", protocol: { major: 1, minor: 0 }, features: [], buildId: "client" },
   });
-  created.invoke("bunaway.capabilities", null);
+  // @ts-expect-error optional plugin commands require an explicit client command map
+  created.invoke("plugin.capabilities.get", null);
+  // @ts-expect-error capabilities belongs to the optional plugin facade
   created.capabilities();
 }
 
@@ -790,7 +814,6 @@ export function checkCoreTypes(
   stop();
   services.callHost(
     contextId,
-    // @ts-expect-error storage writes require text
     { operation: "storage.writeText", payload: { scope: "temp", path: "a" } },
     new AbortController().signal,
   );

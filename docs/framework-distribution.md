@@ -14,8 +14,8 @@ vendor/bunaway나 bunaway.lock.json을 만들지 않는다.
 bun run framework:pack --local
 ```
 
-build/framework/에 bunaway-cli, backend, client, core, protocol, runtime-bun,
-packaging 패키지의 tarball이 생성된다. --local은 서로의 의존성을 이 디렉터리의
+build/framework/에 bunaway-cli, backend, client, plugin, core, protocol, runtime-bun,
+packaging 패키지와 plugin-storage, plugin-log, plugin-capabilities의 개별 tarball이 생성된다. --local은 서로의 의존성을 이 디렉터리의
 절대 tarball 경로로 연결한다. 이는 공개 registry가 없는 동안의 로컬 설치 경로다.
 파일을 다른 디렉터리/머신에 옮겼다면 그 위치에서 로컬 묶음을 다시 생성해야 한다.
 --local 없이 만들면 패키지 간 의존성은 정확한 릴리스 버전이며 공개 publish는 하지 않는다.
@@ -48,8 +48,19 @@ create는 설치를 자동 실행하지 않으며 기존 경로를 덮어쓰지 
 
 ## 설치 구성
 
-- @bunaway/client: 화면에서 `invoke`, `listen`, `capabilities`를 사용하는 WebView 클라이언트 SDK.
+개별 네이티브 패키지는 필요할 때 설치하고 AppDefinition.plugins에 등록한다.
+CLI는 직접 설치한 플러그인의 manifest와 SDK peer 버전, 패키지 내부 경로를 검사한다.
+dependencies, devDependencies, optionalDependencies와 peerDependencies에 선언한 설치 플러그인을 모두 찾는다.
+설치하지 않은 optionalDependencies와 optional로 표시한 peerDependencies는 건너뛴다.
+필수 의존성의 누락이나 설치된 플러그인의 잘못된 설정은 오류로 처리한다.
+공식 `@bunaway/` 플러그인은 프레임워크와 같은 버전을 사용한다. 외부 플러그인은 자체 버전을 유지하며 SDK peer 버전만 정확히 맞춘다.
+화면과 백엔드는 같은 플러그인 패키지를 import한다. 생성 앱의 typecheck는
+tsconfig.json의 browser 조건과 src-bunaway/tsconfig.json의 bun 조건을 각각 검사한다.
+[ADR 0013](./decisions/0013-optional-native-plugins.md)와 [계약](./architecture/plugins.md)을 참고한다.
+
+- @bunaway/client: 화면에서 `invoke`, `listen`를 사용하는 WebView 클라이언트 SDK.
   [기본 연결과 타입 추론](./architecture/common-api.md#클라이언트와-transport)을 참고한다.
+- @bunaway/plugin: 네이티브 플러그인의 선언, 공개 호출 함수와 플랫폼 구현 타입
 - @bunaway/backend: 명령, 이벤트, 앱 정의 SDK
 - @bunaway/core: 공통 실행 계층
 - @bunaway/runtime-bun: macOS 등 별도 프로세스 백엔드 연결
@@ -127,3 +138,5 @@ bun test tests/cli
 패키지 버전 혼합, CLI 입력 누락, 원본 파일 변조, SDK alias, 소스 캐시 회귀도 확인한다.
 BUNAWAY_NATIVE_DISTRIBUTION_TEST=1은 대상 머신에서 doctor/build를 추가한다.
 Windows PowerShell에서는 실행 전 $env:BUNAWAY_NATIVE_DISTRIBUTION_TEST = '1'로 지정한다.
+
+선택 패키지는 @bunaway/plugin-storage, @bunaway/plugin-log, @bunaway/plugin-capabilities다. CLI의 의존성에는 포함하지 않는다. 기본 생성 앱은 저장 패키지만 설치하고 등록한다. 플러그인 추가 시 로컬 tarball을 bun add로 설치한 뒤 해당 객체를 plugins 배열에 추가하고 policy.json의 permissions를 허용한다. 현재 Windows 어댑터를 제공한다.

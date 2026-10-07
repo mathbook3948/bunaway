@@ -21,7 +21,7 @@ description: 지원하는 스키마 키워드와 JSON 값 검증, TypeScript 타
 | `uniqueItems` | JSON 구조적 동등성으로 배열 중복 검사 |
 | `minimum`, `maximum` | 숫자 범위 |
 | `maxLength` | 문자열 Unicode code point 개수 |
-| `pattern` | JavaScript 정규식 검사 |
+| `pattern` | Unicode 모드(`u`)의 JavaScript 정규식 검사 |
 
 지원하는 키워드는 위 표와 같습니다. `$ref`, `format`, `oneOf`, `allOf`, `minLength`는 지원하지 않습니다.
 현재 공개 Schema 타입에는 `type: "number"`가 없습니다.
@@ -42,7 +42,9 @@ const input = {
 } as const;
 ```
 
-pattern에는 플래그 없는 JavaScript 정규식을 문자열로 적습니다. 전체 문자열을 검사하려면 `^`와 `$`로 시작과 끝을 지정하세요.
+pattern에는 JavaScript 정규식의 본문을 문자열로 적습니다. 검증은 Unicode 모드(`u`)를 사용합니다.
+예를 들어 `"^\\p{L}+$"`는 한글을 포함한 Unicode 문자만 허용하고 `"^.$"`는 Unicode code point 하나에 일치합니다.
+명령과 플러그인의 입력, 출력, 권한 범위에 같은 규칙을 적용합니다. 전체 문자열을 검사하려면 `^`와 `$`로 시작과 끝을 지정하세요.
 uniqueItems는 객체의 property 순서가 달라도 같은 값으로 비교합니다. 배열은 원소 순서까지 비교합니다.
 
 ## JSON 값 제한

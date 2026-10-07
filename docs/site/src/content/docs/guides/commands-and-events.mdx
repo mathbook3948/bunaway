@@ -7,6 +7,7 @@ import { Code } from '@astrojs/starlight/components';
 import appSource from '@repo/packages/cli/templates/vanilla/src-bunaway/app.ts?raw';
 import moduleSource from '@repo/packages/cli/templates/vanilla/src-bunaway/message/module.ts?raw';
 import uiSource from '@repo/packages/cli/templates/vanilla/src/main.ts?raw';
+import clientSource from '@repo/packages/cli/templates/vanilla/src/client.ts?raw';
 
 **명령**은 입력을 받아 결과를 반환하는 작업이고, **이벤트**는 구독한 UI에 전달하는 알림입니다.
 저장 명령의 응답은 호출한 UI가 받고 저장 이벤트는 구독 중인 UI가 받습니다.
@@ -55,6 +56,10 @@ import uiSource from '@repo/packages/cli/templates/vanilla/src/main.ts?raw';
 
 ## 3. UI에서 구독하고 호출하기
 
+템플릿의 `client.ts`가 앱 정의에서 명령과 이벤트 타입을 가져옵니다.
+
+<Code code={clientSource} lang="ts" title="src/client.ts" />
+
 아래 코드는 템플릿 HTML의 `#message`, `#saved`, `#status`, `#save` 요소와 함께 사용합니다.
 일반 브라우저에는 네이티브 브리지가 없으므로 **bunaway가 연 WebView 안에서** 실행합니다.
 
@@ -62,7 +67,7 @@ import uiSource from '@repo/packages/cli/templates/vanilla/src/main.ts?raw';
 
 코드는 아래 순서로 실행합니다.
 
-1. `@bunaway/client`에서 `createClient`를 가져옵니다. `CommandsOf`와 `EventsOf`로 앱의 명령과 이벤트 타입을 추론해 클라이언트에 지정합니다.
+1. `./client.ts`에서 앱 타입을 연결한 `client`를 가져옵니다.
 2. `client.listen("message.saved", ...)`으로 저장 알림을 먼저 구독합니다.
 3. `client.invoke("message.read", null)`로 이전 저장 내용을 복원합니다. 결과의 타입은 앱 정의에서 추론합니다.
 4. 버튼 클릭 시 `client.invoke("message.save", text)`를 호출합니다.

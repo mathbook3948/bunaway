@@ -2,6 +2,7 @@ import { lstat, realpath } from "node:fs/promises";
 import { dirname, extname, relative, resolve } from "node:path";
 import type { BunPlugin } from "bun";
 import { files, hash, inside, installedPackageRoot, json } from "./files.ts";
+import { type InstalledPlugin, installedPlugins } from "./plugins.ts";
 
 interface SdkReference {
   name: string;
@@ -31,12 +32,15 @@ export async function assertAppDefinitionExport(source: string): Promise<void> {
 export async function sdkPlugin(
   project: string,
   references: readonly SdkReference[] = [],
+  plugins?: readonly InstalledPlugin[],
 ): Promise<BunPlugin> {
   const root = await installedPackageRoot(project, "@bunaway/cli");
   const release = (await json(resolve(root, "framework.json"))) as {
     packages: Record<string, string>;
+    version: string;
   };
   const entries = new Map<string, string>();
+  const nativePlugins = plugins ?? (await installedPlugins(project, release.version));
   const checked = new Map<string, Promise<boolean>>();
   for (const name of Object.values(release.packages)) {
     if (name !== "@bunaway/cli")
@@ -49,7 +53,9 @@ export async function sdkPlugin(
     const expected = entries.get(name);
     try {
       const path = await realpath(Bun.resolveSync(name, parent));
-      if (expected && relative(expected, path) === "") return path;
+      if (expected && relative(expected, path) === "") {
+        return path;
+      }
       if (expected && path === resolve(dirname(dirname(path)), "src/index.ts")) {
         // Bun can install identical local tarballs twice when direct dependencies
         // use relative paths and the CLI uses absolute paths. Compare the entire
@@ -99,9 +105,17 @@ export async function sdkPlugin(
         }
         return undefined;
       });
-      build.onResolve({ filter: /^@bunaway\// }, async ({ path, importer }) => ({
-        path: await check(path, importer || project),
-      }));
+      build.onResolve({ filter: /^@bunaway\// }, async ({ path, importer }) => {
+        // Let Bun resolve plugin exports and target conditions. Only common SDKs
+        // need routing to one installation to preserve their runtime identity.
+        if (
+          nativePlugins.some(
+            ({ packageName }) => path === packageName || path.startsWith(`${packageName}/`),
+          )
+        )
+          return undefined;
+        return { path: await check(path, importer || project) };
+      });
     },
   };
 }
@@ -110,8 +124,9 @@ export async function validateSdkGraph(
   project: string,
   references: readonly SdkReference[],
   sources: readonly string[],
+  plugins?: readonly InstalledPlugin[],
 ): Promise<string[]> {
-  const plugin = await sdkPlugin(project, references);
+  const plugin = await sdkPlugin(project, references, plugins);
   const dependencies = new Set<string>();
   for (const source of sources) {
     const frontend = (await lstat(source)).isDirectory();

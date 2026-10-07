@@ -3,15 +3,15 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { runWindowsApp } from "../../native/windows/bun/entry.ts";
-import { containAppProcess } from "../../native/windows/bun/job.ts";
 import {
   forwardToInstance,
   instanceAddress,
   listenForInstances,
 } from "../../native/windows/bun/instance.ts";
-import type { HostContext } from "../../packages/protocol/src/index.ts";
-import type { AppDefinition } from "../../packages/core/src/index.ts";
+import { containAppProcess } from "../../native/windows/bun/job.ts";
 import { closeWindowsApp } from "../../packages/cli/src/launch.ts";
+import type { AppDefinition } from "../../packages/core/src/index.ts";
+import type { HostContext } from "../../packages/protocol/src/index.ts";
 
 let uiReadyResolve: () => void = () => {};
 const uiReady = new Promise<void>((resolveReady) => {
@@ -255,14 +255,14 @@ if (!process.argv.includes("--child")) {
         ),
         policy: {
           version: 1,
-          backend: { log: false, storage: [] },
+          backend: { permissions: [] },
           views: [
             {
               id: "main",
               origins: ["https://app.bunaway.local"],
               commands: ["test.ready", "test.restored"],
               events: ["test.reopen"],
-              host: { log: false, storage: [], windows: ["main"] },
+              host: { permissions: [], windows: ["main"] },
             },
           ],
         },

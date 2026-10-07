@@ -1,10 +1,10 @@
-import assert from "node:assert/strict";
 import { dlopen, ptr } from "bun:ffi";
+import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { runWindowsApp } from "../../native/windows/bun/entry.ts";
-import { Windows, user } from "../../native/windows/bun/win32.ts";
-import { defineApp, windows, type CommandContext } from "../../packages/backend-sdk/src/index.ts";
+import { user, Windows } from "../../native/windows/bun/win32.ts";
+import { type CommandContext, defineApp, windows } from "../../packages/backend-sdk/src/index.ts";
 import type { HostContext, Policy } from "../../packages/protocol/src/index.ts";
 
 assert.equal(process.platform, "win32");
@@ -14,21 +14,21 @@ const assets = resolve(output, "assets");
 const reportPath = resolve(output, "report.json");
 const policy: Policy = {
   version: 1,
-  backend: { log: true, storage: [], windows: ["main", "editor"] },
+  backend: { permissions: [], windows: ["main", "editor"] },
   views: [
     {
       id: "main",
       origins: ["https://app.bunaway.local"],
       commands: ["test.run"],
       events: [],
-      host: { log: false, storage: [], windows: ["main", "editor"] },
+      host: { permissions: [], windows: ["main", "editor"] },
     },
     {
       id: "editor",
       origins: ["https://app.bunaway.local"],
       commands: ["test.aux", "test.hold"],
       events: [],
-      host: { log: false, storage: [] },
+      host: { permissions: [], windows: [] },
     },
   ],
 };

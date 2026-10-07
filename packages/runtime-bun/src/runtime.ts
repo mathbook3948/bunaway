@@ -110,6 +110,16 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
           platform: currentPlatform(),
           backendContext: frame.payload.backendContext as HostContext,
           onCommandError: (command, cause) => console.error(`Command ${command} failed:`, cause),
+          onPluginError(plugin, phase, cause) {
+            if (
+              stopping &&
+              phase === "setup" &&
+              cause instanceof BunawayError &&
+              cause.code === "CANCELLED"
+            )
+              return;
+            console.error(`Plugin ${plugin} ${phase} failed:`, cause);
+          },
           runtime: {
             createCancellation: () => new AbortController(),
             now: () => Date.now(),

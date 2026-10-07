@@ -24,6 +24,12 @@ directory를 생략하면 현재 폴더를 검사합니다. 성공하면 `Config
 검사 대상은 프로젝트 파일과 의존성입니다. 명령의 실행 결과와 Host API 권한, OS 권한, GUI 동작은 앱을 실행해 확인하세요.
 정책에 필요한 권한은 앱 개발자가 직접 선언합니다.
 
+설치된 네이티브 플러그인은 package.json의 dependencies, devDependencies,
+optionalDependencies와 peerDependencies에서 찾습니다. 설치하지 않은 optionalDependencies와
+peerDependenciesMeta에서 optional로 표시한 peerDependencies는 건너뜁니다.
+필수 패키지가 없거나 설치된 플러그인의 버전, 선언이나 경로가 잘못되면 검증에 실패합니다.
+선택 패키지가 설치되지 않았다면 앱에도 등록하지 않고 정책에 해당 권한을 추가하지 않습니다.
+
 ## 웹 자산을 따로 검사하기
 
 validate는 웹 빌드를 실행하지 않고 프로덕션 `build.frontend`의 실제 자산을 요구합니다. 앱까지 만들려면 `bun run build`를 실행하세요.

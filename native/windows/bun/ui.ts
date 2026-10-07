@@ -1,21 +1,29 @@
 import assert from "node:assert/strict";
 import { parentPort, workerData } from "node:worker_threads";
 import {
+  API_LIMITS,
   BunawayError,
   type HostContext,
-  type HostCall,
   type HostResponse,
+  hostOperations,
   validateHostOutput,
+  validateWindowCall,
+  type WindowCall,
 } from "../../../packages/protocol/src/index.ts";
-import { allowedHost, ViewBoundary } from "./boundary.ts";
+import { ViewBoundary } from "./boundary.ts";
 import { Channel, type Packet, type UIConfig, type WindowSpec } from "./channel.ts";
-import { WindowOperations } from "./window-operations.ts";
 import { callbackCalls, checkCallbacks, disposeCom } from "./com.ts";
-import { originOf, WebView } from "./webview.ts";
+import { hostResponse } from "./host-response.ts";
+import { disposeAll, operations, permissionMatcher, pluginRegistry } from "./plugins.ts";
 import { Tray } from "./tray.ts";
+import { originOf, WebView } from "./webview.ts";
 import { disposeWin32Bindings, hr, kernel, ole, user, Windows } from "./win32.ts";
+import { WindowOperations } from "./window-operations.ts";
 
 const config = workerData as UIConfig;
+const registry = pluginRegistry(config.plugins ?? []);
+registry.validatePolicy(config.policy);
+const matches = await permissionMatcher(config.plugins ?? []);
 assert(parentPort);
 let failure: unknown;
 let stopping = false;
@@ -24,6 +32,7 @@ let startRequested = false;
 let closingSent = false;
 let initialized = false;
 let windows: Windows | undefined;
+let adapters: Awaited<ReturnType<typeof operations>> | undefined;
 let tray: Tray | undefined;
 let quitPending = false;
 function requestQuit(reason: "last-window" | "tray") {
@@ -58,6 +67,13 @@ const views = new Map<
 const cancelled = new Set<string>();
 const windowRequests = new Map<string, HostContext>();
 const approved = new Map<string, HostContext>();
+const uiCalls = new Map<string, Extract<Packet, { kind: "operation" }>>();
+function discardContext(context: HostContext) {
+  for (const [id, approvedContext] of approved)
+    if (approvedContext === context) approved.delete(id);
+  for (const [id, call] of uiCalls) if (call.context === context) uiCalls.delete(id);
+  for (const [id, source] of windowRequests) if (source === context) cancelled.add(id);
+}
 const fail = (error: unknown) => {
   failure ??= error;
   stopping = true;
@@ -79,62 +95,107 @@ const channel = new Channel(
     } else if (packet.kind === "shutdown") {
       stopping = true;
       approved.clear();
+      uiCalls.clear();
       for (const view of views.values()) {
         view.boundary.revoke("shutdown");
         view.boundary.closed = true;
         view.native.requestClose();
       }
-    } else if (packet.kind === "operation") {
+    } else if (packet.kind === "server")
+      views.get(packet.route.viewId)?.boundary.send(packet.route, packet.message);
+    else if (packet.kind === "operation") {
+      assert(
+        !stopping && !uiCalls.has(packet.requestId) && uiCalls.size < API_LIMITS.maxPending,
+        "Invalid UI queue request",
+      );
+      uiCalls.set(packet.requestId, packet);
+      channel.notify({
+        kind: "prepare",
+        context: packet.context,
+        requestId: packet.requestId,
+        call: packet.call,
+      });
+    } else if (packet.kind === "authorize" || packet.kind === "grant") {
+      const queued = packet.kind === "grant" ? uiCalls.get(packet.requestId) : undefined;
+      if (packet.kind === "grant") {
+        if (!queued) return;
+        assert(queued.context === packet.context);
+        uiCalls.delete(packet.requestId);
+      }
+      const operation = packet.kind === "authorize" ? packet : queued;
+      assert(operation);
       const view = [...views.values()].find((view) => view.boundary.active(packet.context));
       const permissions =
         packet.context === config.backendContext
           ? config.policy.backend
           : view?.boundary.policy.host;
-      let response: HostResponse;
-      windowRequests.set(packet.requestId, packet.context);
+      let allowed = false;
       try {
-        if (stopping || closingSent || !permissions || !allowedHost(permissions, packet.call))
-          throw new BunawayError({
-            code: "PERMISSION_DENIED",
-            message: "Host context or window policy denied.",
-          });
-        const payload = await operations.execute(
-          packet.call,
-          permissions.windows ?? [],
-          packet.requestId,
-        );
-        validateHostOutput(packet.call.operation, payload);
-        response = { kind: "result", payload };
-      } catch (error) {
-        response = {
-          kind: "error",
-          error:
-            error instanceof BunawayError
-              ? { code: error.code, message: error.message }
-              : { code: "INTERNAL", message: "Window operation failed." },
-        };
-      } finally {
-        windowRequests.delete(packet.requestId);
+        const builtin = Object.hasOwn(hostOperations, operation.call.operation);
+        const call = builtin
+          ? validateWindowCall(operation.call)
+          : registry.validateCall(operation.call);
+        allowed =
+          !stopping &&
+          !closingSent &&
+          (packet.kind !== "grant" || packet.allowed) &&
+          !!permissions &&
+          (builtin
+            ? call.operation === "windows.list"
+              ? !!permissions.windows?.length
+              : permissions.windows?.includes((call.payload as { view: string }).view) === true
+            : registry.allowed(permissions, call, matches));
+      } catch {
+        /* Invalid requests fail closed at the host boundary. */
       }
-      const wasCancelled = cancelled.delete(packet.requestId);
-      if (!stopping && !wasCancelled && activeContext(packet.context))
+      if (!allowed) log("host-request-denied", { operation: operation.call.operation });
+      if (packet.kind === "grant") {
+        assert(queued);
+        if (allowed && Object.hasOwn(hostOperations, queued.call.operation)) {
+          let response: HostResponse;
+          windowRequests.set(packet.requestId, packet.context);
+          try {
+            const call = validateWindowCall(queued.call);
+            const payload = await windowOperations.execute(
+              call,
+              permissions?.windows ?? [],
+              packet.requestId,
+            );
+            response = hostResponse(() => validateHostOutput(call.operation, payload));
+          } catch (error) {
+            response = hostResponse(() => {
+              throw error;
+            });
+          } finally {
+            windowRequests.delete(packet.requestId);
+          }
+          const wasCancelled = cancelled.delete(packet.requestId);
+          if (!stopping && !wasCancelled && activeContext(packet.context))
+            channel.notify({
+              kind: "host-response",
+              context: packet.context,
+              requestId: packet.requestId,
+              response,
+            });
+          return;
+        }
+        const response = hostResponse(() => {
+          if (!allowed)
+            throw new BunawayError({
+              code: "PERMISSION_DENIED",
+              message: "Host context or policy denied.",
+            });
+          assert(adapters, "UI adapters are not initialized");
+          return adapters.execute(queued.call.operation, queued.call.payload, queued.source);
+        });
         channel.notify({
           kind: "host-response",
           context: packet.context,
           requestId: packet.requestId,
           response,
         });
-    } else if (packet.kind === "server")
-      views.get(packet.route.viewId)?.boundary.send(packet.route, packet.message);
-    else if (packet.kind === "authorize") {
-      const view = [...views.values()].find((view) => view.boundary.active(packet.context));
-      const permissions =
-        packet.context === config.backendContext
-          ? config.policy.backend
-          : view?.boundary.policy.host;
-      const allowed =
-        !stopping && !closingSent && !!permissions && allowedHost(permissions, packet.call);
-      if (!allowed) log("host-request-denied", { operation: packet.call.operation });
+        return;
+      }
       if (allowed) {
         assert(!approved.has(packet.requestId));
         approved.set(packet.requestId, packet.context);
@@ -147,8 +208,10 @@ const channel = new Channel(
       });
     } else if (packet.kind === "cancel") {
       approved.delete(packet.requestId);
+      uiCalls.delete(packet.requestId);
       if (windowRequests.has(packet.requestId)) cancelled.add(packet.requestId);
-    } else if (packet.kind === "host-result") {
+    } else if (packet.kind === "cancel-context") discardContext(packet.context);
+    else if (packet.kind === "host-result") {
       const active =
         packet.context === config.backendContext ||
         [...views.values()].some((view) => view.boundary.active(packet.context));
@@ -221,7 +284,7 @@ async function closeWindow(
   log("view-window-closed", { view: viewId });
   return true;
 }
-const operations = new WindowOperations(config.windows, {
+const windowOperations = new WindowOperations(config.windows, {
   read: (viewId) => {
     const view = views.get(viewId);
     return view
@@ -242,7 +305,7 @@ const operations = new WindowOperations(config.windows, {
   now: () => Date.now(),
   tick: () => Bun.sleep(5),
 });
-function applyWindow(call: HostCall, viewId: string) {
+function applyWindow(call: WindowCall, viewId: string) {
   assert(windows);
   const view = views.get(viewId);
   assert(view);
@@ -305,12 +368,7 @@ function createWindow(spec: WindowSpec) {
         [...views.values()].reduce((total, view) => total + view.boundary.pendingCount, 0),
       ),
     forward: (packet) => {
-      if (packet.kind === "revoke") {
-        for (const [id, context] of approved)
-          if (context === packet.route.context) approved.delete(id);
-        for (const [id, context] of windowRequests)
-          if (context === packet.route.context) cancelled.add(id);
-      }
+      if (packet.kind === "revoke") discardContext(packet.route.context);
       channel.notify(packet);
     },
     deliver: (text) => native.send(text),
@@ -344,6 +402,7 @@ function createWindow(spec: WindowSpec) {
         revoke: (reason) => {
           boundary.revoke(reason);
           for (const [id, context] of approved) if (!activeContext(context)) approved.delete(id);
+          for (const [id, call] of uiCalls) if (!activeContext(call.context)) uiCalls.delete(id);
         },
         sameDocument: (source) => boundary.sameDocument(source),
         close,
@@ -378,6 +437,7 @@ function createWindow(spec: WindowSpec) {
 try {
   hr(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
   initialized = true;
+  adapters = await operations(config.plugins ?? [], config.dataRoot, "ui");
   windows = new Windows(() => {
     if (closingSent) return;
     closingSent = true;
@@ -410,7 +470,7 @@ try {
     }
     if (
       !closingSent &&
-      !operations.replacing.size &&
+      !windowOperations.replacing.size &&
       [...views.values()].every((view) => view.boundary.closed)
     ) {
       closingSent = true;
@@ -425,6 +485,8 @@ try {
   channel.notify({ kind: "fatal", error: { code: "INTERNAL", message: "Windows UI failed." } });
 } finally {
   stopping = true;
+  uiCalls.clear();
+  approved.clear();
   for (const view of views.values()) {
     view.boundary.revoke("shutdown");
     view.boundary.closed = true;
@@ -454,9 +516,14 @@ try {
     assert.deepEqual(callbackCalls(), calls, "Invoke after native detach");
     log("callbacks-quiescent");
     log("callback-references", disposeCom());
-    windows?.dispose();
-    if (initialized) ole.symbols.CoUninitialize();
-    disposeWin32Bindings();
+    await disposeAll([
+      () => adapters?.dispose(),
+      () => {
+        windows?.dispose();
+        if (initialized) ole.symbols.CoUninitialize();
+        disposeWin32Bindings();
+      },
+    ]);
     await channel.drain();
     if (!failure) await channel.send({ kind: "cleaned" });
   } catch (error) {

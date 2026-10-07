@@ -14,6 +14,13 @@ Bun 자식 프로세스 구조는 기존 구현 상태다. 앱 개발자는 공�
 
 Tauri에서 참고할 부분은 웹 UI, 백엔드 코어, 네이티브 호스트를 나누는 구조다. 명령 처리, 상태, 이벤트, 플러그인 관리 등 백엔드 기반을 Bun과 TypeScript 중심으로 설계한다. 네이티브 코드는 창, WebView, 운영체제 기능과 Bun 내장에 필요한 경계에 둔다.
 
+저장, 앱 로그, 기능 지원 조회 등의 네이티브 기능은 앱이 개별 플러그인 패키지를
+설치하고 등록하는 모델로 전환한다. 설치와 등록은 권한을 부여하지 않으며 필요한
+권한과 리소스 범위는 정책에 별도로 선언한다. 공통 SDK와 호스트는 호출, 권한 검사와
+수명주기를 제공한다. [ADR 0013](./decisions/0013-optional-native-plugins.md)에 설계를
+확정했으며 Windows의 저장, 로그와 기능 지원 조회는 개별 플러그인으로 이관했다.
+macOS 플러그인 어댑터는 후속 작업이다.
+
 이 문서는 책임, 인터페이스, 보안 규칙과 단계별 완료 조건을 정한다. A 단계의 계약 구현과 Windows B 단계의 번들 Bun 프로세스, IPC 실험을 완료했다. C 단계에서는 실제 SDK, 코어, Host API와 Windows WebView2 호스트를 연결했다. 세 창의 다중 창/뷰와 뷰별 정책 분리에서 메모 저장, 이벤트, 재실행 후 복원과 오류, 취소, 권한, 렌더러 재생성, 창별 종료를 검증한 기록이 있다([Windows C 실행 결과](./architecture/windows-host-results.md)). macOS arm64의 POSIX probe와 AppKit, WKWebView 단일 창/뷰 호스트도 구현돼 있다. [macOS 실행 기록](./architecture/macos-native-results.md)은 기존 로컬 기록, 이번 재실행과 실제 CI 결과를 구분한다. [Windows B 실행 결과](./architecture/windows-probe-results.md)는 별도 실험 기록이다. macOS Intel, 다중 창/뷰, Linux, 모바일 호스트와 설치, 배포는 미검증이다. macOS `.app` 생성, ad-hoc 서명은 Developer ID, 공증, 설치 검증이 아니다. 아래 요구사항 전체를 완료한 것은 아니며, 현재 범위는 [진행 상태](./architecture/progress.md)와 [플랫폼 지원 표](./platform-support/README.md)를 따른다.
 
 ### 제품 요구사항
@@ -63,7 +70,8 @@ Bun 자식 프로세스 ── TypeScript 코어 ── 앱 명령, 상태, 플�
 | 모듈 | 책임과 공개 계약 | 허용하는 의존성 |
 | --- | --- | --- |
 | `protocol` | 메시지 스키마, 오류 코드, 버전 협상, 직렬화 규칙 | 플랫폼, Bun, UI 의존성 없음 |
-| `client-sdk` | `invoke`, `listen`과 구독 해제 함수, 기능 조회, 요청 취소, 기본 WebView 연결, 초기화, 정리 | `protocol`, WebView 또는 주입받은 Transport |
+| `client-sdk` | `invoke`, `listen`과 구독 해제 함수, 요청 취소, 기본 WebView 연결, 초기화, 정리 | `protocol`, WebView 또는 주입받은 Transport |
+| `plugin-capabilities` | 등록된 네이티브 작업의 플랫폼 지원과 OS 권한 메타데이터 조회 | `plugin-sdk` |
 | `core` | 명령 레지스트리, 입력 검증, 상태 저장소, 이벤트 라우팅, 플러그인 수명 | `protocol`, 추상 Host API, Runtime Services |
 | `runtime-bun` | 자식 프로세스 안의 코어 부팅, Bun 서비스 어댑터, 프로세스 IPC 연결 | `core`, `protocol`, Bun API |
 | `bun-bundle` | 배포할 Bun 실행 파일, 버전, 소스 revision, 해시, 라이선스 고정 | 공식 플랫폼별 Bun 배포물, 필요한 경우 기록된 빌드, 패치 |
@@ -134,20 +142,23 @@ OS 권한 선언과 런타임 사용자 동의는 프레임워크 권한과 별�
 
 ## 6 공개 SDK와 플러그인
 
-공개 SDK는 프런트엔드용 `client`와 신뢰 백엔드용 `backend` 진입점을 분리한다. 명령 정의에서 클라이언트 타입을 생성하되 백엔드 코드나 비밀 설정이 프런트엔드 번들에 들어가지 않게 한다. 필수 API는 명령 등록, 호출, 앱 상태, 이벤트 구독, 해제, 수명주기와 기능 조회다.
+공개 SDK는 프런트엔드용 `client`와 신뢰 백엔드용 `backend` 진입점을 분리한다. 명령 정의에서 클라이언트 타입을 생성하되 백엔드 코드나 비밀 설정이 프런트엔드 번들에 들어가지 않게 한다. 공통 필수 API는 명령 등록, 호출, 앱 상태, 이벤트 구독, 해제와 수명주기다. 기능 조회는 `@bunaway/plugin-capabilities`에서 선택적으로 제공한다.
 
 공통 타입과 명령 입력, 출력 검증은 [C 공통 API](./architecture/common-api.md)로 고정했다.
 `createClient`, `createCore`를 Windows FFI 호스트와 macOS의 `runBunApp` 어댑터에 연결했다.
 화면은 `invoke`, `listen`을 직접 사용하거나, 앱 정의에서 타입을 추론하는 인자 없는
 `createClient()`를 사용한다. 기본 연결의 브리지, 프로토콜 초기화, 준비 대기와 페이지
 종료 시 정리는 SDK가 담당한다. 일반 브라우저의 백엔드 호출은 `UNSUPPORTED`로 실패한다.
-명령 타입 생성 CLI와 기본 로그, 저장 플러그인은 미구현이다. 다음은 앱 정의의 타입을
+앱 정의에서 명령 타입을 추론하는 전용 CLI는 아직 없으며, `CommandsOf`와 `EventsOf`는
+직접 사용할 수 있다. 저장, 로그, 기능 조회는 개별 선택 패키지다. 다음은 앱 정의의 타입을
 추론하는 계약 사용 예시이며 `notes.read` 앱 전체의 실행 검증을 뜻하지 않는다. 실제 실행 샘플은
 [메모 앱](../examples/memo/README.md)이다.
 
 ```ts
 // src-bunaway/app.ts
 import { command, type AppDefinition } from "@bunaway/backend";
+import { storage, storagePlugin } from "@bunaway/plugin-storage";
+
 
 export const app = {
   commands: {
@@ -159,12 +170,12 @@ export const app = {
         additionalProperties: false,
       },
       output: { type: "string" },
-      async handle({ key }, ctx) {
-        // 원래 요청의 컨텍스트로 Host API의 appData 범위를 검사한다.
-        return ctx.host.call("storage.readText", { scope: "appData", path: `notes/${key}.txt` });
+      async handle({ key }) {
+        return storage.readText({ scope: "appData", path: `notes/${key}.txt` });
       },
     }),
   },
+  plugins: [storagePlugin],
   events: {},
 } satisfies AppDefinition;
 export default app;
@@ -181,9 +192,9 @@ async function start(): Promise<void> {
 void start().catch(console.error);
 ```
 
-위 예제를 허용하는 정책에는 해당 뷰의 `notes.read` 명령과 `appData/notes` 읽기 범위를 함께 선언한다. 입력 패턴은 편의 검증이며 네이티브 파일 범위 검사를 대체하지 않는다.
+위 예제를 허용하는 정책에는 해당 뷰의 `notes.read` 명령과 `host.permissions`의 `storage:read-text` 권한을 `appData/notes` 범위로 함께 선언한다. 입력 패턴은 편의 검증이며 네이티브 파일 범위 검사를 대체하지 않는다.
 
-플러그인은 이름, 버전, 의존성, 지원 플랫폼, 필요 권한, 명령 스키마, 초기화, 종료 훅을 선언한다. 순수 TypeScript 플러그인과 네이티브 구현이 필요한 플러그인을 구분한다. 네이티브 플러그인은 호스트 계약을 따르며 ABI 호환성을 빌드 시 검사한다. 첫 기본 플러그인은 로그와 범위 제한 저장소로 좁힌다. 권한, 네이티브 바이너리와 코드 변경을 포함한 플러그인은 앱을 다시 빌드해 배포한다.
+플러그인은 이름, 버전, 의존성, 지원 플랫폼, 필요 권한, 명령 스키마, 초기화, 종료 훅을 선언한다. 순수 TypeScript 플러그인과 네이티브 구현이 필요한 플러그인을 구분한다. 네이티브 플러그인은 호스트 계약을 따르며 ABI 호환성을 빌드 시 검사한다. 저장, 로그, 기능 조회는 각각 선택 패키지로 제공하며 Windows 어댑터가 구현돼 있다. 권한, 네이티브 바이너리와 코드 변경을 포함한 플러그인은 앱을 다시 빌드해 배포한다.
 
 ## 7 플랫폼과 Bun 기능 지원 계획
 
@@ -207,7 +218,7 @@ void start().catch(console.error);
 | `bun:ffi`, TCC, native addon, `spawn` | 공통 SDK의 필수 기능에서 제외 | 초기 지원 보장 없음. iOS는 우선 비지원 |
 | 창 다중 생성, 메뉴, 트레이 | 데스크톱 확장 API | 자동 모사하지 않고 `UNSUPPORTED` 반환 |
 
-SDK의 기능 조회 결과는 `supported`, `experimental`, `unsupported`와 이유를 반환한다. 플랫폼 기능 지원 여부와 사용자의 OS 권한 허용 여부는 별도 필드다. 필수 미지원 기능은 빌드를 실패시키고 선택 기능은 런타임에서 분기할 수 있게 한다.
+`@bunaway/plugin-capabilities`는 앱에 등록된 네이티브 작업의 지원 여부와 OS 권한 메타데이터를 반환한다. `osPermission: "not-required"`는 해당 작업에 OS 권한이 필요하지 않음을 선언하며, 선언이 없으면 `unknown`이다. 이 메타데이터는 앱 정책의 Host 권한 허용과 별개다. 조회 결과에 없는 플랫폼 기능은 지원 여부가 확인되지 않은 상태로 다룬다.
 
 ## 8 개발 도구와 패키징
 
@@ -277,6 +288,6 @@ Skal의 고정 commit `7edb44aceb8c69ac1abd76549e2c09cf6cdc8a57`에서는 VM 작
 
 CLI create/validate/doctor/dev/build와 vanilla, Vite, React, Vue, Svelte 템플릿, 로컬 프레임워크 설치 artifact, 버전 검증은 구현했다.
 [프레임워크 배포 문서](./framework-distribution.md)에 저장소 밖 설치, 업그레이드와 개발/최종 사용자 요구사항을 구분한다.
-현재 다음 작업은 플랫폼별 검증 범위 확대, macOS 다중 창/뷰, UI framework 템플릿의 네이티브 검증, 기본 플러그인,
+현재 다음 작업은 플랫폼별 검증 범위 확대, macOS 네이티브 플러그인 어댑터와 다중 창/뷰, UI framework 템플릿의 네이티브 검증,
 공개 릴리스/프레임워크 라이선스 결정, Linux, 모바일 확장과 설치, 서명, 배포 검증이다.
 A, B 및 Windows C, macOS 단일 창/뷰 성공으로 초기 버전 출시 기준 전체를 충족했다고 판단하지 않는다.

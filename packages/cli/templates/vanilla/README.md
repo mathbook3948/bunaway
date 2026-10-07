@@ -16,8 +16,10 @@ Edit `src/` for the UI and `src-bunaway/` for the backend.
 `src-bunaway/app.ts` composes the app with `defineApp`;
 `src-bunaway/message/module.ts` registers commands and events with `defineModule`.
 The framework boots the app from `build.app` in `src-bunaway/bunaway.json`.
+`src/client.ts` derives command names, inputs, results and event payloads from the app definition.
+Import its `client` in UI components. For example, `await client.invoke("message.read", null)` returns a string.
 
-The generated UI uses command and event types inferred from the app definition:
+You can also create a client with command and event types inferred from the app definition:
 
 ```ts
 import type { CommandsOf, EventsOf } from "@bunaway/backend";
@@ -38,15 +40,15 @@ The type-only imports keep backend implementation out of the browser bundle.
 The client uses the shared WebView connection without transport setup. Call the
 disposer returned by `client.listen` when the UI component is removed. Backend calls work in the desktop
 app; calls from a regular browser fail with `UNSUPPORTED`.
-The UI creates the client during startup so connection failures appear in the
+The generated UI starts its subscription during startup so connection failures appear in the
 status message and keep the Save button disabled.
 
 Backend commands and their services can import `storage`, `log`, and `capabilities`
-from `@bunaway/backend` directly. The SDK uses the current command's Host permissions
+from `@bunaway/plugin-storage`, `@bunaway/plugin-log`, and `@bunaway/plugin-capabilities`, respectively. The SDK uses the current command's Host permissions
 and cancellation signal, without passing `context.host` through service arguments.
 Await Host operations before the command returns. Calls outside an execution context
 or after command completion are rejected. The starter allows storage under `appData/messages`;
-logging requires enabling `host.log` for the calling view in `policy.json`.
+app logging requires installing `@bunaway/plugin-log`, registering `logPlugin` and allowing `log:write` in the calling view permissions.
 
 ## Build
 
@@ -55,3 +57,7 @@ bun run build
 ```
 
 The desktop app is written to `dist/`.
+
+The message example installs and registers `@bunaway/plugin-storage`. Host permissions use the v1 `permissions` array in `src-bunaway/policy.json`.
+
+Plugin functions use the same package import in frontend and backend code, such as `@bunaway/plugin-storage`. `bun run typecheck` checks frontend `browser` conditions and backend `bun` conditions using `src-bunaway/tsconfig.json`.

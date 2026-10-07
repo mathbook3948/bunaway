@@ -5,12 +5,28 @@ description: 앱 정의에서 클라이언트 타입을 추론하고 스키마�
 
 TypeScript 타입은 개발 중 호출 실수를 잡습니다. 실행할 때는 스키마로 WebView가 보낸 데이터를 검사합니다.
 
+생성 앱의 `bun run typecheck`는 화면과 백엔드를 각각 검사합니다.
+화면의 tsconfig.json은 `customConditions: ["browser"]`,
+src-bunaway/tsconfig.json은 `customConditions: ["bun"]`을 사용합니다.
+같은 플러그인 import도 실행 환경에 맞는 인자와 반환 타입으로 검사합니다.
+
 ## 앱 정의에서 타입 추론
 
-명령 이름과 입력, 결과, 이벤트 데이터의 타입을 검사하려면 앱 정의에서 추론한 타입을 지정하는 것을 권장합니다.
-이 타입을 `createClient`에 지정하면 `bun run typecheck`가 호출과 구독의 타입을 검사합니다.
+생성 앱에는 앱 타입을 연결한 `src/client.ts`가 있습니다. 화면에서는 이 클라이언트를 사용할 수 있습니다.
+앱 정의의 타입을 지정해 명령 이름과 입력, 결과, 이벤트 데이터를 검사하는 것을 권장합니다.
 
-템플릿의 `app.ts`가 `app`을 named/default export하므로 아래처럼 데이터 타입을 만들 수 있습니다.
+```ts
+import { client } from "./client.ts";
+
+const text = await client.invoke("message.read", null); // string
+await client.invoke("message.save", text);
+```
+
+명령 이름과 입력, 결과, 이벤트 payload는 `app.ts`에서 추론하므로 반환형을 직접 지정하지 않습니다.
+클라이언트 파일을 import하는 것만으로 WebView에 연결하지 않습니다. 호출과 구독은 앱 창에서 실행합니다.
+컴포넌트를 제거할 때는 `client.listen()`이 반환한 해제 함수를 호출합니다.
+
+직접 클라이언트를 구성할 때도 `app.ts`의 타입을 사용할 수 있습니다.
 
 ```ts
 import { createClient } from "@bunaway/client";

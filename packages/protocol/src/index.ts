@@ -6,24 +6,14 @@ import {
   policySchema,
   processSchema,
 } from "./schema.ts";
-import { type Infer, parse, ProtocolError, serialize, validate } from "./validation.ts";
+import { type Infer, ProtocolError, parse, serialize, validate } from "./validation.ts";
 
 export {
-  bootstrapSchema,
-  errorSchema,
-  hostResponseSchema,
-  messageSchema,
-  policySchema,
-  processSchema,
-} from "./schema.ts";
-export { type JsonValue, MAX_JSON_DEPTH, MAX_MESSAGE_BYTES, ProtocolError } from "./validation.ts";
-export { type Infer, type Schema, validate as validateValue } from "./validation.ts";
-export { API_LIMITS } from "./contracts.ts";
-export {
-  BunawayError,
+  API_LIMITS,
   type AsyncDispose,
-  type CancellationSignal,
+  BunawayError,
   type CancellationController,
+  type CancellationSignal,
   type ClientMessage,
   type CommandContract,
   type CommandMap,
@@ -37,20 +27,47 @@ export {
   type TransportEvent,
 } from "./contracts.ts";
 export {
-  CAPABILITIES_COMMAND,
-  type Capabilities,
-  type FrameworkCommands,
   type HostAPI,
   type HostCall,
   type HostInput,
   type HostOperation,
+  type HostOperationContract,
   type HostOutput,
   hostCallSchema,
   hostOperations,
+  isWindowOperation,
+  type NativePluginContract,
+  type PermissionContract,
   parseHostCall,
+  parseWindowCall,
   serializeHostCall,
   validateHostOutput,
+  validateWindowCall,
+  type WindowCall,
 } from "./host-api.ts";
+export {
+  type NativeRegistration,
+  NativeRegistry,
+  type NativeRegistryOptions,
+  type PermissionMatcher,
+} from "./native-registry.ts";
+export {
+  bootstrapSchema,
+  errorSchema,
+  hostResponseSchema,
+  messageSchema,
+  policySchema,
+  processSchema,
+} from "./schema.ts";
+export {
+  type Infer,
+  type JsonValue,
+  MAX_JSON_DEPTH,
+  MAX_MESSAGE_BYTES,
+  ProtocolError,
+  type Schema,
+  validate as validateValue,
+} from "./validation.ts";
 
 export type Message = Infer<typeof messageSchema>;
 export type Hello = Extract<Message, { kind: "hello" }>;

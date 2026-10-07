@@ -12,12 +12,12 @@
     "allowJs": true,
     "checkJs": true,
     "isolatedModules": true,
-    "verbatimModuleSyntax": true
+    "verbatimModuleSyntax": true,
+    "customConditions": ["browser"]
   },
   "include": [
     "src/**/*.ts",
     "src/**/*.tsx",
-    "src-bunaway/**/*.ts",
     "vite.config.ts",
     "src/**/*.svelte",
     "svelte.config.js"

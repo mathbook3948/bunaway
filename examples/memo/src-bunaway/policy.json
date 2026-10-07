@@ -7,19 +7,30 @@
       "commands": ["memo.save", "memo.read"],
       "events": ["memo.saved"],
       "host": {
-        "log": false,
-        "storage": [
+        "permissions": [
           {
-            "scope": "appData",
-            "pathPrefix": "notes",
-            "access": ["read", "write"]
+            "identifier": "storage:read-text",
+            "allow": [
+              {
+                "scope": "appData",
+                "pathPrefix": "notes"
+              }
+            ]
+          },
+          {
+            "identifier": "storage:write-text",
+            "allow": [
+              {
+                "scope": "appData",
+                "pathPrefix": "notes"
+              }
+            ]
           }
         ]
       }
     }
   ],
   "backend": {
-    "log": false,
-    "storage": []
+    "permissions": []
   }
 }

@@ -1,7 +1,7 @@
 import {
   BunawayError,
-  type HostCall,
   type JsonValue,
+  type WindowCall,
 } from "../../../packages/protocol/src/index.ts";
 import type { WindowSpec } from "../../../packages/runtime-bun/src/window-config.ts";
 
@@ -22,7 +22,7 @@ export class WindowOperations {
       read(view: string): WindowState | undefined;
       create(spec: WindowSpec): void;
       close(view: string): boolean | Promise<boolean>;
-      apply(call: HostCall, view: string): JsonValue | Promise<JsonValue>;
+      apply(call: WindowCall, view: string): JsonValue | Promise<JsonValue>;
       stopping(): boolean;
       cancelled(requestId: string): boolean;
       now(): number;
@@ -30,7 +30,11 @@ export class WindowOperations {
     },
   ) {}
 
-  async execute(call: HostCall, grants: readonly string[], requestId: string): Promise<JsonValue> {
+  async execute(
+    call: WindowCall,
+    grants: readonly string[],
+    requestId: string,
+  ): Promise<JsonValue> {
     if (call.operation === "windows.list")
       return this.specs
         .filter((spec) => grants.includes(spec.view))

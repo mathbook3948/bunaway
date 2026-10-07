@@ -1,15 +1,17 @@
 import { describe, expect, test } from "bun:test";
+import type { Hello, Message, Policy } from "../../packages/protocol/src/index.ts";
 import {
   MAX_JSON_DEPTH,
   MAX_MESSAGE_BYTES,
   negotiateProtocol,
-  parseMessage,
-  parseHostCall,
-  parsePolicy,
   ProtocolError,
+  parseHostCall,
+  parseMessage,
+  parsePolicy,
+  parseWindowCall,
   serializeMessage,
 } from "../../packages/protocol/src/index.ts";
-import type { Hello, Message, Policy } from "../../packages/protocol/src/index.ts";
+import { registry } from "../fixtures/host-plugins.ts";
 
 const protocol = { major: 1, minor: 0 } as const;
 
@@ -64,15 +66,16 @@ const validView = {
   commands: ["notes.read"],
   events: ["notes.changed"],
   host: {
-    log: false,
-    storage: [{ scope: "appData", pathPrefix: "notes", access: ["read"] }],
+    permissions: [
+      { identifier: "storage:read-text", allow: [{ scope: "appData", pathPrefix: "notes" }] },
+    ],
   },
 } satisfies Policy["views"][number];
 
 const validPolicy = {
   version: 1,
   views: [validView],
-  backend: { log: false, storage: [] },
+  backend: { permissions: [] },
 } satisfies Policy;
 
 describe("protocol messages", () => {
@@ -332,10 +335,14 @@ describe("policy validation", () => {
         ...validView,
         host: {
           ...validView.host,
-          storage: validView.host.storage.map((entry) => ({ ...entry, pathPrefix })),
+          permissions: [
+            { identifier: "storage:read-text", allow: [{ scope: "appData", pathPrefix }] },
+          ],
         },
       };
-      expectProtocolError(() => parsePolicy(JSON.stringify({ ...validPolicy, views: [view] })));
+      expect(() =>
+        registry.validatePolicy(parsePolicy(JSON.stringify({ ...validPolicy, views: [view] }))),
+      ).toThrow();
     }
   });
 
@@ -346,6 +353,32 @@ describe("policy validation", () => {
       views: [{ ...validView, origins: ["https://app.bunaway.local\n"] }],
     };
     expectProtocolError(() => parsePolicy(JSON.stringify(policy)));
+  });
+
+  test("validates Windows grants against declared view IDs", () => {
+    const editor = { ...validView, id: "editor" };
+    const valid = {
+      ...validPolicy,
+      views: [validView, editor],
+      backend: { permissions: [], windows: ["editor"] },
+    };
+    expect(() => registry.validatePolicy(parsePolicy(JSON.stringify(valid)))).not.toThrow();
+
+    const undeclaredBackendGrant = {
+      ...valid,
+      backend: { permissions: [], windows: ["reader"] },
+    };
+    expect(() =>
+      registry.validatePolicy(parsePolicy(JSON.stringify(undeclaredBackendGrant))),
+    ).toThrow();
+
+    const undeclaredViewGrant = {
+      ...valid,
+      views: [validView, { ...editor, host: { permissions: [], windows: ["reader"] } }],
+    };
+    expect(() =>
+      registry.validatePolicy(parsePolicy(JSON.stringify(undeclaredViewGrant))),
+    ).toThrow();
   });
 });
 
@@ -367,9 +400,9 @@ test("window operations reject invalid geometry, arbitrary fields and invalid cl
     },
     { operation: "windows.show", payload: { view: "bad\n" } },
   ];
-  for (const call of invalid) expect(() => parseHostCall(JSON.stringify(call))).toThrow();
+  for (const call of invalid) expect(() => parseWindowCall(JSON.stringify(call))).toThrow();
   expect(
-    parseHostCall(
+    parseWindowCall(
       JSON.stringify({
         operation: "windows.setCloseConfirmation",
         payload: { view: "main", message: null },
@@ -379,4 +412,12 @@ test("window operations reject invalid geometry, arbitrary fields and invalid cl
     operation: "windows.setCloseConfirmation",
     payload: { view: "main", message: null },
   });
+  expect(
+    parseHostCall(
+      JSON.stringify({ operation: "plugin.custom.action", payload: { enabled: true } }),
+    ),
+  ).toEqual({ operation: "plugin.custom.action", payload: { enabled: true } });
+  expect(() =>
+    parseWindowCall(JSON.stringify({ operation: "plugin.custom.action", payload: null })),
+  ).toThrow();
 });

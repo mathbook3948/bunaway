@@ -6,8 +6,8 @@ import type { WindowSpec } from "./channel.ts";
 import {
   addRef,
   type ComHandler,
-  getObject,
   disposeHandlers,
+  getObject,
   getString,
   handler,
   method,

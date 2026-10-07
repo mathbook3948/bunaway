@@ -19,7 +19,8 @@
   "workspaces": [
     "docs/site",
     "packages/*",
-    "plugins/*"
+    "plugins/*",
+    "tests/fixtures/desktop/host"
   ],
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

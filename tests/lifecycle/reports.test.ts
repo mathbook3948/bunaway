@@ -2,13 +2,15 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { hostOperations } from "../../packages/protocol/src/index.ts";
-import { matchesCapabilities } from "../fixtures/desktop/host/web/capabilities.ts";
+import {
+  expectedCapabilityNames,
+  matchesCapabilities,
+} from "../fixtures/desktop/host/web/capabilities.ts";
 import { assertReport, readReport } from "./reports.ts";
 
 test("native capability reports require the complete catalog and platform support states", () => {
   for (const platform of ["win32", "darwin"]) {
-    const capabilities = Object.keys(hostOperations).map((name) => ({
+    const capabilities = expectedCapabilityNames.map((name) => ({
       name,
       support: name.startsWith("windows.") && platform === "darwin" ? "unsupported" : "supported",
       permission: "not-required",

@@ -1,4 +1,5 @@
-import { defineModule, storage } from "@bunaway/backend";
+import { defineModule } from "@bunaway/backend";
+import { storage } from "@bunaway/plugin-storage";
 
 export const message = defineModule("message")
   .command(

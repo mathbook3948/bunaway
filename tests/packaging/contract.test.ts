@@ -48,7 +48,6 @@ const macRuntimeAssets = [
   "assets/process.schema.json",
   "assets/message.schema.json",
   "assets/host-call.schema.json",
-  "assets/host-operations.json",
   "assets/policy.schema.json",
 ] as const;
 const windowsAssets = [

@@ -102,8 +102,40 @@
                       "host": {
                         "type": "object",
                         "properties": {
-                          "log": {
-                            "type": "boolean"
+                          "permissions": {
+                            "type": "array",
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                                  "maxLength": 128
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "identifier": {
+                                      "type": "string",
+                                      "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                                      "maxLength": 128
+                                    },
+                                    "allow": {
+                                      "type": "array",
+                                      "items": {},
+                                      "maxItems": 128
+                                    },
+                                    "deny": {
+                                      "type": "array",
+                                      "items": {},
+                                      "maxItems": 128
+                                    }
+                                  },
+                                  "required": ["identifier"],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            },
+                            "maxItems": 256
                           },
                           "windows": {
                             "type": "array",
@@ -114,37 +146,9 @@
                               "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
                               "maxLength": 128
                             }
-                          },
-                          "storage": {
-                            "type": "array",
-                            "maxItems": 128,
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "scope": {
-                                  "enum": ["appData", "temp"]
-                                },
-                                "pathPrefix": {
-                                  "type": "string",
-                                  "pattern": "^(?:[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*)?$(?![\\s\\S])",
-                                  "maxLength": 256
-                                },
-                                "access": {
-                                  "type": "array",
-                                  "items": {
-                                    "enum": ["read", "write"]
-                                  },
-                                  "minItems": 1,
-                                  "maxItems": 2,
-                                  "uniqueItems": true
-                                }
-                              },
-                              "required": ["scope", "pathPrefix", "access"],
-                              "additionalProperties": false
-                            }
                           }
                         },
-                        "required": ["log", "storage"],
+                        "required": ["permissions"],
                         "additionalProperties": false
                       }
                     },
@@ -155,8 +159,40 @@
                 "backend": {
                   "type": "object",
                   "properties": {
-                    "log": {
-                      "type": "boolean"
+                    "permissions": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                            "maxLength": 128
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "identifier": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                                "maxLength": 128
+                              },
+                              "allow": {
+                                "type": "array",
+                                "items": {},
+                                "maxItems": 128
+                              },
+                              "deny": {
+                                "type": "array",
+                                "items": {},
+                                "maxItems": 128
+                              }
+                            },
+                            "required": ["identifier"],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "maxItems": 256
                     },
                     "windows": {
                       "type": "array",
@@ -167,37 +203,9 @@
                         "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
                         "maxLength": 128
                       }
-                    },
-                    "storage": {
-                      "type": "array",
-                      "maxItems": 128,
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "scope": {
-                            "enum": ["appData", "temp"]
-                          },
-                          "pathPrefix": {
-                            "type": "string",
-                            "pattern": "^(?:[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*)?$(?![\\s\\S])",
-                            "maxLength": 256
-                          },
-                          "access": {
-                            "type": "array",
-                            "items": {
-                              "enum": ["read", "write"]
-                            },
-                            "minItems": 1,
-                            "maxItems": 2,
-                            "uniqueItems": true
-                          }
-                        },
-                        "required": ["scope", "pathPrefix", "access"],
-                        "additionalProperties": false
-                      }
                     }
                   },
-                  "required": ["log", "storage"],
+                  "required": ["permissions"],
                   "additionalProperties": false
                 }
               },

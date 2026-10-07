@@ -23,7 +23,7 @@ const steps = [
     label: "Host API",
     title: "4. 저장 범위를 확인하고 쓰기",
     detail:
-      'context.host.call("storage.writeText", ...)이 원래 뷰의 권한으로 실행됩니다. host.storage가 appData의 messages/ 쓰기를 허용해야 파일을 저장할 수 있습니다.',
+      '앱 정의에 storagePlugin을 등록하고 message.save 핸들러에서 storage.writeText({ scope: "appData", path: "messages/current.txt", text })를 호출합니다. 원래 뷰의 host.permissions에 storage:write-text 권한을 appData/messages/ 범위로 허용해야 저장할 수 있습니다.',
   },
   {
     label: "이벤트와 응답",

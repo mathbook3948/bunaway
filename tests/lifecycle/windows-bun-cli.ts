@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { appendFile, cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { createProject } from "../cli/project.ts";
 import { verifyWindowsLaunch, windowsLaunchEnvironment } from "../../packages/cli/src/launch.ts";
 import { findIscc, must } from "../../packages/packaging/src/channels/windows/common.ts";
 import { recordPackagedHashes } from "../../packages/packaging/src/channels/windows/manifest.ts";
 import type { PackageReport } from "../../packages/packaging/src/contract.ts";
+import { createProject, storageRoundtripUI } from "../cli/project.ts";
 
 assert.equal(process.platform, "win32");
 const root = resolve(import.meta.dir, "../..");
@@ -17,11 +17,18 @@ await mkdir(home, { recursive: true });
 await createProject(resolve(home, "created"));
 const project = resolve(home, "moved app 한글");
 await rename(resolve(home, "created"), project);
+const packagePath = resolve(project, "package.json");
+const packageJson = JSON.parse(await readFile(packagePath, "utf8"));
+packageJson.optionalDependencies = {
+  "@bunaway/plugin-storage": packageJson.dependencies["@bunaway/plugin-storage"],
+};
+delete packageJson.dependencies["@bunaway/plugin-storage"];
+await writeFile(packagePath, JSON.stringify(packageJson, null, 2));
 async function command(args: string[], cwd = project) {
   const child = Bun.spawn([process.execPath, ...args], { cwd, stdout: "pipe", stderr: "pipe" });
   const out = new Response(child.stdout).text();
   const err = new Response(child.stderr).text();
-  assert.equal(await child.exited, 0, await err);
+  assert.equal(await child.exited, 0, `${await out}\n${await err}`);
   return out;
 }
 await command(["install"]);
@@ -59,11 +66,7 @@ await writeFile(
     build: { ...projectConfig.build, app: "src-bunaway/boot.ts" },
   }),
 );
-await appendFile(
-  resolve(project, "src/main.ts"),
-  "\nconst fixtureClient = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();\n" +
-    'await fixtureClient.invoke("message.save", "CLI FFI 한글"); if (await fixtureClient.invoke("message.read", null) !== "CLI FFI 한글") throw new Error("CLI storage roundtrip failed"); window.close();\n',
-);
+await appendFile(resolve(project, "src/main.ts"), storageRoundtripUI);
 await command(["run", "typecheck"]);
 console.log(await command(["run", "build"]));
 const packageRoot = resolve(project, "dist/windows-x64");

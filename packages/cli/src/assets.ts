@@ -2,7 +2,9 @@ import { cp, mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 import type { BunPlugin } from "bun";
 import type { Project } from "./config.ts";
+import { release } from "./distribution.ts";
 import { files, inside, installedPackageRoot } from "./files.ts";
+import { type InstalledPlugin, installedPlugins, pluginTableSource } from "./plugins.ts";
 import { assertAppDefinitionExport, buildWithSdk, sdkPlugin } from "./sdk.ts";
 
 async function bundleBytes(output: Bun.BuildArtifact, development: boolean): Promise<Uint8Array> {
@@ -85,7 +87,7 @@ export async function bundleAssets(
   development = false,
 ): Promise<void> {
   await assertAppDefinitionExport(project.appEntry);
-  const plugin = await sdkPlugin(project.root);
+  const plugin = await sdkPlugin(project.root, [], project.nativePlugins);
   if (!developmentServer) await webAssets(project, resolve(assets, "web"), plugin, development);
   const runtimeEntry = resolve(
     await installedPackageRoot(project.frameworkRoot, "@bunaway/runtime-bun"),
@@ -131,13 +133,19 @@ export async function bundleWindowsAssets(
 ): Promise<void> {
   await assertAppDefinitionExport(project.appEntry);
   if (!developmentServer)
-    await webAssets(project, resolve(assets, "web"), await sdkPlugin(project.root), development);
+    await webAssets(
+      project,
+      resolve(assets, "web"),
+      await sdkPlugin(project.root, [], project.nativePlugins),
+      development,
+    );
   await bundleWindowsHost(
     resolve(project.frameworkRoot, "native/windows/bun"),
     assets,
     project.appEntry,
     project.root,
     development,
+    project.nativePlugins,
   );
 }
 
@@ -147,13 +155,30 @@ export async function bundleWindowsHost(
   appEntry: string,
   project?: string,
   development = false,
+  installed?: readonly InstalledPlugin[],
 ): Promise<void> {
   // A shared chunk preserves class identity (e.g. BunawayError) between core and app.
-  const sdk = project ? await sdkPlugin(project) : undefined;
+  const pluginProject = project ?? dirname(appEntry);
+  const plugins =
+    installed ??
+    (project || (await Bun.file(resolve(pluginProject, "package.json")).exists())
+      ? await installedPlugins(pluginProject, (await release()).version)
+      : []);
+  const sdk = project ? await sdkPlugin(project, [], plugins) : undefined;
   const entries: BunPlugin = {
     name: "windows-app-entry",
     setup(build) {
       sdk?.setup(build);
+      build.onResolve({ filter: /(?:^|\/)plugin-table\.ts$/ }, ({ path, importer }) => {
+        if (resolve(dirname(importer), path) === resolve(source, "plugin-table.ts"))
+          return { path: "table", namespace: "native-plugins" };
+        return undefined;
+      });
+      build.onLoad({ filter: /.*/, namespace: "native-plugins" }, () => ({
+        contents: pluginTableSource(plugins),
+        loader: "ts",
+        resolveDir: source,
+      }));
       build.onResolve({ filter: /^bunaway-windows-app\/app\.ts$/ }, () => ({
         path: "app.ts",
         namespace: "bunaway-windows-entry",
@@ -186,17 +211,21 @@ export async function bundleWindowsHost(
       await bundleBytes(output, development),
     );
   for (const name of ["ui", "host-operations"]) {
-    const result = await Bun.build({
-      entrypoints: [resolve(source, `${name}.ts`)],
-      target: "bun",
-      packages: "bundle",
-      sourcemap: development ? "inline" : "none",
-    });
-    if (!result.success || result.outputs.length !== 1 || !result.outputs[0])
-      throw new Error(`Windows host bundle failed: ${result.logs.join("\n")}`);
-    await writeFile(
-      resolve(destination, `${name}.js`),
-      await bundleBytes(result.outputs[0], development),
+    const outputs = await buildWithSdk(
+      {
+        entrypoints: [resolve(source, `${name}.ts`)],
+        target: "bun",
+        packages: "bundle",
+        splitting: true,
+        naming: "[name].[ext]",
+        sourcemap: development ? "inline" : "none",
+      },
+      entries,
     );
+    for (const output of outputs)
+      await writeFile(
+        resolve(destination, basename(output.path)),
+        await bundleBytes(output, development),
+      );
   }
 }

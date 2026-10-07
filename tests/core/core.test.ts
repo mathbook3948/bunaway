@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
 import { command } from "../../packages/backend-sdk/src/index.ts";
-import { createCore } from "../../packages/core/src/index.ts";
 import type {
   AppDefinition,
   CoreServices,
@@ -17,6 +16,7 @@ import {
   type Policy,
   type ServerMessage,
 } from "../../packages/protocol/src/index.ts";
+import { allowedHost, contracts, createCore } from "../fixtures/host-plugins.ts";
 
 function createClock() {
   let current = 1_000_000;
@@ -76,21 +76,35 @@ const policy: Policy = {
     {
       id: "main",
       origins: ["https://app.bunaway.local"],
-      commands: ["notes.read", "notes.slow", "notes.emit", "notes.state", "bunaway.capabilities"],
+      commands: [
+        "notes.read",
+        "notes.slow",
+        "notes.emit",
+        "notes.state",
+        "plugin.capabilities.get",
+      ],
       events: ["notes.changed"],
-      host: { log: true, storage: [{ scope: "appData", pathPrefix: "notes", access: ["read"] }] },
+      host: {
+        permissions: [
+          "log:write",
+          { identifier: "storage:read-text", allow: [{ scope: "appData", pathPrefix: "notes" }] },
+        ],
+      },
     },
     {
       id: "secondary",
       origins: ["https://app.bunaway.local"],
       commands: ["notes.read"],
       events: [],
-      host: { log: false, storage: [] },
+      host: { permissions: [] },
     },
   ],
   backend: {
-    log: true,
-    storage: [{ scope: "appData", pathPrefix: "", access: ["read", "write"] }],
+    permissions: [
+      "log:write",
+      { identifier: "storage:read-text", allow: [{ scope: "appData", pathPrefix: "" }] },
+      { identifier: "storage:write-text", allow: [{ scope: "appData", pathPrefix: "" }] },
+    ],
   },
 };
 
@@ -282,7 +296,7 @@ test("command round trip validates input, output and binds the session host cont
         input: textInput,
         output: { type: "string" },
         handle: async ({ key }, context) => {
-          await context.host.call("storage.readText", {
+          await context.host.call(contracts["storage.readText"], {
             scope: "appData",
             path: `notes/${key}.txt`,
           });
@@ -778,7 +792,7 @@ test("reserved and duplicate names plus plugin violations fail creation", async 
   const { services } = createServices(clock);
   const reserved = createApp({
     commands: {
-      "bunaway.capabilities": command({
+      "plugin.capabilities.get": command({
         input: { const: null },
         output: { const: null },
         handle: () => null,
@@ -819,10 +833,7 @@ test("reserved and duplicate names plus plugin violations fail creation", async 
   const needsHost: PluginDefinition = {
     name: "greedy",
     version: "1",
-    requiredHost: {
-      log: true,
-      storage: [{ scope: "temp", pathPrefix: "", access: ["write"] }],
-    },
+    requiredPermissions: ["capabilities:get"],
   };
   await expect(createCore(createApp({ plugins: [needsHost] }), services)).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
@@ -831,31 +842,21 @@ test("reserved and duplicate names plus plugin violations fail creation", async 
   const covered: PluginDefinition = {
     name: "covered",
     version: "1",
-    requiredHost: {
-      log: true,
-      storage: [{ scope: "appData", pathPrefix: "deep/dir", access: ["read"] }],
-    },
+    requiredPermissions: ["log:write", "storage:read-text"],
   };
   await expect(createCore(createApp({ plugins: [covered] }), services)).resolves.toBeDefined();
 });
 
 test("plugin window requirements are checked before setup", async () => {
-  for (const grants of [
-    undefined,
-    [],
-    ["main"],
-    ["editor"],
-    ["main", "editor"],
-    ["reader", "editor", "main"],
-  ]) {
+  for (const grants of [undefined, [], ["main"], ["editor"], ["main", "editor"]]) {
     const { services } = createServices(createClock());
     let setupRuns = 0;
     const app = createApp({
       plugins: [
         {
-          name: "windows",
+          name: "window-requirement-test",
           version: "1",
-          requiredHost: { log: false, storage: [], windows: ["main", "editor"] },
+          requiredHost: { windows: ["main", "editor"] },
           setup() {
             setupRuns++;
           },
@@ -866,6 +867,16 @@ test("plugin window requirements are checked before setup", async () => {
       ...services,
       policy: {
         ...services.policy,
+        views: [
+          ...services.policy.views,
+          {
+            id: "editor",
+            origins: ["https://app.bunaway.local"],
+            commands: [],
+            events: [],
+            host: { permissions: [] },
+          },
+        ],
         backend: { ...services.policy.backend, ...(grants ? { windows: grants } : {}) },
       },
     });
@@ -891,7 +902,7 @@ test("plugins initialize in dependency order and clean up in reverse", async () 
     ...(dependencies ? { dependencies } : {}),
     async setup(context) {
       order.push(name);
-      await context.host.call("log.write", { level: "info", message: name });
+      await context.host.call(contracts["log.write"], { level: "info", message: name });
       return () => {
         stops.push(name);
       };
@@ -909,6 +920,69 @@ test("plugins initialize in dependency order and clean up in reverse", async () 
   ]);
   await core.stop();
   expect(stops).toEqual(["c", "b", "a"]);
+});
+
+test("plugin diagnostics preserve setup and stop failures without interrupting cleanup", async () => {
+  const { services } = createServices(createClock());
+  const setupError = new Error("database unavailable");
+  const stopError = new Error("flush failed");
+  const reports: unknown[][] = [];
+  const stopped: string[] = [];
+  services.onPluginError = (plugin, phase, cause) => {
+    reports.push([plugin, phase, cause]);
+    if (phase === "setup") throw new Error("diagnostic failed");
+    return Promise.reject(new Error("diagnostic rejected"));
+  };
+  const plugins: PluginDefinition[] = [
+    {
+      name: "first",
+      version: "1",
+      setup: () => () => {
+        stopped.push("first");
+      },
+    },
+    {
+      name: "second",
+      version: "1",
+      setup: () => () => {
+        stopped.push("second");
+        throw stopError;
+      },
+    },
+  ];
+  await expect(
+    createCore(
+      createApp({
+        plugins: [
+          ...plugins,
+          {
+            name: "broken",
+            version: "1",
+            setup() {
+              throw setupError;
+            },
+          },
+        ],
+      }),
+      services,
+    ),
+  ).rejects.toMatchObject({ message: "Plugin setup failed." });
+  expect(reports).toEqual([
+    ["broken", "setup", setupError],
+    ["second", "stop", stopError],
+  ]);
+  expect(stopped).toEqual(["second", "first"]);
+
+  reports.length = 0;
+  stopped.length = 0;
+  services.onPluginError = (plugin, phase, cause) => {
+    reports.push([plugin, phase, cause]);
+    return new Promise<void>(() => {});
+  };
+  const core = await createCore(createApp({ plugins }), services);
+  await core.stop();
+  expect(reports).toEqual([["second", "stop", stopError]]);
+  expect(stopped).toEqual(["second", "first"]);
 });
 
 test("a plugin setup failure runs earlier stop hooks and rejects creation", async () => {
@@ -942,7 +1016,7 @@ test("a plugin setup failure runs earlier stop hooks and rejects creation", asyn
   expect(stops).toEqual(["registered", "first"]);
 });
 
-test("the built-in capabilities command calls the host operation", async () => {
+test("the registered capabilities plugin command calls the host operation", async () => {
   const clock = createClock();
   const recorded: { context: HostContext; call: HostCall }[] = [];
   const { services, sent } = createServices(clock, {
@@ -960,7 +1034,7 @@ test("the built-in capabilities command calls the host operation", async () => {
     kind: "invoke",
     protocol: helloMessage.protocol,
     id: "cap",
-    command: "bunaway.capabilities",
+    command: "plugin.capabilities.get",
     payload: null,
   });
   await flush();
@@ -1124,39 +1198,36 @@ test("storage permissions combine grants without widening scope or path", async 
     policy: {
       ...policy,
       backend: {
-        log: true,
-        storage: [
-          { scope: "appData", pathPrefix: "", access: ["read"] },
-          { scope: "appData", pathPrefix: "notes", access: ["write"] },
+        permissions: [
+          "log:write",
+          { identifier: "storage:read-text", allow: [{ scope: "appData", pathPrefix: "" }] },
+          { identifier: "storage:write-text", allow: [{ scope: "appData", pathPrefix: "notes" }] },
         ],
       },
     },
   };
-  const app = (scope: "appData" | "temp", pathPrefix: string) =>
-    createApp({
-      plugins: [
-        {
-          name: "notes",
-          version: "1",
-          requiredHost: {
-            log: false,
-            storage: [{ scope, pathPrefix, access: ["read", "write"] }],
-          },
-        },
-      ],
-    });
-  for (const path of ["notes", "notes/nested"]) {
-    const core = await createCore(app("appData", path), splitServices);
-    await core.stop();
+  for (const path of ["notes/file.txt", "notes/nested/file.txt"]) {
+    expect(
+      allowedHost(splitServices.policy.backend, {
+        operation: "storage.writeText",
+        payload: { scope: "appData", path, text: "saved" },
+      }),
+    ).toBe(true);
   }
-  for (const path of ["", "notes-private", "other"]) {
-    await expect(createCore(app("appData", path), splitServices)).rejects.toMatchObject({
-      code: "INVALID_ARGUMENT",
-    });
+  for (const path of ["file.txt", "notes-private/file.txt", "other/file.txt"]) {
+    expect(
+      allowedHost(splitServices.policy.backend, {
+        operation: "storage.writeText",
+        payload: { scope: "appData", path, text: "saved" },
+      }),
+    ).toBe(false);
   }
-  await expect(createCore(app("temp", "notes"), splitServices)).rejects.toMatchObject({
-    code: "INVALID_ARGUMENT",
-  });
+  expect(
+    allowedHost(splitServices.policy.backend, {
+      operation: "storage.writeText",
+      payload: { scope: "temp", path: "notes/file.txt", text: "saved" },
+    }),
+  ).toBe(false);
 });
 
 test("failed startup cancels backend Host calls before reverse cleanup", async () => {
@@ -1188,7 +1259,7 @@ test("failed startup cancels backend Host calls before reverse cleanup", async (
             setup(context) {
               saved = context;
               pending = context.host
-                .call("log.write", { level: "info", message: "pending" })
+                .call(contracts["log.write"], { level: "info", message: "pending" })
                 .catch((error: unknown) => error);
               return () => {
                 expect(context.signal.aborted).toBe(true);
@@ -1213,7 +1284,7 @@ test("failed startup cancels backend Host calls before reverse cleanup", async (
   expect(await pending).toMatchObject({ code: "CANCELLED" });
   if (!saved) throw new Error("Plugin context was not captured.");
   await expect(
-    saved.host.call("log.write", { level: "info", message: "late" }),
+    saved.host.call(contracts["log.write"], { level: "info", message: "late" }),
   ).rejects.toMatchObject({ code: "CANCELLED" });
 });
 
@@ -1373,7 +1444,7 @@ for (const outcome of ["result", "error"] as const) {
               async handle(_input, context) {
                 saved = context;
                 hostWork = context.host
-                  .call("log.write", { level: "info", message: "pending" })
+                  .call(contracts["log.write"], { level: "info", message: "pending" })
                   .catch((error: unknown) => error);
                 await flush();
                 if (outcome === "error") throw new Error("handler failed");
@@ -1400,7 +1471,7 @@ for (const outcome of ["result", "error"] as const) {
       expect(saved.signal.aborted).toBe(true);
       expect(await hostWork).toMatchObject({ code: "CANCELLED" });
       await expect(
-        saved.host.call("log.write", { level: "info", message: "late" }),
+        saved.host.call(contracts["log.write"], { level: "info", message: "late" }),
       ).rejects.toMatchObject({ code: "CANCELLED" });
       await expect(
         saved.events.emit("notes.changed", { key: "late" }, { kind: "broadcast" }),

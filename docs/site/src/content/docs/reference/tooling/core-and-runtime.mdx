@@ -40,7 +40,10 @@ send가 복구할 수 없는 오류로 실패하면 어댑터에서 전송과 �
 
 선택적 `onCommandError(command, cause)`는 핸들러의 예기치 않은 예외를 원본 그대로 받는 진단 콜백입니다. `BunawayError`로 선언한 앱 오류에는 호출하지 않습니다. 반환형은 `void` 또는 `Promise<void>`이며 응답은 콜백 완료를 기다리지 않습니다. 콜백의 throw와 rejection은 무시합니다. 원본 메시지와 스택은 신뢰된 진단 경로에서만 사용하고 WebView 응답에는 넣지 않습니다.
 
-Windows 어댑터는 명령 진단 로그의 쓰기 실패를 무시하고 이후 로그를 계속 처리합니다. 실패한 기록은 다시 시도하지 않습니다.
+선택적 `onPluginError(plugin, phase, cause)`는 실패한 플러그인 이름, `"setup"` 또는 `"stop"` 단계와 원래 오류를 받습니다. 선언한 `BunawayError`도 포함합니다. 반환형은 `void` 또는 `Promise<void>`이며 콜백 완료를 기다리지 않습니다. 콜백이 throw하거나 reject해도 나머지 종료 훅을 실행합니다. 종료 훅의 실패는 진단에 전달하고, 기한 안에 정리를 마치면 `stop()`은 완료됩니다.
+
+Windows 어댑터는 플러그인 오류를 터미널과 `plugin-failed` 진단 로그에 남깁니다. Bun 프로세스 어댑터는 stderr에 기록합니다. Windows 어댑터는 진단 로그의 쓰기 실패를 무시하고 이후 로그를 계속 처리합니다. 실패한 기록은 다시 시도하지 않습니다.
+두 어댑터 모두 종료 요청을 처리하던 중 setup이 `CANCELLED`로 끝난 경우에는 정상 취소로 보고 실패 로그를 남기지 않습니다.
 
 ## RuntimeServices
 
@@ -78,7 +81,7 @@ boot의 정책, backendContext, 프레임 runtime generation, 방향을 검사�
 
 ## bindHostAPI
 
-`bindHostAPI(context, signal, callHost): HostAPI`는 고정된 컨텍스트, 취소 신호를 Host 호출에 연결합니다.
+`bindHostAPI(context, signal, callHost, registry): HostAPI`는 고정된 컨텍스트, 취소 신호를 Host 호출에 연결합니다.
 callHost는 `(context, HostCall, CancellationSignal) => Promise<HostResponse>`입니다.
 입력을 검증하고 호출 전후에 취소 여부를 확인합니다. abort가 발생하면 진행 중인 호출과 취소 중 먼저 완료된 결과를 사용합니다.
 Host 오류는 그대로 전달하고 잘못된 출력이나 일반 실패는 INTERNAL로 변환합니다.
@@ -90,3 +93,5 @@ Host 오류는 그대로 전달하고 잘못된 출력이나 일반 실패는 IN
 바이트 조각 사이에서 끊긴 문자, 여러 줄을 처리하고 각 줄을 문자열로 yield합니다.
 잘못된 UTF-8, 빈 줄, 1 MiB 초과 프레임, 마지막 줄이 미완성인 EOF를 거부합니다.
 줄의 JSON/프레임 검증은 별도로 parseProcessFrame에 맡깁니다.
+
+NativeRegistry에 앱이 등록한 네이티브 계약을 전달합니다. bindHostAPI는 호출자가 넘긴 schema 대신 이 등록 계약을 사용합니다. 현재 macOS 호스트는 네이티브 플러그인의 권한과 작업을 UNSUPPORTED로 거부합니다.

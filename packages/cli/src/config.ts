@@ -6,11 +6,12 @@ import {
   type PackagingConfig,
   parsePackaging,
 } from "@bunaway/packaging";
-import { type Policy, parsePolicy } from "@bunaway/protocol";
-import { readWindowSpecs, type WindowSpec } from "../../runtime-bun/src/window-config.ts";
+import { NativeRegistry, type Policy, parsePolicy } from "@bunaway/protocol";
 import { developmentUrl } from "../../runtime-bun/src/development.ts";
+import { readWindowSpecs, type WindowSpec } from "../../runtime-bun/src/window-config.ts";
 import { validateFramework } from "./distribution.ts";
 import { inside, json, projectPath } from "./files.ts";
+import type { InstalledPlugin } from "./plugins.ts";
 
 export interface DevServerConfig {
   command: string[];
@@ -24,15 +25,15 @@ function command(value: unknown, field: string): string[] {
     !value.length ||
     value.some((arg) => typeof arg !== "string" || !arg || arg.includes("\0"))
   ) {
-    throw new Error(`${field} must be a nonempty array of executable and arguments.`);
+    throw new Error(`bunaway.json: ${field} must be a nonempty array of executable and arguments.`);
   }
   return value as string[];
 }
 
 export function readDevSettings(value: unknown): DevServerConfig | undefined {
   if (value === undefined) return undefined;
-  const dev = record(value);
-  keys(dev, ["command", "url", "timeoutMs"]);
+  const dev = record(value, "dev");
+  keys(dev, ["command", "url", "timeoutMs"], "dev");
   const args = command(dev.command, "dev.command");
   const timeoutMs = dev.timeoutMs ?? 30000;
   if (
@@ -41,7 +42,7 @@ export function readDevSettings(value: unknown): DevServerConfig | undefined {
     timeoutMs < 100 ||
     timeoutMs > 300000
   ) {
-    throw new Error("dev.timeoutMs must be an integer between 100 and 300000.");
+    throw new Error("bunaway.json: dev.timeoutMs must be an integer between 100 and 300000.");
   }
   return { command: args, url: developmentUrl(dev.url).href, timeoutMs };
 }
@@ -53,6 +54,7 @@ export interface Project {
   frontend: string;
   buildCommand?: string[];
   backendDependencies?: string[];
+  nativePlugins?: readonly InstalledPlugin[];
   bundle?: PackagingConfig;
   dev?: DevServerConfig;
   app: {
@@ -66,21 +68,25 @@ export interface Project {
   policy: Policy;
 }
 
-function record(value: unknown): Record<string, unknown> {
+function record(value: unknown, path: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("Expected a configuration object.");
+    throw new Error(`bunaway.json: ${path} must be an object.`);
   }
   return value as Record<string, unknown>;
 }
 
-function keys(value: Record<string, unknown>, allowed: string[]): void {
-  if (Object.keys(value).some((key) => !allowed.includes(key))) {
-    throw new Error("Unknown configuration field.");
+function keys(value: Record<string, unknown>, allowed: string[], path: string): void {
+  const unknown = Object.keys(value).filter((key) => !allowed.includes(key));
+  if (unknown.length) {
+    throw new Error(
+      `bunaway.json: unknown field ${unknown.map((key) => (path ? `${path}.${key}` : key)).join(", ")}. Allowed fields: ${allowed.join(", ")}.`,
+    );
   }
 }
 
-function string(value: unknown): string {
-  if (typeof value !== "string" || !value) throw new Error("Expected a nonempty string.");
+function string(value: unknown, path: string): string {
+  if (typeof value !== "string" || !value)
+    throw new Error(`bunaway.json: ${path} must be a nonempty string.`);
   return value;
 }
 
@@ -142,16 +148,16 @@ export async function readProjectSettings(root: string): Promise<{
   buildCommand?: string[];
 }> {
   const directory = await projectPath(root, "src-bunaway");
-  const config = record(await json(resolve(directory, "bunaway.json")));
+  const config = record(await json(resolve(directory, "bunaway.json")), "root");
   if (config.version !== 1) throw new Error("Unsupported bunaway.json version (expected 1).");
-  keys(config, ["version", "build", "app", "bundle", "dev"]);
-  const build = record(config.build);
+  keys(config, ["version", "build", "app", "bundle", "dev"], "");
+  const build = record(config.build, "build");
   if ("backend" in build || "windowsApp" in build) {
     throw new Error(
       "Use build.app with a default-exported AppDefinition; remove build.backend and build.windowsApp.",
     );
   }
-  keys(build, ["app", "frontend", "command"]);
+  keys(build, ["app", "frontend", "command"], "build");
   const buildCommand =
     build.command === undefined ? undefined : command(build.command, "build.command");
   const bundle =
@@ -160,7 +166,7 @@ export async function readProjectSettings(root: string): Promise<{
   return {
     directory,
     build,
-    app: record(config.app),
+    app: record(config.app, "app"),
     ...(bundle ? { bundle } : {}),
     ...(dev ? { dev } : {}),
     ...(buildCommand ? { buildCommand } : {}),
@@ -177,12 +183,12 @@ async function loadProject(
   const config = settings.build;
   const server = options.development && settings.dev;
   const validateFiles = options.validateFiles !== false;
-  const appName = string(config.app);
+  const appName = string(config.app, "build.app");
   if (isAbsolute(appName) || appName.split(/[\\/]/).includes("..")) {
     throw new Error("build.app must be a project-relative file without '..'.");
   }
   const appEntry = validateFiles ? await projectPath(root, appName) : resolve(root, appName);
-  const frontendName = string(config.frontend);
+  const frontendName = string(config.frontend, "build.frontend");
   if (isAbsolute(frontendName) || frontendName.split(/[\\/]/).includes("..")) {
     throw new Error("build.frontend must be a project-relative directory without '..'.");
   }
@@ -194,13 +200,17 @@ async function loadProject(
   ) {
     throw new Error("app must be a file; frontend must be a directory.");
   }
-  const { root: frameworkRoot, backendDependencies } = await validateFramework(
+  const {
+    root: frameworkRoot,
+    backendDependencies,
+    plugins,
+  } = await validateFramework(
     root,
     options.validateSources === false ? [] : [appEntry, ...(server ? [] : [frontend])],
   );
   const raw = settings.app;
-  keys(raw, ["appId", "title", "view", "home", "window", "windows"]);
-  const appId = string(raw.appId);
+  keys(raw, ["appId", "title", "view", "home", "window", "windows"], "app");
+  const appId = string(raw.appId, "app.appId");
   if (!/^[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$/.test(appId))
     throw new Error("appId must match the native host's 1–64 character app ID grammar.");
   const multiple = raw.windows !== undefined;
@@ -211,6 +221,7 @@ async function loadProject(
     throw new Error(
       "HTTP origins are not allowed in policy.json; use dev.url for a development server.",
     );
+  new NativeRegistry(plugins, { mode: "catalog" }).validatePolicy(policy);
   const windows = readWindowSpecs(
     multiple
       ? raw.windows
@@ -235,13 +246,14 @@ async function loadProject(
     appEntry,
     frontend,
     backendDependencies,
+    nativePlugins: plugins,
     ...(settings.bundle ? { bundle: settings.bundle } : {}),
     ...(settings.dev ? { dev: settings.dev } : {}),
     ...(settings.buildCommand ? { buildCommand: settings.buildCommand } : {}),
     policy,
     app: {
       appId,
-      title: string(raw.title),
+      title: string(raw.title, "app.title"),
       view: primary.view,
       home: primary.home,
       window: primary.window,

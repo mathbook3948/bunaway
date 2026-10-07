@@ -1,8 +1,7 @@
 import { expect, jest, test } from "bun:test";
-import { createClient, type Client } from "../../packages/client-sdk/src/index.ts";
+import { type Client, createClient } from "../../packages/client-sdk/src/index.ts";
 import {
   API_LIMITS,
-  type Capabilities,
   type Dispose,
   type Hello,
   type JsonValue,
@@ -12,8 +11,12 @@ import {
   type TransportEvent,
   type WireError,
 } from "../../packages/protocol/src/index.ts";
+import type { Capabilities } from "../../plugins/capabilities/src/index.ts";
 
-type Commands = { "notes.read": { input: { key: string }; output: string } };
+type Commands = {
+  "notes.read": { input: { key: string }; output: string };
+  "plugin.capabilities.get": { input: null; output: Capabilities };
+};
 type Events = { "notes.changed": { key: string } };
 type TestClient = Client<Commands, Events>;
 
@@ -529,18 +532,18 @@ test("user listener and onError exceptions do not break the receive loop", async
   await expect(pending).resolves.toBe("still-works");
 });
 
-test("capabilities calls the reserved command and validates the response", async () => {
+test("generic client forwards optional plugin commands", async () => {
   const { transport, client } = await connected();
-  const pending = client.capabilities();
+  const pending = client.invoke("plugin.capabilities.get", null);
   await flush();
   const request = invokeMessage(transport);
-  expect(request).toMatchObject({ command: "bunaway.capabilities", payload: null });
+  expect(request).toMatchObject({ command: "plugin.capabilities.get", payload: null });
   const capabilities: Capabilities = [
     { name: "storage", support: "supported", permission: "denied" },
   ];
   transport.emit(serverResult(request.id, capabilities));
   await expect(pending).resolves.toEqual(capabilities);
-  const invalid = client.capabilities();
+  const invalid = client.invoke("plugin.capabilities.get", null);
   await flush();
   const duplicate = invokeMessage(transport);
   transport.emit(
@@ -549,7 +552,7 @@ test("capabilities calls the reserved command and validates the response", async
       { name: "storage", support: "unsupported", permission: "unknown" },
     ]),
   );
-  await expect(invalid).rejects.toMatchObject({ code: "INTERNAL" });
+  await expect(invalid).resolves.toHaveLength(2);
 });
 
 test("the pending request limit rejects new calls with BUSY", async () => {

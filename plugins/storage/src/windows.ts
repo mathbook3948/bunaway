@@ -1,7 +1,28 @@
 import { dlopen, ptr } from "bun:ffi";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { BunawayError } from "../../../packages/protocol/src/index.ts";
+import {
+  BunawayError,
+  type JsonValue,
+  type NativeAdapter,
+  type NativeEnvironment,
+} from "@bunaway/plugin";
+import type { StorageLocation, StorageWrite } from "./index.ts";
+
+export function createOperations(environment: NativeEnvironment): NativeAdapter {
+  const storage = new ScopedStorage(environment.dataRoot);
+  return {
+    execute(operation: string, input: JsonValue): JsonValue {
+      const location = input as StorageLocation;
+      return storage.execute(
+        location.scope,
+        location.path,
+        operation === "storage.writeText" ? (input as StorageWrite).text : undefined,
+      );
+    },
+    dispose: disposeStorageBindings,
+  };
+}
 
 const wide = (text: string) => Buffer.from(`${text}\0`, "utf16le");
 const api = dlopen("kernel32.dll", {
@@ -114,9 +135,12 @@ export class ScopedStorage {
         const attributes = this.info(parent).readUInt32LE(0);
         if (attributes & 0x400 || !(attributes & 0x10))
           deny("Storage path is not a plain directory.");
+        // Bind policy spelling to each pinned directory before creating the next child.
+        if (this.canonical(parent) !== dir) deny("Storage path must use its canonical spelling.");
       }
+      const target = `${root}\\${segments.join("\\")}`;
       file = this.open(
-        `${root}\\${segments.join("\\")}`,
+        target,
         text === undefined ? 0x80000000 : 0x40000000,
         7,
         text === undefined ? 3 : 4,
@@ -126,8 +150,7 @@ export class ScopedStorage {
       if (info.readUInt32LE(0) & 0x410 || info.readUInt32LE(40) > 1)
         deny("Storage target is not a plain in-scope file.");
       const actual = this.canonical(file);
-      if (!actual.toLowerCase().startsWith(`${root}\\`.toLowerCase()))
-        deny("Storage target is outside the named scope.");
+      if (actual !== target) deny("Storage path must use its canonical spelling.");
       const transferred = new Uint32Array(1);
       if (text !== undefined) {
         const bytes = Buffer.from(text);

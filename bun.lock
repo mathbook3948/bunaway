@@ -64,6 +64,15 @@
         "fast-xml-parser": "4.5.7",
       },
     },
+    "packages/plugin-sdk": {
+      "name": "@bunaway/plugin",
+      "version": "0.0.0",
+      "dependencies": {
+        "@bunaway/backend": "workspace:*",
+        "@bunaway/client": "workspace:*",
+        "@bunaway/protocol": "workspace:*",
+      },
+    },
     "packages/protocol": {
       "name": "@bunaway/protocol",
       "version": "0.0.0",
@@ -76,18 +85,42 @@
         "@bunaway/protocol": "workspace:*",
       },
     },
+    "plugins/capabilities": {
+      "name": "@bunaway/plugin-capabilities",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@bunaway/plugin": "workspace:*",
+      },
+      "peerDependencies": {
+        "@bunaway/plugin": "0.0.0",
+      },
+    },
     "plugins/log": {
       "name": "@bunaway/plugin-log",
       "version": "0.0.0",
-      "dependencies": {
-        "@bunaway/backend": "workspace:*",
+      "devDependencies": {
+        "@bunaway/plugin": "workspace:*",
+      },
+      "peerDependencies": {
+        "@bunaway/plugin": "0.0.0",
       },
     },
     "plugins/storage": {
       "name": "@bunaway/plugin-storage",
       "version": "0.0.0",
+      "devDependencies": {
+        "@bunaway/plugin": "workspace:*",
+      },
+      "peerDependencies": {
+        "@bunaway/plugin": "0.0.0",
+      },
+    },
+    "tests/fixtures/desktop/host": {
+      "name": "@bunaway/test-desktop",
       "dependencies": {
-        "@bunaway/backend": "workspace:*",
+        "@bunaway/plugin-capabilities": "workspace:*",
+        "@bunaway/plugin-log": "workspace:*",
+        "@bunaway/plugin-storage": "workspace:*",
       },
     },
   },
@@ -196,6 +229,10 @@
 
     "@bunaway/packaging": ["@bunaway/packaging@workspace:packages/packaging"],
 
+    "@bunaway/plugin": ["@bunaway/plugin@workspace:packages/plugin-sdk"],
+
+    "@bunaway/plugin-capabilities": ["@bunaway/plugin-capabilities@workspace:plugins/capabilities"],
+
     "@bunaway/plugin-log": ["@bunaway/plugin-log@workspace:plugins/log"],
 
     "@bunaway/plugin-storage": ["@bunaway/plugin-storage@workspace:plugins/storage"],
@@ -203,6 +240,8 @@
     "@bunaway/protocol": ["@bunaway/protocol@workspace:packages/protocol"],
 
     "@bunaway/runtime-bun": ["@bunaway/runtime-bun@workspace:packages/runtime-bun"],
+
+    "@bunaway/test-desktop": ["@bunaway/test-desktop@workspace:tests/fixtures/desktop/host"],
 
     "@capsizecss/unpack": ["@capsizecss/unpack@4.0.1", "", { "dependencies": { "fontkitten": "^1.0.3" } }, "sha512-CuNiSqg7+e1cO/GjffyMOm5Tt2jUF9CWHHnvQ/UkqvtkGfHdgwEC0wpmq7fkN3gxwpRnrAN0WzO3vREKmNolMQ=="],
 

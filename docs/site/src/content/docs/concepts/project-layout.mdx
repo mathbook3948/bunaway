@@ -9,13 +9,15 @@ description: 앱의 폴더 구조와 app.ts, bunaway.json, policy.json의 역할
 my-app/
 ├─ package.json             개발 명령과 CLI, SDK 의존성
 ├─ bun.lock                 설치 버전 고정
-├─ tsconfig.json            앱 TypeScript 설정
+├─ tsconfig.json            화면 TypeScript 설정
 ├─ src/                     웹 UI
 │  ├─ index.html
 │  ├─ main.ts
+│  ├─ client.ts              앱 타입을 연결한 명령 호출과 이벤트 구독
 │  └─ style.css
 └─ src-bunaway/
    ├─ app.ts                기능 모듈을 조립한 공통 앱 정의
+   ├─ tsconfig.json          백엔드 TypeScript 설정
    ├─ message/module.ts     메시지 명령과 이벤트
    ├─ bunaway.json           빌드, 앱, 배포 설정
    └─ policy.json            뷰, 백엔드 접근 정책
@@ -25,6 +27,10 @@ my-app/
 `vite.config.ts`와 `public/` 정적 자산이 추가됩니다. 기본 화면은 Vite의 로고와 카운터이며
 SDK 호출은 직접 연결합니다. 웹 프로덕션 빌드 출력은 `web-dist/`입니다.
 
+`bun run typecheck`는 화면과 백엔드를 모두 검사합니다. 화면의 tsconfig.json은
+browser 조건을, src-bunaway/tsconfig.json은 bun 조건을 사용합니다.
+플러그인은 두 환경에서 같은 패키지 경로로 import하며 각각 해당 환경의 타입을 사용합니다.
+
 ## app.ts에 기능 작성하기
 
 `message/module.ts`에서 `defineModule()`로 명령과 이벤트를 등록하고,
@@ -33,6 +39,8 @@ SDK 호출은 직접 연결합니다. 웹 프로덕션 빌드 출력은 `web-dis
 기본 템플릿은 `message.read`, `message.save`, `message.saved`를 제공합니다.
 
 프런트엔드는 SDK에 명령 이름과 JSON 데이터를 넘겨 백엔드를 호출합니다.
+각 템플릿의 `src/client.ts`는 앱 정의에서 명령 이름과 입력, 결과, 이벤트 payload 타입을 추론합니다.
+화면에서 이 파일의 `client.invoke`와 `client.listen`을 사용합니다.
 [명령과 이벤트](/guides/commands-and-events/)에서 실제 코드를 읽어보세요.
 
 ## bunaway.json에 빌드와 창 설정하기

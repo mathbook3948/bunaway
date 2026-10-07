@@ -95,6 +95,7 @@ export default defineConfig({
           collapsed: true,
           items: [
             { label: "기여 자료", slug: "reference/design" },
+            { label: "선택 네이티브 플러그인 설계", slug: "reference/plugin-model" },
             { label: "메시지와 프로세스 IPC", slug: "reference/protocol" },
             { label: "Windows 창과 뷰 구현", slug: "guides/multiple-views" },
             { label: "사용자 정의 클라이언트와 Transport", slug: "reference/client/transport" },

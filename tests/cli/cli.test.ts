@@ -8,7 +8,7 @@ import { buildProject, bundleAssets } from "../../packages/cli/src/build.ts";
 import { readProjectMetadata, validateProject } from "../../packages/cli/src/config.ts";
 import { RestartController, shouldRestartHost } from "../../packages/cli/src/dev.ts";
 import { hash, writeJson } from "../../packages/cli/src/files.ts";
-import { createProject } from "./project.ts";
+import { createProject, storageRoundtripUI } from "./project.ts";
 
 let home: string;
 let project: string;
@@ -109,6 +109,9 @@ test("vanilla UI checks command and event contracts without bundling backend imp
   }
   try {
     expect((await typecheck()).code).toBe(0);
+    await Bun.write(path, original + storageRoundtripUI);
+    const nativeUI = await typecheck();
+    expect(nativeUI.code, nativeUI.output).toBe(0);
     const insertion = "  await client.listen(";
     expect(original).toContain(insertion);
     for (const suffix of [
@@ -285,6 +288,7 @@ test("bundle is optional until packaging and generated settings stay beside app 
       "bunaway.json",
       "message",
       "policy.json",
+      "tsconfig.json",
     ]);
     await writeJson(path, withoutBundle);
     expect((await validateProject(project)).bundle).toBeUndefined();
@@ -403,11 +407,16 @@ test("policy rejects duplicate views, unsafe scope prefixes, unknown permissions
     {
       ...policy,
       backend: {
-        log: true,
-        storage: [{ scope: "appData", pathPrefix: "../escape", access: ["write"] }],
+        permissions: [
+          "log:write",
+          {
+            identifier: "storage:write-text",
+            allow: [{ scope: "appData", pathPrefix: "../escape" }],
+          },
+        ],
       },
     },
-    { ...policy, backend: { log: false, storage: [], arbitraryNativeCall: true } },
+    { ...policy, backend: { permissions: [], arbitraryNativeCall: true } },
   ]) {
     try {
       await writeJson(resolve(project, "src-bunaway/policy.json"), invalid);
@@ -824,7 +833,7 @@ test("CLI validates, relocates and bundles a catalog of startup and deferred win
     policy.views.push({
       ...policy.views[0],
       id: "editor",
-      host: { log: false, storage: [], windows: ["editor"] },
+      host: { ...policy.views[0].host, windows: ["editor"] },
     });
     await writeJson(policyPath, policy);
     await writeJson(configPath, config);

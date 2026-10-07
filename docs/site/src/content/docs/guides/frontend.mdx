@@ -66,6 +66,9 @@ UI 컴포넌트를 제거할 때는 `await unlisten()`으로 해당 구독을 �
 기본 클라이언트 생성에는 WebView 브리지가 필요합니다.
 [타입과 입력 검증](/guides/types-and-validation/)에서 타입 추론 범위를 확인하세요.
 
+생성 앱의 `src/client.ts`가 제공하는 타입이 지정된 `client.invoke`, `client.listen`도 사용할 수 있습니다.
+이 파일을 import하는 것만으로 연결하지 않으며, UI 초기화와 구독 해제 규칙은 같습니다.
+
 ## 브라우저와 WebView
 
 일반 브라우저에는 네이티브 브리지가 없습니다.

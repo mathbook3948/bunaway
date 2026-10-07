@@ -38,7 +38,7 @@ const boundary = new ViewBoundary(
     origins: ["https://app.bunaway.local"],
     commands: [],
     events: [],
-    host: { log: false, storage: [] },
+    host: { permissions: [] },
   },
   {
     origin: (text) => new URL(text).origin,

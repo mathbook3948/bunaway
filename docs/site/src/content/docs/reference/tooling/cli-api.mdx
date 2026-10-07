@@ -24,7 +24,12 @@ validate는 `development?: boolean`을 받으며 기본값은 false입니다.
 개발 검증에서는 외부 개발 서버가 있을 때 프로덕션 UI 파일이 없어도 되며 개발 URL을 검증합니다. validateProject는 build.command를 실행하지 않습니다.
 
 Project에는 `root`, `frameworkRoot`, `appEntry`, `frontend`, `app`, `policy`,
-선택적 `bundle`, `dev`, `buildCommand`, `backendDependencies`가 있습니다. `backendDependencies`는 검증한 앱 정의가 import한 프로젝트 내부 파일의 프로젝트 상대 경로 목록입니다. 파일 경로는 해석된 경로입니다. `buildCommand`는 설정의 `build.command` 실행 파일과 인자 배열입니다.
+선택적 `bundle`, `dev`, `buildCommand`, `backendDependencies`, `nativePlugins`가 있습니다.
+`backendDependencies`는 검증한 앱 정의가 import한 프로젝트 내부 파일의 프로젝트 상대 경로 목록입니다.
+`nativePlugins`는 검증 중 읽은 설치 플러그인의 계약과 플랫폼 구현 목록입니다.
+CLI가 이어지는 번들에 재사용하며 앱의 활성화 목록은 `AppDefinition.plugins`로 정합니다.
+파일 경로는 해석된 경로입니다. 새 검증에서는 설치 플러그인을 다시 읽습니다.
+`buildCommand`는 설정의 `build.command` 실행 파일과 인자 배열입니다.
 구체적인 검증 기준은 [validate](/reference/cli/validate/)를 따릅니다.
 
 ## 네이티브 준비와 빌드

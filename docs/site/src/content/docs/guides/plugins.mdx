@@ -6,10 +6,16 @@ description: 앱에 플러그인을 연결하고 setup, StopHook, 정책, 명령
 작은 앱은 명령을 app.ts에 직접 넣어도 됩니다.
 명령과 이벤트를 재사용하거나 앱 시작과 종료 때 작업을 실행하려면 PluginDefinition으로 묶습니다.
 
+저장 등 설치한 네이티브 플러그인은 화면과 백엔드에서 같은 경로로 import합니다.
+예를 들어 둘 다 `import { storage } from "@bunaway/plugin-storage"`를 사용합니다.
+화면에서는 WebView 호출을, 백엔드에서는 현재 명령이나 setup의 Host API 호출을 사용합니다.
+사용할 패키지의 등록과 권한은 [플러그인 API](/reference/backend/host-api/)에서 확인하세요.
+
 ## 최소 플러그인
 
 ```ts
 import { command, type PluginDefinition } from "@bunaway/backend";
+
 
 export const greetingPlugin = {
   name: "greeting",
@@ -34,28 +40,28 @@ setup에서 반환한 함수는 종료 시 실행할 StopHook입니다.
 ## Host API를 사용하는 초기화
 
 setup의 context.host는 `policy.backend` 권한을 사용합니다.
-로그를 기록하려면 requiredHost에 `{ log: true, storage: [] }`를 선언하고 policy의 backend.log도 true로 설정합니다.
-requiredHost는 시작할 때 필요한 권한을 검사하므로 정책에도 같은 권한이 있어야 합니다.
+로그 패키지를 설치하고 logPlugin을 등록합니다. requiredPermissions에 `log:write`를 선언하고 backend.permissions에도 같은 식별자를 허용합니다.
 
 `defineApp()`으로 플러그인을 연결하면 setup에서도 `storage`, `log`, `capabilities`를
 import해 직접 호출할 수 있습니다.
 
 ```ts
-import { defineApp, log, type PluginDefinition } from "@bunaway/backend";
+import { defineApp, type PluginDefinition } from "@bunaway/backend";
+import { log, logPlugin } from "@bunaway/plugin-log";
 
 const startup = {
   name: "startup",
   version: "1",
-  requiredHost: { log: true, storage: [] },
+  requiredPermissions: ["log:write"],
   async setup() {
     await log.info("앱을 시작했습니다.");
   },
 } satisfies PluginDefinition;
 
-export default defineApp({ modules: [], plugins: [startup] });
+export default defineApp({ modules: [], plugins: [logPlugin, startup] });
 ```
 
-이 예제는 `policy.backend.log: true`가 필요합니다.
+이 예제는 `policy.backend.permissions: ["log:write"]`가 필요합니다.
 setup에서 시작한 비동기 작업은 앱 종료까지 백엔드 권한을 사용합니다.
 명령에서 시작한 작업은 해당 명령이 끝나면 Host API를 사용할 수 없습니다.
 
@@ -67,6 +73,8 @@ dependencies는 플러그인 이름 배열이며 의존성이 먼저 초기화�
 앱과 플러그인에 걸쳐 명령 이름과 이벤트 이름을 중복 등록할 수 없습니다. 플러그인 이름의 중복이나 순환 의존성도 시작 오류가 됩니다.
 타이머와 연결은 StopHook에서 정리합니다.
 초기화 중 실패하면 이미 등록한 StopHook을 역순으로 실행합니다.
+초기화나 종료가 실패하면 개발 터미널에서 플러그인 이름, setup 또는 stop 단계와 원래 오류를 확인합니다.
+Windows 진단 로그에는 `plugin-failed`로 기록됩니다. 종료 훅의 실패는 나머지 자원의 정리를 막지 않습니다.
 
 모든 필드와 시작 실패 조건은 [PluginDefinition](/reference/backend/plugins/)에 있습니다.
 플러그인은 앱에 포함해 실행하는 신뢰된 코드입니다. 별도 마켓이나 자동 업데이트 기능은 아직 없습니다.

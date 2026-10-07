@@ -7,8 +7,8 @@
         "reference/client/create-client": ["createClient"],
         "reference/client/transport": ["createWebViewTransport"],
         "reference/client/invoke": ["invoke"],
-        "reference/client/listen": ["listen"],
-        "reference/client/capabilities": ["capabilities"]
+        "reference/tooling/native-plugins": ["invokePlugin"],
+        "reference/client/listen": ["listen"]
       }
     },
     {
@@ -18,7 +18,7 @@
         "reference/backend/command": ["command"],
         "reference/backend/app-definition": ["defineApp"],
         "reference/backend/module": ["defineModule"],
-        "reference/backend/host-api": ["storage", "log", "capabilities"],
+        "reference/backend/host-api": ["host"],
         "reference/tooling/core-and-runtime": ["createCore"],
         "reference/host/windows": ["windows"]
       }
@@ -27,7 +27,7 @@
       "name": "@bunaway/core",
       "source": "packages/core/src/index.ts",
       "pages": {
-        "reference/tooling/core-and-runtime": ["createCore"]
+        "reference/tooling/core-and-runtime": ["createCore", "bindHostAPI"]
       }
     },
     {
@@ -56,12 +56,14 @@
           "messageSchema",
           "policySchema",
           "processSchema",
-          "CAPABILITIES_COMMAND",
           "hostCallSchema",
-          "hostOperations",
           "parseHostCall",
+          "hostOperations",
+          "isWindowOperation",
+          "parseWindowCall",
           "serializeHostCall",
           "validateHostOutput",
+          "validateWindowCall",
           "PROCESS_IPC_VERSION",
           "parseProcessFrame",
           "serializeProcessFrame",
@@ -72,7 +74,8 @@
           "parseHostResponse",
           "serializeHostResponse",
           "parsePolicy",
-          "negotiateProtocol"
+          "negotiateProtocol",
+          "NativeRegistry"
         ]
       }
     },
@@ -126,6 +129,34 @@
           "runPackage"
         ]
       }
+    },
+    {
+      "name": "@bunaway/plugin-storage",
+      "source": "plugins/storage/src/index.ts",
+      "pages": {
+        "reference/backend/host-api": ["storage", "storagePlugin"]
+      }
+    },
+    {
+      "name": "@bunaway/plugin-log",
+      "source": "plugins/log/src/index.ts",
+      "pages": {
+        "reference/backend/host-api": ["log", "logPlugin"]
+      }
+    },
+    {
+      "name": "@bunaway/plugin-capabilities",
+      "source": "plugins/capabilities/src/index.ts",
+      "pages": {
+        "reference/backend/host-api": ["capabilities", "capabilitiesPlugin"]
+      }
+    },
+    {
+      "name": "@bunaway/plugin",
+      "source": "packages/plugin-sdk/src/index.ts",
+      "pages": {
+        "reference/tooling/native-plugins": ["defineNativePlugin", "BunawayError", "s"]
+      }
     }
   ],
   "members": [
@@ -150,7 +181,6 @@
         "reference/client/create-client": ["ready"],
         "reference/client/invoke": ["invoke"],
         "reference/client/listen": ["listen"],
-        "reference/client/capabilities": ["capabilities"],
         "reference/client/close": ["close"]
       }
     },
@@ -233,10 +263,12 @@
           "version",
           "dependencies",
           "platforms",
-          "requiredHost",
           "commands",
           "events",
-          "setup"
+          "setup",
+          "requiredPermissions",
+          "requiredHost",
+          "native"
         ]
       }
     },
@@ -252,7 +284,8 @@
           "runtime",
           "send",
           "callHost",
-          "onCommandError"
+          "onCommandError",
+          "onPluginError"
         ]
       }
     },
@@ -281,11 +314,54 @@
           "frontend",
           "buildCommand",
           "backendDependencies",
+          "nativePlugins",
           "bundle",
           "dev",
           "app",
           "policy"
         ]
+      }
+    },
+    {
+      "source": "packages/plugin-sdk/src/index.ts",
+      "type": "NativePluginDefinition",
+      "pages": {
+        "reference/tooling/native-plugins": ["name", "version", "operations", "scopes", "matches"]
+      }
+    },
+    {
+      "source": "packages/plugin-sdk/src/index.ts",
+      "type": "NativeEnvironment",
+      "pages": {
+        "reference/tooling/native-plugins": ["dataRoot", "capabilities"]
+      }
+    },
+    {
+      "source": "packages/plugin-sdk/src/index.ts",
+      "type": "NativeAdapter",
+      "pages": {
+        "reference/tooling/native-plugins": ["execute", "dispose"]
+      }
+    },
+    {
+      "source": "packages/plugin-sdk/src/index.ts",
+      "type": "NativeOperationDefinition",
+      "pages": {
+        "reference/tooling/native-plugins": ["input", "output", "permission", "osPermission"]
+      }
+    },
+    {
+      "source": "packages/protocol/src/native-registry.ts",
+      "type": "NativeRegistryOptions",
+      "pages": {
+        "reference/protocol": ["mode"]
+      }
+    },
+    {
+      "source": "packages/protocol/src/host-api.ts",
+      "type": "HostOperationContract",
+      "pages": {
+        "reference/protocol": ["name", "input", "output", "permission", "osPermission"]
       }
     },
     {

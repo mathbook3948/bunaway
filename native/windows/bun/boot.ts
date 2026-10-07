@@ -6,24 +6,24 @@ import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { AppDefinition } from "../../../packages/core/src/index.ts";
 import { type HostContext, parsePolicy } from "../../../packages/protocol/src/index.ts";
-import pin from "../../../runtime/build-manifests/windows-x64.json";
-import { readWindowSpecs } from "../../../packages/runtime-bun/src/window-config.ts";
-import type { UIConfig } from "./channel.ts";
-import deps from "./deps.json";
-import { runWindowsApp } from "./entry.ts";
-import { AppAlreadyRunningError, containAppProcess } from "./job.ts";
-import {
-  forwardToInstance,
-  instanceAddress,
-  listenForInstances,
-  parseLaunchArguments,
-  readLaunchArguments,
-  type LaunchArguments,
-} from "./instance.ts";
 import {
   verifyDevelopmentLaunch,
   verifyDevelopmentToolsLaunch,
 } from "../../../packages/runtime-bun/src/development.ts";
+import { readWindowSpecs } from "../../../packages/runtime-bun/src/window-config.ts";
+import pin from "../../../runtime/build-manifests/windows-x64.json";
+import type { UIConfig } from "./channel.ts";
+import deps from "./deps.json";
+import { runWindowsApp } from "./entry.ts";
+import {
+  forwardToInstance,
+  instanceAddress,
+  type LaunchArguments,
+  listenForInstances,
+  parseLaunchArguments,
+  readLaunchArguments,
+} from "./instance.ts";
+import { AppAlreadyRunningError, containAppProcess } from "./job.ts";
 
 const hash = async (path: string) =>
   createHash("sha256")

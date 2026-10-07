@@ -7,10 +7,30 @@
       "commands": ["message.read", "message.save"],
       "events": ["message.saved"],
       "host": {
-        "log": false,
-        "storage": [{ "scope": "appData", "pathPrefix": "messages", "access": ["read", "write"] }]
+        "permissions": [
+          {
+            "identifier": "storage:read-text",
+            "allow": [
+              {
+                "scope": "appData",
+                "pathPrefix": "messages"
+              }
+            ]
+          },
+          {
+            "identifier": "storage:write-text",
+            "allow": [
+              {
+                "scope": "appData",
+                "pathPrefix": "messages"
+              }
+            ]
+          }
+        ]
       }
     }
   ],
-  "backend": { "log": false, "storage": [] }
+  "backend": {
+    "permissions": []
+  }
 }

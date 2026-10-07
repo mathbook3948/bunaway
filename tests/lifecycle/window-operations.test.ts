@@ -1,5 +1,5 @@
-import assert from "node:assert/strict";
 import { expect, test } from "bun:test";
+import assert from "node:assert/strict";
 import { WindowOperations, type WindowState } from "../../native/windows/bun/window-operations.ts";
 import type { WindowSpec } from "../../packages/runtime-bun/src/window-config.ts";
 

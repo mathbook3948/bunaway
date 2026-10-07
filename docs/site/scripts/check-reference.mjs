@@ -107,23 +107,75 @@ function visitCommands(node) {
 visitCommands(source(resolve(root, "packages/cli/src/main.ts")));
 checkNames(commands, catalog.commands, "CLI commands");
 
-function objectKeys(path, variable) {
-  const declaration = source(resolve(root, path))
-    .statements.filter(ts.isVariableStatement)
-    .flatMap((node) => [...node.declarationList.declarations])
-    .find((node) => node.name.getText() === variable);
-  let value = declaration?.initializer;
-  while (value && (ts.isAsExpression(value) || ts.isSatisfiesExpression(value)))
-    value = value.expression;
-  if (!value || !ts.isObjectLiteralExpression(value)) throw new Error(`Cannot inspect ${variable}`);
-  return new Set(
-    value.properties
-      .map((node) => node.name?.getText().replace(/^['"]|['"]$/g, ""))
-      .filter(Boolean),
-  );
+function operationNames(path) {
+  const names = new Set();
+  function visit(node) {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "defineNativePlugin" &&
+      node.arguments[0] &&
+      ts.isObjectLiteralExpression(node.arguments[0])
+    ) {
+      const fields = new Map(
+        node.arguments[0].properties
+          .filter(ts.isPropertyAssignment)
+          .map((property) => [property.name.getText(), property.initializer]),
+      );
+      const name = fields.get("name");
+      const operations = fields.get("operations");
+      if (
+        name &&
+        ts.isStringLiteral(name) &&
+        operations &&
+        ts.isObjectLiteralExpression(operations)
+      )
+        for (const operation of operations.properties)
+          if (
+            ts.isPropertyAssignment(operation) &&
+            (ts.isIdentifier(operation.name) || ts.isStringLiteral(operation.name))
+          )
+            names.add(`${name.text}.${operation.name.text}`);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(source(resolve(root, path)));
+  return names;
+}
+function objectPropertyNames(path, constantName) {
+  const file = source(resolve(root, path));
+  for (const statement of file.statements) {
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (declaration.name.getText() !== constantName) continue;
+      let initializer = declaration.initializer;
+      while (
+        initializer &&
+        (ts.isAsExpression(initializer) ||
+          ts.isSatisfiesExpression(initializer) ||
+          ts.isParenthesizedExpression(initializer))
+      )
+        initializer = initializer.expression;
+      if (!initializer || !ts.isObjectLiteralExpression(initializer))
+        throw new Error(`Cannot inspect ${path}: ${constantName} must be an object literal.`);
+      return new Set(
+        initializer.properties
+          .filter(ts.isPropertyAssignment)
+          .map((property) => property.name)
+          .filter((name) => ts.isIdentifier(name) || ts.isStringLiteral(name))
+          .map((name) => name.text),
+      );
+    }
+  }
+  throw new Error(`Cannot inspect ${path}: missing ${constantName}.`);
 }
 checkNames(
-  objectKeys("packages/protocol/src/host-api.ts", "hostOperations"),
+  new Set([
+    ...objectPropertyNames("packages/protocol/src/host-api.ts", "hostOperations"),
+    ...["storage", "log", "capabilities"].flatMap((name) => [
+      ...operationNames(`plugins/${name}/src/index.ts`),
+    ]),
+  ]),
   catalog.operations,
   "Host operations",
 );

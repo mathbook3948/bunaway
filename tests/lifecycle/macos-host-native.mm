@@ -24,6 +24,33 @@ int main(int argc, char** argv) {
             testRoot = fs::absolute(fs::path(argv[1])) / ("host-security-" + randomHex(8));
             fs::create_directories(testRoot / "web");
             {
+                parseHostPermissions(Json{{"permissions", Json::array()}});
+                for (const auto& permissions : {
+                    Json::array({"log:write"}),
+                    Json::array({Json{{"identifier", "storage:read-text"}, {"allow", Json::array()}}})
+                }) {
+                    bool rejected = false;
+                    try { parseHostPermissions(Json{{"permissions", permissions}}); }
+                    catch (const HostError& error) { rejected = error.code == "UNSUPPORTED"; }
+                    require(rejected, "Native plugin permissions must be rejected before startup.");
+                }
+                App runtime;
+                runtime.backendContext = "backend-test";
+                runtime.hostLog = std::make_unique<Log>(testRoot / "unsupported.log", 1024 * 1024);
+                const auto key = runtime.backendContext + "|request-1";
+                runtime.hostPending.emplace(key, App::HostRequest{runtime.backendContext, "storage.readText"});
+                runtime.executeHostOp(key, runtime.backendContext, "request-1", "storage.readText", nullptr);
+                require(runtime.queue.size() == 1, "Unsupported operation must return an error.");
+                const auto response = Json::parse(runtime.queue.front());
+                require(response["payload"]["error"]["code"] == "UNSUPPORTED", "Native operation unexpectedly succeeded.");
+                runtime.queue.clear();
+                runtime.hostPending.emplace(key, App::HostRequest{runtime.backendContext, "storage.readText"});
+                runtime.onHostCancel(runtime.backendContext, "request-1");
+                runtime.executeHostOp(key, runtime.backendContext, "request-1", "storage.readText", nullptr);
+                require(runtime.queue.empty() && runtime.hostPending.empty(), "Cancelled native request returned a late error.");
+                std::puts("PASS unsupported plugin permissions, operations and cancel-first cleanup");
+            }
+            {
                 const auto originalBun = fs::path(argv[2]) / "runtime/bun";
                 const auto signedBun = testRoot / "bun";
                 fs::copy_file(originalBun, signedBun);

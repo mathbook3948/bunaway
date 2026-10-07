@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "name": "storage",
+  "entry": "./src/index.ts",
+  "platforms": {
+    "windows": {
+      "execution": "io",
+      "operations": "./src/windows.ts"
+    }
+  }
+}

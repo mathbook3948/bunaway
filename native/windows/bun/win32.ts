@@ -1,4 +1,4 @@
-import { dlopen, JSCallback, ptr, type Pointer } from "bun:ffi";
+import { dlopen, JSCallback, type Pointer, ptr } from "bun:ffi";
 import assert from "node:assert/strict";
 import { APP_SHUTDOWN_MESSAGE } from "./channel.ts";
 

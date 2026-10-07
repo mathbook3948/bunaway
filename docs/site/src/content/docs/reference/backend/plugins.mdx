@@ -1,46 +1,42 @@
 ---
 title: PluginDefinition
-description: 플러그인의 필드와 의존성, 초기화, 종료 과정을 설명합니다.
+description: 개별 플러그인의 등록, 권한, 시작과 종료 계약입니다.
 sidebar: { order: 6 }
 ---
 
-플러그인은 `AppDefinition.plugins`에 추가하는 신뢰된 앱 확장입니다.
-명령과 이벤트를 등록하고 setup에 초기화 작업을 작성합니다. 실행할 플랫폼과 필요한 Host 권한도 선언합니다.
-
-## 필드
+설치한 플러그인은 `defineApp({ modules, plugins })`의 plugins 배열에 등록합니다.
+일반 TypeScript 플러그인은 명령과 이벤트, setup을 제공할 수 있습니다.
+네이티브 플러그인은 필요한 패키지를 개별 설치합니다.
 
 | 필드 | 필수 | 의미 |
 | --- | --- | --- |
-| `name`, `version` | 예 | 플러그인 식별, 버전 문자열 |
-| `dependencies` | 아니요 | 먼저 초기화해야 할 플러그인 이름 배열 |
+| `name`, `version` | 예 | 플러그인 식별자와 버전 문자열. 네이티브 플러그인은 설치 manifest와 일치해야 함 |
+| `dependencies` | 아니요 | 먼저 초기화할 플러그인 이름 배열 |
 | `platforms` | 아니요 | 실행 허용 플랫폼 배열. 미선언이면 플랫폼 제한 없음 |
-| `requiredHost` | 아니요 | 백엔드 작업에 필요한 log, storage, windows 권한 |
-| `commands`, `events` | 아니요 | 앱과 공유하는 명령과 이벤트 등록 목록 |
+| `requiredPermissions` | 아니요 | backend.permissions에 명시해야 할 플러그인 권한 식별자 배열 |
+| `requiredHost` | 아니요 | setup에서 사용할 Host 권한. 현재 `windows` 뷰 ID 배열을 지정할 수 있음 |
+| `native` | 아니요 | operations와 permissions 계약 |
+| `commands`, `events` | 아니요 | 앱과 공유하는 명령과 이벤트 |
 | `setup(context)` | 아니요 | 동기/비동기 초기화. 선택적 StopHook 반환 |
 
-`platforms`의 계약 값은 windows, macos, linux, android, ios입니다.
-현재 호스트의 구현 상태는 [지원 범위](/reference/platforms/)에서 확인합니다.
+`requiredPermissions`는 앱의 `backend.permissions`에 각 식별자가 명시됐는지 검사합니다.
+실제 리소스 접근은 호출할 때 allow와 deny 범위를 검사합니다. 등록만으로 권한을 부여하지 않습니다.
+`requiredHost.windows`는 백엔드 setup에 필요한 창 대상이며, 모든 ID가 `policy.backend.windows`에도 있어야 합니다.
+권한이 빠진 창 API 요청은 `PERMISSION_DENIED`로 실패합니다.
+네이티브 작업에는 `plugin.<이름>.` 명령을 자동 등록합니다. 이 접두사는 일반 앱 명령에 예약되어 있습니다.
 
-## 초기화와 실패
+중복 이름, 없는 의존성과 의존 순환은 `INVALID_ARGUMENT`입니다.
+미지원 플랫폼은 `UNSUPPORTED`, 필요한 backend 권한의 누락은 `INVALID_ARGUMENT`입니다.
+현재 개별 네이티브 어댑터는 Windows를 지원합니다.
 
-dependencies에 지정한 플러그인을 먼저 초기화합니다.
-중복 플러그인 이름, 없는 의존성, 의존 순환은 `INVALID_ARGUMENT`입니다.
-지원하지 않는 플랫폼에서는 `UNSUPPORTED`로 시작에 실패합니다. `requiredHost`의 권한을 `policy.backend`가 충족하지 못하면 `INVALID_ARGUMENT`로 시작에 실패합니다.
-등록 명령, 이벤트 이름은 앱과 다른 플러그인 사이에서도 중복, 예약 이름 검사를 받습니다.
+## 시작과 종료
 
-`requiredHost`에 적은 권한이 `policy.backend`에도 있어야 앱을 시작할 수 있습니다.
-같은 범위의 여러 storage grant로 read/write를 충족할 수 있습니다. 각 grant의 scope와 경로 안에서만 허용합니다.
-`requiredHost.windows`의 모든 뷰 ID가 `policy.backend.windows`에도 있어야 합니다.
-필요한 창 권한이 없으면 어떤 플러그인의 setup도 실행하기 전에 `INVALID_ARGUMENT`로 시작에 실패합니다.
-setup에는 `policy.backend`의 권한을 사용하는 컨텍스트를 전달합니다.
+setup은 의존성 순서로 실행하고 StopHook은 역순으로 실행합니다. 초기화 실패에서도 이미
+시작한 플러그인을 정리합니다. StopHook은 2초 안에 끝나야 하며 기한을 넘기면 `TIMEOUT`입니다.
+초기화와 종료 오류는 플러그인 이름, 단계, 원래 오류를 개발 터미널에 기록합니다.
+Windows에서는 `plugin-failed` 진단 로그에도 남깁니다. 종료 훅 하나가 실패해도 나머지 훅은 실행합니다.
+앱 종료 시 Host 호출을 먼저 취소하므로 StopHook에서 자체 연결과 타이머를 정리합니다.
 
-## 종료
-
-setup이 반환한 함수가 StopHook입니다. 앱 종료와 초기화 실패에서 이미 초기화된 훅을 역순으로 실행합니다.
-정리 작업은 종료 기한인 2초 안에 끝나야 합니다. 기한을 넘기면 `TIMEOUT`이 발생합니다.
-플러그인이 연 연결과 타이머 등은 StopHook에서 정리합니다.
-
-[플러그인 작성 가이드](/guides/plugins/)에 최소 예시와 정책 변경 방법이 있습니다.
-기본 로그와 저장 플러그인은 아직 제공하지 않습니다.
+[사용 가이드](/guides/plugins/)와 [네이티브 계약](/reference/plugin-model/)을 참고하세요.
 Host가 관리하는 로그와 앱 데이터 저장에는 [log, storage](/reference/backend/host-api/)를 사용합니다.
 일반 파일 작업에는 백엔드에서 Bun API를 직접 사용할 수 있습니다.

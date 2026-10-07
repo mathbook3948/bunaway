@@ -1,26 +1,20 @@
 import {
   API_LIMITS,
   BunawayError,
-  CAPABILITIES_COMMAND,
   type CancellationController,
   type CancellationSignal,
   type ClientMessage,
   type Dispose,
   type Hello,
-  type HostAPI,
-  type HostCall,
   type HostContext,
-  type HostResponse,
-  hostCallSchema,
-  hostOperations,
-  hostResponseSchema,
   type JsonValue,
+  NativeRegistry,
   negotiateProtocol,
   type Policy,
   ProtocolError,
   type Schema,
   type ServerMessage,
-  validateHostOutput,
+  serializeMessage,
   validateValue,
   type WireError,
 } from "@bunaway/protocol";
@@ -38,7 +32,8 @@ import type {
 } from "./index.ts";
 
 type ViewPolicy = Policy["views"][number];
-type HostPermissions = Policy["backend"];
+
+import { bindHostAPI } from "./host-api.ts";
 
 const NAME_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
 
@@ -46,14 +41,19 @@ function fail(code: WireError["code"], message: string): never {
   throw new BunawayError({ code, message });
 }
 
+function reportDiagnostic(report: () => void | Promise<void> | undefined): void {
+  try {
+    void Promise.resolve(report()).catch(() => {});
+  } catch {
+    // Diagnostics must not replace the original failure or block cleanup.
+  }
+}
+
 function checkRegistrationName(name: string, kind: "command" | "event", owner: string): void {
   if (!NAME_PATTERN.test(name))
     fail("INVALID_ARGUMENT", `${owner} registered an invalid ${kind} name.`);
-  if (kind === "command" && name === CAPABILITIES_COMMAND)
-    fail(
-      "INVALID_ARGUMENT",
-      `${owner} cannot register the reserved ${CAPABILITIES_COMMAND} command.`,
-    );
+  if (kind === "command" && name.startsWith("plugin."))
+    fail("INVALID_ARGUMENT", `${owner} cannot register the reserved plugin namespace command.`);
 }
 
 function registerAll<T>(
@@ -69,26 +69,12 @@ function registerAll<T>(
   }
 }
 
-// A policy entry covers a required prefix when it grants the same or a wider scope subtree.
-function coversPathPrefix(granted: string, required: string): boolean {
-  return granted === "" || granted === required || required.startsWith(`${granted}/`);
+function coversHostPermissions(
+  granted: Policy["backend"],
+  required: { readonly windows?: readonly string[] },
+): boolean {
+  return (required.windows ?? []).every((view) => granted.windows?.includes(view));
 }
-
-function coversHostPermissions(granted: HostPermissions, required: HostPermissions): boolean {
-  if (required.log && !granted.log) return false;
-  if ((required.windows ?? []).some((view) => !granted.windows?.includes(view))) return false;
-  return required.storage.every((need) =>
-    need.access.every((access) =>
-      granted.storage.some(
-        (have) =>
-          have.scope === need.scope &&
-          coversPathPrefix(have.pathPrefix, need.pathPrefix) &&
-          have.access.includes(access),
-      ),
-    ),
-  );
-}
-
 function orderPlugins(plugins: readonly PluginDefinition[], services: CoreServices) {
   const byName = new Map<string, PluginDefinition>();
   for (const plugin of plugins) {
@@ -118,10 +104,22 @@ function orderPlugins(plugins: readonly PluginDefinition[], services: CoreServic
   for (const plugin of ordered) {
     if (plugin.platforms && !plugin.platforms.includes(services.platform))
       fail("UNSUPPORTED", `Plugin "${plugin.name}" does not support ${services.platform}.`);
-    if (plugin.requiredHost && !coversHostPermissions(services.policy.backend, plugin.requiredHost))
+    if (
+      plugin.requiredPermissions?.some(
+        (permission) =>
+          !services.policy.backend.permissions.some(
+            (grant) => (typeof grant === "string" ? grant : grant.identifier) === permission,
+          ),
+      )
+    )
       fail(
         "INVALID_ARGUMENT",
         `Plugin "${plugin.name}" requires host permissions outside the backend policy.`,
+      );
+    if (plugin.requiredHost && !coversHostPermissions(services.policy.backend, plugin.requiredHost))
+      fail(
+        "INVALID_ARGUMENT",
+        `Plugin "${plugin.name}" requires window grants outside the backend policy.`,
       );
   }
   return ordered;
@@ -145,70 +143,6 @@ function createStateStore(initial: Readonly<Record<string, JsonValue>> | undefin
     delete: (key) => data.delete(key),
   };
 }
-
-// Same binding semantics as the runtime adapter: the context is fixed, calls
-// are checked before and after the operation, and cancellation wins promptly.
-function createHostAPI(
-  context: HostContext,
-  signal: CancellationSignal,
-  callHost: CoreServices["callHost"],
-): HostAPI {
-  const checkCancelled = () => {
-    if (signal.aborted)
-      throw new BunawayError({ code: "CANCELLED", message: "Host operation cancelled." });
-  };
-  return {
-    async call(operation, payload) {
-      checkCancelled();
-      let call: HostCall;
-      try {
-        call = validateValue(hostCallSchema, { operation, payload }) as HostCall;
-      } catch {
-        throw new BunawayError({ code: "INVALID_ARGUMENT", message: "Invalid host request." });
-      }
-      let response: HostResponse;
-      let onAbort = () => {};
-      const aborted = new Promise<never>((_, reject) => {
-        onAbort = () =>
-          reject(new BunawayError({ code: "CANCELLED", message: "Host operation cancelled." }));
-        signal.addEventListener("abort", onAbort);
-      });
-      try {
-        response = validateValue(
-          hostResponseSchema,
-          await Promise.race([
-            Promise.resolve().then(() => {
-              checkCancelled();
-              return callHost(context, call, signal);
-            }),
-            aborted,
-          ]),
-        );
-      } catch (cause) {
-        checkCancelled();
-        if (cause instanceof BunawayError) throw cause;
-        throw new BunawayError({ code: "INTERNAL", message: "Host operation failed." });
-      } finally {
-        signal.removeEventListener("abort", onAbort);
-      }
-      checkCancelled();
-      if (response.kind === "error") throw new BunawayError(response.error);
-      try {
-        return validateHostOutput(operation, response.payload);
-      } catch {
-        throw new BunawayError({ code: "INTERNAL", message: "Invalid host response." });
-      }
-    },
-  };
-}
-
-const capabilitiesCommand: CommandDefinition = {
-  input: { const: null },
-  output: hostOperations["capabilities.get"].output,
-  async run(_payload, context) {
-    return (await context.host.call("capabilities.get", null)) as JsonValue;
-  },
-};
 
 function toWireError(cause: unknown): WireError {
   if (cause instanceof BunawayError) {
@@ -366,10 +300,18 @@ class SessionImpl implements CoreSession {
       });
       return;
     }
+    if (message.command.startsWith("plugin.") && !this.view.commands.includes(message.command)) {
+      this.respondError(message.id, { code: "PERMISSION_DENIED", message: "Command not allowed." });
+      return;
+    }
     const definition = this.core.commands.get(message.command);
     if (!definition) {
       this.respondError(message.id, {
-        code: "INVALID_ARGUMENT",
+        code:
+          message.command.startsWith("plugin.") &&
+          !this.core.registry.plugins.has(message.command.split(".")[1] ?? "")
+            ? "UNSUPPORTED"
+            : "INVALID_ARGUMENT",
         message: "Unknown command.",
       });
       return;
@@ -433,17 +375,15 @@ class SessionImpl implements CoreSession {
       let output: JsonValue;
       try {
         output = validateValue(definition.output, result);
+        reply = { kind: "result", protocol: this.outProtocol, id: pending.id, payload: output };
+        // Include protocol and correlation fields before handing the reply to a transport.
+        serializeMessage(reply);
       } catch {
         throw new BunawayError({ code: "INTERNAL", message: "Invalid command output." });
       }
-      reply = { kind: "result", protocol: this.outProtocol, id: pending.id, payload: output };
     } catch (cause) {
       if (!(cause instanceof BunawayError)) {
-        try {
-          void Promise.resolve(this.core.services.onCommandError?.(command, cause)).catch(() => {});
-        } catch {
-          // Diagnostic failures must not replace or delay the command response.
-        }
+        reportDiagnostic(() => this.core.services.onCommandError?.(command, cause));
       }
       reply = {
         kind: "error",
@@ -458,7 +398,7 @@ class SessionImpl implements CoreSession {
   private makeContext(signal: CancellationSignal): CommandContext {
     return {
       signal,
-      host: createHostAPI(this.context, signal, this.core.services.callHost),
+      host: bindHostAPI(this.context, signal, this.core.services.callHost, this.core.registry),
       state: this.core.state,
       events: {
         emit: async (event, payload, target) => {
@@ -602,12 +542,13 @@ class SessionImpl implements CoreSession {
 class BunawayCore implements Core {
   readonly sessions = new Map<HostContext, SessionImpl>();
   private stopped = false;
-  private readonly stopHooks: StopHook[] = [];
+  private readonly stopHooks: { plugin: string; stop: StopHook }[] = [];
   private stopPromise: Promise<void> | null = null;
   private readonly backendController: CancellationController;
 
   constructor(
     readonly services: CoreServices,
+    readonly registry: NativeRegistry,
     readonly commands: Map<string, CommandDefinition>,
     readonly events: Map<string, Schema>,
     readonly state: StateStore,
@@ -661,7 +602,12 @@ class BunawayCore implements Core {
     const signal = this.backendController.signal;
     return {
       signal,
-      host: createHostAPI(this.services.backendContext, signal, this.services.callHost),
+      host: bindHostAPI(
+        this.services.backendContext,
+        signal,
+        this.services.callHost,
+        this.registry,
+      ),
       state: this.state,
       events: {
         emit: (event, payload, target) => this.emit(event, payload, target, "backend"),
@@ -669,18 +615,18 @@ class BunawayCore implements Core {
     };
   }
 
-  addStopHook(hook: StopHook): void {
-    this.stopHooks.push(hook);
+  addStopHook(plugin: string, stop: StopHook): void {
+    this.stopHooks.push({ plugin, stop });
   }
 
   // Stop hooks best-effort in reverse setup order; individual failures never
   // skip later hooks.
   async cleanupPlugins(): Promise<void> {
-    for (const hook of [...this.stopHooks].reverse()) {
+    for (const { plugin, stop } of [...this.stopHooks].reverse()) {
       try {
-        await hook();
-      } catch {
-        // Cleanup failure must not block the remaining teardown.
+        await stop();
+      } catch (cause) {
+        reportDiagnostic(() => this.services.onPluginError?.(plugin, "stop", cause));
       }
     }
     this.stopHooks.length = 0;
@@ -724,17 +670,39 @@ export const createCore: CoreFactory = async (app, services) => {
     registerAll(commands, plugin.commands ?? {}, "command", `plugin "${plugin.name}"`);
     registerAll(events, plugin.events ?? {}, "event", `plugin "${plugin.name}"`);
   }
-  commands.set(CAPABILITIES_COMMAND, capabilitiesCommand);
+  const registry = new NativeRegistry(ordered);
+  registry.validatePolicy(services.policy);
+  for (const operation of registry.operations.values()) {
+    commands.set(`plugin.${operation.name}`, {
+      input: operation.input,
+      output: operation.output,
+      async run(input, context) {
+        return context.host.call(operation, input as JsonValue);
+      },
+    });
+  }
   const views = new Map<string, ViewPolicy>();
   for (const view of services.policy.views) {
     if (views.has(view.id)) fail("INVALID_ARGUMENT", `Duplicate policy view "${view.id}".`);
     views.set(view.id, view);
   }
-  const core = new BunawayCore(services, commands, events, createStateStore(app.state), views);
+  const core = new BunawayCore(
+    services,
+    registry,
+    commands,
+    events,
+    createStateStore(app.state),
+    views,
+  );
   try {
     for (const plugin of ordered) {
-      const hook = await plugin.setup?.(core.makeBackendContext());
-      if (typeof hook === "function") core.addStopHook(hook);
+      try {
+        const hook = await plugin.setup?.(core.makeBackendContext());
+        if (typeof hook === "function") core.addStopHook(plugin.name, hook);
+      } catch (cause) {
+        reportDiagnostic(() => services.onPluginError?.(plugin.name, "setup", cause));
+        throw cause;
+      }
     }
   } catch (cause) {
     await core.stop();

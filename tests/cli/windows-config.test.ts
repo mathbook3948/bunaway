@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
-import { readWindowSpecs } from "../../packages/runtime-bun/src/window-config.ts";
+import type { Policy } from "../../packages/protocol/src/index.ts";
 import {
   developmentPolicy,
   developmentWindowHome,
 } from "../../packages/runtime-bun/src/development.ts";
-import type { Policy } from "../../packages/protocol/src/index.ts";
+import { readWindowSpecs } from "../../packages/runtime-bun/src/window-config.ts";
 
 const specs = ["main", "editor"].map((view) => ({
   view,
@@ -15,13 +15,13 @@ const specs = ["main", "editor"].map((view) => ({
 }));
 const policy: Policy = {
   version: 1,
-  backend: { log: false, storage: [] },
+  backend: { permissions: [], windows: [] },
   views: specs.map((spec) => ({
     id: spec.view,
     origins: ["https://app.bunaway.local"],
     commands: [],
     events: [],
-    host: { log: false, storage: [] },
+    host: { permissions: [], windows: [] },
   })),
 };
 

@@ -77,11 +77,20 @@ chmod +x "$PACKAGE/bunaway-host" "$PACKAGE/runtime/bun"
 cp "$CACHE/LICENSE.bun" "$JSON_DIR/LICENSE.nlohmann-json" "$PACKAGE/licenses/"
 
 GENERATED="$ROOT/native/host-api/generated"
-for name in bunfig.toml tsconfig.json policy.json; do
+for name in bunfig.toml tsconfig.json; do
   cp "$DESKTOP_TEST/$name" "$PACKAGE/assets/$name"
 done
 cp "$HERE/test/app.json" "$PACKAGE/assets/app.json"
-for name in process.schema.json message.schema.json policy.schema.json host-call.schema.json host-operations.json; do
+"$BUILD_BUN" -e '
+  const policy = await Bun.file(process.argv[1]).json();
+  const { macosApp } = await import(process.argv[3]);
+  policy.views = policy.views.filter(view => view.id === "main");
+  policy.views[0].commands = Object.keys(macosApp.commands).filter(name => name !== "test.notAllowed");
+  policy.views[0].host = { permissions: [] };
+  policy.backend = { permissions: [] };
+  await Bun.write(process.argv[2], JSON.stringify(policy, null, 2) + "\n");
+' "$DESKTOP_TEST/policy.json" "$PACKAGE/assets/policy.json" "$DESKTOP_TEST/macos-app.ts"
+for name in process.schema.json message.schema.json policy.schema.json host-call.schema.json; do
   cp "$GENERATED/$name" "$PACKAGE/assets/$name"
 done
 for f in "$DESKTOP_TEST"/web/*; do cp "$f" "$PACKAGE/assets/web/"; done
@@ -90,7 +99,7 @@ for entry in app.js page2.js memo.js; do
 done
 cp "$HERE/test/web/security.html" "$PACKAGE/assets/web/security.html"
 (cd "$ROOT" && "$BUILD_BUN" build "$HERE/test/web/security.js" --target=browser --outfile "$PACKAGE/assets/web/security.js")
-BACKEND_ENTRY="$DESKTOP_TEST/backend.ts"
+BACKEND_ENTRY="$DESKTOP_TEST/macos-backend.ts"
 (cd "$ROOT" && "$BUILD_BUN" build "$BACKEND_ENTRY" --target=bun --outfile "$PACKAGE/assets/backend.js")
 
 "$BUILD_BUN" -e '

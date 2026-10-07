@@ -1,18 +1,18 @@
 ---
 title: capabilities.get
-description: 백엔드에서 플랫폼 기능과 OS 권한 상태를 조회합니다.
+description: 백엔드에서 프레임워크와 등록 플러그인의 기능 및 OS 권한 메타데이터를 조회합니다.
 sidebar: { order: 4 }
 ---
 
 ```ts
-capabilities(): Promise<HostOutput<"capabilities.get">>
+capabilities(): Promise<Capabilities>
 ```
 
 앱 백엔드에서 현재 플랫폼 기능 정보를 조회합니다.
-UI에서는 [client.capabilities](/reference/client/capabilities/)를 사용합니다.
+UI에서는 [capabilities](/reference/client/capabilities/)를 사용합니다.
 
 ```ts
-import { capabilities } from "@bunaway/backend";
+import { capabilities } from "@bunaway/plugin-capabilities";
 
 const support = await capabilities();
 ```
@@ -26,17 +26,23 @@ const support = await capabilities();
 | `permission` | 예 | granted, denied, prompt, not-required, unknown |
 | `reason` | 아니요 | 문자열, 최대 1,024자 |
 
-현재 Windows는 storage.readText, storage.writeText, log.write, capabilities.get을
-supported, not-required로 보고합니다.
+프레임워크의 창 API와 앱에 등록된 네이티브 플러그인 작업을 보고합니다. Windows 창 API는
+`supported`, `not-required`입니다. Windows의 저장, 로그와 기능 조회 작업은 해당
+플러그인을 등록하고 어댑터를 사용할 수 있을 때 `supported`입니다. 플러그인 작업에
+OS 권한 선언이 없으면 `unknown`입니다.
+조회 결과에는 등록 가능한 네이티브 작업 256개와 프레임워크 창 작업을 모두 포함합니다.
+결과 전체에는 프로토콜의 JSON 깊이와 1 MiB 메시지 제한을 적용합니다.
 
 ## 권한 의미
 
-support는 플랫폼의 구현 상태이고 permission은 현재 OS 권한 상태입니다.
-조회는 현재 상태를 반환하며 정책 변경이나 OS 권한 요청은 실행하지 않습니다.
+support는 플랫폼 어댑터의 구현 상태이고 permission은 플러그인이 선언하거나 제공한 OS 권한
+메타데이터입니다. `osPermission: "not-required"`는 해당 작업에 OS 권한이 필요하지 않다는
+뜻이며, 실제 OS 권한을 조회한 값이 아닙니다. 선언이 없으면 `unknown`입니다. 조회는 정책
+변경이나 OS 권한 요청을 실행하지 않습니다.
 조회 결과와 별도로 파일 범위 및 명령 호출 권한은 정책에 허용해야 합니다.
 
 `capabilities()`에는 인자가 없습니다. 명령이나 `defineApp()`으로 연결한 플러그인 setup에서 호출합니다.
-기존 `context.host.call("capabilities.get", null)`도 지원하며 이 작업의 입력은 반드시 null입니다.
+capabilitiesPlugin 등록과 호출 출처의 `capabilities:get` 권한이 필요합니다. UI 직접 호출에는 `plugin.capabilities.get` 명령 허용도 필요합니다. 입력은 반드시 null입니다.
 실행 범위는 [백엔드 Host API](/reference/backend/host-api/)에서 확인하세요.
 잘못된 입력은 `INVALID_ARGUMENT`,
 취소는 `CANCELLED`, 유효하지 않은 응답은 `INTERNAL`로 실패합니다.

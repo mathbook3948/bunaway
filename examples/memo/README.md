@@ -73,6 +73,7 @@ bun run package win-direct --build
 - `vite.config.ts`: 고정 loopback 포트, 출력 경로, 개발 페이지 CSP 설정.
 - `web-dist/`: Vite의 프로덕션 자산 출력. 생성 파일이므로 커밋하지 않는다.
 - `src-bunaway/app.ts`: `defineApp({ modules: [memo] })`로 기능을 조립하는 공통 앱 정의.
+- `tsconfig.json`, `src-bunaway/tsconfig.json`: 화면은 browser 조건, 백엔드는 bun 조건으로 검사한다. `bun run typecheck`가 두 검사를 실행한다.
 - `src-bunaway/memo/contracts.ts`: 메모 명령 입력, 출력과 이벤트의 JSON Schema 계약.
 - `src-bunaway/memo/module.ts`: `memo.save`, `memo.read`, `memo.saved`를 공개하고 서비스와 연결.
 - `src-bunaway/memo/service.ts`: `storage`를 import해 메모 파일을 읽고 쓰는 서비스. 명령의 Host 권한은 자동으로 연결된다.
@@ -89,3 +90,5 @@ Windows 저장 위치는 `%LOCALAPPDATA%/bunaway/examples.bunaway.memo/data/note
 저장 중 수정하거나 저장에 실패한 내용은 입력창에 남는다.
 
 여러 창, 읽기 전용 권한, 자동 저장, 재실행 시나리오는 `tests/fixtures/desktop/host/`에 분리되어 있다.
+
+이 예제는 @bunaway/plugin-storage를 별도 설치하고 app.ts의 plugins에 storagePlugin을 등록한다. policy v1의 permissions에서 storage:read-text와 storage:write-text의 notes 범위를 허용한다. 현재 네이티브 실행은 Windows에서 검증했다.

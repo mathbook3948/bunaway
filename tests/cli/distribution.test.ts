@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import {
   cp,
   mkdir,
@@ -13,6 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, relative, resolve } from "node:path";
 import { packFramework } from "../../packages/cli/scripts/pack.ts";
+import { bundleWindowsAssets } from "../../packages/cli/src/assets.ts";
 import { bundleAssets } from "../../packages/cli/src/build.ts";
 import { validateProject } from "../../packages/cli/src/config.ts";
 import {
@@ -24,6 +25,94 @@ import {
 import { installedPackageRoot, json, writeJson } from "../../packages/cli/src/files.ts";
 import { buildWithSdk, sdkPlugin } from "../../packages/cli/src/sdk.ts";
 import { createProject } from "./project.ts";
+
+test("plugin declarations use configurable entry paths and are read once per build", async () => {
+  const home = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-plugin-exports-")));
+  try {
+    const project = await createProject(resolve(home, "app"));
+    await command(project, ["install", "--linker", "isolated"]);
+    const root = await installedPackageRoot(project, "@bunaway/plugin-storage");
+    await rename(resolve(root, "src/index.ts"), resolve(root, "src/public-entry.ts"));
+    const scope = resolve(root, "src/scope.ts");
+    await writeFile(
+      scope,
+      (await readFile(scope, "utf8")).replace('"./index.ts"', '"./public-entry.ts"'),
+    );
+    const path = resolve(root, "package.json");
+    const manifest = (await json(path)) as Record<string, unknown>;
+    await writeJson(path, {
+      ...manifest,
+      exports: { ".": "./src/public-entry.ts" },
+    });
+    const descriptorPath = resolve(root, "plugin.json");
+    const descriptor = (await json(descriptorPath)) as { entry: string };
+    descriptor.entry = "./src/public-entry.ts";
+    await writeJson(descriptorPath, descriptor);
+    await writeFile(
+      resolve(project, "src/main.ts"),
+      'import { storage } from "@bunaway/plugin-storage"; document.body.onclick = () => { void storage.readText({ scope: "temp", path: "memo.txt" }, { signal: new AbortController().signal }); };',
+    );
+    const typedClient = resolve(project, "src/client-contracts.ts");
+    await writeFile(
+      typedClient,
+      `import { client } from "./client.ts";
+      export function check() {
+        const text: Promise<string> = client.invoke("message.read", null);
+        // @ts-expect-error unknown command
+        client.invoke("message.typo", null);
+        // @ts-expect-error wrong input
+        client.invoke("message.save", 42);
+        // @ts-expect-error wrong result type
+        const wrong: Promise<number> = client.invoke("message.read", null);
+        client.listen("message.saved", event => {
+          const payload: string = event.payload;
+          // @ts-expect-error wrong event payload
+          const wrong: number = event.payload;
+        }, { onError() {} });
+      }
+    `,
+    );
+    try {
+      await command(project, ["run", "typecheck"]);
+    } finally {
+      await rm(typedClient);
+    }
+    const invalidBackend = resolve(project, "src-bunaway/type-error.ts");
+    await writeFile(
+      invalidBackend,
+      'import { storage } from "@bunaway/plugin-storage"; storage.readText({ scope: "temp", path: "memo.txt" }, { deadline: 0 });',
+    );
+    try {
+      await expect(command(project, ["run", "typecheck"])).rejects.toThrow("not assignable");
+    } finally {
+      await rm(invalidBackend);
+    }
+    const spawn = spyOn(Bun, "spawn");
+    try {
+      const valid = await validateProject(project);
+      const assets = resolve(home, "assets");
+      await bundleWindowsAssets(valid, assets);
+      const contractReads = spawn.mock.calls.filter(
+        ([args]) =>
+          Array.isArray(args) &&
+          args[1] === "-e" &&
+          String(args[2]).includes('matches: typeof plugin.matches === "function"'),
+      );
+      expect(contractReads).toHaveLength(1);
+      expect(await Bun.file(resolve(assets, "boot.js")).exists()).toBe(true);
+      expect(await Bun.file(resolve(assets, "web/main.js")).text()).not.toContain(
+        "AsyncLocalStorage",
+      );
+    } finally {
+      spawn.mockRestore();
+    }
+    const entry = resolve(root, "src/public-entry.ts");
+    await writeFile(entry, (await readFile(entry, "utf8")).replace("  matches,", ""));
+    await expect(validateProject(project)).rejects.toThrow("require matches");
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+}, 60000);
 
 async function command(
   cwd: string,
@@ -38,6 +127,41 @@ async function command(
   if (code !== 0) throw new Error(output);
   return output;
 }
+
+test("generated apps discover installed plugins from every direct dependency section", async () => {
+  const home = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-plugin-dependencies-")));
+  try {
+    const project = await createProject(resolve(home, "app"));
+    await command(project, ["install"]);
+    const path = resolve(project, "package.json");
+    const original = await Bun.file(path).json();
+    const specifier = original.dependencies["@bunaway/plugin-storage"];
+    delete original.dependencies["@bunaway/plugin-storage"];
+    for (const field of [
+      "dependencies",
+      "devDependencies",
+      "optionalDependencies",
+      "peerDependencies",
+    ]) {
+      const pkg = structuredClone(original);
+      pkg[field] = { ...pkg[field], "@bunaway/plugin-storage": specifier };
+      pkg.optionalDependencies = { ...pkg.optionalDependencies, "@bunaway/plugin-absent": "0.0.0" };
+      pkg.peerDependencies = { ...pkg.peerDependencies, "@bunaway/plugin-absent-peer": "0.0.0" };
+      pkg.peerDependenciesMeta = { "@bunaway/plugin-absent-peer": { optional: true } };
+      await writeJson(path, pkg);
+      const valid = await validateProject(project);
+      expect(valid.nativePlugins?.map((plugin) => plugin.packageName)).toEqual([
+        "@bunaway/plugin-storage",
+      ]);
+      const assets = resolve(home, `assets-${field}`);
+      await bundleWindowsAssets(valid, assets);
+      expect(await Bun.file(resolve(assets, "boot.js")).exists()).toBe(true);
+      expect(await Bun.file(resolve(assets, "app.js")).exists()).toBe(true);
+    }
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+}, 60000);
 
 test("workspace and isolated installs resolve transitive SDKs from their declaring packages", async () => {
   const home = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-isolated-")));
@@ -129,13 +253,16 @@ test("upgrading the complete installed release preserves app sources and changes
     await mkdir(directory);
     const pkgPath = resolve(project, "package.json");
     const pkg = JSON.parse(await readFile(pkgPath, "utf8"));
-    const packages = Object.values(
-      (
-        (await json(resolve(project, "node_modules/@bunaway/cli/framework.json"))) as {
-          packages: Record<string, string>;
-        }
-      ).packages,
-    );
+    const info = (await json(resolve(project, "node_modules/@bunaway/cli/framework.json"))) as {
+      packages: Record<string, string>;
+      plugins: Record<string, string>;
+    };
+    const packages = [
+      ...Object.values(info.packages),
+      ...Object.values(info.plugins).filter(
+        (name) => name in pkg.dependencies || name in pkg.devDependencies,
+      ),
+    ];
     const dependency = (name: string) =>
       `file:${resolve(directory, packageFilename(name, "0.0.1")).replaceAll("\\", "/")}`;
     // Synthesize a next release from installed packages without mutating repository versions.
@@ -146,11 +273,16 @@ test("upgrading the complete installed release preserves app sources and changes
       const manifest = (await json(manifestPath)) as {
         version: string;
         dependencies?: Record<string, string>;
+        peerDependencies?: Record<string, string>;
       };
       manifest.version = "0.0.1";
       for (const dep of Object.keys(manifest.dependencies ?? {})) {
         if (dep.startsWith("@bunaway/") && manifest.dependencies)
           manifest.dependencies[dep] = dependency(dep);
+      }
+      for (const dep of Object.keys(manifest.peerDependencies ?? {})) {
+        if (dep.startsWith("@bunaway/") && manifest.peerDependencies)
+          manifest.peerDependencies[dep] = dependency(dep);
       }
       await writeJson(manifestPath, manifest);
       if (name === "@bunaway/cli") {

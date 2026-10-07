@@ -9,7 +9,8 @@
     "strict": true,
     "skipLibCheck": true,
     "types": ["bun", "vite/client"],
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "customConditions": ["browser"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src-bunaway/**/*.ts", "vite.config.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"]
 }

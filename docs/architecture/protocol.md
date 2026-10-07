@@ -166,26 +166,52 @@ payload에 같은 이름의 필드가 있더라도 권한에 사용하지 않는
 브리지를 주입하지 않는 것이 기본이다. backend 자체 작업은 backend 권한을 사용하며
 WebView 작업을 backend 작업으로 승격하지 않는다.
 
-host는 `log: boolean`, `storage: []`로 범위를 선언한다. 저장소 항목은 appData/temp,
-pathPrefix, read/write 목록이다. pathPrefix는 ASCII 영숫자, `_-` 디렉터리를 `/`로
-잇는 상대 경로이며 빈 문자열은 명명된 scope 전체다. 접두어 일치는 경로 세그먼트
-단위다. `notes`가 `notes-private`를 허용하지 않는다. 일반 파일명의 문법과는 별개다.
-파일을 여는 네이티브 경계에서 실제 상대 경로, 심볼릭 링크 탈출, 대상 교체 및
-OS 권한을 다시 검사해야 한다. 이 정책 파서는 파일 접근을 실행하거나 보호하지 않는다.
+`view.host`와 `backend`는 `{ permissions }` 구조를 사용한다. 각 항목은 scope가 없는
+권한 식별자 문자열 또는 `{ identifier, allow?, deny? }` 객체다. 리소스 범위와 비교 규칙은
+권한을 소유한 플러그인이 정한다. 저장 권한의 scope는 `appData` 또는 `temp`와
+`pathPrefix`로 구성한다. 접두어 일치는 경로 세그먼트 단위이므로 `notes`가
+`notes-private`를 허용하지 않는다. 파일을 여는 네이티브 어댑터는 실제 상대 경로,
+심볼릭 링크 탈출, 대상 교체와 OS 권한을 다시 검사해야 한다. 정책 파서는 파일 접근을
+실행하거나 보호하지 않는다.
 
 ```json
 {
   "version": 1,
-  "views": [{
-    "id": "main",
-    "origins": ["https://app.bunaway.local"],
-    "commands": ["notes.read"],
-    "events": ["notes.changed"],
-    "host": { "log": false, "storage": [{ "scope": "appData", "pathPrefix": "notes", "access": ["read"] }] }
-  }],
-  "backend": { "log": false, "storage": [] }
+  "views": [
+    {
+      "id": "main",
+      "origins": [
+        "https://app.bunaway.local"
+      ],
+      "commands": [
+        "notes.read"
+      ],
+      "events": [
+        "notes.changed"
+      ],
+      "host": {
+        "permissions": [
+          {
+            "identifier": "storage:read-text",
+            "allow": [
+              {
+                "scope": "appData",
+                "pathPrefix": "notes"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "backend": {
+    "permissions": []
+  }
 }
 ```
 
 command 이름을 직접 허용하는 정책이다. [C 공통 API](./common-api.md)도 명령 이름을
-그대로 사용하며 권한 별칭으로 해석하지 않는다. 예약된 `bunaway.capabilities`도 명시적으로 허용한다.
+그대로 사용하며 권한 별칭으로 해석하지 않는다. 기능 조회는 선택 플러그인인
+`@bunaway/plugin-capabilities`가 `plugin.capabilities.get` 명령과 `capabilities:get`
+권한을 제공한다. 플러그인을 앱에 등록하고 호출 출처의 정책에서 명령과 권한을 각각
+허용해야 한다.
