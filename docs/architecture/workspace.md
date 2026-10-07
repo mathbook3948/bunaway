@@ -3,6 +3,10 @@
 Bun workspaces는 `docs/site`, `packages/*`와 `plugins/*`에 적용한다.
 네이티브 코드, 번들된 Bun 배포물, 렌더러, 템플릿과 예제는 독립 영역이다.
 
+선택 네이티브 기능은 [ADR 0012](../decisions/0012-optional-native-plugins.md)에 따라
+개별 플러그인 패키지로 이관할 예정이다. 패키지 진입점, 소유권과 CLI 연결은
+[플러그인 구조 계약](./plugins.md)에 정리했다. 아래 표는 이관 전의 현재 구현이다.
+
 | 경로 | 패키지 | TypeScript 환경 | 직접 workspace 의존성 |
 | --- | --- | --- | --- |
 | `packages/protocol` | `@bunaway/protocol` | portable | 없음 |

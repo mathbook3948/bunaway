@@ -1,5 +1,9 @@
 # C 단계 공통 API
 
+선택 네이티브 기능의 후속 공개 계약은 [플러그인 구조 계약](./plugins.md)에 정리했다.
+개별 패키지 설치, 등록과 새 정책 구조는 설계 단계다. 공식 배포 전까지 정책 형식은
+v1을 유지한다. 아래는 현재 구현의 계약이다.
+
 이 계약에 맞춰 client-sdk, core/backend-sdk와 Windows 호스트를 구현했다.
 `ClientFactory`, `CoreFactory`는 공개 실행 계약이며 실제 `createClient`, `createCore`와
 Windows FFI 호스트와 macOS의 `runBunApp` 어댑터가 이를 연결한다. 명령, Host API 검증 헬퍼와 WebView Transport도 구현했다.

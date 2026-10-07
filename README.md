@@ -30,6 +30,11 @@ export async function save(text: string) {
 뷰의 정책에 `appData/notes` 쓰기 권한이 필요하다. 명령 밖이나 완료한 명령의 작업에서는 호출을 거부한다.
 실행 범위와 로그, 기능 조회 사용법은 [백엔드 Host API](./docs/site/src/content/docs/reference/backend/host-api.mdx)를 따른다.
 
+저장, 앱 로그, 기능 지원 조회를 개별 설치하는 플러그인 모델은
+[ADR 0012](./docs/decisions/0012-optional-native-plugins.md)에 확정했다.
+[공개 계약과 이관 순서](./docs/architecture/plugins.md)는 설계 문서이며 위 SDK의
+내장 기능은 아직 이관하지 않았다.
+
 ## 프레임워크 개발 환경
 
 자기 앱을 만드는 개발자는 [로컬 tarball 설치 안내](./docs/framework-distribution.md)를

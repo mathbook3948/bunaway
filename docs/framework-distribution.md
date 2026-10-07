@@ -48,6 +48,11 @@ create는 설치를 자동 실행하지 않으며 기존 경로를 덮어쓰지 
 
 ## 설치 구성
 
+아래는 현재 설치 구성이다. 개별 네이티브 플러그인의 후속 설치 모델은
+[ADR 0012](./decisions/0012-optional-native-plugins.md)와
+[플러그인 구조 계약](./architecture/plugins.md)을 따른다. 선택 플러그인 tarball과
+CLI의 manifest 검사는 아직 구현하지 않았다.
+
 - @bunaway/client: 화면에서 `invoke`, `listen`, `capabilities`를 사용하는 WebView 클라이언트 SDK.
   [기본 연결과 타입 추론](./architecture/common-api.md#클라이언트와-transport)을 참고한다.
 - @bunaway/backend: 명령, 이벤트, 앱 정의 SDK
