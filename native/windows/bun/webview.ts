@@ -69,6 +69,7 @@ export class WebView {
       log(event: string, data?: object): void;
     },
     legacyProfile = false,
+    private readonly devtools = false,
   ) {
     const profile = resolve(
       dataRoot,
@@ -175,7 +176,7 @@ export class WebView {
         [6, 1],
         [8, 0],
         [10, 0],
-        [12, 0],
+        [12, this.devtools ? 1 : 0], // AreDevToolsEnabled
         [14, 0],
         [16, 0],
         [18, 0],
@@ -183,8 +184,12 @@ export class WebView {
         hr(method(settings, slot, ["i32"])(value), "WebView setting");
       const settings4 = query(settings, "cb56846c-4168-4d53-b04f-03b6d6796ff2");
       try {
-        for (const slot of [24, 26, 28])
-          hr(method(settings4, slot, ["i32"])(0), "WebView setting4");
+        for (const [slot, value] of [
+          [24, this.devtools ? 1 : 0], // AreBrowserAcceleratorKeysEnabled
+          [26, 0], // IsPasswordAutosaveEnabled
+          [28, 0], // IsGeneralAutofillEnabled
+        ] as const)
+          hr(method(settings4, slot, ["i32"])(value), "WebView setting4");
       } finally {
         release(settings4);
       }

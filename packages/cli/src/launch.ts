@@ -3,6 +3,12 @@ import { resolve } from "node:path";
 import pin from "../../../runtime/build-manifests/windows-x64.json";
 import { json, projectPath, verifyHash } from "./files.ts";
 
+export function windowsInspectorArgument(port: number): string {
+  if (!Number.isInteger(port) || port < 1 || port > 65535)
+    throw new Error("Inspector port must be an integer between 1 and 65535.");
+  return `--inspect=127.0.0.1:${port}/bunaway`;
+}
+
 export async function writeWindowsLauncher(source: string, destination: string): Promise<void> {
   const script = await readFile(source, "utf8");
   if (!script.includes("__BUN_SHA256__")) throw new Error("Missing launcher runtime pin.");

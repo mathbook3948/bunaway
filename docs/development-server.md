@@ -83,6 +83,13 @@ policy.json에 HTTP origin을 직접 추가하지 않는다.
 
 ## 프로덕션과 검증
 
+Windows의 `bunaway dev`는 UI DevTools를 활성화하며 F12 또는 Ctrl+Shift+I로 연다.
+`--inspect`를 지정하면 백엔드 inspector를 `ws://127.0.0.1:6499/bunaway`에 연결한다.
+`--inspect=<port>`로 포트를 바꾸며 백엔드 재시작 후에는 다시 attach한다. 다른 플랫폼의
+CLI inspector 연결은 아직 지원하지 않는다. 개발 백엔드와 로컬 UI 번들에는 inline 소스맵을
+생성하고, 외부 UI 소스맵은 개발 서버가 제공한다.
+[디버깅 가이드](./site/src/content/docs/guides/debugging.mdx)에서 오류 위치와 연결 설정을 확인한다.
+
 `app.home`은 계속 로컬 자산 URL이다. 외부 서버 개발에서는 `build.frontend`가 아직
 없는 출력 디렉터리여도 된다. `doctor`는 이 개발 설정을 검사한다.
 `build`는 `build.command` 실행 후 프로덕션 자산과 앱 소스를 검증한다. `package --build`도 같은 경로를 실행한다.

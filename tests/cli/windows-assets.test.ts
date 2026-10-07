@@ -1,5 +1,15 @@
 import { expect, test } from "bun:test";
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -108,6 +118,59 @@ test("Windows app entry names cannot collide with the host or break shared bundl
       expect(await readFile(resolve(destination, "boot.js"), "utf8")).toContain(
         "verifyWindowsPackage",
       );
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("development Windows bundles map exceptions to the original TypeScript file and line", async () => {
+  const root = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-debug-assets-")));
+  const host = resolve(import.meta.dir, "../../native/windows/bun");
+  const entry = resolve(root, "src-bunaway/app.ts");
+  const source =
+    'export default {\n  run() {\n    throw new Error("source-map-check");\n  },\n};\n';
+  try {
+    await mkdir(resolve(root, "src-bunaway"));
+    await writeFile(entry, source);
+    for (const development of [false, true]) {
+      const packageRoot = resolve(root, development ? ".bunaway/windows-x64" : "dist/windows-x64");
+      const staging = `${packageRoot}.building`;
+      await mkdir(resolve(staging, "assets"), { recursive: true });
+      await bundleWindowsHost(host, resolve(staging, "assets"), entry, undefined, development);
+      await rename(staging, packageRoot);
+      const destination = resolve(packageRoot, "assets");
+      for (const name of await readdir(destination)) {
+        if (!name.endsWith(".js")) continue;
+        const text = await readFile(resolve(destination, name), "utf8");
+        expect(text.includes("sourceMappingURL=data:"), name).toBe(development);
+        if (name === "app.js" && development) {
+          const encoded = text.match(
+            /sourceMappingURL=data:application\/json;base64,([^\s]+)/,
+          )?.[1];
+          expect(encoded).toBeDefined();
+          const map = JSON.parse(Buffer.from(encoded ?? "", "base64").toString());
+          expect(map.sourcesContent).toContain(source);
+          expect(map.sources).toContain(entry.replaceAll("\\", "/"));
+        }
+      }
+      const runner = resolve(destination, "run.ts");
+      await writeFile(
+        runner,
+        'import app from "./app.js"; try { app.run(); } catch (error) { console.log(JSON.stringify(error.stack)); throw error; }',
+      );
+      const child = Bun.spawn([process.execPath, runner], {
+        cwd: packageRoot,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const stack = new Response(child.stdout).json();
+      const errors = new Response(child.stderr).text();
+      expect(await child.exited).not.toBe(0);
+      const output = await errors;
+      expect(output).toContain("source-map-check");
+      expect(output).toContain(development ? `${entry}:3:` : "app.js:");
+      expect(await stack).toContain(development ? `${entry}:3:` : "app.js:");
     }
   } finally {
     await rm(root, { recursive: true, force: true });

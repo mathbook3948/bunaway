@@ -46,6 +46,14 @@ COM 콜백은 같은 OS 스레드에서 동기 HRESULT를 반환한다. `threads
 
 명령 핸들러의 예기치 않은 예외는 stderr와 앱 로그의 `command-failed`에 명령 이름, 원래 메시지와 스택을 기록한다. WebView 응답에는 내부 오류를 넣지 않는다. 진단 기록 실패는 명령 응답에 영향을 주지 않는다.
 
+CLI의 Windows 개발 산출물은 해시 inventory에 포함된 `app.json.developmentTools: true`와
+`--devtools` 실행 인자를 모두 요구한다. 확인한 값은 UI Worker에 전달해 WebView2의
+AreDevToolsEnabled와 AreBrowserAcceleratorKeysEnabled를 활성화한다. 일반 빌드는 둘 다 끈다.
+F12 또는 Ctrl+Shift+I로 DevTools를 연다. 개발 모드는 서버 URL 설정이 없는 로컬 UI에도 적용된다.
+백엔드 inspector는 `bunaway dev --inspect[=<port>]`로 선택하며 메인 Bun에만 실행 옵션을 추가한다.
+개발 UI, 앱, 호스트와 Worker 번들에는 inline 소스맵을 생성한다. 자세한 사용법은
+[디버깅 가이드](../../../docs/site/src/content/docs/guides/debugging.mdx)를 따른다.
+
 실패한 로그 기록은 다시 시도하지 않는다. 쓰기 실패는 해당 호출에만 전달하며 이후 기록은 계속 처리한다. drain()은 대기 중인 기록 처리가 끝날 때까지 기다린다.
 
 앱 정의의 `desktop.onOpen`은 초기 실행과 두 번째 실행의 인자, URL, 파일을 받는다.

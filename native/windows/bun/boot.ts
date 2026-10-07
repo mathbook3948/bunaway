@@ -19,7 +19,10 @@ import {
   readLaunchArguments,
   type LaunchArguments,
 } from "./instance.ts";
-import { verifyDevelopmentLaunch } from "../../../packages/runtime-bun/src/development.ts";
+import {
+  verifyDevelopmentLaunch,
+  verifyDevelopmentToolsLaunch,
+} from "../../../packages/runtime-bun/src/development.ts";
 
 const hash = async (path: string) =>
   createHash("sha256")
@@ -57,6 +60,7 @@ function localAppData() {
 export async function verifyWindowsPackage(
   directory: string,
   developmentUrl?: string,
+  developmentTools = false,
 ): Promise<UIConfig> {
   assert.equal(process.platform, "win32");
   assert.equal(process.arch, "x64");
@@ -120,6 +124,7 @@ export async function verifyWindowsPackage(
     assert(Object.hasOwn(assets, name), `Required package asset missing: ${name}`);
   const config = object(JSON.parse(await readFile(resolve(root, "assets/app.json"), "utf8")));
   const devUrl = verifyDevelopmentLaunch(config.development, developmentUrl);
+  const devtools = verifyDevelopmentToolsLaunch(config.developmentTools, developmentTools);
   assert(
     typeof config.appId === "string" &&
       /^[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$/.test(config.appId),
@@ -167,6 +172,7 @@ export async function verifyWindowsPackage(
     assets: resolve(root, "assets"),
     loader: resolve(root, "assets/WebView2Loader.dll"),
     legacyProfile: !Array.isArray(config.windows),
+    devtools,
     dataRoot: resolve(localAppData(), "bunaway", config.appId),
   };
 }
@@ -174,9 +180,11 @@ export async function verifyWindowsPackage(
 if (import.meta.main) {
   const root = resolve(dirname(import.meta.path), "..");
   const args = process.argv.slice(2);
+  const devtools = args[0] === "--devtools";
+  if (devtools) args.shift();
   const developmentUrl = args[0] === "--dev-url" ? args[1] : undefined;
   if (args[0] === "--dev-url") assert(developmentUrl, "Missing development URL");
-  const config = await verifyWindowsPackage(root, developmentUrl);
+  const config = await verifyWindowsPackage(root, developmentUrl, devtools);
   // Launchers send JSON on stdin to preserve arguments without expanding the command line.
   let launch: LaunchArguments;
   const appArgs = developmentUrl ? args.slice(2) : args;

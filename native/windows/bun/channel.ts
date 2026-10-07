@@ -37,6 +37,7 @@ export type UIConfig = {
   loader: string;
   legacyProfile?: boolean;
   desktop?: { closeBehavior: "quit" | "hide"; tray?: { tooltip: string } };
+  devtools?: boolean;
 };
 export type Packet =
   | { kind: "ready" | "start" | "shutdown" | "closing" | "cleaned" }

@@ -110,11 +110,12 @@ export async function bundleAssets(
   assets: string,
   windows = false,
   developmentServer = false,
+  development = false,
 ): Promise<void> {
   await runWorker(
     "assets.ts",
     windows ? "bundleWindowsAssets" : "bundleAssets",
-    [project, assets, developmentServer],
+    [project, assets, developmentServer, development],
     project.root,
     project.frameworkRoot,
   );
@@ -217,10 +218,11 @@ async function assembleProject(
     for (const [name, path] of Object.entries(native.licenses)) {
       await cp(path, resolve(packageRoot, "licenses", name));
     }
-    await writeJson(
-      resolve(assets, "app.json"),
-      server ? { ...project.app, home: server.url, development: { url: server.url } } : project.app,
-    );
+    await writeJson(resolve(assets, "app.json"), {
+      ...project.app,
+      ...(server ? { home: server.url, development: { url: server.url } } : {}),
+      ...(windows && options.development ? { developmentTools: true } : {}),
+    });
     await writeJson(
       resolve(assets, "policy.json"),
       server ? developmentPolicy(project.policy, project.app.view, server.url) : project.policy,
@@ -231,7 +233,7 @@ async function assembleProject(
       for (const schema of await files(resolve(root, "native/host-api/generated"))) {
         await cp(schema, resolve(assets, basename(schema)));
       }
-    await bundleAssets(project, assets, windows, !!server);
+    await bundleAssets(project, assets, windows, !!server, options.development ?? false);
     signal?.throwIfAborted();
     if (windows) {
       if (!native.loader) throw new Error("Windows requires the pinned WebView2Loader DLL.");
@@ -361,6 +363,7 @@ ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking<
             `--config=${resolve(output, "assets/bunfig.toml")}`,
             `--tsconfig-override=${resolve(output, "assets/tsconfig.json")}`,
             resolve(output, "assets/boot.js"),
+            ...(options.development ? ["--devtools"] : []),
             ...(server ? ["--dev-url", server.url] : []),
           ]
         : [
