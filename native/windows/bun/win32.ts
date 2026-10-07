@@ -198,6 +198,8 @@ export class Windows {
       const saved = this.fullscreen.get(window);
       assert(saved);
       assert(user.symbols.SetWindowLongPtrW(window, -16, saved.style));
+      // GetWindowPlacement does not record whether the window is hidden.
+      if (!(saved.style & 0x10000000n)) saved.placement.writeUInt32LE(0, 8); // SW_HIDE
       assert(user.symbols.SetWindowPlacement(window, ptr(saved.placement)));
       assert(user.symbols.SetWindowPos(window, 0n, 0, 0, 0, 0, 0x37));
       this.fullscreen.delete(window);

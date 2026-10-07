@@ -3,6 +3,7 @@ import { dlopen, ptr } from "bun:ffi";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { runWindowsApp } from "../../native/windows/bun/entry.ts";
+import { Windows, user } from "../../native/windows/bun/win32.ts";
 import { defineApp, windows, type CommandContext } from "../../packages/backend-sdk/src/index.ts";
 import type { HostContext, Policy } from "../../packages/protocol/src/index.ts";
 
@@ -48,15 +49,45 @@ if (!process.argv.includes("--child")) {
       resolve(assets, "web", name),
       '<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src \'self\'; script-src \'self\'"><script type="module" src="app.js"></script>',
     );
-  const child = Bun.spawn([process.execPath, "--no-env-file", import.meta.path, "--child"], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
   const driver = dlopen("user32.dll", {
     FindWindowW: { args: ["ptr", "ptr"], returns: "u64" },
     PostMessageW: { args: ["u64", "u32", "u64", "i64"], returns: "i32" },
     GetClientRect: { args: ["u64", "ptr"], returns: "i32" },
     GetWindowRect: { args: ["u64", "ptr"], returns: "i32" },
+    IsWindowVisible: { args: ["u64"], returns: "i32" },
+    IsIconic: { args: ["u64"], returns: "i32" },
+    IsZoomed: { args: ["u64"], returns: "i32" },
+  });
+  const nativeWindows = new Windows();
+  try {
+    for (const showCmd of [1, 2, 3])
+      for (const visible of [true, false]) {
+        const hwnd = nativeWindows.create("Fullscreen visibility regression", 800, 600, () => {});
+        try {
+          user.symbols.ShowWindow(hwnd, showCmd);
+          if (!visible) nativeWindows.show(hwnd, false);
+          const frame = new Int32Array(4),
+            restored = new Int32Array(4);
+          assert(driver.symbols.GetWindowRect(hwnd, ptr(frame)));
+          const minimized = driver.symbols.IsIconic(hwnd),
+            maximized = driver.symbols.IsZoomed(hwnd);
+          nativeWindows.setFullscreen(hwnd, true);
+          nativeWindows.setFullscreen(hwnd, false);
+          assert.equal(driver.symbols.IsWindowVisible(hwnd), Number(visible));
+          assert.equal(driver.symbols.IsIconic(hwnd), minimized);
+          assert.equal(driver.symbols.IsZoomed(hwnd), maximized);
+          assert(driver.symbols.GetWindowRect(hwnd, ptr(restored)));
+          assert.deepEqual([...restored], [...frame]);
+        } finally {
+          nativeWindows.destroy(hwnd);
+        }
+      }
+  } finally {
+    nativeWindows.dispose();
+  }
+  const child = Bun.spawn([process.execPath, "--no-env-file", import.meta.path, "--child"], {
+    stdout: "pipe",
+    stderr: "pipe",
   });
   const handles = new Map<string, bigint>();
   const dialogClass = Buffer.from("#32770\0", "utf16le");
@@ -122,7 +153,7 @@ if (!process.argv.includes("--child")) {
     assert.equal(report.pass, true);
     assert.equal(report.auxiliaryDocuments, 3);
     console.log(
-      "PASS Windows public window API: geometry, close refusal, dynamic creation and fresh sessions",
+      "PASS Windows public window API: fullscreen visibility, geometry, close refusal, dynamic creation and fresh sessions",
     );
   } finally {
     clearTimeout(timeout);
