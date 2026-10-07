@@ -52,6 +52,16 @@
               "log": {
                 "type": "boolean"
               },
+              "windows": {
+                "type": "array",
+                "maxItems": 128,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                  "maxLength": 128
+                }
+              },
               "storage": {
                 "type": "array",
                 "maxItems": 128,
@@ -94,6 +104,16 @@
       "properties": {
         "log": {
           "type": "boolean"
+        },
+        "windows": {
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+            "maxLength": 128
+          }
         },
         "storage": {
           "type": "array",

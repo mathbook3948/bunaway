@@ -10,6 +10,7 @@ import {
   type HostResponse,
   type JsonValue,
   type RuntimeIdentity,
+  hostOperations,
   serializeHostResponse,
   validateHostOutput,
 } from "../../../packages/protocol/src/index.ts";
@@ -41,9 +42,11 @@ function execute(call: HostCall, source: string): HostResponse {
   try {
     let payload: JsonValue;
     if (call.operation === "capabilities.get")
-      payload = ["storage.readText", "storage.writeText", "log.write", "capabilities.get"].map(
-        (name) => ({ name, support: "supported", permission: "not-required" }),
-      );
+      payload = Object.keys(hostOperations).map((name) => ({
+        name,
+        support: name.startsWith("windows.") ? "experimental" : "supported",
+        permission: "not-required",
+      }));
     else if (call.operation === "log.write") {
       const path = resolve(config.dataRoot, "logs/app.log");
       mkdirSync(resolve(config.dataRoot, "logs"), { recursive: true });
@@ -57,12 +60,14 @@ function execute(call: HostCall, source: string): HostResponse {
       }
       appendFileSync(path, `${JSON.stringify({ t: Date.now(), source, ...call.payload })}\n`);
       payload = null;
-    } else
+    } else if (call.operation === "storage.readText" || call.operation === "storage.writeText")
       payload = storage.execute(
         call.payload.scope,
         call.payload.path,
         call.operation === "storage.writeText" ? call.payload.text : undefined,
       );
+    else
+      throw new BunawayError({ code: "UNSUPPORTED", message: "Operation requires the UI host." });
     validateHostOutput(call.operation, payload);
     const response = { kind: "result", payload } as HostResponse;
     serializeHostResponse(response);

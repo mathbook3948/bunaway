@@ -106,3 +106,10 @@ probe/host는 실패를 throw/nonzero로 전달하며, CI의 bash `-e -o pipefai
 Developer ID, 공증, 설치, 스토어 배포는 미검증이다. `run.sh --app`은 ad-hoc 서명이며
 메모 예제는 CLI로 실행하며 회귀용 메모 fixture는 테스트 폴더에 분리되어 있다.
 guard는 Bun을 spawn한 뒤 연결되므로 그 짧은 구간의 비정상 호스트 종료 race는 남는다.
+
+## 2026-10-07 PR #40 CI 회귀
+
+CI 실행 [37574470840](https://github.com/mathbook3948/bunaway/actions/runs/37574470840)의 프로세스 probe는
+52개 검사를 통과했다. 네이티브 호스트 회귀는 공용 웹 fixture가 기능 목록을 4개로 고정한 탓에 실패했다.
+새 창 API의 `unsupported` 항목도 포함하도록 공용 검사를 갱신했다. 서명된 회귀 앱을 만들 때
+정의되지 않은 `SAMPLE` 변수를 참조하던 조건도 제거해 loopback 개발 서버 설정을 적용한다.

@@ -5,6 +5,264 @@
       "type": "object",
       "properties": {
         "operation": {
+          "const": "windows.list"
+        },
+        "payload": {
+          "const": null
+        }
+      },
+      "required": ["operation", "payload"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "const": "windows.create"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "view": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{1,128}$(?![\\s\\S])"
+            }
+          },
+          "required": ["view"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["operation", "payload"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "const": "windows.recreate"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "view": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{1,128}$(?![\\s\\S])"
+            }
+          },
+          "required": ["view"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["operation", "payload"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "const": "windows.show"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "view": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{1,128}$(?![\\s\\S])"
+            }
+          },
+          "required": ["view"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["operation", "payload"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "const": "windows.hide"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "view": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{1,128}$(?![\\s\\S])"
+            }
+          },
+          "required": ["view"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["operation", "payload"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "const": "windows.focus"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "view": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{1,128}$(?![\\s\\S])"
+            }
+          },
+          "required": ["view"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["operation", "payload"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "const": "windows.close"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "view": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{1,128}$(?![\\s\\S])"
+            }
+          },
+          "required": ["view"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["operation", "payload"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "const": "windows.setSize"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "view": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{1,128}$(?![\\s\\S])"
+            },
+            "width": {
+              "type": "integer",
+              "minimum": 200,
+              "maximum": 4096
+            },
+            "height": {
+              "type": "integer",
+              "minimum": 200,
+              "maximum": 4096
+            }
+          },
+          "required": ["view", "width", "height"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["operation", "payload"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "const": "windows.setPosition"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "view": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{1,128}$(?![\\s\\S])"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -32768,
+              "maximum": 32767
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -32768,
+              "maximum": 32767
+            }
+          },
+          "required": ["view", "x", "y"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["operation", "payload"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "const": "windows.setFullscreen"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "view": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{1,128}$(?![\\s\\S])"
+            },
+            "fullscreen": {
+              "type": "boolean"
+            }
+          },
+          "required": ["view", "fullscreen"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["operation", "payload"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "const": "windows.setCloseConfirmation"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "view": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{1,128}$(?![\\s\\S])"
+            },
+            "message": {
+              "anyOf": [
+                {
+                  "const": null
+                },
+                {
+                  "type": "string",
+                  "maxLength": 1024,
+                  "pattern": "^[^\\u0000]+$(?![\\s\\S])"
+                }
+              ]
+            }
+          },
+          "required": ["view", "message"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["operation", "payload"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation": {
           "const": "storage.readText"
         },
         "payload": {

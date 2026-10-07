@@ -34,7 +34,12 @@ export const desktopTestApp = {
     "test.restored": {
       input: { const: null },
       output: { const: null },
-      async run() {
+      async run(_input, context) {
+        if (scenario === "hide") {
+          assert.equal(await context.host.call("windows.close", { view: "main" }), false);
+          assert(!context.signal.aborted, "close to tray must keep the request context alive");
+          await context.host.call("windows.show", { view: "main" });
+        }
         uiRestoredResolve();
         return null;
       },
@@ -114,6 +119,7 @@ if (!process.argv.includes("--child")) {
             assert(api.symbols.PostMessageW(hwnd, 0x10, 0n, 0n));
           }
           if (event.event === "view-window-hidden") {
+            if (hidden) continue;
             hidden = true;
             assert.equal(api.symbols.IsWindowVisible(hwnd), 0);
             assert.equal(child.exitCode, null);
@@ -256,7 +262,7 @@ if (!process.argv.includes("--child")) {
               origins: ["https://app.bunaway.local"],
               commands: ["test.ready", "test.restored"],
               events: ["test.reopen"],
-              host: { log: false, storage: [] },
+              host: { log: false, storage: [], windows: ["main"] },
             },
           ],
         },

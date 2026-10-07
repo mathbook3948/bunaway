@@ -151,6 +151,12 @@ const hostPermissions = {
   type: "object",
   properties: {
     log: { type: "boolean" },
+    windows: {
+      type: "array",
+      maxItems: 128,
+      uniqueItems: true,
+      items: identifier,
+    },
     storage: {
       type: "array",
       maxItems: 128,

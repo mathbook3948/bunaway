@@ -7,6 +7,7 @@ import {
   parsePackaging,
 } from "@bunaway/packaging";
 import { type Policy, parsePolicy } from "@bunaway/protocol";
+import { readWindowSpecs, type WindowSpec } from "../../runtime-bun/src/window-config.ts";
 import { developmentUrl } from "../../runtime-bun/src/development.ts";
 import { validateFramework } from "./distribution.ts";
 import { inside, json, projectPath } from "./files.ts";
@@ -60,6 +61,7 @@ export interface Project {
     view: string;
     home: string;
     window: { width: number; height: number };
+    windows?: WindowSpec[];
   };
   policy: Policy;
 }
@@ -197,39 +199,36 @@ async function loadProject(
     options.validateSources === false ? [] : [appEntry, ...(server ? [] : [frontend])],
   );
   const raw = settings.app;
-  keys(raw, ["appId", "title", "view", "home", "window"]);
+  keys(raw, ["appId", "title", "view", "home", "window", "windows"]);
   const appId = string(raw.appId);
-  if (!/^[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$/.test(appId)) {
+  if (!/^[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$/.test(appId))
     throw new Error("appId must match the native host's 1–64 character app ID grammar.");
-  }
-  const window = record(raw.window);
-  keys(window, ["width", "height"]);
-  for (const size of [window.width, window.height]) {
-    if (typeof size !== "number" || !Number.isInteger(size) || size < 200 || size > 4096) {
-      throw new Error("Window dimensions must be integers between 200 and 4096.");
-    }
-  }
-  const home = string(raw.home);
-  const url = new URL(home);
-  if (url.origin !== "https://app.bunaway.local" || url.username || url.password || url.hash) {
-    throw new Error("The MVP home must use the host-owned https://app.bunaway.local origin.");
-  }
-  if (!server && validateFiles) {
-    const homePath = await projectPath(frontend, decodeURIComponent(url.pathname).slice(1));
-    if (!(await lstat(homePath)).isFile()) throw new Error("Home document is not a file.");
-  }
+  const multiple = raw.windows !== undefined;
+  if (multiple && ["view", "home", "window"].some((key) => key in raw))
+    throw new Error("Use app.windows or app.view/home/window, without mixing the two formats.");
   const policy = parsePolicy(await Bun.file(resolve(configDirectory, "policy.json")).text());
-  if (policy.views.some((view) => view.origins.some((origin) => origin.startsWith("http:")))) {
+  if (policy.views.some((view) => view.origins.some((origin) => origin.startsWith("http:"))))
     throw new Error(
       "HTTP origins are not allowed in policy.json; use dev.url for a development server.",
     );
-  }
-  const view = string(raw.view);
-  if (policy.views.length !== 1 || policy.views[0]?.id !== view) {
-    throw new Error("The vanilla MVP requires one configured policy view.");
-  }
-  if (!policy.views[0].origins.includes(url.origin))
-    throw new Error("Home origin is not permitted.");
+  const windows = readWindowSpecs(
+    multiple
+      ? raw.windows
+      : [{ view: raw.view, home: raw.home, title: raw.title, window: raw.window }],
+    policy,
+  );
+  if (!multiple && (policy.views.length !== 1 || policy.views[0]?.id !== windows[0]?.view))
+    throw new Error("Single-window settings require one configured policy view.");
+  if (!server && validateFiles)
+    for (const spec of windows) {
+      const homePath = await projectPath(
+        frontend,
+        decodeURIComponent(new URL(spec.home).pathname).slice(1),
+      );
+      if (!(await lstat(homePath)).isFile()) throw new Error("Home document is not a file.");
+    }
+  const primary = windows.find((spec) => spec.startup !== false);
+  if (!primary) throw new Error("At least one window must open at startup.");
   return {
     root,
     frameworkRoot,
@@ -243,9 +242,10 @@ async function loadProject(
     app: {
       appId,
       title: string(raw.title),
-      view,
-      home,
-      window: { width: window.width as number, height: window.height as number },
+      view: primary.view,
+      home: primary.home,
+      window: primary.window,
+      ...(multiple ? { windows } : {}),
     },
   };
 }

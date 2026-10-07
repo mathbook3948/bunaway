@@ -182,6 +182,24 @@ export function checkCallbacks() {
 export function callbackCalls() {
   return handlers.map((callback) => callback.calls);
 }
+// Release a retired view's owner references after native detach and callback quiescence.
+export function disposeHandlers(retired: readonly ComHandler[]) {
+  assert.equal(callbackDepth, 0, "Callback disposal while native stack is active");
+  assert.equal(invokeDepth, 0, "Invoke disposal while native stack is active");
+  for (const callback of retired) {
+    assert.equal(callback.refs, 1, `${callback.name} outstanding COM refs`);
+    callback.dropOwner();
+    callback.dispose();
+    const index = handlers.indexOf(callback);
+    assert(index >= 0, "Unknown COM handler");
+    handlers.splice(index, 1);
+  }
+  if (!handlers.length) {
+    for (const binding of methods.values()) binding.close();
+    methods.clear();
+  }
+}
+
 export function disposeCom() {
   assert.equal(callbackDepth, 0, "Callback disposal while native stack is active");
   assert.equal(invokeDepth, 0, "Invoke disposal while native stack is active");

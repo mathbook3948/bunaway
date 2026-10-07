@@ -56,6 +56,31 @@ F12 또는 Ctrl+Shift+I로 DevTools를 연다. 개발 모드는 서버 URL 설�
 
 실패한 로그 기록은 다시 시도하지 않는다. 쓰기 실패는 해당 호출에만 전달하며 이후 기록은 계속 처리한다. drain()은 대기 중인 기록 처리가 끝날 때까지 기다린다.
 
+## Public window operations
+
+The CLI accepts an `app.windows` catalog with one unique policy view per window.
+`startup: false` defers creation until `windows.create`. Window calls execute on
+the UI STA after the active caller's `windows` grants are checked. The I/O Worker
+reports them as experimental capabilities. `windows.recreate` reserves the view
+until the old WebView and processes finish, then creates a fresh boundary and
+WebView using the same profile. This also postpones last-window shutdown.
+Retired views release their COM handlers before a replacement is created.
+
+Show, hide, focus, client size, screen position and monitor fullscreen use Win32.
+Close confirmation uses a native Yes/No dialog with No selected by default.
+WM_CLOSE and WebView close requests defer confirmation outside native callbacks.
+Window close operations also honor close-to-tray and last-window quit vetoes.
+Recreation bypasses those app quit controls while preserving close confirmation.
+Deferred and recreated windows inherit the verified development DevTools setting.
+Shutdown bypasses confirmation.
+Browser process failure also closes the affected window without confirmation.
+`tests/lifecycle/windows-bun-window-api.ts` is
+part of `run.ps1` and covers native geometry, close refusal and acceptance,
+dynamic creation, fresh sessions and self-recreation. It passed in PR #40's
+Windows CI run 37574470840. The full native job failed on the shared capability
+fixture's old four-operation expectation, which now checks the complete catalog.
+The browser-failure regression also passed locally on Windows on 2026-10-07.
+
 앱 정의의 `desktop.onOpen`은 초기 실행과 두 번째 실행의 인자, URL, 파일을 받는다.
 `desktop.beforeQuit`는 마지막 창, 트레이, 앱의 종료 요청을 취소할 수 있다.
 `desktop.closeBehavior: "hide"`와 `desktop.tray: { tooltip: "Memo" }`를 함께 지정하면

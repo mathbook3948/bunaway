@@ -17,11 +17,19 @@ export function developmentUrl(value: unknown): URL {
   return url;
 }
 
-export function developmentPolicy(policy: Policy, viewId: string, url: string): Policy {
+export function developmentPolicy(
+  policy: Policy,
+  viewId: string | readonly string[],
+  url: string,
+): Policy {
   const origin = developmentUrl(url).origin;
   return {
     ...policy,
-    views: policy.views.map((view) => (view.id === viewId ? { ...view, origins: [origin] } : view)),
+    views: policy.views.map((view) =>
+      (typeof viewId === "string" ? view.id === viewId : viewId.includes(view.id))
+        ? { ...view, origins: [origin] }
+        : view,
+    ),
   };
 }
 
@@ -42,6 +50,15 @@ export function verifyDevelopmentLaunch(marker: unknown, launchUrl?: string): st
     );
   }
   return developmentUrl(launchUrl).href;
+}
+
+// Keep each window's production path when using one shared loopback UI server.
+export function developmentWindowHome(home: string, server: string): string {
+  const source = new URL(home);
+  const target = developmentUrl(server);
+  target.pathname = source.pathname;
+  target.search = source.search;
+  return target.href;
 }
 
 export function verifyDevelopmentToolsLaunch(marker: unknown, requested = false): boolean {

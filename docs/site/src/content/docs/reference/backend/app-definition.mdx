@@ -104,7 +104,7 @@ export default defineApp({
 
 | DesktopOptions 필드 | 기본값 | 동작 |
 | --- | --- | --- |
-| `closeBehavior` | `"quit"` | `"hide"`이면 닫기 버튼으로 해당 창을 숨깁니다. 트레이가 필요합니다 |
+| `closeBehavior` | `"quit"` | `"hide"`이면 닫기 버튼, `window.close()`와 `windows.close`로 해당 창을 숨깁니다. 트레이가 필요합니다 |
 | `tray` | 없음 | `{ tooltip: string }`. tooltip은 1~127자의 NUL 없는 문자열입니다 |
 | `onOpen` | 없음 | `(request: OpenRequest, context: DesktopContext) => void \| Promise<void>` |
 | `beforeQuit` | 없음 | `(reason: QuitReason) => boolean \| void \| Promise<boolean \| void>` |
@@ -146,6 +146,8 @@ URL과 파일은 앱이 검증할 입력입니다. 전달받은 경로는 Host A
 `DesktopContext.quit()`의 `"api"`입니다. `beforeQuit`가 `false`를 반환하거나 예외를 던지면
 창과 세션을 유지하고 종료를 취소합니다. 동시 종료 요청은 같은 검사 결과를 사용합니다.
 반환값이 `true` 또는 `undefined`이면 기존 종료 절차와 플러그인 StopHook을 실행합니다.
+공개 [windows API](/reference/host/windows/)로 마지막 창을 닫을 때도 종료 검사를 거칩니다.
+창의 `recreate`는 앱 종료를 요청하지 않으며 트레이 숨김 대신 창을 다시 만듭니다.
 `quit()`의 `true`는 종료 승인 결과이며 모든 자원이 이미 정리됐다는 뜻은 아닙니다.
 종료 훅에는 자동 기한이 없으며 앱이 완료해야 합니다. 강제 종료, 호스트 실패, SIGINT, SIGTERM은 취소할 수 없습니다.
 `bunaway dev`의 재시작과 CLI 종료도 `beforeQuit`와 숨김 설정을 우회하고 플러그인 StopHook과 자원 정리를 실행합니다.

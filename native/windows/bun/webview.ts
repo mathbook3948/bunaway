@@ -7,6 +7,7 @@ import {
   addRef,
   type ComHandler,
   getObject,
+  disposeHandlers,
   getString,
   handler,
   method,
@@ -46,6 +47,8 @@ export class WebView {
   private closing = false;
   private detached = false;
   private browserExited = false;
+  private finished = false;
+  private quiescence: { deadline: number; calls: number[] } | undefined;
   private browserHandle = 0n;
   private readonly processHandles = new Map<number, bigint>();
   private closedAt = 0;
@@ -391,6 +394,7 @@ export class WebView {
     return true;
   }
   finish(): boolean {
+    if (this.finished) return true;
     if (!this.detached) return false;
     if (
       this.browserHandle &&
@@ -416,19 +420,34 @@ export class WebView {
       this.checkShutdownDeadline();
       return false;
     }
+    const callbacks = [...this.events.map(({ callback }) => callback), ...this.completions];
+    assert(
+      callbacks.every((callback) => callback.refs === 1),
+      "Outstanding COM reference",
+    );
+    // Keep this view's trampolines alive through bounded STA pumping before reuse or disposal.
+    if (!this.quiescence) {
+      this.quiescence = {
+        deadline: performance.now() + 50,
+        calls: callbacks.map((callback) => callback.calls),
+      };
+      return false;
+    }
+    assert.deepEqual(
+      callbacks.map((callback) => callback.calls),
+      this.quiescence.calls,
+      "Invoke after native detach",
+    );
+    if (performance.now() < this.quiescence.deadline) return false;
     for (const handle of this.processHandles.values()) assert(kernel.symbols.CloseHandle(handle));
     const processes = this.processHandles.size;
     this.processHandles.clear();
     this.browserHandle = 0n;
-    assert(
-      this.events.every(({ callback }) => callback.refs === 1),
-      "Outstanding event reference",
-    );
-    assert(
-      this.completions.every((callback) => callback.refs === 1),
-      "Outstanding completion reference",
-    );
+    disposeHandlers([...this.events.map(({ callback }) => callback), ...this.completions]);
+    this.events.length = 0;
+    this.completions.length = 0;
     this.loader.close();
+    this.finished = true;
     this.hooks.log("view-cleaned", {
       processes,
       elapsedMs: this.closedAt ? performance.now() - this.closedAt : 0,
