@@ -5,6 +5,7 @@ description: 실제 템플릿으로 message.save → 저장 → message.saved �
 
 import { Code } from '@astrojs/starlight/components';
 import appSource from '@repo/packages/cli/templates/vanilla/src-bunaway/app.ts?raw';
+import moduleSource from '@repo/packages/cli/templates/vanilla/src-bunaway/message/module.ts?raw';
 import uiSource from '@repo/packages/cli/templates/vanilla/src/main.ts?raw';
 
 **명령**은 입력을 받아 결과를 반환하는 작업이고, **이벤트**는 구독한 UI에 전달하는 알림입니다.
@@ -12,11 +13,15 @@ import uiSource from '@repo/packages/cli/templates/vanilla/src/main.ts?raw';
 
 ## 1. 앱 백엔드에서 계약과 구현 정의
 
-아래 코드는 현재 `vanilla` 템플릿의 실제 앱 정의입니다.
+아래 코드는 현재 `vanilla` 템플릿의 실제 앱 정의와 메시지 모듈입니다.
+`app.ts`는 기능 모듈을 조립하고, 모듈 파일은 명령과 이벤트를 등록합니다.
 
 <Code code={appSource} lang="ts" title="src-bunaway/app.ts" />
 
-`command()`에는 세 항목이 있습니다.
+<Code code={moduleSource} lang="ts" title="src-bunaway/message/module.ts" />
+
+`defineModule("message").command("save", contract, handle)`은 `message.save`를 등록합니다.
+`contract`에는 `input`과 `output` 스키마를 적고, 세 번째 인자에 작업 함수를 전달합니다.
 
 | 항목 | 역할 | `message.save`의 예 |
 | --- | --- | --- |
@@ -42,8 +47,9 @@ import uiSource from '@repo/packages/cli/templates/vanilla/src/main.ts?raw';
 }
 ```
 
-새 명령을 추가하면 `app.ts.commands`에 구현을 등록한 뒤 호출할 뷰의 `commands`에 같은 이름을 넣습니다.
-이벤트는 `app.ts.events`에 데이터 스키마를 선언한 뒤 받을 뷰의 `events`에 추가합니다.
+새 명령은 기능 모듈의 `.command()`로 등록하고 호출할 뷰의 `commands`에 최종 이름을 넣습니다.
+이벤트는 모듈의 `.event()`에 데이터 스키마를 선언한 뒤 받을 뷰의 `events`에 최종 이름을 추가합니다.
+기존 객체형 앱의 `commands`와 `events`에 직접 등록하는 방법도 지원합니다.
 
 ## 3. UI에서 연결, 구독, 호출
 

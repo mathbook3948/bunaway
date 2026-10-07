@@ -37,6 +37,7 @@ PRD와 설계 문서, 코드에서 확인한 결정을 ADR에 기록한다. 구�
 - [0006: Windows Bun 진입점, UI Worker, 직접 FFI](./decisions/0006-windows-bun-ui-worker.md)
 - [0009: 외부 UI 개발 서버와 CLI 수명주기](./decisions/0009-development-server.md)
 - [0010: Windows 우선 개발과 공통 Bun 앱 정의](./decisions/0010-windows-first-platform-model.md)
+- [0011: 기능 모듈 조립과 중복 명령 거부](./decisions/0011-app-module-composition.md)
 
 [이전 C ABI 초안](./architecture/native-abi.md)은 과거 설계 기록이다. 현재 Windows는 Worker 연결,
 macOS는 프로세스 IPC 계약을 사용한다.

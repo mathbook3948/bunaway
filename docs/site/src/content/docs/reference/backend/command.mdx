@@ -31,6 +31,9 @@ const greet = command({
 | `output` | 예 | 결과 Schema |
 | `handle` | 예 | `(input, context) => Output \| Promise<Output>` |
 
+`CommandContract`는 `{ input, output }`이고 `CommandHandler`는 위 handle 함수의 타입입니다.
+[defineModule](/reference/backend/module/)의 `.command(name, contract, handle)`에도 같은 계약을 사용합니다.
+
 `command()`는 `input`, `output`, `run(payload, context)`가 있는 `CommandDefinition`을 반환합니다.
 반환값을 앱의 commands에 등록하고 호출 권한을 뷰 정책에 적습니다. UI에서는 client.invoke로 호출합니다.
 

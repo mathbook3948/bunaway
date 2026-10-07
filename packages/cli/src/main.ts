@@ -46,8 +46,9 @@ export async function main(args: string[]): Promise<number> {
       template,
       ...(packageDirectory ? { packageDirectory } : {}),
     });
+    const nativeScript = template === "vite" ? "bun run bunaway" : "bun run";
     console.log(
-      `Created ${path}\nNext: enter the directory, run bun install, then bun run doctor / dev / build.`,
+      `Created ${path}\nNext: enter the directory, run bun install, then ${nativeScript} doctor and ${nativeScript} dev.`,
     );
     return 0;
   }

@@ -15,17 +15,21 @@ my-app/
 │  ├─ main.ts
 │  └─ style.css
 └─ src-bunaway/
-   ├─ app.ts                공통 앱 정의
+   ├─ app.ts                기능 모듈을 조립한 공통 앱 정의
+   ├─ message/module.ts     메시지 명령과 이벤트
    ├─ bunaway.json           빌드, 앱, 배포 설정
    └─ policy.json            뷰, 백엔드 접근 정책
 ```
 
 위 구조는 `vanilla` 템플릿입니다. `vite` 템플릿은 `index.html`이 프로젝트 루트에 있고,
-`vite.config.ts`가 추가됩니다. 웹 프로덕션 빌드 출력은 `web-dist/`입니다.
+`vite.config.ts`와 `public/` 정적 자산이 추가됩니다. 기본 화면은 Vite의 로고와 카운터이며
+SDK 호출은 직접 연결합니다. 웹 프로덕션 빌드 출력은 `web-dist/`입니다.
 
 ## app.ts에 기능 작성하기
 
-명령과 이벤트를 정의한 앱 객체를 default export합니다. 초기 상태와 플러그인도 이 객체에 추가합니다.
+`message/module.ts`에서 `defineModule()`로 명령과 이벤트를 등록하고,
+`app.ts`에서 `defineApp({ modules: [message] })`로 조립한 앱 객체를 default export합니다.
+초기 상태와 플러그인도 `defineApp()`에 추가합니다. 기존 객체형 앱 정의도 사용할 수 있습니다.
 기본 템플릿은 `message.read`, `message.save`, `message.saved`를 제공합니다.
 
 프런트엔드는 SDK에 명령 이름과 JSON 데이터를 넘겨 백엔드를 호출합니다.

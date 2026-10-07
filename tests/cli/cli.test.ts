@@ -160,7 +160,7 @@ test("unified v1 configuration rejects malformed sections and old flat settings"
   }
 });
 
-test("bundle is optional until packaging and generated settings use only two files", async () => {
+test("bundle is optional until packaging and generated settings stay beside app modules", async () => {
   const path = resolve(project, "src-bunaway/bunaway.json");
   const valid = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
   const { bundle: _bundle, ...withoutBundle } = valid;
@@ -168,6 +168,7 @@ test("bundle is optional until packaging and generated settings use only two fil
     expect((await readdir(resolve(project, "src-bunaway"))).sort()).toEqual([
       "app.ts",
       "bunaway.json",
+      "message",
       "policy.json",
     ]);
     await writeJson(path, withoutBundle);

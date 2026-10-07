@@ -26,7 +26,8 @@ await client.invoke("message.save", "문자열");
 ```
 
 여기서 transport, hello는 [createClient](/reference/client/create-client/) 예시처럼 준비합니다.
-CommandsOf는 앱에 직접 선언한 명령의 input/output을 추론합니다. 이벤트 payload는 EventsOf로 추론합니다.
+CommandsOf는 앱에 직접 선언한 명령과 `defineApp()`에 정적으로 나열한 모듈의 input/output을 추론합니다.
+이벤트 payload는 EventsOf로 추론합니다. 실행할 때 구성하는 모듈 배열이나 문자열로 정하는 이름은 정확한 목록을 추론하지 못할 수 있습니다.
 플러그인 전체 레지스트리를 합친 자동 타입 생성 CLI는 아직 없습니다.
 
 ## 런타임 계약

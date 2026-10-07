@@ -15,3 +15,9 @@ License texts included in licenses/ (verified against the manifests):
 Generated apps retain these notices. Final app builds include the runtime/native
 dependency license texts through the existing native build pipeline. App authors
 are responsible for their own code and additional dependencies' licenses.
+
+The Vite template frontend is copied from create-vite 9.2.1 (vanilla-ts),
+Copyright (c) 2019-present, VoidZero Inc. and Vite contributors, MIT License.
+Source: https://github.com/vitejs/vite/tree/fea5b21dd9524ed7308632407b996f1fe5942c9c/packages/create-vite/template-vanilla-ts
+The full license is in packages/cli/templates/vite/public/LICENSE.vite.txt,
+copied to generated projects and their frontend production assets.

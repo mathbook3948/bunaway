@@ -13,6 +13,8 @@
       "source": "packages/backend-sdk/src/index.ts",
       "pages": {
         "reference/backend/command": ["command"],
+        "reference/backend/app-definition": ["defineApp"],
+        "reference/backend/module": ["defineModule"],
         "reference/tooling/core-and-runtime": ["createCore"]
       }
     },
@@ -121,6 +123,20 @@
     }
   ],
   "members": [
+    {
+      "source": "packages/backend-sdk/src/module.ts",
+      "type": "ModuleDefinition",
+      "pages": {
+        "reference/backend/module": ["name", "commands", "events"]
+      }
+    },
+    {
+      "source": "packages/backend-sdk/src/module.ts",
+      "type": "ModuleBuilder",
+      "pages": {
+        "reference/backend/module": ["name", "command", "event"]
+      }
+    },
     {
       "source": "packages/client-sdk/src/index.ts",
       "type": "Client",
