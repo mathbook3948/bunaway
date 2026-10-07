@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "views": [
+    {
+      "id": "main",
+      "origins": ["https://app.bunaway.local"],
+      "commands": ["message.read", "message.save"],
+      "events": ["message.saved"],
+      "host": {
+        "log": false,
+        "storage": [{ "scope": "appData", "pathPrefix": "messages", "access": ["read", "write"] }]
+      }
+    }
+  ],
+  "backend": { "log": false, "storage": [] }
+}

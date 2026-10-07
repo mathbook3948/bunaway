@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "build": {
+    "app": "src-bunaway/app.ts",
+    "frontend": "web-dist"
+  },
+  "app": {
+    "appId": "app.svelte",
+    "title": "bunaway Svelte",
+    "view": "main",
+    "home": "https://app.bunaway.local/index.html",
+    "window": {
+      "width": 800,
+      "height": 600
+    }
+  },
+  "bundle": {
+    "channels": {
+      "win-direct": {}
+    }
+  },
+  "dev": {
+    "command": ["bun", "run", "dev"],
+    "url": "http://127.0.0.1:5173/"
+  }
+}

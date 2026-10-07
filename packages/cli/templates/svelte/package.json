@@ -1,0 +1,32 @@
+{
+  "name": "bunaway-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.2",
+  "engines": {
+    "bun": "1.4.2"
+  },
+  "scripts": {
+    "dev": "bun --bun vite",
+    "build": "svelte-check --tsconfig ./tsconfig.json && tsc --project tsconfig.node.json && bun --bun vite build",
+    "preview": "bun --bun vite preview",
+    "bunaway": "bunaway",
+    "typecheck": "svelte-check --tsconfig ./tsconfig.json && tsc --project tsconfig.node.json"
+  },
+  "dependencies": {
+    "@bunaway/backend": "0.0.0",
+    "@bunaway/client": "0.0.0",
+    "@bunaway/runtime-bun": "0.0.0",
+    "@bunaway/core": "0.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.2",
+    "typescript": "6.0.2",
+    "@bunaway/cli": "0.0.0",
+    "vite": "8.3.3",
+    "@sveltejs/vite-plugin-svelte": "7.3.0",
+    "svelte": "5.57.0",
+    "svelte-check": "4.7.6"
+  }
+}

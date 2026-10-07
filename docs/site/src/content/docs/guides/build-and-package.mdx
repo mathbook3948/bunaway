@@ -19,7 +19,7 @@ bun run validate
 bun run build
 ```
 
-`vite` 템플릿은 먼저 웹 자산을 빌드합니다.
+`vite`, `react`, `vue`, `svelte` 템플릿은 먼저 웹 자산을 빌드합니다.
 
 ```sh
 # Vite의 웹 프로덕션 빌드
@@ -60,7 +60,7 @@ bun run package win-direct
 bun run package win-direct --build
 ```
 
-Vite 템플릿은 웹 빌드를 마친 뒤 `bun run bunaway package win-direct --build`로 실행합니다.
+Vite 기반 템플릿은 웹 빌드를 마친 뒤 `bun run bunaway package win-direct --build`로 실행합니다.
 `--build`는 네이티브 빌드 옵션이므로 Vite의 웹 빌드는 먼저 실행해야 합니다.
 
 출력은 `dist/<target>/packaged/<channel>/`에,

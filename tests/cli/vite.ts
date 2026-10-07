@@ -7,7 +7,7 @@ import { startDevServer } from "../../packages/cli/src/dev-server.ts";
 // Verify the real Vite server, frontend modules/assets and HMR transport.
 export async function verifyViteDevelopment(
   project: Project,
-  frontend: "sdk" | "vite" = "sdk",
+  frontend: "sdk" | "vite" | "react" | "vue" | "svelte" = "sdk",
 ): Promise<void> {
   if (!project.dev) throw new Error("Expected a Vite development configuration.");
   const reservation = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("") });
@@ -36,10 +36,11 @@ export async function verifyViteDevelopment(
   try {
     const html = (await (await fetch(url)).text()).replaceAll("&#39;", "'");
     expect(html).toContain('src="/@vite/client"');
-    expect(html).toContain('src="/src/main.ts"');
+    const entry = frontend === "react" ? "src/main.tsx" : "src/main.ts";
+    expect(html).toContain(`src="/${entry}"`);
     expect(html).toContain("style-src 'self' 'unsafe-inline'");
     expect(html).toContain(`connect-src 'self' ws://127.0.0.1:${port}`);
-    const ui = await fetch(new URL("src/main.ts", url));
+    const ui = await fetch(new URL(entry, url));
     expect(ui.ok).toBe(true);
     const script = await ui.text();
     if (frontend === "sdk") {
@@ -48,7 +49,7 @@ export async function verifyViteDevelopment(
       const sdk = await fetch(new URL(sdkPath, url));
       expect(sdk.ok).toBe(true);
       expect(await sdk.text()).toContain("createWebViewTransport");
-    } else {
+    } else if (frontend === "vite") {
       expect(script).toContain("setupCounter");
       expect(script).toContain("Explore Vite");
       const counter = await fetch(new URL("src/counter.ts", url));
@@ -58,6 +59,28 @@ export async function verifyViteDevelopment(
         "src/assets/hero.png",
         "src/assets/vite.svg",
         "src/assets/typescript.svg",
+        "favicon.svg",
+        "icons.svg",
+      ])
+        expect((await fetch(new URL(path, url))).ok).toBe(true);
+    }
+    if (frontend === "react" || frontend === "vue" || frontend === "svelte") {
+      const component = {
+        react: "src/App.tsx",
+        vue: "src/components/HelloWorld.vue",
+        svelte: "src/App.svelte",
+      }[frontend];
+      const response = await fetch(new URL(component, url));
+      expect(response.ok).toBe(true);
+      expect(await response.text()).toContain("Explore Vite");
+      if (frontend === "react") {
+        expect(html).toContain("script-src 'self' 'unsafe-inline'");
+        expect(html).toContain("@react-refresh");
+      } else expect(html).toContain("script-src 'self';");
+      for (const path of [
+        "src/assets/hero.png",
+        "src/assets/vite.svg",
+        `src/assets/${frontend}.svg`,
         "favicon.svg",
         "icons.svg",
       ])
@@ -93,6 +116,32 @@ export async function verifyViteDevelopment(
     expect(await (await fetch(new URL(`src/${cssName}`, url), cssRequest)).text()).toContain(
       "--bunaway-hmr-check",
     );
+    if (frontend === "react" || frontend === "vue" || frontend === "svelte") {
+      const component = {
+        react: "src/App.tsx",
+        vue: "src/components/HelloWorld.vue",
+        svelte: "src/App.svelte",
+      }[frontend];
+      const path = resolve(project.root, component);
+      const source = await readFile(path, "utf8");
+      try {
+        await writeFile(path, source.replace("Explore Vite", "Bunaway HMR verified"));
+        await waitFor(() =>
+          messages.some((message) =>
+            message.updates?.some(
+              (update) =>
+                update.type === "js-update" &&
+                new URL(update.path, url).pathname === `/${component}`,
+            ),
+          ),
+        );
+        expect(await (await fetch(new URL(component, url))).text()).toContain(
+          "Bunaway HMR verified",
+        );
+      } finally {
+        await writeFile(path, source);
+      }
+    }
     expect(await readFile(resolve(project.root, "index.html"), "utf8")).toBe(sourceHtml);
   } finally {
     socket?.close();

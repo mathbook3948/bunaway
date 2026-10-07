@@ -1,0 +1,34 @@
+{
+  "name": "bunaway-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.2",
+  "engines": {
+    "bun": "1.4.2"
+  },
+  "scripts": {
+    "dev": "bun --bun vite",
+    "build": "tsc --project tsconfig.json && bun --bun vite build",
+    "preview": "bun --bun vite preview",
+    "bunaway": "bunaway",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@bunaway/backend": "0.0.0",
+    "@bunaway/client": "0.0.0",
+    "@bunaway/runtime-bun": "0.0.0",
+    "@bunaway/core": "0.0.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.2",
+    "typescript": "7.0.2",
+    "@bunaway/cli": "0.0.0",
+    "vite": "8.3.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "@vitejs/plugin-react": "6.1.1"
+  }
+}

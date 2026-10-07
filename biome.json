@@ -12,7 +12,13 @@
       "!**/build",
       "!**/vendor",
       "!packages/cli/templates/vite/src",
-      "!packages/cli/templates/vite/public"
+      "!packages/cli/templates/vite/public",
+      "!packages/cli/templates/react/src",
+      "!packages/cli/templates/react/public",
+      "!packages/cli/templates/vue/src",
+      "!packages/cli/templates/vue/public",
+      "!packages/cli/templates/svelte/src",
+      "!packages/cli/templates/svelte/public"
     ]
   },
   "formatter": {

@@ -29,7 +29,7 @@ CLI는 **`src-bunaway/bunaway.json`의 v1 형식**을 읽습니다.
 | 필드 | 설명 |
 | --- | --- |
 | `app` | 필수. AppDefinition을 default export하는 모듈. 템플릿은 `src-bunaway/app.ts` |
-| `frontend` | 필수. 웹 UI 자산 디렉터리. vanilla는 `src`, Vite는 `web-dist` |
+| `frontend` | 필수. 웹 UI 자산 디렉터리. vanilla는 `src`, Vite 기반 템플릿은 `web-dist` |
 
 소스와 패키징 파일의 경로는 프로젝트 루트를 기준으로 해석합니다.
 모든 플랫폼에서 `build.app`에 지정한 앱 정의를 사용합니다.
@@ -75,7 +75,7 @@ CLI는 **`src-bunaway/bunaway.json`의 v1 형식**을 읽습니다.
 아래는 CLI 자체의 명령입니다. 앱의 package.json 스크립트 이름은 템플릿마다 다릅니다.
 
 ```text
-bunaway create <new-directory> [--template vanilla|vite] [--package-dir <tarball-directory>]
+bunaway create <new-directory> [--template vanilla|vite|react|vue|svelte] [--package-dir <tarball-directory>]
 bunaway validate [directory]
 bunaway doctor [directory]
 bunaway dev [directory]

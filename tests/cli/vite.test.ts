@@ -6,6 +6,7 @@ import { bundleAssets } from "../../packages/cli/src/build.ts";
 import { validateProject } from "../../packages/cli/src/config.ts";
 import { hash, json, writeJson } from "../../packages/cli/src/files.ts";
 import { main } from "../../packages/cli/src/main.ts";
+import { templateNames } from "../../packages/cli/src/templates.ts";
 import { packageDirectory } from "./project.ts";
 import { verifyViteDevelopment } from "./vite.ts";
 
@@ -26,7 +27,7 @@ test("packed CLI creates independent templates and a Vite app with HMR and local
     const artifact = resolve(root, "package");
     const inventoryPath = resolve(artifact, "artifact.files.json");
     const inventory = (await json(inventoryPath)) as Record<string, string>;
-    for (const template of ["vanilla", "vite"]) {
+    for (const template of templateNames) {
       const name = `packages/cli/templates/${template}/${template}-only.txt`;
       await writeFile(resolve(artifact, name), template);
       inventory[name] = await hash(resolve(artifact, name));
@@ -35,6 +36,9 @@ test("packed CLI creates independent templates and a Vite app with HMR and local
     for (const [template, directory] of [
       ["vanilla", resolve(root, "Vanilla app")],
       ["vite", project],
+      ["react", resolve(root, "React app")],
+      ["vue", resolve(root, "Vue app")],
+      ["svelte", resolve(root, "Svelte app")],
     ] as const) {
       const create = Bun.spawn(
         [
@@ -51,8 +55,8 @@ test("packed CLI creates independent templates and a Vite app with HMR and local
       );
       expect(await create.exited, await new Response(create.stderr).text()).toBe(0);
       expect(await Bun.file(resolve(directory, `${template}-only.txt`)).text()).toBe(template);
-      const other = template === "vite" ? "vanilla" : "vite";
-      expect(await Bun.file(resolve(directory, `${other}-only.txt`)).exists()).toBe(false);
+      for (const other of templateNames.filter((name) => name !== template))
+        expect(await Bun.file(resolve(directory, `${other}-only.txt`)).exists()).toBe(false);
       expect(await Bun.file(resolve(directory, ".gitignore")).exists()).toBe(true);
       expect(await Bun.file(resolve(directory, ".gitattributes")).exists()).toBe(true);
       expect(await Bun.file(resolve(directory, "src-bunaway/app.ts")).text()).toContain(

@@ -25,7 +25,7 @@ Bun UI Worker의 창·WebView2·비동기 작업·다중 창·종료를 검증�
 | B 번들 실행 실현성 | Windows x64 baseline·macOS arm64 Bun 1.4.2 고정, WebView 없는 독립 패키지 | 플랫폼별 probe의 IPC·계산·이벤트·오류·정상/강제 종료 | 다른 CPU/OS·설치·배포 |
 | C 수직 기능 | client-sdk·core·runtime-bun, Win32/WebView2·AppKit/WKWebView, 메모 연결 | Windows 다중 창(3개)·뷰별 정책, macOS 단일 창/뷰의 저장·이벤트·복원·렌더러 복구·경계·종료 | macOS 다중 창/뷰·다른 플랫폼 동등 검증 |
 | D 플랫폼 확장 | macOS probe·제품 호스트 구현. Linux·Android·iOS 호스트 미구현 | macOS arm64 로컬 기록 및 네이티브 CI(정확한 실행 결과는 별도 기록) | macOS Intel·최소 OS, Linux·모바일 실행·수명주기·패키징 |
-| E 배포 가능한 초기 버전 | CLI create/validate/doctor/dev/build, vanilla, SDK/native 소스 artifact·버전 lock, Windows 앱 패키지, macOS `.app`/ad-hoc | CLI·artifact 계약 테스트, 기존 native 검증 기록(새 artifact의 플랫폼별 검증과 구분) | 공개 publish·라이선스, 기본 플러그인·UI framework 템플릿, macOS 다중 창, 설치·Developer ID·공증·Store·출시 기준 |
+| E 배포 가능한 초기 버전 | CLI create/validate/doctor/dev/build, vanilla, Vite, React, Vue, Svelte, SDK/native 소스 artifact, 버전 lock, Windows 앱 패키지, macOS `.app`/ad-hoc | CLI, artifact 계약 테스트, 기존 native 검증 기록(새 artifact의 플랫폼별 검증과 구분) | 공개 publish, 라이선스, 기본 플러그인, UI framework 템플릿의 네이티브 실행 검증, macOS 다중 창, 설치, Developer ID, 공증, Store, 출시 기준 |
 | F 선택 기능 | Chromium 렌더러 등 미구현 | 없음 | 선택 렌더러·추가 네이티브 플러그인 |
 
 ## 구현 근거와 플랫폼 차이
@@ -58,12 +58,14 @@ Bun UI Worker의 창·WebView2·비동기 작업·다중 창·종료를 검증�
 - `examples/memo/`는 CLI 생성 앱과 같은 `src/` + `src-bunaway/` 구조의 독립 단일 창 앱이다.
   예제 폴더의 `dev/build/package`로 실행·빌드하며 여러 창과 자동 실행 시나리오는
   `tests/fixtures/desktop/host/`가 소유한다. `packages/cli`는 실제 create/validate/doctor/dev/build를
-  제공하고 단일 뷰 vanilla 템플릿을 생성한다. `plugins/log`, `plugins/storage`는 빈 모듈이며
+  제공하고 단일 뷰 vanilla, Vite, React, Vue, Svelte 템플릿을 생성한다.
+  Vite 기반 생성 앱의 설치, 타입 검사, CSS/컴포넌트 HMR, 프로덕션 자산 번들은 CLI 테스트로
+  검증하며, 실제 Windows/macOS 창의 UI 실행 검증과 구분한다. `plugins/log`, `plugins/storage`는 빈 모듈이며
   네이티브 Host API 로그/저장 구현과 배포할 기본 플러그인 완료는 다르다.
 - 개발자용 CLI tarball은 SDK·스키마·runtime pin·native source/tools·라이선스 원문을
   함께 포함한다. 현재 생성 앱은 CLI·SDK 패키지를 node_modules에 설치하며
   package.json과 bun.lock으로 버전을 고정한다. [설치·버전 정책](../framework-distribution.md)은 공개 publish나 채널별 앱 설치
-  검증과 별개다. `dev`의 UI 갱신은 전체 호스트 재시작이며 HMR은 미구현이다.
+  검증과 별개다. `vanilla`의 UI 갱신은 전체 호스트 재시작이며 Vite 기반 템플릿은 외부 서버의 HMR을 사용한다.
 
 ## 실행 근거: 기존 기록과 새 실행을 분리
 
@@ -84,7 +86,7 @@ macOS 빌드는 공유 Bun 캐시 초기화 때문에 probe→host 직렬 실행
 ## 이어서 할 작업
 
 1. macOS 다중 창/뷰와 현재 Windows 다중 창 메모 설정 지원 여부를 별도 작업으로 결정한다.
-2. 명령 타입 생성·기본 로그/저장 플러그인·React/Vue/Svelte 템플릿과 공개 릴리스 절차를 구현한다.
+2. 명령 타입 생성, 기본 로그/저장 플러그인, 공개 릴리스 절차를 구현하고 React/Vue/Svelte 템플릿의 실제 네이티브 실행을 검증한다.
 3. 최소 OS·CPU, Windows WebView2 설치, macOS Developer ID·공증·설치·배포를 검증한다.
 4. Linux·Android·iOS의 Bun 실행·배포·수명주기를 각 플랫폼에서 구현·검증한다.
 5. UI 프레임워크 예제·성능·패키지 크기와 PRD 출시 기준을 확인한다.

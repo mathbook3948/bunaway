@@ -7,7 +7,7 @@
 [문서 안내](./docs/README.md)에서 공통 용어, 설계 결정과 구현 계약을 찾을 수 있다.
 
 현재 Windows x64와 macOS arm64에서 명령 호출과 이벤트 구독, 파일 저장을 사용할 수 있다.
-CLI는 vanilla와 Vite 템플릿으로 단일 창 앱을 생성한다.
+CLI는 vanilla, Vite, React, Vue, Svelte 템플릿으로 단일 창 앱을 생성한다.
 앱 실행에는 패키지에 포함된 Bun을 사용하므로 최종 사용자가 Bun을 설치할 필요는 없다.
 Windows 앱 실행에는 WebView2 런타임이 필요하다.
 
@@ -56,7 +56,8 @@ Bun은 `mise.toml`과 `package.json`에 **1.4.2**로 고정되어 있다.
 연결하면 UI 갱신은 해당 서버에 맡기고 CLI는 서버 수명주기와 백엔드 재시작을 관리한다.
 `bunaway create <directory> --template vite`는 공식 create-vite의 기본 로고, 카운터 화면에
 Vite 개발 서버와 프로덕션 빌드를 연결한
-vanilla TypeScript 앱을 생성한다. 기본 템플릿은 기존 `vanilla`다.
+vanilla TypeScript 앱을 생성한다. `--template react`, `vue`, `svelte`로 각 UI 프레임워크의
+TypeScript + Vite 앱을 생성할 수 있다. 기본 템플릿은 기존 `vanilla`다.
 Windows 호스트의 빌드와 패키징은
 `native/windows/bun/run.ps1`이 담당한다. Bun이 앱 진입점이고 UI Worker가
 Win32, WebView2 COM을 직접 소유한다. 생성 앱은 `build.app`에 AppDefinition 모듈을 지정한다.

@@ -510,6 +510,10 @@ test("artifact audit rejects omitted schemas, declarations and Git attributes wi
       "packages/cli/templates/vanilla/gitattributes",
       "packages/cli/templates/vite/gitattributes",
       "packages/cli/templates/vite/src-bunaway/policy.json",
+      "packages/cli/templates/react/src/App.tsx",
+      "packages/cli/templates/vue/src/components/HelloWorld.vue",
+      "packages/cli/templates/svelte/svelte.config.js",
+      "packages/cli/templates/svelte/src-bunaway/policy.json",
       "packages/cli/src/assets.ts",
       "packages/cli/src/sdk.ts",
     ]) {
