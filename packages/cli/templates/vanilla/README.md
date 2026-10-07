@@ -41,6 +41,13 @@ app; calls from a regular browser fail with `UNSUPPORTED`.
 The UI creates the client during startup so connection failures appear in the
 status message and keep the Save button disabled.
 
+Backend commands and their services can import `storage`, `log`, and `capabilities`
+from `@bunaway/backend` directly. The SDK uses the current command's Host permissions
+and cancellation signal, without passing `context.host` through service arguments.
+Await Host operations before the command returns. Calls outside an execution context
+or after command completion are rejected. The starter allows storage under `appData/messages`;
+logging requires enabling `host.log` for the calling view in `policy.json`.
+
 ## Build
 
 ```sh

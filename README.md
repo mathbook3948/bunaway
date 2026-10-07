@@ -15,6 +15,21 @@ Windows 앱 실행에는 WebView2 런타임이 필요하다.
 프레임워크 라이선스는 아직 결정되지 않았다.
 플랫폼별 지원 상태와 배포 검증 범위는 [플랫폼 지원 범위](./docs/platform-support/README.md)에서 확인한다.
 
+앱 백엔드의 명령과 서비스에서는 `@bunaway/backend`의 `storage`, `log`, `capabilities`를
+import해 직접 호출할 수 있다. 호출한 명령의 권한과 취소 신호는 자동으로 연결한다.
+예를 들어 명령이 호출한 서비스 함수에서 다음처럼 파일을 저장한다.
+
+```ts
+import { storage } from "@bunaway/backend";
+
+export async function save(text: string) {
+  return storage.writeText({ scope: "appData", path: "notes/memo.txt", text });
+}
+```
+
+뷰의 정책에 `appData/notes` 쓰기 권한이 필요하다. 명령 밖이나 완료한 명령의 작업에서는 호출을 거부한다.
+실행 범위와 로그, 기능 조회 사용법은 [백엔드 Host API](./docs/site/src/content/docs/reference/backend/host-api.mdx)를 따른다.
+
 ## 프레임워크 개발 환경
 
 자기 앱을 만드는 개발자는 [로컬 tarball 설치 안내](./docs/framework-distribution.md)를
@@ -91,7 +106,7 @@ Windows 호스트의 빌드와 패키징은
 Win32, WebView2 COM을 직접 소유한다. 생성 앱은 `build.app`에 AppDefinition 모듈을 지정한다.
 Windows 빌드는 PowerShell 7과 고정 Bun만 필요하며 C++ 컴파일은 하지 않는다.
 WebView 앱 실행에는 WebView2 Evergreen 런타임이 필요하다.
-생성된 `build/windows-probe-package/`는 Bun 개발 도구 없이 실행되는 독립 실험 패키지다.
+생성된 `build/windows-bun-package/`는 별도의 Bun 설치 없이 실행할 수 있는 회귀 테스트 패키지다.
 
 macOS는 Apple Silicon, Xcode Command Line Tools와 GUI 세션이 필요하다.
 `probe:macos` 다음 `host:macos`를 **직렬 실행**한다. 두 빌드가 공유 Bun 캐시를
@@ -113,16 +128,18 @@ macOS는 Apple Silicon, Xcode Command Line Tools와 GUI 세션이 필요하다.
   결과 JSON과 호스트 로그는 성공, 실패 시 모두 `windows-native-diagnostics`
   artifact로 7일간 보관한다. 생성 전 실패한 경우에는 파일이 없을 수 있다.
 - 별도 `macos-15` ARM64 작업에서 runner CPU와 `darwin-aarch64` pin을 확인하고
-  `mise run probe:macos`→`mise run host:macos`를 직렬 실행한다. 다운로드, 실행 파일
+  `mise run probe:macos`와 `native/macos/host/run.sh --app`을 직렬 실행한다. 다운로드, 실행 파일
   해시, 아키텍처, 버전을 확인하고, 실제 AppKit/WKWebView 페이지 결과, 리소스 요청,
   렌더러 재생성, Bun 종료를 검사한다. GUI가 실행되지 않으면 timeout/오류로 실패한다.
+  ad-hoc 서명한 `.app`의 실행과 서명 유지, 배포 스크립트의 DMG 생성과 PKG 조립도 검사한다.
   결과 JSON, 빌드, 드라이버 로그, 호스트 stderr와 테스트별 호스트/페이지 로그는
   성공, 실패 모두 `macos-native-diagnostics` artifact로 7일간 보관한다.
   `bash -e -o pipefail`로 `tee`가 테스트 실패를 숨기지 않게 한다. 빌드/초기 설정 실패나
   강제 취소 전에는 JSON이 없을 수 있으며, 그 경우 생성된 로그를 확인한다.
 
 CI도 `mise.toml`의 Bun 버전을 사용한다. 같은 PR, 브랜치의 새 실행은 이전 실행을
-취소한다. `.app`, 서명, 공증, 설치, 배포, 릴리스와 Linux/모바일 네이티브 호스트는 검사하지 않는다.
+취소한다. Windows 설치 검사는 Inno Setup이 있을 때 실행하고, 없으면 건너뛴 사실을 로그에 남긴다.
+프로덕션 인증서 서명, 실제 공증, Store 제출, 공개 릴리스와 Linux/모바일 네이티브 실행은 검사하지 않는다.
 실제 실행 환경과 결과는 [macOS 기록](./docs/architecture/macos-native-results.md)에 남긴다.
 로컬 검증 결과와 각 OS 및 CPU의 CI 결과를 따로 기록한다.
 

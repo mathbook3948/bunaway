@@ -23,6 +23,11 @@ sidebar: { order: 3 }
 
 ## host.call
 
+일반적인 저장과 로그, 기능 조회에는 `@bunaway/backend`의
+[storage, log, capabilities](/reference/backend/host-api/)를 사용할 수 있습니다.
+서비스 함수까지 context.host를 전달할 필요가 없습니다.
+아래의 명시적 Host API도 계속 지원합니다.
+
 ```ts
 await context.host.call("storage.readText", {
   scope: "appData", path: "messages/current.txt",

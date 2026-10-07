@@ -1,7 +1,3 @@
-export { command, type CommandContract, type CommandHandler } from "./command.ts";
-export { defineModule, type ModuleDefinition, type ModuleBuilder } from "./module.ts";
-export { defineApp } from "./app.ts";
-export { createCore } from "@bunaway/core";
 export type {
   AppDefinition,
   CommandContext,
@@ -16,6 +12,7 @@ export type {
   StateStore,
   StopHook,
 } from "@bunaway/core";
+export { createCore } from "@bunaway/core";
 export type {
   HostAPI,
   HostInput,
@@ -24,3 +21,7 @@ export type {
   JsonValue,
   Schema,
 } from "@bunaway/protocol";
+export { defineApp } from "./app.ts";
+export { type CommandContract, type CommandHandler, command } from "./command.ts";
+export { capabilities, log, storage } from "./host.ts";
+export { defineModule, type ModuleBuilder, type ModuleDefinition } from "./module.ts";

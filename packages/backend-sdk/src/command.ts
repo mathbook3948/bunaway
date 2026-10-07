@@ -6,6 +6,7 @@ import {
   type Schema,
   validateValue,
 } from "@bunaway/protocol";
+import { bindCommandHost } from "./host-context.ts";
 
 export type CommandContract<I extends Schema = Schema, O extends Schema = Schema> = {
   readonly input: I;
@@ -21,7 +22,7 @@ export type CommandHandler<I extends Schema, O extends Schema> = (
 export function command<const I extends Schema, const O extends Schema>(
   definition: CommandContract<I, O> & { handle: CommandHandler<I, O> },
 ): CommandDefinition<I, O> {
-  return {
+  return bindCommandHost({
     input: definition.input,
     output: definition.output,
     async run(payload, context) {
@@ -38,5 +39,5 @@ export function command<const I extends Schema, const O extends Schema>(
         throw new BunawayError({ code: "INTERNAL", message: "Invalid command output." });
       }
     },
-  };
+  });
 }

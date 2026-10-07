@@ -1,11 +1,11 @@
 # Windows B 단계 실행 결과
 
-이 문서는 이전 실행의 기록이다. 2026-10-06 기존 Windows C++ 소스·CMake·실행기·
+이 문서는 이전 실행의 기록이다. 2026-10-06 기존 Windows C++ 소스, CMake, 실행기,
 전용 테스트를 삭제했다. 현재 재현 명령과 결과는 [Bun FFI 실행 기록](./windows-bun-results.md)을 따른다.
 
 
 검증일: 2026-10-04. WebView 없는 C++ 호스트가 앱 패키지의 Bun을 별도 프로세스로
-실행하고 실제 파이프로 통신하는 B 단계가 통과했다. 사용자 Bun 설치·PATH에 의존하지 않는다.
+실행하고 실제 파이프로 통신하는 B 단계가 통과했다. 사용자 Bun 설치, PATH에 의존하지 않는다.
 
 ## 고정한 배포물과 환경
 
@@ -17,11 +17,11 @@
 - CMake 4.3.1, Ninja, C++20 Release, `/MT /W4 /WX /utf-8`.
 - `dumpbin /DEPENDENTS`의 호스트 의존성은 `bcrypt.dll`, `KERNEL32.dll`뿐이다.
   별도 MSVC 런타임 설치가 필요 없다.
-- JSON 파서 nlohmann/json 3.12.0 단일 헤더. 다운로드·라이선스 해시도 고정.
+- JSON 파서 nlohmann/json 3.12.0 단일 헤더. 다운로드, 라이선스 해시도 고정.
 
-URL·아카이브·실행 파일·라이선스 해시는
+URL, 아카이브, 실행 파일, 라이선스 해시는
 [배포 manifest](../../runtime/build-manifests/windows-x64.json)에 있다.
-빌드 스크립트는 다운로드를 검사하고 라이선스와 백엔드·설정·생성 스키마를 패키징한다.
+빌드 스크립트는 다운로드를 검사하고 라이선스와 백엔드, 설정, 생성 스키마를 패키징한다.
 호스트는 Bun과 패키지 자산 해시를 실행 전에 다시 검사한다.
 
 ## 실제 관찰
@@ -30,48 +30,48 @@ URL·아카이브·실행 파일·라이선스 해시는
 
 | 항목 | 확인 결과 |
 | --- | --- |
-| 번들 실행·PID | 한글·공백 경로, 사용자 Bun 없는 PATH, 다른 cwd에서 ready. OS 자식 PID = Bun PID, 호스트 PID와 다름 |
+| 번들 실행, PID | 한글, 공백 경로, 사용자 Bun 없는 PATH, 다른 cwd에서 ready. OS 자식 PID = Bun PID, 호스트 PID와 다름 |
 | 계산 | `2 + 2 → 4`, Promise `→ 42`, 타이머 `→ timer-done`, 동시 요청 ID 매칭 |
-| 이벤트 | 구독→sequence 1 이벤트→해제. 폐기 시 대기 요청 CANCELLED·이후 요청 거부. 폐기 뒤 listen 성공 응답과 늦은 이벤트 폐기 |
-| 오류 | throw·rejection의 안정된 code/message, 원본 오류 정보 제외. exit 17·Bun이 살아 있는 stdout EOF 시 미완료 요청 실패 |
+| 이벤트 | 구독→sequence 1 이벤트→해제. 폐기 시 대기 요청 CANCELLED, 이후 요청 거부. 폐기 뒤 listen 성공 응답과 늦은 이벤트 폐기 |
+| 오류 | throw, rejection의 안정된 code/message, 원본 오류 정보 제외. exit 17, Bun이 살아 있는 stdout EOF 시 미완료 요청 실패 |
 | 로그 | stderr 288 KiB를 별도로 배출하고 전달량 64 KiB로 제한. IPC 응답 완료 |
-| 프레이밍 | UTF-8 문자 내부 분할, 여러 프레임 병합, 정확히 1 MiB·깊이 64 수신 |
-| 거부·폐기 | 손상 JSON·UTF-8, 1 MiB 초과·깊이 65, 빈 줄·미완성 EOF·stdout 로그, 다른 세대·버전·ID 재사용 거부. 늦은 중복 응답 폐기 |
+| 프레이밍 | UTF-8 문자 내부 분할, 여러 프레임 병합, 정확히 1 MiB, 깊이 64 수신 |
+| 거부, 폐기 | 손상 JSON, UTF-8, 1 MiB 초과, 깊이 65, 빈 줄, 미완성 EOF, stdout 로그, 다른 세대, 버전, ID 재사용 거부. 늦은 중복 응답 폐기 |
 | JSON 일치 | 큰 숫자는 binary64, 음수 0은 0, 중첩 객체 중복 키는 마지막 값 |
-| 숫자 중계 | 1 MiB 경계의 1e-7 배열 요청 echo와 백엔드 생성 응답 통과. 검증된 원문 중계로 숫자 표기 길이 증가 방지. 후속 호출·정상 종료 확인 |
-| 수신·송신 크기 | 1e20 50,000개의 짧은 원문은 수신 허용. 직렬화 시 1 MiB를 넘는 echo 결과는 요청별 INTERNAL 오류로 완료. 129회 반복 뒤 추가 호출·정상 종료 확인 |
-| 스키마 일치 | 공통 입력 59개로 조건 결합·type 없는 anyOf 공통 필수 필드·중첩 값 중복·Unicode 길이·단독 surrogate·줄 구분자 경로 검사 일치. 이모지 600자의 오류도 실제 IPC 통과 |
-| 문자열 계약 | 단독 surrogate 값·객체 키는 송신 전에 거부해 호스트 연결 유지. 정상 surrogate 쌍은 키·값 모두 IPC 왕복 |
-| 타입 추론 | 빈 객체의 숫자·배열 입력과 출력 거부. type 없는 바깥 객체 제약과 required 단독 선언도 반영하고 비객체 분기는 유지. 타입 검사와 명령 실행 검증 |
-| 과부하 | 128개 미완료 요청 한도 초과 시 실패·프로세스 정리, 남은 요청은 오류로 완료 |
-| 정상 종료 | 진행 중 타이머 취소, 종료 응답 이후 실제 Bun 종료·EOF·Job 활성 프로세스 0개 확인 |
-| 시작 중 취소 | 실행 직후 EOF·shutdown 각각 5회가 fatal 없이 정상 종료. boot 이전·이후 종료도 허용하며 준비 전 버전·세대 검증 유지 |
+| 숫자 중계 | 1 MiB 경계의 1e-7 배열 요청 echo와 백엔드 생성 응답 통과. 검증된 원문 중계로 숫자 표기 길이 증가 방지. 후속 호출, 정상 종료 확인 |
+| 수신, 송신 크기 | 1e20 50,000개의 짧은 원문은 수신 허용. 직렬화 시 1 MiB를 넘는 echo 결과는 요청별 INTERNAL 오류로 완료. 129회 반복 뒤 추가 호출, 정상 종료 확인 |
+| 스키마 일치 | 공통 입력 59개로 조건 결합, type 없는 anyOf 공통 필수 필드, 중첩 값 중복, Unicode 길이, 단독 surrogate, 줄 구분자 경로 검사 일치. 이모지 600자의 오류도 실제 IPC 통과 |
+| 문자열 계약 | 단독 surrogate 값, 객체 키는 송신 전에 거부해 호스트 연결 유지. 정상 surrogate 쌍은 키, 값 모두 IPC 왕복 |
+| 타입 추론 | 빈 객체의 숫자, 배열 입력과 출력 거부. type 없는 바깥 객체 제약과 required 단독 선언도 반영하고 비객체 분기는 유지. 타입 검사와 명령 실행 검증 |
+| 과부하 | 128개 미완료 요청 한도 초과 시 실패, 프로세스 정리, 남은 요청은 오류로 완료 |
+| 정상 종료 | 진행 중 타이머 취소, 종료 응답 이후 실제 Bun 종료, EOF, Job 활성 프로세스 0개 확인 |
+| 시작 중 취소 | 실행 직후 EOF, shutdown 각각 5회가 fatal 없이 정상 종료. boot 이전, 이후 종료도 허용하며 준비 전 버전, 세대 검증 유지 |
 | 강제 종료 | 종료를 무시하는 Bun은 2초 기한 후 강제 종료. 호스트를 죽여도 Bun과 자손 정리 |
-| 출력 정체 | 80만 자 echo 소비 중단 뒤 추가 invoke·revoke를 보내도 shutdown 처리. 종료 무시와 출력 큐 초과도 정리. 출력 재개 시 응답·취소 순서 유지. 소비 재개 없이 OS 핸들로 호스트와 Bun 종료 확인 |
+| 출력 정체 | 80만 자 echo 소비 중단 뒤 추가 invoke, revoke를 보내도 shutdown 처리. 종료 무시와 출력 큐 초과도 정리. 출력 재개 시 응답, 취소 순서 유지. 소비 재개 없이 OS 핸들로 호스트와 Bun 종료 확인 |
 
 2026-10-04 11:58:54 UTC 실행에서 호스트 PID `40808`, OS 자식 PID와 Bun ready PID
 `1772`였다. 정상 종료는 `exitCode: 0`, `forced: false`, `failed: false`,
 `activeProcesses: 0`으로 끝났다. 테스트 PID는 실행마다 바뀐다.
 
-네이티브 `--watch` 검증기는 종료 전에 `OpenProcess(SYNCHRONIZE)`로 실제 Bun·자손
+네이티브 `--watch` 검증기는 종료 전에 `OpenProcess(SYNCHRONIZE)`로 실제 Bun, 자손
 프로세스 핸들을 잡고 종료 뒤 signal을 기다린다. PID 조회에서 사라진 것만으로 성공을 추정하지 않는다.
 호스트 강제 종료는 Bun 내부의 종료 처리 없이 Job kill-on-close가 정리하는지 확인한다.
 
-`build/windows-probe-results.json`에 실행 시각·OS·호스트 해시·패키지 manifest,
-테스트별 결과와 실제 PID·ready·요청·응답·이벤트·오류·종료 프레임을 남긴다.
-출력이 막힌 경로에서는 오류·최종 진단 프레임이 잘릴 수 있다. 이 테스트는 프레임 대신
+`build/windows-probe-results.json`에 실행 시각, OS, 호스트 해시, 패키지 manifest,
+테스트별 결과와 실제 PID, ready, 요청, 응답, 이벤트, 오류, 종료 프레임을 남긴다.
+출력이 막힌 경로에서는 오류, 최종 진단 프레임이 잘릴 수 있다. 이 테스트는 프레임 대신
 호스트 종료 코드와 미리 확보한 OS 프로세스 핸들로 종료를 확인한다.
-실험의 `host-started`·`host-stopped`·`host-error`·`host-discarded`는 외부 검증용 진단이며
+실험의 `host-started`, `host-stopped`, `host-error`, `host-discarded`는 외부 검증용 진단이며
 제품의 Web IPC 메시지가 아니다.
 
 ## 다음 단계의 경계
 
-B 실험은 `probe` 런타임·세대 `1`·`probe-view`를 고정하고 테스트 명령만 처리한다.
-이 B 실험에서 Host API 요청·응답은 스키마만 정의했다. 이후 C 단계에서는 실제
-client-sdk·core·WebView2, 세션·origin·frame 검증·권한 정책과 파일 저장 경계를 구현했다.
+B 실험은 `probe` 런타임, 세대 `1`, `probe-view`를 고정하고 테스트 명령만 처리한다.
+이 B 실험에서 Host API 요청, 응답은 스키마만 정의했다. 이후 C 단계에서는 실제
+client-sdk, core, WebView2, 세션, origin, frame 검증, 권한 정책과 파일 저장 경계를 구현했다.
 [C 실행 결과](./windows-host-results.md)의 단일 창/뷰 검증은 이 B 기록과 별개다.
 B 실험의 임시 경로는 쓰기 가능한 패키지의 `assets/tmp`다. C 호스트는 패키지 자산과
-`%LOCALAPPDATA%/bunaway/<appId>`의 앱 데이터·임시 디렉터리를 분리한다.
+`%LOCALAPPDATA%/bunaway/<appId>`의 앱 데이터, 임시 디렉터리를 분리한다.
 
-설치 프로그램·서명·최소 Windows/CPU 지원 범위, macOS·Linux·Android·iOS 실행은
+설치 프로그램, 서명, 최소 Windows/CPU 지원 범위, macOS, Linux, Android, iOS 실행은
 이 결과에 포함하지 않는다. Windows B 성공을 다른 플랫폼의 완료로 확대하지 않는다.

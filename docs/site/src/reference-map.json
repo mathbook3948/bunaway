@@ -18,6 +18,7 @@
         "reference/backend/command": ["command"],
         "reference/backend/app-definition": ["defineApp"],
         "reference/backend/module": ["defineModule"],
+        "reference/backend/host-api": ["storage", "log", "capabilities"],
         "reference/tooling/core-and-runtime": ["createCore"]
       }
     },
@@ -249,7 +250,8 @@
           "backendContext",
           "runtime",
           "send",
-          "callHost"
+          "callHost",
+          "onCommandError"
         ]
       }
     },
@@ -265,6 +267,23 @@
       "type": "CancellationController",
       "pages": {
         "reference/tooling/core-and-runtime": ["signal", "abort"]
+      }
+    },
+    {
+      "source": "packages/cli/src/config.ts",
+      "type": "Project",
+      "pages": {
+        "reference/tooling/cli-api": [
+          "root",
+          "frameworkRoot",
+          "appEntry",
+          "frontend",
+          "backendDependencies",
+          "bundle",
+          "dev",
+          "app",
+          "policy"
+        ]
       }
     }
   ],

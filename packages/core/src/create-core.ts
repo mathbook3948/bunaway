@@ -409,7 +409,7 @@ class SessionImpl implements CoreSession {
       });
     }, remaining);
     this.pending.set(message.id, pending);
-    void this.execute(pending, definition, message.payload);
+    void this.execute(pending, definition, message.payload, message.command);
   }
 
   // Runs detached from receive() so a slow handler never blocks acceptance of
@@ -418,6 +418,7 @@ class SessionImpl implements CoreSession {
     pending: PendingRequest,
     definition: CommandDefinition,
     payload: JsonValue,
+    command: string,
   ): Promise<void> {
     let reply: ServerMessage;
     try {
@@ -436,6 +437,13 @@ class SessionImpl implements CoreSession {
       }
       reply = { kind: "result", protocol: this.outProtocol, id: pending.id, payload: output };
     } catch (cause) {
+      if (!(cause instanceof BunawayError)) {
+        try {
+          void Promise.resolve(this.core.services.onCommandError?.(command, cause)).catch(() => {});
+        } catch {
+          // Diagnostic failures must not replace or delay the command response.
+        }
+      }
       reply = {
         kind: "error",
         protocol: this.outProtocol,

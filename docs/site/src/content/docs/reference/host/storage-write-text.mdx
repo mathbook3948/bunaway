@@ -5,13 +5,15 @@ sidebar: { order: 2 }
 ---
 
 ```ts
-context.host.call("storage.writeText", { scope, path, text }): Promise<null>
+storage.writeText({ scope, path, text }): Promise<null>
 ```
 
 저장 범위 안의 파일에 텍스트를 씁니다. 기존 파일 내용은 새 텍스트로 대체합니다.
 
 ```ts
-await context.host.call("storage.writeText", {
+import { storage } from "@bunaway/backend";
+
+await storage.writeText({
   scope: "appData",
   path: "messages/current.txt",
   text: "저장할 문자열",
@@ -19,6 +21,10 @@ await context.host.call("storage.writeText", {
 ```
 
 ## 입력과 정책
+
+`storage`는 명령이나 `defineApp()`으로 연결한 플러그인 setup에서 호출합니다.
+실행 범위와 기존 `context.host.call("storage.writeText", ...)` 사용법은
+[백엔드 Host API](/reference/backend/host-api/)에서 확인하세요.
 
 `scope`, `path`는 [storage.readText](/reference/host/storage-read-text/)와 같은 필수 경로 계약입니다.
 `text`는 필수 JSON 문자열이며 추가 필드는 허용하지 않습니다.

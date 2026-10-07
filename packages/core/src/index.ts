@@ -82,6 +82,8 @@ export type CoreServices = {
   readonly platform: Platform;
   readonly backendContext: HostContext;
   readonly runtime: RuntimeServices;
+  // Trusted diagnostics only. Never include the cause in a WebView response.
+  onCommandError?(command: string, cause: unknown): void | Promise<void>;
   // The adapter closes the transport and bound session(s) on terminal send failure.
   send(context: HostContext, message: ServerMessage): Promise<void>;
   callHost(context: HostContext, call: HostCall, signal: CancellationSignal): Promise<HostResponse>;

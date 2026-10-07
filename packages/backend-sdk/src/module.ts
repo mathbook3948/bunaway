@@ -1,6 +1,6 @@
 import type { CommandDefinition, CommandRegistry, EventRegistry } from "@bunaway/core";
 import type { Schema } from "@bunaway/protocol";
-import { command, type CommandContract, type CommandHandler } from "./command.ts";
+import { type CommandContract, type CommandHandler, command } from "./command.ts";
 import { checkName, claimName, type RegistrationKind } from "./registration.ts";
 
 type SingleEntry<K extends string, T> = K extends unknown

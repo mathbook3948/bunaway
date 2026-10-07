@@ -1,7 +1,7 @@
 import { lstat, realpath } from "node:fs/promises";
 import { dirname, extname, relative, resolve } from "node:path";
 import type { BunPlugin } from "bun";
-import { files, hash, installedPackageRoot, json } from "./files.ts";
+import { files, hash, inside, installedPackageRoot, json } from "./files.ts";
 
 interface SdkReference {
   name: string;
@@ -110,8 +110,9 @@ export async function validateSdkGraph(
   project: string,
   references: readonly SdkReference[],
   sources: readonly string[],
-): Promise<void> {
+): Promise<string[]> {
   const plugin = await sdkPlugin(project, references);
+  const dependencies = new Set<string>();
   for (const source of sources) {
     const frontend = (await lstat(source)).isDirectory();
     const entrypoints = frontend
@@ -122,22 +123,33 @@ export async function validateSdkGraph(
     await buildWithSdk(
       {
         entrypoints,
+        metafile: !frontend,
         ...(frontend ? { root: source } : { packages: "bundle" as const }),
         target: frontend ? "browser" : "bun",
         splitting: false,
       },
       plugin,
+      (metadata) => {
+        for (const name of Object.keys(metadata?.inputs ?? {})) {
+          const path = resolve(project, name);
+          if (inside(project, path))
+            dependencies.add(relative(project, path).replaceAll("\\", "/"));
+        }
+      },
     );
   }
+  return [...dependencies].sort();
 }
 
 export async function buildWithSdk(
   options: Bun.BuildConfig,
   plugin: BunPlugin,
+  onMetadata?: (metadata: Bun.BuildMetafile | undefined) => void,
 ): Promise<Bun.BuildArtifact[]> {
   try {
     const result = await Bun.build({ ...options, plugins: [plugin] });
     if (!result.success) throw new Error(result.logs.map(String).join("\n"));
+    onMetadata?.(result.metafile);
     return result.outputs;
   } catch (error) {
     const errors = error instanceof AggregateError ? error.errors : [error];

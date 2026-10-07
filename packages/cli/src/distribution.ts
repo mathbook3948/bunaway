@@ -173,7 +173,7 @@ export async function snapshotHashes(
 export async function validateFramework(
   project: string,
   sources: readonly string[] = [],
-): Promise<string> {
+): Promise<{ root: string; backendDependencies: string[] }> {
   const pkg = (await json(resolve(project, "package.json"))) as PackageDependencies & {
     packageManager: string;
     overrides?: unknown;
@@ -235,8 +235,14 @@ export async function validateFramework(
       );
     }
   }
-  await runWorker("sdk.ts", "validateSdkGraph", [project, references, sources], project, root);
-  return root;
+  const output = await runWorker(
+    "sdk.ts",
+    "validateSdkGraph",
+    [project, references, sources],
+    project,
+    root,
+  );
+  return { root, backendDependencies: JSON.parse(output) as string[] };
 }
 
 export function packageFilename(name: string, version: string): string {

@@ -1,7 +1,7 @@
 # macOS probe host
 
 POSIX runtime probe: verifies the bundled Bun child process
-contract end to end — spawn, dedicated-pipe NDJSON IPC, clean/forced shutdown,
+contract end to end: spawn, dedicated-pipe NDJSON IPC, clean/forced shutdown,
 and cleanup when the host dies abnormally.
 
 Design deltas from Windows (documented with execution evidence in the probe
