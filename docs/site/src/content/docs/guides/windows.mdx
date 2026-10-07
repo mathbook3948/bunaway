@@ -52,7 +52,13 @@ const editor = defineModule("editor")
 export default defineApp({ modules: [editor] });
 ```
 
-프런트엔드는 초기화한 클라이언트로 `client.invoke("editor.open", null)`을 호출합니다.
+프런트엔드는 초기화한 클라이언트로 창을 연 뒤 닫기 확인을 설정합니다.
+
+```ts
+await client.invoke("editor.open", null);
+await client.invoke("editor.prepareClose", null);
+```
+
 [프런트엔드 가이드](/guides/frontend/)처럼 `CommandsOf`와 `EventsOf`로 타입을 연결하는 것을 권장합니다.
 동시에 창을 여는 요청이 겹치면 `BUSY`를 처리하세요.
 

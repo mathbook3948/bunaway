@@ -76,6 +76,7 @@ function coversPathPrefix(granted: string, required: string): boolean {
 
 function coversHostPermissions(granted: HostPermissions, required: HostPermissions): boolean {
   if (required.log && !granted.log) return false;
+  if ((required.windows ?? []).some((view) => !granted.windows?.includes(view))) return false;
   return required.storage.every((need) =>
     need.access.every((access) =>
       granted.storage.some(

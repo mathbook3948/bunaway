@@ -14,7 +14,7 @@ sidebar: { order: 6 }
 | `name`, `version` | 예 | 플러그인 식별, 버전 문자열 |
 | `dependencies` | 아니요 | 먼저 초기화해야 할 플러그인 이름 배열 |
 | `platforms` | 아니요 | 실행 허용 플랫폼 배열. 미선언이면 플랫폼 제한 없음 |
-| `requiredHost` | 아니요 | 백엔드 작업에 필요한 log, storage 권한 |
+| `requiredHost` | 아니요 | 백엔드 작업에 필요한 log, storage, windows 권한 |
 | `commands`, `events` | 아니요 | 앱과 공유하는 명령과 이벤트 등록 목록 |
 | `setup(context)` | 아니요 | 동기/비동기 초기화. 선택적 StopHook 반환 |
 
@@ -30,6 +30,8 @@ dependencies에 지정한 플러그인을 먼저 초기화합니다.
 
 `requiredHost`에 적은 권한이 `policy.backend`에도 있어야 앱을 시작할 수 있습니다.
 같은 범위의 여러 storage grant로 read/write를 충족할 수 있습니다. 각 grant의 scope와 경로 안에서만 허용합니다.
+`requiredHost.windows`의 모든 뷰 ID가 `policy.backend.windows`에도 있어야 합니다.
+필요한 창 권한이 없으면 어떤 플러그인의 setup도 실행하기 전에 `INVALID_ARGUMENT`로 시작에 실패합니다.
 setup에는 `policy.backend`의 권한을 사용하는 컨텍스트를 전달합니다.
 
 ## 종료
