@@ -10,7 +10,7 @@ client.listen(name, listener, { onError, signal? }): Promise<AsyncDispose>
 ```
 
 이벤트를 구독하고 알림이 발생할 때마다 콜백을 실행합니다. 구독이 성공하면 비동기 해제 함수를 반환합니다.
-직접 import한 `listen`은 기본 연결과 준비 대기를 사용하므로 별도의 초기화 코드가 필요 없습니다.
+직접 import한 `listen`은 기본 연결을 사용하고 연결이 준비될 때까지 기다립니다. 별도의 초기화 코드는 필요 없습니다.
 
 ## 예시
 
