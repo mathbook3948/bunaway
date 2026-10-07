@@ -64,7 +64,7 @@ export class WebView {
       message(source: string, raw: string): void;
       revoke(reason: string): void;
       sameDocument(source: string): void;
-      close(): void;
+      close(force?: boolean): void;
       ready(): void;
       log(event: string, data?: object): void;
     },
@@ -263,7 +263,7 @@ export class WebView {
       hr(method(args, 3, ["ptr"])(ptr(kind)), "get_ProcessFailedKind");
       this.hooks.log("webview-process-failed", { kind: kind[0] });
       this.hooks.revoke("process-failed");
-      if (kind[0] === 0) this.hooks.close();
+      if (kind[0] === 0) this.hooks.close(true);
       else
         setTimeout(() => {
           if (!this.closing) this.navigate();

@@ -19,6 +19,8 @@ import {
 
 export type Route = { viewId: string; documentGeneration: number; context: HostContext };
 export const MAX_WINDOWS = 128;
+// WM_APP message for orderly CLI teardown, independent of user close behavior.
+export const APP_SHUTDOWN_MESSAGE = 0x8002;
 export type WindowSpec = {
   view: string;
   home: string;
@@ -34,10 +36,14 @@ export type UIConfig = {
   dataRoot: string;
   loader: string;
   legacyProfile?: boolean;
+  desktop?: { closeBehavior: "quit" | "hide"; tray?: { tooltip: string } };
   devtools?: boolean;
 };
 export type Packet =
   | { kind: "ready" | "start" | "shutdown" | "closing" | "cleaned" }
+  | { kind: "desktop-control"; action: "show" | "hide" }
+  | { kind: "quit-request"; reason: "last-window" | "tray" }
+  | { kind: "quit-cancelled" }
   | { kind: "session-open" | "revoke"; route: Route }
   | { kind: "client"; route: Route; message: ClientMessage }
   | { kind: "server"; route: Route; message: ServerMessage }
@@ -63,17 +69,37 @@ const uiKinds = [
   "revoke",
   "client",
   "closing",
+  "quit-request",
   "authorized",
   "host-response",
   "cleaned",
   "fatal",
   "diagnostic",
 ];
-const mainKinds = ["start", "server", "authorize", "cancel", "host-result", "shutdown"];
+const mainKinds = [
+  "desktop-control",
+  "quit-cancelled",
+  "start",
+  "server",
+  "authorize",
+  "cancel",
+  "host-result",
+  "shutdown",
+];
 const ioKinds = ["prepare", "host-response", "cleaned", "fatal"];
 const ioMainKinds = ["operation", "grant", "cancel", "cancel-context", "shutdown"];
 type Side = "main" | "ui" | "io" | "main-io";
-const controlKinds = new Set(["start", "shutdown", "closing", "cleaned", "fatal", "ready"]);
+const controlKinds = new Set([
+  "desktop-control",
+  "quit-cancelled",
+  "quit-request",
+  "start",
+  "shutdown",
+  "closing",
+  "cleaned",
+  "fatal",
+  "ready",
+]);
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("Invalid Worker packet");
@@ -92,6 +118,9 @@ export function validatePacket(value: unknown, incoming: Side): Packet {
   if (Buffer.byteLength(text) > MAX_MESSAGE_BYTES + 1024)
     throw new Error("Worker packet too large");
   const fields: Record<string, string[]> = {
+    "desktop-control": ["action"],
+    "quit-request": ["reason"],
+    "quit-cancelled": [],
     ready: [],
     start: [],
     shutdown: [],
@@ -120,6 +149,16 @@ export function validatePacket(value: unknown, incoming: Side): Packet {
     Object.keys(packet).some((key) => key !== "kind" && !required.includes(key))
   )
     throw new Error("Invalid Worker fields");
+  if (
+    packet.kind === "desktop-control" &&
+    (typeof packet.action !== "string" || !["show", "hide"].includes(packet.action))
+  )
+    throw new Error("Invalid desktop action");
+  if (
+    packet.kind === "quit-request" &&
+    (typeof packet.reason !== "string" || !["last-window", "tray"].includes(packet.reason))
+  )
+    throw new Error("Invalid quit reason");
   if (packet.route !== undefined) {
     const route = record(packet.route);
     if (Object.keys(route).length !== 3) throw new Error("Invalid route fields");

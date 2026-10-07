@@ -1,5 +1,9 @@
 export type {
   AppDefinition,
+  DesktopContext,
+  DesktopOptions,
+  OpenRequest,
+  QuitReason,
   CommandContext,
   CommandDefinition,
   CommandsOf,
