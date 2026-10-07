@@ -44,7 +44,7 @@ function execute(call: HostCall, source: string): HostResponse {
     if (call.operation === "capabilities.get")
       payload = Object.keys(hostOperations).map((name) => ({
         name,
-        support: name.startsWith("windows.") ? "experimental" : "supported",
+        support: "supported",
         permission: "not-required",
       }));
     else if (call.operation === "log.write") {

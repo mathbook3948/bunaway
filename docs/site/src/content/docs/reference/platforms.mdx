@@ -12,13 +12,14 @@ bunaway는 **Windows를 먼저 완성하고 다른 플랫폼을 같은 Bun 기�
 | --- | --- | --- | --- |
 | 앱 화면 | WebView2 | WKWebView | 미지원 |
 | CLI 앱 생성, 개발, 빌드 | 여러 창 설정 지원 | 단일 창과 뷰 | 네이티브 실행 미지원 |
-| 런타임 여러 창과 뷰 | 구현, 세 창 실행 검증 기록 | 미구현 | 미구현 |
+| 런타임 여러 창과 뷰 | 창 생성, 재생성과 제어 정식 지원 | 미구현 | 미구현 |
 | 명령, 이벤트, 저장 | 지원 | 지원 | 네이티브 실행 미지원 |
 | 단일 인스턴스 인자 전달, 종료 취소, 트레이 | 구현, Windows 인자 전달과 WebView2 hide, veto, CLI 중단 검증 | `desktop` 미지원 | 미지원 |
 | 개발 UI DevTools, CLI 백엔드 inspector | 구현, 실제 GUI 검증은 남음 | 미지원 | 미지원 |
 
 `policy.json.views`에 뷰별로 호출할 명령과 받을 이벤트, 저장 범위를 적습니다.
-Windows CLI는 `app.windows` 설정을 지원합니다. 공개 창 API의 창 제어와 반복 재생성을 실제 GUI 회귀로 확인했습니다.
+Windows CLI는 `app.windows` 설정을 지원합니다. 공개 창 API는 기능 조회에서 `supported`를 반환하며,
+창 제어와 반복 재생성을 실제 GUI 회귀로 확인했습니다.
 macOS CLI는 단일 창 설정을 사용합니다.
 [창과 뷰의 정책](/concepts/views-and-policy/)을 함께 읽으세요.
 

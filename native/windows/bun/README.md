@@ -61,7 +61,7 @@ F12 또는 Ctrl+Shift+I로 DevTools를 연다. 개발 모드는 서버 URL 설�
 The CLI accepts an `app.windows` catalog with one unique policy view per window.
 `startup: false` defers creation until `windows.create`. Window calls execute on
 the UI STA after the active caller's `windows` grants are checked. The I/O Worker
-reports them as experimental capabilities. `windows.recreate` reserves the view
+reports them as supported capabilities. `windows.recreate` reserves the view
 until the old WebView and processes finish, then creates a fresh boundary and
 WebView using the same profile. This also postpones last-window shutdown.
 Retired views release their COM handlers before a replacement is created.

@@ -84,7 +84,7 @@ Linux에서 계약, 권한 분리, 중복 생성, 닫기 거절, 취소, 종료�
 독립 CLI의 설치, launcher와 loopback 개발 서버 검사도 통과했다. 전체 Windows 네이티브 작업은
 공용 웹 fixture가 기능 목록을 기존 4개로 고정해 검사한 탓에 실패했다. macOS도 같은 검사에서 실패했다.
 fixture는 프로토콜의 전체 operation 이름과 중복 여부, 플랫폼별 지원 상태를 검사하도록 갱신했다.
-Windows 창 API는 `experimental`, macOS 창 API는 `unsupported`를 요구하며 기존 4개 API는 `supported`여야 한다.
+당시 Windows 창 API는 `experimental`, macOS 창 API는 `unsupported`를 요구했으며 기존 4개 API는 `supported`여야 했다.
 
 ## 2026-10-07 로컬 브라우저 장애 회귀
 
@@ -116,3 +116,35 @@ Windows x64, Bun 1.4.2에서 hide, veto, dev-veto, dev-hide, dev-pending 회귀�
 공개 창 API 실행기의 전체화면 사전 검사는 현재 환경에서 최대화 창의 복원 좌표가 달라 실패했다.
 수정 전 PR 커밋 `53a79233`에서도 같은 실패를 재현했다. 해당 사전 검사만 제외한 임시 사본으로
 창 수명주기 회귀를 실행했으며 원래 전체화면 검사는 유지했다. 전체 네이티브 회귀 통과를 뜻하지 않는다.
+
+## 2026-10-07 공개 창 API 정식 지원 검증
+
+PR #40 병합 커밋 `8eec961`을 기준으로 Windows 창 API 11개의 기능 조회 결과를
+`experimental`에서 `supported`로 변경했다. macOS의 `unsupported`는 유지한다.
+로컬 Windows x64, OS 빌드 26200, Bun 1.4.2, WebView2 SDK 1.0.4129.50과
+Evergreen 154.0.4258.62에서 실제 GUI 회귀를 실행했다.
+
+`tests/lifecycle/windows-bun-window-api.ts`는 사전 검사를 포함한 원본 전체를 통과했다.
+표시, 숨김, 최소화와 최대화 창의 전체화면 해제 후 표시 상태와 좌표 복원,
+크기와 위치, 닫기 거절과 승인, 브라우저 장애 후 닫기, 네 번의 보조 창 생성과
+새 세션, 자기 창 재생성과 이전 세션 종료에 따른 생성 취소를 확인했다.
+
+고정 Bun 1.4.2를 PATH에 둔 `pwsh -NoProfile -File native/windows/bun/run.ps1`도 통과했다.
+SDK와 코어, 모달 중 백엔드 진행, 초기화 중 닫기와 생성 실패 정리, 단일 인스턴스와
+launcher, hide, veto와 세 개발 중단 시나리오, 파일 핸들 경계, 이동한 독립 CLI,
+개발 서버와 실제 SDK 저장 왕복, 기존 다중 창의 정책과 `supported` 기능 목록,
+메모 복원과 강제 종료 시 WebView 자손 정리를 확인했다.
+Inno Setup이 없어 설치 파일 생성과 설치 검사는 건너뛰었으며 설치 검증 통과를 뜻하지 않는다.
+
+전체 네이티브 실행의 모달 테스트에서 종료 중 HTTP 요청이 한 번 `ConnectionRefused`로
+실패했다. 테스트가 시작한 요청을 모두 완료한 뒤 서버를 닫도록 정리하고 전체 실행을 다시 통과했다.
+공용 기능 목록 회귀는 Windows 창 API가 `experimental`이나 `unsupported`를 보고하면 실패하며,
+macOS가 `supported`를 보고하는 경우도 거부한다.
+
+창 API 관련 SDK, 코어, 프로토콜, 창 설정과 수명주기 계약 테스트는 79 통과, 0 실패였다.
+전체 `bun test ./tests --timeout 90000`은 582 통과, 33 skip, 5 실패였다.
+실패 5건은 Windows의 파일 symlink 생성 권한 `EPERM`으로 막힌 macOS 파일 fixture 검사이며,
+정식화 전 병합 커밋에서도 같은 결과를 확인했다.
+전체 워크스페이스와 테스트 타입 검사, 린트와 포맷 검사는 통과했다.
+`bun run docs:check`, `bun run docs:build`도 통과했으며 공개 항목 276개와
+62페이지의 내부 링크와 앵커 4,908개를 검사했다.
