@@ -9,9 +9,9 @@ export class DiagnosticLog {
   write(event: string, fields: object = {}) {
     if (this.queued >= API_LIMITS.maxPending)
       return Promise.reject(new Error("Diagnostic queue full"));
-    this.queued++;
     const text = `${JSON.stringify({ t: Date.now(), event, ...fields })}\n`;
-    this.writer = this.writer.then(async () => {
+    this.queued++;
+    const writer = this.writer.then(async () => {
       try {
         await mkdir(dirname(this.path), { recursive: true });
         try {
@@ -27,7 +27,8 @@ export class DiagnosticLog {
         this.queued--;
       }
     });
-    return this.writer;
+    this.writer = writer.catch(() => {});
+    return writer;
   }
   drain() {
     return this.writer;
