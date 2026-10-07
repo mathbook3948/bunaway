@@ -55,7 +55,13 @@ export default defineConfig({
             {
               label: "Client SDK",
               collapsed: true,
-              items: [{ autogenerate: { directory: "reference/client" } }],
+              items: [
+                { slug: "reference/client/create-client" },
+                { slug: "reference/client/invoke" },
+                { slug: "reference/client/listen" },
+                { slug: "reference/client/capabilities" },
+                { slug: "reference/client/close" },
+              ],
             },
             {
               label: "Backend SDK",
@@ -89,6 +95,7 @@ export default defineConfig({
           items: [
             { label: "기여 자료", slug: "reference/design" },
             { label: "메시지와 프로세스 IPC", slug: "reference/protocol" },
+            { label: "사용자 정의 클라이언트와 Transport", slug: "reference/client/transport" },
             {
               label: "도구와 런타임 API",
               collapsed: true,

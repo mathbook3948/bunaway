@@ -25,6 +25,7 @@ import {
   validateValue,
   type WireError,
 } from "@bunaway/protocol";
+import { defaultClient } from "./default-client.ts";
 export { createWebViewTransport, type WebViewBridge } from "./webview.ts";
 
 export type InvokeOptions = { signal?: CancellationSignal; deadline?: number };
@@ -49,7 +50,6 @@ export interface Client<C extends CommandMap = CommandMap, E extends EventMap = 
   close(): Promise<void>;
 }
 
-// Runtime implementation is the client-sdk parallel workstream.
 export type ClientFactory = <
   C extends CommandMap = CommandMap,
   E extends EventMap = EventMap,
@@ -618,6 +618,34 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
 export function createClient<
   C extends CommandMap = CommandMap,
   E extends EventMap = EventMap,
->(options: { transport: Transport; hello: Hello }): Client<C & FrameworkCommands, E> {
+>(options?: { transport: Transport; hello: Hello }): Client<C & FrameworkCommands, E> {
+  if (options === undefined) return defaultClient(createClient) as Client<C & FrameworkCommands, E>;
   return new ClientSession<C & FrameworkCommands, E>(options.transport, options.hello);
+}
+
+/** Invoke an app command through the document's shared WebView connection. */
+export async function invoke<T extends JsonValue = JsonValue>(
+  command: string,
+  payload: JsonValue,
+  options?: InvokeOptions,
+): Promise<T> {
+  return createClient().invoke(command, payload, options) as Promise<T>;
+}
+
+/** Subscribe through the shared connection; returns a subscription disposer. */
+export async function listen<T extends JsonValue = JsonValue>(
+  event: string,
+  listener: (event: EventDelivery<T>) => void,
+  options: ListenOptions,
+): Promise<AsyncDispose> {
+  return createClient().listen(
+    event,
+    listener as (event: EventDelivery<JsonValue>) => void,
+    options,
+  );
+}
+
+/** Query app capability support and OS permissions through the shared connection. */
+export async function capabilities(): Promise<Capabilities> {
+  return createClient().capabilities();
 }

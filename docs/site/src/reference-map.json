@@ -5,7 +5,10 @@
       "source": "packages/client-sdk/src/index.ts",
       "pages": {
         "reference/client/create-client": ["createClient"],
-        "reference/client/transport": ["createWebViewTransport"]
+        "reference/client/transport": ["createWebViewTransport"],
+        "reference/client/invoke": ["invoke"],
+        "reference/client/listen": ["listen"],
+        "reference/client/capabilities": ["capabilities"]
       }
     },
     {

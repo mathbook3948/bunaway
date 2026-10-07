@@ -10,12 +10,13 @@ description: 프런트엔드와 백엔드 API부터 설정, CLI, 패키징까지
 
 | API | 용도 |
 | --- | --- |
-| [createClient, ready](/reference/client/create-client/) | 클라이언트 생성과 연결 준비 |
-| [createWebViewTransport, Transport](/reference/client/transport/) | 네이티브 브리지 연결 |
-| [invoke](/reference/client/invoke/) | 명령, 취소, deadline |
+| [invoke](/reference/client/invoke/) | 백엔드 작업 요청과 결과, 취소, deadline |
 | [listen](/reference/client/listen/) | 구독, 이벤트 순서, 해제 |
 | [capabilities](/reference/client/capabilities/) | 플랫폼 기능, OS 권한 조회 |
-| [close](/reference/client/close/) | 대기 요청, 구독, 전송 종료 |
+| [createClient, ready](/reference/client/create-client/) | 기본 클라이언트 사용과 앱 정의의 타입 추론 |
+| [close](/reference/client/close/) | 공유 연결의 명시적 종료 |
+
+사용자 정의 연결은 [createWebViewTransport, Transport](/reference/client/transport/)에서 설명합니다.
 
 ## 백엔드
 

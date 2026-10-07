@@ -51,7 +51,7 @@ import uiSource from '@repo/packages/cli/templates/vanilla/src/main.ts?raw';
 이벤트는 모듈의 `.event()`에 데이터 스키마를 선언한 뒤 받을 뷰의 `events`에 최종 이름을 추가합니다.
 기존 객체형 앱의 `commands`와 `events`에 직접 등록하는 방법도 지원합니다.
 
-## 3. UI에서 연결, 구독, 호출
+## 3. UI에서 구독하고 호출하기
 
 아래 코드는 템플릿 HTML의 `#message`, `#saved`, `#status`, `#save` 요소와 함께 사용합니다.
 일반 브라우저에는 네이티브 브리지가 없으므로 **bunaway가 연 WebView 안에서** 실행합니다.
@@ -60,20 +60,18 @@ import uiSource from '@repo/packages/cli/templates/vanilla/src/main.ts?raw';
 
 코드는 아래 순서로 실행합니다.
 
-1. 호스트가 제공하는 브리지를 `createWebViewTransport()`에 전달합니다.
-2. `createClient()`로 클라이언트를 만들고 `client.ready`에서 연결 준비를 기다립니다.
-3. `client.listen("message.saved", ...)`으로 저장 알림을 먼저 구독합니다.
-4. `client.invoke("message.read", null)`로 이전 저장 내용을 복원합니다.
-5. 버튼 클릭 시 `client.invoke("message.save", text)`를 호출합니다.
-6. 이벤트 콜백의 `event.payload`로 화면을 갱신합니다.
+1. `@bunaway/client`에서 `invoke`와 `listen`을 가져옵니다.
+2. `listen("message.saved", ...)`으로 저장 알림을 먼저 구독합니다.
+3. `invoke<string>("message.read", null)`로 이전 저장 내용을 복원합니다.
+4. 버튼 클릭 시 `invoke("message.save", text)`를 호출합니다.
+5. 이벤트 콜백의 `event.payload`로 화면을 갱신합니다.
 
-`listen()`의 `onError`는 필수입니다. 연결 종료나 구독 실패를 UI에 반영해야 합니다.
+`listen()`의 `onError`는 필수입니다. 활성 구독의 종료는 이 콜백에서 처리하고, 구독 시작 실패는 `listen()`의 Promise에서 처리합니다.
 `listen()`이 반환한 해제 함수를 보관해 두었다가 컴포넌트를 제거할 때 `await unlisten()`으로 구독을 정리합니다.
-페이지가 종료되면 템플릿은 `client.close()`를 호출합니다.
 
 ## 응답과 이벤트는 어떻게 다르나요?
 
-`await client.invoke("message.save", text)`는 **그 요청의 결과**인 `null`을 받습니다.
+`await invoke("message.save", text)`는 **그 요청의 결과**인 `null`을 받습니다.
 `message.saved`는 **허용된 구독자에게 전달되는 알림**입니다.
 `{ kind: "broadcast" }`로 발행해도 정책에서 이벤트를 허용하고 구독 중인 세션에만 전달됩니다.
 

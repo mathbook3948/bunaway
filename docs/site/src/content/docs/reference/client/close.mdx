@@ -13,11 +13,16 @@ client.close(): Promise<void>
 ## 사용법
 
 ```ts
-window.addEventListener("pagehide", () => { void client.close(); });
+import { createClient } from "@bunaway/client";
+
+const client = createClient();
+// 앱에서 기본 연결을 명시적으로 종료할 때
+await client.close();
 ```
 
 화면 컴포넌트를 교체할 때는 그 컴포넌트의 구독을 해제하고 공유 클라이언트를 계속 사용합니다.
-전체 페이지나 연결의 사용이 끝나면 close로 정리합니다.
+기본 연결은 페이지 종료 때 자동으로 정리됩니다.
+사용자 정의 전송으로 만든 클라이언트는 앱에서 사용이 끝날 때 close로 정리합니다.
 
 ## 동작
 
@@ -25,11 +30,13 @@ window.addEventListener("pagehide", () => { void client.close(); });
 활성 구독은 `onError`로 종료를 알립니다.
 여러 번 호출해도 한 번만 정리합니다.
 
-닫힌 클라이언트로 다시 `invoke`, `listen`을 시작하면 실패합니다.
+닫힌 클라이언트로 다시 `invoke`, `listen`을 시작하면 `CANCELLED`로 실패합니다.
+기본 연결을 닫으면 직접 import한 함수와 인자 없는 `createClient()`도 같은 종료 상태를 사용합니다.
+같은 문서에서 새 연결을 만들거나 이전 요청을 자동으로 재전송하지 않습니다.
 이미 끝난 파일 저장은 되돌리지 않습니다.
-페이지가 다시 연결되면 새 전송과 클라이언트를 만들고 이벤트를 구독한 뒤 데이터를 읽습니다.
+앱 페이지를 다시 로드하면 새 기본 연결을 사용합니다. 이벤트를 구독한 뒤 데이터를 다시 읽습니다.
 
 ## 관련 수명
 
-페이지가 바뀌거나 복구되면 새 클라이언트가 필요합니다.
+새 문서가 로드되면 새 기본 연결을 사용합니다. 이미 종료된 문서를 브라우저 뒤로 가기로 복원해도 자동으로 다시 연결하지 않습니다.
 [세션과 수명주기](/guides/sessions-and-lifecycle/)에서 재연결과 창 종료 시 처리할 일을 확인하세요.

@@ -5,15 +5,19 @@ sidebar: { order: 3 }
 ---
 
 ```ts
+listen<T extends JsonValue = JsonValue>(name, listener, { onError, signal? }): Promise<AsyncDispose>
 client.listen(name, listener, { onError, signal? }): Promise<AsyncDispose>
 ```
 
-현재 세션에서 이벤트를 구독합니다. 구독이 성공하면 비동기 해제 함수를 반환합니다.
+이벤트를 구독하고 알림이 발생할 때마다 콜백을 실행합니다. 구독이 성공하면 비동기 해제 함수를 반환합니다.
+직접 import한 `listen`은 기본 연결을 사용하고 연결이 준비될 때까지 기다립니다. 별도의 초기화 코드는 필요 없습니다.
 
 ## 예시
 
 ```ts
-const unlisten = await client.listen(
+import { listen } from "@bunaway/client";
+
+const unlisten = await listen<string>(
   "message.saved",
   (event) => { console.log("저장 내용:", event.payload); },
   { onError: (error) => { console.error(error.code, error.message); } },
@@ -31,7 +35,9 @@ await unlisten();
 | `onError` | 예 | 활성 구독이 오류로 종료됐을 때 실행하는 콜백 |
 | `signal` | 아니요 | 구독 시작 및 활성 구독의 취소 신호 |
 
-구독 시작 자체가 실패하면 `listen()` Promise가 reject합니다.
+구독 시작 자체가 실패하면 `listen()` Promise가 reject합니다. 일반 브라우저에서는 `UNSUPPORTED`로 실패합니다.
+직접 함수의 타입 인자 `T`는 작성자가 지정하는 이벤트 payload 타입이며 실행 시 검증기를 추가하지 않습니다.
+앱 정의의 이벤트 타입을 추론하려면 [타입이 연결된 클라이언트](/guides/types-and-validation/)를 사용합니다.
 연결 종료나 이벤트 전달 오류로 활성 구독이 끝나면 `onError`를 호출합니다.
 listener에서 예외가 발생해도 다른 요청과 구독은 계속 처리합니다.
 
@@ -60,6 +66,8 @@ listener에서 예외가 발생해도 다른 요청과 구독은 계속 처리�
 
 ## 재연결
 
-이벤트는 활성 구독에만 전달합니다. 새 세션에서 `listen()`을 다시 호출하고
+페이지 종료 때 기본 연결과 구독은 자동으로 정리됩니다. UI 컴포넌트를 제거할 때는 반환한 해제 함수를 호출합니다.
+
+이벤트는 활성 구독에만 전달합니다. 연결이 끝났으면 앱 페이지를 다시 로드한 뒤 `listen()`을 호출하고
 `message.read` 같은 명령으로 현재 데이터를 읽습니다.
 초기 읽기와 갱신 이벤트의 순서는 앱이 필요한 동기화 방식에 맞춰 설계합니다.

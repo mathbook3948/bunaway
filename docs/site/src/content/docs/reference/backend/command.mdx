@@ -35,7 +35,7 @@ const greet = command({
 [defineModule](/reference/backend/module/)의 `.command(name, contract, handle)`에도 같은 계약을 사용합니다.
 
 `command()`는 `input`, `output`, `run(payload, context)`가 있는 `CommandDefinition`을 반환합니다.
-반환값을 앱의 commands에 등록하고 호출 권한을 뷰 정책에 적습니다. UI에서는 client.invoke로 호출합니다.
+반환값을 앱의 commands에 등록하고 호출 권한을 뷰 정책에 적습니다. UI에서는 `invoke`로 호출합니다.
 
 ## 입력 검증과 결과
 

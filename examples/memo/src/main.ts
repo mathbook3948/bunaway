@@ -1,11 +1,5 @@
-import { createClient, createWebViewTransport, type WebViewBridge } from "@bunaway/client";
+import { invoke, listen } from "@bunaway/client";
 
-const bridge = (window as unknown as { chrome: { webview: WebViewBridge } }).chrome.webview;
-
-const client = createClient({
-  transport: createWebViewTransport(bridge),
-  hello: { kind: "hello", protocol: { major: 1, minor: 0 }, features: [], buildId: "memo-ui" },
-});
 const input = document.querySelector<HTMLTextAreaElement>("#memo");
 const saved = document.querySelector<HTMLElement>("#saved-memo");
 const statusEl = document.querySelector<HTMLElement>("#status");
@@ -44,16 +38,12 @@ document.addEventListener("keydown", (event) => {
     if (!ui.button.disabled) ui.button.click();
   }
 });
-window.addEventListener("pagehide", () => {
-  void client.close();
-});
 
 async function start() {
-  await client.ready;
-  await client.listen(
+  await listen<string>(
     "memo.saved",
     (event) => {
-      const text = String(event.payload);
+      const text = event.payload;
       ui.saved.textContent = text;
       setStatus(
         ui.input.value === text
@@ -72,7 +62,7 @@ async function start() {
   );
   connected = true;
   try {
-    ui.input.value = String(await client.invoke("memo.read", null));
+    ui.input.value = await invoke<string>("memo.read", null);
     ui.saved.textContent = ui.input.value;
     updateCount();
     setStatus("저장된 메모를 불러왔어요.", "saved");
@@ -89,7 +79,7 @@ async function start() {
     ui.saveLabel.textContent = "저장 중…";
     setStatus("메모를 저장하고 있어요.");
     try {
-      await client.invoke("memo.save", value);
+      await invoke("memo.save", value);
       success = true;
     } catch {
       setStatus("저장하지 못했어요. 작성한 내용은 그대로예요.", "error");

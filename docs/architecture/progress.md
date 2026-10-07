@@ -32,6 +32,11 @@ Bun UI Worker의 창·WebView2·비동기 작업·다중 창·종료를 검증�
 
 - `packages/client-sdk/src/index.ts`의 `createClient`는 hello 협상, 명령 호출,
   이벤트 구독·해제, deadline·취소·종료를 구현한다. `src/webview.ts`가 전송을 연결한다.
+  화면용 `invoke`, `listen`, `capabilities`와 인자 없는 `createClient()`는
+  `src/default-client.ts`의 문서별 연결을 공유하며 초기화, 준비 대기, pagehide 정리를
+  SDK에 맡긴다. 기본 연결의 지연 초기화, HMR 공유, 실패, 취소, 문서 종료는
+  `tests/api/default-client.test.ts`에서 검증한다. 이 변경의 실제 Windows 창 실행은
+  별도로 확인해야 하며 기존 네이티브 실행 기록을 새 API 검증 결과로 간주하지 않는다.
 - `packages/core/src/create-core.ts`의 `createCore`는 명령·상태·이벤트·세션·정책과
   플러그인 초기화·역순 정리를 구현한다. 다중 세션 계약은 실제 Windows 다중 창 검증과
   구분하며, 계약 테스트만으로 macOS 다중 창 지원을 주장하지 않는다.
