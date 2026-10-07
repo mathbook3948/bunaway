@@ -1,4 +1,4 @@
-# CLI와 vanilla, Vite 템플릿
+# CLI와 vanilla, Vite, React, Vue, Svelte 템플릿
 
 CLI로 앱을 만들고 개발 서버를 실행하거나 네이티브 앱을 빌드한다.
 SDK와 정책, Host API는 프레임워크의 네이티브 호스트에 연결된다.
@@ -34,7 +34,7 @@ bun run build
 개발 도구 설치에는 Bun 패키지 레지스트리, 최초 네이티브 빌드에는 고정 런타임/헤더/SDK
 다운로드 접근이 필요하다. 앱 실행에는 네트워크나 Bun 설치가 필요 없다.
 
-명령은 `create <new-directory> [--template vanilla|vite] [--package-dir <tarball-directory>]`와 `dev|validate|build|doctor [directory]`,
+명령은 `create <new-directory> [--template vanilla|vite|react|vue|svelte] [--package-dir <tarball-directory>]`와 `dev|validate|build|doctor [directory]`,
 `package <channel> [directory] [--build]`다.
 옵션/알 수 없는 명령, 설정 필드는 오류로 종료한다. `validate`는 버전, 앱 ID, 소스 경로, 홈
 자산, 단일 뷰/정확한 origin, 기존 정책 스키마를 검사한다. `package`는
@@ -54,6 +54,28 @@ cd ../my-vite-app
 bun install
 bun run bunaway dev
 ```
+
+React, Vue, Svelte도 TypeScript + Vite 템플릿으로 제공한다.
+
+```sh
+bun packages/cli/src/main.ts create ../my-react-app --template react --package-dir build/framework
+bun packages/cli/src/main.ts create ../my-vue-app --template vue --package-dir build/framework
+bun packages/cli/src/main.ts create ../my-svelte-app --template svelte --package-dir build/framework
+```
+
+생성한 앱에서 `bun install` → `bun run bunaway dev`로 개발하고,
+`bun run build` → `bun run bunaway build`로 네이티브 앱을 만든다.
+`bun run typecheck`는 UI 컴포넌트, 백엔드, Vite 설정을 검사한다.
+React는 `src/App.tsx`, Vue는 `src/App.vue`와 `src/components/HelloWorld.vue`,
+Svelte는 `src/App.svelte`와 `src/lib/Counter.svelte`에서 시작한다.
+각 UI는 create-vite@9.2.1의 `react-ts`, `vue-ts`, `svelte-ts` 원본이다.
+Vue의 vue-tsc와 Svelte의 svelte-check는 TypeScript 컴파일러 API를 사용하므로 두 템플릿의
+TypeScript는 6.0.2로 고정한다. 다른 템플릿은 기존 7.0.2를 사용한다.
+React Fast Refresh의 인라인 preamble은 개발 CSP에서만 허용한다.
+모든 Vite 기반 템플릿의 프로덕션 CSP는 `script-src 'self'; style-src 'self'`이며
+이미지는 인라인 data URL 대신 로컬 파일로 출력한다.
+공통 `src-bunaway/`의 앱 정의, 메시지 명령, 이벤트, 저장 정책은 동일하다.
+공식 UI 화면에 SDK 호출을 추가하려면 `@bunaway/client`를 사용한다.
 
 `vite` 템플릿은 공식 [create-vite@9.2.1의 vanilla-ts](https://github.com/vitejs/vite/tree/fea5b21dd9524ed7308632407b996f1fe5942c9c/packages/create-vite/template-vanilla-ts)
 기본 화면(로고, 카운터)을 사용한다.
@@ -174,7 +196,7 @@ Bun/자산 해시를 검사하고 내부 Bun **절대 경로**를 실행한다. 
 macOS 패키지에는 로컬 실행용 ad-hoc 서명만 적용하며 번들 Bun을 재서명하지 않는다.
 manifest의 macOS `host.sourceSha256`은 서명 전 원본 호스트 해시다(서명된 실행 파일을
 자신의 서명 대상 manifest에 해싱하는 순환을 피한다). Windows `host.kind=bun-ffi`와 `host.sha256`은 `boot.js` 해시다.
-Developer ID 서명, 공증, React/Vue/Svelte, 공개 플러그인 API,
+Developer ID 서명, 공증, UI 프레임워크 템플릿의 실제 네이티브 검증, 공개 플러그인 API,
 공개 registry publish/라이선스 결정은 후속 범위다.
 Windows `native/windows/bun/prepare.ps1`은 고정 Bun/공식 Loader만 준비한다.
 macOS `--host-only`는 기존 네이티브 컴파일까지만 실행한다. CLI는 앱 자산을 직접 조립한다.

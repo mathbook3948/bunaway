@@ -2,14 +2,14 @@ import { cp, realpath, rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import { checkArtifact, packageFilename, release } from "./distribution.ts";
 import { frameworkRoot, json, writeJson } from "./files.ts";
+import { isTemplate, type Template } from "./templates.ts";
 
 export async function createProject(
   directory: string,
-  options: { packageDirectory?: string; template?: "vanilla" | "vite" } = {},
+  options: { packageDirectory?: string; template?: Template } = {},
 ): Promise<string> {
   const template = options.template ?? "vanilla";
-  if (template !== "vanilla" && template !== "vite")
-    throw new Error(`Unknown template: ${template}.`);
+  if (!isTemplate(template)) throw new Error(`Unknown template: ${template}.`);
   const requested = resolve(directory);
   const target = resolve(await realpath(dirname(requested)), basename(requested));
   try {

@@ -15,7 +15,9 @@ sidebar: { order: 2 }
 | `validateProject(directory, options?)` | 해석한 `Promise<Project>` |
 | `doctor(directory)` | 환경 검사 성공 여부 `Promise<boolean>` |
 
-create는 `packageDirectory?: string`과 `template?: "vanilla" | "vite"`를 받습니다. 기본 템플릿은 vanilla입니다.
+create는 `packageDirectory?: string`과 `template?: Template`를 받습니다. 기본 템플릿은 vanilla입니다.
+`Template`은 `"vanilla" | "vite" | "react" | "vue" | "svelte"`입니다.
+공개된 `templateNames` 배열은 이 다섯 템플릿 이름을 순서대로 제공합니다.
 기존 디렉터리는 덮어쓰지 않습니다. 생성 후 의존성은 별도로 설치하세요.
 validate는 `development?: boolean`을 받으며 기본값은 false입니다.
 개발 검증에서는 프로덕션 UI 파일이 없어도 되며 개발 URL을 검증합니다.

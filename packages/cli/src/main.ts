@@ -7,10 +7,11 @@ import {
   packageProject,
   validateProject,
 } from "./index.ts";
+import { isTemplate, templateNames, type Template } from "./templates.ts";
 
-const help = `bunaway (vanilla / Vite)
+const help = `bunaway (vanilla / Vite / React / Vue / Svelte)
   create <new-directory>   Generate an independent project (then bun install)
-                          [--template vanilla|vite] [--package-dir <tarball-directory>]
+                          [--template ${templateNames.join("|")}] [--package-dir <tarball-directory>]
   validate [directory]    Validate configuration and deny-by-default policy
   dev [directory]         Watch sources; rebuild and restart the native host
   build [directory]       Build a native package with pinned bundled Bun
@@ -26,11 +27,10 @@ export async function main(args: string[]): Promise<number> {
   }
   if (command === "create") {
     const [directory, ...options] = rest;
-    const usage =
-      "Usage: bunaway create <directory> [--template vanilla|vite] [--package-dir <tarball-directory>].";
+    const usage = `Usage: bunaway create <directory> [--template ${templateNames.join("|")}] [--package-dir <tarball-directory>].`;
     if (!directory || directory.startsWith("--")) throw new Error(usage);
     let packageDirectory: string | undefined;
-    let template: "vanilla" | "vite" = "vanilla";
+    let template: Template = "vanilla";
     const seen = new Set<string>();
     for (let index = 0; index < options.length; index += 2) {
       const option = options[index];
@@ -38,15 +38,14 @@ export async function main(args: string[]): Promise<number> {
       if (!option || seen.has(option) || !value || value.startsWith("--")) throw new Error(usage);
       seen.add(option);
       if (option === "--package-dir") packageDirectory = value;
-      else if (option === "--template" && (value === "vanilla" || value === "vite"))
-        template = value;
+      else if (option === "--template" && isTemplate(value)) template = value;
       else throw new Error(usage);
     }
     const path = await createProject(directory, {
       template,
       ...(packageDirectory ? { packageDirectory } : {}),
     });
-    const nativeScript = template === "vite" ? "bun run bunaway" : "bun run";
+    const nativeScript = template === "vanilla" ? "bun run" : "bun run bunaway";
     console.log(
       `Created ${path}\nNext: enter the directory, run bun install, then ${nativeScript} doctor and ${nativeScript} dev.`,
     );

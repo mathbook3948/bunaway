@@ -45,7 +45,8 @@ Vite 프로젝트의 package.json script 예시는 다음과 같다. 기존 Vite
 
 Next.js/Turbopack도 `dev`에 해당 버전의 `next dev` 명령을 지정하고 url의 포트를
 맞추면 같은 실행 구조를 사용한다. 이 연결은 Next.js SSR을 최종 앱에 번들하는 기능이
-아니다. React 템플릿은 아직 제공하지 않으며, 외부 프런트엔드 production build는
+아니다. React, Vue, Svelte 템플릿은 `--template react|vue|svelte`로 생성한다.
+외부 프런트엔드 production build는
 앱의 package.json script에서 명시적으로 연결한다.
 
 URL은 `http://localhost:<port>/...`, `http://127.0.0.1:<port>/...` 또는 HTTPS의 같은

@@ -84,7 +84,8 @@
           "devProject",
           "RestartController",
           "doctor",
-          "packageProject"
+          "packageProject",
+          "templateNames"
         ]
       }
     },

@@ -5,3 +5,5 @@ export { buildProject, prepareNative, currentTarget } from "./build.ts";
 export { devProject, RestartController } from "./dev.ts";
 export { doctor } from "./doctor.ts";
 export { packageProject } from "./package.ts";
+export { templateNames } from "./templates.ts";
+export type { Template } from "./templates.ts";

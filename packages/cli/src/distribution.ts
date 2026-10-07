@@ -1,5 +1,6 @@
 import { cp, mkdir } from "node:fs/promises";
 import { relative, resolve } from "node:path";
+import { templateNames } from "./templates.ts";
 import { PROCESS_IPC_VERSION, PROTOCOL_VERSION } from "@bunaway/protocol";
 import {
   files,
@@ -288,33 +289,61 @@ export async function checkArtifact(root: string): Promise<void> {
     "packages/cli/dist/distribution-main.js",
     "packages/cli/dist/index.js",
     "packages/cli/dist/types/cli/src/index.d.ts",
-    ...["vanilla", "vite"].flatMap((template) =>
+    ...templateNames.flatMap((template) =>
       [
         "package.json",
         "gitattributes",
         "gitignore",
         "README.md",
         "tsconfig.json",
-        "src/main.ts",
-        "src/style.css",
         "src-bunaway/bunaway.json",
         "src-bunaway/policy.json",
         "src-bunaway/app.ts",
         "src-bunaway/message/module.ts",
       ].map((name) => `packages/cli/templates/${template}/${name}`),
     ),
-    "packages/cli/templates/vanilla/src/index.html",
-    ...[
-      "vite.config.ts",
-      "index.html",
-      "src/counter.ts",
-      "src/assets/hero.png",
-      "src/assets/typescript.svg",
-      "src/assets/vite.svg",
-      "public/favicon.svg",
-      "public/icons.svg",
-      "public/LICENSE.vite.txt",
-    ].map((name) => `packages/cli/templates/vite/${name}`),
+    ...Object.entries({
+      vanilla: ["src/index.html", "src/main.ts", "src/style.css"],
+      vite: ["src/main.ts", "src/style.css", "src/counter.ts", "src/assets/typescript.svg"],
+      react: [
+        "src/main.tsx",
+        "src/App.tsx",
+        "src/App.css",
+        "src/index.css",
+        "src/assets/react.svg",
+      ],
+      vue: [
+        "src/main.ts",
+        "src/App.vue",
+        "src/style.css",
+        "src/components/HelloWorld.vue",
+        "src/assets/vue.svg",
+      ],
+      svelte: [
+        "src/main.ts",
+        "src/App.svelte",
+        "src/app.css",
+        "src/lib/Counter.svelte",
+        "src/assets/svelte.svg",
+        "svelte.config.js",
+        "tsconfig.node.json",
+      ],
+    }).flatMap(([template, names]) =>
+      names.map((name) => `packages/cli/templates/${template}/${name}`),
+    ),
+    ...templateNames
+      .filter((template) => template !== "vanilla")
+      .flatMap((template) =>
+        [
+          "vite.config.ts",
+          "index.html",
+          "src/assets/hero.png",
+          "src/assets/vite.svg",
+          "public/favicon.svg",
+          "public/icons.svg",
+          "public/LICENSE.vite.txt",
+        ].map((name) => `packages/cli/templates/${template}/${name}`),
+      ),
   ]) {
     if (!inventory[name]) throw new Error(`Artifact is missing required input: ${name}`);
   }
