@@ -17,15 +17,21 @@ Edit `src/` for the UI and `src-bunaway/` for the backend.
 `src-bunaway/message/module.ts` registers commands and events with `defineModule`.
 The framework boots the app from `build.app` in `src-bunaway/bunaway.json`.
 
-The generated UI infers command and event types from the app definition:
+All Bunaway UIs use a client typed from the app definition. The generated UI
+follows this principle:
 
 ```ts
 import type { CommandsOf, EventsOf } from "@bunaway/backend";
 import { createClient } from "@bunaway/client";
 import type { app } from "../src-bunaway/app.ts";
 
-const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
-const text = await client.invoke("message.read", null);
+async function start(): Promise<void> {
+  const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
+  const text = await client.invoke("message.read", null);
+  console.log(text);
+}
+
+void start().catch(console.error);
 ```
 
 `bun run typecheck` rejects unknown command and event names and invalid payloads.

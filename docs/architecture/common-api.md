@@ -24,36 +24,36 @@ Windows용 `runBunApp`이 이를 연결한다. 명령·Host API 검증 헬퍼와
 
 ## 클라이언트와 Transport
 
-앱 화면의 기본 API는 `@bunaway/client`의 `invoke`, `listen`, `capabilities`다.
-첫 호출에서 SDK가 WebView 브리지를 찾아 Transport와 Client를 만들고 현재 프로토콜의
-hello를 교환한다. import만으로 연결하거나 브리지를 읽지 않으므로 SSR, 일반 브라우저에서
-모듈을 import할 수 있다. 브리지가 없는 환경에서 기본 API를 호출하면 `UNSUPPORTED`로
-Promise를 거부하며 앱 WebView에서 열도록 안내한다. 브라우저용 가짜 성공 응답은 없다.
-인자 없는 `createClient()`는 Client를 즉시 반환하는 동기 API이므로 브리지가 없으면
-같은 `UNSUPPORTED` 오류를 동기적으로 던진다.
-
-```ts
-import { invoke, listen } from "@bunaway/client";
-
-const unlisten = await listen<string>("memo.saved", event => {
-  console.log(event.payload);
-}, { onError: error => console.error(error) });
-const text = await invoke<string>("memo.read", null);
-await unlisten();
-```
-
-직접 함수의 타입 인자는 앱 작성자가 선언한 반환값, 이벤트 payload 타입이며 런타임
-검증기를 추가하지 않는다. 앱 정의에서 명령 이름, 입력, 출력, 이벤트 타입을 추론하려면
-`CommandsOf`, `EventsOf`와 인자 없는 `createClient`를 사용한다. 백엔드 import는 type-only다.
+모든 앱 UI는 앱 정의에서 `CommandsOf`, `EventsOf`로 추론한 타입을 지정해 `createClient`로
+클라이언트를 만든다. vanilla, Vite, React, Vue, Svelte와 기존 웹 프로젝트에 같은 원칙을
+적용한다. UI 초기화 과정에서 만들고 `client.invoke`, `client.listen`, `client.capabilities`로
+호출과 구독에 재사용한다. 백엔드 import는 type-only다.
 
 ```ts
 import { createClient } from "@bunaway/client";
 import type { CommandsOf, EventsOf } from "@bunaway/backend";
 import type { app } from "../src-bunaway/app.ts";
 
-const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
-const text = await client.invoke("message.read", null);
+async function start(): Promise<void> {
+  const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
+  const text = await client.invoke("message.read", null);
+  console.log(text);
+}
+
+void start().catch(console.error);
 ```
+
+`createClient()`는 WebView 브리지를 찾아 Transport와 Client를 만들고 현재 프로토콜의
+hello를 교환한다. Client를 즉시 반환하는 동기 API이며 브리지가 없으면 `UNSUPPORTED`를
+동기적으로 던지므로 생성도 초기화 과정의 오류 처리 범위에 포함한다.
+import만으로 연결하거나 브리지를 읽지 않으므로 SSR, 일반 브라우저에서 모듈을 import할
+수 있다. 클라이언트 생성은 WebView UI의 초기화 때 실행하고 SSR이나 컴포넌트 렌더
+함수에서는 실행하지 않는다. 브라우저용 가짜 성공 응답은 없다.
+
+직접 import하는 `invoke`, `listen`, `capabilities`도 계속 지원한다. 이 함수들은 같은
+기본 연결을 사용하며 브리지가 없으면 Promise를 `UNSUPPORTED`로 거부한다.
+`invoke<T>`, `listen<T>`의 타입 인자는 작성자가 선언한 반환값이나 이벤트 payload 타입이다.
+앱 정의의 명령 이름과 입력 타입을 검사하거나 런타임 검증기를 추가하지 않는다.
 
 기본 함수와 인자 없는 `createClient()`는 문서별 Client 하나를 공유한다. SDK를 여러 번
 로드하거나 UI HMR이 호출 모듈을 교체해도 같은 연결, 요청 ID, 구독을 사용한다.

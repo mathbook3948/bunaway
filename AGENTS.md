@@ -42,6 +42,16 @@ protocol, runtime and adapter implementation details in the framework-contributi
 section or architecture documents, and keep them out of the main app-development
 navigation.
 
+### UI client usage
+
+All app UIs use a client typed from the app definition with `CommandsOf` and
+`EventsOf`. Create it with `createClient` during WebView UI initialization,
+handle creation failures, and reuse it for `client.invoke`, `client.listen` and
+`client.capabilities`. Apply this principle to vanilla, Vite, React, Vue, Svelte
+and existing web projects. Do not create clients during SSR or component render.
+Component cleanup disposes its subscriptions and keeps the shared client open.
+Direct function APIs remain supported and must still be covered by SDK tests.
+
 ### Development priority
 
 Read `docs/decisions/0010-windows-first-platform-model.md` before runtime, CLI,

@@ -35,27 +35,32 @@ Bun은 `mise.toml`과 `package.json`에 **1.4.2**로 고정되어 있다.
 
 ## 화면에서 앱 기능 사용하기
 
-`invoke`는 백엔드 명령을 실행하고 결과를 받는다. `listen`은 백엔드 이벤트를 구독한다.
+모든 앱 UI는 앱 정의의 명령과 이벤트 타입을 지정한 클라이언트를 만들고 재사용한다.
+vanilla, Vite, React, Vue, Svelte와 기존 웹 프로젝트에 같은 원칙을 적용한다.
+`client.invoke`는 백엔드 명령을 실행하고 결과를 받는다. `client.listen`은 백엔드 이벤트를 구독한다.
 
 ```ts
-import { invoke, listen } from "@bunaway/client";
+import { createClient } from "@bunaway/client";
+import type { CommandsOf, EventsOf } from "@bunaway/backend";
+import type { app } from "../src-bunaway/app.ts";
 
-const unlisten = await listen<string>(
-  "message.saved",
-  (event) => console.log("저장된 내용:", event.payload),
-  { onError: console.error },
-);
-await invoke("message.save", "안녕하세요");
-const text = await invoke<string>("message.read", null);
-await unlisten();
+async function start(): Promise<void> {
+  const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
+  const text = await client.invoke("message.read", null);
+  await client.invoke("message.save", text);
+}
+
+void start().catch(console.error);
 ```
 
-화면에서는 별도의 초기화 코드 없이 `invoke`와 `listen`을 호출한다.
-UI 컴포넌트가 사라지면 반환받은 `unlisten`으로 해당 구독을 해제한다.
+WebView UI의 초기화 과정에서 클라이언트를 만들고 생성 오류와 호출 실패를 처리한다.
+컴포넌트와 이벤트 핸들러에서 같은 클라이언트를 사용한다.
+UI 컴포넌트가 사라지면 `client.listen`이 반환한 `unlisten`으로 해당 구독을 해제한다.
+공유 클라이언트는 컴포넌트마다 닫지 않으며 페이지 종료 때 자동으로 정리된다.
 호출은 `bunaway dev`로 연 창이나 배포 앱의 WebView에서 동작한다. 일반 브라우저에는
 브리지가 없어 `UNSUPPORTED`로 실패한다. 기존 `createClient({ transport, hello })`는
-사용자 정의 연결, 테스트에 사용할 수 있다. 타입 추론을 사용하는 인자 없는
-`createClient()`와 취소, 오류, 수명 규칙은 [클라이언트 API](./docs/architecture/common-api.md#클라이언트와-transport)에 있다.
+사용자 정의 연결, 테스트에 사용할 수 있다. 직접 import하는 함수 API도 계속 지원한다.
+타입 추론과 취소, 오류, 수명 규칙은 [클라이언트 API](./docs/architecture/common-api.md#클라이언트와-transport)에 있다.
 
 ## 명령
 

@@ -17,6 +17,29 @@ Edit `src/` for the UI and `src-bunaway/` for the backend.
 `src-bunaway/message/module.ts` registers commands and events with `defineModule`.
 The framework boots the app from `build.app` in `src-bunaway/bunaway.json`.
 
+## Backend calls
+
+All Bunaway UIs use a client typed from the app definition:
+
+```ts
+import type { CommandsOf, EventsOf } from "@bunaway/backend";
+import { createClient } from "@bunaway/client";
+import type { app } from "../src-bunaway/app.ts";
+
+async function start(): Promise<void> {
+  const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
+  const text = await client.invoke("message.read", null);
+  console.log(text);
+}
+
+void start().catch(console.error);
+```
+
+Create the client during WebView UI initialization, handling creation and call
+failures. Reuse it in components and event handlers. Do not create it during
+render or SSR. Dispose each component's `client.listen` subscriptions on cleanup,
+keeping the shared client open. Backend calls require the desktop WebView.
+
 ## Build
 
 ```sh
