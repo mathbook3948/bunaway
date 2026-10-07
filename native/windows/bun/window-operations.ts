@@ -21,8 +21,8 @@ export class WindowOperations {
     private readonly hooks: {
       read(view: string): WindowState | undefined;
       create(spec: WindowSpec): void;
-      close(view: string): boolean;
-      apply(call: HostCall, view: string): JsonValue;
+      close(view: string): boolean | Promise<boolean>;
+      apply(call: HostCall, view: string): JsonValue | Promise<JsonValue>;
       stopping(): boolean;
       cancelled(requestId: string): boolean;
       now(): number;
@@ -61,7 +61,7 @@ export class WindowOperations {
       if (this.hooks.stopping() || this.hooks.cancelled(requestId))
         throw new BunawayError({ code: "CANCELLED", message: "Window request cancelled." });
       const closesLiveWindow = !!view && !view.closed;
-      if (closesLiveWindow && !this.hooks.close(viewId))
+      if (closesLiveWindow && !(await this.hooks.close(viewId)))
         throw new BunawayError({ code: "CANCELLED", message: "Window close was declined." });
       const deadline = this.hooks.now() + 35000;
       while (view && !view.cleaned) {

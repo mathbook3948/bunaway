@@ -207,7 +207,7 @@
       "source": "packages/core/src/index.ts",
       "type": "AppDefinition",
       "pages": {
-        "reference/backend/app-definition": ["commands", "events", "state", "plugins"]
+        "reference/backend/app-definition": ["commands", "events", "state", "plugins", "desktop"]
       }
     },
     {
@@ -286,6 +286,27 @@
           "app",
           "policy"
         ]
+      }
+    },
+    {
+      "source": "packages/core/src/desktop.ts",
+      "type": "DesktopOptions",
+      "pages": {
+        "reference/backend/app-definition": ["closeBehavior", "tray", "onOpen", "beforeQuit"]
+      }
+    },
+    {
+      "source": "packages/core/src/desktop.ts",
+      "type": "OpenRequest",
+      "pages": {
+        "reference/backend/app-definition": ["source", "argv", "cwd", "urls", "files"]
+      }
+    },
+    {
+      "source": "packages/core/src/desktop.ts",
+      "type": "DesktopContext",
+      "pages": {
+        "reference/backend/app-definition": ["show", "hide", "quit"]
       }
     }
   ],

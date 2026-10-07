@@ -154,6 +154,15 @@ macOS는 기존 `bunaway://` 매핑이다. policy.json의 HTTP origin은 허용�
 
 ## 개발 수명주기
 
+Windows `bunaway dev`는 UI DevTools를 활성화한다. WebView에 포커스를 두고 F12 또는
+Ctrl+Shift+I로 연다. `bunaway dev --inspect`는 백엔드 Bun inspector를
+`ws://127.0.0.1:6499/bunaway`에 연결하며 `--inspect=<port>`로 포트를 지정한다.
+옵션을 생략하면 inspector를 시작하지 않는다. 포트는 1부터 65535까지 정수이며
+이 옵션은 Windows x64에서만 지원한다. 백엔드가 재시작되면 같은 주소로 다시 연결한다.
+개발 번들은 원본 소스를 포함한 inline 소스맵을 생성하고 외부 UI의 소스맵은 개발 서버가 제공한다.
+일반 build에는 DevTools, inspector 인자나 CLI 개발 소스맵을 추가하지 않는다.
+[디버깅 가이드](../../docs/site/src/content/docs/guides/debugging.mdx)에서 attach 설정과 오류 위치 확인 절차를 설명한다.
+
 `dev`가 없으면 프로젝트 소스, 설정 변경을 debounce 후 직렬 처리한다(의존성/출력 디렉터리는 제외).
 프런트엔드 변경도 **전체 네이티브 호스트/창 재시작**으로 갱신한다.
 외부 개발 서버 모드에서는 서버가 UI 갱신과 HMR을 처리하고 CLI는 백엔드와 설정 변경을 처리한다. 앱 정의가 import한 프로젝트 내부 전이 의존성도 감시한다. 성공한 검증마다 목록을 갱신하고 실패하면 이전 목록을 유지한다. 서버를 한 번 실행하고 HTTP 준비를 기다린 뒤 호스트를 시작한다.

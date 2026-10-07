@@ -28,7 +28,9 @@ Inno Setup 설치 프로그램을 만든다. 서명으로 Bun 파일이 바뀌�
 검증될 때까지 명시적으로 거부한다. [패키징 안내](../../../packages/packaging/README.md).
 
 같은 앱 데이터 디렉터리는 한 프로세스만 사용한다. 앱 import 전에 `host.lock`을
-Windows 파일 핸들로 독점하며, 중복 실행은 즉시 오류로 종료한다. 기존 WebView 프로필과
+Windows 파일 핸들로 독점한다. 두 번째 실행은 기존 앱에 인자와 작업 디렉터리를
+named pipe로 전달하고 종료한다. 앱 import, Worker, WebView 생성은 소유자만 수행한다.
+기존 WebView 프로필과
 저장 데이터는 유지한다. 잠금은 정상/강제 종료 때 OS가 해제하므로 남은 파일을 삭제할 필요가 없다.
 
 STA의 bounded PeekMessage pump는 64개 처리 후 Bun에 제어를 돌려준다. OS 모달 중에는
@@ -43,6 +45,14 @@ COM 콜백은 같은 OS 스레드에서 동기 HRESULT를 반환한다. `threads
 앱, 화면 회귀 데이터는 `tests/fixtures/desktop/host/`에 있다.
 
 명령 핸들러의 예기치 않은 예외는 stderr와 앱 로그의 `command-failed`에 명령 이름, 원래 메시지와 스택을 기록한다. WebView 응답에는 내부 오류를 넣지 않는다. 진단 기록 실패는 명령 응답에 영향을 주지 않는다.
+
+CLI의 Windows 개발 산출물은 해시 inventory에 포함된 `app.json.developmentTools: true`와
+`--devtools` 실행 인자를 모두 요구한다. 확인한 값은 UI Worker에 전달해 WebView2의
+AreDevToolsEnabled와 AreBrowserAcceleratorKeysEnabled를 활성화한다. 일반 빌드는 둘 다 끈다.
+F12 또는 Ctrl+Shift+I로 DevTools를 연다. 개발 모드는 서버 URL 설정이 없는 로컬 UI에도 적용된다.
+백엔드 inspector는 `bunaway dev --inspect[=<port>]`로 선택하며 메인 Bun에만 실행 옵션을 추가한다.
+개발 UI, 앱, 호스트와 Worker 번들에는 inline 소스맵을 생성한다. 자세한 사용법은
+[디버깅 가이드](../../../docs/site/src/content/docs/guides/debugging.mdx)를 따른다.
 
 실패한 로그 기록은 다시 시도하지 않는다. 쓰기 실패는 해당 호출에만 전달하며 이후 기록은 계속 처리한다. drain()은 대기 중인 기록 처리가 끝날 때까지 기다린다.
 
@@ -59,6 +69,9 @@ Retired views release their COM handlers before a replacement is created.
 Show, hide, focus, client size, screen position and monitor fullscreen use Win32.
 Close confirmation uses a native Yes/No dialog with No selected by default.
 WM_CLOSE and WebView close requests defer confirmation outside native callbacks.
+Window close operations also honor close-to-tray and last-window quit vetoes.
+Recreation bypasses those app quit controls while preserving close confirmation.
+Deferred and recreated windows inherit the verified development DevTools setting.
 Shutdown bypasses confirmation.
 Browser process failure also closes the affected window without confirmation.
 `tests/lifecycle/windows-bun-window-api.ts` is
@@ -67,3 +80,16 @@ dynamic creation, fresh sessions and self-recreation. It passed in PR #40's
 Windows CI run 37574470840. The full native job failed on the shared capability
 fixture's old four-operation expectation, which now checks the complete catalog.
 The browser-failure regression also passed locally on Windows on 2026-10-07.
+
+앱 정의의 `desktop.onOpen`은 초기 실행과 두 번째 실행의 인자, URL, 파일을 받는다.
+`desktop.beforeQuit`는 마지막 창, 트레이, 앱의 종료 요청을 취소할 수 있다.
+`desktop.closeBehavior: "hide"`와 `desktop.tray: { tooltip: "Memo" }`를 함께 지정하면
+닫기 버튼으로 창을 숨기고 백엔드, WebView, 세션을 유지한다. 트레이 Open 또는
+두 번째 실행으로 복원하며 Quit은 종료 검사를 거친다. 기본값은 마지막 창 닫기로 종료다.
+URL scheme과 파일 확장자의 OS 등록은 제공하지 않으며 실행기에 전달된 인자를 처리한다.
+`launch.ps1`의 맨 앞에 `-Wait`를 지정하면 앱 종료까지 기다리고 나머지 인자는 그대로 전달한다.
+`-- -draft.txt`와 `-Verbose` 같은 인자도 보존한다. 앱 인자가 `-Wait`로 시작하면 `-- -Wait`로 전달한다.
+실행기는 인자와 작업 디렉터리를 UTF-8 JSON으로 표준 입력에 전달한다. 입력은 64 KiB와
+5초로 제한하며 기존 인자 검증을 적용한다. 실행기를 호출하는 명령줄 자체는 Windows와 셸의 길이 제한을 따른다.
+개발 CLI의 재시작과 종료는 종료 취소와 숨김을 우회하며 코어, 플러그인 StopHook과 Worker를 정리한다.
+[데스크톱 수명주기 결정](../../../docs/decisions/0013-desktop-lifecycle.md).

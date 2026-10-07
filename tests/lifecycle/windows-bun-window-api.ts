@@ -58,7 +58,7 @@ if (!process.argv.includes("--child")) {
     IsIconic: { args: ["u64"], returns: "i32" },
     IsZoomed: { args: ["u64"], returns: "i32" },
   });
-  const nativeWindows = new Windows();
+  const nativeWindows = new Windows(() => {});
   try {
     for (const showCmd of [1, 2, 3])
       for (const visible of [true, false]) {
@@ -190,7 +190,8 @@ if (!process.argv.includes("--child")) {
   let runs = 0,
     auxiliaryDocuments = 0,
     holds = 0,
-    cancellations = 0;
+    cancellations = 0,
+    quitAttempts = 0;
   async function waitFor(check: () => boolean | Promise<boolean>) {
     const deadline = Date.now() + 10000;
     while (!(await check())) {
@@ -201,6 +202,9 @@ if (!process.argv.includes("--child")) {
   const contract = { input: { const: null }, output: { const: null } } as const;
   const app = defineApp({
     modules: [],
+    desktop: {
+      beforeQuit: () => ++quitAttempts > 1,
+    },
     commands: {
       "test.aux": {
         ...contract,
@@ -270,10 +274,14 @@ if (!process.argv.includes("--child")) {
             await windows.recreate({ view: "main" }); // revokes this caller, but replacement must finish
           } else {
             assert.equal(runs, 4);
+            assert.equal(quitAttempts, 0, "recreation must bypass app quit checks");
             await Bun.sleep(50); // let the replacement readiness reply release its reservation
             await windows.create({ view: "editor" });
             await waitFor(() => holds === 4);
             assert.equal(await windows.close({ view: "editor" }), true);
+            assert.equal(await windows.close({ view: "main" }), false);
+            assert.equal(quitAttempts, 1);
+            assert((await windows.list()).find((spec) => spec.view === "main")?.open);
             const reopening = assert.rejects(
               windows.create({ view: "editor" }),
               (error: unknown) => (error as { code: string }).code === "CANCELLED",
@@ -284,6 +292,7 @@ if (!process.argv.includes("--child")) {
               (error: unknown) => (error as { code: string }).code === "CANCELLED",
             );
             await reopening;
+            assert.equal(quitAttempts, 2);
             assert.equal(auxiliaryDocuments, 4);
             await writeFile(
               reportPath,

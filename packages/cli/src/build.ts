@@ -110,11 +110,12 @@ export async function bundleAssets(
   assets: string,
   windows = false,
   developmentServer = false,
+  development = false,
 ): Promise<void> {
   await runWorker(
     "assets.ts",
     windows ? "bundleWindowsAssets" : "bundleAssets",
-    [project, assets, developmentServer],
+    [project, assets, developmentServer, development],
     project.root,
     project.frameworkRoot,
   );
@@ -221,11 +222,10 @@ async function assembleProject(
     for (const [name, path] of Object.entries(native.licenses)) {
       await cp(path, resolve(packageRoot, "licenses", name));
     }
-    await writeJson(
-      resolve(assets, "app.json"),
-      server
+    await writeJson(resolve(assets, "app.json"), {
+      ...project.app,
+      ...(server
         ? {
-            ...project.app,
             home: server.url,
             development: { url: server.url },
             ...(project.app.windows
@@ -237,8 +237,9 @@ async function assembleProject(
                 }
               : {}),
           }
-        : project.app,
-    );
+        : {}),
+      ...(windows && options.development ? { developmentTools: true } : {}),
+    });
     await writeJson(
       resolve(assets, "policy.json"),
       server
@@ -255,7 +256,7 @@ async function assembleProject(
       for (const schema of await files(resolve(root, "native/host-api/generated"))) {
         await cp(schema, resolve(assets, basename(schema)));
       }
-    await bundleAssets(project, assets, windows, !!server);
+    await bundleAssets(project, assets, windows, !!server, options.development ?? false);
     signal?.throwIfAborted();
     if (windows) {
       if (!native.loader) throw new Error("Windows requires the pinned WebView2Loader DLL.");
@@ -273,7 +274,7 @@ async function assembleProject(
       );
       await writeFile(
         resolve(packageRoot, "bunaway.cmd"),
-        '@echo off\r\n"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "%~dp0launch.ps1"\r\n',
+        '@echo off\r\n"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "%~dp0launch.ps1" %*\r\n',
       );
     }
     const hashes: Record<string, string> = {};
@@ -385,6 +386,7 @@ ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking<
             `--config=${resolve(output, "assets/bunfig.toml")}`,
             `--tsconfig-override=${resolve(output, "assets/tsconfig.json")}`,
             resolve(output, "assets/boot.js"),
+            ...(options.development ? ["--devtools"] : []),
             ...(server ? ["--dev-url", server.url] : []),
           ]
         : [

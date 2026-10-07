@@ -3,7 +3,29 @@ import { dirname, relative } from "node:path";
 import { type BuiltPackage, buildProject, type NativeInputs, prepareNative } from "./build.ts";
 import { type Project, readProjectConfiguration, validateProject } from "./config.ts";
 import { type DevServer, startDevServer } from "./dev-server.ts";
-import { closeWindowsApp, verifyWindowsLaunch, windowsLaunchEnvironment } from "./launch.ts";
+import {
+  closeWindowsApp,
+  verifyWindowsLaunch,
+  windowsInspectorArgument,
+  windowsLaunchEnvironment,
+} from "./launch.ts";
+
+export function parseDevArguments(args: string[]): { directory: string; inspect?: number } {
+  let directory: string | undefined;
+  let inspect: number | undefined;
+  for (const arg of args) {
+    if (arg === "--inspect" || arg.startsWith("--inspect=")) {
+      if (inspect !== undefined) throw new Error("Specify --inspect only once.");
+      const value = arg === "--inspect" ? "6499" : arg.slice("--inspect=".length);
+      if (!/^[0-9]+$/.test(value)) throw new Error("Use --inspect or --inspect=<port>.");
+      inspect = Number(value);
+      windowsInspectorArgument(inspect);
+    } else if (arg.startsWith("--") || directory !== undefined) {
+      throw new Error("Usage: bunaway dev [directory] [--inspect[=<port>]].");
+    } else directory = arg;
+  }
+  return { directory: directory ?? ".", ...(inspect === undefined ? {} : { inspect }) };
+}
 
 export class RestartController<T> {
   private revision = 0;
@@ -71,7 +93,14 @@ export function shouldRestartHost(project: Project, name: string, recovering = f
   );
 }
 
-export async function devProject(directory: string): Promise<void> {
+export async function devProject(
+  directory: string,
+  options: { inspect?: number } = {},
+): Promise<void> {
+  if (options.inspect !== undefined && process.platform !== "win32")
+    throw new Error("Backend --inspect is currently supported on Windows x64 only.");
+  const inspector =
+    options.inspect === undefined ? undefined : windowsInspectorArgument(options.inspect);
   let project = await readProjectConfiguration(directory);
   let recovering = true;
   const abort = new AbortController();
@@ -168,13 +197,22 @@ export async function devProject(directory: string): Promise<void> {
           : "Starting a fresh host/runtime/session; pending requests are not replayed.",
       );
       const environment = process.platform === "win32" ? windowsLaunchEnvironment() : process.env;
-      const current = Bun.spawn([built.executable, ...built.arguments], {
-        cwd: built.package,
-        env: environment,
-        stdin: "ignore",
-        stdout: "inherit",
-        stderr: "inherit",
-      });
+      if (process.platform === "win32")
+        console.log("UI DevTools: focus the WebView and press F12 or Ctrl+Shift+I.");
+      if (inspector)
+        console.log(
+          `Backend inspector: ws://127.0.0.1:${options.inspect}/bunaway (Bun/WebKit inspector protocol). Reconnect after a backend restart.`,
+        );
+      const current = Bun.spawn(
+        [built.executable, ...(inspector ? [inspector] : []), ...built.arguments],
+        {
+          cwd: built.package,
+          env: environment,
+          stdin: "ignore",
+          stdout: "inherit",
+          stderr: "inherit",
+        },
+      );
       child = current;
       void current.exited.then((code) => {
         if (!restarting && child === current) {

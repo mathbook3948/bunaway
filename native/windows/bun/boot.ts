@@ -11,8 +11,19 @@ import { readWindowSpecs } from "../../../packages/runtime-bun/src/window-config
 import type { UIConfig } from "./channel.ts";
 import deps from "./deps.json";
 import { runWindowsApp } from "./entry.ts";
-import { containAppProcess } from "./job.ts";
-import { verifyDevelopmentLaunch } from "../../../packages/runtime-bun/src/development.ts";
+import { AppAlreadyRunningError, containAppProcess } from "./job.ts";
+import {
+  forwardToInstance,
+  instanceAddress,
+  listenForInstances,
+  parseLaunchArguments,
+  readLaunchArguments,
+  type LaunchArguments,
+} from "./instance.ts";
+import {
+  verifyDevelopmentLaunch,
+  verifyDevelopmentToolsLaunch,
+} from "../../../packages/runtime-bun/src/development.ts";
 
 const hash = async (path: string) =>
   createHash("sha256")
@@ -50,6 +61,7 @@ function localAppData() {
 export async function verifyWindowsPackage(
   directory: string,
   developmentUrl?: string,
+  developmentTools = false,
 ): Promise<UIConfig> {
   assert.equal(process.platform, "win32");
   assert.equal(process.arch, "x64");
@@ -113,6 +125,7 @@ export async function verifyWindowsPackage(
     assert(Object.hasOwn(assets, name), `Required package asset missing: ${name}`);
   const config = object(JSON.parse(await readFile(resolve(root, "assets/app.json"), "utf8")));
   const devUrl = verifyDevelopmentLaunch(config.development, developmentUrl);
+  const devtools = verifyDevelopmentToolsLaunch(config.developmentTools, developmentTools);
   assert(
     typeof config.appId === "string" &&
       /^[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$/.test(config.appId),
@@ -131,6 +144,7 @@ export async function verifyWindowsPackage(
     assets: resolve(root, "assets"),
     loader: resolve(root, "assets/WebView2Loader.dll"),
     legacyProfile: !Array.isArray(config.windows),
+    devtools,
     dataRoot: resolve(localAppData(), "bunaway", config.appId),
   };
 }
@@ -138,16 +152,35 @@ export async function verifyWindowsPackage(
 if (import.meta.main) {
   const root = resolve(dirname(import.meta.path), "..");
   const args = process.argv.slice(2);
-  assert(
-    !args.length || (args.length === 2 && args[0] === "--dev-url"),
-    "Usage: boot.js [--dev-url <url>]",
-  );
-  const config = await verifyWindowsPackage(root, args[1]);
-  containAppProcess(config.dataRoot);
-  // Only import a side-effect-free default AppDefinition after all package checks.
-  const module = await import(pathToFileURL(resolve(root, "assets/app.js")).href);
-  const app = object(module.default);
-  assert(app.commands && app.events, "windowsApp must default-export an AppDefinition");
-  await runWindowsApp(app as AppDefinition, config);
+  const devtools = args[0] === "--devtools";
+  if (devtools) args.shift();
+  const developmentUrl = args[0] === "--dev-url" ? args[1] : undefined;
+  if (args[0] === "--dev-url") assert(developmentUrl, "Missing development URL");
+  const config = await verifyWindowsPackage(root, developmentUrl, devtools);
+  // Launchers send JSON on stdin to preserve arguments without expanding the command line.
+  let launch: LaunchArguments;
+  const appArgs = developmentUrl ? args.slice(2) : args;
+  if (appArgs[0] === "--launch-stdin") {
+    assert(appArgs.length === 1, "Invalid launch input");
+    launch = await readLaunchArguments(Bun.stdin.stream());
+  } else launch = parseLaunchArguments({ argv: appArgs, cwd: process.cwd() });
+  try {
+    containAppProcess(config.dataRoot);
+  } catch (error) {
+    if (!(error instanceof AppAlreadyRunningError)) throw error;
+    await forwardToInstance(instanceAddress(config.dataRoot), launch);
+    process.exit(0);
+  }
+  const inbox = await listenForInstances(instanceAddress(config.dataRoot));
+  try {
+    // Only the owner imports the app after all package checks and IPC readiness.
+    const module = await import(pathToFileURL(resolve(root, "assets/app.js")).href);
+    const app = object(module.default);
+    assert(app.commands && app.events, "App must default-export an AppDefinition");
+    await runWindowsApp(app as AppDefinition, config, launch, inbox);
+  } finally {
+    // runWindowsApp also closes on shutdown; early import failures need this path.
+    await inbox.close().catch(() => {});
+  }
   process.exit(0);
 }

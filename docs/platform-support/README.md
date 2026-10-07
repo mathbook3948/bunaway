@@ -76,3 +76,9 @@ show/hide/focus, 크기와 위치, 전체화면, 닫기 확인을 구현했다. 
 새 창 API의 실제 GUI 회귀는 통과했다. 같은 실행의 전체 네이티브 작업은 공용 기능 목록 테스트에서 실패했다.
 Linux에서는 계약, 정책, 재생성 수명 조정과 CLI 번들을 검증한다.
 macOS의 창 API는 `UNSUPPORTED`이며 기존 단일 창 설정만 빌드할 수 있다.
+
+Windows의 앱 정의 `desktop`에 인자, 딥링크, 파일 열기와 종료 취소, 트레이 숨김을
+구현했다. 초기 계약, 번들, 타입 검사는 Linux에서 수행했고 후속 Windows x64, Bun 1.4.2에서
+실제 WebView2의 hide, veto, dev-veto, dev-hide, dev-pending 시나리오와 PowerShell 5.1 인자 전달을 통과했다.
+Windows 실행기는 같은 시나리오를 실행한다. URL scheme과 파일 연결의 OS 등록은 미구현이다.
+macOS 프로세스 런타임은 `desktop`을 `UNSUPPORTED`로 거부한다.

@@ -12,7 +12,8 @@ import { Channel, type Packet, type UIConfig, type WindowSpec } from "./channel.
 import { WindowOperations } from "./window-operations.ts";
 import { callbackCalls, checkCallbacks, disposeCom } from "./com.ts";
 import { originOf, WebView } from "./webview.ts";
-import { disposeWin32Bindings, hr, kernel, ole, Windows } from "./win32.ts";
+import { Tray } from "./tray.ts";
+import { disposeWin32Bindings, hr, kernel, ole, user, Windows } from "./win32.ts";
 
 const config = workerData as UIConfig;
 assert(parentPort);
@@ -23,6 +24,22 @@ let startRequested = false;
 let closingSent = false;
 let initialized = false;
 let windows: Windows | undefined;
+let tray: Tray | undefined;
+let quitPending = false;
+function requestQuit(reason: "last-window" | "tray") {
+  if (stopping || quitPending) return;
+  quitPending = true;
+  channel.notify({ kind: "quit-request", reason });
+}
+function visibility(action: "show" | "hide") {
+  if (stopping) return;
+  for (const view of views.values()) {
+    if (view.boundary.closed) continue;
+    const mode = action === "hide" ? 0 : user.symbols.IsIconic(view.native.hwnd) ? 9 : 5;
+    user.symbols.ShowWindow(view.native.hwnd, mode);
+    if (action === "show") user.symbols.SetForegroundWindow(view.native.hwnd);
+  }
+}
 const views = new Map<
   string,
   {
@@ -33,6 +50,7 @@ const views = new Map<
     ready: boolean;
     navigated: boolean;
     pendingClose: boolean;
+    forceClose: boolean;
     confirmation: string | null;
     deadline: number;
   }
@@ -53,6 +71,11 @@ const channel = new Channel(
       assert(!startRequested && !stopping, "Invalid start");
       startRequested = true;
       startViews();
+    } else if (packet.kind === "desktop-control") {
+      if (packet.action === "hide") assert(tray, "Hiding requires a tray");
+      visibility(packet.action);
+    } else if (packet.kind === "quit-cancelled") {
+      quitPending = false;
     } else if (packet.kind === "shutdown") {
       stopping = true;
       approved.clear();
@@ -163,7 +186,10 @@ function startViews() {
       view.native.navigate();
     }
 }
-function closeWindow(viewId: string): boolean {
+async function closeWindow(
+  viewId: string,
+  mode: "close" | "recreate" | "force" = "close",
+): Promise<boolean> {
   const view = views.get(viewId);
   assert(view);
   view.pendingClose = false;
@@ -171,9 +197,23 @@ function closeWindow(viewId: string): boolean {
   const spec = config.windows.find((spec) => spec.view === viewId);
   assert(spec);
   assert(windows);
-  if (view.confirmation) {
+  if (mode === "close" && config.desktop?.closeBehavior === "hide") {
+    assert(tray, "Close to tray requires a tray");
+    windows.show(view.native.hwnd, false);
+    log("view-window-hidden", { view: viewId });
+    return false;
+  }
+  if (mode !== "force" && view.confirmation && (mode === "recreate" || !quitPending)) {
     log("window-close-confirmation", { view: viewId });
     if (!windows.confirmClose(view.native.hwnd, spec.title, view.confirmation)) return false;
+  }
+  if (
+    mode === "close" &&
+    (quitPending || [...views.values()].filter((view) => !view.boundary.closed).length <= 1)
+  ) {
+    requestQuit("last-window");
+    while (quitPending && !stopping && !closingSent) await Bun.sleep(5);
+    return stopping || closingSent;
   }
   view.boundary.revoke("closing");
   view.boundary.closed = true;
@@ -195,7 +235,7 @@ const operations = new WindowOperations(config.windows, {
       : undefined;
   },
   create: createWindow,
-  close: closeWindow,
+  close: (viewId) => closeWindow(viewId, "recreate"),
   apply: applyWindow,
   stopping: () => stopping,
   cancelled: (id) => cancelled.has(id),
@@ -279,7 +319,7 @@ function createWindow(spec: WindowSpec) {
   const close = (force = false) => {
     const view = views.get(spec.view);
     if (view && !view.boundary.closed) {
-      if (force) view.confirmation = null;
+      if (force) view.forceClose = true;
       view.pendingClose = true;
     }
   };
@@ -316,6 +356,7 @@ function createWindow(spec: WindowSpec) {
         log: (event, data) => log(event, { view: spec.view, ...data }),
       },
       config.legacyProfile,
+      config.devtools,
     );
   } catch (error) {
     windows.destroy(window);
@@ -329,6 +370,7 @@ function createWindow(spec: WindowSpec) {
     ready: false,
     navigated: false,
     pendingClose: false,
+    forceClose: false,
     confirmation: null,
     deadline: Date.now() + 30000,
   });
@@ -336,7 +378,17 @@ function createWindow(spec: WindowSpec) {
 try {
   hr(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
   initialized = true;
-  windows = new Windows();
+  windows = new Windows(() => {
+    if (closingSent) return;
+    closingSent = true;
+    channel.notify({ kind: "closing" });
+  });
+  if (config.desktop?.tray)
+    tray = new Tray(windows, config.desktop.tray.tooltip, (action) => {
+      if (action === "show") visibility("show");
+      else requestQuit("tray");
+    });
+  if (tray) log("tray-created", { hwnd: tray.hwnd.toString() });
   log("ui-thread", { pid: process.pid, thread: kernel.symbols.GetCurrentThreadId() });
   for (const spec of config.windows) if (spec.startup !== false) createWindow(spec);
   await channel.send({ kind: "ready" });
@@ -344,7 +396,8 @@ try {
     checkCallbacks();
     windows.pump();
     for (const [viewId, view] of views) {
-      if (view.pendingClose) closeWindow(viewId);
+      if (view.pendingClose)
+        void closeWindow(viewId, view.forceClose ? "force" : "close").catch(fail);
       if (view.native.failure) throw view.native.failure;
       if (!view.ready && !view.boundary.closed && Date.now() > view.deadline)
         throw new Error("WebView startup timed out");
@@ -391,6 +444,8 @@ try {
       }
       await Bun.sleep(5);
     }
+    tray?.dispose();
+    tray = undefined;
     const calls = callbackCalls();
     for (let count = 0; count < 10; count++) {
       windows?.pump();

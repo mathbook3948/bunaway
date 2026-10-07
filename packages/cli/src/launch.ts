@@ -3,6 +3,12 @@ import { resolve } from "node:path";
 import pin from "../../../runtime/build-manifests/windows-x64.json";
 import { json, projectPath, verifyHash } from "./files.ts";
 
+export function windowsInspectorArgument(port: number): string {
+  if (!Number.isInteger(port) || port < 1 || port > 65535)
+    throw new Error("Inspector port must be an integer between 1 and 65535.");
+  return `--inspect=127.0.0.1:${port}/bunaway`;
+}
+
 export async function writeWindowsLauncher(source: string, destination: string): Promise<void> {
   const script = await readFile(source, "utf8");
   if (!script.includes("__BUN_SHA256__")) throw new Error("Missing launcher runtime pin.");
@@ -42,7 +48,7 @@ export function windowsLaunchEnvironment(
   return environment;
 }
 
-// Development runner only: request normal teardown on the app's actual Win32 windows.
+// Development runner only: request orderly teardown without user close hooks or hiding.
 export async function closeWindowsApp(pid: number): Promise<number> {
   const { dlopen, JSCallback, ptr } = await import("bun:ffi");
   const api = dlopen("user32.dll", {
@@ -74,7 +80,7 @@ export async function closeWindowsApp(pid: number): Promise<number> {
     api.symbols.EnumWindows(callback.ptr, 0n);
     for (const window of windows) {
       api.symbols.PostMessageW(window, 0x1f, 0n, 0n);
-      api.symbols.PostMessageW(window, 0x10, 0n, 0n);
+      api.symbols.PostMessageW(window, 0x8002, 0n, 0n); // host APP_SHUTDOWN_MESSAGE (WM_APP + 2)
     }
     return windows.length;
   } finally {

@@ -91,3 +91,28 @@ Windows 창 API는 `experimental`, macOS 창 API는 `unsupported`를 요구하�
 닫기 확인을 설정한 editor 창의 브라우저 프로세스를 강제 종료해 확인 없이 해당 창이 닫히는 것을 검증했다.
 주 창에서 닫힌 상태를 조회하고 editor를 다시 생성했다. 기존 닫기 거절과 승인, 재생성 후 확인 메시지 초기화,
 자기 창 재생성, 호출 세션 종료에 따른 생성 취소와 정상 종료도 실제 Windows WebView2 회귀를 통과했다.
+
+## 데스크톱 앱 열기와 종료 확장, 2026-10-07
+
+앱 정의의 `desktop`으로 두 번째 실행의 인자 전달, 파일과 URL 열기, 종료 취소,
+트레이 숨김과 복원을 구현했다. 동작과 제한은 [ADR 0013](../decisions/0013-desktop-lifecycle.md)를 따른다.
+`tests/lifecycle/desktop.test.ts`는 플랫폼 독립 계약을 확인하고 Windows 실행기에
+`tests/lifecycle/windows-desktop.ts`의 hide, veto 시나리오를 추가했다.
+초기 Linux 작업에서는 실제 Windows GUI 회귀를 실행하지 않았다. 후속 Windows x64,
+Bun 1.4.2 검증에서 실제 WebView2의 hide, veto와 dev-veto, dev-hide, dev-pending을 통과했다.
+숨김과 최대화 복원, 종료 취소 뒤 세션 유지, CLI 중단 시 종료 검사 우회와 플러그인 정리를 확인했다.
+PowerShell 5.1 실행기에서 `--`, 공통 매개변수 이름, 따옴표, 끝의 역슬래시와 빈 인자 보존도 통과했다.
+OS의 URL scheme과 파일 연결 등록은 제공하지 않는다.
+
+## 2026-10-07 창 API와 데스크톱 수명주기 통합
+
+PR #39 병합 후 공개 창 API와 디버깅 설정을 함께 유지하도록 충돌을 해결했다.
+마지막 창의 `windows.close`는 앱의 종료 승인도 기다리고, 트레이 숨김은 세션을 유지한다.
+`windows.recreate`는 앱 종료 검사를 우회하며 기존 창의 닫기 확인은 적용한다.
+동적으로 만들거나 재생성하는 창도 검증된 DevTools 설정을 사용한다.
+
+Windows x64, Bun 1.4.2에서 hide, veto, dev-veto, dev-hide, dev-pending 회귀를 통과했다.
+창 API의 종료 취소, 자기 창 재생성, 브라우저 장애와 호출 세션 종료에 따른 생성 취소도 통과했다.
+공개 창 API 실행기의 전체화면 사전 검사는 현재 환경에서 최대화 창의 복원 좌표가 달라 실패했다.
+수정 전 PR 커밋 `53a79233`에서도 같은 실패를 재현했다. 해당 사전 검사만 제외한 임시 사본으로
+창 수명주기 회귀를 실행했으며 원래 전체화면 검사는 유지했다. 전체 네이티브 회귀 통과를 뜻하지 않는다.

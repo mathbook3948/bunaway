@@ -60,3 +60,10 @@ export function developmentWindowHome(home: string, server: string): string {
   target.search = source.search;
   return target.href;
 }
+
+export function verifyDevelopmentToolsLaunch(marker: unknown, requested = false): boolean {
+  if (marker === undefined && !requested) return false;
+  if (marker !== true || !requested)
+    throw new Error("DevTools require a development artifact and the --devtools launch flag.");
+  return true;
+}
