@@ -2,6 +2,7 @@ import { dlopen, ptr } from "bun:ffi";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { runWindowsApp } from "../../native/windows/bun/entry.ts";
 import { user, Windows } from "../../native/windows/bun/win32.ts";
 import {
@@ -10,9 +11,12 @@ import {
 } from "../../packages/backend-sdk/src/index.ts";
 import type { HostContext, Policy } from "../../packages/protocol/src/index.ts";
 import { windows, windowsPlugin } from "../../plugins/windows/src/index.ts";
+import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 
 assert.equal(process.platform, "win32");
-const root = resolve(import.meta.dir, "../..");
+const root = process.argv.includes("--repo")
+  ? (process.argv[process.argv.indexOf("--repo") + 1] ?? "")
+  : resolve(import.meta.dir, "../..");
 const output = resolve(root, "build/windows-window-api");
 const assets = resolve(output, "assets");
 const reportPath = resolve(output, "report.json");
@@ -201,12 +205,19 @@ if (!process.argv.includes("--child")) {
   } finally {
     nativeWindows.dispose();
   }
+  const childEntry = await bundleNativeWorker(
+    "windows-bun-window-api",
+    resolve(output, "driver"),
+    import.meta.path,
+  );
   const child = Bun.spawn(
     [
       process.execPath,
       "--no-env-file",
-      import.meta.path,
+      fileURLToPath(childEntry),
       "--child",
+      "--repo",
+      root,
     ],
     {
       stdout: "pipe",

@@ -2,6 +2,7 @@ import { dlopen } from "bun:ffi";
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { runWindowsApp } from "../../native/windows/bun/entry.ts";
 import {
   forwardToInstance,
@@ -16,6 +17,7 @@ import {
   NativeRegistry,
 } from "../../packages/protocol/src/index.ts";
 import { windowsPlugin } from "../../plugins/windows/src/index.ts";
+import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 
 const windowRegistry = new NativeRegistry([
   windowsPlugin,
@@ -85,10 +87,10 @@ export const desktopTestApp = {
 const scenario = process.argv[2] ?? "hide";
 const devShutdown = scenario.startsWith("dev-");
 const devPending = scenario === "dev-pending";
-const root = resolve(
-  import.meta.dir,
-  `../../build/windows-desktop-${scenario}`,
-);
+const repoRoot = process.argv.includes("--repo")
+  ? (process.argv[process.argv.indexOf("--repo") + 1] ?? "")
+  : resolve(import.meta.dir, "../..");
+const root = resolve(repoRoot, `build/windows-desktop-${scenario}`);
 if (!process.argv.includes("--child")) {
   await mkdir(resolve(root, "web"), {
     recursive: true,
@@ -108,13 +110,20 @@ if (!process.argv.includes("--child")) {
     resolve(root, "web/index.html"),
     '<!doctype html><title>Desktop lifecycle</title><script type="module" src="app.js"></script>',
   );
+  const childEntry = await bundleNativeWorker(
+    "windows-desktop",
+    resolve(root, "driver"),
+    import.meta.path,
+  );
   const child = Bun.spawn(
     [
       process.execPath,
       "--no-env-file",
-      import.meta.path,
+      fileURLToPath(childEntry),
       scenario,
       "--child",
+      "--repo",
+      repoRoot,
     ],
     {
       stdout: "pipe",
@@ -411,8 +420,8 @@ if (!process.argv.includes("--child")) {
         assets: root,
         dataRoot,
         loader: resolve(
-          import.meta.dir,
-          "../../native/windows/bun/vendor/sdk/build/native/x64/WebView2Loader.dll",
+          repoRoot,
+          "native/windows/bun/vendor/sdk/build/native/x64/WebView2Loader.dll",
         ),
         policy: {
           version: 1,
