@@ -2,7 +2,13 @@ import { realpath } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { type NativePluginContract, NativeRegistry } from "@bunaway/protocol";
-import { inside, installedPackageRoot, json } from "./files.ts";
+import {
+  inside,
+  installedPackageRoot,
+  isOptionalDependency,
+  json,
+  type PackageDependencies,
+} from "./files.ts";
 
 export type InstalledPlugin = {
   name: string;
@@ -26,13 +32,25 @@ export async function installedPlugins(
   project: string,
   version: string,
 ): Promise<InstalledPlugin[]> {
-  const pkg = (await json(resolve(project, "package.json"))) as {
-    dependencies?: Record<string, string>;
-    devDependencies?: Record<string, string>;
-  };
+  const pkg = (await json(resolve(project, "package.json"))) as PackageDependencies;
   const result: InstalledPlugin[] = [];
-  for (const packageName of Object.keys({ ...pkg.dependencies, ...pkg.devDependencies })) {
-    const root = await installedPackageRoot(project, packageName);
+  for (const packageName of Object.keys({
+    ...pkg.dependencies,
+    ...pkg.devDependencies,
+    ...pkg.optionalDependencies,
+    ...pkg.peerDependencies,
+  })) {
+    let root: string;
+    try {
+      root = await installedPackageRoot(project, packageName);
+    } catch (error) {
+      if (
+        isOptionalDependency(pkg, packageName) &&
+        (error as NodeJS.ErrnoException).code === "ENOENT"
+      )
+        continue;
+      throw error;
+    }
     const manifest = (await json(resolve(root, "package.json"))) as {
       name: string;
       version: string;

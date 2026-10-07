@@ -5,6 +5,23 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const frameworkRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
+export interface PackageDependencies {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
+  peerDependencies?: Record<string, string>;
+  peerDependenciesMeta?: Record<string, { optional?: boolean }>;
+}
+
+export function isOptionalDependency(pkg: PackageDependencies, name: string): boolean {
+  return (
+    Object.hasOwn(pkg.optionalDependencies ?? {}, name) ||
+    (!Object.hasOwn(pkg.dependencies ?? {}, name) &&
+      !Object.hasOwn(pkg.devDependencies ?? {}, name) &&
+      pkg.peerDependenciesMeta?.[name]?.optional === true)
+  );
+}
+
 export async function installedPackageRoot(
   project: string,
   name: string,
@@ -20,7 +37,10 @@ export async function installedPackageRoot(
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
     const next = dirname(parent);
-    if (next === parent) throw new Error(`Missing installed ${name}; run bun install.`);
+    if (next === parent)
+      throw Object.assign(new Error(`Missing installed ${name}; run bun install.`), {
+        code: "ENOENT",
+      });
     parent = next;
   }
 }

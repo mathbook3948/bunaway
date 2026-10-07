@@ -117,7 +117,32 @@ test("external plugins keep their own versions while SDK compatibility stays exa
       }
     };`,
     );
-    expect((await installedPlugins(root, "0.0.0"))[0]?.version).toBe("1.2.3");
+    for (const field of [
+      "dependencies",
+      "devDependencies",
+      "optionalDependencies",
+      "peerDependencies",
+    ]) {
+      await writeJson(resolve(root, "package.json"), {
+        [field]: { "@example/plugin-demo": "1.2.3" },
+        optionalDependencies: {
+          ...(field === "optionalDependencies" ? { "@example/plugin-demo": "1.2.3" } : {}),
+          "@example/plugin-absent": "1.0.0",
+        },
+        ...(field === "peerDependencies"
+          ? {
+              peerDependencies: {
+                "@example/plugin-demo": "1.2.3",
+                "@example/plugin-absent-peer": "1.0.0",
+              },
+              peerDependenciesMeta: { "@example/plugin-absent-peer": { optional: true } },
+            }
+          : {}),
+      });
+      const installed = await installedPlugins(root, "0.0.0");
+      expect(installed).toHaveLength(1);
+      expect(installed[0]?.version).toBe("1.2.3");
+    }
     await writeJson(resolve(plugin, "package.json"), {
       ...manifest,
       peerDependencies: { "@bunaway/plugin": "9.0.0" },
@@ -126,6 +151,14 @@ test("external plugins keep their own versions while SDK compatibility stays exa
     await writeJson(resolve(plugin, "package.json"), manifest);
     await writeJson(resolve(sdk, "package.json"), { name: "@bunaway/plugin", version: "9.0.0" });
     await expect(installedPlugins(root, "0.0.0")).rejects.toThrow("Incompatible SDK/CLI");
+    await writeJson(resolve(root, "package.json"), {
+      dependencies: { "@example/plugin-required": "1.0.0" },
+      peerDependencies: { "@example/plugin-required": "1.0.0" },
+      peerDependenciesMeta: { "@example/plugin-required": { optional: true } },
+    });
+    await expect(installedPlugins(root, "0.0.0")).rejects.toThrow(
+      "Missing installed @example/plugin-required",
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

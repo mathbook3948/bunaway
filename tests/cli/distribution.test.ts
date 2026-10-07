@@ -128,6 +128,41 @@ async function command(
   return output;
 }
 
+test("generated apps discover installed plugins from every direct dependency section", async () => {
+  const home = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-plugin-dependencies-")));
+  try {
+    const project = await createProject(resolve(home, "app"));
+    await command(project, ["install"]);
+    const path = resolve(project, "package.json");
+    const original = await Bun.file(path).json();
+    const specifier = original.dependencies["@bunaway/plugin-storage"];
+    delete original.dependencies["@bunaway/plugin-storage"];
+    for (const field of [
+      "dependencies",
+      "devDependencies",
+      "optionalDependencies",
+      "peerDependencies",
+    ]) {
+      const pkg = structuredClone(original);
+      pkg[field] = { ...pkg[field], "@bunaway/plugin-storage": specifier };
+      pkg.optionalDependencies = { ...pkg.optionalDependencies, "@bunaway/plugin-absent": "0.0.0" };
+      pkg.peerDependencies = { ...pkg.peerDependencies, "@bunaway/plugin-absent-peer": "0.0.0" };
+      pkg.peerDependenciesMeta = { "@bunaway/plugin-absent-peer": { optional: true } };
+      await writeJson(path, pkg);
+      const valid = await validateProject(project);
+      expect(valid.nativePlugins?.map((plugin) => plugin.packageName)).toEqual([
+        "@bunaway/plugin-storage",
+      ]);
+      const assets = resolve(home, `assets-${field}`);
+      await bundleWindowsAssets(valid, assets);
+      expect(await Bun.file(resolve(assets, "boot.js")).exists()).toBe(true);
+      expect(await Bun.file(resolve(assets, "app.js")).exists()).toBe(true);
+    }
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+}, 60000);
+
 test("workspace and isolated installs resolve transitive SDKs from their declaring packages", async () => {
   const home = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-isolated-")));
   try {

@@ -50,6 +50,9 @@ create는 설치를 자동 실행하지 않으며 기존 경로를 덮어쓰지 
 
 개별 네이티브 패키지는 필요할 때 설치하고 AppDefinition.plugins에 등록한다.
 CLI는 직접 설치한 플러그인의 manifest와 SDK peer 버전, 패키지 내부 경로를 검사한다.
+dependencies, devDependencies, optionalDependencies와 peerDependencies에 선언한 설치 플러그인을 모두 찾는다.
+설치하지 않은 optionalDependencies와 optional로 표시한 peerDependencies는 건너뛴다.
+필수 의존성의 누락이나 설치된 플러그인의 잘못된 설정은 오류로 처리한다.
 공식 `@bunaway/` 플러그인은 프레임워크와 같은 버전을 사용한다. 외부 플러그인은 자체 버전을 유지하며 SDK peer 버전만 정확히 맞춘다.
 화면과 백엔드는 같은 플러그인 패키지를 import한다. 생성 앱의 typecheck는
 tsconfig.json의 browser 조건과 src-bunaway/tsconfig.json의 bun 조건을 각각 검사한다.

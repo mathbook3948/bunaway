@@ -339,7 +339,9 @@ capabilities 권한 설정과 bunaway의 기능 지원 조회 함수도 서로 �
 ## Windows adapter와 시작, 종료
 
 CLI는 앱의 직접 의존성에 선언한 네이티브 plugin의 manifest를 읽고 target별 adapter
-목록을 생성한다. 설치된 패키지 전체는 catalog로 검증하며 operation과 permission의
+목록을 생성한다. dependencies, devDependencies, optionalDependencies와 peerDependencies를 모두 탐색한다.
+설치하지 않은 optionalDependencies와 optional peerDependencies는 건너뛰며 필수 패키지의 누락은 오류다.
+설치된 패키지 전체는 catalog로 검증하며 operation과 permission의
 합계가 256개를 넘어도 허용한다. 각 플러그인의 계약과 policy 입력 제한은 그대로
 검사한다. 실제 앱 등록과 runtime registry는 operation과 permission을 각각 최대
 256개로 제한한다. 앱 정의는 runtime 등록의 원본이며 build 설정에 같은 목록을 다시

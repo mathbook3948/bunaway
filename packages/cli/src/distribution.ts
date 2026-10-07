@@ -6,7 +6,9 @@ import {
   frameworkRoot,
   hash,
   installedPackageRoot,
+  isOptionalDependency,
   json,
+  type PackageDependencies,
   runWorker,
   verifyHash,
 } from "./files.ts";
@@ -90,13 +92,6 @@ const packageNames: Record<string, string> = {
   "runtime-bun": "@bunaway/runtime-bun",
   packaging: "@bunaway/packaging",
 };
-
-interface PackageDependencies {
-  dependencies?: Record<string, string>;
-  devDependencies?: Record<string, string>;
-  optionalDependencies?: Record<string, string>;
-  peerDependencies?: Record<string, string>;
-}
 
 function sdkDependencies(pkg: PackageDependencies): [string, string][] {
   return [pkg.dependencies, pkg.devDependencies, pkg.optionalDependencies, pkg.peerDependencies]
@@ -243,6 +238,18 @@ export async function validateFramework(
   }
   const plugins = await installedPlugins(project, actual.version);
   for (const [name, specifier] of declarations) {
+    if (
+      !Object.values(packageNames).includes(name) &&
+      !plugins.some((plugin) => plugin.packageName === name) &&
+      isOptionalDependency(pkg, name)
+    ) {
+      try {
+        await installedPackageRoot(project, name);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+        throw error;
+      }
+    }
     if (
       (!Object.values(packageNames).includes(name) &&
         !plugins.some((plugin) => plugin.packageName === name)) ||
