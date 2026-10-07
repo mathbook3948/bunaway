@@ -11,8 +11,12 @@ import {
   permissionMatcher,
   pluginRegistry,
 } from "../../native/windows/bun/plugins.ts";
-import type { NativeEnvironment } from "../../packages/plugin-sdk/src/index.ts";
-import { hostOperations } from "../../packages/protocol/src/index.ts";
+import {
+  defineNativePlugin,
+  type NativeEnvironment,
+  s,
+} from "../../packages/plugin-sdk/src/index.ts";
+import { hostOperations, validateValue } from "../../packages/protocol/src/index.ts";
 import { capabilitiesPlugin } from "../../plugins/capabilities/src/index.ts";
 import { createOperations as createCapabilities } from "../../plugins/capabilities/src/windows.ts";
 
@@ -37,6 +41,26 @@ test("installed contracts compare by content while changes still fail startup", 
       },
     ]),
   ).toThrow();
+});
+
+test("installed contracts accept validated JSON snapshots without hiding schema changes", () => {
+  const schema = validateValue(s.object({ type: s.enum(["string"]) }), { type: "string" });
+  const plugin = defineNativePlugin({
+    name: "example",
+    version: "1",
+    operations: { echo: { input: schema, output: schema, permission: "echo" } },
+    scopes: { echo: schema },
+    matches: (_permission, input, scope) => input === scope,
+  }).definition;
+  const packaged = JSON.parse(JSON.stringify(plugin.native));
+  const installed = { name: plugin.name, version: plugin.version, native: packaged };
+  table.push(installed);
+  expect(Object.getPrototypeOf(schema)).toBeNull();
+  expect(() => pluginRegistry([plugin])).not.toThrow();
+  installed.native = plugin.native;
+  expect(() => pluginRegistry([{ ...plugin, native: packaged }])).not.toThrow();
+  packaged.operations[0].input.type = "integer";
+  expect(() => pluginRegistry([{ ...plugin, native: packaged }])).toThrow();
 });
 
 test("shutdown and initialization failure clean every prepared adapter in reverse order", async () => {

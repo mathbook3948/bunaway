@@ -5,6 +5,7 @@ import {
   type NativeRegistration,
   NativeRegistry,
   type PermissionMatcher,
+  validateValue,
 } from "../../../packages/protocol/src/index.ts";
 import { type NativeAdapter, type NativeEnvironment, packagedPlugins } from "./plugin-table.ts";
 
@@ -16,7 +17,7 @@ export function pluginRegistry(plugins: readonly NativeRegistration[]) {
     if (
       !packaged ||
       packaged.version !== plugin.version ||
-      !isDeepStrictEqual(packaged.native, plugin.native)
+      !isDeepStrictEqual(validateValue({}, packaged.native), validateValue({}, plugin.native))
     )
       throw new BunawayError({
         code: "INVALID_ARGUMENT",
