@@ -2,9 +2,86 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { hostResponse } from "../../native/windows/bun/host-response.ts";
+import { type PackagedPlugin, packagedPlugins } from "../../native/windows/bun/plugin-table.ts";
+import { operations, permissionMatcher, pluginRegistry } from "../../native/windows/bun/plugins.ts";
 import { writeJson } from "../../packages/cli/src/files.ts";
-import { installedPlugins } from "../../packages/cli/src/plugins.ts";
-import { NativeRegistry } from "../../packages/protocol/src/index.ts";
+import { installedPlugins, pluginTableSource } from "../../packages/cli/src/plugins.ts";
+import { BunawayError, NativeRegistry, type Policy } from "../../packages/protocol/src/index.ts";
+
+test("scoped plugins without a Windows adapter preserve authorization and return UNSUPPORTED", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "bunaway-plugin-unsupported-"));
+  const table = packagedPlugins as PackagedPlugin[];
+  const previous = [...table];
+  try {
+    const plugin = resolve(root, "node_modules/@example/plugin-files");
+    await mkdir(plugin, { recursive: true });
+    await mkdir(resolve(root, "node_modules/@bunaway/plugin"), { recursive: true });
+    await writeJson(resolve(root, "package.json"), {
+      dependencies: { "@example/plugin-files": "1.0.0" },
+    });
+    await writeJson(resolve(plugin, "package.json"), {
+      name: "@example/plugin-files",
+      version: "1.0.0",
+      type: "module",
+      bunaway: { plugin: "plugin.json" },
+      peerDependencies: { "@bunaway/plugin": "0.0.0" },
+    });
+    await writeJson(resolve(root, "node_modules/@bunaway/plugin/package.json"), {
+      name: "@bunaway/plugin",
+      version: "0.0.0",
+    });
+    await writeJson(resolve(plugin, "plugin.json"), {
+      format: 1,
+      name: "files",
+      entry: "index.ts",
+      platforms: {},
+    });
+    await Bun.write(
+      resolve(plugin, "index.ts"),
+      `export default {
+      name: "files", version: "1.0.0", native: {
+        operations: [{ name: "files.read", input: { type: "string" }, output: { type: "string" }, permission: "files:read" }],
+        permissions: [{ name: "files:read", scope: { type: "string" } }]
+      }, matches: (_permission, input, scope) => input === scope
+    };`,
+    );
+    const installed = await installedPlugins(root, "0.0.0");
+    const generated = resolve(root, "table.ts");
+    await Bun.write(generated, pluginTableSource(installed));
+    const module = await import(pathToFileURL(generated).href);
+    table.splice(0, table.length, ...module.packagedPlugins);
+    expect(table[0]?.execution).toBeUndefined();
+    expect(table[0]?.operations).toBeUndefined();
+    const registry = pluginRegistry(installed);
+    const matches = await permissionMatcher(installed);
+    const adapters = await operations(installed, root, "io");
+    try {
+      const call = registry.validateCall({ operation: "files.read", payload: "notes" });
+      for (const [permissions, code] of [
+        [[{ identifier: "files:read", allow: ["notes"] }], "UNSUPPORTED"],
+        [[{ identifier: "files:read", allow: ["other"] }], "PERMISSION_DENIED"],
+        [[{ identifier: "files:read", allow: ["notes"], deny: ["notes"] }], "PERMISSION_DENIED"],
+        [[], "PERMISSION_DENIED"],
+      ] satisfies [Policy["backend"]["permissions"], string][]) {
+        const source = { permissions: [...permissions] };
+        registry.validatePolicy({ version: 1, views: [], backend: source });
+        const response = hostResponse(() => {
+          if (!registry.allowed(source, call, matches))
+            throw new BunawayError({ code: "PERMISSION_DENIED", message: "Not allowed." });
+          return adapters.execute(call.operation, call.payload, "backend");
+        });
+        expect(response).toMatchObject({ kind: "error", error: { code } });
+      }
+    } finally {
+      await adapters.dispose();
+    }
+  } finally {
+    table.splice(0, table.length, ...previous);
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test("external plugins keep their own versions while SDK compatibility stays exact", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "bunaway-plugin-version-"));

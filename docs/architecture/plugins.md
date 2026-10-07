@@ -386,6 +386,8 @@ envelope의 크기 제한을 검사하며, 실패하면 안전한 `INTERNAL` 응
 
 entry의 default export에 `matches(permission, input, scope)`를 선언한다.
 scope가 있는 등록된 플러그인의 평가 모듈만 읽는다.
+평가 모듈은 플랫폼 adapter 유무와 별개로 번들에 포함한다. adapter가 없어도 allow와
+deny를 검사하고, 허용된 호출에는 `UNSUPPORTED`, 권한 밖 호출에는 `PERMISSION_DENIED`를 반환한다.
 공통 계층은 등록된 schema로 검증한 입력과 scope만 전달한다. 함수는 네트워크나
 파일 I/O 없이 한 scope와 요청의 일치 여부를 반환한다. 공통 계층은 모든 deny의
 불일치와 적어도 하나의 allow 일치를 확인하며, 평가 함수가 실패하면 허용하지 않는다.

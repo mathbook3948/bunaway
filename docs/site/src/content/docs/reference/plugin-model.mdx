@@ -78,6 +78,7 @@ export default defineApp({ modules: [memo], plugins: [storagePlugin] });
 현재 네이티브 어댑터는 Windows만 제공합니다. `PluginDefinition.platforms`에서 현재
 플랫폼을 제외하면 앱 시작 단계에서 `UNSUPPORTED`로 거부합니다. Windows 작업에
 어댑터가 없으면 필요한 권한이 허용된 상태에서 호출할 때 `UNSUPPORTED`로 실패합니다.
+리소스 범위가 있는 작업도 allow와 deny를 검사하며, 권한 밖의 호출은 `PERMISSION_DENIED`로 실패합니다.
 macOS는 네이티브 권한을 정책에 포함하면 호스트가 시작을 거부합니다.
 
 새 네이티브 플러그인은 plugin.json, src/index.ts와 src/windows.ts를 기본으로 작성합니다.

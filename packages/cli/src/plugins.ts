@@ -10,7 +10,8 @@ export type InstalledPlugin = {
   root: string;
   version: string;
   native: NativePluginContract;
-  targets: Record<string, { execution: "io" | "ui"; authorization?: string; operations: string }>;
+  authorization?: string;
+  targets: Record<string, { execution: "io" | "ui"; operations: string }>;
 };
 
 async function contained(root: string, value: unknown): Promise<string> {
@@ -106,7 +107,6 @@ export async function installedPlugins(
         throw new Error("Invalid native plugin target.");
       targets[platform] = {
         execution: target.execution,
-        ...(scoped ? { authorization: entry } : {}),
         operations: await contained(root, target.operations),
       };
     }
@@ -116,6 +116,7 @@ export async function installedPlugins(
       root,
       version: manifest.version,
       native,
+      ...(scoped ? { authorization: entry } : {}),
       targets,
     });
   }
@@ -127,7 +128,7 @@ export function pluginTableSource(plugins: readonly InstalledPlugin[]): string {
   return `export const packagedPlugins = [${plugins
     .map((plugin) => {
       const target = plugin.targets.windows;
-      return `{ name: ${JSON.stringify(plugin.name)}, version: ${JSON.stringify(plugin.version)}, native: ${JSON.stringify(plugin.native)}${target ? `, execution: ${JSON.stringify(target.execution)}${target.authorization ? `, authorization: () => import(${JSON.stringify(target.authorization)}).then(({ default: plugin }) => ({ matches: plugin.matches }))` : ""}, operations: () => import(${JSON.stringify(target.operations)})` : ""} }`;
+      return `{ name: ${JSON.stringify(plugin.name)}, version: ${JSON.stringify(plugin.version)}, native: ${JSON.stringify(plugin.native)}${plugin.authorization ? `, authorization: () => import(${JSON.stringify(plugin.authorization)}).then(({ default: plugin }) => ({ matches: plugin.matches }))` : ""}${target ? `, execution: ${JSON.stringify(target.execution)}, operations: () => import(${JSON.stringify(target.operations)})` : ""} }`;
     })
     .join(",")}];`;
 }
