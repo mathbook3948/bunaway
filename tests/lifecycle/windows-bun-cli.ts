@@ -61,7 +61,7 @@ await writeFile(
 );
 await appendFile(
   resolve(project, "src/main.ts"),
-  '\nawait invoke("message.save", "CLI FFI 한글"); if (await invoke<string>("message.read", null) !== "CLI FFI 한글") throw new Error("CLI storage roundtrip failed"); window.close();\n',
+  '\nawait client.invoke("message.save", "CLI FFI 한글"); if (await client.invoke("message.read", null) !== "CLI FFI 한글") throw new Error("CLI storage roundtrip failed"); window.close();\n',
 );
 await command(["run", "typecheck"]);
 console.log(await command(["run", "build"]));

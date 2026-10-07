@@ -11,6 +11,8 @@ import uiSource from '@repo/packages/cli/templates/vanilla/src/main.ts?raw';
 **명령**은 입력을 받아 결과를 반환하는 작업이고, **이벤트**는 구독한 UI에 전달하는 알림입니다.
 저장 명령의 응답은 호출한 UI가 받고 저장 이벤트는 구독 중인 UI가 받습니다.
 
+vanilla UI는 앱 정의의 타입이 연결된 클라이언트를 사용합니다. 명령이나 이벤트 이름을 잘못 쓰거나 입력 타입이 다르면 `bun run typecheck`가 실패합니다.
+
 ## 1. 앱 백엔드에서 계약과 구현 정의
 
 아래 코드는 현재 `vanilla` 템플릿의 실제 앱 정의와 메시지 모듈입니다.

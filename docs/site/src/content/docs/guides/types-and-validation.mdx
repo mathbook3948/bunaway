@@ -7,6 +7,8 @@ TypeScript 타입은 개발 중 호출 실수를 잡습니다. 실행할 때는 
 
 ## 앱 정의에서 타입 추론
 
+vanilla 생성 앱은 아래 타입이 연결된 클라이언트를 기본으로 사용합니다. `bun run typecheck`가 명령과 이벤트 이름, 입력, 출력과 이벤트 payload의 타입을 검사합니다.
+
 템플릿의 `app.ts`가 `app`을 named/default export하므로 아래처럼 데이터 타입을 만들 수 있습니다.
 
 ```ts

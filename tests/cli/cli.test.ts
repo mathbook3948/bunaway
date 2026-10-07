@@ -74,6 +74,52 @@ test("create produces a relocatable project with real SDK dependencies and no re
   expect(await process.exited).toBe(0);
 });
 
+test("vanilla UI checks command and event contracts without bundling backend implementation", async () => {
+  const path = resolve(project, "src/main.ts");
+  const appPath = resolve(project, "src-bunaway/app.ts");
+  const original = originals["src/main.ts"] ?? "";
+  async function typecheck() {
+    const child = Bun.spawn([process.execPath, "run", "typecheck"], {
+      cwd: project,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const output = new Response(child.stdout).text();
+    const errors = new Response(child.stderr).text();
+    const code = await child.exited;
+    return { code, output: `${await output}\n${await errors}` };
+  }
+  try {
+    expect((await typecheck()).code).toBe(0);
+    for (const suffix of [
+      'void client.invoke("message.typo", null);',
+      'void client.invoke("message.save", 123);',
+      'void client.invoke("message.read", "invalid");',
+      'void client.listen("message.typo", () => {}, { onError() {} });',
+      'void client.listen("message.saved", (event) => { const value: number = event.payload; void value; }, { onError() {} });',
+      'void client.invoke("message.read", null).then((value) => { const number: number = value; void number; });',
+    ]) {
+      await Bun.write(path, `${original}\n${suffix}\n`);
+      const checked = await typecheck();
+      expect(checked.code, suffix).not.toBe(0);
+      expect(checked.output).toContain("src/main.ts");
+    }
+    await Bun.write(path, original);
+    await Bun.write(
+      appPath,
+      `console.error("backend-only-type-import-marker");\n${originals["src-bunaway/app.ts"]}`,
+    );
+    const assets = resolve(home, "typed-ui-assets");
+    await bundleAssets(await validateProject(project), assets);
+    expect(await Bun.file(resolve(assets, "web/main.js")).text()).not.toContain(
+      "backend-only-type-import-marker",
+    );
+  } finally {
+    await Bun.write(path, original);
+    await Bun.write(appPath, originals["src-bunaway/app.ts"] ?? "");
+  }
+}, 30000);
+
 test("create refuses existing paths and missing parents without modifying them", async () => {
   await expect(createProject(project)).rejects.toThrow("exists");
   expect(await Bun.file(resolve(project, "src-bunaway/bunaway.json")).text()).toBe(

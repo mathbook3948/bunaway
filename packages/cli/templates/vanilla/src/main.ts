@@ -1,4 +1,8 @@
-import { invoke, listen } from "@bunaway/client";
+import type { CommandsOf, EventsOf } from "@bunaway/backend";
+import { createClient } from "@bunaway/client";
+import type { app } from "../src-bunaway/app.ts";
+
+const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
 
 const input = document.querySelector<HTMLTextAreaElement>("#message");
 const saved = document.querySelector<HTMLElement>("#saved");
@@ -13,7 +17,7 @@ function errorText(error: unknown): string {
 }
 
 async function start(): Promise<void> {
-  await listen<string>(
+  await client.listen(
     "message.saved",
     (event) => {
       ui.saved.textContent = event.payload;
@@ -28,7 +32,7 @@ async function start(): Promise<void> {
     },
   );
   try {
-    const text = await invoke<string>("message.read", null);
+    const text = await client.invoke("message.read", null);
     ui.input.value = text;
     ui.saved.textContent = text;
     ui.status.textContent = "Loaded from appData/messages/current.txt";
@@ -39,7 +43,7 @@ async function start(): Promise<void> {
   ui.button.addEventListener("click", async () => {
     ui.button.disabled = true;
     try {
-      await invoke("message.save", ui.input.value);
+      await client.invoke("message.save", ui.input.value);
     } catch (error) {
       ui.status.textContent = `Save failed (not retried): ${errorText(error)}`;
     } finally {
