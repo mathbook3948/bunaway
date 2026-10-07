@@ -80,6 +80,7 @@ const unlisten = async (key) => {
 const cancel = (id) => send({ kind: "cancel", id });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const multiView = new URL(location.href).searchParams.get("test") === "multi-view";
+const nativePlugins = new URL(location.href).searchParams.get("nativePlugins") !== "0";
 
 async function connect() {
   return client.ready;
@@ -274,72 +275,82 @@ async function run() {
     await sleep(150);
     assert(seen.length === 2, "event delivered after unlisten");
   });
-  await test("storage roundtrip appData", async () => {
-    const w = await call("test.writeNote", { name: "a", text: "hello 파일" });
-    assert(w.kind === "result" && w.payload.ok, `write failed ${JSON.stringify(w)}`);
-    const r = await call("test.readNote", { name: "a" });
-    assert(
-      r.kind === "result" && r.payload.ok && r.payload.value === "hello 파일",
-      `read failed ${JSON.stringify(r)}`,
-    );
-  });
-  await test("junction inside appData cannot bypass pathPrefix", async () => {
-    const r = await call("test.readEscape", { path: "notes/internal-link/x.txt" });
-    assert(
-      r.kind === "result" && r.payload.ok === false && r.payload.code === "PERMISSION_DENIED",
-      `expected junction denial ${JSON.stringify(r)}`,
-    );
-    const w = await call("test.writeNote", { name: "internal-link/x", text: "forbidden" });
-    assert(
-      w.kind === "result" && w.payload.ok === false && w.payload.code === "PERMISSION_DENIED",
-      `expected junction write denial ${JSON.stringify(w)}`,
-    );
-  });
-  await test("storage scope escape denied", async () => {
-    const r = await call("test.readEscape", { path: "secrets/x.txt" });
-    assert(
-      r.kind === "result" && r.payload.ok === false && r.payload.code === "PERMISSION_DENIED",
-      `expected denial ${JSON.stringify(r)}`,
-    );
-  });
-  await test("storage traversal denied", async () => {
-    const r = await call("test.readEscape", { path: "../x.txt" });
-    assert(
-      r.kind === "result" && r.payload.ok === false && r.payload.code === "INVALID_ARGUMENT",
-      `expected rejection ${JSON.stringify(r)}`,
-    );
-  });
-  await test("storage symlink denied", async () => {
-    // notes/link is a junction planted by the driver pointing outside the scope.
-    const r = await call("test.readEscape", { path: "notes/link/secret.txt" });
-    assert(
-      r.kind === "result" && r.payload.ok === false && r.payload.code === "PERMISSION_DENIED",
-      `expected denial ${JSON.stringify(r)}`,
-    );
-  });
-  await test("temp scope roundtrip", async () => {
-    const w = await call("test.tempWrite", { path: "scratch.txt", text: "tmp" });
-    assert(w.kind === "result" && w.payload.ok, `temp write failed ${JSON.stringify(w)}`);
-    const r = await call("test.tempRead", { path: "scratch.txt" });
-    assert(
-      r.kind === "result" && r.payload.ok && r.payload.value === "tmp",
-      `temp read failed ${JSON.stringify(r)}`,
-    );
-  });
-  await test("capabilities", async () => {
-    const r = await call("test.capabilities");
-    assert(
-      r.kind === "result" &&
-        r.payload.ok &&
-        Array.isArray(r.payload.value) &&
-        r.payload.value.length === 4,
-      `bad caps ${JSON.stringify(r)}`,
-    );
-  });
-  await test("log.write", async () => {
-    const r = await call("test.log", { message: "page-log-테스트" });
-    assert(r.kind === "result" && r.payload.ok, `log failed ${JSON.stringify(r)}`);
-  });
+  if (nativePlugins) {
+    await test("storage roundtrip appData", async () => {
+      const w = await call("test.writeNote", { name: "a", text: "hello 파일" });
+      assert(w.kind === "result" && w.payload.ok, `write failed ${JSON.stringify(w)}`);
+      const r = await call("test.readNote", { name: "a" });
+      assert(
+        r.kind === "result" && r.payload.ok && r.payload.value === "hello 파일",
+        `read failed ${JSON.stringify(r)}`,
+      );
+    });
+    await test("junction inside appData cannot bypass pathPrefix", async () => {
+      const r = await call("test.readEscape", { path: "notes/internal-link/x.txt" });
+      assert(
+        r.kind === "result" && r.payload.ok === false && r.payload.code === "PERMISSION_DENIED",
+        `expected junction denial ${JSON.stringify(r)}`,
+      );
+      const w = await call("test.writeNote", { name: "internal-link/x", text: "forbidden" });
+      assert(
+        w.kind === "result" && w.payload.ok === false && w.payload.code === "PERMISSION_DENIED",
+        `expected junction write denial ${JSON.stringify(w)}`,
+      );
+    });
+    await test("storage scope escape denied", async () => {
+      const r = await call("test.readEscape", { path: "secrets/x.txt" });
+      assert(
+        r.kind === "result" && r.payload.ok === false && r.payload.code === "PERMISSION_DENIED",
+        `expected denial ${JSON.stringify(r)}`,
+      );
+    });
+    await test("storage traversal denied", async () => {
+      const r = await call("test.readEscape", { path: "../x.txt" });
+      assert(
+        r.kind === "result" && r.payload.ok === false && r.payload.code === "INVALID_ARGUMENT",
+        `expected rejection ${JSON.stringify(r)}`,
+      );
+    });
+    await test("storage symlink denied", async () => {
+      // notes/link is a junction planted by the driver pointing outside the scope.
+      const r = await call("test.readEscape", { path: "notes/link/secret.txt" });
+      assert(
+        r.kind === "result" && r.payload.ok === false && r.payload.code === "PERMISSION_DENIED",
+        `expected denial ${JSON.stringify(r)}`,
+      );
+    });
+    await test("temp scope roundtrip", async () => {
+      const w = await call("test.tempWrite", { path: "scratch.txt", text: "tmp" });
+      assert(w.kind === "result" && w.payload.ok, `temp write failed ${JSON.stringify(w)}`);
+      const r = await call("test.tempRead", { path: "scratch.txt" });
+      assert(
+        r.kind === "result" && r.payload.ok && r.payload.value === "tmp",
+        `temp read failed ${JSON.stringify(r)}`,
+      );
+    });
+    await test("capabilities", async () => {
+      const r = await call("test.capabilities");
+      assert(
+        r.kind === "result" &&
+          r.payload.ok &&
+          Array.isArray(r.payload.value) &&
+          r.payload.value.length === 4,
+        `bad caps ${JSON.stringify(r)}`,
+      );
+    });
+    await test("log.write", async () => {
+      const r = await call("test.log", { message: "page-log-테스트" });
+      assert(r.kind === "result" && r.payload.ok, `log failed ${JSON.stringify(r)}`);
+    });
+  } else {
+    await test("unregistered native plugin command is denied", async () => {
+      const outcome = await call("plugin.storage.readText", {
+        scope: "appData",
+        path: "notes/a.txt",
+      });
+      assert(outcome.error?.code === "PERMISSION_DENIED", "unregistered plugin was callable");
+    });
+  }
   await test("SDK cancellation", async () => {
     const controller = new AbortController();
     const outcome = call("test.hold", null, { signal: controller.signal });
@@ -347,18 +358,19 @@ async function run() {
     controller.abort();
     assert((await outcome).error?.code === "CANCELLED", "SDK cancellation failed");
   });
-  await test("SDK Host API cancellation", async () => {
-    const controller = new AbortController();
-    const outcome = call("test.hostCancel", null, { signal: controller.signal });
-    if (new URL(location.href).searchParams.has("hostCancelBarrier")) {
-      // Native delayed-op tests require Host dispatch before cancellation.
-      await call("test.ping");
-    } else {
-      await Promise.resolve();
-    }
-    controller.abort();
-    assert((await outcome).error?.code === "CANCELLED", "Host API cancellation failed");
-  });
+  if (nativePlugins)
+    await test("SDK Host API cancellation", async () => {
+      const controller = new AbortController();
+      const outcome = call("test.hostCancel", null, { signal: controller.signal });
+      if (new URL(location.href).searchParams.has("hostCancelBarrier")) {
+        // Native delayed-op tests require Host dispatch before cancellation.
+        await call("test.ping");
+      } else {
+        await Promise.resolve();
+      }
+      controller.abort();
+      assert((await outcome).error?.code === "CANCELLED", "Host API cancellation failed");
+    });
   await test("command error is safe", async () => {
     const result = await call("test.fail");
     assert(
@@ -419,7 +431,7 @@ async function run() {
 
   await report(results);
   await sleep(200);
-  location.assign("page2.html");
+  location.assign(nativePlugins ? "page2.html" : "page2.html?nativePlugins=0");
 }
 
 async function report(results) {

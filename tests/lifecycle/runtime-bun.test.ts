@@ -7,94 +7,98 @@ import {
 } from "../../packages/protocol/src/index.ts";
 import { readJsonLines } from "../../packages/runtime-bun/src/index.ts";
 
-test("unexpected handler errors reach stderr with their stack while IPC replies stay sanitized", async () => {
-  const entrypoint = fileURLToPath(new URL("./command-error.fixture.ts", import.meta.url));
-  const child = Bun.spawn([process.execPath, "--no-env-file", entrypoint], {
-    stdin: "pipe",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const timeout = setTimeout(() => child.kill(), 5000);
-  const errors = new Response(child.stderr).text();
-  const output = readJsonLines(child.stdout)[Symbol.asyncIterator]();
-  const next = async () => {
-    const line = await output.next();
-    if (line.done) throw new Error("Unexpected runtime EOF.");
-    return parseProcessFrame(line.value);
-  };
-  const send = (body: Record<string, unknown>) =>
-    child.stdin.write(
-      `${JSON.stringify({ ...body, ipc: PROTOCOL_VERSION, runtime: { id: "diagnostic", generation: "1" } })}\n`,
-    );
-  try {
-    send({
-      kind: "boot",
-      payload: {
-        entrypoint,
-        buildId: "test",
-        backendContext: "backend-test",
-        policy: {
-          version: 1,
-          backend: { permissions: [] },
-          views: [
-            {
-              id: "main",
-              origins: ["https://app.bunaway.local"],
-              commands: ["fail"],
-              events: [],
-              host: { permissions: [] },
-            },
-          ],
+for (const [fixture, command, detail, stackFile] of [
+  ["./command-error.fixture.ts", "fail", "runtime diagnostic sentinel", "command-error.fixture.ts"],
+  ["../fixtures/desktop/host/macos-backend.ts", "test.fail", "private backend detail", "app.ts"],
+] as const)
+  test(`runtime starts without native permissions and sanitizes ${command} errors (${fixture})`, async () => {
+    const entrypoint = fileURLToPath(new URL(fixture, import.meta.url));
+    const child = Bun.spawn([process.execPath, "--no-env-file", entrypoint], {
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const timeout = setTimeout(() => child.kill(), 5000);
+    const errors = new Response(child.stderr).text();
+    const output = readJsonLines(child.stdout)[Symbol.asyncIterator]();
+    const next = async () => {
+      const line = await output.next();
+      if (line.done) throw new Error("Unexpected runtime EOF.");
+      return parseProcessFrame(line.value);
+    };
+    const send = (body: Record<string, unknown>) =>
+      child.stdin.write(
+        `${JSON.stringify({ ...body, ipc: PROTOCOL_VERSION, runtime: { id: "diagnostic", generation: "1" } })}\n`,
+      );
+    try {
+      send({
+        kind: "boot",
+        payload: {
+          entrypoint,
+          buildId: "test",
+          backendContext: "backend-test",
+          policy: {
+            version: 1,
+            backend: { permissions: [] },
+            views: [
+              {
+                id: "main",
+                origins: ["https://app.bunaway.local"],
+                commands: [command],
+                events: [],
+                host: { permissions: [] },
+              },
+            ],
+          },
         },
-      },
-    });
-    expect((await next()).kind).toBe("hello");
-    send({
-      kind: "hello",
-      payload: { kind: "hello", protocol: PROTOCOL_VERSION, features: [], buildId: "host" },
-    });
-    expect((await next()).kind).toBe("ready");
-    send({ kind: "session-open", context: "view-test", viewId: "main" });
-    send({
-      kind: "web",
-      context: "view-test",
-      payload: { kind: "hello", protocol: PROTOCOL_VERSION, features: [], buildId: "ui" },
-    });
-    expect((await next()).kind).toBe("web");
-    send({
-      kind: "web",
-      context: "view-test",
-      payload: {
-        kind: "invoke",
+      });
+      expect((await next()).kind).toBe("hello");
+      send({
+        kind: "hello",
+        payload: { kind: "hello", protocol: PROTOCOL_VERSION, features: [], buildId: "host" },
+      });
+      expect((await next()).kind).toBe("ready");
+      send({ kind: "session-open", context: "view-test", viewId: "main" });
+      send({
+        kind: "web",
+        context: "view-test",
+        payload: { kind: "hello", protocol: PROTOCOL_VERSION, features: [], buildId: "ui" },
+      });
+      expect((await next()).kind).toBe("web");
+      send({
+        kind: "web",
+        context: "view-test",
+        payload: {
+          kind: "invoke",
+          protocol: PROTOCOL_VERSION,
+          id: "fail-1",
+          command,
+          payload: null,
+        },
+      });
+      const reply = await next();
+      expect(reply.kind).toBe("web");
+      if (reply.kind !== "web") throw new Error("Expected web response.");
+      expect(reply.payload).toEqual({
+        kind: "error",
         protocol: PROTOCOL_VERSION,
         id: "fail-1",
-        command: "fail",
-        payload: null,
-      },
-    });
-    const reply = await next();
-    expect(reply.kind).toBe("web");
-    if (reply.kind !== "web") throw new Error("Expected web response.");
-    expect(reply.payload).toEqual({
-      kind: "error",
-      protocol: PROTOCOL_VERSION,
-      id: "fail-1",
-      error: { code: "INTERNAL", message: "Command failed." },
-    });
-    send({ kind: "shutdown" });
-    child.stdin.end();
-    expect((await next()).kind).toBe("stopping");
-    expect(await child.exited).toBe(0);
-    const stderr = await errors;
-    expect(stderr).toContain("Command fail failed:");
-    expect(stderr).toContain("runtime diagnostic sentinel");
-    expect(stderr).toContain("command-error.fixture.ts");
-  } finally {
-    clearTimeout(timeout);
-    child.kill();
-    await child.exited;
-  }
-});
+        error: { code: "INTERNAL", message: "Command failed." },
+      });
+      send({ kind: "shutdown" });
+      child.stdin.end();
+      expect((await next()).kind).toBe("stopping");
+      expect(await child.exited).toBe(0);
+      const stderr = await errors;
+      expect(stderr).toContain(`Command ${command} failed:`);
+      expect(stderr).toContain(detail);
+      expect(stderr).toContain(stackFile);
+    } finally {
+      clearTimeout(timeout);
+      child.kill();
+      await child.exited;
+    }
+  });
 
 for (const phase of ["before boot", "during plugin setup"] as const) {
   test(`Bun runtime shutdown ${phase} releases stdin without waiting for a Host reply`, async () => {

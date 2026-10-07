@@ -8,7 +8,7 @@ import { buildProject, bundleAssets } from "../../packages/cli/src/build.ts";
 import { readProjectMetadata, validateProject } from "../../packages/cli/src/config.ts";
 import { RestartController, shouldRestartHost } from "../../packages/cli/src/dev.ts";
 import { hash, writeJson } from "../../packages/cli/src/files.ts";
-import { createProject } from "./project.ts";
+import { createProject, storageRoundtripUI } from "./project.ts";
 
 let home: string;
 let project: string;
@@ -109,6 +109,9 @@ test("vanilla UI checks command and event contracts without bundling backend imp
   }
   try {
     expect((await typecheck()).code).toBe(0);
+    await Bun.write(path, original + storageRoundtripUI);
+    const nativeUI = await typecheck();
+    expect(nativeUI.code, nativeUI.output).toBe(0);
     const insertion = "  await client.listen(";
     expect(original).toContain(insertion);
     for (const suffix of [

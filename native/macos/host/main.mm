@@ -419,6 +419,11 @@ Json resourceRules(const std::set<std::string>& origins) {
 }
 
 // ---------- policy (identical shape to the Windows host) ----------
+struct HostError : std::runtime_error {
+    std::string code;
+    HostError(std::string c, const char* m) : std::runtime_error(m), code(std::move(c)) {}
+};
+
 struct StorageGrant {
     std::string scope;
     std::vector<std::string> segments;
@@ -524,11 +529,6 @@ std::vector<std::string> splitPath(const std::string& path) {
     }
     return segments;
 }
-
-struct HostError : std::runtime_error {
-    std::string code;
-    HostError(std::string c, const char* m) : std::runtime_error(m), code(std::move(c)) {}
-};
 
 // Opens the target pinned under the scope root. Caller owns the returned fd.
 Fd openScopedFile(const Scopes& scopes, const std::string& scope, const std::vector<std::string>& segments, bool write) {
@@ -981,7 +981,7 @@ public:
         hostPending.erase(it);
         hostLog->event("host-response", { { "requestId", requestId }, { "kind", response["payload"]["kind"].get<std::string>() } });
     }
-    void executeHostOp(const std::string& key, const std::string& context, const std::string& requestId, const std::string& operation, const Json& payload) {
+    void executeHostOp(const std::string& key, const std::string& context, const std::string& requestId, const std::string&, const Json&) {
         if (hostOpDelayMs > 0) std::this_thread::sleep_for(std::chrono::milliseconds(hostOpDelayMs));
         try {
             {
