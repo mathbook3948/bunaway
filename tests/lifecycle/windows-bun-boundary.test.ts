@@ -281,7 +281,7 @@ test.each(["ui", "main-io"] as const)(
   },
 );
 
-test("Windows channel bounds unacknowledged data and reserved control slots", async () => {
+test("Windows channel bounds data, approvals and reserved control slots independently", async () => {
   const { port1, port2 } = new MessageChannel();
   const failures: unknown[] = [];
   const channel = new Channel(
@@ -293,24 +293,47 @@ test("Windows channel bounds unacknowledged data and reserved control slots", as
   );
   const holds = Array.from({ length: API_LIMITS.maxPending }, (_, index) =>
     channel.send({
-      kind: "authorize",
+      kind: "operation",
       context: "backend-test" as Route["context"],
       requestId: `request-${index}`,
       call: { operation: "capabilities.get", payload: null },
+      source: "backend",
     }),
   );
   for (const hold of holds) void hold.catch(() => {});
   await expect(
     channel.send({
-      kind: "authorize",
+      kind: "operation",
       context: "backend-test" as Route["context"],
       requestId: "overflow",
       call: { operation: "capabilities.get", payload: null },
+      source: "backend",
+    }),
+  ).rejects.toThrow("full");
+  const approvals = Array.from({ length: API_LIMITS.maxPending }, (_, index) =>
+    channel.send({
+      kind: "grant",
+      context: "backend-test" as Route["context"],
+      requestId: `request-${index}`,
+      allowed: true,
+    }),
+  );
+  for (const approval of approvals) void approval.catch(() => {});
+  await expect(
+    channel.send({
+      kind: "grant",
+      context: "backend-test" as Route["context"],
+      requestId: "overflow",
+      allowed: true,
     }),
   ).rejects.toThrow("full");
   const controls = Array.from({ length: 16 }, () => channel.send({ kind: "shutdown" }));
   for (const control of controls) void control.catch(() => {});
   await expect(channel.send({ kind: "shutdown" })).rejects.toThrow("full");
+  for (let index = 0; index < holds.length; index++)
+    port2.postMessage({ runtime: { id: "test", generation: "1" }, ack: index + 1 });
+  await Promise.all(holds);
+  expect(channel.canSend()).toBe(false); // Approval slots stay reserved after data is accepted.
   port2.postMessage({
     runtime: { id: "test", generation: "stale" },
     sequence: 1,
@@ -321,7 +344,12 @@ test("Windows channel bounds unacknowledged data and reserved control slots", as
   channel.close();
   port1.close();
   port2.close();
-  await Promise.allSettled([...holds, ...controls]);
+  const results = await Promise.allSettled([...holds, ...approvals, ...controls]);
+  for (const result of results.slice(holds.length))
+    expect(result).toMatchObject({
+      status: "rejected",
+      reason: { message: "Worker channel closed" },
+    });
 });
 
 test("permission and malformed-message errors reach WebView while diagnostics are suppressed", async () => {

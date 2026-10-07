@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import { Channel, type Packet, type UIConfig } from "../../native/windows/bun/channel.ts";
-import { MAX_MESSAGE_BYTES } from "../../packages/protocol/src/index.ts";
+import { API_LIMITS, MAX_MESSAGE_BYTES } from "../../packages/protocol/src/index.ts";
 
 const native = {
   operations: [
@@ -231,6 +231,33 @@ await import(${JSON.stringify(uiWorker)});
     },
   };
 }
+
+test.skipIf(process.platform !== "win32")(
+  "UI worker approves a full concurrent operation burst without consuming data capacity",
+  async () => {
+    const ui = await startWorker(["ui-test:execute"]);
+    const ids = Array.from({ length: API_LIMITS.maxPending }, (_, index) => `burst-${index}`);
+    const submitted = Promise.all(ids.map((id) => ui.sendOperation(id, "ui-test.ok")));
+    void submitted.catch(() => {});
+    try {
+      await waitFor("all burst responses", () => ui.responses.size === ids.length, ui.failed);
+      await submitted;
+      for (const id of ids)
+        expect((await ui.waitForResponse(id)).response).toEqual({ kind: "result", payload: "ok" });
+      expect(Atomics.load(ui.state, 0)).toBe(ids.length);
+      await ui.sendOperation("after-burst", "ui-test.ok");
+      expect((await ui.waitForResponse("after-burst")).response).toEqual({
+        kind: "result",
+        payload: "ok",
+      });
+      await ui.stop();
+    } finally {
+      await ui.close();
+      await submitted.catch(() => {});
+    }
+  },
+  timeoutMs + 5_000,
+);
 
 test.skipIf(process.platform !== "win32")(
   "UI worker drops queued calls on cancellation and does not roll back an operation already started",

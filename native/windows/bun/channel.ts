@@ -102,6 +102,7 @@ const controlKinds = new Set([
   "fatal",
   "ready",
 ]);
+const approvalKinds = new Set(["prepare", "authorize", "authorized", "grant"]);
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("Invalid Worker packet");
@@ -224,7 +225,7 @@ export class Channel {
   private readonly pending = new Map<
     number,
     {
-      lane: "data" | "cancel" | "revoke" | "control" | "diagnostic";
+      lane: "data" | "approval" | "cancel" | "revoke" | "control" | "diagnostic";
       resolve(): void;
       reject(error: Error): void;
     }
@@ -287,9 +288,11 @@ export class Channel {
             ? "cancel"
             : packet.kind === "revoke" || packet.kind === "cancel-context"
               ? "revoke"
-              : controlKinds.has(packet.kind)
-                ? "control"
-                : "data";
+              : approvalKinds.has(packet.kind)
+                ? "approval"
+                : controlKinds.has(packet.kind)
+                  ? "control"
+                  : "data";
       const count = [...this.pending.values()].filter((item) => item.lane === lane).length;
       if (packet.kind === "diagnostic" && count >= 16) {
         // Diagnostics must not consume request/control capacity or turn BUSY into app failure.
@@ -305,11 +308,11 @@ export class Channel {
         this.droppedDiagnostics = 0;
       }
       validatePacket(packet, opposite);
-      // Cancelling all requests or revoking all views leaves lifecycle control slots free.
+      // A full request burst must still leave room for approvals, cancellation and shutdown.
       const limit =
         lane === "revoke"
           ? MAX_WINDOWS
-          : lane === "data" || lane === "cancel"
+          : lane === "data" || lane === "approval" || lane === "cancel"
             ? API_LIMITS.maxPending
             : 16;
       if (count >= limit) throw new Error("Worker channel full");
@@ -334,9 +337,11 @@ export class Channel {
     return (
       [...this.pending.values()].filter((item) => item.lane === "data").length + count <=
         API_LIMITS.maxPending &&
-      // A request keeps its cancellation slot until completion or cancellation ack.
+      // Reserve room until cancellation and approval acknowledgements also arrive.
       pendingRequests +
-        [...this.pending.values()].filter((item) => item.lane === "cancel").length +
+        [...this.pending.values()].filter(
+          (item) => item.lane === "cancel" || item.lane === "approval",
+        ).length +
         count <=
         API_LIMITS.maxPending
     );
