@@ -1,6 +1,7 @@
 // Exercise CLI orchestration with real frontend processes and a small host process.
 // Native WebView behavior is covered separately by the platform integration runners.
 import { expect, mock } from "bun:test";
+import { rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import * as build from "../../packages/cli/src/build.ts";
 import * as launch from "../../packages/cli/src/launch.ts";
@@ -10,6 +11,8 @@ if (!root) throw new Error("Expected a generated project.");
 const marker = resolve(root, ".bunaway/host-starts.txt");
 const close = resolve(root, ".bunaway/close-host.txt");
 const host = resolve(root, ".bunaway/dev-host.ts");
+await rm(marker, { force: true });
+await rm(close, { force: true });
 await Bun.write(
   host,
   `
@@ -50,6 +53,16 @@ const ui = resolve(root, "src/main.ts");
 const backend = resolve(root, "src-bunaway/app.ts");
 const uiText = await Bun.file(ui).text();
 const backendText = await Bun.file(backend).text();
+const shared = resolve(root, "shared/development-value.ts");
+const sharedImport = 'import "../shared/development-value.ts";\n';
+const failureMode = process.argv[3];
+const brokenStart = ["broken-start", "broken-shared", "missing-shared"].includes(failureMode ?? "");
+const originalError = console.error;
+let buildFailed = false;
+console.error = (...args: unknown[]) => {
+  if (String(args[0]).includes("Dev build failed")) buildFailed = true;
+  originalError(...args);
+};
 function settings() {
   const listener = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("") });
   const port = listener.port;
@@ -84,6 +97,11 @@ const second = settings();
 let running: Promise<void> | undefined;
 let finished = false;
 try {
+  await Bun.write(shared, 'console.error("shared dependency");\n');
+  await Bun.write(backend, sharedImport + backendText);
+  if (failureMode === "broken-start") await Bun.write(backend, "export default = ;\n");
+  if (failureMode === "broken-shared") await Bun.write(shared, "export const invalid = ;\n");
+  if (failureMode === "missing-shared") await rm(shared);
   await Bun.write(configPath, JSON.stringify({ ...JSON.parse(configText), dev: first }));
   running = devProject(root);
   void running.then(
@@ -94,15 +112,26 @@ try {
       finished = true;
     },
   );
+  if (brokenStart) {
+    await waitFor(async () => buildFailed);
+    expect(finished).toBe(false);
+    expect(await starts()).toBe(0);
+    await expect(fetch(first.url)).rejects.toThrow();
+    if (failureMode === "broken-start") await Bun.write(backend, sharedImport + backendText);
+    else await Bun.write(shared, 'console.error("repaired shared dependency");\n');
+  }
   await waitFor(async () => (await starts()) === 1);
   await Bun.write(ui, `${uiText}\n// frontend update\n`);
   await Bun.sleep(350);
   expect(await starts()).toBe(1);
-  await Bun.write(backend, `${backendText}\n// backend update\n`);
+  await Bun.write(backend, `${sharedImport}${backendText}\n// backend update\n`);
   await waitFor(async () => (await starts()) === 2);
   expect((await fetch(first.url)).ok).toBe(true);
-  await Bun.write(configPath, JSON.stringify({ ...JSON.parse(configText), dev: second }));
+  await Bun.write(shared, 'console.error("updated shared dependency");\n');
   await waitFor(async () => (await starts()) === 3);
+  expect((await fetch(first.url)).ok).toBe(true);
+  await Bun.write(configPath, JSON.stringify({ ...JSON.parse(configText), dev: second }));
+  await waitFor(async () => (await starts()) === 4);
   await expect(fetch(first.url)).rejects.toThrow();
   expect((await fetch(second.url)).ok).toBe(true);
   await Bun.write(close, "close");
@@ -119,4 +148,6 @@ try {
   await Bun.write(configPath, configText);
   await Bun.write(ui, uiText);
   await Bun.write(backend, backendText);
+  await rm(shared, { force: true });
+  console.error = originalError;
 }

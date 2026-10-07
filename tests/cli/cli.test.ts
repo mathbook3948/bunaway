@@ -215,6 +215,40 @@ test("external development delegates frontend compilation and missing build outp
   }
 });
 
+test("backend imports outside the app directory are watched and refreshed after validation", async () => {
+  const entry = resolve(project, "src-bunaway/app.ts");
+  const configPath = resolve(project, "src-bunaway/bunaway.json");
+  const config = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
+  const shared = resolve(project, "shared/watch-value.ts");
+  const service = resolve(project, "services/watch-value.ts");
+  try {
+    await writeJson(configPath, {
+      ...config,
+      dev: { command: ["bun", "run", "dev"], url: "http://127.0.0.1:5173/" },
+    });
+    await Bun.write(shared, 'import "../services/watch-value.ts"; console.error("shared");');
+    await Bun.write(service, 'console.error("service");');
+    await Bun.write(
+      entry,
+      `import "../shared/watch-value.ts";\n${originals["src-bunaway/app.ts"]}`,
+    );
+    const first = await validateProject(project, { development: true });
+    expect(shouldRestartHost(first, "shared/watch-value.ts")).toBe(true);
+    expect(shouldRestartHost(first, "services/watch-value.ts")).toBe(true);
+    expect(shouldRestartHost(first, "services")).toBe(true);
+    expect(shouldRestartHost(first, "shared/unrelated.ts")).toBe(false);
+    expect(shouldRestartHost(first, "src/main.ts")).toBe(false);
+    await Bun.write(entry, originals["src-bunaway/app.ts"] ?? "");
+    const next = await validateProject(project, { development: true });
+    expect(shouldRestartHost(next, "shared/watch-value.ts")).toBe(false);
+  } finally {
+    await Bun.write(entry, originals["src-bunaway/app.ts"] ?? "");
+    await Bun.write(configPath, originals["src-bunaway/bunaway.json"] ?? "");
+    await rm(shared, { force: true });
+    await rm(service, { force: true });
+  }
+});
+
 test("policy rejects duplicate views, unsafe scope prefixes, unknown permissions and HTTP origins", async () => {
   const policy = JSON.parse(originals["src-bunaway/policy.json"] ?? "");
   for (const invalid of [
@@ -387,6 +421,31 @@ test("external development orchestrates UI updates, backend restarts and server 
     await child.exited;
   }
 }, 30000);
+
+for (const failureMode of ["broken-start", "broken-shared", "missing-shared"])
+  test(`dev recovers from initial source failure: ${failureMode}`, async () => {
+    const child = Bun.spawn(
+      [process.execPath, resolve(import.meta.dir, "dev.fixture.ts"), project, failureMode],
+      {
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const output = new Response(child.stdout).text();
+    const errors = new Response(child.stderr).text();
+    const timer = setTimeout(() => child.kill(), 25000);
+    try {
+      const code = await child.exited;
+      const stderr = await errors;
+      expect(code, stderr).toBe(0);
+      expect(stderr).toContain("Dev build failed; fix sources and save to retry");
+      expect(await output).toContain("PASS frontend HMR ownership");
+    } finally {
+      clearTimeout(timer);
+      if (child.exitCode === null) child.kill();
+      await child.exited;
+    }
+  }, 30000);
 
 function gate() {
   let release: (() => void) | undefined;

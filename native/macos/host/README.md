@@ -103,7 +103,8 @@ and ad-hoc signs it. Inside a bundle the binary self-locates the package via
 `NSBundle.mainBundle.resourcePath` (`--package` stays explicit for tests).
 Release packaging needs Developer ID signing, notarization
 (`xcrun notarytool submit`), and a per-channel decision on App Sandbox
-entitlements — all deferred to the release milestone.
+entitlements: all deferred to the release milestone.
 
 Ad-hoc signing is not Developer ID signing, notarization, Gatekeeper or
-installation verification. The native CI does not build/test `.app` bundles.
+installation verification. The native CI runs `run.sh --app` to build and test the
+ad-hoc signed bundle in place, then runs the distribution-script regression checks.

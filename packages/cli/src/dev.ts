@@ -1,7 +1,7 @@
 import { watch } from "node:fs";
 import { dirname, relative } from "node:path";
 import { type BuiltPackage, buildProject, type NativeInputs, prepareNative } from "./build.ts";
-import { type Project, validateProject } from "./config.ts";
+import { type Project, readProjectConfiguration, validateProject } from "./config.ts";
 import { type DevServer, startDevServer } from "./dev-server.ts";
 import { closeWindowsApp, verifyWindowsLaunch, windowsLaunchEnvironment } from "./launch.ts";
 
@@ -51,15 +51,18 @@ export class RestartController<T> {
   }
 }
 
-export function shouldRestartHost(project: Project, name: string): boolean {
+export function shouldRestartHost(project: Project, name: string, recovering = false): boolean {
   const path = name.replaceAll("\\", "/");
   if (/^(node_modules|vendor|dist|\.bunaway|\.git|\.next|\.turbo)(\/|$)/.test(path)) return false;
-  if (!project.dev) return true;
+  if (!project.dev || recovering) return true;
   // Frontend files and dev-server outputs belong to that server's watcher.
   const backendDirectories = [project.appEntry].map((entry) =>
     relative(project.root, dirname(entry)).replaceAll("\\", "/"),
   );
   return (
+    project.backendDependencies?.some(
+      (dependency) => dependency === path || dependency.startsWith(`${path}/`),
+    ) ||
     ["package.json", "bun.lock", "tsconfig.json"].includes(path) ||
     path.startsWith("src-bunaway/") ||
     backendDirectories.some((directory) =>
@@ -69,7 +72,8 @@ export function shouldRestartHost(project: Project, name: string): boolean {
 }
 
 export async function devProject(directory: string): Promise<void> {
-  let project = await validateProject(directory, { development: true });
+  let project = await readProjectConfiguration(directory);
+  let recovering = true;
   const abort = new AbortController();
   let native: NativeInputs;
   let server: DevServer | undefined;
@@ -150,7 +154,9 @@ export async function devProject(directory: string): Promise<void> {
       }
       project = next;
       abort.signal.throwIfAborted();
-      return buildProject(project.root, { development: true, native });
+      const built = await buildProject(project.root, { development: true, native });
+      recovering = false;
+      return built;
     },
     async start(built) {
       if (abort.signal.aborted) return;
@@ -179,6 +185,7 @@ export async function devProject(directory: string): Promise<void> {
       });
     },
     error(error) {
+      recovering = true;
       if (!abort.signal.aborted)
         console.error(`Dev build failed; fix sources and save to retry: ${String(error)}`);
     },
@@ -189,7 +196,8 @@ export async function devProject(directory: string): Promise<void> {
     native = await prepareNative(undefined, project.frameworkRoot);
     abort.signal.throwIfAborted();
     sourceWatcher = watch(project.root, { recursive: true }, (_event, name) => {
-      if (!name || !shouldRestartHost(project, String(name)) || abort.signal.aborted) return;
+      if (!name || !shouldRestartHost(project, String(name), recovering) || abort.signal.aborted)
+        return;
       clearTimeout(debounce);
       debounce = setTimeout(() => {
         void controller.change();
