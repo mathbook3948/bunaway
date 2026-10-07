@@ -78,3 +78,10 @@ Linux에서 계약, 권한 분리, 중복 생성, 닫기 거절, 취소, 종료�
 대화상자 거절과 승인, 보조 창 반복 생성과 자기 창 재생성 회귀를
 `tests/lifecycle/windows-bun-window-api.ts`에 추가하고 네이티브 실행기에 연결했다.
 새 Windows 시나리오는 이 Linux 작업 환경에서 실행하지 않았으며 기존 GUI 검증 기록과 구분한다.
+
+2026-10-07 PR #40 CI 실행 [37574470840](https://github.com/mathbook3948/bunaway/actions/runs/37574470840)에서
+공개 창 API의 크기와 위치, 전체화면 복원, 닫기 확인 거절과 승인, 반복 생성과 자기 창 재생성은 통과했다.
+독립 CLI의 설치, launcher와 loopback 개발 서버 검사도 통과했다. 전체 Windows 네이티브 작업은
+공용 웹 fixture가 기능 목록을 기존 4개로 고정해 검사한 탓에 실패했다. macOS도 같은 검사에서 실패했다.
+fixture는 프로토콜의 전체 operation 이름과 중복 여부, 플랫폼별 지원 상태를 검사하도록 갱신했다.
+Windows 창 API는 `experimental`, macOS 창 API는 `unsupported`를 요구하며 기존 4개 API는 `supported`여야 한다.

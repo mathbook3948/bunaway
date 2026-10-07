@@ -72,6 +72,7 @@ Windows 배포 근거와 한계:
 
 Windows CLI는 `app.windows` 설정과 백엔드 `windows` API를 제공한다. 생성과 재생성,
 show/hide/focus, 크기와 위치, 전체화면, 닫기 확인을 구현했다. 새 API는
-`experimental`로 보고하며 실제 Windows GUI 회귀 검증은 남아 있다.
+`experimental`로 보고한다. CI 실행 [37574470840](https://github.com/mathbook3948/bunaway/actions/runs/37574470840)에서
+새 창 API의 실제 GUI 회귀는 통과했다. 같은 실행의 전체 네이티브 작업은 공용 기능 목록 테스트에서 실패했다.
 Linux에서는 계약, 정책, 재생성 수명 조정과 CLI 번들을 검증한다.
 macOS의 창 API는 `UNSUPPORTED`이며 기존 단일 창 설정만 빌드할 수 있다.

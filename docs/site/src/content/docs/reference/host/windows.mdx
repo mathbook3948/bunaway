@@ -7,7 +7,7 @@ description: 창 생성과 재생성, 표시, 크기와 위치, 전체화면, �
 화면에서는 앱 명령을 호출합니다. `context.host.call("windows.show", { view: "editor" })` 같은
 명시적 Host API 호출도 지원합니다. 실행 범위는 [백엔드 Host API](/reference/backend/host-api/)와 같습니다.
 
-현재 Windows x64에 구현했으며 새 API의 실제 GUI 회귀 검증은 남아 있습니다.
+Windows x64에서 창 제어, 닫기 확인과 반복 재생성을 실제 GUI 회귀로 확인했습니다.
 Windows의 기능 조회 결과는 `experimental`입니다. macOS에서는 `UNSUPPORTED`를 반환합니다.
 Linux와 모바일은 네이티브 호스트를 지원하지 않습니다.
 
