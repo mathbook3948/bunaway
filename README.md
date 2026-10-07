@@ -15,6 +15,21 @@ Windows 앱 실행에는 WebView2 런타임이 필요하다.
 프레임워크 라이선스는 아직 결정되지 않았다.
 플랫폼별 지원 상태와 배포 검증 범위는 [플랫폼 지원 범위](./docs/platform-support/README.md)에서 확인한다.
 
+앱 백엔드의 명령과 서비스에서는 `@bunaway/backend`의 `storage`, `log`, `capabilities`를
+import해 직접 호출할 수 있다. 호출한 명령의 권한과 취소 신호는 자동으로 연결한다.
+예를 들어 명령이 호출한 서비스 함수에서 다음처럼 파일을 저장한다.
+
+```ts
+import { storage } from "@bunaway/backend";
+
+export async function save(text: string) {
+  return storage.writeText({ scope: "appData", path: "notes/memo.txt", text });
+}
+```
+
+뷰의 정책에 `appData/notes` 쓰기 권한이 필요하다. 명령 밖이나 완료한 명령의 작업에서는 호출을 거부한다.
+실행 범위와 로그, 기능 조회 사용법은 [백엔드 Host API](./docs/site/src/content/docs/reference/backend/host-api.mdx)를 따른다.
+
 ## 프레임워크 개발 환경
 
 자기 앱을 만드는 개발자는 [로컬 tarball 설치 안내](./docs/framework-distribution.md)를

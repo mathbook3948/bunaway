@@ -17,6 +17,13 @@ Edit `src/` for the UI and `src-bunaway/` for the backend.
 `src-bunaway/message/module.ts` registers commands and events with `defineModule`.
 The framework boots the app from `build.app` in `src-bunaway/bunaway.json`.
 
+Backend commands and their services can import `storage`, `log`, and `capabilities`
+from `@bunaway/backend` directly. The SDK uses the current command's Host permissions
+and cancellation signal, without passing `context.host` through service arguments.
+Await Host operations before the command returns. Calls outside an execution context
+or after command completion are rejected. The starter allows storage under `appData/messages`;
+logging requires enabling `host.log` for the calling view in `policy.json`.
+
 ## Build
 
 ```sh
