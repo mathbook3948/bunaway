@@ -1,0 +1,99 @@
+---
+title: 배포 채널
+description: 배포 채널별 지원 상태와 설치 옵션.
+sidebar: { order: 2 }
+---
+
+## 구현 상태
+
+| 채널 | 상태 | 서명 요구 |
+| --- | --- | --- |
+| `win-direct` | Inno Setup 설치 파일 생성 구현 | 선택적. 미서명은 경고 포함 |
+| `win-store-unpackaged` | Store EXE/MSI용 설치 파일, 제출 자료 생성 구현 | 제출하려면 Trusted Root 체인 서명 필요 |
+| `win-store-msix` | 패키징 미지원 | MSIX 실행에는 서명 필요 |
+| `mac-direct` | 설정만 허용, 패키징 미지원 | 패키징 실행 미지원 |
+| `mac-store` | 설정만 허용, 패키징 미지원 | 패키징 실행 미지원 |
+
+macOS에서는 네이티브 `.app`을 빌드할 수 있습니다. macOS 배포 채널과 MSIX 패키징은 아직 지원하지 않습니다.
+
+## Windows 직접 배포와 Store unpackaged
+
+두 채널 모두 Inno Setup 6.3 이상과 Windows x64 산출물을 사용합니다.
+
+| 옵션 | 기본값 | 동작 |
+| --- | --- | --- |
+| `scope` | `perUser` | `perUser` 또는 `perMachine`. 후자는 관리자 설치 |
+| `webView2` | direct: `bootstrap`, Store: `check` | 런타임 준비 방법 |
+| `desktopShortcut` | `false` | 바탕화면 바로가기 생성 |
+| `startMenuShortcut` | `true` | 시작 메뉴 바로가기 생성 |
+| `uninstall.preserveUserData` | `true` | 제거 시 사용자 데이터 보존 |
+| `signing` | 최상위 설정 | [서명 객체](/reference/packaging/signing/) 전체 대체 |
+
+`scope: "perMachine"`과 `preserveUserData: false`는 함께 사용할 수 없습니다.
+설치한 사용자와 데이터 소유자가 다를 수 있기 때문입니다.
+
+`bootstrap`은 WebView2 bootstrapper를 준비하고 검증한 뒤 앱 설치 중 런타임을 설치합니다.
+설치 때 네트워크가 필요할 수 있습니다.
+`check`는 이미 설치된 WebView2를 검사하며 없는 런타임을 다운로드하지 않습니다.
+Store unpackaged는 설치 중 다운로드를 허용하지 않으므로 `bootstrap` 설정을 거부합니다.
+
+### win-direct
+
+```json
+{
+  "bundle": {
+    "channels": {
+      "win-direct": {
+        "scope": "perUser",
+        "webView2": "bootstrap",
+        "desktopShortcut": false,
+        "startMenuShortcut": true,
+        "uninstall": { "preserveUserData": true }
+      }
+    }
+  }
+}
+```
+
+서명 없이도 로컬 실행용 설치 파일을 만들 수 있으며 서명 여부는 보고서에 기록됩니다.
+배포 전에는 실제 설치 동작과 SmartScreen 표시를 확인하세요.
+
+### win-store-unpackaged
+
+PE와 설치 파일이 제출용 서명 조건 및 오프라인 설치 조건을 충족하는지 검사합니다.
+생성된 제출 자료와 체크리스트를 확인한 뒤 배포자가 Store에 업로드합니다.
+`submission.json`의 다운로드 URL은 생성 시 비어 있을 수 있으므로,
+배포자가 버전별로 고정된 HTTPS 다운로드 주소를 준비하고 제출 정보를 채워야 합니다.
+현재 설정에 임의의 `downloadUrl` 필드를 추가할 수는 없습니다.
+
+## win-store-msix 예약 옵션
+
+| 옵션 | 형식 |
+| --- | --- |
+| `packageName` | 3–50자. 영숫자로 시작, 나머지 영숫자, `. _ -` |
+| `unvirtualizedData` | boolean |
+| `minVersion` | 비어 있지 않은 문자열, 최대 64자 |
+| `maxVersionTested` | 비어 있지 않은 문자열, 최대 64자 |
+| `capabilities` | 비어 있지 않은 문자열의 배열 |
+| `signing` | 서명 객체 |
+
+현재는 이 필드의 형식만 검증하며 MSIX 생성에는 사용하지 않습니다.
+
+## macOS 예약 옵션
+
+| 옵션 | mac-direct | mac-store | 형식 |
+| --- | --- | --- | --- |
+| `format` | 예 | 아니요 | 비어 있지 않은 문자열, 최대 64자 |
+| `bundleId` | 예 | 예 | 비어 있지 않은 문자열, 최대 64자 |
+| `minVersion` | 예 | 예 | 비어 있지 않은 문자열, 최대 64자 |
+| `entitlements` | 예 | 예 | 비어 있지 않은 문자열의 배열 |
+| `signing` | 예 | 예 | 서명 객체 |
+
+설정 파일에서는 위 필드를 허용합니다. `format`의 설치 형식은 아직 구현되지 않았습니다.
+두 채널의 패키징을 실행하면 `PKG_ADAPTER_MISSING`으로 실패합니다.
+
+## OS 최소 버전
+
+Windows 설치 경로는 Windows 10 build 17763 이상을 기준으로 합니다.
+설치할 최소 OS 버전은 `targets[].minVersion`에 지정합니다.
+지원 기준보다 낮거나 형식이 잘못된 버전 문자열은 거부합니다.

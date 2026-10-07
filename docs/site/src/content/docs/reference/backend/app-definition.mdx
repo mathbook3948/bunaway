@@ -1,0 +1,67 @@
+---
+title: defineApp과 AppDefinition
+description: 앱 정의에 명령과 이벤트를 등록하고 초기 상태와 플러그인을 추가합니다.
+sidebar: { order: 1 }
+---
+
+앱 진입점은 AppDefinition을 default export합니다. CLI의 `build.app`이 이 파일을 선택합니다.
+생성 템플릿은 `@bunaway/backend`의 `defineApp()`으로 기능 모듈을 조립합니다.
+
+```ts
+import { defineApp } from "@bunaway/backend";
+import { message } from "./message/module.ts";
+
+export const app = defineApp({ modules: [message] });
+export default app;
+```
+
+`modules`는 필수 배열이며 `[]`도 허용합니다. 각 모듈은 `name`, `commands`, `events`를 가집니다.
+선택적으로 `commands`, `events`, `state`, `plugins`를 함께 전달할 수 있습니다.
+모듈 작성법은 [defineModule](/reference/backend/module/)에서 설명합니다.
+
+`defineApp()`은 모듈과 직접 등록한 명령, 이벤트를 합친 AppDefinition을 즉시 반환합니다.
+명령과 이벤트는 각각 최종 이름의 중복을 검사하며 플러그인의 등록 이름도 함께 검사합니다.
+중복 이름, 잘못된 이름, 예약 명령은 `INVALID_ARGUMENT`로 실패합니다.
+앱 객체와 조립한 명령, 이벤트 목록 및 플러그인 배열은 동결합니다. 플러그인 setup은 앱 실행 시 처리합니다.
+
+기존 객체형 앱 정의도 지원합니다.
+
+```ts
+import type { AppDefinition } from "@bunaway/backend";
+export default {
+  commands: {},
+  events: {},
+  state: { count: 0 },
+  plugins: [],
+} satisfies AppDefinition;
+```
+
+## 필드
+
+| 필드 | 필수 | 의미 |
+| --- | --- | --- |
+| `commands` | 예 | 이름 → `CommandDefinition` 레지스트리 |
+| `events` | 예 | 이름 → payload `Schema` 레지스트리 |
+| `state` | 아니요 | 초기 JSON 메모리 상태. 생략 시 빈 상태 |
+| `plugins` | 아니요 | 플러그인 정의 배열. 생략 시 없음 |
+
+명령 이름과 이벤트 이름은 각각 앱과 모든 플러그인에서 공유합니다.
+동일 이름을 덮어쓰거나 중복 등록할 수 없습니다.
+명령, 이벤트 이름은 1–128자의 영숫자, `_ . : -`입니다.
+`bunaway.capabilities`는 예약 명령이므로 앱이나 플러그인이 구현할 수 없습니다.
+
+## 정책과 실행
+
+등록한 명령과 이벤트를 뷰에서 사용하려면 그 뷰의 `commands`와 `events`에도 이름을 추가합니다.
+모든 플러그인의 setup이 끝나면 앱이 명령을 처리할 준비가 됩니다.
+이름이 중복되거나 예약 이름을 사용하면 시작에 실패합니다. 플러그인의 의존성이나 플랫폼, 필요한 권한이 맞지 않아도 실패합니다.
+
+CLI는 작성한 설정과 정책을 검사합니다. 호출할 명령의 권한은 개발자가 정책에 적습니다.
+앱 시작은 프레임워크가 처리하므로 앱 정의를 default export하면 됩니다.
+
+## 타입
+
+`CommandsOf<typeof app>`는 앱에 직접 선언한 명령과 정적으로 나열한 기능 모듈의 input/output을,
+`EventsOf<typeof app>`는 해당 이벤트의 payload를 추론합니다.
+플러그인까지 합친 전체 목록의 자동 타입 생성은 현재 제공하지 않습니다.
+[타입과 스키마](/guides/types-and-validation/)에서 클라이언트 연결 예시를 확인하세요.

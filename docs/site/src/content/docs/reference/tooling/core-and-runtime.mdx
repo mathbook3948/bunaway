@@ -1,0 +1,88 @@
+---
+title: Core와 Bun 런타임
+description: 호스트 어댑터용 createCore, 세션, RuntimeServices와 Bun 프로세스 연결.
+sidebar: { order: 1 }
+---
+
+호스트나 런타임 어댑터를 작성할 때 사용하는 공개 API입니다.
+앱 정의 작성법은 [AppDefinition](/reference/backend/app-definition/)에서 설명합니다.
+
+## createCore
+
+```ts
+import { createCore } from "@bunaway/core";
+const core = await createCore(app, services);
+const session = core.openSession(hostContext, "main");
+await session.receive(clientMessage);
+await session.close();
+await core.stop();
+```
+
+`createCore(app: AppDefinition, services: CoreServices): Promise<Core>`입니다.
+`@bunaway/backend`도 같은 createCore를 재수출합니다.
+이름의 유효성과 중복 여부, 예약 명령, 플러그인 의존성 및 권한을 검사합니다. setup이 끝나면 Core를 반환합니다.
+초기화 실패 시 이미 등록한 정리 훅을 역순 실행합니다.
+
+## CoreServices
+
+| 필드 | 책임 |
+| --- | --- |
+| `policy` | 검증한 Policy |
+| `hello` | 백엔드 협상 메시지 |
+| `platform` | 현재 플랫폼 |
+| `backendContext` | 호스트가 발급한 백엔드 컨텍스트 |
+| `runtime` | 시간, 스케줄, 취소를 제공하는 RuntimeServices |
+| `send(context, message)` | 서버 메시지를 해당 전송에 FIFO로 보내기 |
+| `callHost(context, call, signal)` | 원래 컨텍스트를 보존해 HostResponse 반환 |
+
+HostContext는 호스트가 발급한 값을 사용합니다. 앱의 입력 문자열을 캐스팅한 값은 유효한 컨텍스트로 인정되지 않습니다.
+send가 복구할 수 없는 오류로 실패하면 어댑터에서 전송과 세션을 닫아야 합니다.
+
+## RuntimeServices
+
+| 메서드 | 반환, 계약 |
+| --- | --- |
+| `createCancellation()` | `CancellationController` (`signal`, `abort()`) |
+| `now()` | UTC epoch 밀리초 |
+| `schedule(callback, delayMs)` | 타이머 해제 함수 `Dispose` |
+
+wire deadline은 UTC이고 실제 타이머는 어댑터의 단조 시간 기준으로 예약합니다.
+CancellationSignal은 `aborted`, `addEventListener("abort", listener)`, `removeEventListener` 구조로,
+DOM 전역 없이도 사용할 수 있는 AbortSignal의 부분 계약입니다.
+
+## 세션과 종료
+
+`core.openSession(context, viewId)`는 호스트가 검증하고 선택한 뷰의 CoreSession을 만듭니다.
+요청 ID와 구독, 협상 상태는 세션마다 따로 관리합니다. 앱 state와 등록된 명령은 모든 세션이 공유합니다.
+
+`session.receive(message): Promise<void>`는 메시지를 받아 처리 경로로 전달할 때까지 기다립니다.
+명령 핸들러는 그 이후에도 실행될 수 있으며 최종 결과는 services.send로 전달됩니다.
+`session.close(error?: WireError)`는 요청, 구독, 컨텍스트를 정리합니다.
+`core.stop()`은 세션과 플러그인 훅을 정리하며 코어 종료 예산은 2초입니다.
+취소되거나 종료된 컨텍스트에서는 핸들러가 뒤늦게 완료되더라도 Host 호출과 이벤트 발행이 거부됩니다.
+
+## runBunApp
+
+`@bunaway/runtime-bun`의 `runBunApp(app: AppDefinition): Promise<void>`는
+stdin/stdout으로 프로세스 IPC를 연결하고 부팅부터 세션과 Host 응답 처리, 종료까지 관리합니다.
+CLI의 macOS 생성 bootstrap이 사용하는 어댑터입니다.
+Windows FFI 부팅과 동일한 AppDefinition을 사용합니다.
+
+stdout은 프로토콜 전용이므로 프로세스 진단은 다른 스트림에 출력해야 합니다.
+boot의 정책, backendContext, 프레임 runtime generation, 방향을 검사합니다.
+준비 이전 플러그인 setup의 Host 응답도 처리하며 예상하지 않은 EOF는 연결 실패입니다.
+
+## bindHostAPI
+
+`bindHostAPI(context, signal, callHost): HostAPI`는 고정된 컨텍스트, 취소 신호를 Host 호출에 연결합니다.
+callHost는 `(context, HostCall, CancellationSignal) => Promise<HostResponse>`입니다.
+입력을 검증하고 호출 전후에 취소 여부를 확인합니다. abort가 발생하면 진행 중인 호출과 취소 중 먼저 완료된 결과를 사용합니다.
+Host 오류는 그대로 전달하고 잘못된 출력이나 일반 실패는 INTERNAL로 변환합니다.
+파일 접근과 권한은 이 함수 이후에도 호스트에서 검사합니다.
+
+## readJsonLines
+
+`readJsonLines(chunks: AsyncIterable<Uint8Array>): AsyncGenerator<string>`는 UTF-8 NDJSON reader입니다.
+바이트 조각 사이에서 끊긴 문자, 여러 줄을 처리하고 각 줄을 문자열로 yield합니다.
+잘못된 UTF-8, 빈 줄, 1 MiB 초과 프레임, 마지막 줄이 미완성인 EOF를 거부합니다.
+줄의 JSON/프레임 검증은 별도로 parseProcessFrame에 맡깁니다.

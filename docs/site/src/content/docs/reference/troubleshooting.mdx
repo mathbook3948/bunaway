@@ -1,0 +1,67 @@
+---
+title: 문제 해결
+description: 연결, 정책, 저장, 개발 서버 오류가 생겼을 때 먼저 확인할 위치.
+---
+
+## 어디서 실패했는지 먼저 확인하세요
+
+| 증상 | 확인할 곳 |
+| --- | --- |
+| CLI 설정 검증 실패 | `bunaway.json`의 지원 필드, 소스 경로, 정책 스키마 |
+| 개발 도구 준비 실패 | `doctor` 출력, OS/CPU, Bun 버전 |
+| UI 연결 실패 | 네이티브 앱 안에서 실행했는지, 브리지, client.ready |
+| 명령 호출 거부 | 앱에 등록된 이름, 뷰의 `commands` |
+| 이벤트가 오지 않음 | 앱의 이벤트 선언, 뷰의 `events`, 활성 구독 |
+| 파일 접근 거부 | 요청 뷰의 `host.storage`, scope, path, access |
+
+## PERMISSION_DENIED
+
+명령 이름이 뷰의 `commands`에 없으면 핸들러를 실행하기 전에 거부됩니다.
+명령이 허용돼도 `storage.writeText`에 필요한 쓰기 범위가 없으면 파일을 저장할 수 없습니다.
+`commands`와 `host.storage`를 모두 확인하세요.
+
+이벤트 구독도 해당 뷰의 `events`에 이름이 있어야 합니다.
+origin은 실제 문서 출처와 정확히 일치해야 합니다. 정책에는 와일드카드 대신 허용할 origin을 각각 적습니다.
+
+## INVALID_ARGUMENT 또는 Unknown command
+
+`app.ts.commands`에 등록한 이름과 UI의 `invoke()` 이름이 같은지 확인하세요.
+입력 데이터도 `command.input`의 스키마와 일치해야 합니다.
+입력이 없는 명령이라도 템플릿의 `{ const: null }`에는 `null`을 전달합니다.
+
+## 첫 실행에 message.read가 실패함
+
+아직 저장 파일이 없을 수 있습니다. 메시지를 저장하고 다시 실행해 확인하세요.
+반복된다면 읽기 권한과 실제 저장 경로가 일치하는지 확인합니다.
+템플릿은 파일 없음과 다른 읽기 실패를 UI에서 함께 알리므로 오류 내용을 확인해야 합니다.
+
+## The vanilla MVP requires one configured policy view
+
+현재 CLI는 정책에 정확히 하나의 뷰를 요구하고 그 ID가 `app.view`와 같아야 합니다.
+Windows 런타임은 여러 창을 처리하지만 현재 CLI 설정은 단일 창만 지원합니다.
+`bunaway.json`에는 `windows` 배열을 넣을 수 없습니다.
+
+## Vite 페이지는 열리는데 네이티브 호출이 안 됨
+
+일반 브라우저에는 `window.chrome.webview` 브리지가 없습니다.
+Vite 템플릿에서 `bun run dev`만 실행하면 웹 서버만 뜹니다.
+`bun run bunaway dev`로 네이티브 창과 서버를 함께 실행하세요.
+기본 Vite 화면에는 SDK 호출이 없습니다. [명령과 이벤트](/guides/commands-and-events/)의 예제를 참고해 클라이언트와 호출 UI를 직접 연결합니다.
+
+CLI가 개발 서버를 실행하므로 포트 5173에 별도 서버가 실행 중이면 먼저 종료하세요.
+개발 서버는 지정 URL에서 준비 확인 요청에 응답해야 합니다. 개발 서버 origin은 CLI가 개발 산출물의 정책에 적용합니다.
+
+## Vite에서 validate가 frontend 경로 오류로 실패함
+
+프로덕션 검증은 `build.frontend`의 웹 자산을 확인합니다.
+`bun run build`로 `web-dist/`를 만든 뒤 `bun run bunaway validate`를 실행하세요.
+`doctor`와 개발 실행은 외부 서버 모드에서 아직 없는 출력 디렉터리를 허용합니다.
+
+## TIMEOUT, CANCELLED, 연결 종료
+
+클라이언트는 실패한 요청을 자동으로 재시도하지 않습니다. 파일 저장 작업이라면 다시 읽어 실제 저장 여부를 확인한 뒤 재시도 여부를 정하세요.
+백엔드가 다시 시작되면 기존 클라이언트와 구독, 진행 중인 요청이 종료됩니다.
+새 연결에서는 새 클라이언트로 구독하고 읽기 명령으로 상태를 복원합니다.
+
+문제가 남으면 플랫폼, Bun 버전, 실행한 명령, 오류 코드와 메시지를 함께 기록하세요.
+호스트 실행 기록과 자세한 계약은 [프레임워크 기여 자료](/reference/design/)에 모아 두었습니다.

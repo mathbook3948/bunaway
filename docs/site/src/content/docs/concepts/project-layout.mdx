@@ -1,0 +1,83 @@
+---
+title: 프로젝트 파일
+description: 앱의 폴더 구조와 app.ts, bunaway.json, policy.json의 역할을 설명합니다.
+---
+
+## 생성 앱의 파일 구조
+
+```text
+my-app/
+├─ package.json             개발 명령과 CLI, SDK 의존성
+├─ bun.lock                 설치 버전 고정
+├─ tsconfig.json            앱 TypeScript 설정
+├─ src/                     웹 UI
+│  ├─ index.html
+│  ├─ main.ts
+│  └─ style.css
+└─ src-bunaway/
+   ├─ app.ts                기능 모듈을 조립한 공통 앱 정의
+   ├─ message/module.ts     메시지 명령과 이벤트
+   ├─ bunaway.json           빌드, 앱, 배포 설정
+   └─ policy.json            뷰, 백엔드 접근 정책
+```
+
+위 구조는 `vanilla` 템플릿입니다. `vite` 템플릿은 `index.html`이 프로젝트 루트에 있고,
+`vite.config.ts`와 `public/` 정적 자산이 추가됩니다. 기본 화면은 Vite의 로고와 카운터이며
+SDK 호출은 직접 연결합니다. 웹 프로덕션 빌드 출력은 `web-dist/`입니다.
+
+## app.ts에 기능 작성하기
+
+`message/module.ts`에서 `defineModule()`로 명령과 이벤트를 등록하고,
+`app.ts`에서 `defineApp({ modules: [message] })`로 조립한 앱 객체를 default export합니다.
+초기 상태와 플러그인도 `defineApp()`에 추가합니다. 기존 객체형 앱 정의도 사용할 수 있습니다.
+기본 템플릿은 `message.read`, `message.save`, `message.saved`를 제공합니다.
+
+프런트엔드는 SDK에 명령 이름과 JSON 데이터를 넘겨 백엔드를 호출합니다.
+[명령과 이벤트](/guides/commands-and-events/)에서 실제 코드를 읽어보세요.
+
+## bunaway.json에 빌드와 창 설정하기
+
+```json
+{
+  "version": 1,
+  "build": { "app": "src-bunaway/app.ts", "frontend": "src" },
+  "app": {
+    "appId": "app.example",
+    "title": "My app",
+    "view": "main",
+    "home": "https://app.bunaway.local/index.html",
+    "window": { "width": 800, "height": 600 }
+  }
+}
+```
+
+`build.app`은 앱 정의를, `build.frontend`는 UI 자산 디렉터리를 가리킵니다.
+**파일 경로는 프로젝트 루트 기준**으로 적습니다. 예를 들어 앱 정의 경로는 `src-bunaway/app.ts`입니다.
+
+`app.view: "main"`은 아래 정책에서 `id: "main"`인 뷰를 선택합니다.
+`home`은 창에서 처음 열 페이지입니다. `https://app.bunaway.local`은 앱에 포함된 로컬 자산을 가리킵니다.
+
+`bundle`에 설치 파일과 배포 채널을 설정합니다. UI 개발 서버를 연결할 때는 `dev`를 추가합니다.
+[설정 레퍼런스](/reference/configuration/)에서 전체 필드를 확인하세요.
+
+## policy.json에 접근 권한 정하기
+
+`views`에는 뷰별 접근 정책을, `backend`에는 백엔드 자체 작업의 Host API 권한을 선언합니다.
+기본 템플릿에서는 `main` 뷰만 메시지를 읽고 쓸 수 있습니다.
+
+정책은 `app.ts`에 등록한 명령 중 각 뷰가 호출할 명령을 정합니다.
+창 설정에서 사용할 뷰 ID를 선택하고 정책에서 그 뷰의 권한을 적습니다.
+
+[창과 뷰의 정책](/concepts/views-and-policy/)에서 각 필드와 실제 검사를 이어서 읽어보세요.
+
+## 개발 중 생기는 디렉터리
+
+| 디렉터리 | 내용 |
+| --- | --- |
+| `node_modules/` | 설치된 CLI, SDK와 의존성 |
+| `.bunaway/` | 개발 실행용 앱 산출물 |
+| `dist/` | 네이티브 빌드, 패키징 산출물 |
+| `web-dist/` | Vite 템플릿의 웹 프로덕션 빌드 |
+
+앱 실행에 포함할 Bun은 프레임워크가 준비합니다.
+CLI가 플랫폼별 시작 코드와 필요한 프레임워크 파일을 빌드에 포함합니다.

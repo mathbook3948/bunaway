@@ -1,0 +1,90 @@
+---
+title: 명령과 이벤트
+description: 실제 템플릿으로 message.save → 저장 → message.saved → UI 갱신을 따라갑니다.
+---
+
+import { Code } from '@astrojs/starlight/components';
+import appSource from '@repo/packages/cli/templates/vanilla/src-bunaway/app.ts?raw';
+import moduleSource from '@repo/packages/cli/templates/vanilla/src-bunaway/message/module.ts?raw';
+import uiSource from '@repo/packages/cli/templates/vanilla/src/main.ts?raw';
+
+**명령**은 입력을 받아 결과를 반환하는 작업이고, **이벤트**는 구독한 UI에 전달하는 알림입니다.
+저장 명령의 응답은 호출한 UI가 받고 저장 이벤트는 구독 중인 UI가 받습니다.
+
+## 1. 앱 백엔드에서 계약과 구현 정의
+
+아래 코드는 현재 `vanilla` 템플릿의 실제 앱 정의와 메시지 모듈입니다.
+`app.ts`는 기능 모듈을 조립하고, 모듈 파일은 명령과 이벤트를 등록합니다.
+
+<Code code={appSource} lang="ts" title="src-bunaway/app.ts" />
+
+<Code code={moduleSource} lang="ts" title="src-bunaway/message/module.ts" />
+
+`defineModule("message").command("save", contract, handle)`은 `message.save`를 등록합니다.
+`contract`에는 `input`과 `output` 스키마를 적고, 세 번째 인자에 작업 함수를 전달합니다.
+
+| 항목 | 역할 | `message.save`의 예 |
+| --- | --- | --- |
+| `input` | 호출 데이터의 런타임 스키마 | 최대 10,000자 문자열 |
+| `output` | 응답 데이터의 런타임 스키마 | `null` |
+| `handle` | 입력이 유효할 때 실행할 함수 | 파일 저장 후 이벤트 발행 |
+
+백엔드는 실행할 때 입력과 출력을 스키마로 검사합니다.
+입력에 객체를 보내면 문자열 스키마에 맞지 않아 `INVALID_ARGUMENT`로 거부됩니다.
+
+`context`에는 요청의 취소 신호(`signal`), 호출 권한에 묶인 `host`,
+앱 `state`와 이벤트 발행자 `events`가 있습니다. `host.call()`은 요청을 보낸 뷰의 권한으로 실행합니다.
+
+## 2. 해당 뷰의 정책에 허용
+
+기본 정책은 아래 이름을 명시적으로 허용합니다.
+나머지 `origins`, `host` 필드까지 포함한 전체 파일은 [창과 뷰의 정책](/concepts/views-and-policy/)에서 확인하세요.
+
+```json
+{
+  "commands": ["message.read", "message.save"],
+  "events": ["message.saved"]
+}
+```
+
+새 명령은 기능 모듈의 `.command()`로 등록하고 호출할 뷰의 `commands`에 최종 이름을 넣습니다.
+이벤트는 모듈의 `.event()`에 데이터 스키마를 선언한 뒤 받을 뷰의 `events`에 최종 이름을 추가합니다.
+기존 객체형 앱의 `commands`와 `events`에 직접 등록하는 방법도 지원합니다.
+
+## 3. UI에서 연결, 구독, 호출
+
+아래 코드는 템플릿 HTML의 `#message`, `#saved`, `#status`, `#save` 요소와 함께 사용합니다.
+일반 브라우저에는 네이티브 브리지가 없으므로 **bunaway가 연 WebView 안에서** 실행합니다.
+
+<Code code={uiSource} lang="ts" title="src/main.ts" />
+
+코드는 아래 순서로 실행합니다.
+
+1. 호스트가 제공하는 브리지를 `createWebViewTransport()`에 전달합니다.
+2. `createClient()`로 클라이언트를 만들고 `client.ready`에서 연결 준비를 기다립니다.
+3. `client.listen("message.saved", ...)`으로 저장 알림을 먼저 구독합니다.
+4. `client.invoke("message.read", null)`로 이전 저장 내용을 복원합니다.
+5. 버튼 클릭 시 `client.invoke("message.save", text)`를 호출합니다.
+6. 이벤트 콜백의 `event.payload`로 화면을 갱신합니다.
+
+`listen()`의 `onError`는 필수입니다. 연결 종료나 구독 실패를 UI에 반영해야 합니다.
+`listen()`이 반환한 해제 함수를 보관해 두었다가 컴포넌트를 제거할 때 `await unlisten()`으로 구독을 정리합니다.
+페이지가 종료되면 템플릿은 `client.close()`를 호출합니다.
+
+## 응답과 이벤트는 어떻게 다르나요?
+
+`await client.invoke("message.save", text)`는 **그 요청의 결과**인 `null`을 받습니다.
+`message.saved`는 **허용된 구독자에게 전달되는 알림**입니다.
+`{ kind: "broadcast" }`로 발행해도 정책에서 이벤트를 허용하고 구독 중인 세션에만 전달됩니다.
+
+이벤트는 활성 구독에만 전달합니다. 다시 연결한 UI는
+`message.read`로 현재 저장 내용을 읽습니다.
+
+## 실패와 취소를 다루기
+
+`invoke()`는 실패하면 Promise를 reject합니다. 연결 종료, 타임아웃, 취소 뒤의 늦은 결과는 폐기합니다.
+저장 명령을 자동 재시도하지 않으며, 취소가 이미 완료된 파일 쓰기를 되돌리지는 않습니다.
+
+선택적 `signal`에는 `AbortController.signal`을, `deadline`에는 Unix epoch 밀리초를 전달할 수 있습니다.
+[SDK 레퍼런스](/reference/api/)에서 옵션을 확인하고,
+[문제 해결](/reference/troubleshooting/)에서 오류별 점검 위치를 찾아보세요.

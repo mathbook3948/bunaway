@@ -1,0 +1,44 @@
+---
+title: storage.readText
+description: 허용된 저장 범위의 텍스트 파일을 읽고 실패를 처리합니다.
+sidebar: { order: 1 }
+---
+
+```ts
+context.host.call("storage.readText", { scope, path }): Promise<string>
+```
+
+지정한 저장 범위 안의 파일을 텍스트로 읽습니다. UI에서 사용하려면 이 Host operation을 호출하는 앱 명령을 작성합니다.
+
+```ts
+return context.host.call("storage.readText", {
+  scope: "appData", path: "messages/current.txt",
+});
+```
+
+## 입력
+
+| 필드 | 필수 | 제약 |
+| --- | --- | --- |
+| `scope` | 예 | `appData` 또는 `temp` |
+| `path` | 예 | 비어 있지 않은 상대 경로, 최대 4,096자, `/` 구분 |
+
+입력은 scope와 path만 받습니다. 절대 경로나 드라이브 경로, `.`, `..`, 역슬래시, NUL, 개행이 포함된 path는 거부합니다.
+scope는 호스트가 정한 저장 영역을 선택합니다.
+
+## 정책
+
+호출 출처에 해당하는 `host.storage` 또는 `backend.storage`에 같은 scope와 pathPrefix의 `read`가 필요합니다.
+`messages` 접두사는 `messages/` 디렉터리와 그 아래를 허용합니다. 이름이 다른 `messages-old/`는 범위 밖입니다.
+허용 범위를 벗어나는 경로나 링크는 접근할 수 없습니다.
+
+## 결과와 오류
+
+결과는 JSON 문자열이며 응답 메시지 크기 제한도 적용됩니다.
+파일이 없으면 성공한 빈 문자열로 바꾸지 않고 실패합니다. 안정된 `NOT_FOUND` 코드는 현재 없습니다.
+`INVALID_ARGUMENT`는 잘못된 입력, `PERMISSION_DENIED`는 저장 권한, 경로 경계 위반,
+`CANCELLED`는 요청 종료, `INTERNAL`은 일반 파일 작업 실패 등에 사용합니다.
+
+처음 실행하는 UI는 읽기 실패를 표시하고 저장 기능을 사용할 수 있게 합니다.
+파일 누락 외에 권한 거부나 파일 작업 오류로도 읽기가 실패합니다.
+이 API는 지정한 텍스트 파일을 읽습니다. 바이너리 읽기나 디렉터리 목록, 파일 선택 기능은 제공하지 않습니다.

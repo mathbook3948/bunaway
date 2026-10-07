@@ -1,0 +1,93 @@
+---
+title: 패키징 프로그램 API
+description: 설정 해석, 원본 검증, 잠금, 어댑터와 단계 실행의 공개 API.
+sidebar: { order: 3 }
+---
+
+`@bunaway/packaging`에서 export하는 패키징 자동화 및 어댑터 API입니다.
+일반 배포는 [CLI package](/reference/cli/package/)를 사용하세요.
+패키징 도구를 작성할 때는 아래 함수에 검증한 입력과 도구가 관리하는 디렉터리를 전달합니다.
+
+## 상수와 대상
+
+| export | 계약 |
+| --- | --- |
+| `PACKAGING_CHANNELS` | 다섯 채널 ID 배열. [구현 상태](/reference/packaging/channels/)와 별개 |
+| `PLATFORMS` | windows, macos |
+| `BUILD_TARGETS` | windows-x64, macos-arm64 |
+| `CODES` | [PKG_* 진단 코드](/reference/packaging/report/) 맵 |
+| `isChannelId(value: string)` | ChannelId type guard |
+| `platformOf(channel)` | windows 또는 macos |
+| `targetFor(platform, arch)` | 지원되는 BuildTarget, 미지원 조합은 예외 |
+
+## 설정 해석
+
+| 함수 | 입력, 반환 |
+| --- | --- |
+| `parsePackaging(text)` | bundle JSON 문자열 → PackagingConfig |
+| `deriveIdentifier(appId)` | 점이 없으면 `.app`을 붙이는 기본 식별자 |
+| `deriveMsixPackageName(identifier)` | 허용 문자로 바꾸고 최대 50자로 제한한 MSIX 이름 |
+| `resolvePackaging(args)` | 메타데이터, 채널, 서명 해석 Promise |
+
+resolve 인자는 `{ root, config, appId, title, projectVersion, channel }`입니다.
+반환은 `{ metadata: ResolvedPackaging, channel: ResolvedChannel }`입니다.
+metadata에는 이름과 식별자, publisher, 버전, 절대 아이콘 경로, targets가 들어갑니다.
+channel에는 channelConfig와 선택적 signing이 들어갑니다.
+아이콘 실제 파일, 식별자, 버전, 대상 조합을 확인합니다.
+MSIX 이름 파생 후에도 유효한 시작 문자, 이름 조건을 충족해야 합니다.
+
+## 원본 산출물
+
+| 함수 | 입력, 반환 |
+| --- | --- |
+| `artifactPaths({ root, target, appId })` | `BuildArtifact`의 dir, packageDir, executable |
+| `loadManifest(artifact)` | `Promise<PackageManifest>` |
+| `verifyArtifact({ artifact, manifest, channel })` | 입력 누락, 변조, 예상 밖 파일 `Promise<Diagnostic[]>` |
+| `packagedDigest(entry)` | 최종 SHA-256 문자열 또는 undefined |
+| `ownedDirectory(root, path, create = false)` | 경계, 소유 확인 `Promise<boolean>`, 필요 시 생성 |
+
+packagedDigest는 executableSha256 필드가 있으면 packagedSha256 → executableSha256,
+그 외에는 packagedSha256 → sha256 → sourceSha256 순서입니다.
+서명 뒤 manifest 검사와 실제 배포 바이트가 일치하도록 이 규칙을 사용합니다.
+ownedDirectory는 프로젝트 밖, 링크 경계를 거부하며 쓰기 경로 확인에 사용합니다.
+
+## 잠금
+
+`acquireBuildOutputLock(root, target)`와 `acquirePackageInputLock(root, target)`은
+`Promise<() => Promise<void>>`로 해제 함수를 반환합니다. finally에서 해제하세요.
+빌드는 독점 쓰기, 패키징은 원본 읽기 잠금입니다. 충돌 시 기다리지 않고 실패합니다.
+`TargetLockError`에는 `path`와 message가 있습니다.
+이전 실행의 잠금이 남아 있다면 프로세스가 종료됐는지 확인한 뒤 직접 제거해야 합니다.
+
+## 어댑터 등록
+
+`registerAdapter(adapter): void`, `adapterFor(channel): PackageAdapter | undefined`,
+`registeredChannels(): ChannelId[]` (정렬)를 제공합니다.
+패키지를 import하면 내장 Windows 어댑터를 등록하며 중복 등록은 예외입니다.
+등록할 어댑터의 채널 이름은 ChannelId 중에서 선택합니다.
+
+PackageAdapter에는 `channel`, `platform`, `signingRequirement`, `stages(input)`이 필요합니다.
+stages는 실행 순서의 AdapterStage 배열을 반환합니다.
+각 단계는 `id`, `title`, `run(ctx): Promise<void>`를 제공합니다.
+
+| StageContext | 계약 |
+| --- | --- |
+| `input` | 채널 설정, 해석한 메타데이터, 원본, manifest, 선택적 signing |
+| `staging` | runner가 소유한 임시 출력 디렉터리 |
+| `report(diagnostic)` | 현재 stage를 붙여 진단 기록 |
+| `addArtifact(path, kind, options?)` | staging 내부 파일을 배포 산출물로 등록 |
+
+addArtifact options는 `signed?: boolean`, `signingRequired?: boolean`입니다.
+서명 요구 제외는 체크섬처럼 배포 실행 파일이 아닌 sidecar에 사용합니다.
+어댑터는 원본을 보존하고 staging 내부에 산출물을 만들어야 합니다. staging 밖의 파일과 절대 링크는 게시할 수 없습니다.
+
+## runner
+
+`runPackage(args): Promise<PackageReport>`의 인자는
+`{ metadata, appId, channel, channelConfig, signing?, target, artifact, adapter, notes? }`입니다.
+원본을 검사하고 잠근 뒤 staging에서 패키징 단계를 실행합니다. 성공하면 출력을 게시합니다.
+보고서에는 실패 진단과 서명 결과, 사용 가능 여부를 담아 반환합니다.
+
+`packagingOutputDir(root, target)`는 `dist/<target>/packaged`,
+`packagingReportPath(root, target, channel)`은 그 안의 `<channel>-report.json`을 반환합니다.
+실패 시 산출물 처리 방법과 보고서의 필드는 [산출물과 보고서](/reference/packaging/report/)에서 확인할 수 있습니다.

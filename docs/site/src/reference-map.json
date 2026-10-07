@@ -1,0 +1,290 @@
+{
+  "packages": [
+    {
+      "name": "@bunaway/client",
+      "source": "packages/client-sdk/src/index.ts",
+      "pages": {
+        "reference/client/create-client": ["createClient"],
+        "reference/client/transport": ["createWebViewTransport"]
+      }
+    },
+    {
+      "name": "@bunaway/backend",
+      "source": "packages/backend-sdk/src/index.ts",
+      "pages": {
+        "reference/backend/command": ["command"],
+        "reference/backend/app-definition": ["defineApp"],
+        "reference/backend/module": ["defineModule"],
+        "reference/tooling/core-and-runtime": ["createCore"]
+      }
+    },
+    {
+      "name": "@bunaway/core",
+      "source": "packages/core/src/index.ts",
+      "pages": {
+        "reference/tooling/core-and-runtime": ["createCore"]
+      }
+    },
+    {
+      "name": "@bunaway/runtime-bun",
+      "source": "packages/runtime-bun/src/index.ts",
+      "pages": {
+        "reference/tooling/core-and-runtime": ["readJsonLines", "bindHostAPI", "runBunApp"]
+      }
+    },
+    {
+      "name": "@bunaway/protocol",
+      "source": "packages/protocol/src/index.ts",
+      "pages": {
+        "reference/schema": ["validateValue"],
+        "reference/errors": [
+          "errorSchema",
+          "MAX_JSON_DEPTH",
+          "MAX_MESSAGE_BYTES",
+          "ProtocolError",
+          "API_LIMITS",
+          "BunawayError"
+        ],
+        "reference/protocol": [
+          "bootstrapSchema",
+          "hostResponseSchema",
+          "messageSchema",
+          "policySchema",
+          "processSchema",
+          "CAPABILITIES_COMMAND",
+          "hostCallSchema",
+          "hostOperations",
+          "parseHostCall",
+          "serializeHostCall",
+          "validateHostOutput",
+          "PROCESS_IPC_VERSION",
+          "parseProcessFrame",
+          "serializeProcessFrame",
+          "PROTOCOL_VERSION",
+          "parseMessage",
+          "serializeMessage",
+          "parseBootstrap",
+          "parseHostResponse",
+          "serializeHostResponse",
+          "parsePolicy",
+          "negotiateProtocol"
+        ]
+      }
+    },
+    {
+      "name": "@bunaway/cli",
+      "source": "packages/cli/src/index.ts",
+      "pages": {
+        "reference/tooling/cli-api": [
+          "createProject",
+          "validateProject",
+          "buildProject",
+          "prepareNative",
+          "currentTarget",
+          "devProject",
+          "RestartController",
+          "doctor",
+          "packageProject"
+        ]
+      }
+    },
+    {
+      "name": "@bunaway/packaging",
+      "source": "packages/packaging/src/index.ts",
+      "pages": {
+        "reference/tooling/packaging-api": [
+          "parsePackaging",
+          "PACKAGING_CHANNELS",
+          "PLATFORMS",
+          "BUILD_TARGETS",
+          "isChannelId",
+          "platformOf",
+          "targetFor",
+          "CODES",
+          "packagedDigest",
+          "ownedDirectory",
+          "artifactPaths",
+          "loadManifest",
+          "verifyArtifact",
+          "acquireBuildOutputLock",
+          "acquirePackageInputLock",
+          "TargetLockError",
+          "adapterFor",
+          "registerAdapter",
+          "registeredChannels",
+          "deriveIdentifier",
+          "deriveMsixPackageName",
+          "resolvePackaging",
+          "packagingOutputDir",
+          "packagingReportPath",
+          "runPackage"
+        ]
+      }
+    }
+  ],
+  "members": [
+    {
+      "source": "packages/backend-sdk/src/module.ts",
+      "type": "ModuleDefinition",
+      "pages": {
+        "reference/backend/module": ["name", "commands", "events"]
+      }
+    },
+    {
+      "source": "packages/backend-sdk/src/module.ts",
+      "type": "ModuleBuilder",
+      "pages": {
+        "reference/backend/module": ["name", "command", "event"]
+      }
+    },
+    {
+      "source": "packages/client-sdk/src/index.ts",
+      "type": "Client",
+      "pages": {
+        "reference/client/create-client": ["ready"],
+        "reference/client/invoke": ["invoke"],
+        "reference/client/listen": ["listen"],
+        "reference/client/capabilities": ["capabilities"],
+        "reference/client/close": ["close"]
+      }
+    },
+    {
+      "source": "packages/core/src/index.ts",
+      "type": "StateStore",
+      "pages": {
+        "reference/backend/state": ["get", "set", "delete"]
+      }
+    },
+    {
+      "source": "packages/core/src/index.ts",
+      "type": "EventEmitter",
+      "pages": {
+        "reference/backend/events": ["emit"]
+      }
+    },
+    {
+      "source": "packages/core/src/index.ts",
+      "type": "Core",
+      "pages": {
+        "reference/tooling/core-and-runtime": ["openSession", "stop"]
+      }
+    },
+    {
+      "source": "packages/core/src/index.ts",
+      "type": "CoreSession",
+      "pages": {
+        "reference/tooling/core-and-runtime": ["receive", "close"]
+      }
+    },
+    {
+      "source": "packages/core/src/index.ts",
+      "type": "RuntimeServices",
+      "pages": {
+        "reference/tooling/core-and-runtime": ["createCancellation", "now", "schedule"]
+      }
+    },
+    {
+      "source": "packages/protocol/src/contracts.ts",
+      "type": "Transport",
+      "pages": {
+        "reference/client/transport": ["send", "subscribe", "close"]
+      }
+    },
+    {
+      "source": "packages/protocol/src/host-api.ts",
+      "type": "HostAPI",
+      "pages": {
+        "reference/backend/context": ["call"]
+      }
+    },
+    {
+      "source": "packages/core/src/index.ts",
+      "type": "AppDefinition",
+      "pages": {
+        "reference/backend/app-definition": ["commands", "events", "state", "plugins"]
+      }
+    },
+    {
+      "source": "packages/core/src/index.ts",
+      "type": "CommandDefinition",
+      "pages": {
+        "reference/backend/command": ["input", "output", "run"]
+      }
+    },
+    {
+      "source": "packages/core/src/index.ts",
+      "type": "CommandContext",
+      "pages": {
+        "reference/backend/context": ["signal", "host", "state", "events"]
+      }
+    },
+    {
+      "source": "packages/core/src/index.ts",
+      "type": "PluginDefinition",
+      "pages": {
+        "reference/backend/plugins": [
+          "name",
+          "version",
+          "dependencies",
+          "platforms",
+          "requiredHost",
+          "commands",
+          "events",
+          "setup"
+        ]
+      }
+    },
+    {
+      "source": "packages/core/src/index.ts",
+      "type": "CoreServices",
+      "pages": {
+        "reference/tooling/core-and-runtime": [
+          "policy",
+          "hello",
+          "platform",
+          "backendContext",
+          "runtime",
+          "send",
+          "callHost"
+        ]
+      }
+    },
+    {
+      "source": "packages/protocol/src/contracts.ts",
+      "type": "CancellationSignal",
+      "pages": {
+        "reference/tooling/core-and-runtime": ["aborted", "addEventListener", "removeEventListener"]
+      }
+    },
+    {
+      "source": "packages/protocol/src/contracts.ts",
+      "type": "CancellationController",
+      "pages": {
+        "reference/tooling/core-and-runtime": ["signal", "abort"]
+      }
+    }
+  ],
+  "commands": {
+    "reference/cli/create": ["create"],
+    "reference/cli/validate": ["validate"],
+    "reference/cli/doctor": ["doctor"],
+    "reference/cli/dev": ["dev"],
+    "reference/cli/build": ["build"],
+    "reference/cli/package": ["package"],
+    "reference/api": ["help"]
+  },
+  "operations": {
+    "reference/host/storage-read-text": ["storage.readText"],
+    "reference/host/storage-write-text": ["storage.writeText"],
+    "reference/host/log-write": ["log.write"],
+    "reference/host/capabilities-get": ["capabilities.get"]
+  },
+  "configuration": {
+    "packages/cli/src/config.ts": ["reference/configuration"],
+    "packages/packaging/src/config.ts": [
+      "reference/packaging/configuration",
+      "reference/packaging/channels",
+      "reference/packaging/signing"
+    ]
+  }
+}

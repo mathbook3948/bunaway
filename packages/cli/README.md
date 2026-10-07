@@ -1,12 +1,13 @@
-# CLI · vanilla / Vite
+# CLI와 vanilla, Vite 템플릿
 
-기존 SDK/정책/Host API와 네이티브 호스트를 그대로 사용한다. 패키지 런타임은
-고정 Bun 1.4.2이며 개발/빌드에도 같은 버전이 필요하다. 공개 npm 배포는 아직 없다.
+CLI로 앱을 만들고 개발 서버를 실행하거나 네이티브 앱을 빌드한다.
+SDK와 정책, Host API는 프레임워크의 네이티브 호스트에 연결된다.
+앱 런타임과 개발 및 빌드에는 Bun 1.4.2를 사용한다. 공개 npm에는 아직 배포하지 않았다.
 
 ## 생성 → 개발 → 빌드 → 독립 실행
 
-저장소 체크아웃 없는 설치, SDK/native artifact 구성·버전 규칙·CLI·SDK 일괄 업그레이드는
-[개발자 설치 안내](../../docs/framework-distribution.md)를 따른다. 로컬 tarball에는 CLI
+저장소를 체크아웃하지 않고 CLI와 SDK를 설치하려면 [개발자 설치 안내](../../docs/framework-distribution.md)를 따른다.
+패키지 구성과 버전 규칙, CLI 및 SDK를 함께 업그레이드하는 방법도 설명한다. 로컬 tarball에는 CLI
 bin/API JS 번들과 모든 생성 입력이 포함된다. 공개 registry publish는 하지 않는다.
 아래는 프레임워크 저장소 기여자용 직접 소스 실행 경로다.
 
@@ -25,25 +26,24 @@ bun run dev
 bun run build
 ```
 
-`create`는 기존 경로를 덮어쓰지 않는다. 설치를 자동 실행하지 않으며 마지막에 다음
-단계를 안내한다. 생성 프로젝트는 @bunaway/cli와 SDK의 패키지 의존성을 선언한다.
+`create`는 새 디렉터리에 앱을 만든다. 기존 경로는 덮어쓰지 않으며
+생성이 끝나면 의존성 설치 등 다음 단계를 안내한다. 생성 프로젝트는 @bunaway/cli와 SDK의 패키지 의존성을 선언한다.
 프레임워크는 앱의 node_modules에 설치되며 원본 저장소 없이 동작한다.
-package.json과 bun.lock을 커밋한다. vendor 복사와 별도 프레임워크 잠금 파일은 없다.
+의존성은 package.json과 bun.lock으로 관리하고 두 파일을 커밋한다.
 로컬 tarball 묶음은 깨끗한 재설치를 위해 보관한다.
 개발 도구 설치에는 Bun 패키지 레지스트리, 최초 네이티브 빌드에는 고정 런타임/헤더/SDK
 다운로드 접근이 필요하다. 앱 실행에는 네트워크나 Bun 설치가 필요 없다.
 
 명령은 `create <new-directory> [--template vanilla|vite] [--package-dir <tarball-directory>]`와 `dev|validate|build|doctor [directory]`,
 `package <channel> [directory] [--build]`다.
-옵션/알 수 없는 명령·설정 필드는 오류로 종료한다. `validate`는 버전·앱 ID·소스 경로·홈
-자산·단일 뷰/정확한 origin·기존 정책 스키마를 검사한다. `package`는
+옵션/알 수 없는 명령, 설정 필드는 오류로 종료한다. `validate`는 버전, 앱 ID, 소스 경로, 홈
+자산, 단일 뷰/정확한 origin, 기존 정책 스키마를 검사한다. `package`는
 `bunaway.json.bundle`(패키징에 필요, 선언 시 dev/build에서도 형식 검사)을 읽어
 `bunaway build`의 채널 중립 산출물을 채널별 패키지로 조립한다. 산출물은
-`dist/<target>/packaged/<channel>/`, 결과는 `packaging-report.<channel>.json`에
-기록한다. `--build`는 패키징 전에 빌드를 먼저 실행한다. 채널·어댑터 계약·서명/해시
+`dist/<target>/packaged/<channel>/`, 결과는 그 옆의 `<channel>-report.json`에
+기록한다. `--build`는 패키징 전에 빌드를 먼저 실행한다. 채널, 어댑터 계약, 서명/해시
 규칙은 `@bunaway/packaging`과 `docs/decisions/0005-packaging-contract.md`에 있다.
-권한의 실제 집행은 호스트/코어의 기존 계약을 따른다. 백엔드를 실행해 명령 목록을
-추측하거나 자동으로 권한을 추가하지 않는다.
+권한은 호스트와 코어에서 검사한다. 앱 개발자는 사용할 명령과 Host API 권한을 정책에 직접 선언한다.
 
 `create`의 기본 템플릿은 기존 `vanilla`다. Vite의 CSS HMR과 페이지 갱신을 사용하는
 vanilla TypeScript 앱은 다음과 같이 생성한다.
@@ -56,16 +56,16 @@ bun run bunaway dev
 ```
 
 `vite` 템플릿은 공식 [create-vite@9.2.1의 vanilla-ts](https://github.com/vitejs/vite/tree/fea5b21dd9524ed7308632407b996f1fe5942c9c/packages/create-vite/template-vanilla-ts)
-기본 화면(로고·카운터)을 사용한다.
-루트 `index.html`, `src/` UI 코드·스타일·이미지, `public/` 정적 자산은 upstream 원본이다.
-`dev`·`build`·`preview`는 Vite 프런트엔드 명령이며 `bunaway` script로 네이티브 CLI를 호출한다.
+기본 화면(로고, 카운터)을 사용한다.
+루트 `index.html`, `src/` UI 코드, 스타일, 이미지, `public/` 정적 자산은 upstream 원본이다.
+`dev`, `build`, `preview`는 Vite 프런트엔드 명령이며 `bunaway` script로 네이티브 CLI를 호출한다.
 UI 변경은 Vite가 처리하고 백엔드 변경은 CLI가 호스트를 재시작한다.
-네이티브 검증·빌드·패키징 전에는 `bun run build`로 `web-dist/`를 생성한다.
-CLI 자체는 외부 프런트엔드 생산 빌드를 자동 실행하지 않는다.
+네이티브 검증, 빌드, 패키징 전에는 `bun run build`로 `web-dist/`를 생성한다.
+CLI 자체는 외부 프런트엔드 프로덕션 빌드를 자동 실행하지 않는다.
 생성 템플릿은 [templates/](./templates/)에서 관리한다. 구조와 script 역할은
 [Tauri vanilla-ts 템플릿](https://github.com/tauri-apps/create-tauri-app/tree/12db955f20162e7422cbeed76c2aa630760ccca3/templates/template-vanilla-ts)을 참조한다.
-각 템플릿은 UI·백엔드·정책·설정을 모두 포함하며, `create`는 선택한 폴더 하나만 복사한다.
-템플릿의 `gitignore`·`gitattributes`는 생성 앱에서 `.gitignore`·`.gitattributes`로 바꾼다.
+각 템플릿은 UI, 백엔드, 정책, 설정을 모두 포함하며, `create`는 선택한 폴더 하나만 복사한다.
+템플릿의 `gitignore`, `gitattributes`는 생성 앱에서 `.gitignore`, `.gitattributes`로 바꾼다.
 
 ## 생성 구조
 
@@ -80,18 +80,18 @@ my-app/
   bun.lock (bun install 후 생성)
 ```
 
-`src-bunaway/bunaway.json` v1에 build·app·bundle을 통합한다. 권한은 policy.json에 둔다.
+`src-bunaway/bunaway.json` v1에 build, app, bundle을 통합한다. 권한은 policy.json에 둔다.
 `app.ts`는 `defineApp({ modules: [message] })`로 기능을 조립하고
-`message/module.ts`는 `defineModule`로 공개 명령·이벤트를 등록한다.
+`message/module.ts`는 `defineModule`로 공개 명령, 이벤트를 등록한다.
 최종 이름이 중복되면 조립이 실패하며 기존 명령을 덮어쓰지 않는다.
 `build.app`은 공통 앱 정의(default export AppDefinition), `build.frontend`는 웹 UI
 디렉터리다. 두 소스 경로와 패키징 파일 경로는 프로젝트 루트 상대 경로다.
 플랫폼별 부팅은 프레임워크가 담당하며 개발자가 별도 `index.ts`를 작성하지 않는다.
-기존 `build.backend`·`build.windowsApp`은 제거하고 앱 정의 경로를 `build.app`에 지정한다.
-배포 전에는 현재 v1만 사용하고 이전 분리 설정·vendor 구조 호환을 제공하지 않는다.
+기존 `build.backend`, `build.windowsApp`은 제거하고 앱 정의 경로를 `build.app`에 지정한다.
+현재 CLI는 v1 설정과 설치 패키지를 사용한다. 이전의 분리 설정과 vendor 구조는 지원하지 않는다.
 
 선택적 `dev`에 외부 UI 개발 서버의 `command`(인자 배열), `url`, `timeoutMs`를 지정한다.
-[Vite·Next.js 개발 서버 연결](../../docs/development-server.md)을 따른다.
+[Vite, Next.js 개발 서버 연결](../../docs/development-server.md)을 따른다.
 `vite` 템플릿은 루트 `index.html`, `public/`, `src/`, `src-bunaway/`와
 `vite.config.ts`, `dev` 설정을 포함한다. `build.frontend`는 `web-dist`다.
 프런트엔드의 `.ts`/`.js`는 브라우저 번들로 변환하고 나머지 정적 자산은 복사한다.
@@ -110,27 +110,26 @@ macOS는 기존 `bunaway://` 매핑이다. policy.json의 HTTP origin은 허용�
 `message.save` → 호출 컨텍스트의 Host API `storage.writeText` →
 `appData/messages/current.txt` → `message.saved` → UI 갱신이다.
 `message.read`로 시작/재실행 시 복원한다. 첫 실행의 파일 없음은 UI에 표시한다.
-정책은 `main` 뷰의 두 명령·한 이벤트와 `messages/` 읽기/쓰기만 허용하며
+정책은 `main` 뷰의 두 명령, 한 이벤트와 `messages/` 읽기/쓰기만 허용하며
 백엔드 자체 작업에는 저장 권한을 주지 않는다.
 
 ## 개발 수명주기
 
-`dev`가 없으면 프로젝트 소스·설정 변경을 debounce 후 직렬 처리한다(의존성/출력 디렉터리는 제외).
+`dev`가 없으면 프로젝트 소스, 설정 변경을 debounce 후 직렬 처리한다(의존성/출력 디렉터리는 제외).
 프런트엔드 변경도 **전체 네이티브 호스트/창 재시작**으로 갱신한다.
-외부 개발 서버 모드에서는 UI 갱신·HMR을 서버에 맡기고 CLI는 백엔드·설정 변경만
-처리한다. 서버를 한 번 실행하고 HTTP 준비를 기다린 뒤 호스트를 시작한다.
-서버 설정 변경은 서버도 교체하며 Ctrl+C·창 닫기·서버 종료·timeout 시 서버 자손을 정리한다.
+외부 개발 서버 모드에서는 서버가 UI 갱신과 HMR을 처리하고 CLI는 백엔드와 설정 변경을 처리한다. 서버를 한 번 실행하고 HTTP 준비를 기다린 뒤 호스트를 시작한다.
+서버 설정 변경은 서버도 교체하며 Ctrl+C, 창 닫기, 서버 종료, timeout 시 서버 자손을 정리한다.
 이전 호스트 종료를 확인한 후 자산을 다시 빌드하고 새 호스트를 시작한다.
-호스트가 새 런타임 세대와 새 호출 컨텍스트/세션을 발급한다. Windows는 WM_CLOSE로 코어·Worker·WebView를 정리하고 Bun Job이 자손을 회수한다.
-macOS의 기존 guard는 Bun 자식을 정리한다. SDK는 세션 종료 시 미완료 요청/구독을 폐기하며 CLI는 요청을
-보관하거나 재전송하지 않는다. 이미 완료된 외부 저장 작업은 롤백하지 않는다.
-개발 중 입력하지 않은 UI 상태도 재시작으로 사라지므로 저장 후 확인한다.
+호스트가 새 런타임 세대와 새 호출 컨텍스트/세션을 발급한다. Windows는 WM_CLOSE로 코어, Worker, WebView를 정리하고 Bun Job이 자손을 회수한다.
+macOS의 guard는 Bun 자식 프로세스를 정리한다. 세션이 종료되면 SDK는 진행 중인 요청과 구독을 폐기한다.
+CLI는 요청을 다시 전송하지 않으며 이미 저장한 파일은 그대로 남는다.
+저장하지 않은 UI 상태는 앱이 다시 시작될 때 사라진다.
 
 빌드 실패 시 이전 프로덕션 산출물을 유지한다. 개발 빌드 실패 시 이전 앱을 다시 띄우지
 않고 오류를 출력하며 다음 변경을 기다린다. 빌드 도중 추가 변경은 오래된 결과의 시작을
 건너뛰고 최신 소스로 다시 빌드한다. 창을 닫거나 Ctrl+C로 개발 실행을 종료한다.
 
-## 패키지 / 배포 조사용 경계
+## 패키지 구조와 배포
 
 Windows x64에는 PowerShell 7과
 WebView2 Evergreen이 필요하다. 네이티브 SDK는 기존 스크립트의 핀으로 받는다.
@@ -166,11 +165,11 @@ open dist/macos-arm64/app.my-app.app
 dist/macos-arm64/app.my-app.app/Contents/MacOS/bunaway-host --package "$PWD/dist/macos-arm64/app.my-app.app/Contents/Resources"
 ```
 
-manifest에는 앱/프레임워크 버전, 호스트 target/해시, Bun 버전·소스 revision·다운로드/실행
-해시·라이선스 출처/해시와 전체 자산/라이선스 해시를 기록한다. 호스트는 실행 전에
+manifest에는 앱/프레임워크 버전, 호스트 target/해시, Bun 버전, 소스 revision, 다운로드/실행
+해시, 라이선스 출처/해시와 전체 자산/라이선스 해시를 기록한다. 호스트는 실행 전에
 Bun/자산 해시를 검사하고 내부 Bun **절대 경로**를 실행한다. 누락/변조 시 실패하며
-전역 Bun fallback은 없다. 사용자 환경·`.env`·preload·자동 의존성 설치를 차단하는
-기존 자식 실행 설정을 유지한다. 해시는 무결성 검사이며 서명된 신뢰의 증명은 아니다.
+전역 Bun fallback은 없다. 사용자 환경, `.env`, preload, 자동 의존성 설치를 차단하는
+기존 자식 실행 설정을 유지한다. 이 해시로 파일의 무결성을 검사한다. 배포자의 신원을 확인하는 서명은 별도로 적용한다.
 
 macOS 패키지에는 로컬 실행용 ad-hoc 서명만 적용하며 번들 Bun을 재서명하지 않는다.
 manifest의 macOS `host.sourceSha256`은 서명 전 원본 호스트 해시다(서명된 실행 파일을

@@ -1,0 +1,65 @@
+---
+title: 프레임워크 기여 자료
+description: 용어집과 설계 결정, 구현 계약, 플랫폼 실행 기록 찾아보기.
+---
+
+bunaway 프레임워크를 개발하거나 전송, 런타임, 패키징 기능을 확장할 때 참고할 자료입니다.
+ADR에는 설계를 선택한 이유가, 구현 계약에는 각 계층의 책임이, 실행 기록에는 실제 검증 결과가 담겨 있습니다.
+
+## 확장과 자동화 API
+
+| 작업 | 레퍼런스 |
+| --- | --- |
+| 전송과 호스트의 메시지 처리 구현 | [메시지와 프로세스 IPC](/reference/protocol/) |
+| 호스트 및 런타임 어댑터 작성 | [Core와 Bun 런타임](/reference/tooling/core-and-runtime/) |
+| 프로젝트 생성과 빌드 자동화 | [CLI 프로그램 API](/reference/tooling/cli-api/) |
+| 패키징 도구와 어댑터 작성 | [패키징 프로그램 API](/reference/tooling/packaging-api/) |
+| 문서 작성 및 공개 API 누락 확인 | [문서 범위와 누락 검사](/reference/coverage/) |
+
+## 공통 용어와 제품 방향
+
+| 자료 | 답하는 질문 |
+| --- | --- |
+| [용어집](https://github.com/mathbook3948/bunaway/blob/main/docs/GLOSSARY.md) | 명령, 뷰, 세션, 호스트, 정책은 어떤 의미인가? |
+| [PRD](https://github.com/mathbook3948/bunaway/blob/main/docs/PRD.md) | 제품 목표와 권한, 수명주기 요구사항은 무엇인가? |
+| [진행 상태](https://github.com/mathbook3948/bunaway/blob/main/docs/architecture/progress.md) | 현재 무엇이 구현되고 무엇이 남아 있는가? |
+
+## 앱을 만드는 데 관련된 결정
+
+| 결정 | 내용 |
+| --- | --- |
+| [ADR 0010](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0010-windows-first-platform-model.md) | Windows 우선 개발, 공통 앱 정의 하나 |
+| [ADR 0011](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0011-app-module-composition.md) | 기능 모듈 조립과 중복 명령 거부 |
+| [ADR 0007](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0007-project-settings.md) | 프로젝트 구조, 설정 통합과 정책 분리 |
+| [ADR 0008](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0008-installed-framework-packages.md) | 앱의 package.json, bun.lock 기반 프레임워크 설치 |
+| [ADR 0009](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0009-development-server.md) | 외부 UI 개발 서버와 CLI 수명주기 |
+| [프레임워크 설치](https://github.com/mathbook3948/bunaway/blob/main/docs/framework-distribution.md) | 로컬 패키지 묶음, 버전, 업그레이드, 도구 요구사항 |
+
+## 코어, 정책, 플랫폼 구현
+
+| 자료 | 내용 |
+| --- | --- |
+| [공통 API](https://github.com/mathbook3948/bunaway/blob/main/docs/architecture/common-api.md) | SDK, 코어, 명령, Host API 실행 계약 |
+| [프로토콜](https://github.com/mathbook3948/bunaway/blob/main/docs/architecture/protocol.md) | 메시지, 정책 스키마, 버전, 오류와 제한 |
+| [ADR 0002](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0002-host-owned-call-context.md) | 호스트가 소유하는 호출 컨텍스트 |
+| [ADR 0004](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0004-multi-window-per-view-policy.md) | 창, 뷰별 정책과 세션 수명 |
+| [ADR 0006](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0006-windows-bun-ui-worker.md) | Windows Bun 메인, UI Worker, I/O Worker |
+
+## 실제 검증 결과
+
+- [현재 Windows Bun FFI 기록](https://github.com/mathbook3948/bunaway/blob/main/docs/architecture/windows-bun-results.md)
+- [기존 Windows C 호스트 기록](https://github.com/mathbook3948/bunaway/blob/main/docs/architecture/windows-host-results.md)
+- [macOS probe, WKWebView 기록](https://github.com/mathbook3948/bunaway/blob/main/docs/architecture/macos-native-results.md)
+- [플랫폼 지원 표](https://github.com/mathbook3948/bunaway/blob/main/docs/platform-support/README.md)
+
+이전 문서의 플랫폼 구조와 예시는 작성 시점에 따라 현재 구현과 다를 수 있습니다.
+현재 앱 진입점과 설정은 ADR 0010 및 CLI의 `build.app`을 기준으로 확인하세요. 플랫폼에서 검증한 동작은 실행 기록에 정리합니다.
+
+## 문서 기여
+
+개발자용 설명은 `docs/site/src/content/docs/`의 MDX에서 작성합니다.
+설계 결정은 기존 `docs/decisions/`, 용어는 `docs/GLOSSARY.md`, 실행 기록은 `docs/architecture/`에 유지합니다.
+앱 개발 가이드에는 사용법과 결과, 권한, 오류를 설명합니다. Worker 구성이나 내부 메시지 처리 과정은 이 기여 자료와 설계 문서에 작성합니다.
+
+이 사이트의 앱 정의, 정책, 설정, UI 예제는 실제 CLI 템플릿을 빌드 시 읽어 표시합니다.
+템플릿의 이름이나 동작을 바꾸면 주변 설명과 지원 범위도 함께 갱신하세요.

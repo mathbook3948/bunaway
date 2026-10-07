@@ -1,0 +1,46 @@
+---
+title: 타입과 입력 검증
+description: 앱 정의에서 클라이언트 타입을 추론하고 스키마로 실제 데이터를 검사합니다.
+---
+
+TypeScript 타입은 개발 중 호출 실수를 잡습니다. 실행할 때는 스키마로 WebView가 보낸 데이터를 검사합니다.
+
+## 앱 정의에서 타입 추론
+
+템플릿의 `app.ts`가 `app`을 named/default export하므로 아래처럼 데이터 타입을 만들 수 있습니다.
+
+```ts
+import type { CommandsOf, EventsOf } from "@bunaway/backend";
+import type { app } from "../src-bunaway/app";
+
+type AppCommands = CommandsOf<typeof app>;
+type AppEvents = EventsOf<typeof app>;
+```
+
+UI에서는 `import type`으로 타입만 가져옵니다. 이렇게 하면 백엔드 구현이 브라우저 번들에 포함되지 않습니다.
+이 타입을 UI 클라이언트에 지정합니다.
+
+```ts
+const client = createClient<AppCommands, AppEvents>({ transport, hello });
+await client.invoke("message.save", "문자열");
+```
+
+여기서 transport, hello는 [createClient](/reference/client/create-client/) 예시처럼 준비합니다.
+CommandsOf는 앱에 직접 선언한 명령과 `defineApp()`에 정적으로 나열한 모듈의 input/output을 추론합니다.
+이벤트 payload는 EventsOf로 추론합니다. 실행할 때 구성하는 모듈 배열이나 문자열로 정하는 이름은 정확한 목록을 추론하지 못할 수 있습니다.
+플러그인 전체 레지스트리를 합친 자동 타입 생성 CLI는 아직 없습니다.
+
+## 런타임 계약
+
+명령 이름이 타입에 있어도 정책 허용은 별도로 필요합니다.
+핸들러를 실행할 때 입력과 결과를 Schema로 검사하고 형식이 맞지 않으면 거부합니다.
+출력 스키마가 string이면 숫자를 반환하는 구현은 유효하지 않습니다.
+
+객체 필드는 `required`에 넣어야 필수가 되고, 나머지 필드를 막으려면 `additionalProperties: false`를 사용합니다.
+스키마의 모든 지원 키워드와 정확한 JSON 규칙은 [Schema 레퍼런스](/reference/schema/)에 있습니다.
+
+## 경계별 오류
+
+잘못된 호출 입력은 INVALID_ARGUMENT, 앱 출력 계약 위반은 INTERNAL,
+뷰 권한 미충족은 PERMISSION_DENIED입니다.
+타입이 맞아도 정책이나 실행 환경, 기한 때문에 요청이 실패할 수 있습니다. 호출한 Promise의 오류도 처리합니다.

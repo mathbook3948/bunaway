@@ -1,0 +1,36 @@
+---
+title: WebViewTransport와 Transport
+description: 브리지 연결과 사용자 정의 전송의 send, subscribe, close 계약.
+sidebar: { order: 6 }
+---
+
+`createWebViewTransport(bridge)`는 호스트가 제공하는 WebView 메시지 브리지를 SDK의 `Transport`로 바꿉니다.
+
+## WebViewBridge
+
+```ts
+interface WebViewBridge {
+  postMessage(message: unknown): void;
+  addEventListener(type: "message", listener: (event: { data: unknown }) => void): void;
+  removeEventListener(type: "message", listener: (event: { data: unknown }) => void): void;
+}
+```
+
+네이티브 WebView가 제공하는 `window.chrome.webview`를 전달하고, 반환값을 createClient의 transport로 사용합니다.
+클라이언트 사용 예시는 [createClient](/reference/client/create-client/)에서 확인하세요.
+
+## 사용자 정의 Transport
+
+`Transport`와 `TransportEvent`는 `@bunaway/protocol`의 계약입니다.
+
+| 메서드 | 계약 |
+| --- | --- |
+| `send(text): Promise<void>` | FIFO 큐에 접수하면 완료. 큐가 가득 차면 실패 |
+| `subscribe(listener): Dispose` | 원문 message 또는 closed를 전달하고 동기 해제 함수 반환 |
+| `close(): Promise<void>` | 멱등 자원 정리. 이후 전송 금지 |
+
+이벤트는 `{ kind: "message", text }` 또는 `{ kind: "closed", error? }`입니다.
+`subscribe`는 첫 send 전에 등록할 수 있어야 하며, 이미 닫힌 전송에 나중에 등록해도 closed를 관찰해야 합니다.
+
+send는 명령의 실행 결과를 반환하지 않습니다. 앱 명령의 결과는 client.invoke로 받습니다.
+전송을 직접 구현할 때의 메시지 형식은 [프로토콜 레퍼런스](/reference/protocol/)를 참고하세요.

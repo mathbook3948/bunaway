@@ -1,0 +1,51 @@
+---
+title: 문서 범위와 누락 검사
+description: 공개 API가 어느 페이지에 설명돼 있는지와 문서 검사의 범위.
+---
+
+import catalog from '../../../reference-map.json';
+
+문서에 기여할 때 공개 API의 설명이 빠지지 않았는지 확인하는 방법입니다.
+앱 개발 문서에는 사용법과 입력, 결과, 권한 및 오류를 적습니다. 프로토콜과 런타임 확장 API는 프레임워크 기여 섹션에 둡니다.
+
+## 공개 API 지도
+
+아래 목록은 누락 검사 도구에서 사용하는 API와 문서의 대응표입니다.
+함수, 상수 export와 Client, Host, 상태, 이벤트, Core의 주요 메서드를 추적합니다.
+
+{catalog.packages.map((entry) => (
+  <section>
+    <h3>{entry.name}</h3>
+    <ul>
+      {Object.entries(entry.pages).map(([slug, names]) => (
+        <li><a href={`/${slug}/`}>{names.join(', ')}</a></li>
+      ))}
+    </ul>
+  </section>
+))}
+
+## 자동으로 검사하는 것
+
+`bun run docs:check`와 `bun run docs:build`는 다음을 검사합니다.
+
+- 일곱 공개 패키지 진입점의 실행 시 export와 재수출이 레퍼런스에 매핑되어 있는지
+- Client, HostAPI, StateStore, EventEmitter, Core, CoreSession, RuntimeServices, Transport 멤버 누락
+- CLI 명령과 Host operation이 각 문서에 있는지
+- Schema 키워드와 policy, CLI, 패키징의 허용 설정 필드가 문서에 있는지
+- 매핑한 페이지가 실제로 존재하고 해당 API 이름이 본문에 있는지
+- 프로덕션 빌드의 내부 페이지 링크, 목차 anchor가 유효한지
+
+export나 메서드, 설정 키를 추가할 때 대응하는 문서와 설명이 없으면 검사가 실패합니다.
+자동 검사는 이름과 문서의 존재 여부를 확인합니다. 설명의 정확성은 소스와 예제를 함께 읽으며 검토해야 합니다.
+
+## 검사 범위 밖
+
+검사 대상은 공개 API입니다. private helper와 내부 분기는 포함하지 않으며 보조 타입 alias도 각각 별도 페이지로 세지 않습니다.
+주요 타입은 관련 API 페이지에서 설명합니다.
+Windows와 macOS의 앱 실행 및 배포 시험 결과는 각 플랫폼의 실행 기록에서 확인할 수 있습니다.
+
+## 문서 구성 참고
+
+[Next.js 문서](https://nextjs.org/docs)의 시작하기, 가이드, API 레퍼런스 구분과
+[Tauri 시작하기](https://v2.tauri.app/start/)의 개발 환경, 프로젝트 구조, 첫 앱 흐름을 참고했습니다.
+동작, 지원 범위, 설정 이름은 bunaway의 실제 구현을 따릅니다.

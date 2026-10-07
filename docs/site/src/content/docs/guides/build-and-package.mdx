@@ -1,0 +1,79 @@
+---
+title: 빌드와 패키징
+description: 웹 자산을 빌드하고 네이티브 앱과 설치 파일을 만듭니다.
+---
+
+## 빌드부터 설치 파일까지
+
+**네이티브 빌드**는 UI 자산과 백엔드 코드에 호스트, 정책, 번들 Bun을 포함해 실행할 앱을 만듭니다.
+그다음 **패키징**으로 배포 채널에 맞는 설치 파일을 만듭니다.
+
+## 네이티브 빌드
+
+Windows x64 또는 macOS arm64 대상 머신에서 실행합니다. 현재 교차 빌드는 지원하지 않습니다.
+
+기본 `vanilla` 템플릿에서는 아래 명령을 실행합니다.
+
+```sh
+bun run validate
+bun run build
+```
+
+`vite` 템플릿은 먼저 웹 자산을 빌드합니다.
+
+```sh
+# Vite의 웹 프로덕션 빌드
+bun run build
+# 위 웹 자산을 포함하는 네이티브 빌드
+bun run bunaway validate
+bun run bunaway build
+```
+
+산출물은 `dist/<target>/`에 만들어집니다.
+프로덕션 앱은 로컬 UI 자산을 사용합니다. `dev.command`와 개발 서버 URL은 개발 실행에서만 사용합니다.
+빌드 실패 시 이전 프로덕션 산출물을 유지합니다.
+
+최종 앱은 포함된 Bun을 사용합니다. 사용자 전역 Bun이나 개발 서버에 의존하지 않습니다.
+Windows 실행에는 WebView2 런타임이 필요합니다.
+
+## 배포 채널로 패키징
+
+패키징에는 `src-bunaway/bunaway.json`의 `bundle` 설정이 필요합니다.
+템플릿은 기본 Windows 직접 배포 채널을 선언합니다.
+
+```json
+{
+  "bundle": {
+    "channels": {
+      "win-direct": {}
+    }
+  }
+}
+```
+
+아래는 `vanilla` 템플릿에서 사용할 명령입니다.
+
+```sh
+# 먼저 만든 네이티브 산출물을 패키징
+bun run package win-direct
+# 네이티브 빌드부터 실행
+bun run package win-direct --build
+```
+
+Vite 템플릿은 웹 빌드를 마친 뒤 `bun run bunaway package win-direct --build`로 실행합니다.
+`--build`는 네이티브 빌드 옵션이므로 Vite의 웹 빌드는 먼저 실행해야 합니다.
+
+출력은 `dist/<target>/packaged/<channel>/`에,
+검증 결과는 그 옆의 `dist/<target>/packaged/<channel>-report.json`에 기록됩니다.
+Windows `win-direct` 설치 파일 생성에는 Inno Setup 6.3 이상이 필요합니다.
+서명, 설치, 스토어 조건은 채널별로 확인해야 합니다.
+
+## 실행과 배포 검증
+
+설치 파일을 만든 뒤에는 실제 설치와 실행을 확인합니다.
+macOS 빌드는 `.app`을 생성하고 ad-hoc으로 서명합니다. Developer ID 서명과 공증은 별도로 진행해야 합니다.
+현재 플랫폼별 검증 결과는 [지원 범위](/reference/platforms/)에서 확인하세요.
+
+채널별 설정과 도구의 자세한 계약은
+[배포 채널](/reference/packaging/channels/)과 [서명](/reference/packaging/signing/)을 확인하세요.
+보고서 읽는 방법은 [산출물과 보고서](/reference/packaging/report/)에 설명했습니다.

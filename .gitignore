@@ -2,6 +2,7 @@ node_modules/
 dist/
 build/
 coverage/
+.astro/
 *.tsbuildinfo
 *.log
 .env

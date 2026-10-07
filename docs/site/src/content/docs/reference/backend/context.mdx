@@ -1,0 +1,41 @@
+---
+title: CommandContext
+description: 명령에서 취소 신호와 Host API, 앱 상태, 이벤트 발행자를 사용합니다.
+sidebar: { order: 3 }
+---
+
+핸들러와 플러그인 setup에는 `{ signal, host, state, events }`가 전달됩니다.
+명령의 컨텍스트는 요청이 끝날 때까지 유효합니다. setup의 컨텍스트는 앱 백엔드가 종료될 때까지 사용합니다.
+
+| 필드 | 역할 |
+| --- | --- |
+| `signal` | 취소, 기한, 세션 종료를 관찰하는 신호 |
+| `host` | 원래 출처의 권한에 묶인 Host API |
+| `state` | 공통 앱 메모리 상태 저장소 |
+| `events` | 선언된 이벤트 발행자 |
+
+## signal
+
+`CancellationSignal`은 표준 AbortSignal의 `aborted`와 abort 리스너 등록, 해제 부분입니다.
+요청이 취소돼도 핸들러의 일반 Promise는 강제로 멈추지 않습니다.
+긴 루프나 외부 작업은 신호를 확인하고 자신이 가진 자원을 정리해야 합니다.
+명령이 완료된 뒤에는 같은 context로 Host API를 호출하거나 이벤트를 발행할 수 없습니다.
+
+## host.call
+
+```ts
+await context.host.call("storage.readText", {
+  scope: "appData", path: "messages/current.txt",
+});
+```
+
+뷰에서 호출한 명령은 그 뷰의 Host 정책을 사용합니다. 백엔드 setup은 `policy.backend`를 사용합니다.
+호출할 작업에 맞는 입력을 전달해야 하며 권한이나 저장 범위를 벗어나면 실패합니다. 요청이 취소되면 Host API 호출도 취소됩니다.
+
+## 상태와 이벤트
+
+`state`는 앱 백엔드 전체가 공유하는 저장소입니다.
+`events`로 이벤트를 발행하면 수신 권한이 있는 뷰의 활성 구독에 전달됩니다.
+[상태](/reference/backend/state/)와 [이벤트 발행](/reference/backend/events/)을 참고하세요.
+
+Host 정책은 context.host를 사용하는 호출에 적용합니다. 백엔드에서 직접 Bun API를 호출하는 코드는 이 정책으로 제한되지 않습니다.

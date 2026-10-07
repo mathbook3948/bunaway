@@ -1,0 +1,67 @@
+---
+title: 산출물과 보고서
+description: 패키징 산출물의 위치와 성공 여부, 진단 코드 확인하기.
+sidebar: { order: 4 }
+---
+
+## 경로
+
+| 산출물 | 위치 |
+| --- | --- |
+| 원본 Windows 빌드 | `dist/windows-x64/` |
+| 원본 macOS 빌드 | `dist/macos-arm64/<appId>.app/` |
+| 배포 채널 출력 | `dist/<target>/packaged/<channel>/` |
+| 채널 보고서 | `dist/<target>/packaged/<channel>-report.json` |
+
+win-direct 보고서의 경로는 `dist/windows-x64/packaged/win-direct-report.json`입니다.
+보고서는 채널 디렉터리와 나란히 저장됩니다.
+
+## PackageReport
+
+| 필드 | 의미 |
+| --- | --- |
+| `channel`, `target` | 실행한 채널, 네이티브 대상 |
+| `app` | `id`, `name`, `identifier`, `version` |
+| `startedAt` | 실행 시작 시간 문자열 |
+| `ok` | 패키징 단계 성공 |
+| `usable` | 채널의 로컬 사용, 실행 조건 충족 |
+| `submittable` | 채널의 제출 조건 충족 |
+| `signing` | `requirement`, `configured`, `performed`, 선택적 `detail` |
+| `stages` | 실행 순서와 단계별 결과 |
+| `diagnostics` | 구조화된 경고, 오류 |
+| `artifacts` | 배포 파일 경로, 종류, 서명 여부, SHA-256, 바이트 수 |
+| `notes` | 실행 검증 범위와 미검증 사항 |
+
+`ok`는 패키징 단계의 성공 여부이며 CLI의 종료 코드도 이 값을 따릅니다.
+`usable`은 로컬 사용 조건을, `submittable`은 제출 조건을 충족했는지 나타냅니다.
+예를 들어 서명하지 않은 Store 제출용 산출물은 로컬에서 사용할 수 있어도 제출 조건은 충족하지 못할 수 있습니다. 실제 설치 동작은 별도로 확인하세요.
+
+## 단계와 진단
+
+단계에는 `id`, `title`, `status` (`ok`, `failed`, `skipped`), `durationMs`가 있습니다.
+진단에는 `stage`, `code`, `severity` (`info`, `warning`, `error`), `message`, 선택적 `path`가 있습니다.
+
+| 코드 | 확인할 사항 |
+| --- | --- |
+| `PKG_CONFIG_INVALID` | bundle 필드, 값 |
+| `PKG_CHANNEL_UNKNOWN` | 채널 ID |
+| `PKG_CHANNEL_NOT_CONFIGURED` | channels 선언 |
+| `PKG_TARGET_MISSING` | 현재 대상 선언 |
+| `PKG_INPUT_MISSING` | 먼저 build 실행 |
+| `PKG_INPUT_TAMPERED` | 빌드 산출물이 변경됐는지 확인하고 다시 build 실행 |
+| `PKG_INPUT_UNEXPECTED` | 예상하지 않은 빌드 파일 |
+| `PKG_ADAPTER_MISSING` | 현재 플랫폼에서 지원하는 채널인지 확인 |
+| `PKG_TOOL_MISSING` | Inno, 서명 도구 설치 |
+| `PKG_TOOL_FAILED` | 도구 출력과 실행 환경 |
+| `PKG_SIGNING_MISSING` | 채널 서명 요구 |
+| `PKG_SIGNING_FAILED` | 인증서, 서명 결과 |
+| `PKG_STAGE_FAILED` | 실패한 단계의 메시지 |
+| `PKG_LOCK_FAILED` | 동시 빌드, 패키징 실행 |
+| `PKG_VERIFY_FAILED` | 최종 산출물 검사 |
+
+## 실패와 동시 실행
+
+패키징에 실패하면 원본 빌드와 이전에 성공한 채널 산출물을 유지합니다.
+같은 target의 빌드와 패키징, 같은 채널의 패키징은 동시에 실행하지 마세요. 충돌하면 잠금 오류로 실패합니다.
+잠금 오류가 발생하면 새 보고서가 없을 수 있으므로 `startedAt`이 이번 실행 시간인지 확인하세요.
+중단된 실행의 잠금을 지우기 전에는 해당 프로세스가 종료됐는지 확인합니다.

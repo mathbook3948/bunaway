@@ -1,0 +1,57 @@
+---
+title: command
+description: 스키마로 입력과 결과를 정하고 handle에 명령의 작업을 작성합니다.
+sidebar: { order: 2 }
+---
+
+`@bunaway/backend`의 `command({ input, output, handle })`는 스키마에서 입력, 결과 타입을 추론하고 런타임에도 검증합니다.
+
+```ts
+import { command } from "@bunaway/backend";
+
+const greet = command({
+  input: {
+    type: "object",
+    properties: { name: { type: "string", maxLength: 100 } },
+    required: ["name"],
+    additionalProperties: false,
+  },
+  output: { type: "string" },
+  handle(input) { return `안녕하세요, ${input.name}`; },
+});
+```
+
+`greet`를 `app.commands["greet"]`에 등록하고 해당 뷰의 정책에도 허용해야 UI가 호출할 수 있습니다.
+
+## 인자와 반환값
+
+| 필드 | 필수 | 의미 |
+| --- | --- | --- |
+| `input` | 예 | 입력 Schema |
+| `output` | 예 | 결과 Schema |
+| `handle` | 예 | `(input, context) => Output \| Promise<Output>` |
+
+`CommandContract`는 `{ input, output }`이고 `CommandHandler`는 위 handle 함수의 타입입니다.
+[defineModule](/reference/backend/module/)의 `.command(name, contract, handle)`에도 같은 계약을 사용합니다.
+
+`command()`는 `input`, `output`, `run(payload, context)`가 있는 `CommandDefinition`을 반환합니다.
+반환값을 앱의 commands에 등록하고 호출 권한을 뷰 정책에 적습니다. UI에서는 client.invoke로 호출합니다.
+
+## 입력 검증과 결과
+
+handle은 input 스키마에 맞는 데이터로 실행됩니다. 반환값은 output 스키마와 일치해야 하며 Promise를 반환하면 완료된 값을 검사합니다.
+
+입력 위반은 `INVALID_ARGUMENT`, 출력 위반은 `INTERNAL`입니다.
+`{ const: null }` 결과를 선언하면 반드시 `null`을 반환합니다. `undefined`는 JSON 값이 아닙니다.
+
+## 예외와 동시 실행
+
+일반 핸들러 예외는 안전한 `INTERNAL`로 전달합니다.
+오류 코드와 공개할 메시지를 직접 정하려면 `@bunaway/protocol`의 `BunawayError`를 사용합니다.
+오류 생성자도 code, message, details 구조를 검증합니다.
+
+명령이 비동기 작업을 기다리는 동안 다른 요청도 실행합니다.
+`await`를 사이에 둔 공유 상태 변경은 자동으로 직렬화되지 않습니다.
+취소된 핸들러가 늦게 반환해도 이미 끝난 요청을 다시 완료하지 않습니다.
+
+[CommandContext](/reference/backend/context/), [스키마](/reference/schema/), [오류](/reference/errors/)

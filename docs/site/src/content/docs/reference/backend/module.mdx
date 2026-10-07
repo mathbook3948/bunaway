@@ -1,0 +1,54 @@
+---
+title: defineModule
+description: 기능별 명령과 이벤트를 등록하고 defineApp으로 조립합니다.
+sidebar: { order: 7 }
+---
+
+`@bunaway/backend`의 `defineModule(name)`은 기능 모듈을 만드는 `ModuleBuilder`를 즉시 반환합니다.
+모듈은 명령과 이벤트를 묶는 앱 코드의 단위입니다. 초기화와 종료 훅이 필요하면 [플러그인](/reference/backend/plugins/)을 사용합니다.
+
+```ts
+import { defineApp, defineModule } from "@bunaway/backend";
+
+const greeting = defineModule("greeting")
+  .command("read", { input: { const: null }, output: { type: "string" } }, () => "안녕하세요")
+  .event("changed", { type: "string" });
+
+export const app = defineApp({ modules: [greeting] });
+export default app;
+```
+
+위 모듈은 `greeting.read` 명령과 `greeting.changed` 이벤트를 등록합니다.
+호출할 뷰의 정책에도 이 최종 이름을 허용해야 합니다. 모듈 등록만으로 권한은 추가되지 않습니다.
+
+## 필드와 메서드
+
+| 항목 | 입력과 결과 |
+| --- | --- |
+| `name` | 모듈 이름 |
+| `commands` | 최종 이름으로 등록한 명령 목록 |
+| `events` | 최종 이름으로 등록한 이벤트 스키마 목록 |
+| `.command(name, contract, handle)` | 명령을 추가한 새 ModuleBuilder 반환 |
+| `.event(name, schema)` | 이벤트를 추가한 새 ModuleBuilder 반환 |
+
+`ModuleDefinition`은 `name`, `commands`, `events`를 가진 구조입니다.
+`.command()`의 contract는 `{ input, output }`이며 handle은 `(input, context) => result`입니다.
+비동기 함수도 허용하고 입력과 출력을 [command](/reference/backend/command/)와 같은 스키마로 검증합니다.
+`.event()`의 schema는 이벤트 payload를 검사합니다. 알림은 핸들러에서 `context.events.emit()`으로 발행합니다.
+
+## 이름과 실패
+
+모듈 이름과 등록 이름은 1~128자의 영숫자, `_ . : -`를 사용합니다.
+최종 이름은 `모듈 이름.등록 이름`이며 이 이름도 같은 길이와 문자 제한을 따릅니다.
+잘못된 이름, 같은 최종 명령 또는 이벤트 이름의 중복, 예약 명령 `bunaway.capabilities`는 `INVALID_ARGUMENT`로 실패합니다.
+명령과 이벤트의 이름 공간은 별도이므로 같은 이름을 각각 등록할 수 있습니다.
+
+## 조립과 타입
+
+각 등록 메서드는 새 모듈을 반환합니다. 반환값을 이어서 사용해야 등록이 반영됩니다.
+이전 모듈 객체는 그대로 유지되며 모듈과 명령, 이벤트 목록은 동결합니다.
+모듈을 `defineApp({ modules: [...] })`에 정적으로 나열하면 `CommandsOf`와 `EventsOf`로 타입을 추론할 수 있습니다.
+실행할 때 선택하는 이름이나 모듈 배열은 정확한 목록을 추론하지 못할 수 있습니다.
+
+서로 다른 모듈이라도 최종 이름이 같으면 앱 조립에 실패합니다.
+일반 객체 spread로 먼저 덮어쓴 등록은 복원할 수 없으므로 기능 조립에는 modules 배열을 사용합니다.

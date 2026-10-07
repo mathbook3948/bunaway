@@ -1,0 +1,92 @@
+---
+title: 첫 앱 실행하기
+description: 로컬 패키지로 첫 앱을 만들고 메시지를 저장한 뒤 다시 읽어봅니다.
+---
+
+## 개발 환경 준비
+
+플랫폼별 도구 설치와 버전 조건은 [개발 환경 준비](/start/prerequisites/)를 먼저 확인하세요.
+
+앱 개발에는 **Bun 1.4.2**를 사용합니다. 네이티브 빌드와 실행은 대상 운영체제에서 합니다.
+
+| 플랫폼 | 추가 준비 |
+| --- | --- |
+| Windows x64 | PowerShell 7, WebView2 Evergreen 런타임, GUI 세션 |
+| macOS arm64 | Xcode Command Line Tools, GUI 세션 |
+
+Linux에서는 이 문서 사이트와 공통 계약 테스트를 실행할 수 있지만 네이티브 앱 호스트는 아직 없습니다.
+
+## 1. 로컬 패키지 준비
+
+현재 공개 npm 배포는 없습니다. bunaway 저장소에서 CLI와 SDK를 같은 버전의 tarball로 만듭니다.
+이미 로컬 묶음을 전달받았다면 다음 단계로 이동하세요.
+
+```sh
+# bunaway 저장소 루트
+bun install --frozen-lockfile
+bun run framework:pack --local
+```
+
+`build/framework/`에 패키지 묶음이 생깁니다.
+`--local`은 패키지 간 의존성을 해당 디렉터리의 절대 경로로 연결합니다.
+묶음을 다른 경로나 머신으로 옮겼다면 그 위치에서 다시 생성해야 합니다.
+
+## 2. 앱 생성
+
+저장소 루트에서 기본 `vanilla` 템플릿으로 생성합니다.
+
+```sh
+bun packages/cli/src/main.ts create ../my-app --package-dir build/framework
+cd ../my-app
+bun install
+```
+
+새 디렉터리에 앱을 생성합니다. 의존성은 생성 후 직접 설치합니다.
+프로젝트의 `package.json`과 설치 후 생긴 `bun.lock`을 함께 보관하세요.
+
+저장소를 체크아웃하지 않는 개발자는 전달받은 CLI tarball을 도구 폴더에 설치할 수 있습니다.
+아래 명령의 두 경로를 전달받은 패키지 묶음의 **절대 경로**로 바꿉니다.
+
+```sh
+mkdir bunaway-tools
+cd bunaway-tools
+bun init -y
+bun add --exact /absolute/path/build/framework/bunaway-cli-0.0.0.tgz
+bun run bunaway create ../my-app --package-dir /absolute/path/build/framework
+cd ../my-app
+bun install
+```
+
+## 3. 검사하고 실행
+
+`vanilla` 생성 앱 폴더에서 실행합니다.
+
+```sh
+bun run validate
+bun run typecheck
+bun run doctor
+bun run dev
+```
+
+`validate`로 소스 경로와 설정, 정책을 검사합니다.
+`typecheck`는 TypeScript 타입을 확인하고 `doctor`는 개발 도구와 환경을 점검합니다.
+첫 네이티브 빌드에서는 고정된 런타임과 플랫폼 의존성을 내려받습니다.
+
+## 4. 저장 흐름 확인
+
+1. 입력 상자에 메시지를 적고 저장 버튼을 누릅니다.
+2. UI가 `message.save` 명령을 호출합니다.
+3. 앱 백엔드가 `appData/messages/current.txt`에 저장합니다.
+4. `message.saved` 이벤트를 받은 UI가 저장 결과를 표시합니다.
+5. 창을 닫고 `bun run dev`로 다시 실행하면 `message.read`로 저장 내용을 복원합니다.
+
+첫 실행에는 저장 파일이 없어 읽기 실패 안내가 나올 수 있습니다. 메시지를 저장한 뒤 다시 실행하면 복원을 확인합니다.
+개발 중 전체 앱이 재시작되면 저장하지 않은 입력은 사라집니다.
+
+## 5. 파일을 살펴보기
+
+[프로젝트 파일](/concepts/project-layout/)에서 `app.ts`, `bunaway.json`, `policy.json`을 연결해 읽어보세요.
+[명령과 이벤트](/guides/commands-and-events/)에는 템플릿의 실제 백엔드, 프런트엔드 코드가 있습니다.
+
+UI HMR을 원하면 [Vite와 개발 흐름](/guides/development/)의 `vite` 템플릿을 사용하세요.
+Vite 템플릿에서는 `dev`와 `build`가 웹 도구를 실행합니다. 네이티브 CLI 실행 방법은 그 가이드에 설명했습니다.

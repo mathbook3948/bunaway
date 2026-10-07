@@ -1,0 +1,96 @@
+---
+title: 저장소와 앱 상태
+description: 메모리 상태와 영구 저장을 구분하고 Host API 경로와 저장 권한을 연결합니다.
+---
+
+## 앱 상태와 파일 저장의 차이
+
+| 방식 | 용도 | 앱 재시작 후 |
+| --- | --- | --- |
+| `context.state` | 백엔드 메모리의 앱 데이터 | 초기 정의로 다시 시작 |
+| `context.host.call("storage.writeText", ...)` | 파일로 저장할 데이터 | 저장된 파일을 다시 읽을 수 있음 |
+
+여러 뷰가 있으면 같은 앱 백엔드의 상태를 공유합니다.
+뷰별 데이터가 필요하면 상태 키에 뷰 ID를 넣는 등 앱에서 구분합니다.
+
+## 템플릿의 저장 경로 읽기
+
+`message.save` 핸들러는 아래 Host API를 호출합니다.
+
+```ts
+await context.host.call("storage.writeText", {
+  scope: "appData",
+  path: "messages/current.txt",
+  text,
+});
+```
+
+`appData`는 호스트가 소유한 앱 데이터 저장 범위입니다.
+`path`는 그 범위 안의 `/`로 구분한 상대 경로입니다.
+`messages/current.txt`가 실제로 어디에 위치할지는 플랫폼 호스트가 결정합니다.
+핸들러에는 사용자별 절대 경로 대신 scope와 상대 경로를 적습니다.
+
+뷰의 정책은 이 호출에 대응하는 범위를 허용해야 합니다.
+
+```json
+{
+  "scope": "appData",
+  "pathPrefix": "messages",
+  "access": ["read", "write"]
+}
+```
+
+`pathPrefix`는 이름 붙은 디렉터리 범위입니다. `messages/` 아래만 허용합니다.
+빈 문자열은 scope 전체를 허용합니다. 특정 디렉터리에만 접근하려면 그 이름을 적습니다.
+`scope`는 `appData` 또는 `temp`입니다. `temp`는 영구 보관할 데이터에 사용하지 않습니다.
+
+절대 경로, `..`, 역슬래시 등은 공통 경로 계약에서 거부하고,
+실제 파일 접근에서는 네이티브 호스트가 저장 권한과 경로 경계를 다시 검사합니다.
+
+## 읽기와 첫 실행
+
+```ts
+const text = await context.host.call("storage.readText", {
+  scope: "appData",
+  path: "messages/current.txt",
+});
+```
+
+첫 실행에는 파일이 없어 읽기에 실패할 수 있습니다. 템플릿은 실패를 표시하고 저장 버튼을 사용할 수 있게 합니다.
+메시지를 저장한 뒤 다시 실행하면 파일을 읽어 복원합니다. 읽기 실패는 파일 누락 외에 권한이나 파일 작업 오류로도 발생합니다.
+
+## 메모리 상태 예시
+
+아래는 파일을 쓰지 않는 앱 정의 예시입니다.
+실행하려면 호출할 뷰의 정책에 `counter.next`도 추가해야 합니다.
+
+```ts
+import { type AppDefinition, command } from "@bunaway/backend";
+
+export default {
+  state: { count: 0 },
+  events: {},
+  commands: {
+    "counter.next": command({
+      input: { const: null },
+      output: { type: "integer" },
+      handle(_input, context) {
+        const count = Number(context.state.get("count")) + 1;
+        context.state.set("count", count);
+        return count;
+      },
+    }),
+  },
+} satisfies AppDefinition;
+```
+
+`state.get()`은 저장된 JSON 값의 복사본을 반환합니다. 반환 객체를 수정하는 것만으로 저장 값은 바뀌지 않습니다.
+변경을 반영하려면 `state.set()`을 사용합니다.
+비동기 핸들러가 `await`하는 동안 다른 요청이 상태를 바꿀 수 있습니다.
+읽은 값을 나중에 덮어쓰는 작업은 직렬로 실행하거나 최신 값을 다시 확인하도록 작성합니다.
+
+## 정책이 적용되는 범위
+
+UI 명령의 `context.host`에는 원래 뷰의 권한이 적용됩니다.
+백엔드 자체 작업은 루트의 `backend` 권한을 사용합니다.
+정책은 Host API 호출에 적용합니다. 신뢰된 백엔드가 직접 호출하는 Bun API는 이 검사 범위 밖입니다.
