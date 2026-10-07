@@ -17,16 +17,26 @@ Edit `src/` for the UI and `src-bunaway/` for the backend.
 `src-bunaway/message/module.ts` registers commands and events with `defineModule`.
 The framework boots the app from `build.app` in `src-bunaway/bunaway.json`.
 
-Call backend commands directly from the UI:
+The example below infers command and event types from the app definition:
 
 ```ts
-import { invoke } from "@bunaway/client";
+import type { CommandsOf, EventsOf } from "@bunaway/backend";
+import { createClient } from "@bunaway/client";
+import type { app } from "../src-bunaway/app.ts";
 
-const text = await invoke<string>("message.read", null);
+async function start(): Promise<void> {
+  const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
+  const text = await client.invoke("message.read", null);
+  console.log(text);
+}
+
+void start().catch(console.error);
 ```
 
-Use `invoke` and `listen` without initialization code. Call the disposer returned
-by `listen` when the UI component is removed. Backend calls work in the desktop
+The client can be reused for commands and subscriptions in event handlers and
+components. The startup function handles creation and call failures. Call the disposer
+returned by `client.listen` when the UI component is removed, keeping the shared
+client open. Backend calls work in the desktop
 window opened by `bun run bunaway dev`; calls from a regular browser or Vite
 preview fail with `UNSUPPORTED`.
 

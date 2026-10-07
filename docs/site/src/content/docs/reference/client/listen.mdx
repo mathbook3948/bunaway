@@ -5,19 +5,19 @@ sidebar: { order: 3 }
 ---
 
 ```ts
-listen<T extends JsonValue = JsonValue>(name, listener, { onError, signal? }): Promise<AsyncDispose>
 client.listen(name, listener, { onError, signal? }): Promise<AsyncDispose>
+listen<T extends JsonValue = JsonValue>(name, listener, { onError, signal? }): Promise<AsyncDispose>
 ```
 
 이벤트를 구독하고 알림이 발생할 때마다 콜백을 실행합니다. 구독이 성공하면 비동기 해제 함수를 반환합니다.
-직접 import한 `listen`은 기본 연결을 사용하고 연결이 준비될 때까지 기다립니다. 별도의 초기화 코드는 필요 없습니다.
+아래 예제는 [앱 정의의 타입을 지정한 클라이언트](/guides/types-and-validation/)의 `client.listen`으로 구독합니다. 구독은 연결 준비를 기다립니다.
+직접 import한 `listen`도 같은 기본 연결을 사용하는 함수 API로 계속 지원합니다.
 
 ## 예시
 
 ```ts
-import { listen } from "@bunaway/client";
-
-const unlisten = await listen<string>(
+// UI 초기화 때 만든 타입이 연결된 client를 재사용합니다.
+const unlisten = await client.listen(
   "message.saved",
   (event) => { console.log("저장 내용:", event.payload); },
   { onError: (error) => { console.error(error.code, error.message); } },
@@ -35,9 +35,9 @@ await unlisten();
 | `onError` | 예 | 활성 구독이 오류로 종료됐을 때 실행하는 콜백 |
 | `signal` | 아니요 | 구독 시작 및 활성 구독의 취소 신호 |
 
-구독 시작 자체가 실패하면 `listen()` Promise가 reject합니다. 일반 브라우저에서는 `UNSUPPORTED`로 실패합니다.
+구독 시작 자체가 실패하면 `listen()` Promise가 reject합니다. 일반 브라우저에서 기본 클라이언트를 생성하면 `UNSUPPORTED`를 동기적으로 던집니다.
 직접 import한 `listen<T>`의 `T`는 이벤트 payload 타입입니다. 이 타입 지정은 실행 시 검증기를 추가하지 않습니다.
-앱 정의의 이벤트 타입을 추론하려면 [앱 타입을 지정한 클라이언트](/guides/types-and-validation/)를 사용합니다.
+앱 타입을 지정한 클라이언트는 이벤트 이름과 payload 타입을 앱 정의에서 추론합니다.
 연결 종료나 이벤트 전달 오류로 활성 구독이 끝나면 `onError`를 호출합니다.
 listener에서 예외가 발생해도 다른 요청과 구독은 계속 처리합니다.
 

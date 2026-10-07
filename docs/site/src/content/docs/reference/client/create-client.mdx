@@ -10,30 +10,29 @@ sidebar: { order: 1 }
 
 ## 사용법
 
-```ts
-import { createClient } from "@bunaway/client";
-
-const client = createClient();
-await client.invoke("message.save", "새 메시지");
-```
-
-이 코드는 `bunaway dev`로 연 창이나 배포 앱의 WebView에서 실행합니다.
-일반 브라우저에서 기본 클라이언트를 만들면 `UNSUPPORTED` 오류를 동기적으로 던집니다.
-
-## 앱 정의에서 타입 추론
+앱 정의에서 추론한 명령과 이벤트 타입을 지정해 클라이언트를 만들 수 있습니다.
 
 ```ts
 import { createClient } from "@bunaway/client";
 import type { CommandsOf, EventsOf } from "@bunaway/backend";
 import type { app } from "../src-bunaway/app.ts";
 
-const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
-const text = await client.invoke("message.read", null);
+async function start(): Promise<void> {
+  const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
+  const text = await client.invoke("message.read", null);
+  console.log(text);
+}
+
+void start().catch(console.error);
 ```
 
 명령 이름과 입력, 반환값, 이벤트 payload 타입을 앱 정의에서 추론합니다.
 UI에서는 `import type`으로 앱 정의의 타입만 가져옵니다.
 [타입과 입력 검증](/guides/types-and-validation/)에서 지원 범위를 확인하세요.
+
+이 코드는 `bunaway dev`로 연 창이나 배포 앱의 WebView에서 실행합니다.
+위 예제는 UI 초기화 함수에서 클라이언트를 만듭니다. 만든 클라이언트는 컴포넌트와 이벤트 핸들러에서 재사용할 수 있습니다.
+일반 브라우저에서 기본 클라이언트를 만들면 `UNSUPPORTED` 오류를 동기적으로 던지므로 생성도 오류 처리 범위에 포함합니다.
 
 ## 인자와 반환값
 

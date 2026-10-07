@@ -17,6 +17,31 @@ Edit `src/` for the UI and `src-bunaway/` for the backend.
 `src-bunaway/message/module.ts` registers commands and events with `defineModule`.
 The framework boots the app from `build.app` in `src-bunaway/bunaway.json`.
 
+## Backend calls
+
+The example below infers command and event types from the app definition:
+
+```ts
+import type { CommandsOf, EventsOf } from "@bunaway/backend";
+import { createClient } from "@bunaway/client";
+import type { app } from "../src-bunaway/app.ts";
+
+async function start(): Promise<void> {
+  const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
+  const text = await client.invoke("message.read", null);
+  console.log(text);
+}
+
+void start().catch(console.error);
+```
+
+The example creates the client in a startup function to handle creation and call
+failures. You can reuse it in components and event handlers. Dispose each
+component's `client.listen` subscriptions on cleanup, keeping the shared client
+open. Backend calls through the default connection require the desktop WebView.
+
+## Backend Host operations
+
 Backend commands and their services can import `storage`, `log`, and `capabilities`
 from `@bunaway/backend` directly. The SDK uses the current command's Host permissions
 and cancellation signal, without passing `context.host` through service arguments.

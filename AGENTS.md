@@ -24,6 +24,10 @@ do not replace reviewing the accuracy of the explanations and examples.
 
 ### Writing style
 
+State general principles without enumerating specific templates or frameworks.
+List names when explaining the currently supported choices.
+Distinguish recommendations from required inputs and runtime constraints.
+
 Do not use em dashes (U+2014) or middle dots (U+00B7) in documentation or
 user-facing text. Use sentences, commas, colons or conjunctions instead.
 
@@ -41,6 +45,15 @@ where users must write them, without describing their implementation. Put
 protocol, runtime and adapter implementation details in the framework-contribution
 section or architecture documents, and keep them out of the main app-development
 navigation.
+
+### UI client usage
+
+Recommend clients typed from the app definition with `CommandsOf` and `EventsOf`
+to check command and event contracts. This is not an SDK requirement.
+UI initialization is the recommended place to create a client and handle failures.
+The default WebView client requires an available host bridge.
+Component cleanup disposes its subscriptions and keeps the shared client open.
+Direct function APIs remain supported and must still be covered by SDK tests.
 
 ### Development priority
 

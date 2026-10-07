@@ -75,7 +75,9 @@ React Fast Refresh의 인라인 preamble은 개발 CSP에서만 허용한다.
 모든 Vite 기반 템플릿의 프로덕션 CSP는 `script-src 'self'; style-src 'self'`이며
 이미지는 인라인 data URL 대신 로컬 파일로 출력한다.
 공통 `src-bunaway/`의 앱 정의, 메시지 명령, 이벤트, 저장 정책은 동일하다.
-공식 UI 화면에 SDK 호출을 추가하려면 `@bunaway/client`를 사용한다.
+앱 정의에서 추론한 타입을 `createClient`에 지정하면 명령 이름과 입력, 결과, 이벤트 데이터의 타입을 검사할 수 있다.
+이 클라이언트의 `client.invoke`, `client.listen`으로 호출하고 구독한다.
+생성과 호출 실패를 처리하고 컴포넌트를 제거할 때는 해당 구독만 해제한다.
 
 `vite` 템플릿은 공식 [create-vite@9.2.1의 vanilla-ts](https://github.com/vitejs/vite/tree/fea5b21dd9524ed7308632407b996f1fe5942c9c/packages/create-vite/template-vanilla-ts)
 기본 화면(로고, 카운터)을 사용한다.
@@ -125,7 +127,9 @@ vanilla MVP는 양쪽 호스트가 공통으로 지원하는 단일 뷰 `app` �
 macOS는 기존 `bunaway://` 매핑이다. policy.json의 HTTP origin은 허용하지 않는다.
 `dev.url`의 정확한 loopback origin은 개발 산출물에만 적용하며 프로덕션에 포함하지 않는다.
 
-`vanilla` 템플릿의 화면은 `@bunaway/client`의 `invoke`, `listen`을 직접 사용하고,
+`vanilla` 템플릿은 `CommandsOf`와 `EventsOf`로 앱 정의에서 명령과 이벤트 타입을 추론한다.
+이 타입을 지정한 클라이언트를 `createClient`로 만들고 명령을 호출하거나 이벤트를 구독한다.
+명령과 이벤트 이름, 입력과 결과는 `bun run typecheck`로 검사한다. 타입만 import하므로 백엔드 구현은 UI 번들에 포함되지 않는다.
 백엔드는 `defineModule`, `defineApp`으로 명령, 이벤트를 등록한다.
 화면에서 별도의 초기화 코드를 작성할 필요는 없다. 일반 브라우저에서 백엔드 호출은
 `UNSUPPORTED`로 실패하므로 `bunaway dev`로 연 앱 창을 사용한다.

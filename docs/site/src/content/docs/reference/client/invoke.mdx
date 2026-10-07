@@ -5,20 +5,20 @@ sidebar: { order: 2 }
 ---
 
 ```ts
-invoke<T extends JsonValue = JsonValue>(name, input, options?): Promise<T>
 client.invoke(name, input, options?): Promise<Output>
+invoke<T extends JsonValue = JsonValue>(name, input, options?): Promise<T>
 ```
 
 등록된 앱 명령을 호출하고 결과를 Promise로 받습니다.
-직접 import한 `invoke`는 기본 연결을 사용하며 연결 준비를 기다립니다. 별도의 초기화 코드는 필요 없습니다.
+아래 예제는 [앱 정의의 타입을 지정한 클라이언트](/guides/types-and-validation/)의 `client.invoke`로 호출합니다. 호출은 연결 준비를 기다립니다.
+직접 import한 `invoke`도 같은 기본 연결을 사용하는 함수 API로 계속 지원합니다.
 
 ## 인자와 예시
 
 ```ts
-import { invoke } from "@bunaway/client";
-
-const text = await invoke<string>("message.read", null);
-await invoke("message.save", "새 메시지");
+// UI 초기화 때 만든 타입이 연결된 client를 재사용합니다.
+const text = await client.invoke("message.read", null);
+await client.invoke("message.save", "새 메시지");
 ```
 
 | 인자 | 필수 | 의미 |
@@ -31,13 +31,12 @@ await invoke("message.save", "새 메시지");
 입력이 없음을 `{ const: null }`로 선언했다면 `undefined` 대신 `null`을 전달합니다.
 Promise는 그 요청의 output을 반환합니다. 직접 import한 `invoke<T>`의 `T`는 반환값 타입입니다.
 이 타입 지정은 실행 시 검증기를 추가하지 않습니다.
-명령 이름과 입력, 반환값을 앱 정의에서 추론하려면 [앱 타입을 지정한 클라이언트](/guides/types-and-validation/)를 사용합니다.
-명령이 발행한 이벤트는 listen의 콜백에서 받습니다.
+앱 타입을 지정한 클라이언트는 명령 이름과 입력, 반환값을 앱 정의에서 추론합니다. 명령이 발행한 이벤트는 `client.listen`의 콜백에서 받습니다.
 
 ## 기한
 
 ```ts
-await invoke<string>("message.read", null, { deadline: Date.now() + 5000 });
+await client.invoke("message.read", null, { deadline: Date.now() + 5000 });
 ```
 
 기본 명령 최대 시간은 30초입니다. 더 먼 deadline을 주어도 최대 시간을 연장하지 않습니다.
@@ -48,7 +47,7 @@ await invoke<string>("message.read", null, { deadline: Date.now() + 5000 });
 
 ```ts
 const controller = new AbortController();
-const request = invoke<string>("message.read", null, { signal: controller.signal });
+const request = client.invoke("message.read", null, { signal: controller.signal });
 controller.abort();
 try { await request; } catch (error) { console.error(error); }
 ```

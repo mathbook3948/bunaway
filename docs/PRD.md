@@ -19,6 +19,7 @@ Tauri에서 참고할 부분은 웹 UI, 백엔드 코어, 네이티브 호스트
 ### 제품 요구사항
 
 - React, Vue, Svelte, vanilla HTML/JS에서 같은 클라이언트 SDK를 사용한다. 코어는 특정 UI 프레임워크를 import하지 않는다.
+- SDK는 앱 정의에서 명령과 이벤트 타입을 추론하는 클라이언트를 제공한다. 직접 명령을 호출하고 이벤트를 구독하는 함수 API도 지원한다.
 - 앱 개발자는 일반적인 기능을 TypeScript로 작성한다. 새 운영체제 기능을 추가할 때만 네이티브 어댑터를 작성한다.
 - 프런트엔드는 등록된 명령과 이벤트만 사용한다. Bun, Node.js, 파일 시스템, 임의 네이티브 함수에 직접 접근하지 않는다.
 - 데스크톱과 모바일은 같은 명령, 이벤트, 권한 모델을 사용한다. 플랫폼별 기능 차이는 조회 가능한 지원 정보와 명시적 오류로 드러낸다.
@@ -170,10 +171,14 @@ export default app;
 
 // src/main.ts
 import { createClient } from "@bunaway/client";
-import type { CommandsOf } from "@bunaway/backend";
+import type { CommandsOf, EventsOf } from "@bunaway/backend";
 import type { app } from "../src-bunaway/app.ts";
-const client = createClient<CommandsOf<typeof app>>();
-const text = await client.invoke("notes.read", { key: "welcome" });
+async function start(): Promise<void> {
+  const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
+  const text = await client.invoke("notes.read", { key: "welcome" });
+  console.log(text);
+}
+void start().catch(console.error);
 ```
 
 위 예제를 허용하는 정책에는 해당 뷰의 `notes.read` 명령과 `appData/notes` 읽기 범위를 함께 선언한다. 입력 패턴은 편의 검증이며 네이티브 파일 범위 검사를 대체하지 않는다.

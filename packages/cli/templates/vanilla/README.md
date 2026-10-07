@@ -17,17 +17,29 @@ Edit `src/` for the UI and `src-bunaway/` for the backend.
 `src-bunaway/message/module.ts` registers commands and events with `defineModule`.
 The framework boots the app from `build.app` in `src-bunaway/bunaway.json`.
 
-Call backend commands directly from the UI:
+The generated UI uses command and event types inferred from the app definition:
 
 ```ts
-import { invoke } from "@bunaway/client";
+import type { CommandsOf, EventsOf } from "@bunaway/backend";
+import { createClient } from "@bunaway/client";
+import type { app } from "../src-bunaway/app.ts";
 
-const text = await invoke<string>("message.read", null);
+async function start(): Promise<void> {
+  const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
+  const text = await client.invoke("message.read", null);
+  console.log(text);
+}
+
+void start().catch(console.error);
 ```
 
-Use `invoke` and `listen` without initialization code. Call the disposer returned
-by `listen` when the UI component is removed. Backend calls work in the desktop
+`bun run typecheck` rejects unknown command and event names and invalid payloads.
+The type-only imports keep backend implementation out of the browser bundle.
+The client uses the shared WebView connection without transport setup. Call the
+disposer returned by `client.listen` when the UI component is removed. Backend calls work in the desktop
 app; calls from a regular browser fail with `UNSUPPORTED`.
+The UI creates the client during startup so connection failures appear in the
+status message and keep the Save button disabled.
 
 Backend commands and their services can import `storage`, `log`, and `capabilities`
 from `@bunaway/backend` directly. The SDK uses the current command's Host permissions
