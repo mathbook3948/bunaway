@@ -28,6 +28,7 @@ import {
   type HostResponse,
   type Infer,
   type JsonValue,
+  NativeRegistry,
   type Policy,
   type ProcessFrame,
   parseBootstrap,
@@ -471,6 +472,15 @@ test("Host paths use relative forward-slash paths while native access checks rem
     payload: { scope: "appData", path: "notes/한글 파일.txt" },
   } as const;
   expect(parseHostCall(JSON.stringify(call))).toEqual(call);
+});
+
+test("the framework windows namespace is reserved from plugin registration", () => {
+  expect(
+    () =>
+      new NativeRegistry([
+        { name: "windows", version: "1.0.0", native: { operations: [], permissions: [] } },
+      ]),
+  ).toThrow();
 });
 
 test("host-only boot policy and session-open never enter the Web message bridge", () => {

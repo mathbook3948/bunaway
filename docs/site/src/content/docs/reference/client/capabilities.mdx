@@ -1,6 +1,6 @@
 ---
 title: capabilities
-description: 등록된 기능의 플랫폼 지원과 OS 권한 메타데이터를 조회합니다.
+description: 프레임워크 창 API와 등록 플러그인의 지원 상태, OS 권한 메타데이터를 조회합니다.
 sidebar: { order: 4 }
 ---
 
@@ -8,13 +8,14 @@ sidebar: { order: 4 }
 capabilities(options?: InvokeOptions): Promise<Capabilities>
 ```
 
-앱에 등록된 기능의 플랫폼 지원과 선언된 OS 권한 메타데이터를 반환합니다.
+프레임워크 창 API와 앱에 등록된 플러그인 작업의 지원 상태, 선언된 OS 권한 메타데이터를 반환합니다.
 직접 import한 `capabilities`는 기본 연결을 사용하며 연결 준비를 기다립니다.
 options에 signal 또는 deadline을 전달할 수 있습니다.
 [invoke의 취소와 기한](/reference/client/invoke/)과 같은 규칙을 적용합니다.
 
 먼저 `@bunaway/plugin-capabilities`를 설치하고 앱에 capabilitiesPlugin을 등록합니다.
-조회 결과에는 등록된 네이티브 작업만 포함됩니다.
+조회 결과에는 앱에 등록한 네이티브 플러그인 작업과 프레임워크의 창 API가 포함됩니다.
+창 API 작업은 `experimental`, `not-required`로 보고됩니다.
 
 ## 정책과 사용법
 
@@ -43,6 +44,7 @@ console.log(read?.support, read?.permission);
 ## 의미와 실패
 
 `support`는 플랫폼 어댑터의 구현 상태이고 `permission`은 플러그인이 선언하거나 제공한 OS 권한 메타데이터입니다.
+프레임워크 창 API의 `support`는 `experimental`이며 `permission`은 `not-required`입니다.
 `osPermission: "not-required"`는 OS 권한을 확인한 결과가 아니라 해당 작업에 OS 권한이 필요하지 않다는 선언입니다.
 선언이 없으면 `unknown`입니다.
 실제 Host API 호출은 뷰 정책도 검사합니다. `permission: "not-required"`인 파일 작업도 허용된 저장 범위 안에서 실행합니다.

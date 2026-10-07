@@ -50,6 +50,7 @@ export type PluginDefinition = {
   readonly dependencies?: readonly string[];
   readonly platforms?: readonly Platform[];
   readonly requiredPermissions?: readonly string[];
+  readonly requiredHost?: { readonly windows?: readonly string[] };
   readonly native?: NativePluginContract;
   readonly commands?: CommandRegistry;
   readonly events?: EventRegistry;

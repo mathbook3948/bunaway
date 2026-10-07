@@ -142,12 +142,40 @@ function operationNames(path) {
   visit(source(resolve(root, path)));
   return names;
 }
+function objectPropertyNames(path, constantName) {
+  const file = source(resolve(root, path));
+  for (const statement of file.statements) {
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (declaration.name.getText() !== constantName) continue;
+      let initializer = declaration.initializer;
+      while (
+        initializer &&
+        (ts.isAsExpression(initializer) ||
+          ts.isSatisfiesExpression(initializer) ||
+          ts.isParenthesizedExpression(initializer))
+      )
+        initializer = initializer.expression;
+      if (!initializer || !ts.isObjectLiteralExpression(initializer))
+        throw new Error(`Cannot inspect ${path}: ${constantName} must be an object literal.`);
+      return new Set(
+        initializer.properties
+          .filter(ts.isPropertyAssignment)
+          .map((property) => property.name)
+          .filter((name) => ts.isIdentifier(name) || ts.isStringLiteral(name))
+          .map((name) => name.text),
+      );
+    }
+  }
+  throw new Error(`Cannot inspect ${path}: missing ${constantName}.`);
+}
 checkNames(
-  new Set(
-    ["storage", "log", "capabilities"].flatMap((name) => [
+  new Set([
+    ...objectPropertyNames("packages/protocol/src/host-api.ts", "hostOperations"),
+    ...["storage", "log", "capabilities"].flatMap((name) => [
       ...operationNames(`plugins/${name}/src/index.ts`),
     ]),
-  ),
+  ]),
   catalog.operations,
   "Host operations",
 );

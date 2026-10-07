@@ -35,6 +35,7 @@ export default defineConfig({
           items: [
             { label: "설치와 업데이트", slug: "guides/installation-and-upgrades" },
             { label: "프런트엔드 연결", slug: "guides/frontend" },
+            { label: "여러 창 만들기", slug: "guides/windows" },
             { label: "명령과 이벤트", slug: "guides/commands-and-events" },
             { label: "타입과 스키마", slug: "guides/types-and-validation" },
             { label: "저장소와 앱 상태", slug: "guides/storage-and-state" },

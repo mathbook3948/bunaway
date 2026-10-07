@@ -92,7 +92,10 @@ const app: AppDefinition = {
         text: String(object(p).text),
       }),
     ),
-    "test.capabilities": command(async (_p, c) => host(c, "capabilities.get", null)),
+    "test.capabilities": command(async (_p, c) => ({
+      ...object(await host(c, "capabilities.get", null)),
+      platform: process.platform,
+    })),
     "test.log": command(async (p, c) =>
       host(c, "log.write", {
         level: "info",

@@ -120,6 +120,7 @@ export class NativeRegistry {
     for (const plugin of plugins) {
       if (
         !/^[A-Za-z0-9_.:-]{1,128}$/.test(plugin.name) ||
+        plugin.name === "windows" ||
         this.plugins.has(plugin.name) ||
         typeof plugin.version !== "string" ||
         !plugin.version
@@ -212,7 +213,10 @@ export class NativeRegistry {
 
   validatePolicy(policy: Infer<typeof policySchema>): void {
     validate(policySchema, policy);
+    const viewIds = new Set(policy.views.map((view) => view.id));
     for (const source of [policy.backend, ...policy.views.map((view) => view.host)]) {
+      if (source.windows?.some((view) => !viewIds.has(view)))
+        fail("Policy references an unknown window.");
       for (const grant of source.permissions) {
         const permission = this.permissions.get(
           typeof grant === "string" ? grant : grant.identifier,

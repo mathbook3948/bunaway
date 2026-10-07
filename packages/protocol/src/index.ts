@@ -29,12 +29,21 @@ export {
 export {
   type HostAPI,
   type HostCall,
+  type HostInput,
+  type HostOperation,
   type HostOperationContract,
+  type HostOutput,
   hostCallSchema,
+  hostOperations,
+  isWindowOperation,
   type NativePluginContract,
   type PermissionContract,
   parseHostCall,
+  parseWindowCall,
   serializeHostCall,
+  validateHostOutput,
+  validateWindowCall,
+  type WindowCall,
 } from "./host-api.ts";
 export {
   type NativeRegistration,

@@ -18,16 +18,12 @@ import {
   type WireError,
 } from "../../../packages/protocol/src/index.ts";
 
+import { MAX_WINDOWS, type WindowSpec } from "../../../packages/runtime-bun/src/window-config.ts";
+
 export type Route = { viewId: string; documentGeneration: number; context: HostContext };
-export const MAX_WINDOWS = 128;
+export { MAX_WINDOWS, type WindowSpec } from "../../../packages/runtime-bun/src/window-config.ts";
 // WM_APP message for orderly CLI teardown, independent of user close behavior.
 export const APP_SHUTDOWN_MESSAGE = 0x8002;
-export type WindowSpec = {
-  view: string;
-  home: string;
-  title: string;
-  window: { width: number; height: number };
-};
 export type UIConfig = {
   runtime: RuntimeIdentity;
   policy: Policy;

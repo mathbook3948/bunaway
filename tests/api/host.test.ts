@@ -595,3 +595,68 @@ export function checkHostTypes() {
   const app: AppDefinition = defineApp({ modules: [] });
   void app;
 }
+
+test("window helpers preserve the command context and typed operation payloads", async () => {
+  const { windows } = await import("../../packages/backend-sdk/src/index.ts");
+  await expect(windows.list()).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
+  const calls: HostCall[] = [];
+  const ctx = context("editor", async (source, call) => {
+    expect(source).toBe("editor" as HostContext);
+    calls.push(call);
+    return {
+      kind: "result",
+      payload:
+        call.operation === "windows.list"
+          ? [{ view: "editor", open: false }]
+          : call.operation === "windows.close"
+            ? false
+            : null,
+    };
+  });
+  await command({
+    ...nullContract,
+    async handle() {
+      expect(await windows.list()).toEqual([{ view: "editor", open: false }]);
+      await windows.create({ view: "editor" });
+      await windows.recreate({ view: "editor" });
+      await windows.show({ view: "editor" });
+      await windows.hide({ view: "editor" });
+      await windows.focus({ view: "editor" });
+      await windows.setSize({ view: "editor", width: 900, height: 700 });
+      await windows.setPosition({ view: "editor", x: -100, y: 20 });
+      await windows.setFullscreen({ view: "editor", fullscreen: true });
+      await windows.setCloseConfirmation({ view: "editor", message: "Close?" });
+      await windows.setCloseConfirmation({ view: "editor", message: null });
+      expect(await windows.close({ view: "editor" })).toBe(false);
+      return null;
+    },
+  }).run(null, ctx);
+  expect(calls.map((call) => call.operation)).toEqual([
+    "windows.list",
+    "windows.create",
+    "windows.recreate",
+    "windows.show",
+    "windows.hide",
+    "windows.focus",
+    "windows.setSize",
+    "windows.setPosition",
+    "windows.setFullscreen",
+    "windows.setCloseConfirmation",
+    "windows.setCloseConfirmation",
+    "windows.close",
+  ]);
+  expect(calls.map((call) => call.payload)).toEqual([
+    null,
+    { view: "editor" },
+    { view: "editor" },
+    { view: "editor" },
+    { view: "editor" },
+    { view: "editor" },
+    { view: "editor", width: 900, height: 700 },
+    { view: "editor", x: -100, y: 20 },
+    { view: "editor", fullscreen: true },
+    { view: "editor", message: "Close?" },
+    { view: "editor", message: null },
+    { view: "editor" },
+  ]);
+});

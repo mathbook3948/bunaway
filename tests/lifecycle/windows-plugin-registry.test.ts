@@ -12,6 +12,7 @@ import {
   pluginRegistry,
 } from "../../native/windows/bun/plugins.ts";
 import type { NativeEnvironment } from "../../packages/plugin-sdk/src/index.ts";
+import { hostOperations } from "../../packages/protocol/src/index.ts";
 import { createOperations as createCapabilities } from "../../plugins/capabilities/src/windows.ts";
 
 const table = packagedPlugins as PackagedPlugin[];
@@ -164,7 +165,13 @@ test("capability permission metadata comes from each registered operation contra
   const adapters = await operations(registrations, ".", "io");
   try {
     if (!observed) throw new Error("Plugin did not receive capability metadata.");
+    expect(observed.capabilities).toHaveLength(Object.keys(hostOperations).length + 2);
     expect(observed.capabilities).toEqual([
+      ...Object.keys(hostOperations).map((name) => ({
+        name,
+        support: "experimental" as const,
+        permission: "not-required" as const,
+      })),
       { name: "storage.read", support: "supported", permission: "unknown" },
       { name: "files.read", support: "supported", permission: "not-required" },
     ]);

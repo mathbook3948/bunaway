@@ -19,7 +19,8 @@
         "reference/backend/app-definition": ["defineApp"],
         "reference/backend/module": ["defineModule"],
         "reference/backend/host-api": ["host"],
-        "reference/tooling/core-and-runtime": ["createCore"]
+        "reference/tooling/core-and-runtime": ["createCore"],
+        "reference/host/windows": ["windows"]
       }
     },
     {
@@ -57,7 +58,12 @@
           "processSchema",
           "hostCallSchema",
           "parseHostCall",
+          "hostOperations",
+          "isWindowOperation",
+          "parseWindowCall",
           "serializeHostCall",
+          "validateHostOutput",
+          "validateWindowCall",
           "PROCESS_IPC_VERSION",
           "parseProcessFrame",
           "serializeProcessFrame",
@@ -261,6 +267,7 @@
           "events",
           "setup",
           "requiredPermissions",
+          "requiredHost",
           "native"
         ]
       }
@@ -392,7 +399,20 @@
     "reference/host/storage-read-text": ["storage.readText"],
     "reference/host/storage-write-text": ["storage.writeText"],
     "reference/host/log-write": ["log.write"],
-    "reference/host/capabilities-get": ["capabilities.get"]
+    "reference/host/capabilities-get": ["capabilities.get"],
+    "reference/host/windows": [
+      "windows.list",
+      "windows.create",
+      "windows.recreate",
+      "windows.show",
+      "windows.hide",
+      "windows.focus",
+      "windows.close",
+      "windows.setSize",
+      "windows.setPosition",
+      "windows.setFullscreen",
+      "windows.setCloseConfirmation"
+    ]
   },
   "configuration": {
     "packages/cli/src/config.ts": ["reference/configuration"],

@@ -3,15 +3,15 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { runWindowsApp } from "../../native/windows/bun/entry.ts";
-import { containAppProcess } from "../../native/windows/bun/job.ts";
 import {
   forwardToInstance,
   instanceAddress,
   listenForInstances,
 } from "../../native/windows/bun/instance.ts";
-import type { HostContext } from "../../packages/protocol/src/index.ts";
-import type { AppDefinition } from "../../packages/core/src/index.ts";
+import { containAppProcess } from "../../native/windows/bun/job.ts";
 import { closeWindowsApp } from "../../packages/cli/src/launch.ts";
+import type { AppDefinition } from "../../packages/core/src/index.ts";
+import type { HostContext } from "../../packages/protocol/src/index.ts";
 
 let uiReadyResolve: () => void = () => {};
 const uiReady = new Promise<void>((resolveReady) => {
@@ -34,7 +34,12 @@ export const desktopTestApp = {
     "test.restored": {
       input: { const: null },
       output: { const: null },
-      async run() {
+      async run(_input, context) {
+        if (scenario === "hide") {
+          assert.equal(await context.host.call("windows.close", { view: "main" }), false);
+          assert(!context.signal.aborted, "close to tray must keep the request context alive");
+          await context.host.call("windows.show", { view: "main" });
+        }
         uiRestoredResolve();
         return null;
       },
@@ -114,6 +119,7 @@ if (!process.argv.includes("--child")) {
             assert(api.symbols.PostMessageW(hwnd, 0x10, 0n, 0n));
           }
           if (event.event === "view-window-hidden") {
+            if (hidden) continue;
             hidden = true;
             assert.equal(api.symbols.IsWindowVisible(hwnd), 0);
             assert.equal(child.exitCode, null);
@@ -256,7 +262,7 @@ if (!process.argv.includes("--child")) {
               origins: ["https://app.bunaway.local"],
               commands: ["test.ready", "test.restored"],
               events: ["test.reopen"],
-              host: { permissions: [] },
+              host: { permissions: [], windows: ["main"] },
             },
           ],
         },

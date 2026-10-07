@@ -1,4 +1,4 @@
-import { dlopen, JSCallback, ptr, type Pointer } from "bun:ffi";
+import { dlopen, JSCallback, type Pointer, ptr } from "bun:ffi";
 import assert from "node:assert/strict";
 import { APP_SHUTDOWN_MESSAGE } from "./channel.ts";
 
@@ -45,8 +45,6 @@ export const user = dlopen("user32.dll", {
     returns: "u64",
   },
   DefWindowProcW: { args: ["u64", "u32", "u64", "i64"], returns: "i64" },
-  SetForegroundWindow: { args: ["u64"], returns: "i32" },
-  IsIconic: { args: ["u64"], returns: "i32" },
   RegisterWindowMessageW: { args: ["ptr"], returns: "u32" },
   LoadIconW: { args: ["u64", "u64"], returns: "u64" },
   CreatePopupMenu: { args: [], returns: "u64" },
@@ -55,6 +53,17 @@ export const user = dlopen("user32.dll", {
   GetCursorPos: { args: ["ptr"], returns: "i32" },
   TrackPopupMenuEx: { args: ["u64", "u32", "i32", "i32", "u64", "ptr"], returns: "u32" },
   ShowWindow: { args: ["u64", "i32"], returns: "i32" },
+  SetForegroundWindow: { args: ["u64"], returns: "i32" },
+  IsIconic: { args: ["u64"], returns: "i32" },
+  GetWindowRect: { args: ["u64", "ptr"], returns: "i32" },
+  SetWindowPos: { args: ["u64", "u64", "i32", "i32", "i32", "i32", "u32"], returns: "i32" },
+  GetWindowLongPtrW: { args: ["u64", "i32"], returns: "i64" },
+  SetWindowLongPtrW: { args: ["u64", "i32", "i64"], returns: "i64" },
+  GetWindowPlacement: { args: ["u64", "ptr"], returns: "i32" },
+  SetWindowPlacement: { args: ["u64", "ptr"], returns: "i32" },
+  MonitorFromWindow: { args: ["u64", "u32"], returns: "u64" },
+  GetMonitorInfoW: { args: ["u64", "ptr"], returns: "i32" },
+  MessageBoxW: { args: ["u64", "ptr", "ptr", "u32"], returns: "i32" },
   DestroyWindow: { args: ["u64"], returns: "i32" },
   GetClientRect: { args: ["u64", "ptr"], returns: "i32" },
   AdjustWindowRect: { args: ["ptr", "u32", "i32"], returns: "i32" },
@@ -75,6 +84,7 @@ export class Windows {
     (message: number, wparam: bigint, lparam: bigint) => void
   >();
   private readonly callback: JSCallback;
+  private readonly fullscreen = new Map<bigint, { style: bigint; placement: Buffer }>();
   private registered = false;
   failure: unknown;
 
@@ -141,9 +151,94 @@ export class Windows {
     return window;
   }
 
+  show(window: bigint, visible: boolean) {
+    user.symbols.ShowWindow(window, visible ? 5 : 0);
+  }
+
+  focus(window: bigint): boolean {
+    user.symbols.ShowWindow(window, user.symbols.IsIconic(window) ? 9 : 5);
+    return !!user.symbols.SetForegroundWindow(window);
+  }
+
+  setSize(window: bigint, width: number, height: number) {
+    const rect = new Int32Array([0, 0, width, height]);
+    assert(
+      user.symbols.AdjustWindowRect(
+        ptr(rect),
+        Number(user.symbols.GetWindowLongPtrW(window, -16)),
+        0,
+      ),
+    );
+    assert(
+      user.symbols.SetWindowPos(
+        window,
+        0n,
+        0,
+        0,
+        (rect[2] ?? 0) - (rect[0] ?? 0),
+        (rect[3] ?? 0) - (rect[1] ?? 0),
+        0x16,
+      ),
+    );
+  }
+
+  setPosition(window: bigint, x: number, y: number) {
+    assert(user.symbols.SetWindowPos(window, 0n, x, y, 0, 0, 0x15));
+  }
+
+  isFullscreen(window: bigint) {
+    return this.fullscreen.has(window);
+  }
+
+  setFullscreen(window: bigint, enabled: boolean) {
+    if (enabled === this.isFullscreen(window)) return;
+    if (enabled) {
+      const placement = Buffer.alloc(44); // WINDOWPLACEMENT, Win64
+      placement.writeUInt32LE(44);
+      assert(user.symbols.GetWindowPlacement(window, ptr(placement)));
+      const style = user.symbols.GetWindowLongPtrW(window, -16);
+      const monitor = Buffer.alloc(40); // MONITORINFO
+      monitor.writeUInt32LE(40);
+      assert(user.symbols.GetMonitorInfoW(user.symbols.MonitorFromWindow(window, 2), ptr(monitor)));
+      assert(user.symbols.SetWindowLongPtrW(window, -16, style & ~0xcf0000n));
+      const x = monitor.readInt32LE(4),
+        y = monitor.readInt32LE(8);
+      assert(
+        user.symbols.SetWindowPos(
+          window,
+          0n,
+          x,
+          y,
+          monitor.readInt32LE(12) - x,
+          monitor.readInt32LE(16) - y,
+          0x34,
+        ),
+      );
+      this.fullscreen.set(window, { style, placement });
+    } else {
+      const saved = this.fullscreen.get(window);
+      assert(saved);
+      assert(user.symbols.SetWindowLongPtrW(window, -16, saved.style));
+      // GetWindowPlacement does not record whether the window is hidden.
+      if (!(saved.style & 0x10000000n)) saved.placement.writeUInt32LE(0, 8); // SW_HIDE
+      assert(user.symbols.SetWindowPlacement(window, ptr(saved.placement)));
+      assert(user.symbols.SetWindowPos(window, 0n, 0, 0, 0, 0, 0x37));
+      this.fullscreen.delete(window);
+    }
+  }
+
+  confirmClose(window: bigint, title: string, message: string): boolean {
+    const result = withWide(title, (caption) =>
+      withWide(message, (text) => user.symbols.MessageBoxW(window, text, caption, 0x124)),
+    );
+    assert(result, `MessageBoxW: ${kernel.symbols.GetLastError()}`);
+    return result === 6; // IDYES, default is No
+  }
+
   destroy(window: bigint) {
     assert(user.symbols.DestroyWindow(window));
     this.windows.delete(window);
+    this.fullscreen.delete(window);
   }
 
   pump() {

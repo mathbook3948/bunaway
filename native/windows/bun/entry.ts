@@ -13,6 +13,7 @@ import {
   type CancellationSignal,
   type HostContext,
   type HostResponse,
+  hostOperations,
   PROTOCOL_VERSION,
 } from "../../../packages/protocol/src/index.ts";
 import { Channel, type Packet, type Route, type UIConfig, validatePacket } from "./channel.ts";
@@ -332,9 +333,10 @@ export async function runWindowsApp(
             new BunawayError({ code: "BUSY", message: "Host request limit reached." }),
           );
         const requestId = `host-${++sequence}`;
-        const execution = packagedPlugins.find((plugin) =>
-          call.operation.startsWith(`${plugin.name}.`),
-        )?.execution;
+        const execution = Object.hasOwn(hostOperations, call.operation)
+          ? "ui"
+          : packagedPlugins.find((plugin) => call.operation.startsWith(`${plugin.name}.`))
+              ?.execution;
         const source =
           context === config.backendContext
             ? "backend"

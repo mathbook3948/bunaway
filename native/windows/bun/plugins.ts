@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import {
   BunawayError,
+  hostOperations,
   type NativeRegistration,
   NativeRegistry,
   type PermissionMatcher,
@@ -64,14 +65,21 @@ export async function operations(
     disposeAll([...adapters.values()].reverse().map((adapter) => () => adapter.dispose()));
   const environment: NativeEnvironment = {
     dataRoot,
-    capabilities: [...registry.operations.values()].map((operation) => ({
-      name: operation.name,
-      support: packagedPlugins.find((plugin) => operation.name.startsWith(`${plugin.name}.`))
-        ?.execution
-        ? "supported"
-        : "unsupported",
-      permission: operation.osPermission ?? "unknown",
-    })),
+    capabilities: [
+      ...Object.keys(hostOperations).map((name) => ({
+        name,
+        support: "experimental" as const,
+        permission: "not-required" as const,
+      })),
+      ...[...registry.operations.values()].map((operation) => ({
+        name: operation.name,
+        support: packagedPlugins.find((plugin) => operation.name.startsWith(`${plugin.name}.`))
+          ?.execution
+          ? ("supported" as const)
+          : ("unsupported" as const),
+        permission: operation.osPermission ?? ("unknown" as const),
+      })),
+    ],
   };
   try {
     for (const plugin of packagedPlugins) {

@@ -2,6 +2,7 @@ import {
   createClient,
   createWebViewTransport,
 } from "../../../../../packages/client-sdk/src/index.ts";
+import { matchesCapabilities } from "./capabilities.ts";
 
 const client = createClient({
   transport: createWebViewTransport(window.chrome.webview),
@@ -333,8 +334,7 @@ async function run() {
       assert(
         r.kind === "result" &&
           r.payload.ok &&
-          Array.isArray(r.payload.value) &&
-          r.payload.value.length === 4,
+          matchesCapabilities(r.payload.value, r.payload.platform),
         `bad caps ${JSON.stringify(r)}`,
       );
     });

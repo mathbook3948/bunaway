@@ -847,6 +847,50 @@ test("reserved and duplicate names plus plugin violations fail creation", async 
   await expect(createCore(createApp({ plugins: [covered] }), services)).resolves.toBeDefined();
 });
 
+test("plugin window requirements are checked before setup", async () => {
+  for (const grants of [undefined, [], ["main"], ["editor"], ["main", "editor"]]) {
+    const { services } = createServices(createClock());
+    let setupRuns = 0;
+    const app = createApp({
+      plugins: [
+        {
+          name: "window-requirement-test",
+          version: "1",
+          requiredHost: { windows: ["main", "editor"] },
+          setup() {
+            setupRuns++;
+          },
+        },
+      ],
+    });
+    const startup = createCore(app, {
+      ...services,
+      policy: {
+        ...services.policy,
+        views: [
+          ...services.policy.views,
+          {
+            id: "editor",
+            origins: ["https://app.bunaway.local"],
+            commands: [],
+            events: [],
+            host: { permissions: [] },
+          },
+        ],
+        backend: { ...services.policy.backend, ...(grants ? { windows: grants } : {}) },
+      },
+    });
+    if (grants?.includes("main") && grants.includes("editor")) {
+      const core = await startup;
+      expect(setupRuns).toBe(1);
+      await core.stop();
+    } else {
+      await expect(startup).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
+      expect(setupRuns).toBe(0);
+    }
+  }
+});
+
 test("plugins initialize in dependency order and clean up in reverse", async () => {
   const clock = createClock();
   const { services, hostCalls } = createServices(clock);

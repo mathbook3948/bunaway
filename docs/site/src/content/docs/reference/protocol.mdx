@@ -62,6 +62,12 @@ const message = parseMessage(text);
 `validateOutput`은 등록 schema로 검사하며 `validatePolicy`는 permission 이름과 범위를
 검사합니다. `allowed(source, call, matches)`는 deny 우선으로 allow 범위를 평가합니다.
 
+`hostOperations`에는 프레임워크가 소유하는 창 API의 작업 schema가 있습니다.
+`isWindowOperation`은 이름이 그 목록에 있는지 확인합니다. `parseWindowCall`과
+`validateWindowCall`은 창 작업 요청을 파싱하고 입력을 검사하며, `validateHostOutput`은
+해당 작업의 결과를 검사합니다. 창 작업 이름과 앱에서 사용하는 API는
+[windows 레퍼런스](/reference/host/windows/)에 있습니다.
+
 ```ts
 type NativeRegistryOptions = { mode?: "runtime" | "catalog" };
 type HostOperationContract<I, O> = {

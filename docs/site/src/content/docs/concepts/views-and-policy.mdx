@@ -37,6 +37,7 @@ policy.views의 id: "main"
 | `commands` | 이 뷰에서 호출할 수 있는 앱 명령 이름 |
 | `events` | 이 뷰에서 구독, 전달받을 수 있는 앱 이벤트 이름 |
 | `host.permissions` | 이 뷰에서 시작한 작업의 권한 식별자와 허용 범위 |
+| `host.windows` | 생성하거나 제어할 대상 창의 뷰 ID 목록. 생략하면 거부 |
 
 명령과 이벤트는 정확한 이름을 선언합니다. `"*"` 와일드카드는 지원하지 않습니다.
 `commands: []`이면 해당 뷰의 명령 호출은 전부 거부됩니다. 필수 키를 삭제하면 정책 검증이 실패합니다.
@@ -54,30 +55,34 @@ policy.views의 id: "main"
 읽기 전용 `reader`에는 `message.read`만 허용하고 편집용 `editor`에는 두 명령을 모두 허용하는 식입니다.
 WebView에서 보낸 요청은 이 허용 목록에 있는 명령만 실행합니다.
 
-## commands와 host.permissions는 각각 검사합니다
+## 명령과 Host API 권한은 각각 검사합니다
 
 `message.save` 호출에는 두 검사가 필요합니다.
 
 1. `commands`에 `message.save`가 있어야 **앱 핸들러를 실행**할 수 있습니다.
 2. 핸들러가 `storage.writeText`를 요청하면 `host.permissions`에서 **그 파일의 쓰기 범위**를 확인합니다.
+   창 API를 호출하면 `host.windows`에서 **대상 뷰 ID**를 확인합니다.
 
 파일을 쓰지 않고 앱 상태만 바꾸는 명령도 있습니다.
-이런 명령의 호출 여부는 `commands`로 정하고 파일 접근은 `host.permissions`로 정합니다.
+이런 명령의 호출 여부는 `commands`로 정하고 네이티브 기능 접근은 각 `host` 권한으로 정합니다.
 
 `scope: "appData"`, `pathPrefix: "messages"`는 명명된 앱 데이터 범위 안의
 `messages/` 디렉터리와 그 아래 파일을 허용합니다. 호출 경로는 이 범위 안의 상대 경로로 적습니다.
 [저장소 가이드](/guides/storage-and-state/)에서 호출 경로와 정책을 함께 확인하세요.
 
-## backend.permissions가 비어 있어도 저장이 되는 이유
+## backend 권한과 뷰 권한은 따로 적용됩니다
 
 UI 명령 핸들러의 `context.host`는 **요청을 보낸 뷰의 권한**을 유지합니다.
 `main`에서 시작한 `message.save`는 `main.host.permissions`로 검사합니다.
 
 루트의 `backend`는 플러그인 초기화 등 **백엔드 자체 작업**에 적용하는 별도 Host API 권한입니다.
-`backend.permissions: []`는 백엔드 자체 작업의 저장 접근을 거부합니다. 뷰에서 시작한 요청은 각 뷰의 정책을 따릅니다.
+`backend.permissions: []`는 백엔드 자체 작업의 플러그인 권한을 거부합니다. 뷰에서 시작한 요청은 각 뷰의 정책을 따릅니다.
+플러그인 setup에서 창 API를 사용하려면 `backend.windows`에 제어할 뷰 ID를 선언합니다.
 정책은 Host API에 적용합니다. 신뢰된 백엔드가 직접 호출하는 Bun API는 이 검사 범위 밖입니다.
 
-CLI로 만드는 앱은 창과 뷰 하나를 사용합니다. `policy.json.views`에는 `app.view`와 일치하는 뷰 하나를 선언합니다.
+기본 템플릿은 창과 뷰 하나를 사용합니다. 단일 창 설정에서는 `app.view`와 일치하는 정책 뷰 하나를 선언합니다.
+Windows에서는 `app.windows`로 여러 창을 연결하고 각 창의 뷰를 정책에 선언합니다.
+[여러 창 만들기](/guides/windows/)에서 보조 창 설정과 공개 API를 사용할 수 있습니다.
 플랫폼별 여러 창 지원 상태는 [지원 범위](/reference/platforms/)에서 확인하세요.
 
 다음으로 [명령과 이벤트](/guides/commands-and-events/)에서 이 정책이 적용되는 코드를 살펴보세요.

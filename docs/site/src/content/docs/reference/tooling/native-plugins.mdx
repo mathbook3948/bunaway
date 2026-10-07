@@ -144,7 +144,12 @@ export function createOperations(_environment: NativeEnvironment): NativeAdapter
 }
 ```
 
-`NativeEnvironment`는 호스트가 정한 dataRoot와 등록된 작업의 capabilities를 제공합니다.
+`NativeEnvironment`는 호스트가 정한 dataRoot와 capabilities 목록을 제공합니다.
+목록에는 `@bunaway/backend`의 프레임워크 창 작업과 앱에 등록된 네이티브 플러그인 작업이
+포함됩니다. 창 작업은 canonical `hostOperations` 계약에서 가져오며 `experimental`,
+`not-required`로 보고합니다. 플러그인 작업은 해당 패키지의 플랫폼 어댑터 상태와
+`osPermission` 선언을 반영합니다. `support` 값은 `supported`, `experimental`,
+`unsupported`이고 `permission`은 `unknown`, `not-required`입니다.
 `NativeAdapter.execute(operation, input, source)`는 승인된 작업을 동기로 실행하고 JSON
 결과를 반환합니다. source는 호스트가 정한 출처입니다. `dispose()`는 자원을 정리하며
 `void` 또는 `Promise<void>`를 반환합니다. 실패를 호출자에게 전달하려면 공통 `BunawayError`를

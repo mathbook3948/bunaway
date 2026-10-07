@@ -84,7 +84,7 @@ export type NativeEnvironment = {
   dataRoot: string;
   capabilities: {
     name: string;
-    support: "supported" | "unsupported";
+    support: "supported" | "experimental" | "unsupported";
     permission: "unknown" | "not-required";
   }[];
 };

@@ -136,6 +136,16 @@
                               ]
                             },
                             "maxItems": 256
+                          },
+                          "windows": {
+                            "type": "array",
+                            "maxItems": 128,
+                            "uniqueItems": true,
+                            "items": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                              "maxLength": 128
+                            }
                           }
                         },
                         "required": ["permissions"],
@@ -183,6 +193,16 @@
                         ]
                       },
                       "maxItems": 256
+                    },
+                    "windows": {
+                      "type": "array",
+                      "maxItems": 128,
+                      "uniqueItems": true,
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                        "maxLength": 128
+                      }
                     }
                   },
                   "required": ["permissions"],

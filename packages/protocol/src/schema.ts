@@ -161,6 +161,12 @@ const hostPermissions = {
   type: "object",
   properties: {
     permissions: { type: "array", items: { anyOf: [identifier, scopedPermission] }, maxItems: 256 },
+    windows: {
+      type: "array",
+      maxItems: 128,
+      uniqueItems: true,
+      items: identifier,
+    },
   },
   required: ["permissions"],
   additionalProperties: false,

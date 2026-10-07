@@ -55,11 +55,13 @@ export default defineApp({ modules: [memo], plugins: [storagePlugin] });
 공식 배포 전까지 정책의 형식 버전은 v1로 유지합니다. 개발 중 구조를 바꾸면
 기존 v1의 계약과 예제를 갱신하며, v2나 이전 개발 형식의 호환 계층을 만들지 않습니다.
 
-`view.host`와 루트 `backend`를 `{ permissions }` 구조로 바꿉니다.
+`view.host`와 루트 `backend`는 `{ permissions, windows? }` 구조를 사용합니다.
 권한 항목은 식별자 문자열 또는 `{ identifier, allow?, deny? }`입니다.
 저장은 `storage:read-text`, `storage:write-text`, 앱 로그는 `log:write`, 지원 조회는
 `capabilities:get`을 사용합니다. 저장처럼 리소스 범위가 필요한 작업에는 allow가
 필요하며 deny에 일치하는 리소스는 거부합니다.
+`windows`에는 해당 호출 출처가 제어할 수 있는 창의 뷰 ID를 적습니다. 이 권한은
+프레임워크의 Windows 창 API에 적용하며 플러그인 permission 식별자와 별도로 검사합니다.
 
 등록하지 않은 Host operation은 `UNSUPPORTED`, 권한 밖의 작업은
 `PERMISSION_DENIED`입니다. 잘못된 설정이나 scope는 시작 전에 거부합니다.

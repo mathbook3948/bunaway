@@ -1,18 +1,18 @@
 export type {
   AppDefinition,
-  DesktopContext,
-  DesktopOptions,
-  OpenRequest,
-  QuitReason,
   CommandContext,
   CommandDefinition,
   CommandsOf,
+  DesktopContext,
+  DesktopOptions,
   EventEmitter,
   EventRegistry,
   EventsOf,
   EventTarget,
+  OpenRequest,
   Platform,
   PluginDefinition,
+  QuitReason,
   StateStore,
   StopHook,
 } from "@bunaway/core";
@@ -28,5 +28,5 @@ export type {
 } from "@bunaway/protocol";
 export { defineApp } from "./app.ts";
 export { type CommandContract, type CommandHandler, command } from "./command.ts";
-export { host } from "./host.ts";
+export { host, windows } from "./host.ts";
 export { defineModule, type ModuleBuilder, type ModuleDefinition } from "./module.ts";

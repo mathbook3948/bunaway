@@ -42,6 +42,7 @@ export const frameworkPaths = [
   "native/windows/bun/tray.ts",
   "native/windows/bun/deps.json",
   "native/windows/bun/channel.ts",
+  "native/windows/bun/window-operations.ts",
   "native/windows/bun/boundary.ts",
   "native/windows/bun/ui.ts",
   "native/windows/bun/webview.ts",
@@ -288,6 +289,7 @@ function requiredFrameworkFiles(): string[] {
     "packages/cli/src/frontend-build.ts",
     "packages/cli/src/managed-command.ts",
     "packages/runtime-bun/src/development.ts",
+    "packages/runtime-bun/src/window-config.ts",
     ...Object.keys(packageNames).flatMap((directory) =>
       ["package.json", "src/index.ts", "tsconfig.json"].map(
         (name) => `packages/${directory}/${name}`,

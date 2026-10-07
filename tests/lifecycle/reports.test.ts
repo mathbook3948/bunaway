@@ -2,7 +2,42 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import {
+  expectedCapabilityNames,
+  matchesCapabilities,
+} from "../fixtures/desktop/host/web/capabilities.ts";
 import { assertReport, readReport } from "./reports.ts";
+
+test("native capability reports require the complete catalog and platform support states", () => {
+  for (const platform of ["win32", "darwin"]) {
+    const capabilities = expectedCapabilityNames.map((name) => ({
+      name,
+      support: name.startsWith("windows.")
+        ? platform === "win32"
+          ? "experimental"
+          : "unsupported"
+        : "supported",
+      permission: "not-required",
+    }));
+    expect(matchesCapabilities(capabilities, platform)).toBe(true);
+    expect(matchesCapabilities([...capabilities].reverse(), platform)).toBe(true);
+    expect(
+      matchesCapabilities(
+        capabilities.filter((c) => !c.name.startsWith("windows.")),
+        platform,
+      ),
+    ).toBe(false);
+    expect(matchesCapabilities([capabilities[0], ...capabilities.slice(0, -1)], platform)).toBe(
+      false,
+    );
+    expect(
+      matchesCapabilities(
+        capabilities.map((c) => ({ ...c, support: "supported" })),
+        platform,
+      ),
+    ).toBe(false);
+  }
+});
 
 test("required page checks cannot pass with an empty, partial or failed report", () => {
   const report = { page: "main", results: [{ name: "denied command", ok: true }] };
