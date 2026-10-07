@@ -1,31 +1,31 @@
 import {
   API_LIMITS,
-  BunawayError,
-  CAPABILITIES_COMMAND,
   type AsyncDispose,
+  BunawayError,
   type CancellationSignal,
-  type Capabilities,
   type ClientMessage,
   type CommandMap,
   type Dispose,
-  errorSchema,
   type EventMap,
-  type FrameworkCommands,
+  errorSchema,
   type Hello,
+  type HostOperationContract,
+  type Infer,
   type JsonValue,
   type Message,
   type NegotiatedProtocol,
   negotiateProtocol,
-  parseMessage,
   ProtocolError,
+  parseMessage,
+  type Schema,
   serializeMessage,
   type Transport,
   type TransportEvent,
-  validateHostOutput,
   validateValue,
   type WireError,
 } from "@bunaway/protocol";
 import { defaultClient } from "./default-client.ts";
+
 export { createWebViewTransport, type WebViewBridge } from "./webview.ts";
 
 export type InvokeOptions = { signal?: CancellationSignal; deadline?: number };
@@ -46,7 +46,6 @@ export interface Client<C extends CommandMap = CommandMap, E extends EventMap = 
     listener: (event: EventDelivery<E[K]>) => void,
     options: ListenOptions,
   ): Promise<AsyncDispose>;
-  capabilities(): Promise<Capabilities>;
   close(): Promise<void>;
 }
 
@@ -56,7 +55,7 @@ export type ClientFactory = <
 >(options: {
   transport: Transport;
   hello: Hello;
-}) => Client<C & FrameworkCommands, E>;
+}) => Client<C, E>;
 
 type Protocol = NegotiatedProtocol["protocol"];
 type EventMessage = Extract<Message, { kind: "event" }>;
@@ -272,24 +271,6 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
       if (signal.aborted) onAbort();
     }
     return release;
-  }
-
-  async capabilities(): Promise<Capabilities> {
-    const payload = await this.request(
-      (id, protocol) => ({
-        kind: "invoke",
-        protocol,
-        id,
-        command: CAPABILITIES_COMMAND,
-        payload: null,
-      }),
-      { signal: undefined, deadlineAt: Date.now() + API_LIMITS.maxCommandDurationMs },
-    );
-    try {
-      return validateHostOutput("capabilities.get", payload);
-    } catch {
-      throw requestError("INTERNAL", "Invalid capabilities response.");
-    }
   }
 
   close(): Promise<void> {
@@ -618,9 +599,9 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
 export function createClient<
   C extends CommandMap = CommandMap,
   E extends EventMap = EventMap,
->(options?: { transport: Transport; hello: Hello }): Client<C & FrameworkCommands, E> {
-  if (options === undefined) return defaultClient(createClient) as Client<C & FrameworkCommands, E>;
-  return new ClientSession<C & FrameworkCommands, E>(options.transport, options.hello);
+>(options?: { transport: Transport; hello: Hello }): Client<C, E> {
+  if (options === undefined) return defaultClient(createClient) as Client<C, E>;
+  return new ClientSession<C, E>(options.transport, options.hello);
 }
 
 /** Invoke an app command through the document's shared WebView connection. */
@@ -630,6 +611,26 @@ export async function invoke<T extends JsonValue = JsonValue>(
   options?: InvokeOptions,
 ): Promise<T> {
   return createClient().invoke(command, payload, options) as Promise<T>;
+}
+
+/** Invoke a native plugin operation through the document's shared connection. */
+export async function invokePlugin<I extends Schema, O extends Schema>(
+  contract: HostOperationContract<I, O>,
+  input: Infer<I>,
+  options?: InvokeOptions,
+): Promise<Infer<O>> {
+  let payload: Infer<I>;
+  try {
+    payload = validateValue(contract.input, input);
+  } catch {
+    throw new BunawayError({ code: "INVALID_ARGUMENT", message: "Invalid plugin input." });
+  }
+  const output = await invoke(`plugin.${contract.name}`, payload, options);
+  try {
+    return validateValue(contract.output, output);
+  } catch {
+    throw new BunawayError({ code: "INTERNAL", message: "Invalid plugin response." });
+  }
 }
 
 /** Subscribe through the shared connection; returns a subscription disposer. */
@@ -643,9 +644,4 @@ export async function listen<T extends JsonValue = JsonValue>(
     listener as (event: EventDelivery<JsonValue>) => void,
     options,
   );
-}
-
-/** Query app capability support and OS permissions through the shared connection. */
-export async function capabilities(): Promise<Capabilities> {
-  return createClient().capabilities();
 }

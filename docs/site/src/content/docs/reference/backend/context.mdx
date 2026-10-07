@@ -23,16 +23,10 @@ sidebar: { order: 3 }
 
 ## host.call
 
-일반적인 저장과 로그, 기능 조회에는 `@bunaway/backend`의
-[storage, log, capabilities](/reference/backend/host-api/)를 사용할 수 있습니다.
-서비스 함수까지 context.host를 전달할 필요가 없습니다.
-아래의 명시적 Host API도 계속 지원합니다.
-
-```ts
-await context.host.call("storage.readText", {
-  scope: "appData", path: "messages/current.txt",
-});
-```
+저장과 로그, 기능 조회는 [개별 플러그인 API](/reference/backend/host-api/)를 사용합니다.
+직접 호출할 때는 `context.host.call(contract, input)`에 등록된 HostOperationContract를
+전달합니다. contract에는 name, input과 output schema, permission이 필수입니다.
+결과 타입은 output schema에서 추론하며 문자열 작업 이름만 전달하는 호출은 지원하지 않습니다.
 
 뷰에서 호출한 명령은 그 뷰의 Host 정책을 사용합니다. 백엔드 setup은 `policy.backend`를 사용합니다.
 호출할 작업에 맞는 입력을 전달해야 하며 권한이나 저장 범위를 벗어나면 실패합니다. 요청이 취소되면 Host API 호출도 취소됩니다.

@@ -2,11 +2,9 @@ import {
   API_LIMITS,
   BunawayError,
   type ClientMessage,
-  type HostCall,
   type HostContext,
   type Policy,
   PROTOCOL_VERSION,
-  parseHostCall,
   parseMessage,
   type ServerMessage,
   serializeMessage,
@@ -293,23 +291,4 @@ export class ViewBoundary {
   get pendingCount() {
     return this.session?.pending.size ?? 0;
   }
-}
-
-export function allowedHost(permissions: Policy["backend"], call: HostCall): boolean {
-  try {
-    parseHostCall(JSON.stringify(call));
-  } catch {
-    return false;
-  }
-  if (call.operation === "capabilities.get") return true;
-  if (call.operation === "log.write") return permissions.log;
-  const segments = call.payload.path.split("/");
-  return permissions.storage.some((grant) => {
-    const prefix = grant.pathPrefix ? grant.pathPrefix.split("/") : [];
-    return (
-      grant.scope === call.payload.scope &&
-      grant.access.includes(call.operation === "storage.writeText" ? "write" : "read") &&
-      prefix.every((part, index) => part === segments[index])
-    );
-  });
 }

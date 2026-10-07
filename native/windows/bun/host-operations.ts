@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { appendFileSync, mkdirSync, renameSync, rmSync, statSync } from "node:fs";
-import { resolve } from "node:path";
 import { parentPort, workerData } from "node:worker_threads";
 import {
   API_LIMITS,
@@ -8,17 +6,20 @@ import {
   type HostCall,
   type HostContext,
   type HostResponse,
-  type JsonValue,
+  type NativeRegistration,
   type RuntimeIdentity,
   serializeHostResponse,
-  validateHostOutput,
 } from "../../../packages/protocol/src/index.ts";
 import { Channel, type Packet } from "./channel.ts";
-import { disposeStorageBindings, ScopedStorage } from "./storage.ts";
+import { disposeAll, operations } from "./plugins.ts";
 
 assert(parentPort);
-const config = workerData as { runtime: RuntimeIdentity; dataRoot: string };
-const storage = new ScopedStorage(config.dataRoot);
+const config = workerData as {
+  runtime: RuntimeIdentity;
+  dataRoot: string;
+  plugins: NativeRegistration[];
+};
+const adapters = await operations(config.plugins, config.dataRoot, "io");
 const queue = new Map<string, { context: HostContext; call: HostCall; source: string }>();
 let active: string | undefined;
 let stopping = false;
@@ -39,31 +40,7 @@ function startNext() {
 }
 function execute(call: HostCall, source: string): HostResponse {
   try {
-    let payload: JsonValue;
-    if (call.operation === "capabilities.get")
-      payload = ["storage.readText", "storage.writeText", "log.write", "capabilities.get"].map(
-        (name) => ({ name, support: "supported", permission: "not-required" }),
-      );
-    else if (call.operation === "log.write") {
-      const path = resolve(config.dataRoot, "logs/app.log");
-      mkdirSync(resolve(config.dataRoot, "logs"), { recursive: true });
-      try {
-        if (statSync(path).size > 1024 * 1024) {
-          rmSync(`${path}.1`, { force: true });
-          renameSync(path, `${path}.1`);
-        }
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      }
-      appendFileSync(path, `${JSON.stringify({ t: Date.now(), source, ...call.payload })}\n`);
-      payload = null;
-    } else
-      payload = storage.execute(
-        call.payload.scope,
-        call.payload.path,
-        call.operation === "storage.writeText" ? call.payload.text : undefined,
-      );
-    validateHostOutput(call.operation, payload);
+    const payload = adapters.execute(call.operation, call.payload, source);
     const response = { kind: "result", payload } as HostResponse;
     serializeHostResponse(response);
     return response;
@@ -133,9 +110,13 @@ async function receive(packet: Packet) {
   } else throw new Error("Unexpected I/O packet");
 }
 async function finish() {
-  await channel.drain();
-  disposeStorageBindings();
-  await channel.send({ kind: "cleaned" });
-  channel.close();
-  parentPort?.close();
+  try {
+    await disposeAll([() => channel.drain(), () => adapters.dispose()]);
+    await channel.send({ kind: "cleaned" });
+  } finally {
+    channel.close();
+    parentPort?.close();
+  }
 }
+
+channel.notify({ kind: "ready" });

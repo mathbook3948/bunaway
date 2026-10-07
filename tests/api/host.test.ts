@@ -1,17 +1,12 @@
 import { expect, test } from "bun:test";
-import { allowedHost } from "../../native/windows/bun/boundary.ts";
 import {
   type AppDefinition,
   type CommandContext,
   type CommandDefinition,
-  capabilities,
   command,
-  createCore,
   defineApp,
   defineModule,
-  log,
   type PluginDefinition,
-  storage,
 } from "../../packages/backend-sdk/src/index.ts";
 import { createClient } from "../../packages/client-sdk/src/index.ts";
 import type { CoreServices } from "../../packages/core/src/index.ts";
@@ -25,7 +20,10 @@ import {
   parseMessage,
   type TransportEvent,
 } from "../../packages/protocol/src/index.ts";
-import { bindHostAPI } from "../../packages/runtime-bun/src/index.ts";
+import { capabilities } from "../../plugins/capabilities/src/index.ts";
+import { log } from "../../plugins/log/src/index.ts";
+import { storage } from "../../plugins/storage/src/index.ts";
+import { allowedHost, bindHostAPI, contracts, createCore } from "../fixtures/host-plugins.ts";
 
 const location = { scope: "appData", path: "notes/memo.txt" } as const;
 const nullContract = { input: { const: null }, output: { const: null } } as const;
@@ -93,7 +91,7 @@ test("Host helpers keep the existing typed operation inputs, outputs and explici
       expect(await capabilities()).toEqual([
         { name: "storage.readText", support: "supported", permission: "not-required" },
       ]);
-      expect(await current.host.call("storage.readText", location)).toBe("saved");
+      expect(await current.host.call(contracts["storage.readText"], location)).toBe("saved");
       return null;
     },
   });
@@ -127,10 +125,13 @@ test("concurrent module services preserve view policy after await and never use 
   );
   const app = defineApp({ modules: [notes] });
   const granted: Policy["backend"] = {
-    log: true,
-    storage: [{ scope: "appData", pathPrefix: "notes", access: ["read", "write"] }],
+    permissions: [
+      "log:write",
+      { identifier: "storage:read-text", allow: [{ scope: "appData", pathPrefix: "notes" }] },
+      { identifier: "storage:write-text", allow: [{ scope: "appData", pathPrefix: "notes" }] },
+    ],
   };
-  const denied = { log: false, storage: [] };
+  const denied = { permissions: [] };
   const listeners = new Map<string, (event: TransportEvent) => void>();
   const attempts: { context: HostContext; call: HostCall }[] = [];
   const services: CoreServices = {
@@ -342,18 +343,18 @@ test("defineApp binds raw app, module and plugin command definitions without mut
       return storage.writeText({ ...location, text: "raw" });
     },
   };
-  const plugin = { name: "raw", version: "1", commands: { "plugin.raw": raw } };
+  const plugin = { name: "raw", version: "1", commands: { "raw.write": raw } };
   const app = defineApp({
     modules: [{ name: "module", commands: { "module.raw": raw }, events: {} }],
     commands: { "app.raw": raw },
     plugins: [plugin],
   });
   const ctx = context("raw", async () => ({ kind: "result", payload: null }));
-  expect(plugin.commands["plugin.raw"]).toBe(raw);
+  expect(plugin.commands["raw.write"]).toBe(raw);
   for (const definition of [
     app.commands["app.raw"],
     app.commands["module.raw"],
-    app.plugins?.[0]?.commands?.["plugin.raw"],
+    app.plugins?.[0]?.commands?.["raw.write"],
   ]) {
     expect(await definition?.run(null, ctx)).toBeNull();
   }
@@ -389,8 +390,8 @@ test("defineApp preserves class getter contracts and original method receivers",
     get platforms() {
       return ["windows"] as const;
     }
-    get requiredHost() {
-      return { log: true, storage: [] };
+    get requiredPermissions() {
+      return ["log:write"] as const;
     }
     get commands() {
       return { "getter.write": raw };
@@ -424,7 +425,7 @@ test("defineApp preserves class getter contracts and original method receivers",
     version: "1",
     dependencies: ["dependency"],
     platforms: ["windows"],
-    requiredHost: { log: true, storage: [] },
+    requiredPermissions: ["log:write"],
     events: { "getter.changed": { const: null } },
   });
   const ctx = context("getter", async () => ({ kind: "result", payload: null }));
@@ -441,7 +442,7 @@ test("defineApp preserves class getter contracts and original method receivers",
   const services: CoreServices = {
     platform: "windows",
     backendContext: "backend" as HostContext,
-    policy: { version: 1, views: [], backend: { log: false, storage: [] } },
+    policy: { version: 1, views: [], backend: { permissions: [] } },
     hello: { kind: "hello", protocol: { major: 1, minor: 0 }, features: [], buildId: "getters" },
     runtime: {
       createCancellation: () => new AbortController(),
@@ -463,7 +464,7 @@ test("defineApp preserves class getter contracts and original method receivers",
   expect(setupOrder).toEqual([]);
   const core = await createCore(app, {
     ...services,
-    policy: { ...services.policy, backend: { log: true, storage: [] } },
+    policy: { ...services.policy, backend: { permissions: ["log:write"] } },
   });
   try {
     expect(setupOrder).toEqual(["dependency", "getter"]);
@@ -504,8 +505,10 @@ test("plugin setup descendants keep their own backend until shutdown, including 
         version: 1,
         views: [],
         backend: {
-          log: true,
-          storage: [{ scope: "appData", pathPrefix: "notes", access: ["read"] }],
+          permissions: [
+            "log:write",
+            { identifier: "storage:read-text", allow: [{ scope: "appData", pathPrefix: "notes" }] },
+          ],
         },
       },
       hello: { kind: "hello", protocol: { major: 1, minor: 0 }, features: [], buildId: "setup" },

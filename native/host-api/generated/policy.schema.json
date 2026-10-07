@@ -49,39 +49,43 @@
           "host": {
             "type": "object",
             "properties": {
-              "log": {
-                "type": "boolean"
-              },
-              "storage": {
+              "permissions": {
                 "type": "array",
-                "maxItems": 128,
                 "items": {
-                  "type": "object",
-                  "properties": {
-                    "scope": {
-                      "enum": ["appData", "temp"]
-                    },
-                    "pathPrefix": {
+                  "anyOf": [
+                    {
                       "type": "string",
-                      "pattern": "^(?:[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*)?$(?![\\s\\S])",
-                      "maxLength": 256
+                      "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                      "maxLength": 128
                     },
-                    "access": {
-                      "type": "array",
-                      "items": {
-                        "enum": ["read", "write"]
+                    {
+                      "type": "object",
+                      "properties": {
+                        "identifier": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                          "maxLength": 128
+                        },
+                        "allow": {
+                          "type": "array",
+                          "items": {},
+                          "maxItems": 128
+                        },
+                        "deny": {
+                          "type": "array",
+                          "items": {},
+                          "maxItems": 128
+                        }
                       },
-                      "minItems": 1,
-                      "maxItems": 2,
-                      "uniqueItems": true
+                      "required": ["identifier"],
+                      "additionalProperties": false
                     }
-                  },
-                  "required": ["scope", "pathPrefix", "access"],
-                  "additionalProperties": false
-                }
+                  ]
+                },
+                "maxItems": 256
               }
             },
-            "required": ["log", "storage"],
+            "required": ["permissions"],
             "additionalProperties": false
           }
         },
@@ -92,39 +96,43 @@
     "backend": {
       "type": "object",
       "properties": {
-        "log": {
-          "type": "boolean"
-        },
-        "storage": {
+        "permissions": {
           "type": "array",
-          "maxItems": 128,
           "items": {
-            "type": "object",
-            "properties": {
-              "scope": {
-                "enum": ["appData", "temp"]
-              },
-              "pathPrefix": {
+            "anyOf": [
+              {
                 "type": "string",
-                "pattern": "^(?:[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*)?$(?![\\s\\S])",
-                "maxLength": 256
+                "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                "maxLength": 128
               },
-              "access": {
-                "type": "array",
-                "items": {
-                  "enum": ["read", "write"]
+              {
+                "type": "object",
+                "properties": {
+                  "identifier": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                    "maxLength": 128
+                  },
+                  "allow": {
+                    "type": "array",
+                    "items": {},
+                    "maxItems": 128
+                  },
+                  "deny": {
+                    "type": "array",
+                    "items": {},
+                    "maxItems": 128
+                  }
                 },
-                "minItems": 1,
-                "maxItems": 2,
-                "uniqueItems": true
+                "required": ["identifier"],
+                "additionalProperties": false
               }
-            },
-            "required": ["scope", "pathPrefix", "access"],
-            "additionalProperties": false
-          }
+            ]
+          },
+          "maxItems": 256
         }
       },
-      "required": ["log", "storage"],
+      "required": ["permissions"],
       "additionalProperties": false
     }
   },

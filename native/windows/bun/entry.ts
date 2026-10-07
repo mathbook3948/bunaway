@@ -15,11 +15,19 @@ import {
   type HostResponse,
   PROTOCOL_VERSION,
 } from "../../../packages/protocol/src/index.ts";
-import { Channel, type Packet, type Route, type UIConfig } from "./channel.ts";
-import { DiagnosticLog } from "./log.ts";
+import { Channel, type Packet, type Route, type UIConfig, validatePacket } from "./channel.ts";
 import { activeDescendants, containAppProcess } from "./job.ts";
+import { DiagnosticLog } from "./log.ts";
+import { packagedPlugins } from "./plugin-table.ts";
+import { pluginRegistry } from "./plugins.ts";
 
 export async function runWindowsApp(app: AppDefinition, config: UIConfig): Promise<void> {
+  const plugins = (app.plugins ?? []).flatMap((plugin) => {
+    const native = plugin.native;
+    return native ? [{ name: plugin.name, version: plugin.version, native }] : [];
+  });
+  pluginRegistry(plugins).validatePolicy(config.policy);
+  config = { ...config, plugins };
   containAppProcess(config.dataRoot);
   const sessions = new Map<HostContext, { route: Route; session: CoreSession }>();
   const log = new DiagnosticLog(resolve(config.dataRoot, "logs/host.log"));
@@ -41,6 +49,10 @@ export async function runWindowsApp(app: AppDefinition, config: UIConfig): Promi
   let failure: unknown;
   let cleaned = false;
   let ioCleaned = false;
+  let ioReadyResolve: () => void = () => {};
+  const ioReady = new Promise<void>((resolve) => {
+    ioReadyResolve = resolve;
+  });
   let readyResolve: () => void = () => {};
   const ready = new Promise<void>((resolveReady) => {
     readyResolve = resolveReady;
@@ -61,7 +73,7 @@ export async function runWindowsApp(app: AppDefinition, config: UIConfig): Promi
         : "./host-operations.js",
       import.meta.url,
     ),
-    { workerData: { runtime: config.runtime, dataRoot: config.dataRoot } },
+    { workerData: { runtime: config.runtime, dataRoot: config.dataRoot, plugins } },
   );
   let exitResolve: (value: number) => void = () => {};
   const exited = new Promise<number>((resolveExit) => {
@@ -71,6 +83,7 @@ export async function runWindowsApp(app: AppDefinition, config: UIConfig): Promi
     failure ??= error;
     stopping = true;
     readyResolve();
+    ioReadyResolve();
     stopResolve();
   };
   const channel = new Channel(worker, config.runtime, "main", receive, fail);
@@ -79,6 +92,10 @@ export async function runWindowsApp(app: AppDefinition, config: UIConfig): Promi
     config.runtime,
     "main-io",
     async (packet) => {
+      if (packet.kind === "ready") {
+        ioReadyResolve();
+        return;
+      }
       if (packet.kind === "cleaned") {
         ioCleaned = true;
         return;
@@ -200,13 +217,29 @@ export async function runWindowsApp(app: AppDefinition, config: UIConfig): Promi
   try {
     await mkdir(resolve(config.dataRoot, "logs"), { recursive: true });
     await log.write("host-started", { pid: process.pid, ui: "worker", runtime: config.runtime });
-    await ready;
+    await Promise.all([ready, ioReady]);
     if (failure) throw failure;
     booting = createCore(app, {
       policy: config.policy,
       hello: { kind: "hello", protocol: PROTOCOL_VERSION, features: [], buildId: "bunaway" },
       platform: "windows",
       backendContext: config.backendContext,
+      onPluginError(plugin, phase, cause) {
+        if (
+          stopping &&
+          phase === "setup" &&
+          cause instanceof BunawayError &&
+          cause.code === "CANCELLED"
+        )
+          return;
+        console.error(`Plugin ${plugin} ${phase} failed:`, cause);
+        return log.write("plugin-failed", {
+          plugin,
+          phase,
+          message: cause instanceof Error ? cause.message : String(cause),
+          ...(cause instanceof Error ? { stack: cause.stack } : {}),
+        });
+      },
       onCommandError(command, cause) {
         console.error(`Command ${command} failed:`, cause);
         void log
@@ -246,6 +279,21 @@ export async function runWindowsApp(app: AppDefinition, config: UIConfig): Promi
             new BunawayError({ code: "BUSY", message: "Host request limit reached." }),
           );
         const requestId = `host-${++sequence}`;
+        const execution = packagedPlugins.find((plugin) =>
+          call.operation.startsWith(`${plugin.name}.`),
+        )?.execution;
+        const source =
+          context === config.backendContext
+            ? "backend"
+            : `view:${sessions.get(context)?.route.viewId ?? "invalid"}`;
+        const packet = { kind: "operation", context, requestId, call, source } as const;
+        try {
+          validatePacket(packet, execution === "ui" ? "ui" : "io");
+        } catch {
+          return Promise.reject(
+            new BunawayError({ code: "INVALID_ARGUMENT", message: "Invalid host request." }),
+          );
+        }
         return new Promise<HostResponse>((resolveCall, reject) => {
           const abort = () => {
             if (!calls.delete(requestId)) return;
@@ -256,16 +304,10 @@ export async function runWindowsApp(app: AppDefinition, config: UIConfig): Promi
           };
           calls.set(requestId, { context, signal, resolve: resolveCall, reject, abort });
           signal.addEventListener("abort", abort);
-          const source =
-            context === config.backendContext
-              ? "backend"
-              : `view:${sessions.get(context)?.route.viewId ?? "invalid"}`;
-          void ioChannel
-            .send({ kind: "operation", context, requestId, call, source })
-            .catch((error) => {
-              abort();
-              fail(error);
-            });
+          void (execution === "ui" ? channel : ioChannel).send(packet).catch((error) => {
+            abort();
+            fail(error);
+          });
         });
       },
     }).then((created) => {

@@ -1,4 +1,5 @@
-import { hostOperations, type JsonValue, type Schema } from "../../packages/protocol/src/index.ts";
+import type { JsonValue, Schema } from "../../packages/protocol/src/index.ts";
+import { hostOperations } from "../fixtures/host-plugins.ts";
 
 // The same inputs exercise TypeScript and the actual Windows IPC validator.
 export const validationCases: {

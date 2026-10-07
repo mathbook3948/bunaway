@@ -1,0 +1,25 @@
+{
+  "name": "@bunaway/plugin",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "imports": {
+    "#transport": {
+      "browser": "./src/browser.ts",
+      "bun": "./src/bun.ts",
+      "default": "./src/bun.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@bunaway/backend": "workspace:*",
+    "@bunaway/client": "workspace:*",
+    "@bunaway/protocol": "workspace:*"
+  }
+}

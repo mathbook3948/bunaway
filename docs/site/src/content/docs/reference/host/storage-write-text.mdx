@@ -8,10 +8,13 @@ sidebar: { order: 2 }
 storage.writeText({ scope, path, text }): Promise<null>
 ```
 
+`@bunaway/plugin-storage`의 화면용 함수는 두 번째 인자로 `InvokeOptions`를 받습니다.
+signal과 deadline의 의미는 [호출 취소와 기한](/reference/client/invoke/)을 따릅니다.
+
 저장 범위 안의 파일에 텍스트를 씁니다. 기존 파일 내용은 새 텍스트로 대체합니다.
 
 ```ts
-import { storage } from "@bunaway/backend";
+import { storage } from "@bunaway/plugin-storage";
 
 await storage.writeText({
   scope: "appData",
@@ -23,7 +26,7 @@ await storage.writeText({
 ## 입력과 정책
 
 `storage`는 명령이나 `defineApp()`으로 연결한 플러그인 setup에서 호출합니다.
-실행 범위와 기존 `context.host.call("storage.writeText", ...)` 사용법은
+플러그인 등록과 실행 범위는
 [백엔드 Host API](/reference/backend/host-api/)에서 확인하세요.
 
 `scope`, `path`는 [storage.readText](/reference/host/storage-read-text/)와 같은 필수 경로 계약입니다.
@@ -31,8 +34,8 @@ await storage.writeText({
 text에는 별도 글자 수 제한이 없지만 전체 요청은 UTF-8 기준 1 MiB 이하여야 합니다.
 앱 명령의 입력 스키마에 더 작은 상한을 정할 수 있으며 템플릿은 10,000자로 제한합니다.
 
-해당 출처의 storage grant에 `write`가 필요합니다.
-저장 명령을 `commands`에 허용한 뒤 파일 범위에도 write를 추가합니다. read만 있는 범위에서는 쓰기를 거부합니다.
+storagePlugin을 등록하고 permissions에 `storage:write-text`와 파일 범위를 allow에 지정합니다.
+UI에서 storage.writeText를 직접 호출하면 commands에 `plugin.storage.writeText`도 허용합니다. 읽기 권한만 있는 범위에서는 쓰기를 거부합니다.
 허용한 디렉터리와 파일 범위 안에서만 저장할 수 있습니다.
 
 ## 반환과 이벤트

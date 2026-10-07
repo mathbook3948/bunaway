@@ -1,74 +1,60 @@
 ---
-title: storage, log, capabilities
-description: 앱 백엔드에서 저장과 로그, 기능 조회를 직접 호출합니다.
+title: 플러그인 API와 host.call
+description: 필요한 네이티브 플러그인을 설치하고 백엔드에서 호출합니다.
 sidebar: { order: 4 }
 ---
 
-`@bunaway/backend`에서 `storage`, `log`, `capabilities`를 import합니다.
-명령에서 호출한 서비스 함수도 같은 API를 사용할 수 있습니다. `context.host`를 인자로 전달하거나
-Host API를 별도로 초기화할 필요가 없습니다.
+저장, 로그와 기능 조회는 개별 설치하는 패키지입니다. 사용하는 패키지를 설치한 뒤
+앱의 `plugins` 배열에 등록하세요. 현재 네이티브 어댑터는 Windows를 지원합니다.
 
 ```ts
-import { defineModule, storage, log, capabilities } from "@bunaway/backend";
+import { defineApp, defineModule } from "@bunaway/backend";
 
-async function save(text: string) {
-  await storage.writeText({ scope: "appData", path: "notes/memo.txt", text });
-  await log.info("메모를 저장했습니다.", { length: text.length });
-  return null;
-}
+import { storage, storagePlugin } from "@bunaway/plugin-storage";
 
-export const memo = defineModule("memo")
-  .command("save", {
-    input: { type: "string" }, output: { const: null },
-  }, save)
-  .command("support", { input: { const: null }, output: {} }, () => capabilities());
+const memo = defineModule("memo").command("save", {
+  input: { type: "string" }, output: { const: null },
+}, text => storage.writeText({ scope: "appData", path: "notes/memo.txt", text }));
+export default defineApp({ modules: [memo], plugins: [storagePlugin] });
 ```
 
-이 예제를 실행하려면 뷰의 정책에 `memo.save`, `memo.support` 명령과
-`appData/notes` 쓰기 권한, `host.log: true`를 선언해야 합니다.
+뷰 정책에는 `memo.save`와 `storage:write-text`의 `appData/notes` 허용 범위가 필요합니다.
+패키지 설치나 플러그인 등록으로 권한을 부여하지 않습니다.
 
-## 저장소
+## 개별 API
 
-```ts
-storage.readText({ scope, path }): Promise<string>
-storage.writeText({ scope, path, text }): Promise<null>
-```
+| 패키지와 등록 객체 | 백엔드 공개 함수 |
+| --- | --- |
+| `@bunaway/plugin-storage`, `storagePlugin` | `storage.readText({ scope, path }): Promise<string>`, `storage.writeText({ scope, path, text }): Promise<null>` |
+| `@bunaway/plugin-log`, `logPlugin` | `log.write({ level, message, details? })`, `log.debug`, `log.info`, `log.warn`, `log.error` |
+| `@bunaway/plugin-capabilities`, `capabilitiesPlugin` | `capabilities(): Promise<Capabilities>` |
 
-`scope`는 `appData` 또는 `temp`, `path`는 해당 범위 안의 상대 경로입니다.
-`text`는 저장할 문자열입니다. 읽기는 문자열, 쓰기는 `null`을 반환합니다.
-`storage`는 플랫폼이 정한 앱별 데이터 폴더와 임시 저장 영역을 사용하는 편의 API입니다.
-일반 파일 작업에는 백엔드에서 `Bun.file()`과 `Bun.write()`를 직접 사용할 수 있습니다.
-별도의 기본 저장 플러그인을 등록할 필요가 없습니다.
-입력 제약과 권한, 파일 오류는 [읽기](/reference/host/storage-read-text/)와
-[쓰기](/reference/host/storage-write-text/)에서 확인하세요.
+로그의 모든 함수는 `Promise<null>`을 반환합니다. `level`은 debug, info, warn, error이며
+메시지는 최대 1,024자, `details`는 선택적 JSON 값입니다.
+저장 scope는 appData 또는 temp이며 path는 범위 안의 상대 경로입니다.
+[저장 읽기](/reference/host/storage-read-text/), [쓰기](/reference/host/storage-write-text/),
+[로그](/reference/host/log-write/)에 입력과 오류를 설명합니다.
 
-## 로그
+화면과 백엔드에서 같은 패키지를 import하고 같은 기능 이름을 사용합니다.
+예를 들어 둘 다 `import { storage } from "@bunaway/plugin-storage"`로 가져옵니다.
+프런트엔드 빌드에서는 화면 함수를, Bun에서는 백엔드 함수를 선택합니다.
+화면 호출에는 `plugin.storage.readText`처럼 정확한 명령 허용과 해당 Host 권한이 모두 필요합니다.
+화면 API는 기본 WebView 연결을 사용합니다. 생성 앱의 typecheck는 화면과 백엔드를
+각각 검사하므로 실행 환경에 맞는 인자와 반환 타입을 확인합니다.
+화면의 `storage.readText(input, options?)`, `storage.writeText(input, options?)`,
+`log.write(input, options?)`, `capabilities(options?)`는 `InvokeOptions`를 받습니다.
+로그 수준별 함수는 `log.info(message, details?, options?)` 형태입니다.
+options의 signal은 호출 취소 신호이고 deadline은 Unix epoch 밀리초의 절대 기한입니다.
+이미 취소된 신호는 `CANCELLED`, 지난 기한은 `TIMEOUT`으로 실패합니다.
+진행 중 취소도 지원하며 완료된 저장이나 로그를 되돌리지는 않습니다.
 
-```ts
-log.write({ level, message, details? }): Promise<null>
-log.debug(message: string, details?: JsonValue): Promise<null>
-log.info(message: string, details?: JsonValue): Promise<null>
-log.warn(message: string, details?: JsonValue): Promise<null>
-log.error(message: string, details?: JsonValue): Promise<null>
-```
+## host.call
 
-`level`은 `debug`, `info`, `warn`, `error` 중 하나입니다.
-메시지는 최대 1,024자이며, 추가 데이터는 JSON 값입니다.
-`details`를 생략하면 추가 데이터를 보내지 않고, `null`은 그대로 기록합니다.
-모든 메서드의 성공 결과는 `null`입니다.
-호출 출처의 로그 권한이 필요하며, 저장 위치와 오류는 [log.write](/reference/host/log-write/)에서 설명합니다.
-
-## 기능 조회
-
-```ts
-capabilities(): Promise<HostOutput<"capabilities.get">>
-```
-
-기능 이름, 지원 수준과 OS 권한 상태를 반환합니다. 인자는 없습니다.
-조회 결과와 앱의 정책상 호출 권한은 별개입니다.
-[capabilities.get](/reference/host/capabilities-get/)에서 결과 필드를 확인하세요.
-이 함수는 백엔드용입니다. 화면에서는 `@bunaway/client`의
-[capabilities](/reference/client/capabilities/)를 사용합니다.
+공통 SDK는 `host.call(contract, input)`과 `context.host.call(contract, input)`을 제공합니다.
+`HostOperationContract<I, O>`의 name, input, output, permission으로 작업을 선언하며
+결과는 출력 schema에서 추론합니다. 플러그인 작성자는 등록한 `native.operations` 계약을
+사용합니다. 호출자가 넘긴 다른 schema나 permission으로 등록한 계약을 바꾸지 못합니다.
+작업이 등록되지 않았다면 `UNSUPPORTED`, 입력이 잘못됐다면 `INVALID_ARGUMENT`입니다.
 
 ## 실행 범위와 권한
 
@@ -89,7 +75,7 @@ setup에서 시작한 비동기 작업은 `policy.backend` 권한을 사용합�
 완료한 명령이나 취소된 요청, 종료된 앱의 작업에서 호출하면 `CANCELLED`로 거부합니다.
 모든 함수는 Promise를 반환하며 실행 범위 오류도 Promise의 거부로 전달합니다.
 
-기존 [context.host.call](/reference/backend/context/)도 지원합니다.
+[context.host.call](/reference/backend/context/)도 지원합니다.
 SDK의 `command()`와 `defineApp()`을 사용하지 않는 객체형 정의에서는 이 명시적 API를 사용하세요.
 권한 부족은 `PERMISSION_DENIED`, 입력 오류는 `INVALID_ARGUMENT`,
 지원하지 않는 기능은 `UNSUPPORTED` 등 기존 Host operation의 오류를 그대로 전달합니다.

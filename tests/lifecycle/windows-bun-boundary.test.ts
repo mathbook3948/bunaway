@@ -3,7 +3,7 @@ import { MessageChannel } from "node:worker_threads";
 import { ViewBoundary } from "../../native/windows/bun/boundary.ts";
 import { Channel, type Packet, type Route } from "../../native/windows/bun/channel.ts";
 import { createClient } from "../../packages/client-sdk/src/index.ts";
-import { createCore, type CoreSession } from "../../packages/core/src/index.ts";
+import { type CoreSession, createCore } from "../../packages/core/src/index.ts";
 import {
   API_LIMITS,
   PROTOCOL_VERSION,
@@ -39,7 +39,7 @@ test("Windows boundary rejects canonical overflow before reserving IDs and deadl
       origins: ["https://app.bunaway.local"],
       commands: ["echo"],
       events: ["changed"],
-      host: { log: false, storage: [] },
+      host: { permissions: [] },
     },
     {
       origin: (text) => new URL(text).origin,
@@ -155,7 +155,7 @@ test("Windows boundary uses actual source, issues view-specific contexts and dro
         origins: ["https://app.bunaway.local"],
         commands: ["echo"],
         events: [],
-        host: { log: false, storage: [] },
+        host: { permissions: [] },
       },
       {
         origin: (source) => new URL(source).origin,
@@ -348,7 +348,7 @@ test("permission and malformed-message errors reach WebView while diagnostics ar
       origins: ["https://app.bunaway.local"],
       commands: ["echo"],
       events: [],
-      host: { log: false, storage: [] },
+      host: { permissions: [] },
     },
     {
       origin: (text) => new URL(text).origin,
@@ -436,7 +436,7 @@ test("saturated data and diagnostics preserve cancellation, deadlines and lifecy
       origins: ["https://app.bunaway.local"],
       commands: ["echo"],
       events: [],
-      host: { log: false, storage: [] },
+      host: { permissions: [] },
     },
     {
       origin: (text) => new URL(text).origin,
@@ -621,10 +621,10 @@ test.each(["abort", "timeout-scan", "timeout-response"])("%s listen cleanup", as
         origins: [new URL(source).origin],
         commands: [],
         events: ["changed"],
-        host: { log: false, storage: [] },
+        host: { permissions: [] },
       },
     ],
-    backend: { log: false, storage: [] },
+    backend: { permissions: [] },
   };
   const hello = {
     kind: "hello" as const,
@@ -797,7 +797,7 @@ test("multiple views share cancellation capacity until all cancellation acknowle
           origins: [new URL(source).origin],
           commands: ["hold"],
           events: [],
-          host: { log: false, storage: [] },
+          host: { permissions: [] },
         },
         {
           origin: (text) => new URL(text).origin,

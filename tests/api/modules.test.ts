@@ -1,22 +1,22 @@
 import { expect, test } from "bun:test";
 import {
+  type AppDefinition,
+  type CommandsOf,
   command,
   createCore,
   defineApp,
   defineModule,
-  type AppDefinition,
-  type CommandsOf,
   type EventsOf,
   type ModuleDefinition,
   type PluginDefinition,
 } from "../../packages/backend-sdk/src/index.ts";
-import { createClient, type Client } from "../../packages/client-sdk/src/index.ts";
+import { type Client, createClient } from "../../packages/client-sdk/src/index.ts";
 import type { CoreServices } from "../../packages/core/src/index.ts";
 import {
   type ClientMessage,
   type HostContext,
-  type TransportEvent,
   parseMessage,
+  type TransportEvent,
 } from "../../packages/protocol/src/index.ts";
 
 const textSchema = { type: "string", maxLength: 32 } as const;
@@ -52,10 +52,10 @@ test("module commands retain validation, policy and events through Core and Clie
           origins: ["https://app.bunaway.local"],
           commands: ["memo.save", "memo.read"],
           events: ["memo.saved"],
-          host: { log: false, storage: [] },
+          host: { permissions: [] },
         },
       ],
-      backend: { log: false, storage: [] },
+      backend: { permissions: [] },
     },
     hello: { kind: "hello", protocol: { major: 1, minor: 0 }, features: [], buildId: "modules" },
     platform: "windows",
@@ -230,14 +230,14 @@ test("invalid and reserved qualified names fail during authoring", () => {
     expect(() => defineModule("memo").command(name, contract, () => null)).toThrow(
       "invalid command name",
     );
-  expect(() => defineModule("bunaway").command("capabilities", contract, () => null)).toThrow(
+  expect(() => defineModule("plugin").command("storage.readText", contract, () => null)).toThrow(
     "reserved",
   );
   expect(
     Object.keys(
-      defineModule("memo").command("bunaway.capabilities", contract, () => null).commands,
+      defineModule("memo").command("plugin.capabilities.get", contract, () => null).commands,
     ),
-  ).toEqual(["memo.bunaway.capabilities"]);
+  ).toEqual(["memo.plugin.capabilities.get"]);
 });
 
 // These assertions verify frontend inference and generic SDK consumers.

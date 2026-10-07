@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
-import { readJsonLines } from "../../packages/runtime-bun/src/index.ts";
 import {
-  parseProcessFrame,
-  type ProcessFrame,
   PROTOCOL_VERSION,
+  type ProcessFrame,
+  parseProcessFrame,
 } from "../../packages/protocol/src/index.ts";
+import { readJsonLines } from "../../packages/runtime-bun/src/index.ts";
 
 test("unexpected handler errors reach stderr with their stack while IPC replies stay sanitized", async () => {
   const entrypoint = fileURLToPath(new URL("./command-error.fixture.ts", import.meta.url));
@@ -35,14 +35,14 @@ test("unexpected handler errors reach stderr with their stack while IPC replies 
         backendContext: "backend-test",
         policy: {
           version: 1,
-          backend: { log: false, storage: [] },
+          backend: { permissions: [] },
           views: [
             {
               id: "main",
               origins: ["https://app.bunaway.local"],
               commands: ["fail"],
               events: [],
-              host: { log: false, storage: [] },
+              host: { permissions: [] },
             },
           ],
         },
@@ -118,7 +118,7 @@ for (const phase of ["before boot", "during plugin setup"] as const) {
               entrypoint,
               buildId: "test",
               backendContext: "backend-test",
-              policy: { version: 1, views: [], backend: { log: true, storage: [] } },
+              policy: { version: 1, views: [], backend: { permissions: ["log:write"] } },
             },
           })}\n`,
         );
@@ -168,7 +168,7 @@ test("Bun core startup Host API, response correlation, cancel, revoke and shutdo
         backendContext: "backend-test",
         policy: {
           version: 1,
-          backend: { log: true, storage: [] },
+          backend: { permissions: ["log:write"] },
           views: [
             {
               id: "main",
@@ -176,8 +176,12 @@ test("Bun core startup Host API, response correlation, cancel, revoke and shutdo
               commands: ["read"],
               events: [],
               host: {
-                log: false,
-                storage: [{ scope: "appData", pathPrefix: "notes", access: ["read"] }],
+                permissions: [
+                  {
+                    identifier: "storage:read-text",
+                    allow: [{ scope: "appData", pathPrefix: "notes" }],
+                  },
+                ],
               },
             },
           ],

@@ -15,13 +15,14 @@ export type {
 export { createCore } from "@bunaway/core";
 export type {
   HostAPI,
-  HostInput,
-  HostOperation,
-  HostOutput,
+  HostOperationContract,
+  Infer,
   JsonValue,
+  NativePluginContract,
+  PermissionContract,
   Schema,
 } from "@bunaway/protocol";
 export { defineApp } from "./app.ts";
 export { type CommandContract, type CommandHandler, command } from "./command.ts";
-export { capabilities, log, storage } from "./host.ts";
+export { host } from "./host.ts";
 export { defineModule, type ModuleBuilder, type ModuleDefinition } from "./module.ts";

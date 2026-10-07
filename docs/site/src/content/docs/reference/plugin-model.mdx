@@ -1,21 +1,20 @@
 ---
-title: 선택 네이티브 플러그인 설계
-description: 개별 설치, 앱 등록, 권한과 플랫폼 구현을 분리하는 후속 공개 계약.
+title: 선택 네이티브 플러그인 구조
+description: 개별 설치, 앱 등록, 권한과 플랫폼 구현을 분리하는 공개 계약.
 ---
 
-이 페이지는 ADR 0012에서 확정한 **구현 전 설계**입니다. 현재 API는
-[백엔드 Host API](/reference/backend/host-api/)와
-[PluginDefinition](/reference/backend/plugins/)을 따릅니다.
-아래 패키지 export와 새 정책 구조는 아직 사용할 수 없습니다.
+ADR 0012의 개별 플러그인 구조를 Windows에서 구현했습니다.
+로컬 tarball로 설치할 수 있으며 현재 플랫폼 어댑터는 Windows만 제공합니다.
+[백엔드 API](/reference/backend/host-api/)와 [PluginDefinition](/reference/backend/plugins/)을 참고하세요.
 
 ## 설치, 등록, 권한을 구분합니다
 
-저장, 앱 로그, 기능 지원 조회는 각각 설치하는 플러그인으로 전환합니다.
+저장, 앱 로그, 기능 지원 조회는 각각 설치하는 플러그인입니다.
 패키지 설치는 앱의 의존성을 준비하고, `AppDefinition.plugins` 등록은 기능을
 활성화합니다. 정책에는 호출할 명령과 Host 권한, 리소스 범위를 별도로 허용합니다.
 설치나 등록만으로 권한을 부여하지 않습니다.
 
-| 패키지 | 백엔드 기본 진입점 | 화면용 `/client` |
+| 패키지 | 공통 공개 export | 화면 함수 |
 | --- | --- | --- |
 | `@bunaway/plugin-storage` | `storage`, `storagePlugin` | `storage` |
 | `@bunaway/plugin-log` | `log`, `logPlugin` | `log` |
@@ -26,6 +25,7 @@ description: 개별 설치, 앱 등록, 권한과 플랫폼 구현을 분리하�
 
 ```ts
 import { defineApp } from "@bunaway/backend";
+
 import { storagePlugin } from "@bunaway/plugin-storage";
 import { memo } from "./memo/module.ts";
 
@@ -34,7 +34,8 @@ export default defineApp({ modules: [memo], plugins: [storagePlugin] });
 
 백엔드 서비스는 `@bunaway/plugin-storage`의 `storage`를 직접 import합니다.
 저장의 입력과 결과는 현재 `storage.readText`와 `storage.writeText` 계약을 유지합니다.
-화면에서 직접 호출할 때는 `/client`의 함수를 사용합니다. 화면용 진입점은 공통
+화면에서도 같은 패키지 경로를 import합니다. 조건부 exports가 실행 환경에 맞는
+구현을 선택합니다. 화면용 구현은 공통
 클라이언트의 연결과 취소를 재사용하고 백엔드 실행 코드를 포함하지 않습니다.
 
 ## 공통 기반과 기능 구현
@@ -64,21 +65,20 @@ export default defineApp({ modules: [memo], plugins: [storagePlugin] });
 `PERMISSION_DENIED`입니다. 잘못된 설정이나 scope는 시작 전에 거부합니다.
 기능 지원 조회와 OS 권한 상태, 앱 정책의 허용은 서로 구분합니다.
 
-## 설치와 플랫폼 연결
+## 설치와 플랫폼 지원
 
-공통 `framework.json` 목록에서 필수 packages와 선택 plugins를 분리합니다.
-플러그인별 tarball을 만들고 CLI의 필수 의존성에는 넣지 않습니다. 공식 플러그인은
-처음에는 호환하는 공통 SDK의 정확한 릴리스 버전을 선언합니다.
+필요한 플러그인의 개별 패키지만 설치합니다. 공식 플러그인은 현재 공통 SDK와 같은
+정확한 릴리스 버전을 사용합니다. 등록 목록은 앱 정의의 plugins에 작성하고 필요한
+권한은 policy.json에 별도로 허용합니다.
 
-CLI는 플러그인의 `plugin.json`에서 계약과 대상 플랫폼 adapter의 경로를 읽습니다.
-계약 모듈은 부작용 없는 선언이며 앱 진입점이나 setup을 실행해서 빌드 정보를
-얻지 않습니다. 앱 등록 목록은 기존 `app.ts`에만 작성합니다.
-설치한 adapter가 번들에 있어도 등록하지 않은 adapter는 초기화하지 않습니다.
+화면과 백엔드는 같은 공개 import 경로와 같은 함수를 사용합니다.
+설치했어도 등록하지 않은 구현은 초기화하지 않습니다.
+현재 네이티브 플러그인은 Windows를 지원하며 등록한 플러그인의 플랫폼 구현이 없으면
+`UNSUPPORTED`로 시작을 실패시킵니다.
 
-Windows에서 준비, 권한 평가, 실행과 종료를 먼저 연결합니다. 저장의 실제 파일
-핸들 검사와 승인 직후 실행을 유지하며 새 feature마다 Worker나 전송 구현을 만들지
-않습니다. 다른 플랫폼은 같은 공개 계약에 맞추고, 등록한 플러그인의 플랫폼 구현이
-없으면 `UNSUPPORTED`로 실패합니다.
+새 네이티브 플러그인은 plugin.json, src/index.ts와 src/windows.ts를 기본으로 작성합니다.
+추가 폴더와 파일은 제작자가 기능의 크기에 맞춰 선택합니다.
+[네이티브 플러그인 작성](/reference/tooling/native-plugins/)에서 선언과 구현 방법을 설명합니다.
 
 ## 이관과 검증
 

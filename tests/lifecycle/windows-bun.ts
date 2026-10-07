@@ -1,16 +1,23 @@
-import assert from "node:assert/strict";
 import { dlopen } from "bun:ffi";
+import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { runWindowsApp } from "../../native/windows/bun/entry.ts";
+import { closeWindowsApp } from "../../packages/cli/src/launch.ts";
 import type { AppDefinition } from "../../packages/core/src/index.ts";
 import type { HostContext, Policy } from "../../packages/protocol/src/index.ts";
+import { logPlugin } from "../../plugins/log/src/index.ts";
 import pin from "../../runtime/build-manifests/windows-x64.json";
-import { closeWindowsApp } from "../../packages/cli/src/launch.ts";
+import { contracts } from "../fixtures/host-plugins.ts";
+import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 
 assert.equal(Bun.version, pin.bun.version);
 assert.equal(Bun.revision, pin.bun.sourceRevision);
-const output = resolve(import.meta.dir, "../../build/windows-bun-core");
+const repoRoot = process.argv.includes("--repo")
+  ? (process.argv[process.argv.indexOf("--repo") + 1] ?? "")
+  : resolve(import.meta.dir, "../..");
+const output = resolve(repoRoot, "build/windows-bun-core");
 const assets = resolve(output, "assets");
 const dataRoot = resolve(output, `data-${process.pid}`);
 const modal = process.argv.includes("--modal");
@@ -24,10 +31,10 @@ const policy: Policy = {
       origins: ["https://app.bunaway.local"],
       commands: ["test.echo", "test.emit", "test.hold", "test.report"],
       events: ["test.changed"],
-      host: { log: true, storage: [] },
+      host: { permissions: ["log:write"] },
     },
   ],
-  backend: { log: true, storage: [] },
+  backend: { permissions: ["log:write"] },
 };
 if (!process.argv.includes("--child")) {
   await mkdir(resolve(assets, "web"), { recursive: true });
@@ -45,8 +52,21 @@ if (!process.argv.includes("--child")) {
     resolve(assets, "web/index.html"),
     '<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src \'self\'; script-src \'self\'"><output>waiting</output><script type="module" src="app.js"></script>',
   );
+  const childEntry = await bundleNativeWorker(
+    "windows-bun",
+    resolve(output, "driver"),
+    import.meta.path,
+  );
   const child = Bun.spawn(
-    [process.execPath, "--no-env-file", import.meta.path, "--child", ...process.argv.slice(2)],
+    [
+      process.execPath,
+      "--no-env-file",
+      fileURLToPath(childEntry),
+      "--child",
+      "--repo",
+      repoRoot,
+      ...process.argv.slice(2),
+    ],
     {
       stdout: "pipe",
       stderr: "pipe",
@@ -150,11 +170,12 @@ if (!process.argv.includes("--child")) {
   const app: AppDefinition = {
     events: { "test.changed": { type: "integer" } },
     plugins: [
+      logPlugin,
       {
         name: "setup",
         version: "1",
         async setup(context) {
-          await context.host.call("log.write", {
+          await context.host.call(contracts["log.write"], {
             level: "info",
             message: "startup",
             details: null,
@@ -221,10 +242,7 @@ if (!process.argv.includes("--child")) {
       dataRoot,
       loader: creationFailure
         ? resolve(output, "missing-loader.dll")
-        : resolve(
-            import.meta.dir,
-            "../../native/windows/bun/vendor/sdk/build/native/x64/WebView2Loader.dll",
-          ),
+        : resolve(repoRoot, "native/windows/bun/vendor/sdk/build/native/x64/WebView2Loader.dll"),
       windows: [
         {
           view: "main",

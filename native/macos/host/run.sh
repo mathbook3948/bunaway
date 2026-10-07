@@ -81,7 +81,7 @@ for name in bunfig.toml tsconfig.json policy.json; do
   cp "$DESKTOP_TEST/$name" "$PACKAGE/assets/$name"
 done
 cp "$HERE/test/app.json" "$PACKAGE/assets/app.json"
-for name in process.schema.json message.schema.json policy.schema.json host-call.schema.json host-operations.json; do
+for name in process.schema.json message.schema.json policy.schema.json host-call.schema.json; do
   cp "$GENERATED/$name" "$PACKAGE/assets/$name"
 done
 for f in "$DESKTOP_TEST"/web/*; do cp "$f" "$PACKAGE/assets/web/"; done

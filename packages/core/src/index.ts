@@ -1,6 +1,6 @@
 import type {
-  CancellationSignal,
   CancellationController,
+  CancellationSignal,
   ClientMessage,
   Dispose,
   Hello,
@@ -10,6 +10,7 @@ import type {
   HostResponse,
   Infer,
   JsonValue,
+  NativePluginContract,
   Policy,
   Schema,
   ServerMessage,
@@ -48,7 +49,8 @@ export type PluginDefinition = {
   readonly version: string;
   readonly dependencies?: readonly string[];
   readonly platforms?: readonly Platform[];
-  readonly requiredHost?: Policy["backend"];
+  readonly requiredPermissions?: readonly string[];
+  readonly native?: NativePluginContract;
   readonly commands?: CommandRegistry;
   readonly events?: EventRegistry;
   setup?(context: CommandContext): void | StopHook | Promise<StopHook | undefined> | Promise<void>;
@@ -84,6 +86,7 @@ export type CoreServices = {
   readonly runtime: RuntimeServices;
   // Trusted diagnostics only. Never include the cause in a WebView response.
   onCommandError?(command: string, cause: unknown): void | Promise<void>;
+  onPluginError?(plugin: string, phase: "setup" | "stop", cause: unknown): void | Promise<void>;
   // The adapter closes the transport and bound session(s) on terminal send failure.
   send(context: HostContext, message: ServerMessage): Promise<void>;
   callHost(context: HostContext, call: HostCall, signal: CancellationSignal): Promise<HostResponse>;
@@ -105,3 +108,5 @@ export interface Core {
 export type CoreFactory = (app: AppDefinition, services: CoreServices) => Promise<Core>;
 
 export { createCore } from "./create-core.ts";
+
+export { bindHostAPI } from "./host-api.ts";

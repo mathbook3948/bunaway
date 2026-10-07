@@ -10,7 +10,8 @@
     "skipLibCheck": true,
     "types": ["bun", "vite/client"],
     "allowJs": true,
-    "checkJs": true
+    "checkJs": true,
+    "customConditions": ["bun"]
   },
-  "include": ["src-bunaway/**/*.ts", "vite.config.ts", "svelte.config.js"]
+  "include": ["vite.config.ts", "svelte.config.js"]
 }

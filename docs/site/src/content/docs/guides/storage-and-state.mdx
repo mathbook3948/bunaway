@@ -21,7 +21,7 @@ description: 메모리 상태와 영구 저장을 구분하고 Host API 경로�
 `message.save` 핸들러는 아래 Host API를 호출합니다.
 
 ```ts
-import { storage } from "@bunaway/backend";
+import { storage } from "@bunaway/plugin-storage";
 
 await storage.writeText({
   scope: "appData",
@@ -76,6 +76,7 @@ const text = await storage.readText({
 
 ```ts
 import { type AppDefinition, command } from "@bunaway/backend";
+
 
 export default {
   state: { count: 0 },

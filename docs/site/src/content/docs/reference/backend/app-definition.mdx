@@ -9,6 +9,7 @@ sidebar: { order: 1 }
 
 ```ts
 import { defineApp } from "@bunaway/backend";
+
 import { message } from "./message/module.ts";
 
 export const app = defineApp({ modules: [message] });
@@ -55,7 +56,7 @@ export default {
 명령 이름과 이벤트 이름은 각각 앱과 모든 플러그인에서 공유합니다.
 동일 이름을 덮어쓰거나 중복 등록할 수 없습니다.
 명령, 이벤트 이름은 1–128자의 영숫자, `_ . : -`입니다.
-`bunaway.capabilities`는 예약 명령이므로 앱이나 플러그인이 구현할 수 없습니다.
+`plugin.` 접두사는 네이티브 플러그인 명령에 예약되어 있습니다. 앱 명령에는 사용할 수 없습니다.
 
 ## 정책과 실행
 

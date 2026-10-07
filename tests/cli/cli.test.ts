@@ -170,6 +170,7 @@ test("bundle is optional until packaging and generated settings stay beside app 
       "bunaway.json",
       "message",
       "policy.json",
+      "tsconfig.json",
     ]);
     await writeJson(path, withoutBundle);
     expect((await validateProject(project)).bundle).toBeUndefined();
@@ -257,8 +258,13 @@ test("policy rejects duplicate views, unsafe scope prefixes, unknown permissions
     {
       ...policy,
       backend: {
-        log: true,
-        storage: [{ scope: "appData", pathPrefix: "../escape", access: ["write"] }],
+        permissions: [
+          "log:write",
+          {
+            identifier: "storage:write-text",
+            allow: [{ scope: "appData", pathPrefix: "../escape" }],
+          },
+        ],
       },
     },
     { ...policy, backend: { log: false, storage: [], arbitraryNativeCall: true } },

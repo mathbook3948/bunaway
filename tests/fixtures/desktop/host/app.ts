@@ -1,14 +1,11 @@
-import { memoApp } from "./memo-app.ts";
 import type {
   AppDefinition,
   CommandContext,
   CommandDefinition,
 } from "../../../../packages/core/src/index.ts";
-import {
-  BunawayError,
-  type HostOperation,
-  type JsonValue,
-} from "../../../../packages/protocol/src/index.ts";
+import { BunawayError, type JsonValue } from "../../../../packages/protocol/src/index.ts";
+import { contracts, plugins } from "../../host-plugins.ts";
+import { memoApp } from "./memo-app.ts";
 
 let invokeCount = 0;
 const command = (run: CommandDefinition["run"]): CommandDefinition => ({
@@ -20,11 +17,19 @@ const command = (run: CommandDefinition["run"]): CommandDefinition => ({
 });
 const host = async (
   context: CommandContext,
-  operation: HostOperation,
+  operation: string,
   payload: JsonValue,
 ): Promise<JsonValue> => {
   try {
-    return { ok: true, value: (await context.host.call(operation, payload as never)) as JsonValue };
+    return {
+      ok: true,
+      value: (await context.host.call(
+        contracts[
+          operation as keyof typeof contracts
+        ] as import("../../../../packages/protocol/src/index.ts").HostOperationContract,
+        payload as never,
+      )) as JsonValue,
+    };
   } catch (error) {
     if (error instanceof BunawayError) return { ok: false, code: error.code };
     throw error;
@@ -33,11 +38,12 @@ const host = async (
 const object = (payload: unknown) => payload as Record<string, JsonValue>;
 const app: AppDefinition = {
   plugins: [
+    ...plugins,
     {
       name: "startup-log",
       version: "1",
       async setup(context) {
-        await context.host.call("log.write", {
+        await context.host.call(contracts["log.write"], {
           level: "info",
           message: "core-startup",
           details: null,
@@ -99,7 +105,7 @@ const app: AppDefinition = {
       return null;
     }),
     "test.hostCancel": command(async (_p, c) =>
-      c.host.call("storage.readText", { scope: "temp", path: "cancel-me.txt" }),
+      c.host.call(contracts["storage.readText"], { scope: "temp", path: "cancel-me.txt" }),
     ),
     "test.report": command(async (p, c) =>
       host(c, "storage.writeText", {

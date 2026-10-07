@@ -21,7 +21,7 @@ class TestWorker extends EventEmitter {
     super();
     this.runtime = options.workerData.runtime;
     workers.push(this);
-    if (workers.length === 1) setTimeout(() => this.packet({ kind: "ready" }), 0);
+    setTimeout(() => this.packet({ kind: "ready" }), 0);
   }
   packet(packet: Packet) {
     this.emit("message", { runtime: this.runtime, sequence: ++this.sequence, packet });
@@ -68,7 +68,7 @@ const config: UIConfig = {
   runtime: { id: "capacity-test", generation: "1" },
   backendContext: "backend-test" as UIConfig["backendContext"],
   dataRoot: resolve(import.meta.dir, `../../build/windows-bun-capacity-${process.pid}`),
-  policy: { version: 1, views: [], backend: { log: false, storage: [] } },
+  policy: { version: 1, views: [], backend: { permissions: [] } },
   windows: [],
   assets: "",
   loader: "",

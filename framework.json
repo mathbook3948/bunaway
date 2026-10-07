@@ -5,13 +5,25 @@
     "cli": "@bunaway/cli",
     "backend-sdk": "@bunaway/backend",
     "client-sdk": "@bunaway/client",
+    "plugin-sdk": "@bunaway/plugin",
     "core": "@bunaway/core",
     "protocol": "@bunaway/protocol",
     "runtime-bun": "@bunaway/runtime-bun",
     "packaging": "@bunaway/packaging"
   },
-  "webProtocol": { "major": 1, "minor": 0 },
-  "processProtocol": { "major": 1, "minor": 0 },
+  "webProtocol": {
+    "major": 1,
+    "minor": 0
+  },
+  "processProtocol": {
+    "major": 1,
+    "minor": 0
+  },
   "nativeHost": "0.0.0",
-  "bun": "1.4.2"
+  "bun": "1.4.2",
+  "plugins": {
+    "storage": "@bunaway/plugin-storage",
+    "log": "@bunaway/plugin-log",
+    "capabilities": "@bunaway/plugin-capabilities"
+  }
 }

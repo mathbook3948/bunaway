@@ -77,10 +77,10 @@ test("development policy preserves grants and needs a matching artifact and laun
         origins: ["https://app.bunaway.local"],
         commands: ["echo"],
         events: [],
-        host: { log: false, storage: [] },
+        host: { permissions: [] },
       },
     ],
-    backend: { log: false, storage: [] },
+    backend: { permissions: [] },
   } as Policy;
   const url = "http://127.0.0.1:5173/";
   const development = developmentPolicy(policy, "main", url);

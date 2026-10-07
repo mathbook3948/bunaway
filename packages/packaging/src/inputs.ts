@@ -276,7 +276,6 @@ const REQUIRED_ASSETS = {
     "assets/process.schema.json",
     "assets/message.schema.json",
     "assets/host-call.schema.json",
-    "assets/host-operations.json",
     "assets/policy.schema.json",
     "licenses/LICENSE.bun",
     "licenses/LICENSE.nlohmann-json",

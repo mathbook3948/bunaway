@@ -51,7 +51,9 @@ const message = parseMessage(text);
 | `parseHostCall` / `serializeHostCall` | 문자열 ↔ HostCall | hostCallSchema |
 | `parseHostResponse` / `serializeHostResponse` | 문자열 ↔ HostResponse | hostResponseSchema |
 | `parseProcessFrame` / `serializeProcessFrame` | 문자열 ↔ ProcessFrame | processSchema와 boot 내부 정책 |
-| `validateHostOutput(operation, value)` | 알 수 없는 값 → 해당 Host 출력 | operation별 출력, capabilities 이름 중복 |
+`NativeRegistry(plugins)`는 등록 계약을 복사하고 작업과 permission 중복을 검사합니다.
+`validateCall`과 `validateOutput`은 등록 schema로 검사하며 `validatePolicy`는 permission 이름과 범위를 검사합니다.
+`allowed(source, call, matches)`는 deny 우선으로 allow 범위를 평가합니다.
 
 입력이 잘못되면 `ProtocolError`가 발생합니다. parse와 serialize는 스키마를 검증하고 JSON 스냅샷을 만듭니다.
 원문과 직렬화 결과의 UTF-8 크기는 최대 1 MiB, 깊이는 최대 64입니다.
@@ -67,9 +69,9 @@ buildId는 버전 협상에 사용하지 않습니다.
 
 ## HostCall과 HostResponse
 
-HostCall은 `{ operation, payload }`이며 허용 operation은 `hostOperations`에 정의된 네 개입니다.
+HostCall은 `{ operation, payload }`입니다. 전송은 작업 이름과 JSON envelope를 검증하고 등록한 플러그인의 계약이 입력과 결과를 검증합니다.
 응답은 `{ kind: "result", payload }` 또는 `{ kind: "error", error }`입니다.
-`CAPABILITIES_COMMAND`는 `"bunaway.capabilities"`입니다.
+네이티브 플러그인 화면 명령은 `plugin.<작업 이름>`입니다.
 WebView invoke의 command와 Host operation은 별도의 이름 공간, 권한 검사입니다.
 
 ## Bootstrap

@@ -1,13 +1,13 @@
-import assert from "node:assert/strict";
 import { dlopen, ptr } from "bun:ffi";
+import assert from "node:assert/strict";
 import { link, mkdir, symlink, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { BunawayError } from "../../packages/protocol/src/index.ts";
 import {
   disposeStorageBindings,
   readStorageText,
   ScopedStorage,
-} from "../../native/windows/bun/storage.ts";
-import { BunawayError } from "../../packages/protocol/src/index.ts";
+} from "../../plugins/storage/src/windows.ts";
 
 const root = resolve(import.meta.dir, `../../build/windows-bun-storage-${process.pid}`);
 await mkdir(resolve(root, "data/notes"), { recursive: true });

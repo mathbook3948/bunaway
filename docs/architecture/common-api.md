@@ -1,7 +1,7 @@
 # C 단계 공통 API
 
 선택 네이티브 기능의 후속 공개 계약은 [플러그인 구조 계약](./plugins.md)에 정리했다.
-개별 패키지 설치, 등록과 새 정책 구조는 설계 단계다. 공식 배포 전까지 정책 형식은
+개별 패키지 설치, 등록과 새 정책 구조는 Windows에 구현했다. 공식 배포 전까지 정책 형식은
 v1을 유지한다. 아래는 현재 구현의 계약이다.
 
 이 계약에 맞춰 client-sdk, core/backend-sdk와 Windows 호스트를 구현했다.
@@ -29,7 +29,9 @@ Windows FFI 호스트와 macOS의 `runBunApp` 어댑터가 이를 연결한다. 
 
 ## 클라이언트와 Transport
 
-앱 화면의 기본 API는 `@bunaway/client`의 `invoke`, `listen`, `capabilities`다.
+앱 화면의 기본 API는 `@bunaway/client`의 `invoke`, `listen`이다.
+기능 지원 조회는 선택 패키지인 `@bunaway/plugin-capabilities`가 제공한다.
+네이티브 플러그인은 화면과 백엔드에서 같은 패키지 경로로 import한다.
 첫 호출에서 SDK가 WebView 브리지를 찾아 Transport와 Client를 만들고 현재 프로토콜의
 hello를 교환한다. import만으로 연결하거나 브리지를 읽지 않으므로 SSR, 일반 브라우저에서
 모듈을 import할 수 있다. 브리지가 없는 환경에서 기본 API를 호출하면 `UNSUPPORTED`로
@@ -88,8 +90,8 @@ listener에는 payload와 공개 source, target, subscriptionId, sequence가 전
 해제 함수는 연결이 이미 닫혔으면 네트워크 호출 없이 완료한다.
 사용자 콜백의 예외로 다른 요청이나 transport 수신 루프를 중단하지 않는다.
 
-`capabilities()`는 예약 명령 `bunaway.capabilities`를 null 입력으로 호출한다.
-앱, 플러그인은 이 이름을 등록할 수 없으며 정책에도 정확한 명령 이름을 허용해야 한다.
+기능 조회는 @bunaway/plugin-capabilities의 capabilities()가 담당한다.
+화면은 plugin.capabilities.get 명령과 capabilities:get 권한을 허용해야 한다.
 기능 지원과 OS 권한은 별도 필드다. 같은 capability 이름은 중복할 수 없다.
 
 ## 앱 정의와 코어
@@ -130,6 +132,9 @@ listener에는 payload와 공개 source, target, subscriptionId, sequence가 전
 `CoreFactory(app, services)`는 명령, 이벤트 등록과 플러그인 setup이 끝난 뒤 Core를 반환한다.
 중복, 예약 이름, 플러그인 의존 순환, 지원 플랫폼, 권한 요구사항 불일치는 시작을 실패시킨다.
 플러그인은 dependency 순서로 초기화하고 반환한 StopHook을 역순으로 실행한다.
+`CoreServices.onPluginError(plugin, phase, cause)`는 setup과 stop 실패의 원인을 받는다.
+진단 콜백의 실패와 지연은 초기화 오류나 나머지 종료 훅에 영향을 주지 않는다.
+Windows는 터미널과 `plugin-failed` 진단 로그에, 프로세스 런타임은 stderr에 기록한다.
 초기화 실패 시 이미 초기화한 플러그인도 정리한다. metadata가 권한을 추가하지 않는다.
 
 `openSession(hostContext, viewId)`는 정책의 허용 뷰에 대한 CoreSession을 만든다.
@@ -170,7 +175,7 @@ Core.stop 완료와 실제 Bun 프로세스 종료는 별도다. 최종 프로�
 | `log.write` | `{ level: debug/info/warn/error, message, details? }` | null |
 | `capabilities.get` | null | `{ name, support, permission, reason? }[]` |
 
-단일 `hostOperations` 정의에서 네이티브 `host-call.schema.json`과 `host-operations.json`을 생성한다.
+공통 host-call.schema.json은 작업 이름과 JSON envelope를 검증한다. 입력과 출력 schema는 개별 플러그인의 index.ts에서 정의한다.
 요청 스키마 검사는 파일 권한 검사가 아니다. path는 `/`로 구분한 상대 경로이고,
 공통 스키마는 절대, 드라이브 경로, 점 경로 요소, 역슬래시, NUL, 개행을 거부한다. 실제 파일을 여는
 네이티브 경계에서 절대 경로, 순회, 심볼릭 링크, 대상 교체와 scope 권한을 검사한다.
@@ -178,8 +183,8 @@ U+2028, U+2029가 들어간 경로도 전체 문자열에서 점 경로 요소�
 지원 여부와 permission 값은 각각 실제 플랫폼 지원과 현재 OS 동의를 반영한다.
 기능 조회는 호출 권한을 부여하지 않으며 네이티브 정책은 실제 operation마다 다시 검사한다.
 
-`bindHostAPI(context, signal, services.callHost)`는 호출 컨텍스트를 고정한다.
-앱 핸들러는 `context.host.call(operation, payload)` 또는 backend-sdk의
+`bindHostAPI(context, signal, services.callHost, registry)`는 호출 컨텍스트를 고정한다.
+앱 핸들러는 `context.host.call(contract, payload)` 또는 개별 플러그인의
 `storage`, `log`, `capabilities`를 사용하며 context를 선택할 수 없다.
 backend-sdk는 `AsyncLocalStorage`로 실행별 `CommandContext`를 연결한다.
 `command()`와 `defineModule().command()`는 명령 실행을 연결하고, `defineApp()`은
@@ -209,7 +214,7 @@ callHost는 signal 취소 시 같은 context, requestId의 `host-cancel`을 보�
 
 ## 구현과 검증 범위
 
-1. client-sdk: 직접 `invoke`, `listen`, `capabilities`, 인자 없는 `createClient()`의 문서별
+1. client-sdk: 직접 `invoke`, `listen`, 인자 없는 `createClient()`의 문서별
    기본 연결과 자동 초기화, 정리, 명시적 `createClient`와 요청, 구독, 취소, 종료,
    `createWebViewTransport` 구현.
 2. core/backend-sdk: `createCore`와 등록, 세션, 상태, 이벤트, 플러그인 실행, 명령 검증 구현.

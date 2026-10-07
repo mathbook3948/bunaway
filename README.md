@@ -6,7 +6,7 @@
 [개발 가이드 사이트](./docs/site/README.md)에서 전체 구조와 첫 앱 실행을 익힌 뒤 뷰별 정책과 명령, 이벤트를 살펴본다. 로컬에서 `bun run docs:dev`로 열 수 있다.
 [문서 안내](./docs/README.md)에서 공통 용어, 설계 결정과 구현 계약을 찾을 수 있다.
 
-현재 Windows x64와 macOS arm64에서 명령 호출과 이벤트 구독, 파일 저장을 사용할 수 있다.
+현재 개별 네이티브 플러그인은 Windows x64에서 지원한다. macOS arm64의 기존 검증 기록은 아래 지원 문서에서 현재 구현과 구분한다.
 CLI는 vanilla, Vite, React, Vue, Svelte 템플릿으로 단일 창 앱을 생성한다.
 앱 실행에는 패키지에 포함된 Bun을 사용하므로 최종 사용자가 Bun을 설치할 필요는 없다.
 Windows 앱 실행에는 WebView2 런타임이 필요하다.
@@ -15,12 +15,12 @@ Windows 앱 실행에는 WebView2 런타임이 필요하다.
 프레임워크 라이선스는 아직 결정되지 않았다.
 플랫폼별 지원 상태와 배포 검증 범위는 [플랫폼 지원 범위](./docs/platform-support/README.md)에서 확인한다.
 
-앱 백엔드의 명령과 서비스에서는 `@bunaway/backend`의 `storage`, `log`, `capabilities`를
-import해 직접 호출할 수 있다. 호출한 명령의 권한과 취소 신호는 자동으로 연결한다.
+앱 백엔드의 명령과 서비스에서는 `@bunaway/plugin-storage`, `@bunaway/plugin-log`,
+`@bunaway/plugin-capabilities`를 개별 설치하고 등록한 뒤 함수를 호출한다. 호출한 명령의 권한과 취소 신호는 자동으로 연결한다.
 예를 들어 명령이 호출한 서비스 함수에서 다음처럼 파일을 저장한다.
 
 ```ts
-import { storage } from "@bunaway/backend";
+import { storage } from "@bunaway/plugin-storage";
 
 export async function save(text: string) {
   return storage.writeText({ scope: "appData", path: "notes/memo.txt", text });
@@ -32,8 +32,11 @@ export async function save(text: string) {
 
 저장, 앱 로그, 기능 지원 조회를 개별 설치하는 플러그인 모델은
 [ADR 0012](./docs/decisions/0012-optional-native-plugins.md)에 확정했다.
-[공개 계약과 이관 순서](./docs/architecture/plugins.md)는 설계 문서이며 위 SDK의
-내장 기능은 아직 이관하지 않았다.
+[공개 계약](./docs/architecture/plugins.md)에 따라 Windows 실행과 개별 패키지 배포를 구현했다.
+기본 템플릿은 저장 플러그인만 설치하고 등록한다.
+플러그인은 화면과 백엔드에서 `@bunaway/plugin-storage`처럼 같은 경로로 import한다.
+새 플러그인은 plugin.json, src/index.ts와 src/windows.ts를 기본으로 작성하며 추가 파일은 제작자가 선택한다.
+생성 앱의 타입 검사와 빌드는 실행 환경에 맞는 구현을 선택한다.
 
 ## 프레임워크 개발 환경
 
@@ -147,7 +150,7 @@ CI도 `mise.toml`의 Bun 버전을 사용한다. 같은 PR, 브랜치의 새 실
 ## 디렉터리
 
 ```text
-packages/   protocol/  client-sdk/  backend-sdk/  core/  runtime-bun/  cli/
+packages/   protocol/  client-sdk/  backend-sdk/  plugin-sdk/  core/  runtime-bun/  cli/
 native/     host-api/  windows/  macos/  linux/  android/  ios/
 runtime/    bun-bundle/  patches/  build-manifests/
 renderers/  system-webview/  chromium/

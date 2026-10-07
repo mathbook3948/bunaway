@@ -147,37 +147,22 @@ export const messageSchema = {
   ],
 } as const;
 
+const scopedPermission = {
+  type: "object",
+  properties: {
+    identifier,
+    allow: { type: "array", items: {}, maxItems: 128 },
+    deny: { type: "array", items: {}, maxItems: 128 },
+  },
+  required: ["identifier"],
+  additionalProperties: false,
+} as const;
 const hostPermissions = {
   type: "object",
   properties: {
-    log: { type: "boolean" },
-    storage: {
-      type: "array",
-      maxItems: 128,
-      items: {
-        type: "object",
-        properties: {
-          scope: { enum: ["appData", "temp"] },
-          // Named directories only; empty means the entire named scope.
-          pathPrefix: {
-            type: "string",
-            pattern: "^(?:[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*)?$(?![\\s\\S])",
-            maxLength: 256,
-          },
-          access: {
-            type: "array",
-            items: { enum: ["read", "write"] },
-            minItems: 1,
-            maxItems: 2,
-            uniqueItems: true,
-          },
-        },
-        required: ["scope", "pathPrefix", "access"],
-        additionalProperties: false,
-      },
-    },
+    permissions: { type: "array", items: { anyOf: [identifier, scopedPermission] }, maxItems: 256 },
   },
-  required: ["log", "storage"],
+  required: ["permissions"],
   additionalProperties: false,
 } as const;
 

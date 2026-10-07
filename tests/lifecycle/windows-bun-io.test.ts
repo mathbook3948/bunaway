@@ -5,6 +5,59 @@ import { resolve } from "node:path";
 import { Worker } from "node:worker_threads";
 import { Channel, type Packet } from "../../native/windows/bun/channel.ts";
 import { API_LIMITS, type HostContext } from "../../packages/protocol/src/index.ts";
+import { storagePlugin } from "../../plugins/storage/src/index.ts";
+import { bundleNativeWorker } from "../fixtures/native-worker.ts";
+
+test.skipIf(process.platform !== "win32")(
+  "installed adapters remain uninitialized when no plugin is registered",
+  async () => {
+    const dataRoot = resolve(
+      import.meta.dir,
+      `../../build/windows-no-plugins-${crypto.randomUUID()}`,
+    );
+    const runtime = { id: "no-plugins", generation: "1" };
+    const worker = new Worker(
+      await bundleNativeWorker("host-operations", resolve(dataRoot, "worker")),
+      { workerData: { runtime, dataRoot, plugins: [] } },
+    );
+    let ready = false;
+    let cleaned = false;
+    let failure: unknown;
+    const exited = new Promise<number>((resolve) => worker.once("exit", resolve));
+    worker.once("error", (error) => {
+      failure = error;
+    });
+    const channel = new Channel(
+      worker,
+      runtime,
+      "main-io",
+      (packet) => {
+        if (packet.kind === "ready") ready = true;
+        else if (packet.kind === "cleaned") cleaned = true;
+        else throw new Error("Unexpected plugin worker reply");
+      },
+      (error) => {
+        failure = error;
+      },
+    );
+    try {
+      const deadline = Date.now() + 5000;
+      while (!ready) {
+        if (failure) throw failure;
+        if (Date.now() > deadline) throw new Error("Plugin worker startup timed out");
+        await Bun.sleep(1);
+      }
+      for (const name of ["data", "temp", "logs/app.log"])
+        expect(existsSync(resolve(dataRoot, name))).toBe(false);
+    } finally {
+      await channel.send({ kind: "shutdown" });
+      expect(await exited).toBe(0);
+      expect(cleaned).toBe(true);
+      channel.close();
+    }
+    expect(failure).toBeUndefined();
+  },
+);
 
 test.skipIf(process.platform !== "win32")(
   "oversized Web strings do not poison COM callbacks",
@@ -54,8 +107,20 @@ test.skipIf(process.platform !== "win32")(
     const runtime = { id: "io-test", generation: "1" };
     const context = "backend-test" as HostContext;
     const worker = new Worker(
-      new URL("../../native/windows/bun/host-operations.ts", import.meta.url),
-      { workerData: { runtime, dataRoot } },
+      await bundleNativeWorker("host-operations", resolve(dataRoot, "worker")),
+      {
+        workerData: {
+          runtime,
+          dataRoot,
+          plugins: [
+            {
+              name: storagePlugin.name,
+              version: storagePlugin.version,
+              native: storagePlugin.native,
+            },
+          ],
+        },
+      },
     );
     const prepares: Extract<Packet, { kind: "prepare" }>[] = [];
     const replies: Extract<Packet, { kind: "host-result" | "host-response" }>[] = [];
@@ -70,6 +135,7 @@ test.skipIf(process.platform !== "win32")(
       runtime,
       "main-io",
       (packet) => {
+        if (packet.kind === "ready") return;
         if (packet.kind === "prepare") prepares.push(packet);
         else if (packet.kind === "host-response") replies.push(packet);
         else if (packet.kind === "cleaned") cleaned = true;

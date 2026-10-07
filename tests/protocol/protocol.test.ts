@@ -1,14 +1,15 @@
 import { describe, expect, test } from "bun:test";
+import type { Hello, Message, Policy } from "../../packages/protocol/src/index.ts";
 import {
   MAX_JSON_DEPTH,
   MAX_MESSAGE_BYTES,
   negotiateProtocol,
+  ProtocolError,
   parseMessage,
   parsePolicy,
-  ProtocolError,
   serializeMessage,
 } from "../../packages/protocol/src/index.ts";
-import type { Hello, Message, Policy } from "../../packages/protocol/src/index.ts";
+import { registry } from "../fixtures/host-plugins.ts";
 
 const protocol = { major: 1, minor: 0 } as const;
 
@@ -63,15 +64,16 @@ const validView = {
   commands: ["notes.read"],
   events: ["notes.changed"],
   host: {
-    log: false,
-    storage: [{ scope: "appData", pathPrefix: "notes", access: ["read"] }],
+    permissions: [
+      { identifier: "storage:read-text", allow: [{ scope: "appData", pathPrefix: "notes" }] },
+    ],
   },
 } satisfies Policy["views"][number];
 
 const validPolicy = {
   version: 1,
   views: [validView],
-  backend: { log: false, storage: [] },
+  backend: { permissions: [] },
 } satisfies Policy;
 
 describe("protocol messages", () => {
@@ -331,10 +333,14 @@ describe("policy validation", () => {
         ...validView,
         host: {
           ...validView.host,
-          storage: validView.host.storage.map((entry) => ({ ...entry, pathPrefix })),
+          permissions: [
+            { identifier: "storage:read-text", allow: [{ scope: "appData", pathPrefix }] },
+          ],
         },
       };
-      expectProtocolError(() => parsePolicy(JSON.stringify({ ...validPolicy, views: [view] })));
+      expect(() =>
+        registry.validatePolicy(parsePolicy(JSON.stringify({ ...validPolicy, views: [view] }))),
+      ).toThrow();
     }
   });
 

@@ -34,22 +34,22 @@ React, Vue, Svelte 생성 앱에는 위 설정이 포함됩니다. 기존 웹 �
 `invoke`는 백엔드에 작업을 요청하고 결과를 받습니다. `listen`은 이벤트가 발생할 때마다 콜백을 실행합니다.
 
 ```ts
-import { invoke, listen } from "@bunaway/client";
+import { client } from "./client.ts";
 
-const unlisten = await listen<string>(
+const unlisten = await client.listen(
   "message.saved",
   (event) => console.log("저장된 내용:", event.payload),
   { onError: console.error },
 );
-await invoke("message.save", "안녕하세요");
-const text = await invoke<string>("message.read", null);
+await client.invoke("message.save", "안녕하세요");
+const text = await client.invoke("message.read", null);
 ```
 
-별도의 초기화 코드 없이 `invoke`와 `listen`을 호출합니다.
+각 템플릿의 `src/client.ts`에서 제공하는 `client.invoke`와 `client.listen`을 호출합니다.
 UI 컴포넌트를 제거할 때는 `await unlisten()`으로 해당 구독을 해제합니다.
 React나 Vue, Svelte에서도 컴포넌트의 정리 시점에 이 해제 함수를 호출합니다.
-직접 import한 `invoke<T>`와 `listen<T>`에서는 `T`로 반환값과 이벤트 데이터의 타입을 각각 지정합니다.
-앱 정의에서 명령과 이벤트 타입을 추론하려면 [타입과 입력 검증](/guides/types-and-validation/)을 참고하세요.
+명령 이름과 입력, 결과, 이벤트 데이터의 타입은 앱 정의에서 추론합니다.
+직접 클라이언트를 구성하는 방법은 [타입과 입력 검증](/guides/types-and-validation/)을 참고하세요.
 
 ## 브라우저와 WebView
 

@@ -5,13 +5,17 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const frameworkRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
-export async function installedPackageRoot(project: string, name: string): Promise<string> {
+export async function installedPackageRoot(
+  project: string,
+  name: string,
+  canonical = true,
+): Promise<string> {
   let parent = resolve(project);
   while (true) {
     const candidate = resolve(parent, "node_modules", name);
     try {
       await stat(resolve(candidate, "package.json"));
-      return await realpath(candidate);
+      return canonical ? await realpath(candidate) : candidate;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }

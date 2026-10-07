@@ -1,4 +1,4 @@
-import { storage } from "@bunaway/backend";
+import { storage } from "@bunaway/plugin-storage";
 
 export class MemoService {
   async save(text: string): Promise<null> {

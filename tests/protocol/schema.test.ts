@@ -1,15 +1,14 @@
 import { expect, test } from "bun:test";
 import {
   bootstrapSchema,
-  hostResponseSchema,
   hostCallSchema,
-  hostOperations,
+  hostResponseSchema,
   messageSchema,
-  policySchema,
-  processSchema,
   parseBootstrap,
   parseHostResponse,
   parseMessage,
+  policySchema,
+  processSchema,
   serializeHostResponse,
 } from "../../packages/protocol/src/index.ts";
 
@@ -27,10 +26,6 @@ test("native schemas are generated from the same definitions as TypeScript", asy
     );
     expect(await file.json()).toEqual(schema);
   }
-  const operations = Bun.file(
-    new URL("../../native/host-api/generated/host-operations.json", import.meta.url),
-  );
-  expect(await operations.json()).toEqual(hostOperations);
 });
 
 test("bootstrap requires a local absolute entrypoint and rejects WebView messages", () => {

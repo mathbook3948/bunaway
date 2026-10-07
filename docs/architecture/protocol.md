@@ -176,14 +176,36 @@ OS 권한을 다시 검사해야 한다. 이 정책 파서는 파일 접근을 �
 ```json
 {
   "version": 1,
-  "views": [{
-    "id": "main",
-    "origins": ["https://app.bunaway.local"],
-    "commands": ["notes.read"],
-    "events": ["notes.changed"],
-    "host": { "log": false, "storage": [{ "scope": "appData", "pathPrefix": "notes", "access": ["read"] }] }
-  }],
-  "backend": { "log": false, "storage": [] }
+  "views": [
+    {
+      "id": "main",
+      "origins": [
+        "https://app.bunaway.local"
+      ],
+      "commands": [
+        "notes.read"
+      ],
+      "events": [
+        "notes.changed"
+      ],
+      "host": {
+        "permissions": [
+          {
+            "identifier": "storage:read-text",
+            "allow": [
+              {
+                "scope": "appData",
+                "pathPrefix": "notes"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "backend": {
+    "permissions": []
+  }
 }
 ```
 

@@ -7,6 +7,7 @@ import {
   type HostContext,
   type HostResponse,
   MAX_MESSAGE_BYTES,
+  type NativeRegistration,
   type Policy,
   parseHostCall,
   parseHostResponse,
@@ -34,6 +35,7 @@ export type UIConfig = {
   dataRoot: string;
   loader: string;
   legacyProfile?: boolean;
+  plugins?: NativeRegistration[];
 };
 export type Packet =
   | { kind: "ready" | "start" | "shutdown" | "closing" | "cleaned" }
@@ -68,8 +70,16 @@ const uiKinds = [
   "fatal",
   "diagnostic",
 ];
-const mainKinds = ["start", "server", "authorize", "cancel", "host-result", "shutdown"];
-const ioKinds = ["prepare", "host-response", "cleaned", "fatal"];
+const mainKinds = [
+  "operation",
+  "start",
+  "server",
+  "authorize",
+  "cancel",
+  "host-result",
+  "shutdown",
+];
+const ioKinds = ["ready", "prepare", "host-response", "cleaned", "fatal"];
 const ioMainKinds = ["operation", "grant", "cancel", "cancel-context", "shutdown"];
 type Side = "main" | "ui" | "io" | "main-io";
 const controlKinds = new Set(["start", "shutdown", "closing", "cleaned", "fatal", "ready"]);

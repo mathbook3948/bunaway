@@ -25,18 +25,45 @@
       ],
       "events": ["test.changed", "memo.saved"],
       "host": {
-        "log": true,
-        "storage": [
+        "permissions": [
+          "log:write",
           {
-            "scope": "appData",
-            "pathPrefix": "notes",
-            "access": ["read", "write"]
+            "identifier": "storage:read-text",
+            "allow": [
+              {
+                "scope": "appData",
+                "pathPrefix": "notes"
+              }
+            ]
           },
           {
-            "scope": "temp",
-            "pathPrefix": "",
-            "access": ["read", "write"]
-          }
+            "identifier": "storage:write-text",
+            "allow": [
+              {
+                "scope": "appData",
+                "pathPrefix": "notes"
+              }
+            ]
+          },
+          {
+            "identifier": "storage:read-text",
+            "allow": [
+              {
+                "scope": "temp",
+                "pathPrefix": ""
+              }
+            ]
+          },
+          {
+            "identifier": "storage:write-text",
+            "allow": [
+              {
+                "scope": "temp",
+                "pathPrefix": ""
+              }
+            ]
+          },
+          "capabilities:get"
         ]
       }
     },
@@ -46,18 +73,45 @@
       "commands": ["test.report", "memo.save", "memo.read"],
       "events": ["memo.saved"],
       "host": {
-        "log": true,
-        "storage": [
+        "permissions": [
+          "log:write",
           {
-            "scope": "appData",
-            "pathPrefix": "notes",
-            "access": ["read", "write"]
+            "identifier": "storage:read-text",
+            "allow": [
+              {
+                "scope": "appData",
+                "pathPrefix": "notes"
+              }
+            ]
           },
           {
-            "scope": "temp",
-            "pathPrefix": "",
-            "access": ["read", "write"]
-          }
+            "identifier": "storage:write-text",
+            "allow": [
+              {
+                "scope": "appData",
+                "pathPrefix": "notes"
+              }
+            ]
+          },
+          {
+            "identifier": "storage:read-text",
+            "allow": [
+              {
+                "scope": "temp",
+                "pathPrefix": ""
+              }
+            ]
+          },
+          {
+            "identifier": "storage:write-text",
+            "allow": [
+              {
+                "scope": "temp",
+                "pathPrefix": ""
+              }
+            ]
+          },
+          "capabilities:get"
         ]
       }
     },
@@ -76,35 +130,79 @@
       ],
       "events": ["memo.saved"],
       "host": {
-        "log": false,
-        "storage": [
+        "permissions": [
           {
-            "scope": "appData",
-            "pathPrefix": "notes",
-            "access": ["read"]
+            "identifier": "storage:read-text",
+            "allow": [
+              {
+                "scope": "appData",
+                "pathPrefix": "notes"
+              }
+            ]
           },
           {
-            "scope": "temp",
-            "pathPrefix": "",
-            "access": ["read", "write"]
-          }
+            "identifier": "storage:read-text",
+            "allow": [
+              {
+                "scope": "temp",
+                "pathPrefix": ""
+              }
+            ]
+          },
+          {
+            "identifier": "storage:write-text",
+            "allow": [
+              {
+                "scope": "temp",
+                "pathPrefix": ""
+              }
+            ]
+          },
+          "capabilities:get"
         ]
       }
     }
   ],
   "backend": {
-    "log": true,
-    "storage": [
+    "permissions": [
+      "log:write",
       {
-        "scope": "appData",
-        "pathPrefix": "",
-        "access": ["read", "write"]
+        "identifier": "storage:read-text",
+        "allow": [
+          {
+            "scope": "appData",
+            "pathPrefix": ""
+          }
+        ]
       },
       {
-        "scope": "temp",
-        "pathPrefix": "",
-        "access": ["read", "write"]
-      }
+        "identifier": "storage:write-text",
+        "allow": [
+          {
+            "scope": "appData",
+            "pathPrefix": ""
+          }
+        ]
+      },
+      {
+        "identifier": "storage:read-text",
+        "allow": [
+          {
+            "scope": "temp",
+            "pathPrefix": ""
+          }
+        ]
+      },
+      {
+        "identifier": "storage:write-text",
+        "allow": [
+          {
+            "scope": "temp",
+            "pathPrefix": ""
+          }
+        ]
+      },
+      "capabilities:get"
     ]
   }
 }

@@ -1,13 +1,48 @@
 import { afterEach, expect, test } from "bun:test";
-import { capabilities, createClient, invoke, listen } from "../../packages/client-sdk/src/index.ts";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import {
+  createClient,
+  type InvokeOptions,
+  invoke,
+  invokePlugin,
+  listen,
+} from "../../packages/client-sdk/src/index.ts";
 import type { WebViewBridge } from "../../packages/client-sdk/src/webview.ts";
 import {
-  type Capabilities,
   type JsonValue,
   type Message,
-  parseMessage,
   PROTOCOL_VERSION,
+  parseMessage,
 } from "../../packages/protocol/src/index.ts";
+import type { Capabilities } from "../../plugins/capabilities/src/index.ts";
+import { contracts } from "../fixtures/host-plugins.ts";
+
+// Exercise the same browser bundle apps receive, while sharing this suite's client session.
+async function browserPlugin(name: string) {
+  const result = await Bun.build({
+    entrypoints: [resolve(import.meta.dir, `../../plugins/${name}/src/index.ts`)],
+    target: "browser",
+    external: ["@bunaway/client", "@bunaway/protocol"],
+  });
+  if (!result.success || !result.outputs[0]) throw new AggregateError(result.logs);
+  let source = await result.outputs[0].text();
+  for (const [dependency, directory] of [
+    ["@bunaway/client", "client-sdk"],
+    ["@bunaway/protocol", "protocol"],
+  ])
+    source = source.replaceAll(
+      JSON.stringify(dependency),
+      JSON.stringify(
+        pathToFileURL(resolve(import.meta.dir, `../../packages/${directory}/src/index.ts`)).href,
+      ),
+    );
+  return import(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`);
+}
+const [{ storage }, { log }, { capabilities }] = await Promise.all(
+  ["storage", "log", "capabilities"].map(browserPlugin),
+);
+const readText = contracts["storage.readText"];
 
 class Bridge implements WebViewBridge {
   readonly listeners = new Set<(event: { data: unknown }) => void>();
@@ -108,7 +143,7 @@ test("imports are lazy and default calls report an unavailable app bridge", asyn
   await expect(sdk.listen("memo.saved", () => {}, { onError() {} })).rejects.toMatchObject({
     code: "UNSUPPORTED",
   });
-  await expect(sdk.capabilities()).rejects.toMatchObject({ code: "UNSUPPORTED" });
+  await expect(capabilities()).rejects.toMatchObject({ code: "UNSUPPORTED" });
 
   for (const browser of [{ document: {} }, { document: {}, chrome: { webview: {} } }]) {
     mount(browser);
@@ -193,7 +228,7 @@ test("direct event subscriptions dispose independently and capabilities use the 
 
   const querying = capabilities();
   await flush();
-  expect(last(bridge, "invoke").command).toBe("bunaway.capabilities");
+  expect(last(bridge, "invoke").command).toBe("plugin.capabilities.get");
   const support: Capabilities = [
     { name: "storage", support: "supported", permission: "not-required" },
   ];
@@ -271,6 +306,53 @@ test("direct calls preserve cancellation before readiness", async () => {
   await flush();
   expect(bridge.requests("invoke")).toHaveLength(0);
   expect(bridge.requests("cancel")).toHaveLength(0);
+});
+
+test("plugin APIs preserve deadlines and cancellation through the shared connection", async () => {
+  const bridge = mount().chrome.webview;
+  const ready = createClient().ready;
+  bridge.hello();
+  await ready;
+  const calls: ((options: InvokeOptions) => Promise<unknown>)[] = [
+    (options) => storage.readText({ scope: "temp", path: "a.txt" }, options),
+    (options) => storage.writeText({ scope: "temp", path: "a.txt", text: "saved" }, options),
+    (options) => log.write({ level: "info", message: "saved" }, options),
+    ...(["debug", "info", "warn", "error"] as const).map(
+      (level) => (options: InvokeOptions) => log[level]("saved", undefined, options),
+    ),
+    (options) => capabilities(options),
+  ];
+  for (const call of calls) {
+    const controller = new AbortController();
+    controller.abort();
+    const before = bridge.requests("invoke").length;
+    await expect(call({ signal: controller.signal })).rejects.toMatchObject({ code: "CANCELLED" });
+    await expect(call({ deadline: 0 })).rejects.toMatchObject({ code: "TIMEOUT" });
+    expect(bridge.requests("invoke")).toHaveLength(before);
+    const active = new AbortController();
+    const deadline = Date.now() + 10000;
+    const pending = call({ signal: active.signal, deadline });
+    await flush();
+    const request = last(bridge, "invoke");
+    expect(request.deadline).toBe(deadline);
+    active.abort();
+    await expect(pending).rejects.toMatchObject({ code: "CANCELLED" });
+    expect(last(bridge, "cancel").id).toBe(request.id);
+  }
+  expect(bridge.requests("hello")).toHaveLength(1);
+});
+
+test("shared plugin invocation validates inputs and responses", async () => {
+  const bridge = mount().chrome.webview;
+  await expect(invokePlugin(readText, { scope: "temp", path: "../escape" })).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  expect(bridge.sent).toHaveLength(0);
+  const pending = invokePlugin(readText, { scope: "temp", path: "a.txt" });
+  bridge.hello();
+  await flush();
+  bridge.result(last(bridge, "invoke").id, 123);
+  await expect(pending).rejects.toMatchObject({ code: "INTERNAL" });
 });
 
 test("each window gets an independent connection and a new document gets a new session", async () => {

@@ -435,28 +435,9 @@ struct ViewPolicy {
 };
 
 HostPermissions parseHostPermissions(const Json& value) {
-    HostPermissions result;
-    result.log = value["log"].get<bool>();
-    for (const auto& grant : value["storage"]) {
-        StorageGrant entry;
-        entry.scope = grant["scope"].get<std::string>();
-        std::string prefix = grant["pathPrefix"].get<std::string>();
-        size_t start = 0;
-        while (start <= prefix.size()) {
-            auto slash = prefix.find('/', start);
-            entry.segments.push_back(prefix.substr(start, slash == std::string::npos ? slash : slash - start));
-            if (slash == std::string::npos) break;
-            start = slash + 1;
-        }
-        if (entry.segments.size() == 1 && entry.segments[0].empty()) entry.segments.clear();
-        for (const auto& access : grant["access"]) {
-            auto name = access.get<std::string>();
-            if (name == "read") entry.read = true;
-            if (name == "write") entry.write = true;
-        }
-        result.storage.push_back(std::move(entry));
-    }
-    return result;
+    if (!value.at("permissions").empty())
+        throw HostError("UNSUPPORTED", "Native plugins currently require the Windows app runtime.");
+    return {};
 }
 
 struct Policy {
@@ -621,7 +602,7 @@ class App {
 public:
     // ---- config ----
     fs::path package, assets;
-    Json manifest, processSchema, messageSchema, hostCallSchema, hostOps;
+    Json manifest, processSchema, messageSchema, hostCallSchema;
     Policy policy;
     std::string appId, viewId, home;
     int windowWidth = 1024, windowHeight = 768;
@@ -1002,9 +983,7 @@ public:
     }
     void executeHostOp(const std::string& key, const std::string& context, const std::string& requestId, const std::string& operation, const Json& payload) {
         if (hostOpDelayMs > 0) std::this_thread::sleep_for(std::chrono::milliseconds(hostOpDelayMs));
-        Json result;
         try {
-            HostPermissions permissions;
             {
                 std::lock_guard lock(stateMutex);
                 auto it = hostPending.find(key);
@@ -1016,56 +995,8 @@ public:
                 }
                 const auto* current = permissionsFor(context);
                 if (!current) throw HostError("PERMISSION_DENIED", "Host context is not active.");
-                permissions = *current;
             }
-            Json call = { { "operation", operation }, { "payload", payload } };
-            if (!valid(hostCallSchema, call)) throw HostError("INVALID_ARGUMENT", "Invalid host request.");
-            if (operation == "capabilities.get") {
-                result = Json::array({
-                    { { "name", "storage.readText" }, { "support", "supported" }, { "permission", "not-required" } },
-                    { { "name", "storage.writeText" }, { "support", "supported" }, { "permission", "not-required" } },
-                    { { "name", "log.write" }, { "support", "supported" }, { "permission", "not-required" } },
-                    { { "name", "capabilities.get" }, { "support", "supported" }, { "permission", "not-required" } },
-                });
-            } else if (operation == "log.write") {
-                if (!permissions.log) throw HostError("PERMISSION_DENIED", "Logging is not allowed for this context.");
-                Json entry = {
-                    { "t", epochMs() },
-                    { "level", payload["level"].get<std::string>() },
-                    { "source", context == backendContext ? "backend" : "view:" + viewId },
-                    { "message", payload["message"].get<std::string>() },
-                };
-                if (payload.contains("details")) entry["details"] = payload["details"];
-                appLog->line(entry.dump());
-                result = nullptr;
-            } else {
-                auto scope = payload["scope"].get<std::string>();
-                auto segments = splitPath(payload["path"].get<std::string>());
-                bool write = operation == "storage.writeText";
-                if (!storageAllowed(permissions, scope, segments, write)) {
-                    hostLog->event("host-request-denied", { { "operation", operation }, { "scope", scope }, { "path", payload["path"].get<std::string>() } });
-                    throw HostError("PERMISSION_DENIED", "Storage scope is not allowed for this context.");
-                }
-                Fd file = openScopedFile(scopes, scope, segments, write);
-                if (write) {
-                    auto text = payload["text"].get_ref<const std::string&>();
-                    size_t offset = 0;
-                    while (offset < text.size()) {
-                        ssize_t written = ::write(file.value, text.data() + offset, std::min<size_t>(text.size() - offset, 1 << 20));
-                        require(written > 0, "Storage write failed.");
-                        offset += static_cast<size_t>(written);
-                    }
-                    require(ftruncate(file.value, static_cast<off_t>(text.size())) == 0, "Storage truncate failed.");
-                    result = nullptr;
-                } else {
-                    struct stat st {};
-                    require(fstat(file.value, &st) == 0, "Storage size failed.");
-                    require(st.st_size <= static_cast<off_t>(maxFileBytes), "Storage file too large.");
-                    result = readStorageText(file.value, static_cast<size_t>(st.st_size));
-                }
-            }
-            if (!valid(hostOps.at(operation)["output"], result)) throw HostError("INTERNAL", "Host operation produced an invalid result.");
-            hostRespond(key, context, requestId, { { "kind", "result" }, { "payload", result } });
+            throw HostError("UNSUPPORTED", "Native plugins currently require the Windows app runtime.");
         } catch (const HostError& error) {
             hostRespond(key, context, requestId, { { "kind", "error" }, { "error", { { "code", error.code }, { "message", error.what() } } } });
         } catch (...) {
@@ -1567,7 +1498,6 @@ static int run(const fs::path& package, const std::string& devUrl = "") {
     app.processSchema = readJson(app.assets / "process.schema.json");
     app.messageSchema = readJson(app.assets / "message.schema.json");
     app.hostCallSchema = readJson(app.assets / "host-call.schema.json");
-    app.hostOps = readJson(app.assets / "host-operations.json");
     app.manifest = readJson(package / "manifest.json");
     auto config = readJson(app.assets / "app.json");
     if (config.contains("development") || !devUrl.empty()) {
@@ -1619,7 +1549,6 @@ static int run(const fs::path& package, const std::string& devUrl = "") {
     app.scopes.appDataCanonical = Scopes::canonicalOf(app.scopes.appData);
     app.scopes.tempCanonical = Scopes::canonicalOf(app.scopes.temp);
     app.hostLog = std::make_unique<Log>(app.scopes.logsDir / "host.log", 1024 * 1024);
-    app.appLog = std::make_unique<Log>(app.scopes.logsDir / "app.log", 1024 * 1024);
 
     if (const char* delay = getenv("BUNAWAY_HOST_OP_DELAY_MS")) {
         long ms = std::strtol(delay, nullptr, 10);

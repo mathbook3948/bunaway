@@ -1,9 +1,9 @@
 # 선택 네이티브 플러그인의 구조와 공개 계약
 
-상태: 설계 확정, 구현 전. 기준일: 2026-10-07.
-[ADR 0012](../decisions/0012-optional-native-plugins.md)의 구현 기준이다.
-이 문서의 패키지 진입점과 새 정책 구조는 아직 사용할 수 없다. 현재 구현은
-[공통 API](./common-api.md)와 [설치 안내](../framework-distribution.md)를 따른다.
+상태: Windows 구현과 로컬 개별 패키지 검증 완료. 기준일: 2026-10-07.
+[ADR 0012](../decisions/0012-optional-native-plugins.md)의 구현 계약이다.
+저장, 로그와 기능 조회는 개별 tarball로 설치하고 등록한다.
+macOS 네이티브 플러그인 어댑터는 아직 제공하지 않는다.
 
 ## 설치, 등록, 권한
 
@@ -11,11 +11,12 @@
 설치를 고정한다. 공개 registry가 준비되기 전에는 개별 로컬 tarball로 설치한다.
 CLI와 공통 SDK의 설치가 선택 플러그인의 설치를 대신하지 않는다.
 
-다음은 이관 후 앱 정의와 서비스의 사용 형태다.
+다음은 앱 정의와 서비스의 사용 형태다.
 
 ```ts
 // src-bunaway/app.ts
 import { defineApp } from "@bunaway/backend";
+
 import { storagePlugin } from "@bunaway/plugin-storage";
 import { logPlugin } from "@bunaway/plugin-log";
 import { memo } from "./memo/module.ts";
@@ -48,36 +49,43 @@ export async function save(text: string): Promise<null> {
 
 ## 패키지와 진입점
 
-| 패키지 | 기본 진입점의 export | `/client`의 export |
+| 패키지 | 공통 공개 export | 화면에서 사용하는 함수 |
 | --- | --- | --- |
 | `@bunaway/plugin-storage` | `storage`, `storagePlugin` | `storage` |
 | `@bunaway/plugin-log` | `log`, `logPlugin` | `log` |
 | `@bunaway/plugin-capabilities` | `capabilities`, `capabilitiesPlugin` | `capabilities` |
 
-기본 진입점은 Bun 백엔드용이다. `/client`는 브라우저용이며 공통 `invoke`와 문서별
-연결을 재사용한다. 플러그인은 연결, handshake, 요청 ID, 취소와 pagehide 정리를
-별도로 구현하지 않는다. 화면용 함수는 선택적 호출 취소를 위한 `InvokeOptions`를
-마지막 인자로 받는다. 백엔드 함수는 실행 중인 명령의 취소 신호를 자동으로 사용한다.
-화면의 저장 함수와 `log.write`는 입력 뒤에 options를 받고, 수준별 로그 함수는
-`log.info(message, details?, options?)`처럼 추가 데이터 뒤에 options를 받는다.
-화면의 기능 조회는 `capabilities(options?: InvokeOptions)`다.
+화면과 백엔드는 같은 패키지의 index.ts를 import한다.
+공통 작성 SDK인 `@bunaway/plugin`의 defineNativePlugin은 선언에서 등록 객체와
+호출 함수를 만든다. 화면과 백엔드의 호출 구현은 SDK 내부의 browser, bun 조건으로
+선택한다. 플러그인마다 계약 파일과 두 환경의 호출 함수를 작성하지 않는다.
+SDK의 호출 함수는 연결, handshake, 취소, pagehide 정리와 기존 호출 컨텍스트를
+재사용한다. 최상위 선언에서는 플랫폼 자원을 열거나 앱 setup을 실행하지 않는다.
+실제 호출에 필요한 SDK는 호출 시 읽으므로 선언 자체를 CLI와 호스트에서 읽을 수 있다.
 
-저장 플러그인의 소스 배치는 다음을 기준으로 한다. 다른 플러그인도 같은 역할의
-진입점을 사용하고 파일 분리는 기능의 크기에 맞춘다.
+기본 구조는 다음과 같다. 기능이 커지면 제작자가 필요한 파일과 폴더를 추가한다.
+아래 파일명은 관례이며 package.json의 exports와 plugin.json의 entry, operations에
+실제 경로를 지정한다. 별도의 contracts.ts, client.ts, authorization.ts를 요구하지 않는다.
 
 ```text
-plugins/storage/
+plugins/<name>/
   package.json
   plugin.json
   src/
-    index.ts                 백엔드 함수와 storagePlugin
-    client.ts                화면용 함수
-    contracts.ts             operation과 permission 계약
-    authorization.ts         리소스 범위의 순수 평가
-    windows/
-      operations.ts          실행과 자원 수명
-      storage.ts             기존 ScopedStorage 구현
+    index.ts                 기능과 권한 선언, 공개 export
+    windows.ts               Windows 실행과 자원 회수
 ```
+
+저장, 로그와 기능 조회의 Windows 구현은 각각 src/windows.ts에 둔다.
+생성 앱의 tsconfig.json은 browser 조건으로 화면을 검사하고 src-bunaway/tsconfig.json은
+bun 조건으로 백엔드를 검사한다. typecheck는 두 검사를 모두 실행한다.
+화면 함수는 마지막 인자로 NativeInvokeOptions의 signal과 deadline을 받는다.
+백엔드 함수는 명령 또는 setup의 호출 범위를 따르며 별도 옵션을 받지 않는다.
+index.ts는 정의와 공개 export를 담당하며 알고리즘과 편의 호출은 역할에 맞는 내부 파일로 분리한다.
+수준별 로그 함수는 logger.ts, capabilities의 중복 이름 검사는 query.ts에서
+생성한 호출 함수를 전달받아 처리한다. storage의 범위 비교는 scope.ts에 두고 matches에 연결한다.
+로직에서 선언의 타입을 읽을 때는 import type을 사용해 런타임 순환 import를 만들지 않는다.
+추가 처리가 없는 plugin은 생성한 api를 바로 공개하며 내부 처리 파일을 요구하지 않는다.
 
 저장과 로그의 기존 입력, 결과 형식은 유지한다.
 
@@ -114,6 +122,7 @@ declare function capabilities(): Promise<Capabilities>;
 | --- | --- |
 | 공통 protocol | 메시지 형식, JSON 제한, schema 검증, 버전 협상 |
 | backend SDK와 core | 앱과 모듈 조립, 명령, 이벤트, 상태, 호출 컨텍스트, 플러그인 등록과 수명 |
+| plugin SDK | 기능 선언에서 공개 호출 함수 생성, 환경에 맞는 호출 선택 |
 | client SDK | WebView 연결, invoke/listen, 응답, 취소와 페이지 종료 |
 | native host | 실제 출처, 뷰와 세션, operation 전달, 실행 직전 권한 확인 |
 | 플러그인 패키지 | 공개 함수, operation 계약, 권한 정의, 플랫폼 어댑터, 기능 자원 정리 |
@@ -180,7 +189,7 @@ type NativePluginFields = {
 operation에는 이름, 입력과 출력 schema, 필요한 permission 식별자가 있다.
 permission에는 식별자와 선택적 리소스 scope schema가 있다. 각 이름은 플러그인의
 이름 공간에 속하며 다른 플러그인이나 앱의 등록과 중복되면 시작을 실패시킨다.
-새 네이티브 기능의 계약은 플러그인의 `contracts.ts`에 작성하며 공통 protocol에
+새 네이티브 기능의 선언은 플러그인의 `index.ts`에 작성하며 공통 protocol에
 개별 작업을 추가하지 않는다.
 
 패키지는 `package.json`의 `bunaway.plugin`에 `plugin.json` 위치를 선언한다.
@@ -190,21 +199,36 @@ CLI가 읽는 manifest의 형식은 다음과 같다.
 {
   "format": 1,
   "name": "storage",
-  "contracts": "./src/contracts.ts",
+  "entry": "./src/index.ts",
   "platforms": {
     "windows": {
       "execution": "io",
-      "authorization": "./src/authorization.ts",
-      "operations": "./src/windows/operations.ts"
+      "operations": "./src/windows.ts"
     }
   }
 }
 ```
 
-manifest는 adapter의 위치를, `contracts.ts`는 작업과 권한의 내용을 소유한다.
-JSON에 schema를 다시 복사하지 않는다. contracts 모듈은 부작용 없는 선언이며
-CLI가 앱 진입점이나 plugin setup을 실행하지 않고 읽을 수 있어야 한다. manifest의
-이름은 앱에 등록한 플러그인 이름과 일치해야 한다.
+manifest는 선언과 adapter의 위치를, index.ts는 작업과 권한의 내용을 소유한다.
+entry의 default export는 플러그인 정의이며 native와 선택적 matches를 제공한다.
+CLI는 이름과 버전을 설치 manifest와 대조하고 native를 검증한다.
+scope가 있는 permission에는 선언의 matches가 필수다. scope가 없는 기능에는
+평가 함수를 요구하지 않는다. plugin.json에 authorization 경로를 따로 쓰지 않는다.
+JSON에 schema를 다시 복사하지 않는다. entry는 부작용 없는 선언이며 CLI가 앱
+진입점이나 plugin setup을 실행하지 않고 읽을 수 있어야 한다.
+`defineNativePlugin`은 선언을 검증하고 `definition`과 `api`를 반환한다.
+제작자는 operations 객체에 메서드 이름과 input, output, 짧은 permission 이름을 작성한다.
+SDK가 작업과 권한의 플러그인 접두사를 붙이고 권한 목록을 만든다.
+같은 permission을 사용하는 작업은 권한 하나를 공유한다. scope가 필요하면 scopes에
+짧은 permission 이름과 schema를 연결한다. 사용하지 않는 scopes 키는 선언 오류다.
+`s.object`는 필드를 기본 필수로 선언하고 추가 필드를 거부한다. 선택 필드는
+`s.optional`로 표시하며 나머지 s 함수도 기존 Schema를 만든다. 검증기를 복제하지 않는다.
+이 작성 형식은 제작자가 native.operations와 native.permissions 배열, 완전한 작업 이름과
+권한 이름, required와 additionalProperties를 반복해서 작성하게 한 이전 형식을 대체한다.
+api의 메서드 이름은 operations의 키와 같다.
+입력과 결과의 타입은 schema에서 추론한다. 등록 객체는 default export하며 공개 함수는
+api를 원하는 이름으로 export한다. 기존 공식 plugin의 이름 있는 등록 export도 유지한다.
+
 Windows의 `execution`은 `io` 또는 `ui`다. 현재 이관하는 저장, 앱 로그와 지원 조회는
 `io`를 사용한다. UI 스레드가 필요한 플러그인은 `ui`를 선언하고 호스트의 UI Worker에
 실행을 맡긴다. 플러그인의 공개 함수가 실행 Worker를 직접 만들거나 선택하지 않는다.
@@ -212,6 +236,8 @@ Windows의 `execution`은 `io` 또는 `ui`다. 현재 이관하는 저장, 앱 �
 경로는 패키지 내부 상대 경로만 허용하고 실제 경로가 설치 패키지를 벗어나면 빌드를
 거부한다. framework 버전과 해석 경로도 검사한다. 같은 backend/core의 복제본이
 있으면 기존 SDK 동일성 검사를 거쳐 같은 설치본으로 연결한다.
+공식 `@bunaway/` 플러그인의 패키지 버전은 프레임워크 버전과 맞춘다. 외부 플러그인은
+자체 버전을 사용하며 SDK peer 버전으로 호환성을 검사한다.
 
 `requiredHost`의 log/storage 전용 구조는 제거한다. setup에 필요한 권한의 식별자는
 `requiredPermissions`에 선언한다. 시작 전에 backend 정책의 명시적 허용을 확인하되,
@@ -274,10 +300,13 @@ permission도 허용하지 않으며 설치와 등록으로 정책에 항목을 
 
 ## 화면 호출과 기능 조회
 
-네이티브 plugin의 `/client`는 `plugin.storage.readText`처럼 `plugin.<name>.` 접두사의
+네이티브 plugin의 화면 구현은 `plugin.storage.readText`처럼 `plugin.<name>.` 접두사의
 명령을 호출한다. 해당 명령은 plugin 등록으로 설치하며 임의 앱 명령이 이 이름 공간을
 사용하면 등록 오류로 처리한다. 일반 앱 명령의 이름과 입력, 결과는 그대로 유지한다.
 화면에서 직접 호출하려면 view.commands에도 정확한 plugin 명령 이름을 허용해야 한다.
+플러그인의 생성된 화면 함수는 공통 `invokePlugin(contract, input, options?)`을
+사용한다. 이 함수가 입력과 결과를 검증하고 기존 WebView 연결로 호출하며
+`InvokeOptions`의 signal과 deadline을 전달한다. 기능별 호출 검증을 복제하지 않는다.
 명령 허용과 Host permission을 모두 검사하며 백엔드 권한으로 승격하지 않는다.
 등록하지 않은 플러그인의 `plugin.<name>.` 명령은 `UNSUPPORTED`로 거부한다.
 등록된 플러그인에서 작업 이름을 잘못 지정하면 `INVALID_ARGUMENT`다. 뷰의 명령
@@ -285,7 +314,7 @@ permission도 허용하지 않으며 설치와 등록으로 정책에 항목을 
 
 기능 지원 조회도 선택 기능이다. core의 자동 `bunaway.capabilities` 등록과 client
 SDK의 내장 `capabilities()`를 제거하고, capabilities plugin이
-`plugin.capabilities.get`을 등록한다. backend와 `/client` 함수는 같은 계약을 사용한다.
+`plugin.capabilities.get`을 등록한다. backend와 화면 함수는 같은 계약을 사용한다.
 조회에는 `capabilities:get` 권한이 필요하며 다른 permission을 부여하지 않는다.
 
 조회 결과는 등록된 작업과 현재 플랫폼 adapter의 지원 정보로 만든다. 설치하지 않은
@@ -301,19 +330,24 @@ CLI는 앱의 직접 의존성에 선언한 네이티브 plugin의 manifest를 �
 작성하지 않는다. 설치된 package의 adapter 코드가 bundle에 들어가더라도 등록하지
 않은 adapter는 import하거나 초기화하지 않는다. 설치와 등록을 정적으로 동일한
 목록이라고 추정해서 코드를 제거하지 않는다.
+검증할 때 읽은 계약과 adapter 목록은 해당 Project의 `nativePlugins`에 담아
+SDK 검증, 정책 검사와 번들에서 재사용한다. 다음 검증이나 개발 재시작에서는 다시
+읽으며 프로세스 전체에 계약을 캐시하지 않는다.
 
 앱 패키지 검증 후 등록한 플러그인과 설치된 manifest를 대조한다. 이름, 버전,
 의존성, 지원 플랫폼, 계약과 scope를 확인하고 UI의 권한 평가 및 실행 adapter를
 준비한 다음 setup을 시작한다. setup 중의 Host 호출도 준비된 경로로 응답해야 한다.
+계약의 객체 키 순서는 일치 여부에 영향을 주지 않는다. 배열 순서와 값은 비교한다.
 
 UI Worker는 실제 view/session과 등록된 작업, 정책을 확인한다. I/O Worker는 기존
-제한된 큐와 실행 직전 승인 절차를 유지한다. authorization 모듈은 UI에서 실행할
+제한된 큐와 실행 직전 승인 절차를 유지한다. entry의 matches는 UI에서 실행할
 순수 권한 평가를, operations 모듈은 지정된 Worker의 기능 실행과 자원 회수를 제공한다.
 프레임워크의 Worker, 메시지 채널, 취소와 승인 절차를 플러그인마다 복제하지 않는다.
 호스트는 manifest의 실행 위치로 작업을 전달한다. `ui` 작업은 UI Worker에서 출처와
 권한을 확인하고 실행한다. `io` 작업은 I/O Worker가 실행 직전 UI에 승인을 요청한다.
 
-authorization 진입점은 `matches(permission, input, scope)`를 export한다.
+entry의 default export에 `matches(permission, input, scope)`를 선언한다.
+scope가 있는 등록된 플러그인의 평가 모듈만 읽는다.
 공통 계층은 등록된 schema로 검증한 입력과 scope만 전달한다. 함수는 네트워크나
 파일 I/O 없이 한 scope와 요청의 일치 여부를 반환한다. 공통 계층은 모든 deny의
 불일치와 적어도 하나의 allow 일치를 확인하며, 평가 함수가 실패하면 허용하지 않는다.
@@ -338,22 +372,26 @@ I/O Worker에서는 기존 파일 작업처럼 승인과 실행 사이에 await�
 역순으로 실행한 뒤 pending 작업, 큐와 adapter 자원을 정리하고 Worker의 실제 종료를
 확인한다. 개별 정리 실패가 다른 adapter 정리를 건너뛰게 하지 않는다. 기존 종료
 기한과 강제 종료, Job의 자손 회수 계약은 유지한다.
+정리 실패는 모든 adapter 정리를 시도한 뒤 AggregateError로 보고한다.
+앱 플러그인의 StopHook 오류는 onPluginError에 플러그인 이름, stop 단계와 원인을 전달하고 나머지 훅을 실행한다.
+초기화 실패와 회수 실패가 함께 발생하면 원래 초기화 오류도 보존한다.
+UI adapter의 정리 실패 뒤에도 창, COM과 플랫폼 바인딩 회수를 시도한다.
 
 ## 배포와 이관 순서
 
 `framework.json`은 공통 `packages`와 선택 `plugins`의 목록을 구분한다. 공식 plugin
 tarball을 각각 만들고 CLI 패키지의 필수 dependencies에는 넣지 않는다. plugin은
-호환하는 backend SDK를 peer dependency로 선언한다. 첫 이관에서는 공식 plugin과
+호환하는 plugin SDK를 peer dependency로 선언한다. 첫 이관에서는 공식 plugin과
 공통 SDK의 정확한 릴리스 버전을 맞추며 `bun.lock`으로 설치를 고정한다.
 
 CLI의 기존 `@bunaway/*` 고정 목록 검사는 manifest 기반 plugin 검사로 확장한다.
-패키지 기본 진입점과 `/client`를 구분하고 앱의 직접 plugin 의존성을 확인한다.
+패키지의 조건부 exports를 해석하고 앱의 직접 plugin 의존성을 확인한다.
 저장 예제와 template는 storage plugin만 명시적으로 설치하고 등록한다. 로그나 기능
 조회는 예제에서 사용하지 않는 한 추가하지 않는다.
 
 1. 공통 호출 계약, native 등록, 정책 v1의 새 구조와 실패 처리를 구현한다. 기존 모듈 조립과
    일반 plugin setup/StopHook은 유지하고 고정 operation, 권한 목록을 제거한다.
-2. 세 공식 plugin의 계약, backend와 `/client` 진입점을 작성한다. SDK의 feature
+2. 공통 작성 SDK와 세 공식 plugin의 선언, 공개 함수와 플랫폼 구현을 작성한다. SDK의 feature
    export와 core의 자동 조회 명령을 제거한다.
 3. Windows adapter와 권한 평가, 시작/종료를 연결한다. 설치된 package와 runtime
    등록을 대조하고 미등록 adapter를 초기화하지 않는 것을 검증한다.
@@ -376,7 +414,8 @@ CLI의 기존 `@bunaway/*` 고정 목록 검사는 manifest 기반 plugin 검사
 - allow와 deny, 잘못된 경로, 링크, 최종 핸들, 승인 후 취소의 기존 저장 회귀를 통과한다.
 - 종료, 초기화 실패에서 pending 호출과 자원을 회수한다. 로그 plugin이 없어도
   프레임워크 시작 실패와 명령 오류의 진단을 확인할 수 있다.
-- `/client` bundle에 backend AsyncLocalStorage, Bun/Node 또는 FFI 구현이 들어가지 않는다.
+- 같은 index.ts의 호출이 SDK의 browser와 bun 조건으로 구현과 타입을 각각 선택한다.
+  browser bundle에 backend AsyncLocalStorage, Bun/Node 또는 FFI 구현이 들어가지 않는다.
 - 독립 tarball 설치, typecheck, validate, dev 재시작, build와 실제 Windows 창에서
   직접 plugin 호출과 앱 command를 통한 호출을 검증한다.
 - `docs:check`, `docs:build`와 관련 reference-map 검사를 통과한다. 다른 플랫폼의

@@ -1,4 +1,4 @@
-import { BunawayError, CAPABILITIES_COMMAND } from "@bunaway/protocol";
+import { BunawayError } from "@bunaway/protocol";
 
 export type RegistrationKind = "command" | "event";
 
@@ -18,10 +18,10 @@ export function claimName(
   owner: string,
 ): void {
   checkName(name, kind, owner);
-  if (kind === "command" && name === CAPABILITIES_COMMAND)
+  if (kind === "command" && name.startsWith("plugin."))
     throw new BunawayError({
       code: "INVALID_ARGUMENT",
-      message: `${owner} cannot register the reserved ${CAPABILITIES_COMMAND} command.`,
+      message: `${owner} cannot register the reserved plugin namespace command.`,
     });
   const previous = owners.get(name);
   if (previous !== undefined)

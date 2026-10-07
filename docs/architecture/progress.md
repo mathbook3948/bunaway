@@ -5,12 +5,18 @@ Windows를 먼저 완성하고 다른 플랫폼을 같은 Bun 기반 개발 모�
 아래 macOS 구현, 검증 기록은 현재 상태이며, macOS 지원을 병행하거나 기존 자식
 프로세스 구조를 장기 목표로 유지한다는 뜻은 아니다.
 
+## 2026-10-07 선택 네이티브 플러그인
+
+저장, 로그와 기능 조회를 개별 패키지로 구현했다. 기본 생성 앱은 저장만 설치하고 등록한다.
+Host 호출은 등록 계약을 검증하며 policy v1은 permissions, allow와 deny 구조를 사용한다.
+Windows에서 실제 다중 뷰, 메모 재시작, 파일 핸들 검사와 I/O 취소 회귀를 검증했다.
+macOS 네이티브 어댑터는 후속 작업이며 현재 네이티브 플러그인 등록을 UNSUPPORTED로 거부한다.
+
 기준일: 2026-10-07. 현재 코드와 ADR, 기존 실행 기록 및 아래에 명시한 CI 실행을 대조했다.
 
 선택 네이티브 플러그인의 구조와 공개 계약은
 [ADR 0012](../decisions/0012-optional-native-plugins.md)와 [구조 계약](./plugins.md)에
-확정했다. 현재 브랜치의 범위는 설계 문서이며, 개별 패키지 배포, 새 정책 구조와
-Windows 실행 이관은 아직 구현하지 않았다.
+확정하고 Windows 실행, 개별 패키지 배포와 새 v1 정책 구조를 구현했다.
 공식 배포 전까지 정책 형식은 v1로 유지하며 개발 중 구조 변경으로 v2를 만들지 않는다.
 
 과거 진행 문서의 “Windows 외 미구현”, “runtime-bun 플랫폼 windows 고정”은 현재 코드와
@@ -67,14 +73,14 @@ Bun UI Worker의 창, WebView2, 비동기 작업, 다중 창, 종료를 검증�
   분리했고 공통 정책, 백엔드, 페이지는 계속 공유한다. 다중 창을 조용히 단일 창으로 변환하지 않는다.
 - 공유 메모 회귀 페이지의 Windows 영속 프로필 검사는 기본값으로 유지한다.
   macOS driver만 비영속 브라우저 저장소의 재시작 초기화를 명시적으로 검사하며,
-  범위 제한 Host API의 메모 파일 복원 검사는 양 플랫폼에서 그대로 유지한다.
+  범위 제한 메모 파일 복원은 현재 Windows 플러그인으로 검증한다. macOS의 기존 기록은 이관 전 검증이다.
 - `examples/memo/`는 CLI 생성 앱과 같은 `src/` + `src-bunaway/` 구조의 독립 단일 창 앱이다.
   예제 폴더의 `dev/build/package`로 실행, 빌드하며 여러 창과 자동 실행 시나리오는
   `tests/fixtures/desktop/host/`가 소유한다. `packages/cli`는 실제 create/validate/doctor/dev/build를
   제공하고 단일 뷰 vanilla, Vite, React, Vue, Svelte 템플릿을 생성한다.
   Vite 기반 생성 앱의 설치, 타입 검사, CSS/컴포넌트 HMR, 프로덕션 자산 번들은 CLI 테스트로
-  검증하며, 실제 Windows/macOS 창의 UI 실행 검증과 구분한다. `plugins/log`, `plugins/storage`는 빈 모듈이며
-  네이티브 Host API 로그/저장 구현과 배포할 기본 플러그인 완료는 다르다.
+  검증하며, 실제 Windows/macOS 창의 UI 실행 검증과 구분한다. 저장과 로그, 기능 조회는 plugins/의 개별 패키지로 구현했다.
+  CLI tarball에는 선택 패키지의 네이티브 구현을 넣지 않으며 필요한 앱이 따로 설치한다.
 - 개발자용 CLI tarball은 SDK, 스키마, runtime pin, native source/tools, 라이선스 원문을
   함께 포함한다. 현재 생성 앱은 CLI, SDK 패키지를 node_modules에 설치하며
   package.json과 bun.lock으로 버전을 고정한다. [설치, 버전 정책](../framework-distribution.md)은 공개 publish나 채널별 앱 설치

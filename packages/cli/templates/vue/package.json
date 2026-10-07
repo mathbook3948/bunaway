@@ -9,17 +9,18 @@
   },
   "scripts": {
     "dev": "bun --bun vite",
-    "build": "vue-tsc --project tsconfig.json && bun --bun vite build",
+    "build": "vue-tsc --project tsconfig.json && tsc --project src-bunaway/tsconfig.json && bun --bun vite build",
     "preview": "bun --bun vite preview",
     "bunaway": "bunaway",
-    "typecheck": "vue-tsc --project tsconfig.json"
+    "typecheck": "vue-tsc --project tsconfig.json && tsc --project src-bunaway/tsconfig.json"
   },
   "dependencies": {
     "@bunaway/backend": "0.0.0",
     "@bunaway/client": "0.0.0",
     "@bunaway/runtime-bun": "0.0.0",
     "@bunaway/core": "0.0.0",
-    "vue": "3.5.42"
+    "vue": "3.5.42",
+    "@bunaway/plugin-storage": "0.0.0"
   },
   "devDependencies": {
     "@types/bun": "1.4.2",

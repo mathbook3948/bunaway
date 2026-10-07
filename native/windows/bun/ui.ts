@@ -1,13 +1,22 @@
 import assert from "node:assert/strict";
 import { parentPort, workerData } from "node:worker_threads";
-import type { HostContext } from "../../../packages/protocol/src/index.ts";
-import { allowedHost, ViewBoundary } from "./boundary.ts";
+import {
+  BunawayError,
+  type HostContext,
+  type HostResponse,
+} from "../../../packages/protocol/src/index.ts";
+import { ViewBoundary } from "./boundary.ts";
 import { Channel, type Packet, type UIConfig } from "./channel.ts";
 import { callbackCalls, checkCallbacks, disposeCom } from "./com.ts";
+import { disposeAll, operations, permissionMatcher, pluginRegistry } from "./plugins.ts";
 import { originOf, WebView } from "./webview.ts";
 import { disposeWin32Bindings, hr, kernel, ole, Windows } from "./win32.ts";
 
 const config = workerData as UIConfig;
+const registry = pluginRegistry(config.plugins ?? []);
+registry.validatePolicy(config.policy);
+const matches = await permissionMatcher(config.plugins ?? []);
+const adapters = await operations(config.plugins ?? [], config.dataRoot, "ui");
 assert(parentPort);
 let failure: unknown;
 let stopping = false;
@@ -44,14 +53,52 @@ const channel = new Channel(
       }
     } else if (packet.kind === "server")
       views.get(packet.route.viewId)?.boundary.send(packet.route, packet.message);
-    else if (packet.kind === "authorize") {
+    else if (packet.kind === "authorize" || packet.kind === "operation") {
       const view = [...views.values()].find((view) => view.boundary.active(packet.context));
       const permissions =
         packet.context === config.backendContext
           ? config.policy.backend
           : view?.boundary.policy.host;
-      const allowed =
-        !stopping && !closingSent && !!permissions && allowedHost(permissions, packet.call);
+      let allowed = false;
+      try {
+        const call = registry.validateCall(packet.call);
+        allowed =
+          !stopping &&
+          !closingSent &&
+          !!permissions &&
+          registry.allowed(permissions, call, matches);
+      } catch {
+        /* Invalid requests fail closed at the host boundary. */
+      }
+      if (packet.kind === "operation") {
+        let response: HostResponse;
+        try {
+          if (!allowed)
+            throw new BunawayError({
+              code: "PERMISSION_DENIED",
+              message: "Host context or policy denied.",
+            });
+          response = {
+            kind: "result",
+            payload: adapters.execute(packet.call.operation, packet.call.payload, packet.source),
+          };
+        } catch (error) {
+          response = {
+            kind: "error",
+            error:
+              error instanceof BunawayError
+                ? { code: error.code, message: error.message }
+                : { code: "INTERNAL", message: "Host operation failed." },
+          };
+        }
+        channel.notify({
+          kind: "host-response",
+          context: packet.context,
+          requestId: packet.requestId,
+          response,
+        });
+        return;
+      }
       if (!allowed) log("host-request-denied", { operation: packet.call.operation });
       if (allowed) {
         assert(!approved.has(packet.requestId));
@@ -237,9 +284,14 @@ try {
     assert.deepEqual(callbackCalls(), calls, "Invoke after native detach");
     log("callbacks-quiescent");
     log("callback-references", disposeCom());
-    windows?.dispose();
-    if (initialized) ole.symbols.CoUninitialize();
-    disposeWin32Bindings();
+    await disposeAll([
+      () => adapters.dispose(),
+      () => {
+        windows?.dispose();
+        if (initialized) ole.symbols.CoUninitialize();
+        disposeWin32Bindings();
+      },
+    ]);
     await channel.drain();
     if (!failure) await channel.send({ kind: "cleaned" });
   } catch (error) {

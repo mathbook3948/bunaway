@@ -1,6 +1,5 @@
 import { cp, mkdir } from "node:fs/promises";
 import { relative, resolve } from "node:path";
-import { templateNames } from "./templates.ts";
 import { PROCESS_IPC_VERSION, PROTOCOL_VERSION } from "@bunaway/protocol";
 import {
   files,
@@ -11,6 +10,8 @@ import {
   runWorker,
   verifyHash,
 } from "./files.ts";
+import { type InstalledPlugin, installedPlugins } from "./plugins.ts";
+import { templateNames } from "./templates.ts";
 
 export const frameworkPaths = [
   "framework.json",
@@ -41,7 +42,8 @@ export const frameworkPaths = [
   "native/windows/bun/webview.ts",
   "native/windows/bun/com.ts",
   "native/windows/bun/win32.ts",
-  "native/windows/bun/storage.ts",
+  "native/windows/bun/plugins.ts",
+  "native/windows/bun/plugin-table.ts",
   "native/windows/bun/host-operations.ts",
   "native/windows/bun/log.ts",
   "native/windows/bun/launch.ps1",
@@ -64,6 +66,7 @@ export interface Release {
   format: number;
   version: string;
   packages: Record<string, string>;
+  plugins: Record<string, string>;
   webProtocol: { major: number; minor: number };
   processProtocol: { major: number; minor: number };
   nativeHost: string;
@@ -74,6 +77,7 @@ const packageNames: Record<string, string> = {
   cli: "@bunaway/cli",
   "backend-sdk": "@bunaway/backend",
   "client-sdk": "@bunaway/client",
+  "plugin-sdk": "@bunaway/plugin",
   core: "@bunaway/core",
   protocol: "@bunaway/protocol",
   "runtime-bun": "@bunaway/runtime-bun",
@@ -110,6 +114,11 @@ export async function release(root = frameworkRoot): Promise<Release> {
     !/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(value.version) ||
     value.nativeHost !== value.version ||
     !value.packages ||
+    !value.plugins ||
+    Object.entries(value.plugins).some(
+      ([directory, name]) =>
+        !/^[a-z-]+$/.test(directory) || name !== `@bunaway/plugin-${directory}`,
+    ) ||
     Object.keys(value.packages).length !== Object.keys(packageNames).length ||
     Object.entries(packageNames).some(([directory, name]) => value.packages[directory] !== name) ||
     value.webProtocol?.major !== PROTOCOL_VERSION.major ||
@@ -173,7 +182,7 @@ export async function snapshotHashes(
 export async function validateFramework(
   project: string,
   sources: readonly string[] = [],
-): Promise<{ root: string; backendDependencies: string[] }> {
+): Promise<{ root: string; backendDependencies: string[]; plugins: InstalledPlugin[] }> {
   const pkg = (await json(resolve(project, "package.json"))) as PackageDependencies & {
     packageManager: string;
     overrides?: unknown;
@@ -225,9 +234,11 @@ export async function validateFramework(
       throw new Error(`Missing framework dependency: ${name}; follow the installation guide.`);
     }
   }
+  const plugins = await installedPlugins(project, actual.version);
   for (const [name, specifier] of declarations) {
     if (
-      !Object.values(packageNames).includes(name) ||
+      (!Object.values(packageNames).includes(name) &&
+        !plugins.some((plugin) => plugin.packageName === name)) ||
       (specifier !== actual.version && !specifier.endsWith(".tgz"))
     ) {
       throw new Error(
@@ -238,11 +249,11 @@ export async function validateFramework(
   const output = await runWorker(
     "sdk.ts",
     "validateSdkGraph",
-    [project, references, sources],
+    [project, references, sources, plugins],
     project,
     root,
   );
-  return { root, backendDependencies: JSON.parse(output) as string[] };
+  return { root, backendDependencies: JSON.parse(output) as string[], plugins };
 }
 
 export function packageFilename(name: string, version: string): string {
@@ -261,11 +272,11 @@ function requiredFrameworkFiles(): string[] {
     ...["bootstrap", "host-call", "host-response", "message", "policy", "process"].map(
       (name) => `native/host-api/generated/${name}.schema.json`,
     ),
-    "native/host-api/generated/host-operations.json",
     "runtime/build-manifests/windows-x64.json",
     "runtime/build-manifests/darwin-aarch64.json",
     "packages/cli/src/assets.ts",
     "packages/cli/src/sdk.ts",
+    "packages/cli/src/plugins.ts",
     "packages/cli/src/dev-server.ts",
     "packages/cli/src/dev-server-worker.ts",
     "packages/runtime-bun/src/development.ts",
@@ -305,7 +316,9 @@ export async function checkArtifact(root: string): Promise<void> {
         "src-bunaway/bunaway.json",
         "src-bunaway/policy.json",
         "src-bunaway/app.ts",
+        "src-bunaway/tsconfig.json",
         "src-bunaway/message/module.ts",
+        "src/client.ts",
       ].map((name) => `packages/cli/templates/${template}/${name}`),
     ),
     ...Object.entries({

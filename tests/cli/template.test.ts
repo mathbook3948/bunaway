@@ -2,18 +2,18 @@ import { expect, test } from "bun:test";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { createClient } from "../../packages/client-sdk/src/index.ts";
 import { bundleAssets } from "../../packages/cli/src/build.ts";
 import { validateProject } from "../../packages/cli/src/config.ts";
-import { createProject } from "./project.ts";
+import { createClient } from "../../packages/client-sdk/src/index.ts";
 import {
-  parseHostCall,
-  parseProcessFrame,
   PROTOCOL_VERSION,
   type ProcessFrame,
+  parseHostCall,
+  parseProcessFrame,
   type TransportEvent,
 } from "../../packages/protocol/src/index.ts";
 import { readJsonLines } from "../../packages/runtime-bun/src/index.ts";
+import { createProject } from "./project.ts";
 
 test("external generated backend uses actual SDK command/storage/event; revoked saves are not replayed", async () => {
   const root = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-template-")));
@@ -93,15 +93,18 @@ test("external generated backend uses actual SDK command/storage/event; revoked 
             const call = parseHostCall(
               JSON.stringify({ operation: frame.operation, payload: frame.payload }),
             );
-            if (call.operation === "storage.writeText" && call.payload.text === "pending save") {
+            if (
+              call.operation === "storage.writeText" &&
+              (call.payload as { text: string }).text === "pending save"
+            ) {
               held = frame;
               holdReached?.();
               continue;
             }
             if (call.operation === "storage.writeText") {
-              expect(call.payload.scope).toBe("appData");
-              expect(call.payload.path).toBe("messages/current.txt");
-              stored = call.payload.text;
+              expect((call.payload as { scope: string }).scope).toBe("appData");
+              expect((call.payload as { path: string }).path).toBe("messages/current.txt");
+              stored = (call.payload as { text: string }).text;
               completedWrites.push(stored);
             }
             send({

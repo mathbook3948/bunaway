@@ -1,7 +1,28 @@
 import { dlopen, ptr } from "bun:ffi";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { BunawayError } from "../../../packages/protocol/src/index.ts";
+import {
+  BunawayError,
+  type JsonValue,
+  type NativeAdapter,
+  type NativeEnvironment,
+} from "@bunaway/plugin";
+import type { StorageLocation, StorageWrite } from "./index.ts";
+
+export function createOperations(environment: NativeEnvironment): NativeAdapter {
+  const storage = new ScopedStorage(environment.dataRoot);
+  return {
+    execute(operation: string, input: JsonValue): JsonValue {
+      const location = input as StorageLocation;
+      return storage.execute(
+        location.scope,
+        location.path,
+        operation === "storage.writeText" ? (input as StorageWrite).text : undefined,
+      );
+    },
+    dispose: disposeStorageBindings,
+  };
+}
 
 const wide = (text: string) => Buffer.from(`${text}\0`, "utf16le");
 const api = dlopen("kernel32.dll", {

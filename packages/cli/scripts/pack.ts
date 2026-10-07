@@ -4,8 +4,8 @@ import {
   checkArtifact,
   copyFramework,
   packageFilename,
-  release,
   type Release,
+  release,
   snapshotHashes,
 } from "../src/distribution.ts";
 import { files, frameworkRoot, run, writeJson } from "../src/files.ts";
@@ -39,7 +39,10 @@ async function writeDeclarations(stage: string, info: Release): Promise<void> {
     const rewritten = source.replace(
       /(\bfrom\s+|\bimport\s*(?:\(\s*)?)(["'])([^"']+)\2/g,
       (_match, prefix: string, quote: string, specifier: string) => {
-        const alias = aliases.get(specifier);
+        const alias =
+          specifier === "#transport"
+            ? resolve(declarations, "plugin-sdk/src/bun.js")
+            : aliases.get(specifier);
         if (alias) {
           specifier = relative(dirname(path), alias).replaceAll("\\", "/");
           if (!specifier.startsWith(".")) specifier = `./${specifier}`;
@@ -73,18 +76,26 @@ export async function packFramework(
   try {
     await copyFramework(stage);
     // SDK packages are ordinary dependencies; native inputs stay in the CLI artifact.
-    for (const [directory, name] of Object.entries(info.packages)) {
+    for (const [directory, name] of [
+      ...Object.entries(info.packages),
+      ...Object.entries(info.plugins),
+    ]) {
       if (name === "@bunaway/cli") continue;
       const sdk = resolve(destination, `sdk-${crypto.randomUUID()}`);
       await mkdir(sdk);
       try {
-        await cp(resolve(frameworkRoot, `packages/${directory}/src`), resolve(sdk, "src"), {
+        const source = resolve(
+          frameworkRoot,
+          `${name.startsWith("@bunaway/plugin-") ? "plugins" : "packages"}/${directory}`,
+        );
+        await cp(resolve(source, "src"), resolve(sdk, "src"), {
           recursive: true,
         });
-        const manifest = JSON.parse(
-          await readFile(resolve(frameworkRoot, `packages/${directory}/package.json`), "utf8"),
-        );
+        const manifest = JSON.parse(await readFile(resolve(source, "package.json"), "utf8"));
         delete manifest.scripts;
+        delete manifest.devDependencies;
+        if (manifest.bunaway?.plugin)
+          await cp(resolve(source, "plugin.json"), resolve(sdk, "plugin.json"));
         for (const field of ["dependencies", "peerDependencies"]) {
           for (const dep of Object.keys(manifest[field] ?? {})) {
             if (dep.startsWith("@bunaway/")) manifest[field][dep] = dependency(dep);
@@ -92,7 +103,12 @@ export async function packFramework(
         }
         await writeJson(resolve(sdk, "package.json"), {
           ...manifest,
-          files: ["src", "LICENSE.txt", "THIRD-PARTY-NOTICES.txt"],
+          files: [
+            "src",
+            ...(manifest.bunaway?.plugin ? ["plugin.json"] : []),
+            "LICENSE.txt",
+            "THIRD-PARTY-NOTICES.txt",
+          ],
         });
         await cp(resolve(frameworkRoot, "FRAMEWORK-LICENSE.txt"), resolve(sdk, "LICENSE.txt"));
         await cp(

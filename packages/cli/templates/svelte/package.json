@@ -9,16 +9,17 @@
   },
   "scripts": {
     "dev": "bun --bun vite",
-    "build": "svelte-check --tsconfig ./tsconfig.json && tsc --project tsconfig.node.json && bun --bun vite build",
+    "build": "svelte-check --tsconfig ./tsconfig.json && tsc --project tsconfig.node.json && tsc --project src-bunaway/tsconfig.json && bun --bun vite build",
     "preview": "bun --bun vite preview",
     "bunaway": "bunaway",
-    "typecheck": "svelte-check --tsconfig ./tsconfig.json && tsc --project tsconfig.node.json"
+    "typecheck": "svelte-check --tsconfig ./tsconfig.json && tsc --project tsconfig.node.json && tsc --project src-bunaway/tsconfig.json"
   },
   "dependencies": {
     "@bunaway/backend": "0.0.0",
     "@bunaway/client": "0.0.0",
     "@bunaway/runtime-bun": "0.0.0",
-    "@bunaway/core": "0.0.0"
+    "@bunaway/core": "0.0.0",
+    "@bunaway/plugin-storage": "0.0.0"
   },
   "devDependencies": {
     "@types/bun": "1.4.2",
