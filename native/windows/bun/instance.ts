@@ -134,7 +134,11 @@ export async function forwardToInstance(address: string, input: LaunchArguments)
         const socket = createConnection(address);
         let response = "";
         const timeout = setTimeout(
-          () => socket.destroy(new Error("Instance delivery timed out")),
+          () => {
+            // Reject before closing so a pending Windows pipe write cannot replace the timeout.
+            reject(new Error("Instance delivery timed out"));
+            socket.destroy();
+          },
           Math.max(0, deadline - Date.now()),
         );
         socket.on("close", () => {

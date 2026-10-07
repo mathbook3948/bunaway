@@ -366,19 +366,30 @@ test("instance deadlines end a slow request and a slow acknowledgement after fiv
     server.listen(outbound, resolve);
   });
   const begin = Date.now();
+  let inboundElapsed = 0;
+  let outboundElapsed = 0;
   try {
     await Promise.all([
       new Promise<void>((resolve, reject) => {
         const client = createConnection(inbound);
         const timer = setInterval(() => client.write(" "), 1000);
-        client.on("error", reject);
+        client.on("error", (error: NodeJS.ErrnoException) => {
+          if (error.code !== "EPIPE" && error.code !== "ECONNRESET") reject(error);
+        });
         client.on("close", () => {
           clearInterval(timer);
+          inboundElapsed = Date.now() - begin;
           resolve();
         });
       }),
-      expect(forwardToInstance(outbound, launch)).rejects.toThrow("timed out"),
+      expect(
+        forwardToInstance(outbound, { ...launch, argv: ["x".repeat(60000)] }).finally(() => {
+          outboundElapsed = Date.now() - begin;
+        }),
+      ).rejects.toThrow("timed out"),
     ]);
+    expect(inboundElapsed).toBeGreaterThanOrEqual(4900);
+    expect(outboundElapsed).toBeGreaterThanOrEqual(4900);
     expect(Date.now() - begin).toBeLessThan(6500);
   } finally {
     await inbox.close();
