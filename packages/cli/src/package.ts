@@ -1,7 +1,7 @@
+import { resolve } from "node:path";
 import {
   adapterFor,
   artifactPaths,
-  type BuildArtifact,
   type ChannelId,
   CODES,
   isChannelId,
@@ -14,7 +14,6 @@ import {
   runPackage,
   targetFor,
 } from "@bunaway/packaging";
-import { resolve } from "node:path";
 import { buildProject, currentTarget } from "./build.ts";
 import { readProjectMetadata } from "./config.ts";
 import { json } from "./files.ts";
@@ -85,22 +84,20 @@ export async function packageProject(
     );
   }
   const notes: string[] = [];
-  let artifact: BuildArtifact;
   if (options.build) {
-    const built = await buildProject(directory);
-    artifact = {
-      dir: built.output,
-      packageDir: built.package,
-      executable: built.executable,
-    };
+    await buildProject(directory);
     notes.push("Build artifact produced in this run.");
-  } else {
-    artifact = artifactPaths({
-      root: project.root,
-      target,
-      appId: project.app.appId,
-    });
   }
+  const artifact = artifactPaths({
+    root: project.root,
+    target,
+    appId: project.app.appId,
+    ...(project.app.executableName
+      ? {
+          executableName: project.app.executableName,
+        }
+      : {}),
+  });
   const report = await runPackage({
     metadata,
     appId: project.app.appId,

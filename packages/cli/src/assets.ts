@@ -261,6 +261,18 @@ export async function bundleWindowsHost(
       );
       build.onResolve(
         {
+          filter: /^\.\/app\.js$/,
+        },
+        ({ importer }) =>
+          resolve(importer) === resolve(source, "boot.ts")
+            ? {
+                path: "app.ts",
+                namespace: "bunaway-windows-entry",
+              }
+            : undefined,
+      );
+      build.onResolve(
+        {
           filter: /^bunaway-windows-app\/app\.ts$/,
         },
         () => ({

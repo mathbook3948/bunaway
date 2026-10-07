@@ -28,29 +28,34 @@ status: accepted
 
 - `bunaway build`는 채널 중립이다. 어댑터는 build 산출물 디렉터리를 읽기 전용으로
   소비하고 스테이징 디렉터리에만 쓴다.
-- 어댑터 입력: 산출물 디렉터리, `manifest.json`, `policy.json`, `app.json`, 라이선스
-  맵, 해석된 패키징 메타데이터. runner의 `verify` 단계가 manifest의 자산, Bun 해시로
+- 어댑터 입력: 산출물 디렉터리, `manifest.json`, 라이선스 맵, 해석된 패키징 메타데이터.
+  Windows의 앱 설정과 정책은 EXE에 내장하며, macOS는 외부 자산으로 제공한다.
+  runner의 `verify` 단계가 manifest에 기록된 자산과 실행 파일의 해시로
   입력을 재검증하고 누락/변조는 `PKG_INPUT_MISSING`/`PKG_INPUT_TAMPERED`로 거부한다.
 - 자산 맵은 상대 경로와 SHA-256으로 구성된 객체여야 한다. Windows는
-  `app.json`, `policy.json`, `boot.js`, `app.js`, `ui.js`, `host-operations.js`,
-  `WebView2Loader.dll`, `bunfig.toml`, `tsconfig.json`, Bun과 WebView2 라이선스가
-  필수다. macOS는 `app.json`, `policy.json`, `backend.js`, `bunfig.toml`,
+  `WebView2Loader.dll`, `licenses/LICENSE.bun`, `licenses/License-WebView2.txt`가 필수다.
+  manifest의 `host.kind`는 `bun-compiled`이며, `host.executable`에 EXE 파일 이름,
+  `host.sha256`에 빌드 직후 해시를 기록한다. 앱과 코어, UI와 I/O Worker, 웹 자산,
+  앱 설정과 정책은 EXE에 내장한다. Windows 배포 형식은
+  [ADR 0006](./0006-windows-bun-ui-worker.md)의 2026-10-08 결정을 따른다.
+  macOS는 `app.json`, `policy.json`, `backend.js`, `bunfig.toml`,
   `tsconfig.json`, `process.schema.json`, `message.schema.json`,
   `host-call.schema.json`, `policy.schema.json`, Bun과 JSON 라이선스가 필수다.
   네이티브 operation 계약은 등록된 플러그인의 앱 정의에 포함하며 별도
   `host-operations.json` 파일로 제공하지 않는다. 파일뿐 아니라 manifest 등재도 확인한다.
-  manifest, 호스트는 빌드 산출물 루트, 자산, Bun은 패키지 루트 안의 실제 경로여야 한다.
+  manifest와 자산, macOS 번들 Bun은 패키지 루트 안의 실제 경로여야 하며,
+  앱 실행 파일은 빌드 산출물 안에 있어야 한다.
   외부 symlink/junction 탈출은 `PKG_INPUT_UNEXPECTED`로 어댑터 실행 전에 거부한다.
 - macOS는 build가 생성한 XML `Contents/Info.plist`도 필수 입력이다. 번들 안의 정규
   파일이어야 하며, `CFBundleExecutable`이 실제 `Contents/MacOS` 호스트를 가리키고
   `CFBundleIdentifier`가 manifest 앱 ID, `CFBundlePackageType`이 `APPL`이어야 한다.
   XML entity, scalar 값, 중첩 array/dict 구조, 중복 키, 필수 metadata 불일치는 어댑터
   실행 전에 거부하며, macOS에서는 Apple `plutil -lint`로도 전체 문서를 검증한다.
-- Bun hello의 런타임 식별에 쓰는 `manifest.bun.version`, `sourceRevision`은 비어 있지
-  않은 문자열이어야 한다. `assets/app.json`의 `home`은 호스트 소유 origin을 사용하며,
+- Bun의 출처를 기록하는 `manifest.bun.version`, `sourceRevision`은 비어 있지
+  않은 문자열이어야 한다. macOS에서는 `assets/app.json`의 `home`이 호스트 소유 origin을 사용하며,
   URL 경로를 디코딩해 찾은 `assets/web` 내 초기 문서(`/`는 `index.html`)는 실제 파일이고
   manifest에 등재돼 있어야 한다. query는 파일 경로에 포함하지 않으며 웹 루트 밖의
-  실제 경로도 거부한다.
+  실제 경로도 거부한다. Windows의 시작 페이지와 정책은 빌드 시 검증해 EXE에 포함한다.
 - 어댑터는 `resolve → verify → stage → sign → assemble → verify-artifact → report`
   순서의 stage 목록을 정의하고, runner가 단계별 실행, 타이밍, 실패 포착을 담당한다.
 - 진단은 `{stage, code: PKG_*, severity, message, path?}` 형식으로 통일하고 결과는
@@ -99,12 +104,17 @@ false로 제외할 수 있고, 설치 패키지, 실행 파일, 제출 번들은
 충족한다. `signing.performed`는 서명된 파일이 있는지를 기록할 뿐 이 판정을 대체하지 않는다.
 
 서명으로 바이너리가 바뀌는 채널을 위해 manifest의 해시를 둘로 나눈다.
-Bun은 upstream의 `executableSha256`을 보존하고, 서명 후 최종 바이트는
-`packagedSha256`에 기록한다. 패키징 검증과 Windows/macOS 런타임 무결성 검사는
-Bun의 `packagedSha256`을 우선 읽고 없으면 `executableSha256`만 사용한다.
+Windows는 빌드 직후 앱 EXE의 `host.sha256`을 보존하고, 선택적 서명 단계가 끝난 뒤
+최종 바이트의 해시를 `host.packagedSha256`에 기록한다. 서명하지 않은 경우에도 기록한다.
+패키징 검증은 `host.packagedSha256`을 우선 읽고 없으면 `host.sha256`을 사용한다.
+`bun.executableSha256`은 컴파일에 사용한 upstream Bun의 출처 기록이며 앱 EXE와 비교하지 않는다.
+Windows 앱은 시작 시 manifest의 해시로 자체 무결성을 검사하지 않는다.
+
+macOS 번들 Bun은 upstream의 `executableSha256`을 보존하고, 서명 후 최종 바이트는
+`bun.packagedSha256`에 기록한다. 패키징 검증과 런타임 무결성 검사는
+`bun.packagedSha256`을 우선 읽고 없으면 `bun.executableSha256`만 사용한다.
 Bun의 `sha256`/`sourceSha256`은 이 fallback을 대체하지 않는다.
-호스트의 `sha256`/`sourceSha256`은 별도 규칙이며, macOS 서명 전 호스트의
-`sourceSha256`은 provenance이므로 최종 호스트 바이트와 직접 비교하지 않는다.
+macOS 서명 전 호스트의 `sourceSha256`은 출처 기록이므로 최종 호스트 바이트와 직접 비교하지 않는다.
 최종 호스트 해시(`packagedSha256`/`sha256`)가 없는 macOS build 입력은 기존 번들의
 코드 서명을 `codesign --verify --deep --strict`로 검증한다. 정상 ad-hoc 서명도 허용하되
 호스트, 봉인 자산, 서명 손상과 검증 도구 실행 실패는 `PKG_INPUT_TAMPERED`로 어댑터 실행

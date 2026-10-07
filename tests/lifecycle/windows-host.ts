@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { cp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { buildHostFixture } from "../../native/windows/bun/package.ts";
 import { windowsLaunchEnvironment } from "../../packages/cli/src/launch.ts";
 import { validateValue } from "../../packages/protocol/src/index.ts";
 import { validationCases } from "../protocol/validation-cases.ts";
@@ -156,12 +157,7 @@ async function reportFile(name: string) {
 
 function launch() {
   const command = [
-    join(packagePath, "runtime/bun.exe"),
-    "--no-env-file",
-    "--no-install",
-    `--config=${join(packagePath, "assets/bunfig.toml")}`,
-    `--tsconfig-override=${join(packagePath, "assets/tsconfig.json")}`,
-    join(packagePath, "assets/boot.js"),
+    join(packagePath, "tests.bunaway.host.exe"),
   ];
   const hostileEnvironment = {
     PATH: `${process.env.SystemRoot}\\System32`,
@@ -653,7 +649,6 @@ try {
     "read",
   ]) {
     await test(`memo sample ${phase} in a new host and Bun process (legacy config)`, async () => {
-      const configPath = join(packagePath, "assets", "app.json");
       // The legacy single-window declaration must keep working: a fresh app.json
       // without the windows array opens exactly one view.
       const config = {
@@ -666,14 +661,7 @@ try {
           height: 768,
         },
       };
-      const text = `${JSON.stringify(config, null, 2)}\n`;
-      await writeFile(configPath, text);
-      const manifestPath = join(packagePath, "manifest.json");
-      const manifest = JSON.parse(await readFile(manifestPath, "utf-8"));
-      manifest.assets["assets/app.json"] = new Bun.CryptoHasher("sha256")
-        .update(text)
-        .digest("hex");
-      await writeFile(manifestPath, JSON.stringify(manifest));
+      await buildHostFixture(packagePath, config);
       const previousCount = (await hostLog()).length;
       const child = launch();
       try {

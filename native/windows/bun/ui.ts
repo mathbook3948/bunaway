@@ -554,15 +554,19 @@ try {
     "ui",
     windowServices,
   );
-  windows = new Windows(() => {
-    if (closingSent) {
-      return;
-    }
-    closingSent = true;
-    channel.notify({
-      kind: "closing",
-    });
-  });
+  windows = new Windows(
+    () => {
+      if (closingSent) {
+        return;
+      }
+      closingSent = true;
+      channel.notify({
+        kind: "closing",
+      });
+    },
+    config.icon,
+    config.runtime.id,
+  );
   if (config.desktop?.tray) {
     tray = new Tray(windows, config.desktop.tray.tooltip, (action) => {
       if (action === "show") {
@@ -633,11 +637,15 @@ try {
   }
 } catch (error) {
   failure ??= error;
+  log("ui-failed", {
+    message: String(error),
+    stack: error instanceof Error ? error.stack : undefined,
+  });
   channel.notify({
     kind: "fatal",
     error: {
       code: "INTERNAL",
-      message: "Windows UI failed.",
+      message: `Windows UI failed: ${String(error).slice(0, 1024)}`,
     },
   });
 } finally {

@@ -34,8 +34,10 @@ bunaway build [directory]
 | Windows | `dist/windows-x64/` |
 | macOS | `dist/macos-arm64/<appId>.app/` |
 
-Windows 산출물은 `bunaway.cmd`, `launch.ps1`, assets, licenses, runtime/bun.exe를 포함합니다.
-앱 폴더 전체를 배포하고 런처로 실행하세요.
+Windows 산출물은 앱 EXE, WebView2Loader.dll, licenses 폴더와 manifest.json을 포함합니다.
+앱 코드, 웹 자산, 설정과 정책은 EXE에 내장합니다. 별도 Bun 설치는 필요하지 않습니다.
+기본 실행 파일 이름은 `<appId>.exe`이며 `app.executableName`과 `app.icon`으로 이름과 아이콘을 지정합니다.
+앱 폴더 전체를 배포하고 EXE를 실행하세요. 웹 자산을 바꾸면 앱을 다시 빌드해야 합니다.
 macOS에서는 `.app`을 만들고 로컬 실행용 ad-hoc 서명을 적용합니다. 배포에 필요한 Developer ID 서명과 공증은 별도로 진행합니다.
 
 ## 실패와 동시 작업
@@ -45,6 +47,7 @@ macOS에서는 `.app`을 만들고 로컬 실행용 ad-hoc 서명을 적용합�
 같은 target의 빌드와 패키징은 동시에 실행하지 마세요. 충돌하면 잠금 오류로 실패합니다.
 잠금은 웹 빌드부터 앱 산출물 게시까지 유지합니다.
 Ctrl+C나 SIGTERM으로 중단하면 실행한 명령과 하위 프로세스를 정리한 뒤 잠금을 해제합니다.
+Windows EXE 컴파일 중에도 적용됩니다.
 명령 종료 후에도 하위 프로세스의 정리 완료를 확인합니다. 정리 완료를 확인하지 못하면 빌드는 실패합니다.
 이미 종료한 하위 프로세스가 운영체제의 프로세스 목록에 남아 있어도 빌드는 계속 진행합니다.
 정리가 끝나면 빌드를 다시 실행할 수 있습니다.

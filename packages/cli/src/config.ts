@@ -81,6 +81,8 @@ export interface Project {
   app: {
     appId: string;
     title: string;
+    executableName?: string;
+    icon?: string;
     view: string;
     home: string;
     window: {
@@ -321,6 +323,8 @@ async function loadProject(
       "home",
       "window",
       "windows",
+      "executableName",
+      "icon",
     ],
     "app",
   );
@@ -329,6 +333,44 @@ async function loadProject(
     throw new Error(
       "appId must match the native host's 1–64 character app ID grammar.",
     );
+  }
+  if (
+    raw.executableName !== undefined ||
+    (process.platform === "win32" && process.arch === "x64")
+  ) {
+    const name =
+      raw.executableName === undefined
+        ? `${appId}.exe`
+        : string(raw.executableName, "app.executableName");
+    if (
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: Windows file-name restrictions.
+      !/^[^<>:"/\\|?*\x00-\x1f]{1,120}\.exe$/i.test(name) ||
+      /^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i.test(name) ||
+      /^unins\d+\.exe$/i.test(name) ||
+      /[. ]\.exe$/i.test(name)
+    ) {
+      throw new Error(
+        raw.executableName === undefined
+          ? `Default Windows executable name ${name} is invalid; ` +
+              "set app.executableName to a valid .exe name."
+          : "app.executableName must be a Windows .exe file name without a path, reserved device name or uninsNNN.exe installer name.",
+      );
+    }
+  }
+  if (raw.icon !== undefined) {
+    const name = string(raw.icon, "app.icon");
+    if (!name.toLowerCase().endsWith(".ico")) {
+      throw new Error("app.icon must be an .ico file.");
+    }
+    if (isAbsolute(name) || name.split(/[\\/]/).includes("..")) {
+      throw new Error("app.icon must be project-relative without '..'.");
+    }
+    if (
+      validateFiles &&
+      !(await lstat(await projectPath(root, name))).isFile()
+    ) {
+      throw new Error("app.icon must be a regular file.");
+    }
   }
   const multiple = raw.windows !== undefined;
   if (
@@ -420,6 +462,16 @@ async function loadProject(
     app: {
       appId,
       title: string(raw.title, "app.title"),
+      ...(raw.executableName !== undefined
+        ? {
+            executableName: raw.executableName as string,
+          }
+        : {}),
+      ...(raw.icon !== undefined
+        ? {
+            icon: raw.icon as string,
+          }
+        : {}),
       view: primary.view,
       home: primary.home,
       window: primary.window,

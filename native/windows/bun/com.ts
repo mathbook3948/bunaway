@@ -2,7 +2,7 @@ import type { FFIType, Pointer } from "bun:ffi";
 import { CFunction, JSCallback, ptr, read, toArrayBuffer } from "bun:ffi";
 import assert from "node:assert/strict";
 import { MAX_MESSAGE_BYTES } from "../../../packages/protocol/src/index.ts";
-import { hr, kernel, ole, withBuffer } from "./win32.ts";
+import { hr, kernel, ole, withBuffer, withWide } from "./win32.ts";
 
 const thread = kernel.symbols.GetCurrentThreadId();
 export type Arg = number | bigint | null;
@@ -36,12 +36,19 @@ export function method(
 }
 export const addRef = (object: Pointer) => method(object, 1, [], "u32")();
 export const release = (object: Pointer) => method(object, 2, [], "u32")();
-export function getString(object: Pointer, slot: number) {
+export function getString(object: Pointer, slot: number, name?: string) {
   const out = new BigUint64Array(1);
   hr(
-    method(object, slot, [
-      "ptr",
-    ])(ptr(out)),
+    name === undefined
+      ? method(object, slot, [
+          "ptr",
+        ])(ptr(out))
+      : withWide(name, (key) =>
+          method(object, slot, [
+            "ptr",
+            "ptr",
+          ])(key, ptr(out)),
+        ),
     "get string",
   );
   const address = Number(out[0]) as Pointer;

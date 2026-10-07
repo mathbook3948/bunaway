@@ -46,7 +46,7 @@ macOS 플러그인 어댑터는 후속 작업이다.
 Windows의 기본 구조는 번들 Bun 진입점, 앱/코어 메인, Win32/WebView2 UI STA Worker, 파일 I/O Worker다.
 같은 프로세스에서 구조화 복사 채널로 연결하며 WebView 브라우저, 렌더러 프로세스는 유지한다.
 실제 출처와 권한은 UI가 검증하고 코어와 SDK 계약은 재사용한다.
-사용자 Bun 설치나 PATH에 의존하지 않으며 검증한 내부 Bun의 절대 경로를 실행한다.
+Windows 배포 빌드는 검증한 Bun으로 앱 호스트 전체를 compile한다. 웹 자산, 앱 설정과 정책을 EXE에 내장하며 사용자 Bun 설치나 PATH에 의존하지 않는다. 개발 모드는 번들 Bun의 절대 경로로 외부 JS를 실행한다.
 [ADR 0006](./decisions/0006-windows-bun-ui-worker.md)이 Windows의 현재 계약이다.
 아래 별도 Bun/IPC 도식은 macOS와 기존 Windows B/C 실험의 구조를 설명한다.
 

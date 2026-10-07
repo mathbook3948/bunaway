@@ -1,15 +1,34 @@
 import { expect, mock, spyOn } from "bun:test";
 import * as fs from "node:fs/promises";
-import { readdir, rm } from "node:fs/promises";
-import { resolve } from "node:path";
+import { readdir, rm as removeCompileAssets, rm } from "node:fs/promises";
+import { relative, resolve } from "node:path";
 import * as build from "../../packages/cli/src/build.ts";
 import * as files from "../../packages/cli/src/files.ts";
+import * as launch from "../../packages/cli/src/launch.ts";
 import {
   adapterFor,
   CODES,
   registerAdapter,
 } from "../../packages/packaging/src/index.ts";
 
+mock.module(import.meta.resolve("../../packages/cli/src/launch.ts"), () => ({
+  ...launch,
+  compileWindowsApp: async (root: string, _bun: string, executable: string) => {
+    const embedded: Record<string, string> = {};
+    for (const path of await files.files(resolve(root, "assets"))) {
+      embedded[relative(resolve(root, "assets"), path).replaceAll("\\", "/")] =
+        await Bun.file(path).text();
+    }
+    await Bun.write(resolve(root, executable), JSON.stringify(embedded));
+    await removeCompileAssets(resolve(root, "assets"), {
+      recursive: true,
+      force: true,
+    });
+  },
+}));
+async function compiledAsset(artifact: build.BuiltPackage, name: string) {
+  return (await Bun.file(artifact.executable).json())[name] as string;
+}
 const project = process.argv[2];
 if (!project) {
   throw new Error("Expected a generated project path.");
@@ -132,12 +151,10 @@ expect(await readdir(resolve(development.package, "assets/web"))).toEqual([]);
 const production = await buildProject(project, {
   native,
 });
-const productionApp = await Bun.file(
-  resolve(production.package, "assets/app.json"),
-).json();
-const productionPolicy = await Bun.file(
-  resolve(production.package, "assets/policy.json"),
-).json();
+const productionApp = JSON.parse(await compiledAsset(production, "app.json"));
+const productionPolicy = JSON.parse(
+  await compiledAsset(production, "policy.json"),
+);
 expect(productionApp.home).toBe("https://app.bunaway.local/index.html");
 expect(productionApp.development).toBeUndefined();
 expect(productionPolicy.views[0].origins).toEqual([
@@ -261,16 +278,12 @@ expect(await Bun.file(webRuns).exists()).toBe(false);
 const firstWeb = await buildProject(project, {
   native,
 });
-expect(
-  await Bun.file(resolve(firstWeb.package, "assets/web/index.html")).text(),
-).toBe("first UI");
+expect(await compiledAsset(firstWeb, "web/index.html")).toBe("first UI");
 await Bun.write(webSource, "latest UI");
 const latestWeb = await buildProject(project, {
   native,
 });
-expect(
-  await Bun.file(resolve(latestWeb.package, "assets/web/index.html")).text(),
-).toBe("latest UI");
+expect(await compiledAsset(latestWeb, "web/index.html")).toBe("latest UI");
 expect(await Bun.file(webRuns).text()).toBe("build\nbuild\n");
 await buildProject(project, {
   native,
@@ -359,9 +372,7 @@ for (const command of [
   expect(
     await Bun.file(resolve(latestWeb.package, "manifest.json")).text(),
   ).toBe(previousManifest);
-  expect(
-    await Bun.file(resolve(latestWeb.package, "assets/web/index.html")).text(),
-  ).toBe("latest UI");
+  expect(await compiledAsset(latestWeb, "web/index.html")).toBe("latest UI");
   expect(
     await readdir(resolve(project, "dist/.bunaway-locks/windows-x64")),
   ).toEqual([]);

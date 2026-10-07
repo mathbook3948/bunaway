@@ -15,12 +15,12 @@
 확인한다. 자산 경로는 상대 경로여야 하며, 입력의 실제 경로가 빌드/패키지 루트 밖으로
 벗어나는 symlink/junction도 어댑터 실행 전에 거부한다. Windows 어댑터는 내부 링크도
 복사 단계에서 거부하여 서명과 manifest 쓰기가 원본 빌드를 변경하지 않게 한다.
-Bun의 최종 해시는 `packagedSha256`이며, 없으면 `executableSha256`을 사용한다.
-Windows Bun FFI 패키지는 `runtime/bun.exe`, `launch.ps1`과 manifest에 등재된
-부트, 앱, UI 자산을 사용한다. 기존 C++ 호스트 빌드는 현재 CLI로 다시 빌드해야 한다.
-서명 단계는 원본 `executableSha256`을 출처 기록으로 유지하고, 서명 후 파일의
-`packagedSha256`에 맞춰 배포본 실행기를 갱신한다. 실행기는 Bun을 시작하기 전에
-파일 해시를 확인하고 실행 환경을 정리한다.
+Windows는 `host.kind=bun-compiled`와 `host.executable`에 지정한 앱 EXE,
+WebView2Loader.dll 및 라이선스를 요구한다. 웹 자산과 설정은 EXE에 내장된다.
+서명 단계는 앱 EXE를 서명한 뒤 `host.packagedSha256`을 기록하며 서명한 EXE를 다시 수정하지 않는다.
+`host.sha256`과 `bun.executableSha256`은 빌드 및 런타임 출처 기록이다.
+이 검사는 빌드에서 패키징으로 전달한 파일을 확인하며, 앱 시작 시 전체 파일 검사는 하지 않는다.
+macOS 번들 Bun은 `bun.packagedSha256`이 있으면 사용하고 없으면 `bun.executableSha256`을 사용한다.
 
 `ctx.addArtifact(path, kind, { signed, signingRequired })`의 `signingRequired`는 기본 true다.
 서명이 필요한 배포물이 모두 서명되어야 `submittable:true`이며, `required-to-run`은
@@ -35,8 +35,8 @@ Inno Setup을 사용하는 `win-direct`와 `win-store-unpackaged`는 6.3 이상�
 
 ### `win-direct`: 직접 배포 인스톨러
 
-Inno Setup 스크립트를 생성, 컴파일한다. 앱 바로가기와 설치 후 실행은 시스템
-Windows PowerShell로 설치된 `launch.ps1`을 호출한다. 채널 설정:
+Inno Setup 스크립트를 생성, 컴파일한다. 앱 바로가기와 설치 후 실행은
+설치된 앱의 GUI 실행 파일을 호출한다. 시작 메뉴, 바탕화면과 제거 화면은 앱 실행 파일의 아이콘을 사용한다. 채널 설정:
 
 - `scope`: `perUser`(기본, `%LOCALAPPDATA%\Programs\<identifier>`, 관리자 불필요)
   또는 `perMachine`(`{autopf}`, 관리자 필요).
@@ -44,6 +44,13 @@ Windows PowerShell로 설치된 `launch.ps1`을 호출한다. 채널 설정:
   이전에 선택한 폴더를 유지한다. 바탕화면 바로가기에도 identifier를 붙인다.
   업데이트는 이름 변경, 설정 변경, 작업 선택 해제로 더 이상 사용하지 않는 앱
   바로가기를 정리하며, 다른 설치를 가리키는 링크와 읽을 수 없는 링크는 유지한다.
+  사용자 인자가 있는 링크는 인자를 보존하고, 이전 앱을 가리키면 새 실행 파일로 연결한다.
+  `win-direct`와 `win-store-unpackaged`는 각 설치에서 실행 파일명을 Inno 이전 설치 데이터에 기록한다.
+  같은 설치 폴더에서 실행 파일명이 바뀌면 이전 EXE와 이를 가리키는 바로가기를 정리한다.
+  실행 중인 이전 앱도 설치 프로그램의 종료 확인 대상에 포함한다.
+  설치 폴더가 바뀌면 이전 EXE를 정리 대상으로 보지 않는다. 실행 파일명이 변경되어도
+  실행 파일명이나 설치 경로 기록이 없는 기존 compiled 설치의 이전 EXE는 안전하게 확인할 수 없어
+  자동 정리하지 않는다.
 - `webView2`: `bootstrap`(기본: 설치 시 런타임이 없으면 Microsoft 공식
   Evergreen 부트스트랩을 무인 실행) 또는 `check`(감지만).
 - `desktopShortcut`(기본 false), `startMenuShortcut`(기본 true).
@@ -65,9 +72,7 @@ WebView2는 레지스트리 `Clients\{F3017226-...}\pv`의 버전이 `0.0.0.0`�
 
 ### `win-store-msix`: 현재 차단
 
-Windows Bun FFI 패키지는 MSIX로 생성할 수 없다. 기존 C++ 실행 파일을 대상으로 한
-MSIX 실행 설정은 새 구조에 맞지 않으며, Bun 직접 실행은 실행 전 환경 정리와
-파일 검증을 우회한다. 안전한 MSIX 실행 경로를 검증하는 후속 작업 전까지
+컴파일된 Windows 앱의 MSIX 활성화와 앱 데이터 경로는 아직 검증하지 않았다. 검증 전까지
 패키징 단계에서 명확한 오류로 거부한다. 일반 설치 파일은 `win-direct` 또는
 `win-store-unpackaged`를 사용한다.
 

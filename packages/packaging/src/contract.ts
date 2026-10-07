@@ -178,6 +178,7 @@ export interface PackageManifest {
   host?: {
     target: string;
     kind?: string;
+    executable?: string;
     sha256?: string;
     sourceSha256?: string;
     packagedSha256?: string;
