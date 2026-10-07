@@ -112,7 +112,7 @@ macOS는 Apple Silicon, Xcode Command Line Tools와 GUI 세션이 필요하다.
 `probe:macos` 다음 `host:macos`를 **직렬 실행**한다. 두 빌드가 공유 Bun 캐시를
 처음 다운로드하고 추출하므로 캐시가 없는 상태에서 두 작업을 동시에 실행하면 충돌할 수 있다.
 `native/macos/host/run.sh --app`은 회귀 앱의 `.app` 생성과 ad-hoc 서명을 추가한다.
-[메모 예제](examples/memo/README.md)는 CLI 생성 앱과 같은 구조이며 예제 폴더에서 `bun run bunaway dev`로 실행한다.
+[메모 예제](examples/memo/README.md)는 CLI 생성 앱과 같은 구조이며 예제 폴더에서 `bun run dev`로 실행한다. `bun run build`는 웹 UI와 앱을 함께 빌드한다.
 
 ## CI
 

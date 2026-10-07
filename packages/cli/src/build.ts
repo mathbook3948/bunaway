@@ -2,7 +2,8 @@ import { chmod, cp, lstat, mkdir, readdir, rename, rm, stat, writeFile } from "n
 import { basename, dirname, relative, resolve } from "node:path";
 import { acquireBuildOutputLock, ownedDirectory, PACKAGING_CHANNELS } from "@bunaway/packaging";
 import { developmentPolicy } from "../../runtime-bun/src/development.ts";
-import { type Project, validateProject } from "./config.ts";
+import { type Project, readProjectMetadata, validateProject } from "./config.ts";
+import { assertNotFrontendBuild, buildFrontend } from "./frontend-build.ts";
 import {
   files,
   frameworkRoot,
@@ -125,7 +126,29 @@ export async function buildProject(
   directory: string,
   options: { development?: boolean; native?: NativeInputs } = {},
 ): Promise<BuiltPackage> {
-  const project = await validateProject(directory, { development: options.development ?? false });
+  if (options.development) {
+    const project = await validateProject(directory, { development: true });
+    return assembleProject(project, options);
+  }
+  const settings = await readProjectMetadata(directory);
+  assertNotFrontendBuild(settings.root);
+  const target = options.native?.target ?? currentTarget();
+  await assertBuildBun(target, settings.frameworkRoot);
+  // The lock covers frontend generation, asset validation and publication so
+  // another build cannot change the web output while this build consumes it.
+  const release = await acquireBuildOutputLock(settings.root, target);
+  try {
+    await buildFrontend(settings);
+    return await assembleProject(await validateProject(settings.root), options);
+  } finally {
+    await release();
+  }
+}
+
+async function assembleProject(
+  project: Project,
+  options: { development?: boolean; native?: NativeInputs },
+): Promise<BuiltPackage> {
   const root = project.frameworkRoot;
   const server = options.development ? project.dev : undefined;
   const target = options.native?.target ?? currentTarget();
@@ -156,7 +179,6 @@ export async function buildProject(
   const executable = windows
     ? resolve(staging, "runtime/bun.exe")
     : resolve(staging, "Contents/MacOS/bunaway-host");
-  let releaseTarget: (() => Promise<void>) | undefined;
   const preserved: { source: string; destination: string }[] = [];
   let published = false;
   try {
@@ -246,9 +268,6 @@ ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking<
       await run(["/usr/bin/codesign", "--force", "--sign", "-", staging], project.root);
       await verifyHash(resolve(packageRoot, "runtime/bun"), pin.bun.executableSha256);
     }
-    if (!options.development) {
-      releaseTarget = await acquireBuildOutputLock(project.root, target);
-    }
     await ownedDirectory(project.root, output);
     if (windows && !options.development) {
       // Channel packages live inside the Windows build output, but survive rebuilds.
@@ -333,7 +352,5 @@ ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking<
     await ownedDirectory(project.root, dirname(staging));
     await rm(staging, { recursive: true, force: true });
     throw error;
-  } finally {
-    await releaseTarget?.();
   }
 }

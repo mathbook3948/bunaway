@@ -44,8 +44,8 @@ Windows 런타임은 여러 창을 처리하지만 현재 CLI 설정은 단일 �
 ## Vite 페이지는 열리는데 네이티브 호출이 안 됨
 
 일반 브라우저에는 `window.chrome.webview` 브리지가 없습니다.
-Vite 템플릿에서 `bun run dev`만 실행하면 웹 서버만 뜹니다.
-`bun run bunaway dev`로 네이티브 창과 서버를 함께 실행하세요.
+Vite 템플릿에서 `bun run dev:web`을 실행하면 웹 서버만 뜹니다.
+`bun run dev`로 네이티브 창과 서버를 함께 실행하세요.
 기본 Vite 화면에는 SDK 호출이 없습니다. [명령과 이벤트](/guides/commands-and-events/)의 예제를 참고해 `invoke`와 `listen`을 사용하는 UI를 작성합니다.
 
 CLI가 개발 서버를 실행하므로 포트 5173에 별도 서버가 실행 중이면 먼저 종료하세요.
@@ -54,7 +54,8 @@ CLI가 개발 서버를 실행하므로 포트 5173에 별도 서버가 실행 �
 ## Vite에서 validate가 frontend 경로 오류로 실패함
 
 프로덕션 검증은 `build.frontend`의 웹 자산을 확인합니다.
-`bun run build`로 `web-dist/`를 만든 뒤 `bun run bunaway validate`를 실행하세요.
+`bun run build:web`으로 `web-dist/`를 만든 뒤 `bun run validate`를 실행하세요.
+`bun run build`는 웹 빌드와 자산 검증을 포함해 앱까지 만듭니다.
 `doctor`와 개발 실행은 외부 서버 모드에서 아직 없는 출력 디렉터리를 허용합니다.
 
 ## INTERNAL: Command failed.

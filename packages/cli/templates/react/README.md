@@ -8,8 +8,8 @@ Requires [Bun 1.4.2](https://bun.sh).
 
 ```sh
 bun install
-bun run bunaway doctor
-bun run bunaway dev
+bun run doctor
+bun run dev
 ```
 
 Edit `src/` for the UI and `src-bunaway/` for the backend.
@@ -53,10 +53,18 @@ logging requires enabling `host.log` for the calling view in `policy.json`.
 
 ```sh
 bun run build
-bun run bunaway build
+# Build and package for Windows:
+bun run package win-direct --build
 ```
 
-The first command builds the frontend; the second creates the desktop app in `dist/`.
+`bun run build` runs the web build configured in `build.command`, validates its output,
+and creates the desktop app in `dist/`. It runs the web build every time, including
+when `web-dist/` already exists. A web build failure stops the app build.
+`package --build` uses the same full build before packaging.
+
+Use `bun run dev:web` for the web server alone and `bun run build:web` for web assets alone.
+`bun run validate` checks existing assets without running the web build.
+`bun run package win-direct` packages an existing app artifact without rebuilding.
 
 [Vite](https://vite.dev)
 

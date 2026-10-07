@@ -14,7 +14,7 @@ const help = `bunaway (vanilla / Vite / React / Vue / Svelte)
                           [--template ${templateNames.join("|")}] [--package-dir <tarball-directory>]
   validate [directory]    Validate configuration and deny-by-default policy
   dev [directory]         Watch sources; rebuild and restart the native host
-  build [directory]       Build a native package with pinned bundled Bun
+  build [directory]       Build frontend and app with pinned bundled Bun
   package <channel> [dir] Package a build artifact for a channel [--build]
   doctor [directory]      Check project, runtime version and native tools
 Builds are native only: Windows x64 / macOS arm64.`;
@@ -45,9 +45,8 @@ export async function main(args: string[]): Promise<number> {
       template,
       ...(packageDirectory ? { packageDirectory } : {}),
     });
-    const nativeScript = template === "vanilla" ? "bun run" : "bun run bunaway";
     console.log(
-      `Created ${path}\nNext: enter the directory, run bun install, then ${nativeScript} doctor and ${nativeScript} dev.`,
+      `Created ${path}\nNext: enter the directory, run bun install, then bun run doctor and bun run dev.`,
     );
     return 0;
   }

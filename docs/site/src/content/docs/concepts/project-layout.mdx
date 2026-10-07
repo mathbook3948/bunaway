@@ -52,6 +52,8 @@ SDK 호출은 직접 연결합니다. 웹 프로덕션 빌드 출력은 `web-dis
 ```
 
 `build.app`은 앱 정의를, `build.frontend`는 UI 자산 디렉터리를 가리킵니다.
+Vite 기반 템플릿은 `build.command: ["bun", "run", "build:web"]`로 웹 빌드를 연결합니다.
+`bun run build`는 웹 빌드 후 자산을 검증하고 앱을 만듭니다. vanilla는 별도 웹 빌드 명령 없이 정적 UI를 번들합니다.
 **파일 경로는 프로젝트 루트 기준**으로 적습니다. 예를 들어 앱 정의 경로는 `src-bunaway/app.ts`입니다.
 
 `app.view: "main"`은 아래 정책에서 `id: "main"`인 뷰를 선택합니다.

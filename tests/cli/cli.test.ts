@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { runInNewContext } from "node:vm";
 import { buildProject, bundleAssets } from "../../packages/cli/src/build.ts";
-import { validateProject } from "../../packages/cli/src/config.ts";
+import { readProjectMetadata, validateProject } from "../../packages/cli/src/config.ts";
 import { RestartController, shouldRestartHost } from "../../packages/cli/src/dev.ts";
 import { writeJson } from "../../packages/cli/src/files.ts";
 import { createProject } from "./project.ts";
@@ -247,6 +247,37 @@ test("bundle is optional until packaging and generated settings stay beside app 
     expect((await validateProject(project)).bundle).toBeUndefined();
     const { packageProject } = await import("../../packages/cli/src/package.ts");
     await expect(packageProject(project, "win-direct")).rejects.toThrow("bunaway.json.bundle");
+  } finally {
+    await Bun.write(path, originals["src-bunaway/bunaway.json"] ?? "");
+  }
+});
+
+test("build commands are explicit argv arrays and metadata does not require generated assets", async () => {
+  const path = resolve(project, "src-bunaway/bunaway.json");
+  const valid = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
+  try {
+    for (const command of [null, "vite build", [], [""], ["bun", 1], ["bun", "bad\0arg"]]) {
+      await writeJson(path, { ...valid, build: { ...valid.build, command } });
+      await expect(readProjectMetadata(project)).rejects.toThrow("build.command");
+    }
+    const args = [process.execPath, "run", "build:web", "argument with spaces"];
+    await writeJson(path, {
+      ...valid,
+      build: { ...valid.build, frontend: "not-built", command: args },
+    });
+    expect((await readProjectMetadata(project)).buildCommand).toEqual(args);
+    await expect(validateProject(project)).rejects.toThrow();
+    expect(await Bun.file(resolve(project, "not-built/index.html")).exists()).toBe(false);
+    const marker = resolve(project, "unexpected-web-build.txt");
+    await writeJson(path, {
+      ...valid,
+      build: {
+        ...valid.build,
+        command: [process.execPath, "-e", `await Bun.write(${JSON.stringify(marker)}, "built")`],
+      },
+    });
+    await validateProject(project);
+    expect(await Bun.file(marker).exists()).toBe(false);
   } finally {
     await Bun.write(path, originals["src-bunaway/bunaway.json"] ?? "");
   }

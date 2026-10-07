@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+2026-10-07: 프로덕션 웹 빌드 자동 실행은 후속 [ADR 0012](./0012-integrated-app-build.md)에서 구현한다.
+
 # UI 개발 서버는 외부 도구가 소유하고 CLI가 실행 수명주기를 관리한다
 
 Vite, Next.js/Turbopack 등의 개발 서버를 네이티브 창과 연결한다. bunaway가 UI

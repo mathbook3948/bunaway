@@ -26,11 +26,11 @@ directory를 생략하면 현재 폴더를 검사합니다. 성공하면 `Config
 
 ## Vite 앱
 
-validate는 프로덕션 `build.frontend`의 실제 자산을 요구합니다.
+validate는 웹 빌드를 실행하지 않고 프로덕션 `build.frontend`의 실제 자산을 요구합니다. 앱까지 만들려면 `bun run build`를 실행하세요.
 
 ```sh
-bun run build
-bun run bunaway validate
+bun run build:web
+bun run validate
 ```
 
 doctor와 dev의 개발 검증은 외부 서버가 있을 때 아직 없는 웹 출력 디렉터리를 허용합니다.

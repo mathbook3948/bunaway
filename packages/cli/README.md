@@ -52,7 +52,7 @@ vanilla TypeScript 앱은 다음과 같이 생성한다.
 bun packages/cli/src/main.ts create ../my-vite-app --template vite --package-dir build/framework
 cd ../my-vite-app
 bun install
-bun run bunaway dev
+bun run dev
 ```
 
 React, Vue, Svelte도 TypeScript + Vite 템플릿으로 제공한다.
@@ -63,8 +63,8 @@ bun packages/cli/src/main.ts create ../my-vue-app --template vue --package-dir b
 bun packages/cli/src/main.ts create ../my-svelte-app --template svelte --package-dir build/framework
 ```
 
-생성한 앱에서 `bun install` → `bun run bunaway dev`로 개발하고,
-`bun run build` → `bun run bunaway build`로 네이티브 앱을 만든다.
+생성한 앱에서 `bun install` → `bun run dev`로 개발하고,
+`bun run build` 한 번으로 웹 UI를 포함한 앱을 만든다.
 `bun run typecheck`는 UI 컴포넌트, 백엔드, Vite 설정을 검사한다.
 React는 `src/App.tsx`, Vue는 `src/App.vue`와 `src/components/HelloWorld.vue`,
 Svelte는 `src/App.svelte`와 `src/lib/Counter.svelte`에서 시작한다.
@@ -82,10 +82,15 @@ React Fast Refresh의 인라인 preamble은 개발 CSP에서만 허용한다.
 `vite` 템플릿은 공식 [create-vite@9.2.1의 vanilla-ts](https://github.com/vitejs/vite/tree/fea5b21dd9524ed7308632407b996f1fe5942c9c/packages/create-vite/template-vanilla-ts)
 기본 화면(로고, 카운터)을 사용한다.
 루트 `index.html`, `src/` UI 코드, 스타일, 이미지, `public/` 정적 자산은 upstream 원본이다.
-`dev`, `build`, `preview`는 Vite 프런트엔드 명령이며 `bunaway` script로 네이티브 CLI를 호출한다.
+모든 템플릿의 `dev`, `build`, `package`, `validate`, `doctor`는 앱 CLI를 호출한다.
+Vite 웹 전용 명령은 `dev:web`, `build:web`, `preview`다.
 UI 변경은 Vite가 처리하고 백엔드 변경은 CLI가 호스트를 재시작한다.
-네이티브 검증, 빌드, 패키징 전에는 `bun run build`로 `web-dist/`를 생성한다.
-CLI 자체는 외부 프런트엔드 프로덕션 빌드를 자동 실행하지 않는다.
+`build.command`는 `["bun", "run", "build:web"]`로 웹 빌드를 연결한다.
+`bunaway build`와 `package --build`는 기존 출력이 있어도 웹 빌드를 매번 실행하고,
+성공한 출력을 검증한 뒤 앱을 빌드한다. 웹 빌드가 실패하면 기존 앱 산출물을 유지하며 중단한다.
+`validate`는 빌드 명령을 실행하지 않으므로 웹 자산만 검사할 때는 `bun run build:web` 다음 실행한다.
+`package` 단독 실행은 앱 소스나 웹 출력 없이도 기존 앱 산출물을 검증해 패키징한다.
+기존 앱은 웹 build/dev 스크립트를 build:web/dev:web으로 옮기고 build.command/dev.command를 연결한다.
 생성 템플릿은 [templates/](./templates/)에서 관리한다. 구조와 script 역할은
 [Tauri vanilla-ts 템플릿](https://github.com/tauri-apps/create-tauri-app/tree/12db955f20162e7422cbeed76c2aa630760ccca3/templates/template-vanilla-ts)을 참조한다.
 각 템플릿은 UI, 백엔드, 정책, 설정을 모두 포함하며, `create`는 선택한 폴더 하나만 복사한다.

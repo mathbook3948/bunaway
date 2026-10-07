@@ -26,7 +26,9 @@ bunaway create <new-directory> [--template vanilla|vite|react|vue|svelte] [--pac
 `bunaway.json`, `policy.json`, 공통 `app.ts`와 UI가 생성됩니다.
 
 vanilla 템플릿에는 정적 UI와 네이티브 dev/build 스크립트가 있습니다.
-vite, react, vue, svelte 템플릿에는 웹 dev/build/preview 스크립트와 `bunaway` CLI 스크립트가 있습니다.
+모든 템플릿은 dev/build/package/validate/doctor 스크립트로 앱 CLI를 실행합니다.
+vite, react, vue, svelte 템플릿에는 웹 전용 dev:web/build:web/preview 스크립트와 `bunaway` CLI 스크립트도 있습니다.
+`build.command`가 build:web을 연결하므로 별도 웹 빌드 없이 build와 package --build를 실행할 수 있습니다.
 Vite 기반 템플릿은 공식 create-vite@9.2.1의 vanilla-ts, react-ts, vue-ts, svelte-ts 화면을 사용합니다.
 화면과 UI 소스, 자산은 원본 그대로이며 네이티브 SDK 호출은 앱에서 추가합니다.
 `bun run typecheck`로 UI 컴포넌트, 백엔드와 Vite 설정을 검사합니다.

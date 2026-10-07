@@ -12,17 +12,22 @@ export interface DevServerConfig {
   timeoutMs: number;
 }
 
+function command(value: unknown, field: string): string[] {
+  if (
+    !Array.isArray(value) ||
+    !value.length ||
+    value.some((arg) => typeof arg !== "string" || !arg || arg.includes("\0"))
+  ) {
+    throw new Error(`${field} must be a nonempty array of executable and arguments.`);
+  }
+  return value as string[];
+}
+
 export function readDevSettings(value: unknown): DevServerConfig | undefined {
   if (value === undefined) return undefined;
   const dev = record(value);
   keys(dev, ["command", "url", "timeoutMs"]);
-  if (
-    !Array.isArray(dev.command) ||
-    !dev.command.length ||
-    dev.command.some((arg) => typeof arg !== "string" || !arg || arg.includes("\0"))
-  ) {
-    throw new Error("dev.command must be a nonempty array of executable and arguments.");
-  }
+  const args = command(dev.command, "dev.command");
   const timeoutMs = dev.timeoutMs ?? 30000;
   if (
     typeof timeoutMs !== "number" ||
@@ -32,7 +37,7 @@ export function readDevSettings(value: unknown): DevServerConfig | undefined {
   ) {
     throw new Error("dev.timeoutMs must be an integer between 100 and 300000.");
   }
-  return { command: dev.command as string[], url: developmentUrl(dev.url).href, timeoutMs };
+  return { command: args, url: developmentUrl(dev.url).href, timeoutMs };
 }
 
 export interface Project {
@@ -40,6 +45,7 @@ export interface Project {
   frameworkRoot: string;
   appEntry: string;
   frontend: string;
+  buildCommand?: string[];
   backendDependencies?: string[];
   bundle?: PackagingConfig;
   dev?: DevServerConfig;
@@ -78,6 +84,7 @@ export async function readProjectSettings(root: string): Promise<{
   app: Record<string, unknown>;
   bundle?: PackagingConfig;
   dev?: DevServerConfig;
+  buildCommand?: string[];
 }> {
   const directory = await projectPath(root, "src-bunaway");
   const config = record(await json(resolve(directory, "bunaway.json")));
@@ -89,7 +96,9 @@ export async function readProjectSettings(root: string): Promise<{
       "Use build.app with a default-exported AppDefinition; remove build.backend and build.windowsApp.",
     );
   }
-  keys(build, ["app", "frontend"]);
+  keys(build, ["app", "frontend", "command"]);
+  const buildCommand =
+    build.command === undefined ? undefined : command(build.command, "build.command");
   const bundle =
     config.bundle === undefined ? undefined : parsePackaging(JSON.stringify(config.bundle));
   const dev = readDevSettings(config.dev);
@@ -99,26 +108,36 @@ export async function readProjectSettings(root: string): Promise<{
     app: record(config.app),
     ...(bundle ? { bundle } : {}),
     ...(dev ? { dev } : {}),
+    ...(buildCommand ? { buildCommand } : {}),
   };
 }
 
 async function loadProject(
   directory: string,
-  options: { development?: boolean; validateSources?: boolean } = {},
+  options: { development?: boolean; validateSources?: boolean; validateFiles?: boolean } = {},
 ): Promise<Project> {
   const root = await realpath(resolve(directory));
   const settings = await readProjectSettings(root);
   const configDirectory = settings.directory;
   const config = settings.build;
   const server = options.development && settings.dev;
-  const appEntry = await projectPath(root, string(config.app));
+  const validateFiles = options.validateFiles !== false;
+  const appName = string(config.app);
+  if (isAbsolute(appName) || appName.split(/[\\/]/).includes("..")) {
+    throw new Error("build.app must be a project-relative file without '..'.");
+  }
+  const appEntry = validateFiles ? await projectPath(root, appName) : resolve(root, appName);
   const frontendName = string(config.frontend);
   if (isAbsolute(frontendName) || frontendName.split(/[\\/]/).includes("..")) {
     throw new Error("build.frontend must be a project-relative directory without '..'.");
   }
-  const frontend = server ? resolve(root, frontendName) : await projectPath(root, frontendName);
-  if (server) await ownedDirectory(root, frontend);
-  if (!(await lstat(appEntry)).isFile() || (!server && !(await lstat(frontend)).isDirectory())) {
+  const frontend =
+    server || !validateFiles ? resolve(root, frontendName) : await projectPath(root, frontendName);
+  if (server && validateFiles) await ownedDirectory(root, frontend);
+  if (
+    validateFiles &&
+    (!(await lstat(appEntry)).isFile() || (!server && !(await lstat(frontend)).isDirectory()))
+  ) {
     throw new Error("app must be a file; frontend must be a directory.");
   }
   const { root: frameworkRoot, backendDependencies } = await validateFramework(
@@ -143,7 +162,7 @@ async function loadProject(
   if (url.origin !== "https://app.bunaway.local" || url.username || url.password || url.hash) {
     throw new Error("The MVP home must use the host-owned https://app.bunaway.local origin.");
   }
-  if (!server) {
+  if (!server && validateFiles) {
     const homePath = await projectPath(frontend, decodeURIComponent(url.pathname).slice(1));
     if (!(await lstat(homePath)).isFile()) throw new Error("Home document is not a file.");
   }
@@ -167,6 +186,7 @@ async function loadProject(
     backendDependencies,
     ...(settings.bundle ? { bundle: settings.bundle } : {}),
     ...(settings.dev ? { dev: settings.dev } : {}),
+    ...(settings.buildCommand ? { buildCommand: settings.buildCommand } : {}),
     policy,
     app: {
       appId,
@@ -176,6 +196,12 @@ async function loadProject(
       window: { width: window.width as number, height: window.height as number },
     },
   };
+}
+
+// Build preflight and packaging need settings, policy and installed dependencies,
+// independently of the app sources and generated frontend output.
+export function readProjectMetadata(directory: string): Promise<Project> {
+  return loadProject(directory, { validateFiles: false, validateSources: false });
 }
 
 // Development must install its watcher before attempting source compilation.
