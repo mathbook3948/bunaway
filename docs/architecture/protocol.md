@@ -1,14 +1,14 @@
 # IPC와 정책 계약 v1 초안
 
-메시지·정책의 직렬화·런타임 검증·버전 협상에 더해 SDK·코어의 세션·명령·취소·
+메시지, 정책의 직렬화, 런타임 검증, 버전 협상에 더해 SDK, 코어의 세션, 명령, 취소,
 이벤트 큐와 Windows 네이티브 경계의 권한 집행을 구현했다.
 [공통 API](./common-api.md)와 [진행 상태](./progress.md)에 구현 범위를 정리했다.
 이 문서는 실행 계약이며, 모든 규칙의 전체 플랫폼 검증 완료를 뜻하지 않는다.
 [Windows 실행 결과](./windows-host-results.md)는 단일 창/뷰의 검증 기록이다.
 
 호스트↔Bun은 번들된 자식 프로세스와 IPC로 연결한다. 아래 Web 메시지는 별도 내부
-envelope의 payload로 운반하며 호스트 발급 컨텍스트·수명주기 제어는 Web JSON에
-추가하지 않는다. `processSchema`와 `parseProcessFrame`·`serializeProcessFrame`,
+envelope의 payload로 운반하며 호스트 발급 컨텍스트, 수명주기 제어는 Web JSON에
+추가하지 않는다. `processSchema`와 `parseProcessFrame`, `serializeProcessFrame`,
 `runtime-bun`의 `readJsonLines`를 구현하고 Windows B 단계에서 실제 파이프로 검증했다.
 [실행 결과](./windows-probe-results.md)를 참고한다.
 
@@ -18,61 +18,61 @@ envelope의 payload로 운반하며 호스트 발급 컨텍스트·수명주기 
 사용한다. `mise run protocol:generate`는 같은 정의를 JSON Schema 2020-12 형식으로
 `native/host-api/generated/`에 내보낸다. `mise run test`가 생성 파일의 일치를 검사한다.
 호스트 전용 bootstrap과 Host API 응답도 같은 소스에서 생성하며 WebView 메시지와 분리한다.
-현재 검증기는 실제 사용한 키워드만 지원한다. 새 키워드는 검증기·테스트와 함께 추가한다.
-`const`·`enum`·`anyOf`와 같은 객체에 선언한 조건은 모두 함께 적용한다.
+현재 검증기는 실제 사용한 키워드만 지원한다. 새 키워드는 검증기, 테스트와 함께 추가한다.
+`const`, `enum`, `anyOf`와 같은 객체에 선언한 조건은 모두 함께 적용한다.
 문자열 `maxLength`는 Unicode 코드 포인트 수이며 결합 문자는 각각 센다.
 `uniqueItems`는 중첩 JSON 값으로 비교한다. 객체의 속성 순서는 무시하고 배열 순서는 보존한다.
-객체 스키마에서 `required`를 생략하면 선언한 속성은 모두 선택 속성으로 추론·검증한다.
+객체 스키마에서 `required`를 생략하면 선언한 속성은 모두 선택 속성으로 추론, 검증한다.
 빈 객체 스키마도 객체 타입을 유지한다. `additionalProperties: false`이면 빈 객체만 허용하고,
 그 외에는 JSON 속성을 허용한다. `items`를 생략한 배열도 JSON 값의 배열로 추론한다.
 `anyOf` 타입은 분기들의 합집합과 바깥 스키마의 공통 타입을 교차해 필수 속성을 보존한다.
-바깥 `type`을 생략해도 `properties`·`required`·`additionalProperties`는 객체 분기에
-반영한다. 객체 키워드만으로 비객체 분기를 금지하지 않으므로 배열·null 등의 유효한 분기는 유지한다.
+바깥 `type`을 생략해도 `properties`, `required`, `additionalProperties`는 객체 분기에
+반영한다. 객체 키워드만으로 비객체 분기를 금지하지 않으므로 배열, null 등의 유효한 분기는 유지한다.
 Windows 실험 호스트는 생성된 process 스키마와 같은 키워드를 해석하고 런타임 세대,
-방향·컨텍스트·요청 ID·이벤트 구독과 sequence를 별도로 검사한다.
+방향, 컨텍스트, 요청 ID, 이벤트 구독과 sequence를 별도로 검사한다.
 제품용 권한 집행과 WebView 신뢰 경계는 C 단계에서 구현한다.
 
 Windows B 호스트의 `pattern`은 UTF-8 바이트 문자열의 `std::regex`다.
-지원 범위는 공통 입력으로 검증한 내장 IPC·정책·Host operation 패턴이다.
+지원 범위는 공통 입력으로 검증한 내장 IPC, 정책, Host operation 패턴이다.
 임의 앱 패턴의 JavaScript와 같은 문자 의미는 보장하지 않는다. 예를 들어 `^.$`와 `한`은
 JavaScript에서는 일치하지만 C++ 바이트 정규식에서는 일치하지 않는다.
-앱 명령·이벤트의 패턴 검증은 JavaScript 코어·backend-sdk가 담당한다. 네이티브가 임의 앱
-패턴을 실행하는 기능은 현재 지원하지 않으며, 추가하려면 정규식 문자·문법 범위를 먼저 맞춘다.
+앱 명령, 이벤트의 패턴 검증은 JavaScript 코어, backend-sdk가 담당한다. 네이티브가 임의 앱
+패턴을 실행하는 기능은 현재 지원하지 않으며, 추가하려면 정규식 문자, 문법 범위를 먼저 맞춘다.
 
 JSON 전송은 UTF-8 최대 1 MiB, 루트 깊이 0에서 최대 깊이 64다. 수신은 원문 바이트 수,
 송신은 실제 직렬화 결과의 바이트 수로 제한한다. 파싱한 숫자의 표기가 길어지더라도
 수신 크기를 다시 계산해 거부하지 않는다. 유한한 숫자, 문자열, boolean, null,
 밀집 배열과 일반 객체만 허용한다.
 문자열 값과 모든 깊이의 객체 키에는 단독 UTF-16 surrogate를 허용하지 않는다.
-정상 surrogate 쌍은 보존하고 단독 surrogate는 송신 전·JSON 파싱 후에 INVALID_ARGUMENT로
+정상 surrogate 쌍은 보존하고 단독 surrogate는 송신 전, JSON 파싱 후에 INVALID_ARGUMENT로
 거부한다. 네이티브 파서도 같은 값을 거부하므로 송신자가 먼저 검증해야 한다.
 함수, undefined, BigInt, 비유한 숫자, 순환 참조, 클래스, getter, symbol 속성과
 JSON으로 보존되지 않는 속성은 보내기 전에 거부한다. 수신측은 파싱 결과도 검증한다.
-송신은 속성 descriptor에서 복사한 JSON 데이터만 검증·직렬화한다. 검증 이후 원본의
+송신은 속성 descriptor에서 복사한 JSON 데이터만 검증, 직렬화한다. 검증 이후 원본의
 동적 속성을 다시 읽지 않으며 복사 중에도 직렬화 크기 예산을 적용한다.
 파싱 후 검증과 `validateValue`의 복사 작업도 제한한다. 숫자는 최소 토큰 길이인 1,
-나머지는 JSON 문자열·키·구조의 바이트 비용을 차감해 반복 참조의 복사량을 제한한다.
-이 작업 예산은 송신 크기 검사를 대신하지 않는다. 명령의 입력·출력 값 검증 후에도
+나머지는 JSON 문자열, 키, 구조의 바이트 비용을 차감해 반복 참조의 복사량을 제한한다.
+이 작업 예산은 송신 크기 검사를 대신하지 않는다. 명령의 입력, 출력 값 검증 후에도
 어댑터는 최종 envelope를 직렬화할 때 전송 크기를 검사해야 한다.
 파서가 반환하는 객체도 원형이 없는 JSON record이므로 자체 메서드 대신 `Object.hasOwn`
 같은 표준 함수를 사용한다. 배열은 일반 배열로 반환한다.
 형태가 잘못된 입력의 오류에는 원본 payload나 JSON 파서 진단을 포함하지 않는다.
-JSON Schema 외에도 바이트·깊이 제한과 정책 view ID 중복 금지를 네이티브에서 적용해야 한다.
+JSON Schema 외에도 바이트, 깊이 제한과 정책 view ID 중복 금지를 네이티브에서 적용해야 한다.
 TypeScript는 `parsePolicy`, `parseBootstrap`, `parseProcessFrame`의 boot 경로와
 `serializeProcessFrame`에서 같은 중복 검사를 적용한다. `validateValue`와 생성 JSON Schema의
 형태 검사만으로 view ID의 유일성을 확인한 것으로 취급하지 않는다.
 
 숫자는 JavaScript와 같은 유한한 IEEE-754 binary64다. 큰 정수의 정확한 보존은 보장하지
-않으므로 정밀한 ID·금액·64비트 값은 문자열이나 앱 스키마로 표현한다. 요청 deadline·버전·
+않으므로 정밀한 ID, 금액, 64비트 값은 문자열이나 앱 스키마로 표현한다. 요청 deadline, 버전,
 이벤트 sequence는 별도로 정수 범위를 제한한다. `-0`은 송신 시 `0`으로 정규화된다.
-Windows B 호스트는 수신 원문을 파싱해 크기·깊이·스키마와 상태를 검사한 뒤 양방향으로
+Windows B 호스트는 수신 원문을 파싱해 크기, 깊이, 스키마와 상태를 검사한 뒤 양방향으로
 원문을 중계한다. 중계 중 숫자를 다시 직렬화해 프레임 크기를 늘리지 않는다.
-호스트가 생성하는 boot·shutdown·오류·진단 프레임은 별도로 직렬화하고 같은 크기 제한을 검사한다.
+호스트가 생성하는 boot, shutdown, 오류, 진단 프레임은 별도로 직렬화하고 같은 크기 제한을 검사한다.
 Windows B 백엔드도 수신 원문과 송신 직렬화 크기를 구분한다. 결과 프레임이 한도를
 넘으면 같은 요청 ID의 작은 `INTERNAL` 오류를 보낸다. 직렬화 실패는 송신 큐를 소모하지
 않으며 오류 응답을 큐에 넣은 뒤 요청 완료를 기록한다. 오류 전송 자체가 실패하면 연결 장애로 처리한다.
 객체 안의 중복 키는 JSON.parse처럼 마지막 값을 사용한다. 네이티브 파서도 모든 깊이에서
-같은 숫자·중복 키 규칙을 적용한 뒤 정책·스키마를 검사해야 한다. 첫 값만 읽는 권한 검사나
+같은 숫자, 중복 키 규칙을 적용한 뒤 정책, 스키마를 검사해야 한다. 첫 값만 읽는 권한 검사나
 JSON 원문에서 필드를 부분 추출하는 구현을 허용하지 않는다. Windows 실험은 C++ 파서의
 숫자를 binary64로 정규화하고 중첩 객체의 중복 키, 큰 숫자와 음수 0을 실제 IPC로 검증한다.
 
@@ -81,21 +81,21 @@ JSON 원문에서 필드를 부분 추출하는 구현을 허용하지 않는다
 `process.schema.json`은 별도 `ipc: { major: 1, minor: 0 }` 버전과 문자열
 `runtime: { id, generation }`을 요구한다. `web`은 호스트 발급 `context`와 기존
 Web `payload`를 운반한다. `boot`, `hello`, `ready`, `revoke`, `shutdown`, `stopping`,
-`fatal`은 부트·협상·수명주기를 처리한다. `host-request`·`host-response`에는
+`fatal`은 부트, 협상, 수명주기를 처리한다. `host-request`, `host-response`에는
 `context`, 문자열 `requestId`와 요청 operation을 넣는다. Host API 호출 실행은 C 단계다.
 
-Windows 실험은 `ready` 전 요청, 중복 ID와 다른 runtime 세대·방향을 거부한다.
+Windows 실험은 `ready` 전 요청, 중복 ID와 다른 runtime 세대, 방향을 거부한다.
 stdout은 NDJSON 전용이며 stderr는 별도로 소비하고 실험 로그 전달량은 64 KiB로 제한한다.
 프레임 크기는 개행 제외 1 MiB, 깊이는 envelope 전체 루트 기준 64다.
 송신 큐와 미완료 요청은 각각 128개, 런타임당 요청 ID 기록은 1024개로 제한한다.
 종료 제어는 대기 송신 큐를 비우고 우선 전달하며 남은 요청은 실패 또는 취소로 끝낸다.
-`shutdown`은 boot·hello·ready 이전에도 허용한다. 버전·런타임 세대 검증 후 종료를
+`shutdown`은 boot, hello, ready 이전에도 허용한다. 버전, 런타임 세대 검증 후 종료를
 처리하며 준비 완료를 요구하지 않는다. 제어기의 정상 EOF도 같은 종료 경로를 사용한다.
 시작 중 취소는 `stopping`을 전송하고 정상 종료하며 `fatal`로 보고하지 않는다.
 예상하지 않은 백엔드 stdout EOF는 프로세스가 살아 있어도 연결 장애로 처리한다.
 Windows 실험은 Bun 종료에 2초, 종료 후 출력 정리에 별도로 2초 기한을 둔다.
-기한이 지나면 동기 읽기·쓰기를 취소하고 호스트를 실패 상태로 종료한다. 출력 소비가
-중단된 경우 오류·최종 진단 프레임 전달을 보장하지 않으며 프로세스 종료로 단절을 관찰한다.
+기한이 지나면 동기 읽기, 쓰기를 취소하고 호스트를 실패 상태로 종료한다. 출력 소비가
+중단된 경우 오류, 최종 진단 프레임 전달을 보장하지 않으며 프로세스 종료로 단절을 관찰한다.
 
 ## 메시지와 버전
 
@@ -115,7 +115,7 @@ envelope에는 origin, frame, 권한 토큰이나 호출 컨텍스트를 넣을 
 | `event` | `subscriptionId`, `source`, `target`, `event`, `sequence`, `payload` | 구독별 이벤트 |
 | `subscription-error` | `subscriptionId`, `error` | 구독의 최종 실패. 큐 초과에는 BUSY |
 
-요청·구독 ID와 이름은 ASCII 영숫자 및 `_.:-`로 1~128자다.
+요청, 구독 ID와 이름은 ASCII 영숫자 및 `_.:-`로 1~128자다.
 버전 major가 다르면 UNSUPPORTED로 연결을 종료한다. minor는 두 값 중 낮은 값,
 features는 교집합으로 협상한다. 알 수 없는 feature는 자동 활성화하지 않는다.
 기본 v1 메시지는 feature 없이 사용한다. 후속 기능은 이름과 최소 버전을 별도로 정의한다.
@@ -126,15 +126,15 @@ features는 교집합으로 협상한다. 알 수 없는 feature는 자동 활�
 이후에는 단조 시계로 만료를 관리한다. 만료된 요청은 실행하지 않는다. deadline 없는
 요청도 호스트의 최대 실행 시간과 진행 중 요청 수 제한을 받는다.
 
-ID는 세션 동안 재사용하지 않는다. 완료·취소·만료 뒤 늦게 온 결과는 폐기한다.
+ID는 세션 동안 재사용하지 않는다. 완료, 취소, 만료 뒤 늦게 온 결과는 폐기한다.
 한 요청은 result 또는 error 한 번으로 끝난다. cancel 수신 때 원 요청이 진행 중이면
 CANCELLED로 끝내고, 이미 끝났으면 무시한다. 외부 부작용의 롤백이나 자동 재시도는 없다.
-탐색·창 폐기·재연결은 새 세션이며 이전 요청과 구독을 모두 무효화한다.
+탐색, 창 폐기, 재연결은 새 세션이며 이전 요청과 구독을 모두 무효화한다.
 Windows B 호스트의 `revoke`는 해당 컨텍스트의 대기 요청을 CANCELLED로 완료하고
-구독을 비운다. 이후 요청은 CANCELLED로 거부하고 늦은 응답·이벤트는 폐기한다.
+구독을 비운다. 이후 요청은 CANCELLED로 거부하고 늦은 응답, 이벤트는 폐기한다.
 늦은 listen 성공 응답으로 폐기한 컨텍스트의 구독을 복원하지 않는다.
 호스트는 상태 잠금 안에서 출력 큐에 프레임을 추가해 순서를 확정한다. 전용 출력 스레드는
-잠금 밖에서 큐 순서대로 stdout에 쓴다. 큐 초과·출력 실패 시 프로세스를 정리하고,
+잠금 밖에서 큐 순서대로 stdout에 쓴다. 큐 초과, 출력 실패 시 프로세스를 정리하고,
 종료 후 출력 정리 기한이 지나면 출력 스레드의 동기 I/O도 취소한다.
 
 이벤트 sequence는 구독마다 1부터 증가한다. listen 성공 응답을 보낸 뒤 이벤트를 전송한다.
@@ -147,8 +147,8 @@ source와 target은 호스트가 붙인 공개 뷰 식별자이고, 백엔드 so
 
 정책은 `version: 1`, `views`, `backend`를 필수로 가진다. 선언이 없는 권한은 거부한다.
 view마다 고유 id, 정확히 일치시킬 origins, commands, events, host 권한을 선언한다.
-현재 origin 문법은 소문자 HTTP(S) hostname과 선택적 port만 지원한다. path·wildcard·
-불투명 `null` origin·IPv6·사용자 정보는 허용하지 않는다. 이는 첫 계약의 제한이며
+현재 origin 문법은 소문자 HTTP(S) hostname과 선택적 port만 지원한다. path, wildcard,
+불투명 `null` origin, IPv6, 사용자 정보는 허용하지 않는다. 이는 첫 계약의 제한이며
 플랫폼 자산 origin의 최종 선택을 뜻하지 않는다. 네이티브 어댑터는 실제 origin을
 정규화하고 유효한 port인지 확인한 뒤 정확히 비교해야 한다. HTTP 개발 origin은
 별도 개발 모드에서만 허용하고 프로덕션 정책 빌드에서는 거부해야 한다.
@@ -156,8 +156,8 @@ view마다 고유 id, 정확히 일치시킬 origins, commands, events, host 권
 실제 URL과 정책용 origin은 다를 수 있다. 플랫폼 자산이 커스텀 스킴(예: `bunaway://`)
 아래에 있을 때 정책 선언은 여전히 대응되는 `https://` origin을 쓰고, 네이티브
 어댑터가 둘을 연결한다. 정규화는 호스트가 소유한 로컬 자산 스킴에만 적용하고,
-실제 스킴·호스트·포트·최상위 frame 검사를 통과한 뒤에만 정책용 origin으로
-환산한다. 웹 payload가 제공한 origin을 정규화해 신뢰하지 않는다 — 신뢰의 근거는
+실제 스킴, 호스트, 포트, 최상위 frame 검사를 통과한 뒤에만 정책용 origin으로
+환산한다. 웹 payload가 제공한 origin을 정규화해 신뢰하지 않는다: 신뢰의 근거는
 항상 호스트가 관찰한 실제 URL이다. 정규화 결과가 선언된 origin과 정확히
 일치하지 않으면 거부한다.
 
@@ -167,7 +167,7 @@ payload에 같은 이름의 필드가 있더라도 권한에 사용하지 않는
 WebView 작업을 backend 작업으로 승격하지 않는다.
 
 host는 `log: boolean`, `storage: []`로 범위를 선언한다. 저장소 항목은 appData/temp,
-pathPrefix, read/write 목록이다. pathPrefix는 ASCII 영숫자·`_-` 디렉터리를 `/`로
+pathPrefix, read/write 목록이다. pathPrefix는 ASCII 영숫자, `_-` 디렉터리를 `/`로
 잇는 상대 경로이며 빈 문자열은 명명된 scope 전체다. 접두어 일치는 경로 세그먼트
 단위다. `notes`가 `notes-private`를 허용하지 않는다. 일반 파일명의 문법과는 별개다.
 파일을 여는 네이티브 경계에서 실제 상대 경로, 심볼릭 링크 탈출, 대상 교체 및

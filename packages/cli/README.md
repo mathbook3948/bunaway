@@ -203,7 +203,7 @@ Bun/자산 해시를 검사하고 내부 Bun **절대 경로**를 실행한다. 
 macOS 패키지에는 로컬 실행용 ad-hoc 서명만 적용하며 번들 Bun을 재서명하지 않는다.
 manifest의 macOS `host.sourceSha256`은 서명 전 원본 호스트 해시다(서명된 실행 파일을
 자신의 서명 대상 manifest에 해싱하는 순환을 피한다). Windows `host.kind=bun-ffi`와 `host.sha256`은 `boot.js` 해시다.
-Developer ID 서명, 공증, UI 프레임워크 템플릿의 실제 네이티브 검증, 공개 플러그인 API,
+Developer ID 서명, 실제 공증, UI 프레임워크 템플릿의 실제 네이티브 검증, 기본 로그와 저장 플러그인,
 공개 registry publish/라이선스 결정은 후속 범위다.
 Windows `native/windows/bun/prepare.ps1`은 고정 Bun/공식 Loader만 준비한다.
 macOS `--host-only`는 기존 네이티브 컴파일까지만 실행한다. CLI는 앱 자산을 직접 조립한다.

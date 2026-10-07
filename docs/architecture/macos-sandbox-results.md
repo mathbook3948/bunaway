@@ -4,7 +4,7 @@ Validation for shipping bunaway apps sandboxed (Mac App Store requires the App
 Sandbox; `mac-direct` stays unsandboxed + notarized). All measurements were
 made on a real Mac: **macOS 26.5.2 (25D2110c) arm64, Xcode CLT clang 21, GUI
 user session**, signing with ad-hoc (`codesign -s -`) and a local self-signed
-`bunaway-dev-codesign` certificate — no Apple-issued identity exists on this
+`bunaway-dev-codesign` certificate: no Apple-issued identity exists on this
 machine, so findings split into *observed locally* and *unverified for MAS*.
 
 Harness: `native/macos/sandbox/` (`run.sh` re-runs the automated assertions;
@@ -16,11 +16,11 @@ real `bunaway-host` + pinned Bun 1.4.2 bundle).
 | # | Question | Result |
 |---|----------|--------|
 | 1 | Does `app-sandbox` apply? | In the tested `.app` bundle, yes. A bare signed Mach-O exec'd directly gets SIGTRAP during secinitd container setup; the same binary inside `Contents/MacOS/` sandboxes fully. Ad-hoc and self-signed identities behave identically in these tests; other identities were not tested. |
-| 2 | Data paths | `HOME`, `NSHomeDirectory()`, `CS_DARWIN_USER_TEMP_DIR` (TMPDIR) all remap to `~/Library/Containers/<bundleId>/Data`. The host's `$HOME/Library/Application Support/bunaway/<appId>` data root lands inside the container unchanged — **no host code change needed** for scoped storage. Writes outside the container: `EPERM`. |
+| 2 | Data paths | `HOME`, `NSHomeDirectory()`, `CS_DARWIN_USER_TEMP_DIR` (TMPDIR) all remap to `~/Library/Containers/<bundleId>/Data`. The host's `$HOME/Library/Application Support/bunaway/<appId>` data root lands inside the container unchanged: **no host code change needed** for scoped storage. Writes outside the container: `EPERM`. |
 | 3 | Child spawn | The tested **linker ad-hoc signed custom helper without inheritance entitlements** outside the bundle → `EPERM`; `/usr/bin/true` and `/bin/echo` outside the bundle spawn and exit 0 in the ad-hoc control run. The bundled custom helper signed `app-sandbox`+`com.apple.security.inherit` runs and inherits the parent sandbox. The tested child signed `app-sandbox` **without** `inherit` → SIGTRAP, **even with `network.client` added**. Keep bunaway-owned helpers bundled with the inheritance pair; these observations do not establish a universal outside-bundle ban or exhaust all valid signatures. |
 | 4 | Re-exec self | Re-exec of the bundle's own main binary works under sandbox (exit 0) → the `--guard <pgid>` watchdog design is sandbox-compatible as-is. |
 | 5 | Bun as child | Real pinned Bun runs under the parent sandbox in every signing flavor tested: untouched Oven signature, or re-signed `app-sandbox`+`inherit`, `+cs.allow-jit`, `+allow-unsigned-executable-memory`. Backend `backend.js` comes up (`backend-ready`) and NDJSON IPC over stdin/stdout works. |
-| 6 | JIT | Bun **re-signed with hardened runtime (`-o runtime`) needs `com.apple.security.cs.allow-jit`** — without it JIT-compiled JS falls back to the interpreter: correct output but ~22× slower (2.42s vs 0.11s measured). Without hardened runtime the key is a no-op. MAS entitlements for the bun child therefore: `app-sandbox` + `inherit` + `cs.allow-jit` (+ harden the signature). The stock Oven binary already carries `allow-jit`+`allow-unsigned-executable-memory`+`disable-executable-page-protection`. |
+| 6 | JIT | Bun **re-signed with hardened runtime (`-o runtime`) needs `com.apple.security.cs.allow-jit`**: without it JIT-compiled JS falls back to the interpreter: correct output but ~22× slower (2.42s vs 0.11s measured). Without hardened runtime the key is a no-op. MAS entitlements for the bun child therefore: `app-sandbox` + `inherit` + `cs.allow-jit` (+ harden the signature). The stock Oven binary already carries `allow-jit`+`allow-unsigned-executable-memory`+`disable-executable-page-protection`. |
 | 7 | Network gate | `com.apple.security.network.client` decides whether `connect()` returns `EPERM` or reaches the stack (`ECONNREFUSED` on a closed port). bunaway's bun child does no networking today → `network.client` goes on the **app** (WebKit needs it), not the child. |
 | 8 | Orphan cleanup | `SIGKILL` the host → the `--guard` child detects parent death, kills Bun's process group, exits. Verified under sandbox: no bun/guard remnants. |
 | 9 | Read-only exec | Host launched from a **read-only DMG mount** (`hdiutil attach -readonly`) starts normally; all writes land in the container. |
@@ -97,15 +97,15 @@ for the in-place workspace/native-binary/signing inputs.
 
 | File (in `native/macos/distribute/entitlements/`, PR B) | Contents |
 |---|---|
-| `mac-direct-app.plist` | none — not sandboxed; hardened runtime + notarization only |
+| `mac-direct-app.plist` | none: not sandboxed; hardened runtime + notarization only |
 | `mac-direct-child.plist` | none needed (bun keeps Oven signature, no re-sign required unless we strip it) |
-| `mac-store-app.plist` | `app-sandbox`, `network.client`, `application-groups` (group = `$(TeamID).<appId>` from config), `cs.allow-jit` if host is hardened (not needed — interpreter fallback works; include only if a native JIT consumer appears) |
-| `mac-store-child.plist` | `app-sandbox`, `inherit`, `cs.allow-jit` — sign bun with `-o runtime` |
+| `mac-store-app.plist` | `app-sandbox`, `network.client`, `application-groups` (group = `$(TeamID).<appId>` from config), `cs.allow-jit` if host is hardened (not needed: interpreter fallback works; include only if a native JIT consumer appears) |
+| `mac-store-child.plist` | `app-sandbox`, `inherit`, `cs.allow-jit`: sign bun with `-o runtime` |
 
 ## Deviations / notes
 
 - `posix_spawn_file_actions_addchdir_np` compiles fine but is deprecated on the
   macOS 26 SDK (warning only).
 - `codesign --entitlements` requires absolute paths (relative `../` paths fail).
-- Bare-executable sandbox tests are meaningless — secinitd needs the bundle.
+- Bare-executable sandbox tests are meaningless: secinitd needs the bundle.
 - `launchctl procinfo` needs root; `bootout`/`kickstart` need the gui domain.
