@@ -98,6 +98,8 @@ if (!process.argv.includes("--child")) {
     pending = "";
   const decoder = new TextDecoder();
   const timers = new Set<ReturnType<typeof setInterval>>();
+  let editorBrowser = 0;
+  const crashes: Promise<void>[] = [];
   const stdout = child.stdout.pipeTo(
     new WritableStream({
       write(chunk) {
@@ -108,6 +110,16 @@ if (!process.argv.includes("--child")) {
           pending = pending.slice(end + 1);
           if (!line) continue;
           const event = JSON.parse(line);
+          if (event.event === "webview-ready" && event.view === "editor")
+            editorBrowser = event.browserPid;
+          if (event.event === "window-api-browser-crash") {
+            assert(editorBrowser);
+            const killer = Bun.spawn(["taskkill", "/F", "/PID", String(editorBrowser)], {
+              stdout: "ignore",
+              stderr: "ignore",
+            });
+            crashes.push(killer.exited.then((code) => assert.equal(code, 0)));
+          }
           if (event.event === "window-created") {
             handles.set(event.view, BigInt(event.hwnd));
             if (event.view === "editor" && ++editorWindows > 4) {
@@ -153,16 +165,19 @@ if (!process.argv.includes("--child")) {
   try {
     const code = await child.exited;
     await stdout;
+    await Promise.all(crashes);
     assert.equal(code, 0, await errors);
     assert.equal(confirmations, 2);
+    assert.equal(crashes.length, 1);
     assert(geometry);
     const report = JSON.parse(await readFile(reportPath, "utf8"));
     assert.equal(report.pass, true);
     assert.equal(report.auxiliaryDocuments, 4);
     assert.equal(editorWindows, 4);
     assert.equal(report.cancelledCreation, true);
+    assert.equal(report.browserFailureClosed, true);
     console.log(
-      "PASS Windows public window API: fullscreen visibility, geometry, close refusal, dynamic creation, fresh sessions and revoked creation",
+      "PASS Windows public window API: fullscreen visibility, geometry, close refusal, browser failure, dynamic creation, fresh sessions and revoked creation",
     );
   } finally {
     clearTimeout(timeout);
@@ -176,9 +191,9 @@ if (!process.argv.includes("--child")) {
     auxiliaryDocuments = 0,
     holds = 0,
     cancellations = 0;
-  async function waitFor(check: () => boolean) {
+  async function waitFor(check: () => boolean | Promise<boolean>) {
     const deadline = Date.now() + 10000;
-    while (!check()) {
+    while (!(await check())) {
       assert(Date.now() < deadline, "Fresh document did not connect");
       await Bun.sleep(10);
     }
@@ -246,7 +261,11 @@ if (!process.argv.includes("--child")) {
             await windows.create({ view: "editor" });
             await waitFor(() => holds === 3 && cancellations === 2);
           } else if (runs === 3) {
-            assert.equal(await windows.close({ view: "editor" }), true);
+            await windows.setCloseConfirmation({ view: "editor", message: "Close editor?" });
+            console.log(JSON.stringify({ event: "window-api-browser-crash" }));
+            await waitFor(async () =>
+              (await windows.list()).some((spec) => spec.view === "editor" && !spec.open),
+            );
             await waitFor(() => cancellations === 3);
             await windows.recreate({ view: "main" }); // revokes this caller, but replacement must finish
           } else {
@@ -273,6 +292,7 @@ if (!process.argv.includes("--child")) {
                 auxiliaryDocuments,
                 cancellations,
                 cancelledCreation: true,
+                browserFailureClosed: true,
               }),
             );
           }

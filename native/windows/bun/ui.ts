@@ -276,9 +276,12 @@ function createWindow(spec: WindowSpec) {
     deliver: (text) => native.send(text),
     log: (event, data) => log(event, { view: spec.view, ...data }),
   });
-  const close = () => {
+  const close = (force = false) => {
     const view = views.get(spec.view);
-    if (view && !view.boundary.closed) view.pendingClose = true;
+    if (view && !view.boundary.closed) {
+      if (force) view.confirmation = null;
+      view.pendingClose = true;
+    }
   };
   const window = windows.create(spec.title, spec.window.width, spec.window.height, (message) => {
     if (message === 0x10) close();

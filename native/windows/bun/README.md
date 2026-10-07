@@ -59,8 +59,11 @@ Retired views release their COM handlers before a replacement is created.
 Show, hide, focus, client size, screen position and monitor fullscreen use Win32.
 Close confirmation uses a native Yes/No dialog with No selected by default.
 WM_CLOSE and WebView close requests defer confirmation outside native callbacks.
-Shutdown bypasses confirmation. `tests/lifecycle/windows-bun-window-api.ts` is
+Shutdown bypasses confirmation.
+Browser process failure also closes the affected window without confirmation.
+`tests/lifecycle/windows-bun-window-api.ts` is
 part of `run.ps1` and covers native geometry, close refusal and acceptance,
 dynamic creation, fresh sessions and self-recreation. It passed in PR #40's
 Windows CI run 37574470840. The full native job failed on the shared capability
 fixture's old four-operation expectation, which now checks the complete catalog.
+The browser-failure regression also passed locally on Windows on 2026-10-07.
