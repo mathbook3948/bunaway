@@ -41,7 +41,6 @@ export default defineConfig({
             { label: "취소와 오류 처리", slug: "guides/cancellation-and-errors" },
             { label: "세션과 앱 수명", slug: "guides/sessions-and-lifecycle" },
             { label: "플러그인", slug: "guides/plugins" },
-            { label: "여러 창과 뷰", slug: "guides/multiple-views" },
             { label: "Vite와 개발 흐름", slug: "guides/development" },
             { label: "빌드와 패키징", slug: "guides/build-and-package" },
           ],
@@ -95,6 +94,7 @@ export default defineConfig({
           items: [
             { label: "기여 자료", slug: "reference/design" },
             { label: "메시지와 프로세스 IPC", slug: "reference/protocol" },
+            { label: "Windows 창과 뷰 구현", slug: "guides/multiple-views" },
             { label: "사용자 정의 클라이언트와 Transport", slug: "reference/client/transport" },
             {
               label: "도구와 런타임 API",

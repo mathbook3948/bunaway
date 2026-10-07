@@ -36,8 +36,8 @@ await unlisten();
 | `signal` | 아니요 | 구독 시작 및 활성 구독의 취소 신호 |
 
 구독 시작 자체가 실패하면 `listen()` Promise가 reject합니다. 일반 브라우저에서는 `UNSUPPORTED`로 실패합니다.
-직접 함수의 타입 인자 `T`는 작성자가 지정하는 이벤트 payload 타입이며 실행 시 검증기를 추가하지 않습니다.
-앱 정의의 이벤트 타입을 추론하려면 [타입이 연결된 클라이언트](/guides/types-and-validation/)를 사용합니다.
+직접 import한 `listen<T>`의 `T`는 이벤트 payload 타입입니다. 이 타입 지정은 실행 시 검증기를 추가하지 않습니다.
+앱 정의의 이벤트 타입을 추론하려면 [앱 타입을 지정한 클라이언트](/guides/types-and-validation/)를 사용합니다.
 연결 종료나 이벤트 전달 오류로 활성 구독이 끝나면 `onError`를 호출합니다.
 listener에서 예외가 발생해도 다른 요청과 구독은 계속 처리합니다.
 
