@@ -66,6 +66,7 @@ const uiKinds = [
   "client",
   "closing",
   "authorized",
+  "prepare",
   "host-response",
   "cleaned",
   "fatal",
@@ -76,7 +77,9 @@ const mainKinds = [
   "start",
   "server",
   "authorize",
+  "grant",
   "cancel",
+  "cancel-context",
   "host-result",
   "shutdown",
 ];

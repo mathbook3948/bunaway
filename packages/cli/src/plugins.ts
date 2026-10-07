@@ -119,7 +119,7 @@ export async function installedPlugins(
       targets,
     });
   }
-  new NativeRegistry(result);
+  new NativeRegistry(result, { mode: "catalog" });
   return result;
 }
 

@@ -110,10 +110,13 @@ declare function capabilities(): Promise<Capabilities>;
 ```
 
 위 타입은 함수 계약을 설명하기 위한 표기다. 별도의 class나 factory를 요구하지 않는다.
-`Capabilities`는 `{ name, support, permission, reason? }[]`인 기존 결과 형식을 유지한다.
-지원 값은 `supported`, `experimental`, `unsupported`이고 OS 권한 값은
-`granted`, `denied`, `prompt`, `not-required`, `unknown`이다. feature 이름은 중복될 수
-없다. 저장의 상대 경로 검사와 1 MiB 메시지 상한, 로그 메시지 1,024자 제한 등
+`Capabilities`는 `{ name, support, permission, reason? }[]` 형식이다. 지원 값은
+`supported`, `experimental`, `unsupported`이고 permission 값은 `granted`, `denied`,
+`prompt`, `not-required`, `unknown`이다. 플러그인 선언의 `osPermission`은 현재
+`not-required`만 허용한다. 이 값은 OS 권한을 요청하거나 현재 동의 상태를 확인하지 않고,
+해당 작업에 OS 권한이 필요하지 않음을 정적으로 표시한다. 생략하면 기능 조회 결과의
+permission은 `unknown`이다. feature 이름은 중복될 수 없다. 저장의 상대 경로 검사와
+1 MiB 메시지 상한, 로그 메시지 1,024자 제한 등
 기존 입력과 결과 제약도 각 플러그인의 계약으로 옮겨 유지한다.
 
 ## 프레임워크와 기능의 소유
@@ -122,10 +125,11 @@ declare function capabilities(): Promise<Capabilities>;
 | --- | --- |
 | 공통 protocol | 메시지 형식, JSON 제한, schema 검증, 버전 협상 |
 | backend SDK와 core | 앱과 모듈 조립, 명령, 이벤트, 상태, 호출 컨텍스트, 플러그인 등록과 수명 |
-| plugin SDK | 기능 선언에서 공개 호출 함수 생성, 환경에 맞는 호출 선택 |
+| plugin SDK | 기능 계약 검증, 선언에서 공개 호출 함수 생성, 환경에 맞는 호출 선택 |
 | client SDK | WebView 연결, invoke/listen, 응답, 취소와 페이지 종료 |
 | native host | 실제 출처, 뷰와 세션, operation 전달, 실행 직전 권한 확인 |
 | 플러그인 패키지 | 공개 함수, operation 계약, 권한 정의, 플랫폼 어댑터, 기능 자원 정리 |
+| capabilities 플러그인 | 등록된 작업의 플랫폼 지원과 OS 권한 메타데이터 조회 API |
 | CLI | 설치 패키지 검증, 필요한 어댑터의 번들과 앱 패키지 검사 |
 
 ## 호출 계약
@@ -141,6 +145,7 @@ type HostOperationContract<I extends Schema, O extends Schema> = {
   readonly input: I;
   readonly output: O;
   readonly permission: string;
+  readonly osPermission?: "not-required";
 };
 
 interface HostAPI {
@@ -187,6 +192,8 @@ type NativePluginFields = {
 ```
 
 operation에는 이름, 입력과 출력 schema, 필요한 permission 식별자가 있다.
+선택 `osPermission: "not-required"`는 OS 권한을 요구하지 않는 작업을 표시한다.
+생략하면 기능 조회의 permission 메타데이터는 `unknown`이다.
 permission에는 식별자와 선택적 리소스 scope schema가 있다. 각 이름은 플러그인의
 이름 공간에 속하며 다른 플러그인이나 앱의 등록과 중복되면 시작을 실패시킨다.
 새 네이티브 기능의 선언은 플러그인의 `index.ts`에 작성하며 공통 protocol에
@@ -312,21 +319,24 @@ permission도 허용하지 않으며 설치와 등록으로 정책에 항목을 
 등록된 플러그인에서 작업 이름을 잘못 지정하면 `INVALID_ARGUMENT`다. 뷰의 명령
 허용 검사는 두 경우에도 적용한다.
 
-기능 지원 조회도 선택 기능이다. core의 자동 `bunaway.capabilities` 등록과 client
-SDK의 내장 `capabilities()`를 제거하고, capabilities plugin이
-`plugin.capabilities.get`을 등록한다. backend와 화면 함수는 같은 계약을 사용한다.
+기능 지원 조회도 선택 기능이다. capabilities plugin이 `plugin.capabilities.get`을
+등록하고 `capabilities()`를 공개한다. client SDK는 기능 조회 API를 소유하지 않는다.
+backend와 화면 함수는 같은 플러그인 계약을 사용한다.
 조회에는 `capabilities:get` 권한이 필요하며 다른 permission을 부여하지 않는다.
 
-조회 결과는 등록된 작업과 현재 플랫폼 adapter의 지원 정보로 만든다. 설치하지 않은
-기능은 결과에 넣지 않는다. OS 권한 상태를 실제로 확인할 수 없으면 `unknown`을
-반환한다. protocol handshake의 지원 feature와 정책의 permission은 이 조회와
-별개이며 공통 기반에 남긴다. Tauri의 capabilities 권한 설정과 bunaway의 기능 지원
-조회 함수도 서로 다른 개념이다.
+조회 결과는 앱에 등록된 작업과 플랫폼 adapter의 지원 정보로 만든다. 설치했더라도 앱에
+등록하지 않은 작업은 결과에 넣지 않는다. `osPermission` 선언이 없으면 `unknown`을
+반환하며, `not-required`는 OS 권한 상태를 확인한 값이 아니다. protocol handshake의
+지원 feature와 정책의 permission은 이 조회와 별개이며 공통 기반에 남긴다. Tauri의
+capabilities 권한 설정과 bunaway의 기능 지원 조회 함수도 서로 다른 개념이다.
 
 ## Windows adapter와 시작, 종료
 
 CLI는 앱의 직접 의존성에 선언한 네이티브 plugin의 manifest를 읽고 target별 adapter
-목록을 생성한다. 앱 정의는 runtime 등록의 원본이며 build 설정에 같은 목록을 다시
+목록을 생성한다. 설치된 패키지 전체는 catalog로 검증하며 operation과 permission의
+합계가 256개를 넘어도 허용한다. 각 플러그인의 계약과 policy 입력 제한은 그대로
+검사한다. 실제 앱 등록과 runtime registry는 operation과 permission을 각각 최대
+256개로 제한한다. 앱 정의는 runtime 등록의 원본이며 build 설정에 같은 목록을 다시
 작성하지 않는다. 설치된 package의 adapter 코드가 bundle에 들어가더라도 등록하지
 않은 adapter는 import하거나 초기화하지 않는다. 설치와 등록을 정적으로 동일한
 목록이라고 추정해서 코드를 제거하지 않는다.
@@ -343,8 +353,19 @@ UI Worker는 실제 view/session과 등록된 작업, 정책을 확인한다. I/
 제한된 큐와 실행 직전 승인 절차를 유지한다. entry의 matches는 UI에서 실행할
 순수 권한 평가를, operations 모듈은 지정된 Worker의 기능 실행과 자원 회수를 제공한다.
 프레임워크의 Worker, 메시지 채널, 취소와 승인 절차를 플러그인마다 복제하지 않는다.
-호스트는 manifest의 실행 위치로 작업을 전달한다. `ui` 작업은 UI Worker에서 출처와
-권한을 확인하고 실행한다. `io` 작업은 I/O Worker가 실행 직전 UI에 승인을 요청한다.
+호스트는 manifest의 실행 위치로 작업을 전달한다. `ui` 작업은 UI Worker의 제한된 큐에
+들어간 뒤 메인 스레드에 prepare를 보낸다. 메인 스레드는 호출이 아직 활성일 때만 grant를 보내고,
+UI Worker는 grant 뒤 현재 호출 문맥과 정책을 다시 확인해 실행한다. `io` 작업은 I/O
+Worker의 제한된 큐에 들어간 뒤 메인 스레드에 prepare를 보낸다. 메인 스레드는 호출이 여전히 활성인지
+확인하고 UI Worker에 정책 평가를 요청한다. 허용 결과를 받은 메인 스레드가 I/O Worker에 grant를
+보내며, I/O Worker는 grant 뒤 실행한다.
+
+Host 호출 취소가 메인 스레드의 grant 전에 처리되면 실행을 막는다. grant 뒤 실행 단계가 시작된
+경우에는 이미 진행 중인 파일 쓰기 같은 부작용을 되돌리지 않는다. UI와 I/O Worker는
+`host-response.ts`의 공통 변환을 사용한다. 성공 결과와 오류는 모두 응답 schema와 최종
+envelope의 크기 제한을 검사하며, 실패하면 안전한 `INTERNAL` 응답으로 바꾼다. 정책 거부는 실행하지 않고
+`PERMISSION_DENIED`를 반환하며, 응답 전에 진단 이벤트를 보낸다. 진단 채널이 포화되어
+이벤트를 버릴 수 있어도 거부 응답과 실행 차단은 유지한다.
 
 entry의 default export에 `matches(permission, input, scope)`를 선언한다.
 scope가 있는 등록된 플러그인의 평가 모듈만 읽는다.

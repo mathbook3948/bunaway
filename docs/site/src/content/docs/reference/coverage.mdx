@@ -28,7 +28,7 @@ import catalog from '../../../reference-map.json';
 
 `bun run docs:check`와 `bun run docs:build`는 다음을 검사합니다.
 
-- 일곱 공개 패키지 진입점의 실행 시 export와 재수출이 레퍼런스에 매핑되어 있는지
+- {catalog.packages.length}개 공개 패키지 진입점의 실행 시 export와 재수출이 레퍼런스에 매핑되어 있는지
 - Client, HostAPI, StateStore, EventEmitter, Core, CoreSession, RuntimeServices, Transport 멤버 누락
 - CLI 명령과 Host operation이 각 문서에 있는지
 - Schema 키워드와 policy, CLI, 패키징의 허용 설정 필드가 문서에 있는지

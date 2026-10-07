@@ -11,6 +11,8 @@ import {
   permissionMatcher,
   pluginRegistry,
 } from "../../native/windows/bun/plugins.ts";
+import type { NativeEnvironment } from "../../packages/plugin-sdk/src/index.ts";
+import { createOperations as createCapabilities } from "../../plugins/capabilities/src/windows.ts";
 
 const table = packagedPlugins as PackagedPlugin[];
 afterEach(() => {
@@ -112,6 +114,66 @@ test("scopeless and unregistered plugins do not load authorization modules", asy
   expect(loaded).toBe(0);
   await permissionMatcher([{ name: "test", version: "1", native: plugin.native }]);
   expect(loaded).toBe(1);
+});
+
+test("capability permission metadata comes from each registered operation contract", async () => {
+  const storage = {
+    name: "storage",
+    version: "1",
+    native: {
+      operations: [
+        {
+          name: "storage.read",
+          input: { const: null },
+          output: { const: null },
+          permission: "storage:read",
+        },
+      ],
+      permissions: [{ name: "storage:read" }],
+    },
+  } as const;
+  const files = {
+    name: "files",
+    version: "1",
+    native: {
+      operations: [
+        {
+          name: "files.read",
+          input: { const: null },
+          output: { const: null },
+          permission: "files:read",
+          osPermission: "not-required",
+        },
+      ],
+      permissions: [{ name: "files:read" }],
+    },
+  } as const;
+  let observed: NativeEnvironment | undefined;
+  for (const plugin of [storage, files])
+    table.push({
+      ...plugin,
+      execution: "io",
+      operations: async () => ({
+        createOperations(environment) {
+          observed = environment;
+          return { execute: () => null, dispose() {} };
+        },
+      }),
+    });
+  const registrations = [storage, files];
+  const adapters = await operations(registrations, ".", "io");
+  try {
+    if (!observed) throw new Error("Plugin did not receive capability metadata.");
+    expect(observed.capabilities).toEqual([
+      { name: "storage.read", support: "supported", permission: "unknown" },
+      { name: "files.read", support: "supported", permission: "not-required" },
+    ]);
+    expect(createCapabilities(observed).execute("capabilities.get", null, "backend")).toEqual(
+      observed.capabilities,
+    );
+  } finally {
+    await adapters.dispose();
+  }
 });
 
 test.skipIf(process.platform !== "win32")(

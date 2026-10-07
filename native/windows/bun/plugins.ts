@@ -64,12 +64,13 @@ export async function operations(
     disposeAll([...adapters.values()].reverse().map((adapter) => () => adapter.dispose()));
   const environment: NativeEnvironment = {
     dataRoot,
-    capabilities: [...registry.operations.keys()].map((name) => ({
-      name,
-      support: packagedPlugins.find((plugin) => name.startsWith(`${plugin.name}.`))?.execution
+    capabilities: [...registry.operations.values()].map((operation) => ({
+      name: operation.name,
+      support: packagedPlugins.find((plugin) => operation.name.startsWith(`${plugin.name}.`))
+        ?.execution
         ? "supported"
         : "unsupported",
-      permission: "unknown",
+      permission: operation.osPermission ?? "unknown",
     })),
   };
   try {

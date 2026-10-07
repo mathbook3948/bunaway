@@ -26,7 +26,12 @@ test("short declarations generate strict schemas, qualified names and shared per
       names: s.array(s.string(), { maxItems: 1 }),
     }),
   });
-  const operation = { input, output: s.null(), permission: "record" };
+  const operation = {
+    input,
+    output: s.null(),
+    permission: "record",
+    osPermission: "not-required" as const,
+  };
   const plugin = defineNativePlugin({
     name: "audit",
     version: "1",
@@ -42,6 +47,10 @@ test("short declarations generate strict schemas, qualified names and shared per
   };
   expect(Object.keys(plugin.api)).toEqual(["write", "repeat"]);
   expect([...registry.operations.keys()]).toEqual(["audit.write", "audit.repeat"]);
+  expect([...registry.operations.values()].map(({ osPermission }) => osPermission)).toEqual([
+    "not-required",
+    "not-required",
+  ]);
   expect([...registry.permissions.keys()]).toEqual(["audit:record"]);
   expect(registry.validateCall({ operation: "audit.write", payload }).payload).toEqual(payload);
   expect(
@@ -186,6 +195,86 @@ test("canonical contracts reject caller schema and permission overrides and copy
           native: {
             ...storagePlugin.native,
             operations: [{ ...readText, input: { $ref: "ignored" } as never }],
+          },
+        },
+      ]),
+  ).toThrow();
+});
+
+test("runtime registries keep aggregate limits while catalogs accept installed plugin sets", () => {
+  const plugins = ["first", "second"].map((name) => ({
+    name,
+    version: "1",
+    native: {
+      operations: Array.from({ length: 129 }, (_, index) => ({
+        name: `${name}.call${index}`,
+        permission: `${name}:call`,
+        input: { const: null },
+        output: { const: null },
+      })),
+      permissions: [{ name: `${name}:call` }],
+    },
+  }));
+
+  expect(() => new NativeRegistry(plugins)).toThrow("Plugin contract limit reached.");
+  expect(new NativeRegistry(plugins, { mode: "catalog" }).operations.size).toBe(258);
+  expect(new NativeRegistry(plugins.slice(0, 1)).operations.size).toBe(129);
+
+  const permissionHeavy = ["first", "second"].map((name) => ({
+    name,
+    version: "1",
+    native: {
+      operations: [
+        {
+          name: `${name}.call`,
+          permission: `${name}:permission0`,
+          input: { const: null },
+          output: { const: null },
+        },
+      ],
+      permissions: Array.from({ length: 129 }, (_, index) => ({
+        name: `${name}:permission${index}`,
+      })),
+    },
+  }));
+  expect(() => new NativeRegistry(permissionHeavy)).toThrow("Plugin contract limit reached.");
+  expect(new NativeRegistry(permissionHeavy, { mode: "catalog" }).permissions.size).toBe(258);
+  expect(
+    () =>
+      new NativeRegistry(
+        [
+          {
+            name: "too-many",
+            version: "1",
+            native: {
+              permissions: [{ name: "too-many:call" }],
+              operations: Array.from({ length: 257 }, (_, index) => ({
+                name: `too-many.call${index}`,
+                permission: "too-many:call",
+                input: { const: null },
+                output: { const: null },
+              })),
+            },
+          },
+        ],
+        { mode: "catalog" },
+      ),
+  ).toThrow();
+});
+
+test("native operation OS permission metadata is copied only for the supported literal", () => {
+  const operation = { ...readText, osPermission: "not-required" as const };
+  const native = { ...storagePlugin.native, operations: [operation] };
+  const registry = new NativeRegistry([{ ...storagePlugin, native }]);
+  expect(registry.operation(operation.name).osPermission).toBe("not-required");
+  expect(
+    () =>
+      new NativeRegistry([
+        {
+          ...storagePlugin,
+          native: {
+            ...native,
+            operations: [{ ...operation, osPermission: "unrestricted" as never }],
           },
         },
       ]),

@@ -13,6 +13,10 @@ export type NativeRegistration = {
   readonly version: string;
   readonly native?: NativePluginContract;
 };
+export type NativeRegistryOptions = {
+  /** `runtime` enforces the aggregate active-plugin limits; `catalog` validates installed plugins. */
+  readonly mode?: "runtime" | "catalog";
+};
 export type PermissionMatcher = (permission: string, input: JsonValue, scope: JsonValue) => boolean;
 type HostPermissions = Infer<typeof policySchema>["backend"];
 
@@ -110,7 +114,9 @@ export class NativeRegistry {
   readonly permissions = new Map<string, PermissionContract>();
   readonly plugins = new Set<string>();
 
-  constructor(plugins: readonly NativeRegistration[]) {
+  constructor(plugins: readonly NativeRegistration[], options: NativeRegistryOptions = {}) {
+    const mode = options.mode ?? "runtime";
+    if (mode !== "runtime" && mode !== "catalog") fail("Invalid plugin registry mode.");
     for (const plugin of plugins) {
       if (
         !/^[A-Za-z0-9_.:-]{1,128}$/.test(plugin.name) ||
@@ -137,6 +143,7 @@ export class NativeRegistry {
                   permission: { type: "string" },
                   input: { type: "object" },
                   output: { type: "object" },
+                  osPermission: { const: "not-required" },
                 },
                 required: ["name", "permission", "input", "output"],
                 additionalProperties: false,
@@ -181,7 +188,7 @@ export class NativeRegistry {
         checkSchema(operation.output);
       }
     }
-    if (this.operations.size > 256 || this.permissions.size > 256)
+    if (mode === "runtime" && (this.operations.size > 256 || this.permissions.size > 256))
       fail("Plugin contract limit reached.");
   }
 

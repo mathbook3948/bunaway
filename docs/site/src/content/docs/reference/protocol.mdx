@@ -51,9 +51,30 @@ const message = parseMessage(text);
 | `parseHostCall` / `serializeHostCall` | 문자열 ↔ HostCall | hostCallSchema |
 | `parseHostResponse` / `serializeHostResponse` | 문자열 ↔ HostResponse | hostResponseSchema |
 | `parseProcessFrame` / `serializeProcessFrame` | 문자열 ↔ ProcessFrame | processSchema와 boot 내부 정책 |
-`NativeRegistry(plugins)`는 등록 계약을 복사하고 작업과 permission 중복을 검사합니다.
-`validateCall`과 `validateOutput`은 등록 schema로 검사하며 `validatePolicy`는 permission 이름과 범위를 검사합니다.
-`allowed(source, call, matches)`는 deny 우선으로 allow 범위를 평가합니다.
+`NativeRegistry(plugins, options?)`는 계약을 복사하고 작업과 permission 중복을 검사합니다.
+기본 `mode: "runtime"`은 실제 앱에 등록된 계약에 적용하며 전체 operation과 permission을
+각각 최대 256개로 제한합니다. `mode: "catalog"`은 설치된 패키지 전체를 검사할 때만
+사용합니다. 이 모드는 여러 플러그인의 합계 제한만 건너뛰고 각 플러그인의 개별 제한,
+계약 및 이름 검증은 유지합니다. CLI는 설치 catalog와 정책 참조를 이 모드로 검사하고,
+앱 실행과 Host 호출에는 기본 runtime 모드를 사용합니다.
+
+`NativeRegistryOptions`의 `mode`는 `runtime` 또는 `catalog`입니다. `validateCall`과
+`validateOutput`은 등록 schema로 검사하며 `validatePolicy`는 permission 이름과 범위를
+검사합니다. `allowed(source, call, matches)`는 deny 우선으로 allow 범위를 평가합니다.
+
+```ts
+type NativeRegistryOptions = { mode?: "runtime" | "catalog" };
+type HostOperationContract<I, O> = {
+  name: string;
+  input: I;
+  output: O;
+  permission: string;
+  osPermission?: "not-required";
+};
+```
+
+`osPermission: "not-required"`는 OS 권한이 필요 없는 작업을 표시하며, 기능 조회에서
+OS 권한 메타데이터로 전달됩니다.
 
 입력이 잘못되면 `ProtocolError`가 발생합니다. parse와 serialize는 스키마를 검증하고 JSON 스냅샷을 만듭니다.
 원문과 직렬화 결과의 UTF-8 크기는 최대 1 MiB, 깊이는 최대 64입니다.

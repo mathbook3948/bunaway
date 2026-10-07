@@ -14,6 +14,7 @@ const plugin = defineNativePlugin({
       }),
       output: s.null(),
       permission: "write",
+      osPermission: "not-required",
     },
   },
 });

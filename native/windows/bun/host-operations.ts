@@ -2,15 +2,14 @@ import assert from "node:assert/strict";
 import { parentPort, workerData } from "node:worker_threads";
 import {
   API_LIMITS,
-  BunawayError,
   type HostCall,
   type HostContext,
   type HostResponse,
   type NativeRegistration,
   type RuntimeIdentity,
-  serializeHostResponse,
 } from "../../../packages/protocol/src/index.ts";
 import { Channel, type Packet } from "./channel.ts";
+import { hostResponse } from "./host-response.ts";
 import { disposeAll, operations } from "./plugins.ts";
 
 assert(parentPort);
@@ -39,20 +38,7 @@ function startNext() {
   });
 }
 function execute(call: HostCall, source: string): HostResponse {
-  try {
-    const payload = adapters.execute(call.operation, call.payload, source);
-    const response = { kind: "result", payload } as HostResponse;
-    serializeHostResponse(response);
-    return response;
-  } catch (error) {
-    return {
-      kind: "error",
-      error:
-        error instanceof BunawayError
-          ? { code: error.code, message: error.message }
-          : { code: "INTERNAL", message: "Host operation failed." },
-    };
-  }
+  return hostResponse(() => adapters.execute(call.operation, call.payload, source));
 }
 async function receive(packet: Packet) {
   if (packet.kind === "operation") {

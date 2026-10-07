@@ -18,6 +18,7 @@ const plugin = defineNativePlugin({
         { maxItems: 256 },
       ),
       permission: "get",
+      osPermission: "not-required",
     },
   },
 });

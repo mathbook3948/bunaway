@@ -96,6 +96,7 @@ export type NativeOperationDefinition = {
   readonly input: Schema;
   readonly output: Schema;
   readonly permission: string;
+  readonly osPermission?: "not-required";
 };
 export type NativePluginDefinition = {
   readonly name: string;
@@ -116,6 +117,7 @@ type NativeOperation<D extends NativePluginDefinition> = {
     readonly permission: `${D["name"]}:${D["operations"][K]["permission"]}`;
     readonly input: D["operations"][K]["input"];
     readonly output: D["operations"][K]["output"];
+    readonly osPermission?: NonNullable<D["operations"][K]["osPermission"]>;
   };
 }[keyof D["operations"] & (string | number)];
 

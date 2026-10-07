@@ -340,7 +340,21 @@
       "source": "packages/plugin-sdk/src/index.ts",
       "type": "NativeOperationDefinition",
       "pages": {
-        "reference/tooling/native-plugins": ["input", "output", "permission"]
+        "reference/tooling/native-plugins": ["input", "output", "permission", "osPermission"]
+      }
+    },
+    {
+      "source": "packages/protocol/src/native-registry.ts",
+      "type": "NativeRegistryOptions",
+      "pages": {
+        "reference/protocol": ["mode"]
+      }
+    },
+    {
+      "source": "packages/protocol/src/host-api.ts",
+      "type": "HostOperationContract",
+      "pages": {
+        "reference/protocol": ["name", "input", "output", "permission", "osPermission"]
       }
     }
   ],

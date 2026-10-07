@@ -70,7 +70,8 @@ Bun 자식 프로세스 ── TypeScript 코어 ── 앱 명령, 상태, 플�
 | 모듈 | 책임과 공개 계약 | 허용하는 의존성 |
 | --- | --- | --- |
 | `protocol` | 메시지 스키마, 오류 코드, 버전 협상, 직렬화 규칙 | 플랫폼, Bun, UI 의존성 없음 |
-| `client-sdk` | `invoke`, `listen`과 구독 해제 함수, 기능 조회, 요청 취소, 기본 WebView 연결, 초기화, 정리 | `protocol`, WebView 또는 주입받은 Transport |
+| `client-sdk` | `invoke`, `listen`과 구독 해제 함수, 요청 취소, 기본 WebView 연결, 초기화, 정리 | `protocol`, WebView 또는 주입받은 Transport |
+| `plugin-capabilities` | 등록된 네이티브 작업의 플랫폼 지원과 OS 권한 메타데이터 조회 | `plugin-sdk` |
 | `core` | 명령 레지스트리, 입력 검증, 상태 저장소, 이벤트 라우팅, 플러그인 수명 | `protocol`, 추상 Host API, Runtime Services |
 | `runtime-bun` | 자식 프로세스 안의 코어 부팅, Bun 서비스 어댑터, 프로세스 IPC 연결 | `core`, `protocol`, Bun API |
 | `bun-bundle` | 배포할 Bun 실행 파일, 버전, 소스 revision, 해시, 라이선스 고정 | 공식 플랫폼별 Bun 배포물, 필요한 경우 기록된 빌드, 패치 |
@@ -141,7 +142,7 @@ OS 권한 선언과 런타임 사용자 동의는 프레임워크 권한과 별�
 
 ## 6 공개 SDK와 플러그인
 
-공개 SDK는 프런트엔드용 `client`와 신뢰 백엔드용 `backend` 진입점을 분리한다. 명령 정의에서 클라이언트 타입을 생성하되 백엔드 코드나 비밀 설정이 프런트엔드 번들에 들어가지 않게 한다. 필수 API는 명령 등록, 호출, 앱 상태, 이벤트 구독, 해제, 수명주기와 기능 조회다.
+공개 SDK는 프런트엔드용 `client`와 신뢰 백엔드용 `backend` 진입점을 분리한다. 명령 정의에서 클라이언트 타입을 생성하되 백엔드 코드나 비밀 설정이 프런트엔드 번들에 들어가지 않게 한다. 공통 필수 API는 명령 등록, 호출, 앱 상태, 이벤트 구독, 해제와 수명주기다. 기능 조회는 `@bunaway/plugin-capabilities`에서 선택적으로 제공한다.
 
 공통 타입과 명령 입력, 출력 검증은 [C 공통 API](./architecture/common-api.md)로 고정했다.
 `createClient`, `createCore`를 Windows FFI 호스트와 macOS의 `runBunApp` 어댑터에 연결했다.
@@ -217,7 +218,7 @@ void start().catch(console.error);
 | `bun:ffi`, TCC, native addon, `spawn` | 공통 SDK의 필수 기능에서 제외 | 초기 지원 보장 없음. iOS는 우선 비지원 |
 | 창 다중 생성, 메뉴, 트레이 | 데스크톱 확장 API | 자동 모사하지 않고 `UNSUPPORTED` 반환 |
 
-SDK의 기능 조회 결과는 `supported`, `experimental`, `unsupported`와 이유를 반환한다. 플랫폼 기능 지원 여부와 사용자의 OS 권한 허용 여부는 별도 필드다. 필수 미지원 기능은 빌드를 실패시키고 선택 기능은 런타임에서 분기할 수 있게 한다.
+`@bunaway/plugin-capabilities`는 앱에 등록된 네이티브 작업의 지원 여부와 OS 권한 메타데이터를 반환한다. `osPermission: "not-required"`는 해당 작업에 OS 권한이 필요하지 않음을 선언하며, 선언이 없으면 `unknown`이다. 이 메타데이터는 앱 정책의 Host 권한 허용과 별개다. 조회 결과에 없는 플랫폼 기능은 지원 여부가 확인되지 않은 상태로 다룬다.
 
 ## 8 개발 도구와 패키징
 

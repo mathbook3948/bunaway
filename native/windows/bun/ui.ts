@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { parentPort, workerData } from "node:worker_threads";
 import {
+  API_LIMITS,
   BunawayError,
   type HostContext,
-  type HostResponse,
 } from "../../../packages/protocol/src/index.ts";
 import { ViewBoundary } from "./boundary.ts";
 import { Channel, type Packet, type UIConfig } from "./channel.ts";
 import { callbackCalls, checkCallbacks, disposeCom } from "./com.ts";
+import { hostResponse } from "./host-response.ts";
 import { disposeAll, operations, permissionMatcher, pluginRegistry } from "./plugins.ts";
 import { originOf, WebView } from "./webview.ts";
 import { disposeWin32Bindings, hr, kernel, ole, Windows } from "./win32.ts";
@@ -30,6 +31,12 @@ const views = new Map<
   { boundary: ViewBoundary; native: WebView; detached: boolean; cleaned: boolean; ready: boolean }
 >();
 const approved = new Map<string, HostContext>();
+const uiCalls = new Map<string, Extract<Packet, { kind: "operation" }>>();
+function discardContext(context: HostContext) {
+  for (const [id, approvedContext] of approved)
+    if (approvedContext === context) approved.delete(id);
+  for (const [id, call] of uiCalls) if (call.context === context) uiCalls.delete(id);
+}
 const fail = (error: unknown) => {
   failure ??= error;
   stopping = true;
@@ -46,6 +53,7 @@ const channel = new Channel(
     } else if (packet.kind === "shutdown") {
       stopping = true;
       approved.clear();
+      uiCalls.clear();
       for (const view of views.values()) {
         view.boundary.revoke("shutdown");
         view.boundary.closed = true;
@@ -53,7 +61,27 @@ const channel = new Channel(
       }
     } else if (packet.kind === "server")
       views.get(packet.route.viewId)?.boundary.send(packet.route, packet.message);
-    else if (packet.kind === "authorize" || packet.kind === "operation") {
+    else if (packet.kind === "operation") {
+      assert(
+        !stopping && !uiCalls.has(packet.requestId) && uiCalls.size < API_LIMITS.maxPending,
+        "Invalid UI queue request",
+      );
+      uiCalls.set(packet.requestId, packet);
+      channel.notify({
+        kind: "prepare",
+        context: packet.context,
+        requestId: packet.requestId,
+        call: packet.call,
+      });
+    } else if (packet.kind === "authorize" || packet.kind === "grant") {
+      const queued = packet.kind === "grant" ? uiCalls.get(packet.requestId) : undefined;
+      if (packet.kind === "grant") {
+        if (!queued) return;
+        assert(queued.context === packet.context);
+        uiCalls.delete(packet.requestId);
+      }
+      const operation = packet.kind === "authorize" ? packet : queued;
+      assert(operation);
       const view = [...views.values()].find((view) => view.boundary.active(packet.context));
       const permissions =
         packet.context === config.backendContext
@@ -61,37 +89,28 @@ const channel = new Channel(
           : view?.boundary.policy.host;
       let allowed = false;
       try {
-        const call = registry.validateCall(packet.call);
+        const call = registry.validateCall(operation.call);
         allowed =
           !stopping &&
           !closingSent &&
+          (packet.kind !== "grant" || packet.allowed) &&
           !!permissions &&
           registry.allowed(permissions, call, matches);
       } catch {
         /* Invalid requests fail closed at the host boundary. */
       }
-      if (packet.kind === "operation") {
-        let response: HostResponse;
-        try {
+      if (!allowed) log("host-request-denied", { operation: operation.call.operation });
+      if (packet.kind === "grant") {
+        assert(queued);
+        const response = hostResponse(() => {
           if (!allowed)
             throw new BunawayError({
               code: "PERMISSION_DENIED",
               message: "Host context or policy denied.",
             });
           assert(adapters, "UI adapters are not initialized");
-          response = {
-            kind: "result",
-            payload: adapters.execute(packet.call.operation, packet.call.payload, packet.source),
-          };
-        } catch (error) {
-          response = {
-            kind: "error",
-            error:
-              error instanceof BunawayError
-                ? { code: error.code, message: error.message }
-                : { code: "INTERNAL", message: "Host operation failed." },
-          };
-        }
+          return adapters.execute(queued.call.operation, queued.call.payload, queued.source);
+        });
         channel.notify({
           kind: "host-response",
           context: packet.context,
@@ -100,7 +119,6 @@ const channel = new Channel(
         });
         return;
       }
-      if (!allowed) log("host-request-denied", { operation: packet.call.operation });
       if (allowed) {
         assert(!approved.has(packet.requestId));
         approved.set(packet.requestId, packet.context);
@@ -111,7 +129,10 @@ const channel = new Channel(
         requestId: packet.requestId,
         allowed,
       });
-    } else if (packet.kind === "cancel") approved.delete(packet.requestId);
+    } else if (packet.kind === "cancel") {
+      approved.delete(packet.requestId);
+      uiCalls.delete(packet.requestId);
+    } else if (packet.kind === "cancel-context") discardContext(packet.context);
     else if (packet.kind === "host-result") {
       const active =
         packet.context === config.backendContext ||
@@ -162,9 +183,7 @@ try {
           [...views.values()].reduce((total, view) => total + view.boundary.pendingCount, 0),
         ),
       forward: (packet) => {
-        if (packet.kind === "revoke")
-          for (const [id, context] of approved)
-            if (context === packet.route.context) approved.delete(id);
+        if (packet.kind === "revoke") discardContext(packet.route.context);
         channel.notify(packet);
       },
       deliver: (text) => native.send(text),
@@ -205,6 +224,7 @@ try {
           revoke: (reason) => {
             boundary.revoke(reason);
             for (const [id, context] of approved) if (!activeContext(context)) approved.delete(id);
+            for (const [id, call] of uiCalls) if (!activeContext(call.context)) uiCalls.delete(id);
           },
           sameDocument: (source) => boundary.sameDocument(source),
           close,
@@ -260,6 +280,8 @@ try {
   channel.notify({ kind: "fatal", error: { code: "INTERNAL", message: "Windows UI failed." } });
 } finally {
   stopping = true;
+  uiCalls.clear();
+  approved.clear();
   for (const view of views.values()) {
     view.boundary.revoke("shutdown");
     view.boundary.closed = true;

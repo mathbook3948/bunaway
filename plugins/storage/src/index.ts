@@ -22,11 +22,17 @@ const plugin = defineNativePlugin({
   name: "storage",
   version: manifest.version,
   operations: {
-    readText: { input: s.object(pathFields), output: s.string(), permission: "read-text" },
+    readText: {
+      input: s.object(pathFields),
+      output: s.string(),
+      permission: "read-text",
+      osPermission: "not-required",
+    },
     writeText: {
       input: s.object({ ...pathFields, text: s.string() }),
       output: s.null(),
       permission: "write-text",
+      osPermission: "not-required",
     },
   },
   scopes: { "read-text": storageScope, "write-text": storageScope },

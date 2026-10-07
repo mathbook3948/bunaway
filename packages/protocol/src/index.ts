@@ -39,6 +39,7 @@ export {
 export {
   type NativeRegistration,
   NativeRegistry,
+  type NativeRegistryOptions,
   type PermissionMatcher,
 } from "./native-registry.ts";
 export {

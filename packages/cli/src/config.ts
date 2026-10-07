@@ -237,7 +237,7 @@ async function loadProject(
     if (!(await lstat(homePath)).isFile()) throw new Error("Home document is not a file.");
   }
   const policy = parsePolicy(await Bun.file(resolve(configDirectory, "policy.json")).text());
-  new NativeRegistry(plugins).validatePolicy(policy);
+  new NativeRegistry(plugins, { mode: "catalog" }).validatePolicy(policy);
   if (policy.views.some((view) => view.origins.some((origin) => origin.startsWith("http:")))) {
     throw new Error(
       "HTTP origins are not allowed in policy.json; use dev.url for a development server.",

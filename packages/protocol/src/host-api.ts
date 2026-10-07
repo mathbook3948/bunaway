@@ -6,6 +6,7 @@ export type HostOperationContract<I extends Schema = Schema, O extends Schema = 
   readonly input: I;
   readonly output: O;
   readonly permission: string;
+  readonly osPermission?: "not-required";
 };
 export type PermissionContract = { readonly name: string; readonly scope?: Schema };
 export type NativePluginContract = {

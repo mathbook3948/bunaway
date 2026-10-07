@@ -46,6 +46,7 @@ export const frameworkPaths = [
   "native/windows/bun/plugins.ts",
   "native/windows/bun/plugin-table.ts",
   "native/windows/bun/host-operations.ts",
+  "native/windows/bun/host-response.ts",
   "native/windows/bun/log.ts",
   "native/windows/bun/launch.ps1",
   "native/windows/bun/prepare.ps1",

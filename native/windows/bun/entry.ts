@@ -142,7 +142,10 @@ export async function runWindowsApp(app: AppDefinition, config: UIConfig): Promi
       call.reject(new BunawayError({ code: "CANCELLED", message: "Host context closed." }));
     }
     // Revocation cancels a whole context without overflowing per-request control slots.
-    if (context !== undefined) ioChannel.notify({ kind: "cancel-context", context });
+    if (context !== undefined) {
+      channel.notify({ kind: "cancel-context", context });
+      ioChannel.notify({ kind: "cancel-context", context });
+    }
   }
   async function receive(packet: Packet) {
     if (packet.kind === "diagnostic") {
@@ -189,6 +192,15 @@ export async function runWindowsApp(app: AppDefinition, config: UIConfig): Promi
       )
         throw new Error("Invalid client route");
       await session.session.receive(packet.message);
+    } else if (packet.kind === "prepare") {
+      const call = calls.get(packet.requestId);
+      if (!call || call.context !== packet.context || call.signal.aborted) return;
+      await channel.send({
+        kind: "grant",
+        context: packet.context,
+        requestId: packet.requestId,
+        allowed: true,
+      });
     } else if (packet.kind === "authorized") {
       const call = calls.get(packet.requestId);
       if (!call || call.context !== packet.context) return;
