@@ -1,8 +1,8 @@
-param(
-    [switch]$Wait,
-    [Parameter(ValueFromRemainingArguments = $true)][string[]]$AppArguments
-)
 $ErrorActionPreference = 'Stop'
+# Avoid parameter binding so -- and PowerShell common-parameter names stay app arguments.
+$launchArguments = @($args)
+$waitForExit = $launchArguments.Count -gt 0 -and $launchArguments[0] -ieq '-Wait'
+if ($waitForExit) { $launchArguments = @($launchArguments | Select-Object -Skip 1) }
 $package = $PSScriptRoot
 $manifest = Get-Content -LiteralPath (Join-Path $package 'manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 function Check([string]$Path, [string]$Expected) {
@@ -37,12 +37,10 @@ foreach ($name in @('SystemRoot', 'WINDIR', 'USERPROFILE', 'APPDATA', 'LOCALAPPD
 }
 $start.EnvironmentVariables['PATH'] = Join-Path $env:SystemRoot 'System32'
 # The payload contains no command-line metacharacters and keeps the caller's cwd.
-$launchArguments = @()
-if ($null -ne $AppArguments) { $launchArguments = @($AppArguments) }
 $launch = @{ argv = $launchArguments; cwd = $PWD.ProviderPath } | ConvertTo-Json -Compress
 $payload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($launch))
 # Windows PowerShell/.NET Framework has no ArgumentList. The encoded payload needs no quoting.
 $start.Arguments = '--no-env-file --no-install --config=./bunfig.toml --tsconfig-override=./tsconfig.json ./boot.js --launch-payload ' + $payload
 $process = [Diagnostics.Process]::Start($start)
-if ($Wait) { $process.WaitForExit(); $code = $process.ExitCode; $process.Dispose(); exit $code }
+if ($waitForExit) { $process.WaitForExit(); $code = $process.ExitCode; $process.Dispose(); exit $code }
 $process.Dispose()

@@ -19,6 +19,8 @@ import {
 
 export type Route = { viewId: string; documentGeneration: number; context: HostContext };
 export const MAX_WINDOWS = 128;
+// WM_APP message for orderly CLI teardown, independent of user close behavior.
+export const APP_SHUTDOWN_MESSAGE = 0x8002;
 export type WindowSpec = {
   view: string;
   home: string;

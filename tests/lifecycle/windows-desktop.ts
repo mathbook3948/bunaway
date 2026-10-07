@@ -11,6 +11,7 @@ import {
 } from "../../native/windows/bun/instance.ts";
 import type { HostContext } from "../../packages/protocol/src/index.ts";
 import type { AppDefinition } from "../../packages/core/src/index.ts";
+import { closeWindowsApp } from "../../packages/cli/src/launch.ts";
 
 let uiReadyResolve: () => void = () => {};
 const uiReady = new Promise<void>((resolveReady) => {
@@ -44,6 +45,8 @@ export const desktopTestApp = {
 
 // Real Win32/WebView2 gate. Each scenario runs in a fresh Job-owned process.
 const scenario = process.argv[2] ?? "hide";
+const devShutdown = scenario.startsWith("dev-");
+const devPending = scenario === "dev-pending";
 const root = resolve(import.meta.dir, `../../build/windows-desktop-${scenario}`);
 if (!process.argv.includes("--child")) {
   await mkdir(resolve(root, "web"), { recursive: true });
@@ -79,6 +82,8 @@ if (!process.argv.includes("--child")) {
   let vetoed = false;
   let reopened = false;
   let sessionCount = 0;
+  let quitCount = 0;
+  let stopped = false;
   const decoder = new TextDecoder();
   const stream = child.stdout.pipeTo(
     new WritableStream({
@@ -90,12 +95,21 @@ if (!process.argv.includes("--child")) {
           pending = pending.slice(end + 1);
           if (!line) continue;
           const event = JSON.parse(line);
+          if (event.event === "desktop-stopped") stopped = true;
+          if (event.event === "quitting") {
+            quitCount++;
+            if (devPending) assert.equal(await closeWindowsApp(child.pid), 1);
+          }
           if (event.event === "session-open") sessionCount++;
           if (event.event === "tray-created") trayWindow = BigInt(event.hwnd);
           if (event.event === "quitting" && event.reason === "tray") trayQuit = true;
           if (event.event === "window-created") hwnd = BigInt(event.hwnd);
           if (event.event === "opened" && event.source === "initial") {
             assert(hwnd);
+            if (devShutdown && !devPending) {
+              assert.equal(await closeWindowsApp(child.pid), trayWindow ? 2 : 1);
+              continue;
+            }
             if (scenario === "hide") api.symbols.ShowWindow(hwnd, 3);
             assert(api.symbols.PostMessageW(hwnd, 0x10, 0n, 0n));
           }
@@ -136,14 +150,21 @@ if (!process.argv.includes("--child")) {
     }),
   );
   const errors = new Response(child.stderr).text();
-  const timer = setTimeout(() => child.kill(), 60000);
+  const timer = setTimeout(() => child.kill(), devShutdown ? 20000 : 60000);
   try {
     assert.equal(await child.exited, 0, await errors);
     await stream;
-    assert(reopened);
+    assert(stopped, "CLI shutdown must run plugin cleanup");
+    if (devShutdown) {
+      assert(!reopened && !hidden && !vetoed);
+      assert.equal(quitCount, devPending ? 1 : 0, "CLI shutdown must bypass beforeQuit");
+    } else {
+      assert(reopened);
+      assert(scenario === "hide" ? hidden && trayQuit : vetoed);
+    }
     assert.equal(sessionCount, 1, "hidden or vetoed view must retain its original session");
-    assert(scenario === "hide" ? hidden && trayQuit : vetoed);
     assert.equal(api.symbols.IsWindow(hwnd), 0);
+    if (trayWindow) assert.equal(api.symbols.IsWindow(trayWindow), 0);
     console.log(`PASS Windows desktop ${scenario}`);
   } finally {
     clearTimeout(timer);
@@ -172,15 +193,18 @@ if (!process.argv.includes("--child")) {
             version: "1",
             setup(context) {
               emitReopen = () => context.events.emit("test.reopen", null, { kind: "broadcast" });
+              return () => console.log(JSON.stringify({ event: "desktop-stopped" }));
             },
           },
         ],
         desktop: {
-          ...(scenario === "hide"
+          ...(scenario === "hide" || scenario === "dev-hide"
             ? ({ closeBehavior: "hide", tray: { tooltip: "Bunaway lifecycle" } } as const)
             : {}),
           beforeQuit(reason) {
             console.log(JSON.stringify({ event: "quitting", reason }));
+            if (devPending) return new Promise<boolean>(() => {});
+            if (devShutdown) return false;
             if (scenario === "veto" && attempts++ === 0) {
               // Keep the check pending briefly so repeated WM_CLOSE remains coalesced.
               return Bun.sleep(30).then(() => {

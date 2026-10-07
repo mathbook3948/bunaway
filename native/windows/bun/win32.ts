@@ -1,5 +1,6 @@
 import { dlopen, JSCallback, ptr, type Pointer } from "bun:ffi";
 import assert from "node:assert/strict";
+import { APP_SHUTDOWN_MESSAGE } from "./channel.ts";
 
 export const wide = (text: string) => Buffer.from(`${text}\0`, "utf16le");
 const nativeBuffers = new Set<Buffer>();
@@ -77,11 +78,15 @@ export class Windows {
   private registered = false;
   failure: unknown;
 
-  constructor() {
+  constructor(shutdown: () => void) {
     this.callback = new JSCallback(
       (window: bigint, message: number, wparam: bigint, lparam: bigint) => {
         try {
           assert.equal(kernel.symbols.GetCurrentThreadId(), this.thread);
+          if (message === APP_SHUTDOWN_MESSAGE) {
+            shutdown();
+            return 0n;
+          }
           this.windows.get(window)?.(message, wparam, lparam);
           if (message === 0x10) return 0n; // defer Close/DestroyWindow past callback
           return user.symbols.DefWindowProcW(window, message, wparam, lparam);

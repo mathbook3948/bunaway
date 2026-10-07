@@ -119,7 +119,11 @@ function startViews() {
 try {
   hr(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
   initialized = true;
-  windows = new Windows();
+  windows = new Windows(() => {
+    if (closingSent) return;
+    closingSent = true;
+    channel.notify({ kind: "closing" });
+  });
   if (config.desktop?.tray)
     tray = new Tray(windows, config.desktop.tray.tooltip, (action) => {
       if (action === "show") visibility("show");

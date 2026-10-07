@@ -35,7 +35,12 @@ test.skipIf(process.platform !== "win32")(
         resolve(root, "launch.ps1"),
         launcher.replace("__BUN_SHA256__", await hash(process.execPath)),
       );
-      for (const argv of [[], ["한글 파일.txt", "memo://open?id=42&mode=edit"]]) {
+      for (const argv of [
+        [],
+        ["한글 파일.txt", "memo://open?id=42&mode=edit"],
+        ["--", "-draft.txt", "-Wait", "-Verbose", "-Debug", "-ErrorAction", "Stop"],
+        ['a"b', "C:\\tail\\", ""],
+      ]) {
         const child = Bun.spawn(
           [
             resolve(

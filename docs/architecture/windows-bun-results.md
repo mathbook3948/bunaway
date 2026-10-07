@@ -71,5 +71,8 @@ CMake, 전용 실행기와 테스트는 삭제했다. 회귀 데이터는 공용
 트레이 숨김과 복원을 구현했다. 동작과 제한은 [ADR 0013](../decisions/0013-desktop-lifecycle.md)를 따른다.
 `tests/lifecycle/desktop.test.ts`는 플랫폼 독립 계약을 확인하고 Windows 실행기에
 `tests/lifecycle/windows-desktop.ts`의 hide, veto 시나리오를 추가했다.
-이번 변경에서 실제 Windows GUI 회귀는 실행하지 않았다. 기존 검증 기록을 새 동작의
-검증 완료로 해석하지 않는다. OS의 URL scheme과 파일 연결 등록은 제공하지 않는다.
+초기 Linux 작업에서는 실제 Windows GUI 회귀를 실행하지 않았다. 후속 Windows x64,
+Bun 1.4.2 검증에서 실제 WebView2의 hide, veto와 dev-veto, dev-hide, dev-pending을 통과했다.
+숨김과 최대화 복원, 종료 취소 뒤 세션 유지, CLI 중단 시 종료 검사 우회와 플러그인 정리를 확인했다.
+PowerShell 5.1 실행기에서 `--`, 공통 매개변수 이름, 따옴표, 끝의 역슬래시와 빈 인자 보존도 통과했다.
+OS의 URL scheme과 파일 연결 등록은 제공하지 않는다.

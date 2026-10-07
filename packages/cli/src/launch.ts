@@ -42,7 +42,7 @@ export function windowsLaunchEnvironment(
   return environment;
 }
 
-// Development runner only: request normal teardown on the app's actual Win32 windows.
+// Development runner only: request orderly teardown without user close hooks or hiding.
 export async function closeWindowsApp(pid: number): Promise<number> {
   const { dlopen, JSCallback, ptr } = await import("bun:ffi");
   const api = dlopen("user32.dll", {
@@ -74,7 +74,7 @@ export async function closeWindowsApp(pid: number): Promise<number> {
     api.symbols.EnumWindows(callback.ptr, 0n);
     for (const window of windows) {
       api.symbols.PostMessageW(window, 0x1f, 0n, 0n);
-      api.symbols.PostMessageW(window, 0x10, 0n, 0n);
+      api.symbols.PostMessageW(window, 0x8002, 0n, 0n); // host APP_SHUTDOWN_MESSAGE (WM_APP + 2)
     }
     return windows.length;
   } finally {

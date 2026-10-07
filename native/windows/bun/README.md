@@ -54,4 +54,7 @@ COM 콜백은 같은 OS 스레드에서 동기 HRESULT를 반환한다. `threads
 닫기 버튼으로 창을 숨기고 백엔드, WebView, 세션을 유지한다. 트레이 Open 또는
 두 번째 실행으로 복원하며 Quit은 종료 검사를 거친다. 기본값은 마지막 창 닫기로 종료다.
 URL scheme과 파일 확장자의 OS 등록은 제공하지 않으며 실행기에 전달된 인자를 처리한다.
+`launch.ps1`의 맨 앞에 `-Wait`를 지정하면 앱 종료까지 기다리고 나머지 인자는 그대로 전달한다.
+`-- -draft.txt`와 `-Verbose` 같은 인자도 보존한다. 앱 인자가 `-Wait`로 시작하면 `-- -Wait`로 전달한다.
+개발 CLI의 재시작과 종료는 종료 취소와 숨김을 우회하며 코어, 플러그인 StopHook과 Worker를 정리한다.
 [데스크톱 수명주기 결정](../../../docs/decisions/0013-desktop-lifecycle.md).

@@ -69,7 +69,7 @@ Windows 배포 근거와 한계:
   않는다.
 
 Windows의 앱 정의 `desktop`에 인자, 딥링크, 파일 열기와 종료 취소, 트레이 숨김을
-구현했다. 계약, 번들, 타입 검사는 Linux에서 확인하며 실제 Windows GUI 회귀는
-`native/windows/bun/run.ps1`의 hide, veto 시나리오로 검증한다. 이번 작업에서는
-Windows GUI 실행을 확인하지 않았다. URL scheme과 파일 연결의 OS 등록은 미구현이다.
+구현했다. 초기 계약, 번들, 타입 검사는 Linux에서 수행했고 후속 Windows x64, Bun 1.4.2에서
+실제 WebView2의 hide, veto, dev-veto, dev-hide, dev-pending 시나리오와 PowerShell 5.1 인자 전달을 통과했다.
+Windows 실행기는 같은 시나리오를 실행한다. URL scheme과 파일 연결의 OS 등록은 미구현이다.
 macOS 프로세스 런타임은 `desktop`을 `UNSUPPORTED`로 거부한다.
