@@ -20,7 +20,7 @@ type AppOptions<
   M extends readonly ModuleDefinition[],
   C extends CommandRegistry,
   E extends EventRegistry,
-> = Pick<AppDefinition, "state" | "plugins"> & {
+> = Pick<AppDefinition, "state" | "plugins" | "desktop"> & {
   readonly modules: M;
   readonly commands?: C;
   readonly events?: E;
@@ -73,6 +73,7 @@ export function defineApp<
     events: Object.freeze(Object.fromEntries(events)) as Readonly<
       NoInfer<E> & ModuleEntries<M, "events">
     >,
+    ...(options.desktop === undefined ? {} : { desktop: options.desktop }),
     ...(options.state === undefined ? {} : { state: options.state }),
     ...(options.plugins === undefined
       ? {}

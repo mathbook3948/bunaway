@@ -36,6 +36,11 @@ function currentPlatform(): Platform {
 
 // Keep the reader free while core setup/commands await replies on the same pipe.
 export async function runBunApp(app: AppDefinition): Promise<void> {
+  if (app.desktop !== undefined)
+    throw new BunawayError({
+      code: "UNSUPPORTED",
+      message: "Desktop lifecycle requires the Windows Bun host.",
+    });
   let runtime: RuntimeIdentity | undefined;
   let core: Core | undefined;
   let booting: Promise<Core> | undefined;
