@@ -13,7 +13,9 @@ export class TargetLockError extends Error {
 }
 
 function lockDirectory(root: string, target: BuildTarget): string {
-  if (!BUILD_TARGETS.includes(target)) throw new Error(`Unsupported build target: ${target}`);
+  if (!BUILD_TARGETS.includes(target)) {
+    throw new Error(`Unsupported build target: ${target}`);
+  }
   return resolve(root, "dist", ".bunaway-locks", target);
 }
 
@@ -22,18 +24,27 @@ async function exists(path: string): Promise<boolean> {
     await lstat(path);
     return true;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return false;
+    }
     throw error;
   }
 }
 
-async function createLock(root: string, path: string): Promise<() => Promise<void>> {
+async function createLock(
+  root: string,
+  path: string,
+): Promise<() => Promise<void>> {
   const file = await open(path, "wx");
   return async () => {
     try {
       await file.close();
     } finally {
-      if (await ownedDirectory(root, dirname(path))) await rm(path, { force: true });
+      if (await ownedDirectory(root, dirname(path))) {
+        await rm(path, {
+          force: true,
+        });
+      }
     }
   };
 }
@@ -46,13 +57,22 @@ export async function acquirePackageInputLock(
   await ownedDirectory(root, directory, true);
   const build = resolve(directory, "build.lock");
   if (await exists(build)) {
-    throw new TargetLockError(build, `Build target ${target} is locked by a rebuild.`);
+    throw new TargetLockError(
+      build,
+      `Build target ${target} is locked by a rebuild.`,
+    );
   }
-  const release = await createLock(root, resolve(directory, `package-${crypto.randomUUID()}.lock`));
+  const release = await createLock(
+    root,
+    resolve(directory, `package-${crypto.randomUUID()}.lock`),
+  );
   // Recheck after registering: a builder may have acquired its lock during registration.
   try {
     if (await exists(build)) {
-      throw new TargetLockError(build, `Build target ${target} is locked by a rebuild.`);
+      throw new TargetLockError(
+        build,
+        `Build target ${target} is locked by a rebuild.`,
+      );
     }
   } catch (error) {
     await release();
@@ -72,13 +92,23 @@ export async function acquireBuildOutputLock(
   try {
     release = await createLock(root, build);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-    throw new TargetLockError(build, `Build target ${target} is locked by another rebuild.`);
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+      throw error;
+    }
+    throw new TargetLockError(
+      build,
+      `Build target ${target} is locked by another rebuild.`,
+    );
   }
   // Readers register before checking build.lock; either side observes the other and refuses.
   try {
-    if ((await readdir(directory)).some((name) => name.startsWith("package-"))) {
-      throw new TargetLockError(directory, `Build target ${target} is in use by packaging.`);
+    if (
+      (await readdir(directory)).some((name) => name.startsWith("package-"))
+    ) {
+      throw new TargetLockError(
+        directory,
+        `Build target ${target} is in use by packaging.`,
+      );
     }
   } catch (error) {
     await release();

@@ -9,10 +9,16 @@ import {
 } from "../../packages/runtime-bun/src/development.ts";
 
 function availablePort(): number {
-  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("") });
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => new Response(""),
+  });
   const port = server.port;
   server.stop(true);
-  if (!port) throw new Error("No test port.");
+  if (!port) {
+    throw new Error("No test port.");
+  }
   return port;
 }
 
@@ -24,7 +30,11 @@ function config(mode: string, childPort?: number) {
       resolve(import.meta.dir, "dev-server.fixture.ts"),
       String(port),
       mode,
-      ...(childPort ? [String(childPort)] : []),
+      ...(childPort
+        ? [
+            String(childPort),
+          ]
+        : []),
     ],
     url: `http://127.0.0.1:${port}/`,
     timeoutMs: 5000,
@@ -33,7 +43,11 @@ function config(mode: string, childPort?: number) {
 
 async function reachable(port: number): Promise<boolean> {
   try {
-    return (await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(200) })).ok;
+    return (
+      await fetch(`http://127.0.0.1:${port}/`, {
+        signal: AbortSignal.timeout(200),
+      })
+    ).ok;
   } catch {
     return false;
   }
@@ -41,7 +55,14 @@ async function reachable(port: number): Promise<boolean> {
 
 test("dev settings reject remote origins, unsafe URLs, shell strings and invalid timeouts", () => {
   expect(readDevSettings(undefined)).toBeUndefined();
-  const base = { command: ["bun", "run", "web:dev"], url: "http://localhost:5173" };
+  const base = {
+    command: [
+      "bun",
+      "run",
+      "web:dev",
+    ],
+    url: "http://localhost:5173",
+  };
   expect(readDevSettings(base)).toEqual({
     ...base,
     url: "http://localhost:5173/",
@@ -50,13 +71,39 @@ test("dev settings reject remote origins, unsafe URLs, shell strings and invalid
   for (const invalid of [
     null,
     [],
-    { ...base, command: "bun run web:dev" },
-    { ...base, command: [] },
-    { ...base, command: ["bun", 123] },
-    { ...base, command: ["bun\0"] },
-    { ...base, timeoutMs: 0 },
-    { ...base, timeoutMs: 300001 },
-    { ...base, unexpected: true },
+    {
+      ...base,
+      command: "bun run web:dev",
+    },
+    {
+      ...base,
+      command: [],
+    },
+    {
+      ...base,
+      command: [
+        "bun",
+        123,
+      ],
+    },
+    {
+      ...base,
+      command: [
+        "bun\0",
+      ],
+    },
+    {
+      ...base,
+      timeoutMs: 0,
+    },
+    {
+      ...base,
+      timeoutMs: 300001,
+    },
+    {
+      ...base,
+      unexpected: true,
+    },
     ...[
       "https://example.com",
       "http://localhost.example.com",
@@ -64,9 +111,13 @@ test("dev settings reject remote origins, unsafe URLs, shell strings and invalid
       "file:///tmp/ui",
       "http://user@localhost:5173",
       "http://localhost:5173/#x",
-    ].map((url) => ({ ...base, url })),
-  ])
+    ].map((url) => ({
+      ...base,
+      url,
+    })),
+  ]) {
     expect(() => readDevSettings(invalid)).toThrow();
+  }
 });
 
 test("development policy preserves grants and needs a matching artifact and launch flag", () => {
@@ -74,26 +125,66 @@ test("development policy preserves grants and needs a matching artifact and laun
     views: [
       {
         id: "main",
-        origins: ["https://app.bunaway.local"],
-        commands: ["echo"],
+        origins: [
+          "https://app.bunaway.local",
+        ],
+        commands: [
+          "echo",
+        ],
         events: [],
-        host: { permissions: [] },
+        host: {
+          permissions: [],
+        },
       },
     ],
-    backend: { permissions: [] },
+    backend: {
+      permissions: [],
+    },
   } as Policy;
   const url = "http://127.0.0.1:5173/";
   const development = developmentPolicy(policy, "main", url);
-  expect(development.views[0]?.origins).toEqual(["http://127.0.0.1:5173"]);
-  expect(development.views[0]?.commands).toEqual(["echo"]);
-  expect(policy.views[0]?.origins).toEqual(["https://app.bunaway.local"]);
+  expect(development.views[0]?.origins).toEqual([
+    "http://127.0.0.1:5173",
+  ]);
+  expect(development.views[0]?.commands).toEqual([
+    "echo",
+  ]);
+  expect(policy.views[0]?.origins).toEqual([
+    "https://app.bunaway.local",
+  ]);
   expect(verifyDevelopmentLaunch(undefined)).toBeUndefined();
-  expect(verifyDevelopmentLaunch({ url }, url)).toBe(url);
+  expect(
+    verifyDevelopmentLaunch(
+      {
+        url,
+      },
+      url,
+    ),
+  ).toBe(url);
   for (const [marker, launch] of [
-    [{ url }, undefined],
-    [undefined, url],
-    [{ url }, "http://127.0.0.1:5174/"],
-    [{ url, extra: true }, url],
+    [
+      {
+        url,
+      },
+      undefined,
+    ],
+    [
+      undefined,
+      url,
+    ],
+    [
+      {
+        url,
+      },
+      "http://127.0.0.1:5174/",
+    ],
+    [
+      {
+        url,
+        extra: true,
+      },
+      url,
+    ],
   ] as const) {
     expect(() => verifyDevelopmentLaunch(marker, launch)).toThrow();
   }
@@ -103,7 +194,11 @@ test("managed server waits for readiness and closes its process tree on stop", a
   const childPort = availablePort();
   const settings = config("delayed", childPort);
   const started = Date.now();
-  const server = await startDevServer(settings, import.meta.dir, new AbortController().signal);
+  const server = await startDevServer(
+    settings,
+    import.meta.dir,
+    new AbortController().signal,
+  );
   try {
     expect(Date.now() - started).toBeGreaterThanOrEqual(300);
     expect((await fetch(settings.url)).ok).toBe(true);
@@ -124,7 +219,10 @@ test("an existing listener is rejected rather than adopted as the application's 
   try {
     await expect(
       startDevServer(
-        { ...config("ready"), url: listener.url.href },
+        {
+          ...config("ready"),
+          url: listener.url.href,
+        },
         import.meta.dir,
         new AbortController().signal,
       ),
@@ -150,7 +248,11 @@ test("server replacement can immediately reuse a port held by a descendant", asy
   const settings = config("ready");
   settings.command[2] = String(childPort);
   settings.url = `http://127.0.0.1:${childPort}/`;
-  const replacement = await startDevServer(settings, import.meta.dir, new AbortController().signal);
+  const replacement = await startDevServer(
+    settings,
+    import.meta.dir,
+    new AbortController().signal,
+  );
   try {
     expect(await reachable(childPort)).toBe(true);
   } finally {
@@ -161,7 +263,11 @@ test("server replacement can immediately reuse a port held by a descendant", asy
 test("early exit reports the exit code and terminates descendants", async () => {
   const childPort = availablePort();
   await expect(
-    startDevServer(config("exit-tree", childPort), import.meta.dir, new AbortController().signal),
+    startDevServer(
+      config("exit-tree", childPort),
+      import.meta.dir,
+      new AbortController().signal,
+    ),
   ).rejects.toThrow("exit 7");
   expect(await reachable(childPort)).toBe(false);
 }, 10000);
@@ -175,12 +281,18 @@ test("exit during an HTTP readiness probe preserves the command's exit code", as
         await Bun.sleep(1000);
         throw new Error("Delayed readiness connection failure.");
       },
-      { preconnect: fetch.preconnect },
+      {
+        preconnect: fetch.preconnect,
+      },
     ),
   );
   try {
     await expect(
-      startDevServer(config("exit-tree", childPort), import.meta.dir, new AbortController().signal),
+      startDevServer(
+        config("exit-tree", childPort),
+        import.meta.dir,
+        new AbortController().signal,
+      ),
     ).rejects.toThrow("exit 7");
     expect(probe).toHaveBeenCalled();
   } finally {
@@ -189,10 +301,16 @@ test("exit during an HTTP readiness probe preserves the command's exit code", as
   expect(await reachable(childPort)).toBe(false);
 }, 10000);
 
-test.each(["timeout", "redirect"])(
+test.each([
+  "timeout",
+  "redirect",
+])(
   "%s is not readiness and cleans up after timeout",
   async (mode) => {
-    const settings = { ...config(mode), timeoutMs: 800 };
+    const settings = {
+      ...config(mode),
+      timeoutMs: 800,
+    };
     await expect(
       startDevServer(settings, import.meta.dir, new AbortController().signal),
     ).rejects.toThrow("did not return HTTP 2xx");
@@ -213,7 +331,11 @@ test("startup cancellation and cancellation after readiness both stop the server
   }
   expect(await reachable(Number(new URL(settings.url).port))).toBe(false);
   const runningAbort = new AbortController();
-  const running = await startDevServer(config("ready"), import.meta.dir, runningAbort.signal);
+  const running = await startDevServer(
+    config("ready"),
+    import.meta.dir,
+    runningAbort.signal,
+  );
   runningAbort.abort();
   await running.stop();
   expect(await running.exited).toBeNumber();

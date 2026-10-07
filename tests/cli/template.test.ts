@@ -16,27 +16,43 @@ import { readJsonLines } from "../../packages/runtime-bun/src/index.ts";
 import { createProject } from "./project.ts";
 
 test("external generated backend uses actual SDK command/storage/event; revoked saves are not replayed", async () => {
-  const root = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-template-")));
+  const root = await realpath(
+    await mkdtemp(resolve(tmpdir(), "bunaway-template-")),
+  );
   let child: ReturnType<typeof Bun.spawn> | undefined;
   try {
     const project = await createProject(resolve(root, "independent"));
-    const install = Bun.spawn([process.execPath, "install"], {
-      cwd: project,
-      stdout: "ignore",
-      stderr: "pipe",
-    });
+    const install = Bun.spawn(
+      [
+        process.execPath,
+        "install",
+      ],
+      {
+        cwd: project,
+        stdout: "ignore",
+        stderr: "pipe",
+      },
+    );
     const installErrors = new Response(install.stderr).text();
     expect(await install.exited, await installErrors).toBe(0);
     const assets = resolve(root, "assets");
     const definition = await validateProject(project);
     await bundleAssets(definition, assets);
     const backend = resolve(assets, "backend.js");
-    const processChild = Bun.spawn([process.execPath, "--no-env-file", "--no-install", backend], {
-      cwd: root,
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    const processChild = Bun.spawn(
+      [
+        process.execPath,
+        "--no-env-file",
+        "--no-install",
+        backend,
+      ],
+      {
+        cwd: root,
+        stdin: "pipe",
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
     child = processChild;
     const timeout = setTimeout(() => processChild.kill(), 12000);
     const errors = new Response(processChild.stderr).text();
@@ -46,12 +62,17 @@ test("external generated backend uses actual SDK command/storage/event; revoked 
         `${JSON.stringify({
           ...body,
           ipc: PROTOCOL_VERSION,
-          runtime: { id: "template", generation: "fresh" },
+          runtime: {
+            id: "template",
+            generation: "fresh",
+          },
         })}\n`,
       );
     const next = async () => {
       const line = await frames.next();
-      if (line.done) throw new Error("Unexpected EOF");
+      if (line.done) {
+        throw new Error("Unexpected EOF");
+      }
       return parseProcessFrame(line.value);
     };
     try {
@@ -67,13 +88,25 @@ test("external generated backend uses actual SDK command/storage/event; revoked 
       expect((await next()).kind).toBe("hello");
       send({
         kind: "hello",
-        payload: { kind: "hello", protocol: PROTOCOL_VERSION, features: [], buildId: "host" },
+        payload: {
+          kind: "hello",
+          protocol: PROTOCOL_VERSION,
+          features: [],
+          buildId: "host",
+        },
       });
       expect((await next()).kind).toBe("ready");
       const receivers = new Map<string, (event: TransportEvent) => void>();
       const completedWrites: string[] = [];
       let stored = "";
-      let held: Extract<ProcessFrame, { kind: "host-request" }> | undefined;
+      let held:
+        | Extract<
+            ProcessFrame,
+            {
+              kind: "host-request";
+            }
+          >
+        | undefined;
       let holdReached: (() => void) | undefined;
       const hold = new Promise<void>((resolveHold) => {
         holdReached = resolveHold;
@@ -81,30 +114,56 @@ test("external generated backend uses actual SDK command/storage/event; revoked 
       const reading = (async () => {
         for (;;) {
           const line = await frames.next();
-          if (line.done) break;
+          if (line.done) {
+            break;
+          }
           const frame = parseProcessFrame(line.value);
-          if (frame.kind === "web")
+          if (frame.kind === "web") {
             receivers.get(frame.context)?.({
               kind: "message",
               text: JSON.stringify(frame.payload),
             });
+          }
           if (frame.kind === "host-request") {
             expect(frame.context).toMatch(/^ctx-/);
             const call = parseHostCall(
-              JSON.stringify({ operation: frame.operation, payload: frame.payload }),
+              JSON.stringify({
+                operation: frame.operation,
+                payload: frame.payload,
+              }),
             );
             if (
               call.operation === "storage.writeText" &&
-              (call.payload as { text: string }).text === "pending save"
+              (
+                call.payload as {
+                  text: string;
+                }
+              ).text === "pending save"
             ) {
               held = frame;
               holdReached?.();
               continue;
             }
             if (call.operation === "storage.writeText") {
-              expect((call.payload as { scope: string }).scope).toBe("appData");
-              expect((call.payload as { path: string }).path).toBe("messages/current.txt");
-              stored = (call.payload as { text: string }).text;
+              expect(
+                (
+                  call.payload as {
+                    scope: string;
+                  }
+                ).scope,
+              ).toBe("appData");
+              expect(
+                (
+                  call.payload as {
+                    path: string;
+                  }
+                ).path,
+              ).toBe("messages/current.txt");
+              stored = (
+                call.payload as {
+                  text: string;
+                }
+              ).text;
               completedWrites.push(stored);
             }
             send({
@@ -120,12 +179,25 @@ test("external generated backend uses actual SDK command/storage/event; revoked 
         }
       })();
       const session = (context: string) => {
-        send({ kind: "session-open", context, viewId: "main" });
+        send({
+          kind: "session-open",
+          context,
+          viewId: "main",
+        });
         return createClient({
-          hello: { kind: "hello", protocol: PROTOCOL_VERSION, features: [], buildId: "ui" },
+          hello: {
+            kind: "hello",
+            protocol: PROTOCOL_VERSION,
+            features: [],
+            buildId: "ui",
+          },
           transport: {
             async send(text) {
-              send({ kind: "web", context, payload: JSON.parse(text) });
+              send({
+                kind: "web",
+                context,
+                payload: JSON.parse(text),
+              });
             },
             subscribe(listener) {
               receivers.set(context, listener);
@@ -134,7 +206,10 @@ test("external generated backend uses actual SDK command/storage/event; revoked 
               };
             },
             async close() {
-              send({ kind: "revoke", context });
+              send({
+                kind: "revoke",
+                context,
+              });
               receivers.delete(context);
             },
           },
@@ -148,29 +223,46 @@ test("external generated backend uses actual SDK command/storage/event; revoked 
         (event) => {
           events.push(event.payload);
         },
-        { onError() {} },
+        {
+          onError() {},
+        },
       );
       expect(await first.invoke("message.save", "saved via SDK")).toBeNull();
       expect(await first.invoke("message.read", null)).toBe("saved via SDK");
-      expect(events).toEqual(["saved via SDK"]);
-      const pending = first.invoke("message.save", "pending save").catch((error: unknown) => error);
+      expect(events).toEqual([
+        "saved via SDK",
+      ]);
+      const pending = first
+        .invoke("message.save", "pending save")
+        .catch((error: unknown) => error);
       await hold;
       await first.close();
       expect(await pending).toBeInstanceOf(Error);
       const second = session("ctx-second");
       await second.ready;
-      if (!held) throw new Error("Missing held request.");
+      if (!held) {
+        throw new Error("Missing held request.");
+      }
       send({
         kind: "host-response",
         context: held.context,
         requestId: held.requestId,
-        payload: { kind: "result", payload: null },
+        payload: {
+          kind: "result",
+          payload: null,
+        },
       });
       expect(await second.invoke("message.read", null)).toBe("saved via SDK");
-      expect(completedWrites).toEqual(["saved via SDK"]);
-      expect(events).toEqual(["saved via SDK"]);
+      expect(completedWrites).toEqual([
+        "saved via SDK",
+      ]);
+      expect(events).toEqual([
+        "saved via SDK",
+      ]);
       await second.close();
-      send({ kind: "shutdown" });
+      send({
+        kind: "shutdown",
+      });
       processChild.stdin.end();
       expect(await processChild.exited).toBe(0);
       await reading;
@@ -185,6 +277,9 @@ test("external generated backend uses actual SDK command/storage/event; revoked 
       child.kill();
       await child.exited;
     }
-    await rm(root, { recursive: true, force: true });
+    await rm(root, {
+      recursive: true,
+      force: true,
+    });
   }
 }, 30000);

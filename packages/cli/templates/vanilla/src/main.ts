@@ -4,8 +4,15 @@ const input = document.querySelector<HTMLTextAreaElement>("#message");
 const saved = document.querySelector<HTMLElement>("#saved");
 const status = document.querySelector<HTMLElement>("#status");
 const button = document.querySelector<HTMLButtonElement>("#save");
-if (!input || !saved || !status || !button) throw new Error("Missing UI elements.");
-const ui = { input, saved, status, button };
+if (!input || !saved || !status || !button) {
+  throw new Error("Missing UI elements.");
+}
+const ui = {
+  input,
+  saved,
+  status,
+  button,
+};
 let sessionEnded = false;
 
 function errorText(error: unknown): string {

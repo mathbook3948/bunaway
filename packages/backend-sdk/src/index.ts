@@ -27,6 +27,14 @@ export type {
   Schema,
 } from "@bunaway/protocol";
 export { defineApp } from "./app.ts";
-export { type CommandContract, type CommandHandler, command } from "./command.ts";
+export {
+  type CommandContract,
+  type CommandHandler,
+  command,
+} from "./command.ts";
 export { host, windows } from "./host.ts";
-export { defineModule, type ModuleBuilder, type ModuleDefinition } from "./module.ts";
+export {
+  defineModule,
+  type ModuleBuilder,
+  type ModuleDefinition,
+} from "./module.ts";

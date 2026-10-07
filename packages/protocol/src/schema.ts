@@ -4,15 +4,34 @@ const identifier = {
   pattern: "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
   maxLength: 128,
 } as const;
-const text = { type: "string", maxLength: 1024 } as const;
-const names = { type: "array", items: identifier, maxItems: 256, uniqueItems: true } as const;
+const text = {
+  type: "string",
+  maxLength: 1024,
+} as const;
+const names = {
+  type: "array",
+  items: identifier,
+  maxItems: 256,
+  uniqueItems: true,
+} as const;
 const version = {
   type: "object",
   properties: {
-    major: { type: "integer", minimum: 0, maximum: 65535 },
-    minor: { type: "integer", minimum: 0, maximum: 65535 },
+    major: {
+      type: "integer",
+      minimum: 0,
+      maximum: 65535,
+    },
+    minor: {
+      type: "integer",
+      minimum: 0,
+      maximum: 65535,
+    },
   },
-  required: ["major", "minor"],
+  required: [
+    "major",
+    "minor",
+  ],
   additionalProperties: false,
 } as const;
 
@@ -33,7 +52,10 @@ export const errorSchema = {
     message: text,
     details: {},
   },
-  required: ["code", "message"],
+  required: [
+    "code",
+    "message",
+  ],
   additionalProperties: false,
 } as const;
 
@@ -43,82 +65,150 @@ export const messageSchema = {
     {
       type: "object",
       properties: {
-        kind: { const: "hello" },
+        kind: {
+          const: "hello",
+        },
         protocol: version,
         features: names,
         buildId: identifier,
       },
-      required: ["kind", "protocol", "features", "buildId"],
+      required: [
+        "kind",
+        "protocol",
+        "features",
+        "buildId",
+      ],
       additionalProperties: false,
     },
     {
       type: "object",
       properties: {
-        kind: { const: "invoke" },
+        kind: {
+          const: "invoke",
+        },
         protocol: version,
         id: identifier,
         command: identifier,
         payload: {},
-        deadline: { type: "integer", minimum: 0, maximum: 9007199254740991 },
+        deadline: {
+          type: "integer",
+          minimum: 0,
+          maximum: 9007199254740991,
+        },
       },
-      required: ["kind", "protocol", "id", "command", "payload"],
-      additionalProperties: false,
-    },
-    {
-      type: "object",
-      properties: { kind: { const: "cancel" }, protocol: version, id: identifier },
-      required: ["kind", "protocol", "id"],
+      required: [
+        "kind",
+        "protocol",
+        "id",
+        "command",
+        "payload",
+      ],
       additionalProperties: false,
     },
     {
       type: "object",
       properties: {
-        kind: { const: "listen" },
+        kind: {
+          const: "cancel",
+        },
+        protocol: version,
+        id: identifier,
+      },
+      required: [
+        "kind",
+        "protocol",
+        "id",
+      ],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        kind: {
+          const: "listen",
+        },
         protocol: version,
         id: identifier,
         event: identifier,
       },
-      required: ["kind", "protocol", "id", "event"],
+      required: [
+        "kind",
+        "protocol",
+        "id",
+        "event",
+      ],
       additionalProperties: false,
     },
     {
       type: "object",
       properties: {
-        kind: { const: "unlisten" },
+        kind: {
+          const: "unlisten",
+        },
         protocol: version,
         id: identifier,
         subscriptionId: identifier,
       },
-      required: ["kind", "protocol", "id", "subscriptionId"],
-      additionalProperties: false,
-    },
-    {
-      type: "object",
-      properties: { kind: { const: "result" }, protocol: version, id: identifier, payload: {} },
-      required: ["kind", "protocol", "id", "payload"],
+      required: [
+        "kind",
+        "protocol",
+        "id",
+        "subscriptionId",
+      ],
       additionalProperties: false,
     },
     {
       type: "object",
       properties: {
-        kind: { const: "error" },
+        kind: {
+          const: "result",
+        },
+        protocol: version,
+        id: identifier,
+        payload: {},
+      },
+      required: [
+        "kind",
+        "protocol",
+        "id",
+        "payload",
+      ],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        kind: {
+          const: "error",
+        },
         protocol: version,
         id: identifier,
         error: errorSchema,
       },
-      required: ["kind", "protocol", "id", "error"],
+      required: [
+        "kind",
+        "protocol",
+        "id",
+        "error",
+      ],
       additionalProperties: false,
     },
     {
       type: "object",
       properties: {
-        kind: { const: "event" },
+        kind: {
+          const: "event",
+        },
         protocol: version,
         subscriptionId: identifier,
         source: identifier,
         target: identifier,
         event: identifier,
-        sequence: { type: "integer", minimum: 1, maximum: 9007199254740991 },
+        sequence: {
+          type: "integer",
+          minimum: 1,
+          maximum: 9007199254740991,
+        },
         payload: {},
       },
       required: [
@@ -136,12 +226,19 @@ export const messageSchema = {
     {
       type: "object",
       properties: {
-        kind: { const: "subscription-error" },
+        kind: {
+          const: "subscription-error",
+        },
         protocol: version,
         subscriptionId: identifier,
         error: errorSchema,
       },
-      required: ["kind", "protocol", "subscriptionId", "error"],
+      required: [
+        "kind",
+        "protocol",
+        "subscriptionId",
+        "error",
+      ],
       additionalProperties: false,
     },
   ],
@@ -151,16 +248,35 @@ const scopedPermission = {
   type: "object",
   properties: {
     identifier,
-    allow: { type: "array", items: {}, maxItems: 128 },
-    deny: { type: "array", items: {}, maxItems: 128 },
+    allow: {
+      type: "array",
+      items: {},
+      maxItems: 128,
+    },
+    deny: {
+      type: "array",
+      items: {},
+      maxItems: 128,
+    },
   },
-  required: ["identifier"],
+  required: [
+    "identifier",
+  ],
   additionalProperties: false,
 } as const;
 const hostPermissions = {
   type: "object",
   properties: {
-    permissions: { type: "array", items: { anyOf: [identifier, scopedPermission] }, maxItems: 256 },
+    permissions: {
+      type: "array",
+      items: {
+        anyOf: [
+          identifier,
+          scopedPermission,
+        ],
+      },
+      maxItems: 256,
+    },
     windows: {
       type: "array",
       maxItems: 128,
@@ -168,7 +284,9 @@ const hostPermissions = {
       items: identifier,
     },
   },
-  required: ["permissions"],
+  required: [
+    "permissions",
+  ],
   additionalProperties: false,
 } as const;
 
@@ -176,7 +294,9 @@ export const policySchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   type: "object",
   properties: {
-    version: { const: 1 },
+    version: {
+      const: 1,
+    },
     views: {
       type: "array",
       maxItems: 128,
@@ -190,7 +310,8 @@ export const policySchema = {
             uniqueItems: true,
             items: {
               type: "string",
-              pattern: "^https?://[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[1-9][0-9]{0,4})?$(?![\\s\\S])",
+              pattern:
+                "^https?://[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[1-9][0-9]{0,4})?$(?![\\s\\S])",
               maxLength: 256,
             },
           },
@@ -198,13 +319,23 @@ export const policySchema = {
           events: names,
           host: hostPermissions,
         },
-        required: ["id", "origins", "commands", "events", "host"],
+        required: [
+          "id",
+          "origins",
+          "commands",
+          "events",
+          "host",
+        ],
         additionalProperties: false,
       },
     },
     backend: hostPermissions,
   },
-  required: ["version", "views", "backend"],
+  required: [
+    "version",
+    "views",
+    "backend",
+  ],
   additionalProperties: false,
 } as const;
 
@@ -222,7 +353,10 @@ export const bootstrapSchema = {
     policy: policySchema,
     backendContext: identifier,
   },
-  required: ["entrypoint", "buildId"],
+  required: [
+    "entrypoint",
+    "buildId",
+  ],
   additionalProperties: false,
 } as const;
 
@@ -232,14 +366,30 @@ export const hostResponseSchema = {
   anyOf: [
     {
       type: "object",
-      properties: { kind: { const: "result" }, payload: {} },
-      required: ["kind", "payload"],
+      properties: {
+        kind: {
+          const: "result",
+        },
+        payload: {},
+      },
+      required: [
+        "kind",
+        "payload",
+      ],
       additionalProperties: false,
     },
     {
       type: "object",
-      properties: { kind: { const: "error" }, error: errorSchema },
-      required: ["kind", "error"],
+      properties: {
+        kind: {
+          const: "error",
+        },
+        error: errorSchema,
+      },
+      required: [
+        "kind",
+        "error",
+      ],
       additionalProperties: false,
     },
   ],
@@ -248,31 +398,53 @@ export const hostResponseSchema = {
 const processBase = {
   ipc: {
     type: "object",
-    properties: { major: { const: 1 }, minor: { const: 0 } },
-    required: ["major", "minor"],
+    properties: {
+      major: {
+        const: 1,
+      },
+      minor: {
+        const: 0,
+      },
+    },
+    required: [
+      "major",
+      "minor",
+    ],
     additionalProperties: false,
   },
   runtime: {
     type: "object",
-    properties: { id: identifier, generation: identifier },
-    required: ["id", "generation"],
+    properties: {
+      id: identifier,
+      generation: identifier,
+    },
+    required: [
+      "id",
+      "generation",
+    ],
     additionalProperties: false,
   },
 } as const;
 
-function processVariant<const K extends string, const P extends Record<string, object>>(
-  kind: K,
-  properties: P,
-) {
+function processVariant<
+  const K extends string,
+  const P extends Record<string, object>,
+>(kind: K, properties: P) {
   return {
     type: "object",
-    properties: { ...processBase, kind: { const: kind }, ...properties },
-    required: ["ipc", "runtime", "kind", ...Object.keys(properties)] as (
-      | "ipc"
-      | "runtime"
-      | "kind"
-      | keyof P
-    )[],
+    properties: {
+      ...processBase,
+      kind: {
+        const: kind,
+      },
+      ...properties,
+    },
+    required: [
+      "ipc",
+      "runtime",
+      "kind",
+      ...Object.keys(properties),
+    ] as ("ipc" | "runtime" | "kind" | keyof P)[],
     additionalProperties: false,
   } as const;
 }
@@ -281,14 +453,25 @@ function processVariant<const K extends string, const P extends Record<string, o
 export const processSchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   anyOf: [
-    processVariant("boot", { payload: bootstrapSchema }),
-    processVariant("hello", { payload: messageSchema.anyOf[0] }),
+    processVariant("boot", {
+      payload: bootstrapSchema,
+    }),
+    processVariant("hello", {
+      payload: messageSchema.anyOf[0],
+    }),
     processVariant("ready", {
-      pid: { type: "integer", minimum: 1, maximum: 4294967295 },
+      pid: {
+        type: "integer",
+        minimum: 1,
+        maximum: 4294967295,
+      },
       bunVersion: identifier,
       revision: identifier,
     } as const),
-    processVariant("web", { context: identifier, payload: messageSchema }),
+    processVariant("web", {
+      context: identifier,
+      payload: messageSchema,
+    }),
     processVariant("host-request", {
       context: identifier,
       requestId: identifier,
@@ -300,11 +483,21 @@ export const processSchema = {
       requestId: identifier,
       payload: hostResponseSchema,
     }),
-    processVariant("host-cancel", { context: identifier, requestId: identifier }),
-    processVariant("revoke", { context: identifier }),
-    processVariant("session-open", { context: identifier, viewId: identifier }),
+    processVariant("host-cancel", {
+      context: identifier,
+      requestId: identifier,
+    }),
+    processVariant("revoke", {
+      context: identifier,
+    }),
+    processVariant("session-open", {
+      context: identifier,
+      viewId: identifier,
+    }),
     processVariant("shutdown", {}),
     processVariant("stopping", {}),
-    processVariant("fatal", { error: errorSchema }),
+    processVariant("fatal", {
+      error: errorSchema,
+    }),
   ],
 } as const;

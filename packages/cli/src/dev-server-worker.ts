@@ -5,16 +5,23 @@ import { pathToFileURL } from "node:url";
 import { frameworkRoot } from "./files.ts";
 
 if (import.meta.main) {
-  if (process.platform !== "win32") throw new Error("Command Job worker is Windows-only.");
+  if (process.platform !== "win32") {
+    throw new Error("Command Job worker is Windows-only.");
+  }
   const lease = process.argv[2];
   const command = JSON.parse(process.argv[3] ?? "null") as string[];
-  if (!lease || !Array.isArray(command) || !command.length)
+  if (!lease || !Array.isArray(command) || !command.length) {
     throw new Error("Invalid command worker input.");
+  }
   const { containAppProcess, terminateAppDescendants } = await import(
     pathToFileURL(resolve(frameworkRoot, "native/windows/bun/job.ts")).href
   );
   containAppProcess(lease);
-  const child = Bun.spawn(command, { stdin: "ignore", stdout: "inherit", stderr: "inherit" });
+  const child = Bun.spawn(command, {
+    stdin: "ignore",
+    stdout: "inherit",
+    stderr: "inherit",
+  });
   let finishing: Promise<never> | undefined;
   const finish = (code: number): Promise<never> =>
     (finishing ??= (async () => {

@@ -1,4 +1,8 @@
-import type { AdapterInput, AdapterStage, PackageAdapter } from "../../contract.ts";
+import type {
+  AdapterInput,
+  AdapterStage,
+  PackageAdapter,
+} from "../../contract.ts";
 import { installerStages } from "./installer.ts";
 
 // win-direct: per-user (default) or per-machine Inno Setup installer for

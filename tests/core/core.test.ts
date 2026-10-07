@@ -16,11 +16,19 @@ import {
   type Policy,
   type ServerMessage,
 } from "../../packages/protocol/src/index.ts";
-import { allowedHost, contracts, createCore } from "../fixtures/host-plugins.ts";
+import {
+  allowedHost,
+  contracts,
+  createCore,
+} from "../fixtures/host-plugins.ts";
 
 function createClock() {
   let current = 1_000_000;
-  const timers: { at: number; callback: () => void; cancelled: boolean }[] = [];
+  const timers: {
+    at: number;
+    callback: () => void;
+    cancelled: boolean;
+  }[] = [];
   const runtime: RuntimeServices = {
     createCancellation(): CancellationController {
       const listeners = new Set<() => void>();
@@ -38,15 +46,25 @@ function createClock() {
           },
         },
         abort() {
-          if (aborted) return;
+          if (aborted) {
+            return;
+          }
           aborted = true;
-          for (const listener of [...listeners]) listener();
+          for (const listener of [
+            ...listeners,
+          ]) {
+            listener();
+          }
         },
       };
     },
     now: () => current,
     schedule(callback, delayMs) {
-      const timer = { at: current + delayMs, callback, cancelled: false };
+      const timer = {
+        at: current + delayMs,
+        callback,
+        cancelled: false,
+      };
       timers.push(timer);
       return () => {
         timer.cancelled = true;
@@ -75,7 +93,9 @@ const policy: Policy = {
   views: [
     {
       id: "main",
-      origins: ["https://app.bunaway.local"],
+      origins: [
+        "https://app.bunaway.local",
+      ],
       commands: [
         "notes.read",
         "notes.slow",
@@ -83,27 +103,59 @@ const policy: Policy = {
         "notes.state",
         "plugin.capabilities.get",
       ],
-      events: ["notes.changed"],
+      events: [
+        "notes.changed",
+      ],
       host: {
         permissions: [
           "log:write",
-          { identifier: "storage:read-text", allow: [{ scope: "appData", pathPrefix: "notes" }] },
+          {
+            identifier: "storage:read-text",
+            allow: [
+              {
+                scope: "appData",
+                pathPrefix: "notes",
+              },
+            ],
+          },
         ],
       },
     },
     {
       id: "secondary",
-      origins: ["https://app.bunaway.local"],
-      commands: ["notes.read"],
+      origins: [
+        "https://app.bunaway.local",
+      ],
+      commands: [
+        "notes.read",
+      ],
       events: [],
-      host: { permissions: [] },
+      host: {
+        permissions: [],
+      },
     },
   ],
   backend: {
     permissions: [
       "log:write",
-      { identifier: "storage:read-text", allow: [{ scope: "appData", pathPrefix: "" }] },
-      { identifier: "storage:write-text", allow: [{ scope: "appData", pathPrefix: "" }] },
+      {
+        identifier: "storage:read-text",
+        allow: [
+          {
+            scope: "appData",
+            pathPrefix: "",
+          },
+        ],
+      },
+      {
+        identifier: "storage:write-text",
+        allow: [
+          {
+            scope: "appData",
+            pathPrefix: "",
+          },
+        ],
+      },
     ],
   },
 };
@@ -113,35 +165,71 @@ type CallHost = CoreServices["callHost"];
 
 function createServices(
   clock: ReturnType<typeof createClock>,
-  options?: { send?: Send; callHost?: CallHost },
+  options?: {
+    send?: Send;
+    callHost?: CallHost;
+  },
 ) {
-  const sent: { context: HostContext; message: ServerMessage }[] = [];
-  const hostCalls: { context: HostContext; call: HostCall }[] = [];
+  const sent: {
+    context: HostContext;
+    message: ServerMessage;
+  }[] = [];
+  const hostCalls: {
+    context: HostContext;
+    call: HostCall;
+  }[] = [];
   const services: CoreServices = {
     policy,
-    hello: { kind: "hello", protocol: { major: 1, minor: 0 }, features: [], buildId: "test" },
+    hello: {
+      kind: "hello",
+      protocol: {
+        major: 1,
+        minor: 0,
+      },
+      features: [],
+      buildId: "test",
+    },
     platform: "windows",
     backendContext: "backend-context" as HostContext,
     runtime: clock.runtime,
     send:
       options?.send ??
       (async (context, message) => {
-        sent.push({ context, message });
+        sent.push({
+          context,
+          message,
+        });
       }),
     callHost:
       options?.callHost ??
       (async (context, call) => {
-        hostCalls.push({ context, call });
-        return { kind: "result" as const, payload: null };
+        hostCalls.push({
+          context,
+          call,
+        });
+        return {
+          kind: "result" as const,
+          payload: null,
+        };
       }),
   };
-  return { services, sent, hostCalls };
+  return {
+    services,
+    sent,
+    hostCalls,
+  };
 }
 
 const textInput = {
   type: "object",
-  properties: { key: { type: "string" } },
-  required: ["key"],
+  properties: {
+    key: {
+      type: "string",
+    },
+  },
+  required: [
+    "key",
+  ],
   additionalProperties: false,
 } as const;
 
@@ -152,7 +240,11 @@ function deferred<T>() {
     resolve = res;
     reject = rej;
   });
-  return { promise, resolve, reject };
+  return {
+    promise,
+    resolve,
+    reject,
+  };
 }
 
 function createApp(overrides?: Partial<AppDefinition>): AppDefinition {
@@ -160,45 +252,72 @@ function createApp(overrides?: Partial<AppDefinition>): AppDefinition {
     commands: {
       "notes.read": command({
         input: textInput,
-        output: { type: "string" },
+        output: {
+          type: "string",
+        },
         handle: ({ key }) => `value:${key}`,
       }),
       "notes.slow": command({
-        input: { const: null },
-        output: { const: null },
+        input: {
+          const: null,
+        },
+        output: {
+          const: null,
+        },
         handle: (_input, context) =>
           new Promise<null>((resolve) => {
             context.signal.addEventListener("abort", () => resolve(null));
           }),
       }),
       "notes.emit": command({
-        input: { type: "string" },
-        output: { const: null },
+        input: {
+          type: "string",
+        },
+        output: {
+          const: null,
+        },
         async handle(target, context) {
-          await context.events.emit("notes.changed", { key: target }, { kind: "broadcast" });
+          await context.events.emit(
+            "notes.changed",
+            {
+              key: target,
+            },
+            {
+              kind: "broadcast",
+            },
+          );
           return null;
         },
       }),
       "notes.state": command({
-        input: { type: "string" },
+        input: {
+          type: "string",
+        },
         output: {},
         handle: (key, context) => context.state.get(key) ?? null,
       }),
     },
-    events: { "notes.changed": textInput },
+    events: {
+      "notes.changed": textInput,
+    },
     ...overrides,
   };
 }
 
 const helloMessage: Hello = {
   kind: "hello",
-  protocol: { major: 1, minor: 0 },
+  protocol: {
+    major: 1,
+    minor: 0,
+  },
   features: [],
   buildId: "ui",
 };
 
 async function flush(turns = 20) {
-  for (let i = 0; i < turns; i++) await Promise.resolve();
+  for (let i = 0; i < turns; i++) {
+    await Promise.resolve();
+  }
 }
 
 async function openSession(
@@ -210,33 +329,64 @@ async function openSession(
   const core = await createCore(app ?? createApp(), services);
   const session = core.openSession(context, viewId);
   await session.receive(helloMessage);
-  return { core, session };
+  return {
+    core,
+    session,
+  };
 }
 
-function results(sent: { message: ServerMessage }[], id: string) {
+function results(
+  sent: {
+    message: ServerMessage;
+  }[],
+  id: string,
+) {
   return sent
     .filter(
-      ({ message }) => (message.kind === "result" || message.kind === "error") && message.id === id,
+      ({ message }) =>
+        (message.kind === "result" || message.kind === "error") &&
+        message.id === id,
     )
     .map(({ message }) => message);
 }
 
-for (const diagnostic of ["capture", "throw", "reject", "pending"] as const) {
+for (const diagnostic of [
+  "capture",
+  "throw",
+  "reject",
+  "pending",
+] as const) {
   test(`unexpected command errors preserve the cause and safe reply when diagnostics ${diagnostic}`, async () => {
     const { services, sent } = createServices(createClock());
     const cause = new Error("private implementation failure");
-    const reports: { command: string; cause: unknown }[] = [];
+    const reports: {
+      command: string;
+      cause: unknown;
+    }[] = [];
     services.onCommandError = (command, original) => {
-      reports.push({ command, cause: original });
-      if (diagnostic === "throw") throw new Error("broken diagnostics");
-      if (diagnostic === "reject") return Promise.reject(new Error("broken diagnostics"));
-      if (diagnostic === "pending") return new Promise<void>(() => {});
+      reports.push({
+        command,
+        cause: original,
+      });
+      if (diagnostic === "throw") {
+        throw new Error("broken diagnostics");
+      }
+      if (diagnostic === "reject") {
+        return Promise.reject(new Error("broken diagnostics"));
+      }
+      if (diagnostic === "pending") {
+        return new Promise<void>(() => {});
+      }
     };
     const app = createApp({
       commands: {
         "notes.read": {
-          input: { const: null },
-          output: { const: null },
+          input: {
+            const: null,
+          },
+          output: {
+            const: null,
+          },
           async run() {
             throw cause;
           },
@@ -266,7 +416,10 @@ for (const diagnostic of ["capture", "throw", "reject", "pending"] as const) {
         kind: "error",
         protocol: helloMessage.protocol,
         id: "failure",
-        error: { code: "INTERNAL", message: "Command failed." },
+        error: {
+          code: "INTERNAL",
+          message: "Command failed.",
+        },
       },
     ]);
     await core.stop();
@@ -277,24 +430,38 @@ test("command round trip validates input, output and binds the session host cont
   const clock = createClock();
   const { services, sent, hostCalls } = createServices(clock);
   const app = createApp();
-  const { session } = await openSession(services, "view-context-1" as HostContext, "main", app);
+  const { session } = await openSession(
+    services,
+    "view-context-1" as HostContext,
+    "main",
+    app,
+  );
   await session.receive({
     kind: "invoke",
     protocol: helloMessage.protocol,
     id: "r1",
     command: "notes.read",
-    payload: { key: "a" },
+    payload: {
+      key: "a",
+    },
   });
   await flush();
   expect(results(sent, "r1")).toEqual([
-    { kind: "result", protocol: helloMessage.protocol, id: "r1", payload: "value:a" },
+    {
+      kind: "result",
+      protocol: helloMessage.protocol,
+      id: "r1",
+      payload: "value:a",
+    },
   ]);
 
   const hostApp = createApp({
     commands: {
       "notes.read": command({
         input: textInput,
-        output: { type: "string" },
+        output: {
+          type: "string",
+        },
         handle: async ({ key }, context) => {
           await context.host.call(contracts["storage.readText"], {
             scope: "appData",
@@ -305,13 +472,20 @@ test("command round trip validates input, output and binds the session host cont
       }),
     },
   });
-  const second = await openSession(services, "view-context-2" as HostContext, "main", hostApp);
+  const second = await openSession(
+    services,
+    "view-context-2" as HostContext,
+    "main",
+    hostApp,
+  );
   await second.session.receive({
     kind: "invoke",
     protocol: helloMessage.protocol,
     id: "r2",
     command: "notes.read",
-    payload: { key: "b" },
+    payload: {
+      key: "b",
+    },
   });
   await flush();
   expect(hostCalls).toEqual([
@@ -319,7 +493,10 @@ test("command round trip validates input, output and binds the session host cont
       context: "view-context-2" as HostContext,
       call: {
         operation: "storage.readText",
-        payload: { scope: "appData", path: "notes/b.txt" },
+        payload: {
+          scope: "appData",
+          path: "notes/b.txt",
+        },
       },
     },
   ]);
@@ -329,18 +506,29 @@ test("command round trip validates input, output and binds the session host cont
     protocol: helloMessage.protocol,
     id: "r3",
     command: "notes.read",
-    payload: { key: 42 },
+    payload: {
+      key: 42,
+    },
   });
   await flush();
   expect(results(sent, "r3")).toMatchObject([
-    { kind: "error", error: { code: "INVALID_ARGUMENT" } },
+    {
+      kind: "error",
+      error: {
+        code: "INVALID_ARGUMENT",
+      },
+    },
   ]);
 });
 
 test("policy blocks commands the view did not allow and unknown commands fail", async () => {
   const clock = createClock();
   const { services, sent } = createServices(clock);
-  const { session } = await openSession(services, "ctx-main" as HostContext, "main");
+  const { session } = await openSession(
+    services,
+    "ctx-main" as HostContext,
+    "main",
+  );
   await session.receive({
     kind: "invoke",
     protocol: helloMessage.protocol,
@@ -348,7 +536,11 @@ test("policy blocks commands the view did not allow and unknown commands fail", 
     command: "notes.missing",
     payload: null,
   });
-  const secondary = await openSession(services, "ctx-secondary" as HostContext, "secondary");
+  const secondary = await openSession(
+    services,
+    "ctx-secondary" as HostContext,
+    "secondary",
+  );
   await secondary.session.receive({
     kind: "invoke",
     protocol: helloMessage.protocol,
@@ -358,10 +550,20 @@ test("policy blocks commands the view did not allow and unknown commands fail", 
   });
   await flush();
   expect(results(sent, "r1")).toMatchObject([
-    { kind: "error", error: { code: "INVALID_ARGUMENT" } },
+    {
+      kind: "error",
+      error: {
+        code: "INVALID_ARGUMENT",
+      },
+    },
   ]);
   expect(results(sent, "r2")).toMatchObject([
-    { kind: "error", error: { code: "PERMISSION_DENIED" } },
+    {
+      kind: "error",
+      error: {
+        code: "PERMISSION_DENIED",
+      },
+    },
   ]);
 });
 
@@ -373,7 +575,9 @@ test("requests before hello fail without running the command", async () => {
     commands: {
       "notes.read": command({
         input: textInput,
-        output: { type: "string" },
+        output: {
+          type: "string",
+        },
         handle: ({ key }) => {
           ran = true;
           return key;
@@ -388,12 +592,20 @@ test("requests before hello fail without running the command", async () => {
     protocol: helloMessage.protocol,
     id: "r1",
     command: "notes.read",
-    payload: { key: "a" },
+    payload: {
+      key: "a",
+    },
   });
   await flush();
   expect(ran).toBe(false);
   expect(results(sent, "r1")).toMatchObject([
-    { kind: "error", error: { code: "INVALID_ARGUMENT", message: "Protocol handshake required." } },
+    {
+      kind: "error",
+      error: {
+        code: "INVALID_ARGUMENT",
+        message: "Protocol handshake required.",
+      },
+    },
   ]);
 });
 
@@ -404,7 +616,10 @@ test("incompatible hello reports the backend version and suppresses later work",
   const session = core.openSession("ctx" as HostContext, "main");
   await session.receive({
     kind: "hello",
-    protocol: { major: 2, minor: 0 },
+    protocol: {
+      major: 2,
+      minor: 0,
+    },
     features: [],
     buildId: "ui",
   });
@@ -413,10 +628,17 @@ test("incompatible hello reports the backend version and suppresses later work",
     protocol: helloMessage.protocol,
     id: "r1",
     command: "notes.read",
-    payload: { key: "a" },
+    payload: {
+      key: "a",
+    },
   });
   await flush();
-  expect(sent).toEqual([{ context: "ctx" as HostContext, message: services.hello }]);
+  expect(sent).toEqual([
+    {
+      context: "ctx" as HostContext,
+      message: services.hello,
+    },
+  ]);
   expect(core.openSession("ctx" as HostContext, "main")).toBeDefined();
   await core.stop();
 });
@@ -437,13 +659,27 @@ test("duplicate request IDs and request ID records are bounded", async () => {
   await invoke("r1");
   await flush();
   expect(results(sent, "r1")).toMatchObject([
-    { kind: "error", error: { code: "INVALID_ARGUMENT", message: "Unknown command." } },
+    {
+      kind: "error",
+      error: {
+        code: "INVALID_ARGUMENT",
+        message: "Unknown command.",
+      },
+    },
   ]);
-  for (let i = 2; i <= API_LIMITS.maxRequestIds; i++) await invoke(`id-${i}`);
+  for (let i = 2; i <= API_LIMITS.maxRequestIds; i++) {
+    await invoke(`id-${i}`);
+  }
   await invoke("overflow");
   await flush();
   expect(results(sent, "overflow")).toMatchObject([
-    { kind: "error", error: { code: "BUSY", message: "Request limit reached." } },
+    {
+      kind: "error",
+      error: {
+        code: "BUSY",
+        message: "Request limit reached.",
+      },
+    },
   ]);
 });
 
@@ -454,13 +690,25 @@ test("concurrent invokes run without blocking receive and respect the pending li
   const app = createApp({
     commands: {
       "notes.slow": command({
-        input: { type: "string" },
-        output: { type: "string" },
-        handle: (key) => new Promise<string>((resolve) => releases.set(key, () => resolve(key))),
+        input: {
+          type: "string",
+        },
+        output: {
+          type: "string",
+        },
+        handle: (key) =>
+          new Promise<string>((resolve) =>
+            releases.set(key, () => resolve(key)),
+          ),
       }),
     },
   });
-  const { session } = await openSession(services, "ctx" as HostContext, "main", app);
+  const { session } = await openSession(
+    services,
+    "ctx" as HostContext,
+    "main",
+    app,
+  );
   const invoke = (id: string, key: string) =>
     session.receive({
       kind: "invoke",
@@ -473,17 +721,35 @@ test("concurrent invokes run without blocking receive and respect the pending li
   await invoke("b", "second");
   releases.get("second")?.();
   await flush();
-  expect(results(sent, "b")).toMatchObject([{ kind: "result", payload: "second" }]);
+  expect(results(sent, "b")).toMatchObject([
+    {
+      kind: "result",
+      payload: "second",
+    },
+  ]);
   expect(results(sent, "a")).toEqual([]);
   releases.get("first")?.();
   await flush();
-  expect(results(sent, "a")).toMatchObject([{ kind: "result", payload: "first" }]);
+  expect(results(sent, "a")).toMatchObject([
+    {
+      kind: "result",
+      payload: "first",
+    },
+  ]);
 
-  for (let i = 0; i < API_LIMITS.maxPending; i++) await invoke(`p-${i}`, `k-${i}`);
+  for (let i = 0; i < API_LIMITS.maxPending; i++) {
+    await invoke(`p-${i}`, `k-${i}`);
+  }
   await invoke("over", "k");
   await flush();
   expect(results(sent, "over")).toMatchObject([
-    { kind: "error", error: { code: "BUSY", message: "Pending request limit reached." } },
+    {
+      kind: "error",
+      error: {
+        code: "BUSY",
+        message: "Pending request limit reached.",
+      },
+    },
   ]);
   await session.close();
 });
@@ -496,8 +762,12 @@ test("cancel ends a pending request with CANCELLED and discards its late result"
   const app = createApp({
     commands: {
       "notes.slow": command({
-        input: { const: null },
-        output: { const: null },
+        input: {
+          const: null,
+        },
+        output: {
+          const: null,
+        },
         handle: (_input, context) => {
           context.signal.addEventListener("abort", () => {
             aborted = true;
@@ -507,7 +777,12 @@ test("cancel ends a pending request with CANCELLED and discards its late result"
       }),
     },
   });
-  const { session } = await openSession(services, "ctx" as HostContext, "main", app);
+  const { session } = await openSession(
+    services,
+    "ctx" as HostContext,
+    "main",
+    app,
+  );
   await session.receive({
     kind: "invoke",
     protocol: helloMessage.protocol,
@@ -515,10 +790,21 @@ test("cancel ends a pending request with CANCELLED and discards its late result"
     command: "notes.slow",
     payload: null,
   });
-  await session.receive({ kind: "cancel", protocol: helloMessage.protocol, id: "r1" });
+  await session.receive({
+    kind: "cancel",
+    protocol: helloMessage.protocol,
+    id: "r1",
+  });
   await flush();
   expect(aborted).toBe(true);
-  expect(results(sent, "r1")).toMatchObject([{ kind: "error", error: { code: "CANCELLED" } }]);
+  expect(results(sent, "r1")).toMatchObject([
+    {
+      kind: "error",
+      error: {
+        code: "CANCELLED",
+      },
+    },
+  ]);
   gate.resolve(null);
   await flush();
   expect(results(sent, "r1")).toHaveLength(1);
@@ -531,8 +817,12 @@ test("deadlines reject expired requests and cap runtime at the command limit", a
   const app = createApp({
     commands: {
       "notes.slow": command({
-        input: { const: null },
-        output: { const: null },
+        input: {
+          const: null,
+        },
+        output: {
+          const: null,
+        },
         handle: () => {
           runs++;
           return new Promise<null>(() => {});
@@ -540,7 +830,12 @@ test("deadlines reject expired requests and cap runtime at the command limit", a
       }),
     },
   });
-  const { session } = await openSession(services, "ctx" as HostContext, "main", app);
+  const { session } = await openSession(
+    services,
+    "ctx" as HostContext,
+    "main",
+    app,
+  );
   await session.receive({
     kind: "invoke",
     protocol: helloMessage.protocol,
@@ -551,7 +846,14 @@ test("deadlines reject expired requests and cap runtime at the command limit", a
   });
   await flush();
   expect(runs).toBe(0);
-  expect(results(sent, "expired")).toMatchObject([{ kind: "error", error: { code: "TIMEOUT" } }]);
+  expect(results(sent, "expired")).toMatchObject([
+    {
+      kind: "error",
+      error: {
+        code: "TIMEOUT",
+      },
+    },
+  ]);
 
   await session.receive({
     kind: "invoke",
@@ -568,28 +870,47 @@ test("deadlines reject expired requests and cap runtime at the command limit", a
   expect(results(sent, "hanging")).toEqual([]);
   clock.advance(1);
   await flush();
-  expect(results(sent, "hanging")).toMatchObject([{ kind: "error", error: { code: "TIMEOUT" } }]);
+  expect(results(sent, "hanging")).toMatchObject([
+    {
+      kind: "error",
+      error: {
+        code: "TIMEOUT",
+      },
+    },
+  ]);
 });
 
 test("state snapshots isolate reads and writes across sessions", async () => {
   const clock = createClock();
   const { services, sent } = createServices(clock);
   const app = createApp({
-    state: { note: { text: "initial" } },
+    state: {
+      note: {
+        text: "initial",
+      },
+    },
     commands: {
       "notes.state": command({
-        input: { type: "string" },
+        input: {
+          type: "string",
+        },
         output: {},
         handle: (key, context) => {
           if (key === "seed") {
-            const value = { text: "seeded" };
+            const value = {
+              text: "seeded",
+            };
             context.state.set("seeded", value);
             value.text = "corrupted";
             return context.state.get("seeded") ?? null;
           }
           const value = context.state.get(key);
           if (value && typeof value === "object" && !Array.isArray(value)) {
-            (value as { text: string }).text = "mutated";
+            (
+              value as {
+                text: string;
+              }
+            ).text = "mutated";
           }
           // Re-reading proves mutations of fetched copies never reach the store.
           return context.state.get(key) ?? null;
@@ -597,7 +918,12 @@ test("state snapshots isolate reads and writes across sessions", async () => {
       }),
     },
   });
-  const { session } = await openSession(services, "ctx" as HostContext, "main", app);
+  const { session } = await openSession(
+    services,
+    "ctx" as HostContext,
+    "main",
+    app,
+  );
   const invoke = (id: string, key: string) =>
     session.receive({
       kind: "invoke",
@@ -611,17 +937,53 @@ test("state snapshots isolate reads and writes across sessions", async () => {
   await invoke("r3", "seed");
   await invoke("r4", "seeded");
   await flush();
-  expect(results(sent, "r1")).toMatchObject([{ kind: "result", payload: { text: "initial" } }]);
-  expect(results(sent, "r2")).toMatchObject([{ kind: "result", payload: { text: "initial" } }]);
-  expect(results(sent, "r3")).toMatchObject([{ kind: "result", payload: { text: "seeded" } }]);
-  expect(results(sent, "r4")).toMatchObject([{ kind: "result", payload: { text: "seeded" } }]);
+  expect(results(sent, "r1")).toMatchObject([
+    {
+      kind: "result",
+      payload: {
+        text: "initial",
+      },
+    },
+  ]);
+  expect(results(sent, "r2")).toMatchObject([
+    {
+      kind: "result",
+      payload: {
+        text: "initial",
+      },
+    },
+  ]);
+  expect(results(sent, "r3")).toMatchObject([
+    {
+      kind: "result",
+      payload: {
+        text: "seeded",
+      },
+    },
+  ]);
+  expect(results(sent, "r4")).toMatchObject([
+    {
+      kind: "result",
+      payload: {
+        text: "seeded",
+      },
+    },
+  ]);
 });
 
 test("events reach allowed subscriptions in order and stop after unlisten", async () => {
   const clock = createClock();
   const { services, sent } = createServices(clock);
-  const { session } = await openSession(services, "ctx-main" as HostContext, "main");
-  const secondary = await openSession(services, "ctx-secondary" as HostContext, "secondary");
+  const { session } = await openSession(
+    services,
+    "ctx-main" as HostContext,
+    "main",
+  );
+  const secondary = await openSession(
+    services,
+    "ctx-secondary" as HostContext,
+    "secondary",
+  );
 
   await secondary.session.receive({
     kind: "listen",
@@ -643,17 +1005,29 @@ test("events reach allowed subscriptions in order and stop after unlisten", asyn
   });
   await flush();
   expect(results(sent, "l-denied")).toMatchObject([
-    { kind: "error", error: { code: "PERMISSION_DENIED" } },
+    {
+      kind: "error",
+      error: {
+        code: "PERMISSION_DENIED",
+      },
+    },
   ]);
   expect(results(sent, "l-unknown")).toMatchObject([
-    { kind: "error", error: { code: "INVALID_ARGUMENT" } },
+    {
+      kind: "error",
+      error: {
+        code: "INVALID_ARGUMENT",
+      },
+    },
   ]);
   expect(results(sent, "l1")).toEqual([
     {
       kind: "result",
       protocol: helloMessage.protocol,
       id: "l1",
-      payload: { subscriptionId: "sub-1" },
+      payload: {
+        subscriptionId: "sub-1",
+      },
     },
   ]);
 
@@ -680,7 +1054,9 @@ test("events reach allowed subscriptions in order and stop after unlisten", asyn
         target: "main",
         event: "notes.changed",
         sequence: 1,
-        payload: { key: "a" },
+        payload: {
+          key: "a",
+        },
       },
     },
     {
@@ -693,7 +1069,9 @@ test("events reach allowed subscriptions in order and stop after unlisten", asyn
         target: "main",
         event: "notes.changed",
         sequence: 2,
-        payload: { key: "b" },
+        payload: {
+          key: "b",
+        },
       },
     },
   ]);
@@ -706,8 +1084,15 @@ test("events reach allowed subscriptions in order and stop after unlisten", asyn
   });
   await emit("e3", "c");
   await flush();
-  expect(results(sent, "u1")).toMatchObject([{ kind: "result", payload: null }]);
-  expect(sent.filter(({ message }) => message.kind === "event")).toHaveLength(2);
+  expect(results(sent, "u1")).toMatchObject([
+    {
+      kind: "result",
+      payload: null,
+    },
+  ]);
+  expect(sent.filter(({ message }) => message.kind === "event")).toHaveLength(
+    2,
+  );
 });
 
 test("backend emits reach subscriptions with the backend source", async () => {
@@ -717,16 +1102,26 @@ test("backend emits reach subscriptions with the backend source", async () => {
   const plugin: PluginDefinition = {
     name: "emitter",
     version: "1",
-    events: { "notes.changed": textInput },
+    events: {
+      "notes.changed": textInput,
+    },
     setup(context) {
-      emit = (payload) => context.events.emit("notes.changed", payload, { kind: "broadcast" });
+      emit = (payload) =>
+        context.events.emit("notes.changed", payload, {
+          kind: "broadcast",
+        });
     },
   };
   const { session } = await openSession(
     services,
     "ctx" as HostContext,
     "main",
-    createApp({ events: {}, plugins: [plugin] }),
+    createApp({
+      events: {},
+      plugins: [
+        plugin,
+      ],
+    }),
   );
   await session.receive({
     kind: "listen",
@@ -735,10 +1130,20 @@ test("backend emits reach subscriptions with the backend source", async () => {
     event: "notes.changed",
   });
   await flush();
-  await emit?.({ key: "from-backend" });
+  await emit?.({
+    key: "from-backend",
+  });
   await flush();
   expect(sent.filter(({ message }) => message.kind === "event")).toMatchObject([
-    { message: { source: "backend", sequence: 1, payload: { key: "from-backend" } } },
+    {
+      message: {
+        source: "backend",
+        sequence: 1,
+        payload: {
+          key: "from-backend",
+        },
+      },
+    },
   ]);
 });
 
@@ -746,12 +1151,20 @@ test("subscription queue overflow ends the subscription with BUSY", async () => 
   const clock = createClock();
   let open = true;
   const gate = deferred<void>();
-  const sent: { context: HostContext; message: ServerMessage }[] = [];
+  const sent: {
+    context: HostContext;
+    message: ServerMessage;
+  }[] = [];
   const send: Send = (context, message) => {
-    sent.push({ context, message });
+    sent.push({
+      context,
+      message,
+    });
     return open ? Promise.resolve() : gate.promise;
   };
-  const { services } = createServices(clock, { send });
+  const { services } = createServices(clock, {
+    send,
+  });
   const { session } = await openSession(services, "ctx" as HostContext, "main");
   await session.receive({
     kind: "listen",
@@ -769,21 +1182,38 @@ test("subscription queue overflow ends the subscription with BUSY", async () => 
       command: "notes.emit",
       payload: "x",
     });
-  for (let i = 0; i <= API_LIMITS.maxPending + 1; i++) await emit(`e-${i}`);
+  for (let i = 0; i <= API_LIMITS.maxPending + 1; i++) {
+    await emit(`e-${i}`);
+  }
   await flush();
   open = true;
   gate.resolve();
   await flush(600);
-  const errors = sent.filter(({ message }) => message.kind === "subscription-error");
-  expect(errors).toMatchObject([{ message: { subscriptionId: "sub-1", error: { code: "BUSY" } } }]);
+  const errors = sent.filter(
+    ({ message }) => message.kind === "subscription-error",
+  );
+  expect(errors).toMatchObject([
+    {
+      message: {
+        subscriptionId: "sub-1",
+        error: {
+          code: "BUSY",
+        },
+      },
+    },
+  ]);
   const events = sent.filter(({ message }) => message.kind === "event");
   expect(events.length).toBeGreaterThan(0);
   expect(events.length).toBeLessThanOrEqual(API_LIMITS.maxPending);
   let lastEvent = -1;
   for (const [index, { message }] of sent.entries()) {
-    if (message.kind === "event") lastEvent = index;
+    if (message.kind === "event") {
+      lastEvent = index;
+    }
   }
-  const terminal = sent.findIndex(({ message }) => message.kind === "subscription-error");
+  const terminal = sent.findIndex(
+    ({ message }) => message.kind === "subscription-error",
+  );
   expect(lastEvent).toBeLessThan(terminal);
 });
 
@@ -793,62 +1223,166 @@ test("reserved and duplicate names plus plugin violations fail creation", async 
   const reserved = createApp({
     commands: {
       "plugin.capabilities.get": command({
-        input: { const: null },
-        output: { const: null },
+        input: {
+          const: null,
+        },
+        output: {
+          const: null,
+        },
         handle: () => null,
       }),
     },
   });
-  await expect(createCore(reserved, services)).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
+  await expect(createCore(reserved, services)).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
 
   const duplicate: PluginDefinition = {
     name: "dup",
     version: "1",
     commands: {
-      "notes.read": command({ input: {}, output: {}, handle: () => null }),
+      "notes.read": command({
+        input: {},
+        output: {},
+        handle: () => null,
+      }),
     },
   };
-  await expect(createCore(createApp({ plugins: [duplicate] }), services)).rejects.toMatchObject({
+  await expect(
+    createCore(
+      createApp({
+        plugins: [
+          duplicate,
+        ],
+      }),
+      services,
+    ),
+  ).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
   });
 
   const cycle: PluginDefinition[] = [
-    { name: "a", version: "1", dependencies: ["b"] },
-    { name: "b", version: "1", dependencies: ["a"] },
+    {
+      name: "a",
+      version: "1",
+      dependencies: [
+        "b",
+      ],
+    },
+    {
+      name: "b",
+      version: "1",
+      dependencies: [
+        "a",
+      ],
+    },
   ];
-  await expect(createCore(createApp({ plugins: cycle }), services)).rejects.toMatchObject({
+  await expect(
+    createCore(
+      createApp({
+        plugins: cycle,
+      }),
+      services,
+    ),
+  ).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
   });
 
-  const missing: PluginDefinition = { name: "a", version: "1", dependencies: ["ghost"] };
-  await expect(createCore(createApp({ plugins: [missing] }), services)).rejects.toMatchObject({
+  const missing: PluginDefinition = {
+    name: "a",
+    version: "1",
+    dependencies: [
+      "ghost",
+    ],
+  };
+  await expect(
+    createCore(
+      createApp({
+        plugins: [
+          missing,
+        ],
+      }),
+      services,
+    ),
+  ).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
   });
 
-  const wrongPlatform: PluginDefinition = { name: "mac", version: "1", platforms: ["macos"] };
-  await expect(createCore(createApp({ plugins: [wrongPlatform] }), services)).rejects.toMatchObject(
-    { code: "UNSUPPORTED" },
-  );
+  const wrongPlatform: PluginDefinition = {
+    name: "mac",
+    version: "1",
+    platforms: [
+      "macos",
+    ],
+  };
+  await expect(
+    createCore(
+      createApp({
+        plugins: [
+          wrongPlatform,
+        ],
+      }),
+      services,
+    ),
+  ).rejects.toMatchObject({
+    code: "UNSUPPORTED",
+  });
 
   const needsHost: PluginDefinition = {
     name: "greedy",
     version: "1",
-    requiredPermissions: ["capabilities:get"],
+    requiredPermissions: [
+      "capabilities:get",
+    ],
   };
-  await expect(createCore(createApp({ plugins: [needsHost] }), services)).rejects.toMatchObject({
+  await expect(
+    createCore(
+      createApp({
+        plugins: [
+          needsHost,
+        ],
+      }),
+      services,
+    ),
+  ).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
   });
 
   const covered: PluginDefinition = {
     name: "covered",
     version: "1",
-    requiredPermissions: ["log:write", "storage:read-text"],
+    requiredPermissions: [
+      "log:write",
+      "storage:read-text",
+    ],
   };
-  await expect(createCore(createApp({ plugins: [covered] }), services)).resolves.toBeDefined();
+  await expect(
+    createCore(
+      createApp({
+        plugins: [
+          covered,
+        ],
+      }),
+      services,
+    ),
+  ).resolves.toBeDefined();
 });
 
 test("plugin window requirements are checked before setup", async () => {
-  for (const grants of [undefined, [], ["main"], ["editor"], ["main", "editor"]]) {
+  for (const grants of [
+    undefined,
+    [],
+    [
+      "main",
+    ],
+    [
+      "editor",
+    ],
+    [
+      "main",
+      "editor",
+    ],
+  ]) {
     const { services } = createServices(createClock());
     let setupRuns = 0;
     const app = createApp({
@@ -856,7 +1390,12 @@ test("plugin window requirements are checked before setup", async () => {
         {
           name: "window-requirement-test",
           version: "1",
-          requiredHost: { windows: ["main", "editor"] },
+          requiredHost: {
+            windows: [
+              "main",
+              "editor",
+            ],
+          },
           setup() {
             setupRuns++;
           },
@@ -871,13 +1410,24 @@ test("plugin window requirements are checked before setup", async () => {
           ...services.policy.views,
           {
             id: "editor",
-            origins: ["https://app.bunaway.local"],
+            origins: [
+              "https://app.bunaway.local",
+            ],
             commands: [],
             events: [],
-            host: { permissions: [] },
+            host: {
+              permissions: [],
+            },
           },
         ],
-        backend: { ...services.policy.backend, ...(grants ? { windows: grants } : {}) },
+        backend: {
+          ...services.policy.backend,
+          ...(grants
+            ? {
+                windows: grants,
+              }
+            : {}),
+        },
       },
     });
     if (grants?.includes("main") && grants.includes("editor")) {
@@ -885,7 +1435,9 @@ test("plugin window requirements are checked before setup", async () => {
       expect(setupRuns).toBe(1);
       await core.stop();
     } else {
-      await expect(startup).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
+      await expect(startup).rejects.toMatchObject({
+        code: "INVALID_ARGUMENT",
+      });
       expect(setupRuns).toBe(0);
     }
   }
@@ -899,27 +1451,52 @@ test("plugins initialize in dependency order and clean up in reverse", async () 
   const make = (name: string, dependencies?: string[]): PluginDefinition => ({
     name,
     version: "1",
-    ...(dependencies ? { dependencies } : {}),
+    ...(dependencies
+      ? {
+          dependencies,
+        }
+      : {}),
     async setup(context) {
       order.push(name);
-      await context.host.call(contracts["log.write"], { level: "info", message: name });
+      await context.host.call(contracts["log.write"], {
+        level: "info",
+        message: name,
+      });
       return () => {
         stops.push(name);
       };
     },
   });
   const core = await createCore(
-    createApp({ plugins: [make("c", ["b"]), make("a"), make("b", ["a"])] }),
+    createApp({
+      plugins: [
+        make("c", [
+          "b",
+        ]),
+        make("a"),
+        make("b", [
+          "a",
+        ]),
+      ],
+    }),
     services,
   );
-  expect(order).toEqual(["a", "b", "c"]);
+  expect(order).toEqual([
+    "a",
+    "b",
+    "c",
+  ]);
   expect(hostCalls.map(({ context }) => context)).toEqual([
     "backend-context" as HostContext,
     "backend-context" as HostContext,
     "backend-context" as HostContext,
   ]);
   await core.stop();
-  expect(stops).toEqual(["c", "b", "a"]);
+  expect(stops).toEqual([
+    "c",
+    "b",
+    "a",
+  ]);
 });
 
 test("plugin diagnostics preserve setup and stop failures without interrupting cleanup", async () => {
@@ -929,8 +1506,14 @@ test("plugin diagnostics preserve setup and stop failures without interrupting c
   const reports: unknown[][] = [];
   const stopped: string[] = [];
   services.onPluginError = (plugin, phase, cause) => {
-    reports.push([plugin, phase, cause]);
-    if (phase === "setup") throw new Error("diagnostic failed");
+    reports.push([
+      plugin,
+      phase,
+      cause,
+    ]);
+    if (phase === "setup") {
+      throw new Error("diagnostic failed");
+    }
     return Promise.reject(new Error("diagnostic rejected"));
   };
   const plugins: PluginDefinition[] = [
@@ -966,23 +1549,54 @@ test("plugin diagnostics preserve setup and stop failures without interrupting c
       }),
       services,
     ),
-  ).rejects.toMatchObject({ message: "Plugin setup failed." });
+  ).rejects.toMatchObject({
+    message: "Plugin setup failed.",
+  });
   expect(reports).toEqual([
-    ["broken", "setup", setupError],
-    ["second", "stop", stopError],
+    [
+      "broken",
+      "setup",
+      setupError,
+    ],
+    [
+      "second",
+      "stop",
+      stopError,
+    ],
   ]);
-  expect(stopped).toEqual(["second", "first"]);
+  expect(stopped).toEqual([
+    "second",
+    "first",
+  ]);
 
   reports.length = 0;
   stopped.length = 0;
   services.onPluginError = (plugin, phase, cause) => {
-    reports.push([plugin, phase, cause]);
+    reports.push([
+      plugin,
+      phase,
+      cause,
+    ]);
     return new Promise<void>(() => {});
   };
-  const core = await createCore(createApp({ plugins }), services);
+  const core = await createCore(
+    createApp({
+      plugins,
+    }),
+    services,
+  );
   await core.stop();
-  expect(reports).toEqual([["second", "stop", stopError]]);
-  expect(stopped).toEqual(["second", "first"]);
+  expect(reports).toEqual([
+    [
+      "second",
+      "stop",
+      stopError,
+    ],
+  ]);
+  expect(stopped).toEqual([
+    "second",
+    "first",
+  ]);
 });
 
 test("a plugin setup failure runs earlier stop hooks and rejects creation", async () => {
@@ -1003,28 +1617,52 @@ test("a plugin setup failure runs earlier stop hooks and rejects creation", asyn
     {
       name: "broken",
       version: "1",
-      dependencies: ["first"],
+      dependencies: [
+        "first",
+      ],
       setup: () => {
         throw new Error("private details");
       },
     },
   ];
-  await expect(createCore(createApp({ plugins }), services)).rejects.toMatchObject({
+  await expect(
+    createCore(
+      createApp({
+        plugins,
+      }),
+      services,
+    ),
+  ).rejects.toMatchObject({
     code: "INTERNAL",
     message: "Plugin setup failed.",
   });
-  expect(stops).toEqual(["registered", "first"]);
+  expect(stops).toEqual([
+    "registered",
+    "first",
+  ]);
 });
 
 test("the registered capabilities plugin command calls the host operation", async () => {
   const clock = createClock();
-  const recorded: { context: HostContext; call: HostCall }[] = [];
+  const recorded: {
+    context: HostContext;
+    call: HostCall;
+  }[] = [];
   const { services, sent } = createServices(clock, {
     callHost: async (context, call) => {
-      recorded.push({ context, call });
+      recorded.push({
+        context,
+        call,
+      });
       return {
         kind: "result" as const,
-        payload: [{ name: "storage", support: "supported", permission: "granted" }],
+        payload: [
+          {
+            name: "storage",
+            support: "supported",
+            permission: "granted",
+          },
+        ],
       };
     },
   });
@@ -1041,7 +1679,10 @@ test("the registered capabilities plugin command calls the host operation", asyn
   expect(hostCalls).toEqual([
     {
       context: "view-context-1" as HostContext,
-      call: { operation: "capabilities.get", payload: null },
+      call: {
+        operation: "capabilities.get",
+        payload: null,
+      },
     },
   ]);
   expect(results(sent, "cap")).toEqual([
@@ -1049,7 +1690,13 @@ test("the registered capabilities plugin command calls the host operation", asyn
       kind: "result",
       protocol: helloMessage.protocol,
       id: "cap",
-      payload: [{ name: "storage", support: "supported", permission: "granted" }],
+      payload: [
+        {
+          name: "storage",
+          support: "supported",
+          permission: "granted",
+        },
+      ],
     },
   ]);
 });
@@ -1067,14 +1714,26 @@ test("session close is idempotent, fails pending work and frees nothing early", 
   });
   const first = session.close();
   const second = session.close();
-  await Promise.all([first, second]);
-  expect(results(sent, "r1")).toMatchObject([{ kind: "error", error: { code: "CANCELLED" } }]);
+  await Promise.all([
+    first,
+    second,
+  ]);
+  expect(results(sent, "r1")).toMatchObject([
+    {
+      kind: "error",
+      error: {
+        code: "CANCELLED",
+      },
+    },
+  ]);
   await session.receive({
     kind: "invoke",
     protocol: helloMessage.protocol,
     id: "r2",
     command: "notes.read",
-    payload: { key: "a" },
+    payload: {
+      key: "a",
+    },
   });
   await flush();
   expect(results(sent, "r2")).toEqual([]);
@@ -1087,11 +1746,17 @@ test("unknown views, duplicate contexts and stopped cores reject openSession", a
   const clock = createClock();
   const { services } = createServices(clock);
   const core = await createCore(createApp(), services);
-  expect(() => core.openSession("a" as HostContext, "ghost")).toThrow("Unknown view");
+  expect(() => core.openSession("a" as HostContext, "ghost")).toThrow(
+    "Unknown view",
+  );
   core.openSession("dup" as HostContext, "main");
-  expect(() => core.openSession("dup" as HostContext, "main")).toThrow("Duplicate context");
+  expect(() => core.openSession("dup" as HostContext, "main")).toThrow(
+    "Duplicate context",
+  );
   await core.stop();
-  expect(() => core.openSession("late" as HostContext, "main")).toThrow("Core is stopped.");
+  expect(() => core.openSession("late" as HostContext, "main")).toThrow(
+    "Core is stopped.",
+  );
 });
 
 test("stop aborts backend work, closes sessions, and reports slow cleanup as TIMEOUT", async () => {
@@ -1111,7 +1776,11 @@ test("stop aborts backend work, closes sessions, and reports slow cleanup as TIM
     services,
     "ctx" as HostContext,
     "main",
-    createApp({ plugins: [plugin] }),
+    createApp({
+      plugins: [
+        plugin,
+      ],
+    }),
   );
   await session.receive({
     kind: "invoke",
@@ -1129,7 +1798,11 @@ test("stop aborts backend work, closes sessions, and reports slow cleanup as TIM
     setup: () => () => new Promise<void>(() => {}),
   };
   const slowCore = await createCore(
-    createApp({ plugins: [hanging] }),
+    createApp({
+      plugins: [
+        hanging,
+      ],
+    }),
     createServices(second).services,
   );
   const stopped = slowCore.stop();
@@ -1140,7 +1813,9 @@ test("stop aborts backend work, closes sessions, and reports slow cleanup as TIM
   } catch (cause) {
     failure = cause;
   }
-  expect(failure).toMatchObject({ code: "TIMEOUT" });
+  expect(failure).toMatchObject({
+    code: "TIMEOUT",
+  });
 });
 
 test("duplicate IDs preserve a pending request and never repeat its result", async () => {
@@ -1155,8 +1830,12 @@ test("duplicate IDs preserve a pending request and never repeat its result", asy
     createApp({
       commands: {
         "notes.slow": command({
-          input: { const: null },
-          output: { const: null },
+          input: {
+            const: null,
+          },
+          output: {
+            const: null,
+          },
           handle: () => {
             runs++;
             return gate.promise;
@@ -1186,7 +1865,12 @@ test("duplicate IDs preserve a pending request and never repeat its result", asy
   await flush();
   await session.receive(request);
   expect(runs).toBe(1);
-  expect(results(sent, "same")).toMatchObject([{ kind: "result", payload: null }]);
+  expect(results(sent, "same")).toMatchObject([
+    {
+      kind: "result",
+      payload: null,
+    },
+  ]);
   await core.stop();
 });
 
@@ -1200,32 +1884,67 @@ test("storage permissions combine grants without widening scope or path", async 
       backend: {
         permissions: [
           "log:write",
-          { identifier: "storage:read-text", allow: [{ scope: "appData", pathPrefix: "" }] },
-          { identifier: "storage:write-text", allow: [{ scope: "appData", pathPrefix: "notes" }] },
+          {
+            identifier: "storage:read-text",
+            allow: [
+              {
+                scope: "appData",
+                pathPrefix: "",
+              },
+            ],
+          },
+          {
+            identifier: "storage:write-text",
+            allow: [
+              {
+                scope: "appData",
+                pathPrefix: "notes",
+              },
+            ],
+          },
         ],
       },
     },
   };
-  for (const path of ["notes/file.txt", "notes/nested/file.txt"]) {
+  for (const path of [
+    "notes/file.txt",
+    "notes/nested/file.txt",
+  ]) {
     expect(
       allowedHost(splitServices.policy.backend, {
         operation: "storage.writeText",
-        payload: { scope: "appData", path, text: "saved" },
+        payload: {
+          scope: "appData",
+          path,
+          text: "saved",
+        },
       }),
     ).toBe(true);
   }
-  for (const path of ["file.txt", "notes-private/file.txt", "other/file.txt"]) {
+  for (const path of [
+    "file.txt",
+    "notes-private/file.txt",
+    "other/file.txt",
+  ]) {
     expect(
       allowedHost(splitServices.policy.backend, {
         operation: "storage.writeText",
-        payload: { scope: "appData", path, text: "saved" },
+        payload: {
+          scope: "appData",
+          path,
+          text: "saved",
+        },
       }),
     ).toBe(false);
   }
   expect(
     allowedHost(splitServices.policy.backend, {
       operation: "storage.writeText",
-      payload: { scope: "temp", path: "notes/file.txt", text: "saved" },
+      payload: {
+        scope: "temp",
+        path: "notes/file.txt",
+        text: "saved",
+      },
     }),
   ).toBe(false);
 });
@@ -1259,7 +1978,10 @@ test("failed startup cancels backend Host calls before reverse cleanup", async (
             setup(context) {
               saved = context;
               pending = context.host
-                .call(contracts["log.write"], { level: "info", message: "pending" })
+                .call(contracts["log.write"], {
+                  level: "info",
+                  message: "pending",
+                })
                 .catch((error: unknown) => error);
               return () => {
                 expect(context.signal.aborted).toBe(true);
@@ -1278,14 +2000,29 @@ test("failed startup cancels backend Host calls before reverse cleanup", async (
       }),
       services,
     ),
-  ).rejects.toMatchObject({ code: "INTERNAL", message: "Plugin setup failed." });
-  expect(stops).toEqual(["worker", "first"]);
+  ).rejects.toMatchObject({
+    code: "INTERNAL",
+    message: "Plugin setup failed.",
+  });
+  expect(stops).toEqual([
+    "worker",
+    "first",
+  ]);
   expect(hostSignal?.aborted).toBe(true);
-  expect(await pending).toMatchObject({ code: "CANCELLED" });
-  if (!saved) throw new Error("Plugin context was not captured.");
+  expect(await pending).toMatchObject({
+    code: "CANCELLED",
+  });
+  if (!saved) {
+    throw new Error("Plugin context was not captured.");
+  }
   await expect(
-    saved.host.call(contracts["log.write"], { level: "info", message: "late" }),
-  ).rejects.toMatchObject({ code: "CANCELLED" });
+    saved.host.call(contracts["log.write"], {
+      level: "info",
+      message: "late",
+    }),
+  ).rejects.toMatchObject({
+    code: "CANCELLED",
+  });
 });
 
 test("failed startup bounds plugin cleanup by the shutdown deadline", async () => {
@@ -1294,7 +2031,11 @@ test("failed startup bounds plugin cleanup by the shutdown deadline", async () =
   const creation = createCore(
     createApp({
       plugins: [
-        { name: "worker", version: "1", setup: () => () => new Promise<void>(() => {}) },
+        {
+          name: "worker",
+          version: "1",
+          setup: () => () => new Promise<void>(() => {}),
+        },
         {
           name: "broken",
           version: "1",
@@ -1309,10 +2050,15 @@ test("failed startup bounds plugin cleanup by the shutdown deadline", async () =
   const failure = creation.catch((error: unknown) => error);
   await flush();
   clock.advance(API_LIMITS.shutdownTimeoutMs);
-  expect(await failure).toMatchObject({ code: "TIMEOUT" });
+  expect(await failure).toMatchObject({
+    code: "TIMEOUT",
+  });
 });
 
-for (const shutdown of ["close", "stop"] as const) {
+for (const shutdown of [
+  "close",
+  "stop",
+] as const) {
   test(`queued subscription overflow error is discarded after ${shutdown}`, async () => {
     const clock = createClock();
     const gate = deferred<void>();
@@ -1320,7 +2066,9 @@ for (const shutdown of ["close", "stop"] as const) {
     const { services } = createServices(clock, {
       send: async (_context, message) => {
         sent.push(message);
-        if (message.kind === "result") await gate.promise;
+        if (message.kind === "result") {
+          await gate.promise;
+        }
       },
     });
     let emit!: () => Promise<void>;
@@ -1335,7 +2083,15 @@ for (const shutdown of ["close", "stop"] as const) {
             version: "1",
             setup(context) {
               emit = () =>
-                context.events.emit("notes.changed", { key: "x" }, { kind: "broadcast" });
+                context.events.emit(
+                  "notes.changed",
+                  {
+                    key: "x",
+                  },
+                  {
+                    kind: "broadcast",
+                  },
+                );
             },
           },
         ],
@@ -1347,18 +2103,33 @@ for (const shutdown of ["close", "stop"] as const) {
       id: "l1",
       event: "notes.changed",
     });
-    for (let i = 0; i <= API_LIMITS.maxPending; i++) await emit();
-    if (shutdown === "close") await session.close();
-    else await core.stop();
-    expect(sent.map((message) => message.kind)).toEqual(["hello", "result"]);
+    for (let i = 0; i <= API_LIMITS.maxPending; i++) {
+      await emit();
+    }
+    if (shutdown === "close") {
+      await session.close();
+    } else {
+      await core.stop();
+    }
+    expect(sent.map((message) => message.kind)).toEqual([
+      "hello",
+      "result",
+    ]);
     gate.resolve();
     await flush(600);
-    expect(sent.map((message) => message.kind)).toEqual(["hello", "result"]);
+    expect(sent.map((message) => message.kind)).toEqual([
+      "hello",
+      "result",
+    ]);
     await core.stop();
   });
 }
 
-for (const shutdown of ["cancel", "timeout", "close"] as const) {
+for (const shutdown of [
+  "cancel",
+  "timeout",
+  "close",
+] as const) {
   test(`late command events cannot reach a new session after ${shutdown}`, async () => {
     const clock = createClock();
     const { services, sent } = createServices(clock);
@@ -1371,12 +2142,24 @@ for (const shutdown of ["cancel", "timeout", "close"] as const) {
       createApp({
         commands: {
           "notes.slow": command({
-            input: { const: null },
-            output: { const: null },
+            input: {
+              const: null,
+            },
+            output: {
+              const: null,
+            },
             async handle(_input, context) {
               await gate.promise;
               try {
-                await context.events.emit("notes.changed", { key: "stale" }, { kind: "broadcast" });
+                await context.events.emit(
+                  "notes.changed",
+                  {
+                    key: "stale",
+                  },
+                  {
+                    kind: "broadcast",
+                  },
+                );
               } catch (cause) {
                 emissionFailure = cause;
               }
@@ -1393,10 +2176,17 @@ for (const shutdown of ["cancel", "timeout", "close"] as const) {
       command: "notes.slow",
       payload: null,
     });
-    if (shutdown === "cancel")
-      await session.receive({ kind: "cancel", protocol: helloMessage.protocol, id: "slow" });
-    else if (shutdown === "timeout") clock.advance(API_LIMITS.maxCommandDurationMs);
-    else await session.close();
+    if (shutdown === "cancel") {
+      await session.receive({
+        kind: "cancel",
+        protocol: helloMessage.protocol,
+        id: "slow",
+      });
+    } else if (shutdown === "timeout") {
+      clock.advance(API_LIMITS.maxCommandDurationMs);
+    } else {
+      await session.close();
+    }
 
     const fresh = core.openSession("fresh" as HostContext, "main");
     await fresh.receive(helloMessage);
@@ -1408,17 +2198,30 @@ for (const shutdown of ["cancel", "timeout", "close"] as const) {
     });
     gate.resolve(null);
     await flush();
-    expect(emissionFailure).toMatchObject({ code: "CANCELLED" });
+    expect(emissionFailure).toMatchObject({
+      code: "CANCELLED",
+    });
     expect(sent.filter(({ message }) => message.kind === "event")).toEqual([]);
     expect(results(sent, "slow")).toMatchObject([
-      { kind: "error", error: { code: shutdown === "timeout" ? "TIMEOUT" : "CANCELLED" } },
+      {
+        kind: "error",
+        error: {
+          code: shutdown === "timeout" ? "TIMEOUT" : "CANCELLED",
+        },
+      },
     ]);
     await core.stop();
   });
 }
 
-for (const outcome of ["result", "error"] as const) {
-  for (const shutdown of ["close", "stop"] as const) {
+for (const outcome of [
+  "result",
+  "error",
+] as const) {
+  for (const shutdown of [
+    "close",
+    "stop",
+  ] as const) {
     test(`settled ${outcome} cancels Host work and stays cancelled after ${shutdown}`, async () => {
       const clock = createClock();
       const hostGate = deferred<null>();
@@ -1427,10 +2230,15 @@ for (const outcome of ["result", "error"] as const) {
         callHost: async () => {
           hostCalls++;
           await hostGate.promise;
-          return { kind: "result", payload: null };
+          return {
+            kind: "result",
+            payload: null,
+          };
         },
       });
-      let saved: Parameters<NonNullable<PluginDefinition["setup"]>>[0] | undefined;
+      let saved:
+        | Parameters<NonNullable<PluginDefinition["setup"]>>[0]
+        | undefined;
       let hostWork: Promise<unknown> | undefined;
       const { core, session } = await openSession(
         services,
@@ -1439,15 +2247,24 @@ for (const outcome of ["result", "error"] as const) {
         createApp({
           commands: {
             "notes.slow": command({
-              input: { const: null },
-              output: { const: null },
+              input: {
+                const: null,
+              },
+              output: {
+                const: null,
+              },
               async handle(_input, context) {
                 saved = context;
                 hostWork = context.host
-                  .call(contracts["log.write"], { level: "info", message: "pending" })
+                  .call(contracts["log.write"], {
+                    level: "info",
+                    message: "pending",
+                  })
                   .catch((error: unknown) => error);
                 await flush();
-                if (outcome === "error") throw new Error("handler failed");
+                if (outcome === "error") {
+                  throw new Error("handler failed");
+                }
                 return null;
               },
             }),
@@ -1462,20 +2279,46 @@ for (const outcome of ["result", "error"] as const) {
         payload: null,
       });
       await flush(100);
-      expect(results(sent, "r1")).toMatchObject([{ kind: outcome }]);
+      expect(results(sent, "r1")).toMatchObject([
+        {
+          kind: outcome,
+        },
+      ]);
       expect(hostCalls).toBe(1);
       expect(saved?.signal.aborted).toBe(true);
-      if (shutdown === "close") await session.close();
-      else await core.stop();
-      if (!saved) throw new Error("Command context was not captured.");
+      if (shutdown === "close") {
+        await session.close();
+      } else {
+        await core.stop();
+      }
+      if (!saved) {
+        throw new Error("Command context was not captured.");
+      }
       expect(saved.signal.aborted).toBe(true);
-      expect(await hostWork).toMatchObject({ code: "CANCELLED" });
+      expect(await hostWork).toMatchObject({
+        code: "CANCELLED",
+      });
       await expect(
-        saved.host.call(contracts["log.write"], { level: "info", message: "late" }),
-      ).rejects.toMatchObject({ code: "CANCELLED" });
+        saved.host.call(contracts["log.write"], {
+          level: "info",
+          message: "late",
+        }),
+      ).rejects.toMatchObject({
+        code: "CANCELLED",
+      });
       await expect(
-        saved.events.emit("notes.changed", { key: "late" }, { kind: "broadcast" }),
-      ).rejects.toMatchObject({ code: "CANCELLED" });
+        saved.events.emit(
+          "notes.changed",
+          {
+            key: "late",
+          },
+          {
+            kind: "broadcast",
+          },
+        ),
+      ).rejects.toMatchObject({
+        code: "CANCELLED",
+      });
       expect(hostCalls).toBe(1);
       hostGate.resolve(null);
       await flush();

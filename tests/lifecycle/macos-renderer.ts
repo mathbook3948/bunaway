@@ -8,7 +8,14 @@ export function terminateRenderers(pids: number[]): void {
       terminated++;
     } catch (cause) {
       // Inventory candidates may exit or belong to a protected WebKit service.
-      if (!["ESRCH", "EPERM"].includes((cause as NodeJS.ErrnoException).code ?? "")) throw cause;
+      if (
+        ![
+          "ESRCH",
+          "EPERM",
+        ].includes((cause as NodeJS.ErrnoException).code ?? "")
+      ) {
+        throw cause;
+      }
     }
   }
   assert.ok(terminated > 0, "no live test renderer was terminated");

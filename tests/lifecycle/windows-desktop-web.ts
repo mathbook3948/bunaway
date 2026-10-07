@@ -1,8 +1,14 @@
 import { createClient } from "../../packages/client-sdk/src/index.ts";
-import type { CommandsOf, EventsOf } from "../../packages/backend-sdk/src/index.ts";
+import type {
+  CommandsOf,
+  EventsOf,
+} from "../../packages/backend-sdk/src/index.ts";
 import type { desktopTestApp } from "./windows-desktop.ts";
 
-const client = createClient<CommandsOf<typeof desktopTestApp>, EventsOf<typeof desktopTestApp>>();
+const client = createClient<
+  CommandsOf<typeof desktopTestApp>,
+  EventsOf<typeof desktopTestApp>
+>();
 await client.ready;
 await client.listen(
   "test.reopen",

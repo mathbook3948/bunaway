@@ -22,15 +22,24 @@ test("native schemas are generated from the same definitions as TypeScript", asy
     "host-call": hostCallSchema,
   })) {
     const file = Bun.file(
-      new URL(`../../native/host-api/generated/${name}.schema.json`, import.meta.url),
+      new URL(
+        `../../native/host-api/generated/${name}.schema.json`,
+        import.meta.url,
+      ),
     );
     expect(await file.json()).toEqual(schema);
   }
 });
 
 test("bootstrap requires a local absolute entrypoint and rejects WebView messages", () => {
-  for (const entrypoint of ["C:\\app\\backend.js", "/app/backend.js"]) {
-    const bootstrap = { entrypoint, buildId: "test-build" };
+  for (const entrypoint of [
+    "C:\\app\\backend.js",
+    "/app/backend.js",
+  ]) {
+    const bootstrap = {
+      entrypoint,
+      buildId: "test-build",
+    };
     expect(parseBootstrap(JSON.stringify(bootstrap))).toEqual(bootstrap);
     expect(() => parseMessage(JSON.stringify(bootstrap))).toThrow();
   }
@@ -40,21 +49,53 @@ test("bootstrap requires a local absolute entrypoint and rejects WebView message
     "C:backend.js",
     "C:\\bad\u0000.js",
   ]) {
-    expect(() => parseBootstrap(JSON.stringify({ entrypoint, buildId: "test" }))).toThrow();
+    expect(() =>
+      parseBootstrap(
+        JSON.stringify({
+          entrypoint,
+          buildId: "test",
+        }),
+      ),
+    ).toThrow();
   }
 });
 
 test("Host API responses correlate out of band and cannot impersonate web IPC", () => {
-  const success = { kind: "result", payload: { saved: true } } as const;
+  const success = {
+    kind: "result",
+    payload: {
+      saved: true,
+    },
+  } as const;
   const failure = {
     kind: "error",
-    error: { code: "PERMISSION_DENIED", message: "Denied." },
+    error: {
+      code: "PERMISSION_DENIED",
+      message: "Denied.",
+    },
   } as const;
-  for (const response of [success, failure]) {
+  for (const response of [
+    success,
+    failure,
+  ]) {
     const json = serializeHostResponse(response);
     expect(parseHostResponse(json)).toEqual(response);
     expect(() => parseMessage(json)).toThrow();
-    expect(() => parseHostResponse(JSON.stringify({ ...response, context: 1 }))).toThrow();
-    expect(() => parseHostResponse(JSON.stringify({ ...response, id: 1 }))).toThrow();
+    expect(() =>
+      parseHostResponse(
+        JSON.stringify({
+          ...response,
+          context: 1,
+        }),
+      ),
+    ).toThrow();
+    expect(() =>
+      parseHostResponse(
+        JSON.stringify({
+          ...response,
+          id: 1,
+        }),
+      ),
+    ).toThrow();
   }
 });

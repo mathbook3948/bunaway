@@ -12,17 +12,31 @@ async function waitForProcessGroupExit(pid: number): Promise<void> {
   while (true) {
     // Signal-zero probes include zombies and may report EPERM on macOS after
     // exit. Inspect live members instead; zombies have released their resources.
-    const { stdout } = await inspectProcesses("/bin/ps", ["-A", "-o", "pgid=,stat="], {
-      timeout: 1000,
-      maxBuffer: 8 * 1024 * 1024,
-    });
+    const { stdout } = await inspectProcesses(
+      "/bin/ps",
+      [
+        "-A",
+        "-o",
+        "pgid=,stat=",
+      ],
+      {
+        timeout: 1000,
+        maxBuffer: 8 * 1024 * 1024,
+      },
+    );
     let alive = false;
     for (const line of stdout.trim().split("\n")) {
       const entry = /^\s*(\d+)\s+(\S+)\s*$/.exec(line);
-      if (!entry) throw new Error("Cannot inspect build command process group.");
-      if (Number(entry[1]) === pid && !/^[ZX]/.test(entry[2] ?? "")) alive = true;
+      if (!entry) {
+        throw new Error("Cannot inspect build command process group.");
+      }
+      if (Number(entry[1]) === pid && !/^[ZX]/.test(entry[2] ?? "")) {
+        alive = true;
+      }
     }
-    if (!alive) return;
+    if (!alive) {
+      return;
+    }
     if (performance.now() >= deadline) {
       throw new Error("Build command process group cleanup timed out.");
     }
@@ -41,7 +55,9 @@ export async function runManagedCommand(
 ): Promise<void> {
   signal.throwIfAborted();
   const windows = process.platform === "win32";
-  const lease = windows ? await mkdtemp(resolve(tmpdir(), "bunaway-build-command-")) : undefined;
+  const lease = windows
+    ? await mkdtemp(resolve(tmpdir(), "bunaway-build-command-"))
+    : undefined;
   try {
     signal.throwIfAborted();
     const child = spawn(
@@ -55,8 +71,15 @@ export async function runManagedCommand(
         : args.slice(1),
       {
         cwd,
-        env: { ...process.env, ...env },
-        stdio: [windows ? "pipe" : "ignore", "inherit", "inherit"],
+        env: {
+          ...process.env,
+          ...env,
+        },
+        stdio: [
+          windows ? "pipe" : "ignore",
+          "inherit",
+          "inherit",
+        ],
         detached: !windows,
         windowsHide: true,
       },
@@ -75,12 +98,16 @@ export async function runManagedCommand(
       });
     });
     const killGroup = (kind: NodeJS.Signals): boolean => {
-      if (!child.pid) return false;
+      if (!child.pid) {
+        return false;
+      }
       try {
         process.kill(-child.pid, kind);
         return true;
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+        if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
+          throw error;
+        }
         return false;
       }
     };
@@ -89,7 +116,12 @@ export async function runManagedCommand(
       (stopping ??= (async () => {
         if (windows) {
           child.stdin?.end();
-          await Promise.race([exited, delay(6000, undefined, { ref: false })]);
+          await Promise.race([
+            exited,
+            delay(6000, undefined, {
+              ref: false,
+            }),
+          ]);
           if (exit === undefined) {
             child.kill();
             await exited;
@@ -99,25 +131,40 @@ export async function runManagedCommand(
           await delay(200);
           killGroup("SIGKILL");
         }
-        if (!windows && child.pid) await waitForProcessGroupExit(child.pid);
+        if (!windows && child.pid) {
+          await waitForProcessGroupExit(child.pid);
+        }
         await exited;
       })());
     const aborted = () => {
       // The finally block awaits cleanup and reports failures.
       void stop().catch(() => {});
     };
-    signal.addEventListener("abort", aborted, { once: true });
+    signal.addEventListener("abort", aborted, {
+      once: true,
+    });
     try {
-      if (signal.aborted) aborted();
+      if (signal.aborted) {
+        aborted();
+      }
       const code = await exited;
       signal.throwIfAborted();
-      if (failure) throw failure;
-      if (code !== 0) throw new Error(`${args[0]} failed (exit ${code}).`);
+      if (failure) {
+        throw failure;
+      }
+      if (code !== 0) {
+        throw new Error(`${args[0]} failed (exit ${code}).`);
+      }
     } finally {
       signal.removeEventListener("abort", aborted);
       await stop();
     }
   } finally {
-    if (lease) await rm(lease, { recursive: true, force: true });
+    if (lease) {
+      await rm(lease, {
+        recursive: true,
+        force: true,
+      });
+    }
   }
 }

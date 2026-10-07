@@ -7,7 +7,9 @@ const adapters = new Map<ChannelId, PackageAdapter>();
 
 export function registerAdapter(adapter: PackageAdapter): void {
   if (adapters.has(adapter.channel)) {
-    throw new Error(`Duplicate packaging adapter for channel ${adapter.channel}.`);
+    throw new Error(
+      `Duplicate packaging adapter for channel ${adapter.channel}.`,
+    );
   }
   adapters.set(adapter.channel, adapter);
 }
@@ -17,5 +19,7 @@ export function adapterFor(channel: ChannelId): PackageAdapter | undefined {
 }
 
 export function registeredChannels(): ChannelId[] {
-  return [...adapters.keys()].sort();
+  return [
+    ...adapters.keys(),
+  ].sort();
 }

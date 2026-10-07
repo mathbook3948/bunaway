@@ -26,7 +26,11 @@ export function artifactPaths(args: {
   const { root, target, appId } = args;
   if (target === "windows-x64") {
     const dir = resolve(root, "dist/windows-x64");
-    return { dir, packageDir: dir, executable: resolve(dir, "runtime/bun.exe") };
+    return {
+      dir,
+      packageDir: dir,
+      executable: resolve(dir, "runtime/bun.exe"),
+    };
   }
   const dir = resolve(root, "dist/macos-arm64", `${appId}.app`);
   return {
@@ -50,7 +54,11 @@ function inside(root: string, path: string): boolean {
   return rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
 
-async function inputPath(root: string, path: string, directory = false): Promise<string> {
+async function inputPath(
+  root: string,
+  path: string,
+  directory = false,
+): Promise<string> {
   if (!inside(root, path)) {
     throw new ArtifactInputError(
       CODES.INPUT_UNEXPECTED,
@@ -59,7 +67,10 @@ async function inputPath(root: string, path: string, directory = false): Promise
   }
   const rootStat = await lstat(root).catch(() => undefined);
   const stat = await lstat(path).catch(() => undefined);
-  if (!rootStat?.isDirectory() || !(directory ? stat?.isDirectory() : stat?.isFile())) {
+  if (
+    !rootStat?.isDirectory() ||
+    !(directory ? stat?.isDirectory() : stat?.isFile())
+  ) {
     throw new ArtifactInputError(
       CODES.INPUT_MISSING,
       `Build input is missing or not a regular ${directory ? "directory" : "file"}: ${path}`,
@@ -85,7 +96,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isIdentity(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0 && value.trim() === value;
+  return (
+    typeof value === "string" && value.length > 0 && value.trim() === value
+  );
 }
 
 type XmlNode = Record<string, XmlNode[] | string>;
@@ -108,10 +121,18 @@ function plistChildren(node: XmlNode | undefined, tag: string): XmlNode[] {
 function plistString(node: XmlNode | undefined, tag: string): string {
   return plistContent(node, tag)
     .map((child) => {
-      if (Object.keys(child).length !== 1) throw new Error(`Expected plist ${tag} text.`);
-      if (typeof child["#text"] === "string") return xmlText(child["#text"]);
+      if (Object.keys(child).length !== 1) {
+        throw new Error(`Expected plist ${tag} text.`);
+      }
+      if (typeof child["#text"] === "string") {
+        return xmlText(child["#text"]);
+      }
       const cdata = child["#cdata"];
-      if (Array.isArray(cdata) && cdata.length === 1 && typeof cdata[0]?.["#text"] === "string") {
+      if (
+        Array.isArray(cdata) &&
+        cdata.length === 1 &&
+        typeof cdata[0]?.["#text"] === "string"
+      ) {
         return cdata[0]["#text"];
       }
       throw new Error(`Expected plist ${tag} text.`);
@@ -120,9 +141,17 @@ function plistString(node: XmlNode | undefined, tag: string): string {
 }
 
 function xmlText(text: string): string {
-  const entities: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
+  const entities: Record<string, string> = {
+    amp: "&",
+    lt: "<",
+    gt: ">",
+    quot: '"',
+    apos: "'",
+  };
   return text.replace(/&([^;]*);|&/g, (_match, entity: string | undefined) => {
-    if (entity && Object.hasOwn(entities, entity)) return entities[entity] ?? "";
+    if (entity && Object.hasOwn(entities, entity)) {
+      return entities[entity] ?? "";
+    }
     if (entity && /^#(?:[0-9]+|x[0-9a-fA-F]+)$/.test(entity)) {
       const point = entity.startsWith("#x")
         ? Number.parseInt(entity.slice(2), 16)
@@ -134,8 +163,9 @@ function xmlText(text: string): string {
         (point >= 0x20 && point <= 0xd7ff) ||
         (point >= 0xe000 && point <= 0xfffd) ||
         (point >= 0x10000 && point <= 0x10ffff)
-      )
+      ) {
         return String.fromCodePoint(point);
+      }
     }
     throw new Error(`Invalid XML entity: &${entity ?? ""};`);
   });
@@ -147,7 +177,9 @@ function plistDictionary(node: XmlNode | undefined): Map<string, XmlNode> {
   for (let i = 0; i < entries.length; i += 2) {
     const key = plistString(entries[i], "key");
     const value = entries[i + 1];
-    if (!value || metadata.has(key)) throw new Error(`Invalid or duplicate plist entry: ${key}`);
+    if (!value || metadata.has(key)) {
+      throw new Error(`Invalid or duplicate plist entry: ${key}`);
+    }
     validatePlistValue(value);
     metadata.set(key, value);
   }
@@ -161,18 +193,32 @@ function validatePlistValue(node: XmlNode): void {
     return;
   }
   if (tag === "array") {
-    for (const value of plistChildren(node, tag)) validatePlistValue(value);
+    for (const value of plistChildren(node, tag)) {
+      validatePlistValue(value);
+    }
     return;
   }
   if (tag === "true" || tag === "false") {
-    if (plistContent(node, tag).length !== 0) throw new Error(`Non-empty plist ${tag}.`);
+    if (plistContent(node, tag).length !== 0) {
+      throw new Error(`Non-empty plist ${tag}.`);
+    }
     return;
   }
-  if (!["string", "integer", "real", "date", "data"].includes(tag)) {
+  if (
+    ![
+      "string",
+      "integer",
+      "real",
+      "date",
+      "data",
+    ].includes(tag)
+  ) {
     throw new Error(`Invalid plist value: ${tag}`);
   }
   const text = plistString(node, tag);
-  if (tag === "string") return;
+  if (tag === "string") {
+    return;
+  }
   const value = text.trim();
   const valid =
     tag === "integer"
@@ -187,7 +233,9 @@ function validatePlistValue(node: XmlNode): void {
           : /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
               text.replace(/\s/g, ""),
             );
-  if (!valid) throw new Error(`Invalid plist ${tag} value.`);
+  if (!valid) {
+    throw new Error(`Invalid plist ${tag} value.`);
+  }
 }
 
 function bundleMetadata(xml: string): Map<string, XmlNode> {
@@ -201,9 +249,13 @@ function bundleMetadata(xml: string): Map<string, XmlNode> {
     cdataPropName: "#cdata",
   });
   const roots = parser.parse(xml, true) as XmlNode[];
-  if (roots.length !== 1) throw new Error("Expected one plist root.");
+  if (roots.length !== 1) {
+    throw new Error("Expected one plist root.");
+  }
   const plist = plistChildren(roots[0], "plist");
-  if (plist.length !== 1) throw new Error("Expected one plist dictionary.");
+  if (plist.length !== 1) {
+    throw new Error("Expected one plist dictionary.");
+  }
   return plistDictionary(plist[0]);
 }
 
@@ -224,7 +276,11 @@ function validateManifest(value: unknown): asserts value is PackageManifest {
       "Package manifest is missing required fields.",
     );
   }
-  for (const key of ["packagedSha256", "sha256", "sourceSha256"]) {
+  for (const key of [
+    "packagedSha256",
+    "sha256",
+    "sourceSha256",
+  ]) {
     if (value.bun[key] !== undefined && !isDigest(value.bun[key])) {
       throw new ArtifactInputError(
         CODES.INPUT_MISSING,
@@ -237,7 +293,9 @@ function validateManifest(value: unknown): asserts value is PackageManifest {
       isAbsolute(path) ||
       win32.parse(path).root !== "" ||
       path.includes("\\") ||
-      path.split("/").some((part) => part === "" || part === "." || part === "..")
+      path
+        .split("/")
+        .some((part) => part === "" || part === "." || part === "..")
     ) {
       throw new ArtifactInputError(
         CODES.INPUT_UNEXPECTED,
@@ -284,7 +342,10 @@ const REQUIRED_ASSETS = {
 
 function homeAsset(value: unknown): string {
   if (!isIdentity(value)) {
-    throw new ArtifactInputError(CODES.INPUT_MISSING, "Build app config is missing its home URL.");
+    throw new ArtifactInputError(
+      CODES.INPUT_MISSING,
+      "Build app config is missing its home URL.",
+    );
   }
   let url: URL;
   let path: string;
@@ -297,13 +358,20 @@ function homeAsset(value: unknown): string {
       "Build app config has an invalid home URL.",
     );
   }
-  if (url.origin !== "https://app.bunaway.local" || url.username || url.password || url.hash) {
+  if (
+    url.origin !== "https://app.bunaway.local" ||
+    url.username ||
+    url.password ||
+    url.hash
+  ) {
     throw new ArtifactInputError(
       CODES.INPUT_UNEXPECTED,
       "Home must use the host-owned https://app.bunaway.local origin.",
     );
   }
-  if (path === "/") path = "/index.html";
+  if (path === "/") {
+    path = "/index.html";
+  }
   const name = path.slice(1);
   if (
     name.includes("\\") ||
@@ -318,14 +386,18 @@ function homeAsset(value: unknown): string {
   return `assets/web/${name}`;
 }
 
-export async function loadManifest(artifact: BuildArtifact): Promise<PackageManifest> {
+export async function loadManifest(
+  artifact: BuildArtifact,
+): Promise<PackageManifest> {
   const path = resolve(artifact.packageDir, "manifest.json");
   const canonicalPath = await inputPath(artifact.dir, path);
   let parsed: unknown;
   try {
     parsed = JSON.parse(await readFile(canonicalPath, "utf8"));
   } catch {
-    throw new Error(`Cannot read package manifest: ${path} (run bunaway build first).`);
+    throw new Error(
+      `Cannot read package manifest: ${path} (run bunaway build first).`,
+    );
   }
   validateManifest(parsed);
   return parsed;
@@ -358,7 +430,8 @@ export async function verifyArtifact(args: {
   } catch (error) {
     diagnostics.push({
       stage,
-      code: error instanceof ArtifactInputError ? error.code : CODES.INPUT_MISSING,
+      code:
+        error instanceof ArtifactInputError ? error.code : CODES.INPUT_MISSING,
       severity: "error",
       message: error instanceof Error ? error.message : String(error),
       path: manifestPath,
@@ -380,10 +453,16 @@ export async function verifyArtifact(args: {
         try {
           await access(canonicalPath, constants.X_OK);
         } catch {
-          throw new ArtifactInputError(CODES.INPUT_TAMPERED, "Build input is not executable.");
+          throw new ArtifactInputError(
+            CODES.INPUT_TAMPERED,
+            "Build input is not executable.",
+          );
         }
       }
-      if (expected !== undefined && (await sha256(canonicalPath)) !== expected) {
+      if (
+        expected !== undefined &&
+        (await sha256(canonicalPath)) !== expected
+      ) {
         diagnostics.push({
           stage,
           code: CODES.INPUT_TAMPERED,
@@ -395,7 +474,10 @@ export async function verifyArtifact(args: {
     } catch (error) {
       diagnostics.push({
         stage,
-        code: error instanceof ArtifactInputError ? error.code : CODES.INPUT_MISSING,
+        code:
+          error instanceof ArtifactInputError
+            ? error.code
+            : CODES.INPUT_MISSING,
         severity: "error",
         message: `${label}: ${error instanceof Error ? error.message : String(error)}`,
         path,
@@ -409,37 +491,66 @@ export async function verifyArtifact(args: {
       const canonicalPath = await inputPath(artifact.dir, plistPath);
       const metadata = bundleMetadata(await readFile(canonicalPath, "utf8"));
       if (process.platform === "darwin") {
-        const validation = Bun.spawn(["/usr/bin/plutil", "-lint", "--", canonicalPath], {
-          stdout: "pipe",
-          stderr: "pipe",
-        });
+        const validation = Bun.spawn(
+          [
+            "/usr/bin/plutil",
+            "-lint",
+            "--",
+            canonicalPath,
+          ],
+          {
+            stdout: "pipe",
+            stderr: "pipe",
+          },
+        );
         const [exit, stdout, stderr] = await Promise.all([
           validation.exited,
           new Response(validation.stdout).text(),
           new Response(validation.stderr).text(),
         ]);
-        if (exit !== 0) throw new Error(`Invalid Apple plist: ${(stdout + stderr).trim()}`);
+        if (exit !== 0) {
+          throw new Error(`Invalid Apple plist: ${(stdout + stderr).trim()}`);
+        }
       }
       for (const [key, expected] of [
-        ["CFBundleExecutable", basename(artifact.executable)],
-        ["CFBundleIdentifier", manifest.app.id],
-        ["CFBundlePackageType", "APPL"],
+        [
+          "CFBundleExecutable",
+          basename(artifact.executable),
+        ],
+        [
+          "CFBundleIdentifier",
+          manifest.app.id,
+        ],
+        [
+          "CFBundlePackageType",
+          "APPL",
+        ],
       ] as const) {
         if (plistString(metadata.get(key), "string") !== expected) {
-          throw new Error(`Info.plist ${key} does not match the build artifact.`);
+          throw new Error(
+            `Info.plist ${key} does not match the build artifact.`,
+          );
         }
       }
       const bundleExecutable = await inputPath(
         artifact.dir,
         resolve(artifact.dir, "Contents/MacOS", basename(artifact.executable)),
       );
-      if (bundleExecutable !== (await inputPath(artifact.dir, artifact.executable))) {
-        throw new Error("Info.plist executable does not resolve to the build host.");
+      if (
+        bundleExecutable !==
+        (await inputPath(artifact.dir, artifact.executable))
+      ) {
+        throw new Error(
+          "Info.plist executable does not resolve to the build host.",
+        );
       }
     } catch (error) {
       diagnostics.push({
         stage,
-        code: error instanceof ArtifactInputError ? error.code : CODES.INPUT_TAMPERED,
+        code:
+          error instanceof ArtifactInputError
+            ? error.code
+            : CODES.INPUT_TAMPERED,
         severity: "error",
         message: `Info.plist: ${error instanceof Error ? error.message : String(error)}`,
         path: plistPath,
@@ -473,11 +584,14 @@ export async function verifyArtifact(args: {
         stage,
         code: CODES.INPUT_TAMPERED,
         severity: "error",
-        message: "Windows Bun FFI bootstrap hash does not match its asset inventory.",
+        message:
+          "Windows Bun FFI bootstrap hash does not match its asset inventory.",
         path: manifestPath,
       });
     }
-    if (artifact.executable !== resolve(artifact.packageDir, "runtime/bun.exe")) {
+    if (
+      artifact.executable !== resolve(artifact.packageDir, "runtime/bun.exe")
+    ) {
       diagnostics.push({
         stage,
         code: CODES.INPUT_UNEXPECTED,
@@ -487,13 +601,22 @@ export async function verifyArtifact(args: {
         path: artifact.executable,
       });
     }
-    for (const name of ["launch.ps1", "bunaway.cmd"]) {
+    for (const name of [
+      "launch.ps1",
+      "bunaway.cmd",
+    ]) {
       try {
-        await inputPath(artifact.packageDir, resolve(artifact.packageDir, name));
+        await inputPath(
+          artifact.packageDir,
+          resolve(artifact.packageDir, name),
+        );
       } catch (error) {
         diagnostics.push({
           stage,
-          code: error instanceof ArtifactInputError ? error.code : CODES.INPUT_MISSING,
+          code:
+            error instanceof ArtifactInputError
+              ? error.code
+              : CODES.INPUT_MISSING,
           severity: "error",
           message: `Windows launcher ${name} is missing; run bunaway build again.`,
           path: resolve(artifact.packageDir, name),
@@ -511,8 +634,15 @@ export async function verifyArtifact(args: {
       path: artifact.executable,
     });
   }
-  if (platform === "macos")
-    await verifyFile(artifact.dir, artifact.executable, "Host executable", hostDigest, true);
+  if (platform === "macos") {
+    await verifyFile(
+      artifact.dir,
+      artifact.executable,
+      "Host executable",
+      hostDigest,
+      true,
+    );
+  }
   const runtime = resolve(
     artifact.packageDir,
     platform === "windows" ? "runtime/bun.exe" : "runtime/bun",
@@ -555,7 +685,8 @@ export async function verifyArtifact(args: {
   } catch (error) {
     diagnostics.push({
       stage,
-      code: error instanceof ArtifactInputError ? error.code : CODES.INPUT_MISSING,
+      code:
+        error instanceof ArtifactInputError ? error.code : CODES.INPUT_MISSING,
       severity: "error",
       message: error instanceof Error ? error.message : String(error),
       path: homePath,
@@ -563,20 +694,36 @@ export async function verifyArtifact(args: {
   }
   for (const [relative, expected] of Object.entries(manifest.assets)) {
     const path = resolve(artifact.packageDir, relative);
-    await verifyFile(artifact.packageDir, path, `Manifest asset ${relative}`, expected);
+    await verifyFile(
+      artifact.packageDir,
+      path,
+      `Manifest asset ${relative}`,
+      expected,
+    );
   }
   if (platform === "macos" && !hostDigest && diagnostics.length === 0) {
     try {
       const validation = Bun.spawn(
-        ["/usr/bin/codesign", "--verify", "--deep", "--strict", artifact.dir],
-        { stdout: "pipe", stderr: "pipe" },
+        [
+          "/usr/bin/codesign",
+          "--verify",
+          "--deep",
+          "--strict",
+          artifact.dir,
+        ],
+        {
+          stdout: "pipe",
+          stderr: "pipe",
+        },
       );
       const [exit, stdout, stderr] = await Promise.all([
         validation.exited,
         new Response(validation.stdout).text(),
         new Response(validation.stderr).text(),
       ]);
-      if (exit !== 0) throw new Error(`Invalid code signature: ${(stdout + stderr).trim()}`);
+      if (exit !== 0) {
+        throw new Error(`Invalid code signature: ${(stdout + stderr).trim()}`);
+      }
     } catch (error) {
       diagnostics.push({
         stage,

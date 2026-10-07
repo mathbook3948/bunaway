@@ -3,7 +3,10 @@ import type {
   CommandContext,
   CommandDefinition,
 } from "../../../../packages/core/src/index.ts";
-import { BunawayError, type JsonValue } from "../../../../packages/protocol/src/index.ts";
+import {
+  BunawayError,
+  type JsonValue,
+} from "../../../../packages/protocol/src/index.ts";
 import { contracts, plugins } from "../../host-plugins.ts";
 import { memoApp } from "./memo-app.ts";
 
@@ -31,7 +34,12 @@ const host = async (
       )) as JsonValue,
     };
   } catch (error) {
-    if (error instanceof BunawayError) return { ok: false, code: error.code };
+    if (error instanceof BunawayError) {
+      return {
+        ok: false,
+        code: error.code,
+      };
+    }
     throw error;
   }
 };
@@ -51,7 +59,10 @@ const app: AppDefinition = {
       },
     },
   ],
-  events: { "test.changed": {}, ...memoApp.events },
+  events: {
+    "test.changed": {},
+    ...memoApp.events,
+  },
   commands: {
     "test.echo": command(async (payload) => payload as JsonValue),
     "test.ping": command(async () => "pong"),
@@ -64,9 +75,17 @@ const app: AppDefinition = {
       async (_payload, { signal }) =>
         new Promise((_, reject) => {
           const abort = () =>
-            reject(new BunawayError({ code: "CANCELLED", message: "Cancelled." }));
-          if (signal.aborted) abort();
-          else signal.addEventListener("abort", abort);
+            reject(
+              new BunawayError({
+                code: "CANCELLED",
+                message: "Cancelled.",
+              }),
+            );
+          if (signal.aborted) {
+            abort();
+          } else {
+            signal.addEventListener("abort", abort);
+          }
         }),
     ),
     "test.writeNote": command(async (p, c) =>
@@ -77,13 +96,22 @@ const app: AppDefinition = {
       }),
     ),
     "test.readNote": command(async (p, c) =>
-      host(c, "storage.readText", { scope: "appData", path: `notes/${object(p).name}.txt` }),
+      host(c, "storage.readText", {
+        scope: "appData",
+        path: `notes/${object(p).name}.txt`,
+      }),
     ),
     "test.readEscape": command(async (p, c) =>
-      host(c, "storage.readText", { scope: "appData", path: String(object(p).path) }),
+      host(c, "storage.readText", {
+        scope: "appData",
+        path: String(object(p).path),
+      }),
     ),
     "test.tempRead": command(async (p, c) =>
-      host(c, "storage.readText", { scope: "temp", path: String(object(p).path) }),
+      host(c, "storage.readText", {
+        scope: "temp",
+        path: String(object(p).path),
+      }),
     ),
     "test.tempWrite": command(async (p, c) =>
       host(c, "storage.writeText", {
@@ -104,11 +132,16 @@ const app: AppDefinition = {
       }),
     ),
     "test.emit": command(async (p, c) => {
-      await c.events.emit("test.changed", p as JsonValue, { kind: "broadcast" });
+      await c.events.emit("test.changed", p as JsonValue, {
+        kind: "broadcast",
+      });
       return null;
     }),
     "test.hostCancel": command(async (_p, c) =>
-      c.host.call(contracts["storage.readText"], { scope: "temp", path: "cancel-me.txt" }),
+      c.host.call(contracts["storage.readText"], {
+        scope: "temp",
+        path: "cancel-me.txt",
+      }),
     ),
     "test.report": command(async (p, c) =>
       host(c, "storage.writeText", {

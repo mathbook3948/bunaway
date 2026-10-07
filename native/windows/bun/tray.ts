@@ -5,7 +5,13 @@ import { user, type Windows, withWide } from "./win32.ts";
 const CALLBACK = 0x8001;
 export class Tray {
   private readonly shell = dlopen("shell32.dll", {
-    Shell_NotifyIconW: { args: ["u32", "ptr"], returns: "i32" },
+    Shell_NotifyIconW: {
+      args: [
+        "u32",
+        "ptr",
+      ],
+      returns: "i32",
+    },
   });
   private readonly data = Buffer.alloc(976); // NOTIFYICONDATAW, Win64
   readonly hwnd: bigint;
@@ -31,10 +37,14 @@ export class Tray {
           if (message === taskbarCreated) {
             this.added = false;
             this.add();
-          } else if (message === 0x10) receive("quit");
-          else if (message === CALLBACK) {
-            if (Number(lparam) === 0x202 || Number(lparam) === 0x203) receive("show");
-            else if (Number(lparam) === 0x205 || Number(lparam) === 0x7b) this.menu(receive);
+          } else if (message === 0x10) {
+            receive("quit");
+          } else if (message === CALLBACK) {
+            if (Number(lparam) === 0x202 || Number(lparam) === 0x203) {
+              receive("show");
+            } else if (Number(lparam) === 0x205 || Number(lparam) === 0x7b) {
+              this.menu(receive);
+            }
           }
         },
         false,
@@ -62,15 +72,22 @@ export class Tray {
   }
 
   private add() {
-    assert(this.shell.symbols.Shell_NotifyIconW(0, ptr(this.data)), "Tray creation failed");
+    assert(
+      this.shell.symbols.Shell_NotifyIconW(0, ptr(this.data)),
+      "Tray creation failed",
+    );
     this.added = true;
   }
   private menu(receive: (action: "show" | "quit") => void) {
     const menu = user.symbols.CreatePopupMenu();
     assert(menu, "Tray menu creation failed");
     try {
-      assert(withWide("Open", (text) => user.symbols.AppendMenuW(menu, 0, 1n, text)));
-      assert(withWide("Quit", (text) => user.symbols.AppendMenuW(menu, 0, 2n, text)));
+      assert(
+        withWide("Open", (text) => user.symbols.AppendMenuW(menu, 0, 1n, text)),
+      );
+      assert(
+        withWide("Quit", (text) => user.symbols.AppendMenuW(menu, 0, 2n, text)),
+      );
       const point = new Int32Array(2);
       assert(user.symbols.GetCursorPos(ptr(point)));
       user.symbols.SetForegroundWindow(this.hwnd);
@@ -83,14 +100,19 @@ export class Tray {
         null,
       );
       user.symbols.PostMessageW(this.hwnd, 0, 0n, 0n);
-      if (item === 1) receive("show");
-      else if (item === 2) receive("quit");
+      if (item === 1) {
+        receive("show");
+      } else if (item === 2) {
+        receive("quit");
+      }
     } finally {
       assert(user.symbols.DestroyMenu(menu));
     }
   }
   dispose() {
-    if (this.added) this.shell.symbols.Shell_NotifyIconW(2, ptr(this.data));
+    if (this.added) {
+      this.shell.symbols.Shell_NotifyIconW(2, ptr(this.data));
+    }
     this.added = false;
     this.windows.destroy(this.hwnd);
     this.shell.close();

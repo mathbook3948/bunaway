@@ -76,8 +76,14 @@ export interface Release {
   version: string;
   packages: Record<string, string>;
   plugins: Record<string, string>;
-  webProtocol: { major: number; minor: number };
-  processProtocol: { major: number; minor: number };
+  webProtocol: {
+    major: number;
+    minor: number;
+  };
+  processProtocol: {
+    major: number;
+    minor: number;
+  };
   nativeHost: string;
   bun: string;
 }
@@ -93,8 +99,16 @@ const packageNames: Record<string, string> = {
   packaging: "@bunaway/packaging",
 };
 
-function sdkDependencies(pkg: PackageDependencies): [string, string][] {
-  return [pkg.dependencies, pkg.devDependencies, pkg.optionalDependencies, pkg.peerDependencies]
+function sdkDependencies(pkg: PackageDependencies): [
+  string,
+  string,
+][] {
+  return [
+    pkg.dependencies,
+    pkg.devDependencies,
+    pkg.optionalDependencies,
+    pkg.peerDependencies,
+  ]
     .flatMap((dependencies) => Object.entries(dependencies ?? {}))
     .filter(([name]) => name.startsWith("@bunaway/"));
 }
@@ -104,7 +118,8 @@ function hasSdkOverride(value: unknown): boolean {
     value !== null &&
     typeof value === "object" &&
     Object.entries(value).some(
-      ([selector, rule]) => selector.includes("@bunaway/") || hasSdkOverride(rule),
+      ([selector, rule]) =>
+        selector.includes("@bunaway/") || hasSdkOverride(rule),
     )
   );
 }
@@ -122,7 +137,9 @@ export async function release(root = frameworkRoot): Promise<Release> {
         !/^[a-z-]+$/.test(directory) || name !== `@bunaway/plugin-${directory}`,
     ) ||
     Object.keys(value.packages).length !== Object.keys(packageNames).length ||
-    Object.entries(packageNames).some(([directory, name]) => value.packages[directory] !== name) ||
+    Object.entries(packageNames).some(
+      ([directory, name]) => value.packages[directory] !== name,
+    ) ||
     value.webProtocol?.major !== PROTOCOL_VERSION.major ||
     value.webProtocol?.minor !== PROTOCOL_VERSION.minor ||
     value.processProtocol?.major !== PROCESS_IPC_VERSION.major ||
@@ -133,29 +150,48 @@ export async function release(root = frameworkRoot): Promise<Release> {
     );
   }
   for (const [directory, name] of Object.entries(value.packages)) {
-    if (!/^[a-z-]+$/.test(directory)) throw new Error("Invalid framework package directory.");
-    const pkg = (await json(resolve(root, `packages/${directory}/package.json`))) as {
+    if (!/^[a-z-]+$/.test(directory)) {
+      throw new Error("Invalid framework package directory.");
+    }
+    const pkg = (await json(
+      resolve(root, `packages/${directory}/package.json`),
+    )) as {
       name: string;
       version: string;
     };
     if (pkg.name !== name || pkg.version !== value.version) {
-      throw new Error(`Incompatible SDK/CLI package: ${name}; expected ${value.version}.`);
+      throw new Error(
+        `Incompatible SDK/CLI package: ${name}; expected ${value.version}.`,
+      );
     }
   }
-  for (const target of ["windows-x64", "darwin-aarch64"]) {
-    const pin = (await json(resolve(root, `runtime/build-manifests/${target}.json`))) as {
-      bun: { version: string };
+  for (const target of [
+    "windows-x64",
+    "darwin-aarch64",
+  ]) {
+    const pin = (await json(
+      resolve(root, `runtime/build-manifests/${target}.json`),
+    )) as {
+      bun: {
+        version: string;
+      };
     };
-    if (pin.bun.version !== value.bun) throw new Error(`Incompatible Bun pin: ${target}.`);
+    if (pin.bun.version !== value.bun) {
+      throw new Error(`Incompatible Bun pin: ${target}.`);
+    }
   }
   return value;
 }
 
 export async function copyFramework(destination: string): Promise<void> {
   const info = await release();
-  await mkdir(destination, { recursive: true });
+  await mkdir(destination, {
+    recursive: true,
+  });
   for (const name of frameworkPaths) {
-    await cp(resolve(frameworkRoot, name), resolve(destination, name), { recursive: true });
+    await cp(resolve(frameworkRoot, name), resolve(destination, name), {
+      recursive: true,
+    });
   }
   for (const directory of Object.keys(info.packages)) {
     const source = resolve(frameworkRoot, `packages/${directory}`);
@@ -184,8 +220,14 @@ export async function snapshotHashes(
 export async function validateFramework(
   project: string,
   sources: readonly string[] = [],
-): Promise<{ root: string; backendDependencies: string[]; plugins: InstalledPlugin[] }> {
-  const pkg = (await json(resolve(project, "package.json"))) as PackageDependencies & {
+): Promise<{
+  root: string;
+  backendDependencies: string[];
+  plugins: InstalledPlugin[];
+}> {
+  const pkg = (await json(
+    resolve(project, "package.json"),
+  )) as PackageDependencies & {
     packageManager: string;
     overrides?: unknown;
     resolutions?: unknown;
@@ -199,31 +241,60 @@ export async function validateFramework(
   const actual = await release(root);
   const active = await release();
   if (actual.version !== active.version) {
-    throw new Error("Incompatible framework/CLI; use the project's installed bunaway command.");
+    throw new Error(
+      "Incompatible framework/CLI; use the project's installed bunaway command.",
+    );
   }
   if (pkg.packageManager !== `bun@${actual.bun}`) {
-    throw new Error("Incompatible Bun/SDK dependency declaration; use the pinned Bun version.");
+    throw new Error(
+      "Incompatible Bun/SDK dependency declaration; use the pinned Bun version.",
+    );
   }
   await checkArtifact(root);
   const declarations = sdkDependencies(pkg);
-  const references: { name: string; parent: string }[] = [];
+  const references: {
+    name: string;
+    parent: string;
+  }[] = [];
   for (const name of Object.values(packageNames)) {
     // The CLI declares all SDKs; transitive packages need not be hoisted into the app.
-    const installed = name === "@bunaway/cli" ? root : await installedPackageRoot(root, name);
-    const manifest = (await json(resolve(installed, "package.json"))) as PackageDependencies & {
+    const installed =
+      name === "@bunaway/cli" ? root : await installedPackageRoot(root, name);
+    const manifest = (await json(
+      resolve(installed, "package.json"),
+    )) as PackageDependencies & {
       name: string;
       version: string;
     };
     if (manifest.name !== name || manifest.version !== actual.version) {
-      throw new Error(`Incompatible SDK/CLI package: ${name}; expected ${actual.version}.`);
+      throw new Error(
+        `Incompatible SDK/CLI package: ${name}; expected ${actual.version}.`,
+      );
     }
     for (const [dependency, version] of sdkDependencies(manifest)) {
-      if (version !== actual.version && !version.endsWith(".tgz"))
+      if (version !== actual.version && !version.endsWith(".tgz")) {
         throw new Error(`Incompatible SDK dependency: ${dependency}.`);
-      if (dependency !== "@bunaway/cli") references.push({ name: dependency, parent: installed });
+      }
+      if (dependency !== "@bunaway/cli") {
+        references.push({
+          name: dependency,
+          parent: installed,
+        });
+      }
     }
-    if (name !== "@bunaway/cli" && declarations.some(([dependency]) => dependency === name)) {
-      for (const parent of [project, ...sources]) references.push({ name, parent });
+    if (
+      name !== "@bunaway/cli" &&
+      declarations.some(([dependency]) => dependency === name)
+    ) {
+      for (const parent of [
+        project,
+        ...sources,
+      ]) {
+        references.push({
+          name,
+          parent,
+        });
+      }
     }
   }
   for (const name of [
@@ -233,7 +304,9 @@ export async function validateFramework(
     "@bunaway/runtime-bun",
   ]) {
     if (!declarations.some(([dependency]) => dependency === name)) {
-      throw new Error(`Missing framework dependency: ${name}; follow the installation guide.`);
+      throw new Error(
+        `Missing framework dependency: ${name}; follow the installation guide.`,
+      );
     }
   }
   const plugins = await installedPlugins(project, actual.version);
@@ -246,7 +319,9 @@ export async function validateFramework(
       try {
         await installedPackageRoot(project, name);
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+          continue;
+        }
         throw error;
       }
     }
@@ -263,11 +338,20 @@ export async function validateFramework(
   const output = await runWorker(
     "sdk.ts",
     "validateSdkGraph",
-    [project, references, sources, plugins],
+    [
+      project,
+      references,
+      sources,
+      plugins,
+    ],
     project,
     root,
   );
-  return { root, backendDependencies: JSON.parse(output) as string[], plugins };
+  return {
+    root,
+    backendDependencies: JSON.parse(output) as string[],
+    plugins,
+  };
 }
 
 export function packageFilename(name: string, version: string): string {
@@ -278,14 +362,23 @@ function requiredFrameworkFiles(): string[] {
   return [
     ...frameworkPaths.filter(
       (path) =>
-        !["native/host-api/generated", "licenses", "runtime/build-manifests"].includes(path),
+        ![
+          "native/host-api/generated",
+          "licenses",
+          "runtime/build-manifests",
+        ].includes(path),
     ),
     "licenses/LICENSE.bun",
     "licenses/LICENSE.nlohmann-json",
     "licenses/License-WebView2.txt",
-    ...["bootstrap", "host-call", "host-response", "message", "policy", "process"].map(
-      (name) => `native/host-api/generated/${name}.schema.json`,
-    ),
+    ...[
+      "bootstrap",
+      "host-call",
+      "host-response",
+      "message",
+      "policy",
+      "process",
+    ].map((name) => `native/host-api/generated/${name}.schema.json`),
     "runtime/build-manifests/windows-x64.json",
     "runtime/build-manifests/darwin-aarch64.json",
     "packages/cli/src/assets.ts",
@@ -298,19 +391,28 @@ function requiredFrameworkFiles(): string[] {
     "packages/runtime-bun/src/development.ts",
     "packages/runtime-bun/src/window-config.ts",
     ...Object.keys(packageNames).flatMap((directory) =>
-      ["package.json", "src/index.ts", "tsconfig.json"].map(
-        (name) => `packages/${directory}/${name}`,
-      ),
+      [
+        "package.json",
+        "src/index.ts",
+        "tsconfig.json",
+      ].map((name) => `packages/${directory}/${name}`),
     ),
   ];
 }
 
 export async function checkArtifact(root: string): Promise<void> {
   await release(root);
-  const inventory = (await json(resolve(root, "artifact.files.json"))) as Record<string, string>;
+  const inventory = (await json(
+    resolve(root, "artifact.files.json"),
+  )) as Record<string, string>;
   const actual = await snapshotHashes(root, generatedDirectories);
   delete actual["artifact.files.json"];
-  const mismatches = [...new Set([...Object.keys(actual), ...Object.keys(inventory)])]
+  const mismatches = [
+    ...new Set([
+      ...Object.keys(actual),
+      ...Object.keys(inventory),
+    ]),
+  ]
     .filter((name) => actual[name] !== inventory[name])
     .sort();
   if (mismatches.length) {
@@ -339,8 +441,17 @@ export async function checkArtifact(root: string): Promise<void> {
       ].map((name) => `packages/cli/templates/${template}/${name}`),
     ),
     ...Object.entries({
-      vanilla: ["src/index.html", "src/main.ts", "src/style.css"],
-      vite: ["src/main.ts", "src/style.css", "src/counter.ts", "src/assets/typescript.svg"],
+      vanilla: [
+        "src/index.html",
+        "src/main.ts",
+        "src/style.css",
+      ],
+      vite: [
+        "src/main.ts",
+        "src/style.css",
+        "src/counter.ts",
+        "src/assets/typescript.svg",
+      ],
       react: [
         "src/main.tsx",
         "src/App.tsx",
@@ -381,18 +492,36 @@ export async function checkArtifact(root: string): Promise<void> {
         ].map((name) => `packages/cli/templates/${template}/${name}`),
       ),
   ]) {
-    if (!inventory[name]) throw new Error(`Artifact is missing required input: ${name}`);
+    if (!inventory[name]) {
+      throw new Error(`Artifact is missing required input: ${name}`);
+    }
   }
-  const pin = (await json(resolve(root, "runtime/build-manifests/windows-x64.json"))) as {
-    bun: { licenseSha256: string };
+  const pin = (await json(
+    resolve(root, "runtime/build-manifests/windows-x64.json"),
+  )) as {
+    bun: {
+      licenseSha256: string;
+    };
   };
-  await verifyHash(resolve(root, "licenses/LICENSE.bun"), pin.bun.licenseSha256);
-  const macPin = (await json(resolve(root, "runtime/build-manifests/darwin-aarch64.json"))) as {
-    json: { licenseSha256: string };
+  await verifyHash(
+    resolve(root, "licenses/LICENSE.bun"),
+    pin.bun.licenseSha256,
+  );
+  const macPin = (await json(
+    resolve(root, "runtime/build-manifests/darwin-aarch64.json"),
+  )) as {
+    json: {
+      licenseSha256: string;
+    };
   };
-  await verifyHash(resolve(root, "licenses/LICENSE.nlohmann-json"), macPin.json.licenseSha256);
+  await verifyHash(
+    resolve(root, "licenses/LICENSE.nlohmann-json"),
+    macPin.json.licenseSha256,
+  );
   const deps = (await json(resolve(root, "native/windows/bun/deps.json"))) as {
-    webview2Sdk: { files: Record<string, string> };
+    webview2Sdk: {
+      files: Record<string, string>;
+    };
   };
   await verifyHash(
     resolve(root, "licenses/License-WebView2.txt"),

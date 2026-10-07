@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
 import { createConnection } from "node:net";
-import { DesktopLifecycle, openRequest } from "../../native/windows/bun/desktop.ts";
+import {
+  DesktopLifecycle,
+  openRequest,
+} from "../../native/windows/bun/desktop.ts";
 import {
   forwardToInstance,
   listenForInstances,
@@ -11,7 +14,14 @@ import { validatePacket } from "../../native/windows/bun/channel.ts";
 import { defineApp } from "../../packages/backend-sdk/src/index.ts";
 import type { OpenRequest } from "../../packages/core/src/index.ts";
 
-const launch = { argv: ["메모 파일.txt", "memo://open/42", "--flag"], cwd: "C:\\사용자\\문서" };
+const launch = {
+  argv: [
+    "메모 파일.txt",
+    "memo://open/42",
+    "--flag",
+  ],
+  cwd: "C:\\사용자\\문서",
+};
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 test("open requests preserve arguments and resolve files using the launching directory", () => {
@@ -35,7 +45,9 @@ test("open requests preserve arguments and resolve files using the launching dir
     "--",
     "-draft.txt",
   ]);
-  expect(request.urls).toEqual(["memo://open/42"]);
+  expect(request.urls).toEqual([
+    "memo://open/42",
+  ]);
   expect(request.files).toEqual([
     "C:\\사용자\\문서\\메모 파일.txt",
     "C:\\notes\\a b.txt",
@@ -50,7 +62,9 @@ test("defineApp preserves desktop hooks and context types", () => {
     modules: [],
     desktop: {
       closeBehavior: "hide",
-      tray: { tooltip: "Memo" },
+      tray: {
+        tooltip: "Memo",
+      },
       onOpen(request, context) {
         const files: readonly string[] = request.files;
         void files;
@@ -108,7 +122,9 @@ test("a failed quit callback cancels shutdown and keeps controls usable", async 
   let stops = 0;
   const lifecycle = new DesktopLifecycle(
     {
-      tray: { tooltip: "Memo" },
+      tray: {
+        tooltip: "Memo",
+      },
       beforeQuit() {
         throw failure;
       },
@@ -124,8 +140,13 @@ test("a failed quit callback cancels shutdown and keeps controls usable", async 
   expect(await lifecycle.quit("tray")).toBe(false);
   await lifecycle.context.hide();
   await lifecycle.context.show();
-  expect(actions).toEqual(["hide", "show"]);
-  expect(errors).toEqual([failure]);
+  expect(actions).toEqual([
+    "hide",
+    "show",
+  ]);
+  expect(errors).toEqual([
+    failure,
+  ]);
   expect(stops).toBe(0);
 });
 
@@ -154,10 +175,16 @@ test("open handlers run in order, recover from errors, and restore a second laun
   lifecycle.open(launch, "initial");
   lifecycle.open(launch, "second-instance");
   await tick();
-  expect(seen).toEqual(["initial"]);
+  expect(seen).toEqual([
+    "initial",
+  ]);
   release();
   await tick();
-  expect(seen).toEqual(["initial", "show", "second-instance"]);
+  expect(seen).toEqual([
+    "initial",
+    "show",
+    "second-instance",
+  ]);
   expect(errors).toHaveLength(1);
   lifecycle.dispose();
   expect(() => lifecycle.open(launch, "second-instance")).toThrow();
@@ -167,7 +194,9 @@ test("hiding requires a recoverable tray and lifecycle packets cannot cross the 
   expect(
     () =>
       new DesktopLifecycle(
-        { closeBehavior: "hide" },
+        {
+          closeBehavior: "hide",
+        },
         async () => {},
         () => {},
         () => {},
@@ -180,13 +209,52 @@ test("hiding requires a recoverable tray and lifecycle packets cannot cross the 
     () => {},
   );
   expect(lifecycle.context.hide()).rejects.toThrow("requires a tray");
-  expect(() => validatePacket({ kind: "quit-request", reason: "tray" }, "main")).not.toThrow();
-  expect(() => validatePacket({ kind: "quit-request", reason: "tray" }, "ui")).toThrow();
-  expect(() => validatePacket({ kind: "quit-request", reason: "forged" }, "main")).toThrow();
   expect(() =>
-    validatePacket({ kind: "desktop-control", action: "show", extra: true }, "ui"),
+    validatePacket(
+      {
+        kind: "quit-request",
+        reason: "tray",
+      },
+      "main",
+    ),
+  ).not.toThrow();
+  expect(() =>
+    validatePacket(
+      {
+        kind: "quit-request",
+        reason: "tray",
+      },
+      "ui",
+    ),
   ).toThrow();
-  expect(() => validatePacket({ kind: "desktop-control", action: "show" }, "main")).toThrow();
+  expect(() =>
+    validatePacket(
+      {
+        kind: "quit-request",
+        reason: "forged",
+      },
+      "main",
+    ),
+  ).toThrow();
+  expect(() =>
+    validatePacket(
+      {
+        kind: "desktop-control",
+        action: "show",
+        extra: true,
+      },
+      "ui",
+    ),
+  ).toThrow();
+  expect(() =>
+    validatePacket(
+      {
+        kind: "desktop-control",
+        action: "show",
+      },
+      "main",
+    ),
+  ).toThrow();
 });
 
 test("single-instance delivery buffers startup requests and acknowledges preserved Unicode and quoting", async () => {
@@ -197,20 +265,33 @@ test("single-instance delivery buffers startup requests and acknowledges preserv
   const inbox = await listenForInstances(address);
   const received: OpenRequest["argv"][] = [];
   const args = {
-    argv: ["a b.txt", 'a"b', "C:\\tail\\", "한글", "memo://open?id=2&mode=edit"],
+    argv: [
+      "a b.txt",
+      'a"b',
+      "C:\\tail\\",
+      "한글",
+      "memo://open?id=2&mode=edit",
+    ],
     cwd: "C:\\docs",
   };
   try {
     await forwardToInstance(address, args);
     expect(received).toHaveLength(0);
     inbox.start((input) => received.push(input.argv));
-    expect(received).toEqual([args.argv]);
+    expect(received).toEqual([
+      args.argv,
+    ]);
     await forwardToInstance(address, launch);
-    expect(received).toEqual([args.argv, launch.argv]);
+    expect(received).toEqual([
+      args.argv,
+      launch.argv,
+    ]);
     await new Promise<void>((resolve, reject) => {
       const client = createConnection(address);
       let reply = "";
-      client.on("connect", () => client.write('{"argv":[],"cwd":"relative","quit":true}\n'));
+      client.on("connect", () =>
+        client.write('{"argv":[],"cwd":"relative","quit":true}\n'),
+      );
       client.on("error", reject);
       client.on("data", (data) => {
         reply += data.toString();
@@ -229,13 +310,35 @@ test("single-instance delivery buffers startup requests and acknowledges preserv
 test("launch argument limits reject malformed and oversized payloads", () => {
   for (const value of [
     null,
-    { argv: [1], cwd: "C:\\docs" },
-    { argv: ["a\0b"], cwd: "C:\\docs" },
-    { argv: [], cwd: "relative" },
-    { argv: ["x".repeat(65536)], cwd: "C:\\docs" },
-    { argv: Array(257).fill("x"), cwd: "C:\\docs" },
-  ])
+    {
+      argv: [
+        1,
+      ],
+      cwd: "C:\\docs",
+    },
+    {
+      argv: [
+        "a\0b",
+      ],
+      cwd: "C:\\docs",
+    },
+    {
+      argv: [],
+      cwd: "relative",
+    },
+    {
+      argv: [
+        "x".repeat(65536),
+      ],
+      cwd: "C:\\docs",
+    },
+    {
+      argv: Array(257).fill("x"),
+      cwd: "C:\\docs",
+    },
+  ]) {
     expect(() => parseLaunchArguments(value)).toThrow();
+  }
 });
 
 test("stdin launch input preserves chunked Unicode and rejects oversized or malformed JSON", async () => {
@@ -243,28 +346,83 @@ test("stdin launch input preserves chunked Unicode and rejects oversized or malf
   const input = (chunks: Uint8Array[]) =>
     new ReadableStream<Uint8Array>({
       start(controller) {
-        for (const chunk of chunks) controller.enqueue(chunk);
+        for (const chunk of chunks) {
+          controller.enqueue(chunk);
+        }
         controller.close();
       },
     });
-  expect(await readLaunchArguments(input([...bytes].map((byte) => Uint8Array.of(byte))))).toEqual(
-    launch,
-  );
-  expect(await readLaunchArguments(input([Buffer.from([0xef, 0xbb, 0xbf]), bytes]))).toEqual(
-    launch,
-  );
-  const maximum = { argv: [""], cwd: "C:\\docs" };
-  maximum.argv[0] = "x".repeat(65536 - Buffer.byteLength(JSON.stringify(maximum)));
   expect(
     await readLaunchArguments(
-      input([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(JSON.stringify(maximum))]),
+      input(
+        [
+          ...bytes,
+        ].map((byte) => Uint8Array.of(byte)),
+      ),
+    ),
+  ).toEqual(launch);
+  expect(
+    await readLaunchArguments(
+      input([
+        Buffer.from([
+          0xef,
+          0xbb,
+          0xbf,
+        ]),
+        bytes,
+      ]),
+    ),
+  ).toEqual(launch);
+  const maximum = {
+    argv: [
+      "",
+    ],
+    cwd: "C:\\docs",
+  };
+  maximum.argv[0] = "x".repeat(
+    65536 - Buffer.byteLength(JSON.stringify(maximum)),
+  );
+  expect(
+    await readLaunchArguments(
+      input([
+        Buffer.from([
+          0xef,
+          0xbb,
+          0xbf,
+        ]),
+        Buffer.from(JSON.stringify(maximum)),
+      ]),
     ),
   ).toEqual(maximum);
-  await expect(readLaunchArguments(input([Buffer.alloc(65537)]))).rejects.toThrow("too large");
-  await expect(readLaunchArguments(input([Buffer.from([0xff])]))).rejects.toThrow();
-  await expect(readLaunchArguments(input([Buffer.from("{")]))).rejects.toThrow();
   await expect(
-    readLaunchArguments(input([Buffer.from('{"argv":[],"cwd":"relative"}')])),
+    readLaunchArguments(
+      input([
+        Buffer.alloc(65537),
+      ]),
+    ),
+  ).rejects.toThrow("too large");
+  await expect(
+    readLaunchArguments(
+      input([
+        Buffer.from([
+          0xff,
+        ]),
+      ]),
+    ),
+  ).rejects.toThrow();
+  await expect(
+    readLaunchArguments(
+      input([
+        Buffer.from("{"),
+      ]),
+    ),
+  ).rejects.toThrow();
+  await expect(
+    readLaunchArguments(
+      input([
+        Buffer.from('{"argv":[],"cwd":"relative"}'),
+      ]),
+    ),
   ).rejects.toThrow("Invalid launch arguments");
 });
 
@@ -286,12 +444,27 @@ test("startup delivery has a bounded queue and closing the inbox is idempotent",
       : `/tmp/bunaway-${crypto.randomUUID()}.sock`;
   const inbox = await listenForInstances(address);
   try {
-    for (let index = 0; index < 32; index++)
-      await forwardToInstance(address, { argv: [String(index)], cwd: "C:\\docs" });
-    await expect(forwardToInstance(address, launch)).rejects.toThrow("rejected");
+    for (let index = 0; index < 32; index++) {
+      await forwardToInstance(address, {
+        argv: [
+          String(index),
+        ],
+        cwd: "C:\\docs",
+      });
+    }
+    await expect(forwardToInstance(address, launch)).rejects.toThrow(
+      "rejected",
+    );
     const received: string[] = [];
     inbox.start((input) => received.push(input.argv[0] ?? ""));
-    expect(received).toEqual(Array.from({ length: 32 }, (_, index) => String(index)));
+    expect(received).toEqual(
+      Array.from(
+        {
+          length: 32,
+        },
+        (_, index) => String(index),
+      ),
+    );
     await forwardToInstance(address, launch);
     expect(received.at(-1)).toBe("메모 파일.txt");
   } finally {
@@ -326,14 +499,40 @@ test("disposing during a quit check prevents a late completion from restarting s
 
 test("the current process runtime explicitly rejects desktop options", async () => {
   const { runBunApp } = await import("../../packages/runtime-bun/src/index.ts");
-  await expect(runBunApp({ commands: {}, events: {}, desktop: {} })).rejects.toMatchObject({
+  await expect(
+    runBunApp({
+      commands: {},
+      events: {},
+      desktop: {},
+    }),
+  ).rejects.toMatchObject({
     code: "UNSUPPORTED",
   });
 });
 
 test("lifecycle controls require scalar strings instead of coercible objects", () => {
-  expect(() => validatePacket({ kind: "desktop-control", action: ["show"] }, "ui")).toThrow();
-  expect(() => validatePacket({ kind: "quit-request", reason: ["tray"] }, "main")).toThrow();
+  expect(() =>
+    validatePacket(
+      {
+        kind: "desktop-control",
+        action: [
+          "show",
+        ],
+      },
+      "ui",
+    ),
+  ).toThrow();
+  expect(() =>
+    validatePacket(
+      {
+        kind: "quit-request",
+        reason: [
+          "tray",
+        ],
+      },
+      "main",
+    ),
+  ).toThrow();
 });
 
 test("file URLs reject encoded separators, NUL, and paths without a Windows drive", () => {
@@ -343,8 +542,19 @@ test("file URLs reject encoded separators, NUL, and paths without a Windows driv
     "file:///C:/docs/a%00b.txt",
     "file:///relative",
     "file:///C:/docs/%zz.txt",
-  ])
-    expect(() => openRequest({ argv: [arg], cwd: "C:\\docs" }, "initial")).toThrow();
+  ]) {
+    expect(() =>
+      openRequest(
+        {
+          argv: [
+            arg,
+          ],
+          cwd: "C:\\docs",
+        },
+        "initial",
+      ),
+    ).toThrow();
+  }
 });
 
 test("instance deadlines end a slow request and a slow acknowledgement after five seconds", async () => {
@@ -374,7 +584,9 @@ test("instance deadlines end a slow request and a slow acknowledgement after fiv
         const client = createConnection(inbound);
         const timer = setInterval(() => client.write(" "), 1000);
         client.on("error", (error: NodeJS.ErrnoException) => {
-          if (error.code !== "EPIPE" && error.code !== "ECONNRESET") reject(error);
+          if (error.code !== "EPIPE" && error.code !== "ECONNRESET") {
+            reject(error);
+          }
         });
         client.on("close", () => {
           clearInterval(timer);
@@ -383,7 +595,12 @@ test("instance deadlines end a slow request and a slow acknowledgement after fiv
         });
       }),
       expect(
-        forwardToInstance(outbound, { ...launch, argv: ["x".repeat(60000)] }).finally(() => {
+        forwardToInstance(outbound, {
+          ...launch,
+          argv: [
+            "x".repeat(60000),
+          ],
+        }).finally(() => {
           outboundElapsed = Date.now() - begin;
         }),
       ).rejects.toThrow("timed out"),

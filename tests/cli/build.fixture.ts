@@ -8,7 +8,9 @@ import * as files from "../../packages/cli/src/files.ts";
 import { adapterFor } from "../../packages/packaging/src/index.ts";
 
 const project = process.argv[2];
-if (!project) throw new Error("Expected a generated project path.");
+if (!project) {
+  throw new Error("Expected a generated project path.");
+}
 const nativeDir = resolve(project, ".bunaway/test-native");
 const loader = resolve(nativeDir, "WebView2Loader.dll");
 const native: build.NativeInputs = {
@@ -33,7 +35,9 @@ mock.module(import.meta.resolve("../../packages/cli/src/files.ts"), () => ({
     const value = await readJson(path);
     const normalized = path.replaceAll("\\", "/");
     if (normalized.endsWith("runtime/build-manifests/windows-x64.json")) {
-      const pin = value as { bun: Record<string, unknown> };
+      const pin = value as {
+        bun: Record<string, unknown>;
+      };
       return {
         ...(value as object),
         bun: {
@@ -48,7 +52,9 @@ mock.module(import.meta.resolve("../../packages/cli/src/files.ts"), () => ({
       return {
         webview2Sdk: {
           files: {
-            "LICENSE.txt": await files.hash(native.licenses["License-WebView2.txt"] ?? ""),
+            "LICENSE.txt": await files.hash(
+              native.licenses["License-WebView2.txt"] ?? "",
+            ),
             "build/native/x64/WebView2Loader.dll": await files.hash(loader),
           },
         },
@@ -61,10 +67,15 @@ const buildProject = build.buildProject;
 mock.module(import.meta.resolve("../../packages/cli/src/build.ts"), () => ({
   ...build,
   currentTarget: () => "windows-x64",
-  buildProject: (directory: string) => buildProject(directory, { native }),
+  buildProject: (directory: string) =>
+    buildProject(directory, {
+      native,
+    }),
 }));
 const adapter = adapterFor("win-direct");
-if (!adapter) throw new Error("Missing Windows packaging adapter.");
+if (!adapter) {
+  throw new Error("Missing Windows packaging adapter.");
+}
 spyOn(adapter, "stages").mockImplementation(() => [
   {
     id: "assemble",
@@ -76,11 +87,22 @@ spyOn(adapter, "stages").mockImplementation(() => [
   },
 ]);
 if (process.argv[3] === "--development-artifact") {
-  console.log(JSON.stringify(await buildProject(project, { native, development: true })));
+  console.log(
+    JSON.stringify(
+      await buildProject(project, {
+        native,
+        development: true,
+      }),
+    ),
+  );
 } else {
   const { main } = await import("../../packages/cli/src/main.ts");
   process.exitCode = await main([
-    ...(process.argv.slice(3).length ? process.argv.slice(3) : ["build"]),
+    ...(process.argv.slice(3).length
+      ? process.argv.slice(3)
+      : [
+          "build",
+        ]),
     project,
   ]);
 }

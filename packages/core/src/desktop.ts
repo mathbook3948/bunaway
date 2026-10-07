@@ -17,7 +17,9 @@ export interface DesktopContext {
 
 export type DesktopOptions = {
   readonly closeBehavior?: "quit" | "hide";
-  readonly tray?: { readonly tooltip: string };
+  readonly tray?: {
+    readonly tooltip: string;
+  };
   onOpen?(request: OpenRequest, context: DesktopContext): void | Promise<void>;
   // biome-ignore lint/suspicious/noConfusingVoidType: async callbacks may allow quitting without an explicit return.
   beforeQuit?(reason: QuitReason): boolean | void | Promise<boolean | void>;

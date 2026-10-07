@@ -30,17 +30,20 @@ const PLATFORMS: Record<string, Platform> = {
 
 function currentPlatform(): Platform {
   const platform = PLATFORMS[process.platform];
-  if (!platform) throw new Error(`Unsupported platform: ${process.platform}`);
+  if (!platform) {
+    throw new Error(`Unsupported platform: ${process.platform}`);
+  }
   return platform;
 }
 
 // Keep the reader free while core setup/commands await replies on the same pipe.
 export async function runBunApp(app: AppDefinition): Promise<void> {
-  if (app.desktop !== undefined)
+  if (app.desktop !== undefined) {
     throw new BunawayError({
       code: "UNSUPPORTED",
       message: "Desktop lifecycle requires the Windows Bun host.",
     });
+  }
   let runtime: RuntimeIdentity | undefined;
   let core: Core | undefined;
   let booting: Promise<Core> | undefined;
@@ -59,12 +62,23 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
   const sessions = new Map<string, CoreSession>();
   const calls = new Map<
     string,
-    { context: HostContext; finish: (response: HostResponse) => void }
+    {
+      context: HostContext;
+      finish: (response: HostResponse) => void;
+    }
   >();
   const send = (body: Record<string, unknown>): Promise<void> => {
-    if (!runtime) return Promise.reject(new Error("Runtime has not booted."));
-    const text = `${serializeProcessFrame({ ...body, ipc: PROCESS_IPC_VERSION, runtime } as ProcessFrame)}\n`;
-    if (queued >= API_LIMITS.maxPending) return Promise.reject(new Error("Output queue full."));
+    if (!runtime) {
+      return Promise.reject(new Error("Runtime has not booted."));
+    }
+    const text = `${serializeProcessFrame({
+      ...body,
+      ipc: PROCESS_IPC_VERSION,
+      runtime,
+    } as ProcessFrame)}\n`;
+    if (queued >= API_LIMITS.maxPending) {
+      return Promise.reject(new Error("Output queue full."));
+    }
     queued++;
     writer = writer.then(
       () =>
@@ -79,45 +93,66 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
   };
   const cancelCalls = (context?: string) => {
     for (const [id, call] of calls) {
-      if (context !== undefined && call.context !== context) continue;
+      if (context !== undefined && call.context !== context) {
+        continue;
+      }
       calls.delete(id);
       call.finish({
         kind: "error",
-        error: { code: "CANCELLED", message: "Runtime context closed." },
+        error: {
+          code: "CANCELLED",
+          message: "Runtime context closed.",
+        },
       });
     }
   };
   try {
     for await (const line of readJsonLines(process.stdin)) {
       const frame = parseProcessFrame(line);
-      if (frame.ipc.major !== PROCESS_IPC_VERSION.major)
+      if (frame.ipc.major !== PROCESS_IPC_VERSION.major) {
         throw new Error("Unsupported IPC version.");
+      }
       if (!runtime) {
         if (frame.kind === "shutdown") {
           runtime = frame.runtime;
           stopping = true;
-          await send({ kind: "stopping" });
+          await send({
+            kind: "stopping",
+          });
           break;
         }
-        if (frame.kind !== "boot" || !frame.payload.policy || !frame.payload.backendContext)
+        if (
+          frame.kind !== "boot" ||
+          !frame.payload.policy ||
+          !frame.payload.backendContext
+        ) {
           throw new Error("Host boot configuration required.");
+        }
         runtime = frame.runtime;
-        hello = { ...hello, buildId: frame.payload.buildId };
-        await send({ kind: "hello", payload: hello });
+        hello = {
+          ...hello,
+          buildId: frame.payload.buildId,
+        };
+        await send({
+          kind: "hello",
+          payload: hello,
+        });
         booting = createCore(app, {
           policy: frame.payload.policy,
           hello,
           platform: currentPlatform(),
           backendContext: frame.payload.backendContext as HostContext,
-          onCommandError: (command, cause) => console.error(`Command ${command} failed:`, cause),
+          onCommandError: (command, cause) =>
+            console.error(`Command ${command} failed:`, cause),
           onPluginError(plugin, phase, cause) {
             if (
               stopping &&
               phase === "setup" &&
               cause instanceof BunawayError &&
               cause.code === "CANCELLED"
-            )
+            ) {
               return;
+            }
             console.error(`Plugin ${plugin} ${phase} failed:`, cause);
           },
           runtime: {
@@ -129,26 +164,48 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
             },
           },
           send: async (context, message) => {
-            if (sessions.has(context) && !stopping)
-              await send({ kind: "web", context, payload: message });
+            if (sessions.has(context) && !stopping) {
+              await send({
+                kind: "web",
+                context,
+                payload: message,
+              });
+            }
           },
           callHost: (context, call, signal) => {
-            if (stopping || signal.aborted)
+            if (stopping || signal.aborted) {
               return Promise.reject(
-                new BunawayError({ code: "CANCELLED", message: "Host operation cancelled." }),
+                new BunawayError({
+                  code: "CANCELLED",
+                  message: "Host operation cancelled.",
+                }),
               );
-            if (calls.size >= API_LIMITS.maxPending)
+            }
+            if (calls.size >= API_LIMITS.maxPending) {
               return Promise.reject(
-                new BunawayError({ code: "BUSY", message: "Host request limit reached." }),
+                new BunawayError({
+                  code: "BUSY",
+                  message: "Host request limit reached.",
+                }),
               );
+            }
             const requestId = `host-${++sequence}`;
             return new Promise<HostResponse>((resolve, reject) => {
               const abort = () => {
-                if (!calls.delete(requestId)) return;
+                if (!calls.delete(requestId)) {
+                  return;
+                }
                 signal.removeEventListener("abort", abort);
-                void send({ kind: "host-cancel", context, requestId }).catch(reject);
+                void send({
+                  kind: "host-cancel",
+                  context,
+                  requestId,
+                }).catch(reject);
                 reject(
-                  new BunawayError({ code: "CANCELLED", message: "Host operation cancelled." }),
+                  new BunawayError({
+                    code: "CANCELLED",
+                    message: "Host operation cancelled.",
+                  }),
                 );
               };
               calls.set(requestId, {
@@ -159,7 +216,12 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
                 },
               });
               signal.addEventListener("abort", abort);
-              void send({ kind: "host-request", context, requestId, ...call }).catch((error) => {
+              void send({
+                kind: "host-request",
+                context,
+                requestId,
+                ...call,
+              }).catch((error) => {
                 calls.delete(requestId);
                 signal.removeEventListener("abort", abort);
                 reject(error);
@@ -169,12 +231,18 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
         });
         // Report initialization failures even while the reader waits for hello.
         void booting.catch(() => {
-          if (!stopping) process.stdin.destroy(new Error("Core initialization failed."));
+          if (!stopping) {
+            process.stdin.destroy(new Error("Core initialization failed."));
+          }
         });
         continue;
       }
-      if (frame.runtime.id !== runtime.id || frame.runtime.generation !== runtime.generation)
+      if (
+        frame.runtime.id !== runtime.id ||
+        frame.runtime.generation !== runtime.generation
+      ) {
         throw new Error("Stale runtime frame.");
+      }
       if (frame.kind === "host-response") {
         const call = calls.get(frame.requestId);
         if (call?.context === frame.context) {
@@ -184,14 +252,18 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
         continue;
       }
       if (frame.kind === "hello") {
-        if (hostHelloSeen) throw new Error("Duplicate host hello.");
+        if (hostHelloSeen) {
+          throw new Error("Duplicate host hello.");
+        }
         hostHelloSeen = true;
         negotiateProtocol(hello, frame.payload);
         // Do not block host-response dispatch during asynchronous plugin setup.
         void booting
           ?.then(async (created) => {
             core = created;
-            if (stopping) return;
+            if (stopping) {
+              return;
+            }
             await send({
               kind: "ready",
               pid: process.pid,
@@ -201,7 +273,9 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
             ready = true;
           })
           .catch(() => {
-            if (!stopping) process.stdin.destroy(new Error("Core startup failed."));
+            if (!stopping) {
+              process.stdin.destroy(new Error("Core startup failed."));
+            }
           });
         continue;
       }
@@ -212,14 +286,25 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
         await core?.stop();
         cancelCalls();
         sessions.clear();
-        await send({ kind: "stopping" });
+        await send({
+          kind: "stopping",
+        });
         break;
       }
-      if (!ready || !core) throw new Error("Runtime not ready.");
+      if (!ready || !core) {
+        throw new Error("Runtime not ready.");
+      }
       if (frame.kind === "session-open") {
-        if (sessions.has(frame.context)) throw new Error("Duplicate session context.");
-        if (sessions.size >= API_LIMITS.maxPending) throw new Error("Session limit reached.");
-        sessions.set(frame.context, core.openSession(frame.context as HostContext, frame.viewId));
+        if (sessions.has(frame.context)) {
+          throw new Error("Duplicate session context.");
+        }
+        if (sessions.size >= API_LIMITS.maxPending) {
+          throw new Error("Session limit reached.");
+        }
+        sessions.set(
+          frame.context,
+          core.openSession(frame.context as HostContext, frame.viewId),
+        );
       } else if (frame.kind === "revoke") {
         const session = sessions.get(frame.context);
         sessions.delete(frame.context);
@@ -227,23 +312,42 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
         cancelCalls(frame.context);
       } else if (frame.kind === "web") {
         const session = sessions.get(frame.context);
-        if (!session) throw new Error("Unknown session context.");
-        if (!["hello", "invoke", "cancel", "listen", "unlisten"].includes(frame.payload.kind))
+        if (!session) {
+          throw new Error("Unknown session context.");
+        }
+        if (
+          ![
+            "hello",
+            "invoke",
+            "cancel",
+            "listen",
+            "unlisten",
+          ].includes(frame.payload.kind)
+        ) {
           throw new Error("Invalid web direction.");
+        }
         await session.receive(frame.payload as ClientMessage);
-      } else throw new Error("Unexpected host frame.");
+      } else {
+        throw new Error("Unexpected host frame.");
+      }
     }
-    if (!stopping) throw new Error("Unexpected host EOF.");
+    if (!stopping) {
+      throw new Error("Unexpected host EOF.");
+    }
     await writer;
   } catch (error) {
     stopping = true;
     cancelCalls();
     await core?.stop().catch(() => {});
-    if (runtime)
+    if (runtime) {
       await send({
         kind: "fatal",
-        error: { code: "INTERNAL", message: "Backend IPC failed." },
+        error: {
+          code: "INTERNAL",
+          message: "Backend IPC failed.",
+        },
       }).catch(() => {});
+    }
     throw error;
   } finally {
     process.stdin.destroy();

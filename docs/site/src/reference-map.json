@@ -34,7 +34,11 @@
       "name": "@bunaway/runtime-bun",
       "source": "packages/runtime-bun/src/index.ts",
       "pages": {
-        "reference/tooling/core-and-runtime": ["readJsonLines", "bindHostAPI", "runBunApp"]
+        "reference/tooling/core-and-runtime": [
+          "readJsonLines",
+          "bindHostAPI",
+          "runBunApp"
+        ]
       }
     },
     {
@@ -155,7 +159,11 @@
       "name": "@bunaway/plugin",
       "source": "packages/plugin-sdk/src/index.ts",
       "pages": {
-        "reference/tooling/native-plugins": ["defineNativePlugin", "BunawayError", "s"]
+        "reference/tooling/native-plugins": [
+          "defineNativePlugin",
+          "BunawayError",
+          "s"
+        ]
       }
     }
   ],
@@ -216,7 +224,11 @@
       "source": "packages/core/src/index.ts",
       "type": "RuntimeServices",
       "pages": {
-        "reference/tooling/core-and-runtime": ["createCancellation", "now", "schedule"]
+        "reference/tooling/core-and-runtime": [
+          "createCancellation",
+          "now",
+          "schedule"
+        ]
       }
     },
     {
@@ -237,7 +249,13 @@
       "source": "packages/core/src/index.ts",
       "type": "AppDefinition",
       "pages": {
-        "reference/backend/app-definition": ["commands", "events", "state", "plugins", "desktop"]
+        "reference/backend/app-definition": [
+          "commands",
+          "events",
+          "state",
+          "plugins",
+          "desktop"
+        ]
       }
     },
     {
@@ -293,7 +311,11 @@
       "source": "packages/protocol/src/contracts.ts",
       "type": "CancellationSignal",
       "pages": {
-        "reference/tooling/core-and-runtime": ["aborted", "addEventListener", "removeEventListener"]
+        "reference/tooling/core-and-runtime": [
+          "aborted",
+          "addEventListener",
+          "removeEventListener"
+        ]
       }
     },
     {
@@ -326,7 +348,13 @@
       "source": "packages/plugin-sdk/src/index.ts",
       "type": "NativePluginDefinition",
       "pages": {
-        "reference/tooling/native-plugins": ["name", "version", "operations", "scopes", "matches"]
+        "reference/tooling/native-plugins": [
+          "name",
+          "version",
+          "operations",
+          "scopes",
+          "matches"
+        ]
       }
     },
     {
@@ -347,7 +375,12 @@
       "source": "packages/plugin-sdk/src/index.ts",
       "type": "NativeOperationDefinition",
       "pages": {
-        "reference/tooling/native-plugins": ["input", "output", "permission", "osPermission"]
+        "reference/tooling/native-plugins": [
+          "input",
+          "output",
+          "permission",
+          "osPermission"
+        ]
       }
     },
     {
@@ -361,21 +394,38 @@
       "source": "packages/protocol/src/host-api.ts",
       "type": "HostOperationContract",
       "pages": {
-        "reference/protocol": ["name", "input", "output", "permission", "osPermission"]
+        "reference/protocol": [
+          "name",
+          "input",
+          "output",
+          "permission",
+          "osPermission"
+        ]
       }
     },
     {
       "source": "packages/core/src/desktop.ts",
       "type": "DesktopOptions",
       "pages": {
-        "reference/backend/app-definition": ["closeBehavior", "tray", "onOpen", "beforeQuit"]
+        "reference/backend/app-definition": [
+          "closeBehavior",
+          "tray",
+          "onOpen",
+          "beforeQuit"
+        ]
       }
     },
     {
       "source": "packages/core/src/desktop.ts",
       "type": "OpenRequest",
       "pages": {
-        "reference/backend/app-definition": ["source", "argv", "cwd", "urls", "files"]
+        "reference/backend/app-definition": [
+          "source",
+          "argv",
+          "cwd",
+          "urls",
+          "files"
+        ]
       }
     },
     {

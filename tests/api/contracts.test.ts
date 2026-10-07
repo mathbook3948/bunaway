@@ -43,7 +43,12 @@ import {
   type TransportEvent,
   validateValue,
 } from "../../packages/protocol/src/index.ts";
-import { bindHostAPI, contracts, registry, validateHostOutput } from "../fixtures/host-plugins.ts";
+import {
+  bindHostAPI,
+  contracts,
+  registry,
+  validateHostOutput,
+} from "../fixtures/host-plugins.ts";
 import {
   combinedSchema,
   implicitMixedSchema,
@@ -54,24 +59,54 @@ import {
 
 const input = {
   type: "object",
-  properties: { key: { type: "string", maxLength: 32 } },
-  required: ["key"],
+  properties: {
+    key: {
+      type: "string",
+      maxLength: 32,
+    },
+  },
+  required: [
+    "key",
+  ],
   additionalProperties: false,
 } as const;
-const output = { type: "string" } as const;
-const emptyObject = { type: "object", properties: {}, additionalProperties: false } as const;
+const output = {
+  type: "string",
+} as const;
+const emptyObject = {
+  type: "object",
+  properties: {},
+  additionalProperties: false,
+} as const;
 const emptyApp = {
   commands: {
-    "empty.object": command({ input: emptyObject, output: emptyObject, handle: (input) => input }),
+    "empty.object": command({
+      input: emptyObject,
+      output: emptyObject,
+      handle: (input) => input,
+    }),
     "empty.array": command({
-      input: { type: "array", items: emptyObject },
-      output: { type: "array", items: emptyObject },
+      input: {
+        type: "array",
+        items: emptyObject,
+      },
+      output: {
+        type: "array",
+        items: emptyObject,
+      },
       handle: (input) => input,
     }),
   },
   events: {},
 } satisfies AppDefinition;
-const optionalInput = { type: "object", properties: { note: { type: "string" } } } as const;
+const optionalInput = {
+  type: "object",
+  properties: {
+    note: {
+      type: "string",
+    },
+  },
+} as const;
 const optionalApp = {
   commands: {
     "notes.optional": command({
@@ -83,7 +118,9 @@ const optionalApp = {
       },
     }),
   },
-  events: { "notes.optionalChanged": optionalInput },
+  events: {
+    "notes.optionalChanged": optionalInput,
+  },
 } satisfies AppDefinition;
 const combinedApp = {
   commands: {
@@ -106,7 +143,9 @@ const combinedApp = {
       },
     }),
   },
-  events: { "notes.combinedChanged": combinedSchema },
+  events: {
+    "notes.combinedChanged": combinedSchema,
+  },
 } satisfies AppDefinition;
 const implicitApp = {
   commands: {
@@ -145,7 +184,9 @@ const app = {
         }),
     }),
   },
-  events: { "notes.changed": input },
+  events: {
+    "notes.changed": input,
+  },
 } satisfies AppDefinition;
 
 const policy: Policy = {
@@ -153,22 +194,42 @@ const policy: Policy = {
   views: [
     {
       id: "main",
-      origins: ["https://app.bunaway.local"],
-      commands: ["notes.read", "plugin.capabilities.get"],
-      events: ["notes.changed"],
+      origins: [
+        "https://app.bunaway.local",
+      ],
+      commands: [
+        "notes.read",
+        "plugin.capabilities.get",
+      ],
+      events: [
+        "notes.changed",
+      ],
       host: {
         permissions: [
-          { identifier: "storage:read-text", allow: [{ scope: "appData", pathPrefix: "notes" }] },
+          {
+            identifier: "storage:read-text",
+            allow: [
+              {
+                scope: "appData",
+                pathPrefix: "notes",
+              },
+            ],
+          },
         ],
       },
     },
   ],
-  backend: { permissions: [] },
+  backend: {
+    permissions: [],
+  },
 };
 // The fixture stands in for the trusted native/runtime adapter, not a Web payload.
 const contextId = "host-session-1" as HostContext;
 
-function context(host: CommandContext["host"], signal: CancellationSignal): CommandContext {
+function context(
+  host: CommandContext["host"],
+  signal: CancellationSignal,
+): CommandContext {
   const state = new Map<string, JsonValue>();
   return {
     host,
@@ -180,35 +241,77 @@ function context(host: CommandContext["host"], signal: CancellationSignal): Comm
       },
       delete: (key) => state.delete(key),
     },
-    events: { async emit() {} },
+    events: {
+      async emit() {},
+    },
   };
 }
 
 test("command value validation accepts decoded numbers without applying a send byte limit", async () => {
   const signal = new AbortController().signal;
   const ctx = context(
-    bindHostAPI(contextId, signal, async () => ({ kind: "result", payload: null })),
+    bindHostAPI(contextId, signal, async () => ({
+      kind: "result",
+      payload: null,
+    })),
     signal,
   );
   const definition = command({
-    input: { type: "array", items: {} },
-    output: { type: "integer" },
+    input: {
+      type: "array",
+      items: {},
+    },
+    output: {
+      type: "integer",
+    },
     handle: (input) => input.length,
   });
-  expect(await definition.run(Array<number>(50000).fill(1e20), ctx)).toBe(50000);
-  await expect(definition.run([Infinity], ctx)).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
+  expect(await definition.run(Array<number>(50000).fill(1e20), ctx)).toBe(
+    50000,
+  );
+  await expect(
+    definition.run(
+      [
+        Infinity,
+      ],
+      ctx,
+    ),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
 });
 
 test("empty object command schemas retain object and array shapes at runtime", async () => {
   const signal = new AbortController().signal;
   const ctx = context(
-    bindHostAPI(contextId, signal, async () => ({ kind: "result", payload: null })),
+    bindHostAPI(contextId, signal, async () => ({
+      kind: "result",
+      payload: null,
+    })),
     signal,
   );
   expect(await emptyApp.commands["empty.object"].run({}, ctx)).toEqual({});
-  expect(await emptyApp.commands["empty.array"].run([{}], ctx)).toEqual([{}]);
-  for (const value of [42, null, [], { extra: true }]) {
-    await expect(emptyApp.commands["empty.object"].run(value, ctx)).rejects.toMatchObject({
+  expect(
+    await emptyApp.commands["empty.array"].run(
+      [
+        {},
+      ],
+      ctx,
+    ),
+  ).toEqual([
+    {},
+  ]);
+  for (const value of [
+    42,
+    null,
+    [],
+    {
+      extra: true,
+    },
+  ]) {
+    await expect(
+      emptyApp.commands["empty.object"].run(value, ctx),
+    ).rejects.toMatchObject({
       code: "INVALID_ARGUMENT",
     });
     const badOutput = command({
@@ -216,9 +319,18 @@ test("empty object command schemas retain object and array shapes at runtime", a
       output: emptyObject,
       handle: () => value as unknown as Infer<typeof emptyObject>,
     });
-    await expect(badOutput.run(null, ctx)).rejects.toMatchObject({ code: "INTERNAL" });
+    await expect(badOutput.run(null, ctx)).rejects.toMatchObject({
+      code: "INTERNAL",
+    });
   }
-  await expect(emptyApp.commands["empty.array"].run([42], ctx)).rejects.toMatchObject({
+  await expect(
+    emptyApp.commands["empty.array"].run(
+      [
+        42,
+      ],
+      ctx,
+    ),
+  ).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
   });
 });
@@ -226,34 +338,73 @@ test("empty object command schemas retain object and array shapes at runtime", a
 test("anyOf commands retain common required fields and discriminate branch fields", async () => {
   const signal = new AbortController().signal;
   const ctx = context(
-    bindHostAPI(contextId, signal, async () => ({ kind: "result", payload: null })),
+    bindHostAPI(contextId, signal, async () => ({
+      kind: "result",
+      payload: null,
+    })),
     signal,
   );
   const definition = combinedApp.commands["notes.combined"];
   for (const value of [
-    { base: "root", kind: "a", value: "text" },
-    { base: "root", kind: "b", value: 42 },
+    {
+      base: "root",
+      kind: "a",
+      value: "text",
+    },
+    {
+      base: "root",
+      kind: "b",
+      value: 42,
+    },
   ]) {
     expect(await definition.run(value, ctx)).toEqual(value);
   }
-  await expect(definition.run({ kind: "a", value: "text" }, ctx)).rejects.toMatchObject({
+  await expect(
+    definition.run(
+      {
+        kind: "a",
+        value: "text",
+      },
+      ctx,
+    ),
+  ).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
   });
 });
 test("implicit outer object constraints apply to object branches while preserving null branches", async () => {
   const signal = new AbortController().signal;
   const ctx = context(
-    bindHostAPI(contextId, signal, async () => ({ kind: "result", payload: null })),
+    bindHostAPI(contextId, signal, async () => ({
+      kind: "result",
+      payload: null,
+    })),
     signal,
   );
-  for (const kind of ["a", "b"]) {
-    const value = { id: "root", kind };
-    expect(await implicitApp.commands["implicit.object"].run(value, ctx)).toEqual(value);
+  for (const kind of [
+    "a",
+    "b",
+  ]) {
+    const value = {
+      id: "root",
+      kind,
+    };
+    expect(
+      await implicitApp.commands["implicit.object"].run(value, ctx),
+    ).toEqual(value);
   }
   await expect(
-    implicitApp.commands["implicit.object"].run({ kind: "a" }, ctx),
-  ).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
-  expect(await implicitApp.commands["implicit.mixed"].run(null, ctx)).toBeNull();
+    implicitApp.commands["implicit.object"].run(
+      {
+        kind: "a",
+      },
+      ctx,
+    ),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  expect(
+    await implicitApp.commands["implicit.mixed"].run(null, ctx),
+  ).toBeNull();
 });
 
 test("duplicate policy view IDs fail on standalone, bootstrap and process boot routes", () => {
@@ -261,15 +412,33 @@ test("duplicate policy view IDs fail on standalone, bootstrap and process boot r
     ...policy,
     views: [
       ...policy.views,
-      ...policy.views.map((view) => ({ ...view, commands: ["notes.delete"] })),
+      ...policy.views.map((view) => ({
+        ...view,
+        commands: [
+          "notes.delete",
+        ],
+      })),
     ],
   };
-  for (const candidate of [policy, duplicate]) {
-    const bootstrap = { entrypoint: "C:/app/backend.js", buildId: "test", policy: candidate };
+  for (const candidate of [
+    policy,
+    duplicate,
+  ]) {
+    const bootstrap = {
+      entrypoint: "C:/app/backend.js",
+      buildId: "test",
+      policy: candidate,
+    };
     const frame: ProcessFrame = {
       kind: "boot",
-      ipc: { major: 1, minor: 0 },
-      runtime: { id: "test", generation: "1" },
+      ipc: {
+        major: 1,
+        minor: 0,
+      },
+      runtime: {
+        id: "test",
+        generation: "1",
+      },
       payload: bootstrap,
     };
     const actions = [
@@ -279,8 +448,11 @@ test("duplicate policy view IDs fail on standalone, bootstrap and process boot r
       () => serializeProcessFrame(frame),
     ];
     for (const action of actions) {
-      if (candidate === duplicate) expect(action).toThrow("Duplicate policy view.");
-      else expect(action).not.toThrow();
+      if (candidate === duplicate) {
+        expect(action).toThrow("Duplicate policy view.");
+      } else {
+        expect(action).not.toThrow();
+      }
     }
   }
 });
@@ -288,13 +460,30 @@ test("duplicate policy view IDs fail on standalone, bootstrap and process boot r
 test("command input properties are optional when required is omitted", async () => {
   const signal = new AbortController().signal;
   const ctx = context(
-    bindHostAPI(contextId, signal, async () => ({ kind: "result", payload: null })),
+    bindHostAPI(contextId, signal, async () => ({
+      kind: "result",
+      payload: null,
+    })),
     signal,
   );
   const definition = optionalApp.commands["notes.optional"];
   expect(await definition.run({}, ctx)).toBe("default");
-  expect(await definition.run({ note: "present" }, ctx)).toBe("present");
-  await expect(definition.run({ note: 42 }, ctx)).rejects.toMatchObject({
+  expect(
+    await definition.run(
+      {
+        note: "present",
+      },
+      ctx,
+    ),
+  ).toBe("present");
+  await expect(
+    definition.run(
+      {
+        note: 42,
+      },
+      ctx,
+    ),
+  ).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
   });
 });
@@ -307,7 +496,9 @@ test("invalid combined constraints and duplicate JSON values never reach command
   }));
   const ctx = context(host, controller.signal);
   for (const { schema, value, accepted } of validationCases) {
-    if (accepted) continue;
+    if (accepted) {
+      continue;
+    }
     let called = false;
     const definition = command({
       input: schema,
@@ -317,41 +508,89 @@ test("invalid combined constraints and duplicate JSON values never reach command
         return null;
       },
     });
-    await expect(definition.run(value, ctx)).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
+    await expect(definition.run(value, ctx)).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
     expect(called).toBe(false);
-    const badOutput = command({ input: {}, output: schema, handle: () => value });
-    await expect(badOutput.run(null, ctx)).rejects.toMatchObject({ code: "INTERNAL" });
+    const badOutput = command({
+      input: {},
+      output: schema,
+      handle: () => value,
+    });
+    await expect(badOutput.run(null, ctx)).rejects.toMatchObject({
+      code: "INTERNAL",
+    });
   }
 });
 
 test("a typed backend command validates input/output and preserves its bound Host context", async () => {
   const controller = new AbortController();
   const seen: unknown[] = [];
-  const host = bindHostAPI(contextId, controller.signal, async (id, call, signal) => {
-    seen.push({ id, call, signal });
-    return { kind: "result", payload: "welcome" };
-  });
+  const host = bindHostAPI(
+    contextId,
+    controller.signal,
+    async (id, call, signal) => {
+      seen.push({
+        id,
+        call,
+        signal,
+      });
+      return {
+        kind: "result",
+        payload: "welcome",
+      };
+    },
+  );
   const ctx = context(host, controller.signal);
-  expect(await app.commands["notes.read"].run({ key: "welcome" }, ctx)).toBe("welcome");
+  expect(
+    await app.commands["notes.read"].run(
+      {
+        key: "welcome",
+      },
+      ctx,
+    ),
+  ).toBe("welcome");
   expect(seen).toEqual([
     {
       id: contextId,
       call: {
         operation: "storage.readText",
-        payload: { scope: "appData", path: "notes/welcome.txt" },
+        payload: {
+          scope: "appData",
+          path: "notes/welcome.txt",
+        },
       },
       signal: controller.signal,
     },
   ]);
-  await expect(app.commands["notes.read"].run({ key: 42 }, ctx)).rejects.toMatchObject({
+  await expect(
+    app.commands["notes.read"].run(
+      {
+        key: 42,
+      },
+      ctx,
+    ),
+  ).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
     message: "Invalid command input.",
   });
   await expect(
-    app.commands["notes.read"].run({ key: "welcome", context: "backend" }, ctx),
+    app.commands["notes.read"].run(
+      {
+        key: "welcome",
+        context: "backend",
+      },
+      ctx,
+    ),
   ).rejects.toThrow();
   expect(seen).toHaveLength(1);
-  const bad = command({ input: { const: null }, output, handle: () => 42 as unknown as string });
+  const bad = command({
+    input: {
+      const: null,
+    },
+    output,
+    handle: () => 42 as unknown as string,
+  });
   await expect(bad.run(null, ctx)).rejects.toMatchObject({
     code: "INTERNAL",
     message: "Invalid command output.",
@@ -363,61 +602,139 @@ test("Host operations share exact request/result schemas and safe errors", async
     parseHostCall(
       serializeHostCall({
         operation: "storage.writeText",
-        payload: { scope: "temp", path: "notes/new.txt", text: "한글" },
+        payload: {
+          scope: "temp",
+          path: "notes/new.txt",
+          text: "한글",
+        },
       }),
     ),
   ).toEqual({
     operation: "storage.writeText",
-    payload: { scope: "temp", path: "notes/new.txt", text: "한글" },
+    payload: {
+      scope: "temp",
+      path: "notes/new.txt",
+      text: "한글",
+    },
   });
   for (const call of [
-    { operation: "unknown", payload: null },
-    { operation: "storage.readText", payload: { scope: "root", path: "notes/a" } },
-    { operation: "storage.readText", payload: { scope: "appData", path: "a\0b" } },
-    { operation: "storage.readText", payload: { scope: "appData", path: "a", context: "backend" } },
-    { operation: "capabilities.get", payload: {} },
-  ])
-    expect(() => registry.validateCall(parseHostCall(JSON.stringify(call)))).toThrow();
+    {
+      operation: "unknown",
+      payload: null,
+    },
+    {
+      operation: "storage.readText",
+      payload: {
+        scope: "root",
+        path: "notes/a",
+      },
+    },
+    {
+      operation: "storage.readText",
+      payload: {
+        scope: "appData",
+        path: "a\0b",
+      },
+    },
+    {
+      operation: "storage.readText",
+      payload: {
+        scope: "appData",
+        path: "a",
+        context: "backend",
+      },
+    },
+    {
+      operation: "capabilities.get",
+      payload: {},
+    },
+  ]) {
+    expect(() =>
+      registry.validateCall(parseHostCall(JSON.stringify(call))),
+    ).toThrow();
+  }
   expect(validateHostOutput("storage.writeText", null)).toBeNull();
   expect(() => validateHostOutput("storage.writeText", true)).toThrow();
   expect(
     validateHostOutput("capabilities.get", [
-      { name: "storage", support: "supported", permission: "denied" },
+      {
+        name: "storage",
+        support: "supported",
+        permission: "denied",
+      },
     ]),
   ).toHaveLength(1);
   expect(() =>
     validateHostOutput("capabilities.get", [
-      { name: "storage", support: "yes", permission: "denied" },
+      {
+        name: "storage",
+        support: "yes",
+        permission: "denied",
+      },
     ]),
   ).toThrow();
   expect(() =>
     validateHostOutput("capabilities.get", [
-      { name: "storage", support: "supported", permission: "denied" },
-      { name: "storage", support: "unsupported", permission: "unknown" },
+      {
+        name: "storage",
+        support: "supported",
+        permission: "denied",
+      },
+      {
+        name: "storage",
+        support: "unsupported",
+        permission: "unknown",
+      },
     ]),
   ).toThrow();
   const signal = new AbortController().signal;
   const denied = bindHostAPI(contextId, signal, async () => ({
     kind: "error",
-    error: { code: "PERMISSION_DENIED", message: "Access denied." },
+    error: {
+      code: "PERMISSION_DENIED",
+      message: "Access denied.",
+    },
   }));
   const raw = bindHostAPI(contextId, signal, async () => {
     throw new Error("private-native-path");
   });
-  const invalid = bindHostAPI(contextId, signal, async () => ({ kind: "result", payload: 42 }));
+  const invalid = bindHostAPI(contextId, signal, async () => ({
+    kind: "result",
+    payload: 42,
+  }));
   await expect(
-    denied.call(contracts["storage.readText"], { scope: "appData", path: "notes/a" }),
-  ).rejects.toMatchObject({ code: "PERMISSION_DENIED", message: "Access denied." });
+    denied.call(contracts["storage.readText"], {
+      scope: "appData",
+      path: "notes/a",
+    }),
+  ).rejects.toMatchObject({
+    code: "PERMISSION_DENIED",
+    message: "Access denied.",
+  });
   await expect(
-    raw.call(contracts["log.write"], { level: "info", message: "safe" }),
+    raw.call(contracts["log.write"], {
+      level: "info",
+      message: "safe",
+    }),
   ).rejects.toMatchObject({
     code: "INTERNAL",
     message: "Host operation failed.",
   });
   await expect(
-    invalid.call(contracts["storage.readText"], { scope: "appData", path: "notes/a" }),
-  ).rejects.toMatchObject({ code: "INTERNAL", message: "Invalid host response." });
-  expect(new BunawayError({ code: "BUSY", message: "Queue full." })).toBeInstanceOf(Error);
+    invalid.call(contracts["storage.readText"], {
+      scope: "appData",
+      path: "notes/a",
+    }),
+  ).rejects.toMatchObject({
+    code: "INTERNAL",
+    message: "Invalid host response.",
+  });
+  expect(
+    new BunawayError({
+      code: "BUSY",
+      message: "Queue full.",
+    }),
+  ).toBeInstanceOf(Error);
 });
 
 test("cancelled Host calls cannot start or deliver a late successful result", async () => {
@@ -425,20 +742,34 @@ test("cancelled Host calls cannot start or deliver a late successful result", as
   let calls = 0;
   const host = bindHostAPI(contextId, controller.signal, async () => {
     calls++;
-    return { kind: "result", payload: null };
+    return {
+      kind: "result",
+      payload: null,
+    };
   });
   controller.abort();
   await expect(
-    host.call(contracts["log.write"], { level: "info", message: "cancelled" }),
-  ).rejects.toMatchObject({ code: "CANCELLED" });
+    host.call(contracts["log.write"], {
+      level: "info",
+      message: "cancelled",
+    }),
+  ).rejects.toMatchObject({
+    code: "CANCELLED",
+  });
   expect(calls).toBe(0);
   const lateController = new AbortController();
   const late = bindHostAPI(contextId, lateController.signal, async () => {
     lateController.abort();
-    return { kind: "result", payload: "late" };
+    return {
+      kind: "result",
+      payload: "late",
+    };
   });
   await expect(
-    late.call(contracts["storage.readText"], { scope: "temp", path: "a" }),
+    late.call(contracts["storage.readText"], {
+      scope: "temp",
+      path: "a",
+    }),
   ).rejects.toMatchObject({
     code: "CANCELLED",
   });
@@ -462,14 +793,23 @@ test("Host paths use relative forward-slash paths while native access checks rem
     expect(() =>
       registry.validateCall(
         parseHostCall(
-          JSON.stringify({ operation: "storage.readText", payload: { scope: "appData", path } }),
+          JSON.stringify({
+            operation: "storage.readText",
+            payload: {
+              scope: "appData",
+              path,
+            },
+          }),
         ),
       ),
     ).toThrow();
   }
   const call = {
     operation: "storage.readText",
-    payload: { scope: "appData", path: "notes/한글 파일.txt" },
+    payload: {
+      scope: "appData",
+      path: "notes/한글 파일.txt",
+    },
   } as const;
   expect(parseHostCall(JSON.stringify(call))).toEqual(call);
 });
@@ -478,7 +818,14 @@ test("the framework windows namespace is reserved from plugin registration", () 
   expect(
     () =>
       new NativeRegistry([
-        { name: "windows", version: "1.0.0", native: { operations: [], permissions: [] } },
+        {
+          name: "windows",
+          version: "1.0.0",
+          native: {
+            operations: [],
+            permissions: [],
+          },
+        },
       ]),
   ).toThrow();
 });
@@ -495,8 +842,14 @@ test("host-only boot policy and session-open never enter the Web message bridge"
   expect(boot.policy).toEqual(policy);
   expect(boot.backendContext).toBe("native-backend-context");
   const frame = {
-    ipc: { major: 1, minor: 0 },
-    runtime: { id: "app", generation: "1" },
+    ipc: {
+      major: 1,
+      minor: 0,
+    },
+    runtime: {
+      id: "app",
+      generation: "1",
+    },
     kind: "session-open",
     context: "native-context",
     viewId: "main",
@@ -539,61 +892,124 @@ test("pending Host calls abort promptly and release their cancellation listener"
     started = true;
     return pending;
   });
-  const task = host.call(contracts["storage.readText"], { scope: "temp", path: "notes/a" });
+  const task = host.call(contracts["storage.readText"], {
+    scope: "temp",
+    path: "notes/a",
+  });
   await Promise.resolve();
   expect(started).toBe(true);
   expect(listeners.size).toBe(1);
   controller.abort();
-  await expect(task).rejects.toMatchObject({ code: "CANCELLED" });
+  await expect(task).rejects.toMatchObject({
+    code: "CANCELLED",
+  });
   expect(listeners.size).toBe(0);
-  complete({ kind: "result", payload: "late" });
+  complete({
+    kind: "result",
+    payload: "late",
+  });
   await pending;
 });
 
 // Type assertions below are not executed by the runtime tests.
-export function checkImplicitObjectTypes(client: Client<CommandsOf<typeof implicitApp>>) {
-  client.invoke("implicit.object", { id: "root", kind: "a" });
-  client.invoke("implicit.object", { id: "root", kind: "b" });
+export function checkImplicitObjectTypes(
+  client: Client<CommandsOf<typeof implicitApp>>,
+) {
+  client.invoke("implicit.object", {
+    id: "root",
+    kind: "a",
+  });
+  client.invoke("implicit.object", {
+    id: "root",
+    kind: "b",
+  });
   client.invoke("implicit.mixed", null);
   // @ts-expect-error implicit outer required id cannot disappear
-  client.invoke("implicit.object", { kind: "a" });
-  // @ts-expect-error implicit properties constrain the common id type
-  client.invoke("implicit.object", { id: 42, kind: "a" });
-  // @ts-expect-error common fields do not widen branch discriminants
-  client.invoke("implicit.object", { id: "root", kind: "c" });
+  client.invoke("implicit.object", {
+    kind: "a",
+  });
+  client.invoke("implicit.object", {
+    // @ts-expect-error implicit properties constrain the common id type
+    id: 42,
+    kind: "a",
+  });
+  client.invoke("implicit.object", {
+    id: "root",
+    // @ts-expect-error common fields do not widen branch discriminants
+    kind: "c",
+  });
   command({
     input: implicitObjectSchema,
     output: implicitObjectSchema,
-    // @ts-expect-error output must also retain common required fields
-    handle: () => ({ kind: "a" }) as const,
+    handle: () =>
+      // @ts-expect-error output must also retain common required fields
+      ({
+        kind: "a",
+      }) as const,
   });
-  const required: Infer<typeof implicitRequiredSchema> = { id: 42, kind: "a" };
+  const required: Infer<typeof implicitRequiredSchema> = {
+    id: 42,
+    kind: "a",
+  };
   const present: JsonValue = required.id;
   void present;
   // @ts-expect-error required applies even without a properties declaration
-  const missing: Infer<typeof implicitRequiredSchema> = { kind: "a" };
+  const missing: Infer<typeof implicitRequiredSchema> = {
+    kind: "a",
+  };
   void missing;
-  const implicit = { properties: implicitObjectSchema.properties, required: ["id"] } as const;
-  const nonObjects: Infer<typeof implicit>[] = [42, null, [42], "text"];
+  const implicit = {
+    properties: implicitObjectSchema.properties,
+    required: [
+      "id",
+    ],
+  } as const;
+  const nonObjects: Infer<typeof implicit>[] = [
+    42,
+    null,
+    [
+      42,
+    ],
+    "text",
+  ];
   void nonObjects;
   // @ts-expect-error implicit keywords still constrain object values
-  const wrong: Infer<typeof implicit> = { id: 42 };
+  const wrong: Infer<typeof implicit> = {
+    id: 42,
+  };
   void wrong;
 }
 
-export function checkContainerSchemaTypes(client: Client<CommandsOf<typeof emptyApp>>) {
-  const objectResult: Promise<Infer<typeof emptyObject>> = client.invoke("empty.object", {});
-  const arrayResult: Promise<Infer<typeof emptyObject>[]> = client.invoke("empty.array", [{}]);
+export function checkContainerSchemaTypes(
+  client: Client<CommandsOf<typeof emptyApp>>,
+) {
+  const objectResult: Promise<Infer<typeof emptyObject>> = client.invoke(
+    "empty.object",
+    {},
+  );
+  const arrayResult: Promise<Infer<typeof emptyObject>[]> = client.invoke(
+    "empty.array",
+    [
+      {},
+    ],
+  );
   void objectResult;
   void arrayResult;
   // @ts-expect-error an empty object schema does not accept a number
   client.invoke("empty.object", 42);
   // @ts-expect-error an empty object schema does not accept an array
   client.invoke("empty.object", []);
-  // @ts-expect-error a closed empty object schema does not accept extra properties
-  client.invoke("empty.object", { extra: true });
-  // @ts-expect-error nested empty objects do not accept numeric items
-  client.invoke("empty.array", [42]);
+  client.invoke("empty.object", {
+    // @ts-expect-error a closed empty object schema does not accept extra properties
+    extra: true,
+  });
+  client.invoke(
+    "empty.array",
+    [
+      // @ts-expect-error nested empty objects do not accept numeric items
+      42,
+    ],
+  );
   command({
     input: emptyObject,
     output: emptyObject,
@@ -606,27 +1022,60 @@ export function checkContainerSchemaTypes(client: Client<CommandsOf<typeof empty
     // @ts-expect-error empty object outputs cannot be arrays
     handle: () => [],
   });
-  const objectOnly = { type: "object" } as const;
-  const openEmpty = { type: "object", properties: {} } as const;
-  const closedOnly = { type: "object", additionalProperties: false } as const;
-  const arrayOnly = { type: "array" } as const;
+  const objectOnly = {
+    type: "object",
+  } as const;
+  const openEmpty = {
+    type: "object",
+    properties: {},
+  } as const;
+  const closedOnly = {
+    type: "object",
+    additionalProperties: false,
+  } as const;
+  const arrayOnly = {
+    type: "array",
+  } as const;
   const containers: [
     Infer<typeof objectOnly>,
     Infer<typeof openEmpty>,
     Infer<typeof closedOnly>,
     Infer<typeof arrayOnly>,
-  ] = [{ anything: [42] }, { anything: null }, {}, [42, {}]];
+  ] = [
+    {
+      anything: [
+        42,
+      ],
+    },
+    {
+      anything: null,
+    },
+    {},
+    [
+      42,
+      {},
+    ],
+  ];
   void containers;
   // @ts-expect-error an object without properties is still an object
   const numericObject: Infer<typeof objectOnly> = 42;
   // @ts-expect-error an open empty object is not an array
   const arrayObject: Infer<typeof openEmpty> = [];
-  // @ts-expect-error a closed object without properties remains empty
-  const extraObject: Infer<typeof closedOnly> = { extra: true };
+  const extraObject: Infer<typeof closedOnly> = {
+    // @ts-expect-error a closed object without properties remains empty
+    extra: true,
+  };
   // @ts-expect-error an array without items is still an array
   const objectArray: Infer<typeof arrayOnly> = {};
   // @ts-expect-error even optional properties named length must not admit arrays
-  const optionalArray: Infer<{ type: "object"; properties: { length: { type: "integer" } } }> = [];
+  const optionalArray: Infer<{
+    type: "object";
+    properties: {
+      length: {
+        type: "integer";
+      };
+    };
+  }> = [];
   void numericObject;
   void arrayObject;
   void extraObject;
@@ -637,11 +1086,14 @@ export function checkContainerSchemaTypes(client: Client<CommandsOf<typeof empty
 export function checkCombinedSchemaTypes(
   client: Client<CommandsOf<typeof combinedApp>, EventsOf<typeof combinedApp>>,
 ) {
-  const result: Promise<Infer<typeof combinedSchema>> = client.invoke("notes.combined", {
-    base: "root",
-    kind: "a",
-    value: "text",
-  });
+  const result: Promise<Infer<typeof combinedSchema>> = client.invoke(
+    "notes.combined",
+    {
+      base: "root",
+      kind: "a",
+      value: "text",
+    },
+  );
   result.then((input) => {
     const base: string = input.base;
     void base;
@@ -651,18 +1103,31 @@ export function checkCombinedSchemaTypes(
     }
   });
   // @ts-expect-error anyOf does not remove the common required base
-  client.invoke("notes.combined", { kind: "a", value: "text" });
+  client.invoke("notes.combined", {
+    kind: "a",
+    value: "text",
+  });
   // @ts-expect-error branch a still requires a string value
-  client.invoke("notes.combined", { base: "root", kind: "a", value: 42 });
-  // @ts-expect-error the shared base must be a string
-  client.invoke("notes.combined", { base: 42, kind: "b", value: 42 });
+  client.invoke("notes.combined", {
+    base: "root",
+    kind: "a",
+    value: 42,
+  });
+  client.invoke("notes.combined", {
+    // @ts-expect-error the shared base must be a string
+    base: 42,
+    kind: "b",
+    value: 42,
+  });
   client.listen(
     "notes.combinedChanged",
     (event) => {
       const base: string = event.payload.base;
       void base;
     },
-    { onError() {} },
+    {
+      onError() {},
+    },
   );
 }
 
@@ -670,11 +1135,15 @@ export function checkOptionalObjectTypes(
   client: Client<CommandsOf<typeof optionalApp>, EventsOf<typeof optionalApp>>,
 ) {
   const missing: Promise<string> = client.invoke("notes.optional", {});
-  const present: Promise<string> = client.invoke("notes.optional", { note: "present" });
+  const present: Promise<string> = client.invoke("notes.optional", {
+    note: "present",
+  });
   void missing;
   void present;
-  // @ts-expect-error a present optional field must still be a string
-  client.invoke("notes.optional", { note: 42 });
+  client.invoke("notes.optional", {
+    // @ts-expect-error a present optional field must still be a string
+    note: 42,
+  });
   // @ts-expect-error the optional object is not nullable
   client.invoke("notes.optional", null);
   client.listen(
@@ -686,10 +1155,18 @@ export function checkOptionalObjectTypes(
       const required: string = event.payload.note;
       void required;
     },
-    { onError() {} },
+    {
+      onError() {},
+    },
   );
   const nested = command({
-    input: { type: "object", properties: { options: optionalInput }, required: [] },
+    input: {
+      type: "object",
+      properties: {
+        options: optionalInput,
+      },
+      required: [],
+    },
     output,
     handle(input) {
       return input.options?.note ?? "nested-default";
@@ -705,8 +1182,12 @@ export function checkClientTypes(
 ) {
   const result: Promise<string> = client.invoke(
     "notes.read",
-    { key: "welcome" },
-    { signal: new AbortController().signal },
+    {
+      key: "welcome",
+    },
+    {
+      signal: new AbortController().signal,
+    },
   );
   void result;
   client.listen(
@@ -723,19 +1204,35 @@ export function checkClientTypes(
     },
   );
   // @ts-expect-error unknown command
-  client.invoke("notes.delete", { key: "welcome" });
-  // @ts-expect-error wrong input type
-  client.invoke("notes.read", { key: 42 });
+  client.invoke("notes.delete", {
+    key: "welcome",
+  });
+  client.invoke("notes.read", {
+    // @ts-expect-error wrong input type
+    key: 42,
+  });
   // @ts-expect-error wrong output type
-  const incorrect: Promise<number> = client.invoke("notes.read", { key: "welcome" });
+  const incorrect: Promise<number> = client.invoke("notes.read", {
+    key: "welcome",
+  });
   void incorrect;
   // @ts-expect-error unknown event
-  client.listen("notes.missing", () => {}, { onError() {} });
+  client.listen("notes.missing", () => {}, {
+    onError() {},
+  });
   // @ts-expect-error subscription failure must have an observer
   client.listen("notes.changed", () => {});
   const created = factory<CommandsOf<typeof app>, EventsOf<typeof app>>({
     transport,
-    hello: { kind: "hello", protocol: { major: 1, minor: 0 }, features: [], buildId: "client" },
+    hello: {
+      kind: "hello",
+      protocol: {
+        major: 1,
+        minor: 0,
+      },
+      features: [],
+      buildId: "client",
+    },
   });
   // @ts-expect-error optional plugin commands require an explicit client command map
   created.invoke("plugin.capabilities.get", null);
@@ -745,21 +1242,29 @@ export function checkClientTypes(
 
 export function checkDefaultClientTypes() {
   const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
-  const result: Promise<string> = client.invoke("notes.read", { key: "welcome" });
+  const result: Promise<string> = client.invoke("notes.read", {
+    key: "welcome",
+  });
   void result;
   // @ts-expect-error the default connection retains known command names
   client.invoke("notes.missing", null);
-  // @ts-expect-error the default connection retains command input validation
-  client.invoke("notes.read", { key: 42 });
+  client.invoke("notes.read", {
+    // @ts-expect-error the default connection retains command input validation
+    key: 42,
+  });
   client.listen(
     "notes.changed",
     (event) => {
       const key: string = event.payload.key;
       void key;
     },
-    { onError() {} },
+    {
+      onError() {},
+    },
   );
-  const direct: Promise<string> = invoke<string>("notes.read", { key: "welcome" });
+  const direct: Promise<string> = invoke<string>("notes.read", {
+    key: "welcome",
+  });
   void direct;
   listen<string>(
     "notes.changed",
@@ -767,7 +1272,9 @@ export function checkDefaultClientTypes() {
       const payload: string = event.payload;
       void payload;
     },
-    { onError() {} },
+    {
+      onError() {},
+    },
   );
   // @ts-expect-error direct subscription failures still require an observer
   listen("notes.changed", () => {});
@@ -793,13 +1300,18 @@ export function checkCoreTypes(
   services.callHost(
     // @ts-expect-error callers may not substitute an unbranded Web-supplied context ID
     "from-web",
-    { operation: "capabilities.get", payload: null },
+    {
+      operation: "capabilities.get",
+      payload: null,
+    },
     new AbortController().signal,
   );
   const plugin = {
     name: "storage",
     version: "0.0.0",
-    platforms: ["windows"],
+    platforms: [
+      "windows",
+    ],
     commands: app.commands,
     events: app.events,
     setup(ctx) {
@@ -814,21 +1326,40 @@ export function checkCoreTypes(
   stop();
   services.callHost(
     contextId,
-    { operation: "storage.writeText", payload: { scope: "temp", path: "a" } },
+    {
+      operation: "storage.writeText",
+      payload: {
+        scope: "temp",
+        path: "a",
+      },
+    },
     new AbortController().signal,
   );
 }
 
 export function checkTransportTypes(transport: Transport) {
   const off = transport.subscribe((event: TransportEvent) => {
-    if (event.kind === "message") parseMessage(event.text);
+    if (event.kind === "message") {
+      parseMessage(event.text);
+    }
   });
   off();
   transport.close();
   // @ts-expect-error transport carries serialized JSON, not authority-bearing objects
-  transport.send({ context: "backend" });
-  // @ts-expect-error host results are separate from Web results
-  const response: HostResponse = { kind: "result", payload: null, id: "web-request" };
+  transport.send({
+    context: "backend",
+  });
+  const response: HostResponse = {
+    kind: "result",
+    payload: null,
+    // @ts-expect-error host results are separate from Web results
+    id: "web-request",
+  };
   void response;
-  validateValue({ const: null }, null);
+  validateValue(
+    {
+      const: null,
+    },
+    null,
+  );
 }

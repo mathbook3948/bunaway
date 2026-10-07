@@ -15,6 +15,9 @@ for (const [name, schema] of Object.entries({
   process: processSchema,
   "host-call": hostCallSchema,
 })) {
-  const file = new URL(`../../../native/host-api/generated/${name}.schema.json`, import.meta.url);
+  const file = new URL(
+    `../../../native/host-api/generated/${name}.schema.json`,
+    import.meta.url,
+  );
   await Bun.write(file, `${JSON.stringify(schema, null, 2)}\n`);
 }

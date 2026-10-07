@@ -7,9 +7,16 @@ import { hr, kernel, ole, withBuffer } from "./win32.ts";
 const thread = kernel.symbols.GetCurrentThreadId();
 export type Arg = number | bigint | null;
 export type Abi = FFIType | "ptr" | "i32" | "u32" | "i64" | "u64";
-type NativeCall = ((...values: Arg[]) => number) & { close(): void };
+type NativeCall = ((...values: Arg[]) => number) & {
+  close(): void;
+};
 const methods = new Map<string, NativeCall>();
-export function method(object: Pointer, slot: number, args: Abi[] = [], returns: Abi = "i32") {
+export function method(
+  object: Pointer,
+  slot: number,
+  args: Abi[] = [],
+  returns: Abi = "i32",
+) {
   const address = read.ptr(read.ptr(object), slot * 8);
   assert(address, "Null COM method");
   const key = `${address}:${args}:${returns}`;
@@ -17,7 +24,10 @@ export function method(object: Pointer, slot: number, args: Abi[] = [], returns:
   if (!binding) {
     binding = CFunction({
       ptr: address as Pointer,
-      args: ["ptr", ...args],
+      args: [
+        "ptr",
+        ...args,
+      ],
       returns,
     }) as NativeCall;
     methods.set(key, binding);
@@ -28,15 +38,26 @@ export const addRef = (object: Pointer) => method(object, 1, [], "u32")();
 export const release = (object: Pointer) => method(object, 2, [], "u32")();
 export function getString(object: Pointer, slot: number) {
   const out = new BigUint64Array(1);
-  hr(method(object, slot, ["ptr"])(ptr(out)), "get string");
+  hr(
+    method(object, slot, [
+      "ptr",
+    ])(ptr(out)),
+    "get string",
+  );
   const address = Number(out[0]) as Pointer;
-  if (!address) return "";
+  if (!address) {
+    return "";
+  }
   try {
     let bytes = 0;
-    while (bytes <= 2 * MAX_MESSAGE_BYTES && read.u16(address, bytes)) bytes += 2;
+    while (bytes <= 2 * MAX_MESSAGE_BYTES && read.u16(address, bytes)) {
+      bytes += 2;
+    }
     // Empty is invalid for both a Web message and an allowed URL. Reject oversized
     // input without returning a truncated value or poisoning the COM callback state.
-    if (bytes > 2 * MAX_MESSAGE_BYTES) return "";
+    if (bytes > 2 * MAX_MESSAGE_BYTES) {
+      return "";
+    }
     return Buffer.from(toArrayBuffer(address, 0, bytes)).toString("utf16le");
   } finally {
     ole.symbols.CoTaskMemFree(address);
@@ -85,7 +106,11 @@ export function handler(
       callbackDepth++;
       maxCallbackDepth = Math.max(callbackDepth, maxCallbackDepth);
       try {
-        assert.equal(kernel.symbols.GetCurrentThreadId(), thread, `${name} foreign thread`);
+        assert.equal(
+          kernel.symbols.GetCurrentThreadId(),
+          thread,
+          `${name} foreign thread`,
+        );
         assert(refs > 0, `${name} used after Release`);
         return fn(...values);
       } catch (error) {
@@ -98,25 +123,48 @@ export function handler(
     };
   const query = new JSCallback(
     wrap((_self, requested, out) => {
-      if (!out) return -2147467261; // E_POINTER
+      if (!out) {
+        return -2147467261; // E_POINTER
+      }
       const output = new DataView(toArrayBuffer(out as Pointer, 0, 8));
       output.setBigUint64(0, 0n, true);
-      if (!requested) return -2147467261;
+      if (!requested) {
+        return -2147467261;
+      }
       const id = Buffer.from(toArrayBuffer(requested as Pointer, 0, 16));
-      if (!id.equals(unknown) && !id.equals(interfaceId)) return -2147467262;
+      if (!id.equals(unknown) && !id.equals(interfaceId)) {
+        return -2147467262;
+      }
       output.setBigUint64(0, BigInt(ptr(object)), true);
       refs++;
       return 0;
     }),
-    { args: ["ptr", "ptr", "ptr"], returns: "i32" },
+    {
+      args: [
+        "ptr",
+        "ptr",
+        "ptr",
+      ],
+      returns: "i32",
+    },
   );
   const retain = new JSCallback(
     wrap(() => ++refs),
-    { args: ["ptr"], returns: "u32" },
+    {
+      args: [
+        "ptr",
+      ],
+      returns: "u32",
+    },
   );
   const drop = new JSCallback(
     wrap(() => --refs),
-    { args: ["ptr"], returns: "u32" },
+    {
+      args: [
+        "ptr",
+      ],
+      returns: "u32",
+    },
   );
   const call = new JSCallback(
     wrap((_self, ...values) => {
@@ -130,10 +178,23 @@ export function handler(
       }
       return 0;
     }),
-    { args: ["ptr", ...args], returns: "i32" },
+    {
+      args: [
+        "ptr",
+        ...args,
+      ],
+      returns: "i32",
+    },
   );
-  const callbacks = [query, retain, drop, call];
-  const vtable = new BigUint64Array(callbacks.map((callback) => BigInt(callback.ptr ?? 0)));
+  const callbacks = [
+    query,
+    retain,
+    drop,
+    call,
+  ];
+  const vtable = new BigUint64Array(
+    callbacks.map((callback) => BigInt(callback.ptr ?? 0)),
+  );
   object[0] = BigInt(ptr(vtable));
   const result = {
     name,
@@ -153,7 +214,9 @@ export function handler(
     },
     dispose() {
       assert.equal(refs, 0, `${name} outstanding COM refs`);
-      for (const callback of callbacks) callback.close();
+      for (const callback of callbacks) {
+        callback.close();
+      }
     },
   };
   handlers.push(result);
@@ -162,21 +225,33 @@ export function handler(
 
 export function getObject(object: Pointer, slot: number): Pointer {
   const out = new BigUint64Array(1);
-  hr(method(object, slot, ["ptr"])(ptr(out)), "get object");
+  hr(
+    method(object, slot, [
+      "ptr",
+    ])(ptr(out)),
+    "get object",
+  );
   assert(out[0], "Null COM object");
   return Number(out[0]) as Pointer;
 }
 export function query(object: Pointer, iid: string): Pointer {
   const out = new BigUint64Array(1);
   hr(
-    withBuffer(guid(iid), (address) => method(object, 0, ["ptr", "ptr"])(address, ptr(out))),
+    withBuffer(guid(iid), (address) =>
+      method(object, 0, [
+        "ptr",
+        "ptr",
+      ])(address, ptr(out)),
+    ),
     "QueryInterface",
   );
   assert(out[0], "Null COM interface");
   return Number(out[0]) as Pointer;
 }
 export function checkCallbacks() {
-  if (failure) throw failure;
+  if (failure) {
+    throw failure;
+  }
   assert.equal(invokeDepth, 0, "Do not pump inside COM Invoke");
 }
 export function callbackCalls() {
@@ -184,7 +259,11 @@ export function callbackCalls() {
 }
 // Release a retired view's owner references after native detach and callback quiescence.
 export function disposeHandlers(retired: readonly ComHandler[]) {
-  assert.equal(callbackDepth, 0, "Callback disposal while native stack is active");
+  assert.equal(
+    callbackDepth,
+    0,
+    "Callback disposal while native stack is active",
+  );
   assert.equal(invokeDepth, 0, "Invoke disposal while native stack is active");
   for (const callback of retired) {
     assert.equal(callback.refs, 1, `${callback.name} outstanding COM refs`);
@@ -195,22 +274,34 @@ export function disposeHandlers(retired: readonly ComHandler[]) {
     handlers.splice(index, 1);
   }
   if (!handlers.length) {
-    for (const binding of methods.values()) binding.close();
+    for (const binding of methods.values()) {
+      binding.close();
+    }
     methods.clear();
   }
 }
 
 export function disposeCom() {
-  assert.equal(callbackDepth, 0, "Callback disposal while native stack is active");
+  assert.equal(
+    callbackDepth,
+    0,
+    "Callback disposal while native stack is active",
+  );
   assert.equal(invokeDepth, 0, "Invoke disposal while native stack is active");
   for (const callback of handlers) {
     callback.dropOwner();
     callback.dispose();
   }
-  for (const binding of methods.values()) binding.close();
+  for (const binding of methods.values()) {
+    binding.close();
+  }
   return {
     maxCallbackDepth,
     maxInvokeDepth,
-    handlers: handlers.map(({ name, refs, calls }) => ({ name, refs, calls })),
+    handlers: handlers.map(({ name, refs, calls }) => ({
+      name,
+      refs,
+      calls,
+    })),
   };
 }

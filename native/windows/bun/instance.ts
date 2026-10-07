@@ -3,18 +3,24 @@ import { realpathSync } from "node:fs";
 import { createConnection, createServer, type Socket } from "node:net";
 import { win32 } from "node:path";
 
-export type LaunchArguments = { argv: string[]; cwd: string };
+export type LaunchArguments = {
+  argv: string[];
+  cwd: string;
+};
 const MAX_BYTES = 64 * 1024;
 const MAX_PENDING = 32;
 
 export function instanceAddress(dataRoot: string): string {
-  const id = createHash("sha256").update(realpathSync(dataRoot).toLowerCase()).digest("hex");
+  const id = createHash("sha256")
+    .update(realpathSync(dataRoot).toLowerCase())
+    .digest("hex");
   return `\\\\.\\pipe\\bunaway-${id}`;
 }
 
 export function parseLaunchArguments(value: unknown): LaunchArguments {
-  if (!value || typeof value !== "object" || Array.isArray(value))
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Invalid launch arguments");
+  }
   const input = value as Record<string, unknown>;
   if (
     Object.keys(input).length !== 2 ||
@@ -26,9 +32,15 @@ export function parseLaunchArguments(value: unknown): LaunchArguments {
     win32.parse(input.cwd).root.length < 3 ||
     input.cwd.includes("\0") ||
     Buffer.byteLength(JSON.stringify(input)) > MAX_BYTES
-  )
+  ) {
     throw new Error("Invalid launch arguments");
-  return { argv: [...input.argv], cwd: input.cwd };
+  }
+  return {
+    argv: [
+      ...input.argv,
+    ],
+    cwd: input.cwd,
+  };
 }
 
 export async function readLaunchArguments(
@@ -39,19 +51,33 @@ export async function readLaunchArguments(
   let size = 0;
   let timeout: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_resolve, reject) => {
-    timeout = setTimeout(() => reject(new Error("Launch input timed out")), 5000);
+    timeout = setTimeout(
+      () => reject(new Error("Launch input timed out")),
+      5000,
+    );
   });
   try {
     while (true) {
-      const { done, value } = await Promise.race([reader.read(), deadline]);
-      if (done) break;
+      const { done, value } = await Promise.race([
+        reader.read(),
+        deadline,
+      ]);
+      if (done) {
+        break;
+      }
       size += value.byteLength;
       // Windows PowerShell 5.1 may prefix redirected stdin with a UTF-8 BOM.
-      if (size > MAX_BYTES + 3) throw new Error("Launch input too large");
+      if (size > MAX_BYTES + 3) {
+        throw new Error("Launch input too large");
+      }
       chunks.push(value);
     }
-    const json = new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks));
-    if (Buffer.byteLength(json) > MAX_BYTES) throw new Error("Launch input too large");
+    const json = new TextDecoder("utf-8", {
+      fatal: true,
+    }).decode(Buffer.concat(chunks));
+    if (Buffer.byteLength(json) > MAX_BYTES) {
+      throw new Error("Launch input too large");
+    }
     return parseLaunchArguments(JSON.parse(json));
   } finally {
     clearTimeout(timeout);
@@ -81,18 +107,33 @@ export async function listenForInstances(address: string) {
     let buffer = Buffer.alloc(0);
     let received = false;
     socket.on("data", (chunk: Buffer) => {
-      if (received) return;
-      buffer = Buffer.concat([buffer, chunk]);
-      if (buffer.length > MAX_BYTES + 1) return socket.destroy();
+      if (received) {
+        return;
+      }
+      buffer = Buffer.concat([
+        buffer,
+        chunk,
+      ]);
+      if (buffer.length > MAX_BYTES + 1) {
+        return socket.destroy();
+      }
       const end = buffer.indexOf(10);
-      if (end < 0) return;
+      if (end < 0) {
+        return;
+      }
       received = true;
       try {
-        if (end !== buffer.length - 1 || queue.length >= MAX_PENDING)
+        if (end !== buffer.length - 1 || queue.length >= MAX_PENDING) {
           throw new Error("Launch queue full or invalid framing");
-        const input = parseLaunchArguments(JSON.parse(buffer.subarray(0, end).toString("utf8")));
-        if (handler) handler(input);
-        else queue.push(input);
+        }
+        const input = parseLaunchArguments(
+          JSON.parse(buffer.subarray(0, end).toString("utf8")),
+        );
+        if (handler) {
+          handler(input);
+        } else {
+          queue.push(input);
+        }
         socket.end("accepted\n");
       } catch {
         socket.end("rejected\n");
@@ -108,16 +149,24 @@ export async function listenForInstances(address: string) {
   });
   return {
     start(receive: (input: LaunchArguments) => void) {
-      if (closed) throw new Error("Instance inbox is closed");
+      if (closed) {
+        throw new Error("Instance inbox is closed");
+      }
       handler = receive;
-      for (const input of queue.splice(0)) receive(input);
+      for (const input of queue.splice(0)) {
+        receive(input);
+      }
     },
     close(): Promise<void> {
-      if (closed) return Promise.resolve();
+      if (closed) {
+        return Promise.resolve();
+      }
       closed = true;
       handler = undefined;
       queue.length = 0;
-      for (const socket of sockets) socket.destroy();
+      for (const socket of sockets) {
+        socket.destroy();
+      }
       return new Promise((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
       );
@@ -125,7 +174,10 @@ export async function listenForInstances(address: string) {
   };
 }
 
-export async function forwardToInstance(address: string, input: LaunchArguments): Promise<void> {
+export async function forwardToInstance(
+  address: string,
+  input: LaunchArguments,
+): Promise<void> {
   const payload = `${JSON.stringify(parseLaunchArguments(input))}\n`;
   const deadline = Date.now() + 5000;
   while (true) {
@@ -149,7 +201,9 @@ export async function forwardToInstance(address: string, input: LaunchArguments)
         socket.on("connect", () => socket.write(payload));
         socket.on("data", (chunk) => {
           response += chunk.toString();
-          if (response.length > 32) socket.destroy(new Error("Invalid instance acknowledgement"));
+          if (response.length > 32) {
+            socket.destroy(new Error("Invalid instance acknowledgement"));
+          }
         });
         socket.on("end", () => {
           socket.destroy();
@@ -161,7 +215,12 @@ export async function forwardToInstance(address: string, input: LaunchArguments)
       return;
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
-      if (Date.now() >= deadline || (code !== "ENOENT" && code !== "ECONNREFUSED")) throw error;
+      if (
+        Date.now() >= deadline ||
+        (code !== "ENOENT" && code !== "ECONNREFUSED")
+      ) {
+        throw error;
+      }
       await Bun.sleep(25);
     }
   }

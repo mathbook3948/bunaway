@@ -4,8 +4,12 @@ import { resolve } from "node:path";
 test.skipIf(process.platform !== "win32")(
   "app data ownership rejects duplicates and recovers after normal exit or termination",
   async () => {
-    const root = resolve(import.meta.dir, `../../build/windows-instance-${crypto.randomUUID()}`);
-    const module = new URL("../../native/windows/bun/job.ts", import.meta.url).href;
+    const root = resolve(
+      import.meta.dir,
+      `../../build/windows-instance-${crypto.randomUUID()}`,
+    );
+    const module = new URL("../../native/windows/bun/job.ts", import.meta.url)
+      .href;
     const children: ReturnType<typeof Bun.spawn>[] = [];
     const start = (dataRoot: string, hold = false) => {
       const child = Bun.spawn(
@@ -19,7 +23,11 @@ test.skipIf(process.platform !== "win32")(
            console.log("owned");
            ${hold ? "await Bun.stdin.text();" : ""}`,
         ],
-        { stdin: "pipe", stdout: "pipe", stderr: "pipe" },
+        {
+          stdin: "pipe",
+          stdout: "pipe",
+          stderr: "pipe",
+        },
       );
       children.push(child);
       return child;
@@ -27,13 +35,19 @@ test.skipIf(process.platform !== "win32")(
     const owns = async (child: ReturnType<typeof start>) => {
       const reader = child.stdout.getReader();
       try {
-        expect(new TextDecoder().decode((await reader.read()).value)).toContain("owned");
+        expect(new TextDecoder().decode((await reader.read()).value)).toContain(
+          "owned",
+        );
       } finally {
         reader.releaseLock();
       }
     };
     const timer = setTimeout(() => {
-      for (const child of children) if (child.exitCode === null) child.kill();
+      for (const child of children) {
+        if (child.exitCode === null) {
+          child.kill();
+        }
+      }
     }, 10000);
     try {
       const owner = start(root, true);
@@ -55,7 +69,11 @@ test.skipIf(process.platform !== "win32")(
       expect(await recovered.exited).toBe(0);
     } finally {
       clearTimeout(timer);
-      for (const child of children) if (child.exitCode === null) child.kill();
+      for (const child of children) {
+        if (child.exitCode === null) {
+          child.kill();
+        }
+      }
       await Promise.all(children.map((child) => child.exited));
     }
   },

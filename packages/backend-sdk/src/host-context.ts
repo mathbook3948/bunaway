@@ -1,8 +1,15 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { CommandContext, CommandDefinition, PluginDefinition } from "@bunaway/core";
+import type {
+  CommandContext,
+  CommandDefinition,
+  PluginDefinition,
+} from "@bunaway/core";
 import { BunawayError, type HostAPI } from "@bunaway/protocol";
 
-type HostScope = { context: CommandContext; active: boolean };
+type HostScope = {
+  context: CommandContext;
+  active: boolean;
+};
 const scopes = new AsyncLocalStorage<HostScope>();
 const commands = new WeakMap<CommandDefinition, CommandDefinition>();
 
@@ -13,31 +20,44 @@ async function runWithHost<T>(
   run: () => T | Promise<T>,
   backend = false,
 ): Promise<T> {
-  const scope: HostScope = { context, active: true };
+  const scope: HostScope = {
+    context,
+    active: true,
+  };
   return scopes.run(scope, async () => {
     try {
       return await run();
     } finally {
-      if (!backend) scope.active = false;
+      if (!backend) {
+        scope.active = false;
+      }
     }
   });
 }
 
 export function currentHost(): HostAPI {
   const scope = scopes.getStore();
-  if (!scope)
+  if (!scope) {
     throw new BunawayError({
       code: "INVALID_ARGUMENT",
-      message: "Host API requires a command or a plugin setup execution context.",
+      message:
+        "Host API requires a command or a plugin setup execution context.",
     });
-  if (!scope.active || scope.context.signal.aborted)
-    throw new BunawayError({ code: "CANCELLED", message: "Host execution context ended." });
+  }
+  if (!scope.active || scope.context.signal.aborted) {
+    throw new BunawayError({
+      code: "CANCELLED",
+      message: "Host execution context ended.",
+    });
+  }
   return scope.context.host;
 }
 
 export function bindCommandHost<T extends CommandDefinition>(definition: T): T {
   const existing = commands.get(definition);
-  if (existing) return existing as T;
+  if (existing) {
+    return existing as T;
+  }
   const bound = {
     ...definition,
     input: definition.input,
@@ -72,23 +92,59 @@ export function bindPluginHost(plugin: PluginDefinition): PluginDefinition {
         ]),
       )
     : undefined;
-  if (!boundCommands && !setup) return plugin;
+  if (!boundCommands && !setup) {
+    return plugin;
+  }
   return {
     ...plugin,
     name,
     version,
-    ...(dependencies === undefined ? {} : { dependencies }),
-    ...(platforms === undefined ? {} : { platforms }),
-    ...(requiredPermissions === undefined ? {} : { requiredPermissions }),
-    ...(requiredHost === undefined ? {} : { requiredHost }),
-    ...(native === undefined ? {} : { native }),
-    ...(events === undefined ? {} : { events }),
-    ...(boundCommands ? { commands: Object.freeze(boundCommands) } : {}),
+    ...(dependencies === undefined
+      ? {}
+      : {
+          dependencies,
+        }),
+    ...(platforms === undefined
+      ? {}
+      : {
+          platforms,
+        }),
+    ...(requiredPermissions === undefined
+      ? {}
+      : {
+          requiredPermissions,
+        }),
+    ...(requiredHost === undefined
+      ? {}
+      : {
+          requiredHost,
+        }),
+    ...(native === undefined
+      ? {}
+      : {
+          native,
+        }),
+    ...(events === undefined
+      ? {}
+      : {
+          events,
+        }),
+    ...(boundCommands
+      ? {
+          commands: Object.freeze(boundCommands),
+        }
+      : {}),
     ...(setup
       ? {
           async setup(context: CommandContext) {
-            const stop = await runWithHost(context, () => setup.call(plugin, context), true);
-            if (typeof stop === "function") return () => runWithHost(context, stop, true);
+            const stop = await runWithHost(
+              context,
+              () => setup.call(plugin, context),
+              true,
+            );
+            if (typeof stop === "function") {
+              return () => runWithHost(context, stop, true);
+            }
           },
         }
       : {}),

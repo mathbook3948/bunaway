@@ -28,13 +28,30 @@ import { defaultClient } from "./default-client.ts";
 
 export { createWebViewTransport, type WebViewBridge } from "./webview.ts";
 
-export type InvokeOptions = { signal?: CancellationSignal; deadline?: number };
-export type ListenOptions = { signal?: CancellationSignal; onError: (error: WireError) => void };
-export type EventDelivery<T> = Omit<Extract<Message, { kind: "event" }>, "payload"> & {
+export type InvokeOptions = {
+  signal?: CancellationSignal;
+  deadline?: number;
+};
+export type ListenOptions = {
+  signal?: CancellationSignal;
+  onError: (error: WireError) => void;
+};
+export type EventDelivery<T> = Omit<
+  Extract<
+    Message,
+    {
+      kind: "event";
+    }
+  >,
+  "payload"
+> & {
   payload: T;
 };
 
-export interface Client<C extends CommandMap = CommandMap, E extends EventMap = EventMap> {
+export interface Client<
+  C extends CommandMap = CommandMap,
+  E extends EventMap = EventMap,
+> {
   readonly ready: Promise<NegotiatedProtocol>;
   invoke<K extends keyof C & string>(
     command: K,
@@ -58,8 +75,18 @@ export type ClientFactory = <
 }) => Client<C, E>;
 
 type Protocol = NegotiatedProtocol["protocol"];
-type EventMessage = Extract<Message, { kind: "event" }>;
-type SubscriptionErrorMessage = Extract<Message, { kind: "subscription-error" }>;
+type EventMessage = Extract<
+  Message,
+  {
+    kind: "event";
+  }
+>;
+type SubscriptionErrorMessage = Extract<
+  Message,
+  {
+    kind: "subscription-error";
+  }
+>;
 
 type PendingRequest = {
   onCancelledResult?: (payload: JsonValue) => void;
@@ -80,14 +107,29 @@ type ActiveSubscription = {
   onAbort?: () => void;
 };
 
-const VIOLATION: WireError = { code: "INTERNAL", message: "Protocol violation." };
-const CONNECTION_CLOSED: WireError = { code: "INTERNAL", message: "Connection closed." };
-const CLIENT_CLOSED: WireError = { code: "CANCELLED", message: "Client closed." };
+const VIOLATION: WireError = {
+  code: "INTERNAL",
+  message: "Protocol violation.",
+};
+const CONNECTION_CLOSED: WireError = {
+  code: "INTERNAL",
+  message: "Connection closed.",
+};
+const CLIENT_CLOSED: WireError = {
+  code: "CANCELLED",
+  message: "Client closed.",
+};
 
 function toBunawayError(cause: unknown, fallback: WireError): BunawayError {
-  if (cause instanceof BunawayError) return cause;
-  if (cause instanceof ProtocolError)
-    return new BunawayError({ code: cause.code, message: cause.message });
+  if (cause instanceof BunawayError) {
+    return cause;
+  }
+  if (cause instanceof ProtocolError) {
+    return new BunawayError({
+      code: cause.code,
+      message: cause.message,
+    });
+  }
   try {
     return new BunawayError(cause as WireError);
   } catch {
@@ -96,15 +138,31 @@ function toBunawayError(cause: unknown, fallback: WireError): BunawayError {
 }
 
 function requestError(code: WireError["code"], message: string): BunawayError {
-  return new BunawayError({ code, message });
+  return new BunawayError({
+    code,
+    message,
+  });
 }
 
 function toWireError(cause: unknown, fallback: WireError): WireError {
-  if (cause instanceof BunawayError)
+  if (cause instanceof BunawayError) {
     return cause.details === undefined
-      ? { code: cause.code, message: cause.message }
-      : { code: cause.code, message: cause.message, details: cause.details };
-  if (cause instanceof ProtocolError) return { code: cause.code, message: cause.message };
+      ? {
+          code: cause.code,
+          message: cause.message,
+        }
+      : {
+          code: cause.code,
+          message: cause.message,
+          details: cause.details,
+        };
+  }
+  if (cause instanceof ProtocolError) {
+    return {
+      code: cause.code,
+      message: cause.message,
+    };
+  }
   try {
     return validateValue(errorSchema, cause);
   } catch {
@@ -112,13 +170,18 @@ function toWireError(cause: unknown, fallback: WireError): WireError {
   }
 }
 
-class ClientSession<C extends CommandMap, E extends EventMap> implements Client<C, E> {
+class ClientSession<C extends CommandMap, E extends EventMap>
+  implements Client<C, E>
+{
   readonly ready: Promise<NegotiatedProtocol>;
 
   private readonly transport: Transport;
   private readonly hello: Hello;
   private readonly requests = new Map<string, PendingRequest>();
-  private readonly cancelledListens = new Map<string, (payload: JsonValue) => void>();
+  private readonly cancelledListens = new Map<
+    string,
+    (payload: JsonValue) => void
+  >();
   private readonly subscriptions = new Map<string, ActiveSubscription>();
   private readonly unsubscribeTransport: Dispose;
   private negotiated: NegotiatedProtocol | undefined;
@@ -148,17 +211,28 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
     // Subscribe before the first send so no inbound frame is missed.
     this.unsubscribeTransport = () => {};
     try {
-      this.unsubscribeTransport = transport.subscribe((event) => this.onTransportEvent(event));
+      this.unsubscribeTransport = transport.subscribe((event) =>
+        this.onTransportEvent(event),
+      );
     } catch (cause) {
       this.terminate(
-        toWireError(cause, { code: "INTERNAL", message: "Transport subscribe failed." }),
+        toWireError(cause, {
+          code: "INTERNAL",
+          message: "Transport subscribe failed.",
+        }),
       );
     }
     this.handshakeTimer = setTimeout(
-      () => this.terminate({ code: "TIMEOUT", message: "Handshake timed out." }),
+      () =>
+        this.terminate({
+          code: "TIMEOUT",
+          message: "Handshake timed out.",
+        }),
       API_LIMITS.handshakeTimeoutMs,
     );
-    if (!this.terminated) this.sendHello();
+    if (!this.terminated) {
+      this.sendHello();
+    }
   }
 
   invoke<K extends keyof C & string>(
@@ -169,10 +243,16 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
     let wireDeadline: number | undefined;
     let deadlineAt: number;
     if (options.deadline !== undefined) {
-      if (!Number.isFinite(options.deadline) || options.deadline < 0)
-        return Promise.reject(requestError("INVALID_ARGUMENT", "Invalid command deadline."));
+      if (!Number.isFinite(options.deadline) || options.deadline < 0) {
+        return Promise.reject(
+          requestError("INVALID_ARGUMENT", "Invalid command deadline."),
+        );
+      }
       // A command deadline may not extend past the maximum execution time.
-      deadlineAt = Math.min(options.deadline, Date.now() + API_LIMITS.maxCommandDurationMs);
+      deadlineAt = Math.min(
+        options.deadline,
+        Date.now() + API_LIMITS.maxCommandDurationMs,
+      );
       wireDeadline = Math.trunc(deadlineAt);
     } else {
       deadlineAt = Date.now() + API_LIMITS.maxCommandDurationMs;
@@ -180,9 +260,25 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
     return this.request(
       (id, protocol) =>
         wireDeadline === undefined
-          ? { kind: "invoke", protocol, id, command, payload }
-          : { kind: "invoke", protocol, id, command, payload, deadline: wireDeadline },
-      { signal: options.signal, deadlineAt },
+          ? {
+              kind: "invoke",
+              protocol,
+              id,
+              command,
+              payload,
+            }
+          : {
+              kind: "invoke",
+              protocol,
+              id,
+              command,
+              payload,
+              deadline: wireDeadline,
+            },
+      {
+        signal: options.signal,
+        deadlineAt,
+      },
     ) as Promise<C[K]["output"]>;
   }
 
@@ -191,28 +287,47 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
     listener: (event: EventDelivery<E[K]>) => void,
     options: ListenOptions,
   ): Promise<AsyncDispose> {
-    if (this.subscriptions.size >= API_LIMITS.maxSubscriptions)
+    if (this.subscriptions.size >= API_LIMITS.maxSubscriptions) {
       throw requestError("BUSY", "Subscription limit reached.");
+    }
     let release: AsyncDispose = async () => {};
-    await this.request((id, protocol) => ({ kind: "listen", protocol, id, event }), {
-      signal: options.signal,
-      onResult: (payload) => {
-        release = this.registerSubscription(event, listener, options, payload);
+    await this.request(
+      (id, protocol) => ({
+        kind: "listen",
+        protocol,
+        id,
+        event,
+      }),
+      {
+        signal: options.signal,
+        onResult: (payload) => {
+          release = this.registerSubscription(
+            event,
+            listener,
+            options,
+            payload,
+          );
+        },
+        onCancelledResult: (payload) => {
+          this.bestEffortUnlisten(this.subscriptionId(payload));
+        },
       },
-      onCancelledResult: (payload) => {
-        this.bestEffortUnlisten(this.subscriptionId(payload));
-      },
-    });
+    );
     return release;
   }
 
   private subscriptionId(payload: JsonValue): string {
     const subscriptionId =
       typeof payload === "object" && payload !== null && !Array.isArray(payload)
-        ? (payload as { subscriptionId?: unknown }).subscriptionId
+        ? (
+            payload as {
+              subscriptionId?: unknown;
+            }
+          ).subscriptionId
         : undefined;
-    if (typeof subscriptionId !== "string" || subscriptionId.length === 0)
+    if (typeof subscriptionId !== "string" || subscriptionId.length === 0) {
       throw requestError("INTERNAL", "Invalid listen response.");
+    }
     return subscriptionId;
   }
 
@@ -234,14 +349,23 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
     let releaseRequested = false;
     let releasePromise: Promise<void> | undefined;
     const release = (): Promise<void> => {
-      if (this.terminated || (subscription.released && !releaseRequested)) return Promise.resolve();
-      if (releasePromise) return releasePromise;
+      if (this.terminated || (subscription.released && !releaseRequested)) {
+        return Promise.resolve();
+      }
+      if (releasePromise) {
+        return releasePromise;
+      }
       releaseRequested = true;
       subscription.released = true;
       this.subscriptions.delete(subscriptionId);
       this.detachSubscription(subscription);
       releasePromise = this.request(
-        (id, protocol) => ({ kind: "unlisten", protocol, id, subscriptionId }),
+        (id, protocol) => ({
+          kind: "unlisten",
+          protocol,
+          id,
+          subscriptionId,
+        }),
         {},
       ).then(
         () => {},
@@ -268,7 +392,9 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
       subscription.signal = signal;
       subscription.onAbort = onAbort;
       signal.addEventListener("abort", onAbort);
-      if (signal.aborted) onAbort();
+      if (signal.aborted) {
+        onAbort();
+      }
     }
     return release;
   }
@@ -289,17 +415,30 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
     try {
       text = serializeMessage(this.hello);
     } catch {
-      this.terminate({ code: "INVALID_ARGUMENT", message: "Invalid hello." });
+      this.terminate({
+        code: "INVALID_ARGUMENT",
+        message: "Invalid hello.",
+      });
       return;
     }
     try {
       this.transport.send(text).then(
         () => {},
         (cause) =>
-          this.terminate(toWireError(cause, { code: "INTERNAL", message: "Hello send failed." })),
+          this.terminate(
+            toWireError(cause, {
+              code: "INTERNAL",
+              message: "Hello send failed.",
+            }),
+          ),
       );
     } catch (cause) {
-      this.terminate(toWireError(cause, { code: "INTERNAL", message: "Hello send failed." }));
+      this.terminate(
+        toWireError(cause, {
+          code: "INTERNAL",
+          message: "Hello send failed.",
+        }),
+      );
     }
   }
 
@@ -329,7 +468,10 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
         reject(requestError("BUSY", "Pending request limit reached."));
         return;
       }
-      if (options.deadlineAt !== undefined && options.deadlineAt <= Date.now()) {
+      if (
+        options.deadlineAt !== undefined &&
+        options.deadlineAt <= Date.now()
+      ) {
         reject(requestError("TIMEOUT", "Command deadline exceeded."));
         return;
       }
@@ -337,15 +479,25 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
       let timer: ReturnType<typeof setTimeout> | undefined;
       const onAbort = signal ? () => this.cancelRequest(id) : undefined;
       const cleanup = (): void => {
-        if (timer !== undefined) clearTimeout(timer);
-        if (signal && onAbort) signal.removeEventListener("abort", onAbort);
+        if (timer !== undefined) {
+          clearTimeout(timer);
+        }
+        if (signal && onAbort) {
+          signal.removeEventListener("abort", onAbort);
+        }
       };
       // Map membership is the settled flag: first completion deletes the entry.
       const pending: PendingRequest = {
         sent: false,
-        ...(options.onCancelledResult ? { onCancelledResult: options.onCancelledResult } : {}),
+        ...(options.onCancelledResult
+          ? {
+              onCancelledResult: options.onCancelledResult,
+            }
+          : {}),
         resolve: (result) => {
-          if (!this.requests.delete(id)) return;
+          if (!this.requests.delete(id)) {
+            return;
+          }
           cleanup();
           try {
             options.onResult?.(result);
@@ -355,29 +507,39 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
           }
         },
         reject: (error) => {
-          if (!this.requests.delete(id)) return;
+          if (!this.requests.delete(id)) {
+            return;
+          }
           cleanup();
           reject(error);
         },
       };
       this.requests.set(id, pending);
-      if (signal && onAbort) signal.addEventListener("abort", onAbort);
-      if (options.deadlineAt !== undefined)
+      if (signal && onAbort) {
+        signal.addEventListener("abort", onAbort);
+      }
+      if (options.deadlineAt !== undefined) {
         timer = setTimeout(
           () => this.expireRequest(id),
           Math.max(0, options.deadlineAt - Date.now()),
         );
+      }
       this.ready.then(
         () => {
           const current = this.requests.get(id);
           const protocol = this.negotiated?.protocol;
-          if (!current || !protocol || this.terminated) return;
+          if (!current || !protocol || this.terminated) {
+            return;
+          }
           let text: string;
           try {
             text = serializeMessage(build(id, protocol));
           } catch (cause) {
             current.reject(
-              toBunawayError(cause, { code: "INVALID_ARGUMENT", message: "Invalid request." }),
+              toBunawayError(cause, {
+                code: "INVALID_ARGUMENT",
+                message: "Invalid request.",
+              }),
             );
             return;
           }
@@ -386,12 +548,20 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
             this.transport.send(text).then(
               () => {},
               (cause) =>
-                this.requests
-                  .get(id)
-                  ?.reject(toBunawayError(cause, { code: "INTERNAL", message: "Send failed." })),
+                this.requests.get(id)?.reject(
+                  toBunawayError(cause, {
+                    code: "INTERNAL",
+                    message: "Send failed.",
+                  }),
+                ),
             );
           } catch (cause) {
-            current.reject(toBunawayError(cause, { code: "INTERNAL", message: "Send failed." }));
+            current.reject(
+              toBunawayError(cause, {
+                code: "INTERNAL",
+                message: "Send failed.",
+              }),
+            );
           }
         },
         (cause) => this.requests.get(id)?.reject(cause),
@@ -401,29 +571,49 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
 
   private cancelRequest(id: string): void {
     const pending = this.requests.get(id);
-    if (!pending) return;
+    if (!pending) {
+      return;
+    }
     const sent = pending.sent;
-    if (sent && pending.onCancelledResult) this.cancelledListens.set(id, pending.onCancelledResult);
+    if (sent && pending.onCancelledResult) {
+      this.cancelledListens.set(id, pending.onCancelledResult);
+    }
     pending.reject(requestError("CANCELLED", "Request cancelled."));
-    if (sent) this.sendCancel(id);
+    if (sent) {
+      this.sendCancel(id);
+    }
   }
 
   private expireRequest(id: string): void {
     const pending = this.requests.get(id);
-    if (!pending) return;
+    if (!pending) {
+      return;
+    }
     const sent = pending.sent;
     pending.reject(requestError("TIMEOUT", "Command deadline exceeded."));
-    if (sent) this.sendCancel(id);
+    if (sent) {
+      this.sendCancel(id);
+    }
   }
 
   private sendCancel(id: string): void {
     const protocol = this.negotiated?.protocol;
-    if (!protocol || this.terminated) return;
+    if (!protocol || this.terminated) {
+      return;
+    }
     try {
-      this.transport.send(serializeMessage({ kind: "cancel", protocol, id })).then(
-        () => {},
-        () => {},
-      );
+      this.transport
+        .send(
+          serializeMessage({
+            kind: "cancel",
+            protocol,
+            id,
+          }),
+        )
+        .then(
+          () => {},
+          () => {},
+        );
     } catch {
       // The cancel is best effort; the request already finished locally.
     }
@@ -434,7 +624,9 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
       this.terminate(event.error ?? CONNECTION_CLOSED);
       return;
     }
-    if (this.terminated) return;
+    if (this.terminated) {
+      return;
+    }
     let message: Message;
     try {
       message = parseMessage(event.text);
@@ -477,9 +669,12 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
         const pending = this.requests.get(message.id);
         // A host deadline can precede delivery of an already-created subscription.
         if (message.error.code === "TIMEOUT") {
-          if (pending?.onCancelledResult)
+          if (pending?.onCancelledResult) {
             this.cancelledListens.set(message.id, pending.onCancelledResult);
-        } else this.cancelledListens.delete(message.id);
+          }
+        } else {
+          this.cancelledListens.delete(message.id);
+        }
         pending?.reject(toBunawayError(message.error, CONNECTION_CLOSED));
         break;
       }
@@ -500,7 +695,12 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
     try {
       negotiated = negotiateProtocol(this.hello, remote);
     } catch (cause) {
-      this.terminate(toWireError(cause, { code: "UNSUPPORTED", message: "Handshake failed." }));
+      this.terminate(
+        toWireError(cause, {
+          code: "UNSUPPORTED",
+          message: "Handshake failed.",
+        }),
+      );
       return;
     }
     this.negotiated = {
@@ -518,7 +718,9 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
 
   private deliverEvent(message: EventMessage): void {
     const subscription = this.subscriptions.get(message.subscriptionId);
-    if (!subscription) return;
+    if (!subscription) {
+      return;
+    }
     if (
       message.event !== subscription.event ||
       message.sequence !== subscription.expectedSequence
@@ -540,11 +742,18 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
 
   private failSubscription(message: SubscriptionErrorMessage): void {
     const subscription = this.subscriptions.get(message.subscriptionId);
-    if (subscription) this.endSubscription(subscription, message.error);
+    if (subscription) {
+      this.endSubscription(subscription, message.error);
+    }
   }
 
-  private endSubscription(subscription: ActiveSubscription, error: WireError): void {
-    if (subscription.released) return;
+  private endSubscription(
+    subscription: ActiveSubscription,
+    error: WireError,
+  ): void {
+    if (subscription.released) {
+      return;
+    }
     subscription.released = true;
     this.subscriptions.delete(subscription.subscriptionId);
     this.detachSubscription(subscription);
@@ -556,14 +765,22 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
   }
 
   private detachSubscription(subscription: ActiveSubscription): void {
-    if (subscription.signal && subscription.onAbort)
+    if (subscription.signal && subscription.onAbort) {
       subscription.signal.removeEventListener("abort", subscription.onAbort);
+    }
   }
 
   private bestEffortUnlisten(subscriptionId: string): void {
-    if (this.terminated) return;
+    if (this.terminated) {
+      return;
+    }
     void this.request(
-      (id, protocol) => ({ kind: "unlisten", protocol, id, subscriptionId }),
+      (id, protocol) => ({
+        kind: "unlisten",
+        protocol,
+        id,
+        subscriptionId,
+      }),
       {},
     ).then(
       () => {},
@@ -572,7 +789,9 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
   }
 
   private terminate(error: WireError): void {
-    if (this.terminated) return;
+    if (this.terminated) {
+      return;
+    }
     this.terminated = true;
     this.cancelledListens.clear();
     this.failure = error;
@@ -585,9 +804,16 @@ class ClientSession<C extends CommandMap, E extends EventMap> implements Client<
       this.readySettled = true;
       this.readyReject(this.rejection);
     }
-    for (const pending of [...this.requests.values()]) pending.reject(this.rejection);
-    for (const subscription of [...this.subscriptions.values()])
+    for (const pending of [
+      ...this.requests.values(),
+    ]) {
+      pending.reject(this.rejection);
+    }
+    for (const subscription of [
+      ...this.subscriptions.values(),
+    ]) {
       this.endSubscription(subscription, error);
+    }
     this.unsubscribeTransport();
     void this.transport.close().then(
       () => {},
@@ -600,7 +826,9 @@ export function createClient<
   C extends CommandMap = CommandMap,
   E extends EventMap = EventMap,
 >(options?: { transport: Transport; hello: Hello }): Client<C, E> {
-  if (options === undefined) return defaultClient(createClient) as Client<C, E>;
+  if (options === undefined) {
+    return defaultClient(createClient) as Client<C, E>;
+  }
   return new ClientSession<C, E>(options.transport, options.hello);
 }
 
@@ -623,13 +851,19 @@ export async function invokePlugin<I extends Schema, O extends Schema>(
   try {
     payload = validateValue(contract.input, input);
   } catch {
-    throw new BunawayError({ code: "INVALID_ARGUMENT", message: "Invalid plugin input." });
+    throw new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message: "Invalid plugin input.",
+    });
   }
   const output = await invoke(`plugin.${contract.name}`, payload, options);
   try {
     return validateValue(contract.output, output);
   } catch {
-    throw new BunawayError({ code: "INTERNAL", message: "Invalid plugin response." });
+    throw new BunawayError({
+      code: "INTERNAL",
+      message: "Invalid plugin response.",
+    });
   }
 }
 

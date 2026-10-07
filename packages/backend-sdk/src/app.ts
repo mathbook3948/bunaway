@@ -1,4 +1,8 @@
-import type { AppDefinition, CommandRegistry, EventRegistry } from "@bunaway/core";
+import type {
+  AppDefinition,
+  CommandRegistry,
+  EventRegistry,
+} from "@bunaway/core";
 import { bindCommandHost, bindPluginHost } from "./host-context.ts";
 import type { ModuleDefinition } from "./module.ts";
 import { claimName, type RegistrationKind } from "./registration.ts";
@@ -48,7 +52,13 @@ export function defineApp<
   const events = new Map<string, EventRegistry[string]>();
   const commandOwners = new Map<string, string>();
   const eventOwners = new Map<string, string>();
-  collect(options.commands ?? {}, commands, commandOwners, "command", "app.commands");
+  collect(
+    options.commands ?? {},
+    commands,
+    commandOwners,
+    "command",
+    "app.commands",
+  );
   collect(options.events ?? {}, events, eventOwners, "event", "app.events");
   options.modules.forEach((module, index) => {
     const owner = `module "${module.name}" (modules[${index}])`;
@@ -58,25 +68,42 @@ export function defineApp<
   // Plugins stay in Core's lifecycle, but their names cannot collide with app modules.
   options.plugins?.forEach((plugin, index) => {
     const owner = `plugin "${plugin.name}" (plugins[${index}])`;
-    for (const name of Object.keys(plugin.commands ?? {}))
+    for (const name of Object.keys(plugin.commands ?? {})) {
       claimName(commandOwners, name, "command", owner);
-    for (const name of Object.keys(plugin.events ?? {}))
+    }
+    for (const name of Object.keys(plugin.events ?? {})) {
       claimName(eventOwners, name, "event", owner);
+    }
   });
   return Object.freeze({
     // Prevent contextual AppDefinition types from widening absent direct registries.
     commands: Object.freeze(
       Object.fromEntries(
-        [...commands].map(([name, definition]) => [name, bindCommandHost(definition)]),
+        [
+          ...commands,
+        ].map(([name, definition]) => [
+          name,
+          bindCommandHost(definition),
+        ]),
       ),
     ) as Readonly<NoInfer<C> & ModuleEntries<M, "commands">>,
     events: Object.freeze(Object.fromEntries(events)) as Readonly<
       NoInfer<E> & ModuleEntries<M, "events">
     >,
-    ...(options.desktop === undefined ? {} : { desktop: options.desktop }),
-    ...(options.state === undefined ? {} : { state: options.state }),
+    ...(options.desktop === undefined
+      ? {}
+      : {
+          desktop: options.desktop,
+        }),
+    ...(options.state === undefined
+      ? {}
+      : {
+          state: options.state,
+        }),
     ...(options.plugins === undefined
       ? {}
-      : { plugins: Object.freeze(options.plugins.map(bindPluginHost)) }),
+      : {
+          plugins: Object.freeze(options.plugins.map(bindPluginHost)),
+        }),
   });
 }

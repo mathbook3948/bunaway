@@ -8,9 +8,17 @@ const statusEl = document.querySelector<HTMLElement>("#status");
 const button = document.querySelector<HTMLButtonElement>("#save");
 const count = document.querySelector<HTMLElement>("#memo-count");
 const saveLabel = document.querySelector<HTMLElement>("#save-label");
-if (!input || !saved || !statusEl || !button || !count || !saveLabel)
+if (!input || !saved || !statusEl || !button || !count || !saveLabel) {
   throw new Error("Missing UI elements.");
-const ui = { input, saved, statusEl, button, count, saveLabel };
+}
+const ui = {
+  input,
+  saved,
+  statusEl,
+  button,
+  count,
+  saveLabel,
+};
 let connected = false;
 let saving = false;
 function setStatus(message: string, state = "") {
@@ -32,17 +40,28 @@ ui.input.addEventListener("input", () => {
 });
 if (navigator.platform.startsWith("Mac")) {
   const shortcut = document.getElementById("shortcut");
-  if (shortcut) shortcut.textContent = "⌘ + S로 저장";
+  if (shortcut) {
+    shortcut.textContent = "⌘ + S로 저장";
+  }
 }
 document.addEventListener("keydown", (event) => {
-  if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "s") {
+  if (
+    (event.ctrlKey || event.metaKey) &&
+    !event.altKey &&
+    event.key.toLowerCase() === "s"
+  ) {
     event.preventDefault();
-    if (!ui.button.disabled) ui.button.click();
+    if (!ui.button.disabled) {
+      ui.button.click();
+    }
   }
 });
 
 async function start() {
-  const client = createClient<CommandsOf<typeof memoApp>, EventsOf<typeof memoApp>>();
+  const client = createClient<
+    CommandsOf<typeof memoApp>,
+    EventsOf<typeof memoApp>
+  >();
   await client.listen(
     "memo.saved",
     (event) => {
@@ -59,7 +78,10 @@ async function start() {
       onError: () => {
         connected = false;
         ui.button.disabled = true;
-        setStatus("연결이 끊어졌어요. 메모를 저장하려면 앱을 다시 열어주세요.", "error");
+        setStatus(
+          "연결이 끊어졌어요. 메모를 저장하려면 앱을 다시 열어주세요.",
+          "error",
+        );
       },
     },
   );
@@ -90,8 +112,9 @@ async function start() {
       saving = false;
       ui.button.disabled = !connected;
       ui.saveLabel.textContent = "메모 저장";
-      if (success && ui.input.value !== value)
+      if (success && ui.input.value !== value) {
         setStatus("아직 저장하지 않은 변경사항이 있어요.", "dirty");
+      }
     }
   });
 }

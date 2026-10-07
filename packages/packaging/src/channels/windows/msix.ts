@@ -45,7 +45,12 @@ interface MsixOptions {
   unvirtualizedData: boolean;
   capabilities: string[];
   executable: string;
-  logo: { square44: string; square150: string; storeLogo: string; wide?: string };
+  logo: {
+    square44: string;
+    square150: string;
+    storeLogo: string;
+    wide?: string;
+  };
 }
 
 function escapeXml(value: string): string {
@@ -58,19 +63,29 @@ function escapeXml(value: string): string {
 }
 
 export function renderAppxManifest(options: MsixOptions): string {
-  if (options.minVersion.localeCompare(DEFAULT_MIN_VERSION, undefined, { numeric: true }) < 0) {
-    throw new Error("Windows minVersion must be >= 10.0.17763.0 (bundled Bun requirement).");
+  if (
+    options.minVersion.localeCompare(DEFAULT_MIN_VERSION, undefined, {
+      numeric: true,
+    }) < 0
+  ) {
+    throw new Error(
+      "Windows minVersion must be >= 10.0.17763.0 (bundled Bun requirement).",
+    );
   }
   if (
     options.unvirtualizedData &&
-    options.minVersion.localeCompare(UNVIRTUALIZED_MIN_VERSION, undefined, { numeric: true }) < 0
+    options.minVersion.localeCompare(UNVIRTUALIZED_MIN_VERSION, undefined, {
+      numeric: true,
+    }) < 0
   ) {
     throw new Error(
       "unvirtualizedData requires minVersion >= 10.0.18362.0 to preserve data on uninstall.",
     );
   }
   if (options.packageName.length < 3 || options.packageName.length > 50) {
-    throw new Error("win-store-msix requires packageName to be 3..50 characters.");
+    throw new Error(
+      "win-store-msix requires packageName to be 3..50 characters.",
+    );
   }
   if (
     options.version.trim() !== options.version ||
@@ -97,7 +112,11 @@ export function renderAppxManifest(options: MsixOptions): string {
   const capabilities = [
     ...new Set([
       "runFullTrust",
-      ...(options.unvirtualizedData ? ["unvirtualizedResources"] : []),
+      ...(options.unvirtualizedData
+        ? [
+            "unvirtualizedResources",
+          ]
+        : []),
       ...options.capabilities,
     ]),
   ].map((cap) => {

@@ -1,8 +1,29 @@
-import { chmod, cp, lstat, mkdir, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  cp,
+  lstat,
+  mkdir,
+  readdir,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
-import { acquireBuildOutputLock, ownedDirectory, PACKAGING_CHANNELS } from "@bunaway/packaging";
-import { developmentPolicy, developmentWindowHome } from "../../runtime-bun/src/development.ts";
-import { type Project, readProjectMetadata, validateProject } from "./config.ts";
+import {
+  acquireBuildOutputLock,
+  ownedDirectory,
+  PACKAGING_CHANNELS,
+} from "@bunaway/packaging";
+import {
+  developmentPolicy,
+  developmentWindowHome,
+} from "../../runtime-bun/src/development.ts";
+import {
+  type Project,
+  readProjectMetadata,
+  validateProject,
+} from "./config.ts";
 import {
   files,
   frameworkRoot,
@@ -26,8 +47,15 @@ export interface NativeInputs {
   loader?: string;
 }
 interface Pin {
-  bun: { version: string; target: string; executableSha256: string; licenseSha256: string };
-  json?: { licenseSha256: string };
+  bun: {
+    version: string;
+    target: string;
+    executableSha256: string;
+    licenseSha256: string;
+  };
+  json?: {
+    licenseSha256: string;
+  };
 }
 export interface BuiltPackage {
   output: string;
@@ -37,9 +65,15 @@ export interface BuiltPackage {
 }
 
 export function currentTarget(): Target {
-  if (process.platform === "win32" && process.arch === "x64") return "windows-x64";
-  if (process.platform === "darwin" && process.arch === "arm64") return "macos-arm64";
-  throw new Error("MVP builds require Windows x64 or macOS arm64 (native builds only).");
+  if (process.platform === "win32" && process.arch === "x64") {
+    return "windows-x64";
+  }
+  if (process.platform === "darwin" && process.arch === "arm64") {
+    return "macos-arm64";
+  }
+  throw new Error(
+    "MVP builds require Windows x64 or macOS arm64 (native builds only).",
+  );
 }
 
 async function readPin(target: Target, root = frameworkRoot): Promise<Pin> {
@@ -52,9 +86,14 @@ async function readPin(target: Target, root = frameworkRoot): Promise<Pin> {
   )) as Pin;
 }
 
-export async function assertBuildBun(target: Target, root = frameworkRoot): Promise<void> {
+export async function assertBuildBun(
+  target: Target,
+  root = frameworkRoot,
+): Promise<void> {
   if (Bun.version !== (await readPin(target, root)).bun.version) {
-    throw new Error("Development/build Bun must match the pinned version (1.4.2).");
+    throw new Error(
+      "Development/build Bun must match the pinned version (1.4.2).",
+    );
   }
 }
 
@@ -70,14 +109,38 @@ async function prepareNativeForBuild(
   root: string,
   signal?: AbortSignal,
 ): Promise<NativeInputs> {
-  if (target !== currentTarget()) throw new Error("Cross compilation is not supported in the MVP.");
+  if (target !== currentTarget()) {
+    throw new Error("Cross compilation is not supported in the MVP.");
+  }
   await assertBuildBun(target, root);
   const windows = target === "windows-x64";
   const args = windows
-    ? ["pwsh", "-NoProfile", "-File", resolve(root, "native/windows/bun/prepare.ps1")]
-    : ["zsh", resolve(root, "native/macos/host/run.sh"), "--host-only"];
-  if (signal) await runManagedCommand(args, root, { BUN: process.execPath }, signal, root);
-  else await run(args, root, { BUN: process.execPath });
+    ? [
+        "pwsh",
+        "-NoProfile",
+        "-File",
+        resolve(root, "native/windows/bun/prepare.ps1"),
+      ]
+    : [
+        "zsh",
+        resolve(root, "native/macos/host/run.sh"),
+        "--host-only",
+      ];
+  if (signal) {
+    await runManagedCommand(
+      args,
+      root,
+      {
+        BUN: process.execPath,
+      },
+      signal,
+      root,
+    );
+  } else {
+    await run(args, root, {
+      BUN: process.execPath,
+    });
+  }
   const pin = await readPin(target, root);
   const vendor = resolve(root, "runtime/bun-bundle/vendor");
   const licenses: Record<string, string> = {
@@ -85,13 +148,23 @@ async function prepareNativeForBuild(
     "THIRD-PARTY-NOTICES.txt": resolve(root, "THIRD-PARTY-NOTICES.txt"),
     "LICENSE.bun": resolve(vendor, "LICENSE.bun"),
   };
-  if (windows)
-    licenses["License-WebView2.txt"] = resolve(root, "native/windows/bun/vendor/sdk/LICENSE.txt");
-  else
-    licenses["LICENSE.nlohmann-json"] = resolve(root, "native/macos/vendor/LICENSE.nlohmann-json");
+  if (windows) {
+    licenses["License-WebView2.txt"] = resolve(
+      root,
+      "native/windows/bun/vendor/sdk/LICENSE.txt",
+    );
+  } else {
+    licenses["LICENSE.nlohmann-json"] = resolve(
+      root,
+      "native/macos/vendor/LICENSE.nlohmann-json",
+    );
+  }
   return {
     target,
-    host: resolve(root, windows ? "native/windows/bun/boot.ts" : "build/macos-host/bunaway-host"),
+    host: resolve(
+      root,
+      windows ? "native/windows/bun/boot.ts" : "build/macos-host/bunaway-host",
+    ),
     ...(windows
       ? {
           loader: resolve(
@@ -115,7 +188,12 @@ export async function bundleAssets(
   await runWorker(
     "assets.ts",
     windows ? "bundleWindowsAssets" : "bundleAssets",
-    [project, assets, developmentServer, development],
+    [
+      project,
+      assets,
+      developmentServer,
+      development,
+    ],
     project.root,
     project.frameworkRoot,
   );
@@ -125,30 +203,43 @@ function xml(text: string): string {
   return text.replace(
     /[<>&"']/g,
     (character) =>
-      ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" })[character] ??
-      character,
+      ({
+        "<": "&lt;",
+        ">": "&gt;",
+        "&": "&amp;",
+        '"': "&quot;",
+        "'": "&apos;",
+      })[character] ?? character,
   );
 }
 
 export async function buildProject(
   directory: string,
-  options: { development?: boolean; native?: NativeInputs } = {},
+  options: {
+    development?: boolean;
+    native?: NativeInputs;
+  } = {},
 ): Promise<BuiltPackage> {
   if (options.development) {
-    const project = await validateProject(directory, { development: true });
+    const project = await validateProject(directory, {
+      development: true,
+    });
     return assembleProject(project, options);
   }
   const settings = await readProjectMetadata(directory);
   assertNotFrontendBuild(settings.root);
   const target = options.native?.target ?? currentTarget();
   await assertBuildBun(target, settings.frameworkRoot);
-  if (target !== "windows-x64" && settings.app.windows)
+  if (target !== "windows-x64" && settings.app.windows) {
     throw new Error("app.windows currently requires the Windows target.");
+  }
   // The lock covers frontend generation, asset validation and publication so
   // another build cannot change the web output while this build consumes it.
   const abort = new AbortController();
-  const interrupted = () => abort.abort(new Error("App build cancelled (SIGINT)."));
-  const terminated = () => abort.abort(new Error("App build cancelled (SIGTERM)."));
+  const interrupted = () =>
+    abort.abort(new Error("App build cancelled (SIGINT)."));
+  const terminated = () =>
+    abort.abort(new Error("App build cancelled (SIGTERM)."));
   process.on("SIGINT", interrupted);
   process.on("SIGTERM", terminated);
   let release: (() => Promise<void>) | undefined;
@@ -170,7 +261,10 @@ export async function buildProject(
 
 async function assembleProject(
   project: Project,
-  options: { development?: boolean; native?: NativeInputs },
+  options: {
+    development?: boolean;
+    native?: NativeInputs;
+  },
   signal?: AbortSignal,
 ): Promise<BuiltPackage> {
   signal?.throwIfAborted();
@@ -179,18 +273,28 @@ async function assembleProject(
   const target = options.native?.target ?? currentTarget();
   await assertBuildBun(target, root);
   const windows = target === "windows-x64";
-  if (!windows && project.app.windows)
+  if (!windows && project.app.windows) {
     throw new Error("app.windows currently requires the Windows target.");
-  const native = options.native ?? (await prepareNativeForBuild(target, root, signal));
+  }
+  const native =
+    options.native ?? (await prepareNativeForBuild(target, root, signal));
   signal?.throwIfAborted();
   const pin = await readPin(target, root);
   await verifyHash(native.bun, pin.bun.executableSha256);
   await verifyHash(native.licenses["LICENSE.bun"] ?? "", pin.bun.licenseSha256);
-  if (!windows)
-    await verifyHash(native.licenses["LICENSE.nlohmann-json"] ?? "", pin.json?.licenseSha256 ?? "");
+  if (!windows) {
+    await verifyHash(
+      native.licenses["LICENSE.nlohmann-json"] ?? "",
+      pin.json?.licenseSha256 ?? "",
+    );
+  }
   if (windows) {
-    const deps = (await json(resolve(root, "native/windows/bun/deps.json"))) as {
-      webview2Sdk: { files: Record<string, string> };
+    const deps = (await json(
+      resolve(root, "native/windows/bun/deps.json"),
+    )) as {
+      webview2Sdk: {
+        files: Record<string, string>;
+      };
     };
     await verifyHash(
       native.licenses["License-WebView2.txt"] ?? "",
@@ -198,27 +302,54 @@ async function assembleProject(
     );
   }
   await stat(native.host);
-  const parent = resolve(project.root, options.development ? ".bunaway" : "dist");
+  const parent = resolve(
+    project.root,
+    options.development ? ".bunaway" : "dist",
+  );
   await ownedDirectory(project.root, parent, true);
-  const output = resolve(parent, `${target}${windows ? "" : `/${project.app.appId}.app`}`);
+  const output = resolve(
+    parent,
+    `${target}${windows ? "" : `/${project.app.appId}.app`}`,
+  );
   await ownedDirectory(project.root, dirname(output), true);
   const staging = `${output}.building-${crypto.randomUUID()}`;
-  const packageRoot = windows ? staging : resolve(staging, "Contents/Resources");
+  const packageRoot = windows
+    ? staging
+    : resolve(staging, "Contents/Resources");
   const executable = windows
     ? resolve(staging, "runtime/bun.exe")
     : resolve(staging, "Contents/MacOS/bunaway-host");
-  const preserved: { source: string; destination: string }[] = [];
+  const preserved: {
+    source: string;
+    destination: string;
+  }[] = [];
   let published = false;
   try {
     const assets = resolve(packageRoot, "assets");
-    await mkdir(resolve(assets, "web"), { recursive: true });
-    await mkdir(resolve(packageRoot, "runtime"), { recursive: true });
-    await mkdir(resolve(packageRoot, "licenses"), { recursive: true });
-    await mkdir(dirname(executable), { recursive: true });
-    if (!windows) await cp(native.host, executable);
-    await cp(native.bun, resolve(packageRoot, `runtime/bun${windows ? ".exe" : ""}`));
+    await mkdir(resolve(assets, "web"), {
+      recursive: true,
+    });
+    await mkdir(resolve(packageRoot, "runtime"), {
+      recursive: true,
+    });
+    await mkdir(resolve(packageRoot, "licenses"), {
+      recursive: true,
+    });
+    await mkdir(dirname(executable), {
+      recursive: true,
+    });
+    if (!windows) {
+      await cp(native.host, executable);
+    }
+    await cp(
+      native.bun,
+      resolve(packageRoot, `runtime/bun${windows ? ".exe" : ""}`),
+    );
     await chmod(executable, 0o755);
-    await chmod(resolve(packageRoot, `runtime/bun${windows ? ".exe" : ""}`), 0o755);
+    await chmod(
+      resolve(packageRoot, `runtime/bun${windows ? ".exe" : ""}`),
+      0o755,
+    );
     for (const [name, path] of Object.entries(native.licenses)) {
       await cp(path, resolve(packageRoot, "licenses", name));
     }
@@ -227,7 +358,9 @@ async function assembleProject(
       ...(server
         ? {
             home: server.url,
-            development: { url: server.url },
+            development: {
+              url: server.url,
+            },
             ...(project.app.windows
               ? {
                   windows: project.app.windows.map((spec) => ({
@@ -238,7 +371,11 @@ async function assembleProject(
               : {}),
           }
         : {}),
-      ...(windows && options.development ? { developmentTools: true } : {}),
+      ...(windows && options.development
+        ? {
+            developmentTools: true,
+          }
+        : {}),
     });
     await writeJson(
       resolve(assets, "policy.json"),
@@ -252,16 +389,31 @@ async function assembleProject(
     );
     await writeFile(resolve(assets, "bunfig.toml"), "env = false\n");
     await writeJson(resolve(assets, "tsconfig.json"), {});
-    if (!windows)
-      for (const schema of await files(resolve(root, "native/host-api/generated"))) {
+    if (!windows) {
+      for (const schema of await files(
+        resolve(root, "native/host-api/generated"),
+      )) {
         await cp(schema, resolve(assets, basename(schema)));
       }
-    await bundleAssets(project, assets, windows, !!server, options.development ?? false);
+    }
+    await bundleAssets(
+      project,
+      assets,
+      windows,
+      !!server,
+      options.development ?? false,
+    );
     signal?.throwIfAborted();
     if (windows) {
-      if (!native.loader) throw new Error("Windows requires the pinned WebView2Loader DLL.");
-      const deps = (await json(resolve(root, "native/windows/bun/deps.json"))) as {
-        webview2Sdk: { files: Record<string, string> };
+      if (!native.loader) {
+        throw new Error("Windows requires the pinned WebView2Loader DLL.");
+      }
+      const deps = (await json(
+        resolve(root, "native/windows/bun/deps.json"),
+      )) as {
+        webview2Sdk: {
+          files: Record<string, string>;
+        };
       };
       await verifyHash(
         native.loader,
@@ -278,23 +430,41 @@ async function assembleProject(
       );
     }
     const hashes: Record<string, string> = {};
-    for (const dir of ["assets", "licenses"]) {
+    for (const dir of [
+      "assets",
+      "licenses",
+    ]) {
       for (const file of await files(resolve(packageRoot, dir))) {
-        hashes[relative(packageRoot, file).replaceAll("\\", "/")] = await hash(file);
+        hashes[relative(packageRoot, file).replaceAll("\\", "/")] =
+          await hash(file);
       }
     }
-    const framework = (await json(resolve(root, "package.json"))) as { version: string };
-    const appPackage = (await json(resolve(project.root, "package.json"))) as { version: string };
+    const framework = (await json(resolve(root, "package.json"))) as {
+      version: string;
+    };
+    const appPackage = (await json(resolve(project.root, "package.json"))) as {
+      version: string;
+    };
     await writeJson(resolve(packageRoot, "manifest.json"), {
       ...pin,
       assets: hashes,
-      app: { id: project.app.appId, version: appPackage.version },
-      framework: { version: framework.version },
+      app: {
+        id: project.app.appId,
+        version: appPackage.version,
+      },
+      framework: {
+        version: framework.version,
+      },
       host: {
         target,
         ...(windows
-          ? { kind: "bun-ffi", sha256: await hash(resolve(assets, "boot.js")) }
-          : { sourceSha256: await hash(native.host) }),
+          ? {
+              kind: "bun-ffi",
+              sha256: await hash(resolve(assets, "boot.js")),
+            }
+          : {
+              sourceSha256: await hash(native.host),
+            }),
       },
     });
     if (!windows) {
@@ -314,10 +484,22 @@ async function assembleProject(
 ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>" : ""}
 </dict></plist>\n`,
       );
-      const args = ["/usr/bin/codesign", "--force", "--sign", "-", staging];
-      if (signal) await runManagedCommand(args, project.root, {}, signal, root);
-      else await run(args, project.root);
-      await verifyHash(resolve(packageRoot, "runtime/bun"), pin.bun.executableSha256);
+      const args = [
+        "/usr/bin/codesign",
+        "--force",
+        "--sign",
+        "-",
+        staging,
+      ];
+      if (signal) {
+        await runManagedCommand(args, project.root, {}, signal, root);
+      } else {
+        await run(args, project.root);
+      }
+      await verifyHash(
+        resolve(packageRoot, "runtime/bun"),
+        pin.bun.executableSha256,
+      );
     }
     signal?.throwIfAborted();
     await ownedDirectory(project.root, output);
@@ -326,11 +508,14 @@ ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking<
       const packaged = resolve(output, "packaged");
       const previous = await ownedDirectory(project.root, packaged);
       if (previous) {
-        await mkdir(resolve(staging, "packaged"), { recursive: true });
+        await mkdir(resolve(staging, "packaged"), {
+          recursive: true,
+        });
         for (const entry of await readdir(packaged)) {
           if (
             PACKAGING_CHANNELS.some(
-              (channel) => entry === channel || entry === `${channel}-report.json`,
+              (channel) =>
+                entry === channel || entry === `${channel}-report.json`,
             )
           ) {
             const source = resolve(packaged, entry);
@@ -338,13 +523,20 @@ ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking<
             const info = await lstat(source);
             if (
               info.isSymbolicLink() ||
-              !(entry.endsWith("-report.json") ? info.isFile() : info.isDirectory())
+              !(entry.endsWith("-report.json")
+                ? info.isFile()
+                : info.isDirectory())
             ) {
-              throw new Error(`Packaged output must be a regular file or directory: ${source}`);
+              throw new Error(
+                `Packaged output must be a regular file or directory: ${source}`,
+              );
             }
             // Move the existing tree so Windows junctions never need to be recreated.
             await rename(source, destination);
-            preserved.push({ source, destination });
+            preserved.push({
+              source,
+              destination,
+            });
           }
         }
       }
@@ -358,7 +550,9 @@ ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking<
         await rename(output, backup);
         moved = true;
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          throw error;
+        }
       }
       await rename(staging, output);
       published = true;
@@ -371,7 +565,10 @@ ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking<
     }
     if (moved) {
       await ownedDirectory(project.root, dirname(backup));
-      await rm(backup, { recursive: true, force: true });
+      await rm(backup, {
+        recursive: true,
+        force: true,
+      });
     }
     return {
       output,
@@ -386,13 +583,27 @@ ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking<
             `--config=${resolve(output, "assets/bunfig.toml")}`,
             `--tsconfig-override=${resolve(output, "assets/tsconfig.json")}`,
             resolve(output, "assets/boot.js"),
-            ...(options.development ? ["--devtools"] : []),
-            ...(server ? ["--dev-url", server.url] : []),
+            ...(options.development
+              ? [
+                  "--devtools",
+                ]
+              : []),
+            ...(server
+              ? [
+                  "--dev-url",
+                  server.url,
+                ]
+              : []),
           ]
         : [
             "--package",
             resolve(output, "Contents/Resources"),
-            ...(server ? ["--dev-url", server.url] : []),
+            ...(server
+              ? [
+                  "--dev-url",
+                  server.url,
+                ]
+              : []),
           ],
     };
   } catch (error) {
@@ -404,7 +615,10 @@ ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking<
       }
     }
     await ownedDirectory(project.root, dirname(staging));
-    await rm(staging, { recursive: true, force: true });
+    await rm(staging, {
+      recursive: true,
+      force: true,
+    });
     throw error;
   }
 }

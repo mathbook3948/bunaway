@@ -1,19 +1,37 @@
 import { createHash } from "node:crypto";
-import { lstat, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  readdir,
+  readFile,
+  realpath,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-export const frameworkRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+export const frameworkRoot = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../..",
+);
 
 export interface PackageDependencies {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
   peerDependencies?: Record<string, string>;
-  peerDependenciesMeta?: Record<string, { optional?: boolean }>;
+  peerDependenciesMeta?: Record<
+    string,
+    {
+      optional?: boolean;
+    }
+  >;
 }
 
-export function isOptionalDependency(pkg: PackageDependencies, name: string): boolean {
+export function isOptionalDependency(
+  pkg: PackageDependencies,
+  name: string,
+): boolean {
   return (
     Object.hasOwn(pkg.optionalDependencies ?? {}, name) ||
     (!Object.hasOwn(pkg.dependencies ?? {}, name) &&
@@ -34,13 +52,19 @@ export async function installedPackageRoot(
       await stat(resolve(candidate, "package.json"));
       return canonical ? await realpath(candidate) : candidate;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
     }
     const next = dirname(parent);
-    if (next === parent)
-      throw Object.assign(new Error(`Missing installed ${name}; run bun install.`), {
-        code: "ENOENT",
-      });
+    if (next === parent) {
+      throw Object.assign(
+        new Error(`Missing installed ${name}; run bun install.`),
+        {
+          code: "ENOENT",
+        },
+      );
+    }
     parent = next;
   }
 }
@@ -63,11 +87,17 @@ export function inside(root: string, path: string): boolean {
 }
 
 export async function projectPath(root: string, name: string): Promise<string> {
-  if (!name || isAbsolute(name) || name.split(/[\\/]/).some((part) => part === "..")) {
+  if (
+    !name ||
+    isAbsolute(name) ||
+    name.split(/[\\/]/).some((part) => part === "..")
+  ) {
     throw new Error("Source paths must be project-relative without '..'.");
   }
   const path = await realpath(resolve(root, name));
-  if (!inside(await realpath(root), path)) throw new Error("Source path escapes the project.");
+  if (!inside(await realpath(root), path)) {
+    throw new Error("Source path escapes the project.");
+  }
   return path;
 }
 
@@ -77,7 +107,9 @@ export async function files(
 ): Promise<string[]> {
   const result: string[] = [];
   async function visit(dir: string): Promise<void> {
-    for (const item of await readdir(dir, { withFileTypes: true })) {
+    for (const item of await readdir(dir, {
+      withFileTypes: true,
+    })) {
       const path = resolve(dir, item.name);
       if (
         item.isDirectory() &&
@@ -85,10 +117,16 @@ export async function files(
       ) {
         continue;
       }
-      if ((await lstat(path)).isSymbolicLink()) throw new Error(`Symlink not allowed: ${path}`);
-      if (item.isDirectory()) await visit(path);
-      else if (item.isFile()) result.push(path);
-      else throw new Error(`Not a regular source file: ${path}`);
+      if ((await lstat(path)).isSymbolicLink()) {
+        throw new Error(`Symlink not allowed: ${path}`);
+      }
+      if (item.isDirectory()) {
+        await visit(path);
+      } else if (item.isFile()) {
+        result.push(path);
+      } else {
+        throw new Error(`Not a regular source file: ${path}`);
+      }
     }
   }
   await visit(root);
@@ -101,8 +139,13 @@ export async function hash(path: string): Promise<string> {
     .digest("hex");
 }
 
-export async function verifyHash(path: string, expected: string): Promise<void> {
-  if ((await hash(path)) !== expected) throw new Error(`Hash mismatch: ${path}`);
+export async function verifyHash(
+  path: string,
+  expected: string,
+): Promise<void> {
+  if ((await hash(path)) !== expected) {
+    throw new Error(`Hash mismatch: ${path}`);
+  }
 }
 
 export async function run(
@@ -112,13 +155,18 @@ export async function run(
 ): Promise<void> {
   const child = Bun.spawn(args, {
     cwd,
-    env: { ...process.env, ...env },
+    env: {
+      ...process.env,
+      ...env,
+    },
     stdin: "ignore",
     stdout: "inherit",
     stderr: "inherit",
   });
   const code = await child.exited;
-  if (code !== 0) throw new Error(`${args[0]} failed (exit ${code}).`);
+  if (code !== 0) {
+    throw new Error(`${args[0]} failed (exit ${code}).`);
+  }
 }
 
 export async function runWorker(
@@ -135,13 +183,20 @@ export async function runWorker(
       "-e",
       `const task = await import(${JSON.stringify(url)}); const result = await task[${JSON.stringify(method)}](...await Bun.stdin.json()); if (result !== undefined) process.stdout.write(JSON.stringify(result));`,
     ],
-    { cwd, stdin: Buffer.from(JSON.stringify(args)), stdout: "pipe", stderr: "pipe" },
+    {
+      cwd,
+      stdin: Buffer.from(JSON.stringify(args)),
+      stdout: "pipe",
+      stderr: "pipe",
+    },
   );
   const output = new Response(child.stdout).text();
   const errors = new Response(child.stderr).text();
   const code = await child.exited;
   await output;
-  if (code !== 0) throw new Error((await errors) || `${method} failed (exit ${code}).`);
+  if (code !== 0) {
+    throw new Error((await errors) || `${method} failed (exit ${code}).`);
+  }
   await errors;
   return output;
 }

@@ -37,7 +37,9 @@ export interface InnoOptions {
 }
 
 function issLiteral(value: string, constants = true): string {
-  if (/[\r\n\0]/.test(value)) throw new Error("Inno values must not contain line breaks or NUL.");
+  if (/[\r\n\0]/.test(value)) {
+    throw new Error("Inno values must not contain line breaks or NUL.");
+  }
   return constants ? value.replace(/{/g, "{{") : value;
 }
 
@@ -47,8 +49,10 @@ function issParameter(value: string, constants = true): string {
 
 // Display names can contain characters forbidden in Windows directory names.
 export function installerDirectoryName(name: string): string {
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: Windows forbids these characters in file names.
-  return name.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").replace(/[. ]+$/, "") || "App";
+  return (
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: Windows forbids these characters in file names.
+    name.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").replace(/[. ]+$/, "") || "App"
+  );
 }
 
 export function renderInnoScript(options: InnoOptions): string {
@@ -62,7 +66,9 @@ export function renderInnoScript(options: InnoOptions): string {
     (parts[0] ?? 0) < 10 ||
     (parts[0] === 10 && parts[1] === 0 && (parts[2] ?? 0) < 17763)
   ) {
-    throw new Error("Windows minVersion must be >= 10.0.17763.0 (bundled Bun requirement).");
+    throw new Error(
+      "Windows minVersion must be >= 10.0.17763.0 (bundled Bun requirement).",
+    );
   }
   const perUser = options.scope === "perUser";
   if (!perUser && !options.preserveUserData) {
@@ -109,7 +115,9 @@ export function renderInnoScript(options: InnoOptions): string {
       `SignedUninstallerDir=${join(options.outputDir, "..", "inno-signing")}`,
     );
   }
-  if (options.iconFile) lines.push(`SetupIconFile=${options.iconFile}`);
+  if (options.iconFile) {
+    lines.push(`SetupIconFile=${options.iconFile}`);
+  }
 
   lines.push("", "[Files]");
   lines.push(
@@ -134,7 +142,9 @@ export function renderInnoScript(options: InnoOptions): string {
       lines.push(
         `Name: "{group}\\${directoryName}"; Filename: "{sys}\\WindowsPowerShell\\v1.0\\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\\launch.ps1"""; WorkingDir: "{app}"; IconFilename: "{app}\\runtime\\bun.exe"`,
       );
-      lines.push(`Name: "{group}\\${directoryName} 제거"; Filename: "{uninstallexe}"`);
+      lines.push(
+        `Name: "{group}\\${directoryName} 제거"; Filename: "{uninstallexe}"`,
+      );
     }
     if (options.desktopShortcut) {
       lines.push(
@@ -147,10 +157,16 @@ export function renderInnoScript(options: InnoOptions): string {
   runEntries.push(
     `Filename: "{sys}\\WindowsPowerShell\\v1.0\\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\\launch.ps1"""; WorkingDir: "{app}"; Description: "${issParameter(`Launch ${options.name}`)}"; Flags: postinstall nowait skipifsilent unchecked`,
   );
-  if (runEntries.length) lines.push("", "[Run]", ...runEntries);
+  if (runEntries.length) {
+    lines.push("", "[Run]", ...runEntries);
+  }
 
   if (!options.preserveUserData) {
-    lines.push("", "[UninstallDelete]", `Type: filesandordirs; Name: "${options.appDataDir}"`);
+    lines.push(
+      "",
+      "[UninstallDelete]",
+      `Type: filesandordirs; Name: "${options.appDataDir}"`,
+    );
   }
 
   lines.push(
@@ -339,10 +355,16 @@ export function renderInnoScript(options: InnoOptions): string {
 // Inno signs its embedded uninstaller and temporary setup copies through this
 // callback. Credentials stay in the compiler's environment, never in .iss/JS
 // files or Inno's logged command line. Verify each PE before embedding it.
-export async function prepareInnoSigning(ctx: StageContext, staging: string, signtool: string) {
+export async function prepareInnoSigning(
+  ctx: StageContext,
+  staging: string,
+  signtool: string,
+) {
   const dir = join(staging, "inno-signing");
   const callback = join(dir, "sign.js");
-  await mkdir(dir, { recursive: true });
+  await mkdir(dir, {
+    recursive: true,
+  });
   await writeFile(
     callback,
     `try {
@@ -361,12 +383,22 @@ export async function prepareInnoSigning(ctx: StageContext, staging: string, sig
   );
   const quote = (value: string) => `$q${value.replace(/\$/g, () => "$$")}$q`;
   return {
-    args: [`/Sbunaway=${quote(process.execPath)} ${quote(callback)} $f`],
+    args: [
+      `/Sbunaway=${quote(process.execPath)} ${quote(callback)} $f`,
+    ],
     env: {
       ...process.env,
       BUNAWAY_INNO_SIGN_COMMANDS: JSON.stringify([
-        [signtool, "sign", ...signingArgs(ctx)],
-        [signtool, "verify", "/pa"],
+        [
+          signtool,
+          "sign",
+          ...signingArgs(ctx),
+        ],
+        [
+          signtool,
+          "verify",
+          "/pa",
+        ],
       ]),
     },
   };
@@ -384,7 +416,8 @@ export async function compileInno(
     ctx.report({
       code: CODES.TOOL_MISSING,
       severity: "error",
-      message: "Inno Setup compiler (ISCC.exe) not found; install Inno Setup 6.3 or newer.",
+      message:
+        "Inno Setup compiler (ISCC.exe) not found; install Inno Setup 6.3 or newer.",
     });
     throw new Error("ISCC.exe not found.");
   }
@@ -394,12 +427,28 @@ export async function compileInno(
   try {
     if (ctx.input.signing) {
       const signtool = await findWindowsKitTool("signtool.exe");
-      if (!signtool)
-        throw new Error("signtool.exe not found; cannot sign the embedded uninstaller.");
+      if (!signtool) {
+        throw new Error(
+          "signtool.exe not found; cannot sign the embedded uninstaller.",
+        );
+      }
       const signing = await prepareInnoSigning(ctx, staging, signtool);
-      await must(iscc, ["/Q", ...signing.args, issPath], { env: signing.env });
+      await must(
+        iscc,
+        [
+          "/Q",
+          ...signing.args,
+          issPath,
+        ],
+        {
+          env: signing.env,
+        },
+      );
     } else {
-      await must(iscc, ["/Q", issPath]);
+      await must(iscc, [
+        "/Q",
+        issPath,
+      ]);
     }
   } catch (error) {
     ctx.report({
@@ -409,7 +458,10 @@ export async function compileInno(
     });
     throw error;
   } finally {
-    await rm(join(staging, "inno-signing"), { recursive: true, force: true });
+    await rm(join(staging, "inno-signing"), {
+      recursive: true,
+      force: true,
+    });
   }
   return join(staging, "installer", `${outputBaseName}.exe`);
 }

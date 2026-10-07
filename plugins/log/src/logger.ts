@@ -9,7 +9,19 @@ export function createLog(
     message: string,
     details?: JsonValue,
     options?: NativeInvokeOptions,
-  ) => write({ level, message, ...(details === undefined ? {} : { details }) }, options);
+  ) =>
+    write(
+      {
+        level,
+        message,
+        ...(details === undefined
+          ? {}
+          : {
+              details,
+            }),
+      },
+      options,
+    );
 
   return Object.freeze({
     write,

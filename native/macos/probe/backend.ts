@@ -13,7 +13,10 @@ import {
 } from "../../../packages/protocol/src/index.ts";
 import { readJsonLines } from "../../../packages/runtime-bun/src/process-ipc.ts";
 
-const runtime = { id: "probe", generation: "1" };
+const runtime = {
+  id: "probe",
+  generation: "1",
+};
 const mode = process.argv.at(-1);
 const hello: Hello = {
   kind: "hello",
@@ -34,15 +37,20 @@ const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function send(frame: ProcessFrame): Promise<void> {
   const line = `${serializeProcessFrame(frame)}\n`;
-  if (queued >= 128) throw new Error("Output queue full.");
+  if (queued >= 128) {
+    throw new Error("Output queue full.");
+  }
   queued++;
   writer = writer.then(
     () =>
       new Promise<void>((resolve, reject) => {
         process.stdout.write(line, (error) => {
           queued--;
-          if (error) reject(error);
-          else resolve();
+          if (error) {
+            reject(error);
+          } else {
+            resolve();
+          }
         });
       }),
   );
@@ -60,37 +68,68 @@ function web(message: Message): Promise<void> {
 }
 
 function result(id: string, payload: JsonValue) {
-  if (completed.has(id)) throw new Error("Duplicate request ID.");
+  if (completed.has(id)) {
+    throw new Error("Duplicate request ID.");
+  }
   let pending: Promise<void>;
   try {
-    pending = web({ kind: "result", protocol: PROTOCOL_VERSION, id, payload });
+    pending = web({
+      kind: "result",
+      protocol: PROTOCOL_VERSION,
+      id,
+      payload,
+    });
   } catch (cause) {
-    if (!(cause instanceof ProtocolError)) throw cause;
+    if (!(cause instanceof ProtocolError)) {
+      throw cause;
+    }
     pending = web({
       kind: "error",
       protocol: PROTOCOL_VERSION,
       id,
-      error: { code: "INTERNAL", message: "Invalid probe response." },
+      error: {
+        code: "INTERNAL",
+        message: "Invalid probe response.",
+      },
     });
   }
   completed.add(id);
   return pending;
 }
 
-function error(id: string, code: "INTERNAL" | "INVALID_ARGUMENT" | "CANCELLED", message: string) {
-  if (completed.has(id)) throw new Error("Duplicate request ID.");
-  const pending = web({ kind: "error", protocol: PROTOCOL_VERSION, id, error: { code, message } });
+function error(
+  id: string,
+  code: "INTERNAL" | "INVALID_ARGUMENT" | "CANCELLED",
+  message: string,
+) {
+  if (completed.has(id)) {
+    throw new Error("Duplicate request ID.");
+  }
+  const pending = web({
+    kind: "error",
+    protocol: PROTOCOL_VERSION,
+    id,
+    error: {
+      code,
+      message,
+    },
+  });
   completed.add(id);
   return pending;
 }
 
 async function dispatch(frame: ProcessFrame) {
-  if (frame.runtime.id !== runtime.id || frame.runtime.generation !== runtime.generation) {
+  if (
+    frame.runtime.id !== runtime.id ||
+    frame.runtime.generation !== runtime.generation
+  ) {
     throw new Error("Stale runtime.");
   }
   // Shutdown may replace queued boot/hello frames before initialization finishes.
   if (frame.kind === "shutdown") {
-    if (mode === "ignore-stop") return;
+    if (mode === "ignore-stop") {
+      return;
+    }
     stopping = true;
     for (const [id, timer] of timers) {
       clearTimeout(timer);
@@ -98,13 +137,22 @@ async function dispatch(frame: ProcessFrame) {
     }
     timers.clear();
     subscribed = false;
-    await send({ kind: "stopping", ipc: PROCESS_IPC_VERSION, runtime });
+    await send({
+      kind: "stopping",
+      ipc: PROCESS_IPC_VERSION,
+      runtime,
+    });
     process.stdin.destroy();
     return;
   }
   if (frame.kind === "boot" && !booted) {
     booted = true;
-    await send({ kind: "hello", ipc: PROCESS_IPC_VERSION, runtime, payload: hello });
+    await send({
+      kind: "hello",
+      ipc: PROCESS_IPC_VERSION,
+      runtime,
+      payload: hello,
+    });
     return;
   }
   if (frame.kind === "hello" && booted && !ready) {
@@ -112,7 +160,12 @@ async function dispatch(frame: ProcessFrame) {
     ready = true;
     if (mode === "child") {
       const child = Bun.spawn(
-        [process.execPath, "--no-env-file", "-e", "setInterval(()=>{},1000)"],
+        [
+          process.execPath,
+          "--no-env-file",
+          "-e",
+          "setInterval(()=>{},1000)",
+        ],
         {
           stdin: "ignore",
           stdout: "ignore",
@@ -133,27 +186,50 @@ async function dispatch(frame: ProcessFrame) {
     if (mode?.startsWith("fault-")) {
       const faults: Record<string, string | Uint8Array> = {
         "fault-json": "not-json\n",
-        "fault-utf8": new Uint8Array([255, 10]),
+        "fault-utf8": new Uint8Array([
+          255,
+          10,
+        ]),
         "fault-large": `${"x".repeat(1_048_577)}\n`,
         "fault-partial": "{",
         "fault-stdout": "backend log on stdout\n",
-        "fault-stale": `${JSON.stringify({ kind: "stopping", ipc: PROCESS_IPC_VERSION, runtime: { id: "probe", generation: "0" } })}\n`,
-        "fault-version": `${JSON.stringify({ kind: "stopping", ipc: { major: 2, minor: 0 }, runtime })}\n`,
+        "fault-stale": `${JSON.stringify({
+          kind: "stopping",
+          ipc: PROCESS_IPC_VERSION,
+          runtime: {
+            id: "probe",
+            generation: "0",
+          },
+        })}\n`,
+        "fault-version": `${JSON.stringify({
+          kind: "stopping",
+          ipc: {
+            major: 2,
+            minor: 0,
+          },
+          runtime,
+        })}\n`,
         "fault-eof": "",
       };
       await new Promise<void>((resolve, reject) =>
-        process.stdout.write(faults[mode] ?? "\n", (cause) => (cause ? reject(cause) : resolve())),
+        process.stdout.write(faults[mode] ?? "\n", (cause) =>
+          cause ? reject(cause) : resolve(),
+        ),
       );
       process.exit(0);
     }
     return;
   }
-  if (!ready || stopping) throw new Error("Runtime not ready.");
+  if (!ready || stopping) {
+    throw new Error("Runtime not ready.");
+  }
   if (frame.kind === "revoke") {
     subscribed = false;
     if (mode === "late-listen" && pendingListen !== undefined) {
       // Intentionally acknowledge a listen only after the host has revoked it.
-      await result(pendingListen, { subscriptionId: "probe-sub" });
+      await result(pendingListen, {
+        subscriptionId: "probe-sub",
+      });
       pendingListen = undefined;
       await web({
         kind: "event",
@@ -168,18 +244,23 @@ async function dispatch(frame: ProcessFrame) {
     }
     return;
   }
-  if (frame.kind !== "web" || frame.context !== "probe-view")
+  if (frame.kind !== "web" || frame.context !== "probe-view") {
     throw new Error("Invalid direction or context.");
+  }
   const message = frame.payload;
   if (message.kind === "listen") {
-    if (message.event !== "probe.changed") throw new Error("Unknown event.");
+    if (message.event !== "probe.changed") {
+      throw new Error("Unknown event.");
+    }
     subscribed = true;
     sequence = 0;
     if (mode === "late-listen") {
       pendingListen = message.id;
       return;
     }
-    await result(message.id, { subscriptionId: "probe-sub" });
+    await result(message.id, {
+      subscriptionId: "probe-sub",
+    });
     return;
   }
   if (message.kind === "unlisten") {
@@ -187,9 +268,16 @@ async function dispatch(frame: ProcessFrame) {
     await result(message.id, null);
     return;
   }
-  if (message.kind !== "invoke") throw new Error("Invalid request.");
-  if (completed.size > 1024 || completed.has(message.id) || timers.has(message.id))
+  if (message.kind !== "invoke") {
+    throw new Error("Invalid request.");
+  }
+  if (
+    completed.size > 1024 ||
+    completed.has(message.id) ||
+    timers.has(message.id)
+  ) {
     throw new Error("Request limit or reused ID.");
+  }
   switch (message.command) {
     case "probe.echo":
       await result(message.id, message.payload);
@@ -200,15 +288,19 @@ async function dispatch(frame: ProcessFrame) {
         !Number.isSafeInteger(message.payload) ||
         message.payload < 0 ||
         message.payload > 210000
-      )
+      ) {
         throw new Error("Invalid array size.");
+      }
       await result(message.id, Array(message.payload).fill(1e-7));
       break;
     case "probe.add":
       await result(message.id, 2 + 2);
       break;
     case "probe.promise":
-      await result(message.id, await Promise.resolve(21).then((value) => value * 2));
+      await result(
+        message.id,
+        await Promise.resolve(21).then((value) => value * 2),
+      );
       break;
     case "probe.timer":
     case "probe.hold":
@@ -226,8 +318,11 @@ async function dispatch(frame: ProcessFrame) {
     case "probe.throw":
     case "probe.reject":
       try {
-        if (message.command === "probe.reject") await Promise.reject(new Error("private-details"));
-        else throw new Error("private-details");
+        if (message.command === "probe.reject") {
+          await Promise.reject(new Error("private-details"));
+        } else {
+          throw new Error("private-details");
+        }
       } catch {
         await error(message.id, "INTERNAL", "Probe operation failed.");
       }
@@ -258,7 +353,12 @@ async function dispatch(frame: ProcessFrame) {
       break;
     case "probe.late-response": {
       await result(message.id, "first");
-      await web({ kind: "result", protocol: PROTOCOL_VERSION, id: message.id, payload: "late" });
+      await web({
+        kind: "result",
+        protocol: PROTOCOL_VERSION,
+        id: message.id,
+        payload: "late",
+      });
       break;
     }
     case "probe.crash":
@@ -271,10 +371,14 @@ async function dispatch(frame: ProcessFrame) {
       const target = fstatSync(1);
       for (const name of readdirSync("/dev/fd")) {
         const fd = Number(name);
-        if (!Number.isInteger(fd) || fd === 1) continue;
+        if (!Number.isInteger(fd) || fd === 1) {
+          continue;
+        }
         try {
           const stat = fstatSync(fd);
-          if (stat.dev === target.dev && stat.ino === target.ino) closeSync(fd);
+          if (stat.dev === target.dev && stat.ino === target.ino) {
+            closeSync(fd);
+          }
         } catch {}
       }
       closeSync(1);
@@ -303,7 +407,10 @@ async function fatal() {
       kind: "fatal",
       ipc: PROCESS_IPC_VERSION,
       runtime,
-      error: { code: "INTERNAL", message: "Backend IPC failed." },
+      error: {
+        code: "INTERNAL",
+        message: "Backend IPC failed.",
+      },
     });
   } finally {
     process.exit(1);
@@ -313,10 +420,16 @@ async function fatal() {
 try {
   for await (const line of readJsonLines(process.stdin)) {
     await dispatch(parseProcessFrame(line));
-    if (stopping) break;
+    if (stopping) {
+      break;
+    }
   }
-  if (!stopping && mode !== "ignore-stop") throw new Error("Unexpected host EOF.");
-  if (mode === "ignore-stop") setInterval(() => {}, 1000);
+  if (!stopping && mode !== "ignore-stop") {
+    throw new Error("Unexpected host EOF.");
+  }
+  if (mode === "ignore-stop") {
+    setInterval(() => {}, 1000);
+  }
   await writer;
 } catch {
   await fatal();

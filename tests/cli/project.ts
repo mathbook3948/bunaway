@@ -15,13 +15,19 @@ window.close();
 let artifacts: Promise<string> | undefined;
 export function packageDirectory(): Promise<string> {
   artifacts ??= (async () => {
-    const directory = await mkdtemp(resolve(tmpdir(), "bunaway-test-packages-"));
-    await packFramework(directory, { localDependencies: true });
+    const directory = await mkdtemp(
+      resolve(tmpdir(), "bunaway-test-packages-"),
+    );
+    await packFramework(directory, {
+      localDependencies: true,
+    });
     return directory;
   })();
   return artifacts;
 }
 
 export async function createProject(directory: string): Promise<string> {
-  return generateProject(directory, { packageDirectory: await packageDirectory() });
+  return generateProject(directory, {
+    packageDirectory: await packageDirectory(),
+  });
 }

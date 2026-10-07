@@ -22,13 +22,23 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { release } from "node:os";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { validateValue } from "../../packages/protocol/src/index.ts";
 import { validationCases } from "../protocol/validation-cases.ts";
 import { terminateRenderers } from "./macos-renderer.ts";
 import { readReport } from "./reports.ts";
 
-const original = resolve(process.argv[process.argv.indexOf("--package") + 1] ?? "");
+const original = resolve(
+  process.argv[process.argv.indexOf("--package") + 1] ?? "",
+);
 assert.ok(process.argv.includes("--package"), "--package is required");
 const inPlace = process.env.BUNAWAY_PACKAGE_IN_PLACE === "1";
 const buildRoot = resolve(import.meta.dir, "../../build");
@@ -39,18 +49,27 @@ const workspace = await resolveTestOutput(
 // BUNAWAY_PACKAGE_IN_PLACE=1 runs the package where it sits — e.g. inside a
 // signed .app for App Sandbox runs — while the default copy keeps the
 // hostile-name path coverage.
-const packagePath = inPlace ? original : join(workspace, "C 호스트 한글 package");
+const packagePath = inPlace
+  ? original
+  : join(workspace, "C 호스트 한글 package");
 // BUNAWAY_HOST_EXEC overrides the host binary: under App Sandbox the binary
 // must exec from inside the .app while --package points at Contents/Resources.
 const host = process.env.BUNAWAY_HOST_EXEC
   ? resolve(process.env.BUNAWAY_HOST_EXEC)
   : join(packagePath, "bunaway-host");
 const nativeTests = resolve(
-  process.env.BUNAWAY_NATIVE_TEST_EXEC ?? join(buildRoot, "macos-host", "host-native-tests"),
+  process.env.BUNAWAY_NATIVE_TEST_EXEC ??
+    join(buildRoot, "macos-host", "host-native-tests"),
 );
 function enclosingApp(path: string): string | undefined {
-  for (let current = path; current !== dirname(current); current = dirname(current)) {
-    if (basename(current).toLowerCase().endsWith(".app")) return current;
+  for (
+    let current = path;
+    current !== dirname(current);
+    current = dirname(current)
+  ) {
+    if (basename(current).toLowerCase().endsWith(".app")) {
+      return current;
+    }
   }
 }
 async function resolveTestOutput(path: string) {
@@ -60,7 +79,11 @@ async function resolveTestOutput(path: string) {
     `test output must not contain parent-directory components: ${path}`,
   );
   const output = resolve(path);
-  assert.equal(enclosingApp(output), undefined, `test output must be outside .app: ${path}`);
+  assert.equal(
+    enclosingApp(output),
+    undefined,
+    `test output must be outside .app: ${path}`,
+  );
   assert.equal(
     enclosingApp(await canonicalPath(output)),
     undefined,
@@ -70,13 +93,16 @@ async function resolveTestOutput(path: string) {
 }
 async function canonicalPath(output: string) {
   let ancestor = output;
-  while (!existsSync(ancestor)) ancestor = dirname(ancestor);
+  while (!existsSync(ancestor)) {
+    ancestor = dirname(ancestor);
+  }
   return resolve(await realpath(ancestor), relative(ancestor, output));
 }
 function containsPath(root: string, path: string) {
   const suffix = relative(root, path);
   return (
-    suffix === "" || (!isAbsolute(suffix) && suffix !== ".." && !suffix.startsWith(`..${sep}`))
+    suffix === "" ||
+    (!isAbsolute(suffix) && suffix !== ".." && !suffix.startsWith(`..${sep}`))
   );
 }
 const app = inPlace ? enclosingApp(await realpath(host)) : undefined;
@@ -88,14 +114,27 @@ assert.equal(
 );
 const identity = process.env.BUNAWAY_TEST_SIGN_IDENTITY;
 function codesign(args: string[]) {
-  const result = Bun.spawnSync(["/usr/bin/codesign", ...args], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  const result = Bun.spawnSync(
+    [
+      "/usr/bin/codesign",
+      ...args,
+    ],
+    {
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
   assert.equal(result.exitCode, 0, result.stderr.toString());
 }
 function verifyApp() {
-  if (app) codesign(["--verify", "--deep", "--strict", app]);
+  if (app) {
+    codesign([
+      "--verify",
+      "--deep",
+      "--strict",
+      app,
+    ]);
+  }
 }
 function sealApp() {
   if (app) {
@@ -121,9 +160,15 @@ const sandboxHome = join(workspace, "host-home");
 await resolveTestOutput(sandboxHome);
 const dataRoot = await resolveTestOutput(
   process.env.BUNAWAY_DATA_ROOT ??
-    join(sandboxHome, "Library/Application Support/bunaway", "tests.bunaway.host"),
+    join(
+      sandboxHome,
+      "Library/Application Support/bunaway",
+      "tests.bunaway.host",
+    ),
 );
-const diagnostics = await resolveTestOutput(join(workspace, "macos-host-diagnostics"));
+const diagnostics = await resolveTestOutput(
+  join(workspace, "macos-host-diagnostics"),
+);
 const out = join(workspace, "macos-host-results.json");
 const protectedPaths = await Promise.all(
   [
@@ -134,13 +179,20 @@ const protectedPaths = await Promise.all(
     workspace,
     cwd,
     sandboxHome,
-    ...(app ? [app] : []),
+    ...(app
+      ? [
+          app,
+        ]
+      : []),
   ].map(canonicalPath),
 );
 async function assertDeletionOutput(path: string, keep: string[] = []) {
   await resolveTestOutput(path);
   const canonical = await canonicalPath(path);
-  for (const target of [...protectedPaths, ...(await Promise.all(keep.map(canonicalPath)))]) {
+  for (const target of [
+    ...protectedPaths,
+    ...(await Promise.all(keep.map(canonicalPath))),
+  ]) {
     assert.ok(
       !containsPath(canonical, target),
       `test deletion root contains protected path: ${path}`,
@@ -150,51 +202,107 @@ async function assertDeletionOutput(path: string, keep: string[] = []) {
 async function assertOutputFile(path: string) {
   await resolveTestOutput(path);
   const entry = await lstat(path).catch((cause: NodeJS.ErrnoException) => {
-    if (cause.code !== "ENOENT") throw cause;
+    if (cause.code !== "ENOENT") {
+      throw cause;
+    }
   });
-  assert.ok(!entry || entry.isFile(), `test output must be a regular file, not a symlink: ${path}`);
+  assert.ok(
+    !entry || entry.isFile(),
+    `test output must be a regular file, not a symlink: ${path}`,
+  );
 }
 async function writeTestOutput(path: string, text: string) {
   await assertOutputFile(path);
   const staging = await mkdtemp(join(dirname(path), ".bunaway-test-output-"));
   try {
     const staged = join(staging, "output");
-    await writeFile(staged, text, { flag: "wx" });
+    await writeFile(staged, text, {
+      flag: "wx",
+    });
     await assertOutputFile(path);
     await rename(staged, path);
   } finally {
-    await rm(staging, { recursive: true, force: true });
+    await rm(staging, {
+      recursive: true,
+      force: true,
+    });
   }
 }
-await assertDeletionOutput(dataRoot, [diagnostics]);
-await assertDeletionOutput(diagnostics, [dataRoot]);
-const scratchFiles = [join(cwd, ".env"), join(cwd, "bunfig.toml"), join(cwd, "hostile.ts")];
-for (const path of [...scratchFiles, out]) await assertOutputFile(path);
+await assertDeletionOutput(dataRoot, [
+  diagnostics,
+]);
+await assertDeletionOutput(diagnostics, [
+  dataRoot,
+]);
+const scratchFiles = [
+  join(cwd, ".env"),
+  join(cwd, "bunfig.toml"),
+  join(cwd, "hostile.ts"),
+];
+for (const path of [
+  ...scratchFiles,
+  out,
+]) {
+  await assertOutputFile(path);
+}
 if (app) {
-  assert.ok(identity, "BUNAWAY_TEST_SIGN_IDENTITY is required for a mutable signed test fixture");
+  assert.ok(
+    identity,
+    "BUNAWAY_TEST_SIGN_IDENTITY is required for a mutable signed test fixture",
+  );
   verifyApp();
 }
 assert.ok(
   existsSync(nativeTests),
   `native tests not found: ${nativeTests}; run native/macos/host/run.sh first`,
 );
-await mkdir(workspace, { recursive: true });
-if (packagePath !== original) await cp(original, packagePath, { recursive: true, force: true });
-await mkdir(cwd, { recursive: true });
+await mkdir(workspace, {
+  recursive: true,
+});
+if (packagePath !== original) {
+  await cp(original, packagePath, {
+    recursive: true,
+    force: true,
+  });
+}
+await mkdir(cwd, {
+  recursive: true,
+});
 await writeTestOutput(join(cwd, ".env"), "BUNAWAY_HOSTILE=from-dotenv\n");
 await writeTestOutput(join(cwd, "bunfig.toml"), 'preload = ["./hostile.ts"]\n');
-await writeTestOutput(join(cwd, "hostile.ts"), 'throw new Error("hostile preload");');
-await mkdir(sandboxHome, { recursive: true });
-const results: { name: string; ok: boolean; durationMs: number; error?: string }[] = [];
-await assertDeletionOutput(diagnostics, [dataRoot]);
-await rm(diagnostics, { recursive: true, force: true });
-await mkdir(diagnostics, { recursive: true });
+await writeTestOutput(
+  join(cwd, "hostile.ts"),
+  'throw new Error("hostile preload");',
+);
+await mkdir(sandboxHome, {
+  recursive: true,
+});
+const results: {
+  name: string;
+  ok: boolean;
+  durationMs: number;
+  error?: string;
+}[] = [];
+await assertDeletionOutput(diagnostics, [
+  dataRoot,
+]);
+await rm(diagnostics, {
+  recursive: true,
+  force: true,
+});
+await mkdir(diagnostics, {
+  recursive: true,
+});
 let launchCount = 0;
 const assets = join(packagePath, "assets");
 const assetMode = (await stat(assets)).mode & 0o777;
 const savedResources = app
   ? await Promise.all(
-      ["assets/app.json", "assets/policy.json", "manifest.json"].map(async (path) => ({
+      [
+        "assets/app.json",
+        "assets/policy.json",
+        "manifest.json",
+      ].map(async (path) => ({
         path: join(packagePath, path),
         bytes: await readFile(join(packagePath, path)),
       })),
@@ -203,57 +311,97 @@ const savedResources = app
 const assetsTmp = join(assets, "tmp");
 const savedTmp = join(diagnostics, "original-assets-tmp");
 const hadTmp = app && existsSync(assetsTmp);
-if (hadTmp) await cp(assetsTmp, savedTmp, { recursive: true, verbatimSymlinks: true });
+if (hadTmp) {
+  await cp(assetsTmp, savedTmp, {
+    recursive: true,
+    verbatimSymlinks: true,
+  });
+}
 
 async function resetData() {
   // WebContent renderers may hold the data folder briefly after the host exits;
   // they live outside the Bun process group so their handles drain late.
   for (let attempt = 0; ; attempt++) {
     try {
-      await assertDeletionOutput(dataRoot, [diagnostics]);
-      await rm(dataRoot, { recursive: true, force: true });
+      await assertDeletionOutput(dataRoot, [
+        diagnostics,
+      ]);
+      await rm(dataRoot, {
+        recursive: true,
+        force: true,
+      });
       break;
     } catch (cause) {
-      if (attempt >= 20) throw cause;
+      if (attempt >= 20) {
+        throw cause;
+      }
       await Bun.sleep(250);
     }
   }
-  await mkdir(join(dataRoot, "data", "notes"), { recursive: true });
-  await mkdir(join(dataRoot, "data", "secrets"), { recursive: true });
-  await writeTestOutput(join(dataRoot, "data", "secrets", "x.txt"), "out-of-scope-secret");
+  await mkdir(join(dataRoot, "data", "notes"), {
+    recursive: true,
+  });
+  await mkdir(join(dataRoot, "data", "secrets"), {
+    recursive: true,
+  });
+  await writeTestOutput(
+    join(dataRoot, "data", "secrets", "x.txt"),
+    "out-of-scope-secret",
+  );
   await symlink(
     join(dataRoot, "data", "secrets"),
     join(dataRoot, "data", "notes", "internal-link"),
   );
   const outside = join(dataRoot, "outside");
-  await mkdir(outside, { recursive: true });
+  await mkdir(outside, {
+    recursive: true,
+  });
   await writeTestOutput(join(outside, "secret.txt"), "junction-target-secret");
   await symlink(outside, join(dataRoot, "data", "notes", "link"));
 }
 
-type LogEntry = { event: string; [key: string]: unknown };
+type LogEntry = {
+  event: string;
+  [key: string]: unknown;
+};
 async function hostLog(): Promise<LogEntry[]> {
   const path = join(dataRoot, "logs", "host.log");
-  if (!existsSync(path)) return [];
+  if (!existsSync(path)) {
+    return [];
+  }
   const text = await readFile(path, "utf-8");
   return text
     .split("\n")
     .filter(Boolean)
     .flatMap((line) => {
       try {
-        const parsed = JSON.parse(line) as { event?: string; [key: string]: unknown };
-        return parsed.event ? [parsed as LogEntry] : [];
+        const parsed = JSON.parse(line) as {
+          event?: string;
+          [key: string]: unknown;
+        };
+        return parsed.event
+          ? [
+              parsed as LogEntry,
+            ]
+          : [];
       } catch {
         return [];
       }
     });
 }
-async function waitFor<T>(probe: () => Promise<T | null>, timeout = 90000): Promise<T> {
+async function waitFor<T>(
+  probe: () => Promise<T | null>,
+  timeout = 90000,
+): Promise<T> {
   const deadline = performance.now() + timeout;
   for (;;) {
     const value = await probe();
-    if (value !== null && value !== undefined) return value;
-    if (performance.now() > deadline) throw new Error("Timed out waiting for host.");
+    if (value !== null && value !== undefined) {
+      return value;
+    }
+    if (performance.now() > deadline) {
+      throw new Error("Timed out waiting for host.");
+    }
     await Bun.sleep(100);
   }
 }
@@ -268,7 +416,9 @@ async function updateAsset(name: string, text: string) {
   await writeFile(join(packagePath, name), text);
   const manifestPath = join(packagePath, "manifest.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf-8"));
-  manifest.assets[name] = new Bun.CryptoHasher("sha256").update(text).digest("hex");
+  manifest.assets[name] = new Bun.CryptoHasher("sha256")
+    .update(text)
+    .digest("hex");
   await writeFile(manifestPath, JSON.stringify(manifest));
 }
 
@@ -277,8 +427,17 @@ async function updateAsset(name: string, text: string) {
 async function webContentPids(): Promise<number[]> {
   assert.ok(process.getuid, "WebContent inventory requires a POSIX user ID");
   const probe = Bun.spawn(
-    ["/usr/bin/pgrep", "-U", String(process.getuid()), "-f", "com.apple.WebKit.WebContent"],
-    { stdout: "pipe", stderr: "pipe" },
+    [
+      "/usr/bin/pgrep",
+      "-U",
+      String(process.getuid()),
+      "-f",
+      "com.apple.WebKit.WebContent",
+    ],
+    {
+      stdout: "pipe",
+      stderr: "pipe",
+    },
   );
   const text = await new Response(probe.stdout).text();
   const exit = await probe.exited;
@@ -294,21 +453,32 @@ async function newWebContentPids(): Promise<number[]> {
   return current.filter((pid) => !webContentBaseline.has(pid));
 }
 
-function launch(extraEnv: Record<string, string> = {}, arguments_: string[] = []) {
+function launch(
+  extraEnv: Record<string, string> = {},
+  arguments_: string[] = [],
+) {
   sealApp();
-  const child = Bun.spawn([host, "--package", packagePath, ...arguments_], {
-    cwd,
-    env: {
-      PATH: "/usr/bin:/bin",
-      HOME: sandboxHome,
-      BUN_OPTIONS: "--preload ./hostile.ts",
-      BUNAWAY_HOSTILE: "from-parent",
-      ...extraEnv,
+  const child = Bun.spawn(
+    [
+      host,
+      "--package",
+      packagePath,
+      ...arguments_,
+    ],
+    {
+      cwd,
+      env: {
+        PATH: "/usr/bin:/bin",
+        HOME: sandboxHome,
+        BUN_OPTIONS: "--preload ./hostile.ts",
+        BUNAWAY_HOSTILE: "from-parent",
+        ...extraEnv,
+      },
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: Bun.file(join(diagnostics, `host-${++launchCount}.stderr.log`)),
     },
-    stdin: "ignore",
-    stdout: "ignore",
-    stderr: Bun.file(join(diagnostics, `host-${++launchCount}.stderr.log`)),
-  });
+  );
   return child;
 }
 async function gracefulStop(child: ReturnType<typeof Bun.spawn>) {
@@ -317,11 +487,18 @@ async function gracefulStop(child: ReturnType<typeof Bun.spawn>) {
   assert.equal(await child.exited, 0, "graceful shutdown must exit cleanly");
 }
 async function watch(pids: (number | string)[]) {
-  const watcher = Bun.spawn([host, "--watch", ...pids.map(String)], {
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  const watcher = Bun.spawn(
+    [
+      host,
+      "--watch",
+      ...pids.map(String),
+    ],
+    {
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
   const reader = watcher.stdout.getReader();
   const first = await reader.read();
   reader.releaseLock();
@@ -339,10 +516,15 @@ async function test(name: string, body: () => Promise<void>) {
       await body();
     } finally {
       const snapshot = join(diagnostics, `test-${testIndex}`);
-      await mkdir(snapshot, { recursive: true });
-      for (const dir of ["logs", "temp"]) {
+      await mkdir(snapshot, {
+        recursive: true,
+      });
+      for (const dir of [
+        "logs",
+        "temp",
+      ]) {
         const source = join(dataRoot, dir);
-        if (existsSync(source))
+        if (existsSync(source)) {
           await cp(source, join(snapshot, dir), {
             recursive: true,
             filter: async (path) => {
@@ -350,6 +532,7 @@ async function test(name: string, body: () => Promise<void>) {
               return entry.isDirectory() || entry.isFile();
             },
           });
+        }
       }
     }
   } catch (cause) {
@@ -359,19 +542,32 @@ async function test(name: string, body: () => Promise<void>) {
       durationMs: Math.round(performance.now() - start),
       error: String(cause),
     });
-    throw new Error(`${name} failed`, { cause });
+    throw new Error(`${name} failed`, {
+      cause,
+    });
   }
-  results.push({ name, ok: true, durationMs: Math.round(performance.now() - start) });
+  results.push({
+    name,
+    ok: true,
+    durationMs: Math.round(performance.now() - start),
+  });
   console.log(`PASS ${name}`);
 }
 
 try {
   await test("native Bun integrity, FIFO, scheme handler and resource-filter regressions", async () => {
-    const native = Bun.spawn([nativeTests, workspace, original], {
-      stdout: "pipe",
-      stderr: "pipe",
-      timeout: 10000,
-    });
+    const native = Bun.spawn(
+      [
+        nativeTests,
+        workspace,
+        original,
+      ],
+      {
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 10000,
+      },
+    );
     const output = new Response(native.stdout).text();
     const errors = new Response(native.stderr).text();
     const exitCode = await native.exited;
@@ -382,15 +578,27 @@ try {
   });
 
   await test("TypeScript and native validators agree on shared regression inputs", async () => {
-    const validator = Bun.spawn([host, "--validate"], {
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    const validator = Bun.spawn(
+      [
+        host,
+        "--validate",
+      ],
+      {
+        stdin: "pipe",
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
     const output = new Response(validator.stdout).text();
     const errors = new Response(validator.stderr).text();
-    for (const { schema, value } of validationCases)
-      validator.stdin.write(`${JSON.stringify({ schema, value })}\n`);
+    for (const { schema, value } of validationCases) {
+      validator.stdin.write(
+        `${JSON.stringify({
+          schema,
+          value,
+        })}\n`,
+      );
+    }
     validator.stdin.end();
     assert.equal(await validator.exited, 0);
     const answers = (await output)
@@ -398,7 +606,10 @@ try {
       .split("\n")
       .map((line) => JSON.parse(line));
     assert.equal(answers.length, validationCases.length);
-    for (const [i, { name, schema, value, accepted }] of validationCases.entries()) {
+    for (const [
+      i,
+      { name, schema, value, accepted },
+    ] of validationCases.entries()) {
       let tsAccepted = true;
       try {
         validateValue(schema, value);
@@ -417,33 +628,61 @@ try {
     try {
       const report = await reportFile("report.json");
       const failed = report.results.filter((r) => !r.ok);
-      assert.equal(failed.length, 0, `page failures: ${JSON.stringify(failed)}`);
+      assert.equal(
+        failed.length,
+        0,
+        `page failures: ${JSON.stringify(failed)}`,
+      );
       const report2 = await reportFile("report2.json");
       const report3 = await reportFile("report3.json");
-      for (const r of [...report2.results, ...report3.results]) assert.equal(r.ok, true, r.name);
+      for (const r of [
+        ...report2.results,
+        ...report3.results,
+      ]) {
+        assert.equal(r.ok, true, r.name);
+      }
 
       const log = await hostLog();
-      const count = (event: string, extra: (e: LogEntry) => boolean = () => true) =>
-        log.filter((entry) => entry.event === event && extra(entry)).length;
+      const count = (
+        event: string,
+        extra: (e: LogEntry) => boolean = () => true,
+      ) => log.filter((entry) => entry.event === event && extra(entry)).length;
       assert.ok(count("host-started") >= 1);
       assert.ok(count("backend-ready") >= 1);
       assert.ok(count("webview-ready") >= 1);
       assert.ok(count("session-open") >= 2, "index + page2 sessions");
       assert.ok(count("revoke", (e) => e.reason === "navigation") >= 1);
       assert.ok(count("navigation-blocked") >= 1);
-      assert.ok(count("web-resource-blocked") >= 1, "remote iframe must be blocked");
+      assert.ok(
+        count("web-resource-blocked") >= 1,
+        "remote iframe must be blocked",
+      );
       assert.ok(count("permission-denied", (e) => e.kind === "command") >= 1);
       assert.ok(count("permission-denied", (e) => e.kind === "event") >= 1);
-      assert.ok(count("web-message-rejected", (e) => e.reason === "malformed") >= 2);
-      assert.ok(count("web-message-rejected", (e) => e.reason === "INVALID_ARGUMENT") >= 1);
+      assert.ok(
+        count("web-message-rejected", (e) => e.reason === "malformed") >= 2,
+      );
+      assert.ok(
+        count("web-message-rejected", (e) => e.reason === "INVALID_ARGUMENT") >=
+          1,
+      );
       // TIMEOUT is asserted by the page; either core or native deadline may win.
       assert.ok(
-        report.results.some((r) => r.name === "unregistered native plugin command is denied"),
+        report.results.some(
+          (r) => r.name === "unregistered native plugin command is denied",
+        ),
       );
 
       // The child-frame message must never reach the backend.
-      assert.equal(JSON.stringify(log).includes("iframe-1"), false, "iframe message leaked");
-      assert.ok(count("frame-message-ignored") >= 1, "iframe message was seen and dropped");
+      assert.equal(
+        JSON.stringify(log).includes("iframe-1"),
+        false,
+        "iframe message leaked",
+      );
+      assert.ok(
+        count("frame-message-ignored") >= 1,
+        "iframe message was seen and dropped",
+      );
 
       assert.equal(
         await readFile(join(dataRoot, "data", "secrets", "x.txt"), "utf-8"),
@@ -458,7 +697,9 @@ try {
       const started = log.find((e) => e.event === "host-started");
       assert.ok(started, "host-started missing");
       const childPid = started.childPid as number;
-      const exited = await watch([childPid]);
+      const exited = await watch([
+        childPid,
+      ]);
       await gracefulStop(child);
       const stopped = (await hostLog()).find((e) => e.event === "host-stopped");
       assert.ok(stopped, "host-stopped missing");
@@ -466,27 +707,40 @@ try {
       assert.equal(stopped.forced, false);
       await exited();
     } finally {
-      if (!child.killed) child.kill();
+      if (!child.killed) {
+        child.kill();
+      }
       await child.exited;
     }
   });
 
   await test("native plugin permissions fail before backend startup", async () => {
     await resetData();
-    const policyText = await readFile(join(packagePath, "assets/policy.json"), "utf-8");
+    const policyText = await readFile(
+      join(packagePath, "assets/policy.json"),
+      "utf-8",
+    );
     const policy = JSON.parse(policyText);
-    policy.backend.permissions = ["log:write"];
+    policy.backend.permissions = [
+      "log:write",
+    ];
     await updateAsset("assets/policy.json", JSON.stringify(policy));
     let child: ReturnType<typeof launch> | undefined;
     try {
       child = launch();
       assert.notEqual(
-        await Promise.race([child.exited, Bun.sleep(10000).then(() => "timeout")]),
+        await Promise.race([
+          child.exited,
+          Bun.sleep(10000).then(() => "timeout"),
+        ]),
         "timeout",
       );
       assert.notEqual(child.exitCode, 0);
       assert.match(
-        await readFile(join(diagnostics, `host-${launchCount}.stderr.log`), "utf8"),
+        await readFile(
+          join(diagnostics, `host-${launchCount}.stderr.log`),
+          "utf8",
+        ),
         /Native plugins currently require the Windows app runtime/,
       );
       assert.equal(
@@ -495,7 +749,9 @@ try {
       );
     } finally {
       if (child) {
-        if (!child.killed) child.kill();
+        if (!child.killed) {
+          child.kill();
+        }
         await child.exited;
       }
       await updateAsset("assets/policy.json", policyText);
@@ -513,22 +769,43 @@ try {
         fetch(request) {
           const path = new URL(request.url).pathname;
           requests.push(path);
-          const headers = { "Access-Control-Allow-Origin": "*" };
-          if (path === "/script")
+          const headers = {
+            "Access-Control-Allow-Origin": "*",
+          };
+          if (path === "/script") {
             return new Response("globalThis.bunawayResourceLoaded = true;", {
-              headers: { ...headers, "Content-Type": "application/javascript" },
+              headers: {
+                ...headers,
+                "Content-Type": "application/javascript",
+              },
             });
-          if (path === "/img")
-            return new Response('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>', {
-              headers: { ...headers, "Content-Type": "image/svg+xml" },
-            });
-          return new Response("resource-ok", { headers });
+          }
+          if (path === "/img") {
+            return new Response(
+              '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>',
+              {
+                headers: {
+                  ...headers,
+                  "Content-Type": "image/svg+xml",
+                },
+              },
+            );
+          }
+          return new Response("resource-ok", {
+            headers,
+          });
         },
       });
     const allowed = serve(allowedRequests);
     const blocked = serve(blockedRequests);
-    const configText = await readFile(join(packagePath, "assets/app.json"), "utf-8");
-    const policyText = await readFile(join(packagePath, "assets/policy.json"), "utf-8");
+    const configText = await readFile(
+      join(packagePath, "assets/app.json"),
+      "utf-8",
+    );
+    const policyText = await readFile(
+      join(packagePath, "assets/policy.json"),
+      "utf-8",
+    );
     let child: ReturnType<typeof launch> | undefined;
     try {
       const allowedOrigin = `http://127.0.0.1:${allowed.port}`;
@@ -539,35 +816,58 @@ try {
       const config = JSON.parse(configText);
       config.home = `https://app.bunaway.local:8443/security.html?${params}`;
       const policy = JSON.parse(policyText);
-      policy.views[0].origins = ["https://app.bunaway.local:8443", allowedOrigin];
+      policy.views[0].origins = [
+        "https://app.bunaway.local:8443",
+        allowedOrigin,
+      ];
       await updateAsset("assets/app.json", JSON.stringify(config));
       await updateAsset("assets/policy.json", JSON.stringify(policy));
       child = launch();
       const report = await reportFile("security.json");
       assert.equal(report.results.length, 6);
-      for (const result of report.results) assert.equal(result.ok, true, JSON.stringify(result));
-      assert.deepEqual(allowedRequests.sort(), ["/fetch", "/img", "/script"]);
-      assert.deepEqual(blockedRequests, [], "blocked resources reached the server");
+      for (const result of report.results) {
+        assert.equal(result.ok, true, JSON.stringify(result));
+      }
+      assert.deepEqual(allowedRequests.sort(), [
+        "/fetch",
+        "/img",
+        "/script",
+      ]);
+      assert.deepEqual(
+        blockedRequests,
+        [],
+        "blocked resources reached the server",
+      );
       const log = await hostLog();
-      const readyIndex = log.findIndex((entry) => entry.event === "webview-ready");
-      const navigationIndex = log.findIndex((entry) => entry.event === "navigation");
+      const readyIndex = log.findIndex(
+        (entry) => entry.event === "webview-ready",
+      );
+      const navigationIndex = log.findIndex(
+        (entry) => entry.event === "navigation",
+      );
       assert.ok(
         readyIndex >= 0 && navigationIndex > readyIndex,
         "navigation preceded rule installation",
       );
       process.kill(child.pid, "SIGTERM");
       assert.equal(
-        await Promise.race([child.exited, Bun.sleep(5000).then(() => "timeout")]),
+        await Promise.race([
+          child.exited,
+          Bun.sleep(5000).then(() => "timeout"),
+        ]),
         0,
         "resource checks must not stall graceful shutdown",
       );
       assert.equal(
-        (await hostLog()).find((entry) => entry.event === "host-stopped")?.forced,
+        (await hostLog()).find((entry) => entry.event === "host-stopped")
+          ?.forced,
         false,
       );
     } finally {
       if (child) {
-        if (!child.killed) child.kill("SIGKILL");
+        if (!child.killed) {
+          child.kill("SIGKILL");
+        }
         await child.exited;
       }
       allowed.stop(true);
@@ -594,7 +894,12 @@ try {
       };
     `,
     );
-    const bundle = await Bun.build({ entrypoints: [entry], target: "browser" });
+    const bundle = await Bun.build({
+      entrypoints: [
+        entry,
+      ],
+      target: "browser",
+    });
     assert(bundle.success && bundle.outputs[0], bundle.logs.join("\n"));
     const script = await bundle.outputs[0].text();
     const server = Bun.serve({
@@ -602,11 +907,20 @@ try {
       port: 0,
       fetch(request, server) {
         const path = new URL(request.url).pathname;
-        if (path === "/hmr" && server.upgrade(request)) return;
-        if (path === "/main.js")
-          return new Response(script, { headers: { "Content-Type": "application/javascript" } });
+        if (path === "/hmr" && server.upgrade(request)) {
+          return;
+        }
+        if (path === "/main.js") {
+          return new Response(script, {
+            headers: {
+              "Content-Type": "application/javascript",
+            },
+          });
+        }
         return new Response('<script type="module" src="/main.js"></script>', {
-          headers: { "Content-Type": "text/html" },
+          headers: {
+            "Content-Type": "text/html",
+          },
         });
       },
       websocket: {
@@ -618,37 +932,69 @@ try {
       },
     });
     const url = `http://127.0.0.1:${server.port}/`;
-    const configText = await readFile(join(packagePath, "assets/app.json"), "utf8");
-    const policyText = await readFile(join(packagePath, "assets/policy.json"), "utf8");
+    const configText = await readFile(
+      join(packagePath, "assets/app.json"),
+      "utf8",
+    );
+    const policyText = await readFile(
+      join(packagePath, "assets/policy.json"),
+      "utf8",
+    );
     let child: ReturnType<typeof launch> | undefined;
     try {
       const config = JSON.parse(configText);
       const policy = JSON.parse(policyText);
       config.home = url;
-      config.development = { url };
-      policy.views[0].origins = [new URL(url).origin];
+      config.development = {
+        url,
+      };
+      policy.views[0].origins = [
+        new URL(url).origin,
+      ];
       await updateAsset("assets/app.json", JSON.stringify(config));
       await updateAsset("assets/policy.json", JSON.stringify(policy));
       const unflagged = launch();
-      assert.notEqual(await unflagged.exited, 0, "Development artifacts require --dev-url.");
-      child = launch({}, ["--dev-url", url]);
+      assert.notEqual(
+        await unflagged.exited,
+        0,
+        "Development artifacts require --dev-url.",
+      );
+      child = launch({}, [
+        "--dev-url",
+        url,
+      ]);
       const first = await reportFile("development.json");
       assert.deepEqual(first.results, [
-        { name: "bridge", ok: true },
-        { name: "first", ok: true },
+        {
+          name: "bridge",
+          ok: true,
+        },
+        {
+          name: "first",
+          ok: true,
+        },
       ]);
       server.publish("hmr", "updated");
       await waitFor(async () =>
-        (await readReport(join(dataRoot, "temp/development.json")))?.results[1]?.name === "updated"
+        (await readReport(join(dataRoot, "temp/development.json")))?.results[1]
+          ?.name === "updated"
           ? true
           : null,
       );
-      const sessions = (await hostLog()).filter((entry) => entry.event === "session-open");
-      assert.equal(sessions.length, 1, "UI update restarted the bridge session.");
+      const sessions = (await hostLog()).filter(
+        (entry) => entry.event === "session-open",
+      );
+      assert.equal(
+        sessions.length,
+        1,
+        "UI update restarted the bridge session.",
+      );
       assert.equal(sessions[0]?.origin, new URL(url).origin);
       await gracefulStop(child);
     } finally {
-      if (child && child.exitCode === null) child.kill("SIGKILL");
+      if (child && child.exitCode === null) {
+        child.kill("SIGKILL");
+      }
       await child?.exited;
       server.stop(true);
       await updateAsset("assets/app.json", configText);
@@ -665,14 +1011,18 @@ try {
     await writeFile(configPath, text);
     const manifestPath = join(packagePath, "manifest.json");
     const manifest = JSON.parse(await readFile(manifestPath, "utf-8"));
-    manifest.assets["assets/app.json"] = new Bun.CryptoHasher("sha256").update(text).digest("hex");
+    manifest.assets["assets/app.json"] = new Bun.CryptoHasher("sha256")
+      .update(text)
+      .digest("hex");
     await writeFile(manifestPath, JSON.stringify(manifest));
     const previousCount = (await hostLog()).length;
     const child = launch();
     try {
       const report = await reportFile("report3.json");
       assert.ok(report.results.length > 0);
-      for (const result of report.results) assert.equal(result.ok, true, result.name);
+      for (const result of report.results) {
+        assert.equal(result.ok, true, result.name);
+      }
       {
         // WebContent renderers of this app's webview are the post-launch delta.
         const pids = await waitFor(async () => {
@@ -686,14 +1036,19 @@ try {
           async () =>
             (await hostLog())
               .slice(beforeCrash)
-              .find((entry) => entry.event === "webview-process-failed") ?? null,
+              .find((entry) => entry.event === "webview-process-failed") ??
+            null,
         );
         const restored = await reportFile("report3.json");
-        for (const result of restored.results)
+        for (const result of restored.results) {
           assert.equal(result.ok, true, `renderer recreation: ${result.name}`);
+        }
         const recovery = (await hostLog()).slice(beforeCrash);
         assert.ok(
-          recovery.some((entry) => entry.event === "revoke" && entry.reason === "process-failed"),
+          recovery.some(
+            (entry) =>
+              entry.event === "revoke" && entry.reason === "process-failed",
+          ),
         );
         assert.ok(recovery.some((entry) => entry.event === "session-open"));
         assert.equal(
@@ -706,7 +1061,9 @@ try {
         .slice(previousCount)
         .find((entry) => entry.event === "host-started");
       assert.ok(started);
-      const exited = await watch([started.childPid as number]);
+      const exited = await watch([
+        started.childPid as number,
+      ]);
       await gracefulStop(child);
       await exited();
       const stopped = (await hostLog())
@@ -715,7 +1072,9 @@ try {
       assert.equal(stopped?.activeProcesses, 0);
       assert.equal(stopped?.forced, false);
     } finally {
-      if (!child.killed) child.kill();
+      if (!child.killed) {
+        child.kill();
+      }
       await child.exited;
     }
   });
@@ -729,12 +1088,18 @@ try {
       const guardPid = started.guardPid as number;
       // Wait for ready so the kill cannot land inside the spawn->guard window.
       await waitLog((e) => e.event === "backend-ready");
-      const exited = await watch([childPid, guardPid, `g${childPid}`]);
+      const exited = await watch([
+        childPid,
+        guardPid,
+        `g${childPid}`,
+      ]);
       process.kill(child.pid, "SIGKILL");
       assert.notEqual(await child.exited, 0);
       await exited();
     } finally {
-      if (!child.killed) child.kill();
+      if (!child.killed) {
+        child.kill();
+      }
       await child.exited;
     }
   });
@@ -742,7 +1107,10 @@ try {
   await test("runtime starts with read-only assets and no bundled tmp directory", async () => {
     await resetData();
     const assets = join(packagePath, "assets");
-    await rm(join(assets, "tmp"), { recursive: true, force: true });
+    await rm(join(assets, "tmp"), {
+      recursive: true,
+      force: true,
+    });
     await chmod(assets, 0o555);
     let child: ReturnType<typeof launch> | undefined;
     try {
@@ -752,7 +1120,9 @@ try {
       await gracefulStop(child);
     } finally {
       if (child) {
-        if (!child.killed) child.kill();
+        if (!child.killed) {
+          child.kill();
+        }
         await child.exited;
       }
       await chmod(assets, 0o755);
@@ -761,9 +1131,19 @@ try {
 } finally {
   if (app) {
     await chmod(assets, 0o755);
-    for (const { path, bytes } of savedResources) await writeFile(path, bytes);
-    await rm(assetsTmp, { recursive: true, force: true });
-    if (hadTmp) await cp(savedTmp, assetsTmp, { recursive: true, verbatimSymlinks: true });
+    for (const { path, bytes } of savedResources) {
+      await writeFile(path, bytes);
+    }
+    await rm(assetsTmp, {
+      recursive: true,
+      force: true,
+    });
+    if (hadTmp) {
+      await cp(savedTmp, assetsTmp, {
+        recursive: true,
+        verbatimSymlinks: true,
+      });
+    }
     await chmod(assets, assetMode);
     sealApp();
   }

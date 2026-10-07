@@ -58,7 +58,11 @@ export function packagingOutputDir(root: string, target: BuildTarget): string {
   return resolve(root, "dist", target, "packaged");
 }
 
-export function packagingReportPath(root: string, target: BuildTarget, channel: ChannelId): string {
+export function packagingReportPath(
+  root: string,
+  target: BuildTarget,
+  channel: ChannelId,
+): string {
   return resolve(packagingOutputDir(root, target), `${channel}-report.json`);
 }
 
@@ -72,20 +76,29 @@ async function verifyStagingLinks(staging: string): Promise<void> {
     throw new Error("Staging root is not a regular directory.");
   }
   const canonicalStaging = await realpath(staging);
-  const directories = [staging];
+  const directories = [
+    staging,
+  ];
   for (const directory of directories) {
-    for (const entry of await readdir(directory, { withFileTypes: true })) {
+    for (const entry of await readdir(directory, {
+      withFileTypes: true,
+    })) {
       const path = resolve(directory, entry.name);
-      if (entry.isDirectory()) directories.push(path);
-      else if (entry.isSymbolicLink()) {
+      if (entry.isDirectory()) {
+        directories.push(path);
+      } else if (entry.isSymbolicLink()) {
         // Absolute targets still point at the old staging path after publication.
         const link = await readlink(path);
         if (isAbsolute(link)) {
-          throw new Error(`Absolute staging links cannot survive publication: ${path}`);
+          throw new Error(
+            `Absolute staging links cannot survive publication: ${path}`,
+          );
         }
         let target = dirname(path);
         // A relative link can leave and reenter through the staging name, then break on rename.
-        for (const part of link.split(process.platform === "win32" ? /[\\/]/ : /\//)) {
+        for (const part of link.split(
+          process.platform === "win32" ? /[\\/]/ : /\//,
+        )) {
           target = await realpath(`${target}${sep}${part}`);
           if (!inside(canonicalStaging, target)) {
             throw new Error(`Staging link escapes staging: ${path}`);
@@ -97,21 +110,41 @@ async function verifyStagingLinks(staging: string): Promise<void> {
 }
 
 const EMPTY_MANIFEST: PackageManifest = {
-  bun: { version: "", sourceRevision: "", target: "", executableSha256: "", licenseSha256: "" },
+  bun: {
+    version: "",
+    sourceRevision: "",
+    target: "",
+    executableSha256: "",
+    licenseSha256: "",
+  },
   assets: {},
-  app: { id: "", version: "" },
+  app: {
+    id: "",
+    version: "",
+  },
 };
 
 // Executes one channel adapter against an existing build artifact. The runner
 // owns stage ordering, diagnostics collection, the atomic output rename and
 // the report; adapters own channel semantics only.
 export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
-  const { metadata, appId, channel, channelConfig, signing, target, artifact, adapter } = args;
+  const {
+    metadata,
+    appId,
+    channel,
+    channelConfig,
+    signing,
+    target,
+    artifact,
+    adapter,
+  } = args;
   const diagnostics: Diagnostic[] = [];
   const stages: StageResult[] = [];
   const produced: ProducedArtifact[] = [];
   const verified: PackageReport["artifacts"] = [];
-  const notes: string[] = [...(args.notes ?? [])];
+  const notes: string[] = [
+    ...(args.notes ?? []),
+  ];
   const output = resolve(packagingOutputDir(metadata.root, target), channel);
   const staging = `${output}.building-${crypto.randomUUID()}`;
   const reportPath = packagingReportPath(metadata.root, target, channel);
@@ -141,7 +174,11 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
     target,
     artifact,
     manifest: EMPTY_MANIFEST,
-    ...(signing ? { signing } : {}),
+    ...(signing
+      ? {
+          signing,
+        }
+      : {}),
   };
   const report: PackageReport = {
     channel,
@@ -167,7 +204,9 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
     notes,
   };
   // JS callers must not turn channel/target names into arbitrary filesystem paths.
-  if (invalidName) return report;
+  if (invalidName) {
+    return report;
+  }
 
   let failed = diagnostics.length > 0;
   function reportFailure(error: unknown) {
@@ -186,12 +225,17 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
   async function remove(path: string, recursive = false) {
     if (await ownedDirectory(metadata.root, dirname(path))) {
       // rm unlinks a leaf symlink/junction; only its parent must be owned.
-      await rm(path, { recursive, force: true });
+      await rm(path, {
+        recursive,
+        force: true,
+      });
     }
   }
   async function stageReport() {
     await remove(stagedReport);
-    await writeFile(stagedReport, `${JSON.stringify(report, null, 2)}\n`, { flag: "wx" });
+    await writeFile(stagedReport, `${JSON.stringify(report, null, 2)}\n`, {
+      flag: "wx",
+    });
   }
   async function writeReport() {
     await stageReport();
@@ -228,7 +272,10 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
       } catch (error) {
         diagnostics.push({
           stage: "resolve",
-          code: error instanceof ArtifactInputError ? error.code : CODES.INPUT_MISSING,
+          code:
+            error instanceof ArtifactInputError
+              ? error.code
+              : CODES.INPUT_MISSING,
           severity: "error",
           message: error instanceof Error ? error.message : String(error),
           path: resolve(artifact.packageDir, "manifest.json"),
@@ -238,7 +285,11 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
     }
     if (!failed) {
       const started = Date.now();
-      const integrity = await verifyArtifact({ artifact, manifest: input.manifest, channel });
+      const integrity = await verifyArtifact({
+        artifact,
+        manifest: input.manifest,
+        channel,
+      });
       if (input.manifest.app.id !== appId) {
         integrity.push({
           stage: "verify",
@@ -273,7 +324,12 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
     }
     for (const stage of adapterStages) {
       if (failed) {
-        stages.push({ id: stage.id, title: stage.title, status: "skipped", durationMs: 0 });
+        stages.push({
+          id: stage.id,
+          title: stage.title,
+          status: "skipped",
+          durationMs: 0,
+        });
         continue;
       }
       const started = Date.now();
@@ -281,7 +337,10 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
         input,
         staging,
         report(diagnostic) {
-          diagnostics.push({ stage: stage.id, ...diagnostic });
+          diagnostics.push({
+            stage: stage.id,
+            ...diagnostic,
+          });
         },
         addArtifact(path, kind, options) {
           produced.push({
@@ -298,7 +357,9 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
         stages.push({
           id: stage.id,
           title: stage.title,
-          status: diagnostics.some((d) => d.severity === "error" && d.stage === stage.id)
+          status: diagnostics.some(
+            (d) => d.severity === "error" && d.stage === stage.id,
+          )
             ? "failed"
             : "ok",
           durationMs: Date.now() - started,
@@ -317,7 +378,11 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
           durationMs: Date.now() - started,
         });
       }
-      if (diagnostics.some((d) => d.severity === "error" && d.stage === stage.id)) failed = true;
+      if (
+        diagnostics.some((d) => d.severity === "error" && d.stage === stage.id)
+      ) {
+        failed = true;
+      }
     }
 
     const started = Date.now();
@@ -348,22 +413,36 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
       for (const entry of produced) {
         let path = entry.path;
         try {
-          if (entry.path.split(process.platform === "win32" ? /[\\/]/ : /\//).includes("..")) {
-            throw new Error("Artifact path contains ambiguous parent components.");
+          if (
+            entry.path
+              .split(process.platform === "win32" ? /[\\/]/ : /\//)
+              .includes("..")
+          ) {
+            throw new Error(
+              "Artifact path contains ambiguous parent components.",
+            );
           }
-          path = isAbsolute(entry.path) ? entry.path : resolve(staging, entry.path);
+          path = isAbsolute(entry.path)
+            ? entry.path
+            : resolve(staging, entry.path);
           if (!(await lstat(staging)).isDirectory()) {
             throw new Error("Staging root is not a regular directory.");
           }
-          if (!inside(staging, path)) throw new Error("Artifact path escapes staging.");
-          if (!(await lstat(path)).isFile()) throw new Error("Artifact is not a regular file.");
+          if (!inside(staging, path)) {
+            throw new Error("Artifact path escapes staging.");
+          }
+          if (!(await lstat(path)).isFile()) {
+            throw new Error("Artifact is not a regular file.");
+          }
           const canonicalStaging = await realpath(staging);
           const canonicalPath = await realpath(path);
           if (!inside(canonicalStaging, canonicalPath)) {
             throw new Error("Artifact real path escapes staging.");
           }
           const file = await lstat(canonicalPath);
-          if (!file.isFile()) throw new Error("Artifact is not a regular file.");
+          if (!file.isFile()) {
+            throw new Error("Artifact is not a regular file.");
+          }
           verified.push({
             path: resolve(staging, relative(canonicalStaging, canonicalPath)),
             kind: entry.kind,
@@ -400,9 +479,14 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
 
     report.signing.performed = !failed && verified.some((p) => p.signed);
     const distributables = verified.filter((p) => p.signingRequired);
-    const allSigned = !failed && distributables.length > 0 && distributables.every((p) => p.signed);
+    const allSigned =
+      !failed &&
+      distributables.length > 0 &&
+      distributables.every((p) => p.signed);
     if (signing && !allSigned) {
-      notes.push("Signing was configured but not all distribution artifacts were signed.");
+      notes.push(
+        "Signing was configured but not all distribution artifacts were signed.",
+      );
     }
     if (!failed && !allSigned) {
       const requirement = adapter.signingRequirement;
@@ -419,7 +503,9 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
 
     failed = failed || diagnostics.some((d) => d.severity === "error");
     report.ok = !failed;
-    report.usable = report.ok && !(adapter.signingRequirement === "required-to-run" && !allSigned);
+    report.usable =
+      report.ok &&
+      !(adapter.signingRequirement === "required-to-run" && !allSigned);
     report.submittable = report.ok && allSigned;
 
     if (report.ok) {
@@ -435,7 +521,9 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
         await rename(output, backup);
         moved = true;
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          throw error;
+        }
       }
       let outputPublished = false;
       try {
@@ -444,7 +532,9 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
         await rename(stagedReport, reportPath);
         reportPublished = true;
       } catch (error) {
-        if (outputPublished) await remove(output, true);
+        if (outputPublished) {
+          await remove(output, true);
+        }
         if (moved) {
           await ownedDirectory(metadata.root, dirname(output));
           await rename(backup, output);

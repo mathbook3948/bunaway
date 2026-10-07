@@ -10,18 +10,40 @@ import pin from "../../../runtime/build-manifests/windows-x64.json";
 const root = resolve(import.meta.dir, "../../..");
 const output = resolve(root, "build/windows-bun-package");
 const assets = resolve(output, "assets");
-await mkdir(resolve(assets, "web"), { recursive: true });
-await mkdir(resolve(output, "runtime"), { recursive: true });
-await mkdir(resolve(output, "licenses"), { recursive: true });
-for (const name of ["app.json", "policy.json", "bunfig.toml", "tsconfig.json"])
-  await cp(resolve(root, "tests/fixtures/desktop/host", name), resolve(assets, name));
-for (const file of await files(resolve(root, "tests/fixtures/desktop/host/web"))) {
+await mkdir(resolve(assets, "web"), {
+  recursive: true,
+});
+await mkdir(resolve(output, "runtime"), {
+  recursive: true,
+});
+await mkdir(resolve(output, "licenses"), {
+  recursive: true,
+});
+for (const name of [
+  "app.json",
+  "policy.json",
+  "bunfig.toml",
+  "tsconfig.json",
+]) {
+  await cp(
+    resolve(root, "tests/fixtures/desktop/host", name),
+    resolve(assets, name),
+  );
+}
+for (const file of await files(
+  resolve(root, "tests/fixtures/desktop/host/web"),
+)) {
   const name = relative(resolve(root, "tests/fixtures/desktop/host/web"), file);
   if (!name.endsWith(".js")) {
     await cp(file, resolve(assets, "web", name));
     continue;
   }
-  const result = await Bun.build({ entrypoints: [file], target: "browser" });
+  const result = await Bun.build({
+    entrypoints: [
+      file,
+    ],
+    target: "browser",
+  });
   assert(result.success && result.outputs[0]);
   await writeFile(
     resolve(assets, "web", name),
@@ -49,13 +71,31 @@ await cp(
   resolve(root, "runtime/bun-bundle/vendor/LICENSE.bun"),
   resolve(output, "licenses/LICENSE.bun"),
 );
-await writeWindowsLauncher(resolve(import.meta.dir, "launch.ps1"), resolve(output, "launch.ps1"));
+await writeWindowsLauncher(
+  resolve(import.meta.dir, "launch.ps1"),
+  resolve(output, "launch.ps1"),
+);
 const hashes: Record<string, string> = {};
-for (const directory of ["assets", "licenses"])
-  for (const path of await files(resolve(output, directory)))
+for (const directory of [
+  "assets",
+  "licenses",
+]) {
+  for (const path of await files(resolve(output, directory))) {
     hashes[relative(output, path).replaceAll("\\", "/")] = await hash(path);
+  }
+}
 await writeFile(
   resolve(output, "manifest.json"),
-  JSON.stringify({ ...pin, assets: hashes, host: { kind: "bun-ffi" } }, null, 2),
+  JSON.stringify(
+    {
+      ...pin,
+      assets: hashes,
+      host: {
+        kind: "bun-ffi",
+      },
+    },
+    null,
+    2,
+  ),
 );
 console.log(output);

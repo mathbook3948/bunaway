@@ -19,16 +19,33 @@ const config = workerData as {
   plugins: NativeRegistration[];
 };
 const adapters = await operations(config.plugins, config.dataRoot, "io");
-const queue = new Map<string, { context: HostContext; call: HostCall; source: string }>();
+const queue = new Map<
+  string,
+  {
+    context: HostContext;
+    call: HostCall;
+    source: string;
+  }
+>();
 let active: string | undefined;
 let stopping = false;
-const channel = new Channel(parentPort, config.runtime, "io", receive, (error) => {
-  throw error;
-});
+const channel = new Channel(
+  parentPort,
+  config.runtime,
+  "io",
+  receive,
+  (error) => {
+    throw error;
+  },
+);
 function startNext() {
-  if (stopping || active) return;
+  if (stopping || active) {
+    return;
+  }
   const next = queue.entries().next().value;
-  if (!next) return;
+  if (!next) {
+    return;
+  }
   active = next[0];
   channel.notify({
     kind: "prepare",
@@ -38,12 +55,16 @@ function startNext() {
   });
 }
 function execute(call: HostCall, source: string): HostResponse {
-  return hostResponse(() => adapters.execute(call.operation, call.payload, source));
+  return hostResponse(() =>
+    adapters.execute(call.operation, call.payload, source),
+  );
 }
 async function receive(packet: Packet) {
   if (packet.kind === "operation") {
     assert(
-      !stopping && !queue.has(packet.requestId) && queue.size < API_LIMITS.maxPending,
+      !stopping &&
+        !queue.has(packet.requestId) &&
+        queue.size < API_LIMITS.maxPending,
       "Invalid I/O queue request",
     );
     queue.set(packet.requestId, {
@@ -54,7 +75,9 @@ async function receive(packet: Packet) {
     startNext();
   } else if (packet.kind === "grant") {
     const call = queue.get(packet.requestId);
-    if (!call || active !== packet.requestId) return;
+    if (!call || active !== packet.requestId) {
+      return;
+    }
     assert(call.context === packet.context);
     queue.delete(packet.requestId);
     active = undefined;
@@ -63,7 +86,10 @@ async function receive(packet: Packet) {
       ? execute(call.call, call.source)
       : ({
           kind: "error",
-          error: { code: "PERMISSION_DENIED", message: "Host context or policy denied." },
+          error: {
+            code: "PERMISSION_DENIED",
+            message: "Host context or policy denied.",
+          },
         } as HostResponse);
     channel.notify({
       kind: "host-response",
@@ -74,14 +100,19 @@ async function receive(packet: Packet) {
     startNext();
   } else if (packet.kind === "cancel") {
     queue.delete(packet.requestId);
-    if (active === packet.requestId) active = undefined;
+    if (active === packet.requestId) {
+      active = undefined;
+    }
     startNext();
   } else if (packet.kind === "cancel-context") {
-    for (const [id, call] of queue)
+    for (const [id, call] of queue) {
       if (call.context === packet.context) {
         queue.delete(id);
-        if (active === id) active = undefined;
+        if (active === id) {
+          active = undefined;
+        }
       }
+    }
     startNext();
   } else if (packet.kind === "shutdown") {
     stopping = true;
@@ -93,16 +124,25 @@ async function receive(packet: Packet) {
         throw error;
       });
     }, 0);
-  } else throw new Error("Unexpected I/O packet");
+  } else {
+    throw new Error("Unexpected I/O packet");
+  }
 }
 async function finish() {
   try {
-    await disposeAll([() => channel.drain(), () => adapters.dispose()]);
-    await channel.send({ kind: "cleaned" });
+    await disposeAll([
+      () => channel.drain(),
+      () => adapters.dispose(),
+    ]);
+    await channel.send({
+      kind: "cleaned",
+    });
   } finally {
     channel.close();
     parentPort?.close();
   }
 }
 
-channel.notify({ kind: "ready" });
+channel.notify({
+  kind: "ready",
+});
