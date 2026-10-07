@@ -31,6 +31,35 @@ export function parseLaunchArguments(value: unknown): LaunchArguments {
   return { argv: [...input.argv], cwd: input.cwd };
 }
 
+export async function readLaunchArguments(
+  input: ReadableStream<Uint8Array>,
+): Promise<LaunchArguments> {
+  const reader = input.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(() => reject(new Error("Launch input timed out")), 5000);
+  });
+  try {
+    while (true) {
+      const { done, value } = await Promise.race([reader.read(), deadline]);
+      if (done) break;
+      size += value.byteLength;
+      // Windows PowerShell 5.1 may prefix redirected stdin with a UTF-8 BOM.
+      if (size > MAX_BYTES + 3) throw new Error("Launch input too large");
+      chunks.push(value);
+    }
+    const json = new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks));
+    if (Buffer.byteLength(json) > MAX_BYTES) throw new Error("Launch input too large");
+    return parseLaunchArguments(JSON.parse(json));
+  } finally {
+    clearTimeout(timeout);
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+}
+
 // Bind before importing the app. Acknowledgement means queued, not opened or authorized.
 export async function listenForInstances(address: string) {
   const queue: LaunchArguments[] = [];

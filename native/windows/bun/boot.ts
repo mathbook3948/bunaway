@@ -16,6 +16,7 @@ import {
   instanceAddress,
   listenForInstances,
   parseLaunchArguments,
+  readLaunchArguments,
   type LaunchArguments,
 } from "./instance.ts";
 import { verifyDevelopmentLaunch } from "../../../packages/runtime-bun/src/development.ts";
@@ -176,12 +177,12 @@ if (import.meta.main) {
   const developmentUrl = args[0] === "--dev-url" ? args[1] : undefined;
   if (args[0] === "--dev-url") assert(developmentUrl, "Missing development URL");
   const config = await verifyWindowsPackage(root, developmentUrl);
-  // Launchers encode arguments to preserve quotes, Unicode and the caller's cwd.
+  // Launchers send JSON on stdin to preserve arguments without expanding the command line.
   let launch: LaunchArguments;
   const appArgs = developmentUrl ? args.slice(2) : args;
-  if (appArgs[0] === "--launch-payload") {
-    assert(appArgs.length === 2 && appArgs[1], "Invalid launch payload");
-    launch = parseLaunchArguments(JSON.parse(Buffer.from(appArgs[1], "base64").toString("utf8")));
+  if (appArgs[0] === "--launch-stdin") {
+    assert(appArgs.length === 1, "Invalid launch input");
+    launch = await readLaunchArguments(Bun.stdin.stream());
   } else launch = parseLaunchArguments({ argv: appArgs, cwd: process.cwd() });
   try {
     containAppProcess(config.dataRoot);
