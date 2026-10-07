@@ -34,6 +34,7 @@ export type UIConfig = {
   dataRoot: string;
   loader: string;
   legacyProfile?: boolean;
+  devtools?: boolean;
 };
 export type Packet =
   | { kind: "ready" | "start" | "shutdown" | "closing" | "cleaned" }

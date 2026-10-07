@@ -75,8 +75,12 @@ spyOn(adapter, "stages").mockImplementation(() => [
     },
   },
 ]);
-const { main } = await import("../../packages/cli/src/main.ts");
-process.exitCode = await main([
-  ...(process.argv.slice(3).length ? process.argv.slice(3) : ["build"]),
-  project,
-]);
+if (process.argv[3] === "--development-artifact") {
+  console.log(JSON.stringify(await buildProject(project, { native, development: true })));
+} else {
+  const { main } = await import("../../packages/cli/src/main.ts");
+  process.exitCode = await main([
+    ...(process.argv.slice(3).length ? process.argv.slice(3) : ["build"]),
+    project,
+  ]);
+}
