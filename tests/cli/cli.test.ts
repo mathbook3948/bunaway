@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readdir, realpath, rename, rm } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { runInNewContext } from "node:vm";
 import { buildProject, bundleAssets } from "../../packages/cli/src/build.ts";
 import { validateProject } from "../../packages/cli/src/config.ts";
 import { RestartController, shouldRestartHost } from "../../packages/cli/src/dev.ts";
@@ -91,6 +92,8 @@ test("vanilla UI checks command and event contracts without bundling backend imp
   }
   try {
     expect((await typecheck()).code).toBe(0);
+    const insertion = "  await client.listen(";
+    expect(original).toContain(insertion);
     for (const suffix of [
       'void client.invoke("message.typo", null);',
       'void client.invoke("message.save", 123);',
@@ -99,7 +102,7 @@ test("vanilla UI checks command and event contracts without bundling backend imp
       'void client.listen("message.saved", (event) => { const value: number = event.payload; void value; }, { onError() {} });',
       'void client.invoke("message.read", null).then((value) => { const number: number = value; void number; });',
     ]) {
-      await Bun.write(path, `${original}\n${suffix}\n`);
+      await Bun.write(path, original.replace(insertion, `  ${suffix}\n${insertion}`));
       const checked = await typecheck();
       expect(checked.code, suffix).not.toBe(0);
       expect(checked.output).toContain("src/main.ts");
@@ -119,6 +122,29 @@ test("vanilla UI checks command and event contracts without bundling backend imp
     await Bun.write(appPath, originals["src-bunaway/app.ts"] ?? "");
   }
 }, 30000);
+
+test("vanilla UI displays a missing WebView bridge error and keeps saving disabled", async () => {
+  const assets = resolve(home, "no-bridge-assets");
+  await bundleAssets(await validateProject(project), assets);
+  const elements = {
+    "#message": { value: "" },
+    "#saved": { textContent: "" },
+    "#status": { textContent: "Connecting…" },
+    "#save": { disabled: true },
+  };
+  const document = {
+    querySelector: (selector: keyof typeof elements) => elements[selector],
+  };
+  runInNewContext(await Bun.file(resolve(assets, "web/main.js")).text(), {
+    window: { document },
+    document,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(elements["#status"].textContent).toBe(
+    "Connection failed: Bunaway bridge is unavailable. Open this page through bunaway dev or the desktop app.",
+  );
+  expect(elements["#save"].disabled).toBe(true);
+});
 
 test("create refuses existing paths and missing parents without modifying them", async () => {
   await expect(createProject(project)).rejects.toThrow("exists");

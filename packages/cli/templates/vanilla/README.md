@@ -33,6 +33,8 @@ The type-only imports keep backend implementation out of the browser bundle.
 The client uses the shared WebView connection without transport setup. Call the
 disposer returned by `client.listen` when the UI component is removed. Backend calls work in the desktop
 app; calls from a regular browser fail with `UNSUPPORTED`.
+The UI creates the client during startup so connection failures appear in the
+status message and keep the Save button disabled.
 
 ## Build
 

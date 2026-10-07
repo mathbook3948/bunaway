@@ -2,8 +2,6 @@ import type { CommandsOf, EventsOf } from "@bunaway/backend";
 import { createClient } from "@bunaway/client";
 import type { app } from "../src-bunaway/app.ts";
 
-const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
-
 const input = document.querySelector<HTMLTextAreaElement>("#message");
 const saved = document.querySelector<HTMLElement>("#saved");
 const status = document.querySelector<HTMLElement>("#status");
@@ -17,6 +15,7 @@ function errorText(error: unknown): string {
 }
 
 async function start(): Promise<void> {
+  const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
   await client.listen(
     "message.saved",
     (event) => {

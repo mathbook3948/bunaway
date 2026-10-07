@@ -125,7 +125,8 @@ vanilla MVP는 양쪽 호스트가 공통으로 지원하는 단일 뷰 `app` �
 macOS는 기존 `bunaway://` 매핑이다. policy.json의 HTTP origin은 허용하지 않는다.
 `dev.url`의 정확한 loopback origin은 개발 산출물에만 적용하며 프로덕션에 포함하지 않는다.
 
-`vanilla` 템플릿은 앱 정의에서 `CommandsOf`, `EventsOf`를 추론한 `createClient`로 호출하고 구독한다.
+`vanilla` 템플릿은 `CommandsOf`와 `EventsOf`로 앱 정의에서 명령과 이벤트 타입을 추론한다.
+이 타입을 지정한 클라이언트를 `createClient`로 만들고 명령을 호출하거나 이벤트를 구독한다.
 명령과 이벤트 이름, 입력과 결과는 `bun run typecheck`로 검사한다. 타입만 import하므로 백엔드 구현은 UI 번들에 포함되지 않는다.
 백엔드는 `defineModule`, `defineApp`으로 명령, 이벤트를 등록한다.
 화면에서 별도의 초기화 코드를 작성할 필요는 없다. 일반 브라우저에서 백엔드 호출은
