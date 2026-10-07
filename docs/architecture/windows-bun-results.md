@@ -26,6 +26,16 @@
 프로젝트·launcher도 재실행해 통과했다. workspace/테스트 TypeScript·린트·포맷 검사는 통과했다.
 예전 C++ 프로세스 테스트 결과는 [별도 기록](./windows-host-results.md)으로 유지한다.
 
+2026-10-07 `main` CI 실행 [37555338557](https://github.com/mathbook3948/bunaway/actions/runs/37555338557)의
+Windows 다중 창 검사는 권한 거부 로그 누락으로 실패했다. 진단 artifact의 `host.log`에는
+`droppedDiagnostics: 6`이 기록돼 있었다. 진단 슬롯 포화 시 로그를 생략하는 동작은
+[ADR 0006](../decisions/0006-windows-bun-ui-worker.md)의 계약이다.
+권한과 잘못된 메시지 검사는 페이지가 받은 오류 코드와 금지된 명령의 미실행을
+`report.json`, `reader.json`으로 확인한다. 드라이버는 해당 검사 이름의 존재와 성공을
+요구하며, 생략될 수 있는 거부 로그의 개수로 성공 여부를 판단하지 않는다.
+진단 슬롯을 채워 권한 거부와 입력 오류 로그가 생략되는 상황에서도 오류 응답은
+전달되고 금지된 요청은 코어로 전달되지 않는지 별도 Worker 경계 회귀로 검사한다.
+
 2026-10-06 리뷰 후 회귀: 진단 로그 포화 시 요청·제어 슬롯 유지, 과대한 COM 문자열
 거부 후 세션 유지, 앱 진입점 이름 `boot.ts`·`app.ts`·`ui.ts`의 번들 충돌을 검사했다.
 공통 계약·Windows 경계·I/O·새 번들 테스트는 116 통과·0 실패였다. 실제 WebView에서
