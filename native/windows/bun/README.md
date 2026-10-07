@@ -41,3 +41,5 @@ COM 콜백은 같은 OS 스레드에서 동기 HRESULT를 반환한다. `threads
 [실행 구조 ADR](../../../docs/decisions/0006-windows-bun-ui-worker.md).
 기존 Windows C++ 호스트·probe·CMake와 전용 테스트는 삭제했다. macOS와 공유하는
 앱·화면 회귀 데이터는 `tests/fixtures/desktop/host/`에 있다.
+
+명령 핸들러의 예기치 않은 예외는 stderr와 앱 로그의 `command-failed`에 명령 이름, 원래 메시지와 스택을 기록한다. WebView 응답에는 내부 오류를 넣지 않는다. 진단 기록 실패는 명령 응답에 영향을 주지 않는다.

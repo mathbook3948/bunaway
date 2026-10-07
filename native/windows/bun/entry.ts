@@ -207,6 +207,16 @@ export async function runWindowsApp(app: AppDefinition, config: UIConfig): Promi
       hello: { kind: "hello", protocol: PROTOCOL_VERSION, features: [], buildId: "bunaway" },
       platform: "windows",
       backendContext: config.backendContext,
+      onCommandError(command, cause) {
+        console.error(`Command ${command} failed:`, cause);
+        void log
+          .write("command-failed", {
+            command,
+            message: cause instanceof Error ? cause.message : String(cause),
+            ...(cause instanceof Error ? { stack: cause.stack } : {}),
+          })
+          .catch(() => {});
+      },
       runtime: {
         createCancellation: () => new AbortController(),
         now: () => Date.now(),

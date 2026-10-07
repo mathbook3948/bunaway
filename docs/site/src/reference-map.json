@@ -249,7 +249,8 @@
           "backendContext",
           "runtime",
           "send",
-          "callHost"
+          "callHost",
+          "onCommandError"
         ]
       }
     },

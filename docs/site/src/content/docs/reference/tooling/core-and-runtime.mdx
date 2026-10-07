@@ -38,6 +38,8 @@ await core.stop();
 HostContext는 호스트가 발급한 값을 사용합니다. 앱의 입력 문자열을 캐스팅한 값은 유효한 컨텍스트로 인정되지 않습니다.
 send가 복구할 수 없는 오류로 실패하면 어댑터에서 전송과 세션을 닫아야 합니다.
 
+선택적 `onCommandError(command, cause)`는 핸들러의 예기치 않은 예외를 원본 그대로 받는 진단 콜백입니다. `BunawayError`로 선언한 앱 오류에는 호출하지 않습니다. 반환형은 `void` 또는 `Promise<void>`이며 응답은 콜백 완료를 기다리지 않습니다. 콜백의 throw와 rejection은 무시합니다. 원본 메시지와 스택은 신뢰된 진단 경로에서만 사용하고 WebView 응답에는 넣지 않습니다.
+
 ## RuntimeServices
 
 | 메서드 | 반환, 계약 |

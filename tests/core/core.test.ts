@@ -207,6 +207,58 @@ function results(sent: { message: ServerMessage }[], id: string) {
     .map(({ message }) => message);
 }
 
+for (const diagnostic of ["capture", "throw", "reject", "pending"] as const) {
+  test(`unexpected command errors preserve the cause and safe reply when diagnostics ${diagnostic}`, async () => {
+    const { services, sent } = createServices(createClock());
+    const cause = new Error("private implementation failure");
+    const reports: { command: string; cause: unknown }[] = [];
+    services.onCommandError = (command, original) => {
+      reports.push({ command, cause: original });
+      if (diagnostic === "throw") throw new Error("broken diagnostics");
+      if (diagnostic === "reject") return Promise.reject(new Error("broken diagnostics"));
+      if (diagnostic === "pending") return new Promise<void>(() => {});
+    };
+    const app = createApp({
+      commands: {
+        "notes.read": {
+          input: { const: null },
+          output: { const: null },
+          async run() {
+            throw cause;
+          },
+        },
+      },
+    });
+    const { core, session } = await openSession(
+      services,
+      "view-context-1" as HostContext,
+      "main",
+      app,
+    );
+    await session.receive({
+      kind: "invoke",
+      protocol: helloMessage.protocol,
+      id: "failure",
+      command: "notes.read",
+      payload: null,
+    });
+    await flush();
+    expect(reports).toHaveLength(1);
+    expect(reports[0]?.command).toBe("notes.read");
+    expect(reports[0]?.cause).toBe(cause);
+    expect(cause.stack).toContain("private implementation failure");
+    expect(results(sent, "failure")).toEqual([
+      {
+        kind: "error",
+        protocol: helloMessage.protocol,
+        id: "failure",
+        error: { code: "INTERNAL", message: "Command failed." },
+      },
+    ]);
+    await core.stop();
+  });
+}
+
 test("command round trip validates input, output and binds the session host context", async () => {
   const clock = createClock();
   const { services, sent, hostCalls } = createServices(clock);
