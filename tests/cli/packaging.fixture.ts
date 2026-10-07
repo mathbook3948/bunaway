@@ -96,6 +96,171 @@ expect(productionApp.development).toBeUndefined();
 expect(productionPolicy.views[0].origins).toEqual(["https://app.bunaway.local"]);
 expect(production.arguments).not.toContain("--dev-url");
 await files.writeJson(configPath, settings);
+
+// Reject output overlap before a tool can clear app output or its locks.
+// Resolve aliases even when their frontend subdirectories do not exist yet.
+const overlapMarker = resolve(project, "unexpected-overlap-build.txt");
+const intactManifest = await Bun.file(resolve(production.package, "manifest.json")).text();
+const alias = resolve(project, "output-alias");
+const pendingAlias = resolve(project, "pending-output-alias");
+await fs.symlink(resolve(project, "dist"), alias, "junction");
+await fs.symlink(resolve(project, "dist/macos-arm64"), pendingAlias, "junction");
+try {
+  for (const frontend of [
+    ".",
+    "dist",
+    "DIST/windows-X64",
+    "dist/windows-x64",
+    "dist/windows-x64/assets/web",
+    "dist/macos-arm64",
+    "dist/.bunaway-locks",
+    ".bunaway/web",
+    "output-alias/windows-x64/not-built",
+    "pending-output-alias/not-built",
+  ]) {
+    await files.writeJson(configPath, {
+      ...settings,
+      build: {
+        ...(settings.build as object),
+        frontend,
+        command: [process.execPath, "-e", "await Bun.write('unexpected-overlap-build.txt', 'ran')"],
+      },
+    });
+    await expect(buildProject(project, { native })).rejects.toThrow(
+      "build.frontend must not overlap",
+    );
+    expect(await Bun.file(overlapMarker).exists()).toBe(false);
+    expect(await Bun.file(resolve(production.package, "manifest.json")).text()).toBe(
+      intactManifest,
+    );
+    expect(await readdir(resolve(project, "dist/.bunaway-locks/windows-x64"))).toEqual([]);
+  }
+  // A separate frontend output can share dist with the app without containing it.
+  await files.writeJson(configPath, {
+    ...settings,
+    build: { ...(settings.build as object), frontend: "dist/web" },
+  });
+  const { readProjectMetadata } = await import("../../packages/cli/src/config.ts");
+  expect((await readProjectMetadata(project)).frontend).toBe(resolve(project, "dist/web"));
+} finally {
+  await fs.unlink(alias);
+  await fs.unlink(pendingAlias);
+  await files.writeJson(configPath, settings);
+}
+
+// Production commands run before output validation, once per app build, and
+// failures never consume old web output or replace the last successful app.
+const webSettings = {
+  ...settings,
+  build: {
+    ...(settings.build as object),
+    frontend: "web-dist",
+    command: [process.execPath, "web builder.ts", "argument with spaces"],
+  },
+};
+const builder = resolve(project, "web builder.ts");
+const webOutput = resolve(project, "web-dist");
+const webSource = resolve(project, "web-version.txt");
+const webRuns = resolve(project, "web-runs.txt");
+await Bun.write(
+  builder,
+  `
+  import { appendFile, mkdir } from 'node:fs/promises';
+  if (process.argv[2] !== 'argument with spaces') throw new Error('argv changed');
+  await appendFile('web-runs.txt', 'build\\n');
+  await mkdir('web-dist', { recursive: true });
+  await Bun.write('web-dist/index.html', await Bun.file('web-version.txt').text());
+`,
+);
+await Bun.write(webSource, "first UI");
+await files.writeJson(configPath, webSettings);
+await rm(webOutput, { recursive: true, force: true });
+await expect(packageProject(project, "mac-direct", { build: true })).rejects.toThrow(
+  "has no channels.mac-direct entry",
+);
+expect(await Bun.file(webRuns).exists()).toBe(false);
+const firstWeb = await buildProject(project, { native });
+expect(await Bun.file(resolve(firstWeb.package, "assets/web/index.html")).text()).toBe("first UI");
+await Bun.write(webSource, "latest UI");
+const latestWeb = await buildProject(project, { native });
+expect(await Bun.file(resolve(latestWeb.package, "assets/web/index.html")).text()).toBe(
+  "latest UI",
+);
+expect(await Bun.file(webRuns).text()).toBe("build\nbuild\n");
+await buildProject(project, { native, development: true });
+expect(await Bun.file(webRuns).text()).toBe("build\nbuild\n");
+
+// Competing builders and package readers are rejected while the web command
+// is still running, before asset validation or publication starts.
+const webStarted = resolve(project, "web-started.txt");
+const webResume = resolve(project, "web-resume.txt");
+await files.writeJson(configPath, {
+  ...webSettings,
+  build: {
+    ...webSettings.build,
+    command: [
+      process.execPath,
+      "-e",
+      `await Bun.write('web-started.txt', 'ready');
+       const deadline = Date.now() + 10000;
+       while (!await Bun.file('web-resume.txt').exists()) {
+         if (Date.now() > deadline) throw new Error('Web build resume timed out');
+         await Bun.sleep(10);
+       }`,
+    ],
+  },
+});
+const buildingWeb = buildProject(project, { native });
+try {
+  const deadline = Date.now() + 5000;
+  while (!(await Bun.file(webStarted).exists())) {
+    if (Date.now() > deadline) throw new Error("Web build did not start.");
+    await Bun.sleep(10);
+  }
+  await expect(buildProject(project, { native })).rejects.toThrow("locked by another rebuild");
+  const blocked = await packageProject(project, "win-direct");
+  expect(blocked.ok).toBe(false);
+  expect(blocked.diagnostics.some((d) => d.code === CODES.LOCK_FAILED)).toBe(true);
+} finally {
+  await Bun.write(webResume, "resume");
+  await buildingWeb;
+  await rm(webStarted);
+  await rm(webResume);
+}
+const previousManifest = await Bun.file(resolve(latestWeb.package, "manifest.json")).text();
+for (const command of [
+  [process.execPath, "-e", "process.exit(19)"],
+  [resolve(project, "missing-web-builder")],
+  [process.execPath, resolve(files.frameworkRoot, "packages/cli/src/main.ts"), "build", project],
+]) {
+  await files.writeJson(configPath, { ...webSettings, build: { ...webSettings.build, command } });
+  await expect(buildProject(project, { native })).rejects.toThrow("Frontend build failed");
+  expect(await Bun.file(resolve(latestWeb.package, "manifest.json")).text()).toBe(previousManifest);
+  expect(await Bun.file(resolve(latestWeb.package, "assets/web/index.html")).text()).toBe(
+    "latest UI",
+  );
+  expect(await readdir(resolve(project, "dist/.bunaway-locks/windows-x64"))).toEqual([]);
+}
+await files.writeJson(configPath, {
+  ...webSettings,
+  build: {
+    ...webSettings.build,
+    command: [process.execPath, "-e", "process.exit(0)"],
+  },
+});
+await rm(resolve(webOutput, "index.html"));
+await expect(buildProject(project, { native })).rejects.toThrow();
+expect(await Bun.file(resolve(latestWeb.package, "manifest.json")).text()).toBe(previousManifest);
+await files.writeJson(configPath, {
+  ...webSettings,
+  build: { ...webSettings.build, command: [process.execPath, "-e", "process.exit(0)"] },
+});
+await rm(webOutput, { recursive: true });
+await expect(buildProject(project, { native })).rejects.toThrow();
+expect(await Bun.file(resolve(latestWeb.package, "manifest.json")).text()).toBe(previousManifest);
+await files.writeJson(configPath, settings);
+for (const path of [builder, webSource, webRuns]) await rm(path, { force: true });
+
 await setBundle({
   channels: { "win-direct": {}, "win-store-msix": {}, "mac-direct": {}, "mac-store": {} },
 });
@@ -161,6 +326,28 @@ await expect(packageProject(project, "win-direct", { build: true })).rejects.toT
 expect(builds).toBe(0);
 await setBundle({ channels: { "win-direct": {}, "win-store-msix": {} } });
 expect((await packageProject(project, "win-direct", { build: true })).ok).toBe(true);
+
+// Plain packaging consumes the app artifact even when app sources are absent
+// or broken and build.command would fail. It does not invoke the web builder.
+const appEntry = resolve(project, "src-bunaway/app.ts");
+const appSource = await Bun.file(appEntry).text();
+const packageSettings = (await readJson(configPath)) as Record<string, unknown>;
+await rm(appEntry);
+await files.writeJson(configPath, {
+  ...packageSettings,
+  build: {
+    ...(packageSettings.build as object),
+    frontend: "missing-web-output",
+    command: [process.execPath, "-e", "process.exit(23)"],
+  },
+});
+try {
+  expect((await packageProject(project, "win-direct")).ok).toBe(true);
+  expect(builds).toBe(1);
+} finally {
+  await Bun.write(appEntry, appSource);
+  await files.writeJson(configPath, packageSettings);
+}
 const packaged = resolve(project, "dist/windows-x64/packaged");
 const previous = resolve(packaged, "win-direct/setup.exe");
 const other = resolve(packaged, "win-store-msix/app.msix");

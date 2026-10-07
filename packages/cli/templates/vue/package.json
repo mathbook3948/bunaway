@@ -8,8 +8,13 @@
     "bun": "1.4.2"
   },
   "scripts": {
-    "dev": "bun --bun vite",
-    "build": "vue-tsc --project tsconfig.json && tsc --project src-bunaway/tsconfig.json && bun --bun vite build",
+    "dev": "bunaway dev",
+    "dev:web": "bun --bun vite",
+    "build": "bunaway build",
+    "build:web": "vue-tsc --project tsconfig.json && tsc --project src-bunaway/tsconfig.json && bun --bun vite build",
+    "package": "bunaway package",
+    "validate": "bunaway validate",
+    "doctor": "bunaway doctor",
     "preview": "bun --bun vite preview",
     "bunaway": "bunaway",
     "typecheck": "vue-tsc --project tsconfig.json && tsc --project src-bunaway/tsconfig.json"

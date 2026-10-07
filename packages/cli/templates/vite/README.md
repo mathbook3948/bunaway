@@ -8,8 +8,8 @@ Requires [Bun 1.4.2](https://bun.sh).
 
 ```sh
 bun install
-bun run bunaway doctor
-bun run bunaway dev
+bun run doctor
+bun run dev
 ```
 
 Edit `src/` for the UI and `src-bunaway/` for the backend.
@@ -19,17 +19,27 @@ The framework boots the app from `build.app` in `src-bunaway/bunaway.json`.
 `src/client.ts` derives command names, inputs, results and event payloads from the app definition.
 Import its `client` in UI components. For example, `await client.invoke("message.read", null)` returns a string.
 
-Call backend commands directly from the UI:
+The example below infers command and event types from the app definition:
 
 ```ts
-import { client } from "./client.ts";
+import type { CommandsOf, EventsOf } from "@bunaway/backend";
+import { createClient } from "@bunaway/client";
+import type { app } from "../src-bunaway/app.ts";
 
-const text = await client.invoke("message.read", null);
+async function start(): Promise<void> {
+  const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
+  const text = await client.invoke("message.read", null);
+  console.log(text);
+}
+
+void start().catch(console.error);
 ```
 
-Use `client.invoke` and `client.listen` without initialization code. Call the disposer returned
-by `listen` when the UI component is removed. Backend calls work in the desktop
-window opened by `bun run bunaway dev`; calls from a regular browser or Vite
+The client can be reused for commands and subscriptions in event handlers and
+components. The startup function handles creation and call failures. Call the disposer
+returned by `client.listen` when the UI component is removed, keeping the shared
+client open. Backend calls work in the desktop
+window opened by `bun run dev`; calls from a regular browser or Vite
 preview fail with `UNSUPPORTED`.
 
 Backend commands and their services can import `storage`, `log`, and `capabilities`
@@ -43,10 +53,18 @@ app logging requires installing `@bunaway/plugin-log`, registering `logPlugin` a
 
 ```sh
 bun run build
-bun run bunaway build
+# Build and package for Windows:
+bun run package win-direct --build
 ```
 
-The first command builds the frontend; the second creates the desktop app in `dist/`.
+`bun run build` runs the web build configured in `build.command`, validates its output,
+and creates the desktop app in `dist/`. It runs the web build every time, including
+when `web-dist/` already exists. A web build failure stops the app build.
+`package --build` uses the same full build before packaging.
+
+Use `bun run dev:web` for the web server alone and `bun run build:web` for web assets alone.
+`bun run validate` checks existing assets without running the web build.
+`bun run package win-direct` packages an existing app artifact without rebuilding.
 
 [Vite](https://vite.dev)
 

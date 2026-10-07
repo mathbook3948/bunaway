@@ -83,12 +83,14 @@ bun run dev
 첫 실행에는 저장 파일이 없어 읽기 실패 안내가 나올 수 있습니다. 메시지를 저장한 뒤 다시 실행하면 복원을 확인합니다.
 개발 중 전체 앱이 재시작되면 저장하지 않은 입력은 사라집니다.
 
-화면에서는 `@bunaway/client`의 `invoke`와 `listen`을 별도 초기화 없이 사용합니다.
+생성된 화면은 앱 정의의 타입을 지정한 클라이언트로 명령을 호출하고 이벤트를 구독합니다.
+[타입과 입력 검증](/guides/types-and-validation/)에서 타입 추론의 사용법과 범위를 확인하세요.
 
 ## 5. 파일을 살펴보기
 
 [프로젝트 파일](/concepts/project-layout/)에서 `app.ts`, `bunaway.json`, `policy.json`을 연결해 읽어보세요.
 [명령과 이벤트](/guides/commands-and-events/)에는 템플릿의 실제 백엔드, 프런트엔드 코드가 있습니다.
 
-UI HMR을 원하면 [Vite와 개발 흐름](/guides/development/)의 `vite` 템플릿을 사용하세요.
-Vite 템플릿에서는 `dev`와 `build`가 웹 도구를 실행합니다. 네이티브 CLI 실행 방법은 그 가이드에 설명했습니다.
+웹 UI 개발 서버를 연결하는 방법은 [개발 흐름](/guides/development/)에서 확인하세요.
+모든 생성 앱에서 `bun run dev`로 앱을 실행하고 `bun run build`로 웹 UI를 포함한 앱을 빌드합니다.
+웹 도구만 별도로 실행할 때는 앱의 웹 전용 스크립트를 사용합니다.

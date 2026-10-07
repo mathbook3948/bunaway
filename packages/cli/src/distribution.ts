@@ -26,6 +26,7 @@ export const frameworkPaths = [
   "docs/decisions/0006-windows-bun-ui-worker.md",
   "docs/decisions/0009-development-server.md",
   "docs/decisions/0010-windows-first-platform-model.md",
+  "docs/decisions/0012-integrated-app-build.md",
   "docs/development-server.md",
   "docs/architecture/windows-bun-results.md",
   "docs/platform-support/README.md",
@@ -279,6 +280,8 @@ function requiredFrameworkFiles(): string[] {
     "packages/cli/src/plugins.ts",
     "packages/cli/src/dev-server.ts",
     "packages/cli/src/dev-server-worker.ts",
+    "packages/cli/src/frontend-build.ts",
+    "packages/cli/src/managed-command.ts",
     "packages/runtime-bun/src/development.ts",
     ...Object.keys(packageNames).flatMap((directory) =>
       ["package.json", "src/index.ts", "tsconfig.json"].map(

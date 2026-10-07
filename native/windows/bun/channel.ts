@@ -36,6 +36,7 @@ export type UIConfig = {
   loader: string;
   legacyProfile?: boolean;
   plugins?: NativeRegistration[];
+  devtools?: boolean;
 };
 export type Packet =
   | { kind: "ready" | "start" | "shutdown" | "closing" | "cleaned" }

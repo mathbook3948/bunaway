@@ -53,7 +53,7 @@ CLI는 직접 설치한 플러그인의 manifest와 SDK peer 버전, 패키지 �
 공식 `@bunaway/` 플러그인은 프레임워크와 같은 버전을 사용한다. 외부 플러그인은 자체 버전을 유지하며 SDK peer 버전만 정확히 맞춘다.
 화면과 백엔드는 같은 플러그인 패키지를 import한다. 생성 앱의 typecheck는
 tsconfig.json의 browser 조건과 src-bunaway/tsconfig.json의 bun 조건을 각각 검사한다.
-[ADR 0012](./decisions/0012-optional-native-plugins.md)와 [계약](./architecture/plugins.md)을 참고한다.
+[ADR 0013](./decisions/0013-optional-native-plugins.md)와 [계약](./architecture/plugins.md)을 참고한다.
 
 - @bunaway/client: 화면에서 `invoke`, `listen`를 사용하는 WebView 클라이언트 SDK.
   [기본 연결과 타입 추론](./architecture/common-api.md#클라이언트와-transport)을 참고한다.

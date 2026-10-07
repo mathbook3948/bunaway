@@ -82,8 +82,13 @@ test("packed CLI creates independent templates and a Vite app with HMR and local
     const development = await validateProject(project, { development: true });
     expect(await Bun.file(resolve(project, "web-dist/index.html")).exists()).toBe(false);
     await verifyViteDevelopment(development, "vite");
+    const scripts = (await Bun.file(resolve(project, "package.json")).json()).scripts;
+    expect(scripts.dev).toBe("bunaway dev");
+    expect(scripts.build).toBe("bunaway build");
+    expect(scripts.package).toBe("bunaway package");
+    expect(development.buildCommand).toEqual(["bun", "run", "build:web"]);
     for (const args of [
-      ["run", "build"],
+      [resolve(import.meta.dir, "build.fixture.ts"), project],
       ["run", "bunaway", "validate"],
     ]) {
       const child = Bun.spawn([process.execPath, ...args], {
@@ -93,6 +98,27 @@ test("packed CLI creates independent templates and a Vite app with HMR and local
       });
       expect(await child.exited, await new Response(child.stderr).text()).toBe(0);
     }
+    // Packaging with --build must regenerate an existing frontend output.
+    const counter = resolve(project, "src/counter.ts");
+    await writeFile(
+      counter,
+      (await readFile(counter, "utf8")).replace("Count is", "Latest count is"),
+    );
+    const packaged = Bun.spawn(
+      [
+        process.execPath,
+        resolve(import.meta.dir, "build.fixture.ts"),
+        project,
+        "package",
+        "win-direct",
+        "--build",
+      ],
+      { cwd: root, stdout: "pipe", stderr: "pipe" },
+    );
+    const packageOutput = new Response(packaged.stdout).text();
+    const packageErrors = new Response(packaged.stderr).text();
+    expect(await packaged.exited, `${await packageOutput}\n${await packageErrors}`).toBe(0);
+    expect((await packageOutput).match(/Building frontend:/g)?.length).toBe(1);
     const production = await validateProject(project);
     expect(production.app.home).toBe("https://app.bunaway.local/index.html");
     expect(production.policy.views[0]?.origins).toEqual(["https://app.bunaway.local"]);
@@ -112,7 +138,7 @@ test("packed CLI creates independent templates and a Vite app with HMR and local
       if (!entry) throw new Error("Missing packaged UI entry.");
       expect(await Bun.file(resolve(assets, "web", entry)).exists()).toBe(true);
       const script = await readFile(resolve(assets, "web", entry), "utf8");
-      expect(script).toContain("Count is");
+      expect(script).toContain("Latest count is");
       expect(script).toContain("Explore Vite");
       expect(script).not.toContain("data:image/");
       expect(await Bun.file(resolve(assets, "web/icons.svg")).exists()).toBe(true);
@@ -121,6 +147,14 @@ test("packed CLI creates independent templates and a Vite app with HMR and local
         "MIT License",
       );
     }
+    const builtHtml = await Bun.file(
+      resolve(project, "dist/windows-x64/assets/web/index.html"),
+    ).text();
+    const builtEntry = builtHtml.match(/src="\.\/([^"]+\.js)"/)?.[1];
+    if (!builtEntry) throw new Error("Missing built UI entry.");
+    expect(
+      await Bun.file(resolve(project, "dist/windows-x64/assets/web", builtEntry)).text(),
+    ).toContain("Latest count is");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

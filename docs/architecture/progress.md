@@ -15,7 +15,7 @@ macOS 네이티브 어댑터는 후속 작업이며 현재 네이티브 플러�
 기준일: 2026-10-07. 현재 코드와 ADR, 기존 실행 기록 및 아래에 명시한 CI 실행을 대조했다.
 
 선택 네이티브 플러그인의 구조와 공개 계약은
-[ADR 0012](../decisions/0012-optional-native-plugins.md)와 [구조 계약](./plugins.md)에
+[ADR 0013](../decisions/0013-optional-native-plugins.md)와 [구조 계약](./plugins.md)에
 확정하고 Windows 실행, 개별 패키지 배포와 새 v1 정책 구조를 구현했다.
 공식 배포 전까지 정책 형식은 v1로 유지하며 개발 중 구조 변경으로 v2를 만들지 않는다.
 
@@ -44,7 +44,7 @@ Bun UI Worker의 창, WebView2, 비동기 작업, 다중 창, 종료를 검증�
 
 - `packages/client-sdk/src/index.ts`의 `createClient`는 hello 협상, 명령 호출,
   이벤트 구독, 해제, deadline, 취소, 종료를 구현한다. `src/webview.ts`가 전송을 연결한다.
-  화면용 `invoke`, `listen`, `capabilities`와 인자 없는 `createClient()`는
+  화면용 `invoke`, `listen`과 인자 없는 `createClient()`는
   `src/default-client.ts`의 문서별 연결을 공유하며 초기화, 준비 대기, pagehide 정리를
   SDK에 맡긴다. 기본 연결의 지연 초기화, HMR 공유, 실패, 취소, 문서 종료는
   `tests/api/default-client.test.ts`에서 검증한다. 코드 커밋 `fae4b809b02a04355c8c862a8c896c7bbbd503cb`의

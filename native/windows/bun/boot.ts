@@ -11,7 +11,10 @@ import { MAX_WINDOWS, type UIConfig, type WindowSpec } from "./channel.ts";
 import deps from "./deps.json";
 import { runWindowsApp } from "./entry.ts";
 import { containAppProcess } from "./job.ts";
-import { verifyDevelopmentLaunch } from "../../../packages/runtime-bun/src/development.ts";
+import {
+  verifyDevelopmentLaunch,
+  verifyDevelopmentToolsLaunch,
+} from "../../../packages/runtime-bun/src/development.ts";
 
 const hash = async (path: string) =>
   createHash("sha256")
@@ -49,6 +52,7 @@ function localAppData() {
 export async function verifyWindowsPackage(
   directory: string,
   developmentUrl?: string,
+  developmentTools = false,
 ): Promise<UIConfig> {
   assert.equal(process.platform, "win32");
   assert.equal(process.arch, "x64");
@@ -112,6 +116,7 @@ export async function verifyWindowsPackage(
     assert(Object.hasOwn(assets, name), `Required package asset missing: ${name}`);
   const config = object(JSON.parse(await readFile(resolve(root, "assets/app.json"), "utf8")));
   const devUrl = verifyDevelopmentLaunch(config.development, developmentUrl);
+  const devtools = verifyDevelopmentToolsLaunch(config.developmentTools, developmentTools);
   assert(
     typeof config.appId === "string" &&
       /^[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$/.test(config.appId),
@@ -159,6 +164,7 @@ export async function verifyWindowsPackage(
     assets: resolve(root, "assets"),
     loader: resolve(root, "assets/WebView2Loader.dll"),
     legacyProfile: !Array.isArray(config.windows),
+    devtools,
     dataRoot: resolve(localAppData(), "bunaway", config.appId),
   };
 }
@@ -166,11 +172,13 @@ export async function verifyWindowsPackage(
 if (import.meta.main) {
   const root = resolve(dirname(import.meta.path), "..");
   const args = process.argv.slice(2);
+  const devtools = args[0] === "--devtools";
+  if (devtools) args.shift();
   assert(
     !args.length || (args.length === 2 && args[0] === "--dev-url"),
-    "Usage: boot.js [--dev-url <url>]",
+    "Usage: boot.js [--devtools] [--dev-url <url>]",
   );
-  const config = await verifyWindowsPackage(root, args[1]);
+  const config = await verifyWindowsPackage(root, args[1], devtools);
   containAppProcess(config.dataRoot);
   // Only import a side-effect-free default AppDefinition after all package checks.
   const module = await import(pathToFileURL(resolve(root, "assets/app.js")).href);

@@ -9,9 +9,9 @@ bunaway UI는 WebView에서 실행할 HTML, CSS, JavaScript 자산입니다.
 
 ## 권장 시작점
 
-처음에는 [vanilla 첫 앱](/start/quickstart/)으로 명령과 정책을 살펴보고
-CSS HMR이 필요하면 [Vite 템플릿](/guides/development/)을 사용합니다.
-어떤 UI 도구를 사용하든 백엔드는 공통 app.ts에 작성합니다.
+처음에는 [첫 앱](/start/quickstart/)으로 명령과 정책을 살펴봅니다.
+웹 개발 서버와 HMR을 연결하려면 [개발 흐름](/guides/development/)을 참고하세요.
+앱 백엔드는 `app.ts`에 작성합니다.
 
 ## 기존 웹 도구 연결
 
@@ -21,35 +21,53 @@ UI 도구를 바꿀 때 아래 항목을 연결합니다.
 | --- | --- |
 | UI 프로덕션 빌드 | 로컬 앱에 포함할 정적 자산 출력 |
 | build.frontend | 실제 웹 출력 디렉터리 |
+| build.command | 정적 출력을 생성할 웹 프로덕션 빌드의 실행 파일, 인자 배열 |
 | app.home | 출력 안의 시작 HTML에 대응하는 로컬 자산 URL |
 | dev.command | 개발 서버의 실행 파일, 인자 배열 |
 | dev.url | 정확한 loopback URL, 고정 포트, HTTP 준비 |
-| SDK | @bunaway/client의 invoke, listen 호출 |
+| SDK | 명령 호출과 이벤트 구독 |
 
-네이티브 프로덕션 빌드 전에 웹 자산을 빌드합니다. 최종 앱은 정적 출력물을 사용하며 Next.js의 SSR 서버는 포함하지 않습니다.
+`bunaway build`는 `build.command`를 실행한 뒤 웹 자산을 검증하고 앱에 포함합니다. 최종 앱은 정적 출력물을 사용하며 Next.js의 SSR 서버는 포함하지 않습니다.
 React, Vue, Svelte 생성 앱에는 위 설정이 포함됩니다. 기존 웹 프로젝트에도 같은 설정을 연결할 수 있습니다.
 
 ## 화면에서 명령 호출과 이벤트 구독
 
-`invoke`는 백엔드에 작업을 요청하고 결과를 받습니다. `listen`은 이벤트가 발생할 때마다 콜백을 실행합니다.
+아래 예제는 앱 정의의 타입을 지정한 클라이언트로 명령을 호출하고 이벤트를 구독합니다.
+`client.invoke`는 백엔드에 작업을 요청하고 결과를 받습니다. `client.listen`은 이벤트가 발생할 때마다 콜백을 실행합니다.
 
 ```ts
-import { client } from "./client.ts";
+import { createClient } from "@bunaway/client";
+import type { CommandsOf, EventsOf } from "@bunaway/backend";
+import type { app } from "../src-bunaway/app.ts";
 
-const unlisten = await client.listen(
-  "message.saved",
-  (event) => console.log("저장된 내용:", event.payload),
-  { onError: console.error },
-);
-await client.invoke("message.save", "안녕하세요");
-const text = await client.invoke("message.read", null);
+async function start() {
+  const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
+  const unlisten = await client.listen(
+    "message.saved",
+    (event) => console.log("저장된 내용:", event.payload),
+    { onError: console.error },
+  );
+  try {
+    await client.invoke("message.save", "안녕하세요");
+    const text = await client.invoke("message.read", null);
+    console.log(text);
+    return { client, unlisten };
+  } catch (error) {
+    await unlisten();
+    throw error;
+  }
+}
 ```
 
-각 템플릿의 `src/client.ts`에서 제공하는 `client.invoke`와 `client.listen`을 호출합니다.
+UI 초기화 훅에서 `start()`를 호출하고 반환한 클라이언트와 해제 함수를 보관합니다. 생성 오류와 초기 호출 실패를 UI에서 처리합니다.
+클라이언트는 컴포넌트와 이벤트 핸들러에서 재사용합니다.
 UI 컴포넌트를 제거할 때는 `await unlisten()`으로 해당 구독을 해제합니다.
-React나 Vue, Svelte에서도 컴포넌트의 정리 시점에 이 해제 함수를 호출합니다.
-명령 이름과 입력, 결과, 이벤트 데이터의 타입은 앱 정의에서 추론합니다.
-직접 클라이언트를 구성하는 방법은 [타입과 입력 검증](/guides/types-and-validation/)을 참고하세요.
+컴포넌트마다 공유 클라이언트를 닫지 않습니다. 기본 연결은 페이지 종료 때 자동으로 정리됩니다.
+기본 클라이언트 생성에는 WebView 브리지가 필요합니다.
+[타입과 입력 검증](/guides/types-and-validation/)에서 타입 추론 범위를 확인하세요.
+
+생성 앱의 `src/client.ts`가 제공하는 타입이 지정된 `client.invoke`, `client.listen`도 사용할 수 있습니다.
+이 파일을 import하는 것만으로 연결하지 않으며, UI 초기화와 구독 해제 규칙은 같습니다.
 
 ## 브라우저와 WebView
 

@@ -8,8 +8,8 @@ Requires [Bun 1.4.2](https://bun.sh).
 
 ```sh
 bun install
-bun run bunaway doctor
-bun run bunaway dev
+bun run doctor
+bun run dev
 ```
 
 Edit `src/` for the UI and `src-bunaway/` for the backend.
@@ -18,6 +18,31 @@ Edit `src/` for the UI and `src-bunaway/` for the backend.
 The framework boots the app from `build.app` in `src-bunaway/bunaway.json`.
 `src/client.ts` derives command names, inputs, results and event payloads from the app definition.
 Import its `client` in UI components. For example, `await client.invoke("message.read", null)` returns a string.
+
+## Backend calls
+
+The example below infers command and event types from the app definition:
+
+```ts
+import type { CommandsOf, EventsOf } from "@bunaway/backend";
+import { createClient } from "@bunaway/client";
+import type { app } from "../src-bunaway/app.ts";
+
+async function start(): Promise<void> {
+  const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
+  const text = await client.invoke("message.read", null);
+  console.log(text);
+}
+
+void start().catch(console.error);
+```
+
+The example creates the client in a startup function to handle creation and call
+failures. You can reuse it in components and event handlers. Dispose each
+component's `client.listen` subscriptions on cleanup, keeping the shared client
+open. Backend calls through the default connection require the desktop WebView.
+
+## Backend Host operations
 
 Backend commands and their services can import `storage`, `log`, and `capabilities`
 from `@bunaway/plugin-storage`, `@bunaway/plugin-log`, and `@bunaway/plugin-capabilities`, respectively. The SDK uses the current command's Host permissions
@@ -30,10 +55,18 @@ app logging requires installing `@bunaway/plugin-log`, registering `logPlugin` a
 
 ```sh
 bun run build
-bun run bunaway build
+# Build and package for Windows:
+bun run package win-direct --build
 ```
 
-The first command builds the frontend; the second creates the desktop app in `dist/`.
+`bun run build` runs the web build configured in `build.command`, validates its output,
+and creates the desktop app in `dist/`. It runs the web build every time, including
+when `web-dist/` already exists. A web build failure stops the app build.
+`package --build` uses the same full build before packaging.
+
+Use `bun run dev:web` for the web server alone and `bun run build:web` for web assets alone.
+`bun run validate` checks existing assets without running the web build.
+`bun run package win-direct` packages an existing app artifact without rebuilding.
 
 [Vite](https://vite.dev)
 

@@ -29,38 +29,38 @@ Windows FFI 호스트와 macOS의 `runBunApp` 어댑터가 이를 연결한다. 
 
 ## 클라이언트와 Transport
 
-앱 화면의 기본 API는 `@bunaway/client`의 `invoke`, `listen`이다.
 기능 지원 조회는 선택 패키지인 `@bunaway/plugin-capabilities`가 제공한다.
 네이티브 플러그인은 화면과 백엔드에서 같은 패키지 경로로 import한다.
-첫 호출에서 SDK가 WebView 브리지를 찾아 Transport와 Client를 만들고 현재 프로토콜의
-hello를 교환한다. import만으로 연결하거나 브리지를 읽지 않으므로 SSR, 일반 브라우저에서
-모듈을 import할 수 있다. 브리지가 없는 환경에서 기본 API를 호출하면 `UNSUPPORTED`로
-Promise를 거부하며 앱 WebView에서 열도록 안내한다. 브라우저용 가짜 성공 응답은 없다.
-인자 없는 `createClient()`는 Client를 즉시 반환하는 동기 API이므로 브리지가 없으면
-같은 `UNSUPPORTED` 오류를 동기적으로 던진다.
 
-```ts
-import { invoke, listen } from "@bunaway/client";
-
-const unlisten = await listen<string>("memo.saved", event => {
-  console.log(event.payload);
-}, { onError: error => console.error(error) });
-const text = await invoke<string>("memo.read", null);
-await unlisten();
-```
-
-직접 import한 `invoke<T>`와 `listen<T>`의 `T`는 각각 반환값과 이벤트 payload 타입이며 런타임
-검증기를 추가하지 않는다. 앱 정의에서 명령 이름, 입력, 출력, 이벤트 타입을 추론하려면
-`CommandsOf`, `EventsOf`와 인자 없는 `createClient`를 사용한다. 백엔드 import는 type-only다.
+`CommandsOf`, `EventsOf`로 앱 정의에서 추론한 타입을 `createClient`에 지정하면
+명령과 이벤트의 이름, 입력, 출력과 이벤트 payload 타입을 검사할 수 있다.
+아래 예제는 UI 초기화 함수에서 클라이언트를 만든다. 백엔드 import는 type-only다.
 
 ```ts
 import { createClient } from "@bunaway/client";
 import type { CommandsOf, EventsOf } from "@bunaway/backend";
 import type { app } from "../src-bunaway/app.ts";
 
-const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
-const text = await client.invoke("message.read", null);
+async function start(): Promise<void> {
+  const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
+  const text = await client.invoke("message.read", null);
+  console.log(text);
+}
+
+void start().catch(console.error);
 ```
+
+`createClient()`는 WebView 브리지를 찾아 Transport와 Client를 만들고 현재 프로토콜의
+hello를 교환한다. Client를 즉시 반환하는 동기 API이며 브리지가 없으면 `UNSUPPORTED`를
+동기적으로 던지므로 생성도 초기화 과정의 오류 처리 범위에 포함한다.
+import만으로 연결하거나 브리지를 읽지 않으므로 SSR, 일반 브라우저에서 모듈을 import할
+수 있다. 기본 클라이언트 생성에는 호스트가 제공하는 WebView 브리지가 필요하다.
+브라우저용 가짜 성공 응답은 없다.
+
+직접 import하는 `invoke`, `listen`도 계속 지원한다. 이 함수들은 같은
+기본 연결을 사용하며 브리지가 없으면 Promise를 `UNSUPPORTED`로 거부한다.
+`invoke<T>`, `listen<T>`의 타입 인자는 작성자가 선언한 반환값이나 이벤트 payload 타입이다.
+앱 정의의 명령 이름과 입력 타입을 검사하거나 런타임 검증기를 추가하지 않는다.
 
 기본 함수와 인자 없는 `createClient()`는 문서별 Client 하나를 공유한다. SDK를 여러 번
 로드하거나 UI HMR이 호출 모듈을 교체해도 같은 연결, 요청 ID, 구독을 사용한다.

@@ -52,7 +52,7 @@ vanilla TypeScript 앱은 다음과 같이 생성한다.
 bun packages/cli/src/main.ts create ../my-vite-app --template vite --package-dir build/framework
 cd ../my-vite-app
 bun install
-bun run bunaway dev
+bun run dev
 ```
 
 React, Vue, Svelte도 TypeScript + Vite 템플릿으로 제공한다.
@@ -63,8 +63,8 @@ bun packages/cli/src/main.ts create ../my-vue-app --template vue --package-dir b
 bun packages/cli/src/main.ts create ../my-svelte-app --template svelte --package-dir build/framework
 ```
 
-생성한 앱에서 `bun install` → `bun run bunaway dev`로 개발하고,
-`bun run build` → `bun run bunaway build`로 네이티브 앱을 만든다.
+생성한 앱에서 `bun install` → `bun run dev`로 개발하고,
+`bun run build` 한 번으로 웹 UI를 포함한 앱을 만든다.
 `bun run typecheck`는 UI 컴포넌트, 백엔드, Vite 설정을 검사한다.
 React는 `src/App.tsx`, Vue는 `src/App.vue`와 `src/components/HelloWorld.vue`,
 Svelte는 `src/App.svelte`와 `src/lib/Counter.svelte`에서 시작한다.
@@ -75,15 +75,26 @@ React Fast Refresh의 인라인 preamble은 개발 CSP에서만 허용한다.
 모든 Vite 기반 템플릿의 프로덕션 CSP는 `script-src 'self'; style-src 'self'`이며
 이미지는 인라인 data URL 대신 로컬 파일로 출력한다.
 공통 `src-bunaway/`의 앱 정의, 메시지 명령, 이벤트, 저장 정책은 동일하다.
-공식 UI 화면에 SDK 호출을 추가하려면 `@bunaway/client`를 사용한다.
+앱 정의에서 추론한 타입을 `createClient`에 지정하면 명령 이름과 입력, 결과, 이벤트 데이터의 타입을 검사할 수 있다.
+이 클라이언트의 `client.invoke`, `client.listen`으로 호출하고 구독한다.
+생성과 호출 실패를 처리하고 컴포넌트를 제거할 때는 해당 구독만 해제한다.
 
 `vite` 템플릿은 공식 [create-vite@9.2.1의 vanilla-ts](https://github.com/vitejs/vite/tree/fea5b21dd9524ed7308632407b996f1fe5942c9c/packages/create-vite/template-vanilla-ts)
 기본 화면(로고, 카운터)을 사용한다.
 루트 `index.html`, `src/` UI 코드, 스타일, 이미지, `public/` 정적 자산은 upstream 원본이다.
-`dev`, `build`, `preview`는 Vite 프런트엔드 명령이며 `bunaway` script로 네이티브 CLI를 호출한다.
+모든 템플릿의 `dev`, `build`, `package`, `validate`, `doctor`는 앱 CLI를 호출한다.
+Vite 웹 전용 명령은 `dev:web`, `build:web`, `preview`다.
 UI 변경은 Vite가 처리하고 백엔드 변경은 CLI가 호스트를 재시작한다.
-네이티브 검증, 빌드, 패키징 전에는 `bun run build`로 `web-dist/`를 생성한다.
-CLI 자체는 외부 프런트엔드 프로덕션 빌드를 자동 실행하지 않는다.
+`build.command`는 `["bun", "run", "build:web"]`로 웹 빌드를 연결한다.
+`bunaway build`와 `package --build`는 기존 출력이 있어도 웹 빌드를 매번 실행하고,
+성공한 출력을 검증한 뒤 앱을 빌드한다. 웹 빌드가 실패하면 기존 앱 산출물을 유지하며 중단한다.
+웹 도구의 출력과 `build.frontend`는 앱 산출물 및 잠금 경로와 분리해야 한다.
+`dist` 자체는 거부하며 `web-dist`나 `dist/web`처럼 겹치지 않는 경로를 사용한다.
+Ctrl+C나 SIGTERM으로 중단하면 실행한 명령과 하위 프로세스를 정리하고 빌드 잠금을 해제한다.
+명령 종료 후에도 하위 프로세스의 정리 완료를 확인하며, 확인하지 못하면 빌드는 실패한다.
+`validate`는 빌드 명령을 실행하지 않으므로 웹 자산만 검사할 때는 `bun run build:web` 다음 실행한다.
+`package` 단독 실행은 앱 소스나 웹 출력 없이도 기존 앱 산출물을 검증해 패키징한다.
+기존 앱은 웹 build/dev 스크립트를 build:web/dev:web으로 옮기고 build.command/dev.command를 연결한다.
 생성 템플릿은 [templates/](./templates/)에서 관리한다. 구조와 script 역할은
 [Tauri vanilla-ts 템플릿](https://github.com/tauri-apps/create-tauri-app/tree/12db955f20162e7422cbeed76c2aa630760ccca3/templates/template-vanilla-ts)을 참조한다.
 각 템플릿은 UI, 백엔드, 정책, 설정을 모두 포함하며, `create`는 선택한 폴더 하나만 복사한다.
@@ -125,7 +136,9 @@ vanilla MVP는 양쪽 호스트가 공통으로 지원하는 단일 뷰 `app` �
 macOS는 기존 `bunaway://` 매핑이다. policy.json의 HTTP origin은 허용하지 않는다.
 `dev.url`의 정확한 loopback origin은 개발 산출물에만 적용하며 프로덕션에 포함하지 않는다.
 
-`vanilla` 템플릿의 화면은 `@bunaway/client`의 `invoke`, `listen`을 직접 사용하고,
+`vanilla` 템플릿은 `CommandsOf`와 `EventsOf`로 앱 정의에서 명령과 이벤트 타입을 추론한다.
+이 타입을 지정한 클라이언트를 `createClient`로 만들고 명령을 호출하거나 이벤트를 구독한다.
+명령과 이벤트 이름, 입력과 결과는 `bun run typecheck`로 검사한다. 타입만 import하므로 백엔드 구현은 UI 번들에 포함되지 않는다.
 백엔드는 `defineModule`, `defineApp`으로 명령, 이벤트를 등록한다.
 화면에서 별도의 초기화 코드를 작성할 필요는 없다. 일반 브라우저에서 백엔드 호출은
 `UNSUPPORTED`로 실패하므로 `bunaway dev`로 연 앱 창을 사용한다.
@@ -140,6 +153,15 @@ macOS는 기존 `bunaway://` 매핑이다. policy.json의 HTTP origin은 허용�
 백엔드 자체 작업에는 저장 권한을 주지 않는다.
 
 ## 개발 수명주기
+
+Windows `bunaway dev`는 UI DevTools를 활성화한다. WebView에 포커스를 두고 F12 또는
+Ctrl+Shift+I로 연다. `bunaway dev --inspect`는 백엔드 Bun inspector를
+`ws://127.0.0.1:6499/bunaway`에 연결하며 `--inspect=<port>`로 포트를 지정한다.
+옵션을 생략하면 inspector를 시작하지 않는다. 포트는 1부터 65535까지 정수이며
+이 옵션은 Windows x64에서만 지원한다. 백엔드가 재시작되면 같은 주소로 다시 연결한다.
+개발 번들은 원본 소스를 포함한 inline 소스맵을 생성하고 외부 UI의 소스맵은 개발 서버가 제공한다.
+일반 build에는 DevTools, inspector 인자나 CLI 개발 소스맵을 추가하지 않는다.
+[디버깅 가이드](../../docs/site/src/content/docs/guides/debugging.mdx)에서 attach 설정과 오류 위치 확인 절차를 설명한다.
 
 `dev`가 없으면 프로젝트 소스, 설정 변경을 debounce 후 직렬 처리한다(의존성/출력 디렉터리는 제외).
 프런트엔드 변경도 **전체 네이티브 호스트/창 재시작**으로 갱신한다.

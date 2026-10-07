@@ -60,6 +60,8 @@ browser 조건을, src-bunaway/tsconfig.json은 bun 조건을 사용합니다.
 ```
 
 `build.app`은 앱 정의를, `build.frontend`는 UI 자산 디렉터리를 가리킵니다.
+웹 빌드 명령은 `build.command`로 연결합니다. 예를 들어 `["bun", "run", "build:web"]`을 지정하면 `bun run build`가 웹 빌드 후 자산을 검증하고 앱을 만듭니다.
+웹 빌드 명령을 생략하면 지정한 정적 UI를 CLI가 번들합니다.
 **파일 경로는 프로젝트 루트 기준**으로 적습니다. 예를 들어 앱 정의 경로는 `src-bunaway/app.ts`입니다.
 
 `app.view: "main"`은 아래 정책에서 `id: "main"`인 뷰를 선택합니다.

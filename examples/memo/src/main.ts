@@ -1,4 +1,6 @@
-import { invoke, listen } from "@bunaway/client";
+import type { CommandsOf, EventsOf } from "@bunaway/backend";
+import { createClient } from "@bunaway/client";
+import type { memoApp } from "../src-bunaway/app.ts";
 
 const input = document.querySelector<HTMLTextAreaElement>("#memo");
 const saved = document.querySelector<HTMLElement>("#saved-memo");
@@ -40,7 +42,8 @@ document.addEventListener("keydown", (event) => {
 });
 
 async function start() {
-  await listen<string>(
+  const client = createClient<CommandsOf<typeof memoApp>, EventsOf<typeof memoApp>>();
+  await client.listen(
     "memo.saved",
     (event) => {
       const text = event.payload;
@@ -62,7 +65,7 @@ async function start() {
   );
   connected = true;
   try {
-    ui.input.value = await invoke<string>("memo.read", null);
+    ui.input.value = await client.invoke("memo.read", null);
     ui.saved.textContent = ui.input.value;
     updateCount();
     setStatus("저장된 메모를 불러왔어요.", "saved");
@@ -79,7 +82,7 @@ async function start() {
     ui.saveLabel.textContent = "저장 중…";
     setStatus("메모를 저장하고 있어요.");
     try {
-      await invoke("memo.save", value);
+      await client.invoke("memo.save", value);
       success = true;
     } catch {
       setStatus("저장하지 못했어요. 작성한 내용은 그대로예요.", "error");

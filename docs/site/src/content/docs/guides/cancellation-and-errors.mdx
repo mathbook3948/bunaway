@@ -8,9 +8,9 @@ description: 요청을 취소하고 오류를 처리한 뒤 저장 상태를 확
 
 ## UI에서 취소하기
 
-```ts
-import { client } from "./client.ts";
+아래 `client`는 [앱 정의의 타입을 지정해 만든 공유 클라이언트](/guides/types-and-validation/)입니다.
 
+```ts
 const controller = new AbortController();
 const request = client.invoke("message.read", null, {
   signal: controller.signal,

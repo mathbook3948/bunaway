@@ -602,6 +602,7 @@ test("artifact audit rejects omitted schemas, declarations and Git attributes wi
     await expect(checkArtifact(root)).rejects.toThrow("inventory mismatch");
     await writeFile(source, sourceOriginal);
     for (const name of [
+      "docs/decisions/0012-integrated-app-build.md",
       "native/host-api/generated/process.schema.json",
       "packages/cli/dist/types/cli/src/index.d.ts",
       "packages/cli/templates/vanilla/gitattributes",
@@ -613,6 +614,7 @@ test("artifact audit rejects omitted schemas, declarations and Git attributes wi
       "packages/cli/templates/svelte/src-bunaway/policy.json",
       "packages/cli/src/assets.ts",
       "packages/cli/src/sdk.ts",
+      "packages/cli/src/managed-command.ts",
     ]) {
       const path = resolve(root, name);
       const original = await readFile(path);

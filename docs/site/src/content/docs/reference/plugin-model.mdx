@@ -3,7 +3,7 @@ title: 선택 네이티브 플러그인 구조
 description: 개별 설치, 앱 등록, 권한과 플랫폼 구현을 분리하는 공개 계약.
 ---
 
-ADR 0012의 개별 플러그인 구조를 Windows에서 구현했습니다.
+ADR 0013의 개별 플러그인 구조를 Windows에서 구현했습니다.
 로컬 tarball로 설치할 수 있으며 현재 플랫폼 어댑터는 Windows만 제공합니다.
 [백엔드 API](/reference/backend/host-api/)와 [PluginDefinition](/reference/backend/plugins/)을 참고하세요.
 
@@ -93,5 +93,5 @@ export default defineApp({ modules: [memo], plugins: [storagePlugin] });
 상세 공개 타입과 Windows 실행 순서, 이관 완료 조건은 저장소의
 [구조 계약](https://github.com/mathbook3948/bunaway/blob/main/docs/architecture/plugins.md)에
 정리합니다. 결정 배경은
-[ADR 0012](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0012-optional-native-plugins.md)를
+[ADR 0013](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0013-optional-native-plugins.md)를
 따릅니다.

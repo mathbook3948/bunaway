@@ -13,10 +13,7 @@ client.close(): Promise<void>
 ## 사용법
 
 ```ts
-import { createClient } from "@bunaway/client";
-
-const client = createClient();
-// 앱에서 기본 연결을 명시적으로 종료할 때
+// UI에서 공유하는 client의 연결을 명시적으로 종료할 때
 await client.close();
 ```
 

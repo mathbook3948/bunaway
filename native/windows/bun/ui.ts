@@ -215,6 +215,7 @@ try {
           log: (event, data) => log(event, { view: spec.view, ...data }),
         },
         config.legacyProfile,
+        config.devtools,
       );
     } catch (error) {
       windows.destroy(window);

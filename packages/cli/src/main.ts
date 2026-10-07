@@ -8,13 +8,15 @@ import {
   validateProject,
 } from "./index.ts";
 import { isTemplate, templateNames, type Template } from "./templates.ts";
+import { parseDevArguments } from "./dev.ts";
 
 const help = `bunaway (vanilla / Vite / React / Vue / Svelte)
   create <new-directory>   Generate an independent project (then bun install)
                           [--template ${templateNames.join("|")}] [--package-dir <tarball-directory>]
   validate [directory]    Validate configuration and deny-by-default policy
   dev [directory]         Watch sources; rebuild and restart the native host
-  build [directory]       Build a native package with pinned bundled Bun
+                          [--inspect[=<port>]] Windows backend debugger (default 6499)
+  build [directory]       Build frontend and app with pinned bundled Bun
   package <channel> [dir] Package a build artifact for a channel [--build]
   doctor [directory]      Check project, runtime version and native tools
 Builds are native only: Windows x64 / macOS arm64.`;
@@ -45,9 +47,8 @@ export async function main(args: string[]): Promise<number> {
       template,
       ...(packageDirectory ? { packageDirectory } : {}),
     });
-    const nativeScript = template === "vanilla" ? "bun run" : "bun run bunaway";
     console.log(
-      `Created ${path}\nNext: enter the directory, run bun install, then ${nativeScript} doctor and ${nativeScript} dev.`,
+      `Created ${path}\nNext: enter the directory, run bun install, then bun run doctor and bun run dev.`,
     );
     return 0;
   }
@@ -67,6 +68,11 @@ export async function main(args: string[]): Promise<number> {
     const report = await packageProject(directory, channel, { build });
     return report.ok ? 0 : 1;
   }
+  if (command === "dev") {
+    const { directory, ...options } = parseDevArguments(rest);
+    await devProject(directory, options);
+    return 0;
+  }
   const [directory, ...extra] = rest;
   if (extra.length || directory?.startsWith("--"))
     throw new Error("Unexpected argument. Use --help.");
@@ -76,9 +82,6 @@ export async function main(args: string[]): Promise<number> {
       console.log("Configuration and policy are valid.");
       return 0;
     }
-    case "dev":
-      await devProject(directory ?? ".");
-      return 0;
     case "build":
       console.log(`Built ${(await buildProject(directory ?? ".")).output}`);
       return 0;

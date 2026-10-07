@@ -31,7 +31,7 @@ export async function save(text: string) {
 실행 범위와 로그, 기능 조회 사용법은 [백엔드 Host API](./docs/site/src/content/docs/reference/backend/host-api.mdx)를 따른다.
 
 저장, 앱 로그, 기능 지원 조회를 개별 설치하는 플러그인 모델은
-[ADR 0012](./docs/decisions/0012-optional-native-plugins.md)에 확정했다.
+[ADR 0013](./docs/decisions/0013-optional-native-plugins.md)에 확정했다.
 [공개 계약](./docs/architecture/plugins.md)에 따라 Windows 실행과 개별 패키지 배포를 구현했다.
 기본 템플릿은 저장 플러그인만 설치하고 등록한다.
 플러그인은 화면과 백엔드에서 `@bunaway/plugin-storage`처럼 같은 경로로 import한다.
@@ -58,27 +58,31 @@ Bun은 `mise.toml`과 `package.json`에 **1.4.2**로 고정되어 있다.
 
 ## 화면에서 앱 기능 사용하기
 
-`invoke`는 백엔드 명령을 실행하고 결과를 받는다. `listen`은 백엔드 이벤트를 구독한다.
+앱 정의에서 추론한 타입을 클라이언트에 지정하면 명령 이름과 입력, 결과, 이벤트 데이터의 타입을 검사할 수 있다.
+`client.invoke`는 백엔드 명령을 실행하고 결과를 받는다. `client.listen`은 백엔드 이벤트를 구독한다.
 
 ```ts
-import { invoke, listen } from "@bunaway/client";
+import { createClient } from "@bunaway/client";
+import type { CommandsOf, EventsOf } from "@bunaway/backend";
+import type { app } from "../src-bunaway/app.ts";
 
-const unlisten = await listen<string>(
-  "message.saved",
-  (event) => console.log("저장된 내용:", event.payload),
-  { onError: console.error },
-);
-await invoke("message.save", "안녕하세요");
-const text = await invoke<string>("message.read", null);
-await unlisten();
+async function start(): Promise<void> {
+  const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
+  const text = await client.invoke("message.read", null);
+  await client.invoke("message.save", text);
+}
+
+void start().catch(console.error);
 ```
 
-화면에서는 별도의 초기화 코드 없이 `invoke`와 `listen`을 호출한다.
-UI 컴포넌트가 사라지면 반환받은 `unlisten`으로 해당 구독을 해제한다.
+위 예제는 UI 초기화 함수에서 클라이언트를 만들고 생성 오류와 호출 실패를 처리한다.
+컴포넌트와 이벤트 핸들러에서 같은 클라이언트를 사용한다.
+UI 컴포넌트가 사라지면 `client.listen`이 반환한 `unlisten`으로 해당 구독을 해제한다.
+공유 클라이언트는 컴포넌트마다 닫지 않으며 페이지 종료 때 자동으로 정리된다.
 호출은 `bunaway dev`로 연 창이나 배포 앱의 WebView에서 동작한다. 일반 브라우저에는
 브리지가 없어 `UNSUPPORTED`로 실패한다. 기존 `createClient({ transport, hello })`는
-사용자 정의 연결, 테스트에 사용할 수 있다. 타입 추론을 사용하는 인자 없는
-`createClient()`와 취소, 오류, 수명 규칙은 [클라이언트 API](./docs/architecture/common-api.md#클라이언트와-transport)에 있다.
+사용자 정의 연결, 테스트에 사용할 수 있다. 직접 import하는 함수 API도 계속 지원한다.
+타입 추론과 취소, 오류, 수명 규칙은 [클라이언트 API](./docs/architecture/common-api.md#클라이언트와-transport)에 있다.
 
 ## 명령
 
@@ -116,7 +120,7 @@ macOS는 Apple Silicon, Xcode Command Line Tools와 GUI 세션이 필요하다.
 `probe:macos` 다음 `host:macos`를 **직렬 실행**한다. 두 빌드가 공유 Bun 캐시를
 처음 다운로드하고 추출하므로 캐시가 없는 상태에서 두 작업을 동시에 실행하면 충돌할 수 있다.
 `native/macos/host/run.sh --app`은 회귀 앱의 `.app` 생성과 ad-hoc 서명을 추가한다.
-[메모 예제](examples/memo/README.md)는 CLI 생성 앱과 같은 구조이며 예제 폴더에서 `bun run bunaway dev`로 실행한다.
+[메모 예제](examples/memo/README.md)는 CLI 생성 앱과 같은 구조이며 예제 폴더에서 `bun run dev`로 실행한다. `bun run build`는 웹 UI와 앱을 함께 빌드한다.
 
 ## CI
 

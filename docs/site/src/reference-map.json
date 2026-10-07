@@ -305,6 +305,7 @@
           "frameworkRoot",
           "appEntry",
           "frontend",
+          "buildCommand",
           "backendDependencies",
           "nativePlugins",
           "bundle",

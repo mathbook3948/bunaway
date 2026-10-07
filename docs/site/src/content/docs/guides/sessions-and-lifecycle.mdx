@@ -9,8 +9,8 @@ description: 앱이 시작되고 문서가 다시 연결되거나 창이 닫힐 
 ## 시작
 
 앱 정의를 default export하고 policy.json에 사용할 기능을 허용합니다.
-플러그인의 setup이 끝나면 명령을 처리할 준비가 됩니다. UI는 직접 import한 `invoke`와 `listen`으로 기능을 사용합니다.
-준비 상태를 UI에 표시할 때는 `createClient().ready`를 사용합니다.
+플러그인의 setup이 끝나면 명령을 처리할 준비가 됩니다. `client.invoke`와 `client.listen`은 연결이 준비될 때까지 기다립니다.
+생성 오류는 초기화 과정에서 처리합니다. 준비 상태를 UI에 표시할 때는 재사용하는 `client.ready`를 사용합니다.
 
 ## 수명별 소유 데이터
 

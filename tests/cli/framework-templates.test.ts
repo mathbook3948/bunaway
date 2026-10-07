@@ -29,7 +29,7 @@ for (const template of ["react", "vue", "svelte"] as const)
       expect(await Bun.file(resolve(project, "web-dist/index.html")).exists()).toBe(false);
       await verifyViteDevelopment(development, template);
       for (const args of [
-        ["run", "build"],
+        [resolve(import.meta.dir, "build.fixture.ts"), project],
         ["run", "bunaway", "validate"],
       ]) {
         const child = Bun.spawn([process.execPath, ...args], {

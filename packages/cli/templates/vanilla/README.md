@@ -19,17 +19,29 @@ The framework boots the app from `build.app` in `src-bunaway/bunaway.json`.
 `src/client.ts` derives command names, inputs, results and event payloads from the app definition.
 Import its `client` in UI components. For example, `await client.invoke("message.read", null)` returns a string.
 
-Call backend commands directly from the UI:
+You can also create a client with command and event types inferred from the app definition:
 
 ```ts
-import { client } from "./client.ts";
+import type { CommandsOf, EventsOf } from "@bunaway/backend";
+import { createClient } from "@bunaway/client";
+import type { app } from "../src-bunaway/app.ts";
 
-const text = await client.invoke("message.read", null);
+async function start(): Promise<void> {
+  const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
+  const text = await client.invoke("message.read", null);
+  console.log(text);
+}
+
+void start().catch(console.error);
 ```
 
-Use `client.invoke` and `client.listen` without initialization code. Call the disposer returned
-by `listen` when the UI component is removed. Backend calls work in the desktop
+`bun run typecheck` rejects unknown command and event names and invalid payloads.
+The type-only imports keep backend implementation out of the browser bundle.
+The client uses the shared WebView connection without transport setup. Call the
+disposer returned by `client.listen` when the UI component is removed. Backend calls work in the desktop
 app; calls from a regular browser fail with `UNSUPPORTED`.
+The generated UI starts its subscription during startup so connection failures appear in the
+status message and keep the Save button disabled.
 
 Backend commands and their services can import `storage`, `log`, and `capabilities`
 from `@bunaway/plugin-storage`, `@bunaway/plugin-log`, and `@bunaway/plugin-capabilities`, respectively. The SDK uses the current command's Host permissions

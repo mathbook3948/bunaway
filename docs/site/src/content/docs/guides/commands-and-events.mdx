@@ -12,6 +12,8 @@ import clientSource from '@repo/packages/cli/templates/vanilla/src/client.ts?raw
 **명령**은 입력을 받아 결과를 반환하는 작업이고, **이벤트**는 구독한 UI에 전달하는 알림입니다.
 저장 명령의 응답은 호출한 UI가 받고 저장 이벤트는 구독 중인 UI가 받습니다.
 
+아래 템플릿은 앱 정의에서 추론한 타입으로 클라이언트를 만듭니다. 명령이나 이벤트 이름을 잘못 쓰거나 입력 타입이 다르면 `bun run typecheck`가 실패합니다.
+
 ## 1. 앱 백엔드에서 계약과 구현 정의
 
 아래 코드는 현재 `vanilla` 템플릿의 실제 앱 정의와 메시지 모듈입니다.
@@ -67,16 +69,18 @@ import clientSource from '@repo/packages/cli/templates/vanilla/src/client.ts?raw
 
 1. `./client.ts`에서 앱 타입을 연결한 `client`를 가져옵니다.
 2. `client.listen("message.saved", ...)`으로 저장 알림을 먼저 구독합니다.
-3. `client.invoke("message.read", null)`로 이전 저장 내용을 복원합니다.
+3. `client.invoke("message.read", null)`로 이전 저장 내용을 복원합니다. 결과의 타입은 앱 정의에서 추론합니다.
 4. 버튼 클릭 시 `client.invoke("message.save", text)`를 호출합니다.
 5. 이벤트 콜백의 `event.payload`로 화면을 갱신합니다.
+
+클라이언트 생성이나 구독 시작에 실패하면 화면에 `Connection failed`와 오류 메시지를 표시하고 저장 버튼을 비활성 상태로 유지합니다.
 
 `listen()`의 `onError`는 필수입니다. 활성 구독의 종료는 이 콜백에서 처리하고, 구독 시작 실패는 `listen()`의 Promise에서 처리합니다.
 `listen()`이 반환한 해제 함수를 보관해 두었다가 컴포넌트를 제거할 때 `await unlisten()`으로 구독을 정리합니다.
 
 ## 응답과 이벤트는 어떻게 다르나요?
 
-`await invoke("message.save", text)`는 **그 요청의 결과**인 `null`을 받습니다.
+`await client.invoke("message.save", text)`는 **그 요청의 결과**인 `null`을 받습니다.
 `message.saved`는 **허용된 구독자에게 전달되는 알림**입니다.
 `{ kind: "broadcast" }`로 발행해도 정책에서 이벤트를 허용하고 구독 중인 세션에만 전달됩니다.
 

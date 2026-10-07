@@ -3,15 +3,25 @@ import { mkdir, mkdtemp, readdir, realpath, rename, rm } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { runInNewContext } from "node:vm";
 import { buildProject, bundleAssets } from "../../packages/cli/src/build.ts";
-import { validateProject } from "../../packages/cli/src/config.ts";
+import { readProjectMetadata, validateProject } from "../../packages/cli/src/config.ts";
 import { RestartController, shouldRestartHost } from "../../packages/cli/src/dev.ts";
-import { writeJson } from "../../packages/cli/src/files.ts";
+import { hash, writeJson } from "../../packages/cli/src/files.ts";
 import { createProject } from "./project.ts";
 
 let home: string;
 let project: string;
 let originals: Record<string, string>;
+
+async function stopWebBuilder(pidFile: string): Promise<void> {
+  if (process.platform === "win32" || !(await Bun.file(pidFile).exists())) return;
+  try {
+    process.kill(-Number(await Bun.file(pidFile).text()), "SIGKILL");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+  }
+}
 
 beforeAll(async () => {
   home = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-cli-")));
@@ -66,12 +76,117 @@ test("create produces a relocatable project with real SDK dependencies and no re
     ).exists(),
   ).toBe(true);
   expect(originals["src-bunaway/app.ts"]).not.toContain("examples/memo");
+  const installedCli = resolve(project, "node_modules/@bunaway/cli");
+  for (const name of ["docs/development-server.md", "docs/decisions/0009-development-server.md"]) {
+    const text = await Bun.file(resolve(installedCli, name)).text();
+    expect(text).toContain("0012-integrated-app-build.md");
+  }
+  expect(
+    await Bun.file(resolve(installedCli, "docs/decisions/0012-integrated-app-build.md")).text(),
+  ).toContain("build.command");
   const process = Bun.spawn([globalThis.process.execPath, "run", "validate"], {
     cwd: project,
     stdout: "pipe",
     stderr: "pipe",
   });
   expect(await process.exited).toBe(0);
+});
+
+test("vanilla UI checks command and event contracts without bundling backend implementation", async () => {
+  const path = resolve(project, "src/main.ts");
+  const appPath = resolve(project, "src-bunaway/app.ts");
+  const original = originals["src/main.ts"] ?? "";
+  async function typecheck() {
+    const child = Bun.spawn([process.execPath, "run", "typecheck"], {
+      cwd: project,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const output = new Response(child.stdout).text();
+    const errors = new Response(child.stderr).text();
+    const code = await child.exited;
+    return { code, output: `${await output}\n${await errors}` };
+  }
+  try {
+    expect((await typecheck()).code).toBe(0);
+    const insertion = "  await client.listen(";
+    expect(original).toContain(insertion);
+    for (const suffix of [
+      'void client.invoke("message.typo", null);',
+      'void client.invoke("message.save", 123);',
+      'void client.invoke("message.read", "invalid");',
+      'void client.listen("message.typo", () => {}, { onError() {} });',
+      'void client.listen("message.saved", (event) => { const value: number = event.payload; void value; }, { onError() {} });',
+      'void client.invoke("message.read", null).then((value) => { const number: number = value; void number; });',
+    ]) {
+      await Bun.write(path, original.replace(insertion, `  ${suffix}\n${insertion}`));
+      const checked = await typecheck();
+      expect(checked.code, suffix).not.toBe(0);
+      expect(checked.output).toContain("src/main.ts");
+    }
+    await Bun.write(path, original);
+    await Bun.write(
+      appPath,
+      `console.error("backend-only-type-import-marker");\n${originals["src-bunaway/app.ts"]}`,
+    );
+    const assets = resolve(home, "typed-ui-assets");
+    await bundleAssets(await validateProject(project), assets);
+    expect(await Bun.file(resolve(assets, "web/main.js")).text()).not.toContain(
+      "backend-only-type-import-marker",
+    );
+  } finally {
+    await Bun.write(path, original);
+    await Bun.write(appPath, originals["src-bunaway/app.ts"] ?? "");
+  }
+}, 30000);
+
+test("vanilla UI displays a missing WebView bridge error and keeps saving disabled", async () => {
+  const assets = resolve(home, "no-bridge-assets");
+  await bundleAssets(await validateProject(project), assets);
+  const elements = {
+    "#message": { value: "" },
+    "#saved": { textContent: "" },
+    "#status": { textContent: "Connecting…" },
+    "#save": { disabled: true },
+  };
+  const document = {
+    querySelector: (selector: keyof typeof elements) => elements[selector],
+  };
+  runInNewContext(await Bun.file(resolve(assets, "web/main.js")).text(), {
+    window: { document },
+    document,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(elements["#status"].textContent).toBe(
+    "Connection failed: Bunaway bridge is unavailable. Open this page through bunaway dev or the desktop app.",
+  );
+  expect(elements["#save"].disabled).toBe(true);
+});
+
+test("development adds inline maps to local UI and backend bundles on both targets", async () => {
+  const valid = await validateProject(project);
+  for (const windows of [false, true]) {
+    for (const development of [false, true]) {
+      const assets = resolve(home, `source-map-assets-${windows}-${development}`);
+      await bundleAssets(valid, assets, windows, false, development);
+      for (const name of ["web/main.js", windows ? "app.js" : "backend.js"]) {
+        const text = await Bun.file(resolve(assets, name)).text();
+        const encoded = text.match(/sourceMappingURL=data:application\/json;base64,([^\s]+)/)?.[1];
+        expect(encoded !== undefined, name).toBe(development);
+        if (encoded) {
+          const map = JSON.parse(Buffer.from(encoded, "base64").toString());
+          const original = originals[name === "web/main.js" ? "src/main.ts" : "src-bunaway/app.ts"];
+          expect(map.sourcesContent).toContain(original);
+          expect(map.sources).toContain(
+            resolve(
+              project,
+              name === "web/main.js" ? "src/main.ts" : "src-bunaway/app.ts",
+            ).replaceAll("\\", "/"),
+          );
+        }
+      }
+    }
+  }
 });
 
 test("create refuses existing paths and missing parents without modifying them", async () => {
@@ -176,6 +291,37 @@ test("bundle is optional until packaging and generated settings stay beside app 
     expect((await validateProject(project)).bundle).toBeUndefined();
     const { packageProject } = await import("../../packages/cli/src/package.ts");
     await expect(packageProject(project, "win-direct")).rejects.toThrow("bunaway.json.bundle");
+  } finally {
+    await Bun.write(path, originals["src-bunaway/bunaway.json"] ?? "");
+  }
+});
+
+test("build commands are explicit argv arrays and metadata does not require generated assets", async () => {
+  const path = resolve(project, "src-bunaway/bunaway.json");
+  const valid = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
+  try {
+    for (const command of [null, "vite build", [], [""], ["bun", 1], ["bun", "bad\0arg"]]) {
+      await writeJson(path, { ...valid, build: { ...valid.build, command } });
+      await expect(readProjectMetadata(project)).rejects.toThrow("build.command");
+    }
+    const args = [process.execPath, "run", "build:web", "argument with spaces"];
+    await writeJson(path, {
+      ...valid,
+      build: { ...valid.build, frontend: "not-built", command: args },
+    });
+    expect((await readProjectMetadata(project)).buildCommand).toEqual(args);
+    await expect(validateProject(project)).rejects.toThrow();
+    expect(await Bun.file(resolve(project, "not-built/index.html")).exists()).toBe(false);
+    const marker = resolve(project, "unexpected-web-build.txt");
+    await writeJson(path, {
+      ...valid,
+      build: {
+        ...valid.build,
+        command: [process.execPath, "-e", `await Bun.write(${JSON.stringify(marker)}, "built")`],
+      },
+    });
+    await validateProject(project);
+    expect(await Bun.file(marker).exists()).toBe(false);
   } finally {
     await Bun.write(path, originals["src-bunaway/bunaway.json"] ?? "");
   }
@@ -400,6 +546,60 @@ test("build rejects corrupted bundled Bun and leaves the last production package
   );
 });
 
+test("Windows development artifacts enable DevTools only with their launch flag", async () => {
+  const configPath = resolve(project, "src-bunaway/bunaway.json");
+  const settings = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
+  async function buildFixture(development: boolean) {
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        resolve(import.meta.dir, "build.fixture.ts"),
+        project,
+        ...(development ? ["--development-artifact"] : []),
+      ],
+      { stdout: "pipe", stderr: "pipe" },
+    );
+    const output = new Response(child.stdout).text();
+    const errors = new Response(child.stderr).text();
+    expect(await child.exited, await errors).toBe(0);
+    return output;
+  }
+  try {
+    await buildFixture(false);
+    const production = resolve(project, "dist/windows-x64");
+    expect(
+      (await Bun.file(resolve(production, "assets/app.json")).json()).developmentTools,
+    ).toBeUndefined();
+    expect(await Bun.file(resolve(production, "assets/app.js")).text()).not.toContain(
+      "sourceMappingURL=data:",
+    );
+    for (const url of [undefined, "http://127.0.0.1:5173/"]) {
+      await writeJson(configPath, {
+        ...settings,
+        ...(url ? { dev: { command: ["bun", "run", "dev:web"], url } } : {}),
+      });
+      const built = JSON.parse(await buildFixture(true)) as {
+        package: string;
+        arguments: string[];
+      };
+      const config = await Bun.file(resolve(built.package, "assets/app.json")).json();
+      const manifest = await Bun.file(resolve(built.package, "manifest.json")).json();
+      expect(config.developmentTools).toBe(true);
+      expect(built.arguments).toContain("--devtools");
+      expect(built.arguments.includes("--dev-url")).toBe(url !== undefined);
+      expect(config.development?.url).toBe(url);
+      expect(manifest.assets["assets/app.json"]).toBe(
+        await hash(resolve(built.package, "assets/app.json")),
+      );
+      expect(await Bun.file(resolve(built.package, "assets/app.js")).text()).toContain(
+        "sourceMappingURL=data:",
+      );
+    }
+  } finally {
+    await Bun.write(configPath, originals["src-bunaway/bunaway.json"] ?? "");
+  }
+});
+
 test("package checks platforms and adapters before building and preserves outputs on failure", async () => {
   const child = Bun.spawn(
     [process.execPath, resolve(import.meta.dir, "packaging.fixture.ts"), project],
@@ -409,6 +609,91 @@ test("package checks platforms and adapters before building and preserves output
   const errors = new Response(child.stderr).text();
   expect(await child.exited, `${await output}\n${await errors}`).toBe(0);
 }, 60000);
+
+test.each(["SIGINT", "SIGTERM"] as const)(
+  "%s during a web build reaps descendants, releases the lock and allows retry",
+  async (signal) => {
+    const listener = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("") });
+    const port = listener.port;
+    listener.stop(true);
+    if (!port) throw new Error("No test port.");
+    const configPath = resolve(project, "src-bunaway/bunaway.json");
+    const source = resolve(project, "frontend-signal.ts");
+    const ready = resolve(project, "web-descendant-ready.txt");
+    const interrupt = resolve(project, "build-interrupt.txt");
+    const pid = resolve(project, "web-builder-pid.txt");
+    const manifestPath = resolve(project, "dist/windows-x64/manifest.json");
+    const manifest = await Bun.file(manifestPath).text();
+    const settings = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
+    await Bun.write(
+      source,
+      `
+    await Bun.write('web-builder-pid.txt', String(process.pid));
+    Bun.spawn([process.execPath, '-e', ${JSON.stringify(`
+      Bun.serve({hostname:'127.0.0.1', port:${port}, fetch:()=>new Response('descendant')});
+      await Bun.write('web-descendant-ready.txt', 'ready');
+    `)}], {stdin:'ignore', stdout:'inherit', stderr:'inherit'});
+    await Bun.sleep(600000);
+  `,
+    );
+    await writeJson(configPath, {
+      ...settings,
+      build: { ...settings.build, command: [process.execPath, "frontend-signal.ts"] },
+    });
+    const child = Bun.spawn(
+      [process.execPath, resolve(import.meta.dir, "build-signal.fixture.ts"), project, signal],
+      { stdout: "pipe", stderr: "pipe" },
+    );
+    const output = new Response(child.stdout).text();
+    const errors = new Response(child.stderr).text();
+    try {
+      const deadline = Date.now() + 10000;
+      while (!(await Bun.file(ready).exists())) {
+        if (child.exitCode !== null || Date.now() >= deadline)
+          throw new Error("Web build did not start.");
+        await Bun.sleep(20);
+      }
+      expect((await fetch(`http://127.0.0.1:${port}/`)).ok).toBe(true);
+      expect(
+        await Bun.file(resolve(project, "dist/.bunaway-locks/windows-x64/build.lock")).exists(),
+      ).toBe(true);
+      if (process.platform === "win32") await Bun.write(interrupt, signal);
+      else child.kill(signal);
+      const timeout = setTimeout(() => child.kill(), 10000);
+      try {
+        expect(await child.exited).not.toBe(0);
+      } finally {
+        clearTimeout(timeout);
+      }
+      expect(await output).toContain("PASS build signal handler cleanup");
+      expect(await errors).toContain(`cancelled (${signal})`);
+      expect(await readdir(resolve(project, "dist/.bunaway-locks/windows-x64"))).toEqual([]);
+      expect(await Bun.file(manifestPath).text()).toBe(manifest);
+      await expect(
+        fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(200) }),
+      ).rejects.toThrow();
+      await Bun.write(configPath, originals["src-bunaway/bunaway.json"] ?? "");
+      const retry = Bun.spawn(
+        [process.execPath, resolve(import.meta.dir, "build.fixture.ts"), project],
+        {
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+      const retryOutput = new Response(retry.stdout).text();
+      const retryErrors = new Response(retry.stderr).text();
+      expect(await retry.exited, `${await retryOutput}\n${await retryErrors}`).toBe(0);
+    } finally {
+      if (child.exitCode === null) child.kill();
+      await child.exited;
+      await stopWebBuilder(pid);
+      await Promise.all([output, errors]);
+      await Bun.write(configPath, originals["src-bunaway/bunaway.json"] ?? "");
+      for (const path of [source, ready, interrupt, pid]) await rm(path, { force: true });
+    }
+  },
+  30000,
+);
 
 test("external development orchestrates UI updates, backend restarts and server replacement", async () => {
   const child = Bun.spawn([process.execPath, resolve(import.meta.dir, "dev.fixture.ts"), project], {

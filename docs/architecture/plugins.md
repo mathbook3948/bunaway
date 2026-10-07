@@ -1,7 +1,7 @@
 # 선택 네이티브 플러그인의 구조와 공개 계약
 
 상태: Windows 구현과 로컬 개별 패키지 검증 완료. 기준일: 2026-10-07.
-[ADR 0012](../decisions/0012-optional-native-plugins.md)의 구현 계약이다.
+[ADR 0013](../decisions/0013-optional-native-plugins.md)의 구현 계약이다.
 저장, 로그와 기능 조회는 개별 tarball로 설치하고 등록한다.
 macOS 네이티브 플러그인 어댑터는 아직 제공하지 않는다.
 
