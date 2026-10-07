@@ -40,6 +40,7 @@ export interface Project {
   frameworkRoot: string;
   appEntry: string;
   frontend: string;
+  backendDependencies?: string[];
   bundle?: PackagingConfig;
   dev?: DevServerConfig;
   app: {
@@ -120,7 +121,10 @@ export async function validateProject(
   if (!(await lstat(appEntry)).isFile() || (!server && !(await lstat(frontend)).isDirectory())) {
     throw new Error("app must be a file; frontend must be a directory.");
   }
-  const frameworkRoot = await validateFramework(root, [appEntry, ...(server ? [] : [frontend])]);
+  const { root: frameworkRoot, backendDependencies } = await validateFramework(root, [
+    appEntry,
+    ...(server ? [] : [frontend]),
+  ]);
   const raw = settings.app;
   keys(raw, ["appId", "title", "view", "home", "window"]);
   const appId = string(raw.appId);
@@ -160,6 +164,7 @@ export async function validateProject(
     frameworkRoot,
     appEntry,
     frontend,
+    backendDependencies,
     ...(settings.bundle ? { bundle: settings.bundle } : {}),
     ...(settings.dev ? { dev: settings.dev } : {}),
     policy,

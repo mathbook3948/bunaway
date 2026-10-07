@@ -25,7 +25,7 @@ node_modules, vendor, dist, .bunaway, .git, .next, .turbo는 호스트 재시작
 - 루트의 package.json, bun.lock, tsconfig.json.
 
 앱 정의가 프로젝트 루트에 있으면 루트 파일만 감시하고 UI 하위 디렉터리는 제외합니다.
-이 범위 밖의 공유 백엔드 모듈을 수정했다면 dev를 다시 실행하세요.
+앱 정의에서 import한 프로젝트 내부 파일도 감시합니다. `shared/`, `services/`처럼 다른 디렉터리에 있는 전이 의존성과 JSON 파일의 변경도 앱을 재시작합니다. 성공한 검증마다 import 목록을 갱신하며, 실패하면 이전 목록을 유지합니다. 프로젝트 밖의 파일과 node_modules의 변경은 감시하지 않습니다.
 
 ## 재시작
 
