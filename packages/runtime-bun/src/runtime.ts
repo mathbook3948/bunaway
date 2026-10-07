@@ -104,6 +104,7 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
           hello,
           platform: currentPlatform(),
           backendContext: frame.payload.backendContext as HostContext,
+          onCommandError: (command, cause) => console.error(`Command ${command} failed:`, cause),
           runtime: {
             createCancellation: () => new AbortController(),
             now: () => Date.now(),

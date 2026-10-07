@@ -9,6 +9,8 @@ AppDefinition을 default export한다. Windows FFI 호스트는 같은 앱 정�
 플러그인 초기화와 hello 협상 뒤 ready를 보낸다. 초기화 중에도 Host API 요청을
 발행하고 stdin에서 응답을 처리한다. stdout은 크기, 큐 상한을 가진 NDJSON 전용이므로
 앱 로그에 `console.log`를 사용하지 않고 Host API `log.write` 또는 stderr를 사용한다.
+명령 핸들러의 예기치 않은 예외는 명령 이름과 원래 오류, 스택을 stderr에 기록한다.
+WebView에는 기존 `INTERNAL: Command failed.` 응답만 전달한다.
 
 - `session-open`은 호스트 컨텍스트와 뷰 정책으로 코어 세션을 만든다.
 - `web`은 해당 세션에 전달하고 코어 응답, 이벤트를 같은 컨텍스트로 중계한다.
