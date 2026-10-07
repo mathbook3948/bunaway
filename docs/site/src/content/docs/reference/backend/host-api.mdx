@@ -46,7 +46,8 @@ export default defineApp({ modules: [memo, editor], plugins: [storagePlugin] });
 화면과 백엔드에서 같은 패키지를 import하고 같은 기능 이름을 사용합니다.
 예를 들어 둘 다 `import { storage } from "@bunaway/plugin-storage"`로 가져옵니다.
 프런트엔드 빌드에서는 화면 함수를, Bun에서는 백엔드 함수를 선택합니다.
-화면 호출에는 `plugin.storage.readText`처럼 정확한 명령 허용과 해당 Host 권한이 모두 필요합니다.
+화면에서 호출하려면 `plugin.storage.readText`처럼 정확한 명령 이름을 허용해야 합니다.
+해당 Host 권한도 필요합니다.
 화면 API는 기본 WebView 연결을 사용합니다. 생성 앱의 typecheck는 화면과 백엔드를
 각각 검사하므로 실행 환경에 맞는 인자와 반환 타입을 확인합니다.
 화면의 `storage.readText(input, options?)`, `storage.writeText(input, options?)`,

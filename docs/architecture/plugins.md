@@ -216,7 +216,7 @@ CLI가 읽는 manifest의 형식은 다음과 같다.
 }
 ```
 
-manifest는 선언과 adapter의 위치를, index.ts는 작업과 권한의 내용을 소유한다.
+manifest는 선언과 어댑터의 위치를 지정하고, index.ts는 작업과 권한을 정의한다.
 entry의 default export는 플러그인 정의이며 native와 선택적 matches를 제공한다.
 CLI는 이름과 버전을 설치 manifest와 대조하고 native를 검증한다.
 scope가 있는 permission에는 선언의 matches가 필수다. scope가 없는 기능에는

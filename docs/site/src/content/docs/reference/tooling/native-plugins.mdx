@@ -86,7 +86,7 @@ SDK가 `system.hostname` 작업과 `system:hostname` 권한을 만들며 같은 
 화면의 마지막 인자에는 `NativeInvokeOptions`로 signal과 deadline을 전달할 수 있습니다.
 이 옵션은 [invoke](/reference/client/invoke/) 규칙을 따릅니다. 백엔드는 진행 중 명령의
 취소와 기한을 따르며 별도 옵션을 받지 않습니다. 생성 앱은 TypeScript의 browser와 bun
-조건을 각각 검사합니다. 직접 구성하는 프로젝트도 customConditions를 환경에 맞춰 지정합니다.
+조건을 각각 적용해 화면과 백엔드 타입을 검사합니다. 직접 구성하는 프로젝트도 customConditions를 환경에 맞춰 지정합니다.
 
 `index.ts`는 플러그인의 정의와 공개 export를 담당합니다. 권한 범위 비교나 편의 함수의
 실제 처리는 역할에 맞는 내부 파일로 분리하고 생성한 호출 함수를 전달해서 연결합니다.
