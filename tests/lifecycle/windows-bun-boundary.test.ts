@@ -324,6 +324,88 @@ test("Windows channel bounds unacknowledged data and reserved control slots", as
   await Promise.allSettled([...holds, ...controls]);
 });
 
+test("permission and malformed-message errors reach WebView while diagnostics are suppressed", async () => {
+  const { port1, port2 } = new MessageChannel();
+  const failures: unknown[] = [];
+  const output: ServerMessage[] = [];
+  const received: Packet[] = [];
+  const runtime = { id: "test", generation: "1" };
+  port2.on("message", (envelope) => {
+    received.push(envelope.packet);
+    port2.postMessage({ runtime, ack: envelope.sequence });
+  });
+  const channel = new Channel(
+    port1,
+    runtime,
+    "ui",
+    () => {},
+    (error) => failures.push(error),
+  );
+  const source = "https://app.bunaway.local/index.html";
+  const boundary = new ViewBoundary(
+    {
+      id: "main",
+      origins: ["https://app.bunaway.local"],
+      commands: ["echo"],
+      events: [],
+      host: { log: false, storage: [] },
+    },
+    {
+      origin: (text) => new URL(text).origin,
+      source: () => source,
+      ready: () => true,
+      forward: (packet) => channel.notify(packet),
+      capacity: (count) => channel.canSend(count),
+      deliver: (text) => output.push(JSON.parse(text)),
+      log: (event, fields = {}) =>
+        channel.notify({ kind: "diagnostic", event, fields: { ...fields } }),
+    },
+  );
+  try {
+    const hello = {
+      kind: "hello" as const,
+      protocol: PROTOCOL_VERSION,
+      features: [],
+      buildId: "test",
+    };
+    boundary.receive(source, JSON.stringify(hello));
+    await channel.drain();
+    const opened = received.find((packet) => packet.kind === "session-open");
+    if (opened?.kind !== "session-open") throw new Error("Missing session");
+    boundary.send(opened.route, hello);
+    await channel.drain();
+    // Fill all diagnostic slots in one turn, before any acknowledgements run.
+    received.length = 0;
+    for (let index = 0; index < 16; index++)
+      channel.notify({ kind: "diagnostic", event: "held", fields: {} });
+    for (const request of [
+      { kind: "invoke", id: "denied-command", command: "forbidden", payload: null },
+      { kind: "listen", id: "denied-event", event: "forbidden" },
+      { kind: "invoke", id: "malformed", command: "echo" },
+    ])
+      boundary.receive(source, JSON.stringify({ ...request, protocol: PROTOCOL_VERSION }));
+    expect(output.slice(-3)).toMatchObject([
+      { id: "denied-command", kind: "error", error: { code: "PERMISSION_DENIED" } },
+      { id: "denied-event", kind: "error", error: { code: "PERMISSION_DENIED" } },
+      { id: "malformed", kind: "error", error: { code: "INVALID_ARGUMENT" } },
+    ]);
+    await channel.drain();
+    expect(received.some((packet) => packet.kind === "client")).toBe(false);
+    expect(
+      received.some(
+        (packet) => packet.kind === "diagnostic" && packet.event === "permission-denied",
+      ),
+    ).toBe(false);
+    await channel.send({ kind: "diagnostic", event: "resumed", fields: {} });
+    expect(received.at(-1)).toMatchObject({ event: "resumed", fields: { droppedDiagnostics: 5 } });
+    expect(failures).toHaveLength(0);
+  } finally {
+    channel.close();
+    port1.close();
+    port2.close();
+  }
+});
+
 test("saturated data and diagnostics preserve cancellation, deadlines and lifecycle delivery", async () => {
   const { port1, port2 } = new MessageChannel();
   const failures: unknown[] = [];

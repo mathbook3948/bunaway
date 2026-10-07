@@ -9,7 +9,7 @@ import { dirname, join, resolve } from "node:path";
 import { windowsLaunchEnvironment } from "../../packages/cli/src/launch.ts";
 import { validateValue } from "../../packages/protocol/src/index.ts";
 import { validationCases } from "../protocol/validation-cases.ts";
-import { readReport } from "./reports.ts";
+import { assertReport, readReport } from "./reports.ts";
 
 const original = resolve(process.argv[process.argv.indexOf("--package") + 1] ?? "");
 assert.ok(process.argv.includes("--package"), "--package is required");
@@ -259,7 +259,14 @@ try {
       const editorReport = await reportFile("editor.json");
       for (const r of editorReport.results) assert.equal(r.ok, true, r.name);
       const readerReport = await reportFile("reader.json");
-      for (const r of readerReport.results) assert.equal(r.ok, true, r.name);
+      // Diagnostic packets may be dropped at capacity. The page checks the
+      // actual permission errors and reports them through an allowed command.
+      assertReport(readerReport, [
+        "save denied for read-only view",
+        "unlisted event listen denied",
+        "allowed command denied by read-only storage grant",
+        "log.write denied for this view",
+      ]);
       // Document loading is independent per view; require every actual session,
       // rather than infer main readiness from the faster reader's report.
       await waitLog((entry) => entry.event === "session-open" && entry.viewId === "main");
@@ -274,15 +281,6 @@ try {
       assert.ok(count("session-open", (e) => e.viewId === "main") >= 1);
       assert.ok(count("session-open", (e) => e.viewId === "editor") >= 1);
       assert.ok(count("session-open", (e) => e.viewId === "reader") >= 1);
-      assert.ok(
-        count("permission-denied", (e) => e.kind === "command" && e.view === "reader") >= 1,
-        "reader save denial missing",
-      );
-      assert.ok(
-        count("permission-denied", (e) => e.kind === "event" && e.view === "reader") >= 1,
-        "reader event denial missing",
-      );
-      assert.ok(count("host-request-denied") >= 1, "read-only storage denial missing");
       // The denied write must not exist.
       assert.equal(existsSync(join(dataRoot, "data", "notes", "reader.txt")), false);
       // test.changed is only allowed for the main view: event deliveries must
@@ -378,8 +376,12 @@ try {
       // The main view finishes its suite, then navigates to page2: that view's
       // revoke/reopen must not touch other views.
       const report = await reportFile("report.json");
-      const failed = report.results.filter((r) => !r.ok);
-      assert.equal(failed.length, 0, `page failures: ${JSON.stringify(failed)}`);
+      assertReport(report, [
+        "denied command",
+        "denied event listen",
+        "forged context rejected",
+        "malformed message rejected",
+      ]);
       const report2 = await reportFile("report2.json");
       const report3 = await reportFile("report3.json");
       for (const r of [...report2.results, ...report3.results]) assert.equal(r.ok, true, r.name);
@@ -400,9 +402,6 @@ try {
         ) >= 1,
         "remote iframe navigation must be canceled for the main view",
       );
-      assert.ok(count2("permission-denied", (e) => e.kind === "command" && e.view === "main") >= 1);
-      assert.ok(count2("web-message-rejected", (e) => e.reason === "malformed") >= 2);
-      assert.ok(count2("web-message-rejected", (e) => e.reason === "INVALID_ARGUMENT") >= 1);
       // Same-turn SDK cancellation can precede Host dispatch. The native suite
       // checks queued Host cancellation independently of process scheduling.
       // The child-frame message must never reach the backend.
