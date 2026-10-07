@@ -1,8 +1,40 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { promisify } from "node:util";
+
+const inspectProcesses = promisify(execFile);
+
+async function waitForProcessGroupExit(pid: number): Promise<void> {
+  const deadline = performance.now() + 5000;
+  while (true) {
+    try {
+      process.kill(-pid, 0);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ESRCH") return;
+      throw error;
+    }
+    // kill(pid, 0) includes zombies. They have released their resources and
+    // may remain until an unrelated parent reaps them, so inspect live members.
+    const { stdout } = await inspectProcesses("/bin/ps", ["-A", "-o", "pgid=,stat="], {
+      timeout: 1000,
+      maxBuffer: 8 * 1024 * 1024,
+    });
+    let alive = false;
+    for (const line of stdout.trim().split("\n")) {
+      const entry = /^\s*(\d+)\s+(\S+)\s*$/.exec(line);
+      if (!entry) throw new Error("Cannot inspect build command process group.");
+      if (Number(entry[1]) === pid && !/^[ZX]/.test(entry[2] ?? "")) alive = true;
+    }
+    if (!alive) return;
+    if (performance.now() >= deadline) {
+      throw new Error("Build command process group cleanup timed out.");
+    }
+    await delay(10);
+  }
+}
 
 // Own finite build commands and their descendants until completion or cancellation.
 // The Windows Job worker also cleans up if the owner disappears without sending EOF.
@@ -73,6 +105,7 @@ export async function runManagedCommand(
           await delay(200);
           killGroup("SIGKILL");
         }
+        if (!windows && child.pid) await waitForProcessGroupExit(child.pid);
         await exited;
       })());
     const aborted = () => {

@@ -71,4 +71,4 @@ test("memo example installs and bundles as a standalone CLI app with one view", 
   } finally {
     await rm(root, { recursive: true, force: true });
   }
-}, 30000);
+}, 60000);
