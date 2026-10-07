@@ -7,6 +7,9 @@
 
 제품 범위는 [PRD](./PRD.md)에, 공통 용어는 [용어집](./GLOSSARY.md)에 정리한다. 현재 구현과 다음 작업은 [진행 상태](./architecture/progress.md)에서 확인할 수 있다.
 
+[데스크톱 기능 TODO](./TODO.md)는 Tauri와 Electron의 공개 기능을 대조한 개발 목록이다.
+현재 Windows 구현과 남은 기능, 우선순위 및 플랫폼별 후속 작업을 구분한다.
+
 ## 설계와 구현 계약
 
 - [개발자용 프레임워크 설치 artifact, 버전, 업그레이드](./framework-distribution.md)
