@@ -220,8 +220,9 @@ callHost는 signal 취소 시 같은 context, requestId의 `host-cancel`을 보�
 2. core/backend-sdk: `createCore`와 등록, 세션, 상태, 이벤트, 플러그인 실행, 명령 검증 구현.
 3. Windows 호스트: WebView2 경계, session-open/revoke, 정책, 파일, Host operations 구현.
 
-runtime-bun의 `runBunApp`은 공통 CoreServices로 모듈을 연결한다. 저장, 로그 Host API는
-Windows 호스트에서 실행하지만 기본 저장, 로그 플러그인 모듈은 비어 있다.
+runtime-bun의 `runBunApp`은 공통 CoreServices로 모듈을 연결한다. 저장, 로그, 기능 조회는
+개별 플러그인 패키지로 제공한다. Windows 호스트는 앱에 등록된 플러그인의 네이티브 어댑터를
+실행하며, 현재 macOS 호스트에는 이 어댑터가 없다.
 메모 샘플과 CLI의 생성, 검증, 개발, 빌드 및 Windows Inno 패키징은 구현했다.
 macOS의 CLI 배포 채널 연결과 프로덕션 서명, 실제 공증 및 Store 제출은 후속 작업이다.
 

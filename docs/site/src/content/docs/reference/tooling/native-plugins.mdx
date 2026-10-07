@@ -94,7 +94,7 @@ capabilities의 결과 이름 중복 검사는 query.ts에 둡니다.
 구현을 import하지 않습니다. 선언을 읽는 것만으로 연결이나 플랫폼 자원을 만들지 않습니다.
 호출 함수는 설치, 앱 등록이나 권한 부여를 대신하지 않습니다.
 
-## s로 입력과 결과 작성하기
+## `s`로 입력과 결과 스키마 정의하기
 
 ```ts
 input: s.object({
@@ -146,8 +146,8 @@ export function createOperations(_environment: NativeEnvironment): NativeAdapter
 `void` 또는 `Promise<void>`를 반환합니다. 실패를 호출자에게 전달하려면 공통 `BunawayError`를
 사용합니다. 예외의 상세 원인을 그대로 화면에 노출하지 않습니다.
 
-입력과 결과는 선언한 schema로 검증합니다. 잘못된 입력은 INVALID_ARGUMENT,
-계약과 다른 결과는 INTERNAL입니다. 권한 거부와 안전한 실행 오류는 호출자에게 전달합니다.
+선언한 schema로 입력과 결과를 검증합니다. 입력이 schema와 다르면 `INVALID_ARGUMENT`,
+결과가 schema와 다르면 `INTERNAL`을 반환합니다. 권한 거부와 안전한 실행 오류는 호출자에게 전달합니다.
 
 ## plugin.json에서 연결하기
 

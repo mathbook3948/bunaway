@@ -40,7 +40,7 @@ export async function save(text: string): Promise<null> {
 ```
 
 `storagePlugin`, `logPlugin`, `capabilitiesPlugin`은 옵션 없는 플러그인 정의 객체다.
-현재 필요한 설정은 정책에서 작성하므로 별도의 `init()`이나 설정 factory를 요구하지
+현재 필요한 설정은 정책에 작성하므로 별도의 `init()`이나 설정 factory를 요구하지
 않는다. 사용자 정의 명령, 상태와 이벤트는 기존 모듈 조립 방식을 유지한다.
 
 패키지가 설치돼 있어도 등록하지 않은 Host operation은 `UNSUPPORTED`다.
@@ -82,8 +82,8 @@ bun 조건으로 백엔드를 검사한다. typecheck는 두 검사를 모두 �
 화면 함수는 마지막 인자로 NativeInvokeOptions의 signal과 deadline을 받는다.
 백엔드 함수는 명령 또는 setup의 호출 범위를 따르며 별도 옵션을 받지 않는다.
 index.ts는 정의와 공개 export를 담당하며 알고리즘과 편의 호출은 역할에 맞는 내부 파일로 분리한다.
-수준별 로그 함수는 logger.ts, capabilities의 중복 이름 검사는 query.ts에서
-생성한 호출 함수를 전달받아 처리한다. storage의 범위 비교는 scope.ts에 두고 matches에 연결한다.
+`logger.ts`의 수준별 로그 함수는 `plugin.api.write`를 받아 만들고, `query.ts`는
+`plugin.api.get` 결과의 이름 중복을 검사한다. `storage`의 범위 비교는 `scope.ts`에 두고 `matches`에 연결한다.
 로직에서 선언의 타입을 읽을 때는 import type을 사용해 런타임 순환 import를 만들지 않는다.
 추가 처리가 없는 plugin은 생성한 api를 바로 공개하며 내부 처리 파일을 요구하지 않는다.
 
@@ -359,6 +359,10 @@ operations 진입점은 `createOperations(environment)`를 export한다. 환경�
 `dispose()`는 준비한 자원을 회수한다. `source`도 호스트가 정한 view/backend 출처다.
 I/O Worker에서는 기존 파일 작업처럼 승인과 실행 사이에 await나 두 번째 큐를 두지
 않는다. 결과와 안전한 오류는 등록된 계약과 공통 HostResponse 형식으로 검증한다.
+
+Windows UI Worker는 `CoInitializeEx`로 STA를 초기화한 뒤 adapter를 준비하고, 이후 창과
+WebView를 만든다. 종료할 때는 adapter를 먼저 정리한 다음 `CoUninitialize`를 호출한다.
+adapter 준비 중에 실패해도 이미 준비한 adapter와 COM 자원을 정리한다.
 
 지원 조회 플러그인은 환경의 등록 정보를 조회하며 OS 권한을 추측해서 생성하지
 않는다. 공통 호스트가 제공하는 정보에도 storage/log 전용 작업 이름은 고정하지 않는다.

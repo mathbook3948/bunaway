@@ -73,8 +73,10 @@ export default defineApp({ modules: [memo], plugins: [storagePlugin] });
 
 화면과 백엔드는 같은 공개 import 경로와 같은 함수를 사용합니다.
 설치했어도 등록하지 않은 구현은 초기화하지 않습니다.
-현재 네이티브 플러그인은 Windows를 지원하며 등록한 플러그인의 플랫폼 구현이 없으면
-`UNSUPPORTED`로 시작을 실패시킵니다.
+현재 네이티브 어댑터는 Windows만 제공합니다. `PluginDefinition.platforms`에서 현재
+플랫폼을 제외하면 앱 시작 단계에서 `UNSUPPORTED`로 거부합니다. Windows 작업에
+어댑터가 없으면 필요한 권한이 허용된 상태에서 호출할 때 `UNSUPPORTED`로 실패합니다.
+macOS는 네이티브 권한을 정책에 포함하면 호스트가 시작을 거부합니다.
 
 새 네이티브 플러그인은 plugin.json, src/index.ts와 src/windows.ts를 기본으로 작성합니다.
 추가 폴더와 파일은 제작자가 기능의 크기에 맞춰 선택합니다.

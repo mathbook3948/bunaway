@@ -16,7 +16,6 @@ const config = workerData as UIConfig;
 const registry = pluginRegistry(config.plugins ?? []);
 registry.validatePolicy(config.policy);
 const matches = await permissionMatcher(config.plugins ?? []);
-const adapters = await operations(config.plugins ?? [], config.dataRoot, "ui");
 assert(parentPort);
 let failure: unknown;
 let stopping = false;
@@ -25,6 +24,7 @@ let startRequested = false;
 let closingSent = false;
 let initialized = false;
 let windows: Windows | undefined;
+let adapters: Awaited<ReturnType<typeof operations>> | undefined;
 const views = new Map<
   string,
   { boundary: ViewBoundary; native: WebView; detached: boolean; cleaned: boolean; ready: boolean }
@@ -78,6 +78,7 @@ const channel = new Channel(
               code: "PERMISSION_DENIED",
               message: "Host context or policy denied.",
             });
+          assert(adapters, "UI adapters are not initialized");
           response = {
             kind: "result",
             payload: adapters.execute(packet.call.operation, packet.call.payload, packet.source),
@@ -144,6 +145,7 @@ function startViews() {
 try {
   hr(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
   initialized = true;
+  adapters = await operations(config.plugins ?? [], config.dataRoot, "ui");
   windows = new Windows();
   log("ui-thread", { pid: process.pid, thread: kernel.symbols.GetCurrentThreadId() });
   for (const spec of config.windows) {
@@ -286,7 +288,7 @@ try {
     log("callbacks-quiescent");
     log("callback-references", disposeCom());
     await disposeAll([
-      () => adapters.dispose(),
+      () => adapters?.dispose(),
       () => {
         windows?.dispose();
         if (initialized) ole.symbols.CoUninitialize();

@@ -1,4 +1,9 @@
 import { afterEach, expect, test } from "bun:test";
+import { mkdir } from "node:fs/promises";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { Worker } from "node:worker_threads";
+import { Channel, type UIConfig } from "../../native/windows/bun/channel.ts";
 import { type PackagedPlugin, packagedPlugins } from "../../native/windows/bun/plugin-table.ts";
 import {
   disposeAll,
@@ -108,3 +113,94 @@ test("scopeless and unregistered plugins do not load authorization modules", asy
   await permissionMatcher([{ name: "test", version: "1", native: plugin.native }]);
   expect(loaded).toBe(1);
 });
+
+test.skipIf(process.platform !== "win32")(
+  "UI adapters initialize and dispose inside the UI Worker's COM apartment",
+  async () => {
+    const dataRoot = resolve(
+      import.meta.dir,
+      `../../build/windows-ui-plugin-${crypto.randomUUID()}`,
+    );
+    await mkdir(dataRoot, { recursive: true });
+    const entry = resolve(dataRoot, "worker.ts");
+    const source = resolve(import.meta.dir, "../../native/windows/bun");
+    await Bun.write(
+      entry,
+      `import assert from "node:assert/strict";
+import { dlopen, ptr } from "bun:ffi";
+import { writeFileSync } from "node:fs";
+import { packagedPlugins } from ${JSON.stringify(pathToFileURL(resolve(source, "plugin-table.ts")).href)};
+const ole = dlopen("ole32.dll", {
+  CoGetApartmentType: { args: ["ptr", "ptr"], returns: "i32" },
+});
+function checkApartment() {
+  const type = new Uint32Array(1);
+  const qualifier = new Uint32Array(1);
+  assert.equal(ole.symbols.CoGetApartmentType(ptr(type), ptr(qualifier)), 0);
+  assert([0, 3].includes(type[0]), "UI adapter must run in STA");
+}
+packagedPlugins.push({
+  name: "sta-test", version: "1", native: ${JSON.stringify(native)}, execution: "ui",
+  operations: async () => ({ createOperations() {
+    checkApartment();
+    return { execute: () => null, dispose() {
+      checkApartment();
+      writeFileSync(${JSON.stringify(resolve(dataRoot, "disposed.txt"))}, "STA");
+      ole.close();
+    } };
+  } }),
+});
+await import(${JSON.stringify(pathToFileURL(resolve(source, "ui.ts")).href)});
+`,
+    );
+    const config: UIConfig = {
+      runtime: { id: "sta-test", generation: "1" },
+      policy: { version: 1, views: [], backend: { permissions: [] } },
+      backendContext: "backend" as UIConfig["backendContext"],
+      windows: [],
+      assets: dataRoot,
+      dataRoot,
+      loader: "",
+      plugins: [{ name: "sta-test", version: "1", native }],
+    };
+    const worker = new Worker(pathToFileURL(entry), { workerData: config });
+    const exited = new Promise<number>((resolve) => worker.once("exit", resolve));
+    let failure: unknown;
+    let ready = false;
+    let cleaned = false;
+    worker.once("error", (error) => {
+      failure = error;
+    });
+    const channel = new Channel(
+      worker,
+      config.runtime,
+      "main",
+      (packet) => {
+        if (packet.kind === "ready") {
+          ready = true;
+          channel.notify({ kind: "shutdown" });
+        } else if (packet.kind === "cleaned") cleaned = true;
+        else if (packet.kind === "fatal") failure = new Error(packet.error.message);
+      },
+      (error) => {
+        failure = error;
+        void worker.terminate();
+      },
+    );
+    const timer = setTimeout(() => {
+      failure = new Error("UI plugin worker timed out");
+      void worker.terminate();
+    }, 5000);
+    try {
+      expect(await exited).toBe(0);
+      expect(failure).toBeUndefined();
+      expect(ready).toBe(true);
+      expect(cleaned).toBe(true);
+      expect(await Bun.file(resolve(dataRoot, "disposed.txt")).text()).toBe("STA");
+    } finally {
+      clearTimeout(timer);
+      channel.close();
+      await worker.terminate();
+    }
+  },
+);

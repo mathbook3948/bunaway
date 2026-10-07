@@ -30,12 +30,12 @@ export async function save(text: string) {
 뷰의 정책에 `appData/notes` 쓰기 권한이 필요하다. 명령 밖이나 완료한 명령의 작업에서는 호출을 거부한다.
 실행 범위와 로그, 기능 조회 사용법은 [백엔드 Host API](./docs/site/src/content/docs/reference/backend/host-api.mdx)를 따른다.
 
-저장, 앱 로그, 기능 지원 조회를 개별 설치하는 플러그인 모델은
-[ADR 0013](./docs/decisions/0013-optional-native-plugins.md)에 확정했다.
+저장, 앱 로그, 기능 지원 조회를 개별 플러그인으로 설치하는 구조는
+[ADR 0013](./docs/decisions/0013-optional-native-plugins.md)에서 확정했다.
 [공개 계약](./docs/architecture/plugins.md)에 따라 Windows 실행과 개별 패키지 배포를 구현했다.
 기본 템플릿은 저장 플러그인만 설치하고 등록한다.
 플러그인은 화면과 백엔드에서 `@bunaway/plugin-storage`처럼 같은 경로로 import한다.
-새 플러그인은 plugin.json, src/index.ts와 src/windows.ts를 기본으로 작성하며 추가 파일은 제작자가 선택한다.
+새 플러그인은 `plugin.json`, `src/index.ts`, `src/windows.ts`로 시작한다. 필요하면 제작자가 파일을 추가한다.
 생성 앱의 타입 검사와 빌드는 실행 환경에 맞는 구현을 선택한다.
 
 ## 프레임워크 개발 환경

@@ -148,13 +148,15 @@ OS 권한 선언과 런타임 사용자 동의는 프레임워크 권한과 별�
 화면은 `invoke`, `listen`을 직접 사용하거나, 앱 정의에서 타입을 추론하는 인자 없는
 `createClient()`를 사용한다. 기본 연결의 브리지, 프로토콜 초기화, 준비 대기와 페이지
 종료 시 정리는 SDK가 담당한다. 일반 브라우저의 백엔드 호출은 `UNSUPPORTED`로 실패한다.
-명령 타입 생성 CLI와 기본 로그, 저장 플러그인은 미구현이다. 다음은 앱 정의의 타입을
+앱 정의에서 명령 타입을 추론하는 전용 CLI는 아직 없으며, `CommandsOf`와 `EventsOf`는
+직접 사용할 수 있다. 저장, 로그, 기능 조회는 개별 선택 패키지다. 다음은 앱 정의의 타입을
 추론하는 계약 사용 예시이며 `notes.read` 앱 전체의 실행 검증을 뜻하지 않는다. 실제 실행 샘플은
 [메모 앱](../examples/memo/README.md)이다.
 
 ```ts
 // src-bunaway/app.ts
 import { command, type AppDefinition } from "@bunaway/backend";
+import { storage, storagePlugin } from "@bunaway/plugin-storage";
 
 
 export const app = {
@@ -167,12 +169,12 @@ export const app = {
         additionalProperties: false,
       },
       output: { type: "string" },
-      async handle({ key }, ctx) {
-        // 원래 요청의 컨텍스트로 Host API의 appData 범위를 검사한다.
-        return ctx.host.call("storage.readText", { scope: "appData", path: `notes/${key}.txt` });
+      async handle({ key }) {
+        return storage.readText({ scope: "appData", path: `notes/${key}.txt` });
       },
     }),
   },
+  plugins: [storagePlugin],
   events: {},
 } satisfies AppDefinition;
 export default app;
@@ -189,9 +191,9 @@ async function start(): Promise<void> {
 void start().catch(console.error);
 ```
 
-위 예제를 허용하는 정책에는 해당 뷰의 `notes.read` 명령과 `appData/notes` 읽기 범위를 함께 선언한다. 입력 패턴은 편의 검증이며 네이티브 파일 범위 검사를 대체하지 않는다.
+위 예제를 허용하는 정책에는 해당 뷰의 `notes.read` 명령과 `host.permissions`의 `storage:read-text` 권한을 `appData/notes` 범위로 함께 선언한다. 입력 패턴은 편의 검증이며 네이티브 파일 범위 검사를 대체하지 않는다.
 
-플러그인은 이름, 버전, 의존성, 지원 플랫폼, 필요 권한, 명령 스키마, 초기화, 종료 훅을 선언한다. 순수 TypeScript 플러그인과 네이티브 구현이 필요한 플러그인을 구분한다. 네이티브 플러그인은 호스트 계약을 따르며 ABI 호환성을 빌드 시 검사한다. 첫 기본 플러그인은 로그와 범위 제한 저장소로 좁힌다. 권한, 네이티브 바이너리와 코드 변경을 포함한 플러그인은 앱을 다시 빌드해 배포한다.
+플러그인은 이름, 버전, 의존성, 지원 플랫폼, 필요 권한, 명령 스키마, 초기화, 종료 훅을 선언한다. 순수 TypeScript 플러그인과 네이티브 구현이 필요한 플러그인을 구분한다. 네이티브 플러그인은 호스트 계약을 따르며 ABI 호환성을 빌드 시 검사한다. 저장, 로그, 기능 조회는 각각 선택 패키지로 제공하며 Windows 어댑터가 구현돼 있다. 권한, 네이티브 바이너리와 코드 변경을 포함한 플러그인은 앱을 다시 빌드해 배포한다.
 
 ## 7 플랫폼과 Bun 기능 지원 계획
 
@@ -285,6 +287,6 @@ Skal의 고정 commit `7edb44aceb8c69ac1abd76549e2c09cf6cdc8a57`에서는 VM 작
 
 CLI create/validate/doctor/dev/build와 vanilla, Vite, React, Vue, Svelte 템플릿, 로컬 프레임워크 설치 artifact, 버전 검증은 구현했다.
 [프레임워크 배포 문서](./framework-distribution.md)에 저장소 밖 설치, 업그레이드와 개발/최종 사용자 요구사항을 구분한다.
-현재 다음 작업은 플랫폼별 검증 범위 확대, macOS 다중 창/뷰, UI framework 템플릿의 네이티브 검증, 기본 플러그인,
+현재 다음 작업은 플랫폼별 검증 범위 확대, macOS 네이티브 플러그인 어댑터와 다중 창/뷰, UI framework 템플릿의 네이티브 검증,
 공개 릴리스/프레임워크 라이선스 결정, Linux, 모바일 확장과 설치, 서명, 배포 검증이다.
 A, B 및 Windows C, macOS 단일 창/뷰 성공으로 초기 버전 출시 기준 전체를 충족했다고 판단하지 않는다.

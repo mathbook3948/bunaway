@@ -32,8 +32,9 @@ Bun 종료를 요구한다. GUI가 없거나 WebKit이 시작하지 못하면 �
 ## 패키지와 출시 검증
 
 macOS WKWebView는 현재 비영속 `WKWebsiteDataStore`를 사용한다. Windows의
-브라우저 프로필 영속성/뷰 분리와 동일한 지원이 아니다. macOS 재시작 시 브라우저
-저장소는 초기화되며, 메모는 별도 범위 제한 Host API 파일에서 복원한다.
+브라우저 프로필 영속성/뷰 분리와 동일한 지원이 아니다. 현재 macOS 회귀 fixture는
+메모 상태를 Bun 메모리에 두며 네이티브 저장 플러그인을 검증하지 않는다. 이전 메모
+fixture가 범위 제한 Host API 파일에서 복원한 결과는 선택 플러그인 이관 전 기록이다.
 
 - Windows 독립 앱 패키지와 macOS 번들 Bun 패키지는 사용자 전역 Bun 없이 실행한다.
 - macOS native CI는 `run.sh --app`으로 `.app`을 만들고 **ad-hoc** 서명한 번들을 실행한다.
@@ -41,8 +42,9 @@ macOS WKWebView는 현재 비영속 `WKWebsiteDataStore`를 사용한다. Window
   [2026-10-07 CI](https://github.com/mathbook3948/bunaway/actions/runs/37554130779/job/112576288095)에서 통과했다.
 - `LSMinimumSystemVersion=14.0`은 생성 plist의 값일 뿐 macOS 14 전체 지원 검증이 아니다.
 - 프로덕션 Developer ID 서명, 실제 공증과 Gatekeeper, 설치 및 App Sandbox의 안정성은 별도 검증이 필요하다.
-- CLI와 vanilla, Vite, React, Vue, Svelte 템플릿은 구현했다. 기본 로그와 저장 플러그인은 아직 빈 모듈이다.
-  로그와 저장 기능은 Host API로 사용할 수 있다. 릴리스 자동화와 PRD 전체 출시 기준은 미충족이다.
+- CLI와 vanilla, Vite, React, Vue, Svelte 템플릿, 저장/로그/기능 조회 선택 플러그인 패키지,
+  Windows 네이티브 어댑터는 구현했다. macOS 네이티브 플러그인 어댑터는 미구현이다.
+  릴리스 자동화와 PRD 전체 출시 기준은 미충족이다.
 
 ## 패키징(공통 계약)
 
