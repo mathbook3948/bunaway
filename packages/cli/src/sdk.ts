@@ -47,14 +47,22 @@ export async function sdkPlugin(
   const nativePlugins =
     plugins ?? (await installedPlugins(project, release.version));
   const checked = new Map<string, Promise<boolean>>();
+  const roots = new Map<string, string>();
   for (const name of Object.values(release.packages)) {
-    if (name !== "@bunaway/cli") {
-      entries.set(
-        name,
-        await realpath(
-          resolve(await installedPackageRoot(root, name), "src/index.ts"),
-        ),
-      );
+    if (name === "@bunaway/cli") {
+      continue;
+    }
+    const packageRoot = await realpath(await installedPackageRoot(root, name));
+    const manifest = (await json(resolve(packageRoot, "package.json"))) as {
+      exports: Record<string, string>;
+    };
+    for (const [subpath, entry] of Object.entries(manifest.exports)) {
+      if (typeof entry !== "string" || !entry.startsWith("./src/")) {
+        continue;
+      }
+      const specifier = subpath === "." ? name : name + subpath.slice(1);
+      entries.set(specifier, await realpath(resolve(packageRoot, entry)));
+      roots.set(specifier, packageRoot);
     }
   }
   async function check(name: string, parent: string): Promise<string> {
@@ -64,10 +72,7 @@ export async function sdkPlugin(
       if (expected && relative(expected, path) === "") {
         return path;
       }
-      if (
-        expected &&
-        path === resolve(dirname(dirname(path)), "src/index.ts")
-      ) {
+      if (expected && roots.has(name)) {
         // Bun can install identical local tarballs twice when direct dependencies
         // use relative paths and the CLI uses absolute paths. Compare the entire
         // package before routing both imports to one SDK to preserve class identity.
@@ -75,8 +80,14 @@ export async function sdkPlugin(
         let identical = checked.get(key);
         if (!identical) {
           identical = (async () => {
-            const expectedRoot = dirname(dirname(expected));
-            const actualRoot = dirname(dirname(path));
+            const expectedRoot = roots.get(name);
+            if (!expectedRoot) {
+              return false;
+            }
+            const actualRoot = resolve(
+              dirname(path),
+              relative(dirname(expected), expectedRoot),
+            );
             const expectedFiles = await files(expectedRoot, [
               "node_modules",
             ]);

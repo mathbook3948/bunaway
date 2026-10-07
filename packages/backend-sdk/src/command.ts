@@ -1,4 +1,4 @@
-import type { CommandContext, CommandDefinition } from "@bunaway/core";
+import type { CommandContext, CommandDefinition } from "@bunaway/plugin-api";
 import {
   BunawayError,
   type Infer,

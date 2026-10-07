@@ -19,8 +19,7 @@
         "reference/backend/app-definition": ["defineApp"],
         "reference/backend/module": ["defineModule"],
         "reference/backend/host-api": ["host"],
-        "reference/tooling/core-and-runtime": ["createCore"],
-        "reference/host/windows": ["windows"]
+        "reference/tooling/core-and-runtime": ["createCore"]
       }
     },
     {
@@ -62,12 +61,7 @@
           "processSchema",
           "hostCallSchema",
           "parseHostCall",
-          "hostOperations",
-          "isWindowOperation",
-          "parseWindowCall",
           "serializeHostCall",
-          "validateHostOutput",
-          "validateWindowCall",
           "PROCESS_IPC_VERSION",
           "parseProcessFrame",
           "serializeProcessFrame",
@@ -165,6 +159,36 @@
           "s"
         ]
       }
+    },
+    {
+      "name": "@bunaway/plugin-api",
+      "source": "packages/plugin-api/src/index.ts",
+      "pages": {}
+    },
+    {
+      "name": "@bunaway/plugin-api/host",
+      "source": "packages/plugin-api/src/host.ts",
+      "pages": {
+        "reference/tooling/plugin-api": [
+          "currentHost",
+          "bindCommandHost",
+          "bindPluginHost"
+        ]
+      }
+    },
+    {
+      "name": "@bunaway/plugin-windows",
+      "source": "plugins/windows/src/index.ts",
+      "pages": {
+        "reference/host/windows": ["windows", "windowsPlugin"],
+        "reference/tooling/native-plugins": [
+          "isWindowOperation",
+          "parseWindowCall",
+          "validateWindowCall",
+          "validateWindowOutput",
+          "windowOperations"
+        ]
+      }
     }
   ],
   "members": [
@@ -193,14 +217,14 @@
       }
     },
     {
-      "source": "packages/core/src/index.ts",
+      "source": "packages/plugin-api/src/index.ts",
       "type": "StateStore",
       "pages": {
         "reference/backend/state": ["get", "set", "delete"]
       }
     },
     {
-      "source": "packages/core/src/index.ts",
+      "source": "packages/plugin-api/src/index.ts",
       "type": "EventEmitter",
       "pages": {
         "reference/backend/events": ["emit"]
@@ -246,7 +270,7 @@
       }
     },
     {
-      "source": "packages/core/src/index.ts",
+      "source": "packages/plugin-api/src/index.ts",
       "type": "AppDefinition",
       "pages": {
         "reference/backend/app-definition": [
@@ -259,21 +283,21 @@
       }
     },
     {
-      "source": "packages/core/src/index.ts",
+      "source": "packages/plugin-api/src/index.ts",
       "type": "CommandDefinition",
       "pages": {
         "reference/backend/command": ["input", "output", "run"]
       }
     },
     {
-      "source": "packages/core/src/index.ts",
+      "source": "packages/plugin-api/src/index.ts",
       "type": "CommandContext",
       "pages": {
         "reference/backend/context": ["signal", "host", "state", "events"]
       }
     },
     {
-      "source": "packages/core/src/index.ts",
+      "source": "packages/plugin-api/src/index.ts",
       "type": "PluginDefinition",
       "pages": {
         "reference/backend/plugins": [
@@ -285,7 +309,6 @@
           "events",
           "setup",
           "requiredPermissions",
-          "requiredHost",
           "native"
         ]
       }
@@ -361,14 +384,23 @@
       "source": "packages/plugin-sdk/src/index.ts",
       "type": "NativeEnvironment",
       "pages": {
-        "reference/tooling/native-plugins": ["dataRoot", "capabilities"]
+        "reference/tooling/native-plugins": [
+          "dataRoot",
+          "capabilities",
+          "windows"
+        ]
       }
     },
     {
       "source": "packages/plugin-sdk/src/index.ts",
       "type": "NativeAdapter",
       "pages": {
-        "reference/tooling/native-plugins": ["execute", "dispose"]
+        "reference/tooling/native-plugins": [
+          "execute",
+          "dispose",
+          "executeUI",
+          "busy"
+        ]
       }
     },
     {
@@ -404,7 +436,7 @@
       }
     },
     {
-      "source": "packages/core/src/desktop.ts",
+      "source": "packages/plugin-api/src/desktop.ts",
       "type": "DesktopOptions",
       "pages": {
         "reference/backend/app-definition": [
@@ -416,7 +448,7 @@
       }
     },
     {
-      "source": "packages/core/src/desktop.ts",
+      "source": "packages/plugin-api/src/desktop.ts",
       "type": "OpenRequest",
       "pages": {
         "reference/backend/app-definition": [
@@ -429,7 +461,7 @@
       }
     },
     {
-      "source": "packages/core/src/desktop.ts",
+      "source": "packages/plugin-api/src/desktop.ts",
       "type": "DesktopContext",
       "pages": {
         "reference/backend/app-definition": ["show", "hide", "quit"]

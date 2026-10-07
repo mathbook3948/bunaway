@@ -27,7 +27,6 @@ const policy: Policy = {
   version: 1,
   backend: {
     permissions: [],
-    windows: [],
   },
   views: specs.map((spec) => ({
     id: spec.view,
@@ -38,7 +37,6 @@ const policy: Policy = {
     events: [],
     host: {
       permissions: [],
-      windows: [],
     },
   })),
 };

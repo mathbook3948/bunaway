@@ -85,16 +85,6 @@ function registerAll<T>(
   }
 }
 
-function coversHostPermissions(
-  granted: Policy["backend"],
-  required: {
-    readonly windows?: readonly string[];
-  },
-): boolean {
-  return (required.windows ?? []).every((view) =>
-    granted.windows?.includes(view),
-  );
-}
 function orderPlugins(
   plugins: readonly PluginDefinition[],
   services: CoreServices,
@@ -153,15 +143,6 @@ function orderPlugins(
       fail(
         "INVALID_ARGUMENT",
         `Plugin "${plugin.name}" requires host permissions outside the backend policy.`,
-      );
-    }
-    if (
-      plugin.requiredHost &&
-      !coversHostPermissions(services.policy.backend, plugin.requiredHost)
-    ) {
-      fail(
-        "INVALID_ARGUMENT",
-        `Plugin "${plugin.name}" requires window grants outside the backend policy.`,
       );
     }
   }

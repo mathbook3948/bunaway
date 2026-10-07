@@ -13,6 +13,7 @@ import {
 import { capabilitiesPlugin } from "../../plugins/capabilities/src/index.ts";
 import { logPlugin } from "../../plugins/log/src/index.ts";
 import { storagePlugin } from "../../plugins/storage/src/index.ts";
+import { windowsPlugin } from "../../plugins/windows/src/index.ts";
 
 const matches = storagePlugin.matches;
 function present<T>(value: T | undefined): T {
@@ -23,6 +24,7 @@ export const plugins = [
   storagePlugin,
   logPlugin,
   capabilitiesPlugin,
+  windowsPlugin,
 ];
 export const registry = new NativeRegistry(plugins);
 export const contracts = {

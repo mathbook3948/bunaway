@@ -28,6 +28,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@bunaway/core": "workspace:*",
+        "@bunaway/plugin-api": "workspace:*",
         "@bunaway/protocol": "workspace:*",
       },
     },
@@ -53,6 +54,7 @@
       "name": "@bunaway/core",
       "version": "0.0.0",
       "dependencies": {
+        "@bunaway/plugin-api": "workspace:*",
         "@bunaway/protocol": "workspace:*",
       },
     },
@@ -64,12 +66,19 @@
         "fast-xml-parser": "4.5.7",
       },
     },
+    "packages/plugin-api": {
+      "name": "@bunaway/plugin-api",
+      "version": "0.0.0",
+      "dependencies": {
+        "@bunaway/protocol": "workspace:*",
+      },
+    },
     "packages/plugin-sdk": {
       "name": "@bunaway/plugin",
       "version": "0.0.0",
       "dependencies": {
-        "@bunaway/backend": "workspace:*",
         "@bunaway/client": "workspace:*",
+        "@bunaway/plugin-api": "workspace:*",
         "@bunaway/protocol": "workspace:*",
       },
     },
@@ -115,12 +124,27 @@
         "@bunaway/plugin": "0.0.0",
       },
     },
+    "plugins/windows": {
+      "name": "@bunaway/plugin-windows",
+      "version": "0.0.0",
+      "dependencies": {
+        "@bunaway/plugin-api": "workspace:*",
+        "@bunaway/protocol": "workspace:*",
+      },
+      "devDependencies": {
+        "@bunaway/plugin": "workspace:*",
+      },
+      "peerDependencies": {
+        "@bunaway/plugin": "0.0.0",
+      },
+    },
     "tests/fixtures/desktop/host": {
       "name": "@bunaway/test-desktop",
       "dependencies": {
         "@bunaway/plugin-capabilities": "workspace:*",
         "@bunaway/plugin-log": "workspace:*",
         "@bunaway/plugin-storage": "workspace:*",
+        "@bunaway/plugin-windows": "workspace:*",
       },
     },
   },
@@ -231,11 +255,15 @@
 
     "@bunaway/plugin": ["@bunaway/plugin@workspace:packages/plugin-sdk"],
 
+    "@bunaway/plugin-api": ["@bunaway/plugin-api@workspace:packages/plugin-api"],
+
     "@bunaway/plugin-capabilities": ["@bunaway/plugin-capabilities@workspace:plugins/capabilities"],
 
     "@bunaway/plugin-log": ["@bunaway/plugin-log@workspace:plugins/log"],
 
     "@bunaway/plugin-storage": ["@bunaway/plugin-storage@workspace:plugins/storage"],
+
+    "@bunaway/plugin-windows": ["@bunaway/plugin-windows@workspace:plugins/windows"],
 
     "@bunaway/protocol": ["@bunaway/protocol@workspace:packages/protocol"],
 

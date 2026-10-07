@@ -1,18 +1,16 @@
-import {
-  hostOperations,
-  NativeRegistry,
-} from "../../../../../packages/protocol/src/index.ts";
+import { NativeRegistry } from "../../../../../packages/protocol/src/index.ts";
 import { capabilitiesPlugin } from "../../../../../plugins/capabilities/src/index.ts";
 import { logPlugin } from "../../../../../plugins/log/src/index.ts";
 import { storagePlugin } from "../../../../../plugins/storage/src/index.ts";
+import { windowsPlugin } from "../../../../../plugins/windows/src/index.ts";
 
 const nativePlugins = new NativeRegistry([
   storagePlugin,
   logPlugin,
   capabilitiesPlugin,
+  windowsPlugin,
 ]);
 export const expectedCapabilityNames = [
-  ...Object.keys(hostOperations),
   ...nativePlugins.operations.keys(),
 ];
 

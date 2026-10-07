@@ -4,7 +4,8 @@
   "dependencies": {
     "@bunaway/plugin-storage": "workspace:*",
     "@bunaway/plugin-log": "workspace:*",
-    "@bunaway/plugin-capabilities": "workspace:*"
+    "@bunaway/plugin-capabilities": "workspace:*",
+    "@bunaway/plugin-windows": "workspace:*"
   },
   "name": "@bunaway/test-desktop"
 }

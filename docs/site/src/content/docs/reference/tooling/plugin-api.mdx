@@ -1,0 +1,10 @@
+---
+title: 플러그인 공통 계약
+description: Core와 선택 플러그인이 공유하는 중립 타입과 호출 컨텍스트입니다.
+---
+
+`@bunaway/plugin-api`는 AppDefinition, PluginDefinition, CommandContext와 DesktopOptions 등 공통 계약을 소유합니다. Core와 Backend SDK는 이 타입을 다시 export합니다. 플러그인은 Core를 설치하거나 import하지 않고 `@bunaway/plugin`과 공통 프로토콜을 사용합니다.
+
+`@bunaway/plugin-api/host`의 currentHost는 실행 중인 명령이나 setup의 Host API를 반환합니다. bindCommandHost와 bindPluginHost는 같은 호출 컨텍스트에 실행을 묶습니다. 명령이 끝나면 후속 호출을 거부하고 setup의 작업은 백엔드 수명을 따릅니다. Backend SDK와 플러그인 작성 SDK가 같은 컨텍스트를 공유합니다.
+
+`@bunaway/plugin-api/native`의 NativeWindowServices는 UI 호스트가 제공하는 창 생성, 정리 상태, 크기와 위치 변경 같은 플랫폼 자원 인터페이스입니다. 작업 이름, 입력과 출력, 권한 및 비동기 창 교체 로직은 선택 창 제어 플러그인이 소유합니다.

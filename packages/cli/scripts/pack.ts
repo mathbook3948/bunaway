@@ -23,7 +23,24 @@ async function writeDeclarations(stage: string, info: Release): Promise<void> {
   const declarations = resolve(stage, "packages/cli/dist/types");
   const aliases = new Map<string, string>();
   for (const [directory, name] of Object.entries(info.packages)) {
-    aliases.set(name, resolve(declarations, `${directory}/src/index.js`));
+    const manifest = JSON.parse(
+      await readFile(
+        resolve(frameworkRoot, `packages/${directory}/package.json`),
+        "utf8",
+      ),
+    );
+    for (const [subpath, entry] of Object.entries(manifest.exports) as [
+      string,
+      string,
+    ][]) {
+      if (!entry.startsWith("./src/")) {
+        continue;
+      }
+      aliases.set(
+        subpath === "." ? name : name + subpath.slice(1),
+        resolve(declarations, directory, entry.replace(/\.ts$/, ".js")),
+      );
+    }
     await run(
       [
         process.execPath,
@@ -107,7 +124,7 @@ export async function packFramework(
       try {
         const source = resolve(
           frameworkRoot,
-          `${name.startsWith("@bunaway/plugin-") ? "plugins" : "packages"}/${directory}`,
+          `${Object.values(info.plugins).includes(name) ? "plugins" : "packages"}/${directory}`,
         );
         await cp(resolve(source, "src"), resolve(sdk, "src"), {
           recursive: true,

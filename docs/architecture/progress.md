@@ -117,3 +117,5 @@ macOS는 `native/macos/host/run.sh --app`으로 ad-hoc 서명한 `.app`의 실�
 [플랫폼 지원 표](../platform-support/README.md)는 검증 환경과 출시 지원을 구분한다.
 [공통 API](./common-api.md)와 [모듈 의존성](./workspace.md)이 현재 계약이며,
 [C ABI 초안](./native-abi.md)은 이전 동일 프로세스 설계 기록이다.
+
+선택 플러그인 분리에서 창 제어도 @bunaway/plugin-windows로 옮겼다. @bunaway/plugin-api를 통해 플러그인 SDK의 Backend SDK와 Core 의존성을 제거했다. 공통 프로토콜의 창 작업 목록과 전용 정책 필드는 제거하고 등록 계약과 permissions로 검사한다. 이 변경의 실제 GUI 검증은 CI에서 확인해야 한다.

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@bunaway/core": "workspace:*",
-    "@bunaway/protocol": "workspace:*"
+    "@bunaway/protocol": "workspace:*",
+    "@bunaway/plugin-api": "workspace:*"
   }
 }

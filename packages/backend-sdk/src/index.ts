@@ -1,3 +1,4 @@
+export { createCore } from "@bunaway/core";
 export type {
   AppDefinition,
   CommandContext,
@@ -15,8 +16,7 @@ export type {
   QuitReason,
   StateStore,
   StopHook,
-} from "@bunaway/core";
-export { createCore } from "@bunaway/core";
+} from "@bunaway/plugin-api";
 export type {
   HostAPI,
   HostOperationContract,
@@ -32,7 +32,7 @@ export {
   type CommandHandler,
   command,
 } from "./command.ts";
-export { host, windows } from "./host.ts";
+export { host } from "./host.ts";
 export {
   defineModule,
   type ModuleBuilder,

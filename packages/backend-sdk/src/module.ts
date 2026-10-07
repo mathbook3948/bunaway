@@ -2,7 +2,7 @@ import type {
   CommandDefinition,
   CommandRegistry,
   EventRegistry,
-} from "@bunaway/core";
+} from "@bunaway/plugin-api";
 import type { Schema } from "@bunaway/protocol";
 import {
   type CommandContract,

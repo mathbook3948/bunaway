@@ -1,7 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import {
   BunawayError,
-  hostOperations,
   type NativeRegistration,
   NativeRegistry,
   type PermissionMatcher,
@@ -82,6 +81,7 @@ export async function operations(
   plugins: readonly NativeRegistration[],
   dataRoot: string,
   execution: "io" | "ui",
+  windows?: NativeEnvironment["windows"],
 ) {
   const registry = pluginRegistry(plugins);
   const adapters = new Map<string, NativeAdapter>();
@@ -95,12 +95,12 @@ export async function operations(
     );
   const environment: NativeEnvironment = {
     dataRoot,
+    ...(windows
+      ? {
+          windows,
+        }
+      : {}),
     capabilities: [
-      ...Object.keys(hostOperations).map((name) => ({
-        name,
-        support: "supported" as const,
-        permission: "not-required" as const,
-      })),
       ...[
         ...registry.operations.values(),
       ].map((operation) => ({
@@ -161,6 +161,35 @@ export async function operations(
         adapter.execute(operation, call.payload, source),
       );
     },
+    async executeUI(
+      operation: string,
+      input: unknown,
+      source: string,
+      context: {
+        requestId: string;
+        permissions: import("../../../packages/protocol/src/index.ts").Policy["backend"];
+      },
+    ) {
+      const call = registry.validateCall({
+        operation,
+        payload: input as never,
+      });
+      const adapter = adapters.get(operation.split(".")[0] ?? "");
+      if (!adapter) {
+        throw new BunawayError({
+          code: "UNSUPPORTED",
+          message: "Plugin has no adapter for this platform.",
+        });
+      }
+      const output = adapter.executeUI
+        ? await adapter.executeUI(operation, call.payload, source, context)
+        : adapter.execute(operation, call.payload, source);
+      return registry.validateOutput(operation, output);
+    },
+    busy: () =>
+      [
+        ...adapters.values(),
+      ].some((adapter) => adapter.busy?.() ?? false),
     dispose,
   };
 }

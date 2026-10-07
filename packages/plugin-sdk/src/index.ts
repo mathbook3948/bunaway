@@ -106,6 +106,7 @@ export const s = Object.freeze({
 });
 
 export type NativeEnvironment = {
+  windows?: import("@bunaway/plugin-api/native").NativeWindowServices;
   dataRoot: string;
   capabilities: {
     name: string;
@@ -115,6 +116,16 @@ export type NativeEnvironment = {
 };
 export type NativeAdapter = {
   execute(operation: string, input: JsonValue, source: string): JsonValue;
+  executeUI?(
+    operation: string,
+    input: JsonValue,
+    source: string,
+    context: {
+      requestId: string;
+      permissions: import("@bunaway/protocol").Policy["backend"];
+    },
+  ): JsonValue | Promise<JsonValue>;
+  busy?(): boolean;
   dispose(): void | Promise<void>;
 };
 export type NativeOperationDefinition = {

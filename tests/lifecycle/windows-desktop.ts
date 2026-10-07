@@ -2,6 +2,7 @@ import { dlopen } from "bun:ffi";
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { runWindowsApp } from "../../native/windows/bun/entry.ts";
 import {
   forwardToInstance,
@@ -11,7 +12,16 @@ import {
 import { containAppProcess } from "../../native/windows/bun/job.ts";
 import { closeWindowsApp } from "../../packages/cli/src/launch.ts";
 import type { AppDefinition } from "../../packages/core/src/index.ts";
-import type { HostContext } from "../../packages/protocol/src/index.ts";
+import {
+  type HostContext,
+  NativeRegistry,
+} from "../../packages/protocol/src/index.ts";
+import { windowsPlugin } from "../../plugins/windows/src/index.ts";
+import { bundleNativeWorker } from "../fixtures/native-worker.ts";
+
+const windowRegistry = new NativeRegistry([
+  windowsPlugin,
+]);
 
 let uiReadyResolve: () => void = () => {};
 const uiReady = new Promise<void>((resolveReady) => {
@@ -22,6 +32,9 @@ const uiRestored = new Promise<void>((resolveRestored) => {
   uiRestoredResolve = resolveRestored;
 });
 export const desktopTestApp = {
+  plugins: [
+    windowsPlugin,
+  ],
   commands: {
     "test.ready": {
       input: {
@@ -45,7 +58,7 @@ export const desktopTestApp = {
       async run(_input, context) {
         if (scenario === "hide") {
           assert.equal(
-            await context.host.call("windows.close", {
+            await context.host.call(windowRegistry.operation("windows.close"), {
               view: "main",
             }),
             false,
@@ -54,7 +67,7 @@ export const desktopTestApp = {
             !context.signal.aborted,
             "close to tray must keep the request context alive",
           );
-          await context.host.call("windows.show", {
+          await context.host.call(windowRegistry.operation("windows.show"), {
             view: "main",
           });
         }
@@ -74,10 +87,10 @@ export const desktopTestApp = {
 const scenario = process.argv[2] ?? "hide";
 const devShutdown = scenario.startsWith("dev-");
 const devPending = scenario === "dev-pending";
-const root = resolve(
-  import.meta.dir,
-  `../../build/windows-desktop-${scenario}`,
-);
+const repoRoot = process.argv.includes("--repo")
+  ? (process.argv[process.argv.indexOf("--repo") + 1] ?? "")
+  : resolve(import.meta.dir, "../..");
+const root = resolve(repoRoot, `build/windows-desktop-${scenario}`);
 if (!process.argv.includes("--child")) {
   await mkdir(resolve(root, "web"), {
     recursive: true,
@@ -97,13 +110,20 @@ if (!process.argv.includes("--child")) {
     resolve(root, "web/index.html"),
     '<!doctype html><title>Desktop lifecycle</title><script type="module" src="app.js"></script>',
   );
+  const childEntry = await bundleNativeWorker(
+    "windows-desktop",
+    resolve(root, "driver"),
+    import.meta.path,
+  );
   const child = Bun.spawn(
     [
       process.execPath,
       "--no-env-file",
-      import.meta.path,
+      fileURLToPath(childEntry),
       scenario,
       "--child",
+      "--repo",
+      repoRoot,
     ],
     {
       stdout: "pipe",
@@ -311,6 +331,7 @@ if (!process.argv.includes("--child")) {
       {
         ...desktopTestApp,
         plugins: [
+          ...desktopTestApp.plugins,
           {
             name: "desktop-test",
             version: "1",
@@ -399,8 +420,8 @@ if (!process.argv.includes("--child")) {
         assets: root,
         dataRoot,
         loader: resolve(
-          import.meta.dir,
-          "../../native/windows/bun/vendor/sdk/build/native/x64/WebView2Loader.dll",
+          repoRoot,
+          "native/windows/bun/vendor/sdk/build/native/x64/WebView2Loader.dll",
         ),
         policy: {
           version: 1,
@@ -421,9 +442,16 @@ if (!process.argv.includes("--child")) {
                 "test.reopen",
               ],
               host: {
-                permissions: [],
-                windows: [
-                  "main",
+                permissions: [
+                  "windows:list",
+                  {
+                    identifier: "windows:control",
+                    allow: [
+                      {
+                        view: "main",
+                      },
+                    ],
+                  },
                 ],
               },
             },

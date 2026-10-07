@@ -28,7 +28,7 @@ import {
   writeJson,
 } from "../../packages/cli/src/files.ts";
 import { buildWithSdk, sdkPlugin } from "../../packages/cli/src/sdk.ts";
-import { createProject } from "./project.ts";
+import { createProject, packageDirectory } from "./project.ts";
 
 test("plugin declarations use configurable entry paths and are read once per build", async () => {
   const home = await realpath(
@@ -1112,3 +1112,74 @@ test("artifact audit rejects omitted schemas, declarations and Git attributes wi
     });
   }
 }, 30000);
+
+test("a standalone plugin install does not install Core, Backend SDK or sibling plugins", async () => {
+  const home = await realpath(
+    await mkdtemp(resolve(tmpdir(), "bunaway-plugin-only-")),
+  );
+  try {
+    const artifacts = await packageDirectory();
+    await writeJson(resolve(home, "package.json"), {
+      type: "module",
+      dependencies: {
+        "@bunaway/plugin-windows": `file:${resolve(artifacts, packageFilename("@bunaway/plugin-windows", "0.0.0"))}`,
+      },
+    });
+    await command(home, [
+      "install",
+      "--linker",
+      "isolated",
+    ]);
+    const plugin = await installedPackageRoot(home, "@bunaway/plugin-windows");
+    const manifest = (await json(resolve(plugin, "package.json"))) as {
+      dependencies: Record<string, string>;
+    };
+    expect(Object.keys(manifest.dependencies).sort()).toEqual([
+      "@bunaway/plugin-api",
+      "@bunaway/protocol",
+    ]);
+    for (const name of [
+      "@bunaway/core",
+      "@bunaway/backend",
+      "@bunaway/plugin-storage",
+      "@bunaway/plugin-log",
+      "@bunaway/plugin-capabilities",
+    ]) {
+      await expect(installedPackageRoot(plugin, name)).rejects.toThrow();
+    }
+    const nativeBundle = await Bun.build({
+      entrypoints: [
+        resolve(plugin, "src/windows.ts"),
+      ],
+      target: "bun",
+    });
+    expect(nativeBundle.success).toBe(true);
+    const entry = resolve(home, "app.ts");
+    await writeFile(
+      entry,
+      'import { windowsPlugin } from "@bunaway/plugin-windows"; if (windowsPlugin.name !== "windows") throw new Error("Missing window plugin");',
+    );
+    await command(home, [
+      entry,
+    ]);
+    const built = await Bun.build({
+      entrypoints: [
+        entry,
+      ],
+      target: "browser",
+      metafile: true,
+    });
+    expect(built.success).toBe(true);
+    const inputs = Object.keys(built.metafile?.inputs ?? {});
+    expect(
+      inputs.some((name) =>
+        /(?:backend-sdk|core|node:async_hooks|src\/windows\.ts)/.test(name),
+      ),
+    ).toBe(false);
+  } finally {
+    await rm(home, {
+      recursive: true,
+      force: true,
+    });
+  }
+}, 60_000);

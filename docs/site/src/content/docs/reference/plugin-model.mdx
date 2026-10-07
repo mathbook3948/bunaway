@@ -19,6 +19,7 @@ ADR 0013의 개별 플러그인 구조를 Windows에서 구현했습니다.
 | `@bunaway/plugin-storage` | `storage`, `storagePlugin` | `storage` |
 | `@bunaway/plugin-log` | `log`, `logPlugin` | `log` |
 | `@bunaway/plugin-capabilities` | `capabilities`, `capabilitiesPlugin` | `capabilities` |
+| `@bunaway/plugin-windows` | `windows`, `windowsPlugin` | `windows` |
 
 새 앱 정의는 필요한 플러그인 객체를 기존 `defineApp()`에 등록합니다.
 옵션이 없는 플러그인에 초기화 factory를 요구하지 않습니다.
@@ -55,13 +56,12 @@ export default defineApp({ modules: [memo], plugins: [storagePlugin] });
 공식 배포 전까지 정책의 형식 버전은 v1로 유지합니다. 개발 중 구조를 바꾸면
 기존 v1의 계약과 예제를 갱신하며, v2나 이전 개발 형식의 호환 계층을 만들지 않습니다.
 
-`view.host`와 루트 `backend`는 `{ permissions, windows? }` 구조를 사용합니다.
+`view.host`와 루트 `backend`는 `{ permissions }` 구조를 사용합니다.
 권한 항목은 식별자 문자열 또는 `{ identifier, allow?, deny? }`입니다.
 저장은 `storage:read-text`, `storage:write-text`, 앱 로그는 `log:write`, 지원 조회는
 `capabilities:get`을 사용합니다. 저장처럼 리소스 범위가 필요한 작업에는 allow가
 필요하며 deny에 일치하는 리소스는 거부합니다.
-`windows`에는 해당 호출 출처가 제어할 수 있는 창의 뷰 ID를 적습니다. 이 권한은
-프레임워크의 Windows 창 API에 적용하며 플러그인 permission 식별자와 별도로 검사합니다.
+창 제어 플러그인도 같은 permission 계약을 사용합니다. `windows:list`는 조회 권한이며 `windows:control`에는 `{ view }` allow와 deny 범위를 지정합니다.
 
 등록하지 않은 Host operation은 `UNSUPPORTED`, 권한 밖의 작업은
 `PERMISSION_DENIED`입니다. 잘못된 설정이나 scope는 시작 전에 거부합니다.

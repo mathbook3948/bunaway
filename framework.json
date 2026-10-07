@@ -9,7 +9,8 @@
     "core": "@bunaway/core",
     "protocol": "@bunaway/protocol",
     "runtime-bun": "@bunaway/runtime-bun",
-    "packaging": "@bunaway/packaging"
+    "packaging": "@bunaway/packaging",
+    "plugin-api": "@bunaway/plugin-api"
   },
   "webProtocol": {
     "major": 1,
@@ -24,6 +25,7 @@
   "plugins": {
     "storage": "@bunaway/plugin-storage",
     "log": "@bunaway/plugin-log",
-    "capabilities": "@bunaway/plugin-capabilities"
+    "capabilities": "@bunaway/plugin-capabilities",
+    "windows": "@bunaway/plugin-windows"
   }
 }

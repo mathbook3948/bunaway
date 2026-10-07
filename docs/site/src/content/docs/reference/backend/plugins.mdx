@@ -14,14 +14,12 @@ sidebar: { order: 6 }
 | `dependencies` | 아니요 | 먼저 초기화할 플러그인 이름 배열 |
 | `platforms` | 아니요 | 실행 허용 플랫폼 배열. 미선언이면 플랫폼 제한 없음 |
 | `requiredPermissions` | 아니요 | backend.permissions에 명시해야 할 플러그인 권한 식별자 배열 |
-| `requiredHost` | 아니요 | setup에서 사용할 Host 권한. 현재 `windows` 뷰 ID 배열을 지정할 수 있음 |
 | `native` | 아니요 | operations와 permissions 계약 |
 | `commands`, `events` | 아니요 | 앱과 공유하는 명령과 이벤트 |
 | `setup(context)` | 아니요 | 동기/비동기 초기화. 선택적 StopHook 반환 |
 
 `requiredPermissions`는 앱의 `backend.permissions`에 각 식별자가 명시됐는지 검사합니다.
 실제 리소스 접근은 호출할 때 allow와 deny 범위를 검사합니다. 등록만으로 권한을 부여하지 않습니다.
-`requiredHost.windows`는 백엔드 setup에 필요한 창 대상이며, 모든 ID가 `policy.backend.windows`에도 있어야 합니다.
 권한이 빠진 창 API 요청은 `PERMISSION_DENIED`로 실패합니다.
 네이티브 작업에는 `plugin.<이름>.` 명령을 자동 등록합니다. 이 접두사는 일반 앱 명령에 예약되어 있습니다.
 

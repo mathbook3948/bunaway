@@ -1022,7 +1022,7 @@ export function checkHostTypes() {
 }
 
 test("window helpers preserve the command context and typed operation payloads", async () => {
-  const { windows } = await import("../../packages/backend-sdk/src/index.ts");
+  const { windows } = await import("../../plugins/windows/src/index.ts");
   await expect(windows.list()).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
   });

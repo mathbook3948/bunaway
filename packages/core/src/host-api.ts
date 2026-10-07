@@ -4,20 +4,13 @@ import {
   type HostAPI,
   type HostCall,
   type HostContext,
-  type HostInput,
-  type HostOperation,
   type HostOperationContract,
-  type HostOutput,
   type HostResponse,
   hostCallSchema,
   hostResponseSchema,
-  type Infer,
-  isWindowOperation,
+  type JsonValue,
   type NativeRegistry,
-  type Schema,
-  validateHostOutput,
   validateValue,
-  validateWindowCall,
 } from "@bunaway/protocol";
 import type { CoreServices } from "./index.ts";
 
@@ -36,66 +29,33 @@ export function bindHostAPI(
     }
   };
 
-  function call<K extends HostOperation>(
-    operation: K,
-    input: HostInput<K>,
-  ): Promise<HostOutput<K>>;
-  function call<I extends Schema, O extends Schema>(
-    contract: HostOperationContract<I, O>,
-    input: Infer<I>,
-  ): Promise<Infer<O>>;
   async function call(
-    operationOrContract: HostOperation | HostOperationContract,
+    operationOrContract: HostOperationContract,
     payload: unknown,
-  ): Promise<unknown> {
+  ): Promise<JsonValue> {
     checkCancelled();
-    const windowCall = typeof operationOrContract === "string";
-    let operationName: string;
+    if (!operationOrContract || typeof operationOrContract.name !== "string") {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "Invalid host contract.",
+      });
+    }
+    const registeredOperation = registry.operation(operationOrContract.name);
+    const operationName = registeredOperation.name;
     let call: HostCall;
-    let registeredOperation: HostOperationContract | undefined;
-    if (windowCall) {
-      try {
-        if (!isWindowOperation(operationOrContract)) {
-          throw new Error("Unknown window operation.");
-        }
-        operationName = operationOrContract;
-        call = validateWindowCall({
+    try {
+      call = validateValue(
+        hostCallSchema,
+        registry.validateCall({
           operation: operationName,
           payload: payload as HostCall["payload"],
-        });
-      } catch {
-        throw new BunawayError({
-          code: "INVALID_ARGUMENT",
-          message: "Invalid host request.",
-        });
-      }
-    } else {
-      if (
-        !operationOrContract ||
-        typeof operationOrContract.name !== "string"
-      ) {
-        throw new BunawayError({
-          code: "INVALID_ARGUMENT",
-          message: "Invalid host contract.",
-        });
-      }
-      // Preserve UNSUPPORTED for operations absent from the installed registry.
-      registeredOperation = registry.operation(operationOrContract.name);
-      operationName = registeredOperation.name;
-      try {
-        call = validateValue(
-          hostCallSchema,
-          registry.validateCall({
-            operation: registeredOperation.name,
-            payload: payload as HostCall["payload"],
-          }),
-        );
-      } catch {
-        throw new BunawayError({
-          code: "INVALID_ARGUMENT",
-          message: "Invalid host request.",
-        });
-      }
+        }),
+      );
+    } catch {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "Invalid host request.",
+      });
     }
 
     let response: HostResponse;
@@ -138,9 +98,7 @@ export function bindHostAPI(
       throw new BunawayError(response.error);
     }
     try {
-      return windowCall
-        ? validateHostOutput(operationName as HostOperation, response.payload)
-        : registry.validateOutput(operationName, response.payload);
+      return registry.validateOutput(operationName, response.payload);
     } catch {
       throw new BunawayError({
         code: "INTERNAL",
@@ -150,6 +108,7 @@ export function bindHostAPI(
   }
 
   return {
-    call,
+    // The selected registry validates the JSON result before exposing schema-derived types.
+    call: call as HostAPI["call"],
   };
 }

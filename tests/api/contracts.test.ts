@@ -814,7 +814,7 @@ test("Host paths use relative forward-slash paths while native access checks rem
   expect(parseHostCall(JSON.stringify(call))).toEqual(call);
 });
 
-test("the framework windows namespace is reserved from plugin registration", () => {
+test("the windows name follows the generic plugin registration rules", () => {
   expect(
     () =>
       new NativeRegistry([
@@ -827,7 +827,7 @@ test("the framework windows namespace is reserved from plugin registration", () 
           },
         },
       ]),
-  ).toThrow();
+  ).not.toThrow();
 });
 
 test("host-only boot policy and session-open never enter the Web message bridge", () => {

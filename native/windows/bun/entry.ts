@@ -13,7 +13,6 @@ import {
   type CancellationSignal,
   type HostContext,
   type HostResponse,
-  hostOperations,
   PROTOCOL_VERSION,
 } from "../../../packages/protocol/src/index.ts";
 import {
@@ -471,11 +470,9 @@ export async function runWindowsApp(
           );
         }
         const requestId = `host-${++sequence}`;
-        const execution = Object.hasOwn(hostOperations, call.operation)
-          ? "ui"
-          : packagedPlugins.find((plugin) =>
-              call.operation.startsWith(`${plugin.name}.`),
-            )?.execution;
+        const execution = packagedPlugins.find((plugin) =>
+          call.operation.startsWith(`${plugin.name}.`),
+        )?.execution;
         const source =
           context === config.backendContext
             ? "backend"

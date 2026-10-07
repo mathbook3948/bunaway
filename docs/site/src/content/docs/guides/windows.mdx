@@ -29,11 +29,12 @@ Windows 앱은 `src-bunaway/bunaway.json`의 `app.windows`에 사용할 창을 �
 위 예제는 `app` 필드에 작성합니다. `build`와 `bundle` 등 기존 최상위 설정은 유지합니다.
 `editor.html`을 웹 자산에 추가하고 `policy.json.views`에 `main`, `editor` 정책을 선언합니다.
 main에서 editor를 여는 명령을 호출하려면 main의 `commands`에 `editor.open`과
-`editor.prepareClose`를, `host.windows`에 `["editor"]`를 추가하세요.
+`editor.prepareClose`를 추가하고 host.permissions에 `windows:list`와 `{ "identifier": "windows:control", "allow": [{ "view": "editor" }] }`를 허용하세요. 먼저 `@bunaway/plugin-windows`를 설치합니다.
 editor에는 필요한 명령과 이벤트, 저장 권한만 선언할 수 있습니다.
 
 ```ts
-import { defineApp, defineModule, windows } from "@bunaway/backend";
+import { defineApp, defineModule } from "@bunaway/backend";
+import { windows, windowsPlugin } from "@bunaway/plugin-windows";
 
 const editor = defineModule("editor")
   .command("open", { input: { const: null }, output: { const: null } }, async () => {
@@ -49,7 +50,7 @@ const editor = defineModule("editor")
     return null;
   });
 
-export default defineApp({ modules: [editor] });
+export default defineApp({ modules: [editor], plugins: [windowsPlugin] });
 ```
 
 프런트엔드는 초기화한 클라이언트로 창을 연 뒤 닫기 확인을 설정합니다.
@@ -73,4 +74,4 @@ await client.invoke("editor.prepareClose", null);
 
 입력 제약, 권한, 전체화면과 포커스, 닫기 확인과 재생성 수명은
 [windows API](/reference/host/windows/)에서 확인할 수 있습니다.
-Windows 창 API는 정식 지원하며 macOS에서는 사용할 수 없습니다.
+창 제어 플러그인은 Windows를 지원하며 macOS 어댑터는 없습니다.

@@ -186,7 +186,7 @@ U+2028, U+2029가 들어간 경로도 전체 문자열에서 점 경로 요소�
 `bindHostAPI(context, signal, services.callHost, registry)`는 호출 컨텍스트를 고정한다.
 앱 핸들러는 `context.host.call(contract, payload)` 또는 개별 플러그인의
 `storage`, `log`, `capabilities`를 사용하며 context를 선택할 수 없다.
-backend-sdk는 `AsyncLocalStorage`로 실행별 `CommandContext`를 연결한다.
+중립 패키지 @bunaway/plugin-api/host가 `AsyncLocalStorage`로 실행별 `CommandContext`를 연결한다.
 `command()`와 `defineModule().command()`는 명령 실행을 연결하고, `defineApp()`은
 직접 등록한 명령과 플러그인 명령, setup 및 StopHook도 연결한다.
 명령의 실행 범위는 핸들러 실행과 검증이 끝나면 비활성화되므로 지연된 작업이 Host API를 재사용할 수 없다.

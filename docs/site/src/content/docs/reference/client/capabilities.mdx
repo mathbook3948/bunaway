@@ -1,54 +1,8 @@
 ---
-title: capabilities
-description: 프레임워크 창 API와 등록 플러그인의 지원 상태, OS 권한 메타데이터를 조회합니다.
-sidebar: { order: 4 }
+title: capabilities 문서 이동
+description: 기능 지원 조회는 선택 플러그인입니다.
+sidebar: { hidden: true }
 ---
 
-```ts
-capabilities(options?: InvokeOptions): Promise<Capabilities>
-```
-
-프레임워크 창 API와 앱에 등록된 플러그인 작업의 지원 상태, 선언된 OS 권한 메타데이터를 반환합니다.
-직접 import한 `capabilities`는 기본 연결을 사용하며 연결 준비를 기다립니다.
-options에 signal 또는 deadline을 전달할 수 있습니다.
-[invoke의 취소와 기한](/reference/client/invoke/)과 같은 규칙을 적용합니다.
-
-먼저 `@bunaway/plugin-capabilities`를 설치하고 앱에 capabilitiesPlugin을 등록합니다.
-조회 결과에는 앱에 등록한 네이티브 플러그인 작업과 프레임워크의 창 API가 포함됩니다.
-Windows 창 API 작업은 `supported`, `not-required`로 보고됩니다.
-
-## 정책과 사용법
-
-호출할 뷰의 `commands` 배열에 `plugin.capabilities.get`를 허용해야 합니다. host.permissions에도 `capabilities:get`을 추가합니다. 기본 템플릿에는 이 기능을 포함하지 않습니다.
-
-```json
-{ "commands": ["message.read", "message.save", "plugin.capabilities.get"] }
-```
-
-```ts
-import { capabilities } from "@bunaway/plugin-capabilities";
-
-const features = await capabilities();
-const read = features.find((feature) => feature.name === "storage.readText");
-console.log(read?.support, read?.permission);
-```
-
-위 JSON의 commands를 기존 뷰 객체에 추가합니다. 나머지 필수 정책 필드는 유지합니다.
-
-## 결과
-
-`name`, `support`, `permission`, 선택적 `reason`을 가진 배열입니다.
-`support`는 `supported`, `experimental`, `unsupported` 중 하나입니다.
-`permission`은 `granted`, `denied`, `prompt`, `not-required`, `unknown` 중 하나입니다.
-
-## 의미와 실패
-
-`support`는 플랫폼 어댑터의 구현 상태이고 `permission`은 플러그인이 선언하거나 제공한 OS 권한 메타데이터입니다.
-Windows 창 API의 `support`는 `supported`이며 `permission`은 `not-required`입니다.
-`osPermission: "not-required"`는 OS 권한을 확인한 결과가 아니라 해당 작업에 OS 권한이 필요하지 않다는 선언입니다.
-선언이 없으면 `unknown`입니다.
-실제 Host API 호출은 뷰 정책도 검사합니다. `permission: "not-required"`인 파일 작업도 허용된 저장 범위 안에서 실행합니다.
-앱 WebView가 없는 환경은 `UNSUPPORTED`, 정책 미허용은 `PERMISSION_DENIED`, 잘못된 기능 응답은 `INTERNAL`로 실패합니다.
-조회는 현재 상태만 반환하며 OS 권한 요청이나 정책 변경은 실행하지 않습니다.
-
-백엔드에서 조회하려면 [capabilities.get](/reference/host/capabilities-get/)을 사용합니다.
+기능 지원 조회는 `@bunaway/plugin-capabilities`를 설치하고 등록한 앱에서 사용합니다.
+[capabilities 플러그인 문서](/reference/plugins/capabilities/)에서 설치, 정책과 사용법을 확인합니다.

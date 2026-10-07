@@ -39,7 +39,7 @@ export async function save(text: string): Promise<null> {
 }
 ```
 
-`storagePlugin`, `logPlugin`, `capabilitiesPlugin`은 옵션 없는 플러그인 정의 객체다.
+`storagePlugin`, `logPlugin`, `capabilitiesPlugin`, `windowsPlugin`은 옵션 없는 플러그인 정의 객체다.
 현재 필요한 설정은 정책에 작성하므로 별도의 `init()`이나 설정 factory를 요구하지
 않는다. 사용자 정의 명령, 상태와 이벤트는 기존 모듈 조립 방식을 유지한다.
 
@@ -241,12 +241,12 @@ Windows의 `execution`은 `io` 또는 `ui`다. 현재 이관하는 저장, 앱 �
 실행을 맡긴다. 플러그인의 공개 함수가 실행 Worker를 직접 만들거나 선택하지 않는다.
 
 경로는 패키지 내부 상대 경로만 허용하고 실제 경로가 설치 패키지를 벗어나면 빌드를
-거부한다. framework 버전과 해석 경로도 검사한다. 같은 backend/core의 복제본이
+거부한다. framework 버전과 해석 경로도 검사한다. 같은 공통 SDK와 호출 컨텍스트의 복제본이
 있으면 기존 SDK 동일성 검사를 거쳐 같은 설치본으로 연결한다.
 공식 `@bunaway/` 플러그인의 패키지 버전은 프레임워크 버전과 맞춘다. 외부 플러그인은
 자체 버전을 사용하며 SDK peer 버전으로 호환성을 검사한다.
 
-`requiredHost`의 log/storage 전용 구조는 제거한다. setup에 필요한 권한의 식별자는
+`requiredHost`의 기능별 구조는 제거한다. setup에 필요한 권한의 식별자는
 `requiredPermissions`에 선언한다. 시작 전에 backend 정책의 명시적 허용을 확인하되,
 리소스 범위까지 보장하는 것으로 설명하지 않는다. 실제 setup의 각 작업은 등록된
 permission과 scope로 다시 검사한다. 단순한 기능 등록에는 backend 권한이 필요 없다.
@@ -328,7 +328,7 @@ Windows 저장 adapter는 각 상위 디렉터리의 고정된 핸들과 최종 
 backend와 화면 함수는 같은 플러그인 계약을 사용한다.
 조회에는 `capabilities:get` 권한이 필요하며 다른 permission을 부여하지 않는다.
 
-조회 결과는 최대 256개의 등록된 네이티브 작업과 프레임워크 창 작업을 모두 포함한다.
+조회 결과는 최대 256개의 등록된 네이티브 작업을 포함한다. 창 작업도 windowsPlugin을 등록한 경우에만 포함한다.
 결과 전체에는 기존 JSON 깊이와 1 MiB 메시지 제한을 적용한다.
 조회 결과는 앱에 등록된 작업과 플랫폼 adapter의 지원 정보로 만든다. 설치했더라도 앱에
 등록하지 않은 작업은 결과에 넣지 않는다. `osPermission` 선언이 없으면 `unknown`을
@@ -467,3 +467,9 @@ CLI의 기존 `@bunaway/*` 고정 목록 검사는 manifest 기반 plugin 검사
   직접 plugin 호출과 앱 command를 통한 호출을 검증한다.
 - `docs:check`, `docs:build`와 관련 reference-map 검사를 통과한다. 다른 플랫폼의
   실제 실행 검증은 Windows 계약 테스트의 통과와 구분해 기록한다.
+
+## 모든 기능의 선택 등록과 Core 의존성 제거
+
+[ADR 0014](../decisions/0014-optional-plugin-packages.md)에 따라 창 제어도 @bunaway/plugin-windows로 설치하고 등록한다. 정책은 windows 전용 배열 대신 windows:list와 windows:control의 `{ view }` allow, deny 범위를 사용한다. 시작 창, WebView, 앱 종료와 진단은 플랫폼 자원 수명 관리로 유지한다.
+
+플러그인 작성 SDK는 Backend SDK와 Core를 의존하지 않는다. @bunaway/plugin-api가 앱 계약과 실행 컨텍스트를 소유하고 Core와 Backend SDK가 이를 사용한다. /host 하위 경로는 Bun 전용 컨텍스트이며 루트의 공통 타입을 브라우저와 portable Core에서 읽어도 Bun 자원을 가져오지 않는다.
