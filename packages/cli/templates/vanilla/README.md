@@ -25,10 +25,9 @@ import { invoke } from "@bunaway/client";
 const text = await invoke<string>("message.read", null);
 ```
 
-The SDK connects to the app WebView, waits for the handshake, and closes the
-connection when the page exits. Use `listen` to subscribe to events and call its
-returned disposer when the UI component is removed. Backend calls require the
-desktop app; a regular browser has no Bunaway bridge.
+Use `invoke` and `listen` without initialization code. Call the disposer returned
+by `listen` when the UI component is removed. Backend calls work in the desktop
+app; calls from a regular browser fail with `UNSUPPORTED`.
 
 ## Build
 

@@ -26,7 +26,6 @@ const client = createClient<AppCommands, AppEvents>();
 await client.invoke("message.save", "문자열");
 ```
 
-기본 연결 설정과 준비 대기는 SDK가 담당합니다. 별도의 transport나 hello 설정을 작성하지 않습니다.
 직접 import한 `invoke<string>`과 `listen<string>`의 타입 인자는 작성자가 선언하는 타입입니다.
 명령 이름과 입력, 이벤트까지 앱 정의에서 검사하려면 위의 타입이 연결된 클라이언트를 사용합니다.
 CommandsOf는 앱에 직접 선언한 명령과 `defineApp()`에 정적으로 나열한 모듈의 input/output을 추론합니다.

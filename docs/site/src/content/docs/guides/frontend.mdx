@@ -44,7 +44,7 @@ await invoke("message.save", "안녕하세요");
 const text = await invoke<string>("message.read", null);
 ```
 
-기본 연결 설정과 준비 대기, 페이지 종료 시 정리는 SDK가 담당합니다.
+별도의 초기화 코드 없이 `invoke`와 `listen`을 호출합니다.
 UI 컴포넌트를 제거할 때는 `await unlisten()`으로 해당 구독을 해제합니다.
 React나 Vue, Svelte에서도 컴포넌트의 정리 시점에 이 해제 함수를 호출합니다.
 직접 함수에서는 작성자가 타입 인자로 반환값이나 이벤트 데이터의 타입을 지정합니다.
@@ -53,7 +53,7 @@ React나 Vue, Svelte에서도 컴포넌트의 정리 시점에 이 해제 함수
 ## 브라우저와 WebView
 
 일반 브라우저에는 네이티브 브리지가 없습니다.
-SDK를 import하는 것만으로 연결하지 않으므로 SSR 코드에서 모듈을 불러올 수 있습니다.
+SSR 코드에서도 SDK를 import할 수 있습니다.
 기본 API를 실제로 호출하면 `UNSUPPORTED`로 실패합니다. 백엔드 호출은 실제 네이티브 창에서 확인합니다.
 브라우저 미리보기에서 앱 기능을 시험하려면 [사용자 정의 클라이언트](/reference/client/transport/)에 테스트 어댑터를 전달합니다. 권한 검사는 실제 WebView에서 확인합니다.
 백엔드 코드, 비밀 설정은 프런트엔드 번들에 넣지 않습니다.

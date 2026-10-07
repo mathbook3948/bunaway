@@ -4,8 +4,7 @@ description: 기본 클라이언트를 사용하고 앱 정의에서 호출 타�
 sidebar: { order: 1 }
 ---
 
-`@bunaway/client`의 `createClient()`는 현재 문서의 기본 클라이언트를 즉시 반환합니다.
-인자를 전달하지 않으면 연결 설정과 준비 대기, 페이지 종료 시 정리를 SDK가 처리합니다.
+`@bunaway/client`의 `createClient()`는 별도 초기화 없이 현재 문서의 기본 클라이언트를 즉시 반환합니다.
 같은 문서에서 여러 번 호출해도 같은 클라이언트를 반환합니다.
 직접 import한 `invoke`, `listen`, `capabilities`도 이 연결을 사용합니다.
 

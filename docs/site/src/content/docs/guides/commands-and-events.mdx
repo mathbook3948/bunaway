@@ -66,11 +66,8 @@ import uiSource from '@repo/packages/cli/templates/vanilla/src/main.ts?raw';
 4. 버튼 클릭 시 `invoke("message.save", text)`를 호출합니다.
 5. 이벤트 콜백의 `event.payload`로 화면을 갱신합니다.
 
-연결 설정과 준비 대기는 SDK가 처리하므로 별도의 초기화 코드를 작성하지 않습니다.
-
 `listen()`의 `onError`는 필수입니다. 활성 구독의 종료는 이 콜백에서 처리하고, 구독 시작 실패는 `listen()`의 Promise에서 처리합니다.
 `listen()`이 반환한 해제 함수를 보관해 두었다가 컴포넌트를 제거할 때 `await unlisten()`으로 구독을 정리합니다.
-페이지가 종료되면 SDK가 연결과 구독을 자동으로 정리합니다.
 
 ## 응답과 이벤트는 어떻게 다르나요?
 

@@ -50,7 +50,7 @@ const text = await invoke<string>("message.read", null);
 await unlisten();
 ```
 
-SDK는 첫 호출에서 문서별 연결 하나를 만들고 준비가 끝나면 요청을 보낸다.
+화면에서는 별도의 초기화 코드 없이 `invoke`와 `listen`을 호출한다.
 UI 컴포넌트가 사라지면 반환받은 `unlisten`으로 해당 구독을 해제한다.
 호출은 `bunaway dev`로 연 창이나 배포 앱의 WebView에서 동작한다. 일반 브라우저에는
 브리지가 없어 `UNSUPPORTED`로 실패한다. 기존 `createClient({ transport, hello })`는
