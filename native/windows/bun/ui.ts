@@ -5,7 +5,8 @@ import { allowedHost, ViewBoundary } from "./boundary.ts";
 import { Channel, type Packet, type UIConfig } from "./channel.ts";
 import { callbackCalls, checkCallbacks, disposeCom } from "./com.ts";
 import { originOf, WebView } from "./webview.ts";
-import { disposeWin32Bindings, hr, kernel, ole, Windows } from "./win32.ts";
+import { Tray } from "./tray.ts";
+import { disposeWin32Bindings, hr, kernel, ole, user, Windows } from "./win32.ts";
 
 const config = workerData as UIConfig;
 assert(parentPort);
@@ -16,6 +17,22 @@ let startRequested = false;
 let closingSent = false;
 let initialized = false;
 let windows: Windows | undefined;
+let tray: Tray | undefined;
+let quitPending = false;
+function requestQuit(reason: "last-window" | "tray") {
+  if (stopping || quitPending) return;
+  quitPending = true;
+  channel.notify({ kind: "quit-request", reason });
+}
+function visibility(action: "show" | "hide") {
+  if (stopping) return;
+  for (const view of views.values()) {
+    if (view.boundary.closed) continue;
+    const mode = action === "hide" ? 0 : user.symbols.IsIconic(view.native.hwnd) ? 9 : 5;
+    user.symbols.ShowWindow(view.native.hwnd, mode);
+    if (action === "show") user.symbols.SetForegroundWindow(view.native.hwnd);
+  }
+}
 const views = new Map<
   string,
   { boundary: ViewBoundary; native: WebView; detached: boolean; cleaned: boolean; ready: boolean }
@@ -34,6 +51,11 @@ const channel = new Channel(
       assert(!startRequested && !stopping, "Invalid start");
       startRequested = true;
       startViews();
+    } else if (packet.kind === "desktop-control") {
+      if (packet.action === "hide") assert(tray, "Hiding requires a tray");
+      visibility(packet.action);
+    } else if (packet.kind === "quit-cancelled") {
+      quitPending = false;
     } else if (packet.kind === "shutdown") {
       stopping = true;
       approved.clear();
@@ -98,6 +120,12 @@ try {
   hr(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
   initialized = true;
   windows = new Windows();
+  if (config.desktop?.tray)
+    tray = new Tray(windows, config.desktop.tray.tooltip, (action) => {
+      if (action === "show") visibility("show");
+      else requestQuit("tray");
+    });
+  if (tray) log("tray-created", { hwnd: tray.hwnd.toString() });
   log("ui-thread", { pid: process.pid, thread: kernel.symbols.GetCurrentThreadId() });
   for (const spec of config.windows) {
     const policy = config.policy.views.find((view) => view.id === spec.view);
@@ -121,7 +149,19 @@ try {
       deliver: (text) => native.send(text),
       log: (event, data) => log(event, { view: spec.view, ...data }),
     });
-    const close = () => {
+    const close = (force = false) => {
+      if (stopping || boundary.closed || (!force && quitPending)) return;
+      // Browser failure must dispose its dead view even in tray mode or during a veto.
+      if (!force && config.desktop?.closeBehavior === "hide") {
+        assert(tray, "Close to tray requires a tray");
+        user.symbols.ShowWindow(window, 0);
+        log("view-window-hidden", { view: spec.view });
+        return;
+      }
+      if (!force && [...views.values()].filter((view) => !view.boundary.closed).length <= 1) {
+        requestQuit("last-window");
+        return;
+      }
       boundary.revoke("closing");
       boundary.closed = true;
       native?.requestClose();
@@ -198,8 +238,7 @@ try {
       if (view.detached && !view.cleaned) view.cleaned = view.native.finish();
     }
     if (!closingSent && [...views.values()].every((view) => view.boundary.closed)) {
-      closingSent = true;
-      channel.notify({ kind: "closing" });
+      requestQuit("last-window");
     }
     if (failure) throw failure;
     // ponytail: bounded polling adds up to 5 ms latency; replace only after measuring idle CPU.
@@ -229,6 +268,8 @@ try {
       }
       await Bun.sleep(5);
     }
+    tray?.dispose();
+    tray = undefined;
     const calls = callbackCalls();
     for (let count = 0; count < 10; count++) {
       windows?.pump();

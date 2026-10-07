@@ -18,7 +18,7 @@ test.skipIf(process.platform !== "win32")(
       for (const [name, text] of Object.entries({
         "한글-😀.txt": "launcher verified",
         "boot.js":
-          'await Bun.write(new URL("../started.txt", import.meta.url), await Bun.file(new URL("./한글-😀.txt", import.meta.url)).text());',
+          'await Bun.write(new URL("../started.txt", import.meta.url), await Bun.file(new URL("./한글-😀.txt", import.meta.url)).text()); await Bun.write(new URL("../launch.json", import.meta.url), Buffer.from(process.argv[3], "base64"));',
         "bunfig.toml": "env = false\n",
         "tsconfig.json": "{}",
       })) {
@@ -35,33 +35,40 @@ test.skipIf(process.platform !== "win32")(
         resolve(root, "launch.ps1"),
         launcher.replace("__BUN_SHA256__", await hash(process.execPath)),
       );
-      const child = Bun.spawn(
-        [
-          resolve(
-            process.env.SystemRoot ?? "C:/Windows",
-            "System32/WindowsPowerShell/v1.0/powershell.exe",
-          ),
-          "-NoProfile",
-          "-ExecutionPolicy",
-          "Bypass",
-          "-File",
-          resolve(root, "launch.ps1"),
-          "-Wait",
-        ],
-        // Let Windows PowerShell use its own modules, not an inherited pwsh module path.
-        { stdout: "pipe", stderr: "pipe", env: { ...process.env, PSModulePath: undefined } },
-      );
-      const output = new Response(child.stdout).text();
-      const errors = new Response(child.stderr).text();
-      const timeout = setTimeout(() => child.kill(), 20000);
-      try {
-        expect(await child.exited, await errors).toBe(0);
-        await output;
-        expect(await readFile(resolve(root, "started.txt"), "utf8")).toBe("launcher verified");
-      } finally {
-        clearTimeout(timeout);
-        if (child.exitCode === null) child.kill();
-        await child.exited;
+      for (const argv of [[], ["한글 파일.txt", "memo://open?id=42&mode=edit"]]) {
+        const child = Bun.spawn(
+          [
+            resolve(
+              process.env.SystemRoot ?? "C:/Windows",
+              "System32/WindowsPowerShell/v1.0/powershell.exe",
+            ),
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            resolve(root, "launch.ps1"),
+            "-Wait",
+            ...argv,
+          ],
+          // Let Windows PowerShell use its own modules, not an inherited pwsh module path.
+          { stdout: "pipe", stderr: "pipe", env: { ...process.env, PSModulePath: undefined } },
+        );
+        const output = new Response(child.stdout).text();
+        const errors = new Response(child.stderr).text();
+        const timeout = setTimeout(() => child.kill(), 20000);
+        try {
+          expect(await child.exited, await errors).toBe(0);
+          await output;
+          expect(await readFile(resolve(root, "started.txt"), "utf8")).toBe("launcher verified");
+          expect(JSON.parse(await readFile(resolve(root, "launch.json"), "utf8"))).toEqual({
+            argv,
+            cwd: process.cwd(),
+          });
+        } finally {
+          clearTimeout(timeout);
+          if (child.exitCode === null) child.kill();
+          await child.exited;
+        }
       }
     } finally {
       await rm(root, { recursive: true, force: true });

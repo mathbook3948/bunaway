@@ -54,11 +54,14 @@ export type PluginDefinition = {
   setup?(context: CommandContext): void | StopHook | Promise<StopHook | undefined> | Promise<void>;
 };
 
+export type { DesktopContext, DesktopOptions, OpenRequest, QuitReason } from "./desktop.ts";
+
 export type AppDefinition = {
   readonly commands: CommandRegistry;
   readonly events: EventRegistry;
   readonly state?: Readonly<Record<string, JsonValue>>;
   readonly plugins?: readonly PluginDefinition[];
+  readonly desktop?: import("./desktop.ts").DesktopOptions;
 };
 
 export type CommandsOf<A extends AppDefinition> = {

@@ -249,7 +249,7 @@ async function assembleProject(
       );
       await writeFile(
         resolve(packageRoot, "bunaway.cmd"),
-        '@echo off\r\n"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "%~dp0launch.ps1"\r\n',
+        '@echo off\r\n"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "%~dp0launch.ps1" %*\r\n',
       );
     }
     const hashes: Record<string, string> = {};

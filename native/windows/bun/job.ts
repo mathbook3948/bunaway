@@ -3,6 +3,12 @@ import assert from "node:assert/strict";
 import { mkdirSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 
+export class AppAlreadyRunningError extends Error {
+  constructor() {
+    super("App data directory is already in use.");
+  }
+}
+
 let owned:
   | { handle: bigint; lock: bigint; dataRoot: string; api: ReturnType<typeof openBindings> }
   | undefined;
@@ -35,9 +41,8 @@ export function containAppProcess(dataRoot: string) {
   if (lock === 0xffffffffffffffffn) {
     const error = api.symbols.GetLastError();
     api.close();
-    throw new Error(
-      error === 32 ? "App data directory is already in use." : `App lock failed (${error})`,
-    );
+    if (error === 32) throw new AppAlreadyRunningError();
+    throw new Error(`App lock failed (${error})`);
   }
   let handle = 0n;
   try {

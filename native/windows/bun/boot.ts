@@ -10,7 +10,14 @@ import pin from "../../../runtime/build-manifests/windows-x64.json";
 import { MAX_WINDOWS, type UIConfig, type WindowSpec } from "./channel.ts";
 import deps from "./deps.json";
 import { runWindowsApp } from "./entry.ts";
-import { containAppProcess } from "./job.ts";
+import { AppAlreadyRunningError, containAppProcess } from "./job.ts";
+import {
+  forwardToInstance,
+  instanceAddress,
+  listenForInstances,
+  parseLaunchArguments,
+  type LaunchArguments,
+} from "./instance.ts";
 import { verifyDevelopmentLaunch } from "../../../packages/runtime-bun/src/development.ts";
 
 const hash = async (path: string) =>
@@ -166,16 +173,33 @@ export async function verifyWindowsPackage(
 if (import.meta.main) {
   const root = resolve(dirname(import.meta.path), "..");
   const args = process.argv.slice(2);
-  assert(
-    !args.length || (args.length === 2 && args[0] === "--dev-url"),
-    "Usage: boot.js [--dev-url <url>]",
-  );
-  const config = await verifyWindowsPackage(root, args[1]);
-  containAppProcess(config.dataRoot);
-  // Only import a side-effect-free default AppDefinition after all package checks.
-  const module = await import(pathToFileURL(resolve(root, "assets/app.js")).href);
-  const app = object(module.default);
-  assert(app.commands && app.events, "windowsApp must default-export an AppDefinition");
-  await runWindowsApp(app as AppDefinition, config);
+  const developmentUrl = args[0] === "--dev-url" ? args[1] : undefined;
+  if (args[0] === "--dev-url") assert(developmentUrl, "Missing development URL");
+  const config = await verifyWindowsPackage(root, developmentUrl);
+  // Launchers encode arguments to preserve quotes, Unicode and the caller's cwd.
+  let launch: LaunchArguments;
+  const appArgs = developmentUrl ? args.slice(2) : args;
+  if (appArgs[0] === "--launch-payload") {
+    assert(appArgs.length === 2 && appArgs[1], "Invalid launch payload");
+    launch = parseLaunchArguments(JSON.parse(Buffer.from(appArgs[1], "base64").toString("utf8")));
+  } else launch = parseLaunchArguments({ argv: appArgs, cwd: process.cwd() });
+  try {
+    containAppProcess(config.dataRoot);
+  } catch (error) {
+    if (!(error instanceof AppAlreadyRunningError)) throw error;
+    await forwardToInstance(instanceAddress(config.dataRoot), launch);
+    process.exit(0);
+  }
+  const inbox = await listenForInstances(instanceAddress(config.dataRoot));
+  try {
+    // Only the owner imports the app after all package checks and IPC readiness.
+    const module = await import(pathToFileURL(resolve(root, "assets/app.js")).href);
+    const app = object(module.default);
+    assert(app.commands && app.events, "App must default-export an AppDefinition");
+    await runWindowsApp(app as AppDefinition, config, launch, inbox);
+  } finally {
+    // runWindowsApp also closes on shutdown; early import failures need this path.
+    await inbox.close().catch(() => {});
+  }
   process.exit(0);
 }

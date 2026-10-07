@@ -17,9 +17,16 @@ import {
 } from "../../../packages/protocol/src/index.ts";
 import { Channel, type Packet, type Route, type UIConfig } from "./channel.ts";
 import { DiagnosticLog } from "./log.ts";
+import { DesktopLifecycle } from "./desktop.ts";
+import type { LaunchArguments, listenForInstances } from "./instance.ts";
 import { activeDescendants, containAppProcess } from "./job.ts";
 
-export async function runWindowsApp(app: AppDefinition, config: UIConfig): Promise<void> {
+export async function runWindowsApp(
+  app: AppDefinition,
+  config: UIConfig,
+  launch?: LaunchArguments,
+  inbox?: Awaited<ReturnType<typeof listenForInstances>>,
+): Promise<void> {
   containAppProcess(config.dataRoot);
   const sessions = new Map<HostContext, { route: Route; session: CoreSession }>();
   const log = new DiagnosticLog(resolve(config.dataRoot, "logs/host.log"));
@@ -49,6 +56,29 @@ export async function runWindowsApp(app: AppDefinition, config: UIConfig): Promi
   const stopRequested = new Promise<void>((resolveStop) => {
     stopResolve = resolveStop;
   });
+  const desktop = new DesktopLifecycle(
+    app.desktop,
+    (action) => channel.send({ kind: "desktop-control", action }),
+    () => {
+      stopping = true;
+      stopResolve();
+    },
+    (error) => {
+      console.error("Desktop callback failed:", error);
+      void log
+        .write("desktop-callback-failed", {
+          message: error instanceof Error ? error.message : String(error),
+        })
+        .catch(() => {});
+    },
+  );
+  config = {
+    ...config,
+    desktop: {
+      closeBehavior: app.desktop?.closeBehavior ?? "quit",
+      ...(app.desktop?.tray ? { tray: { tooltip: app.desktop.tray.tooltip } } : {}),
+    },
+  };
   const workerPath = new URL(
     existsSync(resolve(import.meta.dir, "ui.ts")) ? "./ui.ts" : "./ui.js",
     import.meta.url,
@@ -134,6 +164,17 @@ export async function runWindowsApp(app: AppDefinition, config: UIConfig): Promi
     }
     if (packet.kind === "ready") {
       readyResolve();
+      return;
+    }
+    if (packet.kind === "quit-request") {
+      // Accept the request immediately so a signal can drain the UI channel
+      // while the app is still deciding whether to quit.
+      void desktop
+        .quit(packet.reason)
+        .then(async (allowed) => {
+          if (!allowed && !stopping) await channel.send({ kind: "quit-cancelled" });
+        })
+        .catch(fail);
       return;
     }
     if (packet.kind === "closing") {
@@ -277,13 +318,19 @@ export async function runWindowsApp(app: AppDefinition, config: UIConfig): Promi
     clearTimeout(startupTimer);
     if (core && !stopping)
       await log.write("backend-ready", { pid: process.pid, bunVersion: Bun.version });
-    if (!stopping) await channel.send({ kind: "start" });
+    if (!stopping) {
+      await channel.send({ kind: "start" });
+      if (launch) desktop.open(launch, "initial");
+      inbox?.start((input) => desktop.open(input, "second-instance"));
+    }
     await stopRequested;
   } catch (error) {
     fail(error);
   } finally {
     clearTimeout(startupTimer);
     stopping = true;
+    desktop.dispose();
+    await inbox?.close().catch(fail);
     cancelCalls();
     const timeout = setTimeout(() => {
       console.error("Windows cleanup timed out; ending failed app process.");

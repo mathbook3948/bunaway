@@ -28,7 +28,9 @@ Inno Setup 설치 프로그램을 만든다. 서명으로 Bun 파일이 바뀌�
 검증될 때까지 명시적으로 거부한다. [패키징 안내](../../../packages/packaging/README.md).
 
 같은 앱 데이터 디렉터리는 한 프로세스만 사용한다. 앱 import 전에 `host.lock`을
-Windows 파일 핸들로 독점하며, 중복 실행은 즉시 오류로 종료한다. 기존 WebView 프로필과
+Windows 파일 핸들로 독점한다. 두 번째 실행은 기존 앱에 인자와 작업 디렉터리를
+named pipe로 전달하고 종료한다. 앱 import, Worker, WebView 생성은 소유자만 수행한다.
+기존 WebView 프로필과
 저장 데이터는 유지한다. 잠금은 정상/강제 종료 때 OS가 해제하므로 남은 파일을 삭제할 필요가 없다.
 
 STA의 bounded PeekMessage pump는 64개 처리 후 Bun에 제어를 돌려준다. OS 모달 중에는
@@ -45,3 +47,11 @@ COM 콜백은 같은 OS 스레드에서 동기 HRESULT를 반환한다. `threads
 명령 핸들러의 예기치 않은 예외는 stderr와 앱 로그의 `command-failed`에 명령 이름, 원래 메시지와 스택을 기록한다. WebView 응답에는 내부 오류를 넣지 않는다. 진단 기록 실패는 명령 응답에 영향을 주지 않는다.
 
 실패한 로그 기록은 다시 시도하지 않는다. 쓰기 실패는 해당 호출에만 전달하며 이후 기록은 계속 처리한다. drain()은 대기 중인 기록 처리가 끝날 때까지 기다린다.
+
+앱 정의의 `desktop.onOpen`은 초기 실행과 두 번째 실행의 인자, URL, 파일을 받는다.
+`desktop.beforeQuit`는 마지막 창, 트레이, 앱의 종료 요청을 취소할 수 있다.
+`desktop.closeBehavior: "hide"`와 `desktop.tray: { tooltip: "Memo" }`를 함께 지정하면
+닫기 버튼으로 창을 숨기고 백엔드, WebView, 세션을 유지한다. 트레이 Open 또는
+두 번째 실행으로 복원하며 Quit은 종료 검사를 거친다. 기본값은 마지막 창 닫기로 종료다.
+URL scheme과 파일 확장자의 OS 등록은 제공하지 않으며 실행기에 전달된 인자를 처리한다.
+[데스크톱 수명주기 결정](../../../docs/decisions/0013-desktop-lifecycle.md).

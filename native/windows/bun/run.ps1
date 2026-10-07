@@ -12,6 +12,12 @@ if (!$SkipTests) {
         & $bun @arguments
         if ($LASTEXITCODE -ne 0) { throw "Windows core scenario failed: $scenario" }
     }
+    & $bun --no-env-file test (Join-Path $root 'tests/lifecycle/desktop.test.ts') (Join-Path $root 'tests/lifecycle/windows-bun-instance.test.ts') (Join-Path $root 'tests/cli/windows-assets.test.ts')
+    if ($LASTEXITCODE -ne 0) { throw 'Windows instance and launcher regression failed' }
+    foreach ($scenario in @('hide', 'veto')) {
+        & $bun --no-env-file (Join-Path $root 'tests/lifecycle/windows-desktop.ts') $scenario
+        if ($LASTEXITCODE -ne 0) { throw "Windows desktop lifecycle failed: $scenario" }
+    }
     & $bun --no-env-file (Join-Path $root 'tests/lifecycle/windows-bun-storage.ts')
     if ($LASTEXITCODE -ne 0) { throw 'Windows handle storage regression failed' }
     & $bun --no-env-file (Join-Path $root 'tests/lifecycle/windows-bun-cli.ts')

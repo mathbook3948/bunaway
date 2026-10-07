@@ -67,3 +67,9 @@ Windows 배포 근거와 한계:
   명시적으로 차단한다. MSIX 앱 활성화에서 Bun을 시작하면서 런처와 동일한 제한된 초기
   환경을 보장하는 경로가 아직 검증되지 않았다. MSIX 패키징, 스토어 제출 지원을 주장하지
   않는다.
+
+Windows의 앱 정의 `desktop`에 인자, 딥링크, 파일 열기와 종료 취소, 트레이 숨김을
+구현했다. 계약, 번들, 타입 검사는 Linux에서 확인하며 실제 Windows GUI 회귀는
+`native/windows/bun/run.ps1`의 hide, veto 시나리오로 검증한다. 이번 작업에서는
+Windows GUI 실행을 확인하지 않았다. URL scheme과 파일 연결의 OS 등록은 미구현이다.
+macOS 프로세스 런타임은 `desktop`을 `UNSUPPORTED`로 거부한다.
