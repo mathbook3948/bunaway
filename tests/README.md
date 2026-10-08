@@ -11,6 +11,11 @@
   잘못된 구독 응답과 클라이언트 종료 시 세션 철회, 원격 구독 제거와 명령 취소를 확인한다.
 - `docs/`: 문서 링크 검사기의 정상 입력, 잘못된 링크와 출력 경로 경계.
 
+Windows 이벤트 전송 회귀는 실제 `MessageChannel`과 Core를 연결한다. 두 뷰의
+총 130개 구독에 대한 방송과 구독별 순서, 수신 확인 지연, BUSY 구독 종료,
+서버 대기열 포화와 세션 정리, 취소 및 종료 용량을 확인한다.
+이 검사는 WebView2 GUI 실행을 포함하지 않는다.
+
 Windows 호스트 시나리오는 `lifecycle/windows-host.ts`에 두고 PID 조회, 창 닫기와
 프로세스 종료 감시는 `lifecycle/windows-host-processes.ts`에서 실행한다.
 뷰 프로필 이름은 호스트의 순수 `view-profile.ts` 함수를 공유한다.

@@ -75,6 +75,9 @@ hello를 교환하며 `ready`에서 협상 버전, features, 백엔드 buildId�
 
 `Transport.send(text)`는 FIFO 큐 접수까지 완료하며 JS 작업 완료를 뜻하지 않는다.
 `subscribe`는 원문 메시지 또는 closed 통지를 받으며 반환 함수는 멱등 해제다.
+등록 중 동기 메시지와 closed도 허용한다. Client는 등록 전에 준비 기한을 설정하고,
+hello 완료나 등록 실패, 연결 종료 때 기한을 해제한다. 등록 중 세션이 종료되면
+반환한 구독 해제 함수도 즉시 호출한다. 등록 예외는 ready와 대기 호출로 전달한다.
 closed는 한 번만 통지하고, 종료 뒤 등록한 구독자도 종료를 관찰한다. 종료 뒤 send는 실패한다.
 `close()`는 자원을 회수하고 멱등 완료한다. 세션 하나에 transport, client 하나를 두며
 Client.close가 자신의 transport를 닫는다. 재연결은 새 객체, 새 세션이다.
@@ -162,6 +165,15 @@ state.get/set은 JSON 스냅샷을 다루며 get 결과 수정으로 저장 값�
 events.emit은 선언된 이벤트 스키마를 검사하고 broadcast 또는 명시한 view로 전달한다.
 발신자는 컨텍스트에서 결정하며 대상 뷰의 이벤트 허용 목록과 구독을 확인한다.
 웹 요청을 backend 발신자로 승격하지 않는다.
+코어는 각 구독의 protocol, source, target, subscriptionId와 다음 sequence를 포함한
+최종 이벤트를 모두 직렬화 검사한 뒤 큐에 넣고 sequence를 증가시킨다.
+전송 envelope에 추가 제한이 있는 어댑터는 선택적
+`CoreServices.validateMessage(context, message): void`를 제공한다.
+코어는 큐 등록 전에 모든 대상에 이 동기 검사를 적용한다. 검사는 전송하거나 큐와 세션 상태를
+변경하지 않으며, 실패하면 throw한다. Bun 프로세스 어댑터는 실제 송신과 같은 직렬화 함수로
+context, ipc와 runtime을 포함한 전체 프레임의 크기와 깊이를 검사한다.
+한 대상이라도 메시지 크기, 깊이나 직렬화 규칙을 위반하면 발행자에게 INVALID_ARGUMENT를
+반환하며 어느 구독에도 전달하지 않는다. 기존 구독, sequence와 세션은 유지한다.
 
 세션 close는 멱등이며 새 요청 차단→signal 취소→미완료 요청 실패, 구독 폐기 순서다.
 stop은 모든 세션과 backend 작업을 취소하고 플러그인을 정리한다. 정리 기한 초과는 TIMEOUT이다.

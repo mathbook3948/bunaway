@@ -54,6 +54,9 @@ export type CoreServices = {
     phase: "setup" | "stop",
     cause: unknown,
   ): void | Promise<void>;
+  // Check additional transport-envelope limits synchronously without sending or
+  // changing queues. Event emission validates every destination before delivery.
+  validateMessage?(context: HostContext, message: ServerMessage): void;
   // The adapter closes the transport and bound session(s) on terminal send failure.
   send(context: HostContext, message: ServerMessage): Promise<void>;
   callHost(

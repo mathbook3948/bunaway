@@ -35,6 +35,7 @@ export async function save(text: string) {
 [공개 계약](./docs/architecture/plugins.md)에 따라 Windows 실행과 개별 패키지 배포를 구현했다.
 기본 템플릿은 저장 플러그인만 설치하고 등록한다.
 플러그인은 화면과 백엔드에서 `@bunaway/plugin-storage`처럼 같은 경로로 import한다.
+플러그인 `setup`의 이벤트 발행은 앱 백엔드의 수명을 따른다. 종료 신호가 취소되면 `events.emit`은 `CANCELLED`로 실패한다. [이벤트 수명 안내](./docs/site/src/content/docs/reference/backend/events.mdx)를 참고한다.
 새 플러그인은 `plugin.json`, `src/index.ts`, `src/windows.ts`로 시작한다. 필요하면 제작자가 파일을 추가한다.
 생성 앱의 타입 검사와 빌드는 실행 환경에 맞는 구현을 선택한다.
 

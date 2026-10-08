@@ -74,15 +74,18 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
       finish: (response: HostResponse) => void;
     }
   >();
-  const send = (body: OutboundFrame): Promise<void> => {
+  const serializeFrame = (body: OutboundFrame): string => {
     if (!runtime) {
-      return Promise.reject(new Error("Runtime has not booted."));
+      throw new Error("Runtime has not booted.");
     }
-    const text = `${serializeProcessFrame({
+    return serializeProcessFrame({
       ...body,
       ipc: PROCESS_IPC_VERSION,
       runtime,
-    })}\n`;
+    });
+  };
+  const send = (body: OutboundFrame): Promise<void> => {
+    const text = `${serializeFrame(body)}\n`;
     if (queued >= API_LIMITS.maxPending) {
       return Promise.reject(new Error("Output queue full."));
     }
@@ -169,6 +172,13 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
               const timer = setTimeout(callback, delay);
               return () => clearTimeout(timer);
             },
+          },
+          validateMessage(context, message) {
+            serializeFrame({
+              kind: "web",
+              context,
+              payload: message,
+            });
           },
           send: async (context, message) => {
             if (sessions.has(context) && !stopping) {

@@ -208,20 +208,7 @@ class ClientSession<C extends CommandMap, E extends EventMap>
       () => {},
       () => {},
     );
-    // Subscribe before the first send so no inbound frame is missed.
-    this.unsubscribeTransport = () => {};
-    try {
-      this.unsubscribeTransport = transport.subscribe((event) =>
-        this.onTransportEvent(event),
-      );
-    } catch (cause) {
-      this.terminate(
-        toWireError(cause, {
-          code: "INTERNAL",
-          message: "Transport subscribe failed.",
-        }),
-      );
-    }
+    // Subscribe may deliver hello or closed before returning its disposer.
     this.handshakeTimer = setTimeout(
       () =>
         this.terminate({
@@ -230,6 +217,25 @@ class ClientSession<C extends CommandMap, E extends EventMap>
         }),
       API_LIMITS.handshakeTimeoutMs,
     );
+    // Subscribe before the first send so no inbound frame is missed.
+    this.unsubscribeTransport = () => {};
+    try {
+      const unsubscribe = transport.subscribe((event) =>
+        this.onTransportEvent(event),
+      );
+      if (this.terminated) {
+        unsubscribe();
+      } else {
+        this.unsubscribeTransport = unsubscribe;
+      }
+    } catch (cause) {
+      this.terminate(
+        toWireError(cause, {
+          code: "INTERNAL",
+          message: "Transport subscribe failed.",
+        }),
+      );
+    }
     if (!this.terminated) {
       this.sendHello();
     }

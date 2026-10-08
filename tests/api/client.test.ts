@@ -168,6 +168,23 @@ const serverHello: Hello = {
   buildId: "backend",
 };
 
+class SynchronousSubscribeTransport extends TestTransport {
+  unsubscribeCount = 0;
+
+  constructor(private readonly initialEvent: TransportEvent) {
+    super();
+  }
+
+  override subscribe(listener: (event: TransportEvent) => void): Dispose {
+    const unsubscribe = super.subscribe(listener);
+    listener(this.initialEvent);
+    return () => {
+      this.unsubscribeCount += 1;
+      unsubscribe();
+    };
+  }
+}
+
 // Lets queued promise continuations (ready waiters, sends) run to completion.
 async function flush(turns = 6): Promise<void> {
   for (let index = 0; index < turns; index++) {
@@ -411,6 +428,146 @@ test("ready times out and closes the transport when no hello arrives", async () 
       },
     });
     expect(transport.closed).toBe(true);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test("a hello delivered during subscribe keeps the client usable beyond the handshake timeout", async () => {
+  jest.useFakeTimers();
+  try {
+    const transport = new SynchronousSubscribeTransport({
+      kind: "message",
+      text: JSON.stringify(serverHello),
+    });
+    const client = createClient<Commands, Events>({
+      transport,
+      hello,
+    });
+    expect(await client.ready).toMatchObject({
+      buildId: "backend",
+    });
+    jest.advanceTimersByTime(API_LIMITS.handshakeTimeoutMs);
+    expect(transport.closed).toBe(false);
+
+    const pending = client.invoke("notes.read", {
+      key: "after-handshake",
+    });
+    await flush();
+    transport.emit(
+      serverResult(invokeMessage(transport).id, "still-connected"),
+    );
+    expect(await pending).toBe("still-connected");
+    await client.close();
+    await client.close();
+    expect(transport.unsubscribeCount).toBe(1);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test("startup notifications that terminate during subscribe release its returned disposer", async () => {
+  jest.useFakeTimers();
+  try {
+    const failure: WireError = {
+      code: "INTERNAL",
+      message: "Connection already closed.",
+    };
+    const cases: {
+      event: TransportEvent;
+      error: WireError;
+    }[] = [
+      {
+        event: {
+          kind: "closed",
+          error: failure,
+        },
+        error: failure,
+      },
+      {
+        event: {
+          kind: "message",
+          text: "not json",
+        },
+        error: {
+          code: "INTERNAL",
+          message: "Protocol violation.",
+        },
+      },
+    ];
+    for (const { event, error } of cases) {
+      const transport = new SynchronousSubscribeTransport(event);
+      const client = createClient<Commands, Events>({
+        transport,
+        hello,
+      });
+      expect(await client.ready.catch((cause: unknown) => cause)).toMatchObject(
+        error,
+      );
+      expect(
+        await client
+          .invoke("notes.read", {
+            key: "after-failure",
+          })
+          .catch((cause: unknown) => cause),
+      ).toMatchObject(error);
+      expect(transport.sent).toHaveLength(0);
+      expect(transport.closed).toBe(true);
+      expect(transport.unsubscribeCount).toBe(1);
+      expect(jest.getTimerCount()).toBe(0);
+      await client.close();
+      expect(transport.unsubscribeCount).toBe(1);
+    }
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test("subscribe exceptions reject readiness asynchronously and leave no handshake timer", async () => {
+  jest.useFakeTimers();
+  try {
+    const cases = [
+      {
+        cause: new Error("Private transport diagnostics."),
+        error: {
+          code: "INTERNAL",
+          message: "Transport subscribe failed.",
+        },
+      },
+      {
+        cause: {
+          code: "UNSUPPORTED",
+          message: "Transport unavailable.",
+        },
+        error: {
+          code: "UNSUPPORTED",
+          message: "Transport unavailable.",
+        },
+      },
+    ];
+    for (const { cause, error } of cases) {
+      const transport = new TestTransport();
+      transport.subscribe = () => {
+        throw cause;
+      };
+      const client = createClient<Commands, Events>({
+        transport,
+        hello,
+      });
+      expect(await client.ready.catch((cause: unknown) => cause)).toMatchObject(
+        error,
+      );
+      expect(
+        await client
+          .invoke("notes.read", {
+            key: "after-failure",
+          })
+          .catch((cause: unknown) => cause),
+      ).toMatchObject(error);
+      expect(transport.sent).toHaveLength(0);
+      expect(transport.closed).toBe(true);
+      expect(jest.getTimerCount()).toBe(0);
+    }
   } finally {
     jest.useRealTimers();
   }
