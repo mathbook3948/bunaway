@@ -17,8 +17,8 @@ import { bundleWindowsHost } from "../../packages/cli/src/assets.ts";
 import { compiledAssetArguments } from "../../packages/cli/src/launch.ts";
 
 test("compiled host preserves file imports from the app and both workers after staging is removed", async () => {
-  const root = await mkdtemp(
-    resolve(tmpdir(), "bunaway-compiled-file-assets-"),
+  const root = await realpath(
+    await mkdtemp(resolve(tmpdir(), "bunaway-compiled-file-assets-")),
   );
   const host = resolve(root, "host");
   const assets = resolve(root, "assets");
