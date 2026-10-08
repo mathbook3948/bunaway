@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { createConnection } from "node:net";
+import { validatePacket } from "../../native/windows/bun/channel.ts";
 import {
   DesktopLifecycle,
   openRequest,
@@ -8,9 +9,7 @@ import {
   forwardToInstance,
   listenForInstances,
   parseLaunchArguments,
-  readLaunchArguments,
 } from "../../native/windows/bun/instance.ts";
-import { validatePacket } from "../../native/windows/bun/channel.ts";
 import { defineApp } from "../../packages/backend-sdk/src/index.ts";
 import type { OpenRequest } from "../../packages/core/src/index.ts";
 
@@ -340,102 +339,6 @@ test("launch argument limits reject malformed and oversized payloads", () => {
     expect(() => parseLaunchArguments(value)).toThrow();
   }
 });
-
-test("stdin launch input preserves chunked Unicode and rejects oversized or malformed JSON", async () => {
-  const bytes = Buffer.from(JSON.stringify(launch));
-  const input = (chunks: Uint8Array[]) =>
-    new ReadableStream<Uint8Array>({
-      start(controller) {
-        for (const chunk of chunks) {
-          controller.enqueue(chunk);
-        }
-        controller.close();
-      },
-    });
-  expect(
-    await readLaunchArguments(
-      input(
-        [
-          ...bytes,
-        ].map((byte) => Uint8Array.of(byte)),
-      ),
-    ),
-  ).toEqual(launch);
-  expect(
-    await readLaunchArguments(
-      input([
-        Buffer.from([
-          0xef,
-          0xbb,
-          0xbf,
-        ]),
-        bytes,
-      ]),
-    ),
-  ).toEqual(launch);
-  const maximum = {
-    argv: [
-      "",
-    ],
-    cwd: "C:\\docs",
-  };
-  maximum.argv[0] = "x".repeat(
-    65536 - Buffer.byteLength(JSON.stringify(maximum)),
-  );
-  expect(
-    await readLaunchArguments(
-      input([
-        Buffer.from([
-          0xef,
-          0xbb,
-          0xbf,
-        ]),
-        Buffer.from(JSON.stringify(maximum)),
-      ]),
-    ),
-  ).toEqual(maximum);
-  await expect(
-    readLaunchArguments(
-      input([
-        Buffer.alloc(65537),
-      ]),
-    ),
-  ).rejects.toThrow("too large");
-  await expect(
-    readLaunchArguments(
-      input([
-        Buffer.from([
-          0xff,
-        ]),
-      ]),
-    ),
-  ).rejects.toThrow();
-  await expect(
-    readLaunchArguments(
-      input([
-        Buffer.from("{"),
-      ]),
-    ),
-  ).rejects.toThrow();
-  await expect(
-    readLaunchArguments(
-      input([
-        Buffer.from('{"argv":[],"cwd":"relative"}'),
-      ]),
-    ),
-  ).rejects.toThrow("Invalid launch arguments");
-});
-
-test("stdin launch input times out and cancels an unfinished stream", async () => {
-  let cancelled = false;
-  const input = new ReadableStream<Uint8Array>({
-    cancel() {
-      cancelled = true;
-    },
-  });
-  await expect(readLaunchArguments(input)).rejects.toThrow("timed out");
-  expect(cancelled).toBe(true);
-}, 10000);
 
 test("startup delivery has a bounded queue and closing the inbox is idempotent", async () => {
   const address =

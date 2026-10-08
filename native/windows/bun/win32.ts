@@ -135,6 +135,23 @@ export const user = dlopen("user32.dll", {
     ],
     returns: "u64",
   },
+  LoadImageW: {
+    args: [
+      "u64",
+      "ptr",
+      "u32",
+      "i32",
+      "i32",
+      "u32",
+    ],
+    returns: "u64",
+  },
+  DestroyIcon: {
+    args: [
+      "u64",
+    ],
+    returns: "i32",
+  },
   CreatePopupMenu: {
     args: [],
     returns: "u64",
@@ -335,8 +352,72 @@ export class Windows {
   >();
   private registered = false;
   failure: unknown;
+  readonly icon: bigint;
+  private readonly smallIcon: bigint;
+  private readonly ownedIcons: boolean;
 
-  constructor(shutdown: () => void) {
+  constructor(shutdown: () => void, iconPath?: string, appId?: string) {
+    if (appId) {
+      const shell = dlopen("shell32.dll", {
+        SetCurrentProcessExplicitAppUserModelID: {
+          args: [
+            "ptr",
+          ],
+          returns: "i32",
+        },
+      });
+      try {
+        hr(
+          withWide(appId, (id) =>
+            shell.symbols.SetCurrentProcessExplicitAppUserModelID(id),
+          ),
+          "AppUserModelID",
+        );
+      } finally {
+        shell.close();
+      }
+    }
+    this.ownedIcons = !!iconPath;
+    if (iconPath?.toLowerCase().endsWith(".exe")) {
+      const shell = dlopen("shell32.dll", {
+        ExtractIconExW: {
+          args: [
+            "ptr",
+            "i32",
+            "ptr",
+            "ptr",
+            "u32",
+          ],
+          returns: "u32",
+        },
+      });
+      const large = new BigUint64Array(1);
+      const small = new BigUint64Array(1);
+      try {
+        withWide(iconPath, (path) =>
+          shell.symbols.ExtractIconExW(path, 0, ptr(large), ptr(small), 1),
+        );
+        this.icon = large[0] ?? 0n;
+        this.smallIcon = small[0] ?? 0n;
+      } finally {
+        shell.close();
+      }
+    } else {
+      this.icon = iconPath
+        ? withWide(iconPath, (path) =>
+            user.symbols.LoadImageW(0n, path, 1, 32, 32, 0x10),
+          )
+        : user.symbols.LoadIconW(0n, 32512n);
+      this.smallIcon = iconPath
+        ? withWide(iconPath, (path) =>
+            user.symbols.LoadImageW(0n, path, 1, 16, 16, 0x10),
+          )
+        : this.icon;
+    }
+    if (!this.icon || !this.smallIcon) {
+      this.releaseIcons();
+      throw new Error("App icon could not be loaded.");
+    }
     this.callback = new JSCallback(
       (window: bigint, message: number, wparam: bigint, lparam: bigint) => {
         try {
@@ -369,10 +450,13 @@ export class Windows {
     wc.writeUInt32LE(80, 0);
     wc.writeBigUInt64LE(BigInt(this.callback.ptr ?? 0), 8);
     wc.writeBigUInt64LE(this.instance, 24);
+    wc.writeBigUInt64LE(this.icon, 32);
     wc.writeBigUInt64LE(6n, 48); // COLOR_WINDOW + 1
     wc.writeBigUInt64LE(BigInt(ptr(this.name)), 64);
+    wc.writeBigUInt64LE(this.smallIcon, 72);
     if (!user.symbols.RegisterClassExW(ptr(wc))) {
       this.callback.close();
+      this.releaseIcons();
       throw new Error(`RegisterClassExW: ${kernel.symbols.GetLastError()}`);
     }
     this.registered = true;
@@ -542,6 +626,17 @@ export class Windows {
     }
   }
 
+  private releaseIcons() {
+    if (this.ownedIcons) {
+      if (this.icon) {
+        user.symbols.DestroyIcon(this.icon);
+      }
+      if (this.smallIcon) {
+        user.symbols.DestroyIcon(this.smallIcon);
+      }
+    }
+  }
+
   dispose() {
     assert.equal(this.windows.size, 0);
     if (this.registered) {
@@ -549,6 +644,7 @@ export class Windows {
     }
     this.registered = false;
     this.callback.close();
+    this.releaseIcons();
   }
 }
 export function disposeWin32Bindings() {

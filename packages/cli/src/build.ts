@@ -29,13 +29,14 @@ import {
   frameworkRoot,
   hash,
   json,
+  projectPath,
   run,
   runWorker,
   verifyHash,
   writeJson,
 } from "./files.ts";
 import { assertNotFrontendBuild, buildFrontend } from "./frontend-build.ts";
-import { writeWindowsLauncher } from "./launch.ts";
+import { compileWindowsApp } from "./launch.ts";
 import { runManagedCommand } from "./managed-command.ts";
 
 export type Target = "windows-x64" | "macos-arm64";
@@ -184,8 +185,8 @@ export async function bundleAssets(
   windows = false,
   developmentServer = false,
   development = false,
-): Promise<void> {
-  await runWorker(
+): Promise<string[]> {
+  const result = await runWorker(
     "assets.ts",
     windows ? "bundleWindowsAssets" : "bundleAssets",
     [
@@ -197,6 +198,7 @@ export async function bundleAssets(
     project.root,
     project.frameworkRoot,
   );
+  return windows ? (JSON.parse(result) as string[]) : [];
 }
 
 function xml(text: string): string {
@@ -319,6 +321,8 @@ async function assembleProject(
   const executable = windows
     ? resolve(staging, "runtime/bun.exe")
     : resolve(staging, "Contents/MacOS/bunaway-host");
+  const executableName =
+    project.app.executableName ?? `${project.app.appId}.exe`;
   const preserved: {
     source: string;
     destination: string;
@@ -329,27 +333,33 @@ async function assembleProject(
     await mkdir(resolve(assets, "web"), {
       recursive: true,
     });
-    await mkdir(resolve(packageRoot, "runtime"), {
-      recursive: true,
-    });
+    if (!windows || options.development) {
+      await mkdir(resolve(packageRoot, "runtime"), {
+        recursive: true,
+      });
+    }
     await mkdir(resolve(packageRoot, "licenses"), {
       recursive: true,
     });
-    await mkdir(dirname(executable), {
-      recursive: true,
-    });
+    if (!windows || options.development) {
+      await mkdir(dirname(executable), {
+        recursive: true,
+      });
+    }
     if (!windows) {
       await cp(native.host, executable);
     }
-    await cp(
-      native.bun,
-      resolve(packageRoot, `runtime/bun${windows ? ".exe" : ""}`),
-    );
-    await chmod(executable, 0o755);
-    await chmod(
-      resolve(packageRoot, `runtime/bun${windows ? ".exe" : ""}`),
-      0o755,
-    );
+    if (!windows || options.development) {
+      await cp(
+        native.bun,
+        resolve(packageRoot, `runtime/bun${windows ? ".exe" : ""}`),
+      );
+      await chmod(executable, 0o755);
+      await chmod(
+        resolve(packageRoot, `runtime/bun${windows ? ".exe" : ""}`),
+        0o755,
+      );
+    }
     for (const [name, path] of Object.entries(native.licenses)) {
       await cp(path, resolve(packageRoot, "licenses", name));
     }
@@ -396,7 +406,7 @@ async function assembleProject(
         await cp(schema, resolve(assets, basename(schema)));
       }
     }
-    await bundleAssets(
+    const bundledAssets = await bundleAssets(
       project,
       assets,
       windows,
@@ -419,25 +429,51 @@ async function assembleProject(
         native.loader,
         deps.webview2Sdk.files["build/native/x64/WebView2Loader.dll"] ?? "",
       );
-      await cp(native.loader, resolve(assets, "WebView2Loader.dll"));
-      await writeWindowsLauncher(
-        resolve(root, "native/windows/bun/launch.ps1"),
-        resolve(packageRoot, "launch.ps1"),
+      await cp(
+        native.loader,
+        resolve(
+          packageRoot,
+          options.development
+            ? "assets/WebView2Loader.dll"
+            : "WebView2Loader.dll",
+        ),
       );
-      await writeFile(
-        resolve(packageRoot, "bunaway.cmd"),
-        '@echo off\r\n"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "%~dp0launch.ps1" %*\r\n',
-      );
+      if (project.app.icon) {
+        await cp(
+          await projectPath(project.root, project.app.icon),
+          resolve(assets, "app.ico"),
+        );
+      }
+      if (!options.development) {
+        await compileWindowsApp(
+          packageRoot,
+          native.bun,
+          executableName,
+          project.app,
+          bundledAssets,
+          signal,
+          root,
+        );
+      }
     }
     const hashes: Record<string, string> = {};
-    for (const dir of [
-      "assets",
-      "licenses",
-    ]) {
+    for (const dir of windows && !options.development
+      ? [
+          "licenses",
+        ]
+      : [
+          "assets",
+          "licenses",
+        ]) {
       for (const file of await files(resolve(packageRoot, dir))) {
         hashes[relative(packageRoot, file).replaceAll("\\", "/")] =
           await hash(file);
       }
+    }
+    if (windows && !options.development) {
+      hashes["WebView2Loader.dll"] = await hash(
+        resolve(packageRoot, "WebView2Loader.dll"),
+      );
     }
     const framework = (await json(resolve(root, "package.json"))) as {
       version: string;
@@ -458,10 +494,16 @@ async function assembleProject(
       host: {
         target,
         ...(windows
-          ? {
-              kind: "bun-ffi",
-              sha256: await hash(resolve(assets, "boot.js")),
-            }
+          ? options.development
+            ? {
+                kind: "bun-ffi",
+                sha256: await hash(resolve(assets, "boot.js")),
+              }
+            : {
+                kind: "bun-compiled",
+                executable: executableName,
+                sha256: await hash(resolve(packageRoot, executableName)),
+              }
           : {
               sourceSha256: await hash(native.host),
             }),
@@ -574,37 +616,43 @@ ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking<
       output,
       package: windows ? output : resolve(output, "Contents/Resources"),
       executable: windows
-        ? resolve(output, "runtime/bun.exe")
+        ? resolve(
+            output,
+            options.development ? "runtime/bun.exe" : executableName,
+          )
         : resolve(output, "Contents/MacOS/bunaway-host"),
-      arguments: windows
-        ? [
-            "--no-env-file",
-            "--no-install",
-            `--config=${resolve(output, "assets/bunfig.toml")}`,
-            `--tsconfig-override=${resolve(output, "assets/tsconfig.json")}`,
-            resolve(output, "assets/boot.js"),
-            ...(options.development
-              ? [
-                  "--devtools",
-                ]
-              : []),
-            ...(server
-              ? [
-                  "--dev-url",
-                  server.url,
-                ]
-              : []),
-          ]
-        : [
-            "--package",
-            resolve(output, "Contents/Resources"),
-            ...(server
-              ? [
-                  "--dev-url",
-                  server.url,
-                ]
-              : []),
-          ],
+      arguments:
+        windows && !options.development
+          ? []
+          : windows
+            ? [
+                "--no-env-file",
+                "--no-install",
+                `--config=${resolve(output, "assets/bunfig.toml")}`,
+                `--tsconfig-override=${resolve(output, "assets/tsconfig.json")}`,
+                resolve(output, "assets/boot.js"),
+                ...(options.development
+                  ? [
+                      "--devtools",
+                    ]
+                  : []),
+                ...(server
+                  ? [
+                      "--dev-url",
+                      server.url,
+                    ]
+                  : []),
+              ]
+            : [
+                "--package",
+                resolve(output, "Contents/Resources"),
+                ...(server
+                  ? [
+                      "--dev-url",
+                      server.url,
+                    ]
+                  : []),
+              ],
     };
   } catch (error) {
     if (!published) {

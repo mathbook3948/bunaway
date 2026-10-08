@@ -190,7 +190,7 @@ export async function bundleWindowsAssets(
   assets: string,
   developmentServer = false,
   development = false,
-): Promise<void> {
+): Promise<string[]> {
   await assertAppDefinitionExport(project.appEntry);
   if (!developmentServer) {
     await webAssets(
@@ -200,7 +200,7 @@ export async function bundleWindowsAssets(
       development,
     );
   }
-  await bundleWindowsHost(
+  return bundleWindowsHost(
     resolve(project.frameworkRoot, "native/windows/bun"),
     assets,
     project.appEntry,
@@ -217,7 +217,7 @@ export async function bundleWindowsHost(
   project?: string,
   development = false,
   installed?: readonly InstalledPlugin[],
-): Promise<void> {
+): Promise<string[]> {
   // A shared chunk preserves class identity (e.g. BunawayError) between core and app.
   const pluginProject = project ?? dirname(appEntry);
   const plugins =
@@ -258,6 +258,18 @@ export async function bundleWindowsHost(
           loader: "ts",
           resolveDir: source,
         }),
+      );
+      build.onResolve(
+        {
+          filter: /^\.\/app\.js$/,
+        },
+        ({ importer }) =>
+          resolve(importer) === resolve(source, "boot.ts")
+            ? {
+                path: "app.ts",
+                namespace: "bunaway-windows-entry",
+              }
+            : undefined,
       );
       build.onResolve(
         {
@@ -303,11 +315,21 @@ export async function bundleWindowsHost(
   ) {
     throw new Error("Windows bootstrap bundle failed");
   }
-  for (const output of artifacts) {
+  const bundledAssets = new Set<string>();
+  const saveOutput = async (output: Bun.BuildArtifact) => {
+    const name = basename(output.path);
     await writeFile(
-      resolve(destination, basename(output.path)),
+      resolve(destination, name),
       await bundleBytes(output, development),
     );
+    // File imports become path strings in JS, so the compile pass cannot
+    // discover these assets again. Track by artifact kind, not extension.
+    if (output.kind === "asset") {
+      bundledAssets.add(name);
+    }
+  };
+  for (const output of artifacts) {
+    await saveOutput(output);
   }
   for (const name of [
     "ui",
@@ -327,10 +349,10 @@ export async function bundleWindowsHost(
       entries,
     );
     for (const output of outputs) {
-      await writeFile(
-        resolve(destination, basename(output.path)),
-        await bundleBytes(output, development),
-      );
+      await saveOutput(output);
     }
   }
+  return [
+    ...bundledAssets,
+  ].sort();
 }

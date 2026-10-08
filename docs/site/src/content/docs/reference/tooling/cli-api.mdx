@@ -50,6 +50,7 @@ build는 `development?: boolean`과 `native?: NativeInputs`를 받습니다.
 NativeInputs를 전달하면 현재 플랫폼에서 준비한 결과를 재사용합니다.
 BuiltPackage는 `output`, `package`, `executable`, `arguments: string[]`입니다.
 앱을 실행할 때는 반환한 `executable`과 `arguments`를 함께 사용합니다.
+Windows 프로덕션의 executable은 컴파일된 앱 실행 파일이고 arguments는 빈 배열입니다. 개발 실행은 Bun과 개발 인자를 반환합니다.
 전체 빌드 과정과 실패 시 산출물 처리 방법은 [build](/reference/cli/build/)에서 확인할 수 있습니다.
 
 ## 개발과 패키징

@@ -1,5 +1,5 @@
 import { watch } from "node:fs";
-import { dirname, relative } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import {
   type BuiltPackage,
   buildProject,
@@ -127,7 +127,15 @@ export function shouldRestartHost(
   ].map((entry) =>
     relative(project.root, dirname(entry)).replaceAll("\\", "/"),
   );
+  const icon = project.app.icon
+    ? relative(project.root, resolve(project.root, project.app.icon))
+        .replaceAll("\\", "/")
+        .toLowerCase()
+    : undefined;
   return (
+    (icon !== undefined &&
+      (icon === path.toLowerCase() ||
+        icon.startsWith(`${path.toLowerCase()}/`))) ||
     project.backendDependencies?.some(
       (dependency) => dependency === path || dependency.startsWith(`${path}/`),
     ) ||

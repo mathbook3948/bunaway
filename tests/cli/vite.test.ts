@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { bundleAssets } from "../../packages/cli/src/build.ts";
@@ -255,18 +262,22 @@ test("packed CLI creates independent templates and a Vite app with HMR and local
         await readFile(resolve(assets, "web/LICENSE.vite.txt"), "utf8"),
       ).toContain("MIT License");
     }
-    const builtHtml = await Bun.file(
-      resolve(project, "dist/windows-x64/assets/web/index.html"),
-    ).text();
-    const builtEntry = builtHtml.match(/src="\.\/([^"]+\.js)"/)?.[1];
-    if (!builtEntry) {
-      throw new Error("Missing built UI entry.");
-    }
+    const built = resolve(project, "dist/windows-x64");
+    const manifest = (await json(resolve(built, "manifest.json"))) as {
+      assets: Record<string, string>;
+      host: {
+        kind: string;
+        executable: string;
+      };
+    };
+    expect(manifest.host.kind).toBe("bun-compiled");
     expect(
-      await Bun.file(
-        resolve(project, "dist/windows-x64/assets/web", builtEntry),
-      ).text(),
-    ).toContain("Latest count is");
+      await Bun.file(resolve(built, manifest.host.executable)).exists(),
+    ).toBe(true);
+    expect(await readdir(built)).not.toContain("assets");
+    expect(
+      Object.keys(manifest.assets).some((name) => name.startsWith("assets/")),
+    ).toBe(false);
   } finally {
     await rm(root, {
       recursive: true,

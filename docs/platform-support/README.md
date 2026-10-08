@@ -58,19 +58,15 @@ Windows 배포 근거와 한계:
 - PR16의 자체 서명 테스트 인증서, 기존 설치 테스트는 당시 C++ 호스트 산출물을 대상으로
   했다. 해당 결과는 삭제된 C++ 호스트를 싣지 않는 PR18 Bun FFI 설치 파일의 서명/설치
   검증으로 간주하지 않는다.
-- PR18 Windows 레이아웃은 `runtime/bun.exe`, FFI 자산, `launch.ps1`을 요구한다. 일반
-  설치 파일의 앱 바로가기는 Windows PowerShell을 통해 런처를 실행하며, 런처는 Bun이
-  시작되기 전에 허용된 환경변수만 전달하고 실행 파일, 자산 해시를 확인한다.
-- 런타임 서명 뒤에는 `manifest.bun.packagedSha256`과 런처 해시 핀을 실제 배포 바이트에
-  맞춘다. `executableSha256`와 소스 revision은 upstream provenance로 보존한다. PR18의
-  PE-overlay 테스트는 Authenticode 서명이 아니라 서명으로 바뀐 실행 파일 바이트를
-  대체한다. 실제 Windows CI/설치 결과만 해당 경로의 통합 검증 근거다.
+- Windows 배포본은 Bun과 웹 자산을 내장한 앱 EXE, WebView2Loader.dll, 라이선스와 manifest다.
+  앱 시작 시 전체 해시 검사는 하지 않는다. 실행에는 WebView2 Evergreen이 필요하다.
+- 앱 EXE 서명 뒤에는 `manifest.host.packagedSha256`에 배포 바이트의 해시를 기록한다.
+  Bun 원본 해시와 소스 revision은 출처 기록으로 보존한다.
+  실제 인증서 서명과 설치 결과는 로컬 컴파일 및 단위 테스트 결과와 구분한다.
 - `win-store-unpackaged`는 Store 제출용 일반 EXE/MSI 경로다. Partner Center 제출과
   프로덕션 인증서는 검증 범위가 아니다.
 - `win-store-msix` 채널 이름은 설정, 진단을 위해 등록돼 있지만 Bun FFI 패키지 생성은
-  명시적으로 차단한다. MSIX 앱 활성화에서 Bun을 시작하면서 런처와 동일한 제한된 초기
-  환경을 보장하는 경로가 아직 검증되지 않았다. MSIX 패키징, 스토어 제출 지원을 주장하지
-  않는다.
+  명시적으로 차단한다. 컴파일된 앱의 MSIX 활성화와 앱 데이터 동작은 아직 검증하지 않았다.
 
 ## 공개 창 API
 

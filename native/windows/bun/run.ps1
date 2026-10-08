@@ -15,8 +15,8 @@ if (!$SkipTests) {
     & $bun --no-env-file (Join-Path $root 'tests/lifecycle/windows-bun-window-api.ts')
     if ($LASTEXITCODE -ne 0) { throw 'Windows public window API regression failed' }
 
-    & $bun --no-env-file test (Join-Path $root 'tests/lifecycle/desktop.test.ts') (Join-Path $root 'tests/lifecycle/windows-bun-instance.test.ts') (Join-Path $root 'tests/cli/windows-assets.test.ts')
-    if ($LASTEXITCODE -ne 0) { throw 'Windows instance and launcher regression failed' }
+    & $bun --no-env-file test (Join-Path $root 'tests/lifecycle/desktop.test.ts') (Join-Path $root 'tests/lifecycle/windows-bun-instance.test.ts') (Join-Path $root 'tests/cli/windows-assets.test.ts') (Join-Path $root 'tests/cli/windows-compile.test.ts')
+    if ($LASTEXITCODE -ne 0) { throw 'Windows instance and compiled app regression failed' }
     foreach ($scenario in @('hide', 'veto', 'dev-veto', 'dev-hide', 'dev-pending')) {
         & $bun --no-env-file (Join-Path $root 'tests/lifecycle/windows-desktop.ts') $scenario
         if ($LASTEXITCODE -ne 0) { throw "Windows desktop lifecycle failed: $scenario" }

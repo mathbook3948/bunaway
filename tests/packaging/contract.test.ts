@@ -51,15 +51,7 @@ const macRuntimeAssets = [
   "assets/policy.schema.json",
 ] as const;
 const windowsAssets = [
-  "assets/web/index.html",
-  "assets/policy.json",
-  "assets/boot.js",
-  "assets/app.js",
-  "assets/ui.js",
-  "assets/host-operations.js",
-  "assets/WebView2Loader.dll",
-  "assets/bunfig.toml",
-  "assets/tsconfig.json",
+  "WebView2Loader.dll",
   "licenses/LICENSE.bun",
   "licenses/License-WebView2.txt",
 ] as const;
@@ -99,7 +91,7 @@ async function makeArtifact(
   });
   const dir = artifact.packageDir;
   const windows = target === "windows-x64";
-  const runtime = resolve(dir, windows ? "runtime/bun.exe" : "runtime/bun");
+  const runtime = windows ? artifact.executable : resolve(dir, "runtime/bun");
   if (projectRoot === root) {
     artifactDir = dir;
   }
@@ -136,8 +128,10 @@ async function makeArtifact(
     await chmod(runtime, 0o755);
   }
   const assets: Record<string, string> = {};
-  await writeJson(resolve(dir, "assets/app.json"), appConfig);
-  assets["assets/app.json"] = await sha256(resolve(dir, "assets/app.json"));
+  if (!windows) {
+    await writeJson(resolve(dir, "assets/app.json"), appConfig);
+    assets["assets/app.json"] = await sha256(resolve(dir, "assets/app.json"));
+  }
   const paths = windows
     ? [
         ...windowsAssets,
@@ -159,14 +153,6 @@ async function makeArtifact(
     await writeFile(resolve(dir, path), "{}");
     assets[path] = await sha256(resolve(dir, path));
   }
-  if (windows) {
-    const bunDigest = await sha256(runtime);
-    await writeFile(
-      resolve(dir, "launch.ps1"),
-      `function Check([string]$Path, [string]$Expected) { }\nCheck $bun '${bunDigest}'\n`,
-    );
-    await writeFile(resolve(dir, "bunaway.cmd"), "launcher fixture\n");
-  }
   const manifest: PackageManifest = {
     bun: {
       version: "1.4.2",
@@ -184,8 +170,9 @@ async function makeArtifact(
       target,
       ...(windows
         ? {
-            kind: "bun-ffi",
-            sha256: assets["assets/boot.js"] ?? "",
+            kind: "bun-compiled",
+            executable: "app.test.exe",
+            sha256: await sha256(artifact.executable),
           }
         : {
             sha256: await sha256(artifact.executable),
@@ -376,7 +363,7 @@ test.each(
   async ({ target, boundary }) => {
     const projectRoot = await mkdtemp(join(home, "output-link-"));
     await makeArtifact(projectRoot, target);
-    const channel = target === "windows-x64" ? "win-direct" : "mac-direct";
+    const channel = "mac-direct";
     const packaged = resolve(projectRoot, "dist", target, "packaged");
     await Bun.write(
       resolve(packaged, channel, "previous.txt"),
@@ -1067,14 +1054,14 @@ test("verify stage rejects missing and tampered build inputs", async () => {
     true,
   );
   await writeFile(artifact.executable, "fake bun");
-  await writeFile(resolve(artifactDir, "assets/app.json"), "tampered");
+  await writeFile(resolve(artifactDir, "WebView2Loader.dll"), "tampered");
   diagnostics = await verifyArtifact({
     artifact,
     manifest,
     channel: "win-direct",
   });
   expect(diagnostics.map((d) => d.code)).toContain(CODES.INPUT_TAMPERED);
-  await writeJson(resolve(artifactDir, "assets/app.json"), appConfig);
+  await writeFile(resolve(artifactDir, "WebView2Loader.dll"), "{}");
   expect(
     await verifyArtifact({
       artifact,
@@ -1082,14 +1069,14 @@ test("verify stage rejects missing and tampered build inputs", async () => {
       channel: "win-direct",
     }),
   ).toEqual([]);
-  await rm(resolve(artifactDir, "runtime/bun.exe"));
+  await rm(resolve(artifactDir, "app.test.exe"));
   diagnostics = await verifyArtifact({
     artifact,
     manifest,
     channel: "win-direct",
   });
   expect(diagnostics.map((d) => d.code)).toContain(CODES.INPUT_MISSING);
-  await writeFile(resolve(artifactDir, "runtime/bun.exe"), "fake bun");
+  await writeFile(resolve(artifactDir, "app.test.exe"), "fake bun");
 });
 
 test("runner produces a report, records diagnostics and labels unsigned output", async () => {
@@ -1434,7 +1421,7 @@ test.each([
     pe.writeUInt32LE(128, 0x3c);
     pe.write("PE\0\0", 128);
     for (const file of [
-      "runtime/bun.exe",
+      "app.test.exe",
       ...extraFiles,
     ]) {
       await Bun.write(resolve(artifact.packageDir, file), pe);
@@ -1444,18 +1431,10 @@ test.each([
         );
       }
     }
-    manifest.bun.executableSha256 = await sha256(
-      resolve(artifact.packageDir, "runtime/bun.exe"),
-    );
-    const launcherPath = resolve(artifact.packageDir, "launch.ps1");
-    const launcher = await Bun.file(launcherPath).text();
-    await writeFile(
-      launcherPath,
-      launcher.replace(
-        /Check \$bun '[a-f0-9]{64}'/,
-        `Check $bun '${manifest.bun.executableSha256}'`,
-      ),
-    );
+    if (!manifest.host) {
+      throw new Error("Expected compiled app.");
+    }
+    manifest.host.sha256 = await sha256(artifact.executable);
     await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
     await Bun.write(
       resolve(artifact.packageDir, "plugins/truncated.data"),
@@ -1576,7 +1555,7 @@ test.each([
         .filter((call) => call[1][0] === "verify")
         .map((call) => call[1][2]);
       for (const file of [
-        "runtime/bun.exe",
+        "app.test.exe",
         ...extraFiles,
       ]) {
         expect(
@@ -1627,7 +1606,7 @@ test("signed sidecars alone do not make a channel submittable", async () => {
 });
 
 test("tampered inputs abort before adapter stages run", async () => {
-  await writeFile(resolve(artifactDir, "assets/app.json"), "tampered");
+  await writeFile(resolve(artifactDir, "WebView2Loader.dll"), "tampered");
   let ran = false;
   const adapter = stubAdapter({
     run: async () => {
@@ -1669,7 +1648,7 @@ test("tampered inputs abort before adapter stages run", async () => {
   expect(report.ok).toBe(false);
   expect(ran).toBe(false);
   expect(report.stages.find((s) => s.id === "verify")?.status).toBe("failed");
-  await writeFile(resolve(artifactDir, "assets/app.json"), "{}");
+  await writeFile(resolve(artifactDir, "WebView2Loader.dll"), "{}");
 });
 
 test("packagedSha256 is preferred over the upstream digest", () => {
@@ -1812,7 +1791,7 @@ test.each([
   },
 );
 
-test("Windows Bun FFI bootstrap hash rejects tampering before adapters run", async () => {
+test("Windows compiled app hash rejects tampering before adapters run", async () => {
   const projectRoot = await mkdtemp(join(home, "bun-ffi-bootstrap-"));
   const manifest = await makeArtifact(projectRoot);
   const artifact = artifactPaths({
@@ -1820,7 +1799,8 @@ test("Windows Bun FFI bootstrap hash rejects tampering before adapters run", asy
     target: "windows-x64",
     appId: "app.test",
   });
-  expect(manifest.host?.kind).toBe("bun-ffi");
+  expect(manifest.host?.kind).toBe("bun-compiled");
+  await chmod(artifact.executable, 0o644);
   expect(
     await verifyArtifact({
       artifact,
@@ -1828,10 +1808,7 @@ test("Windows Bun FFI bootstrap hash rejects tampering before adapters run", asy
       channel: "win-direct",
     }),
   ).toEqual([]);
-  await writeFile(
-    resolve(artifact.packageDir, "assets/boot.js"),
-    "tampered bootstrap",
-  );
+  await writeFile(artifact.executable, "tampered bootstrap");
   expect(
     (
       await verifyArtifact({
@@ -1841,7 +1818,7 @@ test("Windows Bun FFI bootstrap hash rejects tampering before adapters run", asy
       })
     ).some((diagnostic) => diagnostic.code === CODES.INPUT_TAMPERED),
   ).toBe(true);
-  await writeFile(resolve(artifact.packageDir, "assets/boot.js"), "{}");
+  await writeFile(artifact.executable, "fake bun");
   const legacy = {
     ...manifest,
     host: {
@@ -1980,7 +1957,7 @@ test("MSIX fails closed before tool discovery or payload staging", async () => {
     expect(() =>
       adapter.stages({} as Parameters<typeof adapter.stages>[0]),
     ).toThrow(
-      /no verified clean pre-start environment.*win-direct.*win-store-unpackaged/,
+      /packaged activation and data paths are unverified.*win-direct.*win-store-unpackaged/,
     );
     expect(findTool).not.toHaveBeenCalled();
   } finally {
@@ -2722,7 +2699,6 @@ test.each(
 test.each(
   (
     [
-      "windows-x64",
       "macos-arm64",
     ] as const
   ).flatMap((target) =>
@@ -2777,7 +2753,6 @@ test.each(
 test.each(
   (
     [
-      "windows-x64",
       "macos-arm64",
     ] as const
   ).flatMap((target) =>
@@ -2827,7 +2802,7 @@ test.each(
     const report = await runAdapter(
       projectRoot,
       stubAdapter({
-        channel: target === "windows-x64" ? "win-direct" : "mac-direct",
+        channel: "mac-direct",
         async run(ctx) {
           await Bun.write(resolve(ctx.staging, "setup.exe"), "installer");
           ctx.addArtifact("setup.exe", "installer");
@@ -2895,10 +2870,10 @@ test.each([
   "invalid built home URL $value fails before adapters run",
   async ({ value, code }) => {
     const projectRoot = await mkdtemp(join(home, "invalid-home-"));
-    const manifest = await makeArtifact(projectRoot);
+    const manifest = await makeArtifact(projectRoot, "macos-arm64");
     const artifact = artifactPaths({
       root: projectRoot,
-      target: "windows-x64",
+      target: "macos-arm64",
       appId: "app.test",
     });
     const appPath = resolve(artifact.packageDir, "assets/app.json");
@@ -2908,7 +2883,9 @@ test.each([
     });
     manifest.assets["assets/app.json"] = await sha256(appPath);
     await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
-    await expectRejectedInputs(projectRoot, code);
+    await expectRejectedInputs(projectRoot, code, {
+      target: "macos-arm64",
+    });
   },
 );
 
@@ -2919,10 +2896,10 @@ test.each([
   "home directory links cannot escape the %s root",
   async (boundary) => {
     const projectRoot = await mkdtemp(join(home, "home-link-"));
-    const manifest = await makeArtifact(projectRoot);
+    const manifest = await makeArtifact(projectRoot, "macos-arm64");
     const artifact = artifactPaths({
       root: projectRoot,
-      target: "windows-x64",
+      target: "macos-arm64",
       appId: "app.test",
     });
     const destination = resolve(
@@ -2945,7 +2922,9 @@ test.each([
       resolve(destination, "index.html"),
     );
     await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
-    await expectRejectedInputs(projectRoot, CODES.INPUT_UNEXPECTED);
+    await expectRejectedInputs(projectRoot, CODES.INPUT_UNEXPECTED, {
+      target: "macos-arm64",
+    });
   },
 );
 
@@ -2958,7 +2937,7 @@ test("invalid Bun digests fail closed even when the runtime has been changed", a
     appId: "app.test",
   });
   await writeFile(
-    resolve(artifact.packageDir, "runtime/bun.exe"),
+    resolve(artifact.packageDir, "app.test.exe"),
     "changed runtime",
   );
   for (const key of [
@@ -3018,14 +2997,6 @@ test("invalid Bun digests fail closed even when the runtime has been changed", a
 
 test.each([
   {
-    target: "windows-x64",
-    alias: "sha256",
-  },
-  {
-    target: "windows-x64",
-    alias: "sourceSha256",
-  },
-  {
     target: "macos-arm64",
     alias: "sha256",
   },
@@ -3043,11 +3014,8 @@ test.each([
       target,
       appId: "app.test",
     });
-    const runtime = resolve(
-      artifact.packageDir,
-      target === "windows-x64" ? "runtime/bun.exe" : "runtime/bun",
-    );
-    const channel = target === "windows-x64" ? "win-direct" : "mac-direct";
+    const runtime = resolve(artifact.packageDir, "runtime/bun");
+    const channel = "mac-direct";
     await Bun.write(runtime, "re-signed runtime bytes");
     const finalDigest = await sha256(runtime);
     manifest.bun[alias] = finalDigest;
@@ -3250,8 +3218,6 @@ test.each([
 });
 
 test.each([
-  "runtime",
-  "assets",
   "licenses",
 ])("input directory %s cannot link outside the package", async (directory) => {
   const projectRoot = await mkdtemp(join(home, "input-link-"));

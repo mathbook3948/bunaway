@@ -12,20 +12,33 @@ pwsh -NoProfile -File native/windows/bun/run.ps1
 pwsh -NoProfile -File native/windows/bun/prepare.ps1 -VerifyOnly
 ```
 
-개발/빌드에는 PowerShell 7과 고정 Bun, 실행에는 WebView2 Evergreen이 필요하다.
+개발/빌드에는 PowerShell 7과 고정 Bun이 필요하다.
+실행에는 WebView2 Evergreen이 필요하다.
 MSVC, CMake, Ninja와 사용자 C/C++ 또는 Rust DLL은 필요 없다. Microsoft의 공식
 `WebView2Loader.dll`과 시스템 DLL은 사용한다. 생성 앱은 `bunaway.json`의
 `build.app`에 **default export AppDefinition** 파일을 지정한다.
 프레임워크가 이 앱 정의를 가져와 부팅하며 개발자가 별도 프로세스 진입점을 작성하지 않는다.
 
-CLI 생성 앱의 `bun run build` 결과는 `dist/windows-x64/bunaway.cmd` 또는
-`pwsh -NoProfile -File dist/windows-x64/launch.ps1 -Wait`로 실행한다.
-Launcher는 내부 Bun 절대 경로와 실행 전 해시를 검사하고 환경을 정리한다.
-`bunaway package win-direct`와 `win-store-unpackaged`는 이 실행기를 사용하는
-Inno Setup 설치 프로그램을 만든다. 서명으로 Bun 파일이 바뀌면 배포본 해시로
-실행기를 갱신하며, 원본 Bun의 출처 해시는 별도로 유지한다.
-단일 앱 exe는 제공하지 않는다. `win-store-msix`는 안전한 패키지 실행 경로가
-검증될 때까지 명시적으로 거부한다. [패키징 안내](../../../packages/packaging/README.md).
+CLI 생성 앱의 `bun run build` 결과는 `dist/windows-x64/<appId>.exe`로 실행한다.
+`app.executableName`은 실행 파일 이름, `app.icon`은 프로젝트 기준 ICO 경로다.
+배포 빌드는 Bun, 앱/코어, UI/IO Worker, 웹 자산, 설정과 정책을 EXE에 내장한다.
+첫 번들의 `asset` 출력도 컴파일 입력으로 전달한다. 앱과 Worker의 파일 import는
+번들 후 경로 문자열이 되므로 두 번째 컴파일에서 자동으로 발견되지 않는다.
+출력 확장자가 `.js`여도 파일 자산이면 내장한다.
+앱 EXE는 콘솔 없이 시작하며 EXE 리소스의 아이콘을 창과 트레이에도 적용한다.
+초기화 실패나 앱을 종료시키는 호스트 오류는 대화상자로 알리고 `logs/startup-error.log`에 기록한다.
+앱 설정 확인 전의 로그는 확장자를 제외한 실행 파일 이름의 데이터 디렉터리에 기록한다.
+데이터 경로를 찾거나 로그를 쓰지 못해도 오류 대화상자는 표시한다.
+명령 호출 오류는 SDK 호출 결과로 전달하며 이 대화상자를 표시하지 않는다.
+네이티브 크래시나 강제 종료까지 오류 대화상자를 보장하지는 않는다.
+Microsoft WebView2Loader.dll과 라이선스는 EXE 옆에 배포한다.
+웹 자산은 WebResourceRequested에서 내장 파일을 IStream 응답으로 제공하며 기존 HTTPS 출처를 유지한다.
+정상 MIME, GET/HEAD, 단일 byte range와 404를 처리하고 설정이나 호스트 JS는 웹 경로로 제공하지 않는다.
+개발 모드는 외부 JS와 폴더 매핑을 사용하며 CLI가 Bun을 직접 실행한다.
+의존성 핀은 빌드 시, 배포 파일 해시는 패키징 전에 확인한다. 앱 시작 시 manifest/전체 해시 검사는 없다.
+서명한 앱 EXE의 해시는 host.packagedSha256에 기록하며 서명 뒤 실행 파일을 패치하지 않는다.
+win-store-msix는 패키지 활성화와 앱 데이터 동작을 검증하기 전까지 지원하지 않는다.
+[패키징 안내](../../../packages/packaging/README.md).
 
 같은 앱 데이터 디렉터리는 한 프로세스만 사용한다. 앱 import 전에 `host.lock`을
 Windows 파일 핸들로 독점한다. 두 번째 실행은 기존 앱에 인자와 작업 디렉터리를
@@ -87,9 +100,7 @@ The browser-failure regression also passed locally on Windows on 2026-10-07.
 닫기 버튼으로 창을 숨기고 백엔드, WebView, 세션을 유지한다. 트레이 Open 또는
 두 번째 실행으로 복원하며 Quit은 종료 검사를 거친다. 기본값은 마지막 창 닫기로 종료다.
 URL scheme과 파일 확장자의 OS 등록은 제공하지 않으며 실행기에 전달된 인자를 처리한다.
-`launch.ps1`의 맨 앞에 `-Wait`를 지정하면 앱 종료까지 기다리고 나머지 인자는 그대로 전달한다.
-`-- -draft.txt`와 `-Verbose` 같은 인자도 보존한다. 앱 인자가 `-Wait`로 시작하면 `-- -Wait`로 전달한다.
-실행기는 인자와 작업 디렉터리를 UTF-8 JSON으로 표준 입력에 전달한다. 입력은 64 KiB와
-5초로 제한하며 기존 인자 검증을 적용한다. 실행기를 호출하는 명령줄 자체는 Windows와 셸의 길이 제한을 따른다.
+GUI 실행 파일은 `-Wait`, `-- -draft.txt`와 `-Verbose`를 포함한 모든 인자를 그대로 전달한다.
+배포 EXE는 인자와 작업 디렉터리를 직접 읽는다. Windows와 호출 셸의 명령줄 길이 제한을 따른다.
 개발 CLI의 재시작과 종료는 종료 취소와 숨김을 우회하며 코어, 플러그인 StopHook과 Worker를 정리한다.
 [데스크톱 수명주기 결정](../../../docs/decisions/0013-desktop-lifecycle.md).

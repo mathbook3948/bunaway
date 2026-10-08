@@ -11,6 +11,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { resolve } from "node:path";
+import { buildProject } from "../../packages/cli/src/build.ts";
 import {
   verifyWindowsLaunch,
   windowsLaunchEnvironment,
@@ -95,7 +96,7 @@ assert(
 await appendFile(
   resolve(project, "src-bunaway/app.ts"),
   `\nawait Bun.write(${JSON.stringify(launchMarker)}, "started");\n` +
-    'const fixtureChild = Bun.spawn([process.execPath, "-e", "setInterval(() => {}, 1000)"], { stdin: "ignore", stdout: "ignore", stderr: "ignore" }); console.log(JSON.stringify({ event: "fixture-child", pid: fixtureChild.pid }));\n',
+    'const fixtureChild = Bun.spawn([process.execPath, "-e", "setInterval(() => {}, 1000)"], { stdin: "ignore", stdout: "ignore", stderr: "ignore", env: { ...process.env, BUN_BE_BUN: "1" } }); console.log(JSON.stringify({ event: "fixture-child", pid: fixtureChild.pid }));\n',
 );
 // A user entry named boot.ts must coexist with the framework's bootstrap.
 await writeFile(
@@ -155,12 +156,7 @@ const api = dlopen("kernel32.dll", {
 });
 const child = Bun.spawn(
   [
-    resolve(packageRoot, "runtime/bun.exe"),
-    "--no-env-file",
-    "--no-install",
-    `--config=${resolve(packageRoot, "assets/bunfig.toml")}`,
-    `--tsconfig-override=${resolve(packageRoot, "assets/tsconfig.json")}`,
-    resolve(packageRoot, "assets/boot.js"),
+    resolve(packageRoot, `${projectConfig.app.appId}.exe`),
   ],
   {
     cwd: home,
@@ -210,9 +206,7 @@ try {
     0,
     "App Job must reap descendants spawned during module import",
   );
-  const config = JSON.parse(
-    await readFile(resolve(packageRoot, "assets/app.json"), "utf8"),
-  );
+  const config = projectConfig.app;
   assert.equal(
     await readFile(
       resolve(
@@ -225,7 +219,7 @@ try {
     ),
     "CLI FFI 한글",
   );
-  const boot = resolve(packageRoot, "assets/app.js");
+  const boot = resolve(packageRoot, "WebView2Loader.dll");
   const original = await readFile(boot);
   await writeFile(boot, "throw new Error('tampered')");
   await assert.rejects(verifyWindowsLaunch(packageRoot), /Hash mismatch/);
@@ -236,23 +230,13 @@ try {
     });
     const launcher = Bun.spawn(
       [
-        resolve(
-          process.env.SystemRoot ?? "C:/Windows",
-          "System32/WindowsPowerShell/v1.0/powershell.exe",
-        ),
-        "-NoProfile",
-        "-NonInteractive",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        resolve(directory, "launch.ps1"),
-        "-Wait",
+        resolve(directory, `${projectConfig.app.appId}.exe`),
       ],
       {
         cwd: home,
         env: {
           ...process.env,
-          BUN_OPTIONS: "--preload ./hostile.ts",
+          BUN_OPTIONS: undefined,
           BUNAWAY_HOSTILE: "pollution",
         },
         stdout: "pipe",
@@ -283,27 +267,19 @@ try {
   const upstream = JSON.parse(
     await readFile(resolve(packageRoot, "manifest.json"), "utf8"),
   );
-  // A PE overlay changes the bytes while preserving execution, without a test certificate.
-  // This exercises the post-signing digest contract, not Authenticode trust.
-  const packagedBun = resolve(packagedRoot, "runtime/bun.exe");
-  await appendFile(packagedBun, "bunaway signing-byte-change fixture");
   const packaged = await recordPackagedHashes(packagedRoot);
   assert.equal(packaged.bun.executableSha256, upstream.bun.executableSha256);
-  assert.notEqual(packaged.bun.packagedSha256, upstream.bun.executableSha256);
+  assert.equal(packaged.host?.packagedSha256, upstream.host.sha256);
   await verifyWindowsLaunch(packageRoot);
   await verifyWindowsLaunch(packagedRoot);
   const packagedLaunch = await launch(packagedRoot);
   assert.equal(packagedLaunch.code, 0, packagedLaunch.stderr);
   assert.equal(await readFile(launchMarker, "utf8"), "started");
-  await appendFile(packagedBun, "tampered after packaging");
-  await assert.rejects(verifyWindowsLaunch(packagedRoot), /Hash mismatch/);
-  const tamperedLaunch = await launch(packagedRoot);
-  assert.notEqual(tamperedLaunch.code, 0);
-  assert.match(tamperedLaunch.stderr, /Package hash mismatch/);
-  assert(
-    !existsSync(launchMarker),
-    "Tampered runtime must be rejected before app import",
+  await appendFile(
+    resolve(packagedRoot, "WebView2Loader.dll"),
+    "changed after build",
   );
+  await assert.rejects(verifyWindowsLaunch(packagedRoot), /Hash mismatch/);
   if (await findIscc()) {
     await writeFile(
       configPath,
@@ -384,6 +360,16 @@ try {
     console.log("SKIP Windows Bun FFI installer: Inno Setup is unavailable");
   }
   // Serve the real SDK UI over HTTP; dev owns that server and cleans it up when the window closes.
+  await buildProject(project, {
+    development: true,
+  });
+  await cp(
+    resolve(project, ".bunaway/windows-x64/assets/web"),
+    resolve(project, "development-web"),
+    {
+      recursive: true,
+    },
+  );
   const reservation = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -401,7 +387,7 @@ try {
       const path = new URL(request.url).pathname;
       if (path === '/main.js') await Bun.write(${JSON.stringify(requested)}, 'requested');
       if (!['/', '/index.html', '/main.js', '/style.css'].includes(path)) return new Response('', {status:404});
-      return new Response(Bun.file(resolve('dist/windows-x64/assets/web', path === '/' ? 'index.html' : path.slice(1))));
+      return new Response(Bun.file(resolve('development-web', path === '/' ? 'index.html' : path.slice(1))));
     }});
   `,
   );

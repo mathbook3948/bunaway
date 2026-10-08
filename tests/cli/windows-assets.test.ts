@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
 import {
-  cp,
   mkdir,
   mkdtemp,
   readdir,
@@ -13,127 +12,209 @@ import {
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { webAsset } from "../../native/windows/bun/web-assets.ts";
 import { bundleWindowsHost } from "../../packages/cli/src/assets.ts";
-import { hash, writeJson } from "../../packages/cli/src/files.ts";
+import { compiledAssetArguments } from "../../packages/cli/src/launch.ts";
 
-test.skipIf(process.platform !== "win32")(
-  "Windows PowerShell launcher verifies UTF-8 asset paths before starting Bun",
-  async () => {
-    const root = await mkdtemp(resolve(tmpdir(), "bunaway-launcher-"));
-    try {
-      await mkdir(resolve(root, "runtime"));
-      await mkdir(resolve(root, "assets"));
-      await cp(process.execPath, resolve(root, "runtime/bun.exe"));
-      const assets: Record<string, string> = {};
-      for (const [name, text] of Object.entries({
-        "한글-😀.txt": "launcher verified",
-        "boot.js": `import { readLaunchArguments } from ${JSON.stringify(new URL("../../native/windows/bun/instance.ts", import.meta.url).href)}; if (process.argv[2] !== "--launch-stdin") throw new Error("Missing stdin launch flag"); await Bun.write(new URL("../started.txt", import.meta.url), await Bun.file(new URL("./한글-😀.txt", import.meta.url)).text()); await Bun.write(new URL("../launch.json", import.meta.url), JSON.stringify(await readLaunchArguments(Bun.stdin.stream())));`,
-        "bunfig.toml": "env = false\n",
-        "tsconfig.json": "{}",
-      })) {
-        const path = resolve(root, "assets", name);
-        await writeFile(path, text);
-        assets[`assets/${name}`] = await hash(path);
-      }
-      await writeJson(resolve(root, "manifest.json"), {
-        assets,
-      });
-      const launcher = await readFile(
-        resolve(import.meta.dir, "../../native/windows/bun/launch.ps1"),
-        "utf8",
-      );
+test("compiled host preserves file imports from the app and both workers after staging is removed", async () => {
+  const root = await realpath(
+    await mkdtemp(resolve(tmpdir(), "bunaway-compiled-file-assets-")),
+  );
+  const host = resolve(root, "host");
+  const assets = resolve(root, "assets");
+  const executable = resolve(
+    root,
+    process.platform === "win32" ? "probe.exe" : "probe",
+  );
+  try {
+    await mkdir(host);
+    await mkdir(resolve(assets, "web"), {
+      recursive: true,
+    });
+    const text = "backend 한글 😀";
+    await writeFile(resolve(root, "data.txt"), text);
+    await writeFile(
+      resolve(root, "data.bin"),
+      Buffer.from([
+        0,
+        128,
+        255,
+      ]),
+    );
+    // A JS extension imported as a file must stay an asset, not a module.
+    await writeFile(resolve(root, "raw.js"), "not valid JavaScript!");
+    await writeFile(resolve(host, "ui.txt"), "UI worker asset");
+    await writeFile(resolve(host, "io.txt"), "I/O worker asset");
+    await writeFile(
+      resolve(root, "app.ts"),
+      `
+import text from "./data.txt" with { type: "file" };
+import binary from "./data.bin" with { type: "file" };
+import raw from "./raw.js" with { type: "file" };
+export default { async read() {
+  return Promise.all([text, binary, raw].map(async file =>
+    Buffer.from(await Bun.file(new URL(file, import.meta.url)).arrayBuffer()).toString("hex")));
+} };
+`,
+    );
+    await writeFile(
+      resolve(host, "boot.ts"),
+      `
+import { Worker } from "node:worker_threads";
+const { default: app } = await import("./app.js");
+const workers = await Promise.all(["ui", "host-operations"].map(name => new Promise((resolve, reject) => {
+  const worker = new Worker(new URL(name + ".js", import.meta.url));
+  worker.once("message", resolve);
+  worker.once("error", reject);
+})));
+console.log(JSON.stringify({ app: await app.read(), workers }));
+`,
+    );
+    for (const [name, file] of [
+      [
+        "ui",
+        "ui.txt",
+      ],
+      [
+        "host-operations",
+        "io.txt",
+      ],
+    ]) {
       await writeFile(
-        resolve(root, "launch.ps1"),
-        launcher.replace("__BUN_SHA256__", await hash(process.execPath)),
+        resolve(host, `${name}.ts`),
+        `
+import { parentPort } from "node:worker_threads";
+import file from "./${file}" with { type: "file" };
+parentPort.postMessage(await Bun.file(new URL(file, import.meta.url)).text());
+parentPort.close();
+`,
       );
-      for (const argv of [
-        [],
-        [
-          "한글 파일.txt",
-          "memo://open?id=42&mode=edit",
-        ],
-        [
-          "--",
-          "-draft.txt",
-          "-Wait",
-          "-Verbose",
-          "-Debug",
-          "-ErrorAction",
-          "Stop",
-        ],
-        [
-          'a"b',
-          "C:\\tail\\",
-          "",
-        ],
-        ...[
-          128,
-          256,
-        ].map((count) =>
-          Array.from(
-            {
-              length: count,
-            },
-            (_, index) => `${"가".repeat(70)}${index}.txt`,
-          ),
-        ),
-      ]) {
-        const child = Bun.spawn(
-          [
-            resolve(
-              process.env.SystemRoot ?? "C:/Windows",
-              "System32/WindowsPowerShell/v1.0/powershell.exe",
-            ),
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            resolve(root, "launch.ps1"),
-            "-Wait",
-            ...argv,
-          ],
-          // Let Windows PowerShell use its own modules, not an inherited pwsh module path.
-          {
-            stdout: "pipe",
-            stderr: "pipe",
-            env: {
-              ...process.env,
-              PSModulePath: undefined,
-            },
-          },
-        );
-        const output = new Response(child.stdout).text();
-        const errors = new Response(child.stderr).text();
-        const timeout = setTimeout(() => child.kill(), 20000);
-        try {
-          expect(await child.exited, await errors).toBe(0);
-          await output;
-          expect(await readFile(resolve(root, "started.txt"), "utf8")).toBe(
-            "launcher verified",
-          );
-          expect(
-            JSON.parse(await readFile(resolve(root, "launch.json"), "utf8")),
-          ).toEqual({
-            argv,
-            cwd: process.cwd(),
-          });
-        } finally {
-          clearTimeout(timeout);
-          if (child.exitCode === null) {
-            child.kill();
-          }
-          await child.exited;
-        }
-      }
-    } finally {
-      await rm(root, {
-        recursive: true,
-        force: true,
-      });
     }
-  },
-  30000,
-);
+    const bundledAssets = await bundleWindowsHost(
+      host,
+      assets,
+      resolve(root, "app.ts"),
+    );
+    await writeFile(resolve(assets, "app.json"), "{}");
+    await writeFile(resolve(assets, "policy.json"), "{}");
+    await writeFile(resolve(assets, "web/index.html"), "<h1>web</h1>");
+    const compiler = Bun.spawn(
+      [
+        process.execPath,
+        "build",
+        "--compile",
+        `--compile-executable-path=${process.execPath}`,
+        ...compiledAssetArguments(bundledAssets),
+        `--outfile=${executable}`,
+        "./boot.js",
+        "./ui.js",
+        "./host-operations.js",
+      ],
+      {
+        cwd: assets,
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const [code, stdout, stderr] = await Promise.all([
+      compiler.exited,
+      new Response(compiler.stdout).text(),
+      new Response(compiler.stderr).text(),
+    ]);
+    expect(code, stdout + stderr).toBe(0);
+    await rm(assets, {
+      recursive: true,
+      force: true,
+    });
+    await rm(host, {
+      recursive: true,
+      force: true,
+    });
+    for (const name of [
+      "app.ts",
+      "data.txt",
+      "data.bin",
+      "raw.js",
+    ]) {
+      await rm(resolve(root, name));
+    }
+    const child = Bun.spawn(
+      [
+        executable,
+      ],
+      {
+        cwd: root,
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const [exit, output, errors] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(exit, errors).toBe(0);
+    expect(JSON.parse(output)).toEqual({
+      app: [
+        Buffer.from(text).toString("hex"),
+        "0080ff",
+        Buffer.from("not valid JavaScript!").toString("hex"),
+      ],
+      workers: [
+        "UI worker asset",
+        "I/O worker asset",
+      ],
+    });
+  } finally {
+    await rm(root, {
+      recursive: true,
+      force: true,
+    });
+  }
+}, 30000);
+
+test("embedded web responses preserve MIME, Unicode paths, HEAD and ranges without exposing host assets", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "bunaway-web-assets-"));
+  try {
+    await mkdir(resolve(root, "web"));
+    await writeFile(resolve(root, "web/index.html"), "<h1>hello</h1>");
+    await writeFile(resolve(root, "web/한글 😀.txt"), "0123456789");
+    await writeFile(resolve(root, "policy.json"), "private");
+    const url = "https://app.bunaway.local/";
+    const text = `${url}${encodeURIComponent("한글 😀.txt")}?v=1`;
+    expect(webAsset(root, url, "GET").headers).toContain(
+      "Content-Type: text/html",
+    );
+    expect(webAsset(root, text, "GET").body.toString()).toBe("0123456789");
+    expect(webAsset(root, text, "HEAD").body.length).toBe(0);
+    expect(webAsset(root, text, "HEAD").headers).toContain(
+      "Content-Length: 10",
+    );
+    expect(webAsset(root, text, "GET", "bytes=2-4").body.toString()).toBe(
+      "234",
+    );
+    expect(webAsset(root, text, "GET", "bytes=-3").body.toString()).toBe("789");
+    expect(webAsset(root, text, "GET", "bytes=20-").status).toBe(416);
+    expect(webAsset(root, text, "POST").status).toBe(405);
+    for (const path of [
+      "missing",
+      "policy.json",
+      "..%2fpolicy.json",
+      "..%5cpolicy.json",
+      "%00",
+    ]) {
+      expect(webAsset(root, url + path, "GET").status).toBe(404);
+    }
+    expect(webAsset(root, "https://other.local/index.html", "GET").status).toBe(
+      403,
+    );
+  } finally {
+    await rm(root, {
+      recursive: true,
+      force: true,
+    });
+  }
+});
 
 test("Windows app entry names cannot collide with the host or break shared bundle imports", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "bunaway-windows-assets-"));

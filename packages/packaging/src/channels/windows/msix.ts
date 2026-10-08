@@ -2,7 +2,7 @@ import type { AdapterStage, PackageAdapter } from "../../contract.ts";
 
 // Pure manifest rendering remains available for schema-level tests. The
 // registered adapter below fails closed until packaged activation preserves
-// the Bun FFI launcher's clean environment.
+// compiled app activation and data paths.
 
 const DEFAULT_MIN_VERSION = "10.0.17763.0";
 const UNVIRTUALIZED_MIN_VERSION = "10.0.18362.0";
@@ -158,15 +158,15 @@ export function renderAppxManifest(options: MsixOptions): string {
 }
 
 // MSIX stays registered so configuration fails with an actionable message.
-// A native packaged activation path must prove the launcher's clean pre-start
-// environment before this channel can stage or invoke any Windows SDK tool.
+// Compiled app activation and data paths need native validation before this
+// channel stages or invokes any Windows SDK tool.
 const adapter: PackageAdapter = {
   channel: "win-store-msix",
   platform: "windows",
   signingRequirement: "required-to-run",
   stages(): AdapterStage[] {
     throw new Error(
-      "win-store-msix does not support the Bun FFI host yet: packaged activation has no verified clean pre-start environment. Use win-direct or win-store-unpackaged.",
+      "win-store-msix does not support compiled Bun apps yet: packaged activation and data paths are unverified. Use win-direct or win-store-unpackaged.",
     );
   },
 };

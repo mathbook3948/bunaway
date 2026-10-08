@@ -91,6 +91,7 @@ UI 변경은 Vite가 처리하고 백엔드 변경은 CLI가 호스트를 재시
 웹 도구의 출력과 `build.frontend`는 앱 산출물 및 잠금 경로와 분리해야 한다.
 `dist` 자체는 거부하며 `web-dist`나 `dist/web`처럼 겹치지 않는 경로를 사용한다.
 Ctrl+C나 SIGTERM으로 중단하면 실행한 명령과 하위 프로세스를 정리하고 빌드 잠금을 해제한다.
+Windows EXE 컴파일 중에도 같은 취소 처리를 적용한다.
 명령 종료 후에도 하위 프로세스의 정리 완료를 확인하며, 확인하지 못하면 빌드는 실패한다.
 `validate`는 빌드 명령을 실행하지 않으므로 웹 자산만 검사할 때는 `bun run build:web` 다음 실행한다.
 `package` 단독 실행은 앱 소스나 웹 출력 없이도 기존 앱 산출물을 검증해 패키징한다.
@@ -182,15 +183,14 @@ CLI는 요청을 다시 전송하지 않으며 이미 저장한 파일은 그대
 
 ## 패키지 구조와 배포
 
-Windows x64에는 PowerShell 7과
-WebView2 Evergreen이 필요하다. 네이티브 SDK는 기존 스크립트의 핀으로 받는다.
+Windows x64 개발에는 PowerShell 7과 고정 Bun이 필요하다.
+앱 실행에는 WebView2 Evergreen이 필요하다. 네이티브 SDK는 기존 스크립트의 핀으로 받는다.
 macOS arm64에는 macOS 14+, Xcode CLT, zsh/codesign이 필요하다. 교차 빌드는 없다.
 
 ```text
 dist/windows-x64/
-  bunaway.cmd, launch.ps1
-  assets/{web/,boot.js,app.js,ui.js,host-operations.js,chunk-*.js,WebView2Loader.dll,app.json,policy.json,bunfig.toml,tsconfig.json}
-  runtime/bun.exe
+  <appId>.exe
+  WebView2Loader.dll
   licenses/{LICENSE.bun,License-WebView2.txt}
   manifest.json
 
@@ -200,14 +200,22 @@ dist/macos-arm64/<appId>.app/Contents/
   Info.plist
 ```
 
-개발 패키지는 동일한 구조로 `.bunaway/<target>/` 아래 생성한다.
-Windows launcher는 절대 경로의 번들 Bun과 검증된 `boot.js`를 실행한다.
+개발 패키지는 `.bunaway/<target>/` 아래 생성한다. Windows 개발 모드는 외부 JS와 번들 Bun을 사용해 빠르게 재시작한다.
+Windows 배포 빌드는 Bun, 앱 코드, UI/IO Worker, 웹 자산, 설정과 정책을 EXE에 포함하고 콘솔 없이 시작한다.
+`app.executableName`으로 EXE 이름을 바꾸고 `app.icon`으로 프로젝트 기준 ICO 파일을 지정한다.
+Windows에서는 기본 이름 `<appId>.exe`도 같은 파일 이름 검사를 받는다. 기본 이름이 유효하지 않으면
+`app.executableName`에 다른 이름을 지정한다.
+실행 파일, 창과 트레이에 같은 앱 아이콘을 사용한다. 초기화 실패나 앱을 종료시키는 호스트 오류는
+첫 번째 창 제목의 오류 대화상자와 `%LOCALAPPDATA%/bunaway/<appId>/logs/startup-error.log`로 알린다.
+앱 설정 확인 전에는 제목으로 `Bunaway`를 쓰고, 로그 경로의 `<appId>`는 확장자를 제외한 실행 파일 이름으로 대신한다.
+데이터 경로를 찾거나 로그를 쓰지 못해도 대화상자는 표시한다. 명령 호출 오류는 SDK 호출 결과로 전달한다.
+인자는 모두 그대로 전달하며 앱 종료까지 기다린다.
 macOS 호스트 인자는 `--package <절대 패키지 경로>`이고 `.app/Contents/Resources`다.
 macOS는 Finder/.app 실행 시 NSBundle Resources에서 패키지를 찾는다.
 
 ```powershell
 # 다른 cwd에서도, PATH에 Bun이 없어도 실행:
-& 'C:\path\my-app\dist\windows-x64\bunaway.cmd'
+& 'C:\path\my-app\dist\windows-x64\app.my-app.exe'
 ```
 
 ```sh
@@ -216,15 +224,16 @@ open dist/macos-arm64/app.my-app.app
 dist/macos-arm64/app.my-app.app/Contents/MacOS/bunaway-host --package "$PWD/dist/macos-arm64/app.my-app.app/Contents/Resources"
 ```
 
-manifest에는 앱/프레임워크 버전, 호스트 target/해시, Bun 버전, 소스 revision, 다운로드/실행
-해시, 라이선스 출처/해시와 전체 자산/라이선스 해시를 기록한다. 호스트는 실행 전에
-Bun/자산 해시를 검사하고 내부 Bun **절대 경로**를 실행한다. 누락/변조 시 실패하며
-전역 Bun fallback은 없다. 사용자 환경, `.env`, preload, 자동 의존성 설치를 차단하는
-기존 자식 실행 설정을 유지한다. 이 해시로 파일의 무결성을 검사한다. 배포자의 신원을 확인하는 서명은 별도로 적용한다.
+manifest에는 앱/프레임워크 버전, Bun 출처와 라이선스, 외부 파일 및 실행 파일 해시를 기록한다.
+Windows의 `host.kind=bun-compiled`, `host.executable`, `host.sha256`은 컴파일된 앱을 가리킨다.
+패키징 전에 빌드 파일을 검사하고 서명 후 해시는 `host.packagedSha256`에 기록한다.
+Windows 앱은 시작할 때 manifest를 읽거나 파일 전체를 해시하지 않는다.
+컴파일 옵션으로 작업 디렉터리의 .env, bunfig, tsconfig와 package.json 자동 로딩을 끈다.
+Bun이 앱 코드 전에 처리하는 BUN_OPTIONS와 BUN_BE_BUN은 로컬 실행 환경의 사용자 설정으로 취급한다.
 
 macOS 패키지에는 로컬 실행용 ad-hoc 서명만 적용하며 번들 Bun을 재서명하지 않는다.
 manifest의 macOS `host.sourceSha256`은 서명 전 원본 호스트 해시다(서명된 실행 파일을
-자신의 서명 대상 manifest에 해싱하는 순환을 피한다). Windows `host.kind=bun-ffi`와 `host.sha256`은 `boot.js` 해시다.
+자신의 서명 대상 manifest에 해싱하는 순환을 피한다).
 Developer ID 서명, 실제 공증, UI 프레임워크 템플릿의 실제 네이티브 검증, 기본 로그와 저장 플러그인,
 공개 registry publish/라이선스 결정은 후속 범위다.
 Windows `native/windows/bun/prepare.ps1`은 고정 Bun/공식 Loader만 준비한다.

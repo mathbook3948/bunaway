@@ -1,12 +1,30 @@
 // Run the real CLI and frontend processes with fixture native inputs. OS host
 // behavior and installer tooling are covered by platform integration runners.
 import { mock, spyOn } from "bun:test";
-import { copyFile } from "node:fs/promises";
+import { copyFile, mkdir, rm as removeCompileAssets } from "node:fs/promises";
 import { resolve } from "node:path";
 import * as build from "../../packages/cli/src/build.ts";
 import * as files from "../../packages/cli/src/files.ts";
+import * as launch from "../../packages/cli/src/launch.ts";
 import { adapterFor } from "../../packages/packaging/src/index.ts";
 
+const compileSignal = process.env.BUNAWAY_TEST_COMPILE_SIGNAL === "1";
+if (!compileSignal) {
+  mock.module(import.meta.resolve("../../packages/cli/src/launch.ts"), () => ({
+    ...launch,
+    compileWindowsApp: async (
+      root: string,
+      _bun: string,
+      executable: string,
+    ) => {
+      await Bun.write(resolve(root, executable), "fixture compiled app");
+      await removeCompileAssets(resolve(root, "assets"), {
+        recursive: true,
+        force: true,
+      });
+    },
+  }));
+}
 const project = process.argv[2];
 if (!project) {
   throw new Error("Expected a generated project path.");
@@ -23,7 +41,49 @@ const native: build.NativeInputs = {
     "License-WebView2.txt": resolve(nativeDir, "License-WebView2.txt"),
   },
 };
-await Bun.write(native.bun, "fixture native input");
+await mkdir(nativeDir, {
+  recursive: true,
+});
+if (compileSignal) {
+  const port = Number(process.env.BUNAWAY_TEST_COMPILE_SIGNAL_PORT);
+  const ready = process.env.BUNAWAY_TEST_COMPILE_SIGNAL_READY;
+  if (!Number.isInteger(port) || port < 1 || !ready) {
+    throw new Error("Expected compile signal fixture port and ready marker.");
+  }
+  const source = resolve(nativeDir, "compile-stall.ts");
+  const descendant = `Bun.serve({hostname:'127.0.0.1',port:${port},fetch:()=>new Response('compiler descendant')}); await Bun.write(${JSON.stringify(ready)}, 'ready'); await Bun.sleep(600000);`;
+  await Bun.write(
+    source,
+    `Bun.spawn([${JSON.stringify(process.execPath)}, '-e', ${JSON.stringify(descendant)}], {stdin:'ignore', stdout:'inherit', stderr:'inherit', windowsHide:true}); await Bun.sleep(600000);`,
+  );
+  const compiler = Bun.spawn(
+    [
+      process.execPath,
+      "build",
+      "--compile",
+      "--target=bun-windows-x64-baseline",
+      "--windows-hide-console",
+      `--outfile=${native.bun}`,
+      source,
+    ],
+    {
+      cwd: nativeDir,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+  const compilerOutput = new Response(compiler.stdout).text();
+  const compilerErrors = new Response(compiler.stderr).text();
+  if (await compiler.exited) {
+    throw new Error(
+      `Cannot build compiler fixture:\n${await compilerOutput}\n${await compilerErrors}`,
+    );
+  }
+  await compilerOutput;
+  await compilerErrors;
+} else {
+  await Bun.write(native.bun, "fixture native input");
+}
 await Bun.write(loader, "fixture loader input");
 for (const [name, path] of Object.entries(native.licenses)) {
   await copyFile(resolve(files.frameworkRoot, "licenses", name), path);

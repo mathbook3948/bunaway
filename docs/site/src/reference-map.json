@@ -497,7 +497,10 @@
     ]
   },
   "configuration": {
-    "packages/cli/src/config.ts": ["reference/configuration"],
+    "packages/cli/src/config.ts": [
+      "reference/configuration",
+      "guides/build-and-package"
+    ],
     "packages/packaging/src/config.ts": [
       "reference/packaging/configuration",
       "reference/packaging/channels",
