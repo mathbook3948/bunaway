@@ -6,6 +6,11 @@ Tauri v2의 기본 API와 공식 플러그인, Electron의 공개 API를 기능�
 기능은 각각 작업으로 기록한다. 비교 대상의 메서드 이름이나 바이너리와의 호환을
 요구하는 문서가 아니라, 같은 앱 요구사항을 해결하기 위한 개발 목록이다.
 
+2026-10-08 보완은 최신 main `c0d3d45bb1f36651ee417c25455fe077ba293ed0`의
+28영역, 483항목을 다시 대조했다. 기존 완료 표시와 우선순위를 유지하고 누락된 기능과
+완료 조건을 보완했다. 아래 API 표는 기능별 탐색을 돕는 색인이며 모든 API, 옵션,
+이벤트의 전수 매핑을 완료했다는 뜻은 아니다.
+
 ## 상태와 작업 기준
 
 - `[x]`는 아래 기준 코드에 구현된 Windows 기능이다. 출시 지원 전체의 완료를 뜻하지 않는다.
@@ -152,6 +157,9 @@ Tauri v2의 기본 API와 공식 플러그인, Electron의 공개 API를 기능�
 - [ ] 종료 코드 지정, 강제 exit, relaunch와 인자 보존 API를 제공한다.
 - [ ] 앱 이름, 버전, 식별자, 프레임워크와 Bun, WebView 버전을 조회한다.
 - [ ] 앱 패키지 경로, 실행 파일, 리소스 경로와 packaged/dev 상태를 조회한다.
+- [ ] 일반 브라우저와 bunaway 앱 WebView 실행 여부를 구분하는 공개 기능을 제공한다. [T-core-live]의 `isTauri`에 대응하는 요구다.
+  일반 브라우저, 앱 WebView, SSR에서의 반환값과 브리지 준비 전 동작을 정의하고 테스트한다.
+  환경 판별 결과를 권한 승인이나 신뢰된 호출 출처의 증명으로 사용하지 않는지 검증한다.
 - [ ] 앱 전체 포커스, 활성 상태와 창 생성 이벤트를 제공한다.
 - [ ] 단일 인스턴스의 추가 데이터 전달과 lock 상태 조회, 해제 필요성을 결정한다.
 - [ ] 앱 ready 전에 들어온 외부 활성화 요청과 종료 요청의 순서를 공개 계약으로 정한다.
@@ -199,6 +207,10 @@ Tauri v2의 기본 API와 공식 플러그인, Electron의 공개 API를 기능�
 - [ ] 메뉴 sublabel과 접근성 label의 플랫폼별 지원을 결정한다.
 - [ ] 전역 단축키를 하나 또는 여러 개 등록한다.
 - [ ] 전역 단축키의 등록 상태 조회, 개별 해제와 전체 해제를 제공한다.
+- [ ] 등록 목록을 유지한 채 전역 단축키 처리를 일시중지, 재개하고 중지 상태를 조회한다.
+  [E-shortcut-live]의 `setSuspended`와 `isSuspended`는 최신 문서상 Electron 42.0.0 이상이다.
+  중지 중 입력 미전달, 신규 등록 실패, 기존 등록 상태 유지, 재개 후 입력 전달과 반복 호출을 검증한다.
+  플랫폼별 구현 가능 범위와 종료 시 등록 해제도 확인한다.
 - [ ] 전역 단축키의 pressed/released 이벤트와 키 조합을 제공한다.
 - [ ] 단축키 충돌, 예약 키, 중복 등록과 종료 정리를 처리한다.
 - [ ] WebView 포커스 시 메뉴 단축키와 UI 입력의 우선순위를 정의한다.
@@ -310,6 +322,10 @@ Tauri v2의 기본 API와 공식 플러그인, Electron의 공개 API를 기능�
 - [ ] 고대비, forced colors, inverted colors 상태를 조회한다.
 - [ ] reduced motion과 transparency 등 접근성 환경설정을 조회한다.
 - [ ] 스크린 리더와 접근성 활성 상태, 변경 이벤트를 제공한다.
+- [ ] 접근성 지원 활성화와 비활성화를 제어하고 지원 기능을 선택, 조회한다. [E-app-live]의
+  `setAccessibilitySupportEnabled`, `getAccessibilitySupportFeatures`, `setAccessibilitySupportFeatures`를 참고한다.
+  초기 상태, OS 자동 감지와 명시 설정의 관계, 호출 가능 시점, 빈 목록과 잘못된 기능명을 정의한다.
+  대상 WebView에서 설정 후 조회와 실제 접근성 트리를 검증하고 렌더러별 미지원 기능을 명시한다.
 - [ ] WebView 접근성 트리와 사용자 타이틀바의 키보드 탐색을 검증한다.
 - [ ] suspend, resume, 화면 잠금과 잠금 해제 이벤트를 제공한다.
 - [ ] AC와 배터리 상태 조회, 변경 이벤트를 제공한다.
@@ -399,6 +415,10 @@ Tauri v2의 기본 API와 공식 플러그인, Electron의 공개 API를 기능�
 - [ ] protocol 응답에 파일, bytes, text, HTTP와 stream을 사용한다.
 - [ ] protocol의 MIME, range, CORS, secure origin과 서비스 워커 지원을 정의한다.
 - [ ] protocol과 세션별 정책을 연결하고 origin 검사와 세션 폐기 계약을 유지한다.
+- [ ] 로컬 파일 경로를 WebView 표시용 URL로 변환하는 공개 기능을 제공한다. [T-core-live]의
+  `convertFileSrc`에 대응하며 URL 변환과 파일 접근 허용을 구분한다. 19절의 파일 scope와
+  17절의 CSP에 연결하고, 허용한 이미지와 미디어 표시, Unicode와 예약 문자 인코딩을 검증한다.
+  범위 밖 경로, 경로 순회, 링크 우회와 scope 철회 후 접근을 차단하는지 테스트한다.
 - [ ] 세션에 preload 등록, 조회와 해제를 제공한다.
 - [ ] service worker 등록, 실행 상태와 console 이벤트를 제공한다.
 - [ ] service worker와 shared worker 조회, 시작과 IPC의 지원 범위를 결정한다.
@@ -413,8 +433,17 @@ Tauri v2의 기본 API와 공식 플러그인, Electron의 공개 API를 기능�
 현재 WebView OS 권한 요청은 일괄 거부한다. 지원 기능, 앱 정책과 사용자의 OS 동의를
 구분하는 요청와 조회 흐름을 추가해야 한다.
 
+CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델에 있는 프로덕션 CSP와
+명시적 개발 origin 요구를 구체화한다. 출처: [T-security-live], [T-csp-live], [T-headers-live].
+
 - [ ] 권한 check와 request 훅, origin과 frame별 허용와 거부를 제공한다.
 - [ ] 권한 결정의 영속화, 조회와 초기화를 제공한다.
+- [ ] 프로덕션 CSP와 개발용 CSP(`devCSP`)의 설정, 기본값과 적용 대상을 정의한다.
+  nonce/hash 생성과 자산 연결, 허용 origin, 개발 HMR과 프로덕션 정책의 분리를 제공한다.
+  정상 자산 로드, 허용하지 않은 inline script와 외부 origin 차단, 개발 정책의 배포 유출 방지를 검증한다.
+- [ ] 자산과 사용자 정의 protocol 응답의 보안 헤더를 설정하고 CSP와의 적용 관계를 정의한다.
+  COOP, COEP, CORP와 `X-Content-Type-Options`의 기본값, 덮어쓰기 규칙과 WebView별 지원을 기록한다.
+  실제 응답 헤더와 교차 origin 허용/차단을 개발 및 패키지 실행에서 검증하고 적용 불가 경로를 명시한다.
 - [ ] 카메라와 마이크의 OS 권한 확인 및 요청을 연결한다.
 - [ ] geolocation, notification과 clipboard 권한을 연결한다.
 - [ ] display capture, fullscreen, pointer lock과 wake lock 권한을 연결한다.
@@ -459,6 +488,9 @@ Tauri v2의 기본 API와 공식 플러그인, Electron의 공개 API를 기능�
 - [ ] binary 읽기와 쓰기, append와 open/read/write/seek/close 핸들을 제공한다.
 - [ ] 파일과 디렉터리 존재, stat, metadata와 권한을 조회한다.
 - [ ] 디렉터리 목록, 재귀 목록과 생성, 삭제를 제공한다.
+- [ ] 파일 크기 조회와 별도로 디렉터리 재귀 용량을 바이트 단위로 계산한다. [T-fs-live]의 `size`를 참고한다.
+  scope 경계, 링크 처리, 접근 거부와 탐색 중 변경의 오류 규칙, 큰 트리의 취소와 비용을 정의한다.
+  빈 디렉터리, 중첩 파일 합계, 범위 밖 링크, 부분 실패와 취소 시 자원 정리를 검증한다.
 - [ ] 파일과 디렉터리 copy, rename, move, truncate를 제공한다.
 - [ ] 파일 watch와 recursive watch, 이벤트 구독 해제를 제공한다.
 - [ ] 원자적 저장, 충돌 처리와 대용량 stream I/O를 제공한다.
@@ -469,6 +501,12 @@ Tauri v2의 기본 API와 공식 플러그인, Electron의 공개 API를 기능�
 - [ ] Windows drive, UNC, extended-length와 Unicode 경로 동작을 정의한다.
 - [ ] key-value store의 load, get, set, delete, clear와 목록 조회를 제공한다.
 - [ ] store 변경 이벤트, save, reload와 autosave를 제공한다.
+- [ ] Store `defaults`와 저장된 값의 병합 우선순위, 중첩 객체 처리, 기본값 무시 옵션을 정의한다.
+  [T-store-live]의 `overrideDefaults`와 reload의 `ignoreDefaults`를 참고하고, 파일 없음,
+  누락 키, 충돌 키와 중첩 객체를 load/reload하여 결과와 저장 시점을 검증한다.
+- [ ] Store를 기본값으로 되돌리는 reset-to-defaults를 제공한다. 모든 값을 지우는 `clear`,
+  디스크 값을 다시 읽는 `reload`와 구분한다. [T-store-live]의 `reset`을 참고한다.
+  기본값이 있는 경우와 없는 경우, 변경 이벤트, autosave 및 명시적 save 후 재실행 결과를 검증한다.
 - [ ] SQLite의 query, execute, transaction과 migration을 제공한다.
 - [ ] Tauri SQL의 다른 backend와 원격 DB 지원 필요성을 결정한다.
 - [ ] Bun 파일, path와 SQLite API를 직접 사용하는 trusted backend 경로와 권한 중재 API를 구분해 문서화한다.
@@ -505,6 +543,14 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 
 - [ ] OS 암호화 저장 지원 여부를 조회한다.
 - [ ] Windows DPAPI를 사용하는 문자열과 bytes 암호화, 복호화를 제공한다.
+- [ ] 보안 저장소의 비동기 사용 가능 여부 조회와 암복호화를 제공한다. [E-safe-live]의
+  `isAsyncEncryptionAvailable`, `encryptStringAsync`, `decryptStringAsync`를 참고한다.
+  초기화 시점, 동시 요청, 오류와 종료 처리를 정의하고 왕복 복호화와 UI 응답성, 손상 입력을 검증한다.
+- [ ] 복호화 결과에 키 교체 등에 따른 재암호화 필요 여부를 제공한다. [E-safe-live]의 `shouldReEncrypt`를 참고한다.
+  재암호화와 원자적 저장 절차를 정의하고 이전 키 데이터, 교체 후 재조회, 저장 실패 시 원본 보존을 검증한다.
+- [ ] 키 저장소가 잠기거나 일시적으로 이용 불가할 때 영구 복호화 실패와 구분하고 재시도 계약을 제공한다.
+  대기 한도, 취소와 복구 후 재시도를 정의하고 일시 실패 및 복구, 종료 중 대기 해제,
+  묵시적 평문 fallback이 없는지 검증한다. 플랫폼별 키 공급자 차이는 [E-safe-live]를 참고한다.
 - [ ] OS credential store에 secret을 저장, 조회하고 삭제하는 기능의 지원을 결정한다.
 - [ ] Stronghold 방식의 vault, client, key와 record 관리 기능을 제공한다.
 - [ ] vault unlock, lock, save와 암호 변경을 제공한다.
@@ -518,6 +564,9 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 
 우선순위 P2, 첫 공개 릴리스 준비는 P1. 소유자: updater 플러그인, 패키저와 호스트.
 출처: [T-updater], [E-updater], [T-config], [E-app].
+
+설치 파일 생성과 출시 검증은 구분한다. 플랫폼별 형식, 코드 서명, 공증과 스토어 배포의
+완료 조건은 28절에서 [PRD](./PRD.md)의 9절과 [플랫폼 지원 표](./platform-support/README.md)에 연결한다.
 
 - [x] 고정 Bun으로 앱 코드와 웹 자산, 설정과 정책을 compiled EXE에 포함한 Windows 앱 패키지를 만든다.
 - [x] Inno Setup 기반 direct와 Store unpackaged 채널의 설치 파일 생성 경로가 있다.
@@ -622,6 +671,10 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 - [ ] Quick Look 파일 미리보기와 선택 단어 사전 기능을 제공한다.
 - [ ] Touch Bar button, slider, group, picker, scrubber와 popover를 제공한다.
 - [ ] macOS 메뉴 Help/Window 역할, Services와 Share menu를 제공한다.
+- [ ] macOS 메뉴 `header`, `palette`, `badge`와 사용자 지정 `userAccelerator` 조회를 제공한다.
+  [E-menu-item-live] 기준 header/palette/badge는 macOS 14 이상이며 badge는 Dock 메뉴에 표시되지 않는다.
+  지원 OS의 표시와 선택 동작, badge 변경과 제거, 메뉴 삽입 전후 사용자 단축키 조회와 미지정 값을 검증한다.
+  이전 OS와 다른 플랫폼의 미지원 결과를 기록하고 07절의 메뉴 계약과 연결한다.
 - [ ] macOS 트레이 title, template와 pressed 이미지, drop과 drag 이벤트를 제공한다.
 - [ ] NSUserDefaults와 distributed/local/workspace notification을 제공한다.
 - [ ] Handoff와 user activity의 시작, 갱신과 종료를 제공한다.
@@ -633,7 +686,11 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 - [ ] Linux desktop name, badge와 desktop-file 연결을 제공한다.
 - [ ] Linux primary-selection 클립보드를 제공한다.
 - [ ] Linux notification urgency, secret-store backend와 인증서 import를 제공한다.
-- [ ] Wayland의 전역 단축키, 포커스, 위치와 화면 캡처에 portal을 연결한다.
+- [ ] Wayland의 전역 단축키, 화면 캡처, 포커스와 위치 제어를 기능별로 구분해 지원 범위를 결정한다.
+  GlobalShortcuts와 ScreenCast 등 필요한 portal의 존재, backend와 compositor 지원, 사용자 동의를 확인한다.
+  포커스 활성화의 compositor 제약과 전역 창 좌표 조회/이동의 미지원 범위를 기록한다.
+  [E-window-live]가 명시한 전역 좌표 제한을 portal 연결만으로 해결된 것으로 취급하지 않는다.
+  compositor별 portal 없음, 권한 거부, 취소, 정상 동작과 위치 제어 미지원 결과를 검증한다.
 - [ ] 플랫폼별 window gesture, cursor auto-hide와 first-mouse 동작을 제공한다.
 - [ ] Intel, ARM64와 translation 환경의 runtime pin, 실행과 배포를 검증한다.
 
@@ -672,6 +729,22 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 - [ ] WebView 장애, 전체 앱 비정상 종료와 강제 종료 뒤 자원 정리를 검증한다.
 - [ ] 각 플랫폼의 supported/experimental/unsupported와 OS permission 값을 실제 구현에 맞춘다.
 - [ ] 지원 목록, CLI 진단, 문서와 배포 산출물을 같은 릴리스로 갱신한다.
+- [ ] 플랫폼별 설치 패키지 형식과 배포 채널을 확정하고 [PRD](./PRD.md)의 9절 출시 기준 및
+  [플랫폼 지원 표](./platform-support/README.md)의 패키지와 출시 검증에 증거를 연결한다. [T-distribute-live]를 참고한다.
+  Windows EXE/MSI/MSIX, macOS app/DMG/PKG, Linux deb/rpm/AppImage 등의 채택 또는 제외를 기록하고,
+  채택한 형식마다 깨끗한 대상 OS에서 설치, 최초 실행, 업데이트와 제거를 검증한다. 22절의 기존 작업과 함께 완료를 판정한다.
+- [ ] 배포할 Windows 앱과 설치 파일의 프로덕션 코드 서명, 타임스탬프와 변조 거부를 검증한다.
+  현재 Bun FFI 산출물로 검사하고, 서명 후 해시와 번들 런타임 검증을 유지한다.
+  자체 서명 인증서나 PE-overlay 테스트를 프로덕션 서명 검증으로 대체하지 않는다.
+- [ ] macOS 배포 채널에 맞는 코드 서명, entitlements와 hardened runtime을 확정한다.
+  직접 배포의 Developer ID 서명, 공증과 stapling, 깨끗한 Mac의 Gatekeeper 및 설치 실행을 검증한다.
+  ad-hoc CI 성공과 구분하여 산출물, 인증서 유형, OS/CPU와 검증 결과를 지원 표에 기록한다.
+- [ ] Android와 iOS의 패키지, 서명과 스토어 배포 조건을 27절의 실행 모델 검증과 연결한다.
+  Android APK/AAB와 업로드/앱 서명 키, iOS 배포 인증서와 provisioning, entitlements를 정의하고
+  서명된 앱을 실기기에서 설치, 실행, 업데이트한다. Bun 실행과 코드 실행 정책의 제약도 기록한다.
+- [ ] Microsoft Store, Mac App Store, Google Play와 App Store의 채널별 제출 및 배포 완료 조건을 정의한다.
+  대상 채널의 정책 검토, 제출 검증, 심사와 실제 설치 결과를 구분해 기록하고 지원 표에 반영한다.
+  미제출, 미승인과 제외 채널을 명시하며 패키지 생성만으로 스토어 배포를 완료 처리하지 않는다.
 
 ## 다음 작업 묶음
 
@@ -684,7 +757,7 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 
 ## 공식 API 대조 범위
 
-아래 출처는 이번에 확인한 스냅샷으로 고정했다. main/dev에는 실험 기능과 다음 버전의
+기존 출처 [T-window]부터 [E-push]까지는 아래 스냅샷으로 고정했다. main/dev에는 실험 기능과 다음 버전의
 기능이 포함될 수 있다. 실제 구현을 시작할 때 대상 안정 버전의 지원 플랫폼과
 deprecated/experimental 상태를 확인하고 해당 체크 항목에 기록한다.
 같은 기능의 setter, getter, 초기 설정과 이벤트는 본문의 기능 항목에 함께 연결한다.
@@ -694,12 +767,20 @@ deprecated/experimental 상태를 확인하고 해당 체크 항목에 기록한
 - Tauri 공식 기능 문서: `712e12a755d349303f7bcf96edd4165d0e1480db`.
 - Electron API 문서: `054d1a159f4dcf775bceefb038134366578980db`.
 
+보완 항목의 `-live` 출처는 2026-10-08 확인한 최신 공식 문서이며 위 SHA를 대체하지 않는다.
+Electron의 단축키 중지, macOS 메뉴, 접근성 제어와 비동기 보안 저장 API는 고정 SHA에도
+있지만 기존 TODO에서 빠졌거나 불명확했다. 최신 문서의 Electron 42.0.0 이상 조건과
+macOS 버전 조건은 비교 대상의 조건이며 bunaway 지원 선언이 아니다.
+Tauri Store와 fs의 JavaScript 상세 참조, 보안 및 배포 가이드는 기존 플러그인 소개와
+config 소스의 보완 근거다. 고정 스냅샷 이후에 추가된 기능이라고 일괄 분류하지 않는다.
+Bun 런타임으로 대체하는 기능과 의도적으로 제외한 기능의 기존 범위는 유지한다.
+
 ### Tauri 기본 API와 공식 기능
 
 | API 또는 공식 기능 | 본문 절 |
 | --- | --- |
 | app | 05, 13, 26, 27 |
-| core, event, mocks | 23, 24 |
+| core, event, mocks | 05, 16, 23, 24 |
 | dpi, window, webviewWindow | 01–04, 13, 14, 26, 27 |
 | webview, Rust Webview와 WebviewWindow | 14–18 |
 | image | 12 |
@@ -731,7 +812,7 @@ deprecated/experimental 상태를 확인하고 해당 체크 항목에 기록한
 | downloadItem | 18 |
 | net, ClientRequest, IncomingMessage, WebSocket | 16, 20 |
 | clipboard, ClipboardItem, nativeImage | 12 |
-| dialog, Menu, MenuItem, Tray, globalShortcut | 06, 07, 11 |
+| dialog, Menu, MenuItem, Tray, globalShortcut | 06, 07, 11, 26 |
 | Notification | 10 |
 | screen, nativeTheme, systemPreferences | 13, 17, 26 |
 | powerMonitor, powerSaveBlocker | 13 |
@@ -845,3 +926,16 @@ deprecated/experimental 상태를 확인하고 해당 체크 항목에 기록한
 [E-share]: https://github.com/electron/electron/blob/054d1a159f4dcf775bceefb038134366578980db/docs/api/share-menu.md
 [E-purchase]: https://github.com/electron/electron/blob/054d1a159f4dcf775bceefb038134366578980db/docs/api/in-app-purchase.md
 [E-push]: https://github.com/electron/electron/blob/054d1a159f4dcf775bceefb038134366578980db/docs/api/push-notifications.md
+
+[T-store-live]: https://v2.tauri.app/reference/javascript/store/
+[T-fs-live]: https://v2.tauri.app/reference/javascript/fs/#size
+[T-core-live]: https://v2.tauri.app/reference/javascript/api/namespacecore/
+[T-security-live]: https://v2.tauri.app/reference/config/#securityconfig
+[T-csp-live]: https://v2.tauri.app/security/csp/
+[T-headers-live]: https://v2.tauri.app/security/http-headers/
+[T-distribute-live]: https://v2.tauri.app/distribute/
+[E-shortcut-live]: https://www.electronjs.org/docs/latest/api/global-shortcut
+[E-menu-item-live]: https://www.electronjs.org/docs/latest/api/menu-item
+[E-app-live]: https://www.electronjs.org/docs/latest/api/app
+[E-safe-live]: https://www.electronjs.org/docs/latest/api/safe-storage
+[E-window-live]: https://www.electronjs.org/docs/latest/api/base-window
