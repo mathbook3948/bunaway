@@ -480,6 +480,7 @@ test.skipIf(process.platform !== "win32")(
       const unconstrainedMaximizedSize = clientPhysicalSize(window);
       inputWindow = windows.create("Input focus test", 400, 300, () => {});
       const keepInputFocus = (change: () => void) => {
+        user.symbols.SetForegroundWindow(inputWindow);
         messaging.symbols.SetActiveWindow(inputWindow);
         messaging.symbols.SetFocus(inputWindow);
         assert.equal(messaging.symbols.GetActiveWindow(), inputWindow);
@@ -490,7 +491,17 @@ test.skipIf(process.platform !== "win32")(
         assert.equal(targetActivations, 0, "Background window was activated.");
         assert.equal(messaging.symbols.GetActiveWindow(), inputWindow);
         assert.equal(messaging.symbols.GetFocus(), inputWindow);
-        assert.equal(messaging.symbols.GetForegroundWindow(), foreground);
+        const currentForeground = messaging.symbols.GetForegroundWindow();
+        assert.notEqual(
+          currentForeground,
+          window,
+          "Background window became foreground.",
+        );
+        // Windows may deny foreground ownership. Other applications on the CI
+        // desktop can change their foreground HWND independently of this test.
+        if (foreground === inputWindow) {
+          assert.equal(currentForeground, inputWindow);
+        }
         assert.equal(windows?.failure, undefined);
       };
       for (const size of [
