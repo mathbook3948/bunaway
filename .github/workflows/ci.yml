@@ -35,6 +35,15 @@ jobs:
           node-version: 24.19.0
       - name: Install locked dependencies
         run: mise run install
+      - name: Install Inno Setup for installer regression tests
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install innosetup --version=6.7.3 --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path -LiteralPath "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            throw 'Inno Setup compiler is required for Windows installer regression tests.'
+          }
       - name: Check formatting, lint, types and contracts
         run: mise run check
       - name: Build the documentation site and search index

@@ -5,6 +5,7 @@ import {
   mkdtemp,
   readFile,
   realpath,
+  rename,
   rm,
   symlink,
   writeFile,
@@ -520,7 +521,7 @@ test.skipIf(!iscc)(
 );
 
 test.skipIf(!iscc)(
-  "Inno upgrades prune renamed and disabled shortcuts while preserving unrelated links and app data",
+  "Inno upgrades preserve shortcut names, locations and arguments, then uninstall managed links",
   async () => {
     const root = await realpath(
       await mkdtemp(join(tmpdir(), "bunaway-inno-shortcuts-")),
@@ -550,8 +551,33 @@ test.skipIf(!iscc)(
     ];
     const unrelated = [
       join(menu, "Unrelated.lnk"),
+      join(menu, "Other install.lnk"),
       join(desktop, `Other (${identifier}).lnk`),
     ];
+    const renamedDesktop = join(desktop, "사용자 바로가기 🚀.lnk");
+    const retargeted = join(menu, "Retargeted.lnk");
+    let unchangedLink = Buffer.alloc(0);
+    const powershell = join(
+      process.env.SystemRoot ?? "C:\\Windows",
+      "System32",
+      "WindowsPowerShell",
+      "v1.0",
+      "powershell.exe",
+    );
+    const psLiteral = (value: string) => `'${value.replaceAll("'", "''")}'`;
+    async function readShortcut(path: string) {
+      const output = await must(powershell, [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        `$folder=(New-Object -ComObject Shell.Application).Namespace(${psLiteral(join(path, ".."))}); $link=$folder.ParseName(${psLiteral(path.split(/[\\/]/).pop() as string)}).GetLink(); [Console]::WriteLine((ConvertTo-Json -InputObject @{Target=$link.Path;Arguments=$link.Arguments;WorkingDirectory=$link.WorkingDirectory} -Compress))`,
+      ]);
+      return JSON.parse(output.stdout.trim()) as {
+        Target: string;
+        Arguments: string;
+        WorkingDirectory: string;
+      };
+    }
     async function removeInstallation() {
       await must(uninstall, silent);
       for (let retry = 0; retry < 100; retry++) {
@@ -564,6 +590,10 @@ test.skipIf(!iscc)(
     }
     try {
       await Bun.write(join(root, "other.exe"), "unrelated executable");
+      await Bun.write(
+        join(root, "other-install", executableNames[0] as string),
+        "another install",
+      );
       for (let index = 0; index < names.length; index++) {
         const name = names[index] as string;
         const executableName = executableNames[index] as string;
@@ -600,14 +630,20 @@ test.skipIf(!iscc)(
           .replaceAll("{autodesktop}", desktop);
         if (index === 0) {
           script = script.replace(
-            "[Icons]\n",
-            `[Icons]\nName: "${menu}\\User profile"; Filename: "{app}\\${executableName.replaceAll("{", "{{")}"; Parameters: "--profile custom"; Flags: uninsneveruninstall\n`,
+            "[Run]\n",
+            `Name: "${menu}\\User profile"; Filename: "{app}\\${executableName.replaceAll("{", "{{")}"; Parameters: "--profile custom"; Flags: uninsneveruninstall\n[Run]\n`,
+          );
+        }
+        if (index === 2) {
+          script = script.replace(
+            "[Run]\n",
+            `Name: "${menu}\\Retargeted"; Filename: "{app}\\${executableName.replaceAll("{", "{{")}"; Flags: uninsneveruninstall; AfterInstall: RememberShortcut('${retargeted.replaceAll("'", "''")}')\n[Run]\n`,
           );
         }
         if (index === 0) {
           script = script.replace(
-            "[Icons]\n",
-            `[Icons]\nName: "${menu}\\Unrelated"; Filename: "${root}\\other.exe"\nName: "${desktop}\\Other (${identifier})"; Filename: "${root}\\other.exe"\nName: "${menu}\\PowerShell other file"; Filename: "{sys}\\WindowsPowerShell\\v1.0\\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\\other.ps1"" ""{app}\\launch.ps1"""\nName: "${menu}\\PowerShell mention"; Filename: "{sys}\\WindowsPowerShell\\v1.0\\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""Write-Output '{app}\\launch.ps1'"""\n`,
+            "[Run]\n",
+            `Name: "${menu}\\Unrelated"; Filename: "${root}\\other.exe"\nName: "${menu}\\Other install"; Filename: "${root}\\other-install\\${executableNames[0]?.replaceAll("{", "{{")}"; Parameters: "--other"\nName: "${desktop}\\Other (${identifier})"; Filename: "${root}\\other.exe"\nName: "${menu}\\PowerShell other file"; Filename: "{sys}\\WindowsPowerShell\\v1.0\\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\\other.ps1"" ""{app}\\launch.ps1"""\nName: "${menu}\\PowerShell mention"; Filename: "{sys}\\WindowsPowerShell\\v1.0\\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""Write-Output '{app}\\launch.ps1'"""\n[Run]\n`,
           );
         }
         const setup = await compileInno(ctx, script, staging, "setup");
@@ -620,10 +656,21 @@ test.skipIf(!iscc)(
         if (index === 0) {
           await Bun.write(data, "memo");
           await Bun.write(join(menu, "broken.lnk"), "not a shortcut");
+          await must(powershell, [
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            `$folder=(New-Object -ComObject Shell.Application).Namespace(${psLiteral(menu)}); $link=$folder.ParseName(${psLiteral(`${names[0]}.lnk`)}).GetLink(); $link.Arguments='--profile "사용자 설정"'; $link.WorkingDirectory=${psLiteral(root)}; $link.Save(${psLiteral(join(menu, `${names[0]}.lnk`))})`,
+          ]);
+          await rename(
+            join(desktop, `${names[0]} (${identifier}).lnk`),
+            renamedDesktop,
+          );
+          // Simulate upgrading an installer that did not yet record managed links.
+          await rm(join(install, ".bunaway-shortcuts.txt"));
         }
         for (const previous of new Set(names.slice(0, index + 1))) {
-          const current = previous === name;
-          const expectedShortcut = current && index < 3;
+          const expectedShortcut = previous === names[0];
           const shortcutPath = join(menu, `${previous}.lnk`);
           const shortcutExists = await Bun.file(shortcutPath).exists();
           expect(shortcutExists, `Install ${index + 1}: ${shortcutPath}`).toBe(
@@ -631,12 +678,12 @@ test.skipIf(!iscc)(
           );
           expect(
             await Bun.file(join(menu, `${previous} 제거.lnk`)).exists(),
-          ).toBe(current && index < 3);
+          ).toBe(expectedShortcut);
           expect(
             await Bun.file(
               join(desktop, `${previous} (${identifier}).lnk`),
             ).exists(),
-          ).toBe(current && index < 2);
+          ).toBe(false);
         }
         for (const previous of new Set(executableNames.slice(0, index + 1))) {
           expect(await Bun.file(join(install, previous)).exists()).toBe(
@@ -671,50 +718,181 @@ test.skipIf(!iscc)(
             "--profile custom",
           ],
         ];
-        if (index === 0) {
-          links.push([
-            name,
-            "",
-          ]);
-        }
+        links.push([
+          names[0] as string,
+          '--profile "사용자 설정"',
+        ]);
         for (const [linkName, arguments_] of links) {
-          const powershell = join(
-            process.env.SystemRoot ?? "C:\\Windows",
-            "System32",
-            "WindowsPowerShell",
-            "v1.0",
-            "powershell.exe",
-          );
           const linkPath = join(menu, `${linkName}.lnk`);
-          const psLiteral = (value: string) =>
-            `'${value.replaceAll("'", "''")}'`;
-          const command = `$folder=(New-Object -ComObject Shell.Application).Namespace(${psLiteral(menu)}); $link=$folder.ParseName(${psLiteral(`${linkName}.lnk`)}).GetLink(); [Console]::WriteLine((ConvertTo-Json -InputObject @{Target=$link.Path;Arguments=$link.Arguments} -Compress))`;
-          const output = await must(powershell, [
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            command,
-          ]);
-          const shortcut = JSON.parse(output.stdout.trim()) as {
-            Target: string;
-            Arguments: string;
-          };
+          const shortcut = await readShortcut(linkPath);
           expect(shortcut.Target.toLowerCase()).toBe(
             join(install, executableName).toLowerCase(),
           );
           expect(shortcut.Arguments).toBe(arguments_);
+          if (linkName === names[0]) {
+            expect(shortcut.WorkingDirectory.toLowerCase()).toBe(
+              root.toLowerCase(),
+            );
+          }
           expect(await Bun.file(linkPath).exists()).toBe(true);
+        }
+        const desktopShortcut = await readShortcut(renamedDesktop);
+        expect(desktopShortcut.Target.toLowerCase()).toBe(
+          join(install, executableName).toLowerCase(),
+        );
+        expect(desktopShortcut.Arguments).toBe("");
+        const otherInstall = await readShortcut(
+          join(menu, "Other install.lnk"),
+        );
+        expect(otherInstall.Target.toLowerCase()).toBe(
+          join(
+            root,
+            "other-install",
+            executableNames[0] as string,
+          ).toLowerCase(),
+        );
+        expect(otherInstall.Arguments).toBe("--other");
+        const linkBytes = await readFile(join(menu, `${names[0]}.lnk`));
+        if (index >= 2) {
+          expect(linkBytes).toEqual(unchangedLink);
+        }
+        unchangedLink = linkBytes;
+        if (index === 2) {
+          await must(powershell, [
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            `$folder=(New-Object -ComObject Shell.Application).Namespace(${psLiteral(menu)}); $link=$folder.ParseName('Retargeted.lnk').GetLink(); $link.Path=${psLiteral(join(root, "other.exe"))}; $link.Save(${psLiteral(retargeted)})`,
+          ]);
         }
       }
       await removeInstallation();
       for (const link of unrelated) {
         expect(await Bun.file(link).exists()).toBe(true);
       }
+      expect(await Bun.file(join(menu, `${names[0]}.lnk`)).exists()).toBe(
+        false,
+      );
+      expect(await Bun.file(join(menu, `${names[0]} 제거.lnk`)).exists()).toBe(
+        false,
+      );
+      expect(await Bun.file(renamedDesktop).exists()).toBe(false);
+      expect(await Bun.file(join(menu, "User profile.lnk")).exists()).toBe(
+        true,
+      );
+      expect((await readShortcut(retargeted)).Target.toLowerCase()).toBe(
+        join(root, "other.exe").toLowerCase(),
+      );
       expect(await Bun.file(data).text()).toBe("memo");
     } finally {
       if (await Bun.file(uninstall).exists()) {
         await removeInstallation();
       }
+      await rm(root, {
+        recursive: true,
+        force: true,
+        maxRetries: 5,
+        retryDelay: 100,
+      });
+    }
+  },
+  60000,
+);
+
+test.skipIf(!iscc)(
+  "Inno keeps old EXEs and shortcut bytes when previous install metadata is missing or belongs elsewhere",
+  async () => {
+    const root = await realpath(
+      await mkdtemp(join(tmpdir(), "bunaway-inno-identity-")),
+    );
+    const silent = [
+      "/VERYSILENT",
+      "/SUPPRESSMSGBOXES",
+      "/NORESTART",
+    ];
+    try {
+      for (const mode of [
+        "missing",
+        "different",
+      ]) {
+        const fixture = join(root, mode);
+        const install = join(fixture, "install");
+        const menu = join(fixture, "menu");
+        const identifier = `app.test-${crypto.randomUUID()}`;
+        let previousLink = Buffer.alloc(0);
+        for (const version of [
+          1,
+          2,
+        ]) {
+          const staging = join(fixture, String(version));
+          const executableName = version === 1 ? "Old.exe" : "New.exe";
+          await Bun.write(join(staging, "app", executableName), "fixture");
+          await mkdir(join(staging, "installer"));
+          let script = renderInnoScript({
+            name: "App",
+            identifier,
+            executableName,
+            version: `${version}.0.0`,
+            publisher: "Test",
+            scope: "perUser",
+            payloadDir: join(staging, "app"),
+            outputDir: join(staging, "installer"),
+            outputBaseName: "setup",
+            desktopShortcut: false,
+            startMenuShortcut: version === 1,
+            webView2: "check",
+            appDataDir: join(fixture, "data"),
+            preserveUserData: true,
+            assetPaths: [],
+          }).replaceAll("{group}", menu);
+          if (version === 1) {
+            script =
+              mode === "missing"
+                ? script.replace(
+                    "SetPreviousData(PreviousDataKey, 'ExecutableName', 'Old.exe');",
+                    "",
+                  )
+                : script.replace(
+                    "SetPreviousData(PreviousDataKey, 'InstallDir', ExpandConstant('{app}'));",
+                    "SetPreviousData(PreviousDataKey, 'InstallDir', ExpandConstant('{app}') + '-other');",
+                  );
+          }
+          const setup = await compileInno(
+            {
+              input: input({}),
+              staging,
+              report() {},
+              addArtifact() {},
+            },
+            script,
+            staging,
+            "setup",
+          );
+          await must(setup, [
+            "/SP-",
+            ...silent,
+            `/DIR=${install}`,
+          ]);
+          const link = await readFile(join(menu, "App.lnk"));
+          if (version === 1) {
+            previousLink = link;
+          } else {
+            expect(link).toEqual(previousLink);
+          }
+          expect(await Bun.file(join(install, "Old.exe")).exists()).toBe(true);
+        }
+        const uninstall = join(install, "unins000.exe");
+        await must(uninstall, silent);
+        for (
+          let retry = 0;
+          retry < 100 && (await Bun.file(uninstall).exists());
+          retry++
+        ) {
+          await Bun.sleep(50);
+        }
+        expect(await Bun.file(uninstall).exists()).toBe(false);
+      }
+    } finally {
       await rm(root, {
         recursive: true,
         force: true,
@@ -996,9 +1174,11 @@ test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data pol
   );
   expect(perUser).toContain("RemovePreviousExecutable;");
   expect(perUser).toContain("Arguments := Link.Arguments;");
-  expect(perUser).toContain(
-    "if (Arguments = '') and (IsManagedExecutableTarget(Target) or",
-  );
+  expect(perUser).toContain("Link.Arguments := Arguments;");
+  expect(perUser).not.toContain("PruneShortcuts");
+  expect(perUser).toContain("Check: ShouldCreateShortcut(");
+  expect(perUser).toContain("AfterInstall: RememberShortcut(");
+  expect(perUser).toContain("CurUninstallStepChanged");
   expect(perUser).toContain("Link.Save(Filename);");
   expect(perUser).toContain(
     "procedure RegisterExtraCloseApplicationsResources;",
