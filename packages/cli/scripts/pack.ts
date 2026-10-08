@@ -17,7 +17,8 @@ import {
   release,
   snapshotHashes,
 } from "../src/distribution.ts";
-import { files, frameworkRoot, run, writeJson } from "../src/files.ts";
+import { files, frameworkRoot, writeJson } from "../src/files.ts";
+import { run } from "../src/processes.ts";
 
 async function writeDeclarations(stage: string, info: Release): Promise<void> {
   const declarations = resolve(stage, "packages/cli/dist/types");

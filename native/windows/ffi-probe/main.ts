@@ -14,6 +14,24 @@ import { parentPort } from "node:worker_threads";
 import pin from "../../../runtime/build-manifests/windows-x64.json";
 import type { ProbeWorkerData, ToUI } from "./worker.ts";
 
+const WM_SIZE = 0x5;
+const WM_CLOSE = 0x10;
+const WM_QUIT = 0x12;
+const WM_CANCELMODE = 0x1f;
+const WM_ENTERSIZEMOVE = 0x231;
+const WM_EXITSIZEMOVE = 0x232;
+const WM_TIMER = 0x113;
+const WM_SYSCOMMAND = 0x112;
+const WS_OVERLAPPEDWINDOW = 0xcf0000;
+const SW_SHOW = 5;
+const SWP_NOMOVE = 0x2;
+const SWP_NOZORDER = 0x4;
+const SYNCHRONIZE = 0x100000;
+const SC_SIZE = 0xf000n;
+const SC_MOVE = 0xf010n;
+const WMSZ_BOTTOMRIGHT = 0x8n;
+const MODAL_TIMER_ID = 123n;
+
 export async function runProbe(uiWorker: ProbeWorkerData | null = null) {
   const viewId = uiWorker?.viewId ?? "single";
   const input = uiWorker?.value ?? 21;
@@ -531,29 +549,29 @@ export async function runProbe(uiWorker: ProbeWorkerData | null = null) {
           thread,
           "WndProc foreign thread",
         );
-        if (message === 0x231) {
-          modalEntered = true; // WM_ENTERSIZEMOVE
+        if (message === WM_ENTERSIZEMOVE) {
+          modalEntered = true;
           if (counters) {
             Atomics.store(counters, 0, 1);
           }
         }
-        if (message === 0x232) {
+        if (message === WM_EXITSIZEMOVE) {
           if (counters) {
             Atomics.store(counters, 0, 0);
           }
-          modalExited = true; // WM_EXITSIZEMOVE
+          modalExited = true;
         }
-        if (message === 0x113 && wparam === 123n) {
+        if (message === WM_TIMER && wparam === MODAL_TIMER_ID) {
           modalTimer = true;
-          user.symbols.KillTimer(window, 123n);
-          user.symbols.PostMessageW(window, 0x1f, 0n, 0n); // WM_CANCELMODE
+          user.symbols.KillTimer(window, MODAL_TIMER_ID);
+          user.symbols.PostMessageW(window, WM_CANCELMODE, 0n, 0n);
           return 0n;
         }
-        if (message === 0x10) {
+        if (message === WM_CLOSE) {
           closing = true;
           return 0n;
         } // defer teardown past WndProc
-        if (message === 5) {
+        if (message === WM_SIZE) {
           resize();
         }
         return user.symbols.DefWindowProcW(window, message, wparam, lparam);
@@ -815,7 +833,7 @@ export async function runProbe(uiWorker: ProbeWorkerData | null = null) {
         "get_BrowserProcessId",
       );
       browserPid = pid[0] ?? 0;
-      browserProcess = kernel.symbols.OpenProcess(0x100000, 0, browserPid);
+      browserProcess = kernel.symbols.OpenProcess(SYNCHRONIZE, 0, browserPid);
       assert(browserProcess, `OpenProcess: ${kernel.symbols.GetLastError()}`);
       log("browser-process", {
         pid: browserPid,
@@ -952,7 +970,7 @@ export async function runProbe(uiWorker: ProbeWorkerData | null = null) {
       count < 64 && user.symbols.PeekMessageW(ptr(message), 0n, 0, 0, 1);
       count++
     ) {
-      if (message.readUInt32LE(8) === 0x12) {
+      if (message.readUInt32LE(8) === WM_QUIT) {
         closing = true;
         break;
       }
@@ -1002,7 +1020,7 @@ export async function runProbe(uiWorker: ProbeWorkerData | null = null) {
       0,
       ptr(className),
       ptr(title),
-      0xcf0000,
+      WS_OVERLAPPEDWINDOW,
       100,
       100,
       640,
@@ -1013,7 +1031,7 @@ export async function runProbe(uiWorker: ProbeWorkerData | null = null) {
       null,
     );
     assert(hwnd, `CreateWindowExW: ${kernel.symbols.GetLastError()}`);
-    user.symbols.ShowWindow(hwnd, 5);
+    user.symbols.ShowWindow(hwnd, SW_SHOW);
     log("window-created", {
       hwnd: hwnd.toString(),
     });
@@ -1039,7 +1057,7 @@ export async function runProbe(uiWorker: ProbeWorkerData | null = null) {
       "CreateCoreWebView2EnvironmentWithOptions",
     );
     if (earlyClose) {
-      user.symbols.SendMessageW(hwnd, 0x10, 0n, 0n);
+      user.symbols.SendMessageW(hwnd, WM_CLOSE, 0n, 0n);
     }
     while (!closing && Date.now() < deadline) {
       // ponytail: bounded polling adds up to 5 ms latency; a native wake integration
@@ -1051,7 +1069,17 @@ export async function runProbe(uiWorker: ProbeWorkerData | null = null) {
       if (roundtrip && ticks >= 20) {
         Bun.gc(true); // Native callbacks/vtables must survive collection while registered.
         resized = false;
-        assert(user.symbols.SetWindowPos(hwnd, 0n, 0, 0, 800, 600, 6));
+        assert(
+          user.symbols.SetWindowPos(
+            hwnd,
+            0n,
+            0,
+            0,
+            800,
+            600,
+            SWP_NOMOVE | SWP_NOZORDER,
+          ),
+        );
         assert(resized);
         if (!uiWorker) {
           lateWork = Bun.sleep(20).then(() => sendResult(99));
@@ -1070,13 +1098,13 @@ export async function runProbe(uiWorker: ProbeWorkerData | null = null) {
         ) {
           const before = ticks;
           const started = performance.now();
-          assert(user.symbols.SetTimer(hwnd, 123n, 300, null));
+          assert(user.symbols.SetTimer(hwnd, MODAL_TIMER_ID, 300, null));
           const modalKind = uiWorker?.resize ? "size" : "move";
-          // SC_SIZE | WMSZ_BOTTOMRIGHT, or SC_MOVE: real native modal loops.
+          // Enter the native modal loop to measure UI-thread scheduling.
           user.symbols.SendMessageW(
             hwnd,
-            0x112,
-            uiWorker?.resize ? 0xf008n : 0xf010n,
+            WM_SYSCOMMAND,
+            uiWorker?.resize ? SC_SIZE | WMSZ_BOTTOMRIGHT : SC_MOVE,
             0n,
           );
           const elapsedMs = performance.now() - started;
@@ -1118,7 +1146,7 @@ export async function runProbe(uiWorker: ProbeWorkerData | null = null) {
             );
           }
         }
-        assert(user.symbols.PostMessageW(hwnd, 0x10, 0n, 0n));
+        assert(user.symbols.PostMessageW(hwnd, WM_CLOSE, 0n, 0n));
       }
       await Bun.sleep(5);
     }

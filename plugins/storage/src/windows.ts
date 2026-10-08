@@ -9,6 +9,33 @@ import {
 } from "@bunaway/plugin";
 import type { StorageLocation, StorageWrite } from "./index.ts";
 
+const MAX_STORAGE_PATH_SEGMENT_BYTES = 255;
+const MAX_STORAGE_FILE_BYTES = 4 * 1024 * 1024;
+const MAX_IO_CHUNK_BYTES = 1 << 20;
+const BY_HANDLE_FILE_INFORMATION_BYTES = 52;
+const FINAL_PATH_BUFFER_CHARS = 32768;
+const WCHAR_BYTES = 2;
+
+const ERROR_FILE_NOT_FOUND = 2;
+const ERROR_PATH_NOT_FOUND = 3;
+const ERROR_ALREADY_EXISTS = 183;
+const FILE_ATTRIBUTE_DIRECTORY = 0x10;
+const FILE_ATTRIBUTE_REPARSE_POINT = 0x400;
+const MAX_FILE_LINK_COUNT = 1;
+const GENERIC_READ = 0x80000000;
+const GENERIC_WRITE = 0x40000000;
+const FILE_READ_ATTRIBUTES = 0x80;
+const FILE_SHARE_READ = 0x1;
+const FILE_SHARE_WRITE = 0x2;
+const FILE_SHARE_DELETE = 0x4;
+const FILE_SHARE_ALL = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
+const OPEN_EXISTING = 3;
+const OPEN_ALWAYS = 4;
+const FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000;
+const FILE_FLAG_BACKUP_SEMANTICS = 0x02000000;
+const DIRECTORY_OPEN_FLAGS =
+  FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS;
+
 export function createOperations(
   environment: NativeEnvironment,
 ): NativeAdapter {
@@ -28,7 +55,9 @@ export function createOperations(
   };
 }
 
-const wide = (text: string) => Buffer.from(`${text}\0`, "utf16le");
+function wide(text: string): Buffer {
+  return Buffer.from(`${text}\0`, "utf16le");
+}
 const api = dlopen("kernel32.dll", {
   CreateFileW: {
     args: [
@@ -109,28 +138,34 @@ const api = dlopen("kernel32.dll", {
     returns: "i32",
   },
 });
-const deny = (message: string): never => {
+function deny(message: string): never {
   throw new BunawayError({
     code: "PERMISSION_DENIED",
     message,
   });
-};
-function check(value: number | bigint, message: string) {
+}
+function check(value: number | bigint, message: string): void {
   if (!value) {
     throw new Error(message);
   }
 }
 export class ScopedStorage {
-  private readonly roots: Record<"appData" | "temp", string>;
+  private readonly roots: Record<StorageLocation["scope"], string>;
   constructor(dataRoot: string) {
     const root = (name: string) => {
       const path = resolve(dataRoot, name);
       mkdirSync(path, {
         recursive: true,
       });
-      const handle = this.open(path, 0, 7, 3, 0x02200000);
+      const handle = this.open(
+        path,
+        0,
+        FILE_SHARE_ALL,
+        OPEN_EXISTING,
+        DIRECTORY_OPEN_FLAGS,
+      );
       try {
-        if (this.info(handle).readUInt32LE(0) & 0x400) {
+        if (this.info(handle).readUInt32LE(0) & FILE_ATTRIBUTE_REPARSE_POINT) {
           deny("Scope root must not be a link.");
         }
         return this.canonical(handle);
@@ -164,7 +199,7 @@ export class ScopedStorage {
     );
     if (handle === 0n || handle === 0xffffffffffffffffn) {
       const code = api.symbols.GetLastError();
-      if (code === 2 || code === 3) {
+      if (code === ERROR_FILE_NOT_FOUND || code === ERROR_PATH_NOT_FOUND) {
         throw new BunawayError({
           code: "INVALID_ARGUMENT",
           message: "Storage target not found.",
@@ -175,7 +210,7 @@ export class ScopedStorage {
     return handle;
   }
   private info(handle: bigint) {
-    const info = Buffer.alloc(52);
+    const info = Buffer.alloc(BY_HANDLE_FILE_INFORMATION_BYTES);
     check(
       api.symbols.GetFileInformationByHandle(handle, ptr(info)),
       "Storage stat failed",
@@ -183,20 +218,20 @@ export class ScopedStorage {
     return info;
   }
   private canonical(handle: bigint) {
-    const text = Buffer.alloc(65536);
+    const text = Buffer.alloc(FINAL_PATH_BUFFER_CHARS * WCHAR_BYTES);
     const length = api.symbols.GetFinalPathNameByHandleW(
       handle,
       ptr(text),
-      32768,
+      FINAL_PATH_BUFFER_CHARS,
       0,
     );
-    if (!length || length >= 32768) {
+    if (!length || length >= FINAL_PATH_BUFFER_CHARS) {
       throw new Error("Storage path check failed");
     }
-    return text.subarray(0, length * 2).toString("utf16le");
+    return text.subarray(0, length * WCHAR_BYTES).toString("utf16le");
   }
   execute(
-    scope: "appData" | "temp",
+    scope: StorageLocation["scope"],
     path: string,
     text?: string,
   ): string | null {
@@ -208,7 +243,7 @@ export class ScopedStorage {
           !part ||
           part === "." ||
           part === ".." ||
-          Buffer.byteLength(part) > 255 ||
+          Buffer.byteLength(part) > MAX_STORAGE_PATH_SEGMENT_BYTES ||
           /[<>:"|?*\\]/.test(part) ||
           [
             ...part,
@@ -236,15 +271,24 @@ export class ScopedStorage {
           if (
             text !== undefined &&
             !api.symbols.CreateDirectoryW(ptr(wide(dir)), null) &&
-            api.symbols.GetLastError() !== 183
+            api.symbols.GetLastError() !== ERROR_ALREADY_EXISTS
           ) {
             throw new Error("Storage directory creation failed");
           }
         }
-        const parent = this.open(dir, 0x80, 1, 3, 0x02200000);
+        const parent = this.open(
+          dir,
+          FILE_READ_ATTRIBUTES,
+          FILE_SHARE_READ,
+          OPEN_EXISTING,
+          DIRECTORY_OPEN_FLAGS,
+        );
         parents.push(parent);
         const attributes = this.info(parent).readUInt32LE(0);
-        if (attributes & 0x400 || !(attributes & 0x10)) {
+        if (
+          attributes & FILE_ATTRIBUTE_REPARSE_POINT ||
+          !(attributes & FILE_ATTRIBUTE_DIRECTORY)
+        ) {
           deny("Storage path is not a plain directory.");
         }
         // Bind policy spelling to each pinned directory before creating the next child.
@@ -255,13 +299,17 @@ export class ScopedStorage {
       const target = `${root}\\${segments.join("\\")}`;
       file = this.open(
         target,
-        text === undefined ? 0x80000000 : 0x40000000,
-        7,
-        text === undefined ? 3 : 4,
-        0x00200000,
+        text === undefined ? GENERIC_READ : GENERIC_WRITE,
+        FILE_SHARE_ALL,
+        text === undefined ? OPEN_EXISTING : OPEN_ALWAYS,
+        FILE_FLAG_OPEN_REPARSE_POINT,
       );
       const info = this.info(file);
-      if (info.readUInt32LE(0) & 0x410 || info.readUInt32LE(40) > 1) {
+      if (
+        info.readUInt32LE(0) &
+          (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT) ||
+        info.readUInt32LE(40) > MAX_FILE_LINK_COUNT
+      ) {
         deny("Storage target is not a plain in-scope file.");
       }
       const actual = this.canonical(file);
@@ -277,7 +325,7 @@ export class ScopedStorage {
             api.symbols.WriteFile(
               file,
               ptr(bytes.subarray(offset)),
-              Math.min(bytes.length - offset, 1 << 20),
+              Math.min(bytes.length - offset, MAX_IO_CHUNK_BYTES),
               ptr(transferred),
               null,
             ),
@@ -296,7 +344,7 @@ export class ScopedStorage {
       if (
         size[0] === undefined ||
         size[0] < 0n ||
-        size[0] > 4n * 1024n * 1024n
+        size[0] > BigInt(MAX_STORAGE_FILE_BYTES)
       ) {
         throw new Error("Storage file too large");
       }
@@ -316,7 +364,11 @@ export function disposeStorageBindings() {
 }
 
 export function readStorageText(file: bigint, size: number): string {
-  if (!Number.isSafeInteger(size) || size < 0 || size > 4 * 1024 * 1024) {
+  if (
+    !Number.isSafeInteger(size) ||
+    size < 0 ||
+    size > MAX_STORAGE_FILE_BYTES
+  ) {
     throw new Error("Storage file too large");
   }
   const bytes = Buffer.alloc(size);

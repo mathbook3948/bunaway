@@ -6,6 +6,9 @@ import {
   type WindowState,
 } from "../../plugins/windows/src/coordinator.ts";
 
+const WINDOW_READY_TIMEOUT_MS = 30_000;
+const CLEANUP_TIMEOUT_ADVANCE_MS = 40_000;
+
 function fixture() {
   const specs: WindowSpec[] = [
     "main",
@@ -20,15 +23,15 @@ function fixture() {
     },
   }));
   const views = new Map<string, WindowState>();
-  function read(id: string) {
+  function requireView(id: string): WindowState {
     const view = views.get(id);
     assert(view);
     return view;
   }
-  let allowClose = true,
-    stopping = false,
-    cancelled = false,
-    time = 0;
+  let allowClose = true;
+  let stopping = false;
+  let cancelled = false;
+  let nowMs = 0;
   let tick = async () => {};
   const created: string[] = [];
   const operations = new WindowOperations(specs, {
@@ -40,12 +43,12 @@ function fixture() {
         cleaned: false,
         ready: true,
         failure: undefined,
-        deadline: time + 30000,
+        deadline: nowMs + WINDOW_READY_TIMEOUT_MS,
       });
     },
     close: (id) => {
       if (allowClose) {
-        read(id).closed = true;
+        requireView(id).closed = true;
       }
       return allowClose;
     },
@@ -54,13 +57,13 @@ function fixture() {
         return null;
       }
       if (allowClose) {
-        read(id).closed = true;
+        requireView(id).closed = true;
       }
       return allowClose;
     },
     stopping: () => stopping,
     cancelled: () => cancelled,
-    now: () => time,
+    now: () => nowMs,
     tick: () => tick(),
   });
   return {
@@ -79,8 +82,8 @@ function fixture() {
     setTick: (value: () => Promise<void>) => {
       tick = value;
     },
-    advance: () => {
-      time += 40000;
+    advancePastCleanupDeadline: () => {
+      nowMs += CLEANUP_TIMEOUT_ADVANCE_MS;
     },
   };
 }
@@ -326,7 +329,7 @@ test("shutdown, cancellation before creation and cleanup timeout do not create r
       if (shutdown) {
         f.stop();
       } else {
-        f.advance();
+        f.advancePastCleanupDeadline();
       }
     });
     await expect(

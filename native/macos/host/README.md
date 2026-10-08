@@ -52,8 +52,9 @@ implemented or tested. See the [support table](../../../docs/platform-support/RE
 ## Layout
 
 ```
-main.mm   app host (run, --validate, --watch, --guard)
-run.sh    build + package + test pipeline (see below)
+main.mm     app host (run, --validate, --watch, --guard)
+sha256.hpp  streaming package and runtime digest implementation
+run.sh      build + package + test pipeline (see below)
 ```
 
 ## Build and test
@@ -86,7 +87,8 @@ are uploaded by the native workflow. See the [execution record](../../../docs/ar
 
 The native regression executable calls the production scheme handler with
 default/non-default ports and userinfo, rejects peerless FIFO reads/writes,
-and checks destination filters. A separate WKWebView page loads scripts,
+checks SHA-256 empty, short and multi-block vectors, and verifies destination
+filters. A separate WKWebView page loads scripts,
 images and fetches against two local test servers on different ports: allowed
 requests must reach one server and blocked requests must never reach the other.
 Native tests also check unsupported Host operations, cancel-first cleanup and

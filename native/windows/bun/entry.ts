@@ -222,14 +222,21 @@ export async function runWindowsApp(
     channel.close();
     exitResolve(code);
   });
+  function takeCall(id: string) {
+    const call = calls.get(id);
+    if (!call) {
+      return undefined;
+    }
+    calls.delete(id);
+    call.signal.removeEventListener("abort", call.abort);
+    return call;
+  }
   function cancelCalls(context?: HostContext) {
     for (const [id, call] of calls) {
       if (context !== undefined && call.context !== context) {
         continue;
       }
-      calls.delete(id);
-      call.signal.removeEventListener("abort", call.abort);
-      call.reject(
+      takeCall(id)?.reject(
         new BunawayError({
           code: "CANCELLED",
           message: "Host context closed.",
@@ -345,13 +352,7 @@ export async function runWindowsApp(
     }
   }
   function finishCall(id: string, response: HostResponse) {
-    const call = calls.get(id);
-    if (!call) {
-      return;
-    }
-    calls.delete(id);
-    call.signal.removeEventListener("abort", call.abort);
-    call.resolve(response);
+    takeCall(id)?.resolve(response);
   }
   const onSignal = () => {
     stopping = true;
@@ -496,10 +497,10 @@ export async function runWindowsApp(
         }
         return new Promise<HostResponse>((resolveCall, reject) => {
           const abort = () => {
-            if (!calls.delete(requestId)) {
+            const call = takeCall(requestId);
+            if (!call) {
               return;
             }
-            signal.removeEventListener("abort", abort);
             channel.notify({
               kind: "cancel",
               context,
@@ -510,7 +511,7 @@ export async function runWindowsApp(
               context,
               requestId,
             });
-            reject(
+            call.reject(
               new BunawayError({
                 code: "CANCELLED",
                 message: "Host context closed.",

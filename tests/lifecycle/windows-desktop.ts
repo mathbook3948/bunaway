@@ -10,7 +10,7 @@ import {
   listenForInstances,
 } from "../../native/windows/bun/instance.ts";
 import { containAppProcess } from "../../native/windows/bun/job.ts";
-import { closeWindowsApp } from "../../packages/cli/src/launch.ts";
+import { closeWindowsApp } from "../../packages/cli/src/windows-dev-launch.ts";
 import type { AppDefinition } from "../../packages/core/src/index.ts";
 import {
   type HostContext,

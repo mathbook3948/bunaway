@@ -14,7 +14,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { webAsset } from "../../native/windows/bun/web-assets.ts";
 import { bundleWindowsHost } from "../../packages/cli/src/assets.ts";
-import { compiledAssetArguments } from "../../packages/cli/src/launch.ts";
+import { compiledAssetArguments } from "../../packages/cli/src/windows-compile.ts";
 
 test("compiled host preserves file imports from the app and both workers after staging is removed", async () => {
   const root = await realpath(

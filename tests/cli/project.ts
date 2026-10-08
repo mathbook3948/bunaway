@@ -1,3 +1,4 @@
+import { rmSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -13,11 +14,23 @@ window.close();
 `;
 
 let artifacts: Promise<string> | undefined;
+let artifactDirectory: string | undefined;
+
+process.once("exit", () => {
+  if (artifactDirectory) {
+    rmSync(artifactDirectory, {
+      recursive: true,
+      force: true,
+    });
+  }
+});
+
 export function packageDirectory(): Promise<string> {
   artifacts ??= (async () => {
     const directory = await mkdtemp(
       resolve(tmpdir(), "bunaway-test-packages-"),
     );
+    artifactDirectory = directory;
     await packFramework(directory, {
       localDependencies: true,
     });

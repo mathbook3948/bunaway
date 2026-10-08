@@ -23,26 +23,16 @@ interface InstallerOptions {
   defaultWebView2: "check" | "bootstrap";
 }
 
-function opt<T>(value: unknown, fallback: T): T {
-  return value === undefined ? fallback : (value as T);
-}
-
 export function installerStages(
   input: AdapterInput,
   options: InstallerOptions,
 ): AdapterStage[] {
   const config = input.channelConfig;
-  const scope = opt<"perUser" | "perMachine">(config.scope, "perUser");
-  let webView2 = opt<"check" | "bootstrap">(
-    config.webView2,
-    options.defaultWebView2,
-  );
-  const desktopShortcut = opt<boolean>(config.desktopShortcut, false);
-  const startMenuShortcut = opt<boolean>(config.startMenuShortcut, true);
-  const uninstall = (config.uninstall ?? {}) as {
-    preserveUserData?: boolean;
-  };
-  const preserveUserData = uninstall.preserveUserData ?? true;
+  const scope = config.scope ?? "perUser";
+  let webView2 = config.webView2 ?? options.defaultWebView2;
+  const desktopShortcut = config.desktopShortcut ?? false;
+  const startMenuShortcut = config.startMenuShortcut ?? true;
+  const preserveUserData = config.uninstall?.preserveUserData ?? true;
 
   const metadata = input.metadata;
   const target = metadata.targets.find(

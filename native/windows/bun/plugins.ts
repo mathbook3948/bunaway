@@ -1,29 +1,48 @@
 import { isDeepStrictEqual } from "node:util";
 import {
   BunawayError,
+  type JsonValue,
   type NativeRegistration,
   NativeRegistry,
   type PermissionMatcher,
+  type Policy,
   validateValue,
 } from "../../../packages/protocol/src/index.ts";
 import {
   type NativeAdapter,
   type NativeEnvironment,
+  type PackagedPlugin,
   packagedPlugins,
 } from "./plugin-table.ts";
 
 const contractJson = (value: unknown) =>
   JSON.parse(JSON.stringify(validateValue({}, value)));
 
-export function pluginRegistry(plugins: readonly NativeRegistration[]) {
+type PluginOperations = {
+  execute(operation: string, input: unknown, source: string): JsonValue;
+  executeUI(
+    operation: string,
+    input: unknown,
+    source: string,
+    context: {
+      requestId: string;
+      permissions: Policy["backend"];
+    },
+  ): Promise<JsonValue>;
+  busy(): boolean;
+  dispose(): Promise<void>;
+};
+
+export function pluginRegistry(
+  plugins: readonly NativeRegistration[],
+  catalog: readonly PackagedPlugin[] = packagedPlugins,
+): NativeRegistry {
   const registry = new NativeRegistry(plugins);
   for (const plugin of plugins) {
     if (!plugin.native) {
       continue;
     }
-    const packaged = packagedPlugins.find(
-      (entry) => entry.name === plugin.name,
-    );
+    const packaged = catalog.find((entry) => entry.name === plugin.name);
     if (
       !packaged ||
       packaged.version !== plugin.version ||
@@ -43,9 +62,10 @@ export function pluginRegistry(plugins: readonly NativeRegistration[]) {
 
 export async function permissionMatcher(
   plugins: readonly NativeRegistration[],
+  catalog: readonly PackagedPlugin[] = packagedPlugins,
 ): Promise<PermissionMatcher> {
   const matchers = new Map<string, PermissionMatcher>();
-  for (const plugin of packagedPlugins) {
+  for (const plugin of catalog) {
     if (
       plugin.authorization &&
       plugin.native.permissions.some((permission) => permission.scope) &&
@@ -82,8 +102,9 @@ export async function operations(
   dataRoot: string,
   execution: "io" | "ui",
   windows?: NativeEnvironment["windows"],
-) {
-  const registry = pluginRegistry(plugins);
+  catalog: readonly PackagedPlugin[] = packagedPlugins,
+): Promise<PluginOperations> {
+  const registry = pluginRegistry(plugins, catalog);
   const adapters = new Map<string, NativeAdapter>();
   const dispose = () =>
     disposeAll(
@@ -105,7 +126,7 @@ export async function operations(
         ...registry.operations.values(),
       ].map((operation) => ({
         name: operation.name,
-        support: packagedPlugins.find((plugin) =>
+        support: catalog.find((plugin) =>
           operation.name.startsWith(`${plugin.name}.`),
         )?.execution
           ? ("supported" as const)
@@ -115,7 +136,7 @@ export async function operations(
     ],
   };
   try {
-    for (const plugin of packagedPlugins) {
+    for (const plugin of catalog) {
       if (
         plugin.execution === execution &&
         plugin.operations &&
@@ -167,7 +188,7 @@ export async function operations(
       source: string,
       context: {
         requestId: string;
-        permissions: import("../../../packages/protocol/src/index.ts").Policy["backend"];
+        permissions: Policy["backend"];
       },
     ) {
       const call = registry.validateCall({
@@ -186,10 +207,14 @@ export async function operations(
         : adapter.execute(operation, call.payload, source);
       return registry.validateOutput(operation, output);
     },
-    busy: () =>
-      [
-        ...adapters.values(),
-      ].some((adapter) => adapter.busy?.() ?? false),
+    busy() {
+      for (const adapter of adapters.values()) {
+        if (adapter.busy?.()) {
+          return true;
+        }
+      }
+      return false;
+    },
     dispose,
   };
 }

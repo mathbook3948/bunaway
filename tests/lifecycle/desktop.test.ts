@@ -287,6 +287,29 @@ test("single-instance delivery buffers startup requests and acknowledges preserv
     ]);
     await new Promise<void>((resolve, reject) => {
       const client = createConnection(address);
+      const payload = Buffer.from(`${JSON.stringify(launch)}\n`);
+      let reply = "";
+      client.on("connect", () => {
+        client.write(payload.subarray(0, 5));
+        setTimeout(() => client.write(payload.subarray(5, 11)), 5);
+        setTimeout(() => client.write(payload.subarray(11)), 10);
+      });
+      client.on("error", reject);
+      client.on("data", (data) => {
+        reply += data.toString();
+      });
+      client.on("end", () => {
+        expect(reply).toBe("accepted\n");
+        resolve();
+      });
+    });
+    expect(received).toEqual([
+      args.argv,
+      launch.argv,
+      launch.argv,
+    ]);
+    await new Promise<void>((resolve, reject) => {
+      const client = createConnection(address);
       let reply = "";
       client.on("connect", () =>
         client.write('{"argv":[],"cwd":"relative","quit":true}\n'),
@@ -300,7 +323,7 @@ test("single-instance delivery buffers startup requests and acknowledges preserv
         resolve();
       });
     });
-    expect(received).toHaveLength(2);
+    expect(received).toHaveLength(3);
   } finally {
     await inbox.close();
   }

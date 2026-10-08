@@ -15,7 +15,7 @@ import { buildProject } from "../../packages/cli/src/build.ts";
 import {
   verifyWindowsLaunch,
   windowsLaunchEnvironment,
-} from "../../packages/cli/src/launch.ts";
+} from "../../packages/cli/src/windows-dev-launch.ts";
 import {
   findIscc,
   must,

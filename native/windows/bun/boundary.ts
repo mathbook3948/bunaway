@@ -3,6 +3,7 @@ import {
   BunawayError,
   type ClientMessage,
   type HostContext,
+  MAX_MESSAGE_BYTES,
   type Policy,
   PROTOCOL_VERSION,
   parseMessage,
@@ -67,7 +68,7 @@ export class ViewBoundary {
     let id = "";
     try {
       // Only a valid correlation id is recovered; rejected payloads never enter logs.
-      if (Buffer.byteLength(raw) <= 1024 * 1024) {
+      if (Buffer.byteLength(raw) <= MAX_MESSAGE_BYTES) {
         const value = JSON.parse(raw);
         if (value && typeof value.id === "string") {
           id = value.id;

@@ -141,6 +141,8 @@ test("host reports remain pending until complete JSON is available", async () =>
       await writeFile(path, text);
       expect(await readReport(path)).toBeNull();
     }
+    await writeFile(path, "null");
+    await expect(readReport(path)).rejects.toThrow("Invalid host report");
     const report = {
       page: "memo",
       results: [

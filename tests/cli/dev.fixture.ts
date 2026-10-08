@@ -4,7 +4,7 @@ import { expect, mock } from "bun:test";
 import { rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import * as build from "../../packages/cli/src/build.ts";
-import * as launch from "../../packages/cli/src/launch.ts";
+import * as windowsDevLaunch from "../../packages/cli/src/windows-dev-launch.ts";
 
 const root = process.argv[2];
 if (!root) {
@@ -44,15 +44,18 @@ mock.module(import.meta.resolve("../../packages/cli/src/build.ts"), () => ({
     ],
   }),
 }));
-mock.module(import.meta.resolve("../../packages/cli/src/launch.ts"), () => ({
-  ...launch,
-  verifyWindowsLaunch: async () => {},
-  windowsLaunchEnvironment: () => process.env,
-  closeWindowsApp: async (pid: number) => {
-    process.kill(pid, "SIGTERM");
-    return 1;
-  },
-}));
+mock.module(
+  import.meta.resolve("../../packages/cli/src/windows-dev-launch.ts"),
+  () => ({
+    ...windowsDevLaunch,
+    verifyWindowsLaunch: async () => {},
+    windowsLaunchEnvironment: () => process.env,
+    closeWindowsApp: async (pid: number) => {
+      process.kill(pid, "SIGTERM");
+      return 1;
+    },
+  }),
+);
 
 const { devProject } = await import("../../packages/cli/src/dev.ts");
 const configPath = resolve(root, "src-bunaway/bunaway.json");

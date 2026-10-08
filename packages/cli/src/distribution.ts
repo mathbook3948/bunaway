@@ -9,10 +9,10 @@ import {
   isOptionalDependency,
   json,
   type PackageDependencies,
-  runWorker,
   verifyHash,
 } from "./files.ts";
 import { type InstalledPlugin, installedPlugins } from "./plugins.ts";
+import { runWorker } from "./processes.ts";
 import { templateNames } from "./templates.ts";
 
 export const frameworkPaths = [
@@ -50,9 +50,11 @@ export const frameworkPaths = [
   "native/windows/bun/boundary.ts",
   "native/windows/bun/ui.ts",
   "native/windows/bun/webview.ts",
+  "native/windows/bun/view-profile.ts",
   "native/windows/bun/web-assets.ts",
   "native/windows/bun/com.ts",
   "native/windows/bun/win32.ts",
+  "native/windows/bun/win32-bindings.ts",
   "native/windows/bun/plugins.ts",
   "native/windows/bun/plugin-table.ts",
   "native/windows/bun/host-operations.ts",
@@ -61,6 +63,7 @@ export const frameworkPaths = [
   "native/windows/bun/prepare.ps1",
   "native/windows/bun/README.md",
   "native/macos/host/main.mm",
+  "native/macos/host/sha256.hpp",
   "native/macos/host/run.sh",
   "runtime/build-manifests",
 ] as const;
@@ -391,8 +394,12 @@ function requiredFrameworkFiles(): string[] {
     "packages/cli/src/dev-server-worker.ts",
     "packages/cli/src/frontend-build.ts",
     "packages/cli/src/managed-command.ts",
+    "packages/cli/src/processes.ts",
+    "packages/cli/src/windows-compile.ts",
+    "packages/cli/src/windows-dev-launch.ts",
     "packages/runtime-bun/src/development.ts",
     "packages/runtime-bun/src/window-config.ts",
+    "packages/runtime-bun/src/windows-control.ts",
     ...Object.keys(packageNames).flatMap((directory) =>
       [
         "package.json",

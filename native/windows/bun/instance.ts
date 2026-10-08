@@ -61,23 +61,23 @@ export async function listenForInstances(address: string) {
       sockets.delete(socket);
     });
     socket.on("error", () => {});
-    let buffer = Buffer.alloc(0);
+    const chunks: Buffer[] = [];
+    let length = 0;
     let received = false;
     socket.on("data", (chunk: Buffer) => {
       if (received) {
         return;
       }
-      buffer = Buffer.concat([
-        buffer,
-        chunk,
-      ]);
-      if (buffer.length > MAX_BYTES + 1) {
+      length += chunk.length;
+      if (length > MAX_BYTES + 1) {
         return socket.destroy();
       }
-      const end = buffer.indexOf(10);
-      if (end < 0) {
+      chunks.push(chunk);
+      if (!chunk.includes(10)) {
         return;
       }
+      const buffer = Buffer.concat(chunks, length);
+      const end = buffer.indexOf(10);
       received = true;
       try {
         if (end !== buffer.length - 1 || queue.length >= MAX_PENDING) {

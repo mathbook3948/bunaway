@@ -75,8 +75,8 @@ bun run package win-direct --build
 - `src-bunaway/app.ts`: `defineApp({ modules: [memo] })`로 기능을 조립하는 공통 앱 정의.
 - `tsconfig.json`, `src-bunaway/tsconfig.json`: 화면은 browser 조건, 백엔드는 bun 조건으로 검사한다. `bun run typecheck`가 두 검사를 실행한다.
 - `src-bunaway/memo/contracts.ts`: 메모 명령 입력, 출력과 이벤트의 JSON Schema 계약.
-- `src-bunaway/memo/module.ts`: `memo.save`, `memo.read`, `memo.saved`를 공개하고 서비스와 연결.
-- `src-bunaway/memo/service.ts`: `storage`를 import해 메모 파일을 읽고 쓰는 서비스. 명령의 Host 권한은 자동으로 연결된다.
+- `src-bunaway/memo/module.ts`: `memo.save`, `memo.read`, `memo.saved`를 공개하고 메모 함수를 연결.
+- `src-bunaway/memo/service.ts`: 메모 파일을 읽고 쓰는 함수. 명령의 Host 권한은 자동으로 연결된다.
 - `src-bunaway/bunaway.json`: 빌드 진입점과 앱 식별자, 제목, 단일 창 설정.
 - `src-bunaway/policy.json`: `main` 뷰의 메모 명령, 이벤트와 `appData/notes/` 읽기, 쓰기 권한.
 

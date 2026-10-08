@@ -17,7 +17,7 @@ import {
   verifyWindowsLaunch,
   windowsInspectorArgument,
   windowsLaunchEnvironment,
-} from "./launch.ts";
+} from "./windows-dev-launch.ts";
 
 export function parseDevArguments(args: string[]): {
   directory: string;

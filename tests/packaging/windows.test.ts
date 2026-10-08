@@ -30,6 +30,8 @@ import {
   type AdapterInput,
   type AdapterStage,
   adapterFor,
+  type ChannelConfig,
+  type ChannelId,
   parsePackaging,
   type ResolvedPackaging,
   registeredChannels,
@@ -60,7 +62,7 @@ const metadata: ResolvedPackaging = {
 };
 
 const input = (
-  channelConfig: Record<string, unknown>,
+  channelConfig: ChannelConfig,
   signing?: SigningConfig,
 ): AdapterInput => ({
   channel: "win-direct",
@@ -101,8 +103,8 @@ const input = (
 
 const runIds = (stages: AdapterStage[]) => stages.map((stage) => stage.id);
 
-const adapterOrThrow = (channel: string) => {
-  const adapter = adapterFor(channel as never);
+const adapterOrThrow = (channel: ChannelId) => {
+  const adapter = adapterFor(channel);
   if (!adapter) {
     throw new Error(`${channel} adapter missing`);
   }

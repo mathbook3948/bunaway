@@ -1,13 +1,10 @@
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import { Channel, type UIConfig } from "../../native/windows/bun/channel.ts";
-import {
-  type PackagedPlugin,
-  packagedPlugins,
-} from "../../native/windows/bun/plugin-table.ts";
+import type { PackagedPlugin } from "../../native/windows/bun/plugin-table.ts";
 import {
   disposeAll,
   operations,
@@ -23,57 +20,64 @@ import { validateValue } from "../../packages/protocol/src/index.ts";
 import { capabilitiesPlugin } from "../../plugins/capabilities/src/index.ts";
 import { createOperations as createCapabilities } from "../../plugins/capabilities/src/windows.ts";
 
-const table = packagedPlugins as PackagedPlugin[];
-afterEach(() => {
-  table.length = 0;
-});
 const native = {
   operations: [],
   permissions: [],
 } as const;
 
 test("installed contracts compare by content while changes still fail startup", () => {
-  table.push({
-    name: "test",
-    version: "1",
-    native,
-  });
+  const catalog: PackagedPlugin[] = [
+    {
+      name: "test",
+      version: "1",
+      native,
+    },
+  ];
   expect(() =>
-    pluginRegistry([
-      {
-        name: "test",
-        version: "1",
-        native: {
-          permissions: [],
-          operations: [],
+    pluginRegistry(
+      [
+        {
+          name: "test",
+          version: "1",
+          native: {
+            permissions: [],
+            operations: [],
+          },
         },
-      },
-    ]),
+      ],
+      catalog,
+    ),
   ).not.toThrow();
   expect(() =>
-    pluginRegistry([
-      {
-        name: "test",
-        version: "2",
-        native,
-      },
-    ]),
+    pluginRegistry(
+      [
+        {
+          name: "test",
+          version: "2",
+          native,
+        },
+      ],
+      catalog,
+    ),
   ).toThrow();
   expect(() =>
-    pluginRegistry([
-      {
-        name: "test",
-        version: "1",
-        native: {
-          operations: [],
-          permissions: [
-            {
-              name: "test:read",
-            },
-          ],
+    pluginRegistry(
+      [
+        {
+          name: "test",
+          version: "1",
+          native: {
+            operations: [],
+            permissions: [
+              {
+                name: "test:read",
+              },
+            ],
+          },
         },
-      },
-    ]),
+      ],
+      catalog,
+    ),
   ).toThrow();
 });
 
@@ -109,30 +113,41 @@ test("installed contracts accept validated JSON snapshots without hiding schema 
     version: plugin.version,
     native: packaged,
   };
-  table.push(installed);
+  const catalog: PackagedPlugin[] = [
+    installed,
+  ];
   expect(Object.getPrototypeOf(schema)).toBeNull();
   expect(() =>
-    pluginRegistry([
-      plugin,
-    ]),
+    pluginRegistry(
+      [
+        plugin,
+      ],
+      catalog,
+    ),
   ).not.toThrow();
   installed.native = plugin.native;
   expect(() =>
-    pluginRegistry([
-      {
-        ...plugin,
-        native: packaged,
-      },
-    ]),
+    pluginRegistry(
+      [
+        {
+          ...plugin,
+          native: packaged,
+        },
+      ],
+      catalog,
+    ),
   ).not.toThrow();
   packaged.operations[0].input.type = "integer";
   expect(() =>
-    pluginRegistry([
-      {
-        ...plugin,
-        native: packaged,
-      },
-    ]),
+    pluginRegistry(
+      [
+        {
+          ...plugin,
+          native: packaged,
+        },
+      ],
+      catalog,
+    ),
   ).toThrow();
 });
 
@@ -162,28 +177,37 @@ test("installed contracts normalize negative zero without hiding numeric changes
     ...plugin,
     native: JSON.parse(JSON.stringify(plugin.native)),
   };
-  table.push(installed);
+  const catalog: PackagedPlugin[] = [
+    installed,
+  ];
   expect(Object.is(plugin.native.operations[0]?.input.minimum, -0)).toBe(true);
   expect(() =>
-    pluginRegistry([
-      plugin,
-    ]),
+    pluginRegistry(
+      [
+        plugin,
+      ],
+      catalog,
+    ),
   ).not.toThrow();
   installed.native.operations[0].input.minimum = 1;
   expect(() =>
-    pluginRegistry([
-      plugin,
-    ]),
+    pluginRegistry(
+      [
+        plugin,
+      ],
+      catalog,
+    ),
   ).toThrow("does not match");
 });
 test("shutdown and initialization failure clean every prepared adapter in reverse order", async () => {
+  const catalog: PackagedPlugin[] = [];
   const cleaned: string[] = [];
   const failure = new Error("cleanup failed");
   for (const name of [
     "first",
     "second",
   ]) {
-    table.push({
+    catalog.push({
       name,
       version: "1",
       native,
@@ -202,12 +226,18 @@ test("shutdown and initialization failure clean every prepared adapter in revers
     });
   }
   const registrations = () =>
-    table.map(({ name, version, native }) => ({
+    catalog.map(({ name, version, native }) => ({
       name,
       version,
       native,
     }));
-  const adapters = await operations(registrations(), ".", "io");
+  const adapters = await operations(
+    registrations(),
+    ".",
+    "io",
+    undefined,
+    catalog,
+  );
   await expect(adapters.dispose()).rejects.toBeInstanceOf(AggregateError);
   expect(cleaned).toEqual([
     "second",
@@ -215,7 +245,7 @@ test("shutdown and initialization failure clean every prepared adapter in revers
   ]);
   cleaned.length = 0;
   const initialization = new Error("initialization failed");
-  table.push({
+  catalog.push({
     name: "third",
     version: "1",
     native,
@@ -225,7 +255,7 @@ test("shutdown and initialization failure clean every prepared adapter in revers
     },
   });
   try {
-    await operations(registrations(), ".", "io");
+    await operations(registrations(), ".", "io", undefined, catalog);
     throw new Error("Initialization unexpectedly succeeded.");
   } catch (error) {
     expect((error as AggregateError).errors[0]).toBe(initialization);
@@ -251,8 +281,9 @@ test("shutdown and initialization failure clean every prepared adapter in revers
 });
 
 test("scopeless and unregistered plugins do not load authorization modules", async () => {
+  const catalog: PackagedPlugin[] = [];
   let loaded = 0;
-  table.push({
+  catalog.push({
     name: "test",
     version: "1",
     native,
@@ -263,16 +294,19 @@ test("scopeless and unregistered plugins do not load authorization modules", asy
       };
     },
   });
-  const matches = await permissionMatcher([
-    {
-      name: "test",
-      version: "1",
-      native,
-    },
-  ]);
+  const matches = await permissionMatcher(
+    [
+      {
+        name: "test",
+        version: "1",
+        native,
+      },
+    ],
+    catalog,
+  );
   expect(loaded).toBe(0);
   expect(matches("test:read", null, null)).toBe(false);
-  const plugin = table[0];
+  const plugin = catalog[0];
   if (!plugin) {
     throw new Error("Missing test plugin.");
   }
@@ -287,19 +321,23 @@ test("scopeless and unregistered plugins do not load authorization modules", asy
       },
     ],
   };
-  await permissionMatcher([]);
+  await permissionMatcher([], catalog);
   expect(loaded).toBe(0);
-  await permissionMatcher([
-    {
-      name: "test",
-      version: "1",
-      native: plugin.native,
-    },
-  ]);
+  await permissionMatcher(
+    [
+      {
+        name: "test",
+        version: "1",
+        native: plugin.native,
+      },
+    ],
+    catalog,
+  );
   expect(loaded).toBe(1);
 });
 
 test("capability permission metadata comes from each registered operation contract", async () => {
+  const catalog: PackagedPlugin[] = [];
   const storage = {
     name: "storage",
     version: "1",
@@ -352,7 +390,7 @@ test("capability permission metadata comes from each registered operation contra
     storage,
     files,
   ]) {
-    table.push({
+    catalog.push({
       ...plugin,
       execution: "io",
       operations: async () => ({
@@ -370,7 +408,13 @@ test("capability permission metadata comes from each registered operation contra
     storage,
     files,
   ];
-  const adapters = await operations(registrations, ".", "io");
+  const adapters = await operations(
+    registrations,
+    ".",
+    "io",
+    undefined,
+    catalog,
+  );
   try {
     if (!observed) {
       throw new Error("Plugin did not receive capability metadata.");
@@ -397,6 +441,7 @@ test("capability permission metadata comes from each registered operation contra
 });
 
 test("capability queries include every operation at the native registry limit", async () => {
+  const catalog: PackagedPlugin[] = [];
   const plugin = {
     name: "catalog",
     version: "1",
@@ -423,17 +468,20 @@ test("capability queries include every operation at the native registry limit", 
       ],
     },
   } as const;
-  table.push(plugin, {
+  catalog.push(plugin, {
     ...capabilitiesPlugin,
     execution: "io",
     operations: async () => ({
       createOperations: createCapabilities,
     }),
   });
-  const registry = pluginRegistry([
-    plugin,
-    capabilitiesPlugin,
-  ]);
+  const registry = pluginRegistry(
+    [
+      plugin,
+      capabilitiesPlugin,
+    ],
+    catalog,
+  );
   expect(registry.operations.size).toBe(256);
   const adapters = await operations(
     [
@@ -442,6 +490,8 @@ test("capability queries include every operation at the native registry limit", 
     ],
     ".",
     "io",
+    undefined,
+    catalog,
   );
   try {
     const result = adapters.execute("capabilities.get", null, "backend");

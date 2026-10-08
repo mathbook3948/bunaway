@@ -1,7 +1,10 @@
 import {
+  type ChannelConfig,
+  type ChannelId,
   CODES,
   isChannelId,
   PACKAGING_CHANNELS,
+  type ResolvedTarget,
   type SigningConfig,
 } from "./contract.ts";
 
@@ -25,12 +28,8 @@ export interface PackagingConfig {
     windows?: Record<string, string>;
     macos?: Record<string, string>;
   };
-  targets?: {
-    platform: string;
-    arch: string;
-    minVersion?: string;
-  }[];
-  channels?: Partial<Record<string, Record<string, unknown>>>;
+  targets?: ResolvedTarget[];
+  channels?: Partial<Record<ChannelId, ChannelConfig>>;
   signing?: SigningConfig;
 }
 
@@ -48,7 +47,7 @@ const TOP_LEVEL = [
 // Channel option keys owned by the shared contract. Channel adapters may read
 // these but must not redefine their meaning; channel-private keys are not
 // allowed, so a typo fails validation instead of being ignored.
-const CHANNEL_KEYS: Record<string, string[]> = {
+const CHANNEL_KEYS: Record<ChannelId, string[]> = {
   "win-direct": [
     "scope",
     "webView2",
@@ -109,6 +108,23 @@ const SIGNING_KEYS = [
 export const IDENTIFIER_PATTERN =
   /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,62})?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,62})?)+$/;
 export const SEMVER_PATTERN = /^\d+\.\d+\.\d+$/;
+
+function stringArray(value: unknown, what: string): string[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    fail(`bunaway.json.bundle: ${what} must be a list of strings.`);
+  }
+  const result: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string" || !item) {
+      fail(`bunaway.json.bundle: ${what} must be a list of strings.`);
+    }
+    result.push(item);
+  }
+  return result;
+}
 
 function fail(message: string): never {
   const error = new Error(message);
@@ -370,22 +386,12 @@ export function parsePackaging(text: string): PackagingConfig {
         16,
       );
       const arch = nonempty(target.arch, `targets[${index}].arch`, 16);
-      if (
-        ![
-          "windows",
-          "macos",
-        ].includes(platform)
-      ) {
+      if (platform !== "windows" && platform !== "macos") {
         fail(
           `bunaway.json.bundle: targets[${index}].platform must be windows or macos.`,
         );
       }
-      if (
-        ![
-          "x64",
-          "arm64",
-        ].includes(arch)
-      ) {
+      if (arch !== "x64" && arch !== "arm64") {
         fail(
           `bunaway.json.bundle: targets[${index}].arch must be x64 or arm64.`,
         );
@@ -395,11 +401,7 @@ export function parsePackaging(text: string): PackagingConfig {
         fail(`bunaway.json.bundle: duplicate target ${id}.`);
       }
       seen.add(id);
-      const result: {
-        platform: string;
-        arch: string;
-        minVersion?: string;
-      } = {
+      const result: ResolvedTarget = {
         platform,
         arch,
       };
@@ -419,6 +421,7 @@ export function parsePackaging(text: string): PackagingConfig {
   }
   if (raw.channels !== undefined) {
     const channels = record(raw.channels, "channels");
+    config.channels = {};
     for (const [channel, value] of Object.entries(channels)) {
       if (!isChannelId(channel)) {
         fail(
@@ -426,121 +429,122 @@ export function parsePackaging(text: string): PackagingConfig {
         );
       }
       const options = record(value, `channels.${channel}`);
-      keys(options, CHANNEL_KEYS[channel] ?? [], `channels.${channel}`);
+      keys(options, CHANNEL_KEYS[channel], `channels.${channel}`);
+      const channelConfig: ChannelConfig = {};
+      const channelPath = `channels.${channel}`;
+
       if (options.signing !== undefined) {
-        options.signing = signing(
-          options.signing,
-          `channels.${channel}.signing`,
-        );
+        const value = signing(options.signing, `${channelPath}.signing`);
+        if (value) {
+          channelConfig.signing = value;
+        }
       }
-      if (
-        options.webView2 !== undefined &&
-        ![
-          "check",
-          "bootstrap",
-        ].includes(options.webView2 as string)
-      ) {
-        fail(
-          `bunaway.json.bundle: channels.${channel}.webView2 must be "check" or "bootstrap".`,
-        );
+      if (options.webView2 !== undefined) {
+        if (options.webView2 !== "check" && options.webView2 !== "bootstrap") {
+          fail(
+            `bunaway.json.bundle: ${channelPath}.webView2 must be "check" or "bootstrap".`,
+          );
+        }
+        channelConfig.webView2 = options.webView2;
       }
       if (
         channel === "win-store-unpackaged" &&
-        options.webView2 === "bootstrap"
+        channelConfig.webView2 === "bootstrap"
       ) {
         fail(
           'bunaway.json.bundle: channels.win-store-unpackaged.webView2 must be "check"; the Store EXE/MSI requirements forbid installer-time downloads.',
         );
       }
-      if (
-        options.scope !== undefined &&
-        ![
-          "perUser",
-          "perMachine",
-        ].includes(options.scope as string)
-      ) {
-        fail(
-          `bunaway.json.bundle: channels.${channel}.scope must be perUser or perMachine.`,
-        );
+      if (options.scope !== undefined) {
+        if (options.scope !== "perUser" && options.scope !== "perMachine") {
+          fail(
+            `bunaway.json.bundle: ${channelPath}.scope must be perUser or perMachine.`,
+          );
+        }
+        channelConfig.scope = options.scope;
       }
       for (const flag of [
         "desktopShortcut",
         "startMenuShortcut",
         "unvirtualizedData",
-      ]) {
-        optionalBoolean(options[flag], `channels.${channel}.${flag}`);
+      ] as const) {
+        const value = optionalBoolean(options[flag], `${channelPath}.${flag}`);
+        if (value !== undefined) {
+          channelConfig[flag] = value;
+        }
       }
       if (options.uninstall !== undefined) {
-        const uninstall = record(
-          options.uninstall,
-          `channels.${channel}.uninstall`,
-        );
+        const uninstall = record(options.uninstall, `${channelPath}.uninstall`);
         keys(
           uninstall,
           [
             "preserveUserData",
           ],
-          `channels.${channel}.uninstall`,
+          `${channelPath}.uninstall`,
         );
-        optionalBoolean(
+        const preserveUserData = optionalBoolean(
           uninstall.preserveUserData,
-          `channels.${channel}.uninstall.preserveUserData`,
+          `${channelPath}.uninstall.preserveUserData`,
         );
         if (
-          options.scope === "perMachine" &&
-          uninstall.preserveUserData === false
+          channelConfig.scope === "perMachine" &&
+          preserveUserData === false
         ) {
           fail(
-            `bunaway.json.bundle: channels.${channel}.uninstall.preserveUserData=false requires scope=perUser; perMachine installs cannot safely target user data.`,
+            `bunaway.json.bundle: ${channelPath}.uninstall.preserveUserData=false requires scope=perUser; perMachine installs cannot safely target user data.`,
           );
         }
+        channelConfig.uninstall = {
+          ...(preserveUserData !== undefined
+            ? {
+                preserveUserData,
+              }
+            : {}),
+        };
       }
-      if (options.capabilities !== undefined) {
-        if (
-          !Array.isArray(options.capabilities) ||
-          options.capabilities.some((cap) => typeof cap !== "string" || !cap)
-        ) {
-          fail(
-            `bunaway.json.bundle: channels.${channel}.capabilities must be a list of strings.`,
-          );
-        }
+      const capabilities = stringArray(
+        options.capabilities,
+        `${channelPath}.capabilities`,
+      );
+      if (capabilities !== undefined) {
+        channelConfig.capabilities = capabilities;
       }
       if (options.packageName !== undefined) {
         const name = nonempty(
           options.packageName,
-          `channels.${channel}.packageName`,
+          `${channelPath}.packageName`,
           50,
         );
         if (!/^[A-Za-z0-9][A-Za-z0-9._-]{2,49}$/.test(name)) {
           fail(
-            `bunaway.json.bundle: channels.${channel}.packageName must be 3..50 characters, alphanumeric plus . _ -.`,
+            `bunaway.json.bundle: ${channelPath}.packageName must be 3..50 characters, alphanumeric plus . _ -.`,
           );
         }
+        channelConfig.packageName = name;
       }
       for (const key of [
         "minVersion",
         "maxVersionTested",
         "bundleId",
         "format",
-      ]) {
+      ] as const) {
         if (options[key] !== undefined) {
-          nonempty(options[key], `channels.${channel}.${key}`, 64);
-        }
-      }
-      if (options.entitlements !== undefined) {
-        if (
-          !Array.isArray(options.entitlements) ||
-          options.entitlements.some((cap) => typeof cap !== "string" || !cap)
-        ) {
-          fail(
-            `bunaway.json.bundle: channels.${channel}.entitlements must be a list of strings.`,
+          channelConfig[key] = nonempty(
+            options[key],
+            `${channelPath}.${key}`,
+            64,
           );
         }
       }
+      const entitlements = stringArray(
+        options.entitlements,
+        `${channelPath}.entitlements`,
+      );
+      if (entitlements !== undefined) {
+        channelConfig.entitlements = entitlements;
+      }
+      config.channels[channel] = channelConfig;
     }
-    config.channels = channels as Partial<
-      Record<string, Record<string, unknown>>
-    >;
   }
   return config;
 }

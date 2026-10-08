@@ -1,6 +1,8 @@
 import type { Policy } from "@bunaway/protocol";
 
 export const MAX_WINDOWS = 128;
+const MIN_WINDOW_DIMENSION = 200;
+const MAX_WINDOW_DIMENSION = 4096;
 export type WindowSpec = {
   view: string;
   home: string;
@@ -105,11 +107,11 @@ export function readWindowSpecs(
       if (
         typeof dimension !== "number" ||
         !Number.isInteger(dimension) ||
-        dimension < 200 ||
-        dimension > 4096
+        dimension < MIN_WINDOW_DIMENSION ||
+        dimension > MAX_WINDOW_DIMENSION
       ) {
         throw new Error(
-          "Window dimensions must be integers between 200 and 4096.",
+          `Window dimensions must be integers between ${MIN_WINDOW_DIMENSION} and ${MAX_WINDOW_DIMENSION}.`,
         );
       }
     }

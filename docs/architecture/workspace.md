@@ -1,6 +1,7 @@
 # Workspace structure
 
-Bun workspaces는 `docs/site`, `packages/*`와 `plugins/*`에 적용한다.
+Bun workspaces에는 `docs/site`, `packages/*`, `plugins/*`와
+`tests/fixtures/desktop/host`가 포함된다.
 네이티브 코드, 번들된 Bun 배포물, 렌더러, 템플릿과 예제는 독립 영역이다.
 
 선택 네이티브 기능은 [ADR 0013](../decisions/0013-optional-native-plugins.md)에 따라
@@ -16,7 +17,8 @@ Bun workspaces는 `docs/site`, `packages/*`와 `plugins/*`에 적용한다.
 | `packages/plugin-api` | `@bunaway/plugin-api` | portable, bun 하위 경로 | `@bunaway/protocol` |
 | `packages/core` | `@bunaway/core` | portable | `@bunaway/plugin-api`, `@bunaway/protocol` |
 | `packages/runtime-bun` | `@bunaway/runtime-bun` | bun | `@bunaway/core`, `@bunaway/protocol` |
-| `packages/cli` | `@bunaway/cli` | bun | `@bunaway/protocol` |
+| `packages/packaging` | `@bunaway/packaging` | bun | `@bunaway/protocol` |
+| `packages/cli` | `@bunaway/cli` | bun | `@bunaway/packaging`, `@bunaway/protocol`, `@bunaway/runtime-bun` |
 | `plugins/log` | `@bunaway/plugin-log` | browser, bun | `@bunaway/plugin` |
 | `plugins/storage` | `@bunaway/plugin-storage` | browser, bun | `@bunaway/plugin` |
 | `plugins/capabilities` | `@bunaway/plugin-capabilities` | browser, bun | `@bunaway/plugin` |
@@ -37,12 +39,23 @@ plugin-sdk는 기능 선언에서 공개 호출 함수를 만들고 화면과 �
 backend-sdk의 `node:async_hooks`는 Bun이 제공하며
 core와 protocol은 portable 환경을 유지한다.
 `runtime-bun`은 UTF-8 NDJSON 수신기, Host API 바인딩과 `runBunApp`으로 코어를
-프로세스 IPC에 연결한다. CLI는 create/validate/doctor/dev/build와 vanilla, Vite, React, Vue, Svelte 템플릿을
+프로세스 IPC에 연결한다. CLI는 선언된 `@bunaway/runtime-bun/development`와
+`@bunaway/runtime-bun/window-config` 경로로 개발 및 창 설정 helper를 사용한다. CLI는
+create/validate/doctor/dev/build와 vanilla, Vite, React, Vue, Svelte 템플릿을
 구현했다. 저장, 로그와 기능 조회 플러그인은 plugins/의 개별 패키지다. 각 패키지는
 index.ts에 기능을 선언하고 windows.ts에 플랫폼 구현을 둔다. 비교와 편의 호출의 처리
 로직은 역할에 따라 logger.ts, scope.ts와 query.ts로 분리한다.
 추가 처리 없는 기능에는 내부 처리 파일을 요구하지 않는다.
 다른 내부 파일과 폴더는 제작자가 선택한다.
+
+Core 내부의 `app-registry.ts`는 앱과 플러그인의 등록 검증 및 조회 맵 준비를 맡고,
+`create-core.ts`는 준비된 등록과 세션, 호출, 이벤트, 종료 상태를 소유한다.
+CLI의 `windows-compile.ts`는 실행 파일 컴파일을, `windows-dev-launch.ts`는 개발 호스트의
+실행 검증, 환경과 종료 요청을 담당한다. 파일 경로, JSON과 해시는 `files.ts`,
+자식 명령 및 worker 실행은 `processes.ts`가 맡는다.
+CLI와 Windows 호스트는 `@bunaway/runtime-bun/windows-control`의 종료 메시지와 창 클래스
+접두어를 공유한다. 이 계약을 가져올 때 네이티브 자원을 초기화하지 않는다.
+
 [공통 API](./common-api.md)를 따른다. 테스트, 스키마 생성 스크립트, 데스크톱 회귀용 앱 정의는 별도
 `tests/tsconfig.json`에서 Bun 타입을 사용한다. portable 패키지에는 전파하지 않는다.
 SDK, 코어 실행은 공통 Factory 타입을 구현한다. Windows WebView2 호스트와 메모 샘플의

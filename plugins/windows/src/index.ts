@@ -1,6 +1,6 @@
 import { defineNativePlugin, s } from "@bunaway/plugin";
 import manifest from "../package.json";
-import { windowOperations } from "./contract.ts";
+import { WINDOW_VIEW_NAME_PATTERN, windowOperations } from "./contract.ts";
 import { matches } from "./scope.ts";
 
 const definitions = Object.fromEntries(
@@ -20,7 +20,7 @@ const plugin = defineNativePlugin({
   scopes: {
     control: s.object({
       view: s.string({
-        pattern: "^[A-Za-z0-9_.:-]{1,128}$(?![\\s\\S])",
+        pattern: WINDOW_VIEW_NAME_PATTERN,
       }),
     }),
   },

@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "@bunaway/packaging": "workspace:*",
-    "@bunaway/protocol": "workspace:*"
+    "@bunaway/protocol": "workspace:*",
+    "@bunaway/runtime-bun": "workspace:*"
   },
   "scripts": {
     "typecheck": "tsc --project tsconfig.json"

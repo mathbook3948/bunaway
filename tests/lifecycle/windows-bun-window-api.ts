@@ -4,7 +4,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runWindowsApp } from "../../native/windows/bun/entry.ts";
-import { user, Windows } from "../../native/windows/bun/win32.ts";
+import { user } from "../../native/windows/bun/win32-bindings.ts";
+import { Windows } from "../../native/windows/bun/win32.ts";
 import {
   type CommandContext,
   defineApp,

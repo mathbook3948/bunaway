@@ -293,18 +293,22 @@ export async function bundleWindowsHost(
       );
     },
   };
-  const options: Bun.BuildConfig = {
-    entrypoints: [
-      resolve(source, "boot.ts"),
-      "bunaway-windows-app/app.ts",
-    ],
-    target: "bun",
-    packages: "bundle",
-    splitting: true,
-    naming: "[name].[ext]",
-    sourcemap: development ? "inline" : "none",
-  };
-  const artifacts = await buildWithSdk(options, entries);
+  const buildWindowsEntries = (entrypoints: string[]) =>
+    buildWithSdk(
+      {
+        entrypoints,
+        target: "bun",
+        packages: "bundle",
+        splitting: true,
+        naming: "[name].[ext]",
+        sourcemap: development ? "inline" : "none",
+      },
+      entries,
+    );
+  const artifacts = await buildWindowsEntries([
+    resolve(source, "boot.ts"),
+    "bunaway-windows-app/app.ts",
+  ]);
   if (
     ![
       "boot.js",
@@ -335,19 +339,9 @@ export async function bundleWindowsHost(
     "ui",
     "host-operations",
   ]) {
-    const outputs = await buildWithSdk(
-      {
-        entrypoints: [
-          resolve(source, `${name}.ts`),
-        ],
-        target: "bun",
-        packages: "bundle",
-        splitting: true,
-        naming: "[name].[ext]",
-        sourcemap: development ? "inline" : "none",
-      },
-      entries,
-    );
+    const outputs = await buildWindowsEntries([
+      resolve(source, `${name}.ts`),
+    ]);
     for (const output of outputs) {
       await saveOutput(output);
     }

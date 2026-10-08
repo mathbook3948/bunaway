@@ -1,342 +1,49 @@
-import { dlopen, JSCallback, type Pointer, ptr } from "bun:ffi";
+import { dlopen, JSCallback, ptr } from "bun:ffi";
 import assert from "node:assert/strict";
-import { APP_SHUTDOWN_MESSAGE } from "./channel.ts";
+import {
+  APP_SHUTDOWN_MESSAGE,
+  APP_WINDOW_CLASS_PREFIX,
+} from "../../../packages/runtime-bun/src/windows-control.ts";
+import { hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
 
-export const wide = (text: string) => Buffer.from(`${text}\0`, "utf16le");
-const nativeBuffers = new Set<Buffer>();
-export function withBuffer<T extends number | bigint>(
-  buffer: Buffer,
-  invoke: (address: Pointer) => T,
-): T {
-  nativeBuffers.add(buffer);
-  try {
-    return invoke(ptr(buffer));
-  } finally {
-    nativeBuffers.delete(buffer);
-  }
-}
-export function withWide<T extends number | bigint>(
-  text: string,
-  invoke: (address: Pointer) => T,
-): T {
-  return withBuffer(wide(text), invoke);
-}
-export function hr(value: number, operation: string): void {
-  if (value < 0) {
-    throw new Error(`${operation}: 0x${(value >>> 0).toString(16)}`);
-  }
-}
-export const kernel = dlopen("kernel32.dll", {
-  GetModuleHandleW: {
-    args: [
-      "ptr",
-    ],
-    returns: "u64",
-  },
-  GetCurrentThreadId: {
-    args: [],
-    returns: "u32",
-  },
-  GetLastError: {
-    args: [],
-    returns: "u32",
-  },
-  OpenProcess: {
-    args: [
-      "u32",
-      "i32",
-      "u32",
-    ],
-    returns: "u64",
-  },
-  WaitForSingleObject: {
-    args: [
-      "u64",
-      "u32",
-    ],
-    returns: "u32",
-  },
-  CloseHandle: {
-    args: [
-      "u64",
-    ],
-    returns: "i32",
-  },
-});
-export const ole = dlopen("ole32.dll", {
-  CoInitializeEx: {
-    args: [
-      "ptr",
-      "u32",
-    ],
-    returns: "i32",
-  },
-  CoUninitialize: {
-    args: [],
-    returns: "void",
-  },
-  CoTaskMemFree: {
-    args: [
-      "ptr",
-    ],
-    returns: "void",
-  },
-});
-export const user = dlopen("user32.dll", {
-  RegisterClassExW: {
-    args: [
-      "ptr",
-    ],
-    returns: "u16",
-  },
-  UnregisterClassW: {
-    args: [
-      "ptr",
-      "u64",
-    ],
-    returns: "i32",
-  },
-  CreateWindowExW: {
-    args: [
-      "u32",
-      "ptr",
-      "ptr",
-      "u32",
-      "i32",
-      "i32",
-      "i32",
-      "i32",
-      "u64",
-      "u64",
-      "u64",
-      "ptr",
-    ],
-    returns: "u64",
-  },
-  DefWindowProcW: {
-    args: [
-      "u64",
-      "u32",
-      "u64",
-      "i64",
-    ],
-    returns: "i64",
-  },
-  RegisterWindowMessageW: {
-    args: [
-      "ptr",
-    ],
-    returns: "u32",
-  },
-  LoadIconW: {
-    args: [
-      "u64",
-      "u64",
-    ],
-    returns: "u64",
-  },
-  LoadImageW: {
-    args: [
-      "u64",
-      "ptr",
-      "u32",
-      "i32",
-      "i32",
-      "u32",
-    ],
-    returns: "u64",
-  },
-  DestroyIcon: {
-    args: [
-      "u64",
-    ],
-    returns: "i32",
-  },
-  CreatePopupMenu: {
-    args: [],
-    returns: "u64",
-  },
-  AppendMenuW: {
-    args: [
-      "u64",
-      "u32",
-      "u64",
-      "ptr",
-    ],
-    returns: "i32",
-  },
-  DestroyMenu: {
-    args: [
-      "u64",
-    ],
-    returns: "i32",
-  },
-  GetCursorPos: {
-    args: [
-      "ptr",
-    ],
-    returns: "i32",
-  },
-  TrackPopupMenuEx: {
-    args: [
-      "u64",
-      "u32",
-      "i32",
-      "i32",
-      "u64",
-      "ptr",
-    ],
-    returns: "u32",
-  },
-  ShowWindow: {
-    args: [
-      "u64",
-      "i32",
-    ],
-    returns: "i32",
-  },
-  SetForegroundWindow: {
-    args: [
-      "u64",
-    ],
-    returns: "i32",
-  },
-  IsIconic: {
-    args: [
-      "u64",
-    ],
-    returns: "i32",
-  },
-  GetWindowRect: {
-    args: [
-      "u64",
-      "ptr",
-    ],
-    returns: "i32",
-  },
-  SetWindowPos: {
-    args: [
-      "u64",
-      "u64",
-      "i32",
-      "i32",
-      "i32",
-      "i32",
-      "u32",
-    ],
-    returns: "i32",
-  },
-  GetWindowLongPtrW: {
-    args: [
-      "u64",
-      "i32",
-    ],
-    returns: "i64",
-  },
-  SetWindowLongPtrW: {
-    args: [
-      "u64",
-      "i32",
-      "i64",
-    ],
-    returns: "i64",
-  },
-  GetWindowPlacement: {
-    args: [
-      "u64",
-      "ptr",
-    ],
-    returns: "i32",
-  },
-  SetWindowPlacement: {
-    args: [
-      "u64",
-      "ptr",
-    ],
-    returns: "i32",
-  },
-  MonitorFromWindow: {
-    args: [
-      "u64",
-      "u32",
-    ],
-    returns: "u64",
-  },
-  GetMonitorInfoW: {
-    args: [
-      "u64",
-      "ptr",
-    ],
-    returns: "i32",
-  },
-  MessageBoxW: {
-    args: [
-      "u64",
-      "ptr",
-      "ptr",
-      "u32",
-    ],
-    returns: "i32",
-  },
-  DestroyWindow: {
-    args: [
-      "u64",
-    ],
-    returns: "i32",
-  },
-  GetClientRect: {
-    args: [
-      "u64",
-      "ptr",
-    ],
-    returns: "i32",
-  },
-  AdjustWindowRect: {
-    args: [
-      "ptr",
-      "u32",
-      "i32",
-    ],
-    returns: "i32",
-  },
-  PeekMessageW: {
-    args: [
-      "ptr",
-      "u64",
-      "u32",
-      "u32",
-      "u32",
-    ],
-    returns: "i32",
-  },
-  TranslateMessage: {
-    args: [
-      "ptr",
-    ],
-    returns: "i32",
-  },
-  DispatchMessageW: {
-    args: [
-      "ptr",
-    ],
-    returns: "i64",
-  },
-  PostMessageW: {
-    args: [
-      "u64",
-      "u32",
-      "u64",
-      "i64",
-    ],
-    returns: "i32",
-  },
-});
+export const WM_SIZE = 0x0005;
+export const WM_CLOSE = 0x0010;
+export const WM_QUIT = 0x0012;
+export const WM_ENTERSIZEMOVE = 0x0231;
+export const WM_EXITSIZEMOVE = 0x0232;
+
+const COLOR_WINDOW = 5;
+const CW_USEDEFAULT = -2147483648;
+const GWL_STYLE = -16;
+const IDI_APPLICATION = 32512n;
+const IMAGE_ICON = 1;
+const LR_LOADFROMFILE = 0x10;
+const MB_DEFBUTTON2 = 0x100;
+const MB_ICONQUESTION = 0x20;
+const MB_YESNO = 0x4;
+const MONITOR_DEFAULTTONEAREST = 2;
+const PM_REMOVE = 1;
+const SW_HIDE = 0;
+const SW_RESTORE = 9;
+const SW_SHOW = 5;
+const SWP_FRAMECHANGED = 0x20;
+const SWP_NOMOVE = 0x2;
+const SWP_NOACTIVATE = 0x10;
+const SWP_NOSIZE = 0x1;
+const SWP_NOZORDER = 0x4;
+const WINDOWPLACEMENT_SHOW_CMD_OFFSET = 8;
+const WS_OVERLAPPEDWINDOW = 0x00cf0000;
+const WS_VISIBLE = 0x10000000n;
+const IDYES = 6;
+const MAX_MESSAGES_PER_PUMP = 64;
 
 // One class and one bounded pump per STA, shared by every view.
 export class Windows {
   readonly thread = kernel.symbols.GetCurrentThreadId();
   private readonly instance = kernel.symbols.GetModuleHandleW(null);
-  private readonly name = wide(`bunaway-bun-${process.pid}-${this.thread}`);
+  private readonly name = wide(
+    `${APP_WINDOW_CLASS_PREFIX}${process.pid}-${this.thread}`,
+  );
   private readonly message = Buffer.alloc(48); // MSG, Win64
   private readonly windows = new Map<
     bigint,
@@ -405,12 +112,26 @@ export class Windows {
     } else {
       this.icon = iconPath
         ? withWide(iconPath, (path) =>
-            user.symbols.LoadImageW(0n, path, 1, 32, 32, 0x10),
+            user.symbols.LoadImageW(
+              0n,
+              path,
+              IMAGE_ICON,
+              32,
+              32,
+              LR_LOADFROMFILE,
+            ),
           )
-        : user.symbols.LoadIconW(0n, 32512n);
+        : user.symbols.LoadIconW(0n, IDI_APPLICATION);
       this.smallIcon = iconPath
         ? withWide(iconPath, (path) =>
-            user.symbols.LoadImageW(0n, path, 1, 16, 16, 0x10),
+            user.symbols.LoadImageW(
+              0n,
+              path,
+              IMAGE_ICON,
+              16,
+              16,
+              LR_LOADFROMFILE,
+            ),
           )
         : this.icon;
     }
@@ -427,7 +148,7 @@ export class Windows {
             return 0n;
           }
           this.windows.get(window)?.(message, wparam, lparam);
-          if (message === 0x10) {
+          if (message === WM_CLOSE) {
             return 0n; // defer Close/DestroyWindow past callback
           }
           return user.symbols.DefWindowProcW(window, message, wparam, lparam);
@@ -451,7 +172,7 @@ export class Windows {
     wc.writeBigUInt64LE(BigInt(this.callback.ptr ?? 0), 8);
     wc.writeBigUInt64LE(this.instance, 24);
     wc.writeBigUInt64LE(this.icon, 32);
-    wc.writeBigUInt64LE(6n, 48); // COLOR_WINDOW + 1
+    wc.writeBigUInt64LE(BigInt(COLOR_WINDOW + 1), 48);
     wc.writeBigUInt64LE(BigInt(ptr(this.name)), 64);
     wc.writeBigUInt64LE(this.smallIcon, 72);
     if (!user.symbols.RegisterClassExW(ptr(wc))) {
@@ -475,15 +196,15 @@ export class Windows {
       width,
       height,
     ]);
-    assert(user.symbols.AdjustWindowRect(ptr(rect), 0xcf0000, 0));
+    assert(user.symbols.AdjustWindowRect(ptr(rect), WS_OVERLAPPEDWINDOW, 0));
     const window = withWide(title, (titlePointer) =>
       user.symbols.CreateWindowExW(
         0,
         ptr(this.name),
         titlePointer,
-        0xcf0000,
-        -2147483648,
-        -2147483648,
+        WS_OVERLAPPEDWINDOW,
+        CW_USEDEFAULT,
+        CW_USEDEFAULT,
         (rect[2] ?? 0) - (rect[0] ?? 0),
         (rect[3] ?? 0) - (rect[1] ?? 0),
         0n,
@@ -495,17 +216,20 @@ export class Windows {
     assert(window, `CreateWindowExW: ${kernel.symbols.GetLastError()}`);
     this.windows.set(window, receive);
     if (visible) {
-      user.symbols.ShowWindow(window, 5);
+      user.symbols.ShowWindow(window, SW_SHOW);
     }
     return window;
   }
 
   show(window: bigint, visible: boolean) {
-    user.symbols.ShowWindow(window, visible ? 5 : 0);
+    user.symbols.ShowWindow(window, visible ? SW_SHOW : SW_HIDE);
   }
 
   focus(window: bigint): boolean {
-    user.symbols.ShowWindow(window, user.symbols.IsIconic(window) ? 9 : 5);
+    user.symbols.ShowWindow(
+      window,
+      user.symbols.IsIconic(window) ? SW_RESTORE : SW_SHOW,
+    );
     return !!user.symbols.SetForegroundWindow(window);
   }
 
@@ -519,7 +243,7 @@ export class Windows {
     assert(
       user.symbols.AdjustWindowRect(
         ptr(rect),
-        Number(user.symbols.GetWindowLongPtrW(window, -16)),
+        Number(user.symbols.GetWindowLongPtrW(window, GWL_STYLE)),
         0,
       ),
     );
@@ -531,13 +255,23 @@ export class Windows {
         0,
         (rect[2] ?? 0) - (rect[0] ?? 0),
         (rect[3] ?? 0) - (rect[1] ?? 0),
-        0x16,
+        SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
       ),
     );
   }
 
   setPosition(window: bigint, x: number, y: number) {
-    assert(user.symbols.SetWindowPos(window, 0n, x, y, 0, 0, 0x15));
+    assert(
+      user.symbols.SetWindowPos(
+        window,
+        0n,
+        x,
+        y,
+        0,
+        0,
+        SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+      ),
+    );
   }
 
   isFullscreen(window: bigint) {
@@ -552,16 +286,22 @@ export class Windows {
       const placement = Buffer.alloc(44); // WINDOWPLACEMENT, Win64
       placement.writeUInt32LE(44);
       assert(user.symbols.GetWindowPlacement(window, ptr(placement)));
-      const style = user.symbols.GetWindowLongPtrW(window, -16);
+      const style = user.symbols.GetWindowLongPtrW(window, GWL_STYLE);
       const monitor = Buffer.alloc(40); // MONITORINFO
       monitor.writeUInt32LE(40);
       assert(
         user.symbols.GetMonitorInfoW(
-          user.symbols.MonitorFromWindow(window, 2),
+          user.symbols.MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST),
           ptr(monitor),
         ),
       );
-      assert(user.symbols.SetWindowLongPtrW(window, -16, style & ~0xcf0000n));
+      assert(
+        user.symbols.SetWindowLongPtrW(
+          window,
+          GWL_STYLE,
+          style & ~BigInt(WS_OVERLAPPEDWINDOW),
+        ),
+      );
       const x = monitor.readInt32LE(4),
         y = monitor.readInt32LE(8);
       assert(
@@ -572,7 +312,7 @@ export class Windows {
           y,
           monitor.readInt32LE(12) - x,
           monitor.readInt32LE(16) - y,
-          0x34,
+          SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
         ),
       );
       this.fullscreen.set(window, {
@@ -582,13 +322,27 @@ export class Windows {
     } else {
       const saved = this.fullscreen.get(window);
       assert(saved);
-      assert(user.symbols.SetWindowLongPtrW(window, -16, saved.style));
+      assert(user.symbols.SetWindowLongPtrW(window, GWL_STYLE, saved.style));
       // GetWindowPlacement does not record whether the window is hidden.
-      if (!(saved.style & 0x10000000n)) {
-        saved.placement.writeUInt32LE(0, 8); // SW_HIDE
+      if (!(saved.style & WS_VISIBLE)) {
+        saved.placement.writeUInt32LE(SW_HIDE, WINDOWPLACEMENT_SHOW_CMD_OFFSET);
       }
       assert(user.symbols.SetWindowPlacement(window, ptr(saved.placement)));
-      assert(user.symbols.SetWindowPos(window, 0n, 0, 0, 0, 0, 0x37));
+      assert(
+        user.symbols.SetWindowPos(
+          window,
+          0n,
+          0,
+          0,
+          0,
+          0,
+          SWP_NOSIZE |
+            SWP_NOMOVE |
+            SWP_NOZORDER |
+            SWP_NOACTIVATE |
+            SWP_FRAMECHANGED,
+        ),
+      );
       this.fullscreen.delete(window);
     }
   }
@@ -596,11 +350,16 @@ export class Windows {
   confirmClose(window: bigint, title: string, message: string): boolean {
     const result = withWide(title, (caption) =>
       withWide(message, (text) =>
-        user.symbols.MessageBoxW(window, text, caption, 0x124),
+        user.symbols.MessageBoxW(
+          window,
+          text,
+          caption,
+          MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2,
+        ),
       ),
     );
     assert(result, `MessageBoxW: ${kernel.symbols.GetLastError()}`);
-    return result === 6; // IDYES, default is No
+    return result === IDYES;
   }
 
   destroy(window: bigint) {
@@ -612,10 +371,11 @@ export class Windows {
   pump() {
     for (
       let count = 0;
-      count < 64 && user.symbols.PeekMessageW(ptr(this.message), 0n, 0, 0, 1);
+      count < MAX_MESSAGES_PER_PUMP &&
+      user.symbols.PeekMessageW(ptr(this.message), 0n, 0, 0, PM_REMOVE);
       count++
     ) {
-      if (this.message.readUInt32LE(8) === 0x12) {
+      if (this.message.readUInt32LE(8) === WM_QUIT) {
         throw new Error("Unexpected WM_QUIT");
       }
       user.symbols.TranslateMessage(ptr(this.message));
@@ -646,9 +406,4 @@ export class Windows {
     this.callback.close();
     this.releaseIcons();
   }
-}
-export function disposeWin32Bindings() {
-  user.close();
-  ole.close();
-  kernel.close();
 }

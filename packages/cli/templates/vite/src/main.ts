@@ -7,7 +7,7 @@ import { setupCounter } from './counter.ts'
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 <section id="center">
   <div class="hero">
-    <img src="${heroImg}" class="base" width="170" height="179">
+    <img src="${heroImg}" class="base" width="170" height="179" alt="">
     <img src="${typescriptLogo}" class="framework" alt="TypeScript logo"/>
     <img src="${viteLogo}" class="vite" alt="Vite logo" />
   </div>

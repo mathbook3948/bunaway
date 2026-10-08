@@ -4,6 +4,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Worker } from "node:worker_threads";
 import { Channel, type Packet } from "../../native/windows/bun/channel.ts";
+import { viewDirName } from "../../native/windows/bun/view-profile.ts";
 import {
   API_LIMITS,
   type HostContext,
@@ -109,28 +110,24 @@ test.skipIf(process.platform !== "win32")(
   },
 );
 
-test.skipIf(process.platform !== "win32")(
-  "view profile names preserve case-sensitive identities on Windows",
-  async () => {
-    const { viewDirName } = await import("../../native/windows/bun/webview.ts");
-    const names = [
-      "main",
-      "Main",
-      "MAIN",
-      "mAin",
-      "..",
-      "-2e-2e",
-      "-3a",
-      "con",
-      "nul",
-      ..."ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.:-",
-    ].map(viewDirName);
-    expect(new Set(names).size).toBe(names.length);
-    for (const name of names) {
-      expect(name).toMatch(/^v[a-z0-9-]+$/);
-    }
-  },
-);
+test("view profile names preserve case-sensitive identities", async () => {
+  const names = [
+    "main",
+    "Main",
+    "MAIN",
+    "mAin",
+    "..",
+    "-2e-2e",
+    "-3a",
+    "con",
+    "nul",
+    ..."ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.:-",
+  ].map(viewDirName);
+  expect(new Set(names).size).toBe(names.length);
+  for (const name of names) {
+    expect(name).toMatch(/^v[a-z0-9-]+$/);
+  }
+});
 
 test.skipIf(process.platform !== "win32")(
   "I/O cancellation prevents queued work; a started write is not rolled back",

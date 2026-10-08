@@ -2,6 +2,8 @@ import type { WindowSpec } from "@bunaway/plugin-api/native";
 import { BunawayError, type JsonValue } from "@bunaway/protocol";
 import type { WindowCall } from "./contract.ts";
 
+const WINDOW_CLEANUP_TIMEOUT_MS = 35_000;
+
 export type WindowState = {
   closed: boolean;
   cleaned: boolean;
@@ -104,7 +106,7 @@ export class WindowOperations {
           message: "Window close was declined.",
         });
       }
-      const deadline = this.hooks.now() + 35000;
+      const deadline = this.hooks.now() + WINDOW_CLEANUP_TIMEOUT_MS;
       while (view && !view.cleaned) {
         if (
           this.hooks.stopping() ||

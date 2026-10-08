@@ -7,11 +7,11 @@ import {
   parsePackaging,
 } from "@bunaway/packaging";
 import { NativeRegistry, type Policy, parsePolicy } from "@bunaway/protocol";
-import { developmentUrl } from "../../runtime-bun/src/development.ts";
+import { developmentUrl } from "@bunaway/runtime-bun/development";
 import {
   readWindowSpecs,
   type WindowSpec,
-} from "../../runtime-bun/src/window-config.ts";
+} from "@bunaway/runtime-bun/window-config";
 import { validateFramework } from "./distribution.ts";
 import { inside, json, projectPath } from "./files.ts";
 import type { InstalledPlugin } from "./plugins.ts";

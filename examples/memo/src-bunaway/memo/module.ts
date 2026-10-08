@@ -1,16 +1,14 @@
 import { defineModule } from "@bunaway/backend";
 import { readContract, saveContract, savedSchema } from "./contracts.ts";
-import { MemoService } from "./service.ts";
-
-const service = new MemoService();
+import { readMemo, saveMemo } from "./service.ts";
 
 export const memo = defineModule("memo")
   .command("save", saveContract, async (text, context) => {
-    await service.save(text);
+    await saveMemo(text);
     await context.events.emit("memo.saved", text, {
       kind: "broadcast",
     });
     return null;
   })
-  .command("read", readContract, () => service.read())
+  .command("read", readContract, () => readMemo())
   .event("saved", savedSchema);

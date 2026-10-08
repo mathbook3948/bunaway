@@ -5,10 +5,6 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { hostResponse } from "../../native/windows/bun/host-response.ts";
 import {
-  type PackagedPlugin,
-  packagedPlugins,
-} from "../../native/windows/bun/plugin-table.ts";
-import {
   operations,
   permissionMatcher,
   pluginRegistry,
@@ -26,10 +22,6 @@ import {
 
 test("scoped plugins without a Windows adapter preserve authorization and return UNSUPPORTED", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "bunaway-plugin-unsupported-"));
-  const table = packagedPlugins as PackagedPlugin[];
-  const previous = [
-    ...table,
-  ];
   try {
     const plugin = resolve(root, "node_modules/@example/plugin-files");
     await mkdir(plugin, {
@@ -80,12 +72,18 @@ test("scoped plugins without a Windows adapter preserve authorization and return
     const generated = resolve(root, "table.ts");
     await Bun.write(generated, pluginTableSource(installed));
     const module = await import(pathToFileURL(generated).href);
-    table.splice(0, table.length, ...module.packagedPlugins);
-    expect(table[0]?.execution).toBeUndefined();
-    expect(table[0]?.operations).toBeUndefined();
-    const registry = pluginRegistry(installed);
-    const matches = await permissionMatcher(installed);
-    const adapters = await operations(installed, root, "io");
+    const catalog = module.packagedPlugins;
+    expect(catalog[0]?.execution).toBeUndefined();
+    expect(catalog[0]?.operations).toBeUndefined();
+    const registry = pluginRegistry(installed, catalog);
+    const matches = await permissionMatcher(installed, catalog);
+    const adapters = await operations(
+      installed,
+      root,
+      "io",
+      undefined,
+      catalog,
+    );
     try {
       const call = registry.validateCall({
         operation: "files.read",
@@ -166,7 +164,6 @@ test("scoped plugins without a Windows adapter preserve authorization and return
       await adapters.dispose();
     }
   } finally {
-    table.splice(0, table.length, ...previous);
     await rm(root, {
       recursive: true,
       force: true,
