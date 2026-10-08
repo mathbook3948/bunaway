@@ -22,6 +22,47 @@ const storageScope = s.object({
     maxLength: 256,
   }),
 });
+const storageTimes = {
+  createdAtMs: {
+    anyOf: [
+      s.integer(),
+      s.null(),
+    ],
+  },
+  modifiedAtMs: {
+    anyOf: [
+      s.integer(),
+      s.null(),
+    ],
+  },
+  accessedAtMs: {
+    anyOf: [
+      s.integer(),
+      s.null(),
+    ],
+  },
+} as const;
+const storageMetadata = {
+  anyOf: [
+    s.object({
+      kind: s.enum([
+        "file",
+      ]),
+      sizeBytes: s.integer({
+        minimum: 0,
+        maximum: Number.MAX_SAFE_INTEGER,
+      }),
+      ...storageTimes,
+    }),
+    s.object({
+      kind: s.enum([
+        "directory",
+      ]),
+      sizeBytes: s.null(),
+      ...storageTimes,
+    }),
+  ],
+} as const;
 const plugin = defineNativePlugin({
   name: "storage",
   version: manifest.version,
@@ -41,10 +82,28 @@ const plugin = defineNativePlugin({
       permission: "write-text",
       osPermission: "not-required",
     },
+    exists: {
+      input: s.object(pathFields),
+      output: s.boolean(),
+      permission: "read-metadata",
+      osPermission: "not-required",
+    },
+    stat: {
+      input: s.object(pathFields),
+      output: {
+        anyOf: [
+          storageMetadata,
+          s.null(),
+        ],
+      },
+      permission: "read-metadata",
+      osPermission: "not-required",
+    },
   },
   scopes: {
     "read-text": storageScope,
     "write-text": storageScope,
+    "read-metadata": storageScope,
   },
   matches,
 });
@@ -53,3 +112,6 @@ export default storagePlugin;
 export const storage = plugin.api;
 export type StorageLocation = Parameters<typeof storage.readText>[0];
 export type StorageWrite = Parameters<typeof storage.writeText>[0];
+export type StorageMetadata = NonNullable<
+  Awaited<ReturnType<typeof storage.stat>>
+>;
