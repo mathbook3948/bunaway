@@ -616,6 +616,8 @@
   "operations": {
     "reference/host/storage-read-text": ["storage.readText"],
     "reference/host/storage-write-text": ["storage.writeText"],
+    "reference/host/storage-exists": ["storage.exists"],
+    "reference/host/storage-stat": ["storage.stat"],
     "reference/host/log-write": ["log.write"],
     "reference/host/capabilities-get": ["capabilities.get"],
     "reference/host/windows": [
