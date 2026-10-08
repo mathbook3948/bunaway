@@ -75,6 +75,9 @@ hello를 교환하며 `ready`에서 협상 버전, features, 백엔드 buildId�
 
 `Transport.send(text)`는 FIFO 큐 접수까지 완료하며 JS 작업 완료를 뜻하지 않는다.
 `subscribe`는 원문 메시지 또는 closed 통지를 받으며 반환 함수는 멱등 해제다.
+등록 중 동기 메시지와 closed도 허용한다. Client는 등록 전에 준비 기한을 설정하고,
+hello 완료나 등록 실패, 연결 종료 때 기한을 해제한다. 등록 중 세션이 종료되면
+반환한 구독 해제 함수도 즉시 호출한다. 등록 예외는 ready와 대기 호출로 전달한다.
 closed는 한 번만 통지하고, 종료 뒤 등록한 구독자도 종료를 관찰한다. 종료 뒤 send는 실패한다.
 `close()`는 자원을 회수하고 멱등 완료한다. 세션 하나에 transport, client 하나를 두며
 Client.close가 자신의 transport를 닫는다. 재연결은 새 객체, 새 세션이다.
