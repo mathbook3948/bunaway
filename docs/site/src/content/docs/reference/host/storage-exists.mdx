@@ -1,0 +1,57 @@
+---
+title: storage.exists
+description: 허용된 저장 범위에서 파일이나 디렉터리의 존재 여부를 확인합니다.
+sidebar: { order: 5 }
+---
+
+```ts
+storage.exists({ scope, path }): Promise<boolean>
+```
+
+`@bunaway/plugin-storage`의 `storage.exists`는 지정한 파일이나 디렉터리가 있는지 반환합니다. 네이티브 구현은 현재 Windows에서 지원합니다.
+
+```ts
+import { storage } from "@bunaway/plugin-storage";
+
+const exists = await storage.exists({
+  scope: "appData",
+  path: "messages/한글 memo.txt",
+});
+```
+
+## 입력과 권한
+
+`scope`와 `path`는 [storage.readText](/reference/host/storage-read-text/)와 같은 저장 범위 및 상대 경로 계약을 따릅니다. `appData` 또는 `temp` 안에서만 조회하며, 절대 경로, `.` 또는 `..` 경로 요소, 역슬래시, NUL, 개행이 든 경로는 `INVALID_ARGUMENT`입니다. Windows에 저장된 이름의 대소문자와 긴 파일명을 그대로 사용해야 합니다.
+
+권한 식별자는 `storage:read-metadata`입니다. 호출 출처에 scope와 `pathPrefix`를 허용해야 합니다. 일치하는 `deny`가 있으면 거부합니다. UI에서 직접 호출하려면 해당 뷰의 `commands`에도 `plugin.storage.exists`를 허용합니다. 예를 들어 아래 설정은 `appData/messages`만 조회하며 `messages/private`는 거부합니다.
+
+```json
+{
+  "commands": ["plugin.storage.exists"],
+  "host": {
+    "permissions": [
+      {
+        "identifier": "storage:read-metadata",
+        "allow": [{ "scope": "appData", "pathPrefix": "messages" }],
+        "deny": [{ "scope": "appData", "pathPrefix": "messages/private" }]
+      }
+    ]
+  }
+}
+```
+
+앱에서 `storagePlugin`을 등록해야 합니다. 뷰에서 시작한 백엔드 명령은 해당 뷰의 `host.permissions`를 사용합니다. 플러그인 setup과 setup에서 시작한 작업은 `backend.permissions`를 사용합니다. 권한 정책과 호출 출처는 [백엔드 Host API](/reference/backend/host-api/)를 확인하세요.
+
+화면용 함수는 두 번째 인자로 `InvokeOptions`를 받습니다. `signal`과 `deadline`은 [호출 취소와 기한](/reference/client/invoke/)의 의미를 따릅니다.
+
+## 결과와 오류
+
+파일이나 디렉터리가 있으면 `true`, 실제로 없는 경로이면 `false`입니다. 부모 경로나 마지막 경로가 없을 때도 Windows가 `ERROR_FILE_NOT_FOUND` 또는 `ERROR_PATH_NOT_FOUND`로 확인한 경우에만 `false`를 반환합니다. 접근 거부를 파일 없음으로 바꾸지 않습니다.
+
+잘못된 경로는 `INVALID_ARGUMENT`입니다. 권한이 없거나 범위를 벗어난 경로, 심볼릭 링크, junction, 다른 reparse point, 하드 링크가 둘 이상인 파일, 다른 대소문자 표기나 8.3 짧은 이름 같은 별칭은 `PERMISSION_DENIED`입니다. 운영체제의 접근 거부도 `PERMISSION_DENIED`이며, 그 밖의 파일 시스템 오류는 `INTERNAL`입니다.
+
+Windows 구현은 링크를 따라가지 않으며, 상위 디렉터리와 대상을 핸들로 열어 경로와 저장 범위를 확인합니다. 이 검사에는 상위 디렉터리의 목록 접근과 대상이 파일이면 읽기 접근, 디렉터리이면 목록 접근이 필요합니다. 이 권한으로 파일 내용을 읽거나 디렉터리 항목을 나열하지는 않습니다. 운영체제가 필요한 접근을 거부하면 `PERMISSION_DENIED`입니다. 조회 핸들은 성공과 실패 모두 작업이 끝나면 닫습니다. 대상이 열리기 전에 삭제되면 `false`를 반환합니다. 대상 핸들은 삭제 공유를 허용하지 않아 조회 중 대상 삭제를 막지만, 다른 프로세스의 쓰기는 메타데이터에 영향을 줄 수 있습니다. 결과는 조회 시점의 관찰이며 이후 경로가 계속 존재한다는 보장은 아닙니다.
+
+다른 프로세스가 먼저 삭제를 시작해 대상이 삭제 대기 상태라면 Windows는 접근 거부를 반환할 수 있습니다. 이 경우에도 `PERMISSION_DENIED`로 실패하며 `false`로 바꾸지 않습니다. 공유 충돌 등 다른 작업 실패는 `INTERNAL`입니다.
+
+취소되거나 기한이 지난 호출은 각각 `CANCELLED` 또는 `TIMEOUT`으로 실패할 수 있습니다. 이미 시작된 운영체제 작업이 되돌려지거나 중단된다고 보장하지 않습니다. 플러그인 미등록 또는 현재 호스트에서 사용할 수 없는 네이티브 구현은 `UNSUPPORTED`입니다.

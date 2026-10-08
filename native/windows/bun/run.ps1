@@ -23,6 +23,8 @@ if (!$SkipTests) {
     }
     & $bun --no-env-file (Join-Path $root 'tests/lifecycle/windows-bun-storage.ts')
     if ($LASTEXITCODE -ne 0) { throw 'Windows handle storage regression failed' }
+    & $bun --no-env-file (Join-Path $root 'tests/lifecycle/windows-storage-metadata.ts')
+    if ($LASTEXITCODE -ne 0) { throw 'Windows WebView2 storage metadata regression failed' }
     & $bun --no-env-file (Join-Path $root 'tests/lifecycle/windows-bun-cli.ts')
     if ($LASTEXITCODE -ne 0) { throw 'Windows independent CLI regression failed' }
     & $bun --no-env-file (Join-Path $root 'tests/lifecycle/windows-host.ts') --package (Join-Path $root 'build/windows-bun-package')

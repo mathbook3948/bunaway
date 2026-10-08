@@ -1,0 +1,83 @@
+---
+title: storage.stat
+description: 허용된 저장 범위에서 파일 또는 디렉터리의 종류, 크기와 시각 정보를 조회합니다.
+sidebar: { order: 6 }
+---
+
+```ts
+storage.stat({ scope, path }): Promise<StorageMetadata | null>
+```
+
+`@bunaway/plugin-storage`의 `storage.stat`은 파일이나 디렉터리의 메타데이터를 반환합니다. 대상이 실제로 없으면 `null`입니다. 네이티브 구현은 현재 Windows에서 지원합니다.
+
+```ts
+import { storage } from "@bunaway/plugin-storage";
+
+const metadata = await storage.stat({
+  scope: "appData",
+  path: "messages/한글 memo.txt",
+});
+
+if (metadata?.kind === "file") {
+  console.log(metadata.sizeBytes, metadata.modifiedAtMs);
+}
+```
+
+## 반환 필드
+
+`StorageMetadata`의 필드는 다음과 같습니다.
+
+| 필드 | 형식 | 의미 |
+| --- | --- | --- |
+| `kind` | `"file" \| "directory"` | 파일 또는 디렉터리 |
+| `sizeBytes` | `number \| null` | 파일 크기. 디렉터리는 재귀 계산을 하지 않으므로 `null` |
+| `createdAtMs` | `number \| null` | 생성 시각, UTC Unix epoch 밀리초 |
+| `modifiedAtMs` | `number \| null` | 수정 시각, UTC Unix epoch 밀리초 |
+| `accessedAtMs` | `number \| null` | 접근 시각, UTC Unix epoch 밀리초 |
+
+Windows의 FILETIME 값이 0이면 해당 시각은 사용할 수 없으므로 `null`입니다. 파일 시스템과 설정에 따라 시각의 정확도가 달라지며, 읽기 작업이 접근 시각을 갱신할 수도 있습니다. `sizeBytes`는 파일에만 제공됩니다. 디렉터리 크기를 계산하거나 내용을 나열하지 않습니다.
+
+## 입력과 권한
+
+`scope`와 `path`는 [storage.readText](/reference/host/storage-read-text/)와 같은 저장 범위 및 상대 경로 계약을 따릅니다. `appData` 또는 `temp` 안에서만 조회합니다. 절대 경로, `.` 또는 `..` 경로 요소, 역슬래시, NUL, 개행이 든 경로는 `INVALID_ARGUMENT`입니다. Windows에 저장된 이름의 대소문자와 긴 파일명을 그대로 사용해야 합니다.
+
+권한 식별자는 `storage:read-metadata`입니다. 호출 출처에 scope와 `pathPrefix`를 허용해야 하며, 일치하는 `deny`가 우선합니다. UI에서 직접 호출하려면 해당 뷰의 `commands`에 `plugin.storage.stat`을 허용합니다. 아래처럼 `appData/messages`를 허용하고 비공개 하위 디렉터리를 거부할 수 있습니다.
+
+```json
+{
+  "commands": ["plugin.storage.stat"],
+  "host": {
+    "permissions": [
+      {
+        "identifier": "storage:read-metadata",
+        "allow": [{ "scope": "appData", "pathPrefix": "messages" }],
+        "deny": [{ "scope": "appData", "pathPrefix": "messages/private" }]
+      }
+    ]
+  }
+}
+```
+
+앱에 `storagePlugin`을 등록해야 합니다. 뷰에서 시작한 백엔드 명령은 해당 뷰의 `host.permissions`를 사용합니다. 플러그인 setup과 setup에서 시작한 작업은 `backend.permissions`를 사용합니다. 화면용 함수의 두 번째 인자는 `InvokeOptions`이고 `signal`과 `deadline`은 [호출 취소와 기한](/reference/client/invoke/)의 의미를 따릅니다.
+
+```ts
+import { storage } from "@bunaway/plugin-storage";
+
+const abortController = new AbortController();
+const metadata = await storage.stat(
+  { scope: "appData", path: "messages/current.txt" },
+  { signal: abortController.signal },
+);
+```
+
+## 오류와 조회 규칙
+
+부모 경로나 마지막 경로가 없을 때 Windows가 `ERROR_FILE_NOT_FOUND` 또는 `ERROR_PATH_NOT_FOUND`로 확인하면 `null`을 반환합니다. 운영체제의 접근 거부를 `null`로 숨기지 않습니다.
+
+잘못된 경로는 `INVALID_ARGUMENT`입니다. 저장 권한이나 경로 범위가 맞지 않거나, 경로에 심볼릭 링크, junction, 다른 reparse point, 하드 링크가 둘 이상인 파일, 다른 대소문자 표기나 8.3 짧은 이름 같은 별칭이 있으면 `PERMISSION_DENIED`입니다. 운영체제의 접근 거부도 `PERMISSION_DENIED`이며, 그 밖의 파일 시스템 오류와 `Number.MAX_SAFE_INTEGER`를 초과하는 크기는 `INTERNAL`입니다. 플러그인 미등록 또는 현재 호스트에서 사용할 수 없는 네이티브 구현은 `UNSUPPORTED`입니다.
+
+Windows에서 경로 검사와 대상 고정에 필요한 OS 접근 권한은 [storage.exists](/reference/host/storage-exists/)와 같습니다. 파일 내용을 읽거나 디렉터리 항목을 나열하지 않으며, 운영체제가 필요한 접근을 거부하면 `PERMISSION_DENIED`입니다. 조회 핸들은 작업이 끝나면 성공과 실패 모두 닫습니다. 대상이 열리기 전에 삭제되면 `null`입니다. 대상 핸들은 삭제 공유를 허용하지 않아 조회 중 대상 삭제를 막지만 다른 프로세스의 쓰기는 메타데이터에 영향을 줄 수 있습니다. 결과는 조회 시점의 관찰이며 호출 뒤에도 대상이 존재하거나 값이 유지된다는 보장은 아닙니다.
+
+다른 프로세스가 먼저 삭제를 시작한 삭제 대기 상태에서는 Windows 접근 거부로 `PERMISSION_DENIED`를 받을 수 있습니다. 이를 `null`로 숨기지 않으며 공유 충돌 등 다른 작업 실패는 `INTERNAL`입니다.
+
+화면 호출의 취소와 기한 초과는 `CANCELLED`와 `TIMEOUT`으로 실패할 수 있습니다. 조회 작업이 이미 운영체제에 전달된 뒤에는 취소가 해당 작업을 되돌리거나 중단한다고 보장하지 않습니다.
