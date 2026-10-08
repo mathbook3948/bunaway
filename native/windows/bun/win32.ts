@@ -762,7 +762,7 @@ export class Windows {
         constraints,
         dpi,
       );
-      this.setPlacement(window, placement, wasVisible);
+      this.setPlacement(window, placement, wasVisible, true);
       return;
     }
     const current = this.clientSizeInDips(window, dpi);

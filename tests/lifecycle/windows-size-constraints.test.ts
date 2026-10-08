@@ -65,6 +65,19 @@ test.skipIf(process.platform !== "win32")(
     const extendedWindowStyle = (hwnd: bigint) =>
       user.symbols.GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
 
+    const windowPhysicalSize = (hwnd: bigint) => {
+      const rect = Buffer.alloc(16);
+      assert(
+        withBuffer(rect, (pointer) =>
+          user.symbols.GetWindowRect(hwnd, pointer),
+        ),
+      );
+      return {
+        width: rect.readInt32LE(8) - rect.readInt32LE(0),
+        height: rect.readInt32LE(12) - rect.readInt32LE(4),
+      };
+    };
+
     const outerSizeFor = (
       width: number,
       height: number,
@@ -359,6 +372,42 @@ test.skipIf(process.platform !== "win32")(
       sendDpiChanged(window, originalDpi);
       assertPlacementLogicalSize(window, originalDpi, 600, 450);
       user.symbols.ShowWindow(window, SW_RESTORE);
+
+      windows.setSizeConstraints(window, {
+        minWidth: null,
+        minHeight: null,
+        maxWidth: null,
+        maxHeight: null,
+      });
+      user.symbols.ShowWindow(window, SW_MAXIMIZE);
+      assert(user.symbols.IsZoomed(window));
+      const maximizedPhysicalSize = windowPhysicalSize(window);
+      for (const visible of [
+        false,
+        true,
+      ]) {
+        user.symbols.ShowWindow(window, visible ? SW_SHOW : SW_HIDE);
+        for (const dpi of [
+          doubleDpi,
+          originalDpi,
+        ]) {
+          sendDpiChanged(window, dpi);
+          assert(user.symbols.IsZoomed(window));
+          assert.equal(user.symbols.IsWindowVisible(window) !== 0, visible);
+          // A synthetic DPI change keeps the physical monitor unchanged.
+          // The suggested 600x450 rect must not become the maximized size.
+          assert.deepEqual(windowPhysicalSize(window), maximizedPhysicalSize);
+          assertPlacementLogicalSize(window, dpi, 600, 450);
+        }
+      }
+      user.symbols.ShowWindow(window, SW_RESTORE);
+      assertLogicalClientSize(window, originalDpi, 600, 450);
+      windows.setSizeConstraints(window, {
+        minWidth: 500,
+        minHeight: 400,
+        maxWidth: 800,
+        maxHeight: 600,
+      });
 
       const fullscreenStyle = windowStyle(window);
       windows.setFullscreen(window, true);
