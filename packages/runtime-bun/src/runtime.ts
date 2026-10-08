@@ -322,7 +322,10 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
           frame.context,
           core.openSession(frame.context as HostContext, frame.viewId),
         );
-      } else if (frame.kind === "revoke") {
+      } else if (
+        frame.kind === "revoke" ||
+        (frame.kind === "web" && frame.payload.kind === "close")
+      ) {
         const session = sessions.get(frame.context);
         sessions.delete(frame.context);
         await session?.close();

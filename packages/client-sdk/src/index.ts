@@ -332,7 +332,10 @@ class ClientSession<C extends CommandMap, E extends EventMap>
           ).subscriptionId
         : undefined;
     if (typeof subscriptionId !== "string" || subscriptionId.length === 0) {
-      throw requestError("INTERNAL", "Invalid listen response.");
+      // Without an ID, closing the session is the only way to release the
+      // subscription that the peer may already have created.
+      this.terminate(VIOLATION);
+      throw this.rejection;
     }
     return subscriptionId;
   }
@@ -691,7 +694,7 @@ class ClientSession<C extends CommandMap, E extends EventMap>
         this.failSubscription(message);
         break;
       default:
-        // Inbound hello/invoke/cancel/listen/unlisten have no allowed direction.
+        // Inbound hello/invoke/cancel/listen/unlisten/close have no allowed direction.
         this.terminate(VIOLATION);
     }
   }

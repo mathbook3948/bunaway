@@ -161,6 +161,20 @@ export const messageSchema = {
       type: "object",
       properties: {
         kind: {
+          const: "close",
+        },
+        protocol: version,
+      },
+      required: [
+        "kind",
+        "protocol",
+      ],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        kind: {
           const: "result",
         },
         protocol: version,

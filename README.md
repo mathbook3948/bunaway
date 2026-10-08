@@ -80,6 +80,7 @@ void start().catch(console.error);
 컴포넌트와 이벤트 핸들러에서 같은 클라이언트를 사용한다.
 UI 컴포넌트가 사라지면 `client.listen`이 반환한 `unlisten`으로 해당 구독을 해제한다.
 공유 클라이언트는 컴포넌트마다 닫지 않으며 페이지 종료 때 자동으로 정리된다.
+구독 성공 응답이 잘못되면 `INTERNAL` 오류로 연결을 닫고 진행 중 요청과 활성 구독을 정리한다.
 호출은 `bunaway dev`로 연 창이나 배포 앱의 WebView에서 동작한다. 일반 브라우저에는
 브리지가 없어 `UNSUPPORTED`로 실패한다. 기존 `createClient({ transport, hello })`는
 사용자 정의 연결, 테스트에 사용할 수 있다. 직접 import하는 함수 API도 계속 지원한다.

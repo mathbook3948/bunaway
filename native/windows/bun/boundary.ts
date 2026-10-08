@@ -85,6 +85,7 @@ export class ViewBoundary {
           "listen",
           "unlisten",
           "cancel",
+          "close",
         ].includes(message.kind)
       ) {
         throw new BunawayError({
@@ -116,6 +117,20 @@ export class ViewBoundary {
           code: "PERMISSION_DENIED",
           message: "Message source is not allowed.",
         });
+      }
+      if (message.kind === "close") {
+        if (!this.session) {
+          return;
+        }
+        if (key(source) !== key(this.session.source)) {
+          throw new BunawayError({
+            code: "PERMISSION_DENIED",
+            message: "Session source mismatch.",
+          });
+        }
+        // A terminal notification must still fit when request capacity is full.
+        this.revoke("client-close");
+        return;
       }
       if (!this.session) {
         if (message.kind !== "hello") {

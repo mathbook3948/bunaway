@@ -399,6 +399,7 @@ export function validatePacket(value: unknown, incoming: Side): Packet {
       "listen",
       "unlisten",
       "cancel",
+      "close",
     ].includes(message.kind);
     if (client !== (packet.kind === "client") && message.kind !== "hello") {
       throw new Error("Invalid Web direction");

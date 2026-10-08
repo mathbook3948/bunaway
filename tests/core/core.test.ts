@@ -1924,7 +1924,10 @@ test("the registered capabilities plugin command calls the host operation", asyn
   ]);
 });
 
-test("session close is idempotent, fails pending work and frees nothing early", async () => {
+test.each([
+  "api",
+  "message",
+])("session close via %s is idempotent", async (mode) => {
   const clock = createClock();
   const { services, sent } = createServices(clock);
   const { core, session } = await openSession(services);
@@ -1935,7 +1938,13 @@ test("session close is idempotent, fails pending work and frees nothing early", 
     command: "notes.slow",
     payload: null,
   });
-  const first = session.close();
+  const first =
+    mode === "api"
+      ? session.close()
+      : session.receive({
+          kind: "close",
+          protocol: helloMessage.protocol,
+        });
   const second = session.close();
   await Promise.all([
     first,
