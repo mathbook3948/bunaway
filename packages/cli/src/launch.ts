@@ -1,27 +1,77 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { cp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import pin from "../../../runtime/build-manifests/windows-x64.json";
-import { json, projectPath, verifyHash } from "./files.ts";
+import { frameworkRoot, json, projectPath, run, verifyHash } from "./files.ts";
+import { runManagedCommand } from "./managed-command.ts";
+
+export function compiledAssetArguments(
+  bundledAssets: readonly string[],
+): string[] {
+  return [
+    "app.json",
+    "policy.json",
+    "web",
+    ...bundledAssets,
+  ].map((name) => `--asset=${name}`);
+}
+
+// Compile using the verified runtime supplied by prepareNative, without downloads.
+export async function compileWindowsApp(
+  root: string,
+  bun: string,
+  executableName: string,
+  app: {
+    title: string;
+    icon?: string;
+  },
+  bundledAssets: readonly string[],
+  signal?: AbortSignal,
+  framework = frameworkRoot,
+): Promise<void> {
+  const assets = resolve(root, "assets");
+  // Bun 1.4.2 cannot copy a --compile-executable-path containing Unicode.
+  // Keep the verified compiler input local and pass an ASCII relative path.
+  await cp(bun, resolve(assets, "bun.exe"));
+  const args = [
+    bun,
+    "build",
+    "--compile",
+    "--target=bun-windows-x64-baseline",
+    "--compile-executable-path=./bun.exe",
+    "--windows-hide-console",
+    `--windows-title=${app.title}`,
+    "--no-compile-autoload-dotenv",
+    "--no-compile-autoload-bunfig",
+    "--no-compile-autoload-tsconfig",
+    "--no-compile-autoload-package-json",
+    ...compiledAssetArguments(bundledAssets),
+    ...(app.icon
+      ? [
+          `--windows-icon=${resolve(assets, "app.ico")}`,
+        ]
+      : []),
+    `--outfile=${resolve(root, executableName)}`,
+    "./boot.js",
+    "./ui.js",
+    "./host-operations.js",
+  ];
+  if (signal) {
+    await runManagedCommand(args, assets, {}, signal, framework);
+  } else {
+    await run(args, assets);
+  }
+  // The compiler has consumed the staging assets; only the DLL stays external.
+  await rm(assets, {
+    recursive: true,
+    force: true,
+  });
+}
 
 export function windowsInspectorArgument(port: number): string {
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error("Inspector port must be an integer between 1 and 65535.");
   }
   return `--inspect=127.0.0.1:${port}/bunaway`;
-}
-
-export async function writeWindowsLauncher(
-  source: string,
-  destination: string,
-): Promise<void> {
-  const script = await readFile(source, "utf8");
-  if (!script.includes("__BUN_SHA256__")) {
-    throw new Error("Missing launcher runtime pin.");
-  }
-  await writeFile(
-    destination,
-    script.replace("__BUN_SHA256__", pin.bun.executableSha256),
-  );
 }
 
 export async function verifyWindowsLaunch(root: string): Promise<void> {
@@ -32,6 +82,12 @@ export async function verifyWindowsLaunch(root: string): Promise<void> {
       packagedSha256?: string;
     };
     assets: Record<string, string>;
+    host?: {
+      kind: string;
+      executable: string;
+      sha256: string;
+      packagedSha256?: string;
+    };
   };
   if (
     manifest.bun?.executableSha256 !== pin.bun.executableSha256 ||
@@ -39,13 +95,20 @@ export async function verifyWindowsLaunch(root: string): Promise<void> {
   ) {
     throw new Error("Package Bun provenance does not match the framework pin.");
   }
-  const runtimeHash = manifest.bun.packagedSha256 ?? pin.bun.executableSha256;
-  if (!/^[a-f0-9]{64}$/.test(runtimeHash)) {
-    throw new Error("Invalid packaged Bun hash.");
-  }
-  await verifyHash(resolve(root, "runtime/bun.exe"), runtimeHash);
-  if (!manifest.assets?.["assets/boot.js"]) {
-    throw new Error("Missing Windows bootstrap inventory.");
+  if (manifest.host?.kind === "bun-compiled") {
+    await verifyHash(
+      await projectPath(root, manifest.host.executable),
+      manifest.host.packagedSha256 ?? manifest.host.sha256,
+    );
+  } else {
+    const runtimeHash = manifest.bun.packagedSha256 ?? pin.bun.executableSha256;
+    if (!/^[a-f0-9]{64}$/.test(runtimeHash)) {
+      throw new Error("Invalid packaged Bun hash.");
+    }
+    await verifyHash(resolve(root, "runtime/bun.exe"), runtimeHash);
+    if (!manifest.assets?.["assets/boot.js"]) {
+      throw new Error("Missing Windows bootstrap inventory.");
+    }
   }
   for (const [name, expected] of Object.entries(manifest.assets)) {
     await verifyHash(await projectPath(root, name), expected);

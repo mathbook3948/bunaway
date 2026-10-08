@@ -173,6 +173,48 @@ async function run() {
     ok: true,
   });
 
+  if (multiView) {
+    await test("embedded resources, ranges and web workers", async () => {
+      const response = await fetch("asset-probe.txt", {
+        headers: {
+          Range: "bytes=2-4",
+        },
+      });
+      assert(
+        response.status === 206 && (await response.text()) === "234",
+        "byte range response",
+      );
+      assert(
+        (await fetch("missing-file.txt")).status === 404,
+        "missing resource must stay local",
+      );
+      assert(
+        (await fetch("../policy.json")).status === 404,
+        "host policy must not be a web resource",
+      );
+      const worker = new Worker("./asset-probe.js");
+      try {
+        const result = await new Promise((resolve, reject) => {
+          const timer = setTimeout(
+            () => reject(new Error("web worker timeout")),
+            5000,
+          );
+          worker.onmessage = (event) => {
+            clearTimeout(timer);
+            resolve(event.data);
+          };
+          worker.onerror = () => {
+            clearTimeout(timer);
+            reject(new Error("web worker failed"));
+          };
+        });
+        assert(result === "embedded worker", "web worker asset");
+      } finally {
+        worker.terminate();
+      }
+    });
+  }
+
   await test("shared request id stays in this view", async () => {
     // The reader page uses the same request id concurrently; each view must
     // receive the response carrying its own payload.

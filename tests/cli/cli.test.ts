@@ -399,6 +399,33 @@ test("unified v1 configuration rejects malformed sections and old flat settings"
         appId: "../escape",
       },
     },
+    ...[
+      "../app.exe",
+      "CON.exe",
+      "unins000.exe",
+      "nul.app.exe",
+      "COM¹.exe",
+      "app. .exe",
+      "app.cmd",
+      "app\0.exe",
+    ].map((executableName) => ({
+      ...valid,
+      app: {
+        ...valid.app,
+        executableName,
+      },
+    })),
+    ...[
+      "missing.ico",
+      "src/main.ts",
+      "../outside.ico",
+    ].map((icon) => ({
+      ...valid,
+      app: {
+        ...valid.app,
+        icon,
+      },
+    })),
     {
       ...valid,
       app: {
@@ -440,6 +467,40 @@ test("unified v1 configuration rejects malformed sections and old flat settings"
     }
   }
 });
+
+test.skipIf(process.platform !== "win32" || process.arch !== "x64")(
+  "Windows validates the default executable name and accepts a valid override",
+  async () => {
+    const path = resolve(project, "src-bunaway/bunaway.json");
+    const valid = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
+    try {
+      await writeJson(path, {
+        ...valid,
+        app: {
+          ...valid.app,
+          appId: "unins000",
+        },
+      });
+      await expect(validateProject(project)).rejects.toThrow(
+        "Default Windows executable name unins000.exe is invalid",
+      );
+
+      await writeJson(path, {
+        ...valid,
+        app: {
+          ...valid.app,
+          appId: "unins000",
+          executableName: "memo.exe",
+        },
+      });
+      expect((await validateProject(project)).app.executableName).toBe(
+        "memo.exe",
+      );
+    } finally {
+      await Bun.write(path, originals["src-bunaway/bunaway.json"] ?? "");
+    }
+  },
+);
 
 test("bundle is optional until packaging and generated settings stay beside app modules", async () => {
   const path = resolve(project, "src-bunaway/bunaway.json");
@@ -577,6 +638,18 @@ test("external development delegates frontend compilation and missing build outp
     expect(shouldRestartHost(rootBackend, "src/main.ts")).toBe(false);
     expect(shouldRestartHost(rootBackend, "public/icon.png")).toBe(false);
     expect(shouldRestartHost(rootBackend, "app.ts")).toBe(true);
+    const withIcon = {
+      ...development,
+      app: {
+        ...development.app,
+        icon: "./assets/App.ico",
+      },
+    };
+    expect(shouldRestartHost(withIcon, "assets/app.ico")).toBe(true);
+    expect(shouldRestartHost(withIcon, "assets\\App.ico")).toBe(true);
+    expect(shouldRestartHost(withIcon, "assets")).toBe(true);
+    expect(shouldRestartHost(withIcon, "assets/other.ico")).toBe(false);
+    expect(shouldRestartHost(withIcon, "src/main.ts")).toBe(false);
     await expect(validateProject(project)).rejects.toThrow();
     const assets = resolve(home, "external-development-assets");
     await mkdir(assets, {
@@ -900,12 +973,18 @@ test("Windows development artifacts enable DevTools only with their launch flag"
     await buildFixture(false);
     const production = resolve(project, "dist/windows-x64");
     expect(
-      (await Bun.file(resolve(production, "assets/app.json")).json())
-        .developmentTools,
-    ).toBeUndefined();
+      await Bun.file(resolve(production, "assets/app.json")).exists(),
+    ).toBe(false);
+    expect(await Bun.file(resolve(production, "assets/app.js")).exists()).toBe(
+      false,
+    );
+    const manifest = await Bun.file(
+      resolve(production, "manifest.json"),
+    ).json();
+    expect(manifest.host.kind).toBe("bun-compiled");
     expect(
-      await Bun.file(resolve(production, "assets/app.js")).text(),
-    ).not.toContain("sourceMappingURL=data:");
+      await Bun.file(resolve(production, manifest.host.executable)).exists(),
+    ).toBe(true);
     for (const url of [
       undefined,
       "http://127.0.0.1:5173/",
@@ -1105,6 +1184,154 @@ test.each([
     }
   },
   30000,
+);
+
+test.skipIf(process.platform !== "win32" || process.arch !== "x64")(
+  "SIGINT during Windows EXE compilation reaps descendants, preserves output and allows retry",
+  async () => {
+    const listener = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: () => new Response(""),
+    });
+    const port = listener.port;
+    listener.stop(true);
+    if (!port) {
+      throw new Error("No test port.");
+    }
+    const ready = resolve(project, "compiler-descendant-ready.txt");
+    const interrupt = resolve(project, "build-interrupt.txt");
+    const output = resolve(project, "dist/windows-x64");
+    const manifestPath = resolve(output, "manifest.json");
+    const lockDirectory = resolve(project, "dist/.bunaway-locks/windows-x64");
+    const cleanFixtureEnv = {
+      ...process.env,
+      BUNAWAY_TEST_COMPILE_SIGNAL: "",
+    };
+    for (const path of [
+      ready,
+      interrupt,
+    ]) {
+      await rm(path, {
+        force: true,
+      });
+    }
+    const baseline = Bun.spawn(
+      [
+        process.execPath,
+        resolve(import.meta.dir, "build.fixture.ts"),
+        project,
+      ],
+      {
+        stdout: "pipe",
+        stderr: "pipe",
+        env: cleanFixtureEnv,
+      },
+    );
+    const baselineOutput = new Response(baseline.stdout).text();
+    const baselineErrors = new Response(baseline.stderr).text();
+    expect(
+      await baseline.exited,
+      `${await baselineOutput}\n${await baselineErrors}`,
+    ).toBe(0);
+    const previousManifest = await Bun.file(manifestPath).text();
+    const executableName = (
+      JSON.parse(previousManifest) as {
+        host: {
+          executable: string;
+        };
+      }
+    ).host.executable;
+    const previousExecutable = await hash(resolve(output, executableName));
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        resolve(import.meta.dir, "build-signal.fixture.ts"),
+        project,
+        "SIGINT",
+      ],
+      {
+        stdout: "pipe",
+        stderr: "pipe",
+        env: {
+          ...process.env,
+          BUNAWAY_TEST_COMPILE_SIGNAL: "1",
+          BUNAWAY_TEST_COMPILE_SIGNAL_PORT: String(port),
+          BUNAWAY_TEST_COMPILE_SIGNAL_READY: ready,
+        },
+      },
+    );
+    const childOutput = new Response(child.stdout).text();
+    const childErrors = new Response(child.stderr).text();
+    try {
+      const deadline = Date.now() + 20000;
+      while (!(await Bun.file(ready).exists())) {
+        if (child.exitCode !== null || Date.now() >= deadline) {
+          throw new Error("Windows app compilation did not start.");
+        }
+        await Bun.sleep(20);
+      }
+      expect((await fetch(`http://127.0.0.1:${port}/`)).ok).toBe(true);
+      expect(
+        await Bun.file(resolve(lockDirectory, "build.lock")).exists(),
+      ).toBe(true);
+      await Bun.write(interrupt, "SIGINT");
+      const timeout = setTimeout(() => child.kill(), 15000);
+      try {
+        expect(await child.exited).not.toBe(0);
+      } finally {
+        clearTimeout(timeout);
+      }
+      expect(await childOutput).toContain("PASS build signal handler cleanup");
+      expect(await childErrors).toContain("cancelled (SIGINT)");
+      expect(await readdir(lockDirectory)).toEqual([]);
+      expect(await Bun.file(manifestPath).text()).toBe(previousManifest);
+      expect(await hash(resolve(output, executableName))).toBe(
+        previousExecutable,
+      );
+      await expect(
+        fetch(`http://127.0.0.1:${port}/`, {
+          signal: AbortSignal.timeout(200),
+        }),
+      ).rejects.toThrow();
+      const retry = Bun.spawn(
+        [
+          process.execPath,
+          resolve(import.meta.dir, "build.fixture.ts"),
+          project,
+        ],
+        {
+          stdout: "pipe",
+          stderr: "pipe",
+          env: cleanFixtureEnv,
+        },
+      );
+      const retryOutput = new Response(retry.stdout).text();
+      const retryErrors = new Response(retry.stderr).text();
+      expect(
+        await retry.exited,
+        `${await retryOutput}\n${await retryErrors}`,
+      ).toBe(0);
+    } finally {
+      if (child.exitCode === null) {
+        child.kill();
+      }
+      await child.exited;
+      await Promise.all([
+        childOutput,
+        childErrors,
+      ]);
+      for (const path of [
+        ready,
+        interrupt,
+      ]) {
+        await rm(path, {
+          force: true,
+        });
+      }
+    }
+  },
+  60000,
 );
 
 test("external development orchestrates UI updates, backend restarts and server replacement", async () => {

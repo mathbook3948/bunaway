@@ -59,7 +59,7 @@ export class Tray {
       this.data.writeUInt32LE(1, 16);
       this.data.writeUInt32LE(7, 20); // NIF_MESSAGE | NIF_ICON | NIF_TIP
       this.data.writeUInt32LE(CALLBACK, 24);
-      const icon = user.symbols.LoadIconW(0n, 32512n); // shared IDI_APPLICATION
+      const icon = windows.icon;
       assert(icon, "Tray icon unavailable");
       this.data.writeBigUInt64LE(icon, 32);
       Buffer.from(tooltip, "utf16le").copy(this.data, 40, 0, 254);

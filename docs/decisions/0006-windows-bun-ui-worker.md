@@ -133,8 +133,8 @@ HRESULT로 변환한다. 마지막 COM 참조 해제와 콜백 반환을 확인�
 
 ## 부팅, 종료
 
-1. 번들 Bun 버전/revision, manifest, 정책, 자산, Loader를 검증하고 실행 식별자를 만든다.
-   앱 모듈은 자산 검증 뒤 불러온다. 전역 Bun이나 기존 C++ 호스트로 자동 fallback하지 않는다.
+1. Bun 버전/revision과 내장 앱 설정, 정책을 확인하고 실행 식별자를 만든다.
+   의존성 핀과 산출물 해시는 빌드 및 패키징에서 검사하며 앱 시작 때 전체 파일을 검사하지 않는다. 전역 Bun이나 기존 C++ 호스트로 자동 fallback하지 않는다.
    앱 import 전에 데이터 디렉터리의 `host.lock`을 공유 없는 Win32 파일 핸들로 연다.
    같은 데이터 디렉터리에서는 WebView 브라우저와 Job 소유권이 겹치지 않게 한다.
    중복 실행의 오류 처리는 [ADR 0013](./0013-desktop-lifecycle.md)의 인자 전달로 확장했다.
@@ -177,10 +177,19 @@ WebView renderer 장애는 해당 뷰의 세션 폐기, 재탐색, browser 장�
 불러오는 진입점으로 번들해야 한다. CLI, 템플릿에 `windowsApp` 설정과 default export AppDefinition을 적용했다.
 기존 backend 진입점을 암묵적으로 새 모드로 해석하지 않는다.
 
-한 exe 배포, 콘솔 없는 시작은 아직 검증하지 않았다. Bun compile을 채택한다면 고정
-버전에서 Worker 경로, FFI DLL 동봉, manifest, 기동 환경을 먼저 검증해야 한다. 런타임이
-자기 해시를 확인하는 것만으로 실행 전 바이너리 검증을 대체했다고 주장하지 않는다.
-C++ 없는 독립 프로젝트 빌드, 앱 기동은 검증했다. 설치/서명 완료를 의미하지 않는다.
+2026-10-08 배포 빌드는 Bun compile을 사용하기로 결정했다. 앱/코어, UI/IO Worker,
+웹 자산, 앱 설정과 정책을 콘솔 없는 EXE에 내장한다. Microsoft Loader DLL과 라이선스는
+외부 파일로 유지한다. 개발 모드는 외부 JS를 사용해 재시작 비용을 줄인다.
+웹 자산은 기존 HTTPS 출처에서 WebResourceRequested로 응답한다. 임시 폴더에 추출하지 않는다.
+Bun과 앱이 하나의 실행 파일이므로 UI 변경도 재빌드와 재서명 대상이다.
+
+작업 디렉터리의 .env, bunfig, tsconfig와 package.json 자동 로딩은 컴파일 시 끈다.
+Bun이 앱 코드보다 먼저 읽는 BUN_OPTIONS와 BUN_BE_BUN은 신뢰된 로컬 실행 환경의
+설정으로 취급한다. 이를 차단하려고 별도 네이티브 실행기를 추가하지 않는다.
+WebView 출처, 호스트 컨텍스트와 정책 검사는 그대로 유지한다.
+manifest는 패키징 입력과 출처 기록이며 시작 시 자체 무결성을 인증하는 수단으로 사용하지 않는다.
+향후 업데이트는 전체 패키지 교체와 신뢰된 공개키의 서명 검증을 기준으로 한다.
+자동 업데이트 플러그인 자체는 이번 변경에 포함하지 않는다.
 
 기존 `tests/core`, `tests/api`, `tests/protocol`은 재사용한다. 실제 호스트 검증은
 `tests/lifecycle/windows-host.ts`의 기대값을 유지하고 실행기/프로세스 구조 확인만

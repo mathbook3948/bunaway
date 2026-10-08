@@ -1,6 +1,6 @@
 # 데스크톱 기능 TODO: Tauri와 Electron 비교
 
-기준일: 2026-10-08. bunaway `38c233b`의 Windows 구현을 기준으로 작성했다.
+기준일: 2026-10-08. bunaway `38c233b`의 Windows 구현과 이후 compiled EXE 배포 전환을 반영했다.
 Tauri v2의 기본 API와 공식 플러그인, Electron의 공개 API를 기능별로 대조한다.
 창 최소 크기와 최대 크기처럼 초기 설정, 실행 중 변경, 조회, 이벤트가 따로 필요한
 기능은 각각 작업으로 기록한다. 비교 대상의 메서드 이름이나 바이너리와의 호환을
@@ -166,10 +166,10 @@ Tauri v2의 기본 API와 공식 플러그인, Electron의 공개 API를 기능�
 우선순위 P1. 소유자: 선택 데스크톱 기능, 앱 실행 유지와 종료는 호스트.
 출처: [T-tray], [E-tray]. Tauri는 별도 설치 플러그인이 아닌 기본 패키지의 내장 tray 플러그인을 사용한다.
 
-- [x] tooltip, 기본 아이콘과 Open/Quit 메뉴로 트레이를 생성한다.
+- [x] tooltip, 앱 아이콘과 Open/Quit 메뉴로 트레이를 생성한다. 앱 아이콘을 지정하지 않으면 기본 아이콘을 사용한다.
 - [x] 트레이 클릭으로 살아 있는 창을 복원하고 Quit에 앱 종료 확인을 적용한다.
 - [x] Explorer 재시작 후 트레이 아이콘을 다시 등록한다.
-- [ ] 사용자 ICO, PNG 또는 이미지 리소스로 아이콘을 지정한다.
+- [ ] 앱 아이콘과 별도로 트레이용 ICO, PNG 또는 이미지 리소스를 지정한다.
 - [ ] 아이콘과 tooltip을 실행 중 변경한다.
 - [ ] 트레이 생성, 조회, 표시, 숨김, 제거와 제거 여부 조회 API를 제공한다.
 - [ ] 여러 트레이 아이콘과 고유 ID, Windows GUID를 지원한다.
@@ -519,12 +519,12 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 우선순위 P2, 첫 공개 릴리스 준비는 P1. 소유자: updater 플러그인, 패키저와 호스트.
 출처: [T-updater], [E-updater], [T-config], [E-app].
 
-- [x] 번들 Bun과 자산, 정책, 해시를 고정한 Windows 앱 패키지를 만든다.
+- [x] 고정 Bun으로 앱 코드와 웹 자산, 설정과 정책을 compiled EXE에 포함한 Windows 앱 패키지를 만든다.
 - [x] Inno Setup 기반 direct와 Store unpackaged 채널의 설치 파일 생성 경로가 있다.
-- [ ] 앱 이름과 아이콘을 가진 GUI launcher와 시작 실패 안내를 제공한다.
+- [x] 앱 이름과 ICO 아이콘을 가진 GUI EXE로 실행하고 시작 실패 대화상자와 로그를 제공한다.
 - [ ] 설치 옵션에 autostart, 파일 연결과 URL scheme의 opt-in을 연결한다.
 - [ ] 설치 위치 변경과 업데이트에서 앱 데이터, 연결과 바로가기를 유지한다.
-- [ ] 서명된 현재 Bun FFI 앱의 설치, 덮어쓰기 업데이트와 제거를 검증한다.
+- [ ] 서명된 compiled EXE 앱의 설치, 덮어쓰기 업데이트와 제거를 검증한다.
 - [ ] WebView2 없는 PC의 설치, offline 배포와 최소 runtime 버전을 처리한다.
 - [ ] MSIX 활성화와 안전한 런타임 시작 경로를 구현하고 검증한다.
 - [ ] 업데이트 endpoint, channel, target와 architecture를 지정한다.
@@ -676,7 +676,7 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 ## 다음 작업 묶음
 
 1. 창 최소와 최대 크기, 기본 상태 제어와 창 이벤트: 02, 03, 04.
-2. 트레이 사용자 아이콘과 메뉴, autostart, 전역 단축키: 06, 07, 08.
+2. 트레이 개별 아이콘과 메뉴, autostart, 전역 단축키: 06, 07, 08.
 3. 파일 대화상자, 클립보드, opener와 알림: 09, 10, 11, 12.
 4. 모니터와 DPI, 테마, 창 상태 저장과 OS 연결: 04, 09, 13.
 5. WebView와 세션 확장, 전송과 데이터 기능: 14–21, 23.

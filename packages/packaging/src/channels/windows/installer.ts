@@ -73,12 +73,15 @@ export function installerStages(
         if (!state.payloadDir) {
           throw new Error("stage did not produce a payload directory.");
         }
+        const executable = input.manifest.host?.executable;
+        if (!executable) {
+          throw new Error("Missing compiled Windows app.");
+        }
         if (ctx.input.signing) {
           await signFiles(ctx, [
-            join(state.payloadDir, "runtime", "bun.exe"),
+            join(state.payloadDir, executable),
           ]);
         }
-        // Bind runtime checks and the pre-start launcher to the final bytes.
         await recordPackagedHashes(state.payloadDir);
         if (ctx.input.signing && ctx.input.channel === "win-store-unpackaged") {
           // Preserve third-party signatures and asset hashes; reject untrusted
@@ -168,6 +171,7 @@ export function installerStages(
         const innoOptions: InnoOptions = {
           name: metadata.name,
           identifier: metadata.identifier,
+          appId: input.manifest.app.id,
           version: metadata.version.semver,
           publisher: metadata.publisher.display,
           scope,
@@ -180,6 +184,8 @@ export function installerStages(
           appDataDir: `{localappdata}\\bunaway\\${input.manifest.app.id}`,
           preserveUserData,
           assetPaths: Object.keys(input.manifest.assets),
+          executableName:
+            input.manifest.host?.executable ?? `${input.manifest.app.id}.exe`,
           signed: ctx.input.signing !== undefined,
           ...(target?.minVersion
             ? {

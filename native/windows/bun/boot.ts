@@ -1,9 +1,7 @@
 import { dlopen, type Pointer, ptr, read, toArrayBuffer } from "bun:ffi";
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { lstat, readdir, readFile, realpath } from "node:fs/promises";
-import { dirname, isAbsolute, relative, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { basename, dirname, resolve } from "node:path";
 import type { AppDefinition } from "../../../packages/core/src/index.ts";
 import {
   type HostContext,
@@ -16,22 +14,18 @@ import {
 import { readWindowSpecs } from "../../../packages/runtime-bun/src/window-config.ts";
 import pin from "../../../runtime/build-manifests/windows-x64.json";
 import type { UIConfig } from "./channel.ts";
-import deps from "./deps.json";
 import { runWindowsApp } from "./entry.ts";
 import {
   forwardToInstance,
   instanceAddress,
-  type LaunchArguments,
   listenForInstances,
   parseLaunchArguments,
-  readLaunchArguments,
 } from "./instance.ts";
 import { AppAlreadyRunningError, containAppProcess } from "./job.ts";
 
-const hash = async (path: string) =>
-  createHash("sha256")
-    .update(await readFile(path))
-    .digest("hex");
+const compiled = Bun.embeddedFiles.some(
+  (file) => (file as File).name === "app.json",
+);
 function object(value: unknown): Record<string, unknown> {
   assert(
     value && typeof value === "object" && !Array.isArray(value),
@@ -92,93 +86,12 @@ export async function verifyWindowsPackage(
   assert.equal(process.arch, "x64");
   assert.equal(Bun.version, pin.bun.version);
   assert.equal(Bun.revision, pin.bun.sourceRevision);
-  for (const name of Object.keys(process.env)) {
-    assert(
-      !/^(BUN_|NODE_OPTIONS$|WEBVIEW2_)/i.test(name),
-      `Unsafe launch environment: ${name}`,
-    );
-  }
+  // Bun consumes BUN_OPTIONS/BUN_BE_BUN before application code. The local launch
+  // environment is trusted; compile disables cwd config loading, not user overrides.
   const root = await realpath(resolve(directory));
-  const manifest = object(
-    JSON.parse(await readFile(resolve(root, "manifest.json"), "utf8")),
-  );
-  const bun = object(manifest.bun);
-  assert.equal(bun.executableSha256, pin.bun.executableSha256);
-  assert.equal(bun.sourceRevision, pin.bun.sourceRevision);
-  const packagedBunSha = bun.packagedSha256 ?? pin.bun.executableSha256;
-  assert(
-    typeof packagedBunSha === "string" && /^[a-f0-9]{64}$/.test(packagedBunSha),
-    "Invalid packaged Bun hash",
-  );
-  assert.equal(
-    await hash(resolve(root, "runtime/bun.exe")),
-    packagedBunSha,
-    "Bun hash mismatch",
-  );
-  assert.equal(
-    await realpath(process.execPath),
-    await realpath(resolve(root, "runtime/bun.exe")),
-    "Use the package's absolute bundled Bun",
-  );
-  const assets = object(manifest.assets);
-  const actual: string[] = [];
-  async function visit(path: string) {
-    for (const entry of await readdir(path, {
-      withFileTypes: true,
-    })) {
-      const target = resolve(path, entry.name);
-      const info = await lstat(target);
-      assert(!info.isSymbolicLink(), "Package links are not allowed");
-      if (info.isDirectory()) {
-        await visit(target);
-      } else {
-        assert(info.isFile());
-        actual.push(relative(root, target).replaceAll("\\", "/"));
-      }
-    }
-  }
-  await visit(resolve(root, "assets"));
-  await visit(resolve(root, "licenses"));
-  assert.deepEqual(
-    actual.sort(),
-    Object.keys(assets).sort(),
-    "Package inventory mismatch",
-  );
-  for (const [name, expected] of Object.entries(assets)) {
-    assert(typeof expected === "string" && /^[a-f0-9]{64}$/.test(expected));
-    assert(
-      !isAbsolute(name) &&
-        !name.includes("\\") &&
-        !name.split("/").includes(".."),
-    );
-    assert.equal(
-      await hash(resolve(root, name)),
-      expected,
-      `Asset hash mismatch: ${name}`,
-    );
-  }
-  assert.equal(
-    await hash(resolve(root, "assets/WebView2Loader.dll")),
-    deps.webview2Sdk.files["build/native/x64/WebView2Loader.dll"],
-  );
-  for (const name of [
-    "assets/boot.js",
-    "assets/ui.js",
-    "assets/host-operations.js",
-    "assets/app.js",
-    "assets/WebView2Loader.dll",
-    "assets/app.json",
-    "assets/policy.json",
-    "assets/bunfig.toml",
-    "assets/tsconfig.json",
-  ]) {
-    assert(
-      Object.hasOwn(assets, name),
-      `Required package asset missing: ${name}`,
-    );
-  }
+  const assets = compiled ? import.meta.dir : resolve(root, "assets");
   const config = object(
-    JSON.parse(await readFile(resolve(root, "assets/app.json"), "utf8")),
+    JSON.parse(await readFile(resolve(assets, "app.json"), "utf8")),
   );
   const devUrl = verifyDevelopmentLaunch(config.development, developmentUrl);
   const devtools = verifyDevelopmentToolsLaunch(
@@ -191,7 +104,7 @@ export async function verifyWindowsPackage(
     "Invalid app id",
   );
   const policy = parsePolicy(
-    await readFile(resolve(root, "assets/policy.json"), "utf8"),
+    await readFile(resolve(assets, "policy.json"), "utf8"),
   );
   const specs = config.windows ?? [
     {
@@ -210,8 +123,16 @@ export async function verifyWindowsPackage(
     backendContext: `backend-${crypto.randomUUID()}` as HostContext,
     policy,
     windows,
-    assets: resolve(root, "assets"),
-    loader: resolve(root, "assets/WebView2Loader.dll"),
+    assets,
+    loader: resolve(
+      root,
+      compiled ? "WebView2Loader.dll" : "assets/WebView2Loader.dll",
+    ),
+    ...(config.icon
+      ? {
+          icon: compiled ? process.execPath : resolve(assets, "app.ico"),
+        }
+      : {}),
     legacyProfile: !Array.isArray(config.windows),
     devtools,
     dataRoot: resolve(localAppData(), "bunaway", config.appId),
@@ -219,53 +140,106 @@ export async function verifyWindowsPackage(
 }
 
 if (import.meta.main) {
-  const root = resolve(dirname(import.meta.path), "..");
-  const args = process.argv.slice(2);
-  const devtools = args[0] === "--devtools";
-  if (devtools) {
-    args.shift();
-  }
-  const developmentUrl = args[0] === "--dev-url" ? args[1] : undefined;
-  if (args[0] === "--dev-url") {
-    assert(developmentUrl, "Missing development URL");
-  }
-  const config = await verifyWindowsPackage(root, developmentUrl, devtools);
-  // Launchers send JSON on stdin to preserve arguments without expanding the command line.
-  let launch: LaunchArguments;
-  const appArgs = developmentUrl ? args.slice(2) : args;
-  if (appArgs[0] === "--launch-stdin") {
-    assert(appArgs.length === 1, "Invalid launch input");
-    launch = await readLaunchArguments(Bun.stdin.stream());
-  } else {
-    launch = parseLaunchArguments({
-      argv: appArgs,
+  let dataRoot: string | undefined;
+  let title = "Bunaway";
+  try {
+    dataRoot = resolve(
+      localAppData(),
+      "bunaway",
+      basename(process.execPath, ".exe"),
+    );
+    const root = compiled
+      ? dirname(process.execPath)
+      : resolve(import.meta.dir, "..");
+    const args = process.argv.slice(2);
+    const devtools = !compiled && args[0] === "--devtools";
+    if (devtools) {
+      args.shift();
+    }
+    const developmentUrl =
+      !compiled && args[0] === "--dev-url" ? args[1] : undefined;
+    if (!compiled && args[0] === "--dev-url") {
+      assert(developmentUrl, "Missing development URL");
+    }
+    const config = await verifyWindowsPackage(root, developmentUrl, devtools);
+    dataRoot = config.dataRoot;
+    title = config.windows[0]?.title ?? title;
+    const launch = parseLaunchArguments({
+      argv: developmentUrl ? args.slice(2) : args,
       cwd: process.cwd(),
     });
-  }
-  try {
-    containAppProcess(config.dataRoot);
-  } catch (error) {
-    if (!(error instanceof AppAlreadyRunningError)) {
-      throw error;
+    try {
+      containAppProcess(config.dataRoot);
+    } catch (error) {
+      if (!(error instanceof AppAlreadyRunningError)) {
+        throw error;
+      }
+      await forwardToInstance(instanceAddress(config.dataRoot), launch);
+      process.exit(0);
     }
-    await forwardToInstance(instanceAddress(config.dataRoot), launch);
+    const inbox = await listenForInstances(instanceAddress(config.dataRoot));
+    try {
+      // Only the owner imports the app after IPC readiness. This literal also lets
+      // bun build --compile include the application and its shared core chunk.
+      // @ts-expect-error app.js is supplied by the host bundler.
+      const module = await import("./app.js");
+      const app = object(module.default);
+      assert(
+        app.commands && app.events,
+        "App must default-export an AppDefinition",
+      );
+      await runWindowsApp(app as AppDefinition, config, launch, inbox);
+    } finally {
+      // runWindowsApp also closes on shutdown; early import failures need this path.
+      await inbox.close().catch(() => {});
+    }
     process.exit(0);
+  } catch (error) {
+    console.error(error);
+    if (compiled) {
+      await reportWindowsFailure(error, dataRoot, title);
+    }
+    process.exit(1);
   }
-  const inbox = await listenForInstances(instanceAddress(config.dataRoot));
+}
+
+export async function reportWindowsFailure(
+  error: unknown,
+  dataRoot: string | undefined,
+  title: string,
+) {
+  const message = (
+    error instanceof Error ? (error.stack ?? error.message) : String(error)
+  ).slice(0, 16384);
+  let detail = message;
+  if (dataRoot) {
+    const log = resolve(dataRoot, "logs/startup-error.log");
+    try {
+      await mkdir(dirname(log), {
+        recursive: true,
+      });
+      await writeFile(log, message, "utf8");
+      detail = `${message}\n\nLog: ${log}`;
+    } catch {
+      /* A startup failure must still be visible if the log cannot be written. */
+    }
+  }
+  const user = dlopen("user32.dll", {
+    MessageBoxW: {
+      args: [
+        "u64",
+        "ptr",
+        "ptr",
+        "u32",
+      ],
+      returns: "i32",
+    },
+  });
+  const text = Buffer.from(`${detail}\0`, "utf16le");
+  const caption = Buffer.from(`${title}\0`, "utf16le");
   try {
-    // Only the owner imports the app after all package checks and IPC readiness.
-    const module = await import(
-      pathToFileURL(resolve(root, "assets/app.js")).href
-    );
-    const app = object(module.default);
-    assert(
-      app.commands && app.events,
-      "App must default-export an AppDefinition",
-    );
-    await runWindowsApp(app as AppDefinition, config, launch, inbox);
+    user.symbols.MessageBoxW(0n, ptr(text), ptr(caption), 0x10);
   } finally {
-    // runWindowsApp also closes on shutdown; early import failures need this path.
-    await inbox.close().catch(() => {});
+    user.close();
   }
-  process.exit(0);
 }

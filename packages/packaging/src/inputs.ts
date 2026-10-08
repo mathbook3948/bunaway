@@ -15,13 +15,14 @@ import {
 } from "./contract.ts";
 
 // Locates the channel-neutral artifact produced by `bunaway build`.
-// Windows: dist/windows-x64/{runtime/bun.exe, assets/, licenses/, manifest.json}.
+// Windows: dist/windows-x64/{<app>.exe, WebView2Loader.dll, licenses/, manifest.json}.
 // macOS: dist/macos-arm64/<appId>.app with the package root at
 // Contents/Resources. Adapters must treat these files as read-only.
 export function artifactPaths(args: {
   root: string;
   target: BuildTarget;
   appId: string;
+  executableName?: string;
 }): BuildArtifact {
   const { root, target, appId } = args;
   if (target === "windows-x64") {
@@ -29,7 +30,7 @@ export function artifactPaths(args: {
     return {
       dir,
       packageDir: dir,
-      executable: resolve(dir, "runtime/bun.exe"),
+      executable: resolve(dir, args.executableName ?? `${appId}.exe`),
     };
   }
   const dir = resolve(root, "dist/macos-arm64", `${appId}.app`);
@@ -313,15 +314,7 @@ function validateManifest(value: unknown): asserts value is PackageManifest {
 
 const REQUIRED_ASSETS = {
   windows: [
-    "assets/app.json",
-    "assets/policy.json",
-    "assets/boot.js",
-    "assets/app.js",
-    "assets/ui.js",
-    "assets/host-operations.js",
-    "assets/WebView2Loader.dll",
-    "assets/bunfig.toml",
-    "assets/tsconfig.json",
+    "WebView2Loader.dll",
     "licenses/LICENSE.bun",
     "licenses/License-WebView2.txt",
   ],
@@ -561,66 +554,51 @@ export async function verifyArtifact(args: {
   // sourceSha256 predates macOS bundle signing and is provenance, not a final digest.
   const hostDigest = manifest.host?.packagedSha256 ?? manifest.host?.sha256;
   if (platform === "windows") {
-    if (manifest.host?.kind !== "bun-ffi") {
-      diagnostics.push({
-        stage,
-        code: CODES.INPUT_UNEXPECTED,
-        severity: "error",
-        message:
-          "This Windows artifact uses the retired native host layout; run bunaway build again for the Bun FFI host.",
-        path: manifestPath,
-      });
-    } else if (!isDigest(manifest.host.sha256)) {
-      diagnostics.push({
-        stage,
-        code: CODES.INPUT_MISSING,
-        severity: "error",
-        message:
-          "Windows build manifest is missing the Bun FFI bootstrap hash; run bunaway build again.",
-        path: manifestPath,
-      });
-    } else if (manifest.host.sha256 !== manifest.assets["assets/boot.js"]) {
-      diagnostics.push({
-        stage,
-        code: CODES.INPUT_TAMPERED,
-        severity: "error",
-        message:
-          "Windows Bun FFI bootstrap hash does not match its asset inventory.",
-        path: manifestPath,
-      });
-    }
+    const host = manifest.host;
     if (
-      artifact.executable !== resolve(artifact.packageDir, "runtime/bun.exe")
+      host?.kind !== "bun-compiled" ||
+      typeof host.executable !== "string" ||
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: Windows file-name restrictions.
+      !/^[^<>:"/\\|?*\x00-\x1f]+\.exe$/i.test(host.executable)
     ) {
       diagnostics.push({
         stage,
         code: CODES.INPUT_UNEXPECTED,
         severity: "error",
         message:
-          "Windows app executable must be the bundled runtime/bun.exe; run bunaway build again.",
-        path: artifact.executable,
+          "Windows requires a compiled Bun app; run bunaway build again.",
+        path: manifestPath,
       });
-    }
-    for (const name of [
-      "launch.ps1",
-      "bunaway.cmd",
-    ]) {
-      try {
-        await inputPath(
-          artifact.packageDir,
-          resolve(artifact.packageDir, name),
-        );
-      } catch (error) {
+    } else {
+      const executable = resolve(artifact.packageDir, host.executable);
+      if (artifact.executable !== executable) {
         diagnostics.push({
           stage,
-          code:
-            error instanceof ArtifactInputError
-              ? error.code
-              : CODES.INPUT_MISSING,
+          code: CODES.INPUT_UNEXPECTED,
           severity: "error",
-          message: `Windows launcher ${name} is missing; run bunaway build again.`,
-          path: resolve(artifact.packageDir, name),
+          message: "Windows executable does not match the build manifest.",
+          path: artifact.executable,
         });
+      }
+      if (
+        !isDigest(host.sha256) ||
+        (host.packagedSha256 !== undefined && !isDigest(host.packagedSha256))
+      ) {
+        diagnostics.push({
+          stage,
+          code: CODES.INPUT_MISSING,
+          severity: "error",
+          message:
+            "Windows build manifest has an invalid compiled executable hash.",
+          path: manifestPath,
+        });
+      } else {
+        await verifyFile(
+          artifact.packageDir,
+          executable,
+          "Compiled app",
+          hostDigest,
+        );
       }
     }
   }
@@ -643,17 +621,15 @@ export async function verifyArtifact(args: {
       true,
     );
   }
-  const runtime = resolve(
-    artifact.packageDir,
-    platform === "windows" ? "runtime/bun.exe" : "runtime/bun",
-  );
-  await verifyFile(
-    artifact.packageDir,
-    runtime,
-    "Bundled Bun",
-    packagedDigest(manifest.bun),
-    platform === "macos",
-  );
+  if (platform === "macos") {
+    await verifyFile(
+      artifact.packageDir,
+      resolve(artifact.packageDir, "runtime/bun"),
+      "Bundled Bun",
+      packagedDigest(manifest.bun),
+      true,
+    );
+  }
 
   const required = REQUIRED_ASSETS[platform];
   for (const path of required) {
@@ -667,30 +643,34 @@ export async function verifyArtifact(args: {
       });
     }
   }
-  let homePath = resolve(artifact.packageDir, "assets/app.json");
-  try {
-    const appPath = await inputPath(artifact.packageDir, homePath);
-    const app: unknown = JSON.parse(await readFile(appPath, "utf8"));
-    const asset = homeAsset(isRecord(app) ? app.home : undefined);
-    homePath = resolve(artifact.packageDir, asset);
-    const web = resolve(artifact.packageDir, "assets/web");
-    await inputPath(artifact.packageDir, web, true);
-    await inputPath(web, homePath);
-    if (!Object.hasOwn(manifest.assets, asset)) {
-      throw new ArtifactInputError(
-        CODES.INPUT_MISSING,
-        `Home document is missing from the manifest: ${asset}`,
-      );
+  if (platform === "macos") {
+    let homePath = resolve(artifact.packageDir, "assets/app.json");
+    try {
+      const appPath = await inputPath(artifact.packageDir, homePath);
+      const app: unknown = JSON.parse(await readFile(appPath, "utf8"));
+      const asset = homeAsset(isRecord(app) ? app.home : undefined);
+      homePath = resolve(artifact.packageDir, asset);
+      const web = resolve(artifact.packageDir, "assets/web");
+      await inputPath(artifact.packageDir, web, true);
+      await inputPath(web, homePath);
+      if (!Object.hasOwn(manifest.assets, asset)) {
+        throw new ArtifactInputError(
+          CODES.INPUT_MISSING,
+          `Home document is missing from the manifest: ${asset}`,
+        );
+      }
+    } catch (error) {
+      diagnostics.push({
+        stage,
+        code:
+          error instanceof ArtifactInputError
+            ? error.code
+            : CODES.INPUT_MISSING,
+        severity: "error",
+        message: error instanceof Error ? error.message : String(error),
+        path: homePath,
+      });
     }
-  } catch (error) {
-    diagnostics.push({
-      stage,
-      code:
-        error instanceof ArtifactInputError ? error.code : CODES.INPUT_MISSING,
-      severity: "error",
-      message: error instanceof Error ? error.message : String(error),
-      path: homePath,
-    });
   }
   for (const [relative, expected] of Object.entries(manifest.assets)) {
     const path = resolve(artifact.packageDir, relative);

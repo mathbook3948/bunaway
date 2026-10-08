@@ -14,7 +14,21 @@ import {
   query,
   release,
 } from "./com.ts";
+import { webAsset } from "./web-assets.ts";
 import { hr, kernel, user, wide, withWide } from "./win32.ts";
+
+const embedded = Bun.embeddedFiles.some(
+  (file) => (file as File).name === "app.json",
+);
+const streams = dlopen("shlwapi.dll", {
+  SHCreateMemStream: {
+    args: [
+      "ptr",
+      "u32",
+    ],
+    returns: "ptr",
+  },
+});
 
 export function originOf(text: string): string {
   try {
@@ -337,39 +351,57 @@ export class WebView {
     } finally {
       release(settings);
     }
-    const webview3 = query(
-      this.webview,
-      "a0d6df20-3b92-416d-aa0c-437a9c727857",
-    );
-    try {
-      hr(
-        withWide("app.bunaway.local", (host) =>
-          withWide(resolve(assets, "web"), (folder) =>
-            method(webview3, 71, [
-              "ptr",
-              "ptr",
-              "i32",
-            ])(host, folder, 2),
-          ),
-        ),
-        "SetVirtualHostNameToFolderMapping",
-      ); // DENY_CORS
-    } finally {
-      release(webview3);
-    }
-    for (const pattern of [
-      "http://*/*",
-      "https://*/*",
-    ]) {
-      hr(
-        withWide(pattern, (address) =>
-          method(webview, 57, [
-            "ptr",
-            "i32",
-          ])(address, 0),
-        ),
-        "Resource filter",
+    if (!embedded) {
+      const webview3 = query(
+        this.webview,
+        "a0d6df20-3b92-416d-aa0c-437a9c727857",
       );
+      try {
+        hr(
+          withWide("app.bunaway.local", (host) =>
+            withWide(resolve(assets, "web"), (folder) =>
+              method(webview3, 71, [
+                "ptr",
+                "ptr",
+                "i32",
+              ])(host, folder, 2),
+            ),
+          ),
+          "SetVirtualHostNameToFolderMapping",
+        ); // DENY_CORS
+      } finally {
+        release(webview3);
+      }
+    }
+    // Include worker-originated requests when serving embedded web resources.
+    const filters = embedded
+      ? query(webview, "db75dfc7-a857-4632-a398-6969dde26c0a")
+      : undefined;
+    try {
+      for (const pattern of [
+        "http://*/*",
+        "https://*/*",
+      ]) {
+        hr(
+          withWide(pattern, (address) =>
+            filters
+              ? method(filters, 123, [
+                  "ptr",
+                  "i32",
+                  "u32",
+                ])(address, 0, 0xffffffff)
+              : method(webview, 57, [
+                  "ptr",
+                  "i32",
+                ])(address, 0),
+          ),
+          "Resource filter",
+        );
+      }
+    } finally {
+      if (filters) {
+        release(filters);
+      }
     }
     const navigation = (args: Pointer, frame: boolean) => {
       const uri = getString(args, 3);
@@ -484,45 +516,97 @@ export class WebView {
     this.on(55, "ab00b74c-15f1-4646-80e8-e76341d25d71", (args) => {
       const request = getObject(args, 3);
       let uri: string;
+      let resource: ReturnType<typeof webAsset> | undefined;
       try {
         uri = getString(request, 3);
+        if (
+          embedded &&
+          originOf(uri) === "https://app.bunaway.local" &&
+          this.origins.includes(originOf(uri))
+        ) {
+          const headers = getObject(request, 9);
+          let range = "";
+          try {
+            const contains = new Int32Array(1);
+            hr(
+              withWide("Range", (name) =>
+                method(headers, 5, [
+                  "ptr",
+                  "ptr",
+                ])(name, ptr(contains)),
+              ),
+              "Has Range header",
+            );
+            if (contains[0]) {
+              range = getString(headers, 3, "Range");
+            }
+          } finally {
+            release(headers);
+          }
+          resource = webAsset(assets, uri, getString(request, 5), range);
+        }
       } finally {
         release(request);
       }
-      if (this.origins.includes(originOf(uri))) {
+      if (!resource && this.origins.includes(originOf(uri))) {
         return;
       }
       assert(this.environment);
       const environment = this.environment;
       const response = new BigUint64Array(1);
-      hr(
-        withWide("Forbidden", (reason) =>
-          withWide("Content-Type: text/plain", (headers) =>
-            method(environment, 4, [
-              "ptr",
-              "i32",
-              "ptr",
-              "ptr",
-              "ptr",
-            ])(null, 403, reason, headers, ptr(response)),
+      const stream = resource?.body.length
+        ? streams.symbols.SHCreateMemStream(
+            ptr(resource.body),
+            resource.body.length,
+          )
+        : null;
+      if (resource?.body.length) {
+        assert(stream, "Create asset stream");
+      }
+      try {
+        hr(
+          withWide(resource?.reason ?? "Forbidden", (reason) =>
+            withWide(
+              resource?.headers ?? "Content-Type: text/plain",
+              (headers) =>
+                method(environment, 4, [
+                  "ptr",
+                  "i32",
+                  "ptr",
+                  "ptr",
+                  "ptr",
+                ])(
+                  stream,
+                  resource?.status ?? 403,
+                  reason,
+                  headers,
+                  ptr(response),
+                ),
+            ),
           ),
-        ),
-        "Create blocked resource response",
-      );
+          "Create resource response",
+        );
+      } finally {
+        if (stream) {
+          release(Number(stream) as Pointer);
+        }
+      }
       const object = Number(response[0]) as Pointer;
       try {
         hr(
           method(args, 5, [
             "ptr",
           ])(object),
-          "Block resource",
+          "Set resource response",
         );
       } finally {
         release(object);
       }
-      this.hooks.log("web-resource-blocked", {
-        uri,
-      });
+      if (!resource) {
+        this.hooks.log("web-resource-blocked", {
+          uri,
+        });
+      }
     });
   }
 

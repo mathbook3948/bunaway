@@ -42,6 +42,7 @@ export type UIConfig = {
   assets: string;
   dataRoot: string;
   loader: string;
+  icon?: string;
   legacyProfile?: boolean;
   plugins?: NativeRegistration[];
   desktop?: {
