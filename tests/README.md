@@ -7,6 +7,11 @@
 - `conformance/`: 네이티브 호스트 간 공통 계약.
 - `security/`: 권한, origin, 세션, 파일 범위.
 - `lifecycle/`: 종료, 재연결, 모바일 수명주기.
+
+Windows 이벤트 전송 회귀는 실제 `MessageChannel`과 Core를 연결한다. 두 뷰의
+총 130개 구독에 대한 방송과 구독별 순서, 수신 확인 지연, BUSY 구독 종료,
+서버 대기열 포화와 세션 정리, 취소 및 종료 용량을 확인한다.
+이 검사는 WebView2 GUI 실행을 포함하지 않는다.
 - `docs/`: 문서 링크 검사기의 정상 입력, 잘못된 링크와 출력 경로 경계.
 
 Windows 호스트 시나리오는 `lifecycle/windows-host.ts`에 두고 PID 조회, 창 닫기와

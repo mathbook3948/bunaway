@@ -1,6 +1,7 @@
 import type { MessagePort, Worker } from "node:worker_threads";
 import {
   API_LIMITS,
+  BunawayError,
   type ClientMessage,
   errorSchema,
   type HostCall,
@@ -81,6 +82,11 @@ export type Packet =
       message: ServerMessage;
     }
   | {
+      kind: "session-failure";
+      route: Route;
+      error: WireError;
+    }
+  | {
       kind: "authorize";
       context: HostContext;
       requestId: string;
@@ -156,6 +162,7 @@ const mainKinds = [
   "quit-cancelled",
   "start",
   "server",
+  "session-failure",
   "authorize",
   "grant",
   "cancel",
@@ -221,6 +228,10 @@ const requiredFields: Record<Packet["kind"], readonly string[]> = {
   server: [
     "route",
     "message",
+  ],
+  "session-failure": [
+    "route",
+    "error",
   ],
   authorize: [
     "context",
@@ -350,6 +361,7 @@ export function validatePacket(value: unknown, incoming: Side): Packet {
       "revoke",
       "client",
       "server",
+      "session-failure",
     ].includes(packet.kind) &&
     !packet.route
   ) {
@@ -424,11 +436,33 @@ export function validatePacket(value: unknown, incoming: Side): Packet {
     identifier(packet.event);
     record(packet.fields);
   }
-  if (packet.kind === "fatal") {
+  if (packet.kind === "fatal" || packet.kind === "session-failure") {
     validateValue(errorSchema, packet.error);
   }
   return packet as Packet;
 }
+
+// A broadcast can have one active send per subscription in every window.
+// This is a bounded backlog policy, separate from unacknowledged data capacity.
+const SERVER_QUEUE_LIMIT = MAX_WINDOWS * API_LIMITS.maxSubscriptions;
+type Lane =
+  | "data"
+  | "approval"
+  | "cancel"
+  | "revoke"
+  | "control"
+  | "diagnostic"
+  | "session-failure";
+type QueuedData = {
+  packet: Extract<
+    Packet,
+    {
+      kind: "server" | "host-result" | "host-response";
+    }
+  >;
+  resolve(): void;
+  reject(error: unknown): void;
+};
 
 // Bounded unacknowledged structured-clone messages; ack means acceptance, not command completion.
 export class Channel {
@@ -436,16 +470,13 @@ export class Channel {
   private expected = 1;
   private closed = false;
   private droppedDiagnostics = 0;
+  private readonly queuedData = new Set<QueuedData>();
+  private queuedServerCount = 0;
+  private queuedCompletions = 0;
   private readonly pending = new Map<
     number,
     {
-      lane:
-        | "data"
-        | "approval"
-        | "cancel"
-        | "revoke"
-        | "control"
-        | "diagnostic";
+      lane: Lane;
       resolve(): void;
       reject(error: Error): void;
     }
@@ -485,6 +516,8 @@ export class Channel {
           throw new Error("Invalid Worker ack");
         }
         this.pending.delete(Number(envelope.ack));
+        // Retained traffic owns the released slot before new requests.
+        this.pumpData();
         pending.resolve();
         return;
       }
@@ -524,19 +557,21 @@ export class Channel {
         io: "main-io",
         "main-io": "io",
       }[this.side] as Side;
-      const lane =
+      const lane: Lane =
         packet.kind === "diagnostic"
           ? "diagnostic"
-          : packet.kind === "cancel" ||
-              (packet.kind === "client" && packet.message.kind === "cancel")
-            ? "cancel"
-            : packet.kind === "revoke" || packet.kind === "cancel-context"
-              ? "revoke"
-              : approvalKinds.has(packet.kind)
-                ? "approval"
-                : controlKinds.has(packet.kind)
-                  ? "control"
-                  : "data";
+          : packet.kind === "session-failure"
+            ? "session-failure"
+            : packet.kind === "cancel" ||
+                (packet.kind === "client" && packet.message.kind === "cancel")
+              ? "cancel"
+              : packet.kind === "revoke" || packet.kind === "cancel-context"
+                ? "revoke"
+                : approvalKinds.has(packet.kind)
+                  ? "approval"
+                  : controlKinds.has(packet.kind)
+                    ? "control"
+                    : "data";
       const count = [
         ...this.pending.values(),
       ].filter((item) => item.lane === lane).length;
@@ -559,37 +594,118 @@ export class Channel {
       validatePacket(packet, opposite);
       // A full request burst must still leave room for approvals, cancellation and shutdown.
       const limit =
-        lane === "revoke"
+        lane === "revoke" || lane === "session-failure"
           ? MAX_WINDOWS
           : lane === "data" || lane === "approval" || lane === "cancel"
             ? API_LIMITS.maxPending
             : 16;
+      if (
+        packet.kind === "server" ||
+        packet.kind === "host-result" ||
+        packet.kind === "host-response"
+      ) {
+        if (
+          packet.kind === "server" &&
+          this.queuedServerCount >= SERVER_QUEUE_LIMIT
+        ) {
+          throw new BunawayError({
+            code: "BUSY",
+            message: "Server message queue full.",
+          });
+        }
+        if (
+          packet.kind !== "server" &&
+          this.queuedCompletions >= API_LIMITS.maxPending
+        ) {
+          throw new Error("Host response queue full");
+        }
+        const retained = packet;
+        return new Promise((resolve, reject) => {
+          this.queuedData.add({
+            packet: retained,
+            resolve,
+            reject,
+          });
+          if (retained.kind === "server") {
+            this.queuedServerCount++;
+          } else {
+            this.queuedCompletions++;
+          }
+          this.pumpData();
+        });
+      }
       if (count >= limit) {
         throw new Error("Worker channel full");
       }
-      const sequence = ++this.sequence;
-      return new Promise((resolve, reject) => {
-        this.pending.set(sequence, {
-          lane,
-          resolve,
-          reject,
-        });
-        try {
-          this.port.postMessage(
-            {
-              runtime: this.runtime,
-              sequence,
-              packet,
-            },
-            [],
-          );
-        } catch (error) {
-          this.pending.delete(sequence);
-          reject(error);
-        }
-      });
+      return this.post(packet, lane);
     } catch (error) {
       return Promise.reject(error);
+    }
+  }
+
+  private post(packet: Packet, lane: Lane): Promise<void> {
+    const sequence = ++this.sequence;
+    return new Promise((resolve, reject) => {
+      this.pending.set(sequence, {
+        lane,
+        resolve,
+        reject,
+      });
+      try {
+        this.port.postMessage(
+          {
+            runtime: this.runtime,
+            sequence,
+            packet,
+          },
+          [],
+        );
+      } catch (error) {
+        this.pending.delete(sequence);
+        reject(error);
+      }
+    });
+  }
+
+  private pumpData(): void {
+    if (this.closed || this.queuedData.size === 0) {
+      return;
+    }
+    let count = 0;
+    for (const item of this.pending.values()) {
+      if (item.lane === "data") {
+        count++;
+      }
+    }
+    while (!this.closed && count < API_LIMITS.maxPending) {
+      const queued = this.queuedData.values().next().value;
+      if (!queued) {
+        return;
+      }
+      this.removeQueued(queued);
+      void this.post(queued.packet, "data").then(queued.resolve, queued.reject);
+      count++;
+    }
+  }
+
+  private removeQueued(queued: QueuedData): void {
+    this.queuedData.delete(queued);
+    if (queued.packet.kind === "server") {
+      this.queuedServerCount--;
+    } else {
+      this.queuedCompletions--;
+    }
+  }
+
+  discardServers(context: HostContext): void {
+    for (const queued of this.queuedData) {
+      if (
+        queued.packet.kind === "server" &&
+        queued.packet.route.context === context
+      ) {
+        this.removeQueued(queued);
+        queued.resolve();
+      }
     }
   }
   notify(packet: Packet) {
@@ -597,6 +713,8 @@ export class Channel {
   }
   canSend(count = 1, pendingRequests = 0) {
     return (
+      !this.closed &&
+      this.queuedData.size === 0 &&
       [
         ...this.pending.values(),
       ].filter((item) => item.lane === "data").length +
@@ -614,7 +732,7 @@ export class Channel {
   }
   async drain() {
     const deadline = Date.now() + 10000;
-    while (this.pending.size) {
+    while (this.pending.size || this.queuedData.size) {
       if (Date.now() > deadline) {
         throw new Error("Worker channel drain timed out");
       }
@@ -628,5 +746,11 @@ export class Channel {
       pending.reject(new Error("Worker channel closed"));
     }
     this.pending.clear();
+    for (const queued of this.queuedData) {
+      queued.reject(new Error("Worker channel closed"));
+    }
+    this.queuedData.clear();
+    this.queuedServerCount = 0;
+    this.queuedCompletions = 0;
   }
 }

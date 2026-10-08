@@ -160,6 +160,9 @@ const channel = new Channel(
       views
         .get(packet.route.viewId)
         ?.boundary.send(packet.route, packet.message);
+    } else if (packet.kind === "session-failure") {
+      discardContext(packet.route.context);
+      views.get(packet.route.viewId)?.boundary.fail(packet.route, packet.error);
     } else if (packet.kind === "operation") {
       assert(
         !stopping &&

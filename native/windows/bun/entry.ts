@@ -73,6 +73,7 @@ export async function runWindowsApp(
     }
   >();
   let stopping = false;
+  const failedSessions = new Set<HostContext>();
   let sequence = 0;
   let core: Core | undefined;
   let booting: Promise<Core> | undefined;
@@ -295,7 +296,10 @@ export async function runWindowsApp(
     if (packet.kind === "revoke") {
       const session = sessions.get(packet.route.context);
       sessions.delete(packet.route.context);
-      cancelCalls(packet.route.context);
+      channel.discardServers(packet.route.context);
+      if (!failedSessions.delete(packet.route.context)) {
+        cancelCalls(packet.route.context);
+      }
       await session?.session.close();
       return;
     }
@@ -435,7 +439,7 @@ export async function runWindowsApp(
       },
       send: async (context, message) => {
         const session = sessions.get(context);
-        if (!session || stopping) {
+        if (!session || stopping || failedSessions.has(context)) {
           return;
         }
         try {
@@ -445,6 +449,29 @@ export async function runWindowsApp(
             message,
           });
         } catch (error) {
+          if (
+            sessions.get(context) !== session ||
+            failedSessions.has(context) ||
+            stopping
+          ) {
+            throw error;
+          }
+          if (error instanceof BunawayError && error.code === "BUSY") {
+            // Keep the closed route until UI revocation consumes in-flight input.
+            failedSessions.add(context);
+            channel.discardServers(context);
+            cancelCalls(context);
+            channel.notify({
+              kind: "session-failure",
+              route: session.route,
+              error: {
+                code: "BUSY",
+                message: "Server message queue full.",
+              },
+            });
+            void session.session.close().catch(fail);
+            throw error;
+          }
           fail(error);
           throw error;
         }
