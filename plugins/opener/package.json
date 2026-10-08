@@ -1,0 +1,23 @@
+{
+  "name": "@bunaway/plugin-opener",
+  "version": "0.0.0",
+  "type": "module",
+  "bunaway": {
+    "plugin": "./plugin.json"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@bunaway/protocol": "workspace:*"
+  },
+  "peerDependencies": {
+    "@bunaway/plugin": "0.0.0"
+  },
+  "devDependencies": {
+    "@bunaway/plugin": "workspace:*"
+  }
+}
