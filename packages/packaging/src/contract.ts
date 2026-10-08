@@ -130,11 +130,30 @@ export interface SigningConfig {
   passwordEnv?: string;
 }
 
+export interface ChannelConfig {
+  scope?: "perUser" | "perMachine";
+  webView2?: "check" | "bootstrap";
+  desktopShortcut?: boolean;
+  startMenuShortcut?: boolean;
+  uninstall?: {
+    preserveUserData?: boolean;
+  };
+  packageName?: string;
+  unvirtualizedData?: boolean;
+  minVersion?: string;
+  maxVersionTested?: string;
+  capabilities?: string[];
+  format?: string;
+  bundleId?: string;
+  entitlements?: string[];
+  signing?: SigningConfig;
+}
+
 // Everything an adapter is allowed to consume. Build outputs arrive as
 // already-validated structures; adapters do not re-parse project sources.
 export interface AdapterInput {
   channel: ChannelId;
-  channelConfig: Record<string, unknown>;
+  channelConfig: ChannelConfig;
   metadata: ResolvedPackaging;
   target: BuildTarget;
   artifact: BuildArtifact;

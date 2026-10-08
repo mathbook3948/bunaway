@@ -1,23 +1,23 @@
 import { lstat, realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import {
+  IDENTIFIER_PATTERN,
+  type PackagingConfig,
+  SEMVER_PATTERN,
+} from "./config.ts";
+import {
+  type ChannelConfig,
   type ChannelId,
   CODES,
-  type PlatformId,
   PLATFORMS,
   type ResolvedPackaging,
   type ResolvedTarget,
   type SigningConfig,
   targetFor,
 } from "./contract.ts";
-import {
-  IDENTIFIER_PATTERN,
-  type PackagingConfig,
-  SEMVER_PATTERN,
-} from "./config.ts";
 
 export interface ResolvedChannel {
-  channelConfig: Record<string, unknown>;
+  channelConfig: ChannelConfig;
   signing?: SigningConfig;
 }
 
@@ -139,8 +139,8 @@ export async function resolvePackaging(args: {
   }
   const targets: ResolvedTarget[] = (config.targets ?? []).map((target) => {
     const result: ResolvedTarget = {
-      platform: target.platform as PlatformId,
-      arch: target.arch as ResolvedTarget["arch"],
+      platform: target.platform,
+      arch: target.arch,
     };
     targetFor(result.platform, result.arch); // throws for unsupported combos
     if (target.minVersion !== undefined) {
@@ -171,7 +171,7 @@ export async function resolvePackaging(args: {
   };
   const signing = channelConfig.signing ?? config.signing;
   if (signing) {
-    resolved.signing = signing as SigningConfig;
+    resolved.signing = signing;
   }
   return {
     metadata,

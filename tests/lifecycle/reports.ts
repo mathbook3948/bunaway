@@ -10,6 +10,28 @@ interface Report {
   }[];
 }
 
+function isReport(value: unknown): value is Report {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const report = value as Record<string, unknown>;
+  return (
+    typeof report.page === "string" &&
+    Array.isArray(report.results) &&
+    report.results.every((result) => {
+      if (!result || typeof result !== "object" || Array.isArray(result)) {
+        return false;
+      }
+      const entry = result as Record<string, unknown>;
+      return (
+        typeof entry.name === "string" &&
+        typeof entry.ok === "boolean" &&
+        (entry.error === undefined || typeof entry.error === "string")
+      );
+    })
+  );
+}
+
 export function assertReport(
   report: Report,
   requiredChecks: readonly string[] = [],
@@ -32,7 +54,11 @@ export function assertReport(
 
 export async function readReport(path: string): Promise<Report | null> {
   try {
-    return JSON.parse(await readFile(path, "utf8")) as Report;
+    const value: unknown = JSON.parse(await readFile(path, "utf8"));
+    if (!isReport(value)) {
+      throw new Error("Invalid host report");
+    }
+    return value;
   } catch (error) {
     if (
       error instanceof SyntaxError ||

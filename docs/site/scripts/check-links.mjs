@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const dist = resolve(dirname(fileURLToPath(import.meta.url)), "../dist");
@@ -56,6 +56,27 @@ function collect(directory) {
 }
 collect(dist);
 
+if (!pages.size) {
+  failures.push("No HTML pages found in docs/site/dist.");
+}
+
+function isLocalFile(pathname) {
+  const destination = resolve(dist, `.${pathname}`);
+  const relativeDestination = relative(dist, destination);
+  if (
+    relativeDestination === ".." ||
+    relativeDestination.startsWith(`..${sep}`) ||
+    isAbsolute(relativeDestination)
+  ) {
+    return false;
+  }
+  try {
+    return statSync(destination).isFile();
+  } catch {
+    return false;
+  }
+}
+
 for (const [route, { html }] of pages) {
   for (const tag of html.matchAll(/<a\b[^>]*>/g)) {
     const attribute = /\bhref="([^"]*)"/.exec(tag[0]);
@@ -63,22 +84,33 @@ for (const [route, { html }] of pages) {
       continue;
     }
     const href = decodeAttribute(attribute[1]);
-    const url = new URL(href, origin + route);
+    let url;
+    try {
+      url = new URL(href, origin + route);
+    } catch {
+      failures.push(`${route}: invalid URL ${href}`);
+      continue;
+    }
     if (url.origin !== origin) {
       continue;
     }
     checked += 1;
-    const pathname = decodeURIComponent(url.pathname);
+    let pathname;
+    let hash;
+    try {
+      pathname = decodeURIComponent(url.pathname);
+      hash = decodeURIComponent(url.hash.slice(1));
+    } catch {
+      failures.push(`${route}: invalid URL encoding ${href}`);
+      continue;
+    }
     const destination =
       pages.get(pathname) ?? pages.get(`${pathname.replace(/\/$/, "")}/`);
     if (!destination) {
-      if (!existsSync(join(dist, pathname))) {
+      if (!isLocalFile(pathname)) {
         failures.push(`${route}: missing ${href}`);
       }
-    } else if (
-      url.hash &&
-      !destination.ids.has(decodeURIComponent(url.hash.slice(1)))
-    ) {
+    } else if (url.hash && !destination.ids.has(hash)) {
       failures.push(`${route}: missing anchor ${href}`);
     }
   }

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
@@ -295,7 +295,14 @@ await import(${JSON.stringify(uiWorker)});
   } catch (error) {
     clearTimeout(timer);
     channel.close();
-    await worker.terminate();
+    try {
+      await worker.terminate();
+    } finally {
+      await rm(dataRoot, {
+        recursive: true,
+        force: true,
+      });
+    }
     throw error;
   }
 
@@ -315,8 +322,15 @@ await import(${JSON.stringify(uiWorker)});
     async close() {
       clearTimeout(timer);
       readyGate.resolve();
-      channel.close();
-      await worker.terminate();
+      try {
+        channel.close();
+        await worker.terminate();
+      } finally {
+        await rm(dataRoot, {
+          recursive: true,
+          force: true,
+        });
+      }
     },
   };
 }

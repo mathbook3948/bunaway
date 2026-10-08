@@ -446,7 +446,9 @@ async function run() {
       n: 3,
     });
     await sleep(150);
-    assert(seen.length === 2, "event delivered after unlisten");
+    const stoppedAfterRelease = seen.length === 2;
+    subs.delete(sub);
+    assert(stoppedAfterRelease, "event delivered after unlisten");
   });
   if (nativePlugins) {
     await test("storage roundtrip appData", async () => {

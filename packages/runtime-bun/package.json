@@ -5,7 +5,10 @@
   "type": "module",
   "license": "UNLICENSED",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./development": "./src/development.ts",
+    "./window-config": "./src/window-config.ts",
+    "./windows-control": "./src/windows-control.ts"
   },
   "scripts": {
     "typecheck": "tsc --project tsconfig.json"

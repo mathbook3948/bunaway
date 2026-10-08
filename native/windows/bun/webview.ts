@@ -14,8 +14,9 @@ import {
   query,
   release,
 } from "./com.ts";
+import { viewDirName } from "./view-profile.ts";
 import { webAsset } from "./web-assets.ts";
-import { hr, kernel, user, wide, withWide } from "./win32.ts";
+import { hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
 
 const embedded = Bun.embeddedFiles.some(
   (file) => (file as File).name === "app.json",
@@ -49,17 +50,6 @@ export function originOf(text: string): string {
     return "";
   }
 }
-export const viewDirName = (id: string) =>
-  `v${[
-    ...id,
-  ]
-    .map((c) =>
-      /[a-z0-9]/.test(c)
-        ? c
-        : `-${c.charCodeAt(0).toString(16).padStart(2, "0")}`,
-    )
-    .join("")}`;
-
 // Slots/IIDs are from the pinned WebView2 SDK 1.0.4129.50, Win64 COM ABI.
 export class WebView {
   webview: Pointer | undefined;

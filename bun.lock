@@ -41,6 +41,7 @@
       "dependencies": {
         "@bunaway/packaging": "workspace:*",
         "@bunaway/protocol": "workspace:*",
+        "@bunaway/runtime-bun": "workspace:*",
       },
     },
     "packages/client-sdk": {

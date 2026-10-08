@@ -34,6 +34,14 @@ debt does not authorize unrelated rewrites.
 
 #### Responsibility and reuse
 
+- Give each file a coherent responsibility. Separate contracts and reusable
+  low-level bindings from the code that owns application state and resource
+  lifetime when their callers and reasons to change differ. Keep lifecycle
+  transitions that depend on each other together instead of splitting by size.
+- Keep constants with the feature, policy or native binding that owns their
+  meaning. Share values that form the same cross-module contract from a single
+  side-effect-free definition. Do not collect unrelated constants globally or
+  make importing a shared value initialize native resources.
 - Search for an existing implementation before writing another. Reuse it when
   its meaning and failure behavior match. Prefer standard library or native
   functionality before adding dependencies or custom infrastructure.

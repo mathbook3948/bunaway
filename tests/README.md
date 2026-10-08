@@ -7,6 +7,13 @@
 - `conformance/`: 네이티브 호스트 간 공통 계약.
 - `security/`: 권한, origin, 세션, 파일 범위.
 - `lifecycle/`: 종료, 재연결, 모바일 수명주기.
+- `docs/`: 문서 링크 검사기의 정상 입력, 잘못된 링크와 출력 경로 경계.
+
+Windows 호스트 시나리오는 `lifecycle/windows-host.ts`에 두고 PID 조회, 창 닫기와
+프로세스 종료 감시는 `lifecycle/windows-host-processes.ts`에서 실행한다.
+뷰 프로필 이름은 호스트의 순수 `view-profile.ts` 함수를 공유한다.
+macOS WebContent PID 조회와 종료는 `lifecycle/macos-renderer.ts`가 맡으며,
+`macos-host.ts`는 시나리오별 기준 PID와 테스트 순서를 유지한다.
 
 `mise run test`는 프로토콜, 정책, SDK, 코어, Host API의 계약 테스트와 네이티브용 생성
 스키마 일치 검사를 실행한다. `mise run check`에는 테스트와 테스트 코드의 타입 검사도 포함한다.

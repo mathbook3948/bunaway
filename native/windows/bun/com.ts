@@ -2,7 +2,7 @@ import type { FFIType, Pointer } from "bun:ffi";
 import { CFunction, JSCallback, ptr, read, toArrayBuffer } from "bun:ffi";
 import assert from "node:assert/strict";
 import { MAX_MESSAGE_BYTES } from "../../../packages/protocol/src/index.ts";
-import { hr, kernel, ole, withBuffer, withWide } from "./win32.ts";
+import { hr, kernel, ole, withBuffer, withWide } from "./win32-bindings.ts";
 
 const thread = kernel.symbols.GetCurrentThreadId();
 export type Arg = number | bigint | null;

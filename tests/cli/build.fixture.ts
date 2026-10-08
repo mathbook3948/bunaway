@@ -5,25 +5,28 @@ import { copyFile, mkdir, rm as removeCompileAssets } from "node:fs/promises";
 import { resolve } from "node:path";
 import * as build from "../../packages/cli/src/build.ts";
 import * as files from "../../packages/cli/src/files.ts";
-import * as launch from "../../packages/cli/src/launch.ts";
+import * as windowsCompile from "../../packages/cli/src/windows-compile.ts";
 import { adapterFor } from "../../packages/packaging/src/index.ts";
 
 const compileSignal = process.env.BUNAWAY_TEST_COMPILE_SIGNAL === "1";
 if (!compileSignal) {
-  mock.module(import.meta.resolve("../../packages/cli/src/launch.ts"), () => ({
-    ...launch,
-    compileWindowsApp: async (
-      root: string,
-      _bun: string,
-      executable: string,
-    ) => {
-      await Bun.write(resolve(root, executable), "fixture compiled app");
-      await removeCompileAssets(resolve(root, "assets"), {
-        recursive: true,
-        force: true,
-      });
-    },
-  }));
+  mock.module(
+    import.meta.resolve("../../packages/cli/src/windows-compile.ts"),
+    () => ({
+      ...windowsCompile,
+      compileWindowsApp: async (
+        root: string,
+        _bun: string,
+        executable: string,
+      ) => {
+        await Bun.write(resolve(root, executable), "fixture compiled app");
+        await removeCompileAssets(resolve(root, "assets"), {
+          recursive: true,
+          force: true,
+        });
+      },
+    }),
+  );
 }
 const project = process.argv[2];
 if (!project) {

@@ -33,7 +33,7 @@ import {
 } from "node:path";
 import { validateValue } from "../../packages/protocol/src/index.ts";
 import { validationCases } from "../protocol/validation-cases.ts";
-import { terminateRenderers } from "./macos-renderer.ts";
+import { listWebContentPids, terminateRenderers } from "./macos-renderer.ts";
 import { readReport } from "./reports.ts";
 
 const original = resolve(
@@ -424,32 +424,9 @@ async function updateAsset(name: string, text: string) {
 
 // WebContent renderers are spawned by launchd, not by our host: inventory is the
 // current user's delta over the baseline snapshot taken at driver start.
-async function webContentPids(): Promise<number[]> {
-  assert.ok(process.getuid, "WebContent inventory requires a POSIX user ID");
-  const probe = Bun.spawn(
-    [
-      "/usr/bin/pgrep",
-      "-U",
-      String(process.getuid()),
-      "-f",
-      "com.apple.WebKit.WebContent",
-    ],
-    {
-      stdout: "pipe",
-      stderr: "pipe",
-    },
-  );
-  const text = await new Response(probe.stdout).text();
-  const exit = await probe.exited;
-  assert.ok(exit === 0 || exit === 1, await new Response(probe.stderr).text());
-  return text
-    .split("\n")
-    .map((line) => Number(line.trim()))
-    .filter((pid) => Number.isInteger(pid) && pid > 0);
-}
-const webContentBaseline = new Set(await webContentPids());
+const webContentBaseline = new Set(await listWebContentPids());
 async function newWebContentPids(): Promise<number[]> {
-  const current = await webContentPids();
+  const current = await listWebContentPids();
   return current.filter((pid) => !webContentBaseline.has(pid));
 }
 

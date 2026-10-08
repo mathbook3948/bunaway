@@ -1,4 +1,5 @@
 import type { CommandContext, CommandDefinition } from "@bunaway/plugin-api";
+import { bindCommandHost } from "@bunaway/plugin-api/host";
 import {
   BunawayError,
   type Infer,
@@ -6,7 +7,6 @@ import {
   type Schema,
   validateValue,
 } from "@bunaway/protocol";
-import { bindCommandHost } from "./host-context.ts";
 
 export type CommandContract<
   I extends Schema = Schema,

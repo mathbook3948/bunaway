@@ -5,6 +5,21 @@ UI Worker 하나가 STA에서 `bun:ffi`로 Win32 창과 WebView2 COM을 직접 �
 I/O Worker 하나가 승인된 Host API를 검사한 파일 핸들로 실행한다.
 앱 호스트와 백엔드 사이의 프로세스 IPC는 없으며 WebView2 자식 프로세스는 유지된다.
 
+## 파일별 책임
+
+`win32-bindings.ts`는 DLL 함수 바인딩과 FFI 버퍼 보조 함수를 제공하고, `win32.ts`의
+`Windows`는 창 클래스, HWND, 아이콘, 전체 화면 상태와 메시지 처리를 소유한다.
+`com.ts`는 COM 참조와 콜백을, `webview.ts`는 WebView 생성과 종료를 관리한다.
+`ui.ts`가 이 자원들의 초기화와 정리 순서를 조정한다. DLL은 창과 COM 정리가 끝난 뒤 닫는다.
+
+트레이 전용 상수는 `tray.ts`, Job 객체 상수는 `job.ts`에 둔다. 개발 CLI와 공유하는
+종료 메시지와 창 클래스 접두어는 `runtime-bun/windows-control`의 단일 정의를 사용한다.
+Worker 패킷은 `channel.ts`가 담당하며 Win32 창 제어 값을 소유하지 않는다.
+뷰 ID를 프로필 디렉터리 이름으로 바꾸는 순수 규칙은 `view-profile.ts`에 두어
+테스트도 네이티브 DLL을 로드하지 않고 같은 매핑을 사용한다.
+
+## 실행
+
 ```powershell
 # 저장소: 의존성 검증, 패키지 빌드, 실제 GUI/보안/수명/CLI 회귀
 pwsh -NoProfile -File native/windows/bun/run.ps1

@@ -8,7 +8,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 export const frameworkRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -72,8 +72,10 @@ export async function installedPackageRoot(
 export async function json(path: string): Promise<unknown> {
   try {
     return JSON.parse(await readFile(path, "utf8"));
-  } catch {
-    throw new Error(`Cannot read JSON: ${path}`);
+  } catch (cause) {
+    throw new Error(`Cannot read JSON: ${path}`, {
+      cause,
+    });
   }
 }
 
@@ -146,57 +148,4 @@ export async function verifyHash(
   if ((await hash(path)) !== expected) {
     throw new Error(`Hash mismatch: ${path}`);
   }
-}
-
-export async function run(
-  args: string[],
-  cwd: string,
-  env: Record<string, string> = {},
-): Promise<void> {
-  const child = Bun.spawn(args, {
-    cwd,
-    env: {
-      ...process.env,
-      ...env,
-    },
-    stdin: "ignore",
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-  const code = await child.exited;
-  if (code !== 0) {
-    throw new Error(`${args[0]} failed (exit ${code}).`);
-  }
-}
-
-export async function runWorker(
-  module: string,
-  method: string,
-  args: unknown[],
-  cwd: string,
-  root = frameworkRoot,
-): Promise<string> {
-  const url = pathToFileURL(resolve(root, "packages/cli/src", module)).href;
-  const child = Bun.spawn(
-    [
-      process.execPath,
-      "-e",
-      `const task = await import(${JSON.stringify(url)}); const result = await task[${JSON.stringify(method)}](...await Bun.stdin.json()); if (result !== undefined) process.stdout.write(JSON.stringify(result));`,
-    ],
-    {
-      cwd,
-      stdin: Buffer.from(JSON.stringify(args)),
-      stdout: "pipe",
-      stderr: "pipe",
-    },
-  );
-  const output = new Response(child.stdout).text();
-  const errors = new Response(child.stderr).text();
-  const code = await child.exited;
-  await output;
-  if (code !== 0) {
-    throw new Error((await errors) || `${method} failed (exit ${code}).`);
-  }
-  await errors;
-  return output;
 }

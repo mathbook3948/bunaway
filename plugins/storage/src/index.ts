@@ -2,11 +2,12 @@ import { defineNativePlugin, s } from "@bunaway/plugin";
 import manifest from "../package.json";
 import { matches } from "./scope.ts";
 
+const storageScopeName = s.enum([
+  "appData",
+  "temp",
+]);
 const pathFields = {
-  scope: s.enum([
-    "appData",
-    "temp",
-  ]),
+  scope: storageScopeName,
   // Lexical guard only; the native file-open boundary still checks links and actual scope.
   path: s.string({
     maxLength: 4096,
@@ -15,10 +16,7 @@ const pathFields = {
   }),
 };
 const storageScope = s.object({
-  scope: s.enum([
-    "appData",
-    "temp",
-  ]),
+  scope: storageScopeName,
   pathPrefix: s.string({
     pattern: "^(?:[A-Za-z0-9_-]+(?:\\/[A-Za-z0-9_-]+)*)?$(?![\\s\\S])",
     maxLength: 256,

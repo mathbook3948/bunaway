@@ -41,6 +41,36 @@
       }
     },
     {
+      "name": "@bunaway/runtime-bun/development",
+      "source": "packages/runtime-bun/src/development.ts",
+      "pages": {
+        "reference/tooling/core-and-runtime": [
+          "developmentUrl",
+          "developmentPolicy",
+          "verifyDevelopmentLaunch",
+          "developmentWindowHome",
+          "verifyDevelopmentToolsLaunch"
+        ]
+      }
+    },
+    {
+      "name": "@bunaway/runtime-bun/window-config",
+      "source": "packages/runtime-bun/src/window-config.ts",
+      "pages": {
+        "reference/tooling/core-and-runtime": ["MAX_WINDOWS", "readWindowSpecs"]
+      }
+    },
+    {
+      "name": "@bunaway/runtime-bun/windows-control",
+      "source": "packages/runtime-bun/src/windows-control.ts",
+      "pages": {
+        "reference/tooling/core-and-runtime": [
+          "APP_SHUTDOWN_MESSAGE",
+          "APP_WINDOW_CLASS_PREFIX"
+        ]
+      }
+    },
+    {
       "name": "@bunaway/protocol",
       "source": "packages/protocol/src/index.ts",
       "pages": {
@@ -177,6 +207,11 @@
       }
     },
     {
+      "name": "@bunaway/plugin-api/native",
+      "source": "packages/plugin-api/src/native.ts",
+      "pages": {}
+    },
+    {
       "name": "@bunaway/plugin-windows",
       "source": "plugins/windows/src/index.ts",
       "pages": {
@@ -263,6 +298,65 @@
       }
     },
     {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "WindowSpec",
+      "pages": {
+        "reference/tooling/plugin-api": [
+          "view",
+          "home",
+          "title",
+          "window",
+          "startup"
+        ]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "WindowState",
+      "pages": {
+        "reference/tooling/plugin-api": [
+          "closed",
+          "cleaned",
+          "ready",
+          "failure",
+          "deadline"
+        ]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "NativeWindow",
+      "pages": {
+        "reference/tooling/plugin-api": [
+          "show",
+          "focus",
+          "close",
+          "isFullscreen",
+          "setSize",
+          "setPosition",
+          "setFullscreen",
+          "setCloseConfirmation"
+        ]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "NativeWindowServices",
+      "pages": {
+        "reference/tooling/plugin-api": [
+          "specs",
+          "read",
+          "create",
+          "close",
+          "window",
+          "stopping",
+          "cancelled",
+          "now",
+          "tick"
+        ]
+      }
+    },
+    {
       "source": "packages/protocol/src/host-api.ts",
       "type": "HostAPI",
       "pages": {
@@ -328,6 +422,48 @@
           "onCommandError",
           "onPluginError"
         ]
+      }
+    },
+    {
+      "source": "packages/runtime-bun/src/window-config.ts",
+      "type": "WindowSpec",
+      "pages": {
+        "reference/tooling/core-and-runtime": [
+          "view",
+          "home",
+          "title",
+          "window",
+          "startup"
+        ]
+      }
+    },
+    {
+      "source": "packages/packaging/src/contract.ts",
+      "type": "ChannelConfig",
+      "pages": {
+        "reference/packaging/channels": [
+          "scope",
+          "webView2",
+          "desktopShortcut",
+          "startMenuShortcut",
+          "uninstall",
+          "packageName",
+          "unvirtualizedData",
+          "minVersion",
+          "maxVersionTested",
+          "capabilities",
+          "format",
+          "bundleId",
+          "entitlements",
+          "signing"
+        ]
+      }
+    },
+    {
+      "source": "packages/packaging/src/contract.ts",
+      "type": "ResolvedTarget",
+      "pages": {
+        "reference/packaging/configuration": ["platform", "arch", "minVersion"]
       }
     },
     {

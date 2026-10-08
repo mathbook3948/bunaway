@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
@@ -11,6 +12,173 @@ const catalog = JSON.parse(
 );
 const failures = [];
 let count = 0;
+const packagesBySource = new Map();
+
+for (const workspace of [
+  "packages",
+  "plugins",
+]) {
+  for (const directory of readdirSync(resolve(root, workspace), {
+    withFileTypes: true,
+  })) {
+    if (!directory.isDirectory()) {
+      continue;
+    }
+    const packageRoot = resolve(root, workspace, directory.name);
+    const manifest = JSON.parse(
+      readFileSync(resolve(packageRoot, "package.json"), "utf8"),
+    );
+    if (!manifest.exports) {
+      continue;
+    }
+    const exports = packageExportEntries(manifest.exports);
+    if (!exports) {
+      failures.push(
+        `${manifest.name}: unsupported package.json exports shape; expected string targets for explicit package paths`,
+      );
+    }
+    packagesBySource.set(`${workspace}/${directory.name}`, {
+      name: manifest.name,
+      exports,
+    });
+  }
+}
+
+function packageExportEntries(exports) {
+  if (!exports || typeof exports !== "object" || Array.isArray(exports)) {
+    return;
+  }
+  const entries = Object.entries(exports);
+  if (
+    !entries.length ||
+    entries.some(
+      ([key, target]) =>
+        (key !== "." && (!key.startsWith("./") || key.includes("*"))) ||
+        typeof target !== "string",
+    )
+  ) {
+    return;
+  }
+  return new Map(entries);
+}
+
+function packageExportFailures(entries, packages) {
+  const failures = [];
+  const mapped = new Map();
+
+  for (const entry of entries) {
+    const sourceRoot = entry.source.split("/").slice(0, 2).join("/");
+    const info = packages.get(sourceRoot);
+    if (!info) {
+      failures.push(`${entry.name}: source is not in a package with exports`);
+      continue;
+    }
+    if (!info.exports) {
+      continue;
+    }
+
+    const packageName = info.name;
+    let exportKey;
+    if (entry.name === packageName) {
+      exportKey = ".";
+    } else if (entry.name.startsWith(`${packageName}/`)) {
+      exportKey = `.${entry.name.slice(packageName.length)}`;
+    }
+    const exportValue = exportKey && info.exports.get(exportKey);
+    if (exportValue === undefined) {
+      failures.push(`${entry.name}: missing package.json export mapping`);
+      continue;
+    }
+
+    const mappedExports = mapped.get(packageName) ?? new Set();
+    if (mappedExports.has(exportKey)) {
+      failures.push(`${entry.name}: duplicate package export mapping`);
+    }
+    mappedExports.add(exportKey);
+    mapped.set(packageName, mappedExports);
+
+    const sourceTarget = `.${entry.source.slice(sourceRoot.length)}`;
+    if (exportValue !== sourceTarget) {
+      failures.push(
+        `${entry.name}: source ${entry.source} is not a package.json export target`,
+      );
+    }
+  }
+
+  for (const info of packages.values()) {
+    if (!info.exports) {
+      continue;
+    }
+    for (const exportKey of info.exports.keys()) {
+      let entryName = info.name;
+      if (exportKey !== ".") {
+        entryName += exportKey.slice(1);
+      }
+      if (!mapped.get(info.name)?.has(exportKey)) {
+        failures.push(`${entryName}: missing reference-map package entry`);
+      }
+    }
+  }
+  return failures;
+}
+
+function checkPackageExportExamples() {
+  const packages = new Map([
+    [
+      "packages/pkg",
+      {
+        name: "@fixture/pkg",
+        exports: packageExportEntries({
+          ".": "./src/index.ts",
+          "./extra": "./src/extra.ts",
+        }),
+      },
+    ],
+  ]);
+  const rootEntry = {
+    name: "@fixture/pkg",
+    source: "packages/pkg/src/index.ts",
+  };
+  const extraEntry = {
+    name: "@fixture/pkg/extra",
+    source: "packages/pkg/src/extra.ts",
+  };
+  const errors = (entries) =>
+    packageExportFailures(entries, packages).join("\n");
+  assert.equal(
+    errors([
+      rootEntry,
+      extraEntry,
+    ]),
+    "",
+  );
+  assert.match(
+    errors([
+      rootEntry,
+    ]),
+    /missing reference-map package entry/,
+  );
+  assert.match(
+    errors([
+      rootEntry,
+      extraEntry,
+      rootEntry,
+    ]),
+    /duplicate package export mapping/,
+  );
+  assert.match(
+    errors([
+      {
+        ...rootEntry,
+        source: "packages/pkg/src/wrong.ts",
+      },
+      extraEntry,
+    ]),
+    /is not a package\.json export target/,
+  );
+}
+
+checkPackageExportExamples();
 
 function source(path) {
   return ts.createSourceFile(
@@ -108,6 +276,12 @@ function checkNames(actual, pages, label) {
   count += actual.size;
 }
 
+for (const failure of packageExportFailures(
+  catalog.packages,
+  packagesBySource,
+)) {
+  failures.push(failure);
+}
 for (const entry of catalog.packages) {
   checkNames(
     runtimeExports(resolve(root, entry.source)),
@@ -122,6 +296,9 @@ function members(path, typeName) {
       (ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) &&
       node.name.text === typeName,
   );
+  if (!declaration) {
+    throw new Error(`Cannot inspect ${path}: missing ${typeName}.`);
+  }
   const body = ts.isTypeAliasDeclaration(declaration)
     ? declaration.type
     : declaration;
@@ -359,6 +536,6 @@ if (failures.length) {
   process.exitCode = 1;
 } else {
   console.log(
-    `Documentation coverage: ${count} public exports, members, commands, operations and configuration keywords checked.`,
+    `Documentation coverage: ${count} public exports, members, commands, operations and configuration keywords checked, with package export paths verified.`,
   );
 }

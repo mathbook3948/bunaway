@@ -18,7 +18,7 @@ import {
 import {
   developmentPolicy,
   developmentWindowHome,
-} from "../../runtime-bun/src/development.ts";
+} from "@bunaway/runtime-bun/development";
 import {
   type Project,
   readProjectMetadata,
@@ -30,14 +30,13 @@ import {
   hash,
   json,
   projectPath,
-  run,
-  runWorker,
   verifyHash,
   writeJson,
 } from "./files.ts";
 import { assertNotFrontendBuild, buildFrontend } from "./frontend-build.ts";
-import { compileWindowsApp } from "./launch.ts";
 import { runManagedCommand } from "./managed-command.ts";
+import { run, runWorker } from "./processes.ts";
+import { compileWindowsApp } from "./windows-compile.ts";
 
 export type Target = "windows-x64" | "macos-arm64";
 export interface NativeInputs {

@@ -44,23 +44,52 @@ async function waitForProcessGroupExit(pid: number): Promise<void> {
   }
 }
 
-// Own finite build commands and their descendants until completion or cancellation.
-// The Windows Job worker also cleans up if the owner disappears without sending EOF.
-export async function runManagedCommand(
+export interface ManagedProcess {
+  readonly exited: Promise<number>;
+  readonly exitCode: number | undefined;
+  readonly failure: Error | undefined;
+  stop(): Promise<void>;
+}
+
+// The server remains owned after readiness; finite commands also wait until their
+// descendants release resources before returning.
+export async function startManagedProcess(
   args: string[],
   cwd: string,
-  env: Record<string, string>,
-  signal: AbortSignal,
   framework: string,
-): Promise<void> {
-  signal.throwIfAborted();
+  purpose: "finite" | "server",
+  env?: Record<string, string>,
+  signal?: AbortSignal,
+): Promise<ManagedProcess> {
+  signal?.throwIfAborted();
   const windows = process.platform === "win32";
   const lease = windows
-    ? await mkdtemp(resolve(tmpdir(), "bunaway-build-command-"))
+    ? await mkdtemp(
+        resolve(
+          tmpdir(),
+          purpose === "finite"
+            ? "bunaway-build-command-"
+            : "bunaway-dev-server-",
+        ),
+      )
     : undefined;
+  async function removeLease(): Promise<void> {
+    if (lease) {
+      await rm(lease, {
+        recursive: true,
+        force: true,
+      });
+    }
+  }
   try {
-    signal.throwIfAborted();
-    const child = spawn(
+    signal?.throwIfAborted();
+  } catch (error) {
+    await removeLease();
+    throw error;
+  }
+  let child: ReturnType<typeof spawn>;
+  try {
+    child = spawn(
       windows ? process.execPath : (args[0] ?? ""),
       windows
         ? [
@@ -71,12 +100,16 @@ export async function runManagedCommand(
         : args.slice(1),
       {
         cwd,
-        env: {
-          ...process.env,
-          ...env,
-        },
+        ...(env
+          ? {
+              env: {
+                ...process.env,
+                ...env,
+              },
+            }
+          : {}),
         stdio: [
-          windows ? "pipe" : "ignore",
+          windows || purpose === "server" ? "pipe" : "ignore",
           "inherit",
           "inherit",
         ],
@@ -84,36 +117,41 @@ export async function runManagedCommand(
         windowsHide: true,
       },
     );
-    let exit: number | undefined;
-    let failure: Error | undefined;
-    const exited = new Promise<number>((done) => {
-      child.once("error", (error) => {
-        failure = error;
-        exit = 1;
-        done(1);
-      });
-      child.once("exit", (code) => {
-        exit = code ?? 1;
-        done(exit);
-      });
+  } catch (error) {
+    await removeLease();
+    throw error;
+  }
+  let exit: number | undefined;
+  let failure: Error | undefined;
+  const exited = new Promise<number>((done) => {
+    child.once("error", (error) => {
+      failure = error;
+      exit = 1;
+      done(1);
     });
-    const killGroup = (kind: NodeJS.Signals): boolean => {
-      if (!child.pid) {
-        return false;
+    child.once("exit", (code) => {
+      exit = code ?? 1;
+      done(exit);
+    });
+  });
+  const killGroup = (kind: NodeJS.Signals): boolean => {
+    if (!child.pid) {
+      return false;
+    }
+    try {
+      process.kill(-child.pid, kind);
+      return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
+        throw error;
       }
+      return false;
+    }
+  };
+  let stopping: Promise<void> | undefined;
+  const stop = (): Promise<void> =>
+    (stopping ??= (async () => {
       try {
-        process.kill(-child.pid, kind);
-        return true;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
-          throw error;
-        }
-        return false;
-      }
-    };
-    let stopping: Promise<void> | undefined;
-    const stop = (): Promise<void> =>
-      (stopping ??= (async () => {
         if (windows) {
           child.stdin?.end();
           await Promise.race([
@@ -125,46 +163,77 @@ export async function runManagedCommand(
           if (exit === undefined) {
             child.kill();
             await exited;
-            throw new Error("Build command worker cleanup timed out.");
+            throw new Error(
+              purpose === "finite"
+                ? "Build command worker cleanup timed out."
+                : "Development server worker cleanup timed out.",
+            );
           }
-        } else if (killGroup("SIGTERM")) {
-          await delay(200);
-          killGroup("SIGKILL");
-        }
-        if (!windows && child.pid) {
-          await waitForProcessGroupExit(child.pid);
+        } else {
+          const sentTerm = killGroup("SIGTERM");
+          if (purpose === "server" || sentTerm) {
+            await delay(200);
+            killGroup("SIGKILL");
+          }
+          if (purpose === "finite" && child.pid) {
+            await waitForProcessGroupExit(child.pid);
+          }
         }
         await exited;
-      })());
-    const aborted = () => {
-      // The finally block awaits cleanup and reports failures.
-      void stop().catch(() => {});
-    };
-    signal.addEventListener("abort", aborted, {
-      once: true,
-    });
-    try {
-      if (signal.aborted) {
-        aborted();
+      } finally {
+        await removeLease();
       }
-      const code = await exited;
-      signal.throwIfAborted();
-      if (failure) {
-        throw failure;
-      }
-      if (code !== 0) {
-        throw new Error(`${args[0]} failed (exit ${code}).`);
-      }
-    } finally {
-      signal.removeEventListener("abort", aborted);
-      await stop();
+    })());
+  return {
+    exited,
+    get exitCode() {
+      return exit;
+    },
+    get failure() {
+      return failure;
+    },
+    stop,
+  };
+}
+
+// Own finite commands and their descendants until completion or cancellation.
+// The Windows Job worker also cleans up if the owner disappears without sending EOF.
+export async function runManagedCommand(
+  args: string[],
+  cwd: string,
+  env: Record<string, string>,
+  signal: AbortSignal,
+  framework: string,
+): Promise<void> {
+  const command = await startManagedProcess(
+    args,
+    cwd,
+    framework,
+    "finite",
+    env,
+    signal,
+  );
+  const aborted = () => {
+    // The finally block awaits cleanup and reports failures.
+    void command.stop().catch(() => {});
+  };
+  signal.addEventListener("abort", aborted, {
+    once: true,
+  });
+  try {
+    if (signal.aborted) {
+      aborted();
+    }
+    const code = await command.exited;
+    signal.throwIfAborted();
+    if (command.failure) {
+      throw command.failure;
+    }
+    if (code !== 0) {
+      throw new Error(`${args[0]} failed (exit ${code}).`);
     }
   } finally {
-    if (lease) {
-      await rm(lease, {
-        recursive: true,
-        force: true,
-      });
-    }
+    signal.removeEventListener("abort", aborted);
+    await command.stop();
   }
 }

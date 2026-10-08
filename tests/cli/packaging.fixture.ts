@@ -4,28 +4,36 @@ import { readdir, rm as removeCompileAssets, rm } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import * as build from "../../packages/cli/src/build.ts";
 import * as files from "../../packages/cli/src/files.ts";
-import * as launch from "../../packages/cli/src/launch.ts";
+import * as windowsCompile from "../../packages/cli/src/windows-compile.ts";
 import {
   adapterFor,
   CODES,
   registerAdapter,
 } from "../../packages/packaging/src/index.ts";
 
-mock.module(import.meta.resolve("../../packages/cli/src/launch.ts"), () => ({
-  ...launch,
-  compileWindowsApp: async (root: string, _bun: string, executable: string) => {
-    const embedded: Record<string, string> = {};
-    for (const path of await files.files(resolve(root, "assets"))) {
-      embedded[relative(resolve(root, "assets"), path).replaceAll("\\", "/")] =
-        await Bun.file(path).text();
-    }
-    await Bun.write(resolve(root, executable), JSON.stringify(embedded));
-    await removeCompileAssets(resolve(root, "assets"), {
-      recursive: true,
-      force: true,
-    });
-  },
-}));
+mock.module(
+  import.meta.resolve("../../packages/cli/src/windows-compile.ts"),
+  () => ({
+    ...windowsCompile,
+    compileWindowsApp: async (
+      root: string,
+      _bun: string,
+      executable: string,
+    ) => {
+      const embedded: Record<string, string> = {};
+      for (const path of await files.files(resolve(root, "assets"))) {
+        embedded[
+          relative(resolve(root, "assets"), path).replaceAll("\\", "/")
+        ] = await Bun.file(path).text();
+      }
+      await Bun.write(resolve(root, executable), JSON.stringify(embedded));
+      await removeCompileAssets(resolve(root, "assets"), {
+        recursive: true,
+        force: true,
+      });
+    },
+  }),
+);
 async function compiledAsset(artifact: build.BuiltPackage, name: string) {
   return (await Bun.file(artifact.executable).json())[name] as string;
 }

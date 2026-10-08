@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { parseDevArguments, devProject } from "../../packages/cli/src/dev.ts";
-import { windowsInspectorArgument } from "../../packages/cli/src/launch.ts";
+import { devProject, parseDevArguments } from "../../packages/cli/src/dev.ts";
+import { windowsInspectorArgument } from "../../packages/cli/src/windows-dev-launch.ts";
 import { verifyDevelopmentToolsLaunch } from "../../packages/runtime-bun/src/development.ts";
 
 test("DevTools require both a development artifact and an explicit launch flag", () => {

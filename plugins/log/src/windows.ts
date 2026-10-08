@@ -13,6 +13,8 @@ import type {
 } from "@bunaway/plugin";
 import type { LogInput } from "./index.ts";
 
+const LOG_ROTATION_THRESHOLD_BYTES = 1024 * 1024;
+
 export function createOperations(
   environment: NativeEnvironment,
 ): NativeAdapter {
@@ -23,7 +25,7 @@ export function createOperations(
         recursive: true,
       });
       try {
-        if (statSync(path).size > 1024 * 1024) {
+        if (statSync(path).size > LOG_ROTATION_THRESHOLD_BYTES) {
           rmSync(`${path}.1`, {
             force: true,
           });

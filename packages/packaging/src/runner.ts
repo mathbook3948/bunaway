@@ -17,6 +17,7 @@ import {
   BUILD_TARGETS,
   type BuildArtifact,
   type BuildTarget,
+  type ChannelConfig,
   type ChannelId,
   CODES,
   type Diagnostic,
@@ -39,7 +40,7 @@ export interface RunPackageArgs {
   metadata: ResolvedPackaging;
   appId: string;
   channel: ChannelId;
-  channelConfig: Record<string, unknown>;
+  channelConfig: ChannelConfig;
   signing?: SigningConfig;
   target: BuildTarget;
   artifact: BuildArtifact;

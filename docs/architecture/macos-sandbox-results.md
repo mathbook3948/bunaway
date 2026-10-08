@@ -98,7 +98,7 @@ for the in-place workspace/native-binary/signing inputs.
 | File (in `native/macos/distribute/entitlements/`, PR B) | Contents |
 |---|---|
 | `mac-direct-app.plist` | none: not sandboxed; hardened runtime + notarization only |
-| `mac-direct-child.plist` | none needed (bun keeps Oven signature, no re-sign required unless we strip it) |
+| `mac-direct-child.plist` | `cs.allow-jit` for the re-signed Bun child under hardened runtime (~22× slowdown otherwise, measured) |
 | `mac-store-app.plist` | `app-sandbox`, `network.client`, `application-groups` (group = `$(TeamID).<appId>` from config), `cs.allow-jit` if host is hardened (not needed: interpreter fallback works; include only if a native JIT consumer appears) |
 | `mac-store-child.plist` | `app-sandbox`, `inherit`, `cs.allow-jit`: sign bun with `-o runtime` |
 

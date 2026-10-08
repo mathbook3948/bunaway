@@ -8,12 +8,14 @@ import {
   validateValue as validate,
 } from "@bunaway/protocol";
 
+export const WINDOW_VIEW_NAME_PATTERN = "^[A-Za-z0-9_.:-]{1,128}$(?![\\s\\S])";
+
 const windowTarget = {
   type: "object",
   properties: {
     view: {
       type: "string",
-      pattern: "^[A-Za-z0-9_.:-]{1,128}$(?![\\s\\S])",
+      pattern: WINDOW_VIEW_NAME_PATTERN,
     },
   },
   required: [

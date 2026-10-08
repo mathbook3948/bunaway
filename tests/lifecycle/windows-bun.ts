@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runWindowsApp } from "../../native/windows/bun/entry.ts";
-import { closeWindowsApp } from "../../packages/cli/src/launch.ts";
+import { closeWindowsApp } from "../../packages/cli/src/windows-dev-launch.ts";
 import type { AppDefinition } from "../../packages/core/src/index.ts";
 import type { HostContext, Policy } from "../../packages/protocol/src/index.ts";
 import { logPlugin } from "../../plugins/log/src/index.ts";

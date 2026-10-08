@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { bundleWindowsHost } from "../../packages/cli/src/assets.ts";
 import { writeJson } from "../../packages/cli/src/files.ts";
-import { compileWindowsApp } from "../../packages/cli/src/launch.ts";
+import { compileWindowsApp } from "../../packages/cli/src/windows-compile.ts";
 
 test.skipIf(process.platform !== "win32")(
   "Compiled app embeds assets and icons, preserves argv, disables cwd config and reports startup failures",

@@ -11,45 +11,10 @@ export function createOperations(
     throw new Error("Window services require the UI thread.");
   }
   const services = environment.windows;
-  const registry = new NativeRegistry([
-    windowsPlugin,
-  ]);
-  const operations = new WindowOperations(services.specs, {
-    ...services,
-    apply: applyWindow,
-  });
-  return {
-    execute() {
-      throw new BunawayError({
-        code: "UNSUPPORTED",
-        message: "Window control requires UI execution.",
-      });
-    },
-    executeUI(operation, input, _source, context) {
-      const call = validateWindowCall({
-        operation,
-        payload: input,
-      });
-      const grants = services.specs
-        .filter((spec) =>
-          registry.allowed(
-            context.permissions,
-            {
-              operation: "windows.show",
-              payload: {
-                view: spec.view,
-              },
-            },
-            matches,
-          ),
-        )
-        .map((spec) => spec.view);
-      return operations.execute(call, grants, context.requestId);
-    },
-    busy: () => operations.replacing.size !== 0,
-    dispose() {},
-  };
-  function applyWindow(call: WindowCall, viewId: string) {
+  function applyWindow(
+    call: WindowCall,
+    viewId: string,
+  ): boolean | null | Promise<boolean> {
     const window = services.window(viewId);
     switch (call.operation) {
       case "windows.show":
@@ -100,4 +65,42 @@ export function createOperations(
     }
     return null;
   }
+  const registry = new NativeRegistry([
+    windowsPlugin,
+  ]);
+  const operations = new WindowOperations(services.specs, {
+    ...services,
+    apply: applyWindow,
+  });
+  return {
+    execute() {
+      throw new BunawayError({
+        code: "UNSUPPORTED",
+        message: "Window control requires UI execution.",
+      });
+    },
+    executeUI(operation, input, _source, context) {
+      const call = validateWindowCall({
+        operation,
+        payload: input,
+      });
+      const grants = services.specs
+        .filter((spec) =>
+          registry.allowed(
+            context.permissions,
+            {
+              operation: "windows.show",
+              payload: {
+                view: spec.view,
+              },
+            },
+            matches,
+          ),
+        )
+        .map((spec) => spec.view);
+      return operations.execute(call, grants, context.requestId);
+    },
+    busy: () => operations.replacing.size !== 0,
+    dispose() {},
+  };
 }

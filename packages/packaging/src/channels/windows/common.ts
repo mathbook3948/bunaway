@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { cp, lstat, mkdir, readdir, readFile } from "node:fs/promises";
-import { join, sep } from "node:path";
+import { join } from "node:path";
 
 // Toolchain discovery and helpers shared by the Windows channel adapters.
 // Adapters never touch the build artifact: they copy it into the runner-owned
@@ -182,8 +182,4 @@ export function stableGuid(identifier: string): string {
     .digest("hex")
     .slice(0, 32);
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
-}
-
-export function toWindowsPath(path: string): string {
-  return path.split("/").join(sep === "\\" ? "\\" : "/");
 }

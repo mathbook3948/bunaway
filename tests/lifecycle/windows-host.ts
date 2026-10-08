@@ -7,7 +7,12 @@ import { existsSync } from "node:fs";
 import { cp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { buildHostFixture } from "../../native/windows/bun/package.ts";
-import { windowsLaunchEnvironment } from "../../packages/cli/src/launch.ts";
+import {
+  closeAllWindows,
+  rendererPids,
+  watch,
+} from "./windows-host-processes.ts";
+import { windowsLaunchEnvironment } from "../../packages/cli/src/windows-dev-launch.ts";
 import { validateValue } from "../../packages/protocol/src/index.ts";
 import { validationCases } from "../protocol/validation-cases.ts";
 import { assertReport, readReport } from "./reports.ts";
@@ -36,18 +41,6 @@ const results: {
   name: string;
   durationMs: number;
 }[] = [];
-
-// The host maps each view id to a user-data directory through viewDirName.
-const viewDir = (viewId: string) =>
-  `v${[
-    ...viewId,
-  ]
-    .map((c) =>
-      /[a-z0-9]/.test(c)
-        ? c
-        : `-${c.charCodeAt(0).toString(16).padStart(2, "0")}`,
-    )
-    .join("")}`;
 
 async function resetData() {
   // Retry folder cleanup if the OS has not released a runtime file lock yet.
@@ -182,113 +175,6 @@ function launch() {
     }
   });
   return child;
-}
-async function rendererPids(viewId: string, legacyProfile = false) {
-  // Select only renderers belonging to this view's WebView user-data directory.
-  const inventory = Bun.spawn(
-    [
-      "powershell",
-      "-NoProfile",
-      "-Command",
-      "@(Get-CimInstance Win32_Process -Filter \"Name = 'msedgewebview2.exe'\" | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($env:BUNAWAY_TEST_WEB_DATA) -and $_.CommandLine.Contains('--type=renderer') } | Select-Object -ExpandProperty ProcessId) | ConvertTo-Json -Compress",
-    ],
-    {
-      env: {
-        ...process.env,
-        BUNAWAY_TEST_WEB_DATA: legacyProfile
-          ? join(dataRoot, "webview")
-          : join(dataRoot, "webview", viewDir(viewId)),
-      },
-      stdout: "pipe",
-      stderr: "pipe",
-    },
-  );
-  const pidsText = await new Response(inventory.stdout).text();
-  assert.equal(
-    await inventory.exited,
-    0,
-    await new Response(inventory.stderr).text(),
-  );
-  const parsed = JSON.parse(pidsText || "[]") as number[] | number;
-  return Array.isArray(parsed)
-    ? parsed
-    : [
-        parsed,
-      ];
-}
-// taskkill delivers WM_CLOSE to only one top-level window per call. A real
-// multi-window app needs WM_CLOSE on every window, like a session logoff does.
-async function closeAllWindows(pid: number) {
-  const script = `
-$src = @'
-using System;
-using System.Collections.Generic;
-using System.Runtime.InteropServices;
-public static class Win32 {
-  [DllImport("user32.dll")] public static extern bool PostMessageW(IntPtr h, uint m, IntPtr w, IntPtr l);
-  [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc cb, IntPtr l);
-  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
-  delegate bool EnumProc(IntPtr h, IntPtr l);
-  public static List<IntPtr> WindowsOf(uint pid) {
-    var list = new List<IntPtr>();
-    EnumWindows((h, l) => { uint p; GetWindowThreadProcessId(h, out p); if (p == pid) list.Add(h); return true; }, IntPtr.Zero);
-    return list;
-  }
-}
-'@
-Add-Type -TypeDefinition $src
-foreach ($h in [Win32]::WindowsOf([uint32]$env:BUNAWAY_CLOSE_PID)) {
-  [void][Win32]::PostMessageW($h, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)
-}
-`;
-  const poster = Bun.spawn(
-    [
-      "powershell",
-      "-NoProfile",
-      "-Command",
-      script,
-    ],
-    {
-      env: {
-        ...process.env,
-        BUNAWAY_CLOSE_PID: String(pid),
-      },
-      stdout: "pipe",
-      stderr: "pipe",
-    },
-  );
-  assert.equal(
-    await poster.exited,
-    0,
-    await new Response(poster.stderr).text(),
-  );
-}
-async function watch(pids: number[]) {
-  const watcher = Bun.spawn(
-    [
-      process.execPath,
-      resolve(import.meta.dir, "windows-bun-process.ts"),
-      "--watch",
-      ...pids.map(String),
-    ],
-    {
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-    },
-  );
-  const reader = watcher.stdout.getReader();
-  const first = await reader.read();
-  reader.releaseLock();
-  assert.equal(new TextDecoder().decode(first.value), "watch-ready\n");
-  return async () => {
-    assert.equal(
-      await watcher.exited,
-      0,
-      "Captured OS process handles must signal exit",
-    );
-    assert.equal(await new Response(watcher.stderr).text(), "");
-  };
 }
 async function test(name: string, body: () => Promise<void>) {
   const start = performance.now();
@@ -476,7 +362,7 @@ try {
       // Wait for main's intentional navigation first so its unrelated revoke
       // cannot be mistaken for propagation from the editor crash.
       await reportFile("report3.json");
-      const pids = await rendererPids("editor");
+      const pids = await rendererPids(dataRoot, "editor");
       assert.ok(pids.length > 0, "editor renderer missing");
       const beforeCrash = (await hostLog()).length;
       await rm(join(dataRoot, "temp", "editor.json"));
@@ -677,7 +563,7 @@ try {
           "legacy config opened more than one view",
         );
         if (phase === "read") {
-          const pids = await rendererPids("main", true);
+          const pids = await rendererPids(dataRoot, "main", true);
           assert.ok(pids.length > 0, "test app renderer missing");
           const beforeCrash = (await hostLog()).length;
           await rm(join(dataRoot, "temp", "read.json"));
@@ -766,7 +652,7 @@ try {
       const browser = await waitLog(
         (entry) => entry.event === "webview-ready" && entry.view === "main",
       );
-      const renderers = await rendererPids("main");
+      const renderers = await rendererPids(dataRoot, "main");
       const targets = [
         childPid,
         browser.browserPid as number,

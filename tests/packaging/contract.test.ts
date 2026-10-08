@@ -939,6 +939,58 @@ test("bundle settings reject malformed shapes before adapters run", async () => 
   expect(() => parsePackaging("{ not json")).toThrow();
 });
 
+test("bundle settings return validated channel options", () => {
+  const config = parsePackaging(
+    JSON.stringify({
+      channels: {
+        "win-direct": {
+          scope: "perMachine",
+          webView2: "bootstrap",
+          desktopShortcut: true,
+          startMenuShortcut: false,
+          uninstall: {
+            preserveUserData: true,
+          },
+        },
+        "win-store-msix": {
+          packageName: "app.test",
+          unvirtualizedData: true,
+          capabilities: [
+            "runFullTrust",
+          ],
+        },
+        "mac-direct": {
+          bundleId: "com.example.app",
+          entitlements: [],
+        },
+      },
+    }),
+  );
+
+  expect(config.channels).toEqual({
+    "win-direct": {
+      scope: "perMachine",
+      webView2: "bootstrap",
+      desktopShortcut: true,
+      startMenuShortcut: false,
+      uninstall: {
+        preserveUserData: true,
+      },
+    },
+    "win-store-msix": {
+      packageName: "app.test",
+      unvirtualizedData: true,
+      capabilities: [
+        "runFullTrust",
+      ],
+    },
+    "mac-direct": {
+      bundleId: "com.example.app",
+      entitlements: [],
+    },
+  });
+});
+
 test("resolve derives identity from app settings/package.json and selects the channel", async () => {
   setBundleConfig({
     channels: {
@@ -1137,28 +1189,31 @@ test("runner produces a report, records diagnostics and labels unsigned output",
 });
 
 test("failed adapter stages keep the previous packaged output intact", async () => {
-  setBundleConfig({
-    channels: {
-      "win-direct": {},
-    },
-  });
-  const config = readBundleConfig();
+  const projectRoot = await mkdtemp(join(home, "failed-stage-"));
+  const config = parsePackaging(
+    JSON.stringify({
+      channels: {
+        "win-direct": {},
+      },
+    }),
+  );
   const { metadata, channel } = await resolvePackaging({
-    root,
+    root: projectRoot,
     config,
     channel: "win-direct",
     ...resolveArgs,
   });
+  await makeArtifact(projectRoot);
   const artifact = artifactPaths({
-    root,
+    root: projectRoot,
     target: "windows-x64",
     appId: "app.test",
   });
   const previous = resolve(
-    root,
+    projectRoot,
     "dist/windows-x64/packaged/win-direct/app-setup.exe",
   );
-  expect(await Bun.file(previous).exists()).toBe(true); // from the passing run above
+  await Bun.write(previous, "last good installer");
   const failing = stubAdapter({
     run: async () => {
       throw new Error("tool exploded");
@@ -1178,7 +1233,7 @@ test("failed adapter stages keep the previous packaged output intact", async () 
   expect(report.submittable).toBe(false);
   expect(report.stages.find((s) => s.id === "stub")?.status).toBe("failed");
   expect(report.diagnostics.map((d) => d.code)).toContain(CODES.STAGE_FAILED);
-  expect(await Bun.file(previous).exists()).toBe(true);
+  expect(await Bun.file(previous).text()).toBe("last good installer");
 });
 
 test("required-to-run channels mark unsigned output unusable", async () => {

@@ -3,7 +3,7 @@ import type {
   CommandRegistry,
   EventRegistry,
 } from "@bunaway/plugin-api";
-import { bindCommandHost, bindPluginHost } from "./host-context.ts";
+import { bindCommandHost, bindPluginHost } from "@bunaway/plugin-api/host";
 import type { ModuleDefinition } from "./module.ts";
 import { claimName, type RegistrationKind } from "./registration.ts";
 

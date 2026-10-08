@@ -24,6 +24,23 @@ int main(int argc, char** argv) {
             testRoot = fs::absolute(fs::path(argv[1])) / ("host-security-" + randomHex(8));
             fs::create_directories(testRoot / "web");
             {
+                const auto emptyFile = testRoot / "sha256-empty";
+                std::ofstream(emptyFile, std::ios::binary);
+                require(sha256(emptyFile) == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                    "SHA-256 empty-message vector failed.");
+
+                const auto abcFile = testRoot / "sha256-abc";
+                { std::ofstream output(abcFile, std::ios::binary); output << "abc"; }
+                require(sha256(abcFile) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+                    "SHA-256 abc vector failed.");
+
+                const auto millionAsFile = testRoot / "sha256-million-a";
+                { std::ofstream output(millionAsFile, std::ios::binary); output << std::string(1'000'000, 'a'); }
+                require(sha256(millionAsFile) == "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0",
+                    "SHA-256 multi-block vector failed.");
+                std::puts("PASS SHA-256 empty, short and multi-block vectors");
+            }
+            {
                 parseHostPermissions(Json{{"permissions", Json::array()}});
                 for (const auto& permissions : {
                     Json::array({"log:write"}),

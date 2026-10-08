@@ -1,14 +1,17 @@
 import { defineModule } from "@bunaway/backend";
 import { storage } from "@bunaway/plugin-storage";
 
+const messageSchema = {
+  type: "string",
+  maxLength: 10000,
+} as const;
+const messagePath = "messages/current.txt";
+
 export const message = defineModule("message")
   .command(
     "save",
     {
-      input: {
-        type: "string",
-        maxLength: 10000,
-      },
+      input: messageSchema,
       output: {
         const: null,
       },
@@ -16,7 +19,7 @@ export const message = defineModule("message")
     async (text, context) => {
       await storage.writeText({
         scope: "appData",
-        path: "messages/current.txt",
+        path: messagePath,
         text,
       });
       await context.events.emit("message.saved", text, {
@@ -38,10 +41,7 @@ export const message = defineModule("message")
     () =>
       storage.readText({
         scope: "appData",
-        path: "messages/current.txt",
+        path: messagePath,
       }),
   )
-  .event("saved", {
-    type: "string",
-    maxLength: 10000,
-  });
+  .event("saved", messageSchema);

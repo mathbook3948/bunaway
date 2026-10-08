@@ -21,6 +21,13 @@ import {
 } from "@bunaway/protocol";
 import { readJsonLines } from "./process-ipc.ts";
 
+// Omit the envelope per variant so each frame keeps its required payload fields.
+type OutboundFrame = ProcessFrame extends infer Frame
+  ? Frame extends ProcessFrame
+    ? Omit<Frame, "ipc" | "runtime">
+    : never
+  : never;
+
 const PLATFORMS: Record<string, Platform> = {
   win32: "windows",
   darwin: "macos",
@@ -67,7 +74,7 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
       finish: (response: HostResponse) => void;
     }
   >();
-  const send = (body: Record<string, unknown>): Promise<void> => {
+  const send = (body: OutboundFrame): Promise<void> => {
     if (!runtime) {
       return Promise.reject(new Error("Runtime has not booted."));
     }
@@ -75,7 +82,7 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
       ...body,
       ipc: PROCESS_IPC_VERSION,
       runtime,
-    } as ProcessFrame)}\n`;
+    })}\n`;
     if (queued >= API_LIMITS.maxPending) {
       return Promise.reject(new Error("Output queue full."));
     }

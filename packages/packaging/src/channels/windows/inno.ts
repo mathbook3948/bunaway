@@ -172,13 +172,11 @@ export function renderInnoScript(options: InnoOptions): string {
     }
   }
 
-  const runEntries: string[] = [];
-  runEntries.push(
+  lines.push(
+    "",
+    "[Run]",
     `Filename: "{app}\\${executable}"; WorkingDir: "{app}"; Description: "${issParameter(`Launch ${options.name}`)}"; Flags: postinstall nowait skipifsilent unchecked`,
   );
-  if (runEntries.length) {
-    lines.push("", "[Run]", ...runEntries);
-  }
 
   if (!options.preserveUserData) {
     lines.push(

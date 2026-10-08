@@ -18,7 +18,7 @@ const commands = new WeakMap<CommandDefinition, CommandDefinition>();
 async function runWithHost<T>(
   context: CommandContext,
   run: () => T | Promise<T>,
-  backend = false,
+  keepBackendContextAlive = false,
 ): Promise<T> {
   const scope: HostScope = {
     context,
@@ -28,7 +28,7 @@ async function runWithHost<T>(
     try {
       return await run();
     } finally {
-      if (!backend) {
+      if (!keepBackendContextAlive) {
         scope.active = false;
       }
     }
@@ -58,6 +58,7 @@ export function bindCommandHost<T extends CommandDefinition>(definition: T): T {
   if (existing) {
     return existing as T;
   }
+  // Preserve schema getters when the definition is copied onto the wrapper.
   const bound = {
     ...definition,
     input: definition.input,
@@ -94,6 +95,7 @@ export function bindPluginHost(plugin: PluginDefinition): PluginDefinition {
   if (!boundCommands && !setup) {
     return plugin;
   }
+  // Materialize contract properties because plugin definitions may expose them as getters.
   return {
     ...plugin,
     name,

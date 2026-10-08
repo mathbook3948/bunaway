@@ -8,7 +8,7 @@ import {
   type Hello,
   type HostContext,
   type JsonValue,
-  NativeRegistry,
+  type NativeRegistry,
   negotiateProtocol,
   type Policy,
   ProtocolError,
@@ -18,6 +18,11 @@ import {
   validateValue,
   type WireError,
 } from "@bunaway/protocol";
+import {
+  type PreparedAppRegistry,
+  prepareAppRegistry,
+} from "./app-registry.ts";
+import { bindHostAPI } from "./host-api.ts";
 import type {
   CommandContext,
   CommandDefinition,
@@ -26,16 +31,11 @@ import type {
   CoreServices,
   CoreSession,
   EventTarget,
-  PluginDefinition,
   StateStore,
   StopHook,
 } from "./index.ts";
 
 type ViewPolicy = Policy["views"][number];
-
-import { bindHostAPI } from "./host-api.ts";
-
-const NAME_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
 
 function fail(code: WireError["code"], message: string): never {
   throw new BunawayError({
@@ -52,101 +52,6 @@ function reportDiagnostic(
   } catch {
     // Diagnostics must not replace the original failure or block cleanup.
   }
-}
-
-function checkRegistrationName(
-  name: string,
-  kind: "command" | "event",
-  owner: string,
-): void {
-  if (!NAME_PATTERN.test(name)) {
-    fail("INVALID_ARGUMENT", `${owner} registered an invalid ${kind} name.`);
-  }
-  if (kind === "command" && name.startsWith("plugin.")) {
-    fail(
-      "INVALID_ARGUMENT",
-      `${owner} cannot register the reserved plugin namespace command.`,
-    );
-  }
-}
-
-function registerAll<T>(
-  target: Map<string, T>,
-  entries: Readonly<Record<string, T>>,
-  kind: "command" | "event",
-  owner: string,
-): void {
-  for (const [name, definition] of Object.entries(entries)) {
-    checkRegistrationName(name, kind, owner);
-    if (target.has(name)) {
-      fail("INVALID_ARGUMENT", `Duplicate ${kind} "${name}".`);
-    }
-    target.set(name, definition);
-  }
-}
-
-function orderPlugins(
-  plugins: readonly PluginDefinition[],
-  services: CoreServices,
-) {
-  const byName = new Map<string, PluginDefinition>();
-  for (const plugin of plugins) {
-    if (byName.has(plugin.name)) {
-      fail("INVALID_ARGUMENT", `Duplicate plugin "${plugin.name}".`);
-    }
-    byName.set(plugin.name, plugin);
-  }
-  const ordered: PluginDefinition[] = [];
-  const marks = new Map<string, "open" | "done">();
-  const visit = (plugin: PluginDefinition): void => {
-    const mark = marks.get(plugin.name);
-    if (mark === "done") {
-      return;
-    }
-    if (mark === "open") {
-      fail("INVALID_ARGUMENT", `Plugin dependency cycle at "${plugin.name}".`);
-    }
-    marks.set(plugin.name, "open");
-    for (const dependency of plugin.dependencies ?? []) {
-      const target = byName.get(dependency);
-      if (!target) {
-        fail(
-          "INVALID_ARGUMENT",
-          `Plugin "${plugin.name}" requires unknown plugin "${dependency}".`,
-        );
-      }
-      visit(target);
-    }
-    marks.set(plugin.name, "done");
-    ordered.push(plugin);
-  };
-  for (const plugin of plugins) {
-    visit(plugin);
-  }
-  for (const plugin of ordered) {
-    if (plugin.platforms && !plugin.platforms.includes(services.platform)) {
-      fail(
-        "UNSUPPORTED",
-        `Plugin "${plugin.name}" does not support ${services.platform}.`,
-      );
-    }
-    if (
-      plugin.requiredPermissions?.some(
-        (permission) =>
-          !services.policy.backend.permissions.some(
-            (grant) =>
-              (typeof grant === "string" ? grant : grant.identifier) ===
-              permission,
-          ),
-      )
-    ) {
-      fail(
-        "INVALID_ARGUMENT",
-        `Plugin "${plugin.name}" requires host permissions outside the backend policy.`,
-      );
-    }
-  }
-  return ordered;
 }
 
 // The store keeps validated snapshots; reads and writes both copy so callers
@@ -390,12 +295,11 @@ class SessionImpl implements CoreSession {
     }
     const definition = this.core.commands.get(message.command);
     if (!definition) {
+      const unknownPlugin =
+        message.command.startsWith("plugin.") &&
+        !this.core.registry.plugins.has(message.command.split(".")[1] ?? "");
       this.respondError(message.id, {
-        code:
-          message.command.startsWith("plugin.") &&
-          !this.core.registry.plugins.has(message.command.split(".")[1] ?? "")
-            ? "UNSUPPORTED"
-            : "INVALID_ARGUMENT",
+        code: unknownPlugin ? "UNSUPPORTED" : "INVALID_ARGUMENT",
         message: "Unknown command.",
       });
       return;
@@ -706,6 +610,10 @@ class SessionImpl implements CoreSession {
 
 class BunawayCore implements Core {
   readonly sessions = new Map<HostContext, SessionImpl>();
+  readonly registry: NativeRegistry;
+  readonly commands: ReadonlyMap<string, CommandDefinition>;
+  readonly events: ReadonlyMap<string, Schema>;
+  private readonly views: ReadonlyMap<string, Policy["views"][number]>;
   private stopped = false;
   private readonly stopHooks: {
     plugin: string;
@@ -716,12 +624,13 @@ class BunawayCore implements Core {
 
   constructor(
     readonly services: CoreServices,
-    readonly registry: NativeRegistry,
-    readonly commands: Map<string, CommandDefinition>,
-    readonly events: Map<string, Schema>,
+    prepared: PreparedAppRegistry,
     readonly state: StateStore,
-    private readonly views: Map<string, ViewPolicy>,
   ) {
+    this.registry = prepared.registry;
+    this.commands = prepared.commands;
+    this.events = prepared.events;
+    this.views = prepared.views;
     this.backendController = services.runtime.createCancellation();
   }
 
@@ -869,53 +778,14 @@ class BunawayCore implements Core {
 }
 
 export const createCore: CoreFactory = async (app, services) => {
-  const ordered = orderPlugins(app.plugins ?? [], services);
-  const commands = new Map<string, CommandDefinition>();
-  const events = new Map<string, Schema>();
-  registerAll(commands, app.commands, "command", "app");
-  registerAll(events, app.events, "event", "app");
-  for (const plugin of ordered) {
-    registerAll(
-      commands,
-      plugin.commands ?? {},
-      "command",
-      `plugin "${plugin.name}"`,
-    );
-    registerAll(
-      events,
-      plugin.events ?? {},
-      "event",
-      `plugin "${plugin.name}"`,
-    );
-  }
-  const registry = new NativeRegistry(ordered);
-  registry.validatePolicy(services.policy);
-  for (const operation of registry.operations.values()) {
-    commands.set(`plugin.${operation.name}`, {
-      input: operation.input,
-      output: operation.output,
-      async run(input, context) {
-        return context.host.call(operation, input as JsonValue);
-      },
-    });
-  }
-  const views = new Map<string, ViewPolicy>();
-  for (const view of services.policy.views) {
-    if (views.has(view.id)) {
-      fail("INVALID_ARGUMENT", `Duplicate policy view "${view.id}".`);
-    }
-    views.set(view.id, view);
-  }
+  const appRegistry = prepareAppRegistry(app, services);
   const core = new BunawayCore(
     services,
-    registry,
-    commands,
-    events,
+    appRegistry,
     createStateStore(app.state),
-    views,
   );
   try {
-    for (const plugin of ordered) {
+    for (const plugin of appRegistry.plugins) {
       try {
         const hook = await plugin.setup?.(core.makeBackendContext());
         if (typeof hook === "function") {

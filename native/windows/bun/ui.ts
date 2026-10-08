@@ -24,13 +24,13 @@ import {
 import { Tray } from "./tray.ts";
 import { originOf, WebView } from "./webview.ts";
 import {
-  disposeWin32Bindings,
-  hr,
-  kernel,
-  ole,
-  user,
   Windows,
+  WM_CLOSE,
+  WM_ENTERSIZEMOVE,
+  WM_EXITSIZEMOVE,
+  WM_SIZE,
 } from "./win32.ts";
+import { disposeWin32Bindings, hr, kernel, ole } from "./win32-bindings.ts";
 
 const config = workerData as UIConfig;
 const registry = pluginRegistry(config.plugins ?? []);
@@ -39,7 +39,7 @@ const matches = await permissionMatcher(config.plugins ?? []);
 assert(parentPort);
 let failure: unknown;
 let stopping = false;
-let starting = false;
+let startupNavigationStarted = false;
 let startRequested = false;
 let closingSent = false;
 let initialized = false;
@@ -61,33 +61,43 @@ function visibility(action: "show" | "hide") {
   if (stopping) {
     return;
   }
+  const nativeWindows = windows;
+  if (!nativeWindows) {
+    return;
+  }
   for (const view of views.values()) {
     if (view.boundary.closed) {
       continue;
     }
-    const mode =
-      action === "hide" ? 0 : user.symbols.IsIconic(view.native.hwnd) ? 9 : 5;
-    user.symbols.ShowWindow(view.native.hwnd, mode);
     if (action === "show") {
-      user.symbols.SetForegroundWindow(view.native.hwnd);
+      nativeWindows.focus(view.native.hwnd);
+    } else {
+      nativeWindows.show(view.native.hwnd, false);
     }
   }
 }
-const views = new Map<
-  string,
-  {
-    boundary: ViewBoundary;
-    native: WebView;
-    detached: boolean;
-    cleaned: boolean;
-    ready: boolean;
-    navigated: boolean;
-    pendingClose: boolean;
-    forceClose: boolean;
-    confirmation: string | null;
-    deadline: number;
+type ViewState = {
+  boundary: ViewBoundary;
+  native: WebView;
+  detached: boolean;
+  cleaned: boolean;
+  ready: boolean;
+  navigationStarted: boolean;
+  pendingClose: boolean;
+  forceClose: boolean;
+  confirmation: string | null;
+  deadline: number;
+};
+const views = new Map<string, ViewState>();
+function cleanupView(view: ViewState) {
+  if (view.boundary.closed && !view.detached && view.native.detach()) {
+    windows?.destroy(view.native.hwnd);
+    view.detached = true;
   }
->();
+  if (view.detached && !view.cleaned) {
+    view.cleaned = view.native.finish();
+  }
+}
 const cancelled = new Set<string>();
 const windowRequests = new Map<string, HostContext>();
 const approved = new Map<string, HostContext>();
@@ -260,11 +270,7 @@ const channel = new Channel(
     } else if (packet.kind === "cancel-context") {
       discardContext(packet.context);
     } else if (packet.kind === "host-result") {
-      const active =
-        packet.context === config.backendContext ||
-        [
-          ...views.values(),
-        ].some((view) => view.boundary.active(packet.context));
+      const active = activeContext(packet.context);
       const context = approved.get(packet.requestId);
       approved.delete(packet.requestId);
       if (!stopping && active && context === packet.context) {
@@ -305,17 +311,17 @@ function startViews() {
   if (
     !startRequested ||
     stopping ||
-    (!starting &&
+    (!startupNavigationStarted &&
       [
         ...views.values(),
       ].some((view) => !view.ready && !view.boundary.closed))
   ) {
     return;
   }
-  starting = true;
+  startupNavigationStarted = true;
   for (const view of views.values()) {
-    if (view.ready && !view.boundary.closed && !view.navigated) {
-      view.navigated = true;
+    if (view.ready && !view.boundary.closed && !view.navigationStarted) {
+      view.navigationStarted = true;
       view.native.navigate();
     }
   }
@@ -433,7 +439,7 @@ function createWindow(spec: WindowSpec) {
   const boundary = new ViewBoundary(policy, {
     origin: originOf,
     source: () => native.source(),
-    ready: () => starting && !stopping && !closingSent,
+    ready: () => startupNavigationStarted && !stopping && !closingSent,
     capacity: (count) =>
       channel.canSend(
         count,
@@ -468,15 +474,15 @@ function createWindow(spec: WindowSpec) {
     spec.window.width,
     spec.window.height,
     (message) => {
-      if (message === 0x10) {
+      if (message === WM_CLOSE) {
         close();
-      } else if (message === 5) {
+      } else if (message === WM_SIZE) {
         native?.resize();
-      } else if (message === 0x231) {
+      } else if (message === WM_ENTERSIZEMOVE) {
         log("modal-enter", {
           view: spec.view,
         });
-      } else if (message === 0x232) {
+      } else if (message === WM_EXITSIZEMOVE) {
         log("modal-exit", {
           view: spec.view,
         });
@@ -538,7 +544,7 @@ function createWindow(spec: WindowSpec) {
     detached: false,
     cleaned: false,
     ready: false,
-    navigated: false,
+    navigationStarted: false,
     pendingClose: false,
     forceClose: false,
     confirmation: null,
@@ -609,13 +615,7 @@ try {
         throw new Error("WebView startup timed out");
       }
       view.boundary.scanDeadlines();
-      if (view.boundary.closed && !view.detached && view.native.detach()) {
-        windows.destroy(view.native.hwnd);
-        view.detached = true;
-      }
-      if (view.detached && !view.cleaned) {
-        view.cleaned = view.native.finish();
-      }
+      cleanupView(view);
     }
     if (
       !closingSent &&
@@ -667,13 +667,7 @@ try {
       assert(Date.now() < deadline, "STA cleanup timed out");
       windows?.pump();
       for (const view of views.values()) {
-        if (!view.detached && view.native.detach()) {
-          windows?.destroy(view.native.hwnd);
-          view.detached = true;
-        }
-        if (view.detached && !view.cleaned) {
-          view.cleaned = view.native.finish();
-        }
+        cleanupView(view);
       }
       await Bun.sleep(5);
     }

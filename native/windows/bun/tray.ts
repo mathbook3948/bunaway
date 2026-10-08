@@ -1,8 +1,26 @@
 import { dlopen, ptr } from "bun:ffi";
 import assert from "node:assert/strict";
-import { user, type Windows, withWide } from "./win32.ts";
+import { type Windows, WM_CLOSE } from "./win32.ts";
+import { user, withWide } from "./win32-bindings.ts";
 
-const CALLBACK = 0x8001;
+const TRAY_CALLBACK_MESSAGE = 0x8001;
+const WM_NULL = 0x0000;
+const WM_LBUTTONUP = 0x0202;
+const WM_LBUTTONDBLCLK = 0x0203;
+const WM_RBUTTONUP = 0x0205;
+const WM_CONTEXTMENU = 0x007b;
+const NIM_ADD = 0;
+const NIM_DELETE = 2;
+const NIF_MESSAGE = 0x1;
+const NIF_ICON = 0x2;
+const NIF_TIP = 0x4;
+const MF_STRING = 0;
+const TPM_RIGHTBUTTON = 0x2;
+const TPM_RETURNCMD = 0x100;
+const TRAY_ICON_ID = 1;
+const TRAY_OPEN_COMMAND = 1;
+const TRAY_QUIT_COMMAND = 2;
+const TRAY_TOOLTIP_BYTES = 254;
 export class Tray {
   private readonly shell = dlopen("shell32.dll", {
     Shell_NotifyIconW: {
@@ -37,12 +55,18 @@ export class Tray {
           if (message === taskbarCreated) {
             this.added = false;
             this.add();
-          } else if (message === 0x10) {
+          } else if (message === WM_CLOSE) {
             receive("quit");
-          } else if (message === CALLBACK) {
-            if (Number(lparam) === 0x202 || Number(lparam) === 0x203) {
+          } else if (message === TRAY_CALLBACK_MESSAGE) {
+            if (
+              Number(lparam) === WM_LBUTTONUP ||
+              Number(lparam) === WM_LBUTTONDBLCLK
+            ) {
               receive("show");
-            } else if (Number(lparam) === 0x205 || Number(lparam) === 0x7b) {
+            } else if (
+              Number(lparam) === WM_RBUTTONUP ||
+              Number(lparam) === WM_CONTEXTMENU
+            ) {
               this.menu(receive);
             }
           }
@@ -56,13 +80,18 @@ export class Tray {
     try {
       this.data.writeUInt32LE(this.data.length, 0);
       this.data.writeBigUInt64LE(this.hwnd, 8);
-      this.data.writeUInt32LE(1, 16);
-      this.data.writeUInt32LE(7, 20); // NIF_MESSAGE | NIF_ICON | NIF_TIP
-      this.data.writeUInt32LE(CALLBACK, 24);
+      this.data.writeUInt32LE(TRAY_ICON_ID, 16);
+      this.data.writeUInt32LE(NIF_MESSAGE | NIF_ICON | NIF_TIP, 20);
+      this.data.writeUInt32LE(TRAY_CALLBACK_MESSAGE, 24);
       const icon = windows.icon;
       assert(icon, "Tray icon unavailable");
       this.data.writeBigUInt64LE(icon, 32);
-      Buffer.from(tooltip, "utf16le").copy(this.data, 40, 0, 254);
+      Buffer.from(tooltip, "utf16le").copy(
+        this.data,
+        40,
+        0,
+        TRAY_TOOLTIP_BYTES,
+      );
       this.add();
     } catch (error) {
       windows.destroy(this.hwnd);
@@ -73,7 +102,7 @@ export class Tray {
 
   private add() {
     assert(
-      this.shell.symbols.Shell_NotifyIconW(0, ptr(this.data)),
+      this.shell.symbols.Shell_NotifyIconW(NIM_ADD, ptr(this.data)),
       "Tray creation failed",
     );
     this.added = true;
@@ -83,26 +112,40 @@ export class Tray {
     assert(menu, "Tray menu creation failed");
     try {
       assert(
-        withWide("Open", (text) => user.symbols.AppendMenuW(menu, 0, 1n, text)),
+        withWide("Open", (text) =>
+          user.symbols.AppendMenuW(
+            menu,
+            MF_STRING,
+            BigInt(TRAY_OPEN_COMMAND),
+            text,
+          ),
+        ),
       );
       assert(
-        withWide("Quit", (text) => user.symbols.AppendMenuW(menu, 0, 2n, text)),
+        withWide("Quit", (text) =>
+          user.symbols.AppendMenuW(
+            menu,
+            MF_STRING,
+            BigInt(TRAY_QUIT_COMMAND),
+            text,
+          ),
+        ),
       );
       const point = new Int32Array(2);
       assert(user.symbols.GetCursorPos(ptr(point)));
       user.symbols.SetForegroundWindow(this.hwnd);
       const item = user.symbols.TrackPopupMenuEx(
         menu,
-        0x102,
+        TPM_RETURNCMD | TPM_RIGHTBUTTON,
         point[0] ?? 0,
         point[1] ?? 0,
         this.hwnd,
         null,
       );
-      user.symbols.PostMessageW(this.hwnd, 0, 0n, 0n);
-      if (item === 1) {
+      user.symbols.PostMessageW(this.hwnd, WM_NULL, 0n, 0n);
+      if (item === TRAY_OPEN_COMMAND) {
         receive("show");
-      } else if (item === 2) {
+      } else if (item === TRAY_QUIT_COMMAND) {
         receive("quit");
       }
     } finally {
@@ -111,7 +154,7 @@ export class Tray {
   }
   dispose() {
     if (this.added) {
-      this.shell.symbols.Shell_NotifyIconW(2, ptr(this.data));
+      this.shell.symbols.Shell_NotifyIconW(NIM_DELETE, ptr(this.data));
     }
     this.added = false;
     this.windows.destroy(this.hwnd);

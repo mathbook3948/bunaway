@@ -48,11 +48,14 @@ src/styles/custom.css          사이트 스타일
 템플릿을 바꾸면 예제도 갱신된다. 주변 설명이 새 코드와 맞는지도 함께 확인한다.
 
 `src/reference-map.json`은 공개 export, 메서드, CLI, Host operation의 문서 대응표다.
-`scripts/check-reference.mjs`가 TypeScript AST에서 실제 공개 항목과 허용 설정 키를 읽어
+`scripts/check-reference.mjs`가 package export 경로와 TypeScript AST의 공개 항목, 허용 설정 키를 읽어
 누락된 항목과 오래된 매핑, 없는 페이지를 검사한다. 새 API는 대응표와 설명을 함께 추가한다.
 자동 검사는 API 이름의 존재 여부를 확인하므로 설명의 정확성은 소스와 대조해 검토한다.
 `docs:check`와 `docs:build`가 이 검사를 실행한다. 프로덕션 빌드 후에는 `check-links.mjs`가
-내부 페이지 링크와 anchor를 검사한다. CI도 같은 검증과 빌드를 실행한다.
+내부 페이지 링크와 anchor를 검사한다. HTML 페이지가 없는 출력, 잘못된 URL과 인코딩,
+출력 폴더 밖의 경로, 페이지 없이 디렉터리만 있는 링크는 실패로 처리한다.
+`bun test ./tests/docs/links.test.ts`로 링크 검사기의 회귀 테스트를 실행할 수 있다.
+CI도 같은 검증과 빌드를 실행한다.
 
 문서 구성은 [Next.js](https://nextjs.org/docs)와 [Tauri](https://v2.tauri.app/start/)를 참고한다.
 개발 환경과 첫 앱은 순서대로 따라갈 수 있게 작성하고 기능 가이드는 작업을 중심으로 설명한다.

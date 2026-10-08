@@ -1,11 +1,8 @@
-import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
 import { createConnection } from "node:net";
-import { tmpdir } from "node:os";
-import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import type { DevServerConfig } from "./config.ts";
 import { frameworkRoot } from "./files.ts";
+import { startManagedProcess } from "./managed-command.ts";
 
 export interface DevServer {
   exited: Promise<number>;
@@ -48,95 +45,15 @@ export async function startDevServer(
   if (command[0] === "bun") {
     command[0] = process.execPath;
   }
-  const lease =
-    process.platform === "win32"
-      ? await mkdtemp(resolve(tmpdir(), "bunaway-dev-server-"))
-      : undefined;
-  const child = spawn(
-    process.platform === "win32" ? process.execPath : (command[0] ?? ""),
-    process.platform === "win32"
-      ? [
-          resolve(root, "packages/cli/src/dev-server-worker.ts"),
-          lease ?? "",
-          JSON.stringify(command),
-        ]
-      : command.slice(1),
-    {
-      cwd,
-      stdio: [
-        "pipe",
-        "inherit",
-        "inherit",
-      ],
-      detached: process.platform !== "win32",
-      windowsHide: true,
-    },
-  );
-  let exit: number | undefined;
-  let failure: Error | undefined;
-  const exited = new Promise<number>((done) => {
-    child.once("error", (error) => {
-      failure = error;
-      exit = 1;
-      done(1);
-    });
-    child.once("exit", (code) => {
-      exit = code ?? 1;
-      done(exit);
-    });
-  });
+  const ownedProcess = await startManagedProcess(command, cwd, root, "server");
+  const { exited } = ownedProcess;
   const startupExitError = () =>
     new Error(
-      `Development server exited before readiness (exit ${exit}): ${failure?.message ?? config.command[0]}`,
+      `Development server exited before readiness (exit ${ownedProcess.exitCode}): ${ownedProcess.failure?.message ?? config.command[0]}`,
     );
-  // The Windows worker owns a kill-on-close Job; on POSIX this child owns a process group.
-  const killGroup = (kind: NodeJS.Signals) => {
-    if (!child.pid) {
-      return;
-    }
-    try {
-      process.kill(-child.pid, kind);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
-        throw error;
-      }
-    }
-  };
-  let stopping: Promise<void> | undefined;
-  const stop = (): Promise<void> =>
-    (stopping ??= (async () => {
-      try {
-        if (process.platform === "win32") {
-          child.stdin?.end(); // EOF asks the worker to terminate and await its Job descendants.
-          await Promise.race([
-            exited,
-            delay(6000, undefined, {
-              ref: false,
-            }),
-          ]);
-          if (exit === undefined) {
-            child.kill();
-            await exited;
-            throw new Error("Development server worker cleanup timed out.");
-          }
-        } else {
-          killGroup("SIGTERM");
-          await delay(200);
-          killGroup("SIGKILL"); // Also reap grandchildren after their parent exited.
-        }
-        await exited;
-      } finally {
-        if (lease) {
-          await rm(lease, {
-            recursive: true,
-            force: true,
-          });
-        }
-      }
-    })());
   const aborted = () => {
     // The owner also awaits stop(), which reports any cleanup failure.
-    void stop().catch(() => {});
+    void ownedProcess.stop().catch(() => {});
   };
   signal.addEventListener("abort", aborted, {
     once: true,
@@ -148,7 +65,7 @@ export async function startDevServer(
     );
     while (Date.now() < deadline) {
       signal.throwIfAborted();
-      if (exit !== undefined) {
+      if (ownedProcess.exitCode !== undefined) {
         throw startupExitError();
       }
       try {
@@ -168,7 +85,7 @@ export async function startDevServer(
           await delay(50, undefined, {
             signal,
           });
-          if (exit !== undefined) {
+          if (ownedProcess.exitCode !== undefined) {
             throw startupExitError();
           }
           console.log(`Frontend server ready: ${config.url}`);
@@ -176,13 +93,13 @@ export async function startDevServer(
             exited,
             stop: async () => {
               signal.removeEventListener("abort", aborted);
-              await stop();
+              await ownedProcess.stop();
             },
           };
         }
       } catch {
         signal.throwIfAborted();
-        if (exit !== undefined) {
+        if (ownedProcess.exitCode !== undefined) {
           throw startupExitError();
         }
       }
@@ -199,7 +116,7 @@ export async function startDevServer(
     );
   } catch (error) {
     signal.removeEventListener("abort", aborted);
-    await stop();
+    await ownedProcess.stop();
     throw error;
   }
 }

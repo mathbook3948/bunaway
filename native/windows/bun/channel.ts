@@ -32,8 +32,6 @@ export {
   MAX_WINDOWS,
   type WindowSpec,
 } from "../../../packages/runtime-bun/src/window-config.ts";
-// WM_APP message for orderly CLI teardown, independent of user close behavior.
-export const APP_SHUTDOWN_MESSAGE = 0x8002;
 export type UIConfig = {
   runtime: RuntimeIdentity;
   policy: Policy;
@@ -197,11 +195,92 @@ const approvalKinds = new Set([
   "authorized",
   "grant",
 ]);
+const requiredFields: Record<Packet["kind"], readonly string[]> = {
+  "desktop-control": [
+    "action",
+  ],
+  "quit-request": [
+    "reason",
+  ],
+  "quit-cancelled": [],
+  ready: [],
+  start: [],
+  shutdown: [],
+  closing: [],
+  cleaned: [],
+  "session-open": [
+    "route",
+  ],
+  revoke: [
+    "route",
+  ],
+  client: [
+    "route",
+    "message",
+  ],
+  server: [
+    "route",
+    "message",
+  ],
+  authorize: [
+    "context",
+    "requestId",
+    "call",
+  ],
+  prepare: [
+    "context",
+    "requestId",
+    "call",
+  ],
+  operation: [
+    "context",
+    "requestId",
+    "call",
+    "source",
+  ],
+  authorized: [
+    "context",
+    "requestId",
+    "allowed",
+  ],
+  grant: [
+    "context",
+    "requestId",
+    "allowed",
+  ],
+  cancel: [
+    "context",
+    "requestId",
+  ],
+  "cancel-context": [
+    "context",
+  ],
+  "host-result": [
+    "context",
+    "requestId",
+    "response",
+  ],
+  "host-response": [
+    "context",
+    "requestId",
+    "response",
+  ],
+  diagnostic: [
+    "event",
+    "fields",
+  ],
+  fatal: [
+    "error",
+  ],
+};
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Invalid Worker packet");
   }
   return value as Record<string, unknown>;
+}
+function packetKind(value: unknown): value is Packet["kind"] {
+  return typeof value === "string" && Object.hasOwn(requiredFields, value);
 }
 function identifier(value: unknown) {
   if (typeof value !== "string" || !/^[A-Za-z0-9_.:-]{1,128}$/.test(value)) {
@@ -216,92 +295,14 @@ export function validatePacket(value: unknown, incoming: Side): Packet {
     io: ioMainKinds,
     "main-io": ioKinds,
   }[incoming];
-  if (typeof packet.kind !== "string" || !allowed.includes(packet.kind)) {
+  if (!packetKind(packet.kind) || !allowed.includes(packet.kind)) {
     throw new Error("Invalid Worker direction");
   }
   const text = JSON.stringify(value);
   if (Buffer.byteLength(text) > MAX_MESSAGE_BYTES + 1024) {
     throw new Error("Worker packet too large");
   }
-  const fields: Record<string, string[]> = {
-    "desktop-control": [
-      "action",
-    ],
-    "quit-request": [
-      "reason",
-    ],
-    "quit-cancelled": [],
-    ready: [],
-    start: [],
-    shutdown: [],
-    closing: [],
-    cleaned: [],
-    "session-open": [
-      "route",
-    ],
-    revoke: [
-      "route",
-    ],
-    client: [
-      "route",
-      "message",
-    ],
-    server: [
-      "route",
-      "message",
-    ],
-    authorize: [
-      "context",
-      "requestId",
-      "call",
-    ],
-    prepare: [
-      "context",
-      "requestId",
-      "call",
-    ],
-    operation: [
-      "context",
-      "requestId",
-      "call",
-      "source",
-    ],
-    authorized: [
-      "context",
-      "requestId",
-      "allowed",
-    ],
-    grant: [
-      "context",
-      "requestId",
-      "allowed",
-    ],
-    cancel: [
-      "context",
-      "requestId",
-    ],
-    "cancel-context": [
-      "context",
-    ],
-    "host-result": [
-      "context",
-      "requestId",
-      "response",
-    ],
-    "host-response": [
-      "context",
-      "requestId",
-      "response",
-    ],
-    diagnostic: [
-      "event",
-      "fields",
-    ],
-    fatal: [
-      "error",
-    ],
-  };
-  const required = fields[packet.kind];
+  const required = requiredFields[packet.kind];
   if (
     !required ||
     required.some((key) => !Object.hasOwn(packet, key)) ||
