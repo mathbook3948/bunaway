@@ -10,156 +10,121 @@ Use a single shared context: `docs/GLOSSARY.md` and ADRs in `docs/decisions/`. S
 
 ### Code quality
 
-Assess readability, maintainability, reliability, reuse and efficiency as well as
-correctness. Passing tests and static checks is necessary but does not establish
-all of these qualities. Apply these rules within the requested scope; existing
-debt does not authorize unrelated rewrites.
+Assess readability, maintainability, reliability, reuse and efficiency alongside correctness.
+Passing tests and static checks is necessary but insufficient. Stay within requested scope;
+existing debt allows no unrelated rewrites.
 
 #### Naming and readability
 
-- Use camelCase for TypeScript variables and functions, PascalCase for types
-  and classes, UPPER_SNAKE_CASE for named limits and native flags, and kebab-case
-  for new TypeScript source filenames. Follow each script language's conventions.
-  Preserve external contract and FFI symbol spelling. Name values for their role,
-  states for what is actually true, and quantities with units when ambiguous.
-- Keep each function focused on one coherent task. Prefer guard clauses and
-  straightforward branches. Name complex conditions when that explains their
-  meaning; avoid nested ternaries and conditions that mix unrelated decisions.
-  Split by responsibility and reading flow, not by a fixed line count.
-- Give domain limits, native flags and other non-obvious literals meaningful
-  names. Ordinary loop indices and self-explanatory literals need no constants.
-- Comments explain reasons, invariants, ordering or external constraints.
-  Update them with the code and remove comments that merely restate it.
-  Follow `biome.json` for formatting instead of adding competing style rules.
+- Use camelCase for TypeScript variables and functions, PascalCase for types and classes,
+  UPPER_SNAKE_CASE for named limits and native flags, and kebab-case for new TypeScript source
+  filenames. Follow script-language conventions and preserve external contract and FFI spelling.
+  Name values by role, states by what is true, and ambiguous quantities with units.
+- Give functions one coherent task; prefer guard clauses and simple branches. Name complex
+  conditions when useful. Avoid nested ternaries and unrelated decisions in one condition; split by
+  responsibility and reading flow, not line count.
+- Name non-obvious literals, domain limits and native flags; ordinary indices and obvious literals
+  need no constants. Comments explain reasons, invariants, ordering or external constraints. Keep
+  comments current, remove restatements, and follow `biome.json` for formatting.
 
 #### Responsibility and reuse
 
-- Give each file a coherent responsibility. Separate contracts and reusable
-  low-level bindings from the code that owns application state and resource
-  lifetime when their callers and reasons to change differ. Keep lifecycle
-  transitions that depend on each other together instead of splitting by size.
-- Keep constants with the feature, policy or native binding that owns their
-  meaning. Share values that form the same cross-module contract from a single
-  side-effect-free definition. Do not collect unrelated constants globally or
-  make importing a shared value initialize native resources.
-- Search for an existing implementation before writing another. Reuse it when
-  its meaning and failure behavior match. Prefer standard library or native
-  functionality before adding dependencies or custom infrastructure.
-- Keep a shared policy or lifecycle procedure in one implementation. Similar
-  syntax alone is not a reason to combine code with different semantics. Add a
-  helper or abstraction when it reduces repeated changes or caller knowledge;
-  do not add speculative factories, configuration or generic utility layers.
-- Expose what callers need without requiring them to know internal execution
-  steps or file layout. Use declared package dependencies and exports for ordinary
-  consumers. Keep source inclusion and special resolution required by accepted
-  ADRs localized to build and distribution code. Preserve the documented package
-  ownership and portable, browser and Bun environments.
+- Give files coherent responsibilities. Separate contracts and reusable low-level bindings from
+  application state and resource ownership when callers and reasons to change differ. Keep dependent
+  lifecycle transitions together instead of splitting by size.
+- Keep constants with their owning feature, policy or binding; share cross-module contract values
+  from one side-effect-free definition. Do not collect unrelated constants globally or initialize
+  native resources when importing shared values.
+- Search before duplicating and reuse implementations with matching meaning and failure behavior.
+  Prefer standard library or native functionality before dependencies or custom infrastructure.
+- Keep shared policy or lifecycle procedures in one implementation; similar syntax with different
+  semantics is insufficient. Add abstractions to reduce repeated changes or caller knowledge,
+  without speculative factories, configuration or generic utility layers.
+- Expose what callers need without requiring knowledge of internal execution steps or file layout.
+  Ordinary consumers use declared package dependencies and exports. Localize source inclusion and
+  special resolution required by accepted ADRs to build and distribution code; preserve documented
+  package ownership and portable, browser and Bun environments.
 
 #### Types and contracts
 
-- Validate external input at trust boundaries, then carry concrete types and
-  resolved defaults through internal code. Type assertions are not validation.
-  Preserve validation when data crosses another trust boundary.
-- Do not weaken strict TypeScript settings or use `any`, broad casts or error
-  suppressions merely to silence type errors. Localize unavoidable assertions
-  for FFI, dynamic keys or external typings and explain the invariant that
-  makes them valid when it is not apparent from nearby code.
-- Use an explicit phase type when mutually exclusive flags obscure valid
-  lifecycle transitions and the type makes them simpler. Keep independent facts
-  separate instead of forcing them into a single state machine.
-  Public contracts must expose the actual inputs, results and failure behavior.
+- Validate external input at each trust boundary, then carry concrete types and resolved defaults
+  internally. Type assertions are not validation.
+- Do not weaken strict TypeScript settings or use `any`, broad casts or suppressions merely to
+  silence errors. Localize unavoidable assertions for FFI, dynamic keys or external typings and
+  explain their invariant unless apparent nearby.
+- Use explicit phase types when they simplify lifecycle transitions obscured by mutually exclusive
+  flags. Keep independent facts separate. Public contracts must expose actual inputs, results and
+  failure behavior.
 
 #### Errors and resource lifetime
 
-- Catch errors to recover, add context, clean up or deliberately contain a
-  failure. An ignored error needs an evident reason and a defined outcome.
-  Preserve useful causes for trusted diagnostics without exposing secrets or
-  internal details through public errors.
-- Give each resource an owner that handles normal completion, failure and
-  cancellation. Share cleanup where its semantics match, and make repeated
-  cleanup safe where multiple paths can invoke it.
-- Await asynchronous work or identify who observes its failure and completes
-  its cleanup. Propagate cancellation and deadlines through owned operations
-  that support them. State what happens to work that cannot be cancelled.
+- Catch to recover, add context, clean up or contain failure; ignoring errors needs an evident
+  reason and defined outcome. Preserve causes for trusted diagnostics without exposing secrets or
+  internal details in public errors.
+- Give every resource an owner for completion, failure and cancellation. Share cleanup with matching
+  semantics and make it safe to repeat when multiple paths can invoke it.
+- Await asynchronous work or identify who observes failures and completes cleanup. Propagate
+  cancellation and deadlines through supported owned operations; define outcomes for uncancellable
+  work.
 
 #### Efficiency
 
-- Inspect repeated work, intermediate allocations, I/O and data bounds in the
-  actual execution path. Remove clear waste when doing so preserves semantics
-  and keeps the code simple; retain copies needed for isolation or safe iteration.
-- Support performance claims with a reproducible workload and measurements.
-  Profile before adding caches, changing polling or concurrency, or making
-  algorithmic tradeoffs that increase complexity. For these changes, record the
-  relevant input scale and tradeoff.
+- Inspect repeated work, intermediate allocations, I/O and data bounds in actual execution paths.
+  Remove clear waste while preserving semantics and simplicity; keep copies needed for isolation or
+  safe iteration.
+- Support performance claims with reproducible workloads and measurements. Profile before caches,
+  polling or concurrency changes, or algorithmic tradeoffs that add complexity; record input scale
+  and tradeoffs.
 
 #### Tests and verification
 
-- Test observable behavior and contracts. For behavioral changes, cover the
-  affected normal flow and relevant failure or boundary case. For refactoring,
-  reuse existing coverage and add a focused test only where a behavior is not
-  protected. Do not add tests per function or chase coverage numbers alone.
-- Prefer explicit inputs and existing dependency interfaces for isolation.
-  Avoid mutating shared production state or rewriting source merely to test
-  ordinary logic. Keep real process, filesystem and packaged-artifact checks
-  where those mechanisms are the behavior under test.
-- Use the Bun version pinned in `mise.toml`. Run focused checks while working
-  and `mise run check` before completing code changes. Also run the relevant
-  platform or distribution checks when those paths change; use `tests/README.md`
-  and `mise.toml` to select them. Distinguish static, contract and actual native
-  execution results. Report failures and checks not run, including the reason.
-  Documentation checks follow the documentation maintenance section below.
+- Test observable behavior and contracts. Cover affected normal flows and relevant failures or
+  boundaries for behavior changes. Refactors reuse coverage and add focused tests only for unprotected
+  behavior. Do not add tests per function or chase coverage numbers alone.
+- Prefer explicit inputs and existing dependency interfaces for isolation. Avoid mutating shared
+  production state or rewriting source merely to test ordinary logic. Retain real process,
+  filesystem and packaged-artifact checks when those mechanisms are the behavior under test.
+- Use the Bun version pinned in `mise.toml`, focused checks while working, and `mise run check`
+  before finishing code changes. When platform or distribution paths change, run relevant checks
+  selected from `tests/README.md` and `mise.toml`. Distinguish static, contract and actual native
+  execution results; report failures and checks not run with reasons. Follow Documentation
+  maintenance below for documentation checks.
 
 #### Review and refactoring discipline
 
-- Trace callers and observable behavior before refactoring. Preserve public
-  contracts, error behavior, permissions and lifecycle ordering. Keep intentional
-  behavior changes distinguishable from mechanical cleanup in the diff and
-  validation results.
-- Review names, control flow, duplication, types, errors, resource use and tests
-  in addition to module structure. Ground each finding in a concrete location
-  and its effect on behavior or the work needed to understand and change it.
-  Distinguish defects, maintainability improvements and style preferences.
-- Make the smallest coherent change that addresses the underlying problem.
-  Explain necessary exceptions to these rules locally without turning them
-  into new general-purpose mechanisms.
+- Trace callers and observable behavior before refactoring. Preserve public contracts, error
+  behavior, permissions and lifecycle ordering; distinguish intentional behavior changes from
+  mechanical cleanup in the diff and validation results.
+- Review names, control flow, duplication, types, errors, resource use and tests as well as module
+  structure. Ground findings in concrete locations and effects on behavior or understanding and
+  change effort; distinguish defects, maintainability improvements and style preferences.
+- Make the smallest coherent change addressing the underlying problem. Explain necessary exceptions
+  locally without introducing general-purpose mechanisms.
 
 ### Documentation maintenance
 
-After changing code, update the related documentation in the same change before
-considering the work complete. Keep usage examples, API signatures, defaults,
-permissions, errors, lifecycle behavior and platform support aligned with the
-implementation.
+Update related documentation in the same change as code: affected guides and references in
+`docs/site/src/content/docs/` and relevant READMEs, architecture docs, glossary or ADRs. Keep
+examples, API signatures, defaults, permissions, errors, lifecycle behavior and platform support
+aligned with the implementation.
 
-Update the affected guides and references in `docs/site/src/content/docs/` and
-any relevant README, architecture document, glossary or ADR. When adding,
-removing or renaming a public API, also update `docs/site/src/reference-map.json`.
-Run `bun run docs:check` and `bun run docs:build` after documentation changes to
-verify coverage, types, rendering and internal links. Automated coverage checks
-do not replace reviewing the accuracy of the explanations and examples.
+Update `docs/site/src/reference-map.json` when adding, removing or renaming a public API.
+After documentation changes, run `bun run docs:check` and `bun run docs:build` for coverage,
+types, rendering and internal links. Also review explanations and examples for accuracy.
 
 ### Writing style
 
-State general principles without enumerating specific templates or frameworks.
-List names when explaining the currently supported choices.
-Distinguish recommendations from required inputs and runtime constraints.
-
-Do not use em dashes (U+2014) or middle dots (U+00B7) in documentation or
-user-facing text. Use sentences, commas, colons or conjunctions instead.
-
-Write Korean documentation in natural, direct sentences. Describe supported
-behavior, inputs, results and failure conditions explicitly. Avoid translationese,
-long chains of nouns and repetitive cautions such as asking readers not to assume
-support. State current limits once where they affect the task, and preserve API
-names, examples, values and technical meaning when editing prose.
-
-Keep app-development documentation focused on tasks, public API usage, inputs,
-results, required permissions, errors and lifecycle behavior the app must handle.
-Do not narrate SDK internals, message forwarding, worker layout, internal IDs or
-validation-layer sequences in these pages. Explain required configuration names
-where users must write them, without describing their implementation. Put
-protocol, runtime and adapter implementation details in the framework-contribution
-section or architecture documents, and keep them out of the main app-development
-navigation.
+- State general principles without listing specific templates or frameworks; name the currently
+  supported choices when explaining them. Distinguish recommendations, required inputs and runtime
+  constraints.
+- Do not use em dashes (U+2014) or middle dots (U+00B7) in documentation or user-facing text. Use
+  sentences, commas, colons or conjunctions instead.
+- Write natural, direct Korean with explicit behavior, inputs, results and failures. Avoid
+  translationese, noun chains and repeated cautions; state limits once where they affect the task.
+  Preserve API names, examples, values and technical meaning.
+- Keep app-development docs focused on tasks, public APIs, inputs, results, permissions, errors,
+  lifecycle and required configuration names. Put SDK, protocol, runtime and adapter internals in
+  framework-contribution or architecture docs, outside the main app-development navigation.
 
 ### UI client usage
 
