@@ -417,7 +417,12 @@ export class Windows {
         resolved,
         this.getDpi(window),
       );
-      this.setPlacement(window, placement);
+      this.setPlacement(
+        window,
+        placement,
+        user.symbols.IsWindowVisible(window) !== 0,
+        true,
+      );
       return;
     }
     const size = this.clientSizeInDips(window, this.getDpi(window));
@@ -534,10 +539,12 @@ export class Windows {
     window: bigint,
     placement: Buffer,
     visible = user.symbols.IsWindowVisible(window) !== 0,
+    recomputeMaximizedSize = false,
   ) {
     // Reapplying SW_SHOWMAXIMIZED to a maximized HWND does not resize it.
     // Keep the caller's placement because restoring changes the live placement.
     if (
+      recomputeMaximizedSize &&
       placement.readUInt32LE(WINDOWPLACEMENT_SHOW_CMD_OFFSET) ===
         SW_SHOWMAXIMIZED &&
       user.symbols.IsZoomed(window)
@@ -838,7 +845,7 @@ export class Windows {
           dpi,
           saved.style,
         );
-        this.setPlacement(window, saved.placement, saved.visible);
+        this.setPlacement(window, saved.placement, saved.visible, true);
         assert(
           user.symbols.SetWindowPos(
             window,
