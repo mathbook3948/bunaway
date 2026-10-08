@@ -235,6 +235,13 @@ export const user = dlopen("user32.dll", {
     ],
     returns: "u32",
   },
+  GetSystemMetricsForDpi: {
+    args: [
+      "i32",
+      "u32",
+    ],
+    returns: "i32",
+  },
   GetWindowRect: {
     args: [
       "u64",

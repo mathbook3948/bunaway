@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 const WM_GETMINMAXINFO = 0x0024;
 const WM_DPICHANGED = 0x02e0;
+const WM_ACTIVATE = 0x0006;
 const GWL_STYLE = -16;
 const GWL_EXSTYLE = -20;
 const WINDOWPLACEMENT_SIZE = 44;
@@ -42,9 +43,35 @@ test.skipIf(process.platform !== "win32")(
         ],
         returns: "i64",
       },
+      GetActiveWindow: {
+        args: [],
+        returns: "u64",
+      },
+      SetActiveWindow: {
+        args: [
+          "u64",
+        ],
+        returns: "u64",
+      },
+      GetForegroundWindow: {
+        args: [],
+        returns: "u64",
+      },
+      GetFocus: {
+        args: [],
+        returns: "u64",
+      },
+      SetFocus: {
+        args: [
+          "u64",
+        ],
+        returns: "u64",
+      },
     });
     let windows: InstanceType<typeof Windows> | undefined;
     let window = 0n;
+    let inputWindow = 0n;
+    let targetActivations = 0;
     let failure: unknown;
 
     const clientPhysicalSize = (hwnd: bigint) => {
@@ -235,7 +262,11 @@ test.skipIf(process.platform !== "win32")(
         "Size constraints callback test",
         800,
         600,
-        () => {},
+        (message, wparam) => {
+          if (message === WM_ACTIVATE && (wparam & 0xffffn) !== 0n) {
+            targetActivations++;
+          }
+        },
         false,
       );
       const originalStyle = windowStyle(window);
@@ -442,6 +473,21 @@ test.skipIf(process.platform !== "win32")(
       user.symbols.ShowWindow(window, SW_MAXIMIZE);
       assert(user.symbols.IsZoomed(window));
       const unconstrainedMaximizedSize = clientPhysicalSize(window);
+      inputWindow = windows.create("Input focus test", 400, 300, () => {});
+      const keepInputFocus = (change: () => void) => {
+        messaging.symbols.SetActiveWindow(inputWindow);
+        messaging.symbols.SetFocus(inputWindow);
+        assert.equal(messaging.symbols.GetActiveWindow(), inputWindow);
+        assert.equal(messaging.symbols.GetFocus(), inputWindow);
+        const foreground = messaging.symbols.GetForegroundWindow();
+        targetActivations = 0;
+        change();
+        assert.equal(targetActivations, 0, "Background window was activated.");
+        assert.equal(messaging.symbols.GetActiveWindow(), inputWindow);
+        assert.equal(messaging.symbols.GetFocus(), inputWindow);
+        assert.equal(messaging.symbols.GetForegroundWindow(), foreground);
+        assert.equal(windows?.failure, undefined);
+      };
       for (const size of [
         {
           width: 640,
@@ -452,11 +498,13 @@ test.skipIf(process.platform !== "win32")(
           height: 540,
         },
       ]) {
-        windows.setSizeConstraints(window, {
-          minWidth: size.width,
-          minHeight: size.height,
-          maxWidth: size.width,
-          maxHeight: size.height,
+        keepInputFocus(() => {
+          windows?.setSizeConstraints(window, {
+            minWidth: size.width,
+            minHeight: size.height,
+            maxWidth: size.width,
+            maxHeight: size.height,
+          });
         });
         assert(user.symbols.IsZoomed(window));
         assertLogicalClientSize(window, originalDpi, size.width, size.height);
@@ -467,20 +515,30 @@ test.skipIf(process.platform !== "win32")(
           size.height,
         );
       }
-      windows.setSizeConstraints(window, {
-        minWidth: null,
-        minHeight: null,
-        maxWidth: null,
-        maxHeight: null,
+      keepInputFocus(() => {
+        windows?.setSizeConstraints(window, {
+          minWidth: null,
+          minHeight: null,
+          maxWidth: null,
+          maxHeight: null,
+        });
+        windows?.setSize(window, 600, 450);
+        sendDpiChanged(window, doubleDpi);
+        sendDpiChanged(window, originalDpi);
       });
       assert(user.symbols.IsZoomed(window));
       assert.deepEqual(clientPhysicalSize(window), unconstrainedMaximizedSize);
+      assertPlacementLogicalSize(window, originalDpi, 600, 450);
       user.symbols.ShowWindow(window, SW_HIDE);
-      windows.setSizeConstraints(window, {
-        minWidth: 600,
-        minHeight: 450,
-        maxWidth: 600,
-        maxHeight: 450,
+      keepInputFocus(() => {
+        windows?.setSizeConstraints(window, {
+          minWidth: 600,
+          minHeight: 450,
+          maxWidth: 600,
+          maxHeight: 450,
+        });
+        sendDpiChanged(window, doubleDpi);
+        sendDpiChanged(window, originalDpi);
       });
       assert(user.symbols.IsZoomed(window));
       assert.equal(user.symbols.IsWindowVisible(window), 0);
@@ -543,6 +601,13 @@ test.skipIf(process.platform !== "win32")(
     }
 
     const cleanupErrors: unknown[] = [];
+    if (inputWindow && windows) {
+      try {
+        windows.destroy(inputWindow);
+      } catch (error) {
+        cleanupErrors.push(error);
+      }
+    }
     if (window && windows) {
       try {
         windows.destroy(window);

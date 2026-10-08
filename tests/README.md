@@ -35,6 +35,7 @@ macOS WebContent PID 조회와 종료는 `lifecycle/macos-renderer.ts`가 맡으
 `lifecycle/windows-window-size.test.ts`는 서로 다른 작업 영역과 DPI에서 최대화 크기 보정과
 제약이 없는 축의 보존을 확인한다. `windows-size-constraints.test.ts`는 실제 Win32에서
 최대화 중 제약 축소, 확대와 해제, 숨긴 최대화 창과 최소화 창의 표시 상태 및 복원 크기를 검사한다.
+두 창을 사용해 최대화된 보조 창의 제약, 복원 크기와 DPI를 바꿀 때 활성화 메시지가 발생하지 않고 입력 창의 활성 상태, 키보드 포커스와 전경 창이 유지되는지도 검사한다.
 합성 DPI 메시지 이후 최대화 크기를 다시 계산하고 표시 상태와 논리 복원 크기를 유지하는지도 확인한다.
 합성 DPI 메시지로 표시하거나 숨긴 전체화면 창이 실제 모니터 영역을 유지하고, 해제 시 크기 제약을 적용하는지도 검사한다.
 `lifecycle/window-operations.test.ts`는 정리 대기 중 중복 생성, 마지막 창 재생성 예약,

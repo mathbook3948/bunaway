@@ -39,10 +39,14 @@ const MB_ICONQUESTION = 0x20;
 const MB_YESNO = 0x4;
 const MONITOR_DEFAULTTONEAREST = 2;
 const PM_REMOVE = 1;
+const SM_CXSIZEFRAME = 32;
+const SM_CYSIZEFRAME = 33;
+const SM_CXPADDEDBORDER = 92;
 const SW_HIDE = 0;
 const SW_RESTORE = 9;
 const SW_SHOW = 5;
 const SW_SHOWMAXIMIZED = 3;
+const SW_SHOWNA = 8;
 const SWP_FRAMECHANGED = 0x20;
 const SWP_NOMOVE = 0x2;
 const SWP_NOACTIVATE = 0x10;
@@ -542,25 +546,59 @@ export class Windows {
     visible = user.symbols.IsWindowVisible(window) !== 0,
     recomputeMaximizedSize = false,
   ) {
-    // Reapplying SW_SHOWMAXIMIZED to a maximized HWND does not resize it.
-    // Keep the caller's placement because restoring changes the live placement.
-    const recompute =
-      recomputeMaximizedSize &&
+    const maximized =
       placement.readUInt32LE(WINDOWPLACEMENT_SHOW_CMD_OFFSET) ===
-        SW_SHOWMAXIMIZED &&
-      user.symbols.IsZoomed(window) !== 0;
-    if (recompute) {
-      user.symbols.ShowWindow(window, SW_RESTORE);
+        SW_SHOWMAXIMIZED && user.symbols.IsZoomed(window) !== 0;
+    if (maximized) {
+      // Update restore bounds without showing or activating a background HWND.
+      // SW_SHOWMAXIMIZED cannot recalculate the size of an already zoomed HWND.
+      const update = Buffer.from(placement);
+      update.writeUInt32LE(
+        visible ? SW_SHOWNA : SW_HIDE,
+        WINDOWPLACEMENT_SHOW_CMD_OFFSET,
+      );
+      assert(user.symbols.SetWindowPlacement(window, ptr(update)));
+      if (recomputeMaximizedSize) {
+        this.resizeMaximized(window);
+      }
+      return;
     }
     assert(user.symbols.SetWindowPlacement(window, ptr(placement)));
-    if (recompute) {
-      // Maximizing records the OS-clamped normal rect as the restore size.
-      // Update the saved normal rect after maximizing, without another resize.
-      assert(user.symbols.SetWindowPlacement(window, ptr(placement)));
-    }
     if (!visible) {
       user.symbols.ShowWindow(window, SW_HIDE);
     }
+  }
+
+  private resizeMaximized(window: bigint) {
+    const monitor = Buffer.alloc(MONITORINFO_SIZE);
+    monitor.writeUInt32LE(MONITORINFO_SIZE);
+    assert(
+      user.symbols.GetMonitorInfoW(
+        user.symbols.MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST),
+        ptr(monitor),
+      ),
+    );
+    const dpi = this.readDpi(window);
+    const padding = user.symbols.GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+    const borderWidth =
+      user.symbols.GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi) + padding;
+    const borderHeight =
+      user.symbols.GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + padding;
+    // Maximized resize borders sit outside the work area. WINDOWPOS applies
+    // the app's client constraints without changing the saved normal rect.
+    const left = monitor.readInt32LE(20);
+    const top = monitor.readInt32LE(24);
+    assert(
+      user.symbols.SetWindowPos(
+        window,
+        0n,
+        left - borderWidth,
+        top - borderHeight,
+        monitor.readInt32LE(28) - left + 2 * borderWidth,
+        monitor.readInt32LE(32) - top + 2 * borderHeight,
+        SWP_NOZORDER | SWP_NOACTIVATE,
+      ),
+    );
   }
 
   private clientSizeFromPlacement(
