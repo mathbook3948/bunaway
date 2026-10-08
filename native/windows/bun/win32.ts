@@ -544,15 +544,20 @@ export class Windows {
   ) {
     // Reapplying SW_SHOWMAXIMIZED to a maximized HWND does not resize it.
     // Keep the caller's placement because restoring changes the live placement.
-    if (
+    const recompute =
       recomputeMaximizedSize &&
       placement.readUInt32LE(WINDOWPLACEMENT_SHOW_CMD_OFFSET) ===
         SW_SHOWMAXIMIZED &&
-      user.symbols.IsZoomed(window)
-    ) {
+      user.symbols.IsZoomed(window) !== 0;
+    if (recompute) {
       user.symbols.ShowWindow(window, SW_RESTORE);
     }
     assert(user.symbols.SetWindowPlacement(window, ptr(placement)));
+    if (recompute) {
+      // Maximizing records the OS-clamped normal rect as the restore size.
+      // Update the saved normal rect after maximizing, without another resize.
+      assert(user.symbols.SetWindowPlacement(window, ptr(placement)));
+    }
     if (!visible) {
       user.symbols.ShowWindow(window, SW_HIDE);
     }
