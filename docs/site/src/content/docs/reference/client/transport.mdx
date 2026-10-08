@@ -56,6 +56,11 @@ window.addEventListener("pagehide", () => { void client.close(); });
 
 이벤트는 `{ kind: "message", text }` 또는 `{ kind: "closed", error? }`입니다.
 `subscribe`는 첫 send 전에 등록할 수 있어야 하며, 이미 닫힌 전송에 나중에 등록해도 closed를 관찰해야 합니다.
+해제 함수를 반환하기 전에 hello 메시지나 closed를 동기적으로 전달할 수 있습니다.
+hello로 연결 준비가 끝나면 10초의 준비 기한이 지나도 연결은 유지됩니다.
+등록 중 연결이 종료되면 반환한 해제 함수를 호출하고 전송을 닫습니다.
+`subscribe`가 예외를 던져도 `createClient`는 클라이언트를 반환하며, `ready`와 대기 호출이 실패합니다.
+유효한 프로토콜 오류는 그대로 전달하고 일반 예외는 `INTERNAL` 오류로 처리합니다.
 
 send는 명령의 실행 결과를 반환하지 않습니다. 앱 명령의 결과는 client.invoke로 받습니다.
 전송을 직접 구현할 때의 메시지 형식은 [프로토콜 레퍼런스](/reference/protocol/)를 참고하세요.
