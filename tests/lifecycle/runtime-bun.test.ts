@@ -2,10 +2,258 @@ import { expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 import {
   PROTOCOL_VERSION,
+  type ClientMessage,
+  MAX_MESSAGE_BYTES,
   type ProcessFrame,
   parseProcessFrame,
 } from "../../packages/protocol/src/index.ts";
 import { readJsonLines } from "../../packages/runtime-bun/src/index.ts";
+
+test("process event limits reject the entire broadcast and preserve sessions and sequences", async () => {
+  const entrypoint = fileURLToPath(
+    new URL("./event-limits.fixture.ts", import.meta.url),
+  );
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      "--no-env-file",
+      entrypoint,
+    ],
+    {
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+  const timeout = setTimeout(() => child.kill(), 5000);
+  const errors = new Response(child.stderr).text();
+  const output = readJsonLines(child.stdout)[Symbol.asyncIterator]();
+  const next = async () => {
+    const line = await output.next();
+    if (line.done) {
+      throw new Error("Unexpected runtime EOF.");
+    }
+    return {
+      frame: parseProcessFrame(line.value),
+      bytes: Buffer.byteLength(line.value),
+    };
+  };
+  const send = (body: Record<string, unknown>) =>
+    child.stdin.write(
+      `${JSON.stringify({
+        ...body,
+        ipc: PROTOCOL_VERSION,
+        runtime: {
+          id: "event-limits",
+          generation: "1",
+        },
+      })}\n`,
+    );
+  const web = (context: string, message: ClientMessage) =>
+    send({
+      kind: "web",
+      context,
+      payload: message,
+    });
+  const contexts = [
+    "view-main",
+    "view-main-long",
+  ];
+  const ping = async (id: string) => {
+    for (const context of contexts) {
+      web(context, {
+        kind: "invoke",
+        protocol: PROTOCOL_VERSION,
+        id,
+        command: "ping",
+        payload: null,
+      });
+      expect((await next()).frame).toMatchObject({
+        kind: "web",
+        context,
+        payload: {
+          kind: "result",
+          id,
+          payload: null,
+        },
+      });
+    }
+  };
+  const emit = (mode: string) =>
+    web("view-main", {
+      kind: "invoke",
+      protocol: PROTOCOL_VERSION,
+      id: mode,
+      command: "emit",
+      payload: mode,
+    });
+  const expectDelivered = async (mode: string, sequence: number) => {
+    emit(mode);
+    const replies = [
+      await next(),
+      await next(),
+      await next(),
+    ];
+    for (const context of contexts) {
+      const event = replies.find(
+        ({ frame }) =>
+          frame.kind === "web" &&
+          frame.context === context &&
+          frame.payload.kind === "event",
+      );
+      expect(event?.frame).toMatchObject({
+        kind: "web",
+        context,
+        payload: {
+          kind: "event",
+          sequence,
+        },
+      });
+      if (mode === "byte-boundary" && context === "view-main-long") {
+        expect(event?.bytes).toBe(MAX_MESSAGE_BYTES);
+      }
+      if (mode === "valid") {
+        expect(event?.frame).toMatchObject({
+          payload: {
+            payload: "after-rejection",
+          },
+        });
+      }
+    }
+    expect(replies.map(({ frame }) => frame)).toContainEqual({
+      kind: "web",
+      context: "view-main",
+      ipc: PROTOCOL_VERSION,
+      runtime: {
+        id: "event-limits",
+        generation: "1",
+      },
+      payload: {
+        kind: "result",
+        protocol: PROTOCOL_VERSION,
+        id: mode,
+        payload: null,
+      },
+    });
+  };
+  try {
+    send({
+      kind: "boot",
+      payload: {
+        entrypoint,
+        buildId: "test",
+        backendContext: "backend-test",
+        policy: {
+          version: 1,
+          backend: {
+            permissions: [],
+          },
+          views: [
+            {
+              id: "main",
+              origins: [
+                "https://app.bunaway.local",
+              ],
+              commands: [
+                "emit",
+                "ping",
+              ],
+              events: [
+                "changed",
+              ],
+              host: {
+                permissions: [],
+              },
+            },
+          ],
+        },
+      },
+    });
+    expect((await next()).frame.kind).toBe("hello");
+    send({
+      kind: "hello",
+      payload: {
+        kind: "hello",
+        protocol: PROTOCOL_VERSION,
+        features: [],
+        buildId: "host",
+      },
+    });
+    expect((await next()).frame.kind).toBe("ready");
+    for (const context of contexts) {
+      send({
+        kind: "session-open",
+        context,
+        viewId: "main",
+      });
+      web(context, {
+        kind: "hello",
+        protocol: PROTOCOL_VERSION,
+        features: [],
+        buildId: "ui",
+      });
+      expect((await next()).frame).toMatchObject({
+        kind: "web",
+        context,
+        payload: {
+          kind: "hello",
+        },
+      });
+      web(context, {
+        kind: "listen",
+        protocol: PROTOCOL_VERSION,
+        id: "listen",
+        event: "changed",
+      });
+      expect((await next()).frame).toMatchObject({
+        kind: "web",
+        context,
+        payload: {
+          kind: "result",
+          id: "listen",
+          payload: {
+            subscriptionId: "sub-1",
+          },
+        },
+      });
+    }
+    await expectDelivered("byte-boundary", 1);
+    for (const mode of [
+      "byte-overflow",
+      "message-boundary",
+      "depth-overflow",
+    ]) {
+      emit(mode);
+      expect((await next()).frame).toMatchObject({
+        kind: "web",
+        context: "view-main",
+        payload: {
+          kind: "error",
+          id: mode,
+          error: {
+            code: "INVALID_ARGUMENT",
+            message: "Invalid event message.",
+          },
+        },
+      });
+      await ping(`ping-${mode}`);
+    }
+    await expectDelivered("depth-boundary", 2);
+    await expectDelivered("valid", 3);
+    await ping("ping-valid");
+    send({
+      kind: "shutdown",
+    });
+    child.stdin.end();
+    expect((await next()).frame.kind).toBe("stopping");
+    expect(await child.exited).toBe(0);
+    expect(await errors).toBe("");
+  } finally {
+    clearTimeout(timeout);
+    child.kill();
+    await child.exited;
+  }
+});
 
 for (const [fixture, command, detail, stackFile] of [
   [

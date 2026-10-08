@@ -13,8 +13,12 @@ import {
   type HostCall,
   type HostContext,
   type JsonValue,
+  MAX_JSON_DEPTH,
+  MAX_MESSAGE_BYTES,
   type Policy,
   type ServerMessage,
+  serializeMessage,
+  validateValue,
 } from "../../packages/protocol/src/index.ts";
 import {
   allowedHost,
@@ -1143,6 +1147,300 @@ test("backend emits reach subscriptions with the backend source", async () => {
           key: "from-backend",
         },
       },
+    },
+  ]);
+});
+
+test("event messages respect the byte boundary without closing the publisher session", async () => {
+  const clock = createClock();
+  const sent: ServerMessage[] = [];
+  const { services } = createServices(clock, {
+    send: async (_context, message) => {
+      serializeMessage(message);
+      sent.push(message);
+    },
+  });
+  const emptyEvent = {
+    kind: "event",
+    protocol: helloMessage.protocol,
+    subscriptionId: "sub-1",
+    source: "main",
+    target: "main",
+    event: "notes.changed",
+    sequence: 1,
+    payload: "",
+  } as const;
+  const payloadBytes = MAX_MESSAGE_BYTES - serializeMessage(emptyEvent).length;
+  const boundaryPayload =
+    "한".repeat(Math.floor(payloadBytes / 3)) + "a".repeat(payloadBytes % 3);
+  let payload = boundaryPayload;
+  const { session } = await openSession(
+    services,
+    "ctx" as HostContext,
+    "main",
+    createApp({
+      commands: {
+        ...createApp().commands,
+        "notes.emit": command({
+          input: {
+            const: null,
+          },
+          output: {
+            const: null,
+          },
+          async handle(_input, context) {
+            await context.events.emit("notes.changed", payload, {
+              kind: "broadcast",
+            });
+            return null;
+          },
+        }),
+      },
+      events: {
+        "notes.changed": {
+          type: "string",
+        },
+      },
+    }),
+  );
+  await session.receive({
+    kind: "listen",
+    protocol: helloMessage.protocol,
+    id: "listen",
+    event: "notes.changed",
+  });
+  const emit = (id: string) =>
+    session.receive({
+      kind: "invoke",
+      protocol: helloMessage.protocol,
+      id,
+      command: "notes.emit",
+      payload: null,
+    });
+  await emit("boundary");
+  await flush();
+  const event = sent.find((message) => message.kind === "event");
+  expect(event).toBeDefined();
+  if (!event) {
+    throw new Error("Missing boundary event.");
+  }
+  expect(new TextEncoder().encode(serializeMessage(event)).byteLength).toBe(
+    MAX_MESSAGE_BYTES,
+  );
+  expect(
+    sent.find(
+      (message) => message.kind === "result" && message.id === "boundary",
+    ),
+  ).toMatchObject({
+    payload: null,
+  });
+
+  payload += "a";
+  expect(
+    validateValue(
+      {
+        type: "string",
+      },
+      payload,
+    ),
+  ).toBe(payload);
+  await emit("oversize");
+  await flush();
+  expect(
+    sent.find(
+      (message) => message.kind === "error" && message.id === "oversize",
+    ),
+  ).toMatchObject({
+    error: {
+      code: "INVALID_ARGUMENT",
+      message: "Invalid event message.",
+    },
+  });
+  expect(sent.filter((message) => message.kind === "event")).toHaveLength(1);
+
+  payload = "after-rejection";
+  await emit("valid");
+  await session.receive({
+    kind: "invoke",
+    protocol: helloMessage.protocol,
+    id: "read",
+    command: "notes.read",
+    payload: {
+      key: "still-open",
+    },
+  });
+  await flush();
+  expect(sent.filter((message) => message.kind === "event")).toMatchObject([
+    {
+      sequence: 1,
+      payload: boundaryPayload,
+    },
+    {
+      sequence: 2,
+      payload: "after-rejection",
+    },
+  ]);
+  expect(
+    sent.find((message) => message.kind === "result" && message.id === "read"),
+  ).toMatchObject({
+    payload: "value:still-open",
+  });
+});
+
+test("backend event validation rejects all subscriptions before any delivery", async () => {
+  const clock = createClock();
+  const sent: {
+    context: HostContext;
+    message: ServerMessage;
+  }[] = [];
+  const { services: baseServices } = createServices(clock, {
+    send: async (context, message) => {
+      serializeMessage(message);
+      sent.push({
+        context,
+        message,
+      });
+    },
+  });
+  const services: CoreServices = {
+    ...baseServices,
+    policy: {
+      ...policy,
+      views: policy.views.map((view) => ({
+        ...view,
+        events: [
+          "notes.changed",
+        ],
+      })),
+    },
+  };
+  let emit: ((payload: JsonValue) => Promise<void>) | undefined;
+  const core = await createCore(
+    createApp({
+      events: {
+        "notes.changed": {},
+      },
+      plugins: [
+        {
+          name: "emitter",
+          version: "1",
+          setup(context) {
+            emit = (payload) =>
+              context.events.emit("notes.changed", payload, {
+                kind: "broadcast",
+              });
+          },
+        },
+      ],
+    }),
+    services,
+  );
+  const main = core.openSession("ctx-main" as HostContext, "main");
+  const secondary = core.openSession(
+    "ctx-secondary" as HostContext,
+    "secondary",
+  );
+  for (const session of [
+    main,
+    secondary,
+  ]) {
+    await session.receive(helloMessage);
+    await session.receive({
+      kind: "listen",
+      protocol: helloMessage.protocol,
+      id: "listen",
+      event: "notes.changed",
+    });
+  }
+  await flush();
+  if (!emit) {
+    throw new Error("Missing backend emitter.");
+  }
+  const emptyEvent = {
+    kind: "event",
+    protocol: helloMessage.protocol,
+    subscriptionId: "sub-1",
+    source: "backend",
+    target: "main",
+    event: "notes.changed",
+    sequence: 1,
+    payload: "",
+  } as const;
+  const payload = "a".repeat(
+    MAX_MESSAGE_BYTES - serializeMessage(emptyEvent).length,
+  );
+  expect(
+    serializeMessage({
+      ...emptyEvent,
+      payload,
+    }).length,
+  ).toBe(MAX_MESSAGE_BYTES);
+  expect(() =>
+    serializeMessage({
+      ...emptyEvent,
+      target: "secondary",
+      payload,
+    }),
+  ).toThrow();
+  let nested: JsonValue = null;
+  for (let depth = 0; depth < MAX_JSON_DEPTH; depth++) {
+    nested = [
+      nested,
+    ];
+  }
+  for (const invalidPayload of [
+    payload,
+    nested,
+  ]) {
+    expect(validateValue({}, invalidPayload)).toEqual(invalidPayload);
+    await expect(emit(invalidPayload)).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+      message: "Invalid event message.",
+    });
+    await flush();
+    expect(sent.filter(({ message }) => message.kind === "event")).toEqual([]);
+  }
+
+  await emit("after-rejection");
+  for (const session of [
+    main,
+    secondary,
+  ]) {
+    await session.receive({
+      kind: "invoke",
+      protocol: helloMessage.protocol,
+      id: "read",
+      command: "notes.read",
+      payload: {
+        key: "still-open",
+      },
+    });
+  }
+  await flush();
+  expect(sent.filter(({ message }) => message.kind === "event")).toMatchObject([
+    {
+      context: "ctx-main",
+      message: {
+        sequence: 1,
+        payload: "after-rejection",
+      },
+    },
+    {
+      context: "ctx-secondary",
+      message: {
+        sequence: 1,
+        payload: "after-rejection",
+      },
+    },
+  ]);
+  expect(results(sent, "read")).toMatchObject([
+    {
+      kind: "result",
+      payload: "value:still-open",
+    },
+    {
+      kind: "result",
+      payload: "value:still-open",
     },
   ]);
 });

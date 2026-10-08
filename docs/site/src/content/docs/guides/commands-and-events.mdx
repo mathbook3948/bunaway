@@ -92,6 +92,10 @@ import clientSource from '@repo/packages/cli/templates/vanilla/src/client.ts?raw
 `invoke()`는 실패하면 Promise를 reject합니다. 연결 종료, 타임아웃, 취소 뒤의 늦은 결과는 폐기합니다.
 저장 명령을 자동 재시도하지 않으며, 취소가 이미 완료된 파일 쓰기를 되돌리지는 않습니다.
 
+`events.emit()`은 데이터 스키마나 전체 이벤트의 JSON 크기, 깊이 제한을 위반하면
+`INVALID_ARGUMENT`로 실패합니다. 이때 어느 구독에도 이벤트를 전달하지 않으며
+기존 구독과 연결은 유지합니다. 이미 완료한 저장은 이벤트 발행 실패로 되돌아가지 않습니다.
+
 선택적 `signal`에는 `AbortController.signal`을, `deadline`에는 Unix epoch 밀리초를 전달할 수 있습니다.
 [SDK 레퍼런스](/reference/api/)에서 옵션을 확인하고,
 [문제 해결](/reference/troubleshooting/)에서 오류별 점검 위치를 찾아보세요.
