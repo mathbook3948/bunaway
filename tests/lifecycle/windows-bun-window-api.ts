@@ -280,16 +280,16 @@ if (!process.argv.includes("--child")) {
     const toLogical = (physical: number) => Math.round((physical * 96) / dpi);
     const width = toLogical(client[2] ?? 0);
     const height = toLogical(client[3] ?? 0);
-    assert(width >= 950);
-    assert(width <= 1100);
+    assert(width >= 700);
+    assert(width <= 800);
     assert(height >= 500);
-    assert(height <= 800);
+    assert(height <= 700);
     driver.symbols.ShowWindow(hwnd, 9);
     while (driver.symbols.IsZoomed(hwnd)) {
       assert(Date.now() < deadline, "Window did not restore.");
       await Bun.sleep(10);
     }
-    assertClientSize(hwnd, 950, 650);
+    assertClientSize(hwnd, 700, 550);
   }
   const previousDpiContext = user.symbols.SetThreadDpiAwarenessContext(-4n);
   assert(previousDpiContext);
@@ -337,7 +337,7 @@ if (!process.argv.includes("--child")) {
             const hwnd = handles.get("editor");
             assert(hwnd);
             const frame = new Int32Array(4);
-            assertClientSize(hwnd, 950, 650);
+            assertClientSize(hwnd, 700, 550);
             assert(driver.symbols.GetWindowRect(hwnd, ptr(frame)));
             assert.equal(frame[0], 20);
             assert.equal(frame[1], 30);
@@ -357,7 +357,7 @@ if (!process.argv.includes("--child")) {
           if (event.event === "window-api-initial-size") {
             const hwnd = handles.get("editor");
             assert(hwnd);
-            assertClientSize(hwnd, 500, 900);
+            assertClientSize(hwnd, 500, 600);
           }
           if (event.event === "window-close-confirmation") {
             const answer = ++confirmations === 1 ? 7n : 6n; // IDNO then IDYES
@@ -502,8 +502,8 @@ if (!process.argv.includes("--child")) {
               {
                 minWidth: 500,
                 minHeight: 400,
-                maxWidth: 1200,
-                maxHeight: 900,
+                maxWidth: 800,
+                maxHeight: 600,
               },
             );
             assert.deepEqual(
@@ -524,8 +524,8 @@ if (!process.argv.includes("--child")) {
                 })),
               },
               {
-                width: 1200,
-                height: 900,
+                width: 800,
+                height: 600,
               },
             );
             console.log(
@@ -567,8 +567,8 @@ if (!process.argv.includes("--child")) {
             }
             await windows.setSize({
               view: "editor",
-              width: 900,
-              height: 650,
+              width: 700,
+              height: 550,
             });
             await windows.setPosition({
               view: "editor",
@@ -589,27 +589,27 @@ if (!process.argv.includes("--child")) {
             );
             await windows.setSize({
               view: "editor",
-              width: 1400,
-              height: 1000,
+              width: 1000,
+              height: 800,
             });
             console.log(
               JSON.stringify({
                 event: "window-api-constrained-size",
-                width: 1200,
-                height: 900,
+                width: 800,
+                height: 600,
               }),
             );
             await windows.setSizeConstraints({
               view: "editor",
               minWidth: 600,
-              maxWidth: 1100,
-              maxHeight: 800,
+              maxWidth: 750,
+              maxHeight: 550,
             });
             console.log(
               JSON.stringify({
                 event: "window-api-constrained-size",
-                width: 1100,
-                height: 800,
+                width: 750,
+                height: 550,
               }),
             );
             await windows.setMinSize({
@@ -626,8 +626,8 @@ if (!process.argv.includes("--child")) {
               {
                 minWidth: 700,
                 minHeight: null,
-                maxWidth: 1100,
-                maxHeight: 800,
+                maxWidth: 750,
+                maxHeight: 550,
               },
             );
             const beforeInvalid = await windows.getSizeConstraints({
@@ -698,15 +698,15 @@ if (!process.argv.includes("--child")) {
             );
             await windows.setSize({
               view: "editor",
-              width: 900,
-              height: 650,
+              width: 650,
+              height: 550,
             });
             await windows.setSizeConstraints({
               view: "editor",
-              minWidth: 800,
+              minWidth: 600,
               minHeight: 500,
-              maxWidth: 1000,
-              maxHeight: 800,
+              maxWidth: 800,
+              maxHeight: 700,
             });
             await windows.setFullscreen({
               view: "editor",
@@ -715,8 +715,8 @@ if (!process.argv.includes("--child")) {
             await assert.rejects(
               windows.setSize({
                 view: "editor",
-                width: 800,
-                height: 600,
+                width: 500,
+                height: 400,
               }),
               (error: unknown) =>
                 (
@@ -727,10 +727,10 @@ if (!process.argv.includes("--child")) {
             );
             await windows.setSizeConstraints({
               view: "editor",
-              minWidth: 950,
+              minWidth: 700,
               minHeight: 500,
-              maxWidth: 1100,
-              maxHeight: 800,
+              maxWidth: 800,
+              maxHeight: 700,
             });
             assert.deepEqual(
               {
@@ -739,10 +739,10 @@ if (!process.argv.includes("--child")) {
                 })),
               },
               {
-                minWidth: 950,
+                minWidth: 700,
                 minHeight: 500,
-                maxWidth: 1100,
-                maxHeight: 800,
+                maxWidth: 800,
+                maxHeight: 700,
               },
             );
             await windows.setFullscreen({
@@ -752,8 +752,8 @@ if (!process.argv.includes("--child")) {
             console.log(
               JSON.stringify({
                 event: "window-api-constrained-size",
-                width: 950,
-                height: 650,
+                width: 700,
+                height: 550,
               }),
             );
             console.log(
@@ -789,8 +789,8 @@ if (!process.argv.includes("--child")) {
               {
                 minWidth: 500,
                 minHeight: 400,
-                maxWidth: 1200,
-                maxHeight: 900,
+                maxWidth: 800,
+                maxHeight: 600,
               },
             );
             assert.equal(
@@ -913,8 +913,8 @@ if (!process.argv.includes("--child")) {
           ? {
               minWidth: 500,
               minHeight: 400,
-              maxWidth: 1200,
-              maxHeight: 900,
+              maxWidth: 800,
+              maxHeight: 600,
             }
           : {}),
       },
