@@ -704,8 +704,12 @@ class BunawayCore implements Core {
       ),
       state: this.state,
       events: {
-        emit: (event, payload, target) =>
-          this.emit(event, payload, target, "backend"),
+        emit: async (event, payload, target) => {
+          if (signal.aborted) {
+            fail("CANCELLED", "Event emission cancelled.");
+          }
+          await this.emit(event, payload, target, "backend");
+        },
       },
     };
   }

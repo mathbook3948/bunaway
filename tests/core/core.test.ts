@@ -2252,3 +2252,55 @@ for (const outcome of [
     });
   }
 }
+
+test("backend events are cancelled during abort and after stop", async () => {
+  const clock = createClock();
+  const { services, sent } = createServices(clock);
+  let emit!: (payload: JsonValue) => Promise<void>;
+  let abortEmission: Promise<unknown> | undefined;
+  const { core, session } = await openSession(
+    services,
+    "ctx" as HostContext,
+    "main",
+    createApp({
+      plugins: [
+        {
+          name: "emitter",
+          version: "1",
+          setup(context) {
+            emit = (payload) =>
+              context.events.emit("notes.changed", payload, {
+                kind: "broadcast",
+              });
+            context.signal.addEventListener("abort", () => {
+              abortEmission = emit({
+                key: "during-abort",
+              }).catch((cause: unknown) => cause);
+            });
+          },
+        },
+      ],
+    }),
+  );
+  await session.receive({
+    kind: "listen",
+    protocol: helloMessage.protocol,
+    id: "l1",
+    event: "notes.changed",
+  });
+  await flush();
+
+  await core.stop();
+  expect(await abortEmission).toMatchObject({
+    code: "CANCELLED",
+  });
+  await expect(
+    emit({
+      key: "after-stop",
+    }),
+  ).rejects.toMatchObject({
+    code: "CANCELLED",
+  });
+  await flush();
+  expect(sent.filter(({ message }) => message.kind === "event")).toEqual([]);
+});
