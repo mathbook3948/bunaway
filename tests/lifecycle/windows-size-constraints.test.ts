@@ -9,9 +9,12 @@ const WINDOWPLACEMENT_SIZE = 44;
 const WINDOWPLACEMENT_NORMAL_RECT_OFFSET = 28;
 const SW_MINIMIZE = 6;
 const SW_HIDE = 0;
+const SW_SHOW = 5;
 const SW_MAXIMIZE = 3;
 const SW_RESTORE = 9;
 const DEFAULT_DPI = 96;
+const MONITORINFO_SIZE = 40;
+const MONITOR_DEFAULTTONEAREST = 2;
 
 function physicalPixels(logicalPixels: number, dpi: number) {
   return Math.round((logicalPixels * dpi) / DEFAULT_DPI);
@@ -128,6 +131,32 @@ test.skipIf(process.platform !== "win32")(
           pointer,
         ),
       );
+      assert.equal(windows?.failure, undefined);
+    };
+
+    const assertFullscreenMonitorBounds = (hwnd: bigint) => {
+      const monitor = Buffer.alloc(MONITORINFO_SIZE);
+      monitor.writeUInt32LE(MONITORINFO_SIZE);
+      assert(
+        withBuffer(monitor, (pointer) =>
+          user.symbols.GetMonitorInfoW(
+            user.symbols.MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST),
+            pointer,
+          ),
+        ),
+      );
+      const rect = Buffer.alloc(16);
+      assert(
+        withBuffer(rect, (pointer) =>
+          user.symbols.GetWindowRect(hwnd, pointer),
+        ),
+      );
+      assert.deepEqual(rect, monitor.subarray(4, 20));
+      assert.deepEqual(clientPhysicalSize(hwnd), {
+        width: monitor.readInt32LE(12) - monitor.readInt32LE(4),
+        height: monitor.readInt32LE(16) - monitor.readInt32LE(8),
+      });
+      assert(windows?.isFullscreen(hwnd));
     };
 
     const assertLogicalClientSize = (
@@ -334,6 +363,26 @@ test.skipIf(process.platform !== "win32")(
       const fullscreenStyle = windowStyle(window);
       windows.setFullscreen(window, true);
       assert.notEqual(windowStyle(window), fullscreenStyle);
+      for (const visible of [
+        false,
+        true,
+      ]) {
+        user.symbols.ShowWindow(window, visible ? SW_SHOW : SW_HIDE);
+        for (const dpi of [
+          doubleDpi,
+          originalDpi,
+        ]) {
+          sendDpiChanged(window, dpi);
+          assertFullscreenMonitorBounds(window);
+          assert.equal(user.symbols.IsWindowVisible(window) !== 0, visible);
+          assert.deepEqual(windows.getSizeConstraints(window), {
+            minWidth: 500,
+            minHeight: 400,
+            maxWidth: 800,
+            maxHeight: 600,
+          });
+        }
+      }
       windows.setSizeConstraints(window, {
         minWidth: 620,
         minHeight: 480,

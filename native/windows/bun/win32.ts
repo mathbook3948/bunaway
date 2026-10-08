@@ -54,6 +54,7 @@ const WS_OVERLAPPEDWINDOW = 0x00cf0000;
 const IDYES = 6;
 const MAX_MESSAGES_PER_PUMP = 64;
 const MINMAXINFO_SIZE = 40;
+const MONITORINFO_SIZE = 40;
 const RECT_SIZE = 16;
 const WINDOWPLACEMENT_SIZE = 44;
 const WINDOWPOS_SIZE = 40;
@@ -707,9 +708,28 @@ export class Windows {
 
     const fullscreen = this.fullscreen.has(window);
     const wasVisible = user.symbols.IsWindowVisible(window) !== 0;
+    if (fullscreen) {
+      // The suggested rect scales the old window, not the physical monitor.
+      const bounds = this.monitorBounds(window);
+      assert(
+        user.symbols.SetWindowPos(
+          window,
+          0n,
+          bounds.x,
+          bounds.y,
+          bounds.width,
+          bounds.height,
+          SWP_NOZORDER | SWP_NOACTIVATE,
+        ),
+      );
+      if (!wasVisible) {
+        user.symbols.ShowWindow(window, SW_HIDE);
+      }
+      return;
+    }
     const constraints = this.constraints.get(window) ?? resolvedConstraints();
-    const minimized = !fullscreen && !!user.symbols.IsIconic(window);
-    const maximized = !fullscreen && !!user.symbols.IsZoomed(window);
+    const minimized = !!user.symbols.IsIconic(window);
+    const maximized = !!user.symbols.IsZoomed(window);
     if (minimized) {
       const placement = this.getPlacement(window);
       this.resizePlacement(
@@ -733,12 +753,6 @@ export class Windows {
         SWP_NOZORDER | SWP_NOACTIVATE,
       ),
     );
-    if (fullscreen) {
-      if (!wasVisible) {
-        user.symbols.ShowWindow(window, SW_HIDE);
-      }
-      return;
-    }
     if (maximized) {
       const placement = this.getPlacement(window);
       this.resizePlacement(
@@ -779,6 +793,25 @@ export class Windows {
     return this.fullscreen.has(window);
   }
 
+  private monitorBounds(window: bigint) {
+    const monitor = Buffer.alloc(MONITORINFO_SIZE);
+    monitor.writeUInt32LE(MONITORINFO_SIZE);
+    assert(
+      user.symbols.GetMonitorInfoW(
+        user.symbols.MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST),
+        ptr(monitor),
+      ),
+    );
+    const x = monitor.readInt32LE(4);
+    const y = monitor.readInt32LE(8);
+    return {
+      x,
+      y,
+      width: monitor.readInt32LE(12) - x,
+      height: monitor.readInt32LE(16) - y,
+    };
+  }
+
   setFullscreen(window: bigint, enabled: boolean) {
     if (enabled === this.isFullscreen(window)) {
       return;
@@ -794,14 +827,7 @@ export class Windows {
         style,
       );
       const visible = user.symbols.IsWindowVisible(window) !== 0;
-      const monitor = Buffer.alloc(40); // MONITORINFO
-      monitor.writeUInt32LE(40);
-      assert(
-        user.symbols.GetMonitorInfoW(
-          user.symbols.MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST),
-          ptr(monitor),
-        ),
-      );
+      const bounds = this.monitorBounds(window);
       this.setStyle(window, style & ~BigInt(WS_OVERLAPPEDWINDOW));
       this.fullscreen.set(window, {
         style,
@@ -810,17 +836,15 @@ export class Windows {
         restoreSize,
         visible,
       });
-      const x = monitor.readInt32LE(4),
-        y = monitor.readInt32LE(8);
       try {
         assert(
           user.symbols.SetWindowPos(
             window,
             0n,
-            x,
-            y,
-            monitor.readInt32LE(12) - x,
-            monitor.readInt32LE(16) - y,
+            bounds.x,
+            bounds.y,
+            bounds.width,
+            bounds.height,
             SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
           ),
         );
