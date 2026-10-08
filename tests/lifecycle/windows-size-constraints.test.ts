@@ -8,6 +8,7 @@ const GWL_EXSTYLE = -20;
 const WINDOWPLACEMENT_SIZE = 44;
 const WINDOWPLACEMENT_NORMAL_RECT_OFFSET = 28;
 const SW_MINIMIZE = 6;
+const SW_HIDE = 0;
 const SW_MAXIMIZE = 3;
 const SW_RESTORE = 9;
 const DEFAULT_DPI = 96;
@@ -90,6 +91,16 @@ test.skipIf(process.platform !== "win32")(
 
     const sendMinMaxInfo = (hwnd: bigint) => {
       const info = Buffer.alloc(40);
+      // Windows initializes these before dispatching a real sizing message.
+      // Seed primary-monitor defaults for the synthetic callback regression.
+      info.writeInt32LE(1920, 8);
+      info.writeInt32LE(1080, 12);
+      info.writeInt32LE(-8, 16);
+      info.writeInt32LE(-8, 20);
+      info.writeInt32LE(200, 24);
+      info.writeInt32LE(100, 28);
+      info.writeInt32LE(8192, 32);
+      info.writeInt32LE(8192, 36);
       withBuffer(info, (pointer) =>
         messaging.symbols.SendMessageW(hwnd, WM_GETMINMAXINFO, 0n, pointer),
       );
@@ -204,6 +215,7 @@ test.skipIf(process.platform !== "win32")(
         maxHeight: 720,
       });
       const constrained = sendMinMaxInfo(window);
+      assert.deepEqual(constrained.subarray(8, 24), defaults.subarray(8, 24));
       const minOuter = outerSizeFor(
         420,
         0,
@@ -342,6 +354,73 @@ test.skipIf(process.platform !== "win32")(
       );
       assert(restoredMinMax.readInt32LE(24) >= restoredMin.width);
       assert(restoredMinMax.readInt32LE(28) >= restoredMin.height);
+
+      windows.setSizeConstraints(window, {
+        minWidth: null,
+        minHeight: null,
+        maxWidth: null,
+        maxHeight: null,
+      });
+      user.symbols.ShowWindow(window, SW_MAXIMIZE);
+      assert(user.symbols.IsZoomed(window));
+      const unconstrainedMaximizedSize = clientPhysicalSize(window);
+      for (const size of [
+        {
+          width: 640,
+          height: 500,
+        },
+        {
+          width: 700,
+          height: 540,
+        },
+      ]) {
+        windows.setSizeConstraints(window, {
+          minWidth: size.width,
+          minHeight: size.height,
+          maxWidth: size.width,
+          maxHeight: size.height,
+        });
+        assert(user.symbols.IsZoomed(window));
+        assertLogicalClientSize(window, originalDpi, size.width, size.height);
+        assertPlacementLogicalSize(
+          window,
+          originalDpi,
+          size.width,
+          size.height,
+        );
+      }
+      windows.setSizeConstraints(window, {
+        minWidth: null,
+        minHeight: null,
+        maxWidth: null,
+        maxHeight: null,
+      });
+      assert(user.symbols.IsZoomed(window));
+      assert.deepEqual(clientPhysicalSize(window), unconstrainedMaximizedSize);
+      user.symbols.ShowWindow(window, SW_HIDE);
+      windows.setSizeConstraints(window, {
+        minWidth: 600,
+        minHeight: 450,
+        maxWidth: 600,
+        maxHeight: 450,
+      });
+      assert(user.symbols.IsZoomed(window));
+      assert.equal(user.symbols.IsWindowVisible(window), 0);
+      assertLogicalClientSize(window, originalDpi, 600, 450);
+      user.symbols.ShowWindow(window, SW_RESTORE);
+      assertLogicalClientSize(window, originalDpi, 600, 450);
+
+      user.symbols.ShowWindow(window, SW_MINIMIZE);
+      windows.setSizeConstraints(window, {
+        minWidth: 620,
+        minHeight: 480,
+        maxWidth: 620,
+        maxHeight: 480,
+      });
+      assert(user.symbols.IsIconic(window));
+      assertPlacementLogicalSize(window, originalDpi, 620, 480);
+      user.symbols.ShowWindow(window, SW_RESTORE);
+      assertLogicalClientSize(window, originalDpi, 620, 480);
     } catch (error) {
       failure = error;
     }

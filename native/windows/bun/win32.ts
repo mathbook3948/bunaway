@@ -10,11 +10,18 @@ import {
   APP_WINDOW_CLASS_PREFIX,
 } from "../../../packages/runtime-bun/src/windows-control.ts";
 import { hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
+import {
+  constrainedOuterSize,
+  DEFAULT_DPI,
+  logicalPixels,
+  physicalPixels,
+} from "./window-size.ts";
 
 export const WM_SIZE = 0x0005;
 export const WM_CLOSE = 0x0010;
 export const WM_QUIT = 0x0012;
 const WM_GETMINMAXINFO = 0x0024;
+const WM_WINDOWPOSCHANGING = 0x0046;
 export const WM_ENTERSIZEMOVE = 0x0231;
 export const WM_EXITSIZEMOVE = 0x0232;
 const WM_DPICHANGED = 0x02e0;
@@ -22,7 +29,6 @@ const WM_DPICHANGED = 0x02e0;
 const COLOR_WINDOW = 5;
 const CW_USEDEFAULT = -2147483648;
 const DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4n;
-const DEFAULT_DPI = 96;
 const GWL_STYLE = -16;
 const GWL_EXSTYLE = -20;
 const IDI_APPLICATION = 32512n;
@@ -50,6 +56,7 @@ const MAX_MESSAGES_PER_PUMP = 64;
 const MINMAXINFO_SIZE = 40;
 const RECT_SIZE = 16;
 const WINDOWPLACEMENT_SIZE = 44;
+const WINDOWPOS_SIZE = 40;
 
 type SizeConstraints = Partial<WindowSizeConstraints>;
 type ClientSize = {
@@ -71,14 +78,6 @@ function resolvedConstraints(
     "Invalid window size constraints.",
   );
   return resolved;
-}
-
-function physicalPixels(logicalPixels: number, dpi: number) {
-  return Math.round((logicalPixels * dpi) / DEFAULT_DPI);
-}
-
-function logicalPixels(physicalPixels: number, dpi: number) {
-  return Math.round((physicalPixels * DEFAULT_DPI) / dpi);
 }
 
 function callbackPointer(address: bigint): Pointer {
@@ -225,6 +224,9 @@ export class Windows {
             this.applyDpiChange(window, wparam, lparam);
             this.windows.get(window)?.(message, wparam, lparam);
             return 0n;
+          }
+          if (message === WM_WINDOWPOSCHANGING) {
+            this.constrainMaximizedSize(window, lparam);
           }
           this.windows.get(window)?.(message, wparam, lparam);
           if (message === WM_CLOSE) {
@@ -533,6 +535,15 @@ export class Windows {
     placement: Buffer,
     visible = user.symbols.IsWindowVisible(window) !== 0,
   ) {
+    // Reapplying SW_SHOWMAXIMIZED to a maximized HWND does not resize it.
+    // Keep the caller's placement because restoring changes the live placement.
+    if (
+      placement.readUInt32LE(WINDOWPLACEMENT_SHOW_CMD_OFFSET) ===
+        SW_SHOWMAXIMIZED &&
+      user.symbols.IsZoomed(window)
+    ) {
+      user.symbols.ShowWindow(window, SW_RESTORE);
+    }
     assert(user.symbols.SetWindowPlacement(window, ptr(placement)));
     if (!visible) {
       user.symbols.ShowWindow(window, SW_HIDE);
@@ -640,32 +651,38 @@ export class Windows {
         true,
       );
     }
-    if (constraints.minWidth !== null || constraints.maxWidth !== null) {
-      const maxWidth = Math.max(
-        info.getInt32(8, true),
-        constraints.minWidth === null ? 0 : minimum.width,
-      );
-      info.setInt32(
-        8,
-        constraints.maxWidth === null
-          ? maxWidth
-          : Math.min(maxWidth, maximum.width),
-        true,
-      );
+    // Leave ptMaxSize/ptMaxPosition at their defaults so Windows adjusts them
+    // for the target monitor. Clamp the resulting WINDOWPOS instead.
+  }
+
+  private constrainMaximizedSize(window: bigint, lparam: bigint) {
+    const constraints =
+      this.constraints.get(window) ?? this.creatingConstraints;
+    if (
+      !constraints ||
+      this.fullscreen.has(window) ||
+      !user.symbols.IsZoomed(window)
+    ) {
+      return;
     }
-    if (constraints.minHeight !== null || constraints.maxHeight !== null) {
-      const maxHeight = Math.max(
-        info.getInt32(12, true),
-        constraints.minHeight === null ? 0 : minimum.height,
-      );
-      info.setInt32(
-        12,
-        constraints.maxHeight === null
-          ? maxHeight
-          : Math.min(maxHeight, maximum.height),
-        true,
-      );
+    const position = new DataView(
+      toArrayBuffer(callbackPointer(lparam), 0, WINDOWPOS_SIZE),
+    );
+    if (position.getUint32(32, true) & SWP_NOSIZE) {
+      return;
     }
+    const dpi = this.getDpi(window);
+    const { style, exStyle } = this.windowStyles(window);
+    const frame = this.outerSizeFor(0, 0, dpi, style, exStyle);
+    const size = constrainedOuterSize(
+      position.getInt32(24, true),
+      position.getInt32(28, true),
+      dpi,
+      frame,
+      constraints,
+    );
+    position.setInt32(24, size.width, true);
+    position.setInt32(28, size.height, true);
   }
 
   private applyDpiChange(window: bigint, wparam: bigint, lparam: bigint) {
@@ -821,12 +838,6 @@ export class Windows {
           dpi,
           saved.style,
         );
-        if (
-          saved.placement.readUInt32LE(WINDOWPLACEMENT_SHOW_CMD_OFFSET) ===
-          SW_SHOWMAXIMIZED
-        ) {
-          user.symbols.ShowWindow(window, SW_RESTORE);
-        }
         this.setPlacement(window, saved.placement, saved.visible);
         assert(
           user.symbols.SetWindowPos(
