@@ -112,6 +112,16 @@ type Subscription = {
   chain: Promise<void>;
 };
 
+type EventDelivery = {
+  subscription: Subscription;
+  message: Extract<
+    ServerMessage,
+    {
+      kind: "event";
+    }
+  >;
+};
+
 class SessionImpl implements CoreSession {
   helloDone = false;
   closed = false;
@@ -541,21 +551,39 @@ class SessionImpl implements CoreSession {
     });
   }
 
-  deliver(event: string, source: string, payload: JsonValue): void {
+  prepareEvent(
+    event: string,
+    source: string,
+    payload: JsonValue,
+  ): EventDelivery[] {
+    const deliveries: EventDelivery[] = [];
     for (const subscription of this.subscriptions.values()) {
       if (subscription.event !== event || subscription.dead) {
         continue;
       }
-      this.enqueueEvent(subscription, {
+      const message: EventDelivery["message"] = {
         kind: "event",
         protocol: this.outProtocol,
         subscriptionId: subscription.id,
         source,
         target: this.view.id,
         event,
-        sequence: ++subscription.sequence,
+        sequence: subscription.sequence + 1,
         payload,
+      };
+      serializeMessage(message);
+      deliveries.push({
+        subscription,
+        message,
       });
+    }
+    return deliveries;
+  }
+
+  deliver(deliveries: readonly EventDelivery[]): void {
+    for (const { subscription, message } of deliveries) {
+      subscription.sequence = message.sequence;
+      this.enqueueEvent(subscription, message);
     }
   }
 
@@ -678,17 +706,33 @@ class BunawayCore implements Core {
     if (target.kind === "view" && !this.views.has(target.viewId)) {
       fail("INVALID_ARGUMENT", `Unknown view "${target.viewId}".`);
     }
-    for (const session of this.sessions.values()) {
-      if (session.closed || session.failed || !session.helloDone) {
-        continue;
+    const deliveries: {
+      session: SessionImpl;
+      events: EventDelivery[];
+    }[] = [];
+    try {
+      for (const session of this.sessions.values()) {
+        if (session.closed || session.failed || !session.helloDone) {
+          continue;
+        }
+        if (target.kind === "view" && session.view.id !== target.viewId) {
+          continue;
+        }
+        if (!session.view.events.includes(event)) {
+          continue;
+        }
+        deliveries.push({
+          session,
+          events: session.prepareEvent(event, source, data),
+        });
       }
-      if (target.kind === "view" && session.view.id !== target.viewId) {
-        continue;
-      }
-      if (!session.view.events.includes(event)) {
-        continue;
-      }
-      session.deliver(event, source, data);
+    } catch {
+      fail("INVALID_ARGUMENT", "Invalid event message.");
+    }
+    // Validate every destination before mutating queues or sequence counters so
+    // an invalid event cannot reach only some of its subscriptions.
+    for (const { session, events } of deliveries) {
+      session.deliver(events);
     }
   }
 

@@ -157,6 +157,10 @@ state.get/set은 JSON 스냅샷을 다루며 get 결과 수정으로 저장 값�
 events.emit은 선언된 이벤트 스키마를 검사하고 broadcast 또는 명시한 view로 전달한다.
 발신자는 컨텍스트에서 결정하며 대상 뷰의 이벤트 허용 목록과 구독을 확인한다.
 웹 요청을 backend 발신자로 승격하지 않는다.
+코어는 각 구독의 protocol, source, target, subscriptionId와 다음 sequence를 포함한
+최종 이벤트를 모두 직렬화 검사한 뒤 큐에 넣고 sequence를 증가시킨다.
+한 대상이라도 메시지 크기, 깊이나 직렬화 규칙을 위반하면 발행자에게 INVALID_ARGUMENT를
+반환하며 어느 구독에도 전달하지 않는다. 기존 구독, sequence와 세션은 유지한다.
 
 세션 close는 멱등이며 새 요청 차단→signal 취소→미완료 요청 실패, 구독 폐기 순서다.
 stop은 모든 세션과 backend 작업을 취소하고 플러그인을 정리한다. 정리 기한 초과는 TIMEOUT이다.
