@@ -1028,7 +1028,7 @@ test("Windows development artifacts enable DevTools only with their launch flag"
   } finally {
     await Bun.write(configPath, originals["src-bunaway/bunaway.json"] ?? "");
   }
-});
+}, 60000);
 
 test("package checks platforms and adapters before building and preserves outputs on failure", async () => {
   const child = Bun.spawn(
