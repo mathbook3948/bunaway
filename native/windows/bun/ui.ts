@@ -415,6 +415,11 @@ const windowServices: import("../../../packages/plugin-api/src/native.ts").Nativ
         focus: () => nativeWindows.focus(hwnd),
         close: () => closeWindow(viewId),
         isFullscreen: () => nativeWindows.isFullscreen(hwnd),
+        getSizeConstraints: () => nativeWindows.getSizeConstraints(hwnd),
+        setSizeConstraints(constraints) {
+          nativeWindows.setSizeConstraints(hwnd, constraints);
+          view.native.resize();
+        },
         setSize(width, height) {
           nativeWindows.setSize(hwnd, width, height);
           view.native.resize();
@@ -488,6 +493,8 @@ function createWindow(spec: WindowSpec) {
         });
       }
     },
+    true,
+    spec.window,
   );
   log("window-created", {
     view: spec.view,

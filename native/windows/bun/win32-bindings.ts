@@ -39,6 +39,12 @@ export const kernel = dlopen("kernel32.dll", {
     args: [],
     returns: "u32",
   },
+  SetLastError: {
+    args: [
+      "u32",
+    ],
+    returns: "void",
+  },
   OpenProcess: {
     args: [
       "u32",
@@ -81,6 +87,12 @@ export const ole = dlopen("ole32.dll", {
   },
 });
 export const user = dlopen("user32.dll", {
+  SetThreadDpiAwarenessContext: {
+    args: [
+      "i64",
+    ],
+    returns: "i64",
+  },
   RegisterClassExW: {
     args: [
       "ptr",
@@ -205,6 +217,24 @@ export const user = dlopen("user32.dll", {
     ],
     returns: "i32",
   },
+  IsZoomed: {
+    args: [
+      "u64",
+    ],
+    returns: "i32",
+  },
+  IsWindowVisible: {
+    args: [
+      "u64",
+    ],
+    returns: "i32",
+  },
+  GetDpiForWindow: {
+    args: [
+      "u64",
+    ],
+    returns: "u32",
+  },
   GetWindowRect: {
     args: [
       "u64",
@@ -289,11 +319,13 @@ export const user = dlopen("user32.dll", {
     ],
     returns: "i32",
   },
-  AdjustWindowRect: {
+  AdjustWindowRectExForDpi: {
     args: [
       "ptr",
       "u32",
       "i32",
+      "u32",
+      "u32",
     ],
     returns: "i32",
   },

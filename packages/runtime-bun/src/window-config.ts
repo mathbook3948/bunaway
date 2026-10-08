@@ -1,18 +1,16 @@
+import {
+  hasValidWindowSizeConstraints,
+  isWindowSizeDimension,
+  MAX_WINDOW_DIMENSION,
+  MIN_WINDOW_DIMENSION,
+  type WindowSizeConstraints,
+  type WindowSpec,
+} from "@bunaway/plugin-api/native";
 import type { Policy } from "@bunaway/protocol";
 
+export type { WindowSpec } from "@bunaway/plugin-api/native";
+
 export const MAX_WINDOWS = 128;
-const MIN_WINDOW_DIMENSION = 200;
-const MAX_WINDOW_DIMENSION = 4096;
-export type WindowSpec = {
-  view: string;
-  home: string;
-  title: string;
-  window: {
-    width: number;
-    height: number;
-  };
-  startup?: boolean;
-};
 
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -95,6 +93,10 @@ export function readWindowSpecs(
           ![
             "width",
             "height",
+            "minWidth",
+            "minHeight",
+            "maxWidth",
+            "maxHeight",
           ].includes(key),
       )
     ) {
@@ -115,6 +117,21 @@ export function readWindowSpecs(
         );
       }
     }
+    const minWidth = readSizeConstraint(size.minWidth, "minWidth");
+    const minHeight = readSizeConstraint(size.minHeight, "minHeight");
+    const maxWidth = readSizeConstraint(size.maxWidth, "maxWidth");
+    const maxHeight = readSizeConstraint(size.maxHeight, "maxHeight");
+    const constraints: WindowSizeConstraints = {
+      minWidth: minWidth ?? null,
+      minHeight: minHeight ?? null,
+      maxWidth: maxWidth ?? null,
+      maxHeight: maxHeight ?? null,
+    };
+    if (!hasValidWindowSizeConstraints(constraints)) {
+      throw new Error(
+        "Window minimum dimensions cannot exceed maximum dimensions.",
+      );
+    }
     if (spec.startup !== undefined && typeof spec.startup !== "boolean") {
       throw new Error("Window startup must be a boolean.");
     }
@@ -125,6 +142,26 @@ export function readWindowSpecs(
       window: {
         width: Number(size.width),
         height: Number(size.height),
+        ...(minWidth === undefined
+          ? {}
+          : {
+              minWidth,
+            }),
+        ...(minHeight === undefined
+          ? {}
+          : {
+              minHeight,
+            }),
+        ...(maxWidth === undefined
+          ? {}
+          : {
+              maxWidth,
+            }),
+        ...(maxHeight === undefined
+          ? {}
+          : {
+              maxHeight,
+            }),
       },
       ...(spec.startup === undefined
         ? {}
@@ -137,4 +174,19 @@ export function readWindowSpecs(
     throw new Error("At least one window must open at startup.");
   }
   return specs;
+}
+
+function readSizeConstraint(
+  value: unknown,
+  name: string,
+): number | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isWindowSizeDimension(value)) {
+    throw new Error(
+      `Window ${name} must be null or an integer between ${MIN_WINDOW_DIMENSION} and ${MAX_WINDOW_DIMENSION}.`,
+    );
+  }
+  return value;
 }

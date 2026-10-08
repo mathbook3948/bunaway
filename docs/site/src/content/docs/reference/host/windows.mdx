@@ -1,11 +1,13 @@
 ---
 title: windows
-description: 창 생성과 재생성, 표시, 크기와 위치, 전체화면, 닫기 확인 API.
+description: 창 생성과 재생성, 표시, 크기 제약, 위치, 전체화면, 닫기 확인 API.
 ---
 
 `@bunaway/plugin-windows`를 설치하고 앱의 `plugins`에 windowsPlugin을 등록합니다. 명령 핸들러나 setup은 이 패키지의 `windows`를 호출합니다. 화면에서도 같은 경로를 import하며 해당 뷰의 commands에 `plugin.windows.<작업>`을 허용해야 합니다.
 
 창 제어 플러그인은 Windows에서 실행합니다. macOS 어댑터는 없으며 Linux와 모바일은 네이티브 호스트를 지원하지 않습니다. 플러그인을 등록하지 않은 앱도 설정한 시작 창과 WebView를 사용할 수 있습니다.
+
+크기와 DPI 처리는 [Per Monitor v2](https://learn.microsoft.com/en-us/windows/win32/hidpi/dpi-awareness-context)를 사용하므로 Windows 10 버전 1703 이상이 필요합니다.
 
 ```ts
 import { defineApp } from "@bunaway/backend";
@@ -47,13 +49,21 @@ export default defineApp({ modules: [], plugins: [windowsPlugin] });
 | `windows.hide` | `{ view }` | `Promise<null>`. 창 숨김. 창과 세션은 유지 |
 | `windows.focus` | `{ view }` | `Promise<null>`. 숨기거나 최소화한 창을 표시하고 포커스 요청. OS가 거부하면 `BUSY` |
 | `windows.setSize` | `{ view, width, height }` | `Promise<null>`. 내용 영역의 크기. 각 값은 정수 200–4096 |
-| `windows.setPosition` | `{ view, x, y }` | `Promise<null>`. 화면에서 창 바깥쪽 왼쪽 위 위치. 각 값은 정수 -32768–32767 |
+| `windows.getMinSize` | `{ view }` | `Promise<{ width: number \| null; height: number \| null }>` 축별 최소 크기. 설정하지 않은 축은 `null` |
+| `windows.setMinSize` | `{ view, width, height }` | `Promise<null>`. 최소 크기 쌍을 교체하며 두 축 모두 `number \| null`. `null`은 해당 축 제한 해제 |
+| `windows.getMaxSize` | `{ view }` | `Promise<{ width: number \| null; height: number \| null }>` 축별 최대 크기. 설정하지 않은 축은 `null` |
+| `windows.setMaxSize` | `{ view, width, height }` | `Promise<null>`. 최대 크기 쌍을 교체하며 두 축 모두 `number \| null`. `null`은 해당 축 제한 해제 |
+| `windows.getSizeConstraints` | `{ view }` | `Promise<{ minWidth: number \| null; minHeight: number \| null; maxWidth: number \| null; maxHeight: number \| null }>` 네 제약을 한 번에 조회 |
+| `windows.setSizeConstraints` | `{ view, minWidth?, minHeight?, maxWidth?, maxHeight? }` | `Promise<null>`. 제약 전체를 교체합니다. 생략하거나 `null`인 축은 제한을 해제합니다 |
+| `windows.setPosition` | `{ view, x, y }` | `Promise<null>`. 화면에서 창 바깥쪽 왼쪽 위의 물리 픽셀 위치. 각 값은 정수 -32768–32767 |
 | `windows.setFullscreen` | `{ view, fullscreen: boolean }` | `Promise<null>`. 현재 모니터 전체화면. 해제하면 이전 창 위치와 표시 상태 복원 |
 | `windows.setCloseConfirmation` | `{ view, message: string \| null }` | `Promise<null>`. 창을 닫기 전에 표시할 확인 메시지 설정. 문자열은 1–1024자, NUL 금지. `null`이면 확인 해제 |
 | `windows.close` | `{ view }` | `Promise<boolean>`. 닫기 승인 시 `true`, 확인이나 앱 종료를 취소하거나 트레이로 숨기면 `false`. 정리 완료를 기다리지는 않음 |
 
-크기와 위치는 Windows 창 좌표의 픽셀 단위입니다. 전체화면 상태에서 크기나 위치를
-바꾸면 `INVALID_ARGUMENT`이므로 먼저 전체화면을 해제하세요.
+크기 제약과 `setSize`의 너비, 높이는 96 DPI 기준 논리 픽셀입니다. Windows가 현재 창의 DPI에 맞춰 실제 픽셀 크기로 변환합니다. 사용자 크기 조절, 최대화와 복원에도 제약을 적용합니다. 제약보다 작은 초기 크기와 `setSize` 값은 최소 크기로, 큰 값은 최대 크기로 보정합니다. 최소값이 최대값보다 크거나 값이 정수가 아니거나 200–4096 범위를 벗어나면 `INVALID_ARGUMENT`이며 기존 제약은 바뀌지 않습니다.
+`setMinSize`와 `setMaxSize`는 지정한 쌍을 각각 교체하고 반대쪽 제약은 유지합니다. `setSizeConstraints`는 네 축 제약 전체를 교체하므로 전달하지 않은 축은 해제됩니다. 한 축에만 제약을 둘 수 있습니다.
+제약의 기본값은 모두 `null`입니다. 앱의 제약을 해제해도 운영체제의 기본 크기 조절 범위는 유지됩니다.
+실행 중 제약을 변경하면 현재 창도 새 범위 안으로 보정합니다. 최대화나 최소화 상태에서는 창 표시 상태를 유지하며 복원 크기에도 새 범위를 적용합니다. 전체화면 중에는 크기 제약 적용을 보류하고 설정 변경은 저장합니다. 전체화면을 해제하면 새 제약이 적용됩니다. 전체화면 상태에서 `setSize`나 위치를 바꾸면 `INVALID_ARGUMENT`이므로 먼저 전체화면을 해제하세요.
 전체화면을 해제하면 진입 전의 숨김 여부도 복원합니다. 숨긴 창은 숨긴 상태를 유지합니다.
 생성 완료는 WebView 준비를 뜻합니다. 웹 문서의 클라이언트 초기화 완료까지 기다리지는 않습니다.
 
@@ -75,7 +85,7 @@ export default defineApp({ modules: [], plugins: [windowsPlugin] });
 앱 종료 처리는 새 확인 대화상자를 띄우지 않습니다. 이미 열린 확인 대화상자가 있으면
 닫혀야 UI 정리가 진행됩니다. 강제 종료는 확인 결과를 기다리지 않습니다.
 
-재생성은 기존 창의 크기 변경, 전체화면과 확인 메시지를 초기화합니다.
+재생성은 기존 창의 크기 변경, 크기 제약, 전체화면과 확인 메시지를 초기화하고 초기 설정을 다시 적용합니다.
 앱 상태와 뷰의 저장 프로필은 유지합니다.
 앱은 새 웹 문서에서 클라이언트를 초기화하고 이벤트 구독을 다시 등록해야 합니다.
 자신의 창을 닫거나 재생성한 요청은 기존 세션 종료로 `CANCELLED`가 될 수 있습니다.

@@ -92,6 +92,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@bunaway/core": "workspace:*",
+        "@bunaway/plugin-api": "workspace:*",
         "@bunaway/protocol": "workspace:*",
       },
     },

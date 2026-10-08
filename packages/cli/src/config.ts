@@ -85,10 +85,7 @@ export interface Project {
     icon?: string;
     view: string;
     home: string;
-    window: {
-      width: number;
-      height: number;
-    };
+    window: WindowSpec["window"];
     windows?: WindowSpec[];
   };
   policy: Policy;

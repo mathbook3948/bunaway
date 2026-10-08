@@ -103,6 +103,66 @@ test("window settings preserve deferred startup and require unique policy-backed
   }
 });
 
+test("window size constraints accept nullable axes and reject invalid or contradictory bounds", () => {
+  const constrained = [
+    {
+      ...specs[0]!,
+      window: {
+        ...specs[0]!.window,
+        minWidth: 480,
+        minHeight: null,
+        maxWidth: 1600,
+      },
+    },
+  ];
+  expect(readWindowSpecs(constrained, policy)).toEqual(constrained);
+
+  for (const window of [
+    {
+      ...constrained[0]!.window,
+      minWidth: 199,
+    },
+    {
+      ...constrained[0]!.window,
+      maxHeight: 4097,
+    },
+    {
+      ...constrained[0]!.window,
+      minWidth: 480.5,
+    },
+    {
+      ...constrained[0]!.window,
+      minWidth: "480",
+    },
+    {
+      ...constrained[0]!.window,
+      minWidth: 500,
+      maxWidth: 499,
+    },
+    {
+      ...constrained[0]!.window,
+      minHeight: 500,
+      maxHeight: 499,
+    },
+    {
+      ...constrained[0]!.window,
+      extra: 1,
+    },
+  ]) {
+    expect(() =>
+      readWindowSpecs(
+        [
+          {
+            ...constrained[0]!,
+            window,
+          },
+        ],
+        policy,
+      ),
+    ).toThrow();
+  }
+});
+
 test("multi-window development replaces each view origin and preserves each home path and query", () => {
   const server = "http://127.0.0.1:5173/health";
   const devPolicy = developmentPolicy(

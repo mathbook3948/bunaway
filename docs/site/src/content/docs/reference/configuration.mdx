@@ -67,16 +67,21 @@ Ctrl+C나 SIGTERM으로 빌드를 중단하면 실행한 명령과 하위 프로
 | `home` | 시작 페이지. 현재 로컬 자산 origin `https://app.bunaway.local` 사용 |
 | `window.width` | 정수, 200–4096 |
 | `window.height` | 정수, 200–4096 |
+| `window.minWidth`, `window.minHeight` | 선택적 정수 또는 `null`, 200–4096. 생략하거나 `null`이면 해당 축의 최소 제한 없음 |
+| `window.maxWidth`, `window.maxHeight` | 선택적 정수 또는 `null`, 200–4096. 생략하거나 `null`이면 해당 축의 최대 제한 없음 |
 
 `home`에는 URL 사용자 정보와 fragment를 넣을 수 없습니다.
+창의 너비와 높이는 96 DPI 기준 논리 픽셀입니다. Windows가 현재 창의 DPI에 맞춰 실제 픽셀로 변환합니다.
 `executableName`, `icon`은 Windows 빌드에서 적용합니다. 아이콘 파일이 없거나 잘못된 ICO이면 빌드가 실패합니다.
 Windows에서는 기본 이름 `<appId>.exe`도 같은 파일 이름 검사를 받습니다. 기본 이름이 유효하지 않으면
 `app.executableName`에 다른 이름을 지정하세요.
 `validate`와 프로덕션 `build`는 시작 페이지의 실제 파일을 확인합니다.
 Windows에서는 `app.windows` 배열로 여러 창을 정의할 수 있습니다.
 `appId`, `title`은 유지하고 단일 창 필드 `view`, `home`, `window`를 배열과 함께 쓰지 마세요.
-각 항목은 `view`, `title`, `home`, `window.width`, `window.height`와 선택적 `startup`을 받습니다.
+각 항목은 `view`, `title`, `home`, `window.width`, `window.height`, 위 표의 선택적 크기 제약과 `startup`을 받습니다.
 `startup`은 boolean이며 생략하면 `true`입니다. `false`인 창은 API로 생성합니다.
+설정한 최소값은 최대값보다 클 수 없습니다.
+초기 크기가 제약을 벗어나면 제약 범위로 보정합니다.
 창은 1–128개이며 뷰 ID는 중복할 수 없고 정책에 해당 뷰와 home origin이 있어야 합니다.
 시작할 때 여는 창이 최소 하나 필요합니다. 창 제목은 1–1024자이며 NUL을 넣을 수 없습니다.
 생성하지 않는 창도 프로덕션 시작 페이지 파일을 검증합니다.
