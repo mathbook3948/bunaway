@@ -539,12 +539,14 @@ async function shortcutScript(path: string, statement: string) {
 async function readShortcut(path: string) {
   const output = await shortcutScript(
     path,
-    "[Console]::WriteLine((ConvertTo-Json -InputObject @{Target=$link.Path;Arguments=$link.Arguments;WorkingDirectory=$link.WorkingDirectory} -Compress))",
+    "$iconPath=''; $iconIndex=$link.GetIconLocation([ref]$iconPath); [Console]::WriteLine((ConvertTo-Json -InputObject @{Target=$link.Path;Arguments=$link.Arguments;WorkingDirectory=$link.WorkingDirectory;IconPath=$iconPath;IconIndex=$iconIndex} -Compress))",
   );
   return JSON.parse(output.stdout.trim()) as {
     Target: string;
     Arguments: string;
     WorkingDirectory: string;
+    IconPath: string;
+    IconIndex: number;
   };
 }
 const silentInstall = [
@@ -585,6 +587,11 @@ test.skipIf(!iscc)(
     const renamed = join(desktop, "사용자 이름 🚀.lnk");
     const moved = join(root, "elsewhere", `${name} 제거.lnk`);
     const copied = join(menu, "User profile.lnk");
+    const customIcon = join(
+      process.env.SystemRoot ?? "C:\\Windows",
+      "System32",
+      "shell32.dll",
+    );
     const executableNames = [
       "old's {앱🧪}.exe",
       "new's {앱🧪}.exe",
@@ -648,6 +655,10 @@ test.skipIf(!iscc)(
           await rename(desktopLink, renamed);
           // A same-target user copy at the configured path is deliberately managed.
           await copyFile(renamed, desktopLink);
+          await shortcutScript(
+            desktopLink,
+            `$link.SetIconLocation(${psLiteral(customIcon)}, 42); $link.Save(${psLiteral(desktopLink)})`,
+          );
           await mkdir(join(root, "elsewhere"));
           await rename(uninstallLink, moved);
           await copyFile(moved, uninstallLink);
@@ -667,6 +678,15 @@ test.skipIf(!iscc)(
         expect(appShortcut.WorkingDirectory.toLowerCase()).toBe(
           root.toLowerCase(),
         );
+        expect(appShortcut.IconPath.toLowerCase()).toBe(
+          join(install, executableName).toLowerCase(),
+        );
+        expect(appShortcut.IconIndex).toBe(0);
+        const desktopShortcut = await readShortcut(desktopLink);
+        expect(desktopShortcut.IconPath.toLowerCase()).toBe(
+          customIcon.toLowerCase(),
+        );
+        expect(desktopShortcut.IconIndex).toBe(42);
         expect((await readShortcut(desktopLink)).Target.toLowerCase()).toBe(
           join(install, executableName).toLowerCase(),
         );

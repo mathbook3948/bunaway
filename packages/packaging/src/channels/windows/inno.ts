@@ -191,6 +191,33 @@ export function renderInnoScript(options: InnoOptions): string {
   lines.push(
     "",
     "[Code]",
+    `// Native icon inspection preserves Unicode and supports output parameters.
+// Keep the unused methods: their positions define the COM vtable.
+type
+  IShellLinkW = interface(IUnknown)
+    '{000214F9-0000-0000-C000-000000000046}'
+    procedure GetPath;
+    procedure GetIDList;
+    procedure SetIDList;
+    procedure GetDescription;
+    procedure SetDescription;
+    procedure GetWorkingDirectory;
+    procedure SetWorkingDirectory;
+    procedure GetArguments;
+    procedure SetArguments;
+    procedure GetHotkey;
+    procedure SetHotkey;
+    procedure GetShowCmd;
+    procedure SetShowCmd;
+    function GetIconLocation(Path: String; Size: Integer; out Index: Integer): HResult;
+  end;
+  IPersistFile = interface(IUnknown)
+    '{0000010B-0000-0000-C000-000000000046}'
+    procedure GetClassID;
+    procedure IsDirty;
+    function Load(Filename: String; Mode: Longint): HResult;
+  end;
+`,
     "var PreviousExecutableName: String;",
     "    PreviousInstallDir: String;",
     "",
@@ -302,15 +329,26 @@ begin
 end;
 
 procedure UpdateShortcut(const Filename: String);
-var Link: Variant; Target, Arguments: String;
+var Link: Variant; Target, Arguments, IconPath: String; IconIndex: Integer;
+    IconObject: IUnknown; IconLink: IShellLinkW; IconFile: IPersistFile;
 begin
   if (PreviousExecutableName = '') or
      (CompareText(PreviousExecutableName, '${executableLiteral}') = 0) or
      (CompareText(AddBackslash(PreviousInstallDir), AddBackslash(ExpandConstant('{app}'))) <> 0) then Exit;
   if not ReadShortcut(Filename, Link, Target) then Exit;
   if CompareText(Target, ExpandConstant('{app}') + '\' + PreviousExecutableName) <> 0 then Exit;
-  try Arguments := Link.Arguments;
-  except Log('Could not inspect shortcut arguments: ' + Filename); Exit; end;
+  try
+    Arguments := Link.Arguments;
+    IconObject := CreateComObject(StringToGuid('{00021401-0000-0000-C000-000000000046}'));
+    IconFile := IPersistFile(IconObject);
+    OleCheck(IconFile.Load(Filename, 0));
+    IconLink := IShellLinkW(IconObject);
+    IconPath := StringOfChar(#0, 32768);
+    OleCheck(IconLink.GetIconLocation(IconPath, Length(IconPath), IconIndex));
+    StringChangeEx(IconPath, #0, '', True);
+  except Log('Could not inspect shortcut properties: ' + Filename); Exit; end;
+  if CompareText(IconPath, Target) = 0 then
+    Link.SetIconLocation(ExpandConstant('{app}') + '\' + '${executableLiteral}', IconIndex);
   Link.Path := ExpandConstant('{app}') + '\' + '${executableLiteral}';
   Link.Arguments := Arguments;
   Link.Save(Filename);
