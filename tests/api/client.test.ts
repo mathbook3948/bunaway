@@ -1216,6 +1216,209 @@ test.each([
   await client.close();
 });
 
+const invalidListenResults: {
+  payload: JsonValue;
+}[] = [
+  {
+    payload: null,
+  },
+  {
+    payload: [],
+  },
+  {
+    payload: "sub-2",
+  },
+  {
+    payload: {},
+  },
+  {
+    payload: {
+      subscriptionId: null,
+    },
+  },
+  {
+    payload: {
+      subscriptionId: 1,
+    },
+  },
+  {
+    payload: {
+      subscriptionId: "",
+    },
+  },
+];
+
+test.each(invalidListenResults)(
+  "invalid listen result %j closes the session and cleans up owned work",
+  async ({ payload }) => {
+    const { transport, client } = await connected();
+    const controller = new AbortController();
+    const errors: WireError[] = [];
+    const deliveries: number[] = [];
+    const established = client.listen(
+      "notes.changed",
+      (event) => deliveries.push(event.sequence),
+      {
+        signal: controller.signal,
+        onError: (error) => errors.push(error),
+      },
+    );
+    await flush();
+    transport.emit(
+      serverResult(must(transport.requests("listen").at(-1)).id, {
+        subscriptionId: "sub-1",
+      }),
+    );
+    const release = await established;
+    const detachSubscription = jest.spyOn(
+      controller.signal,
+      "removeEventListener",
+    );
+    const invokeController = new AbortController();
+    const detachRequest = jest.spyOn(
+      invokeController.signal,
+      "removeEventListener",
+    );
+    const invoke = client.invoke(
+      "notes.read",
+      {
+        key: "pending",
+      },
+      {
+        signal: invokeController.signal,
+      },
+    );
+    const failedListen = client.listen("notes.changed", () => {}, {
+      onError: () => {},
+    });
+    await flush();
+    const request = must(transport.requests("listen").at(-1));
+    const otherListen = client.listen("notes.changed", () => {}, {
+      onError: () => {},
+    });
+    await flush();
+    const violation: WireError = {
+      code: "INTERNAL",
+      message: "Protocol violation.",
+    };
+    // Observe every rejection before the frame settles all requests together.
+    const failures = Promise.all(
+      [
+        failedListen,
+        invoke,
+        otherListen,
+      ].map((pending) =>
+        pending.then(
+          () => ({
+            ok: true,
+          }),
+          (error: unknown) => ({
+            ok: false,
+            error,
+          }),
+        ),
+      ),
+    );
+    transport.emit(serverResult(request.id, payload));
+    for (const failure of await failures) {
+      expect(failure).toMatchObject({
+        ok: false,
+        error: violation,
+      });
+    }
+    expect(transport.closed).toBe(true);
+    expect(errors).toEqual([
+      violation,
+    ]);
+    expect(detachSubscription).toHaveBeenCalledTimes(1);
+    expect(detachRequest).toHaveBeenCalledTimes(1);
+    transport.emit(
+      eventMessage("sub-1", 1, {
+        key: "late",
+      }),
+    );
+    expect(deliveries).toEqual([]);
+    await expect(
+      client.invoke("notes.read", {
+        key: "after",
+      }),
+    ).rejects.toMatchObject(violation);
+    await release();
+    await client.close();
+    expect(transport.requests("unlisten")).toHaveLength(0);
+    expect(errors).toEqual([
+      violation,
+    ]);
+  },
+);
+
+test.each([
+  "abort",
+  "timeout",
+])("invalid late result for %s listen closes the session", async (mode) => {
+  const { transport, client } = await connected();
+  const controller = new AbortController();
+  const pending = client.listen("notes.changed", () => {}, {
+    signal: controller.signal,
+    onError: () => {},
+  });
+  await flush();
+  const request = must(transport.requests("listen").at(-1));
+  if (mode === "abort") {
+    controller.abort();
+  } else {
+    transport.emit(
+      serverError(request.id, {
+        code: "TIMEOUT",
+        message: "Host deadline.",
+      }),
+    );
+  }
+  await expect(pending).rejects.toMatchObject({
+    code: mode === "abort" ? "CANCELLED" : "TIMEOUT",
+  });
+  const invoke = client.invoke("notes.read", {
+    key: "pending",
+  });
+  await flush();
+  transport.emit(serverResult(request.id, null));
+  await expect(invoke).rejects.toMatchObject({
+    code: "INTERNAL",
+    message: "Protocol violation.",
+  });
+  expect(transport.closed).toBe(true);
+  expect(transport.requests("unlisten")).toHaveLength(0);
+});
+
+test("listen error responses keep the session open", async () => {
+  const { transport, client } = await connected();
+  const errors: WireError[] = [];
+  const pending = client.listen("notes.changed", () => {}, {
+    onError: (error) => errors.push(error),
+  });
+  await flush();
+  const request = must(transport.requests("listen").at(-1));
+  transport.emit(
+    serverError(request.id, {
+      code: "PERMISSION_DENIED",
+      message: "Event denied.",
+    }),
+  );
+  await expect(pending).rejects.toMatchObject({
+    code: "PERMISSION_DENIED",
+    message: "Event denied.",
+  });
+  expect(errors).toEqual([]);
+  expect(transport.closed).toBe(false);
+  const invoke = client.invoke("notes.read", {
+    key: "after",
+  });
+  await flush();
+  transport.emit(serverResult(invokeMessage(transport).id, "still-open"));
+  await expect(invoke).resolves.toBe("still-open");
+  await client.close();
+});
+
 test("release retries a rejected send and concurrent releases await the same result", async () => {
   const { transport, client } = await connected();
   const deliveries: number[] = [];

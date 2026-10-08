@@ -30,6 +30,9 @@ event sequence는 구독마다 1부터 증가합니다. source는 발신 뷰 ID 
 target은 실제로 전달받는 뷰 ID입니다. 내부 HostContext 식별자는 공개 이벤트에 포함되지 않습니다.
 
 listen 결과의 payload는 `{ subscriptionId }`입니다. unlisten 결과는 `null`입니다.
+listen 성공 응답에서 비어 있지 않은 문자열 subscriptionId를 얻을 수 없으면 프로토콜 위반입니다.
+클라이언트는 `INTERNAL` 오류로 연결을 닫고 진행 중 요청과 활성 구독을 모두 정리합니다.
+취소되거나 호스트 기한이 지난 listen의 늦은 성공 응답도 같은 검사를 받습니다.
 늦은 결과, 취소, 구독 오류의 처리 계약은 [listen](/reference/client/listen/)과 [취소 가이드](/guides/cancellation-and-errors/)를 따릅니다.
 
 ## 파싱과 직렬화

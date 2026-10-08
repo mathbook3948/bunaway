@@ -87,6 +87,9 @@ deadline은 Unix epoch 밀리초다. 로컬 취소, 만료는 즉시 호출을 �
 `listen(name, listener, { onError, signal })`은 구독 성공 뒤 비동기 멱등 해제 함수를 반환한다.
 listener에는 payload와 공개 source, target, subscriptionId, sequence가 전달된다.
 순서 위반, BUSY, 연결 종료는 onError로 구독을 끝낸다. 해제 뒤 이벤트를 전달하지 않는다.
+listen 성공 응답에 비어 있지 않은 문자열 subscriptionId가 없으면 프로토콜 위반으로 연결을 닫는다.
+해당 listen과 나머지 진행 중 요청은 INTERNAL로 실패하며 활성 구독은 같은 오류의 onError로 끝낸다.
+취소나 호스트 기한 초과 뒤 도착한 listen 성공 응답에도 이 규칙을 적용한다.
 해제 함수는 연결이 이미 닫혔으면 네트워크 호출 없이 완료한다.
 사용자 콜백의 예외로 다른 요청이나 transport 수신 루프를 중단하지 않는다.
 
