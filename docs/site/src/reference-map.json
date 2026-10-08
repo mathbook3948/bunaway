@@ -212,6 +212,13 @@
       "pages": {}
     },
     {
+      "name": "@bunaway/plugin-opener",
+      "source": "plugins/opener/src/index.ts",
+      "pages": {
+        "reference/plugins/opener": ["openUrl", "openerPlugin"]
+      }
+    },
+    {
       "name": "@bunaway/plugin-windows",
       "source": "plugins/windows/src/index.ts",
       "pages": {
@@ -618,6 +625,7 @@
     "reference/host/storage-write-text": ["storage.writeText"],
     "reference/host/log-write": ["log.write"],
     "reference/host/capabilities-get": ["capabilities.get"],
+    "reference/plugins/opener": ["opener.openUrl"],
     "reference/host/windows": [
       "windows.list",
       "windows.create",
