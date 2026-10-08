@@ -7,7 +7,7 @@ import { Channel, type UIConfig } from "../../native/windows/bun/channel.ts";
 import { openerPlugin } from "../../plugins/opener/src/index.ts";
 
 test.skipIf(process.platform !== "win32")(
-  "Windows opener validates calls and releases ShellExecute resources on an STA",
+  "Windows opener validates calls and releases Explorer COM resources on an STA",
   async () => {
     const root = resolve(
       import.meta.dir,
@@ -23,7 +23,6 @@ test.skipIf(process.platform !== "win32")(
     const operationsModule = pathToFileURL(
       resolve(import.meta.dir, "../../plugins/opener/src/windows.ts"),
     ).href;
-    const missingTarget = resolve(root, `${crypto.randomUUID()}.html`);
     await Bun.write(
       workerPath,
       `import assert from "node:assert/strict";
@@ -36,6 +35,24 @@ const ole = dlopen("ole32.dll", {
   CoGetApartmentType: { args: ["ptr", "ptr"], returns: "i32" },
   CoUninitialize: { args: [], returns: "void" },
 });
+// No COM apartment is initialized yet, so a launch must fail without opening
+// a browser. Repeating the failure exercises native cleanup on the error path.
+const shell = createShell();
+try {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    assert.throws(
+      () => shell.open("https://example.com/"),
+      (error) => error instanceof Error && "code" in error && error.code === "INTERNAL",
+    );
+  }
+} finally {
+  shell.dispose();
+  shell.dispose();
+}
+assert.throws(
+  () => shell.open("https://example.com/"),
+  (error) => error instanceof Error && "code" in error && error.code === "CANCELLED",
+);
 const initialized = ole.symbols.CoInitializeEx(null, 0x2 | 0x4) >= 0;
 try {
   assert(initialized);
@@ -87,23 +104,6 @@ try {
       requestId: "disposed",
       permissions: { permissions: ["opener:openUrl"] },
     }),
-    (error) => error instanceof Error && "code" in error && error.code === "CANCELLED",
-  );
-
-  const shell = createShell();
-  try {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      assert.throws(
-        () => shell.open(${JSON.stringify(missingTarget)}),
-        (error) => error instanceof Error && "code" in error && error.code === "INTERNAL",
-      );
-    }
-  } finally {
-    shell.dispose();
-    shell.dispose();
-  }
-  assert.throws(
-    () => shell.open("https://example.com/"),
     (error) => error instanceof Error && "code" in error && error.code === "CANCELLED",
   );
 } finally {

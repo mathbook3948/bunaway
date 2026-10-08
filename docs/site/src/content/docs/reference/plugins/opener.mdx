@@ -25,7 +25,7 @@ import { openUrl } from "@bunaway/plugin-opener";
 await openUrl("https://example.com/search?q=한글 값");
 ```
 
-성공한 `null` 결과는 운영체제가 브라우저 실행 요청을 접수했다는 뜻입니다. 브라우저가 표시되거나 페이지 로딩이 끝났다는 결과는 제공하지 않습니다.
+성공한 `null` 결과는 Windows Explorer가 브라우저 실행 요청을 접수했다는 뜻입니다. 브라우저가 표시되거나 페이지 로딩이 끝났다는 결과는 제공하지 않습니다.
 
 ## 입력
 
@@ -62,14 +62,14 @@ await openUrl("https://example.com/도움말?q=검색어 입력");
 
 ## 결과와 오류
 
-`null`은 운영체제가 브라우저 실행 요청을 접수했음을 나타냅니다. 브라우저 프로세스나 페이지 상태를 추적하지 않습니다. 접수 뒤 브라우저 수명은 운영체제가 관리하며, 플러그인은 브라우저를 닫거나 취소된 호출을 되돌리지 않습니다.
+`null`은 Windows Explorer가 브라우저 실행 요청을 접수했음을 나타냅니다. 실행에는 접근 가능한 Explorer 데스크톱이 필요합니다. Explorer가 브라우저를 실행하므로 브라우저는 앱의 종료용 Job을 상속하지 않고, 앱 종료나 개발 재시작 뒤에도 유지됩니다. 브라우저 프로세스나 페이지 상태는 추적하지 않으며 취소된 호출을 되돌리지 않습니다.
 
 | 오류 | 의미 |
 | --- | --- |
 | `INVALID_ARGUMENT` | URL 형식이나 길이가 허용 범위를 벗어남 |
 | `PERMISSION_DENIED` | 호출 출처에 `opener:openUrl` 권한이 없음 |
 | `UNSUPPORTED` | 현재 플랫폼이나 실행 환경에서 기능을 지원하지 않음 |
-| `INTERNAL` | Windows가 실행 요청을 접수하지 못함 |
+| `INTERNAL` | Explorer 데스크톱에 접근하거나 실행 요청을 전달하지 못함 |
 | `CANCELLED`, `TIMEOUT` | 호출이 취소되었거나 기한을 넘김 |
 
 닫힌 앱의 플러그인 자원은 앱 종료 과정에서 정리합니다. 자세한 패키지 계약과 Windows 검증 방법은 [`@bunaway/plugin-opener` README](https://github.com/mathbook3948/bunaway/tree/main/plugins/opener)를 참고하세요.
