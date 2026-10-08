@@ -93,6 +93,11 @@ export function renderInnoScript(options: InnoOptions): string {
     "''",
   );
   const appId = issParameter(options.appId ?? options.identifier);
+  const menuLink = `{group}\\${directoryName}.lnk`;
+  const uninstallLink = `{group}\\${directoryName} 제거.lnk`;
+  const desktopLink = `{autodesktop}\\${directoryName} (${identifier}).lnk`;
+  const shortcutCheck = (path: string) =>
+    `; Flags: uninsneveruninstall; Check: ShouldCreateShortcut('${path.replace(/'/g, "''")}')`;
   const defaultDir = perUser
     ? `{localappdata}\\Programs\\${identifier}`
     : `{autopf}\\${identifier}`;
@@ -154,15 +159,15 @@ export function renderInnoScript(options: InnoOptions): string {
     lines.push("", "[Icons]");
     if (options.startMenuShortcut) {
       lines.push(
-        `Name: "{group}\\${directoryName}"; Filename: "{app}\\${executable}"; WorkingDir: "{app}"; IconFilename: "{app}\\${executable}"; AppUserModelID: "${appId}"`,
+        `Name: "{group}\\${directoryName}"; Filename: "{app}\\${executable}"; WorkingDir: "{app}"; IconFilename: "{app}\\${executable}"; AppUserModelID: "${appId}"${shortcutCheck(menuLink)}`,
       );
       lines.push(
-        `Name: "{group}\\${directoryName} 제거"; Filename: "{uninstallexe}"`,
+        `Name: "{group}\\${directoryName} 제거"; Filename: "{uninstallexe}"${shortcutCheck(uninstallLink)}`,
       );
     }
     if (options.desktopShortcut) {
       lines.push(
-        `Name: "{autodesktop}\\${directoryName} (${identifier})"; Filename: "{app}\\${executable}"; WorkingDir: "{app}"; IconFilename: "{app}\\${executable}"; AppUserModelID: "${appId}"; Tasks: desktopicon`,
+        `Name: "{autodesktop}\\${directoryName} (${identifier})"; Filename: "{app}\\${executable}"; WorkingDir: "{app}"; IconFilename: "{app}\\${executable}"; AppUserModelID: "${appId}"; Tasks: desktopicon${shortcutCheck(desktopLink)}`,
       );
     }
   }
@@ -186,6 +191,33 @@ export function renderInnoScript(options: InnoOptions): string {
   lines.push(
     "",
     "[Code]",
+    `// Native icon inspection preserves Unicode and supports output parameters.
+// Keep the unused methods: their positions define the COM vtable.
+type
+  IShellLinkW = interface(IUnknown)
+    '{000214F9-0000-0000-C000-000000000046}'
+    procedure GetPath;
+    procedure GetIDList;
+    procedure SetIDList;
+    procedure GetDescription;
+    procedure SetDescription;
+    procedure GetWorkingDirectory;
+    procedure SetWorkingDirectory;
+    procedure GetArguments;
+    procedure SetArguments;
+    procedure GetHotkey;
+    procedure SetHotkey;
+    procedure GetShowCmd;
+    procedure SetShowCmd;
+    function GetIconLocation(Path: String; Size: Integer; out Index: Integer): HResult;
+  end;
+  IPersistFile = interface(IUnknown)
+    '{0000010B-0000-0000-C000-000000000046}'
+    procedure GetClassID;
+    procedure IsDirty;
+    function Load(Filename: String; Mode: Longint): HResult;
+  end;
+`,
     "var PreviousExecutableName: String;",
     "    PreviousInstallDir: String;",
     "",
@@ -247,13 +279,6 @@ export function renderInnoScript(options: InnoOptions): string {
     );
   }
   lines.push(
-    "function IsManagedExecutableTarget(const Target: String): Boolean;",
-    "begin",
-    `  Result := CompareText(Target, ExpandConstant('{app}') + '\\' + '${executableLiteral}') = 0;`,
-    "  if (not Result) and (PreviousExecutableName <> '') then",
-    "    Result := CompareText(Target, ExpandConstant('{app}') + '\\' + PreviousExecutableName) = 0;",
-    "end;",
-    "",
     "procedure RemovePreviousExecutable;",
     "var Path: String; Entry: TFindRec;",
     "begin",
@@ -271,50 +296,83 @@ export function renderInnoScript(options: InnoOptions): string {
     "  end;",
     "end;",
     "",
-    "// Only prune generated links that still point to this installation.",
-    "// Shell.Application preserves Unicode link paths that WScript.Shell can lose via ANSI conversion.",
-    "procedure PruneShortcuts(const Directory, Pattern: String; Current: TStringList);",
-    "var Entry: TFindRec; Shell, Folder, Item, Link: Variant; Filename, Target, Arguments: String;",
+    String.raw`// Inspect only the configured path. Never search for renamed or moved links.
+function ReadShortcut(const Filename: String; var Link: Variant; var Target: String): Boolean;
+var Shell, Folder, Item: Variant; Entry: TFindRec;
+begin
+  Result := False;
+  Target := '';
+  if not FindFirst(ExtractFileDir(Filename), Entry) then Exit;
+  try
+    if (Entry.Attributes and FILE_ATTRIBUTE_REPARSE_POINT) <> 0 then Exit;
+  finally FindClose(Entry); end;
+  if not FindFirst(Filename, Entry) then Exit;
+  try
+    if (Entry.Attributes and (FILE_ATTRIBUTE_DIRECTORY or FILE_ATTRIBUTE_REPARSE_POINT)) <> 0 then Exit;
+  finally FindClose(Entry); end;
+  try
+    // Shell.Application preserves Unicode paths that WScript.Shell can lose via ANSI conversion.
+    Shell := CreateOleObject('Shell.Application');
+    Folder := Shell.Namespace(ExtractFileDir(Filename));
+    Item := Folder.ParseName(ExtractFileName(Filename));
+    Link := Item.GetLink;
+    Target := Link.Path;
+    Result := True;
+  except Log('Could not inspect shortcut: ' + Filename); end;
+end;
+
+function ShouldCreateShortcut(const Filename: String): Boolean;
+var Entry: TFindRec;
+begin
+  Result := not FindFirst(ExpandConstant(Filename), Entry);
+  if not Result then FindClose(Entry);
+end;
+
+procedure UpdateShortcut(const Filename: String);
+var Link: Variant; Target, Arguments, IconPath: String; IconIndex: Integer;
+    IconObject: IUnknown; IconLink: IShellLinkW; IconFile: IPersistFile;
+begin
+  if (PreviousExecutableName = '') or
+     (CompareText(PreviousExecutableName, '${executableLiteral}') = 0) or
+     (CompareText(AddBackslash(PreviousInstallDir), AddBackslash(ExpandConstant('{app}'))) <> 0) then Exit;
+  if not ReadShortcut(Filename, Link, Target) then Exit;
+  if CompareText(Target, ExpandConstant('{app}') + '\' + PreviousExecutableName) <> 0 then Exit;
+  try
+    Arguments := Link.Arguments;
+    IconObject := CreateComObject(StringToGuid('{00021401-0000-0000-C000-000000000046}'));
+    IconFile := IPersistFile(IconObject);
+    OleCheck(IconFile.Load(Filename, 0));
+    IconLink := IShellLinkW(IconObject);
+    IconPath := StringOfChar(#0, 32768);
+    OleCheck(IconLink.GetIconLocation(IconPath, Length(IconPath), IconIndex));
+    StringChangeEx(IconPath, #0, '', True);
+  except Log('Could not inspect shortcut properties: ' + Filename); Exit; end;
+  if CompareText(IconPath, Target) = 0 then
+    Link.SetIconLocation(ExpandConstant('{app}') + '\' + '${executableLiteral}', IconIndex);
+  Link.Path := ExpandConstant('{app}') + '\' + '${executableLiteral}';
+  Link.Arguments := Arguments;
+  Link.Save(Filename);
+end;
+
+procedure DeleteShortcut(const Filename, ExpectedTarget: String);
+var Link: Variant; Target: String;
+begin
+  if not ReadShortcut(Filename, Link, Target) then Exit;
+  if CompareText(Target, ExpectedTarget) <> 0 then Exit;
+  if not DeleteFile(Filename) then Log('Could not remove shortcut: ' + Filename);
+end;
+`,
+    "procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);",
     "begin",
-    "  if not FindFirst(Directory, Entry) then Exit;",
-    "  try",
-    "    if (Entry.Attributes and FILE_ATTRIBUTE_REPARSE_POINT) <> 0 then Exit;",
-    "  finally",
-    "    FindClose(Entry);",
-    "  end;",
-    "  if not FindFirst(AddBackslash(Directory) + Pattern, Entry) then Exit;",
-    "  try",
-    "    Shell := CreateOleObject('Shell.Application');",
-    "    Folder := Shell.Namespace(Directory);",
-    "    repeat",
-    "      if ((Entry.Attributes and (FILE_ATTRIBUTE_DIRECTORY or FILE_ATTRIBUTE_REPARSE_POINT)) = 0) and",
-    "         (Current.IndexOf(Entry.Name) < 0) then begin",
-    "        Filename := AddBackslash(Directory) + Entry.Name;",
-    "        try",
-    "          Item := Folder.ParseName(Entry.Name);",
-    "          Link := Item.GetLink;",
-    "          Target := Link.Path;",
-    "          Arguments := Link.Arguments;",
-    "        except",
-    "          Target := '';",
-    "          Arguments := '';",
-    "          Log('Could not inspect shortcut: ' + Filename);",
-    "        end;",
-    "        if (Arguments <> '') and (PreviousExecutableName <> '') and",
-    `           (CompareText(PreviousExecutableName, '${executableLiteral}') <> 0) and`,
-    "           (CompareText(Target, ExpandConstant('{app}') + '\\' + PreviousExecutableName) = 0) then begin",
-    `          Link.Path := ExpandConstant('{app}') + '\\' + '${executableLiteral}';`,
-    "          Link.Save(Filename);",
-    "        end;",
-    "        if (Arguments = '') and (IsManagedExecutableTarget(Target) or",
-    "           (CompareText(Target, ExpandConstant('{uninstallexe}')) = 0)) then",
-    "          if not DeleteFile(Filename) then",
-    "            RaiseException('Could not remove obsolete shortcut: ' + Filename);",
-    "      end;",
-    "    until not FindNext(Entry);",
-    "  finally",
-    "    FindClose(Entry);",
-    "  end;",
+    "  if CurUninstallStep <> usUninstall then Exit;",
+    ...[
+      menuLink,
+      desktopLink,
+    ].map(
+      (path) =>
+        `  DeleteShortcut(ExpandConstant('${path.replace(/'/g, "''")}'), ExpandConstant('{app}') + '\\' + '${executableLiteral}');`,
+    ),
+    `  DeleteShortcut(ExpandConstant('${uninstallLink.replace(/'/g, "''")}'), ExpandConstant('{uninstallexe}'));`,
     "end;",
     "",
     "procedure PruneAssets(const Base, Relative: String; Current: TStringList);",
@@ -364,22 +422,13 @@ export function renderInnoScript(options: InnoOptions): string {
         `    Current.Add('${issLiteral(path, false).replace(/\//g, "\\").replace(/'/g, "''")}');`,
     ),
     "    PruneAssets(ExpandConstant('{app}'), 'licenses', Current);",
-    "    Current.Clear;",
-    ...(options.startMenuShortcut
-      ? [
-          `    Current.Add('${shortcutName.replace(/'/g, "''")}.lnk');`,
-          `    Current.Add('${shortcutName.replace(/'/g, "''")} 제거.lnk');`,
-        ]
-      : []),
-    "    PruneShortcuts(ExpandConstant('{group}'), '*.lnk', Current);",
-    "    Current.Clear;",
-    ...(options.desktopShortcut
-      ? [
-          "    if WizardIsTaskSelected('desktopicon') then",
-          `      Current.Add('${shortcutName.replace(/'/g, "''")} (${identifier}).lnk');`,
-        ]
-      : []),
-    `    PruneShortcuts(ExpandConstant('{autodesktop}'), '* (${identifier}).lnk', Current);`,
+    ...[
+      menuLink,
+      desktopLink,
+    ].map(
+      (path) =>
+        `    UpdateShortcut(ExpandConstant('${path.replace(/'/g, "''")}'));`,
+    ),
     "    RemovePreviousExecutable;",
     "  finally",
     "    Current.Free;",

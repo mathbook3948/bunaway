@@ -103,7 +103,8 @@ macOS 빌드는 공유 Bun 캐시 초기화 때문에 probe→host 직렬 실행
 실제 GUI/WKWebView 결과 없이는 성공 처리하지 않으며 실패는 CI 실패로 전달한다.
 결과 JSON, 테스트별 로그, 페이지 보고서는 진단 artifact로 보관한다(7일).
 macOS는 `native/macos/host/run.sh --app`으로 ad-hoc 서명한 `.app`의 실행과 서명 유지,
-배포 스크립트의 DMG 생성과 PKG 조립을 검사한다. Windows 설치 검사는 Inno Setup이 있을 때 실행한다.
+배포 스크립트의 DMG 생성과 PKG 조립을 검사한다. Windows CI는 Inno Setup을 설치해
+실제 설치, 업그레이드와 제거 회귀 테스트를 실행한다. 로컬에서는 Inno Setup이 있을 때 이 검사를 실행한다.
 프로덕션 인증서, 실제 공증과 Store 제출은 이 검사 범위에 포함하지 않는다.
 
 ## 이어서 할 작업
