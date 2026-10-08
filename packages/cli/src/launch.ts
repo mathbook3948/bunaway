@@ -4,6 +4,17 @@ import pin from "../../../runtime/build-manifests/windows-x64.json";
 import { frameworkRoot, json, projectPath, run, verifyHash } from "./files.ts";
 import { runManagedCommand } from "./managed-command.ts";
 
+export function compiledAssetArguments(
+  bundledAssets: readonly string[],
+): string[] {
+  return [
+    "app.json",
+    "policy.json",
+    "web",
+    ...bundledAssets,
+  ].map((name) => `--asset=${name}`);
+}
+
 // Compile using the verified runtime supplied by prepareNative, without downloads.
 export async function compileWindowsApp(
   root: string,
@@ -13,6 +24,7 @@ export async function compileWindowsApp(
     title: string;
     icon?: string;
   },
+  bundledAssets: readonly string[],
   signal?: AbortSignal,
   framework = frameworkRoot,
 ): Promise<void> {
@@ -32,9 +44,7 @@ export async function compileWindowsApp(
     "--no-compile-autoload-bunfig",
     "--no-compile-autoload-tsconfig",
     "--no-compile-autoload-package-json",
-    "--asset=app.json",
-    "--asset=policy.json",
-    "--asset=web",
+    ...compiledAssetArguments(bundledAssets),
     ...(app.icon
       ? [
           `--windows-icon=${resolve(assets, "app.ico")}`,

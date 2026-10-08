@@ -65,7 +65,7 @@ export async function buildHostFixture(
       new Uint8Array(await result.outputs[0].arrayBuffer()),
     );
   }
-  await bundleWindowsHost(
+  const bundledAssets = await bundleWindowsHost(
     import.meta.dir,
     assets,
     resolve(root, "tests/fixtures/desktop/host/app.ts"),
@@ -89,6 +89,7 @@ export async function buildHostFixture(
     resolve(root, "runtime/bun-bundle/vendor/bun-windows-x64-baseline/bun.exe"),
     executableName,
     app,
+    bundledAssets,
   );
   const hashes: Record<string, string> = {};
   hashes["WebView2Loader.dll"] = await hash(

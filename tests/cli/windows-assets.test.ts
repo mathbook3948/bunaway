@@ -14,6 +14,164 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { webAsset } from "../../native/windows/bun/web-assets.ts";
 import { bundleWindowsHost } from "../../packages/cli/src/assets.ts";
+import { compiledAssetArguments } from "../../packages/cli/src/launch.ts";
+
+test("compiled host preserves file imports from the app and both workers after staging is removed", async () => {
+  const root = await mkdtemp(
+    resolve(tmpdir(), "bunaway-compiled-file-assets-"),
+  );
+  const host = resolve(root, "host");
+  const assets = resolve(root, "assets");
+  const executable = resolve(
+    root,
+    process.platform === "win32" ? "probe.exe" : "probe",
+  );
+  try {
+    await mkdir(host);
+    await mkdir(resolve(assets, "web"), {
+      recursive: true,
+    });
+    const text = "backend 한글 😀";
+    await writeFile(resolve(root, "data.txt"), text);
+    await writeFile(
+      resolve(root, "data.bin"),
+      Buffer.from([
+        0,
+        128,
+        255,
+      ]),
+    );
+    // A JS extension imported as a file must stay an asset, not a module.
+    await writeFile(resolve(root, "raw.js"), "not valid JavaScript!");
+    await writeFile(resolve(host, "ui.txt"), "UI worker asset");
+    await writeFile(resolve(host, "io.txt"), "I/O worker asset");
+    await writeFile(
+      resolve(root, "app.ts"),
+      `
+import text from "./data.txt" with { type: "file" };
+import binary from "./data.bin" with { type: "file" };
+import raw from "./raw.js" with { type: "file" };
+export default { async read() {
+  return Promise.all([text, binary, raw].map(async file =>
+    Buffer.from(await Bun.file(new URL(file, import.meta.url)).arrayBuffer()).toString("hex")));
+} };
+`,
+    );
+    await writeFile(
+      resolve(host, "boot.ts"),
+      `
+import { Worker } from "node:worker_threads";
+const { default: app } = await import("./app.js");
+const workers = await Promise.all(["ui", "host-operations"].map(name => new Promise((resolve, reject) => {
+  const worker = new Worker(new URL(name + ".js", import.meta.url));
+  worker.once("message", resolve);
+  worker.once("error", reject);
+})));
+console.log(JSON.stringify({ app: await app.read(), workers }));
+`,
+    );
+    for (const [name, file] of [
+      [
+        "ui",
+        "ui.txt",
+      ],
+      [
+        "host-operations",
+        "io.txt",
+      ],
+    ]) {
+      await writeFile(
+        resolve(host, `${name}.ts`),
+        `
+import { parentPort } from "node:worker_threads";
+import file from "./${file}" with { type: "file" };
+parentPort.postMessage(await Bun.file(new URL(file, import.meta.url)).text());
+parentPort.close();
+`,
+      );
+    }
+    const bundledAssets = await bundleWindowsHost(
+      host,
+      assets,
+      resolve(root, "app.ts"),
+    );
+    await writeFile(resolve(assets, "app.json"), "{}");
+    await writeFile(resolve(assets, "policy.json"), "{}");
+    await writeFile(resolve(assets, "web/index.html"), "<h1>web</h1>");
+    const compiler = Bun.spawn(
+      [
+        process.execPath,
+        "build",
+        "--compile",
+        `--compile-executable-path=${process.execPath}`,
+        ...compiledAssetArguments(bundledAssets),
+        `--outfile=${executable}`,
+        "./boot.js",
+        "./ui.js",
+        "./host-operations.js",
+      ],
+      {
+        cwd: assets,
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const [code, stdout, stderr] = await Promise.all([
+      compiler.exited,
+      new Response(compiler.stdout).text(),
+      new Response(compiler.stderr).text(),
+    ]);
+    expect(code, stdout + stderr).toBe(0);
+    await rm(assets, {
+      recursive: true,
+      force: true,
+    });
+    await rm(host, {
+      recursive: true,
+      force: true,
+    });
+    for (const name of [
+      "app.ts",
+      "data.txt",
+      "data.bin",
+      "raw.js",
+    ]) {
+      await rm(resolve(root, name));
+    }
+    const child = Bun.spawn(
+      [
+        executable,
+      ],
+      {
+        cwd: root,
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const [exit, output, errors] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(exit, errors).toBe(0);
+    expect(JSON.parse(output)).toEqual({
+      app: [
+        Buffer.from(text).toString("hex"),
+        "0080ff",
+        Buffer.from("not valid JavaScript!").toString("hex"),
+      ],
+      workers: [
+        "UI worker asset",
+        "I/O worker asset",
+      ],
+    });
+  } finally {
+    await rm(root, {
+      recursive: true,
+      force: true,
+    });
+  }
+}, 30000);
 
 test("embedded web responses preserve MIME, Unicode paths, HEAD and ranges without exposing host assets", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "bunaway-web-assets-"));

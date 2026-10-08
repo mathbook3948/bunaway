@@ -185,8 +185,8 @@ export async function bundleAssets(
   windows = false,
   developmentServer = false,
   development = false,
-): Promise<void> {
-  await runWorker(
+): Promise<string[]> {
+  const result = await runWorker(
     "assets.ts",
     windows ? "bundleWindowsAssets" : "bundleAssets",
     [
@@ -198,6 +198,7 @@ export async function bundleAssets(
     project.root,
     project.frameworkRoot,
   );
+  return windows ? (JSON.parse(result) as string[]) : [];
 }
 
 function xml(text: string): string {
@@ -405,7 +406,7 @@ async function assembleProject(
         await cp(schema, resolve(assets, basename(schema)));
       }
     }
-    await bundleAssets(
+    const bundledAssets = await bundleAssets(
       project,
       assets,
       windows,
@@ -449,6 +450,7 @@ async function assembleProject(
           native.bun,
           executableName,
           project.app,
+          bundledAssets,
           signal,
           root,
         );

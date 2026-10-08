@@ -158,6 +158,15 @@ test.skipIf(process.platform !== "win32")(
       const executable = resolve(root, "내 앱.exe");
       await cp(resolve(root, "app.ico"), resolve(root, "assets/app.ico"));
       const source = resolve(root, "app.ts");
+      await writeFile(resolve(root, "backend.txt"), "backend 한글 😀");
+      await writeFile(
+        resolve(root, "backend.bin"),
+        Buffer.from([
+          0,
+          128,
+          255,
+        ]),
+      );
       const win32 = resolve(
         import.meta.dir,
         "../../native/windows/bun/win32.ts",
@@ -165,6 +174,8 @@ test.skipIf(process.platform !== "win32")(
       await writeFile(
         source,
         `import { dlopen } from "bun:ffi";
+import backendText from "./backend.txt" with { type: "file" };
+import backendBinary from "./backend.bin" with { type: "file" };
 import { Windows } from ${JSON.stringify(win32)};
 const argv = process.argv.slice(2);
 if (argv[0] === "fail") throw new Error("startup-test-failed");
@@ -175,6 +186,8 @@ const result = {
   argv, cwd: process.cwd(), console: kernel.symbols.GetConsoleWindow().toString(),
   icon: windows.icon !== 0n,
   asset: await Bun.file(new URL("./web/한글 😀.txt", import.meta.url)).text(),
+  backendText: await Bun.file(new URL(backendText, import.meta.url)).text(),
+  backendBinary: Buffer.from(await Bun.file(new URL(backendBinary, import.meta.url)).arrayBuffer()).toString("hex"),
   polluted: process.env.CWD_POLLUTION ?? null,
 };
 windows.destroy(hwnd); windows.dispose(); kernel.close();
@@ -204,7 +217,7 @@ export default { commands: {}, events: {} };
         "<h1>embedded</h1>",
       );
       await writeFile(resolve(root, "assets/web/한글 😀.txt"), "embedded text");
-      await bundleWindowsHost(
+      const bundledAssets = await bundleWindowsHost(
         resolve(import.meta.dir, "../../native/windows/bun"),
         resolve(root, "assets"),
         source,
@@ -217,6 +230,7 @@ export default { commands: {}, events: {} };
           title,
           icon: "app.ico",
         },
+        bundledAssets,
         new AbortController().signal,
       );
       expect(await Bun.file(resolve(root, "assets/app.json")).exists()).toBe(
@@ -269,6 +283,8 @@ export default { commands: {}, events: {} };
             console: "0",
             icon: true,
             asset: "embedded text",
+            backendText: "backend 한글 😀",
+            backendBinary: "0080ff",
             polluted: null,
           });
         }
@@ -302,7 +318,7 @@ export default { commands: {}, events: {} };
         failureApp,
         "export default { commands: {}, events: {} };\n",
       );
-      await bundleWindowsHost(
+      const failureBundledAssets = await bundleWindowsHost(
         resolve(import.meta.dir, "../../native/windows/bun"),
         failureAssets,
         failureApp,
@@ -324,6 +340,7 @@ export default { commands: {}, events: {} };
         {
           title: "Bunaway",
         },
+        failureBundledAssets,
         new AbortController().signal,
       );
       const failureChild = Bun.spawn(

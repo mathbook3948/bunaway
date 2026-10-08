@@ -36,6 +36,8 @@ bunaway build [directory]
 
 Windows 산출물은 앱 EXE, WebView2Loader.dll, licenses 폴더와 manifest.json을 포함합니다.
 앱 코드, 웹 자산, 설정과 정책은 EXE에 내장합니다. 별도 Bun 설치는 필요하지 않습니다.
+백엔드에서 `with { type: "file" }`로 가져온 파일도 EXE에 포함합니다.
+파일을 읽을 때는 `Bun.file(new URL(file, import.meta.url))`처럼 가져온 경로를 모듈 기준으로 해석하세요.
 기본 실행 파일 이름은 `<appId>.exe`이며 `app.executableName`과 `app.icon`으로 이름과 아이콘을 지정합니다.
 앱 폴더 전체를 배포하고 EXE를 실행하세요. 웹 자산을 바꾸면 앱을 다시 빌드해야 합니다.
 macOS에서는 `.app`을 만들고 로컬 실행용 ad-hoc 서명을 적용합니다. 배포에 필요한 Developer ID 서명과 공증은 별도로 진행합니다.

@@ -22,6 +22,9 @@ MSVC, CMake, Ninja와 사용자 C/C++ 또는 Rust DLL은 필요 없다. Microsof
 CLI 생성 앱의 `bun run build` 결과는 `dist/windows-x64/<appId>.exe`로 실행한다.
 `app.executableName`은 실행 파일 이름, `app.icon`은 프로젝트 기준 ICO 경로다.
 배포 빌드는 Bun, 앱/코어, UI/IO Worker, 웹 자산, 설정과 정책을 EXE에 내장한다.
+첫 번들의 `asset` 출력도 컴파일 입력으로 전달한다. 앱과 Worker의 파일 import는
+번들 후 경로 문자열이 되므로 두 번째 컴파일에서 자동으로 발견되지 않는다.
+출력 확장자가 `.js`여도 파일 자산이면 내장한다.
 앱 EXE는 콘솔 없이 시작하며 EXE 리소스의 아이콘을 창과 트레이에도 적용한다.
 초기화 실패나 앱을 종료시키는 호스트 오류는 대화상자로 알리고 `logs/startup-error.log`에 기록한다.
 앱 설정 확인 전의 로그는 확장자를 제외한 실행 파일 이름의 데이터 디렉터리에 기록한다.
