@@ -572,6 +572,7 @@ class SessionImpl implements CoreSession {
         payload,
       };
       serializeMessage(message);
+      this.core.services.validateMessage?.(this.context, message);
       deliveries.push({
         subscription,
         message,

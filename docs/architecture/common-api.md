@@ -159,6 +159,11 @@ events.emit은 선언된 이벤트 스키마를 검사하고 broadcast 또는 �
 웹 요청을 backend 발신자로 승격하지 않는다.
 코어는 각 구독의 protocol, source, target, subscriptionId와 다음 sequence를 포함한
 최종 이벤트를 모두 직렬화 검사한 뒤 큐에 넣고 sequence를 증가시킨다.
+전송 envelope에 추가 제한이 있는 어댑터는 선택적
+`CoreServices.validateMessage(context, message): void`를 제공한다.
+코어는 큐 등록 전에 모든 대상에 이 동기 검사를 적용한다. 검사는 전송하거나 큐와 세션 상태를
+변경하지 않으며, 실패하면 throw한다. Bun 프로세스 어댑터는 실제 송신과 같은 직렬화 함수로
+context, ipc와 runtime을 포함한 전체 프레임의 크기와 깊이를 검사한다.
 한 대상이라도 메시지 크기, 깊이나 직렬화 규칙을 위반하면 발행자에게 INVALID_ARGUMENT를
 반환하며 어느 구독에도 전달하지 않는다. 기존 구독, sequence와 세션은 유지한다.
 

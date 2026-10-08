@@ -417,6 +417,7 @@
           "platform",
           "backendContext",
           "runtime",
+          "validateMessage",
           "send",
           "callHost",
           "onCommandError",
