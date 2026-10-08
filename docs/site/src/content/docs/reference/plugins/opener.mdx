@@ -1,0 +1,75 @@
+---
+title: opener.openUrl
+description: 허용된 HTTP 또는 HTTPS 주소를 Windows 기본 브라우저에서 엽니다.
+sidebar: { order: 5 }
+---
+
+```ts
+openUrl(url: string, options?: NativeInvokeOptions): Promise<null>
+```
+
+`@bunaway/plugin-opener`를 설치하고 앱의 `plugins`에 `openerPlugin`을 등록합니다. 현재 기본 브라우저 어댑터는 Windows에서 제공됩니다.
+
+```ts
+import { defineApp } from "@bunaway/backend";
+import { openerPlugin } from "@bunaway/plugin-opener";
+
+export default defineApp({ modules: [], plugins: [openerPlugin] });
+```
+
+화면이나 앱 백엔드에서 `openUrl`을 호출합니다.
+
+```ts
+import { openUrl } from "@bunaway/plugin-opener";
+
+await openUrl("https://example.com/search?q=한글 값");
+```
+
+성공한 `null` 결과는 Windows Explorer가 브라우저 실행 요청을 접수했다는 뜻입니다. 브라우저가 표시되거나 페이지 로딩이 끝났다는 결과는 제공하지 않습니다.
+
+## 입력
+
+`url`은 절대 HTTP 또는 HTTPS 주소여야 합니다. 입력과 정규화된 URL은 각각 최대 8,192자입니다. 호스트 이름이 유효해야 하며 제어 문자, 역슬래시, 앞뒤 공백은 허용하지 않습니다. `file:`, `javascript:`와 임의 커스텀 스킴은 거부합니다.
+
+경로와 쿼리에 공백이나 한글을 쓸 수 있습니다. 호출할 때 URL 규칙에 따라 정규화되고, 인코딩된 주소가 브라우저로 전달됩니다.
+
+```ts
+await openUrl("https://example.com/도움말?q=검색어 입력");
+```
+
+## 정책
+
+화면에서 직접 호출하려면 기존 뷰의 `commands`에 `plugin.opener.openUrl`을, `host.permissions`에 `opener:openUrl`을 추가합니다.
+
+```json
+{
+  "commands": ["app.help", "plugin.opener.openUrl"],
+  "host": { "permissions": ["opener:openUrl"] }
+}
+```
+
+명령 핸들러에서 호출하면 원래 명령의 뷰 권한을 사용합니다. 플러그인 setup에서 호출하려면 루트 `backend.permissions`에 `opener:openUrl`을 추가합니다.
+
+```json
+{
+  "backend": { "permissions": ["opener:openUrl"] }
+}
+```
+
+설치나 플러그인 등록만으로 권한이 생기지 않습니다. 이 권한은 URL 대상을 제한하지 않으므로 허용된 호출자는 모든 HTTP와 HTTPS 주소를 열 수 있습니다.
+
+화면 호출은 `signal`과 절대 시각 `deadline`을 `options`로 전달할 수 있습니다. 호출 취소와 기한은 [invoke](/reference/client/invoke/) 규칙을 따릅니다. 백엔드 호출은 현재 명령의 취소와 기한을 이어받으며 별도 `options`를 받지 않습니다.
+
+## 결과와 오류
+
+`null`은 Windows Explorer가 브라우저 실행 요청을 접수했음을 나타냅니다. 실행에는 접근 가능한 Explorer 데스크톱이 필요합니다. Explorer가 브라우저를 실행하므로 브라우저는 앱의 종료용 Job을 상속하지 않고, 앱 종료나 개발 재시작 뒤에도 유지됩니다. 브라우저 프로세스나 페이지 상태는 추적하지 않으며 취소된 호출을 되돌리지 않습니다.
+
+| 오류 | 의미 |
+| --- | --- |
+| `INVALID_ARGUMENT` | URL 형식이나 길이가 허용 범위를 벗어남 |
+| `PERMISSION_DENIED` | 호출 출처에 `opener:openUrl` 권한이 없음 |
+| `UNSUPPORTED` | 현재 플랫폼이나 실행 환경에서 기능을 지원하지 않음 |
+| `INTERNAL` | Explorer 데스크톱에 접근하거나 실행 요청을 전달하지 못함 |
+| `CANCELLED`, `TIMEOUT` | 호출이 취소되었거나 기한을 넘김 |
+
+닫힌 앱의 플러그인 자원은 앱 종료 과정에서 정리합니다. 자세한 패키지 계약과 Windows 검증 방법은 [`@bunaway/plugin-opener` README](https://github.com/mathbook3948/bunaway/tree/main/plugins/opener)를 참고하세요.

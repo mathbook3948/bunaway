@@ -421,6 +421,7 @@ checkNames(
       "storage",
       "log",
       "capabilities",
+      "opener",
     ].flatMap((name) => [
       ...operationNames(`plugins/${name}/src/index.ts`),
     ]),
