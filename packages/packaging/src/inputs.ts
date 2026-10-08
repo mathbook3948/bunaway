@@ -598,7 +598,6 @@ export async function verifyArtifact(args: {
           executable,
           "Compiled app",
           hostDigest,
-          true,
         );
       }
     }

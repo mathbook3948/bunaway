@@ -538,10 +538,10 @@ test.skipIf(!iscc)(
       "New's 🚀 {App}",
     ];
     const executableNames = [
-      "old's {앱}.exe",
-      "new's {앱}.exe",
-      "new's {앱}.exe",
-      "new's {앱}.exe",
+      "old's {앱🧪}.exe",
+      "new's {앱🧪}.exe",
+      "new's {앱🧪}.exe",
+      "new's {앱🧪}.exe",
     ];
     const silent = [
       "/VERYSILENT",
@@ -623,8 +623,11 @@ test.skipIf(!iscc)(
         }
         for (const previous of new Set(names.slice(0, index + 1))) {
           const current = previous === name;
-          expect(await Bun.file(join(menu, `${previous}.lnk`)).exists()).toBe(
-            current && index < 3,
+          const expectedShortcut = current && index < 3;
+          const shortcutPath = join(menu, `${previous}.lnk`);
+          const shortcutExists = await Bun.file(shortcutPath).exists();
+          expect(shortcutExists, `Install ${index + 1}: ${shortcutPath}`).toBe(
+            expectedShortcut,
           );
           expect(
             await Bun.file(join(menu, `${previous} 제거.lnk`)).exists(),
@@ -964,7 +967,15 @@ test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data pol
   expect(perUser).toContain(
     "if not IsSafeExecutableName(PreviousExecutableName) then",
   );
-  expect(perUser).toContain("Pos(Copy(Name, I, 1), '<>:\"/\\\\|?*') > 0");
+  expect(perUser).toContain(
+    [
+      "    if (Ord(Name[I]) < 32) or (Name[I] = '<') or (Name[I] = '>') or",
+      "       (Name[I] = ':') or (Name[I] = '\"') or (Name[I] = '/') or",
+      "       (Name[I] = '\\') or (Name[I] = '|') or (Name[I] = '?') or",
+      "       (Name[I] = '*') then Exit;",
+    ].join("\n"),
+  );
+  expect(perUser).not.toContain("Pos(Copy(Name, I, 1)");
   expect(perUser).toContain(
     "CompareText(Target, ExpandConstant('{app}') + '\\' + 'com.example.app.exe') = 0",
   );

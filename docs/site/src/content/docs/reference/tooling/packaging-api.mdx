@@ -50,6 +50,7 @@ MSIX 이름 파생 후에도 유효한 시작 문자, 이름 조건을 충족해
 Windows manifest의 `host.kind`는 `bun-compiled`, `host.executable`은 이 파일 이름입니다.
 `host.sha256`에는 빌드 직후 해시, `host.packagedSha256`에는 선택적 서명 단계가 끝난 뒤 최종 해시를 기록합니다.
 서명하지 않은 경우에도 `host.packagedSha256`을 기록합니다.
+Windows EXE에는 Unix 실행 권한을 요구하지 않습니다. macOS 호스트와 번들 Bun은 Unix에서 검사할 때 실행 권한이 필요하며, 없으면 `PKG_INPUT_TAMPERED`를 반환합니다.
 
 packagedDigest는 executableSha256 필드가 있으면 packagedSha256 → executableSha256,
 그 외에는 packagedSha256 → sha256 → sourceSha256 순서입니다.

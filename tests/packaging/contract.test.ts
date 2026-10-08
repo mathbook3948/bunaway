@@ -1800,6 +1800,7 @@ test("Windows compiled app hash rejects tampering before adapters run", async ()
     appId: "app.test",
   });
   expect(manifest.host?.kind).toBe("bun-compiled");
+  await chmod(artifact.executable, 0o644);
   expect(
     await verifyArtifact({
       artifact,
