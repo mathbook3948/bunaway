@@ -549,23 +549,19 @@ export class Windows {
     const maximized =
       placement.readUInt32LE(WINDOWPLACEMENT_SHOW_CMD_OFFSET) ===
         SW_SHOWMAXIMIZED && user.symbols.IsZoomed(window) !== 0;
-    if (maximized) {
-      // Update restore bounds without showing or activating a background HWND.
-      // SW_SHOWMAXIMIZED cannot recalculate the size of an already zoomed HWND.
-      const update = Buffer.from(placement);
+    const update = Buffer.from(placement);
+    if (maximized || !visible) {
+      // Placement does not record hiding. Hide before applying it so a saved
+      // show command cannot briefly display or activate a background HWND.
       update.writeUInt32LE(
         visible ? SW_SHOWNA : SW_HIDE,
         WINDOWPLACEMENT_SHOW_CMD_OFFSET,
       );
-      assert(user.symbols.SetWindowPlacement(window, ptr(update)));
-      if (recomputeMaximizedSize) {
-        this.resizeMaximized(window);
-      }
-      return;
     }
-    assert(user.symbols.SetWindowPlacement(window, ptr(placement)));
-    if (!visible) {
-      user.symbols.ShowWindow(window, SW_HIDE);
+    assert(user.symbols.SetWindowPlacement(window, ptr(update)));
+    if (maximized && recomputeMaximizedSize) {
+      // SW_SHOWMAXIMIZED cannot recalculate the size of an already zoomed HWND.
+      this.resizeMaximized(window);
     }
   }
 

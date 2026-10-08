@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 const WM_GETMINMAXINFO = 0x0024;
 const WM_DPICHANGED = 0x02e0;
 const WM_ACTIVATE = 0x0006;
+const WM_SHOWWINDOW = 0x0018;
 const GWL_STYLE = -16;
 const GWL_EXSTYLE = -20;
 const WINDOWPLACEMENT_SIZE = 44;
@@ -72,6 +73,7 @@ test.skipIf(process.platform !== "win32")(
     let window = 0n;
     let inputWindow = 0n;
     let targetActivations = 0;
+    let targetShows = 0;
     let failure: unknown;
 
     const clientPhysicalSize = (hwnd: bigint) => {
@@ -265,6 +267,9 @@ test.skipIf(process.platform !== "win32")(
         (message, wparam) => {
           if (message === WM_ACTIVATE && (wparam & 0xffffn) !== 0n) {
             targetActivations++;
+          }
+          if (message === WM_SHOWWINDOW && wparam !== 0n) {
+            targetShows++;
           }
         },
         false,
@@ -596,6 +601,37 @@ test.skipIf(process.platform !== "win32")(
       assert.equal(windowStyle(window), fullscreenStyle);
       assertLogicalClientSize(window, originalDpi, 620, 480);
       assert(user.symbols.IsWindowVisible(window));
+
+      for (const showState of [
+        SW_RESTORE,
+        SW_MINIMIZE,
+        SW_MAXIMIZE,
+      ]) {
+        user.symbols.ShowWindow(window, showState);
+        user.symbols.ShowWindow(window, SW_HIDE);
+        const minimized = user.symbols.IsIconic(window);
+        const maximized = user.symbols.IsZoomed(window);
+        targetShows = 0;
+        keepInputFocus(() => {
+          windows?.setSizeConstraints(window, {
+            minWidth: 650,
+            minHeight: 500,
+            maxWidth: 650,
+            maxHeight: 500,
+          });
+          sendDpiChanged(window, doubleDpi);
+          sendDpiChanged(window, originalDpi);
+          windows?.setFullscreen(window, true);
+          windows?.setFullscreen(window, false);
+        });
+        assert.equal(targetShows, 0, "Hidden window was briefly shown.");
+        assert.equal(user.symbols.IsWindowVisible(window), 0);
+        assert.equal(user.symbols.IsIconic(window), minimized);
+        assert.equal(user.symbols.IsZoomed(window), maximized);
+        assertPlacementLogicalSize(window, originalDpi, 650, 500);
+        user.symbols.ShowWindow(window, SW_RESTORE);
+        assertLogicalClientSize(window, originalDpi, 650, 500);
+      }
     } catch (error) {
       failure = error;
     }
