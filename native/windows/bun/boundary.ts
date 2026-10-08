@@ -336,6 +336,25 @@ export class ViewBoundary {
       reason,
     });
   }
+  fail(route: Route, error: WireError): void {
+    if (!this.matches(route) || !this.session) {
+      return;
+    }
+    for (const id of this.session.pending.keys()) {
+      this.error(id, error);
+    }
+    for (const subscriptionId of this.session.subscriptions.keys()) {
+      this.hooks.deliver(
+        serializeMessage({
+          kind: "subscription-error",
+          protocol: PROTOCOL_VERSION,
+          subscriptionId,
+          error,
+        }),
+      );
+    }
+    this.revoke(error.code);
+  }
   send(route: Route, message: ServerMessage) {
     if (!this.matches(route) || !this.session) {
       this.hooks.log("discarded", {
