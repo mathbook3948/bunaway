@@ -90,6 +90,8 @@ listener에는 payload와 공개 source, target, subscriptionId, sequence가 전
 listen 성공 응답에 비어 있지 않은 문자열 subscriptionId가 없으면 프로토콜 위반으로 연결을 닫는다.
 해당 listen과 나머지 진행 중 요청은 INTERNAL로 실패하며 활성 구독은 같은 오류의 onError로 끝낸다.
 취소나 호스트 기한 초과 뒤 도착한 listen 성공 응답에도 이 규칙을 적용한다.
+WebView 전송은 close 메시지로 호스트에 종료를 알리며 호스트는 해당 문서의 세션을 철회해 원격 구독과 요청도 정리한다.
+종료 알림 전송 실패 시 클라이언트 정리는 계속하며 원격 정리는 호스트의 연결 종료나 문서 폐기를 따른다.
 해제 함수는 연결이 이미 닫혔으면 네트워크 호출 없이 완료한다.
 사용자 콜백의 예외로 다른 요청이나 transport 수신 루프를 중단하지 않는다.
 

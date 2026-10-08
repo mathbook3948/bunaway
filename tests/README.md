@@ -7,6 +7,8 @@
 - `conformance/`: 네이티브 호스트 간 공통 계약.
 - `security/`: 권한, origin, 세션, 파일 범위.
 - `lifecycle/`: 종료, 재연결, 모바일 수명주기.
+  `webview-session.test.ts`는 WebView 전송, Windows 메시지 경계와 실제 Core를 연결해
+  잘못된 구독 응답과 클라이언트 종료 시 세션 철회, 원격 구독 제거와 명령 취소를 확인한다.
 - `docs/`: 문서 링크 검사기의 정상 입력, 잘못된 링크와 출력 경로 경계.
 
 Windows 호스트 시나리오는 `lifecycle/windows-host.ts`에 두고 PID 조회, 창 닫기와

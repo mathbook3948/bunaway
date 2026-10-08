@@ -688,7 +688,7 @@ class ClientSession<C extends CommandMap, E extends EventMap>
         this.failSubscription(message);
         break;
       default:
-        // Inbound hello/invoke/cancel/listen/unlisten have no allowed direction.
+        // Inbound hello/invoke/cancel/listen/unlisten/close have no allowed direction.
         this.terminate(VIOLATION);
     }
   }

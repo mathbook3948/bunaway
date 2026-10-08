@@ -136,6 +136,9 @@ class SessionImpl implements CoreSession {
       return;
     }
     switch (message.kind) {
+      case "close":
+        await this.close();
+        return;
       case "hello":
         await this.handleHello(message);
         return;

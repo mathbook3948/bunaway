@@ -673,13 +673,14 @@ public:
             if (!valid(messageSchema, message)) throw HostError("INVALID_ARGUMENT", "Rejected web message.");
             if (message["protocol"] != ipc) throw HostError("INVALID_ARGUMENT", "Protocol version mismatch.");
             auto kind = message["kind"].get<std::string>();
-            if (kind != "hello" && kind != "invoke" && kind != "cancel" && kind != "listen" && kind != "unlisten") {
+            if (kind != "hello" && kind != "invoke" && kind != "cancel" && kind != "listen" && kind != "unlisten" && kind != "close") {
                 throw HostError("INVALID_ARGUMENT", "Invalid web message direction.");
             }
             if (!ready) throw HostError("BUSY", "Backend is not ready.");
-            std::lock_guard lock(stateMutex);
+            std::unique_lock lock(stateMutex);
             Session* session = nullptr;
             if (activeContext.empty()) {
+                if (kind == "close") return;
                 if (kind != "hello") throw HostError("INVALID_ARGUMENT", "First web message must be hello.");
                 auto origin = originOf(sourceText);
                 if (origin.empty() || !view->origins.count(origin)) {
@@ -701,6 +702,11 @@ public:
                     hostLog->event("web-message-rejected", { { "reason", "source" }, { "source", sourceText } });
                     throw HostError("PERMISSION_DENIED", "Message source does not match the session document.");
                 }
+            }
+            if (kind == "close") {
+                lock.unlock();
+                revokeSession("client-close");
+                return;
             }
             if (kind == "hello") throw HostError("INVALID_ARGUMENT", "Duplicate hello.");
             if (kind != "cancel" && !session->negotiated) throw HostError("INVALID_ARGUMENT", "Session is not negotiated.");

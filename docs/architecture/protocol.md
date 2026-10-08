@@ -110,6 +110,7 @@ envelope에는 origin, frame, 권한 토큰이나 호출 컨텍스트를 넣을 
 | `cancel` | `id` | 같은 세션의 진행 중 요청 취소. 별도 응답은 없음 |
 | `listen` | `id`, `event` | UI → 코어, 성공 result의 payload는 `{ subscriptionId }` |
 | `unlisten` | `id`, `subscriptionId` | UI → 코어, 성공 result의 payload는 null |
+| `close` | 추가 필드 없음 | UI → 호스트 또는 코어, 해당 세션 종료. 별도 응답 없음 |
 | `result` | `id`, `payload` | 요청 성공 |
 | `error` | `id`, `error` | 요청 실패, 원래 요청의 한 번뿐인 종료 결과 |
 | `event` | `subscriptionId`, `source`, `target`, `event`, `sequence`, `payload` | 구독별 이벤트 |
@@ -130,6 +131,10 @@ ID는 세션 동안 재사용하지 않는다. 완료, 취소, 만료 뒤 늦게
 한 요청은 result 또는 error 한 번으로 끝난다. cancel 수신 때 원 요청이 진행 중이면
 CANCELLED로 끝내고, 이미 끝났으면 무시한다. 외부 부작용의 롤백이나 자동 재시도는 없다.
 탐색, 창 폐기, 재연결은 새 세션이며 이전 요청과 구독을 모두 무효화한다.
+WebView 전송의 close는 리스너 제거와 함께 close 메시지로 호스트에 종료를 알린다.
+호스트는 실제 발신 문서를 확인한 뒤 현재 문서의 세션을 revoke하며, 코어의 요청과 구독도 정리한다.
+close는 요청 ID나 임의 대상 컨텍스트를 받지 않으며 협상 전과 요청 큐 포화 때도 처리한다.
+이미 종료된 세션의 반복 알림은 무시한다. 종료 알림 전송 실패 시 원격 정리는 호스트의 연결 종료나 문서 폐기에 의존한다.
 Windows B 호스트의 `revoke`는 해당 컨텍스트의 대기 요청을 CANCELLED로 완료하고
 구독을 비운다. 이후 요청은 CANCELLED로 거부하고 늦은 응답, 이벤트는 폐기한다.
 늦은 listen 성공 응답으로 폐기한 컨텍스트의 구독을 복원하지 않는다.

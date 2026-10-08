@@ -875,6 +875,10 @@ test("malformed or wrong-direction inbound frames end the connection", async () 
   for (const raw of [
     "not json",
     JSON.stringify({
+      kind: "close",
+      protocol: hello.protocol,
+    }),
+    JSON.stringify({
       kind: "invoke",
     }),
   ]) {

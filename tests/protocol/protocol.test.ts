@@ -148,6 +148,10 @@ describe("protocol messages", () => {
         subscriptionId: "sub:1",
       },
       {
+        kind: "close",
+        protocol,
+      },
+      {
         kind: "result",
         protocol,
         id: "request:1",
