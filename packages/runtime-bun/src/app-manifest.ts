@@ -100,10 +100,31 @@ export function parseAppManifest(value: unknown): AppManifest {
     ...value,
     plugins: [],
   });
+  // Metadata must not consume the native contract's existing byte or depth budget.
+  const pluginSchema = manifestSchema.properties.plugins.items;
+  const plugins = value.plugins.map((plugin: unknown) => {
+    if (
+      !plugin ||
+      typeof plugin !== "object" ||
+      Array.isArray(plugin) ||
+      !("native" in plugin)
+    ) {
+      throw new Error("Invalid manifest plugin.");
+    }
+    const metadata = validateValue(pluginSchema, {
+      ...plugin,
+      native: {},
+    });
+    return {
+      ...metadata,
+      // NativeRegistry below validates this detached contract before it can be returned.
+      native: validateValue(
+        pluginSchema.properties.native,
+        plugin.native,
+      ) as unknown as NativePluginContract,
+    };
+  });
   // NativeRegistry validates the nested native contracts, including schemas and duplicate names.
-  const plugins = value.plugins.map((plugin: unknown) =>
-    validateValue(manifestSchema.properties.plugins.items, plugin),
-  ) as ManifestPlugin[];
   new NativeRegistry(plugins, {
     mode: "catalog",
   });

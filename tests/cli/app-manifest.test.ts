@@ -7,6 +7,10 @@ import { loadPluginCatalog } from "../../native/windows/bun/plugin-catalog.ts";
 import { writeJson } from "../../packages/cli/src/files.ts";
 import { writePluginAssets } from "../../packages/cli/src/plugins.ts";
 import {
+  MAX_MESSAGE_BYTES,
+  NativeRegistry,
+} from "../../packages/protocol/src/index.ts";
+import {
   parseAppManifest,
   readAppManifest,
 } from "../../packages/runtime-bun/src/app-manifest.ts";
@@ -196,4 +200,87 @@ test("installed manifest catalogs preserve per-plugin limits without a combined 
       developmentSdk: {},
     }).plugins,
   ).toHaveLength(3);
+});
+
+test("manifest generation and catalog loading preserve the native contract size boundary", async () => {
+  const assets = await mkdtemp(resolve(tmpdir(), "bunaway-manifest-boundary-"));
+  const output = {
+    const: "",
+  };
+  const native = {
+    operations: [
+      {
+        name: "example.read",
+        permission: "example:read",
+        input: {
+          const: null,
+        },
+        output,
+      },
+    ],
+    permissions: [
+      {
+        name: "example:read",
+      },
+    ],
+  };
+  // Fill the existing native contract budget exactly; manifest metadata must not consume it.
+  output.const = "x".repeat(
+    MAX_MESSAGE_BYTES - Buffer.byteLength(JSON.stringify(native)),
+  );
+  const plugin = {
+    name: "example",
+    version: "1",
+    native,
+    authorization: false,
+  };
+  const manifest = {
+    format: 1,
+    app: {},
+    policy: {},
+    plugins: [
+      plugin,
+    ],
+    developmentSdk: {},
+  };
+  try {
+    expect(
+      () =>
+        new NativeRegistry([
+          plugin,
+        ]),
+    ).not.toThrow();
+    expect(parseAppManifest(manifest).plugins[0]?.native).toEqual(native);
+    await writePluginAssets(assets, [
+      {
+        name: plugin.name,
+        version: plugin.version,
+        native,
+        packageName: "example",
+        root: assets,
+        targets: {},
+      },
+    ]);
+    expect((await readAppManifest(assets)).plugins[0]?.native).toEqual(native);
+    expect(
+      (
+        await loadPluginCatalog(assets, {
+          example: {},
+        })
+      )[0]?.native,
+    ).toEqual(native);
+    output.const += "x";
+    expect(
+      () =>
+        new NativeRegistry([
+          plugin,
+        ]),
+    ).toThrow();
+    expect(() => parseAppManifest(manifest)).toThrow();
+  } finally {
+    await rm(assets, {
+      recursive: true,
+      force: true,
+    });
+  }
 });

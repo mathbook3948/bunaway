@@ -1,7 +1,9 @@
 # Tests
 
 `cli/app-manifest.test.ts`는 Windows 실행 manifest의 형식과 계약 검증, 플러그인 제거 후
-재생성, 생성 import와 metadata 불일치를 검사한다. `cli/windows-assets.test.ts`는
+재생성, 생성 import와 metadata 불일치를 검사한다.
+manifest 생성과 카탈로그 로딩에서 native 계약의 크기 상한을 그대로 허용하고 초과는 거부하는지도 검사한다.
+`cli/windows-assets.test.ts`는
 원본 소스와 임시 자산을 삭제한 뒤에도 compiled EXE가 manifest와 플러그인 구현을
 읽고 지연 로딩을 유지하는지 검사한다.
 메인과 두 Worker에서 플러그인의 `BunawayError` 코드가 그대로 전달되는지도 확인한다.
