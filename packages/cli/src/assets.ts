@@ -246,7 +246,9 @@ export async function bundleWindowsHost(
           ? manifest.exports
           : undefined;
       const subpaths =
-        exports && typeof exports === "object"
+        exports &&
+        typeof exports === "object" &&
+        Object.keys(exports).some((key) => key.startsWith("."))
           ? Object.keys(exports)
           : [
               ".",
@@ -262,7 +264,14 @@ export async function bundleWindowsHost(
           subpath === "."
             ? plugin.packageName
             : plugin.packageName + subpath.slice(1);
-        const entry = await realpath(Bun.resolveSync(name, project));
+        let source: string;
+        try {
+          source = Bun.resolveSync(name, project);
+        } catch {
+          // Disabled exports are not shared; actual imports still fail in the app build.
+          continue;
+        }
+        const entry = await realpath(source);
         // Assets use Bun's loaders instead of the executable-module wrappers.
         if (/\.[cm]?[jt]sx?$/.test(entry) && !/\.d\.[cm]?ts$/.test(entry)) {
           sharedEntries.set(name, entry);

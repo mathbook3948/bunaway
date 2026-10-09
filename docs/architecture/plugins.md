@@ -67,6 +67,10 @@ SDK의 호출 함수는 연결, handshake, 취소, pagehide 정리와 기존 호
 아래 파일명은 관례이며 package.json의 exports와 plugin.json의 entry, operations에
 실제 경로를 지정한다. 별도의 contracts.ts, client.ts, authorization.ts를 요구하지 않는다.
 
+Windows 개발 번들은 `package.json`의 조건부 루트 `exports`도 공유 모듈로 처리한다.
+`null`로 차단했거나 Bun 조건에서 제공하지 않는 하위 경로는 공유 목록에서 제외한다.
+앱이 그런 경로를 실제로 import하면 번들 빌드를 실패로 처리한다.
+
 ```text
 plugins/<name>/
   package.json

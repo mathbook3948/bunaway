@@ -127,6 +127,94 @@ export default { commands: { read: { input: { const: null }, output: {}, async r
   }
 }, 60000);
 
+test.each([
+  "conditional-root",
+  "restricted-subpaths",
+])(
+  "plugin exports retain their identity across app reloads (%s)",
+  async (mode) => {
+    const home = await realpath(
+      await mkdtemp(resolve(tmpdir(), "bunaway-plugin-exports-reload-")),
+    );
+    try {
+      const project = await createProject(resolve(home, "app"));
+      await command(project, [
+        "install",
+      ]);
+      const pluginRoot = await installedPackageRoot(
+        project,
+        "@bunaway/plugin-storage",
+      );
+      const manifestPath = resolve(pluginRoot, "package.json");
+      const manifest = await json(manifestPath);
+      if (
+        !manifest ||
+        typeof manifest !== "object" ||
+        Array.isArray(manifest)
+      ) {
+        throw new Error("Invalid installed plugin fixture metadata.");
+      }
+      await writeJson(manifestPath, {
+        ...manifest,
+        exports:
+          mode === "conditional-root"
+            ? {
+                browser: "./src/index.ts",
+                bun: "./src/index.ts",
+                default: "./src/index.ts",
+              }
+            : {
+                ".": "./src/index.ts",
+                "./private": null,
+                "./browser": {
+                  browser: "./src/index.ts",
+                },
+              },
+      });
+      const appEntry = resolve(project, "src-bunaway/app.ts");
+      const source = `import plugin from "@bunaway/plugin-storage";
+export default { commands: { read: { input: { const: null }, output: {}, async run() { return "before"; } } }, events: {}, plugins: [plugin] };`;
+      await writeFile(appEntry, source);
+      const valid = await validateProject(project, {
+        development: true,
+      });
+      const assets = resolve(home, "assets");
+      await bundleWindowsAssets(valid, assets, false, true);
+      const initial = await import(
+        pathToFileURL(resolve(assets, "app.js")).href
+      );
+      const development = new DevelopmentApp(initial.default);
+      await writeFile(appEntry, source.replace('"before"', '"after"'));
+      const id = crypto.randomUUID();
+      await bundleWindowsReload(valid, assets, id);
+      const next = await import(
+        pathToFileURL(resolve(assets, "reloads", id, "app.js")).href
+      );
+      expect(await next.default.commands.read.run()).toBe("after");
+      expect(next.default.plugins[0]).toBe(initial.default.plugins[0]);
+      expect(development.replace(next.default)).toBe(true);
+      if (mode === "restricted-subpaths") {
+        await writeFile(
+          appEntry,
+          source.replace(
+            '"@bunaway/plugin-storage"',
+            '"@bunaway/plugin-storage/private"',
+          ),
+        );
+        await expect(
+          bundleWindowsReload(valid, assets, crypto.randomUUID()),
+        ).rejects.toThrow("Bundle failed");
+      }
+    } finally {
+      await rm(home, {
+        recursive: true,
+        force: true,
+      });
+    }
+  },
+  60000,
+);
+
 test("plugin declarations support custom entry paths and JSON exports and are read once per build", async () => {
   const home = await realpath(
     await mkdtemp(resolve(tmpdir(), "bunaway-plugin-exports-")),
