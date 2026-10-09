@@ -24,8 +24,19 @@ existing debt allows no unrelated rewrites.
   conditions when useful. Avoid nested ternaries and unrelated decisions in one condition; split by
   responsibility and reading flow, not line count.
 - Name non-obvious literals, domain limits and native flags; ordinary indices and obvious literals
-  need no constants. Comments explain reasons, invariants, ordering or external constraints. Keep
-  comments current, remove restatements, and follow `biome.json` for formatting.
+  need no constants. Follow `biome.json` for formatting.
+
+#### JSDoc and inline comments
+
+- Write comments so a first-time reader can follow the code's purpose and flow.
+- Use JSDoc for public APIs and important internal functions: explain their role and any non-obvious
+  inputs, results, failures and cleanup responsibilities. Do not repeat TypeScript types.
+- Use inline comments to explain processing stages, important ordering, invariants and external
+  constraints.
+- Skip obvious helpers and line-by-line narration. Missing explanations in complex code are a
+  readability issue even when names and types are clear.
+- Keep comments accurate when changing code, and document contracts at their original declaration
+  instead of copying them into implementations and re-exports.
 
 #### Responsibility and reuse
 
