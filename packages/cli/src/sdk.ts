@@ -37,7 +37,11 @@ export async function sdkPlugin(
   project: string,
   references: readonly SdkReference[] = [],
   plugins?: readonly InstalledPlugin[],
-): Promise<BunPlugin> {
+): Promise<
+  BunPlugin & {
+    entries: ReadonlyMap<string, string>;
+  }
+> {
   const root = await installedPackageRoot(project, "@bunaway/cli");
   const release = (await json(resolve(root, "framework.json"))) as {
     packages: Record<string, string>;
@@ -128,6 +132,7 @@ export async function sdkPlugin(
     await check(name, parent);
   }
   return {
+    entries,
     name: "pinned-bunaway-sdk",
     setup(build) {
       // Native sources use relative imports inside the CLI artifact. Resolve
@@ -177,16 +182,23 @@ export async function sdkPlugin(
   };
 }
 
+export interface SourceDependencies {
+  backendDependencies: string[];
+  frontendDependencies: string[];
+}
+
 export async function validateSdkGraph(
   project: string,
   references: readonly SdkReference[],
   sources: readonly string[],
   plugins?: readonly InstalledPlugin[],
-): Promise<string[]> {
+): Promise<SourceDependencies> {
   const plugin = await sdkPlugin(project, references, plugins);
-  const dependencies = new Set<string>();
+  const backendDependencies = new Set<string>();
+  const frontendDependencies = new Set<string>();
   for (const source of sources) {
     const frontend = (await lstat(source)).isDirectory();
+    const dependencies = frontend ? frontendDependencies : backendDependencies;
     const entrypoints = frontend
       ? (await files(source)).filter(
           (path) => /\.(ts|js)$/.test(path) && !path.endsWith(".d.ts"),
@@ -203,7 +215,7 @@ export async function validateSdkGraph(
     await buildWithSdk(
       {
         entrypoints,
-        metafile: !frontend,
+        metafile: true,
         ...(frontend
           ? {
               root: source,
@@ -225,9 +237,14 @@ export async function validateSdkGraph(
       },
     );
   }
-  return [
-    ...dependencies,
-  ].sort();
+  return {
+    backendDependencies: [
+      ...backendDependencies,
+    ].sort(),
+    frontendDependencies: [
+      ...frontendDependencies,
+    ].sort(),
+  };
 }
 
 export async function buildWithSdk(

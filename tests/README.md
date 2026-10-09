@@ -1,5 +1,11 @@
 # Tests
 
+`cli/restart-controller.test.ts`는 코드 교체 응답을 기다리는 중 받은 UI 변경의 즉시 무효화,
+연속 저장 대기와 종료 시 대기 취소를 검사한다. `cli/distribution.test.ts`는 설치한 CommonJS
+플러그인의 `.cjs`, `.js` 진입점을 실제로 번들하고 로드해 export와 교체 전후 객체 동일성을 검사한다.
+조건별 import/require 결과와 require 전용 진입점, 차단된 import 거부 및 setup 플러그인의
+바인딩 객체 재사용도 확인한다. Host API 테스트는 같은 플러그인을 재사용한 앱의 실행 컨텍스트가 독립적인지 검사한다.
+
 - `protocol/`: 직렬화, 버전 협상, 오류 계약.
 - `api/`: 모듈 공통 타입, 명령 input/output, Host API 컨텍스트, 취소, 오류 계약,
   클라이언트 기본 연결의 지연 초기화, 문서/HMR 공유, 구독 해제, 실패, 취소, 문서 종료 정리.
@@ -18,6 +24,14 @@ Windows 이벤트 전송 회귀는 실제 `MessageChannel`과 Core를 연결한�
 
 Windows 호스트 시나리오는 `lifecycle/windows-host.ts`에 두고 PID 조회, 창 닫기와
 프로세스 종료 감시는 `lifecycle/windows-host-processes.ts`에서 실행한다.
+`app-reload.test.ts`는 명령 교체 후 상태, 세션, 구독, 진행 중인 명령의 기존 구현과
+비공개 개발 IPC 입력 검증을 확인한다. 일반 경로와 별칭 경로에서 정상 번들을 교체하고,
+해시가 다르거나 세대 디렉터리 밖을 가리키는 번들은 거부하는지도 검사한다.
+`windows-app-reload.ts`는 생성하고 설치한 앱의
+실제 CLI 파일 감시와 WebView2를 사용해 소스 오류 중 기존 앱 유지, 수정 후 상태와
+화면 입력, 이벤트 순서, Host API, 오류 코드 보존, 계약 변경 시 전체 재시작을 검증한다.
+CLI 계약 테스트는 로컬 UI와 백엔드의 공유 파일 변경을 전체 재시작 대상으로 분류하고
+두 번들을 갱신하는지, JSON을 export하는 플러그인도 개발 번들에 포함할 수 있는지 확인한다.
 뷰 프로필 이름은 호스트의 순수 `view-profile.ts` 함수를 공유한다.
 macOS WebContent PID 조회와 종료는 `lifecycle/macos-renderer.ts`가 맡으며,
 `macos-host.ts`는 시나리오별 기준 PID와 테스트 순서를 유지한다.

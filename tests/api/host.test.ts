@@ -902,7 +902,14 @@ test("plugin setup descendants keep their own backend until shutdown, including 
         };
       },
     };
-    return createCore(app, services);
+    const currentApp = defineApp({
+      modules: [],
+      plugins: [
+        plugin,
+      ],
+    });
+    expect(currentApp.plugins?.[0]).toBe(app.plugins?.[0]);
+    return createCore(currentApp, services);
   }
   const first = await start("backend-first");
   const second = await start("backend-second");

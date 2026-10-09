@@ -1,9 +1,17 @@
-import { cp, mkdir, writeFile } from "node:fs/promises";
+import { cp, mkdir, realpath, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 import type { BunPlugin } from "bun";
 import type { Project } from "./config.ts";
 import { release } from "./distribution.ts";
-import { files, inside, installedPackageRoot } from "./files.ts";
+import {
+  files,
+  hash,
+  inside,
+  installedPackageRoot,
+  json,
+  writeJson,
+} from "./files.ts";
 import {
   type InstalledPlugin,
   installedPlugins,
@@ -227,10 +235,112 @@ export async function bundleWindowsHost(
       ? await installedPlugins(pluginProject, (await release()).version)
       : []);
   const sdk = project ? await sdkPlugin(project, [], plugins) : undefined;
+  const sharedEntries = new Map<string, string>();
+  if (development && sdk && project) {
+    const require = createRequire(resolve(project, "package.json"));
+    for (const entry of sdk.entries) {
+      sharedEntries.set(...entry);
+    }
+    for (const plugin of plugins) {
+      const manifest = await json(resolve(plugin.root, "package.json"));
+      const exports =
+        manifest && typeof manifest === "object" && "exports" in manifest
+          ? manifest.exports
+          : undefined;
+      const subpaths =
+        exports &&
+        typeof exports === "object" &&
+        Object.keys(exports).some((key) => key.startsWith("."))
+          ? Object.keys(exports)
+          : [
+              ".",
+            ];
+      for (const subpath of subpaths) {
+        if (
+          subpath !== "." &&
+          (!subpath.startsWith("./") || subpath.includes("*"))
+        ) {
+          continue;
+        }
+        const name =
+          subpath === "."
+            ? plugin.packageName
+            : plugin.packageName + subpath.slice(1);
+        for (const kind of [
+          "import",
+          "require",
+        ] as const) {
+          let source: string;
+          try {
+            source =
+              kind === "require"
+                ? require.resolve(name)
+                : Bun.resolveSync(name, project);
+          } catch {
+            // Disabled exports are not shared; actual imports still fail in the app build.
+            continue;
+          }
+          const entry = await realpath(source);
+          // Assets use Bun's loaders instead of the executable-module wrappers.
+          if (/\.[cm]?[jt]sx?$/.test(entry) && !/\.d\.[cm]?ts$/.test(entry)) {
+            sharedEntries.set(
+              kind === "require" ? `require:${name}` : name,
+              entry,
+            );
+          }
+        }
+      }
+    }
+  }
+  const sdkNames = new Map<string, string>();
+  const namesBySource = new Map<string, string>();
+  for (const [name, source] of sharedEntries) {
+    const entry = namesBySource.get(source) ?? `sdk${namesBySource.size}`;
+    namesBySource.set(source, entry);
+    sdkNames.set(name, entry);
+  }
+  const sdkSources = new Map(
+    [
+      ...namesBySource,
+    ].map(([path, name]) => [
+      `${name}.ts`,
+      path,
+    ]),
+  );
   const entries: BunPlugin = {
     name: "windows-app-entry",
     setup(build) {
       sdk?.setup(build);
+      build.onResolve(
+        {
+          filter: /^bunaway-development-sdk\//,
+        },
+        ({ path }) => ({
+          path: path.slice("bunaway-development-sdk/".length),
+          namespace: "development-sdk",
+        }),
+      );
+      build.onLoad(
+        {
+          filter: /.*/,
+          namespace: "development-sdk",
+        },
+        ({ path }) => {
+          const source = sdkSources.get(path);
+          if (!source) {
+            throw new Error("Unknown development SDK entry.");
+          }
+          // Bun's namespace also exposes the default created for CommonJS modules.
+          return {
+            contents: `export * from ${JSON.stringify(source)};
+import * as entry from ${JSON.stringify(source)};
+const defaultExport = Reflect.get(entry, "default");
+export { defaultExport as default };`,
+            loader: "ts",
+            resolveDir: dirname(source),
+          };
+        },
+      );
       build.onResolve(
         {
           filter: /(?:^|\/)plugin-table\.ts$/,
@@ -293,7 +403,10 @@ export async function bundleWindowsHost(
       );
     },
   };
-  const buildWindowsEntries = (entrypoints: string[]) =>
+  const buildWindowsEntries = (
+    entrypoints: string[],
+    onMetadata?: (metadata: Bun.BuildMetafile | undefined) => void,
+  ) =>
     buildWithSdk(
       {
         entrypoints,
@@ -302,13 +415,35 @@ export async function bundleWindowsHost(
         splitting: true,
         naming: "[name].[ext]",
         sourcemap: development ? "inline" : "none",
+        metafile: onMetadata !== undefined,
       },
       entries,
+      onMetadata,
     );
-  const artifacts = await buildWindowsEntries([
-    resolve(source, "boot.ts"),
-    "bunaway-windows-app/app.ts",
-  ]);
+  const commonJsSources = new Set<string>();
+  const artifacts = await buildWindowsEntries(
+    [
+      resolve(source, "boot.ts"),
+      "bunaway-windows-app/app.ts",
+      ...[
+        ...namesBySource.values(),
+      ].map((name) => `bunaway-development-sdk/${name}.ts`),
+    ],
+    sharedEntries.size
+      ? (metadata) => {
+          for (const [path, input] of Object.entries(metadata?.inputs ?? {})) {
+            if (input.format === "cjs") {
+              // Bun 1.4.2 prefixes cross-drive Windows inputs with ../ before the drive path.
+              const inputPath =
+                process.platform === "win32"
+                  ? path.replace(/^(?:\.\.\/)+(?=[A-Za-z]:\/)/, "")
+                  : path;
+              commonJsSources.add(resolve(inputPath));
+            }
+          }
+        }
+      : undefined,
+  );
   if (
     ![
       "boot.js",
@@ -335,6 +470,23 @@ export async function bundleWindowsHost(
   for (const output of artifacts) {
     await saveOutput(output);
   }
+  if (sharedEntries.size) {
+    const inventory: Record<string, string> = {};
+    for (const [name, entry] of sdkNames) {
+      const source = sharedEntries.get(name);
+      if (source && commonJsSources.has(source)) {
+        // A raw CJS entry exposes dynamic named exports that an ESM barrel cannot enumerate.
+        inventory[name] = `${entry}.cjs`;
+        await writeFile(
+          resolve(destination, `${entry}.cjs`),
+          `module.exports = require("./${entry}.js").default;\n`,
+        );
+      } else {
+        inventory[name] = `${entry}.js`;
+      }
+    }
+    await writeJson(resolve(destination, "development-sdk.json"), inventory);
+  }
   for (const name of [
     "ui",
     "host-operations",
@@ -349,4 +501,91 @@ export async function bundleWindowsHost(
   return [
     ...bundledAssets,
   ].sort();
+}
+
+export async function bundleWindowsReload(
+  project: Project,
+  assets: string,
+  id: string,
+): Promise<string> {
+  const entries = await json(resolve(assets, "development-sdk.json"));
+  if (!entries || typeof entries !== "object" || Array.isArray(entries)) {
+    throw new Error("Missing development SDK inventory; restart bunaway dev.");
+  }
+  const aliases = new Map<string, string>();
+  for (const [name, entry] of Object.entries(entries)) {
+    if (typeof entry !== "string" || !/^sdk[0-9]+\.(?:js|cjs)$/.test(entry)) {
+      throw new Error("Invalid development SDK inventory.");
+    }
+    aliases.set(name, entry);
+  }
+  const sdk = await sdkPlugin(project.root, [], project.nativePlugins);
+  const sources = new Map(
+    [
+      ...sdk.entries,
+    ].map(([name, path]) => [
+      path,
+      name,
+    ]),
+  );
+  const outputs = await buildWithSdk(
+    {
+      entrypoints: [
+        project.appEntry,
+      ],
+      target: "bun",
+      packages: "bundle",
+      splitting: false,
+      sourcemap: "inline",
+      naming: "app.js",
+    },
+    {
+      name: "retained-development-sdk",
+      setup(build) {
+        build.onResolve(
+          {
+            filter: /.*/,
+          },
+          ({ path, importer, kind }) => {
+            let name = aliases.has(path)
+              ? path
+              : sources.get(
+                  resolve(dirname(importer || project.appEntry), path),
+                );
+            if (
+              (kind === "require-call" || kind === "require-resolve") &&
+              project.nativePlugins?.some(
+                ({ packageName }) =>
+                  path === packageName || path.startsWith(`${packageName}/`),
+              )
+            ) {
+              name = `require:${path}`;
+            }
+            const entry = name === undefined ? undefined : aliases.get(name);
+            return entry
+              ? {
+                  path: `../../${entry}`,
+                  external: true,
+                }
+              : undefined;
+          },
+        );
+        sdk.setup(build);
+      },
+    },
+  );
+  const directory = resolve(assets, "reloads", id);
+  if (!/^[a-f0-9-]{36}$/.test(id)) {
+    throw new Error("Invalid app reload generation.");
+  }
+  await mkdir(directory, {
+    recursive: true,
+  });
+  for (const output of outputs) {
+    await writeFile(
+      resolve(directory, basename(output.path)),
+      await bundleBytes(output, true),
+    );
+  }
+  return hash(resolve(directory, "app.js"));
 }

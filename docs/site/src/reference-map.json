@@ -49,7 +49,10 @@
           "developmentPolicy",
           "verifyDevelopmentLaunch",
           "developmentWindowHome",
-          "verifyDevelopmentToolsLaunch"
+          "verifyDevelopmentToolsLaunch",
+          "readAppReloadRequest",
+          "readAppReloadResult",
+          "MAX_APP_RELOAD_MESSAGE_CHARS"
         ]
       }
     },
@@ -525,6 +528,7 @@
           "frontend",
           "buildCommand",
           "backendDependencies",
+          "frontendDependencies",
           "nativePlugins",
           "bundle",
           "dev",

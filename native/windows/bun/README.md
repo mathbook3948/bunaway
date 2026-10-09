@@ -87,6 +87,13 @@ F12 또는 Ctrl+Shift+I로 DevTools를 연다. 개발 모드는 서버 URL 설�
 개발 UI, 앱, 호스트와 Worker 번들에는 inline 소스맵을 생성한다. 자세한 사용법은
 [디버깅 가이드](../../../docs/site/src/content/docs/guides/debugging.mdx)를 따른다.
 
+CLI가 연결한 개발 IPC는 `app-reload.ts`가 소유하며 검증한 세대 디렉터리의 앱 번들을
+로드한다. `development-app.ts`는 호환되는 앱 명령 구현만 교체하고 코어와 StateStore,
+세션, 구독, 창과 Worker는 유지한다. 기존 요청은 기존 구현으로 완료한다.
+SDK는 시작 시의 공통 번들을 재사용하며 계약, 플러그인 객체, 상태 초기값이나 실행 설정
+변경은 전체 재시작한다. 일반 빌드는 교체 IPC를 연결하지 않는다.
+공유 플러그인 모듈은 ES modules와 CommonJS의 default export와 이름 있는 export를 유지한다.
+
 실패한 로그 기록은 다시 시도하지 않는다. 쓰기 실패는 해당 호출에만 전달하며 이후 기록은 계속 처리한다. drain()은 대기 중인 기록 처리가 끝날 때까지 기다린다.
 
 ## Public window operations

@@ -75,6 +75,7 @@ export interface Project {
   frontend: string;
   buildCommand?: string[];
   backendDependencies?: string[];
+  frontendDependencies?: string[];
   nativePlugins?: readonly InstalledPlugin[];
   bundle?: PackagingConfig;
   dev?: DevServerConfig;
@@ -296,6 +297,7 @@ async function loadProject(
   const {
     root: frameworkRoot,
     backendDependencies,
+    frontendDependencies,
     plugins,
   } = await validateFramework(
     root,
@@ -439,6 +441,7 @@ async function loadProject(
     appEntry,
     frontend,
     backendDependencies,
+    frontendDependencies,
     nativePlugins: plugins,
     ...(settings.bundle
       ? {
