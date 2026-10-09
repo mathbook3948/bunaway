@@ -197,6 +197,7 @@ if (!process.argv.includes("--child")) {
           if (event.event === "quitting") {
             quitCount++;
             if (devPending) {
+              // Force shutdown with beforeQuit pending to test the CLI override.
               assert.equal(await closeWindowsApp(child.pid), 1);
             }
           }
@@ -233,6 +234,7 @@ if (!process.argv.includes("--child")) {
             hidden = true;
             assert.equal(api.symbols.IsWindowVisible(hwnd), 0);
             assert.equal(child.exitCode, null);
+            // Forward while hidden to verify that the same view reopens.
             await forwardToInstance(
               instanceAddress(resolve(root, `data-${child.pid}`)),
               {
@@ -248,6 +250,7 @@ if (!process.argv.includes("--child")) {
             vetoed = true;
             assert(api.symbols.IsWindow(hwnd));
             assert.equal(child.exitCode, null);
+            // Forward while vetoed to verify that the same host stays available.
             await forwardToInstance(
               instanceAddress(resolve(root, `data-${child.pid}`)),
               {

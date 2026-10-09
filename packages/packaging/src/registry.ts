@@ -5,6 +5,7 @@ import type { ChannelId, PackageAdapter } from "./contract.ts";
 // new file plus a registration call.
 const adapters = new Map<ChannelId, PackageAdapter>();
 
+/** Registers one adapter per channel; duplicate registrations are errors. */
 export function registerAdapter(adapter: PackageAdapter): void {
   if (adapters.has(adapter.channel)) {
     throw new Error(
@@ -14,10 +15,14 @@ export function registerAdapter(adapter: PackageAdapter): void {
   adapters.set(adapter.channel, adapter);
 }
 
+/**
+ * Returns the adapter for this channel, or undefined when none is registered.
+ */
 export function adapterFor(channel: ChannelId): PackageAdapter | undefined {
   return adapters.get(channel);
 }
 
+/** Lists registered channel IDs in stable sorted order. */
 export function registeredChannels(): ChannelId[] {
   return [
     ...adapters.keys(),

@@ -172,6 +172,7 @@ const exited = new Promise<number>((resolve) =>
     resolve(code);
   }),
 );
+// Keep backend work observable while the UI thread enters native modal loops.
 const timer = setInterval(() => {
   ticks++;
   const active = Atomics.load(counters, 0) === 1;

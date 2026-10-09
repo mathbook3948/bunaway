@@ -48,6 +48,10 @@ export function platformOf(channel: ChannelId): PlatformId {
   return channel.startsWith("win-") ? "windows" : "macos";
 }
 
+/**
+ * Resolves the supported build target for a platform and architecture.
+ * Throws when the combination has no build artifact.
+ */
 export function targetFor(platform: PlatformId, arch: string): BuildTarget {
   if (platform === "windows" && arch === "x64") {
     return "windows-x64";
@@ -205,8 +209,11 @@ export interface PackageManifest {
   [key: string]: unknown;
 }
 
-// Bun uses only packagedSha256/executableSha256, matching both native hosts.
-// Host entries without executableSha256 retain their sha256/sourceSha256 fallback.
+/**
+ * Returns the digest of the bytes that should be checked at runtime.
+ * Packaged bytes take precedence after signing; legacy host entries keep their
+ * `sha256` and `sourceSha256` fallbacks.
+ */
 export function packagedDigest(entry: {
   executableSha256?: string;
   sourceSha256?: string;
@@ -231,6 +238,11 @@ export type SigningRequirement =
   | "required-to-run"
   | "required-to-submit";
 
+/**
+ * Channel-specific packaging behavior. Stages run in order after the shared
+ * runner validates inputs; `stages` may reject configuration before adapter
+ * stages run.
+ */
 export interface PackageAdapter {
   readonly channel: ChannelId;
   readonly platform: PlatformId;
@@ -246,6 +258,11 @@ export interface AdapterStage {
   run(ctx: StageContext): Promise<void>;
 }
 
+/**
+ * Resources and reporting hooks supplied to one adapter stage. The runner
+ * owns the staging directory and publishes it only after stages and output
+ * checks succeed.
+ */
 export interface StageContext {
   input: AdapterInput;
   // Runner-owned staging directory. Everything the package needs goes here —
@@ -284,6 +301,11 @@ export interface StageResult {
   durationMs: number;
 }
 
+/**
+ * Result of a packaging run. `ok` reports pipeline success; `usable` also
+ * applies the channel's run-signing rule; `submittable` requires a successful
+ * run, at least one distributable artifact, and signatures on all of them.
+ */
 export interface PackageReport {
   channel: ChannelId;
   target: BuildTarget;

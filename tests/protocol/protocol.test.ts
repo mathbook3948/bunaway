@@ -51,6 +51,7 @@ function utf8Bytes(value: string): number {
 }
 
 function messageTextAtBytes(size: number, prefix = ""): string {
+  // Fix the envelope and pad the payload to generate exact UTF-8 byte counts.
   const base = JSON.stringify(invoke(""));
   const marker = '"payload":';
   const valueStart = base.indexOf(marker) + marker.length;

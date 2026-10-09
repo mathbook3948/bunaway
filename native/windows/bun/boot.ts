@@ -33,6 +33,7 @@ function object(value: unknown): Record<string, unknown> {
   );
   return value as Record<string, unknown>;
 }
+/** Returns LocalAppData and releases its Win32 path buffer and DLL handles. */
 function localAppData() {
   const shell = dlopen("shell32.dll", {
     SHGetKnownFolderPath: {
@@ -77,6 +78,10 @@ function localAppData() {
   }
 }
 
+/**
+ * Validates a packaged or development app and resolves host paths
+ * and runtime settings. Rejects unsupported platforms and Bun builds.
+ */
 export async function verifyWindowsPackage(
   directory: string,
   developmentUrl?: string,
@@ -168,6 +173,7 @@ if (import.meta.main) {
       argv: developmentUrl ? args.slice(2) : args,
       cwd: process.cwd(),
     });
+    // Claim this data directory before importing app code.
     try {
       containAppProcess(config.dataRoot);
     } catch (error) {
@@ -203,6 +209,10 @@ if (import.meta.main) {
   }
 }
 
+/**
+ * Persists startup failures when possible, then shows a Windows dialog.
+ * If logging fails, the original error text still appears there.
+ */
 export async function reportWindowsFailure(
   error: unknown,
   dataRoot: string | undefined,

@@ -14,6 +14,9 @@ export const expectedCapabilityNames = [
   ...nativePlugins.operations.keys(),
 ];
 
+/**
+ * Match every operation and mark Windows window operations unsupported on macOS.
+ */
 export function matchesCapabilities(value: unknown, platform: string): boolean {
   if (
     !Array.isArray(value) ||

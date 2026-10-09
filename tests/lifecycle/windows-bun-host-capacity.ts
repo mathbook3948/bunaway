@@ -20,6 +20,7 @@ type Envelope = {
   packet: Packet;
 };
 const workers: TestWorker[] = [];
+/** Models a Worker whose operation and cancellation acknowledgements can be delayed independently. */
 class TestWorker extends EventEmitter {
   private sequence = 0;
   readonly runtime: RuntimeIdentity;
@@ -50,6 +51,7 @@ class TestWorker extends EventEmitter {
       packet,
     });
   }
+  /** Acknowledges only held messages of this kind and retains the others. */
   release(kind: Packet["kind"]) {
     for (const envelope of this.held.splice(0)) {
       if (envelope.packet.kind === kind) {
@@ -170,6 +172,7 @@ const busy = () =>
     (error: unknown) => error instanceof BunawayError && error.code === "BUSY",
   );
 try {
+  // Capacity returns only after both Workers acknowledge a cancelled call.
   const pending = Array.from(
     {
       length: API_LIMITS.maxPending,

@@ -35,6 +35,7 @@ async function test(name, body) {
 }
 
 function loadElement(kind, url) {
+  // Remove the temporary element on either outcome so the next probe is isolated.
   return new Promise((resolve, reject) => {
     const element = document.createElement(kind);
     const timer = setTimeout(() => {

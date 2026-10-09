@@ -50,6 +50,7 @@ test.skipIf(process.platform !== "win32")(
       }
     }, 10000);
     try {
+      // Keep the first owner alive while the duplicate attempts the same path.
       const owner = start(root, true);
       await owns(owner);
       const duplicate = start(root.toUpperCase());

@@ -31,6 +31,7 @@ test("memo example installs and bundles as a standalone CLI app with one view", 
           source,
         ),
     });
+    // Keep package downloads inside this temporary project tree for cleanup.
     const command = async (args: string[]) => {
       const child = Bun.spawn(
         [

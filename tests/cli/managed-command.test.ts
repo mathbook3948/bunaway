@@ -21,6 +21,7 @@ test.each([
     const abort = new AbortController();
     const timer = setTimeout(() => abort.abort(), 10000);
     const server = `Bun.serve({hostname:'127.0.0.1', port:${port}, fetch:()=>new Response('descendant')});`;
+    // The root exits after this child binds, leaving cleanup responsible for the listener.
     const command = `
     Bun.spawn([process.execPath, '-e', ${JSON.stringify(server)}], {stdin:'ignore', stdout:'inherit', stderr:'inherit'});
     const deadline = Date.now() + 5000;
@@ -109,6 +110,7 @@ test.each([
         abort.signal,
         frameworkRoot,
       );
+      // Hold the rejection until fixture startup or cancellation observes it below.
       void result.catch(() => {});
       try {
         if (outcome === "cancel") {

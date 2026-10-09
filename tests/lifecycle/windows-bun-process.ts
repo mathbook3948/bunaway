@@ -46,6 +46,7 @@ if (process.argv.includes("--validate")) {
     .map((pid) => api.symbols.OpenProcess(0x100000, 0, Number(pid)));
   assert(handles.length && handles.every(Boolean));
   try {
+    // The parent starts killing renderers only after these handles are open.
     console.log("watch-ready");
     const deadline = Date.now() + 60000;
     while (

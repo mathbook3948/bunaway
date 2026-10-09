@@ -9,6 +9,7 @@ const initial = [
   process.listenerCount("SIGINT"),
   process.listenerCount("SIGTERM"),
 ];
+// Compare against the baseline after cancellation to catch leaked CLI handlers.
 // Windows process.kill terminates a process instead of delivering a console
 // event. Emit the same Node signal event there; POSIX tests send a real signal.
 const timer =

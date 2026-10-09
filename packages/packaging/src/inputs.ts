@@ -14,10 +14,11 @@ import {
   platformOf,
 } from "./contract.ts";
 
-// Locates the channel-neutral artifact produced by `bunaway build`.
-// Windows: dist/windows-x64/{<app>.exe, WebView2Loader.dll, licenses/, manifest.json}.
-// macOS: dist/macos-arm64/<appId>.app with the package root at
-// Contents/Resources. Adapters must treat these files as read-only.
+/**
+ * Computes paths for the channel-neutral artifact produced by `bunaway build`.
+ * Windows uses `dist/windows-x64`; macOS uses the app bundle's
+ * `Contents/Resources` as its package root. Adapters must treat it as read-only.
+ */
 export function artifactPaths(args: {
   root: string;
   target: BuildTarget;
@@ -77,6 +78,7 @@ async function inputPath(
       `Build input is missing or not a regular ${directory ? "directory" : "file"}: ${path}`,
     );
   }
+  // A lexical path can escape through a symlink, so check its real target too.
   const canonicalRoot = await realpath(root);
   const canonicalPath = await realpath(path);
   if (!inside(canonicalRoot, canonicalPath)) {
@@ -260,6 +262,7 @@ function bundleMetadata(xml: string): Map<string, XmlNode> {
   return plistDictionary(plist[0]);
 }
 
+/** Validates manifest structure and asset paths before file checks. */
 function validateManifest(value: unknown): asserts value is PackageManifest {
   if (
     !isRecord(value) ||
@@ -333,6 +336,7 @@ const REQUIRED_ASSETS = {
   ],
 };
 
+/** Resolves a host-owned home URL to its path under the packaged web assets. */
 function homeAsset(value: unknown): string {
   if (!isIdentity(value)) {
     throw new ArtifactInputError(
@@ -379,6 +383,10 @@ function homeAsset(value: unknown): string {
   return `assets/web/${name}`;
 }
 
+/**
+ * Reads and validates the build manifest before adapters receive it.
+ * Throws when the manifest is missing, malformed, or outside the artifact root.
+ */
 export async function loadManifest(
   artifact: BuildArtifact,
 ): Promise<PackageManifest> {
@@ -402,10 +410,11 @@ async function sha256(path: string): Promise<string> {
     .digest("hex");
 }
 
-// The built-in verify stage: re-hashes every asset the manifest lists plus the
-// bundled runtime before an adapter is allowed to stage anything. Missing
-// files and digest mismatches are diagnosed separately so tampering cannot
-// masquerade as a missing input.
+/**
+ * Checks artifact paths, required inputs, metadata and recorded digests before
+ * an adapter can stage files. Failures are returned as diagnostics, with
+ * missing inputs distinguished from hash or path tampering.
+ */
 export async function verifyArtifact(args: {
   artifact: BuildArtifact;
   manifest: PackageManifest;

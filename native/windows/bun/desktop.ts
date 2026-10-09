@@ -8,6 +8,11 @@ import type {
 } from "../../../packages/core/src/index.ts";
 import type { LaunchArguments } from "./instance.ts";
 
+/**
+ * Splits launch arguments into an immutable request.
+ * Relative files resolve against the launch directory.
+ * Arguments after -- are positional.
+ */
 export function openRequest(
   input: LaunchArguments,
   source: OpenRequest["source"],
@@ -52,6 +57,7 @@ export function openRequest(
   });
 }
 
+/** Serializes open callbacks and runs the app's before-quit shutdown gate. */
 export class DesktopLifecycle {
   readonly context: DesktopContext;
   private quitting: Promise<boolean> | undefined;
@@ -95,6 +101,11 @@ export class DesktopLifecycle {
       quit: () => this.quit("api"),
     });
   }
+  /**
+   * Queues an open callback, showing the app first for second instances.
+   * Reports callback errors and keeps processing later opens.
+   * Throws if stopped or full.
+   */
   open(input: LaunchArguments, source: OpenRequest["source"]): void {
     if (this.stopped || this.pending >= 64) {
       throw new Error("Desktop open queue unavailable");
@@ -115,6 +126,10 @@ export class DesktopLifecycle {
         this.pending--;
       });
   }
+  /**
+   * Shares concurrent quit checks.
+   * Returns false if before-quit vetoes or fails.
+   */
   quit(reason: QuitReason): Promise<boolean> {
     if (this.stopped) {
       return Promise.resolve(true);
@@ -143,6 +158,7 @@ export class DesktopLifecycle {
       });
     return this.quitting;
   }
+  /** Prevents a pending before-quit check from initiating another shutdown. */
   dispose() {
     this.stopped = true;
   }

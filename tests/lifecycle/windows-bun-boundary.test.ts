@@ -1186,6 +1186,7 @@ test("multiple views share cancellation capacity until all cancellation acknowle
           origin: (text) => new URL(text).origin,
           source: () => source,
           ready: () => true,
+          // Cancellation capacity is shared across views, so include all reservations.
           capacity: (count) =>
             channel.canSend(
               count,

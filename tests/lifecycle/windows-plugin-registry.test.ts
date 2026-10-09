@@ -231,6 +231,7 @@ test("shutdown and initialization failure clean every prepared adapter in revers
       version,
       native,
     }));
+  // The second disposer throws, so cleanup must still reach the first adapter.
   const adapters = await operations(
     registrations(),
     ".",
@@ -446,6 +447,7 @@ test("capability queries include every operation at the native registry limit", 
     name: "catalog",
     version: "1",
     native: {
+      // Leave the final registry slot for the built-in capabilities operation.
       operations: Array.from(
         {
           length: 255,

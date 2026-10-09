@@ -3,6 +3,7 @@ $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path
 $pin = Get-Content -LiteralPath (Join-Path $root 'runtime/build-manifests/windows-x64.json') -Raw | ConvertFrom-Json
 $sdk = (Get-Content -LiteralPath (Join-Path $PSScriptRoot 'deps.json') -Raw | ConvertFrom-Json).webview2Sdk
+# VerifyOnly requires existing artifacts and never downloads or unpacks dependencies.
 function Fetch([string]$Url, [string]$Path, [string]$Expected) {
     if (!(Test-Path -LiteralPath $Path)) {
         if ($VerifyOnly) { throw "Missing dependency: $Path" }

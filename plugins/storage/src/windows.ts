@@ -50,6 +50,7 @@ const FILE_FLAG_BACKUP_SEMANTICS = 0x02000000;
 const DIRECTORY_OPEN_FLAGS =
   FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS;
 
+/** Create the I/O adapter and tie native binding cleanup to its host lifecycle. */
 export function createOperations(
   environment: NativeEnvironment,
 ): NativeAdapter {
@@ -166,12 +167,14 @@ function fail(message: string, code = api.symbols.GetLastError()): never {
   }
   throw new Error(`${message} (${code})`);
 }
+/** Convert a Win32 FILETIME to epoch milliseconds; zero means unavailable. */
 function fileTimeMs(info: Buffer, offset: number): number | null {
   const ticks = info.readBigUInt64LE(offset);
   return ticks === 0n
     ? null
     : Number(ticks / FILETIME_TICKS_PER_MS - WINDOWS_EPOCH_OFFSET_MS);
 }
+/** Convert handle information to the public metadata shape. */
 function metadata(info: Buffer): StorageMetadata {
   const times = {
     createdAtMs: fileTimeMs(info, FILE_CREATION_TIME_OFFSET),
@@ -199,6 +202,8 @@ function metadata(info: Buffer): StorageMetadata {
 }
 export class ScopedStorage {
   private readonly roots: Record<StorageLocation["scope"], string>;
+
+  /** Create app data and temp roots, rejecting roots that are reparse points. */
   constructor(dataRoot: string) {
     const root = (name: string) => {
       const path = resolve(dataRoot, name);
@@ -285,6 +290,10 @@ export class ScopedStorage {
     }
     return text.subarray(0, length * WCHAR_BYTES).toString("utf16le");
   }
+  /**
+   * Check a relative path against pinned handles before reading or writing it.
+   * Missing metadata targets return `false` for exists and `null` for stat.
+   */
   execute(operation: string, input: StorageLocation | StorageWrite): JsonValue {
     const { scope, path } = input;
     const queryingMetadata =
@@ -406,6 +415,7 @@ export class ScopedStorage {
       }
       const transferred = new Uint32Array(1);
       if (text !== undefined) {
+        // Write in bounded chunks, then truncate so a shorter replacement leaves no old tail.
         const bytes = Buffer.from(text);
         let offset = 0;
         while (offset < bytes.length) {
@@ -447,10 +457,12 @@ export class ScopedStorage {
     }
   }
 }
+/** Release the module-level Win32 bindings when the storage adapter is disposed. */
 export function disposeStorageBindings() {
   api.close();
 }
 
+/** Read and strictly decode a bounded UTF-8 file; the caller retains handle ownership. */
 export function readStorageText(file: bigint, size: number): string {
   if (
     !Number.isSafeInteger(size) ||

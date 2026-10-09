@@ -8,6 +8,7 @@ await runBunApp({
       name: "startup",
       version: "1",
       async setup(context) {
+        // The parent tests use these setup and teardown markers to coordinate runtime shutdown.
         await context.host.call(contracts["log.write"], {
           level: "info",
           message: "startup",

@@ -2,7 +2,7 @@ import { BunawayError } from "@bunaway/protocol";
 
 export type RegistrationKind = "command" | "event";
 
-// Match Core's registration contract; Core still validates raw AppDefinitions.
+/** Applies Core's name format at builder time; Core also checks raw app definitions. */
 export function checkName(
   name: string,
   kind: RegistrationKind | "module",
@@ -16,6 +16,7 @@ export function checkName(
   }
 }
 
+/** Validates a name, rejects reserved command names and reports duplicate owners. */
 export function claimName(
   owners: Map<string, string>,
   name: string,

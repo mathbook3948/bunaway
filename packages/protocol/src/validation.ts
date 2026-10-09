@@ -1,3 +1,4 @@
+/** JSON data accepted by the protocol, with no JavaScript-only values. */
 export type JsonValue =
   | null
   | boolean
@@ -8,8 +9,11 @@ export type JsonValue =
       [key: string]: JsonValue;
     };
 
-// Only the keywords used by schema.ts are supported. Native consumers use the
-// exported JSON Schema plus the transport limits described in protocol.md.
+/**
+ * The JSON Schema subset understood by this package and its native consumers.
+ * Native consumers also enforce the exported transport limits. Native plugin
+ * registration rejects unsupported keywords instead of silently ignoring them.
+ */
 export type Schema = {
   readonly $schema?: string;
   readonly type?: "object" | "array" | "string" | "integer" | "boolean";
@@ -87,6 +91,7 @@ type RefineObjects<S, V> = S extends {
       : V
     : V;
 
+/** Derives the TypeScript value shape described by a protocol schema. */
 export type Infer<S> = RefineObjects<
   S,
   S extends {
@@ -133,11 +138,14 @@ type InferShape<S> = S extends {
               ? InferObject<S>
               : unknown;
 
+/** Maximum UTF-8 size accepted for one protocol value or serialized message. */
 export const MAX_MESSAGE_BYTES = 1_048_576;
+/** Maximum number of nested JSON containers accepted by validation. */
 export const MAX_JSON_DEPTH = 64;
 // Unicode mode matches lone UTF-16 surrogates, but leaves valid pairs intact.
 const loneSurrogate = /[\uD800-\uDFFF]/u;
 
+/** Reports malformed input or a schema/value mismatch with a safe public message. */
 export class ProtocolError extends Error {
   constructor(
     public readonly code: "INVALID_ARGUMENT" | "UNSUPPORTED",
@@ -176,6 +184,7 @@ export function utf8Size(value: string): number {
   return size;
 }
 
+/** Copies untrusted values into bounded JSON data, rejecting cycles and accessors. */
 function snapshotJson(
   value: unknown,
   ancestors: Set<object>,
@@ -303,6 +312,7 @@ function jsonKey(value: JsonValue): string {
     .join(",")}}`;
 }
 
+/** Applies the supported schema keywords to an already checked JSON snapshot. */
 function matches(schema: Schema, value: JsonValue): boolean {
   if ("const" in schema && value !== schema.const) {
     return false;
@@ -388,6 +398,10 @@ function checkedSnapshot<S extends Schema>(
   }
 }
 
+/**
+ * Validates a value and returns a detached JSON snapshot.
+ * @throws {ProtocolError} If the value is invalid or outside protocol limits.
+ */
 export function validate<S extends Schema>(
   schema: S,
   value: unknown,
@@ -395,6 +409,10 @@ export function validate<S extends Schema>(
   return checkedSnapshot(schema, value, "value");
 }
 
+/**
+ * Parses JSON text, checks its schema and limits, and returns its validated snapshot.
+ * @throws {ProtocolError} If parsing, schema validation, or a protocol limit fails.
+ */
 export function parse<S extends Schema>(schema: S, text: string): Infer<S> {
   if (typeof text !== "string" || utf8Size(text) > MAX_MESSAGE_BYTES) {
     invalid();
@@ -408,6 +426,10 @@ export function parse<S extends Schema>(schema: S, text: string): Infer<S> {
   return validate(schema, value);
 }
 
+/**
+ * Validates a value before encoding it as size-limited JSON text.
+ * @throws {ProtocolError} If validation or serialization limits fail.
+ */
 export function serialize<S extends Schema>(schema: S, value: unknown): string {
   const snapshot = checkedSnapshot(schema, value, "serialized");
   const text = JSON.stringify(snapshot);

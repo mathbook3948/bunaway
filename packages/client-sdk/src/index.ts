@@ -28,14 +28,21 @@ import { defaultClient } from "./default-client.ts";
 
 export { createWebViewTransport, type WebViewBridge } from "./webview.ts";
 
+/** Controls cancellation and the absolute execution deadline for one command. */
 export type InvokeOptions = {
+  /** Cancels locally; a dispatched request also sends a best-effort cancel frame. */
   signal?: CancellationSignal;
+  /** Absolute `Date.now()` timestamp in milliseconds, capped by the SDK command limit. */
   deadline?: number;
 };
+/** Controls a subscription's lifetime and reports failures after it is created. */
 export type ListenOptions = {
+  /** Cancels a pending listen or releases the subscription after it is created. */
   signal?: CancellationSignal;
+  /** Receives host, protocol, or connection failures for an active subscription. */
   onError: (error: WireError) => void;
 };
+/** Event envelope delivered to a listener with its payload typed from the event map. */
 export type EventDelivery<T> = Omit<
   Extract<
     Message,
@@ -52,25 +59,35 @@ export interface Client<
   C extends CommandMap = CommandMap,
   E extends EventMap = EventMap,
 > {
+  /** Resolves after protocol negotiation, or rejects if setup fails. */
   readonly ready: Promise<NegotiatedProtocol>;
+  /**
+   * Sends a typed command after negotiation. Rejects on host, transport,
+   * cancellation, or deadline errors.
+   */
   invoke<K extends keyof C & string>(
     command: K,
     payload: C[K]["input"],
     options?: InvokeOptions,
   ): Promise<C[K]["output"]>;
+  /** Resolves with an async disposer after the host accepts the subscription. */
   listen<K extends keyof E & string>(
     event: K,
     listener: (event: EventDelivery<E[K]>) => void,
     options: ListenOptions,
   ): Promise<AsyncDispose>;
+  /** Ends the session, rejects pending work, and waits for transport close. Calls share completion. */
   close(): Promise<void>;
 }
 
+/** Creates a typed client for an explicit transport and handshake identity. */
 export type ClientFactory = <
   C extends CommandMap = CommandMap,
   E extends EventMap = EventMap,
 >(options: {
+  /** Transport that carries frames for this client session. */
   transport: Transport;
+  /** Client hello used to negotiate the session protocol. */
   hello: Hello;
 }) => Client<C, E>;
 
@@ -170,6 +187,7 @@ function toWireError(cause: unknown, fallback: WireError): WireError {
   }
 }
 
+/** Owns one negotiated transport session and all requests and subscriptions on it. */
 class ClientSession<C extends CommandMap, E extends EventMap>
   implements Client<C, E>
 {
@@ -340,6 +358,7 @@ class ClientSession<C extends CommandMap, E extends EventMap>
     return subscriptionId;
   }
 
+  /** Installs event delivery and owns the abort listener until release or failure. */
   private registerSubscription<K extends keyof E & string>(
     event: K,
     listener: (event: EventDelivery<E[K]>) => void,
@@ -357,6 +376,7 @@ class ClientSession<C extends CommandMap, E extends EventMap>
     };
     let releaseRequested = false;
     let releasePromise: Promise<void> | undefined;
+    // Remove first so queued events cannot reach a released listener.
     const release = (): Promise<void> => {
       if (this.terminated || (subscription.released && !releaseRequested)) {
         return Promise.resolve();
@@ -419,6 +439,7 @@ class ClientSession<C extends CommandMap, E extends EventMap>
     return this.closePromise;
   }
 
+  /** Sends this session's hello and terminates if serialization or dispatch fails. */
   private sendHello(): void {
     let text: string;
     try {
@@ -451,6 +472,7 @@ class ClientSession<C extends CommandMap, E extends EventMap>
     }
   }
 
+  /** Tracks a request through negotiation, dispatch, settlement, and cleanup. */
   private request(
     build: (id: string, protocol: Protocol) => ClientMessage,
     options: {
@@ -533,6 +555,7 @@ class ClientSession<C extends CommandMap, E extends EventMap>
           Math.max(0, options.deadlineAt - Date.now()),
         );
       }
+      // Wait for negotiation before serialization and dispatch.
       this.ready.then(
         () => {
           const current = this.requests.get(id);
@@ -578,12 +601,14 @@ class ClientSession<C extends CommandMap, E extends EventMap>
     });
   }
 
+  /** Rejects locally first, then asks the host to stop a request that was dispatched. */
   private cancelRequest(id: string): void {
     const pending = this.requests.get(id);
     if (!pending) {
       return;
     }
     const sent = pending.sent;
+    // The host may create a cancelled listen, so retain cleanup for its late result.
     if (sent && pending.onCancelledResult) {
       this.cancelledListens.set(id, pending.onCancelledResult);
     }
@@ -593,6 +618,7 @@ class ClientSession<C extends CommandMap, E extends EventMap>
     }
   }
 
+  /** Enforces the local deadline and sends a cancel after handing the request to the transport. */
   private expireRequest(id: string): void {
     const pending = this.requests.get(id);
     if (!pending) {
@@ -636,6 +662,7 @@ class ClientSession<C extends CommandMap, E extends EventMap>
     if (this.terminated) {
       return;
     }
+    // Validate each frame before using its fields to settle requests or deliver events.
     let message: Message;
     try {
       message = parseMessage(event.text);
@@ -712,6 +739,7 @@ class ClientSession<C extends CommandMap, E extends EventMap>
       );
       return;
     }
+    // Publish readiness only after the shared protocol contract has been accepted.
     this.negotiated = {
       protocol: negotiated.protocol,
       features: negotiated.features,
@@ -734,6 +762,7 @@ class ClientSession<C extends CommandMap, E extends EventMap>
       message.event !== subscription.event ||
       message.sequence !== subscription.expectedSequence
     ) {
+      // Sequence numbers begin at one and must remain contiguous for each subscription.
       this.endSubscription(subscription, {
         code: "INTERNAL",
         message: "Event sequence violated.",
@@ -779,6 +808,7 @@ class ClientSession<C extends CommandMap, E extends EventMap>
     }
   }
 
+  /** Attempts remote cleanup and closes the client if the unlisten request rejects. */
   private bestEffortUnlisten(subscriptionId: string): void {
     if (this.terminated) {
       return;
@@ -797,10 +827,12 @@ class ClientSession<C extends CommandMap, E extends EventMap>
     );
   }
 
+  /** Terminates once, settles requests and subscriptions, and initiates transport close. */
   private terminate(error: WireError): void {
     if (this.terminated) {
       return;
     }
+    // Set closed before callbacks so cleanup cannot begin more work.
     this.terminated = true;
     this.cancelledListens.clear();
     this.failure = error;
@@ -831,17 +863,34 @@ class ClientSession<C extends CommandMap, E extends EventMap>
   }
 }
 
+/**
+ * Creates a typed client session.
+ *
+ * Without options, returns the current document's shared WebView client. With options,
+ * creates a session from the supplied transport and hello. The handshake starts immediately.
+ * @throws {BunawayError} If the default WebView or its host bridge is unavailable.
+ */
 export function createClient<
   C extends CommandMap = CommandMap,
   E extends EventMap = EventMap,
->(options?: { transport: Transport; hello: Hello }): Client<C, E> {
+>(options?: {
+  /** Transport that carries frames for this client session. */
+  transport: Transport;
+  /** Client hello used to negotiate the session protocol. */
+  hello: Hello;
+}): Client<C, E> {
   if (options === undefined) {
     return defaultClient(createClient) as Client<C, E>;
   }
   return new ClientSession<C, E>(options.transport, options.hello);
 }
 
-/** Invoke an app command through the document's shared WebView connection. */
+/**
+ * Invoke an app command through the document's shared WebView connection.
+ *
+ * @throws {BunawayError} If the host, transport, cancellation signal, or
+ *   deadline rejects the request.
+ */
 export async function invoke<T extends JsonValue = JsonValue>(
   command: string,
   payload: JsonValue,
@@ -850,7 +899,12 @@ export async function invoke<T extends JsonValue = JsonValue>(
   return createClient().invoke(command, payload, options) as Promise<T>;
 }
 
-/** Invoke a native plugin operation through the document's shared connection. */
+/**
+ * Invoke a native plugin operation through the document's shared connection.
+ *
+ * Validates input before sending and validates the host response before returning it.
+ * @throws {BunawayError} If validation or the command fails.
+ */
 export async function invokePlugin<I extends Schema, O extends Schema>(
   contract: HostOperationContract<I, O>,
   input: Infer<I>,
@@ -876,7 +930,12 @@ export async function invokePlugin<I extends Schema, O extends Schema>(
   }
 }
 
-/** Subscribe through the shared connection; returns a subscription disposer. */
+/**
+ * Subscribe through the shared connection.
+ *
+ * Resolves with a disposer after the host accepts the subscription; use it to await remote cleanup.
+ * @throws {BunawayError} If the subscription request fails before it is established.
+ */
 export async function listen<T extends JsonValue = JsonValue>(
   event: string,
   listener: (event: EventDelivery<T>) => void,

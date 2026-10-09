@@ -12,6 +12,8 @@ import { validateWindowCall, type WindowCall } from "./contract.ts";
 import { WindowOperations } from "./coordinator.ts";
 import { windowsPlugin } from "./index.ts";
 import { matches } from "./scope.ts";
+
+/** Create the UI-worker adapter; throws when window services are unavailable. */
 export function createOperations(
   environment: NativeEnvironment,
 ): NativeAdapter {
@@ -102,6 +104,7 @@ export function createOperations(
           ...window.getSizeConstraints(),
         };
       case "windows.setSizeConstraints": {
+        // Omitted bounds mean no limit; validate the complete pair before changing either bound.
         const next: WindowSizeConstraints = {
           minWidth: call.payload.minWidth ?? null,
           minHeight: call.payload.minHeight ?? null,
@@ -159,6 +162,7 @@ export function createOperations(
         operation,
         payload: input,
       });
+      // Resolve each configured view's control grant before dispatching to the coordinator.
       const grants = services.specs
         .filter((spec) =>
           registry.allowed(

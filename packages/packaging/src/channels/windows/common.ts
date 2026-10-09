@@ -12,6 +12,7 @@ export interface ToolResult {
   stderr: string;
 }
 
+/** Returns trimmed output and the exit code; process-spawn errors still throw. */
 export async function run(
   exe: string,
   args: string[],
@@ -52,7 +53,7 @@ export async function run(
   };
 }
 
-// Runs a packaging tool and throws with captured output on failure.
+/** Throws on a nonzero exit, including captured output in the error when available. */
 export async function must(
   exe: string,
   args: string[],
@@ -76,7 +77,7 @@ function basenameOf(path: string): string {
   return parts[parts.length - 1] ?? path;
 }
 
-// Latest Windows SDK tool (signtool.exe, makeappx.exe) under the x64 bin dir.
+/** Finds the newest installed Windows SDK x64 tool, if the SDK is available. */
 export async function findWindowsKitTool(
   tool: string,
 ): Promise<string | undefined> {
@@ -125,6 +126,7 @@ const ISCC_CANDIDATES = [
   ),
 ];
 
+/** Finds Inno Setup 6's compiler in its standard installation directories. */
 export async function findIscc(): Promise<string | undefined> {
   for (const candidate of ISCC_CANDIDATES) {
     if (await Bun.file(candidate).exists()) {
@@ -140,11 +142,10 @@ export async function sha256(path: string): Promise<string> {
     .digest("hex");
 }
 
-// Copies the channel-neutral package dir (manifest.json, assets/, licenses/,
-// runtime/, host executable) into a staging payload directory. The `packaged`
-// subtree inside the artifact dir holds earlier package outputs and is not
-// part of the payload — skipping it also keeps staging (which lives under
-// packaged/) out of the copy.
+/**
+ * Copies the channel-neutral payload into adapter staging, excluding previous
+ * package outputs and rejecting symlinks so signing cannot mutate build inputs.
+ */
 export async function copyPayload(
   packageDir: string,
   dest: string,
@@ -174,8 +175,7 @@ export async function copyPayload(
   }
 }
 
-// Deterministic Inno AppId GUID derived from the app identifier so repeated
-// installs of the same app upgrade in place (over-install update contract).
+/** Keeps Inno upgrades for an app on the same deterministic AppId. */
 export function stableGuid(identifier: string): string {
   const hex = createHash("sha256")
     .update(`bunaway:${identifier}`)

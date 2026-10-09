@@ -3,8 +3,11 @@ import { join } from "node:path";
 import type { PackageManifest } from "../../contract.ts";
 import { sha256 } from "./common.ts";
 
-// Keep build provenance and post-signing bytes separate. Nothing patches the
-// compiled executable after signing, and these hashes are not startup checks.
+/**
+ * Records the compiled host's final digest in the staged manifest.
+ * `sha256` remains build provenance; this digest describes packaged bytes and
+ * is not a startup integrity check.
+ */
 export async function recordPackagedHashes(
   payloadDir: string,
 ): Promise<PackageManifest> {

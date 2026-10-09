@@ -3,6 +3,7 @@ import { runManagedCommand } from "./managed-command.ts";
 
 const BUILD_STACK = "BUNAWAY_BUILD_STACK";
 
+/** Read the app-root chain propagated through nested frontend build processes. */
 function buildStack(): string[] {
   const value = process.env[BUILD_STACK];
   if (value === undefined) {
@@ -15,6 +16,7 @@ function buildStack(): string[] {
   return stack as string[];
 }
 
+/** Reject a frontend command that recursively invokes the app build. */
 export function assertNotFrontendBuild(root: string): void {
   if (buildStack().includes(root)) {
     throw new Error(
@@ -23,6 +25,7 @@ export function assertNotFrontendBuild(root: string): void {
   }
 }
 
+/** Run the configured frontend build and attach recursive-build context to child processes. */
 export async function buildFrontend(
   project: Project,
   signal: AbortSignal,
@@ -33,6 +36,7 @@ export async function buildFrontend(
   }
   assertNotFrontendBuild(project.root);
   console.log(`Building frontend: ${project.buildCommand.join(" ")}`);
+  // Use this CLI's Bun executable so nested builds follow the pinned runtime.
   const args =
     project.buildCommand[0] === "bun"
       ? [

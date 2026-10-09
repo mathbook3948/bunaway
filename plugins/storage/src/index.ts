@@ -107,11 +107,20 @@ const plugin = defineNativePlugin({
   },
   matches,
 });
+/** Plugin contract for scoped text and metadata access. */
 export const storagePlugin = plugin.definition;
 export default storagePlugin;
+
+/** Typed storage operations for app data and temporary files. */
 export const storage = plugin.api;
+
+/** Scope and relative path accepted by read and metadata operations. */
 export type StorageLocation = Parameters<typeof storage.readText>[0];
+
+/** Scope, relative path, and text accepted by `storage.writeText`. */
 export type StorageWrite = Parameters<typeof storage.writeText>[0];
+
+/** File or directory metadata returned by `storage.stat`. */
 export type StorageMetadata = NonNullable<
   Awaited<ReturnType<typeof storage.stat>>
 >;

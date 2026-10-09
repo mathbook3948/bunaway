@@ -62,6 +62,10 @@ function escapeXml(value: string): string {
     .replace(/'/g, "&apos;");
 }
 
+/**
+ * Renders the Appx manifest and enforces supported Windows and package-version
+ * constraints before SDK tooling consumes it.
+ */
 export function renderAppxManifest(options: MsixOptions): string {
   if (
     options.minVersion.localeCompare(DEFAULT_MIN_VERSION, undefined, {

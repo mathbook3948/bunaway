@@ -13,6 +13,7 @@ import {
   validate,
 } from "./validation.ts";
 
+/** Installed plugin metadata and its optional native host contract. */
 export type NativeRegistration = {
   readonly name: string;
   readonly version: string;
@@ -22,6 +23,7 @@ export type NativeRegistryOptions = {
   /** `runtime` enforces the aggregate active-plugin limits; `catalog` validates installed plugins. */
   readonly mode?: "runtime" | "catalog";
 };
+/** Returns whether one permission's operation input matches a proposed scope. */
 export type PermissionMatcher = (
   permission: string,
   input: JsonValue,
@@ -36,7 +38,7 @@ function fail(message: string): never {
   });
 }
 
-// Reject unsupported schema keywords at registration rather than silently ignoring them.
+/** Rejects malformed schemas and keywords this validator cannot enforce. */
 function checkSchema(schema: Schema): void {
   const fields = new Set([
     "$schema",
@@ -175,11 +177,13 @@ function checkSchema(schema: Schema): void {
   }
 }
 
+/** Validates registered native contracts and evaluates their policy grants. */
 export class NativeRegistry {
   readonly operations = new Map<string, HostOperationContract>();
   readonly permissions = new Map<string, PermissionContract>();
   readonly plugins = new Set<string>();
 
+  /** Validates plugin identities and native contracts, then snapshots their schemas. */
   constructor(
     plugins: readonly NativeRegistration[],
     options: NativeRegistryOptions = {},
@@ -305,6 +309,7 @@ export class NativeRegistry {
     }
   }
 
+  /** Returns a registered operation or throws UNSUPPORTED when it is absent. */
   operation(name: string): HostOperationContract {
     const operation = this.operations.get(name);
     if (!operation) {
@@ -316,6 +321,7 @@ export class NativeRegistry {
     return operation;
   }
 
+  /** Validates an operation input against the registered schema and returns a snapshot. */
   validateCall(call: HostCall): HostCall {
     return {
       operation: call.operation,
@@ -323,10 +329,12 @@ export class NativeRegistry {
     };
   }
 
+  /** Validates and snapshots an operation result against its registered output schema. */
   validateOutput(name: string, output: unknown): JsonValue {
     return validate(this.operation(name).output, output);
   }
 
+  /** Rejects policies that grant unknown permissions or invalid permission scopes. */
   validatePolicy(policy: Infer<typeof policySchema>): void {
     validate(policySchema, policy);
     for (const source of [
@@ -358,6 +366,11 @@ export class NativeRegistry {
     }
   }
 
+  /**
+   * Checks grants for an operation. Matching deny scopes override all allow
+   * scopes; scoped permissions need at least one matching allow scope.
+   * Throws UNSUPPORTED if the operation is not registered.
+   */
   allowed(
     source: HostPermissions,
     call: HostCall,

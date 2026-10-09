@@ -8,6 +8,7 @@ import {
   verifyDevelopmentLaunch,
 } from "../../packages/runtime-bun/src/development.ts";
 
+/** Gets an available loopback port for a child process fixture. */
 function availablePort(): number {
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -22,6 +23,7 @@ function availablePort(): number {
   return port;
 }
 
+/** Builds settings that launch the requested server fixture on loopback. */
 function config(mode: string, childPort?: number) {
   const port = availablePort();
   return {

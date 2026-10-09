@@ -40,6 +40,7 @@ export function isOptionalDependency(
   );
 }
 
+/** Resolve an installed dependency from the project or one of its parent directories. */
 export async function installedPackageRoot(
   project: string,
   name: string,
@@ -69,6 +70,7 @@ export async function installedPackageRoot(
   }
 }
 
+/** Read JSON and add the file path to parse or I/O failures. */
 export async function json(path: string): Promise<unknown> {
   try {
     return JSON.parse(await readFile(path, "utf8"));
@@ -88,6 +90,7 @@ export function inside(root: string, path: string): boolean {
   return rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
 
+/** Resolve a project-relative source path, rejecting parent segments and links that escape the project. */
 export async function projectPath(root: string, name: string): Promise<string> {
   if (
     !name ||
@@ -103,6 +106,7 @@ export async function projectPath(root: string, name: string): Promise<string> {
   return path;
 }
 
+/** List regular files in stable order, rejecting links and special files. */
 export async function files(
   root: string,
   excludedDirectories: readonly string[] = [],
@@ -141,6 +145,7 @@ export async function hash(path: string): Promise<string> {
     .digest("hex");
 }
 
+/** Throw when a file's SHA-256 digest does not match the recorded value. */
 export async function verifyHash(
   path: string,
   expected: string,

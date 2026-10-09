@@ -32,6 +32,9 @@ const SC_MOVE = 0xf010n;
 const WMSZ_BOTTOMRIGHT = 0x8n;
 const MODAL_TIMER_ID = 123n;
 
+/** Runs the direct Win32 and WebView2 gate.
+ * Optionally routes backend calls through the worker fixture.
+ */
 export async function runProbe(uiWorker: ProbeWorkerData | null = null) {
   const viewId = uiWorker?.viewId ?? "single";
   const input = uiWorker?.value ?? 21;

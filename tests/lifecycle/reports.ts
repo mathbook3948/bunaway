@@ -32,6 +32,7 @@ function isReport(value: unknown): value is Report {
   );
 }
 
+/** Requires every reported check to pass and each named check to appear exactly once. */
 export function assertReport(
   report: Report,
   requiredChecks: readonly string[] = [],
@@ -52,9 +53,11 @@ export function assertReport(
   }
 }
 
+/** Reads a complete report; missing or partial files return null, invalid shapes throw. */
 export async function readReport(path: string): Promise<Report | null> {
   try {
     const value: unknown = JSON.parse(await readFile(path, "utf8"));
+    // Valid JSON can still have the wrong shape, so callers only receive checked report data.
     if (!isReport(value)) {
       throw new Error("Invalid host report");
     }

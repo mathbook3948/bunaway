@@ -6,6 +6,10 @@ import {
   pluginTableSource,
 } from "../../packages/cli/src/plugins.ts";
 
+/**
+ * Bundle native workers with the fixture app's installed plugins.
+ * Supplying an entrypoint builds the shared UI and host-operation workers.
+ */
 export async function bundleNativeWorker(
   name: string,
   destination: string,

@@ -15,6 +15,10 @@ const invalidUrl = () =>
       "Expected an absolute HTTP or HTTPS URL of at most 8192 characters.",
   });
 
+/**
+ * Validate an untrusted URL and return its canonical URL form.
+ * @throws {BunawayError} If the input is not a valid HTTP or HTTPS URL within the length limit.
+ */
 export function normalizeUrl(input: unknown): string {
   if (
     typeof input !== "string" ||

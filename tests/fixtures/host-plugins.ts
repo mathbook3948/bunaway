@@ -16,6 +16,7 @@ import { storagePlugin } from "../../plugins/storage/src/index.ts";
 import { windowsPlugin } from "../../plugins/windows/src/index.ts";
 
 const matches = storagePlugin.matches;
+/** Fail fixture setup when an expected native operation is missing. */
 function present<T>(value: T | undefined): T {
   assert(value !== undefined, "Missing native fixture contract.");
   return value;
@@ -27,6 +28,7 @@ export const plugins = [
   windowsPlugin,
 ];
 export const registry = new NativeRegistry(plugins);
+// Use contracts from the plugin declarations that build the shared registry.
 export const contracts = {
   "storage.readText": present(
     storagePlugin.native.operations.find(
@@ -50,6 +52,7 @@ export const contracts = {
   ),
 } as const;
 export const hostOperations = contracts;
+/** Bind a host API to the registry shared by the protocol and core fixtures. */
 export const bindHostAPI = (
   ...args: Parameters<typeof bind> extends [
     ...infer P,
@@ -58,7 +61,7 @@ export const bindHostAPI = (
     ? P
     : never
 ) => bind(...args, registry);
-// Existing lifecycle suites explicitly use the shared native-feature fixture.
+/** Supply core fixtures with the shared native-feature plugins. */
 export const createCore: CoreFactory = (app, services) =>
   create(
     {
@@ -70,6 +73,7 @@ export const createCore: CoreFactory = (app, services) =>
     },
     services,
   );
+/** Return whether a fixture host call passes the shared registry and policy. */
 export function allowedHost(permissions: Policy["backend"], call: HostCall) {
   try {
     return registry.allowed(permissions, registry.validateCall(call), matches);
@@ -77,6 +81,7 @@ export function allowedHost(permissions: Policy["backend"], call: HostCall) {
     return false;
   }
 }
+/** Validate host output and reject duplicate names in capability snapshots. */
 export function validateHostOutput(
   operation: string,
   value: unknown,

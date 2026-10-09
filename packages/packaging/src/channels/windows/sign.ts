@@ -11,7 +11,10 @@ const DEFAULT_TIMESTAMP_URL = "http://timestamp.digicert.com";
 // never written to disk by this package. Missing credentials surface as
 // PKG_SIGNING_MISSING diagnostics, tool failures as PKG_SIGNING_FAILED.
 
-// Args shared by every signtool invocation for the resolved signing config.
+/**
+ * Builds signtool arguments using passwords only from the configured env var.
+ * Reports and throws when that variable is configured but empty.
+ */
 export function signingArgs(ctx: StageContext): string[] {
   const signing = ctx.input.signing;
   if (!signing) {
@@ -50,8 +53,12 @@ export function signingArgs(ctx: StageContext): string[] {
   return args;
 }
 
-// Signs PE files (.exe/.dll/.msix) in place. Returns the signtool path used.
-// Throws when signing is configured but signtool is unavailable.
+/**
+ * Signs supplied paths in place and returns the signtool path. Callers pass
+ * staging copies to keep build inputs unchanged.
+ * Without signing configuration it reports an informational diagnostic and
+ * returns an empty string; configured signing failures are reported and thrown.
+ */
 export async function signFiles(
   ctx: StageContext,
   files: string[],
@@ -99,8 +106,11 @@ export async function signFiles(
   return signtool;
 }
 
-// Local Authenticode trust also accepts private roots. Store EXE submissions
-// additionally require membership in Microsoft's cached AuthRoot CTL.
+/**
+ * Checks that a signed file chains to Microsoft's cached AuthRoot CTL, as
+ * required for Store EXE submissions. The extracted root certificate is
+ * removed from staging even when verification fails.
+ */
 export async function verifyStoreCertificate(
   ctx: StageContext,
   file: string,
@@ -159,7 +169,10 @@ try {
   }
 }
 
-// Verifies Authenticode signatures and the channel's certificate requirements.
+/**
+ * Verifies Authenticode signatures and channel certificate rules, reporting
+ * failures through the stage context instead of throwing them to the runner.
+ */
 export async function verifySignatures(
   ctx: StageContext,
   files: string[],

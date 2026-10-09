@@ -3,6 +3,7 @@ import { release } from "./distribution.ts";
 import { main } from "./main.ts";
 
 if (import.meta.main) {
+  // Turn command failures into one diagnostic and a nonzero process exit status.
   try {
     if (process.argv.slice(2).join(" ") === "--version") {
       console.log((await release()).version);

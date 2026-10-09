@@ -26,6 +26,7 @@ import {
   createCore,
 } from "../fixtures/host-plugins.ts";
 
+// Fake time advances deadlines and shutdown limits without waiting.
 function createClock() {
   let current = 1_000_000;
   const timers: {
@@ -318,6 +319,7 @@ const helloMessage: Hello = {
   buildId: "ui",
 };
 
+// Drain promise continuations without real-time delays.
 async function flush(turns = 20) {
   for (let i = 0; i < turns; i++) {
     await Promise.resolve();
@@ -723,6 +725,7 @@ test("concurrent invokes run without blocking receive and respect the pending li
     });
   await invoke("a", "first");
   await invoke("b", "second");
+  // Complete request b first to prove its handler does not block later receives.
   releases.get("second")?.();
   await flush();
   expect(results(sent, "b")).toMatchObject([

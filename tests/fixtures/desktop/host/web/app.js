@@ -16,6 +16,7 @@ const client = createClient({
     buildId: "windows-sdk-ui",
   },
 });
+// Navigation ends this document's client so the host can revoke its session.
 window.addEventListener("pagehide", () => {
   void client.close();
 });
@@ -24,6 +25,7 @@ const releases = new Map();
 const pending = new Map();
 const subs = new Map();
 let seq = 0;
+// Match bridge responses to requests and events to their local subscriptions.
 window.chrome.webview.addEventListener("message", (event) => {
   const m = event.data;
   if (!m || typeof m !== "object") {
@@ -131,6 +133,9 @@ async function connect() {
   return client.ready;
 }
 
+/**
+ * Run host-bridge checks, report them, then navigate to the next page.
+ */
 async function run() {
   const results = [];
   const test = async (name, fn) => {
@@ -661,7 +666,7 @@ async function run() {
   });
   await test("remote iframe never navigates", async () => {
     // Behavior-level check: a blocked subframe stays on the initial empty
-    // document instead of reaching the remote URL (works on every platform —
+    // document instead of reaching the remote URL (works on every platform;
     // does not rely on a host log event).
     const frame = document.getElementById("remote-frame");
     await sleep(300);

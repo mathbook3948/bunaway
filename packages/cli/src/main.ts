@@ -21,6 +21,7 @@ const help = `bunaway (vanilla / Vite / React / Vue / Svelte)
   doctor [directory]      Check project, runtime version and native tools
 Builds are native only: Windows x64 / macOS arm64.`;
 
+/** Run a CLI command and return its process exit code. */
 export async function main(args: string[]): Promise<number> {
   const [command, ...rest] = args;
   if (!command || command === "--help" || command === "help") {
@@ -36,6 +37,7 @@ export async function main(args: string[]): Promise<number> {
     let packageDirectory: string | undefined;
     let template: Template = "vanilla";
     const seen = new Set<string>();
+    // Parse options as name/value pairs so a missing value cannot be mistaken for another flag.
     for (let index = 0; index < options.length; index += 2) {
       const option = options[index];
       const value = options[index + 1];

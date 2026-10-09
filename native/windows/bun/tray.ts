@@ -21,6 +21,8 @@ const TRAY_ICON_ID = 1;
 const TRAY_OPEN_COMMAND = 1;
 const TRAY_QUIT_COMMAND = 2;
 const TRAY_TOOLTIP_BYTES = 254;
+
+/** Owns the hidden window and shell icon used for app show and quit actions. */
 export class Tray {
   private readonly shell = dlopen("shell32.dll", {
     Shell_NotifyIconW: {
@@ -34,6 +36,7 @@ export class Tray {
   private readonly data = Buffer.alloc(976); // NOTIFYICONDATAW, Win64
   readonly hwnd: bigint;
   private added = false;
+  /** Registers the icon and releases partial resources if setup fails. */
   constructor(
     private readonly windows: Windows,
     tooltip: string,
@@ -53,6 +56,7 @@ export class Tray {
         200,
         (message, _wparam, lparam) => {
           if (message === taskbarCreated) {
+            // Explorer restarts clear notification icons, so add this one back.
             this.added = false;
             this.add();
           } else if (message === WM_CLOSE) {
@@ -152,6 +156,9 @@ export class Tray {
       assert(user.symbols.DestroyMenu(menu));
     }
   }
+  /**
+   * Requests shell icon removal when registered, destroys its window, and closes the shell binding.
+   */
   dispose() {
     if (this.added) {
       this.shell.symbols.Shell_NotifyIconW(NIM_DELETE, ptr(this.data));

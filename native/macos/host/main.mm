@@ -96,6 +96,7 @@ NSString* nsstr(const char* value) {
 }
 
 Json parse(const std::string& text) {
+    // Bound untrusted frames and normalize safe integral numbers to the protocol representation.
     require(!text.empty() && text.size() <= maxFrame, "Invalid frame length.");
     return Json::parse(text, [](int depth, Json::parse_event_t event, Json& value) {
         require(depth <= maxDepth, "JSON depth exceeded.");
@@ -115,13 +116,13 @@ Json readJson(const fs::path& path) {
     return parse(std::string(std::istreambuf_iterator<char>(input), {}));
 }
 
-// Same JSON Schema subset as the Windows host and the B probe.
 size_t unicodeSize(const std::string& value) {
     size_t count = 0;
     for (unsigned char byte : value) if ((byte & 0xc0) != 0x80) ++count;
     return count;
 }
 
+// Checks the JSON Schema subset shared by the Windows host and native probe.
 bool valid(const Json& schema, const Json& value) {
     if (schema.contains("anyOf")) {
         bool found = false;
@@ -214,6 +215,7 @@ void writeAll(int fd, const std::string& text) {
 }
 
 template<typename F> void readLines(int fd, F receive) {
+    // Read newline-delimited frames and reject oversized or unterminated input.
     std::string pending;
     char buffer[8192];
     for (;;) {
@@ -316,6 +318,7 @@ std::string platformUrl(const std::string& uri) {
     return uri;
 }
 
+// Development artifacts may load only from explicit loopback HTTP(S) URLs.
 std::string developmentUrl(const std::string& uri) {
     NSURL* url = [NSURL URLWithString:nsstr(uri)];
     auto origin = originOf(uri);
@@ -326,6 +329,7 @@ std::string developmentUrl(const std::string& uri) {
     return uri;
 }
 
+// Block HTTP(S) resources by default, then allow only exact declared origins.
 Json resourceRules(const std::set<std::string>& origins) {
     Json rules = Json::array({ {
         { "trigger", { { "url-filter", "^https?://" } } },
@@ -383,6 +387,7 @@ HostPermissions parseHostPermissions(const Json& value) {
 struct Policy {
     std::map<std::string, ViewPolicy> views;
     HostPermissions backend;
+    // Validate the packaged policy before converting it to the host's lookup sets.
     static Policy load(const Json& schema, const fs::path& path) {
         auto value = readJson(path);
         require(valid(schema, value), "Invalid policy.");
@@ -641,6 +646,7 @@ public:
     // re-dispatches the parsed payload to page listeners.
     void postToWeb(const std::string& context, const std::string& jsonText) {
         if (failed || shuttingDown) return;
+        // The document can change while this callback waits for the main queue.
         uint64_t gen = documentGeneration.load();
         std::string script = "__bunawayDeliver(" + Json(jsonText).dump() + ")";
         dispatch_main([this, context, gen, script = std::move(script)] {
@@ -659,6 +665,7 @@ public:
     }
 
     // ---------- WebView -> backend boundary (main queue) ----------
+    // Bind page messages to the active document and enforce its command/event grants.
     void onWebMessage(const std::string& sourceText, const std::string& raw) {
         std::string id, reason;
         const ViewPolicy* view = &policy.views.at(viewId);
@@ -739,7 +746,7 @@ public:
             hostLog->event("web-message-rejected", { { "reason", "malformed" }, { "source", sourceText } });
         }
     }
-    // Caller holds stateMutex.
+    // Caller holds stateMutex. Reserve each ID before forwarding to prevent reuse and bound pending work.
     void registerRequest(Session& session, const Json& message, const std::string& kind) {
         auto id = message["id"].get<std::string>();
         if (session.usedIds.count(id)) throw HostError("INVALID_ARGUMENT", "Request ID was already used.");
@@ -755,7 +762,7 @@ public:
         session.usedIds.insert(id);
         session.pending[id] = { kind, expiry };
     }
-    // Returns the issued context. Caller holds stateMutex.
+    // Caller holds stateMutex. Send session-open before the first page message reaches Bun.
     std::string openSession(const std::string& view, const std::string& source, const std::string& origin) {
         Session session;
         session.context = "ctx-" + randomHex(12);
@@ -774,7 +781,7 @@ public:
         hostLog->event("session-open", { { "context", context }, { "viewId", view }, { "origin", origin } });
         return context;
     }
-    // Revokes the view's active session: cancels pending work and tells the backend.
+    // Invalidate queued page deliveries, discard session work, then tell Bun to revoke the context.
     void revokeSession(const char* reason) {
         std::lock_guard lock(stateMutex);
         documentGeneration.fetch_add(1);
@@ -788,6 +795,7 @@ public:
     }
 
     // ---------- backend -> host dispatch (reader thread) ----------
+    // Validate the child frame and launch identity before dispatching its message kind.
     void onBackendLine(const std::string& line) {
         auto value = parse(line);
         require(valid(processSchema, value) && value["runtime"]["id"] == runtimeId && value["runtime"]["generation"] == generation, "Invalid backend envelope.");
@@ -819,6 +827,7 @@ public:
             throw std::runtime_error("Invalid backend direction.");
         }
     }
+    // Correlate results and accept events only for live requests and subscriptions.
     void onBackendWeb(const std::string& context, const Json& message) {
         {
             std::lock_guard lock(stateMutex);
@@ -877,6 +886,7 @@ public:
         if (it == sessions.end()) return nullptr;
         return &policy.views.at(it->second.viewId).host;
     }
+    // Register before queueing so a cancellation can win before a worker starts.
     void onHostRequest(const Json& value) {
         auto context = value["context"].get<std::string>();
         auto requestId = value["requestId"].get<std::string>();
@@ -903,6 +913,7 @@ public:
         it->second.cancelled = true;
         hostLog->event("host-cancel", { { "requestId", requestId }, { "operation", it->second.operation } });
     }
+    // Complete under stateMutex so cancellation, revocation, and response cannot race past each other.
     void hostRespond(const std::string& key, const std::string& context, const std::string& requestId, const Json& payload) {
         std::lock_guard lock(stateMutex);
         auto it = hostPending.find(key);
@@ -922,6 +933,7 @@ public:
         hostPending.erase(it);
         hostLog->event("host-response", { { "requestId", requestId }, { "kind", response["payload"]["kind"].get<std::string>() } });
     }
+    // Recheck pending state after queueing or test delay so cancelled work stays inert.
     void executeHostOp(const std::string& key, const std::string& context, const std::string& requestId, const std::string&, const Json&) {
         if (hostOpDelayMs > 0) std::this_thread::sleep_for(std::chrono::milliseconds(hostOpDelayMs));
         try {
@@ -946,6 +958,7 @@ public:
     }
 
     // ---------- request deadlines (UI timer) ----------
+    // Queue Bun cancellation before reporting the timeout to the page.
     void notifyTimeout(const std::string& context, const std::string& id) {
         try {
             sendWebFrame(context, Json({ { "kind", "cancel" }, { "protocol", ipc }, { "id", id } }).dump());
@@ -954,6 +967,7 @@ public:
             { "error", { { "code", "TIMEOUT" }, { "message", "Request deadline exceeded." } } } }).dump());
         hostLog->event("request-timeout", { { "context", context }, { "id", id } });
     }
+    // Expire pending requests on monotonic time and notify both Bun and the page.
     void scanDeadlines() {
         std::vector<std::pair<std::string, std::string>> expired;
         {
@@ -970,12 +984,14 @@ public:
     }
 
     // ---------- Bun child process lifecycle (runtime thread) ----------
+    // Prefer the digest recorded for the packaged executable over source metadata.
     void verifyBun(const fs::path& bun) const {
         const auto& runtime = manifest.at("bun");
         const auto& expected = runtime.contains("packagedSha256")
             ? runtime.at("packagedSha256") : runtime.at("executableSha256");
         require(sha256(bun) == expected.get<std::string>(), "Bun executable hash mismatch.");
     }
+    // Verify the embedded runtime, then start it with private pipes and a process-group watchdog.
     void spawnBun(const fs::path& bun) {
         verifyBun(bun);
         int inPipe[2], outPipe[2], errPipe[2], deathPipe[2];
@@ -990,6 +1006,7 @@ public:
         std::vector<char*> argv;
         for (auto& arg : argStore) argv.push_back(arg.data());
         argv.push_back(nullptr);
+        // Keep Bun's home and temporary files inside this app's data root.
         std::vector<std::string> envStore = {
             "BUN_RUNTIME_TRANSPILER_CACHE_PATH=0", "DO_NOT_TRACK=1",
             "HOME=" + scopes.dataRoot.string(), "NO_COLOR=1", "PATH=/usr/bin:/bin",
@@ -1013,6 +1030,7 @@ public:
         posix_spawnattr_destroy(&attr);
         close(inPipe[0]); close(outPipe[1]); close(errPipe[1]);
         require(error == 0, "Bun process creation failed.");
+        // The watchdog owns the death-pipe read end and kills Bun's group if this host disappears.
         {
             auto self = executablePath();
             std::vector<std::string> guardArgs = { self.string(), "--guard", std::to_string(childPid) };
@@ -1038,6 +1056,7 @@ public:
         hostLog->event("host-started", { { "hostPid", getpid() }, { "childPid", childPid }, { "guardPid", guardPid }, { "bunPath", bun.string() }, { "runtime", { { "id", runtimeId }, { "generation", generation } } } });
     }
 
+    // Own the Bun lifecycle and join its pipe and operation workers before returning.
     void runtimeMain(const fs::path& bun) {
         try {
             spawnBun(bun);
@@ -1077,6 +1096,7 @@ public:
                     }
                 });
             }
+            // Bun must receive its package and policy before it can complete the protocol handshake.
             auto boot = frame("boot");
             boot["payload"] = {
                 { "entrypoint", (assets / "backend.js").string() },
@@ -1101,6 +1121,7 @@ public:
             }
             exited.store(true);
             childStatus.store(status);
+            // Kill descendants first because inherited pipe handles can keep the readers blocked.
             killpg(childPid, SIGKILL); // sweep descendants still in the group
             { std::lock_guard lock(queueMutex); writerDone = true; queued.notify_one(); }
             writerThread.join();
@@ -1152,6 +1173,7 @@ public:
 
     // ---------- WKWebView (main queue) ----------
     bool initialNavigationStarted = false;
+    // Start the home document only after Bun is ready and WebKit has installed resource rules.
     void navigateWhenReady() {
         if (ready && webviewReady && webview && !closing && !failed && !initialNavigationStarted) {
             initialNavigationStarted = true;
@@ -1172,6 +1194,7 @@ public:
     }
 
     // ---------- shutdown ----------
+    // Make close idempotent, invalidate the page session locally, then request backend shutdown.
     void beginClose(int code) {
         if (shuttingDown.exchange(true)) return;
         exitCode = code;
@@ -1232,6 +1255,7 @@ static NSString* kBridgeShim =
     return [super init];
 }
 - (void)webView:(WKWebView*)webView startURLSchemeTask:(id<WKURLSchemeTask>)task {
+    // Treat every custom-scheme request as untrusted and serve only canonical files under assets/web.
     @autoreleasepool {
         App* app = g_app;
         NSURL* url = task.request.URL;
@@ -1431,6 +1455,7 @@ static NSString* kBridgeShim =
 }
 @end
 
+// Validate the package and assemble the WebView before starting Bun; this call owns the app lifetime.
 static int run(const fs::path& package, const std::string& devUrl = "") {
     App app;
     g_app = &app;
@@ -1472,6 +1497,7 @@ static int run(const fs::path& package, const std::string& devUrl = "") {
         if (fs::exists(helper)) bun = helper;
     }
     app.verifyBun(bun);
+    // Check every manifest-listed asset before creating app data or launching Bun.
     for (auto it = app.manifest["assets"].begin(); it != app.manifest["assets"].end(); ++it) {
         require(sha256(app.package / fs::path(it.key())) == it.value().get<std::string>(), "Package asset hash mismatch.");
     }
@@ -1566,6 +1592,7 @@ static int run(const fs::path& package, const std::string& devUrl = "") {
     dispatch_activate(termSource);
 
     const fs::path bunPath = bun;
+    // Keep App alive until runtimeMain has stopped and joined every worker that captures it.
     app.runtimeThread = std::thread([&app, bunPath] { app.runtimeMain(bunPath); });
     [NSApp run];
     app.beginClose(app.exitCode);

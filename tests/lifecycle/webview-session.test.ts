@@ -170,6 +170,7 @@ test.each([
         }),
       },
     );
+    // Pump both directions until neither side has queued work.
     const flush = async () => {
       await Bun.sleep(0);
       do {

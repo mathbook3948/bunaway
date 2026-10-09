@@ -26,6 +26,7 @@ export type InstalledPlugin = {
   >;
 };
 
+/** Resolve an installed plugin file and reject paths that escape its package. */
 async function contained(root: string, value: unknown): Promise<string> {
   if (
     typeof value !== "string" ||
@@ -41,6 +42,10 @@ async function contained(root: string, value: unknown): Promise<string> {
   return path;
 }
 
+/**
+ * Load and validate native plugins declared by the project dependencies.
+ * Optional missing packages are skipped; incompatible installed packages fail.
+ */
 export async function installedPlugins(
   project: string,
   version: string,
@@ -215,6 +220,7 @@ export async function installedPlugins(
   return result;
 }
 
+/** Generate the host's static plugin table while keeping plugin modules lazy-loaded. */
 export function pluginTableSource(plugins: readonly InstalledPlugin[]): string {
   return `export const packagedPlugins = [${plugins
     .map((plugin) => {

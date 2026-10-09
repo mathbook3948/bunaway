@@ -1,5 +1,6 @@
 import { runBunApp } from "../../packages/runtime-bun/src/index.ts";
 
+// The parent test checks this sentinel in the command failure diagnostics.
 await runBunApp({
   events: {},
   commands: {

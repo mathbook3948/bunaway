@@ -35,6 +35,7 @@ const version = {
   additionalProperties: false,
 } as const;
 
+/** Schema for the wire error shape sent in protocol responses. */
 export const errorSchema = {
   type: "object",
   properties: {
@@ -59,6 +60,7 @@ export const errorSchema = {
   additionalProperties: false,
 } as const;
 
+/** Schema for the union of messages exchanged by WebView clients and the host. */
 export const messageSchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   anyOf: [
@@ -298,6 +300,7 @@ const hostPermissions = {
   additionalProperties: false,
 } as const;
 
+/** Schema for per-view UI access and backend host-permission grants. */
 export const policySchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   type: "object",
@@ -347,7 +350,7 @@ export const policySchema = {
   additionalProperties: false,
 } as const;
 
-// Native-host-only JSON: never accepted from a WebView transport.
+/** Native-host-only bootstrap JSON, never accepted from a WebView transport. */
 export const bootstrapSchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   type: "object",
@@ -368,7 +371,7 @@ export const bootstrapSchema = {
   additionalProperties: false,
 } as const;
 
-// Correlation and authorization context travel in the host-only process envelope.
+/** Response body; correlation and authorization context stay in the host-only envelope. */
 export const hostResponseSchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   anyOf: [
@@ -457,7 +460,7 @@ function processVariant<
   } as const;
 }
 
-// This envelope is carried only by host-owned pipes, never a WebView bridge.
+/** Process frames use host-owned pipes and are never accepted from a WebView bridge. */
 export const processSchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   anyOf: [

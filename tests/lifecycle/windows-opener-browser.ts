@@ -36,6 +36,7 @@ let initialized = false;
 let server: ReturnType<typeof Bun.serve> | undefined;
 let adapter: ReturnType<typeof createOperations> | undefined;
 try {
+  // The Explorer adapter uses COM on this thread, so verify its STA before launch.
   const initResult = ole.symbols.CoInitializeEx(null, 0x2 | 0x4);
   assert(initResult >= 0);
   initialized = true;
@@ -87,6 +88,7 @@ try {
   }).toString();
   const inputUrl = `http://127.0.0.1:${port}/open 한글?q=space and 한글&run=${nonce}`;
 
+  // The nonce ties the loopback request to this invocation of the default browser.
   assert.equal(
     await opener.executeUI(
       "opener.openUrl",

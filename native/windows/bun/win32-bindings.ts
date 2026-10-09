@@ -1,7 +1,9 @@
 import { dlopen, type Pointer, ptr } from "bun:ffi";
 
+/** Build a NUL-terminated UTF-16LE buffer for Win32 W functions. */
 export const wide = (text: string) => Buffer.from(`${text}\0`, "utf16le");
 const nativeBuffers = new Set<Buffer>();
+/** Hold the buffer until the synchronous native call returns. */
 export function withBuffer<T extends number | bigint>(
   buffer: Buffer,
   invoke: (address: Pointer) => T,
@@ -13,12 +15,14 @@ export function withBuffer<T extends number | bigint>(
     nativeBuffers.delete(buffer);
   }
 }
+/** Pass a temporary UTF-16LE string buffer to a synchronous native call. */
 export function withWide<T extends number | bigint>(
   text: string,
   invoke: (address: Pointer) => T,
 ): T {
   return withBuffer(wide(text), invoke);
 }
+/** Throw with the operation name when a COM HRESULT reports failure. */
 export function hr(value: number, operation: string): void {
   if (value < 0) {
     throw new Error(`${operation}: 0x${(value >>> 0).toString(16)}`);
@@ -376,6 +380,7 @@ export const user = dlopen("user32.dll", {
   },
 });
 
+/** Close native library handles after releasing the owning resources. */
 export function disposeWin32Bindings() {
   user.close();
   ole.close();

@@ -48,6 +48,7 @@ const getter = new JSCallback(
 const vtable = new BigUint64Array(5);
 assert(getter.ptr);
 vtable[4] = BigInt(getter.ptr);
+// Route the string through the callback vtable to exercise native UTF-16 decoding.
 const object = new BigUint64Array([
   BigInt(ptr(vtable)),
 ]);

@@ -19,6 +19,7 @@ const emptyEvent = {
   sequence: 1,
   payload: "",
 } as const;
+// Measure the fixed outer frame once so byte-boundary cases target the actual transport limit.
 const envelopeBytes = serializeProcessFrame({
   kind: "web",
   context: "view-main-long",
@@ -75,6 +76,7 @@ await runBunApp({
             }
             break;
           }
+          // A valid follow-up verifies that a rejected payload leaves the runtime usable.
           default:
             payload = "after-rejection";
         }

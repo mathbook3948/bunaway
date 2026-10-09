@@ -31,6 +31,7 @@ const streams = dlopen("shlwapi.dll", {
   },
 });
 
+/** Normalize HTTP(S) URLs to an origin; return empty for unsupported or malformed URLs. */
 export function originOf(text: string): string {
   try {
     const url = new URL(text);
@@ -51,6 +52,7 @@ export function originOf(text: string): string {
   }
 }
 // Slots/IIDs are from the pinned WebView2 SDK 1.0.4129.50, Win64 COM ABI.
+/** Own one WebView2 instance, its COM callbacks, and the child-process shutdown drain. */
 export class WebView {
   webview: Pointer | undefined;
   private controller: Pointer | undefined;
@@ -81,6 +83,7 @@ export class WebView {
   private readonly loader;
   failure: unknown;
 
+  /** Begin async WebView2 creation; ready fires after the controller is configured and shown. */
   constructor(
     readonly hwnd: bigint,
     readonly spec: WindowSpec,
@@ -240,6 +243,7 @@ export class WebView {
     }
   }
 
+  /** Retain an event callback until detach removes its subscription and finish drains it. */
   private on(slot: number, iid: string, invoke: (args: Pointer) => void) {
     assert(this.webview);
     const callback = handler(
@@ -270,6 +274,7 @@ export class WebView {
     });
   }
 
+  /** Apply browser settings and origin/resource policy before the view is shown. */
   private configure(assets: string) {
     assert(this.webview);
     const webview = this.webview;
@@ -645,7 +650,10 @@ export class WebView {
   requestClose() {
     this.closing = true;
   }
-  // Called outside callbacks. Keep pending creation callbacks and the owning STA alive.
+  /**
+   * Ignore events and detach the controller outside COM callbacks.
+   * Returns false while async creation is pending; finish drains remaining resources later.
+   */
   detach(): boolean {
     this.closing = true;
     if (this.creating) {
@@ -655,6 +663,7 @@ export class WebView {
       return true;
     }
     this.closedAt = performance.now();
+    // Capture process handles before controller closure to track WebView2 children.
     if (this.environment) {
       const env8 = query(
         this.environment,
@@ -752,6 +761,7 @@ export class WebView {
     this.detached = true;
     return true;
   }
+  /** Poll shutdown until children and callbacks drain, returning true after disposal. */
   finish(): boolean {
     if (this.finished) {
       return true;
@@ -840,6 +850,7 @@ export class WebView {
     });
     return true;
   }
+  /** Throw with live-process diagnostics when tracked WebView processes remain past the 30-second deadline. */
   private checkShutdownDeadline() {
     if (performance.now() - this.closedAt > 30000) {
       throw new Error(

@@ -15,6 +15,7 @@ import type { LogInput } from "./index.ts";
 
 const LOG_ROTATION_THRESHOLD_BYTES = 1024 * 1024;
 
+/** Append host-approved log records and retain one rotated file. */
 export function createOperations(
   environment: NativeEnvironment,
 ): NativeAdapter {
@@ -26,6 +27,7 @@ export function createOperations(
       });
       try {
         if (statSync(path).size > LOG_ROTATION_THRESHOLD_BYTES) {
+          // Replace the previous archive before moving the active log into its place.
           rmSync(`${path}.1`, {
             force: true,
           });
@@ -36,6 +38,7 @@ export function createOperations(
           throw error;
         }
       }
+      // The host validates the payload against the log operation before dispatch.
       appendFileSync(
         path,
         `${JSON.stringify({

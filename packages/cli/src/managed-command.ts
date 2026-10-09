@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 
 const inspectProcesses = promisify(execFile);
 
+/** Waits for a Unix process group to release all live members after its leader exits. */
 async function waitForProcessGroupExit(pid: number): Promise<void> {
   const deadline = performance.now() + 5000;
   while (true) {
@@ -44,6 +45,7 @@ async function waitForProcessGroupExit(pid: number): Promise<void> {
   }
 }
 
+/** Tracks a command's exit and shares one process-tree cleanup operation. */
 export interface ManagedProcess {
   readonly exited: Promise<number>;
   readonly exitCode: number | undefined;
@@ -51,8 +53,10 @@ export interface ManagedProcess {
   stop(): Promise<void>;
 }
 
-// The server remains owned after readiness; finite commands also wait until their
-// descendants release resources before returning.
+/** Starts a command whose process tree can be stopped as one unit.
+ * Servers stay owned until stopped; finite commands wait for descendants to exit during cleanup.
+ * The optional signal is checked before spawning, so callers own cancellation after startup.
+ */
 export async function startManagedProcess(
   args: string[],
   cwd: string,
@@ -196,8 +200,9 @@ export async function startManagedProcess(
   };
 }
 
-// Own finite commands and their descendants until completion or cancellation.
-// The Windows Job worker also cleans up if the owner disappears without sending EOF.
+/** Runs a finite command and rejects on cancellation, spawn failure, or a nonzero exit.
+ * On Windows, the Job worker also cleans descendants if the owning CLI disappears.
+ */
 export async function runManagedCommand(
   args: string[],
   cwd: string,

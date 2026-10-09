@@ -89,6 +89,7 @@ test("process event limits reject the entire broadcast and preserve sessions and
     });
   const expectDelivered = async (mode: string, sequence: number) => {
     emit(mode);
+    // Each emit returns one result and broadcasts one event to each session.
     const replies = [
       await next(),
       await next(),

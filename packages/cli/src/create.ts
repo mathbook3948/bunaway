@@ -4,6 +4,10 @@ import { checkArtifact, packageFilename, release } from "./distribution.ts";
 import { frameworkRoot, json, writeJson } from "./files.ts";
 import { isTemplate, type Template } from "./templates.ts";
 
+/**
+ * Create a project from a bundled template and pin its framework dependencies.
+ * The target must not exist; an incomplete staging directory is removed on failure.
+ */
 export async function createProject(
   directory: string,
   options: {

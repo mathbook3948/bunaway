@@ -22,7 +22,7 @@ export type NegotiatedProtocol = Pick<
 >;
 export type RuntimeIdentity = ProcessFrame["runtime"];
 
-// Structural subset of the standard AbortSignal; portable packages need no DOM globals.
+/** Structural subset of AbortSignal that keeps portable packages independent of DOM globals. */
 export interface CancellationSignal {
   readonly aborted: boolean;
   addEventListener(type: "abort", listener: () => void): void;
@@ -45,14 +45,15 @@ export type TransportEvent =
     };
 
 export interface Transport {
-  // FIFO acceptance, not request completion. Queue overflow rejects with BUSY.
+  /** Resolves when the transport accepts a frame; request completion arrives separately. */
   send(text: string): Promise<void>;
-  // Subscribe before the first send. A closed transport reports closure to late subscribers too.
+  /** Subscribe before sending; late subscribers also receive a closed transport event. */
   subscribe(listener: (event: TransportEvent) => void): Dispose;
-  // Idempotent; completes when transport resources have been released.
+  /** Closes idempotently and completes after transport resources are released. */
   close(): Promise<void>;
 }
 
+/** JSON input and output values accepted by one command. */
 export type CommandContract = {
   input: JsonValue;
   output: JsonValue;
@@ -60,6 +61,7 @@ export type CommandContract = {
 export type CommandMap = Record<string, CommandContract>;
 export type EventMap = Record<string, JsonValue>;
 
+/** Default timeouts and limits for requests, subscriptions, and retained IDs. */
 export const API_LIMITS = {
   handshakeTimeoutMs: 10000,
   shutdownTimeoutMs: 2000,
@@ -69,12 +71,13 @@ export const API_LIMITS = {
   maxRequestIds: 1024,
 } as const;
 
-// A typing boundary, not a security token. Only the trusted runtime brands host-issued IDs.
 declare const hostContext: unique symbol;
+/** Compile-time brand for host-issued IDs; it is not a security token. */
 export type HostContext = string & {
   readonly [hostContext]: true;
 };
 
+/** Protocol error represented by validated wire code and optional details. */
 export class BunawayError extends Error {
   readonly code: WireError["code"];
   readonly details?: WireError["details"];

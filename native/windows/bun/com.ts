@@ -11,6 +11,7 @@ type NativeCall = ((...values: Arg[]) => number) & {
   close(): void;
 };
 const methods = new Map<string, NativeCall>();
+/** Bind and cache a COM vtable slot; calls supply object as the implicit this pointer. */
 export function method(
   object: Pointer,
   slot: number,
@@ -36,6 +37,7 @@ export function method(
 }
 export const addRef = (object: Pointer) => method(object, 1, [], "u32")();
 export const release = (object: Pointer) => method(object, 2, [], "u32")();
+/** Read and free COM UTF-16 text by slot or property name; absent or oversized values return empty. */
 export function getString(object: Pointer, slot: number, name?: string) {
   const out = new BigUint64Array(1);
   hr(
@@ -70,6 +72,7 @@ export function getString(object: Pointer, slot: number, name?: string) {
     ole.symbols.CoTaskMemFree(address);
   }
 }
+/** Convert GUID text to the byte order used by the Windows COM ABI. */
 export function guid(value: string) {
   const result = Buffer.from(value.replaceAll("-", ""), "hex");
   result.subarray(0, 4).reverse();
@@ -83,6 +86,7 @@ let maxCallbackDepth = 0;
 let invokeDepth = 0;
 let maxInvokeDepth = 0;
 let failure: unknown;
+/** Owns the JS memory backing a COM object and tracks its native references and calls. */
 export type ComHandler = {
   name: string;
   object: BigUint64Array;
@@ -95,8 +99,10 @@ export type ComHandler = {
   dispose(): void;
 };
 const handlers: ComHandler[] = [];
-// COM retains these objects. Keep the vtable, object and trampolines strongly
-// reachable until COM releases its last reference AND the callback has returned.
+/**
+ * Expose invoke as a COM object while retaining its vtable and callbacks for native use.
+ * Calls must stay on the creating STA; callback exceptions are saved for checkCallbacks.
+ */
 export function handler(
   name: string,
   iid: string,
@@ -230,6 +236,7 @@ export function handler(
   return result;
 }
 
+/** Read an owned interface pointer from an out slot; the caller must release it. */
 export function getObject(object: Pointer, slot: number): Pointer {
   const out = new BigUint64Array(1);
   hr(
@@ -241,6 +248,7 @@ export function getObject(object: Pointer, slot: number): Pointer {
   assert(out[0], "Null COM object");
   return Number(out[0]) as Pointer;
 }
+/** Acquire an interface with QueryInterface; the caller must release its reference. */
 export function query(object: Pointer, iid: string): Pointer {
   const out = new BigUint64Array(1);
   hr(
@@ -255,6 +263,7 @@ export function query(object: Pointer, iid: string): Pointer {
   assert(out[0], "Null COM interface");
   return Number(out[0]) as Pointer;
 }
+/** Rethrow saved callback failures and assert COM Invoke is inactive before pumping. */
 export function checkCallbacks() {
   if (failure) {
     throw failure;
@@ -264,7 +273,10 @@ export function checkCallbacks() {
 export function callbackCalls() {
   return handlers.map((callback) => callback.calls);
 }
-// Release a retired view's owner references after native detach and callback quiescence.
+/**
+ * Dispose a retired view's callbacks after native detach and quiescence.
+ * Cached method bindings are closed when the last view is removed.
+ */
 export function disposeHandlers(retired: readonly ComHandler[]) {
   assert.equal(
     callbackDepth,
@@ -288,6 +300,10 @@ export function disposeHandlers(retired: readonly ComHandler[]) {
   }
 }
 
+/**
+ * Dispose process-wide callbacks and FFI bindings after shutdown.
+ * Native references and active callbacks must have drained first.
+ */
 export function disposeCom() {
   assert.equal(
     callbackDepth,

@@ -14,6 +14,8 @@ import {
 import type { Packet, Route } from "./channel.ts";
 
 const key = (source: string) => source.split("#")[0];
+
+/** Owns the WebView-to-host protocol session for one view and its current document. */
 export class ViewBoundary {
   generation = 0;
   closed = false;
@@ -64,6 +66,8 @@ export class ViewBoundary {
       );
     }
   }
+
+  /** Validates and forwards WebView input; `source` must come from WebView2, not the message body. */
   receive(source: string, raw: string) {
     let id = "";
     try {
@@ -145,6 +149,7 @@ export class ViewBoundary {
             message: "UI channel is full.",
           });
         }
+        // Reserve space for both session-open and the first client hello before publishing a session.
         const route = {
           viewId: this.policy.id,
           documentGeneration: this.generation,
@@ -327,6 +332,8 @@ export class ViewBoundary {
   active(context: HostContext) {
     return !this.closed && this.session?.route.context === context;
   }
+
+  /** Updates the trusted URI after a same-document navigation; a disallowed origin cannot retarget the session. */
   sameDocument(source: string) {
     if (
       this.session &&
@@ -335,6 +342,8 @@ export class ViewBoundary {
       this.session.source = source;
     }
   }
+
+  /** Invalidates current-document routes before notifying the host, so late replies cannot reach this session. */
   revoke(reason: string) {
     this.generation++;
     const session = this.session;
@@ -351,6 +360,8 @@ export class ViewBoundary {
       reason,
     });
   }
+
+  /** Fails requests and subscriptions on the matching route, then revokes it; stale routes are ignored. */
   fail(route: Route, error: WireError): void {
     if (!this.matches(route) || !this.session) {
       return;
@@ -370,6 +381,11 @@ export class ViewBoundary {
     }
     this.revoke(error.code);
   }
+
+  /**
+   * Delivers validated messages on active routes; discards stale routes, late
+   * replies, and events for inactive subscriptions. Invalid active-route messages throw.
+   */
   send(route: Route, message: ServerMessage) {
     if (!this.matches(route) || !this.session) {
       this.hooks.log("discarded", {
@@ -481,6 +497,8 @@ export class ViewBoundary {
       id,
     });
   }
+
+  /** Expires outstanding requests; invoke expirations cancel host work, while listen expirations retain cleanup IDs. */
   scanDeadlines() {
     for (const [id, pending] of this.session?.pending ?? []) {
       if (performance.now() >= pending.expiry) {

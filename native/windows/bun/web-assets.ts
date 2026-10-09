@@ -1,8 +1,11 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-// The compiled web directory is immutable. Serve only files inside it, never
-// another embedded module/configuration or a fallback request to the network.
+/**
+ * Serve only compiled web files for the app origin.
+ * Never read other app files or fetch from the network.
+ * Invalid paths and methods return HTTP errors; unexpected filesystem errors propagate.
+ */
 export function webAsset(
   assets: string,
   uri: string,

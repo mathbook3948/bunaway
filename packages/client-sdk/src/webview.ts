@@ -5,18 +5,27 @@ import {
   type TransportEvent,
 } from "@bunaway/protocol";
 
+/** The message bridge exposed by a Bunaway app WebView. */
 export interface WebViewBridge {
+  /** Sends a protocol frame as a structured-clone value to the host. */
   postMessage(message: unknown): void;
+  /** Starts receiving structured-clone messages from the host. */
   addEventListener(
     type: "message",
     listener: (event: { data: unknown }) => void,
   ): void;
+  /** Stops receiving messages with the same callback passed to `addEventListener`. */
   removeEventListener(
     type: "message",
     listener: (event: { data: unknown }) => void,
   ): void;
 }
 
+/**
+ * Adapts the WebView bridge to the protocol transport used by `createClient`.
+ * Incoming values become JSON text frames; closing removes the bridge listener
+ * and, after a protocol frame has been sent, notifies the host that the session ended.
+ */
 export function createWebViewTransport(bridge: WebViewBridge): Transport {
   const listeners = new Set<(event: TransportEvent) => void>();
   let closed = false;
@@ -25,6 +34,7 @@ export function createWebViewTransport(bridge: WebViewBridge): Transport {
     if (closed) {
       return;
     }
+    // The WebView bridge supplies structured values, while Transport consumes text frames.
     const text = JSON.stringify(event.data);
     if (text === undefined) {
       return;
@@ -42,6 +52,7 @@ export function createWebViewTransport(bridge: WebViewBridge): Transport {
       if (closed) {
         throw new Error("WebView transport closed.");
       }
+      // Parse before posting so the host receives a protocol frame, not arbitrary text.
       const message = parseMessage(text);
       protocol = message.protocol;
       bridge.postMessage(message);
@@ -62,6 +73,7 @@ export function createWebViewTransport(bridge: WebViewBridge): Transport {
       if (closed) {
         return;
       }
+      // Set closed first to ignore reentrant messages and make close idempotent.
       closed = true;
       bridge.removeEventListener("message", receive);
       try {

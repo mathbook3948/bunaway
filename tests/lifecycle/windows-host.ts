@@ -42,6 +42,7 @@ const results: {
   durationMs: number;
 }[] = [];
 
+/** Recreates storage fixtures, including link targets used by scope checks. */
 async function resetData() {
   // Retry folder cleanup if the OS has not released a runtime file lock yet.
   for (let attempt = 0; ; attempt++) {
@@ -100,6 +101,7 @@ type LogEntry = {
   event: string;
   [key: string]: unknown;
 };
+/** Reads host-log records and skips malformed lines, including an incomplete trailing write. */
 async function hostLog(): Promise<LogEntry[]> {
   const path = join(dataRoot, "logs", "host.log");
   if (!existsSync(path)) {
@@ -125,6 +127,7 @@ async function hostLog(): Promise<LogEntry[]> {
       }
     });
 }
+/** Polls for a host event or report; probes return null while the condition is pending. */
 async function waitFor<T>(
   probe: () => Promise<T | null>,
   timeout = 90000,
@@ -148,6 +151,7 @@ async function reportFile(name: string) {
   return waitFor(() => readReport(join(dataRoot, "temp", name)));
 }
 
+/** Starts the packaged host under hostile cwd and environment settings. */
 function launch() {
   const command = [
     join(packagePath, "tests.bunaway.host.exe"),

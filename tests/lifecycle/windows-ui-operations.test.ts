@@ -120,6 +120,7 @@ function config(dataRoot: string, permissions: string[]): UIConfig {
   };
 }
 
+/** Start the real UI worker with shared-memory controls for blocked operations. */
 async function startWorker(permissions: string[]) {
   const dataRoot = resolve(
     import.meta.dir,
@@ -214,6 +215,7 @@ await import(${JSON.stringify(uiWorker)});
     async (packet) => {
       packets.push(packet);
       if (packet.kind === "ready") {
+        // Hold packet handling at startup until stop() releases the gate.
         readySeen.resolve();
         await readyGate.promise;
       } else if (packet.kind === "prepare") {
@@ -422,6 +424,7 @@ test.skipIf(process.platform !== "win32")(
       }
 
       await ui.sendOperation("started", "ui-test.wait");
+      // The shared slot confirms execute() entered before cancellation is sent.
       await waitForSlot(ui.state, 1);
       ui.channel.notify({
         kind: "cancel",

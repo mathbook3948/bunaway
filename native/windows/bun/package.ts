@@ -6,8 +6,9 @@ import { files, hash } from "../../../packages/cli/src/files.ts";
 import { compileWindowsApp } from "../../../packages/cli/src/windows-compile.ts";
 import pin from "../../../runtime/build-manifests/windows-x64.json";
 
-// Build the existing real-host regression fixture with the Bun host, without invoking a C++ compiler.
 const root = resolve(import.meta.dir, "../../..");
+
+/** Build the real-host fixture and replace the requested output directory without a C++ compiler. */
 export async function buildHostFixture(
   output = resolve(root, "build/windows-bun-package"),
   config?: Record<string, unknown>,

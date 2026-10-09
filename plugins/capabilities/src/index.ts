@@ -38,8 +38,12 @@ const plugin = defineNativePlugin({
     },
   },
 });
+/** Plugin contract for reading the host's registered capability states. */
 export const capabilitiesPlugin = plugin.definition;
 export default capabilitiesPlugin;
+
+/** Result shape returned by `capabilities()`. */
 export type Capabilities = Awaited<ReturnType<typeof plugin.api.get>>;
 
+/** Read registered capabilities and reject duplicate names in the host response. */
 export const capabilities = createCapabilities(plugin.api.get);

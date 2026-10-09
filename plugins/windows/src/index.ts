@@ -26,6 +26,7 @@ const plugin = defineNativePlugin({
   },
   matches,
 });
+/** Window operations with separate listing and view-scoped control permissions. */
 export const windowsPlugin = plugin.definition;
 export default windowsPlugin;
 type WindowAPI = {
@@ -41,6 +42,7 @@ type WindowAPI = {
   >;
 };
 const api = plugin.api as WindowAPI;
+/** Typed helpers for invoking the registered window operations. */
 export const windows = Object.freeze({
   ...api,
   list: (options?: import("@bunaway/plugin").NativeInvokeOptions) =>

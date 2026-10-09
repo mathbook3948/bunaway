@@ -74,7 +74,7 @@ const sizeConstraintsOutput = {
   additionalProperties: false,
 } as const;
 
-// Selected window-control contracts.
+/** Schemas for window operations, used to validate calls and their results. */
 export const windowOperations = {
   "windows.list": {
     input: {
@@ -285,16 +285,21 @@ export type WindowInput<K extends WindowOperation> = Infer<
 export type WindowOutput<K extends WindowOperation> = Infer<
   (typeof windowOperations)[K]["output"]
 >;
+
+/** Discriminated union binding each operation name to its matching input shape. */
 export type WindowCall = {
   [K in WindowOperation]: {
     operation: K;
     payload: WindowInput<K>;
   };
 }[WindowOperation];
+
+/** Check whether a host operation name belongs to this plugin. */
 export function isWindowOperation(name: string): name is WindowOperation {
   return Object.hasOwn(windowOperations, name);
 }
 
+/** Validate the host-call envelope and the selected operation's input. */
 export function validateWindowCall(call: HostCall): WindowCall {
   const envelope = validate(hostCallSchema, call) as HostCall;
   if (!isWindowOperation(envelope.operation)) {
@@ -312,10 +317,12 @@ export function validateWindowCall(call: HostCall): WindowCall {
   } as WindowCall;
 }
 
+/** Parse and validate a serialized window host call. */
 export function parseWindowCall(text: string): WindowCall {
   return validateWindowCall(parseHostCall(text));
 }
 
+/** Validate an adapter result against the selected operation's output schema. */
 export function validateWindowOutput<K extends WindowOperation>(
   operation: K,
   value: unknown,

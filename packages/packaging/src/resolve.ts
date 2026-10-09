@@ -31,12 +31,19 @@ function fail(code: string, message: string): never {
   throw error;
 }
 
-// appId (`app.my-app`) is already a valid dotted identifier; append a suffix
-// when it is a single label so every platform gets a reverse-DNS shape.
+/**
+ * Turns a one-label app ID into the reverse-DNS shape required by packages.
+ * Already dotted IDs are preserved.
+ */
 export function deriveIdentifier(appId: string): string {
   return appId.includes(".") ? appId : `${appId}.app`;
 }
 
+/**
+ * Sanitizes the app identifier for the Windows Store package-name field and
+ * truncates it to 50 characters. Throws if the result has no valid first
+ * character.
+ */
 export function deriveMsixPackageName(identifier: string): string {
   // MSIX Package/Identity/Name: alphanumeric plus . - _, at most 50 chars.
   const name = identifier.replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 50);
@@ -72,6 +79,7 @@ async function icon(
       `bunaway.json.bundle: icon is not a file: ${nameInProject}`,
     );
   }
+  // Resolve symlink targets too so a project-local icon cannot escape the root.
   const canonical = await realpath(path);
   const rel = relative(await realpath(root), canonical);
   if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
@@ -83,11 +91,13 @@ async function icon(
   return canonical;
 }
 
-// Merge bunaway.json.bundle with app settings/package.json into the single metadata
-// source every adapter reads. `channel` selects which channels.<id> entry the
-// caller wants; channels must be declared explicitly (an empty object means
-// "package me with defaults") so a store channel is never packaged by
-// accident.
+/**
+ * Resolves project settings into the single metadata source adapters consume.
+ * The requested channel must be declared explicitly; `{}` enables its defaults
+ * while preventing an undeclared Store channel from being packaged by accident.
+ * Icon paths are checked against the project root, and channel signing settings
+ * override the top-level signing defaults.
+ */
 export async function resolvePackaging(args: {
   root: string;
   config: PackagingConfig;

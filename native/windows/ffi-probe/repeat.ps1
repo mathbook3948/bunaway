@@ -9,6 +9,7 @@ $logs = Join-Path $root 'build/windows-ffi-probe'
 $batch = Join-Path $logs ('repeat-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 New-Item -ItemType Directory -Force -Path $batch | Out-Null
 $results = @()
+# Save source hashes with batch logs to tie results to this probe revision.
 Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'main.ts'), (Join-Path $PSScriptRoot 'worker.ts'), (Join-Path $PSScriptRoot 'ui.ts'), (Join-Path $PSScriptRoot 'run.ps1') -Algorithm SHA256 |
     Select-Object Path, Hash | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $batch 'sources.json') -Encoding utf8
 for ($iteration = 1; $iteration -le $Repeat; $iteration++) {

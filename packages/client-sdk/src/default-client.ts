@@ -19,6 +19,10 @@ interface WebViewWindow {
   };
 }
 
+/**
+ * Returns the document's shared client and owns its page-exit cleanup.
+ * @throws {BunawayError} If called outside an app WebView or without its host bridge.
+ */
 export function defaultClient(factory: ClientFactory): Client {
   const view = (
     globalThis as {

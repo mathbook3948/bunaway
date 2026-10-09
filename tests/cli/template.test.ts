@@ -57,6 +57,7 @@ test("external generated backend uses actual SDK command/storage/event; revoked 
     const timeout = setTimeout(() => processChild.kill(), 12000);
     const errors = new Response(processChild.stderr).text();
     const frames = readJsonLines(processChild.stdout)[Symbol.asyncIterator]();
+    // Attach one runtime identity to every test-side frame sent to the backend.
     const send = (body: Record<string, unknown>) =>
       processChild.stdin.write(
         `${JSON.stringify({
@@ -112,6 +113,7 @@ test("external generated backend uses actual SDK command/storage/event; revoked 
         holdReached = resolveHold;
       });
       const reading = (async () => {
+        // Act as the native host and hold one write while its UI session is revoked.
         for (;;) {
           const line = await frames.next();
           if (line.done) {
@@ -178,6 +180,7 @@ test("external generated backend uses actual SDK command/storage/event; revoked 
           }
         }
       })();
+      /** Creates a UI client whose close operation revokes its runtime context. */
       const session = (context: string) => {
         send({
           kind: "session-open",
@@ -243,6 +246,7 @@ test("external generated backend uses actual SDK command/storage/event; revoked 
       if (!held) {
         throw new Error("Missing held request.");
       }
+      // A late response for the revoked context must not replay its pending save.
       send({
         kind: "host-response",
         context: held.context,

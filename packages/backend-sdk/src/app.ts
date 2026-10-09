@@ -30,6 +30,7 @@ type AppOptions<
   readonly events?: E;
 };
 
+/** Checks ownership before adding entries so collisions fail during app composition. */
 function collect<T>(
   entries: Readonly<Record<string, T>>,
   target: Map<string, T>,
@@ -43,6 +44,11 @@ function collect<T>(
   }
 }
 
+/**
+ * Combines direct registrations, modules, state, plugins, and desktop options
+ * into an app definition with frozen registries, without mutating its inputs.
+ * Invalid names and duplicate registrations fail during composition.
+ */
 export function defineApp<
   const M extends readonly ModuleDefinition[],
   const C extends CommandRegistry = Record<never, never>,

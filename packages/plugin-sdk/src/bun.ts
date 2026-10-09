@@ -7,6 +7,11 @@ import {
 } from "@bunaway/protocol";
 
 export type NativeInvokeOptions = never;
+
+/**
+ * Invoke a native operation from the active backend host context. Cancellation
+ * and deadlines come from that context and cannot be overridden here.
+ */
 export async function call<I extends Schema, O extends Schema>(
   operation: HostOperationContract<I, O>,
   input: Infer<I>,

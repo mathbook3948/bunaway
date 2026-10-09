@@ -20,6 +20,7 @@ import {
 import { files, frameworkRoot, writeJson } from "../src/files.ts";
 import { run } from "../src/processes.ts";
 
+/** Emit package declarations and rewrite internal imports to the staged package layout. */
 async function writeDeclarations(stage: string, info: Release): Promise<void> {
   const declarations = resolve(stage, "packages/cli/dist/types");
   const aliases = new Map<string, string>();
@@ -87,6 +88,10 @@ async function writeDeclarations(stage: string, info: Release): Promise<void> {
   }
 }
 
+/**
+ * Build and validate a versioned framework tarball in the destination directory.
+ * Intermediate SDK packages and staging files are removed even when packaging fails.
+ */
 export async function packFramework(
   destination = resolve(frameworkRoot, "build/framework"),
   options: {

@@ -24,21 +24,28 @@ type RegisteredEntry<N extends string, K extends string, T> = string extends
   ? Record<never, never>
   : SingleEntry<`${N}.${K}`, T>;
 
+/** A named group of commands and events ready to be included in an app. */
 export type ModuleDefinition<
   C extends CommandRegistry = CommandRegistry,
   E extends EventRegistry = EventRegistry,
 > = {
+  /** Namespace prepended to this module's command and event names. */
   readonly name: string;
+  /** Commands registered under this module's namespace. */
   readonly commands: C;
+  /** Event schemas registered under this module's namespace. */
   readonly events: E;
 };
 
+/** Immutable, typed builder for registering one module's commands and events. */
 export interface ModuleBuilder<
   N extends string,
   C extends CommandRegistry = Record<never, never>,
   E extends EventRegistry = Record<never, never>,
 > extends ModuleDefinition<C, E> {
+  /** Namespace prepended to this module's command and event names. */
   readonly name: N;
+  /** Registers `<module>.<name>`; invalid or duplicate names throw `INVALID_ARGUMENT`. */
   command<
     const K extends string,
     const I extends Schema,
@@ -48,12 +55,14 @@ export interface ModuleBuilder<
     contract: CommandContract<I, O>,
     handle: CommandHandler<I, O>,
   ): ModuleBuilder<N, C & RegisteredEntry<N, K, CommandDefinition<I, O>>, E>;
+  /** Declares `<module>.<name>`; emitted payloads are checked against its schema. */
   event<const K extends string, const S extends Schema>(
     name: K,
     schema: S,
   ): ModuleBuilder<N, C, E & RegisteredEntry<N, K, S>>;
 }
 
+/** Adds a uniquely named entry to a frozen copy of the current registry. */
 function add<
   R extends Readonly<Record<string, unknown>>,
   N extends string,
@@ -82,6 +91,7 @@ function add<
   }) as R & RegisteredEntry<N, K, T>;
 }
 
+/** Creates a frozen builder snapshot whose methods add one validated entry. */
 function buildModule<
   N extends string,
   C extends CommandRegistry,
@@ -122,7 +132,10 @@ function buildModule<
   return Object.freeze(builder);
 }
 
-// Each call returns a new snapshot so earlier builders retain their exact types.
+/**
+ * Starts an empty module builder. Each registration returns a new snapshot, so
+ * earlier builders keep their original runtime entries and inferred types.
+ */
 export function defineModule<const N extends string>(
   name: N,
 ): ModuleBuilder<N> {

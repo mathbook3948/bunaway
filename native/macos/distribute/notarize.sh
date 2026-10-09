@@ -49,6 +49,7 @@ MSG
 fi
 
 say() { printf 'notarize.sh: %s\n' "$*"; }
+# Stage beside the artifact so the validated replacement can be renamed on the same filesystem.
 STAGE=$(mktemp -d "$(dirname "$ARTIFACT")/.bunaway-notary.XXXXXX")
 trap 'rm -rf "$STAGE"' EXIT
 say "submitting $ARTIFACT (profile '$PROFILE')…"
