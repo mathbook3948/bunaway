@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { DevelopmentApp } from "../../native/windows/bun/development-app.ts";
@@ -206,65 +206,102 @@ test("app replacement keeps state, sessions, subscriptions and the code of an in
   }
 });
 
-test("private process IPC rejects corrupt bundles, recovers after import failure and bounds cached generations", async () => {
-  const assets = await mkdtemp(resolve(tmpdir(), "bunaway-app-reload-"));
-  const connection = new WindowsAppReload();
-  const child = Bun.spawn(
-    [
-      process.execPath,
-      resolve(import.meta.dir, "app-reload.fixture.ts"),
-      assets,
-    ],
-    {
-      stdout: "ignore",
-      stderr: "pipe",
-      stdin: "ignore",
-      ipc: (message) => connection.receive(message),
-    },
-  );
-  connection.attach(child);
-  const errors = new Response(child.stderr).text();
-  const source =
-    "export default { commands: { read: { input: { const: null }, output: {}, async run() { return 1; } } }, events: {} };\n";
-  async function candidate(
-    code: string,
-    hash = createHash("sha256").update(code).digest("hex"),
-  ) {
-    const id = crypto.randomUUID();
-    const directory = resolve(assets, "reloads", id);
-    await mkdir(directory, {
-      recursive: true,
-    });
-    await writeFile(resolve(directory, "app.js"), code);
-    return connection.reload({
-      kind: "bunaway:reload-app",
-      id,
-      sha256: hash,
-    });
-  }
-  try {
-    expect((await candidate(source, "0".repeat(64))).status).toBe("failed");
-    expect((await candidate("export default ;")).status).toBe("failed");
-    expect((await candidate(source)).status).toBe("reloaded");
-    expect(
-      (await candidate(source.replace("events: {}", "events: { changed: {} }")))
-        .status,
-    ).toBe("restart");
-    for (let index = 0; index < 96; index++) {
-      expect((await candidate(source)).status).toBe("reloaded");
+test.each([
+  "direct",
+  "linked",
+])(
+  "private process IPC rejects corrupt bundles, recovers after import failure and bounds cached generations (%s assets)",
+  async (mode) => {
+    const temporary = await mkdtemp(resolve(tmpdir(), "bunaway-app-reload-"));
+    const actualAssets = resolve(temporary, "assets");
+    await mkdir(actualAssets);
+    const assets =
+      mode === "linked" ? resolve(temporary, "linked-assets") : actualAssets;
+    const linkType = process.platform === "win32" ? "junction" : "dir";
+    if (mode === "linked") {
+      await symlink(actualAssets, assets, linkType);
     }
-    expect((await candidate(source)).status).toBe("restart");
-  } finally {
-    connection.close();
-    child.kill();
-    await child.exited;
-    await errors;
-    await rm(assets, {
-      recursive: true,
-      force: true,
-    });
-  }
-});
+    const connection = new WindowsAppReload();
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        resolve(import.meta.dir, "app-reload.fixture.ts"),
+        assets,
+      ],
+      {
+        stdout: "ignore",
+        stderr: "pipe",
+        stdin: "ignore",
+        ipc: (message) => connection.receive(message),
+      },
+    );
+    connection.attach(child);
+    const errors = new Response(child.stderr).text();
+    const source =
+      "export default { commands: { read: { input: { const: null }, output: {}, async run() { return 1; } } }, events: {} };\n";
+    async function candidate(
+      code: string,
+      hash = createHash("sha256").update(code).digest("hex"),
+    ) {
+      const id = crypto.randomUUID();
+      const directory = resolve(assets, "reloads", id);
+      await mkdir(directory, {
+        recursive: true,
+      });
+      await writeFile(resolve(directory, "app.js"), code);
+      return connection.reload({
+        kind: "bunaway:reload-app",
+        id,
+        sha256: hash,
+      });
+    }
+    try {
+      expect(await candidate(source, "0".repeat(64))).toMatchObject({
+        status: "failed",
+        message: "App reload hash does not match.",
+      });
+      const escapedId = crypto.randomUUID();
+      const outside = resolve(temporary, "outside");
+      await mkdir(outside);
+      await writeFile(resolve(outside, "app.js"), source);
+      await symlink(outside, resolve(assets, "reloads", escapedId), linkType);
+      expect(
+        await connection.reload({
+          kind: "bunaway:reload-app",
+          id: escapedId,
+          sha256: createHash("sha256").update(source).digest("hex"),
+        }),
+      ).toMatchObject({
+        status: "failed",
+        message: "App reload entry escapes its generation directory.",
+      });
+      expect((await candidate("export default ;")).status).toBe("failed");
+      expect(await candidate(source)).toMatchObject({
+        status: "reloaded",
+      });
+      expect(
+        (
+          await candidate(
+            source.replace("events: {}", "events: { changed: {} }"),
+          )
+        ).status,
+      ).toBe("restart");
+      for (let index = 0; index < 96; index++) {
+        expect((await candidate(source)).status).toBe("reloaded");
+      }
+      expect((await candidate(source)).status).toBe("restart");
+    } finally {
+      connection.close();
+      child.kill();
+      await child.exited;
+      await errors;
+      await rm(temporary, {
+        recursive: true,
+        force: true,
+      });
+    }
+  },
+);
 
 test("contract, initial state, desktop callbacks and plugin instance changes require a restart", () => {
   const initial = app(1, 1);

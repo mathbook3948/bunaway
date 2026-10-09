@@ -19,7 +19,9 @@ Windows 이벤트 전송 회귀는 실제 `MessageChannel`과 Core를 연결한�
 Windows 호스트 시나리오는 `lifecycle/windows-host.ts`에 두고 PID 조회, 창 닫기와
 프로세스 종료 감시는 `lifecycle/windows-host-processes.ts`에서 실행한다.
 `app-reload.test.ts`는 명령 교체 후 상태, 세션, 구독, 진행 중인 명령의 기존 구현과
-비공개 개발 IPC 입력 검증을 확인한다. `windows-app-reload.ts`는 생성하고 설치한 앱의
+비공개 개발 IPC 입력 검증을 확인한다. 일반 경로와 별칭 경로에서 정상 번들을 교체하고,
+해시가 다르거나 세대 디렉터리 밖을 가리키는 번들은 거부하는지도 검사한다.
+`windows-app-reload.ts`는 생성하고 설치한 앱의
 실제 CLI 파일 감시와 WebView2를 사용해 소스 오류 중 기존 앱 유지, 수정 후 상태와
 화면 입력, 이벤트 순서, Host API, 오류 코드 보존, 계약 변경 시 전체 재시작을 검증한다.
 CLI 계약 테스트는 로컬 UI와 백엔드의 공유 파일 변경을 전체 재시작 대상으로 분류하고

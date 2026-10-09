@@ -43,10 +43,11 @@ export function listenForAppReload(
     }
     busy = true;
     const reload = async () => {
-      const entry = resolve(assets, "reloads", request.id, "app.js");
+      const root = await realpath(assets);
+      const entry = resolve(root, "reloads", request.id, "app.js");
       const canonical = await realpath(entry);
       if (
-        relative(assets, canonical).replaceAll("\\", "/") !==
+        relative(root, canonical).replaceAll("\\", "/") !==
         `reloads/${request.id}/app.js`
       ) {
         throw new Error("App reload entry escapes its generation directory.");
