@@ -91,6 +91,13 @@ export default { commands: { read: { input: { const: null }, output: {}, async r
       });
       const assets = resolve(home, `assets-${extension}`);
       await bundleWindowsAssets(valid, assets, false, true);
+      const inventory = await json(resolve(assets, "development-sdk.json"));
+      if (!inventory || typeof inventory !== "object") {
+        throw new Error("Missing development SDK fixture inventory.");
+      }
+      expect(Reflect.get(inventory, "@bunaway/plugin-storage")).toMatch(
+        /^sdk[0-9]+\.cjs$/,
+      );
       const initial = await import(
         pathToFileURL(resolve(assets, "app.js")).href
       );

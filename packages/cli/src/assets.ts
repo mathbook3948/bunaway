@@ -412,7 +412,12 @@ export { defaultExport as default };`,
       ? (metadata) => {
           for (const [path, input] of Object.entries(metadata?.inputs ?? {})) {
             if (input.format === "cjs") {
-              commonJsSources.add(resolve(path));
+              // Bun 1.4.2 prefixes cross-drive Windows inputs with ../ before the drive path.
+              const inputPath =
+                process.platform === "win32"
+                  ? path.replace(/^(?:\.\.\/)+(?=[A-Za-z]:\/)/, "")
+                  : path;
+              commonJsSources.add(resolve(inputPath));
             }
           }
         }
