@@ -156,6 +156,19 @@ if (!process.argv.includes("--child")) {
       ],
       returns: "i32",
     },
+    GetDpiForWindow: {
+      args: [
+        "u64",
+      ],
+      returns: "u32",
+    },
+    ShowWindow: {
+      args: [
+        "u64",
+        "i32",
+      ],
+      returns: "i32",
+    },
   });
   const nativeWindows = new Windows(() => {});
   try {
@@ -197,6 +210,7 @@ if (!process.argv.includes("--child")) {
             [
               ...frame,
             ],
+            `Fullscreen restore showCmd=${showCmd}, visible=${visible}`,
           );
         } finally {
           nativeWindows.destroy(hwnd);
@@ -232,10 +246,53 @@ if (!process.argv.includes("--child")) {
     editorWindows = 0,
     geometry = false,
     pending = "";
+  const windowChecks: Promise<void>[] = [];
   const decoder = new TextDecoder();
   const timers = new Set<ReturnType<typeof setInterval>>();
   let editorBrowser = 0;
   const crashes: Promise<void>[] = [];
+  function assertClientSize(hwnd: bigint, width: number, height: number) {
+    const client = new Int32Array(4);
+    assert(driver.symbols.GetClientRect(hwnd, ptr(client)));
+    const dpi = driver.symbols.GetDpiForWindow(hwnd);
+    const physical = (logical: number) => Math.round((logical * dpi) / 96);
+    assert.deepEqual(
+      [
+        client[2],
+        client[3],
+      ],
+      [
+        physical(width),
+        physical(height),
+      ],
+    );
+  }
+  async function testMaximizeRestore(hwnd: bigint) {
+    const deadline = Date.now() + 5000;
+    driver.symbols.ShowWindow(hwnd, 3);
+    while (!driver.symbols.IsZoomed(hwnd)) {
+      assert(Date.now() < deadline, "Window did not maximize.");
+      await Bun.sleep(10);
+    }
+    const client = new Int32Array(4);
+    assert(driver.symbols.GetClientRect(hwnd, ptr(client)));
+    const dpi = driver.symbols.GetDpiForWindow(hwnd);
+    const toLogical = (physical: number) => Math.round((physical * 96) / dpi);
+    const width = toLogical(client[2] ?? 0);
+    const height = toLogical(client[3] ?? 0);
+    assert(width >= 700);
+    assert(width <= 800);
+    assert(height >= 500);
+    assert(height <= 700);
+    driver.symbols.ShowWindow(hwnd, 9);
+    while (driver.symbols.IsZoomed(hwnd)) {
+      assert(Date.now() < deadline, "Window did not restore.");
+      await Bun.sleep(10);
+    }
+    assertClientSize(hwnd, 700, 550);
+  }
+  const previousDpiContext = user.symbols.SetThreadDpiAwarenessContext(-4n);
+  assert(previousDpiContext);
   const stdout = child.stdout.pipeTo(
     new WritableStream({
       write(chunk) {
@@ -279,24 +336,28 @@ if (!process.argv.includes("--child")) {
           if (event.event === "window-api-geometry") {
             const hwnd = handles.get("editor");
             assert(hwnd);
-            const client = new Int32Array(4),
-              frame = new Int32Array(4);
-            assert(driver.symbols.GetClientRect(hwnd, ptr(client)));
+            const frame = new Int32Array(4);
+            assertClientSize(hwnd, 700, 550);
             assert(driver.symbols.GetWindowRect(hwnd, ptr(frame)));
-            assert.deepEqual(
-              [
-                ...client,
-              ],
-              [
-                0,
-                0,
-                900,
-                650,
-              ],
-            );
             assert.equal(frame[0], 20);
             assert.equal(frame[1], 30);
             geometry = true;
+            windowChecks.push(
+              testMaximizeRestore(hwnd).catch((error) => {
+                child.kill();
+                throw error;
+              }),
+            );
+          }
+          if (event.event === "window-api-constrained-size") {
+            const hwnd = handles.get("editor");
+            assert(hwnd);
+            assertClientSize(hwnd, event.width, event.height);
+          }
+          if (event.event === "window-api-initial-size") {
+            const hwnd = handles.get("editor");
+            assert(hwnd);
+            assertClientSize(hwnd, 500, 600);
           }
           if (event.event === "window-close-confirmation") {
             const answer = ++confirmations === 1 ? 7n : 6n; // IDNO then IDYES
@@ -328,6 +389,7 @@ if (!process.argv.includes("--child")) {
     const code = await child.exited;
     await stdout;
     await Promise.all(crashes);
+    await Promise.all(windowChecks);
     assert.equal(code, 0, await errors);
     assert.equal(confirmations, 2);
     assert.equal(crashes.length, 1);
@@ -339,7 +401,7 @@ if (!process.argv.includes("--child")) {
     assert.equal(report.cancelledCreation, true);
     assert.equal(report.browserFailureClosed, true);
     console.log(
-      "PASS Windows public window API: fullscreen visibility, geometry, close refusal, browser failure, dynamic creation, fresh sessions and revoked creation",
+      "PASS Windows public window API: size constraints, GetDpiForWindow scaling at the current monitor, maximize and restore, fullscreen visibility, geometry, close refusal, browser failure, dynamic creation, fresh sessions and revoked creation",
     );
   } finally {
     clearTimeout(timeout);
@@ -350,6 +412,7 @@ if (!process.argv.includes("--child")) {
       child.kill();
     }
     await child.exited;
+    assert(user.symbols.SetThreadDpiAwarenessContext(previousDpiContext));
     driver.close();
   }
 } else {
@@ -396,6 +459,17 @@ if (!process.argv.includes("--child")) {
                 }
               ).code === "PERMISSION_DENIED",
           );
+          await assert.rejects(
+            windows.getSizeConstraints({
+              view: "main",
+            }),
+            (error: unknown) =>
+              (
+                error as {
+                  code: string;
+                }
+              ).code === "PERMISSION_DENIED",
+          );
           auxiliaryDocuments++;
           return null;
         },
@@ -419,6 +493,46 @@ if (!process.argv.includes("--child")) {
             await windows.create({
               view: "editor",
             });
+            assert.deepEqual(
+              {
+                ...(await windows.getSizeConstraints({
+                  view: "editor",
+                })),
+              },
+              {
+                minWidth: 500,
+                minHeight: 400,
+                maxWidth: 800,
+                maxHeight: 600,
+              },
+            );
+            assert.deepEqual(
+              {
+                ...(await windows.getMinSize({
+                  view: "editor",
+                })),
+              },
+              {
+                width: 500,
+                height: 400,
+              },
+            );
+            assert.deepEqual(
+              {
+                ...(await windows.getMaxSize({
+                  view: "editor",
+                })),
+              },
+              {
+                width: 800,
+                height: 600,
+              },
+            );
+            console.log(
+              JSON.stringify({
+                event: "window-api-initial-size",
+              }),
+            );
             await waitFor(() => holds === 1);
             await assert.rejects(
               windows.create({
@@ -453,23 +567,77 @@ if (!process.argv.includes("--child")) {
             }
             await windows.setSize({
               view: "editor",
-              width: 900,
-              height: 650,
+              width: 700,
+              height: 550,
             });
             await windows.setPosition({
               view: "editor",
               x: 20,
               y: 30,
             });
-            await windows.setFullscreen({
+            await windows.setSize({
               view: "editor",
-              fullscreen: true,
+              width: 300,
+              height: 300,
             });
-            await assert.rejects(
-              windows.setSize({
-                view: "editor",
+            console.log(
+              JSON.stringify({
+                event: "window-api-constrained-size",
+                width: 500,
+                height: 400,
+              }),
+            );
+            await windows.setSize({
+              view: "editor",
+              width: 1000,
+              height: 800,
+            });
+            console.log(
+              JSON.stringify({
+                event: "window-api-constrained-size",
                 width: 800,
                 height: 600,
+              }),
+            );
+            await windows.setSizeConstraints({
+              view: "editor",
+              minWidth: 600,
+              maxWidth: 750,
+              maxHeight: 550,
+            });
+            console.log(
+              JSON.stringify({
+                event: "window-api-constrained-size",
+                width: 750,
+                height: 550,
+              }),
+            );
+            await windows.setMinSize({
+              view: "editor",
+              width: 700,
+              height: null,
+            });
+            assert.deepEqual(
+              {
+                ...(await windows.getSizeConstraints({
+                  view: "editor",
+                })),
+              },
+              {
+                minWidth: 700,
+                minHeight: null,
+                maxWidth: 750,
+                maxHeight: 550,
+              },
+            );
+            const beforeInvalid = await windows.getSizeConstraints({
+              view: "editor",
+            });
+            await assert.rejects(
+              windows.setMaxSize({
+                view: "editor",
+                width: 699,
+                height: null,
               }),
               (error: unknown) =>
                 (
@@ -478,10 +646,116 @@ if (!process.argv.includes("--child")) {
                   }
                 ).code === "INVALID_ARGUMENT",
             );
+            assert.deepEqual(
+              {
+                ...(await windows.getSizeConstraints({
+                  view: "editor",
+                })),
+              },
+              {
+                ...beforeInvalid,
+              },
+            );
+            await windows.setSizeConstraints({
+              view: "editor",
+              minHeight: 350,
+            });
+            assert.deepEqual(
+              {
+                ...(await windows.getSizeConstraints({
+                  view: "editor",
+                })),
+              },
+              {
+                minWidth: null,
+                minHeight: 350,
+                maxWidth: null,
+                maxHeight: null,
+              },
+            );
+            await windows.setMinSize({
+              view: "editor",
+              width: null,
+              height: null,
+            });
+            await windows.setMaxSize({
+              view: "editor",
+              width: null,
+              height: null,
+            });
+            assert.deepEqual(
+              {
+                ...(await windows.getSizeConstraints({
+                  view: "editor",
+                })),
+              },
+              {
+                minWidth: null,
+                minHeight: null,
+                maxWidth: null,
+                maxHeight: null,
+              },
+            );
+            await windows.setSize({
+              view: "editor",
+              width: 650,
+              height: 550,
+            });
+            await windows.setSizeConstraints({
+              view: "editor",
+              minWidth: 600,
+              minHeight: 500,
+              maxWidth: 800,
+              maxHeight: 700,
+            });
+            await windows.setFullscreen({
+              view: "editor",
+              fullscreen: true,
+            });
+            await assert.rejects(
+              windows.setSize({
+                view: "editor",
+                width: 500,
+                height: 400,
+              }),
+              (error: unknown) =>
+                (
+                  error as {
+                    code: string;
+                  }
+                ).code === "INVALID_ARGUMENT",
+            );
+            await windows.setSizeConstraints({
+              view: "editor",
+              minWidth: 700,
+              minHeight: 500,
+              maxWidth: 800,
+              maxHeight: 700,
+            });
+            assert.deepEqual(
+              {
+                ...(await windows.getSizeConstraints({
+                  view: "editor",
+                })),
+              },
+              {
+                minWidth: 700,
+                minHeight: 500,
+                maxWidth: 800,
+                maxHeight: 700,
+              },
+            );
             await windows.setFullscreen({
               view: "editor",
               fullscreen: false,
             });
+            console.log(
+              JSON.stringify({
+                event: "window-api-constrained-size",
+                width: 700,
+                height: 550,
+              }),
+            );
             console.log(
               JSON.stringify({
                 event: "window-api-geometry",
@@ -506,6 +780,19 @@ if (!process.argv.includes("--child")) {
             });
             await waitFor(() => holds === 2 && cancellations === 1);
           } else if (runs === 2) {
+            assert.deepEqual(
+              {
+                ...(await windows.getSizeConstraints({
+                  view: "editor",
+                })),
+              },
+              {
+                minWidth: 500,
+                minHeight: 400,
+                maxWidth: 800,
+                maxHeight: 600,
+              },
+            );
             assert.equal(
               await windows.close({
                 view: "editor",
@@ -620,8 +907,16 @@ if (!process.argv.includes("--child")) {
       title: `Window API ${view}`,
       home: `https://app.bunaway.local/${view === "main" ? "index" : "editor"}.html`,
       window: {
-        width: 800,
-        height: 600,
+        width: view === "editor" ? 300 : 800,
+        height: view === "editor" ? 1000 : 600,
+        ...(view === "editor"
+          ? {
+              minWidth: 500,
+              minHeight: 400,
+              maxWidth: 800,
+              maxHeight: 600,
+            }
+          : {}),
       },
       startup: view === "main",
     })),

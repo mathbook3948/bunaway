@@ -656,6 +656,44 @@ test("window operations reject invalid geometry, arbitrary fields and invalid cl
       },
     },
     {
+      operation: "windows.setMinSize",
+      payload: {
+        view: "main",
+        width: 500,
+      },
+    },
+    {
+      operation: "windows.setMinSize",
+      payload: {
+        view: "main",
+        width: "500",
+        height: null,
+      },
+    },
+    {
+      operation: "windows.setMinSize",
+      payload: {
+        view: "main",
+        width: 199,
+        height: null,
+      },
+    },
+    {
+      operation: "windows.setMaxSize",
+      payload: {
+        view: "main",
+        width: null,
+        height: 4097,
+      },
+    },
+    {
+      operation: "windows.setSizeConstraints",
+      payload: {
+        view: "main",
+        minWidth: 500.5,
+      },
+    },
+    {
       operation: "windows.setPosition",
       payload: {
         view: "main",
@@ -709,6 +747,57 @@ test("window operations reject invalid geometry, arbitrary fields and invalid cl
     payload: {
       view: "main",
       message: null,
+    },
+  });
+  expect(
+    parseWindowCall(
+      JSON.stringify({
+        operation: "windows.getSizeConstraints",
+        payload: {
+          view: "main",
+        },
+      }),
+    ),
+  ).toEqual({
+    operation: "windows.getSizeConstraints",
+    payload: {
+      view: "main",
+    },
+  });
+  expect(
+    parseWindowCall(
+      JSON.stringify({
+        operation: "windows.setMinSize",
+        payload: {
+          view: "main",
+          width: null,
+          height: 500,
+        },
+      }),
+    ),
+  ).toEqual({
+    operation: "windows.setMinSize",
+    payload: {
+      view: "main",
+      width: null,
+      height: 500,
+    },
+  });
+  expect(
+    parseWindowCall(
+      JSON.stringify({
+        operation: "windows.setSizeConstraints",
+        payload: {
+          view: "main",
+          minWidth: 500,
+        },
+      }),
+    ),
+  ).toEqual({
+    operation: "windows.setSizeConstraints",
+    payload: {
+      view: "main",
+      minWidth: 500,
     },
   });
   expect(

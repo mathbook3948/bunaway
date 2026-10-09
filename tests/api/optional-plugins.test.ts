@@ -1,8 +1,15 @@
 import { expect, test } from "bun:test";
 import { resolve } from "node:path";
 import { bindHostAPI } from "../../packages/core/src/host-api.ts";
-import type { NativeWindowServices } from "../../packages/plugin-api/src/native.ts";
-import type { HostContext, Policy } from "../../packages/protocol/src/index.ts";
+import type {
+  NativeWindowServices,
+  WindowSizeConstraints,
+} from "../../packages/plugin-api/src/native.ts";
+import type {
+  HostContext,
+  JsonValue,
+  Policy,
+} from "../../packages/protocol/src/index.ts";
 import { NativeRegistry } from "../../packages/protocol/src/index.ts";
 import { windowsPlugin } from "../../plugins/windows/src/index.ts";
 import { matches } from "../../plugins/windows/src/scope.ts";
@@ -41,6 +48,20 @@ test("an empty plugin registry exposes no built-in window or feature calls", asy
 
 test("window permissions use generic deny-first matching and filter list results", async () => {
   const actions: string[] = [];
+  const sizeConstraints = new Map<string, WindowSizeConstraints>(
+    [
+      "main",
+      "private",
+    ].map((view) => [
+      view,
+      {
+        minWidth: null,
+        minHeight: null,
+        maxWidth: null,
+        maxHeight: null,
+      },
+    ]),
+  );
   const permissions: Policy["backend"] = {
     permissions: [
       "windows:list",
@@ -89,6 +110,14 @@ test("window permissions use generic deny-first matching and filter list results
       focus: () => true,
       close: () => true,
       isFullscreen: () => false,
+      getSizeConstraints: () => ({
+        ...sizeConstraints.get(view)!,
+      }),
+      setSizeConstraints: (constraints) => {
+        sizeConstraints.set(view, {
+          ...constraints,
+        });
+      },
       setSize() {},
       setPosition() {},
       setFullscreen() {},
@@ -147,6 +176,126 @@ test("window permissions use generic deny-first matching and filter list results
       permissions,
     },
   );
+
+  const invoke = (
+    operationName: string,
+    input: JsonValue,
+    view = "main",
+    requestId = operationName,
+  ) =>
+    execute(operationName, input, "backend", {
+      requestId,
+      permissions,
+    });
+  expect(
+    await invoke("windows.getSizeConstraints", {
+      view: "main",
+    }),
+  ).toEqual({
+    minWidth: null,
+    minHeight: null,
+    maxWidth: null,
+    maxHeight: null,
+  });
+  await invoke("windows.setMinSize", {
+    view: "main",
+    width: 400,
+    height: null,
+  });
+  await invoke("windows.setMaxSize", {
+    view: "main",
+    width: 1200,
+    height: null,
+  });
+  expect(
+    await invoke("windows.getMinSize", {
+      view: "main",
+    }),
+  ).toEqual({
+    width: 400,
+    height: null,
+  });
+  expect(
+    await invoke("windows.getMaxSize", {
+      view: "main",
+    }),
+  ).toEqual({
+    width: 1200,
+    height: null,
+  });
+  const beforeInvalid = await invoke("windows.getSizeConstraints", {
+    view: "main",
+  });
+  await expect(
+    invoke("windows.setMaxSize", {
+      view: "main",
+      width: 399,
+      height: null,
+    }),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  await expect(
+    invoke("windows.setSizeConstraints", {
+      view: "main",
+      minHeight: 480,
+      maxHeight: 470,
+    }),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  expect(
+    await invoke("windows.getSizeConstraints", {
+      view: "main",
+    }),
+  ).toEqual(beforeInvalid);
+  await expect(
+    invoke(
+      "windows.setMinSize",
+      {
+        view: "private",
+        width: 300,
+        height: null,
+      },
+      "private",
+    ),
+  ).rejects.toMatchObject({
+    code: "PERMISSION_DENIED",
+  });
+  await invoke("windows.setSizeConstraints", {
+    view: "main",
+    minHeight: 320,
+  });
+  expect(
+    await invoke("windows.getSizeConstraints", {
+      view: "main",
+    }),
+  ).toEqual({
+    minWidth: null,
+    minHeight: 320,
+    maxWidth: null,
+    maxHeight: null,
+  });
+  await invoke("windows.setMinSize", {
+    view: "main",
+    width: null,
+    height: null,
+  });
+  await invoke("windows.setMaxSize", {
+    view: "main",
+    width: null,
+    height: null,
+  });
+  expect(
+    await invoke("windows.getSizeConstraints", {
+      view: "main",
+    }),
+  ).toEqual({
+    minWidth: null,
+    minHeight: null,
+    maxWidth: null,
+    maxHeight: null,
+  });
   await expect(
     Promise.resolve().then(() =>
       execute(

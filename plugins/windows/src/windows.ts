@@ -1,5 +1,13 @@
 import type { NativeAdapter, NativeEnvironment } from "@bunaway/plugin";
-import { BunawayError, NativeRegistry } from "@bunaway/protocol";
+import {
+  hasValidWindowSizeConstraints,
+  type WindowSizeConstraints,
+} from "@bunaway/plugin-api/native";
+import {
+  BunawayError,
+  type JsonValue,
+  NativeRegistry,
+} from "@bunaway/protocol";
 import { validateWindowCall, type WindowCall } from "./contract.ts";
 import { WindowOperations } from "./coordinator.ts";
 import { windowsPlugin } from "./index.ts";
@@ -14,7 +22,7 @@ export function createOperations(
   function applyWindow(
     call: WindowCall,
     viewId: string,
-  ): boolean | null | Promise<boolean> {
+  ): JsonValue | Promise<JsonValue> {
     const window = services.window(viewId);
     switch (call.operation) {
       case "windows.show":
@@ -42,6 +50,73 @@ export function createOperations(
         }
         window.setSize(call.payload.width, call.payload.height);
         break;
+      case "windows.getMinSize": {
+        const constraints = window.getSizeConstraints();
+        return {
+          width: constraints.minWidth,
+          height: constraints.minHeight,
+        };
+      }
+      case "windows.getMaxSize": {
+        const constraints = window.getSizeConstraints();
+        return {
+          width: constraints.maxWidth,
+          height: constraints.maxHeight,
+        };
+      }
+      case "windows.setMinSize": {
+        const constraints = window.getSizeConstraints();
+        const next: WindowSizeConstraints = {
+          ...constraints,
+          minWidth: call.payload.width,
+          minHeight: call.payload.height,
+        };
+        if (!hasValidWindowSizeConstraints(next)) {
+          throw new BunawayError({
+            code: "INVALID_ARGUMENT",
+            message: "Minimum window size cannot exceed the maximum size.",
+          });
+        }
+        window.setSizeConstraints(next);
+        break;
+      }
+      case "windows.setMaxSize": {
+        const constraints = window.getSizeConstraints();
+        const next: WindowSizeConstraints = {
+          ...constraints,
+          maxWidth: call.payload.width,
+          maxHeight: call.payload.height,
+        };
+        if (!hasValidWindowSizeConstraints(next)) {
+          throw new BunawayError({
+            code: "INVALID_ARGUMENT",
+            message:
+              "Maximum window size cannot be smaller than the minimum size.",
+          });
+        }
+        window.setSizeConstraints(next);
+        break;
+      }
+      case "windows.getSizeConstraints":
+        return {
+          ...window.getSizeConstraints(),
+        };
+      case "windows.setSizeConstraints": {
+        const next: WindowSizeConstraints = {
+          minWidth: call.payload.minWidth ?? null,
+          minHeight: call.payload.minHeight ?? null,
+          maxWidth: call.payload.maxWidth ?? null,
+          maxHeight: call.payload.maxHeight ?? null,
+        };
+        if (!hasValidWindowSizeConstraints(next)) {
+          throw new BunawayError({
+            code: "INVALID_ARGUMENT",
+            message: "Minimum window size cannot exceed the maximum size.",
+          });
+        }
+        window.setSizeConstraints(next);
+        break;
+      }
       case "windows.setPosition":
         if (window.isFullscreen()) {
           throw new BunawayError({

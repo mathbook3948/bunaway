@@ -209,7 +209,15 @@
     {
       "name": "@bunaway/plugin-api/native",
       "source": "packages/plugin-api/src/native.ts",
-      "pages": {}
+      "pages": {
+        "reference/tooling/plugin-api": [
+          "MIN_WINDOW_DIMENSION",
+          "MAX_WINDOW_DIMENSION",
+          "isWindowSizeDimension",
+          "hasValidWindowSizeConstraints",
+          "clampWindowSize"
+        ]
+      }
     },
     {
       "name": "@bunaway/plugin-opener",
@@ -319,6 +327,18 @@
     },
     {
       "source": "packages/plugin-api/src/native.ts",
+      "type": "WindowSizeConstraints",
+      "pages": {
+        "reference/tooling/plugin-api": [
+          "minWidth",
+          "minHeight",
+          "maxWidth",
+          "maxHeight"
+        ]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
       "type": "WindowState",
       "pages": {
         "reference/tooling/plugin-api": [
@@ -339,6 +359,8 @@
           "focus",
           "close",
           "isFullscreen",
+          "getSizeConstraints",
+          "setSizeConstraints",
           "setSize",
           "setPosition",
           "setFullscreen",
@@ -433,7 +455,7 @@
       }
     },
     {
-      "source": "packages/runtime-bun/src/window-config.ts",
+      "source": "packages/plugin-api/src/native.ts",
       "type": "WindowSpec",
       "pages": {
         "reference/tooling/core-and-runtime": [
@@ -638,6 +660,12 @@
       "windows.focus",
       "windows.close",
       "windows.setSize",
+      "windows.getMinSize",
+      "windows.setMinSize",
+      "windows.getMaxSize",
+      "windows.setMaxSize",
+      "windows.getSizeConstraints",
+      "windows.setSizeConstraints",
       "windows.setPosition",
       "windows.setFullscreen",
       "windows.setCloseConfirmation"

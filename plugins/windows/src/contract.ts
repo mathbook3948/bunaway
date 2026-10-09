@@ -1,4 +1,8 @@
 import {
+  MAX_WINDOW_DIMENSION,
+  MIN_WINDOW_DIMENSION,
+} from "@bunaway/plugin-api/native";
+import {
   type HostCall,
   hostCallSchema,
   type Infer,
@@ -28,6 +32,46 @@ const windowResult = {
   output: {
     const: null,
   },
+} as const;
+const sizeDimension = {
+  anyOf: [
+    {
+      const: null,
+    },
+    {
+      type: "integer",
+      minimum: MIN_WINDOW_DIMENSION,
+      maximum: MAX_WINDOW_DIMENSION,
+    },
+  ],
+} as const;
+const sizePairOutput = {
+  type: "object",
+  properties: {
+    width: sizeDimension,
+    height: sizeDimension,
+  },
+  required: [
+    "width",
+    "height",
+  ],
+  additionalProperties: false,
+} as const;
+const sizeConstraintsOutput = {
+  type: "object",
+  properties: {
+    minWidth: sizeDimension,
+    minHeight: sizeDimension,
+    maxWidth: sizeDimension,
+    maxHeight: sizeDimension,
+  },
+  required: [
+    "minWidth",
+    "minHeight",
+    "maxWidth",
+    "maxHeight",
+  ],
+  additionalProperties: false,
 } as const;
 
 // Selected window-control contracts.
@@ -73,13 +117,13 @@ export const windowOperations = {
         ...windowTarget.properties,
         width: {
           type: "integer",
-          minimum: 200,
-          maximum: 4096,
+          minimum: MIN_WINDOW_DIMENSION,
+          maximum: MAX_WINDOW_DIMENSION,
         },
         height: {
           type: "integer",
-          minimum: 200,
-          maximum: 4096,
+          minimum: MIN_WINDOW_DIMENSION,
+          maximum: MAX_WINDOW_DIMENSION,
         },
       },
       required: [
@@ -87,6 +131,69 @@ export const windowOperations = {
         "width",
         "height",
       ],
+    },
+    output: {
+      const: null,
+    },
+  },
+  "windows.getMinSize": {
+    input: windowTarget,
+    output: sizePairOutput,
+  },
+  "windows.getMaxSize": {
+    input: windowTarget,
+    output: sizePairOutput,
+  },
+  "windows.setMinSize": {
+    input: {
+      ...windowTarget,
+      properties: {
+        ...windowTarget.properties,
+        width: sizeDimension,
+        height: sizeDimension,
+      },
+      required: [
+        "view",
+        "width",
+        "height",
+      ],
+    },
+    output: {
+      const: null,
+    },
+  },
+  "windows.setMaxSize": {
+    input: {
+      ...windowTarget,
+      properties: {
+        ...windowTarget.properties,
+        width: sizeDimension,
+        height: sizeDimension,
+      },
+      required: [
+        "view",
+        "width",
+        "height",
+      ],
+    },
+    output: {
+      const: null,
+    },
+  },
+  "windows.getSizeConstraints": {
+    input: windowTarget,
+    output: sizeConstraintsOutput,
+  },
+  "windows.setSizeConstraints": {
+    input: {
+      ...windowTarget,
+      properties: {
+        ...windowTarget.properties,
+        minWidth: sizeDimension,
+        minHeight: sizeDimension,
+        maxWidth: sizeDimension,
+        maxHeight: sizeDimension,
+      },
     },
     output: {
       const: null,

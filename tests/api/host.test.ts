@@ -1027,22 +1027,44 @@ test("window helpers preserve the command context and typed operation payloads",
     code: "INVALID_ARGUMENT",
   });
   const calls: HostCall[] = [];
+  function response(call: HostCall): JsonValue {
+    switch (call.operation) {
+      case "windows.list":
+        return [
+          {
+            view: "editor",
+            open: false,
+          },
+        ];
+      case "windows.getMinSize":
+        return {
+          width: 480,
+          height: null,
+        };
+      case "windows.getMaxSize":
+        return {
+          width: null,
+          height: 1200,
+        };
+      case "windows.getSizeConstraints":
+        return {
+          minWidth: 480,
+          minHeight: null,
+          maxWidth: null,
+          maxHeight: 1200,
+        };
+      case "windows.close":
+        return false;
+      default:
+        return null;
+    }
+  }
   const ctx = context("editor", async (source, call) => {
     expect(source).toBe("editor" as HostContext);
     calls.push(call);
     return {
       kind: "result",
-      payload:
-        call.operation === "windows.list"
-          ? [
-              {
-                view: "editor",
-                open: false,
-              },
-            ]
-          : call.operation === "windows.close"
-            ? false
-            : null,
+      payload: response(call),
     };
   });
   await command({
@@ -1073,6 +1095,49 @@ test("window helpers preserve the command context and typed operation payloads",
         view: "editor",
         width: 900,
         height: 700,
+      });
+      expect(
+        await windows.getMinSize({
+          view: "editor",
+        }),
+      ).toEqual({
+        width: 480,
+        height: null,
+      });
+      await windows.setMinSize({
+        view: "editor",
+        width: null,
+        height: 500,
+      });
+      expect(
+        await windows.getMaxSize({
+          view: "editor",
+        }),
+      ).toEqual({
+        width: null,
+        height: 1200,
+      });
+      await windows.setMaxSize({
+        view: "editor",
+        width: 1600,
+        height: null,
+      });
+      expect(
+        await windows.getSizeConstraints({
+          view: "editor",
+        }),
+      ).toEqual({
+        minWidth: 480,
+        minHeight: null,
+        maxWidth: null,
+        maxHeight: 1200,
+      });
+      await windows.setSizeConstraints({
+        view: "editor",
+        minWidth: 600,
+      });
+      await windows.setSizeConstraints({
+        view: "editor",
       });
       await windows.setPosition({
         view: "editor",
@@ -1107,6 +1172,13 @@ test("window helpers preserve the command context and typed operation payloads",
     "windows.hide",
     "windows.focus",
     "windows.setSize",
+    "windows.getMinSize",
+    "windows.setMinSize",
+    "windows.getMaxSize",
+    "windows.setMaxSize",
+    "windows.getSizeConstraints",
+    "windows.setSizeConstraints",
+    "windows.setSizeConstraints",
     "windows.setPosition",
     "windows.setFullscreen",
     "windows.setCloseConfirmation",
@@ -1134,6 +1206,32 @@ test("window helpers preserve the command context and typed operation payloads",
       view: "editor",
       width: 900,
       height: 700,
+    },
+    {
+      view: "editor",
+    },
+    {
+      view: "editor",
+      width: null,
+      height: 500,
+    },
+    {
+      view: "editor",
+    },
+    {
+      view: "editor",
+      width: 1600,
+      height: null,
+    },
+    {
+      view: "editor",
+    },
+    {
+      view: "editor",
+      minWidth: 600,
+    },
+    {
+      view: "editor",
     },
     {
       view: "editor",
