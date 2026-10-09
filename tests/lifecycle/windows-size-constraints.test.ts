@@ -485,23 +485,18 @@ test.skipIf(process.platform !== "win32")(
         messaging.symbols.SetFocus(inputWindow);
         assert.equal(messaging.symbols.GetActiveWindow(), inputWindow);
         assert.equal(messaging.symbols.GetFocus(), inputWindow);
-        const foreground = messaging.symbols.GetForegroundWindow();
         targetActivations = 0;
         change();
         assert.equal(targetActivations, 0, "Background window was activated.");
         assert.equal(messaging.symbols.GetActiveWindow(), inputWindow);
         assert.equal(messaging.symbols.GetFocus(), inputWindow);
         const currentForeground = messaging.symbols.GetForegroundWindow();
+        // Other desktop applications may change the foreground window independently.
         assert.notEqual(
           currentForeground,
           window,
           "Background window became foreground.",
         );
-        // Windows may deny foreground ownership. Other applications on the CI
-        // desktop can change their foreground HWND independently of this test.
-        if (foreground === inputWindow) {
-          assert.equal(currentForeground, inputWindow);
-        }
         assert.equal(windows?.failure, undefined);
       };
       for (const size of [
