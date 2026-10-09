@@ -1,19 +1,20 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { loadPluginCatalog } from "../../native/windows/bun/plugin-catalog.ts";
 import {
   operations,
   pluginRegistry,
 } from "../../native/windows/bun/plugins.ts";
+import { validateProject } from "../../packages/cli/src/config.ts";
 import { packageFilename } from "../../packages/cli/src/distribution.ts";
+import { writeJson } from "../../packages/cli/src/files.ts";
 import {
   installedPlugins,
-  pluginTableSource,
+  writePluginAssets,
 } from "../../packages/cli/src/plugins.ts";
-import { validateProject } from "../../packages/cli/src/config.ts";
-import { writeJson } from "../../packages/cli/src/files.ts";
 import { createProject, packageDirectory } from "./project.ts";
 
 /** Runs an install/build subprocess and reports its captured output on failure. */
@@ -103,12 +104,17 @@ export default defineApp({ modules: [], plugins: [openerPlugin] });
       "opener",
     ]);
 
-    const generated = resolve(home, "generated/plugin-table.ts");
-    await mkdir(dirname(generated), {
-      recursive: true,
-    });
-    await writeFile(generated, pluginTableSource(plugins));
-    const { packagedPlugins } = await import(pathToFileURL(generated).href);
+    const assets = resolve(home, "generated");
+    const generated = await writePluginAssets(assets, plugins);
+    await writeFile(
+      resolve(assets, "plugin-imports.js"),
+      await Bun.file(generated).text(),
+    );
+    const packagedPlugins = await loadPluginCatalog(
+      assets,
+      (await import(pathToFileURL(resolve(assets, "plugin-imports.js")).href))
+        .pluginImports,
+    );
     const app = (
       await import(pathToFileURL(resolve(project, "src-bunaway/app.ts")).href)
     ).default;

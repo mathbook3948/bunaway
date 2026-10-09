@@ -189,6 +189,13 @@ entry는 default export한 선언을 읽을 경로입니다. operations는 creat
 execution은 io 또는 ui이며, UI 스레드가 필요한 작업은 ui를 지정합니다.
 개발 중 manifest와 정책 형식은 v1입니다.
 
+Windows CLI는 설치된 플러그인의 계약과 실행 위치를 앱 설정, 정책과 함께
+`assets/manifest.json`에 기록합니다. 플러그인 구현을 불러오는 코드는
+`assets/generated/plugin-imports.ts`로 따로 생성하고 번들에 포함합니다.
+개발 빌드에서는 두 파일을 확인할 수 있고, 배포 빌드에서는 실행 manifest와 번들 모듈을
+EXE에 포함합니다. 생성 파일을 직접 수정하지 않고 플러그인의 선언이나 `plugin.json`을
+수정한 뒤 다시 빌드합니다.
+
 ## 리소스 범위가 필요한 기능
 
 파일이나 주소의 범위를 제한하는 기능은 scopes에 짧은 permission 이름과 schema를

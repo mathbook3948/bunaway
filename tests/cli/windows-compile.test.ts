@@ -198,21 +198,26 @@ process.exit(0);
 export default { commands: {}, events: {} };
 `,
       );
-      await writeJson(resolve(root, "assets/app.json"), {
-        appId,
-        title,
-        icon: "app.ico",
-        view: "main",
-        home: "https://app.bunaway.local/index.html",
-        window: {
-          width: 200,
-          height: 200,
+      await writeJson(resolve(root, "assets/manifest.json"), {
+        format: 1,
+        plugins: [],
+        developmentSdk: {},
+        policy: await Bun.file(
+          resolve(import.meta.dir, "../fixtures/desktop/host/policy.json"),
+        ).json(),
+        app: {
+          appId,
+          title,
+          icon: "app.ico",
+          view: "main",
+          home: "https://app.bunaway.local/index.html",
+          window: {
+            width: 200,
+            height: 200,
+          },
         },
       });
-      await cp(
-        resolve(import.meta.dir, "../fixtures/desktop/host/policy.json"),
-        resolve(root, "assets/policy.json"),
-      );
+
       await writeFile(
         resolve(root, "assets/web/index.html"),
         "<h1>embedded</h1>",
@@ -234,9 +239,9 @@ export default { commands: {}, events: {} };
         bundledAssets,
         new AbortController().signal,
       );
-      expect(await Bun.file(resolve(root, "assets/app.json")).exists()).toBe(
-        false,
-      );
+      expect(
+        await Bun.file(resolve(root, "assets/manifest.json")).exists(),
+      ).toBe(false);
       const pe = await readFile(executable);
       expect(pe.readUInt16LE(pe.readUInt32LE(0x3c) + 24 + 68)).toBe(2);
       await writeFile(resolve(root, ".env"), "CWD_POLLUTION=yes");
@@ -297,20 +302,25 @@ export default { commands: {}, events: {} };
       await mkdir(resolve(failureAssets, "web"), {
         recursive: true,
       });
-      await writeJson(resolve(failureAssets, "app.json"), {
-        appId: failureAppId,
-        title: "Known Folder failure",
-        view: "main",
-        home: "https://app.bunaway.local/index.html",
-        window: {
-          width: 200,
-          height: 200,
+      await writeJson(resolve(failureAssets, "manifest.json"), {
+        format: 1,
+        plugins: [],
+        developmentSdk: {},
+        policy: await Bun.file(
+          resolve(import.meta.dir, "../fixtures/desktop/host/policy.json"),
+        ).json(),
+        app: {
+          appId: failureAppId,
+          title: "Known Folder failure",
+          view: "main",
+          home: "https://app.bunaway.local/index.html",
+          window: {
+            width: 200,
+            height: 200,
+          },
         },
       });
-      await cp(
-        resolve(import.meta.dir, "../fixtures/desktop/host/policy.json"),
-        resolve(failureAssets, "policy.json"),
-      );
+
       await writeFile(
         resolve(failureAssets, "web/index.html"),
         "<h1>embedded</h1>",

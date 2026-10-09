@@ -75,7 +75,7 @@ if (!process.argv.includes("--child")) {
   );
   const childEntry = await bundleNativeWorker(
     "windows-bun",
-    resolve(output, "driver"),
+    assets,
     import.meta.path,
   );
   // Keep FFI calls in the parent driver while the packaged host runs in its own process.

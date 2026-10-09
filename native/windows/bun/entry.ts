@@ -28,7 +28,7 @@ import { DevelopmentApp } from "./development-app.ts";
 import type { LaunchArguments, listenForInstances } from "./instance.ts";
 import { activeDescendants, containAppProcess } from "./job.ts";
 import { DiagnosticLog } from "./log.ts";
-import { packagedPlugins } from "./plugin-table.ts";
+import { loadPluginCatalog } from "./plugin-catalog.ts";
 import { pluginRegistry } from "./plugins.ts";
 
 /**
@@ -57,7 +57,8 @@ export async function runWindowsApp(
         ]
       : [];
   });
-  pluginRegistry(plugins).validatePolicy(config.policy);
+  const packagedPlugins = await loadPluginCatalog(config.assets);
+  pluginRegistry(plugins, packagedPlugins).validatePolicy(config.policy);
   config = {
     ...config,
     plugins,
@@ -153,6 +154,7 @@ export async function runWindowsApp(
       workerData: {
         runtime: config.runtime,
         dataRoot: config.dataRoot,
+        assets: config.assets,
         plugins,
       },
     },

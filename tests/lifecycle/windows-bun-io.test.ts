@@ -27,6 +27,7 @@ test.skipIf(process.platform !== "win32")(
       await bundleNativeWorker("host-operations", resolve(dataRoot, "worker")),
       {
         workerData: {
+          assets: resolve(dataRoot, "worker"),
           runtime,
           dataRoot,
           plugins: [],
@@ -145,6 +146,7 @@ test.skipIf(process.platform !== "win32")(
       await bundleNativeWorker("host-operations", resolve(dataRoot, "worker")),
       {
         workerData: {
+          assets: resolve(dataRoot, "worker"),
           runtime,
           dataRoot,
           plugins: [

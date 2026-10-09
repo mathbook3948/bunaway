@@ -7,7 +7,11 @@ import {
   parsePackaging,
 } from "@bunaway/packaging";
 import { NativeRegistry, type Policy, parsePolicy } from "@bunaway/protocol";
-import { developmentUrl } from "@bunaway/runtime-bun/development";
+import {
+  developmentPolicy,
+  developmentUrl,
+  developmentWindowHome,
+} from "@bunaway/runtime-bun/development";
 import {
   readWindowSpecs,
   type WindowSpec,
@@ -93,6 +97,47 @@ export interface Project {
     windows?: WindowSpec[];
   };
   policy: Policy;
+}
+
+/** Resolve development overrides once for generated host settings on either platform. */
+export function runtimeSettings(
+  project: Project,
+  server?: DevServerConfig,
+  devtools = false,
+) {
+  return {
+    app: {
+      ...project.app,
+      ...(server
+        ? {
+            home: server.url,
+            development: {
+              url: server.url,
+            },
+            ...(project.app.windows
+              ? {
+                  windows: project.app.windows.map((spec) => ({
+                    ...spec,
+                    home: developmentWindowHome(spec.home, server.url),
+                  })),
+                }
+              : {}),
+          }
+        : {}),
+      ...(devtools
+        ? {
+            developmentTools: true,
+          }
+        : {}),
+    },
+    policy: server
+      ? developmentPolicy(
+          project.policy,
+          project.app.windows?.map((spec) => spec.view) ?? project.app.view,
+          server.url,
+        )
+      : project.policy,
+  };
 }
 
 function record(value: unknown, path: string): Record<string, unknown> {

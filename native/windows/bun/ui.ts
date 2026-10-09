@@ -15,6 +15,7 @@ import {
 } from "./channel.ts";
 import { callbackCalls, checkCallbacks, disposeCom } from "./com.ts";
 import { hostResponse } from "./host-response.ts";
+import { loadPluginCatalog } from "./plugin-catalog.ts";
 import {
   disposeAll,
   operations,
@@ -33,9 +34,10 @@ import {
 import { disposeWin32Bindings, hr, kernel, ole } from "./win32-bindings.ts";
 
 const config = workerData as UIConfig;
-const registry = pluginRegistry(config.plugins ?? []);
+const packagedPlugins = await loadPluginCatalog(config.assets);
+const registry = pluginRegistry(config.plugins ?? [], packagedPlugins);
 registry.validatePolicy(config.policy);
-const matches = await permissionMatcher(config.plugins ?? []);
+const matches = await permissionMatcher(config.plugins ?? [], packagedPlugins);
 assert(parentPort);
 let failure: unknown;
 let stopping = false;
@@ -581,6 +583,7 @@ try {
     config.dataRoot,
     "ui",
     windowServices,
+    packagedPlugins,
   );
   windows = new Windows(
     () => {

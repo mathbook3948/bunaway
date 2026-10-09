@@ -139,12 +139,11 @@ const development = await buildProject(project, {
   native,
   development: true,
 });
-const developmentApp = await Bun.file(
-  resolve(development.package, "assets/app.json"),
+const developmentManifest = await Bun.file(
+  resolve(development.package, "assets/manifest.json"),
 ).json();
-const developmentPolicy = await Bun.file(
-  resolve(development.package, "assets/policy.json"),
-).json();
+const developmentApp = developmentManifest.app;
+const developmentPolicy = developmentManifest.policy;
 expect(developmentApp.home).toBe(devUrl);
 expect(developmentApp.development).toEqual({
   url: devUrl,
@@ -160,10 +159,11 @@ expect(await readdir(resolve(development.package, "assets/web"))).toEqual([]);
 const production = await buildProject(project, {
   native,
 });
-const productionApp = JSON.parse(await compiledAsset(production, "app.json"));
-const productionPolicy = JSON.parse(
-  await compiledAsset(production, "policy.json"),
+const productionManifest = JSON.parse(
+  await compiledAsset(production, "manifest.json"),
 );
+const productionApp = productionManifest.app;
+const productionPolicy = productionManifest.policy;
 expect(productionApp.home).toBe("https://app.bunaway.local/index.html");
 expect(productionApp.development).toBeUndefined();
 expect(productionPolicy.views[0].origins).toEqual([

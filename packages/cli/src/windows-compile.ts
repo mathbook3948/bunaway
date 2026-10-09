@@ -9,8 +9,7 @@ export function compiledAssetArguments(
   bundledAssets: readonly string[],
 ): string[] {
   return [
-    "app.json",
-    "policy.json",
+    "manifest.json",
     "web",
     ...bundledAssets,
   ].map((name) => `--asset=${name}`);

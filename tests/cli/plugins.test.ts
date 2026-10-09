@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { hostResponse } from "../../native/windows/bun/host-response.ts";
+import { loadPluginCatalog } from "../../native/windows/bun/plugin-catalog.ts";
 import {
   operations,
   permissionMatcher,
@@ -12,7 +13,7 @@ import {
 import { writeJson } from "../../packages/cli/src/files.ts";
 import {
   installedPlugins,
-  pluginTableSource,
+  writePluginAssets,
 } from "../../packages/cli/src/plugins.ts";
 import {
   BunawayError,
@@ -69,10 +70,16 @@ test("scoped plugins without a Windows adapter preserve authorization and return
     };`,
     );
     const installed = await installedPlugins(root, "0.0.0");
-    const generated = resolve(root, "table.ts");
-    await Bun.write(generated, pluginTableSource(installed));
-    const module = await import(pathToFileURL(generated).href);
-    const catalog = module.packagedPlugins;
+    const generated = await writePluginAssets(root, installed);
+    await Bun.write(
+      resolve(root, "plugin-imports.js"),
+      await Bun.file(generated).text(),
+    );
+    const catalog = await loadPluginCatalog(
+      root,
+      (await import(pathToFileURL(resolve(root, "plugin-imports.js")).href))
+        .pluginImports,
+    );
     expect(catalog[0]?.execution).toBeUndefined();
     expect(catalog[0]?.operations).toBeUndefined();
     const registry = pluginRegistry(installed, catalog);

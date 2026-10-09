@@ -19,7 +19,7 @@ import { webAsset } from "./web-assets.ts";
 import { hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
 
 const embedded = Bun.embeddedFiles.some(
-  (file) => (file as File).name === "app.json",
+  (file) => (file as File).name === "manifest.json",
 );
 const streams = dlopen("shlwapi.dll", {
   SHCreateMemStream: {

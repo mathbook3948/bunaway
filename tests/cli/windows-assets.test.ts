@@ -46,6 +46,17 @@ test("compiled host preserves file imports from the app and both workers after s
     await writeFile(resolve(host, "ui.txt"), "UI worker asset");
     await writeFile(resolve(host, "io.txt"), "I/O worker asset");
     await writeFile(
+      resolve(root, "plugin.ts"),
+      `
+import { BunawayError } from ${JSON.stringify(resolve(import.meta.dir, "../../packages/protocol/src/index.ts"))};
+globalThis.pluginLoaded = true;
+export function createOperations() { return { execute(fail = false) {
+  if (fail) throw new BunawayError({ code: "CANCELLED", message: "plugin cancelled" });
+  return "plugin result";
+}, dispose() {} }; }
+`,
+    );
+    await writeFile(
       resolve(root, "app.ts"),
       `
 import text from "./data.txt" with { type: "file" };
@@ -61,13 +72,18 @@ export default { async read() {
       resolve(host, "boot.ts"),
       `
 import { Worker } from "node:worker_threads";
+import { loadPluginCatalog } from ${JSON.stringify(resolve(import.meta.dir, "../../native/windows/bun/plugin-catalog.ts"))};
+import { hostResponse } from ${JSON.stringify(resolve(import.meta.dir, "../../native/windows/bun/host-response.ts"))};
+const catalog = await loadPluginCatalog(import.meta.dir);
+const lazy = globalThis.pluginLoaded !== true;
+const plugin = (await catalog[0].operations()).createOperations({});
 const { default: app } = await import("./app.js");
 const workers = await Promise.all(["ui", "host-operations"].map(name => new Promise((resolve, reject) => {
   const worker = new Worker(new URL(name + ".js", import.meta.url));
   worker.once("message", resolve);
   worker.once("error", reject);
 })));
-console.log(JSON.stringify({ app: await app.read(), workers }));
+console.log(JSON.stringify({ app: await app.read(), workers, lazy, plugin: plugin.execute(), failure: hostResponse(() => plugin.execute(true)) }));
 `,
     );
     for (const [name, file] of [
@@ -84,8 +100,13 @@ console.log(JSON.stringify({ app: await app.read(), workers }));
         resolve(host, `${name}.ts`),
         `
 import { parentPort } from "node:worker_threads";
+import { loadPluginCatalog } from ${JSON.stringify(resolve(import.meta.dir, "../../native/windows/bun/plugin-catalog.ts"))};
+import { hostResponse } from ${JSON.stringify(resolve(import.meta.dir, "../../native/windows/bun/host-response.ts"))};
 import file from "./${file}" with { type: "file" };
-parentPort.postMessage(await Bun.file(new URL(file, import.meta.url)).text());
+const catalog = await loadPluginCatalog(import.meta.dir);
+const lazy = globalThis.pluginLoaded !== true;
+const plugin = (await catalog[0].operations()).createOperations({});
+parentPort.postMessage({ asset: await Bun.file(new URL(file, import.meta.url)).text(), lazy, failure: hostResponse(() => plugin.execute(true)) });
 parentPort.close();
 `,
       );
@@ -94,9 +115,27 @@ parentPort.close();
       host,
       assets,
       resolve(root, "app.ts"),
+      undefined,
+      false,
+      [
+        {
+          name: "example",
+          version: "1",
+          packageName: "example",
+          root,
+          native: {
+            operations: [],
+            permissions: [],
+          },
+          targets: {
+            windows: {
+              execution: "io",
+              operations: resolve(root, "plugin.ts"),
+            },
+          },
+        },
+      ],
     );
-    await writeFile(resolve(assets, "app.json"), "{}");
-    await writeFile(resolve(assets, "policy.json"), "{}");
     await writeFile(resolve(assets, "web/index.html"), "<h1>web</h1>");
     const compiler = Bun.spawn(
       [
@@ -135,6 +174,7 @@ parentPort.close();
       "data.txt",
       "data.bin",
       "raw.js",
+      "plugin.ts",
     ]) {
       await rm(resolve(root, name));
     }
@@ -154,15 +194,33 @@ parentPort.close();
       new Response(child.stderr).text(),
     ]);
     expect(exit, errors).toBe(0);
+    const failure = {
+      kind: "error",
+      error: {
+        code: "CANCELLED",
+        message: "plugin cancelled",
+      },
+    };
     expect(JSON.parse(output)).toEqual({
+      failure,
+      lazy: true,
+      plugin: "plugin result",
       app: [
         Buffer.from(text).toString("hex"),
         "0080ff",
         Buffer.from("not valid JavaScript!").toString("hex"),
       ],
       workers: [
-        "UI worker asset",
-        "I/O worker asset",
+        {
+          asset: "UI worker asset",
+          lazy: true,
+          failure,
+        },
+        {
+          asset: "I/O worker asset",
+          lazy: true,
+          failure,
+        },
       ],
     });
   } finally {

@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import { Channel, type UIConfig } from "../../native/windows/bun/channel.ts";
 import { openerPlugin } from "../../plugins/opener/src/index.ts";
+import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
 
 test.skipIf(process.platform !== "win32")(
   "Windows opener validates calls and releases Explorer COM resources on an STA",
@@ -20,9 +21,10 @@ test.skipIf(process.platform !== "win32")(
     const shellModule = pathToFileURL(
       resolve(import.meta.dir, "../../plugins/opener/src/shell.ts"),
     ).href;
-    const operationsModule = pathToFileURL(
-      resolve(import.meta.dir, "../../plugins/opener/src/windows.ts"),
-    ).href;
+    const operationsModule = resolve(
+      import.meta.dir,
+      "../../plugins/opener/src/windows.ts",
+    );
     await Bun.write(
       workerPath,
       `import assert from "node:assert/strict";
@@ -166,20 +168,25 @@ test.skipIf(process.platform !== "win32")(
     await mkdir(dataRoot, {
       recursive: true,
     });
-    const entry = resolve(dataRoot, "worker.ts");
-    const source = resolve(import.meta.dir, "../../native/windows/bun");
-    const pluginTable = pathToFileURL(resolve(source, "plugin-table.ts")).href;
-    const uiWorker = pathToFileURL(resolve(source, "ui.ts")).href;
-    const operationsModule = pathToFileURL(
-      resolve(import.meta.dir, "../../plugins/opener/src/windows.ts"),
-    ).href;
+    const operationsModule = resolve(
+      import.meta.dir,
+      "../../plugins/opener/src/windows.ts",
+    );
     const disposedPath = resolve(dataRoot, "opener-disposed.txt");
-    await Bun.write(
-      entry,
+    await bundleUIPluginFixture(
+      dataRoot,
+      [
+        {
+          name: "opener",
+          version: openerPlugin.version,
+          native: openerPlugin.native,
+          execution: "ui",
+          authorization: false,
+        },
+      ],
       `import assert from "node:assert/strict";
 import { dlopen, ptr } from "bun:ffi";
 import { writeFileSync } from "node:fs";
-import { packagedPlugins } from ${JSON.stringify(pluginTable)};
 const ole = dlopen("ole32.dll", {
   CoGetApartmentType: { args: ["ptr", "ptr"], returns: "i32" },
 });
@@ -189,11 +196,7 @@ function checkApartment() {
   assert.equal(ole.symbols.CoGetApartmentType(ptr(type), ptr(qualifier)), 0);
   assert([0, 3].includes(type[0]), "Opener adapter must use the UI STA");
 }
-packagedPlugins.push({
-  name: "opener",
-  version: ${JSON.stringify(openerPlugin.version)},
-  native: ${JSON.stringify(openerPlugin.native)},
-  execution: "ui",
+export const pluginImports = { 'opener': {
   operations: async () => {
     const { createOperations } = await import(${JSON.stringify(operationsModule)});
     return {
@@ -212,8 +215,7 @@ packagedPlugins.push({
       },
     };
   },
-});
-await import(${JSON.stringify(uiWorker)});
+}};
 `,
     );
     const config: UIConfig = {
@@ -241,7 +243,7 @@ await import(${JSON.stringify(uiWorker)});
         },
       ],
     };
-    const worker = new Worker(pathToFileURL(entry), {
+    const worker = new Worker(pathToFileURL(resolve(dataRoot, "ui.js")), {
       workerData: config,
     });
     let failure: unknown;

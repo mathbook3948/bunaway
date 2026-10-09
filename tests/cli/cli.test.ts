@@ -1045,7 +1045,7 @@ test("Windows development artifacts enable DevTools only with their launch flag"
     await buildFixture(false);
     const production = resolve(project, "dist/windows-x64");
     expect(
-      await Bun.file(resolve(production, "assets/app.json")).exists(),
+      await Bun.file(resolve(production, "assets/manifest.json")).exists(),
     ).toBe(false);
     expect(await Bun.file(resolve(production, "assets/app.js")).exists()).toBe(
       false,
@@ -1081,17 +1081,17 @@ test("Windows development artifacts enable DevTools only with their launch flag"
         arguments: string[];
       };
       const config = await Bun.file(
-        resolve(built.package, "assets/app.json"),
+        resolve(built.package, "assets/manifest.json"),
       ).json();
       const manifest = await Bun.file(
         resolve(built.package, "manifest.json"),
       ).json();
-      expect(config.developmentTools).toBe(true);
+      expect(config.app.developmentTools).toBe(true);
       expect(built.arguments).toContain("--devtools");
       expect(built.arguments.includes("--dev-url")).toBe(url !== undefined);
-      expect(config.development?.url).toBe(url);
-      expect(manifest.assets["assets/app.json"]).toBe(
-        await hash(resolve(built.package, "assets/app.json")),
+      expect(config.app.development?.url).toBe(url);
+      expect(manifest.assets["assets/manifest.json"]).toBe(
+        await hash(resolve(built.package, "assets/manifest.json")),
       );
       expect(
         await Bun.file(resolve(built.package, "assets/app.js")).text(),

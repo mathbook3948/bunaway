@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { cp, mkdir, rm, writeFile } from "node:fs/promises";
 import { relative, resolve, sep } from "node:path";
 import { bundleWindowsHost } from "../../../packages/cli/src/assets.ts";
-import { files, hash } from "../../../packages/cli/src/files.ts";
+import {
+  files,
+  hash,
+  json,
+  writeJson,
+} from "../../../packages/cli/src/files.ts";
 import { compileWindowsApp } from "../../../packages/cli/src/windows-compile.ts";
 import pin from "../../../runtime/build-manifests/windows-x64.json";
 
@@ -30,8 +35,6 @@ export async function buildHostFixture(
     recursive: true,
   });
   for (const name of [
-    "app.json",
-    "policy.json",
     "bunfig.toml",
     "tsconfig.json",
   ]) {
@@ -40,9 +43,18 @@ export async function buildHostFixture(
       resolve(assets, name),
     );
   }
-  if (config) {
-    await writeFile(resolve(assets, "app.json"), JSON.stringify(config));
-  }
+  const app =
+    config ??
+    (await json(resolve(root, "tests/fixtures/desktop/host/app.json")));
+  await writeJson(resolve(assets, "manifest.json"), {
+    format: 1,
+    app,
+    policy: await json(
+      resolve(root, "tests/fixtures/desktop/host/policy.json"),
+    ),
+    plugins: [],
+    developmentSdk: {},
+  });
   for (const file of await files(
     resolve(root, "tests/fixtures/desktop/host/web"),
   )) {
@@ -83,13 +95,26 @@ export async function buildHostFixture(
     resolve(root, "runtime/bun-bundle/vendor/LICENSE.bun"),
     resolve(output, "licenses/LICENSE.bun"),
   );
-  const app = await Bun.file(resolve(assets, "app.json")).json();
+  assert(
+    app &&
+      typeof app === "object" &&
+      "appId" in app &&
+      "title" in app &&
+      typeof app.title === "string",
+  );
   const executableName = `${app.appId}.exe`;
   await compileWindowsApp(
     output,
     resolve(root, "runtime/bun-bundle/vendor/bun-windows-x64-baseline/bun.exe"),
     executableName,
-    app,
+    {
+      title: app.title,
+      ...(typeof Reflect.get(app, "icon") === "string"
+        ? {
+            icon: String(Reflect.get(app, "icon")),
+          }
+        : {}),
+    },
     bundledAssets,
   );
   const hashes: Record<string, string> = {};

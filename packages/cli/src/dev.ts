@@ -341,7 +341,7 @@ export async function devProject(
       }
       if (
         !(await Bun.file(
-          resolve(runningBuild.package, "assets/development-sdk.json"),
+          resolve(runningBuild.package, "assets/manifest.json"),
         ).exists())
       ) {
         return false;

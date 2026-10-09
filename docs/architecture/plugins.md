@@ -359,6 +359,26 @@ CLI는 앱의 직접 의존성에 선언한 네이티브 plugin의 manifest를 �
 SDK 검증, 정책 검사와 번들에서 재사용한다. 다음 검증이나 개발 재시작에서는 다시
 읽으며 프로세스 전체에 계약을 캐시하지 않는다.
 
+Windows의 앱별 생성 데이터는 `assets/manifest.json`에 모은다. `format: 1` 아래에
+해석된 앱 설정 `app`, 권한 정책 `policy`, 설치된 플러그인 계약 `plugins`, 개발 중
+공유하는 SDK 모듈 목록 `developmentSdk`를 기록한다. plugins의 각 항목에는 이름,
+버전, native 계약, 선택적 execution과 authorization 유무가 들어간다.
+앱 개발자가 작성하는 설정과 정책은 계속 `src-bunaway/`에 두며 이 manifest는 CLI가
+빌드마다 생성한다. 이전 `app.json`, `policy.json`, `development-sdk.json`을 Windows
+실행 자산에 중복 생성하지 않는다. macOS의 기존 프로세스 호스트는 기존 파일을 유지한다.
+
+실행 코드 연결은 별도 생성 파일 `assets/generated/plugin-imports.ts`가 맡는다.
+이 파일에는 플러그인 이름별 지연 import만 있고 계약 데이터는 넣지 않는다.
+번들러는 실제 파일을 읽어 `assets/plugin-imports.js`와 필요한 청크를 만든다.
+CLI는 `bunaway:plugin-imports` 모듈 경로를 이 생성 소스에 연결한다. 호스트와 Worker,
+생성 import를 함께 번들해 EXE 컴파일 뒤에도 공통 SDK와 오류 클래스가 일치하도록 한다.
+일반 소스의 빈 배열을 빌드 훅으로 대체하지 않으며, 호스트는 manifest를 검증한 뒤
+이 import 모듈과 연결한다. 등록된 플러그인만 해당 Worker에서 초기화한다.
+
+개발 산출물에서는 manifest와 생성 소스를 직접 확인할 수 있다. Windows 배포 빌드는
+manifest와 실행 모듈을 EXE에 포함하고 임시 assets를 정리한다. 패키지 루트의
+`manifest.json`은 완성된 EXE와 배포 파일의 해시를 기록하므로 실행 manifest와 분리한다.
+
 앱 패키지 검증 후 등록한 플러그인과 설치된 manifest를 대조한다. 이름, 버전,
 의존성, 지원 플랫폼, 계약과 scope를 확인하고 UI의 권한 평가 및 실행 adapter를
 준비한 다음 setup을 시작한다. setup 중의 Host 호출도 준비된 경로로 응답해야 한다.

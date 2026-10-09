@@ -33,6 +33,7 @@ import {
   writeJson,
 } from "../../packages/cli/src/files.ts";
 import { buildWithSdk, sdkPlugin } from "../../packages/cli/src/sdk.ts";
+import { readAppManifest } from "../../packages/runtime-bun/src/app-manifest.ts";
 import { createProject, packageDirectory } from "./project.ts";
 
 test("CommonJS plugin default and named exports retain their identity across app reloads", async () => {
@@ -91,7 +92,7 @@ export default { commands: { read: { input: { const: null }, output: {}, async r
       });
       const assets = resolve(home, `assets-${extension}`);
       await bundleWindowsAssets(valid, assets, false, true);
-      const inventory = await json(resolve(assets, "development-sdk.json"));
+      const inventory = (await readAppManifest(assets)).developmentSdk;
       if (!inventory || typeof inventory !== "object") {
         throw new Error("Missing development SDK fixture inventory.");
       }
@@ -188,7 +189,7 @@ export default defineApp({ modules: [], commands: { read: { input: { const: null
       });
       const assets = resolve(home, "assets");
       await bundleWindowsAssets(valid, assets, false, true);
-      const inventory = await json(resolve(assets, "development-sdk.json"));
+      const inventory = (await readAppManifest(assets)).developmentSdk;
       if (!inventory || typeof inventory !== "object") {
         throw new Error("Missing development SDK fixture inventory.");
       }

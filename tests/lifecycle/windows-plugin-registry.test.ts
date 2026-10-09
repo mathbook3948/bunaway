@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import { Channel, type UIConfig } from "../../native/windows/bun/channel.ts";
-import type { PackagedPlugin } from "../../native/windows/bun/plugin-table.ts";
+import type { PackagedPlugin } from "../../native/windows/bun/plugin-contract.ts";
 import {
   disposeAll,
   operations,
@@ -19,6 +19,7 @@ import {
 import { validateValue } from "../../packages/protocol/src/index.ts";
 import { capabilitiesPlugin } from "../../plugins/capabilities/src/index.ts";
 import { createOperations as createCapabilities } from "../../plugins/capabilities/src/windows.ts";
+import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
 
 const native = {
   operations: [],
@@ -522,14 +523,20 @@ test.skipIf(process.platform !== "win32")(
     await mkdir(dataRoot, {
       recursive: true,
     });
-    const entry = resolve(dataRoot, "worker.ts");
-    const source = resolve(import.meta.dir, "../../native/windows/bun");
-    await Bun.write(
-      entry,
+    await bundleUIPluginFixture(
+      dataRoot,
+      [
+        {
+          name: "sta-test",
+          version: "1",
+          native: native,
+          execution: "ui",
+          authorization: false,
+        },
+      ],
       `import assert from "node:assert/strict";
 import { dlopen, ptr } from "bun:ffi";
 import { writeFileSync } from "node:fs";
-import { packagedPlugins } from ${JSON.stringify(pathToFileURL(resolve(source, "plugin-table.ts")).href)};
 const ole = dlopen("ole32.dll", {
   CoGetApartmentType: { args: ["ptr", "ptr"], returns: "i32" },
 });
@@ -539,8 +546,7 @@ function checkApartment() {
   assert.equal(ole.symbols.CoGetApartmentType(ptr(type), ptr(qualifier)), 0);
   assert([0, 3].includes(type[0]), "UI adapter must run in STA");
 }
-packagedPlugins.push({
-  name: "sta-test", version: "1", native: ${JSON.stringify(native)}, execution: "ui",
+export const pluginImports = { 'sta-test': {
   operations: async () => ({ createOperations() {
     checkApartment();
     return { execute: () => null, dispose() {
@@ -549,8 +555,7 @@ packagedPlugins.push({
       ole.close();
     } };
   } }),
-});
-await import(${JSON.stringify(pathToFileURL(resolve(source, "ui.ts")).href)});
+}};
 `,
     );
     const config: UIConfig = {
@@ -578,7 +583,7 @@ await import(${JSON.stringify(pathToFileURL(resolve(source, "ui.ts")).href)});
         },
       ],
     };
-    const worker = new Worker(pathToFileURL(entry), {
+    const worker = new Worker(pathToFileURL(resolve(dataRoot, "ui.js")), {
       workerData: config,
     });
     const exited = new Promise<number>((resolve) =>
