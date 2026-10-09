@@ -47,7 +47,8 @@ function collect<T>(
 /**
  * Combines direct registrations, modules, state, plugins, and desktop options
  * into an app definition with frozen registries, without mutating its inputs.
- * Invalid names and duplicate registrations fail during composition.
+ * Invalid command/event names and duplicate command/event registrations fail
+ * during composition. Duplicate plugin names fail during Core creation.
  */
 export function defineApp<
   const M extends readonly ModuleDefinition[],

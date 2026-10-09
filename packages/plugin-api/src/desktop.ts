@@ -31,8 +31,9 @@ export interface DesktopContext {
 /** Optional window-close, tray, open-request, and quit behavior for the desktop app. */
 export type DesktopOptions = {
   /**
-   * Closing a window quits the app or hides it in the tray. `hide` requires a
-   * tray and the default is `quit`.
+   * With `quit`, closing the last open window requests app shutdown; closing
+   * another window closes only that window. `hide` hides the target window and
+   * requires a tray. The default is `quit`.
    */
   readonly closeBehavior?: "quit" | "hide";
   /** Creates a system tray entry used to reopen or quit a hidden app. */

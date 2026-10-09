@@ -138,7 +138,10 @@ type InferShape<S> = S extends {
               ? InferObject<S>
               : unknown;
 
-/** Maximum UTF-8 size accepted for one protocol value or serialized message. */
+/**
+ * Maximum UTF-8 size for parsed or serialized JSON text.
+ * Value validation uses this as a work budget that charges one byte per number.
+ */
 export const MAX_MESSAGE_BYTES = 1_048_576;
 /** Maximum number of nested JSON containers accepted by validation. */
 export const MAX_JSON_DEPTH = 64;

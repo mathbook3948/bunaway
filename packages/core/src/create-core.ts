@@ -422,7 +422,10 @@ class SessionImpl implements CoreSession {
     await this.settle(pending, reply);
   }
 
-  /** Binds command cancellation and its view identity to host, state, and event services. */
+  /**
+   * Binds host calls and event emission to the command's view and cancellation.
+   * State is shared app-wide and does not check the cancellation signal.
+   */
   private makeContext(signal: CancellationSignal): CommandContext {
     return {
       signal,
@@ -755,7 +758,11 @@ class BunawayCore implements Core {
     }
   }
 
-  /** Creates the shared plugin context whose operations are cancelled on core shutdown. */
+  /**
+   * Creates the plugin context with shared app state and a backend signal.
+   * Host calls observe shutdown cancellation, and event emission rejects after
+   * the signal aborts. State access does not check the signal.
+   */
   makeBackendContext(): CommandContext {
     const signal = this.backendController.signal;
     return {
