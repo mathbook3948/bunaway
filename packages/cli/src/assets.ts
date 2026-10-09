@@ -1,4 +1,5 @@
 import { cp, mkdir, realpath, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 import type { BunPlugin } from "bun";
 import type { Project } from "./config.ts";
@@ -236,6 +237,7 @@ export async function bundleWindowsHost(
   const sdk = project ? await sdkPlugin(project, [], plugins) : undefined;
   const sharedEntries = new Map<string, string>();
   if (development && sdk && project) {
+    const require = createRequire(resolve(project, "package.json"));
     for (const entry of sdk.entries) {
       sharedEntries.set(...entry);
     }
@@ -264,34 +266,44 @@ export async function bundleWindowsHost(
           subpath === "."
             ? plugin.packageName
             : plugin.packageName + subpath.slice(1);
-        let source: string;
-        try {
-          source = Bun.resolveSync(name, project);
-        } catch {
-          // Disabled exports are not shared; actual imports still fail in the app build.
-          continue;
-        }
-        const entry = await realpath(source);
-        // Assets use Bun's loaders instead of the executable-module wrappers.
-        if (/\.[cm]?[jt]sx?$/.test(entry) && !/\.d\.[cm]?ts$/.test(entry)) {
-          sharedEntries.set(name, entry);
+        for (const kind of [
+          "import",
+          "require",
+        ] as const) {
+          let source: string;
+          try {
+            source =
+              kind === "require"
+                ? require.resolve(name)
+                : Bun.resolveSync(name, project);
+          } catch {
+            // Disabled exports are not shared; actual imports still fail in the app build.
+            continue;
+          }
+          const entry = await realpath(source);
+          // Assets use Bun's loaders instead of the executable-module wrappers.
+          if (/\.[cm]?[jt]sx?$/.test(entry) && !/\.d\.[cm]?ts$/.test(entry)) {
+            sharedEntries.set(
+              kind === "require" ? `require:${name}` : name,
+              entry,
+            );
+          }
         }
       }
     }
   }
-  const sdkNames = new Map(
-    [
-      ...sharedEntries.keys(),
-    ].map((name, index) => [
-      name,
-      `sdk${index}`,
-    ]),
-  );
+  const sdkNames = new Map<string, string>();
+  const namesBySource = new Map<string, string>();
+  for (const [name, source] of sharedEntries) {
+    const entry = namesBySource.get(source) ?? `sdk${namesBySource.size}`;
+    namesBySource.set(source, entry);
+    sdkNames.set(name, entry);
+  }
   const sdkSources = new Map(
     [
-      ...sharedEntries,
-    ].map(([name, path]) => [
-      `${sdkNames.get(name)}.ts`,
+      ...namesBySource,
+    ].map(([path, name]) => [
+      `${name}.ts`,
       path,
     ]),
   );
@@ -414,7 +426,7 @@ export { defaultExport as default };`,
       resolve(source, "boot.ts"),
       "bunaway-windows-app/app.ts",
       ...[
-        ...sdkNames.values(),
+        ...namesBySource.values(),
       ].map((name) => `bunaway-development-sdk/${name}.ts`),
     ],
     sharedEntries.size
@@ -534,12 +546,21 @@ export async function bundleWindowsReload(
           {
             filter: /.*/,
           },
-          ({ path, importer }) => {
-            const name = aliases.has(path)
+          ({ path, importer, kind }) => {
+            let name = aliases.has(path)
               ? path
               : sources.get(
                   resolve(dirname(importer || project.appEntry), path),
                 );
+            if (
+              (kind === "require-call" || kind === "require-resolve") &&
+              project.nativePlugins?.some(
+                ({ packageName }) =>
+                  path === packageName || path.startsWith(`${packageName}/`),
+              )
+            ) {
+              name = `require:${path}`;
+            }
             const entry = name === undefined ? undefined : aliases.get(name);
             return entry
               ? {

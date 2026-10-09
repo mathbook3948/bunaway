@@ -68,6 +68,9 @@ SDK의 호출 함수는 연결, handshake, 취소, pagehide 정리와 기존 호
 실제 경로를 지정한다. 별도의 contracts.ts, client.ts, authorization.ts를 요구하지 않는다.
 
 Windows 개발 번들은 `package.json`의 조건부 루트 `exports`도 공유 모듈로 처리한다.
+`import`와 `require`의 진입점을 각각 해석하고 같은 파일은 하나의 공유 번들로 묶는다.
+`defineApp()`은 같은 원본 플러그인의 Host 바인딩을 재사용하므로 setup이나 명령을 가진
+플러그인도 객체 동일성을 유지한다. 실행 컨텍스트와 자원 수명은 각 코어가 별도로 소유한다.
 `null`로 차단했거나 Bun 조건에서 제공하지 않는 하위 경로는 공유 목록에서 제외한다.
 앱이 그런 경로를 실제로 import하면 번들 빌드를 실패로 처리한다.
 

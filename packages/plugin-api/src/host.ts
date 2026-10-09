@@ -12,6 +12,7 @@ type HostScope = {
 };
 const scopes = new AsyncLocalStorage<HostScope>();
 const commands = new WeakMap<CommandDefinition, CommandDefinition>();
+const plugins = new WeakMap<PluginDefinition, PluginDefinition>();
 
 // Each asynchronous command keeps its own caller's Host API. Setup descendants
 // retain the backend lifetime, including timers created by a plugin's setup.
@@ -73,6 +74,10 @@ export function bindCommandHost<T extends CommandDefinition>(definition: T): T {
 }
 
 export function bindPluginHost(plugin: PluginDefinition): PluginDefinition {
+  const existing = plugins.get(plugin);
+  if (existing) {
+    return existing;
+  }
   const {
     name,
     version,
@@ -96,7 +101,7 @@ export function bindPluginHost(plugin: PluginDefinition): PluginDefinition {
     return plugin;
   }
   // Materialize contract properties because plugin definitions may expose them as getters.
-  return {
+  const bound: PluginDefinition = {
     ...plugin,
     name,
     version,
@@ -145,4 +150,7 @@ export function bindPluginHost(plugin: PluginDefinition): PluginDefinition {
         }
       : {}),
   };
+  plugins.set(plugin, bound);
+  plugins.set(bound, bound);
+  return bound;
 }

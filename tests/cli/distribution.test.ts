@@ -130,6 +130,7 @@ export default { commands: { read: { input: { const: null }, output: {}, async r
 test.each([
   "conditional-root",
   "restricted-subpaths",
+  "setup",
 ])(
   "plugin exports retain their identity across app reloads (%s)",
   async (mode) => {
@@ -154,6 +155,12 @@ test.each([
       ) {
         throw new Error("Invalid installed plugin fixture metadata.");
       }
+      if (mode === "setup") {
+        await writeFile(
+          resolve(pluginRoot, "setup.ts"),
+          'import plugin from "./src/index.ts"; export default { ...plugin, setup() {} };',
+        );
+      }
       await writeJson(manifestPath, {
         ...manifest,
         exports:
@@ -164,7 +171,7 @@ test.each([
                 default: "./src/index.ts",
               }
             : {
-                ".": "./src/index.ts",
+                ".": mode === "setup" ? "./setup.ts" : "./src/index.ts",
                 "./private": null,
                 "./browser": {
                   browser: "./src/index.ts",
@@ -172,14 +179,24 @@ test.each([
               },
       });
       const appEntry = resolve(project, "src-bunaway/app.ts");
-      const source = `import plugin from "@bunaway/plugin-storage";
-export default { commands: { read: { input: { const: null }, output: {}, async run() { return "before"; } } }, events: {}, plugins: [plugin] };`;
+      const source = `import { defineApp } from "@bunaway/backend";
+import plugin from "@bunaway/plugin-storage";
+export default defineApp({ modules: [], commands: { read: { input: { const: null }, output: {}, async run() { return "before"; } } }, plugins: [plugin] });`;
       await writeFile(appEntry, source);
       const valid = await validateProject(project, {
         development: true,
       });
       const assets = resolve(home, "assets");
       await bundleWindowsAssets(valid, assets, false, true);
+      const inventory = await json(resolve(assets, "development-sdk.json"));
+      if (!inventory || typeof inventory !== "object") {
+        throw new Error("Missing development SDK fixture inventory.");
+      }
+      const sharedEntry = Reflect.get(inventory, "@bunaway/plugin-storage");
+      expect(typeof sharedEntry).toBe("string");
+      expect(Reflect.get(inventory, "require:@bunaway/plugin-storage")).toBe(
+        sharedEntry,
+      );
       const initial = await import(
         pathToFileURL(resolve(assets, "app.js")).href
       );
@@ -200,6 +217,114 @@ export default { commands: { read: { input: { const: null }, output: {}, async r
             '"@bunaway/plugin-storage"',
             '"@bunaway/plugin-storage/private"',
           ),
+        );
+        await expect(
+          bundleWindowsReload(valid, assets, crypto.randomUUID()),
+        ).rejects.toThrow("Bundle failed");
+        await writeFile(
+          appEntry,
+          'const plugin = require("@bunaway/plugin-storage/browser"); export default plugin;',
+        );
+        await expect(
+          bundleWindowsReload(valid, assets, crypto.randomUUID()),
+        ).rejects.toThrow("Bundle failed");
+      }
+    } finally {
+      await rm(home, {
+        recursive: true,
+        force: true,
+      });
+    }
+  },
+  60000,
+);
+
+test.each([
+  "import-require",
+  "require-only",
+])(
+  "plugin require exports retain their result and identity across app reloads (%s)",
+  async (mode) => {
+    const home = await realpath(
+      await mkdtemp(resolve(tmpdir(), "bunaway-require-exports-reload-")),
+    );
+    try {
+      const project = await createProject(resolve(home, "app"));
+      await command(project, [
+        "install",
+      ]);
+      const pluginRoot = await installedPackageRoot(
+        project,
+        "@bunaway/plugin-storage",
+      );
+      const manifestPath = resolve(pluginRoot, "package.json");
+      const manifest = await json(manifestPath);
+      if (
+        !manifest ||
+        typeof manifest !== "object" ||
+        Array.isArray(manifest)
+      ) {
+        throw new Error("Invalid installed plugin fixture metadata.");
+      }
+      await writeFile(
+        resolve(pluginRoot, "import.ts"),
+        'export { default, storagePlugin } from "./src/index.ts"; export const marker = "import";',
+      );
+      await writeFile(
+        resolve(pluginRoot, "require.cjs"),
+        'module.exports = { ...require("./src/index.ts"), marker: "require" };',
+      );
+      await writeJson(manifestPath, {
+        ...manifest,
+        exports: {
+          ".": {
+            import: mode === "require-only" ? null : "./import.ts",
+            require: "./require.cjs",
+          },
+        },
+      });
+      const appEntry = resolve(project, "src-bunaway/app.ts");
+      const importSource =
+        mode === "import-require"
+          ? 'import { marker as imported } from "@bunaway/plugin-storage";'
+          : "const imported = null;";
+      const source = `${importSource}
+const { storagePlugin, marker } = require("@bunaway/plugin-storage");
+export default { commands: { read: { input: { const: null }, output: {}, async run() { return { value: "before", marker, imported }; } } }, events: {}, plugins: [storagePlugin] };`;
+      await writeFile(appEntry, source);
+      const valid = await validateProject(project, {
+        development: true,
+      });
+      const assets = resolve(home, "assets");
+      await bundleWindowsAssets(valid, assets, false, true);
+      const initial = await import(
+        pathToFileURL(resolve(assets, "app.js")).href
+      );
+      const expected = {
+        marker: "require",
+        imported: mode === "import-require" ? "import" : null,
+      };
+      expect(await initial.default.commands.read.run()).toEqual({
+        value: "before",
+        ...expected,
+      });
+      const development = new DevelopmentApp(initial.default);
+      await writeFile(appEntry, source.replace('"before"', '"after"'));
+      const id = crypto.randomUUID();
+      await bundleWindowsReload(valid, assets, id);
+      const next = await import(
+        pathToFileURL(resolve(assets, "reloads", id, "app.js")).href
+      );
+      expect(await next.default.commands.read.run()).toEqual({
+        value: "after",
+        ...expected,
+      });
+      expect(next.default.plugins[0]).toBe(initial.default.plugins[0]);
+      expect(development.replace(next.default)).toBe(true);
+      if (mode === "require-only") {
+        await writeFile(
+          appEntry,
+          'import plugin from "@bunaway/plugin-storage"; export default plugin;',
         );
         await expect(
           bundleWindowsReload(valid, assets, crypto.randomUUID()),
