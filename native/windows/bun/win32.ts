@@ -748,8 +748,14 @@ export class Windows {
     const fullscreen = this.fullscreen.has(window);
     const wasVisible = user.symbols.IsWindowVisible(window) !== 0;
     if (fullscreen) {
-      // The suggested rect scales the old window, not the physical monitor.
-      const bounds = this.monitorBounds(window);
+      // The suggested position identifies the target monitor before the move
+      // is committed. Its scaled size is not the physical fullscreen bounds.
+      const bounds = this.monitorBounds(
+        user.symbols.MonitorFromRect(
+          callbackPointer(lparam),
+          MONITOR_DEFAULTTONEAREST,
+        ),
+      );
       assert(
         user.symbols.SetWindowPos(
           window,
@@ -832,15 +838,10 @@ export class Windows {
     return this.fullscreen.has(window);
   }
 
-  private monitorBounds(window: bigint) {
+  private monitorBounds(display: bigint) {
     const monitor = Buffer.alloc(MONITORINFO_SIZE);
     monitor.writeUInt32LE(MONITORINFO_SIZE);
-    assert(
-      user.symbols.GetMonitorInfoW(
-        user.symbols.MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST),
-        ptr(monitor),
-      ),
-    );
+    assert(user.symbols.GetMonitorInfoW(display, ptr(monitor)));
     const x = monitor.readInt32LE(4);
     const y = monitor.readInt32LE(8);
     return {
@@ -866,7 +867,9 @@ export class Windows {
         style,
       );
       const visible = user.symbols.IsWindowVisible(window) !== 0;
-      const bounds = this.monitorBounds(window);
+      const bounds = this.monitorBounds(
+        user.symbols.MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST),
+      );
       this.setStyle(window, style & ~BigInt(WS_OVERLAPPEDWINDOW));
       this.fullscreen.set(window, {
         style,

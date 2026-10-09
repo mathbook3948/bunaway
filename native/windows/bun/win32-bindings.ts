@@ -297,6 +297,13 @@ export const user = dlopen("user32.dll", {
     ],
     returns: "u64",
   },
+  MonitorFromRect: {
+    args: [
+      "ptr",
+      "u32",
+    ],
+    returns: "u64",
+  },
   GetMonitorInfoW: {
     args: [
       "u64",

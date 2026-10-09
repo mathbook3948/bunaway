@@ -64,3 +64,23 @@ test("maximized client constraints scale with DPI without rounding unchanged dim
     height: 660,
   });
 });
+
+test("fullscreen DPI changes select the suggested monitor before the window moves", async () => {
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      "--no-env-file",
+      `${import.meta.dir}/windows-fullscreen-dpi.fixture.ts`,
+    ],
+    {
+      stdout: "ignore",
+      stderr: "pipe",
+    },
+  );
+  const [code, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stderr).text(),
+  ]);
+  expect(stderr).toBe("");
+  expect(code).toBe(0);
+});
