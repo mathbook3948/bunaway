@@ -143,6 +143,7 @@ CLI와 Windows 호스트는 `@bunaway/runtime-bun/app-manifest`로 생성 데이
 | `readAppManifest(assets: string): Promise<AppManifest>` | 지정한 실행 자산 디렉터리의 `manifest.json`을 읽고 검증합니다. 파일 읽기, JSON 해석과 검증 실패를 호출자에게 전달합니다. |
 
 앱 설정과 정책의 세부 실행 검증은 부팅 단계의 기존 검증기가 맡습니다.
+정책은 manifest의 다른 필드와 별도로 검증하므로 기존 정책의 크기와 깊이 제한을 유지합니다.
 플러그인 메타데이터와 native 계약은 따로 검증하므로 기존 native 계약의 크기와 깊이 제한을 유지합니다.
 이 함수들은 플러그인 실행 코드를 불러오거나 네이티브 자원을 초기화하지 않습니다.
 개발 SDK 경로는 `sdk0.js`, `sdk1.cjs`처럼 생성된 모듈의 파일 이름만 허용합니다.

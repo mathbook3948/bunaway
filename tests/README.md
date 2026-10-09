@@ -3,6 +3,7 @@
 `cli/app-manifest.test.ts`는 Windows 실행 manifest의 형식과 계약 검증, 플러그인 제거 후
 재생성, 생성 import와 metadata 불일치를 검사한다.
 manifest 생성과 카탈로그 로딩에서 native 계약의 크기 상한을 그대로 허용하고 초과는 거부하는지도 검사한다.
+정책의 기존 크기와 깊이 상한도 manifest 생성과 읽기에서 유지하며, 상한 초과 입력은 거부하는지 검사한다.
 `cli/windows-assets.test.ts`는
 원본 소스와 임시 자산을 삭제한 뒤에도 compiled EXE가 manifest와 플러그인 구현을
 읽고 지연 로딩을 유지하는지 검사한다.

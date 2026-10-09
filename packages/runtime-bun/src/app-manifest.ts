@@ -90,16 +90,19 @@ export function parseAppManifest(value: unknown): AppManifest {
   if (
     !value ||
     typeof value !== "object" ||
+    !("policy" in value) ||
     !("plugins" in value) ||
     !Array.isArray(value.plugins)
   ) {
     throw new Error("Invalid app manifest.");
   }
-  // Installed catalogs have no aggregate wire-message budget; validate each plugin separately.
+  // Policy and installed contracts retain independent byte and depth budgets.
   const manifest = validateValue(manifestSchema, {
     ...value,
+    policy: {},
     plugins: [],
   });
+  const policy = validateValue(manifestSchema.properties.policy, value.policy);
   // Metadata must not consume the native contract's existing byte or depth budget.
   const pluginSchema = manifestSchema.properties.plugins.items;
   const plugins = value.plugins.map((plugin: unknown) => {
@@ -141,6 +144,7 @@ export function parseAppManifest(value: unknown): AppManifest {
   );
   return {
     ...manifest,
+    policy,
     plugins,
     developmentSdk,
   };

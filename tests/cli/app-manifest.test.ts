@@ -7,8 +7,11 @@ import { loadPluginCatalog } from "../../native/windows/bun/plugin-catalog.ts";
 import { writeJson } from "../../packages/cli/src/files.ts";
 import { writePluginAssets } from "../../packages/cli/src/plugins.ts";
 import {
+  type JsonValue,
+  MAX_JSON_DEPTH,
   MAX_MESSAGE_BYTES,
   NativeRegistry,
+  parsePolicy,
 } from "../../packages/protocol/src/index.ts";
 import {
   parseAppManifest,
@@ -49,6 +52,16 @@ test("generated manifest rejects invalid versions, contracts, routing and SDK pa
     },
     {
       ...manifest,
+      policy: [],
+    },
+    {
+      format: 1,
+      app: {},
+      plugins: [],
+      developmentSdk: {},
+    },
+    {
+      ...manifest,
       plugins: [
         {
           ...manifest.plugins[0],
@@ -84,6 +97,111 @@ test("generated manifest rejects invalid versions, contracts, routing and SDK pa
     expect(() => parseAppManifest(value)).toThrow();
   }
 });
+
+test.each([
+  "size",
+  "depth",
+])(
+  "manifest generation preserves the standalone policy %s boundary",
+  async (boundary) => {
+    const assets = await mkdtemp(resolve(tmpdir(), "bunaway-policy-boundary-"));
+    const grant = {
+      identifier: "example:read",
+      allow: [
+        "" as JsonValue,
+      ],
+    };
+    const policy = {
+      version: 1,
+      views: [],
+      backend: {
+        permissions: [
+          grant,
+        ],
+      },
+    };
+    if (boundary === "size") {
+      grant.allow[0] = "x".repeat(
+        MAX_MESSAGE_BYTES - Buffer.byteLength(JSON.stringify(policy)),
+      );
+    } else {
+      // The scope starts five levels below the policy root; fill its remaining depth budget.
+      for (let depth = 5; depth < MAX_JSON_DEPTH; depth++) {
+        grant.allow[0] = {
+          child: grant.allow[0] ?? null,
+        };
+      }
+    }
+    const plugin = {
+      name: "example",
+      version: "1",
+      native: {
+        operations: [],
+        permissions: [
+          {
+            name: grant.identifier,
+            scope: {},
+          },
+        ],
+      },
+      packageName: "example",
+      root: assets,
+      targets: {},
+      authorization: resolve(assets, "example.ts"),
+    };
+    const manifest = {
+      format: 1,
+      app: {
+        title: "Example",
+      },
+      policy,
+      plugins: [],
+      developmentSdk: {},
+    };
+    try {
+      const parsedPolicy = parsePolicy(JSON.stringify(policy));
+      new NativeRegistry([
+        plugin,
+      ]).validatePolicy(parsedPolicy);
+      expect(parseAppManifest(manifest).policy).toEqual(parsedPolicy);
+      await writeJson(resolve(assets, "manifest.json"), manifest);
+      await writePluginAssets(assets, [
+        plugin,
+      ]);
+      expect((await readAppManifest(assets)).policy).toEqual(parsedPolicy);
+      expect(
+        await loadPluginCatalog(assets, {
+          example: {
+            authorization: async () => ({
+              matches: () => false,
+            }),
+          },
+        }),
+      ).toHaveLength(1);
+
+      // Crossing the standalone boundary must still fail without any envelope metadata.
+      grant.allow[0] =
+        boundary === "size"
+          ? `${grant.allow[0]}x`
+          : {
+              child: grant.allow[0] ?? null,
+            };
+      expect(() => parsePolicy(JSON.stringify(policy))).toThrow();
+      expect(() => parseAppManifest(manifest)).toThrow();
+      await writeJson(resolve(assets, "manifest.json"), manifest);
+      await expect(
+        writePluginAssets(assets, [
+          plugin,
+        ]),
+      ).rejects.toThrow();
+    } finally {
+      await rm(assets, {
+        recursive: true,
+        force: true,
+      });
+    }
+  },
+);
 
 test("regeneration preserves app data, drops removed plugins and rejects mismatched import modules", async () => {
   const assets = await mkdtemp(resolve(tmpdir(), "bunaway-app-manifest-"));
