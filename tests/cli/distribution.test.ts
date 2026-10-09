@@ -12,8 +12,13 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, relative, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { DevelopmentApp } from "../../native/windows/bun/development-app.ts";
 import { packFramework } from "../../packages/cli/scripts/pack.ts";
-import { bundleWindowsAssets } from "../../packages/cli/src/assets.ts";
+import {
+  bundleWindowsAssets,
+  bundleWindowsReload,
+} from "../../packages/cli/src/assets.ts";
 import { bundleAssets } from "../../packages/cli/src/build.ts";
 import { validateProject } from "../../packages/cli/src/config.ts";
 import {
@@ -29,6 +34,91 @@ import {
 } from "../../packages/cli/src/files.ts";
 import { buildWithSdk, sdkPlugin } from "../../packages/cli/src/sdk.ts";
 import { createProject, packageDirectory } from "./project.ts";
+
+test("CommonJS plugin default and named exports retain their identity across app reloads", async () => {
+  const home = await realpath(
+    await mkdtemp(resolve(tmpdir(), "bunaway-commonjs-reload-")),
+  );
+  try {
+    const project = await createProject(resolve(home, "app"));
+    await command(project, [
+      "install",
+    ]);
+    const pluginRoot = await installedPackageRoot(
+      project,
+      "@bunaway/plugin-storage",
+    );
+    const manifestPath = resolve(pluginRoot, "package.json");
+    const manifest = await json(manifestPath);
+    const descriptorPath = resolve(pluginRoot, "plugin.json");
+    const descriptor = await json(descriptorPath);
+    if (
+      !manifest ||
+      typeof manifest !== "object" ||
+      Array.isArray(manifest) ||
+      !descriptor ||
+      typeof descriptor !== "object" ||
+      Array.isArray(descriptor)
+    ) {
+      throw new Error("Invalid installed plugin fixture metadata.");
+    }
+    for (const extension of [
+      "cjs",
+      "js",
+    ]) {
+      const pluginEntry = `./plugin.${extension}`;
+      await writeFile(
+        resolve(pluginRoot, pluginEntry),
+        'module.exports = { ...require("./src/index.ts").default }; module.exports.identity = module.exports;',
+      );
+      await writeJson(manifestPath, {
+        ...manifest,
+        type: "commonjs",
+        exports: {
+          ".": pluginEntry,
+        },
+      });
+      await writeJson(descriptorPath, {
+        ...descriptor,
+        entry: pluginEntry,
+      });
+      const appEntry = resolve(project, "src-bunaway/app.ts");
+      const source = `import plugin, { identity } from "@bunaway/plugin-storage";
+export default { commands: { read: { input: { const: null }, output: {}, async run() { return { value: "before", samePlugin: plugin === identity }; } } }, events: {}, plugins: [plugin] };`;
+      await writeFile(appEntry, source);
+      const valid = await validateProject(project, {
+        development: true,
+      });
+      const assets = resolve(home, `assets-${extension}`);
+      await bundleWindowsAssets(valid, assets, false, true);
+      const initial = await import(
+        pathToFileURL(resolve(assets, "app.js")).href
+      );
+      expect(await initial.default.commands.read.run()).toEqual({
+        value: "before",
+        samePlugin: true,
+      });
+      const development = new DevelopmentApp(initial.default);
+      await writeFile(appEntry, source.replace('"before"', '"after"'));
+      const id = crypto.randomUUID();
+      await bundleWindowsReload(valid, assets, id);
+      const next = await import(
+        pathToFileURL(resolve(assets, "reloads", id, "app.js")).href
+      );
+      expect(await next.default.commands.read.run()).toEqual({
+        value: "after",
+        samePlugin: true,
+      });
+      expect(next.default.plugins[0]).toBe(initial.default.plugins[0]);
+      expect(development.replace(next.default)).toBe(true);
+    }
+  } finally {
+    await rm(home, {
+      recursive: true,
+      force: true,
+    });
+  }
+}, 60000);
 
 test("plugin declarations support custom entry paths and JSON exports and are read once per build", async () => {
   const home = await realpath(

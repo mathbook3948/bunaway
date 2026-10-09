@@ -304,19 +304,17 @@ export async function bundleWindowsHost(
           filter: /.*/,
           namespace: "development-sdk",
         },
-        async ({ path }) => {
+        ({ path }) => {
           const source = sdkSources.get(path);
           if (!source) {
             throw new Error("Unknown development SDK entry.");
           }
-          const scan = new Bun.Transpiler({
-            loader: source.endsWith("x") ? "tsx" : "ts",
-          }).scan(await Bun.file(source).text());
-          const defaultExport = scan.exports.includes("default")
-            ? `export { default } from ${JSON.stringify(source)};`
-            : "";
+          // Bun's namespace also exposes the default created for CommonJS modules.
           return {
-            contents: `export * from ${JSON.stringify(source)};\n${defaultExport}`,
+            contents: `export * from ${JSON.stringify(source)};
+import * as entry from ${JSON.stringify(source)};
+const defaultExport = Reflect.get(entry, "default");
+export { defaultExport as default };`,
             loader: "ts",
             resolveDir: dirname(source),
           };
@@ -384,7 +382,10 @@ export async function bundleWindowsHost(
       );
     },
   };
-  const buildWindowsEntries = (entrypoints: string[]) =>
+  const buildWindowsEntries = (
+    entrypoints: string[],
+    onMetadata?: (metadata: Bun.BuildMetafile | undefined) => void,
+  ) =>
     buildWithSdk(
       {
         entrypoints,
@@ -393,16 +394,30 @@ export async function bundleWindowsHost(
         splitting: true,
         naming: "[name].[ext]",
         sourcemap: development ? "inline" : "none",
+        metafile: onMetadata !== undefined,
       },
       entries,
+      onMetadata,
     );
-  const artifacts = await buildWindowsEntries([
-    resolve(source, "boot.ts"),
-    "bunaway-windows-app/app.ts",
-    ...[
-      ...sdkNames.values(),
-    ].map((name) => `bunaway-development-sdk/${name}.ts`),
-  ]);
+  const commonJsSources = new Set<string>();
+  const artifacts = await buildWindowsEntries(
+    [
+      resolve(source, "boot.ts"),
+      "bunaway-windows-app/app.ts",
+      ...[
+        ...sdkNames.values(),
+      ].map((name) => `bunaway-development-sdk/${name}.ts`),
+    ],
+    sharedEntries.size
+      ? (metadata) => {
+          for (const [path, input] of Object.entries(metadata?.inputs ?? {})) {
+            if (input.format === "cjs") {
+              commonJsSources.add(resolve(path));
+            }
+          }
+        }
+      : undefined,
+  );
   if (
     ![
       "boot.js",
@@ -430,17 +445,21 @@ export async function bundleWindowsHost(
     await saveOutput(output);
   }
   if (sharedEntries.size) {
-    await writeJson(
-      resolve(destination, "development-sdk.json"),
-      Object.fromEntries(
-        [
-          ...sdkNames,
-        ].map(([name, entry]) => [
-          name,
-          `${entry}.js`,
-        ]),
-      ),
-    );
+    const inventory: Record<string, string> = {};
+    for (const [name, entry] of sdkNames) {
+      const source = sharedEntries.get(name);
+      if (source && commonJsSources.has(source)) {
+        // A raw CJS entry exposes dynamic named exports that an ESM barrel cannot enumerate.
+        inventory[name] = `${entry}.cjs`;
+        await writeFile(
+          resolve(destination, `${entry}.cjs`),
+          `module.exports = require("./${entry}.js").default;\n`,
+        );
+      } else {
+        inventory[name] = `${entry}.js`;
+      }
+    }
+    await writeJson(resolve(destination, "development-sdk.json"), inventory);
   }
   for (const name of [
     "ui",
@@ -469,7 +488,7 @@ export async function bundleWindowsReload(
   }
   const aliases = new Map<string, string>();
   for (const [name, entry] of Object.entries(entries)) {
-    if (typeof entry !== "string" || !/^sdk[0-9]+\.js$/.test(entry)) {
+    if (typeof entry !== "string" || !/^sdk[0-9]+\.(?:js|cjs)$/.test(entry)) {
       throw new Error("Invalid development SDK inventory.");
     }
     aliases.set(name, entry);

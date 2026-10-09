@@ -24,6 +24,8 @@ import {
   windowsLaunchEnvironment,
 } from "./windows-dev-launch.ts";
 
+const SOURCE_DEBOUNCE_MS = 150;
+
 export function parseDevArguments(args: string[]): {
   directory: string;
   inspect?: number;
@@ -62,6 +64,12 @@ export class RestartController<T> {
   private revision = 0;
   private stopped = false;
   private running: Promise<void> | undefined;
+  private debounce:
+    | {
+        ready: Promise<void>;
+        cancel(): void;
+      }
+    | undefined;
   constructor(
     private readonly hooks: {
       stop(): Promise<void>;
@@ -72,11 +80,27 @@ export class RestartController<T> {
     },
   ) {}
 
-  change(): Promise<void> {
+  change(delayMs = 0): Promise<void> {
     if (this.stopped) {
       return Promise.resolve();
     }
     this.revision += 1;
+    this.debounce?.cancel();
+    this.debounce = undefined;
+    if (delayMs > 0) {
+      const { promise, resolve } = Promise.withResolvers<void>();
+      const timer = setTimeout(() => {
+        this.debounce = undefined;
+        resolve();
+      }, delayMs);
+      this.debounce = {
+        ready: promise,
+        cancel() {
+          clearTimeout(timer);
+          resolve();
+        },
+      };
+    }
     if (!this.running) {
       this.running = this.restart().finally(() => {
         this.running = undefined;
@@ -88,6 +112,12 @@ export class RestartController<T> {
   private async restart(): Promise<void> {
     let applied = 0;
     while (!this.stopped && applied !== this.revision) {
+      while (!this.stopped && this.debounce) {
+        await this.debounce.ready;
+      }
+      if (this.stopped) {
+        break;
+      }
       applied = this.revision;
       try {
         if (
@@ -116,6 +146,8 @@ export class RestartController<T> {
 
   async close(): Promise<void> {
     this.stopped = true;
+    this.debounce?.cancel();
+    this.debounce = undefined;
     await this.running;
     await this.hooks.stop();
   }
@@ -483,7 +515,6 @@ export async function devProject(
       }
     },
   });
-  let debounce: ReturnType<typeof setTimeout> | undefined;
   let sourceWatcher: ReturnType<typeof watch> | undefined;
   try {
     native = await prepareNative(undefined, project.frameworkRoot);
@@ -501,11 +532,9 @@ export async function devProject(
         ) {
           return;
         }
-        clearTimeout(debounce);
         changedFiles.add(String(name));
-        debounce = setTimeout(() => {
-          void controller.change();
-        }, 150);
+        // Invalidate immediately, before a reload can clear these pending changes.
+        void controller.change(SOURCE_DEBOUNCE_MS);
       },
     );
     await controller.change();
@@ -518,7 +547,6 @@ export async function devProject(
       throw error;
     }
   } finally {
-    clearTimeout(debounce);
     sourceWatcher?.close();
     process.off("SIGINT", onSignal);
     process.off("SIGTERM", onSignal);

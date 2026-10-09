@@ -83,9 +83,11 @@ await controller.close();
 ```
 
 constructor는 `stop`, `build`, `start`, `error`와 선택적 `reload(isCurrent): Promise<boolean>` 훅을 받습니다.
-`change()`는 변경 revision을 늘리고 reload를 먼저 시도합니다.
+`change(delayMs = 0)`는 변경 revision을 즉시 늘리고 reload를 먼저 시도합니다.
+delayMs가 양수이면 마지막 change 호출부터 지정한 밀리초 동안 기다린 뒤 처리합니다.
+대기 중 새 변경이 오면 이전 교체 후보를 즉시 무효화하고 대기 시간을 다시 설정합니다.
 reload가 true를 반환하면 stop, build, start를 생략합니다. false이면 직렬 stop → build → start를 수행합니다.
 reload는 비동기 준비 후 isCurrent()가 true일 때만 변경을 적용해야 합니다.
 빌드 중 새 변경이 오면 오래된 결과는 시작하지 않고 최신 변경을 다시 적용합니다.
 실패하면 error 훅을 호출합니다. 이후 change 호출은 계속 처리할 수 있습니다.
-`close()`는 진행 중 작업을 기다려 정리하며 이후 change는 재시작하지 않습니다.
+`close()`는 변경 대기를 취소하고 진행 중 작업을 기다려 정리하며 이후 change는 재시작하지 않습니다.

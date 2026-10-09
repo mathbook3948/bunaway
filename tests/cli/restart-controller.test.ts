@@ -1,6 +1,90 @@
 import { expect, test } from "bun:test";
 import { RestartController } from "../../packages/cli/src/dev.ts";
 
+test("a debounced UI save during reload invalidates it immediately and rebuilds the UI", async () => {
+  const entered = Promise.withResolvers<void>();
+  const response = Promise.withResolvers<void>();
+  const changedFiles = new Set<string>();
+  let active = false;
+  let reloadIsCurrent = () => true;
+  let builds = 0;
+  const controller = new RestartController({
+    async stop() {
+      active = false;
+    },
+    async build() {
+      builds += 1;
+      return builds;
+    },
+    async start() {
+      active = true;
+      changedFiles.clear();
+    },
+    error(error) {
+      throw error;
+    },
+    async reload(isCurrent) {
+      if (!active || changedFiles.has("src/main.ts")) {
+        return false;
+      }
+      reloadIsCurrent = isCurrent;
+      entered.resolve();
+      await response.promise;
+      if (isCurrent()) {
+        changedFiles.clear();
+      }
+      return true;
+    },
+  });
+  try {
+    await controller.change();
+    changedFiles.add("src-bunaway/app.ts");
+    const reload = controller.change();
+    await entered.promise;
+    changedFiles.add("src/main.ts");
+    const saved = controller.change(20);
+    expect(reloadIsCurrent()).toBe(false);
+    response.resolve();
+    await Promise.all([
+      reload,
+      saved,
+    ]);
+    expect(builds).toBe(2);
+    expect(changedFiles.size).toBe(0);
+  } finally {
+    response.resolve();
+    await controller.close();
+  }
+});
+
+test("debounce resets on another save and close cancels its pending work", async () => {
+  let builds = 0;
+  const controller = new RestartController({
+    async stop() {},
+    async build() {
+      builds += 1;
+      return builds;
+    },
+    async start() {},
+    error(error) {
+      throw error;
+    },
+  });
+  const first = controller.change(20);
+  const latest = controller.change(20);
+  await Bun.sleep(0);
+  expect(builds).toBe(0);
+  await Promise.all([
+    first,
+    latest,
+  ]);
+  expect(builds).toBe(1);
+  const pending = controller.change(60000);
+  await controller.close();
+  await pending;
+  expect(builds).toBe(1);
+});
+
 test("successful reload skips host teardown and reload failure keeps the running host", async () => {
   const calls: string[] = [];
   let active = false;
