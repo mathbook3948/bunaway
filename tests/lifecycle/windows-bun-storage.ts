@@ -98,6 +98,7 @@ function expectDenied(path: string): void {
   }
 }
 
+/** Checks the metadata shape and nullable Windows timestamps. */
 function assertMetadata(
   value: unknown,
   kind: "file" | "directory",
@@ -136,6 +137,7 @@ function assertMetadata(
 let raceAccessDenials = 0;
 let raceSharingViolations = 0;
 
+/** Allows transient access or sharing errors during deletion. */
 function duringDelete<T>(action: () => T): T | undefined {
   try {
     return action();
@@ -158,6 +160,7 @@ function duringDelete<T>(action: () => T): T | undefined {
 
 async function main(): Promise<void> {
   try {
+    // Seed valid app-data paths and aliases that point outside the storage root.
     await mkdir(resolve(root, "data/notes/private-directory"), {
       recursive: true,
     });
@@ -300,6 +303,7 @@ async function main(): Promise<void> {
     if (shortParts[0] !== "private-directory") {
       aliases.push(`notes/${shortParts[0]}/secret-long-name.txt`);
     }
+    // Case variants and available 8.3 names must keep the same denied scope.
     for (const path of aliases) {
       expectDenied(path);
       for (const text of [
@@ -347,6 +351,7 @@ async function main(): Promise<void> {
       assert.equal(call("storage.readText", "appData", path), "ordinary file");
     }
 
+    // Junctions and hard links must not expose files outside the storage root.
     for (const path of [
       "notes/junction/secret.txt",
       "notes/final-junction",
@@ -368,6 +373,7 @@ async function main(): Promise<void> {
       );
     }
 
+    // Reject unsafe Windows path forms before they reach filesystem operations.
     for (const path of [
       "../outside/secret.txt",
       "notes//x",
@@ -411,6 +417,7 @@ async function main(): Promise<void> {
     const icaclsSid = `*${sid}`;
     let denyApplied = false;
     try {
+      // Apply a real ACL denial so the adapter's OS-error mapping is exercised.
       execFileSync(
         "icacls.exe",
         [
@@ -482,6 +489,7 @@ async function main(): Promise<void> {
     );
     assert(handle && handle !== 0xffffffffffffffffn);
     try {
+      // Truncate the file after opening it to verify reads recheck the handle.
       await writeFile(target, "short");
       assert.throws(() => readStorageText(handle, 22), /changed during read/);
       assert.equal(readStorageText(handle, 0), "");
@@ -520,6 +528,7 @@ async function main(): Promise<void> {
       worker.once("error", reject);
     });
     try {
+      // Begin snapshots only after the worker has installed its handler and announced readiness.
       await ready;
       const writesBeforeQueries = Atomics.load(raceState, 0);
       const deletionsBeforeQueries = Atomics.load(raceState, 1);
@@ -590,6 +599,7 @@ async function main(): Promise<void> {
       "PASS Win32 checked-handle storage: read/write, metadata, missing paths, ACL denial, aliases, reparse points, hardlinks and deletion race",
     );
   } finally {
+    // Release the FFI bindings before deleting the fixture tree.
     api.close();
     disposeStorageBindings();
     await rm(root, {

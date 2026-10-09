@@ -4,6 +4,7 @@ import { frameworkRoot } from "./files.ts";
 import { runManagedCommand } from "./managed-command.ts";
 import { run } from "./processes.ts";
 
+/** Convert required app and bundled web assets to Bun compile flags. */
 export function compiledAssetArguments(
   bundledAssets: readonly string[],
 ): string[] {
@@ -15,7 +16,7 @@ export function compiledAssetArguments(
   ].map((name) => `--asset=${name}`);
 }
 
-// Compile using the verified runtime supplied by prepareNative, without downloads.
+/** Compile the Windows host with the prepared Bun runtime, then remove consumed staging assets. */
 export async function compileWindowsApp(
   root: string,
   bun: string,
@@ -29,8 +30,7 @@ export async function compileWindowsApp(
   framework = frameworkRoot,
 ): Promise<void> {
   const assets = resolve(root, "assets");
-  // Bun 1.4.2 cannot copy a --compile-executable-path containing Unicode.
-  // Keep the verified compiler input local and pass an ASCII relative path.
+  // Bun 1.4.2 requires an ASCII --compile-executable-path, so copy the verified runtime beside the entry points.
   await cp(bun, resolve(assets, "bun.exe"));
   const args = [
     bun,

@@ -41,6 +41,7 @@ function checkTimes(metadata) {
 let report = {
   pass: false,
 };
+// Exercise the metadata API from WebView and return both success and failure over the host channel.
 try {
   await client.ready;
   const existsFile = await storage.exists(file);
@@ -93,6 +94,7 @@ try {
     denied: deniedCodes,
   };
 } catch (error) {
+  // Send browser-side failures through the same host channel as successful results.
   report = {
     pass: false,
     error: error instanceof Error ? error.message : String(error),

@@ -10,6 +10,7 @@ import type { Policy } from "@bunaway/protocol";
 
 export type { WindowSpec } from "@bunaway/plugin-api/native";
 
+/** Maximum number of window definitions accepted at startup. */
 export const MAX_WINDOWS = 128;
 
 function object(value: unknown): Record<string, unknown> {
@@ -19,7 +20,10 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-// Shared validation for CLI settings and verified package boot, without native dependencies.
+/**
+ * Validates window definitions against the app origin and view policy.
+ * A development URL, when supplied, becomes the required home origin.
+ */
 export function readWindowSpecs(
   value: unknown,
   policy: Policy,

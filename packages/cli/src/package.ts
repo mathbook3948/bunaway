@@ -18,10 +18,11 @@ import { buildProject, currentTarget } from "./build.ts";
 import { readProjectMetadata } from "./config.ts";
 import { json } from "./files.ts";
 
-// `bunaway package <channel>` consumes the channel-neutral artifact produced
-// by `bunaway build` (or builds it first with --build) and runs the channel
-// adapter. Exit semantics: the returned report carries ok/usable/submittable;
-// the CLI maps ok to its exit code.
+/**
+ * Package the channel-neutral build artifact with the selected channel adapter.
+ * With `build`, produce the artifact first. The report includes submission readiness,
+ * while `report.ok` determines the CLI exit code.
+ */
 export async function packageProject(
   directory: string,
   channelName: string,

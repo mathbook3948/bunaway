@@ -19,6 +19,7 @@ await rm(marker, {
 await rm(close, {
   force: true,
 });
+// Keep the host alive until the test requests shutdown and record each replacement PID.
 await Bun.write(
   host,
   `
@@ -80,6 +81,7 @@ console.error = (...args: unknown[]) => {
   }
   originalError(...args);
 };
+/** Reserves a loopback port and configures a real server fixture on it. */
 function settings() {
   const listener = Bun.serve({
     hostname: "127.0.0.1",
@@ -99,6 +101,7 @@ function settings() {
     timeoutMs: 5000,
   };
 }
+/** Counts host launches recorded by the controlled child process. */
 async function starts() {
   try {
     return (await Bun.file(marker).text()).trim().split("\n").length;
@@ -106,6 +109,7 @@ async function starts() {
     return 0;
   }
 }
+/** Polls child-process state with a deadline so orchestration stalls cannot hang. */
 async function waitFor(check: () => Promise<boolean>) {
   const deadline = Date.now() + 10000;
   while (!(await check())) {
@@ -159,6 +163,7 @@ try {
     }
   }
   await waitFor(async () => (await starts()) === 1);
+  // UI edits stay in Vite's HMR loop; backend edits replace the native host.
   await Bun.write(ui, `${uiText}\n// frontend update\n`);
   await Bun.sleep(350);
   expect(await starts()).toBe(1);
@@ -178,6 +183,7 @@ try {
       dev: second,
     }),
   );
+  // Reconfiguration must stop the first server before the replacement owns its port.
   await waitFor(async () => (await starts()) === 4);
   await expect(fetch(first.url)).rejects.toThrow();
   expect((await fetch(second.url)).ok).toBe(true);
@@ -188,6 +194,7 @@ try {
     "PASS frontend HMR ownership, backend restart, server reconfiguration and window-close teardown",
   );
 } finally {
+  // This generated project is shared by later tests, so restore every edited input.
   if (running) {
     if (!finished) {
       process.kill(process.pid, "SIGINT");

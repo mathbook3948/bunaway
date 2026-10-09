@@ -89,6 +89,10 @@ type ViewState = {
   deadline: number;
 };
 const views = new Map<string, ViewState>();
+/**
+ * Defer detach while WebView creation is pending.
+ * Destroy its HWND before finishing COM cleanup.
+ */
 function cleanupView(view: ViewState) {
   if (view.boundary.closed && !view.detached && view.native.detach()) {
     windows?.destroy(view.native.hwnd);
@@ -110,6 +114,7 @@ const uiCalls = new Map<
     }
   >
 >();
+/** Drop queued work for a context and suppress results from its running operations. */
 function discardContext(context: HostContext) {
   for (const [id, approvedContext] of approved) {
     if (approvedContext === context) {
@@ -310,6 +315,7 @@ function activeContext(context: HostContext) {
     ].some((view) => view.boundary.active(context))
   );
 }
+/** Wait for startup views, then navigate each ready view once. */
 function startViews() {
   if (
     !startRequested ||
@@ -329,6 +335,10 @@ function startViews() {
     }
   }
 }
+/**
+ * Handle user close, window recreation, and forced shutdown requests.
+ * Returns false if hidden or declined, including a cancelled final quit.
+ */
 async function closeWindow(
   viewId: string,
   mode: "close" | "recreate" | "force" = "close",
@@ -438,6 +448,7 @@ const windowServices: import("../../../packages/plugin-api/src/native.ts").Nativ
       };
     },
   };
+/** Create the HWND and WebView, destroying the HWND if WebView setup fails. */
 function createWindow(spec: WindowSpec) {
   assert(windows);
 
@@ -562,6 +573,7 @@ function createWindow(spec: WindowSpec) {
   });
 }
 try {
+  // Keep window and WebView COM work on this STA through cleanup.
   hr(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
   initialized = true;
   adapters = await operations(
@@ -669,6 +681,7 @@ try {
   }
   const deadline = Date.now() + 35000;
   try {
+    // Cleanup can wait for STA callbacks and child-process exit events.
     while (
       [
         ...views.values(),
@@ -698,6 +711,7 @@ try {
         if (initialized) {
           ole.symbols.CoUninitialize();
         }
+        // Close COM and Win32 DLL handles after releasing their native owners.
         disposeWin32Bindings();
       },
     ]);

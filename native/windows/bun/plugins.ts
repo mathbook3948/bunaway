@@ -15,9 +15,11 @@ import {
   packagedPlugins,
 } from "./plugin-table.ts";
 
+/** Normalize a plugin contract through the protocol's JSON-value validator for comparison. */
 const contractJson = (value: unknown) =>
   JSON.parse(JSON.stringify(validateValue({}, value)));
 
+/** The validated dispatcher owned by one Windows worker. */
 type PluginOperations = {
   execute(operation: string, input: unknown, source: string): JsonValue;
   executeUI(
@@ -33,6 +35,7 @@ type PluginOperations = {
   dispose(): Promise<void>;
 };
 
+/** Build the registry and reject registrations that differ from their installed package. */
 export function pluginRegistry(
   plugins: readonly NativeRegistration[],
   catalog: readonly PackagedPlugin[] = packagedPlugins,
@@ -60,6 +63,7 @@ export function pluginRegistry(
   return registry;
 }
 
+/** Build a fail-closed scope matcher from installed, registered plugins. */
 export async function permissionMatcher(
   plugins: readonly NativeRegistration[],
   catalog: readonly PackagedPlugin[] = packagedPlugins,
@@ -81,6 +85,7 @@ export async function permissionMatcher(
     true;
 }
 
+/** Attempt every cleanup in order and report all failures together. */
 export async function disposeAll(
   actions: Iterable<() => void | Promise<void>>,
 ): Promise<void> {
@@ -97,6 +102,7 @@ export async function disposeAll(
   }
 }
 
+/** Initialize only registered adapters for this worker and own their full cleanup lifecycle. */
 export async function operations(
   plugins: readonly NativeRegistration[],
   dataRoot: string,
@@ -108,6 +114,7 @@ export async function operations(
   const adapters = new Map<string, NativeAdapter>();
   const dispose = () =>
     disposeAll(
+      // Adapter resources may depend on earlier adapters, so release them in reverse creation order.
       [
         ...adapters.values(),
       ]
@@ -136,6 +143,7 @@ export async function operations(
     ],
   };
   try {
+    // Do not import or initialize implementations for unregistered plugins or the other worker.
     for (const plugin of catalog) {
       if (
         plugin.execution === execution &&
@@ -152,6 +160,7 @@ export async function operations(
     }
   } catch (error) {
     try {
+      // A partially initialized worker still owns every adapter created before the failure.
       await dispose();
     } catch (cleanup) {
       throw new AggregateError(

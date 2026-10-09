@@ -87,6 +87,7 @@ async function webAssets(
       throw new Error(`Frontend output escapes destination: ${name}`);
     }
     const rel = relative(destination, path).replaceAll("\\", "/");
+    // Catch names that collide when the output is unpacked on a case-insensitive filesystem.
     const key = rel.toLowerCase();
     if (outputs.has(key)) {
       throw new Error(`Frontend output collision: ${rel}`);
@@ -102,6 +103,7 @@ async function webAssets(
       continue;
     }
     const isEntry = /\.(ts|js)$/.test(rel);
+    // Bundle script files and copy other frontend files without rewriting their contents.
     if (isEntry) {
       entries.push(source);
     } else {
@@ -128,6 +130,10 @@ async function webAssets(
   }
 }
 
+/**
+ * Build web assets unless a development server owns them, then bundle the process host.
+ * Development builds keep inline source maps for debugging.
+ */
 export async function bundleAssets(
   project: Project,
   assets: string,
@@ -193,6 +199,7 @@ await runBunApp(app);`,
   );
 }
 
+/** Build the Windows host and, when needed, its packaged frontend assets. */
 export async function bundleWindowsAssets(
   project: Project,
   assets: string,
@@ -218,6 +225,10 @@ export async function bundleWindowsAssets(
   );
 }
 
+/**
+ * Bundle the Windows bootstrap, app entry and host workers into the asset directory.
+ * With project metadata, development builds retain shared SDK entries; return asset basenames.
+ */
 export async function bundleWindowsHost(
   source: string,
   destination: string,
@@ -503,6 +514,10 @@ export { defaultExport as default };`,
   ].sort();
 }
 
+/**
+ * Bundle a replacement app against the SDK entries retained by the host build.
+ * The reload generation must have a valid ID and the result is the new app bundle hash.
+ */
 export async function bundleWindowsReload(
   project: Project,
   assets: string,

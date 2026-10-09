@@ -28,6 +28,7 @@ let home: string;
 let project: string;
 let originals: Record<string, string>;
 
+/** Stops the detached POSIX builder left by the interrupted-build fixture. */
 async function stopWebBuilder(pidFile: string): Promise<void> {
   if (process.platform === "win32" || !(await Bun.file(pidFile).exists())) {
     return;
@@ -1018,6 +1019,7 @@ test("Windows development artifacts enable DevTools only with their launch flag"
   const configPath = resolve(project, "src-bunaway/bunaway.json");
   const settings = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
   async function buildFixture(development: boolean) {
+    // Module mocks live for the subprocess only, so each artifact build starts clean.
     const child = Bun.spawn(
       [
         process.execPath,
@@ -1334,6 +1336,7 @@ test.skipIf(process.platform !== "win32" || process.arch !== "x64")(
     const childOutput = new Response(child.stdout).text();
     const childErrors = new Response(child.stderr).text();
     try {
+      // Wait until both compiler and descendant are live before interrupting the build.
       const deadline = Date.now() + 20000;
       while (!(await Bun.file(ready).exists())) {
         if (child.exitCode !== null || Date.now() >= deadline) {
@@ -1470,6 +1473,7 @@ for (const failureMode of [
   }, 30000);
 }
 
+/** Creates a manually released barrier for ordering asynchronous restart hooks. */
 function gate() {
   let release: (() => void) | undefined;
   const promise = new Promise<void>((resolveDone) => {

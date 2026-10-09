@@ -43,7 +43,13 @@ function currentPlatform(): Platform {
   return platform;
 }
 
-// Keep the reader free while core setup/commands await replies on the same pipe.
+/**
+ * Runs an app over the host's stdin/stdout IPC connection.
+ * Keeps reading while core work waits for host replies.
+ * The host sends boot configuration and controls session lifetime and shutdown.
+ * The host and runtime exchange hello messages and negotiate the protocol.
+ * Rejects malformed or unexpected frames and unexpected end of input.
+ */
 export async function runBunApp(app: AppDefinition): Promise<void> {
   if (app.desktop !== undefined) {
     throw new BunawayError({
@@ -90,6 +96,7 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
       return Promise.reject(new Error("Output queue full."));
     }
     queued++;
+    // Serialize writes so concurrent replies cannot interleave.
     writer = writer.then(
       () =>
         new Promise<void>((resolve, reject) => {
@@ -101,6 +108,7 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
     );
     return writer;
   };
+  // Settle pending host calls so core work does not wait on a closed context.
   const cancelCalls = (context?: string) => {
     for (const [id, call] of calls) {
       if (context !== undefined && call.context !== context) {
@@ -147,6 +155,7 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
           kind: "hello",
           payload: hello,
         });
+        // Keep reading responses while core setup runs plugin callbacks.
         booting = createCore(app, {
           policy: frame.payload.policy,
           hello,
@@ -207,6 +216,7 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
               );
             }
             const requestId = `host-${++sequence}`;
+            // Match replies by request and context, freeing the slot on abort.
             return new Promise<HostResponse>((resolve, reject) => {
               const abort = () => {
                 if (!calls.delete(requestId)) {
@@ -261,6 +271,7 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
         throw new Error("Stale runtime frame.");
       }
       if (frame.kind === "host-response") {
+        // Ignore late responses after cancellation or session closure.
         const call = calls.get(frame.requestId);
         if (call?.context === frame.context) {
           calls.delete(frame.requestId);
@@ -297,6 +308,7 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
         continue;
       }
       if (frame.kind === "shutdown") {
+        // Stop work before cleanup, then send stopping when cleanup completes.
         stopping = true;
         cancelCalls();
         core ??= await booting?.catch(() => undefined);

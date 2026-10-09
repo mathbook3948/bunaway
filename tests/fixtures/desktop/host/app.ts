@@ -18,6 +18,7 @@ const command = (run: CommandDefinition["run"]): CommandDefinition => ({
     return run(payload, context);
   },
 });
+// BunawayError host-call failures are returned as data; other failures still reject.
 const host = async (
   context: CommandContext,
   operation: string,
@@ -44,6 +45,7 @@ const host = async (
   }
 };
 const object = (payload: unknown) => payload as Record<string, JsonValue>;
+/** Shared host-command fixture adapted by the Windows and macOS test hosts. */
 const app: AppDefinition = {
   plugins: [
     ...plugins,

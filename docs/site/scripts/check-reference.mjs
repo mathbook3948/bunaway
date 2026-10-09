@@ -44,6 +44,7 @@ for (const workspace of [
   }
 }
 
+/** Returns only explicit string export targets that can be checked exactly. */
 function packageExportEntries(exports) {
   if (!exports || typeof exports !== "object" || Array.isArray(exports)) {
     return;
@@ -62,6 +63,7 @@ function packageExportEntries(exports) {
   return new Map(entries);
 }
 
+/** Requires reference-map entries to match package exports and source targets. */
 function packageExportFailures(entries, packages) {
   const failures = [];
   const mapped = new Map();
@@ -276,6 +278,7 @@ function checkNames(actual, pages, label) {
   count += actual.size;
 }
 
+// Compare documented names with runtime exports reached through re-exports.
 for (const failure of packageExportFailures(
   catalog.packages,
   packagesBySource,
@@ -387,6 +390,7 @@ function objectPropertyNames(path, constantName) {
         continue;
       }
       let initializer = declaration.initializer;
+      // Unwrap TypeScript modifiers before reading literal object keys.
       while (
         initializer &&
         (ts.isAsExpression(initializer) ||
@@ -441,6 +445,8 @@ function checkFields(fields, slugs, label) {
   }
   count += fields.size;
 }
+
+// Extract schema and policy fields from their source declarations.
 checkFields(
   members("packages/protocol/src/validation.ts", "Schema"),
   [

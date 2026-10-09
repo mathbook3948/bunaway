@@ -1,3 +1,4 @@
+/** Template names accepted by project creation. */
 export const templateNames = [
   "vanilla",
   "vite",

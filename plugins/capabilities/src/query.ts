@@ -1,6 +1,10 @@
 import { BunawayError, type NativeInvokeOptions } from "@bunaway/plugin";
 import type { Capabilities } from "./index.ts";
 
+/**
+ * Create the public query and enforce unique names in the host response.
+ * Duplicate names reject with an `INTERNAL` error.
+ */
 export function createCapabilities(
   get: (input: null, options?: NativeInvokeOptions) => Promise<Capabilities>,
 ) {

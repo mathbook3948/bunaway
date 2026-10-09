@@ -4,6 +4,7 @@ import { openerPlugin } from "./index.ts";
 import { createShell } from "./shell.ts";
 import { normalizeUrl, urlInput } from "./url.ts";
 
+/** Prepare the UI adapter that checks permission before asking Explorer to open a URL. */
 export function createOperations(
   _environment: NativeEnvironment,
 ): NativeAdapter {

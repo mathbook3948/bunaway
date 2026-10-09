@@ -9,6 +9,7 @@ interface SdkReference {
   parent: string;
 }
 
+/** Check the app entry's module syntax without executing user code. */
 export async function assertAppDefinitionExport(source: string): Promise<void> {
   const extension = extname(source);
   const loader =
@@ -33,6 +34,10 @@ export async function assertAppDefinitionExport(source: string): Promise<void> {
   }
 }
 
+/**
+ * Resolve framework SDK imports to the project's installed packages.
+ * Mismatched copies are rejected so shared classes keep one runtime identity.
+ */
 export async function sdkPlugin(
   project: string,
   references: readonly SdkReference[] = [],
@@ -83,6 +88,7 @@ export async function sdkPlugin(
         const key = `${expected}\n${path}`;
         let identical = checked.get(key);
         if (!identical) {
+          // Reuse the package comparison when several imports resolve through the same pair.
           identical = (async () => {
             const expectedRoot = roots.get(name);
             if (!expectedRoot) {
@@ -182,11 +188,13 @@ export async function sdkPlugin(
   };
 }
 
+/** Project-local source dependencies grouped by backend and frontend build. */
 export interface SourceDependencies {
   backendDependencies: string[];
   frontendDependencies: string[];
 }
 
+/** Bundle backend and frontend sources to collect their project-local dependencies. */
 export async function validateSdkGraph(
   project: string,
   references: readonly SdkReference[],
@@ -247,6 +255,7 @@ export async function validateSdkGraph(
   };
 }
 
+/** Run a Bun build with the SDK resolver and normalize its build errors. */
 export async function buildWithSdk(
   options: Bun.BuildConfig,
   plugin: BunPlugin,

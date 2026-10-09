@@ -13,6 +13,10 @@ import type { DevelopmentApp } from "./development-app.ts";
 
 const MAX_APP_RELOADS = 100;
 
+/**
+ * Verifies private development bundles and replaces compatible app commands.
+ * Reports valid request outcomes over IPC and returns a listener disposer.
+ */
 export function listenForAppReload(
   app: DevelopmentApp,
   assets: string,
@@ -46,6 +50,7 @@ export function listenForAppReload(
       const root = await realpath(assets);
       const entry = resolve(root, "reloads", request.id, "app.js");
       const canonical = await realpath(entry);
+      // Resolve symlinks before checking the generation boundary.
       if (
         relative(root, canonical).replaceAll("\\", "/") !==
         `reloads/${request.id}/app.js`

@@ -31,6 +31,10 @@ import { DiagnosticLog } from "./log.ts";
 import { packagedPlugins } from "./plugin-table.ts";
 import { pluginRegistry } from "./plugins.ts";
 
+/**
+ * Starts the Windows host and Workers, then creates the app Core.
+ * Shutdown drains both Workers and rethrows startup or host failures.
+ */
 export async function runWindowsApp(
   app: AppDefinition,
   config: UIConfig,
@@ -383,6 +387,7 @@ export async function runWindowsApp(
       ui: "worker",
       runtime: config.runtime,
     });
+    // Wait for both Workers before Core starts routing host calls.
     await Promise.all([
       ready,
       ioReady,
@@ -589,6 +594,7 @@ export async function runWindowsApp(
       if (development) {
         closeReload = listenForAppReload(development, config.assets);
       }
+      // Start the UI before delivering initial or forwarded launch requests.
       await channel.send({
         kind: "start",
       });
@@ -601,6 +607,7 @@ export async function runWindowsApp(
   } catch (error) {
     fail(error);
   } finally {
+    // Stop new work before stopping Core and draining Worker cleanup.
     closeReload?.();
     clearTimeout(startupTimer);
     stopping = true;

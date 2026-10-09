@@ -78,6 +78,7 @@ if (!process.argv.includes("--child")) {
     resolve(output, "driver"),
     import.meta.path,
   );
+  // Keep FFI calls in the parent driver while the packaged host runs in its own process.
   const child = Bun.spawn(
     [
       process.execPath,
@@ -148,6 +149,7 @@ if (!process.argv.includes("--child")) {
             event.kind === "invoke"
           ) {
             requested = true;
+            // Enter the native move loop, then post a message that lets it exit.
             assert(driver.symbols.PostMessageW(hwnd, 0x112, 0xf010n, 0n));
             setTimeout(
               () => driver.symbols.PostMessageW(hwnd, 0x1f, 0n, 0n),
@@ -207,6 +209,7 @@ if (!process.argv.includes("--child")) {
     port: 0,
     fetch: () => new Response("network-ok"),
   });
+  // The modal-loop case requires timers, microtasks, and real HTTP requests to keep progressing.
   let ticks = 0;
   let promises = 0;
   let network = 0;
@@ -249,6 +252,7 @@ if (!process.argv.includes("--child")) {
         name: "setup",
         version: "1",
         async setup(context) {
+          // The command gate below requires setup; stop records that shutdown ran cleanup.
           await context.host.call(contracts["log.write"], {
             level: "info",
             message: "startup",
@@ -360,6 +364,7 @@ if (!process.argv.includes("--child")) {
     }
   } finally {
     clearInterval(timer);
+    // Finish already-started requests before stopping the server they use.
     await Promise.all(requests);
     await server.stop(true);
   }

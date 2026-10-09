@@ -1,12 +1,15 @@
 import { defineModule } from "@bunaway/backend";
 import { storage } from "@bunaway/plugin-storage";
 
+/** Validates message input and events against the 10,000-character limit. */
 const messageSchema = {
   type: "string",
   maxLength: 10000,
 } as const;
+/** Relative path resolved inside the host-managed appData scope. */
 const messagePath = "messages/current.txt";
 
+/** Saves messages before broadcasting them and exposes a read command. */
 export const message = defineModule("message")
   .command(
     "save",
@@ -22,6 +25,7 @@ export const message = defineModule("message")
         path: messagePath,
         text,
       });
+      // Publish only after storage confirms the write.
       await context.events.emit("message.saved", text, {
         kind: "broadcast",
       });

@@ -21,7 +21,7 @@ const assert = (value) => {
   }
 };
 await client.ready;
-// Reject hostile Web inputs without losing the UI Worker or the negotiated session.
+// Oversized and disallowed messages must not break the negotiated session or its UI Worker.
 window.chrome.webview.postMessage({
   kind: "invoke",
   protocol: {

@@ -20,6 +20,7 @@ function contracts(app: AppDefinition) {
   });
 }
 
+/** Keeps a stable app definition while development reloads replace commands. */
 export class DevelopmentApp {
   readonly definition: AppDefinition;
   private current: AppDefinition;
@@ -50,6 +51,11 @@ export class DevelopmentApp {
     };
   }
 
+  /**
+   * Installs new command bodies when contracts and lifecycle objects match.
+   * Returns false when restart is needed.
+   * In-flight calls keep their original body.
+   */
   replace(next: AppDefinition): boolean {
     const plugins = this.initial.plugins ?? [];
     const nextPlugins = next.plugins ?? [];

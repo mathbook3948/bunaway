@@ -31,6 +31,7 @@ test("a debounced UI save during reload invalidates it immediately and rebuilds 
       entered.resolve();
       await response.promise;
       if (isCurrent()) {
+        // Only a reload that still owns the latest revision may consume these changes.
         changedFiles.clear();
       }
       return true;
@@ -166,6 +167,7 @@ test("a stale reload candidate is discarded and close prevents a pending replace
         entered();
         await waiting;
       }
+      // A completed candidate is applied only if no newer edit arrived while it waited.
       if (isCurrent()) {
         applied += 1;
       }

@@ -298,6 +298,8 @@ function identifier(value: unknown) {
     throw new Error("Invalid Worker identifier");
   }
 }
+
+/** Validates a cloned packet against the receiving side, exact fields, size bound and nested protocol contracts; throws on rejection. */
 export function validatePacket(value: unknown, incoming: Side): Packet {
   const packet = record(value);
   const allowed = {
@@ -309,6 +311,7 @@ export function validatePacket(value: unknown, incoming: Side): Packet {
   if (!packetKind(packet.kind) || !allowed.includes(packet.kind)) {
     throw new Error("Invalid Worker direction");
   }
+  // Worker envelopes add bounded transport metadata beyond the canonical protocol message.
   const text = JSON.stringify(value);
   if (Buffer.byteLength(text) > MAX_MESSAGE_BYTES + 1024) {
     throw new Error("Worker packet too large");
@@ -465,7 +468,7 @@ type QueuedData = {
   reject(error: unknown): void;
 };
 
-// Bounded unacknowledged structured-clone messages; ack means acceptance, not command completion.
+/** Owns Worker message validation, bounded queues, acknowledgements, and listener cleanup. An ack means acceptance, not command completion. */
 export class Channel {
   private sequence = 0;
   private expected = 1;
@@ -495,6 +498,7 @@ export class Channel {
     port.on("message", this.accept);
   }
 
+  /** Validates runtime and sequence identity before dispatch, then acknowledges only after the receive callback settles. */
   private accept = (raw: unknown) => {
     try {
       const envelope = record(raw);
@@ -502,6 +506,7 @@ export class Channel {
       if (Object.keys(runtime).length !== 2) {
         throw new Error("Invalid runtime fields");
       }
+      // The boot UUID keeps packets from another app run from matching this channel.
       if (
         runtime.id !== this.runtime.id ||
         runtime.generation !== this.runtime.generation
@@ -547,6 +552,7 @@ export class Channel {
     }
   };
 
+  /** Resolves on peer acknowledgement; server and Host responses wait in a bounded FIFO. Rejects invalid or over-capacity sends. */
   send(packet: Packet): Promise<void> {
     try {
       if (this.closed) {
@@ -647,6 +653,7 @@ export class Channel {
   private post(packet: Packet, lane: Lane): Promise<void> {
     const sequence = ++this.sequence;
     return new Promise((resolve, reject) => {
+      // Register first so an immediate acknowledgement has a waiter; undo it if posting fails synchronously.
       this.pending.set(sequence, {
         lane,
         resolve,
@@ -698,6 +705,7 @@ export class Channel {
     }
   }
 
+  /** Drops only queued server messages for a revoked context and settles their send promises. */
   discardServers(context: HostContext): void {
     for (const queued of this.queuedData) {
       if (
@@ -709,9 +717,12 @@ export class Channel {
       }
     }
   }
+  /** Sends without a caller-owned promise and routes failures to the channel's failure handler. */
   notify(packet: Packet) {
     void this.send(packet).catch(this.fail);
   }
+
+  /** Checks requested data slots and reserves room for pending requests' cancellation or approval traffic. */
   canSend(count = 1, pendingRequests = 0) {
     return (
       !this.closed &&
@@ -731,6 +742,8 @@ export class Channel {
         API_LIMITS.maxPending
     );
   }
+
+  /** Waits for all queued sends and acknowledgements, failing if they do not drain within ten seconds. */
   async drain() {
     const deadline = Date.now() + 10000;
     while (this.pending.size || this.queuedData.size) {
@@ -740,6 +753,8 @@ export class Channel {
       await Bun.sleep(1);
     }
   }
+
+  /** Removes the listener and rejects all in-flight and queued send promises. */
   close() {
     this.closed = true;
     this.port.off("message", this.accept);

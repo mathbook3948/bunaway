@@ -1,9 +1,11 @@
 import type { JsonValue, NativeInvokeOptions } from "@bunaway/plugin";
 import type { LogInput } from "./index.ts";
 
+/** Build level-specific helpers around the plugin's typed write operation. */
 export function createLog(
   write: (input: LogInput, options?: NativeInvokeOptions) => Promise<null>,
 ) {
+  // Keep the level in the operation payload so callers cannot log an untyped level.
   const writeLog = (
     level: LogInput["level"],
     message: string,

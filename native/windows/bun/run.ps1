@@ -6,6 +6,7 @@ $bun = Join-Path $root 'runtime/bun-bundle/vendor/bun-windows-x64-baseline/bun.e
 & $bun --no-env-file (Join-Path $PSScriptRoot 'package.ts')
 if ($LASTEXITCODE -ne 0) { throw 'Windows package build failed' }
 if (!$SkipTests) {
+    # Run the packaged host lifecycle before the narrower API and packaging checks.
     foreach ($scenario in @('', '--modal', '--early-close', '--creation-failure')) {
         $arguments = @('--no-env-file', (Join-Path $root 'tests/lifecycle/windows-bun.ts'))
         if ($scenario) { $arguments += $scenario }

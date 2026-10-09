@@ -8,6 +8,7 @@ import { json, projectPath, verifyHash } from "./files.ts";
 
 const WM_CANCELMODE = 0x001f;
 
+/** Builds the loopback-only Bun inspector endpoint after validating its port. */
 export function windowsInspectorArgument(port: number): string {
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error("Inspector port must be an integer between 1 and 65535.");
@@ -15,6 +16,7 @@ export function windowsInspectorArgument(port: number): string {
   return `--inspect=127.0.0.1:${port}/bunaway`;
 }
 
+/** Verifies the packaged Bun provenance and every declared asset before launch. */
 export async function verifyWindowsLaunch(root: string): Promise<void> {
   const manifest = (await json(resolve(root, "manifest.json"))) as {
     bun?: {
@@ -56,6 +58,7 @@ export async function verifyWindowsLaunch(root: string): Promise<void> {
   }
 }
 
+/** Preserves selected Windows variables and limits PATH to the system directory. */
 export function windowsLaunchEnvironment(
   parent: NodeJS.ProcessEnv = process.env,
 ): NodeJS.ProcessEnv {
@@ -73,7 +76,9 @@ export function windowsLaunchEnvironment(
   return environment;
 }
 
-// Development runner only: request orderly teardown without user close hooks or hiding.
+/** Requests orderly teardown of a development app without invoking user close hooks or hiding it.
+ * Returns the number of matching windows found; it does not wait for process exit.
+ */
 export async function closeWindowsApp(pid: number): Promise<number> {
   const { dlopen, JSCallback, ptr } = await import("bun:ffi");
   const api = dlopen("user32.dll", {
@@ -138,6 +143,7 @@ export async function closeWindowsApp(pid: number): Promise<number> {
   try {
     api.symbols.EnumWindows(callback.ptr, 0n);
     for (const window of windows) {
+      // Cancel active move or menu loops before asking the window procedure to shut down.
       api.symbols.PostMessageW(window, WM_CANCELMODE, 0n, 0n);
       api.symbols.PostMessageW(window, APP_SHUTDOWN_MESSAGE, 0n, 0n);
     }

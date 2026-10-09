@@ -31,6 +31,7 @@ const output = childMode
       `windows-storage-metadata-${process.pid}-${crypto.randomUUID()}`,
     );
 const outputRelativeToBuild = relative(buildRoot, output);
+// The parent recursively removes this unique output directory after the host exits.
 assert(
   outputRelativeToBuild &&
     outputRelativeToBuild !== ".." &&
@@ -90,6 +91,7 @@ const policy: Policy = {
 };
 
 if (!process.argv.includes("--child")) {
+  // Seed Unicode paths and build the browser client before starting the native host.
   try {
     await mkdir(resolve(assets, "web"), {
       recursive: true,
@@ -158,6 +160,7 @@ if (!process.argv.includes("--child")) {
             }
             const event = JSON.parse(line);
             if (event.event === "storage-metadata-report-confirmed") {
+              // The browser sends this signal only after its report command succeeds.
               confirmed = true;
               closedWindows = await closeWindowsApp(child.pid);
             }
@@ -209,6 +212,7 @@ if (!process.argv.includes("--child")) {
       await child.exited;
     }
   } finally {
+    // The child is awaited above before its isolated output tree is removed.
     await rm(output, {
       recursive: true,
       force: true,

@@ -1,10 +1,13 @@
 import type { Policy } from "@bunaway/protocol";
 
+/** Request to replace the app definition loaded by a development process. */
 export type AppReloadRequest = {
   kind: "bunaway:reload-app";
   id: string;
   sha256: string;
 };
+
+/** Outcome returned by the running app after it checks a reload request. */
 export type AppReloadResult = {
   kind: "bunaway:reload-result";
   id: string;
@@ -12,8 +15,10 @@ export type AppReloadResult = {
   message?: string;
 };
 const RELOAD_ID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
+/** Maximum diagnostic text accepted in a reload result. */
 export const MAX_APP_RELOAD_MESSAGE_CHARS = 4096;
 
+/** Validates a reload request received by the app process. */
 export function readAppReloadRequest(value: unknown): AppReloadRequest {
   if (
     !value ||
@@ -37,6 +42,7 @@ export function readAppReloadRequest(value: unknown): AppReloadRequest {
   };
 }
 
+/** Validates a reload result received from the app process. */
 export function readAppReloadResult(value: unknown): AppReloadResult {
   if (
     !value ||
@@ -78,7 +84,10 @@ export function readAppReloadResult(value: unknown): AppReloadResult {
   };
 }
 
-// Shared by the CLI and Windows host. Development never accepts a LAN or remote origin.
+/**
+ * Validates a credential-free localhost HTTP(S) development URL.
+ * Rejects remote origins and URL fragments.
+ */
 export function developmentUrl(value: unknown): URL {
   if (typeof value !== "string") {
     throw new Error("dev.url must be a loopback HTTP(S) URL.");
@@ -104,6 +113,9 @@ export function developmentUrl(value: unknown): URL {
   return url;
 }
 
+/**
+ * Replaces the selected views' origin lists with the development URL origin.
+ */
 export function developmentPolicy(
   policy: Policy,
   viewId: string | readonly string[],
@@ -129,7 +141,10 @@ export function developmentPolicy(
   };
 }
 
-// Both a development artifact and an explicit launch flag are required.
+/**
+ * Returns undefined when development is disabled; otherwise requires matching
+ * artifact and launch URLs.
+ */
 export function verifyDevelopmentLaunch(
   marker: unknown,
   launchUrl?: string,
@@ -153,7 +168,9 @@ export function verifyDevelopmentLaunch(
   return developmentUrl(launchUrl).href;
 }
 
-// Keep each window's production path when using one shared loopback UI server.
+/**
+ * Applies the loopback server origin while retaining a window's path and query.
+ */
 export function developmentWindowHome(home: string, server: string): string {
   const source = new URL(home);
   const target = developmentUrl(server);
@@ -162,6 +179,9 @@ export function developmentWindowHome(home: string, server: string): string {
   return target.href;
 }
 
+/**
+ * Requires both the development artifact marker and the explicit DevTools flag.
+ */
 export function verifyDevelopmentToolsLaunch(
   marker: unknown,
   requested = false,

@@ -29,6 +29,7 @@ test("parallel package readers exclude rebuilds until all readers release", asyn
   await expect(acquireBuildOutputLock(root, "windows-x64")).rejects.toThrow(
     "packaging",
   );
+  // One release must leave the other reader's shared lock held.
   await first();
   await expect(acquireBuildOutputLock(root, "windows-x64")).rejects.toThrow(
     "packaging",
@@ -58,6 +59,7 @@ test("a reader rechecks a rebuild that starts during registration", async () => 
   const root = resolve(home, "registration-race");
   const originalOpen = fs.open;
   let releaseBuild: (() => Promise<void>) | undefined;
+  // Start a rebuild between the reader's initial check and lock registration.
   const registration = spyOn(fs, "open").mockImplementation(
     async (path, ...args) => {
       if (String(path).includes("package-")) {
@@ -89,6 +91,7 @@ test("a rebuild observes a reader registered before its second lock check", asyn
     async (path, ...args) => {
       const file = await originalOpen(path, ...args);
       if (String(path).includes("package-")) {
+        // The registered reader forces the rebuild's second check to fail.
         await expect(
           acquireBuildOutputLock(root, "windows-x64"),
         ).rejects.toThrow("packaging");
@@ -109,6 +112,7 @@ test("a rebuild observes a reader registered before its second lock check", asyn
 
 test("package input locks coordinate with rebuilds across processes", async () => {
   const root = resolve(home, "child-reader");
+  // Keep the child reader active until the parent has checked rebuild exclusion.
   const child = Bun.spawn(
     [
       process.execPath,

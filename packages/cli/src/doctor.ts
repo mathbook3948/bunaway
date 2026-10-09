@@ -1,6 +1,7 @@
 import { currentTarget } from "./build.ts";
 import { validateProject } from "./config.ts";
 
+/** Check the project and platform tools, printing each result and returning overall success. */
 export async function doctor(directory: string): Promise<boolean> {
   let ok = true;
   const check = (name: string, passed: boolean, detail: string) => {

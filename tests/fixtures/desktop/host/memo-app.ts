@@ -2,6 +2,7 @@ import { storagePlugin } from "@bunaway/plugin-storage";
 import type { AppDefinition } from "../../../../packages/core/src/index.ts";
 import { contracts } from "../../host-plugins.ts";
 
+/** Storage-backed memo commands for the Windows host fixture. */
 export const memoApp = {
   events: {
     "memo.saved": {
@@ -22,6 +23,8 @@ export const memoApp = {
         const: null,
       },
       async run(text, context) {
+        // Persist before broadcasting so listeners can immediately read the
+        // stored memo.
         await context.host.call(contracts["storage.writeText"], {
           scope: "appData",
           path: "notes/memo.txt",

@@ -1,3 +1,4 @@
+/** Encode each case-sensitive view identity as a stable profile-directory name. */
 export const viewDirName = (id: string) =>
   `v${[
     ...id,

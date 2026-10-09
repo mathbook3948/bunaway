@@ -8,10 +8,6 @@ import {
   type SigningConfig,
 } from "./contract.ts";
 
-// bunaway.json.bundle — the single source for packaging metadata.
-// Unknown fields and malformed values are rejected up front so adapters can
-// trust what they receive. Filesystem checks (icons, certificate files) live
-// in resolve.ts; this file validates shape only.
 export interface PackagingConfig {
   name?: string;
   identifier?: string;
@@ -229,6 +225,11 @@ function signing(value: unknown, what: string): SigningConfig | undefined {
   return result;
 }
 
+/**
+ * Parses the packaging section of `bunaway.json.bundle`, rejecting unknown
+ * fields and invalid values before adapters consume it. Filesystem-backed
+ * assets are checked during resolution.
+ */
 export function parsePackaging(text: string): PackagingConfig {
   let rawValue: unknown;
   try {

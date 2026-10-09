@@ -1,8 +1,12 @@
 import { lstat, mkdir, realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
-// Owned output/lock directories cannot be redirected through links. Read-only
-// inputs and links inside a published package have separate validation rules.
+/**
+ * Verifies each existing output path component is a real directory beneath the
+ * caller-selected root, optionally creating missing components. Returns false
+ * when a descendant is absent; a missing root throws unless `create` is true.
+ * Throws if the path escapes or crosses a link.
+ */
 export async function ownedDirectory(
   root: string,
   path: string,

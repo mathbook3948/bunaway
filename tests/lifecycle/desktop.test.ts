@@ -21,6 +21,7 @@ const launch = {
   ],
   cwd: "C:\\사용자\\문서",
 };
+// Advance one timer turn so queued lifecycle callbacks settle deterministically.
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 test("open requests preserve arguments and resolve files using the launching directory", () => {
@@ -79,6 +80,7 @@ test("defineApp preserves desktop hooks and context types", () => {
 });
 
 test("concurrent quit requests share a veto and a later quit can proceed", async () => {
+  // Keep one decision pending so both quit entry points must share it.
   let finish: (value: boolean) => void = () => {};
   let count = 0;
   let stops = 0;
@@ -274,6 +276,7 @@ test("single-instance delivery buffers startup requests and acknowledges preserv
     cwd: "C:\\docs",
   };
   try {
+    // The first request arrives before a handler is installed and must be buffered.
     await forwardToInstance(address, args);
     expect(received).toHaveLength(0);
     inbox.start((input) => received.push(input.argv));
@@ -290,6 +293,7 @@ test("single-instance delivery buffers startup requests and acknowledges preserv
       const payload = Buffer.from(`${JSON.stringify(launch)}\n`);
       let reply = "";
       client.on("connect", () => {
+        // Split one valid frame across writes to exercise stream framing.
         client.write(payload.subarray(0, 5));
         setTimeout(() => client.write(payload.subarray(5, 11)), 5);
         setTimeout(() => client.write(payload.subarray(11)), 10);
@@ -492,6 +496,7 @@ test("instance deadlines end a slow request and a slow acknowledgement after fiv
   const inbound = address();
   const inbox = await listenForInstances(inbound);
   const outbound = address();
+  // Keep both sockets alive while withholding a complete request or reply.
   const server = createServer((socket) => {
     const timer = setInterval(() => socket.write("x"), 1000);
     socket.on("error", () => {});

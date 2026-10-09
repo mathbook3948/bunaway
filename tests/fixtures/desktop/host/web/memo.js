@@ -40,6 +40,7 @@ async function waitForSaved() {
 
 async function start() {
   await client.ready;
+  // Listen before loading so startup does not miss an early save event.
   await client.listen(
     "memo.saved",
     (event) => {

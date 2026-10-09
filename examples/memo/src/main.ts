@@ -57,15 +57,18 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+/** Connects the UI, restores saved text, and wires the save action. */
 async function start() {
   const client = createClient<
     CommandsOf<typeof memoApp>,
     EventsOf<typeof memoApp>
   >();
+  // Subscribe before the initial read so updates during loading are not missed.
   await client.listen(
     "memo.saved",
     (event) => {
       const text = event.payload;
+      // Keep the saved value current without replacing a draft being edited.
       ui.saved.textContent = text;
       setStatus(
         ui.input.value === text
@@ -99,6 +102,7 @@ async function start() {
     ui.button.disabled = true;
     saving = true;
     updateCount();
+    // Keep this snapshot to detect edits made while the write is in flight.
     const value = ui.input.value;
     let success = false;
     ui.saveLabel.textContent = "저장 중…";

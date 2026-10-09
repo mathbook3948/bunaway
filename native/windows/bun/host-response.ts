@@ -13,6 +13,7 @@ const internal = (): HostResponse => ({
   },
 });
 
+/** Runs the operation once and converts execution or serialization failures to a bounded protocol error response. */
 export function hostResponse(execute: () => JsonValue): HostResponse {
   try {
     const response = {

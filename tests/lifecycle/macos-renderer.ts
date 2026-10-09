@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 
+/** Lists the current user's WebContent processes; `pgrep` exit code 1 means the list is empty. */
 export async function listWebContentPids(): Promise<number[]> {
   assert.ok(process.getuid, "WebContent inventory requires a POSIX user ID");
   const probe = Bun.spawn(
@@ -24,6 +25,7 @@ export async function listWebContentPids(): Promise<number[]> {
     .filter((pid) => Number.isInteger(pid) && pid > 0);
 }
 
+/** Kills renderer candidates from an earlier inventory, tolerating exits and protected processes. */
 export function terminateRenderers(pids: number[]): void {
   let terminated = 0;
   for (const pid of pids) {

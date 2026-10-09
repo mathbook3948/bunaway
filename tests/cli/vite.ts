@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import type { Project } from "../../packages/cli/src/config.ts";
 import { startDevServer } from "../../packages/cli/src/dev-server.ts";
 
-// Verify the real Vite server, frontend modules/assets and HMR transport.
+/** Verifies a generated Vite app over HTTP/HMR and restores files and processes afterward. */
 export async function verifyViteDevelopment(
   project: Project,
   frontend: "sdk" | "vite" | "react" | "vue" | "svelte" = "sdk",
@@ -134,6 +134,7 @@ export async function verifyViteDevelopment(
     socket.addEventListener("message", (event) =>
       messages.push(JSON.parse(String(event.data))),
     );
+    /** Waits for an HMR message and includes the observed stream on timeout. */
     async function waitFor(check: () => boolean) {
       const deadline = Date.now() + 5000;
       while (!check()) {

@@ -20,6 +20,7 @@ const app: AppDefinition = {
   },
   events: {},
 };
+// Keep the private IPC listener alive until the driver disconnects, then release its resources.
 const close = listenForAppReload(new DevelopmentApp(app), assets);
 process.on("disconnect", () => {
   close();

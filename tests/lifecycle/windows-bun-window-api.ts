@@ -172,6 +172,7 @@ if (!process.argv.includes("--child")) {
   });
   const nativeWindows = new Windows(() => {});
   try {
+    // Check fullscreen restoration across visibility and show states.
     for (const showCmd of [
       1,
       2,
@@ -251,6 +252,7 @@ if (!process.argv.includes("--child")) {
   const timers = new Set<ReturnType<typeof setInterval>>();
   let editorBrowser = 0;
   const crashes: Promise<void>[] = [];
+  /** Checks native client dimensions against logical size at the current DPI. */
   function assertClientSize(hwnd: bigint, width: number, height: number) {
     const client = new Int32Array(4);
     assert(driver.symbols.GetClientRect(hwnd, ptr(client)));
@@ -267,6 +269,7 @@ if (!process.argv.includes("--child")) {
       ],
     );
   }
+  /** Checks maximize bounds and restoration to the configured client size. */
   async function testMaximizeRestore(hwnd: bigint) {
     const deadline = Date.now() + 5000;
     driver.symbols.ShowWindow(hwnd, 3);
@@ -311,6 +314,7 @@ if (!process.argv.includes("--child")) {
             editorBrowser = event.browserPid;
           }
           if (event.event === "window-api-browser-crash") {
+            // Kill only the editor renderer to check view-local recovery.
             assert(editorBrowser);
             const killer = Bun.spawn(
               [
@@ -362,6 +366,7 @@ if (!process.argv.includes("--child")) {
           if (event.event === "window-close-confirmation") {
             const answer = ++confirmations === 1 ? 7n : 6n; // IDNO then IDYES
             const deadline = Date.now() + 10000;
+            // Poll because the native confirmation dialog appears asynchronously.
             const timer = setInterval(() => {
               const hwnd = driver.symbols.FindWindowW(
                 ptr(dialogClass),
@@ -421,6 +426,7 @@ if (!process.argv.includes("--child")) {
     holds = 0,
     cancellations = 0,
     quitAttempts = 0;
+  /** Waits for state changes reported by separate WebView documents. */
   async function waitFor(check: () => boolean | Promise<boolean>) {
     const deadline = Date.now() + 10000;
     while (!(await check())) {
@@ -489,6 +495,7 @@ if (!process.argv.includes("--child")) {
       "test.run": {
         ...contract,
         async run() {
+          // First run covers sizing/fullscreen; later runs cover recreation and renderer recovery.
           if (++runs === 1) {
             await windows.create({
               view: "editor",
@@ -804,6 +811,7 @@ if (!process.argv.includes("--child")) {
             });
             await waitFor(() => holds === 3 && cancellations === 2);
           } else if (runs === 3) {
+            // Renderer failure revokes this document while the main view is recreated.
             await windows.setCloseConfirmation({
               view: "editor",
               message: "Close editor?",
@@ -823,6 +831,7 @@ if (!process.argv.includes("--child")) {
               view: "main",
             }); // revokes this caller, but replacement must finish
           } else {
+            // Race a pending editor creation against caller revocation during main-window close.
             assert.equal(runs, 4);
             assert.equal(
               quitAttempts,

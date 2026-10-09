@@ -28,6 +28,8 @@ const hello: Hello = {
   features: [],
   buildId: "reload-test",
 };
+
+/** Build an app whose command adds `step` and can be held in flight. */
 function app(
   version: number,
   step: number,
@@ -239,6 +241,8 @@ test.each([
     const errors = new Response(child.stderr).text();
     const source =
       "export default { commands: { read: { input: { const: null }, output: {}, async run() { return 1; } } }, events: {} };\n";
+
+    /** Write one generation and request its replacement over the private IPC. */
     async function candidate(
       code: string,
       hash = createHash("sha256").update(code).digest("hex"),

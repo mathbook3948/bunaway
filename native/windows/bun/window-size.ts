@@ -5,15 +5,20 @@ import {
 
 export const DEFAULT_DPI = 96;
 
+/** Convert a 96-DPI logical dimension to physical pixels for the target DPI. */
 export function physicalPixels(logicalPixels: number, dpi: number) {
   return Math.round((logicalPixels * dpi) / DEFAULT_DPI);
 }
 
+/** Convert a physical pixel dimension back to 96-DPI logical pixels. */
 export function logicalPixels(physicalPixels: number, dpi: number) {
   return Math.round((physicalPixels * DEFAULT_DPI) / dpi);
 }
 
-// WINDOWPOS already contains the target monitor's physical maximized size.
+/**
+ * Apply logical client constraints to a maximized physical WINDOWPOS.
+ * Unchanged axes retain their exact physical values.
+ */
 export function constrainedOuterSize(
   width: number,
   height: number,

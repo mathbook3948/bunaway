@@ -9,6 +9,7 @@ test("Windows diagnostic writes recover after a failed command error log", async
   const path = resolve(home, "host.log");
   const log = new DiagnosticLog(path);
   try {
+    // A directory at the log path forces the first append to fail.
     await mkdir(path);
     await expect(
       log.write("command-failed", {

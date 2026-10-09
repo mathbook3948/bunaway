@@ -33,6 +33,7 @@ const DEFAULT_DESCENDANT_CLEANUP_TIMEOUT_MS = 5000;
 const PROCESS_EXIT_POLL_INTERVAL_MS = 10;
 const WAIT_OBJECT_0 = 0;
 
+/** Signals that another process already owns this app data directory. */
 export class AppAlreadyRunningError extends Error {
   constructor() {
     super("App data directory is already in use.");
@@ -132,6 +133,10 @@ function openBindings() {
     },
   });
 }
+/**
+ * Claims the app directory and assigns this host to a kill-on-close Job Object.
+ * Repeated claims for this directory are harmless; ownership lasts until exit.
+ */
 export function containAppProcess(dataRoot: string) {
   mkdirSync(dataRoot, {
     recursive: true,
@@ -208,6 +213,10 @@ export function containAppProcess(dataRoot: string) {
     throw error;
   }
 }
+/**
+ * Requires an active app Job.
+ * Returns its live descendants, excluding this Bun host.
+ */
 export function activeDescendants(): number {
   assert(owned);
   const accounting = Buffer.alloc(JOBOBJECT_BASIC_ACCOUNTING_INFORMATION_BYTES);
@@ -226,6 +235,10 @@ export function activeDescendants(): number {
 
 // The development-server worker remains alive until its Job descendants exit.
 // A worker exit notification alone does not establish that their ports are free.
+/**
+ * Terminates app descendants and waits for exit.
+ * Requires an active app Job; rejects on timeout or Win32 failure.
+ */
 export async function terminateAppDescendants(
   timeoutMs = DEFAULT_DESCENDANT_CLEANUP_TIMEOUT_MS,
 ): Promise<void> {

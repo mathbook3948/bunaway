@@ -10,6 +10,7 @@ export type LaunchArguments = {
 const MAX_BYTES = 64 * 1024;
 const MAX_PENDING = 32;
 
+/** Derives the per-app named pipe from the canonical data directory. */
 export function instanceAddress(dataRoot: string): string {
   const id = createHash("sha256")
     .update(realpathSync(dataRoot).toLowerCase())
@@ -17,6 +18,10 @@ export function instanceAddress(dataRoot: string): string {
   return `\\\\.\\pipe\\bunaway-${id}`;
 }
 
+/**
+ * Validates and copies pipe input.
+ * Throws for malformed or oversized launch data.
+ */
 export function parseLaunchArguments(value: unknown): LaunchArguments {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Invalid launch arguments");
@@ -43,7 +48,11 @@ export function parseLaunchArguments(value: unknown): LaunchArguments {
   };
 }
 
-// Bind before importing the app. Acknowledgement means queued, not opened or authorized.
+/**
+ * Binds the single-instance pipe and buffers launches until the host is ready.
+ * Acknowledgements confirm queueing only. Bind errors reject.
+ * Closing drops queued work and connected clients.
+ */
 export async function listenForInstances(address: string) {
   const queue: LaunchArguments[] = [];
   const sockets = new Set<Socket>();
@@ -131,6 +140,11 @@ export async function listenForInstances(address: string) {
   };
 }
 
+/**
+ * Sends launch data to the owning host and waits for its queue acknowledgement.
+ * Retries startup pipe races until the five-second deadline.
+ * Rejects delivery failures, including timeout and invalid acknowledgements.
+ */
 export async function forwardToInstance(
   address: string,
   input: LaunchArguments,

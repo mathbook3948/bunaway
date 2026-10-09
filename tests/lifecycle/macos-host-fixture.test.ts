@@ -24,6 +24,7 @@ afterEach(async () => {
   }
 });
 
+/** Create a protected fake app and inert host for pre-execution validation tests. */
 async function makeFixture(appName = "Signed.app") {
   const root = await mkdtemp(join(tmpdir(), "bunaway-host-fixture-"));
   roots.push(root);
@@ -47,6 +48,7 @@ async function makeFixture(appName = "Signed.app") {
   };
 }
 
+/** Assert setup fails without changing the workspace or sealed app resources. */
 async function rejectsSetup(
   fixture: Awaited<ReturnType<typeof makeFixture>>,
   env: Record<string, string>,

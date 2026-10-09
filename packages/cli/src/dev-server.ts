@@ -4,6 +4,7 @@ import type { DevServerConfig } from "./config.ts";
 import { frameworkRoot } from "./files.ts";
 import { startManagedProcess } from "./managed-command.ts";
 
+/** A ready frontend server whose process tree remains owned until stopped. */
 export interface DevServer {
   exited: Promise<number>;
   stop(): Promise<void>;
@@ -25,6 +26,9 @@ async function portInUse(url: URL): Promise<boolean> {
   });
 }
 
+/** Starts the configured server and waits for an HTTP 2xx response before returning.
+ * Rejects on an occupied port, startup failure, timeout, or cancellation and cleans up its process tree.
+ */
 export async function startDevServer(
   config: DevServerConfig,
   cwd: string,
@@ -33,6 +37,7 @@ export async function startDevServer(
 ): Promise<DevServer> {
   signal.throwIfAborted();
   const url = new URL(config.url);
+  // Only this command is owned and stopped below; never adopt a listener we did not start.
   if (await portInUse(url)) {
     throw new Error(
       `Development port is already in use: ${url.origin}. Stop that server; bunaway starts and owns dev.command.`,

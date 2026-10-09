@@ -26,6 +26,7 @@ import {
 
 const SOURCE_DEBOUNCE_MS = 150;
 
+/** Parses a project directory and an optional loopback backend inspector port. */
 export function parseDevArguments(args: string[]): {
   directory: string;
   inspect?: number;
@@ -60,6 +61,9 @@ export function parseDevArguments(args: string[]): {
   };
 }
 
+/** Serializes app reloads and host rebuilds triggered by project changes.
+ * Tries compatible reloads first and ignores work made stale by a newer edit.
+ */
 export class RestartController<T> {
   private revision = 0;
   private stopped = false;
@@ -80,6 +84,7 @@ export class RestartController<T> {
     },
   ) {}
 
+  /** Queues a change; a positive delay coalesces saves while callers share the active pass. */
   change(delayMs = 0): Promise<void> {
     if (this.stopped) {
       return Promise.resolve();
@@ -144,6 +149,7 @@ export class RestartController<T> {
     }
   }
 
+  /** Cancels pending work, waits for the active pass, and stops the current host. */
   async close(): Promise<void> {
     this.stopped = true;
     this.debounce?.cancel();
@@ -165,6 +171,7 @@ function launchSettings(project: Project) {
   };
 }
 
+/** Classifies whether a changed project path can use a compatible app-code reload. */
 export function isAppCodeChange(project: Project, name: string): boolean {
   const path = name.replaceAll("\\", "/");
   if (
@@ -199,6 +206,7 @@ export function isAppCodeChange(project: Project, name: string): boolean {
   );
 }
 
+/** Classifies watcher changes that enter the host reload or rebuild cycle. */
 export function shouldRestartHost(
   project: Project,
   name: string,
@@ -247,6 +255,10 @@ export function shouldRestartHost(
   );
 }
 
+/** Runs the watched development lifecycle until a signal or owned process exits.
+ * Windows app-code edits try an in-place reload; launch-setting changes need a fresh host.
+ * Failed source builds leave the watcher active for another save.
+ */
 export async function devProject(
   directory: string,
   options: {
@@ -294,6 +306,7 @@ export async function devProject(
     const previous = server;
     server = undefined;
     serverSettings = undefined;
+    // Stop the previous owner first so its process tree releases the port before replacement starts.
     await previous?.stop();
     if (next.dev) {
       const current = await startDevServer(
@@ -346,6 +359,7 @@ export async function devProject(
       if (!isDeepStrictEqual(runningSettings, launchSettings(next))) {
         return false;
       }
+      // Compatible reload keeps the running host only while its launch contract is unchanged.
       const id = crypto.randomUUID();
       const sha256 = await bundleWindowsReload(
         next,
@@ -398,6 +412,7 @@ export async function devProject(
           let posted = false;
           while (previous.exitCode === null && Date.now() < deadline) {
             if (!posted) {
+              // Let the Windows message loop tear down before force-killing on timeout.
               posted = (await closeWindowsApp(previous.pid)) > 0;
             }
             await Bun.sleep(20);
@@ -554,6 +569,7 @@ export async function devProject(
     try {
       await controller.close();
     } finally {
+      // Keep the frontend available until the app window has stopped.
       const previous = server;
       server = undefined;
       await previous?.stop();

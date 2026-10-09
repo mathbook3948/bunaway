@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { frameworkRoot } from "./files.ts";
 
+/** Runs a child command with inherited output and rejects on a nonzero exit. */
 export async function run(
   args: string[],
   cwd: string,
@@ -23,6 +24,7 @@ export async function run(
   }
 }
 
+/** Runs one exported framework function in a child Bun process with JSON arguments and result. */
 export async function runWorker(
   module: string,
   method: string,

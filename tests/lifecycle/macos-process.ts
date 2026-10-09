@@ -75,6 +75,7 @@ const executions: (() => {
 
 let fifoCounter = 0;
 const fifoPaths: string[] = [];
+/** Starts the packaged host; stalled probes use a FIFO for real backpressure. */
 function launch(mode = "normal", stall = false) {
   // Bun drains a subprocess's stdout eagerly into memory, so pausing the
   // consumer can never create OS-level backpressure through the pipe. For
@@ -241,6 +242,7 @@ function launch(mode = "normal", stall = false) {
         Buffer.byteLength(expected) > 65536,
         "Response must exceed the FIFO capacity",
       );
+      // Read only a prefix so the FIFO fills while the rest of the response remains blocked.
       const deadline = performance.now() + 8000;
       const buffer = Buffer.alloc(512);
       while (pendingLine.length < 512) {
@@ -296,6 +298,7 @@ function launch(mode = "normal", stall = false) {
     }),
     logs: () => logs,
     async ready() {
+      // The readiness frames identify both processes and confirm the packaged Bun binary.
       const started = await wait((frame) => frame.kind === "host-started");
       const ready = await wait((frame) => frame.kind === "ready");
       assert.equal(started.hostPid, child.pid);
@@ -349,6 +352,7 @@ function launch(mode = "normal", stall = false) {
       await output;
       await stderr;
       assert.equal(stopped.activeProcesses, 0);
+      // Keep the live set limited to probes that still need final cleanup.
       live.delete(api);
       return stopped;
     },
@@ -394,6 +398,7 @@ async function watch(targets: (number | string)[]) {
   };
 }
 
+/** Records the result and rethrows failures with the case name for the runner. */
 async function test(name: string, body: () => Promise<void>) {
   const start = performance.now();
   try {
@@ -1573,6 +1578,7 @@ try {
   }
   console.log(`macOS process probe: ${results.length} passed.`);
 } finally {
+  // Every still-owned child and FIFO is closed even when a test fails midway through a stall.
   for (const probe of live) {
     probe.child.kill();
     probe.child.stdin.end();

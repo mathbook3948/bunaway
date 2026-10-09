@@ -11,6 +11,7 @@ import {
   registerAdapter,
 } from "../../packages/packaging/src/index.ts";
 
+// Store the bundled assets in a readable executable fixture so packaging tests can inspect them.
 mock.module(
   import.meta.resolve("../../packages/cli/src/windows-compile.ts"),
   () => ({
@@ -648,6 +649,7 @@ try {
   await rm(lockPath);
 }
 
+/** Provides a gate for holding one build/package transition during a race test. */
 function deferred() {
   let resolve!: () => void;
   const promise = new Promise<void>((done) => {

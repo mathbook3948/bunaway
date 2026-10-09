@@ -177,6 +177,7 @@ class SynchronousSubscribeTransport extends TestTransport {
 
   override subscribe(listener: (event: TransportEvent) => void): Dispose {
     const unsubscribe = super.subscribe(listener);
+    // Deliver during subscribe to test events before its disposer is returned.
     listener(this.initialEvent);
     return () => {
       this.unsubscribeCount += 1;

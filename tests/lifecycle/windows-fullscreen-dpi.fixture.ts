@@ -42,6 +42,7 @@ function view(address: Pointer, size: number) {
   return new DataView(toArrayBuffer(address, 0, size));
 }
 
+/** Selects the simulated monitor with the largest overlap with a window rectangle. */
 function monitorFor(rect: typeof windowRect) {
   let largestArea = -1;
   let selected = 0;
@@ -208,6 +209,7 @@ const messages = linkSymbols({
 });
 try {
   windows.setFullscreen(window, true);
+  // Move a fullscreen window between simulated monitors at both visibility states.
   for (const visible of [
     false,
     true,

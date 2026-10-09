@@ -16,6 +16,7 @@ import { validateProject } from "../../packages/cli/src/config.ts";
 import { writeJson } from "../../packages/cli/src/files.ts";
 import { createProject, packageDirectory } from "./project.ts";
 
+/** Runs an install/build subprocess and reports its captured output on failure. */
 async function command(cwd: string, args: string[]): Promise<void> {
   const child = Bun.spawn(
     [

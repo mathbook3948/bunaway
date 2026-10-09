@@ -68,6 +68,8 @@ int main(int argc, char** argv) {
                 std::puts("PASS unsupported plugin permissions, operations and cancel-first cleanup");
             }
             {
+                // Re-signing changes the executable bytes, so digest aliases cannot
+                // bypass packaged-binary preflight.
                 const auto originalBun = fs::path(argv[2]) / "runtime/bun";
                 const auto signedBun = testRoot / "bun";
                 fs::copy_file(originalBun, signedBun);
@@ -139,6 +141,7 @@ int main(int argc, char** argv) {
             scopes.temp = testRoot;
             scopes.tempCanonical = Scopes::canonicalOf(testRoot);
             require(mkfifo((testRoot / "pipe").c_str(), 0600) == 0, "FIFO creation failed.");
+            // Reject the FIFO before a peer connects, then after a nonblocking reader lets open succeed.
             for (bool write : { false, true }) {
                 bool denied = false;
                 try { openScopedFile(scopes, "temp", { "pipe" }, write); }
@@ -168,6 +171,8 @@ int main(int argc, char** argv) {
             app.viewId = "main";
             { std::ofstream out(testRoot / "web/index.html"); out << "asset"; }
             g_app = &app;
+            // Drive the production scheme handler directly so origin checks do not
+            // depend on WebView timing.
             BWSchemeHandler* handler = [[BWSchemeHandler alloc] init];
             auto check = [&](const std::string& uri, NSInteger expected) {
                 BWTestSchemeTask* task = [[BWTestSchemeTask alloc] init];
@@ -192,6 +197,7 @@ int main(int argc, char** argv) {
             g_app = nullptr;
             std::puts("PASS scheme handler preserves ports and rejects userinfo");
 
+            // Resource rules must match exact origins, including deceptive host suffixes.
             auto rules = resourceRules({ "https://app.bunaway.local", "http://127.0.0.1:12345" });
             auto allowed = [&](const std::string& uri) {
                 bool blocked = false;

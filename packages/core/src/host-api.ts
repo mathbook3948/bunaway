@@ -14,6 +14,11 @@ import {
 } from "@bunaway/protocol";
 import type { CoreServices } from "./index.ts";
 
+/**
+ * Binds host calls to one context, cancellation signal, and app registry.
+ * The registered operation supplies the trusted schema and permission contract;
+ * cancellation rejects the wait and is also passed to the host adapter.
+ */
 export function bindHostAPI(
   context: HostContext,
   signal: CancellationSignal,
@@ -40,6 +45,7 @@ export function bindHostAPI(
         message: "Invalid host contract.",
       });
     }
+    // Resolve the caller's name through the app registry instead of trusting its contract.
     const registeredOperation = registry.operation(operationOrContract.name);
     const operationName = registeredOperation.name;
     let call: HostCall;
@@ -71,6 +77,7 @@ export function bindHostAPI(
       signal.addEventListener("abort", onAbort);
     });
     try {
+      // Race cancellation against the adapter so even an unresponsive host cannot hold this call open.
       response = validateValue(
         hostResponseSchema,
         await Promise.race([

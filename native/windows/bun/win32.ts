@@ -124,6 +124,7 @@ export class Windows {
   private readonly smallIcon: bigint;
   private readonly ownedIcons: boolean;
 
+  /** Register the window class and set this STA to per-monitor-v2 awareness. */
   constructor(shutdown: () => void, iconPath?: string, appId?: string) {
     if (appId) {
       const shell = dlopen("shell32.dll", {
@@ -272,6 +273,10 @@ export class Windows {
     this.registered = true;
   }
 
+  /**
+   * Create a window with a clamped logical client size.
+   * Register its state before showing it.
+   */
   create(
     title: string,
     width: number,
@@ -289,6 +294,7 @@ export class Windows {
       BigInt(WS_OVERLAPPEDWINDOW),
       0n,
     );
+    // WM_GETMINMAXINFO can run before CreateWindowExW returns the HWND.
     this.creatingConstraints = initialConstraints;
     let window: bigint;
     try {
@@ -349,6 +355,7 @@ export class Windows {
     return !!user.symbols.SetForegroundWindow(window);
   }
 
+  /** Apply clamped logical dimensions and resize saved normal placement. */
   setSize(window: bigint, width: number, height: number) {
     const constraints = this.constraints.get(window) ?? resolvedConstraints();
     const size = clampWindowSize(width, height, constraints);
@@ -387,6 +394,7 @@ export class Windows {
     };
   }
 
+  /** Replace limits and reclamp current or saved normal client size. */
   setSizeConstraints(window: bigint, constraints: WindowSizeConstraints) {
     assert(
       hasValidWindowSizeConstraints(constraints),
@@ -743,6 +751,7 @@ export class Windows {
     const top = suggested.getInt32(4, true);
     const suggestedWidth = suggested.getInt32(8, true) - left;
     const suggestedHeight = suggested.getInt32(12, true) - top;
+    // Publish target DPI before adjusting bounds; size helpers read this cache.
     this.dpiByWindow.set(window, dpi);
 
     const fullscreen = this.fullscreen.has(window);
@@ -775,6 +784,7 @@ export class Windows {
     const constraints = this.constraints.get(window) ?? resolvedConstraints();
     const minimized = !!user.symbols.IsIconic(window);
     const maximized = !!user.symbols.IsZoomed(window);
+    // Measure saved normal placement at the old DPI before rescaling it.
     if (minimized) {
       const placement = this.getPlacement(window);
       this.resizePlacement(
@@ -852,6 +862,9 @@ export class Windows {
     };
   }
 
+  /**
+   * Save normal style and placement, restoring both under current size limits.
+   */
   setFullscreen(window: bigint, enabled: boolean) {
     if (enabled === this.isFullscreen(window)) {
       return;
@@ -949,6 +962,7 @@ export class Windows {
     return result === IDYES;
   }
 
+  /** Destroy the HWND and discard its size, DPI, and fullscreen state. */
   destroy(window: bigint) {
     assert(user.symbols.DestroyWindow(window));
     this.windows.delete(window);
@@ -957,6 +971,7 @@ export class Windows {
     this.fullscreen.delete(window);
   }
 
+  /** Dispatch a bounded message batch and surface any callback failure. */
   pump() {
     for (
       let count = 0;
@@ -986,6 +1001,10 @@ export class Windows {
     }
   }
 
+  /**
+   * Release the class, callback, icons, and thread DPI context.
+   * Call after all windows have been destroyed.
+   */
   dispose() {
     assert.equal(this.windows.size, 0);
     if (this.registered) {

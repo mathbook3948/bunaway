@@ -35,6 +35,7 @@ let sequence = 0;
 const completed = new Set<string>();
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
+// Keep stdout frames ordered and bound queued work if the host stops reading.
 function send(frame: ProcessFrame): Promise<void> {
   const line = `${serializeProcessFrame(frame)}\n`;
   if (queued >= 128) {
@@ -83,6 +84,7 @@ function result(id: string, payload: JsonValue) {
     if (!(cause instanceof ProtocolError)) {
       throw cause;
     }
+    // Do not expose malformed probe output as a protocol error to the caller.
     pending = web({
       kind: "error",
       protocol: PROTOCOL_VERSION,
@@ -118,6 +120,10 @@ function error(
   return pending;
 }
 
+/**
+ * Advance the probe's handshake, request, revocation, or shutdown state from
+ * one host frame. Invalid state and frame combinations reach the fatal path.
+ */
 async function dispatch(frame: ProcessFrame) {
   if (
     frame.runtime.id !== runtime.id ||
@@ -401,6 +407,7 @@ async function dispatch(frame: ProcessFrame) {
   }
 }
 
+// Keep backend exceptions out of the wire response, then terminate the child.
 async function fatal() {
   try {
     await send({

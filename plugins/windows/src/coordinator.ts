@@ -12,7 +12,7 @@ export type WindowState = {
   deadline: number;
 };
 
-// This coordinator never owns HWNDs or COM objects. The UI pump owns cleanup and readiness.
+/** Coordinates requests without owning HWNDs or COM objects; the UI pump owns cleanup and readiness. */
 export class WindowOperations {
   readonly replacing = new Set<string>();
   constructor(
@@ -29,12 +29,14 @@ export class WindowOperations {
     },
   ) {}
 
+  /** Apply a permitted request, waiting for old cleanup and new readiness when replacing a view. */
   async execute(
     call: WindowCall,
     grants: readonly string[],
     requestId: string,
   ): Promise<JsonValue> {
     if (call.operation === "windows.list") {
+      // A list only reveals views included in the caller's already-computed grants.
       return this.specs
         .filter((spec) => grants.includes(spec.view))
         .map((spec) => ({
@@ -91,6 +93,7 @@ export class WindowOperations {
         message: "Window is already open.",
       });
     }
+    // Serialize create/recreate for this view until readiness or failure.
     this.replacing.add(viewId);
     try {
       if (this.hooks.stopping() || this.hooks.cancelled(requestId)) {
@@ -107,6 +110,7 @@ export class WindowOperations {
         });
       }
       const deadline = this.hooks.now() + WINDOW_CLEANUP_TIMEOUT_MS;
+      // Do not create a replacement until the UI pump confirms native cleanup of the old view.
       while (view && !view.cleaned) {
         if (
           this.hooks.stopping() ||
@@ -133,6 +137,7 @@ export class WindowOperations {
       // Once close commits, finish replacement even if the old document's context is revoked.
       this.hooks.create(spec);
       view = this.hooks.read(viewId);
+      // Creation is complete only after the UI pump publishes readiness for the new document.
       while (!view?.ready) {
         if (
           this.hooks.stopping() ||

@@ -11,6 +11,8 @@ let stopping = false;
 parentPort?.on("message", () => {
   stopping = true;
 });
+// Install the stop handler before signaling readiness, so the driver cannot lose
+// an early shutdown.
 parentPort?.postMessage("ready");
 
 while (!stopping) {

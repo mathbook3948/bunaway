@@ -1,5 +1,10 @@
 import { MAX_MESSAGE_BYTES } from "@bunaway/protocol";
 
+/**
+ * Reads newline-delimited UTF-8 frames.
+ * Rejects invalid UTF-8, empty frames, oversized frames, or a final frame without a newline.
+ * Leaves JSON validation to the caller.
+ */
 export async function* readJsonLines(
   chunks: AsyncIterable<Uint8Array>,
 ): AsyncGenerator<string> {

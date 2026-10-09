@@ -70,6 +70,7 @@ test.skipIf(process.platform !== "win32")(
         returns: "i32",
       },
     });
+    /** Finds the app's startup dialog and owns the FFI callback until the child exits. */
     async function watchDialog(
       child: Bun.Subprocess<"ignore", "pipe", "pipe">,
       caption: string,

@@ -2,9 +2,9 @@
 // Drives the real ObjC++ host end-to-end: packaged Bun backend, WKWebView
 // boundary, policy, unsupported native plugin rejection, session revocation on
 // navigation, renderer recovery, and process cleanup (guard watchdog).
-// Platform deltas: junction -> symlink, taskkill -> SIGTERM (graceful) /
-// SIGKILL (ungraceful), msedgewebview2 renderer inventory -> WebContent
-// delta snapshot, LOCALAPPDATA -> HOME/Library/Application Support.
+// Platform deltas: junction -> symlink, taskkill -> SIGTERM for graceful shutdown
+// or SIGKILL for forced exit, WebView2 renderer inventory -> WebContent snapshot,
+// LOCALAPPDATA -> HOME/Library/Application Support.
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import {
@@ -46,8 +46,8 @@ const workspace = await resolveTestOutput(
   process.env.BUNAWAY_TEST_WORKSPACE ??
     (inPlace ? join(buildRoot, "macos-host-in-place") : dirname(original)),
 );
-// BUNAWAY_PACKAGE_IN_PLACE=1 runs the package where it sits — e.g. inside a
-// signed .app for App Sandbox runs — while the default copy keeps the
+// BUNAWAY_PACKAGE_IN_PLACE=1 runs the package where it sits, such as inside a
+// signed .app for App Sandbox runs, while the default copy keeps the
 // hostile-name path coverage.
 const packagePath = inPlace
   ? original
@@ -72,6 +72,7 @@ function enclosingApp(path: string): string | undefined {
     }
   }
 }
+/** Rejects output paths that could place test data inside a signed .app bundle. */
 async function resolveTestOutput(path: string) {
   const components = sep === "\\" ? path.split(/[\\/]/) : path.split(sep);
   assert.ok(
@@ -92,6 +93,7 @@ async function resolveTestOutput(path: string) {
   return output;
 }
 async function canonicalPath(output: string) {
+  // Resolve through the nearest existing ancestor so new output paths also respect symlinks.
   let ancestor = output;
   while (!existsSync(ancestor)) {
     ancestor = dirname(ancestor);
@@ -153,7 +155,7 @@ const cwd = join(workspace, "hostile-host-cwd");
 await resolveTestOutput(cwd);
 
 // Hermetic HOME: the host resolves its data root under it. BUNAWAY_DATA_ROOT
-// overrides that location — under App Sandbox HOME is rewritten to the app
+// overrides that location. Under App Sandbox HOME is rewritten to the app
 // container, so callers point this at
 // ~/Library/Containers/<bundle-id>/Data/Library/Application Support/bunaway/<appId>.
 const sandboxHome = join(workspace, "host-home");
@@ -186,6 +188,7 @@ const protectedPaths = await Promise.all(
       : []),
   ].map(canonicalPath),
 );
+/** Ensures a recursive cleanup root cannot contain the package or other preserved paths. */
 async function assertDeletionOutput(path: string, keep: string[] = []) {
   await resolveTestOutput(path);
   const canonical = await canonicalPath(path);
@@ -199,6 +202,7 @@ async function assertDeletionOutput(path: string, keep: string[] = []) {
     );
   }
 }
+/** Ensures an output path is absent or a regular file, never a symlink. */
 async function assertOutputFile(path: string) {
   await resolveTestOutput(path);
   const entry = await lstat(path).catch((cause: NodeJS.ErrnoException) => {
@@ -211,10 +215,12 @@ async function assertOutputFile(path: string) {
     `test output must be a regular file, not a symlink: ${path}`,
   );
 }
+/** Replaces a checked output file atomically so report readers cannot observe partial contents. */
 async function writeTestOutput(path: string, text: string) {
   await assertOutputFile(path);
   const staging = await mkdtemp(join(dirname(path), ".bunaway-test-output-"));
   try {
+    // Publish only after the complete file is written.
     const staged = join(staging, "output");
     await writeFile(staged, text, {
       flag: "wx",
@@ -308,6 +314,7 @@ const savedResources = app
       })),
     )
   : [];
+// In-place runs mutate a signed bundle, so preserve original resource bytes for cleanup.
 const assetsTmp = join(assets, "tmp");
 const savedTmp = join(diagnostics, "original-assets-tmp");
 const hadTmp = app && existsSync(assetsTmp);
@@ -318,6 +325,7 @@ if (hadTmp) {
   });
 }
 
+/** Rebuilds isolated app data and the symlink fixtures used by storage-boundary checks. */
 async function resetData() {
   // WebContent renderers may hold the data folder briefly after the host exits;
   // they live outside the Bun process group so their handles drain late.
@@ -389,6 +397,7 @@ async function hostLog(): Promise<LogEntry[]> {
       }
     });
 }
+/** Polls until a probe returns a value; null means the expected state is not ready yet. */
 async function waitFor<T>(
   probe: () => Promise<T | null>,
   timeout = 90000,
@@ -416,6 +425,7 @@ async function updateAsset(name: string, text: string) {
   await writeFile(join(packagePath, name), text);
   const manifestPath = join(packagePath, "manifest.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf-8"));
+  // The host verifies every packaged asset against this digest before it starts.
   manifest.assets[name] = new Bun.CryptoHasher("sha256")
     .update(text)
     .digest("hex");
@@ -434,6 +444,7 @@ function launch(
   extraEnv: Record<string, string> = {},
   arguments_: string[] = [],
 ) {
+  // Re-sign mutable in-place bundles and give the host a controlled environment for each run.
   sealApp();
   const child = Bun.spawn(
     [
@@ -459,10 +470,11 @@ function launch(
   return child;
 }
 async function gracefulStop(child: ReturnType<typeof Bun.spawn>) {
-  // SIGTERM maps to WM_CLOSE: the host closes the session and exits 0.
+  // SIGTERM asks the host to close its session and exit cleanly.
   process.kill(child.pid, "SIGTERM");
   assert.equal(await child.exited, 0, "graceful shutdown must exit cleanly");
 }
+/** Starts a watcher and returns a function that waits for all targets to exit. */
 async function watch(pids: (number | string)[]) {
   const watcher = Bun.spawn(
     [
@@ -477,6 +489,7 @@ async function watch(pids: (number | string)[]) {
     },
   );
   const reader = watcher.stdout.getReader();
+  // Do not treat watcher startup delay as evidence that a target has exited.
   const first = await reader.read();
   reader.releaseLock();
   assert.equal(new TextDecoder().decode(first.value), "watch-ready\n");
@@ -485,6 +498,7 @@ async function watch(pids: (number | string)[]) {
     assert.equal(await new Response(watcher.stderr).text(), "");
   };
 }
+/** Records each case and snapshots logs and reports even when its assertion fails. */
 async function test(name: string, body: () => Promise<void>) {
   const start = performance.now();
   const testIndex = results.length + 1;
@@ -506,6 +520,7 @@ async function test(name: string, body: () => Promise<void>) {
             recursive: true,
             filter: async (path) => {
               const entry = await lstat(path);
+              // Diagnostics must not copy symlinks that lead outside the captured tree.
               return entry.isDirectory() || entry.isFile();
             },
           });
@@ -1107,6 +1122,7 @@ try {
   });
 } finally {
   if (app) {
+    // Restore signed bundle contents before resealing, including when an earlier assertion failed.
     await chmod(assets, 0o755);
     for (const { path, bytes } of savedResources) {
       await writeFile(path, bytes);

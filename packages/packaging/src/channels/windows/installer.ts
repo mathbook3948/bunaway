@@ -23,6 +23,10 @@ interface InstallerOptions {
   defaultWebView2: "check" | "bootstrap";
 }
 
+/**
+ * Returns ordered stages that pass payload and installer paths through
+ * closures. The runner skips remaining stage work after a failure.
+ */
 export function installerStages(
   input: AdapterInput,
   options: InstallerOptions,
@@ -72,6 +76,7 @@ export function installerStages(
             join(state.payloadDir, executable),
           ]);
         }
+        // Re-hash after signing so the manifest matches the shipped host.
         await recordPackagedHashes(state.payloadDir);
         if (ctx.input.signing && ctx.input.channel === "win-store-unpackaged") {
           // Preserve third-party signatures and asset hashes; reject untrusted

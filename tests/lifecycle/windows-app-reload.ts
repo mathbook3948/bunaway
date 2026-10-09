@@ -194,6 +194,7 @@ const stderr = child.stderr.pipeTo(
   }),
 );
 const timeout = setTimeout(() => child.kill(), 90000);
+/** Polls while failing early if the development process exits or times out. */
 async function waitFor(check: () => Promise<boolean> | boolean) {
   const deadline = Date.now() + 30000;
   while (!(await check())) {
@@ -202,6 +203,7 @@ async function waitFor(check: () => Promise<boolean> | boolean) {
     await Bun.sleep(40);
   }
 }
+/** Waits until a report's sample matches the expected command version. */
 async function reportReady(version: number): Promise<boolean> {
   const file = Bun.file(resolve(reports, `${version}.json`));
   if (!(await file.exists())) {
@@ -225,6 +227,7 @@ try {
   assert.equal(first.errorCode, "INVALID_ARGUMENT");
   assert.equal(first.stored, "reload storage");
   const initialWrites = output.match(/window-created/g)?.length ?? 0;
+  // A syntax error must leave the running app on its last valid implementation.
   await writeFile(service, "export const broken = ;\n");
   await waitFor(() =>
     errors.includes("Dev build failed; running app retained"),
@@ -269,6 +272,7 @@ try {
   );
   assert.equal(output.match(/window-created/g)?.length, initialWrites);
   assert(output.includes("App code reloaded"));
+  // An event-contract change requires a new host and UI session.
   await writeFile(
     service,
     "export const version: number = 3; export const step = 100; export let calls = 0; export function called() { return ++calls; }\n",
@@ -296,6 +300,7 @@ try {
 } finally {
   clearTimeout(timeout);
   if (child.exitCode === null) {
+    // Ask every reported app process to close before terminating the dev supervisor.
     for (const version of [
       1,
       2,

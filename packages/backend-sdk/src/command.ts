@@ -8,20 +8,28 @@ import {
   validateValue,
 } from "@bunaway/protocol";
 
+/** Schemas that validate a command's input and handler result at runtime. */
 export type CommandContract<
   I extends Schema = Schema,
   O extends Schema = Schema,
 > = {
+  /** Validates the payload passed to the handler. */
   readonly input: I;
+  /** Validates the handler's return value. */
   readonly output: O;
 };
 
+/** Receives validated input and must return a value accepted by the output schema. */
 export type CommandHandler<I extends Schema, O extends Schema> = (
   input: Infer<I>,
   context: CommandContext,
 ) => Infer<O> | Promise<Infer<O>>;
 
-// Typed handler inputs plus actual schema validation at both sides of the handler.
+/**
+ * Builds a command that validates input before the handler and its result after
+ * the handler. Invalid input becomes `INVALID_ARGUMENT`; an invalid result
+ * becomes `INTERNAL`. Handler errors pass through this helper unchanged for Core to handle.
+ */
 export function command<const I extends Schema, const O extends Schema>(
   definition: CommandContract<I, O> & {
     handle: CommandHandler<I, O>;

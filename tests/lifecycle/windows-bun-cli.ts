@@ -42,6 +42,7 @@ packageJson.optionalDependencies = {
 };
 delete packageJson.dependencies["@bunaway/plugin-storage"];
 await writeFile(packagePath, JSON.stringify(packageJson, null, 2));
+/** Runs a project-local CLI command and includes both output streams on failure. */
 async function command(args: string[], cwd = project) {
   const child = Bun.spawn(
     [
@@ -154,6 +155,7 @@ const api = dlopen("kernel32.dll", {
     returns: "i32",
   },
 });
+// Supply hostile ambient Bun settings to prove the packaged launcher sanitizes its child process.
 const child = Bun.spawn(
   [
     resolve(packageRoot, `${projectConfig.app.appId}.exe`),
@@ -224,6 +226,7 @@ try {
   await writeFile(boot, "throw new Error('tampered')");
   await assert.rejects(verifyWindowsLaunch(packageRoot), /Hash mismatch/);
   await writeFile(boot, original);
+  /** Launches a packaged app from the given directory and captures its exit result. */
   async function launch(directory: string) {
     await rm(launchMarker, {
       force: true,
@@ -335,6 +338,7 @@ try {
     } finally {
       if (existsSync(uninstaller)) {
         await must(uninstaller, silent);
+        // Wait for the uninstaller to release its files before checking removal.
         for (let retry = 0; retry < 100 && existsSync(uninstaller); retry++) {
           await Bun.sleep(50);
         }

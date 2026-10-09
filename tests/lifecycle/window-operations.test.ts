@@ -9,6 +9,7 @@ import {
 const WINDOW_READY_TIMEOUT_MS = 30_000;
 const CLEANUP_TIMEOUT_ADVANCE_MS = 40_000;
 
+/** Build a controllable host so tests can pause cleanup and advance deadlines. */
 function fixture() {
   const specs: WindowSpec[] = [
     "main",
@@ -198,6 +199,7 @@ test("recreation reserves the last window through cleanup, rejects competing cre
   });
   f.cancel();
   original.cleaned = true;
+  // Finish old-window cleanup after its context is cancelled before replacement.
   release();
   await recreation;
   expect(f.created).toEqual([

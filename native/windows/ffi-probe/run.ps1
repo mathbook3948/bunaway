@@ -22,6 +22,7 @@ if ($Mode -eq 'Modal') { $start.ArgumentList.Add('--modal') }
 if ($Mode -eq 'WorkerSize') { $start.ArgumentList.Add('--size') }
 if ($Mode -eq 'WorkerMulti') { $start.ArgumentList.Add('--multi') }
 $process = [Diagnostics.Process]::Start($start)
+# Drain streams before waiting so the child cannot block on a full pipe.
 $stdout = $process.StandardOutput.ReadToEndAsync()
 $stderr = $process.StandardError.ReadToEndAsync()
 $timedOut = !$process.WaitForExit(30000)
@@ -35,6 +36,7 @@ if ($err) { Write-Output $err }
 $code = $process.ExitCode
 $process.Dispose()
 if ($timedOut) { throw "FFI probe timed out; its process tree was terminated. Logs: $results" }
+# WebView2 owns a separate browser process, so verify it exits after teardown.
 foreach ($line in ($out -split "`n" | Where-Object { $_.Trim() })) {
     $event = $line | ConvertFrom-Json
     if ($event.event -ne 'browser-process') { continue }

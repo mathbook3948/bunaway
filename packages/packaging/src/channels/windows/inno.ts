@@ -10,6 +10,7 @@ import { signingArgs } from "./sign.ts";
 // bootstrapper), shortcuts, per-user data preservation on uninstall, and
 // over-install updates keyed by a stable AppId GUID.
 
+/** Inputs used to render the Inno script and its install/update behavior. */
 export interface InnoOptions {
   name: string;
   identifier: string;
@@ -49,7 +50,7 @@ function issParameter(value: string, constants = true): string {
   return issLiteral(value, constants).replace(/"/g, '""');
 }
 
-// Display names can contain characters forbidden in Windows directory names.
+/** Replaces forbidden path characters and trims trailing dots and spaces. */
 export function installerDirectoryName(name: string): string {
   return (
     // biome-ignore lint/suspicious/noControlCharactersInRegex: Windows forbids these characters in file names.
@@ -57,6 +58,10 @@ export function installerDirectoryName(name: string): string {
   );
 }
 
+/**
+ * Renders the installer script, rejecting unsupported OS, scope and executable
+ * settings before the compiler is invoked.
+ */
 export function renderInnoScript(options: InnoOptions): string {
   if (/^unins\d+\.exe$/i.test(options.executableName ?? "")) {
     throw new Error(
@@ -473,9 +478,11 @@ end;
   return `${lines.join("\n")}\n`;
 }
 
-// Inno signs its embedded uninstaller and temporary setup copies through this
-// callback. Credentials stay in the compiler's environment, never in .iss/JS
-// files or Inno's logged command line. Verify each PE before embedding it.
+/**
+ * Prepares Inno's callback for signing and verifying embedded PE files.
+ * Signing commands and credentials stay in the compiler environment rather
+ * than the generated script or compiler command line.
+ */
 export async function prepareInnoSigning(
   ctx: StageContext,
   staging: string,
@@ -525,7 +532,10 @@ export async function prepareInnoSigning(
   };
 }
 
-// Writes the .iss and compiles it. Returns the produced installer path.
+/**
+ * Writes the generated script and invokes ISCC, returning the installer path.
+ * Signing callback files are removed from staging on both success and failure.
+ */
 export async function compileInno(
   ctx: StageContext,
   iss: string,

@@ -25,6 +25,7 @@ process.once("exit", () => {
   }
 });
 
+/** Packages the framework once for this test process and removes it at exit. */
 export function packageDirectory(): Promise<string> {
   artifacts ??= (async () => {
     const directory = await mkdtemp(
@@ -39,6 +40,7 @@ export function packageDirectory(): Promise<string> {
   return artifacts;
 }
 
+/** Generates a consumer project against the shared local package artifacts. */
 export async function createProject(directory: string): Promise<string> {
   return generateProject(directory, {
     packageDirectory: await packageDirectory(),

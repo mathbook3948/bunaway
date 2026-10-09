@@ -55,10 +55,12 @@ async function sha256(path: string): Promise<string> {
     .digest("hex");
 }
 
+/** Returns the shared packaging output root for one build target. */
 export function packagingOutputDir(root: string, target: BuildTarget): string {
   return resolve(root, "dist", target, "packaged");
 }
 
+/** Returns the report path paired with a target's packaged outputs. */
 export function packagingReportPath(
   root: string,
   target: BuildTarget,
@@ -72,6 +74,7 @@ function inside(root: string, path: string): boolean {
   return rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
 
+/** Rejects absolute or escaping links before publishing staging. */
 async function verifyStagingLinks(staging: string): Promise<void> {
   if (!(await lstat(staging)).isDirectory()) {
     throw new Error("Staging root is not a regular directory.");
@@ -125,9 +128,13 @@ const EMPTY_MANIFEST: PackageManifest = {
   },
 };
 
-// Executes one channel adapter against an existing build artifact. The runner
-// owns stage ordering, diagnostics collection, the atomic output rename and
-// the report; adapters own channel semantics only.
+/**
+ * Runs an adapter against a verified build artifact, which adapters must treat
+ * as read-only, and returns a structured report. The runner owns ordered
+ * stages, diagnostics, output verification and publication. Publication
+ * follows successful stages and artifact verification; rollback attempts to
+ * restore the prior output if publication fails.
+ */
 export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
   const {
     metadata,
@@ -527,6 +534,8 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
         }
       }
       let outputPublished = false;
+      // Publish the report after the package. Attempt to restore the previous
+      // package if either rename fails.
       try {
         await rename(staging, output);
         outputPublished = true;
@@ -558,6 +567,7 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
   } catch (error) {
     reportFailure(error);
   } finally {
+    // Nested finally blocks run both lock-release paths even if cleanup fails.
     try {
       await remove(staging, true);
       if (!reportPublished) {

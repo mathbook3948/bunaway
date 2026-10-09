@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { join, resolve } from "node:path";
 import { viewDirName } from "../../native/windows/bun/view-profile.ts";
 
+/** Finds renderers using the requested view profile or the legacy shared profile. */
 export async function rendererPids(
   dataRoot: string,
   viewId: string,
   legacyProfile = false,
 ) {
-  // Select only renderers belonging to this view's WebView user-data directory.
+  // Limit inventory to the selected per-view or legacy WebView user-data directory.
   const inventory = Bun.spawn(
     [
       "powershell",
@@ -42,6 +43,7 @@ export async function rendererPids(
 
 // taskkill delivers WM_CLOSE to only one top-level window per call. A real
 // multi-window app needs WM_CLOSE on every window, like a session logoff does.
+/** Posts WM_CLOSE to each top-level window owned by the host process. */
 export async function closeAllWindows(pid: number) {
   const script = `
 $src = @'
@@ -88,6 +90,7 @@ foreach ($h in [Win32]::WindowsOf([uint32]$env:BUNAWAY_CLOSE_PID)) {
   );
 }
 
+/** Opens process handles before the caller starts terminating the renderers. */
 export async function watch(pids: number[]) {
   const watcher = Bun.spawn(
     [

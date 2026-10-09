@@ -4,6 +4,7 @@ if (!port || !mode) {
 }
 const started = Date.now();
 if (childPort) {
+  // The parent server can exit while this listener stays alive, exercising tree cleanup.
   Bun.spawn(
     [
       process.execPath,
@@ -18,6 +19,7 @@ if (childPort) {
   );
 }
 if (mode === "exit" || mode === "exit-tree") {
+  // Exit before starting the main listener so readiness must observe process failure.
   await Bun.sleep(150);
   process.exit(7);
 }

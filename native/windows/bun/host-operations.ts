@@ -38,6 +38,7 @@ const channel = new Channel(
     throw error;
   },
 );
+/** Request UI authorization for the oldest queued operation when the worker is idle. */
 function startNext() {
   if (stopping || active) {
     return;
@@ -54,11 +55,13 @@ function startNext() {
     call: next[1].call,
   });
 }
+/** Run an authorized operation and translate adapter failures into a host response. */
 function execute(call: HostCall, source: string): HostResponse {
   return hostResponse(() =>
     adapters.execute(call.operation, call.payload, source),
   );
 }
+/** Apply I/O requests and control messages from the main-thread coordinator. */
 async function receive(packet: Packet) {
   if (packet.kind === "operation") {
     assert(
@@ -67,6 +70,7 @@ async function receive(packet: Packet) {
         queue.size < API_LIMITS.maxPending,
       "Invalid I/O queue request",
     );
+    // Map insertion order keeps operations FIFO while the UI authorizes one at a time.
     queue.set(packet.requestId, {
       context: packet.context,
       call: packet.call,
@@ -81,6 +85,7 @@ async function receive(packet: Packet) {
     assert(call.context === packet.context);
     queue.delete(packet.requestId);
     active = undefined;
+    // UI checks context and policy; host forwards pending requests only.
     // No await or second queue between STA authorization and the checked-handle operation.
     const response = packet.allowed
       ? execute(call.call, call.source)
@@ -128,6 +133,7 @@ async function receive(packet: Packet) {
     throw new Error("Unexpected I/O packet");
   }
 }
+/** Drain channel messages, dispose adapters, then release both worker ports. */
 async function finish() {
   try {
     await disposeAll([

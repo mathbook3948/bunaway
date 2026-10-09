@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { BUILD_TARGETS, type BuildTarget } from "./contract.ts";
 import { ownedDirectory } from "./directories.ts";
 
+/** Names the conflicting lock or directory that prevented an operation. */
 export class TargetLockError extends Error {
   constructor(
     readonly path: string,
@@ -49,6 +50,11 @@ async function createLock(
   };
 }
 
+/**
+ * Registers a package reader for a build target and refuses to overlap a
+ * rebuild. The returned async function releases the reader lock and must be
+ * awaited after the artifact is no longer in use.
+ */
 export async function acquirePackageInputLock(
   root: string,
   target: BuildTarget,
@@ -81,6 +87,11 @@ export async function acquirePackageInputLock(
   return release;
 }
 
+/**
+ * Locks a build output and refuses to start while any package reader is active.
+ * The returned async function releases the lock and must be awaited after the
+ * build has finished.
+ */
 export async function acquireBuildOutputLock(
   root: string,
   target: BuildTarget,

@@ -9,6 +9,7 @@ const failures = [];
 let checked = 0;
 
 function decodeAttribute(value) {
+  // Decode before comparing paths and fragment IDs as browsers see them.
   return value.replace(
     /&(?:amp|quot|apos|lt|gt|#\d+|#x[0-9a-f]+);/gi,
     (entity) => {
@@ -31,6 +32,7 @@ function decodeAttribute(value) {
 }
 
 function collect(directory) {
+  // Index generated routes and IDs once for cross-page link resolution.
   for (const entry of readdirSync(directory, {
     withFileTypes: true,
   })) {
@@ -63,6 +65,7 @@ if (!pages.size) {
 function isLocalFile(pathname) {
   const destination = resolve(dist, `.${pathname}`);
   const relativeDestination = relative(dist, destination);
+  // Reject path traversal before checking for a local asset.
   if (
     relativeDestination === ".." ||
     relativeDestination.startsWith(`..${sep}`) ||
@@ -77,6 +80,7 @@ function isLocalFile(pathname) {
   }
 }
 
+// Only page routes resolve fragments; assets resolve as files.
 for (const [route, { html }] of pages) {
   for (const tag of html.matchAll(/<a\b[^>]*>/g)) {
     const attribute = /\bhref="([^"]*)"/.exec(tag[0]);

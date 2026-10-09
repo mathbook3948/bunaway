@@ -178,6 +178,7 @@ function mount(value: object = new View()): View {
 }
 
 afterEach(() => {
+  // Fire pagehide before restoring window so each client can clean up.
   for (const view of views.splice(0)) {
     view.hide();
   }

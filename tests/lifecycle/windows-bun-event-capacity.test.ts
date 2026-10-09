@@ -48,6 +48,7 @@ async function waitFor(condition: () => boolean): Promise<void> {
   }
 }
 
+/** Connect two views to a Core and optionally hold event acknowledgements. */
 async function eventHarness() {
   const { port1, port2 } = new MessageChannel();
   const failures: unknown[] = [];

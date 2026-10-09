@@ -16,6 +16,7 @@ import { validateFramework } from "./distribution.ts";
 import { inside, json, projectPath } from "./files.ts";
 import type { InstalledPlugin } from "./plugins.ts";
 
+/** Frontend server command and URL used by the native app during development. */
 export interface DevServerConfig {
   command: string[];
   url: string;
@@ -35,6 +36,7 @@ function command(value: unknown, field: string): string[] {
   return value as string[];
 }
 
+/** Validate optional development server settings and apply the default timeout. */
 export function readDevSettings(value: unknown): DevServerConfig | undefined {
   if (value === undefined) {
     return undefined;
@@ -68,6 +70,7 @@ export function readDevSettings(value: unknown): DevServerConfig | undefined {
   };
 }
 
+/** Resolved app settings and installed framework inputs consumed by CLI commands. */
 export interface Project {
   root: string;
   frameworkRoot: string;
@@ -142,8 +145,7 @@ async function frontendPath(root: string, name: string): Promise<string> {
   };
   const path = resolve(root, name);
   check(path);
-  // A first build may not have output yet. Resolve its nearest existing ancestor
-  // to detect aliases of reserved directories without requiring generated files.
+  // Resolve through the nearest existing ancestor so missing output cannot hide a reserved-path alias.
   let ancestor = path;
   const suffix: string[] = [];
   let links = 0;
@@ -168,8 +170,7 @@ async function frontendPath(root: string, name: string): Promise<string> {
         if (++links > 40) {
           throw new Error("Cannot resolve build.frontend directory links.");
         }
-        // A dangling link can become live when the build creates dist or its
-        // locks. Check its target before treating the output as missing.
+        // Check dangling link targets because a later build can create their destination.
         ancestor = resolve(
           dirname(ancestor),
           await readlink(ancestor),
@@ -185,7 +186,7 @@ async function frontendPath(root: string, name: string): Promise<string> {
   }
 }
 
-// Read the single project settings format used by generated apps.
+/** Parse the versioned settings file and validate its top-level fields. */
 export async function readProjectSettings(root: string): Promise<{
   directory: string;
   build: Record<string, unknown>;
@@ -256,6 +257,10 @@ export async function readProjectSettings(root: string): Promise<{
   };
 }
 
+/**
+ * Resolve project settings, policy and framework packages. Callers can defer source-import checks;
+ * metadata-only reads also skip required app and frontend file checks.
+ */
 async function loadProject(
   directory: string,
   options: {
@@ -399,6 +404,7 @@ async function loadProject(
   new NativeRegistry(plugins, {
     mode: "catalog",
   }).validatePolicy(policy);
+  // Normalize legacy single-window settings through the same validator as multi-window settings.
   const windows = readWindowSpecs(
     multiple
       ? raw.windows
@@ -484,8 +490,7 @@ async function loadProject(
   };
 }
 
-// Build preflight and packaging need settings, policy and installed dependencies,
-// independently of the app sources and generated frontend output.
+/** Resolve settings and framework dependencies without requiring build outputs or app source files. */
 export function readProjectMetadata(directory: string): Promise<Project> {
   return loadProject(directory, {
     validateFiles: false,
@@ -493,7 +498,7 @@ export function readProjectMetadata(directory: string): Promise<Project> {
   });
 }
 
-// Development must install its watcher before attempting source compilation.
+/** Resolve development settings before the watcher and defer app source validation until a build. */
 export function readProjectConfiguration(directory: string): Promise<Project> {
   return loadProject(directory, {
     development: true,
@@ -501,6 +506,7 @@ export function readProjectConfiguration(directory: string): Promise<Project> {
   });
 }
 
+/** Fully validate app settings, policy, framework dependencies and required project files. */
 export function validateProject(
   directory: string,
   options: {

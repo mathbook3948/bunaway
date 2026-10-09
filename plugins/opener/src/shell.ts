@@ -56,7 +56,10 @@ function checkResult(result: number): void {
   }
 }
 
-// The UI host owns COM initialization. All interfaces and strings stay on its STA.
+/**
+ * Load the COM libraries for a launcher used on the UI host's initialized STA.
+ * Dispose the returned object after its adapter stops.
+ */
 export function createShell() {
   const ole = dlopen("ole32.dll", {
     CoCreateInstance: {
@@ -94,6 +97,10 @@ export function createShell() {
   })();
   let disposed = false;
   return {
+    /**
+     * Ask Explorer to open a target; all COM work must remain on the creating STA.
+     * Calls after disposal throw a `CANCELLED` error.
+     */
     open(target: string): void {
       if (disposed) {
         throw new BunawayError({
@@ -303,6 +310,7 @@ export function createShell() {
         }
       }
     },
+    /** Release the loaded COM libraries after no more launches can run. */
     dispose(): void {
       if (disposed) {
         return;

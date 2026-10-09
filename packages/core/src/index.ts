@@ -34,31 +34,41 @@ export type {
 
 import type { AppDefinition, Platform } from "@bunaway/plugin-api";
 
-// UTC at the wire boundary; schedule uses a monotonic clock in each runtime adapter.
+/** Clock, timer, and cancellation primitives supplied by the host runtime. */
 export interface RuntimeServices {
   createCancellation(): CancellationController;
+  /** Returns Unix epoch milliseconds for comparing command deadlines. */
   now(): number;
+  /** Schedules a callback after a delay and returns a function that cancels it. */
   schedule(callback: () => void, delayMs: number): Dispose;
 }
 
+/** Host and runtime capabilities used to validate and run an app core. */
 export type CoreServices = {
   readonly policy: Policy;
   readonly hello: Hello;
   readonly platform: Platform;
   readonly backendContext: HostContext;
   readonly runtime: RuntimeServices;
-  // Trusted diagnostics only. Never include the cause in a WebView response.
+  /** Reports unexpected command causes; views receive generic INTERNAL errors for them. */
   onCommandError?(command: string, cause: unknown): void | Promise<void>;
+  /** Reports plugin setup and stop failures without interrupting cleanup. */
   onPluginError?(
     plugin: string,
     phase: "setup" | "stop",
     cause: unknown,
   ): void | Promise<void>;
-  // Check additional transport-envelope limits synchronously without sending or
-  // changing queues. Event emission validates every destination before delivery.
+  /**
+   * Checks adapter-specific envelope limits without sending or changing queues.
+   * Event emission validates all destinations before delivering to any of them.
+   */
   validateMessage?(context: HostContext, message: ServerMessage): void;
-  // The adapter closes the transport and bound session(s) on terminal send failure.
+  /**
+   * Sends a message through the transport for this context. A rejection fails
+   * the owning Core session.
+   */
   send(context: HostContext, message: ServerMessage): Promise<void>;
+  /** Runs a host operation with cancellation from the owning command or backend context. */
   callHost(
     context: HostContext,
     call: HostCall,
@@ -66,19 +76,29 @@ export type CoreServices = {
   ): Promise<HostResponse>;
 };
 
+/** One host-bound protocol session and the requests and subscriptions it owns. */
 export interface CoreSession {
-  // Acceptance/dispatch completes here; terminal command results travel through services.send.
+  /** Resolves after accepting a message for dispatch; command results use CoreServices.send. */
   receive(message: ClientMessage): Promise<void>;
+  /** Idempotently cancels pending work, removes subscriptions, and releases the context. */
   close(error?: WireError): Promise<void>;
 }
 
+/** App core that owns registered handlers, shared state, sessions, and plugins. */
 export interface Core {
-  // Only the host/runtime adapter opens sessions using host-issued IDs and selected policy views.
+  /**
+   * Opens a session for a host-issued context and allowed policy view.
+   * Fails for an unknown view, a stopped core, or a context already in use.
+   */
   openSession(context: HostContext, viewId: string): CoreSession;
+  /** Closes sessions and stops plugins, rejecting if shutdown exceeds its deadline. */
   stop(): Promise<void>;
 }
 
-// Resolves after registration and plugin setup; runtime ready must wait for this.
+/**
+ * Creates an app core and resolves after registration and plugin setup complete.
+ * Runtimes should wait for this promise before reporting the app as ready.
+ */
 export type CoreFactory = (
   app: AppDefinition,
   services: CoreServices,

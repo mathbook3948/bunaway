@@ -231,6 +231,7 @@ test("concurrent module services preserve view policy after await and never use 
     if (++entered === 2) {
       enter.resolve();
     }
+    // Keep both handlers suspended to overlap their Host contexts.
     await release.promise;
     return storage.writeText({
       ...location,
@@ -419,6 +420,7 @@ test("cancelling one concurrent command does not cancel or redirect another", as
   const first = read.run(null, context("first", callHost, controller));
   const firstError = first.catch((error) => error);
   const second = read.run(null, context("second", callHost));
+  // Resume both handlers after abort to expose any context leak.
   controller.abort();
   release.resolve();
   expect(await firstError).toMatchObject({

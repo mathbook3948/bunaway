@@ -61,6 +61,7 @@ function deferred() {
   };
 }
 
+/** Pair Worker channels and collect failures while a test controls delivery. */
 function createChannels(
   receive: (packet: Packet) => void | Promise<void>,
   side: "main" | "ui" | "io" = "main",
@@ -393,6 +394,7 @@ test("discardServers releases queued context traffic without delivering it", asy
     },
     (_, index) => harness.sender.send(server(index)),
   );
+  // These context-specific packets stay queued behind the held active sends.
   const discarded = Array.from(
     {
       length: 3,

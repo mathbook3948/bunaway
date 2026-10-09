@@ -19,9 +19,11 @@ const plugin = defineNativePlugin({
   },
 });
 
+/** Plugin contract for opening validated HTTP and HTTPS URLs. */
 export const openerPlugin = plugin.definition;
 export default openerPlugin;
 
+/** Open an absolute HTTP or HTTPS URL after validating and normalizing it. */
 export async function openUrl(
   url: string,
   options?: NativeInvokeOptions,

@@ -190,6 +190,7 @@ async function makeSignedMacArtifact(projectRoot: string) {
     target: "macos-arm64",
     appId: "app.test",
   });
+  // Signature tests need a Mach-O host, so replace the placeholder fixture.
   await copyFile("/bin/echo", artifact.executable);
   manifest.host = {
     target: "macos-arm64",
@@ -560,6 +561,7 @@ test("the package lock excludes another Bun process and is released afterwards",
     "../../packages/packaging/src/index.ts",
     import.meta.url,
   ).href;
+  // The child holds its lock after announcing readiness, until stdin closes.
   const child = Bun.spawn(
     [
       process.execPath,
@@ -648,6 +650,7 @@ test("an active channel does not block a different channel", async () => {
   );
   try {
     await entered.promise;
+    // Keep the first channel assembling while the other finishes.
     const second = await runAdapter(
       projectRoot,
       stubAdapter({

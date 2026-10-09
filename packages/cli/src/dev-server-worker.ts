@@ -1,5 +1,3 @@
-// Windows development and build commands run in a dedicated Job so their process trees
-// are reclaimed even when the command exits early or the owning CLI disappears.
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { frameworkRoot } from "./files.ts";
@@ -16,6 +14,7 @@ if (import.meta.main) {
   const { containAppProcess, terminateAppDescendants } = await import(
     pathToFileURL(resolve(frameworkRoot, "native/windows/bun/job.ts")).href
   );
+  // Assign this worker before spawning so the command and its descendants join its Job.
   containAppProcess(lease);
   const child = Bun.spawn(command, {
     stdin: "ignore",
@@ -26,6 +25,7 @@ if (import.meta.main) {
   const finish = (code: number): Promise<never> =>
     (finishing ??= (async () => {
       try {
+        // A command can exit while descendants still hold files or ports.
         await terminateAppDescendants();
       } catch (error) {
         console.error(`Command cleanup failed: ${String(error)}`);

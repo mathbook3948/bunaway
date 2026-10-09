@@ -11,11 +11,12 @@ type HostScope = {
   active: boolean;
 };
 const scopes = new AsyncLocalStorage<HostScope>();
+// Reusing wrappers keeps repeated app composition idempotent and preserves registry identity.
 const commands = new WeakMap<CommandDefinition, CommandDefinition>();
 const plugins = new WeakMap<PluginDefinition, PluginDefinition>();
 
-// Each asynchronous command keeps its own caller's Host API. Setup descendants
-// retain the backend lifetime, including timers created by a plugin's setup.
+// Command scopes end with their work; setup descendants keep the backend scope
+// so plugin timers can use it until shutdown aborts the shared signal.
 async function runWithHost<T>(
   context: CommandContext,
   run: () => T | Promise<T>,
@@ -36,6 +37,10 @@ async function runWithHost<T>(
   });
 }
 
+/**
+ * Returns the active command or plugin setup Host API. Throws `INVALID_ARGUMENT`
+ * outside a scope and `CANCELLED` after that scope ends or its signal aborts.
+ */
 export function currentHost(): HostAPI {
   const scope = scopes.getStore();
   if (!scope) {
@@ -54,6 +59,11 @@ export function currentHost(): HostAPI {
   return scope.context.host;
 }
 
+/**
+ * Wraps command execution in its invocation context so `host` resolves to the
+ * correct caller across asynchronous work. Rebinding the same object reuses its
+ * wrapper and leaves the original definition untouched.
+ */
 export function bindCommandHost<T extends CommandDefinition>(definition: T): T {
   const existing = commands.get(definition);
   if (existing) {
@@ -73,6 +83,11 @@ export function bindCommandHost<T extends CommandDefinition>(definition: T): T {
   return bound;
 }
 
+/**
+ * Binds plugin commands and setup descendants to the plugin's backend context.
+ * The returned stop hook runs in that context for cleanup, after Core has
+ * aborted its signal. Rebinding the same plugin object reuses its wrapper.
+ */
 export function bindPluginHost(plugin: PluginDefinition): PluginDefinition {
   const existing = plugins.get(plugin);
   if (existing) {

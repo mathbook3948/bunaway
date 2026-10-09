@@ -474,6 +474,7 @@ console.log(metadata.name);
   }
 }, 60000);
 
+/** Runs a consumer-side Bun command and preserves both output streams on failure. */
 async function command(
   cwd: string,
   args: string[],

@@ -16,6 +16,7 @@ import { runWorker } from "./processes.ts";
 import type { SourceDependencies } from "./sdk.ts";
 import { templateNames } from "./templates.ts";
 
+/** Framework-owned files copied into a distributable CLI artifact. */
 export const frameworkPaths = [
   "framework.json",
   "FRAMEWORK-LICENSE.txt",
@@ -80,6 +81,7 @@ const generatedDirectories = [
   "native/macos/vendor",
 ] as const;
 
+/** Version and protocol pins that keep the CLI, SDK packages and native hosts aligned. */
 export interface Release {
   format: number;
   version: string;
@@ -123,6 +125,7 @@ function sdkDependencies(pkg: PackageDependencies): [
     .filter(([name]) => name.startsWith("@bunaway/"));
 }
 
+/** Detect framework package selectors nested anywhere in package-manager override rules. */
 function hasSdkOverride(value: unknown): boolean {
   return (
     value !== null &&
@@ -134,6 +137,7 @@ function hasSdkOverride(value: unknown): boolean {
   );
 }
 
+/** Read release metadata and reject mismatched packages, protocols or Bun pins. */
 export async function release(root = frameworkRoot): Promise<Release> {
   const value = (await json(resolve(root, "framework.json"))) as Release;
   if (
@@ -193,6 +197,7 @@ export async function release(root = frameworkRoot): Promise<Release> {
   return value;
 }
 
+/** Copy framework files and package sources, filtering local build and vendor directories from package copies. */
 export async function copyFramework(destination: string): Promise<void> {
   const info = await release();
   await mkdir(destination, {
@@ -215,6 +220,7 @@ export async function copyFramework(destination: string): Promise<void> {
   }
 }
 
+/** Return SHA-256 hashes keyed by normalized paths relative to the artifact root. */
 export async function snapshotHashes(
   root: string,
   excludedDirectories: readonly string[] = [],
@@ -227,6 +233,7 @@ export async function snapshotHashes(
   return hashes;
 }
 
+/** Validate framework versions and dependencies, and app imports when source paths are supplied. */
 export async function validateFramework(
   project: string,
   sources: readonly string[] = [],
@@ -261,7 +268,9 @@ export async function validateFramework(
       "Incompatible Bun/SDK dependency declaration; use the pinned Bun version.",
     );
   }
+  // Check release integrity before resolving app imports against the installed artifact.
   await checkArtifact(root);
+  // Collect package roots from app declarations and installed package manifests for import resolution.
   const declarations = sdkDependencies(pkg);
   const references: {
     name: string;
@@ -321,6 +330,7 @@ export async function validateFramework(
     }
   }
   const plugins = await installedPlugins(project, actual.version);
+  // Reject SDK and plugin declarations that are outside this release or pinned to another version.
   for (const [name, specifier] of declarations) {
     if (
       !Object.values(packageNames).includes(name) &&
@@ -346,6 +356,7 @@ export async function validateFramework(
       );
     }
   }
+  // Resolve imports in Bun's worker so the result reflects the app's installed package graph.
   const output = await runWorker(
     "sdk.ts",
     "validateSdkGraph",
@@ -365,6 +376,7 @@ export async function validateFramework(
   };
 }
 
+/** Build the local tarball filename used for a framework package and version. */
 export function packageFilename(name: string, version: string): string {
   return `${name.replace("@bunaway/", "bunaway-")}-${version}.tgz`;
 }
@@ -415,12 +427,14 @@ function requiredFrameworkFiles(): string[] {
   ];
 }
 
+/** Verify artifact contents, required inputs and pinned third-party license files. */
 export async function checkArtifact(root: string): Promise<void> {
   await release(root);
   const inventory = (await json(
     resolve(root, "artifact.files.json"),
   )) as Record<string, string>;
   const actual = await snapshotHashes(root, generatedDirectories);
+  // Exclude the inventory itself because embedding its own hash would make it self-referential.
   delete actual["artifact.files.json"];
   const mismatches = [
     ...new Set([
@@ -435,6 +449,7 @@ export async function checkArtifact(root: string): Promise<void> {
       `Artifact inventory mismatch: missing, extra or modified file: ${mismatches.join(", ")}.`,
     );
   }
+  // Check required source, generated bundles and template files after the inventory matches.
   for (const name of [
     ...requiredFrameworkFiles(),
     "packages/cli/dist/distribution-main.js",

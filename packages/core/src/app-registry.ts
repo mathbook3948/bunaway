@@ -15,6 +15,7 @@ import type { CoreServices } from "./index.ts";
 
 type ViewPolicy = Policy["views"][number];
 
+/** Validated app registrations and policy lookups ready for core startup. */
 export type PreparedAppRegistry = {
   readonly plugins: readonly PluginDefinition[];
   readonly registry: NativeRegistry;
@@ -63,6 +64,7 @@ function registerAll<T>(
   }
 }
 
+/** Orders plugins by dependency and rejects unsupported or unauthorized entries. */
 function orderPlugins(
   plugins: readonly PluginDefinition[],
   services: Pick<CoreServices, "platform" | "policy">,
@@ -98,6 +100,7 @@ function orderPlugins(
     marks.set(plugin.name, "done");
     ordered.push(plugin);
   };
+  // Dependencies must be set up first; the open mark also detects cycles.
   for (const plugin of plugins) {
     visit(plugin);
   }
@@ -127,6 +130,10 @@ function orderPlugins(
   return ordered;
 }
 
+/**
+ * Merges app and plugin registrations, then validates native operations and views.
+ * Throws a protocol error for duplicate, invalid, unsupported, or disallowed entries.
+ */
 export function prepareAppRegistry(
   app: AppDefinition,
   services: Pick<CoreServices, "platform" | "policy">,
@@ -152,6 +159,7 @@ export function prepareAppRegistry(
   }
   const registry = new NativeRegistry(plugins);
   registry.validatePolicy(services.policy);
+  // Generated native commands use the same permission checks as declared commands.
   for (const operation of registry.operations.values()) {
     commands.set(`plugin.${operation.name}`, {
       input: operation.input,

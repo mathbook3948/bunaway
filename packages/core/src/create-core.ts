@@ -44,6 +44,7 @@ function fail(code: WireError["code"], message: string): never {
   });
 }
 
+/** Records diagnostics without letting a failing reporter replace app behavior. */
 function reportDiagnostic(
   report: () => void | Promise<void> | undefined,
 ): void {
@@ -54,8 +55,7 @@ function reportDiagnostic(
   }
 }
 
-// The store keeps validated snapshots; reads and writes both copy so callers
-// can never mutate retained state.
+/** Keeps validated snapshots by copying values on both reads and writes. */
 function createStateStore(
   initial: Readonly<Record<string, JsonValue>> | undefined,
 ): StateStore {
@@ -75,6 +75,7 @@ function createStateStore(
   };
 }
 
+/** Preserves declared app errors and hides unexpected causes from the wire. */
 function toWireError(cause: unknown): WireError {
   if (cause instanceof BunawayError) {
     return cause.details === undefined
@@ -122,6 +123,7 @@ type EventDelivery = {
   >;
 };
 
+/** Owns one protocol handshake, its pending requests, and event subscriptions. */
 class SessionImpl implements CoreSession {
   helloDone = false;
   closed = false;
@@ -173,6 +175,7 @@ class SessionImpl implements CoreSession {
   }
 
   private async doClose(error?: WireError): Promise<void> {
+    // Block new work before aborting requests and attempting their terminal replies.
     this.closed = true;
     const failure = error ?? {
       code: "CANCELLED" as const,
@@ -195,6 +198,7 @@ class SessionImpl implements CoreSession {
     }
     this.subscriptions.clear();
     await Promise.all(replies);
+    // The host context can be reused only after pending replies have been attempted.
     this.core.releaseSession(this);
   }
 
@@ -278,6 +282,7 @@ class SessionImpl implements CoreSession {
     return true;
   }
 
+  /** Checks command registration, view access, and deadline before starting timed work. */
   private handleInvoke(
     message: Extract<
       ClientMessage,
@@ -359,8 +364,10 @@ class SessionImpl implements CoreSession {
     void this.execute(pending, definition, message.payload, message.command);
   }
 
-  // Runs detached from receive() so a slow handler never blocks acceptance of
-  // later messages. Exactly one settle() wins; late results are discarded.
+  /**
+   * Runs independently of receive() so slow handlers do not block later messages.
+   * Input and output are validated here; settle discards any result after cancellation.
+   */
   private async execute(
     pending: PendingRequest,
     definition: CommandDefinition,
@@ -415,6 +422,10 @@ class SessionImpl implements CoreSession {
     await this.settle(pending, reply);
   }
 
+  /**
+   * Binds host calls and event emission to the command's view and cancellation.
+   * State is shared app-wide and does not check the cancellation signal.
+   */
   private makeContext(signal: CancellationSignal): CommandContext {
     return {
       signal,
@@ -436,6 +447,7 @@ class SessionImpl implements CoreSession {
     };
   }
 
+  /** Completes a request once, cancelling its timer and work before sending the reply. */
   private async settle(
     pending: PendingRequest,
     reply: ServerMessage,
@@ -474,6 +486,7 @@ class SessionImpl implements CoreSession {
     });
   }
 
+  /** Registers a permitted subscription and queues its result before any events. */
   private handleListen(
     message: Extract<
       ClientMessage,
@@ -554,6 +567,7 @@ class SessionImpl implements CoreSession {
     });
   }
 
+  /** Builds serialized, adapter-validated event messages without mutating delivery state. */
   prepareEvent(
     event: string,
     source: string,
@@ -584,6 +598,7 @@ class SessionImpl implements CoreSession {
     return deliveries;
   }
 
+  /** Commits prepared deliveries by advancing sequence numbers and enqueueing sends. */
   deliver(deliveries: readonly EventDelivery[]): void {
     for (const { subscription, message } of deliveries) {
       subscription.sequence = message.sequence;
@@ -640,6 +655,7 @@ class SessionImpl implements CoreSession {
   }
 }
 
+/** Owns shared app state, policy, sessions, and plugin teardown hooks. */
 class BunawayCore implements Core {
   readonly sessions = new Map<HostContext, SessionImpl>();
   readonly registry: NativeRegistry;
@@ -683,14 +699,16 @@ class BunawayCore implements Core {
   }
 
   releaseSession(session: SessionImpl): void {
+    // A late close must not remove a newer session that reused this context.
     if (this.sessions.get(session.context) === session) {
       this.sessions.delete(session.context);
     }
   }
 
-  // The emitting context decides the public source: a view session reports its
-  // view ID, backend/plugin work reports "backend". Web requests are never
-  // promoted to the backend source.
+  /**
+   * Validates an event for every eligible session before mutating any queue.
+   * Session emissions keep their view ID as source; backend work reports "backend".
+   */
   async emit(
     event: string,
     payload: JsonValue,
@@ -740,6 +758,11 @@ class BunawayCore implements Core {
     }
   }
 
+  /**
+   * Creates the plugin context with shared app state and a backend signal.
+   * Host calls observe shutdown cancellation, and event emission rejects after
+   * the signal aborts. State access does not check the signal.
+   */
   makeBackendContext(): CommandContext {
     const signal = this.backendController.signal;
     return {
@@ -769,8 +792,7 @@ class BunawayCore implements Core {
     });
   }
 
-  // Stop hooks best-effort in reverse setup order; individual failures never
-  // skip later hooks.
+  /** Runs registered stop hooks in reverse setup order and continues after failures. */
   async cleanupPlugins(): Promise<void> {
     for (const { plugin, stop } of [
       ...this.stopHooks,
@@ -793,6 +815,7 @@ class BunawayCore implements Core {
 
   private async doStop(): Promise<void> {
     this.stopped = true;
+    // Cancel backend work before closing sessions, then stop plugins within one deadline.
     this.backendController.abort();
     const cleanup = (async () => {
       const sessions = [
@@ -829,6 +852,11 @@ class BunawayCore implements Core {
   }
 }
 
+/**
+ * Validates registrations and policy before running plugin setup in dependency order.
+ * Setup failures trigger core shutdown. Non-Bunaway errors become `INTERNAL` if
+ * cleanup completes within its deadline.
+ */
 export const createCore: CoreFactory = async (app, services) => {
   const appRegistry = prepareAppRegistry(app, services);
   const core = new BunawayCore(
@@ -837,6 +865,7 @@ export const createCore: CoreFactory = async (app, services) => {
     createStateStore(app.state),
   );
   try {
+    // Setup follows dependency order; each returned stop hook is recorded for reverse teardown.
     for (const plugin of appRegistry.plugins) {
       try {
         const hook = await plugin.setup?.(core.makeBackendContext());

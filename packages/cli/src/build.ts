@@ -38,7 +38,10 @@ import { runManagedCommand } from "./managed-command.ts";
 import { run, runWorker } from "./processes.ts";
 import { compileWindowsApp } from "./windows-compile.ts";
 
+/** Native build targets supported by this CLI. */
 export type Target = "windows-x64" | "macos-arm64";
+
+/** Host, runtime, optional loader and license paths consumed by a native build. */
 export interface NativeInputs {
   target: Target;
   host: string;
@@ -57,6 +60,7 @@ interface Pin {
     licenseSha256: string;
   };
 }
+/** Output paths and launch arguments returned after a successful app build. */
 export interface BuiltPackage {
   output: string;
   package: string;
@@ -64,6 +68,7 @@ export interface BuiltPackage {
   arguments: string[];
 }
 
+/** Return the supported native target for this process or reject the platform. */
 export function currentTarget(): Target {
   if (process.platform === "win32" && process.arch === "x64") {
     return "windows-x64";
@@ -86,6 +91,7 @@ async function readPin(target: Target, root = frameworkRoot): Promise<Pin> {
   )) as Pin;
 }
 
+/** Reject builds when the running Bun differs from the target's pinned runtime. */
 export async function assertBuildBun(
   target: Target,
   root = frameworkRoot,
@@ -97,6 +103,7 @@ export async function assertBuildBun(
   }
 }
 
+/** Prepare the host, Bun runtime and license inputs required for a local build. */
 export async function prepareNative(
   target: Target = currentTarget(),
   root = frameworkRoot,
@@ -109,6 +116,7 @@ async function prepareNativeForBuild(
   root: string,
   signal?: AbortSignal,
 ): Promise<NativeInputs> {
+  // Native inputs require a matching host; use managed process ownership when a build signal is provided.
   if (target !== currentTarget()) {
     throw new Error("Cross compilation is not supported in the MVP.");
   }
@@ -178,6 +186,7 @@ async function prepareNativeForBuild(
   };
 }
 
+/** Bundle project code and assets for the selected host; Windows also returns compile asset names. */
 export async function bundleAssets(
   project: Project,
   assets: string,
@@ -214,6 +223,7 @@ function xml(text: string): string {
   );
 }
 
+/** Build a development or distributable app and return its launch paths and arguments. */
 export async function buildProject(
   directory: string,
   options: {
@@ -227,6 +237,7 @@ export async function buildProject(
     });
     return assembleProject(project, options);
   }
+  // Production builds generate the frontend while holding the same lock used by packagers.
   const settings = await readProjectMetadata(directory);
   assertNotFrontendBuild(settings.root);
   const target = options.native?.target ?? currentTarget();
@@ -260,6 +271,7 @@ export async function buildProject(
   }
 }
 
+/** Assemble a package in staging and preserve the previous output if publication fails. */
 async function assembleProject(
   project: Project,
   options: {
@@ -328,6 +340,7 @@ async function assembleProject(
   }[] = [];
   let published = false;
   try {
+    // Build in a unique sibling directory so the package is complete before replacing the output.
     const assets = resolve(packageRoot, "assets");
     await mkdir(resolve(assets, "web"), {
       recursive: true,
@@ -413,6 +426,7 @@ async function assembleProject(
       options.development ?? false,
     );
     signal?.throwIfAborted();
+    // Compile only after the app metadata, policy and bundled web files are in place.
     if (windows) {
       if (!native.loader) {
         throw new Error("Windows requires the pinned WebView2Loader DLL.");
@@ -474,6 +488,7 @@ async function assembleProject(
         resolve(packageRoot, "WebView2Loader.dll"),
       );
     }
+    // Record release pins, hashes for selected package files, and the host hash.
     const framework = (await json(resolve(root, "package.json"))) as {
       version: string;
     };
@@ -583,6 +598,7 @@ ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking<
       }
     }
     signal?.throwIfAborted();
+    // Move the old output aside only after the staged package and its manifest are complete.
     const backup = `${output}.previous-${crypto.randomUUID()}`;
     let moved = false;
     await ownedDirectory(project.root, dirname(output));
@@ -655,6 +671,7 @@ ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking<
     };
   } catch (error) {
     if (!published) {
+      // Restore channel artifacts moved from the prior build before discarding this staging tree.
       for (const { source, destination } of preserved.reverse()) {
         await ownedDirectory(project.root, dirname(source));
         await ownedDirectory(project.root, dirname(destination));

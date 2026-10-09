@@ -40,7 +40,10 @@ type ObjectSchema<P extends Record<string, Field>> = {
   readonly additionalProperties: false;
 };
 
-/** Small constructors for the existing JSON schemas. Object fields are required by default. */
+/**
+ * Build JSON Schema fragments for plugin inputs and outputs. Object fields are
+ * required by default, and extra fields are rejected.
+ */
 export const s = Object.freeze({
   object<const P extends Record<string, Field>>(fields: P): ObjectSchema<P> {
     const entries = Object.entries(fields);
@@ -58,6 +61,7 @@ export const s = Object.freeze({
       additionalProperties: false,
     } as unknown as ObjectSchema<P>;
   },
+  /** Mark an object field optional while keeping its schema unchanged. */
   optional<const S extends Schema>(schema: S): OptionalField<S> {
     return {
       [optionalField]: schema,
@@ -105,42 +109,64 @@ export const s = Object.freeze({
   },
 });
 
+/** Host-selected values available when a native adapter is created. */
 export type NativeEnvironment = {
+  /** Windows services supplied by the host when running in its UI worker. */
   windows?: import("@bunaway/plugin-api/native").NativeWindowServices;
+  /** Host-owned data directory used for app-scoped files. */
   dataRoot: string;
+  /** Registered capabilities and their support and permission states. */
   capabilities: {
     name: string;
     support: "supported" | "experimental" | "unsupported";
     permission: "unknown" | "not-required";
   }[];
 };
+/** Operations supplied by a platform adapter and owned by the host lifecycle. */
 export type NativeAdapter = {
+  /** Run an operation in the I/O worker or as a UI adapter fallback. */
   execute(operation: string, input: JsonValue, source: string): JsonValue;
+  /** Run an operation that needs UI-thread services; the host awaits its result. */
   executeUI?(
     operation: string,
     input: JsonValue,
     source: string,
     context: {
       requestId: string;
+      /** Permission grants available to this host context. */
       permissions: import("@bunaway/protocol").Policy["backend"];
     },
   ): JsonValue | Promise<JsonValue>;
+  /** Report whether pending adapter work should delay host auto-close. */
   busy?(): boolean;
+  /** Release resources created while preparing this adapter. */
   dispose(): void | Promise<void>;
 };
+/** Input, output, and permission contract for one named native operation. */
 export type NativeOperationDefinition = {
+  /** Schema checked for each call's input. */
   readonly input: Schema;
+  /** Schema checked for the operation result. */
   readonly output: Schema;
+  /** Short permission name, prefixed with the plugin name during registration. */
   readonly permission: string;
+  /** Declare that the operation does not require a separate OS permission. */
   readonly osPermission?: "not-required";
 };
+/** Declarative contract used to register operations and construct their callers. */
 export type NativePluginDefinition = {
+  /** Plugin name used as the prefix for operation and permission identifiers. */
   readonly name: string;
+  /** Version recorded in the registered plugin contract. */
   readonly version: string;
+  /** Operations keyed by the caller-facing method name. */
   readonly operations: Readonly<Record<string, NativeOperationDefinition>>;
+  /** Scope schemas keyed by short permission names used by operations. */
   readonly scopes?: Readonly<Record<string, Schema>>;
+  /** Pure evaluator for whether an input falls within a granted scope. */
   readonly matches?: PermissionMatcher;
 };
+/** Promise-based caller shape inferred from a plugin's operation schemas. */
 export type NativePluginAPI<
   O extends Record<string, NativeOperationDefinition>,
 > = {
@@ -162,7 +188,13 @@ type NativeOperation<D extends NativePluginDefinition> = {
   };
 }[keyof D["operations"] & (string | number)];
 
-/** Declare operations once and create their environment-specific callers. */
+/**
+ * Define operations and return the validated host contract with typed `api`
+ * callers.
+ * Scope schemas are keyed by short permission names. Every scope must belong to
+ * an operation, and scoped permissions require a `matches` evaluator.
+ * The declaration is checked immediately, before any caller is created.
+ */
 export function defineNativePlugin<const D extends NativePluginDefinition>(
   definition: D,
 ) {
