@@ -64,7 +64,7 @@ await command([
   "install",
 ]);
 const snapshot = resolve(project, "node_modules/@bunaway/cli");
-const cache = resolve(snapshot, "runtime/bun-bundle/vendor");
+const cache = resolve(snapshot, "build/cache/bun");
 await mkdir(cache, {
   recursive: true,
 });
@@ -73,20 +73,16 @@ for (const name of [
   "bun-windows-x64-baseline",
   "LICENSE.bun",
 ]) {
-  await cp(
-    resolve(root, "runtime/bun-bundle/vendor", name),
-    resolve(cache, name),
-    {
-      recursive: true,
-    },
-  );
+  await cp(resolve(root, "build/cache/bun", name), resolve(cache, name), {
+    recursive: true,
+  });
 }
-const sdk = resolve(snapshot, "native/windows/bun/vendor");
+const sdk = resolve(snapshot, "build/cache/webview2");
 await mkdir(sdk, {
   recursive: true,
 });
 await cp(
-  resolve(root, "native/windows/bun/vendor/webview2-1.0.4129.50.nupkg"),
+  resolve(root, "build/cache/webview2/webview2-1.0.4129.50.nupkg"),
   resolve(sdk, "webview2-1.0.4129.50.nupkg"),
 );
 assert(

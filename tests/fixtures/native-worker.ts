@@ -1,10 +1,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { appModules } from "../../packages/cli/src/app-modules.ts";
 import { writeJson } from "../../packages/cli/src/files.ts";
 import {
   installedPlugins,
-  writePluginAssets,
+  writePluginManifest,
 } from "../../packages/cli/src/plugins.ts";
 import type { ManifestPlugin } from "../../packages/runtime-bun/src/app-manifest.ts";
 
@@ -21,10 +22,10 @@ export async function bundleNativeWorker(
     resolve(import.meta.dir, "desktop/host"),
     "0.0.0",
   );
-  const generated = await writePluginAssets(destination, plugins);
+  await writePluginManifest(destination, plugins);
   const result = await Bun.build({
     entrypoints: [
-      generated,
+      "bunaway-generated/plugin-imports.ts",
       ...(entrypoint
         ? [
             entrypoint,
@@ -43,19 +44,9 @@ export async function bundleNativeWorker(
     splitting: true,
     naming: "[name].[ext]",
     plugins: [
-      {
-        name: "fixture-plugin-imports",
-        setup(build) {
-          build.onResolve(
-            {
-              filter: /^bunaway:plugin-imports$/,
-            },
-            () => ({
-              path: generated,
-            }),
-          );
-        },
-      },
+      appModules({
+        plugins,
+      }),
     ],
   });
   if (!result.success) {

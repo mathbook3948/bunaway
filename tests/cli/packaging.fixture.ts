@@ -194,7 +194,7 @@ try {
     "dist/windows-x64",
     "dist/windows-x64/assets/web",
     "dist/macos-arm64",
-    "dist/.bunaway-locks",
+    ".bunaway/locks",
     ".bunaway/web",
     "output-alias/windows-x64/not-built",
     "pending-output-alias/not-built",
@@ -221,7 +221,7 @@ try {
       await Bun.file(resolve(production.package, "manifest.json")).text(),
     ).toBe(intactManifest);
     expect(
-      await readdir(resolve(project, "dist/.bunaway-locks/windows-x64")),
+      await readdir(resolve(project, ".bunaway/locks/windows-x64")),
     ).toEqual([]);
   }
   // A separate frontend output can share dist with the app without containing it.
@@ -382,9 +382,9 @@ for (const command of [
     await Bun.file(resolve(latestWeb.package, "manifest.json")).text(),
   ).toBe(previousManifest);
   expect(await compiledAsset(latestWeb, "web/index.html")).toBe("latest UI");
-  expect(
-    await readdir(resolve(project, "dist/.bunaway-locks/windows-x64")),
-  ).toEqual([]);
+  expect(await readdir(resolve(project, ".bunaway/locks/windows-x64"))).toEqual(
+    [],
+  );
 }
 await files.writeJson(configPath, {
   ...webSettings,
@@ -622,7 +622,7 @@ expect(await Bun.file(previous).text()).toBe("installer 3");
 expect(await Bun.file(other).text()).toBe("another channel");
 expect(await Bun.file(otherReport).text()).toBe("another report");
 
-const lockPath = resolve(packaged, "win-direct.lock");
+const lockPath = resolve(project, ".bunaway/locks/windows-x64/win-direct.lock");
 const reportPath = resolve(packaged, "win-direct-report.json");
 const savedReport = await Bun.file(reportPath).text();
 const savedAssemblies = assembled;
@@ -766,9 +766,9 @@ expect(
   ),
 ).toBe(false);
 expect((await packageProject(project, "win-direct")).ok).toBe(true);
-expect(
-  await readdir(resolve(project, "dist/.bunaway-locks/windows-x64")),
-).toEqual([]);
+expect(await readdir(resolve(project, ".bunaway/locks/windows-x64"))).toEqual(
+  [],
+);
 
 // An existing junction in the published tree survives rebuilds without recreation.
 withHelper = true;
@@ -790,14 +790,16 @@ expect(await Bun.file(resolve(link, "helper.exe")).text()).toBe(
 expect(await Bun.file(reportPath).text()).toBe(linkedReportText);
 expect(await Bun.file(other).text()).toBe("another channel");
 
-// Directory ownership is checked at every output/lock boundary, not just at leaves.
+// Directory ownership is checked at every output, work and lock boundary.
 for (const boundary of [
   ".bunaway",
   "dist",
   "dist/windows-x64",
   "dist/windows-x64/packaged",
-  "dist/.bunaway-locks",
-  "dist/.bunaway-locks/windows-x64",
+  ".bunaway/locks",
+  ".bunaway/locks/windows-x64",
+  ".bunaway/work",
+  ".bunaway/work/windows-x64",
   "dist/windows-x64/packaged/win-direct",
 ]) {
   const path = resolve(project, boundary);
@@ -879,12 +881,15 @@ for (const failure of [
   expect(await Bun.file(reportPath).text()).toBe(linkedReportText);
   expect(await Bun.file(other).text()).toBe("another channel");
   expect(await Bun.file(otherReport).text()).toBe("another report");
+  expect(await readdir(resolve(project, ".bunaway/work/windows-x64"))).toEqual(
+    [],
+  );
   expect(
     (await readdir(resolve(project, "dist"))).some((name) =>
       /\.building-|\.previous-/.test(name),
     ),
   ).toBe(false);
-  expect(
-    await readdir(resolve(project, "dist/.bunaway-locks/windows-x64")),
-  ).toEqual([]);
+  expect(await readdir(resolve(project, ".bunaway/locks/windows-x64"))).toEqual(
+    [],
+  );
 }

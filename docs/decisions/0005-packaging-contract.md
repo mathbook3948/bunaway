@@ -81,7 +81,7 @@ status: accepted
   잠금 획득 실패는 `PKG_LOCK_FAILED`로 호출자에게 실패 리포트만 반환하며, 실행 중인
   채널의 디스크 리포트나 출력은 건드리지 않는다. 잠금은 정상 종료, 실패 시 해제된다. 프로세스 강제 종료로
   남은 잠금은 자동 탈취하지 않으며, 실행 중인 작업이 없음을 확인한 뒤 수동 삭제한다.
-- build 교체와 runner는 교체되는 산출물 밖의 `dist/.bunaway-locks/<target>/`에서
+- build 교체와 runner는 교체되는 산출물 밖의 `.bunaway/locks/<target>/`에서
   동기화한다. runner는 manifest 읽기 전부터 정리 완료까지 공유 reader 잠금을 유지하고,
   build는 보존 이동, 교체, rollback 전체에 `build.lock` 배타 잠금을 유지한다. 경합 시
   상대 작업의 출력/리포트를 건드리지 않고 실패한다. 다른 채널 reader는 병렬 실행할 수

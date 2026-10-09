@@ -1,8 +1,6 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { writePluginAssets } from "../../packages/cli/src/plugins.ts";
+import { appModules } from "../../packages/cli/src/app-modules.ts";
 import { bindHostAPI } from "../../packages/core/src/host-api.ts";
 import type {
   NativeWindowServices,
@@ -354,50 +352,29 @@ test("plugin SDK dependencies never reach Core or the Backend SDK", async () => 
 });
 
 test("a zero-plugin UI bundle contains no optional feature implementation", async () => {
-  const assets = await mkdtemp(resolve(tmpdir(), "bunaway-zero-plugins-"));
-  try {
-    const generated = await writePluginAssets(assets, []);
-    const result = await Bun.build({
-      entrypoints: [
-        resolve(import.meta.dir, "../../native/windows/bun/ui.ts"),
-      ],
-      target: "bun",
-      metafile: true,
-      plugins: [
-        {
-          name: "generated-plugin-imports",
-          setup(build) {
-            build.onResolve(
-              {
-                filter: /^bunaway:plugin-imports$/,
-              },
-              () => ({
-                path: generated,
-              }),
-            );
-          },
-        },
-      ],
-    });
-    expect(result.success).toBe(true);
-    expect(
-      Object.keys(result.metafile?.inputs ?? {}).some(
-        (path) => path.includes("/plugins/") || path.startsWith("plugins/"),
-      ),
-    ).toBe(false);
-    const output = await result.outputs[0]?.text();
-    for (const name of [
-      "windows.show",
-      "storage.readText",
-      "log.write",
-      "capabilities.get",
-    ]) {
-      expect(output?.includes(JSON.stringify(name))).toBe(false);
-    }
-  } finally {
-    await rm(assets, {
-      recursive: true,
-      force: true,
-    });
+  const result = await Bun.build({
+    entrypoints: [
+      resolve(import.meta.dir, "../../native/windows/bun/ui.ts"),
+    ],
+    target: "bun",
+    metafile: true,
+    plugins: [
+      appModules({}),
+    ],
+  });
+  expect(result.success).toBe(true);
+  expect(
+    Object.keys(result.metafile?.inputs ?? {}).some(
+      (path) => path.includes("/plugins/") || path.startsWith("plugins/"),
+    ),
+  ).toBe(false);
+  const output = await result.outputs[0]?.text();
+  for (const name of [
+    "windows.show",
+    "storage.readText",
+    "log.write",
+    "capabilities.get",
+  ]) {
+    expect(output?.includes(JSON.stringify(name))).toBe(false);
   }
 });

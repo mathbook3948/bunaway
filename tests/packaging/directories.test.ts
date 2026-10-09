@@ -106,9 +106,9 @@ for (const internal of [
 }
 
 for (const part of [
-  "dist",
-  "dist/.bunaway-locks",
-  "dist/.bunaway-locks/windows-x64",
+  ".bunaway",
+  ".bunaway/locks",
+  ".bunaway/locks/windows-x64",
 ]) {
   test(`both lock entry points reject ${part} links without touching their targets`, async () => {
     const root = await mkdtemp(resolve(home, "locks-"));
@@ -134,7 +134,7 @@ for (const acquire of [
 ]) {
   test(`${acquire.name} release refuses a redirected parent without deleting external files`, async () => {
     const root = await mkdtemp(resolve(home, "release-"));
-    const directory = resolve(root, "dist/.bunaway-locks/windows-x64");
+    const directory = resolve(root, ".bunaway/locks/windows-x64");
     const saved = resolve(root, "saved-locks");
     const external = await mkdtemp(resolve(home, "external-release-"));
     const originalOpen = fs.open;

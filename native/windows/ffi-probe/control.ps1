@@ -3,9 +3,9 @@ $ErrorActionPreference = 'Stop'
 # Diagnostic control only: official managed WebView2 with a WinForms message loop.
 # Never loaded by the Bun implementation. Windows PowerShell supplies .NET Framework.
 $root = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path
-$sdk = Join-Path $PSScriptRoot '../bun/vendor/sdk'
+$sdk = Join-Path $root 'build/cache/webview2/sdk'
 $deps = Get-Content (Join-Path $PSScriptRoot '../bun/deps.json') -Raw | ConvertFrom-Json
-$archive = Join-Path $PSScriptRoot ('../bun/vendor/webview2-' + $deps.webview2Sdk.version + '.nupkg')
+$archive = Join-Path $root ('build/cache/webview2/webview2-' + $deps.webview2Sdk.version + '.nupkg')
 if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $deps.webview2Sdk.archiveSha256) { throw 'SDK archive hash mismatch' }
 $output = Join-Path $root ('build/windows-ffi-probe/control-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 New-Item -ItemType Directory -Force -Path $output | Out-Null

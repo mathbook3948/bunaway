@@ -345,7 +345,7 @@ if (!process.argv.includes("--child")) {
         ? resolve(output, "missing-loader.dll")
         : resolve(
             repoRoot,
-            "native/windows/bun/vendor/sdk/build/native/x64/WebView2Loader.dll",
+            "build/cache/webview2/sdk/build/native/x64/WebView2Loader.dll",
           ),
       windows: [
         {

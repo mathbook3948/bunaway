@@ -12,7 +12,7 @@ bin/API JS 번들과 모든 생성 입력이 포함된다. 공개 registry publi
 아래는 프레임워크 저장소 기여자용 직접 소스 실행 경로다.
 
 저장소에서 `bun install` 후 실행한다. Windows에서 전역 Bun이 없으면
-`runtime/bun-bundle/vendor/bun-windows-x64-baseline/bun.exe`로 아래 `bun`을 대체한다.
+`build/cache/bun/bun-windows-x64-baseline/bun.exe`로 아래 `bun`을 대체한다.
 
 ```sh
 bun run framework:pack --local
@@ -157,7 +157,7 @@ macOS는 기존 `bunaway://` 매핑이다. policy.json의 HTTP origin은 허용�
 
 Windows의 앱별 생성 데이터는 `.bunaway/windows-x64/assets/manifest.json`에서 확인한다.
 앱 설정, 정책, 플러그인 계약과 개발 SDK 모듈 목록을 담으며 CLI가 다시 빌드할 때 갱신한다.
-플러그인 지연 import는 같은 assets 아래 `generated/plugin-imports.ts`로 생성한다.
+앱 진입점, 플러그인 지연 import와 개발 SDK 연결은 빌드 전용 가상 모듈로 만들며 중간 소스 파일은 쓰지 않는다.
 배포 빌드는 실행 manifest와 모듈을 EXE에 포함하고 임시 자산을 정리한다.
 패키지 루트의 `manifest.json`은 최종 배포 파일의 해시를 기록하는 별도 산출물이다.
 
@@ -259,3 +259,19 @@ macOS 빌드는 `app.windows`를 거부한다.
 
 설정 예제는 [여러 창 가이드](../../docs/site/src/content/docs/guides/windows.mdx),
 메서드와 권한, 수명은 [windows API](../../docs/site/src/content/docs/reference/host/windows.mdx)를 참고한다.
+
+## 생성물 관리
+
+앱의 내부 생성물은 `.bunaway/`에서 관리한다. `<target>/`은 개발 실행 파일,
+`work/<target>/`은 빌드와 패키징의 실행별 작업 디렉터리, `locks/<target>/`은 공유 잠금이다.
+작업 디렉터리는 성공과 실패 모두 정리하며 배포 결과는 `dist/<target>/`에 게시한다.
+교체 실패에 대비한 이전 출력 백업과 임시 보고서는 게시할 파일 옆에 둔다.
+실행 중인 빌드나 패키징이 있다면 `.bunaway/`를 지우지 않는다.
+
+프레임워크의 다운로드 캐시는 `build/cache/` 아래 bun, webview2, nlohmann-json으로 모은다.
+네이티브 빌드, 테스트와 프레임워크 배포 산출물도 기존 `build/`를 사용한다.
+검증용 스키마 스냅샷은 `native/host-api/generated/`에 버전 관리한다.
+앱 원본, 사용자 저장 데이터와 WebView 프로필은 이 정리 대상에 포함하지 않는다.
+프런트엔드 도구의 출력 경로는 `build.frontend`를 따르며 템플릿은 `web-dist/`를 사용한다.
+프로세스 제어용 통신 파일과 독립 macOS 서명 스크립트의 작업 파일은 OS 임시 디렉터리를
+사용하고 해당 프로세스가 정리한다. 프로젝트 산출물로 보관하지 않는다.

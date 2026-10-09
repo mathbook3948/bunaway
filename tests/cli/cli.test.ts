@@ -1189,7 +1189,7 @@ test.each([
       expect((await fetch(`http://127.0.0.1:${port}/`)).ok).toBe(true);
       expect(
         await Bun.file(
-          resolve(project, "dist/.bunaway-locks/windows-x64/build.lock"),
+          resolve(project, ".bunaway/locks/windows-x64/build.lock"),
         ).exists(),
       ).toBe(true);
       if (process.platform === "win32") {
@@ -1206,7 +1206,7 @@ test.each([
       expect(await output).toContain("PASS build signal handler cleanup");
       expect(await errors).toContain(`cancelled (${signal})`);
       expect(
-        await readdir(resolve(project, "dist/.bunaway-locks/windows-x64")),
+        await readdir(resolve(project, ".bunaway/locks/windows-x64")),
       ).toEqual([]);
       expect(await Bun.file(manifestPath).text()).toBe(manifest);
       await expect(
@@ -1275,7 +1275,7 @@ test.skipIf(process.platform !== "win32" || process.arch !== "x64")(
     const interrupt = resolve(project, "build-interrupt.txt");
     const output = resolve(project, "dist/windows-x64");
     const manifestPath = resolve(output, "manifest.json");
-    const lockDirectory = resolve(project, "dist/.bunaway-locks/windows-x64");
+    const lockDirectory = resolve(project, ".bunaway/locks/windows-x64");
     const cleanFixtureEnv = {
       ...process.env,
       BUNAWAY_TEST_COMPILE_SIGNAL: "",

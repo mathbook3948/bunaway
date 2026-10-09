@@ -84,15 +84,18 @@ export async function buildHostFixture(
     resolve(root, "tests/fixtures/desktop/host/app.ts"),
   );
   await cp(
-    resolve(import.meta.dir, "vendor/sdk/build/native/x64/WebView2Loader.dll"),
+    resolve(
+      root,
+      "build/cache/webview2/sdk/build/native/x64/WebView2Loader.dll",
+    ),
     resolve(output, "WebView2Loader.dll"),
   );
   await cp(
-    resolve(import.meta.dir, "vendor/sdk/LICENSE.txt"),
+    resolve(root, "build/cache/webview2/sdk/LICENSE.txt"),
     resolve(output, "licenses/License-WebView2.txt"),
   );
   await cp(
-    resolve(root, "runtime/bun-bundle/vendor/LICENSE.bun"),
+    resolve(root, "build/cache/bun/LICENSE.bun"),
     resolve(output, "licenses/LICENSE.bun"),
   );
   assert(
@@ -105,7 +108,7 @@ export async function buildHostFixture(
   const executableName = `${app.appId}.exe`;
   await compileWindowsApp(
     output,
-    resolve(root, "runtime/bun-bundle/vendor/bun-windows-x64-baseline/bun.exe"),
+    resolve(root, "build/cache/bun/bun-windows-x64-baseline/bun.exe"),
     executableName,
     {
       title: app.title,

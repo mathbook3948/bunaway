@@ -1075,9 +1075,9 @@ test("framework validation rejects extra installed inputs but permits designated
     for (const directory of [
       "node_modules/installer-managed-package",
       "build",
-      "runtime/bun-bundle/vendor",
-      "native/windows/bun/vendor",
-      "native/macos/vendor",
+      "build/cache/bun",
+      "build/cache/webview2",
+      "build/cache/nlohmann-json",
     ]) {
       await Bun.write(
         resolve(root, directory, "nested/cache.txt"),

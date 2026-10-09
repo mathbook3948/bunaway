@@ -11,7 +11,14 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import {
   type AdapterInput,
   BUILD_TARGETS,
@@ -35,6 +42,7 @@ import {
 import { ownedDirectory } from "./directories.ts";
 import { ArtifactInputError, loadManifest, verifyArtifact } from "./inputs.ts";
 import { acquirePackageInputLock, TargetLockError } from "./locks.ts";
+import { outputPaths } from "./paths.ts";
 
 export interface RunPackageArgs {
   metadata: ResolvedPackaging;
@@ -57,7 +65,7 @@ async function sha256(path: string): Promise<string> {
 
 /** Returns the shared packaging output root for one build target. */
 export function packagingOutputDir(root: string, target: BuildTarget): string {
-  return resolve(root, "dist", target, "packaged");
+  return outputPaths(root, target).packaged;
 }
 
 /** Returns the report path paired with a target's packaged outputs. */
@@ -154,7 +162,11 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
     ...(args.notes ?? []),
   ];
   const output = resolve(packagingOutputDir(metadata.root, target), channel);
-  const staging = `${output}.building-${crypto.randomUUID()}`;
+  const paths = outputPaths(metadata.root, target);
+  const staging = resolve(
+    paths.work,
+    `${basename(output)}.building-${crypto.randomUUID()}`,
+  );
   const reportPath = packagingReportPath(metadata.root, target, channel);
   const stagedReport = `${reportPath}.building-${crypto.randomUUID()}`;
   let reportPublished = false;
@@ -249,7 +261,7 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
     await stageReport();
     await rename(stagedReport, reportPath);
   }
-  const lockPath = `${output}.lock`;
+  const lockPath = resolve(paths.locks, `${channel}.lock`);
   let lock: FileHandle;
   let releaseTarget: (() => Promise<void>) | undefined;
   try {

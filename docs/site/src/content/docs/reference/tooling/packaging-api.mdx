@@ -100,3 +100,22 @@ addArtifact options는 `signed?: boolean`, `signingRequired?: boolean`입니다.
 `packagingOutputDir(root, target)`는 `dist/<target>/packaged`,
 `packagingReportPath(root, target, channel)`은 그 안의 `<channel>-report.json`을 반환합니다.
 실패 시 산출물 처리 방법과 보고서의 필드는 [산출물과 보고서](/reference/packaging/report/)에서 확인할 수 있습니다.
+
+## 생성물 경로
+
+`@bunaway/packaging/paths`의 `outputPaths(root, target)`는 CLI와 패키징이 공유하는
+경로를 반환합니다. 파일이나 디렉터리를 만들지 않으며 네이티브 자원을 초기화하지 않습니다.
+호출자는 지원하는 target을 검증하고 파일 접근과 정리 전에 `ownedDirectory`로 경로를 검사합니다.
+
+| 반환 필드 | 프로젝트 기준 경로 |
+| --- | --- |
+| `internal` | `.bunaway` |
+| `development` | `.bunaway/<target>` |
+| `work` | `.bunaway/work/<target>` |
+| `locks` | `.bunaway/locks/<target>` |
+| `output` | `dist/<target>` |
+| `packaged` | `dist/<target>/packaged` |
+
+빌드와 설치 프로그램의 중간 파일은 work 아래 실행별 디렉터리에 만들고 성공 또는 실패 시 정리합니다.
+잠금은 locks에서 공유합니다. 게시 중의 이전 출력 백업과 임시 보고서는 최종 출력 옆에 두어
+교체와 복구 순서를 유지합니다. 실행 중인 빌드가 있다면 `.bunaway`를 지우지 않습니다.

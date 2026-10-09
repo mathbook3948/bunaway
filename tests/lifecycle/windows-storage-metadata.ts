@@ -275,7 +275,7 @@ if (!process.argv.includes("--child")) {
     dataRoot,
     loader: resolve(
       repoRoot,
-      "native/windows/bun/vendor/sdk/build/native/x64/WebView2Loader.dll",
+      "build/cache/webview2/sdk/build/native/x64/WebView2Loader.dll",
     ),
   });
 }

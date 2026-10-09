@@ -125,7 +125,7 @@ jobs:
         uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
       - name: Install locked dependencies
         run: mise run install 2>&1 | tee build/macos-native-logs/install.log
-      # Both scripts populate runtime/bun-bundle/vendor: never run cold builds in parallel.
+      # Both scripts populate build/cache/bun: never run cold builds in parallel.
       - name: Build and test bundled-process probe
         run: mise run probe:macos 2>&1 | tee build/macos-native-logs/probe.log
       - name: Build and test real WKWebView host and signed in-place app

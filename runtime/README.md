@@ -17,11 +17,12 @@ revision, 아카이브, 실행 파일, 라이선스 해시를 [manifest](./build
 
 macOS arm64 공식 배포물은 [darwin-aarch64 manifest](./build-manifests/darwin-aarch64.json)에
 같은 Bun 버전과 별도의 ZIP, 실행 파일, 라이선스 해시로 고정했다. macOS probe와 WKWebView
-호스트는 해시, Mach-O CPU, 버전을 검사하며, `runtime/bun-bundle/vendor`를 공유하므로
+호스트는 해시, Mach-O CPU, 버전을 검사하며, `build/cache/bun`을 공유하므로
 초기 다운로드, 추출은 직렬 실행한다. Intel macOS 배포물/pin은 없다.
 [macOS 실행 기록](../docs/architecture/macos-native-results.md)과
 [플랫폼 지원 표](../docs/platform-support/README.md)를 참고한다.
 
 이전 DLL 실험은 중단하고 실험용 코드, 소스 변경을 제거했다. 무시되는
-`bun-embed/vendor/` 소스와 프로젝트 `build/` 도구, 캐시는 제품 의존성으로 사용하지 않는다.
+`bun-embed/vendor/` 소스와 이전 실험 도구는 제품 의존성으로 사용하지 않는다.
+현재 제품의 검증된 런타임 다운로드는 `build/cache/bun/`에서 관리한다.
 [B 단계 계획](../docs/architecture/runtime-feasibility.md)을 따른다.

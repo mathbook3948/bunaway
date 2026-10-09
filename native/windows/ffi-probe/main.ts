@@ -247,7 +247,7 @@ export async function runProbe(uiWorker: ProbeWorkerData | null = null) {
   const loader = dlopen(
     resolve(
       import.meta.dir,
-      "../bun/vendor/sdk/build/native/x64/WebView2Loader.dll",
+      "../../../build/cache/webview2/sdk/build/native/x64/WebView2Loader.dll",
     ),
     {
       CreateCoreWebView2EnvironmentWithOptions: {

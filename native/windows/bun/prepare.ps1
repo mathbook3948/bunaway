@@ -15,8 +15,8 @@ function Verify([string]$Path, [string]$Expected) {
     if (!(Test-Path -LiteralPath $Path)) { throw "Missing extracted dependency: $Path" }
     if ((Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Expected) { throw "Hash mismatch: $Path" }
 }
-$cache = Join-Path $root 'runtime/bun-bundle/vendor'
-$vendor = Join-Path $PSScriptRoot 'vendor'
+$cache = Join-Path $root 'build/cache/bun'
+$vendor = Join-Path $root 'build/cache/webview2'
 New-Item -ItemType Directory -Force -Path $cache, $vendor | Out-Null
 $archive = Join-Path $cache 'bun-windows-x64-baseline.zip'
 Fetch $pin.bun.archiveUrl $archive $pin.bun.archiveSha256

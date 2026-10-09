@@ -137,6 +137,8 @@ parentPort.close();
       ],
     );
     await writeFile(resolve(assets, "web/index.html"), "<h1>web</h1>");
+    expect(await readdir(assets)).not.toContain("generated");
+    expect(await readdir(assets)).toContain("plugin-imports.js");
     const compiler = Bun.spawn(
       [
         process.execPath,

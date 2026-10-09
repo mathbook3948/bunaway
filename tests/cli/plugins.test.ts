@@ -10,10 +10,11 @@ import {
   permissionMatcher,
   pluginRegistry,
 } from "../../native/windows/bun/plugins.ts";
+import { pluginImportsSource } from "../../packages/cli/src/app-modules.ts";
 import { writeJson } from "../../packages/cli/src/files.ts";
 import {
   installedPlugins,
-  writePluginAssets,
+  writePluginManifest,
 } from "../../packages/cli/src/plugins.ts";
 import {
   BunawayError,
@@ -70,10 +71,10 @@ test("scoped plugins without a Windows adapter preserve authorization and return
     };`,
     );
     const installed = await installedPlugins(root, "0.0.0");
-    const generated = await writePluginAssets(root, installed);
+    await writePluginManifest(root, installed);
     await Bun.write(
       resolve(root, "plugin-imports.js"),
-      await Bun.file(generated).text(),
+      pluginImportsSource(installed),
     );
     const catalog = await loadPluginCatalog(
       root,
