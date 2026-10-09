@@ -1,7 +1,7 @@
 import { expect, mock, spyOn } from "bun:test";
 import * as fs from "node:fs/promises";
 import { readdir, rm as removeCompileAssets, rm } from "node:fs/promises";
-import { relative, resolve } from "node:path";
+import { basename, dirname, relative, resolve } from "node:path";
 import * as build from "../../packages/cli/src/build.ts";
 import * as files from "../../packages/cli/src/files.ts";
 import * as windowsCompile from "../../packages/cli/src/windows-compile.ts";
@@ -171,6 +171,101 @@ expect(productionPolicy.views[0].origins).toEqual([
 ]);
 expect(production.arguments).not.toContain("--dev-url");
 await files.writeJson(configPath, settings);
+
+// Reject a work parent changed after assembly or while replacing the previous output.
+for (const phase of [
+  "assembly",
+  "publication",
+]) {
+  const previousManifest = await Bun.file(
+    resolve(production.package, "manifest.json"),
+  ).text();
+  const previousExecutable = await Bun.file(production.executable).text();
+  const work = resolve(project, ".bunaway/work/windows-x64");
+  const saved = resolve(project, `.bunaway/saved-work-${crypto.randomUUID()}`);
+  const external = resolve(project, `../external-work-${crypto.randomUUID()}`);
+  await fs.mkdir(external);
+  let staging = "";
+  let redirected = false;
+  const originalRename = fs.rename;
+  const originalWriteFile = fs.writeFile;
+  async function redirectWork() {
+    const name = (await readdir(work)).find((entry) =>
+      entry.startsWith("windows-x64.building-"),
+    );
+    if (!name) {
+      throw new Error("Missing build staging directory.");
+    }
+    staging = resolve(work, name);
+    await originalRename(work, saved);
+    await fs.symlink(external, work, "junction");
+    redirected = true;
+    await fs.mkdir(resolve(external, name));
+    await Bun.write(resolve(external, name, "sentinel.txt"), "external bytes");
+  }
+  const assembly = spyOn(fs, "writeFile").mockImplementation(
+    async (path, data, options) => {
+      await originalWriteFile(path, data, options);
+      const parent = dirname(String(path));
+      const buildManifest =
+        basename(String(path)) === "manifest.json" &&
+        dirname(parent) === work &&
+        basename(parent).startsWith("windows-x64.building-");
+      if (phase === "assembly" && buildManifest) {
+        await redirectWork();
+      }
+    },
+  );
+  const publication = spyOn(fs, "rename").mockImplementation(
+    async (from, to) => {
+      await originalRename(from, to);
+      if (
+        phase === "publication" &&
+        from === production.output &&
+        String(to).startsWith(`${production.output}.previous-`)
+      ) {
+        await redirectWork();
+      }
+    },
+  );
+  try {
+    await expect(
+      buildProject(project, {
+        native,
+      }),
+    ).rejects.toThrow("without links");
+    expect(redirected).toBe(true);
+    expect(
+      await Bun.file(resolve(production.package, "manifest.json")).text(),
+    ).toBe(previousManifest);
+    expect(await Bun.file(production.executable).text()).toBe(
+      previousExecutable,
+    );
+    expect(
+      await Bun.file(
+        resolve(external, basename(staging), "sentinel.txt"),
+      ).text(),
+    ).toBe("external bytes");
+    expect(
+      await readdir(resolve(project, ".bunaway/locks/windows-x64")),
+    ).toEqual([]);
+  } finally {
+    assembly.mockRestore();
+    publication.mockRestore();
+    if (redirected) {
+      await fs.unlink(work);
+      await originalRename(saved, work);
+      await fs.rm(staging, {
+        recursive: true,
+        force: true,
+      });
+    }
+    await fs.rm(external, {
+      recursive: true,
+      force: true,
+    });
+  }
+}
 
 // Reject output overlap before a tool can clear app output or its locks.
 // Resolve aliases even when their frontend subdirectories do not exist yet.

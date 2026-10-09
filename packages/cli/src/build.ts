@@ -441,6 +441,7 @@ async function assembleProject(
         );
       }
     }
+    await ownedDirectory(project.root, staging);
     const hashes: Record<string, string> = {};
     for (const dir of windows && !options.development
       ? [
@@ -530,6 +531,8 @@ ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking<
       );
     }
     signal?.throwIfAborted();
+    // The work tree can change while bundling or signing; check it before moving preserved output.
+    await ownedDirectory(project.root, staging);
     await ownedDirectory(project.root, output);
     if (windows && !options.development) {
       // Channel packages live inside the Windows build output, but survive rebuilds.
@@ -560,6 +563,7 @@ ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking<
               );
             }
             // Move the existing tree so Windows junctions never need to be recreated.
+            await ownedDirectory(project.root, dirname(destination));
             await rename(source, destination);
             preserved.push({
               source,
@@ -583,6 +587,7 @@ ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking<
           throw error;
         }
       }
+      await ownedDirectory(project.root, staging);
       await rename(staging, output);
       published = true;
     } catch (error) {

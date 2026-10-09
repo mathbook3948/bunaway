@@ -117,5 +117,7 @@ addArtifact options는 `signed?: boolean`, `signingRequired?: boolean`입니다.
 | `packaged` | `dist/<target>/packaged` |
 
 빌드와 설치 프로그램의 중간 파일은 work 아래 실행별 디렉터리에 만들고 성공 또는 실패 시 정리합니다.
+CLI와 패키징은 작업 파일을 검증하고 게시하기 전에 작업 경로를 다시 검사합니다.
+작업 중 경로가 링크로 바뀌면 게시를 거부하고 외부 파일을 이동하거나 정리하지 않습니다.
 잠금은 locks에서 공유합니다. 게시 중의 이전 출력 백업과 임시 보고서는 최종 출력 옆에 두어
 교체와 복구 순서를 유지합니다. 실행 중인 빌드가 있다면 `.bunaway`를 지우지 않습니다.

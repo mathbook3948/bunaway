@@ -407,6 +407,8 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
 
     const started = Date.now();
     if (!failed) {
+      // Work and output have separate parents; validate work again after adapter code.
+      await ownedDirectory(metadata.root, dirname(staging));
       if (produced.length === 0) {
         diagnostics.push({
           stage: "verify-artifact",
@@ -533,6 +535,7 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
         ...entry,
         path: resolve(output, relative(staging, entry.path)),
       }));
+      await ownedDirectory(metadata.root, staging);
       await stageReport();
       await ownedDirectory(metadata.root, output);
       const backup = `${output}.previous-${crypto.randomUUID()}`;
@@ -549,6 +552,7 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
       // Publish the report after the package. Attempt to restore the previous
       // package if either rename fails.
       try {
+        await ownedDirectory(metadata.root, staging);
         await rename(staging, output);
         outputPublished = true;
         await rename(stagedReport, reportPath);

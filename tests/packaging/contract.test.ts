@@ -403,6 +403,97 @@ test("packaging refuses a linked work root without writing or cleaning external 
   ).toEqual([]);
 });
 
+test.each([
+  "assembly",
+  "publication",
+])(
+  "packaging refuses work redirection during %s before publishing external files",
+  async (phase) => {
+    const projectRoot = await mkdtemp(join(home, "redirected-work-"));
+    const external = await mkdtemp(join(home, "external-work-"));
+    await makeArtifact(projectRoot);
+    const adapter = stubAdapter({
+      async run(ctx) {
+        await Bun.write(
+          resolve(ctx.staging, "setup.exe"),
+          "previous installer",
+        );
+        ctx.addArtifact("setup.exe", "installer");
+      },
+    });
+    expect((await runAdapter(projectRoot, adapter)).ok).toBe(true);
+    const output = resolve(
+      projectRoot,
+      "dist/windows-x64/packaged/win-direct/setup.exe",
+    );
+    const reportPath = packagingReportPath(
+      projectRoot,
+      "windows-x64",
+      "win-direct",
+    );
+    const previousReport = await Bun.file(reportPath).text();
+    const work = resolve(projectRoot, ".bunaway/work/windows-x64");
+    const saved = resolve(projectRoot, "saved-work");
+    let staging = "";
+    let redirected = false;
+    async function redirectWork() {
+      await rename(work, saved);
+      await symlink(external, work, "junction");
+      redirected = true;
+      const replacement = resolve(external, basename(staging));
+      await mkdir(replacement);
+      await Bun.write(resolve(replacement, "setup.exe"), "external installer");
+    }
+    const fs = await import("node:fs/promises");
+    const originalWriteFile = fs.writeFile;
+    const publication = spyOn(fs, "writeFile").mockImplementation(
+      async (path, data, options) => {
+        await originalWriteFile(path, data, options);
+        if (
+          phase === "publication" &&
+          String(path).startsWith(`${reportPath}.building-`)
+        ) {
+          await redirectWork();
+        }
+      },
+    );
+    try {
+      await expect(
+        runAdapter(
+          projectRoot,
+          stubAdapter({
+            async run(ctx) {
+              staging = ctx.staging;
+              await Bun.write(resolve(staging, "setup.exe"), "new installer");
+              ctx.addArtifact("setup.exe", "installer");
+              if (phase === "assembly") {
+                await redirectWork();
+              }
+            },
+          }),
+        ),
+      ).rejects.toThrow("without links");
+      expect(redirected).toBe(true);
+      expect(await Bun.file(output).text()).toBe("previous installer");
+      expect(await Bun.file(reportPath).text()).toBe(previousReport);
+      expect(
+        await Bun.file(
+          resolve(external, basename(staging), "setup.exe"),
+        ).text(),
+      ).toBe("external installer");
+      expect(
+        await readdir(resolve(projectRoot, ".bunaway/locks/windows-x64")),
+      ).toEqual([]);
+    } finally {
+      publication.mockRestore();
+      if (redirected) {
+        await fs.unlink(work);
+        await rename(saved, work);
+      }
+    }
+  },
+);
+
 test.each(
   (
     [
