@@ -1,0 +1,27 @@
+import { listenForAppReload } from "../../native/windows/bun/app-reload.ts";
+import { DevelopmentApp } from "../../native/windows/bun/development-app.ts";
+import type { AppDefinition } from "../../packages/core/src/index.ts";
+
+const assets = process.argv[2];
+if (!assets || !process.send) {
+  throw new Error("Expected assets and private IPC");
+}
+const app: AppDefinition = {
+  commands: {
+    read: {
+      input: {
+        const: null,
+      },
+      output: {},
+      async run() {
+        return 0;
+      },
+    },
+  },
+  events: {},
+};
+const close = listenForAppReload(new DevelopmentApp(app), assets);
+process.on("disconnect", () => {
+  close();
+  process.exit(0);
+});

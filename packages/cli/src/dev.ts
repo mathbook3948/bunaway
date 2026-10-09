@@ -1,5 +1,8 @@
 import { watch } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
+import { isDeepStrictEqual } from "node:util";
+import type { AppReloadResult } from "@bunaway/runtime-bun/development";
+import { bundleWindowsReload } from "./assets.ts";
 import {
   type BuiltPackage,
   buildProject,
@@ -12,6 +15,8 @@ import {
   validateProject,
 } from "./config.ts";
 import { type DevServer, startDevServer } from "./dev-server.ts";
+import { inside } from "./files.ts";
+import { WindowsAppReload } from "./windows-app-reload.ts";
 import {
   closeWindowsApp,
   verifyWindowsLaunch,
@@ -63,6 +68,7 @@ export class RestartController<T> {
       build(): Promise<T>;
       start(value: T): Promise<void>;
       error(error: unknown): void;
+      reload?(isCurrent: () => boolean): Promise<boolean>;
     },
   ) {}
 
@@ -84,6 +90,16 @@ export class RestartController<T> {
     while (!this.stopped && applied !== this.revision) {
       applied = this.revision;
       try {
+        if (
+          await this.hooks.reload?.(
+            () => !this.stopped && applied === this.revision,
+          )
+        ) {
+          continue;
+        }
+        if (this.stopped || applied !== this.revision) {
+          continue;
+        }
         await this.hooks.stop();
         if (this.stopped) {
           break;
@@ -103,6 +119,52 @@ export class RestartController<T> {
     await this.running;
     await this.hooks.stop();
   }
+}
+
+function launchSettings(project: Project) {
+  return {
+    appEntry: project.appEntry,
+    frontend: project.frontend,
+    app: project.app,
+    policy: project.policy,
+    dev: project.dev,
+    nativePlugins: project.nativePlugins,
+    buildCommand: project.buildCommand,
+  };
+}
+
+export function isAppCodeChange(project: Project, name: string): boolean {
+  const path = name.replaceAll("\\", "/");
+  if (
+    !project.dev &&
+    (inside(project.frontend, resolve(project.root, path)) ||
+      project.frontendDependencies?.includes(path))
+  ) {
+    return false;
+  }
+  if (
+    [
+      "package.json",
+      "bun.lock",
+      "tsconfig.json",
+    ].includes(path)
+  ) {
+    return false;
+  }
+  if (
+    !/\.[cm]?[jt]sx?$/.test(path) &&
+    !project.backendDependencies?.includes(path)
+  ) {
+    return false;
+  }
+  const directory = relative(
+    project.root,
+    dirname(project.appEntry),
+  ).replaceAll("\\", "/");
+  return (
+    project.backendDependencies?.includes(path) === true ||
+    (directory ? path.startsWith(`${directory}/`) : !path.includes("/"))
+  );
 }
 
 export function shouldRestartHost(
@@ -175,6 +237,10 @@ export async function devProject(
   let server: DevServer | undefined;
   let serverSettings: string | undefined;
   let child: ReturnType<typeof Bun.spawn> | undefined;
+  let reloadConnection: WindowsAppReload | undefined;
+  let runningBuild: BuiltPackage | undefined;
+  let runningSettings: ReturnType<typeof launchSettings> | undefined;
+  const changedFiles = new Set<string>();
   let restarting = false;
   let fatal: Error | undefined;
   let resolveExit: (() => void) | undefined;
@@ -219,6 +285,71 @@ export async function devProject(
   }
 
   const controller = new RestartController<BuiltPackage>({
+    async reload(isCurrent) {
+      if (
+        process.platform !== "win32" ||
+        !child ||
+        !reloadConnection ||
+        !runningBuild
+      ) {
+        return false;
+      }
+      if (
+        !(await Bun.file(
+          resolve(runningBuild.package, "assets/development-sdk.json"),
+        ).exists())
+      ) {
+        return false;
+      }
+      const next = await validateProject(project.root, {
+        development: true,
+      });
+      if (
+        [
+          ...changedFiles,
+        ].some((name) => !isAppCodeChange(next, name))
+      ) {
+        return false;
+      }
+      if (!isDeepStrictEqual(runningSettings, launchSettings(next))) {
+        return false;
+      }
+      const id = crypto.randomUUID();
+      const sha256 = await bundleWindowsReload(
+        next,
+        resolve(runningBuild.package, "assets"),
+        id,
+      );
+      if (!isCurrent()) {
+        return true;
+      }
+      let result: AppReloadResult;
+      try {
+        result = await reloadConnection.reload({
+          kind: "bunaway:reload-app",
+          id,
+          sha256,
+        });
+      } catch (error) {
+        console.error("App reload connection failed; restarting host:", error);
+        return false;
+      }
+      if (result.status === "restart") {
+        return false;
+      }
+      if (result.status === "failed") {
+        throw new Error(result.message ?? "App reload failed.");
+      }
+      project = next;
+      recovering = false;
+      if (isCurrent()) {
+        changedFiles.clear();
+      }
+      console.log(
+        "App code reloaded; windows, state, sessions and subscriptions retained.",
+      );
+      return true;
+    },
     async stop() {
       if (!child) {
         return;
@@ -226,6 +357,9 @@ export async function devProject(
       restarting = true;
       const previous = child;
       child = undefined;
+      reloadConnection?.close();
+      reloadConnection = undefined;
+      runningBuild = undefined;
       try {
         if (process.platform === "win32") {
           const deadline = Date.now() + 40000;
@@ -273,6 +407,7 @@ export async function devProject(
       return built;
     },
     async start(built) {
+      changedFiles.clear();
       if (abort.signal.aborted) {
         return;
       }
@@ -299,6 +434,8 @@ export async function devProject(
           `Backend inspector: ws://127.0.0.1:${options.inspect}/bunaway (Bun/WebKit inspector protocol). Reconnect after a backend restart.`,
         );
       }
+      const connection =
+        process.platform === "win32" ? new WindowsAppReload() : undefined;
       const current = Bun.spawn(
         [
           built.executable,
@@ -315,9 +452,18 @@ export async function devProject(
           stdin: "ignore",
           stdout: "inherit",
           stderr: "inherit",
+          ...(process.platform === "win32"
+            ? {
+                ipc: (message) => connection?.receive(message),
+              }
+            : {}),
         },
       );
       child = current;
+      connection?.attach(current);
+      reloadConnection = connection;
+      runningBuild = built;
+      runningSettings = launchSettings(project);
       void current.exited.then((code) => {
         if (!restarting && child === current) {
           console.log(`Host exited (${code}).`);
@@ -332,7 +478,7 @@ export async function devProject(
       recovering = true;
       if (!abort.signal.aborted) {
         console.error(
-          `Dev build failed; fix sources and save to retry: ${String(error)}`,
+          `Dev build failed${child ? "; running app retained" : ""}; fix sources and save to retry: ${String(error)}`,
         );
       }
     },
@@ -356,6 +502,7 @@ export async function devProject(
           return;
         }
         clearTimeout(debounce);
+        changedFiles.add(String(name));
         debounce = setTimeout(() => {
           void controller.change();
         }, 150);

@@ -126,7 +126,9 @@ Biome은 이 빈 줄을 자동으로 추가하지 않으므로 작성과 리뷰 
 
 생성 앱의 `bun run dev`, `bun run build`는 기존 SDK/네이티브 빌드를 재사용한다.
 선택적 `dev.command`, `dev.url`로 [외부 Vite, Next.js UI 개발 서버](./docs/development-server.md)를
-연결하면 UI 갱신은 해당 서버에 맡기고 CLI는 서버 수명주기와 백엔드 재시작을 관리한다.
+연결하면 UI 갱신은 해당 서버에 맡기고 CLI는 서버 수명주기와 백엔드 변경을 관리한다.
+Windows의 호환되는 명령 구현 변경은 코어, 상태, 세션과 창을 유지하며 앱 코드만 교체한다.
+계약과 플러그인, 상태 초기값 또는 실행 설정이 바뀌면 전체 재시작한다.
 `bunaway create <directory> --template vite`는 공식 create-vite의 기본 로고, 카운터 화면에
 Vite 개발 서버와 프로덕션 빌드를 연결한
 vanilla TypeScript 앱을 생성한다. `--template react`, `vue`, `svelte`로 각 UI 프레임워크의

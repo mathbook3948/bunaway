@@ -27,6 +27,8 @@ if (!$SkipTests) {
     if ($LASTEXITCODE -ne 0) { throw 'Windows WebView2 storage metadata regression failed' }
     & $bun --no-env-file (Join-Path $root 'tests/lifecycle/windows-bun-cli.ts')
     if ($LASTEXITCODE -ne 0) { throw 'Windows independent CLI regression failed' }
+    & $bun --no-env-file (Join-Path $root 'tests/lifecycle/windows-app-reload.ts')
+    if ($LASTEXITCODE -ne 0) { throw 'Windows app reload regression failed' }
     & $bun --no-env-file (Join-Path $root 'tests/lifecycle/windows-host.ts') --package (Join-Path $root 'build/windows-bun-package')
     if ($LASTEXITCODE -ne 0) { throw 'Windows Bun regression failed' }
 }

@@ -1,5 +1,83 @@
 import type { Policy } from "@bunaway/protocol";
 
+export type AppReloadRequest = {
+  kind: "bunaway:reload-app";
+  id: string;
+  sha256: string;
+};
+export type AppReloadResult = {
+  kind: "bunaway:reload-result";
+  id: string;
+  status: "reloaded" | "restart" | "failed";
+  message?: string;
+};
+const RELOAD_ID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
+export const MAX_APP_RELOAD_MESSAGE_CHARS = 4096;
+
+export function readAppReloadRequest(value: unknown): AppReloadRequest {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !("kind" in value) ||
+    value.kind !== "bunaway:reload-app" ||
+    !("id" in value) ||
+    typeof value.id !== "string" ||
+    !RELOAD_ID.test(value.id) ||
+    !("sha256" in value) ||
+    typeof value.sha256 !== "string" ||
+    !/^[a-f0-9]{64}$/.test(value.sha256) ||
+    Object.keys(value).length !== 3
+  ) {
+    throw new Error("Invalid app reload request.");
+  }
+  return {
+    kind: value.kind,
+    id: value.id,
+    sha256: value.sha256,
+  };
+}
+
+export function readAppReloadResult(value: unknown): AppReloadResult {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !("kind" in value) ||
+    value.kind !== "bunaway:reload-result" ||
+    !("id" in value) ||
+    typeof value.id !== "string" ||
+    !RELOAD_ID.test(value.id) ||
+    !("status" in value) ||
+    (value.status !== "reloaded" &&
+      value.status !== "restart" &&
+      value.status !== "failed") ||
+    ("message" in value &&
+      (typeof value.message !== "string" ||
+        value.message.length > MAX_APP_RELOAD_MESSAGE_CHARS)) ||
+    Object.keys(value).some(
+      (key) =>
+        ![
+          "kind",
+          "id",
+          "status",
+          "message",
+        ].includes(key),
+    )
+  ) {
+    throw new Error("Invalid app reload result.");
+  }
+  const message = "message" in value ? value.message : undefined;
+  return {
+    kind: value.kind,
+    id: value.id,
+    status: value.status,
+    ...(typeof message === "string"
+      ? {
+          message,
+        }
+      : {}),
+  };
+}
+
 // Shared by the CLI and Windows host. Development never accepts a LAN or remote origin.
 export function developmentUrl(value: unknown): URL {
   if (typeof value !== "string") {

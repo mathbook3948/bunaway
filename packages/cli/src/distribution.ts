@@ -13,6 +13,7 @@ import {
 } from "./files.ts";
 import { type InstalledPlugin, installedPlugins } from "./plugins.ts";
 import { runWorker } from "./processes.ts";
+import type { SourceDependencies } from "./sdk.ts";
 import { templateNames } from "./templates.ts";
 
 export const frameworkPaths = [
@@ -41,6 +42,8 @@ export const frameworkPaths = [
   "native/host-api/generated",
   "native/windows/bun/boot.ts",
   "native/windows/bun/entry.ts",
+  "native/windows/bun/development-app.ts",
+  "native/windows/bun/app-reload.ts",
   "native/windows/bun/job.ts",
   "native/windows/bun/instance.ts",
   "native/windows/bun/desktop.ts",
@@ -227,11 +230,12 @@ export async function snapshotHashes(
 export async function validateFramework(
   project: string,
   sources: readonly string[] = [],
-): Promise<{
-  root: string;
-  backendDependencies: string[];
-  plugins: InstalledPlugin[];
-}> {
+): Promise<
+  SourceDependencies & {
+    root: string;
+    plugins: InstalledPlugin[];
+  }
+> {
   const pkg = (await json(
     resolve(project, "package.json"),
   )) as PackageDependencies & {
@@ -356,7 +360,7 @@ export async function validateFramework(
   );
   return {
     root,
-    backendDependencies: JSON.parse(output) as string[],
+    ...(JSON.parse(output) as SourceDependencies),
     plugins,
   };
 }

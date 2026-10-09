@@ -17,6 +17,7 @@ import {
   validateProject,
 } from "../../packages/cli/src/config.ts";
 import {
+  isAppCodeChange,
   RestartController,
   shouldRestartHost,
 } from "../../packages/cli/src/dev.ts";
@@ -711,6 +712,75 @@ test("backend imports outside the app directory are watched and refreshed after 
       force: true,
     });
     await rm(service, {
+      force: true,
+    });
+  }
+});
+
+test("local UI dependencies require a full rebuild when shared with the app", async () => {
+  const entry = resolve(project, "src-bunaway/app.ts");
+  const frontend = resolve(project, "src/main.ts");
+  const shared = resolve(project, "shared/ui-value.ts");
+  const asset = resolve(project, "src/shared-label.txt");
+  try {
+    await Bun.write(shared, 'export const label = "SHARED_UI_BEFORE";');
+    await Bun.write(asset, "shared asset");
+    await Bun.write(
+      entry,
+      `import { label } from "../shared/ui-value.ts";
+import asset from "../src/shared-label.txt" with { type: "text" };
+console.log(label, asset);
+${originals["src-bunaway/app.ts"]}`,
+    );
+    await Bun.write(
+      frontend,
+      'import { label } from "../shared/ui-value.ts"; document.title = label;',
+    );
+    const first = await validateProject(project, {
+      development: true,
+    });
+    expect(first.backendDependencies).toContain("shared/ui-value.ts");
+    expect(first.frontendDependencies).toContain("shared/ui-value.ts");
+    expect(isAppCodeChange(first, "shared\\ui-value.ts")).toBe(false);
+    expect(isAppCodeChange(first, "src/shared-label.txt")).toBe(false);
+    expect(isAppCodeChange(first, "src-bunaway/app.ts")).toBe(true);
+    const external = {
+      ...first,
+      dev: {
+        command: [
+          "bun",
+          "run",
+          "web:dev",
+        ],
+        url: "http://127.0.0.1:5173/",
+        timeoutMs: 1000,
+      },
+    };
+    expect(isAppCodeChange(external, "shared/ui-value.ts")).toBe(true);
+    await Bun.write(shared, 'export const label = "SHARED_UI_AFTER";');
+    const next = await validateProject(project, {
+      development: true,
+    });
+    const assets = resolve(home, "shared-ui-assets");
+    await bundleAssets(next, assets);
+    expect(await Bun.file(resolve(assets, "web/main.js")).text()).toContain(
+      "SHARED_UI_AFTER",
+    );
+    expect(await Bun.file(resolve(assets, "backend.js")).text()).toContain(
+      "SHARED_UI_AFTER",
+    );
+    await Bun.write(frontend, originals["src/main.ts"] ?? "");
+    const backendOnly = await validateProject(project, {
+      development: true,
+    });
+    expect(isAppCodeChange(backendOnly, "shared/ui-value.ts")).toBe(true);
+  } finally {
+    await Bun.write(entry, originals["src-bunaway/app.ts"] ?? "");
+    await Bun.write(frontend, originals["src/main.ts"] ?? "");
+    await rm(shared, {
+      force: true,
+    });
+    await rm(asset, {
       force: true,
     });
   }

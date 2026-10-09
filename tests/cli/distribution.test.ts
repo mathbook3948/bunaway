@@ -30,7 +30,7 @@ import {
 import { buildWithSdk, sdkPlugin } from "../../packages/cli/src/sdk.ts";
 import { createProject, packageDirectory } from "./project.ts";
 
-test("plugin declarations use configurable entry paths and are read once per build", async () => {
+test("plugin declarations support custom entry paths and JSON exports and are read once per build", async () => {
   const home = await realpath(
     await mkdtemp(resolve(tmpdir(), "bunaway-plugin-exports-")),
   );
@@ -60,6 +60,7 @@ test("plugin declarations use configurable entry paths and are read once per bui
       ...manifest,
       exports: {
         ".": "./src/public-entry.ts",
+        "./package.json": "./package.json",
       },
     });
     const descriptorPath = resolve(root, "plugin.json");
@@ -68,6 +69,14 @@ test("plugin declarations use configurable entry paths and are read once per bui
     };
     descriptor.entry = "./src/public-entry.ts";
     await writeJson(descriptorPath, descriptor);
+    const appEntry = resolve(project, "src-bunaway/app.ts");
+    await Bun.write(
+      appEntry,
+      `${await Bun.file(appEntry).text()}
+import metadata from "@bunaway/plugin-storage/package.json";
+console.log(metadata.name);
+`,
+    );
     await writeFile(
       resolve(project, "src/main.ts"),
       'import { storage } from "@bunaway/plugin-storage"; document.body.onclick = () => { void storage.readText({ scope: "temp", path: "memo.txt" }, { signal: new AbortController().signal }); };',
@@ -120,6 +129,11 @@ test("plugin declarations use configurable entry paths and are read once per bui
       const valid = await validateProject(project);
       const assets = resolve(home, "assets");
       await bundleWindowsAssets(valid, assets);
+      const developmentAssets = resolve(home, "development-assets");
+      await bundleWindowsAssets(valid, developmentAssets, false, true);
+      expect(
+        await Bun.file(resolve(developmentAssets, "app.js")).exists(),
+      ).toBe(true);
       const contractReads = spawn.mock.calls.filter(
         ([args]) =>
           Array.isArray(args) &&

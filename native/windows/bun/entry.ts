@@ -15,6 +15,7 @@ import {
   type HostResponse,
   PROTOCOL_VERSION,
 } from "../../../packages/protocol/src/index.ts";
+import { listenForAppReload } from "./app-reload.ts";
 import {
   Channel,
   type Packet,
@@ -23,6 +24,7 @@ import {
   validatePacket,
 } from "./channel.ts";
 import { DesktopLifecycle } from "./desktop.ts";
+import { DevelopmentApp } from "./development-app.ts";
 import type { LaunchArguments, listenForInstances } from "./instance.ts";
 import { activeDescendants, containAppProcess } from "./job.ts";
 import { DiagnosticLog } from "./log.ts";
@@ -35,6 +37,10 @@ export async function runWindowsApp(
   launch?: LaunchArguments,
   inbox?: Awaited<ReturnType<typeof listenForInstances>>,
 ): Promise<void> {
+  const development =
+    config.devtools && process.send ? new DevelopmentApp(app) : undefined;
+  app = development?.definition ?? app;
+  let closeReload: (() => void) | undefined;
   const plugins = (app.plugins ?? []).flatMap((plugin) => {
     const native = plugin.native;
     return native
@@ -580,6 +586,9 @@ export async function runWindowsApp(
       });
     }
     if (!stopping) {
+      if (development) {
+        closeReload = listenForAppReload(development, config.assets);
+      }
       await channel.send({
         kind: "start",
       });
@@ -592,6 +601,7 @@ export async function runWindowsApp(
   } catch (error) {
     fail(error);
   } finally {
+    closeReload?.();
     clearTimeout(startupTimer);
     stopping = true;
     desktop.dispose();

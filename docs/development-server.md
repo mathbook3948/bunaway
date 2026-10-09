@@ -67,7 +67,9 @@ Windows x64/macOS arm64의 기존 개발 도구 요구사항을 따른다. Linux
 실행하는 기능은 추가하지 않는다. stdout/stderr에서 개발 서버 오류를 확인한다.
 
 - UI 변경: 서버의 HMR/페이지 갱신을 사용한다. CLI는 UI를 다시 번들하지 않는다.
-- 백엔드 변경: 이전 호스트 종료 → 백엔드, 호스트 빌드 → 새 창/세션 시작. 서버는 유지한다. Windows의 CLI 중단은 `desktop.beforeQuit`와 트레이 숨김을 우회하며 플러그인 StopHook과 자원 정리가 끝난 뒤 빌드한다.
+- 외부 서버 없이 UI와 백엔드가 공유하는 파일을 변경하면 두 번들을 갱신하고 전체 앱을 재시작한다.
+- Windows 명령 구현 변경: 새 앱 번들을 검증하고 로드한 뒤 명령 구현만 교체한다. 코어, StateStore, 창, 문서, 세션, 구독과 개발 서버를 유지한다. 진행 중인 명령은 기존 구현으로 끝내며 다음 호출부터 새 구현을 사용한다. SDK와 설치된 플러그인의 공통 모듈은 시작 시 번들에 고정해 오류 클래스와 Host API 실행 컨텍스트를 공유한다.
+- 전체 재시작: 명령, 이벤트 계약, 상태 초기값, 플러그인 객체, desktop 콜백, 정책, 창 설정과 의존성 설정 변경은 이전 호스트를 정리하고 새 창과 세션을 만든다. Windows의 CLI 중단은 `desktop.beforeQuit`와 트레이 숨김을 우회하며 플러그인 StopHook과 자원 정리가 끝난 뒤 빌드한다. macOS는 백엔드 변경 때 이 방식을 사용한다.
 - 감시 대상: src-bunaway, build.app 앱 정의의 디렉터리, 루트 package.json, bun.lock, tsconfig.json.
   진입점이 프로젝트 루트에 있으면 루트 파일만 감시하고 UI 하위 디렉터리는 제외한다.
   앱 정의가 import한 프로젝트 내부 전이 의존성도 감시하며 성공한 검증마다 목록을 갱신한다.
@@ -85,10 +87,15 @@ policy.json에 HTTP origin을 직접 추가하지 않는다.
 
 Windows의 `bunaway dev`는 UI DevTools를 활성화하며 F12 또는 Ctrl+Shift+I로 연다.
 `--inspect`를 지정하면 백엔드 inspector를 `ws://127.0.0.1:6499/bunaway`에 연결한다.
-`--inspect=<port>`로 포트를 바꾸며 백엔드 재시작 후에는 다시 attach한다. 다른 플랫폼의
+`--inspect=<port>`로 포트를 바꾸며 전체 재시작 후에는 다시 attach한다. 호환되는 Windows 앱 코드 교체는 연결을 유지한다. 다른 플랫폼의
 CLI inspector 연결은 아직 지원하지 않는다. 개발 백엔드와 로컬 UI 번들에는 inline 소스맵을
 생성하고, 외부 UI 소스맵은 개발 서버가 제공한다.
 [디버깅 가이드](./site/src/content/docs/guides/debugging.mdx)에서 오류 위치와 연결 설정을 확인한다.
+
+코드 교체는 StateStore의 데이터를 보존하며 모듈 변수와 클로저는 초기화한다.
+앱 import 단계에서 타이머, 서버, Worker를 만들면 교체 때 중복 실행될 수 있으므로
+자원은 플러그인 setup과 StopHook으로 관리한다. 같은 플러그인 객체를 재사용하지 않으면
+전체 재시작한다. Bun이 캐시한 앱 세대는 제거할 수 없어 100회 로드 이후 전체 재시작한다.
 
 `app.home`은 계속 로컬 자산 URL이다. 외부 서버 개발에서는 `build.frontend`가 아직
 없는 출력 디렉터리여도 된다. `doctor`는 이 개발 설정을 검사한다.
