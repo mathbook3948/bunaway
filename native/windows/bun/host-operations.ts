@@ -10,15 +10,23 @@ import {
 } from "../../../packages/protocol/src/index.ts";
 import { Channel, type Packet } from "./channel.ts";
 import { hostResponse } from "./host-response.ts";
+import { loadPluginCatalog } from "./plugin-catalog.ts";
 import { disposeAll, operations } from "./plugins.ts";
 
 assert(parentPort);
 const config = workerData as {
   runtime: RuntimeIdentity;
   dataRoot: string;
+  assets: string;
   plugins: NativeRegistration[];
 };
-const adapters = await operations(config.plugins, config.dataRoot, "io");
+const adapters = await operations(
+  config.plugins,
+  config.dataRoot,
+  "io",
+  undefined,
+  await loadPluginCatalog(config.assets),
+);
 const queue = new Map<
   string,
   {

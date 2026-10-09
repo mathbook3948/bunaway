@@ -41,6 +41,16 @@
       }
     },
     {
+      "name": "@bunaway/runtime-bun/app-manifest",
+      "source": "packages/runtime-bun/src/app-manifest.ts",
+      "pages": {
+        "reference/tooling/core-and-runtime": [
+          "parseAppManifest",
+          "readAppManifest"
+        ]
+      }
+    },
+    {
       "name": "@bunaway/runtime-bun/development",
       "source": "packages/runtime-bun/src/development.ts",
       "pages": {

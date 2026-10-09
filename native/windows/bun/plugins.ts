@@ -8,12 +8,11 @@ import {
   type Policy,
   validateValue,
 } from "../../../packages/protocol/src/index.ts";
-import {
-  type NativeAdapter,
-  type NativeEnvironment,
-  type PackagedPlugin,
-  packagedPlugins,
-} from "./plugin-table.ts";
+import type {
+  NativeAdapter,
+  NativeEnvironment,
+  PackagedPlugin,
+} from "./plugin-contract.ts";
 
 /** Normalize a plugin contract through the protocol's JSON-value validator for comparison. */
 const contractJson = (value: unknown) =>
@@ -38,7 +37,7 @@ type PluginOperations = {
 /** Build the registry and reject registrations that differ from their installed package. */
 export function pluginRegistry(
   plugins: readonly NativeRegistration[],
-  catalog: readonly PackagedPlugin[] = packagedPlugins,
+  catalog: readonly PackagedPlugin[],
 ): NativeRegistry {
   const registry = new NativeRegistry(plugins);
   for (const plugin of plugins) {
@@ -66,7 +65,7 @@ export function pluginRegistry(
 /** Build a fail-closed scope matcher from installed, registered plugins. */
 export async function permissionMatcher(
   plugins: readonly NativeRegistration[],
-  catalog: readonly PackagedPlugin[] = packagedPlugins,
+  catalog: readonly PackagedPlugin[],
 ): Promise<PermissionMatcher> {
   const matchers = new Map<string, PermissionMatcher>();
   for (const plugin of catalog) {
@@ -107,8 +106,8 @@ export async function operations(
   plugins: readonly NativeRegistration[],
   dataRoot: string,
   execution: "io" | "ui",
-  windows?: NativeEnvironment["windows"],
-  catalog: readonly PackagedPlugin[] = packagedPlugins,
+  windows: NativeEnvironment["windows"] | undefined,
+  catalog: readonly PackagedPlugin[],
 ): Promise<PluginOperations> {
   const registry = pluginRegistry(plugins, catalog);
   const adapters = new Map<string, NativeAdapter>();

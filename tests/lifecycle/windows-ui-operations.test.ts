@@ -12,6 +12,7 @@ import {
   API_LIMITS,
   MAX_MESSAGE_BYTES,
 } from "../../packages/protocol/src/index.ts";
+import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
 
 const native = {
   operations: [
@@ -129,21 +130,24 @@ async function startWorker(permissions: string[]) {
   await mkdir(dataRoot, {
     recursive: true,
   });
-  const entry = resolve(dataRoot, "worker.ts");
-  const source = resolve(import.meta.dir, "../../native/windows/bun");
   const state = new Int32Array(
     new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 4),
   );
   const runtime = config(dataRoot, permissions);
-  const pluginTable = pathToFileURL(resolve(source, "plugin-table.ts")).href;
-  const uiWorker = pathToFileURL(resolve(source, "ui.ts")).href;
-  await Bun.write(
-    entry,
+  await bundleUIPluginFixture(
+    dataRoot,
+    [
+      {
+        name: "ui-test",
+        version: "1",
+        native: native,
+        execution: "ui",
+        authorization: false,
+      },
+    ],
     `import { workerData } from "node:worker_threads";
-import { packagedPlugins } from ${JSON.stringify(pluginTable)};
-const state = new Int32Array((workerData as { state: SharedArrayBuffer }).state);
-packagedPlugins.push({
-  name: "ui-test", version: "1", native: ${JSON.stringify(native)}, execution: "ui",
+const state = new Int32Array(workerData.state);
+export const pluginImports = { 'ui-test': {
   operations: async () => ({ createOperations: () => ({
     execute(operation) {
       Atomics.add(state, 0, 1);
@@ -159,12 +163,11 @@ packagedPlugins.push({
     },
     dispose() {},
   }) }),
-});
-await import(${JSON.stringify(uiWorker)});
+}};
 `,
   );
 
-  const worker = new Worker(pathToFileURL(entry), {
+  const worker = new Worker(pathToFileURL(resolve(dataRoot, "ui.js")), {
     workerData: {
       ...runtime,
       state: state.buffer,

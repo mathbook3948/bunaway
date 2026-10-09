@@ -79,7 +79,7 @@ COM 콜백은 같은 OS 스레드에서 동기 HRESULT를 반환한다. `threads
 
 명령 핸들러의 예기치 않은 예외는 stderr와 앱 로그의 `command-failed`에 명령 이름, 원래 메시지와 스택을 기록한다. WebView 응답에는 내부 오류를 넣지 않는다. 진단 기록 실패는 명령 응답에 영향을 주지 않는다.
 
-CLI의 Windows 개발 산출물은 해시 inventory에 포함된 `app.json.developmentTools: true`와
+CLI의 Windows 개발 산출물은 해시 inventory에 포함된 `assets/manifest.json`의 `app.developmentTools: true`와
 `--devtools` 실행 인자를 모두 요구한다. 확인한 값은 UI Worker에 전달해 WebView2의
 AreDevToolsEnabled와 AreBrowserAcceleratorKeysEnabled를 활성화한다. 일반 빌드는 둘 다 끈다.
 F12 또는 Ctrl+Shift+I로 DevTools를 연다. 개발 모드는 서버 URL 설정이 없는 로컬 UI에도 적용된다.

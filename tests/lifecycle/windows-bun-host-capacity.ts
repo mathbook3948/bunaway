@@ -12,6 +12,7 @@ import {
   BunawayError,
   type RuntimeIdentity,
 } from "../../packages/protocol/src/index.ts";
+import { writePluginFixture } from "../fixtures/native-worker.ts";
 
 // Isolated subprocess: exercise the real entry/channel with independently delayed Worker acks.
 type Envelope = {
@@ -136,6 +137,11 @@ const config: UIConfig = {
   assets: "",
   loader: "",
 };
+mock.module("bunaway:plugin-imports", () => ({
+  pluginImports: {},
+}));
+config.assets = config.dataRoot;
+await writePluginFixture(config.assets, [], "export const pluginImports = {};");
 const { runWindowsApp } = await import("../../native/windows/bun/entry.ts");
 const app = runWindowsApp(
   {

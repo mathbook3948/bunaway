@@ -112,7 +112,7 @@ if (!process.argv.includes("--child")) {
   );
   const childEntry = await bundleNativeWorker(
     "windows-desktop",
-    resolve(root, "driver"),
+    root,
     import.meta.path,
   );
   const child = Bun.spawn(

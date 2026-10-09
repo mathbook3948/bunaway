@@ -155,6 +155,12 @@ macOS는 기존 `bunaway://` 매핑이다. policy.json의 HTTP origin은 허용�
 
 ## 개발 수명주기
 
+Windows의 앱별 생성 데이터는 `.bunaway/windows-x64/assets/manifest.json`에서 확인한다.
+앱 설정, 정책, 플러그인 계약과 개발 SDK 모듈 목록을 담으며 CLI가 다시 빌드할 때 갱신한다.
+플러그인 지연 import는 같은 assets 아래 `generated/plugin-imports.ts`로 생성한다.
+배포 빌드는 실행 manifest와 모듈을 EXE에 포함하고 임시 자산을 정리한다.
+패키지 루트의 `manifest.json`은 최종 배포 파일의 해시를 기록하는 별도 산출물이다.
+
 Windows `bunaway dev`는 UI DevTools를 활성화한다. WebView에 포커스를 두고 F12 또는
 Ctrl+Shift+I로 연다. `bunaway dev --inspect`는 백엔드 Bun inspector를
 `ws://127.0.0.1:6499/bunaway`에 연결하며 `--inspect=<port>`로 포트를 지정한다.

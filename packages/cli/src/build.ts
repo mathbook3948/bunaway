@@ -16,12 +16,9 @@ import {
   PACKAGING_CHANNELS,
 } from "@bunaway/packaging";
 import {
-  developmentPolicy,
-  developmentWindowHome,
-} from "@bunaway/runtime-bun/development";
-import {
   type Project,
   readProjectMetadata,
+  runtimeSettings,
   validateProject,
 } from "./config.ts";
 import {
@@ -375,40 +372,11 @@ async function assembleProject(
     for (const [name, path] of Object.entries(native.licenses)) {
       await cp(path, resolve(packageRoot, "licenses", name));
     }
-    await writeJson(resolve(assets, "app.json"), {
-      ...project.app,
-      ...(server
-        ? {
-            home: server.url,
-            development: {
-              url: server.url,
-            },
-            ...(project.app.windows
-              ? {
-                  windows: project.app.windows.map((spec) => ({
-                    ...spec,
-                    home: developmentWindowHome(spec.home, server.url),
-                  })),
-                }
-              : {}),
-          }
-        : {}),
-      ...(windows && options.development
-        ? {
-            developmentTools: true,
-          }
-        : {}),
-    });
-    await writeJson(
-      resolve(assets, "policy.json"),
-      server
-        ? developmentPolicy(
-            project.policy,
-            project.app.windows?.map((spec) => spec.view) ?? project.app.view,
-            server.url,
-          )
-        : project.policy,
-    );
+    if (!windows) {
+      const settings = runtimeSettings(project, server);
+      await writeJson(resolve(assets, "app.json"), settings.app);
+      await writeJson(resolve(assets, "policy.json"), settings.policy);
+    }
     await writeFile(resolve(assets, "bunfig.toml"), "env = false\n");
     await writeJson(resolve(assets, "tsconfig.json"), {});
     if (!windows) {

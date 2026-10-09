@@ -434,12 +434,12 @@ try {
     );
     const devApp = JSON.parse(
       await readFile(
-        resolve(project, ".bunaway/windows-x64/assets/app.json"),
+        resolve(project, ".bunaway/windows-x64/assets/manifest.json"),
         "utf8",
       ),
     );
-    assert.equal(devApp.home, devUrl);
-    assert.deepEqual(devApp.development, {
+    assert.equal(devApp.app.home, devUrl);
+    assert.deepEqual(devApp.app.development, {
       url: devUrl,
     });
     await assert.rejects(

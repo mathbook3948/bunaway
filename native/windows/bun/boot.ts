@@ -1,12 +1,13 @@
 import { dlopen, type Pointer, ptr, read, toArrayBuffer } from "bun:ffi";
 import assert from "node:assert/strict";
-import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import type { AppDefinition } from "../../../packages/core/src/index.ts";
 import {
   type HostContext,
   parsePolicy,
 } from "../../../packages/protocol/src/index.ts";
+import { readAppManifest } from "../../../packages/runtime-bun/src/app-manifest.ts";
 import {
   verifyDevelopmentLaunch,
   verifyDevelopmentToolsLaunch,
@@ -24,7 +25,7 @@ import {
 import { AppAlreadyRunningError, containAppProcess } from "./job.ts";
 
 const compiled = Bun.embeddedFiles.some(
-  (file) => (file as File).name === "app.json",
+  (file) => (file as File).name === "manifest.json",
 );
 function object(value: unknown): Record<string, unknown> {
   assert(
@@ -95,9 +96,8 @@ export async function verifyWindowsPackage(
   // environment is trusted; compile disables cwd config loading, not user overrides.
   const root = await realpath(resolve(directory));
   const assets = compiled ? import.meta.dir : resolve(root, "assets");
-  const config = object(
-    JSON.parse(await readFile(resolve(assets, "app.json"), "utf8")),
-  );
+  const manifest = await readAppManifest(assets);
+  const config = object(manifest.app);
   const devUrl = verifyDevelopmentLaunch(config.development, developmentUrl);
   const devtools = verifyDevelopmentToolsLaunch(
     config.developmentTools,
@@ -108,9 +108,7 @@ export async function verifyWindowsPackage(
       /^[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$/.test(config.appId),
     "Invalid app id",
   );
-  const policy = parsePolicy(
-    await readFile(resolve(assets, "policy.json"), "utf8"),
-  );
+  const policy = parsePolicy(JSON.stringify(manifest.policy));
   const specs = config.windows ?? [
     {
       view: config.view,

@@ -4,8 +4,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runWindowsApp } from "../../native/windows/bun/entry.ts";
-import { user } from "../../native/windows/bun/win32-bindings.ts";
 import { Windows } from "../../native/windows/bun/win32.ts";
+import { user } from "../../native/windows/bun/win32-bindings.ts";
 import {
   type CommandContext,
   defineApp,
@@ -223,7 +223,7 @@ if (!process.argv.includes("--child")) {
   }
   const childEntry = await bundleNativeWorker(
     "windows-bun-window-api",
-    resolve(output, "driver"),
+    assets,
     import.meta.path,
   );
   const child = Bun.spawn(

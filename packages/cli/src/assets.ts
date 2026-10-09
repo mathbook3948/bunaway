@@ -1,8 +1,9 @@
 import { cp, mkdir, realpath, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
+import { readAppManifest } from "@bunaway/runtime-bun/app-manifest";
 import type { BunPlugin } from "bun";
-import type { Project } from "./config.ts";
+import { type Project, runtimeSettings } from "./config.ts";
 import { release } from "./distribution.ts";
 import {
   files,
@@ -15,7 +16,7 @@ import {
 import {
   type InstalledPlugin,
   installedPlugins,
-  pluginTableSource,
+  writePluginAssets,
 } from "./plugins.ts";
 import { assertAppDefinitionExport, buildWithSdk, sdkPlugin } from "./sdk.ts";
 
@@ -207,6 +208,16 @@ export async function bundleWindowsAssets(
   development = false,
 ): Promise<string[]> {
   await assertAppDefinitionExport(project.appEntry);
+  await mkdir(assets, {
+    recursive: true,
+  });
+  const server = developmentServer ? project.dev : undefined;
+  await writeJson(resolve(assets, "manifest.json"), {
+    format: 1,
+    ...runtimeSettings(project, server, development),
+    plugins: [],
+    developmentSdk: {},
+  });
   if (!developmentServer) {
     await webAssets(
       project,
@@ -237,7 +248,7 @@ export async function bundleWindowsHost(
   development = false,
   installed?: readonly InstalledPlugin[],
 ): Promise<string[]> {
-  // A shared chunk preserves class identity (e.g. BunawayError) between core and app.
+  // Bundle all entries together so lazy adapters and their owning host share error and SDK classes.
   const pluginProject = project ?? dirname(appEntry);
   const plugins =
     installed ??
@@ -246,6 +257,7 @@ export async function bundleWindowsHost(
       ? await installedPlugins(pluginProject, (await release()).version)
       : []);
   const sdk = project ? await sdkPlugin(project, [], plugins) : undefined;
+  const pluginEntry = await writePluginAssets(destination, plugins);
   const sharedEntries = new Map<string, string>();
   if (development && sdk && project) {
     const require = createRequire(resolve(project, "package.json"));
@@ -324,6 +336,14 @@ export async function bundleWindowsHost(
       sdk?.setup(build);
       build.onResolve(
         {
+          filter: /^bunaway:plugin-imports$/,
+        },
+        () => ({
+          path: pluginEntry,
+        }),
+      );
+      build.onResolve(
+        {
           filter: /^bunaway-development-sdk\//,
         },
         ({ path }) => ({
@@ -351,34 +371,6 @@ export { defaultExport as default };`,
             resolveDir: dirname(source),
           };
         },
-      );
-      build.onResolve(
-        {
-          filter: /(?:^|\/)plugin-table\.ts$/,
-        },
-        ({ path, importer }) => {
-          if (
-            resolve(dirname(importer), path) ===
-            resolve(source, "plugin-table.ts")
-          ) {
-            return {
-              path: "table",
-              namespace: "native-plugins",
-            };
-          }
-          return undefined;
-        },
-      );
-      build.onLoad(
-        {
-          filter: /.*/,
-          namespace: "native-plugins",
-        },
-        () => ({
-          contents: pluginTableSource(plugins),
-          loader: "ts",
-          resolveDir: source,
-        }),
       );
       build.onResolve(
         {
@@ -435,6 +427,9 @@ export { defaultExport as default };`,
   const artifacts = await buildWindowsEntries(
     [
       resolve(source, "boot.ts"),
+      resolve(source, "ui.ts"),
+      resolve(source, "host-operations.ts"),
+      pluginEntry,
       "bunaway-windows-app/app.ts",
       ...[
         ...namesBySource.values(),
@@ -496,18 +491,10 @@ export { defaultExport as default };`,
         inventory[name] = `${entry}.js`;
       }
     }
-    await writeJson(resolve(destination, "development-sdk.json"), inventory);
-  }
-  for (const name of [
-    "ui",
-    "host-operations",
-  ]) {
-    const outputs = await buildWindowsEntries([
-      resolve(source, `${name}.ts`),
-    ]);
-    for (const output of outputs) {
-      await saveOutput(output);
-    }
+    await writeJson(resolve(destination, "manifest.json"), {
+      ...(await readAppManifest(destination)),
+      developmentSdk: inventory,
+    });
   }
   return [
     ...bundledAssets,
@@ -523,15 +510,12 @@ export async function bundleWindowsReload(
   assets: string,
   id: string,
 ): Promise<string> {
-  const entries = await json(resolve(assets, "development-sdk.json"));
-  if (!entries || typeof entries !== "object" || Array.isArray(entries)) {
+  const entries = (await readAppManifest(assets)).developmentSdk;
+  if (Object.keys(entries).length === 0) {
     throw new Error("Missing development SDK inventory; restart bunaway dev.");
   }
   const aliases = new Map<string, string>();
   for (const [name, entry] of Object.entries(entries)) {
-    if (typeof entry !== "string" || !/^sdk[0-9]+\.(?:js|cjs)$/.test(entry)) {
-      throw new Error("Invalid development SDK inventory.");
-    }
     aliases.set(name, entry);
   }
   const sdk = await sdkPlugin(project.root, [], project.nativePlugins);

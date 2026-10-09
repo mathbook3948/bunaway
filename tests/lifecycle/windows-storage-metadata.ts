@@ -122,7 +122,7 @@ if (!process.argv.includes("--child")) {
 
     const childEntry = await bundleNativeWorker(
       "windows-storage-metadata",
-      resolve(output, "driver"),
+      assets,
       import.meta.path,
     );
     const child = Bun.spawn(

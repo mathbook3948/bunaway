@@ -5,6 +5,11 @@
 AppDefinition을 default export한다. Windows FFI 호스트는 같은 앱 정의를 직접 실행한다.
 코어의 플랫폼은 `process.platform`에서 읽어 공통 Platform 값으로 변환한다.
 
+`@bunaway/runtime-bun/app-manifest`는 CLI와 Windows 호스트가 공유하는 실행 manifest
+계약이다. `parseAppManifest`는 생성 데이터를 검증하고 `readAppManifest`는 실행 자산의
+`manifest.json`을 읽어 검증한다. 앱 설정, 정책, 플러그인 계약과 개발 SDK 모듈 목록을
+담으며 플러그인 코드를 불러오거나 네이티브 자원을 초기화하지 않는다.
+
 호스트가 보낸 boot의 정책, 백엔드 컨텍스트, 런타임 세대로 `createCore`를 만들고
 플러그인 초기화와 hello 협상 뒤 ready를 보낸다. 초기화 중에도 Host API 요청을
 발행하고 stdin에서 응답을 처리한다. stdout은 크기, 큐 상한을 가진 NDJSON 전용이므로
