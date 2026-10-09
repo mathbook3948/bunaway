@@ -1,0 +1,9 @@
+lefthook: mise exec -- lefthook
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: biome
+      run: mise run check:staged
+    - name: whitespace
+      run: git diff --cached --check

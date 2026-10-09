@@ -50,12 +50,22 @@ export async function save(text: string) {
 mise trust
 mise install
 mise run install
+mise run hooks:install
 mise run check
 ```
 
 Bun은 `mise.toml`과 `package.json`에 **1.4.2**로 고정되어 있다.
 전역 Bun 대신 `mise run` 또는 `mise exec -- bun ...`을 사용한다.
 새 환경은 `bun.lock`을 사용하는 frozen install로 의존성을 재현한다.
+
+Lefthook은 `mise.toml`에 **2.2.1**로 고정되어 있다. 새 clone에서는
+`mise run hooks:install`로 Git 훅을 설치한다. 커밋 전에 stage한 파일의
+Biome 포맷과 린트, `git diff --cached --check`의 공백 오류와 충돌 마커를 검사한다.
+부분적으로 stage한 파일은 stage하지 않은 변경을 잠시 숨겨 커밋할 내용만 검사하고,
+검사가 끝나면 복원한다. 훅은 파일을 자동 수정하거나 다시 stage하지 않는다.
+검사 실패 시 포맷은 `mise run format`으로 수정하고 린트, 공백 오류와 충돌 마커는
+직접 해결한 뒤 수정한 파일을 다시 stage하고 커밋한다.
+pre-push 훅은 사용하지 않는다. 전체 타입 검사, 테스트와 플랫폼 검증은 CI에서 수행한다.
 
 ## 화면에서 앱 기능 사용하기
 
@@ -91,6 +101,8 @@ UI 컴포넌트가 사라지면 `client.listen`이 반환한 `unlisten`으로 �
 | 명령 | 동작 |
 | --- | --- |
 | `mise run install` | lockfile을 변경하지 않고 의존성 설치 |
+| `mise run hooks:install` | Lefthook pre-commit 훅 설치 |
+| `mise run check:staged` | stage한 파일의 포맷과 린트 검사 |
 | `mise run check` | 포맷, 린트, TypeScript, 계약 테스트 검사 |
 | `mise run test` | 프로토콜, SDK, 코어, Host API 계약과 Bun 프로세스 IPC 테스트 |
 | `mise run protocol:generate` | 네이티브용 JSON Schema 생성 |

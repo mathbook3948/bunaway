@@ -1,9 +1,18 @@
 [tools]
 bun = "1.4.2"
+lefthook = "2.2.1"
 
 [tasks.install]
 description = "Install the locked workspace dependencies"
 run = "bun install --frozen-lockfile"
+
+[tasks."hooks:install"]
+description = "Install the repository Git hooks"
+run = "lefthook install"
+
+[tasks."check:staged"]
+description = "Check formatting and lint for staged files without changing them"
+run = "bunx --no-install biome check --staged --assist-enabled=false --no-errors-on-unmatched"
 
 [tasks.typecheck]
 description = "Check all workspace TypeScript types"
