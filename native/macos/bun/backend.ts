@@ -80,6 +80,10 @@ const channel = new Channel(
         return;
       }
       stopping = true;
+      // Setup may await a Host response that shutdown will no longer deliver.
+      for (const call of calls.values()) {
+        call.abort();
+      }
       // Return immediately so the Channel can acknowledge shutdown while cleanup
       // waits for setup and sends its own completion packet.
       void (async () => {

@@ -797,3 +797,93 @@ test("macOS shutdown during native registration acknowledges acceptance and skip
     });
   }
 }, 15000);
+
+test("macOS shutdown cancels setup Host calls before waiting for plugin cleanup", async () => {
+  const directory = await mkdtemp(
+    resolve(tmpdir(), "bunaway-macos-setup-call-"),
+  );
+  let worker: Worker | undefined;
+  let channel: Channel | undefined;
+  try {
+    const app = resolve(directory, "app.ts");
+    const marker = resolve(directory, "stopped.txt");
+    const cancelled = resolve(directory, "cancelled.txt");
+    const plugin = Bun.resolveSync("@bunaway/plugin-windows", import.meta.dir);
+    await Bun.write(
+      app,
+      `import {windowsPlugin} from ${JSON.stringify(plugin)};
+      export default {commands: {}, events: {}, plugins: [windowsPlugin,
+        {name:"cleanup",version:"1.0.0",setup(){return () => Bun.write(${JSON.stringify(marker)},"stopped").then(() => {});}},
+        {name:"close",version:"1.0.0",async setup(context){
+          const operation = windowsPlugin.native.operations.find(operation => operation.name === "windows.close");
+          try { await context.host.call(operation, {view:"main"}); }
+          catch (error) { await Bun.write(${JSON.stringify(cancelled)}, error.code); throw error; }
+        }}
+      ]};`,
+    );
+    await bundleMacosHost(
+      resolve(import.meta.dir, "../../native/macos/bun"),
+      directory,
+      app,
+    );
+    const config = workerConfig(directory);
+    config.policy.backend.permissions = [
+      {
+        identifier: "windows:control",
+        allow: [
+          {
+            view: "main",
+          },
+        ],
+      },
+    ];
+    const running = new Worker(
+      new URL(`file://${resolve(directory, "backend.js")}`),
+      {
+        workerData: config,
+      },
+    );
+    worker = running;
+    const stopped = new Promise<number>((done) => running.once("exit", done));
+    const errors: unknown[] = [];
+    const packets: Packet[] = [];
+    running.on("error", (error) => errors.push(error));
+    channel = new Channel(
+      running,
+      config.runtime,
+      "macos-main",
+      async (packet) => {
+        packets.push(packet);
+        if (packet.kind === "operation") {
+          // Closing the last window starts shutdown and suppresses its Host response.
+          await channel?.send({
+            kind: "shutdown",
+          });
+        }
+      },
+      (error) => errors.push(error),
+    );
+    expect(
+      await Promise.race([
+        stopped,
+        Bun.sleep(2000).then(() => "timeout"),
+      ]),
+    ).toBe(0);
+    expect(await Bun.file(cancelled).text()).toBe("CANCELLED");
+    expect(await Bun.file(marker).text()).toBe("stopped");
+    expect(packets.map((packet) => packet.kind)).toContain("cleaned");
+    expect(
+      packets.some(
+        (packet) => packet.kind === "ready" || packet.kind === "fatal",
+      ),
+    ).toBe(false);
+    expect(errors).toEqual([]);
+  } finally {
+    channel?.close();
+    await worker?.terminate();
+    await rm(directory, {
+      recursive: true,
+      force: true,
+    });
+  }
+}, 15000);

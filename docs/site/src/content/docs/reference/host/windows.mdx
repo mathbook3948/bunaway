@@ -147,6 +147,8 @@ await windows.unmaximize({ view: "editor" });
 설정에 없는 창, 닫힌 창의 제어, 잘못된 입력은 `INVALID_ARGUMENT`입니다.
 동시에 같은 창을 생성하거나 재생성하는 작업은 `BUSY`입니다.
 호출 수명 종료, 호출 취소와 종료 중인 작업은 `CANCELLED`입니다.
+macOS는 setup 중에도 종료 시 대기 중인 Host API 호출을 `CANCELLED`로 끝내고,
+완료된 setup의 정리 훅을 실행합니다.
 닫기 확인을 거절하면 `windows.close`는 `false`를 반환하고 `windows.recreate`는 `CANCELLED`로 실패합니다.
 생성이나 네이티브 호출 실패는 `INTERNAL`입니다.
 [오류 처리](/guides/cancellation-and-errors/)도 확인하세요.
