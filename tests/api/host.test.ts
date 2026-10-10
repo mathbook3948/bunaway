@@ -10,6 +10,9 @@ import {
 } from "@bunaway/backend";
 import { createClient } from "@bunaway/client";
 import type { CoreServices } from "@bunaway/core";
+import { capabilities } from "@bunaway/plugin-capabilities";
+import { log } from "@bunaway/plugin-log";
+import { storage } from "@bunaway/plugin-storage";
 import {
   type ClientMessage,
   type HostCall,
@@ -20,9 +23,6 @@ import {
   parseMessage,
   type TransportEvent,
 } from "@bunaway/protocol";
-import { capabilities } from "@bunaway/plugin-capabilities";
-import { log } from "@bunaway/plugin-log";
-import { storage } from "@bunaway/plugin-storage";
 import {
   allowedHost,
   bindHostAPI,
@@ -1150,6 +1150,8 @@ test("window helpers preserve the command context and typed operation payloads",
           maxHeight: 1200,
         };
       case "windows.close":
+      case "windows.blur":
+      case "windows.activate":
         return false;
       default:
         return null;
@@ -1187,6 +1189,19 @@ test("window helpers preserve the command context and typed operation payloads",
       await windows.focus({
         view: "editor",
       });
+      await windows.showInactive({
+        view: "editor",
+      });
+      expect(
+        await windows.blur({
+          view: "editor",
+        }),
+      ).toBe(false);
+      expect(
+        await windows.activate({
+          view: "editor",
+        }),
+      ).toBe(false);
       await windows.setSize({
         view: "editor",
         width: 900,
@@ -1267,6 +1282,9 @@ test("window helpers preserve the command context and typed operation payloads",
     "windows.show",
     "windows.hide",
     "windows.focus",
+    "windows.showInactive",
+    "windows.blur",
+    "windows.activate",
     "windows.setSize",
     "windows.getMinSize",
     "windows.setMinSize",
@@ -1283,6 +1301,15 @@ test("window helpers preserve the command context and typed operation payloads",
   ]);
   expect(calls.map((call) => call.payload)).toEqual([
     null,
+    {
+      view: "editor",
+    },
+    {
+      view: "editor",
+    },
+    {
+      view: "editor",
+    },
     {
       view: "editor",
     },

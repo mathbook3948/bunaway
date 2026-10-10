@@ -461,6 +461,9 @@ if (!process.argv.includes("--child")) {
             "isFullscreen",
             "isVisible",
             "isFocused",
+            "showInactive",
+            "blur",
+            "activate",
           ] as const) {
             await assert.rejects(
               windows[name]({
@@ -557,6 +560,20 @@ if (!process.argv.includes("--child")) {
             const editor = {
               view: "editor",
             };
+            await windows.hide(editor);
+            assert.equal(await windows.activate(editor), false);
+            await windows.showInactive(editor);
+            assert.equal(await windows.isVisible(editor), true);
+            assert.equal(await windows.isFocused(editor), false);
+            await windows.minimize(editor);
+            assert.equal(await windows.activate(editor), false);
+            await windows.showInactive(editor);
+            assert.equal(await windows.isMinimized(editor), true);
+            await windows.unmaximize(editor);
+            const activated = await windows.activate(editor);
+            assert.equal(activated, await windows.isFocused(editor));
+            const blurred = await windows.blur(editor);
+            assert.equal(blurred, !(await windows.isFocused(editor)));
             assert.equal(await windows.isVisible(editor), true);
             assert.equal(await windows.isMinimized(editor), false);
             assert.equal(await windows.isMaximized(editor), false);

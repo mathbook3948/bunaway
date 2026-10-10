@@ -50,8 +50,11 @@ export default defineApp({ modules: [], plugins: [windowsPlugin] });
 | `windows.create` | `{ view }` | `Promise<null>`. 설정한 창을 생성하고 WebView 준비를 기다림. 열린 창은 `BUSY` |
 | `windows.recreate` | `{ view }` | `Promise<null>`. 닫기 확인 후 기존 창과 WebView를 정리하고 설정대로 다시 생성. 닫힌 창도 생성 가능 |
 | `windows.show` | `{ view }` | `Promise<null>`. 창 표시 |
+| `windows.showInactive` | `{ view }` | `Promise<null>`. 일반, 최소화 또는 최대화 상태를 유지하며 창 표시. 활성화 요청 없음 |
 | `windows.hide` | `{ view }` | `Promise<null>`. 창 숨김. 창과 세션은 유지 |
 | `windows.focus` | `{ view }` | `Promise<null>`. 숨기거나 최소화한 창을 표시하고 포커스 요청. OS가 거부하면 `BUSY` |
+| `windows.blur` | `{ view }` | `Promise<boolean>`. 같은 앱의 허용된 다른 창으로 전환해 대상 창이 비활성인지 반환 |
+| `windows.activate` | `{ view }` | `Promise<boolean>`. 표시된 비최소화 창으로 전경 전환 요청. 실제 대상 창이 전경이면 `true` |
 | `windows.minimize` | `{ view }` | `Promise<null>`. 창을 최소화하고 표시. Windows가 다른 창을 활성화할 수 있음 |
 | `windows.maximize` | `{ view }` | `Promise<null>`. 최소화 여부와 관계없이 창을 최대화하고 표시하며 활성화 요청 |
 | `windows.unmaximize` | `{ view }` | `Promise<null>`. 창을 일반 크기로 표시하고 활성화 요청. 최소화 전 최대화 상태도 해제 |
@@ -104,6 +107,67 @@ macOS는 뷰마다 독립된 임시 WebKit 프로필을 사용합니다. 같은 
 수 있으므로 포커스가 필요하면 `focus`의 결과를 처리하세요. macOS의 `close`는 닫기를
 승인하며, 마지막 열린 창이면 앱을 종료합니다. 닫기 확인과 `desktop` 계약은 아직
 지원하지 않습니다. 아래 상태 변경, 크기와 닫기 확인 설명은 Windows의 동작입니다.
+
+## 표시와 활성 창 전환
+
+다음은 Windows의 계약입니다. `showInactive`, `blur`, `activate`는 macOS에서
+`UNSUPPORTED`입니다. 여기서 활성 창과 포커스된 창은 `isFocused`와 같은 OS 전경 창을
+뜻합니다. 창 안의 입력 요소로 키보드 포커스를 옮기는 API는 아닙니다.
+
+| API | 일반 창 | 숨긴 창 | 최소화한 창 | 최대화한 창 |
+| --- | --- | --- | --- | --- |
+| `show` | 표시하고 활성화 요청 | 숨김 해제하고 활성화 요청. 저장된 상태 유지 | 최소화 상태를 유지하며 표시 | 최대화 유지하며 표시하고 활성화 요청 |
+| `showInactive` | 상태와 포커스 유지 | 숨김만 해제. 일반, 최소화 또는 최대화 상태 유지 | 최소화 유지하며 표시 | 최대화 유지하며 표시 |
+| `hide` | 숨김 | 그대로 유지 | 최소화 상태를 보존하며 숨김 | 최대화 상태를 보존하며 숨김 |
+| `focus` | 활성화 요청 | 표시하고 활성화 요청. 최소화했다면 복원 | 최소화 전 일반 또는 최대화 상태로 복원하고 활성화 요청 | 최대화 유지하며 활성화 요청 |
+| `activate` | 전경 전환 요청 | 표시하지 않고 `false` | 복원하지 않고 `false` | 최대화 유지하며 전경 전환 요청 |
+| `blur` | 활성 창이면 다음 허용 창으로 전환 | 그대로 유지하며 이미 비활성이면 `true` | 그대로 유지하며 이미 비활성이면 `true` | 최대화 유지하며 다음 허용 창으로 전환 |
+
+`show`의 `null`은 표시 완료이며 포커스 획득을 보장하지 않습니다. `showInactive`는
+활성화를 요청하지 않고 현재 입력 창과 그 안의 키보드 포커스를 유지합니다. 이미
+표시된 창에 반복 호출해도 비활성화하거나 복원하지 않습니다. 최소화한 창도
+`isVisible`은 `true`일 수 있으며 내용을 표시하려면 별도로 복원해야 합니다.
+`hide`는 창과 WebView, 세션을 유지합니다. 활성 창을 숨기면 Windows가 다른 창을
+선택할 수 있으며 다음 창을 지정하는 계약은 아닙니다.
+
+`activate({ view })`의 대상은 앱 설정에 선언하고 이미 열린 창입니다. 임의 HWND,
+다른 앱의 창이나 마지막 활성 창을 지정할 수 없습니다. 숨긴 창을 표시하거나
+최소화한 창을 복원하려면 `focus`를 사용합니다. 표시된 비최소화 대상에는 호출 끝에
+관찰한 전경 여부를 반환합니다. Windows가 전경 전환을 거부해 대상이 전경을 얻지
+못하면 `false`이고 기존 표시 상태를 유지합니다. 이미 해당 창이 전경이면 `true`입니다.
+기존 `focus`는 포커스를 얻지 못하면 `BUSY`입니다. 이 경우에도 먼저 적용한 표시와
+최소화 복원은 되돌리지 않습니다.
+
+`blur({ view })`는 숨긴 창이나 최소화한 창을 변경하지 않고 실제 비활성 여부를
+반환합니다. 이미 비활성인 창도 변경 없이 `true`입니다. 표시된 비최소화 활성 창이면
+`app.windows` 배열 순서에서 자신을 제외한 첫 번째 적격 창을 선택합니다. 후보는
+같은 호출 컨텍스트에서 `windows:control`을 허용한 열린 창 중 준비가 완료되고,
+실패하거나 재생성 중이 아니며, 표시된 비최소화 창입니다. 최대화된 창도 후보입니다.
+전환 후 원래 대상이 비활성이면 `true`, 후보가 없거나 Windows가 거부해 원래 대상이
+계속 전경이면 `false`입니다. 첫 후보의 전환이 거부돼도 다음 후보로 재시도하지 않습니다.
+다른 앱의 창을 고르거나 권한 없는 창을 활성화하지 않으며, 대상의 크기와 표시 상태,
+세션은 유지합니다. 다음 창을 직접 지정하려면 `activate`를 호출하세요.
+
+세 API 모두 대상 뷰의 `windows:control` 권한이 필요하며 deny가 우선합니다.
+`blur`의 후보에도 동일한 호출 컨텍스트의 권한을 적용하고 backend 권한을 추가하지
+않습니다. 대상 권한이 없으면 `PERMISSION_DENIED`, 허용된 미선언 뷰나 닫힌 창은
+`INVALID_ARGUMENT`, 재생성 중인 대상은 `BUSY`입니다. OS가 요청한 표시 상태를
+적용하지 못하거나 네이티브 조회가 실패하면 `INTERNAL`입니다.
+
+Windows는 [전경 전환을 제한](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setforegroundwindow)합니다.
+결과는 반환 시점의 관찰이며 이후 사용자 입력으로 달라질 수 있습니다.
+강제 전경 전환이나 제한 우회, 입력 재전송은 하지 않습니다.
+`windows.changed`는 실제 표시와 전경 상태가 바뀐 창에서만 발행합니다.
+성공한 전환에서는 이전 창의 `blur`와 새 창의 `focus`가 각각 자기 뷰에 전달됩니다.
+서로 다른 창의 이벤트 사이에는 전역 순서를 보장하지 않습니다. 거부나 반복 호출에서
+상태가 바뀌지 않으면 이벤트를 만들지 않습니다. 조회한 snapshot의 상태와 revision은
+동일한 관찰을 사용합니다.
+
+```ts
+await windows.showInactive({ view: "editor" });
+const activated = await windows.activate({ view: "editor" });
+const blurred = await windows.blur({ view: "editor" });
+```
 
 ## 조회 단위와 좌표
 

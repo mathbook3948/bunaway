@@ -55,6 +55,10 @@ let style = BigInt(WS_OVERLAPPEDWINDOW);
 let callbackAddress = 0;
 let positionFlags = 0;
 let foregroundWindow = 0n;
+let foregroundRequestApplied = false;
+let foregroundRequestReported = 0;
+let foregroundRequests = 0;
+let nextWindow = 1n;
 const postedMessages: number[] = [];
 
 function view(address: Pointer, size: number) {
@@ -114,13 +118,21 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
         return 1;
       },
       UnregisterClassW: () => 1,
-      CreateWindowExW: () => 1n,
+      CreateWindowExW: () => nextWindow++,
       DestroyWindow: () => 1,
       IsWindow: () => 1,
       IsWindowVisible: () => Number((style & WS_VISIBLE) !== 0n),
       IsIconic: () => Number(minimized),
       IsZoomed: () => Number(maximized),
       GetForegroundWindow: () => foregroundWindow,
+      SetForegroundWindow(window: bigint) {
+        foregroundRequests++;
+        messages.symbols.windowProcedure(window, WM_ACTIVATE, 1n, 0n);
+        if (foregroundRequestApplied) {
+          foregroundWindow = window;
+        }
+        return foregroundRequestReported;
+      },
       PostMessageW(_window: bigint, message: number) {
         postedMessages.push(message);
         return 1;
@@ -626,6 +638,85 @@ try {
     ]);
     assert.equal(windows.getSnapshot(window).state.focused, focused);
     assert.equal(windows.getSnapshot(window).revision, count + 1);
+  }
+  // Activation results and events follow observed state, even when the BOOL disagrees.
+  minimized = false;
+  windows.showInactive(window);
+  for (const applied of [
+    false,
+    true,
+  ]) {
+    foregroundRequestApplied = applied;
+    foregroundRequestReported = applied ? 0 : 1;
+    foregroundWindow = 0n;
+    windows.getSnapshot(window);
+    const count = observedChanges.length;
+    assert.equal(windows.activate(window), applied);
+    assert.equal(observedChanges.length, count + Number(applied));
+    assert.equal(windows.getSnapshot(window).state.focused, applied);
+    while (postedMessages.length) {
+      const posted = postedMessages.shift();
+      assert(posted);
+      messages.symbols.windowProcedure(window, posted, 0n, 0n);
+    }
+    assert.equal(observedChanges.length, count + Number(applied));
+  }
+  windows.show(window, false);
+  const count = foregroundRequests;
+  assert.equal(windows.activate(window), false);
+  assert.equal(foregroundRequests, count);
+  windows.showInactive(window);
+  minimized = true;
+  assert.equal(windows.activate(window), false);
+  assert.equal(foregroundRequests, count);
+  assert.equal(windows.failure, undefined);
+  minimized = false;
+  windows.show(window, false);
+  const second = windows.create(
+    "Activation successor",
+    600,
+    450,
+    () => {},
+    false,
+  );
+  try {
+    windows.showInactive(second);
+    const successorChanges: string[][] = [];
+    windows.observe(second, "editor", (_snapshot, changes) =>
+      successorChanges.push(changes),
+    );
+    foregroundWindow = window;
+    windows.getSnapshot(window);
+    windows.getSnapshot(second);
+    const before = observedChanges.length;
+    foregroundRequestApplied = true;
+    foregroundRequestReported = 0;
+    assert.equal(windows.activate(second), true);
+    assert.equal(observedChanges.length, before + 1);
+    assert.deepEqual(observedChanges.at(-1), [
+      "blur",
+    ]);
+    assert.deepEqual(successorChanges, [
+      [
+        "focus",
+      ],
+    ]);
+    assert.equal(windows.getSnapshot(window).state.focused, false);
+    assert.equal(windows.getSnapshot(second).state.focused, true);
+    while (postedMessages.length) {
+      const posted = postedMessages.shift();
+      assert(posted);
+      messages.symbols.windowProcedure(second, posted, 0n, 0n);
+    }
+    assert.equal(observedChanges.length, before + 1);
+    assert.deepEqual(successorChanges, [
+      [
+        "focus",
+      ],
+    ]);
+    assert.equal(windows.failure, undefined);
+  } finally {
+    windows.destroy(second);
   }
 } finally {
   messages.close();
