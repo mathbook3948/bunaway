@@ -68,7 +68,8 @@ NUL과 짝이 없는 UTF-16 surrogate는 거부합니다. `%PATH%`, `&` 등은 �
 등록을 해제해도 Windows의 기존 비활성화 기록은 남을 수 있습니다.
 
 Windows의 `StartupApproved\\Run`은 공개된 안정적 API가 아닙니다. 현재 구현은
-알려진 12바이트 REG_BINARY의 상태 2와 3만 각각 `enabled`와 `disabled`로 읽습니다.
+알려진 12바이트 REG_BINARY에서 상태 0과 2는 `enabled`, 1과 3은 `disabled`로 읽습니다.
+0과 1은 Windows Server 2022의 실제 시작 앱 설정에서 On과 Off 전환으로 확인했습니다.
 값이 없거나 형식, 상태가 다르면 `unknown`입니다. 이를 활성 상태로 추정하지 마세요.
 `enabled`도 실제 로그인 실행을 보장하지 않습니다. OS 정책, 안전 모드나 실행 파일
 삭제가 실행을 막을 수 있으며 Windows가 실행을 지연할 수도 있습니다.

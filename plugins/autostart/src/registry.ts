@@ -349,10 +349,11 @@ export function startupState(
     return "unknown";
   }
   const state = value.data.readUInt32LE(0);
-  if (state === 2) {
+  // Settings on Server 2022 uses 0/1; also retain the known 2/3 approval format.
+  if (state === 0 || state === 2) {
     return "enabled";
   }
-  if (state === 3) {
+  if (state === 1 || state === 3) {
     return "disabled";
   }
   return "unknown";

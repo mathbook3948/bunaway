@@ -211,13 +211,36 @@ test("Run commands preserve argument boundaries and enforce the complete UTF-16 
 
 test("absent, malformed and unknown approval states never claim to be enabled", () => {
   expect(startupState(null)).toBe("unknown");
-  for (const state of [
-    2,
-    3,
-    6,
-    7,
-    99,
-  ]) {
+  for (const [state, expected] of [
+    [
+      0,
+      "enabled",
+    ],
+    [
+      1,
+      "disabled",
+    ],
+    [
+      2,
+      "enabled",
+    ],
+    [
+      3,
+      "disabled",
+    ],
+    [
+      6,
+      "unknown",
+    ],
+    [
+      7,
+      "unknown",
+    ],
+    [
+      99,
+      "unknown",
+    ],
+  ] as const) {
     const data = Buffer.alloc(12);
     data.writeUInt32LE(state);
     expect(
@@ -225,7 +248,7 @@ test("absent, malformed and unknown approval states never claim to be enabled", 
         type: 3,
         data,
       }),
-    ).toBe(state === 2 ? "enabled" : state === 3 ? "disabled" : "unknown");
+    ).toBe(expected);
     expect(
       startupState({
         type: 1,
@@ -239,6 +262,12 @@ test("absent, malformed and unknown approval states never claim to be enabled", 
       }),
     ).toBe("unknown");
   }
+  expect(
+    startupState({
+      type: 3,
+      data: Buffer.from("0100000070bc7590b058dd01", "hex"),
+    }),
+  ).toBe("disabled");
   expect(
     registryCommand({
       type: 1,
