@@ -1,6 +1,6 @@
 # 플랫폼 지원과 검증 범위
 
-현재 저장, 로그, 기능 조회와 opener 플러그인은 Windows만 지원한다. 창 플러그인의 기본 제어는 macOS에서도 지원한다. 아래 macOS 파일 저장과 네이티브 API 검증 기록은 이관 전 구현의 기록이다. Bun FFI 제품 경로의 명령, 이벤트와 정책, 복구, 종료 검증은 [새 기록](../architecture/macos-bun-results.md)에 둔다.
+현재 저장, 로그, 기능 조회, opener와 clipboard 플러그인은 Windows만 지원한다. 창 플러그인의 기본 제어는 macOS에서도 지원한다. 아래 macOS 파일 저장과 네이티브 API 검증 기록은 이관 전 구현의 기록이다. Bun FFI 제품 경로의 명령, 이벤트와 정책, 복구, 종료 검증은 [새 기록](../architecture/macos-bun-results.md)에 둔다.
 
 기준일: 2026-10-10. “구현”은 출시 지원 보장이 아니다. 실제 OS, CPU와 테스트 범위를
 기록하며, 공통 TypeScript 검사의 성공을 네이티브 호스트 성공으로 확대하지 않는다.
@@ -78,6 +78,11 @@ show/hide/focus, 크기와 위치, 전체화면, 닫기 확인을 정식 지원�
 CI 실행 [37574470840](https://github.com/mathbook3948/bunaway/actions/runs/37574470840)에서
 새 창 API의 실제 GUI 회귀는 통과했다. 같은 실행의 전체 네이티브 작업은 공용 기능 목록 테스트에서 실패했다.
 Linux에서는 계약, 정책, 재생성 수명 조정과 CLI 번들을 검증한다.
+Windows의 `setContentPosition`, `setOuterSize`, `setContentBounds`, `setOuterBounds`는
+물리 또는 논리 픽셀을 받으며 숨김 상태를 유지하고 최소화 및 최대화 중에는 일반
+복원 영역을 변경한다. 전체화면은 거부한다. 2026-10-10 로컬 Win32와 WebView2에서
+설정 후 조회 및 `windows.changed` 일치를 확인했다. 합성 DPI 메시지와 실제 물리
+모니터 이동의 검증 범위는 [실행 기록](../architecture/windows-bun-results.md)에 구분했다.
 macOS는 `app.windows`, 지연 생성과 재생성, 목록 및 열림 여부, show/hide/focus/close,
 표시와 포커스 조회를 제공한다. 뷰마다 임시 WebKit 프로필을 분리하고 실행 중 재생성에서
 유지한다. 크기, 위치, 전체화면, 닫기 확인 등 다른 공개 창 작업은 `UNSUPPORTED`다.

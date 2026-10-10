@@ -149,6 +149,25 @@ export type NativeWindow = {
   setSize(width: number, height: number): void;
   /** Positions the outer top-left in physical pixels from the primary screen origin. */
   setPosition(x: number, y: number): void;
+  /**
+   * Applies physical content or outer geometry without showing or activating the window.
+   * While minimized/maximized, edits normal restoration bounds. Rejects fullscreen and
+   * content sizes outside 200..4096 logical pixels before clamping to current limits.
+   * Position and size pairs must be complete; native failures throw.
+   */
+  setGeometry(
+    area: "content" | "outer",
+    geometry:
+      | {
+          x: number;
+          y: number;
+        }
+      | {
+          width: number;
+          height: number;
+        }
+      | Omit<WindowBounds, "dpi">,
+  ): void;
   /** Enters or exits fullscreen mode. */
   setFullscreen(value: boolean): void;
   /** Sets or clears the confirmation shown before a user closes the window. */

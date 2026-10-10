@@ -4,7 +4,7 @@
 [ADR 0013](../decisions/0013-optional-native-plugins.md)의 구현 계약이다.
 저장, 로그와 기능 조회는 개별 tarball로 설치하고 등록한다.
 macOS는 창 플러그인의 목록, 생성과 재생성, 표시와 포커스 제어, 닫기와 기본 상태
-조회를 제공한다. 저장, 로그, 기능 조회와 opener 어댑터는 아직 제공하지 않는다.
+조회를 제공한다. 저장, 로그, 기능 조회, opener와 clipboard 어댑터는 아직 제공하지 않는다.
 
 ## 설치, 등록, 권한
 
@@ -55,6 +55,11 @@ export async function save(text: string): Promise<null> {
 | `@bunaway/plugin-storage` | `storage`, `storagePlugin` | `storage` |
 | `@bunaway/plugin-log` | `log`, `logPlugin` | `log` |
 | `@bunaway/plugin-capabilities` | `capabilities`, `capabilitiesPlugin` | `capabilities` |
+| `@bunaway/plugin-clipboard` | `clipboard`, `clipboardPlugin` | `clipboard` |
+
+텍스트 클립보드 계약과 Windows 자원 소유권은 [clipboard README](../../plugins/clipboard/README.md)에 둔다.
+공통 UI 실행 컨텍스트는 선택적 `signal`을 제공한다. Windows는 요청 취소, 컨텍스트 폐기와 종료 때 이 신호를 중단한다.
+클립보드 어댑터는 재시도 중에만 비동기로 대기하고 열린 클립보드나 잠긴 메모리는 다음 await까지 유지하지 않는다.
 
 화면과 백엔드는 같은 패키지의 index.ts를 import한다.
 공통 작성 SDK인 `@bunaway/plugin`의 defineNativePlugin은 선언에서 등록 객체와

@@ -1,5 +1,14 @@
 # Tests
 
+`api/clipboard.test.ts`는 텍스트 계약, 작업별 권한, SDK 호출 컨텍스트와 브라우저 번들을 검사한다.
+`lifecycle/clipboard-resources.test.ts`는 별도 프로세스의 Win32 바인딩 대체로 메모리 실패,
+소유권 이전, 잘못된 UTF-16, 점유와 취소, 종료 정리를 확인하며 데스크톱 클립보드를 바꾸지 않는다.
+실제 Windows 검사는 `BUNAWAY_CLIPBOARD_NATIVE=1`을 설정한 뒤
+`mise exec -- bun test tests/lifecycle/windows-clipboard.test.ts`로 실행한다.
+공통 SDK와 실제 UI Worker의 읽기, 쓰기, 지우기, 별도 프로세스 점유와 취소를 확인한다.
+WebView2 페이지 실행은 포함하지 않는다. 이전 텍스트만 복원하며 이미지 등 다른 형식은 복원하지 않는다.
+실제 검증 기록과 명령은 [clipboard README](../plugins/clipboard/README.md)에 둔다.
+
 `lifecycle/window-events.test.ts`는 실제 Core와 typed SDK를 연결해 `windows.changed`의
 스키마, 뷰별 구독 권한, 해제, 폐기 세션과 Core 종료 후 늦은 발행 차단을 확인한다.
 MessageChannel로 네이티브 이벤트 전송 방향, 미확인 128개 상한과 종료 용량도 검사한다.
@@ -108,6 +117,13 @@ boot 전후 종료와 초기화 중 프로토콜 버전, 런타임 ID 및 세대
 `lifecycle/windows-geometry.test.ts`는 실제 Win32 창에서 setter 직후 조회, 일반, 숨김,
 최소화, 최대화와 전체화면 bounds, normal 복원과 음수 좌표를 검사한다. DPI 메시지는
 합성 메시지이며 실제 배율이 다른 물리 모니터 사이의 이동 검증과 구분한다.
+같은 검사는 `setContentPosition`, `setOuterSize`, `setContentBounds`, `setOuterBounds`의
+일반 및 숨김 적용, 제약 보정, 최소화 및 최대화 중 복원 영역 변경, 전체화면 거부,
+rectangle 경계 오류의 변경 방지와 실제 이벤트 snapshot 일치도 확인한다.
+`api/window-geometry.test.ts`는 새 setter의 단위 기본값, DPI 반올림, 입력과 출력 schema,
+SDK 호출 컨텍스트, 대상 권한, 닫힌 창 및 시작 전 취소를 GUI 없이 검사한다.
+`windows-window-events.ts`는 실제 WebView2, Core와 UI Worker를 연결해 네 setter의
+공개 SDK 호출 및 `setOuterBounds` 결과와 `windows.changed`의 revision, bounds 일치를 확인한다.
 `windows-fullscreen-dpi.fixture.ts`는 DLL 대체로 음수 좌표의 모니터 이동, 작업 영역의
 좌표 보정과 전체화면 중 현재 DPI에 따른 normal bounds 계산을 검사한다.
 작업 영역 오프셋이 다른 모니터로 최대화 창을 옮기거나 전체화면에 진입해도 원래 일반

@@ -2,7 +2,7 @@
 
 macOS의 현재 구현과 후속 작업은 [macOS TODO](./TODO-macos.md)에서 관리한다.
 
-기준일: 2026-10-10. bunaway `4bd0368`의 Windows 구현을 기준으로 갱신했다.
+기준일: 2026-10-10. bunaway main `6f2363c`와 이번 geometry 설정 보완을 기준으로 갱신했다.
 Tauri v2의 기본 API와 공식 플러그인, Electron의 공개 API를 기능별로 대조한다.
 창 최소 크기와 최대 크기처럼 초기 설정, 실행 중 변경, 조회, 이벤트가 따로 필요한
 기능은 각각 작업으로 기록한다. 비교 대상의 메서드 이름이나 바이너리와의 호환을
@@ -18,7 +18,8 @@ Tauri v2의 기본 API와 공식 플러그인, Electron의 공개 API를 기능�
 Tauri와 Electron 비교 자료의 기준 버전은 이전 스냅샷을 유지한다.
 
 2026-10-10 갱신은 창 상태 변경 5개와 상태 조회 5개, content/outer/normal 좌표 조회 7개와
-DPI 변환 2개, `windows.changed` 창 이벤트와 `getSnapshot`, 호환되는 개발 앱의
+DPI 변환 2개, content 위치와 outer 크기, content/outer bounds 설정 4개,
+`windows.changed` 창 이벤트와 `getSnapshot`, 호환되는 개발 앱의
 명령 구현 교체를 반영했다.
 공통 Worker 채널과 앱 manifest 정리, Bun 기반 네이티브 실행기 전환도
 현재 구현 근거에 포함한다. 비교 대상의 API 목록은 새로 전수 대조하지 않았다.
@@ -98,7 +99,10 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] DPI 변경, 모니터 이동과 전체화면 해제 뒤에도 크기 제약을 유지한다.
 - [x] `getContentSize`, `getOuterSize`, `getContentPosition`, `getOuterPosition`,
   `getContentBounds`, `getOuterBounds`로 content와 outer 크기, 위치, bounds를 구분해 조회한다.
-- [ ] content 위치, outer 크기와 content/outer bounds를 지정해 설정한다.
+- [x] `setContentPosition`, `setOuterSize`, `setContentBounds`, `setOuterBounds`로
+  content 위치, outer 크기와 content/outer bounds를 지정해 설정한다.
+  단위 기본값은 물리 픽셀이며 논리 입력, content 기준 크기 제약과 반올림을 정의한다.
+  숨김 상태를 유지하고 최소화와 최대화 중에는 일반 복원 영역만 변경한다. 전체화면은 거부한다.
 - [x] `getNormalBounds`로 최소화, 최대화와 전체화면에서 복원할 일반 창의 outer bounds를 조회한다.
 - [x] `toLogical`과 `toPhysical`로 대상 창 DPI를 사용해 좌표, 크기와 bounds를 변환한다.
   반올림, 정수 범위와 오류, 대상 창 권한과 닫힌 창의 동작은 창 API 계약을 따른다.
@@ -344,7 +348,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 우선순위 P1. 소유자: clipboard 플러그인과 공통 이미지 리소스 API 후보.
 출처: [E-clipboard], [E-image], [T-clipboard], [T-image].
 
-- [ ] 클립보드 텍스트 읽기, 쓰기와 지우기를 제공한다.
+- [x] 클립보드 텍스트 읽기, 쓰기와 지우기를 제공한다. `@bunaway/plugin-clipboard`의 작업별 권한, Unicode와 크기 제한, 빈 값, 점유와 취소, 소유권 정리를 정의했다. 2026-10-10 Windows x64의 공통 SDK와 실제 UI Worker 왕복, 별도 프로세스 점유와 취소를 검증했다([계약과 검증](../plugins/clipboard/README.md)).
 - [ ] 이미지 읽기와 쓰기를 제공한다.
 - [ ] HTML, RTF, 파일 목록과 bookmark 형식의 지원을 제공한다.
 - [ ] 사용 가능한 MIME 형식과 지정 형식 존재 여부를 조회한다.

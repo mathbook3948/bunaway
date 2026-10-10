@@ -140,6 +140,44 @@ const positionOutput = {
   ],
   additionalProperties: false,
 } as const;
+const geometryPositionInput = {
+  ...geometryTarget,
+  properties: {
+    ...geometryTarget.properties,
+    ...positionProperties,
+  },
+  required: [
+    "view",
+    "x",
+    "y",
+  ],
+} as const;
+const geometrySizeInput = {
+  ...geometryTarget,
+  properties: {
+    ...geometryTarget.properties,
+    ...sizeProperties,
+  },
+  required: [
+    "view",
+    "width",
+    "height",
+  ],
+} as const;
+const geometryBoundsInput = {
+  ...geometryTarget,
+  properties: {
+    ...geometryTarget.properties,
+    ...boundsProperties,
+  },
+  required: [
+    "view",
+    "x",
+    "y",
+    "width",
+    "height",
+  ],
+} as const;
 const sizeOutput = {
   type: "object",
   properties: {
@@ -385,6 +423,22 @@ export const windowOperations = {
   "windows.getContentSize": {
     input: geometryTarget,
     output: sizeOutput,
+  },
+  "windows.setContentPosition": {
+    input: geometryPositionInput,
+    output: windowResult.output,
+  },
+  "windows.setOuterSize": {
+    input: geometrySizeInput,
+    output: windowResult.output,
+  },
+  "windows.setContentBounds": {
+    input: geometryBoundsInput,
+    output: windowResult.output,
+  },
+  "windows.setOuterBounds": {
+    input: geometryBoundsInput,
+    output: windowResult.output,
   },
   "windows.getOuterSize": {
     input: geometryTarget,

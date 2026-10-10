@@ -76,3 +76,11 @@ await client.invoke("editor.prepareClose", null);
 [windows API](/reference/host/windows/)에서 확인할 수 있습니다.
 창 생성과 기본 제어는 Windows와 macOS를 지원합니다. 위 `prepareClose`처럼 닫기
 확인을 설정하는 작업은 Windows만 지원합니다. macOS는 뷰별 임시 프로필을 앱 실행 중 유지합니다.
+
+Windows에서 내용 영역의 위치와 크기를 한 번에 바꾸려면 명령 핸들러에서
+`windows.setContentBounds({ view: "editor", x: 100, y: 120, width: 800, height: 600, unit: "logical" })`를 호출합니다.
+내용 위치만 바꿀 때는 `setContentPosition`, 제목 표시줄과 테두리를 포함한 크기와 영역은
+`setOuterSize`, `setOuterBounds`를 사용합니다. 기본 단위는 물리 픽셀입니다.
+숨긴 창은 표시하지 않으며 최소화나 최대화 중에는 일반 복원 영역을 변경합니다.
+전체화면은 먼저 해제해야 합니다. 크기 제약을 적용한 결과는 같은 단위의 geometry 조회로 확인하고
+변경 알림은 `windows.changed`로 구독하세요. 입력 범위, 반올림과 오류는 위 API 문서를 따릅니다.

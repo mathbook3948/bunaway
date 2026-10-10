@@ -3,11 +3,15 @@ import assert from "node:assert/strict";
 import {
   clampWindowSize,
   hasValidWindowSizeConstraints,
+  MAX_WINDOW_DIMENSION,
+  MIN_WINDOW_DIMENSION,
+  type NativeWindow,
   type WindowBounds,
   type WindowChange,
   type WindowSizeConstraints,
   type WindowSnapshot,
 } from "@bunaway/plugin-api/native";
+import { BunawayError } from "@bunaway/protocol";
 import {
   APP_SHUTDOWN_MESSAGE,
   APP_WINDOW_CLASS_PREFIX,
@@ -69,6 +73,8 @@ const WINDOWPLACEMENT_FLAGS_OFFSET = 4;
 const WINDOWPLACEMENT_SHOW_CMD_OFFSET = 8;
 const WPF_RESTORETOMAXIMIZED = 0x2;
 const WS_OVERLAPPEDWINDOW = 0x00cf0000;
+const WS_MAXIMIZE = 0x01000000n;
+const WS_MINIMIZE = 0x20000000n;
 const IDYES = 6;
 const MAX_MESSAGES_PER_PUMP = 64;
 const MINMAXINFO_SIZE = 40;
@@ -125,7 +131,7 @@ export class Windows {
       receive(snapshot: WindowSnapshot, changes: WindowChange[]): void;
     }
   >();
-  private readonly changingFullscreen = new Set<bigint>();
+  private readonly changingGeometry = new Set<bigint>();
   private readonly dpiByWindow = new Map<bigint, number>();
   private readonly normalMonitors = new Map<
     bigint,
@@ -491,7 +497,7 @@ export class Windows {
   /** Commit before calling the observer so nested Win32 callbacks cannot repeat a transition. */
   private observeChanges(window: bigint): void {
     const observation = this.observations.get(window);
-    if (!observation || this.changingFullscreen.has(window)) {
+    if (!observation || this.changingGeometry.has(window)) {
       return;
     }
     const previous = observation.snapshot;
@@ -1199,6 +1205,166 @@ export class Windows {
     );
   }
 
+  /**
+   * Apply one geometry request at the current DPI. Validate the full normal rectangle
+   * before touching Win32, preserving hidden/iconic/zoomed state and input focus.
+   * Synchronous native messages publish only the final current-bounds observation.
+   */
+  setGeometry(
+    window: bigint,
+    area: "content" | "outer",
+    geometry: Parameters<NativeWindow["setGeometry"]>[1],
+  ) {
+    const invalid = (message: string): never => {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message,
+      });
+    };
+    if (this.isFullscreen(window)) {
+      invalid("Exit fullscreen before changing window geometry.");
+    }
+    const dpi = this.getDpi(window);
+    const editsNormalBounds =
+      this.isMinimized(window) || this.isMaximized(window);
+    const current = this.getBounds(
+      window,
+      editsNormalBounds ? "normal" : "outer",
+    );
+    const { style, exStyle } = this.windowStyles(window);
+    // Minimized/maximized frame offsets are not those of the future normal window.
+    const frame = new Int32Array(4);
+    assert(
+      user.symbols.AdjustWindowRectExForDpi(
+        ptr(frame),
+        Number(style & ~WS_MAXIMIZE & ~WS_MINIMIZE),
+        0,
+        Number(exStyle),
+        dpi,
+      ),
+    );
+    const frameWidth = (frame[2] ?? 0) - (frame[0] ?? 0);
+    const frameHeight = (frame[3] ?? 0) - (frame[1] ?? 0);
+    let { x, y, width, height } = current;
+    if ("width" in geometry) {
+      const outerWidth = geometry.width + (area === "content" ? frameWidth : 0);
+      const outerHeight =
+        geometry.height + (area === "content" ? frameHeight : 0);
+      const contentWidth = logicalPixels(outerWidth - frameWidth, dpi);
+      const contentHeight = logicalPixels(outerHeight - frameHeight, dpi);
+      if (
+        contentWidth < MIN_WINDOW_DIMENSION ||
+        contentWidth > MAX_WINDOW_DIMENSION ||
+        contentHeight < MIN_WINDOW_DIMENSION ||
+        contentHeight > MAX_WINDOW_DIMENSION
+      ) {
+        invalid(
+          "Requested content size must be 200..4096 logical pixels before constraints.",
+        );
+      }
+      ({ width, height } = constrainedOuterSize(
+        outerWidth,
+        outerHeight,
+        dpi,
+        {
+          width: frameWidth,
+          height: frameHeight,
+        },
+        this.getSizeConstraints(window),
+      ));
+    }
+    if ("x" in geometry) {
+      let offsetX = frame[0] ?? 0;
+      let offsetY = frame[1] ?? 0;
+      if (area === "content" && !editsNormalBounds) {
+        const content = this.getBounds(window, "content");
+        offsetX = current.x - content.x;
+        offsetY = current.y - content.y;
+      }
+      x = geometry.x + (area === "content" ? offsetX : 0);
+      y = geometry.y + (area === "content" ? offsetY : 0);
+    }
+    // All RECT edges and SetWindowPos components must fit signed Win32 LONGs.
+    const checkRectangle = (left: number, top: number) => {
+      for (const value of [
+        left,
+        top,
+        width,
+        height,
+        left + width,
+        top + height,
+      ]) {
+        if (!Number.isInteger(value) || (value | 0) !== value) {
+          invalid("Window geometry exceeds the supported integer range.");
+        }
+      }
+    };
+    checkRectangle(x, y);
+    let placement: Buffer | undefined;
+    let monitor:
+      | {
+          display: bigint;
+          screenRect: Buffer;
+        }
+      | undefined;
+    if (editsNormalBounds) {
+      placement = this.getPlacement(window);
+      const screenRect = new Int32Array([
+        x,
+        y,
+        x + width,
+        y + height,
+      ]);
+      const display = user.symbols.MonitorFromRect(
+        ptr(screenRect),
+        MONITOR_DEFAULTTONEAREST,
+      );
+      const info = Buffer.alloc(MONITORINFO_SIZE);
+      info.writeUInt32LE(MONITORINFO_SIZE);
+      assert(display && user.symbols.GetMonitorInfoW(display, ptr(info)));
+      monitor = {
+        display,
+        screenRect: info.subarray(4, 4 + RECT_SIZE),
+      };
+      if (!(exStyle & WS_EX_TOOLWINDOW)) {
+        // Inverse of getNormalBounds: WINDOWPLACEMENT uses destination workspace coordinates.
+        x -= info.readInt32LE(20) - info.readInt32LE(4);
+        y -= info.readInt32LE(24) - info.readInt32LE(8);
+      }
+      checkRectangle(x, y);
+      const rect = placement.subarray(WINDOWPLACEMENT_NORMAL_RECT_OFFSET);
+      rect.writeInt32LE(x, 0);
+      rect.writeInt32LE(y, 4);
+      rect.writeInt32LE(x + width, 8);
+      rect.writeInt32LE(y + height, 12);
+    }
+    this.changingGeometry.add(window);
+    try {
+      if (placement && monitor) {
+        this.setPlacement(window, placement);
+        this.normalMonitors.set(window, monitor);
+      } else {
+        assert(
+          user.symbols.SetWindowPos(
+            window,
+            0n,
+            x,
+            y,
+            width,
+            height,
+            SWP_NOZORDER |
+              SWP_NOACTIVATE |
+              ("x" in geometry ? 0 : SWP_NOMOVE) |
+              ("width" in geometry ? 0 : SWP_NOSIZE),
+          ),
+        );
+      }
+    } finally {
+      this.changingGeometry.delete(window);
+      this.observeChanges(window);
+    }
+  }
+
   isFullscreen(window: bigint) {
     assert(user.symbols.IsWindow(window), "Window is no longer valid.");
     return this.fullscreen.has(window);
@@ -1223,11 +1389,11 @@ export class Windows {
    */
   setFullscreen(window: bigint, enabled: boolean) {
     // Style and placement changes produce synchronous intermediate native messages.
-    this.changingFullscreen.add(window);
+    this.changingGeometry.add(window);
     try {
       this.applyFullscreen(window, enabled);
     } finally {
-      this.changingFullscreen.delete(window);
+      this.changingGeometry.delete(window);
       this.observeChanges(window);
     }
   }
@@ -1334,7 +1500,7 @@ export class Windows {
   /** Destroy the HWND and discard its size, DPI, and fullscreen state. */
   destroy(window: bigint) {
     this.observations.delete(window);
-    this.changingFullscreen.delete(window);
+    this.changingGeometry.delete(window);
     assert(user.symbols.DestroyWindow(window));
     this.windows.delete(window);
     this.constraints.delete(window);
