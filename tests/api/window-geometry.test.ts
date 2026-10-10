@@ -25,6 +25,40 @@ const queries = [
   "getOuterBounds",
   "getNormalBounds",
 ] as const;
+const setters = [
+  {
+    name: "setContentPosition",
+    geometry: {
+      x: -1,
+      y: 3,
+    },
+  },
+  {
+    name: "setOuterSize",
+    geometry: {
+      width: 801,
+      height: 601,
+    },
+  },
+  {
+    name: "setContentBounds",
+    geometry: {
+      x: -1,
+      y: 3,
+      width: 801,
+      height: 601,
+    },
+  },
+  {
+    name: "setOuterBounds",
+    geometry: {
+      x: -1,
+      y: 3,
+      width: 801,
+      height: 601,
+    },
+  },
+] as const;
 
 test("window geometry helpers preserve context, shapes, DPI and default units", async () => {
   const registry = new NativeRegistry([
@@ -81,6 +115,9 @@ test("window geometry helpers preserve context, shapes, DPI and default units", 
             dpi: 144,
           };
         }
+        if (call.operation.startsWith("windows.set")) {
+          payload = null;
+        }
         return {
           kind: "result",
           payload,
@@ -128,13 +165,129 @@ test("window geometry helpers preserve context, shapes, DPI and default units", 
           y: 20,
         },
       });
+      for (const { name, geometry } of setters) {
+        switch (name) {
+          case "setContentPosition":
+            expect(
+              await windows.setContentPosition({
+                view: "main",
+                ...geometry,
+              }),
+            ).toBeNull();
+            break;
+          case "setOuterSize":
+            expect(
+              await windows.setOuterSize({
+                view: "main",
+                ...geometry,
+              }),
+            ).toBeNull();
+            break;
+          case "setContentBounds":
+            expect(
+              await windows.setContentBounds({
+                view: "main",
+                ...geometry,
+              }),
+            ).toBeNull();
+            break;
+          case "setOuterBounds":
+            expect(
+              await windows.setOuterBounds({
+                view: "main",
+                ...geometry,
+              }),
+            ).toBeNull();
+            break;
+        }
+      }
       return null;
     },
   }).run(null, context);
-  expect(calls).toBe(9);
+  expect(calls).toBe(13);
 });
 
 test("geometry schemas reject malformed shapes and out of range inputs and outputs", () => {
+  for (const { name, geometry } of setters) {
+    const payload = {
+      view: "main",
+      ...geometry,
+    };
+    expect(
+      validateWindowCall({
+        operation: `windows.${name}`,
+        payload,
+      }).payload,
+    ).toEqual(payload);
+    const incomplete: Record<string, JsonValue> = {
+      ...payload,
+    };
+    delete incomplete["x" in geometry ? "y" : "height"];
+    expect(() =>
+      validateWindowCall({
+        operation: `windows.${name}`,
+        payload: incomplete,
+      }),
+    ).toThrow();
+    for (const invalid of [
+      {
+        ...payload,
+        unit: "pixels",
+      },
+      {
+        ...payload,
+        extra: true,
+      },
+      {
+        ...payload,
+        ...("x" in geometry
+          ? {
+              x: 0.5,
+            }
+          : {
+              width: -1,
+            }),
+      },
+      {
+        ...payload,
+        ...("x" in geometry
+          ? {
+              x: -2147483649,
+            }
+          : {
+              width: 2147483648,
+            }),
+      },
+      {
+        ...payload,
+        ...("x" in geometry
+          ? {
+              y: null,
+            }
+          : {
+              height: null,
+            }),
+      },
+      {
+        ...payload,
+        ...("x" in geometry
+          ? {
+              x: NaN,
+            }
+          : {
+              width: Infinity,
+            }),
+      },
+    ]) {
+      expect(() =>
+        validateWindowCall({
+          operation: `windows.${name}`,
+          payload: invalid,
+        }),
+      ).toThrow();
+    }
+    expect(() => validateWindowOutput(`windows.${name}`, false)).toThrow();
+  }
   for (const query of queries) {
     expect(
       validateWindowCall({
@@ -230,6 +383,13 @@ test("geometry schemas reject malformed shapes and out of range inputs and outpu
 test("geometry adapter selects the area, converts at current DPI, and enforces target permission and lifetime", async () => {
   let closed = false;
   let dpi = 144;
+  let fullscreen = false;
+  let cancelled = false;
+  let stopping = false;
+  const applied: {
+    area: string;
+    geometry: JsonValue;
+  }[] = [];
   const areas: string[] = [];
   const services: NativeWindowServices = {
     specs: [
@@ -252,8 +412,8 @@ test("geometry adapter selects the area, converts at current DPI, and enforces t
     }),
     create() {},
     close: () => true,
-    stopping: () => false,
-    cancelled: () => false,
+    stopping: () => stopping,
+    cancelled: () => cancelled,
     now: Date.now,
     tick: async () => {},
     window: () => ({
@@ -272,7 +432,7 @@ test("geometry adapter selects the area, converts at current DPI, and enforces t
       isMaximized: () => false,
       isVisible: () => true,
       isFocused: () => false,
-      isFullscreen: () => false,
+      isFullscreen: () => fullscreen,
       getDpi: () => dpi,
       getBounds(area) {
         areas.push(area);
@@ -293,6 +453,12 @@ test("geometry adapter selects the area, converts at current DPI, and enforces t
       setSizeConstraints() {},
       setSize() {},
       setPosition() {},
+      setGeometry(area, geometry) {
+        applied.push({
+          area,
+          geometry,
+        });
+      },
       setFullscreen() {},
       setCloseConfirmation() {},
     }),
@@ -321,6 +487,136 @@ test("geometry adapter selects the area, converts at current DPI, and enforces t
       ],
     },
   };
+  for (const { name, geometry } of setters) {
+    const operation = `windows.${name}`;
+    const payload = {
+      view: "main",
+      ...geometry,
+    };
+    await execute(operation, payload, "backend", context);
+    expect(applied.at(-1)).toEqual({
+      area: name.startsWith("setContent") ? "content" : "outer",
+      geometry,
+    });
+    await execute(
+      operation,
+      {
+        ...payload,
+        unit: "logical",
+      },
+      "backend",
+      context,
+    );
+    expect(applied.at(-1)?.geometry).toEqual(
+      Object.fromEntries(
+        Object.entries(geometry).map(([key, value]) => [
+          key,
+          Math.round(value * 1.5) || 0,
+        ]),
+      ),
+    );
+    const count = applied.length;
+    for (const state of [
+      "fullscreen",
+      "closed",
+      "cancelled",
+      "stopping",
+    ] as const) {
+      fullscreen = state === "fullscreen";
+      closed = state === "closed";
+      cancelled = state === "cancelled";
+      stopping = state === "stopping";
+      await expect(
+        execute(operation, payload, "backend", context),
+      ).rejects.toMatchObject({
+        code:
+          state === "cancelled" || state === "stopping"
+            ? "CANCELLED"
+            : "INVALID_ARGUMENT",
+      });
+    }
+    fullscreen = closed = cancelled = stopping = false;
+    await expect(
+      execute(operation, payload, "backend", {
+        ...context,
+        permissions: {
+          permissions: [],
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "PERMISSION_DENIED",
+    });
+    await expect(
+      execute(
+        operation,
+        {
+          ...payload,
+          view: "missing",
+        },
+        "backend",
+        context,
+      ),
+    ).rejects.toMatchObject({
+      code: "PERMISSION_DENIED",
+    });
+    for (const denied of [
+      true,
+      false,
+    ]) {
+      const view = denied ? "main" : "missing";
+      await expect(
+        execute(
+          operation,
+          {
+            ...payload,
+            view,
+          },
+          "backend",
+          {
+            ...context,
+            permissions: {
+              permissions: [
+                {
+                  identifier: "windows:control",
+                  allow: [
+                    {
+                      view,
+                    },
+                  ],
+                  deny: denied
+                    ? [
+                        {
+                          view,
+                        },
+                      ]
+                    : [],
+                },
+              ],
+            },
+          },
+        ),
+      ).rejects.toMatchObject({
+        code: denied ? "PERMISSION_DENIED" : "INVALID_ARGUMENT",
+      });
+    }
+    if ("x" in geometry) {
+      await expect(
+        execute(
+          operation,
+          {
+            ...payload,
+            x: 2147483647,
+            unit: "logical",
+          },
+          "backend",
+          context,
+        ),
+      ).rejects.toMatchObject({
+        code: "INVALID_ARGUMENT",
+      });
+    }
+    expect(applied).toHaveLength(count);
+  }
   for (const query of queries) {
     const result = await execute(
       `windows.${query}`,

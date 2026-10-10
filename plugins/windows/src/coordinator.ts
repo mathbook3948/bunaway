@@ -85,6 +85,12 @@ export class WindowOperations {
           message: "Window is not open.",
         });
       }
+      if (this.hooks.stopping() || this.hooks.cancelled(requestId)) {
+        throw new BunawayError({
+          code: "CANCELLED",
+          message: "Window request cancelled.",
+        });
+      }
       return this.hooks.apply(call, viewId);
     }
     if (call.operation === "windows.create" && view && !view.closed) {

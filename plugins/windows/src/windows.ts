@@ -144,6 +144,27 @@ export function createOperations(
         }
         window.setSize(call.payload.width, call.payload.height);
         break;
+      case "windows.setContentPosition":
+      case "windows.setOuterSize":
+      case "windows.setContentBounds":
+      case "windows.setOuterBounds": {
+        if (window.isFullscreen()) {
+          throw new BunawayError({
+            code: "INVALID_ARGUMENT",
+            message: "Exit fullscreen before changing window geometry.",
+          });
+        }
+        const { view: _view, unit, ...geometry } = call.payload;
+        const physical =
+          unit === "logical"
+            ? convertGeometry(geometry, window.getDpi(), "physical")
+            : geometry;
+        window.setGeometry(
+          call.operation.startsWith("windows.setContent") ? "content" : "outer",
+          physical,
+        );
+        break;
+      }
       case "windows.getMinSize": {
         const constraints = window.getSizeConstraints();
         return {

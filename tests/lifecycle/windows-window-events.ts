@@ -234,6 +234,99 @@ if (!process.argv.includes("--child")) {
             width: 650 + documents * 20,
             height: 500,
           });
+          // Exercise setters through the public SDK, Core, UI worker and WebView2 events.
+          const content = await windows.getContentBounds(target);
+          await windows.setContentPosition({
+            ...target,
+            x: content.x + 13,
+            y: content.y + 17,
+          });
+          assert.deepEqual(
+            {
+              ...(await windows.getContentPosition(target)),
+            },
+            {
+              x: content.x + 13,
+              y: content.y + 17,
+              dpi: content.dpi,
+            },
+          );
+          const outer = await windows.getOuterBounds(target);
+          await windows.setOuterSize({
+            ...target,
+            width: outer.width + 9,
+            height: outer.height + 11,
+          });
+          await windows.setContentBounds({
+            ...target,
+            x: 100,
+            y: 110,
+            width: 700,
+            height: 520,
+            unit: "logical",
+          });
+          const logical = await windows.getContentBounds({
+            ...target,
+            unit: "logical",
+          });
+          assert.deepEqual(
+            {
+              ...logical,
+            },
+            {
+              x: 100,
+              y: 110,
+              width: 700,
+              height: 520,
+              dpi: logical.dpi,
+            },
+          );
+          const desired = {
+            x: 140,
+            y: 150,
+            width: outer.width + 20,
+            height: outer.height + 20,
+          };
+          const beforeBounds = records.length;
+          await windows.setOuterBounds({
+            ...target,
+            ...desired,
+          });
+          const applied = await windows.getSnapshot(target);
+          assert.deepEqual(
+            {
+              ...applied.bounds,
+            },
+            {
+              ...desired,
+              dpi: applied.bounds.dpi,
+            },
+          );
+          await waitFor(() =>
+            records
+              .slice(beforeBounds)
+              .some(
+                (record) =>
+                  record.windowId === applied.windowId &&
+                  record.revision === applied.revision,
+              ),
+          );
+          assert.deepEqual(
+            {
+              ...records.find(
+                (record) =>
+                  record.windowId === applied.windowId &&
+                  record.revision === applied.revision,
+              ),
+            },
+            {
+              ...applied,
+              changes: [
+                "move",
+                "resize",
+              ],
+            },
+          );
           await windows.maximize(target);
           await windows.unmaximize(target);
           await windows.minimize(target);

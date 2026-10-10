@@ -143,6 +143,13 @@ WebView using the same profile. This also postpones last-window shutdown.
 Retired views release their COM handlers before a replacement is created.
 
 Show, hide, focus, client size, screen position and monitor fullscreen use Win32.
+`Windows.setGeometry`는 content/outer 위치와 크기를 물리 픽셀로 적용한다.
+일반 상태에서는 `SetWindowPos`, 최소화나 최대화 중에는 일반 복원 영역의
+`SetWindowPlacement`를 사용하며 화면 좌표와 대상 모니터 작업 영역 좌표를 변환한다.
+지정한 content 크기를 검사하고 제약으로 보정한 뒤 rectangle 경계를 검사하며,
+숨김과 활성화 상태를 유지한다. bounds 설정 중에는 중간 이벤트 관찰을 보류하고
+완료 후 실제 현재 outer bounds를 관찰한다. 공개 단위와 상태별 계약은
+[창 API](../../../docs/site/src/content/docs/reference/host/windows.mdx)를 따른다.
 Close confirmation uses a native Yes/No dialog with No selected by default.
 WM_CLOSE and WebView close requests defer confirmation outside native callbacks.
 Window close operations also honor close-to-tray and last-window quit vetoes.

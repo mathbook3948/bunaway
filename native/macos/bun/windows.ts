@@ -200,6 +200,7 @@ export class MacosWindows {
       setSizeConstraints: unsupported,
       setSize: unsupported,
       setPosition: unsupported,
+      setGeometry: unsupported,
       setFullscreen: unsupported,
       setCloseConfirmation: unsupported,
     };
