@@ -430,6 +430,8 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         focus: () => nativeWindows.focus(hwnd),
         close: () => closeWindow(viewId),
         isFullscreen: () => nativeWindows.isFullscreen(hwnd),
+        getBounds: (area) => nativeWindows.getBounds(hwnd, area),
+        getDpi: () => nativeWindows.getDpi(hwnd),
         getSizeConstraints: () => nativeWindows.getSizeConstraints(hwnd),
         setSizeConstraints(constraints) {
           nativeWindows.setSizeConstraints(hwnd, constraints);

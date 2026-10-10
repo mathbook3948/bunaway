@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   clampWindowSize,
   hasValidWindowSizeConstraints,
+  type WindowBounds,
   type WindowSizeConstraints,
 } from "@bunaway/plugin-api/native";
 import {
@@ -31,6 +32,7 @@ const CW_USEDEFAULT = -2147483648;
 const DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4n;
 const GWL_STYLE = -16;
 const GWL_EXSTYLE = -20;
+const WS_EX_TOOLWINDOW = 0x80n;
 const IDI_APPLICATION = 32512n;
 const IMAGE_ICON = 1;
 const LR_LOADFROMFILE = 0x10;
@@ -116,6 +118,7 @@ export class Windows {
       dpi: number;
       restoreSize: ClientSize;
       visible: boolean;
+      monitor: bigint;
     }
   >();
   private registered = false;
@@ -452,8 +455,86 @@ export class Windows {
     return dpi;
   }
 
-  private getDpi(window: bigint) {
+  /** Read the DPI committed by the latest native DPI message. */
+  getDpi(window: bigint) {
     return this.dpiByWindow.get(window) ?? this.readDpi(window);
+  }
+
+  /**
+   * Snapshot client or outer screen geometry without changing visibility or state.
+   * Minimized current bounds are the native iconic bounds; normal bounds remain restorable.
+   */
+  getBounds(
+    window: bigint,
+    area: "content" | "outer" | "normal",
+  ): WindowBounds {
+    const dpi = this.getDpi(window);
+    if (area === "normal") {
+      const saved = this.fullscreen.get(window);
+      const placement = saved
+        ? Buffer.from(saved.placement)
+        : this.getPlacement(window);
+      if (saved) {
+        // Match fullscreen exit's size projection without modifying the saved placement.
+        this.resizePlacement(
+          window,
+          placement,
+          saved.restoreSize,
+          this.getSizeConstraints(window),
+          dpi,
+          saved.style,
+        );
+      }
+      const rect = placement.subarray(WINDOWPLACEMENT_NORMAL_RECT_OFFSET);
+      let x = rect.readInt32LE(0);
+      let y = rect.readInt32LE(4);
+      const { exStyle } = this.windowStyles(window);
+      if (!(exStyle & WS_EX_TOOLWINDOW)) {
+        const monitor = Buffer.alloc(MONITORINFO_SIZE);
+        monitor.writeUInt32LE(MONITORINFO_SIZE);
+        const display =
+          saved?.monitor ??
+          user.symbols.MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
+        if (!user.symbols.GetMonitorInfoW(display, ptr(monitor))) {
+          // A removed fullscreen-entry monitor falls back to the saved normal rectangle.
+          assert(
+            user.symbols.GetMonitorInfoW(
+              user.symbols.MonitorFromRect(ptr(rect), MONITOR_DEFAULTTONEAREST),
+              ptr(monitor),
+            ),
+          );
+        }
+        // WINDOWPLACEMENT uses workspace coordinates; callers use screen coordinates.
+        x += monitor.readInt32LE(20) - monitor.readInt32LE(4);
+        y += monitor.readInt32LE(24) - monitor.readInt32LE(8);
+      }
+      return {
+        x,
+        y,
+        width: rect.readInt32LE(8) - rect.readInt32LE(0),
+        height: rect.readInt32LE(12) - rect.readInt32LE(4),
+        dpi,
+      };
+    }
+    if (area === "content") {
+      const point = Buffer.alloc(8);
+      assert(user.symbols.ClientToScreen(window, ptr(point)));
+      return {
+        x: point.readInt32LE(0),
+        y: point.readInt32LE(4),
+        ...this.clientSize(window),
+        dpi,
+      };
+    }
+    const rect = Buffer.alloc(RECT_SIZE);
+    assert(user.symbols.GetWindowRect(window, ptr(rect)));
+    return {
+      x: rect.readInt32LE(0),
+      y: rect.readInt32LE(4),
+      width: rect.readInt32LE(8) - rect.readInt32LE(0),
+      height: rect.readInt32LE(12) - rect.readInt32LE(4),
+      dpi,
+    };
   }
 
   private clientSize(window: bigint): ClientSize {
@@ -880,9 +961,11 @@ export class Windows {
         style,
       );
       const visible = user.symbols.IsWindowVisible(window) !== 0;
-      const bounds = this.monitorBounds(
-        user.symbols.MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST),
+      const monitor = user.symbols.MonitorFromWindow(
+        window,
+        MONITOR_DEFAULTTONEAREST,
       );
+      const bounds = this.monitorBounds(monitor);
       this.setStyle(window, style & ~BigInt(WS_OVERLAPPEDWINDOW));
       this.fullscreen.set(window, {
         style,
@@ -890,6 +973,7 @@ export class Windows {
         dpi,
         restoreSize,
         visible,
+        monitor,
       });
       try {
         assert(

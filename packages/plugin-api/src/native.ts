@@ -93,6 +93,16 @@ export type WindowState = {
   /** Absolute deadline in milliseconds while waiting for creation to finish. */
   deadline: number;
 };
+/** Physical screen rectangle and the DPI used to measure or project it. */
+export type WindowBounds = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** DPI used for this physical screen-coordinate snapshot. */
+  dpi: number;
+};
+
 /** Native controls exposed to an installed window plugin. */
 export type NativeWindow = {
   /** Shows or hides the native window. */
@@ -103,13 +113,17 @@ export type NativeWindow = {
   close(): boolean | Promise<boolean>;
   /** Reports whether the window currently fills the screen. */
   isFullscreen(): boolean;
+  /** Reads physical screen bounds, or the outer bounds used for normal restoration. */
+  getBounds(area: "content" | "outer" | "normal"): WindowBounds;
+  /** Reads the window's current DPI, including the latest processed DPI change. */
+  getDpi(): number;
   /** Reads the current resize bounds. */
   getSizeConstraints(): WindowSizeConstraints;
   /** Applies resize bounds to the window. */
   setSizeConstraints(constraints: WindowSizeConstraints): void;
-  /** Sets the requested client width and height. */
+  /** Sets the requested content width and height in 96-DPI logical pixels. */
   setSize(width: number, height: number): void;
-  /** Positions the native window in screen coordinates. */
+  /** Positions the outer top-left in physical pixels from the primary screen origin. */
   setPosition(x: number, y: number): void;
   /** Enters or exits fullscreen mode. */
   setFullscreen(value: boolean): void;

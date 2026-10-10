@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { type CommandContext, defineApp } from "@bunaway/backend";
+import { windows, windowsPlugin } from "@bunaway/plugin-windows";
+import type { HostContext, Policy } from "@bunaway/protocol";
 import { runWindowsApp } from "#native/windows/bun/entry";
 import { Windows } from "#native/windows/bun/win32";
 import { user } from "#native/windows/bun/win32-bindings";
-import { type CommandContext, defineApp } from "@bunaway/backend";
-import type { HostContext, Policy } from "@bunaway/protocol";
-import { windows, windowsPlugin } from "@bunaway/plugin-windows";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 
 assert.equal(process.platform, "win32");
@@ -350,16 +350,6 @@ if (!process.argv.includes("--child")) {
               }),
             );
           }
-          if (event.event === "window-api-constrained-size") {
-            const hwnd = handles.get("editor");
-            assert(hwnd);
-            assertClientSize(hwnd, event.width, event.height);
-          }
-          if (event.event === "window-api-initial-size") {
-            const hwnd = handles.get("editor");
-            assert(hwnd);
-            assertClientSize(hwnd, 500, 600);
-          }
           if (event.event === "window-close-confirmation") {
             const answer = ++confirmations === 1 ? 7n : 6n; // IDNO then IDYES
             const deadline = Date.now() + 10000;
@@ -439,6 +429,15 @@ if (!process.argv.includes("--child")) {
       const: null,
     },
   } as const;
+  /** Query before the next setter; delayed stdout can observe a later resize. */
+  async function assertContentSize(width: number, height: number) {
+    const size = await windows.getContentSize({
+      view: "editor",
+      unit: "logical",
+    });
+    assert.equal(size.width, width);
+    assert.equal(size.height, height);
+  }
   const app = defineApp({
     modules: [],
     plugins: [
@@ -532,11 +531,7 @@ if (!process.argv.includes("--child")) {
                 height: 600,
               },
             );
-            console.log(
-              JSON.stringify({
-                event: "window-api-initial-size",
-              }),
-            );
+            await assertContentSize(500, 600);
             await waitFor(() => holds === 1);
             await assert.rejects(
               windows.create({
@@ -579,43 +574,123 @@ if (!process.argv.includes("--child")) {
               x: 20,
               y: 30,
             });
+            // Verify the public API through the real core, UI worker and HWND.
+            const content = await windows.getContentSize({
+              view: "editor",
+              unit: "logical",
+            });
+            assert.equal(content.width, 700);
+            assert.equal(content.height, 550);
+            assert.deepEqual(
+              {
+                ...(await windows.getOuterPosition({
+                  view: "editor",
+                })),
+              },
+              {
+                x: 20,
+                y: 30,
+                dpi: content.dpi,
+              },
+            );
+            const outer = await windows.getOuterBounds({
+              view: "editor",
+            });
+            assert.deepEqual(
+              await windows.getNormalBounds({
+                view: "editor",
+              }),
+              outer,
+            );
+            const inner = await windows.getContentBounds({
+              view: "editor",
+            });
+            assert(inner.x >= outer.x && inner.y > outer.y);
+            assert(outer.width > inner.width && outer.height > inner.height);
+            assert.deepEqual(
+              {
+                ...(await windows.getOuterSize({
+                  view: "editor",
+                })),
+              },
+              {
+                width: outer.width,
+                height: outer.height,
+                dpi: outer.dpi,
+              },
+            );
+            assert.deepEqual(
+              {
+                ...(await windows.getContentPosition({
+                  view: "editor",
+                })),
+              },
+              {
+                x: inner.x,
+                y: inner.y,
+                dpi: inner.dpi,
+              },
+            );
+            const physical = await windows.toPhysical({
+              view: "editor",
+              value: {
+                width: 700,
+                height: 550,
+              },
+            });
+            assert.deepEqual(
+              {
+                ...physical,
+                value: {
+                  ...physical.value,
+                },
+              },
+              {
+                value: {
+                  width: inner.width,
+                  height: inner.height,
+                },
+                dpi: content.dpi,
+              },
+            );
+            const logical = await windows.toLogical({
+              view: "editor",
+              value: physical.value,
+            });
+            assert.deepEqual(
+              {
+                ...logical,
+                value: {
+                  ...logical.value,
+                },
+              },
+              {
+                value: {
+                  width: 700,
+                  height: 550,
+                },
+                dpi: content.dpi,
+              },
+            );
             await windows.setSize({
               view: "editor",
               width: 300,
               height: 300,
             });
-            console.log(
-              JSON.stringify({
-                event: "window-api-constrained-size",
-                width: 500,
-                height: 400,
-              }),
-            );
+            await assertContentSize(500, 400);
             await windows.setSize({
               view: "editor",
               width: 1000,
               height: 800,
             });
-            console.log(
-              JSON.stringify({
-                event: "window-api-constrained-size",
-                width: 800,
-                height: 600,
-              }),
-            );
+            await assertContentSize(800, 600);
             await windows.setSizeConstraints({
               view: "editor",
               minWidth: 600,
               maxWidth: 750,
               maxHeight: 550,
             });
-            console.log(
-              JSON.stringify({
-                event: "window-api-constrained-size",
-                width: 750,
-                height: 550,
-              }),
-            );
+            await assertContentSize(750, 550);
             await windows.setMinSize({
               view: "editor",
               width: 700,
@@ -753,13 +828,7 @@ if (!process.argv.includes("--child")) {
               view: "editor",
               fullscreen: false,
             });
-            console.log(
-              JSON.stringify({
-                event: "window-api-constrained-size",
-                width: 700,
-                height: 550,
-              }),
-            );
+            await assertContentSize(700, 550);
             console.log(
               JSON.stringify({
                 event: "window-api-geometry",

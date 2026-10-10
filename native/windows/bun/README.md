@@ -9,6 +9,11 @@ I/O Worker 하나가 승인된 Host API를 검사한 파일 핸들로 실행한�
 
 `win32-bindings.ts`는 DLL 함수 바인딩과 FFI 버퍼 보조 함수를 제공하고, `win32.ts`의
 `Windows`는 창 클래스, HWND, 아이콘, 전체 화면 상태와 메시지 처리를 소유한다.
+`getBounds`는 content, outer와 일반 상태 복원용 normal 영역을 화면 물리 픽셀로 조회한다.
+normal의 WINDOWPLACEMENT 작업 영역 좌표는 화면 좌표로 보정한다. 전체화면 중 조회는
+저장된 placement를 복사해 현재 DPI와 크기 제약을 적용하며 복원 상태를 변경하지 않는다.
+`ui.ts`는 `NativeWindow.getBounds`와 `getDpi`를 연결하고 창 플러그인이 공개 단위 변환과
+반올림, 입력 및 대상 창 권한을 검사한다.
 `com.ts`는 COM 참조와 콜백을, `webview.ts`는 WebView 생성과 종료를 관리한다.
 `ui.ts`가 이 자원들의 초기화와 정리 순서를 조정한다. DLL은 창과 COM 정리가 끝난 뒤 닫는다.
 

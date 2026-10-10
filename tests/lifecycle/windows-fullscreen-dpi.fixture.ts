@@ -21,10 +21,10 @@ const monitors = [
     dpi: 96,
   },
   {
-    left: 1920,
-    top: 0,
-    right: 4480,
-    bottom: 1440,
+    left: -2560,
+    top: -1440,
+    right: 0,
+    bottom: 0,
     dpi: 144,
   },
 ];
@@ -121,10 +121,10 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
         const placement = view(address, 44);
         placement.setUint32(8, 1, true);
         [
-          windowRect.left,
-          windowRect.top,
-          windowRect.right,
-          windowRect.bottom,
+          windowRect.left - 24,
+          windowRect.top - 40,
+          windowRect.right - 24,
+          windowRect.bottom - 40,
         ].forEach((value, index) => {
           placement.setInt32(28 + index * 4, value, true);
         });
@@ -150,6 +150,26 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
           bounds.bottom,
         ].forEach((value, index) => {
           info.setInt32(4 + index * 4, value, true);
+        });
+        [
+          bounds.left + 24,
+          bounds.top + 40,
+          bounds.right,
+          bounds.bottom,
+        ].forEach((value, index) => {
+          info.setInt32(20 + index * 4, value, true);
+        });
+        return 1;
+      },
+      GetWindowRect(_window: bigint, address: Pointer) {
+        const rect = view(address, 16);
+        [
+          windowRect.left,
+          windowRect.top,
+          windowRect.right,
+          windowRect.bottom,
+        ].forEach((value, index) => {
+          rect.setInt32(index * 4, value, true);
         });
         return 1;
       },
@@ -204,6 +224,13 @@ const messages = linkSymbols({
   },
 });
 try {
+  assert.deepEqual(windows.getBounds(window, "normal"), {
+    x: 32,
+    y: 32,
+    width: 616,
+    height: 489,
+    dpi: 96,
+  });
   windows.setFullscreen(window, true);
   // Move a fullscreen window between simulated monitors at both visibility states.
   for (const visible of [
@@ -242,6 +269,20 @@ try {
       );
       assert(windows.isFullscreen(window));
       assert.deepEqual(windows.getSizeConstraints(window), constraints);
+      assert.deepEqual(windows.getBounds(window, "outer"), {
+        x: target.left,
+        y: target.top,
+        width: target.right - target.left,
+        height: target.bottom - target.top,
+        dpi: target.dpi,
+      });
+      assert.deepEqual(windows.getBounds(window, "normal"), {
+        x: 32,
+        y: 32,
+        width: Math.round((600 * target.dpi) / 96) + FRAME_WIDTH,
+        height: Math.round((450 * target.dpi) / 96) + FRAME_HEIGHT,
+        dpi: target.dpi,
+      });
       assert.notEqual(target.dpi, monitor.dpi);
     }
   }

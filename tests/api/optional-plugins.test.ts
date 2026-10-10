@@ -107,6 +107,14 @@ test("window permissions use generic deny-first matching and filter list results
       focus: () => true,
       close: () => true,
       isFullscreen: () => false,
+      getDpi: () => 144,
+      getBounds: () => ({
+        x: -120,
+        y: 30,
+        width: 1200,
+        height: 900,
+        dpi: 144,
+      }),
       getSizeConstraints: () => ({
         ...sizeConstraints.get(view)!,
       }),

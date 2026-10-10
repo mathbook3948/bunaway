@@ -253,6 +253,13 @@ export const user = dlopen("user32.dll", {
     ],
     returns: "i32",
   },
+  ClientToScreen: {
+    args: [
+      "u64",
+      "ptr",
+    ],
+    returns: "i32",
+  },
   SetWindowPos: {
     args: [
       "u64",
