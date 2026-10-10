@@ -1,0 +1,68 @@
+---
+title: clipboard
+description: Windows 텍스트 클립보드를 읽고 쓰거나 모든 형식을 지웁니다.
+sidebar: { order: 6 }
+---
+
+`@bunaway/plugin-clipboard`를 설치하고 앱의 `plugins`에 `clipboardPlugin`을 등록합니다. 현재 Windows에서만 제공합니다.
+
+```ts
+import { defineApp } from "@bunaway/backend";
+import { clipboardPlugin } from "@bunaway/plugin-clipboard";
+
+export default defineApp({ modules: [], plugins: [clipboardPlugin] });
+```
+
+화면과 앱 백엔드는 같은 패키지에서 `clipboard`를 가져옵니다.
+
+```ts
+import { clipboard } from "@bunaway/plugin-clipboard";
+
+await clipboard.writeText({ text: "안녕하세요 😀" });
+const text = await clipboard.readText(null);
+await clipboard.clear(null);
+```
+
+## 입력과 결과
+
+| 함수 | 입력 | 결과 | 권한 |
+| --- | --- | --- | --- |
+| `clipboard.readText` | `null` | `Promise<string \| null>` | `clipboard:read-text` |
+| `clipboard.writeText` | `{ text: string }` | `Promise<null>` | `clipboard:write-text` |
+| `clipboard.clear` | `null` | `Promise<null>` | `clipboard:clear` |
+
+빈 클립보드나 Windows에서 Unicode 텍스트 형식을 제공하지 않는 클립보드는 `null`입니다. 텍스트 형식이 있고 내용만 비어 있으면 `""`입니다. Windows가 일반 텍스트를 Unicode 텍스트로 변환해 제공하는 경우도 읽습니다.
+
+읽기와 쓰기의 텍스트는 Unicode 문자 16,384개까지입니다. 이모지 등 보조 평면 문자는 하나로 셉니다. NUL과 짝이 맞지 않는 UTF-16 surrogate는 거부합니다. 줄바꿈, 한글과 이모지는 변환 없이 보존합니다. 외부 클립보드의 메모리 블록은 종료 NUL을 포함해 최대 65,538바이트이며, 더 큰 블록이나 잘못된 텍스트는 읽기에 실패합니다. 긴 내용을 잘라 반환하지 않습니다.
+
+쓰기는 기존의 모든 클립보드 형식을 텍스트로 교체합니다. `clear`는 이미지와 사용자 정의 형식까지 모두 지웁니다. 두 작업의 성공 결과는 `null`입니다. 텍스트 쓰기 권한으로 지우기나 읽기를 허용하지 않습니다.
+
+## 정책과 취소
+
+화면에서 직접 호출하려면 뷰의 명령과 Host 권한을 각각 허용합니다.
+
+```json
+{
+  "commands": ["plugin.clipboard.readText", "plugin.clipboard.writeText", "plugin.clipboard.clear"],
+  "host": { "permissions": ["clipboard:read-text", "clipboard:write-text", "clipboard:clear"] }
+}
+```
+
+백엔드 명령은 호출한 뷰의 권한을 유지합니다. setup에서 호출할 때는 루트 `backend.permissions`에 필요한 권한을 지정합니다. 설치나 등록으로 권한을 부여하지 않으며 리소스 범위는 받지 않습니다. 각 권한은 데스크톱 전체 클립보드에 적용됩니다.
+
+화면 함수의 마지막 인자는 선택적인 `NativeInvokeOptions`입니다. `signal`로 취소하고 `deadline`으로 Unix epoch 밀리초의 절대 기한을 지정합니다. 백엔드는 현재 명령의 취소와 기한을 이어받고 별도 옵션을 받지 않습니다. 자세한 규칙은 [invoke](/reference/client/invoke/)를 따릅니다.
+
+다른 프로그램이 클립보드를 점유하면 10ms 간격으로 재시도합니다. 250ms가 지난 뒤에도 열 수 없으면 `BUSY`입니다. 대기 중 취소, 호출 컨텍스트 폐기나 앱 종료는 남은 재시도를 중단합니다. OS 호출 자체는 동기 실행이므로 이미 시작한 읽기나 변경을 중단하거나 완료한 변경을 되돌리지 않습니다. 외부 프로그램의 지연 렌더링 때문에 OS 호출이 오래 걸릴 수 있습니다.
+
+## 오류
+
+| 오류 | 의미 |
+| --- | --- |
+| `INVALID_ARGUMENT` | 잘못된 입력 형식, 길이 초과, NUL 또는 잘못된 Unicode 텍스트 |
+| `PERMISSION_DENIED` | 호출 출처에 해당 작업 권한이 없음 |
+| `UNSUPPORTED` | 등록하지 않은 작업이거나 플랫폼 어댑터가 없음 |
+| `BUSY` | 정해진 시간 동안 클립보드를 열지 못함 |
+| `INTERNAL` | 외부 텍스트가 제한을 벗어나거나 Windows 메모리, 클립보드 작업이 실패함 |
+| `CANCELLED`, `TIMEOUT` | 취소되거나 호출 기한을 넘김 |
+
+메모리 준비에 실패하면 기존 내용은 유지합니다. Windows가 기존 내용을 비운 다음 텍스트 등록에 실패하면 `INTERNAL`이고 클립보드는 이미 비워졌을 수 있습니다. 자세한 소유권과 실제 Windows 검증은 [플러그인 README](https://github.com/mathbook3948/bunaway/tree/main/plugins/clipboard)를 참고하세요.

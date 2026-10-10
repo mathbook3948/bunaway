@@ -339,7 +339,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 우선순위 P1. 소유자: clipboard 플러그인과 공통 이미지 리소스 API 후보.
 출처: [E-clipboard], [E-image], [T-clipboard], [T-image].
 
-- [ ] 클립보드 텍스트 읽기, 쓰기와 지우기를 제공한다.
+- [x] 클립보드 텍스트 읽기, 쓰기와 지우기를 제공한다. `@bunaway/plugin-clipboard`의 작업별 권한, Unicode와 크기 제한, 빈 값, 점유와 취소, 소유권 정리를 정의했다. 2026-10-10 Windows x64의 공통 SDK와 실제 UI Worker 왕복, 별도 프로세스 점유와 취소를 검증했다([계약과 검증](../plugins/clipboard/README.md)).
 - [ ] 이미지 읽기와 쓰기를 제공한다.
 - [ ] HTML, RTF, 파일 목록과 bookmark 형식의 지원을 제공한다.
 - [ ] 사용 가능한 MIME 형식과 지정 형식 존재 여부를 조회한다.

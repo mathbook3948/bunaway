@@ -16,7 +16,7 @@ Windows 앱 실행에는 WebView2 런타임이 필요하다.
 플랫폼별 지원 상태와 배포 검증 범위는 [플랫폼 지원 범위](./docs/platform-support/README.md)에서 확인한다.
 
 앱 백엔드의 명령과 서비스에서는 `@bunaway/plugin-storage`, `@bunaway/plugin-log`,
-`@bunaway/plugin-capabilities`, `@bunaway/plugin-windows`를 개별 설치하고 등록한 뒤 함수를 호출한다. 호출한 명령의 권한과 취소 신호는 자동으로 연결한다.
+`@bunaway/plugin-capabilities`, `@bunaway/plugin-windows`, `@bunaway/plugin-clipboard`를 개별 설치하고 등록한 뒤 함수를 호출한다. 호출한 명령의 권한과 취소 신호는 자동으로 연결한다.
 예를 들어 명령이 호출한 서비스 함수에서 다음처럼 파일을 저장한다.
 
 ```ts

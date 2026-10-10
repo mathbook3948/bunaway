@@ -27,6 +27,7 @@
     "log": "@bunaway/plugin-log",
     "capabilities": "@bunaway/plugin-capabilities",
     "windows": "@bunaway/plugin-windows",
-    "opener": "@bunaway/plugin-opener"
+    "opener": "@bunaway/plugin-opener",
+    "clipboard": "@bunaway/plugin-clipboard"
   }
 }
