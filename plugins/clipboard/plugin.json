@@ -1,0 +1,8 @@
+{
+  "format": 1,
+  "name": "clipboard",
+  "entry": "./src/index.ts",
+  "platforms": {
+    "windows": { "execution": "ui", "operations": "./src/windows.ts" }
+  }
+}

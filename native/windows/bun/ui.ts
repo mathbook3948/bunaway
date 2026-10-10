@@ -107,6 +107,7 @@ function cleanupView(view: ViewState) {
 }
 const cancelled = new Set<string>();
 const windowRequests = new Map<string, HostContext>();
+const operationControllers = new Map<string, AbortController>();
 const approved = new Map<string, HostContext>();
 const uiCalls = new Map<
   string,
@@ -132,6 +133,7 @@ function discardContext(context: HostContext) {
   for (const [id, source] of windowRequests) {
     if (source === context) {
       cancelled.add(id);
+      operationControllers.get(id)?.abort();
     }
   }
 }
@@ -157,6 +159,9 @@ const channel = new Channel(
       quitPending = false;
     } else if (packet.kind === "shutdown") {
       stopping = true;
+      for (const controller of operationControllers.values()) {
+        controller.abort();
+      }
       approved.clear();
       uiCalls.clear();
       for (const view of views.values()) {
@@ -240,6 +245,7 @@ const channel = new Channel(
       uiCalls.delete(packet.requestId);
       if (windowRequests.has(packet.requestId)) {
         cancelled.add(packet.requestId);
+        operationControllers.get(packet.requestId)?.abort();
       }
     } else if (packet.kind === "cancel-context") {
       discardContext(packet.context);
@@ -273,6 +279,8 @@ async function executeWindowRequest(
 ): Promise<void> {
   let response: HostResponse;
   windowRequests.set(queued.requestId, queued.context);
+  const controller = new AbortController();
+  operationControllers.set(queued.requestId, controller);
   try {
     if (!allowed || !permissions) {
       throw new BunawayError({
@@ -288,6 +296,7 @@ async function executeWindowRequest(
       {
         requestId: queued.requestId,
         permissions,
+        signal: controller.signal,
       },
     );
     response = hostResponse(() => payload);
@@ -297,6 +306,7 @@ async function executeWindowRequest(
     });
   } finally {
     windowRequests.delete(queued.requestId);
+    operationControllers.delete(queued.requestId);
   }
   const wasCancelled = cancelled.delete(queued.requestId);
   if (stopping || wasCancelled || !activeContext(queued.context)) {
@@ -738,6 +748,9 @@ try {
   });
 } finally {
   stopping = true;
+  for (const controller of operationControllers.values()) {
+    controller.abort();
+  }
   uiCalls.clear();
   approved.clear();
   for (const view of views.values()) {

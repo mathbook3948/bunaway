@@ -240,6 +240,13 @@
       }
     },
     {
+      "name": "@bunaway/plugin-clipboard",
+      "source": "plugins/clipboard/src/index.ts",
+      "pages": {
+        "reference/plugins/clipboard": ["clipboard", "clipboardPlugin"]
+      }
+    },
+    {
       "name": "@bunaway/plugin-windows",
       "source": "plugins/windows/src/index.ts",
       "pages": {
@@ -748,6 +755,11 @@
     "reference/host/log-write": ["log.write"],
     "reference/host/capabilities-get": ["capabilities.get"],
     "reference/plugins/opener": ["opener.openUrl"],
+    "reference/plugins/clipboard": [
+      "clipboard.readText",
+      "clipboard.writeText",
+      "clipboard.clear"
+    ],
     "reference/host/windows": [
       "windows.list",
       "windows.create",

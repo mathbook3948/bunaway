@@ -1,5 +1,14 @@
 # Tests
 
+`api/clipboard.test.ts`는 텍스트 계약, 작업별 권한, SDK 호출 컨텍스트와 브라우저 번들을 검사한다.
+`lifecycle/clipboard-resources.test.ts`는 별도 프로세스의 Win32 바인딩 대체로 메모리 실패,
+소유권 이전, 잘못된 UTF-16, 점유와 취소, 종료 정리를 확인하며 데스크톱 클립보드를 바꾸지 않는다.
+실제 Windows 검사는 `BUNAWAY_CLIPBOARD_NATIVE=1`을 설정한 뒤
+`mise exec -- bun test tests/lifecycle/windows-clipboard.test.ts`로 실행한다.
+공통 SDK와 실제 UI Worker의 읽기, 쓰기, 지우기, 별도 프로세스 점유와 취소를 확인한다.
+WebView2 페이지 실행은 포함하지 않는다. 이전 텍스트만 복원하며 이미지 등 다른 형식은 복원하지 않는다.
+실제 검증 기록과 명령은 [clipboard README](../plugins/clipboard/README.md)에 둔다.
+
 `lifecycle/window-events.test.ts`는 실제 Core와 typed SDK를 연결해 `windows.changed`의
 스키마, 뷰별 구독 권한, 해제, 폐기 세션과 Core 종료 후 늦은 발행 차단을 확인한다.
 MessageChannel로 네이티브 이벤트 전송 방향, 미확인 128개 상한과 종료 용량도 검사한다.

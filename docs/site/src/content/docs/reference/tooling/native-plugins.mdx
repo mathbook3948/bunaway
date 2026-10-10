@@ -236,6 +236,6 @@ defineNativePlugin을 사용하면 입력과 결과 검증, 공유 연결과 호
 
 `NativeEnvironment.windows`는 UI 실행에만 제공하는 NativeWindowServices입니다. 플러그인은 필요한 저수준 창 자원을 사용하며 공통 호스트는 특정 작업 이름을 분기하지 않습니다.
 
-`NativeAdapter.executeUI`는 UI 작업의 비동기 실행을 지원하며 requestId와 호스트가 확인한 permissions를 받습니다. `busy`는 생성이나 재생성이 진행 중인지 알려 자동 종료를 보류합니다. I/O의 execute는 권한 확인 뒤 동기 실행 계약을 유지합니다. UI 어댑터는 STA 초기화 뒤 준비하고 역순으로 정리합니다.
+`NativeAdapter.executeUI`는 UI 작업의 비동기 실행을 지원하며 requestId와 호스트가 확인한 permissions, 선택적 signal을 받습니다. Windows UI 호스트는 요청 취소, 컨텍스트 폐기와 종료 때 signal을 중단합니다. 어댑터는 취소를 관찰하고 소유한 대기와 자원을 정리해야 합니다. 동기 OS 작업은 완료한 변경을 되돌리지 않습니다. `busy`는 진행 중 작업이 있어 자동 종료를 보류해야 하는지 알립니다. I/O의 execute는 권한 확인 뒤 동기 실행 계약을 유지합니다. UI 어댑터는 STA 초기화 뒤 준비하고 역순으로 정리합니다.
 
 `@bunaway/plugin-windows`의 windowOperations는 입력과 출력 계약입니다. isWindowOperation은 이름을 확인하며 parseWindowCall과 validateWindowCall은 입력을, validateWindowOutput은 결과를 검사합니다. 이 함수는 선택 패키지 안의 계약 도구이며 공통 프로토콜은 창 작업 목록을 소유하지 않습니다.

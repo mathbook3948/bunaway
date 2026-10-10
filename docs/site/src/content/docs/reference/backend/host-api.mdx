@@ -34,6 +34,7 @@ export default defineApp({ modules: [memo, editor], plugins: [storagePlugin, win
 | `@bunaway/plugin-storage` | `storagePlugin` | `storage.readText({ scope, path }): Promise<string>`, `storage.writeText({ scope, path, text }): Promise<null>` |
 | `@bunaway/plugin-log` | `logPlugin` | `log.write({ level, message, details? })`, `log.debug`, `log.info`, `log.warn`, `log.error` |
 | `@bunaway/plugin-capabilities` | `capabilitiesPlugin` | `capabilities(): Promise<Capabilities>` |
+| `@bunaway/plugin-clipboard` | `clipboardPlugin` | [텍스트 읽기, 쓰기와 지우기](/reference/plugins/clipboard/): `clipboard.readText(null)`, `clipboard.writeText({ text })`, `clipboard.clear(null)` |
 | `@bunaway/plugin-windows` | `windowsPlugin` | `windows.list`, `windows.create`, `windows.recreate`, `windows.show`, `windows.hide`, `windows.focus`, `windows.close`, `windows.setSize`, `windows.getMinSize`, `windows.setMinSize`, `windows.getMaxSize`, `windows.setMaxSize`, `windows.getSizeConstraints`, `windows.setSizeConstraints`, `windows.setPosition`, `windows.setFullscreen`, `windows.setCloseConfirmation` |
 
 로그의 모든 함수는 `Promise<null>`을 반환합니다. `level`은 debug, info, warn, error이며
