@@ -198,8 +198,10 @@ test("macOS backend Worker uses core sessions and acknowledges shutdown before p
 test.each([
   "cooperative",
   "blocked",
+  "close-during-setup",
+  "unexpected-exit",
 ] as const)(
-  "macOS UI startup failure waits for %s backend cleanup without UI ticks",
+  "macOS startup %s preserves its outcome and waits for backend cleanup without UI ticks",
   async (cleanup) => {
     const directory = await mkdtemp(
       resolve(tmpdir(), "bunaway-macos-startup-"),
@@ -207,13 +209,17 @@ test.each([
     try {
       const started = resolve(directory, "started.txt");
       const stopped = resolve(directory, "stopped.txt");
+      const continueSetup = resolve(directory, "continue-setup.txt");
+      const closeDuringSetup = cleanup === "close-during-setup";
       const app = resolve(directory, "app.ts");
       await Bun.write(
         app,
-        `export default {
+        `${cleanup === "unexpected-exit" ? "process.exit(0);" : ""}
+        export default {
         commands: {}, events: {},
         plugins: [{name:"cleanup", version:"1.0.0", async setup() {
           await Bun.write(${JSON.stringify(started)}, "started");
+          ${closeDuringSetup ? `while (!await Bun.file(${JSON.stringify(continueSetup)}).exists()) await Bun.sleep(5);` : ""}
           return async () => {
             ${cleanup === "blocked" ? "while (true) {}" : `await Bun.sleep(100); await Bun.write(${JSON.stringify(stopped)}, "stopped");`}
           };
@@ -253,14 +259,17 @@ test.each([
       await Bun.write(
         resolve(directory, "webview.ts"),
         `export class MacosWebview {
-        ready = (async () => {
+        constructor(config, hooks) {
+        this.ready = (async () => {
+          ${cleanup === "unexpected-exit" ? "return;" : ""}
           const deadline = Date.now() + 5000;
           while (!await Bun.file(${JSON.stringify(started)}).exists()) {
             if (Date.now() >= deadline) throw new Error("Backend setup timed out");
             await Bun.sleep(5);
           }
-          throw new Error("UI setup failed");
+          ${closeDuringSetup ? `hooks.close(); await Bun.write(${JSON.stringify(continueSetup)}, "continue");` : 'throw new Error("UI setup failed");'}
         })();
+        }
         start() {}
         close() {}
       }`,
@@ -287,13 +296,23 @@ test.each([
       );
       const output = new Response(child.stdout).text();
       const errors = new Response(child.stderr).text();
-      expect(await child.exited, await errors).toBe(1);
+      expect(await child.exited, await errors).toBe(closeDuringSetup ? 0 : 1);
       if (cleanup === "blocked") {
         expect(performance.now() - startedAt).toBeGreaterThanOrEqual(5000);
       }
       await output;
-      expect(await errors).toContain("UI setup failed");
-      expect(await Bun.file(stopped).exists()).toBe(cleanup === "cooperative");
+      if (closeDuringSetup) {
+        expect(await errors).toBe("");
+      } else {
+        expect(await errors).toContain(
+          cleanup === "unexpected-exit"
+            ? "macOS backend exited during startup (0)."
+            : "UI setup failed",
+        );
+      }
+      expect(await Bun.file(stopped).exists()).toBe(
+        cleanup === "cooperative" || closeDuringSetup,
+      );
       const records = (
         await Bun.file(resolve(directory, "logs/host.log")).text()
       )
@@ -302,8 +321,9 @@ test.each([
         .map((line) => JSON.parse(line));
       expect(records.at(-1)).toMatchObject({
         event: "host-stopped",
-        failed: true,
-        forced: cleanup === "blocked",
+        exitCode: closeDuringSetup ? 0 : 1,
+        failed: !closeDuringSetup,
+        forced: cleanup === "blocked" || cleanup === "unexpected-exit",
       });
     } finally {
       await rm(directory, {

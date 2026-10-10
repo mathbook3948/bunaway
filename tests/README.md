@@ -85,6 +85,8 @@ macOS WebContent PID 조회와 종료는 `lifecycle/macos-renderer.ts`가 맡으
 `macos-bun.test.ts`는 정확한 origin과 포트, 실제 Bun Worker의 명령과 세션 폐기, 종료 수신 확인과 플러그인 정리를 검사한다.
 UI 초기화 실패 검사는 UI 의존성만 대체하고 실제 Worker를 사용한다. UI 이벤트 처리 없이도
 비동기 종료 훅을 기다리며, 종료 훅의 무한 루프는 5초 기한 뒤 강제 종료되는지 확인한다.
+플러그인 초기화 중 창을 닫으면 정리를 완료한 뒤 정상 종료하고, 종료 요청 없이 Worker가
+종료되면 코드가 0이어도 시작 실패로 처리하는지 확인한다.
 `native/macos/bun/run.sh`는 패키징과 테스트 실행 순서를 조정한다.
 macOS 전용 설정과 리소스 경계 페이지도 `fixtures/desktop/host/`에 둔다.
 `host:macos`는 C 컴파일 없이 Bun compiled 앱으로 실제 WKWebView 회귀를 실행한다.

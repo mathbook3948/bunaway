@@ -38,6 +38,7 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
       return;
     }
     stopping = true;
+    clearTimeout(startup);
     // The deadline also applies when UI setup fails before its event pump starts.
     forced = setTimeout(() => {
       failure ??= new Error("macOS backend cleanup timed out.");
@@ -149,7 +150,10 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
         coreReady.promise,
       ]),
       exited.then((code) => {
-        throw new Error(`macOS backend exited during startup (${code}).`);
+        // Requested exits use the same cleanup and failure checks as a running app.
+        if (!stopping) {
+          throw new Error(`macOS backend exited during startup (${code}).`);
+        }
       }),
     ]);
     if (ready) {
