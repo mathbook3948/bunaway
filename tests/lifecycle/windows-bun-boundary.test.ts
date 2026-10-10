@@ -253,7 +253,7 @@ test("Windows boundary keeps accepting settled requests while rejecting retained
       payload: null,
     });
   }
-  // The pending ID survives eviction, the oldest settled ID is forgotten, and recent IDs remain.
+  // The pending ID stays protected outside the history; old settled IDs can be reused.
   expect(invoke("held")).toBe(false);
   expect(invoke(lastId)).toBe(false);
   expect(output.at(-1)).toMatchObject({
@@ -264,6 +264,177 @@ test("Windows boundary keeps accepting settled requests while rejecting retained
     },
   });
   expect(invoke("id-1")).toBe(true);
+});
+
+test("Core and boundary agree on evicted IDs while the oldest reply is in transit", async () => {
+  const source = "https://app.bunaway.local/index.html";
+  const view = {
+    id: "main",
+    origins: [
+      new URL(source).origin,
+    ],
+    commands: [
+      "echo",
+      "slow",
+    ],
+    events: [],
+    host: {
+      permissions: [],
+    },
+  };
+  const hello = {
+    kind: "hello" as const,
+    protocol: PROTOCOL_VERSION,
+    features: [],
+    buildId: "test",
+  };
+  const packets: Packet[] = [];
+  const replies: ServerMessage[] = [];
+  const output: ServerMessage[] = [];
+  let release = () => {};
+  let heldReplyReady = () => {};
+  const heldReply = new Promise<void>((resolve) => {
+    heldReplyReady = resolve;
+  });
+  const core = await createCore(
+    {
+      commands: {
+        echo: {
+          input: {
+            const: null,
+          },
+          output: {
+            const: null,
+          },
+          run: async () => null,
+        },
+        slow: {
+          input: {
+            const: null,
+          },
+          output: {
+            const: null,
+          },
+          run: () =>
+            new Promise<null>((resolve) => {
+              release = () => resolve(null);
+            }),
+        },
+      },
+      events: {},
+    },
+    {
+      policy: {
+        version: 1,
+        views: [
+          view,
+        ],
+        backend: {
+          permissions: [],
+        },
+      },
+      hello,
+      platform: "windows",
+      backendContext: "backend-test" as Route["context"],
+      runtime: {
+        createCancellation: () => new AbortController(),
+        now: Date.now,
+        schedule: (callback, delay) => {
+          const timer = setTimeout(callback, delay);
+          return () => clearTimeout(timer);
+        },
+      },
+      send: async (_context, message) => {
+        replies.push(message);
+        if ("id" in message && message.id === "held") {
+          heldReplyReady();
+        }
+      },
+      callHost: async () => ({
+        kind: "result",
+        payload: null,
+      }),
+    },
+  );
+  const boundary = new ViewBoundary(view, {
+    origin: (text) => new URL(text).origin,
+    source: () => source,
+    ready: () => true,
+    capacity: () => true,
+    forward: (packet) => packets.push(packet),
+    deliver: (text) => output.push(JSON.parse(text)),
+    log: () => {},
+  });
+  let session: CoreSession | undefined;
+  let route: Route | undefined;
+  const forward = async () => {
+    for (const packet of packets.splice(0)) {
+      if (packet.kind === "session-open") {
+        route = packet.route;
+        session = core.openSession(route.context, route.viewId);
+      } else if (packet.kind === "client") {
+        await session?.receive(packet.message);
+      }
+    }
+  };
+  const deliver = () => {
+    if (!route) {
+      throw new Error("Missing session route");
+    }
+    for (const reply of replies.splice(0)) {
+      boundary.send(route, reply);
+    }
+  };
+  const invoke = async (id: string, command = "echo") => {
+    boundary.receive(
+      source,
+      JSON.stringify({
+        kind: "invoke",
+        protocol: PROTOCOL_VERSION,
+        id,
+        command,
+        payload: null,
+      }),
+    );
+    await forward();
+  };
+  try {
+    boundary.receive(source, JSON.stringify(hello));
+    await forward();
+    deliver();
+    await invoke("held", "slow");
+    for (let index = 1; index < API_LIMITS.maxRequestIds; index++) {
+      await invoke(`fast-${index}`);
+      deliver();
+    }
+    // Core has settled the oldest request, but the UI still awaits its reply.
+    release();
+    await heldReply;
+    await invoke("next");
+    deliver();
+    // Both layers must forget the same acceptance history, including the old held ID.
+    await invoke("held");
+    deliver();
+    await invoke("fast-1");
+    deliver();
+    for (const id of [
+      "held",
+      "fast-1",
+    ]) {
+      expect(
+        output.filter(
+          (message) => message.kind === "result" && message.id === id,
+        ),
+      ).toHaveLength(2);
+    }
+    expect(boundary.pendingCount).toBe(0);
+    expect(output.filter((message) => message.kind === "error")).toHaveLength(
+      0,
+    );
+  } finally {
+    release();
+    await core.stop();
+  }
 });
 
 test("Windows boundary uses actual source, issues view-specific contexts and drops revoked delivery", () => {

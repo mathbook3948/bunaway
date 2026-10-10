@@ -649,7 +649,7 @@ test("incompatible hello reports the backend version and suppresses later work",
   await core.stop();
 });
 
-test("duplicate request IDs are rejected while settled ID records stay bounded", async () => {
+test("duplicate request IDs are rejected while recent ID records stay bounded", async () => {
   const clock = createClock();
   const { services, sent } = createServices(clock);
   let release = () => {};
@@ -711,7 +711,7 @@ test("duplicate request IDs are rejected while settled ID records stay bounded",
       },
     },
   ]);
-  // The pending ID survives eviction, the oldest settled ID is forgotten, and recent IDs remain.
+  // The pending ID stays protected outside the history; old settled IDs can be reused.
   await invoke("held", "notes.slow");
   await invoke("r1");
   await invoke(lastId);

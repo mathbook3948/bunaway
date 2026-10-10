@@ -230,7 +230,7 @@ export class ViewBoundary {
         message.kind === "listen" ||
         message.kind === "unlisten"
       ) {
-        if (session.used.has(message.id)) {
+        if (session.used.has(message.id) || session.pending.has(message.id)) {
           throw new BunawayError({
             code: "INVALID_ARGUMENT",
             message: "Request ID was already used.",
@@ -265,12 +265,11 @@ export class ViewBoundary {
         }
         session.used.add(message.id);
         if (session.used.size > API_LIMITS.maxRequestIds) {
-          // Keep pending IDs; drop the oldest settled ID in insertion order.
-          for (const retained of session.used) {
-            if (!session.pending.has(retained)) {
-              session.used.delete(retained);
-              break;
-            }
+          // Match Core's acceptance order even while a completed reply is in transit.
+          // The pending map protects in-flight IDs outside this recent history.
+          const oldest = session.used.values().next().value;
+          if (oldest !== undefined) {
+            session.used.delete(oldest);
           }
         }
         session.pending.set(message.id, {

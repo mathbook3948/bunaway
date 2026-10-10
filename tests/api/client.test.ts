@@ -1242,6 +1242,88 @@ test("sequential calls are not limited by the session's total request count", as
   }
 });
 
+test.each([
+  "abort",
+  "timeout",
+])(
+  "%s listen cleanup counts toward pending capacity until a terminal reply",
+  async (mode) => {
+    const { transport, client } = await connected();
+    for (let index = 0; index < API_LIMITS.maxPending; index++) {
+      const controller = new AbortController();
+      const pending = client.listen("notes.changed", () => {}, {
+        signal: controller.signal,
+        onError: () => {},
+      });
+      await flush();
+      const request = must(transport.requests("listen").at(-1));
+      if (mode === "abort") {
+        controller.abort();
+      } else {
+        transport.emit(
+          serverError(request.id, {
+            code: "TIMEOUT",
+            message: "Host deadline.",
+          }),
+        );
+      }
+      await expect(pending).rejects.toMatchObject({
+        code: mode === "abort" ? "CANCELLED" : "TIMEOUT",
+      });
+    }
+    await expect(
+      client.listen("notes.changed", () => {}, {
+        onError: () => {},
+      }),
+    ).rejects.toMatchObject({
+      code: "BUSY",
+    });
+    await expect(
+      client.invoke("notes.read", {
+        key: "full",
+      }),
+    ).rejects.toMatchObject({
+      code: "BUSY",
+    });
+    expect(transport.requests("listen")).toHaveLength(API_LIMITS.maxPending);
+
+    // A late result frees its cleanup slot before issuing unlisten, even at capacity.
+    const first = must(transport.requests("listen")[0]);
+    transport.emit(
+      serverResult(first.id, {
+        subscriptionId: "late-sub",
+      }),
+    );
+    await flush();
+    const cleanup = must(transport.requests("unlisten").at(-1));
+    expect(cleanup.subscriptionId).toBe("late-sub");
+    transport.emit(serverResult(cleanup.id, null));
+    const call = client.invoke("notes.read", {
+      key: "after-cleanup",
+    });
+    await flush();
+    transport.emit(serverResult(invokeMessage(transport).id, "ok"));
+    await expect(call).resolves.toBe("ok");
+
+    // A final error also releases a slot without creating an unlisten request.
+    const second = must(transport.requests("listen")[1]);
+    transport.emit(
+      serverError(second.id, {
+        code: "CANCELLED",
+        message: "No subscription created.",
+      }),
+    );
+    const resumed = client.invoke("notes.read", {
+      key: "after-error",
+    });
+    await flush();
+    transport.emit(serverResult(invokeMessage(transport).id, "resumed"));
+    await expect(resumed).resolves.toBe("resumed");
+    expect(transport.requests("unlisten")).toHaveLength(1);
+    await client.close();
+  },
+);
+
 test("aborting an established subscription releases it", async () => {
   const { transport, client } = await connected();
   const controller = new AbortController();

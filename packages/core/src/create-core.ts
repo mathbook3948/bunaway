@@ -255,24 +255,21 @@ class SessionImpl implements CoreSession {
   }
 
   // Every request ID is recorded whether the request is executed, rejected,
-  // cancelled, or expired. Pending IDs stay recorded until they settle; settled
-  // IDs are kept for the most recent maxRequestIds requests only.
+  // cancelled, or expired. Retain IDs in acceptance order, independent of reply
+  // delivery; the pending map also protects in-flight IDs evicted from this history.
   private acceptRequest(id: string): boolean {
     if (this.closed || this.failed) {
       return false;
     }
     // A duplicate is not a new request and must not settle the original again.
-    if (this.requestIds.has(id)) {
+    if (this.requestIds.has(id) || this.pending.has(id)) {
       return false;
     }
     this.requestIds.add(id);
     if (this.requestIds.size > API_LIMITS.maxRequestIds) {
-      // Set iteration follows insertion order, so this drops the oldest settled ID.
-      for (const retained of this.requestIds) {
-        if (!this.pending.has(retained)) {
-          this.requestIds.delete(retained);
-          break;
-        }
+      const oldest = this.requestIds.values().next().value;
+      if (oldest !== undefined) {
+        this.requestIds.delete(oldest);
       }
     }
     if (!this.helloDone) {

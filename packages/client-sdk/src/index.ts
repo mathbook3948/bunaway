@@ -492,7 +492,11 @@ class ClientSession<C extends CommandMap, E extends EventMap>
         reject(requestError("CANCELLED", "Request cancelled."));
         return;
       }
-      if (this.requests.size >= API_LIMITS.maxPending) {
+      // Cancelled listens still own a slot until their late subscription is cleaned up.
+      if (
+        this.requests.size + this.cancelledListens.size >=
+        API_LIMITS.maxPending
+      ) {
         reject(requestError("BUSY", "Pending request limit reached."));
         return;
       }

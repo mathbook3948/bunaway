@@ -66,9 +66,11 @@ export const API_LIMITS = {
   handshakeTimeoutMs: 10000,
   shutdownTimeoutMs: 2000,
   maxCommandDurationMs: 30000,
+  // Includes SDK listens awaiting late cleanup after cancellation or timeout.
   maxPending: 128,
   maxSubscriptions: 128,
-  // Recent request IDs a session retains to reject duplicates. It does not cap total requests.
+  // Recent IDs in acceptance order; pending IDs remain protected separately.
+  // This history does not cap total requests.
   maxRequestIds: 1024,
 } as const;
 
