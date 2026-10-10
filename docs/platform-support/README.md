@@ -78,6 +78,11 @@ show/hide/focus, 크기와 위치, 전체화면, 닫기 확인을 정식 지원�
 CI 실행 [37574470840](https://github.com/mathbook3948/bunaway/actions/runs/37574470840)에서
 새 창 API의 실제 GUI 회귀는 통과했다. 같은 실행의 전체 네이티브 작업은 공용 기능 목록 테스트에서 실패했다.
 Linux에서는 계약, 정책, 재생성 수명 조정과 CLI 번들을 검증한다.
+Windows의 `setContentPosition`, `setOuterSize`, `setContentBounds`, `setOuterBounds`는
+물리 또는 논리 픽셀을 받으며 숨김 상태를 유지하고 최소화 및 최대화 중에는 일반
+복원 영역을 변경한다. 전체화면은 거부한다. 2026-10-10 로컬 Win32와 WebView2에서
+설정 후 조회 및 `windows.changed` 일치를 확인했다. 합성 DPI 메시지와 실제 물리
+모니터 이동의 검증 범위는 [실행 기록](../architecture/windows-bun-results.md)에 구분했다.
 macOS는 `app.windows`, 지연 생성과 재생성, 목록 및 열림 여부, show/hide/focus/close,
 표시와 포커스 조회를 제공한다. 뷰마다 임시 WebKit 프로필을 분리하고 실행 중 재생성에서
 유지한다. 크기, 위치, 전체화면, 닫기 확인 등 다른 공개 창 작업은 `UNSUPPORTED`다.

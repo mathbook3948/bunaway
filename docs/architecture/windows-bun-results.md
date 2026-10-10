@@ -1,5 +1,60 @@
 # Windows Bun FFI 실행 기록
 
+## 2026-10-10 창 geometry 설정 API
+
+main `6f2363c`를 기준으로 `setContentPosition`, `setOuterSize`, `setContentBounds`,
+`setOuterBounds`를 추가했다. 로컬 Windows x64와 고정한 Bun 1.4.2로 검증했다.
+기존 조회, DPI 변환과 content 기준 크기 제약을 사용한다. 새 API의 기본 단위는
+물리 픽셀이며 논리 입력의 반올림, 변환 후 크기와 rectangle 경계 검사는
+[창 API](../site/src/content/docs/reference/host/windows.mdx)에 정의했다.
+
+- 계약 및 DLL 대체 검사: 영향받는 10개 파일의 29개 검사 중 24개는 GUI를 사용하지
+  않는다. 새 setter의 schema, SDK 컨텍스트, 기본 단위, 144 DPI 반올림,
+  deny 우선 대상 권한과 허용된 미선언 뷰, 닫힌 창, 시작 전 취소 및 종료를 확인했다.
+  기존 크기 제약, 이벤트 비교와 모니터/DPI 대체 회귀도 통과했다.
+- 실제 Win32: 같은 실행의 5개 검사는 실제 창과 네이티브 메시지를 사용한다.
+  `windows-geometry.test.ts`에서 일반 및 숨김 상태의 적용, content 위치,
+  outer 크기와 bounds, 제약 보정, 최소화 및 최대화 중 일반 복원 영역 변경과
+  표시 상태 유지, 최소화 전 최대화 복원 이력, 전체화면 거부를 확인했다.
+  잘못된 크기와 경계는 위치와 크기를 모두 유지한다. bounds 적용은 중간 관찰을
+  보류하고 실제 조회와 같은 snapshot을 발행한다. 기존 상태, 제약과 이벤트 회귀도 통과했다.
+- 실제 WebView2: `windows-window-events.ts`는 공개 SDK, Core와 UI Worker를
+  연결해 네 setter를 호출했다. 세 문서에서 42개 이벤트를 수신했고 outer bounds
+  적용 직후 조회와 같은 windowId 및 revision의 `windows.changed`가 일치했다.
+  탐색은 같은 windowId를 유지하고 재생성은 새 windowId와 revision으로 시작했다.
+  권한 거부, 구독 해제와 정상 종료도 통과했다. 보고서는
+  `build/windows-window-events/report.json`에 남긴다.
+
+120/144/192 DPI 검사는 실제 창에 합성 `WM_DPICHANGED`를 전달했다.
+홀수 물리 outer 크기를 논리 왕복 변환 없이 유지하고 내용 위치를 현재 DPI로
+반올림하는지 확인했다. 실제 배율이 다른 물리 모니터 간 이동이나 모니터 분리는
+검증하지 않았다. 이 환경에서 OS가 전경 요청을 거부해 기존 focus/blur 전환 검사는
+실제 활성화 성공으로 계산하지 않았다.
+
+재현 명령은 `bun test tests/api/window-geometry.test.ts tests/lifecycle/windows-geometry.test.ts`와
+`bun --no-env-file tests/lifecycle/windows-window-events.ts`다.
+Win32와 WebView2 검증은 macOS나 다른 OS의 geometry 지원을 의미하지 않는다.
+
+최종 포맷, lint, workspace 및 테스트 타입 검사는 통과했다. lint의 기존 경고 12개는
+유지했다. `bun run docs:check`는 공개 계약 460개를 검사했고 `bun run docs:build`는
+69개 페이지와 내부 링크 및 anchor 5913개를 검사했다.
+
+전체 검사는 실패했다. `MISE_JOBS=1`로 작업을 순차 실행한 `mise run check`의
+테스트 결과는 636 통과, 64 skip, 36 실패와 검사 사이 미처리 오류 1개다.
+CLI fixture 패키징 준비의 30초 기한 초과와 exit 143을 재사용한 후속 검사 실패,
+설치 패키지 및 artifact audit의 60초와 30초 기한 초과, Store EXE 두 검사의
+기본 5초 기한 초과를 포함한다. macOS fixture 및 Info.plist의 파일 symlink 생성
+다섯 건은 Windows `EPERM`이다. 미처리 오류는 distribution의 생성 앱 타입 검사
+프로세스 실패이며 출력에 TypeScript 진단은 없었다. 새 geometry 검사는 같은
+전체 실행에서도 통과했다. 실행 로그는 `build-check-complete.log`에 남겼다.
+
+`mise run host:windows`는 SDK/Core 취소, 모달 중 백엔드 진행, 초기화 중 닫기와
+부분 생성 실패 시나리오를 통과한 뒤 기존 `windows-bun-window-api.ts`의 150초
+기한을 넘겼다. 그 창 API를 단독 재실행한 결과도 `WebView cleanup timed out`으로
+실패했다. WebView2 브라우저 자식 프로세스가 정리 기한 뒤에도 남아 있었다.
+따라서 전체 Windows 제품 호스트 회귀의 완료를 선언하지 않는다.
+로그는 `build-host-windows.log`와 `build-window-api-retry.log`에 남겼다.
+
 ## 2026-10-10 창 이벤트와 구독 수명
 
 최신 main `a74f7b3`의 창 상태와 geometry API 위에 이벤트 구현을 적용하고,

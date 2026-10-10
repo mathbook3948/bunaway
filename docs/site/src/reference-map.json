@@ -425,6 +425,7 @@
           "setSizeConstraints",
           "setSize",
           "setPosition",
+          "setGeometry",
           "setFullscreen",
           "setCloseConfirmation",
           "getSnapshot"
@@ -767,6 +768,10 @@
       "windows.isFocused",
       "windows.close",
       "windows.setSize",
+      "windows.setContentPosition",
+      "windows.setOuterSize",
+      "windows.setContentBounds",
+      "windows.setOuterBounds",
       "windows.getContentSize",
       "windows.getOuterSize",
       "windows.getContentPosition",

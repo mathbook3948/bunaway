@@ -3,13 +3,13 @@ import type {
   NativeWindow,
   NativeWindowServices,
 } from "@bunaway/plugin-api/native";
-import { NativeRegistry, type Policy } from "@bunaway/protocol";
 import {
   validateWindowCall,
   validateWindowOutput,
   windowOperations,
   windowsPlugin,
 } from "@bunaway/plugin-windows";
+import { NativeRegistry, type Policy } from "@bunaway/protocol";
 import { matches } from "#plugins/windows/src/scope";
 import { createOperations } from "#plugins/windows/src/windows";
 
@@ -147,6 +147,7 @@ function fixture() {
     setSizeConstraints() {},
     setSize() {},
     setPosition() {},
+    setGeometry() {},
     setFullscreen() {},
     setCloseConfirmation() {},
   };

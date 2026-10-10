@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
 import assert from "node:assert/strict";
-import type { NativeWindowServices } from "@bunaway/plugin-api/native";
+import type {
+  NativeWindowServices,
+  WindowSnapshot,
+} from "@bunaway/plugin-api/native";
 import { createOperations } from "#plugins/windows/src/windows";
 
 const SW_HIDE = 0;
@@ -11,7 +14,7 @@ const SW_RESTORE = 9;
 const WM_DPICHANGED = 0x02e0;
 
 test.skipIf(process.platform !== "win32")(
-  "real Win32 geometry queries preserve state, screen origins, restoration and DPI",
+  "real Win32 geometry queries and setters preserve state, screen origins, restoration and DPI",
   async () => {
     const [{ Windows }, { user }, { dlopen, ptr }] = await Promise.all([
       import("#native/windows/bun/win32"),
@@ -86,6 +89,8 @@ test.skipIf(process.platform !== "win32")(
           setSizeConstraints: (value) => native.setSizeConstraints(hwnd, value),
           setSize: (width, height) => native.setSize(hwnd, width, height),
           setPosition: (x, y) => native.setPosition(hwnd, x, y),
+          setGeometry: (area, geometry) =>
+            native.setGeometry(hwnd, area, geometry),
           setFullscreen: (value) => native.setFullscreen(hwnd, value),
           setCloseConfirmation() {},
         }),
@@ -124,6 +129,246 @@ test.skipIf(process.platform !== "win32")(
           "backend",
           context,
         );
+      const events: WindowSnapshot[] = [];
+      native.observe(hwnd, "main", (snapshot) => events.push(snapshot));
+      // A bounds request commits a single combined move/resize and retains visibility.
+      for (const visible of [
+        false,
+        true,
+      ]) {
+        native.show(hwnd, visible);
+        const start = events.length;
+        await invoke("windows.setContentBounds", {
+          x: -31,
+          y: 73,
+          width: 650,
+          height: 470,
+          unit: "logical",
+        });
+        const actual = native.getBounds(hwnd, "content");
+        const dpi = actual.dpi;
+        expect(actual).toEqual({
+          x: Math.round((-31 * dpi) / 96),
+          y: Math.round((73 * dpi) / 96),
+          width: Math.round((650 * dpi) / 96),
+          height: Math.round((470 * dpi) / 96),
+          dpi,
+        });
+        expect(native.isVisible(hwnd)).toBe(visible);
+        expect(events.length - start).toBe(visible ? 0 : 1);
+        expect(events.at(-1)).toEqual(native.getSnapshot(hwnd));
+        expect(native.getSnapshot(hwnd).bounds).toEqual(
+          native.getBounds(hwnd, "outer"),
+        );
+        await invoke("windows.setContentPosition", {
+          x: -42,
+          y: 85,
+        });
+        expect(await invoke("windows.getContentPosition")).toEqual({
+          x: -42,
+          y: 85,
+          dpi,
+        });
+        const outer = native.getBounds(hwnd, "outer");
+        await invoke("windows.setOuterSize", {
+          width: outer.width + 11,
+          height: outer.height + 7,
+        });
+        expect(native.getBounds(hwnd, "outer")).toEqual({
+          ...outer,
+          width: outer.width + 11,
+          height: outer.height + 7,
+        });
+        // Put both passes at the same final content bounds before the next visibility transition.
+        await invoke("windows.setContentBounds", {
+          x: -31,
+          y: 73,
+          width: 650,
+          height: 470,
+          unit: "logical",
+        });
+      }
+      await invoke("windows.setSizeConstraints", {
+        minWidth: 700,
+        maxHeight: 450,
+      });
+      await invoke("windows.setContentBounds", {
+        x: 100,
+        y: 100,
+        width: 650,
+        height: 470,
+        unit: "logical",
+      });
+      expect(
+        await invoke("windows.getContentSize", {
+          unit: "logical",
+        }),
+      ).toEqual({
+        width: 700,
+        height: 450,
+        dpi: native.getDpi(hwnd),
+      });
+      await invoke("windows.setSizeConstraints");
+      // Restored bounds change while the current iconic/zoomed snapshot stays current.
+      for (const command of [
+        SW_MINIMIZE,
+        SW_MAXIMIZE,
+      ]) {
+        for (const visible of [
+          true,
+          false,
+        ]) {
+          native.unmaximize(hwnd);
+          user.symbols.ShowWindow(hwnd, command);
+          native.show(hwnd, visible);
+          expect(native.isMinimized(hwnd)).toBe(command === SW_MINIMIZE);
+          expect(native.isMaximized(hwnd)).toBe(command === SW_MAXIMIZE);
+          const state = native.getSnapshot(hwnd).state;
+          const before = native.getBounds(hwnd, "outer");
+          await invoke("windows.setContentBounds", {
+            x: 100,
+            y: 110,
+            width: 680,
+            height: 490,
+            unit: "logical",
+          });
+          expect(native.getSnapshot(hwnd).state).toEqual(state);
+          expect(native.getBounds(hwnd, "outer")).toEqual(before);
+          const projected = native.getBounds(hwnd, "normal");
+          await invoke("windows.setContentPosition", {
+            x: 115,
+            y: 125,
+          });
+          await invoke("windows.setOuterSize", {
+            width: projected.width,
+            height: projected.height,
+          });
+          expect(native.getSnapshot(hwnd).state).toEqual(state);
+          await invoke("windows.setOuterBounds", {
+            x: 120,
+            y: 130,
+            width: projected.width + 10,
+            height: projected.height + 10,
+          });
+          const normal = native.getBounds(hwnd, "normal");
+          expect(normal).toEqual({
+            ...projected,
+            x: 120,
+            y: 130,
+            width: projected.width + 10,
+            height: projected.height + 10,
+          });
+          expect(native.getSnapshot(hwnd).state).toEqual(state);
+          native.unmaximize(hwnd);
+          expect(native.getBounds(hwnd, "outer")).toEqual(normal);
+          expect(events.at(-1)).toEqual(native.getSnapshot(hwnd));
+        }
+      }
+      native.maximize(hwnd);
+      native.minimize(hwnd);
+      await invoke("windows.setContentBounds", {
+        x: 100,
+        y: 110,
+        width: 680,
+        height: 490,
+        unit: "logical",
+      });
+      const minimizedNormal = native.getBounds(hwnd, "normal");
+      native.restore(hwnd);
+      expect(native.isMaximized(hwnd)).toBe(true);
+      native.unmaximize(hwnd);
+      expect(native.getBounds(hwnd, "outer")).toEqual(minimizedNormal);
+      native.setFullscreen(hwnd, true);
+      const fullscreenSnapshot = native.getSnapshot(hwnd);
+      for (const [operation, payload] of [
+        [
+          "windows.setContentPosition",
+          {
+            x: 0,
+            y: 0,
+          },
+        ],
+        [
+          "windows.setOuterSize",
+          {
+            width: 700,
+            height: 500,
+          },
+        ],
+        [
+          "windows.setContentBounds",
+          {
+            x: 0,
+            y: 0,
+            width: 700,
+            height: 500,
+          },
+        ],
+        [
+          "windows.setOuterBounds",
+          {
+            x: 0,
+            y: 0,
+            width: 700,
+            height: 500,
+          },
+        ],
+      ] as const) {
+        await expect(invoke(operation, payload)).rejects.toMatchObject({
+          code: "INVALID_ARGUMENT",
+        });
+      }
+      expect(native.getSnapshot(hwnd)).toEqual(fullscreenSnapshot);
+      native.setFullscreen(hwnd, false);
+      const beforeInvalid = native.getSnapshot(hwnd);
+      for (const payload of [
+        {
+          x: 0,
+          y: 0,
+          width: 199,
+          height: 500,
+          unit: "logical",
+        },
+        {
+          x: 0,
+          y: 0,
+          width: 4097,
+          height: 500,
+          unit: "logical",
+        },
+        {
+          x: 0,
+          y: 0,
+          width: 0,
+          height: 0,
+        },
+        {
+          x: 0,
+          y: 0,
+          width: 2147483647,
+          height: 500,
+        },
+        {
+          x: 2147483647,
+          y: 0,
+          width: 700,
+          height: 500,
+        },
+        {
+          x: -2147483648,
+          y: 0,
+          width: 700,
+          height: 500,
+        },
+      ]) {
+        await expect(
+          invoke("windows.setContentBounds", payload),
+        ).rejects.toMatchObject({
+          code: "INVALID_ARGUMENT",
+        });
+        expect(native.getSnapshot(hwnd)).toEqual(beforeInvalid);
+      }
+      native.show(hwnd, false);
       await invoke("windows.setSize", {
         width: 701,
         height: 503,
@@ -320,6 +565,28 @@ test.skipIf(process.platform !== "win32")(
         expect(native.getBounds(hwnd, "normal")).toEqual(
           native.getBounds(hwnd, "outer"),
         );
+        // Odd physical sizes must survive without a logical round-trip on unconstrained axes.
+        const beforeSize = native.getBounds(hwnd, "outer");
+        await invoke("windows.setOuterSize", {
+          width: beforeSize.width + 1,
+          height: beforeSize.height + 1,
+        });
+        expect(native.getBounds(hwnd, "outer")).toEqual({
+          ...beforeSize,
+          width: beforeSize.width + 1,
+          height: beforeSize.height + 1,
+        });
+        await invoke("windows.setContentPosition", {
+          x: -1,
+          y: 1,
+          unit: "logical",
+        });
+        expect(await invoke("windows.getContentPosition")).toEqual({
+          x: Math.round(-targetDpi / 96) || 0,
+          y: Math.round(targetDpi / 96),
+          dpi: targetDpi,
+        });
+        expect(events.at(-1)).toEqual(native.getSnapshot(hwnd));
       }
       closed = true;
       await expect(invoke("windows.getOuterBounds")).rejects.toMatchObject({
