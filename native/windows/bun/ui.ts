@@ -209,6 +209,10 @@ const channel = new Channel(
         packet.context === config.backendContext
           ? config.policy.backend
           : view?.boundary.policy.host;
+      const source =
+        packet.context === config.backendContext
+          ? "backend"
+          : `view:${view?.boundary.policy.id ?? "invalid"}`;
       let allowed = false;
       try {
         const call = registry.validateCall(operation.call);
@@ -217,6 +221,7 @@ const channel = new Channel(
           !closingSent &&
           (packet.kind !== "grant" || packet.allowed) &&
           !!permissions &&
+          (packet.kind !== "grant" || queued?.source === source) &&
           registry.allowed(permissions, call, matches);
       } catch {
         /* Invalid requests fail closed at the host boundary. */
@@ -424,6 +429,12 @@ async function closeWindow(
 const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices =
   {
     specs: config.windows,
+    lookup: {
+      byId: (windowId) => windows?.getById(windowId) ?? null,
+      byView: (viewId) => windows?.getByView(viewId) ?? null,
+      focused: () => windows?.getFocused() ?? null,
+      lastActive: () => windows?.getLastActive() ?? null,
+    },
     read: (viewId) => {
       const view = views.get(viewId);
       return view

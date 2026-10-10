@@ -475,6 +475,7 @@
       "pages": {
         "reference/tooling/plugin-api": [
           "specs",
+          "lookup",
           "read",
           "create",
           "close",
@@ -751,6 +752,13 @@
     },
     {
       "source": "packages/plugin-api/src/native.ts",
+      "type": "WindowIdentity",
+      "pages": {
+        "reference/tooling/plugin-api": ["windowId", "viewId"]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
       "type": "WindowSnapshot",
       "pages": {
         "reference/tooling/plugin-api": [
@@ -792,6 +800,12 @@
     ],
     "reference/host/windows": [
       "windows.list",
+      "windows.getById",
+      "windows.getCurrent",
+      "windows.getFocused",
+      "windows.getLastActive",
+      "windows.isDestroyed",
+      "windows.isNormal",
       "windows.create",
       "windows.recreate",
       "windows.show",

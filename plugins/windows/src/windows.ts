@@ -1,6 +1,7 @@
 import type { NativeAdapter, NativeEnvironment } from "@bunaway/plugin";
 import {
   hasValidWindowSizeConstraints,
+  type WindowIdentity,
   type WindowSizeConstraints,
 } from "@bunaway/plugin-api/native";
 import {
@@ -135,6 +136,12 @@ export function createOperations(
         return window.isVisible();
       case "windows.isFocused":
         return window.isFocused();
+      case "windows.isNormal":
+        return (
+          !window.isMinimized() &&
+          !window.isMaximized() &&
+          !window.isFullscreen()
+        );
       case "windows.setSize":
         if (window.isFullscreen()) {
           throw new BunawayError({
@@ -270,14 +277,14 @@ export function createOperations(
         message: "Window control requires UI execution.",
       });
     },
-    executeUI(operation, input, _source, context) {
+    executeUI(operation, input, source, context) {
       const call = validateWindowCall({
         operation,
         payload: input,
       });
       // Check permission before resolving configuration so unknown views do not bypass denial.
       const targets =
-        call.operation === "windows.list"
+        !call.payload || !("view" in call.payload)
           ? services.specs.map((spec) => spec.view)
           : [
               call.payload.view,
@@ -294,6 +301,80 @@ export function createOperations(
           matches,
         ),
       );
+      if (
+        call.operation === "windows.getById" ||
+        call.operation === "windows.getCurrent" ||
+        call.operation === "windows.getFocused" ||
+        call.operation === "windows.getLastActive"
+      ) {
+        if (!registry.allowed(context.permissions, call, matches)) {
+          throw new BunawayError({
+            code: "PERMISSION_DENIED",
+            message: "Window policy denied.",
+          });
+        }
+        if (services.stopping() || services.cancelled(context.requestId)) {
+          throw new BunawayError({
+            code: "CANCELLED",
+            message: "Window request cancelled.",
+          });
+        }
+        const lookup = services.lookup;
+        if (!lookup) {
+          throw new BunawayError({
+            code: "UNSUPPORTED",
+            message:
+              "Window identity lookup is not implemented on this platform.",
+          });
+        }
+        let identity: WindowIdentity | null = null;
+        switch (call.operation) {
+          case "windows.getById":
+            identity = lookup.byId(call.payload.windowId);
+            break;
+          case "windows.getCurrent": {
+            if (source === "backend") {
+              return null;
+            }
+            const viewId = source.startsWith("view:")
+              ? source.slice("view:".length)
+              : "";
+            if (!services.specs.some((spec) => spec.view === viewId)) {
+              throw new BunawayError({
+                code: "PERMISSION_DENIED",
+                message: "Invalid window call source.",
+              });
+            }
+            // Resolve the authenticated caller, never a view supplied by the web payload.
+            if (
+              services.read(viewId)?.closed === false &&
+              !operations.replacing.has(viewId) &&
+              grants.includes(viewId)
+            ) {
+              identity = lookup.byView(viewId);
+            }
+            break;
+          }
+          case "windows.getFocused":
+            identity = lookup.focused();
+            break;
+          case "windows.getLastActive":
+            identity = lookup.lastActive();
+            break;
+        }
+        // Do not expose IDs for denied, closed or replacing views, and do not fall back to another window.
+        if (
+          !identity ||
+          !grants.includes(identity.viewId) ||
+          services.read(identity.viewId)?.closed !== false ||
+          operations.replacing.has(identity.viewId)
+        ) {
+          return null;
+        }
+        return {
+          ...identity,
+        };
+      }
       return operations.execute(call, grants, context.requestId);
     },
     busy: () => operations.replacing.size !== 0,

@@ -180,6 +180,25 @@ test("recreation reserves the last window through cleanup, rejects competing cre
   );
   expect(original.closed).toBe(true);
   expect(f.operations.replacing.has("main")).toBe(true);
+  for (const operation of [
+    "windows.isDestroyed",
+    "windows.isNormal",
+  ] as const) {
+    await expect(
+      f.operations.execute(
+        {
+          operation,
+          payload: {
+            view: "main",
+          },
+        },
+        grants,
+        "state",
+      ),
+    ).rejects.toMatchObject({
+      code: "BUSY",
+    });
+  }
   expect(f.created).toEqual([
     "main",
   ]);

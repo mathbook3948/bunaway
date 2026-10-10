@@ -182,10 +182,16 @@ export type WindowDisplayState = {
   maximized: boolean;
   fullscreen: boolean;
 };
-/** One committed observation; revision increases within a unique native window lifetime. */
-export type WindowSnapshot = {
+/** Identifies one native window lifetime separately from its policy view. */
+export type WindowIdentity = {
+  /** Opaque native lifetime ID; navigation preserves it and recreation replaces it. */
   windowId: string;
   viewId: string;
+};
+/** One committed observation; revision increases within a unique native window lifetime. */
+export type WindowSnapshot = {
+  windowId: WindowIdentity["windowId"];
+  viewId: WindowIdentity["viewId"];
   revision: number;
   state: WindowDisplayState;
   bounds: WindowBounds;
@@ -208,6 +214,17 @@ export type WindowChange =
 export type NativeWindowServices = {
   /** Configured windows available to the plugin. */
   specs: readonly WindowSpec[];
+  /** Read-only native identity discovery. Missing on platforms without identity tracking. */
+  lookup?: {
+    /** Unknown or destroyed native lifetimes return null. */
+    byId(windowId: string): WindowIdentity | null;
+    /** An uncreated or closed policy view returns null. */
+    byView(viewId: string): WindowIdentity | null;
+    /** The OS foreground window, or null when it belongs to another host. */
+    focused(): WindowIdentity | null;
+    /** Cleared on destruction, with no fallback to earlier activated windows. */
+    lastActive(): WindowIdentity | null;
+  };
   /** Reads a window's lifecycle state, or returns `undefined` for an unknown view. */
   read(view: string): WindowState | undefined;
   /** Creates a window from its validated configuration. */
