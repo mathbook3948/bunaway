@@ -1,5 +1,144 @@
 # Windows Bun FFI 실행 기록
 
+## 2026-10-10 비활성 표시와 활성 창 전환
+
+main `2f45356`을 기준으로 `showInactive`, `blur`, `activate`를 추가했다.
+Windows x64 `10.0.26200.0`, 고정 Bun 1.4.2에서 실행했다.
+공개 입력과 결과, 기존 `show`, `hide`, `focus`와의 차이는
+[창 API](../site/src/content/docs/reference/host/windows.mdx)의 계약을 따른다.
+
+- 계약 검사는 세 API의 입력과 결과, 대상 뷰의 deny 우선 권한, 닫힌 창과 미선언 뷰,
+  네이티브 실패를 확인했다. `blur`는 설정 순서에서 준비된 표시 창을 고르며,
+  권한 없는 창과 숨김, 최소화, 닫힘, 준비 전 및 실패한 창을 건너뛴다.
+  후보 없음과 첫 후보의 활성화 거부는 다른 앱의 창을 고르거나 재시도하지 않는다.
+- 실제 Win32 검사는 두 창과 주 창의 EDIT 입력 필드를 생성했다. 일반, 최소화,
+  최대화와 최대화에서 최소화한 보조 창에 대해 표시 및 숨김 상태에서 `showInactive`를
+  호출했다. 주 창의 스레드 활성 HWND와 입력 필드의 키보드 포커스가 유지되고,
+  보조 창의 활성화 메시지가 발생하지 않는 것을 확인했다. 최소화 전 최대화 복원
+  정보와 표시 상태, `windows.changed` 및 snapshot의 일치, 반복 호출의 중복 억제도 통과했다.
+  `activate`가 숨김과 최소화를 해제하지 않고 `false`를 반환하는 것도 확인했다.
+- 실행 세션에서는 Windows가 전경 활성화를 거부했고 `GetForegroundWindow`가 대상
+  HWND를 반환하지 않았다. 따라서 실제 전경 창 사이의 `blur`와 `focus` 성공은
+  미검증이다. 스레드 활성 창 및 입력 필드의 포커스 보존 결과를 전경 전환 성공으로
+  계산하지 않았다. 테스트는 이 제한을 명시적으로 출력한다.
+- 별도 프로세스의 DLL 대체 검사는 동기 활성화 콜백 뒤 전경 HWND가 변경되는 경우를
+  확인했다. 반환 BOOL이 0이어도 실제 대상이 전경이면 `true`, BOOL이 1이어도 상태가
+  바뀌지 않으면 `false`이며, 실제 전환에만 이벤트를 발행하고 게시된 후속 메시지로
+  중복 발행하지 않았다. 두 관찰 창의 전환에서도 이전 창의 `blur`와 다음 창의
+  `focus`, 양쪽 snapshot의 일치를 확인했다. 이 결과는 실제 OS 전경 전환의 성공 검증이 아니다.
+- 실제 WebView2의 `windows-bun-window-api.ts`와 `windows-window-events.ts`도 통과했다.
+  공개 SDK, Core, UI Worker를 연결해 새 API의 권한 거부, 비활성 표시, 숨김 및 최소화
+  전환 거부와 조회 결과를 확인했다. 이벤트 검사는 세 문서의 구독, 전달, 해제,
+  탐색과 재생성, snapshot 복구, 정상 종료를 통과했고 이벤트 42개를 기록했다.
+  테스트는 각 창의 이벤트를 해당 뷰에 전달하며 서로 다른 창 사이의 전역 순서는 요구하지 않는다.
+
+최종 영향 범위 검사 42개와 전체 TypeScript 타입, lint 및 형식 검사가 통과했다.
+`mise run check`의 전체 실행은 735 pass, 67 skip, 9 fail이었다. 이 중 DLL 대체 fixture의
+초기 보조 창 생성 오류는 수정 후 해당 검사와 영향 범위 검사에서 통과했다.
+macOS fixture의 파일 심볼릭 링크 4개와 Info.plist 심볼릭 링크 검사 1개는 `EPERM`으로
+실패했으며 변경 없는 main `2f45356`에서도 같은 5개 실패를 재현했다.
+EXE 컴파일 중단, 배포 artifact 감사와 Svelte 템플릿 검사는 전체 실행에서 시간 관련
+실패가 발생했고 변경 없는 main과 최종 변경의 단독 실행에서는 세 검사 모두 통과했다.
+문서 coverage와 Astro 타입 검사, 72개 페이지 빌드 및 내부 링크 검사도 통과했다.
+전체 검사를 성공으로 기록하지 않는다.
+
+## 2026-10-10 창 준비와 splashscreen 전환
+
+main `2f45356`에서 분기한 창 준비 변경을 main `29587c7`에 rebase한 뒤,
+최종 PR은 창 식별자 조회가 추가된 main `2b78dc5`에 통합했다.
+Windows 11 Pro x64 `10.0.26200`, Bun 1.4.2, WebView2 Runtime `154.0.4258.62`와
+고정 WebView2 SDK `1.0.4129.50`으로 검증했다. 공개 계약은 [창 API](../site/src/content/docs/reference/host/windows.mdx)를 따른다.
+
+- `tests/lifecycle/windows-window-readiness.ts`: 실제 UI Worker와 WebView2에서 네이티브 창 완료,
+  SDK 협상 확인과 최상위 문서 완료를 구분했다. 이미지 응답을 보류해 SDK가 먼저 준비돼도
+  `visible: false` 창이 표시되거나 포커스를 가져오지 않는지 확인했다.
+- splash의 구독으로 다른 창의 최초 네이티브 완료와 준비 결과를 수신했다. 이벤트 이름만 허용한
+  observer는 제어 권한이 없는 창의 준비를 받지 않았고 events 권한이 없는 뷰는 구독을 거부했다.
+  SDK 준비 뒤 구독한 문서에서도 조회로 이미 완료된 준비를 확인했다.
+- 같은 HWND의 탐색에서는 windowId를 유지하고 문서 세대를 초기화했다. fragment는 준비를 유지했다.
+  두 번의 재생성은 새 windowId와 새 세션을 사용했다. SDK 종료는 문서 완료를 유지하면서 SDK를 취소했다.
+  `build/windows-window-readiness/report.json`의 `pass: true`, 문서 4개와 마지막 창 종료 훅 1회로 완료했다.
+  최종 전체 호스트 실행은 준비 기록 59개를 남겼다. 기록 수는 구독 시점에 따라 달라질 수 있다.
+- `showWhenReady: "document"`는 SDK를 쓰지 않는 문서를 표시했다. `"sdk"`는 두 단계가 끝난 뒤 표시했다.
+  404 탐색 실패와 외부 리디렉션의 네이티브 취소에서는 자동 표시하지 않았다.
+  SDK를 만들지 않는 문서를 30초 기다려 `TIMEOUT` 결과와 계속 숨긴 상태를 확인했다.
+  `window.stop()`은 이 환경에서 ConnectionAborted 상태 9로 보고됐다. 이를 네이티브 취소 상태 14로
+  가정하지 않고 실패로 처리하며, 취소 회귀는 실제 정책에 의한 탐색 취소를 사용했다.
+- 앱 초기화 뒤 주 창을 먼저 표시하고 splash를 닫을 때 종료 훅을 실행하지 않았다.
+  이후 주 창의 마지막 닫기에만 종료 훅을 한 번 실행했고 정상 정리에서 활성 자식 프로세스 0개를 확인했다.
+- `tests/lifecycle/windows-hidden-webview.test.ts`: 별도 실제 STA 프로세스에서 HWND 생성부터 WebView2
+  문서 완료까지 표시, 활성화와 포커스 Win32 메시지, 해당 프로세스의 WinEvent를 관찰했다.
+  모두 0건이며 입력 창의 스레드 키보드 포커스가 유지됐다. 단순한 주기적 조회나 DLL 대체 결과가 아니다.
+- 계약 검사는 설정, 두 대상 창의 권한, 닫기 확인 거절, 구독 전 완료 조회, 늦은 SDK 확인 차단,
+  새 세대, 준비 기한과 생성 요청 취소, SDK 확인 전송 실패와 이전 hello 호환을 포함한다.
+
+main `29587c7` 기반 `mise run host:windows`의 전체 실행도 통과했다. 기존 창 API와 이벤트, Core와 SDK,
+부분 생성 실패, 데스크톱 종료 정책, 파일과 저장 메타데이터, 이동한 독립 CLI,
+개발 중 코드 교체, 메모 복원과 강제 종료 후 WebView 자손 정리를 포함했다.
+이번 전체 실행에서는 기존 [이슈 #94](https://github.com/mathbook3948/bunaway/issues/94)의 종료 기한 초과가 발생하지 않았다.
+
+main `29587c7` 기반 `mise run check`는 751 pass, 67 skip, 6 fail이었다. TypeScript, lint와 형식 검사는 통과했다.
+실패는 macOS fixture의 파일 symlink 생성 권한 `EPERM` 5건과 배포 artifact 감사의 30초 기한 초과 1건이다.
+변경 없는 main `29587c7`을 별도 폴더에 추출해 같은 6건을 재현했다.
+배포 감사는 변경 코드의 단독 실행에서도 기한을 넘겼으며 전체 검사 성공으로 기록하지 않는다.
+`bun run docs:check`, `bun run docs:build`는 공개 항목 504개, 페이지 72개와 내부 링크 및 앵커 6,407개를 검사했다.
+
+macOS 구현과 실행, 다른 Windows 버전이나 프로덕션 서명은 이번 검증에 포함하지 않았다.
+Inno Setup이 없어 설치 프로그램 생성, 설치와 제거를 건너뛰었다.
+
+main `2b78dc5` 통합 뒤에도 실제 `windows-bun-window-api.ts`, `windows-window-readiness.ts`,
+`windows-hidden-webview.test.ts`와 `windows-window-lookup.test.ts`를 다시 통과했다.
+준비 실행은 문서 4개, 준비 기록 55개와 마지막 종료 훅 1회를 확인했다.
+창 조회와 준비 계약을 함께 검사했고 전체 테스트 TypeScript 검사도 통과했다.
+통합된 창 조회의 실제 전경 전환은 Windows가 포커스 요청을 거부해 미검증으로 출력했다.
+숨김 생성 중 표시와 포커스 방지 결과는 이 제한과 별도로 확인했다.
+최종 `mise run check`는 761 pass, 67 skip, 5 fail이었다. TypeScript, lint와 형식 검사를 통과했고,
+배포 artifact 감사도 22.83초에 통과했다. 남은 5건은 위에서 main에도 재현한 macOS fixture의
+파일 symlink 권한 `EPERM`이며 전체 검사 성공으로 기록하지 않는다.
+
+## 2026-10-10 opener 파일 작업
+
+초기 UI Worker 구현의 Windows 실행 근거다. 후속 수정은 파일 검사와 셸 요청을
+기존 I/O Worker로 옮기고 어댑터가 자체 STA 초기화와 정리를 소유하도록 변경했다.
+아래 Windows 실행 결과는 후속 수정의 실행 근거로 사용하지 않는다. 후속 검증은
+`windows-opener.test.ts`의 실제 I/O Worker, 권한 승인 거부와 대기 작업 취소, COM 정리와
+`cli/opener.test.ts`의 UI 어댑터 미초기화 검사로 구분한다.
+
+`6f2363c`의 opener를 확장하고 최신 main `87cbba6`에 rebase했다.
+Windows 11 Pro x64 `10.0.26200`, Bun 1.4.2에서 확인했다.
+`openFile`과 `revealFile`은 작업별 권한과 정확한 절대 파일 경로 scope를 사용한다.
+성공한 `null`은 OS 요청 접수이며 실제 앱 실행이나 Explorer 선택 완료를 기다리는 계약이 아니다.
+
+- 계약: `tests/api/opener.test.ts`에서 URL 계약 보존, 파일 API의 호출 컨텍스트와 오류 전달,
+  Unicode와 공백, 경로 형식과 길이, 정확한 경로 일치와 작업별 권한, deny 우선을 확인했다.
+- 실제 Windows: `tests/lifecycle/windows-opener.test.ts`에서 UI STA와 반복 정리, 없는 파일,
+  디렉터리, 공유 잠금, junction과 하드 링크, 대소문자 별칭 거부를 확인했다.
+  파일 핸들을 유지하는 동안 삭제가 거부되고 실패 후 핸들이 정리되는 것도 확인했다.
+  `windows-opener-job.test.ts`는 Explorer가 실행한 프로세스가 앱 Job 밖에 있고 앱 종료 후에도 살아 있음을 확인했다.
+  두 파일과 계약 파일을 함께 실행해 13개 검사가 통과했다.
+- 패키지 실행: `BUNAWAY_OPENER_FILES_TEST=1 bun test tests/cli/opener.test.ts`가 통과했다.
+  로컬 `.tgz`를 독립 프로젝트에 설치하고 생성 카탈로그와 scope evaluator, 브라우저 번들을 검사했다.
+  설치한 어댑터를 고정 Bun으로 compiled STA EXE에 포함하고 프로브와 helper 소스를 삭제한 뒤 실행했다.
+  `openFile`로 한글, 공백, 쉼표와 emoji가 있는 실행 파일의 기본 동작을 시작해 marker를 확인했다.
+  `revealFile`은 같은 문자가 있는 텍스트 파일을 Explorer에서 실제 선택하는지 확인하고 테스트 창을 닫았다.
+  이 프로브는 실제 WebView2 앱 전체, 서명된 앱, MSIX와 Inno 설치 프로그램을 검증한 결과가 아니다.
+
+일반 문서의 연결 앱 실행 완료와 UNC 공유는 미검증이다. 임시 확장자를 등록한 추가 실험에서
+로컬 Shell.Application은 파일 읽기를 완료했지만 Explorer 위임에서는 helper marker를 받지 못했다.
+원인은 확정하지 못했으며 이 결과를 기본 문서 앱 실행 완료로 계산하지 않는다.
+현재 자동 실행 검사는 사용자 파일 연결을 바꾸지 않는 실행 파일의 기본 동작을 사용한다.
+URL 브라우저 로딩 완료 검사는 폐기 가능한 Windows Sandbox가 없어 재실행하지 않았다.
+
+문서 coverage와 Astro 타입 검사, 69개 페이지 빌드와 내부 링크 5,913개 검사를 통과했다.
+전체 `mise run check`의 첫 실행은 663 pass, 64 skip, 12 fail이었다.
+일부 기존 CLI 검사에서 시간 제한이 발생했고 Windows의 파일 심볼릭 링크 생성은 `EPERM`이었다.
+CommonJS 배포 검사는 단독 재실행에서 통과했다.
+전체 재실행은 699 pass, 64 skip, 9 fail이었다. 형식, lint와 모든 패키지 및 테스트 타입 검사는 통과했다.
+실패는 기존 CLI 설정 검사 하나의 5초 시간 초과와 그 뒤 공유 fixture 오류 세 개,
+기존 macOS fixture 및 패키징 검사의 파일 심볼릭 링크 생성 `EPERM` 다섯 개였다.
+CLI 설정 검사 네 개는 `--timeout 15000`을 지정한 단독 재실행에서 모두 통과했다.
+첫 검사의 실행 시간은 약 8.1초였으며 저장소의 기본 5초 기한은 변경하지 않았다.
+이 전체 검사 결과를 성공으로 기록하지 않는다.
 ## 2026-10-10 창 geometry 설정 API
 
 main `6f2363c`를 기준으로 `setContentPosition`, `setOuterSize`, `setContentBounds`,

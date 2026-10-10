@@ -14,6 +14,7 @@ import {
   type HostContext,
   type HostResponse,
   PROTOCOL_VERSION,
+  SDK_READY_FEATURE,
 } from "@bunaway/protocol";
 import { DiagnosticLog } from "@bunaway/runtime-bun/diagnostic-log";
 import { loadPluginCatalog } from "../../host-api/bun/plugin-catalog.ts";
@@ -419,7 +420,9 @@ export async function runWindowsApp(
       hello: {
         kind: "hello",
         protocol: PROTOCOL_VERSION,
-        features: [],
+        features: [
+          SDK_READY_FEATURE,
+        ],
         buildId: "bunaway",
       },
       platform: "windows",

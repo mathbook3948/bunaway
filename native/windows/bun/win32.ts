@@ -8,6 +8,7 @@ import {
   type NativeWindow,
   type WindowBounds,
   type WindowChange,
+  type WindowIdentity,
   type WindowSizeConstraints,
   type WindowSnapshot,
 } from "@bunaway/plugin-api/native";
@@ -27,6 +28,7 @@ import {
 
 export const WM_SIZE = 0x0005;
 const WM_ACTIVATE = 0x0006;
+const WA_INACTIVE = 0n;
 const WM_OBSERVE_WINDOW = 0x8003;
 export const WM_CLOSE = 0x0010;
 export const WM_QUIT = 0x0012;
@@ -132,6 +134,7 @@ export class Windows {
     }
   >();
   private readonly changingGeometry = new Set<bigint>();
+  private lastActiveWindow: bigint | null = null;
   private readonly dpiByWindow = new Map<bigint, number>();
   private readonly normalMonitors = new Map<
     bigint,
@@ -297,6 +300,13 @@ export class Windows {
           if (message === WM_WINDOWPOSCHANGED) {
             this.observeChanges(window);
           }
+          if (message === WM_ACTIVATE && this.windows.has(window)) {
+            // Record activation itself, including switches while WebView setup is pending.
+            // Blur and read-only queries never change activation history.
+            if ((wparam & 0xffffn) !== WA_INACTIVE) {
+              this.lastActiveWindow = window;
+            }
+          }
           if (message === WM_ACTIVATE && this.observations.has(window)) {
             // Foreground identity can change after this synchronous activation callback returns.
             assert(
@@ -426,12 +436,39 @@ export class Windows {
     user.symbols.ShowWindow(window, visible ? SW_SHOW : SW_HIDE);
   }
 
+  /** Show the existing placement without changing activation, even for hidden iconic or zoomed HWNDs. */
+  showInactive(window: bigint): void {
+    const minimized = this.isMinimized(window);
+    const maximized = this.isMaximized(window);
+    user.symbols.ShowWindow(window, SW_SHOWNA);
+    assert(
+      this.isVisible(window) &&
+        this.isMinimized(window) === minimized &&
+        this.isMaximized(window) === maximized,
+      "Windows did not preserve the inactive window state.",
+    );
+    this.observeChanges(window);
+  }
+
+  /** Request foreground activation without showing or restoring; observe both sides of the transition. */
+  activate(window: bigint): boolean {
+    if (!this.isVisible(window) || this.isMinimized(window)) {
+      return false;
+    }
+    user.symbols.SetForegroundWindow(window);
+    // Synchronous activation callbacks can precede the actual foreground identity change.
+    for (const observed of this.observations.keys()) {
+      this.observeChanges(observed);
+    }
+    return this.isFocused(window);
+  }
+
   focus(window: bigint): boolean {
     user.symbols.ShowWindow(
       window,
       user.symbols.IsIconic(window) ? SW_RESTORE : SW_SHOW,
     );
-    return !!user.symbols.SetForegroundWindow(window);
+    return this.activate(window);
   }
 
   /** Read live HWND state; invalid handles must not be mistaken for false. */
@@ -529,6 +566,49 @@ export class Windows {
         ...snapshot.bounds,
       },
     };
+  }
+
+  /** Return only immutable identity, without sampling bounds, emitting events or activating a window. */
+  private identity(window: bigint): WindowIdentity | null {
+    const snapshot = this.observations.get(window)?.snapshot;
+    return snapshot
+      ? {
+          windowId: snapshot.windowId,
+          viewId: snapshot.viewId,
+        }
+      : null;
+  }
+
+  /** Resolve an observed native lifetime without sampling or publishing window changes. */
+  getById(windowId: string): WindowIdentity | null {
+    for (const [window, observation] of this.observations) {
+      if (observation.snapshot.windowId === windowId) {
+        return this.identity(window);
+      }
+    }
+    return null;
+  }
+
+  /** Resolve the single native window currently owned by this policy view. */
+  getByView(viewId: string): WindowIdentity | null {
+    for (const [window, observation] of this.observations) {
+      if (observation.snapshot.viewId === viewId) {
+        return this.identity(window);
+      }
+    }
+    return null;
+  }
+
+  /** An external foreground window means no focused window in this host. */
+  getFocused(): WindowIdentity | null {
+    return this.identity(user.symbols.GetForegroundWindow());
+  }
+
+  /** Activation history has no fallback when its most recent window is destroyed. */
+  getLastActive(): WindowIdentity | null {
+    return this.lastActiveWindow === null
+      ? null
+      : this.identity(this.lastActiveWindow);
   }
 
   /** ShowWindow returns previous visibility, so verify the requested native state instead. */
@@ -1499,6 +1579,9 @@ export class Windows {
 
   /** Destroy the HWND and discard its size, DPI, and fullscreen state. */
   destroy(window: bigint) {
+    if (this.lastActiveWindow === window) {
+      this.lastActiveWindow = null;
+    }
     this.observations.delete(window);
     this.changingGeometry.delete(window);
     assert(user.symbols.DestroyWindow(window));

@@ -37,9 +37,16 @@ Bun API 사용을 차단하는 샌드박스라고 주장하지 않는다.
 | --- | --- | --- |
 | 메인 | 패키지 검증, 부팅/종료, `createCore`, 앱, 플러그인, CoreSession 연결, Host API Promise | HWND, COM 포인터, 웹 출처 판정 |
 | UI Worker 하나 | STA, 모든 창, 뷰, 하나의 메시지 pump, COM, 콜백 수명, 실제 출처, 프레임 검증, 컨텍스트 발급, 폐기, 작업 권한 승인 | 앱 명령 실행, 블로킹 파일 I/O |
-| I/O Worker 하나 | 검증된 작업의 Win32 파일 핸들, 읽기/쓰기, 제한된 작업 큐 | COM, 창, 임의 컨텍스트의 권한 생성 |
+| I/O Worker 하나 | 검증된 작업의 Win32 파일 핸들, 읽기/쓰기, 제한된 작업 큐, opener의 COM STA | 창과 WebView COM, 임의 컨텍스트의 권한 생성 |
 
 I/O Worker는 기존 C++ 작업 큐의 동기 파일 작업을 이식해 사용한다. Worker 풀, 범용 RPC 프레임워크, 별도 Rust/C++ 래퍼는 만들지 않는다.
+
+`opener`는 창이나 WebView 자원을 사용하지 않으므로 I/O Worker에서 자체 COM STA를
+초기화한다. 호스트의 현재 컨텍스트와 scope 승인 뒤 파일 검사와 Explorer 요청을 같은
+스레드에서 실행하고, 검사한 파일과 부모 핸들을 요청 제출까지 유지한다. 어댑터 종료 시
+셸 참조와 DLL을 해제한 뒤 COM 초기화를 해제한다. 느린 UNC 공유나 셸 확장이 UI Worker의
+메시지 pump를 막지 않으며, 진행 중인 동기 OS 호출은 I/O Worker의 후속 작업과 정리를
+지연시킬 수 있다.
 
 ## 배치할 코드
 

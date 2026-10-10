@@ -27,3 +27,17 @@ status: accepted
 Windows에서 세 창(쓰기 가능 편집 뷰, 읽기 전용 뷰, 주 뷰)으로 정책 분리, 공유 요청 ID 전달, 이벤트 필터링, 렌더러 장애 격리, 폐기 세션 차단, 창별 종료 규칙을 [실제 검증](../architecture/windows-host-results.md)했다. 공개 `windows.create`, `windows.recreate`는 설정한 창을 생성하거나 이전 세션을 폐기하고 같은 프로필로 다시 만든다. 재생성 중에는 마지막 창의 자동 종료를 보류한다. [Bun 호스트 실행 결과](../architecture/windows-bun-results.md)에 검증 기록이 있다. macOS도 같은 선언과 세션 수명을 적용하며, 뷰별 임시 WebKit 프로필을 실행 중 재생성에서 유지한다. macOS의 영속 프로필과 뷰의 창 간 이동은 미구현이다.
 
 근거: [PRD의 권한 모델](../PRD.md), [호출 컨텍스트 ADR](./0002-host-owned-call-context.md), [Windows 호스트](../../native/windows/bun/entry.ts), [Windows 실행 결과](../architecture/windows-host-results.md).
+
+## 2026-10-10 창 준비 확장
+
+Windows 준비는 HWND 생성, 현재 최상위 문서의 탐색 완료와 SDK의 협상 확인으로 나눈다.
+기존 `windowId`, `documentGeneration`, route와 컨텍스트 철회를 사용한다. 공개 준비 상태는
+새 세션 식별자를 만들거나 HostContext를 노출하지 않는다. 준비 이벤트도 기존 native-event,
+세션 구독과 권한 검사를 사용하며 대상 창 제어 권한이 있는 수신 뷰에만 보낸다.
+`sdk-ready`는 hello에서 양쪽이 feature를 협상했을 때만 보내는 확인 메시지다.
+한쪽이 선언하지 않으면 이전 hello 계약을 유지한다. 앞 절의 프로토콜 유지 설명은 최초 다중 창 구현에 대한 기록이다.
+
+숨김 생성은 HWND가 처음부터 표시되지 않도록 하고 준비 중 활성화 요청을 하지 않는다.
+splashscreen 전환은 앱이 UI와 데이터를 준비한 뒤 요청하며 주 창 표시를 먼저 확정한다.
+그 뒤 splash 창을 닫으므로 기존 마지막 창 종료 규칙을 완화하거나 임시 앱 수명을 새로 만들지 않는다.
+상세 완료 조건과 실패, 취소, 조회 계약은 [창 API](../site/src/content/docs/reference/host/windows.mdx)를 따른다.

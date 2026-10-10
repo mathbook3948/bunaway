@@ -223,7 +223,13 @@ if (!process.argv.includes("--child")) {
           ids.push(before.windowId);
           const start = records.length;
           await windows.hide(target);
-          await windows.show(target);
+          assert.equal(await windows.activate(target), false);
+          await windows.showInactive(target);
+          assert.equal(await windows.isVisible(target), true);
+          const activated = await windows.activate(target);
+          assert.equal(activated, await windows.isFocused(target));
+          const blurred = await windows.blur(target);
+          assert.equal(blurred, !(await windows.isFocused(target)));
           await windows.setPosition({
             ...target,
             x: 50 + documents * 20,

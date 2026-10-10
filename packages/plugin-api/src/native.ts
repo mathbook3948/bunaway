@@ -79,6 +79,26 @@ export type WindowSpec = {
   };
   /** Whether the runtime creates this window during startup. */
   startup?: boolean;
+  /** Initial visibility, default true. Hidden creation never activates the window. Windows only. */
+  visible?: boolean;
+  /** Create hidden and show once after the document, or document and SDK, are ready. Windows only. */
+  showWhenReady?: "document" | "sdk";
+};
+
+/** Current-document preparation. SDK readiness is an acknowledged protocol session, not app data or rendering. */
+export type WindowReadiness = {
+  windowId: string;
+  viewId: string;
+  /** Existing session-boundary generation; navigation and session revocation advance it. */
+  documentGeneration: number;
+  /** Increases within this HWND lifetime, including resets and terminal outcomes. */
+  revision: number;
+  /** Creation completed for this HWND lifetime; closing does not erase that fact. */
+  nativeCreated: boolean;
+  document: "pending" | "ready" | "failed" | "cancelled";
+  sdk: "pending" | "ready" | "failed" | "cancelled";
+  /** Latest preparation or session error; navigation clears it, SDK reconnect retains it for a failed/cancelled document. */
+  error: import("@bunaway/protocol").WireError | null;
 };
 /** Lifecycle state observed while a native window is created or replaced. */
 export type WindowState = {
@@ -111,10 +131,16 @@ export type WindowBounds = {
 export type NativeWindow = {
   /** Reads a versioned state and physical outer-bounds snapshot for recovery after subscribing. */
   getSnapshot(): WindowSnapshot;
+  /** Reads the latest preparation outcome, including a retained closed-window outcome. Windows only. */
+  getReadiness(): WindowReadiness;
   /** Shows or hides the native window. */
   show(visible: boolean): void;
+  /** Shows without activation, preserving normal, minimized or maximized state and other input focus. */
+  showInactive(): void;
   /** Focuses the window and reports whether the request succeeded. */
   focus(): boolean;
+  /** Activates only an already visible, non-minimized window; returns its observed foreground state. */
+  activate(): boolean;
   /** Starts a normal close request; returns false when it is declined or hides to tray. */
   close(): boolean | Promise<boolean>;
   /** Minimizes and displays the window, allowing Windows to activate another window. */
@@ -182,10 +208,16 @@ export type WindowDisplayState = {
   maximized: boolean;
   fullscreen: boolean;
 };
-/** One committed observation; revision increases within a unique native window lifetime. */
-export type WindowSnapshot = {
+/** Identifies one native window lifetime separately from its policy view. */
+export type WindowIdentity = {
+  /** Opaque native lifetime ID; navigation preserves it and recreation replaces it. */
   windowId: string;
   viewId: string;
+};
+/** One committed observation; revision increases within a unique native window lifetime. */
+export type WindowSnapshot = {
+  windowId: WindowIdentity["windowId"];
+  viewId: WindowIdentity["viewId"];
   revision: number;
   state: WindowDisplayState;
   bounds: WindowBounds;
@@ -208,6 +240,17 @@ export type WindowChange =
 export type NativeWindowServices = {
   /** Configured windows available to the plugin. */
   specs: readonly WindowSpec[];
+  /** Read-only native identity discovery. Missing on platforms without identity tracking. */
+  lookup?: {
+    /** Unknown or destroyed native lifetimes return null. */
+    byId(windowId: string): WindowIdentity | null;
+    /** An uncreated or closed policy view returns null. */
+    byView(viewId: string): WindowIdentity | null;
+    /** The OS foreground window, or null when it belongs to another host. */
+    focused(): WindowIdentity | null;
+    /** Cleared on destruction, with no fallback to earlier activated windows. */
+    lastActive(): WindowIdentity | null;
+  };
   /** Reads a window's lifecycle state, or returns `undefined` for an unknown view. */
   read(view: string): WindowState | undefined;
   /** Creates a window from its validated configuration. */

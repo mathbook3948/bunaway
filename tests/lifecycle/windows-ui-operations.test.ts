@@ -258,7 +258,11 @@ export const pluginImports = { 'ui-test': {
     }
     return response;
   };
-  const sendOperation = (requestId: string, operation: string) =>
+  const sendOperation = (
+    requestId: string,
+    operation: string,
+    source = "backend",
+  ) =>
     channel.send({
       kind: "operation",
       context: runtime.backendContext,
@@ -267,7 +271,7 @@ export const pluginImports = { 'ui-test': {
         operation,
         payload: null,
       },
-      source: "backend",
+      source,
     });
   const stop = async () => {
     await channel.send({
@@ -376,6 +380,36 @@ test.skipIf(process.platform !== "win32")(
     } finally {
       await ui.close();
       await submitted.catch(() => {});
+    }
+  },
+  timeoutMs + 5_000,
+);
+
+test.skipIf(process.platform !== "win32")(
+  "UI worker rejects a call source that does not match its authenticated context",
+  async () => {
+    const ui = await startWorker([
+      "ui-test:execute",
+    ]);
+    try {
+      await ui.sendOperation("forged-view", "ui-test.ok", "view:main");
+      expect((await ui.waitForResponse("forged-view")).response).toEqual({
+        kind: "error",
+        error: {
+          code: "PERMISSION_DENIED",
+          message: "Host context or policy denied.",
+        },
+      });
+      expect(Atomics.load(ui.state, 0)).toBe(0);
+      await ui.sendOperation("authenticated", "ui-test.ok");
+      expect((await ui.waitForResponse("authenticated")).response).toEqual({
+        kind: "result",
+        payload: "ok",
+      });
+      expect(Atomics.load(ui.state, 0)).toBe(1);
+      await ui.stop();
+    } finally {
+      await ui.close();
     }
   },
   timeoutMs + 5_000,

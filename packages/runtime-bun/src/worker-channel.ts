@@ -443,6 +443,7 @@ export function validatePacket(value: unknown, incoming: Side): Packet {
     const message = parseMessage(JSON.stringify(packet.message));
     const client = [
       "hello",
+      "sdk-ready",
       "invoke",
       "listen",
       "unlisten",

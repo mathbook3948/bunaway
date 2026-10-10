@@ -21,6 +21,19 @@ reply proxy로 한 번만 전환하고 대기 메시지를 순서대로 전달�
 수신 정지로 인한 출력 버퍼 초과를 재현한다. 해당 문서의 진행 중 명령만 취소되고 같은 Bun PID와
 앱 상태, 다른 세션, 새 문서 연결 및 정상 shutdown이 유지되는지 검사한다.
 
+창 준비 계약은 `api/window-readiness.test.ts`, `lifecycle/window-readiness.test.ts`와
+`window-operations.test.ts`에서 설정 검증, 두 대상 창 권한, 단계별 완료와 상태 복구,
+새 세대와 늦은 확인 차단, 기한, 생성 취소와 전환 순서를 확인한다.
+`api/client.test.ts`는 협상한 SDK 준비 확인과 이전 호스트 호환, 확인 전송 실패를 검사한다.
+`windows-window-readiness.ts`는 실제 WebView2에서 숨김 생성, 별도 준비 이벤트, 허용된 다른 창의
+수신과 권한 필터, 탐색과 fragment, 창 재생성, 문서 실패와 탐색 취소, SDK 미준비의 실제 30초 기한,
+문서만 준비된 자동 표시 및 splashscreen 전환 후 한 번의 마지막 창 종료를 검사한다.
+`mise run host:windows`에 포함하며 네이티브 입력 준비 뒤 직접 실행할 수 있다.
+`windows-hidden-webview.test.ts`는 실제 Win32, WebView2를 별도 STA 프로세스에서 실행한다.
+HWND 생성부터 문서 완료까지 Win32 표시, 활성화, 포커스 메시지와 같은 프로세스의 WinEvent를
+관찰하고 입력 포커스와 숨김 상태를 확인한다. DLL 대체나 주기적 상태 조회만으로 순간 표시를 판정하지 않는다.
+WebView2 SDK 입력이 없거나 다른 OS이면 이 검사를 건너뛴다.
+
 `mise run host:android`는 Windows의 Android SDK/JDK와 선택 기기에서 실제 APK를 검사한다.
 `ANDROID_SERIAL` 기본값은 `emulator-5554`이며 기기를 먼저 부팅하거나 연결해야 한다.
 공통 Core/SDK 명령, 이벤트와 구독 해제, 정책 거부, 취소, 자산과 subframe 경계,
@@ -51,6 +64,16 @@ Linux와 macOS에서는 기존 추출 트리와 루트의 심볼릭 링크가 �
 게시 후 백업 정리 실패, Android 출력 대상과 패키징 BuildTarget의 분리를 검사한다.
 
 `api/clipboard.test.ts`는 텍스트 계약, 작업별 권한, SDK 호출 컨텍스트와 브라우저 번들을 검사한다.
+`api/window-activation.test.ts`는 `showInactive`, `blur`, `activate`의 입력과 결과,
+대상 권한과 열린 창 검사, 설정 순서의 후보 선택, 후보 권한 거부와 OS 전환 거부를 검사한다.
+`lifecycle/windows-activation.test.ts`는 실제 두 Win32 창과 EDIT 입력 필드를 사용한다.
+일반, 최소화, 최대화와 최대화에서 최소화한 창을 표시하거나 숨긴 뒤 `showInactive`를
+호출해 활성 창과 키보드 입력 포커스 보존, 표시 상태와 이벤트, snapshot의 일치를 확인한다.
+`activate`가 숨김과 최소화를 유지하는지도 검사한다. 전경 전환을 OS가 거부한 실행은
+입력 포커스 보존 결과와 구분해 기록하며 실제 전경 blur와 focus 성공으로 계산하지 않는다.
+DLL 대체 fixture는 반환 BOOL과 실제 전경 상태가 다를 때 관찰 상태를 반환하고,
+동기 활성화 콜백 뒤에 반영된 상태도 중복 이벤트 없이 전달하는지 검사한다.
+WebView2 경로는 기존 `windows-bun-window-api.ts`와 `windows-window-events.ts`에 포함한다.
 `lifecycle/clipboard-resources.test.ts`는 별도 프로세스의 Win32 바인딩 대체로 메모리 실패,
 소유권 이전, 잘못된 UTF-16, 점유와 취소, 종료 정리를 확인하며 데스크톱 클립보드를 바꾸지 않는다.
 실제 Windows 검사는 `BUNAWAY_CLIPBOARD_NATIVE=1`을 설정한 뒤
@@ -58,6 +81,17 @@ Linux와 macOS에서는 기존 추출 트리와 루트의 심볼릭 링크가 �
 공통 SDK와 실제 UI Worker의 읽기, 쓰기, 지우기, 별도 프로세스 점유와 취소를 확인한다.
 WebView2 페이지 실행은 포함하지 않는다. 이전 텍스트만 복원하며 이미지 등 다른 형식은 복원하지 않는다.
 실제 검증 기록과 명령은 [clipboard README](../plugins/clipboard/README.md)에 둔다.
+
+`api/window-lookup.test.ts`는 창 식별자 schema, 목록 권한과 대상 scope, 인증된 출처,
+이전 ID와 닫힌 창의 `null`, 취소와 미지원 플랫폼을 검사한다.
+`lifecycle/windows-window-lookup.test.ts`는 실제 HWND로 전경 창, 활성화 이력, 숨김,
+파괴 후 삭제와 새 ID, 조회 중 표시와 포커스 유지를 검사한다.
+OS가 전경 전환 요청을 거부하면 해당 활성화 전환을 `UNTESTED`로 기록하고 실제 조회 결과와
+표시 유지 검사는 계속한다. 이 실행을 활성화 전환 성공으로 기록하지 않는다.
+`lifecycle/windows-bun-window-api.ts`는 실제 WebView2와 UI Worker에서 문서 탐색의 ID 유지,
+네이티브 재생성의 ID 교체, 닫힌 창 조회, normal과 destroyed 상태 및 뷰별 권한을 확인한다.
+네이티브 입력을 준비한 뒤 `bun --no-env-file tests/lifecycle/windows-bun-window-api.ts`로
+단독 실행하거나 `mise run host:windows`로 전체 Windows 호스트 회귀와 함께 실행한다.
 
 `lifecycle/window-events.test.ts`는 실제 Core와 typed SDK를 연결해 `windows.changed`의
 스키마, 뷰별 구독 권한, 해제, 폐기 세션과 Core 종료 후 늦은 발행 차단을 확인한다.
@@ -122,6 +156,16 @@ Windows 이벤트 전송 회귀는 실제 `MessageChannel`과 Core를 연결한�
 
 Windows 호스트 시나리오는 `lifecycle/windows-host.ts`에 두고 PID 조회, 창 닫기와
 프로세스 종료 감시는 `lifecycle/windows-host-processes.ts`에서 실행한다.
+
+`api/opener.test.ts`는 HTTP/HTTPS 계약과 파일 API, 정확한 절대 경로 scope, 작업별 권한과 deny 우선 규칙을 확인한다.
+`lifecycle/windows-opener.test.ts`는 실제 Windows I/O STA, 없는 파일과 디렉터리, 공유 잠금, junction,
+하드 링크, 대소문자 별칭 거부와 파일 핸들 정리를 검사한다. 실제 I/O Worker의 승인 거부와
+대기 작업 취소, 자체 COM 초기화와 종료도 검사한다. `windows-opener-job.test.ts`는 Explorer가 실행한
+프로세스의 Job 분리와 앱 종료 후 생존을 확인한다. `cli/opener.test.ts`는 설치한 `.tgz`의 선언,
+카탈로그, scope evaluator와 브라우저 번들, UI Worker에서 어댑터를 초기화하지 않는지 검사한다. `BUNAWAY_OPENER_FILES_TEST=1`로 실행하면
+`cli/windows-opener-files.ts`의 자체 STA를 소유한 compiled I/O 어댑터 프로브로 실행 파일의 기본 동작과 실제 Explorer 선택을 확인한다.
+이 opt-in 검사는 Explorer 데스크톱이 필요하며 사용자 파일 연결을 바꾸지 않고 테스트 폴더의 창만 닫는다.
+일반 문서 편집기의 실행 완료, UNC 공유, MSIX나 Inno 설치 검증은 포함하지 않는다.
 `app-reload.test.ts`는 명령 교체 후 상태, 세션, 구독, 진행 중인 명령의 기존 구현과
 비공개 개발 IPC 입력 검증을 확인한다. 일반 경로와 별칭 경로에서 정상 번들을 교체하고,
 해시가 다르거나 세대 디렉터리 밖을 가리키는 번들은 거부하는지도 검사한다.

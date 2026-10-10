@@ -1,5 +1,12 @@
 # Windows Bun 호스트
 
+창 준비는 HWND 생성, 현재 최상위 문서의 NavigationCompleted와 SDK 협상 확인을 구분한다.
+`window-readiness.ts`가 기존 windowId와 ViewBoundary 세대별 상태를 소유하고 UI Worker가
+기존 native-event 경로로 권한이 있는 구독자에게 보낸다. 최초 네이티브 완료는 WebView2 생성 전에 발행한다.
+`visible: false`와 `showWhenReady`는 HWND를 처음부터 숨겨서 만들며 준비 중 활성화하지 않는다.
+앱이 요청하는 splashscreen 전환은 주 창 표시 후 splash 닫기를 확정하므로 중간에 마지막 창이 사라지지 않는다.
+공개 계약과 실패, 취소 및 기한은 [창 API](../../../docs/site/src/content/docs/reference/host/windows.mdx)를 따른다.
+
 번들 Bun 1.4.2가 앱 진입점이다. 메인은 기존 `createCore`와 앱을 실행하고,
 UI Worker 하나가 STA에서 `bun:ffi`로 Win32 창과 WebView2 COM을 직접 소유한다.
 I/O Worker 하나가 승인된 Host API를 검사한 파일 핸들로 실행한다.
