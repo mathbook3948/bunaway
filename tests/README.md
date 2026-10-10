@@ -9,6 +9,9 @@ manifest 생성과 카탈로그 로딩에서 native 계약의 크기 상한을 �
 읽고 지연 로딩을 유지하는지 검사한다.
 메인과 두 Worker에서 플러그인의 `BunawayError` 코드가 그대로 전달되는지도 확인한다.
 중간 생성 소스 없이 가상 모듈이 EXE에 포함되는지 검사한다.
+`cli/macos-build.test.ts`는 macOS compiled 실행 파일의 메인과 백엔드 Worker가
+원본 소스와 임시 자산을 삭제한 뒤에도 파일 import를 읽는지 검사한다.
+텍스트, 바이너리와 `.js` 파일을 자산으로 가져오는 경우를 포함한다.
 `packaging/contract.test.ts`는 `.bunaway/work/`와 `.bunaway/locks/`의 성공 및 실패 후 정리,
 작업 디렉터리 링크 거부와 외부 파일 보존을 검사한다.
 작업 중과 게시 직전에 작업 경로가 링크로 바뀌어도 외부 파일을 게시하지 않고 이전 출력을 보존하는지 검사한다.

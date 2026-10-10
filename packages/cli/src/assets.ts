@@ -461,13 +461,13 @@ export async function bundleWindowsReload(
   return hash(resolve(directory, "app.js"));
 }
 
-/** Bundle the macOS Bun entry and backend Worker; web resources stay in the .app. */
+/** Bundle the macOS Bun entry and backend Worker; return file imports for compilation. */
 export async function bundleMacosAssets(
   project: Project,
   assets: string,
   developmentServer = false,
   development = false,
-): Promise<void> {
+): Promise<string[]> {
   await assertAppDefinitionExport(project.appEntry);
   await mkdir(assets, {
     recursive: true,
@@ -482,7 +482,7 @@ export async function bundleMacosAssets(
   if (!developmentServer) {
     await webAssets(project, resolve(assets, "web"), sdk, development);
   }
-  await bundleMacosHost(
+  return bundleMacosHost(
     resolve(project.frameworkRoot, "native/macos/bun"),
     assets,
     project.appEntry,
@@ -492,7 +492,7 @@ export async function bundleMacosAssets(
   );
 }
 
-/** Bundle macOS host code and application imports without project-owned native code. */
+/** Bundle macOS host code and application imports; return imported asset basenames. */
 export async function bundleMacosHost(
   source: string,
   destination: string,
@@ -500,7 +500,7 @@ export async function bundleMacosHost(
   project?: string,
   development = false,
   installed: readonly InstalledPlugin[] = [],
-): Promise<void> {
+): Promise<string[]> {
   const sdk = project ? await sdkPlugin(project, [], installed) : undefined;
   const outputs = await buildWithSdk(
     {
@@ -532,10 +532,16 @@ export async function bundleMacosHost(
       },
     },
   );
+  const bundledAssets: string[] = [];
   for (const output of outputs) {
     await writeFile(
       resolve(destination, basename(output.path)),
       await bundleBytes(output, development),
     );
+    // File imports become path strings, so the compile pass needs their asset names.
+    if (output.kind === "asset") {
+      bundledAssets.push(basename(output.path));
+    }
   }
+  return bundledAssets.sort();
 }

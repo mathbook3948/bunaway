@@ -2,11 +2,12 @@ import { frameworkRoot } from "./files.ts";
 import { runManagedCommand } from "./managed-command.ts";
 import { run } from "./processes.ts";
 
-/** Compile the main Bun entry and backend Worker; .app resources stay external. */
+/** Compile the main entry, backend Worker and file imports; web resources stay external. */
 export async function compileMacosApp(
   assets: string,
   bun: string,
   executable: string,
+  bundledAssets: readonly string[],
   signal?: AbortSignal,
   framework = frameworkRoot,
 ): Promise<void> {
@@ -20,6 +21,7 @@ export async function compileMacosApp(
     "--no-compile-autoload-tsconfig",
     "--no-compile-autoload-package-json",
     "--asset=manifest.json",
+    ...bundledAssets.map((name) => `--asset=${name}`),
     `--outfile=${executable}`,
     "./boot.js",
     "./backend.js",

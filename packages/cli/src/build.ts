@@ -181,7 +181,7 @@ async function prepareNativeForBuild(
   };
 }
 
-/** Bundle project code and assets for the selected host; Windows also returns compile asset names. */
+/** Bundle project code and assets for the selected host and return compile asset names. */
 export async function bundleAssets(
   project: Project,
   assets: string,
@@ -201,7 +201,7 @@ export async function bundleAssets(
     project.root,
     project.frameworkRoot,
   );
-  return windows ? (JSON.parse(result) as string[]) : [];
+  return JSON.parse(result) as string[];
 }
 
 function xml(text: string): string {
@@ -423,7 +423,14 @@ async function assembleProject(
       }
     }
     if (!windows) {
-      await compileMacosApp(assets, native.bun, executable, signal, root);
+      await compileMacosApp(
+        assets,
+        native.bun,
+        executable,
+        bundledAssets,
+        signal,
+        root,
+      );
     }
     await ownedDirectory(project.root, staging);
     const hashes: Record<string, string> = {};

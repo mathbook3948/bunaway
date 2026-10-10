@@ -86,7 +86,7 @@ export async function buildMacosFixture(): Promise<string> {
     plugins: [],
     developmentSdk: {},
   });
-  await bundleMacosHost(
+  const bundledAssets = await bundleMacosHost(
     resolve(root, "native/macos/bun"),
     assets,
     resolve(fixture, "macos-entry.ts"),
@@ -95,6 +95,7 @@ export async function buildMacosFixture(): Promise<string> {
     assets,
     process.execPath,
     resolve(output, "bunaway-host"),
+    bundledAssets,
   );
   const hashes: Record<string, string> = {};
   for (const file of await files(assets)) {

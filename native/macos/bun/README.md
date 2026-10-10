@@ -21,6 +21,8 @@ WebKit 메시지는 네이티브 JSON 직렬화 전에 변환 가능 여부를 �
 배포 앱은 Bun compiled 실행 파일을 `Contents/MacOS/bunaway-host`에 넣는다.
 웹 자산과 정책은 `Contents/Resources`에 둔다. 별도 Bun 설치, C 컴파일러나
 WebView를 위한 추가 네이티브 바이너리는 필요하지 않다.
+`with { type: "file" }`로 가져온 파일은 compiled 실행 파일에 포함하며,
+`Bun.file(new URL(file, import.meta.url))`로 읽는다.
 
 현재 대상은 macOS arm64다. 단일 창, 명령과 이벤트, 뷰 정책, 사용자 지정 자산
 스킴, 렌더러 복구와 종료를 제공한다. 다중 창, 데스크톱 종료 설정과 네이티브
