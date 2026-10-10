@@ -1,5 +1,5 @@
-import { createClient, invoke } from "@bunaway/client";
 import type { CommandsOf, EventsOf } from "@bunaway/backend";
+import { createClient, invoke } from "@bunaway/client";
 import type { app } from "../app.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -21,6 +21,20 @@ document.getElementById("fail-renderer")?.addEventListener("click", () => {
 });
 
 async function run() {
+  // Both browser storage APIs must be available to the packaged web UI.
+  for (const storage of [
+    localStorage,
+    sessionStorage,
+  ]) {
+    const key = "bunaway-android-storage-test";
+    storage.setItem(key, "Android 한글 😀");
+    assert(
+      storage.getItem(key) === "Android 한글 😀",
+      "DOM storage roundtrip failed",
+    );
+    storage.removeItem(key);
+    assert(storage.getItem(key) === null, "DOM storage removal failed");
+  }
   const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
   await client.ready;
   assert(
@@ -139,7 +153,7 @@ async function run() {
     after,
     events: values.length,
     checks:
-      "commands, large UTF-8 response, events, unsubscribe, permission, errors, cancellation, assets, subframe",
+      "DOM storage, commands, large UTF-8 response, events, unsubscribe, permission, errors, cancellation, assets, subframe",
   };
 }
 

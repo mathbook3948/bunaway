@@ -89,6 +89,8 @@ apply from: file('.bunaway/settings.gradle')
 `build.command`로 웹 빌드를 먼저 실행하고 `build.app`의 공통 앱 정의와
 `build.frontend`의 웹 자산을 Android 프로젝트에 넣습니다. Android 전용 Bun 진입점은 작성하지 않습니다.
 백엔드에서 `with { type: "file" }`로 가져온 파일도 APK에 포함하며 번들과 같은 상대 경로로 추출합니다.
+백엔드를 시작할 때 이전 추출 트리를 교체하므로 앱 업데이트에서 제거한 파일과 이전 해시의
+파일은 남지 않습니다. 추출 디렉터리는 프레임워크 입력 전용이며 앱 데이터는 별도로 저장하세요.
 
 - `app.view`와 `app.home`으로 단일 뷰를 지정합니다. `app.windows`는 거부합니다.
 - `app.home`은 패키지 자산을 제공하는 HTTPS URL이며 인증 정보와 포트는 허용하지 않습니다.
@@ -102,6 +104,7 @@ UI 초기화에서 앱 정의의 `CommandsOf`, `EventsOf`로 타입을 지정한
 
 현재는 패키지 웹 자산만 제공합니다. 외부 탐색과 웹 네트워크 요청은 차단하며,
 웹 UI에는 백엔드 번들이나 호스트 설정을 제공하지 않습니다.
+WebView의 localStorage와 sessionStorage는 활성화합니다.
 화면 회전은 WebView 문서와 세션을 재생성하며 Bun과 Core 메모리 상태를 유지합니다.
 Activity를 종료하면 Core와 Bun을 종료합니다. 앱 프로세스 재시작 뒤 메모리 상태 복원은 제공하지 않습니다.
 백엔드가 기본 프로세스 그룹을 상속해 만든 하위 프로세스도 종료합니다.

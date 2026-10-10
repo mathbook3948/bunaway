@@ -7,6 +7,7 @@
 홈 런처에서 fixture 아이콘을 눌러 실행하고 호출 주체와 root task를 확인한다.
 홈 이동과 복귀에서는 Bun을 유지하고, 시스템 뒤로가기에서는 종료하는지 구분해 검사한다.
 회전 설정은 원래 값으로 복원한다. Java 스키마 검사와 Android lint도 포함한다.
+실제 WebView에서 localStorage와 sessionStorage의 저장, 읽기와 제거도 확인한다.
 `cli/android.test.ts`는 지원하지 않는 설정과 잘못된 명령 인자, 대상 잠금, sync 후
 사용자 Java/Manifest/Gradle/Wrapper 보존, 생성 파일 교체, 무관한 프로젝트와 링크 거부를 검사한다.
 설치된 패키지의 실제 Android 번들 Worker를 실행하고 생성된 백엔드의 IPC 부팅 협상과 정상 종료도 검사한다.
@@ -22,6 +23,9 @@ Gradle 출력의 최종 application ID와 잘못된 메타데이터 거부도 �
 `lifecycle/android-process-group.test.ts`는 Linux와 JDK 17 이상에서 실제 Java 소유자를
 컴파일하고 시작 취소, 정상 및 실패 종료, 강제 종료 후 자식과 손자, 상속된 파이프 정리를
 검사한다. 다른 그룹의 프로세스가 유지되는지도 확인하며 Android 기기 실행을 대신하지 않는다.
+`lifecycle/android-backend-assets.test.ts`는 JDK 17 이상에서 실제 Java 추출 소유자를
+컴파일하고 APK 갱신 시 이전 파일 import 제거, 앱 데이터 보존과 추출 실패 후 재시도를 검사한다.
+Linux와 macOS에서는 기존 추출 트리와 루트의 심볼릭 링크가 외부 파일을 건드리지 않는지도 검사한다.
 `packaging/publication.test.ts`는 공통 게시의 복구 성공, 게시와 복구 오류의 동시 유지,
 게시 후 백업 정리 실패, Android 출력 대상과 패키징 BuildTarget의 분리를 검사한다.
 

@@ -12,6 +12,7 @@ Java Activity와 Android WebView, APK에 포함한 Bun 1.4.2를 연결한다.
 | `Renderer.java` | 패키지 자산, 출처와 main frame 검사, 문서별 컨텍스트와 응답 |
 | `BunawayActivity.java` | 화면 회전과 Activity 종료의 소유권 |
 | `AppAssets.java`, `Protocol.java` | APK 입력과 생성된 스키마 검증 |
+| `BackendAssets.java` | 시작 전 백엔드 추출 트리 교체와 이전 APK 파일 정리 |
 | `app/` | 사용자가 수정하는 Java Activity, Manifest와 Gradle 초기 템플릿 |
 | `bridge.js` | 기존 기본 Client SDK가 사용하는 WebViewBridge 구현 |
 | `../../packages/cli/src/native-build.ts` | 공통 Bun 도구로 Android x64, arm64 아카이브, 실행 파일과 라이선스 해시 검증 |
@@ -55,6 +56,7 @@ mise run host:android
 
 명령, 이벤트와 구독 해제, 오류와 정책 거부, 취소, 자산 경계와 subframe 거부를 검사한다.
 큰 한글 및 이모지 응답이 여러 파이프 청크를 거쳐도 원문 그대로 도착하는지 검사한다.
+WebView의 localStorage와 sessionStorage에 값을 저장하고 읽은 뒤 제거하는지도 검사한다.
 화면 회전으로 문서 세션이 바뀌어도 Bun PID와 Core 상태가 유지되는지 확인하고,
 뒤로가기로 Activity를 닫은 뒤 Bun PID가 사라지는지 검사한다.
 백엔드의 파일 import를 APK에서 추출한 뒤 읽고, 번들에서 만든 자식과 손자 프로세스가
@@ -70,6 +72,12 @@ APK와 실행 보고서는 `build/android-host/`에 남는다. Java 스키마 �
 Android 최소 API 29는 선언이며 현재 실제 실행 근거는 API 36 x86_64 에뮬레이터다.
 ARM64 런타임은 APK에 포함하고 해시를 검사했지만 실기기 실행은 별도 검증이 필요하다.
 release APK, AAB, 스토어, 외부 개발 서버와 네이티브 플러그인 어댑터는 미구현이다.
+
+백엔드를 시작할 때 `noBackupFilesDir/bunaway-runtime/`의 이전 추출 트리를 지운 뒤
+현재 APK의 번들과 파일 import, Bun 설정을 다시 추출한다. 제거하거나 해시가 바뀐 파일은
+남지 않는다. 기존 트리의 심볼릭 링크는 대상 파일을 따라가지 않고 링크만 제거한다.
+이 디렉터리는 프레임워크 입력 전용이며 앱 데이터는 filesDir 등 별도 디렉터리에 저장한다.
+추출이 실패하면 Bun을 시작하지 않으며 다음 시작에서 불완전한 트리를 지우고 다시 시도한다.
 
 `toybox setsid`로 Android 호스트와 다른 세션 및 프로세스 그룹을 만든다. 셸은 PID를
 알린 뒤 호스트의 시작 승인을 기다리므로, 그룹 검증 전이나 시작 취소 후에는 앱 코드를

@@ -444,6 +444,7 @@ function requiredFrameworkFiles(): string[] {
     ...[
       "Protocol",
       "AppAssets",
+      "BackendAssets",
       "BunProcess",
       "ProcessGroup",
       "FrameReader",

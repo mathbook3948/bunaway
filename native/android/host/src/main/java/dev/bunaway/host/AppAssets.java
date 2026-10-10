@@ -10,7 +10,6 @@ import com.google.gson.JsonObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -120,43 +119,26 @@ final class AppAssets {
      * Copies the backend bundle and its Bun configuration into the app's private no-backup
      * directory and returns that directory.
      *
-     * <p>Bun needs real file paths, while APK assets are only streams. Each start overwrites these
-     * framework files so an app update replaces the code. Other files in the app's data directories
-     * are left untouched.
+     * <p>Bun needs real file paths, while APK assets are only streams. Each start replaces the
+     * framework-owned tree so removed or renamed imports from an earlier APK do not accumulate.
+     * Other files in the app's data directories are left untouched.
      *
      * @throws IOException when the directory cannot be created or a file cannot be copied
      */
     File prepareBackend() throws IOException {
-        File directory = new File(context.getNoBackupFilesDir(), "bunaway-runtime");
-        if (!directory.isDirectory() && !directory.mkdirs()) {
-            throw new IOException("Cannot create backend directory");
-        }
-        copyBackendAssets("bunaway/backend", directory);
-        for (String name : new String[] {"bunfig.toml", "tsconfig.json"}) {
-            try (InputStream input = context.getAssets().open("bunaway/" + name);
-                    FileOutputStream output = new FileOutputStream(new File(directory, name))) {
-                copy(input, output);
-            }
-        }
-        return directory;
-    }
+        return BackendAssets.prepare(
+                context.getNoBackupFilesDir(),
+                new BackendAssets.Source() {
+                    @Override
+                    public String[] list(String path) throws IOException {
+                        return context.getAssets().list(path);
+                    }
 
-    /** Copies the bundled entry and file imports while retaining their relative paths. */
-    private void copyBackendAssets(String source, File destination) throws IOException {
-        String[] names = context.getAssets().list(source);
-        if (names == null || names.length == 0) {
-            try (InputStream input = context.getAssets().open(source);
-                    FileOutputStream output = new FileOutputStream(destination)) {
-                copy(input, output);
-            }
-            return;
-        }
-        if (!destination.isDirectory() && !destination.mkdirs()) {
-            throw new IOException("Cannot create backend asset directory");
-        }
-        for (String name : names) {
-            copyBackendAssets(source + "/" + name, new File(destination, name));
-        }
+                    @Override
+                    public InputStream open(String path) throws IOException {
+                        return context.getAssets().open(path);
+                    }
+                });
     }
 
     private static void copy(InputStream input, OutputStream output) throws IOException {
