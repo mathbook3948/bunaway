@@ -549,26 +549,14 @@ test("Windows adapter disposal is repeatable and blocks later opens", async () =
   });
   await adapter.dispose();
   await adapter.dispose();
-  const executeUI = adapter.executeUI;
-  if (!executeUI) {
-    throw new Error("Missing UI adapter.");
-  }
   await expect(
     Promise.resolve().then(() =>
-      executeUI(
+      adapter.execute(
         "opener.openUrl",
         {
           url: "https://example.com/",
         },
         "backend",
-        {
-          requestId: "disposed",
-          permissions: {
-            permissions: [
-              "opener:openUrl",
-            ],
-          },
-        },
       ),
     ),
   ).rejects.toMatchObject({

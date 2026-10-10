@@ -19,7 +19,7 @@ async function run(args: string[], cwd: string): Promise<void> {
 }
 
 /**
- * Run an installed plugin in a compiled STA probe. The executable file opens by
+ * Run an installed plugin in a compiled I/O adapter probe. The executable file opens by
  * its default action; Explorer's selected item is observed separately. No user
  * file associations or existing application windows are changed.
  */
@@ -69,22 +69,15 @@ export async function verifyWindowsOpenerFiles(
     await writeFile(
       probeSource,
       `import assert from "node:assert/strict";
-import { dlopen } from "bun:ffi";
 import { loadPluginCatalog } from ${JSON.stringify(resolve("native/host-api/bun/plugin-catalog.ts"))};
 import { operations } from ${JSON.stringify(resolve("native/host-api/bun/plugins.ts"))};
 import app from "./src-bunaway/app.ts";
 import { pluginImports } from ${JSON.stringify(resolve(assets, "plugin-imports.js"))};
-const ole = dlopen("ole32.dll", {
-  CoInitializeEx: { args: ["ptr", "u32"], returns: "i32" },
-  CoUninitialize: { args: [], returns: "void" },
-});
-assert(ole.symbols.CoInitializeEx(null, 0x2 | 0x4) >= 0);
 const catalog = await loadPluginCatalog(${JSON.stringify(assets)}, pluginImports);
-const adapter = await operations(app.plugins, ${JSON.stringify(project)}, "ui", undefined, catalog);
+const adapter = await operations(app.plugins, ${JSON.stringify(project)}, "io", undefined, catalog);
 try {
   for (const [action, path] of [["openFile", ${JSON.stringify(helper)}], ["revealFile", ${JSON.stringify(sample)}]]) {
-    const permissions = { permissions: [{ identifier: "opener:" + action, allow: [{ path }] }] };
-    assert.equal(await adapter.executeUI("opener." + action, { path }, "backend", { requestId: action, permissions }), null);
+    assert.equal(adapter.execute("opener." + action, { path }, "backend"), null);
     if (action === "openFile") {
       const deadline = Date.now() + 10000;
       while (!(await Bun.file(${JSON.stringify(marker)}).exists())) {
@@ -95,8 +88,6 @@ try {
   }
 } finally {
   await adapter.dispose();
-  ole.symbols.CoUninitialize();
-  ole.close();
 }
 `,
     );

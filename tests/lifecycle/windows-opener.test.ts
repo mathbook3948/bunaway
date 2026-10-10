@@ -3,12 +3,13 @@ import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
-import { Channel, type UIConfig } from "#native/windows/bun/channel";
+import { Channel } from "#native/windows/bun/channel";
+import type { HostContext, HostResponse } from "@bunaway/protocol";
 import { openerPlugin } from "@bunaway/plugin-opener";
-import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
+import { bundleIOPluginFixture } from "../fixtures/native-worker.ts";
 
 test.skipIf(process.platform !== "win32")(
-  "Windows opener validates calls and releases Explorer COM resources on an STA",
+  "Windows opener owns an I/O STA and validates pinned files",
   async () => {
     const root = resolve(
       import.meta.dir,
@@ -37,15 +38,6 @@ import { writeFileSync, mkdirSync, linkSync, symlinkSync, unlinkSync } from "nod
 import { join } from "node:path";
 const sample = ${JSON.stringify(resolve(root, "한글 공백, 😀.txt"))};
 writeFileSync(sample, "file content");
-const permissions = (action, path) => ({ permissions: [{ identifier: "opener:" + action, allow: [{ path }] }] });
-const fileAdapter = createOperations({ dataRoot: ".", capabilities: [] });
-try {
-  // Valid file and grant reach a real OS failure because this thread has no COM apartment.
-  assert.throws(() => fileAdapter.executeUI("opener.openFile", { path: sample }, "backend", {
-    requestId: "os-failure", permissions: permissions("openFile", sample),
-  }), (error) => error.code === "INTERNAL");
-} finally { fileAdapter.dispose(); }
-
 const files = createFiles();
 try {
   files.withFile(sample, () => {
@@ -97,15 +89,11 @@ try {
   const adapter = createOperations({ dataRoot: ".", capabilities: [] });
   try {
     for (const action of ["openFile", "revealFile"]) {
-      const call = (path, grants) => adapter.executeUI("opener." + action, { path }, "backend", {
-        requestId: "files", permissions: grants,
-      });
-      assert.throws(() => call(sample, { permissions: ["opener:openUrl", "opener:" + action] }), (error) => error.code === "PERMISSION_DENIED");
+      const call = (path) => adapter.execute("opener." + action, { path }, "backend");
       const missing = sample + ".missing";
-      assert.throws(() => call(missing, permissions(action, sample)), (error) => error.code === "PERMISSION_DENIED");
-      assert.throws(() => call(missing, permissions(action, missing)), (error) => error.code === "INVALID_ARGUMENT" && error.details.reason === "FILE_NOT_FOUND");
+      assert.throws(() => call(missing), (error) => error.code === "INVALID_ARGUMENT" && error.details.reason === "FILE_NOT_FOUND");
       const directory = ${JSON.stringify(root)};
-      assert.throws(() => call(directory, permissions(action, directory)), (error) => error.code === "INVALID_ARGUMENT");
+      assert.throws(() => call(directory), (error) => error.code === "INVALID_ARGUMENT");
       const lockApi = dlopen("kernel32.dll", {
         CreateFileW: { args: ["ptr", "u32", "u32", "ptr", "u32", "u32", "u64"], returns: "u64" },
         CloseHandle: { args: ["u64"], returns: "i32" },
@@ -113,39 +101,19 @@ try {
       const lock = lockApi.symbols.CreateFileW(ptr(Buffer.from(sample + "\\0", "utf16le")), 0x80000000, 0, null, 3, 0, 0n);
       assert.notEqual(lock, 0xffffffffffffffffn);
       try {
-        assert.throws(() => call(sample, permissions(action, sample)), (error) => error.code === "PERMISSION_DENIED");
+        assert.throws(() => call(sample), (error) => error.code === "PERMISSION_DENIED");
       } finally { lockApi.symbols.CloseHandle(lock); lockApi.close(); }
     }
     assert.throws(
-      () => adapter.execute("opener.openUrl", { url: "https://example.com/" }, "backend"),
-      (error) => error instanceof Error && "code" in error && error.code === "UNSUPPORTED",
-    );
-    assert.throws(
-      () => adapter.executeUI("opener.openUrl", { url: "https://example.com/" }, "backend", {
-        requestId: "denied",
-        permissions: { permissions: [] },
-      }),
-      (error) => error instanceof Error && "code" in error && error.code === "PERMISSION_DENIED",
-    );
-    assert.throws(
-      () => adapter.executeUI("opener.openUrl", { url: "file:///C:/secret.txt" }, "backend", {
-        requestId: "invalid",
-        permissions: { permissions: ["opener:openUrl"] },
-      }),
+      () => adapter.execute("opener.openUrl", { url: "file:///C:/secret.txt" }, "backend"),
       (error) => error instanceof Error && "code" in error && error.code === "INVALID_ARGUMENT",
     );
     assert.throws(
-      () => adapter.executeUI("opener.missing", { url: "https://example.com/" }, "backend", {
-        requestId: "unknown",
-        permissions: { permissions: ["opener:openUrl"] },
-      }),
+      () => adapter.execute("opener.missing", { url: "https://example.com/" }, "backend"),
       (error) => error instanceof Error && "code" in error && error.code === "UNSUPPORTED",
     );
     assert.throws(
-      () => adapter.executeUI("opener.openUrl", { url: 42 }, "backend", {
-        requestId: "malformed",
-        permissions: { permissions: ["opener:openUrl"] },
-      }),
+      () => adapter.execute("opener.openUrl", { url: 42 }, "backend"),
       (error) => error instanceof Error && "code" in error && error.code === "INVALID_ARGUMENT",
     );
   } finally {
@@ -153,10 +121,7 @@ try {
     await adapter.dispose();
   }
   assert.throws(
-    () => adapter.executeUI("opener.openUrl", { url: "https://example.com/" }, "backend", {
-      requestId: "disposed",
-      permissions: { permissions: ["opener:openUrl"] },
-    }),
+    () => adapter.execute("opener.openUrl", { url: "https://example.com/" }, "backend"),
     (error) => error instanceof Error && "code" in error && error.code === "CANCELLED",
   );
 } finally {
@@ -210,11 +175,11 @@ parentPort?.close();
 );
 
 test.skipIf(process.platform !== "win32")(
-  "Windows UI Worker creates and disposes the opener adapter on its STA",
+  "Windows I/O Worker owns the opener STA and rejects unapproved and cancelled work",
   async () => {
     const dataRoot = resolve(
       import.meta.dir,
-      `../../build/windows-opener-ui-${crypto.randomUUID()}`,
+      `../../build/windows-opener-io-${crypto.randomUUID()}`,
     );
     await mkdir(dataRoot, {
       recursive: true,
@@ -224,15 +189,15 @@ test.skipIf(process.platform !== "win32")(
       "../../plugins/opener/src/windows.ts",
     );
     const disposedPath = resolve(dataRoot, "opener-disposed.txt");
-    await bundleUIPluginFixture(
+    await bundleIOPluginFixture(
       dataRoot,
       [
         {
           name: "opener",
           version: openerPlugin.version,
           native: openerPlugin.native,
-          execution: "ui",
-          authorization: false,
+          execution: "io",
+          authorization: true,
         },
       ],
       `import assert from "node:assert/strict";
@@ -241,106 +206,164 @@ import { writeFileSync } from "node:fs";
 const ole = dlopen("ole32.dll", {
   CoGetApartmentType: { args: ["ptr", "ptr"], returns: "i32" },
 });
-function checkApartment() {
-  const type = new Uint32Array(1);
-  const qualifier = new Uint32Array(1);
-  assert.equal(ole.symbols.CoGetApartmentType(ptr(type), ptr(qualifier)), 0);
-  assert([0, 3].includes(type[0]), "Opener adapter must use the UI STA");
-}
-export const pluginImports = { 'opener': {
+const apartment = new Uint32Array(1);
+const qualifier = new Uint32Array(1);
+const apartmentType = () => ole.symbols.CoGetApartmentType(ptr(apartment), ptr(qualifier));
+export const pluginImports = { opener: {
+  authorization: async () => ({ matches: () => false }),
   operations: async () => {
     const { createOperations } = await import(${JSON.stringify(operationsModule)});
-    return {
-      createOperations(environment) {
-        checkApartment();
-        const adapter = createOperations(environment);
-        return {
-          ...adapter,
-          async dispose() {
-            checkApartment();
-            await adapter.dispose();
-            writeFileSync(${JSON.stringify(disposedPath)}, "STA");
-            ole.close();
-          },
-        };
-      },
-    };
+    return { createOperations(environment) {
+      assert(apartmentType() < 0, "I/O worker must start without COM initialization");
+      const adapter = createOperations(environment);
+      assert.equal(apartmentType(), 0);
+      assert([0, 3].includes(apartment[0]), "Opener must own an STA");
+      return { ...adapter, dispose() {
+        adapter.dispose();
+        adapter.dispose();
+        assert(apartmentType() < 0, "Disposal must balance the adapter's COM initialization");
+        writeFileSync(${JSON.stringify(disposedPath)}, "STA");
+        ole.close();
+      }};
+    }};
   },
 }};
 `,
     );
-    const config: UIConfig = {
-      runtime: {
-        id: `opener-${crypto.randomUUID()}`,
-        generation: "1",
-      },
-      policy: {
-        version: 1,
-        views: [],
-        backend: {
-          permissions: [],
-        },
-      },
-      backendContext: "backend" as UIConfig["backendContext"],
-      windows: [],
-      assets: dataRoot,
-      dataRoot,
-      loader: "",
-      plugins: [
-        {
-          name: openerPlugin.name,
-          version: openerPlugin.version,
-          native: openerPlugin.native,
-        },
-      ],
+    const runtime = {
+      id: `opener-${crypto.randomUUID()}`,
+      generation: "1",
     };
-    const worker = new Worker(pathToFileURL(resolve(dataRoot, "ui.js")), {
-      workerData: config,
-    });
+    const context = "backend" as HostContext;
+    const worker = new Worker(
+      pathToFileURL(resolve(dataRoot, "host-operations.js")),
+      {
+        workerData: {
+          runtime,
+          dataRoot,
+          assets: dataRoot,
+          plugins: [
+            {
+              name: openerPlugin.name,
+              version: openerPlugin.version,
+              native: openerPlugin.native,
+            },
+          ],
+        },
+      },
+    );
     let failure: unknown;
+    let exitCode: number | undefined;
     let ready = false;
     let cleaned = false;
-    const exited = new Promise<number>((resolveExit) => {
-      worker.once("exit", resolveExit);
-    });
+    const prepares: string[] = [];
+    const replies = new Map<string, HostResponse>();
+    const exited = new Promise<number>((done) =>
+      worker.once("exit", (code) => {
+        exitCode = code;
+        done(code);
+      }),
+    );
     worker.once("error", (error) => {
       failure = error;
     });
     const channel = new Channel(
       worker,
-      config.runtime,
-      "main",
+      runtime,
+      "main-io",
       (packet) => {
         if (packet.kind === "ready") {
           ready = true;
-          channel.notify({
-            kind: "shutdown",
-          });
+        } else if (packet.kind === "prepare") {
+          prepares.push(packet.requestId);
+        } else if (packet.kind === "host-response") {
+          replies.set(packet.requestId, packet.response);
         } else if (packet.kind === "cleaned") {
           cleaned = true;
-        } else if (packet.kind === "fatal") {
-          failure = new Error(packet.error.message);
         }
       },
       (error) => {
         failure = error;
-        void worker.terminate();
       },
     );
-    const timeout = setTimeout(() => {
-      failure = new Error("Opener UI Worker timed out.");
-      void worker.terminate();
-    }, 15000);
+    const waitFor = async (condition: () => boolean) => {
+      const deadline = Date.now() + 10000;
+      while (!condition()) {
+        if (failure) {
+          throw failure;
+        }
+        if (exitCode !== undefined) {
+          throw new Error(`Opener I/O worker exited early: ${exitCode}`);
+        }
+        if (Date.now() > deadline) {
+          throw new Error("Opener I/O worker timed out.");
+        }
+        await Bun.sleep(2);
+      }
+    };
+    const operation = (requestId: string) =>
+      channel.send({
+        kind: "operation",
+        context,
+        requestId,
+        source: "backend",
+        call: {
+          operation: "opener.openFile",
+          payload: {
+            path: "relative.txt",
+          },
+        },
+      });
+    const grant = (requestId: string, allowed: boolean) =>
+      channel.send({
+        kind: "grant",
+        context,
+        requestId,
+        allowed,
+      });
     try {
+      await waitFor(() => ready);
+      await operation("denied");
+      await waitFor(() => prepares.includes("denied"));
+      await grant("denied", false);
+      await waitFor(() => replies.has("denied"));
+      expect(replies.get("denied")).toMatchObject({
+        kind: "error",
+        error: {
+          code: "PERMISSION_DENIED",
+        },
+      });
+      await operation("cancelled");
+      await waitFor(() => prepares.includes("cancelled"));
+      await channel.send({
+        kind: "cancel",
+        context,
+        requestId: "cancelled",
+      });
+      await grant("cancelled", true);
+      await operation("approved");
+      await waitFor(() => prepares.includes("approved"));
+      await grant("approved", true);
+      await waitFor(() => replies.has("approved"));
+      expect(replies.get("approved")).toMatchObject({
+        kind: "error",
+        error: {
+          code: "INVALID_ARGUMENT",
+        },
+      });
+      expect(replies.has("cancelled")).toBe(false);
+      await channel.send({
+        kind: "shutdown",
+      });
       expect(await exited).toBe(0);
-      expect(failure).toBeUndefined();
-      expect(ready).toBe(true);
       expect(cleaned).toBe(true);
       expect(await Bun.file(disposedPath).text()).toBe("STA");
+      expect(failure).toBeUndefined();
     } finally {
-      clearTimeout(timeout);
+      if (exitCode === undefined) {
+        await worker.terminate();
+      }
       channel.close();
-      await worker.terminate();
       await rm(dataRoot, {
         recursive: true,
         force: true,

@@ -115,7 +115,7 @@ export default defineApp({ modules: [], plugins: [openerPlugin] });
     expect(plugins.map(({ packageName }) => packageName)).toEqual([
       "@bunaway/plugin-opener",
     ]);
-    expect(plugins[0]?.targets.windows?.execution).toBe("ui");
+    expect(plugins[0]?.targets.windows?.execution).toBe("io");
     expect(plugins[0]?.authorization).toBeDefined();
     expect(valid.nativePlugins?.map(({ name }) => name)).toEqual([
       "opener",
@@ -201,33 +201,60 @@ void revealFile("C:/file.txt");
       ),
     ).toBe(false);
 
+    // UI dispatch must not initialize the opener DLLs, even when the package is
+    // registered. This also runs on Linux to catch accidental UI placement.
+    const uiAdapters = await operations(
+      app.plugins ?? [],
+      project,
+      "ui",
+      undefined,
+      packagedPlugins,
+    );
+    try {
+      await expect(
+        uiAdapters.executeUI(
+          "opener.openFile",
+          {
+            path: "C:/file.txt",
+          },
+          "backend",
+          {
+            requestId: "wrong-worker",
+            permissions: {
+              permissions: [],
+            },
+          },
+        ),
+      ).rejects.toMatchObject({
+        code: "UNSUPPORTED",
+      });
+    } finally {
+      await uiAdapters.dispose();
+    }
+
     if (process.platform === "win32") {
       const appPlugins = app.plugins ?? [];
       const adapters = await operations(
         appPlugins,
         project,
-        "ui",
+        "io",
         undefined,
         packagedPlugins,
       );
       try {
-        await expect(
-          adapters.executeUI(
-            "opener.openUrl",
+        expect(() =>
+          adapters.execute(
+            "opener.openFile",
             {
-              url: "https://example.com/",
+              path: "relative.txt",
             },
-            "view:main",
-            {
-              requestId: "denied",
-              permissions: {
-                permissions: [],
-              },
-            },
+            "backend",
           ),
-        ).rejects.toMatchObject({
-          code: "PERMISSION_DENIED",
-        });
+        ).toThrow(
+          expect.objectContaining({
+            code: "INVALID_ARGUMENT",
+          }),
+        );
       } finally {
         await adapters.dispose();
       }

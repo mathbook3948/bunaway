@@ -80,7 +80,6 @@ try {
     capabilities: [],
   });
   adapter = opener;
-  assert(opener.executeUI);
   const url = new URL(`/open ${"한글"}`, `http://127.0.0.1:${port}`);
   url.search = new URLSearchParams({
     q: "space and 한글",
@@ -90,20 +89,12 @@ try {
 
   // The nonce ties the loopback request to this invocation of the default browser.
   assert.equal(
-    await opener.executeUI(
+    opener.execute(
       "opener.openUrl",
       {
         url: inputUrl,
       },
       "backend",
-      {
-        requestId: `browser-${nonce}`,
-        permissions: {
-          permissions: [
-            "opener:openUrl",
-          ],
-        },
-      },
     ),
     null,
     "A successful result means Windows accepted the request, not that the page loaded.",

@@ -2,6 +2,12 @@
 
 ## 2026-10-10 opener 파일 작업
 
+초기 UI Worker 구현의 Windows 실행 근거다. 후속 수정은 파일 검사와 셸 요청을
+기존 I/O Worker로 옮기고 어댑터가 자체 STA 초기화와 정리를 소유하도록 변경했다.
+아래 Windows 실행 결과는 후속 수정의 실행 근거로 사용하지 않는다. 후속 검증은
+`windows-opener.test.ts`의 실제 I/O Worker, 권한 승인 거부와 대기 작업 취소, COM 정리와
+`cli/opener.test.ts`의 UI 어댑터 미초기화 검사로 구분한다.
+
 `6f2363c`의 opener를 확장하고 최신 main `87cbba6`에 rebase했다.
 Windows 11 Pro x64 `10.0.26200`, Bun 1.4.2에서 확인했다.
 `openFile`과 `revealFile`은 작업별 권한과 정확한 절대 파일 경로 scope를 사용한다.

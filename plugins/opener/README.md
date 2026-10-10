@@ -21,7 +21,7 @@ await revealFile("C:/Users/me/Documents/한글 보고서.txt");
 
 ## 계약과 구현
 
-공개 함수의 입력은 절대 HTTP 또는 HTTPS URL 문자열 하나입니다. 입력 문자열과 URL 표준화 결과는 각각 8,192자를 넘을 수 없습니다. 제어 문자, 역슬래시, 앞뒤 공백, 호스트가 없는 주소, `file:`, `javascript:`와 커스텀 스킴은 거부합니다. 유효한 주소는 `URL.href` 형식으로 정규화합니다. 공백과 한글이 포함된 경로와 쿼리는 URL 규칙에 따라 인코딩됩니다.
+`openUrl`의 입력은 절대 HTTP 또는 HTTPS URL 문자열 하나입니다. 입력 문자열과 URL 표준화 결과는 각각 8,192자를 넘을 수 없습니다. 제어 문자, 역슬래시, 앞뒤 공백, 호스트가 없는 주소, `file:`, `javascript:`와 커스텀 스킴은 거부합니다. 유효한 주소는 `URL.href` 형식으로 정규화합니다. 공백과 한글이 포함된 경로와 쿼리는 URL 규칙에 따라 인코딩됩니다.
 
 작업 계약은 `opener.openUrl`, 입력 `{ url: string }`, 결과 `null`, 권한 `opener:openUrl`입니다. 주소 대상에 대한 별도 권한 범위는 없습니다. 권한을 허용하면 모든 HTTP 및 HTTPS 주소를 열 수 있습니다.
 
@@ -50,13 +50,13 @@ await revealFile("C:/Users/me/Documents/한글 보고서.txt");
 
 권한 검사 뒤 파일과 부모 디렉터리를 확인합니다. 파일이 없으면 `INVALID_ARGUMENT`과 `details.reason: "FILE_NOT_FOUND"`, 읽기나 디렉터리 조회 접근이 거부되거나 공유 잠금과 충돌하면 `PERMISSION_DENIED`를 반환합니다. reparse point, junction, 심볼릭 링크, 하드 링크와 8.3 별칭도 거부합니다. OS 요청을 제출할 때까지 핸들을 유지해 경로 교체를 막으며 성공과 실패 모두에서 닫습니다. 파일 권한은 요청 대상만 제한합니다. 기본 연결 앱의 동작, 실행 파일이나 셸 바로가기의 실행 대상을 격리하지 않으므로 신뢰하는 파일에만 `openFile`을 허용해야 합니다.
 
-Windows 구현은 UI STA에서 Explorer 데스크톱의 `Shell.Application`에 `ShellExecute`를 요청합니다. URL과 `open` 동작을 별도의 COM 인자로 전달하며 셸 명령 문자열을 만들지 않습니다. Explorer가 브라우저를 실행하므로 브라우저는 앱의 kill-on-close Job을 상속하지 않고, 앱 종료나 개발 재시작 뒤에도 유지됩니다. 성공은 Explorer가 실행 요청을 접수했다는 뜻이며 브라우저 표시나 페이지 로딩 완료를 보장하지 않습니다. 각 호출의 COM 참조와 문자열은 성공과 실패 모두에서 해제하며, 플러그인 종료 시 DLL 핸들을 닫습니다. 반복 정리는 안전합니다.
+Windows 구현은 I/O Worker에서 자체 COM STA를 초기화하고 Explorer 데스크톱의 `Shell.Application`에 `ShellExecute`를 요청합니다. URL과 `open` 동작을 별도의 COM 인자로 전달하며 셸 명령 문자열을 만들지 않습니다. Explorer가 브라우저를 실행하므로 브라우저는 앱의 kill-on-close Job을 상속하지 않고, 앱 종료나 개발 재시작 뒤에도 유지됩니다. 성공은 Explorer가 실행 요청을 접수했다는 뜻이며 브라우저 표시나 페이지 로딩 완료를 보장하지 않습니다. 각 호출의 COM 참조와 문자열은 성공과 실패 모두에서 해제하며, 플러그인 종료 시 DLL 핸들을 닫고 자체 COM 초기화를 해제합니다. 반복 정리는 안전합니다.
 
 실행에는 접근 가능한 Windows Explorer 데스크톱이 필요합니다. Explorer를 찾거나 COM 요청을 전달하지 못하면 `INTERNAL`을 반환합니다. 앱 Job에서 브라우저를 직접 실행하는 대체 경로는 제공하지 않습니다.
 
 `openFile`도 같은 Explorer `ShellExecute` 경로를 사용하고 기본 연결 앱을 바꾸지 않습니다. `revealFile`은 `SHParseDisplayName`으로 파일의 PIDL을 얻고 `SHOpenFolderAndSelectItems`로 부모 폴더에서 그 파일 하나를 선택하도록 요청합니다. 경로를 명령줄에 이어 붙이지 않으며 PIDL은 성공과 실패 모두에서 해제합니다. 파일에 대한 OS 요청이 동기적으로 접근 거부나 파일 소실을 반환하면 위의 파일 오류로 변환하고, 다른 요청 실패는 `INTERNAL`입니다.
 
-세 함수 모두 성공은 요청 접수를 뜻합니다. 기본 앱의 실행 완료, 파일 읽기 완료나 Explorer 화면 표시와 선택 완료를 기다리지 않습니다. OS가 접수한 뒤 발생하는 파일 소실, 연결 앱 부재, 앱 내부 실패와 화면 변경은 결과에 포함되지 않습니다. 취소와 기한 초과는 이미 접수한 요청을 되돌리지 않습니다. 네이티브 호출 중에는 OS가 반환할 때까지 작업이 계속될 수 있으며 UNC 공유나 셸 확장의 응답이 느리면 UI STA도 기다릴 수 있습니다.
+세 함수 모두 성공은 요청 접수를 뜻합니다. 기본 앱의 실행 완료, 파일 읽기 완료나 Explorer 화면 표시와 선택 완료를 기다리지 않습니다. OS가 접수한 뒤 발생하는 파일 소실, 연결 앱 부재, 앱 내부 실패와 화면 변경은 결과에 포함되지 않습니다. 취소와 기한 초과는 이미 접수한 요청을 되돌리지 않습니다. 네이티브 호출 중에는 OS가 반환할 때까지 작업이 계속될 수 있으며 UNC 공유나 셸 확장의 응답이 느리면 I/O Worker의 후속 작업과 정리가 지연될 수 있습니다. 창과 WebView를 담당하는 UI Worker는 이 파일 검사나 셸 요청을 실행하지 않습니다. 호스트는 I/O 작업을 시작하기 직전에 현재 호출 컨텍스트와 작업 권한, scope를 검사하며, 승인 전 취소된 작업은 실행하지 않습니다.
 
 현재 어댑터는 Windows만 제공합니다. 지정 앱 열기, 커스텀 URL 스킴, 휴지통, 딥링크 등록과 설치 프로그램 변경은 이 패키지의 범위가 아닙니다.
 
@@ -64,7 +64,7 @@ Windows 구현은 UI STA에서 Explorer 데스크톱의 `Shell.Application`에 `
 
 - `INVALID_ARGUMENT`: URL이나 파일 경로가 유효하지 않거나 파일이 없습니다. 파일 소실은 `details.reason`이 `FILE_NOT_FOUND`입니다.
 - `PERMISSION_DENIED`: 작업 권한이나 파일 scope가 없거나, 파일 접근, 링크 또는 경로 별칭 검사를 통과하지 못했습니다.
-- `UNSUPPORTED`: 현재 플랫폼이나 실행 환경에 Windows UI 어댑터가 없습니다.
+- `UNSUPPORTED`: 현재 플랫폼이나 실행 환경에 Windows 어댑터가 없습니다.
 - `INTERNAL`: 파일 검사 또는 Explorer의 OS 요청에 실패했습니다.
 - `CANCELLED`, `TIMEOUT`: 호출이 취소되었거나 기한을 넘겼습니다.
 
@@ -81,7 +81,7 @@ mise exec bun@1.4.2 --command "bun test tests/lifecycle/windows-opener-job.test.
 
 Windows STA와 셸 호출 검증은 Windows에서 실행해야 합니다. 다른 운영체제에서는 해당 테스트가 건너뜁니다.
 
-`tests/cli/opener.test.ts`는 로컬 `.tgz`를 독립 프로젝트에 설치하고 카탈로그, scope evaluator와 브라우저 번들을 검증합니다. 아래 opt-in 검사는 설치한 플러그인을 compiled EXE로 실행하고, 한글과 공백이 있는 실행 파일이 기본 동작으로 시작되는지와 실제 Explorer 선택을 확인합니다. 사용자 파일 연결을 바꾸지 않고 해당 테스트 폴더의 Explorer 창을 정리합니다. 데스크톱이 있는 Windows에서 실행해야 합니다. 일반 문서에 연결된 편집기의 표시나 읽기 완료 검증과 구분합니다.
+`tests/cli/opener.test.ts`는 로컬 `.tgz`를 독립 프로젝트에 설치하고 카탈로그, scope evaluator와 브라우저 번들을 검증하고 UI Worker에서 어댑터가 초기화되지 않는지 확인합니다. 아래 opt-in 검사는 설치한 플러그인을 compiled EXE로 실행하고, 한글과 공백이 있는 실행 파일이 기본 동작으로 시작되는지와 실제 Explorer 선택을 확인합니다. 사용자 파일 연결을 바꾸지 않고 해당 테스트 폴더의 Explorer 창을 정리합니다. 데스크톱이 있는 Windows에서 실행해야 합니다. 일반 문서에 연결된 편집기의 표시나 읽기 완료 검증과 구분합니다.
 
 ```powershell
 $env:BUNAWAY_OPENER_FILES_TEST = "1"

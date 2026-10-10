@@ -43,8 +43,8 @@ test.skipIf(!hasExplorerDesktop())(
     const ready = resolve(root, "ready");
     const release = resolve(root, "release");
     const launcherPath = resolve(root, "launcher.ts");
-    const shellModule = pathToFileURL(
-      resolve(import.meta.dir, "../../plugins/opener/src/shell.ts"),
+    const operationsModule = pathToFileURL(
+      resolve(import.meta.dir, "../../plugins/opener/src/windows.ts"),
     ).href;
     const jobModule = pathToFileURL(
       resolve(import.meta.dir, "../../native/windows/bun/job.ts"),
@@ -126,18 +126,12 @@ while (!(await Bun.file(${JSON.stringify(stop)}).exists())) {
         launcherPath,
         `
 import assert from "node:assert/strict";
-import { dlopen } from "bun:ffi";
-import { createShell } from ${JSON.stringify(shellModule)};
+import { createOperations } from ${JSON.stringify(operationsModule)};
 import { activeDescendants, containAppProcess } from ${JSON.stringify(jobModule)};
 containAppProcess(${JSON.stringify(resolve(root, "app-data"))});
-const ole = dlopen("ole32.dll", {
-  CoInitializeEx: { args: ["ptr", "u32"], returns: "i32" },
-  CoUninitialize: { args: [], returns: "void" },
-});
-assert(ole.symbols.CoInitializeEx(null, 0x2 | 0x4) >= 0);
-const shell = createShell();
+const adapter = createOperations({ dataRoot: ${JSON.stringify(root)}, capabilities: [] });
 try {
-  shell.open(${JSON.stringify(executable)});
+  adapter.execute("opener.openFile", { path: ${JSON.stringify(executable)} }, "backend");
   const deadline = Date.now() + 15000;
   while (!(await Bun.file(${JSON.stringify(marker)}).exists())) {
     assert(Date.now() < deadline, "Explorer did not start the helper");
@@ -150,10 +144,8 @@ try {
     await Bun.sleep(20);
   }
 } finally {
-  shell.dispose();
-  shell.dispose();
-  ole.symbols.CoUninitialize();
-  ole.close();
+  adapter.dispose();
+  adapter.dispose();
 }
 process.exit(0);
 `,

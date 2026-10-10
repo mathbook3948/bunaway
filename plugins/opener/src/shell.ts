@@ -85,7 +85,7 @@ function checkFileResult(result: number): void {
 }
 
 /**
- * Load the COM libraries for a launcher used on the UI host's initialized STA.
+ * Load the COM libraries for a launcher used on its owner's initialized STA.
  * Dispose the returned object after its adapter stops.
  */
 export function createShell() {
