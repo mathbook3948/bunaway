@@ -18,4 +18,3 @@ runtime/bun-embed/vendor/
 runtime/bun-bundle/vendor/
 native/windows/bun/vendor/
 native/macos/vendor/
-native/macos/host/vendor/

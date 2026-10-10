@@ -102,7 +102,7 @@ export interface SignOptions {
   minOs?: string;
 }
 
-/** Sign nested Bun before recording its digest and sealing the host; publish only after strict verification. */
+/** Sign the compiled host or nested Bun, then seal and verify the bundle before publication. */
 export async function signApp(options: SignOptions): Promise<void> {
   const { channel, identity, teamId, provisionprofile } = options;
   const app = resolve(options.app);
@@ -164,8 +164,13 @@ export async function signApp(options: SignOptions): Promise<void> {
       options.bundleId ?? info.CFBundleIdentifier,
       "CFBundleIdentifier",
     );
+    const manifestPath = resolve(resources, "manifest.json");
+    const manifest = record(JSON.parse(await readFile(manifestPath, "utf8")));
+    const compiled =
+      manifest.host !== undefined &&
+      record(manifest.host).kind === "bun-compiled";
     let bun = resolve(resources, "runtime/bun");
-    if (channel === "mac-store") {
+    if (!compiled && channel === "mac-store") {
       await mkdir(resolve(staged, "Contents/Helpers"), {
         recursive: true,
       });
@@ -180,12 +185,12 @@ export async function signApp(options: SignOptions): Promise<void> {
         }
       });
       bun = relocated;
-      if (provisionprofile) {
-        await must("ditto", [
-          resolve(provisionprofile),
-          resolve(staged, "Contents/embedded.provisionprofile"),
-        ]);
-      }
+    }
+    if (channel === "mac-store" && provisionprofile) {
+      await must("ditto", [
+        resolve(provisionprofile),
+        resolve(staged, "Contents/embedded.provisionprofile"),
+      ]);
     }
     for (const role of [
       "app",
@@ -208,6 +213,12 @@ export async function signApp(options: SignOptions): Promise<void> {
           delete entitlements["com.apple.developer.team-identifier"];
         }
       }
+      if (compiled && role === "app") {
+        // Bun JIT and FFI run in the app executable, without a nested runtime.
+        entitlements["com.apple.security.cs.allow-jit"] = true;
+        entitlements["com.apple.security.cs.allow-unsigned-executable-memory"] =
+          true;
+      }
       await writePlist(resolve(stage, `${role}.ent.plist`), entitlements);
     }
     const sign = (path: string, role: string) =>
@@ -221,14 +232,20 @@ export async function signApp(options: SignOptions): Promise<void> {
         resolve(stage, `${role}.ent.plist`),
         path,
       ]);
-    await sign(bun, "child");
-    const manifestPath = resolve(resources, "manifest.json");
-    const manifest = record(JSON.parse(await readFile(manifestPath, "utf8")));
-    // Signing changes executable bytes, so record the packaged digest only after signing Bun.
-    record(manifest.bun).packagedSha256 = createHash("sha256")
-      .update(await readFile(bun))
-      .digest("hex");
-    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    if (!compiled) {
+      await sign(bun, "child");
+      // Signing changes executable bytes, so record the packaged digest only after signing Bun.
+      const signedManifest = record(
+        JSON.parse(await readFile(manifestPath, "utf8")),
+      );
+      record(signedManifest.bun).packagedSha256 = createHash("sha256")
+        .update(await readFile(bun))
+        .digest("hex");
+      await writeFile(
+        manifestPath,
+        `${JSON.stringify(signedManifest, null, 2)}\n`,
+      );
+    }
     let host = resolve(staged, "Contents/MacOS/bunaway-host");
     if (!(await exists(host))) {
       const executables = resolve(staged, "Contents/MacOS");

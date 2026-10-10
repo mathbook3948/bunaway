@@ -7,6 +7,10 @@ I/O Worker 하나가 승인된 Host API를 검사한 파일 핸들로 실행한�
 
 ## 파일별 책임
 
+`boot.ts`는 실행 인자, 단일 인스턴스 확보와 앱 import를 담당하고,
+`config.ts`는 패키지 설정과 정책을 검증하고 앱 데이터 경로를 결정한다.
+`package.ts`는 회귀 패키지를 빌드하고, `run.ps1`은 준비, 빌드와 테스트 실행을 조정한다.
+
 `win32-bindings.ts`는 DLL 함수 바인딩과 FFI 버퍼 보조 함수를 제공하고, `win32.ts`의
 `Windows`는 창 클래스, HWND, 아이콘, 전체 화면 상태와 메시지 처리를 소유한다.
 `com.ts`는 COM 참조와 콜백을, `webview.ts`는 WebView 생성과 종료를 관리한다.
@@ -14,7 +18,8 @@ I/O Worker 하나가 승인된 Host API를 검사한 파일 핸들로 실행한�
 
 트레이 전용 상수는 `tray.ts`, Job 객체 상수는 `job.ts`에 둔다. 개발 CLI와 공유하는
 종료 메시지와 창 클래스 접두어는 `runtime-bun/windows-control`의 단일 정의를 사용한다.
-Worker 패킷은 `channel.ts`가 담당하며 Win32 창 제어 값을 소유하지 않는다.
+Worker 패킷은 `runtime-bun/worker-channel`의 공통 구현을 사용한다.
+`channel.ts`는 이를 재노출하고 Windows UI 설정 타입을 정의하며 Win32 창 제어 값을 소유하지 않는다.
 서버 메시지는 공유 FIFO 대기열에서 데이터 수신 확인을 기다린다. 미확인 데이터는
 128개, 대기 서버 메시지는 16,384개로 제한한다. 이미 승인한 Host 작업의 결과도
 같은 FIFO에서 전달하며 별도 대기 용량 128개를 유지한다. 대기열이 남아 있으면 새 Host API
@@ -99,6 +104,11 @@ SDK는 시작 시의 공통 번들을 재사용하며 계약, 플러그인 객�
 ## Public window operations
 
 The CLI accepts an `app.windows` catalog with one unique policy view per window.
+상태 변경 `minimize`, `maximize`, `unmaximize`, `restore`, `toggleMaximize`와
+조회 `isMinimized`, `isMaximized`, `isFullscreen`, `isVisible`, `isFocused`도 선택 창 플러그인이
+제공한다. UI Worker의 실제 HWND를 사용하며 조회에도 대상 뷰의 `windows:control` 권한이 필요하다.
+최소화 전 최대화 복원, 숨긴 창 표시와 전체화면 중 변경 거부는
+[공개 창 계약](../../../docs/site/src/content/docs/reference/host/windows.mdx)을 따른다.
 `startup: false` defers creation until `windows.create`. Window calls execute on
 the UI STA through the explicitly installed and registered `@bunaway/plugin-windows`. The active caller's `windows:list` or scoped `windows:control` permission is checked. The I/O Worker
 reports registered operations as capabilities. `windows.recreate` reserves the view

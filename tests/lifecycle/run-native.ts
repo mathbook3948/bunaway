@@ -99,29 +99,15 @@ if (target === "windows-x64") {
     ]);
   }
 } else {
-  const { buildHostFixture } = await import("#native/macos/host/package");
-  const output = await buildHostFixture(values.app);
+  const { buildMacosFixture, buildSignedFixture } = await import(
+    "#native/macos/bun/package"
+  );
+  const output = await buildMacosFixture();
+  if (values.app) {
+    await buildSignedFixture(output);
+  }
   if (!values["skip-tests"]) {
-    const nativeTests = resolve(root, "build/macos-host/host-native-tests");
-    await run(
-      [
-        "clang++",
-        "-std=c++20",
-        "-O2",
-        "-Wall",
-        "-Wextra",
-        "-fobjc-arc",
-        `-I${resolve(root, "build/cache/nlohmann-json")}`,
-        resolve(import.meta.dir, "macos-host-native.mm"),
-        "-framework",
-        "Cocoa",
-        "-framework",
-        "WebKit",
-        "-o",
-        nativeTests,
-      ],
-      root,
-    );
+    await test("macos-webview-regressions.ts");
     await test("macos-host.ts", [
       "--package",
       output,
@@ -138,7 +124,6 @@ if (target === "windows-x64") {
           BUNAWAY_PACKAGE_IN_PLACE: "1",
           BUNAWAY_HOST_EXEC: resolve(app, "Contents/MacOS/bunaway-host"),
           BUNAWAY_TEST_WORKSPACE: resolve(root, "build/macos-host-in-place"),
-          BUNAWAY_NATIVE_TEST_EXEC: nativeTests,
           BUNAWAY_TEST_SIGN_IDENTITY: "-",
         },
       );

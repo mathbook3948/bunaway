@@ -65,6 +65,9 @@ async function plist(path: string): Promise<Record<string, unknown>> {
 async function readManifest(app: string) {
   // Both the fixture and the native integration runner write this manifest shape.
   const manifest: {
+    host?: {
+      kind: string;
+    };
     bun: {
       executableSha256: string;
       packagedSha256: string;
@@ -252,15 +255,86 @@ describe
         "--strict",
         signedApp,
       ]);
-      const runtime = resolve(
-        signedApp,
-        channel === "mac-direct"
-          ? "Contents/Resources/runtime/bun"
-          : "Contents/Helpers/bun",
-      );
       const manifest = await readManifest(signedApp);
       expect(manifest.bun.executableSha256).toBe(originalDigest);
-      expect(manifest.bun.packagedSha256).toBe(await hash(runtime));
+      if (manifest.host?.kind === "bun-compiled") {
+        for (const path of [
+          "Contents/Resources/runtime/bun",
+          "Contents/Helpers/bun",
+        ]) {
+          expect(await Bun.file(resolve(signedApp, path)).exists()).toBe(false);
+        }
+        const entitlementsFile = resolve(root, "compiled-entitlements.plist");
+        await writeFile(
+          entitlementsFile,
+          await command([
+            "codesign",
+            "-d",
+            "--entitlements",
+            ":-",
+            signedApp,
+          ]),
+        );
+        expect(await plist(entitlementsFile)).toMatchObject({
+          "com.apple.security.cs.allow-jit": true,
+          "com.apple.security.cs.allow-unsigned-executable-memory": true,
+        });
+      } else {
+        const runtime = resolve(
+          signedApp,
+          channel === "mac-direct"
+            ? "Contents/Resources/runtime/bun"
+            : "Contents/Helpers/bun",
+        );
+        expect(manifest.bun.packagedSha256).toBe(await hash(runtime));
+      }
+    }
+    // A hardened compiled app must complete real WebView work before graceful termination.
+    async function assertHardenedApp(signedApp: string): Promise<void> {
+      const home = resolve(root, "hardened-home");
+      await mkdir(home);
+      const report = resolve(
+        home,
+        "Library/Application Support/bunaway/tests.bunaway.host/temp/report3.json",
+      );
+      const child = Bun.spawn(
+        [
+          resolve(signedApp, "Contents/MacOS/bunaway-host"),
+        ],
+        {
+          env: {
+            HOME: home,
+            PATH: "/usr/bin:/bin",
+          },
+          stdout: "ignore",
+          stderr: "pipe",
+          timeout: COMMAND_TIMEOUT_MS,
+          killSignal: "SIGKILL",
+        },
+      );
+      const errors = new Response(child.stderr).text();
+      try {
+        const deadline = Date.now() + 15_000;
+        while (
+          !(await Bun.file(report).exists()) &&
+          child.exitCode === null &&
+          Date.now() < deadline
+        ) {
+          await Bun.sleep(100);
+        }
+        expect(
+          await Bun.file(report).exists(),
+          "Hardened Bun FFI app did not complete its WKWebView report",
+        ).toBe(true);
+        child.kill("SIGTERM");
+        expect(await child.exited, await errors).toBe(0);
+      } finally {
+        if (child.exitCode === null) {
+          child.kill("SIGKILL");
+        }
+        await child.exited;
+        await errors;
+      }
     }
     async function assertFixtureMetadata(signedApp: string): Promise<void> {
       const metadata = (path: string) =>
@@ -394,6 +468,41 @@ describe
       expect(
         Object.hasOwn(entitlements, "com.apple.developer.team-identifier"),
       ).toBe(false);
+      expect(await readdir(stage)).toEqual([]);
+    });
+    test("compiled app signing preserves its layout and grants JIT and FFI entitlements in both channels", async () => {
+      await rm(resolve(app, "Contents/Resources/runtime"), {
+        recursive: true,
+      });
+      const manifest = await readManifest(app);
+      manifest.host = {
+        kind: "bun-compiled",
+      };
+      await writeJson(
+        resolve(app, "Contents/Resources/manifest.json"),
+        manifest,
+      );
+      for (const channel of [
+        "mac-direct",
+        "mac-store",
+      ]) {
+        const output = resolve(root, `${channel}.app`);
+        await sign(
+          channel,
+          channel === "mac-store"
+            ? [
+                "--team-id",
+                "ABCD1234EF",
+              ]
+            : [],
+          0,
+          app,
+          output,
+        );
+        await assertSigned(output, channel);
+        await assertFixtureMetadata(output);
+        expect(await readManifest(output)).toEqual(manifest);
+      }
       expect(await readdir(stage)).toEqual([]);
     });
     for (const content of [
@@ -742,6 +851,12 @@ describe
           output,
         );
         await assertSigned(output, channel, manifest.bun.executableSha256);
+        if (
+          manifest.host?.kind === "bun-compiled" &&
+          channel === "mac-direct"
+        ) {
+          await assertHardenedApp(output);
+        }
       }
     });
   });

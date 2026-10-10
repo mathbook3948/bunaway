@@ -93,7 +93,11 @@ export type WindowState = {
   /** Absolute deadline in milliseconds while waiting for creation to finish. */
   deadline: number;
 };
-/** Native controls exposed to an installed window plugin. */
+/**
+ * Native controls exposed to an installed window plugin.
+ * The plugin rejects minimized/maximized transitions during fullscreen before invoking these controls.
+ * Native failures throw; the UI host converts them to bounded public errors.
+ */
 export type NativeWindow = {
   /** Shows or hides the native window. */
   show(visible: boolean): void;
@@ -101,8 +105,26 @@ export type NativeWindow = {
   focus(): boolean;
   /** Starts a normal close request; returns false when it is declined or hides to tray. */
   close(): boolean | Promise<boolean>;
-  /** Reports whether the window currently fills the screen. */
+  /** Minimizes and displays the window, allowing Windows to activate another window. */
+  minimize(): void;
+  /** Maximizes and displays the window, requesting activation. */
+  maximize(): void;
+  /** Displays the normal size even when minimized from maximized, requesting activation. */
+  unmaximize(): void;
+  /** Displays the saved state when minimized, otherwise the normal size, requesting activation. */
+  restore(): void;
+  /** Switches the current native maximized state to normal or maximized, requesting activation. */
+  toggleMaximize(): void;
+  /** Reads the native minimized state. */
+  isMinimized(): boolean;
+  /** Reads the native maximized state, independently of fullscreen mode. */
+  isMaximized(): boolean;
+  /** Reports whether the host applied fullscreen mode to this native window. */
   isFullscreen(): boolean;
+  /** Reads native visibility; minimized windows can still be visible. */
+  isVisible(): boolean;
+  /** Reports whether this window is the OS foreground window, including focus in its WebView. */
+  isFocused(): boolean;
   /** Reads the current resize bounds. */
   getSizeConstraints(): WindowSizeConstraints;
   /** Applies resize bounds to the window. */

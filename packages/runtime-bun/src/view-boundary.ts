@@ -11,7 +11,7 @@ import {
   serializeMessage,
   type WireError,
 } from "@bunaway/protocol";
-import type { Packet, Route } from "./channel.ts";
+import type { Packet, Route } from "./worker-channel.ts";
 
 const key = (source: string) => source.split("#")[0];
 
@@ -67,7 +67,7 @@ export class ViewBoundary {
     }
   }
 
-  /** Validates and forwards WebView input; `source` must come from WebView2, not the message body. */
+  /** Validates and forwards WebView input; `source` must come from the renderer, not the message body. */
   receive(source: string, raw: string) {
     let id = "";
     try {
@@ -112,7 +112,7 @@ export class ViewBoundary {
           message: "Backend is not ready.",
         });
       }
-      // Source comes from WebView2, never the JSON. Top-level handler + current actual document.
+      // Source comes from the renderer, never the JSON. Top-level handler + current actual document.
       if (
         !this.policy.origins.includes(this.hooks.origin(source)) ||
         key(source) !== key(this.hooks.source())

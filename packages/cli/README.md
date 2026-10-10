@@ -143,9 +143,9 @@ macOS는 기존 `bunaway://` 매핑이다. policy.json의 HTTP origin은 허용�
 백엔드는 `defineModule`, `defineApp`으로 명령, 이벤트를 등록한다.
 화면에서 별도의 초기화 코드를 작성할 필요는 없다. 일반 브라우저에서 백엔드 호출은
 `UNSUPPORTED`로 실패하므로 `bunaway dev`로 연 앱 창을 사용한다.
-호출, 구독 해제, 타입 추론은 [클라이언트 API](../../docs/architecture/common-api.md#클라이언트와-transport)를 따른다. Windows 부팅은
-프레임워크가 앱 정의를 import해 담당한다. 현재 macOS 프로세스 호스트용 `runBunApp`
-호출은 CLI가 번들 내부에 생성한다. 개발 우선순위는
+호출, 구독 해제, 타입 추론은 [클라이언트 API](../../docs/architecture/common-api.md#클라이언트와-transport)를 따른다.
+Windows와 macOS 부팅은 프레임워크가 앱 정의를 import해 담당한다.
+두 플랫폼 모두 Bun이 진입점이며 시스템 네이티브 API를 직접 FFI로 호출한다. 개발 우선순위는
 [ADR 0010](../../docs/decisions/0010-windows-first-platform-model.md)을 따른다.
 `message.save` → 호출 컨텍스트의 Host API `storage.writeText` →
 `appData/messages/current.txt` → `message.saved` → UI 갱신이다.
@@ -176,7 +176,7 @@ Ctrl+Shift+I로 연다. `bunaway dev --inspect`는 백엔드 Bun inspector를
 서버 설정 변경은 서버도 교체하며 Ctrl+C, 창 닫기, 서버 종료, timeout 시 서버 자손을 정리한다.
 이전 호스트 종료를 확인한 후 자산을 다시 빌드하고 새 호스트를 시작한다.
 호스트가 새 런타임 세대와 새 호출 컨텍스트/세션을 발급한다. Windows는 WM_CLOSE로 코어, Worker, WebView를 정리하고 Bun Job이 자손을 회수한다.
-macOS의 guard는 Bun 자식 프로세스를 정리한다. 세션이 종료되면 SDK는 진행 중인 요청과 구독을 폐기한다.
+macOS는 같은 프로세스의 백엔드 Worker를 정리하고 실제 종료를 확인한다. 세션이 종료되면 SDK는 진행 중인 요청과 구독을 폐기한다.
 CLI는 요청을 다시 전송하지 않으며 이미 저장한 파일은 그대로 남는다.
 저장하지 않은 UI 상태는 앱이 다시 시작될 때 사라진다.
 
@@ -191,7 +191,7 @@ CLI는 요청을 다시 전송하지 않으며 이미 저장한 파일은 그대
 
 Windows x64 개발에는 Windows 기본 제공 tar와 고정 Bun이 필요하다.
 앱 실행에는 WebView2 Evergreen이 필요하다. 네이티브 빌드 의존성은 고정된 핀으로 받는다.
-macOS arm64에는 macOS 14+, Xcode CLT와 codesign이 필요하다. 교차 빌드는 없다.
+macOS arm64에는 macOS 14+, GUI 세션과 codesign이 필요하다. C 컴파일러는 필요하지 않다. 교차 빌드는 없다.
 
 ```text
 dist/windows-x64/
@@ -202,7 +202,7 @@ dist/windows-x64/
 
 dist/macos-arm64/<appId>.app/Contents/
   MacOS/bunaway-host
-  Resources/{assets/,runtime/bun,licenses/,manifest.json}
+  Resources/{assets/,licenses/,manifest.json}
   Info.plist
 ```
 

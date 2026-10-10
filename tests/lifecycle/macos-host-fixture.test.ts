@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import {
+  chmod,
   copyFile,
   mkdir,
   mkdtemp,
@@ -67,7 +68,6 @@ async function rejectsSetup(
         ...process.env,
         BUNAWAY_PACKAGE_IN_PLACE: "1",
         BUNAWAY_HOST_EXEC: fixture.host,
-        BUNAWAY_NATIVE_TEST_EXEC: fixture.host,
         BUNAWAY_TEST_WORKSPACE: join(fixture.root, "workspace"),
         BUNAWAY_DATA_ROOT: join(fixture.root, "data"),
         BUNAWAY_TEST_SIGN_IDENTITY: "",
@@ -326,6 +326,55 @@ test("in-place runner rejects result directories before writing scratch files", 
   ]);
 });
 
+const HOST_FIXTURE_DRIVER_TIMEOUT_MS = 10_000;
+// Signing and relocation run outside the driver, so the test needs a larger timeout.
+const HOST_FIXTURE_TEST_TIMEOUT_MS = 20_000;
+
+test.skipIf(process.platform !== "darwin")(
+  "runner reports a host killed by a signal without waiting for a report",
+  async () => {
+    const f = await makeFixture();
+    await mkdir(join(f.original, "assets"));
+    await writeFile(f.host, "#!/bin/sh\nkill -KILL $$\n");
+    await chmod(f.host, 0o755);
+    const workspace = join(f.root, "workspace");
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        resolve(import.meta.dir, "macos-host.ts"),
+        "--package",
+        f.original,
+      ],
+      {
+        env: {
+          ...process.env,
+          BUNAWAY_PACKAGE_IN_PLACE: "1",
+          BUNAWAY_HOST_EXEC: f.host,
+          BUNAWAY_TEST_WORKSPACE: workspace,
+          BUNAWAY_DATA_ROOT: join(f.root, "data"),
+          BUNAWAY_TEST_SIGN_IDENTITY: "",
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: HOST_FIXTURE_DRIVER_TIMEOUT_MS,
+      },
+    );
+    const [code, output, errors] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(code, `${output}\n${errors}`).toBe(1);
+    expect(errors).toContain("Host exited before report.json was written.");
+    const summary = JSON.parse(
+      await readFile(join(workspace, "macos-host-results.json"), "utf8"),
+    );
+    expect(summary.results).toHaveLength(1);
+    expect(summary.results[0].ok).toBe(false);
+  },
+  HOST_FIXTURE_TEST_TIMEOUT_MS,
+);
+
 test.skipIf(process.platform !== "darwin")(
   "failed in-place runner preserves signed tmp symlinks after moving the app",
   async () => {
@@ -347,6 +396,7 @@ test.skipIf(process.platform !== "darwin")(
     for (const path of [
       "assets/app.json",
       "assets/policy.json",
+      "assets/manifest.json",
       "manifest.json",
     ]) {
       await mkdir(resolve(resources, path, ".."), {
@@ -385,20 +435,21 @@ test.skipIf(process.platform !== "darwin")(
           ...process.env,
           BUNAWAY_PACKAGE_IN_PLACE: "1",
           BUNAWAY_HOST_EXEC: f.host,
-          BUNAWAY_NATIVE_TEST_EXEC: "/usr/bin/false",
           BUNAWAY_TEST_WORKSPACE: workspace,
           BUNAWAY_DATA_ROOT: join(f.root, "data"),
           BUNAWAY_TEST_SIGN_IDENTITY: "-",
         },
         stdout: "pipe",
         stderr: "pipe",
-        timeout: 10000,
+        timeout: HOST_FIXTURE_DRIVER_TIMEOUT_MS,
       },
     );
-    const output = new Response(child.stdout).text();
-    const errors = new Response(child.stderr).text();
-    expect(await child.exited).toBe(1);
-    await output;
+    const [code, output, errors] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(code, `${output}\n${errors}`).toBe(1);
     for (const directory of [
       tmp,
       join(workspace, "macos-host-diagnostics", "original-assets-tmp"),
@@ -410,8 +461,8 @@ test.skipIf(process.platform !== "darwin")(
         "nested",
       );
     }
-    expect(await errors).toContain(
-      "native Bun integrity, FIFO, scheme handler and resource-filter regressions failed",
+    expect(errors).toContain(
+      "WebView boundary, command policy and Bun cleanup without native plugins failed",
     );
     const summary = JSON.parse(
       await readFile(join(workspace, "macos-host-results.json"), "utf8"),
@@ -434,4 +485,5 @@ test.skipIf(process.platform !== "darwin")(
     ).toBe("nested tmp bytes");
     codesign("--verify", "--deep", "--strict", moved);
   },
+  HOST_FIXTURE_TEST_TIMEOUT_MS,
 );

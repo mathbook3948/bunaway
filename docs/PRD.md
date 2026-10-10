@@ -5,12 +5,12 @@
 ## 1 목표와 범위
 
 개발 순서는 **Windows를 먼저 완성한 뒤 다른 플랫폼을 같은 Bun 기반 개발 모델에
-맞추는 것**이다. macOS도 Bun을 앱 진입점으로 전환할 계획이며, 현재의 별도 호스트,
-Bun 자식 프로세스 구조는 기존 구현 상태다. 앱 개발자는 공통 앱 정의 하나를 작성하고
+맞추는 것**이다. macOS도 Bun을 앱 진입점으로 사용하며 직접 FFI와 같은 프로세스의 백엔드 Worker로
+실행한다. 별도 C/ObjC++ 호스트와 Bun 자식 프로세스 구조는 이전 실험 기록이다. 앱 개발자는 공통 앱 정의 하나를 작성하고
 플랫폼별 부팅은 프레임워크가 담당한다. 개발 우선순위와 진입점 결정은
 [ADR 0010](./decisions/0010-windows-first-platform-model.md)을 따른다.
 
-웹으로 화면을 만들고 TypeScript로 앱 백엔드를 작성하는 독립 프레임워크를 만든다. Windows, macOS, Linux, Android, iOS를 대상으로 하며 기본 렌더러는 각 운영체제의 WebView다. Bun은 빌드 도구이자 앱 패키지에 포함하는 백엔드 런타임으로 사용한다. Windows는 번들 Bun을 앱 진입점으로 사용하고 같은 프로세스의 UI Worker가 직접 FFI로 Win32, WebView2를 소유한다. 현재 macOS 구현은 별도 Bun 자식 프로세스를 사용한다. 후속 지원에서는 Bun 앱 진입점으로 전환하며 모바일의 실행, 배포 경로도 검증한다.
+웹으로 화면을 만들고 TypeScript로 앱 백엔드를 작성하는 독립 프레임워크를 만든다. Windows, macOS, Linux, Android, iOS를 대상으로 하며 기본 렌더러는 각 운영체제의 WebView다. Bun은 빌드 도구이자 앱 패키지에 포함하는 백엔드 런타임으로 사용한다. Windows는 번들 Bun을 앱 진입점으로 사용하고 같은 프로세스의 UI Worker가 직접 FFI로 Win32, WebView2를 소유한다. macOS는 메인 스레드가 직접 FFI로 AppKit, WKWebView를 소유하고 백엔드를 Bun Worker에서 실행하며 모바일의 실행, 배포 경로도 검증한다.
 
 Tauri에서 참고할 부분은 웹 UI, 백엔드 코어, 네이티브 호스트를 나누는 구조다. 명령 처리, 상태, 이벤트, 플러그인 관리 등 백엔드 기반을 Bun과 TypeScript 중심으로 설계한다. 네이티브 코드는 창, WebView, 운영체제 기능과 Bun 내장에 필요한 경계에 둔다.
 
@@ -48,7 +48,7 @@ Windows의 기본 구조는 번들 Bun 진입점, 앱/코어 메인, Win32/WebVi
 실제 출처와 권한은 UI가 검증하고 코어와 SDK 계약은 재사용한다.
 Windows 배포 빌드는 검증한 Bun으로 앱 호스트 전체를 compile한다. 웹 자산, 앱 설정과 정책을 EXE에 내장하며 사용자 Bun 설치나 PATH에 의존하지 않는다. 개발 모드는 번들 Bun의 절대 경로로 외부 JS를 실행한다.
 [ADR 0006](./decisions/0006-windows-bun-ui-worker.md)이 Windows의 현재 계약이다.
-아래 별도 Bun/IPC 도식은 macOS와 기존 Windows B/C 실험의 구조를 설명한다.
+아래 별도 Bun/IPC 도식과 프로세스 수명주기는 이전 macOS와 Windows B/C 실험의 기록이다. 현재 macOS 제품 경로는 [ADR 0015](./decisions/0015-macos-bun-ffi.md)를 따른다.
 
 ```text
 웹 UI ── 클라이언트 SDK
@@ -86,12 +86,12 @@ Bun 자식 프로세스 ── TypeScript 코어 ── 앱 명령, 상태, 플�
 ### 네이티브 구현과 플랫폼 후보
 
 - Windows: Bun 메인, UI STA Worker, I/O Worker, 직접 Win32/WebView2 FFI 및 다중 창/뷰, 뷰별 정책, 독립 CLI 실행 검증
-- macOS: AppKit, WKWebView를 연결하는 Swift/Objective-C++ 호스트
+- macOS: Bun 직접 FFI로 AppKit, WKWebView를 연결하며 백엔드는 같은 프로세스의 Worker에서 실행한다.
 - Linux: GTK, WebKitGTK 기반 C/C++ 호스트
 - Android: Kotlin 앱 수명주기, Android WebView, Bun 실행, 패키징 경로 별도 검증
 - iOS: Swift 앱 수명주기, WKWebView, Bun 실행, 패키징 경로 별도 검증
 
-Windows는 현재 TypeScript Bun FFI 호스트를 사용하며 C++ 컴파일 의존이 없다. 위 macOS 호스트는 현재 구현을, Linux, 모바일 후보는 초기 제안을 설명한다. 후속 플랫폼의 목표 설계는 ADR 0010에 따라 Windows에서 완성한 Bun 기반 개발 모델에 맞추며 플랫폼별 바인딩과 수명주기는 지원 시점에 검증한다. 기존 경량 호스트 라이브러리 재사용 여부는 라이선스, UI 스레드 제어, 모바일 경계와 유지보수 비용을 검토한 뒤 결정한다. 앱 개발자에게 Rust 작성을 요구하지 않으며 코어를 Rust로 다시 구현하지 않는다.
+Windows는 현재 TypeScript Bun FFI 호스트를 사용하며 C++ 컴파일 의존이 없다. macOS도 C 컴파일 의존이 없으며 Linux, 모바일 후보는 초기 제안을 설명한다. 후속 플랫폼의 목표 설계는 ADR 0010에 따라 Windows에서 완성한 Bun 기반 개발 모델에 맞추며 플랫폼별 바인딩과 수명주기는 지원 시점에 검증한다. 기존 경량 호스트 라이브러리 재사용 여부는 라이선스, UI 스레드 제어, 모바일 경계와 유지보수 비용을 검토한 뒤 결정한다. 앱 개발자에게 Rust 작성을 요구하지 않으며 코어를 Rust로 다시 구현하지 않는다.
 
 ## 3 실행 경계와 수명주기
 
@@ -147,7 +147,7 @@ OS 권한 선언과 런타임 사용자 동의는 프레임워크 권한과 별�
 공개 SDK는 프런트엔드용 `client`와 신뢰 백엔드용 `backend` 진입점을 분리한다. 명령 정의에서 클라이언트 타입을 생성하되 백엔드 코드나 비밀 설정이 프런트엔드 번들에 들어가지 않게 한다. 공통 필수 API는 명령 등록, 호출, 앱 상태, 이벤트 구독, 해제와 수명주기다. 기능 조회는 `@bunaway/plugin-capabilities`에서 선택적으로 제공한다.
 
 공통 타입과 명령 입력, 출력 검증은 [C 공통 API](./architecture/common-api.md)로 고정했다.
-`createClient`, `createCore`를 Windows FFI 호스트와 macOS의 `runBunApp` 어댑터에 연결했다.
+`createClient`, `createCore`를 Windows FFI 호스트와 macOS Bun FFI 호스트에 연결했다.
 화면은 `invoke`, `listen`을 직접 사용하거나, 앱 정의에서 타입을 추론하는 인자 없는
 `createClient()`를 사용한다. 기본 연결의 브리지, 프로토콜 초기화, 준비 대기와 페이지
 종료 시 정리는 SDK가 담당한다. 일반 브라우저의 백엔드 호출은 `UNSUPPORTED`로 실패한다.
@@ -205,7 +205,7 @@ void start().catch(console.error);
 | 대상 | 기본 렌더러 | 백엔드 배포 경로 | 초기 상태와 통과 조건 |
 | --- | --- | --- | --- |
 | Windows | WebView2 | 번들 Bun 진입점 + 직접 FFI UI Worker + I/O Worker | B 실험 및 C 다중 창/뷰, 뷰별 정책의 실제 SDK, 코어, 저장, 이벤트, 복원 검증 통과. 최소 OS/CPU, 설치, 서명, 배포 미검증 |
-| macOS | WKWebView | 번들된 Bun 자식 프로세스 + 네이티브 호스트 | 계획. 앱 번들, 서명, IPC, 프로세스 정리 검증 필요 |
+| macOS | WKWebView | Bun 진입점, 직접 FFI, 백엔드 Worker | 단일 창의 실제 UI, 정책과 종료 검증. 출시 서명과 설치는 미검증 |
 | Linux | WebKitGTK | 번들된 Bun 자식 프로세스 + 네이티브 호스트 | 계획. 대상 배포판, 라이브러리, IPC, 패키지 검증 필요 |
 | Android | Android WebView | 미확정 | 미검증. Bun 번들, 실행방식, 수명주기, 배포 제약을 별도 검증 |
 | iOS | WKWebView | 미확정 | 미검증. Bun 실행 가능 경로, 기기, 수명주기, 배포 제약을 별도 검증 |

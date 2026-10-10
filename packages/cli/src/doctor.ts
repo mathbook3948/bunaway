@@ -33,7 +33,6 @@ export async function doctor(directory: string): Promise<boolean> {
         "tar",
       ]
     : [
-        "clang++",
         "codesign",
       ]) {
     check(name, Bun.which(name) !== null, Bun.which(name) ?? "not on PATH");
@@ -62,7 +61,7 @@ export async function doctor(directory: string): Promise<boolean> {
   console.log(
     process.platform === "win32"
       ? "Windows uses bundled Bun FFI; execution requires WebView2 Evergreen. The Bun build tool verifies Bun and Loader pins."
-      : "Native build requires Xcode CLT; macOS 14+ arm64. Local ad-hoc signing only, no notarization.",
+      : "macOS uses bundled Bun FFI and system AppKit/WKWebView; macOS 14+ arm64 and codesign are required. No C compiler is required.",
   );
   return ok;
 }

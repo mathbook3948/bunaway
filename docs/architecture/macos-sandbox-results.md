@@ -88,7 +88,7 @@ fixture's signature valid. These checks validate the harness and successful
 flow execution, **not** long-term WebKit XPC stability or Apple-issued signing.
 CI now runs `mise run host:macos -- --app`, covering the ordinary suite and
 the signed unsandboxed fixture; the App Sandbox fixture remains a local check.
-현재 실행과 서명 입력은 [제품 호스트 README](../../native/macos/host/README.md)를 따른다.
+현재 실행과 서명 입력은 [제품 호스트 README](../../native/macos/bun/README.md)를 따른다.
 독립 샌드박스 fixture와 실험용 entitlement 변형은 제거했다.
 
 ## Entitlement profiles implied for packaging

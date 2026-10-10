@@ -47,5 +47,5 @@ description = "Build the Windows product host package and verify the WebView bou
 run = "bun --no-env-file tests/lifecycle/run-native.ts --target windows-x64"
 
 [tasks."host:macos"]
-description = "Build the macOS product host package and verify the WebView boundary, policy, storage scope and cleanup"
+description = "Build the macOS Bun FFI app without a C compiler and verify WKWebView, policy and Worker cleanup"
 run = "bun --no-env-file tests/lifecycle/run-native.ts --target macos-arm64"

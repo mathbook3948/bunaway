@@ -123,8 +123,6 @@ jobs:
             sw_vers
             uname -m
             echo "Runner architecture: $RUNNER_ARCH; image: $ImageOS $ImageVersion"
-            xcodebuild -version
-            clang++ --version
             launchctl managername
             test "$(uname -m)" = arm64
             test "$RUNNER_ARCH" = ARM64

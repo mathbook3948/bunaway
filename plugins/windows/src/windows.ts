@@ -43,6 +43,45 @@ export function createOperations(
         break;
       case "windows.close":
         return window.close();
+      case "windows.minimize":
+      case "windows.maximize":
+      case "windows.unmaximize":
+      case "windows.restore":
+      case "windows.toggleMaximize":
+        if (window.isFullscreen()) {
+          throw new BunawayError({
+            code: "INVALID_ARGUMENT",
+            message: "Exit fullscreen before changing window state.",
+          });
+        }
+        switch (call.operation) {
+          case "windows.minimize":
+            window.minimize();
+            break;
+          case "windows.maximize":
+            window.maximize();
+            break;
+          case "windows.unmaximize":
+            window.unmaximize();
+            break;
+          case "windows.restore":
+            window.restore();
+            break;
+          case "windows.toggleMaximize":
+            window.toggleMaximize();
+            break;
+        }
+        break;
+      case "windows.isMinimized":
+        return window.isMinimized();
+      case "windows.isMaximized":
+        return window.isMaximized();
+      case "windows.isFullscreen":
+        return window.isFullscreen();
+      case "windows.isVisible":
+        return window.isVisible();
+      case "windows.isFocused":
+        return window.isFocused();
       case "windows.setSize":
         if (window.isFullscreen()) {
           throw new BunawayError({
@@ -162,21 +201,25 @@ export function createOperations(
         operation,
         payload: input,
       });
-      // Resolve each configured view's control grant before dispatching to the coordinator.
-      const grants = services.specs
-        .filter((spec) =>
-          registry.allowed(
-            context.permissions,
-            {
-              operation: "windows.show",
-              payload: {
-                view: spec.view,
-              },
+      // Check permission before resolving configuration so unknown views do not bypass denial.
+      const targets =
+        call.operation === "windows.list"
+          ? services.specs.map((spec) => spec.view)
+          : [
+              call.payload.view,
+            ];
+      const grants = targets.filter((view) =>
+        registry.allowed(
+          context.permissions,
+          {
+            operation: "windows.show",
+            payload: {
+              view,
             },
-            matches,
-          ),
-        )
-        .map((spec) => spec.view);
+          },
+          matches,
+        ),
+      );
       return operations.execute(call, grants, context.requestId);
     },
     busy: () => operations.replacing.size !== 0,

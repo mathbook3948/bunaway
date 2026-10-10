@@ -221,6 +221,16 @@ export const user = dlopen("user32.dll", {
     ],
     returns: "i32",
   },
+  IsWindow: {
+    args: [
+      "u64",
+    ],
+    returns: "i32",
+  },
+  GetForegroundWindow: {
+    args: [],
+    returns: "u64",
+  },
   IsZoomed: {
     args: [
       "u64",

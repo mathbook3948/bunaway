@@ -43,12 +43,14 @@ I/O Worker는 기존 C++ 작업 큐의 동기 파일 작업을 이식해 사용�
 
 ## 배치할 코드
 
-아래 경로에 구현했다. `boot.ts`는 패키지 검증과 앱 import를, `job.ts`는 비정상 종료 자손 회수를 담당한다.
+아래 경로에 구현했다. `boot.ts`는 실행 인자와 앱 import를, `config.ts`는 패키지 검증을, `job.ts`는 비정상 종료 자손 회수를 담당한다.
 
 | 경로 | 내용 |
 | --- | --- |
 | `native/windows/bun/entry.ts` | 검증된 설정과 AppDefinition으로 Worker, 코어 연결, 앱 수명 조정 |
-| `native/windows/bun/channel.ts` | 내부 메시지 타입, 검증, 수신 확인, 큐 상한, 실패 처리 |
+| `native/windows/bun/config.ts` | 패키지 설정과 정책 검증, 앱 데이터 경로 |
+| `native/windows/bun/channel.ts` | Windows UI 설정 타입, 공통 Worker 통신 재노출 |
+| `packages/runtime-bun/src/worker-channel.ts` | 내부 메시지 타입, 검증, 수신 확인, 큐 상한, 실패 처리 |
 | `native/windows/bun/ui.ts` | UI Worker 진입점, 창/뷰 맵, 문서 세대, 세션, 권한 승인 |
 | `native/windows/bun/win32.ts` | DLL 바인딩, Win32 구조체, 문자열, HWND와 메시지 pump |
 | `native/windows/bun/webview.ts` | COM 인터페이스, vtable, 콜백, 환경/controller, 탐색, 자원, 프레임 이벤트 |

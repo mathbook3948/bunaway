@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, rename, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rename, rm } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { frameworkRoot, json, verifyHash } from "./files.ts";
@@ -80,7 +80,7 @@ export async function extractDependencyArchive(
   );
 }
 
-/** Prepare pinned native inputs with the running Bun; verify-only never downloads, extracts or compiles. */
+/** Prepare pinned native inputs with the running Bun; verify-only never downloads or extracts. */
 export async function prepareNativeBuild(
   target: "windows-x64" | "macos-arm64",
   root = frameworkRoot,
@@ -109,6 +109,10 @@ export async function prepareNativeBuild(
     Bun.version === string(bun.version),
     "Build Bun version must match the pin",
   );
+  if (!windows) {
+    await verifyHash(process.execPath, string(bun.executableSha256));
+    return;
+  }
   const cache = resolve(root, "build/cache/bun");
   const archive = resolve(cache, `bun-${bunTarget}.zip`);
   const fetchPinned = (url: unknown, path: string, digest: unknown) =>
@@ -157,79 +161,6 @@ export async function prepareNativeBuild(
     }
     return;
   }
-  const header = record(manifest.json);
-  const vendor = resolve(root, "build/cache/nlohmann-json");
-  await fetchPinned(
-    header.headerUrl,
-    resolve(vendor, "json.hpp"),
-    header.headerSha256,
-  );
-  await fetchPinned(
-    header.licenseUrl,
-    resolve(vendor, "LICENSE.nlohmann-json"),
-    header.licenseSha256,
-  );
-  if (verifyOnly) {
-    return;
-  }
-  await chmod(executable, 0o755);
-  const architecture = Bun.spawn(
-    [
-      "/usr/bin/lipo",
-      "-archs",
-      executable,
-    ],
-    {
-      stdout: "pipe",
-      stderr: "inherit",
-    },
-  );
-  const architectureOutput = (
-    await new Response(architecture.stdout).text()
-  ).trim();
-  const architectureCode = await architecture.exited;
-  assert(
-    architectureOutput === "arm64" && architectureCode === 0,
-    "Bundled Bun must be arm64",
-  );
-  const version = Bun.spawn(
-    [
-      executable,
-      "--version",
-    ],
-    {
-      stdout: "pipe",
-      stderr: "inherit",
-    },
-  );
-  const versionOutput = (await new Response(version.stdout).text()).trim();
-  const versionCode = await version.exited;
-  assert(
-    versionOutput === bun.version && versionCode === 0,
-    "Bundled Bun version mismatch",
-  );
-  await mkdir(resolve(root, "build/macos-host"), {
-    recursive: true,
-  });
-  await run(
-    [
-      "clang++",
-      "-std=c++20",
-      "-O2",
-      "-Wall",
-      "-Wextra",
-      "-fobjc-arc",
-      `-I${vendor}`,
-      resolve(root, "native/macos/host/main.mm"),
-      "-framework",
-      "Cocoa",
-      "-framework",
-      "WebKit",
-      "-o",
-      resolve(root, "build/macos-host/bunaway-host"),
-    ],
-    root,
-  );
 }
 
 if (import.meta.main) {

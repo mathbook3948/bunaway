@@ -5,10 +5,11 @@
   },
   "include": [
     "**/*.ts",
+    "../scripts/*.ts",
     "../packages/protocol/scripts/*.ts",
     "../packages/cli/scripts/*.ts",
     "../packages/packaging/scripts/*.ts",
-    "../native/macos/host/package.ts",
-    "../native/windows/bun/*.ts"
+    "../native/windows/bun/*.ts",
+    "../native/macos/bun/*.ts"
   ]
 }

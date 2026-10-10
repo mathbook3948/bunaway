@@ -1,6 +1,5 @@
 import { expect, spyOn, test } from "bun:test";
 import { MessageChannel } from "node:worker_threads";
-import { ViewBoundary } from "#native/windows/bun/boundary";
 import { Channel, type Packet, type Route } from "#native/windows/bun/channel";
 import { createClient } from "@bunaway/client";
 import { type CoreSession, createCore } from "@bunaway/core";
@@ -10,6 +9,7 @@ import {
   type ServerMessage,
   type TransportEvent,
 } from "@bunaway/protocol";
+import { ViewBoundary } from "@bunaway/runtime-bun/view-boundary";
 
 test("Host calls remain BUSY until both Workers acknowledge cancellations, then recover", async () => {
   const child = Bun.spawn(

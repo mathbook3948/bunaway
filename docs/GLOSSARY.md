@@ -11,7 +11,7 @@
 _Avoid_: 설치 프로그램과의 혼용
 
 **번들 런타임 (Bundled runtime)**:
-앱 백엔드를 실행하기 위해 앱 패키지에 함께 배포하는 Bun이다. Windows 배포 빌드에서는 앱 호스트 코드와 자산을 포함한 compiled EXE에 들어간다.
+앱 백엔드를 실행하기 위해 앱 패키지에 함께 배포하는 Bun이다. Windows와 macOS 배포 빌드에서는 앱 호스트 코드와 백엔드를 포함한 compiled 실행 파일에 들어간다.
 _Avoid_: 사용자 전역 Bun, 동일 프로세스 내장 VM이라는 의미의 내장 런타임
 
 **네이티브 호스트 (Native host)**:

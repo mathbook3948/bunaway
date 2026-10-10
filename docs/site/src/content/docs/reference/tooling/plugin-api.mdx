@@ -22,6 +22,8 @@ description: Core와 선택 플러그인이 공유하는 중립 타입과 호출
 `WindowSpec`은 `view`, `home`, `title`, `window`, `startup` 필드를 가집니다. `window`에는 초기 `width`, `height`와 선택적 `minWidth`, `minHeight`, `maxWidth`, `maxHeight`를 둡니다. 크기 값은 96 DPI 기준 논리 픽셀입니다.
 `NativeWindowServices`는 `specs`, `read(view)`, `create(spec)`, `close(view)`, `window(view)`, `stopping()`, `cancelled(requestId)`, `now()`, `tick()`을 제공합니다.
 `NativeWindow`는 `show(visible)`, `focus()`, `close()`, `isFullscreen()`, `getSizeConstraints()`, `setSizeConstraints(constraints)`, `setSize(width, height)`, `setPosition(x, y)`, `setFullscreen(value)`, `setCloseConfirmation(message)`를 제공합니다.
+상태 제어는 `minimize()`, `maximize()`, `unmaximize()`, `restore()`, `toggleMaximize()`입니다. 모두 동기 실행하며 숨긴 창도 표시합니다. `restore()`는 최소화 전 최대화 상태를 복원하고 `unmaximize()`는 일반 크기를 적용합니다. 전체화면 중에는 창 플러그인이 이 다섯 제어를 거부합니다. 크기 제약과 전체화면 복원 정보의 소유자는 계속 호스트입니다.
+상태 조회는 `isMinimized()`, `isMaximized()`, `isFullscreen()`, `isVisible()`, `isFocused()`이며 `boolean`을 반환합니다. 최소화, 최대화, 표시 상태는 실제 HWND에서 읽고 `isFocused()`는 해당 HWND가 OS 전경 창인지 확인합니다. 전체화면은 해당 네이티브 창에 적용한 호스트 모드입니다. 조회는 표시나 포커스를 바꾸지 않습니다. 네이티브 상태 변경 또는 조회 실패는 예외를 던지며 UI 호스트가 공개 `INTERNAL` 오류로 변환합니다.
 두 `close()` 메서드는 동기 또는 비동기로 닫기 수락 여부를 반환합니다.
 
 `MIN_WINDOW_DIMENSION`과 `MAX_WINDOW_DIMENSION`은 설정과 창 API에 입력할 수 있는 정수 범위인 200과 4096입니다. 사용자가 제한 없이 조절하는 창의 크기 범위와는 별개입니다.

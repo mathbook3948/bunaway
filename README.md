@@ -139,7 +139,7 @@ Windows 빌드는 Windows 기본 제공 tar와 고정 Bun만 필요하며 C++ �
 WebView 앱 실행에는 WebView2 Evergreen 런타임이 필요하다.
 생성된 `build/windows-bun-package/`는 별도의 Bun 설치 없이 실행할 수 있는 회귀 테스트 패키지다.
 
-macOS는 Apple Silicon, Xcode Command Line Tools와 GUI 세션이 필요하다.
+macOS는 Bun 직접 FFI를 사용한다. Apple Silicon과 GUI 세션, codesign이 필요하며 C 컴파일러는 필요하지 않다.
 `mise run host:macos`로 제품 호스트를 빌드하고 실제 WKWebView 회귀를 실행한다.
 `mise run host:macos -- --app`은 회귀 앱의 `.app` 생성과 ad-hoc 서명을 추가한다.
 [메모 예제](examples/memo/README.md)는 CLI 생성 앱과 같은 구조이며 예제 폴더에서 `bun run dev`로 실행한다. `bun run build`는 웹 UI와 앱을 함께 빌드한다.

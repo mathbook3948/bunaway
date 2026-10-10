@@ -5,9 +5,10 @@
 `bunaway package`의 macOS 채널 지원 여부는 바뀌지 않는다.
 명령은 저장소 루트에서 실행한다.
 
-Turns a canonical bunaway `.app` (the `bunaway build` output:
-`Contents/MacOS/bunaway-host` + `Contents/Resources/{runtime/bun, assets,
-licenses, manifest.json}`) into the two macOS release artifacts:
+현재 Bun FFI 앱은 `Contents/MacOS/bunaway-host`에 Bun과 백엔드를 포함하며
+`Resources/runtime/bun`이나 `Helpers/bun`을 배포하지 않는다. 서명은 앱 실행 파일에
+JIT와 FFI 실행 메모리 entitlement를 적용한다. 아래 child 재배치는 이전 프로세스
+패키지의 호환 경로이며 현재 제품 빌드에서는 사용하지 않는다.
 
 | Channel | Artifact | Signature |
 |---|---|---|
@@ -31,6 +32,8 @@ bun packages/packaging/scripts/macos.ts sign \
   --provisionprofile MyApp_MAS.provisionprofile
 ```
 
+현재 compiled 앱은 호스트와 번들을 서명한다. 아래 1, 2단계는 이전 프로세스 패키지에만 적용한다.
+
 Order (measured requirement: see
 `docs/architecture/macos-sandbox-results.md`):
 
@@ -47,7 +50,7 @@ Order (measured requirement: see
 Channel layout notes:
 
 - **mac-store** relocates the bundled Bun to `Contents/Helpers/bun` (Apple's
-  nested-executable convention; `main.mm` resolves the fallback) and embeds
+  nested-executable convention for the previous process host) and embeds
   `embedded.provisionprofile` when `--provisionprofile` is passed.
 - Without `--provisionprofile`, the provisioned entitlements
   (`application-identifier`, `team-identifier`) are dropped from the store app
@@ -114,6 +117,8 @@ Notary submission and tickets are mocked to test ZIP/DMG control flow;
 Apple-issued signing, real notarization and Store acceptance remain unverified.
 
 ## Entitlement profiles (`../src/channels/macos/entitlements/`)
+
+compiled 앱에서는 app 템플릿에 `cs.allow-jit`와 `cs.allow-unsigned-executable-memory`를 추가해 앱 실행 파일에 서명한다.
 
 | File | Keys | Why |
 |---|---|---|

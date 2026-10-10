@@ -962,6 +962,7 @@ test("native bridges require view command permission and distinguish missing plu
 
 test("unified plugin imports select browser and Bun implementations without leaking native code", async () => {
   for (const plugin of [
+    "windows",
     "storage",
     "log",
     "capabilities",
@@ -1019,9 +1020,11 @@ test("unified plugin imports select browser and Bun implementations without leak
       expect(
         inputs.some((name) => name.endsWith(`plugins/${plugin}/src/index.ts`)),
       ).toBe(true);
-      expect(inputs.some((name) => /\/windows(?:\/|\.ts$)/.test(name))).toBe(
-        false,
-      );
+      expect(
+        inputs.some((name) =>
+          /\/native\/windows\/|\/src\/windows\.ts$/.test(name),
+        ),
+      ).toBe(false);
       expect(
         inputs.some((name) =>
           name.endsWith(
