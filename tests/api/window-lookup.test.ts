@@ -34,11 +34,15 @@ function fixture({ ready = true }: { ready?: boolean } = {}) {
   const identities = new Map<string, WindowIdentity>([
     [
       "main",
-      main,
+      {
+        ...main,
+      },
     ],
     [
       "private",
-      privateWindow,
+      {
+        ...privateWindow,
+      },
     ],
   ]);
   const closed = new Set<string>();
@@ -233,6 +237,31 @@ test("lookup distinguishes authenticated current, focused and last active withou
   f.closed.add("main");
   expect(await f.invoke("getCurrent")).toBeNull();
   expect(await f.invoke("getLastActive")).toBeNull();
+});
+
+test("lookup results cannot mutate native identity tracking", async () => {
+  const f = fixture();
+  const current = validateWindowOutput(
+    "windows.getCurrent",
+    await f.invoke("getCurrent"),
+  );
+  expect(current).toEqual(main);
+  if (!current) {
+    throw new Error("The authenticated main window must have an identity.");
+  }
+  current.windowId = "caller-modified-id";
+  current.viewId = "private";
+  expect(await f.invoke("getCurrent")).toEqual(main);
+  expect(
+    await f.invoke("getById", {
+      windowId: main.windowId,
+    }),
+  ).toEqual(main);
+  expect(
+    await f.invoke("getById", {
+      windowId: current.windowId,
+    }),
+  ).toBeNull();
 });
 
 test("lookup hides denied targets and obsolete IDs without substituting another permitted window", async () => {
