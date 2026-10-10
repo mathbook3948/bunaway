@@ -103,6 +103,9 @@ export const PROTOCOL_VERSION = {
   minor: 0,
 } as const;
 
+/** Negotiated feature for the SDK's acknowledgement after accepting the server hello. */
+export const SDK_READY_FEATURE = "sdk-ready";
+
 /** Parses and validates one client/host protocol message. */
 export const parseMessage = (text: string): Message =>
   parse(messageSchema, text);

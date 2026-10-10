@@ -70,6 +70,9 @@ test.skipIf(process.platform !== "win32")(
         tick: async () => {},
         window: () => ({
           getSnapshot: () => native.getSnapshot(hwnd),
+          getReadiness() {
+            throw new Error("Readiness is not used in this geometry test.");
+          },
           show: (visible) => native.show(hwnd, visible),
           showInactive: () => native.showInactive(hwnd),
           activate: () => native.activate(hwnd),

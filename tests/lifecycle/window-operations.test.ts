@@ -30,6 +30,7 @@ function fixture() {
     return view;
   }
   let allowClose = true;
+  let creationReady = true;
   let stopping = false;
   let cancelled = false;
   let nowMs = 0;
@@ -42,7 +43,7 @@ function fixture() {
       views.set(spec.view, {
         closed: false,
         cleaned: false,
-        ready: true,
+        ready: creationReady,
         failure: undefined,
         deadline: nowMs + WINDOW_READY_TIMEOUT_MS,
       });
@@ -71,6 +72,9 @@ function fixture() {
     operations,
     views,
     created,
+    setCreationReady: (value: boolean) => {
+      creationReady = value;
+    },
     setClose: (value: boolean) => {
       allowClose = value;
     },
@@ -88,6 +92,32 @@ function fixture() {
     },
   };
 }
+
+test("cancelling a newly created hidden window while its controller prepares closes the owned window", async () => {
+  const f = fixture();
+  f.setCreationReady(false);
+  f.setTick(async () => {
+    f.cancel();
+  });
+  await expect(
+    f.operations.execute(
+      {
+        operation: "windows.create",
+        payload: {
+          view: "main",
+        },
+      },
+      [
+        "main",
+      ],
+      "new",
+    ),
+  ).rejects.toMatchObject({
+    code: "CANCELLED",
+  });
+  expect(f.views.get("main")?.closed).toBe(true);
+  expect(f.operations.replacing.size).toBe(0);
+});
 
 const grants = [
   "main",

@@ -1,4 +1,8 @@
-import { BunawayError, PROTOCOL_VERSION } from "@bunaway/protocol";
+import {
+  BunawayError,
+  PROTOCOL_VERSION,
+  SDK_READY_FEATURE,
+} from "@bunaway/protocol";
 import type { Client, ClientFactory } from "./index.ts";
 import { createWebViewTransport, type WebViewBridge } from "./webview.ts";
 
@@ -73,7 +77,9 @@ export function defaultClient(factory: ClientFactory): Client {
     hello: {
       kind: "hello",
       protocol: PROTOCOL_VERSION,
-      features: [],
+      features: [
+        SDK_READY_FEATURE,
+      ],
       buildId: "bunaway-client",
     },
   });

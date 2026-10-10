@@ -1,5 +1,12 @@
 # 플랫폼 지원과 검증 범위
 
+Windows 창 준비, 숨김 생성과 splashscreen 전환은 [창 API](../site/src/content/docs/reference/host/windows.mdx)를 따른다.
+Windows 11 Pro x64 `10.0.26200`, Bun 1.4.2와 실제 WebView2에서 단계별 준비, 탐색과 재생성,
+실패와 취소, SDK 기한 초과 및 전환 중 앱 유지를 확인했다.
+Win32 메시지와 WinEvent로 숨김 생성 중 순간 표시, 활성화와 포커스가 없고 입력 포커스가 유지되는 것도 확인했다.
+이 두 검증과 계약 검사 결과는 [Windows 실행 기록](../architecture/windows-bun-results.md)에 구분한다.
+macOS 준비 API와 숨김 생성 옵션은 아직 지원하지 않는다.
+
 현재 저장, 로그, 기능 조회, opener와 clipboard 플러그인은 Windows만 지원한다. 창 플러그인의 기본 제어는 macOS에서도 지원한다. 아래 macOS 파일 저장과 네이티브 API 검증 기록은 이관 전 구현의 기록이다. Bun FFI 제품 경로의 명령, 이벤트와 정책, 복구, 종료 검증은 [새 기록](../architecture/macos-bun-results.md)에 둔다.
 
 기준일: 2026-10-10. “구현”은 출시 지원 보장이 아니다. 실제 OS, CPU와 테스트 범위를

@@ -1,5 +1,6 @@
 import { expect, jest, test } from "bun:test";
 import { type Client, createClient } from "@bunaway/client";
+import type { Capabilities } from "@bunaway/plugin-capabilities";
 import {
   API_LIMITS,
   type Dispose,
@@ -7,11 +8,11 @@ import {
   type JsonValue,
   type Message,
   parseMessage,
+  SDK_READY_FEATURE,
   type Transport,
   type TransportEvent,
   type WireError,
 } from "@bunaway/protocol";
-import type { Capabilities } from "@bunaway/plugin-capabilities";
 
 type Commands = {
   "notes.read": {
@@ -138,6 +139,110 @@ class TestTransport implements Transport {
     );
   }
 }
+
+test("SDK readiness is acknowledged only when negotiated, before application calls", async () => {
+  const transport = new TestTransport();
+  const client = createClient({
+    transport,
+    hello: {
+      ...hello,
+      features: [
+        SDK_READY_FEATURE,
+      ],
+    },
+  });
+  transport.emit({
+    ...serverHello,
+    features: [
+      SDK_READY_FEATURE,
+    ],
+  });
+  await client.ready;
+  expect(
+    transport.sent
+      .map(parseMessage)
+      .filter((message) => message.kind === "sdk-ready"),
+  ).toHaveLength(1);
+  await client.close();
+  const legacy = new TestTransport();
+  const legacyClient = createClient({
+    transport: legacy,
+    hello: {
+      ...hello,
+      features: [
+        SDK_READY_FEATURE,
+      ],
+    },
+  });
+  legacy.emit(serverHello);
+  await legacyClient.ready;
+  expect(
+    legacy.sent
+      .map(parseMessage)
+      .filter((message) => message.kind === "sdk-ready"),
+  ).toHaveLength(0);
+  await legacyClient.close();
+});
+
+test("SDK acknowledgement failure rejects ready and closes the session", async () => {
+  const transport = new TestTransport();
+  const send = transport.send.bind(transport);
+  transport.send = (text) =>
+    parseMessage(text).kind === "sdk-ready"
+      ? Promise.reject(new Error("ack rejected"))
+      : send(text);
+  const client = createClient({
+    transport,
+    hello: {
+      ...hello,
+      features: [
+        SDK_READY_FEATURE,
+      ],
+    },
+  });
+  transport.emit({
+    ...serverHello,
+    features: [
+      SDK_READY_FEATURE,
+    ],
+  });
+  await expect(client.ready).rejects.toMatchObject({
+    code: "INTERNAL",
+  });
+  expect(transport.closed).toBe(true);
+});
+
+test("an eager negotiated hello still sends the client hello before its readiness acknowledgement", async () => {
+  const transport = new TestTransport();
+  const subscribe = transport.subscribe.bind(transport);
+  transport.subscribe = (listener) => {
+    const release = subscribe(listener);
+    transport.emit({
+      ...serverHello,
+      features: [
+        SDK_READY_FEATURE,
+      ],
+    });
+    return release;
+  };
+  const client = createClient({
+    transport,
+    hello: {
+      ...hello,
+      features: [
+        SDK_READY_FEATURE,
+      ],
+    },
+  });
+  await client.ready;
+  expect(
+    transport.sent.map(parseMessage).map((message) => message.kind),
+  ).toEqual([
+    "hello",
+    "sdk-ready",
+  ]);
+  await client.close();
+});
 
 function must<T>(value: T | undefined): T {
   if (value === undefined) {

@@ -42,6 +42,60 @@ EXE 컴파일 중단, 배포 artifact 감사와 Svelte 템플릿 검사는 전�
 문서 coverage와 Astro 타입 검사, 72개 페이지 빌드 및 내부 링크 검사도 통과했다.
 전체 검사를 성공으로 기록하지 않는다.
 
+## 2026-10-10 창 준비와 splashscreen 전환
+
+main `2f45356`에서 분기한 창 준비 변경을 main `29587c7`에 rebase한 뒤,
+최종 PR은 창 식별자 조회가 추가된 main `2b78dc5`에 통합했다.
+Windows 11 Pro x64 `10.0.26200`, Bun 1.4.2, WebView2 Runtime `154.0.4258.62`와
+고정 WebView2 SDK `1.0.4129.50`으로 검증했다. 공개 계약은 [창 API](../site/src/content/docs/reference/host/windows.mdx)를 따른다.
+
+- `tests/lifecycle/windows-window-readiness.ts`: 실제 UI Worker와 WebView2에서 네이티브 창 완료,
+  SDK 협상 확인과 최상위 문서 완료를 구분했다. 이미지 응답을 보류해 SDK가 먼저 준비돼도
+  `visible: false` 창이 표시되거나 포커스를 가져오지 않는지 확인했다.
+- splash의 구독으로 다른 창의 최초 네이티브 완료와 준비 결과를 수신했다. 이벤트 이름만 허용한
+  observer는 제어 권한이 없는 창의 준비를 받지 않았고 events 권한이 없는 뷰는 구독을 거부했다.
+  SDK 준비 뒤 구독한 문서에서도 조회로 이미 완료된 준비를 확인했다.
+- 같은 HWND의 탐색에서는 windowId를 유지하고 문서 세대를 초기화했다. fragment는 준비를 유지했다.
+  두 번의 재생성은 새 windowId와 새 세션을 사용했다. SDK 종료는 문서 완료를 유지하면서 SDK를 취소했다.
+  `build/windows-window-readiness/report.json`의 `pass: true`, 문서 4개와 마지막 창 종료 훅 1회로 완료했다.
+  최종 전체 호스트 실행은 준비 기록 59개를 남겼다. 기록 수는 구독 시점에 따라 달라질 수 있다.
+- `showWhenReady: "document"`는 SDK를 쓰지 않는 문서를 표시했다. `"sdk"`는 두 단계가 끝난 뒤 표시했다.
+  404 탐색 실패와 외부 리디렉션의 네이티브 취소에서는 자동 표시하지 않았다.
+  SDK를 만들지 않는 문서를 30초 기다려 `TIMEOUT` 결과와 계속 숨긴 상태를 확인했다.
+  `window.stop()`은 이 환경에서 ConnectionAborted 상태 9로 보고됐다. 이를 네이티브 취소 상태 14로
+  가정하지 않고 실패로 처리하며, 취소 회귀는 실제 정책에 의한 탐색 취소를 사용했다.
+- 앱 초기화 뒤 주 창을 먼저 표시하고 splash를 닫을 때 종료 훅을 실행하지 않았다.
+  이후 주 창의 마지막 닫기에만 종료 훅을 한 번 실행했고 정상 정리에서 활성 자식 프로세스 0개를 확인했다.
+- `tests/lifecycle/windows-hidden-webview.test.ts`: 별도 실제 STA 프로세스에서 HWND 생성부터 WebView2
+  문서 완료까지 표시, 활성화와 포커스 Win32 메시지, 해당 프로세스의 WinEvent를 관찰했다.
+  모두 0건이며 입력 창의 스레드 키보드 포커스가 유지됐다. 단순한 주기적 조회나 DLL 대체 결과가 아니다.
+- 계약 검사는 설정, 두 대상 창의 권한, 닫기 확인 거절, 구독 전 완료 조회, 늦은 SDK 확인 차단,
+  새 세대, 준비 기한과 생성 요청 취소, SDK 확인 전송 실패와 이전 hello 호환을 포함한다.
+
+main `29587c7` 기반 `mise run host:windows`의 전체 실행도 통과했다. 기존 창 API와 이벤트, Core와 SDK,
+부분 생성 실패, 데스크톱 종료 정책, 파일과 저장 메타데이터, 이동한 독립 CLI,
+개발 중 코드 교체, 메모 복원과 강제 종료 후 WebView 자손 정리를 포함했다.
+이번 전체 실행에서는 기존 [이슈 #94](https://github.com/mathbook3948/bunaway/issues/94)의 종료 기한 초과가 발생하지 않았다.
+
+main `29587c7` 기반 `mise run check`는 751 pass, 67 skip, 6 fail이었다. TypeScript, lint와 형식 검사는 통과했다.
+실패는 macOS fixture의 파일 symlink 생성 권한 `EPERM` 5건과 배포 artifact 감사의 30초 기한 초과 1건이다.
+변경 없는 main `29587c7`을 별도 폴더에 추출해 같은 6건을 재현했다.
+배포 감사는 변경 코드의 단독 실행에서도 기한을 넘겼으며 전체 검사 성공으로 기록하지 않는다.
+`bun run docs:check`, `bun run docs:build`는 공개 항목 504개, 페이지 72개와 내부 링크 및 앵커 6,407개를 검사했다.
+
+macOS 구현과 실행, 다른 Windows 버전이나 프로덕션 서명은 이번 검증에 포함하지 않았다.
+Inno Setup이 없어 설치 프로그램 생성, 설치와 제거를 건너뛰었다.
+
+main `2b78dc5` 통합 뒤에도 실제 `windows-bun-window-api.ts`, `windows-window-readiness.ts`,
+`windows-hidden-webview.test.ts`와 `windows-window-lookup.test.ts`를 다시 통과했다.
+준비 실행은 문서 4개, 준비 기록 55개와 마지막 종료 훅 1회를 확인했다.
+창 조회와 준비 계약을 함께 검사했고 전체 테스트 TypeScript 검사도 통과했다.
+통합된 창 조회의 실제 전경 전환은 Windows가 포커스 요청을 거부해 미검증으로 출력했다.
+숨김 생성 중 표시와 포커스 방지 결과는 이 제한과 별도로 확인했다.
+최종 `mise run check`는 761 pass, 67 skip, 5 fail이었다. TypeScript, lint와 형식 검사를 통과했고,
+배포 artifact 감사도 22.83초에 통과했다. 남은 5건은 위에서 main에도 재현한 macOS fixture의
+파일 symlink 권한 `EPERM`이며 전체 검사 성공으로 기록하지 않는다.
+
 ## 2026-10-10 opener 파일 작업
 
 초기 UI Worker 구현의 Windows 실행 근거다. 후속 수정은 파일 검사와 셸 요청을

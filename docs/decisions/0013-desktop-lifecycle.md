@@ -42,6 +42,10 @@ WebView 정리를 시작한다. SIGINT, SIGTERM, 호스트 실패와 OS 강제 �
 Windows 개발 CLI의 중단도 사용자 종료 요청과 구분한다. 재시작과 CLI 종료는
 `beforeQuit`와 트레이 숨김을 우회하지만 기존 코어, 플러그인 StopHook과 Worker 정리를 수행한다.
 CLI는 앱 HWND에 별도의 WM_APP 종료 메시지를 보내고 UI가 메인에 `closing`을 전달한다.
+준비된 주 창으로 전환하는 `windows.completeSplashscreen`은 주 창을 먼저 표시하고
+splash 창을 닫는다. 전환의 닫기는 창별 확인을 유지하지만 트레이 숨김과 `beforeQuit`를
+실행하지 않는다. 살아 있는 주 창을 남기는 작업이며 마지막 창의 일반 닫기 계약은 유지한다.
+splash 창의 호출 세션은 닫을 때 폐기되므로 전환 요청은 주 창이나 백엔드에서만 받는다.
 트레이 소유 HWND에도 같은 종료 메시지를 적용하므로 앱 창 생성 전에도 중단을 요청할 수 있다.
 
 `closeBehavior: "hide"`는 복원 경로를 제공하는 트레이 설정을 요구한다.

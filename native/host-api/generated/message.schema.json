@@ -47,6 +47,33 @@
       "type": "object",
       "properties": {
         "kind": {
+          "const": "sdk-ready"
+        },
+        "protocol": {
+          "type": "object",
+          "properties": {
+            "major": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "minor": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            }
+          },
+          "required": ["major", "minor"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["kind", "protocol"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
           "const": "invoke"
         },
         "protocol": {

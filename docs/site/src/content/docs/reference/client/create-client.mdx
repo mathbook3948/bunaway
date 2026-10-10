@@ -60,6 +60,9 @@ try {
 ```
 
 `ready`는 `{ protocol, features, buildId }`의 Promise입니다.
+Windows의 기본 연결에서는 협상을 수락했다는 준비 확인을 호스트에 전송한 뒤 완료합니다.
+이 확인의 전송 실패도 준비 실패입니다. 웹 문서 로드와 앱 데이터, UI 초기화 완료는 포함하지 않습니다.
+창 단계와 이미 완료된 상태는 [창 준비](/reference/host/windows/#창-준비)에서 확인합니다.
 `buildId`는 상대 백엔드의 값이며 자세한 필드는 [프로토콜 레퍼런스](/reference/protocol/)에 있습니다.
 
 ## 실패와 수명
