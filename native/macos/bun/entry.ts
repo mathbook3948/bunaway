@@ -128,22 +128,28 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
         if (stopping) {
           return;
         }
-        if (registry) {
-          throw new Error("Invalid native registration phase.");
+        // Fail without rejecting so the Channel still acknowledges registration;
+        // the backend awaits that ack before it can observe shutdown and clean up.
+        try {
+          if (registry) {
+            throw new Error("Invalid native registration phase.");
+          }
+          registry = pluginRegistry(packet.plugins, catalog);
+          registry.validatePolicy(config.policy);
+          matches = await permissionMatcher(packet.plugins, catalog);
+          if (!ui) {
+            throw new Error("Missing window services.");
+          }
+          adapters = await operations(
+            packet.plugins,
+            config.dataRoot,
+            "ui",
+            ui.services,
+            catalog,
+          );
+        } catch (error) {
+          fail(error);
         }
-        registry = pluginRegistry(packet.plugins, catalog);
-        registry.validatePolicy(config.policy);
-        matches = await permissionMatcher(packet.plugins, catalog);
-        if (!ui) {
-          throw new Error("Missing window services.");
-        }
-        adapters = await operations(
-          packet.plugins,
-          config.dataRoot,
-          "ui",
-          ui.services,
-          catalog,
-        );
       } else if (packet.kind === "cancel") {
         if (requests.get(packet.requestId) === packet.context) {
           cancelled.add(packet.requestId);

@@ -21,6 +21,8 @@ const unsupported = (): never => {
 };
 type View = {
   state: WindowState;
+  /** Startup windows end the app on setup failure; dynamic creation reports to its caller. */
+  startup: boolean;
   boundary: ViewBoundary;
   native?: MacosWebview | undefined;
 };
@@ -82,6 +84,7 @@ export class MacosWindows {
         ...fields,
       });
     const view: View = {
+      startup,
       state: {
         closed: false,
         cleaned: false,
@@ -142,7 +145,7 @@ export class MacosWindows {
           return;
         }
         view.state.failure = error;
-        if (startup) {
+        if (view.startup) {
           this.hooks.fail(error);
         }
         this.closeView(spec.view);
@@ -229,6 +232,9 @@ export class MacosWindows {
         Date.now() > view.state.deadline
       ) {
         view.state.failure = new Error("macOS window setup timed out.");
+        if (view.startup) {
+          this.hooks.fail(view.state.failure);
+        }
         this.closeView(view.boundary.policy.id);
       }
       view.boundary.scanDeadlines();

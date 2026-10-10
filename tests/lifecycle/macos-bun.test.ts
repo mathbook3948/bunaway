@@ -502,6 +502,69 @@ test.each([
   20000,
 );
 
+test("macOS native registration failure acknowledges the backend and exits without forced cleanup", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "bunaway-macos-reject-"));
+  try {
+    const app = resolve(directory, "app.ts");
+    await Bun.write(app, "export default {commands: {}, events: {}};");
+    await bundleMacosHost(
+      resolve(import.meta.dir, "../../native/macos/bun"),
+      directory,
+      app,
+    );
+    await bundleTestHost(directory);
+    await Bun.write(
+      resolve(directory, "webview.ts"),
+      `export class MacosWebview {
+        ready = Promise.resolve();
+        start() {}
+        close() {}
+      }`,
+    );
+    // The main thread is the only registry check, so an unregistered grant fails there.
+    const config = workerConfig(directory);
+    config.policy.backend.permissions = [
+      "missing:allow-call",
+    ];
+    await Bun.write(
+      resolve(directory, "run.ts"),
+      `import {runMacosApp} from "./entry.js";
+      try { await runMacosApp(${JSON.stringify(config)}); }
+      catch (error) { console.error(error.message); process.exitCode = 1; }`,
+    );
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        resolve(directory, "run.ts"),
+      ],
+      {
+        stdout: "ignore",
+        stderr: "pipe",
+        timeout: 15000,
+      },
+    );
+    const errors = new Response(child.stderr).text();
+    expect(await child.exited).toBe(1);
+    expect(await errors).toContain(
+      "Policy references an unregistered permission.",
+    );
+    const records = (await Bun.file(resolve(directory, "logs/host.log")).text())
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(records.at(-1)).toMatchObject({
+      event: "host-stopped",
+      failed: true,
+      forced: false,
+    });
+  } finally {
+    await rm(directory, {
+      recursive: true,
+      force: true,
+    });
+  }
+}, 15000);
+
 for (const mode of [
   "referenced",
   "unref",

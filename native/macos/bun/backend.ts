@@ -12,8 +12,6 @@ import {
   type Packet,
   type Route,
 } from "@bunaway/runtime-bun/worker-channel";
-import { loadPluginCatalog } from "../../host-api/bun/plugin-catalog.ts";
-import { pluginRegistry } from "../../host-api/bun/plugins.ts";
 import type { MacosConfig } from "./config.ts";
 
 const config: MacosConfig = workerData;
@@ -153,10 +151,6 @@ try {
         ]
       : [],
   );
-  pluginRegistry(
-    plugins,
-    await loadPluginCatalog(config.assets),
-  ).validatePolicy(config.policy);
   if (stopping) {
     parentPort.close();
   } else {
