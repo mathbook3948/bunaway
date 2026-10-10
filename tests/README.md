@@ -157,6 +157,15 @@ Windows 이벤트 전송 회귀는 실제 `MessageChannel`과 Core를 연결한�
 Windows 호스트 시나리오는 `lifecycle/windows-host.ts`에 두고 PID 조회, 창 닫기와
 프로세스 종료 감시는 `lifecycle/windows-host-processes.ts`에서 실행한다.
 
+`api/window-relations.test.ts`는 trusted destroy의 백엔드 출처, 별도 권한과 대상 권한,
+관계 양쪽 권한과 식별자 노출, 입력과 출력 경계를 확인한다.
+`lifecycle/windows-window-relations.test.ts`는 실제 HWND의 owner와 enabled,
+여러 모달의 원래 enabled 복원, 순환과 종료된 ID 거부, 네이티브 실패의 변경 취소,
+자식부터의 자원 해제 순서를 검사한다. `lifecycle/windows-owned-modal.ts`는 실제
+WebView2 세션과 UI Worker로 웹의 destroy 거부, 닫기 확인 거절, 모달 자식 재생성,
+부모 종료와 새 ID, 마지막 창 집합의 종료 취소와 오류, 대기 중 trusted destroy를
+검사한다. 실제 WebView2 정리 기한 초과는 성공으로 간주하지 않는다.
+
 `api/opener.test.ts`는 HTTP/HTTPS 계약과 파일 API, 정확한 절대 경로 scope, 작업별 권한과 deny 우선 규칙을 확인한다.
 `lifecycle/windows-opener.test.ts`는 실제 Windows I/O STA, 없는 파일과 디렉터리, 공유 잠금, junction,
 하드 링크, 대소문자 별칭 거부와 파일 핸들 정리를 검사한다. 실제 I/O Worker의 승인 거부와

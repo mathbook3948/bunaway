@@ -26,6 +26,19 @@ status: accepted
 
 Windows에서 세 창(쓰기 가능 편집 뷰, 읽기 전용 뷰, 주 뷰)으로 정책 분리, 공유 요청 ID 전달, 이벤트 필터링, 렌더러 장애 격리, 폐기 세션 차단, 창별 종료 규칙을 [실제 검증](../architecture/windows-host-results.md)했다. 공개 `windows.create`, `windows.recreate`는 설정한 창을 생성하거나 이전 세션을 폐기하고 같은 프로필로 다시 만든다. 재생성 중에는 마지막 창의 자동 종료를 보류한다. [Bun 호스트 실행 결과](../architecture/windows-bun-results.md)에 검증 기록이 있다. macOS도 같은 선언과 세션 수명을 적용하며, 뷰별 임시 WebKit 프로필을 실행 중 재생성에서 유지한다. macOS의 영속 프로필과 뷰의 창 간 이동은 미구현이다.
 
+## Windows 부모와 모달 수명 확장, 2026-10-11
+
+사전 선언된 창을 생성한 뒤 현재 부모의 `windowId`로 소유 관계를 맺는다.
+`viewId`는 계속 권한 대상이고 새 HWND는 새 ID를 받는다. 부모는 Windows의 owner를
+가진 최상위 창 관계이며 child HWND 임베딩과 구분한다. 모달은 부모 입력을 차단하고
+마지막 모달의 자원이 정리된 뒤 원래 enabled 상태를 복원한다.
+일반 창의 독립 종료 규칙은 유지하며, 부모를 닫으면 그 부모가 소유한 자식도 종료한다.
+모든 확인과 마지막 창 집합의 종료 취소를 먼저 검사한 뒤 자식부터 세션, HWND와
+WebView 자원을 정리한다. 자식 재생성은 살아 있는 부모 수명에만 다시 연결한다.
+정리 중 부모 수명이 끝나면 취소하고 같은 뷰의 새 부모로 대체하지 않는다.
+신뢰된 백엔드의 `destroy`는 별도 대상 권한으로 확인과 종료 취소를 우회하며
+네이티브 자원은 같은 정리 순서로 폐기한다. 웹 호출은 이 권한이 있어도 거부한다.
+
 근거: [PRD의 권한 모델](../PRD.md), [호출 컨텍스트 ADR](./0002-host-owned-call-context.md), [Windows 호스트](../../native/windows/bun/entry.ts), [Windows 실행 결과](../architecture/windows-host-results.md).
 
 ## 2026-10-10 창 준비 확장

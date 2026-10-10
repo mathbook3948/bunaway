@@ -45,6 +45,8 @@ const CW_USEDEFAULT = -2147483648;
 const DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4n;
 const GWL_STYLE = -16;
 const GWL_EXSTYLE = -20;
+const GWLP_HWNDPARENT = -8;
+const GW_OWNER = 4;
 const WS_EX_TOOLWINDOW = 0x80n;
 const IDI_APPLICATION = 32512n;
 const IMAGE_ICON = 1;
@@ -609,6 +611,31 @@ export class Windows {
     return this.lastActiveWindow === null
       ? null
       : this.identity(this.lastActiveWindow);
+  }
+
+  /** Uses Win32 ownership for top-level windows, never WS_CHILD embedding. */
+  setOwner(window: bigint, owner: bigint) {
+    user.symbols.SetWindowLongPtrW(window, GWLP_HWNDPARENT, owner);
+    // The setter can invoke our WndProc, which uses Win32 APIs and changes last-error state.
+    assert.equal(this.getOwner(window), owner, "Windows did not apply owner");
+  }
+
+  getOwner(window: bigint): bigint {
+    return user.symbols.GetWindow(window, GW_OWNER);
+  }
+
+  /** EnableWindow returns the previous disabled state; verify the resulting state. */
+  setEnabled(window: bigint, enabled: boolean) {
+    user.symbols.EnableWindow(window, enabled ? 1 : 0);
+    assert.equal(
+      this.isEnabled(window),
+      enabled,
+      "Windows did not apply enabled state",
+    );
+  }
+
+  isEnabled(window: bigint): boolean {
+    return !!user.symbols.IsWindowEnabled(window);
   }
 
   /** ShowWindow returns previous visibility, so verify the requested native state instead. */
@@ -1563,6 +1590,7 @@ export class Windows {
   }
 
   confirmClose(window: bigint, title: string, message: string): boolean {
+    // shortcut: an open MessageBox defers queued destroy; use cancellable confirmation if immediate interruption is required.
     const result = withWide(title, (caption) =>
       withWide(message, (text) =>
         user.symbols.MessageBoxW(

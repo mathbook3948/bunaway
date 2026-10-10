@@ -458,3 +458,77 @@ Win32 콜백은 기존 Channel에서 제한된 메시지 묶음을 읽어 수신
 통과했다. 실제 모달 시나리오도 분리 실행에서 백엔드 진행과 정상 정리를 통과했다.
 전체 호스트를 다른 검사와 함께 실행한 첫 시도에서는 WebView 정리 기한을 초과했다.
 로컬 실제 포커스 전환은 Windows가 활성화를 거부해 확인하지 못했다.
+
+## 2026-10-11 부모, 모달과 trusted destroy
+
+main `488f88a` 기반 작업 브랜치에서 검증했다. 환경은 Windows x64, NT
+`10.0.26200.0`, Bun `1.4.2`, WebView2 Runtime `154.0.4258.62`다.
+기존 `windowId`와 `viewId`, 네이티브 생성, 문서와 SDK 준비의 구분을 유지한다.
+
+`tests/api/window-relations.test.ts`, `tests/lifecycle/window-operations.test.ts`와
+`tests/lifecycle/windows-window-relations.test.ts`의 집중 검사 19개가 통과했다.
+별도 destroy 권한과 백엔드 출처, 대상과 양쪽 부모 관계 권한, 잘못된 입력과 출력,
+재생성 중 trusted destroy 및 부모 종료 취소, 생성 실패의 무조건 정리를 확인했다.
+실제 HWND에서는 Win32 owner 조회와 enabled 변경, 여러 모달의 마지막 해제 때
+이전 true 또는 false 상태 복원을 확인했다. 순환과 종료된 ID, 네이티브 owner 및
+disable 실패, 입력 복원 실패와 재시도, 자식부터 정리하는 순서는 제어된 의존성으로
+검사했다. 실제 OS API 실패를 주입한 검증과 구분한다.
+
+`tests/lifecycle/windows-owned-modal.ts`의 최종 단독 실행도 통과했다.
+실제 WebView2와 UI Worker, 공개 windows helper를 연결해 웹에서 destroy 권한을
+허용해도 거부되는 동작, 닫기 확인 거절과 그동안의 중복 WM_CLOSE, 모달 차단 중
+enabled 변경 거부, 이미 disabled인 부모 상태 보존, 두 모달의 마지막 종료 뒤 입력
+복원을 확인했다. 살아 있는 자식 재생성의 새 ID와 SDK 세션, 부모 close의 자식 종료,
+부모 재생성 후 이전 ID 거부, 부모 destroy와 자식 재생성 경쟁의 CANCELLED도 확인했다.
+마지막 부모와 자식 집합의 beforeQuit 거절과 오류는 창을 유지했다. 완료되지 않은
+beforeQuit 중 백엔드 destroy는 확인과 취소를 우회하고 정상 정리를 끝냈다.
+
+결과는 `build/windows-owned-modal/report.json`의 `pass: true`, `quitChecks: 3`이다.
+최종 호스트 로그는 `activeProcesses: 0`, `forced: false`, `failed: false`이며
+COM handler 목록이 비어 있고 종료 후 콜백이 없음을 확인했다.
+로그는 `build/windows-owned-modal/final-run.log`에 보관했다.
+
+첫 실행은 WebView2 브라우저 프로세스 잔류로 30초 정리 기한을 넘겼고, 전체 검사와
+함께 실행한 추가 시도는 fixture의 150초 기한에 실패했다. 단독 실행 두 번은 통과했다.
+기존 [이슈 #94](https://github.com/mathbook3948/bunaway/issues/94)의 간헐적 정리 문제를
+해결했다는 뜻은 아니다.
+
+`mise run check`는 타입, lint, 포맷과 Java 포맷 검사를 통과했지만 전체 테스트는
+768개 통과, 67개 건너뜀, 12개 실패와 테스트 사이 오류 3개로 끝났다.
+CLI 번들의 5초 제한 세 건과 패키징의 60초 기한 초과, 이어진 실행 및 빌드 잠금
+실패 세 건, Windows의 symlink 생성 EPERM 다섯 건이 기록됐다.
+시간 초과한 번들 검사 세 개는 별도 30초 기한 실행에서 각각 2.6초, 1.0초, 1.4초로
+통과했다. 이 재실행이 전체 check 성공을 대신하지는 않는다.
+로그는 `build/check-final.log`, `build/cli-window-distribution-retry.log`에 보관했다.
+문서 check와 build는 통과했으며 72 페이지의 내부 링크 6,413개를 검사했다.
+`mise run host:windows`도 `windows-host: all checks passed`로 완료했다.
+기존 창 탐색과 준비, 이벤트, 초기 종료와 생성 실패, 새 모달 시나리오, 트레이 종료와
+취소, 저장 경계, 이동한 CLI 앱, 앱 명령 교체와 다중 뷰, 메모 저장과 복원,
+엔트리포인트 종료 후 자식 프로세스 정리를 확인했다. 로그는
+`build/host-windows-final.log`다. Inno Setup이 없어 설치 검사를 건너뛰었고 Windows의
+symlink 생성 권한이 없어 저장소의 마지막 파일 symlink 검사는 건너뛰었다.
+
+작업 중 main에 병합된 `bcdd503`을 PR 브랜치에 반영한 뒤 공통 SDK, 코어와 프로토콜,
+새 채널 회귀 및 창 계약 269개를 다시 검사해 모두 통과했다.
+`windows-window-readiness.ts`와 `windows-owned-modal.ts`의 실제 WebView2 실행도
+통과했다. 모달 검사는 자식 자원이 부모 자원보다 먼저 정리되고 종료 로그의
+잔류 프로세스가 0개인지 직접 검사한다. 최신 main에서 완료된 뒤 도착한 종료 훅의
+승인도 종료를 다시 시작하지 않았다. 로그는 `build/main-update-contract.log`,
+`build/windows-readiness-latest-main.log`, `build/windows-owned-modal/latest-main.log`다.
+
+최신 main 병합 후 전체 `mise run check` 재실행은 정적 검사를 모두 통과했으며
+테스트 800개 통과, 67개 건너뜀, 5개 실패로 끝났다. 실패 다섯 건은 모두 Windows에서
+macOS fixture용 symlink를 만들 때 발생한 EPERM이다. 이전 CLI 시간 초과와 잠금
+실패는 재현되지 않았다. 로그는 `build/check-latest-main.log`다.
+문서 검사도 공개 항목 529개와 72 페이지의 내부 링크 6,413개를 확인해 통과했다.
+
+최종 종료 경쟁 보완에서는 자식의 닫기 확인 중 부모와 자식에 함께 WM_CLOSE를
+보내도 확인이 추가되거나 호스트가 실패하지 않는 실제 Windows 검사를 통과했다.
+재생성의 새 컨트롤러 준비 중 부모가 종료되는 경우도 CANCELLED로 처리하는 집중
+회귀를 추가했다. 최종 집중 검사 20개와 테스트 전체 타입, 변경 파일의 lint 및 포맷
+검사가 통과했다. 전체 검사 이후의 이 두 보완은 해당 집중 검사와 실제 시나리오로
+검증했다. 로그는 `build/windows-owned-modal/ancestor-race.log`,
+`build/window-relations-contract-complete.log`, `build/window-relations-types-complete.log`,
+`build/window-relations-static-complete.log`다.
+초기 설정의 부모 지정, child HWND 임베딩, 다중 물리 모니터와 다른 플랫폼 실행은
+이번 작업에 포함하지 않았다.

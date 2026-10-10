@@ -8,27 +8,39 @@ import {
 import { matches } from "./scope.ts";
 
 const definitions = Object.fromEntries(
-  Object.entries(windowOperations).map(([name, operation]) => [
-    name.slice("windows.".length),
-    {
-      ...operation,
-      permission:
-        name === "windows.list" ||
-        name === "windows.getById" ||
-        name === "windows.getCurrent" ||
-        name === "windows.getFocused" ||
-        name === "windows.getLastActive"
-          ? "list"
-          : "control",
-      osPermission: "not-required" as const,
-    },
-  ]),
+  Object.entries(windowOperations).map(([name, operation]) => {
+    let permission = "control";
+    if (name === "windows.destroy") {
+      permission = "destroy";
+    } else if (
+      name === "windows.list" ||
+      name === "windows.getById" ||
+      name === "windows.getCurrent" ||
+      name === "windows.getFocused" ||
+      name === "windows.getLastActive"
+    ) {
+      permission = "list";
+    }
+    return [
+      name.slice("windows.".length),
+      {
+        ...operation,
+        permission,
+        osPermission: "not-required" as const,
+      },
+    ];
+  }),
 );
 const plugin = defineNativePlugin({
   name: "windows",
   version: manifest.version,
   operations: definitions,
   scopes: {
+    destroy: s.object({
+      view: s.string({
+        pattern: WINDOW_VIEW_NAME_PATTERN,
+      }),
+    }),
     control: s.object({
       view: s.string({
         pattern: WINDOW_VIEW_NAME_PATTERN,

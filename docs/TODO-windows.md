@@ -68,12 +68,12 @@ debug APK 개발 경로를 반영하고 iOS 및 모바일 후속 작업을 분�
 - [x] blur와 활성 창 전환 API를 제공한다.
 - [x] `isVisible`과 `isFocused`로 실제 창의 표시 상태와 전경 창 여부를 조회한다.
 - [x] `isDestroyed`와 `isNormal`로 창의 destroyed와 normal 상태를 조회한다.
-- [ ] 일반 close와 확인을 우회하는 trusted destroy의 계약을 구분한다.
+- [x] 일반 close와 확인을 우회하는 trusted destroy의 계약을 구분한다.
 - [ ] 실행 중 창 생성 옵션을 지정하는 기능의 지원 범위와 권한을 결정한다. 현재는 사전 선언만 지원한다.
 - [ ] 하나의 뷰에서 여러 창을 만드는 기능과 식별자, 정책의 관계를 결정한다. 현재는 뷰별 창 하나다.
-- [ ] 부모 창, 자식 창, owner 관계를 설정하고 조회한다.
-- [ ] 부모에 종속된 모달 창과 부모의 입력 차단, 종료 순서를 제공한다.
-- [ ] 창 enabled 상태의 변경과 조회를 제공한다.
+- [x] 부모 창, 자식 창, owner 관계를 설정하고 조회한다.
+- [x] 부모에 종속된 모달 창과 부모의 입력 차단, 종료 순서를 제공한다.
+- [x] 창 enabled 상태의 변경과 조회를 제공한다.
 - [ ] 창이 없는 상주 앱과 트레이만 있는 앱의 시작을 지원한다. 현재 설정은 시작 창 하나 이상을 요구한다.
 - [x] 앱 초기화 뒤 `completeSplashscreen`으로 준비된 주 창을 먼저 표시하고 splashscreen을 닫는다.
 
@@ -103,6 +103,14 @@ SDK 기한 초과 및 전환 중 마지막 창 종료 억제를 확인했다.
 OS 거부와 후보 없음, 기존 show, hide, focus와의 차이는 [창 API](./site/src/content/docs/reference/host/windows.mdx)의 공개 계약을 따른다.
 실제 두 Win32 창과 입력 필드의 포커스 보존, 전경 전환의 검증 한계는
 [실행 기록](./architecture/windows-bun-results.md)에 구분한다.
+
+2026-10-11 부모와 모달 구현은 main `488f88a`의 네이티브 창 식별자와 준비 계약을
+유지한다. `setParent`, `getParent`, `getOwner`, `getChildren`, `setEnabled`, `isEnabled`와
+백엔드 전용 `destroy`를 제공한다. 일반 close는 확인과 종료 취소를 유지하며,
+destroy는 별도 권한으로 확인을 우회한다. 여러 모달의 차단과 이전 enabled 상태 복원,
+자식부터의 자원 정리, 재생성 중 부모 수명 종료를 처리한다. 초기 설정의 관계 지정과
+child HWND 임베딩은 지원하지 않는다. 계약과 실제 HWND 검증은 통과했으며,
+WebView2 실행 검증 결과와 남은 정리 문제는 [실행 기록](./architecture/windows-bun-results.md)에 구분한다.
 
 ## 02. 창 크기와 위치, 최소 크기와 최대 크기 제약
 

@@ -91,6 +91,26 @@ export const ole = dlopen("ole32.dll", {
   },
 });
 export const user = dlopen("user32.dll", {
+  EnableWindow: {
+    args: [
+      "u64",
+      "i32",
+    ],
+    returns: "i32",
+  },
+  IsWindowEnabled: {
+    args: [
+      "u64",
+    ],
+    returns: "i32",
+  },
+  GetWindow: {
+    args: [
+      "u64",
+      "u32",
+    ],
+    returns: "u64",
+  },
   SetThreadDpiAwarenessContext: {
     args: [
       "i64",
