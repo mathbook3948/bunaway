@@ -56,3 +56,7 @@ Windows EXE 컴파일 중에도 적용됩니다.
 Windows에서 다시 빌드해도 기존 `packaged/`에서 인식한 채널의 산출물과 보고서는 유지합니다.
 
 [패키징](/reference/cli/package/)
+
+macOS 빌드도 Bun compiled 실행 파일을 앱 번들에 넣습니다. C/ObjC++ 호스트나
+사용자 정의 dylib를 컴파일하지 않으며 AppKit와 WKWebView는 Bun FFI로 호출합니다.
+별도 Bun 설치와 C 컴파일러는 필요하지 않습니다.

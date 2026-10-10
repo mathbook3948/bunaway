@@ -20,7 +20,8 @@ Windows 호스트는 Bun FFI이므로 앱 개발에 C++ 컴파일러를 요구�
 
 ## macOS arm64
 
-Bun 1.4.2, Xcode Command Line Tools, GUI 세션이 필요합니다.
+Bun 1.4.2, codesign과 GUI 세션이 필요합니다.
+macOS도 시스템 API를 Bun FFI로 직접 호출하므로 C/ObjC++ 컴파일러는 필요하지 않습니다.
 현재 호스트와 CLI는 macOS 14 이상인 Apple Silicon 기기를 지원합니다.
 Intel 기기와 여러 창은 아직 지원하지 않습니다.
 개발 빌드는 ad-hoc으로 서명합니다. 배포용 Developer ID 서명과 공증은 따로 준비해야 합니다.

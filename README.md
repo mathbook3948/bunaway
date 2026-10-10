@@ -140,10 +140,9 @@ Windows 빌드는 PowerShell 7과 고정 Bun만 필요하며 C++ 컴파일은 �
 WebView 앱 실행에는 WebView2 Evergreen 런타임이 필요하다.
 생성된 `build/windows-bun-package/`는 별도의 Bun 설치 없이 실행할 수 있는 회귀 테스트 패키지다.
 
-macOS는 Apple Silicon, Xcode Command Line Tools와 GUI 세션이 필요하다.
-`probe:macos` 다음 `host:macos`를 **직렬 실행**한다. 두 빌드가 공유 Bun 캐시를
-처음 다운로드하고 추출하므로 캐시가 없는 상태에서 두 작업을 동시에 실행하면 충돌할 수 있다.
-`native/macos/host/run.sh --app`은 회귀 앱의 `.app` 생성과 ad-hoc 서명을 추가한다.
+macOS도 Bun 직접 FFI를 사용한다. Apple Silicon과 GUI 세션, codesign이 필요하며 C 컴파일러는 필요하지 않다.
+`host:macos`는 Bun FFI 제품 회귀를 실행한다. `probe:macos`는 이전 프로세스 모델의 별도 실험이다.
+`native/macos/bun/run.sh --app`은 회귀 앱의 `.app` 생성과 ad-hoc 서명을 추가한다.
 [메모 예제](examples/memo/README.md)는 CLI 생성 앱과 같은 구조이며 예제 폴더에서 `bun run dev`로 실행한다. `bun run build`는 웹 UI와 앱을 함께 빌드한다.
 
 ## CI
@@ -160,7 +159,7 @@ macOS는 Apple Silicon, Xcode Command Line Tools와 GUI 세션이 필요하다.
   결과 JSON과 호스트 로그는 성공, 실패 시 모두 `windows-native-diagnostics`
   artifact로 7일간 보관한다. 생성 전 실패한 경우에는 파일이 없을 수 있다.
 - 별도 `macos-15` ARM64 작업에서 runner CPU와 `darwin-aarch64` pin을 확인하고
-  `mise run probe:macos`와 `native/macos/host/run.sh --app`을 직렬 실행한다. 다운로드, 실행 파일
+  `native/macos/bun/run.sh --app`으로 Bun FFI 앱을 빌드하고 검증한다. 다운로드, 실행 파일
   해시, 아키텍처, 버전을 확인하고, 실제 AppKit/WKWebView 페이지 결과, 리소스 요청,
   렌더러 재생성, Bun 종료를 검사한다. GUI가 실행되지 않으면 timeout/오류로 실패한다.
   ad-hoc 서명한 `.app`의 실행과 서명 유지, 배포 스크립트의 DMG 생성과 PKG 조립도 검사한다.

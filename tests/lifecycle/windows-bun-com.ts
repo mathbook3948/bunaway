@@ -1,6 +1,5 @@
 import { dlopen, JSCallback, type Pointer, ptr, toArrayBuffer } from "bun:ffi";
 import assert from "node:assert/strict";
-import { ViewBoundary } from "../../native/windows/bun/boundary.ts";
 import type { Packet } from "../../native/windows/bun/channel.ts";
 import {
   checkCallbacks,
@@ -13,6 +12,7 @@ import {
   MAX_MESSAGE_BYTES,
   PROTOCOL_VERSION,
 } from "../../packages/protocol/src/index.ts";
+import { ViewBoundary } from "../../packages/runtime-bun/src/view-boundary.ts";
 
 // Execute in a separate process so COM callback/binding disposal cannot affect other tests.
 const api = dlopen("ole32.dll", {

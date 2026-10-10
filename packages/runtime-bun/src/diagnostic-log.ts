@@ -1,6 +1,6 @@
 import { appendFile, mkdir, rename, rm, stat } from "node:fs/promises";
 import { dirname } from "node:path";
-import { API_LIMITS } from "../../../packages/protocol/src/index.ts";
+import { API_LIMITS } from "@bunaway/protocol";
 
 /** Writes ordered JSONL diagnostics and keeps one rotated copy of the previous log. */
 export class DiagnosticLog {

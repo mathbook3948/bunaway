@@ -55,5 +55,5 @@ description = "Build the standalone macOS Bun package and verify process IPC and
 run = "zsh native/macos/probe/run.sh"
 
 [tasks."host:macos"]
-description = "Build the macOS product host package and verify the WebView boundary, policy, storage scope and cleanup"
-run = "zsh native/macos/host/run.sh"
+description = "Build the macOS Bun FFI app without a C compiler and verify WKWebView, policy and Worker cleanup"
+run = "zsh native/macos/bun/run.sh"

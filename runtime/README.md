@@ -6,7 +6,8 @@
   OS, CPU, 라이선스와 필요한 경우의 빌드 정보.
 
 Windows는 패키지의 Bun을 앱 진입점으로 실행하고 같은 프로세스의 UI Worker가 Win32와 WebView2를 소유한다.
-macOS는 네이티브 호스트가 번들 Bun을 자식 프로세스로 실행하고 IPC로 연결한다.
+macOS도 Bun이 앱 진입점이며 메인 스레드가 직접 FFI로 AppKit, WKWebView를 소유하고
+같은 프로세스의 Worker가 앱 백엔드를 실행한다.
 양쪽 모두 번들 Bun의 절대 경로를 사용하며 사용자의 별도 Bun 설치나 PATH에 의존하지 않는다.
 현재 실행 구조는 [ADR 0010](../docs/decisions/0010-windows-first-platform-model.md)을 따른다.
 
@@ -16,9 +17,9 @@ revision, 아카이브, 실행 파일, 라이선스 해시를 [manifest](./build
 사용자 Bun이 없는 PATH, 한글, 공백 경로와 다른 cwd의 패키지 실행을 검증했다.
 
 macOS arm64 공식 배포물은 [darwin-aarch64 manifest](./build-manifests/darwin-aarch64.json)에
-같은 Bun 버전과 별도의 ZIP, 실행 파일, 라이선스 해시로 고정했다. macOS probe와 WKWebView
-호스트는 해시, Mach-O CPU, 버전을 검사하며, `runtime/bun-bundle/vendor`를 공유하므로
-초기 다운로드, 추출은 직렬 실행한다. Intel macOS 배포물/pin은 없다.
+같은 Bun 버전과 별도의 ZIP, 실행 파일, 라이선스 해시로 고정했다. macOS 제품 빌드는
+고정 Bun의 실행 파일 해시와 버전을 검사해 compiled 앱을 만든다.
+별도 프로세스 probe는 이전 실행 방식의 실험으로 유지한다. Intel macOS 배포물/pin은 없다.
 [macOS 실행 기록](../docs/architecture/macos-native-results.md)과
 [플랫폼 지원 표](../docs/platform-support/README.md)를 참고한다.
 

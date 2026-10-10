@@ -1,14 +1,15 @@
 bunaway framework artifact
 
 The artifact includes native build source/tools and pinned dependency manifests,
-not precompiled Bun, WebView2 or nlohmann-json binaries/headers. Native build
-tools download the exact pinned archives/files and check their SHA-256 hashes.
+not precompiled Bun, WebView2 or nlohmann-json binaries/headers. Windows preparation tools download pinned archives/files and check their SHA-256
+hashes. macOS builds verify the pinned Bun executable and use direct FFI to
+system frameworks, without project-owned C/ObjC++ binaries.
 
 License texts included in licenses/ (verified against the manifests):
 - LICENSE.bun: Bun 1.4.2, source revision and license URL in
   runtime/build-manifests/{windows-x64,darwin-aarch64}.json. This upstream text
   includes Bun's third-party attributions; preserve it in full.
-- LICENSE.nlohmann-json: nlohmann-json 3.12.0, MIT; used by macOS; URL/hash in runtime/build-manifests/darwin-aarch64.json.
+- LICENSE.nlohmann-json: nlohmann-json 3.12.0, MIT; retained for historical macOS process probes, not used by the Bun FFI product host; URL/hash in runtime/build-manifests/darwin-aarch64.json.
 - License-WebView2.txt: Microsoft WebView2 SDK 1.0.4129.50; archive URL/hash and
   license hash in native/windows/bun/deps.json.
 

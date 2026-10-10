@@ -1,3 +1,8 @@
+현재 Bun FFI 앱은 `Contents/MacOS/bunaway-host`에 Bun과 백엔드를 포함하며
+`Resources/runtime/bun`이나 `Helpers/bun`을 배포하지 않는다. 서명은 앱 실행 파일에
+JIT와 FFI 실행 메모리 entitlement를 적용한다. 아래 child 재배치는 이전 프로세스
+패키지의 호환 경로이며 현재 제품 빌드에서는 사용하지 않는다.
+
 # macOS distribution adapters
 
 Turns a canonical bunaway `.app` (the `bunaway build` output:
@@ -93,7 +98,7 @@ BUNAWAY_DISTRIBUTION_APP=build/Bunaway.app python3 native/macos/distribute/test.
 ```
 
 The existing macOS native CI runs these checks through
-`native/macos/host/run.sh --app`, after the signed host lifecycle suite. They
+`native/macos/bun/run.sh --app`, after the signed host lifecycle suite. They
 use real ad-hoc signing, DMG creation/mounting and unsigned PKG assembly,
 check source/packaged hashes and both channel layouts, and inject failures
 to check output preservation, rollback and temporary-directory cleanup.

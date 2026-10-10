@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { ViewBoundary } from "../../native/windows/bun/boundary.ts";
 import type { Packet, Route } from "../../native/windows/bun/channel.ts";
 import { command } from "../../packages/backend-sdk/src/index.ts";
 import {
@@ -21,6 +20,7 @@ import {
   type ServerMessage,
   type WireError,
 } from "../../packages/protocol/src/index.ts";
+import { ViewBoundary } from "../../packages/runtime-bun/src/view-boundary.ts";
 
 test.each([
   "invalid-result",

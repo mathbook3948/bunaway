@@ -1,14 +1,14 @@
 # 플랫폼 지원과 검증 범위
 
-현재 선택 네이티브 플러그인은 Windows만 지원한다. 아래 macOS 파일 저장과 네이티브 API 검증 기록은 이관 전 구현의 기록이다. 새 패키지와 permissions 정책으로 실행한 macOS 검증은 하지 않았다.
+현재 선택 네이티브 플러그인은 Windows만 지원한다. 아래 macOS 파일 저장과 네이티브 API 검증 기록은 이관 전 구현의 기록이다. Bun FFI 제품 경로의 명령, 이벤트와 정책, 복구, 종료 검증은 [새 기록](../architecture/macos-bun-results.md)에 둔다.
 
-기준일: 2026-10-07. “구현”은 출시 지원 보장이 아니다. 실제 OS, CPU와 테스트 범위를
+기준일: 2026-10-10. “구현”은 출시 지원 보장이 아니다. 실제 OS, CPU와 테스트 범위를
 기록하며, 공통 TypeScript 검사의 성공을 네이티브 호스트 성공으로 확대하지 않는다.
 
 | 플랫폼 | 네이티브 구현 | 검증 환경, 범위 | 미검증, 제약 |
 | --- | --- | --- | --- |
 | Windows x64 | Bun 진입점, 직접 FFI UI Worker, WebView2, 번들 Bun x64 baseline | 로컬 FFI/모달/Host API/다중 창/복구/종료/독립 CLI 검증([기록](../architecture/windows-bun-results.md)); PR18의 번들 런처 검증은 아래 기록과 분리 | 최소 Windows, CPU, WebView2 설치 경로, 배포, 스토어 적합성 |
-| macOS arm64 | AppKit, WKWebView, 번들 Bun darwin-aarch64, 단일 창/뷰 | 이번 로컬 26.5.2, Actions 15.7.9: probe 50/50, 실제 WKWebView 8/8. 기존/새 실행은 [별도 기록](../architecture/macos-native-results.md) | Intel, 다중 창/뷰, 최소 OS, 현재 Windows 다중 창 메모 샘플, Developer ID, 공증, 설치 |
+| macOS arm64 | Bun 진입점, 직접 FFI AppKit/WKWebView, 백엔드 Worker, 단일 창/뷰 | 로컬 26.7.1 arm64: 실제 WKWebView 7/7. [Bun FFI 기록](../architecture/macos-bun-results.md)과 [이전 기록](../architecture/macos-native-results.md)을 구분 | Intel, 다중 창/뷰, 최소 OS, 현재 Windows 다중 창 메모 샘플, Developer ID, 공증, 설치 |
 | macOS Intel | 고정 Bun 배포물, 해시 없음 | 없음. arm64 빌드 스크립트가 명시적으로 거부 | 별도 pin, 빌드, 실제 실행 검증 필요 |
 | Linux | GTK, WebKitGTK 후보, 호스트 미구현 | Ubuntu 공통 검사, 생성 스키마 검사만 있음 | 네이티브 실행, UI, 프로세스 정리, 패키징 |
 | Android | Kotlin, WebView 후보, 호스트 미구현 | 없음 | Bun 실행 경로, 수명주기, 배포 제약 |
@@ -19,8 +19,8 @@
 GitHub 공식 [runner 표](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)와
 [macOS 15 arm64 이미지](https://github.com/actions/runner-images/blob/main/images/macos/macos-15-arm64-Readme.md)를
 기준으로 native job에 `macos-15`를 선택했다. 실제 `uname -m=arm64`, `RUNNER_ARCH=ARM64`,
-OS, Xcode, 이미지 정보를 job에서 검사/기록한다. `darwin-aarch64.json`의 Bun 1.4.2
-아카이브, 실행 파일, 라이선스 해시, Mach-O 아키텍처와 실제 버전도 빌드 중 확인한다.
+OS와 CPU 정보를 job에서 검사/기록한다. Bun FFI 회귀는 C 컴파일 없이
+`darwin-aarch64.json`의 Bun 실행 파일 해시와 실제 버전을 확인해 앱을 빌드한다.
 runner 라벨이 바뀌거나 CPU가 맞지 않으면 실패하며 Rosetta나 skip-success로 대체하지 않는다.
 
 기존 로컬 26.5.2 arm64 성공만으로 macOS 15의 GUI/WKWebView 성공을 주장하지 않는다.
@@ -83,4 +83,4 @@ Windows의 앱 정의 `desktop`에 인자, 딥링크, 파일 열기와 종료 �
 구현했다. 초기 계약, 번들, 타입 검사는 Linux에서 수행했고 후속 Windows x64, Bun 1.4.2에서
 실제 WebView2의 hide, veto, dev-veto, dev-hide, dev-pending 시나리오와 PowerShell 5.1 인자 전달을 통과했다.
 Windows 실행기는 같은 시나리오를 실행한다. URL scheme과 파일 연결의 OS 등록은 미구현이다.
-macOS 프로세스 런타임은 `desktop`을 `UNSUPPORTED`로 거부한다.
+macOS Bun FFI 런타임은 `desktop`을 `UNSUPPORTED`로 거부한다.

@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
 import { MessageChannel } from "node:worker_threads";
-import { ViewBoundary } from "../../native/windows/bun/boundary.ts";
 import {
   Channel,
   MAX_WINDOWS,
@@ -18,6 +17,7 @@ import {
   serializeMessage,
   type WireError,
 } from "../../packages/protocol/src/index.ts";
+import { ViewBoundary } from "../../packages/runtime-bun/src/view-boundary.ts";
 
 const route: Route = {
   viewId: "main",

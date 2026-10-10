@@ -85,8 +85,8 @@ DOM 전역 없이도 사용할 수 있는 AbortSignal의 부분 계약입니다.
 
 `@bunaway/runtime-bun`의 `runBunApp(app: AppDefinition): Promise<void>`는
 stdin/stdout으로 프로세스 IPC를 연결하고 부팅부터 세션과 Host 응답 처리, 종료까지 관리합니다.
-CLI의 macOS 생성 bootstrap이 사용하는 어댑터입니다.
-Windows FFI 부팅과 동일한 AppDefinition을 사용합니다.
+프로세스 probe와 계약 테스트에서 사용하는 어댑터입니다.
+Windows와 macOS 제품 호스트는 같은 AppDefinition을 Bun에서 직접 실행하며 stdin/stdout IPC를 사용하지 않습니다.
 
 stdout은 프로토콜 전용이므로 프로세스 진단은 다른 스트림에 출력해야 합니다.
 boot의 정책, backendContext, 프레임 runtime generation, 방향을 검사합니다.

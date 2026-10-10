@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, rmdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, rmdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { DiagnosticLog } from "../../native/windows/bun/log.ts";
+import { DiagnosticLog } from "../../packages/runtime-bun/src/diagnostic-log.ts";
 
 test("Windows diagnostic writes recover after a failed command error log", async () => {
   const home = await mkdtemp(resolve(tmpdir(), "bunaway-diagnostic-log-"));

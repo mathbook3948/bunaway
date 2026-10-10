@@ -1,11 +1,12 @@
 # Bun 런타임 어댑터
 
 `runBunApp(app)`은 stdin/stdout으로 코어를 네이티브 호스트의 프로세스 IPC에 연결하는 어댑터다.
-현재 CLI의 macOS 부팅 코드가 이 함수를 사용한다. 앱 개발자는 `build.app`에 지정한 파일에서
-AppDefinition을 default export한다. Windows FFI 호스트는 같은 앱 정의를 직접 실행한다.
+이 함수는 프로세스 probe와 계약 테스트에서 사용한다. Windows와 macOS 제품 호스트는
+같은 앱 정의를 Bun에서 직접 실행한다. 앱 개발자는 `build.app`에 지정한 파일에서
+AppDefinition을 default export한다.
 코어의 플랫폼은 `process.platform`에서 읽어 공통 Platform 값으로 변환한다.
 
-`@bunaway/runtime-bun/app-manifest`는 CLI와 Windows 호스트가 공유하는 실행 manifest
+`@bunaway/runtime-bun/app-manifest`는 CLI와 Windows/macOS 호스트가 공유하는 실행 manifest
 계약이다. `parseAppManifest`는 생성 데이터를 검증하고 `readAppManifest`는 실행 자산의
 `manifest.json`을 읽어 검증한다. 앱 설정, 정책, 플러그인 계약과 개발 SDK 모듈 목록을
 담으며 플러그인 코드를 불러오거나 네이티브 자원을 초기화하지 않는다.

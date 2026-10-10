@@ -78,6 +78,19 @@ macOS WebContent PID 조회와 종료는 `lifecycle/macos-renderer.ts`가 맡으
 보조 창의 반복 생성과 새로운 세션, 자기 창 재생성을 추가 검증한다.
 닫기 확인을 설정한 창의 브라우저 프로세스를 종료해 확인 없이 닫히는지도 검증한다.
 호출한 뷰의 세션이 종료되면 정리 대기 중인 생성 요청이 새 창을 열지 않는지도 확인한다.
+`macos-bun.test.ts`는 정확한 origin과 포트, 실제 Bun Worker의 명령과 세션 폐기, 종료 수신 확인과 플러그인 정리를 검사한다.
+UI 초기화 실패 검사는 UI 의존성만 대체하고 실제 Worker를 사용한다. UI 이벤트 처리 없이도
+비동기 종료 훅을 기다리며, 종료 훅의 무한 루프는 5초 기한 뒤 강제 종료되는지 확인한다.
+`native/macos/bun/run.sh`는 패키징과 테스트 실행 순서를 조정한다.
+macOS 전용 설정과 리소스 경계 페이지도 `fixtures/desktop/host/`에 둔다.
+`host:macos`는 C 컴파일 없이 Bun compiled 앱으로 실제 WKWebView 회귀를 실행한다.
+같은 실행기의 `macos-webview-regressions.ts`는 실제 AppKit 창의 초기 크기 보정,
+최소, 최대 제약과 제한 해제, WebKit UI delegate의 미디어 권한 거부를 확인한다.
+미디어 검사는 설치된 delegate와 네이티브 decision block을 사용하며 실제 장치를 열지 않는다.
+브리지에 최상위 `Date`, 객체와 배열 안의 `Date`를 보내도 앱이 종료되지 않고,
+잘못된 메시지를 거부한 뒤 정상 메시지를 계속 수신하는지 확인한다.
+4KB 응답 24,000개를 실제 페이지에 전달한 뒤 호스트 메모리 증가를 검사하고,
+런타임 세대를 바꿔 다시 창을 만들 때 영구 저장 리소스 규칙이 하나로 유지되는지 확인한다.
 공용 기능 목록 검사는 Windows 창 API의 `supported`와 macOS의 `unsupported`를 요구한다.
 
 `desktop.test.ts`는 앱 열기 입력, 단일 인스턴스 전달과 시작 큐, 종료 취소,

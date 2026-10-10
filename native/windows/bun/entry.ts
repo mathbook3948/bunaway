@@ -15,6 +15,7 @@ import {
   type HostResponse,
   PROTOCOL_VERSION,
 } from "../../../packages/protocol/src/index.ts";
+import { DiagnosticLog } from "../../../packages/runtime-bun/src/diagnostic-log.ts";
 import { listenForAppReload } from "./app-reload.ts";
 import {
   Channel,
@@ -27,7 +28,6 @@ import { DesktopLifecycle } from "./desktop.ts";
 import { DevelopmentApp } from "./development-app.ts";
 import type { LaunchArguments, listenForInstances } from "./instance.ts";
 import { activeDescendants, containAppProcess } from "./job.ts";
-import { DiagnosticLog } from "./log.ts";
 import { loadPluginCatalog } from "./plugin-catalog.ts";
 import { pluginRegistry } from "./plugins.ts";
 

@@ -64,7 +64,7 @@ and [Apple's upload requirements](https://developer.apple.com/help/app-store-con
 ## Signed product-host lifecycle fixture
 
 ```sh
-zsh native/macos/host/run.sh --app
+zsh native/macos/bun/run.sh --app
 ```
 
 This runs the ordinary copied-package suite and then the same suite against
@@ -78,7 +78,7 @@ left untouched; updating manifest hashes alone cannot repair the app seal.
 To test a separately prepared App Sandbox fixture (test package assets, not the
 memo-only package), use a **disposable writable app**, signed inside-out with
 its existing entitlements and a post-signing Bun hash. Build the native test
-binary first via `native/macos/host/run.sh`. For example:
+binary first via `native/macos/bun/run.sh`. For example:
 
 ```sh
 BUNAWAY_PACKAGE_IN_PLACE=1 \

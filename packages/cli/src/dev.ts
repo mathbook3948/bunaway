@@ -470,7 +470,15 @@ export async function devProject(
           : "Starting a fresh host/runtime/session; pending requests are not replayed.",
       );
       const environment =
-        process.platform === "win32" ? windowsLaunchEnvironment() : process.env;
+        process.platform === "win32"
+          ? windowsLaunchEnvironment()
+          : {
+              HOME: process.env.HOME,
+              TMPDIR: process.env.TMPDIR,
+              PATH: "/usr/bin:/bin",
+              BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0",
+              DO_NOT_TRACK: "1",
+            };
       if (process.platform === "win32") {
         console.log(
           "UI DevTools: focus the WebView and press F12 or Ctrl+Shift+I.",

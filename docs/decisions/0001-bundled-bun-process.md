@@ -4,6 +4,9 @@ status: accepted
 
 # 번들 Bun을 별도 자식 프로세스로 실행한다
 
+2026-10-10: macOS 제품 실행도 [ADR 0015](./0015-macos-bun-ffi.md)의 Bun 직접 FFI로 대체됐다.
+아래 macOS 자식 프로세스 설명은 이전 실험 기록이다.
+
 2026-10-06: [ADR 0010](./0010-windows-first-platform-model.md)에 따라 Windows를
 먼저 완성하고 다른 플랫폼을 같은 Bun 기반 개발 모델에 맞춘다. 아래 macOS 자식
 프로세스 구조는 현재 구현 기록이며, 향후 목표는 Bun을 앱 진입점으로 전환하는 것이다.

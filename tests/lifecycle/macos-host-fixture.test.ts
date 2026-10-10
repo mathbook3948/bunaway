@@ -67,7 +67,6 @@ async function rejectsSetup(
         ...process.env,
         BUNAWAY_PACKAGE_IN_PLACE: "1",
         BUNAWAY_HOST_EXEC: fixture.host,
-        BUNAWAY_NATIVE_TEST_EXEC: fixture.host,
         BUNAWAY_TEST_WORKSPACE: join(fixture.root, "workspace"),
         BUNAWAY_DATA_ROOT: join(fixture.root, "data"),
         BUNAWAY_TEST_SIGN_IDENTITY: "",
@@ -347,6 +346,7 @@ test.skipIf(process.platform !== "darwin")(
     for (const path of [
       "assets/app.json",
       "assets/policy.json",
+      "assets/manifest.json",
       "manifest.json",
     ]) {
       await mkdir(resolve(resources, path, ".."), {
@@ -385,7 +385,6 @@ test.skipIf(process.platform !== "darwin")(
           ...process.env,
           BUNAWAY_PACKAGE_IN_PLACE: "1",
           BUNAWAY_HOST_EXEC: f.host,
-          BUNAWAY_NATIVE_TEST_EXEC: "/usr/bin/false",
           BUNAWAY_TEST_WORKSPACE: workspace,
           BUNAWAY_DATA_ROOT: join(f.root, "data"),
           BUNAWAY_TEST_SIGN_IDENTITY: "-",
@@ -411,7 +410,7 @@ test.skipIf(process.platform !== "darwin")(
       );
     }
     expect(await errors).toContain(
-      "native Bun integrity, FIFO, scheme handler and resource-filter regressions failed",
+      "WebView boundary, command policy and Bun cleanup without native plugins failed",
     );
     const summary = JSON.parse(
       await readFile(join(workspace, "macos-host-results.json"), "utf8"),

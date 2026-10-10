@@ -117,7 +117,7 @@ build, app, bundle을 통합한다. policy.json은 별도 권한 선언이다.
 
 Windows x64 dev/build에는 PowerShell 7과 WebView2 Evergreen이 필요하다.
 최종 앱 실행에는 WebView2 Evergreen가 필요하다.
-macOS arm64에는 Xcode CLT와 GUI 세션이 필요하다. 교차 빌드는 지원하지 않는다.
+macOS arm64에는 codesign과 GUI 세션이 필요하다. 두 플랫폼의 앱 빌드는 C 컴파일러를 요구하지 않는다. 교차 빌드는 지원하지 않는다.
 큰 native dependency와 런타임은 설치된 CLI 패키지 안의 생성 캐시에 받는다.
 node_modules를 지우면 이 캐시도 없어지지만 원본 소스와 Bun/Loader 핀은 패키지에서 복원한다.
 앱 실행은 번들 Bun의 절대 경로를 사용하며 전역 Bun/개발 도구를 필요로 하지 않는다.

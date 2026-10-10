@@ -88,7 +88,7 @@ the bundled tmp directory were restored; no scratch or results appeared in
 `Contents`. An intentionally failing native test also left the unsandboxed
 fixture's signature valid. These checks validate the harness and successful
 flow execution, **not** long-term WebKit XPC stability or Apple-issued signing.
-CI now runs `native/macos/host/run.sh --app`, covering the ordinary suite and
+CI now runs `native/macos/bun/run.sh --app`, covering the ordinary suite and
 the signed unsandboxed fixture; the App Sandbox fixture remains a local check.
 See the [harness README](../../native/macos/sandbox/README.md#signed-product-host-lifecycle-fixture)
 for the in-place workspace/native-binary/signing inputs.

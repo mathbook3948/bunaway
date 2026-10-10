@@ -1,7 +1,7 @@
-// Standalone integration runner: native/macos/host/run.sh builds the package first.
+// Standalone integration runner: native/macos/bun/run.sh builds the package first.
 // Drives the real ObjC++ host end-to-end: packaged Bun backend, WKWebView
 // boundary, policy, unsupported native plugin rejection, session revocation on
-// navigation, renderer recovery, and process cleanup (guard watchdog).
+// navigation, renderer recovery, and process cleanup (in-process Bun Worker).
 // Platform deltas: junction -> symlink, taskkill -> SIGTERM for graceful shutdown
 // or SIGKILL for forced exit, WebView2 renderer inventory -> WebContent snapshot,
 // LOCALAPPDATA -> HOME/Library/Application Support.
@@ -31,8 +31,6 @@ import {
   resolve,
   sep,
 } from "node:path";
-import { validateValue } from "../../packages/protocol/src/index.ts";
-import { validationCases } from "../protocol/validation-cases.ts";
 import { listWebContentPids, terminateRenderers } from "./macos-renderer.ts";
 import { readReport } from "./reports.ts";
 
@@ -57,10 +55,6 @@ const packagePath = inPlace
 const host = process.env.BUNAWAY_HOST_EXEC
   ? resolve(process.env.BUNAWAY_HOST_EXEC)
   : join(packagePath, "bunaway-host");
-const nativeTests = resolve(
-  process.env.BUNAWAY_NATIVE_TEST_EXEC ??
-    join(buildRoot, "macos-host", "host-native-tests"),
-);
 function enclosingApp(path: string): string | undefined {
   for (
     let current = path;
@@ -177,7 +171,6 @@ const protectedPaths = await Promise.all(
     original,
     packagePath,
     host,
-    nativeTests,
     workspace,
     cwd,
     sandboxHome,
@@ -258,10 +251,6 @@ if (app) {
   );
   verifyApp();
 }
-assert.ok(
-  existsSync(nativeTests),
-  `native tests not found: ${nativeTests}; run native/macos/host/run.sh first`,
-);
 await mkdir(workspace, {
   recursive: true,
 });
@@ -307,6 +296,7 @@ const savedResources = app
       [
         "assets/app.json",
         "assets/policy.json",
+        "assets/manifest.json",
         "manifest.json",
       ].map(async (path) => ({
         path: join(packagePath, path),
@@ -418,13 +408,30 @@ async function waitLog(match: (entry: LogEntry) => boolean, timeout = 90000) {
   return waitFor(async () => (await hostLog()).find(match) ?? null, timeout);
 }
 async function reportFile(name: string) {
-  return waitFor(() => readReport(join(dataRoot, "temp", name)));
+  return waitFor(async () => {
+    const report = await readReport(join(dataRoot, "temp", name));
+    if (!report && activeHost?.exitCode !== null) {
+      throw new Error(`Host exited before ${name} was written.`);
+    }
+    return report;
+  });
 }
 
 async function updateAsset(name: string, text: string) {
   await writeFile(join(packagePath, name), text);
   const manifestPath = join(packagePath, "manifest.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf-8"));
+  if (name === "assets/app.json" || name === "assets/policy.json") {
+    const appManifestPath = join(packagePath, "assets/manifest.json");
+    const appManifest = JSON.parse(await readFile(appManifestPath, "utf8"));
+    appManifest[name === "assets/app.json" ? "app" : "policy"] =
+      JSON.parse(text);
+    const content = JSON.stringify(appManifest);
+    await writeFile(appManifestPath, content);
+    manifest.assets["assets/manifest.json"] = new Bun.CryptoHasher("sha256")
+      .update(content)
+      .digest("hex");
+  }
   // The host verifies every packaged asset against this digest before it starts.
   manifest.assets[name] = new Bun.CryptoHasher("sha256")
     .update(text)
@@ -440,6 +447,7 @@ async function newWebContentPids(): Promise<number[]> {
   return current.filter((pid) => !webContentBaseline.has(pid));
 }
 
+let activeHost: ReturnType<typeof Bun.spawn> | undefined;
 function launch(
   extraEnv: Record<string, string> = {},
   arguments_: string[] = [],
@@ -458,7 +466,6 @@ function launch(
       env: {
         PATH: "/usr/bin:/bin",
         HOME: sandboxHome,
-        BUN_OPTIONS: "--preload ./hostile.ts",
         BUNAWAY_HOSTILE: "from-parent",
         ...extraEnv,
       },
@@ -467,6 +474,7 @@ function launch(
       stderr: Bun.file(join(diagnostics, `host-${++launchCount}.stderr.log`)),
     },
   );
+  activeHost = child;
   return child;
 }
 async function gracefulStop(child: ReturnType<typeof Bun.spawn>) {
@@ -476,26 +484,21 @@ async function gracefulStop(child: ReturnType<typeof Bun.spawn>) {
 }
 /** Starts a watcher and returns a function that waits for all targets to exit. */
 async function watch(pids: (number | string)[]) {
-  const watcher = Bun.spawn(
-    [
-      host,
-      "--watch",
-      ...pids.map(String),
-    ],
-    {
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-    },
-  );
-  const reader = watcher.stdout.getReader();
-  // Do not treat watcher startup delay as evidence that a target has exited.
-  const first = await reader.read();
-  reader.releaseLock();
-  assert.equal(new TextDecoder().decode(first.value), "watch-ready\n");
   return async () => {
-    assert.equal(await watcher.exited, 0, "watched processes must signal exit");
-    assert.equal(await new Response(watcher.stderr).text(), "");
+    await waitFor(async () => {
+      for (const pid of pids) {
+        assert.equal(typeof pid, "number");
+        try {
+          process.kill(Number(pid), 0);
+          return null;
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
+            throw error;
+          }
+        }
+      }
+      return true;
+    }, 15000);
   };
 }
 /** Records each case and snapshots logs and reports even when its assertion fails. */
@@ -547,73 +550,6 @@ async function test(name: string, body: () => Promise<void>) {
 }
 
 try {
-  await test("native Bun integrity, FIFO, scheme handler and resource-filter regressions", async () => {
-    const native = Bun.spawn(
-      [
-        nativeTests,
-        workspace,
-        original,
-      ],
-      {
-        stdout: "pipe",
-        stderr: "pipe",
-        timeout: 10000,
-      },
-    );
-    const output = new Response(native.stdout).text();
-    const errors = new Response(native.stderr).text();
-    const exitCode = await native.exited;
-    await writeTestOutput(join(diagnostics, "native.stdout.log"), await output);
-    await writeTestOutput(join(diagnostics, "native.stderr.log"), await errors);
-    assert.equal(exitCode, 0, await errors);
-    assert.ok((await output).includes("PASS scheme handler"));
-  });
-
-  await test("TypeScript and native validators agree on shared regression inputs", async () => {
-    const validator = Bun.spawn(
-      [
-        host,
-        "--validate",
-      ],
-      {
-        stdin: "pipe",
-        stdout: "pipe",
-        stderr: "pipe",
-      },
-    );
-    const output = new Response(validator.stdout).text();
-    const errors = new Response(validator.stderr).text();
-    for (const { schema, value } of validationCases) {
-      validator.stdin.write(
-        `${JSON.stringify({
-          schema,
-          value,
-        })}\n`,
-      );
-    }
-    validator.stdin.end();
-    assert.equal(await validator.exited, 0);
-    const answers = (await output)
-      .trim()
-      .split("\n")
-      .map((line) => JSON.parse(line));
-    assert.equal(answers.length, validationCases.length);
-    for (const [
-      i,
-      { name, schema, value, accepted },
-    ] of validationCases.entries()) {
-      let tsAccepted = true;
-      try {
-        validateValue(schema, value);
-      } catch {
-        tsAccepted = false;
-      }
-      assert.equal(tsAccepted, accepted, `TypeScript: ${name}`);
-      assert.equal(answers[i], accepted, `native: ${name}`);
-    }
-    assert.equal(await errors, "");
-  });
-
   await test("WebView boundary, command policy and Bun cleanup without native plugins", async () => {
     await resetData();
     const child = launch();
@@ -688,7 +624,7 @@ try {
 
       const started = log.find((e) => e.event === "host-started");
       assert.ok(started, "host-started missing");
-      const childPid = started.childPid as number;
+      const childPid = started.backendPid as number;
       const exited = await watch([
         childPid,
       ]);
@@ -733,7 +669,7 @@ try {
           join(diagnostics, `host-${launchCount}.stderr.log`),
           "utf8",
         ),
-        /Native plugins currently require the Windows app runtime/,
+        /macOS native plugin adapters are not implemented/,
       );
       assert.equal(
         (await hostLog()).some((entry) => entry.event === "host-started"),
@@ -1054,7 +990,7 @@ try {
         .find((entry) => entry.event === "host-started");
       assert.ok(started);
       const exited = await watch([
-        started.childPid as number,
+        started.backendPid as number,
       ]);
       await gracefulStop(child);
       await exited();
@@ -1071,19 +1007,18 @@ try {
     }
   });
 
-  await test("killing the host still removes bundled Bun via the guard", async () => {
+  await test("killing the Bun app leaves no separate backend or guard process", async () => {
     await resetData();
     const child = launch();
     try {
       const started = await waitLog((e) => e.event === "host-started");
-      const childPid = started.childPid as number;
-      const guardPid = started.guardPid as number;
-      // Wait for ready so the kill cannot land inside the spawn->guard window.
+      const childPid = started.backendPid as number;
+      assert.equal(childPid, child.pid);
+      assert.equal(started.transport, "bun-worker");
+      assert.equal(started.guardPid, undefined);
       await waitLog((e) => e.event === "backend-ready");
       const exited = await watch([
         childPid,
-        guardPid,
-        `g${childPid}`,
       ]);
       process.kill(child.pid, "SIGKILL");
       assert.notEqual(await child.exited, 0);

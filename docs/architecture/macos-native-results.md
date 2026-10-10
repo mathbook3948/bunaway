@@ -1,5 +1,8 @@
 # macOS 네이티브 회귀 검증 기록
 
+2026-10-10: 아래 별도 프로세스 호스트는 Bun 직접 FFI로 대체했다.
+현재 제품 실행은 [새 기록](./macos-bun-results.md)을 따른다.
+
 기준일: 2026-10-05. 코드 구현, 과거 실행과 이번 실행을 분리한다.
 Windows 실행 기록은 [B](./windows-probe-results.md), [C](./windows-host-results.md)에 보존한다.
 

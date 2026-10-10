@@ -6,7 +6,7 @@ import {
   type HostContext,
   type HostResponse,
 } from "../../../packages/protocol/src/index.ts";
-import { ViewBoundary } from "./boundary.ts";
+import { ViewBoundary } from "../../../packages/runtime-bun/src/view-boundary.ts";
 import {
   Channel,
   type Packet,
