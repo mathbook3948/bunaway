@@ -9,7 +9,7 @@ I/O Worker 하나가 승인된 Host API를 검사한 파일 핸들로 실행한�
 
 `boot.ts`는 실행 인자, 단일 인스턴스 확보와 앱 import를 담당하고,
 `config.ts`는 패키지 설정과 정책을 검증하고 앱 데이터 경로를 결정한다.
-`package.ts`는 회귀 패키지를 빌드하고, `run.ps1`은 준비, 빌드와 테스트 실행을 조정한다.
+`package.ts`는 회귀 패키지를 빌드하고, `tests/lifecycle/run-native.ts`는 준비, 빌드와 테스트 실행을 조정한다.
 
 `win32-bindings.ts`는 DLL 함수 바인딩과 FFI 버퍼 보조 함수를 제공하고, `win32.ts`의
 `Windows`는 창 클래스, HWND, 아이콘, 전체 화면 상태와 메시지 처리를 소유한다.
@@ -32,12 +32,12 @@ Worker 패킷은 `runtime-bun/worker-channel`의 공통 구현을 사용한다.
 
 ```powershell
 # 저장소: 의존성 검증, 패키지 빌드, 실제 GUI/보안/수명/CLI 회귀
-pwsh -NoProfile -File native/windows/bun/run.ps1
+mise run host:windows
 # 의존성만 확인 (다운로드/추출하지 않음)
-pwsh -NoProfile -File native/windows/bun/prepare.ps1 -VerifyOnly
+bun packages/cli/src/native-build.ts --target windows-x64 --verify-only
 ```
 
-개발/빌드에는 PowerShell 7과 고정 Bun이 필요하다.
+개발/빌드에는 Windows 기본 제공 tar와 고정 Bun이 필요하다.
 실행에는 WebView2 Evergreen이 필요하다.
 MSVC, CMake, Ninja와 사용자 C/C++ 또는 Rust DLL은 필요 없다. Microsoft의 공식
 `WebView2Loader.dll`과 시스템 DLL은 사용한다. 생성 앱은 `bunaway.json`의
@@ -125,7 +125,7 @@ Deferred and recreated windows inherit the verified development DevTools setting
 Shutdown bypasses confirmation.
 Browser process failure also closes the affected window without confirmation.
 `tests/lifecycle/windows-bun-window-api.ts` is
-part of `run.ps1` and covers native geometry, close refusal and acceptance,
+part of `tests/lifecycle/run-native.ts` and covers native geometry, close refusal and acceptance,
 dynamic creation, fresh sessions and self-recreation. It passed in PR #40's
 Windows CI run 37574470840. The full native job failed on the shared capability
 fixture's old four-operation expectation, which now checks the complete catalog.

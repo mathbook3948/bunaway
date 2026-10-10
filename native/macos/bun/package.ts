@@ -113,7 +113,7 @@ export async function buildMacosFixture(): Promise<string> {
 }
 
 /** Copy the compiled fixture into an ad-hoc signed .app for launch and signing checks. */
-async function buildSignedFixture(output: string): Promise<string> {
+export async function buildSignedFixture(output: string): Promise<string> {
   const app = resolve(root, "build/Bunaway.app");
   await rm(app, {
     recursive: true,

@@ -7,9 +7,8 @@ user session**, signing with ad-hoc (`codesign -s -`) and a local self-signed
 `bunaway-dev-codesign` certificate: no Apple-issued identity exists on this
 machine, so findings split into *observed locally* and *unverified for MAS*.
 
-Harness: `native/macos/sandbox/` (`run.sh` re-runs the automated assertions;
-every verdict below was additionally confirmed by hand-driven runs against the
-real `bunaway-host` + pinned Bun 1.4.2 bundle).
+과거 측정 기록이다. 독립 App Sandbox 실험 코드는 제거했으며 Git 이력에서 확인할 수 있다.
+아래 관측 결과는 현재 macOS 지원이나 App Store 승인 여부를 보장하지 않는다.
 
 ## Verified locally (ad-hoc and self-signed identities tested)
 
@@ -69,9 +68,8 @@ specific exception has not been tested.
 **UNVERIFIED**. Whether Apple-issued signing resolves the observed service
 failure is an untested hypothesis, not a conclusion that packaging alone
 fixes it. A Developer ID test would not establish Apple Distribution /
-provisioning behavior or an App Store review outcome. Keep `entsrv` + `probe
-xpc` for follow-up diagnostics, and re-run the real host with the intended
-identity and entitlements before making a `mac-store` support claim.
+provisioning behavior or an App Store review outcome. Re-run the real product host with the intended identity and entitlements before
+making a `mac-store` support claim.
 
 ## Lifecycle harness regression checks
 
@@ -88,14 +86,14 @@ the bundled tmp directory were restored; no scratch or results appeared in
 `Contents`. An intentionally failing native test also left the unsandboxed
 fixture's signature valid. These checks validate the harness and successful
 flow execution, **not** long-term WebKit XPC stability or Apple-issued signing.
-CI now runs `native/macos/bun/run.sh --app`, covering the ordinary suite and
+CI now runs `mise run host:macos -- --app`, covering the ordinary suite and
 the signed unsandboxed fixture; the App Sandbox fixture remains a local check.
-See the [harness README](../../native/macos/sandbox/README.md#signed-product-host-lifecycle-fixture)
-for the in-place workspace/native-binary/signing inputs.
+현재 실행과 서명 입력은 [제품 호스트 README](../../native/macos/bun/README.md)를 따른다.
+독립 샌드박스 fixture와 실험용 entitlement 변형은 제거했다.
 
 ## Entitlement profiles implied for packaging
 
-| File (in `native/macos/distribute/entitlements/`, PR B) | Contents |
+| File (in `packages/packaging/src/channels/macos/entitlements/`, PR B) | Contents |
 |---|---|
 | `mac-direct-app.plist` | none: not sandboxed; hardened runtime + notarization only |
 | `mac-direct-child.plist` | `cs.allow-jit` for the re-signed Bun child under hardened runtime (~22× slowdown otherwise, measured) |

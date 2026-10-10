@@ -123,10 +123,11 @@ async function prepareNativeForBuild(
   const windows = target === "windows-x64";
   if (windows) {
     const args = [
-      "pwsh",
-      "-NoProfile",
-      "-File",
-      resolve(root, "native/windows/bun/prepare.ps1"),
+      process.execPath,
+      "--no-env-file",
+      resolve(root, "packages/cli/src/native-build.ts"),
+      "--target",
+      target,
     ];
     if (signal) {
       await runManagedCommand(

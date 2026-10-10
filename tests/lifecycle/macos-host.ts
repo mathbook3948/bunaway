@@ -1,5 +1,5 @@
-// Standalone integration runner: native/macos/bun/run.sh builds the package first.
-// Drives the real ObjC++ host end-to-end: packaged Bun backend, WKWebView
+// Standalone integration runner: tests/lifecycle/run-native.ts builds the package first.
+// Drives the real Bun FFI host end-to-end: backend Worker, WKWebView
 // boundary, policy, unsupported native plugin rejection, session revocation on
 // navigation, renderer recovery, and process cleanup (in-process Bun Worker).
 // Platform deltas: junction -> symlink, taskkill -> SIGTERM for graceful shutdown

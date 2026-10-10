@@ -9,7 +9,7 @@ status: accepted
 기존 backend 진입점 분리는 당시 구현 기록이며, 공통 앱 정의 하나를 사용하는 방향으로 정리한다.
 
 2026-10-06 Windows 기본 제품 실행을 이 구조로 전환했다. 기존 C++ 호스트, probe, CMake, 전용 실행기와 테스트는 삭제했다.
-[직접 FFI 실험](../../native/windows/ffi-probe/README.md)에서 같은 Bun 프로세스의
+과거 직접 FFI 실험에서 같은 Bun 프로세스의
 UI Worker가 Win32, WebView2를 소유하고, 메인 스레드의 비동기 작업과 두 창의
 개별 수명을 유지함을 확인했다. 기존 코어, 정책, Host API, CLI 연결과 실제 다중 창 회귀는
 [제품 실행 기록](../architecture/windows-bun-results.md)에 정리했다. 서명, 설치, 출시 완료와는 구분한다.

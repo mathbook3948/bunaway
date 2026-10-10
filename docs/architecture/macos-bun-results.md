@@ -18,7 +18,7 @@ Objective-C의 tagged object는 64비트 bigint를 그대로 전달한다. arm64
 
 ```sh
 mise run host:macos
-mise exec -- zsh native/macos/bun/run.sh --app
+mise exec -- bun --no-env-file tests/lifecycle/run-native.ts --app
 mise exec -- bun test tests/lifecycle/macos-bun.test.ts
 mise exec -- bun tests/lifecycle/macos-webview-regressions.ts
 ```

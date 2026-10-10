@@ -19,7 +19,7 @@ revision, 아카이브, 실행 파일, 라이선스 해시를 [manifest](./build
 macOS arm64 공식 배포물은 [darwin-aarch64 manifest](./build-manifests/darwin-aarch64.json)에
 같은 Bun 버전과 별도의 ZIP, 실행 파일, 라이선스 해시로 고정했다. macOS 제품 빌드는
 고정 Bun의 실행 파일 해시와 버전을 검사해 compiled 앱을 만든다.
-별도 프로세스 probe는 이전 실행 방식의 실험으로 유지한다. Intel macOS 배포물/pin은 없다.
+독립 프로세스 probe는 제거했으며 이전 실행 기록만 유지한다. Intel macOS 배포물/pin은 없다.
 [macOS 실행 기록](../docs/architecture/macos-native-results.md)과
 [플랫폼 지원 표](../docs/platform-support/README.md)를 참고한다.
 

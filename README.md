@@ -107,7 +107,6 @@ UI 컴포넌트가 사라지면 `client.listen`이 반환한 `unlisten`으로 �
 | `mise run test` | 프로토콜, SDK, 코어, Host API 계약과 Bun 프로세스 IPC 테스트 |
 | `mise run protocol:generate` | 네이티브용 JSON Schema 생성 |
 | `mise run host:windows` | Windows WebView2 앱 패키지 빌드와 SDK, 코어, 메모, 경계, 종료 통합 검증 |
-| `mise run probe:macos` | macOS arm64 번들 Bun 패키지 빌드와 프로세스 IPC, 종료 통합 검증 |
 | `mise run host:macos` | macOS arm64 실제 WKWebView, SDK, 코어, 메모, 경계, 종료 회귀 검증 |
 | `mise run typecheck` | 각 workspace 타입 검사 |
 | `mise run format` | 코드와 JSON 포맷 적용 |
@@ -133,16 +132,16 @@ Windows의 호환되는 명령 구현 변경은 코어, 상태, 세션과 창을
 Vite 개발 서버와 프로덕션 빌드를 연결한
 vanilla TypeScript 앱을 생성한다. `--template react`, `vue`, `svelte`로 각 UI 프레임워크의
 TypeScript + Vite 앱을 생성할 수 있다. 기본 템플릿은 기존 `vanilla`다.
-Windows 호스트의 빌드와 패키징은
-`native/windows/bun/run.ps1`이 담당한다. Bun이 앱 진입점이고 UI Worker가
+Windows 빌드 의존성은 CLI의 `native-build.ts`가 준비한다.
+`tests/lifecycle/run-native.ts`는 회귀 테스트용 호스트 패키지를 만들고 검증한다. Bun이 앱 진입점이고 UI Worker가
 Win32, WebView2 COM을 직접 소유한다. 생성 앱은 `build.app`에 AppDefinition 모듈을 지정한다.
-Windows 빌드는 PowerShell 7과 고정 Bun만 필요하며 C++ 컴파일은 하지 않는다.
+Windows 빌드는 Windows 기본 제공 tar와 고정 Bun만 필요하며 C++ 컴파일은 하지 않는다.
 WebView 앱 실행에는 WebView2 Evergreen 런타임이 필요하다.
 생성된 `build/windows-bun-package/`는 별도의 Bun 설치 없이 실행할 수 있는 회귀 테스트 패키지다.
 
-macOS도 Bun 직접 FFI를 사용한다. Apple Silicon과 GUI 세션, codesign이 필요하며 C 컴파일러는 필요하지 않다.
-`host:macos`는 Bun FFI 제품 회귀를 실행한다. `probe:macos`는 이전 프로세스 모델의 별도 실험이다.
-`native/macos/bun/run.sh --app`은 회귀 앱의 `.app` 생성과 ad-hoc 서명을 추가한다.
+macOS는 Bun 직접 FFI를 사용한다. Apple Silicon과 GUI 세션, codesign이 필요하며 C 컴파일러는 필요하지 않다.
+`mise run host:macos`로 제품 호스트를 빌드하고 실제 WKWebView 회귀를 실행한다.
+`mise run host:macos -- --app`은 회귀 앱의 `.app` 생성과 ad-hoc 서명을 추가한다.
 [메모 예제](examples/memo/README.md)는 CLI 생성 앱과 같은 구조이며 예제 폴더에서 `bun run dev`로 실행한다. `bun run build`는 웹 UI와 앱을 함께 빌드한다.
 
 ## CI
@@ -159,7 +158,7 @@ macOS도 Bun 직접 FFI를 사용한다. Apple Silicon과 GUI 세션, codesign�
   결과 JSON과 호스트 로그는 성공, 실패 시 모두 `windows-native-diagnostics`
   artifact로 7일간 보관한다. 생성 전 실패한 경우에는 파일이 없을 수 있다.
 - 별도 `macos-15` ARM64 작업에서 runner CPU와 `darwin-aarch64` pin을 확인하고
-  `native/macos/bun/run.sh --app`으로 Bun FFI 앱을 빌드하고 검증한다. 다운로드, 실행 파일
+  `mise run host:macos -- --app`을 실행한다. 다운로드, 실행 파일
   해시, 아키텍처, 버전을 확인하고, 실제 AppKit/WKWebView 페이지 결과, 리소스 요청,
   렌더러 재생성, Bun 종료를 검사한다. GUI가 실행되지 않으면 timeout/오류로 실패한다.
   ad-hoc 서명한 `.app`의 실행과 서명 유지, 배포 스크립트의 DMG 생성과 PKG 조립도 검사한다.

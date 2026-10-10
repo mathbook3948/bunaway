@@ -24,7 +24,7 @@ memo/
 
 ## 로컬 실행
 
-Windows x64에서 Bun 1.4.2, PowerShell 7, WebView2 Evergreen이 필요하다.
+Windows x64에서 Bun 1.4.2, Windows 기본 제공 tar, WebView2 Evergreen이 필요하다.
 macOS arm64에서는 Xcode Command Line Tools와 GUI 세션이 필요하다.
 아직 프레임워크를 배포하지 않았으므로 저장소에서 만든 로컬 npm 패키지를 설치한다.
 저장소 루트에서 시작한다.

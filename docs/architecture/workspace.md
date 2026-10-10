@@ -64,8 +64,9 @@ CLI와 Windows 호스트는 `@bunaway/runtime-bun/windows-control`의 종료 메
 
 [공통 API](./common-api.md)를 따른다. 테스트, 스키마 생성 스크립트, 데스크톱 회귀용 앱 정의는 별도
 `tests/tsconfig.json`에서 Bun 타입을 사용한다. portable 패키지에는 전파하지 않는다.
-SDK, 코어 실행은 공통 Factory 타입을 구현한다. Windows WebView2 호스트와 메모 샘플의
-빌드, 패키징은 `native/windows/bun/run.ps1`에 있다. CLI는 macOS arm64 native build도
+SDK, 코어 실행은 공통 Factory 타입을 구현한다.
+CLI의 `native-build.ts`는 플랫폼별 빌드 의존성을 준비한다.
+`tests/lifecycle/run-native.ts`는 실제 호스트 회귀용 fixture를 만들고 검증한다. CLI는 macOS arm64 native build도
 재사용하며, bin/API 번들과 SDK/native 소스를 [로컬 artifact](../framework-distribution.md)로
 설치할 수 있다. 공개 publish, 프레임워크 라이선스, 프로덕션 서명과 Linux 및 모바일 빌드는 후속 작업이다.
 플랫폼별 실제 실행 결과는 [Windows 기록](./windows-bun-results.md)과 [macOS 기록](./macos-native-results.md)에서 확인한다.

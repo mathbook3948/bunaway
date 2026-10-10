@@ -115,7 +115,7 @@ build, app, bundle을 통합한다. policy.json은 별도 권한 선언이다.
 
 ## 네이티브 개발과 최종 사용자
 
-Windows x64 dev/build에는 PowerShell 7과 WebView2 Evergreen이 필요하다.
+Windows x64 dev/build에는 Windows 기본 제공 tar와 WebView2 Evergreen이 필요하다.
 최종 앱 실행에는 WebView2 Evergreen가 필요하다.
 macOS arm64에는 codesign과 GUI 세션이 필요하다. 두 플랫폼의 앱 빌드는 C 컴파일러를 요구하지 않는다. 교차 빌드는 지원하지 않는다.
 큰 native dependency와 런타임은 설치된 CLI 패키지 안의 생성 캐시에 받는다.

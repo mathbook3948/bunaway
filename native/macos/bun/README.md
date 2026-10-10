@@ -44,16 +44,16 @@ Worker 통신과 뷰 경계는 `packages/runtime-bun`의 공통 구현을 사용
 
 ```sh
 mise run host:macos
-mise exec -- zsh native/macos/bun/run.sh --skip-tests
-mise exec -- zsh native/macos/bun/run.sh --app
+mise exec -- bun --no-env-file tests/lifecycle/run-native.ts --skip-tests
+mise exec -- bun --no-env-file tests/lifecycle/run-native.ts --app
 ```
 
-`package.ts`는 회귀 패키지와 선택한 `.app`을 빌드하고, `run.sh`는 빌드 후 실제
+`package.ts`는 회귀 패키지와 선택한 `.app`을 빌드하고, 공통 Bun 실행기는 빌드 후 실제
 WKWebView와 배포 스크립트 검사를 실행한다. 테스트 설정과 리소스 경계 페이지는
 `tests/fixtures/desktop/host/macos-app.json`과 `macos-web/`에 둔다.
 Bun 1.4.2, macOS arm64와 GUI 세션이 필요하다. `--skip-tests`는 빌드만 실행하고,
 `--app`은 ad-hoc 서명한 `build/Bunaway.app`을 만들어 서명된 앱의 회귀도 검사한다.
-Xcode CLT와 C 컴파일러는 필요하지 않다. 이전 POSIX 프로세스 probe는 별도 실험이다.
+Xcode CLT와 C 컴파일러는 필요하지 않다. 독립 POSIX 프로세스 probe는 제거했으며 이전 실행 기록만 유지한다.
 
 현재 결과와 제약은 [Bun FFI 실행 기록](../../../docs/architecture/macos-bun-results.md)과
 [지원 표](../../../docs/platform-support/README.md)를 따른다.

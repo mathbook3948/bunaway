@@ -14,7 +14,7 @@
 | 독립 생성 프로젝트 이동, 자체 vendor 빌드, 실제 SDK 저장/읽기, 환경 정리, 실행 전 변조 거부 | 통과 |
 | 앱 import 중 생성한 자식 포함, 앱 종료 시 kill-on-close Job 회수 | 통과 |
 
-재현 명령은 `pwsh -NoProfile -File native/windows/bun/run.ps1`이다.
+재현 명령은 `mise run host:windows`이다.
 공통 계약과 Worker 경계 테스트는 `bun test ./tests/core ./tests/api ./tests/protocol
 ./tests/lifecycle/windows-bun-boundary.test.ts ./tests/lifecycle/windows-bun-io.test.ts`,
 타입 검사는 `mise run typecheck`다. 실제 GUI 보고서는
@@ -129,7 +129,7 @@ Evergreen 154.0.4258.62에서 실제 GUI 회귀를 실행했다.
 크기와 위치, 닫기 거절과 승인, 브라우저 장애 후 닫기, 네 번의 보조 창 생성과
 새 세션, 자기 창 재생성과 이전 세션 종료에 따른 생성 취소를 확인했다.
 
-고정 Bun 1.4.2를 PATH에 둔 `pwsh -NoProfile -File native/windows/bun/run.ps1`도 통과했다.
+당시 Windows 실행기를 고정 Bun 1.4.2로 실행한 검사도 통과했다.
 SDK와 코어, 모달 중 백엔드 진행, 초기화 중 닫기와 생성 실패 정리, 단일 인스턴스와
 launcher, hide, veto와 세 개발 중단 시나리오, 파일 핸들 경계, 이동한 독립 CLI,
 개발 서버와 실제 SDK 저장 왕복, 기존 다중 창의 정책과 `supported` 기능 목록,
