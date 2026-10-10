@@ -660,7 +660,7 @@ try {
     }
   });
 
-  await test("native plugin permissions fail before backend startup", async () => {
+  await test("uninstalled plugin permissions fail before backend startup", async () => {
     await resetData();
     const policyText = await readFile(
       join(packagePath, "assets/policy.json"),
@@ -687,7 +687,7 @@ try {
           join(diagnostics, `host-${launchCount}.stderr.log`),
           "utf8",
         ),
-        /macOS native plugin adapters are not implemented/,
+        /Policy references an unregistered permission/,
       );
       assert.equal(
         (await hostLog()).some((entry) => entry.event === "host-started"),

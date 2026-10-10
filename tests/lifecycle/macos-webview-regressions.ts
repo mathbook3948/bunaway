@@ -20,7 +20,9 @@ const directory = await mkdtemp(
   resolve(tmpdir(), "bunaway-webview-regressions-"),
 );
 const title = `Bunaway regression ${crypto.randomUUID()}`;
-const config: MacosConfig = {
+const config: Omit<MacosConfig, "windows"> & {
+  window: import("@bunaway/plugin-api/native").WindowSpec;
+} = {
   runtime: {
     id: "tests.bunaway.webview-regressions",
     generation: crypto.randomUUID(),
@@ -187,6 +189,28 @@ window.chrome.webview.postMessage({ready: true});
 </script>`,
   );
   const o = new Objc();
+  const callbacks = new Objc();
+  let callbackCount = 0;
+  const probe = callbacks.delegate([
+    {
+      selector: "isActive",
+      arguments: 0,
+      returns: "bool",
+      encoding: "B@:",
+      call() {
+        callbackCount++;
+        return true;
+      },
+    },
+  ]);
+  assert(callbacks.send(probe, "isActive"));
+  callbacks.releaseCallbacks();
+  assert.equal(callbacks.send(probe, "isActive"), null);
+  assert.equal(callbackCount, 1);
+  callbacks.send(probe, "release");
+  const profile = application.dataStore(config.window.view);
+  assert.notEqual(profile, application.dataStore("other"));
+  assert.equal(o.send(profile, "isPersistent"), null);
   view = new MacosWebview(config, hooks, application);
   await view.ready;
   view.start();
@@ -288,6 +312,7 @@ window.chrome.webview.postMessage({ready: true});
     ],
   );
   view.close();
+  assert.equal(profile, application.dataStore(config.window.view));
   config.runtime.generation = crypto.randomUUID();
   config.window.title = `${title} reopened`;
   config.window.window = {

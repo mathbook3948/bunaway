@@ -109,6 +109,7 @@ if (target === "windows-x64") {
   }
   if (!values["skip-tests"]) {
     await test("macos-webview-regressions.ts");
+    await test("macos-window-api.ts");
     await test("macos-host.ts", [
       "--package",
       output,

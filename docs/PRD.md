@@ -1,6 +1,6 @@
 # Bun 기반 크로스플랫폼 앱 프레임워크 PRD
 
-작성일: 2026-10-04 ,  구현 상태 갱신: 2026-10-05 (macOS native CI 작업) ,  상태: 제품 요구사항, 단계별 구현 진행 중 ,  제품명: bunaway
+작성일: 2026-10-04 ,  구현 상태 갱신: 2026-10-10 (macOS 다중 창과 기본 창 API) ,  상태: 제품 요구사항, 단계별 구현 진행 중 ,  제품명: bunaway
 
 ## 1 목표와 범위
 
@@ -21,7 +21,7 @@ Tauri에서 참고할 부분은 웹 UI, 백엔드 코어, 네이티브 호스트
 확정했으며 Windows의 저장, 로그와 기능 지원 조회는 개별 플러그인으로 이관했다.
 macOS 플러그인 어댑터는 후속 작업이다.
 
-이 문서는 책임, 인터페이스, 보안 규칙과 단계별 완료 조건을 정한다. A 단계의 계약 구현과 Windows B 단계의 번들 Bun 프로세스, IPC 실험을 완료했다. C 단계에서는 실제 SDK, 코어, Host API와 Windows WebView2 호스트를 연결했다. 세 창의 다중 창/뷰와 뷰별 정책 분리에서 메모 저장, 이벤트, 재실행 후 복원과 오류, 취소, 권한, 렌더러 재생성, 창별 종료를 검증한 기록이 있다([Windows C 실행 결과](./architecture/windows-host-results.md)). macOS arm64의 AppKit, WKWebView 단일 창/뷰 호스트도 구현돼 있다. 독립 실험 코드는 제거했으며 과거 결과는 설계 기록으로 남긴다. [macOS 실행 기록](./architecture/macos-native-results.md)은 기존 로컬 기록, 이번 재실행과 실제 CI 결과를 구분한다. [Windows B 실행 결과](./architecture/windows-probe-results.md)는 별도 실험 기록이다. macOS Intel, 다중 창/뷰, Linux, 모바일 호스트와 설치, 배포는 미검증이다. macOS `.app` 생성, ad-hoc 서명은 Developer ID, 공증, 설치 검증이 아니다. 아래 요구사항 전체를 완료한 것은 아니며, 현재 범위는 [진행 상태](./architecture/progress.md)와 [플랫폼 지원 표](./platform-support/README.md)를 따른다.
+이 문서는 책임, 인터페이스, 보안 규칙과 단계별 완료 조건을 정한다. A 단계의 계약 구현과 Windows B 단계의 번들 Bun 프로세스, IPC 실험을 완료했다. C 단계에서는 실제 SDK, 코어, Host API와 Windows WebView2 호스트를 연결했다. 세 창의 다중 창/뷰와 뷰별 정책 분리에서 메모 저장, 이벤트, 재실행 후 복원과 오류, 취소, 권한, 렌더러 재생성, 창별 종료를 검증한 기록이 있다([Windows C 실행 결과](./architecture/windows-host-results.md)). macOS arm64의 AppKit, WKWebView 다중 창/뷰와 기본 창 API도 구현돼 있다. 독립 실험 코드는 제거했으며 과거 결과는 설계 기록으로 남긴다. [macOS 실행 기록](./architecture/macos-native-results.md)은 기존 로컬 기록, 이번 재실행과 실제 CI 결과를 구분한다. [Windows B 실행 결과](./architecture/windows-probe-results.md)는 별도 실험 기록이다. macOS Intel, 영속 뷰 프로필, Linux, 모바일 호스트와 설치, 배포는 미검증이다. macOS `.app` 생성, ad-hoc 서명은 Developer ID, 공증, 설치 검증이 아니다. 아래 요구사항 전체를 완료한 것은 아니며, 현재 범위는 [진행 상태](./architecture/progress.md)와 [플랫폼 지원 표](./platform-support/README.md)를 따른다.
 
 ### 제품 요구사항
 
@@ -205,7 +205,7 @@ void start().catch(console.error);
 | 대상 | 기본 렌더러 | 백엔드 배포 경로 | 초기 상태와 통과 조건 |
 | --- | --- | --- | --- |
 | Windows | WebView2 | 번들 Bun 진입점 + 직접 FFI UI Worker + I/O Worker | B 실험 및 C 다중 창/뷰, 뷰별 정책의 실제 SDK, 코어, 저장, 이벤트, 복원 검증 통과. 최소 OS/CPU, 설치, 서명, 배포 미검증 |
-| macOS | WKWebView | Bun 진입점, 직접 FFI, 백엔드 Worker | 단일 창의 실제 UI, 정책과 종료 검증. 출시 서명과 설치는 미검증 |
+| macOS | WKWebView | Bun 진입점, 직접 FFI, 백엔드 Worker | 다중 창의 실제 UI, 기본 창 API, 정책과 종료 검증. 출시 서명과 설치는 미검증 |
 | Linux | WebKitGTK | 번들된 Bun 자식 프로세스 + 네이티브 호스트 | 계획. 대상 배포판, 라이브러리, IPC, 패키지 검증 필요 |
 | Android | Android WebView | 미확정 | 미검증. Bun 번들, 실행방식, 수명주기, 배포 제약을 별도 검증 |
 | iOS | WKWebView | 미확정 | 미검증. Bun 실행 가능 경로, 기기, 수명주기, 배포 제약을 별도 검증 |
@@ -290,6 +290,6 @@ Skal의 고정 commit `7edb44aceb8c69ac1abd76549e2c09cf6cdc8a57`에서는 VM 작
 
 CLI create/validate/doctor/dev/build와 vanilla, Vite, React, Vue, Svelte 템플릿, 로컬 프레임워크 설치 artifact, 버전 검증은 구현했다.
 [프레임워크 배포 문서](./framework-distribution.md)에 저장소 밖 설치, 업그레이드와 개발/최종 사용자 요구사항을 구분한다.
-현재 다음 작업은 플랫폼별 검증 범위 확대, macOS 네이티브 플러그인 어댑터와 다중 창/뷰, UI framework 템플릿의 네이티브 검증,
+현재 다음 작업은 플랫폼별 검증 범위 확대, macOS의 다른 네이티브 플러그인 어댑터와 영속 뷰 프로필, UI framework 템플릿의 네이티브 검증,
 공개 릴리스/프레임워크 라이선스 결정, Linux, 모바일 확장과 설치, 서명, 배포 검증이다.
-A, B 및 Windows C, macOS 단일 창/뷰 성공으로 초기 버전 출시 기준 전체를 충족했다고 판단하지 않는다.
+A, B 및 Windows C, macOS 다중 창/뷰 성공으로 초기 버전 출시 기준 전체를 충족했다고 판단하지 않는다.

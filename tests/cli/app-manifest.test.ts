@@ -3,7 +3,7 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { loadPluginCatalog } from "#native/windows/bun/plugin-catalog";
+import { loadPluginCatalog } from "#native/host-api/bun/plugin-catalog";
 import { pluginImportsSource } from "#cli/app-modules";
 import { writeJson } from "#cli/files";
 import { writePluginManifest } from "#cli/plugins";

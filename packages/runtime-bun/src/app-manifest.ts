@@ -6,12 +6,12 @@ import {
   validateValue,
 } from "@bunaway/protocol";
 
-/** Installed Windows plugin data. Executable imports live in a separate generated module. */
+/** Installed platform plugin data. Executable imports live in a separate generated module. */
 export type ManifestPlugin = {
   name: string;
   version: string;
   native: NativePluginContract;
-  /** Worker owning the adapter; omitted when Windows has no implementation. */
+  /** Execution thread owning the adapter; omitted when this platform has no implementation. */
   execution?: "io" | "ui";
   /** Whether a resource-scope matcher is available; this does not grant permission. */
   authorization: boolean;

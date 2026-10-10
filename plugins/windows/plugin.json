@@ -6,6 +6,10 @@
     "windows": {
       "execution": "ui",
       "operations": "./src/windows.ts"
+    },
+    "macos": {
+      "execution": "ui",
+      "operations": "./src/windows.ts"
     }
   }
 }

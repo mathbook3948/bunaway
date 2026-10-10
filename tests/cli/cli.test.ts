@@ -1618,16 +1618,6 @@ test("CLI bundles startup and deferred window specs without implicitly selecting
     await writeJson(configPath, config);
     const metadata = await readProjectMetadata(project);
     expect(metadata.app.windows?.[1]?.home).toEndWith("/missing.html");
-    await expect(
-      buildProject(project, {
-        native: {
-          target: "macos-arm64",
-          host: "unused",
-          bun: "unused",
-          licenses: {},
-        },
-      }),
-    ).rejects.toThrow("app.windows currently requires the Windows target");
   } finally {
     await Bun.write(configPath, originals["src-bunaway/bunaway.json"] ?? "");
     await Bun.write(policyPath, originals["src-bunaway/policy.json"] ?? "");

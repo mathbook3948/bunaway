@@ -2,9 +2,22 @@
 
 개발 우선순위는 [ADR 0010](../decisions/0010-windows-first-platform-model.md)에 따라
 Windows를 먼저 완성하고 다른 플랫폼을 같은 Bun 기반 개발 모델에 맞추는 것이다.
-현재 macOS 호스트는 기존 자식 프로세스 구조를 사용한다. 아래 기록에는 선택 플러그인
+현재 macOS 호스트는 Bun 직접 FFI와 같은 프로세스의 백엔드 Worker를 사용한다. 아래 기록에는 선택 플러그인
 이관 전의 저장, 메모 복원 검증이 포함되며, 이를 현재 플러그인 지원이나 장기 실행 모델로
 해석하지 않는다.
+
+## 2026-10-10 macOS 창 수명주기
+
+AppKit 앱 delegate와 이벤트 루프를 개별 창에서 분리했다. `app.windows`와 지연 생성,
+닫은 창의 생성과 열린 창의 재생성, 허용된 목록 및 열림 여부, show/hide/focus/close와
+표시 및 포커스 조회를 창 플러그인에 연결했다. 뷰별 세션과 임시 WebKit 프로필을 분리하며
+재생성에서 새 세션과 같은 프로필을 사용한다. 보조 창 닫기는 다른 창을 유지하고 마지막
+창 닫기는 앱을 종료한다. 재생성 중에는 자동 종료를 보류한다.
+
+검증 범위는 [Bun FFI 기록](./macos-bun-results.md)을 따른다. 공통 준비 이벤트,
+showInactive, 모달과 sheet, destroy 및 상주 앱의 선행 계약은
+[이슈 #78](https://github.com/mathbook3948/bunaway/issues/78)에서 관리한다.
+저장과 로그 등 다른 네이티브 플러그인 어댑터와 영속 프로필은 후속 작업이다.
 
 ## 2026-10-07 선택 네이티브 플러그인
 
@@ -37,9 +50,9 @@ Bun UI Worker의 창, WebView2, 비동기 작업, 다중 창, 종료를 검증�
 | 개발 환경 | mise 기반 Bun 1.4.2, 8개 workspace, 타입 환경 분리, 개발자용 로컬 CLI artifact | 공통 CI 및 실제 tarball 외부 설치, 생성, 이동, 검증/typecheck 테스트 | 공개 publish, 프레임워크 라이선스 결정 |
 | A 계약 | Web, 프로세스 IPC, 정책 단일 스키마, JSON 검증, 직렬화, 버전 협상 | 계약 테스트와 Windows/macOS 네이티브 검증기 회귀 | Linux, 모바일 네이티브 계약 준수 |
 | B 번들 실행 실현성 | Windows x64 baseline, macOS arm64 Bun 1.4.2 고정. 독립 실험 코드는 제거 | 과거 플랫폼별 probe의 IPC, 계산, 이벤트, 오류, 정상/강제 종료 기록 | 다른 CPU/OS, 설치, 배포 |
-| C 수직 기능 | client-sdk, core, runtime-bun, Win32/WebView2, AppKit/WKWebView, 메모 연결 | Windows 다중 창(3개), 뷰별 정책, macOS 단일 창/뷰의 명령, 이벤트, 경계, 렌더러 복구, 종료. 저장과 메모 파일 복원은 이관 전 기록 | macOS 다중 창/뷰, 다른 플랫폼 동등 검증 |
-| D 플랫폼 확장 | macOS 제품 호스트 구현. Linux, Android, iOS 호스트 미구현. macOS 네이티브 플러그인 어댑터는 후속 작업 | macOS arm64 로컬 기록 및 네이티브 CI(정확한 실행 결과는 별도 기록) | macOS Intel, 최소 OS, Linux, 모바일 실행, 수명주기, 패키징 |
-| E 배포 가능한 초기 버전 | CLI create/validate/doctor/dev/build, vanilla, Vite, React, Vue, Svelte, SDK/native 소스 artifact, 버전 lock, Windows 앱 패키지, macOS `.app`/ad-hoc, 선택 저장/로그/기능 조회 패키지와 Windows 어댑터 | CLI, artifact 계약 테스트, 기존 native 검증 기록(새 artifact의 플랫폼별 검증과 구분) | 공개 publish, 라이선스, UI framework 템플릿의 네이티브 실행 검증, macOS 다중 창, 설치, Developer ID, 공증, Store, 출시 기준 |
+| C 수직 기능 | client-sdk, core, runtime-bun, Win32/WebView2, AppKit/WKWebView, 메모 연결 | Windows 다중 창(3개), 뷰별 정책, macOS 다중 창/뷰와 기본 창 API, 명령, 이벤트, 경계, 렌더러 복구, 종료. 저장과 메모 파일 복원은 이관 전 기록 | macOS 영속 프로필과 고급 창 기능, 다른 플랫폼 동등 검증 |
+| D 플랫폼 확장 | macOS 제품 호스트 구현. Linux, Android, iOS 호스트 미구현. macOS의 다른 네이티브 플러그인 어댑터는 후속 작업 | macOS arm64 로컬 기록 및 네이티브 CI(정확한 실행 결과는 별도 기록) | macOS Intel, 최소 OS, Linux, 모바일 실행, 수명주기, 패키징 |
+| E 배포 가능한 초기 버전 | CLI create/validate/doctor/dev/build, vanilla, Vite, React, Vue, Svelte, SDK/native 소스 artifact, 버전 lock, Windows 앱 패키지, macOS `.app`/ad-hoc, 선택 저장/로그/기능 조회 패키지와 Windows 어댑터 | CLI, artifact 계약 테스트, 기존 native 검증 기록(새 artifact의 플랫폼별 검증과 구분) | 공개 publish, 라이선스, UI framework 템플릿의 네이티브 실행 검증, macOS 고급 창 기능, 설치, Developer ID, 공증, Store, 출시 기준 |
 | F 선택 기능 | Chromium 렌더러 등 미구현 | 없음 | 선택 렌더러, 추가 네이티브 플러그인 |
 
 ## 구현 근거와 플랫폼 차이

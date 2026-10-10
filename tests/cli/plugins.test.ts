@@ -3,13 +3,13 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { hostResponse } from "#native/windows/bun/host-response";
-import { loadPluginCatalog } from "#native/windows/bun/plugin-catalog";
+import { hostResponse } from "#native/host-api/bun/host-response";
+import { loadPluginCatalog } from "#native/host-api/bun/plugin-catalog";
 import {
   operations,
   permissionMatcher,
   pluginRegistry,
-} from "#native/windows/bun/plugins";
+} from "#native/host-api/bun/plugins";
 import { pluginImportsSource } from "#cli/app-modules";
 import { writeJson } from "#cli/files";
 import { installedPlugins, writePluginManifest } from "#cli/plugins";

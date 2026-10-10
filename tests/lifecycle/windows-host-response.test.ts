@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { hostResponse } from "#native/windows/bun/host-response";
+import { hostResponse } from "#native/host-api/bun/host-response";
 import {
   BunawayError,
   MAX_MESSAGE_BYTES,

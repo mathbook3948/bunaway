@@ -111,7 +111,7 @@ export const s = Object.freeze({
 
 /** Host-selected values available when a native adapter is created. */
 export type NativeEnvironment = {
-  /** Windows services supplied by the host when running in its UI worker. */
+  /** Window services supplied by the host on its native UI thread. */
   windows?: import("@bunaway/plugin-api/native").NativeWindowServices;
   /** Host-owned data directory used for app-scoped files. */
   dataRoot: string;
