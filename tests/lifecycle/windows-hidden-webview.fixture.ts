@@ -74,7 +74,7 @@ let hidden = 0n;
 let source = 0n;
 let webview: WebView | undefined;
 let nativeMessages = 0;
-let systemEvents = 0;
+const systemEventRoots = new Set<bigint>();
 const callback = new JSCallback(
   (_hook, event, hwnd) => {
     if (
@@ -84,9 +84,8 @@ const callback = new JSCallback(
     ) {
       return;
     }
-    if (driver.symbols.GetAncestor(BigInt(hwnd), GA_ROOT) === hidden) {
-      systemEvents++;
-    }
+    // WinEvents can arrive inside CreateWindowExW, before `hidden` receives its HWND.
+    systemEventRoots.add(driver.symbols.GetAncestor(BigInt(hwnd), GA_ROOT));
   },
   {
     args: [
@@ -198,8 +197,8 @@ try {
     "Hidden construction showed or activated the HWND",
   );
   assert.equal(
-    systemEvents,
-    0,
+    systemEventRoots.has(hidden),
+    false,
     "WinEvent observer saw a transient show or focus",
   );
   console.log(
