@@ -2,7 +2,7 @@
 
 macOS의 현재 구현과 후속 작업은 [macOS TODO](./TODO-macos.md)에서 관리한다.
 
-기준일: 2026-10-10. bunaway main `3ca321d`의 구현과 저장소에 기록된 실행 결과를 기준으로 갱신했다.
+기준일: 2026-10-11. bunaway main `2b78dc5` 기반 창 준비 변경과 저장소에 기록된 실행 결과를 기준으로 갱신했다.
 Tauri v2의 기본 API와 공식 플러그인, Electron의 공개 API를 기능별로 대조한다.
 창 최소 크기와 최대 크기처럼 초기 설정, 실행 중 변경, 조회, 이벤트가 따로 필요한
 기능은 각각 작업으로 기록한다. 비교 대상의 메서드 이름이나 바이너리와의 호환을
@@ -62,8 +62,8 @@ debug APK 개발 경로를 반영하고 iOS 및 모바일 후속 작업을 분�
 - [x] 창 재생성에서 이전 세션을 정리하고 새 세션을 만든다.
 - [x] 창별 권한, WebView 프로필과 렌더러 복구를 분리한다.
 - [x] `getById`, `getCurrent`, `getFocused`, `getLastActive`로 창 ID, 현재 창, 포커스된 창과 마지막 활성 창을 조회한다.
-- [ ] 창 생성, 웹 문서 준비, SDK 준비를 구분한 완료 이벤트를 제공한다.
-- [ ] 숨긴 상태로 창을 생성하고 준비된 뒤 표시하는 옵션을 제공한다.
+- [x] `windows.readiness`와 `getReadiness`로 네이티브 창 생성, 현재 문서 완료와 SDK 협상 확인을 구분한다.
+- [x] `visible: false`, `showWhenReady: "document" | "sdk"`로 처음부터 숨겨서 생성하고 첫 준비 뒤 표시한다.
 - [x] 포커스를 가져오지 않고 창을 표시하는 `showInactive`를 제공한다.
 - [x] blur와 활성 창 전환 API를 제공한다.
 - [x] `isVisible`과 `isFocused`로 실제 창의 표시 상태와 전경 창 여부를 조회한다.
@@ -75,7 +75,14 @@ debug APK 개발 경로를 반영하고 iOS 및 모바일 후속 작업을 분�
 - [ ] 부모에 종속된 모달 창과 부모의 입력 차단, 종료 순서를 제공한다.
 - [ ] 창 enabled 상태의 변경과 조회를 제공한다.
 - [ ] 창이 없는 상주 앱과 트레이만 있는 앱의 시작을 지원한다. 현재 설정은 시작 창 하나 이상을 요구한다.
-- [ ] splashscreen을 앱 준비 후 닫고 주 창으로 전환하는 흐름을 제공한다.
+- [x] 앱 초기화 뒤 `completeSplashscreen`으로 준비된 주 창을 먼저 표시하고 splashscreen을 닫는다.
+
+세 항목의 완료 조건, 이벤트 수신 권한, 구독 뒤 상태 복구, 탐색과 재생성 초기화 및 실패,
+취소와 기한은 [창 API](./site/src/content/docs/reference/host/windows.mdx)를 따른다.
+Windows 11 Pro x64, Bun 1.4.2의 실제 WebView2에서 문서와 SDK 순서, 준비 실패와 취소,
+SDK 기한 초과 및 전환 중 마지막 창 종료 억제를 확인했다.
+별도 Win32, WinEvent 관찰에서는 숨김 생성 중 순간 표시와 활성화, 포커스가 없고 입력 포커스가 유지됐다.
+검증 범위는 [실행 기록](./architecture/windows-bun-results.md)에 구분한다. macOS 후속 구현은 포함하지 않는다.
 
 2026-10-10 창 탐색 구현은 기존 `getSnapshot`의 `windowId`와 정책 `viewId`를 재사용한다.
 문서 탐색은 ID를 유지하고 네이티브 재생성은 새 ID를 발급한다. 없는 창, 닫힌 창과

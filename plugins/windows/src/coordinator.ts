@@ -68,7 +68,12 @@ export class WindowOperations {
         message: "Window is not configured.",
       });
     }
-    if (this.replacing.has(viewId)) {
+    if (
+      (this.replacing.has(viewId) &&
+        call.operation !== "windows.getReadiness") ||
+      (call.operation === "windows.completeSplashscreen" &&
+        this.replacing.has(call.payload.splash))
+    ) {
       throw new BunawayError({
         code: "BUSY",
         message: "Window is being recreated.",
@@ -88,7 +93,7 @@ export class WindowOperations {
       call.operation !== "windows.create" &&
       call.operation !== "windows.recreate"
     ) {
-      if (!view || view.closed) {
+      if (!view || (view.closed && call.operation !== "windows.getReadiness")) {
         throw new BunawayError({
           code: "INVALID_ARGUMENT",
           message: "Window is not open.",
@@ -152,10 +157,24 @@ export class WindowOperations {
       // Once close commits, finish replacement even if the old document's context is revoked.
       this.hooks.create(spec);
       view = this.hooks.read(viewId);
-      // Creation is complete only after the UI pump publishes readiness for the new document.
+      // Preserve create's existing completion at controller setup; document and SDK readiness are separate.
       while (!view?.ready) {
+        if (this.hooks.stopping()) {
+          throw new BunawayError({
+            code: "CANCELLED",
+            message: "App shutdown interrupted window creation.",
+          });
+        }
+        if (!closesLiveWindow && this.hooks.cancelled(requestId)) {
+          if (view && !view.closed) {
+            await this.hooks.close(viewId);
+          }
+          throw new BunawayError({
+            code: "CANCELLED",
+            message: "Window request cancelled.",
+          });
+        }
         if (
-          this.hooks.stopping() ||
           !view ||
           view.closed ||
           view.failure ||

@@ -7,6 +7,7 @@ import {
   type Policy,
   PROTOCOL_VERSION,
   parseMessage,
+  SDK_READY_FEATURE,
   type ServerMessage,
   serializeMessage,
   type WireError,
@@ -24,6 +25,8 @@ export class ViewBoundary {
         route: Route;
         source: string;
         negotiated: boolean;
+        sdkReadyAllowed: boolean;
+        sdkReady: boolean;
         used: Set<string>;
         // Cancelled requests still own their IDs until the terminal reply is discarded.
         cancelled: Set<string>;
@@ -54,6 +57,10 @@ export class ViewBoundary {
       capacity(count: number): boolean;
       deliver(text: string): void;
       log(event: string, data?: object): void;
+      /** Optional native lifecycle observers; these never change session authorization. */
+      sdkReady?(route: Route): void;
+      sessionOpened?(route: Route): void;
+      revoked?(reason: string, generation: number, error?: WireError): void;
     },
   ) {}
   private error(id: string, error: WireError) {
@@ -87,6 +94,7 @@ export class ViewBoundary {
       if (
         ![
           "hello",
+          "sdk-ready",
           "invoke",
           "listen",
           "unlisten",
@@ -161,11 +169,14 @@ export class ViewBoundary {
           route,
           source,
           negotiated: false,
+          sdkReadyAllowed: message.features.includes(SDK_READY_FEATURE),
+          sdkReady: false,
           used: new Set(),
           cancelled: new Set(),
           pending: new Map(),
           subscriptions: new Map(),
         };
+        this.hooks.sessionOpened?.(route);
         this.hooks.forward({
           kind: "session-open",
           route,
@@ -202,6 +213,19 @@ export class ViewBoundary {
         }
       }
       const session = this.session;
+      if (message.kind === "sdk-ready") {
+        if (!session.sdkReadyAllowed || !session.negotiated) {
+          throw new BunawayError({
+            code: "INVALID_ARGUMENT",
+            message: "SDK readiness was not negotiated.",
+          });
+        }
+        if (!session.sdkReady) {
+          session.sdkReady = true;
+          this.hooks.sdkReady?.(session.route);
+        }
+        return;
+      }
       if (
         message.kind === "invoke" &&
         !this.policy.commands.includes(message.command)
@@ -384,10 +408,11 @@ export class ViewBoundary {
   }
 
   /** Invalidates current-document routes before notifying the host, so late replies cannot reach this session. */
-  revoke(reason: string) {
+  revoke(reason: string, error?: WireError) {
     this.generation++;
     const session = this.session;
     this.session = undefined;
+    this.hooks.revoked?.(reason, this.generation, error);
     if (!session) {
       return;
     }
@@ -419,7 +444,7 @@ export class ViewBoundary {
         }),
       );
     }
-    this.revoke(error.code);
+    this.revoke(error.code, error);
   }
 
   /**
@@ -440,6 +465,7 @@ export class ViewBoundary {
         throw new Error("Duplicate server hello");
       }
       session.negotiated = true;
+      session.sdkReadyAllowed &&= message.features.includes(SDK_READY_FEATURE);
     } else if (message.kind === "result" || message.kind === "error") {
       if (session.cancelled.delete(message.id)) {
         this.hooks.log("discarded", {

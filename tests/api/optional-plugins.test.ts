@@ -103,6 +103,9 @@ test("window permissions use generic deny-first matching and filter list results
     create() {},
     close: () => true,
     window: (view) => ({
+      getReadiness() {
+        throw new Error("Readiness is not used in this permission test.");
+      },
       getSnapshot() {
         throw new Error("Snapshot is not used in this permission test.");
       },

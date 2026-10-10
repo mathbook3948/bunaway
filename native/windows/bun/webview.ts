@@ -2,6 +2,7 @@ import { dlopen, type Pointer, ptr } from "bun:ffi";
 import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
+import type { WireError } from "@bunaway/protocol";
 import type { WindowSpec } from "./channel.ts";
 import {
   addRef,
@@ -21,6 +22,8 @@ import { hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
 const embedded = Bun.embeddedFiles.some(
   (file) => (file as File).name === "manifest.json",
 );
+// COREWEBVIEW2_WEB_ERROR_STATUS from the pinned WebView2 SDK.
+const WEB_ERROR_OPERATION_CANCELED = 14;
 const streams = dlopen("shlwapi.dll", {
   SHCreateMemStream: {
     args: [
@@ -82,8 +85,9 @@ export class WebView {
   private readonly profile: Buffer;
   private readonly loader;
   failure: unknown;
+  private navigationId: bigint | undefined;
 
-  /** Begin async WebView2 creation; ready fires after the controller is configured and shown. */
+  /** Begin async WebView2 creation; ready fires after configuration, independently of HWND visibility. */
   constructor(
     readonly hwnd: bigint,
     readonly spec: WindowSpec,
@@ -97,6 +101,7 @@ export class WebView {
       sameDocument(source: string): void;
       close(force?: boolean): void;
       ready(): void;
+      documentComplete(error: WireError | null): void;
       log(event: string, data?: object): void;
     },
     legacyProfile = false,
@@ -416,7 +421,17 @@ export class WebView {
             : {}),
         });
       } else if (!frame) {
-        this.hooks.revoke("navigation");
+        const id = new BigUint64Array(1);
+        hr(
+          method(args, 9, [
+            "ptr",
+          ])(ptr(id)),
+          "get_NavigationId(starting)",
+        );
+        if (this.navigationId !== id[0]) {
+          this.navigationId = id[0];
+          this.hooks.revoke("navigation");
+        }
       }
     };
     this.on(7, "9adbe429-f36d-432b-9ddc-f8881fbd76e3", (args) =>
@@ -438,6 +453,16 @@ export class WebView {
       }
     });
     this.on(15, "d33a35bf-1c49-4f98-93ab-006e0533fe1c", (args) => {
+      const id = new BigUint64Array(1);
+      hr(
+        method(args, 5, [
+          "ptr",
+        ])(ptr(id)),
+        "get_NavigationId(completed)",
+      );
+      if (id[0] !== this.navigationId) {
+        return;
+      }
       const success = new Int32Array(1);
       hr(
         method(args, 3, [
@@ -449,6 +474,27 @@ export class WebView {
         success: !!success[0],
         uri: this.webview ? getString(this.webview, 4) : "",
       });
+      let error: WireError | null = null;
+      if (!success[0]) {
+        const status = new Int32Array(1);
+        hr(
+          method(args, 4, [
+            "ptr",
+          ])(ptr(status)),
+          "get_WebErrorStatus",
+        );
+        this.hooks.log("navigation-error", {
+          status: status[0],
+        });
+        error = {
+          code:
+            status[0] === WEB_ERROR_OPERATION_CANCELED
+              ? "CANCELLED"
+              : "INTERNAL",
+          message: "Document navigation did not complete.",
+        };
+      }
+      this.hooks.documentComplete(error);
     });
     // ICoreWebView2 receives top-level messages only; no FrameWebMessageReceived handlers are installed.
     this.on(34, "57213f19-00e6-49fa-8e07-898ea01ecbd2", (args) =>

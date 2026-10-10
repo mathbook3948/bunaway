@@ -82,5 +82,6 @@ export {
   validateWindowOutput,
   windowEvents,
   windowOperations,
+  windowReadinessSchema,
   windowSnapshotSchema,
 } from "./contract.ts";

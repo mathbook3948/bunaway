@@ -18,6 +18,7 @@ import {
   ProtocolError,
   parseMessage,
   type Schema,
+  SDK_READY_FEATURE,
   serializeMessage,
   type Transport,
   type TransportEvent,
@@ -59,7 +60,7 @@ export interface Client<
   C extends CommandMap = CommandMap,
   E extends EventMap = EventMap,
 > {
-  /** Resolves after protocol negotiation, or rejects if setup fails. */
+  /** Resolves after negotiation and any negotiated readiness acknowledgement is accepted; rejects if setup fails. */
   readonly ready: Promise<NegotiatedProtocol>;
   /**
    * Sends a typed command after negotiation. Rejects on host, transport,
@@ -210,6 +211,7 @@ class ClientSession<C extends CommandMap, E extends EventMap>
   private handshakeTimer: ReturnType<typeof setTimeout> | undefined;
   private requestIds = 0;
   private readySettled = false;
+  private helloAccepted = false;
   private readyResolve: (value: NegotiatedProtocol) => void = () => {};
   private readyReject: (error: unknown) => void = () => {};
 
@@ -453,7 +455,15 @@ class ClientSession<C extends CommandMap, E extends EventMap>
     }
     try {
       this.transport.send(text).then(
-        () => {},
+        () => {
+          this.helloAccepted = true;
+          if (
+            !this.terminated &&
+            this.negotiated?.features.includes(SDK_READY_FEATURE)
+          ) {
+            void this.acknowledgeReadiness(this.negotiated);
+          }
+        },
         (cause) =>
           this.terminate(
             toWireError(cause, {
@@ -742,12 +752,49 @@ class ClientSession<C extends CommandMap, E extends EventMap>
       features: negotiated.features,
       buildId: remote.buildId,
     };
+    if (negotiated.features.includes(SDK_READY_FEATURE)) {
+      if (this.helloAccepted) {
+        void this.acknowledgeReadiness(this.negotiated);
+      }
+      return;
+    }
+    this.resolveReady(this.negotiated);
+  }
+
+  /** Observe acknowledgement failure before exposing the session to application initialization. */
+  private async acknowledgeReadiness(
+    negotiated: NegotiatedProtocol,
+  ): Promise<void> {
+    // Dispatch before resolving ready so application calls follow the acknowledgement.
+    try {
+      await this.transport.send(
+        serializeMessage({
+          kind: "sdk-ready",
+          protocol: negotiated.protocol,
+        }),
+      );
+    } catch (cause) {
+      this.terminate(
+        toWireError(cause, {
+          code: "INTERNAL",
+          message: "SDK readiness acknowledgement failed.",
+        }),
+      );
+      return;
+    }
+    this.resolveReady(negotiated);
+  }
+
+  private resolveReady(negotiated: NegotiatedProtocol): void {
+    if (this.terminated) {
+      return;
+    }
     if (this.handshakeTimer !== undefined) {
       clearTimeout(this.handshakeTimer);
       this.handshakeTimer = undefined;
     }
     this.readySettled = true;
-    this.readyResolve(this.negotiated);
+    this.readyResolve(negotiated);
   }
 
   private deliverEvent(message: EventMessage): void {

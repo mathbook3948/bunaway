@@ -79,6 +79,26 @@ export type WindowSpec = {
   };
   /** Whether the runtime creates this window during startup. */
   startup?: boolean;
+  /** Initial visibility, default true. Hidden creation never activates the window. Windows only. */
+  visible?: boolean;
+  /** Create hidden and show once after the document, or document and SDK, are ready. Windows only. */
+  showWhenReady?: "document" | "sdk";
+};
+
+/** Current-document preparation. SDK readiness is an acknowledged protocol session, not app data or rendering. */
+export type WindowReadiness = {
+  windowId: string;
+  viewId: string;
+  /** Existing session-boundary generation; navigation and session revocation advance it. */
+  documentGeneration: number;
+  /** Increases within this HWND lifetime, including resets and terminal outcomes. */
+  revision: number;
+  /** Creation completed for this HWND lifetime; closing does not erase that fact. */
+  nativeCreated: boolean;
+  document: "pending" | "ready" | "failed" | "cancelled";
+  sdk: "pending" | "ready" | "failed" | "cancelled";
+  /** Latest preparation or session error; navigation clears it, SDK reconnect retains it for a failed/cancelled document. */
+  error: import("@bunaway/protocol").WireError | null;
 };
 /** Lifecycle state observed while a native window is created or replaced. */
 export type WindowState = {
@@ -111,6 +131,8 @@ export type WindowBounds = {
 export type NativeWindow = {
   /** Reads a versioned state and physical outer-bounds snapshot for recovery after subscribing. */
   getSnapshot(): WindowSnapshot;
+  /** Reads the latest preparation outcome, including a retained closed-window outcome. Windows only. */
+  getReadiness(): WindowReadiness;
   /** Shows or hides the native window. */
   show(visible: boolean): void;
   /** Shows without activation, preserving normal, minimized or maximized state and other input focus. */

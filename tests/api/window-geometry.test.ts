@@ -417,6 +417,9 @@ test("geometry adapter selects the area, converts at current DPI, and enforces t
     now: Date.now,
     tick: async () => {},
     window: () => ({
+      getReadiness() {
+        throw new Error("Readiness is not used in this geometry test.");
+      },
       getSnapshot() {
         throw new Error("Snapshot is not used in this geometry test.");
       },

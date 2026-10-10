@@ -11,6 +11,9 @@ description: 앱이 시작되고 문서가 다시 연결되거나 창이 닫힐 
 앱 정의를 default export하고 policy.json에 사용할 기능을 허용합니다.
 플러그인의 setup이 끝나면 명령을 처리할 준비가 됩니다. `client.invoke`와 `client.listen`은 연결이 준비될 때까지 기다립니다.
 생성 오류는 초기화 과정에서 처리합니다. 준비 상태를 UI에 표시할 때는 재사용하는 `client.ready`를 사용합니다.
+Windows의 네이티브 창 생성, 웹 문서 완료와 SDK 준비는 각각 확인합니다.
+SDK 준비는 현재 세션의 협상 확인이며 앱 데이터나 UI 초기화 완료를 뜻하지 않습니다.
+숨김 생성, 준비 조회와 구독, splashscreen 전환은 [창 준비](/reference/host/windows/#창-준비)를 따릅니다.
 
 ## 수명별 소유 데이터
 

@@ -13,6 +13,7 @@ import {
   type Policy,
   ProtocolError,
   type Schema,
+  SDK_READY_FEATURE,
   type ServerMessage,
   serializeMessage,
   validateValue,
@@ -126,6 +127,7 @@ type EventDelivery = {
 /** Owns one protocol handshake, its pending requests, and event subscriptions. */
 class SessionImpl implements CoreSession {
   helloDone = false;
+  private sdkReadyAllowed = false;
   closed = false;
   failed = false;
   private outProtocol: Hello["protocol"];
@@ -153,6 +155,14 @@ class SessionImpl implements CoreSession {
         return;
       case "hello":
         await this.handleHello(message);
+        return;
+      case "sdk-ready":
+        if (!this.helloDone || !this.sdkReadyAllowed) {
+          await this.close({
+            code: "INVALID_ARGUMENT",
+            message: "SDK readiness was not negotiated.",
+          });
+        }
         return;
       case "invoke":
         this.handleInvoke(message);
@@ -213,6 +223,7 @@ class SessionImpl implements CoreSession {
     try {
       const negotiated = negotiateProtocol(this.core.services.hello, message);
       this.outProtocol = negotiated.protocol;
+      this.sdkReadyAllowed = negotiated.features.includes(SDK_READY_FEATURE);
     } catch (cause) {
       const code =
         cause instanceof ProtocolError ? cause.code : "INVALID_ARGUMENT";

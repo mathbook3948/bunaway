@@ -30,6 +30,36 @@ export function createOperations(
   ): JsonValue | Promise<JsonValue> {
     const window = services.window(viewId);
     switch (call.operation) {
+      case "windows.getReadiness":
+        return {
+          ...window.getReadiness(),
+        };
+      case "windows.completeSplashscreen": {
+        if (viewId === call.payload.splash) {
+          throw new BunawayError({
+            code: "INVALID_ARGUMENT",
+            message: "Splashscreen and main window must differ.",
+          });
+        }
+        const readiness = window.getReadiness();
+        if (readiness.document !== "ready" || readiness.sdk !== "ready") {
+          throw new BunawayError({
+            code: "BUSY",
+            message: "Main window is not ready.",
+          });
+        }
+        const splash = services.read(call.payload.splash);
+        if (!splash || splash.closed) {
+          throw new BunawayError({
+            code: "INVALID_ARGUMENT",
+            message: "Splashscreen is not open.",
+          });
+        }
+        // Keep the main HWND live and show it before committing splash closure. The replacement
+        // close path preserves confirmation and bypasses last-window quit and hide-to-tray.
+        window.show(true);
+        return services.close(call.payload.splash);
+      }
       case "windows.getSnapshot":
         return {
           ...window.getSnapshot(),
@@ -332,6 +362,9 @@ export function createOperations(
             .map((spec) => spec.view),
         );
       }
+      if (call.operation === "windows.completeSplashscreen") {
+        targets.push(call.payload.splash);
+      }
       const grants = targets.filter((view) =>
         registry.allowed(
           context.permissions,
@@ -417,6 +450,15 @@ export function createOperations(
         return {
           ...identity,
         };
+      }
+      if (
+        call.operation === "windows.completeSplashscreen" &&
+        grants.length !== targets.length
+      ) {
+        throw new BunawayError({
+          code: "PERMISSION_DENIED",
+          message: "Window policy denied.",
+        });
       }
       return operations.execute(call, grants, context.requestId);
     },

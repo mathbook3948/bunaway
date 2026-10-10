@@ -109,6 +109,7 @@
           "parseProcessFrame",
           "serializeProcessFrame",
           "PROTOCOL_VERSION",
+          "SDK_READY_FEATURE",
           "parseMessage",
           "serializeMessage",
           "parseBootstrap",
@@ -281,7 +282,8 @@
           "validateWindowOutput",
           "windowOperations",
           "windowEvents",
-          "windowSnapshotSchema"
+          "windowSnapshotSchema",
+          "windowReadinessSchema"
         ]
       }
     },
@@ -402,7 +404,9 @@
           "home",
           "title",
           "window",
-          "startup"
+          "startup",
+          "visible",
+          "showWhenReady"
         ]
       }
     },
@@ -460,7 +464,24 @@
           "setGeometry",
           "setFullscreen",
           "setCloseConfirmation",
-          "getSnapshot"
+          "getSnapshot",
+          "getReadiness"
+        ]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "WindowReadiness",
+      "pages": {
+        "reference/host/windows": [
+          "windowId",
+          "viewId",
+          "documentGeneration",
+          "revision",
+          "nativeCreated",
+          "document",
+          "sdk",
+          "error"
         ]
       }
     },
@@ -567,7 +588,9 @@
           "home",
           "title",
           "window",
-          "startup"
+          "startup",
+          "visible",
+          "showWhenReady"
         ]
       }
     },
@@ -850,7 +873,9 @@
       "windows.setPosition",
       "windows.setFullscreen",
       "windows.setCloseConfirmation",
-      "windows.getSnapshot"
+      "windows.getSnapshot",
+      "windows.getReadiness",
+      "windows.completeSplashscreen"
     ]
   },
   "configuration": {

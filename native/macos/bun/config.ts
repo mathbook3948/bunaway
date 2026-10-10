@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
+  BunawayError,
   type HostContext,
   NativeRegistry,
   type Policy,
@@ -62,7 +63,18 @@ export function readMacosWindowSpecs(
     );
     origin = home.origin;
   }
-  return readWindowSpecs(declarations, policy, origin);
+  const specs = readWindowSpecs(declarations, policy, origin);
+  if (
+    specs.some(
+      (spec) => spec.visible !== undefined || spec.showWhenReady !== undefined,
+    )
+  ) {
+    throw new BunawayError({
+      code: "UNSUPPORTED",
+      message: "Hidden window preparation is not implemented on macOS.",
+    });
+  }
+  return specs;
 }
 
 /** Validate package inventory and policy before app code or system UI is initialized. */

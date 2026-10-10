@@ -3,6 +3,7 @@ import {
   MIN_WINDOW_DIMENSION,
 } from "@bunaway/plugin-api/native";
 import {
+  errorSchema,
   type HostCall,
   hostCallSchema,
   type Infer,
@@ -284,7 +285,51 @@ export const windowSnapshotSchema = {
   additionalProperties: false,
 } as const;
 /** A single ordered subscription observes every committed window transition. */
+const preparationPhase = {
+  enum: [
+    "pending",
+    "ready",
+    "failed",
+    "cancelled",
+  ],
+} as const;
+/** Recoverable preparation snapshot; revisions belong to the existing windowId lifetime. */
+export const windowReadinessSchema = {
+  type: "object",
+  properties: {
+    windowId: windowTarget.properties.view,
+    viewId: windowTarget.properties.view,
+    documentGeneration: windowSnapshotSchema.properties.revision,
+    revision: windowSnapshotSchema.properties.revision,
+    nativeCreated: {
+      type: "boolean",
+    },
+    document: preparationPhase,
+    sdk: preparationPhase,
+    error: {
+      anyOf: [
+        {
+          const: null,
+        },
+        errorSchema,
+      ],
+    },
+  },
+  required: [
+    "windowId",
+    "viewId",
+    "documentGeneration",
+    "revision",
+    "nativeCreated",
+    "document",
+    "sdk",
+    "error",
+  ],
+  additionalProperties: false,
+} as const;
+/** Ordered native transitions and preparation snapshots, subject to view event policy. */
 export const windowEvents = {
+  "windows.readiness": windowReadinessSchema,
   "windows.changed": {
     ...windowSnapshotSchema,
     properties: {
@@ -388,6 +433,26 @@ export const windowOperations = {
   "windows.getCurrent": windowLookup,
   "windows.getFocused": windowLookup,
   "windows.getLastActive": windowLookup,
+  "windows.getReadiness": {
+    input: windowTarget,
+    output: windowReadinessSchema,
+  },
+  "windows.completeSplashscreen": {
+    input: {
+      ...windowTarget,
+      properties: {
+        ...windowTarget.properties,
+        splash: windowTarget.properties.view,
+      },
+      required: [
+        "view",
+        "splash",
+      ],
+    },
+    output: {
+      type: "boolean",
+    },
+  },
   "windows.getSnapshot": {
     input: windowTarget,
     output: windowSnapshotSchema,

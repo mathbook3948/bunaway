@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { parentPort, workerData } from "node:worker_threads";
+import type { WindowReadiness } from "@bunaway/plugin-api/native";
 import {
   API_LIMITS,
   BunawayError,
@@ -33,8 +34,10 @@ import {
   WM_SIZE,
 } from "./win32.ts";
 import { disposeWin32Bindings, hr, kernel, ole } from "./win32-bindings.ts";
+import { WindowReadinessTracker } from "./window-readiness.ts";
 
 const config = workerData as UIConfig;
+const WINDOW_PREPARATION_TIMEOUT_MS = 30_000;
 const packagedPlugins = await loadPluginCatalog(config.assets);
 const registry = pluginRegistry(config.plugins ?? [], packagedPlugins);
 registry.validatePolicy(config.policy);
@@ -90,6 +93,9 @@ type ViewState = {
   forceClose: boolean;
   confirmation: string | null;
   deadline: number;
+  documentDeadline: number;
+  sdkDeadline: number;
+  readiness: WindowReadinessTracker;
 };
 const views = new Map<string, ViewState>();
 /**
@@ -166,6 +172,10 @@ const channel = new Channel(
       uiCalls.clear();
       for (const view of views.values()) {
         view.boundary.revoke("shutdown");
+        view.readiness?.terminate({
+          code: "CANCELLED",
+          message: "App shutdown.",
+        });
         view.boundary.closed = true;
         view.native.requestClose();
       }
@@ -175,7 +185,10 @@ const channel = new Channel(
         ?.boundary.send(packet.route, packet.message);
     } else if (packet.kind === "session-failure") {
       discardContext(packet.route.context);
-      views.get(packet.route.viewId)?.boundary.fail(packet.route, packet.error);
+      const view = views.get(packet.route.viewId);
+      if (view?.boundary.matches(packet.route)) {
+        view.boundary.fail(packet.route, packet.error);
+      }
     } else if (packet.kind === "operation") {
       assert(
         !stopping &&
@@ -419,6 +432,10 @@ async function closeWindow(
     return stopping || closingSent;
   }
   view.boundary.revoke("closing");
+  view.readiness?.terminate({
+    code: "CANCELLED",
+    message: "Window closed.",
+  });
   view.boundary.closed = true;
   view.native.requestClose();
   log("view-window-closed", {
@@ -462,6 +479,10 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
       const hwnd = view.native.hwnd;
       return {
         getSnapshot: () => nativeWindows.getSnapshot(hwnd),
+        getReadiness: () => {
+          assert(view.readiness);
+          return view.readiness.snapshot();
+        },
         show: (visible) => nativeWindows.show(hwnd, visible),
         showInactive: () => nativeWindows.showInactive(hwnd),
         focus: () => nativeWindows.focus(hwnd),
@@ -533,6 +554,34 @@ function createWindow(spec: WindowSpec) {
         view: spec.view,
         ...data,
       }),
+    sessionOpened: (route) => {
+      const view = views.get(spec.view);
+      if (view) {
+        view.sdkDeadline = Date.now() + API_LIMITS.handshakeTimeoutMs;
+        view.readiness?.sessionOpened(route.documentGeneration);
+      }
+    },
+    sdkReady: (route) =>
+      views.get(spec.view)?.readiness?.sdkComplete(route.documentGeneration),
+    revoked: (reason, generation, error) => {
+      const view = views.get(spec.view);
+      if (!view) {
+        return;
+      }
+      if (reason === "navigation") {
+        view.documentDeadline = Date.now() + WINDOW_PREPARATION_TIMEOUT_MS;
+        view.sdkDeadline = Date.now() + WINDOW_PREPARATION_TIMEOUT_MS;
+        view.readiness?.reset(generation);
+      } else {
+        view.readiness?.sessionEnded(
+          generation,
+          error ?? {
+            code: "CANCELLED",
+            message: "SDK session ended.",
+          },
+        );
+      }
+    },
   });
   const close = (force = false) => {
     const view = views.get(spec.view);
@@ -562,13 +611,43 @@ function createWindow(spec: WindowSpec) {
         });
       }
     },
-    true,
+    spec.visible !== false && !spec.showWhenReady,
     spec.window,
   );
   log("window-created", {
     view: spec.view,
     hwnd: window.toString(),
   });
+  windows.observe(window, spec.view, (snapshot, changes) => {
+    if (stopping || closingSent || views.get(spec.view)?.native !== native) {
+      return;
+    }
+    sendNativeEvent(boundary, "windows.changed", {
+      ...snapshot,
+      changes,
+    });
+  });
+  const readiness = new WindowReadinessTracker(
+    windows.getSnapshot(window).windowId,
+    spec.view,
+    spec.showWhenReady,
+    {
+      publish: publishReadiness,
+      show: () => {
+        const current = views.get(spec.view);
+        if (
+          current &&
+          current.native === native &&
+          !current.boundary.closed &&
+          !stopping &&
+          !closingSent
+        ) {
+          windows?.show(window, true);
+        }
+      },
+    },
+  );
+  publishReadiness(readiness.snapshot());
   // Record partial HWND ownership before environment creation can fail.
   try {
     native = new WebView(
@@ -594,6 +673,8 @@ function createWindow(spec: WindowSpec) {
           }
         },
         sameDocument: (source) => boundary.sameDocument(source),
+        documentComplete: (error) =>
+          views.get(spec.view)?.readiness?.documentComplete(error),
         close,
         ready: () => {
           const view = views.get(spec.view);
@@ -611,10 +692,15 @@ function createWindow(spec: WindowSpec) {
       config.devtools,
     );
   } catch (error) {
+    readiness.terminate({
+      code: "INTERNAL",
+      message: "WebView creation failed.",
+    });
     windows.destroy(window);
     throw error;
   }
   views.set(spec.view, {
+    readiness,
     boundary,
     native,
     detached: false,
@@ -624,45 +710,75 @@ function createWindow(spec: WindowSpec) {
     pendingClose: false,
     forceClose: false,
     confirmation: null,
-    deadline: Date.now() + 30000,
+    deadline: Date.now() + WINDOW_PREPARATION_TIMEOUT_MS,
+    documentDeadline: Date.now() + WINDOW_PREPARATION_TIMEOUT_MS,
+    sdkDeadline: Date.now() + WINDOW_PREPARATION_TIMEOUT_MS,
   });
-  // Window control and its event contract remain opt-in. Host owns the native observer.
-  if (registry.operations.has("windows.getSnapshot")) {
-    windows.observe(window, spec.view, (snapshot, changes) => {
-      if (stopping || closingSent || views.get(spec.view)?.native !== native) {
-        return;
-      }
-      const route = boundary.eventRoute("windows.changed");
-      if (!route) {
-        return;
-      }
-      void channel
-        .send({
-          kind: "native-event",
-          route,
-          event: "windows.changed",
+}
+
+/** Broadcast preparation only to subscribed live sessions allowed to control the source window. */
+function publishReadiness(state: WindowReadiness): void {
+  if (
+    stopping ||
+    closingSent ||
+    !registry.operations.has("windows.getReadiness")
+  ) {
+    return;
+  }
+  for (const recipient of views.values()) {
+    const route = recipient.boundary.eventRoute("windows.readiness");
+    if (
+      !route ||
+      !registry.allowed(
+        recipient.boundary.policy.host,
+        {
+          operation: "windows.getReadiness",
           payload: {
-            ...snapshot,
-            changes,
+            view: state.viewId,
           },
-        })
-        .catch((error) => {
-          if (stopping || closingSent || !boundary.matches(route)) {
-            return;
-          }
-          if (error instanceof BunawayError && error.code === "BUSY") {
-            // Losing a transition invalidates this session instead of silently keeping stale UI state.
-            boundary.fail(route, {
-              code: "BUSY",
-              message: "Native event queue full.",
-            });
-            return;
-          }
-          fail(error);
-        });
+        },
+        matches,
+      )
+    ) {
+      continue;
+    }
+    sendNativeEvent(recipient.boundary, "windows.readiness", {
+      ...state,
     });
   }
 }
+/** Reuse the ordered native-event lane; a lost transition revokes its receiving session. */
+function sendNativeEvent(
+  boundary: ViewBoundary,
+  event: string,
+  payload: import("@bunaway/protocol").JsonValue,
+): void {
+  const route = boundary.eventRoute(event);
+  if (!route) {
+    return;
+  }
+  void channel
+    .send({
+      kind: "native-event",
+      route,
+      event,
+      payload,
+    })
+    .catch((error) => {
+      if (stopping || closingSent || !boundary.matches(route)) {
+        return;
+      }
+      if (error instanceof BunawayError && error.code === "BUSY") {
+        boundary.fail(route, {
+          code: "BUSY",
+          message: "Native event queue full.",
+        });
+        return;
+      }
+      fail(error);
+    });
+}
+
 try {
   // Keep window and WebView COM work on this STA through cleanup.
   hr(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
@@ -724,10 +840,24 @@ try {
         );
       }
       if (view.native.failure) {
+        view.readiness?.terminate({
+          code: "INTERNAL",
+          message: "WebView creation failed.",
+        });
         throw view.native.failure;
       }
       if (!view.ready && !view.boundary.closed && Date.now() > view.deadline) {
+        view.readiness?.terminate({
+          code: "TIMEOUT",
+          message: "WebView creation timed out.",
+        });
         throw new Error("WebView startup timed out");
+      }
+      if (!view.boundary.closed && Date.now() > view.documentDeadline) {
+        view.readiness?.expireDocument();
+      }
+      if (!view.boundary.closed && Date.now() > view.sdkDeadline) {
+        view.readiness?.expireSdk();
       }
       view.boundary.scanDeadlines();
       cleanupView(view);
@@ -772,6 +902,10 @@ try {
   approved.clear();
   for (const view of views.values()) {
     view.boundary.revoke("shutdown");
+    view.readiness?.terminate({
+      code: "CANCELLED",
+      message: "App shutdown.",
+    });
     view.boundary.closed = true;
     view.native.requestClose();
   }

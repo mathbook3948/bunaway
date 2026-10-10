@@ -18,9 +18,13 @@ description: Core와 선택 플러그인이 공유하는 중립 타입과 호출
 | `WindowSizeConstraints` | 논리 픽셀 단위 최소 및 최대 너비와 높이. 제한이 없는 축은 `null` |
 | `WindowBounds` | 화면 물리 픽셀 단위 `x`, `y`, `width`, `height`와 측정 또는 복원 크기 계산에 사용한 `dpi` |
 | `WindowState` | 창의 `closed`, `cleaned`, `ready`, `failure`, `deadline` 상태 |
+| `WindowReadiness` | 기존 창 ID와 문서 세대, 준비 revision, nativeCreated, document와 sdk의 단계, 공개 error |
 | `NativeWindowServices` | 창 사양, 상태 조회와 생성, 종료, 창 객체, 호스트 종료와 취소 확인, 시각과 UI tick |
 
 `WindowSpec`은 `view`, `home`, `title`, `window`, `startup` 필드를 가집니다. `window`에는 초기 `width`, `height`와 선택적 `minWidth`, `minHeight`, `maxWidth`, `maxHeight`를 둡니다. 크기 값은 96 DPI 기준 논리 픽셀입니다.
+Windows에서는 선택적 `visible`, `showWhenReady`도 받으며 기본값과 완료 조건은 [창 준비](/reference/host/windows/#창-준비)를 따릅니다.
+`WindowState.ready`는 WebView2 설정 완료만 뜻합니다. `NativeWindow.getReadiness()`는 별도 WindowReadiness를 읽습니다.
+호스트가 준비 상태를 소유하며 SDK 확인은 현재 세션과 문서 세대에 연결합니다. HostContext는 공개 준비 payload에 넣지 않습니다.
 `NativeWindowServices`는 `specs`, `read(view)`, `create(spec)`, `close(view)`, `window(view)`, `stopping()`, `cancelled(requestId)`, `now()`, `tick()`을 제공합니다.
 선택적 `lookup`은 `byId(windowId)`, `byView(viewId)`, `focused()`, `lastActive()`로
 `WindowIdentity`인 `{ windowId, viewId }` 또는 `null`을 반환합니다. 스냅샷이나 geometry를

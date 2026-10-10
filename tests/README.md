@@ -1,5 +1,18 @@
 # Tests
 
+창 준비 계약은 `api/window-readiness.test.ts`, `lifecycle/window-readiness.test.ts`와
+`window-operations.test.ts`에서 설정 검증, 두 대상 창 권한, 단계별 완료와 상태 복구,
+새 세대와 늦은 확인 차단, 기한, 생성 취소와 전환 순서를 확인한다.
+`api/client.test.ts`는 협상한 SDK 준비 확인과 이전 호스트 호환, 확인 전송 실패를 검사한다.
+`windows-window-readiness.ts`는 실제 WebView2에서 숨김 생성, 별도 준비 이벤트, 허용된 다른 창의
+수신과 권한 필터, 탐색과 fragment, 창 재생성, 문서 실패와 탐색 취소, SDK 미준비의 실제 30초 기한,
+문서만 준비된 자동 표시 및 splashscreen 전환 후 한 번의 마지막 창 종료를 검사한다.
+`mise run host:windows`에 포함하며 네이티브 입력 준비 뒤 직접 실행할 수 있다.
+`windows-hidden-webview.test.ts`는 실제 Win32, WebView2를 별도 STA 프로세스에서 실행한다.
+HWND 생성부터 문서 완료까지 Win32 표시, 활성화, 포커스 메시지와 같은 프로세스의 WinEvent를
+관찰하고 입력 포커스와 숨김 상태를 확인한다. DLL 대체나 주기적 상태 조회만으로 순간 표시를 판정하지 않는다.
+WebView2 SDK 입력이 없거나 다른 OS이면 이 검사를 건너뛴다.
+
 `mise run host:android`는 Windows의 Android SDK/JDK와 선택 기기에서 실제 APK를 검사한다.
 `ANDROID_SERIAL` 기본값은 `emulator-5554`이며 기기를 먼저 부팅하거나 연결해야 한다.
 공통 Core/SDK 명령, 이벤트와 구독 해제, 정책 거부, 취소, 자산과 subframe 경계,

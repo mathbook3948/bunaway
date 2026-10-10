@@ -86,6 +86,20 @@ export const messageSchema = {
       type: "object",
       properties: {
         kind: {
+          const: "sdk-ready",
+        },
+        protocol: version,
+      },
+      required: [
+        "kind",
+        "protocol",
+      ],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        kind: {
           const: "invoke",
         },
         protocol: version,

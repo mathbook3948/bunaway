@@ -172,6 +172,7 @@ function fixture() {
       show: unused,
       close: unused,
       getSnapshot: unused,
+      getReadiness: unused,
       minimize: unused,
       maximize: unused,
       unmaximize: unused,

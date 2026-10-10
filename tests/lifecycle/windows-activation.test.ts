@@ -66,6 +66,7 @@ test.skipIf(process.platform !== "win32")(
         isMinimized: () => native.isMinimized(hwnd),
         isVisible: () => native.isVisible(hwnd),
         getSnapshot: () => native.getSnapshot(hwnd),
+        getReadiness: unused,
         close: unused,
         minimize: unused,
         maximize: unused,

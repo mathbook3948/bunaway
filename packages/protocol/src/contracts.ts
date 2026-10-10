@@ -7,7 +7,14 @@ export type AsyncDispose = () => Promise<void>;
 export type ClientMessage = Extract<
   Message,
   {
-    kind: "hello" | "invoke" | "cancel" | "listen" | "unlisten" | "close";
+    kind:
+      | "hello"
+      | "sdk-ready"
+      | "invoke"
+      | "cancel"
+      | "listen"
+      | "unlisten"
+      | "close";
   }
 >;
 export type ServerMessage = Extract<

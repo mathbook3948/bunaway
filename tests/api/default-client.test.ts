@@ -6,14 +6,15 @@ import {
   invokePlugin,
   listen,
 } from "@bunaway/client";
-import type { WebViewBridge } from "#client/webview";
+import type { Capabilities } from "@bunaway/plugin-capabilities";
 import {
   type JsonValue,
   type Message,
   PROTOCOL_VERSION,
   parseMessage,
+  SDK_READY_FEATURE,
 } from "@bunaway/protocol";
-import type { Capabilities } from "@bunaway/plugin-capabilities";
+import type { WebViewBridge } from "#client/webview";
 import { contracts } from "../fixtures/host-plugins.ts";
 
 // Exercise the same browser bundle apps receive, while sharing this suite's client session.
@@ -263,7 +264,9 @@ test("concurrent direct calls and repeated SDK imports share one handshake and r
   expect(last(bridge, "hello")).toEqual({
     kind: "hello",
     protocol: PROTOCOL_VERSION,
-    features: [],
+    features: [
+      SDK_READY_FEATURE,
+    ],
     buildId: "bunaway-client",
   });
   expect(bridge.requests("invoke")).toHaveLength(0);

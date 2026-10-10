@@ -35,7 +35,7 @@ export function readWindowSpecs(
     );
   }
   const seen = new Set<string>();
-  const specs = value.map((item) => {
+  const specs = value.map((item): WindowSpec => {
     const spec = object(item);
     if (
       Object.keys(spec).some(
@@ -46,6 +46,8 @@ export function readWindowSpecs(
             "title",
             "window",
             "startup",
+            "visible",
+            "showWhenReady",
           ].includes(key),
       )
     ) {
@@ -139,10 +141,30 @@ export function readWindowSpecs(
     if (spec.startup !== undefined && typeof spec.startup !== "boolean") {
       throw new Error("Window startup must be a boolean.");
     }
+    if (spec.visible !== undefined && typeof spec.visible !== "boolean") {
+      throw new Error("Window visible must be a boolean.");
+    }
+    if (
+      spec.showWhenReady !== undefined &&
+      spec.showWhenReady !== "document" &&
+      spec.showWhenReady !== "sdk"
+    ) {
+      throw new Error("Window showWhenReady must be document or sdk.");
+    }
     return {
       view: spec.view,
       title: spec.title,
       home: spec.home,
+      ...(spec.visible === undefined
+        ? {}
+        : {
+            visible: spec.visible,
+          }),
+      ...(spec.showWhenReady === undefined
+        ? {}
+        : {
+            showWhenReady: spec.showWhenReady,
+          }),
       window: {
         width: Number(size.width),
         height: Number(size.height),
