@@ -1,6 +1,7 @@
 # macOS 데스크톱 기능 TODO
 
-기준일: 2026-10-10. bunaway `c26caea`의 macOS arm64 구현을 기준으로 작성했다.
+기준일: 2026-10-10. bunaway `5cabc6b`의 macOS arm64 구현과 기록된 실행 결과를 기준으로 갱신했다.
+앱과 창의 수명 분리, 다중 창과 기본 창 API는 PR #77, #79와 #84의 병합 결과를 반영했다.
 [Windows TODO](./TODO-windows.md)의 기능 영역을 기준으로 macOS의 현재 구현과
 후속 작업을 정리한다. Tauri와 Electron의 비교 자료와 API 색인은 Windows TODO의
 고정 스냅샷을 공유하며, 최신 API 전체를 새로 대조한 문서는 아니다.
@@ -34,7 +35,7 @@
 
 | 영역 | 현재 구현 | 남은 범위 |
 | --- | --- | --- |
-| 실행 | 고정 Bun 1.4.2, 직접 FFI, 같은 PID의 백엔드 Worker | 최소 OS, Intel, 현재 구현의 CI 실행 검증 |
+| 실행 | 고정 Bun 1.4.2, 직접 FFI, 같은 PID의 백엔드 Worker, arm64 네이티브 CI 통과 | 최소 OS와 Intel 실행 검증 |
 | 창 | 다중 창, 생성과 재생성, 기본 제어, 초기 크기 제약 | 준비 이벤트, 모달과 sheet, 상주 앱 |
 | WebView | 명령, 이벤트, 정책, 자산 스킴, 탐색과 리소스 경계, 복구 | 영속 프로필과 세션 제어 API |
 | 종료 | Worker 정리, 기한 초과 강제 종료, 프로세스 그룹 정리 | `desktop`, 종료 취소와 상주 앱 |
@@ -50,8 +51,9 @@
 - [x] `app.windows`의 다중 창과 뷰별 정책, 세션, 임시 프로필을 지원한다. 한 뷰에 창 하나를 선언한다.
 - [x] `startup: false` 창의 지연 생성, 닫은 창의 생성과 열린 창의 재생성을 제공한다.
 - [x] 허용된 창 목록과 열림 여부, 개별 창의 표시와 포커스 여부를 조회한다.
-- [ ] 창 ID, 현재 창과 마지막 활성 창을 조회한다.
+- [ ] 창 ID, 현재 창, 포커스된 창과 마지막 활성 창을 조회한다.
 - [x] 공개 show, hide, focus, close API를 제공한다.
+- [ ] 숨긴 상태로 창을 생성하고 앱이 준비된 뒤 표시하는 초기 옵션을 제공한다.
 - [ ] 포커스를 가져오지 않고 표시하는 `showInactive` API를 제공한다.
 - [ ] 창 생성, 웹 문서 준비와 SDK 준비를 구분한 이벤트를 제공한다.
 - [ ] 부모와 자식 창, 모달 창 및 sheet의 입력 차단과 종료 순서를 제공한다.
@@ -95,7 +97,8 @@
 창 상태 변경과 크기, 위치, 전체화면 및 닫기 확인의 실행 중 macOS 호출은 `UNSUPPORTED`다.
 
 - [ ] minimize, maximize, unmaximize, restore와 toggleMaximize를 공통 계약에 맞춘다.
-- [ ] 최소화, 최대화, 전체화면, 표시와 포커스 상태를 조회한다.
+- [x] `isVisible`과 `isFocused`로 실제 창의 표시 상태와 포커스 여부를 조회한다.
+- [ ] 최소화, 최대화와 전체화면 상태를 조회한다.
 - [ ] 초기 maximized/fullscreen 옵션과 실행 중 전체화면 전환을 제공한다.
 - [ ] native fullscreen과 simple fullscreen, 전환 완료와 복원 동작을 구분한다.
 - [ ] minimizable, maximizable, closable, fullscreenable과 focusable을 제공한다.
@@ -462,19 +465,20 @@ iOS의 WKWebView 구현은 macOS 구현만으로 완료 처리하지 않는다.
 
 - [x] 고정 arm64 Bun의 버전, revision과 해시를 확인하고 C 컴파일 없는 빌드를 제공한다.
 - [x] macOS 26.7.1 arm64 로컬 GUI에서 실제 WKWebView 회귀 7개를 통과했다.
-- [x] ad-hoc `.app`에서 같은 회귀 7개와 배포 도구 검사 16개를 통과했다.
+- [x] ad-hoc `.app`에서 같은 회귀 7개와 배포 도구 회귀를 통과했다.
 - [x] 로컬 mac-direct hardened runtime 서명 뒤 WKWebView 보고서와 정상 종료를 확인했다.
 - [x] 실제 Worker의 명령, 세션 폐기와 플러그인 종료, UI 초기화 실패와 종료 기한을 검사했다.
 - [x] 일반 및 `unref()` 자손, 무한 종료 훅과 SIGKILL의 프로세스 그룹 정리를 검사했다.
 - [x] 실제 창의 초기 크기 보정과 최소/최대 제약, 제한 해제를 검사했다.
 - [x] 설치된 네이티브 delegate로 카메라/마이크 거부를 검사했다. 실제 장치를 열지는 않았다.
 - [x] JSON 변환 불가 메시지, 응답 전달 메모리와 리소스 규칙 교체 회귀를 검사했다.
-- [ ] 현재 Bun FFI 제품으로 GitHub Actions의 macOS GUI 회귀를 실행하고 결과를 기록한다.
+- [x] compiled 앱에서 다중 창, 지연 생성과 반복 재생성, 뷰별 권한 및 세션 분리, 마지막 창의 자기 재생성과 종료를 검증했다.
+- [x] GitHub Actions의 macOS 15 arm64에서 실제 WKWebView와 서명한 `.app` 회귀를 통과했다. [기준 커밋의 CI 실행](https://github.com/mathbook3948/bunaway/actions/runs/38042996617/job/114186820712)에 결과를 기록했다.
 - [ ] 최소 지원 macOS와 WKWebView 환경을 실제 기기에서 확정한다. plist의 14.0 값만으로 지원을 선언하지 않는다.
 - [ ] Intel Bun pin, FFI ABI, 빌드와 실제 실행을 지원하거나 제외를 확정한다.
 - [ ] 다중 화면과 Retina, 다른 배율의 이동, fullscreen/Spaces와 화면 제거를 검증한다.
 - [ ] IME, keyboard layout, VoiceOver와 접근성, suspend/resume 및 잠금을 검증한다.
-- [ ] 저장 및 네이티브 플러그인, 다중 창과 공통 메모 샘플을 실제 앱에서 검증한다.
+- [ ] 저장 등 추가 네이티브 플러그인과 공통 메모 샘플의 파일 저장을 실제 앱에서 검증한다. 기본 창 어댑터와 다중 창 검증은 위 완료 항목에 포함한다.
 - [ ] Developer ID 서명, 공증 및 stapling 뒤 깨끗한 Mac의 Gatekeeper와 설치를 검증한다.
 - [ ] App Sandbox에서 현재 compiled 앱의 JIT/FFI, WebKit XPC와 감시 프로세스를 검증한다.
 - [ ] Apple Distribution 및 provisioning, Store 제출, 심사와 설치 결과를 각각 기록한다.
@@ -483,16 +487,18 @@ iOS의 WKWebView 구현은 macOS 구현만으로 완료 처리하지 않는다.
 
 ## 다음 작업 묶음
 
-1. 선택 네이티브 플러그인 카탈로그와 저장, 로그, 기능 조회 및 opener 어댑터: 09, 19, 23, 24.
-2. 다중 창과 공개 창 API, 이벤트 및 desktop 수명주기: 01–05.
+1. 저장, 로그, 기능 조회 및 opener의 macOS 어댑터: 09, 19, 23, 24. 카탈로그와 기본 창 어댑터는 구현했다.
+2. 창 식별과 조회, 숨긴 초기 창, `showInactive`, 준비 이벤트, 모달 및 desktop 수명주기: 01–05. 공통 선행 계약은 #78에서 관리한다.
 3. 메뉴 막대 아이콘, 메뉴, 자동 실행, 알림, 파일 선택과 클립보드: 06–12.
 4. 영속 WebView 프로필, 권한 중재, 모니터와 접근성: 13–18.
-5. CLI 배포 채널 연결과 현재 제품의 CI, Developer ID, 설치 및 Sandbox 검증: 22, 28.
+5. CLI 배포 채널 연결, 최소 지원 OS와 Intel, Developer ID, 설치 및 Sandbox 검증: 22, 28. 현재 arm64 제품의 CI는 통과했다.
 6. 업데이트, 보안 저장과 고급 macOS 연동: 20, 21, 25, 26. PRD 범위와 별도로 우선순위를 결정한다.
 
 ## 구현과 검증 근거
 
 - [다중 창 설정과 카탈로그 권한 검증](../native/macos/bun/config.ts)
+- [AppKit 앱 수명과 뷰별 임시 프로필](../native/macos/bun/application.ts)
+- [개별 창 소유권, 생성과 정리 및 세션 경계](../native/macos/bun/windows.ts)
 - [백엔드 Worker와 Host API, desktop 미지원 처리](../native/macos/bun/backend.ts)
 - [시작과 Worker 종료](../native/macos/bun/entry.ts)
 - [AppKit, WKWebView, 정책과 리소스 경계](../native/macos/bun/webview.ts)
@@ -502,6 +508,8 @@ iOS의 WKWebView 구현은 macOS 구현만으로 완료 처리하지 않는다.
   [공증](../packages/packaging/src/channels/macos/notarize.ts)과
   [DMG/PKG 조립](../packages/packaging/src/channels/macos/package.ts)
 - [계약 및 실제 네이티브 검사 구분](../tests/README.md)
+- [실제 compiled 앱의 다중 창 및 기본 창 API 회귀](../tests/lifecycle/macos-window-api.ts)
+- [기준 커밋의 macOS 네이티브 CI 결과](https://github.com/mathbook3948/bunaway/actions/runs/38042996617/job/114186820712)
 - [현재 Bun FFI 실행 결과](./architecture/macos-bun-results.md),
   [이전 네이티브 기록](./architecture/macos-native-results.md)과
   [이전 Sandbox 기록](./architecture/macos-sandbox-results.md)
