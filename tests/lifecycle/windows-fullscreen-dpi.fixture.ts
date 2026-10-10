@@ -5,6 +5,7 @@ import { hostResponse } from "#native/host-api/bun/host-response";
 
 // Isolate the DLL substitute from the real Windows callback tests.
 const WM_DPICHANGED = 0x02e0;
+const WM_ACTIVATE = 0x0006;
 const WM_WINDOWPOSCHANGED = 0x0047;
 const WM_DISPLAYCHANGE = 0x007e;
 const WS_OVERLAPPEDWINDOW = 0x00cf0000;
@@ -53,6 +54,8 @@ let minimized = false;
 let style = BigInt(WS_OVERLAPPEDWINDOW);
 let callbackAddress = 0;
 let positionFlags = 0;
+let foregroundWindow = 0n;
+const postedMessages: number[] = [];
 
 function view(address: Pointer, size: number) {
   return new DataView(toArrayBuffer(address, 0, size));
@@ -117,6 +120,11 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
       IsWindowVisible: () => Number((style & WS_VISIBLE) !== 0n),
       IsIconic: () => Number(minimized),
       IsZoomed: () => Number(maximized),
+      GetForegroundWindow: () => foregroundWindow,
+      PostMessageW(_window: bigint, message: number) {
+        postedMessages.push(message);
+        return 1;
+      },
       DefWindowProcW: () => 0n,
       ShowWindow(_window: bigint, command: number) {
         style = command === SW_HIDE ? style & ~WS_VISIBLE : style | WS_VISIBLE;
@@ -588,6 +596,37 @@ try {
       },
     },
   );
+  removedMonitors.clear();
+  const observedChanges: string[][] = [];
+  windows.observe(window, "main", (_snapshot, changes) =>
+    observedChanges.push(changes),
+  );
+  // Foreground identity can be published after the synchronous activation callback returns.
+  for (const focused of [
+    true,
+    false,
+  ]) {
+    const count = observedChanges.length;
+    messages.symbols.windowProcedure(
+      window,
+      WM_ACTIVATE,
+      focused ? 1n : 0n,
+      0n,
+    );
+    assert.equal(windows.failure, undefined);
+    assert.equal(observedChanges.length, count);
+    assert.equal(postedMessages.length, 1);
+    foregroundWindow = focused ? window : 0n;
+    const posted = postedMessages.shift();
+    assert(posted);
+    messages.symbols.windowProcedure(window, posted, 0n, 0n);
+    assert.equal(windows.failure, undefined);
+    assert.deepEqual(observedChanges.at(-1), [
+      focused ? "focus" : "blur",
+    ]);
+    assert.equal(windows.getSnapshot(window).state.focused, focused);
+    assert.equal(windows.getSnapshot(window).revision, count + 1);
+  }
 } finally {
   messages.close();
   windows.destroy(window);

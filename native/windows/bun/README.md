@@ -28,7 +28,9 @@ normal의 WINDOWPLACEMENT 작업 영역 좌표는 화면 좌표로 보정한다.
 `ui.ts`가 이 자원들의 초기화와 정리 순서를 조정한다. DLL은 창과 COM 정리가 끝난 뒤 닫는다.
 
 창 플러그인을 등록하면 `Windows.observe`가 창별 상태와 물리 outer bounds의 변경을
-비교한다. `window-events.ts`는 변경 이름과 순서를 결정하며 `ui.ts`는 현재 문서의
+비교한다. 활성화 관찰은 `WM_ACTIVATE` 뒤에 게시한 창 메시지에서 전경 HWND를 조회한다.
+동기 활성화 콜백이 끝나기 전에 이전 전경 HWND를 읽어 전환을 놓치는 것을 방지한다.
+`window-events.ts`는 변경 이름과 순서를 결정하며 `ui.ts`는 현재 문서의
 구독 관심과 route를 확인해 `native-event` 패킷을 보낸다. 메인은 동일한 route의
 활성 Core 세션에 `emitNative`로 전달한다. observer는 SDK 구독 수와 관계없이 창별
 하나이며 HWND 파괴 전에 제거한다. 전송 용량과 복구는

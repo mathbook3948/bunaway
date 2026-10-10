@@ -23,6 +23,7 @@ import {
 
 export const WM_SIZE = 0x0005;
 const WM_ACTIVATE = 0x0006;
+const WM_OBSERVE_WINDOW = 0x8003;
 export const WM_CLOSE = 0x0010;
 export const WM_QUIT = 0x0012;
 const WM_GETMINMAXINFO = 0x0024;
@@ -248,6 +249,10 @@ export class Windows {
             shutdown();
             return 0n;
           }
+          if (message === WM_OBSERVE_WINDOW) {
+            this.observeChanges(window);
+            return 0n;
+          }
           if (message === WM_GETMINMAXINFO) {
             user.symbols.DefWindowProcW(window, message, wparam, lparam);
             this.applyMinMaxInfo(window, lparam);
@@ -276,8 +281,14 @@ export class Windows {
           if (message === WM_WINDOWPOSCHANGED && this.windows.has(window)) {
             this.rememberNormalMonitor(window);
           }
-          if (message === WM_WINDOWPOSCHANGED || message === WM_ACTIVATE) {
+          if (message === WM_WINDOWPOSCHANGED) {
             this.observeChanges(window);
+          }
+          if (message === WM_ACTIVATE && this.observations.has(window)) {
+            // Foreground identity can change after this synchronous activation callback returns.
+            assert(
+              user.symbols.PostMessageW(window, WM_OBSERVE_WINDOW, 0n, 0n),
+            );
           }
           if (
             message === WM_DISPLAYCHANGE &&
