@@ -1,6 +1,7 @@
 import { linkSymbols, type Pointer, ptr, toArrayBuffer } from "bun:ffi";
 import { mock } from "bun:test";
 import assert from "node:assert/strict";
+import { hostResponse } from "#native/windows/bun/host-response";
 
 // Isolate the DLL substitute from the real Windows callback tests.
 const WM_DPICHANGED = 0x02e0;
@@ -100,6 +101,7 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
       UnregisterClassW: () => 1,
       CreateWindowExW: () => 1n,
       DestroyWindow: () => 1,
+      IsWindow: () => 1,
       IsWindowVisible: () => Number((style & WS_VISIBLE) !== 0n),
       IsIconic: () => 0,
       IsZoomed: () => Number(maximized),
@@ -235,6 +237,21 @@ const messages = linkSymbols({
   },
 });
 try {
+  // This substitute ignores maximize; the HWND postcondition must report a bounded failure.
+  assert.deepEqual(
+    hostResponse(() => {
+      windows.maximize(window);
+      return null;
+    }),
+    {
+      kind: "error",
+      error: {
+        code: "INTERNAL",
+        message: "Host operation failed.",
+      },
+    },
+  );
+  windows.show(window, false);
   const expectedNormal = {
     x: 32,
     y: 32,

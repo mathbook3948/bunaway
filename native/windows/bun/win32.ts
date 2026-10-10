@@ -45,6 +45,8 @@ const SM_CXSIZEFRAME = 32;
 const SM_CYSIZEFRAME = 33;
 const SM_CXPADDEDBORDER = 92;
 const SW_HIDE = 0;
+const SW_SHOWNORMAL = 1;
+const SW_MINIMIZE = 6;
 const SW_RESTORE = 9;
 const SW_SHOW = 5;
 const SW_SHOWMAXIMIZED = 3;
@@ -55,7 +57,9 @@ const SWP_NOACTIVATE = 0x10;
 const SWP_NOSIZE = 0x1;
 const SWP_NOZORDER = 0x4;
 const WINDOWPLACEMENT_NORMAL_RECT_OFFSET = 28;
+const WINDOWPLACEMENT_FLAGS_OFFSET = 4;
 const WINDOWPLACEMENT_SHOW_CMD_OFFSET = 8;
+const WPF_RESTORETOMAXIMIZED = 0x2;
 const WS_OVERLAPPEDWINDOW = 0x00cf0000;
 const IDYES = 6;
 const MAX_MESSAGES_PER_PUMP = 64;
@@ -355,6 +359,78 @@ export class Windows {
       user.symbols.IsIconic(window) ? SW_RESTORE : SW_SHOW,
     );
     return !!user.symbols.SetForegroundWindow(window);
+  }
+
+  /** Read live HWND state; invalid handles must not be mistaken for false. */
+  isMinimized(window: bigint): boolean {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return user.symbols.IsIconic(window) !== 0;
+  }
+
+  isMaximized(window: bigint): boolean {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return user.symbols.IsZoomed(window) !== 0;
+  }
+
+  isVisible(window: bigint): boolean {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return user.symbols.IsWindowVisible(window) !== 0;
+  }
+
+  isFocused(window: bigint): boolean {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return user.symbols.GetForegroundWindow() === window;
+  }
+
+  /** ShowWindow returns previous visibility, so verify the requested native state instead. */
+  private changeShowState(
+    window: bigint,
+    command: number,
+    minimized: boolean,
+    maximized: boolean,
+  ) {
+    assert(
+      !this.isFullscreen(window),
+      "Exit fullscreen before changing window state.",
+    );
+    user.symbols.ShowWindow(window, command);
+    assert(
+      this.isVisible(window) &&
+        this.isMinimized(window) === minimized &&
+        this.isMaximized(window) === maximized,
+      "Windows did not apply the requested window state.",
+    );
+  }
+
+  minimize(window: bigint) {
+    this.changeShowState(window, SW_MINIMIZE, true, false);
+  }
+
+  maximize(window: bigint) {
+    this.changeShowState(window, SW_SHOWMAXIMIZED, false, true);
+  }
+
+  /** Normal restoration deliberately discards the minimized window's maximize history. */
+  unmaximize(window: bigint) {
+    this.changeShowState(window, SW_SHOWNORMAL, false, false);
+  }
+
+  /** Honor Windows' restore-to-maximized flag only when restoring a minimized window. */
+  restore(window: bigint) {
+    const restoreMaximized =
+      this.isMinimized(window) &&
+      (this.getPlacement(window).readUInt32LE(WINDOWPLACEMENT_FLAGS_OFFSET) &
+        WPF_RESTORETOMAXIMIZED) !==
+        0;
+    this.changeShowState(window, SW_RESTORE, false, restoreMaximized);
+  }
+
+  toggleMaximize(window: bigint) {
+    if (this.isMaximized(window)) {
+      this.unmaximize(window);
+    } else {
+      this.maximize(window);
+    }
   }
 
   /** Apply clamped logical dimensions and resize saved normal placement. */
@@ -922,6 +998,7 @@ export class Windows {
   }
 
   isFullscreen(window: bigint) {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
     return this.fullscreen.has(window);
   }
 

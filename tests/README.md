@@ -75,6 +75,11 @@ macOS WebContent PID 조회와 종료는 `lifecycle/macos-renderer.ts`가 맡으
 좌표 보정과 전체화면 중 현재 DPI에 따른 normal bounds 계산을 검사한다.
 작업 영역 오프셋이 다른 모니터로 최대화 창을 옮기거나 전체화면에 진입해도 원래 일반
 복원 rectangle의 모니터로 좌표를 보정하는지, 조회가 숨김 상태를 유지하는지도 검사한다.
+`api/window-state.test.ts`는 상태 제어와 조회의 입력 및 출력 schema, 뷰별 deny 우선 권한,
+전체화면 중 변경 거부, 닫힌 창과 허용된 미선언 뷰의 오류를 검사한다.
+`lifecycle/windows-window-state.test.ts`는 실제 Win32 창에서 최소화 전 최대화 복원과 일반
+복원의 차이, 숨긴 창의 표시, OS에서 직접 바꾼 상태 조회, 크기 제약과 전체화면 복원을 확인한다.
+공개 함수와 UI Worker, WebView2를 연결한 상태 제어와 조회는 `windows-bun-window-api.ts`로 검증한다.
 `lifecycle/windows-window-size.test.ts`는 서로 다른 작업 영역과 DPI에서 최대화 크기 보정과
 제약이 없는 축의 보존을 확인한다. `windows-size-constraints.test.ts`는 실제 Win32에서
 최대화 중 제약 축소, 확대와 해제, 숨긴 최대화 창과 최소화 창의 표시 상태 및 복원 크기를 검사한다.
@@ -85,6 +90,8 @@ macOS WebContent PID 조회와 종료는 `lifecycle/macos-renderer.ts`가 맡으
 `windows-window-size.test.ts`의 별도 프로세스는 Win32 DLL을 대체하고 실제 FFI 창 콜백을 호출한다.
 서로 다른 DPI와 해상도의 모니터로 이동하기 전에 전달된 제안 위치로 전체화면 대상을 선택하고,
 화면 영역, 숨김 상태, 활성화 방지와 저장된 크기 제약을 유지하는지 검사한다. 실제 물리 모니터 이동 검증과는 구분한다.
+같은 격리된 DLL 대체 환경에서 최대화 요청을 무시하도록 해도 성공으로 반환하지 않고
+네이티브 상태 확인 후 공개 `INTERNAL` 오류로 변환하는지 검사한다.
 `lifecycle/window-operations.test.ts`는 정리 대기 중 중복 생성, 마지막 창 재생성 예약,
 기존 문서 취소, 닫기 거절과 종료 경쟁을 검증한다. Windows 네이티브 실행기는
 `windows-bun-window-api.ts`로 크기와 위치, 전체화면 복원, 확인 대화상자 거절과 승인,

@@ -450,6 +450,27 @@ if (!process.argv.includes("--child")) {
       "test.aux": {
         ...contract,
         async run(_input: unknown, _context: CommandContext) {
+          for (const name of [
+            "minimize",
+            "maximize",
+            "unmaximize",
+            "restore",
+            "toggleMaximize",
+            "isMinimized",
+            "isMaximized",
+            "isFullscreen",
+            "isVisible",
+            "isFocused",
+          ] as const) {
+            await assert.rejects(
+              windows[name]({
+                view: "main",
+              }),
+              {
+                code: "PERMISSION_DENIED",
+              },
+            );
+          }
           await assert.rejects(
             windows.show({
               view: "main",
@@ -533,6 +554,45 @@ if (!process.argv.includes("--child")) {
             );
             await assertContentSize(500, 600);
             await waitFor(() => holds === 1);
+            const editor = {
+              view: "editor",
+            };
+            assert.equal(await windows.isVisible(editor), true);
+            assert.equal(await windows.isMinimized(editor), false);
+            assert.equal(await windows.isMaximized(editor), false);
+            await windows.maximize(editor);
+            assert.equal(await windows.isMaximized(editor), true);
+            await windows.minimize(editor);
+            assert.equal(await windows.isMinimized(editor), true);
+            await windows.restore(editor);
+            assert.equal(await windows.isMaximized(editor), true);
+            await windows.minimize(editor);
+            await windows.unmaximize(editor);
+            assert.equal(await windows.isMinimized(editor), false);
+            assert.equal(await windows.isMaximized(editor), false);
+            await windows.toggleMaximize(editor);
+            assert.equal(await windows.isMaximized(editor), true);
+            await windows.toggleMaximize(editor);
+            assert.equal(await windows.isMaximized(editor), false);
+            for (const name of [
+              "minimize",
+              "maximize",
+              "unmaximize",
+              "restore",
+              "toggleMaximize",
+            ] as const) {
+              await windows.hide(editor);
+              assert.equal(await windows.isVisible(editor), false);
+              assert.equal(await windows.isFocused(editor), false);
+              await windows[name](editor);
+              assert.equal(await windows.isVisible(editor), true);
+              await windows.unmaximize(editor);
+            }
+            console.log(
+              JSON.stringify({
+                event: "window-api-state",
+              }),
+            );
             await assert.rejects(
               windows.create({
                 view: "editor",
@@ -791,6 +851,18 @@ if (!process.argv.includes("--child")) {
               view: "editor",
               fullscreen: true,
             });
+            assert.equal(await windows.isFullscreen(editor), true);
+            for (const name of [
+              "minimize",
+              "maximize",
+              "unmaximize",
+              "restore",
+              "toggleMaximize",
+            ] as const) {
+              await assert.rejects(windows[name](editor), {
+                code: "INVALID_ARGUMENT",
+              });
+            }
             await assert.rejects(
               windows.setSize({
                 view: "editor",
@@ -829,6 +901,7 @@ if (!process.argv.includes("--child")) {
               fullscreen: false,
             });
             await assertContentSize(700, 550);
+            assert.equal(await windows.isFullscreen(editor), false);
             console.log(
               JSON.stringify({
                 event: "window-api-geometry",

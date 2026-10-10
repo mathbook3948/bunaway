@@ -37,6 +37,12 @@ const windowResult = {
     const: null,
   },
 } as const;
+const windowStateResult = {
+  input: windowTarget,
+  output: {
+    type: "boolean",
+  },
+} as const;
 const sizeDimension = {
   anyOf: [
     {
@@ -239,6 +245,16 @@ export const windowOperations = {
   "windows.show": windowResult,
   "windows.hide": windowResult,
   "windows.focus": windowResult,
+  "windows.minimize": windowResult,
+  "windows.maximize": windowResult,
+  "windows.unmaximize": windowResult,
+  "windows.restore": windowResult,
+  "windows.toggleMaximize": windowResult,
+  "windows.isMinimized": windowStateResult,
+  "windows.isMaximized": windowStateResult,
+  "windows.isFullscreen": windowStateResult,
+  "windows.isVisible": windowStateResult,
+  "windows.isFocused": windowStateResult,
   "windows.close": {
     input: windowTarget,
     output: {

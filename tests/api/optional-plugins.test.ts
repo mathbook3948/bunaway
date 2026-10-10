@@ -106,6 +106,13 @@ test("window permissions use generic deny-first matching and filter list results
       show: () => actions.push(view),
       focus: () => true,
       close: () => true,
+      minimize() {},
+      maximize() {},
+      unmaximize() {},
+      restore() {},
+      toggleMaximize() {},
+      isMinimized: () => false,
+      isMaximized: () => false,
       isFullscreen: () => false,
       getDpi: () => 144,
       getBounds: () => ({
@@ -115,6 +122,8 @@ test("window permissions use generic deny-first matching and filter list results
         height: 900,
         dpi: 144,
       }),
+      isVisible: () => true,
+      isFocused: () => false,
       getSizeConstraints: () => ({
         ...sizeConstraints.get(view)!,
       }),
