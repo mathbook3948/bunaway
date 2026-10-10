@@ -411,6 +411,8 @@
           "isMinimized",
           "isMaximized",
           "isFullscreen",
+          "getBounds",
+          "getDpi",
           "isVisible",
           "isFocused",
           "getSizeConstraints",
@@ -420,6 +422,13 @@
           "setFullscreen",
           "setCloseConfirmation"
         ]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "WindowBounds",
+      "pages": {
+        "reference/tooling/plugin-api": ["x", "y", "width", "height", "dpi"]
       }
     },
     {
@@ -725,6 +734,15 @@
       "windows.isFocused",
       "windows.close",
       "windows.setSize",
+      "windows.getContentSize",
+      "windows.getOuterSize",
+      "windows.getContentPosition",
+      "windows.getOuterPosition",
+      "windows.getContentBounds",
+      "windows.getOuterBounds",
+      "windows.getNormalBounds",
+      "windows.toLogical",
+      "windows.toPhysical",
       "windows.getMinSize",
       "windows.setMinSize",
       "windows.getMaxSize",
