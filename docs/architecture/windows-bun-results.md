@@ -507,5 +507,13 @@ CLI 번들의 5초 제한 세 건과 패키징의 60초 기한 초과, 이어진
 엔트리포인트 종료 후 자식 프로세스 정리를 확인했다. 로그는
 `build/host-windows-final.log`다. Inno Setup이 없어 설치 검사를 건너뛰었고 Windows의
 symlink 생성 권한이 없어 저장소의 마지막 파일 symlink 검사는 건너뛰었다.
+
+작업 중 main에 병합된 `bcdd503`을 PR 브랜치에 반영한 뒤 공통 SDK, 코어와 프로토콜,
+새 채널 회귀 및 창 계약 269개를 다시 검사해 모두 통과했다.
+`windows-window-readiness.ts`와 `windows-owned-modal.ts`의 실제 WebView2 실행도
+통과했다. 모달 검사는 자식 자원이 부모 자원보다 먼저 정리되고 종료 로그의
+잔류 프로세스가 0개인지 직접 검사한다. 최신 main에서 완료된 뒤 도착한 종료 훅의
+승인도 종료를 다시 시작하지 않았다. 로그는 `build/main-update-contract.log`,
+`build/windows-readiness-latest-main.log`, `build/windows-owned-modal/latest-main.log`다.
 초기 설정의 부모 지정, child HWND 임베딩, 다중 물리 모니터와 다른 플랫폼 실행은
 이번 작업에 포함하지 않았다.
