@@ -13,6 +13,10 @@ import {
 } from "@bunaway/protocol";
 
 export const WINDOW_VIEW_NAME_PATTERN = "^[A-Za-z0-9_.:-]{1,128}$(?![\\s\\S])";
+// Win32 geometry uses signed 32-bit components; WM_DPICHANGED carries a 16-bit DPI.
+export const MIN_WINDOW_COORDINATE = -2147483648;
+export const MAX_WINDOW_COORDINATE = 2147483647;
+const MAX_WINDOW_DPI = 65535;
 
 const windowTarget = {
   type: "object",
@@ -76,6 +80,137 @@ const sizeConstraintsOutput = {
     "minHeight",
     "maxWidth",
     "maxHeight",
+  ],
+  additionalProperties: false,
+} as const;
+
+const coordinate = {
+  type: "integer",
+  minimum: MIN_WINDOW_COORDINATE,
+  maximum: MAX_WINDOW_COORDINATE,
+} as const;
+const dimension = {
+  type: "integer",
+  minimum: 0,
+  maximum: MAX_WINDOW_COORDINATE,
+} as const;
+const dpi = {
+  type: "integer",
+  minimum: 1,
+  maximum: MAX_WINDOW_DPI,
+} as const;
+const positionProperties = {
+  x: coordinate,
+  y: coordinate,
+} as const;
+const sizeProperties = {
+  width: dimension,
+  height: dimension,
+} as const;
+const boundsProperties = {
+  ...positionProperties,
+  ...sizeProperties,
+} as const;
+const geometryTarget = {
+  ...windowTarget,
+  properties: {
+    ...windowTarget.properties,
+    unit: {
+      anyOf: [
+        {
+          const: "physical",
+        },
+        {
+          const: "logical",
+        },
+      ],
+    },
+  },
+} as const;
+const positionOutput = {
+  type: "object",
+  properties: {
+    ...positionProperties,
+    dpi,
+  },
+  required: [
+    "x",
+    "y",
+    "dpi",
+  ],
+  additionalProperties: false,
+} as const;
+const sizeOutput = {
+  type: "object",
+  properties: {
+    ...sizeProperties,
+    dpi,
+  },
+  required: [
+    "width",
+    "height",
+    "dpi",
+  ],
+  additionalProperties: false,
+} as const;
+const boundsOutput = {
+  type: "object",
+  properties: {
+    ...boundsProperties,
+    dpi,
+  },
+  required: [
+    "x",
+    "y",
+    "width",
+    "height",
+    "dpi",
+  ],
+  additionalProperties: false,
+} as const;
+
+const geometryValue = {
+  anyOf: [
+    {
+      type: "object",
+      properties: positionProperties,
+      required: [
+        "x",
+        "y",
+      ],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: sizeProperties,
+      required: [
+        "width",
+        "height",
+      ],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: boundsProperties,
+      required: [
+        "x",
+        "y",
+        "width",
+        "height",
+      ],
+      additionalProperties: false,
+    },
+  ],
+} as const;
+const conversionOutput = {
+  type: "object",
+  properties: {
+    value: geometryValue,
+    dpi,
+  },
+  required: [
+    "value",
+    "dpi",
   ],
   additionalProperties: false,
 } as const;
@@ -151,6 +286,62 @@ export const windowOperations = {
     output: {
       const: null,
     },
+  },
+  "windows.getContentSize": {
+    input: geometryTarget,
+    output: sizeOutput,
+  },
+  "windows.getOuterSize": {
+    input: geometryTarget,
+    output: sizeOutput,
+  },
+  "windows.getContentPosition": {
+    input: geometryTarget,
+    output: positionOutput,
+  },
+  "windows.getOuterPosition": {
+    input: geometryTarget,
+    output: positionOutput,
+  },
+  "windows.getContentBounds": {
+    input: geometryTarget,
+    output: boundsOutput,
+  },
+  "windows.getOuterBounds": {
+    input: geometryTarget,
+    output: boundsOutput,
+  },
+  "windows.getNormalBounds": {
+    input: geometryTarget,
+    output: boundsOutput,
+  },
+  "windows.toLogical": {
+    input: {
+      ...windowTarget,
+      properties: {
+        ...windowTarget.properties,
+        value: geometryValue,
+      },
+      required: [
+        "view",
+        "value",
+      ],
+    },
+    output: conversionOutput,
+  },
+  "windows.toPhysical": {
+    input: {
+      ...windowTarget,
+      properties: {
+        ...windowTarget.properties,
+        value: geometryValue,
+      },
+      required: [
+        "view",
+        "value",
+      ],
+    },
+    output: conversionOutput,
   },
   "windows.getMinSize": {
     input: windowTarget,

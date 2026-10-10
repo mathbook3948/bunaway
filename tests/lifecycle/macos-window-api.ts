@@ -102,6 +102,8 @@ try {
           "isVisible",
           "isFocused",
           "setSize",
+          "getOuterBounds",
+          "toLogical",
         ].map((name) => `plugin.windows.${name}`),
       ],
       events: [],
@@ -159,6 +161,8 @@ try {
           check(await windows.isVisible({view:"reader"}) === true, "show");
           try {await windows.focus({view:"reader"}); check(await windows.isFocused({view:"reader"}), "focus");} catch (error) {check(error.code === "BUSY", "focus error");}
           await error(() => windows.setSize({view:"reader",width:400,height:400}), "UNSUPPORTED");
+          await error(() => windows.getOuterBounds({view:"reader"}), "UNSUPPORTED");
+          await error(() => windows.toLogical({view:"reader",value:{width:400,height:400}}), "UNSUPPORTED");
           for (let index = 0; index < 3; index++) {
             await windows.create({view:"lazy"});
             await client.invoke("test.wait", {view:"lazy",count:index*2+1});

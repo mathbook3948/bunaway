@@ -185,6 +185,8 @@ export class MacosWindows {
       close: () => this.closeView(viewId),
       isVisible: () => native.isVisible(),
       isFocused: () => native.isFocused(),
+      getBounds: unsupported,
+      getDpi: unsupported,
       minimize: unsupported,
       maximize: unsupported,
       unmaximize: unsupported,

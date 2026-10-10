@@ -65,7 +65,7 @@ test("maximized client constraints scale with DPI without rounding unchanged dim
   });
 });
 
-test("fullscreen DPI changes select the suggested monitor before the window moves", async () => {
+test("normal bounds and fullscreen DPI changes preserve monitor selection and valid maximize history", async () => {
   const child = Bun.spawn(
     [
       process.execPath,

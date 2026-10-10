@@ -118,7 +118,9 @@ test.skipIf(process.platform !== "win32")(
         if (maximized) {
           windows.maximize(hwnd);
         }
+        expect(windows.isMaximized(hwnd)).toBe(maximized);
         windows.show(hwnd, false);
+        expect(windows.isMaximized(hwnd)).toBe(maximized);
         windows.setFullscreen(hwnd, true);
         expect(windows.isFullscreen(hwnd)).toBe(true);
         for (const action of [
