@@ -3,22 +3,18 @@ import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
-import { Channel, type UIConfig } from "../../native/windows/bun/channel.ts";
-import type { PackagedPlugin } from "../../native/windows/bun/plugin-contract.ts";
+import { Channel, type UIConfig } from "#native/windows/bun/channel";
+import type { PackagedPlugin } from "#native/windows/bun/plugin-contract";
 import {
   disposeAll,
   operations,
   permissionMatcher,
   pluginRegistry,
-} from "../../native/windows/bun/plugins.ts";
-import {
-  defineNativePlugin,
-  type NativeEnvironment,
-  s,
-} from "../../packages/plugin-sdk/src/index.ts";
-import { validateValue } from "../../packages/protocol/src/index.ts";
-import { capabilitiesPlugin } from "../../plugins/capabilities/src/index.ts";
-import { createOperations as createCapabilities } from "../../plugins/capabilities/src/windows.ts";
+} from "#native/windows/bun/plugins";
+import { defineNativePlugin, type NativeEnvironment, s } from "@bunaway/plugin";
+import { validateValue } from "@bunaway/protocol";
+import { capabilitiesPlugin } from "@bunaway/plugin-capabilities";
+import { createOperations as createCapabilities } from "#plugins/capabilities/src/windows";
 import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
 
 const native = {

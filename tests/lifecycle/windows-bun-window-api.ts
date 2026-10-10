@@ -3,15 +3,12 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runWindowsApp } from "../../native/windows/bun/entry.ts";
-import { Windows } from "../../native/windows/bun/win32.ts";
-import { user } from "../../native/windows/bun/win32-bindings.ts";
-import {
-  type CommandContext,
-  defineApp,
-} from "../../packages/backend-sdk/src/index.ts";
-import type { HostContext, Policy } from "../../packages/protocol/src/index.ts";
-import { windows, windowsPlugin } from "../../plugins/windows/src/index.ts";
+import { runWindowsApp } from "#native/windows/bun/entry";
+import { Windows } from "#native/windows/bun/win32";
+import { user } from "#native/windows/bun/win32-bindings";
+import { type CommandContext, defineApp } from "@bunaway/backend";
+import type { HostContext, Policy } from "@bunaway/protocol";
+import { windows, windowsPlugin } from "@bunaway/plugin-windows";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 
 assert.equal(process.platform, "win32");
@@ -933,7 +930,7 @@ if (!process.argv.includes("--child")) {
     dataRoot: resolve(output, `data-${process.pid}`),
     loader: resolve(
       root,
-      "native/windows/bun/vendor/sdk/build/native/x64/WebView2Loader.dll",
+      "build/cache/webview2/sdk/build/native/x64/WebView2Loader.dll",
     ),
   });
   process.exit(0);

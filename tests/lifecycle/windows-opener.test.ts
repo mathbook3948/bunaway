@@ -3,8 +3,8 @@ import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
-import { Channel, type UIConfig } from "../../native/windows/bun/channel.ts";
-import { openerPlugin } from "../../plugins/opener/src/index.ts";
+import { Channel, type UIConfig } from "#native/windows/bun/channel";
+import { openerPlugin } from "@bunaway/plugin-opener";
 import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
 
 test.skipIf(process.platform !== "win32")(

@@ -4,9 +4,9 @@ import type {
   NativeRegistration,
   Policy,
   RuntimeIdentity,
-} from "../../../packages/protocol/src/index.ts";
-import type { WindowSpec } from "../../../packages/runtime-bun/src/window-config.ts";
-export * from "../../../packages/runtime-bun/src/worker-channel.ts";
+} from "@bunaway/protocol";
+import type { WindowSpec } from "@bunaway/runtime-bun/window-config";
+export * from "@bunaway/runtime-bun/worker-channel";
 export type UIConfig = {
   runtime: RuntimeIdentity;
   policy: Policy;

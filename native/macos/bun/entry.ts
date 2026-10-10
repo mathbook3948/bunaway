@@ -1,9 +1,9 @@
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Worker } from "node:worker_threads";
-import { DiagnosticLog } from "../../../packages/runtime-bun/src/diagnostic-log.ts";
-import { ViewBoundary } from "../../../packages/runtime-bun/src/view-boundary.ts";
-import { Channel } from "../../../packages/runtime-bun/src/worker-channel.ts";
+import { DiagnosticLog } from "@bunaway/runtime-bun/diagnostic-log";
+import { ViewBoundary } from "@bunaway/runtime-bun/view-boundary";
+import { Channel } from "@bunaway/runtime-bun/worker-channel";
 import type { MacosConfig } from "./config.ts";
 import { macosOrigin } from "./urls.ts";
 import { MacosWebview } from "./webview.ts";

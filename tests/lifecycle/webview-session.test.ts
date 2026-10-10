@@ -1,16 +1,12 @@
 import { expect, test } from "bun:test";
-import type { Packet, Route } from "../../native/windows/bun/channel.ts";
-import { command } from "../../packages/backend-sdk/src/index.ts";
+import type { Packet, Route } from "#native/windows/bun/channel";
+import { command } from "@bunaway/backend";
 import {
   createClient,
   createWebViewTransport,
   type WebViewBridge,
-} from "../../packages/client-sdk/src/index.ts";
-import {
-  type CoreSession,
-  createCore,
-  type EventEmitter,
-} from "../../packages/core/src/index.ts";
+} from "@bunaway/client";
+import { type CoreSession, createCore, type EventEmitter } from "@bunaway/core";
 import {
   type Hello,
   type Message,
@@ -19,8 +15,8 @@ import {
   parseMessage,
   type ServerMessage,
   type WireError,
-} from "../../packages/protocol/src/index.ts";
-import { ViewBoundary } from "../../packages/runtime-bun/src/view-boundary.ts";
+} from "@bunaway/protocol";
+import { ViewBoundary } from "@bunaway/runtime-bun/view-boundary";
 
 test.each([
   "invalid-result",

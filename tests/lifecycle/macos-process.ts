@@ -24,8 +24,8 @@ import {
   type ProcessFrame,
   serializeProcessFrame,
   validateValue,
-} from "../../packages/protocol/src/index.ts";
-import { readJsonLines } from "../../packages/runtime-bun/src/process-ipc.ts";
+} from "@bunaway/protocol";
+import { readJsonLines } from "#runtime-bun/process-ipc";
 import { validationCases } from "../protocol/validation-cases.ts";
 
 const original = resolve(

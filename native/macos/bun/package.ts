@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { cp, mkdir, rm, writeFile } from "node:fs/promises";
 import { relative, resolve } from "node:path";
-import { bundleMacosHost } from "../../../packages/cli/src/assets.ts";
-import { files, hash, writeJson } from "../../../packages/cli/src/files.ts";
-import { compileMacosApp } from "../../../packages/cli/src/macos-compile.ts";
-import { run } from "../../../packages/cli/src/processes.ts";
+import { bundleMacosHost } from "#cli/assets";
+import { files, hash, writeJson } from "#cli/files";
+import { compileMacosApp } from "#cli/macos-compile";
+import { run } from "#cli/processes";
 import pin from "../../../runtime/build-manifests/darwin-aarch64.json";
 import { macosApp } from "../../../tests/fixtures/desktop/host/macos-app.ts";
 

@@ -114,3 +114,11 @@ MSIX 설치, 앱 실행은 현재 지원하지 않는다.
 
 Windows의 `signing.certificateFile` 상대 경로는 프로젝트 루트를 기준으로 해석한다.
 절대 경로는 그대로 사용한다.
+
+## 작업 파일
+
+CLI와 패키징은 `@bunaway/packaging/paths`의 `outputPaths`를 사용한다.
+설치 스크립트, 서명 콜백, 임시 인증서와 패키지 복사본은 `.bunaway/work/<target>/`의
+실행별 디렉터리에 만들며, 빌드와 채널 잠금은 `.bunaway/locks/<target>/`에 둔다.
+성공한 결과는 `dist/<target>/packaged/`에 게시한다. 출력 교체용 백업과 임시 보고서는
+게시 위치 옆에서 관리하며 복구와 정리 순서는 runner가 소유한다.

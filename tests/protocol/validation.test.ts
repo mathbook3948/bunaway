@@ -7,8 +7,8 @@ import {
   serializeProcessFrame,
   type Message,
   validateValue,
-} from "../../packages/protocol/src/index.ts";
-import { parse } from "../../packages/protocol/src/validation.ts";
+} from "@bunaway/protocol";
+import { parse } from "#protocol/validation";
 import { validationCases } from "./validation-cases.ts";
 
 test("receive size uses original JSON while sending bounds serialized JSON", () => {

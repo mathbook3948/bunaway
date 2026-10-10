@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { buildProject } from "../../packages/cli/src/build.ts";
+import { buildProject } from "#cli/build";
 import { createProject } from "./project.ts";
 
 const macos = process.platform === "darwin" && process.arch === "arm64";

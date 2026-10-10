@@ -1,10 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type {
-  AppDefinition,
-  CommandDefinition,
-} from "../../../../packages/core/src/index.ts";
+import type { AppDefinition, CommandDefinition } from "@bunaway/core";
 import shared from "./app.ts";
 
 // macOS has no native plugin adapter. Keep the common command/event boundary

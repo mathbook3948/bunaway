@@ -7,9 +7,9 @@ import {
   defineApp,
   defineModule,
   type PluginDefinition,
-} from "../../packages/backend-sdk/src/index.ts";
-import { createClient } from "../../packages/client-sdk/src/index.ts";
-import type { CoreServices } from "../../packages/core/src/index.ts";
+} from "@bunaway/backend";
+import { createClient } from "@bunaway/client";
+import type { CoreServices } from "@bunaway/core";
 import {
   type ClientMessage,
   type HostCall,
@@ -19,10 +19,10 @@ import {
   type Policy,
   parseMessage,
   type TransportEvent,
-} from "../../packages/protocol/src/index.ts";
-import { capabilities } from "../../plugins/capabilities/src/index.ts";
-import { log } from "../../plugins/log/src/index.ts";
-import { storage } from "../../plugins/storage/src/index.ts";
+} from "@bunaway/protocol";
+import { capabilities } from "@bunaway/plugin-capabilities";
+import { log } from "@bunaway/plugin-log";
+import { storage } from "@bunaway/plugin-storage";
 import {
   allowedHost,
   bindHostAPI,
@@ -1031,7 +1031,7 @@ export function checkHostTypes() {
 }
 
 test("window helpers preserve the command context and typed operation payloads", async () => {
-  const { windows } = await import("../../plugins/windows/src/index.ts");
+  const { windows } = await import("@bunaway/plugin-windows");
   await expect(windows.list()).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
   });

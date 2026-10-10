@@ -6,7 +6,7 @@ import {
   type Packet,
   type Route,
   validatePacket,
-} from "../../native/windows/bun/channel.ts";
+} from "#native/windows/bun/channel";
 import {
   API_LIMITS,
   type Hello,
@@ -16,8 +16,8 @@ import {
   parseMessage,
   serializeMessage,
   type WireError,
-} from "../../packages/protocol/src/index.ts";
-import { ViewBoundary } from "../../packages/runtime-bun/src/view-boundary.ts";
+} from "@bunaway/protocol";
+import { ViewBoundary } from "@bunaway/runtime-bun/view-boundary";
 
 const route: Route = {
   viewId: "main",

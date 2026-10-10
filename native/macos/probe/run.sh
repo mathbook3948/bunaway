@@ -31,8 +31,8 @@ download() { # download <url> <file> <sha256>
 
 BUN_TARGET=$(field bun target)
 [[ "$BUN_TARGET" == darwin-aarch64 ]] || { echo "Unexpected Bun target: $BUN_TARGET" >&2; exit 1; }
-CACHE="$ROOT/runtime/bun-bundle/vendor"
-JSON_DIR="$HERE/vendor"
+CACHE="$ROOT/build/cache/bun"
+JSON_DIR="$ROOT/build/cache/nlohmann-json"
 mkdir -p "$CACHE" "$JSON_DIR"
 ARCHIVE="$CACHE/bun-$BUN_TARGET.zip"
 download "$(field bun archiveUrl)" "$ARCHIVE" "$(field bun archiveSha256)"
@@ -55,7 +55,7 @@ command -v clang++ >/dev/null || { echo "Xcode CLT clang++ is required." >&2; ex
 BUILD="$ROOT/build/macos-probe"
 PACKAGE="$BUILD/package"
 mkdir -p "$PACKAGE/assets/tmp" "$PACKAGE/licenses" "$PACKAGE/runtime"
-clang++ -std=c++20 -O2 -Wall -Wextra -I"$HERE/vendor" "$HERE/host.cpp" -o "$BUILD/bunaway-probe"
+clang++ -std=c++20 -O2 -Wall -Wextra -I"$JSON_DIR" "$HERE/host.cpp" -o "$BUILD/bunaway-probe"
 cp -f "$BUILD/bunaway-probe" "$PACKAGE/bunaway-probe"
 cp "$BUNDLED" "$PACKAGE/runtime/bun"
 chmod +x "$PACKAGE/bunaway-probe" "$PACKAGE/runtime/bun"

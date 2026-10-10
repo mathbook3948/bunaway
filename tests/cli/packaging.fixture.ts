@@ -1,40 +1,28 @@
 import { expect, mock, spyOn } from "bun:test";
 import * as fs from "node:fs/promises";
 import { readdir, rm as removeCompileAssets, rm } from "node:fs/promises";
-import { relative, resolve } from "node:path";
-import * as build from "../../packages/cli/src/build.ts";
-import * as files from "../../packages/cli/src/files.ts";
-import * as windowsCompile from "../../packages/cli/src/windows-compile.ts";
-import {
-  adapterFor,
-  CODES,
-  registerAdapter,
-} from "../../packages/packaging/src/index.ts";
+import { basename, dirname, relative, resolve } from "node:path";
+import * as build from "#cli/build";
+import * as files from "#cli/files";
+import * as windowsCompile from "#cli/windows-compile";
+import { adapterFor, CODES, registerAdapter } from "@bunaway/packaging";
 
 // Store the bundled assets in a readable executable fixture so packaging tests can inspect them.
-mock.module(
-  import.meta.resolve("../../packages/cli/src/windows-compile.ts"),
-  () => ({
-    ...windowsCompile,
-    compileWindowsApp: async (
-      root: string,
-      _bun: string,
-      executable: string,
-    ) => {
-      const embedded: Record<string, string> = {};
-      for (const path of await files.files(resolve(root, "assets"))) {
-        embedded[
-          relative(resolve(root, "assets"), path).replaceAll("\\", "/")
-        ] = await Bun.file(path).text();
-      }
-      await Bun.write(resolve(root, executable), JSON.stringify(embedded));
-      await removeCompileAssets(resolve(root, "assets"), {
-        recursive: true,
-        force: true,
-      });
-    },
-  }),
-);
+mock.module(import.meta.resolve("#cli/windows-compile"), () => ({
+  ...windowsCompile,
+  compileWindowsApp: async (root: string, _bun: string, executable: string) => {
+    const embedded: Record<string, string> = {};
+    for (const path of await files.files(resolve(root, "assets"))) {
+      embedded[relative(resolve(root, "assets"), path).replaceAll("\\", "/")] =
+        await Bun.file(path).text();
+    }
+    await Bun.write(resolve(root, executable), JSON.stringify(embedded));
+    await removeCompileAssets(resolve(root, "assets"), {
+      recursive: true,
+      force: true,
+    });
+  },
+}));
 async function compiledAsset(artifact: build.BuiltPackage, name: string) {
   return (await Bun.file(artifact.executable).json())[name] as string;
 }
@@ -69,7 +57,7 @@ const buildProject = build.buildProject;
 const readJson = files.json;
 let builds = 0;
 let nativeTarget: build.NativeInputs["target"] = "windows-x64";
-mock.module(import.meta.resolve("../../packages/cli/src/files.ts"), () => ({
+mock.module(import.meta.resolve("#cli/files"), () => ({
   ...files,
   json: async (path: string) => {
     const value = await readJson(path);
@@ -102,7 +90,7 @@ mock.module(import.meta.resolve("../../packages/cli/src/files.ts"), () => ({
     return value;
   },
 }));
-mock.module(import.meta.resolve("../../packages/cli/src/build.ts"), () => ({
+mock.module(import.meta.resolve("#cli/build"), () => ({
   ...build,
   currentTarget: () => nativeTarget,
   buildProject: async (directory: string) => {
@@ -120,7 +108,7 @@ async function setBundle(value: Record<string, unknown>) {
     bundle: value,
   });
 }
-const { packageProject } = await import("../../packages/cli/src/package.ts");
+const { packageProject } = await import("#cli/package");
 // A dev URL is included only in development output; production stays on local assets.
 const settings = (await readJson(configPath)) as Record<string, unknown>;
 const devUrl = "http://127.0.0.1:5173/";
@@ -172,6 +160,101 @@ expect(productionPolicy.views[0].origins).toEqual([
 expect(production.arguments).not.toContain("--dev-url");
 await files.writeJson(configPath, settings);
 
+// Reject a work parent changed after assembly or while replacing the previous output.
+for (const phase of [
+  "assembly",
+  "publication",
+]) {
+  const previousManifest = await Bun.file(
+    resolve(production.package, "manifest.json"),
+  ).text();
+  const previousExecutable = await Bun.file(production.executable).text();
+  const work = resolve(project, ".bunaway/work/windows-x64");
+  const saved = resolve(project, `.bunaway/saved-work-${crypto.randomUUID()}`);
+  const external = resolve(project, `../external-work-${crypto.randomUUID()}`);
+  await fs.mkdir(external);
+  let staging = "";
+  let redirected = false;
+  const originalRename = fs.rename;
+  const originalWriteFile = fs.writeFile;
+  async function redirectWork() {
+    const name = (await readdir(work)).find((entry) =>
+      entry.startsWith("windows-x64.building-"),
+    );
+    if (!name) {
+      throw new Error("Missing build staging directory.");
+    }
+    staging = resolve(work, name);
+    await originalRename(work, saved);
+    await fs.symlink(external, work, "junction");
+    redirected = true;
+    await fs.mkdir(resolve(external, name));
+    await Bun.write(resolve(external, name, "sentinel.txt"), "external bytes");
+  }
+  const assembly = spyOn(fs, "writeFile").mockImplementation(
+    async (path, data, options) => {
+      await originalWriteFile(path, data, options);
+      const parent = dirname(String(path));
+      const buildManifest =
+        basename(String(path)) === "manifest.json" &&
+        dirname(parent) === work &&
+        basename(parent).startsWith("windows-x64.building-");
+      if (phase === "assembly" && buildManifest) {
+        await redirectWork();
+      }
+    },
+  );
+  const publication = spyOn(fs, "rename").mockImplementation(
+    async (from, to) => {
+      await originalRename(from, to);
+      if (
+        phase === "publication" &&
+        from === production.output &&
+        String(to).startsWith(`${production.output}.previous-`)
+      ) {
+        await redirectWork();
+      }
+    },
+  );
+  try {
+    await expect(
+      buildProject(project, {
+        native,
+      }),
+    ).rejects.toThrow("without links");
+    expect(redirected).toBe(true);
+    expect(
+      await Bun.file(resolve(production.package, "manifest.json")).text(),
+    ).toBe(previousManifest);
+    expect(await Bun.file(production.executable).text()).toBe(
+      previousExecutable,
+    );
+    expect(
+      await Bun.file(
+        resolve(external, basename(staging), "sentinel.txt"),
+      ).text(),
+    ).toBe("external bytes");
+    expect(
+      await readdir(resolve(project, ".bunaway/locks/windows-x64")),
+    ).toEqual([]);
+  } finally {
+    assembly.mockRestore();
+    publication.mockRestore();
+    if (redirected) {
+      await fs.unlink(work);
+      await originalRename(saved, work);
+      await fs.rm(staging, {
+        recursive: true,
+        force: true,
+      });
+    }
+    await fs.rm(external, {
+      recursive: true,
+      force: true,
+    });
+  }
+}
+
 // Reject output overlap before a tool can clear app output or its locks.
 // Resolve aliases even when their frontend subdirectories do not exist yet.
 const overlapMarker = resolve(project, "unexpected-overlap-build.txt");
@@ -194,7 +277,7 @@ try {
     "dist/windows-x64",
     "dist/windows-x64/assets/web",
     "dist/macos-arm64",
-    "dist/.bunaway-locks",
+    ".bunaway/locks",
     ".bunaway/web",
     "output-alias/windows-x64/not-built",
     "pending-output-alias/not-built",
@@ -221,7 +304,7 @@ try {
       await Bun.file(resolve(production.package, "manifest.json")).text(),
     ).toBe(intactManifest);
     expect(
-      await readdir(resolve(project, "dist/.bunaway-locks/windows-x64")),
+      await readdir(resolve(project, ".bunaway/locks/windows-x64")),
     ).toEqual([]);
   }
   // A separate frontend output can share dist with the app without containing it.
@@ -232,9 +315,7 @@ try {
       frontend: "dist/web",
     },
   });
-  const { readProjectMetadata } = await import(
-    "../../packages/cli/src/config.ts"
-  );
+  const { readProjectMetadata } = await import("#cli/config");
   expect((await readProjectMetadata(project)).frontend).toBe(
     resolve(project, "dist/web"),
   );
@@ -382,9 +463,9 @@ for (const command of [
     await Bun.file(resolve(latestWeb.package, "manifest.json")).text(),
   ).toBe(previousManifest);
   expect(await compiledAsset(latestWeb, "web/index.html")).toBe("latest UI");
-  expect(
-    await readdir(resolve(project, "dist/.bunaway-locks/windows-x64")),
-  ).toEqual([]);
+  expect(await readdir(resolve(project, ".bunaway/locks/windows-x64"))).toEqual(
+    [],
+  );
 }
 await files.writeJson(configPath, {
   ...webSettings,
@@ -622,7 +703,7 @@ expect(await Bun.file(previous).text()).toBe("installer 3");
 expect(await Bun.file(other).text()).toBe("another channel");
 expect(await Bun.file(otherReport).text()).toBe("another report");
 
-const lockPath = resolve(packaged, "win-direct.lock");
+const lockPath = resolve(project, ".bunaway/locks/windows-x64/win-direct.lock");
 const reportPath = resolve(packaged, "win-direct-report.json");
 const savedReport = await Bun.file(reportPath).text();
 const savedAssemblies = assembled;
@@ -766,9 +847,9 @@ expect(
   ),
 ).toBe(false);
 expect((await packageProject(project, "win-direct")).ok).toBe(true);
-expect(
-  await readdir(resolve(project, "dist/.bunaway-locks/windows-x64")),
-).toEqual([]);
+expect(await readdir(resolve(project, ".bunaway/locks/windows-x64"))).toEqual(
+  [],
+);
 
 // An existing junction in the published tree survives rebuilds without recreation.
 withHelper = true;
@@ -790,14 +871,16 @@ expect(await Bun.file(resolve(link, "helper.exe")).text()).toBe(
 expect(await Bun.file(reportPath).text()).toBe(linkedReportText);
 expect(await Bun.file(other).text()).toBe("another channel");
 
-// Directory ownership is checked at every output/lock boundary, not just at leaves.
+// Directory ownership is checked at every output, work and lock boundary.
 for (const boundary of [
   ".bunaway",
   "dist",
   "dist/windows-x64",
   "dist/windows-x64/packaged",
-  "dist/.bunaway-locks",
-  "dist/.bunaway-locks/windows-x64",
+  ".bunaway/locks",
+  ".bunaway/locks/windows-x64",
+  ".bunaway/work",
+  ".bunaway/work/windows-x64",
   "dist/windows-x64/packaged/win-direct",
 ]) {
   const path = resolve(project, boundary);
@@ -879,12 +962,15 @@ for (const failure of [
   expect(await Bun.file(reportPath).text()).toBe(linkedReportText);
   expect(await Bun.file(other).text()).toBe("another channel");
   expect(await Bun.file(otherReport).text()).toBe("another report");
+  expect(await readdir(resolve(project, ".bunaway/work/windows-x64"))).toEqual(
+    [],
+  );
   expect(
     (await readdir(resolve(project, "dist"))).some((name) =>
       /\.building-|\.previous-/.test(name),
     ),
   ).toBe(false);
-  expect(
-    await readdir(resolve(project, "dist/.bunaway-locks/windows-x64")),
-  ).toEqual([]);
+  expect(await readdir(resolve(project, ".bunaway/locks/windows-x64"))).toEqual(
+    [],
+  );
 }

@@ -1,5 +1,5 @@
-import { createClient } from "../../../packages/client-sdk/src/index.ts";
-import { storage } from "../../../plugins/storage/src/index.ts";
+import { createClient } from "@bunaway/client";
+import { storage } from "@bunaway/plugin-storage";
 
 const client = createClient();
 const file = {

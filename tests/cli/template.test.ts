@@ -2,25 +2,19 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import {
-  type Project,
-  validateProject,
-} from "../../packages/cli/src/config.ts";
-import { installedPackageRoot } from "../../packages/cli/src/files.ts";
-import {
-  assertAppDefinitionExport,
-  buildWithSdk,
-  sdkPlugin,
-} from "../../packages/cli/src/sdk.ts";
-import { createClient } from "../../packages/client-sdk/src/index.ts";
+import { type Project, validateProject } from "#cli/config";
+import { appModules } from "#cli/app-modules";
+import { installedPackageRoot } from "#cli/files";
+import { assertAppDefinitionExport, buildWithSdk, sdkPlugin } from "#cli/sdk";
+import { createClient } from "@bunaway/client";
 import {
   PROTOCOL_VERSION,
   type ProcessFrame,
   parseHostCall,
   parseProcessFrame,
   type TransportEvent,
-} from "../../packages/protocol/src/index.ts";
-import { readJsonLines } from "../../packages/runtime-bun/src/index.ts";
+} from "@bunaway/protocol";
+import { readJsonLines } from "@bunaway/runtime-bun";
 import { createProject } from "./project.ts";
 
 /** Bundle the legacy process adapter only for its SDK contract test. */
@@ -32,26 +26,30 @@ async function bundleProcessBackend(
   await mkdir(assets, {
     recursive: true,
   });
-  const entry = resolve(assets, "process-entry.ts");
   const runtime = resolve(
     await installedPackageRoot(project.frameworkRoot, "@bunaway/runtime-bun"),
     "src/index.ts",
   );
-  await Bun.write(
-    entry,
-    `import app from ${JSON.stringify(project.appEntry)};
-import { runBunApp } from ${JSON.stringify(runtime)};
-await runBunApp(app);`,
-  );
+  const sdk = await sdkPlugin(project.root, [], project.nativePlugins);
   const outputs = await buildWithSdk(
     {
       entrypoints: [
-        entry,
+        "bunaway-generated/backend.ts",
       ],
+      root: project.root,
       target: "bun",
       packages: "bundle",
     },
-    await sdkPlugin(project.root, [], project.nativePlugins),
+    {
+      name: "process-contract-entry",
+      setup(build) {
+        sdk.setup(build);
+        appModules({
+          appEntry: project.appEntry,
+          processRuntime: runtime,
+        }).setup(build);
+      },
+    },
   );
   const output = outputs[0];
   if (outputs.length !== 1 || !output) {

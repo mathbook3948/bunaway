@@ -87,9 +87,6 @@ export const frameworkPaths = [
 const generatedDirectories = [
   "node_modules",
   "build",
-  "runtime/bun-bundle/vendor",
-  "native/windows/bun/vendor",
-  "native/macos/vendor",
 ] as const;
 
 /** Version and protocol pins that keep the CLI, SDK packages and native hosts aligned. */
@@ -416,6 +413,7 @@ function requiredFrameworkFiles(): string[] {
     "runtime/build-manifests/windows-x64.json",
     "runtime/build-manifests/darwin-aarch64.json",
     "packages/cli/src/assets.ts",
+    "packages/cli/src/app-modules.ts",
     "packages/cli/src/sdk.ts",
     "packages/cli/src/plugins.ts",
     "packages/cli/src/dev-server.ts",
@@ -429,6 +427,7 @@ function requiredFrameworkFiles(): string[] {
     "packages/runtime-bun/src/development.ts",
     "packages/runtime-bun/src/window-config.ts",
     "packages/runtime-bun/src/windows-control.ts",
+    "packages/packaging/src/paths.ts",
     ...Object.keys(packageNames).flatMap((directory) =>
       [
         "package.json",

@@ -11,17 +11,14 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { runInNewContext } from "node:vm";
-import { buildProject, bundleAssets } from "../../packages/cli/src/build.ts";
-import {
-  readProjectMetadata,
-  validateProject,
-} from "../../packages/cli/src/config.ts";
+import { buildProject, bundleAssets } from "#cli/build";
+import { readProjectMetadata, validateProject } from "#cli/config";
 import {
   isAppCodeChange,
   RestartController,
   shouldRestartHost,
-} from "../../packages/cli/src/dev.ts";
-import { hash, writeJson } from "../../packages/cli/src/files.ts";
+} from "#cli/dev";
+import { hash, writeJson } from "#cli/files";
 import { createProject, storageRoundtripUI } from "./project.ts";
 
 let home: string;
@@ -518,9 +515,7 @@ test("bundle is optional until packaging and generated settings stay beside app 
     ]);
     await writeJson(path, withoutBundle);
     expect((await validateProject(project)).bundle).toBeUndefined();
-    const { packageProject } = await import(
-      "../../packages/cli/src/package.ts"
-    );
+    const { packageProject } = await import("#cli/package");
     await expect(packageProject(project, "win-direct")).rejects.toThrow(
       "bunaway.json.bundle",
     );
@@ -1189,7 +1184,7 @@ test.each([
       expect((await fetch(`http://127.0.0.1:${port}/`)).ok).toBe(true);
       expect(
         await Bun.file(
-          resolve(project, "dist/.bunaway-locks/windows-x64/build.lock"),
+          resolve(project, ".bunaway/locks/windows-x64/build.lock"),
         ).exists(),
       ).toBe(true);
       if (process.platform === "win32") {
@@ -1206,7 +1201,7 @@ test.each([
       expect(await output).toContain("PASS build signal handler cleanup");
       expect(await errors).toContain(`cancelled (${signal})`);
       expect(
-        await readdir(resolve(project, "dist/.bunaway-locks/windows-x64")),
+        await readdir(resolve(project, ".bunaway/locks/windows-x64")),
       ).toEqual([]);
       expect(await Bun.file(manifestPath).text()).toBe(manifest);
       await expect(
@@ -1275,7 +1270,7 @@ test.skipIf(process.platform !== "win32" || process.arch !== "x64")(
     const interrupt = resolve(project, "build-interrupt.txt");
     const output = resolve(project, "dist/windows-x64");
     const manifestPath = resolve(output, "manifest.json");
-    const lockDirectory = resolve(project, "dist/.bunaway-locks/windows-x64");
+    const lockDirectory = resolve(project, ".bunaway/locks/windows-x64");
     const cleanFixtureEnv = {
       ...process.env,
       BUNAWAY_TEST_COMPILE_SIGNAL: "",

@@ -1,18 +1,11 @@
 import { parentPort, workerData } from "node:worker_threads";
-import {
-  createCore,
-  type Core,
-  type CoreSession,
-} from "../../../packages/core/src/index.ts";
-import {
-  BunawayError,
-  PROTOCOL_VERSION,
-} from "../../../packages/protocol/src/index.ts";
+import { createCore, type Core, type CoreSession } from "@bunaway/core";
+import { BunawayError, PROTOCOL_VERSION } from "@bunaway/protocol";
 import {
   Channel,
   type Packet,
   type Route,
-} from "../../../packages/runtime-bun/src/worker-channel.ts";
+} from "@bunaway/runtime-bun/worker-channel";
 import type { MacosConfig } from "./config.ts";
 
 const config: MacosConfig = workerData;

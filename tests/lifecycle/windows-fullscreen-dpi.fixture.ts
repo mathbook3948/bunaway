@@ -70,116 +70,112 @@ function monitorInfo(handle: bigint) {
 }
 
 const wide = (text: string) => Buffer.from(`${text}\0`, "utf16le");
-mock.module(
-  import.meta.resolve("../../native/windows/bun/win32-bindings.ts"),
-  () => ({
-    hr: (result: number) => assert(result >= 0),
-    wide,
-    withWide: <T>(text: string, action: (address: Pointer) => T) =>
-      action(ptr(wide(text))),
-    kernel: {
-      symbols: {
-        GetCurrentThreadId: () => 1,
-        GetModuleHandleW: () => 1n,
-        GetLastError: () => 0,
-        SetLastError() {},
+mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
+  hr: (result: number) => assert(result >= 0),
+  wide,
+  withWide: <T>(text: string, action: (address: Pointer) => T) =>
+    action(ptr(wide(text))),
+  kernel: {
+    symbols: {
+      GetCurrentThreadId: () => 1,
+      GetModuleHandleW: () => 1n,
+      GetLastError: () => 0,
+      SetLastError() {},
+    },
+  },
+  user: {
+    symbols: {
+      LoadIconW: () => 1n,
+      SetThreadDpiAwarenessContext: () => -4n,
+      RegisterClassExW(address: Pointer) {
+        callbackAddress = Number(view(address, 80).getBigUint64(8, true));
+        return 1;
+      },
+      UnregisterClassW: () => 1,
+      CreateWindowExW: () => 1n,
+      DestroyWindow: () => 1,
+      IsWindowVisible: () => Number((style & WS_VISIBLE) !== 0n),
+      IsIconic: () => 0,
+      IsZoomed: () => 0,
+      ShowWindow(_window: bigint, command: number) {
+        style = command === SW_HIDE ? style & ~WS_VISIBLE : style | WS_VISIBLE;
+        return 1;
+      },
+      GetDpiForWindow: () => monitorInfo(monitorFor(windowRect)).dpi,
+      GetWindowLongPtrW: (_window: bigint, index: number) =>
+        index === GWL_STYLE ? style : 0n,
+      SetWindowLongPtrW(_window: bigint, _index: number, next: bigint) {
+        const previous = style;
+        style = next;
+        return previous;
+      },
+      AdjustWindowRectExForDpi(address: Pointer, requestedStyle: number) {
+        const rect = view(address, 16);
+        if (requestedStyle & WS_OVERLAPPEDWINDOW) {
+          rect.setInt32(8, rect.getInt32(8, true) + FRAME_WIDTH, true);
+          rect.setInt32(12, rect.getInt32(12, true) + FRAME_HEIGHT, true);
+        }
+        return 1;
+      },
+      GetWindowPlacement(_window: bigint, address: Pointer) {
+        const placement = view(address, 44);
+        placement.setUint32(8, 1, true);
+        [
+          windowRect.left,
+          windowRect.top,
+          windowRect.right,
+          windowRect.bottom,
+        ].forEach((value, index) => {
+          placement.setInt32(28 + index * 4, value, true);
+        });
+        return 1;
+      },
+      MonitorFromWindow: () => monitorFor(windowRect),
+      MonitorFromRect(address: Pointer) {
+        const rect = view(address, 16);
+        return monitorFor({
+          left: rect.getInt32(0, true),
+          top: rect.getInt32(4, true),
+          right: rect.getInt32(8, true),
+          bottom: rect.getInt32(12, true),
+        });
+      },
+      GetMonitorInfoW(monitor: bigint, address: Pointer) {
+        const bounds = monitorInfo(monitor);
+        const info = view(address, 40);
+        [
+          bounds.left,
+          bounds.top,
+          bounds.right,
+          bounds.bottom,
+        ].forEach((value, index) => {
+          info.setInt32(4 + index * 4, value, true);
+        });
+        return 1;
+      },
+      SetWindowPos(
+        _window: bigint,
+        _after: bigint,
+        left: number,
+        top: number,
+        width: number,
+        height: number,
+        flags: number,
+      ) {
+        positionFlags = flags;
+        if (!(flags & SWP_NOMOVE)) {
+          windowRect.left = left;
+          windowRect.top = top;
+        }
+        windowRect.right = windowRect.left + width;
+        windowRect.bottom = windowRect.top + height;
+        return 1;
       },
     },
-    user: {
-      symbols: {
-        LoadIconW: () => 1n,
-        SetThreadDpiAwarenessContext: () => -4n,
-        RegisterClassExW(address: Pointer) {
-          callbackAddress = Number(view(address, 80).getBigUint64(8, true));
-          return 1;
-        },
-        UnregisterClassW: () => 1,
-        CreateWindowExW: () => 1n,
-        DestroyWindow: () => 1,
-        IsWindowVisible: () => Number((style & WS_VISIBLE) !== 0n),
-        IsIconic: () => 0,
-        IsZoomed: () => 0,
-        ShowWindow(_window: bigint, command: number) {
-          style =
-            command === SW_HIDE ? style & ~WS_VISIBLE : style | WS_VISIBLE;
-          return 1;
-        },
-        GetDpiForWindow: () => monitorInfo(monitorFor(windowRect)).dpi,
-        GetWindowLongPtrW: (_window: bigint, index: number) =>
-          index === GWL_STYLE ? style : 0n,
-        SetWindowLongPtrW(_window: bigint, _index: number, next: bigint) {
-          const previous = style;
-          style = next;
-          return previous;
-        },
-        AdjustWindowRectExForDpi(address: Pointer, requestedStyle: number) {
-          const rect = view(address, 16);
-          if (requestedStyle & WS_OVERLAPPEDWINDOW) {
-            rect.setInt32(8, rect.getInt32(8, true) + FRAME_WIDTH, true);
-            rect.setInt32(12, rect.getInt32(12, true) + FRAME_HEIGHT, true);
-          }
-          return 1;
-        },
-        GetWindowPlacement(_window: bigint, address: Pointer) {
-          const placement = view(address, 44);
-          placement.setUint32(8, 1, true);
-          [
-            windowRect.left,
-            windowRect.top,
-            windowRect.right,
-            windowRect.bottom,
-          ].forEach((value, index) => {
-            placement.setInt32(28 + index * 4, value, true);
-          });
-          return 1;
-        },
-        MonitorFromWindow: () => monitorFor(windowRect),
-        MonitorFromRect(address: Pointer) {
-          const rect = view(address, 16);
-          return monitorFor({
-            left: rect.getInt32(0, true),
-            top: rect.getInt32(4, true),
-            right: rect.getInt32(8, true),
-            bottom: rect.getInt32(12, true),
-          });
-        },
-        GetMonitorInfoW(monitor: bigint, address: Pointer) {
-          const bounds = monitorInfo(monitor);
-          const info = view(address, 40);
-          [
-            bounds.left,
-            bounds.top,
-            bounds.right,
-            bounds.bottom,
-          ].forEach((value, index) => {
-            info.setInt32(4 + index * 4, value, true);
-          });
-          return 1;
-        },
-        SetWindowPos(
-          _window: bigint,
-          _after: bigint,
-          left: number,
-          top: number,
-          width: number,
-          height: number,
-          flags: number,
-        ) {
-          positionFlags = flags;
-          if (!(flags & SWP_NOMOVE)) {
-            windowRect.left = left;
-            windowRect.top = top;
-          }
-          windowRect.right = windowRect.left + width;
-          windowRect.bottom = windowRect.top + height;
-          return 1;
-        },
-      },
-    },
-  }),
-);
+  },
+}));
 
-const { Windows } = await import("../../native/windows/bun/win32.ts");
+const { Windows } = await import("#native/windows/bun/win32");
 const windows = new Windows(() => {});
 const constraints = {
   minWidth: 500,

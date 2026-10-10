@@ -5,11 +5,11 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import type { MacosConfig } from "../../native/macos/bun/config.ts";
-import { Objc, type ObjcObject } from "../../native/macos/bun/objc.ts";
-import { MacosWebview } from "../../native/macos/bun/webview.ts";
-import { MAX_WINDOW_DIMENSION } from "../../packages/plugin-api/src/native.ts";
-import type { HostContext } from "../../packages/protocol/src/index.ts";
+import type { MacosConfig } from "#native/macos/bun/config";
+import { Objc, type ObjcObject } from "#native/macos/bun/objc";
+import { MacosWebview } from "#native/macos/bun/webview";
+import { MAX_WINDOW_DIMENSION } from "@bunaway/plugin-api/native";
+import type { HostContext } from "@bunaway/protocol";
 
 const BATCH_SIZE = 4_000;
 const MAX_RETAINED_GROWTH_BYTES = 64 * 1024 * 1024;

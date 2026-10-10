@@ -8,6 +8,10 @@ manifest 생성과 카탈로그 로딩에서 native 계약의 크기 상한을 �
 원본 소스와 임시 자산을 삭제한 뒤에도 compiled EXE가 manifest와 플러그인 구현을
 읽고 지연 로딩을 유지하는지 검사한다.
 메인과 두 Worker에서 플러그인의 `BunawayError` 코드가 그대로 전달되는지도 확인한다.
+중간 생성 소스 없이 가상 모듈이 EXE에 포함되는지 검사한다.
+`packaging/contract.test.ts`는 `.bunaway/work/`와 `.bunaway/locks/`의 성공 및 실패 후 정리,
+작업 디렉터리 링크 거부와 외부 파일 보존을 검사한다.
+작업 중과 게시 직전에 작업 경로가 링크로 바뀌어도 외부 파일을 게시하지 않고 이전 출력을 보존하는지 검사한다.
 
 `cli/restart-controller.test.ts`는 코드 교체 응답을 기다리는 중 받은 UI 변경의 즉시 무효화,
 연속 저장 대기와 종료 시 대기 취소를 검사한다. `cli/distribution.test.ts`는 설치한 CommonJS

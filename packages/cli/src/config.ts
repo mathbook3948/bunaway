@@ -6,6 +6,7 @@ import {
   type PackagingConfig,
   parsePackaging,
 } from "@bunaway/packaging";
+import { outputPaths } from "@bunaway/packaging/paths";
 import { NativeRegistry, type Policy, parsePolicy } from "@bunaway/protocol";
 import {
   developmentPolicy,
@@ -170,8 +171,7 @@ function string(value: unknown, path: string): string {
 async function frontendPath(root: string, name: string): Promise<string> {
   const reserved = [
     ".bunaway",
-    "dist/.bunaway-locks",
-    ...BUILD_TARGETS.map((t) => `dist/${t}`),
+    ...BUILD_TARGETS.map((target) => outputPaths(root, target).output),
   ].map((path) => resolve(root, path).toLowerCase());
   const check = (path: string) => {
     if (!inside(root, path)) {

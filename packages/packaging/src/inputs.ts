@@ -13,6 +13,7 @@ import {
   packagedDigest,
   platformOf,
 } from "./contract.ts";
+import { outputPaths } from "./paths.ts";
 
 /**
  * Computes paths for the channel-neutral artifact produced by `bunaway build`.
@@ -27,14 +28,14 @@ export function artifactPaths(args: {
 }): BuildArtifact {
   const { root, target, appId } = args;
   if (target === "windows-x64") {
-    const dir = resolve(root, "dist/windows-x64");
+    const dir = outputPaths(root, target).output;
     return {
       dir,
       packageDir: dir,
       executable: resolve(dir, args.executableName ?? `${appId}.exe`),
     };
   }
-  const dir = resolve(root, "dist/macos-arm64", `${appId}.app`);
+  const dir = resolve(outputPaths(root, target).output, `${appId}.app`);
   return {
     dir,
     packageDir: resolve(dir, "Contents/Resources"),

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { devProject, parseDevArguments } from "../../packages/cli/src/dev.ts";
-import { windowsInspectorArgument } from "../../packages/cli/src/windows-dev-launch.ts";
-import { verifyDevelopmentToolsLaunch } from "../../packages/runtime-bun/src/development.ts";
+import { devProject, parseDevArguments } from "#cli/dev";
+import { windowsInspectorArgument } from "#cli/windows-dev-launch";
+import { verifyDevelopmentToolsLaunch } from "@bunaway/runtime-bun/development";
 
 test("DevTools require both a development artifact and an explicit launch flag", () => {
   expect(verifyDevelopmentToolsLaunch(undefined)).toBe(false);

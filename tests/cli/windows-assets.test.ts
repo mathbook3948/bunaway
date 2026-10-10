@@ -12,9 +12,9 @@ import {
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { webAsset } from "../../native/windows/bun/web-assets.ts";
-import { bundleWindowsHost } from "../../packages/cli/src/assets.ts";
-import { compiledAssetArguments } from "../../packages/cli/src/windows-compile.ts";
+import { webAsset } from "#native/windows/bun/web-assets";
+import { bundleWindowsHost } from "#cli/assets";
+import { compiledAssetArguments } from "#cli/windows-compile";
 
 test("compiled host preserves file imports from the app and both workers after staging is removed", async () => {
   const root = await realpath(
@@ -48,7 +48,7 @@ test("compiled host preserves file imports from the app and both workers after s
     await writeFile(
       resolve(root, "plugin.ts"),
       `
-import { BunawayError } from ${JSON.stringify(resolve(import.meta.dir, "../../packages/protocol/src/index.ts"))};
+import { BunawayError } from ${JSON.stringify(Bun.resolveSync("@bunaway/protocol", import.meta.dir))};
 globalThis.pluginLoaded = true;
 export function createOperations() { return { execute(fail = false) {
   if (fail) throw new BunawayError({ code: "CANCELLED", message: "plugin cancelled" });
@@ -72,8 +72,8 @@ export default { async read() {
       resolve(host, "boot.ts"),
       `
 import { Worker } from "node:worker_threads";
-import { loadPluginCatalog } from ${JSON.stringify(resolve(import.meta.dir, "../../native/windows/bun/plugin-catalog.ts"))};
-import { hostResponse } from ${JSON.stringify(resolve(import.meta.dir, "../../native/windows/bun/host-response.ts"))};
+import { loadPluginCatalog } from ${JSON.stringify(Bun.resolveSync("#native/windows/bun/plugin-catalog", import.meta.dir))};
+import { hostResponse } from ${JSON.stringify(Bun.resolveSync("#native/windows/bun/host-response", import.meta.dir))};
 const catalog = await loadPluginCatalog(import.meta.dir);
 const lazy = globalThis.pluginLoaded !== true;
 const plugin = (await catalog[0].operations()).createOperations({});
@@ -100,8 +100,8 @@ console.log(JSON.stringify({ app: await app.read(), workers, lazy, plugin: plugi
         resolve(host, `${name}.ts`),
         `
 import { parentPort } from "node:worker_threads";
-import { loadPluginCatalog } from ${JSON.stringify(resolve(import.meta.dir, "../../native/windows/bun/plugin-catalog.ts"))};
-import { hostResponse } from ${JSON.stringify(resolve(import.meta.dir, "../../native/windows/bun/host-response.ts"))};
+import { loadPluginCatalog } from ${JSON.stringify(Bun.resolveSync("#native/windows/bun/plugin-catalog", import.meta.dir))};
+import { hostResponse } from ${JSON.stringify(Bun.resolveSync("#native/windows/bun/host-response", import.meta.dir))};
 import file from "./${file}" with { type: "file" };
 const catalog = await loadPluginCatalog(import.meta.dir);
 const lazy = globalThis.pluginLoaded !== true;
@@ -137,6 +137,8 @@ parentPort.close();
       ],
     );
     await writeFile(resolve(assets, "web/index.html"), "<h1>web</h1>");
+    expect(await readdir(assets)).not.toContain("generated");
+    expect(await readdir(assets)).toContain("plugin-imports.js");
     const compiler = Bun.spawn(
       [
         process.execPath,

@@ -1,4 +1,4 @@
-import { createClient } from "../../../packages/client-sdk/src/index.ts";
+import { createClient } from "@bunaway/client";
 
 const client = createClient();
 await client.ready;

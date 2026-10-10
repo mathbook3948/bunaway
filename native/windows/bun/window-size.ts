@@ -1,7 +1,7 @@
 import {
   clampWindowSize,
   type WindowSizeConstraints,
-} from "../../../packages/plugin-api/src/native.ts";
+} from "@bunaway/plugin-api/native";
 
 export const DEFAULT_DPI = 96;
 

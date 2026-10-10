@@ -1,4 +1,4 @@
-import { runBunApp } from "../../../../packages/runtime-bun/src/index.ts";
+import { runBunApp } from "@bunaway/runtime-bun";
 import { macosApp } from "./macos-app.ts";
 
 await runBunApp(macosApp);

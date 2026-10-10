@@ -12,12 +12,12 @@ import {
 } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Worker } from "node:worker_threads";
-import { BunawayError } from "../../packages/protocol/src/index.ts";
+import { BunawayError } from "@bunaway/protocol";
 import {
   disposeStorageBindings,
   readStorageText,
   ScopedStorage,
-} from "../../plugins/storage/src/windows.ts";
+} from "#plugins/storage/src/windows";
 
 const root = resolve(
   import.meta.dir,

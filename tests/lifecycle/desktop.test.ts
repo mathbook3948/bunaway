@@ -1,17 +1,14 @@
 import { expect, test } from "bun:test";
 import { createConnection } from "node:net";
-import { validatePacket } from "../../native/windows/bun/channel.ts";
-import {
-  DesktopLifecycle,
-  openRequest,
-} from "../../native/windows/bun/desktop.ts";
+import { validatePacket } from "#native/windows/bun/channel";
+import { DesktopLifecycle, openRequest } from "#native/windows/bun/desktop";
 import {
   forwardToInstance,
   listenForInstances,
   parseLaunchArguments,
-} from "../../native/windows/bun/instance.ts";
-import { defineApp } from "../../packages/backend-sdk/src/index.ts";
-import type { OpenRequest } from "../../packages/core/src/index.ts";
+} from "#native/windows/bun/instance";
+import { defineApp } from "@bunaway/backend";
+import type { OpenRequest } from "@bunaway/core";
 
 const launch = {
   argv: [
@@ -428,7 +425,7 @@ test("disposing during a quit check prevents a late completion from restarting s
 });
 
 test("the current process runtime explicitly rejects desktop options", async () => {
-  const { runBunApp } = await import("../../packages/runtime-bun/src/index.ts");
+  const { runBunApp } = await import("@bunaway/runtime-bun");
   await expect(
     runBunApp({
       commands: {},

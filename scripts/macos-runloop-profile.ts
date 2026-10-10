@@ -2,8 +2,8 @@
 import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { MacosWebview } from "../native/macos/bun/webview.ts";
-import type { HostContext } from "../packages/protocol/src/index.ts";
+import { MacosWebview } from "#native/macos/bun/webview";
+import type { HostContext } from "@bunaway/protocol";
 
 const directory = await mkdtemp(resolve(tmpdir(), "bunaway-runloop-"));
 const intervals: number[] = [];

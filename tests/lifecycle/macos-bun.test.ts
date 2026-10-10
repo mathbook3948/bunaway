@@ -4,21 +4,15 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { Worker } from "node:worker_threads";
 import { pathToFileURL } from "node:url";
-import type { MacosConfig } from "../../native/macos/bun/config.ts";
-import { bundleMacosHost } from "../../packages/cli/src/assets.ts";
+import type { MacosConfig } from "#native/macos/bun/config";
+import { bundleMacosHost } from "#cli/assets";
 import {
   macosOrigin,
   platformUrl,
   resourceRules,
-} from "../../native/macos/bun/urls.ts";
-import {
-  Channel,
-  type Packet,
-} from "../../packages/runtime-bun/src/worker-channel.ts";
-import {
-  type HostContext,
-  PROTOCOL_VERSION,
-} from "../../packages/protocol/src/index.ts";
+} from "#native/macos/bun/urls";
+import { Channel, type Packet } from "@bunaway/runtime-bun/worker-channel";
+import { type HostContext, PROTOCOL_VERSION } from "@bunaway/protocol";
 
 /** Minimal validated configuration shared by real Worker lifecycle tests. */
 function workerConfig(directory: string): MacosConfig {

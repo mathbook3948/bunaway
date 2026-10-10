@@ -1,4 +1,4 @@
-import { runBunApp } from "../../packages/runtime-bun/src/index.ts";
+import { runBunApp } from "@bunaway/runtime-bun";
 import { contracts, plugins } from "../fixtures/host-plugins.ts";
 
 await runBunApp({

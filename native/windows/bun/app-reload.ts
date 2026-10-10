@@ -2,13 +2,13 @@ import { createHash } from "node:crypto";
 import { readFile, realpath } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { AppDefinition } from "../../../packages/core/src/index.ts";
+import type { AppDefinition } from "@bunaway/core";
 import {
   type AppReloadRequest,
   type AppReloadResult,
   MAX_APP_RELOAD_MESSAGE_CHARS,
   readAppReloadRequest,
-} from "../../../packages/runtime-bun/src/development.ts";
+} from "@bunaway/runtime-bun/development";
 import type { DevelopmentApp } from "./development-app.ts";
 
 const MAX_APP_RELOADS = 100;

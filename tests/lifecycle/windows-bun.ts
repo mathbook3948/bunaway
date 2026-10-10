@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runWindowsApp } from "../../native/windows/bun/entry.ts";
-import { closeWindowsApp } from "../../packages/cli/src/windows-dev-launch.ts";
-import type { AppDefinition } from "../../packages/core/src/index.ts";
-import type { HostContext, Policy } from "../../packages/protocol/src/index.ts";
-import { logPlugin } from "../../plugins/log/src/index.ts";
+import { runWindowsApp } from "#native/windows/bun/entry";
+import { closeWindowsApp } from "#cli/windows-dev-launch";
+import type { AppDefinition } from "@bunaway/core";
+import type { HostContext, Policy } from "@bunaway/protocol";
+import { logPlugin } from "@bunaway/plugin-log";
 import pin from "../../runtime/build-manifests/windows-x64.json";
 import { contracts } from "../fixtures/host-plugins.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
@@ -345,7 +345,7 @@ if (!process.argv.includes("--child")) {
         ? resolve(output, "missing-loader.dll")
         : resolve(
             repoRoot,
-            "native/windows/bun/vendor/sdk/build/native/x64/WebView2Loader.dll",
+            "build/cache/webview2/sdk/build/native/x64/WebView2Loader.dll",
           ),
       windows: [
         {

@@ -3,7 +3,7 @@ import {
   type HostResponse,
   type JsonValue,
   serializeHostResponse,
-} from "../../../packages/protocol/src/index.ts";
+} from "@bunaway/protocol";
 
 const internal = (): HostResponse => ({
   kind: "error",

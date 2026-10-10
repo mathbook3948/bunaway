@@ -5,7 +5,7 @@ import type {
   DesktopOptions,
   OpenRequest,
   QuitReason,
-} from "../../../packages/core/src/index.ts";
+} from "@bunaway/core";
 import type { LaunchArguments } from "./instance.ts";
 
 /**

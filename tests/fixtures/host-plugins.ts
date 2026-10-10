@@ -3,17 +3,17 @@ import {
   bindHostAPI as bind,
   type CoreFactory,
   createCore as create,
-} from "../../packages/core/src/index.ts";
+} from "@bunaway/core";
 import {
   type HostCall,
   type JsonValue,
   NativeRegistry,
   type Policy,
-} from "../../packages/protocol/src/index.ts";
-import { capabilitiesPlugin } from "../../plugins/capabilities/src/index.ts";
-import { logPlugin } from "../../plugins/log/src/index.ts";
-import { storagePlugin } from "../../plugins/storage/src/index.ts";
-import { windowsPlugin } from "../../plugins/windows/src/index.ts";
+} from "@bunaway/protocol";
+import { capabilitiesPlugin } from "@bunaway/plugin-capabilities";
+import { logPlugin } from "@bunaway/plugin-log";
+import { storagePlugin } from "@bunaway/plugin-storage";
+import { windowsPlugin } from "@bunaway/plugin-windows";
 
 const matches = storagePlugin.matches;
 /** Fail fixture setup when an expected native operation is missing. */

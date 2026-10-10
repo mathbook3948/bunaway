@@ -6,8 +6,8 @@ import {
   MAX_MESSAGE_BYTES,
   type ProcessFrame,
   parseProcessFrame,
-} from "../../packages/protocol/src/index.ts";
-import { readJsonLines } from "../../packages/runtime-bun/src/index.ts";
+} from "@bunaway/protocol";
+import { readJsonLines } from "@bunaway/runtime-bun";
 
 test("process event limits reject the entire broadcast and preserve sessions and sequences", async () => {
   const entrypoint = fileURLToPath(

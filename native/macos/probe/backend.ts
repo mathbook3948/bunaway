@@ -10,8 +10,8 @@ import {
   ProtocolError,
   parseProcessFrame,
   serializeProcessFrame,
-} from "../../../packages/protocol/src/index.ts";
-import { readJsonLines } from "../../../packages/runtime-bun/src/process-ipc.ts";
+} from "@bunaway/protocol";
+import { readJsonLines } from "#runtime-bun/process-ipc";
 
 const runtime = {
   id: "probe",

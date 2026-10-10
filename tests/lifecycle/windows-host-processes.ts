@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { join, resolve } from "node:path";
-import { viewDirName } from "../../native/windows/bun/view-profile.ts";
+import { viewDirName } from "#native/windows/bun/view-profile";
 
 /** Finds renderers using the requested view profile or the legacy shared profile. */
 export async function rendererPids(

@@ -2,16 +2,13 @@ import { mock } from "bun:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { resolve } from "node:path";
-import type { Packet, UIConfig } from "../../native/windows/bun/channel.ts";
-import type {
-  AppDefinition,
-  CoreServices,
-} from "../../packages/core/src/index.ts";
+import type { Packet, UIConfig } from "#native/windows/bun/channel";
+import type { AppDefinition, CoreServices } from "@bunaway/core";
 import {
   API_LIMITS,
   BunawayError,
   type RuntimeIdentity,
-} from "../../packages/protocol/src/index.ts";
+} from "@bunaway/protocol";
 import { writePluginFixture } from "../fixtures/native-worker.ts";
 
 // Isolated subprocess: exercise the real entry/channel with independently delayed Worker acks.
@@ -99,7 +96,7 @@ class TestWorker extends EventEmitter {
 mock.module("node:worker_threads", () => ({
   Worker: TestWorker,
 }));
-mock.module("../../native/windows/bun/job.ts", () => ({
+mock.module("#native/windows/bun/job", () => ({
   containAppProcess() {},
   activeDescendants: () => 0,
 }));
@@ -107,7 +104,7 @@ let capture = (_services: CoreServices) => {};
 const captured = new Promise<CoreServices>((done) => {
   capture = done;
 });
-mock.module("../../packages/core/src/index.ts", () => ({
+mock.module("@bunaway/core", () => ({
   createCore: async (_app: AppDefinition, services: CoreServices) => {
     capture(services);
     return {
@@ -142,7 +139,7 @@ mock.module("bunaway:plugin-imports", () => ({
 }));
 config.assets = config.dataRoot;
 await writePluginFixture(config.assets, [], "export const pluginImports = {};");
-const { runWindowsApp } = await import("../../native/windows/bun/entry.ts");
+const { runWindowsApp } = await import("#native/windows/bun/entry");
 const app = runWindowsApp(
   {
     commands: {},

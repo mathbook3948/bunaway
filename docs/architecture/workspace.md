@@ -29,6 +29,12 @@ Bun workspaces에는 `docs/site`, `packages/*`, `plugins/*`와
 공통 베이스에 Bun, Node, DOM 타입을 전역으로 넣지 않는다.
 패키지의 의존성은 `workspace:*`로 선언하며 경로 별칭으로 우회하지 않는다.
 
+테스트와 네이티브 코드도 공개 API는 `@bunaway/...`의 선언된 export로 가져온다.
+테스트와 저장소 빌드 도구가 내부 구현을 직접 검사하거나 재사용할 때는 루트
+`package.json`의 비공개 `imports`를 사용한다. 예를 들어 `#cli/windows-compile`은
+CLI의 실행 파일 컴파일 구현을, `#native/windows/bun/channel`은 Windows 채널 구현을
+가리킨다. 이 경로는 저장소 도구용이며 생성 앱의 의존성이나 패키지 export를 대체하지 않는다.
+
 모든 패키지는 비공개다. `protocol`은 스키마, 검증, 직렬화, 버전 협상을 구현했고
 `client-sdk`는 화면용 `invoke`, `listen`와 인자 없는 `createClient()`를
 제공하며 문서별 WebView 연결, hello, 준비 대기, 페이지 종료 시 정리를 내부에서 처리한다.

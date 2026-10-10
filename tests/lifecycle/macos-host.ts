@@ -811,7 +811,7 @@ try {
     await writeFile(
       entry,
       `
-      import { createClient, createWebViewTransport } from ${JSON.stringify(resolve(import.meta.dir, "../../packages/client-sdk/src/index.ts"))};
+      import { createClient, createWebViewTransport } from ${JSON.stringify(Bun.resolveSync("@bunaway/client", import.meta.dir))};
       const client = createClient({ transport: createWebViewTransport(window.chrome.webview), hello: { kind: 'hello', protocol: { major: 1, minor: 0 }, features: [], buildId: 'development-page' } });
       await client.ready;
       const echo = await client.invoke('test.echo', { message: 'development bridge' });

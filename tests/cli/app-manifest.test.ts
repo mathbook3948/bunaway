@@ -1,22 +1,23 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { loadPluginCatalog } from "../../native/windows/bun/plugin-catalog.ts";
-import { writeJson } from "../../packages/cli/src/files.ts";
-import { writePluginAssets } from "../../packages/cli/src/plugins.ts";
+import { loadPluginCatalog } from "#native/windows/bun/plugin-catalog";
+import { pluginImportsSource } from "#cli/app-modules";
+import { writeJson } from "#cli/files";
+import { writePluginManifest } from "#cli/plugins";
 import {
   type JsonValue,
   MAX_JSON_DEPTH,
   MAX_MESSAGE_BYTES,
   NativeRegistry,
   parsePolicy,
-} from "../../packages/protocol/src/index.ts";
+} from "@bunaway/protocol";
 import {
   parseAppManifest,
   readAppManifest,
-} from "../../packages/runtime-bun/src/app-manifest.ts";
+} from "@bunaway/runtime-bun/app-manifest";
 
 test("generated manifest rejects invalid versions, contracts, routing and SDK paths", () => {
   const manifest = {
@@ -165,7 +166,7 @@ test.each([
       ]).validatePolicy(parsedPolicy);
       expect(parseAppManifest(manifest).policy).toEqual(parsedPolicy);
       await writeJson(resolve(assets, "manifest.json"), manifest);
-      await writePluginAssets(assets, [
+      await writePluginManifest(assets, [
         plugin,
       ]);
       expect((await readAppManifest(assets)).policy).toEqual(parsedPolicy);
@@ -190,7 +191,7 @@ test.each([
       expect(() => parseAppManifest(manifest)).toThrow();
       await writeJson(resolve(assets, "manifest.json"), manifest);
       await expect(
-        writePluginAssets(assets, [
+        writePluginManifest(assets, [
           plugin,
         ]),
       ).rejects.toThrow();
@@ -230,8 +231,11 @@ test("regeneration preserves app data, drops removed plugins and rejects mismatc
         targets: {},
       },
     ];
-    const generated = await writePluginAssets(assets, plugins);
-    const source = await Bun.file(generated).text();
+    await writePluginManifest(assets, plugins);
+    expect(await readdir(assets)).toEqual([
+      "manifest.json",
+    ]);
+    const source = pluginImportsSource(plugins);
     expect(source).not.toContain("version");
     expect(source).not.toContain("native");
     await Bun.write(resolve(assets, "plugin-imports.js"), source);
@@ -268,9 +272,8 @@ test("regeneration preserves app data, drops removed plugins and rejects mismatc
     await expect(loadPluginCatalog(assets, imports)).rejects.toThrow(
       "Generated plugin imports do not match",
     );
-    await writePluginAssets(assets, []);
+    await writePluginManifest(assets, []);
     expect((await readAppManifest(assets)).plugins).toEqual([]);
-    expect(await Bun.file(generated).text()).not.toContain("example");
   } finally {
     await rm(assets, {
       recursive: true,
@@ -369,7 +372,7 @@ test("manifest generation and catalog loading preserve the native contract size 
         ]),
     ).not.toThrow();
     expect(parseAppManifest(manifest).plugins[0]?.native).toEqual(native);
-    await writePluginAssets(assets, [
+    await writePluginManifest(assets, [
       {
         name: plugin.name,
         version: plugin.version,

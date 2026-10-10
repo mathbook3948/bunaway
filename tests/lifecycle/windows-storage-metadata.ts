@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runWindowsApp } from "../../native/windows/bun/entry.ts";
-import { closeWindowsApp } from "../../packages/cli/src/windows-dev-launch.ts";
-import type { HostContext, Policy } from "../../packages/protocol/src/index.ts";
-import { storagePlugin } from "../../plugins/storage/src/index.ts";
+import { runWindowsApp } from "#native/windows/bun/entry";
+import { closeWindowsApp } from "#cli/windows-dev-launch";
+import type { HostContext, Policy } from "@bunaway/protocol";
+import { storagePlugin } from "@bunaway/plugin-storage";
 import pin from "../../runtime/build-manifests/windows-x64.json";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 
@@ -275,7 +275,7 @@ if (!process.argv.includes("--child")) {
     dataRoot,
     loader: resolve(
       repoRoot,
-      "native/windows/bun/vendor/sdk/build/native/x64/WebView2Loader.dll",
+      "build/cache/webview2/sdk/build/native/x64/WebView2Loader.dll",
     ),
   });
 }

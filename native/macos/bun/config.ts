@@ -7,13 +7,13 @@ import {
   parsePolicy,
   type Policy,
   type RuntimeIdentity,
-} from "../../../packages/protocol/src/index.ts";
-import { readAppManifest } from "../../../packages/runtime-bun/src/app-manifest.ts";
-import { verifyDevelopmentLaunch } from "../../../packages/runtime-bun/src/development.ts";
+} from "@bunaway/protocol";
+import { readAppManifest } from "@bunaway/runtime-bun/app-manifest";
+import { verifyDevelopmentLaunch } from "@bunaway/runtime-bun/development";
 import {
   readWindowSpecs,
   type WindowSpec,
-} from "../../../packages/runtime-bun/src/window-config.ts";
+} from "@bunaway/runtime-bun/window-config";
 import pin from "../../../runtime/build-manifests/darwin-aarch64.json";
 
 export type MacosConfig = {

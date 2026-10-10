@@ -2,7 +2,7 @@ import { dlopen, ptr } from "bun:ffi";
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
-import type { AppDefinition } from "../../../packages/core/src/index.ts";
+import type { AppDefinition } from "@bunaway/core";
 import { isCompiledApp, localAppData, verifyWindowsPackage } from "./config.ts";
 import { runWindowsApp } from "./entry.ts";
 import {

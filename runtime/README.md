@@ -24,5 +24,6 @@ macOS arm64 공식 배포물은 [darwin-aarch64 manifest](./build-manifests/darw
 [플랫폼 지원 표](../docs/platform-support/README.md)를 참고한다.
 
 이전 DLL 실험은 중단하고 실험용 코드, 소스 변경을 제거했다. 무시되는
-`bun-embed/vendor/` 소스와 프로젝트 `build/` 도구, 캐시는 제품 의존성으로 사용하지 않는다.
+`bun-embed/vendor/` 소스와 이전 실험 도구는 제품 의존성으로 사용하지 않는다.
+현재 제품의 검증된 런타임 다운로드는 `build/cache/bun/`에서 관리한다.
 [B 단계 계획](../docs/architecture/runtime-feasibility.md)을 따른다.

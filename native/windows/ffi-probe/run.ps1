@@ -4,7 +4,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path
 & (Join-Path $PSScriptRoot '../bun/prepare.ps1')
-$bun = Join-Path $root 'runtime/bun-bundle/vendor/bun-windows-x64-baseline/bun.exe'
+$bun = Join-Path $root 'build/cache/bun/bun-windows-x64-baseline/bun.exe'
 $results = Join-Path $root 'build/windows-ffi-probe'
 New-Item -ItemType Directory -Force -Path $results | Out-Null
 # This child is the test subject, not a native app host. No C/C++ build is involved.

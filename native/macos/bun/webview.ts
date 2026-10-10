@@ -1,7 +1,7 @@
 import { dlopen, type Pointer, ptr, toArrayBuffer } from "bun:ffi";
 import { readFileSync, realpathSync, statSync } from "node:fs";
 import { extname, resolve } from "node:path";
-import { clampWindowSize } from "../../../packages/plugin-api/src/native.ts";
+import { clampWindowSize } from "@bunaway/plugin-api/native";
 import type { MacosConfig } from "./config.ts";
 import { Objc, type ObjcObject } from "./objc.ts";
 import { macosOrigin, platformUrl, resourceRules } from "./urls.ts";

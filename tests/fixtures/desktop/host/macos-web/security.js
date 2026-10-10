@@ -1,7 +1,4 @@
-import {
-  createClient,
-  createWebViewTransport,
-} from "../../../../../packages/client-sdk/src/index.ts";
+import { createClient, createWebViewTransport } from "@bunaway/client";
 
 const params = new URLSearchParams(location.search);
 const results = [];

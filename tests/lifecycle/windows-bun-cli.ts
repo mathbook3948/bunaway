@@ -11,17 +11,14 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { resolve } from "node:path";
-import { buildProject } from "../../packages/cli/src/build.ts";
+import { buildProject } from "#cli/build";
 import {
   verifyWindowsLaunch,
   windowsLaunchEnvironment,
-} from "../../packages/cli/src/windows-dev-launch.ts";
-import {
-  findIscc,
-  must,
-} from "../../packages/packaging/src/channels/windows/common.ts";
-import { recordPackagedHashes } from "../../packages/packaging/src/channels/windows/manifest.ts";
-import type { PackageReport } from "../../packages/packaging/src/contract.ts";
+} from "#cli/windows-dev-launch";
+import { findIscc, must } from "#packaging/channels/windows/common";
+import { recordPackagedHashes } from "#packaging/channels/windows/manifest";
+import type { PackageReport } from "#packaging/contract";
 import { createProject, storageRoundtripUI } from "../cli/project.ts";
 
 assert.equal(process.platform, "win32");
@@ -64,7 +61,7 @@ await command([
   "install",
 ]);
 const snapshot = resolve(project, "node_modules/@bunaway/cli");
-const cache = resolve(snapshot, "runtime/bun-bundle/vendor");
+const cache = resolve(snapshot, "build/cache/bun");
 await mkdir(cache, {
   recursive: true,
 });
@@ -73,20 +70,16 @@ for (const name of [
   "bun-windows-x64-baseline",
   "LICENSE.bun",
 ]) {
-  await cp(
-    resolve(root, "runtime/bun-bundle/vendor", name),
-    resolve(cache, name),
-    {
-      recursive: true,
-    },
-  );
+  await cp(resolve(root, "build/cache/bun", name), resolve(cache, name), {
+    recursive: true,
+  });
 }
-const sdk = resolve(snapshot, "native/windows/bun/vendor");
+const sdk = resolve(snapshot, "build/cache/webview2");
 await mkdir(sdk, {
   recursive: true,
 });
 await cp(
-  resolve(root, "native/windows/bun/vendor/webview2-1.0.4129.50.nupkg"),
+  resolve(root, "build/cache/webview2/webview2-1.0.4129.50.nupkg"),
   resolve(sdk, "webview2-1.0.4129.50.nupkg"),
 );
 assert(

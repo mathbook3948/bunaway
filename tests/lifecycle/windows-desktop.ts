@@ -3,20 +3,17 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runWindowsApp } from "../../native/windows/bun/entry.ts";
+import { runWindowsApp } from "#native/windows/bun/entry";
 import {
   forwardToInstance,
   instanceAddress,
   listenForInstances,
-} from "../../native/windows/bun/instance.ts";
-import { containAppProcess } from "../../native/windows/bun/job.ts";
-import { closeWindowsApp } from "../../packages/cli/src/windows-dev-launch.ts";
-import type { AppDefinition } from "../../packages/core/src/index.ts";
-import {
-  type HostContext,
-  NativeRegistry,
-} from "../../packages/protocol/src/index.ts";
-import { windowsPlugin } from "../../plugins/windows/src/index.ts";
+} from "#native/windows/bun/instance";
+import { containAppProcess } from "#native/windows/bun/job";
+import { closeWindowsApp } from "#cli/windows-dev-launch";
+import type { AppDefinition } from "@bunaway/core";
+import { type HostContext, NativeRegistry } from "@bunaway/protocol";
+import { windowsPlugin } from "@bunaway/plugin-windows";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 
 const windowRegistry = new NativeRegistry([
@@ -424,7 +421,7 @@ if (!process.argv.includes("--child")) {
         dataRoot,
         loader: resolve(
           repoRoot,
-          "native/windows/bun/vendor/sdk/build/native/x64/WebView2Loader.dll",
+          "build/cache/webview2/sdk/build/native/x64/WebView2Loader.dll",
         ),
         policy: {
           version: 1,

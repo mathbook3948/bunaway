@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { RestartController } from "../../packages/cli/src/dev.ts";
+import { RestartController } from "#cli/dev";
 
 test("a debounced UI save during reload invalidates it immediately and rebuilds the UI", async () => {
   const entered = Promise.withResolvers<void>();

@@ -2,16 +2,13 @@ import { dlopen, type Pointer, ptr, read, toArrayBuffer } from "bun:ffi";
 import assert from "node:assert/strict";
 import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
-import {
-  type HostContext,
-  parsePolicy,
-} from "../../../packages/protocol/src/index.ts";
-import { readAppManifest } from "../../../packages/runtime-bun/src/app-manifest.ts";
+import { type HostContext, parsePolicy } from "@bunaway/protocol";
+import { readAppManifest } from "@bunaway/runtime-bun/app-manifest";
 import {
   verifyDevelopmentLaunch,
   verifyDevelopmentToolsLaunch,
-} from "../../../packages/runtime-bun/src/development.ts";
-import { readWindowSpecs } from "../../../packages/runtime-bun/src/window-config.ts";
+} from "@bunaway/runtime-bun/development";
+import { readWindowSpecs } from "@bunaway/runtime-bun/window-config";
 import pin from "../../../runtime/build-manifests/windows-x64.json";
 import type { UIConfig } from "./channel.ts";
 

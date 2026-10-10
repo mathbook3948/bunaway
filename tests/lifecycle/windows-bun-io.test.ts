@@ -3,13 +3,10 @@ import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Worker } from "node:worker_threads";
-import { Channel, type Packet } from "../../native/windows/bun/channel.ts";
-import { viewDirName } from "../../native/windows/bun/view-profile.ts";
-import {
-  API_LIMITS,
-  type HostContext,
-} from "../../packages/protocol/src/index.ts";
-import { storagePlugin } from "../../plugins/storage/src/index.ts";
+import { Channel, type Packet } from "#native/windows/bun/channel";
+import { viewDirName } from "#native/windows/bun/view-profile";
+import { API_LIMITS, type HostContext } from "@bunaway/protocol";
+import { storagePlugin } from "@bunaway/plugin-storage";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 
 test.skipIf(process.platform !== "win32")(
