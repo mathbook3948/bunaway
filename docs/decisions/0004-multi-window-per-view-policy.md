@@ -24,6 +24,6 @@ status: accepted
 
 창이 닫힌 뒤에도 뷰 세션을 살려 창 재생성 시 복원하는 설계도 검토했지만 채택하지 않았다. 창이 없는 세션은 응답을 받을 곳이 없어 유령 요청만 남고, 세션 유지가 요구하는 수명 주기 규칙(재생성 창과 이전 세션의 재연결)은 새 프로토콜을 요구한다. "창 닫기 = 그 뷰 세션 폐기"가 기존 `revoke` 계약에 그대로 들어맞는다.
 
-Windows에서 세 창(쓰기 가능 편집 뷰, 읽기 전용 뷰, 주 뷰)으로 정책 분리, 공유 요청 ID 전달, 이벤트 필터링, 렌더러 장애 격리, 폐기 세션 차단, 창별 종료 규칙을 [실제 검증](../architecture/windows-host-results.md)했다. 공개 `windows.create`, `windows.recreate`는 설정한 창을 생성하거나 이전 세션을 폐기하고 같은 프로필로 다시 만든다. 재생성 중에는 마지막 창의 자동 종료를 보류한다. [Bun 호스트 실행 결과](../architecture/windows-bun-results.md)에 검증 기록이 있다. 다른 플랫폼의 다중 창과 뷰의 창 간 이동은 미구현이다.
+Windows에서 세 창(쓰기 가능 편집 뷰, 읽기 전용 뷰, 주 뷰)으로 정책 분리, 공유 요청 ID 전달, 이벤트 필터링, 렌더러 장애 격리, 폐기 세션 차단, 창별 종료 규칙을 [실제 검증](../architecture/windows-host-results.md)했다. 공개 `windows.create`, `windows.recreate`는 설정한 창을 생성하거나 이전 세션을 폐기하고 같은 프로필로 다시 만든다. 재생성 중에는 마지막 창의 자동 종료를 보류한다. [Bun 호스트 실행 결과](../architecture/windows-bun-results.md)에 검증 기록이 있다. macOS도 같은 선언과 세션 수명을 적용하며, 뷰별 임시 WebKit 프로필을 실행 중 재생성에서 유지한다. macOS의 영속 프로필과 뷰의 창 간 이동은 미구현이다.
 
 근거: [PRD의 권한 모델](../PRD.md), [호출 컨텍스트 ADR](./0002-host-owned-call-context.md), [Windows 호스트](../../native/windows/bun/entry.ts), [Windows 실행 결과](../architecture/windows-host-results.md).

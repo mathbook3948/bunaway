@@ -86,7 +86,7 @@ export type WindowState = {
   closed: boolean;
   /** Whether its native and WebView resources have been released. */
   cleaned: boolean;
-  /** Whether initial navigation reached the ready state. */
+  /** Whether WebView setup is complete; document and SDK readiness are separate. */
   ready: boolean;
   /** Failure captured during creation, when one occurred. */
   failure: unknown;

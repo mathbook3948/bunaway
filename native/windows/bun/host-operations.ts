@@ -8,10 +8,10 @@ import {
   type NativeRegistration,
   type RuntimeIdentity,
 } from "@bunaway/protocol";
+import { hostResponse } from "../../host-api/bun/host-response.ts";
+import { loadPluginCatalog } from "../../host-api/bun/plugin-catalog.ts";
+import { disposeAll, operations } from "../../host-api/bun/plugins.ts";
 import { Channel, type Packet } from "./channel.ts";
-import { hostResponse } from "./host-response.ts";
-import { loadPluginCatalog } from "./plugin-catalog.ts";
-import { disposeAll, operations } from "./plugins.ts";
 
 assert(parentPort);
 const config = workerData as {

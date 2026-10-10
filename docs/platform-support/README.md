@@ -1,6 +1,6 @@
 # 플랫폼 지원과 검증 범위
 
-현재 선택 네이티브 플러그인은 Windows만 지원한다. 아래 macOS 파일 저장과 네이티브 API 검증 기록은 이관 전 구현의 기록이다. Bun FFI 제품 경로의 명령, 이벤트와 정책, 복구, 종료 검증은 [새 기록](../architecture/macos-bun-results.md)에 둔다.
+현재 저장, 로그, 기능 조회와 opener 플러그인은 Windows만 지원한다. 창 플러그인의 기본 제어는 macOS에서도 지원한다. 아래 macOS 파일 저장과 네이티브 API 검증 기록은 이관 전 구현의 기록이다. Bun FFI 제품 경로의 명령, 이벤트와 정책, 복구, 종료 검증은 [새 기록](../architecture/macos-bun-results.md)에 둔다.
 
 기준일: 2026-10-10. “구현”은 출시 지원 보장이 아니다. 실제 OS, CPU와 테스트 범위를
 기록하며, 공통 TypeScript 검사의 성공을 네이티브 호스트 성공으로 확대하지 않는다.
@@ -8,7 +8,7 @@
 | 플랫폼 | 네이티브 구현 | 검증 환경, 범위 | 미검증, 제약 |
 | --- | --- | --- | --- |
 | Windows x64 | Bun 진입점, 직접 FFI UI Worker, WebView2, 번들 Bun x64 baseline | 로컬 FFI/모달/Host API/다중 창/복구/종료/독립 CLI 검증([기록](../architecture/windows-bun-results.md)); PR18의 번들 런처 검증은 아래 기록과 분리 | 최소 Windows, CPU, WebView2 설치 경로, 배포, 스토어 적합성 |
-| macOS arm64 | Bun 진입점, 직접 FFI AppKit/WKWebView, 백엔드 Worker, 단일 창/뷰 | 로컬 26.7.1 arm64: 실제 WKWebView 7/7. [Bun FFI 기록](../architecture/macos-bun-results.md)과 [이전 기록](../architecture/macos-native-results.md)을 구분 | Intel, 다중 창/뷰, 최소 OS, 현재 Windows 다중 창 메모 샘플, Developer ID, 공증, 설치 |
+| macOS arm64 | Bun 진입점, 직접 FFI AppKit/WKWebView, 백엔드 Worker, 다중 창/뷰 | 로컬 26.7.1 arm64: 실제 WKWebView 회귀와 compiled 다중 창 API 검사. [Bun FFI 기록](../architecture/macos-bun-results.md)과 [이전 기록](../architecture/macos-native-results.md)을 구분 | Intel, 영속 프로필, 최소 OS, 현재 Windows 다중 창 메모 샘플, Developer ID, 공증, 설치 |
 | macOS Intel | 고정 Bun 배포물, 해시 없음 | 없음. arm64 빌드 스크립트가 명시적으로 거부 | 별도 pin, 빌드, 실제 실행 검증 필요 |
 | Linux | GTK, WebKitGTK 후보, 호스트 미구현 | Ubuntu 공통 검사, 생성 스키마 검사만 있음 | 네이티브 실행, UI, 프로세스 정리, 패키징 |
 | Android | Kotlin, WebView 후보, 호스트 미구현 | 없음 | Bun 실행 경로, 수명주기, 배포 제약 |
@@ -78,7 +78,9 @@ show/hide/focus, 크기와 위치, 전체화면, 닫기 확인을 정식 지원�
 CI 실행 [37574470840](https://github.com/mathbook3948/bunaway/actions/runs/37574470840)에서
 새 창 API의 실제 GUI 회귀는 통과했다. 같은 실행의 전체 네이티브 작업은 공용 기능 목록 테스트에서 실패했다.
 Linux에서는 계약, 정책, 재생성 수명 조정과 CLI 번들을 검증한다.
-macOS의 창 API는 `UNSUPPORTED`이며 기존 단일 창 설정만 빌드할 수 있다.
+macOS는 `app.windows`, 지연 생성과 재생성, 목록 및 열림 여부, show/hide/focus/close,
+표시와 포커스 조회를 제공한다. 뷰마다 임시 WebKit 프로필을 분리하고 실행 중 재생성에서
+유지한다. 크기, 위치, 전체화면, 닫기 확인 등 다른 공개 창 작업은 `UNSUPPORTED`다.
 
 Windows의 앱 정의 `desktop`에 인자, 딥링크, 파일 열기와 종료 취소, 트레이 숨김을
 구현했다. 초기 계약, 번들, 타입 검사는 Linux에서 수행했고 후속 Windows x64, Bun 1.4.2에서

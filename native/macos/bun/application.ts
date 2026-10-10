@@ -27,6 +27,7 @@ export class MacosApplication {
   private readonly delegate: ObjcObject;
   private readonly timer: ReturnType<typeof setInterval>;
   private closed = false;
+  private readonly profiles = new Map<string, ObjcObject>();
 
   constructor(hooks: {
     quit(): void;
@@ -95,6 +96,28 @@ export class MacosApplication {
     );
   }
 
+  isActive(): boolean {
+    return !!this.objc.send(this.app, "isActive");
+  }
+
+  /** Isolate each view's ephemeral profile and retain it across window recreation. */
+  dataStore(view: string): ObjcObject {
+    let store = this.profiles.get(view);
+    if (!store) {
+      store =
+        this.objc.send(
+          this.objc.class("WKWebsiteDataStore"),
+          "nonPersistentDataStore",
+        ) ?? undefined;
+      if (!store) {
+        throw new Error("WebKit profile creation failed.");
+      }
+      this.objc.send(store, "retain");
+      this.profiles.set(view, store);
+    }
+    return store;
+  }
+
   /** Stop pumping only after all windows have detached their native callbacks. */
   close(): void {
     if (this.closed) {
@@ -104,6 +127,11 @@ export class MacosApplication {
     clearInterval(this.timer);
     this.objc.send(this.app, "setDelegate:", null);
     this.objc.send(this.delegate, "release");
+    for (const store of this.profiles.values()) {
+      this.objc.send(store, "release");
+    }
+    this.profiles.clear();
+    this.objc.releaseCallbacks();
     this.runLoop.close();
   }
 }

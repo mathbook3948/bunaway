@@ -72,8 +72,8 @@ export default { async read() {
       resolve(host, "boot.ts"),
       `
 import { Worker } from "node:worker_threads";
-import { loadPluginCatalog } from ${JSON.stringify(Bun.resolveSync("#native/windows/bun/plugin-catalog", import.meta.dir))};
-import { hostResponse } from ${JSON.stringify(Bun.resolveSync("#native/windows/bun/host-response", import.meta.dir))};
+import { loadPluginCatalog } from ${JSON.stringify(Bun.resolveSync("#native/host-api/bun/plugin-catalog", import.meta.dir))};
+import { hostResponse } from ${JSON.stringify(Bun.resolveSync("#native/host-api/bun/host-response", import.meta.dir))};
 const catalog = await loadPluginCatalog(import.meta.dir);
 const lazy = globalThis.pluginLoaded !== true;
 const plugin = (await catalog[0].operations()).createOperations({});
@@ -100,8 +100,8 @@ console.log(JSON.stringify({ app: await app.read(), workers, lazy, plugin: plugi
         resolve(host, `${name}.ts`),
         `
 import { parentPort } from "node:worker_threads";
-import { loadPluginCatalog } from ${JSON.stringify(Bun.resolveSync("#native/windows/bun/plugin-catalog", import.meta.dir))};
-import { hostResponse } from ${JSON.stringify(Bun.resolveSync("#native/windows/bun/host-response", import.meta.dir))};
+import { loadPluginCatalog } from ${JSON.stringify(Bun.resolveSync("#native/host-api/bun/plugin-catalog", import.meta.dir))};
+import { hostResponse } from ${JSON.stringify(Bun.resolveSync("#native/host-api/bun/host-response", import.meta.dir))};
 import file from "./${file}" with { type: "file" };
 const catalog = await loadPluginCatalog(import.meta.dir);
 const lazy = globalThis.pluginLoaded !== true;

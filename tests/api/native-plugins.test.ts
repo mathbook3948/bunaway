@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { resolve } from "node:path";
 import { validatePacket } from "#native/windows/bun/channel";
-import { hostResponse } from "#native/windows/bun/host-response";
+import { hostResponse } from "#native/host-api/bun/host-response";
 import { bindHostAPI, type CoreServices, createCore } from "@bunaway/core";
 import { defineNativePlugin, s } from "@bunaway/plugin";
 import {

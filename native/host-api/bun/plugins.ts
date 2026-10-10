@@ -18,7 +18,7 @@ import type {
 const contractJson = (value: unknown) =>
   JSON.parse(JSON.stringify(validateValue({}, value)));
 
-/** The validated dispatcher owned by one Windows worker. */
+/** The validated dispatcher owned by one host execution thread. */
 type PluginOperations = {
   execute(operation: string, input: unknown, source: string): JsonValue;
   executeUI(
