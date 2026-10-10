@@ -182,7 +182,9 @@ export class MacosWindows {
     return {
       getSnapshot: unsupported,
       show: (visible) => native.show(visible),
+      showInactive: unsupported,
       focus: () => native.focus(),
+      activate: unsupported,
       close: () => this.closeView(viewId),
       isVisible: () => native.isVisible(),
       isFocused: () => native.isFocused(),

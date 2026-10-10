@@ -71,6 +71,8 @@ test.skipIf(process.platform !== "win32")(
         window: () => ({
           getSnapshot: () => native.getSnapshot(hwnd),
           show: (visible) => native.show(hwnd, visible),
+          showInactive: () => native.showInactive(hwnd),
+          activate: () => native.activate(hwnd),
           focus: () => native.focus(hwnd),
           close: () => true,
           minimize: () => native.minimize(hwnd),

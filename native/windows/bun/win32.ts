@@ -436,12 +436,39 @@ export class Windows {
     user.symbols.ShowWindow(window, visible ? SW_SHOW : SW_HIDE);
   }
 
+  /** Show the existing placement without changing activation, even for hidden iconic or zoomed HWNDs. */
+  showInactive(window: bigint): void {
+    const minimized = this.isMinimized(window);
+    const maximized = this.isMaximized(window);
+    user.symbols.ShowWindow(window, SW_SHOWNA);
+    assert(
+      this.isVisible(window) &&
+        this.isMinimized(window) === minimized &&
+        this.isMaximized(window) === maximized,
+      "Windows did not preserve the inactive window state.",
+    );
+    this.observeChanges(window);
+  }
+
+  /** Request foreground activation without showing or restoring; observe both sides of the transition. */
+  activate(window: bigint): boolean {
+    if (!this.isVisible(window) || this.isMinimized(window)) {
+      return false;
+    }
+    user.symbols.SetForegroundWindow(window);
+    // Synchronous activation callbacks can precede the actual foreground identity change.
+    for (const observed of this.observations.keys()) {
+      this.observeChanges(observed);
+    }
+    return this.isFocused(window);
+  }
+
   focus(window: bigint): boolean {
     user.symbols.ShowWindow(
       window,
       user.symbols.IsIconic(window) ? SW_RESTORE : SW_SHOW,
     );
-    return !!user.symbols.SetForegroundWindow(window);
+    return this.activate(window);
   }
 
   /** Read live HWND state; invalid handles must not be mistaken for false. */

@@ -64,8 +64,8 @@ debug APK 개발 경로를 반영하고 iOS 및 모바일 후속 작업을 분�
 - [x] `getById`, `getCurrent`, `getFocused`, `getLastActive`로 창 ID, 현재 창, 포커스된 창과 마지막 활성 창을 조회한다.
 - [ ] 창 생성, 웹 문서 준비, SDK 준비를 구분한 완료 이벤트를 제공한다.
 - [ ] 숨긴 상태로 창을 생성하고 준비된 뒤 표시하는 옵션을 제공한다.
-- [ ] 포커스를 가져오지 않고 창을 표시하는 `showInactive`를 제공한다.
-- [ ] blur와 활성 창 전환 API를 제공한다.
+- [x] 포커스를 가져오지 않고 창을 표시하는 `showInactive`를 제공한다.
+- [x] blur와 활성 창 전환 API를 제공한다.
 - [x] `isVisible`과 `isFocused`로 실제 창의 표시 상태와 전경 창 여부를 조회한다.
 - [x] `isDestroyed`와 `isNormal`로 창의 destroyed와 normal 상태를 조회한다.
 - [ ] 일반 close와 확인을 우회하는 trusted destroy의 계약을 구분한다.
@@ -89,6 +89,13 @@ debug APK 개발 경로를 반영하고 iOS 및 모바일 후속 작업을 분�
 실제 WebView2와 UI Worker 실행은 문서 탐색의 ID 유지, 재생성의 ID 교체, 닫힌 창과
 이전 ID 조회, normal과 destroyed 상태, 뷰별 권한 거부를 확인했다. 다중 물리 모니터와
 사용자 입력에 의한 모든 포커스 전환을 검증했다는 뜻은 아니다.
+
+`showInactive`는 숨김만 해제하며 최소화, 최대화 상태와 다른 창의 입력 포커스를 유지한다.
+`activate`는 표시된 비최소화 창을 지정해 전환하고 실제 전경 여부를 반환한다.
+`blur`는 같은 호출 컨텍스트에서 제어 권한이 있는 적격 앱 창을 설정 순서로 선택한다.
+OS 거부와 후보 없음, 기존 show, hide, focus와의 차이는 [창 API](./site/src/content/docs/reference/host/windows.mdx)의 공개 계약을 따른다.
+실제 두 Win32 창과 입력 필드의 포커스 보존, 전경 전환의 검증 한계는
+[실행 기록](./architecture/windows-bun-results.md)에 구분한다.
 
 ## 02. 창 크기와 위치, 최소 크기와 최대 크기 제약
 

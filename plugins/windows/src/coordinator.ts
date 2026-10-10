@@ -21,7 +21,11 @@ export class WindowOperations {
       read(view: string): WindowState | undefined;
       create(spec: WindowSpec): void;
       close(view: string): boolean | Promise<boolean>;
-      apply(call: WindowCall, view: string): JsonValue | Promise<JsonValue>;
+      apply(
+        call: WindowCall,
+        view: string,
+        grants: readonly string[],
+      ): JsonValue | Promise<JsonValue>;
       stopping(): boolean;
       cancelled(requestId: string): boolean;
       now(): number;
@@ -96,7 +100,7 @@ export class WindowOperations {
           message: "Window request cancelled.",
         });
       }
-      return this.hooks.apply(call, viewId);
+      return this.hooks.apply(call, viewId, grants);
     }
     if (call.operation === "windows.create" && view && !view.closed) {
       throw new BunawayError({

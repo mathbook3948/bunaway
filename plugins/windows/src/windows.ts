@@ -26,6 +26,7 @@ export function createOperations(
   function applyWindow(
     call: WindowCall,
     viewId: string,
+    grants: readonly string[],
   ): JsonValue | Promise<JsonValue> {
     const window = services.window(viewId);
     switch (call.operation) {
@@ -35,6 +36,9 @@ export function createOperations(
         };
       case "windows.show":
         window.show(true);
+        break;
+      case "windows.showInactive":
+        window.showInactive();
         break;
       case "windows.hide":
         window.show(false);
@@ -47,6 +51,38 @@ export function createOperations(
           });
         }
         break;
+      case "windows.activate":
+        return window.activate();
+      case "windows.blur": {
+        if (window.isMinimized() || !window.isVisible()) {
+          return !window.isFocused();
+        }
+        if (!window.isFocused()) {
+          return true;
+        }
+        // Configuration order is deterministic; never activate an ungranted or external window.
+        for (const spec of services.specs) {
+          if (spec.view === viewId || !grants.includes(spec.view)) {
+            continue;
+          }
+          const state = services.read(spec.view);
+          if (
+            !state ||
+            state.closed ||
+            !state.ready ||
+            state.failure ||
+            operations.replacing.has(spec.view)
+          ) {
+            continue;
+          }
+          const next = services.window(spec.view);
+          if (next.isVisible() && !next.isMinimized()) {
+            next.activate();
+            return !window.isFocused();
+          }
+        }
+        return false;
+      }
       case "windows.close":
         return window.close();
       case "windows.getContentSize":
@@ -289,6 +325,13 @@ export function createOperations(
           : [
               call.payload.view,
             ];
+      if (call.operation === "windows.blur") {
+        targets.push(
+          ...services.specs
+            .filter((spec) => spec.view !== call.payload.view)
+            .map((spec) => spec.view),
+        );
+      }
       const grants = targets.filter((view) =>
         registry.allowed(
           context.permissions,
