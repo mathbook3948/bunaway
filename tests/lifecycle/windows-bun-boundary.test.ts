@@ -437,6 +437,246 @@ test("Core and boundary agree on evicted IDs while the oldest reply is in transi
   }
 });
 
+test.each([
+  "cancel-result",
+  "cancel-error",
+  "timeout-result",
+  "timeout-error",
+])(
+  "%s request IDs stay protected until FIFO replies are discarded",
+  async (mode) => {
+    const source = "https://app.bunaway.local/index.html";
+    const view = {
+      id: "main",
+      origins: [
+        new URL(source).origin,
+      ],
+      commands: [
+        "echo",
+      ],
+      events: [],
+      host: {
+        permissions: [],
+      },
+    };
+    const hello = {
+      kind: "hello" as const,
+      protocol: PROTOCOL_VERSION,
+      features: [],
+      buildId: "test",
+    };
+    const packets: Packet[] = [];
+    const replies: ServerMessage[] = [];
+    const output: ServerMessage[] = [];
+    const core = await createCore(
+      {
+        commands: {
+          echo: {
+            input: {
+              type: "string",
+            },
+            output: {
+              type: "string",
+            },
+            run: async (payload) => {
+              if (typeof payload !== "string") {
+                throw new Error("Expected string input.");
+              }
+              if (payload === "old-error") {
+                throw new Error("Old command failed.");
+              }
+              return payload;
+            },
+          },
+        },
+        events: {},
+      },
+      {
+        policy: {
+          version: 1,
+          views: [
+            view,
+          ],
+          backend: {
+            permissions: [],
+          },
+        },
+        hello,
+        platform: "windows",
+        backendContext: "backend-test" as Route["context"],
+        runtime: {
+          createCancellation: () => new AbortController(),
+          now: Date.now,
+          schedule: (callback, delay) => {
+            const timer = setTimeout(callback, delay);
+            return () => clearTimeout(timer);
+          },
+        },
+        send: async (_context, message) => {
+          replies.push(message);
+        },
+        callHost: async () => ({
+          kind: "result",
+          payload: null,
+        }),
+      },
+    );
+    const boundary = new ViewBoundary(view, {
+      origin: (text) => new URL(text).origin,
+      source: () => source,
+      ready: () => true,
+      capacity: () => true,
+      forward: (packet) => packets.push(packet),
+      deliver: (text) => output.push(JSON.parse(text)),
+      log: () => {},
+    });
+    boundary.receive(source, JSON.stringify(hello));
+    const opened = packets.shift();
+    if (opened?.kind !== "session-open") {
+      throw new Error("Missing session");
+    }
+    const session = core.openSession(opened.route.context, view.id);
+    const forward = async () => {
+      for (const packet of packets.splice(0)) {
+        if (packet.kind === "client") {
+          await session.receive(packet.message);
+        }
+      }
+    };
+    const deliver = () => {
+      for (const reply of replies.splice(0)) {
+        boundary.send(opened.route, reply);
+      }
+    };
+    const invoke = async (
+      id: string,
+      payload = mode.endsWith("error") ? "old-error" : "old-result",
+    ) => {
+      boundary.receive(
+        source,
+        JSON.stringify({
+          kind: "invoke",
+          protocol: PROTOCOL_VERSION,
+          id,
+          command: "echo",
+          payload,
+        }),
+      );
+      await forward();
+    };
+    try {
+      await forward();
+      deliver();
+      // Core finishes, but all replies remain queued in their original order.
+      for (let index = 0; index < API_LIMITS.maxPending; index++) {
+        const id = `request-${index}`;
+        await invoke(id);
+        if (mode.startsWith("cancel")) {
+          boundary.receive(
+            source,
+            JSON.stringify({
+              kind: "cancel",
+              protocol: PROTOCOL_VERSION,
+              id,
+            }),
+          );
+          await forward();
+        }
+      }
+      if (mode.startsWith("timeout")) {
+        const clock = spyOn(performance, "now").mockReturnValue(
+          performance.now() + API_LIMITS.maxCommandDurationMs + 1,
+        );
+        try {
+          boundary.scanDeadlines();
+          boundary.scanDeadlines();
+        } finally {
+          clock.mockRestore();
+        }
+        await forward();
+      }
+      expect(replies).toHaveLength(API_LIMITS.maxPending);
+      expect(output.filter((message) => message.kind === "error")).toHaveLength(
+        API_LIMITS.maxPending,
+      );
+      // Cancelled work retains bounded capacity rather than evicting unanswered IDs.
+      for (let index = 0; index < API_LIMITS.maxRequestIds; index++) {
+        await invoke(`overflow-${index}`);
+        expect(output.at(-1)).toMatchObject({
+          kind: "error",
+          error: {
+            code: "BUSY",
+          },
+        });
+      }
+      await invoke("request-0", "new-result");
+      expect(output.at(-1)).toMatchObject({
+        kind: "error",
+        error: {
+          code: "INVALID_ARGUMENT",
+        },
+      });
+      deliver();
+      expect(
+        output.filter((message) => message.kind === "result"),
+      ).toHaveLength(0);
+      // Once replies are consumed, ordinary calls can evict history and safely reuse an ID.
+      for (let index = 0; index < API_LIMITS.maxRequestIds; index++) {
+        await invoke(`settled-${index}`, "filler");
+        deliver();
+        expect(output.at(-1)).toMatchObject({
+          kind: "result",
+          id: `settled-${index}`,
+          payload: "filler",
+        });
+      }
+      await invoke("request-0", "new-result");
+      deliver();
+      expect(
+        output.filter(
+          (message) => message.kind === "result" && message.id === "request-0",
+        ),
+      ).toMatchObject([
+        {
+          kind: "result",
+          payload: "new-result",
+        },
+      ]);
+      expect(boundary.pendingCount).toBe(0);
+      // Expiry discovered during delivery consumes that same reply and must not leak a slot.
+      for (let index = 0; index <= API_LIMITS.maxPending; index++) {
+        const id = `expired-on-delivery-${index}`;
+        await invoke(id);
+        const clock = spyOn(performance, "now").mockReturnValue(
+          performance.now() + API_LIMITS.maxCommandDurationMs + 1,
+        );
+        try {
+          deliver();
+        } finally {
+          clock.mockRestore();
+        }
+        expect(output.at(-1)).toMatchObject({
+          kind: "error",
+          id,
+          error: {
+            code: "TIMEOUT",
+          },
+        });
+      }
+      await forward();
+      await invoke("after-expired-replies", "resumed");
+      deliver();
+      expect(output.at(-1)).toMatchObject({
+        kind: "result",
+        id: "after-expired-replies",
+        payload: "resumed",
+      });
+    } finally {
+      await core.stop();
+    }
+  },
+);
+
 test("Windows boundary uses actual source, issues view-specific contexts and drops revoked delivery", () => {
   const packets: Packet[] = [];
   const output: string[] = [];

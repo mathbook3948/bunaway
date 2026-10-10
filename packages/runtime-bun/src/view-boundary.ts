@@ -25,6 +25,8 @@ export class ViewBoundary {
         source: string;
         negotiated: boolean;
         used: Set<string>;
+        // Cancelled requests still own their IDs until the terminal reply is discarded.
+        cancelled: Set<string>;
         pending: Map<
           string,
           {
@@ -160,6 +162,7 @@ export class ViewBoundary {
           source,
           negotiated: false,
           used: new Set(),
+          cancelled: new Set(),
           pending: new Map(),
           subscriptions: new Map(),
         };
@@ -230,14 +233,19 @@ export class ViewBoundary {
         message.kind === "listen" ||
         message.kind === "unlisten"
       ) {
-        if (session.used.has(message.id) || session.pending.has(message.id)) {
+        if (
+          session.used.has(message.id) ||
+          session.pending.has(message.id) ||
+          session.cancelled.has(message.id)
+        ) {
           throw new BunawayError({
             code: "INVALID_ARGUMENT",
             message: "Request ID was already used.",
           });
         }
         if (
-          session.pending.size >= API_LIMITS.maxPending ||
+          session.pending.size + session.cancelled.size >=
+            API_LIMITS.maxPending ||
           (message.kind === "listen" &&
             session.subscriptions.size +
               [
@@ -266,7 +274,7 @@ export class ViewBoundary {
         session.used.add(message.id);
         if (session.used.size > API_LIMITS.maxRequestIds) {
           // Match Core's acceptance order even while a completed reply is in transit.
-          // The pending map protects in-flight IDs outside this recent history.
+          // Active and cancelled requests protect IDs outside this recent history.
           const oldest = session.used.values().next().value;
           if (oldest !== undefined) {
             session.used.delete(oldest);
@@ -296,6 +304,7 @@ export class ViewBoundary {
         if (!session.pending.delete(message.id)) {
           return;
         }
+        session.cancelled.add(message.id);
         this.error(message.id, {
           code: "CANCELLED",
           message: "Request cancelled.",
@@ -408,6 +417,13 @@ export class ViewBoundary {
       }
       session.negotiated = true;
     } else if (message.kind === "result" || message.kind === "error") {
+      if (session.cancelled.delete(message.id)) {
+        this.hooks.log("discarded", {
+          reason: "late-response",
+          id: message.id,
+        });
+        return;
+      }
       const pending = session.pending.get(message.id);
       if (!pending) {
         this.hooks.log("discarded", {
@@ -419,6 +435,8 @@ export class ViewBoundary {
       if (performance.now() >= pending.expiry) {
         this.expire(message.id);
         if (pending.kind !== "listen") {
+          // This response already completes the cleanup reservation just created by expire.
+          session.cancelled.delete(message.id);
           return;
         }
       }
@@ -486,6 +504,7 @@ export class ViewBoundary {
       pending.expiry = Number.POSITIVE_INFINITY;
     } else {
       session.pending.delete(id);
+      session.cancelled.add(id);
       this.hooks.forward({
         kind: "client",
         route: session.route,
@@ -513,6 +532,7 @@ export class ViewBoundary {
       }
     }
   }
+  /** Requests that may still send a cancel; already-cancelled IDs need no channel reservation. */
   get pendingCount() {
     return this.session?.pending.size ?? 0;
   }
