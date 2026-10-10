@@ -9,8 +9,8 @@
 현재 제품 경로는 Bun 진입점, 메인 스레드의 AppKit/WKWebView 직접 FFI와 같은
 프로세스의 백엔드 Worker다. 이전 C/ObjC++ 호스트와 Bun 자식 프로세스 실험의
 완료 표시를 현재 구현으로 옮기지 않는다. 별도 개발자 진입점 없이 공통 앱 정의
-하나를 사용하는 모델은 구현했고, 다중 창, `desktop`과 네이티브 플러그인 어댑터는
-남아 있다.
+하나를 사용하는 모델과 다중 창은 구현했다. 창 플러그인의 기본 제어를 제공하며,
+`desktop`과 저장, 로그 등 다른 네이티브 플러그인 어댑터는 남아 있다.
 
 ## 상태와 작업 기준
 
@@ -35,10 +35,10 @@
 | 영역 | 현재 구현 | 남은 범위 |
 | --- | --- | --- |
 | 실행 | 고정 Bun 1.4.2, 직접 FFI, 같은 PID의 백엔드 Worker | 최소 OS, Intel, 현재 구현의 CI 실행 검증 |
-| 창 | 단일 창, 초기 크기와 최소/최대 제약 | 다중 창과 공개 창 API |
+| 창 | 다중 창, 생성과 재생성, 기본 제어, 초기 크기 제약 | 준비 이벤트, 모달과 sheet, 상주 앱 |
 | WebView | 명령, 이벤트, 정책, 자산 스킴, 탐색과 리소스 경계, 복구 | 영속 프로필과 세션 제어 API |
 | 종료 | Worker 정리, 기한 초과 강제 종료, 프로세스 그룹 정리 | `desktop`, 종료 취소와 상주 앱 |
-| 네이티브 플러그인 | 미구현, 권한 선언과 Host API 호출을 `UNSUPPORTED`로 거부 | 저장, 로그, 기능 조회, opener와 창 어댑터 |
+| 네이티브 플러그인 | 등록과 권한 검증, 기본 창 어댑터 | 저장, 로그, 기능 조회, opener와 창 제어 확장 |
 | 배포 | compiled `.app`, 서명 및 DMG/PKG 조립 도구 | CLI 채널 연결, Developer ID, 공증, 설치와 Store 검증 |
 
 ## 01. 창 생성과 기본 수명주기
@@ -47,15 +47,28 @@
 
 - [x] 공통 앱 정의와 `build.app`으로 단일 창을 생성한다.
 - [x] 창 닫기와 앱 종료 요청에서 세션, 코어, Worker와 UI를 정리한다.
-- [ ] `app.windows`의 다중 창과 뷰별 정책, 세션, 프로필을 지원한다. 현재 선언은 하나만 허용한다.
-- [ ] `startup: false` 창의 지연 생성, 닫은 창의 생성과 열린 창의 재생성을 제공한다.
-- [ ] 허용된 창 목록과 열림 여부, 현재 창과 활성 창을 조회한다.
-- [ ] 공개 show, hide, focus, close와 `showInactive` API를 제공한다.
+- [x] `app.windows`의 다중 창과 뷰별 정책, 세션, 임시 프로필을 지원한다. 한 뷰에 창 하나를 선언한다.
+- [x] `startup: false` 창의 지연 생성, 닫은 창의 생성과 열린 창의 재생성을 제공한다.
+- [x] 허용된 창 목록과 열림 여부, 개별 창의 표시와 포커스 여부를 조회한다.
+- [ ] 창 ID, 현재 창과 마지막 활성 창을 조회한다.
+- [x] 공개 show, hide, focus, close API를 제공한다.
+- [ ] 포커스를 가져오지 않고 표시하는 `showInactive` API를 제공한다.
 - [ ] 창 생성, 웹 문서 준비와 SDK 준비를 구분한 이벤트를 제공한다.
 - [ ] 부모와 자식 창, 모달 창 및 sheet의 입력 차단과 종료 순서를 제공한다.
 - [ ] 일반 close와 확인을 우회하는 destroy의 계약을 구분한다.
 - [ ] 창 없는 상주 앱, 메뉴 막대 앱과 splashscreen 전환을 지원한다.
 - [ ] 실행 중 창 옵션과 하나의 뷰에서 여러 창을 만드는 기능의 권한 및 식별자를 결정한다.
+
+창과 뷰의 정책, 세션을 따로 관리하며 보조 창을 닫아도 다른 창과 백엔드는 유지한다.
+재생성은 기존 세션을 폐기하고 새 세션을 만든다. 같은 뷰의 임시 WebKit 프로필은
+앱 실행 중 유지하며 다른 뷰와 공유하지 않는다. 앱 종료 후 프로필은 남기지 않는다.
+숨긴 창은 열린 창이며 마지막 열린 창을 닫으면 앱이 종료된다. 재생성 중에는 자동
+종료를 보류한다. 생성 완료는 WebView 설정과 리소스 규칙 준비이며 웹 문서나 SDK
+초기화 완료가 아니다. 공개 계약은 [창 API](./site/src/content/docs/reference/host/windows.mdx)를 따른다.
+
+남은 공통 API는 Windows에서 계약과 구현을 먼저 확정한 뒤 macOS에 연결한다.
+현재 지원 범위만 완료로 표시하며 01절 전체 완료를 뜻하지 않는다.
+후속 계약과 선행 조건은 [이슈 #78](https://github.com/mathbook3948/bunaway/issues/78)에서 관리한다.
 
 ## 02. 창 크기와 위치, 최소 크기와 최대 크기 제약
 
@@ -79,7 +92,7 @@
 우선순위 P1, 효과와 특수 창은 P2. 소유자: 호스트와 창 API.
 
 현재 네이티브 창의 기본 버튼과 사용자 조작은 공개 창 제어 API의 구현으로 세지 않는다.
-`@bunaway/plugin-windows`의 macOS 호출은 `UNSUPPORTED`다.
+창 상태 변경과 크기, 위치, 전체화면 및 닫기 확인의 실행 중 macOS 호출은 `UNSUPPORTED`다.
 
 - [ ] minimize, maximize, unmaximize, restore와 toggleMaximize를 공통 계약에 맞춘다.
 - [ ] 최소화, 최대화, 전체화면, 표시와 포커스 상태를 조회한다.
@@ -377,7 +390,7 @@ Windows의 `beforeQuit`, `onOpen`과 트레이 종료 동작은 현재 macOS 기
 - [x] 문서 교체와 종료 시 요청 및 구독을 정리한다.
 - [x] Worker 채널의 패킷 검증, 수신 확인과 용량 제한을 Windows와 공유한다.
 - [x] 네이티브 JSON 직렬화 전 변환 불가 메시지를 거부하고 정상 메시지 처리를 유지한다.
-- [ ] macOS 네이티브 플러그인 카탈로그와 어댑터를 공통 등록 및 권한 계약에 연결한다.
+- [x] macOS 네이티브 플러그인 카탈로그와 기본 창 어댑터를 공통 등록 및 권한 계약에 연결한다.
 - [ ] 기능 지원 조회에서 실제 macOS 작업과 OS 권한 상태를 보고한다.
 - [ ] once와 native 이벤트, binary payload, stream/channel과 transferable 자원 계약을 제공한다.
 - [ ] UI 명령 및 이벤트의 타입과 정책 목록 생성, 브라우저 테스트 transport를 제공한다.
@@ -479,8 +492,8 @@ iOS의 WKWebView 구현은 macOS 구현만으로 완료 처리하지 않는다.
 
 ## 구현과 검증 근거
 
-- [설정 검증과 단일 창, 네이티브 권한 거부](../native/macos/bun/config.ts)
-- [백엔드와 desktop 및 Host API의 미지원 처리](../native/macos/bun/backend.ts)
+- [다중 창 설정과 카탈로그 권한 검증](../native/macos/bun/config.ts)
+- [백엔드 Worker와 Host API, desktop 미지원 처리](../native/macos/bun/backend.ts)
 - [시작과 Worker 종료](../native/macos/bun/entry.ts)
 - [AppKit, WKWebView, 정책과 리소스 경계](../native/macos/bun/webview.ts)
 - [프로세스 그룹 소유와 감시](../native/macos/bun/process-group.ts)

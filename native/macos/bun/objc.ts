@@ -182,6 +182,9 @@ export class Objc {
   } as const);
   private readonly selectors = new Map<string, ObjcObject>();
   private readonly callbacks: JSCallback[] = [];
+  private readonly callbackTargets: {
+    call: ((...args: (Pointer | null)[]) => unknown) | undefined;
+  }[] = [];
   private readonly blocks: {
     bytes: Buffer;
     descriptor: Buffer;
@@ -304,15 +307,25 @@ export class Objc {
       throw new Error("Objective-C delegate allocation failed.");
     }
     for (const method of methods) {
-      const callback = new JSCallback(method.call, {
-        args: Array.from(
-          {
-            length: method.arguments + 2,
-          },
-          () => "ptr" as const,
-        ),
-        returns: method.returns ?? "void",
-      } as const);
+      const target: {
+        call: typeof method.call | undefined;
+      } = {
+        call: method.call,
+      };
+      this.callbackTargets.push(target);
+      const emptyResult = method.returns === "bool" ? false : null;
+      const callback = new JSCallback(
+        (...args) => target.call?.(...args) ?? emptyResult,
+        {
+          args: Array.from(
+            {
+              length: method.arguments + 2,
+            },
+            () => "ptr" as const,
+          ),
+          returns: method.returns ?? "void",
+        } as const,
+      );
       this.callbacks.push(callback);
       if (
         !this.runtime.symbols.class_addMethod(
@@ -343,15 +356,26 @@ export class Objc {
     argumentsCount: number,
     call: (...args: (Pointer | null)[]) => void,
   ): Pointer {
-    const invoke = new JSCallback(call, {
-      args: Array.from(
-        {
-          length: argumentsCount + 1,
-        },
-        () => "ptr" as const,
-      ),
-      returns: "void",
-    } as const);
+    const target: {
+      call: typeof call | undefined;
+    } = {
+      call,
+    };
+    this.callbackTargets.push(target);
+    const invoke = new JSCallback(
+      (...args) => {
+        target.call?.(...args);
+      },
+      {
+        args: Array.from(
+          {
+            length: argumentsCount + 1,
+          },
+          () => "ptr" as const,
+        ),
+        returns: "void",
+      } as const,
+    );
     this.callbacks.push(invoke);
     const signature = this.cstring(`v@?${"@".repeat(argumentsCount)}`);
     const descriptor = Buffer.alloc(24);
@@ -375,6 +399,13 @@ export class Objc {
       signature,
     });
     return ptr(bytes);
+  }
+  /** Drop captured window state after delegates detach; process-owned IMPs and pending native Blocks remain callable. */
+  releaseCallbacks(): void {
+    for (const target of this.callbackTargets) {
+      target.call = undefined;
+    }
+    this.callbackTargets.length = 0;
   }
   /** Invoke a native decision block exactly once with its integer decision. */
   decide(block: Pointer | null, decision: number): void {

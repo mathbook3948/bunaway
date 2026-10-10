@@ -238,9 +238,6 @@ export async function buildProject(
   assertNotFrontendBuild(settings.root);
   const target = options.native?.target ?? currentTarget();
   await assertBuildBun(target, settings.frameworkRoot);
-  if (target !== "windows-x64" && settings.app.windows) {
-    throw new Error("app.windows currently requires the Windows target.");
-  }
   // The lock covers frontend generation, asset validation and publication so
   // another build cannot change the web output while this build consumes it.
   const abort = new AbortController();
@@ -282,9 +279,6 @@ async function assembleProject(
   const target = options.native?.target ?? currentTarget();
   await assertBuildBun(target, root);
   const windows = target === "windows-x64";
-  if (!windows && project.app.windows) {
-    throw new Error("app.windows currently requires the Windows target.");
-  }
   const native =
     options.native ?? (await prepareNativeForBuild(target, root, signal));
   signal?.throwIfAborted();

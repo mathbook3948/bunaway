@@ -21,6 +21,7 @@ mise run host:macos
 mise exec -- bun --no-env-file tests/lifecycle/run-native.ts --app
 mise exec -- bun test tests/lifecycle/macos-bun.test.ts
 mise exec -- bun tests/lifecycle/macos-webview-regressions.ts
+mise exec -- bun tests/lifecycle/macos-window-api.ts
 ```
 
 실제 WKWebView 회귀 7개가 통과했다. 공통 페이지에서 명령과 이벤트, 입력 오류,
@@ -34,7 +35,18 @@ Bun 앱 강제 종료와 읽기 전용 자산에서의 시작도 확인했다.
 ad-hoc 서명한 `.app`에서도 같은 회귀 7개가 통과했으며 배포 스크립트 검사 16개가 통과했다.
 `mac-direct` hardened runtime 서명 후에도 실제 WKWebView 보고서와 정상 종료를 확인했다.
 Worker 계약 테스트는 명령 결과, 세션 폐기, 종료 수신 확인과 플러그인 정리 파일을
-실제 Bun Worker로 확인한다. macOS native 플러그인 권한은 백엔드 시작 전에 거부한다.
+실제 Bun Worker로 확인한다. 등록한 창 플러그인은 설치된 카탈로그와 계약을 비교하고
+각 Host API 호출에서 현재 컨텍스트와 뷰별 권한을 검증한다. 다른 플러그인의 macOS
+작업은 어댑터가 없으므로 `UNSUPPORTED`다.
+
+다중 창 검사는 compiled Bun 호스트에서 setup의 Host API를 먼저 확인한 뒤 주 창과 읽기 뷰를 시작하고, 지연 창을
+반복 생성과 재생성한다. 뷰별 목록 필터링, 권한 없는 명령과 대상 창 거부,
+show/hide와 상태 조회, 닫은 창의 조회 오류와 미지원 작업의 오류를 확인한다.
+보조 창을 닫아도 주 창과 백엔드를 유지하고, 주 창만 남은 상태에서 자기 재생성을
+완료한 뒤 새로운 세션과 유지된 백엔드 상태로 마지막 창을 닫는다.
+포커스 요청은 OS가 거절하면 `BUSY`를 허용하며, 성공하면 실제 key window와 앱의
+활성 상태를 조회한다. 다른 뷰의 임시 프로필 분리와 같은 뷰의 프로필 유지도 검사한다.
+영속 프로필, 준비 이벤트와 모달 창의 완료 검증은 포함하지 않는다.
 
 하위 프로세스 회귀는 백엔드에서 shell과 그 자식 `sleep`을 실행한다. 일반 실행과
 `unref()` 실행, 플러그인 종료 훅의 무한 루프, 호스트 SIGKILL의 네 경로에서

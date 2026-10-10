@@ -226,6 +226,7 @@ export async function installedPlugins(
 export async function writePluginManifest(
   assets: string,
   plugins: readonly InstalledPlugin[],
+  platform: "windows" | "macos" = "windows",
 ): Promise<void> {
   await mkdir(assets, {
     recursive: true,
@@ -245,9 +246,9 @@ export async function writePluginManifest(
       name: plugin.name,
       version: plugin.version,
       native: plugin.native,
-      ...(plugin.targets.windows
+      ...(plugin.targets[platform]
         ? {
-            execution: plugin.targets.windows.execution,
+            execution: plugin.targets[platform]?.execution,
           }
         : {}),
       authorization: plugin.authorization !== undefined,
