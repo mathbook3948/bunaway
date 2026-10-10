@@ -1,7 +1,7 @@
 import { linkSymbols, type Pointer, ptr, toArrayBuffer } from "bun:ffi";
 import { mock } from "bun:test";
 import assert from "node:assert/strict";
-import { hostResponse } from "#native/windows/bun/host-response";
+import { hostResponse } from "#native/host-api/bun/host-response";
 
 // Isolate the DLL substitute from the real Windows callback tests.
 const WM_DPICHANGED = 0x02e0;

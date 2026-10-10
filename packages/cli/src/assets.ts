@@ -502,6 +502,7 @@ export async function bundleMacosHost(
   installed: readonly InstalledPlugin[] = [],
 ): Promise<string[]> {
   const sdk = project ? await sdkPlugin(project, [], installed) : undefined;
+  await writePluginManifest(destination, installed, "macos");
   const outputs = await buildWithSdk(
     {
       entrypoints: [
@@ -518,6 +519,10 @@ export async function bundleMacosHost(
       name: "macos-app-entry",
       setup(build) {
         sdk?.setup(build);
+        appModules({
+          plugins: installed,
+          platform: "macos",
+        }).setup(build);
         build.onResolve(
           {
             filter: /^\.\/app\.js$/,

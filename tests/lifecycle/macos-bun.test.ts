@@ -5,9 +5,17 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import { type HostContext, PROTOCOL_VERSION } from "@bunaway/protocol";
-import { Channel, type Packet } from "@bunaway/runtime-bun/worker-channel";
+import {
+  Channel,
+  type Packet,
+  validatePacket,
+} from "@bunaway/runtime-bun/worker-channel";
+import { appModules } from "#cli/app-modules";
 import { bundleMacosHost } from "#cli/assets";
-import type { MacosConfig } from "#native/macos/bun/config";
+import {
+  type MacosConfig,
+  readMacosWindowSpecs,
+} from "#native/macos/bun/config";
 import {
   macosOrigin,
   platformUrl,
@@ -24,15 +32,17 @@ function workerConfig(directory: string): MacosConfig {
     backendContext: "backend-test" as HostContext,
     assets: directory,
     dataRoot: directory,
-    window: {
-      view: "main",
-      home: "https://app.bunaway.local/",
-      title: "Test",
-      window: {
-        width: 800,
-        height: 600,
+    windows: [
+      {
+        view: "main",
+        home: "https://app.bunaway.local/",
+        title: "Test",
+        window: {
+          width: 800,
+          height: 600,
+        },
       },
-    },
+    ],
     policy: {
       version: 1,
       backend: {
@@ -70,6 +80,9 @@ async function bundleTestHost(directory: string): Promise<void> {
       {
         name: "test-ui",
         setup(build) {
+          appModules({
+            platform: "macos",
+          }).setup(build);
           if (process.platform !== "darwin") {
             build.onResolve(
               {
@@ -152,6 +165,113 @@ test("macOS asset origins reject credentials and preserve non-default ports", ()
   expect(filters[1].trigger["url-filter"]).toBe(
     "^http://127\\.0\\.0\\.1:5173[/?#]",
   );
+});
+
+test("macOS native registration validates its direction and exact metadata before dispatch", () => {
+  const packet = {
+    kind: "native-register",
+    plugins: [],
+  } satisfies Packet;
+  expect(validatePacket(packet, "macos-main")).toEqual(packet);
+  expect(() => validatePacket(packet, "macos-backend")).toThrow();
+  const native = {
+    operations: [],
+    permissions: [],
+  };
+  for (const registration of [
+    {
+      name: 123,
+      version: "1",
+      native,
+    },
+    {
+      name: "test",
+      version: 123,
+      native,
+    },
+    {
+      name: "test",
+      version: "1",
+      native,
+      extra: true,
+    },
+    {
+      name: "test",
+      version: "1",
+    },
+    null,
+  ]) {
+    expect(() =>
+      validatePacket(
+        {
+          ...packet,
+          plugins: [
+            registration,
+          ],
+        },
+        "macos-main",
+      ),
+    ).toThrow();
+  }
+});
+
+test("macOS window declarations preserve exact asset ports and reject mixed origins", () => {
+  const config = workerConfig("/tmp");
+  const first = config.windows[0];
+  if (!first) {
+    throw new Error("Missing test window.");
+  }
+  const policy = {
+    ...config.policy,
+    views: [
+      {
+        ...config.policy.views[0],
+        id: "main",
+        origins: [
+          "https://app.bunaway.local:8443",
+        ],
+        commands: [],
+        events: [],
+        host: {
+          permissions: [],
+        },
+      },
+    ],
+  };
+  expect(
+    readMacosWindowSpecs(
+      [
+        {
+          ...first,
+          home: "https://app.bunaway.local:8443/",
+        },
+      ],
+      policy,
+    )[0]?.home,
+  ).toContain(":8443");
+  expect(() =>
+    readMacosWindowSpecs(
+      [
+        {
+          ...first,
+          home: "https://app.bunaway.local/",
+        },
+      ],
+      policy,
+    ),
+  ).toThrow();
+  expect(() =>
+    readMacosWindowSpecs(
+      [
+        {
+          ...first,
+          home: "https://external.example/",
+        },
+      ],
+      policy,
+    ),
+  ).toThrow();
+  expect(() => readMacosWindowSpecs([], policy)).toThrow();
 });
 
 test("macOS backend Worker uses core sessions and acknowledges shutdown before plugin cleanup", async () => {
@@ -551,3 +671,66 @@ for (const mode of [
     25000,
   );
 }
+
+test("macOS shutdown during native registration acknowledges acceptance and skips core setup", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "bunaway-macos-register-"));
+  let worker: Worker | undefined;
+  let channel: Channel | undefined;
+  try {
+    const app = resolve(directory, "app.ts");
+    const marker = resolve(directory, "setup.txt");
+    await Bun.write(
+      app,
+      `export default {commands: {}, events: {}, plugins: [{name:"setup",version:"1.0.0",setup:()=>Bun.write(${JSON.stringify(marker)},"started")} ]};`,
+    );
+    await bundleMacosHost(
+      resolve(import.meta.dir, "../../native/macos/bun"),
+      directory,
+      app,
+    );
+    const errors: unknown[] = [];
+    let cleaned = false;
+    let registered = false;
+    // Hold registration's ack until shutdown has been accepted by the backend.
+    const config = workerConfig(directory);
+    const running = new Worker(
+      new URL(`file://${resolve(directory, "backend.js")}`),
+      {
+        workerData: config,
+      },
+    );
+    worker = running;
+    const stopped = new Promise<number>((done) => running.once("exit", done));
+    running.on("error", (error) => errors.push(error));
+    channel = new Channel(
+      running,
+      config.runtime,
+      "macos-main",
+      async (packet) => {
+        if (packet.kind === "native-register") {
+          registered = true;
+          await channel?.send({
+            kind: "shutdown",
+          });
+        } else if (packet.kind === "cleaned") {
+          cleaned = true;
+        } else {
+          errors.push(packet);
+        }
+      },
+      (error) => errors.push(error),
+    );
+    expect(await stopped).toBe(0);
+    expect(registered).toBe(true);
+    expect(cleaned).toBe(true);
+    expect(errors).toEqual([]);
+    expect(await Bun.file(marker).exists()).toBe(false);
+  } finally {
+    channel?.close();
+    await worker?.terminate();
+    await rm(directory, {
+      recursive: true,
+      force: true,
+    });
+  }
+}, 15000);

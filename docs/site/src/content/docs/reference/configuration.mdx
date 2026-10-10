@@ -76,7 +76,7 @@ Ctrl+C나 SIGTERM으로 빌드를 중단하면 실행한 명령과 하위 프로
 Windows에서는 기본 이름 `<appId>.exe`도 같은 파일 이름 검사를 받습니다. 기본 이름이 유효하지 않으면
 `app.executableName`에 다른 이름을 지정하세요.
 `validate`와 프로덕션 `build`는 시작 페이지의 실제 파일을 확인합니다.
-Windows에서는 `app.windows` 배열로 여러 창을 정의할 수 있습니다.
+Windows와 macOS에서는 `app.windows` 배열로 여러 창을 정의할 수 있습니다.
 `appId`, `title`은 유지하고 단일 창 필드 `view`, `home`, `window`를 배열과 함께 쓰지 마세요.
 각 항목은 `view`, `title`, `home`, `window.width`, `window.height`, 위 표의 선택적 크기 제약과 `startup`을 받습니다.
 `startup`은 boolean이며 생략하면 `true`입니다. `false`인 창은 API로 생성합니다.
@@ -85,7 +85,8 @@ Windows에서는 `app.windows` 배열로 여러 창을 정의할 수 있습니�
 창은 1–128개이며 뷰 ID는 중복할 수 없고 정책에 해당 뷰와 home origin이 있어야 합니다.
 시작할 때 여는 창이 최소 하나 필요합니다. 창 제목은 1–1024자이며 NUL을 넣을 수 없습니다.
 생성하지 않는 창도 프로덕션 시작 페이지 파일을 검증합니다.
-macOS 빌드는 `app.windows`를 거부합니다.
+macOS에서 앱 자산 origin에 명시적 포트를 지정하면 모든 창의 `home`은 같은 origin을 사용하고,
+각 뷰의 정책에도 그 포트를 포함한 origin을 허용해야 합니다.
 [여러 창 만들기](/guides/windows/)에서 설정과 명령을 함께 작성할 수 있습니다.
 
 ## dev

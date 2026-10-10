@@ -4,13 +4,13 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import { Channel, type UIConfig } from "#native/windows/bun/channel";
-import type { PackagedPlugin } from "#native/windows/bun/plugin-contract";
+import type { PackagedPlugin } from "#native/host-api/bun/plugin-contract";
 import {
   disposeAll,
   operations,
   permissionMatcher,
   pluginRegistry,
-} from "#native/windows/bun/plugins";
+} from "#native/host-api/bun/plugins";
 import { defineNativePlugin, type NativeEnvironment, s } from "@bunaway/plugin";
 import { validateValue } from "@bunaway/protocol";
 import { capabilitiesPlugin } from "@bunaway/plugin-capabilities";

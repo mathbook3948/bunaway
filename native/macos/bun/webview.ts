@@ -58,7 +58,9 @@ export class MacosWebview {
   readonly ready: Promise<void>;
 
   constructor(
-    private readonly config: MacosConfig,
+    private readonly config: Omit<MacosConfig, "windows"> & {
+      window: import("@bunaway/plugin-api/native").WindowSpec;
+    },
     readonly hooks: {
       receive(source: string, raw: string): void;
       revoke(reason: string): void;
@@ -66,7 +68,7 @@ export class MacosWebview {
       log(event: string, fields?: object): void;
       fail(error: unknown): void;
     },
-    application: MacosApplication,
+    private readonly application: MacosApplication,
   ) {
     const o = this.objc;
     runtimeOwners.push(o);
@@ -76,282 +78,291 @@ export class MacosWebview {
       }
       return value;
     };
-    const windowDelegate = o.delegate([
-      {
-        selector: "windowShouldClose:",
-        arguments: 1,
-        returns: "bool",
-        encoding: "B@:@",
-        call: () => {
-          if (!this.closed) {
-            hooks.close();
-          }
-          return false;
-        },
-      },
-    ]);
-    this.retained.push(windowDelegate);
-    const size = config.window.window;
-    const constraints = {
-      minWidth: size.minWidth ?? null,
-      minHeight: size.minHeight ?? null,
-      maxWidth: size.maxWidth ?? null,
-      maxHeight: size.maxHeight ?? null,
-    };
-    const initialSize = clampWindowSize(size.width, size.height, constraints);
-    this.window = o.window(initialSize.width, initialSize.height);
-    o.setSize(
-      this.window,
-      "setContentMinSize:",
-      constraints.minWidth ?? 0,
-      constraints.minHeight ?? 0,
-    );
-    o.setSize(
-      this.window,
-      "setContentMaxSize:",
-      constraints.maxWidth ?? NS_UNBOUNDED_CONTENT_SIZE,
-      constraints.maxHeight ?? NS_UNBOUNDED_CONTENT_SIZE,
-    );
-    o.send(this.window, "setTitle:", o.string(config.window.title));
-    o.send(this.window, "setDelegate:", windowDelegate);
-    const configuration = o.object("WKWebViewConfiguration");
-    this.controller = o.object("WKUserContentController");
-    this.retained.push(configuration, this.controller);
-    const scheme = o.delegate([
-      {
-        selector: "webView:startURLSchemeTask:",
-        arguments: 2,
-        encoding: "v@:@@",
-        call: (_self, _cmd, _view, task) => {
-          if (task && !this.closed) {
-            this.serve(task);
-          }
-        },
-      },
-      {
-        selector: "webView:stopURLSchemeTask:",
-        arguments: 2,
-        encoding: "v@:@@",
-        call() {},
-      },
-    ]);
-    this.retained.push(scheme);
-    o.send(
-      configuration,
-      "setURLSchemeHandler:forURLScheme:",
-      scheme,
-      o.string("bunaway"),
-    );
-    const scriptHandler = o.delegate([
-      {
-        selector: "userContentController:didReceiveScriptMessage:",
-        arguments: 2,
-        encoding: "v@:@@",
-        call: (_self, _cmd, _controller, message) => {
-          if (this.closed || !message) {
-            return;
-          }
-          const frame = o.send(message, "frameInfo");
-          if (!o.send(frame, "isMainFrame")) {
-            hooks.log("frame-message-ignored");
-            return;
-          }
-          // WKWebView supplies frame identity and its live URL; neither is trusted from JSON.
-          const source = this.source();
-          const body = o.send(message, "body");
-          // WebKit accepts NSDate and other values that would throw a native
-          // exception during JSON serialization, before protocol validation.
-          if (
-            !o.send(o.class("NSJSONSerialization"), "isValidJSONObject:", body)
-          ) {
-            hooks.log("web-message-rejected", {
-              reason: "INVALID_ARGUMENT",
-            });
-            return;
-          }
-          const data = o.send(
-            o.class("NSJSONSerialization"),
-            "dataWithJSONObject:options:error:",
-            body,
-            0,
-            null,
-          );
-          const bytes = o.send(data, "bytes");
-          const length = Number(o.send(data, "length"));
-          const raw = bytes
-            ? Buffer.from(
-                toArrayBuffer(Number(bytes) as Pointer, 0, length),
-              ).toString("utf8")
-            : "";
-          hooks.receive(source, raw);
-        },
-      },
-    ]);
-    this.retained.push(scriptHandler);
-    o.send(
-      this.controller,
-      "addScriptMessageHandler:name:",
-      scriptHandler,
-      o.string("bunaway"),
-    );
-    const script = required(
-      o.send(
-        o.send(o.class("WKUserScript"), "alloc"),
-        "initWithSource:injectionTime:forMainFrameOnly:",
-        o.string(BRIDGE),
-        WK_USER_SCRIPT_INJECTION_AT_DOCUMENT_START,
-        0,
-      ),
-    );
-    this.retained.push(script);
-    o.send(this.controller, "addUserScript:", script);
-    o.send(configuration, "setUserContentController:", this.controller);
-    o.send(
-      configuration,
-      "setWebsiteDataStore:",
-      o.send(o.class("WKWebsiteDataStore"), "nonPersistentDataStore"),
-    );
-    this.webview = o.webview(
-      initialSize.width,
-      initialSize.height,
-      configuration,
-    );
-    const cancelDownload = o.block(1, () => {});
-    const navigation = o.delegate([
-      {
-        selector: "webView:decidePolicyForNavigationAction:decisionHandler:",
-        arguments: 3,
-        encoding: "v@:@@@?",
-        call: (_self, _cmd, _view, action, decision) => {
-          let allowed = false;
-          try {
-            const target = o.text(
-              o.send(
-                o.send(o.send(action ?? null, "request"), "URL"),
-                "absoluteString",
-              ),
-            );
-            const frame = o.send(action ?? null, "targetFrame");
-            const view = config.policy.views.find(
-              (view) => view.id === config.window.view,
-            );
-            allowed =
-              !!frame &&
-              !!view?.origins.includes(macosOrigin(target)) &&
-              !this.closed;
-            if (allowed && o.send(frame, "isMainFrame")) {
-              hooks.revoke("navigation");
-              hooks.log("navigation", {
-                uri: target,
-              });
-            } else if (!allowed) {
-              let event = "new-window-blocked";
-              if (frame) {
-                event = o.send(frame, "isMainFrame")
-                  ? "navigation-blocked"
-                  : "web-resource-blocked";
-              }
-              hooks.log(event, {
-                uri: target,
-              });
+    try {
+      const windowDelegate = o.delegate([
+        {
+          selector: "windowShouldClose:",
+          arguments: 1,
+          returns: "bool",
+          encoding: "B@:@",
+          call: () => {
+            if (!this.closed) {
+              hooks.close();
             }
-          } catch (error) {
-            hooks.fail(error);
-          }
-          o.decide(
-            decision ?? null,
-            allowed ? WK_NAVIGATION_ALLOW : WK_NAVIGATION_CANCEL,
-          );
+            return false;
+          },
         },
-      },
-      {
-        selector: "webView:navigationAction:didBecomeDownload:",
-        arguments: 3,
-        encoding: "v@:@@@",
-        call: (_self, _cmd, _view, _action, download) => {
-          if (download) {
-            o.send(download, "cancel:", cancelDownload);
-          }
-        },
-      },
-      {
-        selector: "webView:didFinishNavigation:",
-        arguments: 2,
-        encoding: "v@:@@",
-        call: () =>
-          hooks.log("navigation-completed", {
-            success: true,
-            source: this.source(),
-          }),
-      },
-      {
-        selector: "webViewWebContentProcessDidTerminate:",
-        arguments: 1,
-        encoding: "v@:@",
-        call: () => {
-          hooks.log("webview-process-failed", {
-            kind: 1,
-          });
-          hooks.revoke("process-failed");
-          if (!this.closed) {
-            this.loadHome();
-          }
-        },
-      },
-      {
-        selector:
-          "webView:requestMediaCapturePermissionForOrigin:initiatedByFrame:type:decisionHandler:",
-        arguments: 5,
-        encoding: "v@:@@@q@?",
-        call: (_self, _cmd, _view, _origin, _frame, _type, decision) => {
-          hooks.log("permission-request-denied");
-          o.decide(decision ?? null, WK_PERMISSION_DENY);
-        },
-      },
-    ]);
-    this.retained.push(navigation);
-    o.send(this.webview, "setNavigationDelegate:", navigation);
-    // Media permissions belong to WKUIDelegate, even when one object owns both contracts.
-    o.send(this.webview, "setUIDelegate:", navigation);
-    o.send(
-      this.webview,
-      "setAutoresizingMask:",
-      NS_VIEW_WIDTH_SIZABLE | NS_VIEW_HEIGHT_SIZABLE,
-    );
-    o.send(o.send(this.window, "contentView"), "addSubview:", this.webview);
-    o.send(this.window, "center");
-    o.send(this.window, "makeKeyAndOrderFront:", null);
-    application.activate();
-    const viewPolicy = config.policy.views.find(
-      (view) => view.id === config.window.view,
-    );
-    if (!viewPolicy) {
-      throw new Error("Missing view policy.");
-    }
-    this.ready = new Promise<void>((resolveReady, reject) => {
-      const completion = o.block(2, (_block, rules, error) => {
-        if (this.closed) {
-          reject(new Error("WebView closed during setup."));
-          return;
-        }
-        if (!rules || error) {
-          reject(new Error("WebKit resource-rule compilation failed."));
-          return;
-        }
-        o.send(this.controller, "addContentRuleList:", rules);
-        this.rulesReady = true;
-        hooks.log("webview-ready");
-        this.navigateWhenReady();
-        resolveReady();
-      });
-      o.send(
-        o.send(o.class("WKContentRuleListStore"), "defaultStore"),
-        "compileContentRuleListForIdentifier:encodedContentRuleList:completionHandler:",
-        o.string(`bunaway-${config.runtime.id}-${config.window.view}`),
-        o.string(resourceRules(viewPolicy.origins)),
-        completion,
+      ]);
+      this.retained.push(windowDelegate);
+      const size = config.window.window;
+      const constraints = {
+        minWidth: size.minWidth ?? null,
+        minHeight: size.minHeight ?? null,
+        maxWidth: size.maxWidth ?? null,
+        maxHeight: size.maxHeight ?? null,
+      };
+      const initialSize = clampWindowSize(size.width, size.height, constraints);
+      this.window = o.window(initialSize.width, initialSize.height);
+      o.setSize(
+        this.window,
+        "setContentMinSize:",
+        constraints.minWidth ?? 0,
+        constraints.minHeight ?? 0,
       );
-    });
+      o.setSize(
+        this.window,
+        "setContentMaxSize:",
+        constraints.maxWidth ?? NS_UNBOUNDED_CONTENT_SIZE,
+        constraints.maxHeight ?? NS_UNBOUNDED_CONTENT_SIZE,
+      );
+      o.send(this.window, "setTitle:", o.string(config.window.title));
+      o.send(this.window, "setDelegate:", windowDelegate);
+      const configuration = o.object("WKWebViewConfiguration");
+      this.controller = o.object("WKUserContentController");
+      this.retained.push(configuration, this.controller);
+      const scheme = o.delegate([
+        {
+          selector: "webView:startURLSchemeTask:",
+          arguments: 2,
+          encoding: "v@:@@",
+          call: (_self, _cmd, _view, task) => {
+            if (task && !this.closed) {
+              this.serve(task);
+            }
+          },
+        },
+        {
+          selector: "webView:stopURLSchemeTask:",
+          arguments: 2,
+          encoding: "v@:@@",
+          call() {},
+        },
+      ]);
+      this.retained.push(scheme);
+      o.send(
+        configuration,
+        "setURLSchemeHandler:forURLScheme:",
+        scheme,
+        o.string("bunaway"),
+      );
+      const scriptHandler = o.delegate([
+        {
+          selector: "userContentController:didReceiveScriptMessage:",
+          arguments: 2,
+          encoding: "v@:@@",
+          call: (_self, _cmd, _controller, message) => {
+            if (this.closed || !message) {
+              return;
+            }
+            const frame = o.send(message, "frameInfo");
+            if (!o.send(frame, "isMainFrame")) {
+              hooks.log("frame-message-ignored");
+              return;
+            }
+            // WKWebView supplies frame identity and its live URL; neither is trusted from JSON.
+            const source = this.source();
+            const body = o.send(message, "body");
+            // WebKit accepts NSDate and other values that would throw a native
+            // exception during JSON serialization, before protocol validation.
+            if (
+              !o.send(
+                o.class("NSJSONSerialization"),
+                "isValidJSONObject:",
+                body,
+              )
+            ) {
+              hooks.log("web-message-rejected", {
+                reason: "INVALID_ARGUMENT",
+              });
+              return;
+            }
+            const data = o.send(
+              o.class("NSJSONSerialization"),
+              "dataWithJSONObject:options:error:",
+              body,
+              0,
+              null,
+            );
+            const bytes = o.send(data, "bytes");
+            const length = Number(o.send(data, "length"));
+            const raw = bytes
+              ? Buffer.from(
+                  toArrayBuffer(Number(bytes) as Pointer, 0, length),
+                ).toString("utf8")
+              : "";
+            hooks.receive(source, raw);
+          },
+        },
+      ]);
+      this.retained.push(scriptHandler);
+      o.send(
+        this.controller,
+        "addScriptMessageHandler:name:",
+        scriptHandler,
+        o.string("bunaway"),
+      );
+      const script = required(
+        o.send(
+          o.send(o.class("WKUserScript"), "alloc"),
+          "initWithSource:injectionTime:forMainFrameOnly:",
+          o.string(BRIDGE),
+          WK_USER_SCRIPT_INJECTION_AT_DOCUMENT_START,
+          0,
+        ),
+      );
+      this.retained.push(script);
+      o.send(this.controller, "addUserScript:", script);
+      o.send(configuration, "setUserContentController:", this.controller);
+      o.send(
+        configuration,
+        "setWebsiteDataStore:",
+        application.dataStore(config.window.view),
+      );
+      this.webview = o.webview(
+        initialSize.width,
+        initialSize.height,
+        configuration,
+      );
+      const cancelDownload = o.block(1, () => {});
+      const navigation = o.delegate([
+        {
+          selector: "webView:decidePolicyForNavigationAction:decisionHandler:",
+          arguments: 3,
+          encoding: "v@:@@@?",
+          call: (_self, _cmd, _view, action, decision) => {
+            let allowed = false;
+            try {
+              const target = o.text(
+                o.send(
+                  o.send(o.send(action ?? null, "request"), "URL"),
+                  "absoluteString",
+                ),
+              );
+              const frame = o.send(action ?? null, "targetFrame");
+              const view = config.policy.views.find(
+                (view) => view.id === config.window.view,
+              );
+              allowed =
+                !!frame &&
+                !!view?.origins.includes(macosOrigin(target)) &&
+                !this.closed;
+              if (allowed && o.send(frame, "isMainFrame")) {
+                hooks.revoke("navigation");
+                hooks.log("navigation", {
+                  uri: target,
+                });
+              } else if (!allowed) {
+                let event = "new-window-blocked";
+                if (frame) {
+                  event = o.send(frame, "isMainFrame")
+                    ? "navigation-blocked"
+                    : "web-resource-blocked";
+                }
+                hooks.log(event, {
+                  uri: target,
+                });
+              }
+            } catch (error) {
+              hooks.fail(error);
+            }
+            o.decide(
+              decision ?? null,
+              allowed ? WK_NAVIGATION_ALLOW : WK_NAVIGATION_CANCEL,
+            );
+          },
+        },
+        {
+          selector: "webView:navigationAction:didBecomeDownload:",
+          arguments: 3,
+          encoding: "v@:@@@",
+          call: (_self, _cmd, _view, _action, download) => {
+            if (download) {
+              o.send(download, "cancel:", cancelDownload);
+            }
+          },
+        },
+        {
+          selector: "webView:didFinishNavigation:",
+          arguments: 2,
+          encoding: "v@:@@",
+          call: () =>
+            hooks.log("navigation-completed", {
+              success: true,
+              source: this.source(),
+            }),
+        },
+        {
+          selector: "webViewWebContentProcessDidTerminate:",
+          arguments: 1,
+          encoding: "v@:@",
+          call: () => {
+            hooks.log("webview-process-failed", {
+              kind: 1,
+            });
+            hooks.revoke("process-failed");
+            if (!this.closed) {
+              this.loadHome();
+            }
+          },
+        },
+        {
+          selector:
+            "webView:requestMediaCapturePermissionForOrigin:initiatedByFrame:type:decisionHandler:",
+          arguments: 5,
+          encoding: "v@:@@@q@?",
+          call: (_self, _cmd, _view, _origin, _frame, _type, decision) => {
+            hooks.log("permission-request-denied");
+            o.decide(decision ?? null, WK_PERMISSION_DENY);
+          },
+        },
+      ]);
+      this.retained.push(navigation);
+      o.send(this.webview, "setNavigationDelegate:", navigation);
+      // Media permissions belong to WKUIDelegate, even when one object owns both contracts.
+      o.send(this.webview, "setUIDelegate:", navigation);
+      o.send(
+        this.webview,
+        "setAutoresizingMask:",
+        NS_VIEW_WIDTH_SIZABLE | NS_VIEW_HEIGHT_SIZABLE,
+      );
+      o.send(o.send(this.window, "contentView"), "addSubview:", this.webview);
+      o.send(this.window, "center");
+      o.send(this.window, "makeKeyAndOrderFront:", null);
+      application.activate();
+      const viewPolicy = config.policy.views.find(
+        (view) => view.id === config.window.view,
+      );
+      if (!viewPolicy) {
+        throw new Error("Missing view policy.");
+      }
+      this.ready = new Promise<void>((resolveReady, reject) => {
+        const completion = o.block(2, (_block, rules, error) => {
+          if (this.closed) {
+            reject(new Error("WebView closed during setup."));
+            return;
+          }
+          if (!rules || error) {
+            reject(new Error("WebKit resource-rule compilation failed."));
+            return;
+          }
+          o.send(this.controller, "addContentRuleList:", rules);
+          this.rulesReady = true;
+          hooks.log("webview-ready");
+          this.navigateWhenReady();
+          resolveReady();
+        });
+        o.send(
+          o.send(o.class("WKContentRuleListStore"), "defaultStore"),
+          "compileContentRuleListForIdentifier:encodedContentRuleList:completionHandler:",
+          o.string(`bunaway-${config.runtime.id}-${config.window.view}`),
+          o.string(resourceRules(viewPolicy.origins)),
+          completion,
+        );
+      });
+    } catch (error) {
+      this.close();
+      throw error;
+    }
   }
 
   source(): string {
@@ -363,6 +374,39 @@ export class MacosWebview {
   start(): void {
     this.coreReady = true;
     this.navigateWhenReady();
+  }
+  show(visible: boolean): void {
+    const o = this.objc;
+    o.withAutoreleasePool(() => {
+      o.send(
+        this.window,
+        visible ? "makeKeyAndOrderFront:" : "orderOut:",
+        null,
+      );
+      if (this.isVisible() !== visible) {
+        throw new Error("AppKit declined window visibility.");
+      }
+    });
+  }
+  focus(): boolean {
+    const o = this.objc;
+    return o.withAutoreleasePool(() => {
+      if (o.send(this.window, "isMiniaturized")) {
+        o.send(this.window, "deminiaturize:", null);
+      }
+      this.show(true);
+      this.application.activate();
+      return this.isFocused();
+    });
+  }
+  isVisible(): boolean {
+    return !!this.objc.send(this.window, "isVisible");
+  }
+  isFocused(): boolean {
+    return (
+      !!this.objc.send(this.window, "isKeyWindow") &&
+      this.application.isActive()
+    );
   }
   private navigateWhenReady(): void {
     if (
@@ -481,22 +525,30 @@ export class MacosWebview {
     }
     this.closed = true;
     const o = this.objc;
-    o.send(
-      this.controller,
-      "removeScriptMessageHandlerForName:",
-      o.string("bunaway"),
-    );
-    o.send(this.controller, "removeAllUserScripts");
-    o.send(this.webview, "stopLoading");
-    o.send(this.webview, "setNavigationDelegate:", null);
-    o.send(this.webview, "setUIDelegate:", null);
-    o.send(this.window, "setDelegate:", null);
-    o.send(this.window, "close");
-    o.send(this.webview, "removeFromSuperview");
-    o.send(this.webview, "release");
-    o.send(this.window, "release");
+    if (this.controller) {
+      o.send(
+        this.controller,
+        "removeScriptMessageHandlerForName:",
+        o.string("bunaway"),
+      );
+      o.send(this.controller, "removeAllUserScripts");
+    }
+    if (this.webview) {
+      o.send(this.webview, "stopLoading");
+      o.send(this.webview, "setNavigationDelegate:", null);
+      o.send(this.webview, "setUIDelegate:", null);
+      o.send(this.webview, "removeFromSuperview");
+      o.send(this.webview, "release");
+    }
+    if (this.window) {
+      o.send(this.window, "setDelegate:", null);
+      o.send(this.window, "close");
+      o.send(this.window, "release");
+    }
     for (const object of this.retained.reverse()) {
       o.send(object, "release");
     }
+    this.retained.length = 0;
+    o.releaseCallbacks();
   }
 }

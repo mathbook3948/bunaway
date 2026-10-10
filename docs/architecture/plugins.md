@@ -3,7 +3,8 @@
 상태: Windows 구현과 로컬 개별 패키지 검증 완료. 기준일: 2026-10-07.
 [ADR 0013](../decisions/0013-optional-native-plugins.md)의 구현 계약이다.
 저장, 로그와 기능 조회는 개별 tarball로 설치하고 등록한다.
-macOS 네이티브 플러그인 어댑터는 아직 제공하지 않는다.
+macOS는 창 플러그인의 목록, 생성과 재생성, 표시와 포커스 제어, 닫기와 기본 상태
+조회를 제공한다. 저장, 로그, 기능 조회와 opener 어댑터는 아직 제공하지 않는다.
 
 ## 설치, 등록, 권한
 
@@ -365,7 +366,11 @@ Windows의 앱별 생성 데이터는 `assets/manifest.json`에 모은다. `form
 버전, native 계약, 선택적 execution과 authorization 유무가 들어간다.
 앱 개발자가 작성하는 설정과 정책은 계속 `src-bunaway/`에 두며 이 manifest는 CLI가
 빌드마다 생성한다. 이전 `app.json`, `policy.json`, `development-sdk.json`을 Windows
-실행 자산에 중복 생성하지 않는다. macOS의 기존 프로세스 호스트는 기존 파일을 유지한다.
+실행 자산에 중복 생성하지 않는다. macOS도 실행 manifest와 생성 import 모듈을 사용한다.
+CLI는 대상 플랫폼의 어댑터 경로를 선택하고 설치된 카탈로그 검증과 플러그인 실행은
+`native/host-api/bun`에서 공유한다. macOS 백엔드는 실제 앱이 등록한 계약을 메인 스레드에
+보내며, 메인은 설치된 계약과 일치하는 플러그인만 초기화한다. Host API는 호출한
+컨텍스트가 아직 활성 상태인지와 해당 컨텍스트의 현재 정책을 검사한 뒤 실행한다.
 
 실행 코드 연결은 CLI의 `app-modules.ts`가 빌드 전용 가상 모듈로 생성한다.
 앱 진입점, 개발 SDK 연결, macOS 부팅 코드와 플러그인 지연 import를 이곳에서 관리하며

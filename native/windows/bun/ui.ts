@@ -7,6 +7,14 @@ import {
   type HostResponse,
 } from "@bunaway/protocol";
 import { ViewBoundary } from "@bunaway/runtime-bun/view-boundary";
+import { hostResponse } from "../../host-api/bun/host-response.ts";
+import { loadPluginCatalog } from "../../host-api/bun/plugin-catalog.ts";
+import {
+  disposeAll,
+  operations,
+  permissionMatcher,
+  pluginRegistry,
+} from "../../host-api/bun/plugins.ts";
 import {
   Channel,
   type Packet,
@@ -14,14 +22,6 @@ import {
   type WindowSpec,
 } from "./channel.ts";
 import { callbackCalls, checkCallbacks, disposeCom } from "./com.ts";
-import { hostResponse } from "./host-response.ts";
-import { loadPluginCatalog } from "./plugin-catalog.ts";
-import {
-  disposeAll,
-  operations,
-  permissionMatcher,
-  pluginRegistry,
-} from "./plugins.ts";
 import { Tray } from "./tray.ts";
 import { originOf, WebView } from "./webview.ts";
 import {

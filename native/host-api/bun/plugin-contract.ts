@@ -4,7 +4,7 @@ import type { ManifestPlugin } from "@bunaway/runtime-bun/app-manifest";
 
 export type { NativeAdapter, NativeEnvironment };
 
-/** A plugin's installed contract and the factories available to each Windows worker. */
+/** A plugin's installed contract and the factories available to each host execution thread. */
 export type PackagedPlugin = Omit<ManifestPlugin, "authorization"> & {
   /** Lazily load permission-scope matching for registered scoped permissions. */
   authorization?: () => Promise<{

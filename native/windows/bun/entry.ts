@@ -16,6 +16,8 @@ import {
   PROTOCOL_VERSION,
 } from "@bunaway/protocol";
 import { DiagnosticLog } from "@bunaway/runtime-bun/diagnostic-log";
+import { loadPluginCatalog } from "../../host-api/bun/plugin-catalog.ts";
+import { pluginRegistry } from "../../host-api/bun/plugins.ts";
 import { listenForAppReload } from "./app-reload.ts";
 import {
   Channel,
@@ -28,8 +30,6 @@ import { DesktopLifecycle } from "./desktop.ts";
 import { DevelopmentApp } from "./development-app.ts";
 import type { LaunchArguments, listenForInstances } from "./instance.ts";
 import { activeDescendants, containAppProcess } from "./job.ts";
-import { loadPluginCatalog } from "./plugin-catalog.ts";
-import { pluginRegistry } from "./plugins.ts";
 
 /**
  * Starts the Windows host and Workers, then creates the app Core.

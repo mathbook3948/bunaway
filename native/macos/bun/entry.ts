@@ -1,26 +1,31 @@
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Worker } from "node:worker_threads";
+import {
+  API_LIMITS,
+  BunawayError,
+  type HostContext,
+  type HostResponse,
+} from "@bunaway/protocol";
 import { DiagnosticLog } from "@bunaway/runtime-bun/diagnostic-log";
-import { ViewBoundary } from "@bunaway/runtime-bun/view-boundary";
 import { Channel } from "@bunaway/runtime-bun/worker-channel";
+import { hostResponse } from "../../host-api/bun/host-response.ts";
+import { loadPluginCatalog } from "../../host-api/bun/plugin-catalog.ts";
+import {
+  operations,
+  permissionMatcher,
+  pluginRegistry,
+} from "../../host-api/bun/plugins.ts";
 import { MacosApplication } from "./application.ts";
 import type { MacosConfig } from "./config.ts";
 import { containMacosProcess } from "./process-group.ts";
-import { macosOrigin } from "./urls.ts";
-import { MacosWebview } from "./webview.ts";
+import { MacosWindows } from "./windows.ts";
 
 const STARTUP_TIMEOUT_MS = 30_000;
 const SHUTDOWN_TIMEOUT_MS = 5_000;
 
 /** Own UI, backend Worker, channels and shutdown deadlines for one Bun app process. */
 export async function runMacosApp(config: MacosConfig): Promise<void> {
-  const view = config.policy.views.find(
-    (view) => view.id === config.window.view,
-  );
-  if (!view) {
-    throw new Error("Missing macOS view policy.");
-  }
   await mkdir(resolve(config.dataRoot, "logs"), {
     recursive: true,
   });
@@ -37,10 +42,15 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
   let ready = false;
   let cleaned = false;
   let failure: unknown;
-  let ui: MacosWebview | undefined;
+  let ui: MacosWindows | undefined;
   let application: MacosApplication | undefined;
   let channel: Channel | undefined;
-  let boundary: ViewBoundary | undefined;
+  const catalog = await loadPluginCatalog(config.assets);
+  let adapters: Awaited<ReturnType<typeof operations>> | undefined;
+  let registry: ReturnType<typeof pluginRegistry> | undefined;
+  let matches: Awaited<ReturnType<typeof permissionMatcher>> | undefined;
+  const requests = new Map<string, HostContext>();
+  const cancelled = new Set<string>();
   let shutdownTimer: ReturnType<typeof setTimeout> | undefined;
   let forced = false;
   let descendantCleanup: Promise<void> | undefined;
@@ -58,7 +68,7 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
         failure ??= error;
       });
     }, SHUTDOWN_TIMEOUT_MS);
-    boundary?.revoke("closing");
+    ui?.revoke();
     diagnostic("closing");
     channel?.notify({
       kind: "shutdown",
@@ -113,7 +123,100 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
         });
         ui?.start();
       } else if (packet.kind === "server") {
-        boundary?.send(packet.route, packet.message);
+        ui?.send(packet.route, packet.message);
+      } else if (packet.kind === "native-register") {
+        if (stopping) {
+          return;
+        }
+        if (registry) {
+          throw new Error("Invalid native registration phase.");
+        }
+        registry = pluginRegistry(packet.plugins, catalog);
+        registry.validatePolicy(config.policy);
+        matches = await permissionMatcher(packet.plugins, catalog);
+        if (!ui) {
+          throw new Error("Missing window services.");
+        }
+        adapters = await operations(
+          packet.plugins,
+          config.dataRoot,
+          "ui",
+          ui.services,
+          catalog,
+        );
+      } else if (packet.kind === "cancel") {
+        if (requests.get(packet.requestId) === packet.context) {
+          cancelled.add(packet.requestId);
+        }
+      } else if (packet.kind === "operation") {
+        if (
+          requests.has(packet.requestId) ||
+          requests.size >= API_LIMITS.maxPending
+        ) {
+          throw new Error("Duplicate native request.");
+        }
+        requests.set(packet.requestId, packet.context);
+        let response: HostResponse;
+        try {
+          const permissions =
+            packet.context === config.backendContext
+              ? config.policy.backend
+              : ui?.boundary(packet.context)?.policy.host;
+          const source =
+            packet.context === config.backendContext
+              ? "backend"
+              : `view:${ui?.boundary(packet.context)?.policy.id ?? "invalid"}`;
+          if (
+            stopping ||
+            !permissions ||
+            source !== packet.source ||
+            !registry ||
+            !matches ||
+            !registry.allowed(
+              permissions,
+              registry.validateCall(packet.call),
+              matches,
+            )
+          ) {
+            throw new BunawayError({
+              code: "PERMISSION_DENIED",
+              message: "Host context or policy denied.",
+            });
+          }
+          if (!adapters) {
+            throw new Error("Native adapters are not ready.");
+          }
+          const payload = await adapters.executeUI(
+            packet.call.operation,
+            packet.call.payload,
+            source,
+            {
+              requestId: packet.requestId,
+              permissions,
+            },
+          );
+          response = hostResponse(() => payload);
+        } catch (error) {
+          response = hostResponse(() => {
+            throw error;
+          });
+        } finally {
+          requests.delete(packet.requestId);
+        }
+        const wasCancelled = cancelled.delete(packet.requestId);
+        if (
+          !stopping &&
+          !wasCancelled &&
+          (packet.context === config.backendContext ||
+            ui?.boundary(packet.context))
+        ) {
+          channel?.notify({
+            kind: "host-response",
+            context: packet.context,
+            requestId: packet.requestId,
+            response,
+          });
+        }
       } else if (packet.kind === "cleaned") {
         cleaned = true;
         // Referenced subprocesses can keep an otherwise cleaned Worker alive.
@@ -127,18 +230,6 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
     },
     fail,
   );
-  boundary = new ViewBoundary(view, {
-    origin: macosOrigin,
-    source: () => ui?.source() ?? "",
-    ready: () => ready && !stopping,
-    forward(packet) {
-      channel?.notify(packet);
-    },
-    capacity: (count) =>
-      channel?.canSend(count, boundary?.pendingCount) ?? false,
-    deliver: (text) => ui?.deliver(text),
-    log: diagnostic,
-  });
   const startup = setTimeout(
     () => fail(new Error("macOS startup timed out.")),
     STARTUP_TIMEOUT_MS,
@@ -156,30 +247,29 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
     });
     application = new MacosApplication({
       quit,
-      tick: () => boundary?.scanDeadlines(),
+      tick: () => ui?.tick(),
       fail,
     });
-    ui = new MacosWebview(
-      config,
-      {
-        receive(source, raw) {
-          // The native navigation delegate revokes replacement documents. A live URL
-          // change without replacement comes from History API and keeps the session.
-          boundary?.sameDocument(source);
-          boundary?.receive(source, raw);
-        },
-        revoke: (reason) => boundary?.revoke(reason),
-        close: quit,
-        log: diagnostic,
-        fail,
+    ui = new MacosWindows(config, application, {
+      ready: () => ready,
+      stopping: () => stopping,
+      busy: () => adapters?.busy() ?? false,
+      cancelled: (requestId) => {
+        const context = requests.get(requestId);
+        return (
+          cancelled.has(requestId) ||
+          !context ||
+          (context !== config.backendContext && !ui?.boundary(context))
+        );
       },
-      application,
-    );
+      forward: (packet) => channel?.notify(packet),
+      capacity: (count, pending) => channel?.canSend(count, pending) ?? false,
+      log: diagnostic,
+      fail,
+      quit,
+    });
     await Promise.race([
-      Promise.all([
-        ui.ready,
-        coreReady.promise,
-      ]),
+      coreReady.promise,
       exited.then((code) => {
         // Requested exits use the same cleanup and failure checks as a running app.
         if (!stopping) {
@@ -207,6 +297,11 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
     }
     process.off("SIGINT", onSignal);
     process.off("SIGTERM", onSignal);
+    try {
+      await adapters?.dispose();
+    } catch (error) {
+      failure ??= error;
+    }
     ui?.close();
     application?.close();
     channel.close();

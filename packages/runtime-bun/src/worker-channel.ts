@@ -8,6 +8,7 @@ import {
   type HostContext,
   type HostResponse,
   MAX_MESSAGE_BYTES,
+  NativeRegistry,
   parseHostCall,
   parseHostResponse,
   parseMessage,
@@ -29,6 +30,10 @@ export {
   type WindowSpec,
 } from "./window-config.ts";
 export type Packet =
+  | {
+      kind: "native-register";
+      plugins: import("@bunaway/protocol").NativeRegistration[];
+    }
   | {
       kind: "ready" | "start" | "shutdown" | "closing" | "cleaned";
     }
@@ -162,18 +167,23 @@ const ioMainKinds = [
 ];
 type Side = "main" | "ui" | "io" | "main-io" | "macos-main" | "macos-backend";
 const macosMainKinds = [
+  "native-register",
+  "operation",
+  "cancel",
   "ready",
   "cleaned",
   "server",
   "fatal",
 ];
 const macosBackendKinds = [
+  "host-response",
   "session-open",
   "revoke",
   "client",
   "shutdown",
 ];
 const controlKinds = new Set([
+  "native-register",
   "desktop-control",
   "quit-cancelled",
   "quit-request",
@@ -191,6 +201,9 @@ const approvalKinds = new Set([
   "grant",
 ]);
 const requiredFields: Record<Packet["kind"], readonly string[]> = {
+  "native-register": [
+    "plugins",
+  ],
   "desktop-control": [
     "action",
   ],
@@ -333,6 +346,23 @@ export function validatePacket(value: unknown, incoming: Side): Packet {
       ].includes(packet.reason))
   ) {
     throw new Error("Invalid quit reason");
+  }
+  if (packet.kind === "native-register") {
+    if (!Array.isArray(packet.plugins)) {
+      throw new Error("Invalid native registrations");
+    }
+    for (const plugin of packet.plugins) {
+      const registration = record(plugin);
+      if (
+        Object.keys(registration).length !== 3 ||
+        typeof registration.name !== "string" ||
+        typeof registration.version !== "string" ||
+        !registration.native
+      ) {
+        throw new Error("Invalid native registration fields");
+      }
+    }
+    new NativeRegistry(packet.plugins);
   }
   if (packet.route !== undefined) {
     const route = record(packet.route);

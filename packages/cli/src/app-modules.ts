@@ -10,10 +10,11 @@ export function commonJsSdkSource(entry: string): string {
 /** Generate executable links only; installed contracts remain in the execution manifest. */
 export function pluginImportsSource(
   plugins: readonly InstalledPlugin[],
+  platform: "windows" | "macos" = "windows",
 ): string {
   return `export const pluginImports = {${plugins
     .map((plugin) => {
-      const target = plugin.targets.windows;
+      const target = plugin.targets[platform];
       return `[${JSON.stringify(plugin.name)}]: {${plugin.authorization ? `authorization: () => import(${JSON.stringify(plugin.authorization)}).then(({ default: plugin }) => ({ matches: plugin.matches })),` : ""}${target ? `operations: () => import(${JSON.stringify(target.operations)})` : ""}}`;
     })
     .join(",")}};\n`;
@@ -27,6 +28,7 @@ export function appModules(options: {
   appEntry?: string;
   processRuntime?: string;
   plugins?: readonly InstalledPlugin[];
+  platform?: "windows" | "macos";
   sdkSources?: ReadonlyMap<string, string>;
 }): BunPlugin {
   const modules = new Map<
@@ -46,7 +48,7 @@ export function appModules(options: {
     });
   }
   modules.set("plugin-imports.ts", {
-    contents: pluginImportsSource(options.plugins ?? []),
+    contents: pluginImportsSource(options.plugins ?? [], options.platform),
     resolveDir: process.cwd(),
   });
   for (const [name, source] of options.sdkSources ?? []) {
