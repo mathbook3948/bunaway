@@ -1231,6 +1231,8 @@ test("the pending request limit rejects new calls with BUSY", async () => {
 test("sequential calls are not limited by the session's total request count", async () => {
   const { transport, client } = await connected();
   for (let i = 0; i <= API_LIMITS.maxRequestIds; i++) {
+    // Keep only this call's frame so finding it does not reparse the whole history.
+    transport.sent.length = 0;
     const call = client.invoke("notes.read", {
       key: "x",
     });
