@@ -36,6 +36,12 @@ function fixture() {
   let nowMs = 0;
   let tick = async () => {};
   const created: string[] = [];
+  const destroyed: string[] = [];
+  const destroy = (id: string) => {
+    destroyed.push(id);
+    requireView(id).closed = true;
+    return true;
+  };
   const operations = new WindowOperations(specs, {
     read: (id) => views.get(id),
     create: (spec) => {
@@ -54,7 +60,11 @@ function fixture() {
       }
       return allowClose;
     },
+    destroy,
     apply: (call, id) => {
+      if (call.operation === "windows.destroy") {
+        return destroy(id);
+      }
       if (call.operation !== "windows.close") {
         return null;
       }
@@ -72,6 +82,7 @@ function fixture() {
     operations,
     views,
     created,
+    destroyed,
     setCreationReady: (value: boolean) => {
       creationReady = value;
     },
@@ -96,6 +107,7 @@ function fixture() {
 test("cancelling a newly created hidden window while its controller prepares closes the owned window", async () => {
   const f = fixture();
   f.setCreationReady(false);
+  f.setClose(false);
   f.setTick(async () => {
     f.cancel();
   });
@@ -116,6 +128,9 @@ test("cancelling a newly created hidden window while its controller prepares clo
     code: "CANCELLED",
   });
   expect(f.views.get("main")?.closed).toBe(true);
+  expect(f.destroyed).toEqual([
+    "main",
+  ]);
   expect(f.operations.replacing.size).toBe(0);
 });
 
@@ -123,6 +138,135 @@ const grants = [
   "main",
   "editor",
 ];
+
+test("trusted destruction interrupts an already committed recreation without resurrecting its window", async () => {
+  const f = fixture();
+  const target = {
+    view: "main",
+  };
+  await f.operations.execute(
+    {
+      operation: "windows.create",
+      payload: target,
+    },
+    grants,
+    "initial",
+  );
+  const original = f.views.get("main");
+  assert(original);
+  let wake: (() => void) | undefined;
+  f.setTick(
+    () =>
+      new Promise<void>((resolve) => {
+        wake = resolve;
+      }),
+  );
+  const replacement = f.operations.execute(
+    {
+      operation: "windows.recreate",
+      payload: target,
+    },
+    grants,
+    "replacement",
+  );
+  await Promise.resolve();
+  assert(wake);
+  expect(
+    await f.operations.execute(
+      {
+        operation: "windows.destroy",
+        payload: target,
+      },
+      grants,
+      "force",
+    ),
+  ).toBe(true);
+  wake();
+  await expect(replacement).rejects.toMatchObject({
+    code: "CANCELLED",
+  });
+  expect(f.created).toEqual([
+    "main",
+  ]);
+  expect(f.operations.replacing.size).toBe(0);
+});
+
+test("failed controller creation uses trusted cleanup even when normal close would refuse", async () => {
+  const f = fixture();
+  f.setClose(false);
+  f.setCreationReady(false);
+  f.setTick(async () => {
+    const view = f.views.get("main");
+    assert(view);
+    view.failure = new Error("Controller failed");
+  });
+  await expect(
+    f.operations.execute(
+      {
+        operation: "windows.create",
+        payload: {
+          view: "main",
+        },
+      },
+      grants,
+      "failed",
+    ),
+  ).rejects.toMatchObject({
+    code: "INTERNAL",
+  });
+  expect(f.views.get("main")?.closed).toBe(true);
+  expect(f.destroyed).toEqual([
+    "main",
+  ]);
+});
+
+test("parent termination cancels child recreation but permits a later explicit unowned creation", async () => {
+  const f = fixture();
+  const target = {
+    view: "main",
+  };
+  await f.operations.execute(
+    {
+      operation: "windows.create",
+      payload: target,
+    },
+    grants,
+    "initial",
+  );
+  f.setTick(async () => {
+    const original = f.views.get("main");
+    assert(original);
+    original.replacementCancelled = true;
+    original.cleaned = true;
+  });
+  await expect(
+    f.operations.execute(
+      {
+        operation: "windows.recreate",
+        payload: target,
+      },
+      grants,
+      "recreation",
+    ),
+  ).rejects.toMatchObject({
+    code: "CANCELLED",
+  });
+  expect(f.created).toEqual([
+    "main",
+  ]);
+  await f.operations.execute(
+    {
+      operation: "windows.create",
+      payload: target,
+    },
+    grants,
+    "explicit",
+  );
+  expect(f.created).toEqual([
+    "main",
+    "main",
+  ]);
+});
 test("window catalog filters grants and cannot open arbitrary or unauthorized views", async () => {
   const f = fixture();
   expect(

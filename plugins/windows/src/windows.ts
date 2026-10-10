@@ -15,6 +15,13 @@ import { windowsPlugin } from "./index.ts";
 import { matches } from "./scope.ts";
 import { convertGeometry } from "./window-geometry.ts";
 
+function unsupportedRelations() {
+  return new BunawayError({
+    code: "UNSUPPORTED",
+    message: "Window ownership control is not implemented on this platform.",
+  });
+}
+
 /** Create the UI-worker adapter; throws when window services are unavailable. */
 export function createOperations(
   environment: NativeEnvironment,
@@ -115,6 +122,56 @@ export function createOperations(
       }
       case "windows.close":
         return window.close();
+      case "windows.destroy":
+        if (!window.destroy) {
+          throw unsupportedRelations();
+        }
+        return window.destroy();
+      case "windows.setParent":
+        if (!window.setParent) {
+          throw unsupportedRelations();
+        }
+        window.setParent(call.payload.parent, call.payload.modal);
+        break;
+      case "windows.getParent":
+      case "windows.getOwner": {
+        if (!window.getParent) {
+          throw unsupportedRelations();
+        }
+        const parent = window.getParent();
+        return parent &&
+          grants.includes(parent.viewId) &&
+          !operations.replacing.has(parent.viewId)
+          ? {
+              ...parent,
+            }
+          : null;
+      }
+      case "windows.getChildren":
+        if (!window.getChildren) {
+          throw unsupportedRelations();
+        }
+        return window
+          .getChildren()
+          .filter(
+            (child) =>
+              grants.includes(child.viewId) &&
+              !operations.replacing.has(child.viewId),
+          )
+          .map((child) => ({
+            ...child,
+          }));
+      case "windows.setEnabled":
+        if (!window.setEnabled) {
+          throw unsupportedRelations();
+        }
+        window.setEnabled(call.payload.enabled);
+        break;
+      case "windows.isEnabled":
+        if (!window.isEnabled) {
+          throw unsupportedRelations();
+        }
+        return window.isEnabled();
       case "windows.getContentSize":
       case "windows.getOuterSize":
       case "windows.getContentPosition":
@@ -348,6 +405,25 @@ export function createOperations(
         operation,
         payload: input,
       });
+      if (
+        call.operation === "windows.destroy" &&
+        (source !== "backend" ||
+          !registry.allowed(context.permissions, call, matches))
+      ) {
+        throw new BunawayError({
+          code: "PERMISSION_DENIED",
+          message: "Trusted backend destroy permission required.",
+        });
+      }
+      if (
+        call.operation === "windows.setParent" &&
+        !registry.allowed(context.permissions, call, matches)
+      ) {
+        throw new BunawayError({
+          code: "PERMISSION_DENIED",
+          message: "Window relationship policy denied.",
+        });
+      }
       // Check permission before resolving configuration so unknown views do not bypass denial.
       const targets =
         !call.payload || !("view" in call.payload)
@@ -365,6 +441,41 @@ export function createOperations(
       if (call.operation === "windows.completeSplashscreen") {
         targets.push(call.payload.splash);
       }
+      if (
+        call.operation === "windows.getParent" ||
+        call.operation === "windows.getOwner" ||
+        call.operation === "windows.getChildren"
+      ) {
+        targets.push(...services.specs.map((spec) => spec.view));
+      }
+      if (
+        call.operation === "windows.setParent" &&
+        call.payload.parent !== null
+      ) {
+        const parent = services.lookup?.byId(call.payload.parent);
+        if (!parent || services.read(parent.viewId)?.closed !== false) {
+          throw new BunawayError({
+            code: "INVALID_ARGUMENT",
+            message: "Parent window lifetime is not open.",
+          });
+        }
+        if (operations.replacing.has(parent.viewId)) {
+          throw new BunawayError({
+            code: "BUSY",
+            message: "Parent window is being recreated.",
+          });
+        }
+        targets.push(parent.viewId);
+      }
+      if (
+        call.operation === "windows.setParent" &&
+        services.read(call.payload.view)?.closed === false
+      ) {
+        const previous = services.window(call.payload.view).getParent?.();
+        if (previous) {
+          targets.push(previous.viewId);
+        }
+      }
       const grants = targets.filter((view) =>
         registry.allowed(
           context.permissions,
@@ -377,6 +488,15 @@ export function createOperations(
           matches,
         ),
       );
+      if (
+        call.operation === "windows.setParent" &&
+        targets.some((view) => !grants.includes(view))
+      ) {
+        throw new BunawayError({
+          code: "PERMISSION_DENIED",
+          message: "Window relationship policy denied.",
+        });
+      }
       if (
         call.operation === "windows.getById" ||
         call.operation === "windows.getCurrent" ||

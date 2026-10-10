@@ -35,6 +35,7 @@ import {
 } from "./win32.ts";
 import { disposeWin32Bindings, hr, kernel, ole } from "./win32-bindings.ts";
 import { WindowReadinessTracker } from "./window-readiness.ts";
+import { WindowRelations } from "./window-relations.ts";
 
 const config = workerData as UIConfig;
 const WINDOW_PREPARATION_TIMEOUT_MS = 30_000;
@@ -91,6 +92,7 @@ type ViewState = {
   navigationStarted: boolean;
   pendingClose: boolean;
   forceClose: boolean;
+  replacementCancelled: boolean;
   confirmation: string | null;
   deadline: number;
   documentDeadline: number;
@@ -98,17 +100,59 @@ type ViewState = {
   readiness: WindowReadinessTracker;
 };
 const views = new Map<string, ViewState>();
+const closingWindows = new Set<string>();
+const replacements = new Map<
+  string,
+  {
+    parent: string | null;
+    modal: boolean;
+  }
+>();
+const modalWindows = new Set<string>();
+const relations = new WindowRelations({
+  setOwner: (child, parent) => {
+    assert(windows);
+    windows.setOwner(hwndById(child), parent === null ? 0n : hwndById(parent));
+  },
+  isEnabled: (id) => {
+    assert(windows);
+    return windows.isEnabled(hwndById(id));
+  },
+  setEnabled: (id, enabled) => {
+    assert(windows);
+    windows.setEnabled(hwndById(id), enabled);
+  },
+});
+
+function hwndById(windowId: string): bigint {
+  assert(windows);
+  const identity = windows.getById(windowId);
+  const view = identity && views.get(identity.viewId);
+  assert(view, "Unknown native window lifetime");
+  return view.native.hwnd;
+}
 /**
  * Defer detach while WebView creation is pending.
  * Destroy its HWND before finishing COM cleanup.
  */
 function cleanupView(view: ViewState) {
-  if (view.boundary.closed && !view.detached && view.native.detach()) {
+  if (!view.boundary.closed || view.cleaned) {
+    return;
+  }
+  const windowId = view.readiness.snapshot().windowId;
+  if (!relations.canRelease(windowId)) {
+    return;
+  }
+  if (!view.detached && view.native.detach()) {
     windows?.destroy(view.native.hwnd);
     view.detached = true;
   }
   if (view.detached && !view.cleaned) {
-    view.cleaned = view.native.finish();
+    if (view.native.finish()) {
+      relations.release(windowId);
+      modalWindows.delete(windowId);
+      view.cleaned = true;
+    }
   }
 }
 const cancelled = new Set<string>();
@@ -171,6 +215,7 @@ const channel = new Channel(
       approved.clear();
       uiCalls.clear();
       for (const view of views.values()) {
+        relations.markClosing(view.readiness.snapshot().windowId);
         view.boundary.revoke("shutdown");
         view.readiness?.terminate({
           code: "CANCELLED",
@@ -390,47 +435,140 @@ async function closeWindow(
   const view = views.get(viewId);
   assert(view);
   view.pendingClose = false;
+  if (mode === "force") {
+    replacements.delete(viewId);
+  }
   if (view.boundary.closed) {
     return true;
   }
-  const spec = config.windows.find((spec) => spec.view === viewId);
-  assert(spec);
   assert(windows);
-  if (mode === "close" && config.desktop?.closeBehavior === "hide") {
-    assert(tray, "Close to tray requires a tray");
-    windows.show(view.native.hwnd, false);
-    log("view-window-hidden", {
-      view: viewId,
-    });
-    return false;
-  }
+  const windowId = view.readiness.snapshot().windowId;
+  const order = relations.closeOrder(windowId);
+  const subtree = order.map((id) => {
+    const entry = [
+      ...views,
+    ].find(([, child]) => child.readiness.snapshot().windowId === id);
+    assert(entry);
+    return {
+      id,
+      viewId: entry[0],
+      view: entry[1],
+    };
+  });
   if (
     mode !== "force" &&
-    view.confirmation &&
-    (mode === "recreate" || !quitPending)
+    subtree.some((child) => closingWindows.has(child.id))
   ) {
-    log("window-close-confirmation", {
-      view: viewId,
+    throw new BunawayError({
+      code: "BUSY",
+      message: "Window close is already pending.",
     });
+  }
+  if (mode === "force") {
+    for (const child of subtree) {
+      if (child.view !== view) {
+        child.view.replacementCancelled = true;
+      }
+      commitClose(child.viewId, child.view);
+    }
+    return true;
+  }
+  for (const child of subtree) {
+    closingWindows.add(child.id);
+  }
+  try {
     if (
-      !windows.confirmClose(view.native.hwnd, spec.title, view.confirmation)
+      mode === "close" &&
+      config.desktop?.closeBehavior === "hide" &&
+      !relations.getParent(windowId)
     ) {
+      assert(tray, "Close to tray requires a tray");
+      windows.show(view.native.hwnd, false);
+      log("view-window-hidden", {
+        view: viewId,
+      });
       return false;
     }
-  }
-  if (
-    mode === "close" &&
-    (quitPending ||
-      [
-        ...views.values(),
-      ].filter((view) => !view.boundary.closed).length <= 1)
-  ) {
-    requestQuit("last-window");
-    while (quitPending && !stopping && !closingSent) {
-      await Bun.sleep(5);
+    for (const child of subtree) {
+      if (
+        child.view.boundary.closed ||
+        !child.view.confirmation ||
+        (mode !== "recreate" && quitPending)
+      ) {
+        continue;
+      }
+      log("window-close-confirmation", {
+        view: child.viewId,
+      });
+      const childSpec = config.windows.find(
+        (candidate) => candidate.view === child.viewId,
+      );
+      assert(childSpec);
+      if (
+        !windows.confirmClose(
+          child.view.native.hwnd,
+          childSpec.title,
+          child.view.confirmation,
+        )
+      ) {
+        return view.boundary.closed;
+      }
+      if (stopping || closingSent || view.boundary.closed) {
+        return true;
+      }
     }
-    return stopping || closingSent;
+    // Native confirmation pumps messages, so recheck shutdown before committing closure.
+    if (view.boundary.closed) {
+      return true;
+    }
+    if (
+      mode === "close" &&
+      (quitPending ||
+        [
+          ...views.values(),
+        ].filter(
+          (candidate) =>
+            !candidate.boundary.closed &&
+            !subtree.some((child) => child.view === candidate),
+        ).length === 0)
+    ) {
+      requestQuit("last-window");
+      while (
+        quitPending &&
+        !view.boundary.closed &&
+        !stopping &&
+        !closingSent
+      ) {
+        await Bun.sleep(5);
+      }
+      return view.boundary.closed || stopping || closingSent;
+    }
+    if (mode === "recreate") {
+      replacements.set(viewId, {
+        parent: relations.getParent(windowId)?.windowId ?? null,
+        modal: modalWindows.has(windowId),
+      });
+    }
+    for (const child of subtree) {
+      if (child.view !== view) {
+        child.view.replacementCancelled = true;
+      }
+      commitClose(child.viewId, child.view);
+    }
+    return true;
+  } finally {
+    for (const child of subtree) {
+      closingWindows.delete(child.id);
+    }
   }
+}
+
+/** Retires sessions before native release. The cleanup pump releases descendants first. */
+function commitClose(viewId: string, view: ViewState) {
+  if (view.boundary.closed) {
+    return;
+  }
+  relations.markClosing(view.readiness.snapshot().windowId);
   view.boundary.revoke("closing");
   view.readiness?.terminate({
     code: "CANCELLED",
@@ -441,7 +579,6 @@ async function closeWindow(
   log("view-window-closed", {
     view: viewId,
   });
-  return true;
 }
 const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices =
   {
@@ -460,12 +597,14 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
             cleaned: view.cleaned,
             ready: view.ready,
             failure: view.native.failure,
+            replacementCancelled: view.replacementCancelled,
             deadline: view.deadline,
           }
         : undefined;
     },
     create: createWindow,
     close: (viewId) => closeWindow(viewId, "recreate"),
+    destroy: (viewId) => closeWindow(viewId, "force"),
     stopping: () => stopping,
     cancelled: (id) => cancelled.has(id),
     now: () => Date.now(),
@@ -488,6 +627,40 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         focus: () => nativeWindows.focus(hwnd),
         activate: () => nativeWindows.activate(hwnd),
         close: () => closeWindow(viewId),
+        destroy: () => closeWindow(viewId, "force"),
+        setParent(parent, modal) {
+          const id = view.readiness.snapshot().windowId;
+          if (
+            closingWindows.has(id) ||
+            (parent !== null && closingWindows.has(parent))
+          ) {
+            throw new BunawayError({
+              code: "BUSY",
+              message: "Window close is pending.",
+            });
+          }
+          relations.setParent(id, parent, modal);
+          if (modal) {
+            modalWindows.add(id);
+          } else {
+            modalWindows.delete(id);
+          }
+        },
+        getParent: () =>
+          relations.getParent(view.readiness.snapshot().windowId),
+        getChildren: () =>
+          relations.getChildren(view.readiness.snapshot().windowId),
+        setEnabled(enabled) {
+          const id = view.readiness.snapshot().windowId;
+          if (closingWindows.has(id)) {
+            throw new BunawayError({
+              code: "BUSY",
+              message: "Window close is pending.",
+            });
+          }
+          relations.setEnabled(id, enabled);
+        },
+        isEnabled: () => nativeWindows.isEnabled(hwnd),
         minimize: () => nativeWindows.minimize(hwnd),
         maximize: () => nativeWindows.maximize(hwnd),
         unmaximize: () => nativeWindows.unmaximize(hwnd),
@@ -525,8 +698,25 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
     },
   };
 /** Create the HWND and WebView, destroying the HWND if WebView setup fails. */
-function createWindow(spec: WindowSpec) {
+function createWindow(spec: WindowSpec, replacingLiveWindow = false) {
   assert(windows);
+  const replacement = replacingLiveWindow
+    ? replacements.get(spec.view)
+    : undefined;
+  replacements.delete(spec.view);
+  if (replacement?.parent) {
+    const parent = windows.getById(replacement.parent);
+    if (
+      !parent ||
+      views.get(parent.viewId)?.boundary.closed ||
+      closingWindows.has(replacement.parent)
+    ) {
+      throw new BunawayError({
+        code: "CANCELLED",
+        message: "Parent lifetime ended during recreation.",
+      });
+    }
+  }
 
   const policy = config.policy.views.find((view) => view.id === spec.view);
   assert(policy);
@@ -586,6 +776,9 @@ function createWindow(spec: WindowSpec) {
   const close = (force = false) => {
     const view = views.get(spec.view);
     if (view && !view.boundary.closed) {
+      if (!force && closingWindows.has(view.readiness.snapshot().windowId)) {
+        return;
+      }
       if (force) {
         view.forceClose = true;
       }
@@ -709,11 +902,32 @@ function createWindow(spec: WindowSpec) {
     navigationStarted: false,
     pendingClose: false,
     forceClose: false,
+    replacementCancelled: false,
     confirmation: null,
     deadline: Date.now() + WINDOW_PREPARATION_TIMEOUT_MS,
     documentDeadline: Date.now() + WINDOW_PREPARATION_TIMEOUT_MS,
     sdkDeadline: Date.now() + WINDOW_PREPARATION_TIMEOUT_MS,
   });
+  const identity = windows.getByView(spec.view);
+  assert(identity);
+  relations.register(identity);
+  if (replacement?.parent) {
+    try {
+      relations.setParent(
+        identity.windowId,
+        replacement.parent,
+        replacement.modal,
+      );
+      if (replacement.modal) {
+        modalWindows.add(identity.windowId);
+      }
+    } catch (error) {
+      const view = views.get(spec.view);
+      assert(view);
+      commitClose(spec.view, view);
+      throw error;
+    }
+  }
 }
 
 /** Broadcast preparation only to subscribed live sessions allowed to control the source window. */
@@ -835,9 +1049,15 @@ try {
     windows.pump();
     for (const [viewId, view] of views) {
       if (view.pendingClose) {
-        void closeWindow(viewId, view.forceClose ? "force" : "close").catch(
-          fail,
-        );
+        view.pendingClose = false;
+        if (
+          view.forceClose ||
+          !closingWindows.has(view.readiness.snapshot().windowId)
+        ) {
+          void closeWindow(viewId, view.forceClose ? "force" : "close").catch(
+            fail,
+          );
+        }
       }
       if (view.native.failure) {
         view.readiness?.terminate({
@@ -901,6 +1121,7 @@ try {
   uiCalls.clear();
   approved.clear();
   for (const view of views.values()) {
+    relations.markClosing(view.readiness.snapshot().windowId);
     view.boundary.revoke("shutdown");
     view.readiness?.terminate({
       code: "CANCELLED",

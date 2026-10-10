@@ -19,7 +19,9 @@ const definitions = Object.fromEntries(
         name === "windows.getFocused" ||
         name === "windows.getLastActive"
           ? "list"
-          : "control",
+          : name === "windows.destroy"
+            ? "destroy"
+            : "control",
       osPermission: "not-required" as const,
     },
   ]),
@@ -29,6 +31,11 @@ const plugin = defineNativePlugin({
   version: manifest.version,
   operations: definitions,
   scopes: {
+    destroy: s.object({
+      view: s.string({
+        pattern: WINDOW_VIEW_NAME_PATTERN,
+      }),
+    }),
     control: s.object({
       view: s.string({
         pattern: WINDOW_VIEW_NAME_PATTERN,

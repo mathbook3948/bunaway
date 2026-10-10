@@ -1,26 +1,22 @@
-import type { WindowSpec } from "@bunaway/plugin-api/native";
+import type { WindowSpec, WindowState } from "@bunaway/plugin-api/native";
 import { BunawayError, type JsonValue } from "@bunaway/protocol";
 import type { WindowCall } from "./contract.ts";
 
 const WINDOW_CLEANUP_TIMEOUT_MS = 35_000;
 
-export type WindowState = {
-  closed: boolean;
-  cleaned: boolean;
-  ready: boolean;
-  failure: unknown;
-  deadline: number;
-};
+export type { WindowState } from "@bunaway/plugin-api/native";
 
 /** Coordinates requests without owning HWNDs or COM objects; the UI pump owns cleanup and readiness. */
 export class WindowOperations {
   readonly replacing = new Set<string>();
+  private readonly destroyedReplacements = new Set<string>();
   constructor(
     private readonly specs: readonly WindowSpec[],
     private readonly hooks: {
       read(view: string): WindowState | undefined;
-      create(spec: WindowSpec): void;
+      create(spec: WindowSpec, replacingLiveWindow?: boolean): void;
       close(view: string): boolean | Promise<boolean>;
+      destroy?(view: string): boolean | Promise<boolean>;
       apply(
         call: WindowCall,
         view: string,
@@ -70,7 +66,8 @@ export class WindowOperations {
     }
     if (
       (this.replacing.has(viewId) &&
-        call.operation !== "windows.getReadiness") ||
+        call.operation !== "windows.getReadiness" &&
+        call.operation !== "windows.destroy") ||
       (call.operation === "windows.completeSplashscreen" &&
         this.replacing.has(call.payload.splash))
     ) {
@@ -80,6 +77,28 @@ export class WindowOperations {
       });
     }
     let view = this.hooks.read(viewId);
+    if (call.operation === "windows.destroy") {
+      if (this.hooks.stopping() || this.hooks.cancelled(requestId)) {
+        throw new BunawayError({
+          code: "CANCELLED",
+          message: "Window request cancelled.",
+        });
+      }
+      if (!view) {
+        if (!this.hooks.destroy) {
+          throw new BunawayError({
+            code: "UNSUPPORTED",
+            message:
+              "Trusted window destruction is not implemented on this platform.",
+          });
+        }
+        return true;
+      }
+      if (this.replacing.has(viewId)) {
+        this.destroyedReplacements.add(viewId);
+      }
+      return this.hooks.apply(call, viewId, grants);
+    }
     if (call.operation === "windows.isDestroyed") {
       if (this.hooks.stopping() || this.hooks.cancelled(requestId)) {
         throw new BunawayError({
@@ -115,6 +134,7 @@ export class WindowOperations {
     }
     // Serialize create/recreate for this view until readiness or failure.
     this.replacing.add(viewId);
+    let creationStarted = false;
     try {
       if (this.hooks.stopping() || this.hooks.cancelled(requestId)) {
         throw new BunawayError({
@@ -134,6 +154,8 @@ export class WindowOperations {
       while (view && !view.cleaned) {
         if (
           this.hooks.stopping() ||
+          this.destroyedReplacements.has(viewId) ||
+          (closesLiveWindow && view.replacementCancelled) ||
           (!closesLiveWindow && this.hooks.cancelled(requestId)) ||
           this.hooks.now() > deadline
         ) {
@@ -147,6 +169,8 @@ export class WindowOperations {
       }
       if (
         this.hooks.stopping() ||
+        this.destroyedReplacements.has(viewId) ||
+        (closesLiveWindow && view?.replacementCancelled) ||
         (!closesLiveWindow && this.hooks.cancelled(requestId))
       ) {
         throw new BunawayError({
@@ -155,11 +179,12 @@ export class WindowOperations {
         });
       }
       // Once close commits, finish replacement even if the old document's context is revoked.
-      this.hooks.create(spec);
+      creationStarted = true;
+      this.hooks.create(spec, closesLiveWindow);
       view = this.hooks.read(viewId);
       // Preserve create's existing completion at controller setup; document and SDK readiness are separate.
       while (!view?.ready) {
-        if (this.hooks.stopping()) {
+        if (this.hooks.stopping() || this.destroyedReplacements.has(viewId)) {
           throw new BunawayError({
             code: "CANCELLED",
             message: "App shutdown interrupted window creation.",
@@ -167,7 +192,7 @@ export class WindowOperations {
         }
         if (!closesLiveWindow && this.hooks.cancelled(requestId)) {
           if (view && !view.closed) {
-            await this.hooks.close(viewId);
+            await (this.hooks.destroy ?? this.hooks.close)(viewId);
           }
           throw new BunawayError({
             code: "CANCELLED",
@@ -189,8 +214,21 @@ export class WindowOperations {
         view = this.hooks.read(viewId);
       }
       return null;
+    } catch (error) {
+      const current = this.hooks.read(viewId);
+      if (
+        creationStarted &&
+        current &&
+        !current.closed &&
+        !current.ready &&
+        this.hooks.destroy
+      ) {
+        await this.hooks.destroy(viewId);
+      }
+      throw error;
     } finally {
       this.replacing.delete(viewId);
+      this.destroyedReplacements.delete(viewId);
     }
   }
 }

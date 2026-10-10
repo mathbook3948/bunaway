@@ -43,6 +43,58 @@ export default defineApp({ modules: [], plugins: [windowsPlugin] });
 
 ## 메서드
 
+### 부모, 모달과 신뢰된 종료
+
+이 API는 Windows에서 지원합니다. `setParent`는 사전 선언된 두 창이 열린 뒤 호출합니다.
+`view`는 제어할 정책 ID이고 `parent`는 현재 부모의 네이티브 `windowId`입니다.
+`getParent`와 `getOwner`는 같은 관계를 반환합니다. Windows의 owner를 가진 최상위 창이며
+다른 창의 내용 영역에 들어가는 child HWND는 아닙니다. 자기 자신, 순환 관계, 종료된
+부모 ID는 `INVALID_ARGUMENT`입니다. 관계 변경에는 자식, 새 부모와 기존 부모의
+`windows:control` 권한이 모두 필요합니다. 조회 결과에서도 허용되지 않은 관계는 제외합니다.
+
+`modal: true`는 부모 입력을 즉시 차단합니다. 모달 창을 숨겨도 차단은 유지합니다.
+같은 부모의 여러 모달과 중첩 모달을 지원하며 마지막 모달의 HWND와 WebView 정리가
+끝나면 첫 차단 직전의 enabled 상태를 복원합니다. 이전 상태가 `false`이면 계속
+비활성입니다. 차단 중인 부모의 `setEnabled`는 `BUSY`입니다. 모달의 부모를 바꾸려면
+먼저 `parent: null, modal: false`로 해제합니다. `isEnabled`는 실제 HWND 상태를 읽으며
+표시, 활성화나 준비 완료를 뜻하지 않습니다.
+
+일반 `close`는 자식부터 모든 닫기 확인을 검사하고 거절하면 아직 살아 있는 창과 세션을
+유지합니다. 부모와 자식이 마지막 창 집합이면 `beforeQuit`도 먼저 검사합니다.
+취소나 훅 오류는 종료를 확정하지 않습니다. 부모가 승인되면 직접, 간접 자식을 함께
+종료하며 각 자식 세션 철회, WebView 분리, HWND 파괴와 COM 및 프로세스 정리가 끝난 뒤
+부모를 정리합니다. 소유 관계를 맺은 자식의 닫기는 트레이 숨김을 적용하지 않습니다.
+동시에 진행 중인 일반 닫기나 관계 변경은 `BUSY`입니다.
+
+`destroy`의 호출 주체는 신뢰된 앱 백엔드뿐입니다. setup의 백엔드 컨텍스트에서
+호출할 수 있고, 뷰에서 시작한 명령은 `windows:destroy`를 허용해도
+`PERMISSION_DENIED`입니다. 백엔드에는 대상의 `windows:destroy`와 `windows:control`
+권한을 모두 허용해야 합니다. `destroy`는 닫기 확인, 트레이 숨김과 `beforeQuit`를
+우회하고 대기 중인 닫기와 재생성을 중단합니다. 부모의 destroy는 자식도 종료하며
+부모 종료는 그 관계로 소유한 자식의 종료 권한을 포함합니다. 마지막 창을 destroy하면
+앱은 기존 정상 정리 경로로 종료합니다. 앱 프로세스를 즉시 강제 종료하는 API는 아닙니다.
+이미 닫혔거나 생성하지 않은 선언 창에는 `true`를 반환합니다.
+이미 실행 중인 `beforeQuit` 함수 자체를 강제로 중단하지는 않습니다. 마지막 창의
+destroy 뒤 정리는 훅 완료를 기다리지 않으며 늦은 결과로 종료를 다시 시작하지 않습니다.
+이미 열린 Win32 닫기 확인은 동기 대화상자입니다. 그동안 큐에 들어온 destroy는
+대화상자 응답 뒤 처리하며 추가 닫기 확인을 띄우지 않습니다.
+
+```ts
+// 신뢰된 백엔드 setup에서 사용합니다.
+const parent = await windows.getReadiness({ view: "main" });
+await windows.create({ view: "dialog" });
+await windows.setParent({ view: "dialog", parent: parent.windowId, modal: true });
+// 사용자가 거절할 수 있는 닫기입니다.
+await windows.close({ view: "dialog" });
+```
+
+생성 완료는 기존대로 WebView 설정 완료입니다. 문서와 SDK 준비는 `getReadiness`와
+`windows.readiness`로 구분합니다. 살아 있는 자식의 `recreate`는 부모 수명을 보존하고
+새 자식 ID와 세션을 만듭니다. 기다리는 동안 부모가 종료되면 `CANCELLED`로 끝나며
+같은 뷰의 새 부모에 자동으로 연결하지 않습니다. 닫힌 자식의 `create`는 소유 관계가
+없는 새 창을 만듭니다. 생성 취소나 오류는 확인을 우회해 부분 자원을 정리합니다.
+`close`와 `destroy`의 응답은 종료 확정 여부이며 비동기 네이티브 정리 완료를 뜻하지 않습니다.
+
 각 메서드는 같은 이름의 Host operation과 입력, 결과가 같습니다.
 예를 들어 `windows.setSize`의 입력과 결과는 SDK와 `host.call`에서 같습니다.
 
@@ -55,6 +107,12 @@ export default defineApp({ modules: [], plugins: [windowsPlugin] });
 | `windows.getFocused` | 인자 없음. Host operation 입력은 `null` | 같은 식별자 형태. 이 앱에 속한 OS 전경 창 |
 | `windows.getLastActive` | 인자 없음. Host operation 입력은 `null` | 같은 식별자 형태. 마지막으로 실제 활성화된 창 |
 | `windows.getReadiness` | `{ view }` | `Promise<WindowReadiness>`. 현재 준비 상태와 실패, 취소 결과. 닫힌 창의 마지막 결과도 조회 |
+| `windows.destroy` | `{ view }` | `Promise<boolean>`. 신뢰된 백엔드가 확인과 종료 취소를 우회해 대상과 자식의 종료를 확정 |
+| `windows.setParent` | `{ view, parent: string \| null, modal: boolean }` | `Promise<null>`. 네이티브 `windowId`로 owner 지정. `null`과 `modal: false`로 관계 해제 |
+| `windows.getParent`, `windows.getOwner` | `{ view }` | `Promise<WindowIdentity \| null>`. 같은 최상위 창 소유 관계를 조회 |
+| `windows.getChildren` | `{ view }` | `Promise<WindowIdentity[]>`. 살아 있고 허용된 직접 자식 조회 |
+| `windows.setEnabled` | `{ view, enabled: boolean }` | `Promise<null>`. 실제 입력 가능 상태 변경. 활성 모달이 부모를 막고 있으면 `BUSY` |
+| `windows.isEnabled` | `{ view }` | `Promise<boolean>`. 실제 네이티브 입력 가능 상태 |
 | `windows.completeSplashscreen` | `{ view, splash }` | `Promise<boolean>`. 준비된 주 창을 먼저 표시하고 splash 창을 닫음. 닫기 확인을 거절하면 `false` |
 | `windows.create` | `{ view }` | `Promise<null>`. 설정한 창을 생성하고 WebView 준비를 기다림. 열린 창은 `BUSY` |
 | `windows.recreate` | `{ view }` | `Promise<null>`. 닫기 확인 후 기존 창과 WebView를 정리하고 설정대로 다시 생성. 닫힌 창도 생성 가능 |

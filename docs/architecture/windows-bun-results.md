@@ -458,3 +458,39 @@ Win32 콜백은 기존 Channel에서 제한된 메시지 묶음을 읽어 수신
 통과했다. 실제 모달 시나리오도 분리 실행에서 백엔드 진행과 정상 정리를 통과했다.
 전체 호스트를 다른 검사와 함께 실행한 첫 시도에서는 WebView 정리 기한을 초과했다.
 로컬 실제 포커스 전환은 Windows가 활성화를 거부해 확인하지 못했다.
+
+## 2026-10-11 부모, 모달과 trusted destroy
+
+main `488f88a` 기반 작업 브랜치에서 검증했다. 환경은 Windows x64, NT
+`10.0.26200.0`, Bun `1.4.2`, WebView2 Runtime `154.0.4258.62`다.
+기존 `windowId`와 `viewId`, 네이티브 생성, 문서와 SDK 준비의 구분을 유지한다.
+
+`tests/api/window-relations.test.ts`, `tests/lifecycle/window-operations.test.ts`와
+`tests/lifecycle/windows-window-relations.test.ts`의 집중 검사 19개가 통과했다.
+별도 destroy 권한과 백엔드 출처, 대상과 양쪽 부모 관계 권한, 잘못된 입력과 출력,
+재생성 중 trusted destroy 및 부모 종료 취소, 생성 실패의 무조건 정리를 확인했다.
+실제 HWND에서는 Win32 owner 조회와 enabled 변경, 여러 모달의 마지막 해제 때
+이전 true 또는 false 상태 복원을 확인했다. 순환과 종료된 ID, 네이티브 owner 및
+disable 실패, 입력 복원 실패와 재시도, 자식부터 정리하는 순서는 제어된 의존성으로
+검사했다. 실제 OS API 실패를 주입한 검증과 구분한다.
+
+`tests/lifecycle/windows-owned-modal.ts`의 최종 단독 실행도 통과했다.
+실제 WebView2와 UI Worker, 공개 windows helper를 연결해 웹에서 destroy 권한을
+허용해도 거부되는 동작, 닫기 확인 거절과 그동안의 중복 WM_CLOSE, 모달 차단 중
+enabled 변경 거부, 이미 disabled인 부모 상태 보존, 두 모달의 마지막 종료 뒤 입력
+복원을 확인했다. 살아 있는 자식 재생성의 새 ID와 SDK 세션, 부모 close의 자식 종료,
+부모 재생성 후 이전 ID 거부, 부모 destroy와 자식 재생성 경쟁의 CANCELLED도 확인했다.
+마지막 부모와 자식 집합의 beforeQuit 거절과 오류는 창을 유지했다. 완료되지 않은
+beforeQuit 중 백엔드 destroy는 확인과 취소를 우회하고 정상 정리를 끝냈다.
+
+결과는 `build/windows-owned-modal/report.json`의 `pass: true`, `quitChecks: 3`이다.
+최종 호스트 로그는 `activeProcesses: 0`, `forced: false`, `failed: false`이며
+COM handler 목록이 비어 있고 종료 후 콜백이 없음을 확인했다.
+로그는 `build/windows-owned-modal/final-run.log`에 보관했다.
+
+첫 실행은 WebView2 브라우저 프로세스 잔류로 30초 정리 기한을 넘겼고, 전체 검사와
+함께 실행한 추가 시도는 fixture의 150초 기한에 실패했다. 단독 실행 두 번은 통과했다.
+기존 [이슈 #94](https://github.com/mathbook3948/bunaway/issues/94)의 간헐적 정리 문제를
+해결했다는 뜻은 아니다. 전체 검사와 호스트 회귀 결과는 해당 실행 로그로 구분한다.
+초기 설정의 부모 지정, child HWND 임베딩, 다중 물리 모니터와 다른 플랫폼 실행은
+이번 작업에 포함하지 않았다.

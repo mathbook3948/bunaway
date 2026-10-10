@@ -110,6 +110,8 @@ export type WindowState = {
   ready: boolean;
   /** Failure captured during creation, when one occurred. */
   failure: unknown;
+  /** A parent ended this lifetime; an in-flight live-window replacement must not reopen it. */
+  replacementCancelled?: boolean;
   /** Absolute deadline in milliseconds while waiting for creation to finish. */
   deadline: number;
 };
@@ -143,6 +145,18 @@ export type NativeWindow = {
   activate(): boolean;
   /** Starts a normal close request; returns false when it is declined or hides to tray. */
   close(): boolean | Promise<boolean>;
+  /** Trusted backend destruction bypasses confirmation, tray hiding and quit veto. Windows only. */
+  destroy?(): boolean | Promise<boolean>;
+  /** Sets the owner of this top-level window by native lifetime ID. Null detaches. Windows only. */
+  setParent?(windowId: string | null, modal: boolean): void;
+  /** Returns the owner identity, or null when unowned. Windows only. */
+  getParent?(): WindowIdentity | null;
+  /** Returns immediate owned windows, including modal windows. Windows only. */
+  getChildren?(): WindowIdentity[];
+  /** Changes input availability. Active modal blockers reject changes. Windows only. */
+  setEnabled?(enabled: boolean): void;
+  /** Reads actual native input availability. Windows only. */
+  isEnabled?(): boolean;
   /** Minimizes and displays the window, allowing Windows to activate another window. */
   minimize(): void;
   /** Maximizes and displays the window, requesting activation. */
@@ -253,10 +267,12 @@ export type NativeWindowServices = {
   };
   /** Reads a window's lifecycle state, or returns `undefined` for an unknown view. */
   read(view: string): WindowState | undefined;
-  /** Creates a window from its validated configuration. */
-  create(spec: WindowSpec): void;
+  /** Creates from validated configuration; a live replacement preserves its captured owner lifetime. */
+  create(spec: WindowSpec, replacingLiveWindow?: boolean): void;
   /** Closes a window before replacement and reports whether closing was accepted. */
   close(view: string): boolean | Promise<boolean>;
+  /** Unconditionally retires an incomplete creation on cancellation or failure. Windows only. */
+  destroy?(view: string): boolean | Promise<boolean>;
   /** Gets native controls for an existing view. */
   window(view: string): NativeWindow;
   /** Reports whether app shutdown has started. */
