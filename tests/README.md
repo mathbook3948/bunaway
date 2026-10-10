@@ -115,3 +115,9 @@ macOS의 기본 테스트 실행에도 포함되며, 실제 Bunaway 앱 검증�
 `BUNAWAY_DISTRIBUTION_APP`에 지정한 앱을 사용한다. 다른 OS에서는 건너뛴다.
 Apple 공증 서비스와 도구 실패는 테스트 자식 프로세스의 PATH에만 놓는 Bun fixture로
 검증한다. Python이나 별도 셸 실행기는 필요 없다.
+
+`cli/native-build.test.ts`는 한글과 공백이 포함된 캐시 경로에서 Bun ZIP과 SDK의
+압축 해제 위치를 확인하고, 잘못된 ZIP의 실패가 호출자에게 전달되는지 검사한다.
+Windows 네이티브 CI는 이 검사를 호스트 빌드 전에 실행하며 전체 실행 로그도 보관한다.
+macOS 배포 회귀는 날짜와 바이너리 데이터를 포함한 추가 plist 메타데이터가
+서명과 DMG, PKG 조립 후에도 타입과 값 그대로 남는지 확인한다.

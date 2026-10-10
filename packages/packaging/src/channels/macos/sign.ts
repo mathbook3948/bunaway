@@ -17,7 +17,9 @@ import {
   directory,
   exists,
   plist,
+  plistStrings,
   record,
+  setPlistString,
   string,
   writePlist,
 } from "./common.ts";
@@ -118,7 +120,9 @@ export async function signApp(options: SignOptions): Promise<void> {
     ]);
     const resources = resolve(staged, "Contents/Resources");
     const plistPath = resolve(staged, "Contents/Info.plist");
-    const info = await plist(plistPath);
+    const info = await plistStrings(plistPath, [
+      "CFBundleIdentifier",
+    ]);
     for (const [key, value] of [
       [
         "CFBundleIdentifier",
@@ -146,7 +150,7 @@ export async function signApp(options: SignOptions): Promise<void> {
       ],
     ]) {
       if (key && value !== undefined) {
-        info[key] = value;
+        await setPlistString(plistPath, key, value);
       }
     }
     if (options.icon) {
@@ -154,10 +158,12 @@ export async function signApp(options: SignOptions): Promise<void> {
         resolve(options.icon),
         resolve(resources, "AppIcon.icns"),
       ]);
-      info.CFBundleIconFile = "AppIcon";
+      await setPlistString(plistPath, "CFBundleIconFile", "AppIcon");
     }
-    await writePlist(plistPath, info);
-    const bundleId = string(info.CFBundleIdentifier, "CFBundleIdentifier");
+    const bundleId = string(
+      options.bundleId ?? info.CFBundleIdentifier,
+      "CFBundleIdentifier",
+    );
     let bun = resolve(resources, "runtime/bun");
     if (channel === "mac-store") {
       await mkdir(resolve(staged, "Contents/Helpers"), {

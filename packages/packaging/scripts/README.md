@@ -58,6 +58,10 @@ Channel layout notes:
   --icon --min-os`) rewrite `Info.plist` before sealing; a CLI/config layer
   supplies these from project settings.
 
+`Info.plist`에서는 필요한 문자열만 읽고 수정한다. 다른 키의 날짜, 바이너리 데이터와
+중첩 배열, 사전은 기존 타입과 값을 보존하며, 이 메타데이터가 있는 앱도 서명하고
+DMG 또는 PKG로 조립할 수 있다.
+
 ## package: channel artifact
 
 ```sh

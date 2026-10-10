@@ -122,6 +122,14 @@ describe
         "binary1",
         info,
       ]);
+      await command([
+        "/usr/bin/plutil",
+        "-insert",
+        "Extra",
+        "-xml",
+        "<dict><key>date</key><date>2026-10-05T23:13:00Z</date><key>data</key><data>YQ==</data><key>values</key><array><string>  padded &amp; text  </string><integer>42</integer></array></dict>",
+        info,
+      ]);
       upstream = await hash(resolve(resources, "runtime/bun"));
       // A stale packaged digest must be replaced after signing, while the upstream digest stays intact.
       await writeJson(resolve(resources, "manifest.json"), {
@@ -254,6 +262,19 @@ describe
       expect(manifest.bun.executableSha256).toBe(originalDigest);
       expect(manifest.bun.packagedSha256).toBe(await hash(runtime));
     }
+    async function assertFixtureMetadata(signedApp: string): Promise<void> {
+      const metadata = (path: string) =>
+        command([
+          "/usr/bin/plutil",
+          "-extract",
+          "Extra",
+          "xml1",
+          "-o",
+          "-",
+          resolve(path, "Contents/Info.plist"),
+        ]);
+      expect(await metadata(signedApp)).toBe(await metadata(template));
+    }
     async function notaryMock(): Promise<void> {
       env.NOTARY_LOG = resolve(root, "notary.log");
       await replaceTool("xcrun");
@@ -286,7 +307,9 @@ describe
       await previousOutput();
       await sign("mac-direct", [
         "--display-name",
-        "New Display Name",
+        "  New Display 이름  ",
+        "--bundle-id",
+        "ai.bunaway.changed",
         "--version",
         "2.0.0",
         "--build-number",
@@ -295,12 +318,42 @@ describe
         "14.0",
       ]);
       await assertSigned(out, "mac-direct");
-      expect(await plist(resolve(out, "Contents/Info.plist"))).toMatchObject({
-        CFBundleDisplayName: "New Display Name",
-        CFBundleShortVersionString: "2.0.0",
-        CFBundleVersion: "5",
-        LSMinimumSystemVersion: "14.0",
-      });
+      await assertFixtureMetadata(out);
+      for (const [key, value] of [
+        [
+          "CFBundleDisplayName",
+          "  New Display 이름  ",
+        ],
+        [
+          "CFBundleIdentifier",
+          "ai.bunaway.changed",
+        ],
+        [
+          "CFBundleShortVersionString",
+          "2.0.0",
+        ],
+        [
+          "CFBundleVersion",
+          "5",
+        ],
+        [
+          "LSMinimumSystemVersion",
+          "14.0",
+        ],
+      ] as const) {
+        expect(
+          await command([
+            "/usr/bin/plutil",
+            "-extract",
+            key,
+            "raw",
+            "-expect",
+            "string",
+            "-n",
+            resolve(out, "Contents/Info.plist"),
+          ]),
+        ).toBe(value);
+      }
       expect(await Bun.file(resolve(out, "previous-marker")).exists()).toBe(
         false,
       );
@@ -316,6 +369,7 @@ describe
         "ABCD1234EF",
       ]);
       await assertSigned(out, "mac-store");
+      await assertFixtureMetadata(out);
       expect(
         await Bun.file(resolve(out, "Contents/Resources/runtime/bun")).exists(),
       ).toBe(false);
@@ -342,6 +396,30 @@ describe
       ).toBe(false);
       expect(await readdir(stage)).toEqual([]);
     });
+    for (const content of [
+      "invalid plist",
+      '<plist version="1.0"><array/></plist>',
+    ]) {
+      test(`invalid bundle metadata preserves previous output (${content})`, async () => {
+        await previousOutput();
+        await writeFile(resolve(app, "Contents/Info.plist"), content);
+        await sign("mac-direct", [], 1);
+        await assertPrevious();
+        await run(
+          "package",
+          [
+            "--channel",
+            "mac-direct",
+            "--app",
+            app,
+            "--out-dir",
+            resolve(root, "artifacts"),
+          ],
+          1,
+        );
+        expect(await Bun.file(resolve(root, "artifacts")).exists()).toBe(false);
+      });
+    }
     for (const [name, tool, failure] of [
       [
         "invalid manifest preserves previous output",
@@ -430,6 +508,7 @@ describe
           ]);
           try {
             await assertSigned(resolve(mount, "Signed.app"), channel);
+            await assertFixtureMetadata(resolve(mount, "Signed.app"));
             expect(await readlink(resolve(mount, "Applications"))).toBe(
               "/Applications",
             );

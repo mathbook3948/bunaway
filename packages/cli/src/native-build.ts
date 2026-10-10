@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { chmod, mkdir, mkdtemp, rename, rm } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { frameworkRoot, json, verifyHash } from "./files.ts";
 import { run } from "./processes.ts";
@@ -55,6 +55,31 @@ export async function fetchDependency(
   }
 }
 
+/** Extract pinned ZIPs using ASCII relative names on Windows, where tar cannot open Unicode absolute paths. */
+export async function extractDependencyArchive(
+  archive: string,
+  directory: string,
+): Promise<void> {
+  const cwd = dirname(archive);
+  await run(
+    process.platform === "win32"
+      ? [
+          "tar",
+          "-xf",
+          basename(archive),
+          "-C",
+          relative(cwd, directory) || ".",
+        ]
+      : [
+          "/usr/bin/ditto",
+          "-xk",
+          archive,
+          directory,
+        ],
+    cwd,
+  );
+}
+
 /** Prepare pinned native inputs with the running Bun; verify-only never downloads, extracts or compiles. */
 export async function prepareNativeBuild(
   target: "windows-x64" | "macos-arm64",
@@ -95,23 +120,7 @@ export async function prepareNativeBuild(
     windows ? "bun.exe" : "bun",
   );
   if (!(await Bun.file(executable).exists()) && !verifyOnly) {
-    await run(
-      windows
-        ? [
-            "tar",
-            "-xf",
-            archive,
-            "-C",
-            cache,
-          ]
-        : [
-            "/usr/bin/ditto",
-            "-xk",
-            archive,
-            cache,
-          ],
-      root,
-    );
+    await extractDependencyArchive(archive, cache);
   }
   await verifyHash(executable, string(bun.executableSha256));
   await fetchPinned(
@@ -137,16 +146,7 @@ export async function prepareNativeBuild(
       await mkdir(extracted, {
         recursive: true,
       });
-      await run(
-        [
-          "tar",
-          "-xf",
-          sdkArchive,
-          "-C",
-          extracted,
-        ],
-        root,
-      );
+      await extractDependencyArchive(sdkArchive, extracted);
     }
     const hashes = record(sdk.files);
     for (const file of [

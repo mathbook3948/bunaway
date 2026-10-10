@@ -73,8 +73,14 @@ jobs:
         uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
       - name: Install locked dependencies
         run: mise run install
+      - name: Verify ZIP extraction in Unicode cache paths
+        run: mise exec -- bun --no-env-file test tests/cli/native-build.test.ts
       - name: Build and test Bun FFI WebView2 host
-        run: mise run host:windows
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path build/windows-native-logs | Out-Null
+          mise run host:windows 2>&1 | Tee-Object -FilePath build/windows-native-logs/host.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Collect host diagnostics
         if: always()
         shell: pwsh
@@ -92,6 +98,7 @@ jobs:
           path: |
             build/windows-*-results.json
             build/windows-host-logs/
+            build/windows-native-logs/
           if-no-files-found: ignore
           retention-days: 7
 
