@@ -1,22 +1,35 @@
 import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { frameworkRoot } from "#cli/files";
 
-const java = Bun.which("java");
+// Windows PATH can select a standalone JRE. Use the compiler's JDK for both commands.
+const javac = Bun.which(
+  "javac",
+  process.env.JAVA_HOME
+    ? {
+        PATH: resolve(process.env.JAVA_HOME, "bin"),
+      }
+    : {},
+);
+const java = javac
+  ? Bun.which("java", {
+      PATH: dirname(javac),
+    })
+  : null;
 
-test.skipIf(!java)(
+test.skipIf(!javac || !java)(
   "Android backend extraction replaces previous APK imports without removing app data",
   async () => {
-    if (!java) {
-      throw new Error("Java is required");
+    if (!javac || !java) {
+      throw new Error("A JDK is required");
     }
     const root = await mkdtemp(resolve(tmpdir(), "bunaway-android-assets-"));
-    async function run(args: string[]): Promise<string> {
+    async function run(executable: string, args: string[]): Promise<string> {
       const child = Bun.spawn(
         [
-          java ?? "",
+          executable,
           ...args,
         ],
         {
@@ -34,8 +47,7 @@ test.skipIf(!java)(
       return output;
     }
     try {
-      await run([
-        "com.sun.tools.javac.Main",
+      await run(javac, [
         "--release",
         "17",
         "-encoding",
@@ -52,7 +64,7 @@ test.skipIf(!java)(
         ),
       ]);
       expect(
-        await run([
+        await run(java, [
           "-cp",
           root,
           "dev.bunaway.host.BackendAssetsHarness",
