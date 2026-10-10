@@ -6,6 +6,7 @@ import {
   BunawayError,
   type HostContext,
   type HostResponse,
+  type NativeRegistration,
 } from "@bunaway/protocol";
 import { DiagnosticLog } from "@bunaway/runtime-bun/diagnostic-log";
 import { Channel } from "@bunaway/runtime-bun/worker-channel";
@@ -48,6 +49,7 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
   const catalog = await loadPluginCatalog(config.assets);
   let adapters: Awaited<ReturnType<typeof operations>> | undefined;
   let registry: ReturnType<typeof pluginRegistry> | undefined;
+  const pendingPlugins: NativeRegistration[] = [];
   let matches: Awaited<ReturnType<typeof permissionMatcher>> | undefined;
   const requests = new Map<string, HostContext>();
   const cancelled = new Set<string>();
@@ -59,6 +61,7 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
       return;
     }
     stopping = true;
+    pendingPlugins.length = 0;
     clearTimeout(startup);
     // The deadline also applies when UI setup fails before its event pump starts.
     shutdownTimer = setTimeout(() => {
@@ -134,14 +137,20 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
           if (registry) {
             throw new Error("Invalid native registration phase.");
           }
-          registry = pluginRegistry(packet.plugins, catalog);
+          pendingPlugins.push(...packet.plugins);
+          if (!packet.complete) {
+            return;
+          }
+          // Validate the aggregate limits and installed contracts only after the final batch.
+          const plugins = pendingPlugins.splice(0);
+          registry = pluginRegistry(plugins, catalog);
           registry.validatePolicy(config.policy);
-          matches = await permissionMatcher(packet.plugins, catalog);
+          matches = await permissionMatcher(plugins, catalog);
           if (!ui) {
             throw new Error("Missing window services.");
           }
           adapters = await operations(
-            packet.plugins,
+            plugins,
             config.dataRoot,
             "ui",
             ui.services,

@@ -159,15 +159,25 @@ try {
     parentPort.close();
   } else {
     booting = (async () => {
-      await channel.send({
-        kind: "native-register",
-        plugins,
-      });
-      if (stopping) {
-        throw new BunawayError({
-          code: "CANCELLED",
-          message: "Backend startup cancelled.",
+      // Each native contract has its own size budget; never combine contracts into one packet.
+      const batchCount = Math.max(1, plugins.length);
+      for (let index = 0; index < batchCount; index++) {
+        const plugin = plugins[index];
+        await channel.send({
+          kind: "native-register",
+          plugins: plugin
+            ? [
+                plugin,
+              ]
+            : [],
+          complete: index === batchCount - 1,
         });
+        if (stopping) {
+          throw new BunawayError({
+            code: "CANCELLED",
+            message: "Backend startup cancelled.",
+          });
+        }
       }
       return createCore(app, {
         policy: config.policy,

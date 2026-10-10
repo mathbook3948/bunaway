@@ -33,6 +33,8 @@ export type Packet =
   | {
       kind: "native-register";
       plugins: import("@bunaway/protocol").NativeRegistration[];
+      /** Final batch commits the complete registry before backend setup can run. */
+      complete: boolean;
     }
   | {
       kind: "ready" | "start" | "shutdown" | "closing" | "cleaned";
@@ -203,6 +205,7 @@ const approvalKinds = new Set([
 const requiredFields: Record<Packet["kind"], readonly string[]> = {
   "native-register": [
     "plugins",
+    "complete",
   ],
   "desktop-control": [
     "action",
@@ -348,7 +351,12 @@ export function validatePacket(value: unknown, incoming: Side): Packet {
     throw new Error("Invalid quit reason");
   }
   if (packet.kind === "native-register") {
-    if (!Array.isArray(packet.plugins)) {
+    if (
+      !Array.isArray(packet.plugins) ||
+      packet.plugins.length > 1 ||
+      typeof packet.complete !== "boolean" ||
+      (!packet.complete && packet.plugins.length === 0)
+    ) {
       throw new Error("Invalid native registrations");
     }
     for (const plugin of packet.plugins) {
