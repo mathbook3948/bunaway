@@ -393,7 +393,7 @@ if (!process.argv.includes("--child")) {
     assert.equal(report.cancelledCreation, true);
     assert.equal(report.browserFailureClosed, true);
     console.log(
-      "PASS Windows public window API: size constraints, GetDpiForWindow scaling at the current monitor, maximize and restore, fullscreen visibility, geometry, close refusal, browser failure, dynamic creation, fresh sessions and revoked creation",
+      "PASS Windows public window API: identity lookup, navigation identity preservation, native recreation identity replacement, destroyed and normal state, size constraints, GetDpiForWindow scaling at the current monitor, maximize and restore, fullscreen visibility, geometry, close refusal, browser failure, dynamic creation, fresh sessions and revoked creation",
     );
   } finally {
     clearTimeout(timeout);
@@ -413,6 +413,8 @@ if (!process.argv.includes("--child")) {
     holds = 0,
     cancellations = 0,
     quitAttempts = 0;
+  let mainWindowId = "";
+  let editorWindowId = "";
   /** Waits for state changes reported by separate WebView documents. */
   async function waitFor(check: () => boolean | Promise<boolean>) {
     const deadline = Date.now() + 10000;
@@ -461,6 +463,8 @@ if (!process.argv.includes("--child")) {
             "isFullscreen",
             "isVisible",
             "isFocused",
+            "isNormal",
+            "isDestroyed",
             "showInactive",
             "blur",
             "activate",
@@ -473,6 +477,15 @@ if (!process.argv.includes("--child")) {
                 code: "PERMISSION_DENIED",
               },
             );
+          }
+          for (const lookup of [
+            windows.getCurrent,
+            windows.getFocused,
+            windows.getLastActive,
+          ]) {
+            await assert.rejects(lookup(), {
+              code: "PERMISSION_DENIED",
+            });
           }
           await assert.rejects(
             windows.show({
@@ -515,8 +528,52 @@ if (!process.argv.includes("--child")) {
       "test.run": {
         ...contract,
         async run() {
+          const current = await windows.getCurrent();
+          assert(current && current.viewId === "main");
+          const snapshot = await windows.getSnapshot({
+            view: "main",
+          });
+          assert.equal(current.windowId, snapshot.windowId);
+          assert.deepEqual(
+            await windows.getById({
+              windowId: current.windowId,
+            }),
+            current,
+          );
+          assert.equal(
+            await windows.getById({
+              windowId: "main",
+            }),
+            null,
+          );
+          if (runs === 1 || runs === 2) {
+            assert.equal(
+              current.windowId,
+              mainWindowId,
+              "navigation preserves native identity",
+            );
+          } else if (runs === 3) {
+            assert.notEqual(
+              current.windowId,
+              mainWindowId,
+              "native recreation replaces identity",
+            );
+            assert.equal(
+              await windows.getById({
+                windowId: mainWindowId,
+              }),
+              null,
+            );
+          }
+          mainWindowId = current.windowId;
           // First run covers sizing/fullscreen; later runs cover recreation and renderer recovery.
           if (++runs === 1) {
+            assert.equal(
+              await windows.isDestroyed({
+                view: "editor",
+              }),
+              true,
+            );
             await windows.create({
               view: "editor",
             });
@@ -560,6 +617,10 @@ if (!process.argv.includes("--child")) {
             const editor = {
               view: "editor",
             };
+            const editorSnapshot = await windows.getSnapshot(editor);
+            editorWindowId = editorSnapshot.windowId;
+            assert.equal(await windows.isDestroyed(editor), false);
+            assert.equal(await windows.isNormal(editor), true);
             await windows.hide(editor);
             assert.equal(await windows.activate(editor), false);
             await windows.showInactive(editor);
@@ -578,6 +639,7 @@ if (!process.argv.includes("--child")) {
             assert.equal(await windows.isMinimized(editor), false);
             assert.equal(await windows.isMaximized(editor), false);
             await windows.maximize(editor);
+            assert.equal(await windows.isNormal(editor), false);
             assert.equal(await windows.isMaximized(editor), true);
             await windows.minimize(editor);
             assert.equal(await windows.isMinimized(editor), true);
@@ -624,6 +686,27 @@ if (!process.argv.includes("--child")) {
             await windows.hide({
               view: "editor",
             });
+            const foreground = user.symbols.GetForegroundWindow();
+            const lastActive = await windows.getLastActive();
+            assert.deepEqual(
+              {
+                ...(await windows.getById({
+                  windowId: editorWindowId,
+                })),
+              },
+              {
+                windowId: editorWindowId,
+                viewId: "editor",
+              },
+            );
+            await windows.getFocused();
+            assert.equal(await windows.isVisible(editor), false);
+            assert.equal(
+              user.symbols.GetForegroundWindow(),
+              foreground,
+              "lookup must not activate a hidden window",
+            );
+            assert.deepEqual(await windows.getLastActive(), lastActive);
             await windows.show({
               view: "editor",
             });
@@ -941,8 +1024,23 @@ if (!process.argv.includes("--child")) {
             await windows.recreate({
               view: "editor",
             });
+            assert.equal(
+              await windows.getById({
+                windowId: editorWindowId,
+              }),
+              null,
+            );
+            assert.notEqual(
+              (await windows.getSnapshot(editor)).windowId,
+              editorWindowId,
+            );
             await waitFor(() => holds === 2 && cancellations === 1);
           } else if (runs === 2) {
+            editorWindowId = (
+              await windows.getSnapshot({
+                view: "editor",
+              })
+            ).windowId;
             assert.deepEqual(
               {
                 ...(await windows.getSizeConstraints({
@@ -962,6 +1060,26 @@ if (!process.argv.includes("--child")) {
               }),
               true,
             ); // confirmation resets on recreation
+            assert.equal(
+              await windows.isDestroyed({
+                view: "editor",
+              }),
+              true,
+            );
+            assert.equal(
+              await windows.getById({
+                windowId: editorWindowId,
+              }),
+              null,
+            );
+            await assert.rejects(
+              windows.isNormal({
+                view: "editor",
+              }),
+              {
+                code: "INVALID_ARGUMENT",
+              },
+            );
             await windows.create({
               view: "editor",
             });
@@ -1049,6 +1167,8 @@ if (!process.argv.includes("--child")) {
                 cancellations,
                 cancelledCreation: true,
                 browserFailureClosed: true,
+                identityLookup: true,
+                navigationPreservesIdentity: true,
               }),
             );
           }

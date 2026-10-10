@@ -25,7 +25,10 @@ export default defineApp({ modules: [], plugins: [windowsPlugin] });
 `startup: false`로 설정하면 `windows.create`로 열 때까지 생성하지 않습니다.
 호출 인자로 임의 URL이나 새 정책을 전달할 수 없습니다.
 
-뷰 명령은 해당 뷰의 `host.permissions`, setup은 `backend.permissions`에 권한을 허용합니다. `windows:list`는 목록 조회, `windows:control`은 allow에 지정한 뷰의 생성, 재생성과 제어를 허용합니다. deny가 allow보다 우선합니다. 생략하면 거부합니다.
+뷰 명령은 해당 뷰의 `host.permissions`, setup은 `backend.permissions`에 권한을 허용합니다.
+`windows:list`는 목록과 식별자 탐색, `windows:control`은 allow에 지정한 뷰의 생성,
+재생성, 제어와 상태 조회를 허용합니다. 식별자 탐색도 대상의 `windows:control` 권한으로
+결과를 제한합니다. deny가 allow보다 우선합니다. 생략하면 거부합니다.
 
 ```json
 {
@@ -47,6 +50,10 @@ export default defineApp({ modules: [], plugins: [windowsPlugin] });
 | --- | --- | --- |
 | `windows.getSnapshot` | `{ view }` | `Promise<WindowSnapshot>`. 현재 창 식별자, 관찰 revision, 표시 상태와 물리 outer bounds를 한 번에 조회 |
 | `windows.list` | 인자 없음. Host operation 입력은 `null` | `Promise<{ view: string; open: boolean }[]>`. 허용된 창 설정과 열림 여부 |
+| `windows.getById` | `{ windowId }` | `Promise<WindowIdentity \| null>`. 해당 네이티브 수명의 살아 있는 창 |
+| `windows.getCurrent` | 인자 없음. Host operation 입력은 `null` | 같은 식별자 형태. 인증된 호출 출처의 현재 창 |
+| `windows.getFocused` | 인자 없음. Host operation 입력은 `null` | 같은 식별자 형태. 이 앱에 속한 OS 전경 창 |
+| `windows.getLastActive` | 인자 없음. Host operation 입력은 `null` | 같은 식별자 형태. 마지막으로 실제 활성화된 창 |
 | `windows.create` | `{ view }` | `Promise<null>`. 설정한 창을 생성하고 WebView 준비를 기다림. 열린 창은 `BUSY` |
 | `windows.recreate` | `{ view }` | `Promise<null>`. 닫기 확인 후 기존 창과 WebView를 정리하고 설정대로 다시 생성. 닫힌 창도 생성 가능 |
 | `windows.show` | `{ view }` | `Promise<null>`. 창 표시 |
@@ -65,6 +72,8 @@ export default defineApp({ modules: [], plugins: [windowsPlugin] });
 | `windows.isFullscreen` | `{ view }` | `Promise<boolean>`. 호스트가 해당 네이티브 창에 적용한 전체화면 모드 여부 |
 | `windows.isVisible` | `{ view }` | `Promise<boolean>`. 네이티브 표시 상태. 최소화한 창도 `true`일 수 있음 |
 | `windows.isFocused` | `{ view }` | `Promise<boolean>`. OS 전경 창인지 조회. 창 안의 WebView에 입력 포커스가 있어도 `true` |
+| `windows.isDestroyed` | `{ view }` | `Promise<boolean>`. 선언된 뷰에 살아 있는 창이 없으면 `true` |
+| `windows.isNormal` | `{ view }` | `Promise<boolean>`. 최소화, 최대화와 전체화면이 모두 아니면 `true` |
 | `windows.setSize` | `{ view, width, height }` | `Promise<null>`. 내용 영역의 크기. 각 값은 정수 200–4096 |
 | `windows.setContentPosition` | `{ view, x, y, unit? }` | `Promise<null>`. 내용 영역 왼쪽 위의 화면 위치 설정 |
 | `windows.setOuterSize` | `{ view, width, height, unit? }` | `Promise<null>`. 제목 표시줄과 테두리를 포함한 바깥 크기 설정 |
@@ -107,6 +116,51 @@ macOS는 뷰마다 독립된 임시 WebKit 프로필을 사용합니다. 같은 
 수 있으므로 포커스가 필요하면 `focus`의 결과를 처리하세요. macOS의 `close`는 닫기를
 승인하며, 마지막 열린 창이면 앱을 종료합니다. 닫기 확인과 `desktop` 계약은 아직
 지원하지 않습니다. 아래 상태 변경, 크기와 닫기 확인 설명은 Windows의 동작입니다.
+
+## 창 식별자 조회
+
+Windows의 네 탐색 메서드는 `WindowIdentity`인 `{ windowId, viewId }` 또는 `null`을 반환합니다.
+`viewId`는 `app.windows`에 선언한 정책 뷰이며 뷰마다 창 하나를 유지합니다.
+`windowId`는 `getSnapshot`과 같은 불투명 네이티브 수명 ID입니다. HWND나 `viewId`로
+만들거나 추측하지 말고 반환된 값을 사용합니다.
+
+같은 네이티브 창의 문서 탐색과 SDK 세션 교체는 `windowId`를 유지합니다. 닫았다 다시
+생성하거나 `recreate`로 네이티브 창을 바꾸면 새 ID를 발급합니다. `getById`는 알 수 없는 ID와
+이전 ID에 `null`을 반환합니다. 닫힌 창, 생성 전 창과 API 생성 또는 재생성 중인 창도
+탐색 결과에서 제외합니다. 시작 창처럼 API 생성 작업이 없는 경우 HWND가 만들어진 뒤에는
+WebView 준비 전에도 식별할 수 있습니다.
+
+`getCurrent`는 입력으로 뷰를 받지 않으며 호스트가 인증한 `view:<viewId>` 출처를 사용합니다.
+백엔드 호출에는 `null`, 잘못된 출처에는 `PERMISSION_DENIED`를 반환합니다.
+`getFocused`는 OS 전경 창이 이 앱의 창일 때만 그 식별자를 반환합니다.
+외부 앱이 전경이거나 전경 창이 없으면 `null`입니다.
+`getLastActive`는 이 호스트에서 마지막으로 실제 활성화를 받은 창을 반환하며 기록이 없으면 `null`입니다.
+
+네 탐색 메서드는 `windows:list`를 확인한 뒤 대상의 `windows:control` 허용과 거부 규칙을
+적용합니다. 실제 대상이 허용되지 않으면 `null`이며 다른 허용 창으로 대체하지 않습니다.
+목록 권한이 없으면 `PERMISSION_DENIED`입니다.
+
+마지막 활성 기록은 OS가 창을 활성화할 때만 갱신합니다. 비활성화 메시지, 문서 탐색과 조회
+자체는 기록을 바꾸지 않습니다. 해당 네이티브 창을 파괴하면 기록을 삭제하며 이전 활성 창으로
+되돌리지 않습니다. 다른 창을 파괴해도 기록을 유지합니다. 다만 blur, 종료나 숨김 과정에서 OS가
+다른 앱 창을 실제로 활성화하면 그 활성화를 새로 기록합니다.
+기록은 이 호스트 실행에만 유지하며 앱 종료 뒤에는 보존하지 않습니다.
+
+조회는 창 생성, 표시, 포커스나 활성화를 요청하지 않습니다. `getById`의 `windowId`는
+1~128자의 영문, 숫자, `_`, `.`, `:`, `-` 문자열이며 잘못된 입력은 `INVALID_ARGUMENT`입니다.
+호스트 종료와 호출 취소는 `CANCELLED`입니다. 식별자 추적을 제공하지 않는 플랫폼은
+`UNSUPPORTED`, 네이티브 조회 실패는 `INTERNAL`을 반환합니다.
+
+```ts
+const current = await windows.getCurrent();
+if (current) {
+  const sameLifetime = await windows.getById({ windowId: current.windowId });
+  const normal = await windows.isNormal({ view: current.viewId });
+}
+const focused = await windows.getFocused();
+const lastActive = await windows.getLastActive();
+const destroyed = await windows.isDestroyed({ view: "editor" });
+```
 
 ## 표시와 활성 창 전환
 
@@ -290,13 +344,22 @@ const outer = await windows.getOuterBounds({ view: "editor" });
 
 `toggleMaximize`는 호출 시 네이티브 최대화 여부를 기준으로 전환합니다. 최소화한 창은 현재 최대화 상태가 아니므로 최대화합니다. 이미 최소화한 창에 `minimize`, 이미 최대화한 창에 `maximize`를 다시 호출해도 해당 상태를 유지합니다.
 
-전체화면 중에는 `minimize`, `maximize`, `unmaximize`, `restore`, `toggleMaximize`를 `INVALID_ARGUMENT`로 거부하고 전체화면과 복원 정보를 유지합니다. 먼저 `setFullscreen({ view, fullscreen: false })`로 해제하세요. 전체화면 중에도 다섯 상태 조회는 가능합니다. 전체화면과 최대화는 별개 상태이며 전체화면 진입 전 최대화 여부를 유지할 수 있습니다.
+전체화면 중에는 `minimize`, `maximize`, `unmaximize`, `restore`, `toggleMaximize`를 `INVALID_ARGUMENT`로 거부하고 전체화면과 복원 정보를 유지합니다. 먼저 `setFullscreen({ view, fullscreen: false })`로 해제하세요. 전체화면 중에도 상태 조회는 가능합니다. 전체화면과 최대화는 별개 상태이며 전체화면 진입 전 최대화 여부를 유지할 수 있습니다.
 
 숨긴 창에 다섯 상태 변경을 호출하면 창을 표시합니다. `minimize`는 최소화된 표시 상태로 만들며 대상 창의 포커스를 요청하지 않습니다. 나머지는 대상 창의 활성화를 요청하지만 OS의 전경 전환 정책에 따라 포커스를 얻지 못할 수 있습니다. 상태 변경 성공은 포커스 획득을 보장하지 않습니다. 반드시 포커스가 필요하면 `focus`를 호출하고 실패를 처리하세요. 조회는 창을 표시하거나 포커스를 바꾸지 않습니다.
 
 최소화, 최대화, 표시 여부와 전경 창 여부는 호출할 때 Windows에서 읽습니다. 전체화면은 해당 HWND에 적용한 호스트의 전체화면 모드입니다. `isVisible`은 다른 창에 가려졌는지나 화면 안에 있는지까지 판정하지 않습니다. 조회 결과는 그 시점의 상태이며 이후 사용자의 창 조작으로 바뀔 수 있습니다.
 
-제어와 조회 모두 대상 뷰의 `windows:control` 권한이 필요합니다. `windows:list`만으로는 상태를 조회할 수 없습니다. 권한을 먼저 검사하며 권한이 없으면 대상의 선언 여부와 관계없이 `PERMISSION_DENIED`입니다. 권한이 허용된 미선언 뷰 또는 닫힌 창에는 `INVALID_ARGUMENT`를 반환합니다. 닫힌 창의 상태를 `false`로 대신 반환하거나 자동 생성하지 않습니다.
+`isNormal`은 숨긴 창이나 포커스가 없는 창에도 `true`일 수 있습니다. `isDestroyed`는
+아직 생성하지 않은 `startup: false` 뷰와 닫기가 수락된 창에도 `true`를 반환합니다.
+API 생성 작업이 없고 살아 있는 HWND가 있으면 WebView 준비 전에도 `false`입니다. 이 조회는 창을 생성하거나
+문서 준비를 기다리지 않습니다. 트레이로 숨기거나 닫기를 거절한 창은 destroyed가 아닙니다.
+
+제어와 상태 조회 모두 대상 뷰의 `windows:control` 권한이 필요합니다. `windows:list`만으로는
+상태를 조회할 수 없습니다. 권한을 먼저 검사하며 권한이 없으면 대상의 선언 여부와 관계없이
+`PERMISSION_DENIED`입니다. 허용된 미선언 뷰는 `INVALID_ARGUMENT`입니다.
+`isDestroyed`를 제외한 상태 조회는 닫힌 창에 `INVALID_ARGUMENT`를 반환합니다.
+API 생성 또는 재생성 중인 창은 `isDestroyed`를 포함해 `BUSY`입니다.
 
 웹 UI에서는 두 번째 인자로 `signal`, `timeoutMs`를 사용할 수 있습니다. 백엔드 호출은 명령의 취소와 기한을 따르며 별도 취소 옵션을 전달하면 `INVALID_ARGUMENT`입니다. 네이티브 작업 시작 전 취소는 실행을 막습니다. 시작한 작업은 동기 실행하며 이후 취소는 창 상태 변경을 되돌리지 않습니다. OS가 요청한 표시 상태를 적용하지 못하거나 네이티브 조회가 실패하면 `INTERNAL`입니다.
 

@@ -48,17 +48,13 @@ export class WindowOperations {
           open: this.hooks.read(spec.view)?.closed === false,
         }));
     }
-    if (!("view" in (call.payload ?? {}))) {
+    if (!call.payload || !("view" in call.payload)) {
       throw new BunawayError({
         code: "INVALID_ARGUMENT",
         message: "Expected a window operation.",
       });
     }
-    const viewId = (
-      call.payload as {
-        view: string;
-      }
-    ).view;
+    const viewId = call.payload.view;
     if (!grants.includes(viewId)) {
       throw new BunawayError({
         code: "PERMISSION_DENIED",
@@ -79,6 +75,15 @@ export class WindowOperations {
       });
     }
     let view = this.hooks.read(viewId);
+    if (call.operation === "windows.isDestroyed") {
+      if (this.hooks.stopping() || this.hooks.cancelled(requestId)) {
+        throw new BunawayError({
+          code: "CANCELLED",
+          message: "Window request cancelled.",
+        });
+      }
+      return !view || view.closed;
+    }
     if (
       call.operation !== "windows.create" &&
       call.operation !== "windows.recreate"

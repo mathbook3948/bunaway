@@ -12,7 +12,14 @@ const definitions = Object.fromEntries(
     name.slice("windows.".length),
     {
       ...operation,
-      permission: name === "windows.list" ? "list" : "control",
+      permission:
+        name === "windows.list" ||
+        name === "windows.getById" ||
+        name === "windows.getCurrent" ||
+        name === "windows.getFocused" ||
+        name === "windows.getLastActive"
+          ? "list"
+          : "control",
       osPermission: "not-required" as const,
     },
   ]),
@@ -54,6 +61,12 @@ export const windows = Object.freeze({
   ...api,
   list: (options?: import("@bunaway/plugin").NativeInvokeOptions) =>
     api.list(null, options),
+  getCurrent: (options?: import("@bunaway/plugin").NativeInvokeOptions) =>
+    api.getCurrent(null, options),
+  getFocused: (options?: import("@bunaway/plugin").NativeInvokeOptions) =>
+    api.getFocused(null, options),
+  getLastActive: (options?: import("@bunaway/plugin").NativeInvokeOptions) =>
+    api.getLastActive(null, options),
 });
 export type {
   WindowCall,

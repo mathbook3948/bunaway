@@ -43,6 +43,32 @@ const windowStateResult = {
     type: "boolean",
   },
 } as const;
+const windowIdentitySchema = {
+  type: "object",
+  properties: {
+    windowId: windowTarget.properties.view,
+    viewId: windowTarget.properties.view,
+  },
+  required: [
+    "windowId",
+    "viewId",
+  ],
+  additionalProperties: false,
+} as const;
+const windowLookupOutput = {
+  anyOf: [
+    {
+      const: null,
+    },
+    windowIdentitySchema,
+  ],
+} as const;
+const windowLookup = {
+  input: {
+    const: null,
+  },
+  output: windowLookupOutput,
+} as const;
 const sizeDimension = {
   anyOf: [
     {
@@ -346,6 +372,22 @@ const conversionOutput = {
 
 /** Schemas for window operations, used to validate calls and their results. */
 export const windowOperations = {
+  "windows.getById": {
+    input: {
+      type: "object",
+      properties: {
+        windowId: windowTarget.properties.view,
+      },
+      required: [
+        "windowId",
+      ],
+      additionalProperties: false,
+    },
+    output: windowLookupOutput,
+  },
+  "windows.getCurrent": windowLookup,
+  "windows.getFocused": windowLookup,
+  "windows.getLastActive": windowLookup,
   "windows.getSnapshot": {
     input: windowTarget,
     output: windowSnapshotSchema,
@@ -391,6 +433,8 @@ export const windowOperations = {
   "windows.isFullscreen": windowStateResult,
   "windows.isVisible": windowStateResult,
   "windows.isFocused": windowStateResult,
+  "windows.isDestroyed": windowStateResult,
+  "windows.isNormal": windowStateResult,
   "windows.close": {
     input: windowTarget,
     output: {

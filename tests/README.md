@@ -48,6 +48,17 @@ WebView2 경로는 기존 `windows-bun-window-api.ts`와 `windows-window-events.
 WebView2 페이지 실행은 포함하지 않는다. 이전 텍스트만 복원하며 이미지 등 다른 형식은 복원하지 않는다.
 실제 검증 기록과 명령은 [clipboard README](../plugins/clipboard/README.md)에 둔다.
 
+`api/window-lookup.test.ts`는 창 식별자 schema, 목록 권한과 대상 scope, 인증된 출처,
+이전 ID와 닫힌 창의 `null`, 취소와 미지원 플랫폼을 검사한다.
+`lifecycle/windows-window-lookup.test.ts`는 실제 HWND로 전경 창, 활성화 이력, 숨김,
+파괴 후 삭제와 새 ID, 조회 중 표시와 포커스 유지를 검사한다.
+OS가 전경 전환 요청을 거부하면 해당 활성화 전환을 `UNTESTED`로 기록하고 실제 조회 결과와
+표시 유지 검사는 계속한다. 이 실행을 활성화 전환 성공으로 기록하지 않는다.
+`lifecycle/windows-bun-window-api.ts`는 실제 WebView2와 UI Worker에서 문서 탐색의 ID 유지,
+네이티브 재생성의 ID 교체, 닫힌 창 조회, normal과 destroyed 상태 및 뷰별 권한을 확인한다.
+네이티브 입력을 준비한 뒤 `bun --no-env-file tests/lifecycle/windows-bun-window-api.ts`로
+단독 실행하거나 `mise run host:windows`로 전체 Windows 호스트 회귀와 함께 실행한다.
+
 `lifecycle/window-events.test.ts`는 실제 Core와 typed SDK를 연결해 `windows.changed`의
 스키마, 뷰별 구독 권한, 해제, 폐기 세션과 Core 종료 후 늦은 발행 차단을 확인한다.
 MessageChannel로 네이티브 이벤트 전송 방향, 미확인 128개 상한과 종료 용량도 검사한다.

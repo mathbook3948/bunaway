@@ -30,11 +30,16 @@ const queries = [
 const registry = new NativeRegistry([
   windowsPlugin,
 ]);
+const stateQueries = [
+  ...queries,
+  "isNormal",
+  "isDestroyed",
+] as const;
 
 test("window state schemas accept only a view and validate null or boolean outputs", () => {
   for (const name of [
     ...controls,
-    ...queries,
+    ...stateQueries,
   ]) {
     const operation = `windows.${name}` as const;
     expect(windowOperations[operation]).toBeDefined();
@@ -81,7 +86,7 @@ test("window state schemas accept only a view and validate null or boolean outpu
     expect(validateWindowOutput(`windows.${name}`, null)).toBeNull();
     expect(() => validateWindowOutput(`windows.${name}`, true)).toThrow();
   }
-  for (const name of queries) {
+  for (const name of stateQueries) {
     for (const value of [
       false,
       true,
@@ -222,7 +227,7 @@ function fixture() {
   return {
     actions,
     invoke: (
-      name: (typeof controls)[number] | (typeof queries)[number],
+      name: (typeof controls)[number] | (typeof stateQueries)[number],
       view = "main",
     ) =>
       Promise.resolve().then(() =>
@@ -292,7 +297,7 @@ test("state dispatch uses live resource queries and rejects fullscreen changes w
 test("every state call enforces deny-first target permission and open configured windows", async () => {
   for (const name of [
     ...controls,
-    ...queries,
+    ...stateQueries,
   ]) {
     const f = fixture();
     for (const view of [
@@ -335,9 +340,13 @@ test("every state call enforces deny-first target permission and open configured
       code: "INVALID_ARGUMENT",
     });
     f.setClosed();
-    await expect(f.invoke(name)).rejects.toMatchObject({
-      code: "INVALID_ARGUMENT",
-    });
+    if (name === "isDestroyed") {
+      expect(await f.invoke(name)).toBe(true);
+    } else {
+      await expect(f.invoke(name)).rejects.toMatchObject({
+        code: "INVALID_ARGUMENT",
+      });
+    }
     expect(f.actions).toEqual([]);
   }
 });
@@ -349,5 +358,28 @@ test("native failures propagate from state operations", async () => {
   for (const name of controls) {
     await expect(f.invoke(name)).rejects.toBe(failure);
   }
+  expect(f.actions).toEqual([]);
+});
+
+test("normal excludes minimized, maximized and fullscreen but not hidden or unfocused windows", async () => {
+  const f = fixture();
+  expect(await f.invoke("isNormal")).toBe(true);
+  expect(await f.invoke("isDestroyed")).toBe(false);
+  for (const name of [
+    "isMinimized",
+    "isMaximized",
+  ] as const) {
+    f.setObserved(name, true);
+    expect(await f.invoke("isNormal")).toBe(false);
+    f.setObserved(name, false);
+    expect(await f.invoke("isNormal")).toBe(true);
+  }
+  f.setFullscreen();
+  expect(await f.invoke("isNormal")).toBe(false);
+  f.setClosed();
+  expect(await f.invoke("isDestroyed")).toBe(true);
+  await expect(f.invoke("isNormal")).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
   expect(f.actions).toEqual([]);
 });

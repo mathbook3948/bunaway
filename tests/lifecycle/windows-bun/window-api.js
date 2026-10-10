@@ -10,5 +10,9 @@ if (location.pathname === "/editor.html") {
   // Keep the main document active while the parent recreates and crashes the editor view.
   for (;;) {
     await client.invoke("test.run", null);
+    if (!location.search) {
+      location.replace("/index.html?navigation=1");
+      break;
+    }
   }
 }
