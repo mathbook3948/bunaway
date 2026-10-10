@@ -154,7 +154,12 @@ export class Windows {
   private readonly ownedIcons: boolean;
 
   /** Register the window class and set this STA to per-monitor-v2 awareness. */
-  constructor(shutdown: () => void, iconPath?: string, appId?: string) {
+  constructor(
+    shutdown: () => void,
+    iconPath?: string,
+    appId?: string,
+    pollMessages?: () => void,
+  ) {
     if (appId) {
       const shell = dlopen("shell32.dll", {
         SetCurrentProcessExplicitAppUserModelID: {
@@ -245,6 +250,8 @@ export class Windows {
       (window: bigint, message: number, wparam: bigint, lparam: bigint) => {
         try {
           assert.equal(kernel.symbols.GetCurrentThreadId(), this.thread);
+          // DispatchMessage can remain in a native move/resize loop until the user releases the mouse.
+          pollMessages?.();
           if (message === APP_SHUTDOWN_MESSAGE) {
             shutdown();
             return 0n;

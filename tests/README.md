@@ -56,6 +56,11 @@ Windows 이벤트 전송 회귀는 실제 `MessageChannel`과 Core를 연결한�
 서버 대기열 포화와 세션 정리, 취소 및 종료 용량을 확인한다.
 이 검사는 WebView2 GUI 실행을 포함하지 않는다.
 
+`windows-window-events.test.ts`의 `windows-modal-events.fixture.ts`는 실제 Win32
+이동 모달 루프에서 5ms 간격으로 위치를 384번 변경한다. 이벤트 수신 확인과
+서버 전달이 모달 종료 전에도 진행되고, 양방향 전송의 순서와 정리가 유지되는지 검사한다.
+물리 마우스 드래그를 실행하는 검사는 아니다.
+
 Windows 호스트 시나리오는 `lifecycle/windows-host.ts`에 두고 PID 조회, 창 닫기와
 프로세스 종료 감시는 `lifecycle/windows-host-processes.ts`에서 실행한다.
 `app-reload.test.ts`는 명령 교체 후 상태, 세션, 구독, 진행 중인 명령의 기존 구현과

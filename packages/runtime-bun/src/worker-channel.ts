@@ -1,4 +1,8 @@
-import type { MessagePort, Worker } from "node:worker_threads";
+import {
+  MessagePort,
+  receiveMessageOnPort,
+  type Worker,
+} from "node:worker_threads";
 import {
   API_LIMITS,
   BunawayError,
@@ -519,6 +523,7 @@ export class Channel {
   private sequence = 0;
   private expected = 1;
   private closed = false;
+  private polling = false;
   private droppedDiagnostics = 0;
   private readonly queuedData = new Set<QueuedData>();
   private queuedServerCount = 0;
@@ -582,21 +587,57 @@ export class Channel {
       }
       const packet = validatePacket(envelope.packet, this.side);
       // Dispatch without waiting on application work, keeping setup Host API replies live.
-      Promise.resolve(this.receive(packet))
-        .then(() => {
-          this.port.postMessage(
-            {
-              runtime: this.runtime,
-              ack: envelope.sequence,
-            },
-            [],
-          );
-        })
-        .catch(this.fail);
+      const acknowledge = () => {
+        this.port.postMessage(
+          {
+            runtime: this.runtime,
+            ack: envelope.sequence,
+          },
+          [],
+        );
+      };
+      // Resource changes must not re-enter a Win32/COM callback while polling its acknowledgements.
+      const completion =
+        this.polling && packet.kind !== "server"
+          ? Promise.resolve().then(() => this.receive(packet))
+          : this.receive(packet);
+      // Native modal loops cannot run Promise jobs. Completed synchronous deliveries release capacity now.
+      // A void callback may return an ignored value, such as Array.push's count.
+      if (completion && typeof completion.then === "function") {
+        void Promise.resolve(completion).then(acknowledge).catch(this.fail);
+      } else {
+        acknowledge();
+      }
     } catch (error) {
       this.fail(error);
     }
   };
+
+  /** Process a bounded MessagePort batch inside native callbacks. Acks and server delivery run now; other handlers wait for JS to resume. Nested polls are ignored. */
+  poll(): void {
+    if (this.closed || this.polling) {
+      return;
+    }
+    if (!(this.port instanceof MessagePort)) {
+      throw new Error("Worker channel polling requires a MessagePort.");
+    }
+    this.polling = true;
+    try {
+      for (
+        let count = 0;
+        count < API_LIMITS.maxPending && !this.closed;
+        count++
+      ) {
+        const received = receiveMessageOnPort(this.port);
+        if (!received) {
+          break;
+        }
+        this.accept(received.message);
+      }
+    } finally {
+      this.polling = false;
+    }
+  }
 
   /** Resolves on peer acknowledgement; server and Host responses wait in a bounded FIFO. Rejects invalid or over-capacity sends. */
   send(packet: Packet): Promise<void> {

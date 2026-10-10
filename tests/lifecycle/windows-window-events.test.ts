@@ -3,6 +3,32 @@ import { expect, test } from "bun:test";
 import type { WindowChange, WindowSnapshot } from "@bunaway/plugin-api/native";
 
 test.skipIf(process.platform !== "win32")(
+  "native move loops keep event acknowledgements and ordered server delivery live beyond channel capacity",
+  async () => {
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "--no-env-file",
+        `${import.meta.dir}/windows-modal-events.fixture.ts`,
+      ],
+      {
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const [code, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(stderr).toBe("");
+    expect(code).toBe(0);
+    expect(stdout).toContain("ordered modal events and server deliveries");
+  },
+  25000,
+);
+
+test.skipIf(process.platform !== "win32")(
   "real Win32 API and system commands emit committed window transitions and stop after destroy",
   async () => {
     const { Windows } = await import("#native/windows/bun/win32");

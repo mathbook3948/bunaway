@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { MessageChannel } from "node:worker_threads";
+import { MessageChannel, receiveMessageOnPort } from "node:worker_threads";
 import {
   type AppDefinition,
   type CommandsOf,
@@ -25,6 +25,7 @@ import {
 } from "@bunaway/protocol";
 import {
   Channel,
+  type Packet,
   type Route,
   validatePacket,
 } from "@bunaway/runtime-bun/worker-channel";
@@ -100,6 +101,117 @@ export function checkObjectAppEventTypes(
     onError() {},
   });
 }
+
+test("native callback polling is bounded, suppresses nested polls and acknowledges only completed deliveries", async () => {
+  const { port1, port2 } = new MessageChannel();
+  const runtime = {
+    id: "poll",
+    generation: "1",
+  };
+  const received: Packet[] = [];
+  const failures: unknown[] = [];
+  const server = {
+    kind: "server",
+    route: {
+      viewId: "main",
+      context: "ctx-poll" as HostContext,
+      documentGeneration: 0,
+    },
+    message: {
+      kind: "result",
+      protocol: PROTOCOL_VERSION,
+      id: "poll-result",
+      payload: null,
+    },
+  } as const;
+  let holdServer = false;
+  let complete = () => {};
+  const held = new Promise<void>((resolve) => {
+    complete = resolve;
+  });
+  const channel = new Channel(
+    port2,
+    runtime,
+    "ui",
+    (packet) => {
+      channel.poll();
+      received.push(packet);
+      if (packet.kind === "server" && holdServer) {
+        return held;
+      }
+    },
+    (error) => failures.push(error),
+  );
+  try {
+    for (let sequence = 1; sequence <= API_LIMITS.maxPending + 1; sequence++) {
+      port1.postMessage({
+        runtime,
+        sequence,
+        packet: server,
+      });
+    }
+    channel.poll();
+    expect(received).toHaveLength(API_LIMITS.maxPending);
+    for (let ack = 1; ack <= API_LIMITS.maxPending; ack++) {
+      expect(receiveMessageOnPort(port1)?.message).toEqual({
+        runtime,
+        ack,
+      });
+    }
+    channel.poll();
+    expect(received).toHaveLength(API_LIMITS.maxPending + 1);
+    expect(receiveMessageOnPort(port1)?.message).toEqual({
+      runtime,
+      ack: API_LIMITS.maxPending + 1,
+    });
+    holdServer = true;
+    port1.postMessage({
+      runtime,
+      sequence: API_LIMITS.maxPending + 2,
+      packet: server,
+    });
+    channel.poll();
+    expect(receiveMessageOnPort(port1)).toBeUndefined();
+    complete();
+    await Bun.sleep(0);
+    expect(receiveMessageOnPort(port1)?.message).toEqual({
+      runtime,
+      ack: API_LIMITS.maxPending + 2,
+    });
+    expect(failures).toEqual([]);
+    port1.postMessage({
+      runtime,
+      sequence: API_LIMITS.maxPending + 3,
+      packet: {
+        kind: "shutdown",
+      },
+    });
+    channel.poll();
+    expect(received).toHaveLength(API_LIMITS.maxPending + 2);
+    expect(receiveMessageOnPort(port1)).toBeUndefined();
+    await Bun.sleep(0);
+    expect(received.at(-1)?.kind).toBe("shutdown");
+    expect(receiveMessageOnPort(port1)?.message).toEqual({
+      runtime,
+      ack: API_LIMITS.maxPending + 3,
+    });
+    channel.close();
+    port1.postMessage({
+      runtime,
+      sequence: API_LIMITS.maxPending + 4,
+      packet: {
+        kind: "start",
+      },
+    });
+    channel.poll();
+    expect(received).toHaveLength(API_LIMITS.maxPending + 3);
+  } finally {
+    complete();
+    channel.close();
+    port1.close();
+    port2.close();
+  }
+});
 
 test("window changes suppress duplicates and order display state before physical outer geometry", () => {
   expect(windowChanges(snapshot, structuredClone(snapshot))).toEqual([]);
