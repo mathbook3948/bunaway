@@ -12,6 +12,7 @@ import { validateWindowCall, type WindowCall } from "./contract.ts";
 import { WindowOperations } from "./coordinator.ts";
 import { windowsPlugin } from "./index.ts";
 import { matches } from "./scope.ts";
+import { convertGeometry } from "./window-geometry.ts";
 
 /** Create the UI-worker adapter; throws when window services are unavailable. */
 export function createOperations(
@@ -43,6 +44,54 @@ export function createOperations(
         break;
       case "windows.close":
         return window.close();
+      case "windows.getContentSize":
+      case "windows.getOuterSize":
+      case "windows.getContentPosition":
+      case "windows.getOuterPosition":
+      case "windows.getContentBounds":
+      case "windows.getOuterBounds":
+      case "windows.getNormalBounds": {
+        let area: "content" | "outer" | "normal" = "outer";
+        if (call.operation.startsWith("windows.getContent")) {
+          area = "content";
+        }
+        if (call.operation === "windows.getNormalBounds") {
+          area = "normal";
+        }
+        const { dpi, ...physical } = window.getBounds(area);
+        const bounds =
+          call.payload.unit === "logical"
+            ? convertGeometry(physical, dpi, "logical")
+            : physical;
+        if (call.operation.endsWith("Size") && "width" in bounds) {
+          return {
+            width: bounds.width,
+            height: bounds.height,
+            dpi,
+          };
+        }
+        if (call.operation.endsWith("Position") && "x" in bounds) {
+          return {
+            x: bounds.x,
+            y: bounds.y,
+            dpi,
+          };
+        }
+        return {
+          ...bounds,
+          dpi,
+        };
+      }
+      case "windows.toLogical":
+      case "windows.toPhysical": {
+        const dpi = window.getDpi();
+        const unit =
+          call.operation === "windows.toLogical" ? "logical" : "physical";
+        return {
+          value: convertGeometry(call.payload.value, dpi, unit),
+          dpi,
+        };
+      }
       case "windows.minimize":
       case "windows.maximize":
       case "windows.unmaximize":

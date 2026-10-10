@@ -437,6 +437,8 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         isMinimized: () => nativeWindows.isMinimized(hwnd),
         isMaximized: () => nativeWindows.isMaximized(hwnd),
         isFullscreen: () => nativeWindows.isFullscreen(hwnd),
+        getBounds: (area) => nativeWindows.getBounds(hwnd, area),
+        getDpi: () => nativeWindows.getDpi(hwnd),
         isVisible: () => nativeWindows.isVisible(hwnd),
         isFocused: () => nativeWindows.isFocused(hwnd),
         getSizeConstraints: () => nativeWindows.getSizeConstraints(hwnd),

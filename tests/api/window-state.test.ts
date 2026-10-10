@@ -127,6 +127,14 @@ function fixture() {
     isFullscreen: () => fullscreen,
     isVisible: () => observed.isVisible,
     isFocused: () => observed.isFocused,
+    getDpi: () => 96,
+    getBounds: () => ({
+      x: 0,
+      y: 0,
+      width: 800,
+      height: 600,
+      dpi: 96,
+    }),
     getSizeConstraints: () => ({
       minWidth: null,
       minHeight: null,
