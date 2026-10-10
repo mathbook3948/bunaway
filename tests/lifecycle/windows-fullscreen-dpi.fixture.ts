@@ -5,6 +5,7 @@ import { hostResponse } from "#native/windows/bun/host-response";
 
 // Isolate the DLL substitute from the real Windows callback tests.
 const WM_DPICHANGED = 0x02e0;
+const WM_WINDOWPOSCHANGED = 0x0047;
 const WS_OVERLAPPEDWINDOW = 0x00cf0000;
 const WS_VISIBLE = 0x10000000n;
 const GWL_STYLE = -16;
@@ -25,22 +26,23 @@ const monitors = [
   },
   {
     left: -2560,
-    top: -1440,
+    top: 0,
     right: 0,
-    bottom: 0,
+    bottom: 1440,
     dpi: 144,
   },
 ];
 const windowRect = {
-  left: 32,
-  top: 32,
-  right: 648,
-  bottom: 521,
+  left: -300,
+  top: 100,
+  right: 316,
+  bottom: 589,
 };
 const normalRect = {
   ...windowRect,
 };
 let maximized = false;
+let minimized = false;
 let style = BigInt(WS_OVERLAPPEDWINDOW);
 let callbackAddress = 0;
 let positionFlags = 0;
@@ -103,8 +105,9 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
       DestroyWindow: () => 1,
       IsWindow: () => 1,
       IsWindowVisible: () => Number((style & WS_VISIBLE) !== 0n),
-      IsIconic: () => 0,
+      IsIconic: () => Number(minimized),
       IsZoomed: () => Number(maximized),
+      DefWindowProcW: () => 0n,
       ShowWindow(_window: bigint, command: number) {
         style = command === SW_HIDE ? style & ~WS_VISIBLE : style | WS_VISIBLE;
         return 1;
@@ -132,12 +135,13 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
           maximized ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL,
           true,
         );
-        const restored = maximized ? normalRect : windowRect;
+        const restored = maximized || minimized ? normalRect : windowRect;
+        const primary = monitorFor(restored) === 1n;
         [
-          restored.left - 24,
-          restored.top - 40,
-          restored.right - 24,
-          restored.bottom - 40,
+          restored.left - (primary ? 24 : 0),
+          restored.top - (primary ? 40 : 0),
+          restored.right - (primary ? 24 : 0),
+          restored.bottom - (primary ? 40 : 0),
         ].forEach((value, index) => {
           placement.setInt32(28 + index * 4, value, true);
         });
@@ -237,6 +241,96 @@ const messages = linkSymbols({
   },
 });
 try {
+  const secondary = monitors[1];
+  assert(secondary);
+  const originalSecondary = {
+    ...secondary,
+  };
+  // Normal moves must update the monitor; iconic and maximized moves must keep it.
+  for (const layout of [
+    {
+      left: -2560,
+      top: 0,
+      right: 0,
+      bottom: 1440,
+      x: -300,
+      y: 100,
+    },
+    {
+      left: -2560,
+      top: 0,
+      right: 0,
+      bottom: 1440,
+      x: -320,
+      y: 100,
+    },
+    {
+      left: 0,
+      top: -1440,
+      right: 2560,
+      bottom: 0,
+      x: 100,
+      y: -230,
+    },
+    {
+      left: 0,
+      top: -1440,
+      right: 2560,
+      bottom: 0,
+      x: 100,
+      y: -260,
+    },
+  ]) {
+    Object.assign(secondary, {
+      left: layout.left,
+      top: layout.top,
+      right: layout.right,
+      bottom: layout.bottom,
+    });
+    Object.assign(windowRect, {
+      left: layout.x,
+      top: layout.y,
+      right: layout.x + 600 + FRAME_WIDTH,
+      bottom: layout.y + 450 + FRAME_HEIGHT,
+    });
+    Object.assign(normalRect, windowRect);
+    messages.symbols.windowProcedure(window, WM_WINDOWPOSCHANGED, 0n, 0n);
+    const expected = {
+      x: layout.x,
+      y: layout.y,
+      width: 600 + FRAME_WIDTH,
+      height: 450 + FRAME_HEIGHT,
+      dpi: 96,
+    };
+    assert.deepEqual(windows.getBounds(window, "normal"), expected);
+    for (const state of [
+      "minimized",
+      "maximized",
+    ]) {
+      minimized = state === "minimized";
+      maximized = state === "maximized";
+      Object.assign(windowRect, {
+        left: secondary.left,
+        top: secondary.top,
+        right: secondary.right,
+        bottom: secondary.bottom,
+      });
+      messages.symbols.windowProcedure(window, WM_WINDOWPOSCHANGED, 0n, 0n);
+      assert.deepEqual(windows.getBounds(window, "normal"), expected);
+      assert.equal(windows.failure, undefined);
+    }
+    minimized = false;
+    maximized = false;
+  }
+  Object.assign(secondary, originalSecondary);
+  Object.assign(windowRect, {
+    left: -300,
+    top: 100,
+    right: 316,
+    bottom: 589,
+  });
+  Object.assign(normalRect, windowRect);
+  messages.symbols.windowProcedure(window, WM_WINDOWPOSCHANGED, 0n, 0n);
   // This substitute ignores maximize; the HWND postcondition must report a bounded failure.
   assert.deepEqual(
     hostResponse(() => {
@@ -253,8 +347,8 @@ try {
   );
   windows.show(window, false);
   const expectedNormal = {
-    x: 32,
-    y: 32,
+    x: -300,
+    y: 100,
     width: 616,
     height: 489,
     dpi: 96,
@@ -262,8 +356,6 @@ try {
   assert.deepEqual(windows.getBounds(window, "normal"), expectedNormal);
   // Moving a maximized HWND does not move its saved normal rectangle.
   maximized = true;
-  const secondary = monitors[1];
-  assert(secondary);
   Object.assign(windowRect, {
     left: secondary.left,
     top: secondary.top,
@@ -334,8 +426,8 @@ try {
         dpi: target.dpi,
       });
       assert.deepEqual(windows.getBounds(window, "normal"), {
-        x: 32,
-        y: 32,
+        x: -300,
+        y: 100,
         width: Math.round((600 * target.dpi) / 96) + FRAME_WIDTH,
         height: Math.round((450 * target.dpi) / 96) + FRAME_HEIGHT,
         dpi: target.dpi,

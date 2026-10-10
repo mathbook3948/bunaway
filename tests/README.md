@@ -75,6 +75,8 @@ macOS WebContent PID 조회와 종료는 `lifecycle/macos-renderer.ts`가 맡으
 좌표 보정과 전체화면 중 현재 DPI에 따른 normal bounds 계산을 검사한다.
 작업 영역 오프셋이 다른 모니터로 최대화 창을 옮기거나 전체화면에 진입해도 원래 일반
 복원 rectangle의 모니터로 좌표를 보정하는지, 조회가 숨김 상태를 유지하는지도 검사한다.
+왼쪽과 위쪽 모니터의 경계에 걸친 일반 창의 위치, 모니터 변경과 최소화, 최대화 중
+복원 모니터 정보의 보존도 검사한다. 전체화면과 DPI 변경도 경계에 걸친 복원 영역을 사용한다.
 `api/window-state.test.ts`는 상태 제어와 조회의 입력 및 출력 schema, 뷰별 deny 우선 권한,
 전체화면 중 변경 거부, 닫힌 창과 허용된 미선언 뷰의 오류를 검사한다.
 `lifecycle/windows-window-state.test.ts`는 실제 Win32 창에서 최소화 전 최대화 복원과 일반

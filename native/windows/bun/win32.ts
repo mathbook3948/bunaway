@@ -23,6 +23,7 @@ export const WM_CLOSE = 0x0010;
 export const WM_QUIT = 0x0012;
 const WM_GETMINMAXINFO = 0x0024;
 const WM_WINDOWPOSCHANGING = 0x0046;
+const WM_WINDOWPOSCHANGED = 0x0047;
 export const WM_ENTERSIZEMOVE = 0x0231;
 export const WM_EXITSIZEMOVE = 0x0232;
 const WM_DPICHANGED = 0x02e0;
@@ -111,6 +112,7 @@ export class Windows {
   >();
   private readonly constraints = new Map<bigint, WindowSizeConstraints>();
   private readonly dpiByWindow = new Map<bigint, number>();
+  private readonly normalMonitors = new Map<bigint, bigint>();
   private creatingConstraints: WindowSizeConstraints | undefined;
   private readonly callback: JSCallback;
   private readonly previousDpiAwarenessContext: bigint;
@@ -244,7 +246,16 @@ export class Windows {
           if (message === WM_CLOSE) {
             return 0n; // defer Close/DestroyWindow past callback
           }
-          return user.symbols.DefWindowProcW(window, message, wparam, lparam);
+          const result = user.symbols.DefWindowProcW(
+            window,
+            message,
+            wparam,
+            lparam,
+          );
+          if (message === WM_WINDOWPOSCHANGED && this.windows.has(window)) {
+            this.rememberNormalMonitor(window);
+          }
+          return result;
         } catch (error) {
           this.failure ??= error;
           return 0n;
@@ -329,6 +340,7 @@ export class Windows {
     try {
       this.dpiByWindow.set(window, this.getDpi(window));
       this.setSize(window, initialSize.width, initialSize.height);
+      this.rememberNormalMonitor(window);
       if (visible) {
         user.symbols.ShowWindow(window, SW_SHOW);
       }
@@ -535,6 +547,23 @@ export class Windows {
     return this.dpiByWindow.get(window) ?? this.readDpi(window);
   }
 
+  /** Keep the normal monitor before iconic, maximized or fullscreen geometry replaces it. */
+  private rememberNormalMonitor(window: bigint) {
+    if (
+      this.fullscreen.has(window) ||
+      user.symbols.IsIconic(window) ||
+      user.symbols.IsZoomed(window)
+    ) {
+      return;
+    }
+    const monitor = user.symbols.MonitorFromWindow(
+      window,
+      MONITOR_DEFAULTTONEAREST,
+    );
+    assert(monitor, "Normal window monitor is unavailable.");
+    this.normalMonitors.set(window, monitor);
+  }
+
   /**
    * Snapshot client or outer screen geometry without changing visibility or state.
    * Minimized current bounds are the native iconic bounds; normal bounds remain restorable.
@@ -567,14 +596,9 @@ export class Windows {
       if (!(exStyle & WS_EX_TOOLWINDOW)) {
         const monitor = Buffer.alloc(MONITORINFO_SIZE);
         monitor.writeUInt32LE(MONITORINFO_SIZE);
-        // A maximized HWND can move independently of its saved normal rectangle.
-        const normalRect = (saved?.placement ?? placement).subarray(
-          WINDOWPLACEMENT_NORMAL_RECT_OFFSET,
-        );
-        const display = user.symbols.MonitorFromRect(
-          ptr(normalRect),
-          MONITOR_DEFAULTTONEAREST,
-        );
+        // Workspace coordinates cannot identify the screen monitor at a shared edge.
+        const display = this.normalMonitors.get(window);
+        assert(display, "Normal window monitor is unavailable.");
         assert(user.symbols.GetMonitorInfoW(display, ptr(monitor)));
         // WINDOWPLACEMENT uses workspace coordinates; callers use screen coordinates.
         x += monitor.readInt32LE(20) - monitor.readInt32LE(4);
@@ -1124,6 +1148,7 @@ export class Windows {
     this.windows.delete(window);
     this.constraints.delete(window);
     this.dpiByWindow.delete(window);
+    this.normalMonitors.delete(window);
     this.fullscreen.delete(window);
   }
 
