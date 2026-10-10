@@ -2,17 +2,17 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { Worker } from "node:worker_threads";
 import { pathToFileURL } from "node:url";
-import type { MacosConfig } from "#native/macos/bun/config";
+import { Worker } from "node:worker_threads";
+import { type HostContext, PROTOCOL_VERSION } from "@bunaway/protocol";
+import { Channel, type Packet } from "@bunaway/runtime-bun/worker-channel";
 import { bundleMacosHost } from "#cli/assets";
+import type { MacosConfig } from "#native/macos/bun/config";
 import {
   macosOrigin,
   platformUrl,
   resourceRules,
 } from "#native/macos/bun/urls";
-import { Channel, type Packet } from "@bunaway/runtime-bun/worker-channel";
-import { type HostContext, PROTOCOL_VERSION } from "@bunaway/protocol";
 
 /** Minimal validated configuration shared by real Worker lifecycle tests. */
 function workerConfig(directory: string): MacosConfig {
@@ -55,6 +55,57 @@ function workerConfig(directory: string): MacosConfig {
       ],
     },
   };
+}
+
+/** Bundle the real host lifecycle with a replaceable native UI for process tests. */
+async function bundleTestHost(directory: string): Promise<void> {
+  // Keep the lifecycle and Worker real, replacing only the native UI dependency.
+  const build = await Bun.build({
+    entrypoints: [
+      resolve(import.meta.dir, "../../native/macos/bun/entry.ts"),
+    ],
+    target: "bun",
+    outdir: directory,
+    plugins: [
+      {
+        name: "test-ui",
+        setup(build) {
+          if (process.platform !== "darwin") {
+            build.onResolve(
+              {
+                filter: /^\.\/process-group\.ts$/,
+              },
+              () => ({
+                path: "test-process-group",
+                namespace: "test",
+              }),
+            );
+            build.onLoad(
+              {
+                filter: /.*/,
+                namespace: "test",
+              },
+              () => ({
+                contents:
+                  "export async function containMacosProcess() { return {stopDescendants: async () => {}, close: async () => {}}; }",
+                loader: "js",
+              }),
+            );
+          }
+          build.onResolve(
+            {
+              filter: /^\.\/webview\.ts$/,
+            },
+            () => ({
+              path: pathToFileURL(resolve(directory, "webview.ts")).href,
+              external: true,
+            }),
+          );
+        },
+      },
+    ],
+  });
+  expect(build.success).toBe(true);
 }
 
 test("macOS asset origins reject credentials and preserve non-default ports", () => {
@@ -231,31 +282,7 @@ test.each([
         directory,
         app,
       );
-      // Keep the lifecycle and Worker real, replacing only the native UI dependency.
-      const build = await Bun.build({
-        entrypoints: [
-          resolve(import.meta.dir, "../../native/macos/bun/entry.ts"),
-        ],
-        target: "bun",
-        outdir: directory,
-        plugins: [
-          {
-            name: "test-ui",
-            setup(build) {
-              build.onResolve(
-                {
-                  filter: /^\.\/webview\.ts$/,
-                },
-                () => ({
-                  path: pathToFileURL(resolve(directory, "webview.ts")).href,
-                  external: true,
-                }),
-              );
-            },
-          },
-        ],
-      });
-      expect(build.success).toBe(true);
+      await bundleTestHost(directory);
       await Bun.write(
         resolve(directory, "webview.ts"),
         `export class MacosWebview {
@@ -323,7 +350,7 @@ test.each([
         event: "host-stopped",
         exitCode: closeDuringSetup ? 0 : 1,
         failed: !closeDuringSetup,
-        forced: cleanup === "blocked" || cleanup === "unexpected-exit",
+        forced: cleanup === "blocked",
       });
     } finally {
       await rm(directory, {
@@ -334,3 +361,173 @@ test.each([
   },
   20000,
 );
+
+for (const mode of [
+  "referenced",
+  "unref",
+  "blocked",
+  "host-killed",
+] as const) {
+  test.skipIf(process.platform !== "darwin")(
+    `macOS ${mode} shutdown removes inherited subprocesses and its guard`,
+    async () => {
+      const directory = await mkdtemp(
+        resolve(tmpdir(), "bunaway-macos-descendants-"),
+      );
+      const unrelated = Bun.spawn(
+        [
+          "/bin/sleep",
+          "120",
+        ],
+        {
+          stdout: "ignore",
+          stderr: "ignore",
+        },
+      );
+      let host: ReturnType<typeof Bun.spawn> | undefined;
+      const pids: number[] = [];
+      try {
+        const pidFile = resolve(directory, "child.pid");
+        const grandchildFile = resolve(directory, "grandchild.pid");
+        const app = resolve(directory, "app.ts");
+        await Bun.write(
+          app,
+          `export default {
+          commands: {}, events: {},
+          plugins: [{name: "subprocess", version: "1.0.0", async setup() {
+            const child = Bun.spawn(["/bin/sh", "-c", 'sleep 120 & printf "%s\\n" "$!" > "$1"; wait', "test-child", ${JSON.stringify(grandchildFile)}], {stdin: "ignore", stdout: "ignore", stderr: "ignore"});
+            ${mode === "unref" ? "child.unref();" : ""}
+            await Bun.write(${JSON.stringify(pidFile)}, String(child.pid));
+            return () => { ${mode === "blocked" ? "while (true) {}" : ""} };
+          }}]
+        };`,
+        );
+        await bundleMacosHost(
+          resolve(import.meta.dir, "../../native/macos/bun"),
+          directory,
+          app,
+        );
+        await bundleTestHost(directory);
+        await Bun.write(
+          resolve(directory, "webview.ts"),
+          `export class MacosWebview {
+          ready = Promise.resolve();
+          constructor(config, hooks) { this.hooks = hooks; }
+          start() { ${mode === "host-killed" ? "" : "setTimeout(() => this.hooks.close(), 100);"} }
+          close() {}
+        }`,
+        );
+        await Bun.write(
+          resolve(directory, "run.ts"),
+          `import {runMacosApp} from "./entry.js";
+          try { await runMacosApp(${JSON.stringify(workerConfig(directory))}); process.exit(0); }
+          catch (error) { console.error(error.message); process.exit(1); }`,
+        );
+        const launched = Bun.spawn(
+          [
+            process.execPath,
+            resolve(directory, "run.ts"),
+          ],
+          {
+            stdout: "ignore",
+            stderr: "pipe",
+            timeout: 15000,
+          },
+        );
+        host = launched;
+        const errors = new Response(launched.stderr).text();
+        const deadline = Date.now() + 10000;
+        while (
+          !(await Bun.file(pidFile).exists()) ||
+          !(await Bun.file(grandchildFile).exists())
+        ) {
+          expect(Date.now()).toBeLessThan(deadline);
+          await Bun.sleep(10);
+        }
+        pids.push(
+          Number(await Bun.file(pidFile).text()),
+          Number(await Bun.file(grandchildFile).text()),
+        );
+        const logPath = resolve(directory, "logs/host.log");
+        const started = (await Bun.file(logPath).text())
+          .trim()
+          .split("\n")
+          .map((line) => JSON.parse(line))
+          .find((record) => record.event === "host-started");
+        expect(started.guardPid).toBeGreaterThan(0);
+        pids.push(started.guardPid);
+        if (mode === "host-killed") {
+          host.kill("SIGKILL");
+        }
+        const exit = await host.exited;
+        if (mode === "host-killed") {
+          expect(host.signalCode).toBe("SIGKILL");
+        } else {
+          expect(exit, await errors).toBe(mode === "blocked" ? 1 : 0);
+        }
+        const cleanupDeadline = Date.now() + 5000;
+        while (true) {
+          const probe = Bun.spawnSync(
+            [
+              "/bin/ps",
+              "-p",
+              pids.join(","),
+              "-o",
+              "stat=",
+            ],
+            {
+              stdout: "pipe",
+              stderr: "pipe",
+            },
+          );
+          expect([
+            0,
+            1,
+          ]).toContain(probe.exitCode);
+          const live = probe.stdout
+            .toString()
+            .trim()
+            .split("\n")
+            .some((line) => line.trim() && !line.trim().startsWith("Z"));
+          if (!live) {
+            break;
+          }
+          expect(Date.now()).toBeLessThan(cleanupDeadline);
+          await Bun.sleep(10);
+        }
+        expect(unrelated.exitCode).toBeNull();
+        if (mode !== "host-killed") {
+          const records = (await Bun.file(logPath).text())
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line));
+          expect(records.at(-1)).toMatchObject({
+            event: "host-stopped",
+            forced: mode === "blocked",
+            activeProcesses: 0,
+          });
+        }
+        await errors;
+      } finally {
+        if (host?.exitCode === null) {
+          host.kill("SIGKILL");
+        }
+        await host?.exited;
+        unrelated.kill("SIGKILL");
+        await unrelated.exited;
+        for (const pid of pids) {
+          try {
+            process.kill(pid, "SIGKILL");
+          } catch (error) {
+            expect((error as NodeJS.ErrnoException).code).toBe("ESRCH");
+          }
+        }
+        await rm(directory, {
+          recursive: true,
+          force: true,
+        });
+      }
+    },
+    25000,
+  );
+}

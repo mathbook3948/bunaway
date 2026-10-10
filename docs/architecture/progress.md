@@ -68,7 +68,8 @@ Bun UI Worker의 창, WebView2, 비동기 작업, 다중 창, 종료를 검증�
 - `native/macos/bun/`은 Bun 직접 FFI로 AppKit와 WKWebView를 연결한다.
   메인 스레드가 UI를 소유하고 같은 프로세스의 Worker가 코어를 실행한다.
   자산 스킴, frame/origin, 탐색 시 세션 폐기와 첫 탐색 전 리소스 규칙을 검증한다.
-  렌더러만 재생성하고 Bun은 유지하며 별도 백엔드 프로세스나 guard는 없다.
+  렌더러만 재생성하고 Bun은 유지하며 별도 백엔드 프로세스는 없다.
+  전용 프로세스 그룹과 시스템 shell 감시 프로세스가 앱 하위 프로세스의 정리를 소유한다.
   C/ObjC++ 제품 호스트와 전용 native 테스트는 삭제했다.
 - Windows 다중 창 변경으로 공유 `app.json`이 macOS 호스트와 호환되지 않게 된 것을
   새 회귀 실행에서 확인했다. macOS 회귀용 단일 창 선언을 `tests/fixtures/desktop/host/macos-app.json`에

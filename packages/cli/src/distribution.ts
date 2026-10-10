@@ -75,6 +75,7 @@ export const frameworkPaths = [
     "entry.ts",
     "backend.ts",
     "config.ts",
+    "process-group.ts",
     "objc.ts",
     "webview.ts",
     "urls.ts",

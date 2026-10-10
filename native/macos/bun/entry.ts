@@ -5,6 +5,7 @@ import { DiagnosticLog } from "@bunaway/runtime-bun/diagnostic-log";
 import { ViewBoundary } from "@bunaway/runtime-bun/view-boundary";
 import { Channel } from "@bunaway/runtime-bun/worker-channel";
 import type { MacosConfig } from "./config.ts";
+import { containMacosProcess } from "./process-group.ts";
 import { macosOrigin } from "./urls.ts";
 import { MacosWebview } from "./webview.ts";
 
@@ -13,6 +14,12 @@ const SHUTDOWN_TIMEOUT_MS = 5_000;
 
 /** Own UI, backend Worker, channels and shutdown deadlines for one Bun app process. */
 export async function runMacosApp(config: MacosConfig): Promise<void> {
+  const view = config.policy.views.find(
+    (view) => view.id === config.window.view,
+  );
+  if (!view) {
+    throw new Error("Missing macOS view policy.");
+  }
   await mkdir(resolve(config.dataRoot, "logs"), {
     recursive: true,
   });
@@ -32,7 +39,9 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
   let ui: MacosWebview | undefined;
   let channel: Channel | undefined;
   let boundary: ViewBoundary | undefined;
-  let forced: ReturnType<typeof setTimeout> | undefined;
+  let shutdownTimer: ReturnType<typeof setTimeout> | undefined;
+  let forced = false;
+  let descendantCleanup: Promise<void> | undefined;
   const quit = () => {
     if (stopping) {
       return;
@@ -40,7 +49,8 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
     stopping = true;
     clearTimeout(startup);
     // The deadline also applies when UI setup fails before its event pump starts.
-    forced = setTimeout(() => {
+    shutdownTimer = setTimeout(() => {
+      forced = true;
       failure ??= new Error("macOS backend cleanup timed out.");
       void worker.terminate().catch((error) => {
         failure ??= error;
@@ -57,23 +67,38 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
     quit();
   };
   const coreReady = Promise.withResolvers<void>();
-  const worker = new Worker(new URL("./backend.js", import.meta.url), {
-    workerData: config,
-    env: {
-      HOME: config.dataRoot,
-      TMPDIR: resolve(config.dataRoot, "temp"),
-      PATH: "/usr/bin:/bin",
-      BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0",
-      DO_NOT_TRACK: "1",
-    },
+  const group = await containMacosProcess((error) => {
+    failure ??= error;
+    if (channel) {
+      quit();
+    }
   });
+  let worker: Worker;
+  try {
+    if (failure) {
+      throw failure;
+    }
+    worker = new Worker(new URL("./backend.js", import.meta.url), {
+      workerData: config,
+      env: {
+        HOME: config.dataRoot,
+        TMPDIR: resolve(config.dataRoot, "temp"),
+        PATH: "/usr/bin:/bin",
+        BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0",
+        DO_NOT_TRACK: "1",
+      },
+    });
+  } catch (error) {
+    await group.close();
+    throw error;
+  }
   const exited = new Promise<number>((done) => worker.once("exit", done));
   worker.on("error", fail);
   channel = new Channel(
     worker,
     config.runtime,
     "macos-main",
-    (packet) => {
+    async (packet) => {
       if (packet.kind === "ready") {
         if (stopping) {
           return;
@@ -89,6 +114,9 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
         boundary?.send(packet.route, packet.message);
       } else if (packet.kind === "cleaned") {
         cleaned = true;
+        // Referenced subprocesses can keep an otherwise cleaned Worker alive.
+        descendantCleanup = group.stopDescendants();
+        await descendantCleanup;
       } else if (packet.kind === "fatal") {
         fail(new Error(packet.error.message));
       } else {
@@ -97,12 +125,6 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
     },
     fail,
   );
-  const view = config.policy.views.find(
-    (view) => view.id === config.window.view,
-  );
-  if (!view) {
-    throw new Error("Missing macOS view policy.");
-  }
   boundary = new ViewBoundary(view, {
     origin: macosOrigin,
     source: () => ui?.source() ?? "",
@@ -126,6 +148,7 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
     diagnostic("host-started", {
       hostPid: process.pid,
       backendPid: process.pid,
+      guardPid: group.guardPid,
       transport: "bun-worker",
       runtime: config.runtime,
     });
@@ -164,30 +187,40 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
     if (code !== 0 || !cleaned || !stopping) {
       failure ??= new Error(`macOS backend exited without cleanup (${code}).`);
     }
-    if (failure) {
-      throw failure;
-    }
   } catch (error) {
     failure ??= error;
-    throw error;
   } finally {
     clearTimeout(startup);
     quit();
     // Keep acknowledgements alive until plugin cleanup and actual Worker exit.
     await exited;
-    if (forced) {
-      clearTimeout(forced);
+    if (shutdownTimer) {
+      clearTimeout(shutdownTimer);
     }
     process.off("SIGINT", onSignal);
     process.off("SIGTERM", onSignal);
     ui?.close();
     channel.close();
-    diagnostic("host-stopped", {
-      exitCode: failure ? 1 : 0,
-      failed: failure !== undefined,
-      forced: !cleaned,
-      activeProcesses: 0,
-    });
-    await log.drain();
+    let activeProcesses: number | null = null;
+    try {
+      await descendantCleanup?.catch((error) => {
+        failure ??= error;
+      });
+      await group.close();
+      activeProcesses = 0;
+    } catch (error) {
+      failure ??= error;
+    } finally {
+      diagnostic("host-stopped", {
+        exitCode: failure ? 1 : 0,
+        failed: failure !== undefined,
+        forced,
+        activeProcesses,
+      });
+      await log.drain();
+    }
+  }
+  if (failure) {
+    throw failure;
   }
 }

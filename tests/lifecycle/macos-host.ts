@@ -487,19 +487,32 @@ async function gracefulStop(child: ReturnType<typeof Bun.spawn>) {
   process.kill(child.pid, "SIGTERM");
   assert.equal(await child.exited, 0, "graceful shutdown must exit cleanly");
 }
-/** Starts a watcher and returns a function that waits for all targets to exit. */
+/** Wait for live targets to exit; orphan zombies no longer own app resources. */
 async function watch(pids: (number | string)[]) {
   return async () => {
     await waitFor(async () => {
       for (const pid of pids) {
         assert.equal(typeof pid, "number");
-        try {
-          process.kill(Number(pid), 0);
+        const probe = Bun.spawnSync(
+          [
+            "/bin/ps",
+            "-p",
+            String(pid),
+            "-o",
+            "stat=",
+          ],
+          {
+            stdout: "pipe",
+            stderr: "pipe",
+          },
+        );
+        assert.ok(
+          probe.exitCode === 0 || probe.exitCode === 1,
+          probe.stderr.toString(),
+        );
+        const status = probe.stdout.toString().trim();
+        if (status && !status.startsWith("Z")) {
           return null;
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
-            throw error;
-          }
         }
       }
       return true;
@@ -1012,7 +1025,7 @@ try {
     }
   });
 
-  await test("killing the Bun app leaves no separate backend or guard process", async () => {
+  await test("killing the Bun app removes its process guard", async () => {
     await resetData();
     const child = launch();
     try {
@@ -1020,10 +1033,12 @@ try {
       const childPid = started.backendPid as number;
       assert.equal(childPid, child.pid);
       assert.equal(started.transport, "bun-worker");
-      assert.equal(started.guardPid, undefined);
+      const guardPid = started.guardPid;
+      assert.ok(typeof guardPid === "number" && guardPid > 0);
       await waitLog((e) => e.event === "backend-ready");
       const exited = await watch([
         childPid,
+        guardPid,
       ]);
       process.kill(child.pid, "SIGKILL");
       assert.notEqual(await child.exited, 0);

@@ -29,12 +29,19 @@ mise exec -- bun tests/lifecycle/macos-webview-regressions.ts
 차단을 확인한다. 개발 URL과 websocket 갱신, WebContent 종료 뒤 세션 재생성,
 Bun 앱 강제 종료와 읽기 전용 자산에서의 시작도 확인했다.
 
-`host-started`의 `hostPid`와 `backendPid`가 같은지, `guardPid`가 없는지 검사한다.
+`host-started`의 `hostPid`와 `backendPid`가 같은지, `guardPid`가 발급되는지 검사한다.
 정상 종료에서는 Worker 정리와 실제 종료를 기다리고 `forced: false`를 요구한다.
 ad-hoc 서명한 `.app`에서도 같은 회귀 7개가 통과했으며 배포 스크립트 검사 16개가 통과했다.
 `mac-direct` hardened runtime 서명 후에도 실제 WKWebView 보고서와 정상 종료를 확인했다.
 Worker 계약 테스트는 명령 결과, 세션 폐기, 종료 수신 확인과 플러그인 정리 파일을
 실제 Bun Worker로 확인한다. macOS native 플러그인 권한은 백엔드 시작 전에 거부한다.
+
+하위 프로세스 회귀는 백엔드에서 shell과 그 자식 `sleep`을 실행한다. 일반 실행과
+`unref()` 실행, 플러그인 종료 훅의 무한 루프, 호스트 SIGKILL의 네 경로에서
+하위 프로세스와 감시 프로세스가 남지 않고 다른 그룹의 프로세스는 유지되는지 확인했다.
+정상 종료의 `activeProcesses: 0`은 그룹 정리 완료 후 기록하며,
+`forced`는 실제 Worker 강제 종료 여부다. 앱이 새 세션이나 그룹으로 분리한
+프로세스는 이 관리 범위에 포함하지 않는다.
 
 추가 네이티브 회귀는 실제 창에서 최소 1200x700, 최대 1300x900과 초기 크기 보정,
 제약의 `null`과 생략에 따른 제한 해제를 확인한다. 카메라와 마이크 거부는 설치된
