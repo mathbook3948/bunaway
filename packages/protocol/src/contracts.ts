@@ -68,6 +68,7 @@ export const API_LIMITS = {
   maxCommandDurationMs: 30000,
   maxPending: 128,
   maxSubscriptions: 128,
+  // Recent request IDs a session retains to reject duplicates. It does not cap total requests.
   maxRequestIds: 1024,
 } as const;
 

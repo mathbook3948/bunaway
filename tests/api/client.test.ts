@@ -1228,6 +1228,18 @@ test("the pending request limit rejects new calls with BUSY", async () => {
   }
 });
 
+test("sequential calls are not limited by the session's total request count", async () => {
+  const { transport, client } = await connected();
+  for (let i = 0; i <= API_LIMITS.maxRequestIds; i++) {
+    const call = client.invoke("notes.read", {
+      key: "x",
+    });
+    await flush();
+    transport.emit(serverResult(invokeMessage(transport).id, `result-${i}`));
+    await expect(call).resolves.toBe(`result-${i}`);
+  }
+});
+
 test("aborting an established subscription releases it", async () => {
   const { transport, client } = await connected();
   const controller = new AbortController();

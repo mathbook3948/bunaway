@@ -254,8 +254,9 @@ class SessionImpl implements CoreSession {
     });
   }
 
-  // Every request ID is recorded once for the session lifetime, whether the
-  // request is executed, rejected, cancelled, or expired.
+  // Every request ID is recorded whether the request is executed, rejected,
+  // cancelled, or expired. Pending IDs stay recorded until they settle; settled
+  // IDs are kept for the most recent maxRequestIds requests only.
   private acceptRequest(id: string): boolean {
     if (this.closed || this.failed) {
       return false;
@@ -264,14 +265,16 @@ class SessionImpl implements CoreSession {
     if (this.requestIds.has(id)) {
       return false;
     }
-    if (this.requestIds.size >= API_LIMITS.maxRequestIds) {
-      this.respondError(id, {
-        code: "BUSY",
-        message: "Request limit reached.",
-      });
-      return false;
-    }
     this.requestIds.add(id);
+    if (this.requestIds.size > API_LIMITS.maxRequestIds) {
+      // Set iteration follows insertion order, so this drops the oldest settled ID.
+      for (const retained of this.requestIds) {
+        if (!this.pending.has(retained)) {
+          this.requestIds.delete(retained);
+          break;
+        }
+      }
+    }
     if (!this.helloDone) {
       this.respondError(id, {
         code: "INVALID_ARGUMENT",

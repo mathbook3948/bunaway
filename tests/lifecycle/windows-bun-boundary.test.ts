@@ -187,6 +187,85 @@ test("Windows boundary rejects canonical overflow before reserving IDs and deadl
   );
 });
 
+test("Windows boundary keeps accepting settled requests while rejecting retained duplicate IDs", () => {
+  const packets: Packet[] = [];
+  const output: ServerMessage[] = [];
+  const source = "https://app.bunaway.local/index.html";
+  const boundary = new ViewBoundary(
+    {
+      id: "main",
+      origins: [
+        "https://app.bunaway.local",
+      ],
+      commands: [
+        "echo",
+      ],
+      events: [],
+      host: {
+        permissions: [],
+      },
+    },
+    {
+      origin: (text) => new URL(text).origin,
+      source: () => source,
+      ready: () => true,
+      forward: (packet) => packets.push(packet),
+      capacity: () => true,
+      deliver: (text) => output.push(JSON.parse(text)),
+      log: () => {},
+    },
+  );
+  const hello = {
+    kind: "hello",
+    protocol: PROTOCOL_VERSION,
+    features: [],
+    buildId: "test",
+  } satisfies ServerMessage;
+  boundary.receive(source, JSON.stringify(hello));
+  const opened = packets[0];
+  if (opened?.kind !== "session-open") {
+    throw new Error("Missing session");
+  }
+  boundary.send(opened.route, hello);
+  const invoke = (id: string) => {
+    packets.length = 0;
+    boundary.receive(
+      source,
+      JSON.stringify({
+        kind: "invoke",
+        protocol: PROTOCOL_VERSION,
+        id,
+        command: "echo",
+        payload: null,
+      }),
+    );
+    return packets.length === 1;
+  };
+  const lastId = `id-${API_LIMITS.maxRequestIds + 1}`;
+  expect(invoke("held")).toBe(true);
+  // Settle more requests than the record holds; none is rejected as BUSY.
+  for (let i = 1; i <= API_LIMITS.maxRequestIds + 1; i++) {
+    expect(invoke(`id-${i}`)).toBe(true);
+    boundary.send(opened.route, {
+      kind: "result",
+      protocol: PROTOCOL_VERSION,
+      id: `id-${i}`,
+      payload: null,
+    });
+  }
+  // The pending ID survives eviction, the oldest settled ID is forgotten, and recent IDs remain.
+  expect(invoke("held")).toBe(false);
+  expect(invoke(lastId)).toBe(false);
+  expect(output.at(-1)).toMatchObject({
+    kind: "error",
+    error: {
+      code: "INVALID_ARGUMENT",
+      message: "Request ID was already used.",
+    },
+  });
+  expect(invoke("id-1")).toBe(true);
+});
+
 test("Windows boundary uses actual source, issues view-specific contexts and drops revoked delivery", () => {
   const packets: Packet[] = [];
   const output: string[] = [];

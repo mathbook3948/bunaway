@@ -237,7 +237,6 @@ export class ViewBoundary {
           });
         }
         if (
-          session.used.size >= API_LIMITS.maxRequestIds ||
           session.pending.size >= API_LIMITS.maxPending ||
           (message.kind === "listen" &&
             session.subscriptions.size +
@@ -265,6 +264,15 @@ export class ViewBoundary {
           });
         }
         session.used.add(message.id);
+        if (session.used.size > API_LIMITS.maxRequestIds) {
+          // Keep pending IDs; drop the oldest settled ID in insertion order.
+          for (const retained of session.used) {
+            if (!session.pending.has(retained)) {
+              session.used.delete(retained);
+              break;
+            }
+          }
+        }
         session.pending.set(message.id, {
           kind: message.kind,
           expiry: performance.now() + duration,

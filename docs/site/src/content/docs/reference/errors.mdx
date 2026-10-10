@@ -44,7 +44,7 @@ JSON과 스키마 검증, 버전 협상 헬퍼에서 발생하는 오류입니�
 | maxCommandDurationMs | 30,000 ms | 명령 최대 시간 |
 | maxPending | 128 | 동시에 대기할 수 있는 요청 수 |
 | maxSubscriptions | 128 | 세션 구독 |
-| maxRequestIds | 1,024 | 한 세션의 요청 수 |
+| maxRequestIds | 1,024 | 중복 요청을 거부하려고 세션이 보관하는 최근 요청 ID 수 |
 
 `MAX_MESSAGE_BYTES`는 1,048,576 UTF-8 바이트, `MAX_JSON_DEPTH`는 루트 0 기준 64입니다.
 바이트 제한을 계산할 때는 한글과 emoji를 포함한 데이터의 UTF-8 인코딩 크기를 사용합니다.

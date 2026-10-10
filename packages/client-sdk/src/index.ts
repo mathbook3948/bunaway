@@ -492,10 +492,7 @@ class ClientSession<C extends CommandMap, E extends EventMap>
         reject(requestError("CANCELLED", "Request cancelled."));
         return;
       }
-      if (
-        this.requests.size >= API_LIMITS.maxPending ||
-        this.requestIds >= API_LIMITS.maxRequestIds
-      ) {
+      if (this.requests.size >= API_LIMITS.maxPending) {
         reject(requestError("BUSY", "Pending request limit reached."));
         return;
       }
