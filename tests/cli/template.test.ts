@@ -2,17 +2,17 @@ import { expect, test } from "bun:test";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { bundleAssets } from "../../packages/cli/src/build.ts";
-import { validateProject } from "../../packages/cli/src/config.ts";
-import { createClient } from "../../packages/client-sdk/src/index.ts";
+import { bundleAssets } from "#cli/build";
+import { validateProject } from "#cli/config";
+import { createClient } from "@bunaway/client";
 import {
   PROTOCOL_VERSION,
   type ProcessFrame,
   parseHostCall,
   parseProcessFrame,
   type TransportEvent,
-} from "../../packages/protocol/src/index.ts";
-import { readJsonLines } from "../../packages/runtime-bun/src/index.ts";
+} from "@bunaway/protocol";
+import { readJsonLines } from "@bunaway/runtime-bun";
 import { createProject } from "./project.ts";
 
 test("external generated backend uses actual SDK command/storage/event; revoked saves are not replayed", async () => {

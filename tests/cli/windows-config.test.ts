@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
-import type { Policy } from "../../packages/protocol/src/index.ts";
+import type { Policy } from "@bunaway/protocol";
 import {
   developmentPolicy,
   developmentWindowHome,
-} from "../../packages/runtime-bun/src/development.ts";
-import { readWindowSpecs } from "../../packages/runtime-bun/src/window-config.ts";
+} from "@bunaway/runtime-bun/development";
+import { readWindowSpecs } from "@bunaway/runtime-bun/window-config";
 
 const specs = [
   "main",

@@ -2,8 +2,8 @@ import { rmSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { packFramework } from "../../packages/cli/scripts/pack.ts";
-import { createProject as generateProject } from "../../packages/cli/src/create.ts";
+import { packFramework } from "#cli-scripts/pack";
+import { createProject as generateProject } from "#cli/create";
 
 export const storageRoundtripUI = `
 import { client as fixtureClient } from "./client.ts";

@@ -6,8 +6,8 @@ import {
   PROTOCOL_VERSION,
   serializeMessage,
   serializeProcessFrame,
-} from "../../packages/protocol/src/index.ts";
-import { runBunApp } from "../../packages/runtime-bun/src/index.ts";
+} from "@bunaway/protocol";
+import { runBunApp } from "@bunaway/runtime-bun";
 
 const emptyEvent = {
   kind: "event",

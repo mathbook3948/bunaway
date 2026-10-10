@@ -5,7 +5,7 @@ import {
   BunawayError,
   type HostContext,
   type HostResponse,
-} from "../../../packages/protocol/src/index.ts";
+} from "@bunaway/protocol";
 import { ViewBoundary } from "./boundary.ts";
 import {
   Channel,
@@ -397,7 +397,7 @@ async function closeWindow(
   });
   return true;
 }
-const windowServices: import("../../../packages/plugin-api/src/native.ts").NativeWindowServices =
+const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices =
   {
     specs: config.windows,
     read: (viewId) => {

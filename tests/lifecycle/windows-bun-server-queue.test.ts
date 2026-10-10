@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test";
 import { MessageChannel } from "node:worker_threads";
-import { ViewBoundary } from "../../native/windows/bun/boundary.ts";
+import { ViewBoundary } from "#native/windows/bun/boundary";
 import {
   Channel,
   MAX_WINDOWS,
   type Packet,
   type Route,
   validatePacket,
-} from "../../native/windows/bun/channel.ts";
+} from "#native/windows/bun/channel";
 import {
   API_LIMITS,
   type Hello,
@@ -17,7 +17,7 @@ import {
   parseMessage,
   serializeMessage,
   type WireError,
-} from "../../packages/protocol/src/index.ts";
+} from "@bunaway/protocol";
 
 const route: Route = {
   viewId: "main",

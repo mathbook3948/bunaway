@@ -11,17 +11,14 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { runInNewContext } from "node:vm";
-import { buildProject, bundleAssets } from "../../packages/cli/src/build.ts";
-import {
-  readProjectMetadata,
-  validateProject,
-} from "../../packages/cli/src/config.ts";
+import { buildProject, bundleAssets } from "#cli/build";
+import { readProjectMetadata, validateProject } from "#cli/config";
 import {
   isAppCodeChange,
   RestartController,
   shouldRestartHost,
-} from "../../packages/cli/src/dev.ts";
-import { hash, writeJson } from "../../packages/cli/src/files.ts";
+} from "#cli/dev";
+import { hash, writeJson } from "#cli/files";
 import { createProject, storageRoundtripUI } from "./project.ts";
 
 let home: string;
@@ -518,9 +515,7 @@ test("bundle is optional until packaging and generated settings stay beside app 
     ]);
     await writeJson(path, withoutBundle);
     expect((await validateProject(project)).bundle).toBeUndefined();
-    const { packageProject } = await import(
-      "../../packages/cli/src/package.ts"
-    );
+    const { packageProject } = await import("#cli/package");
     await expect(packageProject(project, "win-direct")).rejects.toThrow(
       "bunaway.json.bundle",
     );

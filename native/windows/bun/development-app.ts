@@ -1,8 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import type {
-  AppDefinition,
-  CommandDefinition,
-} from "../../../packages/core/src/index.ts";
+import type { AppDefinition, CommandDefinition } from "@bunaway/core";
 
 function contracts(app: AppDefinition) {
   return structuredClone({

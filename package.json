@@ -25,6 +25,32 @@
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
     "@types/bun": "1.4.2",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "@bunaway/runtime-bun": "workspace:*",
+    "@bunaway/protocol": "workspace:*",
+    "@bunaway/plugin": "workspace:*",
+    "@bunaway/plugin-api": "workspace:*",
+    "@bunaway/packaging": "workspace:*",
+    "@bunaway/core": "workspace:*",
+    "@bunaway/client": "workspace:*",
+    "@bunaway/cli": "workspace:*",
+    "@bunaway/backend": "workspace:*",
+    "@bunaway/plugin-windows": "workspace:*",
+    "@bunaway/plugin-storage": "workspace:*",
+    "@bunaway/plugin-opener": "workspace:*",
+    "@bunaway/plugin-log": "workspace:*",
+    "@bunaway/plugin-capabilities": "workspace:*"
+  },
+  "imports": {
+    "#cli/*": "./packages/cli/src/*.ts",
+    "#cli-scripts/*": "./packages/cli/scripts/*.ts",
+    "#backend/*": "./packages/backend-sdk/src/*.ts",
+    "#client/*": "./packages/client-sdk/src/*.ts",
+    "#core/*": "./packages/core/src/*.ts",
+    "#packaging/*": "./packages/packaging/src/*.ts",
+    "#protocol/*": "./packages/protocol/src/*.ts",
+    "#runtime-bun/*": "./packages/runtime-bun/src/*.ts",
+    "#native/*": "./native/*.ts",
+    "#plugins/*": "./plugins/*.ts"
   }
 }

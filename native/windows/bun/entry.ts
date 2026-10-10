@@ -7,14 +7,14 @@ import {
   type Core,
   type CoreSession,
   createCore,
-} from "../../../packages/core/src/index.ts";
+} from "@bunaway/core";
 import {
   BunawayError,
   type CancellationSignal,
   type HostContext,
   type HostResponse,
   PROTOCOL_VERSION,
-} from "../../../packages/protocol/src/index.ts";
+} from "@bunaway/protocol";
 import { listenForAppReload } from "./app-reload.ts";
 import {
   Channel,

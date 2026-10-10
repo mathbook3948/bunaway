@@ -1,12 +1,12 @@
 import { expect, spyOn, test } from "bun:test";
 import { resolve } from "node:path";
-import { readDevSettings } from "../../packages/cli/src/config.ts";
-import { startDevServer } from "../../packages/cli/src/dev-server.ts";
-import type { Policy } from "../../packages/protocol/src/index.ts";
+import { readDevSettings } from "#cli/config";
+import { startDevServer } from "#cli/dev-server";
+import type { Policy } from "@bunaway/protocol";
 import {
   developmentPolicy,
   verifyDevelopmentLaunch,
-} from "../../packages/runtime-bun/src/development.ts";
+} from "@bunaway/runtime-bun/development";
 
 /** Gets an available loopback port for a child process fixture. */
 function availablePort(): number {

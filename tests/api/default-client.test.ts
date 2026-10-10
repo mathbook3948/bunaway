@@ -1,28 +1,26 @@
 import { afterEach, expect, test } from "bun:test";
-import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 import {
   createClient,
   type InvokeOptions,
   invoke,
   invokePlugin,
   listen,
-} from "../../packages/client-sdk/src/index.ts";
-import type { WebViewBridge } from "../../packages/client-sdk/src/webview.ts";
+} from "@bunaway/client";
+import type { WebViewBridge } from "#client/webview";
 import {
   type JsonValue,
   type Message,
   PROTOCOL_VERSION,
   parseMessage,
-} from "../../packages/protocol/src/index.ts";
-import type { Capabilities } from "../../plugins/capabilities/src/index.ts";
+} from "@bunaway/protocol";
+import type { Capabilities } from "@bunaway/plugin-capabilities";
 import { contracts } from "../fixtures/host-plugins.ts";
 
 // Exercise the same browser bundle apps receive, while sharing this suite's client session.
 async function browserPlugin(name: string) {
   const result = await Bun.build({
     entrypoints: [
-      resolve(import.meta.dir, `../../plugins/${name}/src/index.ts`),
+      Bun.resolveSync(`@bunaway/plugin-${name}`, import.meta.dir),
     ],
     target: "browser",
     external: [
@@ -34,23 +32,13 @@ async function browserPlugin(name: string) {
     throw new AggregateError(result.logs);
   }
   let source = await result.outputs[0].text();
-  for (const [dependency, directory] of [
-    [
-      "@bunaway/client",
-      "client-sdk",
-    ],
-    [
-      "@bunaway/protocol",
-      "protocol",
-    ],
+  for (const dependency of [
+    "@bunaway/client",
+    "@bunaway/protocol",
   ]) {
     source = source.replaceAll(
       JSON.stringify(dependency),
-      JSON.stringify(
-        pathToFileURL(
-          resolve(import.meta.dir, `../../packages/${directory}/src/index.ts`),
-        ).href,
-      ),
+      JSON.stringify(import.meta.resolve(dependency)),
     );
   }
   return import(
@@ -197,11 +185,8 @@ async function flush(): Promise<void> {
 
 async function reload(
   label: string,
-): Promise<typeof import("../../packages/client-sdk/src/index.ts")> {
-  const path = new URL(
-    `../../packages/client-sdk/src/index.ts?${label}`,
-    import.meta.url,
-  ).href;
+): Promise<typeof import("@bunaway/client")> {
+  const path = `${import.meta.resolve("@bunaway/client")}?${label}`;
   return import(path);
 }
 
@@ -267,12 +252,10 @@ test("concurrent direct calls and repeated SDK imports share one handshake and r
   const bridge = view.chrome.webview;
   const first = invoke<string>("memo.read", null);
   const reloaded = await reload("hot-update");
-  const initializerPath = new URL(
-    "../../packages/client-sdk/src/default-client.ts?hot-update",
-    import.meta.url,
-  ).href;
-  const initializer: typeof import("../../packages/client-sdk/src/default-client.ts") =
-    await import(initializerPath);
+  const initializerPath = `${import.meta.resolve("#client/default-client")}?hot-update`;
+  const initializer: typeof import("#client/default-client") = await import(
+    initializerPath
+  );
   expect(initializer.defaultClient(reloaded.createClient)).toBe(createClient());
   const second = reloaded.invoke("memo.read", null);
   expect(createClient()).toBe(reloaded.createClient());

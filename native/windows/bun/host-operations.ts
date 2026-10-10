@@ -7,7 +7,7 @@ import {
   type HostResponse,
   type NativeRegistration,
   type RuntimeIdentity,
-} from "../../../packages/protocol/src/index.ts";
+} from "@bunaway/protocol";
 import { Channel, type Packet } from "./channel.ts";
 import { hostResponse } from "./host-response.ts";
 import { loadPluginCatalog } from "./plugin-catalog.ts";

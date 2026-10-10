@@ -9,18 +9,15 @@ import {
   type EventsOf,
   type ModuleDefinition,
   type PluginDefinition,
-} from "../../packages/backend-sdk/src/index.ts";
-import {
-  type Client,
-  createClient,
-} from "../../packages/client-sdk/src/index.ts";
-import type { CoreServices } from "../../packages/core/src/index.ts";
+} from "@bunaway/backend";
+import { type Client, createClient } from "@bunaway/client";
+import type { CoreServices } from "@bunaway/core";
 import {
   type ClientMessage,
   type HostContext,
   parseMessage,
   type TransportEvent,
-} from "../../packages/protocol/src/index.ts";
+} from "@bunaway/protocol";
 
 const textSchema = {
   type: "string",

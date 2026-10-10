@@ -10,7 +10,7 @@ import {
   policySchema,
   processSchema,
   serializeHostResponse,
-} from "../../packages/protocol/src/index.ts";
+} from "@bunaway/protocol";
 
 test("native schemas are generated from the same definitions as TypeScript", async () => {
   for (const [name, schema] of Object.entries({

@@ -1,8 +1,5 @@
-import { createClient } from "../../packages/client-sdk/src/index.ts";
-import type {
-  CommandsOf,
-  EventsOf,
-} from "../../packages/backend-sdk/src/index.ts";
+import { createClient } from "@bunaway/client";
+import type { CommandsOf, EventsOf } from "@bunaway/backend";
 import type { desktopTestApp } from "./windows-desktop.ts";
 
 const client = createClient<

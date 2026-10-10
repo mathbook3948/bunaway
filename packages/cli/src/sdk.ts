@@ -141,8 +141,8 @@ export async function sdkPlugin(
     entries,
     name: "pinned-bunaway-sdk",
     setup(build) {
-      // Native sources use relative imports inside the CLI artifact. Resolve
-      // those entries to the installed SDK too, preserving class identity.
+      // Direct SDK source imports in the CLI artifact also use the installed
+      // SDK, preserving class identity.
       build.onResolve(
         {
           filter: /packages\/[a-z-]+\/src\/index\.ts$/,

@@ -1,10 +1,7 @@
 // Read-only view: shares the backend with main/editor but its policy denies
 // writes, log output and most commands. Exercises per-view policy, request-id
 // isolation and event filtering, then closes its own window while siblings run.
-import {
-  createClient,
-  createWebViewTransport,
-} from "../../../../../packages/client-sdk/src/index.ts";
+import { createClient, createWebViewTransport } from "@bunaway/client";
 const client = createClient({
   transport: createWebViewTransport(window.chrome.webview),
   hello: {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { cp, mkdir, stat, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { closeWindowsApp } from "../../packages/cli/src/windows-dev-launch.ts";
+import { closeWindowsApp } from "#cli/windows-dev-launch";
 import { createProject } from "../cli/project.ts";
 
 assert.equal(process.platform, "win32");

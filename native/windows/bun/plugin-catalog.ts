@@ -1,4 +1,4 @@
-import { readAppManifest } from "../../../packages/runtime-bun/src/app-manifest.ts";
+import { readAppManifest } from "@bunaway/runtime-bun/app-manifest";
 import type { PackagedPlugin, PluginImports } from "./plugin-contract.ts";
 
 /** Join manifest data with bundled or already loaded imports without initializing adapters. */

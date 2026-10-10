@@ -4,7 +4,7 @@ import {
   parseProcessFrame,
   PROCESS_IPC_VERSION,
   type ProcessFrame,
-} from "../../packages/protocol/src/index.ts";
+} from "@bunaway/protocol";
 
 const backend = fileURLToPath(
   new URL("../../native/macos/probe/backend.ts", import.meta.url),

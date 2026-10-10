@@ -1,7 +1,4 @@
-import {
-  createClient,
-  createWebViewTransport,
-} from "../../../../../packages/client-sdk/src/index.ts";
+import { createClient, createWebViewTransport } from "@bunaway/client";
 import { matchesCapabilities } from "./capabilities.ts";
 
 const client = createClient({

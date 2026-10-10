@@ -10,7 +10,7 @@ import {
   type ServerMessage,
   serializeMessage,
   type WireError,
-} from "../../../packages/protocol/src/index.ts";
+} from "@bunaway/protocol";
 import type { Packet, Route } from "./channel.ts";
 
 const key = (source: string) => source.split("#")[0];

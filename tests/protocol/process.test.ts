@@ -5,8 +5,8 @@ import {
   parseProcessFrame,
   PROCESS_IPC_VERSION,
   serializeProcessFrame,
-} from "../../packages/protocol/src/index.ts";
-import { readJsonLines } from "../../packages/runtime-bun/src/process-ipc.ts";
+} from "@bunaway/protocol";
+import { readJsonLines } from "#runtime-bun/process-ipc";
 
 async function lines(parts: Uint8Array[]) {
   async function* chunks() {

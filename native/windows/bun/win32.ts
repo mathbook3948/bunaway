@@ -4,11 +4,11 @@ import {
   clampWindowSize,
   hasValidWindowSizeConstraints,
   type WindowSizeConstraints,
-} from "../../../packages/plugin-api/src/native.ts";
+} from "@bunaway/plugin-api/native";
 import {
   APP_SHUTDOWN_MESSAGE,
   APP_WINDOW_CLASS_PREFIX,
-} from "../../../packages/runtime-bun/src/windows-control.ts";
+} from "@bunaway/runtime-bun/windows-control";
 import { hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
 import {
   constrainedOuterSize,

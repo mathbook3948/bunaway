@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import assert from "node:assert/strict";
-import type { WindowSpec } from "../../packages/runtime-bun/src/window-config.ts";
+import type { WindowSpec } from "@bunaway/runtime-bun/window-config";
 import {
   WindowOperations,
   type WindowState,
-} from "../../plugins/windows/src/coordinator.ts";
+} from "#plugins/windows/src/coordinator";
 
 const WINDOW_READY_TIMEOUT_MS = 30_000;
 const CLEANUP_TIMEOUT_ADVANCE_MS = 40_000;

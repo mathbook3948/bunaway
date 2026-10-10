@@ -1,8 +1,8 @@
 import { expect } from "bun:test";
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { Project } from "../../packages/cli/src/config.ts";
-import { startDevServer } from "../../packages/cli/src/dev-server.ts";
+import type { Project } from "#cli/config";
+import { startDevServer } from "#cli/dev-server";
 
 /** Verifies a generated Vite app over HTTP/HMR and restores files and processes afterward. */
 export async function verifyViteDevelopment(

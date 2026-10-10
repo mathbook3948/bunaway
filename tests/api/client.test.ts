@@ -1,8 +1,5 @@
 import { expect, jest, test } from "bun:test";
-import {
-  type Client,
-  createClient,
-} from "../../packages/client-sdk/src/index.ts";
+import { type Client, createClient } from "@bunaway/client";
 import {
   API_LIMITS,
   type Dispose,
@@ -13,8 +10,8 @@ import {
   type Transport,
   type TransportEvent,
   type WireError,
-} from "../../packages/protocol/src/index.ts";
-import type { Capabilities } from "../../plugins/capabilities/src/index.ts";
+} from "@bunaway/protocol";
+import type { Capabilities } from "@bunaway/plugin-capabilities";
 
 type Commands = {
   "notes.read": {

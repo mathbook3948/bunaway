@@ -1,20 +1,16 @@
 import { expect, test } from "bun:test";
 import { resolve } from "node:path";
-import { appModules } from "../../packages/cli/src/app-modules.ts";
-import { bindHostAPI } from "../../packages/core/src/host-api.ts";
+import { appModules } from "#cli/app-modules";
+import { bindHostAPI } from "#core/host-api";
 import type {
   NativeWindowServices,
   WindowSizeConstraints,
-} from "../../packages/plugin-api/src/native.ts";
-import type {
-  HostContext,
-  JsonValue,
-  Policy,
-} from "../../packages/protocol/src/index.ts";
-import { NativeRegistry } from "../../packages/protocol/src/index.ts";
-import { windowsPlugin } from "../../plugins/windows/src/index.ts";
-import { matches } from "../../plugins/windows/src/scope.ts";
-import { createOperations } from "../../plugins/windows/src/windows.ts";
+} from "@bunaway/plugin-api/native";
+import type { HostContext, JsonValue, Policy } from "@bunaway/protocol";
+import { NativeRegistry } from "@bunaway/protocol";
+import { windowsPlugin } from "@bunaway/plugin-windows";
+import { matches } from "#plugins/windows/src/scope";
+import { createOperations } from "#plugins/windows/src/windows";
 
 const registry = new NativeRegistry([
   windowsPlugin,

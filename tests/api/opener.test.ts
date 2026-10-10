@@ -1,18 +1,18 @@
 import { expect, test } from "bun:test";
-import { bindHostAPI } from "../../packages/core/src/host-api.ts";
-import { bindCommandHost } from "../../packages/plugin-api/src/host.ts";
-import type { CommandContext } from "../../packages/plugin-api/src/index.ts";
+import { bindHostAPI } from "#core/host-api";
+import { bindCommandHost } from "@bunaway/plugin-api/host";
+import type { CommandContext } from "@bunaway/plugin-api";
 import {
   type HostCall,
   type HostContext,
   NativeRegistry,
   type HostResponse,
   type Policy,
-} from "../../packages/protocol/src/index.ts";
-import { s } from "../../packages/plugin-sdk/src/index.ts";
-import { openUrl, openerPlugin } from "../../plugins/opener/src/index.ts";
-import { createOperations } from "../../plugins/opener/src/windows.ts";
-import { MAX_URL_LENGTH, normalizeUrl } from "../../plugins/opener/src/url.ts";
+} from "@bunaway/protocol";
+import { s } from "@bunaway/plugin";
+import { openUrl, openerPlugin } from "@bunaway/plugin-opener";
+import { createOperations } from "#plugins/opener/src/windows";
+import { MAX_URL_LENGTH, normalizeUrl } from "#plugins/opener/src/url";
 
 const emptyPolicy: Policy = {
   version: 1,

@@ -3,24 +3,21 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { DevelopmentApp } from "../../native/windows/bun/development-app.ts";
-import { WindowsAppReload } from "../../packages/cli/src/windows-app-reload.ts";
-import type {
-  AppDefinition,
-  CoreServices,
-} from "../../packages/core/src/index.ts";
-import { createCore } from "../../packages/core/src/index.ts";
+import { DevelopmentApp } from "#native/windows/bun/development-app";
+import { WindowsAppReload } from "#cli/windows-app-reload";
+import type { AppDefinition, CoreServices } from "@bunaway/core";
+import { createCore } from "@bunaway/core";
 import {
   type Hello,
   type HostContext,
   PROTOCOL_VERSION,
   type ServerMessage,
-} from "../../packages/protocol/src/index.ts";
+} from "@bunaway/protocol";
 import {
   type AppReloadRequest,
   readAppReloadRequest,
   readAppReloadResult,
-} from "../../packages/runtime-bun/src/development.ts";
+} from "@bunaway/runtime-bun/development";
 
 const hello: Hello = {
   kind: "hello",

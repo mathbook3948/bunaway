@@ -1,8 +1,8 @@
-import { NativeRegistry } from "../../../../../packages/protocol/src/index.ts";
-import { capabilitiesPlugin } from "../../../../../plugins/capabilities/src/index.ts";
-import { logPlugin } from "../../../../../plugins/log/src/index.ts";
-import { storagePlugin } from "../../../../../plugins/storage/src/index.ts";
-import { windowsPlugin } from "../../../../../plugins/windows/src/index.ts";
+import { NativeRegistry } from "@bunaway/protocol";
+import { capabilitiesPlugin } from "@bunaway/plugin-capabilities";
+import { logPlugin } from "@bunaway/plugin-log";
+import { storagePlugin } from "@bunaway/plugin-storage";
+import { windowsPlugin } from "@bunaway/plugin-windows";
 
 const nativePlugins = new NativeRegistry([
   storagePlugin,

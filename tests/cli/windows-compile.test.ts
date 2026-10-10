@@ -3,9 +3,9 @@ import { expect, test } from "bun:test";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { bundleWindowsHost } from "../../packages/cli/src/assets.ts";
-import { writeJson } from "../../packages/cli/src/files.ts";
-import { compileWindowsApp } from "../../packages/cli/src/windows-compile.ts";
+import { bundleWindowsHost } from "#cli/assets";
+import { writeJson } from "#cli/files";
+import { compileWindowsApp } from "#cli/windows-compile";
 
 test.skipIf(process.platform !== "win32")(
   "Compiled app embeds assets and icons, preserves argv, disables cwd config and reports startup failures",
@@ -146,7 +146,7 @@ test.skipIf(process.platform !== "win32")(
       ico.writeUInt16LE(32, 36);
       ico.fill(255, 62, 62 + 16 * 16 * 4);
       await writeFile(resolve(root, "app.ico"), ico);
-      const { Windows } = await import("../../native/windows/bun/win32.ts");
+      const { Windows } = await import("#native/windows/bun/win32");
       const windows = new Windows(() => {}, resolve(root, "app.ico"));
       const hwnd = windows.create(title, 200, 200, () => {}, false);
       try {

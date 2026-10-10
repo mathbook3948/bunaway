@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { frameworkRoot } from "../../packages/cli/src/files.ts";
-import { runManagedCommand } from "../../packages/cli/src/managed-command.ts";
+import { frameworkRoot } from "#cli/files";
+import { runManagedCommand } from "#cli/managed-command";
 
 test.each([
   0,

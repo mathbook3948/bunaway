@@ -2,11 +2,8 @@ import type {
   AppDefinition,
   CommandContext,
   CommandDefinition,
-} from "../../../../packages/core/src/index.ts";
-import {
-  BunawayError,
-  type JsonValue,
-} from "../../../../packages/protocol/src/index.ts";
+} from "@bunaway/core";
+import { BunawayError, type JsonValue } from "@bunaway/protocol";
 import { contracts, plugins } from "../../host-plugins.ts";
 import { memoApp } from "./memo-app.ts";
 
@@ -30,7 +27,7 @@ const host = async (
       value: (await context.host.call(
         contracts[
           operation as keyof typeof contracts
-        ] as import("../../../../packages/protocol/src/index.ts").HostOperationContract,
+        ] as import("@bunaway/protocol").HostOperationContract,
         payload as never,
       )) as JsonValue,
     };

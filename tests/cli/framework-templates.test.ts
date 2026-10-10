@@ -2,9 +2,9 @@ import { expect, test } from "bun:test";
 import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { bundleAssets } from "../../packages/cli/src/build.ts";
-import { validateProject } from "../../packages/cli/src/config.ts";
-import { createProject } from "../../packages/cli/src/create.ts";
+import { bundleAssets } from "#cli/build";
+import { validateProject } from "#cli/config";
+import { createProject } from "#cli/create";
 import { packageDirectory } from "./project.ts";
 import { verifyViteDevelopment } from "./vite.ts";
 

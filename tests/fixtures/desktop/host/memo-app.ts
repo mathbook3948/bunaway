@@ -1,5 +1,5 @@
 import { storagePlugin } from "@bunaway/plugin-storage";
-import type { AppDefinition } from "../../../../packages/core/src/index.ts";
+import type { AppDefinition } from "@bunaway/core";
 import { contracts } from "../../host-plugins.ts";
 
 /** Storage-backed memo commands for the Windows host fixture. */
