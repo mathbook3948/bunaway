@@ -1,15 +1,29 @@
 // A reproducible idle profile for the cooperative AppKit/Bun event loop.
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { MacosWebview } from "#native/macos/bun/webview";
 import type { HostContext } from "@bunaway/protocol";
+import { MacosApplication } from "#native/macos/bun/application";
+import { MacosWebview } from "#native/macos/bun/webview";
 
 const directory = await mkdtemp(resolve(tmpdir(), "bunaway-runloop-"));
 const intervals: number[] = [];
 let previous = performance.now();
 let failure: unknown;
 let view: MacosWebview | undefined;
+const application = new MacosApplication({
+  quit() {
+    failure = new Error("Profile app quit.");
+  },
+  fail(error) {
+    failure = error;
+  },
+  tick() {
+    const now = performance.now();
+    intervals.push(now - previous);
+    previous = now;
+  },
+});
 try {
   await mkdir(resolve(directory, "web"));
   await Bun.write(
@@ -64,12 +78,8 @@ try {
       fail(error) {
         failure = error;
       },
-      tick() {
-        const now = performance.now();
-        intervals.push(now - previous);
-        previous = now;
-      },
     },
+    application,
   );
   await view.ready;
   view.start();
@@ -104,6 +114,7 @@ try {
   console.log(result);
 } finally {
   view?.close();
+  application.close();
   await rm(directory, {
     recursive: true,
     force: true,

@@ -4,6 +4,7 @@ import { Worker } from "node:worker_threads";
 import { DiagnosticLog } from "@bunaway/runtime-bun/diagnostic-log";
 import { ViewBoundary } from "@bunaway/runtime-bun/view-boundary";
 import { Channel } from "@bunaway/runtime-bun/worker-channel";
+import { MacosApplication } from "./application.ts";
 import type { MacosConfig } from "./config.ts";
 import { containMacosProcess } from "./process-group.ts";
 import { macosOrigin } from "./urls.ts";
@@ -37,6 +38,7 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
   let cleaned = false;
   let failure: unknown;
   let ui: MacosWebview | undefined;
+  let application: MacosApplication | undefined;
   let channel: Channel | undefined;
   let boundary: ViewBoundary | undefined;
   let shutdownTimer: ReturnType<typeof setTimeout> | undefined;
@@ -152,21 +154,27 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
       transport: "bun-worker",
       runtime: config.runtime,
     });
-    ui = new MacosWebview(config, {
-      receive(source, raw) {
-        // The native navigation delegate revokes replacement documents. A live URL
-        // change without replacement comes from History API and keeps the session.
-        boundary?.sameDocument(source);
-        boundary?.receive(source, raw);
-      },
-      revoke: (reason) => boundary?.revoke(reason),
-      close: quit,
-      tick() {
-        boundary?.scanDeadlines();
-      },
-      log: diagnostic,
+    application = new MacosApplication({
+      quit,
+      tick: () => boundary?.scanDeadlines(),
       fail,
     });
+    ui = new MacosWebview(
+      config,
+      {
+        receive(source, raw) {
+          // The native navigation delegate revokes replacement documents. A live URL
+          // change without replacement comes from History API and keeps the session.
+          boundary?.sameDocument(source);
+          boundary?.receive(source, raw);
+        },
+        revoke: (reason) => boundary?.revoke(reason),
+        close: quit,
+        log: diagnostic,
+        fail,
+      },
+      application,
+    );
     await Promise.race([
       Promise.all([
         ui.ready,
@@ -200,6 +208,7 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
     process.off("SIGINT", onSignal);
     process.off("SIGTERM", onSignal);
     ui?.close();
+    application?.close();
     channel.close();
     let activeProcesses: number | null = null;
     try {

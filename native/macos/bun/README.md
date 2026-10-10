@@ -37,7 +37,9 @@ WebView를 위한 추가 네이티브 바이너리는 필요하지 않다.
 `boot.ts`는 실행 인자를 읽고, `config.ts`는 패키지 설정과 정책을 검증한다.
 `entry.ts`는 UI와 백엔드 Worker의 시작과 종료를 조정하고, `backend.ts`는 앱과 코어를 실행한다.
 `process-group.ts`는 하위 프로세스의 종료와 호스트 비정상 종료 감시를 소유한다.
-`objc.ts`는 Objective-C FFI 바인딩과 콜백을, `webview.ts`는 AppKit 창과 WKWebView를 소유한다.
+`application.ts`는 앱 delegate와 모든 창이 공유하는 이벤트 루프를 소유한다.
+`objc.ts`는 Objective-C FFI 바인딩과 콜백을, `webview.ts`는 개별 AppKit 창과 WKWebView를 소유한다.
+개별 창 정리는 앱 delegate나 이벤트 루프를 해제하지 않는다.
 Worker 통신과 뷰 경계는 `packages/runtime-bun`의 공통 구현을 사용한다.
 
 ## 실행
