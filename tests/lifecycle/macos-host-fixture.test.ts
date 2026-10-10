@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import {
+  chmod,
   copyFile,
   mkdir,
   mkdtemp,
@@ -325,9 +326,54 @@ test("in-place runner rejects result directories before writing scratch files", 
   ]);
 });
 
-const SIGNED_FIXTURE_DRIVER_TIMEOUT_MS = 10_000;
+const HOST_FIXTURE_DRIVER_TIMEOUT_MS = 10_000;
 // Signing and relocation run outside the driver, so the test needs a larger timeout.
-const SIGNED_FIXTURE_TEST_TIMEOUT_MS = 20_000;
+const HOST_FIXTURE_TEST_TIMEOUT_MS = 20_000;
+
+test.skipIf(process.platform !== "darwin")(
+  "runner reports a host killed by a signal without waiting for a report",
+  async () => {
+    const f = await makeFixture();
+    await mkdir(join(f.original, "assets"));
+    await writeFile(f.host, "#!/bin/sh\nkill -KILL $$\n");
+    await chmod(f.host, 0o755);
+    const workspace = join(f.root, "workspace");
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        resolve(import.meta.dir, "macos-host.ts"),
+        "--package",
+        f.original,
+      ],
+      {
+        env: {
+          ...process.env,
+          BUNAWAY_PACKAGE_IN_PLACE: "1",
+          BUNAWAY_HOST_EXEC: f.host,
+          BUNAWAY_TEST_WORKSPACE: workspace,
+          BUNAWAY_DATA_ROOT: join(f.root, "data"),
+          BUNAWAY_TEST_SIGN_IDENTITY: "",
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: HOST_FIXTURE_DRIVER_TIMEOUT_MS,
+      },
+    );
+    const [code, output, errors] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(code, `${output}\n${errors}`).toBe(1);
+    expect(errors).toContain("Host exited before report.json was written.");
+    const summary = JSON.parse(
+      await readFile(join(workspace, "macos-host-results.json"), "utf8"),
+    );
+    expect(summary.results).toHaveLength(1);
+    expect(summary.results[0].ok).toBe(false);
+  },
+  HOST_FIXTURE_TEST_TIMEOUT_MS,
+);
 
 test.skipIf(process.platform !== "darwin")(
   "failed in-place runner preserves signed tmp symlinks after moving the app",
@@ -395,7 +441,7 @@ test.skipIf(process.platform !== "darwin")(
         },
         stdout: "pipe",
         stderr: "pipe",
-        timeout: SIGNED_FIXTURE_DRIVER_TIMEOUT_MS,
+        timeout: HOST_FIXTURE_DRIVER_TIMEOUT_MS,
       },
     );
     const [code, output, errors] = await Promise.all([
@@ -439,5 +485,5 @@ test.skipIf(process.platform !== "darwin")(
     ).toBe("nested tmp bytes");
     codesign("--verify", "--deep", "--strict", moved);
   },
-  SIGNED_FIXTURE_TEST_TIMEOUT_MS,
+  HOST_FIXTURE_TEST_TIMEOUT_MS,
 );

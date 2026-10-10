@@ -410,7 +410,12 @@ async function waitLog(match: (entry: LogEntry) => boolean, timeout = 90000) {
 async function reportFile(name: string) {
   return waitFor(async () => {
     const report = await readReport(join(dataRoot, "temp", name));
-    if (!report && activeHost?.exitCode !== null) {
+    // Bun leaves exitCode null when a signal terminates the host.
+    if (
+      !report &&
+      activeHost &&
+      (activeHost.exitCode !== null || activeHost.signalCode !== null)
+    ) {
       throw new Error(`Host exited before ${name} was written.`);
     }
     return report;
