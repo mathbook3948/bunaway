@@ -86,10 +86,29 @@ export async function bundleUIPluginFixture(
   plugins: ManifestPlugin[],
   imports: string,
 ) {
+  return bundlePluginFixture("ui", assets, plugins, imports);
+}
+
+/** Bundle the real I/O dispatcher with controlled adapters and its generated imports. */
+export async function bundleIOPluginFixture(
+  assets: string,
+  plugins: ManifestPlugin[],
+  imports: string,
+) {
+  return bundlePluginFixture("host-operations", assets, plugins, imports);
+}
+
+/** Keep controlled adapters on the same generated-module boundary as installed plugins. */
+async function bundlePluginFixture(
+  worker: "ui" | "host-operations",
+  assets: string,
+  plugins: ManifestPlugin[],
+  imports: string,
+) {
   await writePluginFixture(assets, plugins, imports);
   const result = await Bun.build({
     entrypoints: [
-      resolve(import.meta.dir, "../../native/windows/bun/ui.ts"),
+      resolve(import.meta.dir, `../../native/windows/bun/${worker}.ts`),
     ],
     target: "bun",
     outdir: assets,

@@ -1,5 +1,48 @@
 # Windows Bun FFI 실행 기록
 
+## 2026-10-10 opener 파일 작업
+
+초기 UI Worker 구현의 Windows 실행 근거다. 후속 수정은 파일 검사와 셸 요청을
+기존 I/O Worker로 옮기고 어댑터가 자체 STA 초기화와 정리를 소유하도록 변경했다.
+아래 Windows 실행 결과는 후속 수정의 실행 근거로 사용하지 않는다. 후속 검증은
+`windows-opener.test.ts`의 실제 I/O Worker, 권한 승인 거부와 대기 작업 취소, COM 정리와
+`cli/opener.test.ts`의 UI 어댑터 미초기화 검사로 구분한다.
+
+`6f2363c`의 opener를 확장하고 최신 main `87cbba6`에 rebase했다.
+Windows 11 Pro x64 `10.0.26200`, Bun 1.4.2에서 확인했다.
+`openFile`과 `revealFile`은 작업별 권한과 정확한 절대 파일 경로 scope를 사용한다.
+성공한 `null`은 OS 요청 접수이며 실제 앱 실행이나 Explorer 선택 완료를 기다리는 계약이 아니다.
+
+- 계약: `tests/api/opener.test.ts`에서 URL 계약 보존, 파일 API의 호출 컨텍스트와 오류 전달,
+  Unicode와 공백, 경로 형식과 길이, 정확한 경로 일치와 작업별 권한, deny 우선을 확인했다.
+- 실제 Windows: `tests/lifecycle/windows-opener.test.ts`에서 UI STA와 반복 정리, 없는 파일,
+  디렉터리, 공유 잠금, junction과 하드 링크, 대소문자 별칭 거부를 확인했다.
+  파일 핸들을 유지하는 동안 삭제가 거부되고 실패 후 핸들이 정리되는 것도 확인했다.
+  `windows-opener-job.test.ts`는 Explorer가 실행한 프로세스가 앱 Job 밖에 있고 앱 종료 후에도 살아 있음을 확인했다.
+  두 파일과 계약 파일을 함께 실행해 13개 검사가 통과했다.
+- 패키지 실행: `BUNAWAY_OPENER_FILES_TEST=1 bun test tests/cli/opener.test.ts`가 통과했다.
+  로컬 `.tgz`를 독립 프로젝트에 설치하고 생성 카탈로그와 scope evaluator, 브라우저 번들을 검사했다.
+  설치한 어댑터를 고정 Bun으로 compiled STA EXE에 포함하고 프로브와 helper 소스를 삭제한 뒤 실행했다.
+  `openFile`로 한글, 공백, 쉼표와 emoji가 있는 실행 파일의 기본 동작을 시작해 marker를 확인했다.
+  `revealFile`은 같은 문자가 있는 텍스트 파일을 Explorer에서 실제 선택하는지 확인하고 테스트 창을 닫았다.
+  이 프로브는 실제 WebView2 앱 전체, 서명된 앱, MSIX와 Inno 설치 프로그램을 검증한 결과가 아니다.
+
+일반 문서의 연결 앱 실행 완료와 UNC 공유는 미검증이다. 임시 확장자를 등록한 추가 실험에서
+로컬 Shell.Application은 파일 읽기를 완료했지만 Explorer 위임에서는 helper marker를 받지 못했다.
+원인은 확정하지 못했으며 이 결과를 기본 문서 앱 실행 완료로 계산하지 않는다.
+현재 자동 실행 검사는 사용자 파일 연결을 바꾸지 않는 실행 파일의 기본 동작을 사용한다.
+URL 브라우저 로딩 완료 검사는 폐기 가능한 Windows Sandbox가 없어 재실행하지 않았다.
+
+문서 coverage와 Astro 타입 검사, 69개 페이지 빌드와 내부 링크 5,913개 검사를 통과했다.
+전체 `mise run check`의 첫 실행은 663 pass, 64 skip, 12 fail이었다.
+일부 기존 CLI 검사에서 시간 제한이 발생했고 Windows의 파일 심볼릭 링크 생성은 `EPERM`이었다.
+CommonJS 배포 검사는 단독 재실행에서 통과했다.
+전체 재실행은 699 pass, 64 skip, 9 fail이었다. 형식, lint와 모든 패키지 및 테스트 타입 검사는 통과했다.
+실패는 기존 CLI 설정 검사 하나의 5초 시간 초과와 그 뒤 공유 fixture 오류 세 개,
+기존 macOS fixture 및 패키징 검사의 파일 심볼릭 링크 생성 `EPERM` 다섯 개였다.
+CLI 설정 검사 네 개는 `--timeout 15000`을 지정한 단독 재실행에서 모두 통과했다.
+첫 검사의 실행 시간은 약 8.1초였으며 저장소의 기본 5초 기한은 변경하지 않았다.
+이 전체 검사 결과를 성공으로 기록하지 않는다.
 ## 2026-10-10 창 geometry 설정 API
 
 main `6f2363c`를 기준으로 `setContentPosition`, `setOuterSize`, `setContentBounds`,

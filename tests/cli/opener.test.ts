@@ -4,13 +4,18 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { loadPluginCatalog } from "#native/host-api/bun/plugin-catalog";
-import { operations, pluginRegistry } from "#native/host-api/bun/plugins";
+import {
+  operations,
+  permissionMatcher,
+  pluginRegistry,
+} from "#native/host-api/bun/plugins";
 import { pluginImportsSource } from "#cli/app-modules";
 import { validateProject } from "#cli/config";
 import { packageFilename } from "#cli/distribution";
 import { writeJson } from "#cli/files";
 import { installedPlugins, writePluginManifest } from "#cli/plugins";
 import { createProject, packageDirectory } from "./project.ts";
+import { verifyWindowsOpenerFiles } from "./windows-opener-files.ts";
 
 /** Runs an install/build subprocess and reports its captured output on failure. */
 async function command(cwd: string, args: string[]): Promise<void> {
@@ -80,6 +85,22 @@ export default defineApp({ modules: [], plugins: [openerPlugin] });
           host: {
             permissions: [
               "opener:openUrl",
+              {
+                identifier: "opener:openFile",
+                allow: [
+                  {
+                    path: "C:\\한글 값.txt",
+                  },
+                ],
+              },
+              {
+                identifier: "opener:revealFile",
+                allow: [
+                  {
+                    path: "C:\\한글 값.txt",
+                  },
+                ],
+              },
             ],
           },
         },
@@ -94,7 +115,8 @@ export default defineApp({ modules: [], plugins: [openerPlugin] });
     expect(plugins.map(({ packageName }) => packageName)).toEqual([
       "@bunaway/plugin-opener",
     ]);
-    expect(plugins[0]?.targets.windows?.execution).toBe("ui");
+    expect(plugins[0]?.targets.windows?.execution).toBe("io");
+    expect(plugins[0]?.authorization).toBeDefined();
     expect(valid.nativePlugins?.map(({ name }) => name)).toEqual([
       "opener",
     ]);
@@ -118,12 +140,49 @@ export default defineApp({ modules: [], plugins: [openerPlugin] });
     expect(registry.operation("opener.openUrl").permission).toBe(
       "opener:openUrl",
     );
+    const matches = await permissionMatcher(app.plugins ?? [], packagedPlugins);
+    for (const action of [
+      "openFile",
+      "revealFile",
+    ]) {
+      const call = {
+        operation: `opener.${action}`,
+        payload: {
+          path: "C:/한글 값.txt",
+        },
+      };
+      expect(
+        registry.allowed(
+          valid.policy.views[0]?.host ?? {
+            permissions: [],
+          },
+          call,
+          matches,
+        ),
+      ).toBe(true);
+      expect(
+        registry.allowed(
+          valid.policy.views[0]?.host ?? {
+            permissions: [],
+          },
+          {
+            ...call,
+            payload: {
+              path: "C:/other.txt",
+            },
+          },
+          matches,
+        ),
+      ).toBe(false);
+    }
 
     const browserEntry = resolve(project, "opener-browser.ts");
     await writeFile(
       browserEntry,
-      `import { openUrl } from "@bunaway/plugin-opener";
+      `import { openFile, openUrl, revealFile } from "@bunaway/plugin-opener";
 void openUrl("https://example.com/");
+void openFile("C:/file.txt");
+void revealFile("C:/file.txt");
 `,
     );
     const browser = await Bun.build({
@@ -142,35 +201,65 @@ void openUrl("https://example.com/");
       ),
     ).toBe(false);
 
+    // UI dispatch must not initialize the opener DLLs, even when the package is
+    // registered. This also runs on Linux to catch accidental UI placement.
+    const uiAdapters = await operations(
+      app.plugins ?? [],
+      project,
+      "ui",
+      undefined,
+      packagedPlugins,
+    );
+    try {
+      await expect(
+        uiAdapters.executeUI(
+          "opener.openFile",
+          {
+            path: "C:/file.txt",
+          },
+          "backend",
+          {
+            requestId: "wrong-worker",
+            permissions: {
+              permissions: [],
+            },
+          },
+        ),
+      ).rejects.toMatchObject({
+        code: "UNSUPPORTED",
+      });
+    } finally {
+      await uiAdapters.dispose();
+    }
+
     if (process.platform === "win32") {
       const appPlugins = app.plugins ?? [];
       const adapters = await operations(
         appPlugins,
         project,
-        "ui",
+        "io",
         undefined,
         packagedPlugins,
       );
       try {
-        await expect(
-          adapters.executeUI(
-            "opener.openUrl",
+        expect(() =>
+          adapters.execute(
+            "opener.openFile",
             {
-              url: "https://example.com/",
+              path: "relative.txt",
             },
-            "view:main",
-            {
-              requestId: "denied",
-              permissions: {
-                permissions: [],
-              },
-            },
+            "backend",
           ),
-        ).rejects.toMatchObject({
-          code: "PERMISSION_DENIED",
-        });
+        ).toThrow(
+          expect.objectContaining({
+            code: "INVALID_ARGUMENT",
+          }),
+        );
       } finally {
         await adapters.dispose();
+      }
+      if (process.env.BUNAWAY_OPENER_FILES_TEST === "1") {
+        await verifyWindowsOpenerFiles(project, assets);
       }
     }
   } finally {

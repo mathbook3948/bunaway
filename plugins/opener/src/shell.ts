@@ -6,6 +6,7 @@ const VARIANT_BYTES = 24;
 const VARIANT_VALUE_OFFSET = 8;
 const DISPPARAMS_BYTES = 24;
 const EXCEPINFO_BYTES = 64;
+const EXCEPINFO_SCODE_OFFSET = 56;
 const VT_I4 = 3;
 const VT_BSTR = 8;
 const CLSCTX_SHELL_WINDOWS = 0x1 | 0x4;
@@ -14,6 +15,9 @@ const SWFO_NEEDDISPATCH = 1;
 const SVGIO_BACKGROUND = 0;
 const DISPATCH_METHOD = 1;
 const SW_SHOWNORMAL = 1;
+const HRESULT_ACCESS_DENIED = 0x80070005;
+const HRESULT_FILE_NOT_FOUND = 0x80070002;
+const HRESULT_PATH_NOT_FOUND = 0x80070003;
 const COM_SLOT = {
   queryInterface: 0,
   release: 2,
@@ -46,7 +50,7 @@ const IID_NULL = Buffer.alloc(16);
 function launchFailed(): BunawayError {
   return new BunawayError({
     code: "INTERNAL",
-    message: "Windows Explorer could not accept the browser launch request.",
+    message: "Windows Explorer could not accept the shell request.",
   });
 }
 
@@ -56,8 +60,32 @@ function checkResult(result: number): void {
   }
 }
 
+/** Preserve file-specific failures when Windows reports them synchronously. */
+function checkFileResult(result: number): void {
+  const hresult = result >>> 0;
+  if (hresult === HRESULT_ACCESS_DENIED) {
+    throw new BunawayError({
+      code: "PERMISSION_DENIED",
+      message: "Windows denied the file request.",
+    });
+  }
+  if (
+    hresult === HRESULT_FILE_NOT_FOUND ||
+    hresult === HRESULT_PATH_NOT_FOUND
+  ) {
+    throw new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message: "Opener file not found.",
+      details: {
+        reason: "FILE_NOT_FOUND",
+      },
+    });
+  }
+  checkResult(result);
+}
+
 /**
- * Load the COM libraries for a launcher used on the UI host's initialized STA.
+ * Load the COM libraries for a launcher used on its owner's initialized STA.
  * Dispose the returned object after its adapter stops.
  */
 export function createShell() {
@@ -71,6 +99,12 @@ export function createShell() {
         "ptr",
       ],
       returns: "i32",
+    },
+    CoTaskMemFree: {
+      args: [
+        "ptr",
+      ],
+      returns: "void",
     },
   });
   const automation = (() => {
@@ -244,17 +278,26 @@ export function createShell() {
             "ptr",
           ])(ptr(IID_NULL), ptr(names), 1, 0, ptr(dispatchId)),
         );
-        const argumentsBuffer = Buffer.alloc(5 * VARIANT_BYTES);
-        argumentsBuffer.writeUInt16LE(VT_I4, 0);
-        argumentsBuffer.writeInt32LE(SW_SHOWNORMAL, VARIANT_VALUE_OFFSET);
-        const empty = string("");
-        for (const [index, value] of [
-          string("open"),
-          empty,
-          empty,
+        const isUrl = /^https?:\/\//i.test(target);
+        const argumentCount = isUrl ? 5 : 1;
+        const argumentsBuffer = Buffer.alloc(argumentCount * VARIANT_BYTES);
+        let values = [
           string(target),
-        ].entries()) {
-          const offset = (index + 1) * VARIANT_BYTES;
+        ];
+        if (isUrl) {
+          argumentsBuffer.writeUInt16LE(VT_I4, 0);
+          argumentsBuffer.writeInt32LE(SW_SHOWNORMAL, VARIANT_VALUE_OFFSET);
+          const empty = string("");
+          values = [
+            string("open"),
+            empty,
+            empty,
+            ...values,
+          ];
+        }
+        // File calls omit optional arguments so the registered default verb is used.
+        for (const [index, value] of values.entries()) {
+          const offset = (index + (isUrl ? 1 : 0)) * VARIANT_BYTES;
           argumentsBuffer.writeUInt16LE(VT_BSTR, offset);
           argumentsBuffer.writeBigUInt64LE(
             BigInt(value),
@@ -264,28 +307,33 @@ export function createShell() {
         const parameters = Buffer.alloc(DISPPARAMS_BYTES);
         // Win64 DISPPARAMS: rgvarg at 0, cArgs at 16, no named arguments.
         parameters.writeBigUInt64LE(BigInt(ptr(argumentsBuffer)), 0);
-        parameters.writeUInt32LE(5, 16);
-        checkResult(
-          method(shell, COM_SLOT.invoke, [
-            "i32",
-            "ptr",
-            "u32",
-            "u16",
-            "ptr",
-            "ptr",
-            "ptr",
-            "ptr",
-          ])(
-            dispatchId[0] ?? 0,
-            ptr(IID_NULL),
-            0,
-            DISPATCH_METHOD,
-            ptr(parameters),
-            null,
-            ptr(exception),
-            null,
-          ),
+        parameters.writeUInt32LE(argumentCount, 16);
+        const result = method(shell, COM_SLOT.invoke, [
+          "i32",
+          "ptr",
+          "u32",
+          "u16",
+          "ptr",
+          "ptr",
+          "ptr",
+          "ptr",
+        ])(
+          dispatchId[0] ?? 0,
+          ptr(IID_NULL),
+          0,
+          DISPATCH_METHOD,
+          ptr(parameters),
+          null,
+          ptr(exception),
+          null,
         );
+        if (result < 0 && !isUrl) {
+          // DISP_E_EXCEPTION carries the underlying HRESULT in EXCEPINFO.scode.
+          checkFileResult(
+            exception.readInt32LE(EXCEPINFO_SCODE_OFFSET) || result,
+          );
+        }
+        checkResult(result);
       } finally {
         // EXCEPINFO's source, description and help-file strings belong to us,
         // including when Invoke returns DISP_E_EXCEPTION.
@@ -308,6 +356,65 @@ export function createShell() {
         for (const binding of methods) {
           binding.close();
         }
+      }
+    },
+    /** Request selection of a single file by PIDL, releasing it on every outcome. */
+    reveal(target: string): void {
+      if (disposed) {
+        throw new BunawayError({
+          code: "CANCELLED",
+          message: "Opener has been disposed.",
+        });
+      }
+      const shell = dlopen("shell32.dll", {
+        SHParseDisplayName: {
+          args: [
+            "ptr",
+            "ptr",
+            "ptr",
+            "u32",
+            "ptr",
+          ],
+          returns: "i32",
+        },
+        SHOpenFolderAndSelectItems: {
+          args: [
+            "ptr",
+            "u32",
+            "ptr",
+            "u32",
+          ],
+          returns: "i32",
+        },
+      });
+      const item = new BigUint64Array(1);
+      try {
+        checkFileResult(
+          shell.symbols.SHParseDisplayName(
+            ptr(Buffer.from(`${target}\0`, "utf16le")),
+            null,
+            ptr(item),
+            0,
+            null,
+          ),
+        );
+        if (!item[0]) {
+          throw launchFailed();
+        }
+        // With zero children, the absolute PIDL identifies the item to select in its parent.
+        checkFileResult(
+          shell.symbols.SHOpenFolderAndSelectItems(
+            Number(item[0]) as Pointer,
+            0,
+            null,
+            0,
+          ),
+        );
+      } finally {
+        if (item[0]) {
+          ole.symbols.CoTaskMemFree(Number(item[0]) as Pointer);
+        }
+        shell.close();
       }
     },
     /** Release the loaded COM libraries after no more launches can run. */
