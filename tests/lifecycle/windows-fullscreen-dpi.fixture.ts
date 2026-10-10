@@ -253,32 +253,50 @@ const messages = linkSymbols({
 try {
   const secondary = monitors[1];
   assert(secondary);
-  // Display removal can relocate normal placement without leaving iconic or zoomed state.
-  for (const state of [
-    "minimized",
-    "maximized",
+  for (const queryWhileDisconnected of [
+    false,
+    true,
   ]) {
-    Object.assign(windowRect, {
-      left: -1000,
-      top: 100,
-      right: -384,
-      bottom: 589,
-    });
-    Object.assign(normalRect, windowRect);
-    messages.symbols.windowProcedure(window, WM_WINDOWPOSCHANGED, 0n, 0n);
-    minimized = state === "minimized";
-    maximized = state === "maximized";
-    removedMonitors.add(2n);
-    Object.assign(normalRect, {
-      left: 100,
-      top: 200,
-      right: 716,
-      bottom: 689,
-    });
-    Object.assign(windowRect, normalRect);
-    messages.symbols.windowProcedure(window, WM_DISPLAYCHANGE, 32n, 0n);
-    messages.symbols.windowProcedure(window, WM_WINDOWPOSCHANGED, 0n, 0n);
-    for (let query = 0; query < 2; query++) {
+    // Display removal can relocate normal placement without leaving iconic or zoomed state.
+    for (const state of [
+      "minimized",
+      "maximized",
+    ]) {
+      Object.assign(windowRect, {
+        left: -1000,
+        top: 100,
+        right: -384,
+        bottom: 589,
+      });
+      Object.assign(normalRect, windowRect);
+      messages.symbols.windowProcedure(window, WM_WINDOWPOSCHANGED, 0n, 0n);
+      minimized = state === "minimized";
+      maximized = state === "maximized";
+      removedMonitors.add(2n);
+      Object.assign(normalRect, {
+        left: 100,
+        top: 200,
+        right: 716,
+        bottom: 689,
+      });
+      Object.assign(windowRect, normalRect);
+      messages.symbols.windowProcedure(window, WM_DISPLAYCHANGE, 32n, 0n);
+      messages.symbols.windowProcedure(window, WM_WINDOWPOSCHANGED, 0n, 0n);
+      for (let query = 0; query < (queryWhileDisconnected ? 2 : 0); query++) {
+        assert.deepEqual(windows.getBounds(window, "normal"), {
+          x: 100,
+          y: 200,
+          width: 616,
+          height: 489,
+          dpi: 96,
+        });
+      }
+      assert.equal(windows.failure, undefined);
+      assert.equal(minimized, state === "minimized");
+      assert.equal(maximized, state === "maximized");
+      assert.equal((style & WS_VISIBLE) !== 0n, false);
+      removedMonitors.clear();
+      // Reconnecting the old display must not undo Windows' relocated normal placement.
       assert.deepEqual(windows.getBounds(window, "normal"), {
         x: 100,
         y: 200,
@@ -286,22 +304,9 @@ try {
         height: 489,
         dpi: 96,
       });
+      minimized = false;
+      maximized = false;
     }
-    assert.equal(windows.failure, undefined);
-    assert.equal(minimized, state === "minimized");
-    assert.equal(maximized, state === "maximized");
-    assert.equal((style & WS_VISIBLE) !== 0n, false);
-    removedMonitors.clear();
-    // Reconnecting the old display must not undo Windows' relocated normal placement.
-    assert.deepEqual(windows.getBounds(window, "normal"), {
-      x: 100,
-      y: 200,
-      width: 616,
-      height: 489,
-      dpi: 96,
-    });
-    minimized = false;
-    maximized = false;
   }
   const originalSecondary = {
     ...secondary,

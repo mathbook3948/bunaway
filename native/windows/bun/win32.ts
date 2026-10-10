@@ -24,6 +24,7 @@ export const WM_QUIT = 0x0012;
 const WM_GETMINMAXINFO = 0x0024;
 const WM_WINDOWPOSCHANGING = 0x0046;
 const WM_WINDOWPOSCHANGED = 0x0047;
+const WM_DISPLAYCHANGE = 0x007e;
 export const WM_ENTERSIZEMOVE = 0x0231;
 export const WM_EXITSIZEMOVE = 0x0232;
 const WM_DPICHANGED = 0x02e0;
@@ -260,6 +261,19 @@ export class Windows {
           );
           if (message === WM_WINDOWPOSCHANGED && this.windows.has(window)) {
             this.rememberNormalMonitor(window);
+          }
+          if (
+            message === WM_DISPLAYCHANGE &&
+            this.windows.has(window) &&
+            !this.fullscreen.has(window)
+          ) {
+            // Refresh even without a query while the previous monitor is disconnected.
+            this.readNormalMonitorInfo(
+              window,
+              this.getPlacement(window).subarray(
+                WINDOWPLACEMENT_NORMAL_RECT_OFFSET,
+              ),
+            );
           }
           return result;
         } catch (error) {
@@ -577,6 +591,40 @@ export class Windows {
   }
 
   /**
+   * Resolve the normal monitor, caching replacements outside fullscreen.
+   * Return undefined when no display can be queried; the next display change or query retries.
+   */
+  private readNormalMonitorInfo(
+    window: bigint,
+    rect: Buffer,
+  ): Buffer | undefined {
+    const normalMonitor = this.normalMonitors.get(window);
+    assert(normalMonitor, "Normal window monitor is unavailable.");
+    const info = Buffer.alloc(MONITORINFO_SIZE);
+    info.writeUInt32LE(MONITORINFO_SIZE);
+    if (user.symbols.GetMonitorInfoW(normalMonitor.display, ptr(info))) {
+      return info;
+    }
+    const fullscreen = this.fullscreen.has(window);
+    // Workspace coordinates cannot identify the screen monitor at a shared edge.
+    const display = user.symbols.MonitorFromRect(
+      ptr(fullscreen ? normalMonitor.screenRect : rect),
+      MONITOR_DEFAULTTONEAREST,
+    );
+    if (!display || !user.symbols.GetMonitorInfoW(display, ptr(info))) {
+      return undefined;
+    }
+    // Fullscreen retains its original placement, so its fallback monitor is temporary.
+    if (!fullscreen) {
+      this.normalMonitors.set(window, {
+        display,
+        screenRect: info.subarray(4, 4 + RECT_SIZE),
+      });
+    }
+    return info;
+  }
+
+  /**
    * Snapshot client or outer screen geometry without changing visibility or state.
    * Minimized current bounds are the native iconic bounds; normal bounds remain restorable.
    */
@@ -606,28 +654,8 @@ export class Windows {
       let y = rect.readInt32LE(4);
       const { exStyle } = this.windowStyles(window);
       if (!(exStyle & WS_EX_TOOLWINDOW)) {
-        const monitor = Buffer.alloc(MONITORINFO_SIZE);
-        monitor.writeUInt32LE(MONITORINFO_SIZE);
-        // Workspace coordinates cannot identify the screen monitor at a shared edge.
-        const normalMonitor = this.normalMonitors.get(window);
-        assert(normalMonitor, "Normal window monitor is unavailable.");
-        let display = normalMonitor.display;
-        if (!user.symbols.GetMonitorInfoW(display, ptr(monitor))) {
-          // Reconnected displays can have new handles; fullscreen retains the original screen area.
-          display = user.symbols.MonitorFromRect(
-            ptr(saved ? normalMonitor.screenRect : rect),
-            MONITOR_DEFAULTTONEAREST,
-          );
-          assert(display, "Normal window monitor is unavailable.");
-          assert(user.symbols.GetMonitorInfoW(display, ptr(monitor)));
-          // Fullscreen retains the original placement, so its fallback monitor is temporary.
-          if (!saved) {
-            this.normalMonitors.set(window, {
-              display,
-              screenRect: monitor.subarray(4, 4 + RECT_SIZE),
-            });
-          }
-        }
+        const monitor = this.readNormalMonitorInfo(window, rect);
+        assert(monitor, "Normal window monitor is unavailable.");
         // WINDOWPLACEMENT uses workspace coordinates; callers use screen coordinates.
         x += monitor.readInt32LE(20) - monitor.readInt32LE(4);
         y += monitor.readInt32LE(24) - monitor.readInt32LE(8);
