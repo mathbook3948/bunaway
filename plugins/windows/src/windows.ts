@@ -460,6 +460,17 @@ export function createOperations(
           message: "Window policy denied.",
         });
       }
+      if (
+        call.operation === "windows.completeSplashscreen" &&
+        source === `view:${call.payload.splash}`
+      ) {
+        // Closing the caller's WebView revokes its route before the result can be delivered.
+        throw new BunawayError({
+          code: "INVALID_ARGUMENT",
+          message:
+            "Complete the splashscreen handoff from the main window or backend.",
+        });
+      }
       return operations.execute(call, grants, context.requestId);
     },
     busy: () => operations.replacing.size !== 0,

@@ -177,6 +177,7 @@ test("splashscreen handoff validates both targets and readiness before showing, 
     permissions: Policy["backend"],
     splash = "splash",
     operation = "windows.completeSplashscreen",
+    source = "backend",
   ) =>
     adapter.executeUI?.(
       operation,
@@ -188,7 +189,7 @@ test("splashscreen handoff validates both targets and readiness before showing, 
             }
           : {}),
       },
-      "backend",
+      source,
       {
         requestId: "handoff",
         permissions,
@@ -232,6 +233,12 @@ test("splashscreen handoff validates both targets and readiness before showing, 
   await expect(invoke(both, "main")).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
   });
+  await expect(
+    invoke(both, "splash", "windows.completeSplashscreen", "view:splash"),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  expect(actions).toEqual([]);
   cancelled = true;
   await expect(invoke(both)).rejects.toMatchObject({
     code: "CANCELLED",
@@ -244,7 +251,9 @@ test("splashscreen handoff validates both targets and readiness before showing, 
     "close:splash",
   ]);
   allowClose = true;
-  expect(await invoke(both)).toBe(true);
+  expect(
+    await invoke(both, "splash", "windows.completeSplashscreen", "view:main"),
+  ).toBe(true);
   closed = true;
   expect(await invoke(both, "splash", "windows.getReadiness")).toMatchObject({
     sdk: "ready",
