@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "views": [
+    {
+      "id": "main",
+      "origins": ["https://app.bunaway.local"],
+      "commands": [
+        "test.echo",
+        "test.info",
+        "test.increment",
+        "test.hold",
+        "test.error",
+        "test.environment"
+      ],
+      "events": ["test.changed"],
+      "host": { "permissions": [] }
+    }
+  ],
+  "backend": { "permissions": [] }
+}

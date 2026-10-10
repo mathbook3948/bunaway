@@ -1,5 +1,5 @@
-import { lstat, mkdir, realpath } from "node:fs/promises";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { lstat, mkdir, realpath, rename, rm } from "node:fs/promises";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
 /**
  * Verifies each existing output path component is a real directory beneath the
@@ -54,4 +54,78 @@ export async function ownedDirectory(
     }
   }
   return true;
+}
+
+/** A publication committed successfully but its previous output could not be removed. */
+export class PublishedDirectoryCleanupError extends Error {
+  constructor(
+    readonly backup: string,
+    cause: unknown,
+  ) {
+    super(`Published output, but cannot remove previous directory: ${backup}`, {
+      cause,
+    });
+  }
+}
+
+/**
+ * Publish a staged owned directory, backing up and restoring prior output on failure.
+ * Rejects links and missing staging. Rollback failure retains both causes and names
+ * the recoverable backup. PublishedDirectoryCleanupError means the new output is
+ * already committed; callers must not undo resources transferred into it.
+ */
+export async function publishOwnedDirectory(
+  root: string,
+  source: string,
+  destination: string,
+): Promise<void> {
+  if (!(await ownedDirectory(root, source))) {
+    throw new Error(`Missing publication directory: ${source}`);
+  }
+  await ownedDirectory(root, destination);
+  await ownedDirectory(root, dirname(destination), true);
+  const backup = `${destination}.previous-${crypto.randomUUID()}`;
+  let previous = false;
+  try {
+    await rename(destination, backup);
+    previous = true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+  try {
+    await ownedDirectory(root, source);
+    await rename(source, destination);
+  } catch (error) {
+    if (previous) {
+      try {
+        await ownedDirectory(root, dirname(destination));
+        await rename(backup, destination);
+      } catch (rollbackError) {
+        throw new AggregateError(
+          [
+            error,
+            rollbackError,
+          ],
+          `Publication and rollback failed; previous output remains at ${backup}`,
+          {
+            cause: error,
+          },
+        );
+      }
+    }
+    throw error;
+  }
+  if (previous) {
+    try {
+      await ownedDirectory(root, backup);
+      await rm(backup, {
+        recursive: true,
+        force: true,
+      });
+    } catch (error) {
+      throw new PublishedDirectoryCleanupError(backup, error);
+    }
+  }
 }

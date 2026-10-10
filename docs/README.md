@@ -26,6 +26,8 @@
 - [Windows Bun FFI 제품 실행 결과, 제약](./architecture/windows-bun-results.md)
 - [macOS probe, WKWebView 회귀 검증: 기존/새 실행 기록](./architecture/macos-native-results.md)
 - [플랫폼 지원, CPU, CI와 출시 검증 범위](./platform-support/README.md)
+- [Android 호스트 구조와 실제 실행 검사](../native/android/README.md)
+- [Android Core/SDK와 Activity 재생성 실행 결과](./architecture/android-host-results.md)
 - [Windows 메모 샘플 실행 방법](../examples/memo/README.md)
 
 ## 설계 결정
@@ -45,6 +47,7 @@ PRD와 설계 문서, 코드에서 확인한 결정을 ADR에 기록한다. 구�
 - [0011: 기능 모듈 조립과 중복 명령 거부](./decisions/0011-app-module-composition.md)
 - [0012: 웹 빌드와 앱 빌드의 통합](./decisions/0012-integrated-app-build.md)
 - [0013: 네이티브 기능의 개별 플러그인 설치와 등록](./decisions/0013-optional-native-plugins.md)
+- [0015: Android 번들 Bun과 Activity, 문서 세션의 수명](./decisions/0015-android-bundled-process-host.md)
 
 [이전 C ABI 초안](./architecture/native-abi.md)은 과거 설계 기록이다. 현재 Windows는 Worker 연결,
 macOS는 프로세스 IPC 계약을 사용한다.

@@ -16,6 +16,7 @@ const JOB_OBJECT_BASIC_ACCOUNTING_INFORMATION_CLASS = 1;
 const JOB_OBJECT_BASIC_PROCESS_ID_LIST_CLASS = 3;
 const ERROR_MORE_DATA = 234;
 const ERROR_INVALID_PARAMETER = 87;
+const ERROR_ACCESS_DENIED = 5;
 const PROCESS_TERMINATE = 0x0001;
 const SYNCHRONIZE = 0x00100000;
 const PROCESS_TERMINATION_ACCESS = PROCESS_TERMINATE | SYNCHRONIZE;
@@ -299,12 +300,25 @@ export async function terminateAppDescendants(
           api.symbols.WaitForSingleObject(processHandle, 0) !== WAIT_OBJECT_0
         ) {
           const terminated = api.symbols.TerminateProcess(processHandle, 1);
-          assert(
-            terminated ||
-              api.symbols.WaitForSingleObject(processHandle, 0) ===
-                WAIT_OBJECT_0,
-            `Cannot terminate Job descendant ${pid}`,
-          );
+          const terminationError = terminated ? 0 : api.symbols.GetLastError();
+          if (!terminated) {
+            // A self-exiting process can deny termination before its handle is signaled.
+            assert.equal(
+              terminationError,
+              ERROR_ACCESS_DENIED,
+              `Cannot terminate Job descendant ${pid} (Win32 ${terminationError})`,
+            );
+            while (
+              api.symbols.WaitForSingleObject(processHandle, 0) !==
+              WAIT_OBJECT_0
+            ) {
+              assert(
+                Date.now() < deadline,
+                `Job descendant ${pid} did not finish exiting`,
+              );
+              await Bun.sleep(PROCESS_EXIT_POLL_INTERVAL_MS);
+            }
+          }
         }
       } finally {
         api.symbols.CloseHandle(processHandle);

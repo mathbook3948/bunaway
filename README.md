@@ -60,11 +60,13 @@ Bun은 `mise.toml`과 `package.json`에 **1.4.2**로 고정되어 있다.
 
 Lefthook은 `mise.toml`에 **2.2.1**로 고정되어 있다. 새 clone에서는
 `mise run hooks:install`로 Git 훅을 설치한다. 커밋 전에 stage한 파일의
-Biome 포맷과 린트, `git diff --cached --check`의 공백 오류와 충돌 마커를 검사한다.
+Biome 포맷과 린트, Java 포맷, `git diff --cached --check`의 공백 오류와 충돌 마커를 검사한다.
 부분적으로 stage한 파일은 stage하지 않은 변경을 잠시 숨겨 커밋할 내용만 검사하고,
 검사가 끝나면 복원한다. 훅은 파일을 자동 수정하거나 다시 stage하지 않는다.
 검사 실패 시 포맷은 `mise run format`으로 수정하고 린트, 공백 오류와 충돌 마커는
 직접 해결한 뒤 수정한 파일을 다시 stage하고 커밋한다.
+Java는 Biome이 지원하지 않으므로 `mise.toml`에 **1.36.1**로 고정한 google-java-format의
+AOSP 스타일로 포맷한다. mise가 OS별 실행 파일을 설치하므로 JDK가 없어도 된다.
 pre-push 훅은 사용하지 않는다. 전체 타입 검사, 테스트와 플랫폼 검증은 CI에서 수행한다.
 
 ## 화면에서 앱 기능 사용하기
@@ -109,8 +111,10 @@ UI 컴포넌트가 사라지면 `client.listen`이 반환한 `unlisten`으로 �
 | `mise run host:windows` | Windows WebView2 앱 패키지 빌드와 SDK, 코어, 메모, 경계, 종료 통합 검증 |
 | `mise run host:macos` | macOS arm64 실제 WKWebView, SDK, 코어, 메모, 경계, 종료 회귀 검증 |
 | `mise run typecheck` | 각 workspace 타입 검사 |
-| `mise run format` | 코드와 JSON 포맷 적용 |
-| `mise run format:check` | 포맷 검사 |
+| `mise run format` | 코드, JSON과 Java 포맷 적용 |
+| `mise run format:check` | Biome 포맷 검사 |
+| `mise run format:java` | Java 포맷 적용 |
+| `mise run format:java:check` | Java 포맷 검사 |
 | `mise run lint` | 코드 린트 |
 
 저장소 검사 명령은 mise에서 관리한다. 루트의 `bun run framework:pack`과

@@ -1,0 +1,2 @@
+include ':host'
+project(':host').projectDir = new File(settingsDir, '.bunaway/host')

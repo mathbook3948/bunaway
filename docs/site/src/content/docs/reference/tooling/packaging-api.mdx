@@ -14,7 +14,8 @@ sidebar: { order: 3 }
 | --- | --- |
 | `PACKAGING_CHANNELS` | 다섯 채널 ID 배열. [구현 상태](/reference/packaging/channels/)와 별개 |
 | `PLATFORMS` | windows, macos |
-| `BUILD_TARGETS` | windows-x64, macos-arm64 |
+| `BUILD_TARGETS` | windows-x64, macos-arm64. 패키징 어댑터와 보고서의 BuildTarget |
+| `OUTPUT_TARGETS` | windows-x64, macos-arm64, android. 빌드 출력과 잠금의 OutputTarget |
 | `CODES` | [PKG_* 진단 코드](/reference/packaging/report/) 맵 |
 | `isChannelId(value: string)` | ChannelId type guard |
 | `platformOf(channel)` | windows 또는 macos |
@@ -48,6 +49,7 @@ MSIX 이름 파생 후에도 유효한 시작 문자, 이름 조건을 충족해
 | `verifyArtifact({ artifact, manifest, channel })` | 입력 누락, 변조, 예상 밖 파일 `Promise<Diagnostic[]>` |
 | `packagedDigest(entry)` | 최종 SHA-256 문자열 또는 undefined |
 | `ownedDirectory(root, path, create = false)` | 경계, 소유 확인 `Promise<boolean>`, 필요 시 생성 |
+| `publishOwnedDirectory(root, source, destination)` | 준비한 디렉터리를 게시하는 `Promise<void>` |
 
 `artifactPaths`의 Windows 실행 파일 이름은 `executableName`이며 기본값은 `<appId>.exe`입니다.
 Windows manifest의 `host.kind`는 `bun-compiled`, `host.executable`은 이 파일 이름입니다.
@@ -60,11 +62,23 @@ packagedDigest는 executableSha256 필드가 있으면 packagedSha256 → execut
 서명 뒤 manifest 검사와 실제 배포 바이트가 일치하도록 이 규칙을 사용합니다.
 ownedDirectory는 프로젝트 밖, 링크 경계를 거부하며 쓰기 경로 확인에 사용합니다.
 
+publishOwnedDirectory는 프로젝트 안의 실제 디렉터리만 받습니다. source가 없으면 실패합니다.
+이전 출력을 백업하고 source를 destination으로 옮기며, 게시 실패는 이전 출력을 복구합니다.
+복구도 실패하면 원래 게시 오류와 복구 오류를 `AggregateError.errors`에 모두 유지하고
+복구할 백업 경로를 오류 메시지에 표시합니다. 첫 오류는 cause로도 유지합니다.
+`PublishedDirectoryCleanupError`는 새 출력의 게시가 끝난 뒤 백업 제거가 실패했다는 뜻입니다.
+`backup`은 남아 있는 이전 출력 경로이며, cause는 제거 오류입니다. 이 오류를 받으면
+이미 새 출력에 들어간 리소스를 준비 디렉터리로 되돌리지 마세요.
+
 ## 잠금
 
 `acquireBuildOutputLock(root, target)`와 `acquirePackageInputLock(root, target)`은
 `Promise<() => Promise<void>>`로 해제 함수를 반환합니다. finally에서 해제하세요.
 빌드는 독점 쓰기, 패키징은 원본 읽기 잠금입니다. 충돌 시 기다리지 않고 실패합니다.
+acquireBuildOutputLock의 target은 OutputTarget이며 Android도 허용합니다.
+acquirePackageInputLock의 target, 어댑터 입력과 PackageReport.target은 BuildTarget으로 한정합니다.
+`@bunaway/packaging/paths`의 `outputPaths(root, target)`과 `OUTPUT_TARGETS`는 같은 출력 대상을
+사용합니다. outputPaths는 internal, output, development, work, locks와 packaged 경로를 반환합니다.
 `TargetLockError`에는 `path`와 message가 있습니다.
 이전 실행의 잠금이 남아 있다면 프로세스가 종료됐는지 확인한 뒤 직접 제거해야 합니다.
 

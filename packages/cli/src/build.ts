@@ -14,6 +14,8 @@ import {
   acquireBuildOutputLock,
   ownedDirectory,
   PACKAGING_CHANNELS,
+  publishOwnedDirectory,
+  PublishedDirectoryCleanupError,
 } from "@bunaway/packaging";
 import { outputPaths } from "@bunaway/packaging/paths";
 import {
@@ -564,35 +566,13 @@ ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking<
       }
     }
     signal?.throwIfAborted();
-    // Move the old output aside only after the staged package and its manifest are complete.
-    const backup = `${output}.previous-${crypto.randomUUID()}`;
-    let moved = false;
-    await ownedDirectory(project.root, dirname(output));
+    // The publication owner preserves prior output and reports whether cleanup failed after commit.
     try {
-      try {
-        await rename(output, backup);
-        moved = true;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-          throw error;
-        }
-      }
-      await ownedDirectory(project.root, staging);
-      await rename(staging, output);
+      await publishOwnedDirectory(project.root, staging, output);
       published = true;
     } catch (error) {
-      if (moved) {
-        await ownedDirectory(project.root, dirname(output));
-        await rename(backup, output);
-      }
+      published = error instanceof PublishedDirectoryCleanupError;
       throw error;
-    }
-    if (moved) {
-      await ownedDirectory(project.root, dirname(backup));
-      await rm(backup, {
-        recursive: true,
-        force: true,
-      });
     }
     return {
       output,
@@ -637,19 +617,32 @@ ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking<
               ],
     };
   } catch (error) {
-    if (!published) {
-      // Restore channel artifacts moved from the prior build before discarding this staging tree.
-      for (const { source, destination } of preserved.reverse()) {
-        await ownedDirectory(project.root, dirname(source));
-        await ownedDirectory(project.root, dirname(destination));
-        await rename(destination, source);
+    try {
+      if (!published) {
+        // Restore channel artifacts moved from the prior build before discarding this staging tree.
+        for (const { source, destination } of preserved.reverse()) {
+          await ownedDirectory(project.root, dirname(source));
+          await ownedDirectory(project.root, dirname(destination));
+          await rename(destination, source);
+        }
       }
+      await ownedDirectory(project.root, dirname(staging));
+      await rm(staging, {
+        recursive: true,
+        force: true,
+      });
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [
+          error,
+          cleanupError,
+        ],
+        `${error instanceof Error ? error.message : String(error)}; build cleanup failed`,
+        {
+          cause: error,
+        },
+      );
     }
-    await ownedDirectory(project.root, dirname(staging));
-    await rm(staging, {
-      recursive: true,
-      force: true,
-    });
     throw error;
   }
 }

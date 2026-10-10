@@ -92,5 +92,7 @@ Windows B 단계 통과 후 `client-sdk`, `core`, `runtime-bun`을 Windows WebVi
 
 macOS, Linux는 각 플랫폼의 프로세스, IPC, 종료, 서명, 패키징을 검증한다. Android, iOS의
 Bun 번들, 실행 가능 경로, 수명주기와 배포 제약은 D 단계에서 별도로 검증한다.
+Android는 [단일 뷰 호스트](../../native/android/README.md)에서 공통 Core/SDK와 debug APK의
+API 36 x86_64 실행, 화면 회전과 종료를 검증했다. ARM64 실기기와 release/AAB는 미검증이다.
 Windows 성공을 모바일 지원 완료로 확대하지 않는다. 이전 Skal, iOS 포크와 C ABI 조사 자료는
 현행 Windows 구현의 의존성이나 완료 조건이 아니다.

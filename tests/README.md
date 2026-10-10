@@ -1,5 +1,21 @@
 # Tests
 
+`mise run host:android`는 Windows의 Android SDK/JDK와 선택 기기에서 실제 APK를 검사한다.
+`ANDROID_SERIAL` 기본값은 `emulator-5554`이며 기기를 먼저 부팅하거나 연결해야 한다.
+공통 Core/SDK 명령, 이벤트와 구독 해제, 정책 거부, 취소, 자산과 subframe 경계,
+화면 회전 후 같은 Bun PID와 Core 상태, Activity 종료 뒤 실제 Bun 종료를 확인한다.
+회전 설정은 원래 값으로 복원한다. Java 스키마 검사와 Android lint도 포함한다.
+`cli/android.test.ts`는 지원하지 않는 설정과 잘못된 명령 인자, 대상 잠금, sync 후
+사용자 Java/Manifest/Gradle/Wrapper 보존, 생성 파일 교체, 무관한 프로젝트와 링크 거부를 검사한다.
+앱이 지정한 launcher 해석과 시작, ADB가 종료 코드 0으로 반환한 실행 오류의 실패 처리도 검사한다.
+Gradle 출력의 최종 application ID와 잘못된 메타데이터 거부도 검사한다.
+별도 프로세스의 ADB fixture로 설치와 시작 중 출력 잠금, debug 접미사가 붙은 ID의 전달,
+정상 종료와 설치 실패, 시작 실패, 취소 후 ADB 종료 및 잠금 해제를 확인한다.
+이 결과는 ARM64 실기기, release APK/AAB와 네이티브 플러그인 검증이 아니다.
+실제 런처 intent와 renderer 실패 후 회전, Bun의 cacheDir 임시 파일 쓰기도 확인한다.
+`packaging/publication.test.ts`는 공통 게시의 복구 성공, 게시와 복구 오류의 동시 유지,
+게시 후 백업 정리 실패, Android 출력 대상과 패키징 BuildTarget의 분리를 검사한다.
+
 `cli/app-manifest.test.ts`는 Windows 실행 manifest의 형식과 계약 검증, 플러그인 제거 후
 재생성, 생성 import와 metadata 불일치를 검사한다.
 manifest 생성과 카탈로그 로딩에서 native 계약의 크기 상한을 그대로 허용하고 초과는 거부하는지도 검사한다.

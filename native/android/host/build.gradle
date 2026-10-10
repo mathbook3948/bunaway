@@ -1,0 +1,25 @@
+apply plugin: 'com.android.library'
+def appInputs = rootProject.file('.bunaway/inputs')
+layout.buildDirectory.set(rootProject.file('.gradle/bunaway-host-build'))
+android {
+    namespace 'dev.bunaway.host'
+    compileSdk 36
+    buildToolsVersion '36.1.0'
+    defaultConfig { minSdk 29 }
+    sourceSets.main {
+        java.srcDir("$appInputs/generated")
+        assets.srcDir("$appInputs/assets")
+        jniLibs.srcDir("$appInputs/jniLibs")
+        res.srcDir("$appInputs/generated-res")
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+tasks.withType(Test).configureEach { systemProperty 'bunawayAssets', "$appInputs/assets/bunaway" }
+dependencies {
+    implementation 'androidx.webkit:webkit:1.14.0'
+    implementation 'com.google.code.gson:gson:2.13.2'
+    testImplementation 'junit:junit:4.13.2'
+}

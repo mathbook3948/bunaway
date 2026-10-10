@@ -11,7 +11,7 @@
 | macOS arm64 | Bun 진입점, 직접 FFI AppKit/WKWebView, 백엔드 Worker, 다중 창/뷰 | 로컬 26.7.1 arm64: 실제 WKWebView 회귀와 compiled 다중 창 API 검사. [Bun FFI 기록](../architecture/macos-bun-results.md)과 [이전 기록](../architecture/macos-native-results.md)을 구분 | Intel, 영속 프로필, 최소 OS, 현재 Windows 다중 창 메모 샘플, Developer ID, 공증, 설치 |
 | macOS Intel | 고정 Bun 배포물, 해시 없음 | 없음. arm64 빌드 스크립트가 명시적으로 거부 | 별도 pin, 빌드, 실제 실행 검증 필요 |
 | Linux | GTK, WebKitGTK 후보, 호스트 미구현 | Ubuntu 공통 검사, 생성 스키마 검사만 있음 | 네이티브 실행, UI, 프로세스 정리, 패키징 |
-| Android | Kotlin, WebView 후보, 호스트 미구현 | 없음 | Bun 실행 경로, 수명주기, 배포 제약 |
+| Android | Java Activity, WebView, 번들 Bun과 공통 Core/SDK, Java 프로젝트 sync와 debug APK | API 36 x86_64 에뮬레이터. 명령, 이벤트, 취소, 자산과 프레임 경계, 화면 회전, 종료 | ARM64 실기기, API 29, 네이티브 플러그인, 외부 개발 서버, 백그라운드 복원, release/AAB/Store |
 | iOS | Swift, WKWebView 후보, 호스트 미구현 | 없음 | Bun 실행/JIT, 수명주기, 서명, 스토어 정책 |
 
 ## macOS CI와 CPU

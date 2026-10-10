@@ -1,6 +1,7 @@
 [tools]
 bun = "1.4.2"
 lefthook = "2.2.1"
+"github:google/google-java-format" = "1.36.1"
 
 [tasks.install]
 description = "Install the locked workspace dependencies"
@@ -16,7 +17,7 @@ run = "bunx --no-install biome check --staged --assist-enabled=false --no-errors
 
 [tasks.typecheck]
 description = "Check all workspace TypeScript types"
-run = ["bun run --workspaces typecheck", "bunx --no-install tsc --project tests/tsconfig.json"]
+run = ["bun run --workspaces typecheck", "bunx --no-install tsc --project tests/tsconfig.json", "bunx --no-install tsc --project tests/fixtures/android/web/tsconfig.json"]
 
 [tasks.lint]
 description = "Lint source files without changing them"
@@ -24,15 +25,26 @@ run = "bunx --no-install biome lint ."
 
 [tasks.format]
 description = "Format source files and project configuration"
+depends = ["format:java"]
 run = "bunx --no-install biome format --write ."
 
 [tasks."format:check"]
 description = "Check formatting without changing files"
 run = "bunx --no-install biome format ."
 
+[tasks."format:java"]
+description = "Format Java sources with google-java-format (AOSP style)"
+shell = "bun exec"
+run = "google-java-format --aosp --replace $(git ls-files --cached --others --exclude-standard '*.java')"
+
+[tasks."format:java:check"]
+description = "Check Java formatting without changing files"
+shell = "bun exec"
+run = "google-java-format --aosp --dry-run --set-exit-if-changed $(git ls-files --cached --others --exclude-standard '*.java')"
+
 [tasks.check]
 description = "Check formatting, types, and protocol contracts"
-depends = ["lint", "format:check", "typecheck", "test"]
+depends = ["lint", "format:check", "format:java:check", "typecheck", "test"]
 
 [tasks.test]
 description = "Run contract tests"
@@ -49,3 +61,7 @@ run = "bun --no-env-file tests/lifecycle/run-native.ts --target windows-x64"
 [tasks."host:macos"]
 description = "Build the macOS Bun FFI app without a C compiler and verify WKWebView, policy and Worker cleanup"
 run = "bun --no-env-file tests/lifecycle/run-native.ts --target macos-arm64"
+
+[tasks."host:android"]
+description = "Build the Android APK and verify the actual Core, SDK, WebView and lifecycle on a selected device"
+run = "bun native/android/run.ts"

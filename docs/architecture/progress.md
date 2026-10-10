@@ -51,7 +51,7 @@ Bun UI Worker의 창, WebView2, 비동기 작업, 다중 창, 종료를 검증�
 | A 계약 | Web, 프로세스 IPC, 정책 단일 스키마, JSON 검증, 직렬화, 버전 협상 | 계약 테스트와 Windows/macOS 네이티브 검증기 회귀 | Linux, 모바일 네이티브 계약 준수 |
 | B 번들 실행 실현성 | Windows x64 baseline, macOS arm64 Bun 1.4.2 고정. 독립 실험 코드는 제거 | 과거 플랫폼별 probe의 IPC, 계산, 이벤트, 오류, 정상/강제 종료 기록 | 다른 CPU/OS, 설치, 배포 |
 | C 수직 기능 | client-sdk, core, runtime-bun, Win32/WebView2, AppKit/WKWebView, 메모 연결 | Windows 다중 창(3개), 뷰별 정책, macOS 다중 창/뷰와 기본 창 API, 명령, 이벤트, 경계, 렌더러 복구, 종료. 저장과 메모 파일 복원은 이관 전 기록 | macOS 영속 프로필과 고급 창 기능, 다른 플랫폼 동등 검증 |
-| D 플랫폼 확장 | macOS 제품 호스트 구현. Linux, Android, iOS 호스트 미구현. macOS의 다른 네이티브 플러그인 어댑터는 후속 작업 | macOS arm64 로컬 기록 및 네이티브 CI(정확한 실행 결과는 별도 기록) | macOS Intel, 최소 OS, Linux, 모바일 실행, 수명주기, 패키징 |
+| D 플랫폼 확장 | macOS 제품 호스트와 Android 단일 뷰 호스트, debug APK 구현. Linux, iOS와 macOS/Android 네이티브 플러그인 어댑터는 후속 작업 | macOS arm64 로컬 기록과 네이티브 CI, Android API 36 x86_64의 실제 Core/SDK와 화면 회전, 종료 | macOS Intel, 최소 OS, Linux, Android ARM64 실기기와 release/AAB, iOS |
 | E 배포 가능한 초기 버전 | CLI create/validate/doctor/dev/build, vanilla, Vite, React, Vue, Svelte, SDK/native 소스 artifact, 버전 lock, Windows 앱 패키지, macOS `.app`/ad-hoc, 선택 저장/로그/기능 조회 패키지와 Windows 어댑터 | CLI, artifact 계약 테스트, 기존 native 검증 기록(새 artifact의 플랫폼별 검증과 구분) | 공개 publish, 라이선스, UI framework 템플릿의 네이티브 실행 검증, macOS 고급 창 기능, 설치, Developer ID, 공증, Store, 출시 기준 |
 | F 선택 기능 | Chromium 렌더러 등 미구현 | 없음 | 선택 렌더러, 추가 네이티브 플러그인 |
 
@@ -127,7 +127,7 @@ macOS는 `mise run host:macos -- --app`으로 ad-hoc 서명한 `.app`의 실행�
 1. macOS 다중 창/뷰와 현재 Windows 다중 창 메모 설정 지원 여부를 별도 작업으로 결정한다.
 2. 명령 타입 생성, macOS 네이티브 플러그인 어댑터, 공개 릴리스 절차를 구현하고 React/Vue/Svelte 템플릿의 실제 네이티브 실행을 검증한다.
 3. 최소 OS, CPU, Windows WebView2 설치, macOS Developer ID, 공증, 설치, 배포를 검증한다.
-4. Linux, Android, iOS의 Bun 실행, 배포, 수명주기를 각 플랫폼에서 구현, 검증한다.
+4. Linux, iOS의 Bun 실행, 배포와 수명주기를 구현, 검증한다. Android는 단일 뷰와 debug APK 이후 ARM64 실기기, 선택 플러그인, release/AAB와 백그라운드 수명을 확장한다.
 5. UI 프레임워크 예제, 성능, 패키지 크기와 PRD 출시 기준을 확인한다.
 
 [플랫폼 지원 표](../platform-support/README.md)는 검증 환경과 출시 지원을 구분한다.
