@@ -2,7 +2,7 @@
 
 macOS의 현재 구현과 후속 작업은 [macOS TODO](./TODO-macos.md)에서 관리한다.
 
-기준일: 2026-10-10. bunaway main `6f2363c`와 이번 geometry 설정 보완을 기준으로 갱신했다.
+기준일: 2026-10-10. bunaway main `3ca321d`의 구현과 저장소에 기록된 실행 결과를 기준으로 갱신했다.
 Tauri v2의 기본 API와 공식 플러그인, Electron의 공개 API를 기능별로 대조한다.
 창 최소 크기와 최대 크기처럼 초기 설정, 실행 중 변경, 조회, 이벤트가 따로 필요한
 기능은 각각 작업으로 기록한다. 비교 대상의 메서드 이름이나 바이너리와의 호환을
@@ -19,14 +19,18 @@ Tauri와 Electron 비교 자료의 기준 버전은 이전 스냅샷을 유지�
 
 2026-10-10 갱신은 창 상태 변경 5개와 상태 조회 5개, content/outer/normal 좌표 조회 7개와
 DPI 변환 2개, content 위치와 outer 크기, content/outer bounds 설정 4개,
-`windows.changed` 창 이벤트와 `getSnapshot`, 호환되는 개발 앱의
-명령 구현 교체를 반영했다.
+`windows.changed` 창 이벤트와 `getSnapshot`, 호환되는 개발 앱의 명령 구현 교체를 반영했다.
+파일 opener와 Explorer 선택, 텍스트 클립보드, 사용자 범위 autostart의 구현도 포함한다.
+focus/blur와 물리 드래그 검증을 다중 물리 모니터 검증과 구분하고, 전체 Windows 호스트
+회귀의 실패와 실제 로그인 실행 등 남은 검증을 기록한다. 27절에는 Android 단일 뷰 호스트와
+debug APK 개발 경로를 반영하고 iOS 및 모바일 후속 작업을 분리한다.
 공통 Worker 채널과 앱 manifest 정리, Bun 기반 네이티브 실행기 전환도
 현재 구현 근거에 포함한다. 비교 대상의 API 목록은 새로 전수 대조하지 않았다.
 
 ## 상태와 작업 기준
 
-- `[x]`는 아래 기준 코드에 구현된 Windows 기능이다. 출시 지원 전체의 완료를 뜻하지 않는다.
+- `[x]`는 기준 코드에 구현된 기능이다. 플랫폼별 항목은 해당 절에 명시한 플랫폼에만 적용하며,
+  출시 지원 전체의 완료를 뜻하지 않는다.
 - `[ ]`는 미구현, 부분 구현의 확장 또는 지원 방식을 결정해야 하는 작업이다.
 - P1은 일반 데스크톱 앱의 기본 기능, P2는 기능 확장, P3은 고급 기능과 다른 플랫폼의 후속 작업이다.
 - 각 절의 소유자는 권장안이다. 호스트는 앱, 창, WebView와 세션의 최종 수명주기를 소유한다.
@@ -298,8 +302,10 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [x] `revealFile`로 Explorer에서 파일을 선택해 표시한다. `opener:revealFile`과 같은 형태의 scope를 요구한다.
   두 작업은 Unicode와 공백을 보존하며 파일 소실, 접근 거부와 OS 요청 실패를 반환한다.
   성공은 요청 접수이며 실제 앱 실행이나 Explorer 선택 완료를 뜻하지 않는다.
-  계약 검사, 실제 Windows STA와 설치한 플러그인의 compiled EXE 검증은
-  [실행 기록](./architecture/windows-bun-results.md)에 구분한다.
+  현재 파일 검사와 셸 요청은 I/O Worker에서 실행한다. 기록된 Windows STA와 compiled EXE
+  실행 결과는 초기 UI Worker 구현의 근거이며, 이관 후 구현의 실행 근거로 확대하지 않는다.
+  계약 검사와 초기 실행 결과, 이관 후 검증 범위는
+  [실행 기록](./architecture/windows-bun-results.md#2026-10-10-opener-파일-작업)에 구분한다.
 - [ ] 지정 앱으로 파일과 URL을 연다.
 - [ ] 파일을 휴지통으로 보내고 실패를 반환한다.
 - [ ] Windows 바로가기 생성, 읽기와 변경을 제공한다.
@@ -785,7 +791,12 @@ setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 
 우선순위 P3. Windows 완성 후 플랫폼 실행 모델을 검증한다.
 출처: [T-biometric], [T-geolocation], [T-barcode], [T-haptics], [T-nfc], [T-notification], [T-app], [T-config].
 
-- [ ] Android와 iOS의 호스트, Bun 실행, 중단과 복귀, 배포 경로를 구현한다.
+- [x] Android의 Java Activity, 단일 WebView와 APK에 번들한 Bun 자식 프로세스를 공통 앱 정의, Core와 SDK에 연결한다.
+- [x] Android의 `sync`, `build`, `run`으로 사용자 네이티브 프로젝트를 유지하고 debug APK를 빌드, 설치 및 실행한다.
+- [x] Android 화면 회전에서 Bun과 Core를 유지하고 홈 이동과 복귀, 뒤로가기 종료를 구분한다.
+- [ ] Android의 저메모리와 백그라운드 종료 이후 상태 복원, WebView 장애 복구와 네이티브 플러그인 어댑터를 구현한다.
+- [ ] Android release APK/AAB와 서명, 스토어 배포 경로를 구현한다.
+- [ ] iOS의 호스트, Bun 실행, 중단과 복귀, 배포 경로를 구현한다.
 - [ ] native permission 요청, 거부, 재요청과 시스템 설정 이동을 제공한다.
 - [ ] 앱 foreground/background, resume, pause와 back-button 이벤트를 제공한다.
 - [ ] 모바일 다중 창, Android activity와 iOS scene 식별, 지원 여부 조회를 제공한다.
@@ -800,6 +811,12 @@ setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 
 - [ ] 모바일 data store 식별자 조회와 삭제와 웹 프로필 수명을 제공한다.
 - [ ] 모바일 keyboard accessory, link preview, scrollbar와 safe-area 옵션을 제공한다.
 - [ ] Android/iOS 권한 설명, entitlements와 앱 패키지 설정을 검증한다.
+
+Android의 실제 실행 기록은 API 36 x86_64 에뮬레이터와 debug APK 범위다.
+ARM64는 런타임 해시와 APK 포함만 확인했으며 실기기 실행과 최소 API 29는 미검증이다.
+후속 파일 import와 프로세스 그룹 정리의 계약 검사도 기존 에뮬레이터 실행 결과와 구분한다.
+[Android 실행 기록](./architecture/android-host-results.md)과
+[호스트 수명주기 ADR](./decisions/0015-android-bundled-process-host.md)을 따른다.
 
 ## 28. 플랫폼 지원과 완료 검증
 
@@ -830,8 +847,17 @@ setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 
   후속 물리 조작 검증에서 focus/blur와 물리 드래그를 확인했다. 다중 물리 모니터 이동은 미검증이다.
 - [ ] IME, keyboard layout, 고대비와 스크린 리더 회귀를 검증한다.
 - [ ] tray, autostart, file association과 toast를 깨끗한 Windows 설치에서 검증한다.
+- [ ] autostart를 등록한 뒤 실제 로그아웃과 로그인에서 앱 실행 및 인자 전달을 검증한다.
+  Run 값 등록과 저장 명령줄의 CreateProcessW 실행 검사는 실제 로그인 실행을 검증한 결과가 아니다.
+  [autostart 검증 범위](../plugins/autostart/README.md#검증)를 따른다.
+- [ ] I/O Worker로 이관한 opener의 파일 열기와 Explorer 선택을 실제 Windows 및 compiled EXE에서 재검증한다.
+  [초기 UI Worker 실행 기록](./architecture/windows-bun-results.md#2026-10-10-opener-파일-작업)과 구분한다.
 - [ ] suspend/resume, 잠금과 Explorer 재시작 후 자원과 구독을 검증한다.
 - [x] 로컬 Windows x64에서 WebView 장애 복구와 앱 강제 종료 후 Job의 자손 회수를 검증한다.
+- [ ] 최신 Windows 전체 호스트 회귀를 통과하고 WebView 종료와 자식 프로세스 정리를 재검증한다.
+  [geometry 설정 검증 기록](./architecture/windows-bun-results.md#2026-10-10-창-geometry-설정-api)의
+  개별 Win32와 WebView2 검사는 통과했지만 전체 호스트 회귀와 단독 재실행에서
+  `WebView cleanup timed out` 및 브라우저 자식 프로세스 잔류가 기록됐다.
 - [ ] 최소 지원 OS, CPU와 다른 Job 정책의 환경에서 장애 및 강제 종료 뒤 자원 정리를 검증한다.
 - [ ] 각 플랫폼의 supported/experimental/unsupported와 OS permission 값을 실제 구현에 맞춘다.
 - [ ] 지원 목록, CLI 진단, 문서와 배포 산출물을 같은 릴리스로 갱신한다.
@@ -848,18 +874,22 @@ setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 
 - [ ] Android와 iOS의 패키지, 서명과 스토어 배포 조건을 27절의 실행 모델 검증과 연결한다.
   Android APK/AAB와 업로드/앱 서명 키, iOS 배포 인증서와 provisioning, entitlements를 정의하고
   서명된 앱을 실기기에서 설치, 실행, 업데이트한다. Bun 실행과 코드 실행 정책의 제약도 기록한다.
+- [x] Android API 36 x86_64 에뮬레이터에서 debug APK 설치와 공통 SDK/Core, 화면 회전 및 종료를 검증한 결과를 기록한다.
+  [Android 실행 기록](./architecture/android-host-results.md)의 검증 시점과 범위를 따른다.
+  ARM64 실기기, 최소 API 29, 후속 프로세스 그룹 변경의 기기 재검증과 release 배포는 포함하지 않는다.
 - [ ] Microsoft Store, Mac App Store, Google Play와 App Store의 채널별 제출 및 배포 완료 조건을 정의한다.
   대상 채널의 정책 검토, 제출 검증, 심사와 실제 설치 결과를 구분해 기록하고 지원 표에 반영한다.
   미제출, 미승인과 제외 채널을 명시하며 패키지 생성만으로 스토어 배포를 완료 처리하지 않는다.
 
 ## 다음 작업 묶음
 
-1. content 위치, outer 크기와 bounds 설정, 초기 위치와 창 상태 옵션, 생성과 준비 등 남은 창 이벤트: 02, 03, 04.
-2. 트레이 개별 아이콘과 메뉴, autostart, 전역 단축키: 06, 07, 08.
-3. 파일 열기와 지정 앱 opener 확장, 파일 대화상자, 클립보드와 알림: 09, 10, 11, 12.
+1. 초기 위치와 중앙 배치, 초기 창 상태 옵션, 생성과 준비 등 남은 창 이벤트: 02, 03, 04.
+2. 트레이 개별 아이콘과 메뉴, 전역 단축키, autostart 숨김 시작과 설치 및 제거 연동: 06, 07, 08.
+3. 지정 앱 opener와 휴지통, 파일 대화상자, 클립보드 이미지와 다중 형식, 알림: 09, 10, 11, 12.
 4. 모니터와 DPI, 테마, 창 상태 저장과 OS 연결: 04, 09, 13.
 5. WebView와 세션 확장, 전송과 데이터 기능: 14–21, 23.
 6. 업데이트, 선택 렌더러와 다른 플랫폼: 22, 25–27. PRD의 출시 범위와 별도로 우선순위를 결정한다.
+7. Windows 전체 호스트 회귀, opener I/O 이관 후 실행, 실제 로그인과 다중 물리 모니터 검증: 28.
 
 ## 공식 API 대조 범위
 
