@@ -30,7 +30,7 @@ const privateWindow = {
   viewId: "private",
 };
 
-function fixture() {
+function fixture({ ready = true }: { ready?: boolean } = {}) {
   const identities = new Map<string, WindowIdentity>([
     [
       "main",
@@ -73,7 +73,7 @@ function fixture() {
         ? {
             closed: closed.has(view),
             cleaned: false,
-            ready: true,
+            ready,
             failure: null,
             deadline: Infinity,
           }
@@ -314,17 +314,9 @@ test("lookup requires list permission, handles cancellation and explicitly rejec
 });
 
 test("destroyed handles deferred and closing windows but denies unknown or forbidden views", async () => {
-  const f = fixture();
-  const read = f.services.read;
-  f.services.read = (view) => {
-    const state = read(view);
-    return state
-      ? {
-          ...state,
-          ready: false,
-        }
-      : undefined;
-  };
+  const f = fixture({
+    ready: false,
+  });
   expect(await f.invoke("getCurrent")).toEqual(main);
   expect(
     await f.invoke("isDestroyed", {
