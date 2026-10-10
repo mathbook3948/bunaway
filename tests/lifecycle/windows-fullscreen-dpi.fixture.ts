@@ -13,6 +13,9 @@ const GWL_STYLE = -16;
 const SW_HIDE = 0;
 const SW_SHOWNORMAL = 1;
 const SW_SHOWMAXIMIZED = 3;
+const SW_SHOWMINIMIZED = 2;
+const SWP_NOSIZE = 0x1;
+const WPF_RESTORETOMAXIMIZED = 0x2;
 const SWP_NOMOVE = 0x2;
 const SWP_NOACTIVATE = 0x10;
 const FRAME_WIDTH = 16;
@@ -137,11 +140,15 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
       },
       GetWindowPlacement(_window: bigint, address: Pointer) {
         const placement = view(address, 44);
-        placement.setUint32(
-          8,
-          maximized ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL,
-          true,
-        );
+        // Windows can retain maximize history after returning to a normal window.
+        placement.setUint32(4, WPF_RESTORETOMAXIMIZED, true);
+        let showCommand = SW_SHOWNORMAL;
+        if (minimized) {
+          showCommand = SW_SHOWMINIMIZED;
+        } else if (maximized) {
+          showCommand = SW_SHOWMAXIMIZED;
+        }
+        placement.setUint32(8, showCommand, true);
         const restored = maximized || minimized ? normalRect : windowRect;
         const primary = monitorFor(restored) === monitors[0]?.handle;
         [
@@ -152,6 +159,22 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
         ].forEach((value, index) => {
           placement.setInt32(28 + index * 4, value, true);
         });
+        return 1;
+      },
+      SetWindowPlacement(_window: bigint, address: Pointer) {
+        const placement = view(address, 44);
+        assert.equal(
+          placement.getUint32(4, true) & WPF_RESTORETOMAXIMIZED,
+          minimized ? WPF_RESTORETOMAXIMIZED : 0,
+        );
+        assert.equal(placement.getUint32(8, true), SW_HIDE);
+        // WINDOWPLACEMENT uses workspace coordinates; the mock HWND uses screen coordinates.
+        const primary = monitorFor(normalRect) === monitors[0]?.handle;
+        windowRect.left = placement.getInt32(28, true) + (primary ? 24 : 0);
+        windowRect.top = placement.getInt32(32, true) + (primary ? 40 : 0);
+        windowRect.right = placement.getInt32(36, true) + (primary ? 24 : 0);
+        windowRect.bottom = placement.getInt32(40, true) + (primary ? 40 : 0);
+        Object.assign(normalRect, windowRect);
         return 1;
       },
       MonitorFromWindow: () => monitorFor(windowRect),
@@ -214,8 +237,10 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
           windowRect.left = left;
           windowRect.top = top;
         }
-        windowRect.right = windowRect.left + width;
-        windowRect.bottom = windowRect.top + height;
+        if (!(flags & SWP_NOSIZE)) {
+          windowRect.right = windowRect.left + width;
+          windowRect.bottom = windowRect.top + height;
+        }
         return 1;
       },
     },
@@ -419,6 +444,22 @@ try {
     dpi: 96,
   };
   assert.deepEqual(windows.getBounds(window, "normal"), expectedNormal);
+  // A normal placement drops stale maximize history; a minimized one keeps it.
+  for (const wasMinimized of [
+    false,
+    true,
+  ]) {
+    minimized = wasMinimized;
+    windows.show(window, false);
+    windows.setFullscreen(window, true);
+    windows.setFullscreen(window, false);
+    assert.equal(windows.isFullscreen(window), false);
+    assert.equal(windows.isVisible(window), false);
+    assert.equal(windows.isMinimized(window), wasMinimized);
+    assert.equal(windows.isMaximized(window), false);
+    assert.deepEqual(windows.getBounds(window, "normal"), expectedNormal);
+  }
+  minimized = false;
   // Moving a maximized HWND does not move its saved normal rectangle.
   maximized = true;
   Object.assign(windowRect, {

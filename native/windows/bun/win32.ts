@@ -56,6 +56,7 @@ const SW_MINIMIZE = 6;
 const SW_RESTORE = 9;
 const SW_SHOW = 5;
 const SW_SHOWMAXIMIZED = 3;
+const SW_SHOWMINIMIZED = 2;
 const SW_SHOWNA = 8;
 const SWP_FRAMECHANGED = 0x20;
 const SWP_NOMOVE = 0x2;
@@ -870,6 +871,17 @@ export class Windows {
     const placement = Buffer.alloc(WINDOWPLACEMENT_SIZE);
     placement.writeUInt32LE(WINDOWPLACEMENT_SIZE);
     assert(user.symbols.GetWindowPlacement(window, ptr(placement)));
+    // Maximize history is only valid when restoring a minimized placement.
+    if (
+      placement.readUInt32LE(WINDOWPLACEMENT_SHOW_CMD_OFFSET) !==
+      SW_SHOWMINIMIZED
+    ) {
+      placement.writeUInt32LE(
+        placement.readUInt32LE(WINDOWPLACEMENT_FLAGS_OFFSET) &
+          ~WPF_RESTORETOMAXIMIZED,
+        WINDOWPLACEMENT_FLAGS_OFFSET,
+      );
+    }
     return placement;
   }
 

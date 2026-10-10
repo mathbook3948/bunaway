@@ -1,20 +1,18 @@
-import { dlopen, type Pointer, ptr, toArrayBuffer } from "bun:ffi";
+import { type Pointer, ptr, toArrayBuffer } from "bun:ffi";
 import { readFileSync, realpathSync, statSync } from "node:fs";
 import { extname, resolve } from "node:path";
 import { clampWindowSize } from "@bunaway/plugin-api/native";
+import type { MacosApplication } from "./application.ts";
 import type { MacosConfig } from "./config.ts";
 import { Objc, type ObjcObject } from "./objc.ts";
 import { macosOrigin, platformUrl, resourceRules } from "./urls.ts";
 
-const NS_APPLICATION_ACTIVATION_POLICY_REGULAR = 0;
 const NS_VIEW_WIDTH_SIZABLE = 2;
 const NS_VIEW_HEIGHT_SIZABLE = 16;
 const WK_USER_SCRIPT_INJECTION_AT_DOCUMENT_START = 0;
 const WK_NAVIGATION_CANCEL = 0;
 const WK_NAVIGATION_ALLOW = 1;
 const WK_PERMISSION_DENY = 0;
-const UI_PUMP_INTERVAL_MS = 5;
-const MAX_EVENTS_PER_TICK = 64;
 const NS_UNBOUNDED_CONTENT_SIZE = 3.4028234663852886e38;
 const BRIDGE = `(() => {
   const listeners = new Set();
@@ -49,25 +47,10 @@ const runtimeOwners: Objc[] = [];
 /** Own a single AppKit window and WKWebView using only Bun FFI and system frameworks. */
 export class MacosWebview {
   private readonly objc = new Objc();
-  private readonly runLoop = dlopen(
-    "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation",
-    {
-      CFRunLoopRunInMode: {
-        args: [
-          "ptr",
-          "f64",
-          "bool",
-        ],
-        returns: "i32",
-      },
-    },
-  );
-  private readonly app: ObjcObject;
   private readonly window: ObjcObject;
   private readonly webview: ObjcObject;
   private readonly controller: ObjcObject;
   private readonly retained: ObjcObject[] = [];
-  private timer: ReturnType<typeof setInterval> | undefined;
   private closed = false;
   private rulesReady = false;
   private coreReady = false;
@@ -80,10 +63,10 @@ export class MacosWebview {
       receive(source: string, raw: string): void;
       revoke(reason: string): void;
       close(): void;
-      tick(): void;
       log(event: string, fields?: object): void;
       fail(error: unknown): void;
     },
+    application: MacosApplication,
   ) {
     const o = this.objc;
     runtimeOwners.push(o);
@@ -93,12 +76,6 @@ export class MacosWebview {
       }
       return value;
     };
-    this.app = required(o.send(o.class("NSApplication"), "sharedApplication"));
-    o.send(
-      this.app,
-      "setActivationPolicy:",
-      NS_APPLICATION_ACTIVATION_POLICY_REGULAR,
-    );
     const windowDelegate = o.delegate([
       {
         selector: "windowShouldClose:",
@@ -113,22 +90,7 @@ export class MacosWebview {
         },
       },
     ]);
-    const appDelegate = o.delegate([
-      {
-        selector: "applicationShouldTerminate:",
-        arguments: 1,
-        returns: "ptr",
-        encoding: "q@:@",
-        call: () => {
-          if (!this.closed) {
-            hooks.close();
-          }
-          return null;
-        },
-      },
-    ]);
-    this.retained.push(windowDelegate, appDelegate);
-    o.send(this.app, "setDelegate:", appDelegate);
+    this.retained.push(windowDelegate);
     const size = config.window.window;
     const constraints = {
       minWidth: size.minWidth ?? null,
@@ -357,10 +319,9 @@ export class MacosWebview {
       NS_VIEW_WIDTH_SIZABLE | NS_VIEW_HEIGHT_SIZABLE,
     );
     o.send(o.send(this.window, "contentView"), "addSubview:", this.webview);
-    o.send(this.app, "finishLaunching");
     o.send(this.window, "center");
     o.send(this.window, "makeKeyAndOrderFront:", null);
-    o.send(this.app, "activateIgnoringOtherApps:", 1);
+    application.activate();
     const viewPolicy = config.policy.views.find(
       (view) => view.id === config.window.view,
     );
@@ -391,33 +352,6 @@ export class MacosWebview {
         completion,
       );
     });
-    // AppKit stays on Bun's main thread. Bounded, nonblocking turns give Bun's
-    // event loop time for Worker messages, I/O and shutdown between native events.
-    this.timer = setInterval(() => {
-      if (this.closed) {
-        return;
-      }
-      try {
-        o.withAutoreleasePool(() => {
-          this.runLoop.symbols.CFRunLoopRunInMode(
-            o.string("kCFRunLoopDefaultMode"),
-            0,
-            true,
-          );
-          for (let index = 0; index < MAX_EVENTS_PER_TICK; index++) {
-            const event = o.nextEvent(this.app);
-            if (!event) {
-              break;
-            }
-            o.send(this.app, "sendEvent:", event);
-          }
-          o.send(this.app, "updateWindows");
-          hooks.tick();
-        });
-      } catch (error) {
-        hooks.fail(error);
-      }
-    }, UI_PUMP_INTERVAL_MS);
   }
 
   source(): string {
@@ -546,9 +480,6 @@ export class MacosWebview {
       return;
     }
     this.closed = true;
-    if (this.timer) {
-      clearInterval(this.timer);
-    }
     const o = this.objc;
     o.send(
       this.controller,
@@ -560,7 +491,6 @@ export class MacosWebview {
     o.send(this.webview, "setNavigationDelegate:", null);
     o.send(this.webview, "setUIDelegate:", null);
     o.send(this.window, "setDelegate:", null);
-    o.send(this.app, "setDelegate:", null);
     o.send(this.window, "close");
     o.send(this.webview, "removeFromSuperview");
     o.send(this.webview, "release");
@@ -568,6 +498,5 @@ export class MacosWebview {
     for (const object of this.retained.reverse()) {
       o.send(object, "release");
     }
-    this.runLoop.close();
   }
 }

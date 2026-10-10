@@ -1,3 +1,4 @@
+import { MacosApplication } from "#native/macos/bun/application";
 // Standalone main-thread checks for the real AppKit/WKWebView integration.
 
 import { ptr } from "bun:ffi";
@@ -5,11 +6,11 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { MAX_WINDOW_DIMENSION } from "@bunaway/plugin-api/native";
+import type { HostContext } from "@bunaway/protocol";
 import type { MacosConfig } from "#native/macos/bun/config";
 import { Objc, type ObjcObject } from "#native/macos/bun/objc";
 import { MacosWebview } from "#native/macos/bun/webview";
-import { MAX_WINDOW_DIMENSION } from "@bunaway/plugin-api/native";
-import type { HostContext } from "@bunaway/protocol";
 
 const BATCH_SIZE = 4_000;
 const MAX_RETAINED_GROWTH_BYTES = 64 * 1024 * 1024;
@@ -162,6 +163,13 @@ async function ruleIdentifiers(o: Objc): Promise<string[]> {
   return result;
 }
 
+const application = new MacosApplication({
+  quit: () => {},
+  tick: () => {},
+  fail: (error) => {
+    failure = error;
+  },
+});
 try {
   await mkdir(resolve(directory, "web"));
   await Bun.write(
@@ -179,7 +187,7 @@ window.chrome.webview.postMessage({ready: true});
 </script>`,
   );
   const o = new Objc();
-  view = new MacosWebview(config, hooks);
+  view = new MacosWebview(config, hooks, application);
   await view.ready;
   view.start();
   await waitFor(() => pageReady);
@@ -288,7 +296,7 @@ window.chrome.webview.postMessage({ready: true});
     minWidth: null,
     maxHeight: null,
   };
-  view = new MacosWebview(config, hooks);
+  view = new MacosWebview(config, hooks, application);
   await view.ready;
   o.withAutoreleasePool(() => {
     const window = nativeWindow(o);
@@ -319,6 +327,7 @@ window.chrome.webview.postMessage({ready: true});
   }
 } finally {
   view?.close();
+  application.close();
   await rm(directory, {
     recursive: true,
     force: true,

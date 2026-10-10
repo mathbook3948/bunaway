@@ -94,6 +94,26 @@ async function bundleTestHost(directory: string): Promise<void> {
           }
           build.onResolve(
             {
+              filter: /^\.\/application\.ts$/,
+            },
+            () => ({
+              path: "test-application",
+              namespace: "test-application",
+            }),
+          );
+          build.onLoad(
+            {
+              filter: /.*/,
+              namespace: "test-application",
+            },
+            () => ({
+              contents:
+                "export class MacosApplication { activate() {} close() {} }",
+              loader: "js",
+            }),
+          );
+          build.onResolve(
+            {
               filter: /^\.\/webview\.ts$/,
             },
             () => ({
