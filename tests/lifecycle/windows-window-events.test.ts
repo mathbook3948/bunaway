@@ -38,10 +38,7 @@ test.skipIf(process.platform !== "win32")(
         }),
       );
       const original = windows.getSnapshot(hwnd);
-      const check = (change: WindowChange, action: () => void) => {
-        const start = events.length;
-        action();
-        windows.pump();
+      const checkObservation = (change: WindowChange, start: number) => {
         expect(
           events.slice(start).some((event) => event.changes.includes(change)),
         ).toBe(true);
@@ -49,6 +46,12 @@ test.skipIf(process.platform !== "win32")(
         expect(windows.getSnapshot(hwnd).bounds).toEqual(
           windows.getBounds(hwnd, "outer"),
         );
+      };
+      const check = (change: WindowChange, action: () => void) => {
+        const start = events.length;
+        action();
+        windows.pump();
+        checkObservation(change, start);
       };
       check("shown", () => windows.show(hwnd, true));
       check("hidden", () => windows.show(hwnd, false));
@@ -91,8 +94,31 @@ test.skipIf(process.platform !== "win32")(
         const focused = windows.focus(hwnd);
         windows.pump();
         if (focused && windows.isFocused(hwnd)) {
-          check("blur", () => windows.focus(second));
-          check("focus", () => windows.focus(hwnd));
+          for (const [target, change] of [
+            [
+              second,
+              "blur",
+            ],
+            [
+              hwnd,
+              "focus",
+            ],
+          ] as const) {
+            const start = events.length;
+            const accepted = windows.focus(target);
+            windows.pump();
+            // Windows can decline any foreground request, even after an earlier one succeeded.
+            if (!accepted || !windows.isFocused(target)) {
+              expect(windows.getSnapshot(hwnd).state.focused).toBe(
+                windows.isFocused(hwnd),
+              );
+              console.warn(
+                `Native ${change} transition not verified: Windows declined foreground focus in this test session.`,
+              );
+              break;
+            }
+            checkObservation(change, start);
+          }
         } else {
           expect(windows.getSnapshot(hwnd).state.focused).toBe(
             windows.isFocused(hwnd),

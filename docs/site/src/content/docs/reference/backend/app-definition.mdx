@@ -36,11 +36,12 @@ export default app;
 
 ```ts
 import type { AppDefinition } from "@bunaway/backend";
+import { windowsPlugin } from "@bunaway/plugin-windows";
 export default {
   commands: {},
   events: {},
   state: { count: 0 },
-  plugins: [],
+  plugins: [windowsPlugin] as const,
 } satisfies AppDefinition;
 ```
 
@@ -72,6 +73,10 @@ CLI는 작성한 설정과 정책을 검사합니다. 호출할 명령의 권한
 
 `CommandsOf<typeof app>`는 앱에 직접 선언한 명령과 정적으로 나열한 기능 모듈의 input/output을,
 `EventsOf<typeof app>`는 해당 이벤트와 정적으로 나열한 플러그인의 이벤트 payload를 추론합니다.
+객체형 앱 정의에서 플러그인 이벤트 타입을 추론하려면 위 예제처럼 `plugins` 배열에
+`as const`를 붙여 등록 목록을 tuple로 유지합니다. `defineApp()`에 배열을 직접 전달하면
+별도 지정 없이 tuple로 추론합니다. 일반 배열로 선언한 플러그인 목록의 이벤트는
+`EventsOf`에 포함하지 않습니다.
 플러그인 명령까지 합친 전체 명령 목록의 자동 타입 생성은 현재 제공하지 않습니다.
 [타입과 스키마](/guides/types-and-validation/)에서 클라이언트 연결 예시를 확인하세요.
 

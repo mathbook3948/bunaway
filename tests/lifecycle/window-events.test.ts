@@ -1,7 +1,12 @@
 import { expect, test } from "bun:test";
 import { MessageChannel } from "node:worker_threads";
-import { type CommandsOf, defineApp, type EventsOf } from "@bunaway/backend";
-import { createClient } from "@bunaway/client";
+import {
+  type AppDefinition,
+  type CommandsOf,
+  defineApp,
+  type EventsOf,
+} from "@bunaway/backend";
+import { type Client, createClient } from "@bunaway/client";
 import { type CoreSession, createCore } from "@bunaway/core";
 import type { WindowSnapshot } from "@bunaway/plugin-api/native";
 import {
@@ -62,6 +67,39 @@ const app = defineApp({
     windowsPlugin,
   ],
 });
+
+const objectApp = {
+  commands: {},
+  events: {},
+  plugins: [
+    windowsPlugin,
+  ] as const,
+} satisfies AppDefinition;
+
+// Object definitions retain plugin event schemas when the plugin list is a tuple.
+export function checkObjectAppEventTypes(
+  client: Client<CommandsOf<typeof objectApp>, EventsOf<typeof objectApp>>,
+) {
+  void client.listen(
+    "windows.changed",
+    (event) => {
+      const revision: number = event.payload.revision;
+      // @ts-expect-error plugin event payloads retain their concrete field types
+      const invalid: string = event.payload.revision;
+      void [
+        revision,
+        invalid,
+      ];
+    },
+    {
+      onError() {},
+    },
+  );
+  // @ts-expect-error object definitions do not expose undeclared plugin events
+  void client.listen("windows.missing", () => {}, {
+    onError() {},
+  });
+}
 
 test("window changes suppress duplicates and order display state before physical outer geometry", () => {
   expect(windowChanges(snapshot, structuredClone(snapshot))).toEqual([]);

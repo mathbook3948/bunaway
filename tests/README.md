@@ -5,11 +5,12 @@
 MessageChannel로 네이티브 이벤트 전송 방향, 미확인 128개 상한과 종료 용량도 검사한다.
 Core 구독 큐 초과는 BUSY로 구독을 끝내고 이후 이벤트를 차단하는지 확인한다.
 이 계약 검사는 WebView2 실행을 포함하지 않는다.
+객체형 앱 정의의 `plugins` tuple에서도 이벤트 이름과 payload 타입을 추론하는지 타입 검사로 확인한다.
 
 `lifecycle/windows-window-events.test.ts`는 실제 Win32에서 API와 시스템 메뉴 명령의
 표시, 포커스, 이동, 크기, 최소화, 최대화, 복원과 전체화면 전환을 확인한다.
 중복 억제, 현재 물리 outer bounds, revision과 HWND 파괴 후 콜백 차단 및 재생성 식별자도 검사한다.
-OS가 전경 전환을 거부하면 focused 조회와 snapshot의 일치를 확인하고 실제 focus/blur
+각 전경 전환 요청의 반환값과 실제 전경 창을 확인한다. OS가 전환을 거부하면 focused 조회와 snapshot의 일치를 확인하고 실제 focus/blur
 전환은 검증하지 못했다는 메시지를 출력한다. 해당 실행을 focus/blur 성공으로 기록하지 않는다.
 `lifecycle/windows-window-events.ts`는 실제 WebView2로 구독한 세 문서에서 정상 전달,
 권한 거부, 구독 해제, snapshot 조회, 탐색과 창 재생성 및 정상 종료를 확인한다.
