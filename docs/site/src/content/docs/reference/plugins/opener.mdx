@@ -1,14 +1,16 @@
 ---
-title: opener.openUrl
-description: 허용된 HTTP 또는 HTTPS 주소를 Windows 기본 브라우저에서 엽니다.
+title: opener
+description: Windows에서 URL을 기본 브라우저로 열고 파일을 기본 연결 앱으로 열거나 Explorer에서 선택합니다.
 sidebar: { order: 5 }
 ---
 
 ```ts
 openUrl(url: string, options?: NativeInvokeOptions): Promise<null>
+openFile(path: string, options?: NativeInvokeOptions): Promise<null>
+revealFile(path: string, options?: NativeInvokeOptions): Promise<null>
 ```
 
-`@bunaway/plugin-opener`를 설치하고 앱의 `plugins`에 `openerPlugin`을 등록합니다. 현재 기본 브라우저 어댑터는 Windows에서 제공됩니다.
+`@bunaway/plugin-opener`를 설치하고 앱의 `plugins`에 `openerPlugin`을 등록합니다. 세 함수는 현재 Windows에서 제공됩니다.
 
 ```ts
 import { defineApp } from "@bunaway/backend";
@@ -17,17 +19,19 @@ import { openerPlugin } from "@bunaway/plugin-opener";
 export default defineApp({ modules: [], plugins: [openerPlugin] });
 ```
 
-화면이나 앱 백엔드에서 `openUrl`을 호출합니다.
+화면이나 앱 백엔드에서 세 함수를 호출합니다.
 
 ```ts
-import { openUrl } from "@bunaway/plugin-opener";
+import { openFile, openUrl, revealFile } from "@bunaway/plugin-opener";
 
 await openUrl("https://example.com/search?q=한글 값");
+await openFile("C:/Users/me/Documents/한글 보고서.txt");
+await revealFile("C:/Users/me/Documents/한글 보고서.txt");
 ```
 
-성공한 `null` 결과는 Windows Explorer가 브라우저 실행 요청을 접수했다는 뜻입니다. 브라우저가 표시되거나 페이지 로딩이 끝났다는 결과는 제공하지 않습니다.
+`openFile`은 파일을 기본 연결 앱으로 엽니다. `revealFile`은 부모 폴더에서 해당 파일 하나를 선택하도록 Explorer에 요청합니다. 성공한 `null` 결과는 OS가 요청을 접수했다는 뜻입니다. 브라우저나 기본 앱의 표시와 실행 완료, 파일 읽기 완료 또는 Explorer 선택 완료를 기다리지 않습니다.
 
-## 입력
+## URL 입력
 
 `url`은 절대 HTTP 또는 HTTPS 주소여야 합니다. 입력과 정규화된 URL은 각각 최대 8,192자입니다. 호스트 이름이 유효해야 하며 제어 문자, 역슬래시, 앞뒤 공백은 허용하지 않습니다. `file:`, `javascript:`와 임의 커스텀 스킴은 거부합니다.
 
@@ -36,6 +40,14 @@ await openUrl("https://example.com/search?q=한글 값");
 ```ts
 await openUrl("https://example.com/도움말?q=검색어 입력");
 ```
+
+## 파일 입력
+
+`path`는 드라이브부터 지정한 `C:\folder\file.txt` 또는 UNC 공유를 지정한 `\\server\share\file.txt`와 같은 절대 Windows 파일 경로여야 합니다. `/`를 `\`로 바꾸고 드라이브 문자를 대문자로 바꾸며, Unicode, 한글, 파일명 중간의 공백과 쉼표를 보존합니다. 최대 길이는 259 UTF-16 코드 단위이고 각 이름은 최대 255 단위입니다. 파일이 존재해야 하며 디렉터리는 거부합니다.
+
+상대 경로, `C:file.txt` 같은 드라이브 상대 경로, `.`과 `..`, 중복 구분자, 제어 문자, 잘못된 Unicode, 예약 장치명, 이름 끝의 점이나 공백, alternate data stream, `\\?\`와 `\\.\` 장치 경로는 거부합니다. 파일과 부모 디렉터리는 파일 시스템의 실제 이름으로 지정해야 합니다. reparse point, junction, 심볼릭 링크, 하드 링크와 8.3 별칭을 통한 접근은 허용하지 않습니다.
+
+권한 확인 뒤 파일을 읽기 접근으로, 부모 디렉터리를 조회 접근으로 검사합니다. 파일이 없으면 `INVALID_ARGUMENT`과 `details.reason: "FILE_NOT_FOUND"`를 반환합니다. 읽기나 조회 권한이 없거나 공유 잠금과 충돌하면 `PERMISSION_DENIED`입니다. OS 요청 제출 중에는 파일과 부모 핸들을 유지해 경로 교체를 막고 성공과 실패 모두에서 해제합니다.
 
 ## 정책
 
@@ -58,18 +70,44 @@ await openUrl("https://example.com/도움말?q=검색어 입력");
 
 설치나 플러그인 등록만으로 권한이 생기지 않습니다. 이 권한은 URL 대상을 제한하지 않으므로 허용된 호출자는 모든 HTTP와 HTTPS 주소를 열 수 있습니다.
 
+파일 작업에는 각각 `opener:openFile`, `opener:revealFile` 권한과 정확한 파일을 나타내는 `{ path: string }` scope가 필요합니다. 화면 직접 호출은 뷰의 `commands`에 `plugin.opener.openFile`, `plugin.opener.revealFile`도 추가합니다. 예를 들어 뷰의 `host`를 다음과 같이 설정합니다.
+
+```json
+{
+  "permissions": [
+    {
+      "identifier": "opener:openFile",
+      "allow": [{ "path": "C:/Users/me/Documents/한글 보고서.txt" }]
+    },
+    {
+      "identifier": "opener:revealFile",
+      "allow": [{ "path": "C:/Users/me/Documents/한글 보고서.txt" }],
+      "deny": [{ "path": "C:/Users/me/Documents/비공개.txt" }]
+    }
+  ]
+}
+```
+
+setup에서 호출할 때는 같은 grants를 루트 `backend.permissions`에 둡니다. 단순 문자열 권한으로 파일 접근을 허용할 수 없습니다. 경로는 구분자와 드라이브 문자 정규화 뒤 대소문자까지 정확히 일치해야 합니다. 하위 폴더 포함이나 와일드카드는 없으며 deny가 allow보다 우선합니다. `opener:openUrl`은 파일 권한을 부여하지 않습니다.
+
+파일 scope는 요청한 파일만 제한하며 연결 앱의 동작을 격리하지 않습니다. 실행 파일과 셸 바로가기도 기본 동작으로 실행될 수 있으므로 신뢰하는 파일에만 `openFile`을 허용합니다. 지정 앱 열기와 기본 연결 변경은 지원하지 않습니다.
+
 화면 호출은 `signal`과 절대 시각 `deadline`을 `options`로 전달할 수 있습니다. 호출 취소와 기한은 [invoke](/reference/client/invoke/) 규칙을 따릅니다. 백엔드 호출은 현재 명령의 취소와 기한을 이어받으며 별도 `options`를 받지 않습니다.
 
 ## 결과와 오류
 
 `null`은 Windows Explorer가 브라우저 실행 요청을 접수했음을 나타냅니다. 실행에는 접근 가능한 Explorer 데스크톱이 필요합니다. Explorer가 브라우저를 실행하므로 브라우저는 앱의 종료용 Job을 상속하지 않고, 앱 종료나 개발 재시작 뒤에도 유지됩니다. 브라우저 프로세스나 페이지 상태는 추적하지 않으며 취소된 호출을 되돌리지 않습니다.
 
+`openFile`도 Explorer에 실행을 위임해 기본 연결 앱이 앱의 종료용 Job을 상속하지 않게 합니다. `revealFile`은 경로를 셸 명령 문자열에 붙이지 않고 파일 식별자를 OS에 전달합니다. 접수 이후의 파일 소실, 연결 앱 부재, 앱 내부 실패와 화면 변경은 반환 결과에 포함하지 않습니다. OS 호출을 진행하는 동안 취소나 기한 초과가 발생해도 OS 작업은 반환할 때까지 계속될 수 있습니다. UNC 공유와 셸 확장의 응답이 느리면 UI도 기다릴 수 있습니다.
+
+Host operation은 `opener.openUrl`, `opener.openFile`, `opener.revealFile`입니다. 입력은 URL 작업에서 `{ url: string }`, 파일 작업에서 `{ path: string }`이고 모두 `null`을 반환합니다.
+
 | 오류 | 의미 |
 | --- | --- |
-| `INVALID_ARGUMENT` | URL 형식이나 길이가 허용 범위를 벗어남 |
-| `PERMISSION_DENIED` | 호출 출처에 `opener:openUrl` 권한이 없음 |
+| `INVALID_ARGUMENT` | URL이나 파일 경로가 유효하지 않거나 디렉터리 입력, 파일 소실. 파일 소실은 `details.reason`이 `FILE_NOT_FOUND` |
+| `PERMISSION_DENIED` | 작업 권한이나 파일 scope가 없음, OS 파일 접근 거부, 공유 잠금 충돌, 링크나 경로 별칭 거부 |
 | `UNSUPPORTED` | 현재 플랫폼이나 실행 환경에서 기능을 지원하지 않음 |
-| `INTERNAL` | Explorer 데스크톱에 접근하거나 실행 요청을 전달하지 못함 |
+| `INTERNAL` | 파일 검사 실패, Explorer 데스크톱 접근 실패 또는 다른 OS 요청 실패 |
 | `CANCELLED`, `TIMEOUT` | 호출이 취소되었거나 기한을 넘김 |
 
 닫힌 앱의 플러그인 자원은 앱 종료 과정에서 정리합니다. 자세한 패키지 계약과 Windows 검증 방법은 [`@bunaway/plugin-opener` README](https://github.com/mathbook3948/bunaway/tree/main/plugins/opener)를 참고하세요.

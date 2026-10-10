@@ -32,6 +32,37 @@ import { dlopen, ptr } from "bun:ffi";
 import { parentPort } from "node:worker_threads";
 import { createShell } from ${JSON.stringify(shellModule)};
 import { createOperations } from ${JSON.stringify(operationsModule)};
+import { createFiles } from ${JSON.stringify(resolve("plugins/opener/src/windows-file.ts"))};
+import { writeFileSync, mkdirSync, linkSync, symlinkSync, unlinkSync } from "node:fs";
+import { join } from "node:path";
+const sample = ${JSON.stringify(resolve(root, "한글 공백, 😀.txt"))};
+writeFileSync(sample, "file content");
+const permissions = (action, path) => ({ permissions: [{ identifier: "opener:" + action, allow: [{ path }] }] });
+const fileAdapter = createOperations({ dataRoot: ".", capabilities: [] });
+try {
+  // Valid file and grant reach a real OS failure because this thread has no COM apartment.
+  assert.throws(() => fileAdapter.executeUI("opener.openFile", { path: sample }, "backend", {
+    requestId: "os-failure", permissions: permissions("openFile", sample),
+  }), (error) => error.code === "INTERNAL");
+} finally { fileAdapter.dispose(); }
+
+const files = createFiles();
+try {
+  files.withFile(sample, () => {
+    assert.throws(() => unlinkSync(sample), "The file must remain pinned during request submission");
+  });
+  const hardlink = sample + ".link";
+  linkSync(sample, hardlink);
+  assert.throws(() => files.withFile(sample, () => assert.fail("Hardlink escaped checks")), (error) => error.code === "PERMISSION_DENIED");
+  unlinkSync(hardlink);
+  const directory = ${JSON.stringify(resolve(root, "folder"))};
+  const junction = ${JSON.stringify(resolve(root, "alias"))};
+  mkdirSync(directory);
+  writeFileSync(join(directory, "file.txt"), "linked file");
+  symlinkSync(directory, junction, "junction");
+  assert.throws(() => files.withFile(join(junction, "file.txt"), () => assert.fail("Junction escaped checks")), (error) => error.code === "PERMISSION_DENIED");
+  assert.throws(() => files.withFile(sample.replace(".txt", ".TXT"), () => assert.fail("Case alias escaped checks")), (error) => error.code === "PERMISSION_DENIED");
+} finally { files.dispose(); files.dispose(); }
 const ole = dlopen("ole32.dll", {
   CoInitializeEx: { args: ["ptr", "u32"], returns: "i32" },
   CoGetApartmentType: { args: ["ptr", "ptr"], returns: "i32" },
@@ -65,6 +96,26 @@ try {
 
   const adapter = createOperations({ dataRoot: ".", capabilities: [] });
   try {
+    for (const action of ["openFile", "revealFile"]) {
+      const call = (path, grants) => adapter.executeUI("opener." + action, { path }, "backend", {
+        requestId: "files", permissions: grants,
+      });
+      assert.throws(() => call(sample, { permissions: ["opener:openUrl", "opener:" + action] }), (error) => error.code === "PERMISSION_DENIED");
+      const missing = sample + ".missing";
+      assert.throws(() => call(missing, permissions(action, sample)), (error) => error.code === "PERMISSION_DENIED");
+      assert.throws(() => call(missing, permissions(action, missing)), (error) => error.code === "INVALID_ARGUMENT" && error.details.reason === "FILE_NOT_FOUND");
+      const directory = ${JSON.stringify(root)};
+      assert.throws(() => call(directory, permissions(action, directory)), (error) => error.code === "INVALID_ARGUMENT");
+      const lockApi = dlopen("kernel32.dll", {
+        CreateFileW: { args: ["ptr", "u32", "u32", "ptr", "u32", "u32", "u64"], returns: "u64" },
+        CloseHandle: { args: ["u64"], returns: "i32" },
+      });
+      const lock = lockApi.symbols.CreateFileW(ptr(Buffer.from(sample + "\\0", "utf16le")), 0x80000000, 0, null, 3, 0, 0n);
+      assert.notEqual(lock, 0xffffffffffffffffn);
+      try {
+        assert.throws(() => call(sample, permissions(action, sample)), (error) => error.code === "PERMISSION_DENIED");
+      } finally { lockApi.symbols.CloseHandle(lock); lockApi.close(); }
+    }
     assert.throws(
       () => adapter.execute("opener.openUrl", { url: "https://example.com/" }, "backend"),
       (error) => error instanceof Error && "code" in error && error.code === "UNSUPPORTED",

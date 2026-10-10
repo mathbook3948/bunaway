@@ -236,7 +236,12 @@
       "name": "@bunaway/plugin-opener",
       "source": "plugins/opener/src/index.ts",
       "pages": {
-        "reference/plugins/opener": ["openUrl", "openerPlugin"]
+        "reference/plugins/opener": [
+          "openUrl",
+          "openFile",
+          "revealFile",
+          "openerPlugin"
+        ]
       }
     },
     {
@@ -747,7 +752,11 @@
     "reference/host/storage-stat": ["storage.stat"],
     "reference/host/log-write": ["log.write"],
     "reference/host/capabilities-get": ["capabilities.get"],
-    "reference/plugins/opener": ["opener.openUrl"],
+    "reference/plugins/opener": [
+      "opener.openUrl",
+      "opener.openFile",
+      "opener.revealFile"
+    ],
     "reference/host/windows": [
       "windows.list",
       "windows.create",

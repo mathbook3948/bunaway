@@ -278,10 +278,15 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 기본 브라우저에서 HTTP/HTTPS URL을 연다.
   `@bunaway/plugin-opener`의 `openUrl`과 `opener:openUrl`
   권한을 제공한다. Explorer에 실행을 위임하며 성공은 요청 접수를 뜻한다.
-  커스텀 스킴, 파일과 지정 앱 열기는 지원하지 않는다.
+  커스텀 스킴과 지정 앱 열기는 지원하지 않는다.
   공개 계약은 [opener 문서](../plugins/opener/README.md)를 따른다.
-- [ ] 기본 앱 또는 지정 앱으로 파일과 URL을 연다.
-- [ ] Explorer에서 파일을 선택해 표시한다.
+- [x] `openFile`로 기본 연결 앱에서 파일을 연다. `opener:openFile`과 정확한 절대 파일 경로 scope를 요구한다.
+- [x] `revealFile`로 Explorer에서 파일을 선택해 표시한다. `opener:revealFile`과 같은 형태의 scope를 요구한다.
+  두 작업은 Unicode와 공백을 보존하며 파일 소실, 접근 거부와 OS 요청 실패를 반환한다.
+  성공은 요청 접수이며 실제 앱 실행이나 Explorer 선택 완료를 뜻하지 않는다.
+  계약 검사, 실제 Windows STA와 설치한 플러그인의 compiled EXE 검증은
+  [실행 기록](./architecture/windows-bun-results.md)에 구분한다.
+- [ ] 지정 앱으로 파일과 URL을 연다.
 - [ ] 파일을 휴지통으로 보내고 실패를 반환한다.
 - [ ] Windows 바로가기 생성, 읽기와 변경을 제공한다.
 - [ ] OS beep와 이모지 패널의 지원을 결정한다.
