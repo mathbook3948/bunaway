@@ -1,6 +1,8 @@
-# 데스크톱 기능 TODO: Tauri와 Electron 비교
+# Windows 데스크톱 기능 TODO: Tauri와 Electron 비교
 
-기준일: 2026-10-09. bunaway `ef69d90`의 Windows 구현을 기준으로 갱신했다.
+macOS의 현재 구현과 후속 작업은 [macOS TODO](./TODO-macos.md)에서 관리한다.
+
+기준일: 2026-10-10. bunaway `c26caea`의 Windows 구현을 기준으로 갱신했다.
 Tauri v2의 기본 API와 공식 플러그인, Electron의 공개 API를 기능별로 대조한다.
 창 최소 크기와 최대 크기처럼 초기 설정, 실행 중 변경, 조회, 이벤트가 따로 필요한
 기능은 각각 작업으로 기록한다. 비교 대상의 메서드 이름이나 바이너리와의 호환을
@@ -14,6 +16,10 @@ Tauri v2의 기본 API와 공식 플러그인, Electron의 공개 API를 기능�
 2026-10-09 갱신은 이후 병합된 창 크기 제약, HTTP/HTTPS opener, 저장소 메타데이터와
 설치 바로가기 보존 구현을 반영했다. 완료 표시는 기준 코드의 구현 여부로 판단한다.
 Tauri와 Electron 비교 자료의 기준 버전은 이전 스냅샷을 유지한다.
+
+2026-10-10 갱신은 창 상태 변경 5개와 상태 조회 5개, 호환되는 개발 앱의 명령 구현
+교체를 반영했다. 공통 Worker 채널과 앱 manifest 정리, Bun 기반 네이티브 실행기 전환도
+현재 구현 근거에 포함한다. 비교 대상의 API 목록은 새로 전수 대조하지 않았다.
 
 ## 상태와 작업 기준
 
@@ -53,7 +59,8 @@ Tauri와 Electron 비교 자료의 기준 버전은 이전 스냅샷을 유지�
 - [ ] 숨긴 상태로 창을 생성하고 준비된 뒤 표시하는 옵션을 제공한다.
 - [ ] 포커스를 가져오지 않고 창을 표시하는 `showInactive`를 제공한다.
 - [ ] blur와 활성 창 전환 API를 제공한다.
-- [ ] 창의 visible, focused, destroyed, normal 상태를 조회한다.
+- [x] `isVisible`과 `isFocused`로 실제 창의 표시 상태와 전경 창 여부를 조회한다.
+- [ ] 창의 destroyed와 normal 상태를 조회한다.
 - [ ] 일반 close와 확인을 우회하는 trusted destroy의 계약을 구분한다.
 - [ ] 실행 중 창 생성 옵션을 지정하는 기능의 지원 범위와 권한을 결정한다. 현재는 사전 선언만 지원한다.
 - [ ] 하나의 뷰에서 여러 창을 만드는 기능과 식별자, 정책의 관계를 결정한다. 현재는 뷰별 창 하나다.
@@ -100,8 +107,11 @@ Tauri와 Electron 비교 자료의 기준 버전은 이전 스냅샷을 유지�
 우선순위 P1, 효과와 특수 창은 P2. 소유자: 호스트와 창 API. 출처: [T-window], [E-window], [E-window-options].
 
 - [x] 현재 모니터의 전체화면과 이전 표시 상태, 위치 복원을 제공한다.
-- [ ] minimize, maximize, unmaximize, restore와 toggleMaximize API를 제공한다.
-- [ ] 최소화, 최대화, 전체화면 상태를 조회한다.
+- [x] minimize, maximize, unmaximize, restore와 toggleMaximize API를 제공한다.
+- [x] `isMinimized`, `isMaximized`, `isFullscreen`으로 최소화, 최대화, 전체화면 상태를 조회한다.
+- [x] 최소화 전 최대화 상태의 복원, 일반 크기 복원과 반복 호출의 동작을 정의한다.
+- [x] 숨긴 창의 상태 변경은 창을 표시하고, 전체화면 중 다섯 상태 변경은 `INVALID_ARGUMENT`로 거부한다.
+- [x] 상태 조회에도 대상 뷰의 `windows:control` 권한을 적용하고 닫힌 창의 오류를 처리한다.
 - [ ] 초기 maximized와 fullscreen 옵션을 지원한다.
 - [ ] minimizable, maximizable, closable, fullscreenable을 설정하고 조회한다.
 - [ ] 초기 및 실행 중 focusable을 설정하고 조회한다.
@@ -129,6 +139,11 @@ Tauri와 Electron 비교 자료의 기준 버전은 이전 스냅샷을 유지�
 - [ ] 접근성용 창 제목을 일반 제목과 별도로 설정한다.
 - [ ] 신뢰된 네이티브 어댑터에 HWND와 native WebView 접근을 제공하는 범위를 정한다.
 - [ ] Windows message hook의 등록, 조회, 개별 해제와 전체 해제를 제공한다.
+
+`restore`는 최소화 전의 일반 또는 최대화 상태를 복원하고 `unmaximize`는 일반 크기를
+적용한다. `isVisible`은 다른 창에 가려졌거나 화면 밖에 있는지 판정하지 않는다.
+최소화를 제외한 상태 변경은 활성화를 요청하지만 포커스 획득을 보장하지 않는다.
+현재 계약과 오류는 [창 API](./site/src/content/docs/reference/host/windows.mdx)를 따른다.
 
 ## 04. 창 이벤트와 상태 저장
 
@@ -635,7 +650,9 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 우선순위 P2, 실험 API는 P3. 소유자: CLI와 호스트, 앱 로그는 공식 기능 플러그인.
 출처: [E-debugger], [E-tracing], [E-crash], [E-net-log], [E-process], [T-log], [T-mocks].
 
-- [x] UI HMR과 백엔드 변경 재시작을 제공한다.
+- [x] 외부 개발 서버의 UI HMR과 앱 계약, 정책, 플러그인 및 실행 설정 변경의 전체 재시작을 제공한다.
+- [x] 호환되는 Windows 개발 앱의 명령 구현만 교체하고 창, 문서, StateStore, 세션과 구독을 유지한다.
+- [x] 앱 코드 빌드 오류 동안 기존 구현을 유지하고 진행 중 요청은 이전 구현으로 완료한다.
 - [x] 웹 build.command와 앱 빌드를 통합하고 프로세스 종료를 관리한다.
 - [x] Windows 개발 모드 DevTools와 `dev --inspect`를 제공한다.
 - [x] UI와 백엔드 소스맵과 원본 명령 오류 스택을 제공한다.
@@ -656,6 +673,11 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 - [ ] 시작 시간, 유휴 메모리, 패키지 크기와 명령 지연의 기준 측정을 기록한다.
 - [ ] 각 UI 템플릿의 실제 Windows dev, HMR, build와 package 실행을 검증한다.
 - [ ] 고급 process crash, hang, heap snapshot과 JavaScript stack 수집의 지원 범위를 결정한다.
+
+명령 교체는 Windows 개발 모드에만 적용한다. 모듈 변수는 새로 초기화되며 플러그인
+setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 않는다. 공통 계약이나
+설정이 바뀌면 전체 재시작한다. [개발 가이드](./site/src/content/docs/guides/development.mdx)와
+[실제 앱 코드 교체 기록](./architecture/windows-bun-results.md#2026-10-09-앱-코드-교체)을 따른다.
 
 ## 25. 선택 렌더러와 고급 데스크톱 기능
 
@@ -682,7 +704,8 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 우선순위 P3. Windows 완성 후 진행한다. 소유자: 플랫폼 호스트와 공식 기능 패키지.
 출처: [T-window], [T-app], [E-window], [E-app], [E-dock], [E-touch], [E-system], [E-share], [E-purchase], [E-push].
 
-- [ ] macOS를 같은 Bun 앱 정의와 desktop, window, WebView 계약에 맞춘다.
+- [x] macOS를 같은 Bun 앱 정의로 실행하고 직접 FFI와 같은 프로세스의 백엔드 Worker에 연결한다.
+- [ ] macOS의 desktop, 다중 창과 네이티브 플러그인 계약을 맞춘다. [macOS TODO](./TODO-macos.md)를 따른다.
 - [ ] Linux 호스트와 렌더러를 구현하고 X11/Wayland별 기능 차이를 명시한다.
 - [ ] macOS activation policy, app hide/show와 Dock visibility를 제공한다.
 - [ ] Dock icon, badge, bounce, menu와 recent documents를 제공한다.
@@ -743,14 +766,21 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 
 우선순위 P1. 소유자: 각 기능의 구현 담당자와 배포 도구.
 
+완료 표시는 저장소에 기록된 실행 결과를 뜻한다. 이번 문서 갱신에서 네이티브
+실행을 새로 수행한 것은 아니다.
+
 - [ ] Windows 10/11의 지원 최소 버전과 실제 검증 환경을 확정한다.
 - [ ] WebView2 최소 버전과 Evergreen, Fixed Version 배포 지원을 확정한다.
 - [ ] Windows ARM64 지원과 x64 emulation 범위를 확정한다.
 - [ ] 최소와 최대 크기, DPI와 다중 모니터 회귀를 실제 사용자 조작으로 검증한다.
+- [x] 로컬 Windows x64에서 실제 Win32와 WebView2로 상태 제어와 조회, 권한 거부와 전체화면 중 변경 거부를 검증한다.
+  2026-10-10의 [창 상태 검증 기록](./architecture/windows-bun-results.md#2026-10-10-창-상태-제어와-조회)을 따른다.
+  실제 다른 DPI의 물리 모니터 이동과 초기 maximized/fullscreen 옵션, 창 이벤트는 이 결과에 포함하지 않는다.
 - [ ] IME, keyboard layout, 고대비와 스크린 리더 회귀를 검증한다.
 - [ ] tray, autostart, file association과 toast를 깨끗한 Windows 설치에서 검증한다.
 - [ ] suspend/resume, 잠금과 Explorer 재시작 후 자원과 구독을 검증한다.
-- [ ] WebView 장애, 전체 앱 비정상 종료와 강제 종료 뒤 자원 정리를 검증한다.
+- [x] 로컬 Windows x64에서 WebView 장애 복구와 앱 강제 종료 후 Job의 자손 회수를 검증한다.
+- [ ] 최소 지원 OS, CPU와 다른 Job 정책의 환경에서 장애 및 강제 종료 뒤 자원 정리를 검증한다.
 - [ ] 각 플랫폼의 supported/experimental/unsupported와 OS permission 값을 실제 구현에 맞춘다.
 - [ ] 지원 목록, CLI 진단, 문서와 배포 산출물을 같은 릴리스로 갱신한다.
 - [ ] 플랫폼별 설치 패키지 형식과 배포 채널을 확정하고 [PRD](./PRD.md)의 9절 출시 기준 및
@@ -772,7 +802,7 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 
 ## 다음 작업 묶음
 
-1. 창 크기와 위치의 남은 API, 기본 상태 제어와 창 이벤트: 02, 03, 04.
+1. 창 크기와 위치의 남은 API, 초기 창 상태 옵션과 창 이벤트: 02, 03, 04.
 2. 트레이 개별 아이콘과 메뉴, autostart, 전역 단축키: 06, 07, 08.
 3. 파일 열기와 지정 앱 opener 확장, 파일 대화상자, 클립보드와 알림: 09, 10, 11, 12.
 4. 모니터와 DPI, 테마, 창 상태 저장과 OS 연결: 04, 09, 13.
