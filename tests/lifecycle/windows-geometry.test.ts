@@ -565,16 +565,17 @@ test.skipIf(process.platform !== "win32")(
         expect(native.getBounds(hwnd, "normal")).toEqual(
           native.getBounds(hwnd, "outer"),
         );
-        // Odd physical sizes must survive without a logical round-trip on unconstrained axes.
+        // Use odd sizes below the applied bounds, which Win32 may have capped at its
+        // maximum tracking size. Unconstrained axes must avoid a logical round-trip.
         const beforeSize = native.getBounds(hwnd, "outer");
-        await invoke("windows.setOuterSize", {
-          width: beforeSize.width + 1,
-          height: beforeSize.height + 1,
-        });
+        const oddSize = {
+          width: Math.floor(beforeSize.width / 2) * 2 - 1,
+          height: Math.floor(beforeSize.height / 2) * 2 - 1,
+        };
+        await invoke("windows.setOuterSize", oddSize);
         expect(native.getBounds(hwnd, "outer")).toEqual({
           ...beforeSize,
-          width: beforeSize.width + 1,
-          height: beforeSize.height + 1,
+          ...oddSize,
         });
         await invoke("windows.setContentPosition", {
           x: -1,
