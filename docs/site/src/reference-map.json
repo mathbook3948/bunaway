@@ -437,7 +437,9 @@
       "pages": {
         "reference/tooling/plugin-api": [
           "show",
+          "showInactive",
           "focus",
+          "activate",
           "close",
           "minimize",
           "maximize",
@@ -795,8 +797,11 @@
       "windows.create",
       "windows.recreate",
       "windows.show",
+      "windows.showInactive",
       "windows.hide",
       "windows.focus",
+      "windows.blur",
+      "windows.activate",
       "windows.minimize",
       "windows.maximize",
       "windows.unmaximize",

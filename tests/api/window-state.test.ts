@@ -118,6 +118,8 @@ function fixture() {
       throw new Error("Snapshot is not used in this state test.");
     },
     show() {},
+    showInactive() {},
+    activate: () => true,
     focus: () => true,
     close: () => true,
     minimize: () => apply("minimize"),

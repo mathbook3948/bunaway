@@ -30,6 +30,16 @@ Linux와 macOS에서는 기존 추출 트리와 루트의 심볼릭 링크가 �
 게시 후 백업 정리 실패, Android 출력 대상과 패키징 BuildTarget의 분리를 검사한다.
 
 `api/clipboard.test.ts`는 텍스트 계약, 작업별 권한, SDK 호출 컨텍스트와 브라우저 번들을 검사한다.
+`api/window-activation.test.ts`는 `showInactive`, `blur`, `activate`의 입력과 결과,
+대상 권한과 열린 창 검사, 설정 순서의 후보 선택, 후보 권한 거부와 OS 전환 거부를 검사한다.
+`lifecycle/windows-activation.test.ts`는 실제 두 Win32 창과 EDIT 입력 필드를 사용한다.
+일반, 최소화, 최대화와 최대화에서 최소화한 창을 표시하거나 숨긴 뒤 `showInactive`를
+호출해 활성 창과 키보드 입력 포커스 보존, 표시 상태와 이벤트, snapshot의 일치를 확인한다.
+`activate`가 숨김과 최소화를 유지하는지도 검사한다. 전경 전환을 OS가 거부한 실행은
+입력 포커스 보존 결과와 구분해 기록하며 실제 전경 blur와 focus 성공으로 계산하지 않는다.
+DLL 대체 fixture는 반환 BOOL과 실제 전경 상태가 다를 때 관찰 상태를 반환하고,
+동기 활성화 콜백 뒤에 반영된 상태도 중복 이벤트 없이 전달하는지 검사한다.
+WebView2 경로는 기존 `windows-bun-window-api.ts`와 `windows-window-events.ts`에 포함한다.
 `lifecycle/clipboard-resources.test.ts`는 별도 프로세스의 Win32 바인딩 대체로 메모리 실패,
 소유권 이전, 잘못된 UTF-16, 점유와 취소, 종료 정리를 확인하며 데스크톱 클립보드를 바꾸지 않는다.
 실제 Windows 검사는 `BUNAWAY_CLIPBOARD_NATIVE=1`을 설정한 뒤

@@ -452,7 +452,9 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
       return {
         getSnapshot: () => nativeWindows.getSnapshot(hwnd),
         show: (visible) => nativeWindows.show(hwnd, visible),
+        showInactive: () => nativeWindows.showInactive(hwnd),
         focus: () => nativeWindows.focus(hwnd),
+        activate: () => nativeWindows.activate(hwnd),
         close: () => closeWindow(viewId),
         minimize: () => nativeWindows.minimize(hwnd),
         maximize: () => nativeWindows.maximize(hwnd),

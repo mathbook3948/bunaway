@@ -113,8 +113,12 @@ export type NativeWindow = {
   getSnapshot(): WindowSnapshot;
   /** Shows or hides the native window. */
   show(visible: boolean): void;
+  /** Shows without activation, preserving normal, minimized or maximized state and other input focus. */
+  showInactive(): void;
   /** Focuses the window and reports whether the request succeeded. */
   focus(): boolean;
+  /** Activates only an already visible, non-minimized window; returns its observed foreground state. */
+  activate(): boolean;
   /** Starts a normal close request; returns false when it is declined or hides to tray. */
   close(): boolean | Promise<boolean>;
   /** Minimizes and displays the window, allowing Windows to activate another window. */

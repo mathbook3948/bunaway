@@ -421,6 +421,8 @@ test("geometry adapter selects the area, converts at current DPI, and enforces t
         throw new Error("Snapshot is not used in this geometry test.");
       },
       show() {},
+      showInactive() {},
+      activate: () => true,
       focus: () => true,
       close: () => true,
       minimize() {},
