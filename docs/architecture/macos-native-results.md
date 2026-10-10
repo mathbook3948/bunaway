@@ -67,23 +67,22 @@ macOS 10.15부터 제공되는 동등 `posix_spawn_file_actions_addchdir_np`를 
 ```sh
 mise run install
 mise run check
-# 공유 캐시의 다운로드/추출 때문에 반드시 직렬 실행
-mise run probe:macos
 mise run host:macos
 ```
 
 Apple Silicon, Xcode CLT, 실제 AppKit/WKWebView를 실행할 GUI 세션이 필요하다.
 Intel pin은 없으며 현재 스크립트가 다른 CPU를 거부한다.
 위 2026-10-05 CI 기록은 `.app` 없이 패키지 실행 파일을 직접 실행한 결과다.
-현재 CI는 `run.sh --app`으로 ad-hoc 서명한 `.app`도 실행한다.
+현재 CI는 `mise run host:macos -- --app`으로 ad-hoc 서명한 `.app`도 실행한다.
 코드 커밋 `fae4b80`의 [2026-10-07 실행](https://github.com/mathbook3948/bunaway/actions/runs/37554130779/job/112576288095)은 통과했다.
-probe/host는 실패를 throw/nonzero로 전달하며, CI의 bash `-e -o pipefail`은
+제품 호스트 검사는 실패를 throw/nonzero로 전달하며, CI의 bash `-e -o pipefail`은
 로그용 `tee` 뒤에서도 실패를 보존한다. skip 또는 GUI 모킹을 사용하지 않는다.
+
+과거 probe 실행 결과는 위 기록에 보존한다. 독립 실험 코드와 실행기는 제거했으며
+현재 재현 명령과 진단 산출물에는 포함하지 않는다.
 
 ## 회귀 범위와 진단 산출물
 
-- probe: 실제 POSIX spawn, NDJSON IPC, 한글/공백 경로, Bun 없는 PATH, 환경 격리,
-  계산, Promise, 타이머, 이벤트, 프레이밍, 과부하, 역압, 정상/강제 종료, guard 정리.
 - host: 네이티브 FIFO/스킴 핸들러/리소스 필터와 공통 검증기, 실제 WKWebView의
   SDK, 코어, 정책, frame/origin, 세션, 저장, 취소, 허용/차단 script/image/fetch 요청,
   새 Bun 프로세스의 메모 읽기, WebContent 강제 종료 후 복구와 guard 정리.
@@ -94,9 +93,8 @@ probe/host는 실패를 throw/nonzero로 전달하며, CI의 bash `-e -o pipefai
 
 | 경로 | 내용 |
 | --- | --- |
-| `build/macos-probe/macos-probe-results.json` | OS/CPU, pin, 호스트 해시, test별 ok/error, 실제 IPC trace |
 | `build/macos-host-results.json` | OS/CPU, test별 ok/error, 소요 시간 |
-| `build/macos-native-logs/` | runner 환경, install, probe, host 빌드/드라이버 stdout/stderr |
+| `build/macos-native-logs/` | runner 환경, install, host 빌드/드라이버 stdout/stderr |
 | `build/macos-host-diagnostics/` | native 회귀 stdout/stderr, 실행별 호스트 stderr, test별 logs/temp 보고서 snapshot |
 
 다음 테스트의 `resetData()` 전에 snapshot을 남겨 앞선 호스트/페이지 보고서가
@@ -108,7 +106,7 @@ probe/host는 실패를 throw/nonzero로 전달하며, CI의 bash `-e -o pipefai
 ## 남은 제약
 
 [지원 표](../platform-support/README.md)를 따른다. Intel, 다중 창/뷰, 최소 OS,
-Developer ID, 공증, 설치, 스토어 배포는 미검증이다. `run.sh --app`은 ad-hoc 서명이며
+Developer ID, 공증, 설치, 스토어 배포는 미검증이다. `mise run host:macos -- --app`은 ad-hoc 서명이며
 메모 예제는 CLI로 실행하며 회귀용 메모 fixture는 테스트 폴더에 분리되어 있다.
 guard는 Bun을 spawn한 뒤 연결되므로 그 짧은 구간의 비정상 호스트 종료 race는 남는다.
 

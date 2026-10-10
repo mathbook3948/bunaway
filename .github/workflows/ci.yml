@@ -107,6 +107,8 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+      - name: Set up mise and pinned Bun
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
       - name: Verify runner matches the pinned native runtime
         run: |
           mkdir -p build/macos-native-logs
@@ -119,24 +121,18 @@ jobs:
             launchctl managername
             test "$(uname -m)" = arm64
             test "$RUNNER_ARCH" = ARM64
-            /usr/bin/python3 -c 'import json; pin = json.load(open("runtime/build-manifests/darwin-aarch64.json")); assert pin["bun"]["target"] == "darwin-aarch64"; print(pin["bun"])'
+            mise exec -- bun -e 'import assert from "node:assert/strict"; const pin = await Bun.file("runtime/build-manifests/darwin-aarch64.json").json(); assert.equal(pin.bun.target, "darwin-aarch64"); console.log(pin.bun);'
           } 2>&1 | tee build/macos-native-logs/runner.log
-      - name: Set up mise and pinned Bun
-        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
       - name: Install locked dependencies
         run: mise run install 2>&1 | tee build/macos-native-logs/install.log
-      # Both scripts populate build/cache/bun: never run cold builds in parallel.
-      - name: Build and test bundled-process probe
-        run: mise run probe:macos 2>&1 | tee build/macos-native-logs/probe.log
       - name: Build and test real WKWebView host and signed in-place app
-        run: mise exec -- zsh native/macos/host/run.sh --app 2>&1 | tee build/macos-native-logs/host.log
+        run: mise exec -- bun --no-env-file tests/lifecycle/run-native.ts --app 2>&1 | tee build/macos-native-logs/host.log
       - name: Upload native test reports and logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: macos-native-diagnostics
           path: |
-            build/macos-probe/macos-probe-results.json
             build/macos-host-results.json
             build/macos-native-logs/
             build/macos-host-diagnostics/

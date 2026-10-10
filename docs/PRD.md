@@ -21,7 +21,7 @@ Tauri에서 참고할 부분은 웹 UI, 백엔드 코어, 네이티브 호스트
 확정했으며 Windows의 저장, 로그와 기능 지원 조회는 개별 플러그인으로 이관했다.
 macOS 플러그인 어댑터는 후속 작업이다.
 
-이 문서는 책임, 인터페이스, 보안 규칙과 단계별 완료 조건을 정한다. A 단계의 계약 구현과 Windows B 단계의 번들 Bun 프로세스, IPC 실험을 완료했다. C 단계에서는 실제 SDK, 코어, Host API와 Windows WebView2 호스트를 연결했다. 세 창의 다중 창/뷰와 뷰별 정책 분리에서 메모 저장, 이벤트, 재실행 후 복원과 오류, 취소, 권한, 렌더러 재생성, 창별 종료를 검증한 기록이 있다([Windows C 실행 결과](./architecture/windows-host-results.md)). macOS arm64의 POSIX probe와 AppKit, WKWebView 단일 창/뷰 호스트도 구현돼 있다. [macOS 실행 기록](./architecture/macos-native-results.md)은 기존 로컬 기록, 이번 재실행과 실제 CI 결과를 구분한다. [Windows B 실행 결과](./architecture/windows-probe-results.md)는 별도 실험 기록이다. macOS Intel, 다중 창/뷰, Linux, 모바일 호스트와 설치, 배포는 미검증이다. macOS `.app` 생성, ad-hoc 서명은 Developer ID, 공증, 설치 검증이 아니다. 아래 요구사항 전체를 완료한 것은 아니며, 현재 범위는 [진행 상태](./architecture/progress.md)와 [플랫폼 지원 표](./platform-support/README.md)를 따른다.
+이 문서는 책임, 인터페이스, 보안 규칙과 단계별 완료 조건을 정한다. A 단계의 계약 구현과 Windows B 단계의 번들 Bun 프로세스, IPC 실험을 완료했다. C 단계에서는 실제 SDK, 코어, Host API와 Windows WebView2 호스트를 연결했다. 세 창의 다중 창/뷰와 뷰별 정책 분리에서 메모 저장, 이벤트, 재실행 후 복원과 오류, 취소, 권한, 렌더러 재생성, 창별 종료를 검증한 기록이 있다([Windows C 실행 결과](./architecture/windows-host-results.md)). macOS arm64의 AppKit, WKWebView 단일 창/뷰 호스트도 구현돼 있다. 독립 실험 코드는 제거했으며 과거 결과는 설계 기록으로 남긴다. [macOS 실행 기록](./architecture/macos-native-results.md)은 기존 로컬 기록, 이번 재실행과 실제 CI 결과를 구분한다. [Windows B 실행 결과](./architecture/windows-probe-results.md)는 별도 실험 기록이다. macOS Intel, 다중 창/뷰, Linux, 모바일 호스트와 설치, 배포는 미검증이다. macOS `.app` 생성, ad-hoc 서명은 Developer ID, 공증, 설치 검증이 아니다. 아래 요구사항 전체를 완료한 것은 아니며, 현재 범위는 [진행 상태](./architecture/progress.md)와 [플랫폼 지원 표](./platform-support/README.md)를 따른다.
 
 ### 제품 요구사항
 

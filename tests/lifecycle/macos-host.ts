@@ -1,4 +1,4 @@
-// Standalone integration runner: native/macos/host/run.sh builds the package first.
+// Standalone integration runner: tests/lifecycle/run-native.ts builds the package first.
 // Drives the real ObjC++ host end-to-end: packaged Bun backend, WKWebView
 // boundary, policy, unsupported native plugin rejection, session revocation on
 // navigation, renderer recovery, and process cleanup (guard watchdog).
@@ -260,7 +260,7 @@ if (app) {
 }
 assert.ok(
   existsSync(nativeTests),
-  `native tests not found: ${nativeTests}; run native/macos/host/run.sh first`,
+  `native tests not found: ${nativeTests}; run tests/lifecycle/run-native.ts first`,
 );
 await mkdir(workspace, {
   recursive: true,

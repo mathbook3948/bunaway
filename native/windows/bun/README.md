@@ -27,12 +27,12 @@ Worker 패킷은 `channel.ts`가 담당하며 Win32 창 제어 값을 소유하�
 
 ```powershell
 # 저장소: 의존성 검증, 패키지 빌드, 실제 GUI/보안/수명/CLI 회귀
-pwsh -NoProfile -File native/windows/bun/run.ps1
+mise run host:windows
 # 의존성만 확인 (다운로드/추출하지 않음)
-pwsh -NoProfile -File native/windows/bun/prepare.ps1 -VerifyOnly
+bun packages/cli/src/native-build.ts --target windows-x64 --verify-only
 ```
 
-개발/빌드에는 PowerShell 7과 고정 Bun이 필요하다.
+개발/빌드에는 Windows 기본 제공 tar와 고정 Bun이 필요하다.
 실행에는 WebView2 Evergreen이 필요하다.
 MSVC, CMake, Ninja와 사용자 C/C++ 또는 Rust DLL은 필요 없다. Microsoft의 공식
 `WebView2Loader.dll`과 시스템 DLL은 사용한다. 생성 앱은 `bunaway.json`의
@@ -115,7 +115,7 @@ Deferred and recreated windows inherit the verified development DevTools setting
 Shutdown bypasses confirmation.
 Browser process failure also closes the affected window without confirmation.
 `tests/lifecycle/windows-bun-window-api.ts` is
-part of `run.ps1` and covers native geometry, close refusal and acceptance,
+part of `tests/lifecycle/run-native.ts` and covers native geometry, close refusal and acceptance,
 dynamic creation, fresh sessions and self-recreation. It passed in PR #40's
 Windows CI run 37574470840. The full native job failed on the shared capability
 fixture's old four-operation expectation, which now checks the complete catalog.

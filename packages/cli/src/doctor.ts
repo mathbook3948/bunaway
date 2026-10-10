@@ -30,10 +30,9 @@ export async function doctor(directory: string): Promise<boolean> {
   }
   for (const name of process.platform === "win32"
     ? [
-        "pwsh",
+        "tar",
       ]
     : [
-        "zsh",
         "clang++",
         "codesign",
       ]) {
@@ -62,7 +61,7 @@ export async function doctor(directory: string): Promise<boolean> {
   }
   console.log(
     process.platform === "win32"
-      ? "Windows uses bundled Bun FFI; execution requires WebView2 Evergreen. The prepare script verifies Bun and Loader pins."
+      ? "Windows uses bundled Bun FFI; execution requires WebView2 Evergreen. The Bun build tool verifies Bun and Loader pins."
       : "Native build requires Xcode CLT; macOS 14+ arm64. Local ad-hoc signing only, no notarization.",
   );
   return ok;

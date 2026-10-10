@@ -62,7 +62,8 @@ macOS WebContent PID 조회와 종료는 `lifecycle/macos-renderer.ts`가 맡으
 독립 CLI 프로젝트는 테스트용 UI 명령 호출을 추가한 뒤 생성 앱의 타입 검사를 통과해야 빌드와 창 실행을 진행한다.
 공통 앱, 화면 데이터는 `tests/fixtures/desktop/host/`에서 Windows/macOS가 공유한다.
 예전 Windows C++ 호스트/probe와 전용 실행기, 테스트는 삭제했다.
-`backend-startup.test.ts`는 macOS 프로세스 probe 백엔드로 boot 전후 종료와 버전, 세대 검증을 확인한다.
+독립 실험 실행기와 모의 백엔드는 제거했다. `runtime-bun.test.ts`는 실제 Bun 런타임의
+boot 전후 종료와 초기화 중 프로토콜 버전, 런타임 ID 및 세대 불일치 거부를 확인한다.
 다른 플랫폼, 모바일 수명주기의 검증 완료를 뜻하지 않는다.
 
 공개 창 API의 계약, 대상 창 권한, 카탈로그와 개발 URL은 SDK, CLI 테스트에서 확인한다.
@@ -101,3 +102,16 @@ Windows 데스크톱의 dev-veto, dev-hide, dev-pending 시나리오는 CLI 중�
 공개 창 API와 데스크톱 종료 설정을 함께 쓰는 회귀도 확인한다. `windows.close`의
 마지막 창 종료 취소는 기존 세션을 유지하고, 자기 창 재생성은 `beforeQuit`를 호출하지 않는다.
 트레이 숨김 설정에서는 API로 닫은 뒤에도 같은 요청 컨텍스트로 창을 다시 표시할 수 있어야 한다.
+
+## 네이티브 빌드와 배포 회귀
+
+`mise run host:windows`와 `mise run host:macos`는 Bun으로
+`tests/lifecycle/run-native.ts`를 실행한다. CLI의 의존성 준비와 네이티브 빌드를
+거친 뒤 플랫폼별 실제 호스트 fixture를 만들고 검증한다.
+`--skip-tests`는 fixture 생성까지만 수행하며, macOS의 `--app`은 ad-hoc 서명 앱
+검증과 `tests/packaging/macos-distribution.test.ts`의 배포 회귀를 추가한다.
+배포 회귀는 `bun:test`로 실제 DMG와 PKG, 실패 시 이전 산출물 보존을 확인한다.
+macOS의 기본 테스트 실행에도 포함되며, 실제 Bunaway 앱 검증은
+`BUNAWAY_DISTRIBUTION_APP`에 지정한 앱을 사용한다. 다른 OS에서는 건너뛴다.
+Apple 공증 서비스와 도구 실패는 테스트 자식 프로세스의 PATH에만 놓는 Bun fixture로
+검증한다. Python이나 별도 셸 실행기는 필요 없다.

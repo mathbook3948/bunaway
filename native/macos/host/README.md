@@ -54,20 +54,19 @@ implemented or tested. See the [support table](../../../docs/platform-support/RE
 ```
 main.mm     app host (run, --validate, --watch, --guard)
 sha256.hpp  streaming package and runtime digest implementation
-run.sh      build + package + test pipeline (see below)
+package.ts  real host fixture packaging (test runner: tests/lifecycle/run-native.ts)
 ```
 
 ## Build and test
 
 ```zsh
-./run.sh              # pins -> clang++ -> host package -> tests/lifecycle/macos-host.ts
-./run.sh --skip-tests
-./run.sh --app        # also produce an ad-hoc signed build/Bunaway.app
-mise run host:macos   # same entry point
+mise run host:macos              # pins -> clang++ -> host package -> tests/lifecycle/macos-host.ts
+mise run host:macos -- --skip-tests
+mise run host:macos -- --app        # also produce an ad-hoc signed build/Bunaway.app
 ```
 
-Requires macOS arm64, pinned Bun 1.4.2, Xcode CLT and a GUI session. Run the
-probe before the host serially: both populate `build/cache/bun`.
+macOS arm64, 고정 Bun 1.4.2, Xcode CLT와 GUI 세션이 필요하다.
+저장소 루트에서 실행한다. 의존성 준비와 호스트 빌드는 CLI의 `native-build.ts`가 담당한다.
 The regression suite owns an in-memory memo fixture. The standalone memo app
 uses the storage plugin and currently requires Windows.
 
@@ -105,7 +104,7 @@ response escapes. Default is `0` (no delay; production behavior unchanged).
 
 ## .app packaging
 
-`run.sh --app` lays out `build/Bunaway.app` as
+`mise run host:macos -- --app` lays out `build/Bunaway.app` as
 `Contents/{MacOS/bunaway-host, Resources/{runtime/bun, assets, licenses, manifest.json}}`
 and ad-hoc signs it. Inside a bundle the binary self-locates the package via
 `NSBundle.mainBundle.resourcePath` (`--package` stays explicit for tests).
@@ -114,5 +113,5 @@ Release packaging needs Developer ID signing, notarization
 entitlements: all deferred to the release milestone.
 
 Ad-hoc signing is not Developer ID signing, notarization, Gatekeeper or
-installation verification. The native CI runs `run.sh --app` to build and test the
+installation verification. The native CI runs `mise run host:macos -- --app` to build and test the
 ad-hoc signed bundle in place, then runs the distribution-script regression checks.

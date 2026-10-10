@@ -25,7 +25,7 @@ macOS 네이티브 어댑터는 후속 작업이다. 네이티브 권한이 포�
 맞지 않는다. 아래는 요구사항 전체 완료 선언이 아니라 구현 및 검증 범위다.
 새 macOS 회귀 실행은 [macOS 기록](./macos-native-results.md)에서 기존 검증과 구분한다.
 
-2026-10-06 [Windows 직접 FFI 예제](../../native/windows/ffi-probe/README.md)에서
+2026-10-06 Windows 직접 FFI 실험에서
 Bun UI Worker의 창, WebView2, 비동기 작업, 다중 창, 종료를 검증했다. 5초 종료 기준
 초과는 공식 컨트롤에서도 재현됐다. C++ 프로브 결과만으로 제품 전환을 선언하지 않았고, 이후 실제 제품 회귀를 실행했다.
 같은 날 실제 제품의 코어, 정책, Host API, 다중 창, CLI를 이식하고 기본 실행을 전환했다.
@@ -36,9 +36,9 @@ Bun UI Worker의 창, WebView2, 비동기 작업, 다중 창, 종료를 검증�
 | --- | --- | --- | --- |
 | 개발 환경 | mise 기반 Bun 1.4.2, 8개 workspace, 타입 환경 분리, 개발자용 로컬 CLI artifact | 공통 CI 및 실제 tarball 외부 설치, 생성, 이동, 검증/typecheck 테스트 | 공개 publish, 프레임워크 라이선스 결정 |
 | A 계약 | Web, 프로세스 IPC, 정책 단일 스키마, JSON 검증, 직렬화, 버전 협상 | 계약 테스트와 Windows/macOS 네이티브 검증기 회귀 | Linux, 모바일 네이티브 계약 준수 |
-| B 번들 실행 실현성 | Windows x64 baseline, macOS arm64 Bun 1.4.2 고정, WebView 없는 독립 패키지 | 플랫폼별 probe의 IPC, 계산, 이벤트, 오류, 정상/강제 종료 | 다른 CPU/OS, 설치, 배포 |
+| B 번들 실행 실현성 | Windows x64 baseline, macOS arm64 Bun 1.4.2 고정. 독립 실험 코드는 제거 | 과거 플랫폼별 probe의 IPC, 계산, 이벤트, 오류, 정상/강제 종료 기록 | 다른 CPU/OS, 설치, 배포 |
 | C 수직 기능 | client-sdk, core, runtime-bun, Win32/WebView2, AppKit/WKWebView, 메모 연결 | Windows 다중 창(3개), 뷰별 정책, macOS 단일 창/뷰의 명령, 이벤트, 경계, 렌더러 복구, 종료. 저장과 메모 파일 복원은 이관 전 기록 | macOS 다중 창/뷰, 다른 플랫폼 동등 검증 |
-| D 플랫폼 확장 | macOS probe, 제품 호스트 구현. Linux, Android, iOS 호스트 미구현. macOS 네이티브 플러그인 어댑터는 후속 작업 | macOS arm64 로컬 기록 및 네이티브 CI(정확한 실행 결과는 별도 기록) | macOS Intel, 최소 OS, Linux, 모바일 실행, 수명주기, 패키징 |
+| D 플랫폼 확장 | macOS 제품 호스트 구현. Linux, Android, iOS 호스트 미구현. macOS 네이티브 플러그인 어댑터는 후속 작업 | macOS arm64 로컬 기록 및 네이티브 CI(정확한 실행 결과는 별도 기록) | macOS Intel, 최소 OS, Linux, 모바일 실행, 수명주기, 패키징 |
 | E 배포 가능한 초기 버전 | CLI create/validate/doctor/dev/build, vanilla, Vite, React, Vue, Svelte, SDK/native 소스 artifact, 버전 lock, Windows 앱 패키지, macOS `.app`/ad-hoc, 선택 저장/로그/기능 조회 패키지와 Windows 어댑터 | CLI, artifact 계약 테스트, 기존 native 검증 기록(새 artifact의 플랫폼별 검증과 구분) | 공개 publish, 라이선스, UI framework 템플릿의 네이티브 실행 검증, macOS 다중 창, 설치, Developer ID, 공증, Store, 출시 기준 |
 | F 선택 기능 | Chromium 렌더러 등 미구현 | 없음 | 선택 렌더러, 추가 네이티브 플러그인 |
 
@@ -99,10 +99,10 @@ Bun UI Worker의 창, WebView2, 비동기 작업, 다중 창, 종료를 검증�
   로컬/Actions 실행을 별도 표기한다. 기존 `.app` 성공이 새 CI나 현재 샘플 설정의 성공은 아니다.
 
 현재 CI는 세 운영체제의 공통 검사와 Windows 및 macOS 네이티브 통합 검사를 실행한다.
-macOS 빌드는 공유 Bun 캐시 초기화 때문에 probe→host 직렬 실행한다.
+독립 실험 실행기는 제거했으며 CI는 제품 호스트와 실제 런타임을 검증한다.
 실제 GUI/WKWebView 결과 없이는 성공 처리하지 않으며 실패는 CI 실패로 전달한다.
 결과 JSON, 테스트별 로그, 페이지 보고서는 진단 artifact로 보관한다(7일).
-macOS는 `native/macos/host/run.sh --app`으로 ad-hoc 서명한 `.app`의 실행과 서명 유지,
+macOS는 `mise run host:macos -- --app`으로 ad-hoc 서명한 `.app`의 실행과 서명 유지,
 배포 스크립트의 DMG 생성과 PKG 조립을 검사한다. Windows CI는 Inno Setup을 설치해
 실제 설치, 업그레이드와 제거 회귀 테스트를 실행한다. 로컬에서는 Inno Setup이 있을 때 이 검사를 실행한다.
 프로덕션 인증서, 실제 공증과 Store 제출은 이 검사 범위에 포함하지 않는다.

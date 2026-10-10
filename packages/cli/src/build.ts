@@ -120,18 +120,13 @@ async function prepareNativeForBuild(
   }
   await assertBuildBun(target, root);
   const windows = target === "windows-x64";
-  const args = windows
-    ? [
-        "pwsh",
-        "-NoProfile",
-        "-File",
-        resolve(root, "native/windows/bun/prepare.ps1"),
-      ]
-    : [
-        "zsh",
-        resolve(root, "native/macos/host/run.sh"),
-        "--host-only",
-      ];
+  const args = [
+    process.execPath,
+    "--no-env-file",
+    resolve(root, "packages/cli/src/native-build.ts"),
+    "--target",
+    target,
+  ];
   if (signal) {
     await runManagedCommand(
       args,

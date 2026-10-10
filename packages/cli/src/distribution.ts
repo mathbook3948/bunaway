@@ -67,11 +67,9 @@ export const frameworkPaths = [
   "native/windows/bun/host-operations.ts",
   "native/windows/bun/host-response.ts",
   "native/windows/bun/log.ts",
-  "native/windows/bun/prepare.ps1",
   "native/windows/bun/README.md",
   "native/macos/host/main.mm",
   "native/macos/host/sha256.hpp",
-  "native/macos/host/run.sh",
   "runtime/build-manifests",
 ] as const;
 
@@ -411,6 +409,7 @@ function requiredFrameworkFiles(): string[] {
     "packages/cli/src/dev-server-worker.ts",
     "packages/cli/src/frontend-build.ts",
     "packages/cli/src/managed-command.ts",
+    "packages/cli/src/native-build.ts",
     "packages/cli/src/processes.ts",
     "packages/cli/src/windows-compile.ts",
     "packages/cli/src/windows-dev-launch.ts",

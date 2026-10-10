@@ -483,6 +483,134 @@ for (const phase of [
 }
 
 test.each([
+  {
+    name: "IPC version before boot",
+    bootFirst: false,
+    ipcMajor: 2,
+    runtimeId: "test",
+    generation: "1",
+    error: "Invalid protocol data.",
+  },
+  {
+    name: "IPC version during setup",
+    bootFirst: true,
+    ipcMajor: 2,
+    runtimeId: "test",
+    generation: "1",
+    error: "Invalid protocol data.",
+  },
+  {
+    name: "runtime ID during setup",
+    bootFirst: true,
+    ipcMajor: 1,
+    runtimeId: "other",
+    generation: "1",
+    error: "Stale runtime frame.",
+  },
+  {
+    name: "runtime generation during setup",
+    bootFirst: true,
+    ipcMajor: 1,
+    runtimeId: "test",
+    generation: "0",
+    error: "Stale runtime frame.",
+  },
+])("Bun runtime rejects an invalid $name on shutdown", async (scenario) => {
+  const entrypoint = fileURLToPath(
+    new URL("./runtime-fixture.ts", import.meta.url),
+  );
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      "--no-env-file",
+      entrypoint,
+    ],
+    {
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+  const timeout = setTimeout(() => child.kill(), 3000);
+  try {
+    const output = new Response(child.stdout).text();
+    const errors = new Response(child.stderr).text();
+    if (scenario.bootFirst) {
+      // Real plugin setup waits for a Host reply while shutdown input is validated.
+      child.stdin.write(
+        `${JSON.stringify({
+          ipc: PROTOCOL_VERSION,
+          runtime: {
+            id: "test",
+            generation: "1",
+          },
+          kind: "boot",
+          payload: {
+            entrypoint,
+            buildId: "test",
+            backendContext: "backend-test",
+            policy: {
+              version: 1,
+              views: [],
+              backend: {
+                permissions: [
+                  "log:write",
+                ],
+              },
+            },
+          },
+        })}\n`,
+      );
+    }
+    child.stdin.write(
+      `${JSON.stringify({
+        ipc: {
+          major: scenario.ipcMajor,
+          minor: 0,
+        },
+        runtime: {
+          id: scenario.runtimeId,
+          generation: scenario.generation,
+        },
+        kind: "shutdown",
+      })}\n`,
+    );
+    child.stdin.end();
+    expect(await child.exited).toBe(1);
+    expect(await errors).toContain(scenario.error);
+    const frames = (await output)
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map(parseProcessFrame);
+    expect(
+      frames.some(
+        (frame) => frame.kind === "ready" || frame.kind === "stopping",
+      ),
+    ).toBe(false);
+    if (scenario.bootFirst) {
+      expect(frames.at(-1)).toMatchObject({
+        kind: "fatal",
+        runtime: {
+          id: "test",
+          generation: "1",
+        },
+        error: {
+          code: "INTERNAL",
+          message: "Backend IPC failed.",
+        },
+      });
+    } else {
+      expect(frames).toEqual([]);
+    }
+  } finally {
+    clearTimeout(timeout);
+    child.kill();
+    await child.exited;
+  }
+});
+
+test.each([
   "revoke",
   "close",
 ])(

@@ -37,7 +37,7 @@ macOS WKWebView는 현재 비영속 `WKWebsiteDataStore`를 사용한다. Window
 fixture가 범위 제한 Host API 파일에서 복원한 결과는 선택 플러그인 이관 전 기록이다.
 
 - Windows 독립 앱 패키지와 macOS 번들 Bun 패키지는 사용자 전역 Bun 없이 실행한다.
-- macOS native CI는 `run.sh --app`으로 `.app`을 만들고 **ad-hoc** 서명한 번들을 실행한다.
+- macOS native CI는 `mise run host:macos -- --app`으로 `.app`을 만들고 **ad-hoc** 서명한 번들을 실행한다.
   서명 유지와 DMG 생성, PKG 조립도 검사한다. 이 검사의 코드 커밋 `fae4b80` 실행은
   [2026-10-07 CI](https://github.com/mathbook3948/bunaway/actions/runs/37554130779/job/112576288095)에서 통과했다.
 - `LSMinimumSystemVersion=14.0`은 생성 plist의 값일 뿐 macOS 14 전체 지원 검증이 아니다.
@@ -51,7 +51,8 @@ fixture가 범위 제한 Host API 파일에서 복원한 결과는 선택 플러
 `packages/packaging`의 채널 중립 계약(`bunaway.json` v1의 `bundle`, 어댑터 입출력,
 `PKG_*` 진단, 서명 후 `packagedSha256` 규칙)과 `bunaway package <channel>` 진입점이 있다.
 Windows `win-direct`와 `win-store-unpackaged`는 일반 Inno 설치 파일 경로를 제공한다.
-macOS 서명과 배포 스크립트는 `native/macos/distribute/`에 있으며 native CI에서 검사한다.
+macOS 서명과 배포 구현은 `packages/packaging/src/channels/macos/`에 있다.
+Bun 진입점은 `packages/packaging/scripts/macos.ts`이며 native CI에서 검사한다.
 CLI의 `mac-direct`, `mac-store` 채널 어댑터 연결은 아직 구현하지 않았다.
 
 Windows 배포 근거와 한계:

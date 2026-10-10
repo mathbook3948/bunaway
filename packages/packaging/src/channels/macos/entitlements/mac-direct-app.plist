@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<!-- mac-direct app: NOT sandboxed. Notarization requires the hardened
-	     runtime flag (-o runtime, applied by sign.sh), not entitlements.
+	     runtime flag (-o runtime, applied by signApp), not entitlements.
 	     Kept intentionally minimal — do not add keys without a measured need. -->
 </dict>
 </plist>
