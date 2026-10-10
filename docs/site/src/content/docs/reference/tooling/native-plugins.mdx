@@ -156,6 +156,10 @@ export function createOperations(_environment: NativeEnvironment): NativeAdapter
 ```
 
 `NativeEnvironment`는 호스트가 정한 dataRoot와 capabilities 목록을 제공합니다.
+Windows 호스트의 선택적 `app`은 검증한 앱 ID와 개발 또는 배포 실행의 절대 실행 파일,
+프레임워크 부팅 인자를 제공합니다. 자동 실행 어댑터는 이 정보만 등록 경로로 사용하며
+호출자가 실행 파일이나 다른 앱 ID를 선택하지 못합니다. 호스트 실행 정보가 없는 환경은
+해당 기능을 지원한다고 가정하지 않습니다.
 목록에는 앱에 등록된 네이티브 플러그인 작업만 포함합니다. 창 제어도 windowsPlugin을 등록한 경우에만 포함합니다. 각 작업은 해당 패키지의 플랫폼 어댑터 상태와
 `osPermission` 선언을 반영합니다. `support` 값은 `supported`, `experimental`,
 `unsupported`이고 `permission`은 `unknown`, `not-required`입니다.

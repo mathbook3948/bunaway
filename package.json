@@ -38,6 +38,7 @@
     "@bunaway/plugin-windows": "workspace:*",
     "@bunaway/plugin-storage": "workspace:*",
     "@bunaway/plugin-opener": "workspace:*",
+    "@bunaway/plugin-autostart": "workspace:*",
     "@bunaway/plugin-log": "workspace:*",
     "@bunaway/plugin-capabilities": "workspace:*"
   },

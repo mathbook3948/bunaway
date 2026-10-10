@@ -102,6 +102,22 @@ export async function verifyWindowsPackage(
   ];
   const windows = readWindowSpecs(specs, policy, devUrl);
   return {
+    app: {
+      id: config.appId,
+      launch: {
+        mode: isCompiledApp ? "packaged" : "development",
+        executablePath: await realpath(process.execPath),
+        args: isCompiledApp
+          ? []
+          : [
+              "--no-env-file",
+              "--no-install",
+              `--config=${resolve(assets, "bunfig.toml")}`,
+              `--tsconfig-override=${resolve(assets, "tsconfig.json")}`,
+              await realpath(resolve(assets, "boot.js")),
+            ],
+      },
+    },
     runtime: {
       id: config.appId,
       generation: crypto.randomUUID(),

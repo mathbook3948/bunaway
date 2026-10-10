@@ -15,6 +15,7 @@ import { Channel, type Packet } from "./channel.ts";
 
 assert(parentPort);
 const config = workerData as {
+  app?: import("@bunaway/plugin").NativeEnvironment["app"];
   runtime: RuntimeIdentity;
   dataRoot: string;
   assets: string;
@@ -26,6 +27,7 @@ const adapters = await operations(
   "io",
   undefined,
   await loadPluginCatalog(config.assets),
+  config.app,
 );
 const queue = new Map<
   string,

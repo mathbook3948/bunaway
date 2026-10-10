@@ -108,6 +108,7 @@ export async function operations(
   execution: "io" | "ui",
   windows: NativeEnvironment["windows"] | undefined,
   catalog: readonly PackagedPlugin[],
+  app?: NativeEnvironment["app"],
 ): Promise<PluginOperations> {
   const registry = pluginRegistry(plugins, catalog);
   const adapters = new Map<string, NativeAdapter>();
@@ -122,6 +123,11 @@ export async function operations(
     );
   const environment: NativeEnvironment = {
     dataRoot,
+    ...(app
+      ? {
+          app,
+        }
+      : {}),
     ...(windows
       ? {
           windows,
