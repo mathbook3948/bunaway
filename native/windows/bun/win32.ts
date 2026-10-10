@@ -597,9 +597,18 @@ export class Windows {
         const monitor = Buffer.alloc(MONITORINFO_SIZE);
         monitor.writeUInt32LE(MONITORINFO_SIZE);
         // Workspace coordinates cannot identify the screen monitor at a shared edge.
-        const display = this.normalMonitors.get(window);
+        let display = this.normalMonitors.get(window);
         assert(display, "Normal window monitor is unavailable.");
-        assert(user.symbols.GetMonitorInfoW(display, ptr(monitor)));
+        if (!user.symbols.GetMonitorInfoW(display, ptr(monitor))) {
+          // A detached display invalidates its handle even while normal tracking is suspended.
+          display = user.symbols.MonitorFromRect(
+            ptr(rect),
+            MONITOR_DEFAULTTONEAREST,
+          );
+          assert(display, "Normal window monitor is unavailable.");
+          assert(user.symbols.GetMonitorInfoW(display, ptr(monitor)));
+          this.normalMonitors.set(window, display);
+        }
         // WINDOWPLACEMENT uses workspace coordinates; callers use screen coordinates.
         x += monitor.readInt32LE(20) - monitor.readInt32LE(4);
         y += monitor.readInt32LE(24) - monitor.readInt32LE(8);

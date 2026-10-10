@@ -6,6 +6,7 @@ import { hostResponse } from "#native/windows/bun/host-response";
 // Isolate the DLL substitute from the real Windows callback tests.
 const WM_DPICHANGED = 0x02e0;
 const WM_WINDOWPOSCHANGED = 0x0047;
+const WM_DISPLAYCHANGE = 0x007e;
 const WS_OVERLAPPEDWINDOW = 0x00cf0000;
 const WS_VISIBLE = 0x10000000n;
 const GWL_STYLE = -16;
@@ -41,6 +42,7 @@ const windowRect = {
 const normalRect = {
   ...windowRect,
 };
+const removedMonitors = new Set<bigint>();
 let maximized = false;
 let minimized = false;
 let style = BigInt(WS_OVERLAPPEDWINDOW);
@@ -54,8 +56,11 @@ function view(address: Pointer, size: number) {
 /** Selects the simulated monitor with the largest overlap with a window rectangle. */
 function monitorFor(rect: typeof windowRect) {
   let largestArea = -1;
-  let selected = 0;
+  let selected = -1;
   for (const [index, monitor] of monitors.entries()) {
+    if (removedMonitors.has(BigInt(index + 1))) {
+      continue;
+    }
     const width = Math.max(
       0,
       Math.min(rect.right, monitor.right) - Math.max(rect.left, monitor.left),
@@ -158,6 +163,9 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
         });
       },
       GetMonitorInfoW(monitor: bigint, address: Pointer) {
+        if (!monitor || removedMonitors.has(monitor)) {
+          return 0;
+        }
         const bounds = monitorInfo(monitor);
         const info = view(address, 40);
         [
@@ -243,6 +251,48 @@ const messages = linkSymbols({
 try {
   const secondary = monitors[1];
   assert(secondary);
+  // Display removal can relocate normal placement without leaving iconic or zoomed state.
+  for (const state of [
+    "minimized",
+    "maximized",
+  ]) {
+    Object.assign(windowRect, {
+      left: -1000,
+      top: 100,
+      right: -384,
+      bottom: 589,
+    });
+    Object.assign(normalRect, windowRect);
+    messages.symbols.windowProcedure(window, WM_WINDOWPOSCHANGED, 0n, 0n);
+    minimized = state === "minimized";
+    maximized = state === "maximized";
+    removedMonitors.add(2n);
+    Object.assign(normalRect, {
+      left: 100,
+      top: 200,
+      right: 716,
+      bottom: 689,
+    });
+    Object.assign(windowRect, normalRect);
+    messages.symbols.windowProcedure(window, WM_DISPLAYCHANGE, 32n, 0n);
+    messages.symbols.windowProcedure(window, WM_WINDOWPOSCHANGED, 0n, 0n);
+    for (let query = 0; query < 2; query++) {
+      assert.deepEqual(windows.getBounds(window, "normal"), {
+        x: 100,
+        y: 200,
+        width: 616,
+        height: 489,
+        dpi: 96,
+      });
+    }
+    assert.equal(windows.failure, undefined);
+    assert.equal(minimized, state === "minimized");
+    assert.equal(maximized, state === "maximized");
+    assert.equal((style & WS_VISIBLE) !== 0n, false);
+    removedMonitors.clear();
+    minimized = false;
+    maximized = false;
+  }
   const originalSecondary = {
     ...secondary,
   };
@@ -435,6 +485,35 @@ try {
       assert.notEqual(target.dpi, monitor.dpi);
     }
   }
+  // Fullscreen retains its saved placement, but the removed monitor handle must be replaced.
+  windows.show(window, false);
+  removedMonitors.add(1n);
+  Object.assign(windowRect, secondary);
+  messages.symbols.windowProcedure(window, WM_DISPLAYCHANGE, 32n, 0n);
+  messages.symbols.windowProcedure(window, WM_WINDOWPOSCHANGED, 0n, 0n);
+  for (let query = 0; query < 2; query++) {
+    assert.deepEqual(windows.getBounds(window, "normal"), {
+      x: -324,
+      y: 60,
+      width: 616,
+      height: 489,
+      dpi: 96,
+    });
+  }
+  assert(windows.isFullscreen(window));
+  assert.equal((style & WS_VISIBLE) !== 0n, false);
+  assert.equal(windows.failure, undefined);
+  removedMonitors.add(2n);
+  assert.deepEqual(
+    hostResponse(() => windows.getBounds(window, "normal")),
+    {
+      kind: "error",
+      error: {
+        code: "INTERNAL",
+        message: "Host operation failed.",
+      },
+    },
+  );
 } finally {
   messages.close();
   windows.destroy(window);
