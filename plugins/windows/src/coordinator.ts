@@ -184,10 +184,14 @@ export class WindowOperations {
       view = this.hooks.read(viewId);
       // Preserve create's existing completion at controller setup; document and SDK readiness are separate.
       while (!view?.ready) {
-        if (this.hooks.stopping() || this.destroyedReplacements.has(viewId)) {
+        if (
+          this.hooks.stopping() ||
+          this.destroyedReplacements.has(viewId) ||
+          view?.replacementCancelled
+        ) {
           throw new BunawayError({
             code: "CANCELLED",
-            message: "App shutdown interrupted window creation.",
+            message: "Window creation was cancelled.",
           });
         }
         if (!closesLiveWindow && this.hooks.cancelled(requestId)) {

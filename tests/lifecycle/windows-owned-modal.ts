@@ -105,6 +105,10 @@ if (!process.argv.includes("--child")) {
       );
       const owner = driver.symbols.GetWindow(dialog, GW_OWNER);
       assert(owner);
+      const parent = driver.symbols.GetWindow(owner, GW_OWNER);
+      assert(parent);
+      // Parent and child native close requests share the pending confirmation's subtree.
+      assert(driver.symbols.PostMessageW(parent, WM_CLOSE, 0n, 0n));
       // A duplicate native close during confirmation must not enqueue another confirmation.
       assert(driver.symbols.PostMessageW(owner, WM_CLOSE, 0n, 0n));
       assert(driver.symbols.PostMessageW(dialog, WM_COMMAND, IDNO, 0n));

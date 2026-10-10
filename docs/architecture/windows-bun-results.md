@@ -515,5 +515,20 @@ symlink 생성 권한이 없어 저장소의 마지막 파일 symlink 검사는 
 잔류 프로세스가 0개인지 직접 검사한다. 최신 main에서 완료된 뒤 도착한 종료 훅의
 승인도 종료를 다시 시작하지 않았다. 로그는 `build/main-update-contract.log`,
 `build/windows-readiness-latest-main.log`, `build/windows-owned-modal/latest-main.log`다.
+
+최신 main 병합 후 전체 `mise run check` 재실행은 정적 검사를 모두 통과했으며
+테스트 800개 통과, 67개 건너뜀, 5개 실패로 끝났다. 실패 다섯 건은 모두 Windows에서
+macOS fixture용 symlink를 만들 때 발생한 EPERM이다. 이전 CLI 시간 초과와 잠금
+실패는 재현되지 않았다. 로그는 `build/check-latest-main.log`다.
+문서 검사도 공개 항목 529개와 72 페이지의 내부 링크 6,413개를 확인해 통과했다.
+
+최종 종료 경쟁 보완에서는 자식의 닫기 확인 중 부모와 자식에 함께 WM_CLOSE를
+보내도 확인이 추가되거나 호스트가 실패하지 않는 실제 Windows 검사를 통과했다.
+재생성의 새 컨트롤러 준비 중 부모가 종료되는 경우도 CANCELLED로 처리하는 집중
+회귀를 추가했다. 최종 집중 검사 20개와 테스트 전체 타입, 변경 파일의 lint 및 포맷
+검사가 통과했다. 전체 검사 이후의 이 두 보완은 해당 집중 검사와 실제 시나리오로
+검증했다. 로그는 `build/windows-owned-modal/ancestor-race.log`,
+`build/window-relations-contract-complete.log`, `build/window-relations-types-complete.log`,
+`build/window-relations-static-complete.log`다.
 초기 설정의 부모 지정, child HWND 임베딩, 다중 물리 모니터와 다른 플랫폼 실행은
 이번 작업에 포함하지 않았다.

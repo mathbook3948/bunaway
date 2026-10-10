@@ -267,6 +267,52 @@ test("parent termination cancels child recreation but permits a later explicit u
     "main",
   ]);
 });
+test("parent termination during replacement controller setup reports cancellation", async () => {
+  const f = fixture();
+  const target = {
+    view: "main",
+  };
+  await f.operations.execute(
+    {
+      operation: "windows.create",
+      payload: target,
+    },
+    grants,
+    "initial",
+  );
+  const original = f.views.get("main");
+  assert(original);
+  f.setCreationReady(false);
+  f.setTick(async () => {
+    const current = f.views.get("main");
+    assert(current);
+    if (current === original) {
+      current.cleaned = true;
+    } else {
+      current.replacementCancelled = true;
+      current.closed = true;
+    }
+  });
+  await expect(
+    f.operations.execute(
+      {
+        operation: "windows.recreate",
+        payload: target,
+      },
+      grants,
+      "replacement",
+    ),
+  ).rejects.toMatchObject({
+    code: "CANCELLED",
+  });
+  expect(f.created).toEqual([
+    "main",
+    "main",
+  ]);
+  expect(f.views.get("main")?.closed).toBe(true);
+  expect(f.operations.replacing.size).toBe(0);
+});
+
 test("window catalog filters grants and cannot open arbitrary or unauthorized views", async () => {
   const f = fixture();
   expect(

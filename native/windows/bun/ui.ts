@@ -131,6 +131,12 @@ function hwndById(windowId: string): bigint {
   assert(view, "Unknown native window lifetime");
   return view.native.hwnd;
 }
+
+function hasPendingClose(view: ViewState): boolean {
+  return relations
+    .closeOrder(view.readiness.snapshot().windowId)
+    .some((id) => closingWindows.has(id));
+}
 /**
  * Defer detach while WebView creation is pending.
  * Destroy its HWND before finishing COM cleanup.
@@ -776,7 +782,7 @@ function createWindow(spec: WindowSpec, replacingLiveWindow = false) {
   const close = (force = false) => {
     const view = views.get(spec.view);
     if (view && !view.boundary.closed) {
-      if (!force && closingWindows.has(view.readiness.snapshot().windowId)) {
+      if (!force && hasPendingClose(view)) {
         return;
       }
       if (force) {
@@ -1050,10 +1056,7 @@ try {
     for (const [viewId, view] of views) {
       if (view.pendingClose) {
         view.pendingClose = false;
-        if (
-          view.forceClose ||
-          !closingWindows.has(view.readiness.snapshot().windowId)
-        ) {
+        if (view.forceClose || !hasPendingClose(view)) {
           void closeWindow(viewId, view.forceClose ? "force" : "close").catch(
             fail,
           );
