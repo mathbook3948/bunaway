@@ -2,6 +2,7 @@ import type {
   AppDefinition,
   CommandRegistry,
   EventRegistry,
+  PluginDefinition,
 } from "@bunaway/plugin-api";
 import { bindCommandHost, bindPluginHost } from "@bunaway/plugin-api/host";
 import type { ModuleDefinition } from "./module.ts";
@@ -24,10 +25,23 @@ type AppOptions<
   M extends readonly ModuleDefinition[],
   C extends CommandRegistry,
   E extends EventRegistry,
-> = Pick<AppDefinition, "state" | "plugins" | "desktop"> & {
+  P extends readonly PluginDefinition[],
+> = Pick<AppDefinition, "state" | "desktop"> & {
   readonly modules: M;
   readonly commands?: C;
   readonly events?: E;
+  readonly plugins?: P;
+};
+
+// Keep concrete event schemas while retaining the bound lifecycle's callable contract.
+type BoundPlugins<P extends readonly PluginDefinition[]> = {
+  readonly [K in keyof P]: P[K] extends {
+    readonly events: infer E extends EventRegistry;
+  }
+    ? Omit<PluginDefinition, "events"> & {
+        readonly events: E;
+      }
+    : PluginDefinition;
 };
 
 /** Checks ownership before adding entries so collisions fail during app composition. */
@@ -54,7 +68,8 @@ export function defineApp<
   const M extends readonly ModuleDefinition[],
   const C extends CommandRegistry = Record<never, never>,
   const E extends EventRegistry = Record<never, never>,
->(options: AppOptions<M, C, E>) {
+  const P extends readonly PluginDefinition[] = readonly PluginDefinition[],
+>(options: AppOptions<M, C, E, P>) {
   const commands = new Map<string, CommandRegistry[string]>();
   const events = new Map<string, EventRegistry[string]>();
   const commandOwners = new Map<string, string>();
@@ -110,7 +125,10 @@ export function defineApp<
     ...(options.plugins === undefined
       ? {}
       : {
-          plugins: Object.freeze(options.plugins.map(bindPluginHost)),
+          // Binding preserves event schemas and order; expose the input tuple for EventsOf.
+          plugins: Object.freeze(
+            options.plugins.map(bindPluginHost),
+          ) as unknown as BoundPlugins<P>,
         }),
   });
 }

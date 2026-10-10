@@ -65,7 +65,7 @@ test("maximized client constraints scale with DPI without rounding unchanged dim
   });
 });
 
-test("normal bounds and fullscreen DPI changes preserve monitor selection and valid maximize history", async () => {
+test("native snapshots preserve normal geometry, fullscreen DPI and committed foreground changes", async () => {
   const child = Bun.spawn(
     [
       process.execPath,

@@ -66,6 +66,7 @@ test.skipIf(process.platform !== "win32")(
         now: Date.now,
         tick: async () => {},
         window: () => ({
+          getSnapshot: () => native.getSnapshot(hwnd),
           show: (visible) => native.show(hwnd, visible),
           focus: () => native.focus(hwnd),
           close: () => true,

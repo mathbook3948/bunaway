@@ -62,6 +62,7 @@ export const frameworkPaths = [
   "native/windows/bun/win32.ts",
   "native/windows/bun/win32-bindings.ts",
   "native/windows/bun/window-size.ts",
+  "native/windows/bun/window-events.ts",
   "native/host-api/bun/plugins.ts",
   "native/host-api/bun/plugin-contract.ts",
   "native/host-api/bun/plugin-catalog.ts",

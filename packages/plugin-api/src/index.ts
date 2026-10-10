@@ -121,7 +121,21 @@ export type CommandsOf<A extends AppDefinition> = {
     output: Infer<A["commands"][K]["output"]>;
   };
 };
-/** Infers the payload type of each registered app event. */
+type PluginEvents<P> = P extends {
+  readonly events: infer E extends EventRegistry;
+}
+  ? E
+  : Record<never, never>;
+type PluginEventEntries<P extends readonly PluginDefinition[]> =
+  P extends readonly [
+    infer First extends PluginDefinition,
+    ...infer Rest extends readonly PluginDefinition[],
+  ]
+    ? PluginEvents<First> & PluginEventEntries<Rest>
+    : Record<never, never>;
+type AppEventEntries<A extends AppDefinition> = A["events"] &
+  PluginEventEntries<NonNullable<A["plugins"]>>;
+/** Infers app, module and statically registered plugin event payloads. */
 export type EventsOf<A extends AppDefinition> = {
-  [K in keyof A["events"]]: Infer<A["events"][K]>;
+  [K in keyof AppEventEntries<A>]: Infer<AppEventEntries<A>[K]>;
 };

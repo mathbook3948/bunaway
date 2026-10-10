@@ -1,5 +1,48 @@
 # Windows Bun FFI 실행 기록
 
+## 2026-10-10 창 이벤트와 구독 수명
+
+최신 main `a74f7b3`의 창 상태와 geometry API 위에 이벤트 구현을 적용하고,
+로컬 Windows x64와 고정한 Bun 1.4.2로 확인했다.
+`windows.changed`는 호스트의 실제 관찰을 대상 창의 뷰 세션으로 전달한다.
+
+- 계약 검사: `tests/lifecycle/window-events.test.ts`의 네 검사에서 전환 이름과 순서,
+  중복 억제, 스키마 검증, typed SDK의 권한 거부와 해제, 재생성한 세션의 격리,
+  종료 후 늦은 발행 차단을 확인했다. 실제 MessageChannel의 미확인 이벤트 상한
+  128개와 독립된 종료 용량, Core 구독 큐 초과의 BUSY 종료도 확인했다.
+  이 결과는 GUI 실행 결과가 아니다.
+- 실제 Win32: `tests/lifecycle/windows-window-events.test.ts`에서 API와 네이티브
+  시스템 메뉴 명령으로 표시, 숨김, 이동, 크기, 최소화, 최대화와 복원,
+  전체화면 진입과 해제를 확인했다. query와 이벤트의 물리 outer bounds 일치,
+  revision 증가, HWND 파괴 후 콜백 차단과 재생성 식별자 변경도 확인했다.
+- 실제 WebView2: `tests/lifecycle/windows-window-events.ts`는 세 문서에서
+  30개 이벤트를 받고 snapshot 복구, 권한 거부, 구독 해제, 문서 탐색과 창 재생성,
+  정상 종료를 통과했다. 탐색한 두 문서는 같은 windowId이고 재생성한 문서는 새
+  windowId였다. 보고서는 `build/windows-window-events/report.json`에 남긴다.
+- `mise run host:windows`의 기존 Windows 호스트 회귀도 통과했다. 네이티브 창 API,
+  저장과 앱 재시작, 다중 뷰 권한과 세션, 정상 및 비정상 종료를 포함한다.
+
+이 실행 환경에서 Windows가 전경 전환을 거부해 실제 focus/blur 전환은 검증하지
+못했다. focused 조회와 snapshot의 일치, focus/blur 변경 비교는 각각 네이티브와
+계약 검사로 확인했다. 이를 실제 focus/blur 전환 성공으로 계산하지 않는다.
+사용자의 물리 마우스 드래그와 다중 물리 모니터 이동은 이 시나리오에 포함하지 않았다.
+현재 모니터에서 실행한 결과이며 다른 DPI나 다른 OS 지원을 주장하지 않는다.
+
+재현은 네이티브 입력을 준비한 뒤
+`bun test ./tests/lifecycle/window-events.test.ts ./tests/lifecycle/windows-window-events.test.ts`와
+`bun --no-env-file tests/lifecycle/windows-window-events.ts`로 한다.
+실제 WebView2 시나리오는 `mise run host:windows`에도 포함된다.
+
+포맷, lint와 workspace 및 테스트 타입 검사는 통과했다. lint의 기존 경고는 유지했다.
+`mise run check`는 기존 CLI 설정 검사가 기본 5초 기한을 넘겨 중단했다.
+코드와 테스트 조건을 바꾸지 않고 `bun test ./tests --timeout 90000`으로 재실행한 결과는
+678 통과, 64 skip, 5 실패였다. CLI 검사는 통과했고 실패 다섯 건은 macOS fixture 및
+Info.plist 검사에서 파일 심볼릭 링크를 만들지 못한 Windows `EPERM`이다.
+이번 변경에서 해당 macOS 검사나 OS 링크 생성 설정은 바꾸지 않았다.
+`bun run docs:check`와 `bun run docs:build`도 통과했다.
+
+## 이전 실행 기록
+
 2026-10-06 로컬 Windows x64, 저장소가 고정한 Bun 1.4.2
 `744846f844374847c902b5e7fd59b4342a51ef99`, WebView2 SDK 1.0.4129.50과
 설치된 Evergreen을 사용했다. 다른 OS/CPU 및 새 CI 실행 성공을 주장하지 않는다.
@@ -204,3 +247,20 @@ Bun 1.4.2에서 `tests/lifecycle/windows-window-state.test.ts`로 실제 Win32 �
 실제 OS 작업 실패를 의도적으로 발생시킨 검증과는 구분한다.
 실제 다른 DPI의 물리 모니터 이동, 초기 최대화 및 전체화면 옵션, 창 이벤트와 사용자
 타이틀바, 다른 플랫폼 실행은 이번 상태 API 검증에 포함하지 않았다.
+## 2026-10-10 네이티브 모달 이벤트 전송 보완
+
+창 이동 모달 루프가 Bun 이벤트 루프를 막으면 Worker의 수신 확인을 처리하지 못해
+네이티브 이벤트 용량 128개가 포화되는 문제를 재현했다. 기존 경로에서 5ms 간격으로
+위치를 160번 바꾸면 이벤트 161개 중 33개가 BUSY로 거부됐다.
+
+Win32 콜백은 기존 Channel에서 제한된 메시지 묶음을 읽어 수신 확인과 서버 전달을
+진행한다. 자원을 바꾸는 나머지 패킷은 Bun 이벤트 루프가 재개된 뒤 처리하며,
+중첩 읽기를 막는다. 이벤트 FIFO와 용량 제한, 권한 및 세션 검증은 유지한다.
+새 `windows-modal-events.fixture.ts`는 실제 Win32 이동 모달 루프에서 5ms 간격으로
+위치를 384번 변경하고, 양방향 순서와 모달 종료 전 서버 전달 및 정리를 검사했다.
+이 검사는 물리 마우스 드래그를 실행하지 않는다.
+
+실제 WebView2의 이벤트 전달, snapshot 복구, 구독 해제, 탐색, 재생성과 종료 검사는
+통과했다. 실제 모달 시나리오도 분리 실행에서 백엔드 진행과 정상 정리를 통과했다.
+전체 호스트를 다른 검사와 함께 실행한 첫 시도에서는 WebView 정리 기한을 초과했다.
+로컬 실제 포커스 전환은 Windows가 활성화를 거부해 확인하지 못했다.
