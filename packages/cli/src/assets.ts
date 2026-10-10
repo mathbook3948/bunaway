@@ -6,7 +6,14 @@ import type { BunPlugin } from "bun";
 import { appModules, commonJsSdkSource } from "./app-modules.ts";
 import { type Project, runtimeSettings } from "./config.ts";
 import { release } from "./distribution.ts";
-import { files, hash, inside, json, writeJson } from "./files.ts";
+import {
+  files,
+  hash,
+  inside,
+  installedPackageRoot,
+  json,
+  writeJson,
+} from "./files.ts";
 import {
   type InstalledPlugin,
   installedPlugins,
@@ -459,6 +466,48 @@ export async function bundleWindowsReload(
     );
   }
   return hash(resolve(directory, "app.js"));
+}
+
+/** Bundle packaged web assets and the Android child-process bootstrap from the common app definition. */
+export async function bundleAndroidAssets(
+  project: Project,
+  assets: string,
+): Promise<void> {
+  await assertAppDefinitionExport(project.appEntry);
+  const sdk = await sdkPlugin(project.root, [], project.nativePlugins);
+  await webAssets(project, resolve(assets, "web"), sdk, false);
+  const runtimeEntry = resolve(
+    await installedPackageRoot(project.frameworkRoot, "@bunaway/runtime-bun"),
+    "src/index.ts",
+  );
+  const backend = await buildWithSdk(
+    {
+      entrypoints: [
+        "bunaway-generated/backend.ts",
+      ],
+      root: project.root,
+      target: "bun",
+      packages: "bundle",
+    },
+    {
+      name: "android-app-entry",
+      setup(build) {
+        sdk.setup(build);
+        appModules({
+          appEntry: project.appEntry,
+          processRuntime: runtimeEntry,
+        }).setup(build);
+      },
+    },
+  );
+  const output = backend[0];
+  if (backend.length !== 1 || !output) {
+    throw new Error("Missing Android backend bundle.");
+  }
+  await writeFile(
+    resolve(assets, "backend.js"),
+    await bundleBytes(output, false),
+  );
 }
 
 /** Bundle the macOS Bun entry and backend Worker; return file imports for compilation. */

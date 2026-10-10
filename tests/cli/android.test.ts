@@ -11,6 +11,8 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { acquireBuildOutputLock } from "@bunaway/packaging";
 import { outputPaths } from "@bunaway/packaging/paths";
+import { PROTOCOL_VERSION } from "@bunaway/protocol";
+import { readJsonLines } from "@bunaway/runtime-bun";
 import {
   assertAndroidProject,
   isAndroidSerial,
@@ -19,8 +21,11 @@ import {
   readAndroidApplicationId,
   runAndroidProject,
 } from "#cli/android";
+import { validateProject } from "#cli/config";
 import { frameworkRoot } from "#cli/files";
 import { main } from "#cli/main";
+import { run, runWorker } from "#cli/processes";
+import { createProject } from "./project.ts";
 
 const project = {
   app: {
@@ -53,6 +58,119 @@ const project = {
     },
   },
 };
+
+test("installed Android assets Worker bundles the web SDK and an executable process backend", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "bunaway-android-worker-"));
+  try {
+    const app = await createProject(resolve(root, "app"));
+    await run(
+      [
+        process.execPath,
+        "install",
+        "--ignore-scripts",
+      ],
+      app,
+    );
+    await Bun.write(
+      resolve(app, "src-bunaway/app.ts"),
+      'import { defineApp } from "@bunaway/backend"; export default defineApp({ modules: [] });',
+    );
+    await Bun.write(
+      resolve(app, "src-bunaway/policy.json"),
+      JSON.stringify(project.policy),
+    );
+    const validated = await validateProject(app);
+    assertAndroidProject(validated);
+    const assets = resolve(root, "assets");
+    await runWorker(
+      "assets.ts",
+      "bundleAndroidAssets",
+      [
+        validated,
+        assets,
+      ],
+      app,
+      validated.frameworkRoot,
+    );
+    expect(await Bun.file(resolve(assets, "web/index.html")).exists()).toBe(
+      true,
+    );
+    expect(await Bun.file(resolve(assets, "web/main.js")).exists()).toBe(true);
+    const backend = resolve(assets, "backend.js");
+    // Boot the emitted file outside the installed app so unresolved package imports cannot hide.
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "--no-env-file",
+        backend,
+      ],
+      {
+        cwd: assets,
+        stdin: "pipe",
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const timeout = setTimeout(() => child.kill(), 5000);
+    const errors = new Response(child.stderr).text();
+    const output = readJsonLines(child.stdout)[Symbol.asyncIterator]();
+    const send = (body: Record<string, unknown>) =>
+      child.stdin.write(
+        `${JSON.stringify({
+          ...body,
+          ipc: PROTOCOL_VERSION,
+          runtime: {
+            id: "android-worker-test",
+            generation: "1",
+          },
+        })}\n`,
+      );
+    const next = async () => JSON.parse((await output.next()).value ?? "");
+    try {
+      send({
+        kind: "boot",
+        payload: {
+          entrypoint: backend,
+          buildId: "test",
+          backendContext: "backend-test",
+          policy: project.policy,
+        },
+      });
+      expect(await next()).toMatchObject({
+        kind: "hello",
+      });
+      send({
+        kind: "hello",
+        payload: {
+          kind: "hello",
+          protocol: PROTOCOL_VERSION,
+          features: [],
+          buildId: "test",
+        },
+      });
+      expect(await next()).toMatchObject({
+        kind: "ready",
+      });
+      send({
+        kind: "shutdown",
+      });
+      child.stdin.end();
+      expect(await next()).toMatchObject({
+        kind: "stopping",
+      });
+      expect(await child.exited, await errors).toBe(0);
+    } finally {
+      clearTimeout(timeout);
+      child.kill();
+      await child.exited;
+    }
+  } finally {
+    await rm(root, {
+      recursive: true,
+      force: true,
+    });
+  }
+}, 60000);
 
 test("Android accepts the common app model and rejects unsupported native inputs before building", () => {
   expect(() => assertAndroidProject(project)).not.toThrow();

@@ -4,9 +4,12 @@
 `ANDROID_SERIAL` 기본값은 `emulator-5554`이며 기기를 먼저 부팅하거나 연결해야 한다.
 공통 Core/SDK 명령, 이벤트와 구독 해제, 정책 거부, 취소, 자산과 subframe 경계,
 화면 회전 후 같은 Bun PID와 Core 상태, Activity 종료 뒤 실제 Bun 종료를 확인한다.
+홈 런처에서 fixture 아이콘을 눌러 실행하고 호출 주체와 root task를 확인한다.
+홈 이동과 복귀에서는 Bun을 유지하고, 시스템 뒤로가기에서는 종료하는지 구분해 검사한다.
 회전 설정은 원래 값으로 복원한다. Java 스키마 검사와 Android lint도 포함한다.
 `cli/android.test.ts`는 지원하지 않는 설정과 잘못된 명령 인자, 대상 잠금, sync 후
 사용자 Java/Manifest/Gradle/Wrapper 보존, 생성 파일 교체, 무관한 프로젝트와 링크 거부를 검사한다.
+설치된 패키지의 실제 Android 번들 Worker를 실행하고 생성된 백엔드의 IPC 부팅 협상과 정상 종료도 검사한다.
 앱이 지정한 launcher 해석과 시작, ADB가 종료 코드 0으로 반환한 실행 오류의 실패 처리도 검사한다.
 Gradle 출력의 최종 application ID와 잘못된 메타데이터 거부도 검사한다.
 별도 프로세스의 ADB fixture로 설치와 시작 중 출력 잠금, debug 접미사가 붙은 ID의 전달,

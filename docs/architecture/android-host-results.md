@@ -41,9 +41,11 @@ Java 전환 뒤 같은 기기의 Core/SDK, 화면 회전과 종료 검사를 다
 앱 Gradle 파일은 관리 스크립트만 연결한다. library 호스트의 웹 자산, 리소스와
 두 ABI의 Bun을 APK로 병합한 뒤 같은 Core/SDK 검사를 통과했다.
 APK에서 추출한 두 ABI의 Bun SHA-256은 원본 런타임 핀과 일치했다.
-뒤로가기 검사는 `am start -n` 대신 `monkey -p dev.bunaway.fixture -c android.intent.category.LAUNCHER 1`로
-시작한다. API 36에서 MAIN/LAUNCHER intent와 rootOfTask=true를 확인했고 뒤로가기 후 Bun PID가
-사라졌다. 이 결과를 다른 Android 버전의 뒤로가기 정책으로 일반화하지 않는다.
+초기 뒤로가기 검사는 `monkey`에서 MAIN/LAUNCHER intent로 실행했다. 이 검사는 실제 홈 런처에서
+시작한 루트 Activity의 Android 12 이상 동작을 검증하지 못했다. API 36 Pixel 런처의 아이콘으로
+실행하면 뒤로가기 후 Activity가 백그라운드로 이동하고 Bun이 남는 것을 재현했다.
+호스트에 명시적인 Back 종료 처리를 추가하고, 검사를 홈 런처 아이콘 실행으로 바꿨다.
+`launchedFromPackage`와 `rootOfTask=true`를 확인하며 홈 이동, 복귀와 뒤로가기 종료를 구분한다.
 
 Windows에서 생성 디렉터리를 게시하는 rename이 간헐적으로 `EPERM`으로 실패했다.
 이 경우 이전 생성 영역은 복구됐으며 동일 규모의 복사 및 이동에서도 오류를 재현했다.

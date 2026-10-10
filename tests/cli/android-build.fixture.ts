@@ -1,12 +1,14 @@
 // Run the public Android pipeline with fixture tools in an isolated process.
 // Native Gradle/APK behavior stays covered by the emulator and artifact checks.
+
+import { mock, spyOn } from "bun:test";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
-import { mock, spyOn } from "bun:test";
+import { acquireBuildOutputLock } from "@bunaway/packaging";
+import * as assets from "#cli/assets";
 import type { Project } from "#cli/config";
 import { hash, writeJson } from "#cli/files";
-import { acquireBuildOutputLock } from "@bunaway/packaging";
 
 const root = process.argv[2];
 const mode = process.argv[3];
@@ -97,7 +99,15 @@ mock.module(import.meta.resolve("#cli/frontend-build"), () => ({
   buildFrontend: async () => {},
 }));
 mock.module(import.meta.resolve("#cli/processes"), () => ({
-  runWorker: async () => "",
+  runWorker: async (module: string, method: string) => {
+    assert.equal(module, "assets.ts");
+    assert.equal(
+      typeof Reflect.get(assets, method),
+      "function",
+      "Android Worker export must exist",
+    );
+    return "";
+  },
 }));
 mock.module(import.meta.resolve("#cli/managed-command"), () => ({
   runManagedCommand: async (args: string[]) => {

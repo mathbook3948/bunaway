@@ -39,6 +39,8 @@ AppAssets는 application context로 한 번 읽어 Bun과 회전 후 Activity가
 WebView는 현재 Activity context를 사용하며 기능 지원은 초기화 때 검사한다.
 백엔드 ready 이후에 WebView를 생성하고 문서를 로드한다. 생성이나 부팅이 실패하면
 두 소유자를 함께 닫는다.
+시스템 뒤로가기는 Activity를 명시적으로 종료한다. Android 13 이상은 시스템 Back 콜백을,
+이전 버전은 `onBackPressed`를 사용한다. 홈 버튼은 종료로 처리하지 않는다.
 들어온 IPC는 중첩 웹 메시지까지 한 번 파싱하고 검증한다. 호스트가 만든 송신 객체는
 스키마, 크기와 깊이, Unicode를 검사해 직렬화하며 JSON을 다시 파싱하지 않는다.
 수신 청크는 줄바꿈 사이의 바이트를 묶음으로 복사한다. 복사 전에 공유 프레임 크기 제한을
@@ -55,7 +57,8 @@ mise run host:android
 화면 회전으로 문서 세션이 바뀌어도 Bun PID와 Core 상태가 유지되는지 확인하고,
 뒤로가기로 Activity를 닫은 뒤 Bun PID가 사라지는지 검사한다.
 검사는 기기 회전 설정을 원래 값으로 복원하고 fixture 앱을 종료한다.
-런처 MAIN/LAUNCHER intent에서 뒤로가기 종료를 확인하고, renderer 실패 뒤 화면 회전이
+홈 런처의 앱 아이콘을 눌러 실행하고 호출 주체와 root task를 확인한다. 홈 이동 후 복귀와
+뒤로가기 종료를 구분해 검사하며, renderer 실패 뒤 화면 회전이
 닫힌 런타임에 WebView를 연결하지 않는지 검사한다. TMPDIR는 cacheDir, HOME은 filesDir이며
 실제 `os.tmpdir()`의 파일 생성, 읽기와 제거를 검사한다.
 APK와 실행 보고서는 `build/android-host/`에 남는다. Java 스키마 단위 검사와 Android lint도 실행한다.

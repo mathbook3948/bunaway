@@ -448,7 +448,7 @@ async function prepareAndroidProject(
     });
     await runWorker(
       "assets.ts",
-      "bundleAssets",
+      "bundleAndroidAssets",
       [
         project,
         assets,

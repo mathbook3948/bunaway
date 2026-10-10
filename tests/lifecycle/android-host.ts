@@ -40,27 +40,91 @@ async function command(...args: string[]): Promise<string> {
 }
 
 async function launchFixture(): Promise<string> {
-  await command("shell", "am", "force-stop", appId);
-  await command(
+  await command("shell", "input", "keyevent", "KEYCODE_HOME");
+  const home = await command(
     "shell",
-    "monkey",
-    "-p",
-    appId,
+    "cmd",
+    "package",
+    "resolve-activity",
+    "--brief",
+    "-a",
+    "android.intent.action.MAIN",
     "-c",
-    "android.intent.category.LAUNCHER",
-    "1",
+    "android.intent.category.HOME",
   );
-  // Monkey restores free rotation when it exits. Freeze the live orientation afterwards.
+  const launcher = home.trim().split("\n").at(-1)?.split("/")[0];
+  assert(
+    launcher && /^[A-Za-z0-9_.]+$/.test(launcher),
+    "Missing home launcher",
+  );
+  let icon: string | undefined;
+  // Tap the installed app in the real launcher. Shell/monkey starts use different root-task Back semantics.
+  for (let page = 0; page < 5; page++) {
+    const xml = await readUI();
+    assert(
+      xml.includes(`package="${launcher}"`),
+      "Expected the home launcher UI",
+    );
+    icon = xml
+      .match(/<node\b[^>]*>/g)
+      ?.find(
+        (node) =>
+          /(?:text|content-desc)=['"]Bunaway /.test(node) &&
+          node.includes('clickable="true"'),
+      );
+    if (icon) {
+      break;
+    }
+    const screen = xml.match(/bounds="\[0,0\]\[(\d+),(\d+)\]"/);
+    assert(screen?.[1] && screen[2], "Missing launcher screen bounds");
+    const x = String(Math.floor(Number(screen[1]) / 2));
+    await command(
+      "shell",
+      "input",
+      "swipe",
+      x,
+      String(Math.floor(Number(screen[2]) * 0.8)),
+      x,
+      String(Math.floor(Number(screen[2]) * 0.2)),
+      "400",
+    );
+  }
+  await tapNode(icon, "Missing Bunaway fixture icon in home launcher");
   await command("shell", "wm", "user-rotation", "lock");
   const deadline = Date.now() + 10000;
   while (Date.now() < deadline) {
     const pid = await command("shell", "pidof", appId);
     if (/^[1-9][0-9]*$/.test(pid)) {
+      const activity = await command(
+        "shell",
+        "dumpsys",
+        "activity",
+        "activities",
+        appId,
+      );
+      assert(
+        activity.includes(`launchedFromPackage=${launcher} `) &&
+          activity.includes("rootOfTask=true"),
+        "Fixture must be a root task started by the home launcher",
+      );
+      await Bun.write(resolve(inputs, "launcher-activity.txt"), activity);
       return pid;
     }
     await Bun.sleep(100);
   }
   throw new Error("Launcher did not start the fixture host.");
+}
+
+async function tapNode(node: string | undefined, error: string): Promise<void> {
+  const bounds = node?.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+  assert(bounds?.[1] && bounds[2] && bounds[3] && bounds[4], error);
+  await command(
+    "shell",
+    "input",
+    "tap",
+    String(Math.floor((Number(bounds[1]) + Number(bounds[3])) / 2)),
+    String(Math.floor((Number(bounds[2]) + Number(bounds[4])) / 2)),
+  );
 }
 
 async function rotate(): Promise<void> {
@@ -103,6 +167,21 @@ async function requireFailureText(text: string): Promise<void> {
     }
   }
   throw new Error(`Missing native failure UI: ${text}`);
+}
+
+async function requireFailureButton(): Promise<string> {
+  const deadline = Date.now() + 15000;
+  while (Date.now() < deadline) {
+    const node = (await readUI())
+      .match(/<node\b[^>]*>/g)
+      ?.find((element) =>
+        /(?:text|content-desc)="Fail renderer"/.test(element),
+      );
+    if (node) {
+      return node;
+    }
+  }
+  throw new Error("Missing failure button after WebView rendering");
 }
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -203,6 +282,7 @@ try {
   );
   // Ask WindowManager to own the rotation mode rather than issuing separate Settings writes.
   await command("shell", "wm", "user-rotation", "lock", "0");
+  await command("shell", "am", "force-stop", appId);
   const hostPid = await launchFixture();
   assert(/^[1-9][0-9]*$/.test(hostPid), "Expected one Android host PID");
   const first = await report(hostPid, 2);
@@ -215,6 +295,17 @@ try {
     new RegExp(`^\\s*${first.after.pid}\\s+${hostPid}\\s`, "m").test(running),
     "Bun is not the actual app child",
   );
+  await command("shell", "input", "keyevent", "KEYCODE_HOME");
+  await readUI();
+  assert(
+    (await launchFixture()) === hostPid,
+    "Home navigation replaced the host",
+  );
+  const resumed = await command("shell", "ps", "-A", "-o", "PID,PPID,NAME");
+  assert(
+    new RegExp(`^\\s*${first.after.pid}\\s+${hostPid}\\s`, "m").test(resumed),
+    "Home navigation terminated Bun",
+  );
   // Launch may restore the task's prior rotation. Change the actual live mode after its first report.
   await rotate();
   const rotated = await report(hostPid, 4);
@@ -226,23 +317,11 @@ try {
   await requireChildExit(first.after.pid);
 
   // Exercise the ready -> renderer failure -> closed owner -> Activity recreation path.
+  await command("shell", "am", "force-stop", appId);
   const failureHost = await launchFixture();
   const beforeFailure = await report(failureHost, 2);
-  const node = (await readUI())
-    .match(/<node\b[^>]*>/g)
-    ?.find((element) => /(?:text|content-desc)="Fail renderer"/.test(element));
-  const bounds = node?.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-  assert(
-    bounds?.[1] && bounds[2] && bounds[3] && bounds[4],
-    "Missing failure button bounds",
-  );
-  await command(
-    "shell",
-    "input",
-    "tap",
-    String(Math.floor((Number(bounds[1]) + Number(bounds[3])) / 2)),
-    String(Math.floor((Number(bounds[2]) + Number(bounds[4])) / 2)),
-  );
+  const node = await requireFailureButton();
+  await tapNode(node, "Missing failure button bounds");
   await requireFailureText("Invalid WebView message");
   await requireChildExit(beforeFailure.after.pid);
   await rotate();
@@ -252,7 +331,7 @@ try {
     first,
     rotated,
     shutdown: "Bun PID absent after back",
-    launcher: "monkey MAIN/LAUNCHER, root task",
+    launcher: "Home launcher icon, verified launchedFromPackage and root task",
     rendererFailureRotation:
       "Closed owner shows native failure instead of attaching a WebView",
   });
