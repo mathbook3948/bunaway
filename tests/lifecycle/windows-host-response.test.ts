@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
-import { hostResponse } from "../../native/windows/bun/host-response.ts";
+import { hostResponse } from "#native/windows/bun/host-response";
 import {
   BunawayError,
   MAX_MESSAGE_BYTES,
   parseHostResponse,
-} from "../../packages/protocol/src/index.ts";
+} from "@bunaway/protocol";
 
 test("UI and I/O host responses bound both results and plugin errors", () => {
   expect(hostResponse(() => "ok")).toEqual({

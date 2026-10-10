@@ -3,8 +3,8 @@
 import { expect, mock } from "bun:test";
 import { rm } from "node:fs/promises";
 import { resolve } from "node:path";
-import * as build from "../../packages/cli/src/build.ts";
-import * as windowsDevLaunch from "../../packages/cli/src/windows-dev-launch.ts";
+import * as build from "#cli/build";
+import * as windowsDevLaunch from "#cli/windows-dev-launch";
 
 const root = process.argv[2];
 if (!root) {
@@ -28,7 +28,7 @@ await Bun.write(
   setInterval(async () => { if (await Bun.file(${JSON.stringify(close)}).exists()) process.exit(0); }, 20);
 `,
 );
-mock.module(import.meta.resolve("../../packages/cli/src/build.ts"), () => ({
+mock.module(import.meta.resolve("#cli/build"), () => ({
   ...build,
   prepareNative: async () => ({
     target: "windows-x64",
@@ -45,20 +45,17 @@ mock.module(import.meta.resolve("../../packages/cli/src/build.ts"), () => ({
     ],
   }),
 }));
-mock.module(
-  import.meta.resolve("../../packages/cli/src/windows-dev-launch.ts"),
-  () => ({
-    ...windowsDevLaunch,
-    verifyWindowsLaunch: async () => {},
-    windowsLaunchEnvironment: () => process.env,
-    closeWindowsApp: async (pid: number) => {
-      process.kill(pid, "SIGTERM");
-      return 1;
-    },
-  }),
-);
+mock.module(import.meta.resolve("#cli/windows-dev-launch"), () => ({
+  ...windowsDevLaunch,
+  verifyWindowsLaunch: async () => {},
+  windowsLaunchEnvironment: () => process.env,
+  closeWindowsApp: async (pid: number) => {
+    process.kill(pid, "SIGTERM");
+    return 1;
+  },
+}));
 
-const { devProject } = await import("../../packages/cli/src/dev.ts");
+const { devProject } = await import("#cli/dev");
 const configPath = resolve(root, "src-bunaway/bunaway.json");
 const configText = await Bun.file(configPath).text();
 const ui = resolve(root, "src/main.ts");

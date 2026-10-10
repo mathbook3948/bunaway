@@ -1,4 +1,4 @@
-import { runBunApp } from "../../packages/runtime-bun/src/index.ts";
+import { runBunApp } from "@bunaway/runtime-bun";
 
 // The parent test checks this sentinel in the command failure diagnostics.
 await runBunApp({

@@ -17,12 +17,12 @@ import {
   type ServerMessage,
   validateValue,
   type WireError,
-} from "../../../packages/protocol/src/index.ts";
+} from "@bunaway/protocol";
 
 import {
   MAX_WINDOWS,
   type WindowSpec,
-} from "../../../packages/runtime-bun/src/window-config.ts";
+} from "@bunaway/runtime-bun/window-config";
 
 export type Route = {
   viewId: string;
@@ -32,7 +32,7 @@ export type Route = {
 export {
   MAX_WINDOWS,
   type WindowSpec,
-} from "../../../packages/runtime-bun/src/window-config.ts";
+} from "@bunaway/runtime-bun/window-config";
 export type UIConfig = {
   runtime: RuntimeIdentity;
   policy: Policy;

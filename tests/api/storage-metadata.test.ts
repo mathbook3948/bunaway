@@ -1,18 +1,12 @@
 import { expect, test } from "bun:test";
-import {
-  type CommandContext,
-  command,
-} from "../../packages/backend-sdk/src/index.ts";
-import type { CoreServices } from "../../packages/core/src/index.ts";
-import {
-  NativeRegistry,
-  type Policy,
-} from "../../packages/protocol/src/index.ts";
+import { type CommandContext, command } from "@bunaway/backend";
+import type { CoreServices } from "@bunaway/core";
+import { NativeRegistry, type Policy } from "@bunaway/protocol";
 import {
   type StorageMetadata,
   storage,
   storagePlugin,
-} from "../../plugins/storage/src/index.ts";
+} from "@bunaway/plugin-storage";
 import { bindHostAPI } from "../fixtures/host-plugins.ts";
 
 const location = {

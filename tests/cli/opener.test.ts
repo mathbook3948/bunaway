@@ -3,19 +3,13 @@ import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { loadPluginCatalog } from "../../native/windows/bun/plugin-catalog.ts";
-import {
-  operations,
-  pluginRegistry,
-} from "../../native/windows/bun/plugins.ts";
-import { pluginImportsSource } from "../../packages/cli/src/app-modules.ts";
-import { validateProject } from "../../packages/cli/src/config.ts";
-import { packageFilename } from "../../packages/cli/src/distribution.ts";
-import { writeJson } from "../../packages/cli/src/files.ts";
-import {
-  installedPlugins,
-  writePluginManifest,
-} from "../../packages/cli/src/plugins.ts";
+import { loadPluginCatalog } from "#native/windows/bun/plugin-catalog";
+import { operations, pluginRegistry } from "#native/windows/bun/plugins";
+import { pluginImportsSource } from "#cli/app-modules";
+import { validateProject } from "#cli/config";
+import { packageFilename } from "#cli/distribution";
+import { writeJson } from "#cli/files";
+import { installedPlugins, writePluginManifest } from "#cli/plugins";
 import { createProject, packageDirectory } from "./project.ts";
 
 /** Runs an install/build subprocess and reports its captured output on failure. */

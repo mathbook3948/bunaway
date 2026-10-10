@@ -1,23 +1,19 @@
 import { expect, test } from "bun:test";
 import { MessageChannel } from "node:worker_threads";
-import {
-  Channel,
-  type Packet,
-  type Route,
-} from "../../native/windows/bun/channel.ts";
-import { command } from "../../packages/backend-sdk/src/command.ts";
+import { Channel, type Packet, type Route } from "#native/windows/bun/channel";
+import { command } from "#backend/command";
 import {
   type Core,
   type CoreSession,
   createCore,
   type EventEmitter,
-} from "../../packages/core/src/index.ts";
+} from "@bunaway/core";
 import {
   API_LIMITS,
   type HostContext,
   type JsonValue,
   PROTOCOL_VERSION,
-} from "../../packages/protocol/src/index.ts";
+} from "@bunaway/protocol";
 
 type ServerPacket = Extract<
   Packet,

@@ -30,8 +30,8 @@ test.skipIf(process.platform !== "win32")(
   "Windows native callbacks preserve logical size constraints across DPI and fullscreen changes",
   async () => {
     const [{ Windows }, { user, withBuffer }, { dlopen }] = await Promise.all([
-      import("../../native/windows/bun/win32.ts"),
-      import("../../native/windows/bun/win32-bindings.ts"),
+      import("#native/windows/bun/win32"),
+      import("#native/windows/bun/win32-bindings"),
       import("bun:ffi"),
     ]);
     const messaging = dlopen("user32.dll", {

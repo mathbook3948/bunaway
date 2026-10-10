@@ -7,7 +7,7 @@ import {
   type PermissionMatcher,
   type Policy,
   validateValue,
-} from "../../../packages/protocol/src/index.ts";
+} from "@bunaway/protocol";
 import type {
   NativeAdapter,
   NativeEnvironment,

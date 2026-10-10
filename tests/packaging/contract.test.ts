@@ -15,8 +15,8 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
-import * as windowsTools from "../../packages/packaging/src/channels/windows/common.ts";
-import { verifySignatures } from "../../packages/packaging/src/channels/windows/sign.ts";
+import * as windowsTools from "#packaging/channels/windows/common";
+import { verifySignatures } from "#packaging/channels/windows/sign";
 import {
   adapterFor,
   artifactPaths,
@@ -38,7 +38,7 @@ import {
   type StageContext,
   targetFor,
   verifyArtifact,
-} from "../../packages/packaging/src/index.ts";
+} from "@bunaway/packaging";
 
 let home: string;
 let root: string;

@@ -11,17 +11,14 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { resolve } from "node:path";
-import { buildProject } from "../../packages/cli/src/build.ts";
+import { buildProject } from "#cli/build";
 import {
   verifyWindowsLaunch,
   windowsLaunchEnvironment,
-} from "../../packages/cli/src/windows-dev-launch.ts";
-import {
-  findIscc,
-  must,
-} from "../../packages/packaging/src/channels/windows/common.ts";
-import { recordPackagedHashes } from "../../packages/packaging/src/channels/windows/manifest.ts";
-import type { PackageReport } from "../../packages/packaging/src/contract.ts";
+} from "#cli/windows-dev-launch";
+import { findIscc, must } from "#packaging/channels/windows/common";
+import { recordPackagedHashes } from "#packaging/channels/windows/manifest";
+import type { PackageReport } from "#packaging/contract";
 import { createProject, storageRoundtripUI } from "../cli/project.ts";
 
 assert.equal(process.platform, "win32");

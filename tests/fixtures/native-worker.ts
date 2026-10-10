@@ -1,13 +1,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { appModules } from "../../packages/cli/src/app-modules.ts";
-import { writeJson } from "../../packages/cli/src/files.ts";
-import {
-  installedPlugins,
-  writePluginManifest,
-} from "../../packages/cli/src/plugins.ts";
-import type { ManifestPlugin } from "../../packages/runtime-bun/src/app-manifest.ts";
+import { appModules } from "#cli/app-modules";
+import { writeJson } from "#cli/files";
+import { installedPlugins, writePluginManifest } from "#cli/plugins";
+import type { ManifestPlugin } from "@bunaway/runtime-bun/app-manifest";
 
 /**
  * Bundle native workers with the fixture app's installed plugins.

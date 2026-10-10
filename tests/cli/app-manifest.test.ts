@@ -3,21 +3,21 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { loadPluginCatalog } from "../../native/windows/bun/plugin-catalog.ts";
-import { pluginImportsSource } from "../../packages/cli/src/app-modules.ts";
-import { writeJson } from "../../packages/cli/src/files.ts";
-import { writePluginManifest } from "../../packages/cli/src/plugins.ts";
+import { loadPluginCatalog } from "#native/windows/bun/plugin-catalog";
+import { pluginImportsSource } from "#cli/app-modules";
+import { writeJson } from "#cli/files";
+import { writePluginManifest } from "#cli/plugins";
 import {
   type JsonValue,
   MAX_JSON_DEPTH,
   MAX_MESSAGE_BYTES,
   NativeRegistry,
   parsePolicy,
-} from "../../packages/protocol/src/index.ts";
+} from "@bunaway/protocol";
 import {
   parseAppManifest,
   readAppManifest,
-} from "../../packages/runtime-bun/src/app-manifest.ts";
+} from "@bunaway/runtime-bun/app-manifest";
 
 test("generated manifest rejects invalid versions, contracts, routing and SDK paths", () => {
   const manifest = {

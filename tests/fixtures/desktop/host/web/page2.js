@@ -1,9 +1,6 @@
 // Second page: verifies the old session was revoked and a new session works,
 // then tries a blocked remote navigation and confirms the session survives.
-import {
-  createClient,
-  createWebViewTransport,
-} from "../../../../../packages/client-sdk/src/index.ts";
+import { createClient, createWebViewTransport } from "@bunaway/client";
 const client = createClient({
   transport: createWebViewTransport(window.chrome.webview),
   hello: {

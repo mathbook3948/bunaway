@@ -2,39 +2,27 @@ import { expect, mock, spyOn } from "bun:test";
 import * as fs from "node:fs/promises";
 import { readdir, rm as removeCompileAssets, rm } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
-import * as build from "../../packages/cli/src/build.ts";
-import * as files from "../../packages/cli/src/files.ts";
-import * as windowsCompile from "../../packages/cli/src/windows-compile.ts";
-import {
-  adapterFor,
-  CODES,
-  registerAdapter,
-} from "../../packages/packaging/src/index.ts";
+import * as build from "#cli/build";
+import * as files from "#cli/files";
+import * as windowsCompile from "#cli/windows-compile";
+import { adapterFor, CODES, registerAdapter } from "@bunaway/packaging";
 
 // Store the bundled assets in a readable executable fixture so packaging tests can inspect them.
-mock.module(
-  import.meta.resolve("../../packages/cli/src/windows-compile.ts"),
-  () => ({
-    ...windowsCompile,
-    compileWindowsApp: async (
-      root: string,
-      _bun: string,
-      executable: string,
-    ) => {
-      const embedded: Record<string, string> = {};
-      for (const path of await files.files(resolve(root, "assets"))) {
-        embedded[
-          relative(resolve(root, "assets"), path).replaceAll("\\", "/")
-        ] = await Bun.file(path).text();
-      }
-      await Bun.write(resolve(root, executable), JSON.stringify(embedded));
-      await removeCompileAssets(resolve(root, "assets"), {
-        recursive: true,
-        force: true,
-      });
-    },
-  }),
-);
+mock.module(import.meta.resolve("#cli/windows-compile"), () => ({
+  ...windowsCompile,
+  compileWindowsApp: async (root: string, _bun: string, executable: string) => {
+    const embedded: Record<string, string> = {};
+    for (const path of await files.files(resolve(root, "assets"))) {
+      embedded[relative(resolve(root, "assets"), path).replaceAll("\\", "/")] =
+        await Bun.file(path).text();
+    }
+    await Bun.write(resolve(root, executable), JSON.stringify(embedded));
+    await removeCompileAssets(resolve(root, "assets"), {
+      recursive: true,
+      force: true,
+    });
+  },
+}));
 async function compiledAsset(artifact: build.BuiltPackage, name: string) {
   return (await Bun.file(artifact.executable).json())[name] as string;
 }
@@ -69,7 +57,7 @@ const buildProject = build.buildProject;
 const readJson = files.json;
 let builds = 0;
 let nativeTarget: build.NativeInputs["target"] = "windows-x64";
-mock.module(import.meta.resolve("../../packages/cli/src/files.ts"), () => ({
+mock.module(import.meta.resolve("#cli/files"), () => ({
   ...files,
   json: async (path: string) => {
     const value = await readJson(path);
@@ -102,7 +90,7 @@ mock.module(import.meta.resolve("../../packages/cli/src/files.ts"), () => ({
     return value;
   },
 }));
-mock.module(import.meta.resolve("../../packages/cli/src/build.ts"), () => ({
+mock.module(import.meta.resolve("#cli/build"), () => ({
   ...build,
   currentTarget: () => nativeTarget,
   buildProject: async (directory: string) => {
@@ -120,7 +108,7 @@ async function setBundle(value: Record<string, unknown>) {
     bundle: value,
   });
 }
-const { packageProject } = await import("../../packages/cli/src/package.ts");
+const { packageProject } = await import("#cli/package");
 // A dev URL is included only in development output; production stays on local assets.
 const settings = (await readJson(configPath)) as Record<string, unknown>;
 const devUrl = "http://127.0.0.1:5173/";
@@ -327,9 +315,7 @@ try {
       frontend: "dist/web",
     },
   });
-  const { readProjectMetadata } = await import(
-    "../../packages/cli/src/config.ts"
-  );
+  const { readProjectMetadata } = await import("#cli/config");
   expect((await readProjectMetadata(project)).frontend).toBe(
     resolve(project, "dist/web"),
   );

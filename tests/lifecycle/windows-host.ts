@@ -6,14 +6,14 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { cp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { buildHostFixture } from "../../native/windows/bun/package.ts";
+import { buildHostFixture } from "#native/windows/bun/package";
 import {
   closeAllWindows,
   rendererPids,
   watch,
 } from "./windows-host-processes.ts";
-import { windowsLaunchEnvironment } from "../../packages/cli/src/windows-dev-launch.ts";
-import { validateValue } from "../../packages/protocol/src/index.ts";
+import { windowsLaunchEnvironment } from "#cli/windows-dev-launch";
+import { validateValue } from "@bunaway/protocol";
 import { validationCases } from "../protocol/validation-cases.ts";
 import { assertReport, readReport } from "./reports.ts";
 

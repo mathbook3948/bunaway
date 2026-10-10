@@ -7,11 +7,8 @@ import {
   Channel,
   type Packet,
   type UIConfig,
-} from "../../native/windows/bun/channel.ts";
-import {
-  API_LIMITS,
-  MAX_MESSAGE_BYTES,
-} from "../../packages/protocol/src/index.ts";
+} from "#native/windows/bun/channel";
+import { API_LIMITS, MAX_MESSAGE_BYTES } from "@bunaway/protocol";
 import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
 
 const native = {

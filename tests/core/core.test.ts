@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
-import { command } from "../../packages/backend-sdk/src/index.ts";
+import { command } from "@bunaway/backend";
 import type {
   AppDefinition,
   CoreServices,
   PluginDefinition,
   RuntimeServices,
-} from "../../packages/core/src/index.ts";
+} from "@bunaway/core";
 import {
   API_LIMITS,
   type CancellationController,
@@ -19,7 +19,7 @@ import {
   type ServerMessage,
   serializeMessage,
   validateValue,
-} from "../../packages/protocol/src/index.ts";
+} from "@bunaway/protocol";
 import {
   allowedHost,
   contracts,

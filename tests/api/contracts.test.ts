@@ -5,21 +5,21 @@ import {
   command,
   type EventsOf,
   type PluginDefinition,
-} from "../../packages/backend-sdk/src/index.ts";
+} from "@bunaway/backend";
 import {
   type Client,
   type ClientFactory,
   createClient,
   invoke,
   listen,
-} from "../../packages/client-sdk/src/index.ts";
+} from "@bunaway/client";
 import type {
   CommandContext,
   CoreFactory,
   CoreServices,
   CoreSession,
   RuntimeServices,
-} from "../../packages/core/src/index.ts";
+} from "@bunaway/core";
 import {
   BunawayError,
   type CancellationSignal,
@@ -42,7 +42,7 @@ import {
   type Transport,
   type TransportEvent,
   validateValue,
-} from "../../packages/protocol/src/index.ts";
+} from "@bunaway/protocol";
 import {
   bindHostAPI,
   contracts,

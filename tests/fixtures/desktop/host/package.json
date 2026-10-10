@@ -5,7 +5,11 @@
     "@bunaway/plugin-storage": "workspace:*",
     "@bunaway/plugin-log": "workspace:*",
     "@bunaway/plugin-capabilities": "workspace:*",
-    "@bunaway/plugin-windows": "workspace:*"
+    "@bunaway/plugin-windows": "workspace:*",
+    "@bunaway/core": "workspace:*",
+    "@bunaway/protocol": "workspace:*",
+    "@bunaway/runtime-bun": "workspace:*",
+    "@bunaway/client": "workspace:*"
   },
   "name": "@bunaway/test-desktop"
 }

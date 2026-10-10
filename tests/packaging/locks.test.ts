@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import {
   acquireBuildOutputLock,
   acquirePackageInputLock,
-} from "../../packages/packaging/src/index.ts";
+} from "@bunaway/packaging";
 
 let home: string;
 beforeAll(async () => {
@@ -117,7 +117,7 @@ test("package input locks coordinate with rebuilds across processes", async () =
     [
       process.execPath,
       "-e",
-      `import { acquirePackageInputLock } from ${JSON.stringify(import.meta.resolve("../../packages/packaging/src/index.ts"))};
+      `import { acquirePackageInputLock } from ${JSON.stringify(import.meta.resolve("@bunaway/packaging"))};
 const release = await acquirePackageInputLock(process.argv[1], "windows-x64");
 console.log("ready");
 for await (const chunk of Bun.stdin.stream()) { break; }

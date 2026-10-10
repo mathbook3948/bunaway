@@ -12,20 +12,20 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import * as windowsTools from "../../packages/packaging/src/channels/windows/common.ts";
+import * as windowsTools from "#packaging/channels/windows/common";
 import {
   copyPayload,
   findIscc,
   findWindowsKitTool,
   must,
-} from "../../packages/packaging/src/channels/windows/common.ts";
+} from "#packaging/channels/windows/common";
 import {
   compileInno,
   prepareInnoSigning,
   renderInnoScript,
-} from "../../packages/packaging/src/channels/windows/inno.ts";
-import { renderAppxManifest } from "../../packages/packaging/src/channels/windows/msix.ts";
-import { signingArgs } from "../../packages/packaging/src/channels/windows/sign.ts";
+} from "#packaging/channels/windows/inno";
+import { renderAppxManifest } from "#packaging/channels/windows/msix";
+import { signingArgs } from "#packaging/channels/windows/sign";
 import {
   type AdapterInput,
   type AdapterStage,
@@ -37,7 +37,7 @@ import {
   registeredChannels,
   type SigningConfig,
   type StageContext,
-} from "../../packages/packaging/src/index.ts";
+} from "@bunaway/packaging";
 
 const metadata: ResolvedPackaging = {
   root: "C:\\proj",
@@ -299,9 +299,7 @@ test.each([
           },
         }),
       );
-      const { resolvePackaging } = await import(
-        "../../packages/packaging/src/index.ts"
-      );
+      const { resolvePackaging } = await import("@bunaway/packaging");
       const resolved = await resolvePackaging({
         root,
         config,
@@ -1770,7 +1768,7 @@ test("packagedSha256 records the signed app without modifying it", async () => {
       }),
     );
     const { recordPackagedHashes } = await import(
-      "../../packages/packaging/src/channels/windows/manifest.ts"
+      "#packaging/channels/windows/manifest"
     );
     const manifest = await recordPackagedHashes(root);
     expect(manifest.bun.executableSha256).toBe(upstream);

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { constrainedOuterSize } from "../../native/windows/bun/window-size.ts";
+import { constrainedOuterSize } from "#native/windows/bun/window-size";
 
 const unconstrained = {
   minWidth: null,

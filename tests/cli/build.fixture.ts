@@ -3,30 +3,27 @@
 import { mock, spyOn } from "bun:test";
 import { copyFile, mkdir, rm as removeCompileAssets } from "node:fs/promises";
 import { resolve } from "node:path";
-import * as build from "../../packages/cli/src/build.ts";
-import * as files from "../../packages/cli/src/files.ts";
-import * as windowsCompile from "../../packages/cli/src/windows-compile.ts";
-import { adapterFor } from "../../packages/packaging/src/index.ts";
+import * as build from "#cli/build";
+import * as files from "#cli/files";
+import * as windowsCompile from "#cli/windows-compile";
+import { adapterFor } from "@bunaway/packaging";
 
 const compileSignal = process.env.BUNAWAY_TEST_COMPILE_SIGNAL === "1";
 if (!compileSignal) {
-  mock.module(
-    import.meta.resolve("../../packages/cli/src/windows-compile.ts"),
-    () => ({
-      ...windowsCompile,
-      compileWindowsApp: async (
-        root: string,
-        _bun: string,
-        executable: string,
-      ) => {
-        await Bun.write(resolve(root, executable), "fixture compiled app");
-        await removeCompileAssets(resolve(root, "assets"), {
-          recursive: true,
-          force: true,
-        });
-      },
-    }),
-  );
+  mock.module(import.meta.resolve("#cli/windows-compile"), () => ({
+    ...windowsCompile,
+    compileWindowsApp: async (
+      root: string,
+      _bun: string,
+      executable: string,
+    ) => {
+      await Bun.write(resolve(root, executable), "fixture compiled app");
+      await removeCompileAssets(resolve(root, "assets"), {
+        recursive: true,
+        force: true,
+      });
+    },
+  }));
 }
 const project = process.argv[2];
 if (!project) {
@@ -92,7 +89,7 @@ for (const [name, path] of Object.entries(native.licenses)) {
   await copyFile(resolve(files.frameworkRoot, "licenses", name), path);
 }
 const readJson = files.json;
-mock.module(import.meta.resolve("../../packages/cli/src/files.ts"), () => ({
+mock.module(import.meta.resolve("#cli/files"), () => ({
   ...files,
   json: async (path: string) => {
     const value = await readJson(path);
@@ -127,7 +124,7 @@ mock.module(import.meta.resolve("../../packages/cli/src/files.ts"), () => ({
   },
 }));
 const buildProject = build.buildProject;
-mock.module(import.meta.resolve("../../packages/cli/src/build.ts"), () => ({
+mock.module(import.meta.resolve("#cli/build"), () => ({
   ...build,
   currentTarget: () => "windows-x64",
   buildProject: (directory: string) =>
@@ -159,7 +156,7 @@ if (process.argv[3] === "--development-artifact") {
     ),
   );
 } else {
-  const { main } = await import("../../packages/cli/src/main.ts");
+  const { main } = await import("#cli/main");
   process.exitCode = await main([
     ...(process.argv.slice(3).length
       ? process.argv.slice(3)

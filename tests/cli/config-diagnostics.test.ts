@@ -2,11 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import {
-  readDevSettings,
-  readProjectSettings,
-} from "../../packages/cli/src/config.ts";
-import { writeJson } from "../../packages/cli/src/files.ts";
+import { readDevSettings, readProjectSettings } from "#cli/config";
+import { writeJson } from "#cli/files";
 
 test("configuration diagnostics identify the file, field and expected value", async () => {
   expect(() => readDevSettings(null)).toThrow(

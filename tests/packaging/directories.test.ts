@@ -18,7 +18,7 @@ import {
   acquirePackageInputLock,
   type BuildTarget,
   ownedDirectory,
-} from "../../packages/packaging/src/index.ts";
+} from "@bunaway/packaging";
 
 let home: string;
 beforeAll(async () => {

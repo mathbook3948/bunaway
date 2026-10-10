@@ -1,9 +1,6 @@
-import type {
-  NativeAdapter,
-  NativeEnvironment,
-} from "../../../packages/plugin-sdk/src/index.ts";
-import type { PermissionMatcher } from "../../../packages/protocol/src/index.ts";
-import type { ManifestPlugin } from "../../../packages/runtime-bun/src/app-manifest.ts";
+import type { NativeAdapter, NativeEnvironment } from "@bunaway/plugin";
+import type { PermissionMatcher } from "@bunaway/protocol";
+import type { ManifestPlugin } from "@bunaway/runtime-bun/app-manifest";
 
 export type { NativeAdapter, NativeEnvironment };
 

@@ -1,13 +1,9 @@
 import { expect, test } from "bun:test";
 import { resolve } from "node:path";
-import { validatePacket } from "../../native/windows/bun/channel.ts";
-import { hostResponse } from "../../native/windows/bun/host-response.ts";
-import {
-  bindHostAPI,
-  type CoreServices,
-  createCore,
-} from "../../packages/core/src/index.ts";
-import { defineNativePlugin, s } from "../../packages/plugin-sdk/src/index.ts";
+import { validatePacket } from "#native/windows/bun/channel";
+import { hostResponse } from "#native/windows/bun/host-response";
+import { bindHostAPI, type CoreServices, createCore } from "@bunaway/core";
+import { defineNativePlugin, s } from "@bunaway/plugin";
 import {
   type HostContext,
   MAX_MESSAGE_BYTES,
@@ -16,8 +12,8 @@ import {
   type ServerMessage,
   serializeHostResponse,
   serializeMessage,
-} from "../../packages/protocol/src/index.ts";
-import { storagePlugin } from "../../plugins/storage/src/index.ts";
+} from "@bunaway/protocol";
+import { storagePlugin } from "@bunaway/plugin-storage";
 import { contracts } from "../fixtures/host-plugins.ts";
 
 const readText = contracts["storage.readText"];

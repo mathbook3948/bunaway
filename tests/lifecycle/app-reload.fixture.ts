@@ -1,6 +1,6 @@
-import { listenForAppReload } from "../../native/windows/bun/app-reload.ts";
-import { DevelopmentApp } from "../../native/windows/bun/development-app.ts";
-import type { AppDefinition } from "../../packages/core/src/index.ts";
+import { listenForAppReload } from "#native/windows/bun/app-reload";
+import { DevelopmentApp } from "#native/windows/bun/development-app";
+import type { AppDefinition } from "@bunaway/core";
 
 const assets = process.argv[2];
 if (!assets || !process.send) {

@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type {
-  Hello,
-  Message,
-  Policy,
-} from "../../packages/protocol/src/index.ts";
+import type { Hello, Message, Policy } from "@bunaway/protocol";
 import {
   MAX_JSON_DEPTH,
   MAX_MESSAGE_BYTES,
@@ -13,8 +9,8 @@ import {
   parseMessage,
   parsePolicy,
   serializeMessage,
-} from "../../packages/protocol/src/index.ts";
-import { parseWindowCall } from "../../plugins/windows/src/index.ts";
+} from "@bunaway/protocol";
+import { parseWindowCall } from "@bunaway/plugin-windows";
 import { registry } from "../fixtures/host-plugins.ts";
 
 const protocol = {

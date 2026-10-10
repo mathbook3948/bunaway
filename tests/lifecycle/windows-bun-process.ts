@@ -1,6 +1,6 @@
 import { dlopen } from "bun:ffi";
 import assert from "node:assert/strict";
-import { validateValue } from "../../packages/protocol/src/index.ts";
+import { validateValue } from "@bunaway/protocol";
 
 if (process.argv.includes("--validate")) {
   for await (const line of console) {

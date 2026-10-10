@@ -13,27 +13,20 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { DevelopmentApp } from "../../native/windows/bun/development-app.ts";
-import { packFramework } from "../../packages/cli/scripts/pack.ts";
-import {
-  bundleWindowsAssets,
-  bundleWindowsReload,
-} from "../../packages/cli/src/assets.ts";
-import { bundleAssets } from "../../packages/cli/src/build.ts";
-import { validateProject } from "../../packages/cli/src/config.ts";
+import { DevelopmentApp } from "#native/windows/bun/development-app";
+import { packFramework } from "#cli-scripts/pack";
+import { bundleWindowsAssets, bundleWindowsReload } from "#cli/assets";
+import { bundleAssets } from "#cli/build";
+import { validateProject } from "#cli/config";
 import {
   checkArtifact,
   packageFilename,
   snapshotHashes,
   validateFramework,
-} from "../../packages/cli/src/distribution.ts";
-import {
-  installedPackageRoot,
-  json,
-  writeJson,
-} from "../../packages/cli/src/files.ts";
-import { buildWithSdk, sdkPlugin } from "../../packages/cli/src/sdk.ts";
-import { readAppManifest } from "../../packages/runtime-bun/src/app-manifest.ts";
+} from "#cli/distribution";
+import { installedPackageRoot, json, writeJson } from "#cli/files";
+import { buildWithSdk, sdkPlugin } from "#cli/sdk";
+import { readAppManifest } from "@bunaway/runtime-bun/app-manifest";
 import { createProject, packageDirectory } from "./project.ts";
 
 test("CommonJS plugin default and named exports retain their identity across app reloads", async () => {
@@ -643,7 +636,7 @@ test("workspace and isolated installs resolve transitive SDKs from their declari
   }
 }, 60000);
 
-test("Windows host relative SDK imports share the installed app's error class", async () => {
+test("Windows host package imports share the installed app's error class", async () => {
   const home = await realpath(
     await mkdtemp(resolve(tmpdir(), "bunaway-sdk-identity-")),
   );
@@ -659,7 +652,7 @@ test("Windows host relative SDK imports share the installed app's error class", 
     );
     await Bun.write(
       native,
-      'export { BunawayError } from "../../../packages/protocol/src/index.ts";',
+      'export { BunawayError } from "@bunaway/protocol";',
     );
     const entry = resolve(project, "identity.ts");
     await Bun.write(

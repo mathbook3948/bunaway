@@ -1,14 +1,9 @@
 import assert from "node:assert/strict";
 import { cp, mkdir, rm, writeFile } from "node:fs/promises";
 import { relative, resolve, sep } from "node:path";
-import { bundleWindowsHost } from "../../../packages/cli/src/assets.ts";
-import {
-  files,
-  hash,
-  json,
-  writeJson,
-} from "../../../packages/cli/src/files.ts";
-import { compileWindowsApp } from "../../../packages/cli/src/windows-compile.ts";
+import { bundleWindowsHost } from "#cli/assets";
+import { files, hash, json, writeJson } from "#cli/files";
+import { compileWindowsApp } from "#cli/windows-compile";
 import pin from "../../../runtime/build-manifests/windows-x64.json";
 
 const root = resolve(import.meta.dir, "../../..");
