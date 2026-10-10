@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { createClient, createWebViewTransport } from "@bunaway/client";
 import type { WindowReadiness } from "@bunaway/plugin-api/native";
 import {
   validateWindowCall,
@@ -6,6 +7,8 @@ import {
 } from "@bunaway/plugin-windows";
 import {
   type HostContext,
+  type Hello,
+  parseMessage,
   PROTOCOL_VERSION,
   SDK_READY_FEATURE,
   serializeMessage,
@@ -162,6 +165,7 @@ test("preparation deadlines and navigation failure suppress late success but all
 
 test("SDK acknowledgement requires a current negotiated session and never forwards a new command", () => {
   const packets: Packet[] = [];
+  let capacity = true;
   const ready: Route[] = [];
   const revoked: number[] = [];
   const hello = {
@@ -189,7 +193,7 @@ test("SDK acknowledgement requires a current negotiated session and never forwar
       source: () => "https://app.bunaway.local/index.html",
       ready: () => true,
       forward: (packet) => packets.push(packet),
-      capacity: () => true,
+      capacity: () => capacity,
       deliver() {},
       log() {},
       sdkReady: (route) => ready.push(route),
@@ -217,6 +221,7 @@ test("SDK acknowledgement requires a current negotiated session and never forwar
   if (packet?.kind !== "session-open") {
     throw new Error("Missing route");
   }
+  capacity = false;
   boundary.receive(source, acknowledgement);
   expect(ready).toHaveLength(0);
   boundary.send(packet.route, {
@@ -246,6 +251,92 @@ test("SDK acknowledgement requires a current negotiated session and never forwar
     1,
   ]);
   expect(boundary.active(packet.route.context as HostContext)).toBe(false);
+});
+
+test("SDK readiness and automatic display complete while the Worker channel is full", async () => {
+  const f = fixture();
+  f.tracker.documentComplete(null);
+  const source = "https://app.bunaway.local/index.html";
+  const hello: Hello = {
+    kind: "hello",
+    protocol: PROTOCOL_VERSION,
+    features: [
+      SDK_READY_FEATURE,
+    ],
+    buildId: "test",
+  };
+  const packets: Packet[] = [];
+  const listeners = new Set<(event: { data: unknown }) => void>();
+  let capacity = true;
+  const boundary = new ViewBoundary(
+    {
+      id: "main",
+      origins: [
+        new URL(source).origin,
+      ],
+      commands: [
+        "test.command",
+      ],
+      events: [],
+      host: {
+        permissions: [],
+      },
+    },
+    {
+      origin: (text) => new URL(text).origin,
+      source: () => source,
+      ready: () => true,
+      capacity: () => capacity,
+      forward: (packet) => packets.push(packet),
+      deliver: (text) => {
+        for (const listener of listeners) {
+          listener({
+            data: parseMessage(text),
+          });
+        }
+      },
+      log() {},
+      sessionOpened: (route) =>
+        f.tracker.sessionOpened(route.documentGeneration),
+      sdkReady: (route) => f.tracker.sdkComplete(route.documentGeneration),
+    },
+  );
+  const client = createClient({
+    hello,
+    transport: createWebViewTransport({
+      postMessage: (message) =>
+        boundary.receive(source, JSON.stringify(message)),
+      addEventListener: (_type, listener) => listeners.add(listener),
+      removeEventListener: (_type, listener) => listeners.delete(listener),
+    }),
+  });
+  try {
+    const opened = packets[0];
+    if (opened?.kind !== "session-open") {
+      throw new Error("Missing session");
+    }
+    // Other views can fill the shared channel before this client's acknowledgement arrives.
+    capacity = false;
+    boundary.send(opened.route, hello);
+    await client.ready;
+    expect(f.tracker.snapshot()).toMatchObject({
+      document: "ready",
+      sdk: "ready",
+      error: null,
+    });
+    expect(f.shows()).toBe(1);
+    expect(packets).toHaveLength(2);
+    f.tracker.expireSdk();
+    expect(f.tracker.snapshot().sdk).toBe("ready");
+    // Local readiness must not allow commands to bypass the shared channel's bound.
+    await expect(client.invoke("test.command", null)).rejects.toMatchObject({
+      code: "BUSY",
+    });
+    expect(packets).toHaveLength(2);
+  } finally {
+    await client.close();
+  }
+  expect(listeners.size).toBe(0);
 });
 
 test("preparation schemas reject invalid phases and splashscreen targets", () => {

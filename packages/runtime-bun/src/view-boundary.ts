@@ -205,7 +205,12 @@ export class ViewBoundary {
             message: "Session is not negotiated.",
           });
         }
-        if (message.kind !== "cancel" && !this.hooks.capacity(1)) {
+        // SDK readiness is handled locally and consumes no Worker channel slot.
+        if (
+          message.kind !== "cancel" &&
+          message.kind !== "sdk-ready" &&
+          !this.hooks.capacity(1)
+        ) {
           throw new BunawayError({
             code: "BUSY",
             message: "UI channel is full.",
