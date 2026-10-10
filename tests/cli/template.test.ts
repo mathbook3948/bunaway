@@ -1,9 +1,11 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { bundleAssets } from "#cli/build";
-import { validateProject } from "#cli/config";
+import { type Project, validateProject } from "#cli/config";
+import { appModules } from "#cli/app-modules";
+import { installedPackageRoot } from "#cli/files";
+import { assertAppDefinitionExport, buildWithSdk, sdkPlugin } from "#cli/sdk";
 import { createClient } from "@bunaway/client";
 import {
   PROTOCOL_VERSION,
@@ -14,6 +16,47 @@ import {
 } from "@bunaway/protocol";
 import { readJsonLines } from "@bunaway/runtime-bun";
 import { createProject } from "./project.ts";
+
+/** Bundle the legacy process adapter only for its SDK contract test. */
+async function bundleProcessBackend(
+  project: Project,
+  assets: string,
+): Promise<void> {
+  await assertAppDefinitionExport(project.appEntry);
+  await mkdir(assets, {
+    recursive: true,
+  });
+  const runtime = resolve(
+    await installedPackageRoot(project.frameworkRoot, "@bunaway/runtime-bun"),
+    "src/index.ts",
+  );
+  const sdk = await sdkPlugin(project.root, [], project.nativePlugins);
+  const outputs = await buildWithSdk(
+    {
+      entrypoints: [
+        "bunaway-generated/backend.ts",
+      ],
+      root: project.root,
+      target: "bun",
+      packages: "bundle",
+    },
+    {
+      name: "process-contract-entry",
+      setup(build) {
+        sdk.setup(build);
+        appModules({
+          appEntry: project.appEntry,
+          processRuntime: runtime,
+        }).setup(build);
+      },
+    },
+  );
+  const output = outputs[0];
+  if (outputs.length !== 1 || !output) {
+    throw new Error("Missing backend bundle.");
+  }
+  await Bun.write(resolve(assets, "backend.js"), await output.arrayBuffer());
+}
 
 test("external generated backend uses actual SDK command/storage/event; revoked saves are not replayed", async () => {
   const root = await realpath(
@@ -37,7 +80,7 @@ test("external generated backend uses actual SDK command/storage/event; revoked 
     expect(await install.exited, await installErrors).toBe(0);
     const assets = resolve(root, "assets");
     const definition = await validateProject(project);
-    await bundleAssets(definition, assets);
+    await bundleProcessBackend(definition, assets);
     const backend = resolve(assets, "backend.js");
     const processChild = Bun.spawn(
       [

@@ -32,6 +32,7 @@ import {
   writeJson,
 } from "./files.ts";
 import { assertNotFrontendBuild, buildFrontend } from "./frontend-build.ts";
+import { compileMacosApp } from "./macos-compile.ts";
 import { runManagedCommand } from "./managed-command.ts";
 import { run, runWorker } from "./processes.ts";
 import { compileWindowsApp } from "./windows-compile.ts";
@@ -120,56 +121,50 @@ async function prepareNativeForBuild(
   }
   await assertBuildBun(target, root);
   const windows = target === "windows-x64";
-  const args = windows
-    ? [
-        "pwsh",
-        "-NoProfile",
-        "-File",
-        resolve(root, "native/windows/bun/prepare.ps1"),
-      ]
-    : [
-        "zsh",
-        resolve(root, "native/macos/host/run.sh"),
-        "--host-only",
-      ];
-  if (signal) {
-    await runManagedCommand(
-      args,
-      root,
-      {
+  if (windows) {
+    const args = [
+      "pwsh",
+      "-NoProfile",
+      "-File",
+      resolve(root, "native/windows/bun/prepare.ps1"),
+    ];
+    if (signal) {
+      await runManagedCommand(
+        args,
+        root,
+        {
+          BUN: process.execPath,
+        },
+        signal,
+        root,
+      );
+    } else {
+      await run(args, root, {
         BUN: process.execPath,
-      },
-      signal,
-      root,
-    );
-  } else {
-    await run(args, root, {
-      BUN: process.execPath,
-    });
+      });
+    }
   }
   const pin = await readPin(target, root);
   const vendor = resolve(root, "build/cache/bun");
   const licenses: Record<string, string> = {
     "FRAMEWORK-LICENSE.txt": resolve(root, "FRAMEWORK-LICENSE.txt"),
     "THIRD-PARTY-NOTICES.txt": resolve(root, "THIRD-PARTY-NOTICES.txt"),
-    "LICENSE.bun": resolve(vendor, "LICENSE.bun"),
+    "LICENSE.bun": resolve(
+      windows ? vendor : resolve(root, "licenses"),
+      "LICENSE.bun",
+    ),
   };
   if (windows) {
     licenses["License-WebView2.txt"] = resolve(
       root,
       "build/cache/webview2/sdk/LICENSE.txt",
     );
-  } else {
-    licenses["LICENSE.nlohmann-json"] = resolve(
-      root,
-      "build/cache/nlohmann-json/LICENSE.nlohmann-json",
-    );
   }
   return {
     target,
     host: resolve(
       root,
-      windows ? "native/windows/bun/boot.ts" : "build/macos-host/bunaway-host",
+      windows ? "native/windows/bun/boot.ts" : "native/macos/bun/boot.ts",
     ),
     ...(windows
       ? {
@@ -179,12 +174,14 @@ async function prepareNativeForBuild(
           ),
         }
       : {}),
-    bun: resolve(vendor, `bun-${pin.bun.target}/bun${windows ? ".exe" : ""}`),
+    bun: windows
+      ? resolve(vendor, `bun-${pin.bun.target}/bun.exe`)
+      : process.execPath,
     licenses,
   };
 }
 
-/** Bundle project code and assets for the selected host; Windows also returns compile asset names. */
+/** Bundle project code and assets for the selected host and return compile asset names. */
 export async function bundleAssets(
   project: Project,
   assets: string,
@@ -194,7 +191,7 @@ export async function bundleAssets(
 ): Promise<string[]> {
   const result = await runWorker(
     "assets.ts",
-    windows ? "bundleWindowsAssets" : "bundleAssets",
+    windows ? "bundleWindowsAssets" : "bundleMacosAssets",
     [
       project,
       assets,
@@ -204,7 +201,7 @@ export async function bundleAssets(
     project.root,
     project.frameworkRoot,
   );
-  return windows ? (JSON.parse(result) as string[]) : [];
+  return JSON.parse(result) as string[];
 }
 
 function xml(text: string): string {
@@ -293,12 +290,6 @@ async function assembleProject(
   const pin = await readPin(target, root);
   await verifyHash(native.bun, pin.bun.executableSha256);
   await verifyHash(native.licenses["LICENSE.bun"] ?? "", pin.bun.licenseSha256);
-  if (!windows) {
-    await verifyHash(
-      native.licenses["LICENSE.nlohmann-json"] ?? "",
-      pin.json?.licenseSha256 ?? "",
-    );
-  }
   if (windows) {
     const deps = (await json(
       resolve(root, "native/windows/bun/deps.json"),
@@ -346,7 +337,7 @@ async function assembleProject(
     await mkdir(resolve(assets, "web"), {
       recursive: true,
     });
-    if (!windows || options.development) {
+    if (options.development && windows) {
       await mkdir(resolve(packageRoot, "runtime"), {
         recursive: true,
       });
@@ -359,10 +350,7 @@ async function assembleProject(
         recursive: true,
       });
     }
-    if (!windows) {
-      await cp(native.host, executable);
-    }
-    if (!windows || options.development) {
+    if (options.development && windows) {
       await cp(
         native.bun,
         resolve(packageRoot, `runtime/bun${windows ? ".exe" : ""}`),
@@ -383,13 +371,6 @@ async function assembleProject(
     }
     await writeFile(resolve(assets, "bunfig.toml"), "env = false\n");
     await writeJson(resolve(assets, "tsconfig.json"), {});
-    if (!windows) {
-      for (const schema of await files(
-        resolve(root, "native/host-api/generated"),
-      )) {
-        await cp(schema, resolve(assets, basename(schema)));
-      }
-    }
     const bundledAssets = await bundleAssets(
       project,
       assets,
@@ -441,6 +422,16 @@ async function assembleProject(
         );
       }
     }
+    if (!windows) {
+      await compileMacosApp(
+        assets,
+        native.bun,
+        executable,
+        bundledAssets,
+        signal,
+        root,
+      );
+    }
     await ownedDirectory(project.root, staging);
     const hashes: Record<string, string> = {};
     for (const dir of windows && !options.development
@@ -470,6 +461,11 @@ async function assembleProject(
     };
     await writeJson(resolve(packageRoot, "manifest.json"), {
       ...pin,
+      ...(!windows
+        ? {
+            json: undefined,
+          }
+        : {}),
       assets: hashes,
       app: {
         id: project.app.appId,
@@ -492,7 +488,8 @@ async function assembleProject(
                 sha256: await hash(resolve(packageRoot, executableName)),
               }
           : {
-              sourceSha256: await hash(native.host),
+              kind: "bun-compiled",
+              sourceSha256: await hash(executable),
             }),
       },
     });
@@ -518,6 +515,8 @@ ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking<
         "--force",
         "--sign",
         "-",
+        "--entitlements",
+        resolve(root, "native/macos/bun/entitlements.plist"),
         staging,
       ];
       if (signal) {
@@ -525,10 +524,6 @@ ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking<
       } else {
         await run(args, project.root);
       }
-      await verifyHash(
-        resolve(packageRoot, "runtime/bun"),
-        pin.bun.executableSha256,
-      );
     }
     signal?.throwIfAborted();
     // The work tree can change while bundling or signing; check it before moving preserved output.

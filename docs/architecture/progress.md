@@ -65,13 +65,14 @@ Bun UI Worker의 창, WebView2, 비동기 작업, 다중 창, 종료를 검증�
   `windows[]`와 이전 단일 창 설정을 지원한다.
   창, 뷰별 WebView2 환경, 세션, 정책, 뷰 단위 복구, 마지막 창 종료 시 Job 정리를 구현한다.
   [창/뷰 ADR](../decisions/0004-multi-window-per-view-policy.md)은 Windows 범위다.
-- `native/macos/host/main.mm`는 단일 `view`, `home`, `window` 설정을 사용한다.
-  `WKURLSchemeHandler` 로컬 자산, 호스트가 관찰한 frame/origin, 탐색 시 세션 폐기,
-  첫 탐색 전 `WKContentRuleList`, 범위 제한 `openat`과 FIFO, 링크 거부를 구현한다.
-  렌더러만 재생성하고 Bun은 유지한다. Bun 프로세스 그룹과 guard로 종료를 관리하지만
-  spawn→guard 연결 사이의 비정상 종료 race 제약은 남는다.
+- `native/macos/bun/`은 Bun 직접 FFI로 AppKit와 WKWebView를 연결한다.
+  메인 스레드가 UI를 소유하고 같은 프로세스의 Worker가 코어를 실행한다.
+  자산 스킴, frame/origin, 탐색 시 세션 폐기와 첫 탐색 전 리소스 규칙을 검증한다.
+  렌더러만 재생성하고 Bun은 유지하며 별도 백엔드 프로세스는 없다.
+  전용 프로세스 그룹과 시스템 shell 감시 프로세스가 앱 하위 프로세스의 정리를 소유한다.
+  C/ObjC++ 제품 호스트와 전용 native 테스트는 삭제했다.
 - Windows 다중 창 변경으로 공유 `app.json`이 macOS 호스트와 호환되지 않게 된 것을
-  새 회귀 실행에서 확인했다. macOS 회귀용 단일 창 선언을 `native/macos/host/test/app.json`에
+  새 회귀 실행에서 확인했다. macOS 회귀용 단일 창 선언을 `tests/fixtures/desktop/host/macos-app.json`에
   분리했고 공통 정책, 백엔드, 페이지는 계속 공유한다. 다중 창을 조용히 단일 창으로 변환하지 않는다.
 - 공유 메모 회귀 페이지의 Windows 영속 프로필 검사는 기본값으로 유지한다.
   macOS driver만 비영속 브라우저 저장소의 재시작 초기화를 명시적으로 검사하며,
@@ -99,10 +100,10 @@ Bun UI Worker의 창, WebView2, 비동기 작업, 다중 창, 종료를 검증�
   로컬/Actions 실행을 별도 표기한다. 기존 `.app` 성공이 새 CI나 현재 샘플 설정의 성공은 아니다.
 
 현재 CI는 세 운영체제의 공통 검사와 Windows 및 macOS 네이티브 통합 검사를 실행한다.
-macOS 빌드는 공유 Bun 캐시 초기화 때문에 probe→host 직렬 실행한다.
+macOS 제품 CI는 C 컴파일 없이 Bun FFI 앱을 빌드하고 실행한다. 프로세스 probe는 별도 실험으로 유지한다.
 실제 GUI/WKWebView 결과 없이는 성공 처리하지 않으며 실패는 CI 실패로 전달한다.
 결과 JSON, 테스트별 로그, 페이지 보고서는 진단 artifact로 보관한다(7일).
-macOS는 `native/macos/host/run.sh --app`으로 ad-hoc 서명한 `.app`의 실행과 서명 유지,
+macOS는 `native/macos/bun/run.sh --app`으로 ad-hoc 서명한 `.app`의 실행과 서명 유지,
 배포 스크립트의 DMG 생성과 PKG 조립을 검사한다. Windows CI는 Inno Setup을 설치해
 실제 설치, 업그레이드와 제거 회귀 테스트를 실행한다. 로컬에서는 Inno Setup이 있을 때 이 검사를 실행한다.
 프로덕션 인증서, 실제 공증과 Store 제출은 이 검사 범위에 포함하지 않는다.

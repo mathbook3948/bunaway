@@ -19,4 +19,3 @@ runtime/bun-bundle/vendor/
 native/windows/bun/vendor/
 native/macos/vendor/
 native/macos/probe/vendor/
-native/macos/host/vendor/

@@ -259,6 +259,31 @@
       "pages": {
         "reference/tooling/packaging-api": ["outputPaths"]
       }
+    },
+    {
+      "name": "@bunaway/runtime-bun/worker-channel",
+      "source": "packages/runtime-bun/src/worker-channel.ts",
+      "pages": {
+        "reference/tooling/core-and-runtime": [
+          "MAX_WINDOWS",
+          "validatePacket",
+          "Channel"
+        ]
+      }
+    },
+    {
+      "name": "@bunaway/runtime-bun/view-boundary",
+      "source": "packages/runtime-bun/src/view-boundary.ts",
+      "pages": {
+        "reference/tooling/core-and-runtime": ["ViewBoundary"]
+      }
+    },
+    {
+      "name": "@bunaway/runtime-bun/diagnostic-log",
+      "source": "packages/runtime-bun/src/diagnostic-log.ts",
+      "pages": {
+        "reference/tooling/core-and-runtime": ["DiagnosticLog"]
+      }
     }
   ],
   "members": [

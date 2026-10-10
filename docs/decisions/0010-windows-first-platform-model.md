@@ -47,9 +47,9 @@ Windows는 [ADR 0006](./0006-windows-bun-ui-worker.md)에 따라 번들 Bun이 �
 ## 후속 작업과 현재 상태
 
 생성 템플릿은 `app.ts` 하나를 앱 정의로 사용하며 CLI는 `build.app`을 읽는다.
-Windows 부팅은 프레임워크가 담당한다. 현재 macOS의 프로세스 호스트가 사용하는
-부팅 코드는 CLI가 번들 내부에 생성하므로 개발자 소스에 노출하지 않는다.
-macOS의 Bun 앱 진입점 전환은 Windows 완성 이후의 별도 작업이며 아직 완료되지 않았다.
+Windows와 macOS 부팅은 프레임워크가 담당한다.
+macOS의 Bun 앱 진입점 전환은 [ADR 0015](./0015-macos-bun-ffi.md)에서 구현했다.
+현재 macOS는 같은 프로세스의 Bun Worker와 직접 FFI를 사용한다.
 
 Windows 완성 여부는 실제 기능, 정책, 수명주기, CLI, 패키징의 구현과 검증 근거로
 판단한다. 이 결정 자체로 Windows 완성이나 다른 플랫폼 지원을 선언하지 않는다.

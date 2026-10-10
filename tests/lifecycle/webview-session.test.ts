@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { ViewBoundary } from "#native/windows/bun/boundary";
 import type { Packet, Route } from "#native/windows/bun/channel";
 import { command } from "@bunaway/backend";
 import {
@@ -17,6 +16,7 @@ import {
   type ServerMessage,
   type WireError,
 } from "@bunaway/protocol";
+import { ViewBoundary } from "@bunaway/runtime-bun/view-boundary";
 
 test.each([
   "invalid-result",

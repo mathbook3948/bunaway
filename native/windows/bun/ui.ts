@@ -6,7 +6,7 @@ import {
   type HostContext,
   type HostResponse,
 } from "@bunaway/protocol";
-import { ViewBoundary } from "./boundary.ts";
+import { ViewBoundary } from "@bunaway/runtime-bun/view-boundary";
 import {
   Channel,
   type Packet,

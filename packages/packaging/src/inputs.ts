@@ -631,7 +631,7 @@ export async function verifyArtifact(args: {
       true,
     );
   }
-  if (platform === "macos") {
+  if (platform === "macos" && manifest.host?.kind !== "bun-compiled") {
     await verifyFile(
       artifact.packageDir,
       resolve(artifact.packageDir, "runtime/bun"),
@@ -641,7 +641,17 @@ export async function verifyArtifact(args: {
     );
   }
 
-  const required = REQUIRED_ASSETS[platform];
+  const required =
+    platform === "macos" && manifest.host?.kind === "bun-compiled"
+      ? [
+          "assets/app.json",
+          "assets/policy.json",
+          "assets/manifest.json",
+          "assets/boot.js",
+          "assets/backend.js",
+          "licenses/LICENSE.bun",
+        ]
+      : REQUIRED_ASSETS[platform];
   for (const path of required) {
     if (!Object.hasOwn(manifest.assets, path)) {
       diagnostics.push({

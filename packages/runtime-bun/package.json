@@ -9,7 +9,10 @@
     "./app-manifest": "./src/app-manifest.ts",
     "./development": "./src/development.ts",
     "./window-config": "./src/window-config.ts",
-    "./windows-control": "./src/windows-control.ts"
+    "./windows-control": "./src/windows-control.ts",
+    "./worker-channel": "./src/worker-channel.ts",
+    "./view-boundary": "./src/view-boundary.ts",
+    "./diagnostic-log": "./src/diagnostic-log.ts"
   },
   "scripts": {
     "typecheck": "tsc --project tsconfig.json"

@@ -102,19 +102,26 @@ fi
 BUNDLE_ID_FINAL=$("$PB" -c "Print :CFBundleIdentifier" "$PLIST")
 
 # ------------------------------------------------- store layout changes ---
+BUN_MODEL=$(python3 - "$RES_DIR/manifest.json" <<'PYCODE'
+import json, sys
+print("compiled" if json.load(open(sys.argv[1])).get("host", {}).get("kind") == "bun-compiled" else "process")
+PYCODE
+)
 BUN_BIN="$RES_DIR/runtime/bun"
-if [ "$CHANNEL" = "mac-store" ]; then
-  mkdir -p "$STAGED/Contents/Helpers"
-  [ -f "$BUN_BIN" ] || die "bundled bun missing at $BUN_BIN"
-  mv "$BUN_BIN" "$STAGED/Contents/Helpers/bun"
-  rmdir "$RES_DIR/runtime" 2>/dev/null || true
-  BUN_BIN="$STAGED/Contents/Helpers/bun"
-  if [ -n "$PROFILE" ]; then
-    [ -f "$PROFILE" ] || die "provisionprofile not found: $PROFILE"
-    ditto "$PROFILE" "$STAGED/Contents/embedded.provisionprofile"
+if [ "$BUN_MODEL" = process ]; then
+  if [ "$CHANNEL" = "mac-store" ]; then
+    mkdir -p "$STAGED/Contents/Helpers"
+    [ -f "$BUN_BIN" ] || die "bundled bun missing at $BUN_BIN"
+    mv "$BUN_BIN" "$STAGED/Contents/Helpers/bun"
+    rmdir "$RES_DIR/runtime" 2>/dev/null || true
+    BUN_BIN="$STAGED/Contents/Helpers/bun"
   fi
+  [ -f "$BUN_BIN" ] || die "bun executable not found at $BUN_BIN"
 fi
-[ -f "$BUN_BIN" ] || die "bun executable not found at $BUN_BIN"
+if [ "$CHANNEL" = "mac-store" ] && [ -n "$PROFILE" ]; then
+  [ -f "$PROFILE" ] || die "provisionprofile not found: $PROFILE"
+  ditto "$PROFILE" "$STAGED/Contents/embedded.provisionprofile"
+fi
 
 # -------------------------------------------------------- entitlements ----
 gen_ent() { # gen_ent <plist-src> <dst>
@@ -145,6 +152,7 @@ gen_ent "$ENTS/$CHANNEL-child.plist" "$STAGE/child.ent.plist"
 # ---------------------------------------------------------------- sign ----
 say() { printf 'sign.sh[%s] %s\n' "$CHANNEL" "$*"; }
 
+if [ "$BUN_MODEL" = process ]; then
 say "signing nested bun -> $BUN_BIN"
 codesign --force --sign "$IDENTITY" --options runtime \
   --entitlements "$STAGE/child.ent.plist" "$BUN_BIN" \
@@ -167,6 +175,21 @@ with open(path) as f:
         raise RuntimeError("Post-signing Bun hash was not recorded")
 print("manifest bun.packagedSha256 := " + digest[:12] + "...")
 PY
+
+else
+  # Bun and FFI execute in the main app. Carry JIT and executable-memory
+  # entitlements on that executable rather than a nonexistent child.
+  python3 - "$STAGE/app.ent.plist" <<'PYCODE'
+import plistlib, sys
+path = sys.argv[1]
+with open(path, "rb") as f:
+    entitlements = plistlib.load(f)
+entitlements["com.apple.security.cs.allow-jit"] = True
+entitlements["com.apple.security.cs.allow-unsigned-executable-memory"] = True
+with open(path, "wb") as f:
+    plistlib.dump(entitlements, f)
+PYCODE
+fi
 
 HOST_BIN="$MACOS_DIR/bunaway-host"
 [ -f "$HOST_BIN" ] || HOST_BIN=$(find "$MACOS_DIR" -type f -perm +111 | head -1)

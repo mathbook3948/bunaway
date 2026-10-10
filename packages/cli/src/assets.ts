@@ -6,14 +6,7 @@ import type { BunPlugin } from "bun";
 import { appModules, commonJsSdkSource } from "./app-modules.ts";
 import { type Project, runtimeSettings } from "./config.ts";
 import { release } from "./distribution.ts";
-import {
-  files,
-  hash,
-  inside,
-  installedPackageRoot,
-  json,
-  writeJson,
-} from "./files.ts";
+import { files, hash, inside, json, writeJson } from "./files.ts";
 import {
   type InstalledPlugin,
   installedPlugins,
@@ -130,58 +123,6 @@ async function webAssets(
       await writeFile(path, await bundleBytes(source, development));
     }
   }
-}
-
-/**
- * Build web assets unless a development server owns them, then bundle the process host.
- * Development builds keep inline source maps for debugging.
- */
-export async function bundleAssets(
-  project: Project,
-  assets: string,
-  developmentServer = false,
-  development = false,
-): Promise<void> {
-  await assertAppDefinitionExport(project.appEntry);
-  const plugin = await sdkPlugin(project.root, [], project.nativePlugins);
-  if (!developmentServer) {
-    await webAssets(project, resolve(assets, "web"), plugin, development);
-  }
-  const runtimeEntry = resolve(
-    await installedPackageRoot(project.frameworkRoot, "@bunaway/runtime-bun"),
-    "src/index.ts",
-  );
-  // The current process host needs a bootstrap; app authors only supply the definition.
-  const entry: BunPlugin = {
-    name: "process-app-entry",
-    setup(build) {
-      plugin.setup(build);
-      appModules({
-        appEntry: project.appEntry,
-        processRuntime: runtimeEntry,
-      }).setup(build);
-    },
-  };
-  const backend = await buildWithSdk(
-    {
-      entrypoints: [
-        "bunaway-generated/backend.ts",
-      ],
-      root: project.root,
-      target: "bun",
-      packages: "bundle",
-      sourcemap: development ? "inline" : "none",
-    },
-    entry,
-  );
-  const backendOutput = backend[0];
-  if (backend.length !== 1 || !backendOutput) {
-    throw new Error("Missing backend bundle.");
-  }
-  await writeFile(
-    resolve(assets, "backend.js"),
-    await bundleBytes(backendOutput, development),
-  );
 }
 
 /** Build the Windows host and, when needed, its packaged frontend assets. */
@@ -518,4 +459,89 @@ export async function bundleWindowsReload(
     );
   }
   return hash(resolve(directory, "app.js"));
+}
+
+/** Bundle the macOS Bun entry and backend Worker; return file imports for compilation. */
+export async function bundleMacosAssets(
+  project: Project,
+  assets: string,
+  developmentServer = false,
+  development = false,
+): Promise<string[]> {
+  await assertAppDefinitionExport(project.appEntry);
+  await mkdir(assets, {
+    recursive: true,
+  });
+  const sdk = await sdkPlugin(project.root, [], project.nativePlugins);
+  await writeJson(resolve(assets, "manifest.json"), {
+    format: 1,
+    ...runtimeSettings(project, developmentServer ? project.dev : undefined),
+    plugins: [],
+    developmentSdk: {},
+  });
+  if (!developmentServer) {
+    await webAssets(project, resolve(assets, "web"), sdk, development);
+  }
+  return bundleMacosHost(
+    resolve(project.frameworkRoot, "native/macos/bun"),
+    assets,
+    project.appEntry,
+    project.root,
+    development,
+    project.nativePlugins,
+  );
+}
+
+/** Bundle macOS host code and application imports; return imported asset basenames. */
+export async function bundleMacosHost(
+  source: string,
+  destination: string,
+  appEntry: string,
+  project?: string,
+  development = false,
+  installed: readonly InstalledPlugin[] = [],
+): Promise<string[]> {
+  const sdk = project ? await sdkPlugin(project, [], installed) : undefined;
+  const outputs = await buildWithSdk(
+    {
+      entrypoints: [
+        resolve(source, "boot.ts"),
+        resolve(source, "backend.ts"),
+      ],
+      target: "bun",
+      packages: "bundle",
+      splitting: false,
+      naming: "[name].[ext]",
+      sourcemap: development ? "inline" : "none",
+    },
+    {
+      name: "macos-app-entry",
+      setup(build) {
+        sdk?.setup(build);
+        build.onResolve(
+          {
+            filter: /^\.\/app\.js$/,
+          },
+          ({ importer }) =>
+            resolve(importer) === resolve(source, "backend.ts")
+              ? {
+                  path: resolve(appEntry),
+                }
+              : undefined,
+        );
+      },
+    },
+  );
+  const bundledAssets: string[] = [];
+  for (const output of outputs) {
+    await writeFile(
+      resolve(destination, basename(output.path)),
+      await bundleBytes(output, development),
+    );
+    // File imports become path strings, so the compile pass needs their asset names.
+    if (output.kind === "asset") {
+      bundledAssets.push(basename(output.path));
+    }
+  }
+  return bundledAssets.sort();
 }

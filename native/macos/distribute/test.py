@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 
@@ -30,9 +31,9 @@ class DistributionTests(unittest.TestCase):
         (resources / "runtime").mkdir(parents=True)
         host = cls.template / "Contents/MacOS/bunaway-host"
         host.parent.mkdir()
-        source = Path(cls.template_dir.name) / "main.c"
-        source.write_text("int main(void) { return 0; }\n")
-        subprocess.run(["clang", str(source), "-o", str(host)], check=True)
+        # A small system Mach-O is enough for signing/rollback tests. No C compiler.
+        shutil.copyfile("/usr/bin/true", host)
+        host.chmod(0o755)
         shutil.copy2(host, resources / "runtime/bun")
         with (cls.template / "Contents/Info.plist").open("wb") as f:
             plistlib.dump({
@@ -313,9 +314,37 @@ elif args[0] == "stapler":
                           app=app, out=out)
                 subprocess.run(["codesign", "--verify", "--deep", "--strict", str(out)], check=True)
                 final = json.loads((out / "Contents/Resources/manifest.json").read_text())
-                runtime = out / ("Contents/Resources/runtime/bun" if channel == "mac-direct" else "Contents/Helpers/bun")
                 self.assertEqual(final["bun"]["executableSha256"], manifest["bun"]["executableSha256"])
-                self.assertEqual(final["bun"]["packagedSha256"], digest(runtime))
+                if manifest.get("host", {}).get("kind") == "bun-compiled":
+                    self.assertFalse((out / "Contents/Resources/runtime/bun").exists())
+                    self.assertFalse((out / "Contents/Helpers/bun").exists())
+                    details = subprocess.run(["codesign", "-d", "--entitlements", ":-", str(out)], check=True, capture_output=True)
+                    entitlements = plistlib.loads(details.stdout)
+                    self.assertTrue(entitlements["com.apple.security.cs.allow-jit"])
+                    self.assertTrue(entitlements["com.apple.security.cs.allow-unsigned-executable-memory"])
+                    if channel == "mac-direct":
+                        # Execute the hardened FFI app, not just its signature verifier.
+                        home = self.root / "hardened-home"
+                        home.mkdir()
+                        report = home / "Library/Application Support/bunaway/tests.bunaway.host/temp/report3.json"
+                        child = subprocess.Popen([str(out / "Contents/MacOS/bunaway-host")],
+                            env={"HOME": str(home), "PATH": "/usr/bin:/bin"},
+                            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                        try:
+                            deadline = time.monotonic() + 15
+                            while not report.exists() and child.poll() is None and time.monotonic() < deadline:
+                                time.sleep(0.1)
+                            self.assertTrue(report.exists(), "hardened Bun FFI app did not complete its WKWebView report")
+                            child.terminate()
+                            _, errors = child.communicate(timeout=10)
+                            self.assertEqual(child.returncode, 0, errors.decode())
+                        finally:
+                            if child.poll() is None:
+                                child.kill()
+                            child.communicate(timeout=10)
+                else:
+                    runtime = out / ("Contents/Resources/runtime/bun" if channel == "mac-direct" else "Contents/Helpers/bun")
+                    self.assertEqual(final["bun"]["packagedSha256"], digest(runtime))
 
 
 if __name__ == "__main__":
