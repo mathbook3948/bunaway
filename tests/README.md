@@ -1,5 +1,26 @@
 # Tests
 
+Android의 `FrameDispatcherTest`는 읽기 스레드의 직접 전달이 멈춰도 별도 타이머가
+실행되는지, 유휴 이후에도 기한을 감시하는지와 종료 제어 뒤의 응답 폐기를 검사한다.
+`ProtocolTest`는 큰 한글과 이모지, 문자열과 키의 잘못된 surrogate, 원문 payload 전달의
+중복 키와 이스케이프, envelope를 포함한 깊이 및 크기 제한을 확인한다.
+`WebViewSessionTest`는 최초 hello, 입력 방향, 종료 및 화면 전환 뒤 대기 요청 폐기를 검사한다.
+이 Java 검사들은 `mise run host:android`의 Gradle 단위 검사에 포함된다.
+`android-bridge.test.ts`는 실제 `bridge.js`를 실행해 SDK의 텍스트 전달, 기존 객체 기반
+리스너와의 호환성, 잘못된 메시지 거부와 종료 후 리스너 해제를 검사한다.
+포트 연결 전 요청의 순서와 용량, 이전 문서 및 중복 포트 거부, fallback과 포트 회수도 포함한다.
+직접 연결의 SDK 종료 알림과 출력 버퍼 제한도 검사한다. `loopback-channel.test.ts`는
+실제 로컬 WebSocket으로 Origin, 일회용 주소, 만료와 회수, 늦은 SDK 초기화, 입력 순서와
+크기 및 대기 제한을 검사한다. `runtime-bun.test.ts`는 실제 Bun 자식 프로세스에서
+직접 연결의 정책 거부, 명령 오류 응답, 호스트 회수와 종료를 확인한다.
+`android-bridge.test.ts`는 WebSocket 생성 실패와 최초 연결의 error/close에서 MessagePort와
+reply proxy로 한 번만 전환하고 대기 메시지를 순서대로 전달하는지 검사한다. 이전 소켓의
+늦은 콜백과 중복 주소를 무시하며 연결 성공 후에는 실패한 요청을 재전송하지 않는다.
+`runtime-bun.test.ts`는 기존 직접 연결 권한을 회수한 뒤 새 파이프 세션이 동작하는지도 검사한다.
+`runtime-channel-failure.test.ts`는 실제 TCP 연결의 close 프레임 없는 종료, 잘못된 입력과
+수신 정지로 인한 출력 버퍼 초과를 재현한다. 해당 문서의 진행 중 명령만 취소되고 같은 Bun PID와
+앱 상태, 다른 세션, 새 문서 연결 및 정상 shutdown이 유지되는지 검사한다.
+
 창 준비 계약은 `api/window-readiness.test.ts`, `lifecycle/window-readiness.test.ts`와
 `window-operations.test.ts`에서 설정 검증, 두 대상 창 권한, 단계별 완료와 상태 복구,
 새 세대와 늦은 확인 차단, 기한, 생성 취소와 전환 순서를 확인한다.

@@ -12,6 +12,7 @@ import {
   type HostContext,
   type HostResponse,
   negotiateProtocol,
+  type Policy,
   PROCESS_IPC_VERSION,
   PROTOCOL_VERSION,
   type ProcessFrame,
@@ -19,6 +20,7 @@ import {
   type RuntimeIdentity,
   serializeProcessFrame,
 } from "@bunaway/protocol";
+import { LoopbackChannel } from "./loopback-channel.ts";
 import { readJsonLines } from "./process-ipc.ts";
 
 // Omit the envelope per variant so each frame keeps its required payload fields.
@@ -48,7 +50,8 @@ function currentPlatform(): Platform {
  * Keeps reading while core work waits for host replies.
  * The host sends boot configuration and controls session lifetime and shutdown.
  * The host and runtime exchange hello messages and negotiate the protocol.
- * Rejects malformed or unexpected frames and unexpected end of input.
+ * Rejects malformed or unexpected host frames and unexpected end of control input.
+ * Direct document connection failures revoke only their own session.
  */
 export async function runBunApp(app: AppDefinition): Promise<void> {
   if (app.desktop !== undefined) {
@@ -72,7 +75,16 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
   let sequence = 0;
   let queued = 0;
   let writer = Promise.resolve();
-  const sessions = new Map<string, CoreSession>();
+  let policy: Policy | undefined;
+  let channel: LoopbackChannel | undefined;
+  const sessions = new Map<
+    string,
+    {
+      session: CoreSession;
+      viewId: string;
+      channelRequested: boolean;
+    }
+  >();
   const calls = new Map<
     string,
     {
@@ -124,6 +136,13 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
       });
     }
   };
+  const closeSession = async (context: string) => {
+    const current = sessions.get(context);
+    sessions.delete(context);
+    channel?.revoke(context as HostContext);
+    await current?.session.close();
+    cancelCalls(context);
+  };
   try {
     for await (const line of readJsonLines(process.stdin)) {
       const frame = parseProcessFrame(line);
@@ -147,6 +166,7 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
           throw new Error("Host boot configuration required.");
         }
         runtime = frame.runtime;
+        policy = frame.payload.policy;
         hello = {
           ...hello,
           buildId: frame.payload.buildId,
@@ -183,6 +203,10 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
             },
           },
           validateMessage(context, message) {
+            if (channel?.owns(context)) {
+              // Core already checked the web message; only pipe delivery adds an envelope.
+              return;
+            }
             serializeFrame({
               kind: "web",
               context,
@@ -191,6 +215,10 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
           },
           send: async (context, message) => {
             if (sessions.has(context) && !stopping) {
+              if (channel?.owns(context)) {
+                channel.send(context, message);
+                return;
+              }
               await send({
                 kind: "web",
                 context,
@@ -310,6 +338,7 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
       if (frame.kind === "shutdown") {
         // Stop work before cleanup, then send stopping when cleanup completes.
         stopping = true;
+        await channel?.close();
         cancelCalls();
         core ??= await booting?.catch(() => undefined);
         await core?.stop();
@@ -330,22 +359,62 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
         if (sessions.size >= API_LIMITS.maxPending) {
           throw new Error("Session limit reached.");
         }
-        sessions.set(
-          frame.context,
-          core.openSession(frame.context as HostContext, frame.viewId),
-        );
+        sessions.set(frame.context, {
+          session: core.openSession(frame.context as HostContext, frame.viewId),
+          viewId: frame.viewId,
+          channelRequested: false,
+        });
+      } else if (frame.kind === "channel-open") {
+        const current = sessions.get(frame.context);
+        const view = policy?.views.find((view) => view.id === current?.viewId);
+        if (
+          !current ||
+          current.channelRequested ||
+          !view?.origins.includes(frame.origin)
+        ) {
+          throw new Error("Invalid document channel request.");
+        }
+        current.channelRequested = true;
+        if (!channel) {
+          try {
+            channel = new LoopbackChannel({
+              receive: async (context, message) => {
+                const active = sessions.get(context);
+                if (!active || stopping) {
+                  throw new Error("Document session closed.");
+                }
+                await active.session.receive(message);
+              },
+              disconnected(context) {
+                // Document transport failures revoke that session, not the host control pipe.
+                void closeSession(context).catch(() =>
+                  process.stdin.destroy(new Error("Document cleanup failed.")),
+                );
+              },
+            });
+          } catch {
+            // Existing Android projects may lack loopback network permission; keep their bridge.
+          }
+        }
+        await send({
+          kind: "channel-ready",
+          context: frame.context,
+          nonce: frame.nonce,
+          url: channel?.grant(frame.context as HostContext, frame.origin) ?? "",
+        });
       } else if (
         frame.kind === "revoke" ||
         (frame.kind === "web" && frame.payload.kind === "close")
       ) {
-        const session = sessions.get(frame.context);
-        sessions.delete(frame.context);
-        await session?.close();
-        cancelCalls(frame.context);
+        await closeSession(frame.context);
       } else if (frame.kind === "web") {
-        const session = sessions.get(frame.context);
+        const current = sessions.get(frame.context);
+        const session = current?.session;
         if (!session) {
           throw new Error("Unknown session context.");
+        }
+        if (channel?.owns(frame.context as HostContext)) {
+          throw new Error("Document uses a direct channel.");
         }
         if (
           ![
@@ -369,6 +438,7 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
     await writer;
   } catch (error) {
     stopping = true;
+    await channel?.close();
     cancelCalls();
     await core?.stop().catch(() => {});
     if (runtime) {
@@ -382,6 +452,7 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
     }
     throw error;
   } finally {
+    await channel?.close();
     process.stdin.destroy();
   }
 }

@@ -112,6 +112,7 @@
           "SDK_READY_FEATURE",
           "parseMessage",
           "serializeMessage",
+          "validateMessage",
           "parseBootstrap",
           "parseHostResponse",
           "serializeHostResponse",

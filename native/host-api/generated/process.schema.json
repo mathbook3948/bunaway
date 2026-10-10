@@ -1184,6 +1184,114 @@
           "additionalProperties": false
         },
         "kind": {
+          "const": "channel-open"
+        },
+        "context": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+          "maxLength": 128
+        },
+        "nonce": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+          "maxLength": 128
+        },
+        "origin": {
+          "type": "string",
+          "maxLength": 1024
+        }
+      },
+      "required": ["ipc", "runtime", "kind", "context", "nonce", "origin"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ipc": {
+          "type": "object",
+          "properties": {
+            "major": {
+              "const": 1
+            },
+            "minor": {
+              "const": 0
+            }
+          },
+          "required": ["major", "minor"],
+          "additionalProperties": false
+        },
+        "runtime": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            },
+            "generation": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            }
+          },
+          "required": ["id", "generation"],
+          "additionalProperties": false
+        },
+        "kind": {
+          "const": "channel-ready"
+        },
+        "context": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+          "maxLength": 128
+        },
+        "nonce": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+          "maxLength": 128
+        },
+        "url": {
+          "type": "string",
+          "maxLength": 1024
+        }
+      },
+      "required": ["ipc", "runtime", "kind", "context", "nonce", "url"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ipc": {
+          "type": "object",
+          "properties": {
+            "major": {
+              "const": 1
+            },
+            "minor": {
+              "const": 0
+            }
+          },
+          "required": ["major", "minor"],
+          "additionalProperties": false
+        },
+        "runtime": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            },
+            "generation": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+              "maxLength": 128
+            }
+          },
+          "required": ["id", "generation"],
+          "additionalProperties": false
+        },
+        "kind": {
           "const": "shutdown"
         }
       },

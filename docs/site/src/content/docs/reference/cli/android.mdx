@@ -102,8 +102,26 @@ apply from: file('.bunaway/settings.gradle')
 UI 초기화에서 앱 정의의 `CommandsOf`, `EventsOf`로 타입을 지정한 클라이언트를 만들고
 실패를 처리하는 방법은 [createClient](/reference/client/create-client/)를 따릅니다.
 
-현재는 패키지 웹 자산만 제공합니다. 외부 탐색과 웹 네트워크 요청은 차단하며,
+현재는 패키지 웹 자산만 제공합니다. 외부 탐색과 외부 origin의 자산 요청은 차단하며,
 웹 UI에는 백엔드 번들이나 호스트 설정을 제공하지 않습니다.
+프레임워크 호스트는 Android INTERNET 권한을 포함하며 별도의 런타임 권한 요청은 없습니다.
+Windows, macOS와 같이 Bun 백엔드는 외부 네트워크에 접근할 수 있습니다.
+포함된 network security 설정은 WebView와 Java 네트워크 요청에만 적용되며
+`127.0.0.1`의 cleartext 연결만 허용합니다.
+자체 설정이 필요하면 앱의 `res/xml/bunaway_network_security.xml`로 같은 이름의 리소스를
+재정의할 수 있습니다. 다른 이름의 `android:networkSecurityConfig`를 이미 지정했다면
+앱 Manifest에 `tools:replace="android:networkSecurityConfig"`와 tools 네임스페이스를 선언해
+앱 설정을 선택하세요. INTERNET 권한을 제거하려면 tools 네임스페이스와 함께
+`<uses-permission android:name="android.permission.INTERNET" tools:node="remove" />`를
+앱 Manifest에 선언하세요. 앱 설정에서 `127.0.0.1` cleartext 연결을 막거나 INTERNET 권한을
+제거하면 기존 브리지 경로로 동작하며 직접 연결의 성능 개선은 적용되지 않습니다.
+SDK 사용법은 두 경로에서 같습니다.
+최초 직접 연결에 실패하면 기존 세션을 정리하고 새 세션의 대체 채널로 전환합니다.
+아직 전송하지 않은 SDK 요청은 순서대로 전달합니다.
+직접 연결이 열린 뒤 끊기거나 버퍼 제한을 넘으면 해당 문서의 SDK 연결을 닫고 진행 중 요청과 구독을
+정리합니다. Bun의 앱 상태는 유지합니다. 자동 재연결은 제공하지 않으며 새로고침이나 문서를
+다시 열면 새 세션으로 연결합니다. 호스트 제어 파이프 실패와 Android renderer 프로세스 종료는
+앱 전체 실패로 처리합니다.
 WebView의 localStorage와 sessionStorage는 활성화합니다.
 화면 회전은 WebView 문서와 세션을 재생성하며 Bun과 Core 메모리 상태를 유지합니다.
 Activity를 종료하면 Core와 Bun을 종료합니다. 앱 프로세스 재시작 뒤 메모리 상태 복원은 제공하지 않습니다.

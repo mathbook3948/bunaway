@@ -33,8 +33,32 @@ TMPDIR는 앱 cacheDir, HOME은 filesDir로 설정한다. 현재 여러 Activity
 백그라운드 서비스, 저메모리 종료 이후의 상태 복원은 현재 계약에 포함하지 않는다.
 
 브리지는 AndroidX WebKit의 origin-matched listener와 document-start script를 사용한다.
-발신 origin과 main frame은 네이티브 콜백에서 확인하며, 응답은 원래 문서에 결합된
-reply proxy로 전달한다. Web 프로토콜과 호스트 전용 프로세스 envelope를 섞지 않는다.
+발신 origin과 main frame은 네이티브 콜백에서 확인한다. 최초 구현은 원래 문서에 결합된
+reply proxy로 응답을 전달했다. 성능 개선 후에는 같은 출처 검사로 문서별 일회용 연결 주소를
+발급하고 WebView와 Bun을 loopback WebSocket으로 직접 연결한다. Bun은 `127.0.0.1`의
+임시 포트만 열며 정확한 Origin, Host와 일회용 토큰을 검사한다. Java는 여전히 세션 개설,
+회수와 프로세스 수명주기를 소유한다. 앱 메시지는 Java 파싱과 프로세스 envelope 왕복 없이
+기존 SDK와 Core의 검증, 정책 및 명령 처리로 전달된다.
+
+호스트 library가 INTERNET 권한과 IPv4 loopback에만 cleartext를 허용하는 network security
+설정을 제공한다. 이 권한으로 Bun 백엔드도 Windows, macOS와 같이 외부 네트워크에 접근할 수 있으며
+network security 설정은 Bun의 네이티브 소켓에 적용되지 않는다. 앱 설정이 이 연결을 허용하지 않거나 Bun listener를 시작할 수 없으면
+문서 전용 MessagePort를 사용한다. 포트 API 미지원 환경에서는 reply proxy를 유지한다.
+WebSocket 생성 또는 최초 연결이 실패하면 기존 권한과 Core 세션을 회수하고 새 세션의
+MessagePort 또는 reply proxy로 전환한다. `open` 전에는 앱 메시지를 전송하지 않으므로
+대기 메시지를 순서대로 전달할 수 있다. `open` 이후의 실패는 세션을 닫으며 이미 전송한
+요청을 다른 경로로 재전송하지 않는다. 연결 성공 후 비정상 종료, 입력 위반과 버퍼 초과는
+해당 문서의 요청과 구독만 정리한다.
+Bun과 Core 상태, 다른 세션은 유지하며 새 문서는 새 권한을 받아 연결할 수 있다.
+호스트 제어 파이프 실패나 세션 정리 자체의 실패는 런타임 전체 실패로 처리한다.
+기존 Java 브리지의 잘못된 입력과 Android renderer 프로세스 종료에 대한 Activity 실패 처리는 유지한다.
+문서별 nonce로 오래된 연결 응답을 거부하고 문서 교체와 종료 시 토큰과 연결을 회수한다.
+연결하지 않은 주소는 10초 뒤 만료하지만 연결된 문서는 나중에 SDK를 초기화할 수 있다.
+입력은 1MiB와 대기 128개, 출력 버퍼는 2MiB로 제한한다.
+제어 프레임은 UI 적용을 기다려 이후 응답이 준비 완료나 실패 처리를 앞지르지 않게 한다.
+별도 타이머가 전달 기한을 감시한다. 변경 근거와 비교는
+[RPC 성능 기록](../architecture/android-rpc-performance.md)에 남긴다.
+Web 프로토콜과 호스트 전용 프로세스 envelope를 섞지 않는다.
 네이티브 측 검증도 protocol 패키지가 생성한 JSON Schema와 제한을 사용한다.
 
 첫 구현은 단일 뷰, 패키지 HTTPS 자산과 debug APK를 지원한다. 네이티브 권한이 있는

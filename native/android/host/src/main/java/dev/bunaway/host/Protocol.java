@@ -12,6 +12,7 @@ import com.google.gson.Strictness;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +28,9 @@ import java.util.regex.Pattern;
  */
 final class Protocol {
     private static final Gson JSON = new GsonBuilder().setStrictness(Strictness.STRICT).create();
+    // Java regex matches code points, so valid surrogate pairs are outside this range.
+    private static final Pattern UNPAIRED_SURROGATE = Pattern.compile("[\\uD800-\\uDFFF]");
+    private static final int NATIVE_UNICODE_SCAN_LENGTH = 1024;
     private static final List<String> KEYWORDS =
             Arrays.asList(
                     "$schema",
@@ -52,18 +56,60 @@ final class Protocol {
     private static final double MAX_SAFE_INTEGER = 9007199254740991.0;
 
     private final JsonObject schema;
+    private final Map<String, Pattern> patterns = new HashMap<>();
+
+    /** Owns the parsed tree and original wire text, so forwarding cannot observe later mutation. */
+    static final class Validated {
+        private final JsonObject value;
+        private final String json;
+        private final int depth;
+        private final int payloadStart;
+        private final int payloadEnd;
+
+        private Validated(
+                JsonObject value, String json, int depth, int payloadStart, int payloadEnd) {
+            this.value = value;
+            this.json = json;
+            this.depth = depth;
+            this.payloadStart = payloadStart;
+            this.payloadEnd = payloadEnd;
+        }
+
+        String kind() {
+            return text(value, "kind");
+        }
+    }
+
+    /** A checked process frame and its web payload's original JSON slice, when present. */
+    static final class Frame {
+        final JsonObject value;
+        final String webJson;
+
+        private Frame(Validated parsed) {
+            value = parsed.value;
+            webJson =
+                    parsed.kind().equals("web")
+                            ? parsed.json.substring(parsed.payloadStart, parsed.payloadEnd)
+                            : null;
+        }
+    }
 
     /**
      * @throws IllegalArgumentException when the schema uses a keyword or type outside the supported
      *     subset
      */
     Protocol(JsonObject schema) {
-        checkSchema(schema);
-        this.schema = schema;
+        this.schema = schema.deepCopy();
+        checkSchema(this.schema);
     }
 
-    private static void checkSchema(JsonObject schema) {
+    private void checkSchema(JsonObject schema) {
         require(KEYWORDS.containsAll(schema.keySet()), "Unsupported schema keyword");
+        // Packaged schemas are fixed for this owner; compile identifiers once, not per RPC.
+        if (schema.has("pattern")) {
+            String pattern = text(schema, "pattern");
+            patterns.computeIfAbsent(pattern, Pattern::compile);
+        }
         if (schema.has("type")) {
             require(TYPES.contains(text(schema, "type")), "Unsupported schema type");
         }
@@ -88,27 +134,75 @@ final class Protocol {
      * @throws com.google.gson.JsonParseException when Gson rejects the JSON syntax
      */
     JsonObject parse(String text) {
-        require(
-                text.getBytes(StandardCharsets.UTF_8).length <= MAX_MESSAGE_BYTES,
-                "Message too large");
+        return parseValidated(text).value;
+    }
+
+    /** Keeps a checked response in wire form instead of serializing its payload tree again. */
+    Frame parseFrame(String text) {
+        return new Frame(parseValidated(text));
+    }
+
+    /** Validates once and retains an immutable message for embedding in a process envelope. */
+    Validated parseValidated(String text) {
+        checkSize(text);
         // Bound nesting before the parser allocates an attacker-controlled tree.
         int depth = 0;
-        boolean quoted = false;
-        boolean escaped = false;
+        int payloadStart = -1;
+        int payloadEnd = -1;
+        // Record root payload boundaries while bounding nesting. Only the strict parser and
+        // schema checks below authorize forwarding that slice.
         for (int index = 0; index < text.length(); index++) {
             char character = text.charAt(index);
-            if (quoted) {
-                if (escaped) escaped = false;
-                else if (character == '\\') escaped = true;
-                else if (character == '"') quoted = false;
-            } else if (character == '"') quoted = true;
-            else if (character == '{' || character == '[') {
+            if (character == '"') {
+                int end = stringEnd(text, index);
+                int next = whitespaceEnd(text, end + 1);
+                if (depth == 1
+                        && next < text.length()
+                        && text.charAt(next) == ':'
+                        && isPayloadKey(text, index, end)) {
+                    payloadStart = whitespaceEnd(text, next + 1);
+                    payloadEnd = -1;
+                }
+                index = end;
+            } else if (character == '{' || character == '[') {
                 require(++depth <= MAX_JSON_DEPTH + 1, "JSON nesting too deep");
-            } else if (character == '}' || character == ']') depth--;
+            } else if (character == '}' || character == ']') {
+                depth--;
+                if (depth == 0 && payloadStart >= 0 && payloadEnd < 0) payloadEnd = index;
+            } else if (character == ',' && depth == 1 && payloadStart >= 0 && payloadEnd < 0) {
+                payloadEnd = index;
+            }
         }
-        JsonObject value = readObject(text);
+        JsonElement parsed = JSON.fromJson(text, JsonElement.class);
+        require(parsed != null && parsed.isJsonObject(), "JSON object required");
+        int maximumDepth = checkDepth(parsed, 0);
+        JsonObject value = parsed.getAsJsonObject();
         require(matches(schema, value), "Invalid protocol message");
-        return value;
+        return new Validated(value, text, maximumDepth, payloadStart, payloadEnd);
+    }
+
+    private static int whitespaceEnd(String text, int index) {
+        while (index < text.length() && Character.isWhitespace(text.charAt(index))) index++;
+        return index;
+    }
+
+    /** Recognize escaped keys too; duplicate members use the last value, as Gson does. */
+    private static boolean isPayloadKey(String text, int start, int end) {
+        String key = text.substring(start + 1, end);
+        if (key.equals("payload")) return true;
+        return key.indexOf('\\') >= 0
+                && "payload".equals(JSON.fromJson(text.substring(start, end + 1), String.class));
+    }
+
+    /** Skip string contents with native search; Gson still checks escapes and termination. */
+    private static int stringEnd(String text, int start) {
+        int end = start;
+        while ((end = text.indexOf('"', end + 1)) >= 0) {
+            int slash = end - 1;
+            while (slash > start && text.charAt(slash) == '\\') slash--;
+            if ((end - slash) % 2 == 1) return end;
+        }
+        return text.length();
     }
 
     /**
@@ -122,10 +216,49 @@ final class Protocol {
         checkDepth(value, 0);
         require(matches(schema, value), "Invalid protocol message");
         String text = value.toString();
+        checkSize(text);
+        return text;
+    }
+
+    /**
+     * Wraps validated WebView text without walking or serializing its data a second time. Metadata
+     * stays host-owned. The combined schema, nesting and wire size still apply.
+     */
+    String encode(JsonObject envelope, Validated payload) {
+        require(!envelope.has("payload"), "Payload already supplied");
+        checkDepth(envelope, 0);
+        require(payload.depth + 1 <= MAX_JSON_DEPTH, "JSON nesting too deep");
+        JsonObject frame = new JsonObject();
+        for (Map.Entry<String, JsonElement> entry : envelope.entrySet()) {
+            frame.add(entry.getKey(), entry.getValue());
+        }
+        frame.add("payload", payload.value);
+        require(matches(schema, frame), "Invalid protocol message");
+        String metadata = envelope.toString();
+        String text =
+                metadata.substring(0, metadata.length() - 1)
+                        + (envelope.isEmpty() ? "" : ",")
+                        + "\"payload\":"
+                        // Strict JSON can contain literal line breaks only between tokens.
+                        + singleLine(payload.json)
+                        + "}";
+        checkSize(text);
+        return text;
+    }
+
+    private static String singleLine(String text) {
+        if (text.indexOf('\n') >= 0) text = text.replace("\n", "");
+        if (text.indexOf('\r') >= 0) text = text.replace("\r", "");
+        return text;
+    }
+
+    private static void checkSize(String text) {
+        // UTF-8 needs at most three bytes per UTF-16 code unit, including surrogate pairs.
+        if (text.length() <= MAX_MESSAGE_BYTES / 3) return;
+        require(text.length() <= MAX_MESSAGE_BYTES, "Message too large");
         require(
                 text.getBytes(StandardCharsets.UTF_8).length <= MAX_MESSAGE_BYTES,
                 "Message too large");
-        return text;
     }
 
     /**
@@ -146,29 +279,44 @@ final class Protocol {
      * Enforces the shared nesting limit and rejects values JavaScript peers cannot round-trip:
      * non-finite numbers and unpaired UTF-16 surrogates in strings or object keys.
      */
-    private static void checkDepth(JsonElement value, int depth) {
+    private static int checkDepth(JsonElement value, int depth) {
         require(depth <= MAX_JSON_DEPTH, "JSON nesting too deep");
+        int maximum = depth;
         if (value.isJsonObject()) {
             for (Map.Entry<String, JsonElement> entry : value.getAsJsonObject().entrySet()) {
                 // Object keys are strings too, so check their Unicode with the same rule.
-                checkDepth(new JsonPrimitive(entry.getKey()), depth + 1);
-                checkDepth(entry.getValue(), depth + 1);
+                require(depth < MAX_JSON_DEPTH, "JSON nesting too deep");
+                checkUnicode(entry.getKey());
+                maximum = Math.max(maximum, checkDepth(entry.getValue(), depth + 1));
             }
         } else if (value.isJsonArray()) {
-            for (JsonElement item : value.getAsJsonArray()) checkDepth(item, depth + 1);
+            for (JsonElement item : value.getAsJsonArray()) {
+                maximum = Math.max(maximum, checkDepth(item, depth + 1));
+            }
         } else if (value.isJsonPrimitive()) {
             JsonPrimitive primitive = value.getAsJsonPrimitive();
             if (primitive.isNumber()) {
                 require(Double.isFinite(primitive.getAsDouble()), "Non-finite JSON number");
+            } else if (primitive.isString()) {
+                checkUnicode(primitive.getAsString());
             }
-            String text = primitive.getAsString();
-            for (int index = 0; index < text.length(); index++) {
-                char character = text.charAt(index);
-                if (Character.isHighSurrogate(character)) {
-                    require(
-                            ++index < text.length() && Character.isLowSurrogate(text.charAt(index)),
-                            "Invalid Unicode");
-                } else require(!Character.isLowSurrogate(character), "Invalid Unicode");
+        }
+        return maximum;
+    }
+
+    private static void checkUnicode(String text) {
+        // Android's native matcher avoids repeated String.charAt calls for large payloads.
+        if (text.length() >= NATIVE_UNICODE_SCAN_LENGTH) {
+            require(!UNPAIRED_SURROGATE.matcher(text).find(), "Invalid Unicode");
+            return;
+        }
+        for (int index = 0; index < text.length(); index++) {
+            char character = text.charAt(index);
+            if (character < '\ud800' || character > '\udfff') continue;
+            if (character > '\udbff'
+                    || ++index == text.length()
+                    || !Character.isLowSurrogate(text.charAt(index))) {
+                throw new IllegalArgumentException("Invalid Unicode");
             }
         }
     }
@@ -180,9 +328,18 @@ final class Protocol {
      * #MAX_SAFE_INTEGER} are rejected. {@code maxLength} counts code points as JSON Schema
      * requires.
      */
-    private static boolean matches(JsonObject schema, JsonElement value) {
+    private boolean matches(JsonObject schema, JsonElement value) {
         if (schema.has("const") && !schema.get("const").equals(value)) return false;
         if (schema.has("enum") && !schema.getAsJsonArray("enum").contains(value)) return false;
+        // Reject another message kind before repeatedly checking its runtime IDs and version.
+        if (value.isJsonObject() && schema.has("properties")) {
+            JsonElement kind = value.getAsJsonObject().get("kind");
+            JsonObject properties = schema.getAsJsonObject("properties");
+            if (kind != null && properties.has("kind")) {
+                JsonObject kindSchema = properties.getAsJsonObject("kind");
+                if (kindSchema.has("const") && !kindSchema.get("const").equals(kind)) return false;
+            }
+        }
         if (schema.has("anyOf")) {
             boolean matched = false;
             for (JsonElement alternative : schema.getAsJsonArray("anyOf")) {
@@ -261,11 +418,12 @@ final class Protocol {
         } else if (primitive != null && primitive.isString()) {
             String text = primitive.getAsString();
             if (schema.has("maxLength")
+                    && text.length() > schema.get("maxLength").getAsInt()
                     && text.codePointCount(0, text.length()) > schema.get("maxLength").getAsInt()) {
                 return false;
             }
             if (schema.has("pattern")
-                    && !Pattern.compile(text(schema, "pattern")).matcher(text).find()) {
+                    && !patterns.get(text(schema, "pattern")).matcher(text).find()) {
                 return false;
             }
         }

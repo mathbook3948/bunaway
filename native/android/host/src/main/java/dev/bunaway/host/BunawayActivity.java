@@ -64,6 +64,9 @@ public class BunawayActivity extends Activity {
                     (context, message) -> {
                         if (renderer != null) renderer.receive(context, message);
                     },
+                    frame -> {
+                        if (renderer != null) renderer.receiveChannel(frame);
+                    },
                     this::showFailure);
             if (!(retained instanceof BunProcess)) owner.start();
         } catch (Exception error) {

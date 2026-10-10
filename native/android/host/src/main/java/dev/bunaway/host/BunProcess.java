@@ -4,6 +4,7 @@ import static dev.bunaway.host.Protocol.*;
 import static dev.bunaway.host.ProtocolLimits.*;
 
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.Looper;
 import android.system.ErrnoException;
 import android.system.Os;
@@ -20,6 +21,7 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -27,11 +29,12 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * Owns one Bun generation, bounded pipe writes, negotiation and actual process shutdown.
@@ -49,7 +52,11 @@ final class BunProcess {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Executors.newFixedThreadPool(IO_THREADS);
     // Cleanup must not queue behind blocked pipe readers, or block the Activity's main thread.
-    private final ScheduledExecutorService cleanup = Executors.newSingleThreadScheduledExecutor();
+    private final ScheduledThreadPoolExecutor cleanup = new ScheduledThreadPoolExecutor(1);
+    private final HandlerThread messageThread = new HandlerThread("bunaway-messages");
+    final Handler messageHandler;
+    private final FrameDispatcher dispatch;
+    private volatile WebViewChannel channel;
     // A single writer keeps frames ordered; its bounded queue applies backpressure.
     private final ThreadPoolExecutor writer =
             new ThreadPoolExecutor(
@@ -73,16 +80,48 @@ final class BunProcess {
     private volatile Process process;
     private volatile ProcessGroup processGroup;
     private volatile boolean closing;
-    private boolean ready;
+    private volatile boolean ready;
     private boolean helloSeen;
     private Long runtimePid;
     private String failure;
     private Runnable onReady;
-    private BiConsumer<String, JsonObject> onMessage;
+    private BiConsumer<String, WebMessage> onMessage;
+    private Consumer<JsonObject> onChannel;
     private Consumer<String> onFailure;
+
+    /** Prepared off the UI thread, after the process boundary validates the nested message. */
+    static final class WebMessage {
+        private static final List<String> SERVER_KINDS =
+                Arrays.asList("hello", "result", "error", "event", "subscription-error");
+        final String kind;
+        final String json;
+
+        WebMessage(JsonObject payload, String json) {
+            kind = text(payload, "kind");
+            this.json = json;
+        }
+
+        void checkDirection() {
+            require(SERVER_KINDS.contains(kind), "Invalid backend WebView direction");
+        }
+    }
 
     BunProcess(AppAssets assets) {
         this.assets = assets;
+        // Completed deliveries must not retain cancelled deadline tasks until the timeout expires.
+        cleanup.setRemoveOnCancelPolicy(true);
+        messageThread.start();
+        messageHandler = new Handler(messageThread.getLooper());
+        dispatch =
+                new FrameDispatcher(
+                        cleanup,
+                        HANDSHAKE_TIMEOUT_MS,
+                        () -> {
+                            // Cleanup stays independent even if the destination or main thread is
+                            // stuck.
+                            scheduleCleanup(0);
+                            fail("Bridge dispatch timed out");
+                        });
     }
 
     /**
@@ -210,8 +249,7 @@ final class BunProcess {
     }
 
     /**
-     * Splits stdout into newline-delimited frames, validates each one and dispatches it on the main
-     * thread.
+     * Validates stdout frames in order, delivering port replies here and control frames on main.
      *
      * @throws Exception when a frame is oversized, not valid UTF-8 or JSON, fails the schema,
      *     belongs to another runtime, cannot be dispatched in time, or stdout ends before shutdown
@@ -221,27 +259,83 @@ final class BunProcess {
             FrameReader reader = new FrameReader(input);
             String text;
             while ((text = reader.read()) != null) {
-                JsonObject frame = assets.processProtocol.parse(text);
+                Protocol.Frame parsed = assets.processProtocol.parseFrame(text);
+                JsonObject frame = parsed.value;
                 require(frame.get("runtime").equals(runtime), "Stale runtime frame");
-                // Await dispatch so a producer cannot accumulate an unbounded UI queue.
-                CountDownLatch dispatched = new CountDownLatch(1);
-                main.post(
-                        () -> {
-                            try {
-                                receive(frame);
-                            } catch (Exception error) {
-                                Log.e("BunawayHost", "Invalid backend frame", error);
-                                fail("Invalid backend message");
-                            } finally {
-                                dispatched.countDown();
-                            }
-                        });
-                require(
-                        dispatched.await(HANDSHAKE_TIMEOUT_MS, TimeUnit.MILLISECONDS),
-                        "UI dispatch timed out");
+                WebMessage message =
+                        text(frame, "kind").equals("web")
+                                ? new WebMessage(frame.getAsJsonObject("payload"), parsed.webJson)
+                                : null;
+                // Delivery has an independent deadline even if WebView blocks this reader.
+                // A closing owner still drains stdout until Bun finishes graceful cleanup.
+                if (!dispatch.submit(() -> deliver(frame, message)) && !closing) return;
             }
             require(closing, "Unexpected backend EOF");
         }
+    }
+
+    /**
+     * Control frames form a main-thread barrier, so later web replies cannot pass ready or fatal.
+     */
+    private void deliver(JsonObject frame, WebMessage message) {
+        if (closing) return;
+        try {
+            WebViewChannel current = channel;
+            if (message != null
+                    && ready
+                    && current != null
+                    && current.session.context.equals(text(frame, "context"))) {
+                current.send(message);
+                return;
+            }
+            CountDownLatch delivered = new CountDownLatch(1);
+            require(
+                    main.post(
+                            () -> {
+                                try {
+                                    receive(frame, message);
+                                } catch (Exception error) {
+                                    Log.e("BunawayHost", "Invalid backend frame", error);
+                                    fail("Invalid backend message");
+                                } finally {
+                                    delivered.countDown();
+                                }
+                            }),
+                    "UI dispatcher stopped");
+            require(
+                    delivered.await(HANDSHAKE_TIMEOUT_MS, TimeUnit.MILLISECONDS),
+                    "UI dispatch timed out");
+        } catch (Exception error) {
+            if (error instanceof InterruptedException) Thread.currentThread().interrupt();
+            // Stop queued replies before reporting a failed delivery on the main thread.
+            dispatch.close();
+            scheduleCleanup(0);
+            fail("Backend delivery failed");
+        }
+    }
+
+    /** Main-thread document setup publishes the endpoint to the ordered message dispatcher. */
+    void connectChannel(WebViewChannel next) {
+        synchronized (lock) {
+            require(!closing, "Backend is closed");
+            require(channel == null, "Document channel already connected");
+            channel = next;
+        }
+    }
+
+    void disconnectChannel(WebViewChannel previous) {
+        synchronized (lock) {
+            if (channel == previous) channel = null;
+        }
+        previous.close();
+    }
+
+    /** Invalid input from an old endpoint cannot fail the replacement document. */
+    void reportInvalidChannel(WebViewChannel source, Runnable invalid) {
+        main.post(
+                () -> {
+                    if (channel == source && !closing) invalid.run();
+                });
     }
 
     /**
@@ -253,9 +347,13 @@ final class BunProcess {
      *
      * @throws IllegalArgumentException when the frame is out of order or uses a host-only direction
      */
-    private void receive(JsonObject frame) {
+    private void receive(JsonObject frame, WebMessage message) {
         if (closing) return;
         switch (text(frame, "kind")) {
+            case "channel-ready":
+                require(ready, "Backend is not ready");
+                if (onChannel != null) onChannel.accept(frame);
+                break;
             case "hello":
                 require(
                         !helloSeen
@@ -284,7 +382,7 @@ final class BunProcess {
             case "web":
                 require(ready, "Backend not ready");
                 if (onMessage != null) {
-                    onMessage.accept(text(frame, "context"), frame.getAsJsonObject("payload"));
+                    onMessage.accept(text(frame, "context"), message);
                 }
                 break;
             case "host-request":
@@ -316,30 +414,68 @@ final class BunProcess {
     }
 
     /**
-     * Validates and queues one frame for Bun stdin.
+     * Queues an owned frame for validation, serialization and writing on the Bun stdin worker.
      *
      * <p>{@code fields} are alternating names and values as accepted by {@link Protocol#object};
      * the IPC version, runtime identity and kind are added here. A full queue or write error fails
-     * this generation unless it is already closing.
+     * this generation unless it is already closing. Callers must not mutate JSON fields after
+     * queuing them. Invalid envelopes also fail this generation through the failure callback.
      *
-     * @throws IllegalArgumentException when the frame violates the process schema or size limit
+     * @throws IllegalArgumentException when fields are not name/value pairs of supported JSON types
      */
     void send(String kind, Object... fields) {
+        JsonObject frame = envelope(kind, fields);
+        enqueue(() -> assets.processProtocol.encode(frame));
+    }
+
+    /** Validates document input on the same FIFO writer that forwards it to Bun. */
+    void sendWeb(WebViewSession session, String text, Runnable invalid) {
+        enqueue(
+                () -> {
+                    Protocol.Validated payload;
+                    try {
+                        payload = session.receive(text);
+                    } catch (RuntimeException error) {
+                        main.post(invalid);
+                        return null;
+                    }
+                    if (payload == null) return null;
+                    if (payload.kind().equals("close")) {
+                        main.post(
+                                () -> {
+                                    WebViewChannel current = channel;
+                                    if (current != null && current.session == session)
+                                        disconnectChannel(current);
+                                });
+                    }
+                    return assets.processProtocol.encode(
+                            envelope("web", "context", session.context), payload);
+                });
+    }
+
+    private JsonObject envelope(String kind, Object... fields) {
         JsonObject frame = object(fields);
         frame.add("ipc", version);
         frame.add("runtime", runtime);
         frame.addProperty("kind", kind);
-        String text = assets.processProtocol.encode(frame) + "\n";
+        return frame;
+    }
+
+    /** A null frame means its document was revoked before queued work could run. */
+    private void enqueue(Supplier<String> encode) {
         try {
             writer.execute(
                     () -> {
                         try {
+                            String text = encode.get();
+                            if (text == null) return;
                             Process child = process;
                             if (child == null) {
                                 throw new IllegalStateException("Backend not started");
                             }
                             OutputStream output = child.getOutputStream();
                             output.write(text.getBytes(StandardCharsets.UTF_8));
+                            output.write('\n');
                             output.flush();
                         } catch (Exception error) {
                             main.post(
@@ -359,7 +495,11 @@ final class BunProcess {
      * <p>{@code ready} runs immediately when the backend is already ready, otherwise after the
      * handshake. A closed backend reports {@code failed} immediately and keeps no callbacks.
      */
-    void attach(Runnable ready, BiConsumer<String, JsonObject> message, Consumer<String> failed) {
+    void attach(
+            Runnable ready,
+            BiConsumer<String, WebMessage> message,
+            Consumer<JsonObject> channelReady,
+            Consumer<String> failed) {
         // A renderer failure can close a ready generation before Activity recreation.
         if (closing) {
             failed.accept(failure == null ? "Backend is closed. Reopen the app." : failure);
@@ -367,6 +507,7 @@ final class BunProcess {
         }
         onReady = ready;
         onMessage = message;
+        onChannel = channelReady;
         onFailure = failed;
         if (this.ready) ready.run();
     }
@@ -375,6 +516,7 @@ final class BunProcess {
     void detach() {
         onReady = null;
         onMessage = null;
+        onChannel = null;
         onFailure = null;
     }
 
@@ -383,20 +525,30 @@ final class BunProcess {
      * the executors after {@code SHUTDOWN_TIMEOUT_MS}. Safe to call repeatedly.
      */
     void close() {
+        WebViewChannel previous;
         synchronized (lock) {
             if (closing) return;
             closing = true;
+            previous = channel;
+            channel = null;
+            dispatch.close();
             // A saturated writer may reject shutdown; the deadline still owns forced termination.
             if (process != null) send("shutdown");
         }
         detach();
         scheduleCleanup(SHUTDOWN_TIMEOUT_MS);
+        if (previous != null) previous.close();
     }
 
     /**
      * Sweeps the owned group and closes pipes on a background thread, including after leader exit.
      */
     private void finishProcess() {
+        WebViewChannel previous;
+        synchronized (lock) {
+            previous = channel;
+            channel = null;
+        }
         try {
             ProcessGroup owner = processGroup;
             if (owner != null) owner.close();
@@ -406,6 +558,8 @@ final class BunProcess {
             writer.shutdownNow();
             io.shutdown();
             cleanup.shutdownNow();
+            messageThread.quitSafely();
+            if (previous != null) previous.close();
         }
     }
 

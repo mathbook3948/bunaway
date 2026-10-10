@@ -519,6 +519,16 @@ export const processSchema = {
       context: identifier,
       viewId: identifier,
     }),
+    processVariant("channel-open", {
+      context: identifier,
+      nonce: identifier,
+      origin: text,
+    }),
+    processVariant("channel-ready", {
+      context: identifier,
+      nonce: identifier,
+      url: text,
+    }),
     processVariant("shutdown", {}),
     processVariant("stopping", {}),
     processVariant("fatal", {

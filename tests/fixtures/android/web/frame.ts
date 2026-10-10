@@ -6,6 +6,7 @@ if (
   "postMessage" in native &&
   typeof native.postMessage === "function"
 ) {
+  native.postMessage(`@bunaway-port:${crypto.randomUUID()}`);
   native.postMessage(
     JSON.stringify({
       kind: "shutdown",
