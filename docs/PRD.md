@@ -1,6 +1,6 @@
 # Bun 기반 크로스플랫폼 앱 프레임워크 PRD
 
-작성일: 2026-10-04 ,  구현 상태 갱신: 2026-10-10 (macOS 다중 창과 기본 창 API) ,  상태: 제품 요구사항, 단계별 구현 진행 중 ,  제품명: bunaway
+작성일: 2026-10-04 ,  구현 상태 갱신: 2026-10-10 (macOS 다중 창과 Android 단일 뷰 호스트) ,  상태: 제품 요구사항, 단계별 구현 진행 중 ,  제품명: bunaway
 
 ## 1 목표와 범위
 
@@ -21,7 +21,7 @@ Tauri에서 참고할 부분은 웹 UI, 백엔드 코어, 네이티브 호스트
 확정했으며 Windows의 저장, 로그와 기능 지원 조회는 개별 플러그인으로 이관했다.
 macOS 플러그인 어댑터는 후속 작업이다.
 
-이 문서는 책임, 인터페이스, 보안 규칙과 단계별 완료 조건을 정한다. A 단계의 계약 구현과 Windows B 단계의 번들 Bun 프로세스, IPC 실험을 완료했다. C 단계에서는 실제 SDK, 코어, Host API와 Windows WebView2 호스트를 연결했다. 세 창의 다중 창/뷰와 뷰별 정책 분리에서 메모 저장, 이벤트, 재실행 후 복원과 오류, 취소, 권한, 렌더러 재생성, 창별 종료를 검증한 기록이 있다([Windows C 실행 결과](./architecture/windows-host-results.md)). macOS arm64의 AppKit, WKWebView 다중 창/뷰와 기본 창 API도 구현돼 있다. 독립 실험 코드는 제거했으며 과거 결과는 설계 기록으로 남긴다. [macOS 실행 기록](./architecture/macos-native-results.md)은 기존 로컬 기록, 이번 재실행과 실제 CI 결과를 구분한다. [Windows B 실행 결과](./architecture/windows-probe-results.md)는 별도 실험 기록이다. macOS Intel, 영속 뷰 프로필, Linux, 모바일 호스트와 설치, 배포는 미검증이다. macOS `.app` 생성, ad-hoc 서명은 Developer ID, 공증, 설치 검증이 아니다. 아래 요구사항 전체를 완료한 것은 아니며, 현재 범위는 [진행 상태](./architecture/progress.md)와 [플랫폼 지원 표](./platform-support/README.md)를 따른다.
+이 문서는 책임, 인터페이스, 보안 규칙과 단계별 완료 조건을 정한다. A 단계의 계약 구현과 Windows B 단계의 번들 Bun 프로세스, IPC 실험을 완료했다. C 단계에서는 실제 SDK, 코어, Host API와 Windows WebView2 호스트를 연결했다. 세 창의 다중 창/뷰와 뷰별 정책 분리에서 메모 저장, 이벤트, 재실행 후 복원과 오류, 취소, 권한, 렌더러 재생성, 창별 종료를 검증한 기록이 있다([Windows C 실행 결과](./architecture/windows-host-results.md)). macOS arm64의 AppKit, WKWebView 다중 창/뷰와 기본 창 API도 구현돼 있다. 독립 실험 코드는 제거했으며 과거 결과는 설계 기록으로 남긴다. [macOS 실행 기록](./architecture/macos-native-results.md)은 기존 로컬 기록, 이번 재실행과 실제 CI 결과를 구분한다. [Windows B 실행 결과](./architecture/windows-probe-results.md)는 별도 실험 기록이다. macOS Intel, 영속 뷰 프로필, Linux, iOS 호스트와 설치, 배포는 미검증이다. macOS `.app` 생성, ad-hoc 서명은 Developer ID, 공증, 설치 검증이 아니다. Android는 단일 뷰 WebView와 번들 Bun을 연결하고 debug APK 설치, 공통 SDK와 Core, 화면 회전 및 종료를 API 36 x86_64 에뮬레이터에서 검증했다([Android 실행 결과](./architecture/android-host-results.md)). Android arm64 실기기와 모바일 release 배포는 미검증이다. 아래 요구사항 전체를 완료한 것은 아니며, 현재 범위는 [진행 상태](./architecture/progress.md)와 [플랫폼 지원 표](./platform-support/README.md)를 따른다.
 
 ### 제품 요구사항
 
@@ -81,14 +81,14 @@ Bun 자식 프로세스 ── TypeScript 코어 ── 앱 명령, 상태, 플�
 | `renderer-*` | WebView/CEF 생성, 탐색 정책, 메시지 전달, 자산 공급 | 네이티브 호스트의 렌더러 계약, 해당 OS SDK |
 | `tooling` | 설정 검증, SDK 타입 생성, 개발 서버 연결, 번들, 네이티브 빌드와 패키징 | 위 모듈의 배포 형식과 빌드 어댑터 |
 
-`core`는 Swift, Kotlin, JNI, Win32 또는 WebView 라이브러리를 직접 참조하지 않는다. 렌더러는 앱 명령의 의미를 알지 못한다. 빌드 도구는 앱 실행에 포함하지 않는다. TypeScript와 네이티브 양쪽에서 쓰는 프로토콜, 정책 스키마는 한 정의에서 생성한다.
+`core`는 Swift, Java, Kotlin, JNI, Win32 또는 WebView 라이브러리를 직접 참조하지 않는다. 렌더러는 앱 명령의 의미를 알지 못한다. 빌드 도구는 앱 실행에 포함하지 않는다. TypeScript와 네이티브 양쪽에서 쓰는 프로토콜, 정책 스키마는 한 정의에서 생성한다.
 
 ### 네이티브 구현과 플랫폼 후보
 
 - Windows: Bun 메인, UI STA Worker, I/O Worker, 직접 Win32/WebView2 FFI 및 다중 창/뷰, 뷰별 정책, 독립 CLI 실행 검증
 - macOS: Bun 직접 FFI로 AppKit, WKWebView를 연결하며 백엔드는 같은 프로세스의 Worker에서 실행한다.
 - Linux: GTK, WebKitGTK 기반 C/C++ 호스트
-- Android: Kotlin 앱 수명주기, Android WebView, Bun 실행, 패키징 경로 별도 검증
+- Android: Java 앱 수명주기, Android WebView, Bun 실행, 프로젝트 동기화와 패키징 경로 별도 검증
 - iOS: Swift 앱 수명주기, WKWebView, Bun 실행, 패키징 경로 별도 검증
 
 Windows는 현재 TypeScript Bun FFI 호스트를 사용하며 C++ 컴파일 의존이 없다. macOS도 C 컴파일 의존이 없으며 Linux, 모바일 후보는 초기 제안을 설명한다. 후속 플랫폼의 목표 설계는 ADR 0010에 따라 Windows에서 완성한 Bun 기반 개발 모델에 맞추며 플랫폼별 바인딩과 수명주기는 지원 시점에 검증한다. 기존 경량 호스트 라이브러리 재사용 여부는 라이선스, UI 스레드 제어, 모바일 경계와 유지보수 비용을 검토한 뒤 결정한다. 앱 개발자에게 Rust 작성을 요구하지 않으며 코어를 Rust로 다시 구현하지 않는다.
@@ -207,7 +207,7 @@ void start().catch(console.error);
 | Windows | WebView2 | 번들 Bun 진입점 + 직접 FFI UI Worker + I/O Worker | B 실험 및 C 다중 창/뷰, 뷰별 정책의 실제 SDK, 코어, 저장, 이벤트, 복원 검증 통과. 최소 OS/CPU, 설치, 서명, 배포 미검증 |
 | macOS | WKWebView | Bun 진입점, 직접 FFI, 백엔드 Worker | 다중 창의 실제 UI, 기본 창 API, 정책과 종료 검증. 출시 서명과 설치는 미검증 |
 | Linux | WebKitGTK | 번들된 Bun 자식 프로세스 + 네이티브 호스트 | 계획. 대상 배포판, 라이브러리, IPC, 패키지 검증 필요 |
-| Android | Android WebView | 미확정 | 미검증. Bun 번들, 실행방식, 수명주기, 배포 제약을 별도 검증 |
+| Android | Android WebView | APK에 포함한 Bun 자식 프로세스 | 단일 뷰 debug APK, API 36 x86_64 실행 검증. ARM64 실기기와 release 배포 미검증 |
 | iOS | WKWebView | 미확정 | 미검증. Bun 실행 가능 경로, 기기, 수명주기, 배포 제약을 별도 검증 |
 | 데스크톱 선택 렌더러 | CEF 등 Chromium 계열 | 동일한 백엔드, Host API | 후속. 번들 크기, 하위 프로세스, 서명, 라이선스 검토 |
 
@@ -284,8 +284,8 @@ Skal의 고정 commit `7edb44aceb8c69ac1abd76549e2c09cf6cdc8a57`에서는 VM 작
 
 - Windows x64 baseline과 macOS arm64 번들 Bun 1.4.2의 소스 revision, 실행 파일 해시, 라이선스는 각각 [Windows manifest](../runtime/build-manifests/windows-x64.json)와 [macOS manifest](../runtime/build-manifests/darwin-aarch64.json)로 고정했다. 다른 CPU/플랫폼 배포물과 upstream 업데이트 검증 책임은 후속 결정이다.
 - 모바일의 Bun 실행, 배포 경로와 지원할 Bun, Node.js API 목록, native addon 지원 범위
-- 프로세스 IPC envelope, 프레이밍, 큐 상한, 종료, 오류 처리와 Windows Job 정리는 구현했다. macOS는 프로세스 그룹, guard로 정리하며 spawn 직후 guard 연결 전 race 제약이 남는다. Linux, 모바일 정리 방식은 미결정이다.
-- Windows의 WebView2 SDK, 네이티브 의존성, 라이선스와 가상 자산 origin, macOS의 `WKURLSchemeHandler` 자산 origin 매핑은 구현에 고정했다. 최소 OS, CPU, WebView 런타임 지원 범위 및 Linux, 모바일 호스트, 자산 origin은 별도 검증, 결정이 필요하다.
+- 프로세스 IPC envelope, 프레이밍, 큐 상한, 종료, 오류 처리와 Windows Job 정리는 구현했다. macOS는 프로세스 그룹, guard로 정리하며 spawn 직후 guard 연결 전 race 제약이 남는다. Android는 Activity 재생성과 Bun 수명을 분리하고 최종 종료에서 IPC shutdown 후 제한 시간 내 강제 종료한다. Linux, iOS 정리 방식은 미결정이다.
+- Windows의 WebView2 SDK, 네이티브 의존성, 라이선스와 가상 자산 origin, macOS의 `WKURLSchemeHandler` 자산 origin 매핑은 구현에 고정했다. Android는 APK 자산을 app.home의 HTTPS origin으로 매핑한다. 최소 OS, CPU, WebView 런타임 지원 범위와 Linux, iOS 호스트 및 자산 origin은 별도 검증, 결정이 필요하다.
 - 서명, 공증, 스토어 제출에 필요한 조건과 iOS 코드 실행, 업데이트 정책. 검토 전 스토어 배포 가능성을 보장하지 않음
 
 CLI create/validate/doctor/dev/build와 vanilla, Vite, React, Vue, Svelte 템플릿, 로컬 프레임워크 설치 artifact, 버전 검증은 구현했다.

@@ -1,0 +1,14 @@
+{
+  "bun": {
+    "version": "1.4.2",
+    "sourceRevision": "744846f844374847c902b5e7fd59b4342a51ef99",
+    "sourceUrl": "https://github.com/oven-sh/bun/tree/744846f844374847c902b5e7fd59b4342a51ef99",
+    "target": "linux-x64-android-baseline",
+    "archiveUrl": "https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-linux-x64-android-baseline.zip",
+    "archiveSha256": "fe36d8d4795e0eadc22fb6696d44d168491c2e5b9b7cbb12b8c96b0c0c40a4f9",
+    "executableSha256": "12222610d9a72265ecb5955e09e009bc2b32cd9624427f8a76bec34965917054",
+    "licenseUrl": "https://raw.githubusercontent.com/oven-sh/bun/744846f844374847c902b5e7fd59b4342a51ef99/LICENSE.md",
+    "licenseSha256": "b9caf52728691b4057e371232c221a132883198be2f3d2ddf92c90404c984b1a",
+    "patches": []
+  }
+}

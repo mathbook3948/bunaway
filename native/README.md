@@ -4,7 +4,7 @@
 - `windows/`: Bun 직접 FFI Win32, WebView2 제품 호스트.
 - `macos/`: Bun 직접 FFI AppKit, WKWebView 제품 호스트(arm64).
 - `linux/`: GTK, WebKitGTK 호스트 예정 영역, 미구현.
-- `android/`: Kotlin 수명주기, WebView 예정 영역, 미구현. Bun 실행, 배포 경로 미검증.
+- `android/`: Java Activity, WebView와 번들 Bun 호스트. Java 프로젝트 동기화, 단일 뷰와 debug APK, Core/SDK 및 화면 회전과 종료 구현. [현재 범위](./android/README.md).
 - `ios/`: Swift 수명주기, WKWebView 예정 영역, 미구현. Bun 실행, 배포 경로 미검증.
 
 Windows는 번들 Bun이 진입점이고 같은 프로세스의 UI Worker가 직접 FFI로 Win32,

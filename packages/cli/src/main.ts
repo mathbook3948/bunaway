@@ -1,5 +1,12 @@
 #!/usr/bin/env bun
 import {
+  buildAndroidProject,
+  isAndroidSerial,
+  runAndroidProject,
+  syncAndroidProject,
+} from "./android.ts";
+import { parseDevArguments } from "./dev.ts";
+import {
   buildProject,
   createProject,
   devProject,
@@ -7,8 +14,7 @@ import {
   packageProject,
   validateProject,
 } from "./index.ts";
-import { isTemplate, templateNames, type Template } from "./templates.ts";
-import { parseDevArguments } from "./dev.ts";
+import { isTemplate, type Template, templateNames } from "./templates.ts";
 
 const help = `bunaway (vanilla / Vite / React / Vue / Svelte)
   create <new-directory>   Generate an independent project (then bun install)
@@ -19,7 +25,10 @@ const help = `bunaway (vanilla / Vite / React / Vue / Svelte)
   build [directory]       Build frontend and app with pinned bundled Bun
   package <channel> [dir] Package a build artifact for a channel [--build]
   doctor [directory]      Check project, runtime version and native tools
-Builds are native only: Windows x64 / macOS arm64.`;
+  android sync [dir]     Create or refresh the editable Android Studio project
+  android build [dir]    Sync and build an experimental Android debug APK on Windows
+  android run [dir]      Build, install and start the APK [--serial <device>]
+Desktop builds: Windows x64 / macOS arm64. Android debug APK builds: Windows.`;
 
 /** Run a CLI command and return its process exit code. */
 export async function main(args: string[]): Promise<number> {
@@ -94,6 +103,42 @@ export async function main(args: string[]): Promise<number> {
   if (command === "dev") {
     const { directory, ...options } = parseDevArguments(rest);
     await devProject(directory, options);
+    return 0;
+  }
+  if (command === "android") {
+    const [action, ...options] = rest;
+    const usage =
+      "Usage: bunaway android sync [directory] | android build [directory] | android run [directory] --serial <device>.";
+    let directory = ".";
+    let directorySeen = false;
+    let serial: string | undefined;
+    if (action !== "sync" && action !== "build" && action !== "run") {
+      throw new Error(usage);
+    }
+    for (let index = 0; index < options.length; index++) {
+      const option = options[index];
+      if (option === "--serial" && action === "run" && serial === undefined) {
+        serial = options[++index];
+        if (!serial || !isAndroidSerial(serial)) {
+          throw new Error(usage);
+        }
+      } else if (option && !option.startsWith("--") && !directorySeen) {
+        directory = option;
+        directorySeen = true;
+      } else {
+        throw new Error(usage);
+      }
+    }
+    if (action === "sync") {
+      console.log(`Synced ${await syncAndroidProject(directory)}`);
+    } else if (action === "build") {
+      console.log(`Built ${(await buildAndroidProject(directory)).apk}`);
+    } else {
+      if (!serial) {
+        throw new Error(usage);
+      }
+      await runAndroidProject(directory, serial);
+    }
     return 0;
   }
   const [directory, ...extra] = rest;

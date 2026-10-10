@@ -1,0 +1,26 @@
+apply plugin: 'com.android.application'
+def appConfig = new groovy.json.JsonSlurper().parse(rootProject.file('.bunaway/inputs/assets/bunaway/host.json'))
+if (providers.gradleProperty('bunawayBuildDirectory').isPresent()) {
+    layout.buildDirectory.set(file(providers.gradleProperty('bunawayBuildDirectory').get()))
+}
+android {
+    namespace 'dev.bunaway.app'
+    compileSdk 36
+    buildToolsVersion '36.1.0'
+    defaultConfig {
+        applicationId appConfig.appId
+        minSdk 29
+        targetSdk 36
+        versionCode 1
+        versionName '0.0.0'
+    }
+    packaging.jniLibs {
+        useLegacyPackaging = true
+        keepDebugSymbols += '**/libbun.so'
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+dependencies { implementation project(':host') }

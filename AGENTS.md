@@ -24,7 +24,8 @@ existing debt allows no unrelated rewrites.
   conditions when useful. Avoid nested ternaries and unrelated decisions in one condition; split by
   responsibility and reading flow, not line count.
 - Name non-obvious literals, domain limits and native flags; ordinary indices and obvious literals
-  need no constants. Follow `biome.json` for formatting.
+  need no constants. Follow `biome.json` for formatting, and `mise run format:java`
+  (google-java-format, AOSP style) for Java.
 
 #### JSDoc and inline comments
 
