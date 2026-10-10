@@ -190,8 +190,8 @@ CLI는 요청을 다시 전송하지 않으며 이미 저장한 파일은 그대
 ## 패키지 구조와 배포
 
 Windows x64 개발에는 Windows 기본 제공 tar와 고정 Bun이 필요하다.
-앱 실행에는 WebView2 Evergreen이 필요하다. 네이티브 SDK는 기존 스크립트의 핀으로 받는다.
-macOS arm64에는 macOS 14+, Xcode CLT, zsh/codesign이 필요하다. 교차 빌드는 없다.
+앱 실행에는 WebView2 Evergreen이 필요하다. 네이티브 빌드 의존성은 고정된 핀으로 받는다.
+macOS arm64에는 macOS 14+, Xcode CLT와 codesign이 필요하다. 교차 빌드는 없다.
 
 ```text
 dist/windows-x64/
@@ -244,7 +244,7 @@ Developer ID 서명, 실제 공증, UI 프레임워크 템플릿의 실제 네�
 공개 registry publish/라이선스 결정은 후속 범위다.
 `packages/cli/src/native-build.ts`는 Windows에서 고정 Bun과 공식 Loader를 준비하고,
 macOS에서는 고정 의존성을 검증한 뒤 네이티브 호스트를 컴파일한다.
-macOS `--host-only`는 기존 네이티브 컴파일까지만 실행한다. CLI는 앱 자산을 직접 조립한다.
+CLI는 앱 자산을 직접 조립한다.
 Windows 일반 Inno 설치는 `bunaway package win-direct`와 `win-store-unpackaged`를 사용한다.
 MSIX 앱 활성화 경로와 Developer ID 공증/배포는 후속 범위다. 기존 샘플/계약 테스트
 경로와 기본 빌드 동작은 유지한다.
