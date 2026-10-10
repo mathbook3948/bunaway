@@ -254,24 +254,24 @@ class SessionImpl implements CoreSession {
     });
   }
 
-  // Every request ID is recorded once for the session lifetime, whether the
-  // request is executed, rejected, cancelled, or expired.
+  // Every request ID is recorded whether the request is executed, rejected,
+  // cancelled, or expired. Retain IDs in acceptance order, independent of reply
+  // delivery; the pending map also protects in-flight IDs evicted from this history.
   private acceptRequest(id: string): boolean {
     if (this.closed || this.failed) {
       return false;
     }
     // A duplicate is not a new request and must not settle the original again.
-    if (this.requestIds.has(id)) {
-      return false;
-    }
-    if (this.requestIds.size >= API_LIMITS.maxRequestIds) {
-      this.respondError(id, {
-        code: "BUSY",
-        message: "Request limit reached.",
-      });
+    if (this.requestIds.has(id) || this.pending.has(id)) {
       return false;
     }
     this.requestIds.add(id);
+    if (this.requestIds.size > API_LIMITS.maxRequestIds) {
+      const oldest = this.requestIds.values().next().value;
+      if (oldest !== undefined) {
+        this.requestIds.delete(oldest);
+      }
+    }
     if (!this.helloDone) {
       this.respondError(id, {
         code: "INVALID_ARGUMENT",
