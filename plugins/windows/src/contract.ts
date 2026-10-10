@@ -169,6 +169,97 @@ const boundsOutput = {
   additionalProperties: false,
 } as const;
 
+/** State and bounds shared by native events and snapshot recovery. Bounds are physical outer pixels. */
+export const windowSnapshotSchema = {
+  type: "object",
+  properties: {
+    windowId: windowTarget.properties.view,
+    viewId: windowTarget.properties.view,
+    revision: {
+      type: "integer",
+      minimum: 0,
+      maximum: Number.MAX_SAFE_INTEGER,
+    },
+    state: {
+      type: "object",
+      properties: {
+        visible: {
+          type: "boolean",
+        },
+        focused: {
+          type: "boolean",
+        },
+        minimized: {
+          type: "boolean",
+        },
+        maximized: {
+          type: "boolean",
+        },
+        fullscreen: {
+          type: "boolean",
+        },
+      },
+      required: [
+        "visible",
+        "focused",
+        "minimized",
+        "maximized",
+        "fullscreen",
+      ],
+      additionalProperties: false,
+    },
+    bounds: boundsOutput,
+  },
+  required: [
+    "windowId",
+    "viewId",
+    "revision",
+    "state",
+    "bounds",
+  ],
+  additionalProperties: false,
+} as const;
+/** A single ordered subscription observes every committed window transition. */
+export const windowEvents = {
+  "windows.changed": {
+    ...windowSnapshotSchema,
+    properties: {
+      ...windowSnapshotSchema.properties,
+      changes: {
+        type: "array",
+        minItems: 1,
+        maxItems: 12,
+        uniqueItems: true,
+        items: {
+          type: "string",
+          enum: [
+            "shown",
+            "hidden",
+            "focus",
+            "blur",
+            "unmaximize",
+            "minimize",
+            "maximize",
+            "restore",
+            "enterFullscreen",
+            "leaveFullscreen",
+            "move",
+            "resize",
+          ],
+        },
+      },
+    },
+    required: [
+      ...windowSnapshotSchema.required,
+      "changes",
+    ],
+  },
+} as const;
+/** Native event payloads for typed client subscriptions. */
+export type WindowEvents = {
+  [K in keyof typeof windowEvents]: Infer<(typeof windowEvents)[K]>;
+};
+
 const geometryValue = {
   anyOf: [
     {
@@ -217,6 +308,10 @@ const conversionOutput = {
 
 /** Schemas for window operations, used to validate calls and their results. */
 export const windowOperations = {
+  "windows.getSnapshot": {
+    input: windowTarget,
+    output: windowSnapshotSchema,
+  },
   "windows.list": {
     input: {
       const: null,

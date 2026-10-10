@@ -180,6 +180,7 @@ export class MacosWindows {
       throw new Error("Missing native window.");
     }
     return {
+      getSnapshot: unsupported,
       show: (visible) => native.show(visible),
       focus: () => native.focus(),
       close: () => this.closeView(viewId),

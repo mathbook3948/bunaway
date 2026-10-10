@@ -705,15 +705,35 @@ class BunawayCore implements Core {
     }
   }
 
-  /**
-   * Validates an event for every eligible session before mutating any queue.
-   * Session emissions keep their view ID as source; backend work reports "backend".
-   */
+  /** Reuses event validation and queues for one host-issued session, ignoring revoked contexts. */
+  async emitNative(
+    context: HostContext,
+    event: string,
+    payload: JsonValue,
+  ): Promise<void> {
+    const session = this.sessions.get(context);
+    if (this.stopped || !session || session.closed || session.failed) {
+      return;
+    }
+    await this.emit(
+      event,
+      payload,
+      {
+        kind: "view",
+        viewId: session.view.id,
+      },
+      "native",
+      context,
+    );
+  }
+
+  /** Validates all eligible destinations before changing queues; retains the actual emission source. */
   async emit(
     event: string,
     payload: JsonValue,
     target: EventTarget,
     source: string,
+    destinationContext?: HostContext,
   ): Promise<void> {
     const schema = this.events.get(event);
     if (!schema) {
@@ -734,6 +754,12 @@ class BunawayCore implements Core {
     }[] = [];
     try {
       for (const session of this.sessions.values()) {
+        if (
+          destinationContext !== undefined &&
+          session.context !== destinationContext
+        ) {
+          continue;
+        }
         if (session.closed || session.failed || !session.helloDone) {
           continue;
         }

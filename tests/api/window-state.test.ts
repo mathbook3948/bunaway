@@ -114,6 +114,9 @@ function fixture() {
   };
   let failure: Error | undefined;
   const native: NativeWindow = {
+    getSnapshot() {
+      throw new Error("Snapshot is not used in this state test.");
+    },
     show() {},
     focus: () => true,
     close: () => true,

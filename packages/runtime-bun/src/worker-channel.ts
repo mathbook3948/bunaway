@@ -1,4 +1,8 @@
-import type { MessagePort, Worker } from "node:worker_threads";
+import {
+  MessagePort,
+  receiveMessageOnPort,
+  type Worker,
+} from "node:worker_threads";
 import {
   API_LIMITS,
   BunawayError,
@@ -58,6 +62,12 @@ export type Packet =
       kind: "client";
       route: Route;
       message: ClientMessage;
+    }
+  | {
+      kind: "native-event";
+      route: Route;
+      event: string;
+      payload: import("@bunaway/protocol").JsonValue;
     }
   | {
       kind: "server";
@@ -126,6 +136,7 @@ export type Packet =
     };
 
 const uiKinds = [
+  "native-event",
   "ready",
   "session-open",
   "revoke",
@@ -203,6 +214,11 @@ const approvalKinds = new Set([
   "grant",
 ]);
 const requiredFields: Record<Packet["kind"], readonly string[]> = {
+  "native-event": [
+    "route",
+    "event",
+    "payload",
+  ],
   "native-register": [
     "plugins",
     "complete",
@@ -393,6 +409,7 @@ export function validatePacket(value: unknown, incoming: Side): Packet {
       "client",
       "server",
       "session-failure",
+      "native-event",
     ].includes(packet.kind) &&
     !packet.route
   ) {
@@ -468,6 +485,10 @@ export function validatePacket(value: unknown, incoming: Side): Packet {
     identifier(packet.event);
     record(packet.fields);
   }
+  if (packet.kind === "native-event") {
+    identifier(packet.event);
+    validateValue({}, packet.payload);
+  }
   if (packet.kind === "fatal" || packet.kind === "session-failure") {
     validateValue(errorSchema, packet.error);
   }
@@ -478,6 +499,7 @@ export function validatePacket(value: unknown, incoming: Side): Packet {
 // This is a bounded backlog policy, separate from unacknowledged data capacity.
 const SERVER_QUEUE_LIMIT = MAX_WINDOWS * API_LIMITS.maxSubscriptions;
 type Lane =
+  | "native-event"
   | "data"
   | "approval"
   | "cancel"
@@ -501,6 +523,7 @@ export class Channel {
   private sequence = 0;
   private expected = 1;
   private closed = false;
+  private polling = false;
   private droppedDiagnostics = 0;
   private readonly queuedData = new Set<QueuedData>();
   private queuedServerCount = 0;
@@ -564,21 +587,57 @@ export class Channel {
       }
       const packet = validatePacket(envelope.packet, this.side);
       // Dispatch without waiting on application work, keeping setup Host API replies live.
-      Promise.resolve(this.receive(packet))
-        .then(() => {
-          this.port.postMessage(
-            {
-              runtime: this.runtime,
-              ack: envelope.sequence,
-            },
-            [],
-          );
-        })
-        .catch(this.fail);
+      const acknowledge = () => {
+        this.port.postMessage(
+          {
+            runtime: this.runtime,
+            ack: envelope.sequence,
+          },
+          [],
+        );
+      };
+      // Resource changes must not re-enter a Win32/COM callback while polling its acknowledgements.
+      const completion =
+        this.polling && packet.kind !== "server"
+          ? Promise.resolve().then(() => this.receive(packet))
+          : this.receive(packet);
+      // Native modal loops cannot run Promise jobs. Completed synchronous deliveries release capacity now.
+      // A void callback may return an ignored value, such as Array.push's count.
+      if (completion && typeof completion.then === "function") {
+        void Promise.resolve(completion).then(acknowledge).catch(this.fail);
+      } else {
+        acknowledge();
+      }
     } catch (error) {
       this.fail(error);
     }
   };
+
+  /** Process a bounded MessagePort batch inside native callbacks. Acks and server delivery run now; other handlers wait for JS to resume. Nested polls are ignored. */
+  poll(): void {
+    if (this.closed || this.polling) {
+      return;
+    }
+    if (!(this.port instanceof MessagePort)) {
+      throw new Error("Worker channel polling requires a MessagePort.");
+    }
+    this.polling = true;
+    try {
+      for (
+        let count = 0;
+        count < API_LIMITS.maxPending && !this.closed;
+        count++
+      ) {
+        const received = receiveMessageOnPort(this.port);
+        if (!received) {
+          break;
+        }
+        this.accept(received.message);
+      }
+    } finally {
+      this.polling = false;
+    }
+  }
 
   /** Resolves on peer acknowledgement; server and Host responses wait in a bounded FIFO. Rejects invalid or over-capacity sends. */
   send(packet: Packet): Promise<void> {
@@ -594,7 +653,7 @@ export class Channel {
         "macos-main": "macos-backend",
         "macos-backend": "macos-main",
       }[this.side] as Side;
-      const lane: Lane =
+      let lane: Lane =
         packet.kind === "diagnostic"
           ? "diagnostic"
           : packet.kind === "session-failure"
@@ -609,6 +668,9 @@ export class Channel {
                   : controlKinds.has(packet.kind)
                     ? "control"
                     : "data";
+      if (packet.kind === "native-event") {
+        lane = "native-event";
+      }
       const count = [
         ...this.pending.values(),
       ].filter((item) => item.lane === lane).length;
@@ -633,7 +695,10 @@ export class Channel {
       const limit =
         lane === "revoke" || lane === "session-failure"
           ? MAX_WINDOWS
-          : lane === "data" || lane === "approval" || lane === "cancel"
+          : lane === "data" ||
+              lane === "approval" ||
+              lane === "cancel" ||
+              lane === "native-event"
             ? API_LIMITS.maxPending
             : 16;
       if (
@@ -672,6 +737,12 @@ export class Channel {
         });
       }
       if (count >= limit) {
+        if (lane === "native-event") {
+          throw new BunawayError({
+            code: "BUSY",
+            message: "Native event queue full.",
+          });
+        }
         throw new Error("Worker channel full");
       }
       return this.post(packet, lane);

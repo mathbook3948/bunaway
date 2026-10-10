@@ -28,6 +28,10 @@ export function createOperations(
   ): JsonValue | Promise<JsonValue> {
     const window = services.window(viewId);
     switch (call.operation) {
+      case "windows.getSnapshot":
+        return {
+          ...window.getSnapshot(),
+        };
       case "windows.show":
         window.show(true);
         break;

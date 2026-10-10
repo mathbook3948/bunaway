@@ -4,13 +4,16 @@ import {
   clampWindowSize,
   hasValidWindowSizeConstraints,
   type WindowBounds,
+  type WindowChange,
   type WindowSizeConstraints,
+  type WindowSnapshot,
 } from "@bunaway/plugin-api/native";
 import {
   APP_SHUTDOWN_MESSAGE,
   APP_WINDOW_CLASS_PREFIX,
 } from "@bunaway/runtime-bun/windows-control";
 import { hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
+import { windowChanges } from "./window-events.ts";
 import {
   constrainedOuterSize,
   DEFAULT_DPI,
@@ -19,6 +22,8 @@ import {
 } from "./window-size.ts";
 
 export const WM_SIZE = 0x0005;
+const WM_ACTIVATE = 0x0006;
+const WM_OBSERVE_WINDOW = 0x8003;
 export const WM_CLOSE = 0x0010;
 export const WM_QUIT = 0x0012;
 const WM_GETMINMAXINFO = 0x0024;
@@ -113,6 +118,14 @@ export class Windows {
     (message: number, wparam: bigint, lparam: bigint) => void
   >();
   private readonly constraints = new Map<bigint, WindowSizeConstraints>();
+  private readonly observations = new Map<
+    bigint,
+    {
+      snapshot: WindowSnapshot;
+      receive(snapshot: WindowSnapshot, changes: WindowChange[]): void;
+    }
+  >();
+  private readonly changingFullscreen = new Set<bigint>();
   private readonly dpiByWindow = new Map<bigint, number>();
   private readonly normalMonitors = new Map<
     bigint,
@@ -141,7 +154,12 @@ export class Windows {
   private readonly ownedIcons: boolean;
 
   /** Register the window class and set this STA to per-monitor-v2 awareness. */
-  constructor(shutdown: () => void, iconPath?: string, appId?: string) {
+  constructor(
+    shutdown: () => void,
+    iconPath?: string,
+    appId?: string,
+    pollMessages?: () => void,
+  ) {
     if (appId) {
       const shell = dlopen("shell32.dll", {
         SetCurrentProcessExplicitAppUserModelID: {
@@ -232,8 +250,14 @@ export class Windows {
       (window: bigint, message: number, wparam: bigint, lparam: bigint) => {
         try {
           assert.equal(kernel.symbols.GetCurrentThreadId(), this.thread);
+          // DispatchMessage can remain in a native move/resize loop until the user releases the mouse.
+          pollMessages?.();
           if (message === APP_SHUTDOWN_MESSAGE) {
             shutdown();
+            return 0n;
+          }
+          if (message === WM_OBSERVE_WINDOW) {
+            this.observeChanges(window);
             return 0n;
           }
           if (message === WM_GETMINMAXINFO) {
@@ -245,6 +269,7 @@ export class Windows {
           if (message === WM_DPICHANGED) {
             this.applyDpiChange(window, wparam, lparam);
             this.windows.get(window)?.(message, wparam, lparam);
+            this.observeChanges(window);
             return 0n;
           }
           if (message === WM_WINDOWPOSCHANGING) {
@@ -262,6 +287,15 @@ export class Windows {
           );
           if (message === WM_WINDOWPOSCHANGED && this.windows.has(window)) {
             this.rememberNormalMonitor(window);
+          }
+          if (message === WM_WINDOWPOSCHANGED) {
+            this.observeChanges(window);
+          }
+          if (message === WM_ACTIVATE && this.observations.has(window)) {
+            // Foreground identity can change after this synchronous activation callback returns.
+            assert(
+              user.symbols.PostMessageW(window, WM_OBSERVE_WINDOW, 0n, 0n),
+            );
           }
           if (
             message === WM_DISPLAYCHANGE &&
@@ -413,6 +447,82 @@ export class Windows {
   isFocused(window: bigint): boolean {
     assert(user.symbols.IsWindow(window), "Window is no longer valid.");
     return user.symbols.GetForegroundWindow() === window;
+  }
+
+  /** Own one native observer per window. Its callback ends before HWND destruction. No initial replay. */
+  observe(
+    window: bigint,
+    viewId: string,
+    receive: (snapshot: WindowSnapshot, changes: WindowChange[]) => void,
+  ): void {
+    assert(!this.observations.has(window), "Window already observed.");
+    this.observations.set(window, {
+      snapshot: this.readSnapshot(
+        window,
+        `window-${crypto.randomUUID()}`,
+        viewId,
+        0,
+      ),
+      receive,
+    });
+  }
+
+  private readSnapshot(
+    window: bigint,
+    windowId: string,
+    viewId: string,
+    revision: number,
+  ): WindowSnapshot {
+    return {
+      windowId,
+      viewId,
+      revision,
+      state: {
+        visible: this.isVisible(window),
+        focused: this.isFocused(window),
+        minimized: this.isMinimized(window),
+        maximized: this.isMaximized(window),
+        fullscreen: this.isFullscreen(window),
+      },
+      bounds: this.getBounds(window, "outer"),
+    };
+  }
+
+  /** Commit before calling the observer so nested Win32 callbacks cannot repeat a transition. */
+  private observeChanges(window: bigint): void {
+    const observation = this.observations.get(window);
+    if (!observation || this.changingFullscreen.has(window)) {
+      return;
+    }
+    const previous = observation.snapshot;
+    const current = this.readSnapshot(
+      window,
+      previous.windowId,
+      previous.viewId,
+      previous.revision + 1,
+    );
+    const changes = windowChanges(previous, current);
+    if (!changes.length) {
+      return;
+    }
+    observation.snapshot = current;
+    observation.receive(current, changes);
+  }
+
+  /** Query using the same committed revision as events, including changes awaiting a native message. */
+  getSnapshot(window: bigint): WindowSnapshot {
+    this.observeChanges(window);
+    const snapshot = this.observations.get(window)?.snapshot;
+    assert(snapshot, "Window is not observed.");
+    return {
+      ...snapshot,
+      state: {
+        ...snapshot.state,
+      },
+      bounds: {
+        ...snapshot.bounds,
+      },
+    };
   }
 
   /** ShowWindow returns previous visibility, so verify the requested native state instead. */
@@ -1112,6 +1222,17 @@ export class Windows {
    * Save normal style and placement, restoring both under current size limits.
    */
   setFullscreen(window: bigint, enabled: boolean) {
+    // Style and placement changes produce synchronous intermediate native messages.
+    this.changingFullscreen.add(window);
+    try {
+      this.applyFullscreen(window, enabled);
+    } finally {
+      this.changingFullscreen.delete(window);
+      this.observeChanges(window);
+    }
+  }
+
+  private applyFullscreen(window: bigint, enabled: boolean) {
     if (enabled === this.isFullscreen(window)) {
       return;
     }
@@ -1212,6 +1333,8 @@ export class Windows {
 
   /** Destroy the HWND and discard its size, DPI, and fullscreen state. */
   destroy(window: bigint) {
+    this.observations.delete(window);
+    this.changingFullscreen.delete(window);
     assert(user.symbols.DestroyWindow(window));
     this.windows.delete(window);
     this.constraints.delete(window);

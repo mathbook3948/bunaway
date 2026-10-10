@@ -5,6 +5,7 @@ import {
   BunawayError,
   type HostContext,
   type HostResponse,
+  type Policy,
 } from "@bunaway/protocol";
 import { ViewBoundary } from "@bunaway/runtime-bun/view-boundary";
 import { hostResponse } from "../../host-api/bun/host-response.ts";
@@ -142,7 +143,7 @@ const channel = new Channel(
   parentPort,
   config.runtime,
   "ui",
-  async (packet: Packet) => {
+  (packet: Packet) => {
     if (packet.kind === "start") {
       assert(!startRequested && !stopping, "Invalid start");
       startRequested = true;
@@ -222,44 +223,7 @@ const channel = new Channel(
       }
       if (packet.kind === "grant") {
         assert(queued);
-        let response: HostResponse;
-        windowRequests.set(packet.requestId, packet.context);
-        try {
-          if (!allowed || !permissions) {
-            throw new BunawayError({
-              code: "PERMISSION_DENIED",
-              message: "Host context or policy denied.",
-            });
-          }
-          assert(adapters, "UI adapters are not initialized");
-          const payload = await adapters.executeUI(
-            queued.call.operation,
-            queued.call.payload,
-            queued.source,
-            {
-              requestId: packet.requestId,
-              permissions,
-            },
-          );
-          response = hostResponse(() => payload);
-        } catch (error) {
-          response = hostResponse(() => {
-            throw error;
-          });
-        } finally {
-          windowRequests.delete(packet.requestId);
-        }
-        const wasCancelled = cancelled.delete(packet.requestId);
-        if (stopping || wasCancelled || !activeContext(packet.context)) {
-          return;
-        }
-        channel.notify({
-          kind: "host-response",
-          context: packet.context,
-          requestId: packet.requestId,
-          response,
-        });
-        return;
+        return executeWindowRequest(queued, allowed, permissions);
       }
       if (allowed) {
         assert(!approved.has(packet.requestId));
@@ -295,6 +259,56 @@ const channel = new Channel(
   },
   fail,
 );
+
+/** Keep asynchronous adapter completion separate so server deliveries can be acknowledged inside a native modal loop. */
+async function executeWindowRequest(
+  queued: Extract<
+    Packet,
+    {
+      kind: "operation";
+    }
+  >,
+  allowed: boolean,
+  permissions: Policy["backend"] | undefined,
+): Promise<void> {
+  let response: HostResponse;
+  windowRequests.set(queued.requestId, queued.context);
+  try {
+    if (!allowed || !permissions) {
+      throw new BunawayError({
+        code: "PERMISSION_DENIED",
+        message: "Host context or policy denied.",
+      });
+    }
+    assert(adapters, "UI adapters are not initialized");
+    const payload = await adapters.executeUI(
+      queued.call.operation,
+      queued.call.payload,
+      queued.source,
+      {
+        requestId: queued.requestId,
+        permissions,
+      },
+    );
+    response = hostResponse(() => payload);
+  } catch (error) {
+    response = hostResponse(() => {
+      throw error;
+    });
+  } finally {
+    windowRequests.delete(queued.requestId);
+  }
+  const wasCancelled = cancelled.delete(queued.requestId);
+  if (stopping || wasCancelled || !activeContext(queued.context)) {
+    return;
+  }
+  channel.notify({
+    kind: "host-response",
+    context: queued.context,
+    requestId: queued.requestId,
+    response,
+  });
+}
 
 const log = (event: string, data: Record<string, unknown> = {}) => {
   console.log(
@@ -426,6 +440,7 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
       const nativeWindows = windows;
       const hwnd = view.native.hwnd;
       return {
+        getSnapshot: () => nativeWindows.getSnapshot(hwnd),
         show: (visible) => nativeWindows.show(hwnd, visible),
         focus: () => nativeWindows.focus(hwnd),
         close: () => closeWindow(viewId),
@@ -584,6 +599,42 @@ function createWindow(spec: WindowSpec) {
     confirmation: null,
     deadline: Date.now() + 30000,
   });
+  // Window control and its event contract remain opt-in. Host owns the native observer.
+  if (registry.operations.has("windows.getSnapshot")) {
+    windows.observe(window, spec.view, (snapshot, changes) => {
+      if (stopping || closingSent || views.get(spec.view)?.native !== native) {
+        return;
+      }
+      const route = boundary.eventRoute("windows.changed");
+      if (!route) {
+        return;
+      }
+      void channel
+        .send({
+          kind: "native-event",
+          route,
+          event: "windows.changed",
+          payload: {
+            ...snapshot,
+            changes,
+          },
+        })
+        .catch((error) => {
+          if (stopping || closingSent || !boundary.matches(route)) {
+            return;
+          }
+          if (error instanceof BunawayError && error.code === "BUSY") {
+            // Losing a transition invalidates this session instead of silently keeping stale UI state.
+            boundary.fail(route, {
+              code: "BUSY",
+              message: "Native event queue full.",
+            });
+            return;
+          }
+          fail(error);
+        });
+    });
+  }
 }
 try {
   // Keep window and WebView COM work on this STA through cleanup.
@@ -608,6 +659,7 @@ try {
     },
     config.icon,
     config.runtime.id,
+    () => channel.poll(),
   );
   if (config.desktop?.tray) {
     tray = new Tray(windows, config.desktop.tray.tooltip, (action) => {

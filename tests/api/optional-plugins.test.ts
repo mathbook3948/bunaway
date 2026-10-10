@@ -103,6 +103,9 @@ test("window permissions use generic deny-first matching and filter list results
     create() {},
     close: () => true,
     window: (view) => ({
+      getSnapshot() {
+        throw new Error("Snapshot is not used in this permission test.");
+      },
       show: () => actions.push(view),
       focus: () => true,
       close: () => true,

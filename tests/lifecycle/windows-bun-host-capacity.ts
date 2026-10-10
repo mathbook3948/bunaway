@@ -2,13 +2,14 @@ import { mock } from "bun:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { resolve } from "node:path";
-import type { Packet, UIConfig } from "#native/windows/bun/channel";
+import { MessagePort, receiveMessageOnPort } from "node:worker_threads";
 import type { AppDefinition, CoreServices } from "@bunaway/core";
 import {
   API_LIMITS,
   BunawayError,
   type RuntimeIdentity,
 } from "@bunaway/protocol";
+import type { Packet, UIConfig } from "#native/windows/bun/channel";
 import { writePluginFixture } from "../fixtures/native-worker.ts";
 
 // Isolated subprocess: exercise the real entry/channel with independently delayed Worker acks.
@@ -95,6 +96,8 @@ class TestWorker extends EventEmitter {
 }
 mock.module("node:worker_threads", () => ({
   Worker: TestWorker,
+  MessagePort,
+  receiveMessageOnPort,
 }));
 mock.module("#native/windows/bun/job", () => ({
   containAppProcess() {},

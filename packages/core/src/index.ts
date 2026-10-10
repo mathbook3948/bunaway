@@ -91,6 +91,12 @@ export interface Core {
    * Fails for an unknown view, a stopped core, or a context already in use.
    */
   openSession(context: HostContext, viewId: string): CoreSession;
+  /** Sends a host-observed event only to this live context, validating its schema and view policy. Stale contexts are ignored. */
+  emitNative(
+    context: HostContext,
+    event: string,
+    payload: import("@bunaway/protocol").JsonValue,
+  ): Promise<void>;
   /** Closes sessions and stops plugins, rejecting if shutdown exceeds its deadline. */
   stop(): Promise<void>;
 }

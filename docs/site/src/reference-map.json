@@ -255,7 +255,9 @@
           "parseWindowCall",
           "validateWindowCall",
           "validateWindowOutput",
-          "windowOperations"
+          "windowOperations",
+          "windowEvents",
+          "windowSnapshotSchema"
         ]
       }
     },
@@ -335,7 +337,11 @@
       "source": "packages/core/src/index.ts",
       "type": "Core",
       "pages": {
-        "reference/tooling/core-and-runtime": ["openSession", "stop"]
+        "reference/tooling/core-and-runtime": [
+          "openSession",
+          "stop",
+          "emitNative"
+        ]
       }
     },
     {
@@ -426,7 +432,8 @@
           "setSize",
           "setPosition",
           "setFullscreen",
-          "setCloseConfirmation"
+          "setCloseConfirmation",
+          "getSnapshot"
         ]
       }
     },
@@ -702,6 +709,32 @@
       "pages": {
         "reference/backend/app-definition": ["show", "hide", "quit"]
       }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "WindowDisplayState",
+      "pages": {
+        "reference/tooling/plugin-api": [
+          "visible",
+          "focused",
+          "minimized",
+          "maximized",
+          "fullscreen"
+        ]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "WindowSnapshot",
+      "pages": {
+        "reference/tooling/plugin-api": [
+          "windowId",
+          "viewId",
+          "revision",
+          "state",
+          "bounds"
+        ]
+      }
     }
   ],
   "commands": {
@@ -758,7 +791,8 @@
       "windows.setSizeConstraints",
       "windows.setPosition",
       "windows.setFullscreen",
-      "windows.setCloseConfirmation"
+      "windows.setCloseConfirmation",
+      "windows.getSnapshot"
     ]
   },
   "configuration": {

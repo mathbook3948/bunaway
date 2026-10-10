@@ -321,6 +321,30 @@ export class ViewBoundary {
       );
     }
   }
+  /** Captures the current negotiated document route for host-originated events. */
+  eventRoute(event: string): Route | undefined {
+    const session = this.session;
+    if (
+      this.closed ||
+      !session?.negotiated ||
+      !this.policy.events.includes(event)
+    ) {
+      return undefined;
+    }
+    // A listen can already be registered in Core while its result is still crossing the channel.
+    for (const subscription of session.subscriptions.values()) {
+      if (subscription.event === event) {
+        return session.route;
+      }
+    }
+    for (const request of session.pending.values()) {
+      if (request.kind === "listen" && request.event === event) {
+        return session.route;
+      }
+    }
+    return undefined;
+  }
+
   matches(route: Route) {
     return (
       !this.closed &&
