@@ -8,13 +8,18 @@ Java Activity와 Android WebView, APK에 포함한 Bun 1.4.2를 연결한다.
 | --- | --- |
 | `host/src/main/java/dev/bunaway/host/BunProcess.java` | 부팅, 협상, 파이프 입출력, 정상 종료와 기한 초과 처리 |
 | `FrameReader.java` | 프레임 크기를 먼저 제한하고 UTF-8 파이프 청크를 묶음으로 복사 |
+| `FrameDispatcher.java` | 읽기 스레드의 순차 전달과 독립된 완료 기한 감시 |
+| `WebViewChannel.java` | fallback 문서 전용 MessagePort의 입력, 응답과 회수 |
 | `ProcessGroup.java` | 앱 코드 실행 전 그룹 격리, 시작 취소와 종료 후 자손 정리, 파이프 해제 |
 | `Renderer.java` | 패키지 자산, 출처와 main frame 검사, 문서별 컨텍스트와 응답 |
+| `WebViewSession.java` | 문서별 hello 상태, 입력 방향 검사와 대기 중 요청 취소 |
 | `BunawayActivity.java` | 화면 회전과 Activity 종료의 소유권 |
 | `AppAssets.java`, `Protocol.java` | APK 입력과 생성된 스키마 검증 |
 | `BackendAssets.java` | 시작 전 백엔드 추출 트리 교체와 이전 APK 파일 정리 |
 | `app/` | 사용자가 수정하는 Java Activity, Manifest와 Gradle 초기 템플릿 |
 | `bridge.js` | 기존 기본 Client SDK가 사용하는 WebViewBridge 구현 |
+| `../../packages/runtime-bun/src/loopback-channel.ts` | 일회용 문서 연결, 입력 검증과 순서, 크기 제한 및 회수 |
+| `host/src/main/res/xml/bunaway_network_security.xml` | IPv4 loopback 연결만 cleartext 허용 |
 | `../../packages/cli/src/native-build.ts` | 공통 Bun 도구로 Android x64, arm64 아카이브, 실행 파일과 라이선스 해시 검증 |
 | `run.ts` | 공통 SDK fixture 빌드와 실제 기기 검사 |
 
@@ -29,6 +34,7 @@ settings도 `.bunaway/settings.gradle`을 연결해 내부 호스트 경로를 �
 초기 Gradle 파일은 Groovy이며 Kotlin 컴파일 플러그인을 적용하지 않는다.
 
 Java 소스는 `mise run format:java`로 포맷하며 `mise run check`가 포맷을 검사한다.
+RPC 변경과 비교 측정은 [성능 기록](../../docs/architecture/android-rpc-performance.md)에 정리했다.
 
 ## 실제 실행 검사
 
@@ -43,11 +49,52 @@ WebView는 현재 Activity context를 사용하며 기능 지원은 초기화 �
 두 소유자를 함께 닫는다.
 시스템 뒤로가기는 Activity를 명시적으로 종료한다. Android 13 이상은 시스템 Back 콜백을,
 이전 버전은 `onBackPressed`를 사용한다. 홈 버튼은 종료로 처리하지 않는다.
-들어온 IPC는 중첩 웹 메시지까지 한 번 파싱하고 검증한다. 호스트가 만든 송신 객체는
-스키마, 크기와 깊이, Unicode를 검사해 직렬화하며 JSON을 다시 파싱하지 않는다.
-수신 청크는 줄바꿈 사이의 바이트를 묶음으로 복사한다. 복사 전에 공유 프레임 크기 제한을
-검사하며 잘못된 UTF-8과 미완성 EOF를 거부한다. 프레임별 UI 전달 완료를 기다려
-백엔드가 보낸 응답이나 이벤트가 UI 큐에 무한히 쌓이지 않도록 한다.
+기본 앱 메시지는 WebView에서 `127.0.0.1`의 Bun WebSocket으로 직접 보낸다.
+Java가 확인한 main frame과 origin에만 일회용 주소를 전달하며, Bun은 정확한 Origin과
+Host를 검사하고 토큰을 한 번만 사용한다. 제어 파이프에서 연 Core 세션에 연결하므로
+SDK의 계약과 Core의 정책, 입력 및 출력 검증은 그대로 적용된다. 문서 교체 시 Java가
+기존 세션과 연결을 회수하고 프로세스 종료 시 listener를 닫는다. 연결하지 않은 주소는
+10초 뒤 만료한다. 이미 연결된 문서에서 SDK를 나중에 초기화하는 것은 허용한다.
+입력은 1MiB와 대기 128개, 양쪽 출력 버퍼는 각각 2MiB로 제한하며 초과 시 세션을 닫는다.
+압축이나 묶음 전송은 사용하지 않는다. 연결 실패는 SDK의 진행 중 호출에도 전달한다.
+연결 성공 후 직접 연결의 비정상 종료, 입력 위반과 송수신 버퍼 초과는 해당 문서의 연결과 Core 세션만
+닫고 요청과 구독을 정리한다. Bun 프로세스, 앱 상태와 다른 세션은 유지한다.
+자동 재연결은 하지 않으며 새 문서를 열면 새 권한과 세션으로 연결한다.
+호스트 제어 파이프의 EOF나 잘못된 제어 프레임, 세션 정리 자체의 실패는 런타임 전체 실패로
+처리한다. Android가 보고한 renderer 프로세스 종료와 기존 Java 브리지의 잘못된 입력도
+기존 Activity 실패 처리를 유지한다. WebSocket의 비정상 종료만으로 이 경로에 들어가지는 않는다.
+
+호스트 library는 INTERNET 권한과 loopback 전용 network security 설정을 포함한다.
+앱이 loopback 연결을 금지하거나 Bun listener를 시작할 수 없으면 아래 MessagePort 경로를
+사용한다. 주소를 받은 뒤에도 WebSocket 생성 또는 최초 연결이 실패하면 기존 권한과
+Core 세션을 회수하고 새 세션의 MessagePort로 전환한다. 포트 API 미지원 환경에서는
+reply proxy를 사용한다. 아직 전송하지 않은 SDK 메시지만 순서대로 전달한다.
+WebSocket의 `open` 이후 발생한 실패는 세션을 닫으며 요청을 다시 보내지 않는다.
+앱 소유 설정의 변경 방법은 [Android CLI 문서](../../docs/site/src/content/docs/reference/cli/android.mdx)를 따른다.
+
+fallback 경로의 IPC는 읽기 스레드에서 중첩 웹 메시지까지 파싱하고 검증하며 WebView에 보낼
+payload 원문을 잘라 전달한다. UI에서 출처와 main frame을 확인한 최초 요청으로 문서 전용
+MessagePort를 연결한다. 문서별 nonce로 이전 문서에 대한 포트 전달을 거부하고,
+포트 입력은 전용 callback 스레드에서 기존 쓰기 큐에 넣는다. 쓰기 스레드가 순서대로
+JSON, UTF-8 크기, 스키마, 방향과 최초 hello를
+검사하고 호스트 소유 envelope에 넣는다. 화면 전환과 종료는 이전 문서를 즉시 취소하므로
+아직 시작하지 않은 요청은 파싱 없이 버린다. 유효한 hello 전이나 문서 종료 후에는
+응답을 전달하지 않는다. 검증한 트리와 원문을 함께 보관하며 envelope의 전체 스키마,
+추가 중첩 깊이와 UTF-8 크기를 확인하되 payload를 다시 순회하거나 직렬화하지 않는다.
+JSON Lines 전달 전에 토큰 사이의 CR과 LF를 제거하며 문자열 안의 이스케이프는 보존한다.
+다른 송신 객체는 쓰기 스레드에서 검증하고 직렬화한다. 읽기 스레드는 검증한 응답을
+현재 문서의 MessagePort로 직접 보낸다. 포트 API를 지원하지 않는 WebView에서는
+기존 UI 스레드의 reply proxy 경로를 사용한다. 문서 교체와 종료 시 양쪽 포트를 닫는다.
+수신 청크 안에 프레임이 완성되면 중간 복사 없이 디코딩하고, 나뉜 프레임만 묶음으로 복사한다.
+복사 전에 공유 프레임 크기 제한을
+검사하며 잘못된 UTF-8과 미완성 EOF를 거부한다. 제어 프레임은 UI 적용이 끝나야
+다음 프레임을 처리하므로 응답이 ready나 fatal을 앞지르지 않는다. 전달은 기존 협상
+제한 시간 안에 끝나야 한다. 별도 타이머가 추가 입력이 없어도 기한 초과를 감지한다.
+완료한 호출마다 타이머를 취소하고 생성하지 않고 가장 오래된 미완료 기한을 따라간다.
+유휴 상태에서는 남은 타이머가 한 번 만료된 뒤 사라지며 종료 시 즉시 해제한다.
+Android 브리지는 SDK가 사용하는 내부 텍스트 채널을 제공한다. SDK에서 JSON을 객체로
+바꿨다가 브리지에서 다시 문자열로 만드는 과정을 없앴으며, 기존 structured-value
+브리지 메서드와 이전 SDK의 연결 방식은 유지한다.
 
 ```powershell
 $env:ANDROID_SERIAL = 'emulator-5554'
@@ -55,7 +102,7 @@ mise run host:android
 ```
 
 명령, 이벤트와 구독 해제, 오류와 정책 거부, 취소, 자산 경계와 subframe 거부를 검사한다.
-큰 한글 및 이모지 응답이 여러 파이프 청크를 거쳐도 원문 그대로 도착하는지 검사한다.
+큰 한글 및 이모지 응답이 원문 그대로 도착하는지 검사한다.
 WebView의 localStorage와 sessionStorage에 값을 저장하고 읽은 뒤 제거하는지도 검사한다.
 화면 회전으로 문서 세션이 바뀌어도 Bun PID와 Core 상태가 유지되는지 확인하고,
 뒤로가기로 Activity를 닫은 뒤 Bun PID가 사라지는지 검사한다.

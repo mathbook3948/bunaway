@@ -7,6 +7,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
@@ -22,7 +23,7 @@ final class FrameReader {
 
     private final InputStream input;
     private final byte[] bytes = new byte[READ_BUFFER_BYTES];
-    private final ByteArrayOutputStream line = new ByteArrayOutputStream();
+    private final FrameBuffer line = new FrameBuffer();
     private final CharsetDecoder decoder =
             StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT);
     private int position;
@@ -30,6 +31,13 @@ final class FrameReader {
 
     FrameReader(InputStream input) {
         this.input = input;
+    }
+
+    private static final class FrameBuffer extends ByteArrayOutputStream {
+        String decode(CharsetDecoder decoder) throws CharacterCodingException {
+            // Decode synchronously before reset; the returned String owns its characters.
+            return decoder.decode(ByteBuffer.wrap(buf, 0, count)).toString();
+        }
     }
 
     /**
@@ -54,10 +62,15 @@ final class FrameReader {
             int count = position - start;
             // Check the bound before a bulk append can allocate an oversized frame.
             require(count <= MAX_MESSAGE_BYTES - line.size(), "IPC frame too large");
+            if (position < length && line.size() == 0) {
+                position++;
+                // Decode before reusing the read buffer; a complete frame needs no staging copy.
+                return decoder.decode(ByteBuffer.wrap(bytes, start, count)).toString();
+            }
             line.write(bytes, start, count);
             if (position < length) {
                 position++;
-                String text = decoder.decode(ByteBuffer.wrap(line.toByteArray())).toString();
+                String text = line.decode(decoder);
                 line.reset();
                 return text;
             }

@@ -12,6 +12,7 @@ import {
   parse,
   serialize,
   validate,
+  validateSerialized,
 } from "./validation.ts";
 
 export {
@@ -95,7 +96,7 @@ export const parseProcessFrame = (text: string): ProcessFrame =>
   checkProcessPolicy(parse(processSchema, text));
 /** Validates and serializes a host/runtime frame, including boot view ID uniqueness. */
 export const serializeProcessFrame = (frame: ProcessFrame): string =>
-  serialize(processSchema, checkProcessPolicy(validate(processSchema, frame)));
+  serialize(processSchema, frame, checkProcessPolicy);
 
 /** Version advertised by clients and hosts during handshake. */
 export const PROTOCOL_VERSION = {
@@ -112,6 +113,9 @@ export const parseMessage = (text: string): Message =>
 /** Validates and serializes one client/host protocol message. */
 export const serializeMessage = (message: Message): string =>
   serialize(messageSchema, message);
+/** Returns a detached message checked against its schema and exact serialized size, without encoding it. */
+export const validateMessage = (message: Message): Message =>
+  validateSerialized(messageSchema, message);
 
 /** Parses native runtime bootstrap JSON and rejects duplicate view IDs in policy. */
 export function parseBootstrap(text: string): Bootstrap {
