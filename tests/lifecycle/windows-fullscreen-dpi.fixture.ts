@@ -290,6 +290,14 @@ try {
     assert.equal(maximized, state === "maximized");
     assert.equal((style & WS_VISIBLE) !== 0n, false);
     removedMonitors.clear();
+    // Reconnecting the old display must not undo Windows' relocated normal placement.
+    assert.deepEqual(windows.getBounds(window, "normal"), {
+      x: 100,
+      y: 200,
+      width: 616,
+      height: 489,
+      dpi: 96,
+    });
     minimized = false;
     maximized = false;
   }
@@ -485,24 +493,38 @@ try {
       assert.notEqual(target.dpi, monitor.dpi);
     }
   }
-  // Fullscreen retains its saved placement, but the removed monitor handle must be replaced.
-  windows.show(window, false);
-  removedMonitors.add(1n);
-  Object.assign(windowRect, secondary);
-  messages.symbols.windowProcedure(window, WM_DISPLAYCHANGE, 32n, 0n);
-  messages.symbols.windowProcedure(window, WM_WINDOWPOSCHANGED, 0n, 0n);
-  for (let query = 0; query < 2; query++) {
-    assert.deepEqual(windows.getBounds(window, "normal"), {
-      x: -324,
-      y: 60,
-      width: 616,
-      height: 489,
-      dpi: 96,
-    });
+  // Fullscreen keeps its saved placement across repeated removal and reconnection.
+  for (const visible of [
+    false,
+    true,
+  ]) {
+    windows.show(window, visible);
+    for (let cycle = 0; cycle < 2; cycle++) {
+      removedMonitors.add(1n);
+      Object.assign(windowRect, secondary);
+      messages.symbols.windowProcedure(window, WM_DISPLAYCHANGE, 32n, 0n);
+      messages.symbols.windowProcedure(window, WM_WINDOWPOSCHANGED, 0n, 0n);
+      for (let query = 0; query < 2; query++) {
+        assert.deepEqual(windows.getBounds(window, "normal"), {
+          x: -324,
+          y: 60,
+          width: 616,
+          height: 489,
+          dpi: 96,
+        });
+      }
+      removedMonitors.delete(1n);
+      messages.symbols.windowProcedure(window, WM_DISPLAYCHANGE, 32n, 0n);
+      messages.symbols.windowProcedure(window, WM_WINDOWPOSCHANGED, 0n, 0n);
+      for (let query = 0; query < 2; query++) {
+        assert.deepEqual(windows.getBounds(window, "normal"), expectedNormal);
+      }
+      assert(windows.isFullscreen(window));
+      assert.equal((style & WS_VISIBLE) !== 0n, visible);
+      assert.equal(windows.failure, undefined);
+    }
   }
-  assert(windows.isFullscreen(window));
-  assert.equal((style & WS_VISIBLE) !== 0n, false);
-  assert.equal(windows.failure, undefined);
+  removedMonitors.add(1n);
   removedMonitors.add(2n);
   assert.deepEqual(
     hostResponse(() => windows.getBounds(window, "normal")),

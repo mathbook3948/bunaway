@@ -607,7 +607,10 @@ export class Windows {
           );
           assert(display, "Normal window monitor is unavailable.");
           assert(user.symbols.GetMonitorInfoW(display, ptr(monitor)));
-          this.normalMonitors.set(window, display);
+          // Fullscreen retains the original placement, so its fallback monitor is temporary.
+          if (!saved) {
+            this.normalMonitors.set(window, display);
+          }
         }
         // WINDOWPLACEMENT uses workspace coordinates; callers use screen coordinates.
         x += monitor.readInt32LE(20) - monitor.readInt32LE(4);
