@@ -206,6 +206,11 @@ test.skipIf(process.platform !== "win32")(
       // A setter in a maximized window changes its future normal size, not its show state.
       user.symbols.ShowWindow(hwnd, SW_RESTORE);
       user.symbols.ShowWindow(hwnd, SW_MAXIMIZE);
+      await invoke("windows.setPosition", {
+        x: -500,
+        y: -200,
+      });
+      expect(native.getBounds(hwnd, "normal")).toEqual(normal);
       await invoke("windows.setSize", {
         width: 650,
         height: 470,

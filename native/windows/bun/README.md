@@ -12,6 +12,8 @@ I/O Worker 하나가 승인된 Host API를 검사한 파일 핸들로 실행한�
 `getBounds`는 content, outer와 일반 상태 복원용 normal 영역을 화면 물리 픽셀로 조회한다.
 normal의 WINDOWPLACEMENT 작업 영역 좌표는 화면 좌표로 보정한다. 전체화면 중 조회는
 저장된 placement를 복사해 현재 DPI와 크기 제약을 적용하며 복원 상태를 변경하지 않는다.
+보정할 모니터는 현재 HWND가 아니라 일반 복원 rectangle에서 선택한다. 최대화한 창을
+다른 모니터로 옮기거나 그곳에서 전체화면에 진입해도 원래 복원 위치의 오프셋을 사용한다.
 `ui.ts`는 `NativeWindow.getBounds`와 `getDpi`를 연결하고 창 플러그인이 공개 단위 변환과
 반올림, 입력 및 대상 창 권한을 검사한다.
 `com.ts`는 COM 참조와 콜백을, `webview.ts`는 WebView 생성과 종료를 관리한다.

@@ -118,7 +118,6 @@ export class Windows {
       dpi: number;
       restoreSize: ClientSize;
       visible: boolean;
-      monitor: bigint;
     }
   >();
   private registered = false;
@@ -492,18 +491,15 @@ export class Windows {
       if (!(exStyle & WS_EX_TOOLWINDOW)) {
         const monitor = Buffer.alloc(MONITORINFO_SIZE);
         monitor.writeUInt32LE(MONITORINFO_SIZE);
-        const display =
-          saved?.monitor ??
-          user.symbols.MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
-        if (!user.symbols.GetMonitorInfoW(display, ptr(monitor))) {
-          // A removed fullscreen-entry monitor falls back to the saved normal rectangle.
-          assert(
-            user.symbols.GetMonitorInfoW(
-              user.symbols.MonitorFromRect(ptr(rect), MONITOR_DEFAULTTONEAREST),
-              ptr(monitor),
-            ),
-          );
-        }
+        // A maximized HWND can move independently of its saved normal rectangle.
+        const normalRect = (saved?.placement ?? placement).subarray(
+          WINDOWPLACEMENT_NORMAL_RECT_OFFSET,
+        );
+        const display = user.symbols.MonitorFromRect(
+          ptr(normalRect),
+          MONITOR_DEFAULTTONEAREST,
+        );
+        assert(user.symbols.GetMonitorInfoW(display, ptr(monitor)));
         // WINDOWPLACEMENT uses workspace coordinates; callers use screen coordinates.
         x += monitor.readInt32LE(20) - monitor.readInt32LE(4);
         y += monitor.readInt32LE(24) - monitor.readInt32LE(8);
@@ -973,7 +969,6 @@ export class Windows {
         dpi,
         restoreSize,
         visible,
-        monitor,
       });
       try {
         assert(

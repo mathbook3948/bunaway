@@ -8,6 +8,8 @@ const WS_OVERLAPPEDWINDOW = 0x00cf0000;
 const WS_VISIBLE = 0x10000000n;
 const GWL_STYLE = -16;
 const SW_HIDE = 0;
+const SW_SHOWNORMAL = 1;
+const SW_SHOWMAXIMIZED = 3;
 const SWP_NOMOVE = 0x2;
 const SWP_NOACTIVATE = 0x10;
 const FRAME_WIDTH = 16;
@@ -34,6 +36,10 @@ const windowRect = {
   right: 648,
   bottom: 521,
 };
+const normalRect = {
+  ...windowRect,
+};
+let maximized = false;
 let style = BigInt(WS_OVERLAPPEDWINDOW);
 let callbackAddress = 0;
 let positionFlags = 0;
@@ -96,7 +102,7 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
       DestroyWindow: () => 1,
       IsWindowVisible: () => Number((style & WS_VISIBLE) !== 0n),
       IsIconic: () => 0,
-      IsZoomed: () => 0,
+      IsZoomed: () => Number(maximized),
       ShowWindow(_window: bigint, command: number) {
         style = command === SW_HIDE ? style & ~WS_VISIBLE : style | WS_VISIBLE;
         return 1;
@@ -119,12 +125,17 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
       },
       GetWindowPlacement(_window: bigint, address: Pointer) {
         const placement = view(address, 44);
-        placement.setUint32(8, 1, true);
+        placement.setUint32(
+          8,
+          maximized ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL,
+          true,
+        );
+        const restored = maximized ? normalRect : windowRect;
         [
-          windowRect.left - 24,
-          windowRect.top - 40,
-          windowRect.right - 24,
-          windowRect.bottom - 40,
+          restored.left - 24,
+          restored.top - 40,
+          restored.right - 24,
+          restored.bottom - 40,
         ].forEach((value, index) => {
           placement.setInt32(28 + index * 4, value, true);
         });
@@ -152,8 +163,8 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
           info.setInt32(4 + index * 4, value, true);
         });
         [
-          bounds.left + 24,
-          bounds.top + 40,
+          bounds.left + (monitor === 1n ? 24 : 0),
+          bounds.top + (monitor === 1n ? 40 : 0),
           bounds.right,
           bounds.bottom,
         ].forEach((value, index) => {
@@ -224,14 +235,43 @@ const messages = linkSymbols({
   },
 });
 try {
-  assert.deepEqual(windows.getBounds(window, "normal"), {
+  const expectedNormal = {
     x: 32,
     y: 32,
     width: 616,
     height: 489,
     dpi: 96,
+  };
+  assert.deepEqual(windows.getBounds(window, "normal"), expectedNormal);
+  // Moving a maximized HWND does not move its saved normal rectangle.
+  maximized = true;
+  const secondary = monitors[1];
+  assert(secondary);
+  Object.assign(windowRect, {
+    left: secondary.left,
+    top: secondary.top,
+    right: secondary.right,
+    bottom: secondary.bottom,
   });
+  for (const visible of [
+    false,
+    true,
+  ]) {
+    windows.show(window, visible);
+    assert.deepEqual(windows.getBounds(window, "normal"), expectedNormal);
+    assert.equal((style & WS_VISIBLE) !== 0n, visible);
+  }
   windows.setFullscreen(window, true);
+  assert.deepEqual(windows.getBounds(window, "normal"), expectedNormal);
+  // Start the existing DPI scenarios on the normal rectangle's monitor.
+  const primary = monitors[0];
+  assert(primary);
+  Object.assign(windowRect, {
+    left: primary.left,
+    top: primary.top,
+    right: primary.right,
+    bottom: primary.bottom,
+  });
   // Move a fullscreen window between simulated monitors at both visibility states.
   for (const visible of [
     false,
