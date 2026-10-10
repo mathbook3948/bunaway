@@ -9,6 +9,9 @@ I/O Worker 하나가 승인된 Host API를 검사한 파일 핸들로 실행한�
 
 `boot.ts`는 실행 인자, 단일 인스턴스 확보와 앱 import를 담당하고,
 `config.ts`는 패키지 설정과 정책을 검증하고 앱 데이터 경로를 결정한다.
+검증한 앱 ID와 재실행 경로, 개발 모드의 절대 부팅 인자를 I/O Worker에 전달한다.
+로그인 자동 실행 플러그인은 이 호스트 선택 경로를 사용하며 현재 개발 서버 주소와
+DevTools 옵션은 영속 등록에 포함하지 않는다.
 `package.ts`는 회귀 패키지를 빌드하고, `tests/lifecycle/run-native.ts`는 준비, 빌드와 테스트 실행을 조정한다.
 
 `win32-bindings.ts`는 DLL 함수 바인딩과 FFI 버퍼 보조 함수를 제공하고, `win32.ts`의
@@ -143,6 +146,13 @@ WebView using the same profile. This also postpones last-window shutdown.
 Retired views release their COM handlers before a replacement is created.
 
 Show, hide, focus, client size, screen position and monitor fullscreen use Win32.
+`Windows.setGeometry`는 content/outer 위치와 크기를 물리 픽셀로 적용한다.
+일반 상태에서는 `SetWindowPos`, 최소화나 최대화 중에는 일반 복원 영역의
+`SetWindowPlacement`를 사용하며 화면 좌표와 대상 모니터 작업 영역 좌표를 변환한다.
+지정한 content 크기를 검사하고 제약으로 보정한 뒤 rectangle 경계를 검사하며,
+숨김과 활성화 상태를 유지한다. bounds 설정 중에는 중간 이벤트 관찰을 보류하고
+완료 후 실제 현재 outer bounds를 관찰한다. 공개 단위와 상태별 계약은
+[창 API](../../../docs/site/src/content/docs/reference/host/windows.mdx)를 따른다.
 Close confirmation uses a native Yes/No dialog with No selected by default.
 WM_CLOSE and WebView close requests defer confirmation outside native callbacks.
 Window close operations also honor close-to-tray and last-window quit vetoes.

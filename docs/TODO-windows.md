@@ -2,7 +2,7 @@
 
 macOS의 현재 구현과 후속 작업은 [macOS TODO](./TODO-macos.md)에서 관리한다.
 
-기준일: 2026-10-10. bunaway `c26caea`의 Windows 구현을 기준으로 갱신했다.
+기준일: 2026-10-10. bunaway main `6f2363c`와 이번 geometry 설정 보완을 기준으로 갱신했다.
 Tauri v2의 기본 API와 공식 플러그인, Electron의 공개 API를 기능별로 대조한다.
 창 최소 크기와 최대 크기처럼 초기 설정, 실행 중 변경, 조회, 이벤트가 따로 필요한
 기능은 각각 작업으로 기록한다. 비교 대상의 메서드 이름이나 바이너리와의 호환을
@@ -17,8 +17,11 @@ Tauri v2의 기본 API와 공식 플러그인, Electron의 공개 API를 기능�
 설치 바로가기 보존 구현을 반영했다. 완료 표시는 기준 코드의 구현 여부로 판단한다.
 Tauri와 Electron 비교 자료의 기준 버전은 이전 스냅샷을 유지한다.
 
-2026-10-10 갱신은 창 상태 변경 5개와 상태 조회 5개, 호환되는 개발 앱의 명령 구현
-교체를 반영했다. 공통 Worker 채널과 앱 manifest 정리, Bun 기반 네이티브 실행기 전환도
+2026-10-10 갱신은 창 상태 변경 5개와 상태 조회 5개, content/outer/normal 좌표 조회 7개와
+DPI 변환 2개, content 위치와 outer 크기, content/outer bounds 설정 4개,
+`windows.changed` 창 이벤트와 `getSnapshot`, 호환되는 개발 앱의
+명령 구현 교체를 반영했다.
+공통 Worker 채널과 앱 manifest 정리, Bun 기반 네이티브 실행기 전환도
 현재 구현 근거에 포함한다. 비교 대상의 API 목록은 새로 전수 대조하지 않았다.
 
 ## 상태와 작업 기준
@@ -74,11 +77,14 @@ Tauri와 Electron 비교 자료의 기준 버전은 이전 스냅샷을 유지�
 
 우선순위 P1. 소유자: 호스트와 창 API. 출처: [T-window], [T-config], [E-window], [E-window-options].
 
-초기 크기 제약과 실행 중 변경, 조회를 구현했다.
+초기 크기 제약과 실행 중 변경, 크기와 위치 조회, DPI 변환을 구현했다.
 `minWidth`, `minHeight`, `maxWidth`, `maxHeight`와 `setSize`는 96 DPI 기준 논리 픽셀을
 사용하고 입력 범위는 200–4096이다. 제약 기본값은 모두 `null`이며 한 축만 제한하거나
 해제할 수 있다. 초기 크기와 실행 중 크기는 제약 안으로 보정하고 min > max는 거부한다.
 전체화면에서는 제약 적용을 보류하고 해제할 때 다시 적용한다.
+content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `unit: "logical"`로
+96 DPI 기준 논리 픽셀을 조회할 수 있다. 조회와 변환은 사용한 대상 창의 `dpi`를 함께 반환한다.
+`setSize`는 내용 영역의 논리 크기, `setPosition`은 창 바깥쪽의 물리 화면 좌표를 받는다.
 공개 계약은 [창 API](./site/src/content/docs/reference/host/windows.mdx)를 따른다.
 
 - [x] 내용 영역의 크기와 창 바깥쪽 위치를 실행 중 변경한다.
@@ -91,9 +97,15 @@ Tauri와 Electron 비교 자료의 기준 버전은 이전 스냅샷을 유지�
 - [x] 초기 크기와 `setSize`가 제약을 벗어날 때 거부 또는 보정 규칙을 정의한다.
 - [x] Windows의 사용자 크기 조절, 최대화, 복원에도 최소 크기와 최대 크기 제약을 적용한다.
 - [x] DPI 변경, 모니터 이동과 전체화면 해제 뒤에도 크기 제약을 유지한다.
-- [ ] content와 outer 크기, 위치, bounds를 구분해 조회하고 설정한다.
-- [ ] 최대화 전 normal bounds를 조회한다.
-- [ ] logical와 physical 좌표 및 크기의 변환을 제공한다.
+- [x] `getContentSize`, `getOuterSize`, `getContentPosition`, `getOuterPosition`,
+  `getContentBounds`, `getOuterBounds`로 content와 outer 크기, 위치, bounds를 구분해 조회한다.
+- [x] `setContentPosition`, `setOuterSize`, `setContentBounds`, `setOuterBounds`로
+  content 위치, outer 크기와 content/outer bounds를 지정해 설정한다.
+  단위 기본값은 물리 픽셀이며 논리 입력, content 기준 크기 제약과 반올림을 정의한다.
+  숨김 상태를 유지하고 최소화와 최대화 중에는 일반 복원 영역만 변경한다. 전체화면은 거부한다.
+- [x] `getNormalBounds`로 최소화, 최대화와 전체화면에서 복원할 일반 창의 outer bounds를 조회한다.
+- [x] `toLogical`과 `toPhysical`로 대상 창 DPI를 사용해 좌표, 크기와 bounds를 변환한다.
+  반올림, 정수 범위와 오류, 대상 창 권한과 닫힌 창의 동작은 창 API 계약을 따른다.
 - [ ] 초기 x, y, center와 content-size 기준 옵션을 지원한다.
 - [ ] 실행 중 창을 현재 또는 지정 모니터의 작업 영역 중앙에 배치한다.
 - [ ] 초기 창 위치와 크기가 작업 영역을 넘지 않게 하는 prevent-overflow 옵션을 제공한다.
@@ -150,21 +162,32 @@ Tauri와 Electron 비교 자료의 기준 버전은 이전 스냅샷을 유지�
 우선순위 P1. 소유자: 창 이벤트는 호스트, 영속 저장은 선택 기능. 출처: [T-window], [E-window], [T-window-state], [T-positioner].
 
 - [x] 닫기 확인 메시지의 승인과 거절을 처리한다.
-- [ ] created, ready, shown, hidden, closed, destroyed 이벤트를 제공한다.
-- [ ] focus와 blur 이벤트를 제공한다.
-- [ ] move, moved, resize와 resized 이벤트 및 현재 bounds를 제공한다.
+- [x] `windows.changed`로 shown과 hidden 전환을 제공한다.
+- [ ] created, ready, closed, destroyed 이벤트를 제공한다.
+- [x] `windows.changed`로 실제 전경 창 상태의 focus와 blur 전환을 제공한다.
+- [x] move와 resize 전환에 현재 outer bounds와 DPI를 함께 제공한다.
+- [ ] 연속 이동과 크기 변경이 끝난 moved와 resized 이벤트를 제공한다.
 - [ ] will-move와 will-resize의 취소 가능 여부를 정의한다.
-- [ ] minimize, maximize, unmaximize와 restore 이벤트를 제공한다.
-- [ ] 전체화면 진입과 해제, always-on-top 변경 이벤트를 제공한다.
+- [x] minimize, maximize, unmaximize와 restore 전환을 제공한다.
+- [x] enterFullscreen과 leaveFullscreen 전환을 제공한다.
+- [ ] always-on-top 변경 이벤트를 제공한다.
 - [ ] close-requested 이벤트와 비동기 저장 후 닫기 승인 흐름을 제공한다. 현재 확인 메시지는 비동기 저장 훅이 아니다.
-- [ ] DPI, theme 변경 이벤트를 제공한다.
+- [x] DPI 변경을 resize 전환과 bounds의 `dpi`로 전달한다.
+- [ ] theme 변경 이벤트를 제공한다.
 - [ ] Windows shutdown, logoff의 query-session-end와 session-end를 처리한다.
 - [ ] app-command와 system-context-menu 이벤트를 제공한다.
-- [ ] 창 이벤트 구독 해제, 재생성 후 새 구독, 종료 시 정리를 보장한다.
+- [x] 창 이벤트 구독 해제, 탐색과 재생성 후 새 구독, 종료 시 정리를 보장한다.
+- [x] `getSnapshot`으로 windowId, revision, 상태와 bounds를 조회하고 구독 후 현재 상태를 복구한다.
 - [ ] 크기, 위치, 최대화, 전체화면과 표시 상태의 저장 항목을 선택한다.
 - [ ] 앱 재실행 시 창 상태를 복원하고 상태를 삭제하는 API를 제공한다.
 - [ ] 저장했던 모니터가 사라진 경우 보이는 작업 영역으로 창을 복원한다.
 - [ ] 모니터 모서리와 중앙, 트레이 아이콘 근처로 창을 배치하는 positioner를 제공한다.
+
+창 이벤트는 대상 창의 정책 뷰에 기존 typed `listen`으로 전달한다. `windows.changed`
+구독에는 이벤트 권한이, `getSnapshot`에는 대상 창의 `windows:control` 권한이 필요하다.
+초기 이벤트와 과거 이력은 재전송하지 않으며, 같은 값의 반복 관찰은 이벤트를 만들지 않는다.
+창별 windowId와 revision, 구독 수명 및 용량 초과의 `BUSY` 처리 계약은
+[창 API](./site/src/content/docs/reference/host/windows.mdx#창-이벤트)를 따른다.
 
 ## 05. 앱 수명주기와 실행 정보
 
@@ -240,16 +263,26 @@ Tauri와 Electron 비교 자료의 기준 버전은 이전 스냅샷을 유지�
 
 ## 08. 로그인 시 자동 실행
 
-우선순위 P1. 소유자: 공식 autostart 플러그인 후보. 출처: [T-autostart], [E-app].
+우선순위 P1. 소유자: 공식 autostart 플러그인. 출처: [T-autostart], [E-app].
 
-- [ ] 로그인 시 실행을 등록하고 해제한다.
-- [ ] 등록 여부와 실제 실행 경로, 인자 상태를 조회한다.
-- [ ] 로그인 시작에 전달할 인자와 숨김 시작 옵션을 지원한다.
+- [x] 로그인 시 실행을 사용자 HKCU Run에 등록하고 해제한다.
+- [x] 등록 여부와 저장된 실제 실행 경로, 인자 상태를 조회한다.
+- [x] 로그인 시작에 전달할 인자를 Windows argv 규칙으로 인코딩한다.
+- [ ] 숨김 시작 옵션과 트레이 수명주기를 연결한다.
 - [ ] 수동 실행과 로그인 실행을 앱에서 구분한다.
-- [ ] 사용자 범위 등록을 기본으로 하고 관리자 범위 지원 여부를 결정한다.
-- [ ] 앱 이동, 업데이트와 제거 후 오래된 등록을 갱신하거나 정리한다.
-- [ ] Windows 작업 관리자에서 사용자가 비활성화한 상태를 반영한다.
+- [x] 사용자 범위 등록을 기본으로 하고 관리자 범위는 제공하지 않는다.
+- [x] 앱 이동과 업데이트 후 명시적 재등록으로 오래된 경로와 인자를 갱신한다.
+- [ ] 제거 시 현재 ID의 등록을 해제하고 ID 변경 전 등록을 정리하는 설치 계약을 연결한다.
+- [x] Windows 작업 관리자에서 사용자가 비활성화한 상태를 별도로 조회하고 갱신 시 보존한다.
 - [ ] 설치 프로그램의 opt-in 설정과 런타임 설정을 연결한다.
+- [ ] MSIX manifest StartupTask와 사용자 동의 계약을 구현한다.
+
+현재 `@bunaway/plugin-autostart`는 개발과 배포 앱 ID를 분리하며 등록 변경과 조회 권한도
+분리한다. 전체 Run 명령줄은 260 UTF-16 코드 단위 이하다. Windows 활성 상태를
+판독할 수 없으면 `unknown`이며 등록 존재 여부와 같다고 추정하지 않는다. 재등록은
+Windows의 비활성화 기록을 수정하지 않는다.
+[공개 계약](./site/src/content/docs/reference/plugins/autostart.mdx)과
+[등록 방식 결정](./decisions/0016-windows-autostart.md)을 따른다.
 
 ## 09. OS 셸, 파일 연결과 작업 표시줄
 
@@ -320,7 +353,7 @@ Tauri와 Electron 비교 자료의 기준 버전은 이전 스냅샷을 유지�
 우선순위 P1. 소유자: clipboard 플러그인과 공통 이미지 리소스 API 후보.
 출처: [E-clipboard], [E-image], [T-clipboard], [T-image].
 
-- [ ] 클립보드 텍스트 읽기, 쓰기와 지우기를 제공한다.
+- [x] 클립보드 텍스트 읽기, 쓰기와 지우기를 제공한다. `@bunaway/plugin-clipboard`의 작업별 권한, Unicode와 크기 제한, 빈 값, 점유와 취소, 소유권 정리를 정의했다. 2026-10-10 Windows x64의 공통 SDK와 실제 UI Worker 왕복, 별도 프로세스 점유와 취소를 검증했다([계약과 검증](../plugins/clipboard/README.md)).
 - [ ] 이미지 읽기와 쓰기를 제공한다.
 - [ ] HTML, RTF, 파일 목록과 bookmark 형식의 지원을 제공한다.
 - [ ] 사용 가능한 MIME 형식과 지정 형식 존재 여부를 조회한다.
@@ -634,7 +667,7 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 - [x] 권한, 취소, deadline과 종료된 세션의 늦은 응답 처리를 제공한다.
 - [x] 기본 WebView 연결을 공유하고 HMR과 pagehide에서 수명을 관리한다.
 - [ ] once 구독과 대상 창, WebView, backend 이벤트 전달의 공개 계약을 제공한다.
-- [ ] native 이벤트를 동일한 typed 구독 API로 전달한다.
+- [x] Windows의 `windows.changed` native 이벤트를 동일한 typed 구독 API로 전달한다.
 - [ ] binary payload와 JSON 외 데이터의 전송 계약을 추가한다.
 - [ ] 연속 결과와 대용량 데이터의 channel 또는 stream 전송을 제공한다.
 - [ ] MessagePort와 transferable resource에 해당하는 기능을 제공한다.
@@ -705,7 +738,8 @@ setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 
 출처: [T-window], [T-app], [E-window], [E-app], [E-dock], [E-touch], [E-system], [E-share], [E-purchase], [E-push].
 
 - [x] macOS를 같은 Bun 앱 정의로 실행하고 직접 FFI와 같은 프로세스의 백엔드 Worker에 연결한다.
-- [ ] macOS의 desktop, 다중 창과 네이티브 플러그인 계약을 맞춘다. [macOS TODO](./TODO-macos.md)를 따른다.
+- [x] macOS의 사전 선언 다중 창과 기본 창 수명주기를 공통 네이티브 플러그인 계약에 연결한다.
+- [ ] macOS의 desktop, 나머지 창 API와 선택 네이티브 플러그인 계약을 맞춘다. [macOS TODO](./TODO-macos.md)를 따른다.
 - [ ] Linux 호스트와 렌더러를 구현하고 X11/Wayland별 기능 차이를 명시한다.
 - [ ] macOS activation policy, app hide/show와 Dock visibility를 제공한다.
 - [ ] Dock icon, badge, bounce, menu와 recent documents를 제공한다.
@@ -766,16 +800,29 @@ setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 
 
 우선순위 P1. 소유자: 각 기능의 구현 담당자와 배포 도구.
 
-완료 표시는 저장소에 기록된 실행 결과를 뜻한다. 이번 문서 갱신에서 네이티브
-실행을 새로 수행한 것은 아니다.
+완료 표시는 각 항목과 연결한 실행 기록의 환경 및 범위를 뜻한다. 새 실행 결과와 이전 실행
+결과는 날짜, 기준 revision과 검증 방식으로 구분한다.
 
 - [ ] Windows 10/11의 지원 최소 버전과 실제 검증 환경을 확정한다.
 - [ ] WebView2 최소 버전과 Evergreen, Fixed Version 배포 지원을 확정한다.
 - [ ] Windows ARM64 지원과 x64 emulation 범위를 확정한다.
 - [ ] 최소와 최대 크기, DPI와 다중 모니터 회귀를 실제 사용자 조작으로 검증한다.
+  최소/최대 크기의 물리 경계 조작과 서로 다른 DPI의 물리 모니터 이동은 미검증이다.
+- [x] 로컬 Windows x64의 실제 두 창에서 focus/blur 왕복과 물리 드래그 중 move/resize 전달을 검증한다.
+  2026-10-10 main `6f2363c`, Windows 11 Pro 25H2 x64, 빌드 26200.9457,
+  Bun 1.4.2와 WebView2 Evergreen 154.0.4258.62에서 순차 실행했다.
+  단일 1920×1080, 100%(96 DPI) 모니터에서 클릭 왕복과 제목 표시줄 및 테두리 드래그를 수행했다.
+  물리 조작 구간의 move 424개와 resize 228개를 수신했고 normal/outer bounds가 일치했다.
+  버튼을 누른 채 5초 멈췄으며 놓기 전 전달은 조작자의 관찰로 확인했다.
+- [ ] 물리 모니터 분리와 재연결 시 normal bounds 및 전체화면 복원을 검증한다.
+  DLL 대체 회귀는 통과했지만 물리 연결 변경은 수행하지 않았다. 다른 모니터로의 fallback도 미검증이다.
 - [x] 로컬 Windows x64에서 실제 Win32와 WebView2로 상태 제어와 조회, 권한 거부와 전체화면 중 변경 거부를 검증한다.
   2026-10-10의 [창 상태 검증 기록](./architecture/windows-bun-results.md#2026-10-10-창-상태-제어와-조회)을 따른다.
   실제 다른 DPI의 물리 모니터 이동과 초기 maximized/fullscreen 옵션, 창 이벤트는 이 결과에 포함하지 않는다.
+- [x] 로컬 Windows x64의 실제 Win32와 WebView2에서 창 이벤트, snapshot 복구와 구독 수명을 검증한다.
+  [창 이벤트 검증 기록](./architecture/windows-bun-results.md#2026-10-10-창-이벤트와-구독-수명)과
+  [네이티브 모달 이벤트 전송 기록](./architecture/windows-bun-results.md#2026-10-10-네이티브-모달-이벤트-전송-보완)을 따른다.
+  후속 물리 조작 검증에서 focus/blur와 물리 드래그를 확인했다. 다중 물리 모니터 이동은 미검증이다.
 - [ ] IME, keyboard layout, 고대비와 스크린 리더 회귀를 검증한다.
 - [ ] tray, autostart, file association과 toast를 깨끗한 Windows 설치에서 검증한다.
 - [ ] suspend/resume, 잠금과 Explorer 재시작 후 자원과 구독을 검증한다.
@@ -802,7 +849,7 @@ setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 
 
 ## 다음 작업 묶음
 
-1. 창 크기와 위치의 남은 API, 초기 창 상태 옵션과 창 이벤트: 02, 03, 04.
+1. content 위치, outer 크기와 bounds 설정, 초기 위치와 창 상태 옵션, 생성과 준비 등 남은 창 이벤트: 02, 03, 04.
 2. 트레이 개별 아이콘과 메뉴, autostart, 전역 단축키: 06, 07, 08.
 3. 파일 열기와 지정 앱 opener 확장, 파일 대화상자, 클립보드와 알림: 09, 10, 11, 12.
 4. 모니터와 DPI, 테마, 창 상태 저장과 OS 연결: 04, 09, 13.

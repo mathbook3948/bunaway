@@ -35,6 +35,7 @@ export const frameworkPaths = [
   "docs/decisions/0013-optional-native-plugins.md",
   "docs/decisions/0014-optional-plugin-packages.md",
   "docs/decisions/0015-macos-bun-ffi.md",
+  "docs/decisions/0016-windows-autostart.md",
   "docs/architecture/macos-bun-results.md",
   "docs/architecture/plugins.md",
   "docs/development-server.md",

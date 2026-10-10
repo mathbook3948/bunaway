@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test";
 import { resolve } from "node:path";
-import { appModules } from "#cli/app-modules";
-import { bindHostAPI } from "#core/host-api";
 import type {
   NativeWindowServices,
   WindowSizeConstraints,
 } from "@bunaway/plugin-api/native";
+import { windowsPlugin } from "@bunaway/plugin-windows";
 import type { HostContext, JsonValue, Policy } from "@bunaway/protocol";
 import { NativeRegistry } from "@bunaway/protocol";
-import { windowsPlugin } from "@bunaway/plugin-windows";
+import { appModules } from "#cli/app-modules";
+import { bindHostAPI } from "#core/host-api";
 import { matches } from "#plugins/windows/src/scope";
 import { createOperations } from "#plugins/windows/src/windows";
 
@@ -137,6 +137,7 @@ test("window permissions use generic deny-first matching and filter list results
       },
       setSize() {},
       setPosition() {},
+      setGeometry() {},
       setFullscreen() {},
       setCloseConfirmation() {},
     }),

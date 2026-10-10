@@ -649,18 +649,42 @@ test("incompatible hello reports the backend version and suppresses later work",
   await core.stop();
 });
 
-test("duplicate request IDs and request ID records are bounded", async () => {
+test("duplicate request IDs are rejected while recent ID records stay bounded", async () => {
   const clock = createClock();
   const { services, sent } = createServices(clock);
-  const { session } = await openSession(services);
-  const invoke = (id: string) =>
+  let release = () => {};
+  const app = createApp({
+    commands: {
+      "notes.slow": command({
+        input: {
+          const: null,
+        },
+        output: {
+          const: null,
+        },
+        handle: () =>
+          new Promise<null>((resolve) => {
+            release = () => resolve(null);
+          }),
+      }),
+    },
+  });
+  const { session } = await openSession(
+    services,
+    "ctx" as HostContext,
+    "main",
+    app,
+  );
+  const invoke = (id: string, name = "notes.missing") =>
     session.receive({
       kind: "invoke",
       protocol: helloMessage.protocol,
       id,
-      command: "notes.missing",
+      command: name,
       payload: null,
     });
+  const lastId = `id-${API_LIMITS.maxRequestIds + 1}`;
+  await invoke("held", "notes.slow");
   await invoke("r1");
   await invoke("r1");
   await flush();
@@ -673,20 +697,35 @@ test("duplicate request IDs and request ID records are bounded", async () => {
       },
     },
   ]);
-  for (let i = 2; i <= API_LIMITS.maxRequestIds; i++) {
+  // Settle more requests than the record holds; the session keeps accepting them.
+  for (let i = 2; i <= API_LIMITS.maxRequestIds + 1; i++) {
     await invoke(`id-${i}`);
   }
-  await invoke("overflow");
   await flush();
-  expect(results(sent, "overflow")).toMatchObject([
+  expect(results(sent, lastId)).toMatchObject([
     {
       kind: "error",
       error: {
-        code: "BUSY",
-        message: "Request limit reached.",
+        code: "INVALID_ARGUMENT",
+        message: "Unknown command.",
       },
     },
   ]);
+  // The pending ID stays protected outside the history; old settled IDs can be reused.
+  await invoke("held", "notes.slow");
+  await invoke("r1");
+  await invoke(lastId);
+  release();
+  await flush();
+  expect(results(sent, "held")).toMatchObject([
+    {
+      kind: "result",
+      payload: null,
+    },
+  ]);
+  expect(results(sent, "r1")).toHaveLength(2);
+  expect(results(sent, lastId)).toHaveLength(1);
+  await session.close();
 });
 
 test("concurrent invokes run without blocking receive and respect the pending limit", async () => {

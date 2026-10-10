@@ -187,6 +187,496 @@ test("Windows boundary rejects canonical overflow before reserving IDs and deadl
   );
 });
 
+test("Windows boundary keeps accepting settled requests while rejecting retained duplicate IDs", () => {
+  const packets: Packet[] = [];
+  const output: ServerMessage[] = [];
+  const source = "https://app.bunaway.local/index.html";
+  const boundary = new ViewBoundary(
+    {
+      id: "main",
+      origins: [
+        "https://app.bunaway.local",
+      ],
+      commands: [
+        "echo",
+      ],
+      events: [],
+      host: {
+        permissions: [],
+      },
+    },
+    {
+      origin: (text) => new URL(text).origin,
+      source: () => source,
+      ready: () => true,
+      forward: (packet) => packets.push(packet),
+      capacity: () => true,
+      deliver: (text) => output.push(JSON.parse(text)),
+      log: () => {},
+    },
+  );
+  const hello = {
+    kind: "hello",
+    protocol: PROTOCOL_VERSION,
+    features: [],
+    buildId: "test",
+  } satisfies ServerMessage;
+  boundary.receive(source, JSON.stringify(hello));
+  const opened = packets[0];
+  if (opened?.kind !== "session-open") {
+    throw new Error("Missing session");
+  }
+  boundary.send(opened.route, hello);
+  const invoke = (id: string) => {
+    packets.length = 0;
+    boundary.receive(
+      source,
+      JSON.stringify({
+        kind: "invoke",
+        protocol: PROTOCOL_VERSION,
+        id,
+        command: "echo",
+        payload: null,
+      }),
+    );
+    return packets.length === 1;
+  };
+  const lastId = `id-${API_LIMITS.maxRequestIds + 1}`;
+  expect(invoke("held")).toBe(true);
+  // Settle more requests than the record holds; none is rejected as BUSY.
+  for (let i = 1; i <= API_LIMITS.maxRequestIds + 1; i++) {
+    expect(invoke(`id-${i}`)).toBe(true);
+    boundary.send(opened.route, {
+      kind: "result",
+      protocol: PROTOCOL_VERSION,
+      id: `id-${i}`,
+      payload: null,
+    });
+  }
+  // The pending ID stays protected outside the history; old settled IDs can be reused.
+  expect(invoke("held")).toBe(false);
+  expect(invoke(lastId)).toBe(false);
+  expect(output.at(-1)).toMatchObject({
+    kind: "error",
+    error: {
+      code: "INVALID_ARGUMENT",
+      message: "Request ID was already used.",
+    },
+  });
+  expect(invoke("id-1")).toBe(true);
+});
+
+test("Core and boundary agree on evicted IDs while the oldest reply is in transit", async () => {
+  const source = "https://app.bunaway.local/index.html";
+  const view = {
+    id: "main",
+    origins: [
+      new URL(source).origin,
+    ],
+    commands: [
+      "echo",
+      "slow",
+    ],
+    events: [],
+    host: {
+      permissions: [],
+    },
+  };
+  const hello = {
+    kind: "hello" as const,
+    protocol: PROTOCOL_VERSION,
+    features: [],
+    buildId: "test",
+  };
+  const packets: Packet[] = [];
+  const replies: ServerMessage[] = [];
+  const output: ServerMessage[] = [];
+  let release = () => {};
+  let heldReplyReady = () => {};
+  const heldReply = new Promise<void>((resolve) => {
+    heldReplyReady = resolve;
+  });
+  const core = await createCore(
+    {
+      commands: {
+        echo: {
+          input: {
+            const: null,
+          },
+          output: {
+            const: null,
+          },
+          run: async () => null,
+        },
+        slow: {
+          input: {
+            const: null,
+          },
+          output: {
+            const: null,
+          },
+          run: () =>
+            new Promise<null>((resolve) => {
+              release = () => resolve(null);
+            }),
+        },
+      },
+      events: {},
+    },
+    {
+      policy: {
+        version: 1,
+        views: [
+          view,
+        ],
+        backend: {
+          permissions: [],
+        },
+      },
+      hello,
+      platform: "windows",
+      backendContext: "backend-test" as Route["context"],
+      runtime: {
+        createCancellation: () => new AbortController(),
+        now: Date.now,
+        schedule: (callback, delay) => {
+          const timer = setTimeout(callback, delay);
+          return () => clearTimeout(timer);
+        },
+      },
+      send: async (_context, message) => {
+        replies.push(message);
+        if ("id" in message && message.id === "held") {
+          heldReplyReady();
+        }
+      },
+      callHost: async () => ({
+        kind: "result",
+        payload: null,
+      }),
+    },
+  );
+  const boundary = new ViewBoundary(view, {
+    origin: (text) => new URL(text).origin,
+    source: () => source,
+    ready: () => true,
+    capacity: () => true,
+    forward: (packet) => packets.push(packet),
+    deliver: (text) => output.push(JSON.parse(text)),
+    log: () => {},
+  });
+  let session: CoreSession | undefined;
+  let route: Route | undefined;
+  const forward = async () => {
+    for (const packet of packets.splice(0)) {
+      if (packet.kind === "session-open") {
+        route = packet.route;
+        session = core.openSession(route.context, route.viewId);
+      } else if (packet.kind === "client") {
+        await session?.receive(packet.message);
+      }
+    }
+  };
+  const deliver = () => {
+    if (!route) {
+      throw new Error("Missing session route");
+    }
+    for (const reply of replies.splice(0)) {
+      boundary.send(route, reply);
+    }
+  };
+  const invoke = async (id: string, command = "echo") => {
+    boundary.receive(
+      source,
+      JSON.stringify({
+        kind: "invoke",
+        protocol: PROTOCOL_VERSION,
+        id,
+        command,
+        payload: null,
+      }),
+    );
+    await forward();
+  };
+  try {
+    boundary.receive(source, JSON.stringify(hello));
+    await forward();
+    deliver();
+    await invoke("held", "slow");
+    for (let index = 1; index < API_LIMITS.maxRequestIds; index++) {
+      await invoke(`fast-${index}`);
+      deliver();
+    }
+    // Core has settled the oldest request, but the UI still awaits its reply.
+    release();
+    await heldReply;
+    await invoke("next");
+    deliver();
+    // Both layers must forget the same acceptance history, including the old held ID.
+    await invoke("held");
+    deliver();
+    await invoke("fast-1");
+    deliver();
+    for (const id of [
+      "held",
+      "fast-1",
+    ]) {
+      expect(
+        output.filter(
+          (message) => message.kind === "result" && message.id === id,
+        ),
+      ).toHaveLength(2);
+    }
+    expect(boundary.pendingCount).toBe(0);
+    expect(output.filter((message) => message.kind === "error")).toHaveLength(
+      0,
+    );
+  } finally {
+    release();
+    await core.stop();
+  }
+});
+
+test.each([
+  "cancel-result",
+  "cancel-error",
+  "timeout-result",
+  "timeout-error",
+])(
+  "%s request IDs stay protected until FIFO replies are discarded",
+  async (mode) => {
+    const source = "https://app.bunaway.local/index.html";
+    const view = {
+      id: "main",
+      origins: [
+        new URL(source).origin,
+      ],
+      commands: [
+        "echo",
+      ],
+      events: [],
+      host: {
+        permissions: [],
+      },
+    };
+    const hello = {
+      kind: "hello" as const,
+      protocol: PROTOCOL_VERSION,
+      features: [],
+      buildId: "test",
+    };
+    const packets: Packet[] = [];
+    const replies: ServerMessage[] = [];
+    const output: ServerMessage[] = [];
+    const core = await createCore(
+      {
+        commands: {
+          echo: {
+            input: {
+              type: "string",
+            },
+            output: {
+              type: "string",
+            },
+            run: async (payload) => {
+              if (typeof payload !== "string") {
+                throw new Error("Expected string input.");
+              }
+              if (payload === "old-error") {
+                throw new Error("Old command failed.");
+              }
+              return payload;
+            },
+          },
+        },
+        events: {},
+      },
+      {
+        policy: {
+          version: 1,
+          views: [
+            view,
+          ],
+          backend: {
+            permissions: [],
+          },
+        },
+        hello,
+        platform: "windows",
+        backendContext: "backend-test" as Route["context"],
+        runtime: {
+          createCancellation: () => new AbortController(),
+          now: Date.now,
+          schedule: (callback, delay) => {
+            const timer = setTimeout(callback, delay);
+            return () => clearTimeout(timer);
+          },
+        },
+        send: async (_context, message) => {
+          replies.push(message);
+        },
+        callHost: async () => ({
+          kind: "result",
+          payload: null,
+        }),
+      },
+    );
+    const boundary = new ViewBoundary(view, {
+      origin: (text) => new URL(text).origin,
+      source: () => source,
+      ready: () => true,
+      capacity: () => true,
+      forward: (packet) => packets.push(packet),
+      deliver: (text) => output.push(JSON.parse(text)),
+      log: () => {},
+    });
+    boundary.receive(source, JSON.stringify(hello));
+    const opened = packets.shift();
+    if (opened?.kind !== "session-open") {
+      throw new Error("Missing session");
+    }
+    const session = core.openSession(opened.route.context, view.id);
+    const forward = async () => {
+      for (const packet of packets.splice(0)) {
+        if (packet.kind === "client") {
+          await session.receive(packet.message);
+        }
+      }
+    };
+    const deliver = () => {
+      for (const reply of replies.splice(0)) {
+        boundary.send(opened.route, reply);
+      }
+    };
+    const invoke = async (
+      id: string,
+      payload = mode.endsWith("error") ? "old-error" : "old-result",
+    ) => {
+      boundary.receive(
+        source,
+        JSON.stringify({
+          kind: "invoke",
+          protocol: PROTOCOL_VERSION,
+          id,
+          command: "echo",
+          payload,
+        }),
+      );
+      await forward();
+    };
+    try {
+      await forward();
+      deliver();
+      // Core finishes, but all replies remain queued in their original order.
+      for (let index = 0; index < API_LIMITS.maxPending; index++) {
+        const id = `request-${index}`;
+        await invoke(id);
+        if (mode.startsWith("cancel")) {
+          boundary.receive(
+            source,
+            JSON.stringify({
+              kind: "cancel",
+              protocol: PROTOCOL_VERSION,
+              id,
+            }),
+          );
+          await forward();
+        }
+      }
+      if (mode.startsWith("timeout")) {
+        const clock = spyOn(performance, "now").mockReturnValue(
+          performance.now() + API_LIMITS.maxCommandDurationMs + 1,
+        );
+        try {
+          boundary.scanDeadlines();
+          boundary.scanDeadlines();
+        } finally {
+          clock.mockRestore();
+        }
+        await forward();
+      }
+      expect(replies).toHaveLength(API_LIMITS.maxPending);
+      expect(output.filter((message) => message.kind === "error")).toHaveLength(
+        API_LIMITS.maxPending,
+      );
+      // Cancelled work retains bounded capacity rather than evicting unanswered IDs.
+      for (let index = 0; index < API_LIMITS.maxRequestIds; index++) {
+        await invoke(`overflow-${index}`);
+        expect(output.at(-1)).toMatchObject({
+          kind: "error",
+          error: {
+            code: "BUSY",
+          },
+        });
+      }
+      await invoke("request-0", "new-result");
+      expect(output.at(-1)).toMatchObject({
+        kind: "error",
+        error: {
+          code: "INVALID_ARGUMENT",
+        },
+      });
+      deliver();
+      expect(
+        output.filter((message) => message.kind === "result"),
+      ).toHaveLength(0);
+      // Once replies are consumed, ordinary calls can evict history and safely reuse an ID.
+      for (let index = 0; index < API_LIMITS.maxRequestIds; index++) {
+        await invoke(`settled-${index}`, "filler");
+        deliver();
+        expect(output.at(-1)).toMatchObject({
+          kind: "result",
+          id: `settled-${index}`,
+          payload: "filler",
+        });
+      }
+      await invoke("request-0", "new-result");
+      deliver();
+      expect(
+        output.filter(
+          (message) => message.kind === "result" && message.id === "request-0",
+        ),
+      ).toMatchObject([
+        {
+          kind: "result",
+          payload: "new-result",
+        },
+      ]);
+      expect(boundary.pendingCount).toBe(0);
+      // Expiry discovered during delivery consumes that same reply and must not leak a slot.
+      for (let index = 0; index <= API_LIMITS.maxPending; index++) {
+        const id = `expired-on-delivery-${index}`;
+        await invoke(id);
+        const clock = spyOn(performance, "now").mockReturnValue(
+          performance.now() + API_LIMITS.maxCommandDurationMs + 1,
+        );
+        try {
+          deliver();
+        } finally {
+          clock.mockRestore();
+        }
+        expect(output.at(-1)).toMatchObject({
+          kind: "error",
+          id,
+          error: {
+            code: "TIMEOUT",
+          },
+        });
+      }
+      await forward();
+      await invoke("after-expired-replies", "resumed");
+      deliver();
+      expect(output.at(-1)).toMatchObject({
+        kind: "result",
+        id: "after-expired-replies",
+        payload: "resumed",
+      });
+    } finally {
+      await core.stop();
+    }
+  },
+);
+
 test("Windows boundary uses actual source, issues view-specific contexts and drops revoked delivery", () => {
   const packets: Packet[] = [];
   const output: string[] = [];

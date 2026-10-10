@@ -66,8 +66,11 @@ export const API_LIMITS = {
   handshakeTimeoutMs: 10000,
   shutdownTimeoutMs: 2000,
   maxCommandDurationMs: 30000,
+  // Includes SDK listen cleanup and WebView IDs awaiting replies after cancellation or timeout.
   maxPending: 128,
   maxSubscriptions: 128,
+  // Recent IDs in acceptance order; pending IDs remain protected separately.
+  // This history does not cap total requests.
   maxRequestIds: 1024,
 } as const;
 

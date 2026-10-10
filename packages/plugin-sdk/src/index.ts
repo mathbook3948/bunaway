@@ -111,6 +111,15 @@ export const s = Object.freeze({
 
 /** Host-selected values available when a native adapter is created. */
 export type NativeEnvironment = {
+  /** Trusted app identity and restart command. Callers cannot select another executable. */
+  app?: {
+    id: string;
+    launch: {
+      mode: "development" | "packaged";
+      executablePath: string;
+      args: string[];
+    };
+  };
   /** Window services supplied by the host on its native UI thread. */
   windows?: import("@bunaway/plugin-api/native").NativeWindowServices;
   /** Host-owned data directory used for app-scoped files. */
@@ -135,6 +144,8 @@ export type NativeAdapter = {
       requestId: string;
       /** Permission grants available to this host context. */
       permissions: import("@bunaway/protocol").Policy["backend"];
+      /** Aborted when the UI call is cancelled, its context is revoked, or the host stops. */
+      signal?: AbortSignal;
     },
   ): JsonValue | Promise<JsonValue>;
   /** Report whether pending adapter work should delay host auto-close. */
