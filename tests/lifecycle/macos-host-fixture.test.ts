@@ -325,6 +325,10 @@ test("in-place runner rejects result directories before writing scratch files", 
   ]);
 });
 
+const SIGNED_FIXTURE_DRIVER_TIMEOUT_MS = 10_000;
+// Signing and relocation run outside the driver, so the test needs a larger timeout.
+const SIGNED_FIXTURE_TEST_TIMEOUT_MS = 20_000;
+
 test.skipIf(process.platform !== "darwin")(
   "failed in-place runner preserves signed tmp symlinks after moving the app",
   async () => {
@@ -391,13 +395,15 @@ test.skipIf(process.platform !== "darwin")(
         },
         stdout: "pipe",
         stderr: "pipe",
-        timeout: 10000,
+        timeout: SIGNED_FIXTURE_DRIVER_TIMEOUT_MS,
       },
     );
-    const output = new Response(child.stdout).text();
-    const errors = new Response(child.stderr).text();
-    expect(await child.exited).toBe(1);
-    await output;
+    const [code, output, errors] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(code, `${output}\n${errors}`).toBe(1);
     for (const directory of [
       tmp,
       join(workspace, "macos-host-diagnostics", "original-assets-tmp"),
@@ -409,7 +415,7 @@ test.skipIf(process.platform !== "darwin")(
         "nested",
       );
     }
-    expect(await errors).toContain(
+    expect(errors).toContain(
       "WebView boundary, command policy and Bun cleanup without native plugins failed",
     );
     const summary = JSON.parse(
@@ -433,4 +439,5 @@ test.skipIf(process.platform !== "darwin")(
     ).toBe("nested tmp bytes");
     codesign("--verify", "--deep", "--strict", moved);
   },
+  SIGNED_FIXTURE_TEST_TIMEOUT_MS,
 );
