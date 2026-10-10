@@ -58,6 +58,17 @@ Bun 프로세스 어댑터는 context, ipc와 runtime을 포함한 전체 프레
 Windows 어댑터는 플러그인 오류를 터미널과 `plugin-failed` 진단 로그에 남깁니다. Bun 프로세스 어댑터는 stderr에 기록합니다. Windows 어댑터는 진단 로그의 쓰기 실패를 무시하고 이후 로그를 계속 처리합니다. 실패한 기록은 다시 시도하지 않습니다.
 두 어댑터 모두 종료 요청을 처리하던 중 setup이 `CANCELLED`로 끝난 경우에는 정상 취소로 보고 실패 로그를 남기지 않습니다.
 
+## 네이티브 이벤트 전달
+
+`core.emitNative(context, event, payload): Promise<void>`는 신뢰된 호스트 어댑터가
+관찰한 이벤트를 지정한 활성 Core 세션에 전달합니다. 등록한 이벤트 스키마와
+수신 뷰의 events 정책, 구독별 FIFO 및 용량을 백엔드 이벤트 발행과 동일하게 적용하며,
+출처는 `native`입니다. 폐기된 컨텍스트와 종료 중인 Core에는 전달하지 않습니다.
+등록하지 않은 이름이나 잘못된 payload는 `INVALID_ARGUMENT`입니다.
+호스트는 실제 창과 문서 route를 캡처하고, 네이티브 입력을 Worker 경계에서 검증한 뒤
+이 API를 호출합니다. WebView에서 보낸 문자열을 네이티브 이벤트로 신뢰해서는 안 됩니다.
+Windows 창 이벤트의 복구와 큐 포화 계약은 [창 API](/reference/host/windows/)를 따릅니다.
+
 ## RuntimeServices
 
 | 메서드 | 반환, 계약 |
@@ -177,6 +188,12 @@ home은 개발 URL을 전달하면 그 origin을, 그렇지 않으면 `https://a
 이 값은 프레임워크의 개발 실행 계약이며 앱의 `desktop.beforeQuit` 설정을 대신하지 않습니다.
 
 ## 같은 프로세스의 Worker와 뷰 경계
+
+`ViewBoundary.eventRoute(event)`는 구독하거나 구독 응답을 기다리는 현재 문서의
+허용된 이벤트 route를 반환합니다. 관심이 없거나 문서가 폐기되었으면 `undefined`입니다.
+Windows 호스트는 이 route를 `native-event`에 넣고 메인에서 문서 세대와 컨텍스트를
+다시 검사합니다. 이전 창과 문서의 이벤트를 새 세션에 전달하지 않습니다.
+native-event는 UI에서 메인으로만 허용하고 별도 미확인 용량 128개를 사용합니다.
 
 Windows와 macOS 호스트는 다음 런타임 경로를 공유합니다. 호스트 어댑터에서 사용하며,
 앱 코드가 Worker 패킷이나 뷰 세션을 직접 관리할 필요는 없습니다.

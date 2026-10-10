@@ -109,6 +109,8 @@ export type WindowBounds = {
  * Native failures throw; the UI host converts them to bounded public errors.
  */
 export type NativeWindow = {
+  /** Reads a versioned state and physical outer-bounds snapshot for recovery after subscribing. */
+  getSnapshot(): WindowSnapshot;
   /** Shows or hides the native window. */
   show(visible: boolean): void;
   /** Focuses the window and reports whether the request succeeded. */
@@ -152,6 +154,37 @@ export type NativeWindow = {
   /** Sets or clears the confirmation shown before a user closes the window. */
   setCloseConfirmation(message: string | null): void;
 };
+
+/** Independent display facts, using the same meaning as the window query APIs. */
+export type WindowDisplayState = {
+  visible: boolean;
+  focused: boolean;
+  minimized: boolean;
+  maximized: boolean;
+  fullscreen: boolean;
+};
+/** One committed observation; revision increases within a unique native window lifetime. */
+export type WindowSnapshot = {
+  windowId: string;
+  viewId: string;
+  revision: number;
+  state: WindowDisplayState;
+  bounds: WindowBounds;
+};
+/** Changes emitted in the order of a committed snapshot comparison. */
+export type WindowChange =
+  | "shown"
+  | "hidden"
+  | "focus"
+  | "blur"
+  | "unmaximize"
+  | "minimize"
+  | "maximize"
+  | "restore"
+  | "enterFullscreen"
+  | "leaveFullscreen"
+  | "move"
+  | "resize";
 /** UI-thread services used by the native windows plugin. */
 export type NativeWindowServices = {
   /** Configured windows available to the plugin. */

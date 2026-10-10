@@ -257,6 +257,9 @@ test("geometry adapter selects the area, converts at current DPI, and enforces t
     now: Date.now,
     tick: async () => {},
     window: () => ({
+      getSnapshot() {
+        throw new Error("Snapshot is not used in this geometry test.");
+      },
       show() {},
       focus: () => true,
       close: () => true,

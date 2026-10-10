@@ -71,8 +71,8 @@ CLI는 작성한 설정과 정책을 검사합니다. 호출할 명령의 권한
 ## 타입
 
 `CommandsOf<typeof app>`는 앱에 직접 선언한 명령과 정적으로 나열한 기능 모듈의 input/output을,
-`EventsOf<typeof app>`는 해당 이벤트의 payload를 추론합니다.
-플러그인까지 합친 전체 목록의 자동 타입 생성은 현재 제공하지 않습니다.
+`EventsOf<typeof app>`는 해당 이벤트와 정적으로 나열한 플러그인의 이벤트 payload를 추론합니다.
+플러그인 명령까지 합친 전체 명령 목록의 자동 타입 생성은 현재 제공하지 않습니다.
 [타입과 스키마](/guides/types-and-validation/)에서 클라이언트 연결 예시를 확인하세요.
 
 ## 데스크톱 앱 동작

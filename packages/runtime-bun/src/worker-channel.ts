@@ -53,6 +53,12 @@ export type Packet =
       message: ClientMessage;
     }
   | {
+      kind: "native-event";
+      route: Route;
+      event: string;
+      payload: import("@bunaway/protocol").JsonValue;
+    }
+  | {
       kind: "server";
       route: Route;
       message: ServerMessage;
@@ -119,6 +125,7 @@ export type Packet =
     };
 
 const uiKinds = [
+  "native-event",
   "ready",
   "session-open",
   "revoke",
@@ -191,6 +198,11 @@ const approvalKinds = new Set([
   "grant",
 ]);
 const requiredFields: Record<Packet["kind"], readonly string[]> = {
+  "native-event": [
+    "route",
+    "event",
+    "payload",
+  ],
   "desktop-control": [
     "action",
   ],
@@ -355,6 +367,7 @@ export function validatePacket(value: unknown, incoming: Side): Packet {
       "client",
       "server",
       "session-failure",
+      "native-event",
     ].includes(packet.kind) &&
     !packet.route
   ) {
@@ -430,6 +443,10 @@ export function validatePacket(value: unknown, incoming: Side): Packet {
     identifier(packet.event);
     record(packet.fields);
   }
+  if (packet.kind === "native-event") {
+    identifier(packet.event);
+    validateValue({}, packet.payload);
+  }
   if (packet.kind === "fatal" || packet.kind === "session-failure") {
     validateValue(errorSchema, packet.error);
   }
@@ -440,6 +457,7 @@ export function validatePacket(value: unknown, incoming: Side): Packet {
 // This is a bounded backlog policy, separate from unacknowledged data capacity.
 const SERVER_QUEUE_LIMIT = MAX_WINDOWS * API_LIMITS.maxSubscriptions;
 type Lane =
+  | "native-event"
   | "data"
   | "approval"
   | "cancel"
@@ -556,7 +574,7 @@ export class Channel {
         "macos-main": "macos-backend",
         "macos-backend": "macos-main",
       }[this.side] as Side;
-      const lane: Lane =
+      let lane: Lane =
         packet.kind === "diagnostic"
           ? "diagnostic"
           : packet.kind === "session-failure"
@@ -571,6 +589,9 @@ export class Channel {
                   : controlKinds.has(packet.kind)
                     ? "control"
                     : "data";
+      if (packet.kind === "native-event") {
+        lane = "native-event";
+      }
       const count = [
         ...this.pending.values(),
       ].filter((item) => item.lane === lane).length;
@@ -595,7 +616,10 @@ export class Channel {
       const limit =
         lane === "revoke" || lane === "session-failure"
           ? MAX_WINDOWS
-          : lane === "data" || lane === "approval" || lane === "cancel"
+          : lane === "data" ||
+              lane === "approval" ||
+              lane === "cancel" ||
+              lane === "native-event"
             ? API_LIMITS.maxPending
             : 16;
       if (
@@ -634,6 +658,12 @@ export class Channel {
         });
       }
       if (count >= limit) {
+        if (lane === "native-event") {
+          throw new BunawayError({
+            code: "BUSY",
+            message: "Native event queue full.",
+          });
+        }
         throw new Error("Worker channel full");
       }
       return this.post(packet, lane);

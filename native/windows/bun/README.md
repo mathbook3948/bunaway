@@ -27,6 +27,13 @@ normal의 WINDOWPLACEMENT 작업 영역 좌표는 화면 좌표로 보정한다.
 `com.ts`는 COM 참조와 콜백을, `webview.ts`는 WebView 생성과 종료를 관리한다.
 `ui.ts`가 이 자원들의 초기화와 정리 순서를 조정한다. DLL은 창과 COM 정리가 끝난 뒤 닫는다.
 
+창 플러그인을 등록하면 `Windows.observe`가 창별 상태와 물리 outer bounds의 변경을
+비교한다. `window-events.ts`는 변경 이름과 순서를 결정하며 `ui.ts`는 현재 문서의
+구독 관심과 route를 확인해 `native-event` 패킷을 보낸다. 메인은 동일한 route의
+활성 Core 세션에 `emitNative`로 전달한다. observer는 SDK 구독 수와 관계없이 창별
+하나이며 HWND 파괴 전에 제거한다. 전송 용량과 복구는
+[공개 창 이벤트 계약](../../../docs/site/src/content/docs/reference/host/windows.mdx)을 따른다.
+
 트레이 전용 상수는 `tray.ts`, Job 객체 상수는 `job.ts`에 둔다. 개발 CLI와 공유하는
 종료 메시지와 창 클래스 접두어는 `runtime-bun/windows-control`의 단일 정의를 사용한다.
 Worker 패킷은 `runtime-bun/worker-channel`의 공통 구현을 사용한다.

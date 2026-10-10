@@ -426,6 +426,7 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
       const nativeWindows = windows;
       const hwnd = view.native.hwnd;
       return {
+        getSnapshot: () => nativeWindows.getSnapshot(hwnd),
         show: (visible) => nativeWindows.show(hwnd, visible),
         focus: () => nativeWindows.focus(hwnd),
         close: () => closeWindow(viewId),
@@ -584,6 +585,42 @@ function createWindow(spec: WindowSpec) {
     confirmation: null,
     deadline: Date.now() + 30000,
   });
+  // Window control and its event contract remain opt-in. Host owns the native observer.
+  if (registry.operations.has("windows.getSnapshot")) {
+    windows.observe(window, spec.view, (snapshot, changes) => {
+      if (stopping || closingSent || views.get(spec.view)?.native !== native) {
+        return;
+      }
+      const route = boundary.eventRoute("windows.changed");
+      if (!route) {
+        return;
+      }
+      void channel
+        .send({
+          kind: "native-event",
+          route,
+          event: "windows.changed",
+          payload: {
+            ...snapshot,
+            changes,
+          },
+        })
+        .catch((error) => {
+          if (stopping || closingSent || !boundary.matches(route)) {
+            return;
+          }
+          if (error instanceof BunawayError && error.code === "BUSY") {
+            // Losing a transition invalidates this session instead of silently keeping stale UI state.
+            boundary.fail(route, {
+              code: "BUSY",
+              message: "Native event queue full.",
+            });
+            return;
+          }
+          fail(error);
+        });
+    });
+  }
 }
 try {
   // Keep window and WebView COM work on this STA through cleanup.

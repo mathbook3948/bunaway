@@ -1,6 +1,10 @@
 import { defineNativePlugin, s } from "@bunaway/plugin";
 import manifest from "../package.json";
-import { WINDOW_VIEW_NAME_PATTERN, windowOperations } from "./contract.ts";
+import {
+  WINDOW_VIEW_NAME_PATTERN,
+  windowEvents,
+  windowOperations,
+} from "./contract.ts";
 import { matches } from "./scope.ts";
 
 const definitions = Object.fromEntries(
@@ -27,7 +31,10 @@ const plugin = defineNativePlugin({
   matches,
 });
 /** Window operations with separate listing and view-scoped control permissions. */
-export const windowsPlugin = plugin.definition;
+export const windowsPlugin = Object.freeze({
+  ...plugin.definition,
+  events: windowEvents,
+});
 export default windowsPlugin;
 type WindowAPI = {
   readonly [K in keyof typeof windowOperations as K extends `windows.${infer Name}`
@@ -50,6 +57,7 @@ export const windows = Object.freeze({
 });
 export type {
   WindowCall,
+  WindowEvents,
   WindowInput,
   WindowOperation,
   WindowOutput,
@@ -59,5 +67,7 @@ export {
   parseWindowCall,
   validateWindowCall,
   validateWindowOutput,
+  windowEvents,
   windowOperations,
+  windowSnapshotSchema,
 } from "./contract.ts";

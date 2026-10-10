@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import type { Packet, Route } from "#native/windows/bun/channel";
 import { command } from "@bunaway/backend";
 import {
   createClient,
@@ -17,6 +16,7 @@ import {
   type WireError,
 } from "@bunaway/protocol";
 import { ViewBoundary } from "@bunaway/runtime-bun/view-boundary";
+import type { Packet, Route } from "#native/windows/bun/channel";
 
 test.each([
   "invalid-result",
@@ -197,6 +197,7 @@ test.each([
     try {
       await flush();
       await client.ready;
+      expect(boundary.eventRoute("changed")).toBeUndefined();
       const errors: WireError[] = [];
       const subscribing = client.listen("changed", () => {}, {
         onError: (error) => errors.push(error),
@@ -206,6 +207,7 @@ test.each([
       if (!events || !route) {
         throw new Error("Missing active session");
       }
+      expect(boundary.eventRoute("changed")).toEqual(route);
       await events.emit("changed", "before", {
         kind: "broadcast",
       });
@@ -254,6 +256,7 @@ test.each([
       expect(cancelledCommands).toBe(1);
       expect(revocations).toBe(1);
       expect(boundary.matches(route)).toBe(false);
+      expect(boundary.eventRoute("changed")).toBeUndefined();
       expect(boundary.pendingCount).toBe(0);
       expect(listeners.size).toBe(0);
       expect(errors).toHaveLength(1);

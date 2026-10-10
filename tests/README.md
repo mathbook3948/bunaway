@@ -1,5 +1,20 @@
 # Tests
 
+`lifecycle/window-events.test.ts`는 실제 Core와 typed SDK를 연결해 `windows.changed`의
+스키마, 뷰별 구독 권한, 해제, 폐기 세션과 Core 종료 후 늦은 발행 차단을 확인한다.
+MessageChannel로 네이티브 이벤트 전송 방향, 미확인 128개 상한과 종료 용량도 검사한다.
+Core 구독 큐 초과는 BUSY로 구독을 끝내고 이후 이벤트를 차단하는지 확인한다.
+이 계약 검사는 WebView2 실행을 포함하지 않는다.
+
+`lifecycle/windows-window-events.test.ts`는 실제 Win32에서 API와 시스템 메뉴 명령의
+표시, 포커스, 이동, 크기, 최소화, 최대화, 복원과 전체화면 전환을 확인한다.
+중복 억제, 현재 물리 outer bounds, revision과 HWND 파괴 후 콜백 차단 및 재생성 식별자도 검사한다.
+OS가 전경 전환을 거부하면 focused 조회와 snapshot의 일치를 확인하고 실제 focus/blur
+전환은 검증하지 못했다는 메시지를 출력한다. 해당 실행을 focus/blur 성공으로 기록하지 않는다.
+`lifecycle/windows-window-events.ts`는 실제 WebView2로 구독한 세 문서에서 정상 전달,
+권한 거부, 구독 해제, snapshot 조회, 탐색과 창 재생성 및 정상 종료를 확인한다.
+`mise run host:windows`에 포함되며, 네이티브 입력 준비 후 이 파일만 실행할 수도 있다.
+
 `cli/app-manifest.test.ts`는 Windows 실행 manifest의 형식과 계약 검증, 플러그인 제거 후
 재생성, 생성 import와 metadata 불일치를 검사한다.
 manifest 생성과 카탈로그 로딩에서 native 계약의 크기 상한을 그대로 허용하고 초과는 거부하는지도 검사한다.

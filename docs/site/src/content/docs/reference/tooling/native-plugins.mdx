@@ -4,6 +4,11 @@ description: 기능을 한 번 선언하고 Windows 구현을 연결합니다.
 sidebar: { order: 3 }
 ---
 
+창 플러그인의 `windowEvents`는 `windows.changed`의 payload 스키마를 제공하고,
+`windowSnapshotSchema`는 이벤트와 `windows.getSnapshot`이 공유하는 스키마입니다.
+`WindowEvents`는 기존 typed listen의 이벤트 맵 타입입니다. 등록과 구독 권한,
+상태와 물리 bounds 및 수명 규칙은 [창 API](/reference/host/windows/)에서 설명합니다.
+
 기본 구조는 다음과 같습니다. 기능이 커지면 제작자가 필요한 폴더와 파일을 추가합니다.
 파일명은 관례이며 package.json과 plugin.json에 지정한 경로를 사용합니다.
 
