@@ -349,7 +349,7 @@ Windows의 비활성화 기록을 수정하지 않는다.
 우선순위 P1. 소유자: clipboard 플러그인과 공통 이미지 리소스 API 후보.
 출처: [E-clipboard], [E-image], [T-clipboard], [T-image].
 
-- [ ] 클립보드 텍스트 읽기, 쓰기와 지우기를 제공한다.
+- [x] 클립보드 텍스트 읽기, 쓰기와 지우기를 제공한다. `@bunaway/plugin-clipboard`의 작업별 권한, Unicode와 크기 제한, 빈 값, 점유와 취소, 소유권 정리를 정의했다. 2026-10-10 Windows x64의 공통 SDK와 실제 UI Worker 왕복, 별도 프로세스 점유와 취소를 검증했다([계약과 검증](../plugins/clipboard/README.md)).
 - [ ] 이미지 읽기와 쓰기를 제공한다.
 - [ ] HTML, RTF, 파일 목록과 bookmark 형식의 지원을 제공한다.
 - [ ] 사용 가능한 MIME 형식과 지정 형식 존재 여부를 조회한다.
@@ -796,20 +796,29 @@ setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 
 
 우선순위 P1. 소유자: 각 기능의 구현 담당자와 배포 도구.
 
-완료 표시는 저장소에 기록된 실행 결과를 뜻한다. 이번 문서 갱신에서 네이티브
-실행을 새로 수행한 것은 아니다.
+완료 표시는 각 항목과 연결한 실행 기록의 환경 및 범위를 뜻한다. 새 실행 결과와 이전 실행
+결과는 날짜, 기준 revision과 검증 방식으로 구분한다.
 
 - [ ] Windows 10/11의 지원 최소 버전과 실제 검증 환경을 확정한다.
 - [ ] WebView2 최소 버전과 Evergreen, Fixed Version 배포 지원을 확정한다.
 - [ ] Windows ARM64 지원과 x64 emulation 범위를 확정한다.
 - [ ] 최소와 최대 크기, DPI와 다중 모니터 회귀를 실제 사용자 조작으로 검증한다.
+  최소/최대 크기의 물리 경계 조작과 서로 다른 DPI의 물리 모니터 이동은 미검증이다.
+- [x] 로컬 Windows x64의 실제 두 창에서 focus/blur 왕복과 물리 드래그 중 move/resize 전달을 검증한다.
+  2026-10-10 main `6f2363c`, Windows 11 Pro 25H2 x64, 빌드 26200.9457,
+  Bun 1.4.2와 WebView2 Evergreen 154.0.4258.62에서 순차 실행했다.
+  단일 1920×1080, 100%(96 DPI) 모니터에서 클릭 왕복과 제목 표시줄 및 테두리 드래그를 수행했다.
+  물리 조작 구간의 move 424개와 resize 228개를 수신했고 normal/outer bounds가 일치했다.
+  버튼을 누른 채 5초 멈췄으며 놓기 전 전달은 조작자의 관찰로 확인했다.
+- [ ] 물리 모니터 분리와 재연결 시 normal bounds 및 전체화면 복원을 검증한다.
+  DLL 대체 회귀는 통과했지만 물리 연결 변경은 수행하지 않았다. 다른 모니터로의 fallback도 미검증이다.
 - [x] 로컬 Windows x64에서 실제 Win32와 WebView2로 상태 제어와 조회, 권한 거부와 전체화면 중 변경 거부를 검증한다.
   2026-10-10의 [창 상태 검증 기록](./architecture/windows-bun-results.md#2026-10-10-창-상태-제어와-조회)을 따른다.
   실제 다른 DPI의 물리 모니터 이동과 초기 maximized/fullscreen 옵션, 창 이벤트는 이 결과에 포함하지 않는다.
 - [x] 로컬 Windows x64의 실제 Win32와 WebView2에서 창 이벤트, snapshot 복구와 구독 수명을 검증한다.
   [창 이벤트 검증 기록](./architecture/windows-bun-results.md#2026-10-10-창-이벤트와-구독-수명)과
   [네이티브 모달 이벤트 전송 기록](./architecture/windows-bun-results.md#2026-10-10-네이티브-모달-이벤트-전송-보완)을 따른다.
-  실제 focus/blur 전환, 물리 마우스 드래그와 다중 물리 모니터 이동은 검증하지 않았다.
+  후속 물리 조작 검증에서 focus/blur와 물리 드래그를 확인했다. 다중 물리 모니터 이동은 미검증이다.
 - [ ] IME, keyboard layout, 고대비와 스크린 리더 회귀를 검증한다.
 - [ ] tray, autostart, file association과 toast를 깨끗한 Windows 설치에서 검증한다.
 - [ ] suspend/resume, 잠금과 Explorer 재시작 후 자원과 구독을 검증한다.

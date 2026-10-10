@@ -144,6 +144,8 @@ export type NativeAdapter = {
       requestId: string;
       /** Permission grants available to this host context. */
       permissions: import("@bunaway/protocol").Policy["backend"];
+      /** Aborted when the UI call is cancelled, its context is revoked, or the host stops. */
+      signal?: AbortSignal;
     },
   ): JsonValue | Promise<JsonValue>;
   /** Report whether pending adapter work should delay host auto-close. */

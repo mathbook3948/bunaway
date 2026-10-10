@@ -28,6 +28,7 @@ type PluginOperations = {
     context: {
       requestId: string;
       permissions: Policy["backend"];
+      signal?: AbortSignal;
     },
   ): Promise<JsonValue>;
   busy(): boolean;
@@ -203,6 +204,7 @@ export async function operations(
       context: {
         requestId: string;
         permissions: Policy["backend"];
+        signal?: AbortSignal;
       },
     ) {
       const call = registry.validateCall({

@@ -39,6 +39,7 @@
     "@bunaway/plugin-storage": "workspace:*",
     "@bunaway/plugin-opener": "workspace:*",
     "@bunaway/plugin-autostart": "workspace:*",
+    "@bunaway/plugin-clipboard": "workspace:*",
     "@bunaway/plugin-log": "workspace:*",
     "@bunaway/plugin-capabilities": "workspace:*"
   },
