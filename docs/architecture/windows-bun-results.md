@@ -1,5 +1,55 @@
 # Windows Bun FFI 실행 기록
 
+## 2026-10-11 창 없는 상주 앱과 트레이 시작
+
+main `488f88a`에서 분기해 구현했다. Windows x64 `10.0.26200.0`, 고정 Bun 1.4.2와
+WebView2 SDK `1.0.4129.50`에서 실제 UI Worker, HWND, 트레이와 WebView2를 실행했다.
+공개 설정과 종료 계약은 [앱 정의](../site/src/content/docs/reference/backend/app-definition.mdx)와
+[창 없는 시작](../site/src/content/docs/guides/windows.mdx#창-없는-시작)을 따른다.
+
+`tests/lifecycle/windows-windowless.ts`의 resident, resident-empty, tray, tray-empty,
+dev-resident, dev-tray, dev-pending-tray, force-tray 시나리오가 통과했다.
+`build/windows-windowless/<scenario>-report.json`과 해당 PID의 `logs/host.log`를 남긴다.
+
+- 초기 앱 창이 없고 백엔드 타이머가 진행되는 것을 확인했다. 트레이 또는 숨긴 제어
+  HWND는 보이지 않으며 `windows` 목록과 세션에 앱 창으로 등록하지 않는다.
+- 백엔드 Host 호출의 사전 선언 창 생성, 트레이 표시 요청의 첫 선언 창 생성,
+  최대화 상태로 숨김과 복원, 최소화 복원에서 HWND 식별자와 기존 SDK 세션을 유지했다.
+- 마지막 창의 실제 WM_CLOSE와 공개 `windows.close` 뒤 백엔드를 유지했다.
+  다시 열기는 새 windowId와 SDK 세션을 사용했으며 반복 트레이 요청으로 중복 생성하지 않았다.
+- 빈 창 선언의 Open은 창을 만들지 않았다. 창 없는 상태의 트레이 Quit과 API quit은
+  beforeQuit의 첫 취소 뒤 재시도로 종료했다. 정상 종료는 StopHook, HWND와 Worker를 정리했고
+  `host-stopped`의 `activeProcesses: 0`을 확인했다.
+- 앱 창 생성 전 CLI의 실제 `closeWindowsApp` 종료 메시지는 상주 앱과 트레이 앱을 정리했다.
+  완료되지 않는 beforeQuit도 우회했으며 정상 종료에서 StopHook을 실행했다.
+- 강제 종료는 StopHook을 실행하지 않았다. 실제 프로세스 핸들로 Job 자식 종료를 확인하고
+  트레이 소유 HWND도 없어진 것을 확인했다. 강제 종료에서 Shell 아이콘 삭제 콜백은 보장하지 않는다.
+
+트레이는 실제 Shell_NotifyIconW로 등록했다. 입력은 소유 HWND에 콜백과 WM_CLOSE 메시지를
+게시했으며 물리 마우스 클릭, Explorer 재시작과 배포 설치 검증을 이번 결과에 포함하지 않는다.
+macOS의 창 없는 시작은 지원하지 않으며 빈 선언과 모든 지연 선언을 명시적으로 거부한다.
+
+설정과 수명주기 집중 검사는 41 pass, macOS 전용 실행 4 skip이었다.
+설치한 독립 CLI의 빈 창 배열 검사는 fixture 경로를 수정한 뒤 단독 실행으로 통과했다.
+전체 `mise run check`는 753 pass, 67 skip, 17 fail과 테스트 사이 오류 4개였다.
+이 실행에는 수정 전 fixture 실패 한 개가 포함된다. 나머지는 Android 설치 Worker,
+CLI/템플릿/배포 감사의 기한 초과와 그 이후 잠금 실패, Host 용량 기한 초과 및
+Windows 파일 심볼릭 링크 권한 오류다. 변경 없는 main `488f88a` 스냅샷에서도
+CLI 패키징과 빌드 중단 4개, macOS 심볼릭 링크 5개 실패를 재현했다.
+그 밖의 전체 검사 실패는 이번 변경과의 관계를 확정하지 않았다.
+
+`mise run host:windows`는 기존 desktop 5개와 창 없는 앱 8개, 창 API와 준비,
+이벤트, 저장 검사까지 통과했다. 이후 독립 CLI 개발 실행에서 고정 Bun의
+`directory mismatch` 진단이 발생하고 90초 기한으로 종료해 전체 suite는 실패했다.
+독립 CLI를 단독 재실행해 실제 SDK/저장 왕복과 서버 정리까지 통과했다.
+그 뒤 남은 앱 교체와 product-host 검사도 별도로 실행해 모두 통과했다.
+원래의 전체 명령 실패와 개별 재실행 성공을 구분한다.
+Inno Setup은 설치되어 있지 않아 설치 검사는 건너뛰었다.
+
+최종 workspace 및 테스트 타입, lint와 형식 검사가 통과했다. 문서 coverage는
+공개 export와 필드, 명령, 작업 및 설정 513개를 확인했고 Astro 타입 검사도 통과했다.
+72개 페이지 빌드와 내부 링크 및 anchor 6419개를 검사했다.
+
 ## 2026-10-10 비활성 표시와 활성 창 전환
 
 main `2f45356`을 기준으로 `showInactive`, `blur`, `activate`를 추가했다.

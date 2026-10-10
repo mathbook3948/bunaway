@@ -1606,6 +1606,18 @@ test("CLI bundles startup and deferred window specs without implicitly selecting
     expect(await Bun.file(resolve(assets, "ui.js")).text()).not.toContain(
       "Window cleanup did not complete.",
     );
+    config.app.windows = config.app.windows.map(
+      (window: { startup?: boolean }) => ({
+        ...window,
+        startup: false,
+      }),
+    );
+    await writeJson(configPath, config);
+    expect(
+      (await validateProject(project)).app.windows?.every(
+        (window) => window.startup === false,
+      ),
+    ).toBe(true);
     config.app.view = "main";
     await writeJson(configPath, config);
     await expect(validateProject(project)).rejects.toThrow("without mixing");
@@ -1618,6 +1630,13 @@ test("CLI bundles startup and deferred window specs without implicitly selecting
     await writeJson(configPath, config);
     const metadata = await readProjectMetadata(project);
     expect(metadata.app.windows?.[1]?.home).toEndWith("/missing.html");
+    config.app.windows = [];
+    await mkdir(resolve(project, config.build.frontend));
+    await writeJson(configPath, config);
+    const windowless = await validateProject(project);
+    expect(windowless.app.windows).toEqual([]);
+    expect(windowless.app.home).toBeUndefined();
+    await bundleAssets(windowless, resolve(home, "windowless-assets"), true);
   } finally {
     await Bun.write(configPath, originals["src-bunaway/bunaway.json"] ?? "");
     await Bun.write(policyPath, originals["src-bunaway/policy.json"] ?? "");

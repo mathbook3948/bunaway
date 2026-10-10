@@ -66,7 +66,55 @@ await client.invoke("editor.prepareClose", null);
 `startup`을 생략하면 앱 시작 때 엽니다. `false`인 창은 API로 생성합니다.
 닫은 보조 창을 다시 열 때도 `create`를 사용합니다. 새 문서로 다시 시작하려면
 `recreate`를 사용하고 기존 창의 정리가 완료될 때까지 기다립니다.
-모든 창을 닫으면 앱이 종료되므로 보조 창을 다시 열려면 주 창을 유지하세요.
+기본 종료 설정에서는 모든 창을 닫으면 앱이 종료됩니다. 계속 실행하려면 아래 desktop 설정을 사용하세요.
+
+## 창 없는 시작
+
+Windows에서는 모든 창에 `startup: false`를 지정하거나 `app.windows`를 빈 배열로 작성합니다.
+앱 정의에는 `desktop.tray` 또는 `desktop.closeBehavior: "keep-alive"`를 지정해야 합니다.
+나중에 창을 열려면 위 예제처럼 사전 선언 창과 해당 뷰 정책을 유지합니다.
+
+```ts
+import { defineApp } from "@bunaway/backend";
+
+export default defineApp({
+  modules: [],
+  desktop: {
+    closeBehavior: "keep-alive",
+    tray: { tooltip: "Notes" },
+    async onOpen(request, desktop) {
+      if (request.argv.includes("--quit")) {
+        await desktop.quit();
+      }
+    },
+    beforeQuit() {
+      return true;
+    },
+  },
+});
+```
+
+초기 실행은 창을 만들지 않습니다. 트레이 클릭 또는 Open으로 첫 사전 선언 창을 엽니다.
+열린 창이 있으면 표시하고 최소화를 복원하며 최대화 상태와 기존 세션을 유지합니다.
+`closeBehavior: "keep-alive"`는 마지막 창을 닫아도 백엔드를 유지합니다.
+다음 Open은 정리한 창을 새 HWND와 세션으로 생성합니다. 여러 선언 중 첫 창만 생성합니다.
+`"hide"`와 트레이를 함께 쓰면 닫기에서 창과 세션을 유지한 채 숨깁니다.
+`"quit"` 또는 생략은 나중에 만든 마지막 창 닫기로 종료를 요청합니다.
+
+창이 전혀 필요 없으면 `app.windows: []`로 설정합니다. `build.app`, `build.frontend`와
+정책 파일 등 프로젝트의 필수 입력은 그대로 필요합니다. 트레이 Open은 창을 만들지 않습니다.
+트레이 없는 상주 앱에서는 위 `onOpen`을 유지하고 `tray`만 생략할 수 있습니다.
+실행 파일에 `--quit`을 전달하면 같은 앱으로 전달된 요청에서 명시적 종료를 요청합니다.
+`beforeQuit`가 `false`를 반환하거나 실패하면 종료를 취소하므로 다시 요청할 수 있습니다.
+
+백엔드에서 특정 사전 선언 창을 열려면 `@bunaway/plugin-windows`를 등록하고
+플러그인 setup의 실행 컨텍스트로 `context.host.call`을 사용합니다.
+backend 정책에 `windows:control`과 대상 `view` 범위를 허용해야 하며 미선언 창은 생성할 수 없습니다.
+`onOpen` 자체는 Host 호출 컨텍스트를 제공하지 않습니다.
+`DesktopContext.show()`는 공개 창 플러그인 없이도 첫 선언 창의 표시를 요청할 수 있습니다.
+개발 CLI 중단과 재시작은 창이 없거나 종료 훅이 대기 중이어도 앱 정리를 요청합니다.
+OS 강제 종료는 앱 훅을 실행하지 않습니다. 자세한 결과와 실패는
+[데스크톱 앱 동작](/reference/backend/app-definition/#데스크톱-앱-동작)을 따릅니다.
 
 개발 서버를 사용하면 각 창의 `home` 경로와 query를 같은 loopback 서버에 연결합니다.
 위 예제에서는 `/index.html`, `/editor.html`을 각각 제공해야 합니다.

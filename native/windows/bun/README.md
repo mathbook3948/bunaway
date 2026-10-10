@@ -183,4 +183,8 @@ URL scheme과 파일 확장자의 OS 등록은 제공하지 않으며 실행기�
 GUI 실행 파일은 `-Wait`, `-- -draft.txt`와 `-Verbose`를 포함한 모든 인자를 그대로 전달한다.
 배포 EXE는 인자와 작업 디렉터리를 직접 읽는다. Windows와 호출 셸의 명령줄 길이 제한을 따른다.
 개발 CLI의 재시작과 종료는 종료 취소와 숨김을 우회하며 코어, 플러그인 StopHook과 Worker를 정리한다.
+`app.windows: []`와 모든 선언의 `startup: false`는 트레이 또는 `closeBehavior: "keep-alive"`를 요구한다.
+keep-alive는 마지막 창을 실제로 정리한 뒤에도 백엔드를 유지한다. Open과 show는 살아 있는 창을
+복원하거나 첫 사전 선언 창을 생성한다. 빈 선언 배열이면 창은 만들지 않는다.
+트레이 없는 상주 앱은 숨긴 제어 HWND를 소유해 CLI 종료 메시지를 받고 정상 종료 때 정리한다.
 [데스크톱 수명주기 결정](../../../docs/decisions/0013-desktop-lifecycle.md).

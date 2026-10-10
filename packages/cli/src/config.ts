@@ -91,9 +91,9 @@ export interface Project {
     title: string;
     executableName?: string;
     icon?: string;
-    view: string;
-    home: string;
-    window: WindowSpec["window"];
+    view?: string;
+    home?: string;
+    window?: WindowSpec["window"];
     windows?: WindowSpec[];
   };
   policy: Policy;
@@ -133,7 +133,9 @@ export function runtimeSettings(
     policy: server
       ? developmentPolicy(
           project.policy,
-          project.app.windows?.map((spec) => spec.view) ?? project.app.view,
+          project.app.windows?.map((spec) => spec.view) ??
+            project.app.view ??
+            [],
           server.url,
         )
       : project.policy,
@@ -481,10 +483,7 @@ async function loadProject(
       }
     }
   }
-  const primary = windows.find((spec) => spec.startup !== false);
-  if (!primary) {
-    throw new Error("At least one window must open at startup.");
-  }
+  const primary = windows.find((spec) => spec.startup !== false) ?? windows[0];
   return {
     root,
     frameworkRoot,
@@ -522,9 +521,13 @@ async function loadProject(
             icon: raw.icon as string,
           }
         : {}),
-      view: primary.view,
-      home: primary.home,
-      window: primary.window,
+      ...(primary
+        ? {
+            view: primary.view,
+            home: primary.home,
+            window: primary.window,
+          }
+        : {}),
       ...(multiple
         ? {
             windows,
