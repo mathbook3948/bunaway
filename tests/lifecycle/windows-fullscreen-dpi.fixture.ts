@@ -9,6 +9,10 @@ const WS_OVERLAPPEDWINDOW = 0x00cf0000;
 const WS_VISIBLE = 0x10000000n;
 const GWL_STYLE = -16;
 const SW_HIDE = 0;
+const SW_SHOWNORMAL = 1;
+const SW_SHOWMINIMIZED = 2;
+const SWP_NOSIZE = 0x1;
+const WPF_RESTORETOMAXIMIZED = 0x2;
 const SWP_NOMOVE = 0x2;
 const SWP_NOACTIVATE = 0x10;
 const FRAME_WIDTH = 16;
@@ -38,6 +42,7 @@ const windowRect = {
 let style = BigInt(WS_OVERLAPPEDWINDOW);
 let callbackAddress = 0;
 let positionFlags = 0;
+let minimized = false;
 
 function view(address: Pointer, size: number) {
   return new DataView(toArrayBuffer(address, 0, size));
@@ -97,7 +102,7 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
       DestroyWindow: () => 1,
       IsWindow: () => 1,
       IsWindowVisible: () => Number((style & WS_VISIBLE) !== 0n),
-      IsIconic: () => 0,
+      IsIconic: () => Number(minimized),
       IsZoomed: () => 0,
       ShowWindow(_window: bigint, command: number) {
         style = command === SW_HIDE ? style & ~WS_VISIBLE : style | WS_VISIBLE;
@@ -121,7 +126,13 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
       },
       GetWindowPlacement(_window: bigint, address: Pointer) {
         const placement = view(address, 44);
-        placement.setUint32(8, 1, true);
+        // Windows can retain maximize history after returning to a normal window.
+        placement.setUint32(4, WPF_RESTORETOMAXIMIZED, true);
+        placement.setUint32(
+          8,
+          minimized ? SW_SHOWMINIMIZED : SW_SHOWNORMAL,
+          true,
+        );
         [
           windowRect.left,
           windowRect.top,
@@ -130,6 +141,19 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
         ].forEach((value, index) => {
           placement.setInt32(28 + index * 4, value, true);
         });
+        return 1;
+      },
+      SetWindowPlacement(_window: bigint, address: Pointer) {
+        const placement = view(address, 44);
+        assert.equal(
+          placement.getUint32(4, true) & WPF_RESTORETOMAXIMIZED,
+          minimized ? WPF_RESTORETOMAXIMIZED : 0,
+        );
+        assert.equal(placement.getUint32(8, true), SW_HIDE);
+        windowRect.left = placement.getInt32(28, true);
+        windowRect.top = placement.getInt32(32, true);
+        windowRect.right = placement.getInt32(36, true);
+        windowRect.bottom = placement.getInt32(40, true);
         return 1;
       },
       MonitorFromWindow: () => monitorFor(windowRect),
@@ -169,8 +193,10 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
           windowRect.left = left;
           windowRect.top = top;
         }
-        windowRect.right = windowRect.left + width;
-        windowRect.bottom = windowRect.top + height;
+        if (!(flags & SWP_NOSIZE)) {
+          windowRect.right = windowRect.left + width;
+          windowRect.bottom = windowRect.top + height;
+        }
         return 1;
       },
     },
@@ -261,6 +287,20 @@ try {
       assert.deepEqual(windows.getSizeConstraints(window), constraints);
       assert.notEqual(target.dpi, monitor.dpi);
     }
+  }
+  // A normal placement drops stale maximize history; a minimized one keeps it.
+  for (const wasMinimized of [
+    false,
+    true,
+  ]) {
+    minimized = wasMinimized;
+    windows.show(window, false);
+    windows.setFullscreen(window, true);
+    windows.setFullscreen(window, false);
+    assert.equal(windows.isFullscreen(window), false);
+    assert.equal(windows.isVisible(window), false);
+    assert.equal(windows.isMinimized(window), wasMinimized);
+    assert.equal(windows.isMaximized(window), false);
   }
 } finally {
   messages.close();
