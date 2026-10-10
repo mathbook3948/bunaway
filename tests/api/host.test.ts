@@ -1030,6 +1030,93 @@ export function checkHostTypes() {
   void app;
 }
 
+test("window state helpers retain context, validate results and honor pre-call cancellation", async () => {
+  const { windows } = await import("@bunaway/plugin-windows");
+  const controls = [
+    "minimize",
+    "maximize",
+    "unmaximize",
+    "restore",
+    "toggleMaximize",
+  ] as const;
+  const queries = [
+    "isMinimized",
+    "isMaximized",
+    "isFullscreen",
+    "isVisible",
+    "isFocused",
+  ] as const;
+  const calls: HostCall[] = [];
+  let validOutput = true;
+  const cancellation = new AbortController();
+  const ctx = context(
+    "editor",
+    async (source, call) => {
+      expect(source).toBe("editor" as HostContext);
+      calls.push(call);
+      const isStateQuery = call.operation.startsWith("windows.is");
+      return {
+        kind: "result",
+        payload: isStateQuery && validOutput ? true : null,
+      };
+    },
+    cancellation,
+  );
+  await command({
+    ...nullContract,
+    async handle() {
+      for (const name of controls) {
+        expect(
+          await windows[name]({
+            view: "editor",
+          }),
+        ).toBeNull();
+      }
+      for (const name of queries) {
+        expect(
+          await windows[name]({
+            view: "editor",
+          }),
+        ).toBe(true);
+      }
+      validOutput = false;
+      await expect(
+        windows.isVisible({
+          view: "editor",
+        }),
+      ).rejects.toMatchObject({
+        code: "INTERNAL",
+      });
+      cancellation.abort();
+      for (const name of [
+        ...controls,
+        ...queries,
+      ]) {
+        await expect(
+          windows[name]({
+            view: "editor",
+          }),
+        ).rejects.toMatchObject({
+          code: "CANCELLED",
+        });
+      }
+      return null;
+    },
+  }).run(null, ctx);
+  expect(calls.map((call) => call.operation)).toEqual(
+    [
+      ...controls,
+      ...queries,
+      "isVisible",
+    ].map((name) => `windows.${name}`),
+  );
+  for (const call of calls) {
+    expect(call.payload).toEqual({
+      view: "editor",
+    });
+  }
+});
+
 test("window helpers preserve the command context and typed operation payloads", async () => {
   const { windows } = await import("@bunaway/plugin-windows");
   await expect(windows.list()).rejects.toMatchObject({
