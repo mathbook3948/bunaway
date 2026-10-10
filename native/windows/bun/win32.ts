@@ -112,7 +112,13 @@ export class Windows {
   >();
   private readonly constraints = new Map<bigint, WindowSizeConstraints>();
   private readonly dpiByWindow = new Map<bigint, number>();
-  private readonly normalMonitors = new Map<bigint, bigint>();
+  private readonly normalMonitors = new Map<
+    bigint,
+    {
+      display: bigint;
+      screenRect: Buffer;
+    }
+  >();
   private creatingConstraints: WindowSizeConstraints | undefined;
   private readonly callback: JSCallback;
   private readonly previousDpiAwarenessContext: bigint;
@@ -561,7 +567,13 @@ export class Windows {
       MONITOR_DEFAULTTONEAREST,
     );
     assert(monitor, "Normal window monitor is unavailable.");
-    this.normalMonitors.set(window, monitor);
+    const info = Buffer.alloc(MONITORINFO_SIZE);
+    info.writeUInt32LE(MONITORINFO_SIZE);
+    assert(user.symbols.GetMonitorInfoW(monitor, ptr(info)));
+    this.normalMonitors.set(window, {
+      display: monitor,
+      screenRect: info.subarray(4, 4 + RECT_SIZE),
+    });
   }
 
   /**
@@ -597,19 +609,23 @@ export class Windows {
         const monitor = Buffer.alloc(MONITORINFO_SIZE);
         monitor.writeUInt32LE(MONITORINFO_SIZE);
         // Workspace coordinates cannot identify the screen monitor at a shared edge.
-        let display = this.normalMonitors.get(window);
-        assert(display, "Normal window monitor is unavailable.");
+        const normalMonitor = this.normalMonitors.get(window);
+        assert(normalMonitor, "Normal window monitor is unavailable.");
+        let display = normalMonitor.display;
         if (!user.symbols.GetMonitorInfoW(display, ptr(monitor))) {
-          // A detached display invalidates its handle even while normal tracking is suspended.
+          // Reconnected displays can have new handles; fullscreen retains the original screen area.
           display = user.symbols.MonitorFromRect(
-            ptr(rect),
+            ptr(saved ? normalMonitor.screenRect : rect),
             MONITOR_DEFAULTTONEAREST,
           );
           assert(display, "Normal window monitor is unavailable.");
           assert(user.symbols.GetMonitorInfoW(display, ptr(monitor)));
           // Fullscreen retains the original placement, so its fallback monitor is temporary.
           if (!saved) {
-            this.normalMonitors.set(window, display);
+            this.normalMonitors.set(window, {
+              display,
+              screenRect: monitor.subarray(4, 4 + RECT_SIZE),
+            });
           }
         }
         // WINDOWPLACEMENT uses workspace coordinates; callers use screen coordinates.

@@ -19,6 +19,7 @@ const FRAME_WIDTH = 16;
 const FRAME_HEIGHT = 39;
 const monitors = [
   {
+    handle: 1n,
     left: 0,
     top: 0,
     right: 1920,
@@ -26,6 +27,7 @@ const monitors = [
     dpi: 96,
   },
   {
+    handle: 2n,
     left: -2560,
     top: 0,
     right: 0,
@@ -58,7 +60,7 @@ function monitorFor(rect: typeof windowRect) {
   let largestArea = -1;
   let selected = -1;
   for (const [index, monitor] of monitors.entries()) {
-    if (removedMonitors.has(BigInt(index + 1))) {
+    if (removedMonitors.has(monitor.handle)) {
       continue;
     }
     const width = Math.max(
@@ -74,11 +76,11 @@ function monitorFor(rect: typeof windowRect) {
       selected = index;
     }
   }
-  return BigInt(selected + 1);
+  return monitors[selected]?.handle ?? 0n;
 }
 
 function monitorInfo(handle: bigint) {
-  const monitor = monitors[Number(handle) - 1];
+  const monitor = monitors.find((monitor) => monitor.handle === handle);
   assert(monitor, "Expected a configured monitor handle.");
   return monitor;
 }
@@ -141,7 +143,7 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
           true,
         );
         const restored = maximized || minimized ? normalRect : windowRect;
-        const primary = monitorFor(restored) === 1n;
+        const primary = monitorFor(restored) === monitors[0]?.handle;
         [
           restored.left - (primary ? 24 : 0),
           restored.top - (primary ? 40 : 0),
@@ -163,10 +165,10 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
         });
       },
       GetMonitorInfoW(monitor: bigint, address: Pointer) {
-        if (!monitor || removedMonitors.has(monitor)) {
+        const bounds = monitors.find((display) => display.handle === monitor);
+        if (!bounds || removedMonitors.has(monitor)) {
           return 0;
         }
-        const bounds = monitorInfo(monitor);
         const info = view(address, 40);
         [
           bounds.left,
@@ -177,8 +179,8 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
           info.setInt32(4 + index * 4, value, true);
         });
         [
-          bounds.left + (monitor === 1n ? 24 : 0),
-          bounds.top + (monitor === 1n ? 40 : 0),
+          bounds.left + (bounds === monitors[0] ? 24 : 0),
+          bounds.top + (bounds === monitors[0] ? 40 : 0),
           bounds.right,
           bounds.bottom,
         ].forEach((value, index) => {
@@ -500,7 +502,7 @@ try {
   ]) {
     windows.show(window, visible);
     for (let cycle = 0; cycle < 2; cycle++) {
-      removedMonitors.add(1n);
+      removedMonitors.add(primary.handle);
       Object.assign(windowRect, secondary);
       messages.symbols.windowProcedure(window, WM_DISPLAYCHANGE, 32n, 0n);
       messages.symbols.windowProcedure(window, WM_WINDOWPOSCHANGED, 0n, 0n);
@@ -513,7 +515,11 @@ try {
           dpi: 96,
         });
       }
-      removedMonitors.delete(1n);
+      removedMonitors.delete(primary.handle);
+      // A reconnected display can receive a new HMONITOR; also retain same-handle coverage.
+      if (cycle === 1) {
+        primary.handle += 2n;
+      }
       messages.symbols.windowProcedure(window, WM_DISPLAYCHANGE, 32n, 0n);
       messages.symbols.windowProcedure(window, WM_WINDOWPOSCHANGED, 0n, 0n);
       for (let query = 0; query < 2; query++) {
@@ -524,8 +530,8 @@ try {
       assert.equal(windows.failure, undefined);
     }
   }
-  removedMonitors.add(1n);
-  removedMonitors.add(2n);
+  removedMonitors.add(primary.handle);
+  removedMonitors.add(secondary.handle);
   assert.deepEqual(
     hostResponse(() => windows.getBounds(window, "normal")),
     {
