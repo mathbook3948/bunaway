@@ -14,6 +14,7 @@
   let connecting = true;
   let port;
   let socket;
+  let socketAttempted = false;
   const post = (text) => {
     if (socket) {
       const remaining =
@@ -146,7 +147,11 @@
     if (!active) {
       return;
     }
-    if (connecting && event.data === `${portPrefix}fallback:${nonce}`) {
+    if (
+      connecting &&
+      !socket &&
+      event.data === `${portPrefix}fallback:${nonce}`
+    ) {
       connected();
       return;
     }
@@ -156,22 +161,56 @@
       typeof event.data === "string" &&
       event.data.startsWith(socketReply)
     ) {
-      if (socket) {
-        closeBridge();
+      if (socketAttempted) {
         return;
       }
+      socketAttempted = true;
+      const fallback = () => {
+        if (!active) {
+          return;
+        }
+        if (!connecting) {
+          closeBridge();
+          return;
+        }
+        // No application message has left the queue before onopen. Revoke this attempt
+        // through the host before flushing it into a fresh fallback session.
+        const previous = socket;
+        socket = undefined;
+        if (previous) {
+          previous.onopen =
+            previous.onmessage =
+            previous.onerror =
+            previous.onclose =
+              null;
+          previous.close();
+        }
+        try {
+          bunawayNative.postMessage(`${portPrefix}fallback:${nonce}`);
+        } catch {
+          closeBridge();
+        }
+      };
       try {
-        socket = new WebSocket(event.data.slice(socketReply.length));
-        socket.onopen = () => {
-          if (active) {
+        const current = new WebSocket(event.data.slice(socketReply.length));
+        socket = current;
+        current.onopen = () => {
+          if (active && socket === current && connecting) {
             connected();
           }
         };
-        socket.onmessage = (message) => bunawayNative.onmessage(message);
-        socket.onerror = closeBridge;
-        socket.onclose = closeBridge;
+        current.onmessage = (message) => {
+          if (socket === current) {
+            bunawayNative.onmessage(message);
+          }
+        };
+        current.onerror = current.onclose = () => {
+          if (socket === current) {
+            fallback();
+          }
+        };
       } catch {
-        closeBridge();
+        fallback();
       }
       return;
     }

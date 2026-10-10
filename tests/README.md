@@ -13,6 +13,10 @@ Android의 `FrameDispatcherTest`는 읽기 스레드의 직접 전달이 멈춰�
 실제 로컬 WebSocket으로 Origin, 일회용 주소, 만료와 회수, 늦은 SDK 초기화, 입력 순서와
 크기 및 대기 제한을 검사한다. `runtime-bun.test.ts`는 실제 Bun 자식 프로세스에서
 직접 연결의 정책 거부, 명령 오류 응답, 호스트 회수와 종료를 확인한다.
+`android-bridge.test.ts`는 WebSocket 생성 실패와 최초 연결의 error/close에서 MessagePort와
+reply proxy로 한 번만 전환하고 대기 메시지를 순서대로 전달하는지 검사한다. 이전 소켓의
+늦은 콜백과 중복 주소를 무시하며 연결 성공 후에는 실패한 요청을 재전송하지 않는다.
+`runtime-bun.test.ts`는 기존 직접 연결 권한을 회수한 뒤 새 파이프 세션이 동작하는지도 검사한다.
 `runtime-channel-failure.test.ts`는 실제 TCP 연결의 close 프레임 없는 종료, 잘못된 입력과
 수신 정지로 인한 출력 버퍼 초과를 재현한다. 해당 문서의 진행 중 명령만 취소되고 같은 Bun PID와
 앱 상태, 다른 세션, 새 문서 연결 및 정상 shutdown이 유지되는지 검사한다.

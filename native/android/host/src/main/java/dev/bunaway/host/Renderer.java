@@ -73,7 +73,7 @@ final class Renderer {
     private WebViewChannel channel;
     private boolean inputStarted;
     private String channelNonce;
-    private boolean directChannel;
+    private String directNonce;
 
     /** Document reply proxy for connection grants and, after hello, fallback web replies. */
     private JavaScriptReplyProxy reply;
@@ -129,11 +129,16 @@ final class Renderer {
                         String data = message.getData();
                         require(data != null, "Text message required");
                         if (data.startsWith(WebViewChannel.REQUEST_PREFIX)) {
-                            openChannel(data, proxy);
+                            String fallback = WebViewChannel.REQUEST_PREFIX + "fallback:";
+                            if (data.startsWith(fallback)) {
+                                fallbackChannel(data.substring(fallback.length()), proxy);
+                            } else {
+                                openChannel(data, proxy);
+                            }
                             return;
                         }
                         require(
-                                channel == null && channelNonce == null && !directChannel,
+                                channel == null && channelNonce == null && directNonce == null,
                                 "Document transport already selected");
                         inputStarted = true;
                         // Bound queued text cheaply; exact UTF-8 and schema checks run on the
@@ -199,10 +204,7 @@ final class Renderer {
                             webView.stopLoading();
                             return;
                         }
-                        session =
-                                new WebViewSession("view-" + UUID.randomUUID(), assets.webProtocol);
-                        runtime.send(
-                                "session-open", "context", session.context, "viewId", assets.view);
+                        openSession();
                     }
 
                     @Override
@@ -283,8 +285,24 @@ final class Renderer {
                         && path.startsWith("/")
                         && UUID.fromString(path.substring(1)).toString().equals(path.substring(1)),
                 "Invalid document capability");
-        directChannel = true;
+        directNonce = nonce;
         reply.postMessage(WebViewChannel.REQUEST_PREFIX + "socket:" + nonce + ":" + endpoint);
+    }
+
+    /** A failed initial socket attempt gets a new Core session before any queued SDK input. */
+    private void fallbackChannel(String nonce, JavaScriptReplyProxy proxy) {
+        // Ignore duplicate requests and callbacks belonging to an older document.
+        if (!nonce.equals(directNonce)) return;
+        revoke();
+        openSession();
+        inputStarted = true;
+        reply = proxy;
+        openPort(WebViewChannel.REQUEST_PREFIX + nonce, proxy);
+    }
+
+    private void openSession() {
+        session = new WebViewSession("view-" + UUID.randomUUID(), assets.webProtocol);
+        runtime.send("session-open", "context", session.context, "viewId", assets.view);
     }
 
     private void openPort(String request, JavaScriptReplyProxy proxy) {
@@ -419,7 +437,7 @@ final class Renderer {
     /** Ends the current backend view session and drops the document's reply proxy. */
     private void revoke() {
         channelNonce = null;
-        directChannel = false;
+        directNonce = null;
         if (channel != null) {
             runtime.disconnectChannel(channel);
             channel = null;

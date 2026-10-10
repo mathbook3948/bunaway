@@ -13,6 +13,7 @@ test.each([
   "revoke",
   "shutdown",
   "wrong-origin",
+  "fallback",
 ] as const)(
   "host-owned direct runtime channel enforces policy and %s lifetime",
   async (ending) => {
@@ -117,6 +118,69 @@ test.each([
         throw new Error("Missing direct grant");
       }
       expect(grant.nonce).toBe("document-nonce");
+      if (ending === "fallback") {
+        // The native host revokes the failed socket's capability before opening a new pipe session.
+        send({
+          kind: "revoke",
+          context: "view-test",
+        });
+        send({
+          kind: "session-open",
+          context: "view-fallback",
+          viewId: "main",
+        });
+        send({
+          kind: "web",
+          context: "view-fallback",
+          payload: hello,
+        });
+        expect(await next()).toMatchObject({
+          kind: "web",
+          context: "view-fallback",
+          payload: {
+            kind: "hello",
+          },
+        });
+        expect(
+          (
+            await fetch(grant.url.replace("ws:", "http:"), {
+              headers: {
+                Origin: origin,
+              },
+            })
+          ).status,
+        ).toBe(403);
+        send({
+          kind: "web",
+          context: "view-fallback",
+          payload: {
+            kind: "invoke",
+            protocol: PROTOCOL_VERSION,
+            id: "1",
+            command: "fail",
+            payload: null,
+          },
+        });
+        expect(await next()).toMatchObject({
+          kind: "web",
+          context: "view-fallback",
+          payload: {
+            kind: "error",
+            id: "1",
+            error: {
+              code: "INTERNAL",
+              message: "Command failed.",
+            },
+          },
+        });
+        send({
+          kind: "shutdown",
+        });
+        expect((await next()).kind).toBe("stopping");
+        expect(await child.exited).toBe(0);
+        expect(await errors).toContain("runtime diagnostic sentinel");
+        return;
+      }
       socket = new WebSocket(grant.url, {
         headers: {
           Origin: origin,
