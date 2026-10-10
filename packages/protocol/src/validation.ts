@@ -147,6 +147,8 @@ export const MAX_MESSAGE_BYTES = 1_048_576;
 export const MAX_JSON_DEPTH = 64;
 // Unicode mode matches lone UTF-16 surrogates, but leaves valid pairs intact.
 const loneSurrogate = /[\uD800-\uDFFF]/u;
+const nonAscii = /[\u0080-\uFFFF]/;
+const escapedOrNonAscii = /[^\u0020-\u007F]|["\\]/;
 
 /** Reports malformed input or a schema/value mismatch with a safe public message. */
 export class ProtocolError extends Error {
@@ -165,6 +167,9 @@ function invalid(): never {
 }
 
 export function utf8Size(value: string): number {
+  if (!nonAscii.test(value)) {
+    return value.length;
+  }
   let size = 0;
   for (let i = 0; i < value.length; i++) {
     const code = value.charCodeAt(i);
@@ -185,6 +190,13 @@ export function utf8Size(value: string): number {
     }
   }
   return size;
+}
+
+/** Ordinary ASCII strings need neither escaping nor a temporary JSON string. */
+function jsonStringSize(value: string): number {
+  return escapedOrNonAscii.test(value)
+    ? utf8Size(JSON.stringify(value))
+    : value.length + 2;
 }
 
 /** Copies untrusted values into bounded JSON data, rejecting cycles and accessors. */
@@ -211,7 +223,11 @@ function snapshotJson(
     ) {
       invalid();
     }
-    budget.remaining -= utf8Size(JSON.stringify(value));
+    if (typeof value === "string") {
+      budget.remaining -= jsonStringSize(value);
+    } else {
+      budget.remaining -= value === false ? 5 : 4;
+    }
     if (budget.remaining < 0) {
       invalid();
     }
@@ -278,7 +294,7 @@ function snapshotJson(
       if (key.length > budget.remaining || loneSurrogate.test(key)) {
         invalid();
       }
-      budget.remaining -= utf8Size(JSON.stringify(key)) + 1;
+      budget.remaining -= jsonStringSize(key) + 1;
     }
     if (budget.remaining < 0) {
       invalid();
@@ -360,9 +376,8 @@ function matches(schema: Schema, value: JsonValue): boolean {
     case "string":
       return (
         typeof value === "string" &&
-        [
-          ...value,
-        ].length <= (schema.maxLength ?? Infinity) &&
+        (schema.maxLength === undefined ||
+          withinStringLimit(value, schema.maxLength)) &&
         (!schema.pattern || new RegExp(schema.pattern, "u").test(value))
       );
     case "integer":
@@ -378,6 +393,20 @@ function matches(schema: Schema, value: JsonValue): boolean {
     default:
       return true;
   }
+}
+
+/** JSON Schema counts code points; avoid allocating an array or scanning unbounded strings. */
+function withinStringLimit(value: string, maximum: number): boolean {
+  if (value.length <= maximum) {
+    return true;
+  }
+  let length = 0;
+  for (const _ of value) {
+    if (++length > maximum) {
+      return false;
+    }
+  }
+  return length <= maximum;
 }
 
 function checkedSnapshot<S extends Schema>(
@@ -412,6 +441,44 @@ export function validate<S extends Schema>(
   return checkedSnapshot(schema, value, "value");
 }
 
+/** Checks exact serialized limits without allocating a JSON string that will be discarded. */
+export function validateSerialized<S extends Schema>(
+  schema: S,
+  value: unknown,
+): Infer<S> {
+  return checkedSnapshot(schema, value, "serialized");
+}
+
+/** JSON.parse already owns plain, acyclic data; check wire-only limits without copying it. */
+function checkParsedJson(value: JsonValue, depth: number): void {
+  if (depth > MAX_JSON_DEPTH) {
+    invalid();
+  }
+  if (typeof value === "string" && loneSurrogate.test(value)) {
+    invalid();
+  }
+  if (typeof value === "number" && !Number.isFinite(value)) {
+    invalid();
+  }
+  if (value === null || typeof value !== "object") {
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      checkParsedJson(item, depth + 1);
+    }
+    return;
+  }
+  for (const key of Object.keys(value)) {
+    if (loneSurrogate.test(key)) {
+      invalid();
+    }
+    checkParsedJson(value[key] as JsonValue, depth + 1);
+  }
+  // Retain the null-prototype object contract of validated snapshots.
+  Object.setPrototypeOf(value, null);
+}
+
 /**
  * Parses JSON text, checks its schema and limits, and returns its validated snapshot.
  * @throws {ProtocolError} If parsing, schema validation, or a protocol limit fails.
@@ -420,21 +487,31 @@ export function parse<S extends Schema>(schema: S, text: string): Infer<S> {
   if (typeof text !== "string" || utf8Size(text) > MAX_MESSAGE_BYTES) {
     invalid();
   }
-  let value: unknown;
   try {
-    value = JSON.parse(text);
+    // Native JSON parsing cannot produce accessors, proxies, cycles or non-JSON types.
+    const value: JsonValue = JSON.parse(text);
+    checkParsedJson(value, 0);
+    if (!matches(schema, value)) {
+      invalid();
+    }
+    return value as Infer<S>;
   } catch {
     invalid();
   }
-  return validate(schema, value);
 }
 
 /**
  * Validates a value before encoding it as size-limited JSON text.
  * @throws {ProtocolError} If validation or serialization limits fail.
  */
-export function serialize<S extends Schema>(schema: S, value: unknown): string {
-  const snapshot = checkedSnapshot(schema, value, "serialized");
+export function serialize<S extends Schema>(
+  schema: S,
+  value: unknown,
+  check?: (snapshot: Infer<S>) => void,
+): string {
+  const snapshot = validateSerialized(schema, value);
+  // Cross-field rules inspect the same detached value that reaches the wire.
+  check?.(snapshot);
   const text = JSON.stringify(snapshot);
   if (utf8Size(text) > MAX_MESSAGE_BYTES) {
     invalid();

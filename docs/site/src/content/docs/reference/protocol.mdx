@@ -52,6 +52,7 @@ const message = parseMessage(text);
 | 헬퍼 | 입력 → 반환 | 추가 검사 |
 | --- | --- | --- |
 | `parseMessage` / `serializeMessage` | 문자열 ↔ Message | messageSchema, 크기, 깊이 |
+| `validateMessage` | Message → 독립된 Message 스냅샷 | messageSchema, 직렬화 크기, 깊이. 전체 JSON 문자열은 만들지 않음 |
 | `parsePolicy` | 문자열 → Policy | policySchema와 중복 view ID |
 | `parseBootstrap` | 문자열 → Bootstrap | bootstrapSchema와 내부 정책 view ID |
 | `parseHostCall` / `serializeHostCall` | 문자열 ↔ HostCall | hostCallSchema |
@@ -84,7 +85,10 @@ type HostOperationContract<I, O> = {
 `osPermission: "not-required"`는 OS 권한이 필요 없는 작업을 표시하며, 기능 조회에서
 OS 권한 메타데이터로 전달됩니다.
 
-입력이 잘못되면 `ProtocolError`가 발생합니다. parse와 serialize는 스키마를 검증하고 JSON 스냅샷을 만듭니다.
+입력이 잘못되면 `ProtocolError`가 발생합니다. parse는 문자열에서 읽은 JSON 값을 검사해 반환합니다.
+serialize는 입력과 분리된 JSON 스냅샷을 검사한 뒤 직렬화합니다.
+`validateMessage`는 같은 직렬화 제한을 검사하되 메시지 객체를 반환합니다.
+전송 전에 크기를 확인하거나 여러 대상에 보낼 이벤트를 미리 검사할 때 사용합니다.
 원문과 직렬화 결과의 UTF-8 크기는 최대 1 MiB, 깊이는 최대 64입니다.
 serialize는 getter나 toJSON을 실행하지 않으며 그런 객체를 입력하면 거부합니다.
 
@@ -127,13 +131,18 @@ runtime identity, generation, context는 신뢰된 호스트가 발급합니다.
 | `host-cancel` | `context`, `requestId` | Host 요청 취소 |
 | `revoke` | `context` | 컨텍스트 회수 |
 | `session-open` | `context`, `viewId` | 호스트가 세션 개설 |
+| `channel-open` | `context`, `nonce`, `origin` | Android 호스트가 확인한 문서의 직접 연결 요청 |
+| `channel-ready` | `context`, `nonce`, `url` | Bun이 발급한 일회용 연결 주소. 빈 주소는 기존 브리지 사용 |
 | `shutdown` | 없음 | 종료 요청 |
 | `stopping` | 없음 | 정리 시작 알림 |
 | `fatal` | `error` | 복구 불가능한 실패 |
 
 스키마가 JSON 구조를 검증한 뒤 런타임이 발급자 identity와 프레임 방향을 추가로 검사합니다.
 WebView에서 위조한 host-request나 session-open은 권한을 가진 호스트 프레임으로 인정되지 않습니다.
-Windows와 macOS Bun FFI 경로는 같은 프로세스의 Worker 연결에 같은 앱과 코어 계약을 적용합니다. 프로세스 IPC는 이전 probe와 어댑터 계약 검사를 위한 경로입니다.
+Android의 직접 연결 주소는 권한을 가진 토큰을 포함하므로 로그에 기록하거나 다른 문서에 전달하지 않습니다.
+직접 연결에서는 웹 메시지만 보내며, 호스트가 파이프로 개설한 세션의 정책과 수명주기를 적용합니다.
+문서가 회수되면 주소와 연결도 폐기합니다. Windows와 macOS Bun FFI 경로는 같은 프로세스의
+Worker 연결에 같은 앱과 코어 계약을 적용합니다. 프로세스 IPC는 Android 호스트와 어댑터 계약 검사에 사용합니다.
 
 ## 공개 스키마 객체
 

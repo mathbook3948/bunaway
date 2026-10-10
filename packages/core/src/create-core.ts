@@ -14,7 +14,7 @@ import {
   ProtocolError,
   type Schema,
   type ServerMessage,
-  serializeMessage,
+  validateMessage,
   validateValue,
   type WireError,
 } from "@bunaway/protocol";
@@ -399,7 +399,7 @@ class SessionImpl implements CoreSession {
           payload: output,
         };
         // Include protocol and correlation fields before handing the reply to a transport.
-        serializeMessage(reply);
+        validateMessage(reply);
       } catch {
         throw new BunawayError({
           code: "INTERNAL",
@@ -588,7 +588,7 @@ class SessionImpl implements CoreSession {
         sequence: subscription.sequence + 1,
         payload,
       };
-      serializeMessage(message);
+      validateMessage(message);
       this.core.services.validateMessage?.(this.context, message);
       deliveries.push({
         subscription,

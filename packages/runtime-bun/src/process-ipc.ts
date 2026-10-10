@@ -15,25 +15,29 @@ export async function* readJsonLines(
   });
   for await (const chunk of chunks) {
     let start = 0;
-    for (let end = 0; end <= chunk.length; end++) {
-      if (end < chunk.length && chunk[end] !== 10) {
-        continue;
-      }
+    while (start < chunk.length) {
+      const newline = chunk.indexOf(10, start);
+      const end = newline < 0 ? chunk.length : newline;
       const part = chunk.subarray(start, end);
       size += part.length;
       if (size > MAX_MESSAGE_BYTES) {
         throw new Error("Process frame exceeds limit.");
       }
-      if (part.length) {
-        parts.push(new Uint8Array(part));
-      }
-      if (end < chunk.length) {
+      if (newline >= 0) {
         if (!size) {
           throw new Error("Empty process frame.");
         }
-        yield decoder.decode(Buffer.concat(parts, size));
+        // Decode the borrowed view before yielding; only unfinished frames need owned copies.
+        if (parts.length === 0) {
+          yield decoder.decode(part);
+        } else {
+          parts.push(part);
+          yield decoder.decode(Buffer.concat(parts, size));
+        }
         parts = [];
         size = 0;
+      } else if (part.length) {
+        parts.push(new Uint8Array(part));
       }
       start = end + 1;
     }

@@ -1,3 +1,4 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:enableOnBackInvokedCallback="true" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <application android:enableOnBackInvokedCallback="true" android:networkSecurityConfig="@xml/bunaway_network_security" />
 </manifest>

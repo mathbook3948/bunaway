@@ -1,13 +1,205 @@
 import { expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 import {
-  PROTOCOL_VERSION,
   type ClientMessage,
   MAX_MESSAGE_BYTES,
+  PROTOCOL_VERSION,
   type ProcessFrame,
   parseProcessFrame,
 } from "@bunaway/protocol";
 import { readJsonLines } from "@bunaway/runtime-bun";
+
+test.each([
+  "revoke",
+  "shutdown",
+  "wrong-origin",
+] as const)(
+  "host-owned direct runtime channel enforces policy and %s lifetime",
+  async (ending) => {
+    const entrypoint = fileURLToPath(
+      new URL("./command-error.fixture.ts", import.meta.url),
+    );
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "--no-env-file",
+        entrypoint,
+      ],
+      {
+        stdin: "pipe",
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const timeout = setTimeout(() => child.kill(), 5000);
+    const errors = new Response(child.stderr).text();
+    const output = readJsonLines(child.stdout)[Symbol.asyncIterator]();
+    const next = async () => {
+      const line = await output.next();
+      if (line.done) {
+        throw new Error("Unexpected runtime EOF.");
+      }
+      return parseProcessFrame(line.value);
+    };
+    const send = (body: Record<string, unknown>) =>
+      child.stdin.write(
+        `${JSON.stringify({
+          ...body,
+          ipc: PROTOCOL_VERSION,
+          runtime: {
+            id: "direct",
+            generation: "1",
+          },
+        })}\n`,
+      );
+    const origin = "https://app.bunaway.local";
+    let socket: WebSocket | undefined;
+    try {
+      send({
+        kind: "boot",
+        payload: {
+          entrypoint,
+          buildId: "test",
+          backendContext: "backend-test",
+          policy: {
+            version: 1,
+            backend: {
+              permissions: [],
+            },
+            views: [
+              {
+                id: "main",
+                origins: [
+                  origin,
+                ],
+                commands: [
+                  "fail",
+                ],
+                events: [],
+                host: {
+                  permissions: [],
+                },
+              },
+            ],
+          },
+        },
+      });
+      expect((await next()).kind).toBe("hello");
+      const hello = {
+        kind: "hello",
+        protocol: PROTOCOL_VERSION,
+        features: [],
+        buildId: "test",
+      };
+      send({
+        kind: "hello",
+        payload: hello,
+      });
+      expect((await next()).kind).toBe("ready");
+      send({
+        kind: "session-open",
+        context: "view-test",
+        viewId: "main",
+      });
+      send({
+        kind: "channel-open",
+        context: "view-test",
+        nonce: "document-nonce",
+        origin: ending === "wrong-origin" ? "https://wrong.example" : origin,
+      });
+      const grant = await next();
+      if (ending === "wrong-origin") {
+        expect(grant.kind).toBe("fatal");
+        expect(await child.exited).not.toBe(0);
+        return;
+      }
+      if (grant.kind !== "channel-ready") {
+        throw new Error("Missing direct grant");
+      }
+      expect(grant.nonce).toBe("document-nonce");
+      socket = new WebSocket(grant.url, {
+        headers: {
+          Origin: origin,
+        },
+      });
+      const connected = Promise.withResolvers<void>();
+      socket.onopen = () => connected.resolve();
+      socket.onerror = () =>
+        connected.reject(new Error("Direct channel failed"));
+      await connected.promise;
+      const ended = Promise.withResolvers<void>();
+      socket.onclose = () => ended.resolve();
+      const receive = () => {
+        const result = Promise.withResolvers<unknown>();
+        if (!socket) {
+          throw new Error("Missing socket");
+        }
+        socket.onmessage = (event) =>
+          result.resolve(JSON.parse(String(event.data)));
+        return result.promise;
+      };
+      const ready = receive();
+      socket.send(JSON.stringify(hello));
+      expect(await ready).toMatchObject({
+        kind: "hello",
+      });
+      const result = receive();
+      socket.send(
+        JSON.stringify({
+          kind: "invoke",
+          protocol: PROTOCOL_VERSION,
+          id: "1",
+          command: "fail",
+          payload: null,
+        }),
+      );
+      expect(await result).toMatchObject({
+        kind: "error",
+        id: "1",
+        error: {
+          code: "INTERNAL",
+          message: "Command failed.",
+        },
+      });
+      send(
+        ending === "revoke"
+          ? {
+              kind: "revoke",
+              context: "view-test",
+            }
+          : {
+              kind: "shutdown",
+            },
+      );
+      await ended.promise;
+      if (ending === "revoke") {
+        const old = new WebSocket(grant.url, {
+          headers: {
+            Origin: origin,
+          },
+        });
+        const rejected = Promise.withResolvers<void>();
+        old.onerror = () => rejected.resolve();
+        old.onopen = () => {
+          old.close();
+          rejected.reject(new Error("Revoked grant accepted"));
+        };
+        await rejected.promise;
+        send({
+          kind: "shutdown",
+        });
+      }
+      expect((await next()).kind).toBe("stopping");
+      expect(await child.exited).toBe(0);
+      expect(await errors).toContain("runtime diagnostic sentinel");
+    } finally {
+      socket?.close();
+      clearTimeout(timeout);
+      child.kill();
+      await child.exited;
+    }
+  },
+);
 
 test("process event limits reject the entire broadcast and preserve sessions and sequences", async () => {
   const entrypoint = fileURLToPath(

@@ -4,8 +4,10 @@ import static dev.bunaway.host.AppAssets.originOf;
 import static dev.bunaway.host.Protocol.*;
 
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.net.Uri;
+import android.security.NetworkSecurityPolicy;
 import android.view.ViewGroup;
 import android.webkit.ConsoleMessage;
 import android.webkit.RenderProcessGoneDetail;
@@ -18,6 +20,8 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
 import androidx.webkit.JavaScriptReplyProxy;
+import androidx.webkit.WebMessageCompat;
+import androidx.webkit.WebMessagePortCompat;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
 
@@ -26,10 +30,8 @@ import com.google.gson.JsonObject;
 import java.io.ByteArrayInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -38,20 +40,14 @@ import java.util.function.Consumer;
 /**
  * Owns one document session and exposes the bridge only to the trusted main-frame origin.
  *
- * <p>The WebView serves packaged assets for the app origin and blocks every other request. Each
- * main-frame navigation opens a new backend view context and revokes the previous one, so replies
- * never reach a different document. All methods run on the main thread.
+ * <p>The WebView serves packaged assets for the app origin and allows the document's loopback IPC.
+ * Each main-frame navigation opens a new backend view context and revokes the previous one, so
+ * replies never reach a different document. All methods run on the main thread.
  */
 final class Renderer {
-    /** Message kinds the client SDK may send; the rest belong to the backend direction. */
-    private static final List<String> CLIENT_KINDS =
-            Arrays.asList("hello", "invoke", "listen", "unlisten", "cancel", "close");
-
-    /** Message kinds the backend may deliver to the document. */
-    private static final List<String> SERVER_KINDS =
-            Arrays.asList("hello", "result", "error", "event", "subscription-error");
-
-    /** Headers for packaged assets: no sniffing, no caching and same-origin resources only. */
+    /**
+     * Packaged assets allow same-origin resources and the capability-protected loopback channel.
+     */
     private static final Map<String, String> HEADERS;
 
     static {
@@ -61,8 +57,8 @@ final class Renderer {
         headers.put(
                 "Content-Security-Policy",
                 "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src"
-                        + " 'self'; connect-src 'self'; frame-src 'self'; object-src 'none';"
-                        + " base-uri 'none'; form-action 'none'");
+                    + " 'self'; connect-src 'self' ws://127.0.0.1:*; frame-src 'self'; object-src"
+                    + " 'none'; base-uri 'none'; form-action 'none'");
         HEADERS = Collections.unmodifiableMap(headers);
     }
 
@@ -72,9 +68,14 @@ final class Renderer {
     private final Consumer<String> failed;
 
     /** Backend view context of the current document, or null while no session is open. */
-    private String context;
+    private WebViewSession session;
 
-    /** Reply channel bound to the current document by its first hello message. */
+    private WebViewChannel channel;
+    private boolean inputStarted;
+    private String channelNonce;
+    private boolean directChannel;
+
+    /** Document reply proxy for connection grants and, after hello, fallback web replies. */
     private JavaScriptReplyProxy reply;
 
     private boolean closed;
@@ -120,22 +121,36 @@ final class Renderer {
                     if (!mainFrame
                             || !originOf(origin).equals(assets.origin)
                             || closed
-                            || context == null) {
+                            || session == null
+                            || session.isClosed()) {
                         return;
                     }
                     try {
                         String data = message.getData();
                         require(data != null, "Text message required");
-                        JsonObject payload = assets.webProtocol.parse(data);
-                        String kind = text(payload, "kind");
-                        require(CLIENT_KINDS.contains(kind), "Invalid WebView direction");
-                        // The first message of a document must be hello and binds its reply proxy.
-                        if (reply == null) {
-                            require(kind.equals("hello"), "Expected WebView hello");
-                            reply = proxy;
+                        if (data.startsWith(WebViewChannel.REQUEST_PREFIX)) {
+                            openChannel(data, proxy);
+                            return;
                         }
-                        runtime.send("web", "context", context, "payload", payload);
-                        if (kind.equals("close")) context = null;
+                        require(
+                                channel == null && channelNonce == null && !directChannel,
+                                "Document transport already selected");
+                        inputStarted = true;
+                        // Bound queued text cheaply; exact UTF-8 and schema checks run on the
+                        // writer.
+                        require(
+                                data.length() <= ProtocolLimits.MAX_MESSAGE_BYTES,
+                                "Message too large");
+                        WebViewSession current = session;
+                        if (reply == null) reply = proxy;
+                        runtime.sendWeb(
+                                current,
+                                data,
+                                () -> {
+                                    if (session != current) return;
+                                    revoke();
+                                    failed.accept("Invalid WebView message");
+                                });
                     } catch (Exception error) {
                         revoke();
                         failed.accept("Invalid WebView message");
@@ -143,7 +158,16 @@ final class Renderer {
                 });
         // bridge.js adapts the native object to the chrome.webview API the client SDK expects.
         WebViewCompat.addDocumentStartJavaScript(
-                view, assets.read("bridge.js"), Collections.singleton(assets.origin));
+                view,
+                assets.read("bridge.js")
+                        .replace("__BUNAWAY_PORT_PREFIX__", WebViewChannel.REQUEST_PREFIX)
+                        .replace(
+                                "__BUNAWAY_MAX_PENDING__",
+                                Integer.toString(ProtocolLimits.MAX_PENDING))
+                        .replace(
+                                "__BUNAWAY_MAX_MESSAGE_BYTES__",
+                                Integer.toString(ProtocolLimits.MAX_MESSAGE_BYTES)),
+                Collections.singleton(assets.origin));
         view.setWebChromeClient(
                 new WebChromeClient() {
                     @Override
@@ -175,8 +199,10 @@ final class Renderer {
                             webView.stopLoading();
                             return;
                         }
-                        context = "view-" + UUID.randomUUID();
-                        runtime.send("session-open", "context", context, "viewId", assets.view);
+                        session =
+                                new WebViewSession("view-" + UUID.randomUUID(), assets.webProtocol);
+                        runtime.send(
+                                "session-open", "context", session.context, "viewId", assets.view);
                     }
 
                     @Override
@@ -199,11 +225,111 @@ final class Renderer {
                 });
     }
 
+    /** Select transport only as the document's first input, after native origin/frame checks. */
+    private void openChannel(String request, JavaScriptReplyProxy proxy) {
+        require(!inputStarted, "Document transport already selected");
+        String nonce = request.substring(WebViewChannel.REQUEST_PREFIX.length());
+        require(
+                nonce.length() == 36 && UUID.fromString(nonce).toString().equals(nonce),
+                "Invalid channel nonce");
+        inputStarted = true;
+        reply = proxy;
+        if (assets.context.checkSelfPermission(android.Manifest.permission.INTERNET)
+                        == PackageManager.PERMISSION_GRANTED
+                && NetworkSecurityPolicy.getInstance().isCleartextTrafficPermitted("127.0.0.1")) {
+            channelNonce = nonce;
+            runtime.send(
+                    "channel-open",
+                    "context",
+                    session.context,
+                    "nonce",
+                    nonce,
+                    "origin",
+                    assets.origin);
+            return;
+        }
+        openPort(request, proxy);
+    }
+
+    /** Delivers a one-use endpoint only to the still-current document that requested it. */
+    void receiveChannel(JsonObject frame) {
+        if (closed
+                || session == null
+                || session.isClosed()
+                || channelNonce == null
+                || !session.context.equals(text(frame, "context"))
+                || !channelNonce.equals(text(frame, "nonce"))) return;
+        String nonce = channelNonce;
+        channelNonce = null;
+        String endpoint = text(frame, "url");
+        if (endpoint.isEmpty()) {
+            openPort(WebViewChannel.REQUEST_PREFIX + nonce, reply);
+            return;
+        }
+        Uri uri = Uri.parse(endpoint);
+        require(
+                "ws".equals(uri.getScheme())
+                        && "127.0.0.1".equals(uri.getHost())
+                        && uri.getPort() > 0
+                        && uri.getPort() <= 65535
+                        && ("127.0.0.1:" + uri.getPort()).equals(uri.getEncodedAuthority())
+                        && uri.getEncodedQuery() == null
+                        && uri.getEncodedFragment() == null,
+                "Invalid document endpoint");
+        String path = uri.getEncodedPath();
+        require(
+                path != null
+                        && path.length() == 37
+                        && path.startsWith("/")
+                        && UUID.fromString(path.substring(1)).toString().equals(path.substring(1)),
+                "Invalid document capability");
+        directChannel = true;
+        reply.postMessage(WebViewChannel.REQUEST_PREFIX + "socket:" + nonce + ":" + endpoint);
+    }
+
+    private void openPort(String request, JavaScriptReplyProxy proxy) {
+        String nonce = request.substring(WebViewChannel.REQUEST_PREFIX.length());
+        if (!WebViewChannel.supported()) {
+            proxy.postMessage(WebViewChannel.REQUEST_PREFIX + "fallback:" + nonce);
+            return;
+        }
+        WebViewSession current = session;
+        WebMessagePortCompat[] ports = WebViewCompat.createWebMessageChannel(view);
+        try {
+            channel =
+                    new WebViewChannel(
+                            current,
+                            ports[0],
+                            runtime,
+                            () -> {
+                                if (session != current) return;
+                                revoke();
+                                failed.accept("Invalid WebView message");
+                            });
+            runtime.connectChannel(channel);
+            // The bridge accepts only its own nonce, including when a navigation races this post.
+            WebViewCompat.postWebMessage(
+                    view,
+                    new WebMessageCompat(request, new WebMessagePortCompat[] {ports[1]}),
+                    Uri.parse(assets.origin));
+        } catch (RuntimeException error) {
+            if (channel != null) runtime.disconnectChannel(channel);
+            else ports[0].close();
+            try {
+                ports[1].close();
+            } catch (IllegalStateException transferred) {
+                // A transferred endpoint belongs to JS; closing its peer already revokes access.
+            }
+            throw error;
+        }
+    }
+
     /**
      * Serves a GET request for the app origin from {@code assets/bunaway/web/}.
      *
-     * <p>Other methods and origins receive 403, so the WebView never reaches the network. Paths
-     * that could escape the web directory or expose hidden files are also rejected.
+     * <p>Other intercepted methods and origins receive 403. The direct WebSocket uses a separate
+     * capability-protected loopback connection. Paths that could escape the web directory or expose
+     * hidden files are also rejected.
      */
     private WebResourceResponse assetResponse(WebResourceRequest request) {
         if (!request.getMethod().equals("GET")
@@ -276,15 +402,14 @@ final class Renderer {
      * <p>Messages for a revoked or older context are dropped. A message in the client direction
      * fails the document.
      */
-    void receive(String id, JsonObject message) {
-        if (closed || !id.equals(context)) return;
+    void receive(String id, BunProcess.WebMessage message) {
+        if (closed || session == null || !id.equals(session.context) || !session.acceptsReplies())
+            return;
         try {
-            require(
-                    SERVER_KINDS.contains(text(message, "kind")),
-                    "Invalid backend WebView direction");
+            message.checkDirection();
             // The process boundary already validated the nested Web message. The proxy belongs to
             // its document.
-            if (reply != null) reply.postMessage(message.toString());
+            if (reply != null) reply.postMessage(message.json);
         } catch (Exception error) {
             revoke();
             failed.accept("Invalid backend response");
@@ -293,9 +418,19 @@ final class Renderer {
 
     /** Ends the current backend view session and drops the document's reply proxy. */
     private void revoke() {
-        if (context != null) runtime.send("revoke", "context", context);
-        context = null;
+        channelNonce = null;
+        directChannel = false;
+        if (channel != null) {
+            runtime.disconnectChannel(channel);
+            channel = null;
+        }
+        if (session != null) {
+            session.close();
+            runtime.send("revoke", "context", session.context);
+        }
+        session = null;
         reply = null;
+        inputStarted = false;
     }
 
     /** Revokes the session and destroys the WebView. Safe to call repeatedly. */

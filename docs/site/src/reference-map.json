@@ -111,6 +111,7 @@
           "PROTOCOL_VERSION",
           "parseMessage",
           "serializeMessage",
+          "validateMessage",
           "parseBootstrap",
           "parseHostResponse",
           "serializeHostResponse",
