@@ -1324,6 +1324,73 @@ test.each([
   },
 );
 
+test.each([
+  "reject",
+  "throw",
+])(
+  "cancelled listens release capacity when send fails with %s",
+  async (mode) => {
+    const { transport, client } = await connected();
+    const send = transport.send.bind(transport);
+    const failure = {
+      code: "BUSY",
+      message: "Transport queue full.",
+    };
+    let cancelListen = () => {};
+    let rejectListenSend = (_cause: unknown) => {};
+    transport.send = (text) => {
+      if (parseMessage(text).kind !== "listen") {
+        return send(text);
+      }
+      if (mode === "throw") {
+        // A transport can synchronously trigger cancellation before rejecting a frame.
+        cancelListen();
+        throw failure;
+      }
+      return new Promise<void>((_resolve, reject) => {
+        rejectListenSend = reject;
+      });
+    };
+    try {
+      for (let index = 0; index < API_LIMITS.maxPending; index++) {
+        const controller = new AbortController();
+        cancelListen = () => controller.abort();
+        const pending = client.listen("notes.changed", () => {}, {
+          signal: controller.signal,
+          onError: () => {},
+        });
+        await flush();
+        if (mode === "reject") {
+          controller.abort();
+          rejectListenSend(failure);
+        }
+        await expect(pending).rejects.toMatchObject({
+          code: "CANCELLED",
+        });
+        await flush();
+      }
+      // None of the rejected frames can create a remote subscription or a late reply.
+      expect(transport.requests("listen")).toHaveLength(0);
+      expect(transport.requests("unlisten")).toHaveLength(0);
+      expect(transport.closed).toBe(false);
+      transport.send = send;
+      const resumed = client
+        .invoke("notes.read", {
+          key: "after-send-failure",
+        })
+        .catch((cause: unknown) => cause);
+      await flush();
+      const invocation = transport.requests("invoke").at(-1);
+      if (invocation) {
+        transport.emit(serverResult(invocation.id, "resumed"));
+      }
+      await expect(resumed).resolves.toBe("resumed");
+    } finally {
+      await client.close();
+    }
+  },
+);
+
 test("aborting an established subscription releases it", async () => {
   const { transport, client } = await connected();
   const controller = new AbortController();

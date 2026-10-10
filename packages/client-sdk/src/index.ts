@@ -577,24 +577,20 @@ class ClientSession<C extends CommandMap, E extends EventMap>
             return;
           }
           current.sent = true;
-          try {
-            this.transport.send(text).then(
-              () => {},
-              (cause) =>
-                this.requests.get(id)?.reject(
-                  toBunawayError(cause, {
-                    code: "INTERNAL",
-                    message: "Send failed.",
-                  }),
-                ),
-            );
-          } catch (cause) {
+          const onSendFailure = (cause: unknown): void => {
+            // A rejected frame cannot create a subscription, even if already cancelled.
+            this.cancelledListens.delete(id);
             current.reject(
               toBunawayError(cause, {
                 code: "INTERNAL",
                 message: "Send failed.",
               }),
             );
+          };
+          try {
+            this.transport.send(text).then(() => {}, onSendFailure);
+          } catch (cause) {
+            onSendFailure(cause);
           }
         },
         (cause) => this.requests.get(id)?.reject(cause),
