@@ -3,6 +3,49 @@ import { BunawayError } from "@bunaway/protocol";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import backendData from "./backend-data.txt" with { type: "file" };
+
+// Intentionally leave unref'ed descendants and inherited pipes for the native host to own.
+const descendantDirectory = await mkdtemp(
+  join(tmpdir(), "bunaway-descendants-"),
+);
+const descendants: number[] = [];
+try {
+  for (let index = 0; index < 2; index++) {
+    const marker = join(descendantDirectory, `${index}.pid`);
+    const child = Bun.spawn(
+      [
+        "/system/bin/sh",
+        "-c",
+        'sleep 120 & printf "%s\\n" "$!" > "$1"; wait',
+        "bunaway-fixture-child",
+        marker,
+      ],
+      {
+        stdin: "ignore",
+        stdout: "inherit",
+        stderr: "inherit",
+      },
+    );
+    child.unref();
+    const deadline = Date.now() + 5000;
+    while (!(await Bun.file(marker).exists()) || Bun.file(marker).size === 0) {
+      if (Date.now() >= deadline) {
+        throw new Error("Fixture descendant did not start");
+      }
+      await Bun.sleep(10);
+    }
+    descendants.push(
+      child.pid,
+      Number((await readFile(marker, "utf8")).trim()),
+    );
+  }
+} finally {
+  await rm(descendantDirectory, {
+    recursive: true,
+    force: true,
+  });
+}
 
 const infoSchema = {
   type: "object",
@@ -16,11 +59,18 @@ const infoSchema = {
     pid: {
       type: "integer",
     },
+    descendants: {
+      type: "array",
+      items: {
+        type: "integer",
+      },
+    },
   },
   required: [
     "count",
     "cancelled",
     "pid",
+    "descendants",
   ],
   additionalProperties: false,
 } as const;
@@ -43,6 +93,13 @@ export const app = defineApp({
     },
   },
   commands: {
+    "test.files": command({
+      input: {},
+      output: {
+        type: "string",
+      },
+      handle: () => Bun.file(new URL(backendData, import.meta.url)).text(),
+    }),
     "test.echo": command({
       input: echoSchema,
       output: echoSchema,
@@ -100,6 +157,7 @@ export const app = defineApp({
           count: Number(state.get("count")),
           cancelled: Number(state.get("cancelled")),
           pid: process.pid,
+          descendants,
         };
       },
     }),

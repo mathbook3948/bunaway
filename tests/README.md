@@ -16,6 +16,12 @@ Gradle 출력의 최종 application ID와 잘못된 메타데이터 거부도 �
 정상 종료와 설치 실패, 시작 실패, 취소 후 ADB 종료 및 잠금 해제를 확인한다.
 이 결과는 ARM64 실기기, release APK/AAB와 네이티브 플러그인 검증이 아니다.
 실제 런처 intent와 renderer 실패 후 회전, Bun의 cacheDir 임시 파일 쓰기도 확인한다.
+백엔드 파일 import의 APK 추출과 읽기, Bun이 만든 자식 및 손자의 회전 중 유지와
+뒤로가기 및 renderer 실패 후 정리도 검사한다. 설치된 Android Worker 검사는 텍스트,
+바이너리와 JS 파일 자산을 번들하고 추출한 뒤 원본 소스를 삭제하고 IPC 명령으로 읽는다.
+`lifecycle/android-process-group.test.ts`는 Linux와 JDK 17 이상에서 실제 Java 소유자를
+컴파일하고 시작 취소, 정상 및 실패 종료, 강제 종료 후 자식과 손자, 상속된 파이프 정리를
+검사한다. 다른 그룹의 프로세스가 유지되는지도 확인하며 Android 기기 실행을 대신하지 않는다.
 `packaging/publication.test.ts`는 공통 게시의 복구 성공, 게시와 복구 오류의 동시 유지,
 게시 후 백업 정리 실패, Android 출력 대상과 패키징 BuildTarget의 분리를 검사한다.
 

@@ -23,6 +23,10 @@ document.getElementById("fail-renderer")?.addEventListener("click", () => {
 async function run() {
   const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
   await client.ready;
+  assert(
+    (await client.invoke("test.files", null)) === "Android backend 한글 😀\n",
+    "Packaged backend file import was not extracted with the bundle",
+  );
   // The response spans many pipe reads, including split UTF-8 encodings of Korean and emoji.
   const largeEcho = "가😀".repeat(32_768);
   assert(

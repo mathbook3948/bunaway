@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  cp,
   mkdir,
   mkdtemp,
   readFile,
@@ -59,7 +60,7 @@ const project = {
   },
 };
 
-test("installed Android assets Worker bundles the web SDK and an executable process backend", async () => {
+test("installed Android assets Worker preserves backend file imports through extraction and IPC execution", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "bunaway-android-worker-"));
   try {
     const app = await createProject(resolve(root, "app"));
@@ -71,13 +72,54 @@ test("installed Android assets Worker bundles the web SDK and an executable proc
       ],
       app,
     );
+    const text = "Android backend 한글 😀";
+    const binary = Buffer.from([
+      0,
+      128,
+      255,
+    ]);
+    const raw = "not valid JavaScript!";
+    for (const [name, content] of [
+      [
+        "data.txt",
+        text,
+      ],
+      [
+        "data.bin",
+        binary,
+      ],
+      [
+        "raw.js",
+        raw,
+      ],
+    ] as const) {
+      await Bun.write(resolve(app, "src-bunaway", name), content);
+    }
     await Bun.write(
       resolve(app, "src-bunaway/app.ts"),
-      'import { defineApp } from "@bunaway/backend"; export default defineApp({ modules: [] });',
+      `import { command, defineApp } from "@bunaway/backend";
+import text from "./data.txt" with { type: "file" };
+import binary from "./data.bin" with { type: "file" };
+import raw from "./raw.js" with { type: "file" };
+export default defineApp({ modules: [], commands: {
+  "test.files": command({ input: {}, output: { type: "array", items: { type: "string" } },
+    handle: () => Promise.all([text, binary, raw].map(async file =>
+      Buffer.from(await Bun.file(new URL(file, import.meta.url)).arrayBuffer()).toString("hex")))
+  })
+} });`,
     );
+    const policy = {
+      ...project.policy,
+      views: project.policy.views.map((view) => ({
+        ...view,
+        commands: [
+          "test.files",
+        ],
+      })),
+    };
     await Bun.write(
       resolve(app, "src-bunaway/policy.json"),
-      JSON.stringify(project.policy),
+      JSON.stringify(policy),
     );
     const validated = await validateProject(app);
     assertAndroidProject(validated);
@@ -96,8 +138,18 @@ test("installed Android assets Worker bundles the web SDK and an executable proc
       true,
     );
     expect(await Bun.file(resolve(assets, "web/main.js")).exists()).toBe(true);
-    const backend = resolve(assets, "backend.js");
-    // Boot the emitted file outside the installed app so unresolved package imports cannot hide.
+    const runtime = resolve(root, "runtime");
+    await cp(resolve(assets, "backend"), runtime, {
+      recursive: true,
+    });
+    const backend = resolve(runtime, "backend.js");
+    // Extract the APK's backend tree and remove sources to exercise relative file imports.
+    await rm(assets, {
+      recursive: true,
+    });
+    await rm(resolve(app, "src-bunaway"), {
+      recursive: true,
+    });
     const child = Bun.spawn(
       [
         process.execPath,
@@ -105,7 +157,7 @@ test("installed Android assets Worker bundles the web SDK and an executable proc
         backend,
       ],
       {
-        cwd: assets,
+        cwd: runtime,
         stdin: "pipe",
         stdout: "pipe",
         stderr: "pipe",
@@ -133,7 +185,7 @@ test("installed Android assets Worker bundles the web SDK and an executable proc
           entrypoint: backend,
           buildId: "test",
           backendContext: "backend-test",
-          policy: project.policy,
+          policy,
         },
       });
       expect(await next()).toMatchObject({
@@ -150,6 +202,51 @@ test("installed Android assets Worker bundles the web SDK and an executable proc
       });
       expect(await next()).toMatchObject({
         kind: "ready",
+      });
+      send({
+        kind: "session-open",
+        context: "view-test",
+        viewId: "main",
+      });
+      send({
+        kind: "web",
+        context: "view-test",
+        payload: {
+          kind: "hello",
+          protocol: PROTOCOL_VERSION,
+          features: [],
+          buildId: "test",
+        },
+      });
+      expect(await next()).toMatchObject({
+        kind: "web",
+        payload: {
+          kind: "hello",
+        },
+      });
+      send({
+        kind: "web",
+        context: "view-test",
+        payload: {
+          kind: "invoke",
+          protocol: PROTOCOL_VERSION,
+          id: "files",
+          command: "test.files",
+          payload: null,
+        },
+      });
+      expect(await next()).toMatchObject({
+        kind: "web",
+        context: "view-test",
+        payload: {
+          kind: "result",
+          id: "files",
+          payload: [
+            Buffer.from(text).toString("hex"),
+            binary.toString("hex"),
+            Buffer.from(raw).toString("hex"),
+          ],
+        },
       });
       send({
         kind: "shutdown",

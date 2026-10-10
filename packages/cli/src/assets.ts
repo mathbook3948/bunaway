@@ -488,6 +488,10 @@ export async function bundleAndroidAssets(
       root: project.root,
       target: "bun",
       packages: "bundle",
+      naming: {
+        entry: "backend.js",
+        asset: "backend-assets/[name]-[hash].[ext]",
+      },
     },
     {
       name: "android-app-entry",
@@ -500,14 +504,37 @@ export async function bundleAndroidAssets(
       },
     },
   );
-  const output = backend[0];
-  if (backend.length !== 1 || !output) {
+  await writeAndroidBackend(backend, assets);
+}
+
+/** Preserve the backend entry and file imports together for extraction from the APK. */
+export async function writeAndroidBackend(
+  outputs: readonly Bun.BuildArtifact[],
+  assets: string,
+): Promise<void> {
+  const entries = outputs.filter((output) => output.kind === "entry-point");
+  if (
+    entries.length !== 1 ||
+    basename(entries[0]?.path ?? "") !== "backend.js"
+  ) {
     throw new Error("Missing Android backend bundle.");
   }
-  await writeFile(
-    resolve(assets, "backend.js"),
-    await bundleBytes(output, false),
-  );
+  const destination = resolve(assets, "backend");
+  for (const output of outputs) {
+    if (output.kind !== "entry-point" && output.kind !== "asset") {
+      throw new Error(`Unexpected Android backend output: ${output.kind}`);
+    }
+    const path = resolve(destination, output.path);
+    if (!inside(destination, path)) {
+      throw new Error(
+        `Android backend output escapes destination: ${output.path}`,
+      );
+    }
+    await mkdir(dirname(path), {
+      recursive: true,
+    });
+    await writeFile(path, await bundleBytes(output, false));
+  }
 }
 
 /** Bundle the macOS Bun entry and backend Worker; return file imports for compilation. */

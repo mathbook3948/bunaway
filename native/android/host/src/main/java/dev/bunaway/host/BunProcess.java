@@ -5,21 +5,29 @@ import static dev.bunaway.host.ProtocolLimits.*;
 
 import android.os.Handler;
 import android.os.Looper;
+import android.system.ErrnoException;
+import android.system.Os;
+import android.system.OsConstants;
 import android.util.Log;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
@@ -40,6 +48,8 @@ final class BunProcess {
     final AppAssets assets;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Executors.newFixedThreadPool(IO_THREADS);
+    // Cleanup must not queue behind blocked pipe readers, or block the Activity's main thread.
+    private final ScheduledExecutorService cleanup = Executors.newSingleThreadScheduledExecutor();
     // A single writer keeps frames ordered; its bounded queue applies backpressure.
     private final ThreadPoolExecutor writer =
             new ThreadPoolExecutor(
@@ -61,6 +71,7 @@ final class BunProcess {
     // Orders process creation against close so a closing owner never starts a child.
     private final Object lock = new Object();
     private volatile Process process;
+    private volatile ProcessGroup processGroup;
     private volatile boolean closing;
     private boolean ready;
     private boolean helloSeen;
@@ -94,11 +105,20 @@ final class BunProcess {
                                 new File(
                                         assets.context.getApplicationInfo().nativeLibraryDir,
                                         "libbun.so");
-                        Process child;
+                        ProcessGroup owner;
                         synchronized (lock) {
                             if (closing) return;
-                            ProcessBuilder builder =
-                                    new ProcessBuilder(
+                            Map<String, String> environment = new HashMap<>();
+                            // Android has no /tmp. Give Bun's OS APIs app-owned writable
+                            // directories.
+                            environment.put(
+                                    "TMPDIR", assets.context.getCacheDir().getAbsolutePath());
+                            environment.put("HOME", assets.context.getFilesDir().getAbsolutePath());
+                            owner =
+                                    new ProcessGroup(
+                                            Arrays.asList("/system/bin/toybox", "setsid"),
+                                            "/system/bin/sh",
+                                            Arrays.asList(
                                                     runtimeFile.getPath(),
                                                     "--no-env-file",
                                                     "--no-install",
@@ -106,17 +126,21 @@ final class BunProcess {
                                                             + new File(directory, "bunfig.toml"),
                                                     "--tsconfig-override="
                                                             + new File(directory, "tsconfig.json"),
-                                                    new File(directory, "backend.js").getPath())
-                                            .directory(directory);
-                            // Android has no /tmp. Give Bun's OS APIs app-owned writable
-                            // directories.
-                            builder.environment()
-                                    .put("TMPDIR", assets.context.getCacheDir().getAbsolutePath());
-                            builder.environment()
-                                    .put("HOME", assets.context.getFilesDir().getAbsolutePath());
-                            child = builder.start();
-                            process = child;
+                                                    new File(directory, "backend.js").getPath()),
+                                            directory,
+                                            environment,
+                                            android.os.Process.myPid(),
+                                            BunProcess::killProcessGroup,
+                                            SHUTDOWN_TIMEOUT_MS);
+                            processGroup = owner;
+                            process = owner.process;
                         }
+                        owner.prepare();
+                        synchronized (lock) {
+                            if (closing) return;
+                            owner.begin();
+                        }
+                        Process child = owner.process;
                         Log.i("BunawayHost", "Bun started");
                         io.execute(() -> drainDiagnostics(child));
                         io.execute(() -> observeExit(child));
@@ -181,8 +205,7 @@ final class BunProcess {
                         if (!closing) fail("Backend exit observation interrupted");
                     });
         } finally {
-            writer.shutdownNow();
-            io.shutdown();
+            finishProcess();
         }
     }
 
@@ -367,14 +390,45 @@ final class BunProcess {
             if (process != null) send("shutdown");
         }
         detach();
-        main.postDelayed(
-                () -> {
-                    Process child = process;
-                    if (child != null && child.isAlive()) child.destroyForcibly();
-                    writer.shutdownNow();
-                    io.shutdown();
-                },
-                SHUTDOWN_TIMEOUT_MS);
+        scheduleCleanup(SHUTDOWN_TIMEOUT_MS);
+    }
+
+    /**
+     * Sweeps the owned group and closes pipes on a background thread, including after leader exit.
+     */
+    private void finishProcess() {
+        try {
+            ProcessGroup owner = processGroup;
+            if (owner != null) owner.close();
+        } catch (IOException error) {
+            Log.e("BunawayHost", "Backend process group cleanup failed", error);
+        } finally {
+            writer.shutdownNow();
+            io.shutdown();
+            cleanup.shutdownNow();
+        }
+    }
+
+    /**
+     * Requests cleanup independently of pipe I/O; an exited owner may already have completed it.
+     */
+    private void scheduleCleanup(long delayMs) {
+        try {
+            cleanup.schedule(this::finishProcess, delayMs, TimeUnit.MILLISECONDS);
+        } catch (RejectedExecutionException error) {
+            // Only finishProcess shuts this executor down, after releasing the process group.
+        }
+    }
+
+    /** Signals an isolated backend group, never the Android host or another app. */
+    private static void killProcessGroup(int group) throws IOException {
+        try {
+            Os.kill(-group, OsConstants.SIGKILL);
+        } catch (ErrnoException error) {
+            if (error.errno != OsConstants.ESRCH) {
+                throw new IOException("Cannot terminate backend process group", error);
+            }
+        }
     }
 
     /**
@@ -391,8 +445,7 @@ final class BunProcess {
         Consumer<String> reportFailure = onFailure;
         // Mark closed before callbacks can revoke a document or attempt another write.
         close();
-        Process child = process;
-        if (child != null) child.destroyForcibly();
+        scheduleCleanup(0);
         if (reportFailure != null) reportFailure.accept(message);
     }
 }

@@ -2,6 +2,7 @@ import { cp, mkdir } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { appModules } from "#cli/app-modules";
 import { assembleAndroidApk } from "#cli/android";
+import { writeAndroidBackend } from "#cli/assets";
 import { frameworkRoot, writeJson } from "#cli/files";
 import { run } from "#cli/processes";
 import { parsePolicy } from "@bunaway/protocol";
@@ -32,6 +33,10 @@ const backend = await Bun.build({
   root: frameworkRoot,
   target: "bun",
   packages: "bundle",
+  naming: {
+    entry: "backend.js",
+    asset: "backend-assets/[name]-[hash].[ext]",
+  },
   plugins: [
     appModules({
       appEntry: resolve(fixture, "app.ts"),
@@ -42,11 +47,10 @@ const backend = await Bun.build({
     }),
   ],
 });
-const backendOutput = backend.outputs[0];
-if (!backend.success || backend.outputs.length !== 1 || !backendOutput) {
+if (!backend.success) {
   throw new Error(`Android backend bundle failed: ${backend.logs.join("\n")}`);
 }
-await Bun.write(resolve(assets, "backend.js"), backendOutput);
+await writeAndroidBackend(backend.outputs, assets);
 const frontend = await Bun.build({
   entrypoints: [
     resolve(fixture, "web/client.ts"),

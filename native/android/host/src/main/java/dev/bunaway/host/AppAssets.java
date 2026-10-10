@@ -131,13 +131,32 @@ final class AppAssets {
         if (!directory.isDirectory() && !directory.mkdirs()) {
             throw new IOException("Cannot create backend directory");
         }
-        for (String name : new String[] {"backend.js", "bunfig.toml", "tsconfig.json"}) {
+        copyBackendAssets("bunaway/backend", directory);
+        for (String name : new String[] {"bunfig.toml", "tsconfig.json"}) {
             try (InputStream input = context.getAssets().open("bunaway/" + name);
                     FileOutputStream output = new FileOutputStream(new File(directory, name))) {
                 copy(input, output);
             }
         }
         return directory;
+    }
+
+    /** Copies the bundled entry and file imports while retaining their relative paths. */
+    private void copyBackendAssets(String source, File destination) throws IOException {
+        String[] names = context.getAssets().list(source);
+        if (names == null || names.length == 0) {
+            try (InputStream input = context.getAssets().open(source);
+                    FileOutputStream output = new FileOutputStream(destination)) {
+                copy(input, output);
+            }
+            return;
+        }
+        if (!destination.isDirectory() && !destination.mkdirs()) {
+            throw new IOException("Cannot create backend asset directory");
+        }
+        for (String name : names) {
+            copyBackendAssets(source + "/" + name, new File(destination, name));
+        }
     }
 
     private static void copy(InputStream input, OutputStream output) throws IOException {

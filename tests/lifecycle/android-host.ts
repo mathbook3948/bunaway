@@ -148,7 +148,9 @@ async function requireChildExit(pid: number): Promise<void> {
     }
     await Bun.sleep(100);
   }
-  throw new Error("Bun survived Activity finish or renderer failure.");
+  throw new Error(
+    `Backend process ${pid} survived Activity finish or renderer failure.`,
+  );
 }
 
 const uiDump = `/sdcard/bunaway-${crypto.randomUUID()}.xml`;
@@ -193,10 +195,12 @@ type Report = {
   before: {
     count: number;
     pid: number;
+    descendants: number[];
   };
   after: {
     count: number;
     pid: number;
+    descendants: number[];
   };
   error?: string;
 };
@@ -211,7 +215,12 @@ function isSnapshot(value: unknown): value is Report["before"] {
     value.count >= 0 &&
     typeof value.pid === "number" &&
     Number.isSafeInteger(value.pid) &&
-    value.pid > 0
+    value.pid > 0 &&
+    Array.isArray(value.descendants) &&
+    value.descendants.length === 4 &&
+    value.descendants.every(
+      (pid) => typeof pid === "number" && Number.isSafeInteger(pid) && pid > 0,
+    )
   );
 }
 function parseReport(text: string): Report {
@@ -295,6 +304,12 @@ try {
     new RegExp(`^\\s*${first.after.pid}\\s+${hostPid}\\s`, "m").test(running),
     "Bun is not the actual app child",
   );
+  for (const pid of first.after.descendants) {
+    assert(
+      new RegExp(`^\\s*${pid}\\s`, "m").test(running),
+      "Fixture descendant did not start",
+    );
+  }
   await command("shell", "input", "keyevent", "KEYCODE_HOME");
   await readUI();
   assert(
@@ -313,8 +328,16 @@ try {
     rotated.before.count === 2 && rotated.after.pid === first.after.pid,
     "Activity recreation replaced Core or Bun",
   );
+  assert(
+    JSON.stringify(rotated.after.descendants) ===
+      JSON.stringify(first.after.descendants),
+    "Rotation replaced backend descendants",
+  );
   await command("shell", "input", "keyevent", "4");
   await requireChildExit(first.after.pid);
+  for (const pid of first.after.descendants) {
+    await requireChildExit(pid);
+  }
 
   // Exercise the ready -> renderer failure -> closed owner -> Activity recreation path.
   await command("shell", "am", "force-stop", appId);
@@ -324,13 +347,17 @@ try {
   await tapNode(node, "Missing failure button bounds");
   await requireFailureText("Invalid WebView message");
   await requireChildExit(beforeFailure.after.pid);
+  for (const pid of beforeFailure.after.descendants) {
+    await requireChildExit(pid);
+  }
   await rotate();
   await requireFailureText("Backend is closed. Reopen the app.");
   await writeJson(resolve(inputs, "result.json"), {
     passed: true,
     first,
     rotated,
-    shutdown: "Bun PID absent after back",
+    shutdown:
+      "Bun and all inherited descendant PIDs absent after back and renderer failure",
     launcher: "Home launcher icon, verified launchedFromPackage and root task",
     rendererFailureRotation:
       "Closed owner shows native failure instead of attaching a WebView",

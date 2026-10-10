@@ -10,7 +10,8 @@
         "test.increment",
         "test.hold",
         "test.error",
-        "test.environment"
+        "test.environment",
+        "test.files"
       ],
       "events": ["test.changed"],
       "host": { "permissions": [] }

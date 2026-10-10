@@ -8,6 +8,7 @@ Java Activity와 Android WebView, APK에 포함한 Bun 1.4.2를 연결한다.
 | --- | --- |
 | `host/src/main/java/dev/bunaway/host/BunProcess.java` | 부팅, 협상, 파이프 입출력, 정상 종료와 기한 초과 처리 |
 | `FrameReader.java` | 프레임 크기를 먼저 제한하고 UTF-8 파이프 청크를 묶음으로 복사 |
+| `ProcessGroup.java` | 앱 코드 실행 전 그룹 격리, 시작 취소와 종료 후 자손 정리, 파이프 해제 |
 | `Renderer.java` | 패키지 자산, 출처와 main frame 검사, 문서별 컨텍스트와 응답 |
 | `BunawayActivity.java` | 화면 회전과 Activity 종료의 소유권 |
 | `AppAssets.java`, `Protocol.java` | APK 입력과 생성된 스키마 검증 |
@@ -56,6 +57,8 @@ mise run host:android
 큰 한글 및 이모지 응답이 여러 파이프 청크를 거쳐도 원문 그대로 도착하는지 검사한다.
 화면 회전으로 문서 세션이 바뀌어도 Bun PID와 Core 상태가 유지되는지 확인하고,
 뒤로가기로 Activity를 닫은 뒤 Bun PID가 사라지는지 검사한다.
+백엔드의 파일 import를 APK에서 추출한 뒤 읽고, 번들에서 만든 자식과 손자 프로세스가
+화면 회전 동안 유지되며 뒤로가기와 renderer 실패 후 모두 사라지는지도 검사한다.
 검사는 기기 회전 설정을 원래 값으로 복원하고 fixture 앱을 종료한다.
 홈 런처의 앱 아이콘을 눌러 실행하고 호출 주체와 root task를 확인한다. 홈 이동 후 복귀와
 뒤로가기 종료를 구분해 검사하며, renderer 실패 뒤 화면 회전이
@@ -67,3 +70,12 @@ APK와 실행 보고서는 `build/android-host/`에 남는다. Java 스키마 �
 Android 최소 API 29는 선언이며 현재 실제 실행 근거는 API 36 x86_64 에뮬레이터다.
 ARM64 런타임은 APK에 포함하고 해시를 검사했지만 실기기 실행은 별도 검증이 필요하다.
 release APK, AAB, 스토어, 외부 개발 서버와 네이티브 플러그인 어댑터는 미구현이다.
+
+`toybox setsid`로 Android 호스트와 다른 세션 및 프로세스 그룹을 만든다. 셸은 PID를
+알린 뒤 호스트의 시작 승인을 기다리므로, 그룹 검증 전이나 시작 취소 후에는 앱 코드를
+실행하지 않는다. 정상 Bun 종료 후에도 그룹을 정리하며 종료 기한 초과와 실패에서는
+그룹 전체에 SIGKILL을 보낸다. 정리는 파이프 I/O와 독립된 스레드에서 수행하고 살아 있는
+그룹 구성원이 사라진 뒤 파이프를 닫는다. 별도 그룹이나 세션으로 분리한 자식은 앱이
+직접 종료해야 한다. `lifecycle/android-process-group.test.ts`는 Linux와 JDK 17 이상에서
+같은 Java 소유자로 시작 취소, 정상 종료, 실패와 강제 종료, 손자 정리와 다른 그룹의 보존을
+검사한다. 이 계약 검사는 Android 기기의 실행 검증과 구분한다.

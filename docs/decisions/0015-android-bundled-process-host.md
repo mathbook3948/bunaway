@@ -23,6 +23,10 @@ x64 baseline과 arm64 배포물을 고정한다. 자체 Bun VM 내장이나 JNI 
 `BunawayActivity`는 두 소유자를 화면 수명주기에 연결한다. 화면 회전으로 Activity를
 재생성할 때 Bun과 Core는 유지하고 기존 뷰 컨텍스트를 철회한 뒤 새 문서 세션을 연다.
 Activity 종료는 shutdown과 실제 자식 종료를 요구하며 기한 초과에는 강제 종료한다.
+앱 코드 실행 전에 `toybox setsid`로 별도 그룹을 만들고 PID, 부모, 그룹과 세션을 검증한
+뒤 시작을 승인한다. 정상 Bun 종료와 기한 초과, 부팅 및 renderer 실패에서 상속된 그룹의
+하위 프로세스를 정리하고 파이프를 닫는다. 별도 그룹이나 세션으로 분리한 자식의 수명은
+앱이 소유한다. 그룹 정리는 파이프 읽기와 독립된 스레드에서 수행한다.
 닫힌 Bun 세대에 새 Activity가 붙으면 ready 상태와 관계없이 오류 화면을 표시한다.
 TMPDIR는 앱 cacheDir, HOME은 filesDir로 설정한다. 현재 여러 Activity의 동시 실행은
 지원하지 않으며 기본 launchMode에서 각 인스턴스가 같은 백엔드 코드 경로를 쓸 수 있다.
@@ -46,6 +50,8 @@ Android 지원으로 간주하지 않는다. CLI는 `android sync`, `android bui
 프로젝트를 만든다. 앱 모듈의 `MainActivity.java`는 Java `BunawayActivity`를 상속하며
 앱이 Android 수명주기와 리소스를 직접 추가할 수 있다. 호스트 내부도 Java로 작성하고
 초기 Gradle 설정은 Groovy를 사용한다. Kotlin 컴파일 플러그인은 적용하지 않는다.
+백엔드 번들에는 JS 진입점과 파일 import 자산을 함께 보존한다. APK의 backend 트리를
+상대 경로 그대로 앱 전용 실행 디렉터리에 추출해 원본 프로젝트 없이 읽을 수 있게 한다.
 
 루트 빌드 설정, Wrapper와 `app/`은 최초에만 생성한다. 이후 sync는 프레임워크 library
 모듈과 APK 입력이 있는 `android/.bunaway/`만 원자적으로 교체한다.

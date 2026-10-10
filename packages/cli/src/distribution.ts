@@ -445,6 +445,7 @@ function requiredFrameworkFiles(): string[] {
       "Protocol",
       "AppAssets",
       "BunProcess",
+      "ProcessGroup",
       "FrameReader",
       "Renderer",
       "BunawayActivity",
