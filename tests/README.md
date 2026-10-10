@@ -1,5 +1,34 @@
 # Tests
 
+`mise run host:android`는 Windows의 Android SDK/JDK와 선택 기기에서 실제 APK를 검사한다.
+`ANDROID_SERIAL` 기본값은 `emulator-5554`이며 기기를 먼저 부팅하거나 연결해야 한다.
+공통 Core/SDK 명령, 이벤트와 구독 해제, 정책 거부, 취소, 자산과 subframe 경계,
+화면 회전 후 같은 Bun PID와 Core 상태, Activity 종료 뒤 실제 Bun 종료를 확인한다.
+홈 런처에서 fixture 아이콘을 눌러 실행하고 호출 주체와 root task를 확인한다.
+홈 이동과 복귀에서는 Bun을 유지하고, 시스템 뒤로가기에서는 종료하는지 구분해 검사한다.
+회전 설정은 원래 값으로 복원한다. Java 스키마 검사와 Android lint도 포함한다.
+실제 WebView에서 localStorage와 sessionStorage의 저장, 읽기와 제거도 확인한다.
+`cli/android.test.ts`는 지원하지 않는 설정과 잘못된 명령 인자, 대상 잠금, sync 후
+사용자 Java/Manifest/Gradle/Wrapper 보존, 생성 파일 교체, 무관한 프로젝트와 링크 거부를 검사한다.
+설치된 패키지의 실제 Android 번들 Worker를 실행하고 생성된 백엔드의 IPC 부팅 협상과 정상 종료도 검사한다.
+앱이 지정한 launcher 해석과 시작, ADB가 종료 코드 0으로 반환한 실행 오류의 실패 처리도 검사한다.
+Gradle 출력의 최종 application ID와 잘못된 메타데이터 거부도 검사한다.
+별도 프로세스의 ADB fixture로 설치와 시작 중 출력 잠금, debug 접미사가 붙은 ID의 전달,
+정상 종료와 설치 실패, 시작 실패, 취소 후 ADB 종료 및 잠금 해제를 확인한다.
+이 결과는 ARM64 실기기, release APK/AAB와 네이티브 플러그인 검증이 아니다.
+실제 런처 intent와 renderer 실패 후 회전, Bun의 cacheDir 임시 파일 쓰기도 확인한다.
+백엔드 파일 import의 APK 추출과 읽기, Bun이 만든 자식 및 손자의 회전 중 유지와
+뒤로가기 및 renderer 실패 후 정리도 검사한다. 설치된 Android Worker 검사는 텍스트,
+바이너리와 JS 파일 자산을 번들하고 추출한 뒤 원본 소스를 삭제하고 IPC 명령으로 읽는다.
+`lifecycle/android-process-group.test.ts`는 Linux와 JDK 17 이상에서 실제 Java 소유자를
+컴파일하고 시작 취소, 정상 및 실패 종료, 강제 종료 후 자식과 손자, 상속된 파이프 정리를
+검사한다. 다른 그룹의 프로세스가 유지되는지도 확인하며 Android 기기 실행을 대신하지 않는다.
+`lifecycle/android-backend-assets.test.ts`는 JDK 17 이상에서 실제 Java 추출 소유자를
+컴파일하고 APK 갱신 시 이전 파일 import 제거, 앱 데이터 보존과 추출 실패 후 재시도를 검사한다.
+Linux와 macOS에서는 기존 추출 트리와 루트의 심볼릭 링크가 외부 파일을 건드리지 않는지도 검사한다.
+`packaging/publication.test.ts`는 공통 게시의 복구 성공, 게시와 복구 오류의 동시 유지,
+게시 후 백업 정리 실패, Android 출력 대상과 패키징 BuildTarget의 분리를 검사한다.
+
 `api/clipboard.test.ts`는 텍스트 계약, 작업별 권한, SDK 호출 컨텍스트와 브라우저 번들을 검사한다.
 `lifecycle/clipboard-resources.test.ts`는 별도 프로세스의 Win32 바인딩 대체로 메모리 실패,
 소유권 이전, 잘못된 UTF-16, 점유와 취소, 종료 정리를 확인하며 데스크톱 클립보드를 바꾸지 않는다.

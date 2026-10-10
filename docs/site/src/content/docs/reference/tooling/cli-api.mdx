@@ -68,6 +68,26 @@ Windows에서는 호환되는 명령 구현 변경에 앱 코드만 교체하며
 반환된 보고서의 `ok`로 성공 여부를 확인하세요. 사전 검증에 실패하면 예외가 발생합니다.
 build가 true이면 웹 빌드를 포함한 buildProject 경로를 한 번 실행합니다. false이면 앱 소스와 웹 출력 없이도 기존 앱 산출물을 검증해 패키징합니다.
 
+## Android 동기화, 빌드와 실행
+
+`syncAndroidProject(directory): Promise<string>`는 웹 빌드와 Bun 번들을 실행하고 앱의
+`android/` 프로젝트를 갱신한 뒤 프로젝트의 절대 경로를 반환합니다. Windows와 Bun 1.4.2가
+필요하며 SDK/JDK와 Gradle 빌드는 요구하지 않습니다. 앱 Java 소스, Manifest와 Gradle 설정은
+보존하고 생성 영역인 `android/.bunaway/`만 교체합니다. 최초 실행에서는 Java 앱과 Wrapper를 생성합니다.
+
+`buildAndroidProject(directory): Promise<{ apk: string; appId: string }>`는 공통 앱 설정과
+정책을 검증하고 동기화한 네이티브 프로젝트를 빌드해 debug APK의 절대 경로와 앱 ID를 반환합니다.
+반환하는 `appId`는 Gradle 빌드 결과의 최종 application ID이며 앱의 네이티브 설정 변경을 반영합니다.
+`runAndroidProject(directory, serial): Promise<void>`는 APK를 빌드하고 선택한 기기에
+설치한 뒤 Activity를 시작합니다. 명령 종료 뒤 앱은 기기에서 계속 실행됩니다.
+빌드부터 설치와 Activity 시작까지 같은 대상 잠금을 유지합니다.
+실패는 Promise rejection으로 전달합니다. Windows, SDK와 JDK 경로, 단일 뷰와 빈
+네이티브 권한 등 현재 입력 제약은 [Android CLI](/reference/cli/android/)를 따릅니다.
+외부 웹 빌드와 Gradle 프로세스는 빌드 취소 신호로 정리합니다. 앱 코드 번들은 완료를
+기다린 다음 취소를 확인하며, 빌드 단계에서 취소되면 산출물을 게시하지 않습니다.
+실행 단계에서 취소되면 ADB 클라이언트의 종료를 확인한 뒤 잠금을 해제합니다.
+설치나 시작 실패와 취소는 이미 게시한 APK나 완료된 기기 작업을 되돌리지 않습니다.
+
 ## RestartController
 
 ```ts

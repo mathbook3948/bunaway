@@ -82,10 +82,14 @@ export async function extractDependencyArchive(
 
 /** Prepare pinned native inputs with the running Bun; verify-only never downloads or extracts. */
 export async function prepareNativeBuild(
-  target: "windows-x64" | "macos-arm64",
+  target: "windows-x64" | "macos-arm64" | "android",
   root = frameworkRoot,
   verifyOnly = false,
 ): Promise<void> {
+  if (target === "android") {
+    await prepareAndroidBuild(root, verifyOnly);
+    return;
+  }
   const windows = target === "windows-x64";
   assert(
     windows
@@ -163,6 +167,66 @@ export async function prepareNativeBuild(
   }
 }
 
+/** Verify both Android ABI pins before preparing their archives, executables and licenses. */
+async function prepareAndroidBuild(
+  root: string,
+  verifyOnly: boolean,
+): Promise<void> {
+  assert(
+    process.platform === "win32",
+    "Android builds currently require Windows.",
+  );
+  const pins = await Promise.all(
+    (
+      [
+        "x64",
+        "arm64",
+      ] as const
+    ).map(async (architecture) => {
+      const manifest = record(
+        await json(
+          resolve(root, `runtime/build-manifests/android-${architecture}.json`),
+        ),
+      );
+      const bun = record(manifest.bun);
+      const target =
+        architecture === "x64"
+          ? "linux-x64-android-baseline"
+          : "linux-aarch64-android";
+      assert(bun.target === target, "Unexpected Android Bun target");
+      assert(
+        Bun.version === string(bun.version),
+        "Build Bun version must match the Android pin",
+      );
+      return {
+        bun,
+        target,
+        cache: resolve(root, `build/cache/android-bun/${architecture}`),
+      };
+    }),
+  );
+  for (const { bun, target, cache } of pins) {
+    const archive = resolve(cache, `bun-${target}.zip`);
+    await fetchDependency(
+      string(bun.archiveUrl),
+      archive,
+      string(bun.archiveSha256),
+      verifyOnly,
+    );
+    const executable = resolve(cache, `bun-${target}/bun`);
+    if (!(await Bun.file(executable).exists()) && !verifyOnly) {
+      await extractDependencyArchive(archive, cache);
+    }
+    await verifyHash(executable, string(bun.executableSha256));
+    await fetchDependency(
+      string(bun.licenseUrl),
+      resolve(cache, "LICENSE.bun"),
+      string(bun.licenseSha256),
+      verifyOnly,
+    );
+  }
+}
+
 if (import.meta.main) {
   const { values } = parseArgs({
     options: {
@@ -176,8 +240,10 @@ if (import.meta.main) {
     },
   });
   assert(
-    values.target === "windows-x64" || values.target === "macos-arm64",
-    "--target must be windows-x64 or macos-arm64",
+    values.target === "windows-x64" ||
+      values.target === "macos-arm64" ||
+      values.target === "android",
+    "--target must be windows-x64, macos-arm64 or android",
   );
   await prepareNativeBuild(values.target, frameworkRoot, values["verify-only"]);
 }

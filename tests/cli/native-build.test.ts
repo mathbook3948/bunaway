@@ -3,12 +3,123 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { extractDependencyArchive, fetchDependency } from "#cli/native-build";
+import {
+  extractDependencyArchive,
+  fetchDependency,
+  prepareNativeBuild,
+} from "#cli/native-build";
 
 // Stored ZIP containing nested/dependency.txt, with no platform archive-creation dependency.
 const dependencyArchive = Buffer.from(
   "UEsDBAoAAAAAAHVvSl29P779EgAAABIAAAAVAAAAbmVzdGVkL2RlcGVuZGVuY3kudHh0cGlubmVkIGRlcGVuZGVuY3kKUEsBAh4DCgAAAAAAdW9KXb0/vv0SAAAAEgAAABUAAAAAAAAAAAAAAKSBAAAAAG5lc3RlZC9kZXBlbmRlbmN5LnR4dFBLBQYAAAAAAQABAEMAAABFAAAAAAA=",
   "base64",
+);
+
+test.skipIf(process.platform !== "win32")(
+  "Android preparation validates both ABI pins and cached artifacts",
+  async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "bunaway-android-cache-"));
+    const content = "pinned Android dependency";
+    const digest = createHash("sha256").update(content).digest("hex");
+    try {
+      const pins = [];
+      for (const [architecture, target] of [
+        [
+          "x64",
+          "linux-x64-android-baseline",
+        ],
+        [
+          "arm64",
+          "linux-aarch64-android",
+        ],
+      ] as const) {
+        const path = resolve(
+          root,
+          `runtime/build-manifests/android-${architecture}.json`,
+        );
+        const bun = {
+          target,
+          version: Bun.version,
+          archiveUrl: "https://unused.invalid/bun.zip",
+          archiveSha256: digest,
+          executableSha256: digest,
+          licenseUrl: "https://unused.invalid/LICENSE",
+          licenseSha256: digest,
+        };
+        await Bun.write(
+          path,
+          JSON.stringify({
+            bun,
+          }),
+        );
+        pins.push({
+          path,
+          bun,
+          cache: resolve(root, `build/cache/android-bun/${architecture}`),
+        });
+      }
+      const arm64 = pins[1];
+      if (!arm64) {
+        throw new Error("Missing ARM64 fixture");
+      }
+      for (const invalid of [
+        {
+          target: "wrong-target",
+        },
+        {
+          version: "0.0.0",
+        },
+      ]) {
+        await Bun.write(
+          arm64.path,
+          JSON.stringify({
+            bun: {
+              ...arm64.bun,
+              ...invalid,
+            },
+          }),
+        );
+        await expect(prepareNativeBuild("android", root)).rejects.toThrow();
+        expect(await readdir(root)).toEqual([
+          "runtime",
+        ]);
+      }
+      await Bun.write(
+        arm64.path,
+        JSON.stringify({
+          bun: arm64.bun,
+        }),
+      );
+      await expect(prepareNativeBuild("android", root, true)).rejects.toThrow(
+        "Missing dependency",
+      );
+      expect(await readdir(root)).toEqual([
+        "runtime",
+      ]);
+      const artifacts = pins.flatMap(({ bun, cache }) => [
+        resolve(cache, `bun-${bun.target}.zip`),
+        resolve(cache, `bun-${bun.target}/bun`),
+        resolve(cache, "LICENSE.bun"),
+      ]);
+      for (const path of artifacts) {
+        await Bun.write(path, content);
+      }
+      await prepareNativeBuild("android", root, true);
+      await prepareNativeBuild("android", root);
+      for (const path of artifacts) {
+        await Bun.write(path, "corrupt");
+        await expect(prepareNativeBuild("android", root, true)).rejects.toThrow(
+          "Hash mismatch",
+        );
+        await Bun.write(path, content);
+      }
+    } finally {
+      await rm(root, {
+        recursive: true,
+        force: true,
+      });
+    }
+  },
 );
 
 for (const directory of [

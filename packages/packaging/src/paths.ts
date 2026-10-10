@@ -1,12 +1,19 @@
 import { resolve } from "node:path";
-import type { BuildTarget } from "./contract.ts";
+import { BUILD_TARGETS } from "./contract.ts";
+
+/** Output namespaces used by builds and locks, including targets without packaging channels. */
+export const OUTPUT_TARGETS = [
+  ...BUILD_TARGETS,
+  "android",
+] as const;
+export type OutputTarget = (typeof OUTPUT_TARGETS)[number];
 
 /**
  * Shared app-output layout for CLI builds and packaging. Work and locks are disposable;
  * output and packaged are published artifacts. Callers validate targets and use
  * ownedDirectory before filesystem access, including cleanup.
  */
-export function outputPaths(root: string, target: BuildTarget) {
+export function outputPaths(root: string, target: OutputTarget) {
   const internal = resolve(root, ".bunaway");
   const output = resolve(root, "dist", target);
   return {

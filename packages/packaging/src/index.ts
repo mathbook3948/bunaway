@@ -1,6 +1,11 @@
 export { type PackagingConfig, parsePackaging } from "./config.ts";
 export * from "./contract.ts";
-export { ownedDirectory } from "./directories.ts";
+export {
+  ownedDirectory,
+  publishOwnedDirectory,
+  PublishedDirectoryCleanupError,
+} from "./directories.ts";
+export { OUTPUT_TARGETS, type OutputTarget } from "./paths.ts";
 export { artifactPaths, loadManifest, verifyArtifact } from "./inputs.ts";
 export {
   acquireBuildOutputLock,

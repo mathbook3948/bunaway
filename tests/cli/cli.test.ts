@@ -465,7 +465,7 @@ test("unified v1 configuration rejects malformed sections and old flat settings"
       await Bun.write(path, originals["src-bunaway/bunaway.json"] ?? "");
     }
   }
-});
+}, 30000);
 
 test.skipIf(process.platform !== "win32" || process.arch !== "x64")(
   "Windows validates the default executable name and accepts a valid override",

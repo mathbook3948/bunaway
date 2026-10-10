@@ -7,7 +7,7 @@ system frameworks, without project-owned C/ObjC++ binaries.
 
 License texts included in licenses/ (verified against the manifests):
 - LICENSE.bun: Bun 1.4.2, source revision and license URL in
-  runtime/build-manifests/{windows-x64,darwin-aarch64}.json. This upstream text
+  runtime/build-manifests/{windows-x64,darwin-aarch64,android-x64,android-arm64}.json. This upstream text
   includes Bun's third-party attributions; preserve it in full.
 - LICENSE.nlohmann-json: nlohmann-json 3.12.0, MIT; retained for historical macOS process probes, not used by the Bun FFI product host; URL/hash in runtime/build-manifests/darwin-aarch64.json.
 - License-WebView2.txt: Microsoft WebView2 SDK 1.0.4129.50; archive URL/hash and
@@ -22,3 +22,13 @@ Copyright (c) 2019-present, VoidZero Inc. and Vite contributors, MIT License.
 Source: https://github.com/vitejs/vite/tree/fea5b21dd9524ed7308632407b996f1fe5942c9c/packages/create-vite/template-vanilla-ts
 The full license is in packages/cli/templates/vite/public/LICENSE.vite.txt,
 copied to generated projects and their frontend production assets.
+
+The Java Android host uses AndroidX WebKit 1.14.0 and Gson 2.13.2,
+distributed under the Apache License 2.0. AndroidX dependencies retain their own
+transitive dependency metadata, including Kotlin runtime notices where applicable.
+Sources and license notices: https://android.googlesource.com/platform/frameworks/support/
+https://github.com/google/gson and https://github.com/JetBrains/kotlin
+The Gradle wrapper 8.14.3 is from https://github.com/gradle/gradle,
+also distributed under the Apache License 2.0. Preserve dependency license metadata.
+The Apache license text is retained in licenses/LICENSE.apache-2.0.txt
+and included in Android APK assets.

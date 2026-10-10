@@ -11,6 +11,8 @@
     "../packages/packaging/scripts/*.ts",
     "../native/host-api/bun/*.ts",
     "../native/windows/bun/*.ts",
-    "../native/macos/bun/*.ts"
-  ]
+    "../native/macos/bun/*.ts",
+    "../native/android/*.ts"
+  ],
+  "exclude": ["fixtures/android/web"]
 }

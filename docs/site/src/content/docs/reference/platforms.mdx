@@ -8,7 +8,7 @@ description: 플랫폼별 앱 개발과 실행, 배포 지원 상태.
 bunaway는 **Windows를 먼저 완성하고 다른 플랫폼을 같은 Bun 기반 앱 개발 모델에 맞추는 순서**로 개발합니다.
 앱 개발자는 공통 `app.ts`를 작성하고, 플랫폼별 부팅은 프레임워크가 담당합니다.
 
-| 구분 | Windows x64 | macOS arm64 | Linux, 모바일 |
+| 구분 | Windows x64 | macOS arm64 | Linux, iOS |
 | --- | --- | --- | --- |
 | 앱 화면 | WebView2 | WKWebView | 미지원 |
 | CLI 앱 생성, 개발, 빌드 | 여러 창 설정 지원 | 단일 창과 뷰 | 네이티브 실행 미지원 |
@@ -49,7 +49,8 @@ macOS는 종료 시 앱의 프로세스 그룹에 남은 하위 프로세스를 
 
 앱 패키지에 고정된 Bun을 포함하므로 최종 사용자는 Bun을 따로 설치할 필요가 없습니다.
 현재 공개 registry 배포는 없고 로컬 CLI, SDK tarball 설치를 사용합니다.
-빌드는 대상 운영체제에서 하며 교차 빌드는 지원하지 않습니다.
+데스크톱 빌드는 대상 운영체제에서 하며 교차 빌드는 지원하지 않습니다.
+Android debug APK는 Windows에서 빌드합니다.
 
 ## 플랫폼에서 검증한 동작
 
@@ -57,7 +58,12 @@ Windows의 실제 GUI 검증에는 명령, 이벤트, 파일 권한, 다중 창,
 macOS arm64는 Bun FFI의 단일 창, 명령과 이벤트, 리소스 경계와 렌더러 복구, 종료를 검증했습니다. 파일 저장 검증은 이전 구현의 기록입니다. 새 플러그인과 permissions 모델은 Windows에서 검증했으며 macOS 어댑터는 아직 제공하지 않습니다.
 배포 서명과 설치, 스토어 제출은 아직 검증이 남아 있습니다.
 
-macOS Intel과 macOS 다중 창, Linux, Android, iOS 호스트는 현재 지원하지 않습니다.
+Android는 Windows에서 Java 프로젝트를 동기화하고 debug APK를 빌드합니다. Java Activity, WebView와 번들 Bun을 사용합니다.
+API 36 x86_64 에뮬레이터에서 공통 Core/SDK, 단일 뷰, 화면 회전과 종료를 검증했습니다.
+현재 빈 네이티브 권한과 패키지 웹 자산을 요구합니다. ARM64 실기기와 출시 패키지는 별도 검증이 필요합니다.
+사용 방법은 [Android CLI](/reference/cli/android/)를 따르세요.
+
+macOS Intel과 macOS 다중 창, Linux, iOS 호스트는 현재 지원하지 않습니다.
 macOS 빌드는 로컬 실행용 ad-hoc 서명을 사용합니다. 배포에는 Developer ID 서명과 공증, 설치 검증이 필요합니다.
 생성 템플릿은 vanilla, Vite, React, Vue, Svelte를 제공합니다.
 React, Vue, Svelte 생성 앱은 설치, 타입 검사, CSS와 컴포넌트 HMR, 프로덕션 자산 번들을 Linux에서 검증했습니다.

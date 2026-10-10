@@ -85,6 +85,22 @@ export const frameworkPaths = [
     "entitlements.plist",
     "README.md",
   ].map((name) => `native/macos/bun/${name}`),
+  "native/android/settings.gradle",
+  "native/android/host-settings.gradle",
+  "native/android/app.gradle",
+  "native/android/build.gradle",
+  "native/android/gitignore",
+  "native/android/app/build.gradle",
+  "native/android/app/src",
+  "native/android/gradle.properties",
+  "native/android/gradlew",
+  "native/android/gradlew.bat",
+  "native/android/gradle/wrapper",
+  "native/android/host/build.gradle",
+  "native/android/host/src",
+  "native/android/bridge.js",
+  "native/android/README.md",
+  "docs/decisions/0015-android-bundled-process-host.md",
   "runtime/build-manifests",
 ] as const;
 
@@ -194,6 +210,8 @@ export async function release(root = frameworkRoot): Promise<Release> {
   for (const target of [
     "windows-x64",
     "darwin-aarch64",
+    "android-x64",
+    "android-arm64",
   ]) {
     const pin = (await json(
       resolve(root, `runtime/build-manifests/${target}.json`),
@@ -399,6 +417,9 @@ function requiredFrameworkFiles(): string[] {
       (path) =>
         ![
           "native/host-api/generated",
+          "native/android/gradle/wrapper",
+          "native/android/host/src",
+          "native/android/app/src",
           "licenses",
           "runtime/build-manifests",
         ].includes(path),
@@ -416,6 +437,30 @@ function requiredFrameworkFiles(): string[] {
     ].map((name) => `native/host-api/generated/${name}.schema.json`),
     "runtime/build-manifests/windows-x64.json",
     "runtime/build-manifests/darwin-aarch64.json",
+    "runtime/build-manifests/android-x64.json",
+    "runtime/build-manifests/android-arm64.json",
+    "native/android/gradle/wrapper/gradle-wrapper.jar",
+    "native/android/gradle/wrapper/gradle-wrapper.properties",
+    "native/android/host/src/main/AndroidManifest.xml",
+    ...[
+      "Protocol",
+      "AppAssets",
+      "BackendAssets",
+      "BunProcess",
+      "ProcessGroup",
+      "FrameReader",
+      "Renderer",
+      "BunawayActivity",
+    ].map(
+      (name) =>
+        `native/android/host/src/main/java/dev/bunaway/host/${name}.java`,
+    ),
+    "native/android/host/src/test/java/dev/bunaway/host/ProtocolTest.java",
+    "native/android/host/src/test/java/dev/bunaway/host/FrameReaderTest.java",
+    "native/android/app/build.gradle",
+    "native/android/app/src/main/AndroidManifest.xml",
+    "native/android/app/src/main/java/dev/bunaway/app/MainActivity.java",
+    "packages/cli/src/android.ts",
     "packages/cli/src/assets.ts",
     "packages/cli/src/app-modules.ts",
     "packages/cli/src/sdk.ts",

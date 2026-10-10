@@ -6,7 +6,14 @@ import type { BunPlugin } from "bun";
 import { appModules, commonJsSdkSource } from "./app-modules.ts";
 import { type Project, runtimeSettings } from "./config.ts";
 import { release } from "./distribution.ts";
-import { files, hash, inside, json, writeJson } from "./files.ts";
+import {
+  files,
+  hash,
+  inside,
+  installedPackageRoot,
+  json,
+  writeJson,
+} from "./files.ts";
 import {
   type InstalledPlugin,
   installedPlugins,
@@ -459,6 +466,75 @@ export async function bundleWindowsReload(
     );
   }
   return hash(resolve(directory, "app.js"));
+}
+
+/** Bundle packaged web assets and the Android child-process bootstrap from the common app definition. */
+export async function bundleAndroidAssets(
+  project: Project,
+  assets: string,
+): Promise<void> {
+  await assertAppDefinitionExport(project.appEntry);
+  const sdk = await sdkPlugin(project.root, [], project.nativePlugins);
+  await webAssets(project, resolve(assets, "web"), sdk, false);
+  const runtimeEntry = resolve(
+    await installedPackageRoot(project.frameworkRoot, "@bunaway/runtime-bun"),
+    "src/index.ts",
+  );
+  const backend = await buildWithSdk(
+    {
+      entrypoints: [
+        "bunaway-generated/backend.ts",
+      ],
+      root: project.root,
+      target: "bun",
+      packages: "bundle",
+      naming: {
+        entry: "backend.js",
+        asset: "backend-assets/[name]-[hash].[ext]",
+      },
+    },
+    {
+      name: "android-app-entry",
+      setup(build) {
+        sdk.setup(build);
+        appModules({
+          appEntry: project.appEntry,
+          processRuntime: runtimeEntry,
+        }).setup(build);
+      },
+    },
+  );
+  await writeAndroidBackend(backend, assets);
+}
+
+/** Preserve the backend entry and file imports together for extraction from the APK. */
+export async function writeAndroidBackend(
+  outputs: readonly Bun.BuildArtifact[],
+  assets: string,
+): Promise<void> {
+  const entries = outputs.filter((output) => output.kind === "entry-point");
+  if (
+    entries.length !== 1 ||
+    basename(entries[0]?.path ?? "") !== "backend.js"
+  ) {
+    throw new Error("Missing Android backend bundle.");
+  }
+  const destination = resolve(assets, "backend");
+  for (const output of outputs) {
+    if (output.kind !== "entry-point" && output.kind !== "asset") {
+      throw new Error(`Unexpected Android backend output: ${output.kind}`);
+    }
+    const path = resolve(destination, output.path);
+    if (!inside(destination, path)) {
+      throw new Error(
+        `Android backend output escapes destination: ${output.path}`,
+      );
+    }
+    await mkdir(dirname(path), {
+      recursive: true,
+    });
+    await writeFile(path, await bundleBytes(output, false));
+  }
 }
 
 /** Bundle the macOS Bun entry and backend Worker; return file imports for compilation. */

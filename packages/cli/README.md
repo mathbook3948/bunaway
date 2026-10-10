@@ -4,6 +4,14 @@ CLI로 앱을 만들고 개발 서버를 실행하거나 네이티브 앱을 빌
 SDK와 정책, Host API는 프레임워크의 네이티브 호스트에 연결된다.
 앱 런타임과 개발 및 빌드에는 Bun 1.4.2를 사용한다. 공개 npm에는 아직 배포하지 않았다.
 
+Android는 `bunaway android sync [directory]`로 앱의 `android/`에 Android Studio용 Java
+프로젝트를 만든다. 이후 동기화는 `android/.bunaway/`만 교체하고 앱 코드와 Gradle 설정을 보존한다.
+Windows 빌드 머신에서 `bunaway android build [directory]`와
+`bunaway android run [directory] --serial <device>`는 동기화 후 debug APK를 빌드하고 실행한다.
+공통 앱 정의를 사용하며 현재는 단일 뷰, 패키지 웹 자산과 빈 네이티브 권한을 요구한다.
+기본 템플릿의 저장 플러그인은 Android 어댑터가 없어 그대로 실행할 수 없다.
+입력, 도구와 지원 범위는 [Android 문서](../../docs/site/src/content/docs/reference/cli/android.mdx)를 따른다.
+
 ## 생성 → 개발 → 빌드 → 독립 실행
 
 저장소를 체크아웃하지 않고 CLI와 SDK를 설치하려면 [개발자 설치 안내](../../docs/framework-distribution.md)를 따른다.

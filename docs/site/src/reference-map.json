@@ -128,6 +128,9 @@
           "createProject",
           "validateProject",
           "buildProject",
+          "buildAndroidProject",
+          "syncAndroidProject",
+          "runAndroidProject",
           "prepareNative",
           "currentTarget",
           "devProject",
@@ -147,12 +150,15 @@
           "PACKAGING_CHANNELS",
           "PLATFORMS",
           "BUILD_TARGETS",
+          "OUTPUT_TARGETS",
           "isChannelId",
           "platformOf",
           "targetFor",
           "CODES",
           "packagedDigest",
           "ownedDirectory",
+          "publishOwnedDirectory",
+          "PublishedDirectoryCleanupError",
           "artifactPaths",
           "loadManifest",
           "verifyArtifact",
@@ -278,7 +284,7 @@
       "name": "@bunaway/packaging/paths",
       "source": "packages/packaging/src/paths.ts",
       "pages": {
-        "reference/tooling/packaging-api": ["outputPaths"]
+        "reference/tooling/packaging-api": ["outputPaths", "OUTPUT_TARGETS"]
       }
     },
     {
@@ -759,6 +765,7 @@
     "reference/cli/dev": ["dev"],
     "reference/cli/build": ["build"],
     "reference/cli/package": ["package"],
+    "reference/cli/android": ["android"],
     "reference/api": ["help"]
   },
   "operations": {

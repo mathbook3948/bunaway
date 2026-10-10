@@ -1071,6 +1071,8 @@ test("framework validation rejects extra installed inputs but permits designated
       "build/cache/bun",
       "build/cache/webview2",
       "build/cache/nlohmann-json",
+      "build/cache/android-bun",
+      "build/cache/android-gradle",
     ]) {
       await Bun.write(
         resolve(root, directory, "nested/cache.txt"),
@@ -1410,6 +1412,12 @@ test("artifact audit rejects omitted schemas, declarations and Git attributes wi
       "packages/cli/src/assets.ts",
       "packages/cli/src/sdk.ts",
       "packages/cli/src/managed-command.ts",
+      "packages/cli/src/android.ts",
+      "native/android/gradle/wrapper/gradle-wrapper.jar",
+      "native/android/host/src/main/java/dev/bunaway/host/Renderer.java",
+      "native/android/host/src/main/java/dev/bunaway/host/FrameReader.java",
+      "native/android/host/src/test/java/dev/bunaway/host/FrameReaderTest.java",
+      "native/android/app/src/main/java/dev/bunaway/app/MainActivity.java",
     ]) {
       const path = resolve(root, name);
       const original = await readFile(path);
@@ -1424,6 +1432,12 @@ test("artifact audit rejects omitted schemas, declarations and Git attributes wi
       await writeFile(path, original);
       await writeFile(inventoryPath, inventory);
     }
+    // Release pins are read before the inventory, so a missing pin must fail at that boundary.
+    const pinPath = resolve(root, "runtime/build-manifests/android-arm64.json");
+    const pin = await readFile(pinPath);
+    await rm(pinPath);
+    await expect(checkArtifact(root)).rejects.toThrow("Cannot read JSON");
+    await writeFile(pinPath, pin);
   } finally {
     await rm(home, {
       recursive: true,

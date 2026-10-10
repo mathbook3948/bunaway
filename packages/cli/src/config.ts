@@ -1,12 +1,11 @@
 import { lstat, readlink, realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, resolve } from "node:path";
 import {
-  BUILD_TARGETS,
   ownedDirectory,
   type PackagingConfig,
   parsePackaging,
 } from "@bunaway/packaging";
-import { outputPaths } from "@bunaway/packaging/paths";
+import { OUTPUT_TARGETS, outputPaths } from "@bunaway/packaging/paths";
 import { NativeRegistry, type Policy, parsePolicy } from "@bunaway/protocol";
 import {
   developmentPolicy,
@@ -171,7 +170,7 @@ function string(value: unknown, path: string): string {
 async function frontendPath(root: string, name: string): Promise<string> {
   const reserved = [
     ".bunaway",
-    ...BUILD_TARGETS.map((target) => outputPaths(root, target).output),
+    ...OUTPUT_TARGETS.map((target) => outputPaths(root, target).output),
   ].map((path) => resolve(root, path).toLowerCase());
   const check = (path: string) => {
     if (!inside(root, path)) {

@@ -1,8 +1,8 @@
 import { lstat, open, readdir, rm } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { BUILD_TARGETS, type BuildTarget } from "./contract.ts";
+import type { BuildTarget } from "./contract.ts";
 import { ownedDirectory } from "./directories.ts";
-import { outputPaths } from "./paths.ts";
+import { OUTPUT_TARGETS, type OutputTarget, outputPaths } from "./paths.ts";
 
 /** Names the conflicting lock or directory that prevented an operation. */
 export class TargetLockError extends Error {
@@ -14,8 +14,8 @@ export class TargetLockError extends Error {
   }
 }
 
-function lockDirectory(root: string, target: BuildTarget): string {
-  if (!BUILD_TARGETS.includes(target)) {
+function lockDirectory(root: string, target: OutputTarget): string {
+  if (!OUTPUT_TARGETS.includes(target)) {
     throw new Error(`Unsupported build target: ${target}`);
   }
   return outputPaths(root, target).locks;
@@ -95,7 +95,7 @@ export async function acquirePackageInputLock(
  */
 export async function acquireBuildOutputLock(
   root: string,
-  target: BuildTarget,
+  target: OutputTarget,
 ): Promise<() => Promise<void>> {
   const directory = lockDirectory(root, target);
   await ownedDirectory(root, directory, true);
