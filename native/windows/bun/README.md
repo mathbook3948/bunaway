@@ -9,6 +9,9 @@ I/O Worker 하나가 승인된 Host API를 검사한 파일 핸들로 실행한�
 
 `boot.ts`는 실행 인자, 단일 인스턴스 확보와 앱 import를 담당하고,
 `config.ts`는 패키지 설정과 정책을 검증하고 앱 데이터 경로를 결정한다.
+검증한 앱 ID와 재실행 경로, 개발 모드의 절대 부팅 인자를 I/O Worker에 전달한다.
+로그인 자동 실행 플러그인은 이 호스트 선택 경로를 사용하며 현재 개발 서버 주소와
+DevTools 옵션은 영속 등록에 포함하지 않는다.
 `package.ts`는 회귀 패키지를 빌드하고, `tests/lifecycle/run-native.ts`는 준비, 빌드와 테스트 실행을 조정한다.
 
 `win32-bindings.ts`는 DLL 함수 바인딩과 FFI 버퍼 보조 함수를 제공하고, `win32.ts`의

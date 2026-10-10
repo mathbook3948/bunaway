@@ -1,0 +1,137 @@
+---
+title: autostart
+description: Windows 사용자 로그인 자동 실행을 등록, 조회하고 해제합니다.
+sidebar: { order: 6 }
+---
+
+`@bunaway/plugin-autostart`는 현재 사용자의 Windows 로그인 자동 실행을 제공합니다.
+패키지를 설치하고 `autostartPlugin`을 등록해야 합니다. 설치와 등록만으로 자동 실행이
+켜지지 않습니다. 사용자가 동의한 설정 변경에서 `enableAutostart`를 호출하세요.
+
+```ts
+import { defineApp } from "@bunaway/backend";
+import { autostartPlugin } from "@bunaway/plugin-autostart";
+
+export default defineApp({ modules: [], plugins: [autostartPlugin] });
+```
+
+## 등록, 조회와 해제
+
+```ts
+enableAutostart(args?: string[], options?: NativeInvokeOptions): Promise<AutostartStatus>
+getAutostartStatus(options?: NativeInvokeOptions): Promise<AutostartStatus>
+disableAutostart(options?: NativeInvokeOptions): Promise<null>
+```
+
+```ts
+import {
+  enableAutostart,
+  getAutostartStatus,
+  disableAutostart,
+} from "@bunaway/plugin-autostart";
+
+await enableAutostart(["--login", "한글 값", '인용"값', ""]);
+const status = await getAutostartStatus();
+if (status.registered && status.startupState === "disabled") {
+  // Windows 설정이나 작업 관리자에서 사용자가 다시 활성화하도록 안내합니다.
+}
+await disableAutostart();
+```
+
+`args`의 기본값은 빈 배열입니다. 최대 64개이며 각 문자열은 최대 260자입니다.
+Windows에 저장하는 전체 명령줄은 **260 UTF-16 코드 단위**를 넘을 수 없습니다.
+경로, 프레임워크 시작 인자, 인자 사이 공백과 따옴표 이스케이프도 이 제한에 포함합니다.
+공백, Unicode, 빈 문자열, 따옴표와 끝의 역슬래시는 원래 인자 그대로 전달합니다.
+NUL과 짝이 없는 UTF-16 surrogate는 거부합니다. `%PATH%`, `&` 등은 문자열이며
+환경 변수 확장이나 셸 실행을 하지 않습니다.
+
+`--login`은 앱이 선택한 일반 인자입니다. 자동 감지 기능이 아니므로 앱의
+`desktop.onOpen`에서 해당 인자를 확인할 수 있지만 수동으로 같은 인자를 전달하면
+구별할 수 없습니다. 숨김 시작이나 트레이 동작을 자동으로 적용하지 않습니다.
+
+## 결과
+
+`AutostartStatus`는 서로 독립인 등록과 Windows 활성 상태를 반환합니다.
+
+| 필드 | 의미 |
+| --- | --- |
+| `registrationName` | 현재 앱과 실행 모드의 Run 값 이름 |
+| `registered` | 해당 Run 값이 실제로 존재하는지 여부 |
+| `commandLine` | 저장된 REG_SZ 명령줄. 값이 없거나 문자열 형식이 유효하지 않으면 `null` |
+| `executablePath` | 저장된 명령줄에서 파싱한 절대 실행 경로. 관리 형식으로 읽을 수 없으면 `null` |
+| `args` | 실행 파일 다음의 실제 저장 인자 배열. 개발 모드의 프레임워크 인자도 포함. 파싱할 수 없으면 `null` |
+| `startupState` | `enabled`, `disabled`, `unknown` 중 하나. 등록 존재 여부와 별개 |
+| `matchesCurrentLaunch` | 저장 경로와 프레임워크 인자 접두어가 현재 호스트 실행과 일치하는지 여부. 앱 인자는 비교하지 않음 |
+
+조회는 등록을 고치거나 앱을 활성화하지 않습니다. Run 값이 남아 있어도 작업 관리자에서
+비활성화하면 `registered: true`, `startupState: "disabled"`일 수 있습니다.
+등록을 해제해도 Windows의 기존 비활성화 기록은 남을 수 있습니다.
+
+Windows의 `StartupApproved\\Run`은 공개된 안정적 API가 아닙니다. 현재 구현은
+알려진 12바이트 REG_BINARY에서 상태 0과 2는 `enabled`, 1과 3은 `disabled`로 읽습니다.
+0과 1은 Windows Server 2022의 실제 시작 앱 설정에서 On과 Off 전환으로 확인했습니다.
+값이 없거나 형식, 상태가 다르면 `unknown`입니다. 이를 활성 상태로 추정하지 마세요.
+`enabled`도 실제 로그인 실행을 보장하지 않습니다. OS 정책, 안전 모드나 실행 파일
+삭제가 실행을 막을 수 있으며 Windows가 실행을 지연할 수도 있습니다.
+
+## 식별자와 실행 경로
+
+등록 이름은 `bunaway.packaged.<appId>` 또는 `bunaway.development.<appId>`입니다.
+`appId`는 검증한 앱 설정의 ID를 그대로 사용하며 앱 표시 이름이나 실행 파일 이름은
+사용하지 않습니다. 동일 ID의 두 배포 앱은 같은 사용자 설정을 공유합니다.
+개발 등록은 배포 등록을 바꾸지 않습니다. ID를 변경하면 이전 ID의 등록도 자동으로
+찾거나 삭제하지 않으므로 이전 ID로 실행하는 앱에서 먼저 해제해야 합니다.
+
+배포 앱은 현재 실행 중인 compiled EXE의 절대 경로와 앱 인자를 저장합니다.
+PATH나 사용자 Bun 설치에 의존하지 않습니다. 개발 앱은 사용 중인 Bun의 절대 경로,
+`--no-env-file`, `--no-install`, 절대 bunfig와 tsconfig 경로, 빌드한
+`assets/boot.js`의 절대 경로를 저장합니다. 현재 Vite 서버 주소와 DevTools 옵션은
+저장하지 않으며 로그인 시 디스크의 빌드된 웹 자산을 사용합니다. 개발 실행 경로가
+길어 전체 명령줄 제한을 넘으면 등록할 수 없습니다. 짧은 개발 경로를 쓰거나 배포
+EXE로 검증하세요. 앱 인자의 첫 항목으로 개발용 `--devtools`, `--dev-url`을 전달할 수 없습니다.
+
+로그인 실행의 작업 디렉터리는 Windows가 정하며 등록 API로 설정하지 않습니다.
+상대 파일 인자는 로그인 시 작업 디렉터리 기준이므로 재실행해야 하는 파일은 절대 경로로
+전달하세요. 개발 자산이나 EXE를 옮기거나 지우면 기존 등록도 그 옛 경로를 유지합니다.
+
+## 갱신과 사용자 선택
+
+`enableAutostart`는 현재 실행 모드의 값 하나를 현재 경로와 새 인자로 교체합니다.
+같은 요청을 반복하면 기존 값이 같을 때 쓰기를 생략합니다. 업데이트나 이동 뒤에는
+동의한 자동 실행 설정을 유지하는 앱이 새 위치에서 명시적으로 재등록해야 합니다.
+앱 시작 시 무조건 재등록하거나 다른 ID의 값을 삭제하지 마세요.
+
+재등록과 해제는 Windows 시작 앱 활성 기록을 수정하지 않습니다. 특히 사용자가
+작업 관리자에서 비활성화한 선택을 우회하지 않습니다. `enableAutostart`가 성공해도
+`startupState`가 `disabled`일 수 있습니다. 사용자는 Windows에서 직접 활성화해야 합니다.
+`disableAutostart`는 등록이 없거나 반복 호출해도 성공하며 다른 앱의 값은 지우지 않습니다.
+앱 삭제만으로 Run 값이 정리되지는 않습니다. 제거 전 명시적 해제, 설치 프로그램의
+opt-in 및 제거 연동과 숨김 시작은 후속 범위입니다.
+
+## 정책과 오류
+
+| 작업 | 입력 | 권한 |
+| --- | --- | --- |
+| `autostart.enable` | `{ args: string[] }` | `autostart:configure` |
+| `autostart.disable` | `null` | `autostart:configure` |
+| `autostart.getStatus` | `null` | `autostart:read` |
+
+뷰에서 직접 호출하면 `commands`에 대응하는 `plugin.autostart.enable`,
+`plugin.autostart.disable`, `plugin.autostart.getStatus`를 추가하고 필요한 권한을
+`host.permissions`에 허용합니다. 명령 핸들러는 원래 뷰 권한을 사용합니다.
+setup에서는 루트 `backend.permissions`를 사용합니다. 실행 파일이나 다른 앱 ID를
+선택하는 입력과 관리자 범위는 제공하지 않습니다.
+
+- `INVALID_ARGUMENT`: 입력, 인자 인코딩이나 전체 명령줄 길이가 유효하지 않습니다.
+- `PERMISSION_DENIED`: 정책 권한이나 사용자 레지스트리 접근 권한이 없습니다.
+- `UNSUPPORTED`: Windows 어댑터, 호스트 실행 정보가 없거나 MSIX 패키지로 실행 중입니다.
+  MSIX는 manifest StartupTask와 별도의 사용자 동의 계약이 필요합니다.
+- `INTERNAL`: 레지스트리 조회, 갱신이나 명령줄 파싱에 실패했습니다.
+- `CANCELLED`, `TIMEOUT`, `BUSY`: 기존 Host API의 취소, 기한과 대기열 제한입니다.
+
+어댑터 종료는 DLL과 열린 핸들을 정리하지만 영속 등록을 해제하지 않습니다.
+작업이 이미 레지스트리를 변경한 뒤 취소되거나 결과 조회가 실패하면 변경을 되돌리지
+않습니다. 설정 화면은 다시 조회해서 현재 상태를 확인하세요.
+
+현재 Windows x64의 개발 실행, 직접 배포와 Store 비패키지 실행을 지원합니다.
+MSIX, macOS, Linux와 모바일은 지원하지 않습니다.

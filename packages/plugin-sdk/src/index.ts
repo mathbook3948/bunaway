@@ -111,6 +111,15 @@ export const s = Object.freeze({
 
 /** Host-selected values available when a native adapter is created. */
 export type NativeEnvironment = {
+  /** Trusted app identity and restart command. Callers cannot select another executable. */
+  app?: {
+    id: string;
+    launch: {
+      mode: "development" | "packaged";
+      executablePath: string;
+      args: string[];
+    };
+  };
   /** Window services supplied by the host on its native UI thread. */
   windows?: import("@bunaway/plugin-api/native").NativeWindowServices;
   /** Host-owned data directory used for app-scoped files. */

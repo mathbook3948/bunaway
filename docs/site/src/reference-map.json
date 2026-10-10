@@ -233,6 +233,18 @@
       }
     },
     {
+      "name": "@bunaway/plugin-autostart",
+      "source": "plugins/autostart/src/index.ts",
+      "pages": {
+        "reference/plugins/autostart": [
+          "autostartPlugin",
+          "enableAutostart",
+          "disableAutostart",
+          "getAutostartStatus"
+        ]
+      }
+    },
+    {
       "name": "@bunaway/plugin-opener",
       "source": "plugins/opener/src/index.ts",
       "pages": {
@@ -632,7 +644,8 @@
         "reference/tooling/native-plugins": [
           "dataRoot",
           "capabilities",
-          "windows"
+          "windows",
+          "app"
         ]
       }
     },

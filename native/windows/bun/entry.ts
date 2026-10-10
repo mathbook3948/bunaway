@@ -153,6 +153,7 @@ export async function runWindowsApp(
     {
       workerData: {
         runtime: config.runtime,
+        app: config.app,
         dataRoot: config.dataRoot,
         assets: config.assets,
         plugins,

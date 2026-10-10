@@ -191,6 +191,16 @@ Windows 데스크톱의 dev-veto, dev-hide, dev-pending 시나리오는 CLI 중�
 
 ## 네이티브 빌드와 배포 회귀
 
+`api/autostart.test.ts`는 로그인 자동 실행 플러그인의 정책, 공개 helper, 앱 ID 분리와
+Windows 명령줄 제한을 검사한다. `lifecycle/windows-autostart.test.ts`는 실제 사용자
+Run 값의 등록, 조회, 경로 갱신과 반복 해제를 확인한다. 임시 앱 ID에만 승인 테스트 값을
+써서 비활성화 선택을 보존하는지 확인하며 실제 작업 관리자 조작과는 구분한다.
+저장 명령줄을 CreateProcessW로 실행해 compiled EXE와 개발 Bun의 공백, Unicode,
+따옴표, 빈 문자열과 끝의 역슬래시 argv를 검사한다. 실제 로그인 자동 실행은 별도
+대화형 로그인 검증이 필요하다. 테스트는 다른 앱의 등록을 변경하지 않는다.
+`cli/autostart.test.ts`는 로컬 tarball의 isolated 설치, manifest와 I/O 어댑터 발견,
+정책 승인과 browser 번들에서 FFI가 제외되는지도 확인한다.
+
 `mise run host:windows`와 `mise run host:macos`는 Bun으로
 `tests/lifecycle/run-native.ts`를 실행한다. CLI의 의존성 준비와 네이티브 빌드를
 거친 뒤 플랫폼별 실제 호스트 fixture를 만들고 검증한다.
