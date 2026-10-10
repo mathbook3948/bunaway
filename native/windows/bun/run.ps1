@@ -2,7 +2,7 @@ param([switch]$SkipTests)
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path
 & (Join-Path $PSScriptRoot 'prepare.ps1')
-$bun = Join-Path $root 'runtime/bun-bundle/vendor/bun-windows-x64-baseline/bun.exe'
+$bun = Join-Path $root 'build/cache/bun/bun-windows-x64-baseline/bun.exe'
 & $bun --no-env-file (Join-Path $PSScriptRoot 'package.ts')
 if ($LASTEXITCODE -ne 0) { throw 'Windows package build failed' }
 if (!$SkipTests) {

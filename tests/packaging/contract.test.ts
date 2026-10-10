@@ -340,6 +340,160 @@ function deferred() {
   };
 }
 
+test.each([
+  false,
+  true,
+])(
+  "packaging owns and cleans centralized work files (failure=%s)",
+  async (fail) => {
+    const projectRoot = await mkdtemp(join(home, "central-work-"));
+    await makeArtifact(projectRoot);
+    let ran = false;
+    const report = await runAdapter(
+      projectRoot,
+      stubAdapter({
+        async run(ctx) {
+          ran = true;
+          expect(dirname(ctx.staging)).toBe(
+            resolve(projectRoot, ".bunaway/work/windows-x64"),
+          );
+          expect(
+            await readdir(resolve(projectRoot, ".bunaway/locks/windows-x64")),
+          ).toContain("win-direct.lock");
+          await Bun.write(resolve(ctx.staging, "setup.exe"), "installer");
+          if (fail) {
+            throw new Error("Test assembly failed.");
+          }
+          ctx.addArtifact("setup.exe", "installer");
+        },
+      }),
+    );
+    expect(ran).toBe(true);
+    expect(report.ok).toBe(!fail);
+    expect(
+      await readdir(resolve(projectRoot, ".bunaway/work/windows-x64")),
+    ).toEqual([]);
+    expect(
+      await readdir(resolve(projectRoot, ".bunaway/locks/windows-x64")),
+    ).toEqual([]);
+    expect(
+      await Bun.file(
+        resolve(projectRoot, "dist/windows-x64/packaged/win-direct/setup.exe"),
+      ).exists(),
+    ).toBe(!fail);
+  },
+);
+
+test("packaging refuses a linked work root without writing or cleaning external files", async () => {
+  const projectRoot = await mkdtemp(join(home, "linked-work-"));
+  const external = await mkdtemp(join(home, "external-work-"));
+  await makeArtifact(projectRoot);
+  await mkdir(resolve(projectRoot, ".bunaway"));
+  await Bun.write(resolve(external, "sentinel.txt"), "keep");
+  await symlink(external, resolve(projectRoot, ".bunaway/work"), "junction");
+  await expect(runAdapter(projectRoot, stubAdapter({}))).rejects.toThrow(
+    "without links",
+  );
+  expect(await readdir(external)).toEqual([
+    "sentinel.txt",
+  ]);
+  expect(await Bun.file(resolve(external, "sentinel.txt")).text()).toBe("keep");
+  expect(
+    await readdir(resolve(projectRoot, ".bunaway/locks/windows-x64")),
+  ).toEqual([]);
+});
+
+test.each([
+  "assembly",
+  "publication",
+])(
+  "packaging refuses work redirection during %s before publishing external files",
+  async (phase) => {
+    const projectRoot = await mkdtemp(join(home, "redirected-work-"));
+    const external = await mkdtemp(join(home, "external-work-"));
+    await makeArtifact(projectRoot);
+    const adapter = stubAdapter({
+      async run(ctx) {
+        await Bun.write(
+          resolve(ctx.staging, "setup.exe"),
+          "previous installer",
+        );
+        ctx.addArtifact("setup.exe", "installer");
+      },
+    });
+    expect((await runAdapter(projectRoot, adapter)).ok).toBe(true);
+    const output = resolve(
+      projectRoot,
+      "dist/windows-x64/packaged/win-direct/setup.exe",
+    );
+    const reportPath = packagingReportPath(
+      projectRoot,
+      "windows-x64",
+      "win-direct",
+    );
+    const previousReport = await Bun.file(reportPath).text();
+    const work = resolve(projectRoot, ".bunaway/work/windows-x64");
+    const saved = resolve(projectRoot, "saved-work");
+    let staging = "";
+    let redirected = false;
+    async function redirectWork() {
+      await rename(work, saved);
+      await symlink(external, work, "junction");
+      redirected = true;
+      const replacement = resolve(external, basename(staging));
+      await mkdir(replacement);
+      await Bun.write(resolve(replacement, "setup.exe"), "external installer");
+    }
+    const fs = await import("node:fs/promises");
+    const originalWriteFile = fs.writeFile;
+    const publication = spyOn(fs, "writeFile").mockImplementation(
+      async (path, data, options) => {
+        await originalWriteFile(path, data, options);
+        if (
+          phase === "publication" &&
+          String(path).startsWith(`${reportPath}.building-`)
+        ) {
+          await redirectWork();
+        }
+      },
+    );
+    try {
+      await expect(
+        runAdapter(
+          projectRoot,
+          stubAdapter({
+            async run(ctx) {
+              staging = ctx.staging;
+              await Bun.write(resolve(staging, "setup.exe"), "new installer");
+              ctx.addArtifact("setup.exe", "installer");
+              if (phase === "assembly") {
+                await redirectWork();
+              }
+            },
+          }),
+        ),
+      ).rejects.toThrow("without links");
+      expect(redirected).toBe(true);
+      expect(await Bun.file(output).text()).toBe("previous installer");
+      expect(await Bun.file(reportPath).text()).toBe(previousReport);
+      expect(
+        await Bun.file(
+          resolve(external, basename(staging), "setup.exe"),
+        ).text(),
+      ).toBe("external installer");
+      expect(
+        await readdir(resolve(projectRoot, ".bunaway/locks/windows-x64")),
+      ).toEqual([]);
+    } finally {
+      publication.mockRestore();
+      if (redirected) {
+        await fs.unlink(work);
+        await rename(saved, work);
+      }
+    }
+  },
+);
+
 test.each(
   (
     [
@@ -373,7 +527,7 @@ test.each(
     await writeJson(packagingReportPath(projectRoot, target, channel), {
       previous: true,
     });
-    const locks = resolve(projectRoot, "dist/.bunaway-locks", target);
+    const locks = resolve(projectRoot, ".bunaway/locks", target);
     await mkdir(locks, {
       recursive: true,
     });
@@ -508,7 +662,7 @@ test.skipIf(process.platform === "win32")(
   async () => {
     const projectRoot = await mkdtemp(join(home, "redirected-cleanup-"));
     await makeArtifact(projectRoot);
-    const packaged = resolve(projectRoot, "dist/windows-x64/packaged");
+    const packaged = resolve(projectRoot, ".bunaway");
     const saved = resolve(projectRoot, "saved-packaged");
     const external = await mkdtemp(join(home, "external-cleanup-"));
     try {
@@ -524,7 +678,7 @@ test.skipIf(process.platform === "win32")(
                 "external staging bytes",
               );
               await Bun.write(
-                resolve(packaged, "win-direct.lock"),
+                resolve(packaged, "locks/windows-x64/win-direct.lock"),
                 "external lock bytes",
               );
               throw new Error("Output parent redirected during assembly.");
@@ -532,19 +686,22 @@ test.skipIf(process.platform === "win32")(
           }),
         ),
       ).rejects.toThrow("without links");
-      const staging = (await readdir(external)).find((name) =>
+      const work = resolve(external, "work/windows-x64");
+      const staging = (await readdir(work)).find((name) =>
         name.includes(".building-"),
       ) as string;
       expect(
-        await Bun.file(resolve(external, staging, "sentinel.txt")).text(),
+        await Bun.file(resolve(work, staging, "sentinel.txt")).text(),
       ).toBe("external staging bytes");
-      expect(await Bun.file(resolve(external, "win-direct.lock")).text()).toBe(
-        "external lock bytes",
-      );
+      expect(
+        await Bun.file(
+          resolve(external, "locks/windows-x64/win-direct.lock"),
+        ).text(),
+      ).toBe("external lock bytes");
       expect((await readdir(external)).sort()).toEqual(
         [
-          staging,
-          "win-direct.lock",
+          "work",
+          "locks",
         ].sort(),
       );
     } finally {
@@ -676,7 +833,7 @@ test("an existing package lock is not removed or overwritten by a rejected run",
   await makeArtifact(projectRoot);
   const lockPath = resolve(
     projectRoot,
-    "dist/windows-x64/packaged/win-direct.lock",
+    ".bunaway/locks/windows-x64/win-direct.lock",
   );
   await Bun.write(lockPath, "another owner");
   const result = await runAdapter(projectRoot, stubAdapter({}));
@@ -2407,7 +2564,7 @@ test.each([
       ),
     ).toBe(false);
     expect(
-      await readdir(resolve(projectRoot, "dist/.bunaway-locks/windows-x64")),
+      await readdir(resolve(projectRoot, ".bunaway/locks/windows-x64")),
     ).toEqual([]);
     expect(
       await Bun.file(
@@ -2507,7 +2664,7 @@ test.each(
       ),
     ).toBe(false);
     expect(
-      await readdir(resolve(projectRoot, "dist/.bunaway-locks/windows-x64")),
+      await readdir(resolve(projectRoot, ".bunaway/locks/windows-x64")),
     ).toEqual([]);
     expect(
       await Bun.file(
@@ -2566,7 +2723,7 @@ relativeLinkTest.each([
       ),
     ).toBe(false);
     expect(
-      await readdir(resolve(projectRoot, "dist/.bunaway-locks/windows-x64")),
+      await readdir(resolve(projectRoot, ".bunaway/locks/windows-x64")),
     ).toEqual([]);
     expect(
       await Bun.file(
@@ -2684,7 +2841,7 @@ test.each([
       ),
     ).toBe(false);
     expect(
-      await readdir(resolve(projectRoot, "dist/.bunaway-locks/windows-x64")),
+      await readdir(resolve(projectRoot, ".bunaway/locks/windows-x64")),
     ).toEqual([]);
     expect(
       await Bun.file(

@@ -50,9 +50,9 @@ test("parallel package readers exclude rebuilds until all readers release", asyn
   }
   const reader = await acquirePackageInputLock(root, "windows-x64");
   await reader();
-  expect(
-    await fs.readdir(resolve(root, "dist/.bunaway-locks/windows-x64")),
-  ).toEqual([]);
+  expect(await fs.readdir(resolve(root, ".bunaway/locks/windows-x64"))).toEqual(
+    [],
+  );
 });
 
 test("a reader rechecks a rebuild that starts during registration", async () => {
@@ -73,7 +73,7 @@ test("a reader rechecks a rebuild that starts during registration", async () => 
       "rebuild",
     );
     expect(
-      await fs.readdir(resolve(root, "dist/.bunaway-locks/windows-x64")),
+      await fs.readdir(resolve(root, ".bunaway/locks/windows-x64")),
     ).toEqual([
       "build.lock",
     ]);

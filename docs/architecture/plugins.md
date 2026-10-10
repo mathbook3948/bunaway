@@ -367,15 +367,16 @@ Windows의 앱별 생성 데이터는 `assets/manifest.json`에 모은다. `form
 빌드마다 생성한다. 이전 `app.json`, `policy.json`, `development-sdk.json`을 Windows
 실행 자산에 중복 생성하지 않는다. macOS의 기존 프로세스 호스트는 기존 파일을 유지한다.
 
-실행 코드 연결은 별도 생성 파일 `assets/generated/plugin-imports.ts`가 맡는다.
-이 파일에는 플러그인 이름별 지연 import만 있고 계약 데이터는 넣지 않는다.
-번들러는 실제 파일을 읽어 `assets/plugin-imports.js`와 필요한 청크를 만든다.
-CLI는 `bunaway:plugin-imports` 모듈 경로를 이 생성 소스에 연결한다. 호스트와 Worker,
-생성 import를 함께 번들해 EXE 컴파일 뒤에도 공통 SDK와 오류 클래스가 일치하도록 한다.
+실행 코드 연결은 CLI의 `app-modules.ts`가 빌드 전용 가상 모듈로 생성한다.
+앱 진입점, 개발 SDK 연결, macOS 부팅 코드와 플러그인 지연 import를 이곳에서 관리하며
+중간 TypeScript 파일은 쓰지 않는다. 플러그인 계약 데이터는 manifest에만 기록한다.
+`bunaway:plugin-imports`는 이 가상 모듈을 가리키고 번들 결과는
+`assets/plugin-imports.js`와 필요한 청크다. 호스트와 Worker, 생성 import를 함께 번들해
+EXE 컴파일 뒤에도 공통 SDK와 오류 클래스가 일치하도록 한다.
 일반 소스의 빈 배열을 빌드 훅으로 대체하지 않으며, 호스트는 manifest를 검증한 뒤
 이 import 모듈과 연결한다. 등록된 플러그인만 해당 Worker에서 초기화한다.
 
-개발 산출물에서는 manifest와 생성 소스를 직접 확인할 수 있다. Windows 배포 빌드는
+개발 산출물에서는 manifest와 실행 번들을 직접 확인할 수 있다. Windows 배포 빌드는
 manifest와 실행 모듈을 EXE에 포함하고 임시 assets를 정리한다. 패키지 루트의
 `manifest.json`은 완성된 EXE와 배포 파일의 해시를 기록하므로 실행 manifest와 분리한다.
 

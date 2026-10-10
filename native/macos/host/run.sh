@@ -41,8 +41,8 @@ download() {
 
 BUN_TARGET=$(field bun target)
 [[ "$BUN_TARGET" == darwin-aarch64 ]] || { echo "Unexpected Bun target: $BUN_TARGET" >&2; exit 1; }
-CACHE="$ROOT/runtime/bun-bundle/vendor"
-JSON_DIR="$ROOT/native/macos/vendor"
+CACHE="$ROOT/build/cache/bun"
+JSON_DIR="$ROOT/build/cache/nlohmann-json"
 mkdir -p "$CACHE" "$JSON_DIR"
 ARCHIVE="$CACHE/bun-$BUN_TARGET.zip"
 download "$(field bun archiveUrl)" "$ARCHIVE" "$(field bun archiveSha256)"

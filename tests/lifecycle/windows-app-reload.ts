@@ -31,7 +31,7 @@ await run([
   "install",
 ]);
 const framework = resolve(project, "node_modules/@bunaway/cli");
-const runtimeCache = resolve(framework, "runtime/bun-bundle/vendor");
+const runtimeCache = resolve(framework, "build/cache/bun");
 await mkdir(runtimeCache, {
   recursive: true,
 });
@@ -41,19 +41,19 @@ for (const name of [
   "LICENSE.bun",
 ]) {
   await cp(
-    resolve(root, "runtime/bun-bundle/vendor", name),
+    resolve(root, "build/cache/bun", name),
     resolve(runtimeCache, name),
     {
       recursive: true,
     },
   );
 }
-const nativeCache = resolve(framework, "native/windows/bun/vendor");
+const nativeCache = resolve(framework, "build/cache/webview2");
 await mkdir(nativeCache, {
   recursive: true,
 });
 await cp(
-  resolve(root, "native/windows/bun/vendor/webview2-1.0.4129.50.nupkg"),
+  resolve(root, "build/cache/webview2/webview2-1.0.4129.50.nupkg"),
   resolve(nativeCache, "webview2-1.0.4129.50.nupkg"),
 );
 

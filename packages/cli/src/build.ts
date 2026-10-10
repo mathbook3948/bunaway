@@ -15,6 +15,7 @@ import {
   ownedDirectory,
   PACKAGING_CHANNELS,
 } from "@bunaway/packaging";
+import { outputPaths } from "@bunaway/packaging/paths";
 import {
   type Project,
   readProjectMetadata,
@@ -147,7 +148,7 @@ async function prepareNativeForBuild(
     });
   }
   const pin = await readPin(target, root);
-  const vendor = resolve(root, "runtime/bun-bundle/vendor");
+  const vendor = resolve(root, "build/cache/bun");
   const licenses: Record<string, string> = {
     "FRAMEWORK-LICENSE.txt": resolve(root, "FRAMEWORK-LICENSE.txt"),
     "THIRD-PARTY-NOTICES.txt": resolve(root, "THIRD-PARTY-NOTICES.txt"),
@@ -156,12 +157,12 @@ async function prepareNativeForBuild(
   if (windows) {
     licenses["License-WebView2.txt"] = resolve(
       root,
-      "native/windows/bun/vendor/sdk/LICENSE.txt",
+      "build/cache/webview2/sdk/LICENSE.txt",
     );
   } else {
     licenses["LICENSE.nlohmann-json"] = resolve(
       root,
-      "native/macos/vendor/LICENSE.nlohmann-json",
+      "build/cache/nlohmann-json/LICENSE.nlohmann-json",
     );
   }
   return {
@@ -174,7 +175,7 @@ async function prepareNativeForBuild(
       ? {
           loader: resolve(
             root,
-            "native/windows/bun/vendor/sdk/build/native/x64/WebView2Loader.dll",
+            "build/cache/webview2/sdk/build/native/x64/WebView2Loader.dll",
           ),
         }
       : {}),
@@ -312,17 +313,20 @@ async function assembleProject(
     );
   }
   await stat(native.host);
-  const parent = resolve(
-    project.root,
-    options.development ? ".bunaway" : "dist",
-  );
+  const paths = outputPaths(project.root, target);
+  const targetOutput = options.development ? paths.development : paths.output;
+  const parent = dirname(targetOutput);
   await ownedDirectory(project.root, parent, true);
   const output = resolve(
     parent,
-    `${target}${windows ? "" : `/${project.app.appId}.app`}`,
+    `${basename(targetOutput)}${windows ? "" : `/${project.app.appId}.app`}`,
   );
   await ownedDirectory(project.root, dirname(output), true);
-  const staging = `${output}.building-${crypto.randomUUID()}`;
+  await ownedDirectory(project.root, paths.work, true);
+  const staging = resolve(
+    paths.work,
+    `${basename(output)}.building-${crypto.randomUUID()}`,
+  );
   const packageRoot = windows
     ? staging
     : resolve(staging, "Contents/Resources");
@@ -337,7 +341,7 @@ async function assembleProject(
   }[] = [];
   let published = false;
   try {
-    // Build in a unique sibling directory so the package is complete before replacing the output.
+    // Complete each package in its owned work directory before replacing the output.
     const assets = resolve(packageRoot, "assets");
     await mkdir(resolve(assets, "web"), {
       recursive: true,
@@ -437,6 +441,7 @@ async function assembleProject(
         );
       }
     }
+    await ownedDirectory(project.root, staging);
     const hashes: Record<string, string> = {};
     for (const dir of windows && !options.development
       ? [
@@ -526,6 +531,8 @@ ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking<
       );
     }
     signal?.throwIfAborted();
+    // The work tree can change while bundling or signing; check it before moving preserved output.
+    await ownedDirectory(project.root, staging);
     await ownedDirectory(project.root, output);
     if (windows && !options.development) {
       // Channel packages live inside the Windows build output, but survive rebuilds.
@@ -556,6 +563,7 @@ ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking<
               );
             }
             // Move the existing tree so Windows junctions never need to be recreated.
+            await ownedDirectory(project.root, dirname(destination));
             await rename(source, destination);
             preserved.push({
               source,
@@ -579,6 +587,7 @@ ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking<
           throw error;
         }
       }
+      await ownedDirectory(project.root, staging);
       await rename(staging, output);
       published = true;
     } catch (error) {

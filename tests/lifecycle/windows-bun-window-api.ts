@@ -933,7 +933,7 @@ if (!process.argv.includes("--child")) {
     dataRoot: resolve(output, `data-${process.pid}`),
     loader: resolve(
       root,
-      "native/windows/bun/vendor/sdk/build/native/x64/WebView2Loader.dll",
+      "build/cache/webview2/sdk/build/native/x64/WebView2Loader.dll",
     ),
   });
   process.exit(0);

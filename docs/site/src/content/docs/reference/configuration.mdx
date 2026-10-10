@@ -38,7 +38,7 @@ CLI는 **`src-bunaway/bunaway.json`의 v1 형식**을 읽습니다.
 모든 플랫폼에서 `build.app`에 지정한 앱 정의를 사용합니다.
 
 `build.frontend`는 앱 산출물 경로와 분리해야 합니다. `dist` 전체를 웹 출력으로 지정할 수 없습니다.
-`dist/windows-x64`, `dist/macos-arm64`, `dist/.bunaway-locks`, `.bunaway`와 같거나
+`dist/windows-x64`, `dist/macos-arm64`, `.bunaway/locks`, `.bunaway`와 같거나
 이 경로를 포함하거나 그 안에 속하면 거부합니다. `web-dist`나 `dist/web`처럼
 앱 출력과 겹치지 않는 디렉터리를 사용하세요. 웹 도구의 출력 경로도 같은 디렉터리로 지정합니다.
 

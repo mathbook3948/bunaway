@@ -252,6 +252,13 @@
           "windowOperations"
         ]
       }
+    },
+    {
+      "name": "@bunaway/packaging/paths",
+      "source": "packages/packaging/src/paths.ts",
+      "pages": {
+        "reference/tooling/packaging-api": ["outputPaths"]
+      }
     }
   ],
   "members": [

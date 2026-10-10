@@ -67,7 +67,7 @@ mise run host:macos   # same entry point
 ```
 
 Requires macOS arm64, pinned Bun 1.4.2, Xcode CLT and a GUI session. Run the
-probe before the host serially: both populate `runtime/bun-bundle/vendor`.
+probe before the host serially: both populate `build/cache/bun`.
 The regression suite owns an in-memory memo fixture. The standalone memo app
 uses the storage plugin and currently requires Windows.
 

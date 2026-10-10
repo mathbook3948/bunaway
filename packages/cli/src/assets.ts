@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 import { readAppManifest } from "@bunaway/runtime-bun/app-manifest";
 import type { BunPlugin } from "bun";
+import { appModules, commonJsSdkSource } from "./app-modules.ts";
 import { type Project, runtimeSettings } from "./config.ts";
 import { release } from "./distribution.ts";
 import {
@@ -16,7 +17,7 @@ import {
 import {
   type InstalledPlugin,
   installedPlugins,
-  writePluginAssets,
+  writePluginManifest,
 } from "./plugins.ts";
 import { assertAppDefinitionExport, buildWithSdk, sdkPlugin } from "./sdk.ts";
 
@@ -155,35 +156,18 @@ export async function bundleAssets(
     name: "process-app-entry",
     setup(build) {
       plugin.setup(build);
-      build.onResolve(
-        {
-          filter: /^bunaway-process-app$/,
-        },
-        () => ({
-          path: "backend.ts",
-          namespace: "bunaway-process-entry",
-        }),
-      );
-      build.onLoad(
-        {
-          filter: /.*/,
-          namespace: "bunaway-process-entry",
-        },
-        () => ({
-          contents: `import app from ${JSON.stringify(project.appEntry)};
-import { runBunApp } from ${JSON.stringify(runtimeEntry)};
-await runBunApp(app);`,
-          loader: "ts",
-          resolveDir: project.root,
-        }),
-      );
+      appModules({
+        appEntry: project.appEntry,
+        processRuntime: runtimeEntry,
+      }).setup(build);
     },
   };
   const backend = await buildWithSdk(
     {
       entrypoints: [
-        "bunaway-process-app",
+        "bunaway-generated/backend.ts",
       ],
+      root: project.root,
       target: "bun",
       packages: "bundle",
       sourcemap: development ? "inline" : "none",
@@ -257,7 +241,7 @@ export async function bundleWindowsHost(
       ? await installedPlugins(pluginProject, (await release()).version)
       : []);
   const sdk = project ? await sdkPlugin(project, [], plugins) : undefined;
-  const pluginEntry = await writePluginAssets(destination, plugins);
+  await writePluginManifest(destination, plugins);
   const sharedEntries = new Map<string, string>();
   if (development && sdk && project) {
     const require = createRequire(resolve(project, "package.json"));
@@ -334,44 +318,11 @@ export async function bundleWindowsHost(
     name: "windows-app-entry",
     setup(build) {
       sdk?.setup(build);
-      build.onResolve(
-        {
-          filter: /^bunaway:plugin-imports$/,
-        },
-        () => ({
-          path: pluginEntry,
-        }),
-      );
-      build.onResolve(
-        {
-          filter: /^bunaway-development-sdk\//,
-        },
-        ({ path }) => ({
-          path: path.slice("bunaway-development-sdk/".length),
-          namespace: "development-sdk",
-        }),
-      );
-      build.onLoad(
-        {
-          filter: /.*/,
-          namespace: "development-sdk",
-        },
-        ({ path }) => {
-          const source = sdkSources.get(path);
-          if (!source) {
-            throw new Error("Unknown development SDK entry.");
-          }
-          // Bun's namespace also exposes the default created for CommonJS modules.
-          return {
-            contents: `export * from ${JSON.stringify(source)};
-import * as entry from ${JSON.stringify(source)};
-const defaultExport = Reflect.get(entry, "default");
-export { defaultExport as default };`,
-            loader: "ts",
-            resolveDir: dirname(source),
-          };
-        },
-      );
+      appModules({
+        appEntry,
+        plugins,
+        sdkSources,
+      }).setup(build);
       build.onResolve(
         {
           filter: /^\.\/app\.js$/,
@@ -380,29 +331,9 @@ export { defaultExport as default };`,
           resolve(importer) === resolve(source, "boot.ts")
             ? {
                 path: "app.ts",
-                namespace: "bunaway-windows-entry",
+                namespace: "bunaway-generated",
               }
             : undefined,
-      );
-      build.onResolve(
-        {
-          filter: /^bunaway-windows-app\/app\.ts$/,
-        },
-        () => ({
-          path: "app.ts",
-          namespace: "bunaway-windows-entry",
-        }),
-      );
-      build.onLoad(
-        {
-          filter: /.*/,
-          namespace: "bunaway-windows-entry",
-        },
-        () => ({
-          contents: `export { default } from ${JSON.stringify(resolve(appEntry))};`,
-          loader: "ts",
-          resolveDir: dirname(resolve(appEntry)),
-        }),
       );
     },
   };
@@ -429,11 +360,11 @@ export { defaultExport as default };`,
       resolve(source, "boot.ts"),
       resolve(source, "ui.ts"),
       resolve(source, "host-operations.ts"),
-      pluginEntry,
-      "bunaway-windows-app/app.ts",
+      "bunaway-generated/plugin-imports.ts",
+      "bunaway-generated/app.ts",
       ...[
         ...namesBySource.values(),
-      ].map((name) => `bunaway-development-sdk/${name}.ts`),
+      ].map((name) => `bunaway-generated/${name}.ts`),
     ],
     sharedEntries.size
       ? (metadata) => {
@@ -485,7 +416,7 @@ export { defaultExport as default };`,
         inventory[name] = `${entry}.cjs`;
         await writeFile(
           resolve(destination, `${entry}.cjs`),
-          `module.exports = require("./${entry}.js").default;\n`,
+          commonJsSdkSource(entry),
         );
       } else {
         inventory[name] = `${entry}.js`;

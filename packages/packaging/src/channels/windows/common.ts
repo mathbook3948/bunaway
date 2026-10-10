@@ -153,9 +153,7 @@ export async function copyPayload(
   await mkdir(dest, {
     recursive: true,
   });
-  // Copy entries individually: fs.cp refuses a destination inside the source
-  // (staging lives under packageDir/packaged/), so that subtree is excluded
-  // by name rather than by a filter.
+  // Exclude previous channel outputs from the payload copied into staging.
   for (const entry of await readdir(packageDir)) {
     if (entry === "packaged") {
       continue;

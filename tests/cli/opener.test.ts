@@ -8,12 +8,13 @@ import {
   operations,
   pluginRegistry,
 } from "../../native/windows/bun/plugins.ts";
+import { pluginImportsSource } from "../../packages/cli/src/app-modules.ts";
 import { validateProject } from "../../packages/cli/src/config.ts";
 import { packageFilename } from "../../packages/cli/src/distribution.ts";
 import { writeJson } from "../../packages/cli/src/files.ts";
 import {
   installedPlugins,
-  writePluginAssets,
+  writePluginManifest,
 } from "../../packages/cli/src/plugins.ts";
 import { createProject, packageDirectory } from "./project.ts";
 
@@ -105,10 +106,10 @@ export default defineApp({ modules: [], plugins: [openerPlugin] });
     ]);
 
     const assets = resolve(home, "generated");
-    const generated = await writePluginAssets(assets, plugins);
+    await writePluginManifest(assets, plugins);
     await writeFile(
       resolve(assets, "plugin-imports.js"),
-      await Bun.file(generated).text(),
+      pluginImportsSource(plugins),
     );
     const packagedPlugins = await loadPluginCatalog(
       assets,
