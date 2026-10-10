@@ -27,7 +27,7 @@ import {
   type UIConfig,
   validatePacket,
 } from "./channel.ts";
-import { DesktopLifecycle } from "./desktop.ts";
+import { DesktopLifecycle, validateDesktopStartup } from "./desktop.ts";
 import { DevelopmentApp } from "./development-app.ts";
 import type { LaunchArguments, listenForInstances } from "./instance.ts";
 import { activeDescendants, containAppProcess } from "./job.ts";
@@ -124,6 +124,7 @@ export async function runWindowsApp(
         .catch(() => {});
     },
   );
+  validateDesktopStartup(config.windows, app.desktop);
   config = {
     ...config,
     desktop: {

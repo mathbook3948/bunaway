@@ -53,7 +53,18 @@ splash 창의 호출 세션은 닫을 때 폐기되므로 전환 요청은 주 �
 살아 있는 창을 모두 복원하며 Quit은 종료 검사를 거친다. 트레이는 별도의 숨긴 HWND를
 소유해 앱 창의 수명과 구별하고 Explorer 재시작 뒤 다시 등록한다.
 종료 때 아이콘과 소유 HWND를 정리한다. 이 복원 동작은 살아 있는 창을 대상으로 한다.
-이미 닫힌 창의 생성과 재생성은 공개 `windows` API와 [ADR 0004](./0004-multi-window-per-view-policy.md)를 따른다.
+열린 창이 없으면 첫 사전 선언 창을 생성하고 표시한다. 빈 선언 배열이면 창을 만들지 않는다.
+지정 창의 생성과 재생성은 공개 `windows` API와 [ADR 0004](./0004-multi-window-per-view-policy.md)를 따른다.
+
+2026-10-11 확장: `app.windows: []` 또는 모든 선언의 `startup: false`를 허용한다.
+Windows 호스트는 앱 정의를 읽은 뒤 트레이 또는 `closeBehavior: "keep-alive"`가 있는지
+검사하며, 없으면 필요한 설정을 진단하고 UI Worker 시작 전에 거부한다.
+`keep-alive`는 마지막 창을 닫아 HWND, WebView와 세션을 정리해도 백엔드와 앱 상태를 유지한다.
+마지막 창 닫기는 종료 요청이 아니며 트레이 Quit과 `DesktopContext.quit()`만 종료 검사를 거친다.
+트레이 자체는 마지막 창의 닫기 규칙을 변경하지 않는다. 기본 quit은 기존 규칙을 유지한다.
+표시 요청은 반복 입력을 합치고 이전 창 정리와 창 API 작업이 끝난 뒤 생성한다.
+트레이 없는 keep-alive 앱도 숨긴 제어 HWND를 소유해 개발 CLI의 종료 메시지를 받는다.
+종료 때 제어 HWND도 정리한다. macOS의 창 없는 시작은 아직 `UNSUPPORTED`다.
 
 URL scheme과 파일 확장자의 OS 등록은 설치 기능이며 이번 변경에 포함하지 않는다.
 등록된 열기 명령이 실행기에 URL이나 파일 인자를 전달하면 동일한 앱 열기 계약을 사용한다.

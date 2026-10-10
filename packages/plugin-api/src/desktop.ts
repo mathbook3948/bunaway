@@ -20,7 +20,10 @@ export type OpenRequest = {
 
 /** Lifecycle controls exposed only to trusted app callbacks. */
 export interface DesktopContext {
-  /** Shows and focuses the app's open windows. */
+  /**
+   * Requests display and focus of open windows, or creation of the first declared window.
+   * An empty catalog is a no-op. Resolves on UI acceptance, before document or SDK readiness.
+   */
   show(): Promise<void>;
   /** Hides the app window; rejects when no tray is configured. */
   hide(): Promise<void>;
@@ -33,10 +36,12 @@ export type DesktopOptions = {
   /**
    * With `quit`, closing the last open window requests app shutdown; closing
    * another window closes only that window. `hide` hides the target window and
-   * requires a tray. The default is `quit`.
+   * requires a tray. `keep-alive` closes the window without quitting the app.
+   * Closing a window with `keep-alive` does not invoke beforeQuit.
+   * A windowless start requires `keep-alive` or a tray. The default is `quit`.
    */
-  readonly closeBehavior?: "quit" | "hide";
-  /** Creates a system tray entry used to reopen or quit a hidden app. */
+  readonly closeBehavior?: "quit" | "hide" | "keep-alive";
+  /** Creates a system tray entry that keeps a windowless app running and offers Open and Quit. */
   readonly tray?: {
     /** Text shown by the operating system for the tray icon. */
     readonly tooltip: string;

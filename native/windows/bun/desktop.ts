@@ -6,7 +6,24 @@ import type {
   OpenRequest,
   QuitReason,
 } from "@bunaway/core";
+import type { WindowSpec } from "@bunaway/runtime-bun/window-config";
 import type { LaunchArguments } from "./instance.ts";
+
+/** Reject a windowless start without an explicit lifetime owner before starting native resources. */
+export function validateDesktopStartup(
+  windows: readonly WindowSpec[],
+  options: DesktopOptions | undefined,
+): void {
+  if (
+    !windows.some((spec) => spec.startup !== false) &&
+    !options?.tray &&
+    options?.closeBehavior !== "keep-alive"
+  ) {
+    throw new Error(
+      "app.windows has no startup window; configure desktop.tray or desktop.closeBehavior: keep-alive in the app definition.",
+    );
+  }
+}
 
 /**
  * Splits launch arguments into an immutable request.
@@ -70,6 +87,12 @@ export class DesktopLifecycle {
     private readonly stop: () => void,
     private readonly report: (error: unknown) => void,
   ) {
+    if (
+      options !== undefined &&
+      (!options || typeof options !== "object" || Array.isArray(options))
+    ) {
+      throw new Error("desktop must be an options object");
+    }
     if (options?.closeBehavior === "hide" && !options.tray) {
       throw new Error("desktop.closeBehavior hide requires a tray");
     }
@@ -78,17 +101,33 @@ export class DesktopLifecycle {
       ![
         "quit",
         "hide",
+        "keep-alive",
       ].includes(options.closeBehavior)
     ) {
       throw new Error("Invalid desktop.closeBehavior");
     }
     if (
-      options?.tray &&
-      (!options.tray.tooltip ||
+      options?.tray !== undefined &&
+      (!options.tray ||
+        typeof options.tray !== "object" ||
+        Array.isArray(options.tray) ||
+        typeof options.tray.tooltip !== "string" ||
+        !options.tray.tooltip ||
         options.tray.tooltip.length > 127 ||
         options.tray.tooltip.includes("\0"))
     ) {
       throw new Error("Invalid desktop.tray.tooltip");
+    }
+    for (const name of [
+      "onOpen",
+      "beforeQuit",
+    ] as const) {
+      if (
+        options?.[name] !== undefined &&
+        typeof options[name] !== "function"
+      ) {
+        throw new Error(`desktop.${name} must be a function`);
+      }
     }
     this.context = Object.freeze({
       show: () => (this.stopped ? Promise.resolve() : control("show")),

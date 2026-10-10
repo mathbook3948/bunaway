@@ -110,7 +110,7 @@ export default defineApp({
 
 | DesktopOptions 필드 | 기본값 | 동작 |
 | --- | --- | --- |
-| `closeBehavior` | `"quit"` | `"hide"`이면 닫기 버튼, `window.close()`와 `windows.close`로 해당 창을 숨깁니다. 트레이가 필요합니다 |
+| `closeBehavior` | `"quit"` | 마지막 창 닫기로 종료를 요청합니다. `"hide"`는 해당 창을 숨기며 트레이가 필요합니다. `"keep-alive"`는 마지막 창을 실제로 닫아도 앱을 유지합니다 |
 | `tray` | 없음 | `{ tooltip: string }`. tooltip은 1~127자의 NUL 없는 문자열입니다 |
 | `onOpen` | 없음 | `(request: OpenRequest, context: DesktopContext) => void \| Promise<void>` |
 | `beforeQuit` | 없음 | `(reason: QuitReason) => boolean \| void \| Promise<boolean \| void>` |
@@ -139,24 +139,40 @@ URL과 파일은 앱이 검증할 입력입니다. 전달받은 경로는 Host A
 
 | DesktopContext 메서드 | 결과 |
 | --- | --- |
-| `show(): Promise<void>` | 살아 있는 창을 모두 복원합니다. 종료한 창은 재생성하지 않습니다 |
+| `show(): Promise<void>` | 살아 있는 창을 모두 복원합니다. 열린 창이 없으면 첫 사전 선언 창을 생성합니다. 선언이 비어 있으면 아무 창도 만들지 않습니다 |
 | `hide(): Promise<void>` | 트레이가 있으면 살아 있는 창을 모두 숨깁니다. 없으면 오류로 실패합니다 |
 | `quit(): Promise<boolean>` | 종료 검사가 승인되면 `true`, 취소하거나 검사에 실패하면 `false` |
 
-두 번째 실행을 받으면 살아 있는 창을 모두 복원한 뒤 `onOpen`을 호출합니다.
+`show()`는 표시 요청의 접수를 기다립니다. 새 창의 문서와 SDK 준비까지 기다리지 않습니다.
+두 번째 실행을 받으면 같은 표시 요청을 접수한 뒤 `onOpen`을 호출합니다.
 숨김은 창, WebView, 세션과 앱 상태를 유지하므로 백엔드 작업도 계속 실행됩니다.
 트레이를 클릭하거나 메뉴의 Open을 선택하면 창을 복원합니다. 숨기기 전의 최대화 상태를 유지하며,
 최소화된 창은 복원합니다. Quit은 종료 검사를 거칩니다.
+열린 창이 없으면 Open은 첫 선언의 `startup` 값과 관계없이 그 창을 생성해 표시합니다.
+다른 창은 자동 생성하지 않으며 `app.windows: []`이면 아이콘과 Quit만 사용합니다.
+이 표시 요청은 `visible`과 `showWhenReady`의 자동 표시 조건을 기다리지 않고 창을 표시합니다.
+반복 표시 요청은 합치고 이전 WebView 정리와 진행 중인 창 API 작업이 끝난 뒤 생성합니다.
+
+시작 창이 없으면 트레이 또는 `closeBehavior: "keep-alive"`를 반드시 지정합니다.
+백엔드 타이머나 `beforeQuit`, `onOpen` 훅만으로는 이 조건을 충족하지 않습니다.
+트레이는 시작 창이 없어도 앱을 유지하지만 마지막 창의 닫기 규칙을 바꾸지는 않습니다.
+트레이와 기본 `"quit"`를 함께 쓰면 나중에 만든 마지막 창을 닫을 때 종료를 요청합니다.
+`"keep-alive"`로 닫은 창은 HWND, WebView와 세션을 정리하고 앱 상태와 백엔드는 유지합니다.
+이때 마지막 창 닫기는 종료 요청이 아니므로 `beforeQuit`를 호출하지 않습니다.
+명시적 종료는 트레이 Quit 또는 `onOpen`에서 받은 `DesktopContext.quit()`으로 요청합니다.
+트레이 없는 상주 앱은 앱이 완료할 수 있는 종료 경로를 구현해야 합니다.
+설정과 지연 생성 예시는 [창 없는 시작](/guides/windows/#창-없는-시작)을 따릅니다.
 
 `QuitReason`은 마지막 창의 닫기 `"last-window"`, 트레이 Quit `"tray"`,
 `DesktopContext.quit()`의 `"api"`입니다. `beforeQuit`가 `false`를 반환하거나 예외를 던지면
 창과 세션을 유지하고 종료를 취소합니다. 동시 종료 요청은 같은 검사 결과를 사용합니다.
 반환값이 `true` 또는 `undefined`이면 기존 종료 절차와 플러그인 StopHook을 실행합니다.
-공개 [windows API](/reference/host/windows/)로 마지막 창을 닫을 때도 종료 검사를 거칩니다.
+기본 `"quit"`에서는 공개 [windows API](/reference/host/windows/)로 마지막 창을 닫을 때도 종료 검사를 거칩니다.
 창의 `recreate`는 앱 종료를 요청하지 않으며 트레이 숨김 대신 창을 다시 만듭니다.
 `quit()`의 `true`는 종료 승인 결과이며 모든 자원이 이미 정리됐다는 뜻은 아닙니다.
 종료 훅에는 자동 기한이 없으며 앱이 완료해야 합니다. 강제 종료, 호스트 실패, SIGINT, SIGTERM은 취소할 수 없습니다.
 `bunaway dev`의 재시작과 CLI 종료도 `beforeQuit`와 숨김 설정을 우회하고 플러그인 StopHook과 자원 정리를 실행합니다.
+창이 없는 상주 앱과 트레이 앱에도 적용합니다. OS 강제 종료는 StopHook 실행을 보장하지 않습니다.
 
 `onOpen`과 `beforeQuit`는 앱 수명주기 콜백입니다. 명령이나 플러그인 setup의 Host 호출 컨텍스트를
 자동으로 제공하지 않으므로 `storage`, `log`, `capabilities` 직접 호출의 실행 범위로 사용하지 않습니다.

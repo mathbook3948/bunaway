@@ -299,7 +299,21 @@ test("macOS window declarations preserve exact asset ports and reject mixed orig
       policy,
     ),
   ).toThrow();
-  expect(() => readMacosWindowSpecs([], policy)).toThrow();
+  expect(() => readMacosWindowSpecs([], policy)).toThrow(
+    "macOS requires at least one startup window",
+  );
+  expect(() =>
+    readMacosWindowSpecs(
+      [
+        {
+          ...first,
+          home: "https://app.bunaway.local:8443/",
+          startup: false,
+        },
+      ],
+      policy,
+    ),
+  ).toThrow("macOS requires at least one startup window");
 });
 
 test("macOS backend Worker uses core sessions and acknowledges shutdown before plugin cleanup", async () => {

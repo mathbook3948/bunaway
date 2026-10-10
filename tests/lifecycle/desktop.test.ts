@@ -1,14 +1,151 @@
 import { expect, test } from "bun:test";
 import { createConnection } from "node:net";
+import { defineApp } from "@bunaway/backend";
+import type { DesktopOptions, OpenRequest } from "@bunaway/core";
+import type { WindowSpec } from "@bunaway/runtime-bun/window-config";
 import { validatePacket } from "#native/windows/bun/channel";
-import { DesktopLifecycle, openRequest } from "#native/windows/bun/desktop";
+import {
+  DesktopLifecycle,
+  openRequest,
+  validateDesktopStartup,
+} from "#native/windows/bun/desktop";
 import {
   forwardToInstance,
   listenForInstances,
   parseLaunchArguments,
 } from "#native/windows/bun/instance";
-import { defineApp } from "@bunaway/backend";
-import type { OpenRequest } from "@bunaway/core";
+
+test("windowless startup requires a tray or explicit keep-alive, even with open and quit hooks", () => {
+  const deferred: WindowSpec[] = [
+    {
+      view: "main",
+      title: "Main",
+      home: "https://app.bunaway.local/index.html",
+      window: {
+        width: 640,
+        height: 480,
+      },
+      startup: false,
+    },
+  ];
+  for (const windows of [
+    [],
+    deferred,
+  ]) {
+    for (const options of [
+      undefined,
+      {},
+      {
+        beforeQuit: () => false,
+      },
+      {
+        onOpen: () => {},
+      },
+    ]) {
+      expect(() => validateDesktopStartup(windows, options)).toThrow(
+        "desktop.tray or desktop.closeBehavior: keep-alive",
+      );
+    }
+    for (const options of [
+      {
+        closeBehavior: "keep-alive",
+      },
+      {
+        tray: {
+          tooltip: "Resident",
+        },
+      },
+      {
+        closeBehavior: "hide",
+        tray: {
+          tooltip: "Resident",
+        },
+      },
+    ] satisfies DesktopOptions[]) {
+      expect(() => validateDesktopStartup(windows, options)).not.toThrow();
+    }
+  }
+  expect(() =>
+    validateDesktopStartup(
+      deferred.map((spec) => ({
+        ...spec,
+        startup: true,
+      })),
+      undefined,
+    ),
+  ).not.toThrow();
+});
+
+test("keep-alive preserves explicit quit checks and diagnoses invalid desktop settings", async () => {
+  for (const options of [
+    null,
+    [],
+    false,
+  ]) {
+    // App definitions loaded at runtime may not have passed a TypeScript check.
+    expect(
+      () =>
+        new DesktopLifecycle(
+          options as unknown as DesktopOptions,
+          async () => {},
+          () => {},
+          () => {},
+        ),
+    ).toThrow("desktop must be an options object");
+  }
+  let stops = 0;
+  const lifecycle = new DesktopLifecycle(
+    {
+      closeBehavior: "keep-alive",
+      beforeQuit: () => false,
+    },
+    async () => {},
+    () => {
+      stops++;
+    },
+    () => {},
+  );
+  expect(await lifecycle.context.quit()).toBe(false);
+  expect(stops).toBe(0);
+  for (const options of [
+    {
+      closeBehavior: "resident",
+    },
+    {
+      tray: {
+        tooltip: 42,
+      },
+    },
+    {
+      tray: {
+        tooltip: "",
+      },
+    },
+    {
+      tray: null,
+    },
+    {
+      tray: [],
+    },
+    {
+      onOpen: true,
+    },
+    {
+      beforeQuit: false,
+    },
+  ]) {
+    // Exercise untyped app definitions at the runtime boundary.
+    expect(
+      () =>
+        new DesktopLifecycle(
+          options as unknown as DesktopOptions,
+          async () => {},
+          () => {},
+          () => {},
+        ),
+    ).toThrow("desktop.");
+  }
+});
 
 const launch = {
   argv: [

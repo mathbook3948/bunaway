@@ -245,7 +245,15 @@ macOS 전용 설정과 리소스 경계 페이지도 `fixtures/desktop/host/`에
 공용 기능 목록 검사는 Windows 창 API의 `supported`와 macOS의 `unsupported`를 요구한다.
 
 `desktop.test.ts`는 앱 열기 입력, 단일 인스턴스 전달과 시작 큐, 종료 취소,
-실패 복구, 제어 패킷 경계를 확인한다. Windows 실행기의 `windows-desktop.ts`는
+실패 복구, 제어 패킷 경계와 창 없는 시작의 실행 유지 조건, 잘못된 desktop 설정의 진단을 확인한다.
+`windows-windowless.ts`는 실제 Windows HWND, 트레이와 WebView2로 빈 창 선언,
+지연 생성과 첫 창의 트레이 생성, 숨김과 최소화 및 최대화 복원, 마지막 창 닫기 뒤
+백엔드 유지와 새 세션, 트레이 Quit 취소와 재시도를 확인한다. 트레이 입력은 실제
+소유 HWND에 콜백 메시지를 게시하며 물리 마우스 클릭 검증과 구분한다.
+창 없는 상주 앱과 트레이 앱의 CLI 중단, 대기 중인 beforeQuit 우회와 StopHook 정리도 검사한다.
+강제 종료에서는 StopHook을 보장하지 않으며 실제 Job 자식 프로세스와 HWND 종료를 확인한다.
+실행 결과는 `build/windows-windowless/<scenario>-report.json`에 기록한다.
+Windows 실행기의 `windows-desktop.ts`는
 실제 창을 숨긴 뒤 백엔드 타이머가 계속 동작하는지, 두 번째 실행으로 복원되는지,
 종료 취소 뒤 같은 창과 세션을 유지하고 다시 종료할 수 있는지 확인한다.
 `windows-desktop-web.ts`는 복원 뒤에도 원래 구독으로 이벤트를 받고 같은 세션에서
