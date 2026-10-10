@@ -25,9 +25,6 @@ WebView에서 Bun으로 직접 연결하고 Java에 문서 권한 발급과 회�
 측정 구간 초반에도 나타나지만 이 자료만으로 JIT나 시작 부하가 원인이라고 단정할 수 없다.
 별도 고정 주소 프로토타입의 수치는 이 최종 비교에 섞지 않았다.
 
-원시 표본은 `measurements-20261011-003508/resume-comparison.json`이며 재현 명령은
-`python build/android-performance/2026-10-10/resume-compare.py final capacitor`다.
-
 | 변형 | APK SHA-256 |
 | --- | --- |
 | Bunaway 최종 직접 연결 | `cffb7a8a6aa09da9a33b070b34e30bcd9a3f820cf5906b6f7868ca726c3a7a97` |
@@ -76,9 +73,6 @@ Capacitor 대비 128KiB는 약 1.86배, 동시 호출은 약 1.70배 느리다.
 이전 시점의 main 측정과 표본을 합치거나 개별 수정의 효과로 나눠 해석하지 않는다.
 기기 내 계측에서는 큰 입력의 Java 파싱과 검증, envelope 생성 및 별도 Bun 왕복이 남아 있다.
 따옴표와 줄바꿈 검색을 정규식으로 바꾼 후보는 전체 호출 이득이 뚜렷하지 않아 제외했다.
-
-원본은 `measurements-20261010-235627/resume-comparison.json`이며 재현 명령은
-`python build/android-performance/2026-10-10/resume-compare.py text direct capacitor`다.
 
 | 변형 | APK SHA-256 |
 | --- | --- |
@@ -164,8 +158,8 @@ Java 스키마 검사는 메시지 종류가 다른 분기를 runtime ID와 버�
 
 ## 전송 경로 후보 비교
 
-`measurements-20261010-233309/resume-comparison.json`은 기기 재부팅 후 수행한
-한 회차의 탐색 결과다. 위와 같은 입력과 워밍업을 사용했고 값은 중앙값, 단위는 ms다.
+기기 재부팅 후 한 회차 탐색을 수행했다. 위와 같은 입력과 워밍업을 사용했고
+값은 중앙값, 단위는 ms다.
 
 | 경로 | 1KiB 순차 | 128KiB 순차 | 1KiB 동시 16개 |
 | --- | ---: | ---: | ---: |
@@ -182,7 +176,7 @@ ArrayBuffer와 fetch는 8KiB 이상 응답에 적용했다. 현재 구조에서�
 
 이후 MessagePort를 본 코드에 적용하면서 문서 교체 시 포트 회수, 응답 순서와 전달 기한을
 유지했다. 첫 구현의 별도 응답 큐는 제거하고 읽기 스레드에서 직접 보낸다.
-재부팅 전 시스템 부하가 높았던 `measurements-20261010-232631/`의 수치는 채택 판단에서 제외했다.
+재부팅 전 시스템 부하가 높았던 예비 실행의 수치는 채택 판단에서 제외했다.
 
 ## 측정 조건과 결과
 
@@ -220,24 +214,15 @@ Java의 최초 파싱과 검증, 별도 Bun 프로세스 왕복도 남아 있다
 이후 정규식 사전 컴파일, 파이프 복사 감소와 WebView 입력의 writer 검증을 적용한
 추가 비교에서는 수정 APK / Capacitor 중앙값이 1KiB 2.50 / 1.40ms,
 128KiB 14.75 / 6.10ms, 1KiB 동시 16개 10.30 / 4.90ms였다.
-세 회차 원본은 `measurements-20261010-231213/resume-comparison.json`이다.
 기존 1차 결과와 실행 시점이 다르므로 수치를 합치지 않는다.
 
 그 뒤 UTF-8 크기 사전 판정과 긴 문자열의 Unicode 검사 경로를 추가했다.
 이 단계만 분리한 비교는 ADB 서버 연결 실패로 중단되어 완성된 세 회차 수치가 없다.
-중단된 실행 `measurements-20261010-231613/`은 최종 성능 근거에서 제외한다.
+중단된 실행은 최종 성능 근거에서 제외한다.
 이 변경은 문서 앞부분의 이전 MessagePort 구현 반복 비교에 포함돼 있다.
 
-## 로컬 재현 자료
+## 측정 범위
 
-`build/android-performance/2026-10-10/`에 기존 공통 `harness.js`, `prepare.ts`,
-`run-benchmark.py`와 이번 `resume-compare.py`를 보관했다. 이 디렉터리는 Git 추적 대상이 아니다.
-`resume-baseline/app-debug.apk`, `resume-candidate/app-debug.apk`와 Capacitor APK를 준비한
-현재 로컬 환경에서 `python build/android-performance/2026-10-10/resume-compare.py baseline candidate capacitor`로
-동일 측정을 수행한다. 스크립트는 측정 패키지만 교체하고, 공간 확보를 위해 검증 fixture를
-데이터를 보존한 채 임시 제거한 뒤 finally에서 복원한다. 다른 앱은 제거하지 않는다.
-
-1차 비교 원시 표본은 `measurements-20261010-225331/resume-comparison.json`이다.
 1차 비교 APK SHA-256은 다음과 같다.
 
 | 변형 | SHA-256 |
