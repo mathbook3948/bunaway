@@ -491,6 +491,21 @@ COM handler 목록이 비어 있고 종료 후 콜백이 없음을 확인했다.
 첫 실행은 WebView2 브라우저 프로세스 잔류로 30초 정리 기한을 넘겼고, 전체 검사와
 함께 실행한 추가 시도는 fixture의 150초 기한에 실패했다. 단독 실행 두 번은 통과했다.
 기존 [이슈 #94](https://github.com/mathbook3948/bunaway/issues/94)의 간헐적 정리 문제를
-해결했다는 뜻은 아니다. 전체 검사와 호스트 회귀 결과는 해당 실행 로그로 구분한다.
+해결했다는 뜻은 아니다.
+
+`mise run check`는 타입, lint, 포맷과 Java 포맷 검사를 통과했지만 전체 테스트는
+768개 통과, 67개 건너뜀, 12개 실패와 테스트 사이 오류 3개로 끝났다.
+CLI 번들의 5초 제한 세 건과 패키징의 60초 기한 초과, 이어진 실행 및 빌드 잠금
+실패 세 건, Windows의 symlink 생성 EPERM 다섯 건이 기록됐다.
+시간 초과한 번들 검사 세 개는 별도 30초 기한 실행에서 각각 2.6초, 1.0초, 1.4초로
+통과했다. 이 재실행이 전체 check 성공을 대신하지는 않는다.
+로그는 `build/check-final.log`, `build/cli-window-distribution-retry.log`에 보관했다.
+문서 check와 build는 통과했으며 72 페이지의 내부 링크 6,413개를 검사했다.
+`mise run host:windows`도 `windows-host: all checks passed`로 완료했다.
+기존 창 탐색과 준비, 이벤트, 초기 종료와 생성 실패, 새 모달 시나리오, 트레이 종료와
+취소, 저장 경계, 이동한 CLI 앱, 앱 명령 교체와 다중 뷰, 메모 저장과 복원,
+엔트리포인트 종료 후 자식 프로세스 정리를 확인했다. 로그는
+`build/host-windows-final.log`다. Inno Setup이 없어 설치 검사를 건너뛰었고 Windows의
+symlink 생성 권한이 없어 저장소의 마지막 파일 symlink 검사는 건너뛰었다.
 초기 설정의 부모 지정, child HWND 임베딩, 다중 물리 모니터와 다른 플랫폼 실행은
 이번 작업에 포함하지 않았다.

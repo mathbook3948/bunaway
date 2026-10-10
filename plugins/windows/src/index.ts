@@ -8,23 +8,28 @@ import {
 import { matches } from "./scope.ts";
 
 const definitions = Object.fromEntries(
-  Object.entries(windowOperations).map(([name, operation]) => [
-    name.slice("windows.".length),
-    {
-      ...operation,
-      permission:
-        name === "windows.list" ||
-        name === "windows.getById" ||
-        name === "windows.getCurrent" ||
-        name === "windows.getFocused" ||
-        name === "windows.getLastActive"
-          ? "list"
-          : name === "windows.destroy"
-            ? "destroy"
-            : "control",
-      osPermission: "not-required" as const,
-    },
-  ]),
+  Object.entries(windowOperations).map(([name, operation]) => {
+    let permission = "control";
+    if (name === "windows.destroy") {
+      permission = "destroy";
+    } else if (
+      name === "windows.list" ||
+      name === "windows.getById" ||
+      name === "windows.getCurrent" ||
+      name === "windows.getFocused" ||
+      name === "windows.getLastActive"
+    ) {
+      permission = "list";
+    }
+    return [
+      name.slice("windows.".length),
+      {
+        ...operation,
+        permission,
+        osPermission: "not-required" as const,
+      },
+    ];
+  }),
 );
 const plugin = defineNativePlugin({
   name: "windows",
