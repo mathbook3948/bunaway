@@ -155,13 +155,20 @@ z.object는 선언하지 않은 필드를 제거하고, z.strictObject는 추가
 record, union, nullable과 JSON 값을 선언할 수 있습니다. 문자열 길이, Unicode 정규식,
 숫자 범위와 배수, 배열 길이 제약을 공유합니다. 정규식은 u 플래그만 사용해야 합니다.
 
+record의 키에 z.number나 z.int를 사용하면 선언을 거부합니다. 숫자 키를 문자열로
+변환할 때 범위와 배수 제약이 사라지기 때문입니다. union이나 lazy 안의 숫자 키도 거부합니다.
+enum이나 literal로 키를 열거한 record는 모든 키가 필수입니다. 값에 exactOptional을
+사용해도 이 규칙을 유지합니다. 일부 키의 생략을 허용하려면 z.partialRecord를 사용합니다.
+
 SDK는 defineNativePlugin 호출 때 Zod의 JSON Schema로 변환하고 필드 제거 규칙을 함께 기록합니다.
 프로세스와 Worker에는 실행 함수가 없는 JSON 계약을 전달하며 화면, 백엔드와 호스트가
 같은 계약으로 입력과 결과를 처리합니다. 제거할 필드도 먼저 JSON 값과 크기, 깊이 제한을
 검사하므로 undefined나 Date, 순환 참조 등을 추가 필드에 넣으면 오류가 납니다.
 
 transform, pipe, coerce, default, catch, trim 같은 값 변환과 임의 refine,
-superRefine 검사는 선언 단계에서 거부합니다. 변환할 수 없는 Date, bigint, Map, Set도
+superRefine 검사와 함수 기반 z.stringFormat은 선언 단계에서 거부합니다.
+정규식 기반 z.stringFormat도 u 플래그와 아래 JSON Schema 지원 범위를 따라야 합니다.
+변환할 수 없는 Date, bigint, Map, Set도
 허용하지 않습니다. format, oneOf와 allOf 같은 미지원 키워드를 만드는 선언도 거부하므로
 서로 다른 경계에서 검증이 빠지지 않습니다. 같은 문자열에 여러 정규식을 연결하면
 allOf가 생성되므로 사용할 수 없습니다. 스키마 지원 범위는 [Schema 레퍼런스](/reference/schema/)에서 확인하세요.

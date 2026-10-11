@@ -28,6 +28,70 @@ const PLUGIN_SCHEMA_KEYWORDS = new Set([
   "x-bunaway-stripUnknown",
 ]);
 
+const SHARED_SCHEMA_CHECKS = new Set([
+  "greater_than",
+  "less_than",
+  "multiple_of",
+  "number_format",
+  "min_length",
+  "max_length",
+  "length_equals",
+  "string_format",
+]);
+
+/** Reject checks that cannot be enforced from their serialized constraints. */
+function checkSharedCheck(check: z.core.$ZodCheck): void {
+  const definition = check._zod.def;
+  if (
+    !SHARED_SCHEMA_CHECKS.has(definition.check) ||
+    (definition.check === "string_format" &&
+      "fn" in definition &&
+      !("pattern" in definition && definition.pattern instanceof RegExp))
+  ) {
+    throw new Error(
+      "Plugin schemas cannot transform values or contain custom checks.",
+    );
+  }
+  if (definition.check === "string_format" && "pattern" in definition) {
+    const pattern = definition.pattern;
+    if (pattern instanceof RegExp && pattern.flags !== "u") {
+      throw new Error(
+        "Plugin regular expressions must use only the Unicode flag.",
+      );
+    }
+  }
+}
+
+/** Numeric record keys lose their bounds when Zod rewrites them as property names. */
+function checkRecordKey(
+  schema: z.core.$ZodType,
+  visited = new Set<z.core.$ZodType>(),
+): void {
+  if (visited.has(schema)) {
+    return;
+  }
+  visited.add(schema);
+  if (schema instanceof z.core.$ZodNumber) {
+    throw new Error("Plugin record keys cannot use numeric schemas.");
+  }
+  if (schema instanceof z.core.$ZodUnion) {
+    for (const option of schema._zod.def.options) {
+      checkRecordKey(option, visited);
+    }
+  } else if (schema instanceof z.core.$ZodIntersection) {
+    checkRecordKey(schema._zod.def.left, visited);
+    checkRecordKey(schema._zod.def.right, visited);
+  } else if (schema instanceof z.core.$ZodLazy) {
+    checkRecordKey(schema._zod.innerType, visited);
+  } else if (
+    schema instanceof z.core.$ZodOptional ||
+    schema instanceof z.core.$ZodNullable ||
+    schema instanceof z.core.$ZodNonOptional
+  ) {
+    checkRecordKey(schema._zod.def.innerType, visited);
+  }
+}
+
 /**
  * Convert a plugin's Zod declaration to a portable JSON Schema contract.
  * Carries Zod's object stripping rule alongside JSON Schema validation so every
@@ -62,24 +126,18 @@ export function toJSONSchema<S extends z.ZodType>(
           "pipe",
           "transform",
           "readonly",
-        ].includes(definition.type) ||
-        definition.checks?.some(
-          (check) =>
-            ![
-              "greater_than",
-              "less_than",
-              "multiple_of",
-              "number_format",
-              "min_length",
-              "max_length",
-              "length_equals",
-              "string_format",
-            ].includes(check._zod.def.check),
-        )
+        ].includes(definition.type)
       ) {
         throw new Error(
           "Plugin schemas cannot transform values or contain custom checks.",
         );
+      }
+      // Format and number schemas can themselves be checks, outside def.checks.
+      if (zodSchema instanceof z.core.$ZodCheck) {
+        checkSharedCheck(zodSchema);
+      }
+      for (const check of definition.checks ?? []) {
+        checkSharedCheck(check);
       }
       if (definition.type === "object") {
         if (!definition.catchall) {
@@ -92,17 +150,17 @@ export function toJSONSchema<S extends z.ZodType>(
           );
         }
       }
-      for (const check of definition.checks ?? []) {
-        if (
-          check._zod.def.check === "string_format" &&
-          "pattern" in check._zod.def
-        ) {
-          const pattern = check._zod.def.pattern;
-          if (pattern instanceof RegExp && pattern.flags !== "u") {
-            throw new Error(
-              "Plugin regular expressions must use only the Unicode flag.",
-            );
-          }
+      if (definition.type === "record") {
+        checkRecordKey(definition.keyType);
+        const keys = definition.keyType._zod.values;
+        if (keys && !definition.partial) {
+          // Exhaustive records parse every value, including missing keys. JSON
+          // cannot carry undefined, so optional values do not make keys omittable.
+          jsonSchema.required = [
+            ...keys,
+          ]
+            .filter((key) => typeof key === "string" || typeof key === "number")
+            .map(String);
         }
       }
     },

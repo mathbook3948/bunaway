@@ -342,6 +342,238 @@ test("shared plugin declarations reject lost checks and value transformations", 
   ).toThrow();
 });
 
+test("numeric record key declarations fail before a lossy contract can be registered", () => {
+  for (const key of [
+    z.number(),
+    z.int().min(5),
+    z.number().gt(0).max(10).multipleOf(0.5),
+    z.union([
+      z.string(),
+      z.int().min(5),
+    ]),
+    z.intersection(z.number(), z.number().min(5)),
+    z.lazy(() => z.int().min(5)),
+    z.int().exactOptional(),
+    z.int().nonoptional(),
+  ]) {
+    const schema = z.record(key, z.string());
+    for (const operation of [
+      {
+        input: schema,
+        output: z.null(),
+      },
+      {
+        input: z.null(),
+        output: schema,
+      },
+    ]) {
+      expect(() =>
+        defineNativePlugin({
+          name: "invalid",
+          operations: {
+            echo: operation,
+          },
+        }),
+      ).toThrow("Plugin record keys cannot use numeric schemas.");
+    }
+  }
+  const shared = z.int().min(5);
+  expect(() =>
+    toJSONSchema(
+      z.strictObject({
+        id: shared,
+        values: z.record(shared, z.string()),
+      }),
+    ),
+  ).toThrow("Plugin record keys cannot use numeric schemas.");
+});
+
+test("exhaustive record keys remain required while partial records permit omissions", () => {
+  for (const keys of [
+    z.enum([
+      "a",
+      "b",
+    ]),
+    z.union([
+      z.literal("a"),
+      z.literal("b"),
+    ]),
+  ]) {
+    const exhaustive = z.record(keys, z.string().exactOptional());
+    const partial = z.partialRecord(keys, z.string().exactOptional());
+    // Wrappers and repeated references must retain the record's required keys.
+    for (const record of [
+      exhaustive,
+      partial,
+    ]) {
+      for (const schema of [
+        record,
+        record.nullable(),
+        z.array(record),
+        z.lazy(() => record),
+      ]) {
+        const plugin = defineNativePlugin({
+          name: "records",
+          operations: {
+            echo: {
+              input: schema,
+              output: schema,
+            },
+          },
+        });
+        const registry = new NativeRegistry([
+          structuredClone(plugin.definition),
+        ]);
+        for (const value of [
+          {},
+          {
+            a: "ok",
+          },
+          {
+            a: "ok",
+            b: "ok",
+          },
+          {
+            c: "bad",
+          },
+        ]) {
+          const payload =
+            schema instanceof z.ZodArray
+              ? [
+                  value,
+                ]
+              : value;
+          const parsed = schema.safeParse(payload);
+          if (parsed.success) {
+            expect(
+              registry.validateCall({
+                operation: "records.echo",
+                payload,
+              }).payload,
+            ).toEqual(parsed.data);
+            expect(registry.validateOutput("records.echo", payload)).toEqual(
+              parsed.data,
+            );
+          } else {
+            expect(() =>
+              registry.validateCall({
+                operation: "records.echo",
+                payload,
+              }),
+            ).toThrow();
+            expect(() =>
+              registry.validateOutput("records.echo", payload),
+            ).toThrow();
+          }
+        }
+      }
+    }
+    const repeated = z.record(keys, z.string().exactOptional());
+    const schema = z.strictObject({
+      first: repeated,
+      second: repeated,
+    });
+    const portable = JSON.parse(JSON.stringify(toJSONSchema(schema)));
+    expect(
+      validateValue(portable, {
+        first: {
+          a: "ok",
+          b: "ok",
+        },
+        second: {
+          a: "ok",
+          b: "ok",
+        },
+      }),
+    ).toEqual({
+      first: {
+        a: "ok",
+        b: "ok",
+      },
+      second: {
+        a: "ok",
+        b: "ok",
+      },
+    });
+    expect(() =>
+      validateValue(portable, {
+        first: {
+          a: "ok",
+          b: "ok",
+        },
+        second: {},
+      }),
+    ).toThrow();
+  }
+});
+
+test("custom string checks are rejected and standalone regular expressions retain their rules", () => {
+  for (const schema of [
+    z.stringFormat("time", (value) => value === "12:00"),
+    z.stringFormat("regex", (value) => value === "allowed"),
+    z.string().check(z.stringFormat("time", (value) => value === "12:00")),
+    z.object({
+      time: z.stringFormat("time", (value) => value === "12:00"),
+    }),
+  ]) {
+    for (const operation of [
+      {
+        input: schema,
+        output: z.null(),
+      },
+      {
+        input: z.null(),
+        output: schema,
+      },
+    ]) {
+      expect(() =>
+        defineNativePlugin({
+          name: "invalid",
+          operations: {
+            echo: operation,
+          },
+        }),
+      ).toThrow(
+        "Plugin schemas cannot transform values or contain custom checks.",
+      );
+    }
+  }
+  for (const pattern of [
+    /^a$/,
+    /^a$/iu,
+  ]) {
+    expect(() => toJSONSchema(z.stringFormat("regex", pattern))).toThrow(
+      "Plugin regular expressions must use only the Unicode flag.",
+    );
+  }
+  const schema = z.stringFormat("regex", /^a$/u);
+  const registry = new NativeRegistry([
+    defineNativePlugin({
+      name: "pattern",
+      operations: {
+        echo: {
+          input: schema,
+          output: schema,
+        },
+      },
+    }).definition,
+  ]);
+  expect(
+    registry.validateCall({
+      operation: "pattern.echo",
+      payload: "a",
+    }).payload,
+  ).toBe("a");
+  expect(registry.validateOutput("pattern.echo", "a")).toBe("a");
+  expect(() =>
+    registry.validateCall({
+      operation: "pattern.echo",
+      payload: "A",
+    }),
+  ).toThrow();
+  expect(() => registry.validateOutput("pattern.echo", "A")).toThrow();
+});
+
 test("recursive JSON stays bounded and references cannot access external or inherited schemas", () => {
   const schema = toJSONSchema(z.json());
   expect(Object.getOwnPropertyNames(schema)).not.toContain("~standard");

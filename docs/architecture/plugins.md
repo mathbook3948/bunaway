@@ -242,6 +242,9 @@ JSON에 schema를 다시 복사하지 않는다. 진입점은 부작용 없는 �
 제작자는 operations 객체에 메서드 이름과 input, output을 작성한다.
 SDK가 작업 이름에 플러그인 접두사를 붙인다. 작업마다 독립적으로 권한을 허용한다.
 제작자는 Zod로 입력과 출력을 선언하고 호출 타입은 z.input과 z.output에서 추론한다.
+숫자 스키마를 record 키로 사용하는 선언은 범위와 배수 제약을 보존하지 못하므로 거부한다.
+열거한 키의 record는 값에 exactOptional을 사용해도 필수 키를 JSON 계약에 유지한다.
+일부 키만 받는 partialRecord와 구분하며 스키마 자체의 사용자 문자열 검사도 선언 검증에 포함한다.
 z.object는 추가 필드를 제거하고 z.strictObject는 거부한다. 선택 필드는 z.exactOptional로 선언한다.
 SDK는 선언을 읽을 때 JSON Schema로 변환하고 z.object의 필드 제거를
 x-bunaway-stripUnknown 키워드로 기록한다. 프로세스와 Worker에는
