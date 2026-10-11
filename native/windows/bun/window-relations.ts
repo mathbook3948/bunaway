@@ -8,6 +8,16 @@ type OwnedWindow = {
   closing: boolean;
 };
 
+/** A native input restoration failure leaves the modal relation intact for another cleanup attempt. */
+export class WindowInputRestoreError extends Error {
+  constructor(cause: unknown) {
+    super(`Could not restore parent window input: ${String(cause)}`, {
+      cause,
+    });
+    this.name = "WindowInputRestoreError";
+  }
+}
+
 /** Owns lifetime relationships and restores input only after the last modal resource owner releases. */
 export class WindowRelations {
   private readonly windows = new Map<string, OwnedWindow>();
@@ -149,7 +159,11 @@ export class WindowRelations {
       return;
     }
     if (!this.windows.get(windowId)?.closing) {
-      this.native.setEnabled(windowId, previous.enabled);
+      try {
+        this.native.setEnabled(windowId, previous.enabled);
+      } catch (error) {
+        throw new WindowInputRestoreError(error);
+      }
     }
     this.blocked.delete(windowId);
   }

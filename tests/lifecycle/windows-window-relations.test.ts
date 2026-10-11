@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test";
-import { WindowRelations } from "#native/windows/bun/window-relations";
+import {
+  WindowInputRestoreError,
+  WindowRelations,
+} from "#native/windows/bun/window-relations";
 
 function fixture() {
   const enabled = new Map([
@@ -163,7 +166,7 @@ test("failed input restoration retains its owner until retry or parent shutdown 
   relations.setParent("first", "main", true);
   relations.markClosing("first");
   failEnable();
-  expect(() => relations.release("first")).toThrow("Enable failed");
+  expect(() => relations.release("first")).toThrow(WindowInputRestoreError);
   expect(relations.canRelease("main")).toBe(false);
   recoverEnable();
   relations.release("first");

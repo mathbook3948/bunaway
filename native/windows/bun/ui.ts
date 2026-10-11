@@ -35,10 +35,14 @@ import {
 } from "./win32.ts";
 import { disposeWin32Bindings, hr, kernel, ole } from "./win32-bindings.ts";
 import { WindowReadinessTracker } from "./window-readiness.ts";
-import { WindowRelations } from "./window-relations.ts";
+import {
+  WindowInputRestoreError,
+  WindowRelations,
+} from "./window-relations.ts";
 
 const config = workerData as UIConfig;
 const WINDOW_PREPARATION_TIMEOUT_MS = 30_000;
+const WINDOW_CLEANUP_TIMEOUT_MS = 35_000;
 const packagedPlugins = await loadPluginCatalog(config.assets);
 const registry = pluginRegistry(config.plugins ?? [], packagedPlugins);
 registry.validatePolicy(config.policy);
@@ -93,6 +97,7 @@ type ViewState = {
   pendingClose: boolean;
   forceClose: boolean;
   replacementCancelled: boolean;
+  inputRestoreDeadlineMs?: number;
   confirmation: string | null;
   deadline: number;
   documentDeadline: number;
@@ -155,7 +160,24 @@ function cleanupView(view: ViewState) {
   }
   if (view.detached && !view.cleaned) {
     if (view.native.finish()) {
-      relations.release(windowId);
+      try {
+        relations.release(windowId);
+      } catch (error) {
+        if (!(error instanceof WindowInputRestoreError)) {
+          throw error;
+        }
+        if (view.inputRestoreDeadlineMs === undefined) {
+          view.inputRestoreDeadlineMs = Date.now() + WINDOW_CLEANUP_TIMEOUT_MS;
+          log("window-input-restore-retry", {
+            view: view.readiness.snapshot().viewId,
+            message: error.message,
+          });
+        }
+        if (Date.now() >= view.inputRestoreDeadlineMs) {
+          throw error;
+        }
+        return;
+      }
       modalWindows.delete(windowId);
       view.cleaned = true;
     }
@@ -1133,7 +1155,7 @@ try {
     view.boundary.closed = true;
     view.native.requestClose();
   }
-  const deadline = Date.now() + 35000;
+  const deadline = Date.now() + WINDOW_CLEANUP_TIMEOUT_MS;
   try {
     // Cleanup can wait for STA callbacks and child-process exit events.
     while (
