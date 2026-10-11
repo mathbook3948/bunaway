@@ -94,10 +94,13 @@ export class WindowOperations {
         }
         return true;
       }
+      // Native support is checked synchronously by the adapter before destruction starts.
+      // A rejected unsupported call must leave an existing recreation running.
+      const result = this.hooks.apply(call, viewId, grants);
       if (this.replacing.has(viewId)) {
         this.destroyedReplacements.add(viewId);
       }
-      return this.hooks.apply(call, viewId, grants);
+      return result;
     }
     if (call.operation === "windows.isDestroyed") {
       if (this.hooks.stopping() || this.hooks.cancelled(requestId)) {

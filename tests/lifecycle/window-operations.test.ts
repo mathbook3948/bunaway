@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import assert from "node:assert/strict";
 import type { WindowSpec } from "@bunaway/runtime-bun/window-config";
+import { BunawayError } from "@bunaway/protocol";
 import {
   WindowOperations,
   type WindowState,
@@ -10,7 +11,7 @@ const WINDOW_READY_TIMEOUT_MS = 30_000;
 const CLEANUP_TIMEOUT_ADVANCE_MS = 40_000;
 
 /** Build a controllable host so tests can pause cleanup and advance deadlines. */
-function fixture() {
+function fixture(supportsDestroy = true) {
   const specs: WindowSpec[] = [
     "main",
     "editor",
@@ -60,9 +61,20 @@ function fixture() {
       }
       return allowClose;
     },
-    destroy,
+    ...(supportsDestroy
+      ? {
+          destroy,
+        }
+      : {}),
     apply: (call, id) => {
       if (call.operation === "windows.destroy") {
+        if (!supportsDestroy) {
+          throw new BunawayError({
+            code: "UNSUPPORTED",
+            message:
+              "Trusted window destruction is not implemented on this platform.",
+          });
+        }
         return destroy(id);
       }
       if (call.operation !== "windows.close") {
@@ -138,6 +150,62 @@ const grants = [
   "main",
   "editor",
 ];
+
+test("unsupported destruction leaves an already committed recreation running", async () => {
+  const f = fixture(false);
+  const target = {
+    view: "main",
+  };
+  await f.operations.execute(
+    {
+      operation: "windows.create",
+      payload: target,
+    },
+    grants,
+    "initial",
+  );
+  const original = f.views.get("main");
+  assert(original);
+  let wake: (() => void) | undefined;
+  f.setTick(
+    () =>
+      new Promise<void>((resolve) => {
+        wake = resolve;
+      }),
+  );
+  const replacement = f.operations.execute(
+    {
+      operation: "windows.recreate",
+      payload: target,
+    },
+    grants,
+    "replacement",
+  );
+  await Promise.resolve();
+  assert(wake);
+  await expect(
+    f.operations.execute(
+      {
+        operation: "windows.destroy",
+        payload: target,
+      },
+      grants,
+      "unsupported",
+    ),
+  ).rejects.toMatchObject({
+    code: "UNSUPPORTED",
+  });
+  original.cleaned = true;
+  wake();
+  expect(await replacement).toBeNull();
+  expect(f.created).toEqual([
+    "main",
+    "main",
+  ]);
+  expect(f.views.get("main")?.closed).toBe(false);
+  expect(f.destroyed).toEqual([]);
+  expect(f.operations.replacing.size).toBe(0);
+});
 
 test("trusted destruction interrupts an already committed recreation without resurrecting its window", async () => {
   const f = fixture();
