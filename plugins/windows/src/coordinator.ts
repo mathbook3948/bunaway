@@ -183,7 +183,7 @@ export class WindowOperations {
       this.hooks.create(spec, closesLiveWindow);
       view = this.hooks.read(viewId);
       // Preserve create's existing completion at controller setup; document and SDK readiness are separate.
-      while (!view?.ready) {
+      while (true) {
         if (
           this.hooks.stopping() ||
           this.destroyedReplacements.has(viewId) ||
@@ -207,17 +207,20 @@ export class WindowOperations {
           !view ||
           view.closed ||
           view.failure ||
-          this.hooks.now() > view.deadline
+          (!view.ready && this.hooks.now() > view.deadline)
         ) {
           throw new BunawayError({
             code: "INTERNAL",
             message: "Window creation failed.",
           });
         }
+        // Readiness and termination can both arrive before this request resumes.
+        if (view.ready) {
+          return null;
+        }
         await this.hooks.tick();
         view = this.hooks.read(viewId);
       }
-      return null;
     } catch (error) {
       const current = this.hooks.read(viewId);
       if (

@@ -62,6 +62,19 @@ export function createOperations(
             message: "Splashscreen is not open.",
           });
         }
+        // Closing an owner also retires descendants, so validate before either window changes.
+        for (
+          let parent = window.getParent?.();
+          parent;
+          parent = services.window(parent.viewId).getParent?.()
+        ) {
+          if (parent.viewId === call.payload.splash) {
+            throw new BunawayError({
+              code: "INVALID_ARGUMENT",
+              message: "Splashscreen cannot own the main window.",
+            });
+          }
+        }
         // Keep the main HWND live and show it before committing splash closure. The replacement
         // close path preserves confirmation and bypasses last-window quit and hide-to-tray.
         window.show(true);

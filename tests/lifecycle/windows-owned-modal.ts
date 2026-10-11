@@ -204,6 +204,54 @@ if (!process.argv.includes("--child")) {
     await windows.create(first);
     await windows.create(second);
     await waitFor(() => arrivals.has("first") && arrivals.has("second"));
+    // Reject handoffs that would close the main window with its direct or indirect owner.
+    for (const ownerView of [
+      "first",
+      "second",
+    ]) {
+      const owner = await windows.getReadiness({
+        view: ownerView,
+      });
+      await windows.setParent({
+        ...main,
+        parent: owner.windowId,
+        modal: false,
+      });
+      if (ownerView === "second") {
+        const splash = await windows.getReadiness(first);
+        await windows.setParent({
+          ...second,
+          parent: splash.windowId,
+          modal: false,
+        });
+      }
+      await assert.rejects(
+        windows.completeSplashscreen({
+          view: "main",
+          splash: "first",
+        }),
+        {
+          code: "INVALID_ARGUMENT",
+        },
+      );
+      assert.equal(await windows.isDestroyed(main), false);
+      assert.equal(await windows.isDestroyed(first), false);
+      assert.equal(await windows.isVisible(main), false);
+      assert.equal(
+        (await windows.getReadiness(main)).windowId,
+        parent.windowId,
+      );
+      await windows.setParent({
+        ...main,
+        parent: null,
+        modal: false,
+      });
+      await windows.setParent({
+        ...second,
+        parent: null,
+        modal: false,
+      });
+    }
     await windows.setEnabled({
       ...main,
       enabled: false,
