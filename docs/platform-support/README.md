@@ -1,8 +1,9 @@
 # 플랫폼 지원과 검증 범위
 
 창 생성은 사전 선언 뷰마다 하나를 지원한다. [ADR 0016](../decisions/0016-window-creation-contract.md)은
-Windows의 호출별 표시 옵션 범위를 결정한 문서이며 해당 기능의 구현 완료를 뜻하지 않는다.
-현재 create와 recreate는 `{ view }`만 받고 추가 생성 옵션은 `INVALID_ARGUMENT`로 거부한다.
+Windows의 호출별 표시 옵션 범위를 정의한다. create와 recreate는 `{ view, options? }`를 받는다.
+제목, 부분 크기와 제약, 표시와 준비 후 표시를 생성마다 병합하고 검증한다. macOS의 비어 있지 않은 options는 `UNSUPPORTED`다.
+새 옵션의 실제 Windows 검증은 CI의 windows-native 작업에서 수행한다.
 현재 여러 창은 서로 다른 선언 뷰를 사용한다. [ADR 0017](../decisions/0017-multiple-windows-per-view.md)은
 single 기본값과 multiple 선택, 창별 ID와 세션, 프로필 공유 및 격리를 후속 구현 계약으로 정한다.
 같은 뷰의 동시 다중 창은 아직 미구현이며 임의 동적 선언은 허용하지 않는다.

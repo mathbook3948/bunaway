@@ -252,6 +252,8 @@ export type WindowChange =
   | "resize";
 /** UI-thread services used by the native windows plugin. */
 export type NativeWindowServices = {
+  /** Whether this UI adapter supports per-creation presentation options; absent means unsupported. */
+  supportsCreationOptions?: boolean;
   /** Configured windows available to the plugin. */
   specs: readonly WindowSpec[];
   /** Read-only native identity discovery. Missing on platforms without identity tracking. */

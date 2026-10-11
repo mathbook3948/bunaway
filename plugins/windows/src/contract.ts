@@ -82,6 +82,61 @@ const sizeDimension = {
     },
   ],
 } as const;
+const creationDimension = {
+  type: "integer",
+  minimum: MIN_WINDOW_DIMENSION,
+  maximum: MAX_WINDOW_DIMENSION,
+} as const;
+const creationResult = {
+  input: {
+    ...windowTarget,
+    properties: {
+      ...windowTarget.properties,
+      options: {
+        type: "object",
+        properties: {
+          title: {
+            type: "string",
+            maxLength: 1024,
+            pattern: "^[^\\u0000]+$(?![\\s\\S])",
+          },
+          window: {
+            type: "object",
+            properties: {
+              width: creationDimension,
+              height: creationDimension,
+              minWidth: sizeDimension,
+              minHeight: sizeDimension,
+              maxWidth: sizeDimension,
+              maxHeight: sizeDimension,
+            },
+            additionalProperties: false,
+          },
+          visible: {
+            type: "boolean",
+          },
+          showWhenReady: {
+            anyOf: [
+              {
+                enum: [
+                  "document",
+                  "sdk",
+                ],
+              },
+              {
+                const: null,
+              },
+            ],
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  output: {
+    const: null,
+  },
+} as const;
 const sizePairOutput = {
   type: "object",
   properties: {
@@ -480,9 +535,9 @@ export const windowOperations = {
       },
     },
   },
-  // Creation selects a declared view; runtime options and caller-supplied IDs are not accepted.
-  "windows.create": windowResult,
-  "windows.recreate": windowResult,
+  // Options only change this creation's presentation; view, origin and profile remain declared.
+  "windows.create": creationResult,
+  "windows.recreate": creationResult,
   "windows.show": windowResult,
   "windows.showInactive": windowResult,
   "windows.hide": windowResult,

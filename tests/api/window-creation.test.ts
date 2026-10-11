@@ -15,7 +15,7 @@ test.each([
   "windows.create",
   "windows.recreate",
 ])(
-  "%s accepts only a declared-view selector contract and keeps control scoped to its target",
+  "%s keeps creation options restricted to presentation and control scoped to its target",
   (operation) => {
     const call = {
       operation,
@@ -54,9 +54,6 @@ test.each([
 
     const extras: Record<string, JsonValue>[] = [
       {
-        options: {},
-      },
-      {
         title: "New title",
       },
       {
@@ -88,6 +85,73 @@ test.each([
         modal: true,
       },
     ];
+    for (const options of [
+      {},
+      {
+        title: "Editor",
+        visible: false,
+      },
+      {
+        window: {
+          minWidth: null,
+          height: 900,
+        },
+        showWhenReady: null,
+      },
+    ]) {
+      const valid = {
+        ...call,
+        payload: {
+          ...call.payload,
+          options,
+        },
+      };
+      expect(registry.validateCall(valid)).toEqual(valid);
+      expect(parseWindowCall(JSON.stringify(valid))).toEqual(valid);
+    }
+    for (const options of [
+      null,
+      {
+        title: "",
+      },
+      {
+        title: "bad\0title",
+      },
+      {
+        window: {
+          width: 199,
+        },
+      },
+      {
+        window: {
+          maxHeight: 4097,
+        },
+      },
+      {
+        visible: "false",
+      },
+      {
+        showWhenReady: "app",
+      },
+      {
+        home: "https://outside.invalid",
+      },
+      {
+        profile: "shared",
+      },
+      {
+        window: {
+          x: 20,
+        },
+      },
+      {
+        windowId: "caller-id",
+      },
+    ]) {
+      extras.push({
+        options,
+      });
+    }
     for (const extra of extras) {
       const invalid = {
         ...call,
