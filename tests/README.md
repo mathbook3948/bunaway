@@ -348,3 +348,16 @@ Apple 공증 서비스와 도구 실패는 테스트 자식 프로세스의 PATH
 Windows 네이티브 CI는 이 검사를 호스트 빌드 전에 실행하며 전체 실행 로그도 보관한다.
 macOS 배포 회귀는 날짜와 바이너리 데이터를 포함한 추가 plist 메타데이터가
 서명과 DMG, PKG 조립 후에도 타입과 값 그대로 남는지 확인한다.
+
+`lifecycle/window-instances.test.ts`는 인스턴스 ID 선택, 이전 ID 거부, 요청별 getCurrent,
+동시 생성과 앱 및 뷰별 상한, 정리 중 슬롯과 단일 창 호환을 검사한다.
+`lifecycle/windows-ui-lifecycle.test.ts`는 실제 UI Worker와 창 어댑터에서 모든 살아 있는
+창의 복원, 시작 controller 오류의 fatal 보고와 정리, 실행 중 생성 실패의 인스턴스 격리를 검사한다.
+Win32와 WebView 콜백 경계는 제어 가능한 fixture로 대체하며 실제 Windows 실행 검증과 구분한다.
+`lifecycle/window-profiles.test.ts`는 실제 임시 폴더로 프로필 공유, 격리, 재생성 보존과 최종 삭제를 검사한다.
+`lifecycle/windows-multiple-windows.ts`는 실제 WebView2에서 같은 뷰의 여러 창, 응답 및 이벤트 라우팅,
+원래 컨텍스트 취소, 탐색과 ID 유지, 재생성과 ID 교체, 공유 쿠키 및 localStorage,
+격리 프로필의 재생성 보존과 새 생성 초기화, 모달 소유 관계, 최종 삭제와 앱 재실행을 확인한다.
+공유 브라우저 프로세스 장애에서 해당 창의 정리, 격리된 창의 계속 동작과 새 공유 환경 복구도 확인한다.
+실행한 OS, Bun revision과 WebView2 버전은 `build/windows-multiple-windows-results.json`에 기록한다.
+CI의 windows-native 작업은 `mise run host:windows`를 통해 이 검사를 실행한다.
