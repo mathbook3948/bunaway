@@ -49,8 +49,7 @@ PRD와 설계 문서, 코드에서 확인한 결정을 ADR에 기록한다. 구�
 - [0013: 네이티브 기능의 개별 플러그인 설치와 등록](./decisions/0013-optional-native-plugins.md)
 - [0015: Android 번들 Bun과 Activity, 문서 세션의 수명](./decisions/0015-android-bundled-process-host.md)
 
-[이전 C ABI 초안](./architecture/native-abi.md)은 과거 설계 기록이다. 현재 Windows는 Worker 연결,
-macOS는 프로세스 IPC 계약을 사용한다.
+현재 Windows와 macOS는 같은 프로세스의 Bun Worker 연결을 사용한다.
 
 ## 에이전트 작업 규칙
 

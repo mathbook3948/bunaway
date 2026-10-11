@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import assert from "node:assert/strict";
 import type { Policy } from "@bunaway/protocol";
 import {
   developmentPolicy,
@@ -129,6 +130,79 @@ test("window catalogs accept an empty or fully deferred Windows start without we
   ).toThrow("0 and 128");
 });
 
+test("one-window-per-view declarations reject duplicates even when deferred or hidden", () => {
+  for (const overrides of [
+    {},
+    {
+      startup: false,
+    },
+    {
+      visible: false,
+    },
+  ]) {
+    expect(() =>
+      readWindowSpecs(
+        [
+          specs[0],
+          {
+            ...specs[0],
+            ...overrides,
+          },
+        ],
+        policy,
+      ),
+    ).toThrow("Only one window declaration per view is supported");
+  }
+  // Invalid identifiers must fail before policy lookup, including a trailing newline.
+  expect(() =>
+    readWindowSpecs(
+      [
+        {
+          ...specs[0],
+          view: "main\n",
+        },
+      ],
+      policy,
+    ),
+  ).toThrow("Window view IDs must contain");
+});
+
+test("the window catalog limit includes deferred definitions and accepts 128 distinct views", () => {
+  const baseSpec = specs[0];
+  const basePolicy = policy.views[0];
+  assert(baseSpec && basePolicy);
+  const catalog = Array.from(
+    {
+      length: 128,
+    },
+    (_, index) => ({
+      ...baseSpec,
+      view: `view-${index}`,
+      startup: false,
+    }),
+  );
+  const catalogPolicy: Policy = {
+    ...policy,
+    views: catalog.map((spec) => ({
+      ...basePolicy,
+      id: spec.view,
+    })),
+  };
+  expect(readWindowSpecs(catalog, catalogPolicy)).toEqual(catalog);
+  expect(() =>
+    readWindowSpecs(
+      [
+        ...catalog,
+        {
+          ...baseSpec,
+          view: "overflow",
+        },
+      ],
+      catalogPolicy,
+    ),
+  ).toThrow("0 and 128");
+});
+
 test("window size constraints accept nullable axes and reject invalid or contradictory bounds", () => {
   const constrained = [
     {
@@ -209,4 +283,84 @@ test("multi-window development replaces each view origin and preserves each home
     "https://app.bunaway.local",
   ]);
   expect(() => readWindowSpecs(devSpecs, policy, server)).toThrow();
+});
+
+test("instance configuration validates multiplicity, explicit bounds and fixed profile selection", () => {
+  const first = specs[0];
+  assert(first);
+  expect(
+    readWindowSpecs(
+      [
+        {
+          ...first,
+          instances: "multiple",
+          maxInstances: 128,
+          profile: "isolated",
+        },
+      ],
+      policy,
+    )[0],
+  ).toMatchObject({
+    instances: "multiple",
+    maxInstances: 128,
+    profile: "isolated",
+  });
+  expect(
+    readWindowSpecs(
+      [
+        {
+          ...first,
+          instances: "single",
+          maxInstances: 1,
+          profile: "shared",
+        },
+      ],
+      policy,
+    )[0],
+  ).toMatchObject({
+    instances: "single",
+    maxInstances: 1,
+  });
+  for (const extra of [
+    {
+      instances: "many",
+    },
+    {
+      instances: "multiple",
+    },
+    {
+      maxInstances: 2,
+    },
+    {
+      instances: "multiple",
+      maxInstances: 0,
+    },
+    {
+      instances: "multiple",
+      maxInstances: 129,
+    },
+    {
+      instances: "multiple",
+      maxInstances: 1.5,
+    },
+    {
+      instances: "multiple",
+      maxInstances: "2",
+    },
+    {
+      profile: "custom",
+    },
+  ]) {
+    expect(() =>
+      readWindowSpecs(
+        [
+          {
+            ...first,
+            ...extra,
+          },
+        ],
+        policy,
+      ),
+    ).toThrow();
+  }
 });

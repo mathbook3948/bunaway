@@ -164,6 +164,11 @@ Close confirmation uses a native Yes/No dialog with No selected by default.
 WM_CLOSE and WebView close requests defer confirmation outside native callbacks.
 Window close operations also honor close-to-tray and last-window quit vetoes.
 Recreation bypasses those app quit controls while preserving close confirmation.
+Windows의 `setParent`는 현재 `windowId`로 최상위 owner 관계를 맺는다.
+모달 자식은 부모 입력을 차단하며 여러 모달의 마지막 자원 정리 뒤 이전 enabled 상태를 복원한다.
+부모 종료는 모든 자식의 확인을 먼저 검사하고 자식 세션, WebView와 HWND 정리 뒤 부모를 해제한다.
+신뢰된 백엔드 `destroy`는 별도 대상 권한으로 확인과 종료 취소를 우회한다.
+`tests/lifecycle/windows-owned-modal.ts`는 실제 UI Worker와 WebView2로 해당 종료 경쟁을 검사한다.
 Deferred and recreated windows inherit the verified development DevTools setting.
 Shutdown bypasses confirmation.
 Browser process failure also closes the affected window without confirmation.
@@ -178,7 +183,7 @@ The browser-failure regression also passed locally on Windows on 2026-10-07.
 `desktop.beforeQuit`는 마지막 창, 트레이, 앱의 종료 요청을 취소할 수 있다.
 `desktop.closeBehavior: "hide"`와 `desktop.tray: { tooltip: "Memo" }`를 함께 지정하면
 닫기 버튼으로 창을 숨기고 백엔드, WebView, 세션을 유지한다. 트레이 Open 또는
-두 번째 실행으로 복원하며 Quit은 종료 검사를 거친다. 기본값은 마지막 창 닫기로 종료다.
+두 번째 실행으로 살아 있는 모든 창을 복원하며 Quit은 종료 검사를 거친다. 기본값은 마지막 창 닫기로 종료다.
 URL scheme과 파일 확장자의 OS 등록은 제공하지 않으며 실행기에 전달된 인자를 처리한다.
 GUI 실행 파일은 `-Wait`, `-- -draft.txt`와 `-Verbose`를 포함한 모든 인자를 그대로 전달한다.
 배포 EXE는 인자와 작업 디렉터리를 직접 읽는다. Windows와 호출 셸의 명령줄 길이 제한을 따른다.
@@ -188,3 +193,29 @@ keep-alive는 마지막 창을 실제로 정리한 뒤에도 백엔드를 유지
 복원하거나 첫 사전 선언 창을 생성한다. 빈 선언 배열이면 창은 만들지 않는다.
 트레이 없는 상주 앱은 숨긴 제어 HWND를 소유해 CLI 종료 메시지를 받고 정상 종료 때 정리한다.
 [데스크톱 수명주기 결정](../../../docs/decisions/0013-desktop-lifecycle.md).
+
+## 같은 뷰의 창 인스턴스
+
+`app.windows`는 뷰마다 생성 정의 하나를 유지한다. single이 기본값이며 multiple은
+maxInstances를 요구한다. UI의 자원 Map, 닫기와 재생성 예약은 내부 인스턴스 키로
+구분하고 네이티브 ID는 HWND 수명마다 발급한다. 서버 응답은 인증된 컨텍스트로
+ViewBoundary를 찾은 뒤 viewId와 문서 세대를 확인한다. viewId만으로 창을 선택하지 않는다.
+
+`webview.ts`의 프로필별 소유자 그룹은 environment 하나와 창별 controller를 관리한다.
+첫 창을 닫아도 남은 controller의 환경을 유지한다. 마지막 controller의 정리만
+브라우저 및 자식 프로세스 종료를 기다리고 그룹의 COM 참조와 DLL을 해제한다.
+`window-profiles.ts`는 영속 shared 경로와 임시 isolated 경로를 소유한다. 격리 경로는
+내부 논리 인스턴스에 연결해 새 HWND로 재생성해도 유지하고 최종 종료 뒤 삭제한다.
+파일 잠금이 지속되면 3초 뒤 진단을 남기고 소유 기록과 슬롯을 유지하며 삭제를 재시도한다.
+정리 완료 전 슬롯을 재사용하지 않으며 종료 기한 초과는 실패로 처리한다.
+splashscreen 전환은 최종 종료이므로 isolated 프로필을 보존하지 않는다.
+공유 프로필의 모든 창을 동시에 재생성할 때는 마지막 environment 정리가 끝날 때까지
+교체 예약을 유지한 뒤 각 새 controller를 생성한다.
+시작 창의 controller 생성 오류는 강제 닫기 예약보다 먼저 확인해 앱 시작 실패로 보고한다.
+실행 중 생성 오류는 해당 인스턴스만 정리하고 호출자에게 반환하며 기존 창은 유지한다.
+
+선언과 앱 전체 창 상한은 별도이며 활성, 예약과 정리 중인 자원은 128개 이내다.
+공개 목록은 살아 있는 창만 노출하고 숨김 및 WebView 준비 중인 HWND도 포함한다.
+트레이 열기는 선언 순서와 생성 순서의 첫 살아 있는 창을 복원한다. 창이 없으면
+첫 선언에서 하나만 생성한다. 실제 회귀는 `windows-multiple-windows.ts`를
+`mise run host:windows`와 windows-native CI에서 실행한다.

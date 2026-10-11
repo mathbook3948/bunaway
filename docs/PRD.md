@@ -25,6 +25,10 @@ macOS 플러그인 어댑터는 후속 작업이다.
 
 ### 제품 요구사항
 
+- 같은 화면과 정책의 뷰 선언에서 여러 창 인스턴스를 실행 중 생성할 수 있게 한다.
+  단일 창을 기본값으로 유지하고 창별 ID와 연결 세션, WebView 프로필 공유 및 격리,
+  인스턴스 상한을 구분한다. [ADR 0017](./decisions/0017-multiple-windows-per-view.md)의
+  Windows에서 구현했으며 macOS의 다중 창 어댑터는 후속 작업이다.
 - React, Vue, Svelte, vanilla HTML/JS에서 같은 클라이언트 SDK를 사용한다. 코어는 특정 UI 프레임워크를 import하지 않는다.
 - SDK는 앱 정의에서 명령과 이벤트 타입을 추론하는 클라이언트를 제공한다. 직접 명령을 호출하고 이벤트를 구독하는 함수 API도 지원한다.
 - 앱 개발자는 일반적인 기능을 TypeScript로 작성한다. 새 운영체제 기능을 추가할 때만 네이티브 어댑터를 작성한다.
@@ -73,7 +77,7 @@ Bun 자식 프로세스 ── TypeScript 코어 ── 앱 명령, 상태, 플�
 | `client-sdk` | `invoke`, `listen`과 구독 해제 함수, 요청 취소, 기본 WebView 연결, 초기화, 정리 | `protocol`, WebView 또는 주입받은 Transport |
 | `plugin-capabilities` | 등록된 네이티브 작업의 플랫폼 지원 조회 | `plugin-sdk` |
 | `plugin-api` | 앱과 플러그인 공통 타입, 실행 컨텍스트 | `protocol` |
-| `plugin-windows` | 선택 창 제어, 생성과 재생성, 창별 권한 | `plugin-sdk`, 호스트 자원 인터페이스 |
+| `plugin-windows` | 선택 창 제어, 생성과 재생성, 작업별 권한 | `plugin-sdk`, 호스트 자원 인터페이스 |
 | `core` | 명령 레지스트리, 입력 검증, 상태 저장소, 이벤트 라우팅, 플러그인 수명 | `plugin-api`, `protocol`, 추상 Host API, Runtime Services |
 | `runtime-bun` | 자식 프로세스 안의 코어 부팅, Bun 서비스 어댑터, 프로세스 IPC 연결 | `core`, `protocol`, Bun API |
 | `bun-bundle` | 배포할 Bun 실행 파일, 버전, 소스 revision, 해시, 라이선스 고정 | 공식 플랫폼별 Bun 배포물, 필요한 경우 기록된 빌드, 패치 |

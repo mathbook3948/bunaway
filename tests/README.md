@@ -18,6 +18,11 @@ windows-ui-operations.test.ts는 실제 UI Worker에서 정책 승인 전에 플
 실행되지 않는지, 비동기 요청의 승인과 사용자 거부가 전달되는지 검사한다. OS 대화상자는 대체하며
 실제 카메라 권한 검증을 뜻하지 않는다. capabilities는 플랫폼 지원만 반환한다.
 
+`windows-windowless.ts`의 `destroy-recreate-resident`와 `destroy-recreate-tray`는
+마지막 창 재생성의 이전 세션이 폐기된 뒤 destroy를 호출합니다. 새 HWND를 만들지 않고
+재생성을 CANCELLED로 끝내며 keep-alive와 기본 quit 트레이 앱이 beforeQuit 없이
+StopHook과 네이티브 자원 정리를 완료하는지 확인합니다. `mise run host:windows`에 포함합니다.
+
 Android의 `FrameDispatcherTest`는 읽기 스레드의 직접 전달이 멈춰도 별도 타이머가
 실행되는지, 유휴 이후에도 기한을 감시하는지와 종료 제어 뒤의 응답 폐기를 검사한다.
 `ProtocolTest`는 큰 한글과 이모지, 문자열과 키의 잘못된 surrogate, 원문 payload 전달의
@@ -111,6 +116,16 @@ OS가 전경 전환 요청을 거부하면 해당 활성화 전환을 `UNTESTED`
 네이티브 입력을 준비한 뒤 `bun --no-env-file tests/lifecycle/windows-bun-window-api.ts`로
 단독 실행하거나 `mise run host:windows`로 전체 Windows 호스트 회귀와 함께 실행한다.
 
+`api/window-creation.test.ts`는 create/recreate의 `{ view, options? }` 계약과 독립 작업 권한,
+공개 registry 및 직렬화 Host 경계의 허용된 표시 옵션과 잘못된 옵션, URL, 프로필과 임의 ID 거부를 확인한다.
+`cli/windows-config.test.ts`는 숨김 및 지연 창의 중복 뷰 진단, 식별자 개행과 128개 선언
+상한을 검사한다. `lifecycle/window-operations.test.ts`는 열린 뷰의 두 번째 create가
+BUSY로 실패하고 기존 자원 소유자를 유지하는지 확인한다. 호출별 옵션의 크기 보정,
+제약 병합과 선언값 복원, 제목 검증 및 잘못된 옵션과 미지원 플랫폼에서 기존 창 보존도
+검사한다. 같은 뷰의 여러 창이나 실제 WebView2 실행은 포함하지 않는다.
+`lifecycle/windows-window-readiness.ts`는 실제 Windows 호스트에서 호출별 크기 적용,
+잘못된 제약에서 창 ID 유지와 다음 재생성의 선언 크기 복원을 검증한다.
+
 `lifecycle/window-events.test.ts`는 실제 Core와 typed SDK를 연결해 `windows.changed`의
 스키마, 뷰별 구독 권한, 해제, 폐기 세션과 Core 종료 후 늦은 발행 차단을 확인한다.
 MessageChannel로 네이티브 이벤트 전송 방향, 미확인 128개 상한과 종료 용량도 검사한다.
@@ -180,6 +195,18 @@ Windows 호스트 시나리오는 `lifecycle/windows-host.ts`에 두고 PID 조�
 프로세스 종료 감시는 `lifecycle/windows-host-processes.ts`에서 실행한다.
 
 `api/opener.test.ts`는 HTTP/HTTPS 계약과 파일 API, 절대 경로 입력과 작업별 권한을 확인한다.
+
+`api/window-relations.test.ts`는 trusted destroy의 백엔드 출처와 독립 작업 권한,
+관계 조회와 변경의 작업별 권한, 입력과 출력 경계를 확인한다.
+`lifecycle/windows-window-relations.test.ts`는 실제 HWND의 owner와 enabled,
+여러 모달의 원래 enabled 복원, 순환과 종료된 ID 거부, 네이티브 실패의 변경 취소,
+자식부터의 자원 해제 순서를 검사한다. `lifecycle/windows-owned-modal.ts`는 실제
+WebView2 세션과 UI Worker로 웹의 destroy 거부, 닫기 확인 거절, 모달 자식 재생성,
+부모 종료와 새 ID, 마지막 창 집합의 종료 취소와 오류, 대기 중 trusted destroy를
+검사한다. 실제 WebView2 정리 기한 초과는 성공으로 간주하지 않는다.
+`windows-windowless.ts`의 destroy 시나리오는 keep-alive와 트레이 상주 앱에서도
+마지막 창의 trusted destroy가 닫기 확인과 beforeQuit를 우회하고 앱을 정리하는지 검사한다.
+
 `lifecycle/windows-opener.test.ts`는 실제 Windows I/O STA, 없는 파일과 디렉터리, 공유 잠금, junction,
 하드 링크, 대소문자 별칭 거부와 파일 핸들 정리를 검사한다. 실제 I/O Worker의 승인 거부와
 대기 작업 취소, 자체 COM 초기화와 종료도 검사한다. `windows-opener-job.test.ts`는 Explorer가 실행한
@@ -258,7 +285,8 @@ SDK 호출 컨텍스트, 작업 권한, 닫힌 창 및 시작 전 취소를 GUI 
 같은 격리된 DLL 대체 환경에서 최대화 요청을 무시하도록 해도 성공으로 반환하지 않고
 네이티브 상태 확인 후 공개 `INTERNAL` 오류로 변환하는지 검사한다.
 `lifecycle/window-operations.test.ts`는 정리 대기 중 중복 생성, 마지막 창 재생성 예약,
-기존 문서 취소, 닫기 거절과 종료 경쟁을 검증한다. Windows 네이티브 실행기는
+기존 문서 취소, 닫기 거절과 종료 경쟁을 검증한다. 미지원 destroy 호출이 실패해도
+진행 중인 재생성은 새 창 생성까지 완료하는지도 확인한다. Windows 네이티브 실행기는
 `windows-bun-window-api.ts`로 크기와 위치, 전체화면 복원, 확인 대화상자 거절과 승인,
 보조 창의 반복 생성과 새로운 세션, 자기 창 재생성을 추가 검증한다.
 닫기 확인을 설정한 창의 브라우저 프로세스를 종료해 확인 없이 닫히는지도 검증한다.
@@ -331,6 +359,8 @@ Run 값의 등록, 조회, 경로 갱신과 반복 해제를 확인한다. 임�
 `--skip-tests`는 fixture 생성까지만 수행하며, macOS의 `--app`은 ad-hoc 서명 앱
 검증과 `tests/packaging/macos-distribution.test.ts`의 배포 회귀를 추가한다.
 배포 회귀는 `bun:test`로 실제 DMG와 PKG, 실패 시 이전 산출물 보존을 확인한다.
+서명 fixture도 Bun으로 compile하며 C 컴파일러를 사용하지 않는다. compiled 앱 입력과
+서명, JIT와 FFI entitlement, 롤백과 정리를 검증한다.
 macOS의 기본 테스트 실행에도 포함되며, 실제 Bunaway 앱 검증은
 `BUNAWAY_DISTRIBUTION_APP`에 지정한 앱을 사용한다. 다른 OS에서는 건너뛴다.
 Apple 공증 서비스와 도구 실패는 테스트 자식 프로세스의 PATH에만 놓는 Bun fixture로
@@ -341,3 +371,16 @@ Apple 공증 서비스와 도구 실패는 테스트 자식 프로세스의 PATH
 Windows 네이티브 CI는 이 검사를 호스트 빌드 전에 실행하며 전체 실행 로그도 보관한다.
 macOS 배포 회귀는 날짜와 바이너리 데이터를 포함한 추가 plist 메타데이터가
 서명과 DMG, PKG 조립 후에도 타입과 값 그대로 남는지 확인한다.
+
+`lifecycle/window-instances.test.ts`는 인스턴스 ID 선택, 이전 ID 거부, 요청별 getCurrent,
+동시 생성과 앱 및 뷰별 상한, 정리 중 슬롯과 단일 창 호환을 검사한다.
+`lifecycle/windows-ui-lifecycle.test.ts`는 실제 UI Worker와 창 어댑터에서 모든 살아 있는
+창의 복원, 시작 controller 오류의 fatal 보고와 정리, 실행 중 생성 실패의 인스턴스 격리를 검사한다.
+Win32와 WebView 콜백 경계는 제어 가능한 fixture로 대체하며 실제 Windows 실행 검증과 구분한다.
+`lifecycle/window-profiles.test.ts`는 실제 임시 폴더로 프로필 공유, 격리, 재생성 보존과 최종 삭제를 검사한다.
+`lifecycle/windows-multiple-windows.ts`는 실제 WebView2에서 같은 뷰의 여러 창, 응답 및 이벤트 라우팅,
+원래 컨텍스트 취소, 탐색과 ID 유지, 재생성과 ID 교체, 공유 쿠키 및 localStorage,
+격리 프로필의 재생성 보존과 새 생성 초기화, 모달 소유 관계, 최종 삭제와 앱 재실행을 확인한다.
+공유 브라우저 프로세스 장애에서 해당 창의 정리, 격리된 창의 계속 동작과 새 공유 환경 복구도 확인한다.
+실행한 OS, Bun revision과 WebView2 버전은 `build/windows-multiple-windows-results.json`에 기록한다.
+CI의 windows-native 작업은 `mise run host:windows`를 통해 이 검사를 실행한다.

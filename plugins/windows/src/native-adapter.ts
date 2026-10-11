@@ -9,6 +9,13 @@ import { validateWindowCall, type WindowCall } from "./contract.ts";
 import { WindowOperations } from "./coordinator.ts";
 import { convertGeometry } from "./window-geometry.ts";
 
+function unsupportedRelations() {
+  return new BunawayError({
+    code: "UNSUPPORTED",
+    message: "Window ownership control is not implemented on this platform.",
+  });
+}
+
 /** Create the UI-worker adapter; throws when window services are unavailable. */
 export function createOperations(
   environment: NativeEnvironment,
@@ -48,10 +55,23 @@ export function createOperations(
             message: "Splashscreen is not open.",
           });
         }
-        // Keep the main HWND live and show it before committing splash closure. The replacement
-        // close path preserves confirmation and bypasses last-window quit and hide-to-tray.
+        // Closing an owner also retires descendants, so validate before either window changes.
+        for (
+          let parent = window.getParent?.();
+          parent;
+          parent = services.window(identityKey(parent)).getParent?.()
+        ) {
+          if (parent.viewId === call.payload.splash) {
+            throw new BunawayError({
+              code: "INVALID_ARGUMENT",
+              message: "Splashscreen cannot own the main window.",
+            });
+          }
+        }
+        // Final handoff preserves confirmation and bypasses quit/hide, without reserving
+        // another splash lifetime or retaining its isolated profile.
         window.show(true);
-        return services.close(call.payload.splash);
+        return services.close(call.payload.splash, false);
       }
       case "windows.getSnapshot":
         return {
@@ -84,21 +104,40 @@ export function createOperations(
           return true;
         }
         // Configuration order is deterministic; never activate an external window.
-        for (const spec of services.specs) {
-          if (spec.view === viewId) {
+        const instances = services.instances?.();
+        const candidates = services.specs.flatMap((spec) =>
+          instances
+            ? instances
+                .filter((entry) => entry.identity.viewId === spec.view)
+                .map((entry) => ({
+                  key: entry.key,
+                  viewId: spec.view,
+                }))
+            : [
+                {
+                  key: spec.view,
+                  viewId: spec.view,
+                },
+              ],
+        );
+        for (const candidate of candidates) {
+          if (
+            candidate.key === viewId ||
+            !services.specs.some((spec) => spec.view === candidate.viewId)
+          ) {
             continue;
           }
-          const state = services.read(spec.view);
+          const state = services.read(candidate.key);
           if (
             !state ||
             state.closed ||
             !state.ready ||
             state.failure ||
-            operations.replacing.has(spec.view)
+            operations.replacing.has(candidate.key)
           ) {
             continue;
           }
-          const next = services.window(spec.view);
+          const next = services.window(candidate.key);
           if (next.isVisible() && !next.isMinimized()) {
             next.activate();
             return !window.isFocused();
@@ -108,6 +147,56 @@ export function createOperations(
       }
       case "windows.close":
         return window.close();
+      case "windows.destroy":
+        if (!window.destroy) {
+          throw unsupportedRelations();
+        }
+        return window.destroy();
+      case "windows.setParent":
+        if (!window.setParent) {
+          throw unsupportedRelations();
+        }
+        window.setParent(call.payload.parent, call.payload.modal);
+        break;
+      case "windows.getParent":
+      case "windows.getOwner": {
+        if (!window.getParent) {
+          throw unsupportedRelations();
+        }
+        const parent = window.getParent();
+        return parent &&
+          services.specs.some((spec) => spec.view === parent.viewId) &&
+          !operations.replacing.has(identityKey(parent))
+          ? {
+              ...parent,
+            }
+          : null;
+      }
+      case "windows.getChildren":
+        if (!window.getChildren) {
+          throw unsupportedRelations();
+        }
+        return window
+          .getChildren()
+          .filter(
+            (child) =>
+              services.specs.some((spec) => spec.view === child.viewId) &&
+              !operations.replacing.has(identityKey(child)),
+          )
+          .map((child) => ({
+            ...child,
+          }));
+      case "windows.setEnabled":
+        if (!window.setEnabled) {
+          throw unsupportedRelations();
+        }
+        window.setEnabled(call.payload.enabled);
+        break;
+      case "windows.isEnabled":
+        if (!window.isEnabled) {
+          throw unsupportedRelations();
+        }
+        return window.isEnabled();
       case "windows.getContentSize":
       case "windows.getOuterSize":
       case "windows.getContentPosition":
@@ -326,6 +415,12 @@ export function createOperations(
     ...services,
     apply: applyWindow,
   });
+  function identityKey(identity: WindowIdentity): string {
+    return services.instances
+      ? (operations.resolveKey(identity.viewId, identity.windowId) ??
+          identity.viewId)
+      : identity.viewId;
+  }
   return {
     execute() {
       throw new BunawayError({
@@ -338,6 +433,35 @@ export function createOperations(
         operation,
         payload: input,
       });
+      if (
+        (call.operation === "windows.list" ||
+          call.operation === "windows.listInstances") &&
+        !context.permissions.permissions.includes(call.operation)
+      ) {
+        throw new BunawayError({
+          code: "PERMISSION_DENIED",
+          message: "Window listing permission required.",
+        });
+      }
+      if (
+        call.operation === "windows.destroy" &&
+        (source !== "backend" ||
+          !context.permissions.permissions.includes(call.operation))
+      ) {
+        throw new BunawayError({
+          code: "PERMISSION_DENIED",
+          message: "Trusted backend destroy permission required.",
+        });
+      }
+      if (
+        call.operation === "windows.setParent" &&
+        !context.permissions.permissions.includes(call.operation)
+      ) {
+        throw new BunawayError({
+          code: "PERMISSION_DENIED",
+          message: "Window relationship policy denied.",
+        });
+      }
       // Check permission before resolving configuration so unknown views do not bypass denial.
       if (!context.permissions.permissions.includes(call.operation)) {
         throw new BunawayError({
@@ -346,11 +470,35 @@ export function createOperations(
         });
       }
       if (
+        call.operation === "windows.setParent" &&
+        call.payload.parent !== null
+      ) {
+        const parent = services.lookup?.byId(call.payload.parent);
+        if (!parent || services.read(identityKey(parent))?.closed !== false) {
+          throw new BunawayError({
+            code: "INVALID_ARGUMENT",
+            message: "Parent window lifetime is not open.",
+          });
+        }
+        if (operations.replacing.has(identityKey(parent))) {
+          throw new BunawayError({
+            code: "BUSY",
+            message: "Parent window is being recreated.",
+          });
+        }
+      }
+      if (
         call.operation === "windows.getById" ||
         call.operation === "windows.getCurrent" ||
         call.operation === "windows.getFocused" ||
         call.operation === "windows.getLastActive"
       ) {
+        if (!context.permissions.permissions.includes(call.operation)) {
+          throw new BunawayError({
+            code: "PERMISSION_DENIED",
+            message: "Window policy denied.",
+          });
+        }
         if (services.stopping() || services.cancelled(context.requestId)) {
           throw new BunawayError({
             code: "CANCELLED",
@@ -383,8 +531,17 @@ export function createOperations(
                 message: "Invalid window call source.",
               });
             }
-            // Resolve the authenticated caller, never a view supplied by the web payload.
-            if (
+            // Host request IDs are mapped to authenticated contexts by the UI owner.
+            if (lookup.byRequest) {
+              identity = lookup.byRequest(context.requestId);
+              if (identity && identity.viewId !== viewId) {
+                throw new BunawayError({
+                  code: "PERMISSION_DENIED",
+                  message:
+                    "Window source does not match its authenticated request.",
+                });
+              }
+            } else if (
               services.read(viewId)?.closed === false &&
               !operations.replacing.has(viewId)
             ) {
@@ -399,12 +556,12 @@ export function createOperations(
             identity = lookup.lastActive();
             break;
         }
-        // Closed or replacing views have no live identity; do not substitute another window.
+        // Do not expose IDs for denied, closed or replacing views, and do not fall back to another window.
         if (
           !identity ||
           !services.specs.some((spec) => spec.view === identity.viewId) ||
-          services.read(identity.viewId)?.closed !== false ||
-          operations.replacing.has(identity.viewId)
+          services.read(identityKey(identity))?.closed !== false ||
+          operations.replacing.has(identityKey(identity))
         ) {
           return null;
         }

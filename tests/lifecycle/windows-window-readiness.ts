@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { windowPermissions } from "../fixtures/window-permissions.ts";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type CommandContext, defineApp } from "@bunaway/backend";
@@ -17,6 +16,7 @@ import {
 } from "@bunaway/protocol";
 import { runWindowsApp } from "#native/windows/bun/entry";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 const root =
   process.env.BUNAWAY_READINESS_TEST_ROOT ?? resolve(import.meta.dir, "../..");
@@ -80,6 +80,7 @@ if (!process.argv.includes("--child")) {
     await child.exited;
   }
 } else {
+  const dataRoot = resolve(output, `data-${process.pid}`);
   const counts = new Map<string, number>();
   const records: {
     recipient: string;
@@ -230,7 +231,39 @@ if (!process.argv.includes("--child")) {
       () =>
         counts.has("splash") && counts.has("observer") && counts.has("denied"),
     );
-    await windows.create(main);
+    await windows.create({
+      ...main,
+      options: {
+        title: "Creation override",
+        visible: false,
+        showWhenReady: null,
+        window: {
+          width: 700,
+          height: 500,
+          minWidth: 900,
+          maxWidth: 1100,
+        },
+      },
+    });
+    const overriddenSize = await windows.getContentSize(main);
+    assert.equal(overriddenSize.width, 900);
+    assert.equal(overriddenSize.height, 500);
+    const originalId = (await windows.getReadiness(main)).windowId;
+    await assert.rejects(
+      windows.recreate({
+        ...main,
+        options: {
+          window: {
+            minWidth: 1000,
+            maxWidth: 900,
+          },
+        },
+      }),
+      {
+        code: "INVALID_ARGUMENT",
+      },
+    );
+    assert.equal((await windows.getReadiness(main)).windowId, originalId);
     await waitFor(() => counts.get("main") === 1);
     const partial = await windows.getReadiness(main);
     assert.equal(partial.nativeCreated, true);
@@ -272,6 +305,9 @@ if (!process.argv.includes("--child")) {
     await waitFor(() => counts.get("main") === 3);
     await ready("main");
     const recreated = await windows.getReadiness(main);
+    const declaredSize = await windows.getContentSize(main);
+    assert.equal(declaredSize.width, 640);
+    assert.equal(declaredSize.height, 480);
     assert.notEqual(recreated.windowId, partial.windowId);
     assert(recreated.documentGeneration <= navigated.documentGeneration);
     await context.events.emit("test.action", "close-sdk", {
@@ -455,6 +491,8 @@ if (!process.argv.includes("--child")) {
         view,
       });
     }
+    const temporaryRoot = resolve(dataRoot, "webview", "temporary");
+    assert.equal((await readdir(temporaryRoot)).length, 1);
     assert.equal(
       await windows.completeSplashscreen({
         ...main,
@@ -464,6 +502,17 @@ if (!process.argv.includes("--child")) {
     );
     assert.equal(quitChecks, 0, "Handoff invoked the final-window quit rule");
     assert.equal(await windows.isVisible(main), true);
+    await waitFor(async () => (await readdir(temporaryRoot)).length === 0);
+    // Final handoff must not reserve the old isolated owner for another splash.
+    await windows.create({
+      view: "splash",
+    });
+    await ready("splash");
+    assert.equal((await readdir(temporaryRoot)).length, 1);
+    await windows.close({
+      view: "splash",
+    });
+    await waitFor(async () => (await readdir(temporaryRoot)).length === 0);
     completed = true;
     await windows.close(main);
   }
@@ -569,7 +618,7 @@ if (!process.argv.includes("--child")) {
       backendContext: `backend-${crypto.randomUUID()}` as HostContext,
       policy,
       assets,
-      dataRoot: resolve(output, `data-${process.pid}`),
+      dataRoot,
       loader: resolve(
         root,
         "build/cache/webview2/sdk/build/native/x64/WebView2Loader.dll",
@@ -588,6 +637,11 @@ if (!process.argv.includes("--child")) {
           "denied",
         ].includes(view),
         visible: view === "splash",
+        ...(view === "splash"
+          ? {
+              profile: "isolated" as const,
+            }
+          : {}),
         ...([
           "automatic",
           "bad",

@@ -3,6 +3,7 @@ import { windowPermissions } from "../fixtures/window-permissions.ts";
 import type {
   NativeWindow,
   NativeWindowServices,
+  WindowIdentity,
 } from "@bunaway/plugin-api/native";
 import type { Policy } from "@bunaway/protocol";
 import { readWindowSpecs } from "@bunaway/runtime-bun/window-config";
@@ -16,6 +17,7 @@ const policy: Policy = {
   views: [
     "main",
     "splash",
+    "intermediate",
   ].map((id) => ({
     id,
     origins: [
@@ -96,6 +98,7 @@ test("splashscreen handoff validates both targets and readiness before showing, 
   let allowClose = false;
   let cancelled = false;
   let closed = false;
+  const parents = new Map<string, WindowIdentity>();
   const native: NativeWindow = {
     getReadiness: () => ({
       windowId: "window-main",
@@ -159,11 +162,15 @@ test("splashscreen handoff validates both targets and readiness before showing, 
       deadline: Date.now() + 30_000,
     }),
     create() {},
-    close(view) {
+    close(view, replacing) {
+      expect(replacing).toBe(false);
       actions.push(`close:${view}`);
       return allowClose;
     },
-    window: () => native,
+    window: (view) => ({
+      ...native,
+      getParent: () => parents.get(view) ?? null,
+    }),
     stopping: () => false,
     cancelled: () => cancelled,
     now: Date.now,
@@ -227,6 +234,31 @@ test("splashscreen handoff validates both targets and readiness before showing, 
   });
   expect(actions).toEqual([]);
   cancelled = false;
+  // A direct or indirect owner must not retire the main window during handoff.
+  for (const ancestor of [
+    "splash",
+    "intermediate",
+  ]) {
+    parents.set("main", {
+      windowId: `window-${ancestor}`,
+      viewId: ancestor,
+    });
+    parents.set("intermediate", {
+      windowId: "window-splash",
+      viewId: "splash",
+    });
+    await expect(invoke(both)).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+    expect(actions).toEqual([]);
+    expect(closed).toBe(false);
+  }
+  parents.clear();
+  // The opposite relationship keeps the main window alive and is a valid handoff.
+  parents.set("splash", {
+    windowId: "window-main",
+    viewId: "main",
+  });
   expect(await invoke(both)).toBe(false);
   expect(actions).toEqual([
     "show:true",

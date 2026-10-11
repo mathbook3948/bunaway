@@ -19,7 +19,7 @@ export const MIN_WINDOW_COORDINATE = -2147483648;
 export const MAX_WINDOW_COORDINATE = 2147483647;
 const MAX_WINDOW_DPI = 65535;
 
-const windowTarget = {
+const viewTarget = {
   type: "object",
   properties: {
     view: {
@@ -31,6 +31,13 @@ const windowTarget = {
     "view",
   ],
   additionalProperties: false,
+} as const;
+const windowTarget = {
+  ...viewTarget,
+  properties: {
+    ...viewTarget.properties,
+    windowId: viewTarget.properties.view,
+  },
 } as const;
 const windowResult = {
   input: windowTarget,
@@ -81,6 +88,61 @@ const sizeDimension = {
       maximum: MAX_WINDOW_DIMENSION,
     },
   ],
+} as const;
+const creationDimension = {
+  type: "integer",
+  minimum: MIN_WINDOW_DIMENSION,
+  maximum: MAX_WINDOW_DIMENSION,
+} as const;
+const creationResult = {
+  input: {
+    ...viewTarget,
+    properties: {
+      ...viewTarget.properties,
+      options: {
+        type: "object",
+        properties: {
+          title: {
+            type: "string",
+            maxLength: 1024,
+            pattern: "^[^\\u0000]+$(?![\\s\\S])",
+          },
+          window: {
+            type: "object",
+            properties: {
+              width: creationDimension,
+              height: creationDimension,
+              minWidth: sizeDimension,
+              minHeight: sizeDimension,
+              maxWidth: sizeDimension,
+              maxHeight: sizeDimension,
+            },
+            additionalProperties: false,
+          },
+          visible: {
+            type: "boolean",
+          },
+          showWhenReady: {
+            anyOf: [
+              {
+                enum: [
+                  "document",
+                  "sdk",
+                ],
+              },
+              {
+                const: null,
+              },
+            ],
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  output: {
+    const: null,
+  },
 } as const;
 const sizePairOutput = {
   type: "object",
@@ -417,6 +479,33 @@ const conversionOutput = {
 
 /** Schemas for window operations, used to validate calls and their results. */
 export const windowOperations = {
+  "windows.createInstance": {
+    ...creationResult,
+    output: windowIdentitySchema,
+  },
+  "windows.recreateInstance": {
+    input: {
+      ...creationResult.input,
+      properties: {
+        ...creationResult.input.properties,
+        windowId: viewTarget.properties.view,
+      },
+      required: [
+        "view",
+        "windowId",
+      ],
+    },
+    output: windowIdentitySchema,
+  },
+  "windows.listInstances": {
+    input: {
+      const: null,
+    },
+    output: {
+      type: "array",
+      items: windowIdentitySchema,
+    },
+  },
   "windows.getById": {
     input: {
       type: "object",
@@ -439,9 +528,9 @@ export const windowOperations = {
   },
   "windows.completeSplashscreen": {
     input: {
-      ...windowTarget,
+      ...viewTarget,
       properties: {
-        ...windowTarget.properties,
+        ...viewTarget.properties,
         splash: windowTarget.properties.view,
       },
       required: [
@@ -480,8 +569,9 @@ export const windowOperations = {
       },
     },
   },
-  "windows.create": windowResult,
-  "windows.recreate": windowResult,
+  // Options only change this creation's presentation; view, origin and profile remain declared.
+  "windows.create": creationResult,
+  "windows.recreate": creationResult,
   "windows.show": windowResult,
   "windows.showInactive": windowResult,
   "windows.hide": windowResult,
@@ -506,6 +596,69 @@ export const windowOperations = {
       type: "boolean",
     },
   },
+  "windows.destroy": windowStateResult,
+  "windows.setParent": {
+    input: {
+      ...windowTarget,
+      properties: {
+        ...windowTarget.properties,
+        parent: {
+          anyOf: [
+            {
+              const: null,
+            },
+            windowTarget.properties.view,
+          ],
+        },
+        modal: {
+          type: "boolean",
+        },
+      },
+      required: [
+        "view",
+        "parent",
+        "modal",
+      ],
+    },
+    output: {
+      const: null,
+    },
+  },
+  "windows.getParent": {
+    input: windowTarget,
+    output: windowLookupOutput,
+  },
+  "windows.getOwner": {
+    input: windowTarget,
+    output: windowLookupOutput,
+  },
+  "windows.getChildren": {
+    input: windowTarget,
+    output: {
+      type: "array",
+      maxItems: 128,
+      items: windowIdentitySchema,
+    },
+  },
+  "windows.setEnabled": {
+    input: {
+      ...windowTarget,
+      properties: {
+        ...windowTarget.properties,
+        enabled: {
+          type: "boolean",
+        },
+      },
+      required: [
+        "view",
+        "enabled",
+      ],
+    },
+    output: {
+      const: null,
+    },
+  },
+  "windows.isEnabled": windowStateResult,
   "windows.setSize": {
     input: {
       ...windowTarget,

@@ -60,9 +60,12 @@ export function clampWindowSize(
   };
 }
 
-/** Validated configuration for one app window and its WebView. */
+/** Maximum active, reserved and cleaning native window instances per app. */
+export const MAX_WINDOW_INSTANCES = 128;
+
+/** Validated definition of a screen, policy and window defaults. */
 export type WindowSpec = {
-  /** Unique policy view served by this window. */
+  /** Unique declared policy view served by every instance. */
   view: string;
   /** Initial URL, restricted by the view's allowed origin. */
   home: string;
@@ -77,7 +80,13 @@ export type WindowSpec = {
     maxWidth?: number | null;
     maxHeight?: number | null;
   };
-  /** Whether the runtime creates this window during startup. */
+  /** Single by default. Multiple allows explicit ID-addressed instances on Windows. */
+  instances?: "single" | "multiple";
+  /** Required for multiple: an integer from 1 through MAX_WINDOW_INSTANCES. */
+  maxInstances?: number;
+  /** Shared persistent per-view storage by default; isolated is temporary per logical instance. */
+  profile?: "shared" | "isolated";
+  /** Whether the runtime creates one instance of this definition during startup. */
   startup?: boolean;
   /** Initial visibility, default true. Hidden creation never activates the window. Windows only. */
   visible?: boolean;
@@ -110,6 +119,8 @@ export type WindowState = {
   ready: boolean;
   /** Failure captured during creation, when one occurred. */
   failure: unknown;
+  /** A parent ended this lifetime; an in-flight live-window replacement must not reopen it. */
+  replacementCancelled?: boolean;
   /** Absolute deadline in milliseconds while waiting for creation to finish. */
   deadline: number;
 };
@@ -143,6 +154,18 @@ export type NativeWindow = {
   activate(): boolean;
   /** Starts a normal close request; returns false when it is declined or hides to tray. */
   close(): boolean | Promise<boolean>;
+  /** Trusted backend destruction bypasses confirmation, tray hiding and quit veto. Windows only. */
+  destroy?(): boolean | Promise<boolean>;
+  /** Sets the owner of this top-level window by native lifetime ID. Null detaches. Windows only. */
+  setParent?(windowId: string | null, modal: boolean): void;
+  /** Returns the owner identity, or null when unowned. Windows only. */
+  getParent?(): WindowIdentity | null;
+  /** Returns immediate owned windows, including modal windows. Windows only. */
+  getChildren?(): WindowIdentity[];
+  /** Changes input availability. Active modal blockers reject changes. Windows only. */
+  setEnabled?(enabled: boolean): void;
+  /** Reads actual native input availability. Windows only. */
+  isEnabled?(): boolean;
   /** Minimizes and displays the window, allowing Windows to activate another window. */
   minimize(): void;
   /** Maximizes and displays the window, requesting activation. */
@@ -238,26 +261,43 @@ export type WindowChange =
   | "resize";
 /** UI-thread services used by the native windows plugin. */
 export type NativeWindowServices = {
+  /** Whether this UI adapter supports per-creation presentation options; absent means unsupported. */
+  supportsCreationOptions?: boolean;
   /** Configured windows available to the plugin. */
   specs: readonly WindowSpec[];
+  /** All native lifetimes, including resources still being cleaned. Keys are host-private logical owners. */
+  instances?(): readonly {
+    key: string;
+    identity: WindowIdentity;
+  }[];
   /** Read-only native identity discovery. Missing on platforms without identity tracking. */
   lookup?: {
     /** Unknown or destroyed native lifetimes return null. */
     byId(windowId: string): WindowIdentity | null;
     /** An uncreated or closed policy view returns null. */
     byView(viewId: string): WindowIdentity | null;
+    /** Resolve the authenticated pending host request to its exact originating native window. */
+    byRequest?(requestId: string): WindowIdentity | null;
     /** The OS foreground window, or null when it belongs to another host. */
     focused(): WindowIdentity | null;
     /** Cleared on destruction, with no fallback to earlier activated windows. */
     lastActive(): WindowIdentity | null;
   };
-  /** Reads a window's lifecycle state, or returns `undefined` for an unknown view. */
+  /** Reads a window's lifecycle state, or returns `undefined` for an unknown logical instance key. */
   read(view: string): WindowState | undefined;
-  /** Creates a window from its validated configuration. */
-  create(spec: WindowSpec): void;
-  /** Closes a window before replacement and reports whether closing was accepted. */
-  close(view: string): boolean | Promise<boolean>;
-  /** Gets native controls for an existing view. */
+  /** Creates from validated configuration; a live replacement preserves its captured owner lifetime. */
+  create(
+    spec: WindowSpec,
+    replacingLiveWindow?: boolean,
+    instanceKey?: string,
+  ): void;
+  /** Releases native replacement metadata after creation succeeds, fails or is cancelled. */
+  creationSettled?(instanceKey: string): void;
+  /** Closes before replacement by default. Pass false for a final splash handoff without preserving instance resources. Reports close acceptance. */
+  close(view: string, replacing?: boolean): boolean | Promise<boolean>;
+  /** Unconditionally retires an incomplete creation on cancellation or failure. Windows only. */
+  destroy?(view: string): boolean | Promise<boolean>;
+  /** Gets native controls for a logical instance key. */
   window(view: string): NativeWindow;
   /** Reports whether app shutdown has started. */
   stopping(): boolean;

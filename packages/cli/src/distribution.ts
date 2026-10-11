@@ -58,6 +58,7 @@ export const frameworkPaths = [
   "native/windows/bun/ui.ts",
   "native/windows/bun/webview.ts",
   "native/windows/bun/view-profile.ts",
+  "native/windows/bun/window-profiles.ts",
   "native/windows/bun/web-assets.ts",
   "native/windows/bun/com.ts",
   "native/windows/bun/win32.ts",
@@ -65,6 +66,7 @@ export const frameworkPaths = [
   "native/windows/bun/window-size.ts",
   "native/windows/bun/window-events.ts",
   "native/windows/bun/window-readiness.ts",
+  "native/windows/bun/window-relations.ts",
   "native/host-api/bun/plugins.ts",
   "native/host-api/bun/plugin-contract.ts",
   "native/host-api/bun/plugin-catalog.ts",
@@ -426,7 +428,6 @@ function requiredFrameworkFiles(): string[] {
         ].includes(path),
     ),
     "licenses/LICENSE.bun",
-    "licenses/LICENSE.nlohmann-json",
     "licenses/License-WebView2.txt",
     ...[
       "bootstrap",
@@ -604,17 +605,6 @@ export async function checkArtifact(root: string): Promise<void> {
   await verifyHash(
     resolve(root, "licenses/LICENSE.bun"),
     pin.bun.licenseSha256,
-  );
-  const macPin = (await json(
-    resolve(root, "runtime/build-manifests/darwin-aarch64.json"),
-  )) as {
-    json: {
-      licenseSha256: string;
-    };
-  };
-  await verifyHash(
-    resolve(root, "licenses/LICENSE.nlohmann-json"),
-    macPin.json.licenseSha256,
   );
   const deps = (await json(resolve(root, "native/windows/bun/deps.json"))) as {
     webview2Sdk: {

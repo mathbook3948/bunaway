@@ -249,7 +249,8 @@
           "MAX_WINDOW_DIMENSION",
           "isWindowSizeDimension",
           "hasValidWindowSizeConstraints",
-          "clampWindowSize"
+          "clampWindowSize",
+          "MAX_WINDOW_INSTANCES"
         ]
       }
     },
@@ -436,7 +437,10 @@
           "window",
           "startup",
           "visible",
-          "showWhenReady"
+          "showWhenReady",
+          "instances",
+          "maxInstances",
+          "profile"
         ]
       }
     },
@@ -461,6 +465,7 @@
           "cleaned",
           "ready",
           "failure",
+          "replacementCancelled",
           "deadline"
         ]
       }
@@ -475,6 +480,12 @@
           "focus",
           "activate",
           "close",
+          "destroy",
+          "setParent",
+          "getParent",
+          "getChildren",
+          "setEnabled",
+          "isEnabled",
           "minimize",
           "maximize",
           "unmaximize",
@@ -528,15 +539,19 @@
       "pages": {
         "reference/tooling/plugin-api": [
           "specs",
+          "supportsCreationOptions",
           "lookup",
           "read",
           "create",
           "close",
+          "destroy",
           "window",
           "stopping",
           "cancelled",
           "now",
-          "tick"
+          "tick",
+          "instances",
+          "creationSettled"
         ]
       }
     },
@@ -620,7 +635,10 @@
           "window",
           "startup",
           "visible",
-          "showWhenReady"
+          "showWhenReady",
+          "instances",
+          "maxInstances",
+          "profile"
         ]
       }
     },
@@ -865,6 +883,13 @@
       "windows.isVisible",
       "windows.isFocused",
       "windows.close",
+      "windows.destroy",
+      "windows.setParent",
+      "windows.getParent",
+      "windows.getOwner",
+      "windows.getChildren",
+      "windows.setEnabled",
+      "windows.isEnabled",
       "windows.setSize",
       "windows.setContentPosition",
       "windows.setOuterSize",
@@ -890,7 +915,10 @@
       "windows.setCloseConfirmation",
       "windows.getSnapshot",
       "windows.getReadiness",
-      "windows.completeSplashscreen"
+      "windows.completeSplashscreen",
+      "windows.createInstance",
+      "windows.recreateInstance",
+      "windows.listInstances"
     ]
   },
   "configuration": {

@@ -31,6 +31,7 @@ debug APK 개발 경로를 반영하고 iOS 및 모바일 후속 작업을 분�
 
 - `[x]`는 기준 코드에 구현된 기능이다. 플랫폼별 항목은 해당 절에 명시한 플랫폼에만 적용하며,
   출시 지원 전체의 완료를 뜻하지 않는다.
+- 지원 결정만 완료한 항목은 `[x] 결정 완료`로 명시하고 구현 후속 항목은 별도로 `[ ]`로 유지한다.
 - `[ ]`는 미구현, 부분 구현의 확장 또는 지원 방식을 결정해야 하는 작업이다.
 - P1은 일반 데스크톱 앱의 기본 기능, P2는 기능 확장, P3은 고급 기능과 다른 플랫폼의 후속 작업이다.
 - 각 절의 소유자는 권장안이다. 호스트는 앱, 창, WebView와 세션의 최종 수명주기를 소유한다.
@@ -68,14 +69,21 @@ debug APK 개발 경로를 반영하고 iOS 및 모바일 후속 작업을 분�
 - [x] blur와 활성 창 전환 API를 제공한다.
 - [x] `isVisible`과 `isFocused`로 실제 창의 표시 상태와 전경 창 여부를 조회한다.
 - [x] `isDestroyed`와 `isNormal`로 창의 destroyed와 normal 상태를 조회한다.
-- [ ] 일반 close와 확인을 우회하는 trusted destroy의 계약을 구분한다.
-- [ ] 실행 중 창 생성 옵션을 지정하는 기능의 지원 범위와 권한을 결정한다. 현재는 사전 선언만 지원한다.
-- [ ] 하나의 뷰에서 여러 창을 만드는 기능과 식별자, 정책의 관계를 결정한다. 현재는 뷰별 창 하나다.
-- [ ] 부모 창, 자식 창, owner 관계를 설정하고 조회한다.
-- [ ] 부모에 종속된 모달 창과 부모의 입력 차단, 종료 순서를 제공한다.
-- [ ] 창 enabled 상태의 변경과 조회를 제공한다.
+- [x] 일반 close와 확인을 우회하는 trusted destroy의 계약을 구분한다.
+- [x] 결정 완료: 실행 중 창 생성 옵션은 사전 선언 창의 호출별 제목, 크기와 제약, 표시 및 준비 후 표시로 제한한다. 각 생성 작업의 operation 권한을 허용한다. [ADR 0016](./decisions/0016-window-creation-contract.md).
+- [x] Windows create/recreate에 ADR 0016의 선택적 `options`와 생성별 검증, 실패 정리를 구현했다. 실제 네이티브 회귀는 CI의 windows-native에서 수행한다. [#102](https://github.com/mathbook3948/bunaway/issues/102).
+- [x] 결정 완료: 뷰는 화면과 정책의 생성 정의이며 single 기본값과 multiple 선택으로 창 인스턴스를 생성한다. 창별 ID와 세션, 프로필 공유 및 격리, 선언 및 인스턴스 상한은 [ADR 0017](./decisions/0017-multiple-windows-per-view.md)을 따른다. Windows는 이 계약을 구현하며 실제 네이티브 회귀는 CI로 검증한다.
+- [x] Windows의 동일 뷰 다중 창 생성과 ID별 제어, 창별 세션 라우팅, 프로필 소유권과 상한을 구현했다. 실제 WebView2 검증은 CI의 windows-native 작업에서 수행한다. [#104](https://github.com/mathbook3948/bunaway/issues/104).
+- [x] 부모 창, 자식 창, owner 관계를 설정하고 조회한다.
+- [x] 부모에 종속된 모달 창과 부모의 입력 차단, 종료 순서를 제공한다.
+- [x] 창 enabled 상태의 변경과 조회를 제공한다.
 - [x] 창이 없는 상주 앱과 트레이만 있는 앱의 시작을 지원한다. 빈 창 선언 또는 모든 `startup: false`를 허용하며 트레이 또는 `closeBehavior: "keep-alive"`를 요구한다.
 - [x] 앱 초기화 뒤 `completeSplashscreen`으로 준비된 주 창을 먼저 표시하고 splashscreen을 닫는다.
+
+2026-10-11 main `49ed0a5` 이후 ADR 0017로 같은 뷰의 여러 창 보류를 변경했다.
+호출별 옵션과 다중 인스턴스를 구현했다. single 기본값과 중복 선언의 시작 전 진단,
+열린 뷰의 create에 대한 BUSY와 자원 보존, 허용하지 않은 생성 필드와 임의 ID 거부,
+식별자 개행 거부 및 128개 선언 상한 검사는 유지한다. #102와 #104는 실제 구현과 검증 뒤 닫는다.
 
 2026-10-11 창 없는 시작은 트레이 또는 명시적 keep-alive로 실행 유지 조건을 검증한다.
 keep-alive는 마지막 창을 닫아도 백엔드를 유지하고 Quit 또는 `DesktopContext.quit()`으로 종료한다.
@@ -109,6 +117,14 @@ SDK 기한 초과 및 전환 중 마지막 창 종료 억제를 확인했다.
 OS 거부와 후보 없음, 기존 show, hide, focus와의 차이는 [창 API](./site/src/content/docs/reference/host/windows.mdx)의 공개 계약을 따른다.
 실제 두 Win32 창과 입력 필드의 포커스 보존, 전경 전환의 검증 한계는
 [실행 기록](./architecture/windows-bun-results.md)에 구분한다.
+
+2026-10-11 부모와 모달 구현은 main `488f88a`의 네이티브 창 식별자와 준비 계약을
+유지한다. `setParent`, `getParent`, `getOwner`, `getChildren`, `setEnabled`, `isEnabled`와
+백엔드 전용 `destroy`를 제공한다. 일반 close는 확인과 종료 취소를 유지하며,
+destroy는 별도 권한으로 확인을 우회한다. 여러 모달의 차단과 이전 enabled 상태 복원,
+자식부터의 자원 정리, 재생성 중 부모 수명 종료를 처리한다. 초기 설정의 관계 지정과
+child HWND 임베딩은 지원하지 않는다. 계약과 실제 HWND 검증은 통과했으며,
+WebView2 실행 검증 결과와 남은 정리 문제는 [실행 기록](./architecture/windows-bun-results.md)에 구분한다.
 
 ## 02. 창 크기와 위치, 최소 크기와 최대 크기 제약
 
