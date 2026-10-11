@@ -115,9 +115,9 @@ function showWindows() {
     ),
   );
   if (live.length) {
-    const first = live[0];
-    assert(first);
-    windows.focus(first.native.hwnd);
+    for (const view of live) {
+      windows.focus(view.native.hwnd);
+    }
     showRequested = false;
     return;
   }
@@ -1226,14 +1226,8 @@ try {
     windows.pump();
     showWindows();
     for (const [viewId, view] of views) {
-      if (view.pendingClose) {
-        view.pendingClose = false;
-        if (view.forceClose || !hasPendingClose(view)) {
-          void closeWindow(viewId, view.forceClose ? "force" : "close").catch(
-            fail,
-          );
-        }
-      }
+      // Controller errors also queue a forced close. Report startup failure before
+      // that close retires the boundary and makes the failure look like normal exit.
       if (view.native.failure && !view.boundary.closed) {
         view.readiness?.terminate({
           code: "INTERNAL",
@@ -1243,6 +1237,14 @@ try {
           throw view.native.failure;
         }
         void closeWindow(viewId, "force").catch(fail);
+      }
+      if (view.pendingClose) {
+        view.pendingClose = false;
+        if (view.forceClose || !hasPendingClose(view)) {
+          void closeWindow(viewId, view.forceClose ? "force" : "close").catch(
+            fail,
+          );
+        }
       }
       if (!view.ready && !view.boundary.closed && Date.now() > view.deadline) {
         view.readiness?.terminate({

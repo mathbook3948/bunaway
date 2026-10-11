@@ -348,6 +348,9 @@ macOS 배포 회귀는 날짜와 바이너리 데이터를 포함한 추가 plis
 
 `lifecycle/window-instances.test.ts`는 인스턴스 ID 선택, 이전 ID 거부, 요청별 getCurrent,
 동시 생성과 앱 및 뷰별 상한, 정리 중 슬롯과 단일 창 호환을 검사한다.
+`lifecycle/windows-ui-lifecycle.test.ts`는 실제 UI Worker와 창 어댑터에서 모든 살아 있는
+창의 복원, 시작 controller 오류의 fatal 보고와 정리, 실행 중 생성 실패의 인스턴스 격리를 검사한다.
+Win32와 WebView 콜백 경계는 제어 가능한 fixture로 대체하며 실제 Windows 실행 검증과 구분한다.
 `lifecycle/window-profiles.test.ts`는 실제 임시 폴더로 프로필 공유, 격리, 재생성 보존과 최종 삭제를 검사한다.
 `lifecycle/windows-multiple-windows.ts`는 실제 WebView2에서 같은 뷰의 여러 창, 응답 및 이벤트 라우팅,
 원래 컨텍스트 취소, 탐색과 ID 유지, 재생성과 ID 교체, 공유 쿠키 및 localStorage,

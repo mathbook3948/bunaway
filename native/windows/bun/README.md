@@ -183,7 +183,7 @@ The browser-failure regression also passed locally on Windows on 2026-10-07.
 `desktop.beforeQuit`는 마지막 창, 트레이, 앱의 종료 요청을 취소할 수 있다.
 `desktop.closeBehavior: "hide"`와 `desktop.tray: { tooltip: "Memo" }`를 함께 지정하면
 닫기 버튼으로 창을 숨기고 백엔드, WebView, 세션을 유지한다. 트레이 Open 또는
-두 번째 실행으로 복원하며 Quit은 종료 검사를 거친다. 기본값은 마지막 창 닫기로 종료다.
+두 번째 실행으로 살아 있는 모든 창을 복원하며 Quit은 종료 검사를 거친다. 기본값은 마지막 창 닫기로 종료다.
 URL scheme과 파일 확장자의 OS 등록은 제공하지 않으며 실행기에 전달된 인자를 처리한다.
 GUI 실행 파일은 `-Wait`, `-- -draft.txt`와 `-Verbose`를 포함한 모든 인자를 그대로 전달한다.
 배포 EXE는 인자와 작업 디렉터리를 직접 읽는다. Windows와 호출 셸의 명령줄 길이 제한을 따른다.
@@ -211,6 +211,8 @@ ViewBoundary를 찾은 뒤 viewId와 문서 세대를 확인한다. viewId만으
 splashscreen 전환은 최종 종료이므로 isolated 프로필을 보존하지 않는다.
 공유 프로필의 모든 창을 동시에 재생성할 때는 마지막 environment 정리가 끝날 때까지
 교체 예약을 유지한 뒤 각 새 controller를 생성한다.
+시작 창의 controller 생성 오류는 강제 닫기 예약보다 먼저 확인해 앱 시작 실패로 보고한다.
+실행 중 생성 오류는 해당 인스턴스만 정리하고 호출자에게 반환하며 기존 창은 유지한다.
 
 선언과 앱 전체 창 상한은 별도이며 활성, 예약과 정리 중인 자원은 128개 이내다.
 공개 목록은 살아 있는 창만 노출하고 숨김 및 WebView 준비 중인 HWND도 포함한다.
