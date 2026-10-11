@@ -136,19 +136,22 @@ if (!process.argv.includes("--child")) {
       );
       const beforeFailure =
         firstFailure === -1 ? diagnostics : diagnostics.slice(0, firstFailure);
+      const beforeFailurePids = beforeFailure
+        .filter(
+          (record) =>
+            record.event === "webview-ready" && record.view === "shared",
+        )
+        .map((record) => record.browserPid);
       assert.equal(
-        new Set(
-          beforeFailure
-            .filter(
-              (record) =>
-                record.event === "webview-ready" && record.view === "shared",
-            )
-            .map((record) => record.browserPid),
-        ).size,
+        new Set(beforeFailurePids.slice(0, phase === "exercise" ? 4 : 1)).size,
         1,
         "Shared windows created distinct browser environments",
       );
-      assert.equal(new Set(sharedPids).size, phase === "exercise" ? 2 : 1);
+      if (phase === "exercise") {
+        assert.equal(beforeFailurePids.length, 6);
+        assert.equal(new Set(beforeFailurePids.slice(4)).size, 1);
+      }
+      assert.equal(new Set(sharedPids).size, phase === "exercise" ? 3 : 1);
       const browserVersions = [
         ...new Set(
           diagnostics
@@ -448,6 +451,30 @@ if (!process.argv.includes("--child")) {
       assert(record);
       return record.value;
     }
+    async function createWhenReady(view: string): Promise<WindowIdentity> {
+      let created: WindowIdentity | undefined;
+      await waitFor(async () => {
+        try {
+          created = await windows.createInstance({
+            view,
+          });
+          return true;
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            "code" in error &&
+            error.code === "BUSY"
+          ) {
+            return false;
+          }
+          throw error;
+        }
+      });
+      assert(created);
+      const identity = created;
+      await waitFor(() => arrivals(identity.windowId).length === 1);
+      return identity;
+    }
     if (phase === "restart") {
       assert((await action(first, "read")).startsWith("persisted|"));
       const isolated = await windows.createInstance({
@@ -638,29 +665,14 @@ if (!process.argv.includes("--child")) {
       await windows.close(target(isolatedReplacement));
       await waitFor(async () => await windows.isEnabled(target(replaced)));
       // A cleaned final owner frees capacity and the next instance receives a fresh profile.
-      let fresh: WindowIdentity | undefined;
-      await waitFor(async () => {
-        try {
-          fresh = await windows.createInstance({
-            view: "isolated",
-          });
-          return true;
-        } catch (error) {
-          if (
-            error instanceof Error &&
-            "code" in error &&
-            error.code === "BUSY"
-          ) {
-            return false;
-          }
-          throw error;
-        }
-      });
-      assert(fresh);
-      await waitFor(
-        () => fresh !== undefined && arrivals(fresh.windowId).length === 1,
-      );
+      const fresh = await createWhenReady("isolated");
       assert((await action(fresh, "read")).startsWith("|"));
+      // A normal profile shutdown commits storage before testing an abrupt browser failure.
+      await windows.close(target(replaced));
+      await windows.close(target(third));
+      const checkpoint = await createWhenReady("shared");
+      assert((await action(checkpoint, "read")).startsWith("persisted|"));
+      const checkpointPeer = await createWhenReady("shared");
       // A shared browser failure closes all its controllers while isolated profiles keep serving calls.
       const diagnosticLines = (
         await readFile(resolve(dataRoot, "logs/host.log"), "utf8")
@@ -681,7 +693,8 @@ if (!process.argv.includes("--child")) {
             ? record.browserPid
             : undefined;
         })
-        .find((pid) => pid !== undefined);
+        .filter((pid) => pid !== undefined)
+        .at(-1);
       assert(ready);
       const killed = Bun.spawn(
         [
@@ -706,36 +719,14 @@ if (!process.argv.includes("--child")) {
       await waitFor(
         async () =>
           (await windows.getById({
-            windowId: replaced.windowId,
+            windowId: checkpoint.windowId,
           })) === null &&
           (await windows.getById({
-            windowId: third.windowId,
+            windowId: checkpointPeer.windowId,
           })) === null,
       );
       assert((await action(isolatedB, "read")).startsWith("|"));
-      let recovered: WindowIdentity | undefined;
-      await waitFor(async () => {
-        try {
-          recovered = await windows.createInstance({
-            view: "shared",
-          });
-          return true;
-        } catch (error) {
-          if (
-            error instanceof Error &&
-            "code" in error &&
-            error.code === "BUSY"
-          ) {
-            return false;
-          }
-          throw error;
-        }
-      });
-      assert(recovered);
-      await waitFor(
-        () =>
-          recovered !== undefined && arrivals(recovered.windowId).length === 1,
-      );
+      const recovered = await createWhenReady("shared");
       assert((await action(recovered, "read")).startsWith("persisted|"));
       assert(!records.some((record) => record.action === "error"));
     }
