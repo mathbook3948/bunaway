@@ -75,10 +75,10 @@ export function createOperations(
             });
           }
         }
-        // Keep the main HWND live and show it before committing splash closure. The replacement
-        // close path preserves confirmation and bypasses last-window quit and hide-to-tray.
+        // Final handoff preserves confirmation and bypasses quit/hide, without reserving
+        // another splash lifetime or retaining its isolated profile.
         window.show(true);
-        return services.close(call.payload.splash);
+        return services.close(call.payload.splash, false);
       }
       case "windows.getSnapshot":
         return {

@@ -27,7 +27,11 @@ Windows에서는 선택적 `visible`, `showWhenReady`도 받으며 기본값과 
 선택적 `WindowState.replacementCancelled`는 부모 종료로 해당 수명의 진행 중인
 재생성을 취소해야 한다는 뜻입니다. 닫힌 뷰에 나중에 요청한 명시적 create는 허용합니다.
 호스트가 준비 상태를 소유하며 SDK 확인은 현재 세션과 문서 세대에 연결합니다. HostContext는 공개 준비 payload에 넣지 않습니다.
-`NativeWindowServices`는 `specs`, `read(key)`, `create(spec, replacingLiveWindow?, instanceKey?)`, `close(key)`, `window(key)`, `stopping()`, `cancelled(requestId)`, `now()`, `tick()`을 제공합니다.
+`NativeWindowServices`는 `specs`, `read(key)`, `create(spec, replacingLiveWindow?, instanceKey?)`, `close(key, replacing?)`, `window(key)`, `stopping()`, `cancelled(requestId)`, `now()`, `tick()`을 제공합니다.
+`close`의 replacing 기본값은 true이며 교체할 인스턴스의 자원을 보존합니다.
+splashscreen 최종 종료에는 false를 전달해 임시 프로필과 교체 예약을 보존하지 않습니다.
+공유 프로필의 모든 창을 동시에 재생성하면 read의 cleaned는 공유 환경의 마지막
+정리까지 false를 유지해 각 교체 예약이 새 환경을 기다리게 합니다.
 `create(spec, replacingLiveWindow)`의 선택적 두 번째 인자는 살아 있던 창의 재생성인지
 구분하며 기본값은 false입니다. 호스트는 이 경우에만 닫기 전 포착한 부모 수명을 재사용합니다.
 선택적 `lookup`은 `byId(windowId)`, `byView(viewId)`, `focused()`, `lastActive()`로

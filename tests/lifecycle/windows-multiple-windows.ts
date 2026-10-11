@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { release } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -670,9 +670,35 @@ if (!process.argv.includes("--child")) {
       // A normal profile shutdown commits storage before testing an abrupt browser failure.
       await windows.close(target(replaced));
       await windows.close(target(third));
-      const checkpoint = await createWhenReady("shared");
+      let checkpoint = await createWhenReady("shared");
       assert((await action(checkpoint, "read")).startsWith("persisted|"));
-      const checkpointPeer = await createWhenReady("shared");
+      let checkpointPeer = await createWhenReady("shared");
+      // Retire every controller concurrently. Each replacement waits for the shared
+      // environment drain, then joins one fresh environment without losing its slot.
+      const retired = [
+        checkpoint,
+        checkpointPeer,
+      ];
+      [checkpoint, checkpointPeer] = await Promise.all([
+        windows.recreateInstance(target(checkpoint)),
+        windows.recreateInstance(target(checkpointPeer)),
+      ]);
+      await waitFor(() =>
+        [
+          checkpoint,
+          checkpointPeer,
+        ].every((identity) => arrivals(identity.windowId).length === 1),
+      );
+      for (const identity of retired) {
+        assert.equal(
+          await windows.getById({
+            windowId: identity.windowId,
+          }),
+          null,
+        );
+      }
+      assert((await action(checkpoint, "read")).startsWith("persisted|"));
+      assert((await action(checkpointPeer, "read")).startsWith("persisted|"));
       // A shared browser failure closes all its controllers while isolated profiles keep serving calls.
       const diagnosticLines = (
         await readFile(resolve(dataRoot, "logs/host.log"), "utf8")

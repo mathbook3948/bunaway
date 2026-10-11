@@ -293,8 +293,8 @@ export type NativeWindowServices = {
   ): void;
   /** Releases native replacement metadata after creation succeeds, fails or is cancelled. */
   creationSettled?(instanceKey: string): void;
-  /** Closes a window before replacement and reports whether closing was accepted. */
-  close(view: string): boolean | Promise<boolean>;
+  /** Closes before replacement by default. Pass false for a final splash handoff without preserving instance resources. Reports close acceptance. */
+  close(view: string, replacing?: boolean): boolean | Promise<boolean>;
   /** Unconditionally retires an incomplete creation on cancellation or failure. Windows only. */
   destroy?(view: string): boolean | Promise<boolean>;
   /** Gets native controls for a logical instance key. */

@@ -264,6 +264,16 @@ function cleanupView(view: ViewState) {
     }
   }
 }
+/** Shutdown turns every pending replacement into final cleanup, including already released controllers. */
+function cancelReplacements() {
+  for (const key of replacements.keys()) {
+    const view = views.get(key);
+    if (view?.released) {
+      view.cleaned = false;
+    }
+  }
+  replacements.clear();
+}
 const cancelled = new Set<string>();
 const windowRequests = new Map<string, HostContext>();
 const operationControllers = new Map<string, AbortController>();
@@ -318,6 +328,7 @@ const channel = new Channel(
       quitPending = false;
     } else if (packet.kind === "shutdown") {
       stopping = true;
+      cancelReplacements();
       for (const controller of operationControllers.values()) {
         controller.abort();
       }
@@ -540,7 +551,7 @@ function startViews() {
  */
 async function closeWindow(
   viewId: string,
-  mode: "close" | "recreate" | "force" | "destroy" = "close",
+  mode: "close" | "recreate" | "handoff" | "force" | "destroy" = "close",
 ): Promise<boolean> {
   const view = views.get(viewId);
   assert(view);
@@ -611,7 +622,7 @@ async function closeWindow(
       if (
         child.view.boundary.closed ||
         !child.view.confirmation ||
-        (mode !== "recreate" && quitPending)
+        (mode === "close" && quitPending)
       ) {
         continue;
       }
@@ -734,7 +745,9 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
       return view
         ? {
             closed: view.boundary.closed,
-            cleaned: view.cleaned,
+            cleaned:
+              view.cleaned &&
+              (!replacements.has(viewId) || view.native.canReuseProfile()),
             ready: view.ready,
             failure: view.native.failure,
             replacementCancelled: view.replacementCancelled,
@@ -751,7 +764,8 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         view.cleaned = false;
       }
     },
-    close: (viewId) => closeWindow(viewId, "recreate"),
+    close: (viewId, replacing = true) =>
+      closeWindow(viewId, replacing ? "recreate" : "handoff"),
     destroy: (viewId) => closeWindow(viewId, "force"),
     stopping: () => stopping,
     cancelled: (id) => cancelled.has(id),
@@ -1289,6 +1303,7 @@ try {
   });
 } finally {
   stopping = true;
+  cancelReplacements();
   for (const controller of operationControllers.values()) {
     controller.abort();
   }

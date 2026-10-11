@@ -17,6 +17,7 @@ export class WindowProfiles {
     {
       deadline: number;
       retryAt: number;
+      deferred: boolean;
     }
   >();
   private readonly temporaryRoot: string;
@@ -55,7 +56,7 @@ export class WindowProfiles {
     return path;
   }
 
-  /** Keep storage through approved recreation; final closure retries locked files for a bounded interval. */
+  /** Keep storage through approved recreation; failed final deletion retains ownership and retries until removal succeeds. */
   release(key: string, preserve: boolean): boolean {
     if (preserve) {
       return true;
@@ -134,6 +135,7 @@ export class WindowProfiles {
         retry = {
           deadline: now + PROFILE_CLEANUP_TIMEOUT_MS,
           retryAt: now,
+          deferred: false,
         };
         // Failed abandoned profiles must not grow the in-memory retry queue without bound.
         if (this.pending.size >= MAX_WINDOW_INSTANCES) {
@@ -148,13 +150,12 @@ export class WindowProfiles {
           message: String(error),
         });
       }
-      if (now >= retry.deadline) {
-        this.pending.delete(path);
+      if (now >= retry.deadline && !retry.deferred) {
+        retry.deferred = true;
         this.log("profile-cleanup-deferred", {
           path,
           message: String(error),
         });
-        return true;
       }
       retry.retryAt = now + PROFILE_CLEANUP_RETRY_MS;
       return false;

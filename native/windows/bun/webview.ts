@@ -146,13 +146,7 @@ export class WebView {
     });
     this.profilePath = profile;
     const existing = environments.get(profile);
-    if (
-      existing &&
-      (existing.drainer ||
-        [
-          ...existing.members,
-        ].every((member) => member.closing))
-    ) {
+    if (!WebView.canUseEnvironment(existing)) {
       this.loader.close();
       throw new BunawayError({
         code: "BUSY",
@@ -771,6 +765,22 @@ export class WebView {
   }
   requestClose() {
     this.closing = true;
+  }
+  /** Old controllers can finish before the last shared owner; retain replacement reservations until its drain completes. */
+  canReuseProfile(): boolean {
+    return WebView.canUseEnvironment(environments.get(this.profilePath));
+  }
+  /** A live controller can share its environment; an entirely closing group must drain first. */
+  private static canUseEnvironment(
+    group: EnvironmentGroup | undefined,
+  ): boolean {
+    return (
+      !group ||
+      (!group.drainer &&
+        [
+          ...group.members,
+        ].some((member) => !member.closing))
+    );
   }
   /**
    * Ignore events and detach the controller outside COM callbacks.
