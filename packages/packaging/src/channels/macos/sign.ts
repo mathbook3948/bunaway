@@ -1,14 +1,5 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import {
-  lstat,
-  mkdir,
-  mkdtemp,
-  readFile,
-  rm,
-  rmdir,
-  writeFile,
-} from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
 import { must } from "../../tools.ts";
@@ -102,7 +93,7 @@ export interface SignOptions {
   minOs?: string;
 }
 
-/** Sign the compiled host or nested Bun, then seal and verify the bundle before publication. */
+/** Sign the compiled Bun app, then seal and verify the bundle before publication. */
 export async function signApp(options: SignOptions): Promise<void> {
   const { channel, identity, teamId, provisionprofile } = options;
   const app = resolve(options.app);
@@ -166,62 +157,41 @@ export async function signApp(options: SignOptions): Promise<void> {
     );
     const manifestPath = resolve(resources, "manifest.json");
     const manifest = record(JSON.parse(await readFile(manifestPath, "utf8")));
-    const compiled =
+    assert(
       manifest.host !== undefined &&
-      record(manifest.host).kind === "bun-compiled";
-    let bun = resolve(resources, "runtime/bun");
-    if (!compiled && channel === "mac-store") {
-      await mkdir(resolve(staged, "Contents/Helpers"), {
-        recursive: true,
-      });
-      const relocated = resolve(staged, "Contents/Helpers/bun");
-      await must("mv", [
-        bun,
-        relocated,
-      ]);
-      await rmdir(dirname(bun)).catch((error) => {
-        if ((error as NodeJS.ErrnoException).code !== "ENOTEMPTY") {
-          throw error;
-        }
-      });
-      bun = relocated;
-    }
+        record(manifest.host).kind === "bun-compiled",
+      "macOS requires a compiled Bun app.",
+    );
     if (channel === "mac-store" && provisionprofile) {
       await must("ditto", [
         resolve(provisionprofile),
         resolve(staged, "Contents/embedded.provisionprofile"),
       ]);
     }
-    for (const role of [
-      "app",
-      "child",
-    ]) {
-      const entitlements = await plist(
-        resolve(import.meta.dir, "entitlements", `${channel}-${role}.plist`),
-      );
-      if (channel === "mac-store" && role === "app") {
-        entitlements["com.apple.security.application-groups"] = [
-          `${teamId}.${bundleId}`,
-        ];
-        if (provisionprofile) {
-          entitlements["com.apple.application-identifier"] =
-            `${teamId}.${bundleId}`;
-          entitlements["com.apple.developer.team-identifier"] = teamId;
-        } else {
-          // Provisioned entitlements without a profile cause AMFI to reject local test apps.
-          delete entitlements["com.apple.application-identifier"];
-          delete entitlements["com.apple.developer.team-identifier"];
-        }
+    const entitlements = await plist(
+      resolve(import.meta.dir, "entitlements", `${channel}-app.plist`),
+    );
+    if (channel === "mac-store") {
+      entitlements["com.apple.security.application-groups"] = [
+        `${teamId}.${bundleId}`,
+      ];
+      if (provisionprofile) {
+        entitlements["com.apple.application-identifier"] =
+          `${teamId}.${bundleId}`;
+        entitlements["com.apple.developer.team-identifier"] = teamId;
+      } else {
+        // Provisioned entitlements without a profile cause AMFI to reject local test apps.
+        delete entitlements["com.apple.application-identifier"];
+        delete entitlements["com.apple.developer.team-identifier"];
       }
-      if (compiled && role === "app") {
-        // Bun JIT and FFI run in the app executable, without a nested runtime.
-        entitlements["com.apple.security.cs.allow-jit"] = true;
-        entitlements["com.apple.security.cs.allow-unsigned-executable-memory"] =
-          true;
-      }
-      await writePlist(resolve(stage, `${role}.ent.plist`), entitlements);
     }
-    const sign = (path: string, role: string) =>
+    // Bun JIT and FFI run in the app executable.
+    entitlements["com.apple.security.cs.allow-jit"] = true;
+    entitlements["com.apple.security.cs.allow-unsigned-executable-memory"] =
+      true;
+    const entitlementsPath = resolve(stage, "app.ent.plist");
+    await writePlist(entitlementsPath, entitlements);
+    const sign = (path: string) =>
       must("codesign", [
         "--force",
         "--sign",
@@ -229,23 +199,9 @@ export async function signApp(options: SignOptions): Promise<void> {
         "--options",
         "runtime",
         "--entitlements",
-        resolve(stage, `${role}.ent.plist`),
+        entitlementsPath,
         path,
       ]);
-    if (!compiled) {
-      await sign(bun, "child");
-      // Signing changes executable bytes, so record the packaged digest only after signing Bun.
-      const signedManifest = record(
-        JSON.parse(await readFile(manifestPath, "utf8")),
-      );
-      record(signedManifest.bun).packagedSha256 = createHash("sha256")
-        .update(await readFile(bun))
-        .digest("hex");
-      await writeFile(
-        manifestPath,
-        `${JSON.stringify(signedManifest, null, 2)}\n`,
-      );
-    }
     let host = resolve(staged, "Contents/MacOS/bunaway-host");
     if (!(await exists(host))) {
       const executables = resolve(staged, "Contents/MacOS");
@@ -260,8 +216,8 @@ export async function signApp(options: SignOptions): Promise<void> {
       }
       host = string(found, "host executable");
     }
-    await sign(host, "app");
-    await sign(staged, "app");
+    await sign(host);
+    await sign(staged);
     await must("codesign", [
       "--verify",
       "--deep",

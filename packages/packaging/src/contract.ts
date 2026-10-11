@@ -6,13 +6,9 @@
 // everything lands in a runner-owned staging directory that is moved into
 // place atomically, so a failed package run preserves the previous output.
 //
-// Hash rule: signing changes executable bytes, so every packaged executable
-// keeps two digests in manifest.json — `sourceSha256` (the upstream artifact,
-// pinned and immutable) and `packagedSha256` (the final bytes shipped inside
-// the package, recomputed after any signing step). Runtime integrity checks
-// prefer `packagedSha256` and fall back to the upstream digest when the file
-// was never re-signed. Unsigned outputs still record `packagedSha256` equal to
-// `sourceSha256` so the rule is uniform across channels.
+// Signing changes executable bytes. The host entry retains its build digest
+// and may record packagedSha256 after signing. macOS bundles with only host
+// provenance require code-signature verification for final integrity.
 //
 // Diagnostics are structured: every stage reports {stage, code, severity,
 // message, path?} entries into the packaging report instead of only throwing.
@@ -171,7 +167,7 @@ export interface BuildArtifact {
   // Root of the channel-neutral build output (dist/<target> for Windows,
   // dist/<target>/<appId>.app for macOS).
   dir: string;
-  // Directory containing manifest.json, assets/, licenses/, runtime/.
+  // Directory containing manifest.json, assets/ and licenses/.
   packageDir: string;
   // Host executable inside the artifact.
   executable: string;
@@ -186,7 +182,7 @@ export interface PackageManifest {
     executableSha256: string;
     licenseSha256: string;
     sourceRevision: string;
-    // Written by adapters that re-sign bun inside the package.
+    // Optional final runtime digest supplied by imported build metadata.
     packagedSha256?: string;
     [key: string]: unknown;
   };

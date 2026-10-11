@@ -44,11 +44,13 @@ let home: string;
 let root: string;
 let artifactDir: string;
 
-const macRuntimeAssets = [
-  "assets/process.schema.json",
-  "assets/message.schema.json",
-  "assets/host-call.schema.json",
-  "assets/policy.schema.json",
+const macAppAssets = [
+  "assets/app.json",
+  "assets/policy.json",
+  "assets/manifest.json",
+  "assets/boot.js",
+  "assets/backend.js",
+  "licenses/LICENSE.bun",
 ] as const;
 const windowsAssets = [
   "WebView2Loader.dll",
@@ -79,7 +81,7 @@ async function writeJson(path: string, value: unknown) {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-// Builds a minimal valid Windows Bun FFI artifact or macOS native-host bundle.
+// Builds a minimal valid compiled Bun artifact for either desktop platform.
 async function makeArtifact(
   projectRoot = root,
   target: BuildTarget = "windows-x64",
@@ -91,14 +93,10 @@ async function makeArtifact(
   });
   const dir = artifact.packageDir;
   const windows = target === "windows-x64";
-  const runtime = windows ? artifact.executable : resolve(dir, "runtime/bun");
   if (projectRoot === root) {
     artifactDir = dir;
   }
   await mkdir(resolve(dir, "assets"), {
-    recursive: true,
-  });
-  await mkdir(resolve(dir, "runtime"), {
     recursive: true,
   });
   await mkdir(resolve(dir, "licenses"), {
@@ -107,9 +105,7 @@ async function makeArtifact(
   await mkdir(resolve(artifact.executable, ".."), {
     recursive: true,
   });
-  if (!windows) {
-    await writeFile(artifact.executable, "fake host");
-  }
+  await writeFile(artifact.executable, "fake bun");
   if (!windows) {
     await chmod(artifact.executable, 0o755);
     await writeFile(
@@ -123,10 +119,6 @@ async function makeArtifact(
 </dict></plist>`,
     );
   }
-  await writeFile(runtime, "fake bun");
-  if (!windows) {
-    await chmod(runtime, 0o755);
-  }
   const assets: Record<string, string> = {};
   if (!windows) {
     await writeJson(resolve(dir, "assets/app.json"), appConfig);
@@ -138,13 +130,7 @@ async function makeArtifact(
       ]
     : [
         "assets/web/index.html",
-        "assets/policy.json",
-        "assets/backend.js",
-        "assets/bunfig.toml",
-        "assets/tsconfig.json",
-        ...macRuntimeAssets,
-        "licenses/LICENSE.bun",
-        "licenses/LICENSE.nlohmann-json",
+        ...macAppAssets.filter((path) => path !== "assets/app.json"),
       ];
   for (const path of paths) {
     await mkdir(resolve(dir, path, ".."), {
@@ -158,7 +144,7 @@ async function makeArtifact(
       version: "1.4.2",
       sourceRevision: "744846f844374847c902b5e7fd59b4342a51ef99",
       target: windows ? "windows-x64-baseline" : "darwin-aarch64",
-      executableSha256: await sha256(runtime),
+      executableSha256: await sha256(artifact.executable),
       licenseSha256: assets["licenses/LICENSE.bun"] ?? "",
     },
     assets,
@@ -168,9 +154,9 @@ async function makeArtifact(
     },
     host: {
       target,
+      kind: "bun-compiled",
       ...(windows
         ? {
-            kind: "bun-compiled",
             executable: "app.test.exe",
             sha256: await sha256(artifact.executable),
           }
@@ -190,10 +176,11 @@ async function makeSignedMacArtifact(projectRoot: string) {
     target: "macos-arm64",
     appId: "app.test",
   });
-  // Signature tests need a Mach-O host, so replace the placeholder fixture.
-  await copyFile("/bin/echo", artifact.executable);
+  // Signature tests use the real Bun Mach-O executable instead of placeholder bytes.
+  await copyFile(process.execPath, artifact.executable);
   manifest.host = {
     target: "macos-arm64",
+    kind: "bun-compiled",
     sourceSha256: await sha256(artifact.executable),
   };
   await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
@@ -2047,8 +2034,8 @@ test("Windows compiled app hash rejects tampering before adapters run", async ()
     channel: "win-direct",
   });
   expect(
-    legacyDiagnostics.some((diagnostic) =>
-      diagnostic.message.includes("run bunaway build again"),
+    legacyDiagnostics.some(
+      (diagnostic) => diagnostic.code === CODES.INPUT_UNEXPECTED,
     ),
   ).toBe(true);
   await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
@@ -3211,61 +3198,35 @@ test("invalid Bun digests fail closed even when the runtime has been changed", a
 });
 
 test.each([
-  {
-    target: "macos-arm64",
-    alias: "sha256",
-  },
-  {
-    target: "macos-arm64",
-    alias: "sourceSha256",
-  },
-] as const)(
-  "Bun ignores $alias as a final digest on $target",
-  async ({ target, alias }) => {
-    const projectRoot = await mkdtemp(join(home, "bun-fallback-"));
-    const manifest = await makeArtifact(projectRoot, target);
-    const artifact = artifactPaths({
-      root: projectRoot,
-      target,
-      appId: "app.test",
-    });
-    const runtime = resolve(artifact.packageDir, "runtime/bun");
-    const channel = "mac-direct";
-    await Bun.write(runtime, "re-signed runtime bytes");
-    const finalDigest = await sha256(runtime);
-    manifest.bun[alias] = finalDigest;
-    await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);
-    const report = await expectRejectedInputs(
-      projectRoot,
-      CODES.INPUT_TAMPERED,
-      {
-        target,
-      },
-    );
-    expect(
-      report.diagnostics.some(
-        (d) => d.code === CODES.INPUT_TAMPERED && d.path === runtime,
+  undefined,
+  "native-host",
+])(
+  "macOS rejects unsupported host kind %s before adapter execution",
+  async (kind) => {
+    const projectRoot = await mkdtemp(join(home, "mac-host-kind-"));
+    const manifest = await makeArtifact(projectRoot, "macos-arm64");
+    if (!manifest.host) {
+      throw new Error("Expected compiled app.");
+    }
+    if (kind === undefined) {
+      delete manifest.host.kind;
+    } else {
+      manifest.host.kind = kind;
+    }
+    await writeJson(
+      resolve(
+        artifactPaths({
+          root: projectRoot,
+          target: "macos-arm64",
+          appId: "app.test",
+        }).packageDir,
+        "manifest.json",
       ),
-    ).toBe(true);
-
-    manifest.bun.packagedSha256 = finalDigest;
-    expect(
-      await verifyArtifact({
-        artifact,
-        manifest,
-        channel,
-      }),
-    ).toEqual([]);
-    manifest.bun.packagedSha256 = manifest.bun.executableSha256;
-    expect(
-      (
-        await verifyArtifact({
-          artifact,
-          manifest,
-          channel,
-        })
-      ).some((d) => d.code === CODES.INPUT_TAMPERED && d.path === runtime),
-    ).toBe(true);
+      manifest,
+    );
+    await expectRejectedInputs(projectRoot, CODES.INPUT_UNEXPECTED, {
+      target: "macos-arm64",
+    });
   },
 );
 
@@ -3300,20 +3261,19 @@ test.each(
       "macos-arm64",
     ] as const
   ).flatMap((target) =>
-    (target === "windows-x64" ? windowsAssets : macRuntimeAssets).flatMap(
-      (path) =>
-        (
-          [
-            "manifest",
-            "file",
-            "both",
-            "tampered",
-          ] as const
-        ).map((mode) => ({
-          target,
-          path,
-          mode,
-        })),
+    (target === "windows-x64" ? windowsAssets : macAppAssets).flatMap((path) =>
+      (
+        [
+          "manifest",
+          "file",
+          "both",
+          "tampered",
+        ] as const
+      ).map((mode) => ({
+        target,
+        path,
+        mode,
+      })),
     ),
   ),
 )(
@@ -3783,10 +3743,10 @@ test("input directory links inside the package remain valid", async () => {
     target: "windows-x64",
     appId: "app.test",
   });
-  const runtime = resolve(artifact.packageDir, "runtime");
-  const internal = resolve(artifact.packageDir, "original-runtime");
-  await rename(runtime, internal);
-  await symlink(internal, runtime, "junction");
+  const licenses = resolve(artifact.packageDir, "licenses");
+  const internal = resolve(artifact.packageDir, "original-licenses");
+  await rename(licenses, internal);
+  await symlink(internal, licenses, "junction");
   expect(
     await verifyArtifact({
       artifact,
@@ -3832,74 +3792,66 @@ for (const channel of [
   "mac-direct",
   "mac-store",
 ] as const) {
-  for (const executable of [
-    "host",
-    "bun",
-  ] as const) {
-    test.skipIf(process.platform === "win32")(
-      `${channel} rejects non-executable ${executable} with a valid final digest`,
-      async () => {
-        const projectRoot = await mkdtemp(join(home, "mac-executable-"));
-        const manifest = await makeArtifact(projectRoot, "macos-arm64");
-        const artifact = artifactPaths({
-          root: projectRoot,
-          target: "macos-arm64",
-          appId: "app.test",
-        });
-        const path =
-          executable === "host"
-            ? artifact.executable
-            : resolve(artifact.packageDir, "runtime/bun");
-        const digest = await sha256(path);
-        await chmod(path, 0o555);
-        expect(
-          await verifyArtifact({
-            artifact,
-            manifest,
-            channel,
-          }),
-        ).toEqual([]);
-        await chmod(path, 0o644);
-        expect(await sha256(path)).toBe(digest);
-        expect(
-          await verifyArtifact({
-            artifact,
-            manifest,
-            channel,
-          }),
-        ).toEqual([
-          expect.objectContaining({
-            stage: "verify",
-            code: CODES.INPUT_TAMPERED,
-            severity: "error",
-            message: expect.stringContaining("not executable"),
-            path,
-          }),
-        ]);
-        let resolved = false;
-        const report = await runAdapter(
-          projectRoot,
-          stubAdapter({
-            channel,
-            stages: () => {
-              resolved = true;
-              return [];
-            },
-          }),
-          {
-            target: "macos-arm64",
+  test.skipIf(process.platform === "win32")(
+    `${channel} rejects a non-executable compiled app with a valid final digest`,
+    async () => {
+      const projectRoot = await mkdtemp(join(home, "mac-executable-"));
+      const manifest = await makeArtifact(projectRoot, "macos-arm64");
+      const artifact = artifactPaths({
+        root: projectRoot,
+        target: "macos-arm64",
+        appId: "app.test",
+      });
+      const path = artifact.executable;
+      const digest = await sha256(path);
+      await chmod(path, 0o555);
+      expect(
+        await verifyArtifact({
+          artifact,
+          manifest,
+          channel,
+        }),
+      ).toEqual([]);
+      await chmod(path, 0o644);
+      expect(await sha256(path)).toBe(digest);
+      expect(
+        await verifyArtifact({
+          artifact,
+          manifest,
+          channel,
+        }),
+      ).toEqual([
+        expect.objectContaining({
+          stage: "verify",
+          code: CODES.INPUT_TAMPERED,
+          severity: "error",
+          message: expect.stringContaining("not executable"),
+          path,
+        }),
+      ]);
+      let resolved = false;
+      const report = await runAdapter(
+        projectRoot,
+        stubAdapter({
+          channel,
+          stages: () => {
+            resolved = true;
+            return [];
           },
-        );
-        expect(report.ok).toBe(false);
-        expect(report.usable).toBe(false);
-        expect(report.submittable).toBe(false);
-        expect(report.stages.find((s) => s.id === "verify")?.status).toBe(
-          "failed",
-        );
-        expect(resolved).toBe(false);
-      },
-    );
-  }
+        }),
+        {
+          target: "macos-arm64",
+        },
+      );
+      expect(report.ok).toBe(false);
+      expect(report.usable).toBe(false);
+      expect(report.submittable).toBe(false);
+      expect(report.stages.find((s) => s.id === "verify")?.status).toBe(
+        "failed",
+      );
+      expect(resolved).toBe(false);
+    },
+  );
   test.skipIf(process.platform !== "darwin")(
     `${channel} accepts an ad-hoc signed bundle with only host provenance`,
     async () => {
@@ -3939,7 +3891,6 @@ for (const channel of [
     "resources",
     "signature",
     "host-mode",
-    "bun-mode",
   ] as const) {
     test.skipIf(process.platform !== "darwin")(
       `${channel} rejects signed bundle ${change} tampering before adapter execution`,
@@ -3984,10 +3935,7 @@ for (const channel of [
             recursive: true,
           });
         } else {
-          const path =
-            change === "host-mode"
-              ? artifact.executable
-              : resolve(artifact.packageDir, "runtime/bun");
+          const path = artifact.executable;
           const digest = await sha256(path);
           await chmod(path, 0o644);
           expect(await sha256(path)).toBe(digest);
@@ -4085,6 +4033,7 @@ test.skipIf(process.platform === "darwin")(
     });
     manifest.host = {
       target: "macos-arm64",
+      kind: "bun-compiled",
       sourceSha256: await sha256(artifact.executable),
     };
     await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);

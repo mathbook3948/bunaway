@@ -1,6 +1,6 @@
 # Native hosts
 
-- `host-api/`: 호스트 호출, 렌더러, 생성된 정책의 네이티브 경계와 이전 C ABI 기록.
+- `host-api/`: 호스트 호출 계약, 공통 Bun 플러그인 처리와 생성된 프로토콜, 정책 스키마.
 - `windows/`: Bun 직접 FFI Win32, WebView2 제품 호스트.
 - `macos/`: Bun 직접 FFI AppKit, WKWebView 제품 호스트(arm64).
 - `linux/`: GTK, WebKitGTK 호스트 예정 영역, 미구현.

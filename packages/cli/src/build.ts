@@ -458,11 +458,6 @@ async function assembleProject(
     };
     await writeJson(resolve(packageRoot, "manifest.json"), {
       ...pin,
-      ...(!windows
-        ? {
-            json: undefined,
-          }
-        : {}),
       assets: hashes,
       app: {
         id: project.app.appId,

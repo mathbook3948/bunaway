@@ -19,6 +19,6 @@ Windows는 번들 Bun이 앱 진입점이며 같은 프로세스의 UI Worker가
 
 IPC와 프로세스 정리 비용을 감수하는 대신, 호스트에 Bun VM을 직접 넣는 빌드, 수명주기 결합을 피한다. 종료 응답 수신과 실제 프로세스 종료는 구분하며 최종 정리는 호스트가 확인한다. Windows 구현은 Bun을 정지 상태로 생성하고 kill-on-close Job에 배정한 뒤 실행한다.
 
-Windows B 실험에서 구현한 선택이다. macOS, Linux의 실행, 배포와 Android, iOS의 런타임 경로까지 검증됐다는 뜻은 아니며, 모바일 실행 방식은 미확정이다. 이전 [C ABI 초안](../architecture/native-abi.md)은 현재 실행 계약이 아닌 과거 설계 기록으로 남긴다.
+Windows B 실험에서 구현한 선택이다. macOS, Linux의 실행, 배포와 Android, iOS의 런타임 경로까지 검증됐다는 뜻은 아니며, 모바일 실행 방식은 당시 미확정이었다. 동일 프로세스 VM 내장용 C ABI 초안과 헤더는 삭제했다.
 
 근거: [실행 방식과 중단한 실험](../architecture/runtime-feasibility.md), [Windows 실행 결과](../architecture/windows-probe-results.md).

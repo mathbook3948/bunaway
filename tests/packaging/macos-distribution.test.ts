@@ -67,10 +67,10 @@ async function readManifest(app: string) {
   const manifest: {
     host?: {
       kind: string;
+      sourceSha256?: string;
     };
     bun: {
       executableSha256: string;
-      packagedSha256: string;
     };
   } = await Bun.file(resolve(app, "Contents/Resources/manifest.json")).json();
   return manifest;
@@ -96,20 +96,26 @@ describe
       );
       template = resolve(templateRoot, "Fixture.app");
       const resources = resolve(template, "Contents/Resources");
-      await mkdir(resolve(resources, "runtime"), {
+      await mkdir(resources, {
         recursive: true,
       });
       const host = resolve(template, "Contents/MacOS/bunaway-host");
       await mkdir(dirname(host));
-      const source = resolve(templateRoot, "main.c");
-      await writeFile(source, "int main(void) { return 0; }\n");
+      const source = resolve(templateRoot, "main.ts");
+      await writeFile(source, "process.exit(0);\n");
       await command([
-        "clang",
+        process.execPath,
+        "--no-env-file",
+        "build",
+        "--compile",
+        "--no-compile-autoload-dotenv",
+        "--no-compile-autoload-bunfig",
+        "--no-compile-autoload-tsconfig",
+        "--no-compile-autoload-package-json",
         source,
-        "-o",
+        "--outfile",
         host,
       ]);
-      await cp(host, resolve(resources, "runtime/bun"));
       const info = resolve(template, "Contents/Info.plist");
       await writeJson(info, {
         CFBundleExecutable: "bunaway-host",
@@ -133,12 +139,14 @@ describe
         "<dict><key>date</key><date>2026-10-05T23:13:00Z</date><key>data</key><data>YQ==</data><key>values</key><array><string>  padded &amp; text  </string><integer>42</integer></array></dict>",
         info,
       ]);
-      upstream = await hash(resolve(resources, "runtime/bun"));
-      // A stale packaged digest must be replaced after signing, while the upstream digest stays intact.
+      upstream = await hash(process.execPath);
       await writeJson(resolve(resources, "manifest.json"), {
+        host: {
+          kind: "bun-compiled",
+          sourceSha256: await hash(host),
+        },
         bun: {
           executableSha256: upstream,
-          packagedSha256: "0".repeat(64),
         },
       });
     }, COMMAND_TIMEOUT_MS);
@@ -245,7 +253,6 @@ describe
     }
     async function assertSigned(
       signedApp: string,
-      channel: string,
       originalDigest = upstream,
     ): Promise<void> {
       await command([
@@ -257,37 +264,28 @@ describe
       ]);
       const manifest = await readManifest(signedApp);
       expect(manifest.bun.executableSha256).toBe(originalDigest);
-      if (manifest.host?.kind === "bun-compiled") {
-        for (const path of [
-          "Contents/Resources/runtime/bun",
-          "Contents/Helpers/bun",
-        ]) {
-          expect(await Bun.file(resolve(signedApp, path)).exists()).toBe(false);
-        }
-        const entitlementsFile = resolve(root, "compiled-entitlements.plist");
-        await writeFile(
-          entitlementsFile,
-          await command([
-            "codesign",
-            "-d",
-            "--entitlements",
-            ":-",
-            signedApp,
-          ]),
-        );
-        expect(await plist(entitlementsFile)).toMatchObject({
-          "com.apple.security.cs.allow-jit": true,
-          "com.apple.security.cs.allow-unsigned-executable-memory": true,
-        });
-      } else {
-        const runtime = resolve(
-          signedApp,
-          channel === "mac-direct"
-            ? "Contents/Resources/runtime/bun"
-            : "Contents/Helpers/bun",
-        );
-        expect(manifest.bun.packagedSha256).toBe(await hash(runtime));
+      expect(manifest.host?.kind).toBe("bun-compiled");
+      for (const path of [
+        "Contents/Resources/runtime/bun",
+        "Contents/Helpers/bun",
+      ]) {
+        expect(await Bun.file(resolve(signedApp, path)).exists()).toBe(false);
       }
+      const entitlementsFile = resolve(root, "compiled-entitlements.plist");
+      await writeFile(
+        entitlementsFile,
+        await command([
+          "codesign",
+          "-d",
+          "--entitlements",
+          ":-",
+          signedApp,
+        ]),
+      );
+      expect(await plist(entitlementsFile)).toMatchObject({
+        "com.apple.security.cs.allow-jit": true,
+        "com.apple.security.cs.allow-unsigned-executable-memory": true,
+      });
     }
     // A hardened compiled app must complete real WebView work before graceful termination.
     async function assertHardenedApp(signedApp: string): Promise<void> {
@@ -377,7 +375,7 @@ describe
       return archive;
     }
 
-    test("direct signing preserves source hash, updates metadata and cleans staging", async () => {
+    test("direct signing preserves provenance, updates metadata and cleans staging", async () => {
       await previousOutput();
       await sign("mac-direct", [
         "--display-name",
@@ -391,7 +389,7 @@ describe
         "--min-os",
         "14.0",
       ]);
-      await assertSigned(out, "mac-direct");
+      await assertSigned(out);
       await assertFixtureMetadata(out);
       for (const [key, value] of [
         [
@@ -433,8 +431,8 @@ describe
       );
       expect(await readdir(stage)).toEqual([]);
       expect(await matches("Signed.app.publish.*")).toEqual([]);
-      expect(await hash(resolve(app, "Contents/Resources/runtime/bun"))).toBe(
-        upstream,
+      expect((await readManifest(app)).host?.sourceSha256).toBe(
+        await hash(resolve(app, "Contents/MacOS/bunaway-host")),
       );
     });
     test("store layout and entitlements", async () => {
@@ -442,7 +440,7 @@ describe
         "--team-id",
         "ABCD1234EF",
       ]);
-      await assertSigned(out, "mac-store");
+      await assertSigned(out);
       await assertFixtureMetadata(out);
       expect(
         await Bun.file(resolve(out, "Contents/Resources/runtime/bun")).exists(),
@@ -471,17 +469,7 @@ describe
       expect(await readdir(stage)).toEqual([]);
     });
     test("compiled app signing preserves its layout and grants JIT and FFI entitlements in both channels", async () => {
-      await rm(resolve(app, "Contents/Resources/runtime"), {
-        recursive: true,
-      });
       const manifest = await readManifest(app);
-      manifest.host = {
-        kind: "bun-compiled",
-      };
-      await writeJson(
-        resolve(app, "Contents/Resources/manifest.json"),
-        manifest,
-      );
       for (const channel of [
         "mac-direct",
         "mac-store",
@@ -499,7 +487,7 @@ describe
           app,
           output,
         );
-        await assertSigned(output, channel);
+        await assertSigned(output);
         await assertFixtureMetadata(output);
         expect(await readManifest(output)).toEqual(manifest);
       }
@@ -529,12 +517,26 @@ describe
         expect(await Bun.file(resolve(root, "artifacts")).exists()).toBe(false);
       });
     }
+    for (const manifest of [
+      "invalid",
+      JSON.stringify({
+        host: {
+          kind: "native-host",
+        },
+      }),
+    ]) {
+      test(`unsupported manifest preserves previous output (${manifest})`, async () => {
+        await previousOutput();
+        await writeFile(
+          resolve(app, "Contents/Resources/manifest.json"),
+          manifest,
+        );
+        await sign("mac-direct", [], 1);
+        await assertPrevious();
+        expect(await readdir(stage)).toEqual([]);
+      });
+    }
     for (const [name, tool, failure] of [
-      [
-        "invalid manifest preserves previous output",
-        "codesign",
-        "manifest",
-      ],
       [
         "verification failure preserves previous output",
         "codesign",
@@ -616,7 +618,7 @@ describe
             artifact,
           ]);
           try {
-            await assertSigned(resolve(mount, "Signed.app"), channel);
+            await assertSigned(resolve(mount, "Signed.app"));
             await assertFixtureMetadata(resolve(mount, "Signed.app"));
             expect(await readlink(resolve(mount, "Applications"))).toBe(
               "/Applications",
@@ -850,7 +852,7 @@ describe
           input,
           output,
         );
-        await assertSigned(output, channel, manifest.bun.executableSha256);
+        await assertSigned(output, manifest.bun.executableSha256);
         if (
           manifest.host?.kind === "bun-compiled" &&
           channel === "mac-direct"

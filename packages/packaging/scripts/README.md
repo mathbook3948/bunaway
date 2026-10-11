@@ -5,10 +5,8 @@
 `bunaway package`의 macOS 채널 지원 여부는 바뀌지 않는다.
 명령은 저장소 루트에서 실행한다.
 
-현재 Bun FFI 앱은 `Contents/MacOS/bunaway-host`에 Bun과 백엔드를 포함하며
-`Resources/runtime/bun`이나 `Helpers/bun`을 배포하지 않는다. 서명은 앱 실행 파일에
-JIT와 FFI 실행 메모리 entitlement를 적용한다. 아래 child 재배치는 이전 프로세스
-패키지의 호환 경로이며 현재 제품 빌드에서는 사용하지 않는다.
+Bun FFI 앱은 `Contents/MacOS/bunaway-host`에 Bun과 백엔드를 포함한다.
+서명은 앱 실행 파일에 JIT와 FFI 실행 메모리 entitlement를 적용한다.
 
 | Channel | Artifact | Signature |
 |---|---|---|
@@ -32,26 +30,14 @@ bun packages/packaging/scripts/macos.ts sign \
   --provisionprofile MyApp_MAS.provisionprofile
 ```
 
-현재 compiled 앱은 호스트와 번들을 서명한다. 아래 1, 2단계는 이전 프로세스 패키지에만 적용한다.
-
-Order (measured requirement: see
-`docs/architecture/macos-sandbox-results.md`):
-
-1. sign nested executables (`Contents/Helpers/bun` for store,
-   `Contents/Resources/runtime/bun` for direct) with the channel's *child*
-   entitlements;
-2. record the **post-signing** hash in `manifest.json`'s `bun.packagedSha256`,
-   preserving the upstream `bun.executableSha256`: the host prefers the
-   packaged digest and re-verifies it at launch;
-3. sign the host binary and seal the bundle with the channel's *app*
-   entitlements (`--options runtime` everywhere);
-4. `codesign --verify --deep --strict`.
+compiled 앱의 실행 파일을 채널의 app entitlement와 `--options runtime`으로 서명한 뒤
+앱 번들을 서명한다. 마지막으로 `codesign --verify --deep --strict`를 실행한다.
+원본 Bun의 `bun.executableSha256`과 compiled 실행 파일의 `host.sourceSha256`은
+출처 기록으로 유지하며, 서명 뒤의 앱 무결성은 코드 서명으로 검증한다.
 
 Channel layout notes:
 
-- **mac-store** relocates the bundled Bun to `Contents/Helpers/bun` (Apple's
-  nested-executable convention for the previous process host) and embeds
-  `embedded.provisionprofile` when `--provisionprofile` is passed.
+- **mac-store** embeds `embedded.provisionprofile` when `--provisionprofile` is passed.
 - Without `--provisionprofile`, the provisioned entitlements
   (`application-identifier`, `team-identifier`) are dropped from the store app
   signature: with them but no profile, AMFI kills the app at exec (measured).
@@ -107,6 +93,7 @@ BUNAWAY_DISTRIBUTION_APP=build/Bunaway.app bun test tests/packaging/macos-distri
 macOS의 기본 `bun test`에서도 실행하며, 다른 OS에서는 건너뛴다.
 실제 Bunaway 앱 검증에는 `BUNAWAY_DISTRIBUTION_APP`을 지정한다.
 공증 서비스 대체 도구도 Bun으로 실행한다.
+서명 fixture는 Bun으로 compile하므로 C 컴파일러가 필요하지 않다.
 
 The existing macOS native CI runs these checks through
 `mise run host:macos -- --app`, after the signed host lifecycle suite. They
@@ -123,9 +110,7 @@ compiled 앱에서는 app 템플릿에 `cs.allow-jit`와 `cs.allow-unsigned-exec
 | File | Keys | Why |
 |---|---|---|
 | `mac-direct-app.plist` | none | not sandboxed; notarization needs only `-o runtime` |
-| `mac-direct-child.plist` | `cs.allow-jit` | Bun JIT under hardened runtime (~22× slowdown otherwise, measured) |
 | `mac-store-app.plist` | `app-sandbox`, `network.client`, `application-groups`, `application-identifier`, `team-identifier` | MAS minimum; `${TEAM_ID}`/`${BUNDLE_ID}` substituted at signing; provisioned keys dropped without a profile |
-| `mac-store-child.plist` | `app-sandbox`, `inherit`, `cs.allow-jit` | the only child shape the sandbox accepts (measured) |
 
 **Known open item:** under self-signed/dev identities, sandboxed
 `com.apple.WebKit.Networking` exits on its client-entitlement gate even

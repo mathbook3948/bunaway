@@ -427,7 +427,6 @@ function requiredFrameworkFiles(): string[] {
         ].includes(path),
     ),
     "licenses/LICENSE.bun",
-    "licenses/LICENSE.nlohmann-json",
     "licenses/License-WebView2.txt",
     ...[
       "bootstrap",
@@ -605,17 +604,6 @@ export async function checkArtifact(root: string): Promise<void> {
   await verifyHash(
     resolve(root, "licenses/LICENSE.bun"),
     pin.bun.licenseSha256,
-  );
-  const macPin = (await json(
-    resolve(root, "runtime/build-manifests/darwin-aarch64.json"),
-  )) as {
-    json: {
-      licenseSha256: string;
-    };
-  };
-  await verifyHash(
-    resolve(root, "licenses/LICENSE.nlohmann-json"),
-    macPin.json.licenseSha256,
   );
   const deps = (await json(resolve(root, "native/windows/bun/deps.json"))) as {
     webview2Sdk: {
