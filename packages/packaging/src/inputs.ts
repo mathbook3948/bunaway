@@ -569,8 +569,7 @@ export async function verifyArtifact(args: {
         stage,
         code: CODES.INPUT_UNEXPECTED,
         severity: "error",
-        message:
-          "Windows requires a compiled Bun app; run bunaway build again.",
+        message: "Windows requires a compiled Bun app.",
         path: manifestPath,
       });
     } else {
@@ -622,7 +621,7 @@ export async function verifyArtifact(args: {
         stage,
         code: CODES.INPUT_UNEXPECTED,
         severity: "error",
-        message: "macOS requires a compiled Bun app; run bunaway build again.",
+        message: "macOS requires a compiled Bun app.",
         path: manifestPath,
       });
     }

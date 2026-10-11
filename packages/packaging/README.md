@@ -17,7 +17,7 @@
 복사 단계에서 거부하여 서명과 manifest 쓰기가 원본 빌드를 변경하지 않게 한다.
 Windows는 `host.kind=bun-compiled`와 `host.executable`에 지정한 앱 EXE,
 WebView2Loader.dll 및 라이선스를 요구한다. 웹 자산과 설정은 EXE에 내장된다.
-macOS도 `host.kind=bun-compiled`인 앱을 요구하며 이전 별도 호스트 패키지는 거부한다.
+macOS도 `host.kind=bun-compiled`인 앱을 요구한다.
 Windows EXE에는 Unix 실행 권한을 요구하지 않는다. macOS compiled 앱은 Unix에서 검사할 때 실행 권한이 필요하다.
 서명 단계는 앱 EXE를 서명한 뒤 `host.packagedSha256`을 기록하며 서명한 EXE를 다시 수정하지 않는다.
 `host.sha256`과 `bun.executableSha256`은 빌드 및 런타임 출처 기록이다.

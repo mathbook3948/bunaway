@@ -160,7 +160,7 @@ export async function signApp(options: SignOptions): Promise<void> {
     assert(
       manifest.host !== undefined &&
         record(manifest.host).kind === "bun-compiled",
-      "macOS requires a compiled Bun app; run bunaway build again.",
+      "macOS requires a compiled Bun app.",
     );
     if (channel === "mac-store" && provisionprofile) {
       await must("ditto", [

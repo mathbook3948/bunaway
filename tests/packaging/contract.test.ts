@@ -2034,8 +2034,8 @@ test("Windows compiled app hash rejects tampering before adapters run", async ()
     channel: "win-direct",
   });
   expect(
-    legacyDiagnostics.some((diagnostic) =>
-      diagnostic.message.includes("run bunaway build again"),
+    legacyDiagnostics.some(
+      (diagnostic) => diagnostic.code === CODES.INPUT_UNEXPECTED,
     ),
   ).toBe(true);
   await writeJson(resolve(artifact.packageDir, "manifest.json"), manifest);

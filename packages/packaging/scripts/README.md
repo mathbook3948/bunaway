@@ -5,10 +5,8 @@
 `bunaway package`의 macOS 채널 지원 여부는 바뀌지 않는다.
 명령은 저장소 루트에서 실행한다.
 
-현재 Bun FFI 앱은 `Contents/MacOS/bunaway-host`에 Bun과 백엔드를 포함하며
-`Resources/runtime/bun`이나 `Helpers/bun`을 배포하지 않는다. 서명은 앱 실행 파일에
-JIT와 FFI 실행 메모리 entitlement를 적용한다. `host.kind=bun-compiled`가 아닌
-이전 호스트 패키지는 거부하며 `bunaway build`로 다시 빌드해야 한다.
+Bun FFI 앱은 `Contents/MacOS/bunaway-host`에 Bun과 백엔드를 포함한다.
+서명은 앱 실행 파일에 JIT와 FFI 실행 메모리 entitlement를 적용한다.
 
 | Channel | Artifact | Signature |
 |---|---|---|
