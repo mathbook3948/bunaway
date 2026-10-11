@@ -74,8 +74,14 @@ debug APK 개발 경로를 반영하고 iOS 및 모바일 후속 작업을 분�
 - [ ] 부모 창, 자식 창, owner 관계를 설정하고 조회한다.
 - [ ] 부모에 종속된 모달 창과 부모의 입력 차단, 종료 순서를 제공한다.
 - [ ] 창 enabled 상태의 변경과 조회를 제공한다.
-- [ ] 창이 없는 상주 앱과 트레이만 있는 앱의 시작을 지원한다. 현재 설정은 시작 창 하나 이상을 요구한다.
+- [x] 창이 없는 상주 앱과 트레이만 있는 앱의 시작을 지원한다. 빈 창 선언 또는 모든 `startup: false`를 허용하며 트레이 또는 `closeBehavior: "keep-alive"`를 요구한다.
 - [x] 앱 초기화 뒤 `completeSplashscreen`으로 준비된 주 창을 먼저 표시하고 splashscreen을 닫는다.
+
+2026-10-11 창 없는 시작은 트레이 또는 명시적 keep-alive로 실행 유지 조건을 검증한다.
+keep-alive는 마지막 창을 닫아도 백엔드를 유지하고 Quit 또는 `DesktopContext.quit()`으로 종료한다.
+트레이 Open과 show는 살아 있는 창을 복원하며 열린 창이 없으면 첫 사전 선언 창을 생성한다.
+빈 선언 배열이면 창을 만들지 않는다. 종료 취소, 창 없는 상태의 개발 CLI 중단과
+강제 종료 검증 범위는 [실행 기록](./architecture/windows-bun-results.md)을 따른다.
 
 세 항목의 완료 조건, 이벤트 수신 권한, 구독 뒤 상태 복구, 탐색과 재생성 초기화 및 실패,
 취소와 기한은 [창 API](./site/src/content/docs/reference/host/windows.mdx)를 따른다.

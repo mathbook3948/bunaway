@@ -735,12 +735,8 @@
       "source": "packages/plugin-api/src/desktop.ts",
       "type": "DesktopOptions",
       "pages": {
-        "reference/backend/app-definition": [
-          "closeBehavior",
-          "tray",
-          "onOpen",
-          "beforeQuit"
-        ]
+        "guides/windows": ["closeBehavior"],
+        "reference/backend/app-definition": ["tray", "onOpen", "beforeQuit"]
       }
     },
     {
@@ -880,6 +876,7 @@
     ]
   },
   "configuration": {
+    "packages/runtime-bun/src/window-config.ts": ["reference/configuration"],
     "packages/cli/src/config.ts": [
       "reference/configuration",
       "guides/build-and-package"

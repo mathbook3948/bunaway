@@ -52,6 +52,8 @@ let initialized = false;
 let windows: Windows | undefined;
 let adapters: Awaited<ReturnType<typeof operations>> | undefined;
 let tray: Tray | undefined;
+let controlWindow: bigint | undefined;
+let showRequested = false;
 let quitPending = false;
 function requestQuit(reason: "last-window" | "tray") {
   if (stopping || quitPending) {
@@ -64,7 +66,11 @@ function requestQuit(reason: "last-window" | "tray") {
   });
 }
 function visibility(action: "show" | "hide") {
-  if (stopping) {
+  if (stopping || closingSent) {
+    return;
+  }
+  showRequested = action === "show";
+  if (showRequested) {
     return;
   }
   const nativeWindows = windows;
@@ -75,12 +81,43 @@ function visibility(action: "show" | "hide") {
     if (view.boundary.closed) {
       continue;
     }
-    if (action === "show") {
-      nativeWindows.focus(view.native.hwnd);
-    } else {
-      nativeWindows.show(view.native.hwnd, false);
-    }
+    nativeWindows.show(view.native.hwnd, false);
   }
+}
+
+/** Restore live views or create the first declaration after old views and API operations finish. */
+function showWindows() {
+  if (!showRequested || stopping || closingSent) {
+    return;
+  }
+  assert(windows);
+  const live = [
+    ...views.values(),
+  ].filter((view) => !view.boundary.closed);
+  if (live.length) {
+    for (const view of live) {
+      windows.focus(view.native.hwnd);
+    }
+    showRequested = false;
+    return;
+  }
+  // The pump owns native cleanup. Waiting here also avoids racing windows.create/recreate.
+  if (
+    adapters?.busy() ||
+    [
+      ...views.values(),
+    ].some((view) => !view.cleaned)
+  ) {
+    return;
+  }
+  const first = config.windows[0];
+  if (first) {
+    createWindow(first);
+    const view = views.get(first.view);
+    assert(view);
+    windows.focus(view.native.hwnd);
+  }
+  showRequested = false;
 }
 type ViewState = {
   boundary: ViewBoundary;
@@ -420,6 +457,7 @@ async function closeWindow(
   }
   if (
     mode === "close" &&
+    config.desktop?.closeBehavior !== "keep-alive" &&
     (quitPending ||
       [
         ...views.values(),
@@ -812,6 +850,18 @@ try {
         requestQuit("tray");
       }
     });
+  } else if (config.desktop?.closeBehavior === "keep-alive") {
+    // A resident app needs an HWND for the CLI's private shutdown message, even before its first view.
+    controlWindow = windows.create(
+      config.runtime.id,
+      200,
+      200,
+      () => {},
+      false,
+    );
+    log("desktop-control-created", {
+      hwnd: controlWindow.toString(),
+    });
   }
   if (tray) {
     log("tray-created", {
@@ -833,6 +883,7 @@ try {
   while (!stopping) {
     checkCallbacks();
     windows.pump();
+    showWindows();
     for (const [viewId, view] of views) {
       if (view.pendingClose) {
         void closeWindow(viewId, view.forceClose ? "force" : "close").catch(
@@ -864,6 +915,8 @@ try {
     }
     if (
       !closingSent &&
+      !tray &&
+      config.desktop?.closeBehavior !== "keep-alive" &&
       !adapters?.busy() &&
       [
         ...views.values(),
@@ -926,6 +979,10 @@ try {
     }
     tray?.dispose();
     tray = undefined;
+    if (controlWindow) {
+      windows?.destroy(controlWindow);
+      controlWindow = undefined;
+    }
     const calls = callbackCalls();
     for (let count = 0; count < 10; count++) {
       windows?.pump();

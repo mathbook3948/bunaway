@@ -1,4 +1,5 @@
 // Shared Worker transport; Windows keeps its platform-specific boot configuration here.
+import type { DesktopOptions } from "@bunaway/core";
 import type {
   HostContext,
   NativeRegistration,
@@ -6,6 +7,7 @@ import type {
   RuntimeIdentity,
 } from "@bunaway/protocol";
 import type { WindowSpec } from "@bunaway/runtime-bun/window-config";
+
 export * from "@bunaway/runtime-bun/worker-channel";
 export type UIConfig = {
   app?: import("@bunaway/plugin").NativeEnvironment["app"];
@@ -20,7 +22,7 @@ export type UIConfig = {
   legacyProfile?: boolean;
   plugins?: NativeRegistration[];
   desktop?: {
-    closeBehavior: "quit" | "hide";
+    closeBehavior: NonNullable<DesktopOptions["closeBehavior"]>;
     tray?: {
       tooltip: string;
     };

@@ -147,6 +147,10 @@ const app = runWindowsApp(
   {
     commands: {},
     events: {},
+    // The capacity probe intentionally runs without startup windows.
+    desktop: {
+      closeBehavior: "keep-alive",
+    },
   },
   config,
 );

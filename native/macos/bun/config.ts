@@ -17,6 +17,9 @@ import {
 } from "@bunaway/runtime-bun/window-config";
 import pin from "../../../runtime/build-manifests/darwin-aarch64.json";
 
+const WINDOWLESS_STARTUP_MESSAGE =
+  "macOS requires at least one startup window; windowless desktop apps are only supported on Windows.";
+
 export type MacosConfig = {
   runtime: RuntimeIdentity;
   backendContext: HostContext;
@@ -40,6 +43,12 @@ export function readMacosWindowSpecs(
   policy: Policy,
   developmentUrl?: string,
 ): WindowSpec[] {
+  if (Array.isArray(declarations) && declarations.length === 0) {
+    throw new BunawayError({
+      code: "UNSUPPORTED",
+      message: WINDOWLESS_STARTUP_MESSAGE,
+    });
+  }
   let origin = developmentUrl;
   if (!origin) {
     const first: unknown = Array.isArray(declarations)
@@ -64,6 +73,12 @@ export function readMacosWindowSpecs(
     origin = home.origin;
   }
   const specs = readWindowSpecs(declarations, policy, origin);
+  if (!specs.some((spec) => spec.startup !== false)) {
+    throw new BunawayError({
+      code: "UNSUPPORTED",
+      message: WINDOWLESS_STARTUP_MESSAGE,
+    });
+  }
   if (
     specs.some(
       (spec) => spec.visible !== undefined || spec.showWhenReady !== undefined,
