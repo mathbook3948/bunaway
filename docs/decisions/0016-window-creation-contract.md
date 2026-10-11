@@ -33,7 +33,7 @@ Windows 호출별 생성 옵션을 구현했다. 실제 네이티브 회귀는 C
 앱 백엔드 상태와 Host 저장 범위는 WebView 프로필과 별개다. 서로 다른 뷰라도
 같은 저장 범위 권한을 부여하면 그 범위의 앱 데이터에 접근할 수 있다.
 
-## 결정: 사전 선언 창의 호출별 옵션을 후속 구현한다
+## 결정: 사전 선언 창의 호출별 옵션을 지원한다
 
 Windows의 `create`와 `recreate`에 선택적인 `options`를 추가하는 범위로 정한다.
 입력은 `{ view, options? }`이고 `options` 생략 또는 빈 객체는 기존 `{ view }`와 같다.
@@ -57,12 +57,12 @@ Windows의 `create`와 `recreate`에 선택적인 `options`를 추가하는 범�
 알 수 없는 필드와 잘못된 옵션은 `INVALID_ARGUMENT`로 거부한다.
 UI 자산과 출처는 배포 때 검증한 선언으로 고정하며, 부모와 모달은 열린 두 창에
 기존 `setParent`로 설정한다. 위치는 생성 뒤 기존 geometry API로 변경한다.
-macOS의 기존 `{ view }`는 유지한다. 새 nonempty options는 어댑터 구현 전
-`UNSUPPORTED`로 거부한다. 다른 플랫폼 지원을 Windows 구현의 선행 조건으로 삼지 않는다.
+macOS는 기존 `{ view }`와 빈 `options`를 허용한다. 비어 있지 않은 유효한 options는
+어댑터 구현 전 `UNSUPPORTED`로 거부한다. 다른 플랫폼 지원을 Windows 구현의 선행 조건으로 삼지 않는다.
 
 ## 권한, 생성 순서와 자원 제한
 
-새 생성 권한은 추가하지 않는다. 현재와 후속 옵션 모두 대상 `view`의
+새 생성 권한은 추가하지 않는다. 호출별 옵션도 대상 `view`의
 `windows:control`을 요구하며 deny가 우선한다. 웹 직접 호출에는 해당 뷰의
 `commands`에 `plugin.windows.create` 또는 `plugin.windows.recreate`도 필요하다.
 앱 명령을 통한 호출은 그 명령의 허용과 원래 뷰 Host 권한을 따르고, setup은
@@ -123,7 +123,9 @@ windowId를 추가 인자로 받는 것만으로 이 문제들이 해결되지 �
 | 현재 입력 또는 상태 | 계약 |
 | --- | --- |
 | app.windows에 같은 view 두 번 선언 | 시작 전 설정 오류. 지연 또는 숨김 선언도 예외 없음. 뷰별 하나 제한과 별도 ID 사용을 진단. SDK WireError가 아님. |
-| create/recreate에 options 또는 추가 필드, caller windowId 전달 | 공개 registry와 Host 입력 schema에서 `INVALID_ARGUMENT`. 아직 유효한 옵션 API가 아니므로 `UNSUPPORTED`로 바꾸지 않음. |
+| Windows create/recreate에 유효한 options 전달 | 선언값과 병합해 이번 생성에만 적용. options 생략 또는 빈 객체는 선언값 사용. |
+| macOS create/recreate에 비어 있지 않은 유효한 options 전달 | 기존 창을 닫기 전에 `UNSUPPORTED`. options 생략 또는 빈 객체는 허용. |
+| create/recreate에 잘못된 options, 허용하지 않은 필드나 caller windowId 전달 | 공개 registry와 Host 입력 schema 또는 병합값 검증에서 `INVALID_ARGUMENT`. 기존 창과 예약 유지. |
 | 형식이 유효한 view에 생성 권한 없음 | `PERMISSION_DENIED`. 선언 여부와 무관하게 권한을 먼저 검사. |
 | 권한을 가진 미선언 view | `INVALID_ARGUMENT`. 카탈로그에 새 항목을 만들지 않음. |
 | 이미 열린 view의 create | `BUSY`. 기존 창과 세션을 유지하고 show 또는 recreate 사용을 안내. |
@@ -134,23 +136,23 @@ ADR 0004의 정책은 변경하지 않으므로 ID, 프로필, 정책 파일의 
 여러 문서 창을 쓰려는 앱은 선언별로 서로 다른 view와 명시적인 정책을 작성하고 같은
 home을 재사용할 수 있다. 기존 view 이름을 바꾸면 프로필 경로도 바뀌므로 데이터 이동 없이
 이름만 바꾸는 마이그레이션을 안내하지 않는다. 기존 단일 창 프로필 호환 경로도 보존한다.
-후속 options 도입은 선택적 입력 추가이며 기존 `{ view }`, `null` 결과와 재생성 기본값은 유지한다.
+options는 선택적 입력이며 기존 `{ view }`, `null` 결과와 재생성 기본값은 유지한다.
 식별자 끝의 개행은 기존 공개 ID 계약에 맞춰 설정 경계에서도 즉시 거부한다.
 
 ## 구현과 검증 완료 기준
 
-이번 변경은 선언 중복과 열린 창 재생성 안내, 식별자 끝의 개행 거부를 보완한다.
-현재 schema의 옵션과 임의 ID 거부, 대상 권한, 중복 생성의 자원 보존, 128개 선언 경계를
-계약 테스트로 고정한다. 기존 창 ID, 세션, 프로필과 이벤트 회귀는 그대로 사용한다.
-이 결과를 호출별 옵션이나 같은 뷰의 여러 창 기능 구현 완료로 표시하지 않는다.
+공개 registry와 Host 입력 schema는 허용된 호출별 옵션을 받고 잘못된 입력과 임의 ID를
+거부한다. 계약 테스트는 병합한 크기 제약과 보정, 제목 검증, 선언값 보존과 재생성 기본값
+복원, 검증 실패와 미지원 플랫폼에서 기존 창 보존을 확인한다. 대상 권한, 중복 생성의
+자원 보존과 128개 선언 경계도 유지한다.
 
-후속 옵션 구현은 SDK와 native schema, Windows UI 어댑터, 설정 병합과 실패 정리,
-생성별 ID 조회 및 실제 WebView2의 숨김, 준비, 취소와 재생성을 함께 검증해야 한다.
-특히 잘못된 옵션으로 기존 창을 닫지 않음, 재생성 기본값 복원, 새 세션의 대상 정책,
-이전 컨텍스트의 응답과 이벤트 차단, 프로필 재사용과 동시 소유 방지를 확인한다.
+실제 Windows WebView2의 숨김, 준비, 취소와 재생성은 CI의 windows-native 작업에서
+검증한다. 호출별 크기 적용과 잘못된 제약에서 기존 창 보존, 다음 재생성의 선언값 복원을
+확인하며 기존 창 ID, 세션, 대상 정책, 프로필과 이벤트 회귀를 함께 실행한다.
+이 결과는 같은 뷰의 여러 창 기능 구현 완료를 뜻하지 않는다.
 
-후속 구현 명세와 완료 조건은 [GitHub 이슈 #102](https://github.com/mathbook3948/bunaway/issues/102)에서 관리한다.
-이번 결정 PR으로 해당 구현 이슈를 닫지 않는다.
+구현 명세와 완료 조건은 [GitHub 이슈 #102](https://github.com/mathbook3948/bunaway/issues/102)에서 관리한다.
+지원 범위를 정한 결정 PR은 이 이슈를 닫지 않으며, 구현 PR은 실제 구현과 검증 뒤 닫는다.
 
 근거: [선언 검증](../../packages/runtime-bun/src/window-config.ts),
 [창 schema](../../plugins/windows/src/contract.ts), [창 작업](../../plugins/windows/src/coordinator.ts),
