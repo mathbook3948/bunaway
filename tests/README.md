@@ -1,5 +1,10 @@
 # Tests
 
+`windows-windowless.ts`의 `destroy-recreate-resident`와 `destroy-recreate-tray`는
+마지막 창 재생성의 이전 세션이 폐기된 뒤 destroy를 호출합니다. 새 HWND를 만들지 않고
+재생성을 CANCELLED로 끝내며 keep-alive와 기본 quit 트레이 앱이 beforeQuit 없이
+StopHook과 네이티브 자원 정리를 완료하는지 확인합니다. `mise run host:windows`에 포함합니다.
+
 Android의 `FrameDispatcherTest`는 읽기 스레드의 직접 전달이 멈춰도 별도 타이머가
 실행되는지, 유휴 이후에도 기한을 감시하는지와 종료 제어 뒤의 응답 폐기를 검사한다.
 `ProtocolTest`는 큰 한글과 이모지, 문자열과 키의 잘못된 surrogate, 원문 payload 전달의

@@ -514,7 +514,8 @@ async function closeWindow(
   if (forced) {
     replacements.delete(viewId);
   }
-  if (view.boundary.closed) {
+  // A recreation may have retired this lifetime already; public destroy must still decide app shutdown.
+  if (view.boundary.closed && mode !== "destroy") {
     return true;
   }
   assert(windows);

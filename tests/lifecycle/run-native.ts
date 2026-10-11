@@ -95,6 +95,8 @@ if (target === "windows-x64") {
       "tray-empty",
       "destroy-resident",
       "destroy-resident-tray",
+      "destroy-recreate-resident",
+      "destroy-recreate-tray",
       "dev-resident",
       "dev-tray",
       "dev-pending-tray",

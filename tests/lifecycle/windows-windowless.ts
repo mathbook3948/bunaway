@@ -392,13 +392,34 @@ if (!process.argv.includes("--child")) {
     }
     await ready();
     if (scenario.startsWith("destroy-")) {
-      await backend.host.call(
-        registry.operation("windows.setCloseConfirmation"),
-        {
-          view: "main",
-          message: "Trusted destroy must bypass this confirmation",
-        },
-      );
+      let recreation: Promise<void> | undefined;
+      if (scenario.startsWith("destroy-recreate-")) {
+        recreation = assert.rejects(
+          call("windows.recreate", {
+            view: "main",
+          }),
+          {
+            code: "CANCELLED",
+          },
+        );
+        // Observe the old session's retirement before destroying its pending replacement.
+        await waitFor(
+          async () =>
+            (
+              await call("windows.getReadiness", {
+                view: "main",
+              })
+            ).sdk === "cancelled",
+        );
+      } else {
+        await backend.host.call(
+          registry.operation("windows.setCloseConfirmation"),
+          {
+            view: "main",
+            message: "Trusted destroy must bypass this confirmation",
+          },
+        );
+      }
       emit("verified");
       await call("windows.destroy", {
         view: "main",
@@ -409,6 +430,7 @@ if (!process.argv.includes("--child")) {
             error.code === "CANCELLED",
         );
       });
+      await recreation;
       assert.equal(attempts, 0);
       return;
     }
@@ -526,7 +548,7 @@ if (!process.argv.includes("--child")) {
         ],
         desktop: {
           // Empty tray-only apps also exercise the default quit policy with no startup views.
-          ...(!(hasTray && empty)
+          ...(!(hasTray && empty) && scenario !== "destroy-recreate-tray"
             ? {
                 closeBehavior: "keep-alive" as const,
               }
