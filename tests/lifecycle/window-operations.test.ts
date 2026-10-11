@@ -893,8 +893,36 @@ test("platforms without creation options accept empty options and reject overrid
 
 test("creation titles use the same UTF-16 bound as declarations before closing an existing window", async () => {
   const f = fixture();
-  await f.operations.execute({ operation: "windows.create", payload: { view: "main", options: { title: "😀".repeat(512) } } }, grants, "valid-title");
-  await expect(f.operations.execute({ operation: "windows.recreate", payload: { view: "main", options: { title: "😀".repeat(513) } } }, grants, "invalid-title")).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
+  await f.operations.execute(
+    {
+      operation: "windows.create",
+      payload: {
+        view: "main",
+        options: {
+          title: "😀".repeat(512),
+        },
+      },
+    },
+    grants,
+    "valid-title",
+  );
+  await expect(
+    f.operations.execute(
+      {
+        operation: "windows.recreate",
+        payload: {
+          view: "main",
+          options: {
+            title: "😀".repeat(513),
+          },
+        },
+      },
+      grants,
+      "invalid-title",
+    ),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
   expect(f.views.get("main")?.closed).toBe(false);
   expect(f.createdSpecs[0]?.title.length).toBe(1024);
 });
