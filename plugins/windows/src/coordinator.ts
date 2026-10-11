@@ -132,7 +132,8 @@ export class WindowOperations {
     if (call.operation === "windows.create" && view && !view.closed) {
       throw new BunawayError({
         code: "BUSY",
-        message: "Window is already open.",
+        message:
+          "Window is already open. Only one window per view is supported; use show or recreate for the existing window.",
       });
     }
     // Serialize create/recreate for this view until readiness or failure.

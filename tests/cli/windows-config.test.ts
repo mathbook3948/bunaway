@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import assert from "node:assert/strict";
 import type { Policy } from "@bunaway/protocol";
 import {
   developmentPolicy,
@@ -125,6 +126,79 @@ test("window catalogs accept an empty or fully deferred Windows start without we
         () => specs[0],
       ),
       policy,
+    ),
+  ).toThrow("0 and 128");
+});
+
+test("one-window-per-view declarations reject duplicates even when deferred or hidden", () => {
+  for (const overrides of [
+    {},
+    {
+      startup: false,
+    },
+    {
+      visible: false,
+    },
+  ]) {
+    expect(() =>
+      readWindowSpecs(
+        [
+          specs[0],
+          {
+            ...specs[0],
+            ...overrides,
+          },
+        ],
+        policy,
+      ),
+    ).toThrow("Only one window declaration per view is supported");
+  }
+  // Invalid identifiers must fail before policy lookup, including a trailing newline.
+  expect(() =>
+    readWindowSpecs(
+      [
+        {
+          ...specs[0],
+          view: "main\n",
+        },
+      ],
+      policy,
+    ),
+  ).toThrow("Window view IDs must contain");
+});
+
+test("the window catalog limit includes deferred definitions and accepts 128 distinct views", () => {
+  const baseSpec = specs[0];
+  const basePolicy = policy.views[0];
+  assert(baseSpec && basePolicy);
+  const catalog = Array.from(
+    {
+      length: 128,
+    },
+    (_, index) => ({
+      ...baseSpec,
+      view: `view-${index}`,
+      startup: false,
+    }),
+  );
+  const catalogPolicy: Policy = {
+    ...policy,
+    views: catalog.map((spec) => ({
+      ...basePolicy,
+      id: spec.view,
+    })),
+  };
+  expect(readWindowSpecs(catalog, catalogPolicy)).toEqual(catalog);
+  expect(() =>
+    readWindowSpecs(
+      [
+        ...catalog,
+        {
+          ...baseSpec,
+          view: "overflow",
+        },
+      ],
+      catalogPolicy,
     ),
   ).toThrow("0 and 128");
 });

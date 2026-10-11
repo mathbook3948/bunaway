@@ -480,6 +480,7 @@ export const windowOperations = {
       },
     },
   },
+  // Creation selects a declared view; runtime options and caller-supplied IDs are not accepted.
   "windows.create": windowResult,
   "windows.recreate": windowResult,
   "windows.show": windowResult,
