@@ -236,7 +236,8 @@
           "MAX_WINDOW_DIMENSION",
           "isWindowSizeDimension",
           "hasValidWindowSizeConstraints",
-          "clampWindowSize"
+          "clampWindowSize",
+          "MAX_WINDOW_INSTANCES"
         ]
       }
     },
@@ -407,7 +408,10 @@
           "window",
           "startup",
           "visible",
-          "showWhenReady"
+          "showWhenReady",
+          "instances",
+          "maxInstances",
+          "profile"
         ]
       }
     },
@@ -516,7 +520,9 @@
           "stopping",
           "cancelled",
           "now",
-          "tick"
+          "tick",
+          "instances",
+          "creationSettled"
         ]
       }
     },
@@ -600,7 +606,10 @@
           "window",
           "startup",
           "visible",
-          "showWhenReady"
+          "showWhenReady",
+          "instances",
+          "maxInstances",
+          "profile"
         ]
       }
     },
@@ -888,7 +897,10 @@
       "windows.setCloseConfirmation",
       "windows.getSnapshot",
       "windows.getReadiness",
-      "windows.completeSplashscreen"
+      "windows.completeSplashscreen",
+      "windows.createInstance",
+      "windows.recreateInstance",
+      "windows.listInstances"
     ]
   },
   "configuration": {

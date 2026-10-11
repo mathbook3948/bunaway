@@ -66,9 +66,11 @@ await client.invoke("editor.prepareClose", null);
 `startup`을 생략하면 앱 시작 때 엽니다. `false`인 창은 API로 생성합니다.
 Windows 생성 API는 `{ view, options? }`를 받습니다. 제목, 부분 크기와 제약,
 표시와 준비 후 표시를 이번 생성에만 바꿀 수 있습니다. 자세한 값과 해제 방법은
-[창 API](/reference/host/windows/)를 따릅니다. 같은 UI를 여러 창에서 쓰려면 서로 다른 뷰 ID로
-선언하고 각 정책을 작성하세요. 같은 뷰의 열린 창을 다시 생성하면 `BUSY`입니다.
-같은 뷰 선언에서 여러 창을 생성하는 지원은 후속 구현 계약으로 정했으나 아직 사용할 수 없습니다.
+[창 API](/reference/host/windows/)를 따릅니다. 같은 뷰로 여러 창을 만들려면 해당 선언에
+`instances: "multiple"`, `maxInstances`를 지정하고 createInstance를 사용하세요.
+응답의 windowId를 저장해 show나 close 등의 입력에 view와 함께 전달합니다.
+profile의 기본값 shared는 웹 저장소를 공유하며 isolated는 창마다 임시 데이터를 유지합니다.
+재생성에는 recreateInstance를 사용합니다. 같은 화면이라도 권한을 다르게 주려면 별도 뷰로 선언하세요.
 닫은 보조 창을 다시 열 때도 `create`를 사용합니다. 새 문서로 다시 시작하려면
 `recreate`를 사용하고 기존 창의 정리가 완료될 때까지 기다립니다.
 기본 종료 설정에서는 모든 창을 닫으면 앱이 종료됩니다. 계속 실행하려면 아래 desktop 설정을 사용하세요.

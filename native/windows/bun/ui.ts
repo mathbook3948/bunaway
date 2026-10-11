@@ -34,6 +34,7 @@ import {
   WM_SIZE,
 } from "./win32.ts";
 import { disposeWin32Bindings, hr, kernel, ole } from "./win32-bindings.ts";
+import { WindowProfiles } from "./window-profiles.ts";
 import { WindowReadinessTracker } from "./window-readiness.ts";
 import {
   WindowInputRestoreError,
@@ -106,9 +107,13 @@ function showWindows() {
     return;
   }
   assert(windows);
-  const live = [
-    ...views.values(),
-  ].filter((view) => !view.boundary.closed);
+  const live = config.windows.flatMap((spec) =>
+    [
+      ...views.values(),
+    ].filter(
+      (view) => view.boundary.policy.id === spec.view && !view.boundary.closed,
+    ),
+  );
   if (live.length) {
     for (const view of live) {
       windows.focus(view.native.hwnd);
@@ -128,13 +133,20 @@ function showWindows() {
   const first = config.windows[0];
   if (first) {
     createWindow(first);
-    const view = views.get(first.view);
+    const view = [
+      ...views.values(),
+    ].find(
+      (view) => view.boundary.policy.id === first.view && !view.boundary.closed,
+    );
     assert(view);
     windows.focus(view.native.hwnd);
   }
   showRequested = false;
 }
 type ViewState = {
+  key: string;
+  startup: boolean;
+  released: boolean;
   boundary: ViewBoundary;
   native: WebView;
   detached: boolean;
@@ -152,6 +164,14 @@ type ViewState = {
   readiness: WindowReadinessTracker;
 };
 const views = new Map<string, ViewState>();
+const profiles = new WindowProfiles(
+  config.dataRoot,
+  config.legacyProfile ?? false,
+  (event, data) =>
+    log(event, {
+      ...data,
+    }),
+);
 const closingWindows = new Set<string>();
 const replacements = new Map<
   string,
@@ -176,10 +196,19 @@ const relations = new WindowRelations({
   },
 });
 
+/** Native IDs address an HWND lifetime; contexts address one document session. Neither uses a view-only fallback. */
+function viewById(windowId: string): ViewState | undefined {
+  return [
+    ...views.values(),
+  ].find((view) => view.readiness.snapshot().windowId === windowId);
+}
+function viewByContext(context: HostContext): ViewState | undefined {
+  return [
+    ...views.values(),
+  ].find((view) => view.boundary.active(context));
+}
 function hwndById(windowId: string): bigint {
-  assert(windows);
-  const identity = windows.getById(windowId);
-  const view = identity && views.get(identity.viewId);
+  const view = viewById(windowId);
   assert(view, "Unknown native window lifetime");
   return view.native.hwnd;
 }
@@ -195,6 +224,10 @@ function hasPendingClose(view: ViewState): boolean {
  */
 function cleanupView(view: ViewState) {
   if (!view.boundary.closed || view.cleaned) {
+    return;
+  }
+  if (view.released) {
+    view.cleaned = profiles.release(view.key, replacements.has(view.key));
     return;
   }
   const windowId = view.readiness.snapshot().windowId;
@@ -226,9 +259,20 @@ function cleanupView(view: ViewState) {
         return;
       }
       modalWindows.delete(windowId);
-      view.cleaned = true;
+      view.released = true;
+      view.cleaned = profiles.release(view.key, replacements.has(view.key));
     }
   }
+}
+/** Shutdown turns every pending replacement into final cleanup, including already released controllers. */
+function cancelReplacements() {
+  for (const key of replacements.keys()) {
+    const view = views.get(key);
+    if (view?.released) {
+      view.cleaned = false;
+    }
+  }
+  replacements.clear();
 }
 const cancelled = new Set<string>();
 const windowRequests = new Map<string, HostContext>();
@@ -284,6 +328,7 @@ const channel = new Channel(
       quitPending = false;
     } else if (packet.kind === "shutdown") {
       stopping = true;
+      cancelReplacements();
       for (const controller of operationControllers.values()) {
         controller.abort();
       }
@@ -300,12 +345,13 @@ const channel = new Channel(
         view.native.requestClose();
       }
     } else if (packet.kind === "server") {
-      views
-        .get(packet.route.viewId)
-        ?.boundary.send(packet.route, packet.message);
+      viewByContext(packet.route.context)?.boundary.send(
+        packet.route,
+        packet.message,
+      );
     } else if (packet.kind === "session-failure") {
       discardContext(packet.route.context);
-      const view = views.get(packet.route.viewId);
+      const view = viewByContext(packet.route.context);
       if (view?.boundary.matches(packet.route)) {
         view.boundary.fail(packet.route, packet.error);
       }
@@ -505,7 +551,7 @@ function startViews() {
  */
 async function closeWindow(
   viewId: string,
-  mode: "close" | "recreate" | "force" | "destroy" = "close",
+  mode: "close" | "recreate" | "handoff" | "force" | "destroy" = "close",
 ): Promise<boolean> {
   const view = views.get(viewId);
   assert(view);
@@ -576,7 +622,7 @@ async function closeWindow(
       if (
         child.view.boundary.closed ||
         !child.view.confirmation ||
-        (mode !== "recreate" && quitPending)
+        (mode === "close" && quitPending)
       ) {
         continue;
       }
@@ -584,7 +630,7 @@ async function closeWindow(
         view: child.viewId,
       });
       const childSpec = config.windows.find(
-        (candidate) => candidate.view === child.viewId,
+        (candidate) => candidate.view === child.view.boundary.policy.id,
       );
       assert(childSpec);
       if (
@@ -668,9 +714,29 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
   {
     specs: config.windows,
     supportsCreationOptions: true,
+    instances: () =>
+      [
+        ...views,
+      ].map(([key, view]) => ({
+        key,
+        identity: {
+          windowId: view.readiness.snapshot().windowId,
+          viewId: view.boundary.policy.id,
+        },
+      })),
     lookup: {
       byId: (windowId) => windows?.getById(windowId) ?? null,
       byView: (viewId) => windows?.getByView(viewId) ?? null,
+      byRequest: (requestId) => {
+        const context = windowRequests.get(requestId);
+        const view = context && viewByContext(context);
+        return view
+          ? {
+              windowId: view.readiness.snapshot().windowId,
+              viewId: view.boundary.policy.id,
+            }
+          : null;
+      },
       focused: () => windows?.getFocused() ?? null,
       lastActive: () => windows?.getLastActive() ?? null,
     },
@@ -679,7 +745,9 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
       return view
         ? {
             closed: view.boundary.closed,
-            cleaned: view.cleaned,
+            cleaned:
+              view.cleaned &&
+              (!replacements.has(viewId) || view.native.canReuseProfile()),
             ready: view.ready,
             failure: view.native.failure,
             replacementCancelled: view.replacementCancelled,
@@ -688,7 +756,16 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         : undefined;
     },
     create: createWindow,
-    close: (viewId) => closeWindow(viewId, "recreate"),
+    creationSettled: (key) => {
+      replacements.delete(key);
+      const view = views.get(key);
+      // A failed replacement can leave a cleaned old lifetime with a preserved temporary profile.
+      if (view?.boundary.closed && view.cleaned) {
+        view.cleaned = false;
+      }
+    },
+    close: (viewId, replacing = true) =>
+      closeWindow(viewId, replacing ? "recreate" : "handoff"),
     destroy: (viewId) => closeWindow(viewId, "force"),
     stopping: () => stopping,
     cancelled: (id) => cancelled.has(id),
@@ -783,17 +860,23 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
     },
   };
 /** Create the HWND and WebView, destroying the HWND if WebView setup fails. */
-function createWindow(spec: WindowSpec, replacingLiveWindow = false) {
+function createWindow(
+  spec: WindowSpec,
+  replacingLiveWindow = false,
+  instanceKey = spec.instances === "multiple"
+    ? `instance-${crypto.randomUUID()}`
+    : spec.view,
+) {
   assert(windows);
   const replacement = replacingLiveWindow
-    ? replacements.get(spec.view)
+    ? replacements.get(instanceKey)
     : undefined;
-  replacements.delete(spec.view);
+  replacements.delete(instanceKey);
   if (replacement?.parent) {
     const parent = windows.getById(replacement.parent);
     if (
       !parent ||
-      views.get(parent.viewId)?.boundary.closed ||
+      viewById(parent.windowId)?.boundary.closed ||
       closingWindows.has(replacement.parent)
     ) {
       throw new BunawayError({
@@ -830,16 +913,16 @@ function createWindow(spec: WindowSpec, replacingLiveWindow = false) {
         ...data,
       }),
     sessionOpened: (route) => {
-      const view = views.get(spec.view);
+      const view = views.get(instanceKey);
       if (view) {
         view.sdkDeadline = Date.now() + API_LIMITS.handshakeTimeoutMs;
         view.readiness?.sessionOpened(route.documentGeneration);
       }
     },
     sdkReady: (route) =>
-      views.get(spec.view)?.readiness?.sdkComplete(route.documentGeneration),
+      views.get(instanceKey)?.readiness?.sdkComplete(route.documentGeneration),
     revoked: (reason, generation, error) => {
-      const view = views.get(spec.view);
+      const view = views.get(instanceKey);
       if (!view) {
         return;
       }
@@ -859,7 +942,7 @@ function createWindow(spec: WindowSpec, replacingLiveWindow = false) {
     },
   });
   const close = (force = false) => {
-    const view = views.get(spec.view);
+    const view = views.get(instanceKey);
     if (view && !view.boundary.closed) {
       if (!force && hasPendingClose(view)) {
         return;
@@ -897,7 +980,7 @@ function createWindow(spec: WindowSpec, replacingLiveWindow = false) {
     hwnd: window.toString(),
   });
   windows.observe(window, spec.view, (snapshot, changes) => {
-    if (stopping || closingSent || views.get(spec.view)?.native !== native) {
+    if (stopping || closingSent || views.get(instanceKey)?.native !== native) {
       return;
     }
     sendNativeEvent(boundary, "windows.changed", {
@@ -912,7 +995,7 @@ function createWindow(spec: WindowSpec, replacingLiveWindow = false) {
     {
       publish: publishReadiness,
       show: () => {
-        const current = views.get(spec.view);
+        const current = views.get(instanceKey);
         if (
           current &&
           current.native === native &&
@@ -952,10 +1035,10 @@ function createWindow(spec: WindowSpec, replacingLiveWindow = false) {
         },
         sameDocument: (source) => boundary.sameDocument(source),
         documentComplete: (error) =>
-          views.get(spec.view)?.readiness?.documentComplete(error),
+          views.get(instanceKey)?.readiness?.documentComplete(error),
         close,
         ready: () => {
-          const view = views.get(spec.view);
+          const view = views.get(instanceKey);
           assert(view);
           view.ready = true;
           startViews();
@@ -968,6 +1051,7 @@ function createWindow(spec: WindowSpec, replacingLiveWindow = false) {
       },
       config.legacyProfile,
       config.devtools,
+      profiles.path(spec, instanceKey),
     );
   } catch (error) {
     readiness.terminate({
@@ -975,9 +1059,15 @@ function createWindow(spec: WindowSpec, replacingLiveWindow = false) {
       message: "WebView creation failed.",
     });
     windows.destroy(window);
+    profiles.release(instanceKey, false);
     throw error;
   }
-  views.set(spec.view, {
+  // A new HWND lifetime joins the end of its definition's creation order.
+  views.delete(instanceKey);
+  views.set(instanceKey, {
+    key: instanceKey,
+    startup: !startRequested,
+    released: false,
     readiness,
     boundary,
     native,
@@ -993,7 +1083,7 @@ function createWindow(spec: WindowSpec, replacingLiveWindow = false) {
     documentDeadline: Date.now() + WINDOW_PREPARATION_TIMEOUT_MS,
     sdkDeadline: Date.now() + WINDOW_PREPARATION_TIMEOUT_MS,
   });
-  const identity = windows.getByView(spec.view);
+  const identity = windows.getById(readiness.snapshot().windowId);
   assert(identity);
   relations.register(identity);
   if (replacement?.parent) {
@@ -1007,9 +1097,9 @@ function createWindow(spec: WindowSpec, replacingLiveWindow = false) {
         modalWindows.add(identity.windowId);
       }
     } catch (error) {
-      const view = views.get(spec.view);
+      const view = views.get(instanceKey);
       assert(view);
-      commitClose(spec.view, view);
+      commitClose(instanceKey, view);
       throw error;
     }
   }
@@ -1122,6 +1212,7 @@ try {
     pid: process.pid,
     thread: kernel.symbols.GetCurrentThreadId(),
   });
+  profiles.collectOrphans();
   for (const spec of config.windows) {
     if (spec.startup !== false) {
       createWindow(spec);
@@ -1135,6 +1226,18 @@ try {
     windows.pump();
     showWindows();
     for (const [viewId, view] of views) {
+      // Controller errors also queue a forced close. Report startup failure before
+      // that close retires the boundary and makes the failure look like normal exit.
+      if (view.native.failure && !view.boundary.closed) {
+        view.readiness?.terminate({
+          code: "INTERNAL",
+          message: "WebView creation failed.",
+        });
+        if (view.startup) {
+          throw view.native.failure;
+        }
+        void closeWindow(viewId, "force").catch(fail);
+      }
       if (view.pendingClose) {
         view.pendingClose = false;
         if (view.forceClose || !hasPendingClose(view)) {
@@ -1143,19 +1246,15 @@ try {
           );
         }
       }
-      if (view.native.failure) {
-        view.readiness?.terminate({
-          code: "INTERNAL",
-          message: "WebView creation failed.",
-        });
-        throw view.native.failure;
-      }
       if (!view.ready && !view.boundary.closed && Date.now() > view.deadline) {
         view.readiness?.terminate({
           code: "TIMEOUT",
           message: "WebView creation timed out.",
         });
-        throw new Error("WebView startup timed out");
+        if (view.startup) {
+          throw new Error("WebView startup timed out");
+        }
+        void closeWindow(viewId, "force").catch(fail);
       }
       if (!view.boundary.closed && Date.now() > view.documentDeadline) {
         view.readiness?.expireDocument();
@@ -1165,6 +1264,14 @@ try {
       }
       view.boundary.scanDeadlines();
       cleanupView(view);
+      if (
+        view.cleaned &&
+        !replacements.has(viewId) &&
+        config.windows.find((spec) => spec.view === view.boundary.policy.id)
+          ?.instances === "multiple"
+      ) {
+        views.delete(viewId);
+      }
     }
     if (
       !closingSent &&
@@ -1198,6 +1305,7 @@ try {
   });
 } finally {
   stopping = true;
+  cancelReplacements();
   for (const controller of operationControllers.values()) {
     controller.abort();
   }

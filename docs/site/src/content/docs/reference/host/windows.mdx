@@ -21,7 +21,8 @@ export default defineApp({ modules: [], plugins: [windowsPlugin] });
 ## 설정과 권한
 
 대상 창은 [app.windows](/reference/configuration/)에 정의합니다.
-`view`는 해당 창에 연결할 정책 뷰의 ID입니다. 한 뷰에는 창 하나만 열 수 있습니다.
+`view`는 화면과 정책을 선언한 ID입니다. `instances`의 기본값은 `"single"`이며
+`"multiple"`과 `maxInstances`를 선언하면 같은 뷰에서 여러 창을 생성할 수 있습니다.
 `startup: false`로 설정하면 `windows.create`로 열 때까지 생성하지 않습니다.
 호출 인자로 임의 URL이나 새 정책을 전달할 수 없습니다.
 
@@ -44,20 +45,46 @@ await windows.create({ view: "editor", options: {
 같은 뷰의 열린 창에 다시 `create`하면 `BUSY`이며 기존 창과 세션은 유지됩니다.
 기존 창을 표시하려면 `show`, 이전 세션을 정리하고 설정대로 다시 만들려면 `recreate`를 사용하세요.
 
-같은 UI 페이지를 여러 창에서 쓰려면 서로 다른 `view`로 사전 선언하고 각 뷰의 정책을
-명시합니다. 같은 home을 재사용할 수 있지만 정책을 자동 복사하거나 실행 중 뷰를 등록하지 않습니다.
-한 뷰를 두 번 선언하면 지연 또는 숨김 창이어도 시작 전에 설정 오류로 거부합니다.
-Windows 선언은 0–128개이며 지연 선언도 상한에 포함합니다. 빈 선언은 임의 창 생성 권한이 아닙니다.
-창 ID는 호스트가 발급하는 창 수명 식별자이며 정책과 WebView 프로필은 계속 뷰 ID를 기준으로 합니다.
-생성 요청자의 정책은 새 창으로 복사되지 않고 새 문서는 대상 뷰의 정책을 사용합니다.
+뷰마다 생성 정의 하나만 선언하며 중복 view는 시작 전에 거부합니다.
+Windows 선언은 0–128개입니다. 빈 선언은 임의 창 생성 권한이 아닙니다.
+같은 뷰의 모든 창은 같은 UI 자산과 정책을 사용하며 각 창은 별도 windowId와 연결 세션을 가집니다.
+새 창은 생성 요청자의 정책을 복사하지 않고 대상 뷰의 정책을 사용합니다.
 
-같은 뷰의 여러 창은 지원 범위만 결정했고 아직 구현하지 않았습니다.
-후속 구현에서는 뷰를 화면과 정책의 선언으로 유지하고 단일 창을 기본값으로, 다중 창을
-선택하도록 합니다. 각 창은 별도 ID와 연결 세션을 갖습니다. 현재 사용할 수 있는 입력과
-권한은 이 문서의 계약을 따릅니다.
+`instances: "multiple"`은 정수 1–128의 `maxInstances`를 요구합니다. 앱 전체에서는
+활성, 예약 및 정리 중인 인스턴스가 최대 128개입니다. 한도에 닿으면 `BUSY`이며
+창을 닫았어도 네이티브와 프로필 정리가 끝날 때까지 슬롯을 사용합니다.
+startup은 multiple에서도 시작 창 하나만 만듭니다.
+기존 create/recreate는 single에서만 사용하고 multiple에서는 `INVALID_ARGUMENT`입니다.
+createInstance와 recreateInstance는 single에서도 사용할 수 있으며 ID를 직접 반환합니다.
+
+```ts
+const first = await windows.createInstance({ view: "editor", options: { title: "문서 A" } });
+const second = await windows.createInstance({ view: "editor", options: { title: "문서 B" } });
+await windows.show({ view: "editor", windowId: second.windowId });
+const replacement = await windows.recreateInstance({ view: "editor", windowId: first.windowId });
+```
+
+제어와 상태 입력에는 `{ view, windowId?, ... }`를 사용합니다. view는 권한 대상이며
+windowId는 실제 창을 선택합니다. single에서는 ID를 생략할 수 있습니다.
+multiple에서는 현재 창이 하나여도 반드시 ID를 전달합니다. 다른 뷰에 속한 ID는
+`INVALID_ARGUMENT`입니다. 재생성은 새 ID를 발급하고 이전 ID의 제어는 거부합니다.
+닫힌 ID의 getById는 null이며 허용한 view의 isDestroyed는 true입니다.
+getCurrent는 인증된 호출자 세션의 창을 반환하고 백엔드 호출은 null입니다.
+
+선언의 `profile` 기본값은 `"shared"`입니다. 같은 뷰의 창은 하나의 WebView2 환경과
+영속 웹 저장소를 공유하고 controller와 IPC 세션은 별도로 소유합니다. 창 하나를 닫아도
+다른 창은 계속 실행됩니다. `"isolated"`는 창마다 임시 프로필을 만들고 재생성에서는
+저장소를 유지합니다. 최종 종료와 실패 뒤 정리하며 새 생성과 앱 재실행에서는 복원하지 않습니다.
+잠긴 파일은 삭제할 때까지 재시도하며 정리 중인 인스턴스는 계속 상한에 포함합니다.
+3초 뒤에도 삭제하지 못하면 진단을 남기고 소유 기록을 유지합니다. 앱 종료 기한을
+넘기면 정리 실패로 처리합니다. 다음 시작에는 소유 프로세스가 종료된 이전 임시
+폴더를 제한된 개수만 정리하며 다시 열지 않습니다.
+앱 이벤트를 view 대상으로 발행하면 해당 뷰의 구독한 모든 창에 전달합니다.
+windows.changed는 변경된 창의 문서에만 전달합니다.
+macOS는 새 인스턴스 API, multiple과 isolated 선언을 `UNSUPPORTED`로 거부합니다.
 
 뷰 명령은 해당 뷰의 `host.permissions`, setup은 `backend.permissions`에 권한을 허용합니다.
-`windows:list`는 목록과 식별자 탐색, `windows:control`은 allow에 지정한 뷰의 생성,
+`windows:list`는 list, listInstances와 식별자 탐색, `windows:control`은 allow에 지정한 뷰의 생성,
 재생성, 제어와 상태 조회를 허용합니다. 식별자 탐색도 대상의 `windows:control` 권한으로
 결과를 제한합니다. deny가 allow보다 우선합니다. 생략하면 거부합니다.
 
@@ -77,7 +104,8 @@ Windows 선언은 0–128개이며 지연 선언도 상한에 포함합니다. �
 ### 부모, 모달과 신뢰된 종료
 
 이 API는 Windows에서 지원합니다. `setParent`는 사전 선언된 두 창이 열린 뒤 호출합니다.
-`view`는 제어할 정책 ID이고 `parent`는 현재 부모의 네이티브 `windowId`입니다.
+`view`는 제어할 정책 ID이고 선택적 windowId는 자식 창을 선택합니다.
+`parent`는 현재 부모의 네이티브 `windowId`입니다. 같은 뷰의 두 창도 부모 관계를 맺을 수 있습니다.
 `getParent`와 `getOwner`는 같은 관계를 반환합니다. Windows의 owner를 가진 최상위 창이며
 다른 창의 내용 영역에 들어가는 child HWND는 아닙니다. 자기 자신, 순환 관계, 종료된
 부모 ID는 `INVALID_ARGUMENT`입니다. 관계 변경에는 자식, 새 부모와 기존 부모의
@@ -125,7 +153,7 @@ await windows.close({ view: "dialog" });
 ```
 
 생성 완료는 기존대로 WebView 설정 완료입니다. 문서와 SDK 준비는 `getReadiness`와
-`windows.readiness`로 구분합니다. 살아 있는 자식의 `recreate`는 부모 수명을 보존하고
+`windows.readiness`로 구분합니다. 살아 있는 자식의 `recreate`와 `recreateInstance`는 부모 수명을 보존하고
 새 자식 ID와 세션을 만듭니다. 기다리는 동안 부모가 종료되면 `CANCELLED`로 끝나며
 같은 뷰의 새 부모에 자동으로 연결하지 않습니다. 닫힌 자식의 `create`는 소유 관계가
 없는 새 창을 만듭니다. 생성 취소나 오류는 확인을 우회해 부분 자원을 정리합니다.
@@ -136,64 +164,67 @@ await windows.close({ view: "dialog" });
 
 | API | 입력 | 결과와 동작 |
 | --- | --- | --- |
-| `windows.getSnapshot` | `{ view }` | `Promise<WindowSnapshot>`. 현재 창 식별자, 관찰 revision, 표시 상태와 물리 outer bounds를 한 번에 조회 |
-| `windows.list` | 인자 없음. Host operation 입력은 `null` | `Promise<{ view: string; open: boolean }[]>`. 허용된 창 설정과 열림 여부 |
+| `windows.getSnapshot` | `{ view, windowId? }` | `Promise<WindowSnapshot>`. 현재 창 식별자, 관찰 revision, 표시 상태와 물리 outer bounds를 한 번에 조회 |
+| `windows.listInstances` | 인자 없음. Host operation 입력은 `null` | `Promise<WindowIdentity[]>`. 허용된 살아 있는 창의 ID 목록. 숨김과 준비 중인 창을 포함하고 선언 순서와 생성 순서로 정렬 |
+| `windows.createInstance` | `{ view, options? }` | `Promise<WindowIdentity>`. 새 창을 만들고 WebView 설정 완료 뒤 `{ windowId, viewId }` 반환 |
+| `windows.recreateInstance` | `{ view, windowId, options? }` | 같은 ID 형태. 살아 있는 해당 창만 교체하고 새 ID 반환 |
+| `windows.list` | 인자 없음. Host operation 입력은 `null` | `Promise<{ view: string; open: boolean }[]>`. 허용된 뷰 정의와 하나 이상의 창이 열려 있는지 |
 | `windows.getById` | `{ windowId }` | `Promise<WindowIdentity \| null>`. 해당 네이티브 수명의 살아 있는 창 |
 | `windows.getCurrent` | 인자 없음. Host operation 입력은 `null` | 같은 식별자 형태. 인증된 호출 출처의 현재 창 |
 | `windows.getFocused` | 인자 없음. Host operation 입력은 `null` | 같은 식별자 형태. 이 앱에 속한 OS 전경 창 |
 | `windows.getLastActive` | 인자 없음. Host operation 입력은 `null` | 같은 식별자 형태. 마지막으로 실제 활성화된 창 |
-| `windows.getReadiness` | `{ view }` | `Promise<WindowReadiness>`. 현재 준비 상태와 실패, 취소 결과. 닫힌 창의 마지막 결과도 조회 |
-| `windows.destroy` | `{ view }` | `Promise<boolean>`. 신뢰된 백엔드가 확인과 종료 취소를 우회해 대상과 자식의 종료를 확정 |
-| `windows.setParent` | `{ view, parent: string \| null, modal: boolean }` | `Promise<null>`. 네이티브 `windowId`로 owner 지정. `null`과 `modal: false`로 관계 해제 |
-| `windows.getParent`, `windows.getOwner` | `{ view }` | `Promise<WindowIdentity \| null>`. 같은 최상위 창 소유 관계를 조회 |
-| `windows.getChildren` | `{ view }` | `Promise<WindowIdentity[]>`. 살아 있고 허용된 직접 자식 조회 |
-| `windows.setEnabled` | `{ view, enabled: boolean }` | `Promise<null>`. 실제 입력 가능 상태 변경. 활성 모달이 부모를 막고 있으면 `BUSY` |
-| `windows.isEnabled` | `{ view }` | `Promise<boolean>`. 실제 네이티브 입력 가능 상태 |
+| `windows.getReadiness` | `{ view, windowId? }` | `Promise<WindowReadiness>`. 현재 준비 상태와 실패, 취소 결과. single에서 ID를 생략하면 보존한 닫힌 창의 마지막 결과도 조회 |
+| `windows.destroy` | `{ view, windowId? }` | `Promise<boolean>`. 신뢰된 백엔드가 확인과 종료 취소를 우회해 대상과 자식의 종료를 확정 |
+| `windows.setParent` | `{ view, windowId?, parent: string \| null, modal: boolean }` | `Promise<null>`. 네이티브 `windowId`로 owner 지정. `null`과 `modal: false`로 관계 해제 |
+| `windows.getParent`, `windows.getOwner` | `{ view, windowId? }` | `Promise<WindowIdentity \| null>`. 같은 최상위 창 소유 관계를 조회 |
+| `windows.getChildren` | `{ view, windowId? }` | `Promise<WindowIdentity[]>`. 살아 있고 허용된 직접 자식 조회 |
+| `windows.setEnabled` | `{ view, windowId?, enabled: boolean }` | `Promise<null>`. 실제 입력 가능 상태 변경. 활성 모달이 부모를 막고 있으면 `BUSY` |
+| `windows.isEnabled` | `{ view, windowId? }` | `Promise<boolean>`. 실제 네이티브 입력 가능 상태 |
 | `windows.completeSplashscreen` | `{ view, splash }` | `Promise<boolean>`. 준비된 주 창을 먼저 표시하고 splash 창을 닫음. 닫기 확인을 거절하면 `false` |
-| `windows.create` | `{ view }` | `Promise<null>`. 설정한 창을 생성하고 WebView 준비를 기다림. 열린 창은 `BUSY` |
-| `windows.recreate` | `{ view }` | `Promise<null>`. 닫기 확인 후 기존 창과 WebView를 정리하고 설정대로 다시 생성. 닫힌 창도 생성 가능 |
-| `windows.show` | `{ view }` | `Promise<null>`. 창 표시 |
-| `windows.showInactive` | `{ view }` | `Promise<null>`. 일반, 최소화 또는 최대화 상태를 유지하며 창 표시. 활성화 요청 없음 |
-| `windows.hide` | `{ view }` | `Promise<null>`. 창 숨김. 창과 세션은 유지 |
-| `windows.focus` | `{ view }` | `Promise<null>`. 숨기거나 최소화한 창을 표시하고 포커스 요청. OS가 거부하면 `BUSY` |
-| `windows.blur` | `{ view }` | `Promise<boolean>`. 같은 앱의 허용된 다른 창으로 전환해 대상 창이 비활성인지 반환 |
-| `windows.activate` | `{ view }` | `Promise<boolean>`. 표시된 비최소화 창으로 전경 전환 요청. 실제 대상 창이 전경이면 `true` |
-| `windows.minimize` | `{ view }` | `Promise<null>`. 창을 최소화하고 표시. Windows가 다른 창을 활성화할 수 있음 |
-| `windows.maximize` | `{ view }` | `Promise<null>`. 최소화 여부와 관계없이 창을 최대화하고 표시하며 활성화 요청 |
-| `windows.unmaximize` | `{ view }` | `Promise<null>`. 창을 일반 크기로 표시하고 활성화 요청. 최소화 전 최대화 상태도 해제 |
-| `windows.restore` | `{ view }` | `Promise<null>`. 최소화했다면 이전 일반 또는 최대화 상태로 복원. 그 외에는 일반 크기로 표시하고 활성화 요청 |
-| `windows.toggleMaximize` | `{ view }` | `Promise<null>`. 현재 최대화 상태이면 일반 크기, 아니면 최대화로 표시하고 활성화 요청 |
-| `windows.isMinimized` | `{ view }` | `Promise<boolean>`. 실제 네이티브 창의 최소화 여부 |
-| `windows.isMaximized` | `{ view }` | `Promise<boolean>`. 실제 네이티브 창의 최대화 여부 |
-| `windows.isFullscreen` | `{ view }` | `Promise<boolean>`. 호스트가 해당 네이티브 창에 적용한 전체화면 모드 여부 |
-| `windows.isVisible` | `{ view }` | `Promise<boolean>`. 네이티브 표시 상태. 최소화한 창도 `true`일 수 있음 |
-| `windows.isFocused` | `{ view }` | `Promise<boolean>`. OS 전경 창인지 조회. 창 안의 WebView에 입력 포커스가 있어도 `true` |
-| `windows.isDestroyed` | `{ view }` | `Promise<boolean>`. 선언된 뷰에 살아 있는 창이 없으면 `true` |
-| `windows.isNormal` | `{ view }` | `Promise<boolean>`. 최소화, 최대화와 전체화면이 모두 아니면 `true` |
-| `windows.setSize` | `{ view, width, height }` | `Promise<null>`. 내용 영역의 크기. 각 값은 정수 200–4096 |
-| `windows.setContentPosition` | `{ view, x, y, unit? }` | `Promise<null>`. 내용 영역 왼쪽 위의 화면 위치 설정 |
-| `windows.setOuterSize` | `{ view, width, height, unit? }` | `Promise<null>`. 제목 표시줄과 테두리를 포함한 바깥 크기 설정 |
-| `windows.setContentBounds` | `{ view, x, y, width, height, unit? }` | `Promise<null>`. 내용 영역의 화면 위치와 크기를 함께 설정 |
-| `windows.setOuterBounds` | `{ view, x, y, width, height, unit? }` | `Promise<null>`. 바깥 영역의 화면 위치와 크기를 함께 설정 |
-| `windows.getContentSize` | `{ view, unit? }` | `Promise<{ width: number; height: number; dpi: number }>` 현재 내용 영역 크기 |
-| `windows.getOuterSize` | `{ view, unit? }` | `Promise<{ width: number; height: number; dpi: number }>` 현재 창 바깥 영역 크기 |
-| `windows.getContentPosition` | `{ view, unit? }` | `Promise<{ x: number; y: number; dpi: number }>` 내용 영역 왼쪽 위의 화면 위치 |
-| `windows.getOuterPosition` | `{ view, unit? }` | `Promise<{ x: number; y: number; dpi: number }>` 창 바깥쪽 왼쪽 위의 화면 위치 |
-| `windows.getContentBounds` | `{ view, unit? }` | `Promise<{ x: number; y: number; width: number; height: number; dpi: number }>` 현재 내용 영역 위치와 크기 |
-| `windows.getOuterBounds` | `{ view, unit? }` | 같은 bounds 형태. 현재 창 바깥 영역 위치와 크기 |
-| `windows.getNormalBounds` | `{ view, unit? }` | 같은 bounds 형태. 일반 상태로 복원할 창 바깥 영역 위치와 크기 |
-| `windows.toLogical` | `{ view, value }` | `Promise<{ value, dpi: number }>` 물리 픽셀을 대상 창 DPI로 논리 픽셀로 변환. value 형태 유지 |
-| `windows.toPhysical` | `{ view, value }` | `Promise<{ value, dpi: number }>` 96 DPI 논리 픽셀을 대상 창 DPI로 물리 픽셀로 변환. value 형태 유지 |
-| `windows.getMinSize` | `{ view }` | `Promise<{ width: number \| null; height: number \| null }>` 축별 최소 크기. 설정하지 않은 축은 `null` |
-| `windows.setMinSize` | `{ view, width, height }` | `Promise<null>`. 최소 크기 쌍을 교체하며 두 축 모두 `number \| null`. `null`은 해당 축 제한 해제 |
-| `windows.getMaxSize` | `{ view }` | `Promise<{ width: number \| null; height: number \| null }>` 축별 최대 크기. 설정하지 않은 축은 `null` |
-| `windows.setMaxSize` | `{ view, width, height }` | `Promise<null>`. 최대 크기 쌍을 교체하며 두 축 모두 `number \| null`. `null`은 해당 축 제한 해제 |
-| `windows.getSizeConstraints` | `{ view }` | `Promise<{ minWidth: number \| null; minHeight: number \| null; maxWidth: number \| null; maxHeight: number \| null }>` 네 제약을 한 번에 조회 |
-| `windows.setSizeConstraints` | `{ view, minWidth?, minHeight?, maxWidth?, maxHeight? }` | `Promise<null>`. 제약 전체를 교체합니다. 생략하거나 `null`인 축은 제한을 해제합니다 |
-| `windows.setPosition` | `{ view, x, y }` | `Promise<null>`. 화면에서 창 바깥쪽 왼쪽 위의 물리 픽셀 위치. 각 값은 정수 -32768–32767 |
-| `windows.setFullscreen` | `{ view, fullscreen: boolean }` | `Promise<null>`. 현재 모니터 전체화면. 해제하면 이전 창 위치와 표시 상태 복원 |
-| `windows.setCloseConfirmation` | `{ view, message: string \| null }` | `Promise<null>`. 창을 닫기 전에 표시할 확인 메시지 설정. 문자열은 1–1024자, NUL 금지. `null`이면 확인 해제 |
-| `windows.close` | `{ view }` | `Promise<boolean>`. 닫기 승인 시 `true`, 확인이나 앱 종료를 취소하거나 트레이로 숨기면 `false`. 정리 완료를 기다리지는 않음 |
+| `windows.create` | `{ view, options? }` | `Promise<null>`. 설정한 창을 생성하고 WebView 준비를 기다림. 열린 창은 `BUSY` |
+| `windows.recreate` | `{ view, options? }` | `Promise<null>`. 닫기 확인 후 기존 창과 WebView를 정리하고 설정대로 다시 생성. 닫힌 창도 생성 가능 |
+| `windows.show` | `{ view, windowId? }` | `Promise<null>`. 창 표시 |
+| `windows.showInactive` | `{ view, windowId? }` | `Promise<null>`. 일반, 최소화 또는 최대화 상태를 유지하며 창 표시. 활성화 요청 없음 |
+| `windows.hide` | `{ view, windowId? }` | `Promise<null>`. 창 숨김. 창과 세션은 유지 |
+| `windows.focus` | `{ view, windowId? }` | `Promise<null>`. 숨기거나 최소화한 창을 표시하고 포커스 요청. OS가 거부하면 `BUSY` |
+| `windows.blur` | `{ view, windowId? }` | `Promise<boolean>`. 같은 앱의 허용된 다른 창으로 전환해 대상 창이 비활성인지 반환 |
+| `windows.activate` | `{ view, windowId? }` | `Promise<boolean>`. 표시된 비최소화 창으로 전경 전환 요청. 실제 대상 창이 전경이면 `true` |
+| `windows.minimize` | `{ view, windowId? }` | `Promise<null>`. 창을 최소화하고 표시. Windows가 다른 창을 활성화할 수 있음 |
+| `windows.maximize` | `{ view, windowId? }` | `Promise<null>`. 최소화 여부와 관계없이 창을 최대화하고 표시하며 활성화 요청 |
+| `windows.unmaximize` | `{ view, windowId? }` | `Promise<null>`. 창을 일반 크기로 표시하고 활성화 요청. 최소화 전 최대화 상태도 해제 |
+| `windows.restore` | `{ view, windowId? }` | `Promise<null>`. 최소화했다면 이전 일반 또는 최대화 상태로 복원. 그 외에는 일반 크기로 표시하고 활성화 요청 |
+| `windows.toggleMaximize` | `{ view, windowId? }` | `Promise<null>`. 현재 최대화 상태이면 일반 크기, 아니면 최대화로 표시하고 활성화 요청 |
+| `windows.isMinimized` | `{ view, windowId? }` | `Promise<boolean>`. 실제 네이티브 창의 최소화 여부 |
+| `windows.isMaximized` | `{ view, windowId? }` | `Promise<boolean>`. 실제 네이티브 창의 최대화 여부 |
+| `windows.isFullscreen` | `{ view, windowId? }` | `Promise<boolean>`. 호스트가 해당 네이티브 창에 적용한 전체화면 모드 여부 |
+| `windows.isVisible` | `{ view, windowId? }` | `Promise<boolean>`. 네이티브 표시 상태. 최소화한 창도 `true`일 수 있음 |
+| `windows.isFocused` | `{ view, windowId? }` | `Promise<boolean>`. OS 전경 창인지 조회. 창 안의 WebView에 입력 포커스가 있어도 `true` |
+| `windows.isDestroyed` | `{ view, windowId? }` | `Promise<boolean>`. 선언된 뷰에 살아 있는 창이 없으면 `true` |
+| `windows.isNormal` | `{ view, windowId? }` | `Promise<boolean>`. 최소화, 최대화와 전체화면이 모두 아니면 `true` |
+| `windows.setSize` | `{ view, windowId?, width, height }` | `Promise<null>`. 내용 영역의 크기. 각 값은 정수 200–4096 |
+| `windows.setContentPosition` | `{ view, windowId?, x, y, unit? }` | `Promise<null>`. 내용 영역 왼쪽 위의 화면 위치 설정 |
+| `windows.setOuterSize` | `{ view, windowId?, width, height, unit? }` | `Promise<null>`. 제목 표시줄과 테두리를 포함한 바깥 크기 설정 |
+| `windows.setContentBounds` | `{ view, windowId?, x, y, width, height, unit? }` | `Promise<null>`. 내용 영역의 화면 위치와 크기를 함께 설정 |
+| `windows.setOuterBounds` | `{ view, windowId?, x, y, width, height, unit? }` | `Promise<null>`. 바깥 영역의 화면 위치와 크기를 함께 설정 |
+| `windows.getContentSize` | `{ view, windowId?, unit? }` | `Promise<{ width: number; height: number; dpi: number }>` 현재 내용 영역 크기 |
+| `windows.getOuterSize` | `{ view, windowId?, unit? }` | `Promise<{ width: number; height: number; dpi: number }>` 현재 창 바깥 영역 크기 |
+| `windows.getContentPosition` | `{ view, windowId?, unit? }` | `Promise<{ x: number; y: number; dpi: number }>` 내용 영역 왼쪽 위의 화면 위치 |
+| `windows.getOuterPosition` | `{ view, windowId?, unit? }` | `Promise<{ x: number; y: number; dpi: number }>` 창 바깥쪽 왼쪽 위의 화면 위치 |
+| `windows.getContentBounds` | `{ view, windowId?, unit? }` | `Promise<{ x: number; y: number; width: number; height: number; dpi: number }>` 현재 내용 영역 위치와 크기 |
+| `windows.getOuterBounds` | `{ view, windowId?, unit? }` | 같은 bounds 형태. 현재 창 바깥 영역 위치와 크기 |
+| `windows.getNormalBounds` | `{ view, windowId?, unit? }` | 같은 bounds 형태. 일반 상태로 복원할 창 바깥 영역 위치와 크기 |
+| `windows.toLogical` | `{ view, windowId?, value }` | `Promise<{ value, dpi: number }>` 물리 픽셀을 대상 창 DPI로 논리 픽셀로 변환. value 형태 유지 |
+| `windows.toPhysical` | `{ view, windowId?, value }` | `Promise<{ value, dpi: number }>` 96 DPI 논리 픽셀을 대상 창 DPI로 물리 픽셀로 변환. value 형태 유지 |
+| `windows.getMinSize` | `{ view, windowId? }` | `Promise<{ width: number \| null; height: number \| null }>` 축별 최소 크기. 설정하지 않은 축은 `null` |
+| `windows.setMinSize` | `{ view, windowId?, width, height }` | `Promise<null>`. 최소 크기 쌍을 교체하며 두 축 모두 `number \| null`. `null`은 해당 축 제한 해제 |
+| `windows.getMaxSize` | `{ view, windowId? }` | `Promise<{ width: number \| null; height: number \| null }>` 축별 최대 크기. 설정하지 않은 축은 `null` |
+| `windows.setMaxSize` | `{ view, windowId?, width, height }` | `Promise<null>`. 최대 크기 쌍을 교체하며 두 축 모두 `number \| null`. `null`은 해당 축 제한 해제 |
+| `windows.getSizeConstraints` | `{ view, windowId? }` | `Promise<{ minWidth: number \| null; minHeight: number \| null; maxWidth: number \| null; maxHeight: number \| null }>` 네 제약을 한 번에 조회 |
+| `windows.setSizeConstraints` | `{ view, windowId?, minWidth?, minHeight?, maxWidth?, maxHeight? }` | `Promise<null>`. 제약 전체를 교체합니다. 생략하거나 `null`인 축은 제한을 해제합니다 |
+| `windows.setPosition` | `{ view, windowId?, x, y }` | `Promise<null>`. 화면에서 창 바깥쪽 왼쪽 위의 물리 픽셀 위치. 각 값은 정수 -32768–32767 |
+| `windows.setFullscreen` | `{ view, windowId?, fullscreen: boolean }` | `Promise<null>`. 현재 모니터 전체화면. 해제하면 이전 창 위치와 표시 상태 복원 |
+| `windows.setCloseConfirmation` | `{ view, windowId?, message: string \| null }` | `Promise<null>`. 창을 닫기 전에 표시할 확인 메시지 설정. 문자열은 1–1024자, NUL 금지. `null`이면 확인 해제 |
+| `windows.close` | `{ view, windowId? }` | `Promise<boolean>`. 닫기 승인 시 `true`, 확인이나 앱 종료를 취소하거나 트레이로 숨기면 `false`. 정리 완료를 기다리지는 않음 |
 
 크기 제약과 `setSize`의 너비, 높이는 96 DPI 기준 논리 픽셀입니다. Windows가 현재 창의 DPI에 맞춰 실제 픽셀 크기로 변환합니다. 사용자 크기 조절, 최대화와 복원에도 제약을 적용합니다. 제약보다 작은 초기 크기와 `setSize` 값은 최소 크기로, 큰 값은 최대 크기로 보정합니다. 최소값이 최대값보다 크거나 값이 정수가 아니거나 200–4096 범위를 벗어나면 `INVALID_ARGUMENT`이며 기존 제약은 바뀌지 않습니다.
 `setMinSize`와 `setMaxSize`는 지정한 쌍을 각각 교체하고 반대쪽 제약은 유지합니다. `setSizeConstraints`는 네 축 제약 전체를 교체하므로 전달하지 않은 축은 해제됩니다. 한 축에만 제약을 둘 수 있습니다.
@@ -394,6 +425,7 @@ splash 창이 주 창의 직접 또는 간접 부모이면 `INVALID_ARGUMENT`이
 주 창을 먼저 표시하고 splash 창의 닫기를 확정하므로 전환 중 마지막 창 종료 규칙을 실행하지 않습니다.
 닫기 확인을 거절하면 주 창은 표시된 상태이고 splash 창도 유지하며 `false`를 반환합니다.
 전환에서는 splash 창을 트레이로 숨기지 않고 닫습니다. `beforeQuit`는 실행하지 않습니다.
+isolated splash의 임시 프로필도 최종 종료로 정리하며 다시 생성하면 새 프로필을 사용합니다.
 그 뒤 마지막 주 창의 일반 닫기는 기존 종료 취소와 트레이 규칙을 따릅니다.
 요청을 실행하기 전 취소하면 전환하지 않습니다. 이미 표시와 닫기를 확정한 뒤에는 그 변경을 되돌리지 않습니다.
 macOS의 준비 조회, 이벤트와 splashscreen 전환은 아직 지원하지 않습니다.
@@ -687,3 +719,5 @@ macOS는 setup 중에도 종료 시 대기 중인 Host API 호출을 `CANCELLED`
 닫기 확인을 거절하면 `windows.close`는 `false`를 반환하고 `windows.recreate`는 `CANCELLED`로 실패합니다.
 생성이나 네이티브 호출 실패는 `INTERNAL`입니다.
 [오류 처리](/guides/cancellation-and-errors/)도 확인하세요.
+
+completeSplashscreen은 주 창과 splash 선언 모두 single이어야 합니다. multiple 선언은 `INVALID_ARGUMENT`입니다.

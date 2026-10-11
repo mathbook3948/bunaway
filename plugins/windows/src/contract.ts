@@ -19,7 +19,7 @@ export const MIN_WINDOW_COORDINATE = -2147483648;
 export const MAX_WINDOW_COORDINATE = 2147483647;
 const MAX_WINDOW_DPI = 65535;
 
-const windowTarget = {
+const viewTarget = {
   type: "object",
   properties: {
     view: {
@@ -31,6 +31,13 @@ const windowTarget = {
     "view",
   ],
   additionalProperties: false,
+} as const;
+const windowTarget = {
+  ...viewTarget,
+  properties: {
+    ...viewTarget.properties,
+    windowId: viewTarget.properties.view,
+  },
 } as const;
 const windowResult = {
   input: windowTarget,
@@ -89,9 +96,9 @@ const creationDimension = {
 } as const;
 const creationResult = {
   input: {
-    ...windowTarget,
+    ...viewTarget,
     properties: {
-      ...windowTarget.properties,
+      ...viewTarget.properties,
       options: {
         type: "object",
         properties: {
@@ -472,6 +479,33 @@ const conversionOutput = {
 
 /** Schemas for window operations, used to validate calls and their results. */
 export const windowOperations = {
+  "windows.createInstance": {
+    ...creationResult,
+    output: windowIdentitySchema,
+  },
+  "windows.recreateInstance": {
+    input: {
+      ...creationResult.input,
+      properties: {
+        ...creationResult.input.properties,
+        windowId: viewTarget.properties.view,
+      },
+      required: [
+        "view",
+        "windowId",
+      ],
+    },
+    output: windowIdentitySchema,
+  },
+  "windows.listInstances": {
+    input: {
+      const: null,
+    },
+    output: {
+      type: "array",
+      items: windowIdentitySchema,
+    },
+  },
   "windows.getById": {
     input: {
       type: "object",
@@ -494,9 +528,9 @@ export const windowOperations = {
   },
   "windows.completeSplashscreen": {
     input: {
-      ...windowTarget,
+      ...viewTarget,
       properties: {
-        ...windowTarget.properties,
+        ...viewTarget.properties,
         splash: windowTarget.properties.view,
       },
       required: [

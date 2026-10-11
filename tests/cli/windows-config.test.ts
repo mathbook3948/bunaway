@@ -284,3 +284,83 @@ test("multi-window development replaces each view origin and preserves each home
   ]);
   expect(() => readWindowSpecs(devSpecs, policy, server)).toThrow();
 });
+
+test("instance configuration validates multiplicity, explicit bounds and fixed profile selection", () => {
+  const first = specs[0];
+  assert(first);
+  expect(
+    readWindowSpecs(
+      [
+        {
+          ...first,
+          instances: "multiple",
+          maxInstances: 128,
+          profile: "isolated",
+        },
+      ],
+      policy,
+    )[0],
+  ).toMatchObject({
+    instances: "multiple",
+    maxInstances: 128,
+    profile: "isolated",
+  });
+  expect(
+    readWindowSpecs(
+      [
+        {
+          ...first,
+          instances: "single",
+          maxInstances: 1,
+          profile: "shared",
+        },
+      ],
+      policy,
+    )[0],
+  ).toMatchObject({
+    instances: "single",
+    maxInstances: 1,
+  });
+  for (const extra of [
+    {
+      instances: "many",
+    },
+    {
+      instances: "multiple",
+    },
+    {
+      maxInstances: 2,
+    },
+    {
+      instances: "multiple",
+      maxInstances: 0,
+    },
+    {
+      instances: "multiple",
+      maxInstances: 129,
+    },
+    {
+      instances: "multiple",
+      maxInstances: 1.5,
+    },
+    {
+      instances: "multiple",
+      maxInstances: "2",
+    },
+    {
+      profile: "custom",
+    },
+  ]) {
+    expect(() =>
+      readWindowSpecs(
+        [
+          {
+            ...first,
+            ...extra,
+          },
+        ],
+        policy,
+      ),
+    ).toThrow();
+  }
+});

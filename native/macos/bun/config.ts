@@ -73,6 +73,17 @@ export function readMacosWindowSpecs(
     origin = home.origin;
   }
   const specs = readWindowSpecs(declarations, policy, origin);
+  if (
+    specs.some(
+      (spec) => spec.instances === "multiple" || spec.profile === "isolated",
+    )
+  ) {
+    throw new BunawayError({
+      code: "UNSUPPORTED",
+      message:
+        "Multiple windows and isolated instance profiles are not implemented on macOS.",
+    });
+  }
   if (!specs.some((spec) => spec.startup !== false)) {
     throw new BunawayError({
       code: "UNSUPPORTED",

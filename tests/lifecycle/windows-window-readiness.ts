@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type CommandContext, defineApp } from "@bunaway/backend";
@@ -79,6 +79,7 @@ if (!process.argv.includes("--child")) {
     await child.exited;
   }
 } else {
+  const dataRoot = resolve(output, `data-${process.pid}`);
   const counts = new Map<string, number>();
   const records: {
     recipient: string;
@@ -501,6 +502,8 @@ if (!process.argv.includes("--child")) {
         view,
       });
     }
+    const temporaryRoot = resolve(dataRoot, "webview", "temporary");
+    assert.equal((await readdir(temporaryRoot)).length, 1);
     assert.equal(
       await windows.completeSplashscreen({
         ...main,
@@ -510,6 +513,17 @@ if (!process.argv.includes("--child")) {
     );
     assert.equal(quitChecks, 0, "Handoff invoked the final-window quit rule");
     assert.equal(await windows.isVisible(main), true);
+    await waitFor(async () => (await readdir(temporaryRoot)).length === 0);
+    // Final handoff must not reserve the old isolated owner for another splash.
+    await windows.create({
+      view: "splash",
+    });
+    await ready("splash");
+    assert.equal((await readdir(temporaryRoot)).length, 1);
+    await windows.close({
+      view: "splash",
+    });
+    await waitFor(async () => (await readdir(temporaryRoot)).length === 0);
     completed = true;
     await windows.close(main);
   }
@@ -615,7 +629,7 @@ if (!process.argv.includes("--child")) {
       backendContext: `backend-${crypto.randomUUID()}` as HostContext,
       policy,
       assets,
-      dataRoot: resolve(output, `data-${process.pid}`),
+      dataRoot,
       loader: resolve(
         root,
         "build/cache/webview2/sdk/build/native/x64/WebView2Loader.dll",
@@ -634,6 +648,11 @@ if (!process.argv.includes("--child")) {
           "denied",
         ].includes(view),
         visible: view === "splash",
+        ...(view === "splash"
+          ? {
+              profile: "isolated" as const,
+            }
+          : {}),
         ...([
           "automatic",
           "bad",

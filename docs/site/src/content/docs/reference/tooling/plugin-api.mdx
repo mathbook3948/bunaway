@@ -21,13 +21,17 @@ description: Core와 선택 플러그인이 공유하는 중립 타입과 호출
 | `WindowReadiness` | 기존 창 ID와 문서 세대, 준비 revision, nativeCreated, document와 sdk의 단계, 공개 error |
 | `NativeWindowServices` | 창 사양, 상태 조회와 생성, 종료, 창 객체, 호스트 종료와 취소 확인, 시각과 UI tick |
 
-`WindowSpec`은 `view`, `home`, `title`, `window`, `startup` 필드를 가집니다. `window`에는 초기 `width`, `height`와 선택적 `minWidth`, `minHeight`, `maxWidth`, `maxHeight`를 둡니다. 크기 값은 96 DPI 기준 논리 픽셀입니다.
+`WindowSpec`은 `view`, `home`, `title`, `window`, `startup`과 선택적 `instances`, `maxInstances`, `profile` 필드를 가집니다. 인스턴스 모드와 프로필 수명은 [창 API](/reference/host/windows/)를 따릅니다. `window`에는 초기 `width`, `height`와 선택적 `minWidth`, `minHeight`, `maxWidth`, `maxHeight`를 둡니다. 크기 값은 96 DPI 기준 논리 픽셀입니다.
 Windows에서는 선택적 `visible`, `showWhenReady`도 받으며 기본값과 완료 조건은 [창 준비](/reference/host/windows/#창-준비)를 따릅니다.
 `WindowState.ready`는 WebView2 설정 완료만 뜻합니다. `NativeWindow.getReadiness()`는 별도 WindowReadiness를 읽습니다.
 선택적 `WindowState.replacementCancelled`는 부모 종료로 해당 수명의 진행 중인
 재생성을 취소해야 한다는 뜻입니다. 닫힌 뷰에 나중에 요청한 명시적 create는 허용합니다.
 호스트가 준비 상태를 소유하며 SDK 확인은 현재 세션과 문서 세대에 연결합니다. HostContext는 공개 준비 payload에 넣지 않습니다.
-`NativeWindowServices`는 `specs`, `read(view)`, `create(spec)`, `close(view)`, `window(view)`, `stopping()`, `cancelled(requestId)`, `now()`, `tick()`을 제공합니다.
+`NativeWindowServices`는 `specs`, `read(key)`, `create(spec, replacingLiveWindow?, instanceKey?)`, `close(key, replacing?)`, `window(key)`, `stopping()`, `cancelled(requestId)`, `now()`, `tick()`을 제공합니다.
+`close`의 replacing 기본값은 true이며 교체할 인스턴스의 자원을 보존합니다.
+splashscreen 최종 종료에는 false를 전달해 임시 프로필과 교체 예약을 보존하지 않습니다.
+공유 프로필의 모든 창을 동시에 재생성하면 read의 cleaned는 공유 환경의 마지막
+정리까지 false를 유지해 각 교체 예약이 새 환경을 기다리게 합니다.
 `create(spec, replacingLiveWindow)`의 선택적 두 번째 인자는 살아 있던 창의 재생성인지
 구분하며 기본값은 false입니다. 호스트는 이 경우에만 닫기 전 포착한 부모 수명을 재사용합니다.
 선택적 `lookup`은 `byId(windowId)`, `byView(viewId)`, `focused()`, `lastActive()`로
@@ -86,3 +90,13 @@ Windows의 선택적 `NativeWindow.destroy()`는 확인, 트레이 숨김과 종
 `NativeWindowServices.supportsCreationOptions`는 호출별 표시 옵션의 네이티브 지원 여부입니다.
 Windows는 true를 제공하고 macOS는 생략합니다. 공통 어댑터는 비어 있지 않은 options를
 지원하지 않는 호스트에서 기존 창을 닫기 전에 `UNSUPPORTED`로 거부합니다.
+
+`MAX_WINDOW_INSTANCES`는 앱 전체의 활성, 예약 및 정리 중인 창 상한인 128입니다.
+선택적 `NativeWindowServices.instances()`는 `{ key, identity }` 네이티브 소유자 목록을 반환합니다.
+key는 창 제어, 예약과 프로필을 연결하는 호스트 내부 논리 수명 키이며 웹에 노출하지 않습니다.
+identity는 HWND 수명마다 새로 발급합니다. 정리 중인 소유자를 포함해 슬롯을 계산하며
+공개 listInstances에서는 닫힌 창과 네이티브 자원 없는 예약을 제외합니다.
+`lookup.byRequest(requestId)`는 UI 호스트가 관리하는 요청의 인증된 컨텍스트에서 정확한
+호출자 창을 찾습니다. 다중 창 호스트는 view로 대체하지 않습니다.
+`creationSettled(key)`는 생성 성공, 실패와 취소 모두에서 재생성 메타데이터를 해제합니다.
+실패 때 보존했던 임시 프로필은 최종 종료 정리로 돌려 보냅니다.

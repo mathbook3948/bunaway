@@ -161,7 +161,8 @@ test("splashscreen handoff validates both targets and readiness before showing, 
       deadline: Date.now() + 30_000,
     }),
     create() {},
-    close(view) {
+    close(view, replacing) {
+      expect(replacing).toBe(false);
       actions.push(`close:${view}`);
       return allowClose;
     },

@@ -14,6 +14,7 @@ const definitions = Object.fromEntries(
       permission = "destroy";
     } else if (
       name === "windows.list" ||
+      name === "windows.listInstances" ||
       name === "windows.getById" ||
       name === "windows.getCurrent" ||
       name === "windows.getFocused" ||
@@ -73,6 +74,8 @@ export const windows = Object.freeze({
   ...api,
   list: (options?: import("@bunaway/plugin").NativeInvokeOptions) =>
     api.list(null, options),
+  listInstances: (options?: import("@bunaway/plugin").NativeInvokeOptions) =>
+    api.listInstances(null, options),
   getCurrent: (options?: import("@bunaway/plugin").NativeInvokeOptions) =>
     api.getCurrent(null, options),
   getFocused: (options?: import("@bunaway/plugin").NativeInvokeOptions) =>

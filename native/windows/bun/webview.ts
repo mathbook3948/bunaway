@@ -2,7 +2,7 @@ import { dlopen, type Pointer, ptr } from "bun:ffi";
 import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
-import type { WireError } from "@bunaway/protocol";
+import { BunawayError, type WireError } from "@bunaway/protocol";
 import type { WindowSpec } from "./channel.ts";
 import {
   addRef,
@@ -54,8 +54,16 @@ export function originOf(text: string): string {
     return "";
   }
 }
+/** A profile has one environment, separate controllers and one final native process drain. */
+type EnvironmentGroup = {
+  members: Set<WebView>;
+  waiting: Set<WebView>;
+  environment?: Pointer;
+  drainer?: WebView;
+};
+const environments = new Map<string, EnvironmentGroup>();
 // Slots/IIDs are from the pinned WebView2 SDK 1.0.4129.50, Win64 COM ABI.
-/** Own one WebView2 instance, its COM callbacks, and the child-process shutdown drain. */
+/** Own one controller and its callbacks; profile peers share an environment and its final process drain. */
 export class WebView {
   webview: Pointer | undefined;
   private controller: Pointer | undefined;
@@ -83,6 +91,8 @@ export class WebView {
   private readonly processHandles = new Map<number, bigint>();
   private closedAt = 0;
   private readonly profile: Buffer;
+  private readonly profilePath: string;
+  private readonly group: EnvironmentGroup;
   private readonly loader;
   failure: unknown;
   private navigationId: bigint | undefined;
@@ -106,16 +116,19 @@ export class WebView {
     },
     legacyProfile = false,
     private readonly devtools = false,
+    profilePath?: string,
   ) {
-    const profile = resolve(
-      dataRoot,
-      "webview",
-      ...(legacyProfile
-        ? []
-        : [
-            viewDirName(spec.view),
-          ]),
-    );
+    const profile =
+      profilePath ??
+      resolve(
+        dataRoot,
+        "webview",
+        ...(legacyProfile
+          ? []
+          : [
+              viewDirName(spec.view),
+            ]),
+      );
     mkdirSync(profile, {
       recursive: true,
     });
@@ -131,6 +144,21 @@ export class WebView {
         returns: "i32",
       },
     });
+    this.profilePath = profile;
+    const existing = environments.get(profile);
+    if (!WebView.canUseEnvironment(existing)) {
+      this.loader.close();
+      throw new BunawayError({
+        code: "BUSY",
+        message: "WebView profile cleanup is still in progress.",
+      });
+    }
+    this.group = existing ?? {
+      members: new Set(),
+      waiting: new Set(),
+    };
+    this.group.members.add(this);
+    environments.set(profile, this.group);
     const browser = handler(
       "browser-exit",
       "fa504257-a216-4911-a860-fe8825712861",
@@ -151,43 +179,51 @@ export class WebView {
       ],
       (result, created) => {
         this.creating--;
-        if (this.closing && (Number(result) < 0 || !created)) {
-          return;
+        try {
+          if (this.closing && (Number(result) < 0 || !created)) {
+            return;
+          }
+          hr(Number(result), "Controller completion");
+          assert(created);
+          this.controller = created as Pointer;
+          addRef(this.controller);
+          this.webview = getObject(this.controller, 25);
+          const pid = new Uint32Array(1);
+          hr(
+            method(this.webview, 37, [
+              "ptr",
+            ])(ptr(pid)),
+            "get_BrowserProcessId",
+          );
+          this.browserHandle = kernel.symbols.OpenProcess(
+            0x100000,
+            0,
+            pid[0] ?? 0,
+          );
+          assert(this.browserHandle, "OpenProcess browser");
+          this.processHandles.set(pid[0] ?? 0, this.browserHandle);
+          this.hooks.log("webview-ready", {
+            browserPid: pid[0],
+            browserVersion: this.environment
+              ? getString(this.environment, 5)
+              : "",
+          });
+          if (this.closing) {
+            return;
+          }
+          this.configure(assets);
+          this.resize();
+          hr(
+            method(this.controller, 4, [
+              "i32",
+            ])(1),
+            "put_IsVisible",
+          );
+          this.hooks.ready();
+        } catch (error) {
+          this.failure = error;
+          this.hooks.close(true);
         }
-        hr(Number(result), "Controller completion");
-        assert(created);
-        this.controller = created as Pointer;
-        addRef(this.controller);
-        this.webview = getObject(this.controller, 25);
-        const pid = new Uint32Array(1);
-        hr(
-          method(this.webview, 37, [
-            "ptr",
-          ])(ptr(pid)),
-          "get_BrowserProcessId",
-        );
-        this.browserHandle = kernel.symbols.OpenProcess(
-          0x100000,
-          0,
-          pid[0] ?? 0,
-        );
-        assert(this.browserHandle, "OpenProcess browser");
-        this.processHandles.set(pid[0] ?? 0, this.browserHandle);
-        this.hooks.log("webview-ready", {
-          browserPid: pid[0],
-        });
-        if (this.closing) {
-          return;
-        }
-        this.configure(assets);
-        this.resize();
-        hr(
-          method(this.controller, 4, [
-            "i32",
-          ])(1),
-          "put_IsVisible",
-        );
-        this.hooks.ready();
       },
     );
     const environment = handler(
@@ -198,53 +234,87 @@ export class WebView {
         "ptr",
       ],
       (result, created) => {
-        this.creating--;
-        if (this.closing && (Number(result) < 0 || !created)) {
+        if (Number(result) < 0 || !created) {
+          for (const member of this.group.waiting) {
+            member.creating--;
+            member.failure = new Error(`Environment completion: ${result}`);
+          }
+          this.group.waiting.clear();
           return;
         }
-        hr(Number(result), "Environment completion");
-        assert(created);
-        this.environment = created as Pointer;
-        addRef(this.environment);
-        // Environment8 extends Environment5; require process inventory before starting a view.
-        this.environment5 = query(
-          this.environment,
-          "d6eb91dd-c3d2-45e5-bd29-6dc2bc4de9cf",
-        );
-        const token = new BigInt64Array(1);
-        hr(
-          method(this.environment5, 12, [
-            "ptr",
-            "ptr",
-          ])(browser.pointer, ptr(token)),
-          "add_BrowserProcessExited",
-        );
-        this.browserToken = token[0] ?? 0n;
-        if (this.closing) {
-          return;
+        // Keep a group reference even when the first window closes before its siblings.
+        this.group.environment = created as Pointer;
+        addRef(this.group.environment);
+        for (const member of this.group.waiting) {
+          member.receiveEnvironment(this.group.environment);
         }
-        this.creating++;
-        const resultCode = method(this.environment, 3, [
-          "u64",
-          "ptr",
-        ])(hwnd, controller.pointer);
-        if (resultCode < 0) {
-          this.creating--;
-        }
-        hr(resultCode, "CreateController");
+        this.group.waiting.clear();
       },
     );
     this.completions.push(environment, controller, browser);
     this.creating++;
-    const result = this.loader.symbols.CreateCoreWebView2EnvironmentWithOptions(
-      null,
-      ptr(this.profile),
-      null,
-      environment.pointer,
-    );
-    if (result < 0) {
-      this.creating--;
-      this.failure = new Error(`CreateEnvironment: ${result}`);
+    if (this.group.environment) {
+      this.receiveEnvironment(this.group.environment);
+    } else {
+      this.group.waiting.add(this);
+      if (!existing) {
+        const result =
+          this.loader.symbols.CreateCoreWebView2EnvironmentWithOptions(
+            null,
+            ptr(this.profile),
+            null,
+            environment.pointer,
+          );
+        if (result < 0) {
+          this.creating--;
+          this.group.waiting.delete(this);
+          this.failure = new Error(`CreateEnvironment: ${result}`);
+        }
+      } else if (existing.waiting.size === 1) {
+        // A synchronously failed environment cannot acquire fresh controllers.
+        this.creating--;
+        this.group.waiting.delete(this);
+        this.failure = new Error("Shared WebView environment creation failed.");
+      }
+    }
+  }
+
+  /** Each member retains the same environment but owns its own controller and callback tokens. */
+  private receiveEnvironment(environment: Pointer): void {
+    this.creating--;
+    this.environment = environment;
+    addRef(environment);
+    try {
+      this.environment5 = query(
+        environment,
+        "d6eb91dd-c3d2-45e5-bd29-6dc2bc4de9cf",
+      );
+      const browser = this.completions[2];
+      const controller = this.completions[1];
+      assert(browser && controller);
+      const token = new BigInt64Array(1);
+      hr(
+        method(this.environment5, 12, [
+          "ptr",
+          "ptr",
+        ])(browser.pointer, ptr(token)),
+        "add_BrowserProcessExited",
+      );
+      this.browserToken = token[0] ?? 0n;
+      if (this.closing) {
+        return;
+      }
+      this.creating++;
+      const result = method(environment, 3, [
+        "u64",
+        "ptr",
+      ])(this.hwnd, controller.pointer);
+      if (result < 0) {
+        this.creating--;
+      }
+      hr(result, "CreateController");
+    } catch (error) {
+      this.failure = error;
     }
   }
 
@@ -696,6 +766,22 @@ export class WebView {
   requestClose() {
     this.closing = true;
   }
+  /** Old controllers can finish before the last shared owner; retain replacement reservations until its drain completes. */
+  canReuseProfile(): boolean {
+    return WebView.canUseEnvironment(environments.get(this.profilePath));
+  }
+  /** A live controller can share its environment; an entirely closing group must drain first. */
+  private static canUseEnvironment(
+    group: EnvironmentGroup | undefined,
+  ): boolean {
+    return (
+      !group ||
+      (!group.drainer &&
+        [
+          ...group.members,
+        ].some((member) => !member.closing))
+    );
+  }
   /**
    * Ignore events and detach the controller outside COM callbacks.
    * Returns false while async creation is pending; finish drains remaining resources later.
@@ -805,6 +891,13 @@ export class WebView {
     this.webview = undefined;
     this.controller = undefined;
     this.detached = true;
+    if (
+      [
+        ...this.group.members,
+      ].every((member) => member.detached)
+    ) {
+      this.group.drainer = this;
+    }
     return true;
   }
   /** Poll shutdown until children and callbacks drain, returning true after disposal. */
@@ -815,7 +908,17 @@ export class WebView {
     if (!this.detached) {
       return false;
     }
+    const drainsGroup = this.group.drainer === this;
     if (
+      drainsGroup &&
+      [
+        ...this.group.members,
+      ].some((member) => member !== this && !member.finished)
+    ) {
+      return false;
+    }
+    if (
+      drainsGroup &&
       this.browserHandle &&
       (!this.browserExited ||
         kernel.symbols.WaitForSingleObject(this.browserHandle, 0) !== 0)
@@ -842,9 +945,14 @@ export class WebView {
     }
     this.environment5 = undefined;
     this.environment = undefined;
+    if (drainsGroup && this.group.environment) {
+      release(this.group.environment);
+      delete this.group.environment;
+    }
     // Environment references can own runtime-side resources. Release them after
     // BrowserProcessExited, then keep the STA/trampolines alive while children drain.
     if (
+      drainsGroup &&
       [
         ...this.processHandles.values(),
       ].some((handle) => kernel.symbols.WaitForSingleObject(handle, 0) !== 0)
@@ -890,6 +998,11 @@ export class WebView {
     this.completions.length = 0;
     this.loader.close();
     this.finished = true;
+    this.group.members.delete(this);
+    if (drainsGroup) {
+      assert(this.group.members.size === 0, "Environment still owns a window");
+      environments.delete(this.profilePath);
+    }
     this.hooks.log("view-cleaned", {
       processes,
       elapsedMs: this.closedAt ? performance.now() - this.closedAt : 0,
