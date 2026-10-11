@@ -56,10 +56,16 @@ export function readWindowSpecs(
     }
     if (
       typeof spec.view !== "string" ||
-      !/^[A-Za-z0-9_.:-]{1,128}$/.test(spec.view) ||
-      seen.has(spec.view)
+      !/^[A-Za-z0-9_.:-]{1,128}$(?![\s\S])/.test(spec.view)
     ) {
-      throw new Error("Window view IDs must be valid and unique.");
+      throw new Error(
+        "Window view IDs must contain 1 to 128 ASCII letters, digits, underscores, dots, colons or hyphens.",
+      );
+    }
+    if (seen.has(spec.view)) {
+      throw new Error(
+        `Only one window declaration per view is supported (duplicate: ${spec.view}). Use distinct policy view IDs for multiple windows.`,
+      );
     }
     seen.add(spec.view);
     if (

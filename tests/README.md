@@ -98,6 +98,13 @@ OS가 전경 전환 요청을 거부하면 해당 활성화 전환을 `UNTESTED`
 네이티브 입력을 준비한 뒤 `bun --no-env-file tests/lifecycle/windows-bun-window-api.ts`로
 단독 실행하거나 `mise run host:windows`로 전체 Windows 호스트 회귀와 함께 실행한다.
 
+`api/window-creation.test.ts`는 현재 create/recreate의 `{ view }` 계약과 대상 control 권한,
+공개 registry 및 직렬화 Host 경계의 추가 생성 옵션, URL, 프로필과 임의 ID 거부를 확인한다.
+`cli/windows-config.test.ts`는 숨김 및 지연 창의 중복 뷰 진단, 식별자 개행과 128개 선언
+상한을 검사한다. `lifecycle/window-operations.test.ts`는 열린 뷰의 두 번째 create가
+BUSY로 실패하고 기존 자원 소유자를 유지하는지 확인한다. 호출별 옵션 기능이나 같은
+뷰의 여러 창, 실제 WebView2 실행을 검증하는 테스트는 아니다.
+
 `lifecycle/window-events.test.ts`는 실제 Core와 typed SDK를 연결해 `windows.changed`의
 스키마, 뷰별 구독 권한, 해제, 폐기 세션과 Core 종료 후 늦은 발행 차단을 확인한다.
 MessageChannel로 네이티브 이벤트 전송 방향, 미확인 128개 상한과 종료 용량도 검사한다.

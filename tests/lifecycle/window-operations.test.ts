@@ -493,6 +493,30 @@ test("window catalog filters grants and cannot open arbitrary or unauthorized vi
   expect(f.created).toEqual([]);
 });
 
+test("a second creation of an open view is BUSY and preserves its window and session owner", async () => {
+  const f = fixture();
+  const call = {
+    operation: "windows.create",
+    payload: {
+      view: "main",
+    },
+  } as const;
+  await f.operations.execute(call, grants, "first");
+  const original = f.views.get("main");
+  await expect(
+    f.operations.execute(call, grants, "second"),
+  ).rejects.toMatchObject({
+    code: "BUSY",
+    message: expect.stringContaining("Only one window per view is supported"),
+  });
+  expect(f.views.get("main")).toBe(original);
+  expect(f.created).toEqual([
+    "main",
+  ]);
+  expect(f.destroyed).toEqual([]);
+  expect(original?.closed).toBe(false);
+});
+
 test("recreation reserves the last window through cleanup, rejects competing creation, and survives old-context cancellation", async () => {
   const f = fixture();
   await f.operations.execute(

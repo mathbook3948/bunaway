@@ -1,5 +1,10 @@
 # 플랫폼 지원과 검증 범위
 
+창 생성은 사전 선언 뷰마다 하나를 지원한다. [ADR 0016](../decisions/0016-window-creation-contract.md)은
+Windows의 호출별 표시 옵션 범위를 결정한 문서이며 해당 기능의 구현 완료를 뜻하지 않는다.
+현재 create와 recreate는 `{ view }`만 받고 추가 생성 옵션은 `INVALID_ARGUMENT`로 거부한다.
+같은 뷰의 동시 다중 창과 임의 동적 선언은 보류하며 여러 창은 서로 다른 선언 뷰를 사용한다.
+
 Windows 창 준비, 숨김 생성과 splashscreen 전환은 [창 API](../site/src/content/docs/reference/host/windows.mdx)를 따른다.
 Windows 11 Pro x64 `10.0.26200`, Bun 1.4.2와 실제 WebView2에서 단계별 준비, 탐색과 재생성,
 실패와 취소, SDK 기한 초과 및 전환 중 앱 유지를 확인했다.
