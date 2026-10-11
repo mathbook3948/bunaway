@@ -72,17 +72,18 @@ debug APK 개발 경로를 반영하고 iOS 및 모바일 후속 작업을 분�
 - [x] 일반 close와 확인을 우회하는 trusted destroy의 계약을 구분한다.
 - [x] 결정 완료: 실행 중 창 생성 옵션은 사전 선언 창의 호출별 제목, 크기와 제약, 표시 및 준비 후 표시로 제한한다. 권한은 대상 뷰의 `windows:control`을 유지한다. [ADR 0016](./decisions/0016-window-creation-contract.md).
 - [ ] 구현 후속: Windows create/recreate에 ADR 0016의 선택적 `options`와 생성별 검증, 실패 정리를 구현한다. 현재 입력은 `{ view }`뿐이고 추가 옵션은 `INVALID_ARGUMENT`다. [#102](https://github.com/mathbook3948/bunaway/issues/102).
-- [x] 결정 완료: 같은 뷰의 동시 다중 창은 보류하고 뷰별 창 하나를 유지한다. 별도 뷰로 같은 UI를 재사용하며 ID, 세션, 정책과 프로필은 [ADR 0016](./decisions/0016-window-creation-contract.md)을 따른다. 다중 인스턴스 기능 구현 완료 표시가 아니다.
+- [x] 결정 완료: 뷰는 화면과 정책의 생성 정의이며 single 기본값과 multiple 선택으로 창 인스턴스를 생성한다. 창별 ID와 세션, 프로필 공유 및 격리, 선언 및 인스턴스 상한은 [ADR 0017](./decisions/0017-multiple-windows-per-view.md)을 따른다. 현재 SDK의 다중 인스턴스 지원 완료 표시가 아니다.
+- [ ] 구현 후속: Windows의 동일 뷰 다중 창 생성과 ID별 제어, 창별 세션 라우팅, 프로필 소유권과 상한을 구현하고 실제 WebView2에서 검증한다. [#104](https://github.com/mathbook3948/bunaway/issues/104).
 - [x] 부모 창, 자식 창, owner 관계를 설정하고 조회한다.
 - [x] 부모에 종속된 모달 창과 부모의 입력 차단, 종료 순서를 제공한다.
 - [x] 창 enabled 상태의 변경과 조회를 제공한다.
 - [x] 창이 없는 상주 앱과 트레이만 있는 앱의 시작을 지원한다. 빈 창 선언 또는 모든 `startup: false`를 허용하며 트레이 또는 `closeBehavior: "keep-alive"`를 요구한다.
 - [x] 앱 초기화 뒤 `completeSplashscreen`으로 준비된 주 창을 먼저 표시하고 splashscreen을 닫는다.
 
-2026-10-11 main `222998f`에서 두 생성 항목의 지원 결정을 완료했다.
-호출별 옵션은 아직 미구현이고 같은 뷰의 여러 창은 보류다. 중복 선언의 시작 전 진단,
+2026-10-11 main `49ed0a5` 이후 ADR 0017로 같은 뷰의 여러 창 보류를 변경했다.
+호출별 옵션과 다중 인스턴스는 아직 미구현이다. 현재 뷰별 창 하나 계약과 중복 선언의 시작 전 진단,
 열린 뷰의 create에 대한 BUSY와 자원 보존, 추가 생성 필드와 임의 ID 거부,
-식별자 개행 거부 및 128개 선언 상한을 계약 검사로 보완한다.
+식별자 개행 거부 및 128개 선언 상한 검사는 유지한다. #102와 #104는 실제 구현과 검증 뒤 닫는다.
 
 2026-10-11 창 없는 시작은 트레이 또는 명시적 keep-alive로 실행 유지 조건을 검증한다.
 keep-alive는 마지막 창을 닫아도 백엔드를 유지하고 Quit 또는 `DesktopContext.quit()`으로 종료한다.
