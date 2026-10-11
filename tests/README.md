@@ -2,10 +2,15 @@
 
 `mise run check`와 플랫폼 검사는 먼저 `plugins:build`를 실행해 중립 공개 출력과 OS별
 호스트 출력을 생성한다. `cli/plugin-build.test.ts`는 화면 출력의 OS 코드 제외,
-확장자를 작성하거나 생략한 플랫폼 import의 동일한 처리,
+확장자를 작성하거나 생략한 플랫폼 import의 동일한 처리, 깨끗한 체크아웃에서 빌드 테스트 폴더 생성,
 대상 OS 선택, package.json 버전 반영과 잘못된 버전 거부, 실패 시 기존 출력 보존을 검사한다. storage 네이티브 검사는 여러
 어댑터의 DLL 소유권과 반복 dispose도 확인한다. 저장 어댑터 생성 시 기본 폴더가 생기지 않는지,
 앱이 지정한 절대 경로의 입출력이 가능한지와 링크, 별칭, ACL 및 파일 교체 검사를 실제 Windows에서 확인한다.
+
+`cli/plugins.test.ts`는 네이티브 export의 실제 경로를 패키지 루트와 비교해 내부 링크는 허용하고
+외부로 연결되는 링크는 거부하는지 검사한다. Windows의 임시 폴더에 남은 짧은 경로도 정규화해
+같은 패키지 안의 모듈을 잘못 거부하지 않는지 확인한다. macOS 네이티브 CI는 호스트 실행 전에
+`plugins:build`를 실행한다.
 
 공식 플러그인은 `src/index.ts`에서 선언을 조립하고 `src/contract.ts`에 계약을 둔다.
 `api/plugin-contracts.test.ts`는 OS 자원 없이 네이티브 입력 검증을 실행해 모르는 작업의

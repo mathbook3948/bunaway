@@ -13,6 +13,9 @@ test.each([
 ])(
   "plugin build separates OS code and preserves output on failure (extension %j)",
   async (extension) => {
+    await mkdir(resolve(frameworkRoot, "build"), {
+      recursive: true,
+    });
     const root = await mkdtemp(
       resolve(frameworkRoot, "build/plugin-build-test-"),
     );

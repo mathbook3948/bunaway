@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -96,6 +96,10 @@ test.each([
       }`,
       );
       const installed = await installedPlugins(root, "0.0.0");
+      expect(installed[0]?.root).toBe(await realpath(plugin));
+      expect(installed[0]?.targets.windows?.operations).toBe(
+        await realpath(entry),
+      );
       expect(installed[0]?.targets.windows?.supportedOperations).toEqual([
         "demo.read",
       ]);
@@ -202,6 +206,27 @@ test.each([
         await emptyAdapter.dispose();
       }
 
+      // In-package links resolve to the same native entry; links outside the package remain denied below.
+      await symlink(
+        resolve(plugin, "src"),
+        resolve(plugin, "linked-src"),
+        process.platform === "win32" ? "junction" : "dir",
+      );
+      const manifestPath = resolve(plugin, "package.json");
+      const manifest = await Bun.file(manifestPath).json();
+      await writeJson(manifestPath, {
+        ...manifest,
+        exports: {
+          ".": "./src/index.ts",
+          "./native/windows": "./linked-src/index.ts",
+        },
+      });
+      const linked = await installedPlugins(root, "0.0.0");
+      expect(linked[0]?.targets.windows?.operations).toBe(
+        await realpath(entry),
+      );
+      await writeJson(manifestPath, manifest);
+
       for (const target of [
         {
           execution: "other",
@@ -265,7 +290,6 @@ test.each([
           },
         ).replaceAll('"factory"', "createOperations")};`,
       );
-      const manifestPath = resolve(plugin, "package.json");
       await writeJson(manifestPath, {
         ...(await Bun.file(manifestPath).json()),
         exports: {

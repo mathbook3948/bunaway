@@ -230,9 +230,11 @@ export async function installedPlugins(
     for (const [platform, target] of Object.entries(
       declaration.nativePlatforms,
     )) {
+      // Normalize Windows short names and linked paths before comparing with the canonical package root.
+      const nativeEntry = await realpath(target.module ?? "");
       targets[platform] = {
         execution: target.execution,
-        operations: await contained(root, relative(root, target.module ?? "")),
+        operations: await contained(root, relative(root, nativeEntry)),
         ...(target.operations === undefined
           ? {}
           : {

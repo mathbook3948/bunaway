@@ -135,6 +135,8 @@ jobs:
           } 2>&1 | tee build/macos-native-logs/runner.log
       - name: Install locked dependencies
         run: mise run install 2>&1 | tee build/macos-native-logs/install.log
+      - name: Build native plugin packages
+        run: mise run plugins:build
       - name: Build and test real WKWebView host and signed in-place app
         run: mise exec -- bun --no-env-file tests/lifecycle/run-native.ts --app 2>&1 | tee build/macos-native-logs/host.log
       - name: Upload native test reports and logs
