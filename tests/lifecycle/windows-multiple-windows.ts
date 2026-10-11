@@ -148,10 +148,12 @@ if (!process.argv.includes("--child")) {
         "Shared windows created distinct browser environments",
       );
       if (phase === "exercise") {
-        assert.equal(beforeFailurePids.length, 6);
-        assert.equal(new Set(beforeFailurePids.slice(4)).size, 1);
+        assert.equal(beforeFailurePids.length, 8);
+        assert.equal(new Set(beforeFailurePids.slice(4, 6)).size, 1);
+        assert.equal(new Set(beforeFailurePids.slice(6)).size, 1);
+        assert.notEqual(beforeFailurePids[6], beforeFailurePids[4]);
       }
-      assert.equal(new Set(sharedPids).size, phase === "exercise" ? 3 : 1);
+      assert.equal(new Set(sharedPids).size, phase === "exercise" ? 4 : 1);
       const browserVersions = [
         ...new Set(
           diagnostics
