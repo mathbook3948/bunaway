@@ -11,7 +11,7 @@ const WINDOW_READY_TIMEOUT_MS = 30_000;
 const CLEANUP_TIMEOUT_ADVANCE_MS = 40_000;
 
 /** Build a controllable host so tests can pause cleanup and advance deadlines. */
-function fixture(supportsDestroy = true) {
+function fixture(supportsDestroy = true, supportsCreationOptions = true) {
   const specs: WindowSpec[] = [
     "main",
     "editor",
@@ -37,6 +37,7 @@ function fixture(supportsDestroy = true) {
   let nowMs = 0;
   let tick = async () => {};
   const created: string[] = [];
+  const createdSpecs: WindowSpec[] = [];
   const destroyed: string[] = [];
   const destroy = (id: string) => {
     destroyed.push(id);
@@ -44,9 +45,11 @@ function fixture(supportsDestroy = true) {
     return true;
   };
   const operations = new WindowOperations(specs, {
+    supportsCreationOptions,
     read: (id) => views.get(id),
     create: (spec) => {
       created.push(spec.view);
+      createdSpecs.push(spec);
       views.set(spec.view, {
         closed: false,
         cleaned: false,
@@ -94,6 +97,8 @@ function fixture(supportsDestroy = true) {
     operations,
     views,
     created,
+    createdSpecs,
+    specs,
     destroyed,
     setCreationReady: (value: boolean) => {
       creationReady = value;
@@ -742,4 +747,146 @@ test("shutdown, cancellation before creation and cleanup timeout do not create r
     ]);
     expect(f.operations.replacing.size).toBe(0);
   }
+});
+
+test("creation options clamp merged constraints and restore declaration defaults on recreation", async () => {
+  const f = fixture();
+  const spec = f.specs[0];
+  assert(spec);
+  spec.showWhenReady = "sdk";
+  spec.window.minWidth = 900;
+  spec.window.maxWidth = 1200;
+  await f.operations.execute(
+    {
+      operation: "windows.create",
+      payload: {
+        view: "main",
+        options: {
+          title: "Draft",
+          visible: false,
+          showWhenReady: null,
+          window: {
+            width: 1500,
+            minWidth: null,
+          },
+        },
+      },
+    },
+    grants,
+    "options",
+  );
+  expect(f.createdSpecs[0]).toMatchObject({
+    title: "Draft",
+    visible: false,
+    window: {
+      width: 1200,
+      height: 600,
+      minWidth: null,
+      maxWidth: 1200,
+    },
+  });
+  expect(f.createdSpecs[0]).not.toHaveProperty("showWhenReady");
+  expect(spec.title).toBe("main");
+  expect(spec.window.width).toBe(800);
+  f.setTick(async () => {
+    const state = f.views.get("main");
+    assert(state);
+    state.cleaned = true;
+  });
+  await f.operations.execute(
+    {
+      operation: "windows.recreate",
+      payload: {
+        view: "main",
+      },
+    },
+    grants,
+    "defaults",
+  );
+  expect(f.createdSpecs[1]).toMatchObject({
+    title: "main",
+    showWhenReady: "sdk",
+    window: {
+      width: 900,
+      minWidth: 900,
+    },
+  });
+  expect(f.createdSpecs[1]).not.toHaveProperty("visible");
+});
+
+test("invalid merged creation constraints leave the live window and reservation unchanged", async () => {
+  const f = fixture();
+  const spec = f.specs[0];
+  assert(spec);
+  spec.window.minWidth = 1000;
+  await f.operations.execute(
+    {
+      operation: "windows.create",
+      payload: {
+        view: "main",
+      },
+    },
+    grants,
+    "initial",
+  );
+  const original = f.views.get("main");
+  await expect(
+    f.operations.execute(
+      {
+        operation: "windows.recreate",
+        payload: {
+          view: "main",
+          options: {
+            window: {
+              maxWidth: 900,
+            },
+          },
+        },
+      },
+      grants,
+      "invalid",
+    ),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  expect(f.views.get("main")).toBe(original);
+  expect(original?.closed).toBe(false);
+  expect(f.operations.replacing.size).toBe(0);
+  expect(f.created).toEqual([
+    "main",
+  ]);
+});
+
+test("platforms without creation options accept empty options and reject overrides before closing", async () => {
+  const f = fixture(true, false);
+  await f.operations.execute(
+    {
+      operation: "windows.create",
+      payload: {
+        view: "main",
+        options: {},
+      },
+    },
+    grants,
+    "empty",
+  );
+  await expect(
+    f.operations.execute(
+      {
+        operation: "windows.recreate",
+        payload: {
+          view: "main",
+          options: {
+            visible: false,
+          },
+        },
+      },
+      grants,
+      "unsupported",
+    ),
+  ).rejects.toMatchObject({
+    code: "UNSUPPORTED",
+  });
+  expect(f.views.get("main")?.closed).toBe(false);
+  expect(f.operations.replacing.size).toBe(0);
 });

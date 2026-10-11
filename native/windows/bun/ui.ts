@@ -667,6 +667,7 @@ function commitClose(viewId: string, view: ViewState) {
 const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices =
   {
     specs: config.windows,
+    supportsCreationOptions: true,
     lookup: {
       byId: (windowId) => windows?.getById(windowId) ?? null,
       byView: (viewId) => windows?.getByView(viewId) ?? null,

@@ -506,6 +506,7 @@
       "pages": {
         "reference/tooling/plugin-api": [
           "specs",
+          "supportsCreationOptions",
           "lookup",
           "read",
           "create",

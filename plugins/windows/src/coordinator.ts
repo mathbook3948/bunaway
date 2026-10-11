@@ -1,6 +1,7 @@
 import type { WindowSpec, WindowState } from "@bunaway/plugin-api/native";
 import { BunawayError, type JsonValue } from "@bunaway/protocol";
 import type { WindowCall } from "./contract.ts";
+import { mergeCreationOptions } from "./creation-options.ts";
 
 const WINDOW_CLEANUP_TIMEOUT_MS = 35_000;
 
@@ -13,6 +14,7 @@ export class WindowOperations {
   constructor(
     private readonly specs: readonly WindowSpec[],
     private readonly hooks: {
+      supportsCreationOptions?: boolean;
       read(view: string): WindowState | undefined;
       create(spec: WindowSpec, replacingLiveWindow?: boolean): void;
       close(view: string): boolean | Promise<boolean>;
@@ -136,6 +138,19 @@ export class WindowOperations {
           "Window is already open. Only one window per view is supported; use show or recreate for the existing window.",
       });
     }
+    // Resolve merged constraints before reservation or closing an existing window.
+    const creationSpec = mergeCreationOptions(spec, call.payload.options);
+    if (
+      call.payload.options &&
+      Object.keys(call.payload.options).length !== 0 &&
+      !this.hooks.supportsCreationOptions
+    ) {
+      throw new BunawayError({
+        code: "UNSUPPORTED",
+        message:
+          "Window creation options are not implemented on this platform.",
+      });
+    }
     // Serialize create/recreate for this view until readiness or failure.
     this.replacing.add(viewId);
     let creationStarted = false;
@@ -184,7 +199,7 @@ export class WindowOperations {
       }
       // Once close commits, finish replacement even if the old document's context is revoked.
       creationStarted = true;
-      this.hooks.create(spec, closesLiveWindow);
+      this.hooks.create(creationSpec, closesLiveWindow);
       view = this.hooks.read(viewId);
       // Preserve create's existing completion at controller setup; document and SDK readiness are separate.
       while (true) {

@@ -243,7 +243,40 @@ if (!process.argv.includes("--child")) {
       () =>
         counts.has("splash") && counts.has("observer") && counts.has("denied"),
     );
-    await windows.create(main);
+    await windows.create({
+      ...main,
+      options: {
+        title: "Creation override",
+        visible: false,
+        showWhenReady: null,
+        window: {
+          width: 700,
+          height: 500,
+          minWidth: 900,
+          maxWidth: 1100,
+        },
+      },
+    });
+    assert.deepEqual(await windows.getContentSize(main), {
+      width: 900,
+      height: 500,
+    });
+    const originalId = (await windows.getReadiness(main)).windowId;
+    await assert.rejects(
+      windows.recreate({
+        ...main,
+        options: {
+          window: {
+            minWidth: 1000,
+            maxWidth: 900,
+          },
+        },
+      }),
+      {
+        code: "INVALID_ARGUMENT",
+      },
+    );
+    assert.equal((await windows.getReadiness(main)).windowId, originalId);
     await waitFor(() => counts.get("main") === 1);
     const partial = await windows.getReadiness(main);
     assert.equal(partial.nativeCreated, true);
@@ -285,6 +318,10 @@ if (!process.argv.includes("--child")) {
     await waitFor(() => counts.get("main") === 3);
     await ready("main");
     const recreated = await windows.getReadiness(main);
+    assert.deepEqual(await windows.getContentSize(main), {
+      width: 640,
+      height: 480,
+    });
     assert.notEqual(recreated.windowId, partial.windowId);
     assert(recreated.documentGeneration <= navigated.documentGeneration);
     await context.events.emit("test.action", "close-sdk", {
