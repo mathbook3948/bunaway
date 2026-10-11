@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { release } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type CommandContext, defineApp } from "@bunaway/backend";
@@ -44,6 +45,7 @@ if (!process.argv.includes("--child")) {
   );
   let port = "0";
   let previousLogLines = 0;
+  const phases = [];
   for (const phase of [
     "exercise",
     "restart",
@@ -100,11 +102,15 @@ if (!process.argv.includes("--child")) {
                 browserPid: {
                   type: "integer",
                 },
+                browserVersion: {
+                  type: "string",
+                },
               },
               required: [
                 "event",
                 "view",
                 "browserPid",
+                "browserVersion",
               ],
               additionalProperties: false,
             } as const,
@@ -112,6 +118,8 @@ if (!process.argv.includes("--child")) {
               event: record.event,
               view: "view" in record ? record.view : "",
               browserPid: "browserPid" in record ? record.browserPid : 0,
+              browserVersion:
+                "browserVersion" in record ? record.browserVersion : "",
             },
           );
         });
@@ -122,11 +130,41 @@ if (!process.argv.includes("--child")) {
         )
         .map((record) => record.browserPid);
       assert(sharedPids.length > 0);
+      const firstFailure = diagnostics.findIndex(
+        (record) =>
+          record.event === "webview-process-failed" && record.view === "shared",
+      );
+      const beforeFailure =
+        firstFailure === -1 ? diagnostics : diagnostics.slice(0, firstFailure);
       assert.equal(
-        new Set(sharedPids).size,
+        new Set(
+          beforeFailure
+            .filter(
+              (record) =>
+                record.event === "webview-ready" && record.view === "shared",
+            )
+            .map((record) => record.browserPid),
+        ).size,
         1,
         "Shared windows created distinct browser environments",
       );
+      assert.equal(new Set(sharedPids).size, phase === "exercise" ? 2 : 1);
+      const browserVersions = [
+        ...new Set(
+          diagnostics
+            .filter((record) => record.event === "webview-ready")
+            .map((record) => record.browserVersion),
+        ),
+      ];
+      assert(
+        browserVersions.length > 0 &&
+          browserVersions.every((version) => version.length > 0),
+      );
+      phases.push({
+        phase,
+        browserVersions,
+        report,
+      });
       assert(
         diagnostics.some((record) => record.event === "callbacks-quiescent"),
       );
@@ -152,6 +190,19 @@ if (!process.argv.includes("--child")) {
       await child.exited;
     }
   }
+  const summary = {
+    pass: true,
+    platform: process.platform,
+    osRelease: release(),
+    bunVersion: Bun.version,
+    bunRevision: Bun.revision,
+    phases,
+  };
+  await writeFile(
+    resolve(root, "build/windows-multiple-windows-results.json"),
+    `${JSON.stringify(summary, null, 2)}\n`,
+  );
+  console.log(summary);
   console.log(
     "PASS multiple WebView2 instances: exact caller identity, independent replies, scoped events, ID targeting, bounds, navigation, recreation, shared and isolated profiles, ownership, cleanup and restart",
   );
@@ -610,6 +661,82 @@ if (!process.argv.includes("--child")) {
         () => fresh !== undefined && arrivals(fresh.windowId).length === 1,
       );
       assert((await action(fresh, "read")).startsWith("|"));
+      // A shared browser failure closes all its controllers while isolated profiles keep serving calls.
+      const diagnosticLines = (
+        await readFile(resolve(dataRoot, "logs/host.log"), "utf8")
+      )
+        .trim()
+        .split("\n");
+      const ready = diagnosticLines
+        .map((line) => {
+          const record: unknown = JSON.parse(line);
+          return record &&
+            typeof record === "object" &&
+            "event" in record &&
+            record.event === "webview-ready" &&
+            "view" in record &&
+            record.view === "shared" &&
+            "browserPid" in record &&
+            typeof record.browserPid === "number"
+            ? record.browserPid
+            : undefined;
+        })
+        .find((pid) => pid !== undefined);
+      assert(ready);
+      const killed = Bun.spawn(
+        [
+          "taskkill",
+          "/PID",
+          String(ready),
+          "/F",
+          "/T",
+        ],
+        {
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+      const killedOutput = new Response(killed.stdout).text();
+      const killedErrors = new Response(killed.stderr).text();
+      assert.equal(
+        await killed.exited,
+        0,
+        `${await killedOutput}\n${await killedErrors}`,
+      );
+      await waitFor(
+        async () =>
+          (await windows.getById({
+            windowId: replaced.windowId,
+          })) === null &&
+          (await windows.getById({
+            windowId: third.windowId,
+          })) === null,
+      );
+      assert((await action(isolatedB, "read")).startsWith("|"));
+      let recovered: WindowIdentity | undefined;
+      await waitFor(async () => {
+        try {
+          recovered = await windows.createInstance({
+            view: "shared",
+          });
+          return true;
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            "code" in error &&
+            error.code === "BUSY"
+          ) {
+            return false;
+          }
+          throw error;
+        }
+      });
+      assert(recovered);
+      await waitFor(
+        () =>
+          recovered !== undefined && arrivals(recovered.windowId).length === 1,
+      );
+      assert((await action(recovered, "read")).startsWith("persisted|"));
       assert(!records.some((record) => record.action === "error"));
     }
     for (const identity of await windows.listInstances()) {

@@ -210,6 +210,9 @@ export class WebView {
           this.processHandles.set(pid[0] ?? 0, this.browserHandle);
           this.hooks.log("webview-ready", {
             browserPid: pid[0],
+            browserVersion: this.environment
+              ? getString(this.environment, 5)
+              : "",
           });
           if (this.closing) {
             return;

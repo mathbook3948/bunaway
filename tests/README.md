@@ -352,4 +352,6 @@ macOS 배포 회귀는 날짜와 바이너리 데이터를 포함한 추가 plis
 `lifecycle/windows-multiple-windows.ts`는 실제 WebView2에서 같은 뷰의 여러 창, 응답 및 이벤트 라우팅,
 원래 컨텍스트 취소, 탐색과 ID 유지, 재생성과 ID 교체, 공유 쿠키 및 localStorage,
 격리 프로필의 재생성 보존과 새 생성 초기화, 모달 소유 관계, 최종 삭제와 앱 재실행을 확인한다.
+공유 브라우저 프로세스 장애에서 해당 창의 정리, 격리된 창의 계속 동작과 새 공유 환경 복구도 확인한다.
+실행한 OS, Bun revision과 WebView2 버전은 `build/windows-multiple-windows-results.json`에 기록한다.
 CI의 windows-native 작업은 `mise run host:windows`를 통해 이 검사를 실행한다.
