@@ -44,15 +44,10 @@ const policy: Policy = {
 test("window settings preserve deferred startup and require unique policy-backed views", () => {
   expect(readWindowSpecs(specs, policy)).toEqual(specs);
   for (const invalid of [
-    [],
     [
       ...specs,
       specs[0],
     ],
-    specs.map((spec) => ({
-      ...spec,
-      startup: false,
-    })),
     [
       {
         ...specs[0],
@@ -101,6 +96,37 @@ test("window settings preserve deferred startup and require unique policy-backed
   ]) {
     expect(() => readWindowSpecs(invalid, policy)).toThrow();
   }
+});
+
+test("window catalogs accept an empty or fully deferred Windows start without weakening declaration validation", () => {
+  expect(readWindowSpecs([], policy)).toEqual([]);
+  const deferred = specs.map((spec) => ({
+    ...spec,
+    startup: false,
+  }));
+  expect(readWindowSpecs(deferred, policy)).toEqual(deferred);
+  expect(() =>
+    readWindowSpecs(
+      [
+        {
+          ...deferred[0],
+          home: "https://remote.example/",
+        },
+      ],
+      policy,
+    ),
+  ).toThrow("allowed app origin");
+  expect(() =>
+    readWindowSpecs(
+      Array.from(
+        {
+          length: 129,
+        },
+        () => specs[0],
+      ),
+      policy,
+    ),
+  ).toThrow("0 and 128");
 });
 
 test("window size constraints accept nullable axes and reject invalid or contradictory bounds", () => {

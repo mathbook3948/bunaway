@@ -68,6 +68,15 @@ CLI가 개발 서버를 실행하므로 포트 5173에 별도 서버가 실행 �
 
 명령 핸들러에서 예기치 않은 예외가 발생했습니다. 개발 터미널의 해당 명령 이름과 원래 오류, 스택을 확인하세요. Windows 앱 로그에도 `command-failed`로 기록됩니다. UI 응답에는 내부 오류 메시지나 스택을 포함하지 않습니다.
 
+## app.windows has no startup window
+
+Windows 앱의 창 선언이 비어 있거나 모두 `startup: false`인데 실행 유지 설정이 없습니다.
+앱 정의의 `desktop.tray` 또는 `desktop.closeBehavior: "keep-alive"`를 지정하세요.
+백엔드 타이머나 `onOpen`, `beforeQuit`만 지정해도 이 오류를 해결할 수는 없습니다.
+CLI 설정 검증은 앱 정의를 실행하지 않으므로 이 조건은 앱 시작 때 검사합니다.
+`desktop.closeBehavior: "hide"`에는 유효한 트레이 tooltip도 필요합니다.
+macOS는 창 없는 시작을 아직 지원하지 않으므로 시작 창을 하나 이상 선언해야 합니다.
+
 ## 플러그인 초기화 또는 종료 훅 실패
 
 개발 터미널에서 `Plugin <이름> setup failed:` 또는 `Plugin <이름> stop failed:` 뒤의 원래 오류와 스택을 확인하세요.

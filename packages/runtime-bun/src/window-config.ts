@@ -23,15 +23,16 @@ function object(value: unknown): Record<string, unknown> {
 /**
  * Validates window definitions against the app origin and view policy.
  * A development URL, when supplied, becomes the required home origin.
+ * Startup liveness is validated by the host after loading the app definition.
  */
 export function readWindowSpecs(
   value: unknown,
   policy: Policy,
   developmentUrl?: string,
 ): WindowSpec[] {
-  if (!Array.isArray(value) || !value.length || value.length > MAX_WINDOWS) {
+  if (!Array.isArray(value) || value.length > MAX_WINDOWS) {
     throw new Error(
-      "windows must contain between 1 and 128 window definitions.",
+      "windows must contain between 0 and 128 window definitions.",
     );
   }
   const seen = new Set<string>();
@@ -196,9 +197,6 @@ export function readWindowSpecs(
           }),
     };
   });
-  if (!specs.some((spec) => spec.startup !== false)) {
-    throw new Error("At least one window must open at startup.");
-  }
   return specs;
 }
 

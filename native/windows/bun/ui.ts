@@ -57,7 +57,19 @@ let initialized = false;
 let windows: Windows | undefined;
 let adapters: Awaited<ReturnType<typeof operations>> | undefined;
 let tray: Tray | undefined;
+let controlWindow: bigint | undefined;
+let showRequested = false;
 let quitPending = false;
+/** Commit app shutdown once, bypassing user quit veto for explicit destruction or host interruption. */
+function signalClosing() {
+  if (closingSent) {
+    return;
+  }
+  closingSent = true;
+  channel.notify({
+    kind: "closing",
+  });
+}
 function requestQuit(reason: "last-window" | "tray") {
   if (stopping || quitPending) {
     return;
@@ -69,7 +81,11 @@ function requestQuit(reason: "last-window" | "tray") {
   });
 }
 function visibility(action: "show" | "hide") {
-  if (stopping) {
+  if (stopping || closingSent) {
+    return;
+  }
+  showRequested = action === "show";
+  if (showRequested) {
     return;
   }
   const nativeWindows = windows;
@@ -80,12 +96,43 @@ function visibility(action: "show" | "hide") {
     if (view.boundary.closed) {
       continue;
     }
-    if (action === "show") {
-      nativeWindows.focus(view.native.hwnd);
-    } else {
-      nativeWindows.show(view.native.hwnd, false);
-    }
+    nativeWindows.show(view.native.hwnd, false);
   }
+}
+
+/** Restore live views or create the first declaration after old views and API operations finish. */
+function showWindows() {
+  if (!showRequested || stopping || closingSent) {
+    return;
+  }
+  assert(windows);
+  const live = [
+    ...views.values(),
+  ].filter((view) => !view.boundary.closed);
+  if (live.length) {
+    for (const view of live) {
+      windows.focus(view.native.hwnd);
+    }
+    showRequested = false;
+    return;
+  }
+  // The pump owns native cleanup. Waiting here also avoids racing windows.create/recreate.
+  if (
+    adapters?.busy() ||
+    [
+      ...views.values(),
+    ].some((view) => !view.cleaned)
+  ) {
+    return;
+  }
+  const first = config.windows[0];
+  if (first) {
+    createWindow(first);
+    const view = views.get(first.view);
+    assert(view);
+    windows.focus(view.native.hwnd);
+  }
+  showRequested = false;
 }
 type ViewState = {
   boundary: ViewBoundary;
@@ -458,12 +505,13 @@ function startViews() {
  */
 async function closeWindow(
   viewId: string,
-  mode: "close" | "recreate" | "force" = "close",
+  mode: "close" | "recreate" | "force" | "destroy" = "close",
 ): Promise<boolean> {
   const view = views.get(viewId);
   assert(view);
+  const forced = mode === "force" || mode === "destroy";
   view.pendingClose = false;
-  if (mode === "force") {
+  if (forced) {
     replacements.delete(viewId);
   }
   if (view.boundary.closed) {
@@ -483,21 +531,27 @@ async function closeWindow(
       view: entry[1],
     };
   });
-  if (
-    mode !== "force" &&
-    subtree.some((child) => closingWindows.has(child.id))
-  ) {
+  if (!forced && subtree.some((child) => closingWindows.has(child.id))) {
     throw new BunawayError({
       code: "BUSY",
       message: "Window close is already pending.",
     });
   }
-  if (mode === "force") {
+  if (forced) {
     for (const child of subtree) {
       if (child.view !== view) {
         child.view.replacementCancelled = true;
       }
       commitClose(child.viewId, child.view);
+    }
+    // Internal failed/cancelled creation preserves residency; public last-window destroy ends the app.
+    if (
+      mode === "destroy" &&
+      [
+        ...views.values(),
+      ].every((candidate) => candidate.boundary.closed)
+    ) {
+      signalClosing();
     }
     return true;
   }
@@ -551,6 +605,7 @@ async function closeWindow(
     }
     if (
       mode === "close" &&
+      config.desktop?.closeBehavior !== "keep-alive" &&
       (quitPending ||
         [
           ...views.values(),
@@ -655,7 +710,7 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         focus: () => nativeWindows.focus(hwnd),
         activate: () => nativeWindows.activate(hwnd),
         close: () => closeWindow(viewId),
-        destroy: () => closeWindow(viewId, "force"),
+        destroy: () => closeWindow(viewId, "destroy"),
         setParent(parent, modal) {
           const id = view.readiness.snapshot().windowId;
           if (
@@ -1032,19 +1087,8 @@ try {
     windowServices,
     packagedPlugins,
   );
-  windows = new Windows(
-    () => {
-      if (closingSent) {
-        return;
-      }
-      closingSent = true;
-      channel.notify({
-        kind: "closing",
-      });
-    },
-    config.icon,
-    config.runtime.id,
-    () => channel.poll(),
+  windows = new Windows(signalClosing, config.icon, config.runtime.id, () =>
+    channel.poll(),
   );
   if (config.desktop?.tray) {
     tray = new Tray(windows, config.desktop.tray.tooltip, (action) => {
@@ -1053,6 +1097,18 @@ try {
       } else {
         requestQuit("tray");
       }
+    });
+  } else if (config.desktop?.closeBehavior === "keep-alive") {
+    // A resident app needs an HWND for the CLI's private shutdown message, even before its first view.
+    controlWindow = windows.create(
+      config.runtime.id,
+      200,
+      200,
+      () => {},
+      false,
+    );
+    log("desktop-control-created", {
+      hwnd: controlWindow.toString(),
     });
   }
   if (tray) {
@@ -1075,6 +1131,7 @@ try {
   while (!stopping) {
     checkCallbacks();
     windows.pump();
+    showWindows();
     for (const [viewId, view] of views) {
       if (view.pendingClose) {
         view.pendingClose = false;
@@ -1109,15 +1166,14 @@ try {
     }
     if (
       !closingSent &&
+      !tray &&
+      config.desktop?.closeBehavior !== "keep-alive" &&
       !adapters?.busy() &&
       [
         ...views.values(),
       ].every((view) => view.boundary.closed)
     ) {
-      closingSent = true;
-      channel.notify({
-        kind: "closing",
-      });
+      signalClosing();
     }
     if (failure) {
       throw failure;
@@ -1172,6 +1228,10 @@ try {
     }
     tray?.dispose();
     tray = undefined;
+    if (controlWindow) {
+      windows?.destroy(controlWindow);
+      controlWindow = undefined;
+    }
     const calls = callbackCalls();
     for (let count = 0; count < 10; count++) {
       windows?.pump();

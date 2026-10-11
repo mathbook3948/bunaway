@@ -7,6 +7,13 @@ Win32 메시지와 WinEvent로 숨김 생성 중 순간 표시, 활성화와 포
 이 두 검증과 계약 검사 결과는 [Windows 실행 기록](../architecture/windows-bun-results.md)에 구분한다.
 macOS 준비 API와 숨김 생성 옵션은 아직 지원하지 않는다.
 
+Windows의 창 없는 시작은 빈 창 선언 또는 모든 `startup: false`로 설정하며
+트레이 또는 `desktop.closeBehavior: "keep-alive"`를 요구한다.
+Windows x64 `10.0.26200.0`, Bun 1.4.2에서 실제 트레이와 WebView2의 지연 생성,
+마지막 창 닫기 뒤 백엔드 유지, 새 세션, 종료 취소, CLI 중단과 Job 강제 종료를 확인했다.
+트레이 입력은 실제 HWND의 콜백 메시지로 검사했으며 물리 마우스 클릭은 포함하지 않는다.
+macOS 창 없는 시작은 `UNSUPPORTED`이며 [Windows 실행 기록](../architecture/windows-bun-results.md)의 범위를 따른다.
+
 현재 저장, 로그, 기능 조회, opener와 clipboard 플러그인은 Windows만 지원한다. 창 플러그인의 기본 제어는 macOS에서도 지원한다. 아래 macOS 파일 저장과 네이티브 API 검증 기록은 이관 전 구현의 기록이다. Bun FFI 제품 경로의 명령, 이벤트와 정책, 복구, 종료 검증은 [새 기록](../architecture/macos-bun-results.md)에 둔다.
 
 기준일: 2026-10-10. “구현”은 출시 지원 보장이 아니다. 실제 OS, CPU와 테스트 범위를

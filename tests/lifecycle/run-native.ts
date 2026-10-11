@@ -88,6 +88,22 @@ if (target === "windows-x64") {
         scenario,
       ]);
     }
+    for (const scenario of [
+      "resident",
+      "resident-empty",
+      "tray",
+      "tray-empty",
+      "destroy-resident",
+      "destroy-resident-tray",
+      "dev-resident",
+      "dev-tray",
+      "dev-pending-tray",
+      "force-tray",
+    ]) {
+      await test("windows-windowless.ts", [
+        scenario,
+      ]);
+    }
     for (const name of [
       "windows-bun-storage.ts",
       "windows-storage-metadata.ts",
