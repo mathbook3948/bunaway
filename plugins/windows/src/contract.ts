@@ -506,6 +506,69 @@ export const windowOperations = {
       type: "boolean",
     },
   },
+  "windows.destroy": windowStateResult,
+  "windows.setParent": {
+    input: {
+      ...windowTarget,
+      properties: {
+        ...windowTarget.properties,
+        parent: {
+          anyOf: [
+            {
+              const: null,
+            },
+            windowTarget.properties.view,
+          ],
+        },
+        modal: {
+          type: "boolean",
+        },
+      },
+      required: [
+        "view",
+        "parent",
+        "modal",
+      ],
+    },
+    output: {
+      const: null,
+    },
+  },
+  "windows.getParent": {
+    input: windowTarget,
+    output: windowLookupOutput,
+  },
+  "windows.getOwner": {
+    input: windowTarget,
+    output: windowLookupOutput,
+  },
+  "windows.getChildren": {
+    input: windowTarget,
+    output: {
+      type: "array",
+      maxItems: 128,
+      items: windowIdentitySchema,
+    },
+  },
+  "windows.setEnabled": {
+    input: {
+      ...windowTarget,
+      properties: {
+        ...windowTarget.properties,
+        enabled: {
+          type: "boolean",
+        },
+      },
+      required: [
+        "view",
+        "enabled",
+      ],
+    },
+    output: {
+      const: null,
+    },
+  },
+  "windows.isEnabled": windowStateResult,
   "windows.setSize": {
     input: {
       ...windowTarget,

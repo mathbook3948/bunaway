@@ -62,6 +62,7 @@ if (target === "windows-x64") {
     await test("windows-bun-window-api.ts");
     await test("windows-window-events.ts");
     await test("windows-window-readiness.ts");
+    await test("windows-owned-modal.ts");
     await run(
       [
         inputs.bun,
@@ -92,6 +93,10 @@ if (target === "windows-x64") {
       "resident-empty",
       "tray",
       "tray-empty",
+      "destroy-resident",
+      "destroy-resident-tray",
+      "destroy-recreate-resident",
+      "destroy-recreate-tray",
       "dev-resident",
       "dev-tray",
       "dev-pending-tray",

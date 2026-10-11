@@ -254,6 +254,10 @@ if (!process.argv.includes("--child")) {
           scenario === "dev-pending-tray" ? 1 : 0,
           "CLI interruption must bypass beforeQuit",
         );
+      } else if (scenario.startsWith("destroy-")) {
+        assert.equal(quitChecks, 0, "trusted destroy must bypass beforeQuit");
+        assert(verified);
+        assert.equal(created, 1);
       } else {
         assert.equal(quitChecks, 2);
         assert(empty || verified);
@@ -387,6 +391,49 @@ if (!process.argv.includes("--child")) {
       });
     }
     await ready();
+    if (scenario.startsWith("destroy-")) {
+      let recreation: Promise<void> | undefined;
+      if (scenario.startsWith("destroy-recreate-")) {
+        recreation = assert.rejects(
+          call("windows.recreate", {
+            view: "main",
+          }),
+          {
+            code: "CANCELLED",
+          },
+        );
+        // Observe the old session's retirement before destroying its pending replacement.
+        await waitFor(
+          async () =>
+            (
+              await call("windows.getReadiness", {
+                view: "main",
+              })
+            ).sdk === "cancelled",
+        );
+      } else {
+        await backend.host.call(
+          registry.operation("windows.setCloseConfirmation"),
+          {
+            view: "main",
+            message: "Trusted destroy must bypass this confirmation",
+          },
+        );
+      }
+      emit("verified");
+      await call("windows.destroy", {
+        view: "main",
+      }).catch((error: unknown) => {
+        assert(
+          error instanceof Error &&
+            "code" in error &&
+            error.code === "CANCELLED",
+        );
+      });
+      await recreation;
+      assert.equal(attempts, 0);
+      return;
+    }
     const original = await call("windows.getSnapshot", {
       view: "main",
     });
@@ -501,7 +548,7 @@ if (!process.argv.includes("--child")) {
         ],
         desktop: {
           // Empty tray-only apps also exercise the default quit policy with no startup views.
-          ...(!(hasTray && empty)
+          ...(!(hasTray && empty) && scenario !== "destroy-recreate-tray"
             ? {
                 closeBehavior: "keep-alive" as const,
               }
@@ -553,6 +600,14 @@ if (!process.argv.includes("--child")) {
           backend: {
             permissions: [
               "windows:list",
+              {
+                identifier: "windows:destroy",
+                allow: [
+                  {
+                    view: "main",
+                  },
+                ],
+              },
               {
                 identifier: "windows:control",
                 allow: [

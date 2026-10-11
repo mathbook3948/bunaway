@@ -164,6 +164,11 @@ Close confirmation uses a native Yes/No dialog with No selected by default.
 WM_CLOSE and WebView close requests defer confirmation outside native callbacks.
 Window close operations also honor close-to-tray and last-window quit vetoes.
 Recreation bypasses those app quit controls while preserving close confirmation.
+Windows의 `setParent`는 현재 `windowId`로 최상위 owner 관계를 맺는다.
+모달 자식은 부모 입력을 차단하며 여러 모달의 마지막 자원 정리 뒤 이전 enabled 상태를 복원한다.
+부모 종료는 모든 자식의 확인을 먼저 검사하고 자식 세션, WebView와 HWND 정리 뒤 부모를 해제한다.
+신뢰된 백엔드 `destroy`는 별도 대상 권한으로 확인과 종료 취소를 우회한다.
+`tests/lifecycle/windows-owned-modal.ts`는 실제 UI Worker와 WebView2로 해당 종료 경쟁을 검사한다.
 Deferred and recreated windows inherit the verified development DevTools setting.
 Shutdown bypasses confirmation.
 Browser process failure also closes the affected window without confirmation.

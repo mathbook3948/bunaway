@@ -1,5 +1,10 @@
 # Tests
 
+`windows-windowless.ts`의 `destroy-recreate-resident`와 `destroy-recreate-tray`는
+마지막 창 재생성의 이전 세션이 폐기된 뒤 destroy를 호출합니다. 새 HWND를 만들지 않고
+재생성을 CANCELLED로 끝내며 keep-alive와 기본 quit 트레이 앱이 beforeQuit 없이
+StopHook과 네이티브 자원 정리를 완료하는지 확인합니다. `mise run host:windows`에 포함합니다.
+
 Android의 `FrameDispatcherTest`는 읽기 스레드의 직접 전달이 멈춰도 별도 타이머가
 실행되는지, 유휴 이후에도 기한을 감시하는지와 종료 제어 뒤의 응답 폐기를 검사한다.
 `ProtocolTest`는 큰 한글과 이모지, 문자열과 키의 잘못된 surrogate, 원문 payload 전달의
@@ -157,6 +162,17 @@ Windows 이벤트 전송 회귀는 실제 `MessageChannel`과 Core를 연결한�
 Windows 호스트 시나리오는 `lifecycle/windows-host.ts`에 두고 PID 조회, 창 닫기와
 프로세스 종료 감시는 `lifecycle/windows-host-processes.ts`에서 실행한다.
 
+`api/window-relations.test.ts`는 trusted destroy의 백엔드 출처, 별도 권한과 대상 권한,
+관계 양쪽 권한과 식별자 노출, 입력과 출력 경계를 확인한다.
+`lifecycle/windows-window-relations.test.ts`는 실제 HWND의 owner와 enabled,
+여러 모달의 원래 enabled 복원, 순환과 종료된 ID 거부, 네이티브 실패의 변경 취소,
+자식부터의 자원 해제 순서를 검사한다. `lifecycle/windows-owned-modal.ts`는 실제
+WebView2 세션과 UI Worker로 웹의 destroy 거부, 닫기 확인 거절, 모달 자식 재생성,
+부모 종료와 새 ID, 마지막 창 집합의 종료 취소와 오류, 대기 중 trusted destroy를
+검사한다. 실제 WebView2 정리 기한 초과는 성공으로 간주하지 않는다.
+`windows-windowless.ts`의 destroy 시나리오는 keep-alive와 트레이 상주 앱에서도
+마지막 창의 trusted destroy가 닫기 확인과 beforeQuit를 우회하고 앱을 정리하는지 검사한다.
+
 `api/opener.test.ts`는 HTTP/HTTPS 계약과 파일 API, 정확한 절대 경로 scope, 작업별 권한과 deny 우선 규칙을 확인한다.
 `lifecycle/windows-opener.test.ts`는 실제 Windows I/O STA, 없는 파일과 디렉터리, 공유 잠금, junction,
 하드 링크, 대소문자 별칭 거부와 파일 핸들 정리를 검사한다. 실제 I/O Worker의 승인 거부와
@@ -236,7 +252,8 @@ SDK 호출 컨텍스트, 대상 권한, 닫힌 창 및 시작 전 취소를 GUI 
 같은 격리된 DLL 대체 환경에서 최대화 요청을 무시하도록 해도 성공으로 반환하지 않고
 네이티브 상태 확인 후 공개 `INTERNAL` 오류로 변환하는지 검사한다.
 `lifecycle/window-operations.test.ts`는 정리 대기 중 중복 생성, 마지막 창 재생성 예약,
-기존 문서 취소, 닫기 거절과 종료 경쟁을 검증한다. Windows 네이티브 실행기는
+기존 문서 취소, 닫기 거절과 종료 경쟁을 검증한다. 미지원 destroy 호출이 실패해도
+진행 중인 재생성은 새 창 생성까지 완료하는지도 확인한다. Windows 네이티브 실행기는
 `windows-bun-window-api.ts`로 크기와 위치, 전체화면 복원, 확인 대화상자 거절과 승인,
 보조 창의 반복 생성과 새로운 세션, 자기 창 재생성을 추가 검증한다.
 닫기 확인을 설정한 창의 브라우저 프로세스를 종료해 확인 없이 닫히는지도 검증한다.
