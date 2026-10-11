@@ -32,10 +32,11 @@ const app: AppLaunch = {
 
 test("autostart exposes strict app-scoped read and configure contracts", () => {
   expect([
-    ...registry.permissions.keys(),
+    ...registry.operations.keys(),
   ]).toEqual([
-    "autostart:configure",
-    "autostart:read",
+    "autostart.enable",
+    "autostart.disable",
+    "autostart.getStatus",
   ]);
   for (const payload of [
     {
@@ -70,8 +71,9 @@ test("autostart exposes strict app-scoped read and configure contracts", () => {
     }),
   ).toThrow();
   for (const permission of [
-    "autostart:read",
-    "autostart:configure",
+    "autostart.enable",
+    "autostart.disable",
+    "autostart.getStatus",
   ]) {
     const policy = {
       permissions: [
@@ -79,25 +81,17 @@ test("autostart exposes strict app-scoped read and configure contracts", () => {
       ],
     };
     expect(
-      registry.allowed(
-        policy,
-        {
-          operation: "autostart.getStatus",
-          payload: null,
-        },
-        () => false,
-      ),
-    ).toBe(permission === "autostart:read");
+      registry.allowed(policy, {
+        operation: "autostart.getStatus",
+        payload: null,
+      }),
+    ).toBe(permission === "autostart.getStatus");
     expect(
-      registry.allowed(
-        policy,
-        {
-          operation: "autostart.disable",
-          payload: null,
-        },
-        () => false,
-      ),
-    ).toBe(permission === "autostart:configure");
+      registry.allowed(policy, {
+        operation: "autostart.disable",
+        payload: null,
+      }),
+    ).toBe(permission === "autostart.disable");
   }
 });
 

@@ -36,7 +36,7 @@ export function matchesCapabilities(value: unknown, platform: string): boolean {
     if (!capability || typeof capability !== "object") {
       return false;
     }
-    const { name, support, permission } = capability;
+    const { name, support } = capability;
     if (!names.includes(name) || seen.has(name)) {
       return false;
     }
@@ -45,6 +45,6 @@ export function matchesCapabilities(value: unknown, platform: string): boolean {
       name.startsWith("windows.") && platform === "darwin"
         ? "unsupported"
         : "supported";
-    return support === expected && permission === "not-required";
+    return support === expected;
   });
 }

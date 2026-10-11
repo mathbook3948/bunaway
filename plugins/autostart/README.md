@@ -1,8 +1,12 @@
 # @bunaway/plugin-autostart
 
+`src/index.ts`는 계약과 플랫폼 선언을 조립하고 공개 함수를 export합니다.
+`src/contract.ts`는 작업 스키마와 타입, 네이티브 호출 검증을 소유하고 `src/calls.ts`는 편의 호출을 담당합니다.
+플랫폼 구현은 계약을 직접 읽으며 공개 진입점을 역으로 import하지 않습니다.
+
 Windows 사용자별 로그인 자동 실행을 제공하는 선택 네이티브 플러그인입니다.
 앱에 패키지를 설치하고 `autostartPlugin`을 등록합니다. 등록 변경에는
-`autostart:configure`, 조회에는 `autostart:read` 권한이 필요합니다.
+`autostart.enable`, `autostart.disable`, 조회에는 `autostart.getStatus` 권한이 필요합니다.
 
 ```ts
 import { autostartPlugin, enableAutostart, getAutostartStatus, disableAutostart } from "@bunaway/plugin-autostart";

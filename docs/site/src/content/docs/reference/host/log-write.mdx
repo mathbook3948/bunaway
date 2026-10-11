@@ -38,9 +38,9 @@ await log.write({
 
 ## 정책과 결과
 
-logPlugin을 등록하고 호출 출처의 permissions에 `log:write`를 허용합니다. 화면의 로그 함수에는 commands의 `plugin.log.write` 허용도 필요합니다.
+logPlugin을 등록하고 호출 출처의 permissions에 `log.write`를 허용합니다. 화면의 로그 함수에는 commands의 `plugin.log.write` 허용도 필요합니다.
 기본 템플릿은 로그를 설치하거나 허용하지 않습니다. 로그 패키지와 권한을 사용하는 앱에 추가하세요.
-플러그인에 `requiredPermissions: ["log:write"]`를 선언하면 시작할 때 backend.permissions에 권한이 명시됐는지 검사합니다.
+플러그인에 `requiredPermissions: ["log.write"]`를 선언하면 시작할 때 backend.permissions에 권한이 명시됐는지 검사합니다.
 성공 결과는 `null`입니다.
 
 Windows 구현은 앱 데이터의 `logs/app.log`에 JSON 줄을 추가하고

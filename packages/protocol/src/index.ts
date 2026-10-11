@@ -39,7 +39,6 @@ export {
   type HostOperationContract,
   hostCallSchema,
   type NativePluginContract,
-  type PermissionContract,
   parseHostCall,
   serializeHostCall,
 } from "./host-api.ts";
@@ -47,7 +46,6 @@ export {
   type NativeRegistration,
   NativeRegistry,
   type NativeRegistryOptions,
-  type PermissionMatcher,
 } from "./native-registry.ts";
 export {
   bootstrapSchema,

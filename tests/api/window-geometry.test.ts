@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 import { type CommandContext, command } from "@bunaway/backend";
 import type { NativeWindowServices } from "@bunaway/plugin-api/native";
 import {
@@ -14,7 +15,7 @@ import {
   NativeRegistry,
 } from "@bunaway/protocol";
 import { bindHostAPI } from "#core/host-api";
-import { createOperations } from "#plugins/windows/src/windows";
+import { createOperations } from "#plugins/windows/src/platforms/windows";
 
 const queries = [
   "getContentSize",
@@ -380,7 +381,7 @@ test("geometry schemas reject malformed shapes and out of range inputs and outpu
   ).toBe(2147483647);
 });
 
-test("geometry adapter selects the area, converts at current DPI, and enforces target permission and lifetime", async () => {
+test("geometry adapter selects the area, converts at current DPI, and enforces operation permission and lifetime", async () => {
   let closed = false;
   let dpi = 144;
   let fullscreen = false;
@@ -481,14 +482,7 @@ test("geometry adapter selects the area, converts at current DPI, and enforces t
     requestId: "geometry",
     permissions: {
       permissions: [
-        {
-          identifier: "windows:control",
-          allow: [
-            {
-              view: "main",
-            },
-          ],
-        },
+        ...windowPermissions(),
       ],
     },
   };
@@ -562,7 +556,7 @@ test("geometry adapter selects the area, converts at current DPI, and enforces t
         context,
       ),
     ).rejects.toMatchObject({
-      code: "PERMISSION_DENIED",
+      code: "INVALID_ARGUMENT",
     });
     for (const denied of [
       true,
@@ -580,23 +574,7 @@ test("geometry adapter selects the area, converts at current DPI, and enforces t
           {
             ...context,
             permissions: {
-              permissions: [
-                {
-                  identifier: "windows:control",
-                  allow: [
-                    {
-                      view,
-                    },
-                  ],
-                  deny: denied
-                    ? [
-                        {
-                          view,
-                        },
-                      ]
-                    : [],
-                },
-              ],
+              permissions: denied ? [] : windowPermissions(),
             },
           },
         ),
@@ -768,21 +746,7 @@ test("geometry adapter selects the area, converts at current DPI, and enforces t
       execute(operation, payload, "backend", {
         ...context,
         permissions: {
-          permissions: [
-            {
-              identifier: "windows:control",
-              allow: [
-                {
-                  view: "main",
-                },
-              ],
-              deny: [
-                {
-                  view: "main",
-                },
-              ],
-            },
-          ],
+          permissions: [],
         },
       }),
     ).rejects.toMatchObject({
@@ -799,7 +763,7 @@ test("geometry adapter selects the area, converts at current DPI, and enforces t
         context,
       ),
     ).rejects.toMatchObject({
-      code: "PERMISSION_DENIED",
+      code: "INVALID_ARGUMENT",
     });
     closed = true;
     await expect(

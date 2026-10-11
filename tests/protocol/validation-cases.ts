@@ -659,47 +659,23 @@ validationCases.push(
   },
 );
 
-for (const [path, accepted] of [
-  [
-    "notes\u2028/../escape",
-    false,
-  ],
-  [
-    "notes\u2029/../escape",
-    false,
-  ],
-  [
-    "notes\u2028/./escape",
-    false,
-  ],
-  [
-    "notes\u2029/./escape",
-    false,
-  ],
-  [
-    "notes/../\u2028escape",
-    false,
-  ],
-  [
-    "notes/./\u2029escape",
-    false,
-  ],
-  [
-    "notes\u2028/file.txt",
-    true,
-  ],
-  [
-    "notes\u2029/file.txt",
-    true,
-  ],
+for (const path of [
+  "notes\u2028/../escape",
+  "notes\u2029/../escape",
+  "notes\u2028/./escape",
+  "notes\u2029/./escape",
+  "notes/../\u2028escape",
+  "notes/./\u2029escape",
+  "notes\u2028/file.txt",
+  "notes\u2029/file.txt",
 ] as const) {
   validationCases.push({
     name: `Unicode path ${JSON.stringify(path)}`,
     schema: hostOperations["storage.readText"].input,
     value: {
-      scope: "appData",
       path,
     },
-    accepted,
+    // Unicode separators are valid strings; the OS implementation checks path elements.
+    accepted: true,
   });
 }

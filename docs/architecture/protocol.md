@@ -171,12 +171,11 @@ payload에 같은 이름의 필드가 있더라도 권한에 사용하지 않는
 브리지를 주입하지 않는 것이 기본이다. backend 자체 작업은 backend 권한을 사용하며
 WebView 작업을 backend 작업으로 승격하지 않는다.
 
-`view.host`와 `backend`는 `{ permissions }` 구조를 사용한다. 각 항목은 scope가 없는
-권한 식별자 문자열 또는 `{ identifier, allow?, deny? }` 객체다. 리소스 범위와 비교 규칙은
-권한을 소유한 플러그인이 정한다. 저장 권한의 scope는 `appData` 또는 `temp`와
-`pathPrefix`로 구성한다. 접두어 일치는 경로 세그먼트 단위이므로 `notes`가
-`notes-private`를 허용하지 않는다. 파일을 여는 네이티브 어댑터는 실제 상대 경로,
-심볼릭 링크 탈출, 대상 교체와 OS 권한을 다시 검사해야 한다. 정책 파서는 파일 접근을
+`view.host`와 `backend`는 `{ permissions }` 구조를 사용한다. 각 항목은 완전한
+operation 이름 문자열이며 작업마다 독립적으로 허용한다. 파일별 접근이나 특정 창의
+제어 같은 앱 규칙은 백엔드 앱 명령이 검사한다. 화면에는 그 앱 명령만 허용한다.
+저장 위치와 파일별 접근 규칙은 앱이 정하며 storage에는 경로를 전달한다. 파일을 여는 네이티브 어댑터는 플랫폼 경로 문법,
+링크, 대상 교체와 OS 권한을 검사해야 한다. 정책 파서는 파일 접근을
 실행하거나 보호하지 않는다.
 
 ```json
@@ -196,15 +195,7 @@ WebView 작업을 backend 작업으로 승격하지 않는다.
       ],
       "host": {
         "permissions": [
-          {
-            "identifier": "storage:read-text",
-            "allow": [
-              {
-                "scope": "appData",
-                "pathPrefix": "notes"
-              }
-            ]
-          }
+          "storage.readText"
         ]
       }
     }
@@ -217,6 +208,6 @@ WebView 작업을 backend 작업으로 승격하지 않는다.
 
 command 이름을 직접 허용하는 정책이다. [C 공통 API](./common-api.md)도 명령 이름을
 그대로 사용하며 권한 별칭으로 해석하지 않는다. 기능 조회는 선택 플러그인인
-`@bunaway/plugin-capabilities`가 `plugin.capabilities.get` 명령과 `capabilities:get`
+`@bunaway/plugin-capabilities`가 `plugin.capabilities.get` 명령과 `capabilities.get`
 권한을 제공한다. 플러그인을 앱에 등록하고 호출 출처의 정책에서 명령과 권한을 각각
 허용해야 한다.

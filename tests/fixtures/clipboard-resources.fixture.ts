@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createOperations } from "#plugins/clipboard/src/windows";
+import { createOperations } from "#plugins/clipboard/src/platforms/windows";
 import { createClipboard } from "#plugins/clipboard/src/win32";
 import { state } from "./clipboard-ffi.ts";
 
@@ -11,9 +11,9 @@ const context = {
   requestId: "test",
   permissions: {
     permissions: [
-      "clipboard:read-text",
-      "clipboard:write-text",
-      "clipboard:clear",
+      "clipboard.readText",
+      "clipboard.writeText",
+      "clipboard.clear",
     ],
   },
 };
@@ -67,7 +67,7 @@ await assert.rejects(
       ...context,
       permissions: {
         permissions: [
-          "clipboard:write-text",
+          "clipboard.writeText",
         ],
       },
     }),

@@ -99,8 +99,8 @@ WebView 전송은 close 메시지로 호스트에 종료를 알리며 호스트�
 사용자 콜백의 예외로 다른 요청이나 transport 수신 루프를 중단하지 않는다.
 
 기능 조회는 @bunaway/plugin-capabilities의 capabilities()가 담당한다.
-화면은 plugin.capabilities.get 명령과 capabilities:get 권한을 허용해야 한다.
-기능 지원과 OS 권한은 별도 필드다. 같은 capability 이름은 중복할 수 없다.
+화면은 plugin.capabilities.get 명령과 capabilities.get 권한을 허용해야 한다.
+기능 조회는 플랫폼 지원을 반환한다. OS 동의 상태 조회와 요청은 해당 기능 플러그인이 소유한다. 같은 capability 이름은 중복할 수 없다.
 
 ## 앱 정의와 코어
 
@@ -194,17 +194,18 @@ SDK는 취소 또는 시간 초과 후 늦은 응답을 기다리는 구독 요�
 
 | operation | input | output |
 | --- | --- | --- |
-| `storage.readText` | `{ scope: appData/temp, path }` | string |
-| `storage.writeText` | `{ scope, path, text }` | null |
+| `storage.readText` | `{ path }` | string |
+| `storage.writeText` | `{ path, text }` | null |
 | `log.write` | `{ level: debug/info/warn/error, message, details? }` | null |
-| `capabilities.get` | null | `{ name, support, permission, reason? }[]` |
+| `capabilities.get` | null | `{ name, support, reason? }[]` |
 
 공통 host-call.schema.json은 작업 이름과 JSON envelope를 검증한다. 입력과 출력 schema는 개별 플러그인의 index.ts에서 정의한다.
-요청 스키마 검사는 파일 권한 검사가 아니다. path는 `/`로 구분한 상대 경로이고,
-공통 스키마는 절대, 드라이브 경로, 점 경로 요소, 역슬래시, NUL, 개행을 거부한다. 실제 파일을 여는
-네이티브 경계에서 절대 경로, 순회, 심볼릭 링크, 대상 교체와 scope 권한을 검사한다.
-U+2028, U+2029가 들어간 경로도 전체 문자열에서 점 경로 요소를 검사한다.
-지원 여부와 permission 값은 각각 실제 플랫폼 지원과 현재 OS 동의를 반영한다.
+요청 스키마 검사는 파일 권한 검사가 아니다. 저장 위치와 파일별 접근 규칙은 앱이 정하고
+storage에는 경로를 전달한다. 공통 스키마는 빈 문자열, NUL과 개행을 거부하며 길이를 제한한다.
+현재 Windows 구현은 드라이브 또는 UNC 공유에서 시작하는 절대 경로를 받는다.
+네이티브 경계에서 플랫폼 경로 문법과 점 경로 요소, 링크, 경로 별칭과 대상 교체를 검사한다.
+U+2028, U+2029가 들어간 경로도 각 경로 요소를 검사한다. 플러그인은 기본 저장 폴더를 선택하지 않는다.
+지원 여부는 실제 플랫폼 구현을 반영하며 OS 동의 상태는 포함하지 않는다.
 기능 조회는 호출 권한을 부여하지 않으며 네이티브 정책은 실제 operation마다 다시 검사한다.
 
 `bindHostAPI(context, signal, services.callHost, registry)`는 호출 컨텍스트를 고정한다.

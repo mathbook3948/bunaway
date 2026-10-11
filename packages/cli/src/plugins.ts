@@ -1,5 +1,5 @@
 import { mkdir, realpath } from "node:fs/promises";
-import { isAbsolute, resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { type NativePluginContract, NativeRegistry } from "@bunaway/protocol";
 import { readAppManifest } from "@bunaway/runtime-bun/app-manifest";
@@ -18,15 +18,112 @@ export type InstalledPlugin = {
   root: string;
   version: string;
   native: NativePluginContract;
-  authorization?: string;
   targets: Record<
     string,
     {
       execution: "io" | "ui";
       operations: string;
+      supportedOperations?: string[];
     }
   >;
 };
+
+/** Read declaration metadata in an isolated Bun process without invoking factories. */
+export async function readPluginDeclaration(
+  entry: string,
+  directory: string,
+  packageName?: string,
+) {
+  // Read the declaration without importing the app, calling its API or initializing adapters.
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      "-e",
+      `const { default: plugin } = await import(${JSON.stringify(pathToFileURL(entry).href)}); const packageName = ${JSON.stringify(packageName ?? null)}; process.stdout.write(JSON.stringify({ name: plugin.name, version: plugin.version, native: plugin.native, nativePlatforms: plugin.nativePlatforms && Object.fromEntries(Object.entries(plugin.nativePlatforms).map(([os, target]) => [os, { ...target, create: typeof target.create === "function", ...(packageName ? { module: Bun.resolveSync(packageName + "/native/" + os, ${JSON.stringify(directory)}) } : {}) }])) }));`,
+    ],
+    {
+      cwd: directory,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+  const output = new Response(child.stdout).text();
+  const errors = new Response(child.stderr).text();
+  if ((await child.exited) !== 0) {
+    throw new Error(await errors);
+  }
+  const declaration = JSON.parse(await output) as {
+    name: string;
+    version: string;
+    native: NativePluginContract;
+    nativePlatforms: Record<
+      string,
+      {
+        execution: "io" | "ui";
+        create: boolean;
+        module?: string;
+        operations?: string[];
+      }
+    >;
+  };
+  await errors;
+  const native = declaration.native;
+  new NativeRegistry([
+    {
+      name: declaration.name,
+      version: declaration.version,
+      native,
+    },
+  ]);
+  if (
+    !declaration.nativePlatforms ||
+    typeof declaration.nativePlatforms !== "object" ||
+    Array.isArray(declaration.nativePlatforms)
+  ) {
+    throw new Error("Invalid native plugin platform declaration.");
+  }
+  for (const [platform, target] of Object.entries(
+    declaration.nativePlatforms,
+  )) {
+    if (
+      !target ||
+      typeof target !== "object" ||
+      Array.isArray(target) ||
+      ![
+        "windows",
+        "macos",
+        "linux",
+        "android",
+        "ios",
+      ].includes(platform) ||
+      ![
+        "io",
+        "ui",
+      ].includes(target.execution)
+    ) {
+      throw new Error("Invalid native plugin target.");
+    }
+    if (target.create !== true) {
+      throw new Error("Native plugin platforms require an adapter factory.");
+    }
+    if (
+      target.operations !== undefined &&
+      (!Array.isArray(target.operations) ||
+        new Set(target.operations).size !== target.operations.length ||
+        target.operations.some(
+          (operation) =>
+            typeof operation !== "string" ||
+            !native.operations.some(
+              (contract) =>
+                contract.name === `${declaration.name}.${operation}`,
+            ),
+        ))
+    ) {
+      throw new Error("Invalid native plugin operation support.");
+    }
+  }
+  return declaration;
+}
 
 /** Resolve an installed plugin file and reject paths that escape its package. */
 async function contained(root: string, value: unknown): Promise<string> {
@@ -117,102 +214,40 @@ export async function installedPlugins(
         );
       }
     }
-    const descriptor = (await json(
-      await contained(root, manifest.bunaway.plugin),
-    )) as {
-      format: number;
-      name: string;
-      entry: string;
-      platforms: Record<
-        string,
-        {
-          execution: "io" | "ui";
-          operations: string;
-        }
-      >;
-    };
-    if (descriptor.format !== 1 || !descriptor.platforms) {
-      throw new Error("Invalid native plugin descriptor.");
-    }
-    const entry = await contained(root, descriptor.entry);
-    // Read the declaration without importing the app, calling its API or initializing adapters.
-    const child = Bun.spawn(
-      [
-        process.execPath,
-        "-e",
-        `const { default: plugin } = await import(${JSON.stringify(pathToFileURL(entry).href)}); process.stdout.write(JSON.stringify({ name: plugin.name, version: plugin.version, native: plugin.native, matches: typeof plugin.matches === "function" }));`,
-      ],
-      {
-        cwd: project,
-        stdout: "pipe",
-        stderr: "pipe",
-      },
+    const entry = await contained(root, manifest.bunaway.plugin);
+    const declaration = await readPluginDeclaration(
+      entry,
+      project,
+      packageName,
     );
-    const output = new Response(child.stdout).text();
-    const errors = new Response(child.stderr).text();
-    if ((await child.exited) !== 0) {
-      throw new Error(await errors);
-    }
-    const declaration = JSON.parse(await output) as {
-      name: string;
-      version: string;
-      native: NativePluginContract;
-      matches: boolean;
-    };
-    await errors;
-    if (
-      declaration.name !== descriptor.name ||
-      declaration.version !== manifest.version
-    ) {
+    if (declaration.version !== manifest.version) {
       throw new Error(
         "Plugin declaration does not match its installed manifest.",
       );
     }
     const native = declaration.native;
-    new NativeRegistry([
-      {
-        name: descriptor.name,
-        version: manifest.version,
-        native,
-      },
-    ]);
-    const scoped = native.permissions.some((permission) => permission.scope);
-    if (scoped && !declaration.matches) {
-      throw new Error("Scoped plugin permissions require matches.");
-    }
     const targets: InstalledPlugin["targets"] = {};
-    for (const [platform, target] of Object.entries(descriptor.platforms)) {
-      if (
-        ![
-          "windows",
-          "macos",
-          "linux",
-          "android",
-          "ios",
-        ].includes(platform) ||
-        ![
-          "io",
-          "ui",
-        ].includes(target.execution)
-      ) {
-        throw new Error("Invalid native plugin target.");
-      }
+    for (const [platform, target] of Object.entries(
+      declaration.nativePlatforms,
+    )) {
       targets[platform] = {
         execution: target.execution,
-        operations: await contained(root, target.operations),
+        operations: await contained(root, relative(root, target.module ?? "")),
+        ...(target.operations === undefined
+          ? {}
+          : {
+              supportedOperations: target.operations.map(
+                (operation) => `${declaration.name}.${operation}`,
+              ),
+            }),
       };
     }
     result.push({
-      name: descriptor.name,
+      name: declaration.name,
       packageName,
       root,
       version: manifest.version,
       native,
-      ...(scoped
-        ? {
-            authorization: entry,
-          }
-        : {}),
       targets,
     });
   }
@@ -249,9 +284,14 @@ export async function writePluginManifest(
       ...(plugin.targets[platform]
         ? {
             execution: plugin.targets[platform]?.execution,
+            ...(plugin.targets[platform]?.supportedOperations === undefined
+              ? {}
+              : {
+                  supportedOperations:
+                    plugin.targets[platform]?.supportedOperations,
+                }),
           }
         : {}),
-      authorization: plugin.authorization !== undefined,
     })),
     developmentSdk: {},
   });

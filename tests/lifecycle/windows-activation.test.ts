@@ -1,4 +1,5 @@
 import { dlopen } from "bun:ffi";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 import { expect, test } from "bun:test";
 import type {
   NativeWindow,
@@ -6,7 +7,7 @@ import type {
   WindowChange,
   WindowSnapshot,
 } from "@bunaway/plugin-api/native";
-import { createOperations } from "#plugins/windows/src/windows";
+import { createOperations } from "#plugins/windows/src/platforms/windows";
 
 const WM_ACTIVATE = 0x0006;
 
@@ -136,17 +137,7 @@ test.skipIf(process.platform !== "win32")(
           requestId: operation,
           permissions: {
             permissions: [
-              {
-                identifier: "windows:control",
-                allow: [
-                  {
-                    view: "main",
-                  },
-                  {
-                    view: "editor",
-                  },
-                ],
-              },
+              ...windowPermissions(),
             ],
           },
         },

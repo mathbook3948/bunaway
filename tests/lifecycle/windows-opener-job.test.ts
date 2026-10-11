@@ -44,7 +44,7 @@ test.skipIf(!hasExplorerDesktop())(
     const release = resolve(root, "release");
     const launcherPath = resolve(root, "launcher.ts");
     const operationsModule = pathToFileURL(
-      resolve(import.meta.dir, "../../plugins/opener/src/windows.ts"),
+      resolve(import.meta.dir, "../../plugins/opener/src/platforms/windows.ts"),
     ).href;
     const jobModule = pathToFileURL(
       resolve(import.meta.dir, "../../native/windows/bun/job.ts"),

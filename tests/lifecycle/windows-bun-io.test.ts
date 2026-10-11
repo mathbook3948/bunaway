@@ -217,8 +217,7 @@ test.skipIf(process.platform !== "win32")(
         call: {
           operation: "storage.writeText",
           payload: {
-            scope: "temp",
-            path: `${id}.txt`,
+            path: resolve(dataRoot, "temp", `${id}.txt`),
             text: "written",
           },
         },
@@ -327,8 +326,7 @@ test.skipIf(process.platform !== "win32")(
           call: {
             operation: "storage.readText",
             payload: {
-              scope: "temp",
-              path: `${id}.txt`,
+              path: resolve(dataRoot, "temp", `${id}.txt`),
             },
           },
         });

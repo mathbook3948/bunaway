@@ -17,11 +17,11 @@ const registry = new NativeRegistry([
 ]);
 test("clipboard has separate read, write and clear permissions with strict Unicode contracts", () => {
   expect([
-    ...registry.permissions.keys(),
+    ...registry.operations.keys(),
   ]).toEqual([
-    "clipboard:read-text",
-    "clipboard:write-text",
-    "clipboard:clear",
+    "clipboard.readText",
+    "clipboard.writeText",
+    "clipboard.clear",
   ]);
   for (const text of [
     "",
@@ -94,7 +94,7 @@ test("clipboard has separate read, write and clear permissions with strict Unico
   ).toThrow();
 });
 
-test("clipboard grants only the requested operation and rejects scopes", () => {
+test("clipboard grants only the requested operation", () => {
   for (const operation of registry.operations.values()) {
     const call = {
       operation: operation.name,
@@ -108,11 +108,10 @@ test("clipboard grants only the requested operation and rejects scopes", () => {
       registry.allowed(
         {
           permissions: [
-            operation.permission,
+            operation.name,
           ],
         },
         call,
-        () => false,
       ),
     ).toBe(true);
     expect(
@@ -121,11 +120,10 @@ test("clipboard grants only the requested operation and rejects scopes", () => {
           permissions: [],
         },
         call,
-        () => false,
       ),
     ).toBe(false);
-    for (const other of registry.permissions.keys()) {
-      if (other !== operation.permission) {
+    for (const other of registry.operations.keys()) {
+      if (other !== operation.name) {
         expect(
           registry.allowed(
             {
@@ -134,7 +132,6 @@ test("clipboard grants only the requested operation and rejects scopes", () => {
               ],
             },
             call,
-            () => false,
           ),
         ).toBe(false);
       }
@@ -146,16 +143,11 @@ test("clipboard grants only the requested operation and rejects scopes", () => {
       views: [],
       backend: {
         permissions: [
-          {
-            identifier: "clipboard:read-text",
-            allow: [
-              {},
-            ],
-          },
+          "clipboard.readText",
         ],
       },
     }),
-  ).toThrow();
+  ).not.toThrow();
 });
 
 test("clipboard public functions reuse the active command host and validate before dispatch", async () => {
@@ -227,7 +219,7 @@ test("clipboard is independently discoverable as a Windows UI plugin", async () 
   expect(plugin?.targets.macos).toBeUndefined();
   const result = await Bun.build({
     entrypoints: [
-      resolve(import.meta.dir, "../../plugins/clipboard/src/index.ts"),
+      resolve(import.meta.dir, "../../plugins/clipboard/dist/index.js"),
     ],
     target: "browser",
   });

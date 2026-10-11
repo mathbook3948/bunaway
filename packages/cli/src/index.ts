@@ -11,4 +11,5 @@ export {
   syncAndroidProject,
 } from "./android.ts";
 export { templateNames } from "./templates.ts";
+export { buildNativePlugin } from "./plugin-build.ts";
 export type { Template } from "./templates.ts";

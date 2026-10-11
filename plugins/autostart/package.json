@@ -3,12 +3,20 @@
   "version": "0.0.0",
   "type": "module",
   "bunaway": {
-    "plugin": "./plugin.json"
+    "plugin": "./dist/index.js"
   },
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./native/*": {
+      "types": "./dist/types/index.d.ts",
+      "default": "./dist/native/*.js"
+    }
   },
   "scripts": {
+    "build": "bunaway plugin build",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {

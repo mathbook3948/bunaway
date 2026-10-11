@@ -42,14 +42,14 @@ const policy: Policy = {
       ],
       host: {
         permissions: [
-          "log:write",
+          "log.write",
         ],
       },
     },
   ],
   backend: {
     permissions: [
-      "log:write",
+      "log.write",
     ],
   },
 };

@@ -27,9 +27,9 @@ await clipboard.clear(null);
 
 | 함수 | 입력 | 결과 | 권한 |
 | --- | --- | --- | --- |
-| `clipboard.readText` | `null` | `Promise<string \| null>` | `clipboard:read-text` |
-| `clipboard.writeText` | `{ text: string }` | `Promise<null>` | `clipboard:write-text` |
-| `clipboard.clear` | `null` | `Promise<null>` | `clipboard:clear` |
+| `clipboard.readText` | `null` | `Promise<string \| null>` | `clipboard.readText` |
+| `clipboard.writeText` | `{ text: string }` | `Promise<null>` | `clipboard.writeText` |
+| `clipboard.clear` | `null` | `Promise<null>` | `clipboard.clear` |
 
 빈 클립보드나 Windows에서 Unicode 텍스트 형식을 제공하지 않는 클립보드는 `null`입니다. 텍스트 형식이 있고 내용만 비어 있으면 `""`입니다. Windows가 일반 텍스트를 Unicode 텍스트로 변환해 제공하는 경우도 읽습니다.
 
@@ -44,7 +44,7 @@ await clipboard.clear(null);
 ```json
 {
   "commands": ["plugin.clipboard.readText", "plugin.clipboard.writeText", "plugin.clipboard.clear"],
-  "host": { "permissions": ["clipboard:read-text", "clipboard:write-text", "clipboard:clear"] }
+  "host": { "permissions": ["clipboard.readText", "clipboard.writeText", "clipboard.clear"] }
 }
 ```
 

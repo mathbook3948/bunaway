@@ -668,7 +668,7 @@ try {
     );
     const policy = JSON.parse(policyText);
     policy.backend.permissions = [
-      "log:write",
+      "log.write",
     ];
     await updateAsset("assets/policy.json", JSON.stringify(policy));
     let child: ReturnType<typeof launch> | undefined;
@@ -687,7 +687,7 @@ try {
           join(diagnostics, `host-${launchCount}.stderr.log`),
           "utf8",
         ),
-        /Policy references an unregistered permission/,
+        /Policy references an unregistered operation/,
       );
       assert.equal(
         (await hostLog()).some((entry) => entry.event === "host-started"),

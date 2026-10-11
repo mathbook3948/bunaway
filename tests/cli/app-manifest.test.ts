@@ -12,7 +12,7 @@ import {
   MAX_JSON_DEPTH,
   MAX_MESSAGE_BYTES,
   NativeRegistry,
-  parsePolicy,
+  validateValue,
 } from "@bunaway/protocol";
 import {
   parseAppManifest,
@@ -31,14 +31,33 @@ test("generated manifest rejects invalid versions, contracts, routing and SDK pa
         version: "1",
         native: {
           operations: [],
-          permissions: [],
         },
-        authorization: false,
       },
     ],
   };
   expect(parseAppManifest(manifest).plugins[0]?.name).toBe("example");
   for (const value of [
+    {
+      ...manifest,
+      plugins: [
+        {
+          ...manifest.plugins[0],
+          execution: "io",
+          supportedOperations: [
+            "example.missing",
+          ],
+        },
+      ],
+    },
+    {
+      ...manifest,
+      plugins: [
+        {
+          ...manifest.plugins[0],
+          supportedOperations: [],
+        },
+      ],
+    },
     {
       ...manifest,
       format: 2,
@@ -76,7 +95,7 @@ test("generated manifest rejects invalid versions, contracts, routing and SDK pa
         {
           ...manifest.plugins[0],
           native: {
-            operations: [],
+            operations: {},
           },
         },
       ],
@@ -103,33 +122,22 @@ test.each([
   "size",
   "depth",
 ])(
-  "manifest generation preserves the standalone policy %s boundary",
+  "manifest preserves the policy JSON %s budget before policy validation",
   async (boundary) => {
     const assets = await mkdtemp(resolve(tmpdir(), "bunaway-policy-boundary-"));
-    const grant = {
-      identifier: "example:read",
-      allow: [
-        "" as JsonValue,
-      ],
-    };
-    const policy = {
-      version: 1,
-      views: [],
-      backend: {
-        permissions: [
-          grant,
-        ],
-      },
+    const policy: {
+      value: JsonValue;
+    } = {
+      value: "",
     };
     if (boundary === "size") {
-      grant.allow[0] = "x".repeat(
+      policy.value = "x".repeat(
         MAX_MESSAGE_BYTES - Buffer.byteLength(JSON.stringify(policy)),
       );
     } else {
-      // The scope starts five levels below the policy root; fill its remaining depth budget.
-      for (let depth = 5; depth < MAX_JSON_DEPTH; depth++) {
-        grant.allow[0] = {
-          child: grant.allow[0] ?? null,
+      for (let depth = 1; depth < MAX_JSON_DEPTH; depth++) {
+        policy.value = {
+          child: policy.value,
         };
       }
     }
@@ -138,56 +146,51 @@ test.each([
       version: "1",
       native: {
         operations: [],
-        permissions: [
-          {
-            name: grant.identifier,
-            scope: {},
-          },
-        ],
       },
       packageName: "example",
       root: assets,
       targets: {},
-      authorization: resolve(assets, "example.ts"),
     };
     const manifest = {
       format: 1,
-      app: {
-        title: "Example",
-      },
+      app: {},
       policy,
       plugins: [],
       developmentSdk: {},
     };
     try {
-      const parsedPolicy = parsePolicy(JSON.stringify(policy));
-      new NativeRegistry([
-        plugin,
-      ]).validatePolicy(parsedPolicy);
-      expect(parseAppManifest(manifest).policy).toEqual(parsedPolicy);
+      // The manifest preflights JSON independently; the app's policy validator runs separately.
+      validateValue(
+        {
+          type: "object",
+        },
+        policy,
+      );
+      expect(parseAppManifest(manifest).policy).toEqual(policy);
       await writeJson(resolve(assets, "manifest.json"), manifest);
       await writePluginManifest(assets, [
         plugin,
       ]);
-      expect((await readAppManifest(assets)).policy).toEqual(parsedPolicy);
+      expect((await readAppManifest(assets)).policy).toEqual(policy);
       expect(
         await loadPluginCatalog(assets, {
-          example: {
-            authorization: async () => ({
-              matches: () => false,
-            }),
-          },
+          example: {},
         }),
       ).toHaveLength(1);
-
-      // Crossing the standalone boundary must still fail without any envelope metadata.
-      grant.allow[0] =
+      policy.value =
         boundary === "size"
-          ? `${grant.allow[0]}x`
+          ? `${policy.value}x`
           : {
-              child: grant.allow[0] ?? null,
+              child: policy.value,
             };
-      expect(() => parsePolicy(JSON.stringify(policy))).toThrow();
+      expect(() =>
+        validateValue(
+          {
+            type: "object",
+          },
+          policy,
+        ),
+      ).toThrow();
       expect(() => parseAppManifest(manifest)).toThrow();
       await writeJson(resolve(assets, "manifest.json"), manifest);
       await expect(
@@ -226,7 +229,6 @@ test("regeneration preserves app data, drops removed plugins and rejects mismatc
         root: assets,
         native: {
           operations: [],
-          permissions: [],
         },
         targets: {},
       },
@@ -290,23 +292,17 @@ test("installed manifest catalogs preserve per-plugin limits without a combined 
     (_, index) => ({
       name: `example${index}`,
       version: "1",
-      authorization: false,
+
       native: {
         operations: [
           {
             name: `example${index}.read`,
-            permission: `example${index}:read`,
             input: {
               const: null,
             },
             output: {
               const: "x".repeat(400000),
             },
-          },
-        ],
-        permissions: [
-          {
-            name: `example${index}:read`,
           },
         ],
       },
@@ -332,16 +328,10 @@ test("manifest generation and catalog loading preserve the native contract size 
     operations: [
       {
         name: "example.read",
-        permission: "example:read",
         input: {
           const: null,
         },
         output,
-      },
-    ],
-    permissions: [
-      {
-        name: "example:read",
       },
     ],
   };
@@ -353,7 +343,6 @@ test("manifest generation and catalog loading preserve the native contract size 
     name: "example",
     version: "1",
     native,
-    authorization: false,
   };
   const manifest = {
     format: 1,

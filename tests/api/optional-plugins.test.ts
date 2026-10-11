@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 import { resolve } from "node:path";
 import type {
   NativeWindowServices,
@@ -9,8 +10,7 @@ import type { HostContext, JsonValue, Policy } from "@bunaway/protocol";
 import { NativeRegistry } from "@bunaway/protocol";
 import { appModules } from "#cli/app-modules";
 import { bindHostAPI } from "#core/host-api";
-import { matches } from "#plugins/windows/src/scope";
-import { createOperations } from "#plugins/windows/src/windows";
+import { createOperations } from "#plugins/windows/src/platforms/windows";
 
 const registry = new NativeRegistry([
   windowsPlugin,
@@ -19,7 +19,6 @@ const operation = registry.operation("windows.show");
 test("an empty plugin registry exposes no built-in window or feature calls", async () => {
   const empty = new NativeRegistry([]);
   expect(empty.operations.size).toBe(0);
-  expect(empty.permissions.size).toBe(0);
   let nativeCalls = 0;
   const host = bindHostAPI(
     "backend" as HostContext,
@@ -43,7 +42,7 @@ test("an empty plugin registry exposes no built-in window or feature calls", asy
   expect(nativeCalls).toBe(0);
 });
 
-test("window permissions use generic deny-first matching and filter list results", async () => {
+test("window operations use name grants and list all configured windows", async () => {
   const actions: string[] = [];
   const sizeConstraints = new Map<string, WindowSizeConstraints>(
     [
@@ -61,23 +60,7 @@ test("window permissions use generic deny-first matching and filter list results
   );
   const permissions: Policy["backend"] = {
     permissions: [
-      "windows:list",
-      {
-        identifier: "windows:control",
-        allow: [
-          {
-            view: "main",
-          },
-          {
-            view: "private",
-          },
-        ],
-        deny: [
-          {
-            view: "private",
-          },
-        ],
-      },
+      ...windowPermissions(),
     ],
   };
   const services: NativeWindowServices = {
@@ -166,17 +149,13 @@ test("window permissions use generic deny-first matching and filter list results
     backend: permissions,
   });
   expect(
-    registry.allowed(
-      permissions,
-      {
-        operation: "windows.show",
-        payload: {
-          view: "private",
-        },
+    registry.allowed(permissions, {
+      operation: "windows.show",
+      payload: {
+        view: "private",
       },
-      matches,
-    ),
-  ).toBe(false);
+    }),
+  ).toBe(true);
   expect(
     await execute("windows.list", null, "backend", {
       requestId: "list",
@@ -185,6 +164,10 @@ test("window permissions use generic deny-first matching and filter list results
   ).toEqual([
     {
       view: "main",
+      open: true,
+    },
+    {
+      view: "private",
       open: true,
     },
   ]);
@@ -203,7 +186,6 @@ test("window permissions use generic deny-first matching and filter list results
   const invoke = (
     operationName: string,
     input: JsonValue,
-    view = "main",
     requestId = operationName,
   ) =>
     execute(operationName, input, "backend", {
@@ -273,18 +255,12 @@ test("window permissions use generic deny-first matching and filter list results
     }),
   ).toEqual(beforeInvalid);
   await expect(
-    invoke(
-      "windows.setMinSize",
-      {
-        view: "private",
-        width: 300,
-        height: null,
-      },
-      "private",
-    ),
-  ).rejects.toMatchObject({
-    code: "PERMISSION_DENIED",
-  });
+    invoke("windows.setMinSize", {
+      view: "private",
+      width: 300,
+      height: null,
+    }),
+  ).resolves.toBeNull();
   await invoke("windows.setSizeConstraints", {
     view: "main",
     minHeight: 320,
@@ -329,7 +305,9 @@ test("window permissions use generic deny-first matching and filter list results
         "backend",
         {
           requestId: "denied",
-          permissions,
+          permissions: {
+            permissions: [],
+          },
         },
       ),
     ),

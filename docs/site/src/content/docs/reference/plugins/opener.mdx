@@ -51,46 +51,39 @@ await openUrl("https://example.com/도움말?q=검색어 입력");
 
 ## 정책
 
-화면에서 직접 호출하려면 기존 뷰의 `commands`에 `plugin.opener.openUrl`을, `host.permissions`에 `opener:openUrl`을 추가합니다.
+화면에서 직접 호출하려면 기존 뷰의 `commands`에 `plugin.opener.openUrl`을, `host.permissions`에 `opener.openUrl`을 추가합니다.
 
 ```json
 {
   "commands": ["app.help", "plugin.opener.openUrl"],
-  "host": { "permissions": ["opener:openUrl"] }
+  "host": { "permissions": ["opener.openUrl"] }
 }
 ```
 
-명령 핸들러에서 호출하면 원래 명령의 뷰 권한을 사용합니다. 플러그인 setup에서 호출하려면 루트 `backend.permissions`에 `opener:openUrl`을 추가합니다.
+명령 핸들러에서 호출하면 원래 명령의 뷰 권한을 사용합니다. 플러그인 setup에서 호출하려면 루트 `backend.permissions`에 `opener.openUrl`을 추가합니다.
 
 ```json
 {
-  "backend": { "permissions": ["opener:openUrl"] }
+  "backend": { "permissions": ["opener.openUrl"] }
 }
 ```
 
 설치나 플러그인 등록만으로 권한이 생기지 않습니다. 이 권한은 URL 대상을 제한하지 않으므로 허용된 호출자는 모든 HTTP와 HTTPS 주소를 열 수 있습니다.
 
-파일 작업에는 각각 `opener:openFile`, `opener:revealFile` 권한과 정확한 파일을 나타내는 `{ path: string }` scope가 필요합니다. 화면 직접 호출은 뷰의 `commands`에 `plugin.opener.openFile`, `plugin.opener.revealFile`도 추가합니다. 예를 들어 뷰의 `host`를 다음과 같이 설정합니다.
+파일 작업에는 각각 `opener.openFile`, `opener.revealFile` 작업 권한이 필요합니다. 화면 직접 호출은 뷰의 `commands`에 `plugin.opener.openFile`, `plugin.opener.revealFile`도 추가합니다. 예를 들어 뷰의 `host`를 다음과 같이 설정합니다.
 
 ```json
 {
   "permissions": [
-    {
-      "identifier": "opener:openFile",
-      "allow": [{ "path": "C:/Users/me/Documents/한글 보고서.txt" }]
-    },
-    {
-      "identifier": "opener:revealFile",
-      "allow": [{ "path": "C:/Users/me/Documents/한글 보고서.txt" }],
-      "deny": [{ "path": "C:/Users/me/Documents/비공개.txt" }]
-    }
+    "opener.openFile",
+    "opener.revealFile"
   ]
 }
 ```
 
-setup에서 호출할 때는 같은 grants를 루트 `backend.permissions`에 둡니다. 단순 문자열 권한으로 파일 접근을 허용할 수 없습니다. 경로는 구분자와 드라이브 문자 정규화 뒤 대소문자까지 정확히 일치해야 합니다. 하위 폴더 포함이나 와일드카드는 없으며 deny가 allow보다 우선합니다. `opener:openUrl`은 파일 권한을 부여하지 않습니다.
+setup에서 호출할 때는 같은 작업 이름을 루트 `backend.permissions`에 둡니다. 파일별 접근 제한은 앱 명령에서 검사하고 화면에는 그 명령만 허용합니다. `opener.openUrl`은 파일 권한을 부여하지 않습니다.
 
-파일 scope는 요청한 파일만 제한하며 연결 앱의 동작을 격리하지 않습니다. 실행 파일과 셸 바로가기도 기본 동작으로 실행될 수 있으므로 신뢰하는 파일에만 `openFile`을 허용합니다. 지정 앱 열기와 기본 연결 변경은 지원하지 않습니다.
+작업 권한은 유효한 파일 경로 전체에 적용하며 연결 앱의 동작을 격리하지 않습니다. 실행 파일과 셸 바로가기도 기본 동작으로 실행될 수 있으므로 앱 명령에서 신뢰하는 파일을 정합니다. 지정 앱 열기와 기본 연결 변경은 지원하지 않습니다.
 
 화면 호출은 `signal`과 절대 시각 `deadline`을 `options`로 전달할 수 있습니다. 호출 취소와 기한은 [invoke](/reference/client/invoke/) 규칙을 따릅니다. 백엔드 호출은 현재 명령의 취소와 기한을 이어받으며 별도 `options`를 받지 않습니다.
 
@@ -105,7 +98,7 @@ Host operation은 `opener.openUrl`, `opener.openFile`, `opener.revealFile`입니
 | 오류 | 의미 |
 | --- | --- |
 | `INVALID_ARGUMENT` | URL이나 파일 경로가 유효하지 않거나 디렉터리 입력, 파일 소실. 파일 소실은 `details.reason`이 `FILE_NOT_FOUND` |
-| `PERMISSION_DENIED` | 작업 권한이나 파일 scope가 없음, OS 파일 접근 거부, 공유 잠금 충돌, 링크나 경로 별칭 거부 |
+| `PERMISSION_DENIED` | 작업 권한 없음, OS 파일 접근 거부, 공유 잠금 충돌, 링크나 경로 별칭 거부 |
 | `UNSUPPORTED` | 현재 플랫폼이나 실행 환경에서 기능을 지원하지 않음 |
 | `INTERNAL` | 파일 검사 실패, Explorer 데스크톱 접근 실패 또는 다른 OS 요청 실패 |
 | `CANCELLED`, `TIMEOUT` | 호출이 취소되었거나 기한을 넘김 |

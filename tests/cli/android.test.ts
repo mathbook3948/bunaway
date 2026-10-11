@@ -296,7 +296,7 @@ test("Android accepts the common app model and rejects unsupported native inputs
         ...project.policy,
         backend: {
           permissions: [
-            "storage:read-text",
+            "storage.readText",
           ],
         },
       },

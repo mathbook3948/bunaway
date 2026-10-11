@@ -1,4 +1,5 @@
 import { dlopen, ptr } from "bun:ffi";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -22,18 +23,7 @@ const policy: Policy = {
   version: 1,
   backend: {
     permissions: [
-      "windows:list",
-      {
-        identifier: "windows:control",
-        allow: [
-          {
-            view: "main",
-          },
-          {
-            view: "editor",
-          },
-        ],
-      },
+      ...windowPermissions(),
     ],
   },
   views: [
@@ -48,18 +38,7 @@ const policy: Policy = {
       events: [],
       host: {
         permissions: [
-          "windows:list",
-          {
-            identifier: "windows:control",
-            allow: [
-              {
-                view: "main",
-              },
-              {
-                view: "editor",
-              },
-            ],
-          },
+          ...windowPermissions(),
         ],
       },
     },

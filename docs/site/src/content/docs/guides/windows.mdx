@@ -29,7 +29,8 @@ Windows 앱은 `src-bunaway/bunaway.json`의 `app.windows`에 사용할 창을 �
 위 예제는 `app` 필드에 작성합니다. `build`와 `bundle` 등 기존 최상위 설정은 유지합니다.
 `editor.html`을 웹 자산에 추가하고 `policy.json.views`에 `main`, `editor` 정책을 선언합니다.
 main에서 editor를 여는 명령을 호출하려면 main의 `commands`에 `editor.open`과
-`editor.prepareClose`를 추가하고 host.permissions에 `windows:list`와 `{ "identifier": "windows:control", "allow": [{ "view": "editor" }] }`를 허용하세요. 먼저 `@bunaway/plugin-windows`를 설치합니다.
+`editor.prepareClose`를 추가합니다. host.permissions에는 windows.list, windows.create,
+windows.show, windows.setCloseConfirmation을 각각 작업 이름 문자열로 허용합니다. 특정 창의 제어를 제한하려면 앱 명령에서 검사합니다. 먼저 `@bunaway/plugin-windows`를 설치합니다.
 editor에는 필요한 명령과 이벤트, 저장 권한만 선언할 수 있습니다.
 
 ```ts
@@ -109,7 +110,7 @@ export default defineApp({
 
 백엔드에서 특정 사전 선언 창을 열려면 `@bunaway/plugin-windows`를 등록하고
 플러그인 setup의 실행 컨텍스트로 `context.host.call`을 사용합니다.
-backend 정책에 `windows:control`과 대상 `view` 범위를 허용해야 하며 미선언 창은 생성할 수 없습니다.
+backend 정책에 windows.create를 허용해야 하며 미선언 창은 생성할 수 없습니다.
 `onOpen` 자체는 Host 호출 컨텍스트를 제공하지 않습니다.
 `DesktopContext.show()`는 공개 창 플러그인 없이도 첫 선언 창의 표시를 요청할 수 있습니다.
 개발 CLI 중단과 재시작은 창이 없거나 종료 훅이 대기 중이어도 앱 정리를 요청합니다.
@@ -172,9 +173,11 @@ Windows에서는 준비 전에 화면을 표시하지 않으려면 창 항목에
 닫기 확인으로 `false`가 반환되면 두 창은 유지되므로 앱에서 재시도를 제공할 수 있습니다.
 
 main 정책의 `commands`에 `plugin.windows.getReadiness`, `plugin.windows.completeSplashscreen`을,
-`events`에 `windows.readiness`를 추가합니다. `host.permissions`의 `windows:control`에
-main과 splash를 모두 허용해야 전환할 수 있습니다.
-준비 알림을 splash에서도 받으려면 splash의 events와 대상 창 제어 권한도 허용하세요.
+`events`에 `windows.readiness`를 추가합니다. main의 `host.permissions`에는
+`"windows.getReadiness"`와 `"windows.completeSplashscreen"` 작업 이름을 추가합니다.
+권한은 작업 단위로 부여합니다. 특정 창으로 접근을 제한하려면 백엔드 앱 명령에서 대상을 검사하고
+화면에는 그 앱 명령만 허용합니다.
+준비 알림을 splash에서도 받으려면 splash의 events와 windows.getReadiness 작업 권한도 허용하세요.
 
 ```ts
 import { createClient } from "@bunaway/client";

@@ -31,7 +31,6 @@ import {
 } from "../fixtures/host-plugins.ts";
 
 const location = {
-  scope: "appData",
   path: "notes/memo.txt",
 } as const;
 const nullContract = {
@@ -112,7 +111,6 @@ test("Host helpers keep the existing typed operation inputs, outputs and explici
                 {
                   name: "storage.readText",
                   support: "supported",
-                  permission: "not-required",
                 },
               ]
             : null,
@@ -146,7 +144,6 @@ test("Host helpers keep the existing typed operation inputs, outputs and explici
         {
           name: "storage.readText",
           support: "supported",
-          permission: "not-required",
         },
       ]);
       expect(
@@ -257,25 +254,9 @@ test("concurrent module services preserve view policy after await and never use 
   });
   const granted: Policy["backend"] = {
     permissions: [
-      "log:write",
-      {
-        identifier: "storage:read-text",
-        allow: [
-          {
-            scope: "appData",
-            pathPrefix: "notes",
-          },
-        ],
-      },
-      {
-        identifier: "storage:write-text",
-        allow: [
-          {
-            scope: "appData",
-            pathPrefix: "notes",
-          },
-        ],
-      },
+      "log.write",
+      "storage.readText",
+      "storage.writeText",
     ],
   };
   const denied = {
@@ -672,7 +653,7 @@ test("defineApp preserves class getter contracts and original method receivers",
     }
     get requiredPermissions() {
       return [
-        "log:write",
+        "log.write",
       ] as const;
     }
     get commands() {
@@ -728,7 +709,7 @@ test("defineApp preserves class getter contracts and original method receivers",
       "windows",
     ],
     requiredPermissions: [
-      "log:write",
+      "log.write",
     ],
     events: {
       "getter.changed": {
@@ -803,7 +784,7 @@ test("defineApp preserves class getter contracts and original method receivers",
       ...services.policy,
       backend: {
         permissions: [
-          "log:write",
+          "log.write",
         ],
       },
     },
@@ -862,16 +843,8 @@ test("plugin setup descendants keep their own backend until shutdown, including 
         views: [],
         backend: {
           permissions: [
-            "log:write",
-            {
-              identifier: "storage:read-text",
-              allow: [
-                {
-                  scope: "appData",
-                  pathPrefix: "notes",
-                },
-              ],
-            },
+            "log.write",
+            "storage.readText",
           ],
         },
       },
@@ -969,7 +942,7 @@ test("Host helpers preserve path and message validation, Host errors and output 
       await expect(
         storage.readText({
           ...location,
-          path: "../escape",
+          path: "bad\0path",
         }),
       ).rejects.toMatchObject({
         code: "INVALID_ARGUMENT",
@@ -1008,7 +981,7 @@ export function checkHostTypes() {
     support,
   ];
   storage.readText({
-    // @ts-expect-error storage scopes are restricted
+    // @ts-expect-error storage has no scope input
     scope: "home",
     path: "memo.txt",
   });

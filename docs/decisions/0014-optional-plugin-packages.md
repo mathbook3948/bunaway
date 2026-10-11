@@ -14,6 +14,6 @@ status: accepted
 
 창 제어 패키지는 작업 계약, 권한, 공개 함수와 생성, 재생성 로직을 소유한다. 기본 창과 WebView, 앱 종료와 트레이 수명, 진단은 호스트 자원 관리로 유지한다. 창 제어 플러그인은 호스트가 제공하는 중립 자원 인터페이스를 사용한다.
 
-공통 정책의 windows 필드와 PluginDefinition.requiredHost는 제거한다. 창 제어도 windows:list와 windows:control의 `{ view }` allow, deny를 사용하며 deny가 우선한다. 등록 플러그인 없는 정책의 permissions는 빈 배열이다.
+공통 정책의 windows 필드와 PluginDefinition.requiredHost는 제거한다. 창 제어는 windows.list, windows.show 등 각 operation 이름을 허용한다. 허용된 작업은 앱에 선언된 창을 대상으로 하며 특정 창의 접근 제한은 앱 명령에서 검사한다. 등록 플러그인 없는 정책의 permissions는 빈 배열이다.
 
 Windows 구현을 우선하며 기존 네이티브 플러그인 경계 검증을 보존한다. macOS 네이티브 플러그인 어댑터는 ADR 0013과 같이 후속 작업이다. 기능 조회 문서는 Client SDK가 아닌 선택 플러그인 레퍼런스에 둔다.

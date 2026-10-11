@@ -8,6 +8,7 @@ import type {
 } from "@bunaway/core";
 import {
   API_LIMITS,
+  BunawayError,
   type CancellationController,
   type Hello,
   type HostCall,
@@ -20,11 +21,7 @@ import {
   serializeMessage,
   validateValue,
 } from "@bunaway/protocol";
-import {
-  allowedHost,
-  contracts,
-  createCore,
-} from "../fixtures/host-plugins.ts";
+import { contracts, createCore } from "../fixtures/host-plugins.ts";
 
 // Fake time advances deadlines and shutdown limits without waiting.
 function createClock() {
@@ -113,16 +110,8 @@ const policy: Policy = {
       ],
       host: {
         permissions: [
-          "log:write",
-          {
-            identifier: "storage:read-text",
-            allow: [
-              {
-                scope: "appData",
-                pathPrefix: "notes",
-              },
-            ],
-          },
+          "log.write",
+          "storage.readText",
         ],
       },
     },
@@ -142,25 +131,9 @@ const policy: Policy = {
   ],
   backend: {
     permissions: [
-      "log:write",
-      {
-        identifier: "storage:read-text",
-        allow: [
-          {
-            scope: "appData",
-            pathPrefix: "",
-          },
-        ],
-      },
-      {
-        identifier: "storage:write-text",
-        allow: [
-          {
-            scope: "appData",
-            pathPrefix: "",
-          },
-        ],
-      },
+      "log.write",
+      "storage.readText",
+      "storage.writeText",
     ],
   },
 };
@@ -470,7 +443,6 @@ test("command round trip validates input, output and binds the session host cont
         },
         handle: async ({ key }, context) => {
           await context.host.call(contracts["storage.readText"], {
-            scope: "appData",
             path: `notes/${key}.txt`,
           });
           return key;
@@ -500,7 +472,6 @@ test("command round trip validates input, output and binds the session host cont
       call: {
         operation: "storage.readText",
         payload: {
-          scope: "appData",
           path: "notes/b.txt",
         },
       },
@@ -1672,7 +1643,7 @@ test("reserved and duplicate names plus plugin violations fail creation", async 
     name: "greedy",
     version: "1",
     requiredPermissions: [
-      "capabilities:get",
+      "capabilities.get",
     ],
   };
   await expect(
@@ -1692,8 +1663,8 @@ test("reserved and duplicate names plus plugin violations fail creation", async 
     name: "covered",
     version: "1",
     requiredPermissions: [
-      "log:write",
-      "storage:read-text",
+      "log.write",
+      "storage.readText",
     ],
   };
   await expect(
@@ -1925,7 +1896,6 @@ test("the registered capabilities plugin command calls the host operation", asyn
           {
             name: "storage",
             support: "supported",
-            permission: "granted",
           },
         ],
       };
@@ -1959,7 +1929,6 @@ test("the registered capabilities plugin command calls the host operation", asyn
         {
           name: "storage",
           support: "supported",
-          permission: "granted",
         },
       ],
     },
@@ -2148,79 +2117,137 @@ test("duplicate IDs preserve a pending request and never repeat its result", asy
   await core.stop();
 });
 
-test("storage permissions combine grants without widening scope or path", async () => {
-  const clock = createClock();
-  const { services } = createServices(clock);
-  const splitServices: CoreServices = {
-    ...services,
+test("app commands enforce resource access and direct plugin calls cannot bypass them", async () => {
+  const calls: HostCall[] = [];
+  const { services: baseServices, sent } = createServices(createClock(), {
+    callHost: async (_context, call) => {
+      calls.push(call);
+      return {
+        kind: "result",
+        payload: "welcome",
+      };
+    },
+  });
+  const services: CoreServices = {
+    ...baseServices,
     policy: {
-      ...policy,
+      version: 1,
       backend: {
-        permissions: [
-          "log:write",
-          {
-            identifier: "storage:read-text",
-            allow: [
-              {
-                scope: "appData",
-                pathPrefix: "",
-              },
-            ],
-          },
-          {
-            identifier: "storage:write-text",
-            allow: [
-              {
-                scope: "appData",
-                pathPrefix: "notes",
-              },
-            ],
-          },
-        ],
+        permissions: [],
       },
+      views: [
+        {
+          id: "main",
+          origins: [
+            "https://app.bunaway.local",
+          ],
+          commands: [
+            "memo.read",
+          ],
+          events: [],
+          host: {
+            permissions: [
+              "storage.readText",
+            ],
+          },
+        },
+      ],
     },
   };
-  for (const path of [
-    "notes/file.txt",
-    "notes/nested/file.txt",
-  ]) {
-    expect(
-      allowedHost(splitServices.policy.backend, {
-        operation: "storage.writeText",
-        payload: {
-          scope: "appData",
-          path,
-          text: "saved",
-        },
-      }),
-    ).toBe(true);
-  }
-  for (const path of [
-    "file.txt",
-    "notes-private/file.txt",
-    "other/file.txt",
-  ]) {
-    expect(
-      allowedHost(splitServices.policy.backend, {
-        operation: "storage.writeText",
-        payload: {
-          scope: "appData",
-          path,
-          text: "saved",
-        },
-      }),
-    ).toBe(false);
-  }
-  expect(
-    allowedHost(splitServices.policy.backend, {
-      operation: "storage.writeText",
-      payload: {
-        scope: "temp",
-        path: "notes/file.txt",
-        text: "saved",
+  const core = await createCore(
+    {
+      events: {},
+      commands: {
+        "memo.read": command({
+          input: textInput,
+          output: {
+            type: "string",
+          },
+          handle({ key }, context) {
+            if (key !== "welcome") {
+              throw new BunawayError({
+                code: "PERMISSION_DENIED",
+                message: "Memo access denied.",
+              });
+            }
+            return context.host.call(contracts["storage.readText"], {
+              path: "notes/welcome.txt",
+            });
+          },
+        }),
       },
-    }),
-  ).toBe(false);
+    },
+    services,
+  );
+  try {
+    const session = core.openSession("app-rule-view" as HostContext, "main");
+    await session.receive(services.hello);
+    for (const [id, name, payload] of [
+      [
+        "allowed",
+        "memo.read",
+        {
+          key: "welcome",
+        },
+      ],
+      [
+        "forbidden",
+        "memo.read",
+        {
+          key: "secret",
+        },
+      ],
+      [
+        "bypass",
+        "plugin.storage.readText",
+        {
+          path: "private/secret.txt",
+        },
+      ],
+    ] satisfies [
+      string,
+      string,
+      JsonValue,
+    ][]) {
+      await session.receive({
+        kind: "invoke",
+        protocol: services.hello.protocol,
+        id,
+        command: name,
+        payload,
+      });
+      await flush();
+    }
+    expect(results(sent, "allowed")).toMatchObject([
+      {
+        kind: "result",
+        payload: "welcome",
+      },
+    ]);
+    for (const id of [
+      "forbidden",
+      "bypass",
+    ]) {
+      expect(results(sent, id)).toMatchObject([
+        {
+          kind: "error",
+          error: {
+            code: "PERMISSION_DENIED",
+          },
+        },
+      ]);
+    }
+    expect(calls).toEqual([
+      {
+        operation: "storage.readText",
+        payload: {
+          path: "notes/welcome.txt",
+        },
+      },
+    ]);
+  } finally {
+    await core.stop();
+  }
 });
 
 test("failed startup cancels backend Host calls before reverse cleanup", async () => {

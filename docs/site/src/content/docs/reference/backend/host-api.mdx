@@ -6,7 +6,7 @@ sidebar: { order: 4 }
 
 저장, 로그와 기능 조회는 개별 설치하는 선택 패키지입니다. 사용할 패키지를 설치한 뒤
 앱의 `plugins` 배열에 등록하세요. 현재 네이티브 플러그인 어댑터는 Windows를 지원합니다.
-창 제어도 `@bunaway/plugin-windows`를 설치하고 windowsPlugin을 등록한 뒤 호출합니다. `editor` 창은 앱 설정 `app.windows`와 정책의 `views`에 정의하고, 호출 출처의 permissions에 `windows:control`의 allow 범위를 허용합니다.
+창 제어도 `@bunaway/plugin-windows`를 설치하고 windowsPlugin을 등록한 뒤 호출합니다. `editor` 창은 앱 설정 `app.windows`와 정책의 `views`에 정의하고, 호출 출처의 permissions에 사용할 작업 이름을 허용합니다.
 
 ```ts
 import { defineApp, defineModule } from "@bunaway/backend";
@@ -16,22 +16,23 @@ import { storage, storagePlugin } from "@bunaway/plugin-storage";
 
 const memo = defineModule("memo").command("save", {
   input: { type: "string" }, output: { const: null },
-}, text => storage.writeText({ scope: "appData", path: "notes/memo.txt", text }));
+}, text => storage.writeText({ path: "C:/Users/me/Documents/notes/memo.txt", text }));
 const editor = defineModule("editor").command("open", {
   input: { const: null }, output: { const: null },
 }, async () => { await windows.create({ view: "editor" }); return null; });
 export default defineApp({ modules: [memo, editor], plugins: [storagePlugin, windowsPlugin] });
 ```
 
-뷰 정책에는 `memo.save`와 `storage:write-text`의 `appData/notes` 허용 범위가 필요합니다.
-`editor.open`을 호출하는 뷰의 `commands`에는 해당 명령을, `host.permissions`에는 `{ "identifier": "windows:control", "allow": [{ "view": "editor" }] }`를 지정합니다.
+뷰 정책에는 `commands: ["memo.save"]`와 `host.permissions: ["storage.writeText"]`가 필요합니다.
+앱 명령은 저장 경로를 정하며 파일별 접근 규칙이 있으면 호출 전에 검사합니다.
+`editor.open`을 호출하는 뷰의 `commands`에는 해당 명령을, `host.permissions`에는 `"windows.create"`를 지정합니다.
 패키지 설치나 플러그인 등록으로 권한을 부여하지 않습니다.
 
 ## 개별 API
 
 | 패키지 | 앱 등록 | 백엔드 API |
 | --- | --- | --- |
-| `@bunaway/plugin-storage` | `storagePlugin` | `storage.readText({ scope, path }): Promise<string>`, `storage.writeText({ scope, path, text }): Promise<null>` |
+| `@bunaway/plugin-storage` | `storagePlugin` | `storage.readText({ path }): Promise<string>`, `storage.writeText({ path, text }): Promise<null>` |
 | `@bunaway/plugin-log` | `logPlugin` | `log.write({ level, message, details? })`, `log.debug`, `log.info`, `log.warn`, `log.error` |
 | `@bunaway/plugin-capabilities` | `capabilitiesPlugin` | `capabilities(): Promise<Capabilities>` |
 | `@bunaway/plugin-clipboard` | `clipboardPlugin` | [텍스트 읽기, 쓰기와 지우기](/reference/plugins/clipboard/): `clipboard.readText(null)`, `clipboard.writeText({ text })`, `clipboard.clear(null)` |
@@ -39,7 +40,7 @@ export default defineApp({ modules: [memo, editor], plugins: [storagePlugin, win
 
 로그의 모든 함수는 `Promise<null>`을 반환합니다. `level`은 debug, info, warn, error이며
 메시지는 최대 1,024자, `details`는 선택적 JSON 값입니다.
-저장 scope는 appData 또는 temp이며 path는 범위 안의 상대 경로입니다.
+저장 위치와 파일별 접근 규칙은 앱이 정합니다. 현재 Windows 저장 구현에는 절대 경로를 전달합니다.
 [저장 읽기](/reference/host/storage-read-text/), [쓰기](/reference/host/storage-write-text/),
 [로그](/reference/host/log-write/)에 입력과 오류를 설명합니다.
 
@@ -60,9 +61,9 @@ options의 signal은 호출 취소 신호이고 deadline은 Unix epoch 밀리초
 ## host.call
 
 공통 SDK는 `host.call(contract, input)`과 `context.host.call(contract, input)`을 제공합니다.
-`HostOperationContract<I, O>`의 name, input, output, permission으로 작업을 선언하며
+`HostOperationContract<I, O>`의 name, input과 output으로 작업을 선언하며
 결과는 출력 schema에서 추론합니다. 플러그인 작성자는 등록한 `native.operations` 계약을
-사용합니다. 호출자가 넘긴 다른 schema나 permission으로 등록한 계약을 바꾸지 못합니다.
+사용합니다. 호출자가 넘긴 다른 schema로 등록한 계약을 바꾸지 못합니다.
 작업이 등록되지 않았다면 `UNSUPPORTED`, 입력이 잘못됐다면 `INVALID_ARGUMENT`입니다.
 
 ## 실행 범위와 권한
@@ -96,5 +97,5 @@ SDK의 `command()`와 `defineApp()`을 사용하지 않는 객체형 정의에�
 ## 창
 
 `windows`는 선택 패키지인 `@bunaway/plugin-windows`의 창 제어 API입니다.
-호출 출처의 permissions에 `windows:list`와 대상 뷰의 `windows:control` 범위를 허용합니다.
+호출 출처의 permissions에 각 windows 작업 이름을 허용합니다. 특정 창의 접근 제한은 앱 명령에서 검사합니다.
 메서드와 권한은 [windows 레퍼런스](/reference/host/windows/)를 확인하세요.

@@ -107,9 +107,6 @@ test("cancelling a newly created hidden window while its controller prepares clo
           view: "main",
         },
       },
-      [
-        "main",
-      ],
       "new",
     ),
   ).rejects.toMatchObject({
@@ -119,11 +116,7 @@ test("cancelling a newly created hidden window while its controller prepares clo
   expect(f.operations.replacing.size).toBe(0);
 });
 
-const grants = [
-  "main",
-  "editor",
-];
-test("window catalog filters grants and cannot open arbitrary or unauthorized views", async () => {
+test("window catalog lists configured views and cannot open arbitrary views", async () => {
   const f = fixture();
   expect(
     await f.operations.execute(
@@ -131,12 +124,13 @@ test("window catalog filters grants and cannot open arbitrary or unauthorized vi
         operation: "windows.list",
         payload: null,
       },
-      [
-        "editor",
-      ],
       "1",
     ),
   ).toEqual([
+    {
+      view: "main",
+      open: false,
+    },
     {
       view: "editor",
       open: false,
@@ -147,29 +141,10 @@ test("window catalog filters grants and cannot open arbitrary or unauthorized vi
       {
         operation: "windows.create",
         payload: {
-          view: "main",
-        },
-      },
-      [
-        "editor",
-      ],
-      "2",
-    ),
-  ).rejects.toMatchObject({
-    code: "PERMISSION_DENIED",
-  });
-  await expect(
-    f.operations.execute(
-      {
-        operation: "windows.create",
-        payload: {
           view: "unknown",
         },
       },
-      [
-        "unknown",
-      ],
-      "3",
+      "2",
     ),
   ).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
@@ -186,7 +161,6 @@ test("recreation reserves the last window through cleanup, rejects competing cre
         view: "main",
       },
     },
-    grants,
     "1",
   );
   const original = f.views.get("main");
@@ -205,7 +179,6 @@ test("recreation reserves the last window through cleanup, rejects competing cre
         view: "main",
       },
     },
-    grants,
     "2",
   );
   expect(original.closed).toBe(true);
@@ -222,7 +195,6 @@ test("recreation reserves the last window through cleanup, rejects competing cre
             view: "main",
           },
         },
-        grants,
         "state",
       ),
     ).rejects.toMatchObject({
@@ -240,7 +212,6 @@ test("recreation reserves the last window through cleanup, rejects competing cre
           view: "main",
         },
       },
-      grants,
       "3",
     ),
   ).rejects.toMatchObject({
@@ -268,7 +239,6 @@ test("close refusal preserves the existing window and recreation releases its re
         view: "main",
       },
     },
-    grants,
     "1",
   );
   f.setClose(false);
@@ -280,7 +250,6 @@ test("close refusal preserves the existing window and recreation releases its re
           view: "main",
         },
       },
-      grants,
       "2",
     ),
   ).toBe(false);
@@ -292,7 +261,6 @@ test("close refusal preserves the existing window and recreation releases its re
           view: "main",
         },
       },
-      grants,
       "3",
     ),
   ).rejects.toMatchObject({
@@ -332,7 +300,6 @@ test("cancelling creation while an already closed window drains prevents a new w
             view: "editor",
           },
         },
-        grants,
         "1",
       ),
     ).rejects.toMatchObject({
@@ -354,7 +321,6 @@ test("shutdown, cancellation before creation and cleanup timeout do not create r
           view: "main",
         },
       },
-      grants,
       "1",
     ),
   ).rejects.toMatchObject({
@@ -373,7 +339,6 @@ test("shutdown, cancellation before creation and cleanup timeout do not create r
           view: "main",
         },
       },
-      grants,
       "1",
     );
     f.setTick(async () => {
@@ -391,7 +356,6 @@ test("shutdown, cancellation before creation and cleanup timeout do not create r
             view: "main",
           },
         },
-        grants,
         "2",
       ),
     ).rejects.toMatchObject({

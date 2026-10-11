@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -186,7 +187,6 @@ test("macOS native registration validates its direction and exact metadata befor
   expect(() => validatePacket(packet, "macos-backend")).toThrow();
   const native = {
     operations: [],
-    permissions: [],
   };
   expect(() =>
     validatePacket(
@@ -573,18 +573,12 @@ test.each([
               },
               (_, operation) => ({
                 name: `${name}.read${operation}`,
-                permission: `${name}:read`,
                 input: {
                   const: null,
                 },
                 output,
               }),
             ),
-            permissions: [
-              {
-                name: `${name}:read`,
-              },
-            ],
           };
           if (mode !== "limit") {
             output.const = "x".repeat(
@@ -742,7 +736,7 @@ test("macOS native registration failure acknowledges the backend and exits witho
     const errors = new Response(child.stderr).text();
     expect(await child.exited).toBe(1);
     expect(await errors).toContain(
-      "Policy references an unregistered permission.",
+      "Policy references an unregistered operation.",
     );
     const records = (await Bun.file(resolve(directory, "logs/host.log")).text())
       .trim()
@@ -941,7 +935,7 @@ test("macOS shutdown during native registration acknowledges acceptance and skip
     await Bun.write(
       app,
       `export default {commands: {}, events: {}, plugins: [
-        ...Array.from({length:2}, (_,index)=>({name:"native"+index,version:"1",native:{operations:[],permissions:[]}})),
+        ...Array.from({length:2}, (_,index)=>({name:"native"+index,version:"1",native:{operations:[]}})),
         {name:"setup",version:"1.0.0",setup:()=>Bun.write(${JSON.stringify(marker)},"started")} ]};`,
     );
     await bundleMacosHost(
@@ -1028,14 +1022,7 @@ test("macOS shutdown cancels setup Host calls before waiting for plugin cleanup"
     );
     const config = workerConfig(directory);
     config.policy.backend.permissions = [
-      {
-        identifier: "windows:control",
-        allow: [
-          {
-            view: "main",
-          },
-        ],
-      },
+      ...windowPermissions(),
     ];
     const running = new Worker(
       new URL(`file://${resolve(directory, "backend.js")}`),

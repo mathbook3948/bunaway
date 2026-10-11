@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { dlopen, ptr } from "bun:ffi";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { resolve } from "node:path";
-import { createOperations } from "#plugins/autostart/src/windows";
+import { createOperations } from "#plugins/autostart/src/platforms/windows";
 import {
   commandLine,
   type AppLaunch,

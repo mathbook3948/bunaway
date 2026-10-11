@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { dlopen, ptr } from "bun:ffi";
-import { createOperations } from "#plugins/opener/src/windows";
+import { createOperations } from "#plugins/opener/src/platforms/windows";
 
 if (
   process.platform !== "win32" ||

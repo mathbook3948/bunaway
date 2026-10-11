@@ -3,7 +3,6 @@ import type {
   HostCall,
   HostOperationContract,
   NativePluginContract,
-  PermissionContract,
 } from "./host-api.ts";
 import { policySchema } from "./schema.ts";
 import {
@@ -23,12 +22,6 @@ export type NativeRegistryOptions = {
   /** `runtime` enforces the aggregate active-plugin limits; `catalog` validates installed plugins. */
   readonly mode?: "runtime" | "catalog";
 };
-/** Returns whether one permission's operation input matches a proposed scope. */
-export type PermissionMatcher = (
-  permission: string,
-  input: JsonValue,
-  scope: JsonValue,
-) => boolean;
 type HostPermissions = Infer<typeof policySchema>["backend"];
 
 function fail(message: string): never {
@@ -180,7 +173,6 @@ function checkSchema(schema: Schema): void {
 /** Validates registered native contracts and evaluates their policy grants. */
 export class NativeRegistry {
   readonly operations = new Map<string, HostOperationContract>();
-  readonly permissions = new Map<string, PermissionContract>();
   readonly plugins = new Set<string>();
 
   /** Validates plugin identities and native contracts, then snapshots their schemas. */
@@ -222,43 +214,17 @@ export class NativeRegistry {
                   name: {
                     type: "string",
                   },
-                  permission: {
-                    type: "string",
-                  },
                   input: {
                     type: "object",
                   },
                   output: {
                     type: "object",
                   },
-                  osPermission: {
-                    const: "not-required",
-                  },
                 },
                 required: [
                   "name",
-                  "permission",
                   "input",
                   "output",
-                ],
-                additionalProperties: false,
-              },
-            },
-            permissions: {
-              type: "array",
-              maxItems: 256,
-              items: {
-                type: "object",
-                properties: {
-                  name: {
-                    type: "string",
-                  },
-                  scope: {
-                    type: "object",
-                  },
-                },
-                required: [
-                  "name",
                 ],
                 additionalProperties: false,
               },
@@ -266,33 +232,16 @@ export class NativeRegistry {
           },
           required: [
             "operations",
-            "permissions",
           ],
           additionalProperties: false,
         },
         plugin.native,
       ) as unknown as NativePluginContract;
-      for (const permission of native.permissions) {
-        if (
-          !permission.name.startsWith(`${plugin.name}:`) ||
-          !/^[A-Za-z0-9_.:-]{1,128}$/.test(permission.name) ||
-          this.permissions.has(permission.name)
-        ) {
-          fail("Invalid or duplicate plugin permission.");
-        }
-        this.permissions.set(permission.name, permission);
-        if (permission.scope) {
-          checkSchema(permission.scope);
-        }
-      }
       for (const operation of native.operations) {
         if (
           !operation.name.startsWith(`${plugin.name}.`) ||
           !/^[A-Za-z0-9_.:-]{1,121}$/.test(operation.name) ||
-          this.operations.has(operation.name) ||
-          !native.permissions.some(
-            (permission) => permission.name === operation.permission,
-          )
+          this.operations.has(operation.name)
         ) {
           fail("Invalid or duplicate plugin operation.");
         }
@@ -301,10 +250,7 @@ export class NativeRegistry {
         checkSchema(operation.output);
       }
     }
-    if (
-      mode === "runtime" &&
-      (this.operations.size > 256 || this.permissions.size > 256)
-    ) {
+    if (mode === "runtime" && this.operations.size > 256) {
       fail("Plugin contract limit reached.");
     }
   }
@@ -334,7 +280,7 @@ export class NativeRegistry {
     return validate(this.operation(name).output, output);
   }
 
-  /** Rejects policies that grant unknown permissions or invalid permission scopes. */
+  /** Rejects policies that grant operations absent from the registered plugins. */
   validatePolicy(policy: Infer<typeof policySchema>): void {
     validate(policySchema, policy);
     for (const source of [
@@ -342,72 +288,19 @@ export class NativeRegistry {
       ...policy.views.map((view) => view.host),
     ]) {
       for (const grant of source.permissions) {
-        const permission = this.permissions.get(
-          typeof grant === "string" ? grant : grant.identifier,
-        );
-        if (!permission) {
-          fail("Policy references an unregistered permission.");
-        }
-        if (typeof grant === "string") {
-          if (permission.scope) {
-            fail("Scoped permission requires explicit allow scopes.");
-          }
-        } else if (permission.scope) {
-          for (const scope of [
-            ...(grant.allow ?? []),
-            ...(grant.deny ?? []),
-          ]) {
-            validate(permission.scope, scope);
-          }
-        } else if (grant.allow !== undefined || grant.deny !== undefined) {
-          fail("Unscoped permission cannot specify allow or deny scopes.");
+        if (!this.operations.has(grant)) {
+          fail("Policy references an unregistered operation.");
         }
       }
     }
   }
 
   /**
-   * Checks grants for an operation. Matching deny scopes override all allow
-   * scopes; scoped permissions need at least one matching allow scope.
+   * Checks whether the source explicitly grants this operation.
    * Throws UNSUPPORTED if the operation is not registered.
    */
-  allowed(
-    source: HostPermissions,
-    call: HostCall,
-    matches: PermissionMatcher,
-  ): boolean {
+  allowed(source: HostPermissions, call: HostCall): boolean {
     const operation = this.operation(call.operation);
-    const permission = this.permissions.get(operation.permission);
-    if (!permission) {
-      fail("Unregistered operation permission.");
-    }
-    let allowed = false;
-    for (const grant of source.permissions) {
-      if (typeof grant === "string") {
-        if (grant === operation.permission && !permission.scope) {
-          allowed = true;
-        }
-      } else if (grant.identifier === operation.permission) {
-        if (!permission.scope) {
-          allowed = true;
-        } else {
-          if (
-            grant.deny?.some((scope) =>
-              matches(operation.permission, call.payload, scope),
-            )
-          ) {
-            return false;
-          }
-          if (
-            grant.allow?.some((scope) =>
-              matches(operation.permission, call.payload, scope),
-            )
-          ) {
-            allowed = true;
-          }
-        }
-      }
-    }
-    return allowed;
+    return source.permissions.includes(operation.name);
   }
 }

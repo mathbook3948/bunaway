@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,20 +26,12 @@ const reportPath = resolve(output, "report.json");
 const target = {
   view: "main",
 };
-const grant = {
-  identifier: "windows:control",
-  allow: [
-    target,
-    {
-      view: "denied",
-    },
-  ],
-};
+const grants = windowPermissions();
 const policy: Policy = {
   version: 1,
   backend: {
     permissions: [
-      grant,
+      ...grants,
     ],
   },
   views: [
@@ -72,7 +65,7 @@ const policy: Policy = {
       permissions:
         id === "main"
           ? [
-              grant,
+              ...grants,
             ]
           : [],
     },

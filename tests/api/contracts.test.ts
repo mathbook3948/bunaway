@@ -179,7 +179,6 @@ const app = {
       output,
       handle: ({ key }, context) =>
         context.host.call(contracts["storage.readText"], {
-          scope: "appData",
           path: `notes/${key}.txt`,
         }),
     }),
@@ -206,15 +205,7 @@ const policy: Policy = {
       ],
       host: {
         permissions: [
-          {
-            identifier: "storage:read-text",
-            allow: [
-              {
-                scope: "appData",
-                pathPrefix: "notes",
-              },
-            ],
-          },
+          "storage.readText",
         ],
       },
     },
@@ -556,7 +547,6 @@ test("a typed backend command validates input/output and preserves its bound Hos
       call: {
         operation: "storage.readText",
         payload: {
-          scope: "appData",
           path: "notes/welcome.txt",
         },
       },
@@ -603,7 +593,6 @@ test("Host operations share exact request/result schemas and safe errors", async
       serializeHostCall({
         operation: "storage.writeText",
         payload: {
-          scope: "temp",
           path: "notes/new.txt",
           text: "한글",
         },
@@ -612,7 +601,6 @@ test("Host operations share exact request/result schemas and safe errors", async
   ).toEqual({
     operation: "storage.writeText",
     payload: {
-      scope: "temp",
       path: "notes/new.txt",
       text: "한글",
     },
@@ -632,14 +620,12 @@ test("Host operations share exact request/result schemas and safe errors", async
     {
       operation: "storage.readText",
       payload: {
-        scope: "appData",
         path: "a\0b",
       },
     },
     {
       operation: "storage.readText",
       payload: {
-        scope: "appData",
         path: "a",
         context: "backend",
       },
@@ -660,7 +646,6 @@ test("Host operations share exact request/result schemas and safe errors", async
       {
         name: "storage",
         support: "supported",
-        permission: "denied",
       },
     ]),
   ).toHaveLength(1);
@@ -669,7 +654,6 @@ test("Host operations share exact request/result schemas and safe errors", async
       {
         name: "storage",
         support: "yes",
-        permission: "denied",
       },
     ]),
   ).toThrow();
@@ -678,12 +662,10 @@ test("Host operations share exact request/result schemas and safe errors", async
       {
         name: "storage",
         support: "supported",
-        permission: "denied",
       },
       {
         name: "storage",
         support: "unsupported",
-        permission: "unknown",
       },
     ]),
   ).toThrow();
@@ -704,7 +686,6 @@ test("Host operations share exact request/result schemas and safe errors", async
   }));
   await expect(
     denied.call(contracts["storage.readText"], {
-      scope: "appData",
       path: "notes/a",
     }),
   ).rejects.toMatchObject({
@@ -722,7 +703,6 @@ test("Host operations share exact request/result schemas and safe errors", async
   });
   await expect(
     invalid.call(contracts["storage.readText"], {
-      scope: "appData",
       path: "notes/a",
     }),
   ).rejects.toMatchObject({
@@ -767,7 +747,6 @@ test("cancelled Host calls cannot start or deliver a late successful result", as
   });
   await expect(
     late.call(contracts["storage.readText"], {
-      scope: "temp",
       path: "a",
     }),
   ).rejects.toMatchObject({
@@ -775,20 +754,12 @@ test("cancelled Host calls cannot start or deliver a late successful result", as
   });
 });
 
-test("Host paths use relative forward-slash paths while native access checks remain required", () => {
+test("storage validates path strings while platform implementations validate native paths", () => {
   for (const path of [
     "",
-    "/absolute",
-    "C:/absolute",
-    "C:relative-drive",
-    "../escape",
-    "notes/../escape",
-    "notes/./a",
-    "notes\\a",
-    "notes\u2028/../escape",
-    "notes\u2029/../escape",
-    "notes\u2028/./a",
-    "notes\u2029/./a",
+    "bad\0path",
+    "bad\npath",
+    "bad\rpath",
   ]) {
     expect(() =>
       registry.validateCall(
@@ -796,7 +767,6 @@ test("Host paths use relative forward-slash paths while native access checks rem
           JSON.stringify({
             operation: "storage.readText",
             payload: {
-              scope: "appData",
               path,
             },
           }),
@@ -807,8 +777,7 @@ test("Host paths use relative forward-slash paths while native access checks rem
   const call = {
     operation: "storage.readText",
     payload: {
-      scope: "appData",
-      path: "notes/한글 파일.txt",
+      path: "C:/notes/한글 파일.txt",
     },
   } as const;
   expect(parseHostCall(JSON.stringify(call))).toEqual(call);
@@ -823,7 +792,6 @@ test("the windows name follows the generic plugin registration rules", () => {
           version: "1.0.0",
           native: {
             operations: [],
-            permissions: [],
           },
         },
       ]),
@@ -893,7 +861,6 @@ test("pending Host calls abort promptly and release their cancellation listener"
     return pending;
   });
   const task = host.call(contracts["storage.readText"], {
-    scope: "temp",
     path: "notes/a",
   });
   await Promise.resolve();
@@ -1329,7 +1296,6 @@ export function checkCoreTypes(
     {
       operation: "storage.writeText",
       payload: {
-        scope: "temp",
         path: "a",
       },
     },

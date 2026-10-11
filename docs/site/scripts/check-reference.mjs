@@ -34,7 +34,7 @@ for (const workspace of [
     const exports = packageExportEntries(manifest.exports);
     if (!exports) {
       failures.push(
-        `${manifest.name}: unsupported package.json exports shape; expected string targets for explicit package paths`,
+        `${manifest.name}: unsupported package.json exports shape; expected string targets or types/default targets`,
       );
     }
     packagesBySource.set(`${workspace}/${directory.name}`, {
@@ -44,7 +44,7 @@ for (const workspace of [
   }
 }
 
-/** Returns only explicit string export targets that can be checked exactly. */
+/** Resolve source or compiled export targets; generated native wildcard outputs are mapped explicitly. */
 function packageExportEntries(exports) {
   if (!exports || typeof exports !== "object" || Array.isArray(exports)) {
     return;
@@ -54,13 +54,28 @@ function packageExportEntries(exports) {
     !entries.length ||
     entries.some(
       ([key, target]) =>
-        (key !== "." && (!key.startsWith("./") || key.includes("*"))) ||
-        typeof target !== "string",
+        (key !== "." &&
+          (!key.startsWith("./") ||
+            (key.includes("*") && key !== "./native/*"))) ||
+        !(
+          typeof target === "string" ||
+          (target &&
+            typeof target.types === "string" &&
+            typeof target.default === "string" &&
+            Object.keys(target).every(
+              (key) => key === "types" || key === "default",
+            ))
+        ),
     )
   ) {
     return;
   }
-  return new Map(entries);
+  return new Map(
+    entries.map(([key, target]) => [
+      key,
+      typeof target === "string" ? target : target.default,
+    ]),
+  );
 }
 
 /** Requires reference-map entries to match package exports and source targets. */
@@ -100,10 +115,23 @@ function packageExportFailures(entries, packages) {
     mapped.set(packageName, mappedExports);
 
     const sourceTarget = `.${entry.source.slice(sourceRoot.length)}`;
-    if (exportValue !== sourceTarget) {
+    if (exportValue !== (entry.buildOutputs?.[exportKey] ?? sourceTarget)) {
       failures.push(
         `${entry.name}: source ${entry.source} is not a package.json export target`,
       );
+    }
+    for (const [key, target] of Object.entries(entry.buildOutputs ?? {})) {
+      if (info.exports.get(key) !== target) {
+        failures.push(
+          `${entry.name}: compiled output ${key} does not match package.json exports`,
+        );
+      }
+      if (key !== exportKey) {
+        if (mappedExports.has(key)) {
+          failures.push(`${entry.name}: duplicate package export mapping`);
+        }
+        mappedExports.add(key);
+      }
     }
   }
 
@@ -176,6 +204,55 @@ function checkPackageExportExamples() {
       },
       extraEntry,
     ]),
+    /is not a package\.json export target/,
+  );
+  const compiled = new Map([
+    [
+      "plugins/demo",
+      {
+        name: "@fixture/demo",
+        exports: packageExportEntries({
+          ".": {
+            types: "./dist/types/index.d.ts",
+            default: "./dist/index.js",
+          },
+          "./native/*": {
+            types: "./dist/types/index.d.ts",
+            default: "./dist/native/*.js",
+          },
+        }),
+      },
+    ],
+  ]);
+  const entry = {
+    name: "@fixture/demo",
+    source: "plugins/demo/src/index.ts",
+    buildOutputs: {
+      ".": "./dist/index.js",
+      "./native/*": "./dist/native/*.js",
+    },
+  };
+  assert.deepEqual(
+    packageExportFailures(
+      [
+        entry,
+      ],
+      compiled,
+    ),
+    [],
+  );
+  assert.match(
+    packageExportFailures(
+      [
+        {
+          ...entry,
+          buildOutputs: {
+            ".": "./dist/wrong.js",
+          },
+        },
+      ],
+      compiled,
+    ).join("\n"),
     /is not a package\.json export target/,
   );
 }
@@ -337,48 +414,6 @@ function visitCommands(node) {
 visitCommands(source(resolve(root, "packages/cli/src/main.ts")));
 checkNames(commands, catalog.commands, "CLI commands");
 
-function operationNames(path) {
-  const names = new Set();
-  function visit(node) {
-    if (
-      ts.isCallExpression(node) &&
-      ts.isIdentifier(node.expression) &&
-      node.expression.text === "defineNativePlugin" &&
-      node.arguments[0] &&
-      ts.isObjectLiteralExpression(node.arguments[0])
-    ) {
-      const fields = new Map(
-        node.arguments[0].properties
-          .filter(ts.isPropertyAssignment)
-          .map((property) => [
-            property.name.getText(),
-            property.initializer,
-          ]),
-      );
-      const name = fields.get("name");
-      const operations = fields.get("operations");
-      if (
-        name &&
-        ts.isStringLiteral(name) &&
-        operations &&
-        ts.isObjectLiteralExpression(operations)
-      ) {
-        for (const operation of operations.properties) {
-          if (
-            ts.isPropertyAssignment(operation) &&
-            (ts.isIdentifier(operation.name) ||
-              ts.isStringLiteral(operation.name))
-          ) {
-            names.add(`${name.text}.${operation.name.text}`);
-          }
-        }
-      }
-    }
-    ts.forEachChild(node, visit);
-  }
-  visit(source(resolve(root, path)));
-  return names;
-}
 function objectPropertyNames(path, constantName) {
   const file = source(resolve(root, path));
   for (const statement of file.statements) {
@@ -427,9 +462,15 @@ checkNames(
       "capabilities",
       "opener",
       "clipboard",
-    ].flatMap((name) => [
-      ...operationNames(`plugins/${name}/src/index.ts`),
-    ]),
+      "autostart",
+    ].flatMap((name) =>
+      [
+        ...objectPropertyNames(
+          `plugins/${name}/src/contract.ts`,
+          `${name}Operations`,
+        ),
+      ].map((operation) => `${name}.${operation}`),
+    ),
   ]),
   catalog.operations,
   "Host operations",

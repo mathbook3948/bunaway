@@ -60,6 +60,13 @@ Windows 프로덕션의 executable은 컴파일된 앱 실행 파일이고 argum
 
 ## 개발과 패키징
 
+`buildNativePlugin(directory = "."): Promise<string>`는 플러그인의 src/index.ts와 플랫폼
+팩터리를 빌드하고 dist의 절대 경로를 반환합니다. 중립 공개 출력, OS별 네이티브 출력과
+타입 선언을 만들며 플러그인 package.json의 version을 모든 출력에 기록합니다.
+version이 없거나 빈 문자열이면 실패하며 기존 dist를 보존합니다. TypeScript는 플러그인 개발 의존성으로
+설치해야 합니다. 파일 asset import는 거부합니다. CLI의 `bunaway plugin build [directory]`와
+같은 작업이며 입력 구조와 배포 exports는 [네이티브 플러그인 작성](/reference/tooling/native-plugins/)을 따릅니다.
+
 `devProject(directory, { inspect?: number } = {}): Promise<void>`는 파일 감시와 창 실행을 시작하고 종료 후 정리가 끝날 때까지 기다립니다.
 inspect를 지정하면 Windows x64에서 `127.0.0.1:<port>/bunaway`의 백엔드 inspector를 시작합니다.
 포트는 1부터 65535까지 정수여야 합니다. 생략하면 inspector를 시작하지 않습니다.

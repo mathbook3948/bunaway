@@ -16,6 +16,7 @@ description = "Check formatting and lint for staged files without changing them"
 run = "bunx --no-install biome check --staged --assist-enabled=false --no-errors-on-unmatched"
 
 [tasks.typecheck]
+depends = ["plugins:build"]
 description = "Check all workspace TypeScript types"
 run = ["bun run --workspaces typecheck", "bunx --no-install tsc --project tests/tsconfig.json", "bunx --no-install tsc --project tests/fixtures/android/web/tsconfig.json"]
 
@@ -47,6 +48,7 @@ description = "Check formatting, types, and protocol contracts"
 depends = ["lint", "format:check", "format:java:check", "typecheck", "test"]
 
 [tasks.test]
+depends = ["plugins:build"]
 description = "Run contract tests"
 run = "bun test ./tests"
 
@@ -55,13 +57,20 @@ description = "Export the protocol and policy schemas for native hosts"
 run = ["bun packages/protocol/scripts/generate.ts", "bunx --no-install biome format --write native/host-api/generated"]
 
 [tasks."host:windows"]
-description = "Build the Windows product host package and verify the WebView boundary, policy, storage scope and cleanup"
+depends = ["plugins:build"]
+description = "Build the Windows product host package and verify the WebView boundary, policy, application-selected storage paths and cleanup"
 run = "bun --no-env-file tests/lifecycle/run-native.ts --target windows-x64"
 
 [tasks."host:macos"]
+depends = ["plugins:build"]
 description = "Build the macOS Bun FFI app without a C compiler and verify WKWebView, policy and Worker cleanup"
 run = "bun --no-env-file tests/lifecycle/run-native.ts --target macos-arm64"
 
 [tasks."host:android"]
+depends = ["plugins:build"]
 description = "Build the Android APK and verify the actual Core, SDK, WebView and lifecycle on a selected device"
 run = "bun native/android/run.ts"
+
+[tasks."plugins:build"]
+description = "Build neutral plugin declarations and per-platform native exports"
+run = "bun run plugins:build"

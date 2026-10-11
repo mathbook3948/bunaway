@@ -1,5 +1,9 @@
 # @bunaway/plugin-clipboard
 
+`src/index.ts`는 계약과 플랫폼 선언을 조립하고 공개 API를 export한다.
+`src/contract.ts`는 작업 스키마와 네이티브 호출 검증을 소유하며 텍스트 제한은 `src/text.ts`에서 공유한다.
+플랫폼 구현은 계약을 직접 읽으며 공개 진입점을 역으로 import하지 않는다.
+
 Windows 텍스트 클립보드를 제공하는 선택 패키지다. 설치 후 `clipboardPlugin`을 앱의 `plugins`에 등록하고 호출 출처에 작업별 권한을 허용한다. 화면과 백엔드 모두 같은 `clipboard`를 사용한다.
 
 ```ts
@@ -15,7 +19,7 @@ await clipboard.clear(null);
 
 ## Windows 소유권과 수명
 
-`plugin.json`의 UI 실행 경로를 사용한다. 공통 SDK가 입력과 결과를 검사하고 Windows UI 호스트와 어댑터가 권한을 검사한다. UI STA에서 숨은 `STATIC` 창과 DLL 바인딩을 만들며, 선언을 import하는 것만으로 네이티브 자원을 만들지 않는다.
+`src/index.ts`의 platforms 선언에 UI 실행과 `src/platforms/windows.ts`에서 import한 팩터리를 지정한다. 공통 SDK가 입력과 결과를 검사하고 Windows UI 호스트와 어댑터가 권한을 검사한다. UI STA에서 숨은 `STATIC` 창과 DLL 바인딩을 만들며, 선언을 import하는 것만으로 네이티브 자원을 만들지 않는다. `bun run plugins:build`는 OS 구현을 제외한 공개 출력과 Windows 호스트 출력을 만든다.
 
 `OpenClipboard`에는 해당 창을 전달한다. 점유 재시도 사이에는 메모리와 클립보드 핸들을 보유하지 않는다. 성공한 열기마다 `finally`에서 `CloseClipboard`를 호출한다. 읽기는 `CF_UNICODETEXT`의 빌린 `HGLOBAL`을 `GlobalSize`로 제한하고 `GlobalLock` 이후 NUL 종료를 확인한다. 잠금은 항상 해제하며 문자열을 복사한 뒤에만 클립보드를 닫는다. 빌린 핸들은 해제하지 않는다.
 

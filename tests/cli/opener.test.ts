@@ -4,11 +4,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { loadPluginCatalog } from "#native/host-api/bun/plugin-catalog";
-import {
-  operations,
-  permissionMatcher,
-  pluginRegistry,
-} from "#native/host-api/bun/plugins";
+import { operations, pluginRegistry } from "#native/host-api/bun/plugins";
 import { pluginImportsSource } from "#cli/app-modules";
 import { validateProject } from "#cli/config";
 import { packageFilename } from "#cli/distribution";
@@ -84,23 +80,9 @@ export default defineApp({ modules: [], plugins: [openerPlugin] });
           events: [],
           host: {
             permissions: [
-              "opener:openUrl",
-              {
-                identifier: "opener:openFile",
-                allow: [
-                  {
-                    path: "C:\\한글 값.txt",
-                  },
-                ],
-              },
-              {
-                identifier: "opener:revealFile",
-                allow: [
-                  {
-                    path: "C:\\한글 값.txt",
-                  },
-                ],
-              },
+              "opener.openUrl",
+              "opener.openFile",
+              "opener.revealFile",
             ],
           },
         },
@@ -116,7 +98,6 @@ export default defineApp({ modules: [], plugins: [openerPlugin] });
       "@bunaway/plugin-opener",
     ]);
     expect(plugins[0]?.targets.windows?.execution).toBe("io");
-    expect(plugins[0]?.authorization).toBeDefined();
     expect(valid.nativePlugins?.map(({ name }) => name)).toEqual([
       "opener",
     ]);
@@ -137,10 +118,7 @@ export default defineApp({ modules: [], plugins: [openerPlugin] });
     ).default;
     const registry = pluginRegistry(app.plugins ?? [], packagedPlugins);
     registry.validatePolicy(valid.policy);
-    expect(registry.operation("opener.openUrl").permission).toBe(
-      "opener:openUrl",
-    );
-    const matches = await permissionMatcher(app.plugins ?? [], packagedPlugins);
+    expect(registry.operation("opener.openUrl").name).toBe("opener.openUrl");
     for (const action of [
       "openFile",
       "revealFile",
@@ -157,7 +135,6 @@ export default defineApp({ modules: [], plugins: [openerPlugin] });
             permissions: [],
           },
           call,
-          matches,
         ),
       ).toBe(true);
       expect(
@@ -171,9 +148,8 @@ export default defineApp({ modules: [], plugins: [openerPlugin] });
               path: "C:/other.txt",
             },
           },
-          matches,
         ),
-      ).toBe(false);
+      ).toBe(true);
     }
 
     const browserEntry = resolve(project, "opener-browser.ts");

@@ -14,6 +14,15 @@ import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
 const native = {
   operations: [
     {
+      name: "ui-test.consent",
+      input: {
+        const: null,
+      },
+      output: {
+        type: "string",
+      },
+    },
+    {
       name: "ui-test.wait",
       input: {
         const: null,
@@ -21,7 +30,6 @@ const native = {
       output: {
         type: "string",
       },
-      permission: "ui-test:execute",
     },
     {
       name: "ui-test.large",
@@ -31,7 +39,6 @@ const native = {
       output: {
         type: "string",
       },
-      permission: "ui-test:execute",
     },
     {
       name: "ui-test.ok",
@@ -41,12 +48,6 @@ const native = {
       output: {
         type: "string",
       },
-      permission: "ui-test:execute",
-    },
-  ],
-  permissions: [
-    {
-      name: "ui-test:execute",
     },
   ],
 } as const;
@@ -119,7 +120,7 @@ function config(dataRoot: string, permissions: string[]): UIConfig {
 }
 
 /** Start the real UI worker with shared-memory controls for blocked operations. */
-async function startWorker(permissions: string[]) {
+async function startWorker(permissions: string[], consentGranted = true) {
   const dataRoot = resolve(
     import.meta.dir,
     `../../build/windows-ui-operations-${crypto.randomUUID()}`,
@@ -128,8 +129,9 @@ async function startWorker(permissions: string[]) {
     recursive: true,
   });
   const state = new Int32Array(
-    new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 4),
+    new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 6),
   );
+  Atomics.store(state, 5, consentGranted ? 1 : 0);
   const runtime = config(dataRoot, permissions);
   await bundleUIPluginFixture(
     dataRoot,
@@ -139,13 +141,22 @@ async function startWorker(permissions: string[]) {
         version: "1",
         native: native,
         execution: "ui",
-        authorization: false,
       },
     ],
     `import { workerData } from "node:worker_threads";
+import { BunawayError } from "@bunaway/protocol";
 const state = new Int32Array(workerData.state);
 export const pluginImports = { 'ui-test': {
   operations: async () => ({ createOperations: () => ({
+    async executeUI(operation, input, source, context) {
+      if (operation !== "ui-test.consent") return this.execute(operation, input, source);
+      // Model an asynchronous plugin-owned OS prompt after the real host policy boundary.
+      Atomics.add(state, 4, 1);
+      await Bun.sleep(2);
+      if (context.signal?.aborted) throw new BunawayError({ code: "CANCELLED", message: "Consent cancelled." });
+      if (!Atomics.load(state, 5)) throw new BunawayError({ code: "PERMISSION_DENIED", message: "OS consent denied." });
+      return "captured";
+    },
     execute(operation) {
       Atomics.add(state, 0, 1);
       if (operation === "ui-test.wait") {
@@ -342,10 +353,73 @@ export const pluginImports = { 'ui-test': {
 }
 
 test.skipIf(process.platform !== "win32")(
+  "plugin-owned consent runs only after operation policy approval and preserves user denial",
+  async () => {
+    for (const [permissions, consentGranted, expected] of [
+      [
+        [],
+        true,
+        {
+          kind: "error",
+          error: {
+            code: "PERMISSION_DENIED",
+            message: "Host context or policy denied.",
+          },
+        },
+      ],
+      [
+        [
+          "ui-test.consent",
+        ],
+        true,
+        {
+          kind: "result",
+          payload: "captured",
+        },
+      ],
+      [
+        [
+          "ui-test.consent",
+        ],
+        false,
+        {
+          kind: "error",
+          error: {
+            code: "PERMISSION_DENIED",
+            message: "OS consent denied.",
+          },
+        },
+      ],
+    ] as const) {
+      const ui = await startWorker(
+        [
+          ...permissions,
+        ],
+        consentGranted,
+      );
+      try {
+        expect(Atomics.load(ui.state, 4)).toBe(0);
+        await ui.sendOperation("capture", "ui-test.consent");
+        expect((await ui.waitForResponse("capture")).response).toEqual(
+          expected,
+        );
+        expect(Atomics.load(ui.state, 4)).toBe(permissions.length ? 1 : 0);
+        await ui.stop();
+      } finally {
+        await ui.close();
+      }
+    }
+  },
+  timeoutMs + 5_000,
+);
+
+test.skipIf(process.platform !== "win32")(
   "UI worker approves a full concurrent operation burst without consuming data capacity",
   async () => {
     const ui = await startWorker([
-      "ui-test:execute",
+      "ui-test.wait",
+      "ui-test.large",
+      "ui-test.ok",
     ]);
     const ids = Array.from(
       {
@@ -389,7 +463,9 @@ test.skipIf(process.platform !== "win32")(
   "UI worker rejects a call source that does not match its authenticated context",
   async () => {
     const ui = await startWorker([
-      "ui-test:execute",
+      "ui-test.wait",
+      "ui-test.large",
+      "ui-test.ok",
     ]);
     try {
       await ui.sendOperation("forged-view", "ui-test.ok", "view:main");
@@ -419,7 +495,9 @@ test.skipIf(process.platform !== "win32")(
   "UI worker drops queued calls on cancellation and does not roll back an operation already started",
   async () => {
     const ui = await startWorker([
-      "ui-test:execute",
+      "ui-test.wait",
+      "ui-test.large",
+      "ui-test.ok",
     ]);
     try {
       for (const [requestId, cancellation] of [
@@ -496,7 +574,9 @@ test.skipIf(process.platform !== "win32")(
       MAX_MESSAGE_BYTES,
     );
     const ui = await startWorker([
-      "ui-test:execute",
+      "ui-test.wait",
+      "ui-test.large",
+      "ui-test.ok",
     ]);
     try {
       await ui.sendOperation("oversized", "ui-test.large");

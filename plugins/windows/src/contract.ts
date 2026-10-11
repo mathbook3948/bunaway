@@ -797,3 +797,17 @@ export function validateWindowOutput<K extends WindowOperation>(
 ): WindowOutput<K> {
   return validate(windowOperations[operation].output, value) as WindowOutput<K>;
 }
+
+/** Caller-facing keys derived from the fully qualified host operation contract. */
+type WindowDefinitions = {
+  readonly [K in keyof typeof windowOperations as K extends `windows.${infer Name}`
+    ? Name
+    : never]: (typeof windowOperations)[K];
+};
+// Every key in windowOperations has the windows. prefix; stripping it preserves each schema pair.
+export const windowDefinitions = Object.fromEntries(
+  Object.entries(windowOperations).map(([name, operation]) => [
+    name.slice("windows.".length),
+    operation,
+  ]),
+) as WindowDefinitions;

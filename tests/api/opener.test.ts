@@ -17,12 +17,10 @@ import {
   revealFile,
 } from "@bunaway/plugin-opener";
 import {
-  fileInput,
   MAX_FILE_PATH_LENGTH,
   normalizeFilePath,
 } from "#plugins/opener/src/path";
-import { matches } from "#plugins/opener/src/scope";
-import { createOperations } from "#plugins/opener/src/windows";
+import { createOperations } from "#plugins/opener/src/platforms/windows";
 import { MAX_URL_LENGTH, normalizeUrl } from "#plugins/opener/src/url";
 
 const emptyPolicy: Policy = {
@@ -37,7 +35,6 @@ const registry = new NativeRegistry([
   openerPlugin,
 ]);
 const operation = registry.operation("opener.openUrl");
-const matchesNoScope = () => false;
 
 test("file paths preserve Unicode and spaces and normalize separators and drive letters", () => {
   expect(normalizeFilePath("c:/한글 폴더/😀, 보고서.txt")).toBe(
@@ -81,127 +78,49 @@ test("file paths preserve Unicode and spaces and normalize separators and drive 
   }
 });
 
-test("file grants authorize exact paths, separate operations, and deny wins", () => {
-  const path = "C:\\한글 폴더\\report.txt";
+test("file grants authorize only the selected operation and do not encode app path rules", () => {
   for (const action of [
     "openFile",
     "revealFile",
   ]) {
-    const permission = `opener:${action}`;
-    const call = {
-      operation: `opener.${action}`,
-      payload: {
-        path,
-      },
-    };
-    const grant = {
-      identifier: permission,
-      allow: [
-        {
-          path: path.replaceAll("\\", "/"),
-        },
+    const source = {
+      permissions: [
+        `opener.${action}`,
       ],
     };
     registry.validatePolicy({
       ...emptyPolicy,
-      backend: {
-        permissions: [
-          grant,
-        ],
-      },
+      backend: source,
     });
-    expect(
-      registry.allowed(
-        {
-          permissions: [
-            grant,
-          ],
-        },
-        call,
-        matches,
-      ),
-    ).toBe(true);
-    for (const other of [
-      `${path}.old`,
-      "C:\\한글 폴더\\Report.txt",
-      "C:\\한글 폴더\\sub\\report.txt",
-      "C:\\한글 폴더\\..\\report.txt",
+    for (const path of [
+      "C:/한글 폴더/report.txt",
+      "C:/other.txt",
     ]) {
+      const call = registry.validateCall({
+        operation: `opener.${action}`,
+        payload: {
+          path,
+        },
+      });
+      expect(registry.allowed(source, call)).toBe(true);
       expect(
         registry.allowed(
           {
-            permissions: [
-              grant,
-            ],
+            permissions: [],
           },
-          {
-            ...call,
-            payload: {
-              path: other,
-            },
-          },
-          matches,
+          call,
         ),
       ).toBe(false);
     }
+    const other = action === "openFile" ? "revealFile" : "openFile";
     expect(
-      registry.allowed(
-        {
-          permissions: [
-            grant,
-            {
-              identifier: permission,
-              deny: [
-                {
-                  path,
-                },
-              ],
-            },
-          ],
-        },
-        call,
-        matches,
-      ),
-    ).toBe(false);
-    expect(
-      registry.allowed(
-        {
-          permissions: [
-            "opener:openUrl",
-            permission,
-          ],
-        },
-        call,
-        matches,
-      ),
-    ).toBe(false);
-    expect(
-      registry.allowed(
-        {
-          permissions: [
-            {
-              ...grant,
-              identifier:
-                action === "openFile" ? "opener:revealFile" : "opener:openFile",
-            },
-          ],
-        },
-        call,
-        matches,
-      ),
-    ).toBe(false);
-    expect(() =>
-      registry.validateCall({
-        ...call,
+      registry.allowed(source, {
+        operation: `opener.${other}`,
         payload: {
-          path,
-          extra: true,
+          path: "C:/other.txt",
         },
       }),
-    ).toThrow();
-    expect(registry.operation(call.operation).output).toEqual({
-      const: null,
-    });
+    ).toBe(false);
   }
 });
 
@@ -276,19 +195,21 @@ test("public file APIs use caller context and preserve OS failure codes", async 
   ]);
 });
 
-test("opener preserves the strict URL operation and adds separately scoped file operations", () => {
-  expect(operation.permission).toBe("opener:openUrl");
-  expect(openerPlugin.native?.permissions).toEqual([
+test("opener preserves strict inputs and independently granted file operations", () => {
+  expect(operation.name).toBe("opener.openUrl");
+  expect(
+    openerPlugin.native?.operations.map(({ name }) => ({
+      name,
+    })),
+  ).toEqual([
     {
-      name: "opener:openUrl",
+      name: "opener.openUrl",
     },
     {
-      name: "opener:openFile",
-      scope: fileInput,
+      name: "opener.openFile",
     },
     {
-      name: "opener:revealFile",
-      scope: fileInput,
+      name: "opener.revealFile",
     },
   ]);
   expect(operation.output).toEqual({
@@ -326,16 +247,11 @@ test("opener preserves the strict URL operation and adds separately scoped file 
       ...emptyPolicy,
       backend: {
         permissions: [
-          {
-            identifier: "opener:openUrl",
-            allow: [
-              {},
-            ],
-          },
+          "opener.openUrl",
         ],
       },
     }),
-  ).toThrow();
+  ).not.toThrow();
 });
 
 test("URL validation accepts HTTP and HTTPS and preserves parsed Korean query text", () => {
@@ -401,7 +317,7 @@ test("URL length is checked after URL encoding", () => {
 test("openUrl uses the caller host, and the registered permission controls it", async () => {
   const allowedPermissions: Policy["backend"] = {
     permissions: [
-      "opener:openUrl",
+      "opener.openUrl",
     ],
   };
   const deniedPermissions: Policy["backend"] = {
@@ -417,7 +333,7 @@ test("openUrl uses the caller host, and the registered permission controls it", 
     _context: HostContext,
     call: HostCall,
   ): Promise<HostResponse> => {
-    if (!registry.allowed(allowedPermissions, call, matchesNoScope)) {
+    if (!registry.allowed(allowedPermissions, call)) {
       return {
         kind: "error",
         error: {
@@ -439,7 +355,7 @@ test("openUrl uses the caller host, and the registered permission controls it", 
       "backend" as HostContext,
       controller.signal,
       async (context, call) => {
-        if (!registry.allowed(permissions, call, matchesNoScope)) {
+        if (!registry.allowed(permissions, call)) {
           return {
             kind: "error",
             error: {

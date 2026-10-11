@@ -15,7 +15,6 @@ import { logPlugin } from "@bunaway/plugin-log";
 import { storagePlugin } from "@bunaway/plugin-storage";
 import { windowsPlugin } from "@bunaway/plugin-windows";
 
-const matches = storagePlugin.matches;
 /** Fail fixture setup when an expected native operation is missing. */
 function present<T>(value: T | undefined): T {
   assert(value !== undefined, "Missing native fixture contract.");
@@ -76,7 +75,7 @@ export const createCore: CoreFactory = (app, services) =>
 /** Return whether a fixture host call passes the shared registry and policy. */
 export function allowedHost(permissions: Policy["backend"], call: HostCall) {
   try {
-    return registry.allowed(permissions, registry.validateCall(call), matches);
+    return registry.allowed(permissions, registry.validateCall(call));
   } catch {
     return false;
   }

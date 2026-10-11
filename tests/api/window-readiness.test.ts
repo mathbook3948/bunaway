@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 import type {
   NativeWindow,
   NativeWindowServices,
 } from "@bunaway/plugin-api/native";
 import type { Policy } from "@bunaway/protocol";
 import { readWindowSpecs } from "@bunaway/runtime-bun/window-config";
-import { createOperations } from "#plugins/windows/src/windows";
+import { createOperations } from "#plugins/windows/src/platforms/windows";
 
 const policy: Policy = {
   version: 1,
@@ -196,30 +197,11 @@ test("splashscreen handoff validates both targets and readiness before showing, 
       },
     );
   const mainOnly = {
-    permissions: [
-      {
-        identifier: "windows:control",
-        allow: [
-          {
-            view: "main",
-          },
-        ],
-      },
-    ],
+    permissions: [],
   };
   const both = {
     permissions: [
-      {
-        identifier: "windows:control",
-        allow: [
-          {
-            view: "main",
-          },
-          {
-            view: "splash",
-          },
-        ],
-      },
+      ...windowPermissions(),
     ],
   };
   await expect(invoke(mainOnly)).rejects.toMatchObject({

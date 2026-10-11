@@ -78,7 +78,7 @@ bun run package win-direct --build
 - `src-bunaway/memo/module.ts`: `memo.save`, `memo.read`, `memo.saved`를 공개하고 메모 함수를 연결.
 - `src-bunaway/memo/service.ts`: 메모 파일을 읽고 쓰는 함수. 명령의 Host 권한은 자동으로 연결된다.
 - `src-bunaway/bunaway.json`: 빌드 진입점과 앱 식별자, 제목, 단일 창 설정.
-- `src-bunaway/policy.json`: `main` 뷰의 메모 명령, 이벤트와 `appData/notes/` 읽기, 쓰기 권한.
+- `src-bunaway/policy.json`: `main` 뷰의 메모 명령, 이벤트와 `storage.readText`, `storage.writeText` 호출 권한. 저장 파일의 절대 경로는 `memo/service.ts`에서 정한다.
 
 저장 버튼은 `memo.save`를 호출하고 백엔드는 Host API로 파일을 기록한 뒤 `memo.saved`를 발행한다.
 화면은 초기화 과정에서 `memoApp`의 명령과 이벤트 타입을 지정한 클라이언트를 만든다.
@@ -91,4 +91,4 @@ Windows 저장 위치는 `%LOCALAPPDATA%/bunaway/examples.bunaway.memo/data/note
 
 여러 창, 읽기 전용 권한, 자동 저장, 재실행 시나리오는 `tests/fixtures/desktop/host/`에 분리되어 있다.
 
-이 예제는 @bunaway/plugin-storage를 별도 설치하고 app.ts의 plugins에 storagePlugin을 등록한다. policy v1의 permissions에서 storage:read-text와 storage:write-text의 notes 범위를 허용한다. 현재 네이티브 실행은 Windows에서 검증했다.
+이 예제는 @bunaway/plugin-storage를 별도 설치하고 app.ts의 plugins에 storagePlugin을 등록한다. policy v1의 permissions에서 storage.readText와 storage.writeText를 허용하고 앱 명령이 notes 저장 경로를 정한다. 현재 네이티브 실행은 Windows에서 검증했다.

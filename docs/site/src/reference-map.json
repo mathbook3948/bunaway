@@ -130,6 +130,7 @@
           "createProject",
           "validateProject",
           "buildProject",
+          "buildNativePlugin",
           "buildAndroidProject",
           "syncAndroidProject",
           "runAndroidProject",
@@ -182,6 +183,10 @@
     {
       "name": "@bunaway/plugin-storage",
       "source": "plugins/storage/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
       "pages": {
         "reference/backend/host-api": ["storage", "storagePlugin"]
       }
@@ -189,6 +194,10 @@
     {
       "name": "@bunaway/plugin-log",
       "source": "plugins/log/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
       "pages": {
         "reference/backend/host-api": ["log", "logPlugin"]
       }
@@ -196,6 +205,10 @@
     {
       "name": "@bunaway/plugin-capabilities",
       "source": "plugins/capabilities/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
       "pages": {
         "reference/backend/host-api": ["capabilities", "capabilitiesPlugin"]
       }
@@ -243,6 +256,10 @@
     {
       "name": "@bunaway/plugin-autostart",
       "source": "plugins/autostart/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
       "pages": {
         "reference/plugins/autostart": [
           "autostartPlugin",
@@ -255,6 +272,10 @@
     {
       "name": "@bunaway/plugin-opener",
       "source": "plugins/opener/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
       "pages": {
         "reference/plugins/opener": [
           "openUrl",
@@ -267,6 +288,10 @@
     {
       "name": "@bunaway/plugin-clipboard",
       "source": "plugins/clipboard/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
       "pages": {
         "reference/plugins/clipboard": ["clipboard", "clipboardPlugin"]
       }
@@ -274,6 +299,10 @@
     {
       "name": "@bunaway/plugin-windows",
       "source": "plugins/windows/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
       "pages": {
         "reference/host/windows": ["windows", "windowsPlugin"],
         "reference/tooling/native-plugins": [
@@ -666,13 +695,7 @@
       "source": "packages/plugin-sdk/src/index.ts",
       "type": "NativePluginDefinition",
       "pages": {
-        "reference/tooling/native-plugins": [
-          "name",
-          "version",
-          "operations",
-          "scopes",
-          "matches"
-        ]
+        "reference/tooling/native-plugins": ["name", "platforms", "operations"]
       }
     },
     {
@@ -703,12 +726,7 @@
       "source": "packages/plugin-sdk/src/index.ts",
       "type": "NativeOperationDefinition",
       "pages": {
-        "reference/tooling/native-plugins": [
-          "input",
-          "output",
-          "permission",
-          "osPermission"
-        ]
+        "reference/tooling/native-plugins": ["input", "output"]
       }
     },
     {
@@ -722,13 +740,7 @@
       "source": "packages/protocol/src/host-api.ts",
       "type": "HostOperationContract",
       "pages": {
-        "reference/protocol": [
-          "name",
-          "input",
-          "output",
-          "permission",
-          "osPermission"
-        ]
+        "reference/protocol": ["name", "input", "output"]
       }
     },
     {
@@ -794,6 +806,7 @@
     }
   ],
   "commands": {
+    "reference/tooling/native-plugins": ["plugin"],
     "reference/cli/create": ["create"],
     "reference/cli/validate": ["validate"],
     "reference/cli/doctor": ["doctor"],
@@ -804,6 +817,11 @@
     "reference/api": ["help"]
   },
   "operations": {
+    "reference/plugins/autostart": [
+      "autostart.enable",
+      "autostart.disable",
+      "autostart.getStatus"
+    ],
     "reference/host/storage-read-text": ["storage.readText"],
     "reference/host/storage-write-text": ["storage.writeText"],
     "reference/host/storage-exists": ["storage.exists"],

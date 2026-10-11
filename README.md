@@ -23,11 +23,11 @@ Windows 앱 실행에는 WebView2 런타임이 필요하다.
 import { storage } from "@bunaway/plugin-storage";
 
 export async function save(text: string) {
-  return storage.writeText({ scope: "appData", path: "notes/memo.txt", text });
+  return storage.writeText({ path: "C:/Users/me/Documents/notes/memo.txt", text });
 }
 ```
 
-뷰의 정책에 `appData/notes` 쓰기 권한이 필요하다. 명령 밖이나 완료한 명령의 작업에서는 호출을 거부한다.
+저장 경로는 앱이 정하며 예제 경로는 실행 환경에 맞게 선택한다. 뷰의 정책에는 `storage.writeText`가 필요하다. 명령 밖이나 완료한 명령의 작업에서는 호출을 거부한다.
 실행 범위와 로그, 기능 조회 사용법은 [백엔드 Host API](./docs/site/src/content/docs/reference/backend/host-api.mdx)를 따른다.
 
 저장, 앱 로그, 기능 지원 조회를 개별 플러그인으로 설치하는 구조는
@@ -36,7 +36,7 @@ export async function save(text: string) {
 기본 템플릿은 저장 플러그인만 설치하고 등록한다.
 플러그인은 화면과 백엔드에서 `@bunaway/plugin-storage`처럼 같은 경로로 import한다.
 플러그인 `setup`의 이벤트 발행은 앱 백엔드의 수명을 따른다. 종료 신호가 취소되면 `events.emit`은 `CANCELLED`로 실패한다. [이벤트 수명 안내](./docs/site/src/content/docs/reference/backend/events.mdx)를 참고한다.
-새 플러그인은 `plugin.json`, `src/index.ts`, `src/windows.ts`로 시작한다. 필요하면 제작자가 파일을 추가한다.
+새 플러그인은 `package.json`, `src/index.ts`, `src/platforms/windows.ts`로 시작한다. index.ts에서 API와 직접 import한 구현 팩터리를 함께 선언한다. `bunaway plugin build`는 화면과 백엔드용 중립 출력 및 OS별 호스트 출력을 만든다.
 생성 앱의 타입 검사와 빌드는 실행 환경에 맞는 구현을 선택한다.
 
 ## 프레임워크 개발 환경

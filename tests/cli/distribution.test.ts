@@ -13,8 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { DevelopmentApp } from "#native/windows/bun/development-app";
-import { packFramework } from "#cli-scripts/pack";
+import { readAppManifest } from "@bunaway/runtime-bun/app-manifest";
 import { bundleWindowsAssets, bundleWindowsReload } from "#cli/assets";
 import { bundleAssets } from "#cli/build";
 import { validateProject } from "#cli/config";
@@ -24,10 +23,143 @@ import {
   snapshotHashes,
   validateFramework,
 } from "#cli/distribution";
-import { installedPackageRoot, json, writeJson } from "#cli/files";
+import { files, installedPackageRoot, json, writeJson } from "#cli/files";
 import { buildWithSdk, sdkPlugin } from "#cli/sdk";
-import { readAppManifest } from "@bunaway/runtime-bun/app-manifest";
+import { packFramework } from "#cli-scripts/pack";
+import { DevelopmentApp } from "#native/windows/bun/development-app";
 import { createProject, packageDirectory } from "./project.ts";
+
+test("installed CLI builds an author's direct factory imports into portable package exports", async () => {
+  const home = await realpath(
+    await mkdtemp(resolve(tmpdir(), "bunaway-plugin-author-")),
+  );
+  try {
+    const project = await createProject(resolve(home, "app"));
+    await command(project, [
+      "install",
+    ]);
+    const plugin = resolve(project, "author-plugin");
+    await mkdir(resolve(plugin, "src/platforms"), {
+      recursive: true,
+    });
+    await writeJson(resolve(plugin, "package.json"), {
+      name: "@example/plugin-built",
+      version: "1.2.3",
+      type: "module",
+      bunaway: {
+        plugin: "./dist/index.js",
+      },
+      exports: {
+        ".": {
+          types: "./dist/types/index.d.ts",
+          default: "./dist/index.js",
+        },
+        "./native/*": {
+          types: "./dist/types/index.d.ts",
+          default: "./dist/native/*.js",
+        },
+      },
+      files: [
+        "dist",
+      ],
+      peerDependencies: {
+        "@bunaway/plugin": `file:${resolve(await packageDirectory(), packageFilename("@bunaway/plugin", "0.0.0")).replaceAll("\\", "/")}`,
+      },
+    });
+    await writeJson(resolve(plugin, "tsconfig.json"), {
+      compilerOptions: {
+        target: "ES2022",
+        module: "Preserve",
+        moduleResolution: "Bundler",
+        strict: true,
+        noEmit: true,
+        allowImportingTsExtensions: true,
+        types: [
+          "bun",
+        ],
+      },
+      include: [
+        "src/**/*.ts",
+      ],
+    });
+    await Bun.write(
+      resolve(plugin, "src/index.ts"),
+      `import { defineNativePlugin, s } from "@bunaway/plugin";
+import { createOperations } from "./platforms/windows.ts";
+const plugin = defineNativePlugin({ name: "built", platforms: { windows: { execution: "io", create: createOperations } }, operations: { read: { input: s.null(), output: s.string() } } });
+export default plugin.definition;
+export const built = plugin.api;`,
+    );
+    await Bun.write(
+      resolve(plugin, "src/platforms/windows.ts"),
+      `import { dlopen } from "bun:ffi";
+import type { NativeAdapterFactory } from "@bunaway/plugin";
+export const createOperations: NativeAdapterFactory = () => { const api = dlopen("kernel32.dll", {}); return { execute: () => "native value", dispose: () => api.close() }; };`,
+    );
+    expect(
+      await command(project, [
+        "run",
+        "bunaway",
+        "plugin",
+        "build",
+        plugin,
+      ]),
+    ).toContain("Built");
+    const archive = resolve(home, "plugin.tgz");
+    await command(plugin, [
+      "pm",
+      "pack",
+      "--ignore-scripts",
+      "--filename",
+      archive,
+      "--quiet",
+    ]);
+    const manifest = await Bun.file(resolve(project, "package.json")).json();
+    await writeJson(resolve(project, "package.json"), {
+      ...manifest,
+      dependencies: {
+        ...manifest.dependencies,
+        "@example/plugin-built": `file:${archive.replaceAll("\\", "/")}`,
+      },
+    });
+    await command(project, [
+      "install",
+    ]);
+    const imported = resolve(project, "src/plugin-contract.ts");
+    await Bun.write(
+      imported,
+      `import { built } from "@example/plugin-built";
+const text: Promise<string> = built.read(null);
+// @ts-expect-error invalid plugin input
+built.read("wrong");`,
+    );
+    await command(project, [
+      "run",
+      "typecheck",
+    ]);
+    const neutral = await Bun.file(
+      resolve(
+        await installedPackageRoot(project, "@example/plugin-built"),
+        "dist/index.js",
+      ),
+    ).text();
+    expect(neutral).not.toContain("kernel32.dll");
+    expect(neutral).not.toContain("bun:ffi");
+    const valid = await validateProject(project);
+    expect(
+      valid.nativePlugins?.find((plugin) => plugin.name === "built")?.version,
+    ).toBe("1.2.3");
+    expect(
+      valid.nativePlugins?.find((plugin) => plugin.name === "built")?.targets
+        .windows?.operations,
+    ).toMatch(/[\\/]dist[\\/]native[\\/]windows\.js$/);
+  } finally {
+    await rm(home, {
+      recursive: true,
+      force: true,
+    });
+  }
+}, 60000);
 
 test("CommonJS plugin default and named exports retain their identity across app reloads", async () => {
   const home = await realpath(
@@ -44,16 +176,7 @@ test("CommonJS plugin default and named exports retain their identity across app
     );
     const manifestPath = resolve(pluginRoot, "package.json");
     const manifest = await json(manifestPath);
-    const descriptorPath = resolve(pluginRoot, "plugin.json");
-    const descriptor = await json(descriptorPath);
-    if (
-      !manifest ||
-      typeof manifest !== "object" ||
-      Array.isArray(manifest) ||
-      !descriptor ||
-      typeof descriptor !== "object" ||
-      Array.isArray(descriptor)
-    ) {
+    if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
       throw new Error("Invalid installed plugin fixture metadata.");
     }
     for (const extension of [
@@ -63,18 +186,18 @@ test("CommonJS plugin default and named exports retain their identity across app
       const pluginEntry = `./plugin.${extension}`;
       await writeFile(
         resolve(pluginRoot, pluginEntry),
-        'module.exports = { ...require("./src/index.ts").default }; module.exports.identity = module.exports;',
+        'const plugin = require("./dist/index.js").default; module.exports = { ...plugin }; module.exports.identity = module.exports;',
       );
       await writeJson(manifestPath, {
         ...manifest,
         type: "commonjs",
+        bunaway: {
+          plugin: pluginEntry,
+        },
         exports: {
+          "./native/*": "./dist/native/*.js",
           ".": pluginEntry,
         },
-      });
-      await writeJson(descriptorPath, {
-        ...descriptor,
-        entry: pluginEntry,
       });
       const appEntry = resolve(project, "src-bunaway/app.ts");
       const source = `import plugin, { identity } from "@bunaway/plugin-storage";
@@ -152,7 +275,7 @@ test.each([
       if (mode === "setup") {
         await writeFile(
           resolve(pluginRoot, "setup.ts"),
-          'import plugin from "./src/index.ts"; export default { ...plugin, setup() {} };',
+          'import plugin from "./dist/index.js"; export default { ...plugin, setup() {} };',
         );
       }
       await writeJson(manifestPath, {
@@ -160,15 +283,19 @@ test.each([
         exports:
           mode === "conditional-root"
             ? {
-                browser: "./src/index.ts",
-                bun: "./src/index.ts",
-                default: "./src/index.ts",
+                ".": {
+                  browser: "./dist/index.js",
+                  bun: "./dist/index.js",
+                  default: "./dist/index.js",
+                },
+                "./native/*": "./dist/native/*.js",
               }
             : {
-                ".": mode === "setup" ? "./setup.ts" : "./src/index.ts",
+                "./native/*": "./dist/native/*.js",
+                ".": mode === "setup" ? "./setup.ts" : "./dist/index.js",
                 "./private": null,
                 "./browser": {
-                  browser: "./src/index.ts",
+                  browser: "./dist/index.js",
                 },
               },
       });
@@ -262,15 +389,16 @@ test.each([
       }
       await writeFile(
         resolve(pluginRoot, "import.ts"),
-        'export { default, storagePlugin } from "./src/index.ts"; export const marker = "import";',
+        'export { default, storagePlugin } from "./dist/index.js"; export const marker = "import";',
       );
       await writeFile(
         resolve(pluginRoot, "require.cjs"),
-        'module.exports = { ...require("./src/index.ts"), marker: "require" };',
+        'module.exports = { ...require("./dist/index.js"), marker: "require" };',
       );
       await writeJson(manifestPath, {
         ...manifest,
         exports: {
+          "./native/*": "./dist/native/*.js",
           ".": {
             import: mode === "require-only" ? null : "./import.ts",
             require: "./require.cjs",
@@ -347,32 +475,25 @@ test("plugin declarations support custom entry paths and JSON exports and are re
     ]);
     const root = await installedPackageRoot(project, "@bunaway/plugin-storage");
     await rename(
-      resolve(root, "src/index.ts"),
-      resolve(root, "src/public-entry.ts"),
-    );
-    const scope = resolve(root, "src/scope.ts");
-    await writeFile(
-      scope,
-      (await readFile(scope, "utf8")).replace(
-        '"./index.ts"',
-        '"./public-entry.ts"',
-      ),
+      resolve(root, "dist/index.js"),
+      resolve(root, "dist/public-entry.js"),
     );
     const path = resolve(root, "package.json");
     const manifest = (await json(path)) as Record<string, unknown>;
     await writeJson(path, {
       ...manifest,
+      bunaway: {
+        plugin: "./dist/public-entry.js",
+      },
       exports: {
-        ".": "./src/public-entry.ts",
+        "./native/*": "./dist/native/*.js",
+        ".": {
+          types: "./dist/types/index.d.ts",
+          default: "./dist/public-entry.js",
+        },
         "./package.json": "./package.json",
       },
     });
-    const descriptorPath = resolve(root, "plugin.json");
-    const descriptor = (await json(descriptorPath)) as {
-      entry: string;
-    };
-    descriptor.entry = "./src/public-entry.ts";
-    await writeJson(descriptorPath, descriptor);
     const appEntry = resolve(project, "src-bunaway/app.ts");
     await Bun.write(
       appEntry,
@@ -383,7 +504,7 @@ console.log(metadata.name);
     );
     await writeFile(
       resolve(project, "src/main.ts"),
-      'import { storage } from "@bunaway/plugin-storage"; document.body.onclick = () => { void storage.readText({ scope: "temp", path: "memo.txt" }, { signal: new AbortController().signal }); };',
+      'import { storage } from "@bunaway/plugin-storage"; document.body.onclick = () => { void storage.readText({ path: "memo.txt" }, { signal: new AbortController().signal }); };',
     );
     const typedClient = resolve(project, "src/client-contracts.ts");
     await writeFile(
@@ -416,7 +537,7 @@ console.log(metadata.name);
     const invalidBackend = resolve(project, "src-bunaway/type-error.ts");
     await writeFile(
       invalidBackend,
-      'import { storage } from "@bunaway/plugin-storage"; storage.readText({ scope: "temp", path: "memo.txt" }, { deadline: 0 });',
+      'import { storage } from "@bunaway/plugin-storage"; storage.readText({ path: "memo.txt" }, { deadline: 0 });',
     );
     try {
       await expect(
@@ -442,9 +563,7 @@ console.log(metadata.name);
         ([args]) =>
           Array.isArray(args) &&
           args[1] === "-e" &&
-          String(args[2]).includes(
-            'matches: typeof plugin.matches === "function"',
-          ),
+          String(args[2]).includes("nativePlatforms: plugin.nativePlatforms"),
       );
       expect(contractReads).toHaveLength(1);
       expect(await Bun.file(resolve(assets, "boot.js")).exists()).toBe(true);
@@ -454,12 +573,6 @@ console.log(metadata.name);
     } finally {
       spawn.mockRestore();
     }
-    const entry = resolve(root, "src/public-entry.ts");
-    await writeFile(
-      entry,
-      (await readFile(entry, "utf8")).replace("  matches,", ""),
-    );
-    await expect(validateProject(project)).rejects.toThrow("require matches");
   } finally {
     await rm(home, {
       recursive: true,
@@ -744,6 +857,20 @@ test("upgrading the complete installed release preserves app sources and changes
         }
       }
       await writeJson(manifestPath, manifest);
+      if (Object.values(info.plugins).includes(name)) {
+        // This synthetic release changes the bundled package version as well as its manifest.
+        for (const file of await files(resolve(stage, "dist"))) {
+          if (file.endsWith(".js")) {
+            await writeFile(
+              file,
+              (await readFile(file, "utf8")).replaceAll(
+                'version: "0.0.0"',
+                'version: "0.0.1"',
+              ),
+            );
+          }
+        }
+      }
       if (name === "@bunaway/cli") {
         const releasePath = resolve(stage, "framework.json");
         await writeJson(releasePath, {
@@ -1482,7 +1609,7 @@ test("a standalone plugin install does not install Core, Backend SDK or sibling 
     }
     const nativeBundle = await Bun.build({
       entrypoints: [
-        resolve(plugin, "src/windows.ts"),
+        resolve(plugin, "dist/native/windows.js"),
       ],
       target: "bun",
     });

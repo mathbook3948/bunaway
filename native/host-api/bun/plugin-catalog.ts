@@ -10,12 +10,11 @@ export async function loadPluginCatalog(
   // Keep the dependency visible to both bundle passes so adapters share the host's SDK classes.
   const pluginImports =
     imports ?? (await import("bunaway:plugin-imports")).pluginImports;
-  return manifest.plugins.map(({ authorization, ...plugin }) => {
+  return manifest.plugins.map((plugin) => {
     const imports = pluginImports[plugin.name];
     if (
       !Object.hasOwn(pluginImports, plugin.name) ||
       !imports ||
-      (typeof imports.authorization === "function") !== authorization ||
       (typeof imports.operations === "function") !==
         (plugin.execution !== undefined)
     ) {

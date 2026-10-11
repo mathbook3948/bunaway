@@ -21,11 +21,7 @@ export class WindowOperations {
       read(view: string): WindowState | undefined;
       create(spec: WindowSpec): void;
       close(view: string): boolean | Promise<boolean>;
-      apply(
-        call: WindowCall,
-        view: string,
-        grants: readonly string[],
-      ): JsonValue | Promise<JsonValue>;
+      apply(call: WindowCall, view: string): JsonValue | Promise<JsonValue>;
       stopping(): boolean;
       cancelled(requestId: string): boolean;
       now(): number;
@@ -34,19 +30,12 @@ export class WindowOperations {
   ) {}
 
   /** Apply a permitted request, waiting for old cleanup and new readiness when replacing a view. */
-  async execute(
-    call: WindowCall,
-    grants: readonly string[],
-    requestId: string,
-  ): Promise<JsonValue> {
+  async execute(call: WindowCall, requestId: string): Promise<JsonValue> {
     if (call.operation === "windows.list") {
-      // A list only reveals views included in the caller's already-computed grants.
-      return this.specs
-        .filter((spec) => grants.includes(spec.view))
-        .map((spec) => ({
-          view: spec.view,
-          open: this.hooks.read(spec.view)?.closed === false,
-        }));
+      return this.specs.map((spec) => ({
+        view: spec.view,
+        open: this.hooks.read(spec.view)?.closed === false,
+      }));
     }
     if (!call.payload || !("view" in call.payload)) {
       throw new BunawayError({
@@ -55,12 +44,6 @@ export class WindowOperations {
       });
     }
     const viewId = call.payload.view;
-    if (!grants.includes(viewId)) {
-      throw new BunawayError({
-        code: "PERMISSION_DENIED",
-        message: "Window policy denied.",
-      });
-    }
     const spec = this.specs.find((spec) => spec.view === viewId);
     if (!spec) {
       throw new BunawayError({
@@ -105,7 +88,7 @@ export class WindowOperations {
           message: "Window request cancelled.",
         });
       }
-      return this.hooks.apply(call, viewId, grants);
+      return this.hooks.apply(call, viewId);
     }
     if (call.operation === "windows.create" && view && !view.closed) {
       throw new BunawayError({

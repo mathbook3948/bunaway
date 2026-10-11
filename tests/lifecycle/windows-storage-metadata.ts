@@ -62,30 +62,20 @@ const policy: Policy = {
       events: [],
       host: {
         permissions: [
-          {
-            identifier: "storage:read-metadata",
-            allow: [
-              {
-                scope: "appData",
-                pathPrefix: "notes",
-              },
-            ],
-          },
+          ...[
+            "storage.exists",
+            "storage.stat",
+          ],
         ],
       },
     },
   ],
   backend: {
     permissions: [
-      {
-        identifier: "storage:read-metadata",
-        allow: [
-          {
-            scope: "appData",
-            pathPrefix: "",
-          },
-        ],
-      },
+      ...[
+        "storage.exists",
+        "storage.stat",
+      ],
     ],
   },
 };
@@ -109,6 +99,11 @@ if (!process.argv.includes("--child")) {
         resolve(import.meta.dir, "windows-bun/storage-metadata.js"),
       ],
       target: "browser",
+      define: {
+        "globalThis.storageTestDirectory": JSON.stringify(
+          resolve(dataRoot, "data"),
+        ),
+      },
     });
     assert(built.success && built.outputs[0]);
     await writeFile(
@@ -197,12 +192,12 @@ if (!process.argv.includes("--child")) {
       assert.equal(report.directory.kind, "directory");
       assert.equal(report.directory.sizeBytes, null);
       assert.equal(report.missing, null);
-      assert.deepEqual(report.denied, [
-        "PERMISSION_DENIED",
-        "PERMISSION_DENIED",
+      assert.deepEqual(report.outside, [
+        false,
+        null,
       ]);
       console.log(
-        "PASS Windows WebView2 storage metadata: API, I/O Worker, FFI, Unicode paths, missing targets and scoped permissions",
+        "PASS Windows WebView2 storage metadata: API, I/O Worker, FFI, Unicode paths, missing targets and operation permissions",
       );
     } finally {
       clearTimeout(timeout);

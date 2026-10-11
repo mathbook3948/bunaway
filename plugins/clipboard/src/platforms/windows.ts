@@ -1,14 +1,9 @@
 import { setTimeout as delay } from "node:timers/promises";
 import type { NativeAdapter, NativeEnvironment } from "@bunaway/plugin";
-import {
-  BunawayError,
-  type JsonValue,
-  NativeRegistry,
-  validateValue,
-} from "@bunaway/protocol";
-import { clipboardPlugin } from "./index.ts";
-import { writeTextSchema } from "./text.ts";
-import { createClipboard } from "./win32.ts";
+import { BunawayError, type JsonValue, validateValue } from "@bunaway/protocol";
+import { validateClipboardInput } from "../contract.ts";
+import { writeTextSchema } from "../text.ts";
+import { createClipboard } from "../win32.ts";
 
 const OPEN_TIMEOUT_MS = 250;
 const OPEN_RETRY_MS = 10;
@@ -18,20 +13,14 @@ type UIContext = Parameters<NonNullable<NativeAdapter["executeUI"]>>[3];
 export function createOperations(
   _environment: NativeEnvironment,
 ): NativeAdapter {
-  const registry = new NativeRegistry([
-    clipboardPlugin,
-  ]);
   const native = createClipboard();
   const lifetime = new AbortController();
   const pending = new Set<Promise<string | null>>();
   let disposal: Promise<void> | undefined;
 
   async function run(name: string, input: JsonValue, context: UIContext) {
-    const call = registry.validateCall({
-      operation: name,
-      payload: input,
-    });
-    if (!registry.allowed(context.permissions, call, () => false)) {
+    validateClipboardInput(name, input);
+    if (!context.permissions.permissions.includes(name)) {
       throw new BunawayError({
         code: "PERMISSION_DENIED",
         message: "Clipboard permission denied.",

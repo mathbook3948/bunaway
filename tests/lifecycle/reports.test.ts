@@ -19,7 +19,6 @@ test("native capability reports require the complete catalog and platform suppor
         name.startsWith("windows.") && platform === "darwin"
           ? "unsupported"
           : "supported",
-      permission: "not-required",
     }));
     expect(matchesCapabilities(capabilities, platform)).toBe(true);
     expect(

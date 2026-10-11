@@ -1,11 +1,11 @@
 import { dlopen } from "bun:ffi";
 import type { NativeAdapter, NativeEnvironment } from "@bunaway/plugin";
-import { BunawayError, NativeRegistry, validateValue } from "@bunaway/protocol";
-import { openerPlugin } from "./index.ts";
-import { fileInput, normalizeFilePath } from "./path.ts";
-import { createShell } from "./shell.ts";
-import { normalizeUrl, urlInput } from "./url.ts";
-import { createFiles } from "./windows-file.ts";
+import { BunawayError } from "@bunaway/protocol";
+import { validateOpenerInput } from "../contract.ts";
+import { normalizeFilePath } from "../path.ts";
+import { createShell } from "../shell.ts";
+import { normalizeUrl } from "../url.ts";
+import { createFiles } from "../windows-file.ts";
 
 const COINIT_APARTMENTTHREADED = 0x2;
 
@@ -43,9 +43,6 @@ function createApartment() {
 export function createOperations(
   _environment: NativeEnvironment,
 ): NativeAdapter {
-  const registry = new NativeRegistry([
-    openerPlugin,
-  ]);
   const apartment = createApartment();
   const shell = (() => {
     try {
@@ -76,13 +73,9 @@ export function createOperations(
           message: "Opener has been disposed.",
         });
       }
-      // The host authorizes the current context and exact scope immediately before
+      // The host authorizes the current context and operation immediately before
       // dispatch to this I/O worker. There is no async gap before pinning the path.
-      registry.operation(name);
-      const payload =
-        name === "opener.openUrl"
-          ? validateValue(urlInput, input)
-          : validateValue(fileInput, input);
+      const payload = validateOpenerInput(name, input);
       if ("url" in payload) {
         shell.open(normalizeUrl(payload.url));
       } else {

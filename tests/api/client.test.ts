@@ -1282,7 +1282,6 @@ test("generic client forwards optional plugin commands", async () => {
     {
       name: "storage",
       support: "supported",
-      permission: "denied",
     },
   ];
   transport.emit(serverResult(request.id, capabilities));
@@ -1295,12 +1294,10 @@ test("generic client forwards optional plugin commands", async () => {
       {
         name: "storage",
         support: "supported",
-        permission: "granted",
       },
       {
         name: "storage",
         support: "unsupported",
-        permission: "unknown",
       },
     ]),
   );

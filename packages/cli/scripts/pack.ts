@@ -19,6 +19,7 @@ import {
 } from "../src/distribution.ts";
 import { files, frameworkRoot, writeJson } from "../src/files.ts";
 import { run } from "../src/processes.ts";
+import { buildNativePlugin } from "../src/plugin-build.ts";
 
 /** Emit package declarations and rewrite internal imports to the staged package layout. */
 async function writeDeclarations(stage: string, info: Release): Promise<void> {
@@ -135,14 +136,16 @@ export async function packFramework(
         await cp(resolve(source, "src"), resolve(sdk, "src"), {
           recursive: true,
         });
+        if (Object.values(info.plugins).includes(name)) {
+          await cp(await buildNativePlugin(source), resolve(sdk, "dist"), {
+            recursive: true,
+          });
+        }
         const manifest = JSON.parse(
           await readFile(resolve(source, "package.json"), "utf8"),
         );
         delete manifest.scripts;
         delete manifest.devDependencies;
-        if (manifest.bunaway?.plugin) {
-          await cp(resolve(source, "plugin.json"), resolve(sdk, "plugin.json"));
-        }
         for (const field of [
           "dependencies",
           "peerDependencies",
@@ -157,9 +160,9 @@ export async function packFramework(
           ...manifest,
           files: [
             "src",
-            ...(manifest.bunaway?.plugin
+            ...(Object.values(info.plugins).includes(name)
               ? [
-                  "plugin.json",
+                  "dist",
                 ]
               : []),
             "LICENSE.txt",

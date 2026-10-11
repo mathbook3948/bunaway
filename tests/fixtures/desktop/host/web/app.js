@@ -453,7 +453,7 @@ async function run() {
     assert(stoppedAfterRelease, "event delivered after unlisten");
   });
   if (nativePlugins) {
-    await test("storage roundtrip appData", async () => {
+    await test("storage roundtrip at app-selected path", async () => {
       const w = await call("test.writeNote", {
         name: "a",
         text: "hello 파일",
@@ -470,7 +470,7 @@ async function run() {
         `read failed ${JSON.stringify(r)}`,
       );
     });
-    await test("junction inside appData cannot bypass pathPrefix", async () => {
+    await test("junction cannot bypass native link checks", async () => {
       const r = await call("test.readEscape", {
         path: "notes/internal-link/x.txt",
       });
@@ -491,15 +491,15 @@ async function run() {
         `expected junction write denial ${JSON.stringify(w)}`,
       );
     });
-    await test("storage scope escape denied", async () => {
+    await test("storage operation grant accepts another app-selected directory", async () => {
       const r = await call("test.readEscape", {
         path: "secrets/x.txt",
       });
       assert(
         r.kind === "result" &&
-          r.payload.ok === false &&
-          r.payload.code === "PERMISSION_DENIED",
-        `expected denial ${JSON.stringify(r)}`,
+          r.payload.ok === true &&
+          r.payload.value === "app-selected-secret",
+        `expected selected file read ${JSON.stringify(r)}`,
       );
     });
     await test("storage traversal denied", async () => {
@@ -514,7 +514,7 @@ async function run() {
       );
     });
     await test("storage symlink denied", async () => {
-      // notes/link is a junction planted by the driver pointing outside the scope.
+      // notes/link is a junction planted by the driver pointing to another directory.
       const r = await call("test.readEscape", {
         path: "notes/link/secret.txt",
       });
@@ -525,7 +525,7 @@ async function run() {
         `expected denial ${JSON.stringify(r)}`,
       );
     });
-    await test("temp scope roundtrip", async () => {
+    await test("storage roundtrip at app-selected temporary path", async () => {
       const w = await call("test.tempWrite", {
         path: "scratch.txt",
         text: "tmp",
@@ -563,7 +563,6 @@ async function run() {
   } else {
     await test("unregistered native plugin command is denied", async () => {
       const outcome = await call("plugin.storage.readText", {
-        scope: "appData",
         path: "notes/a.txt",
       });
       assert(

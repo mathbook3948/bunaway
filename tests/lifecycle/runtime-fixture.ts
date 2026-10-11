@@ -31,7 +31,6 @@ await runBunApp({
       },
       async run(_payload, context) {
         return context.host.call(contracts["storage.readText"], {
-          scope: "appData",
           path: "notes/a.txt",
         });
       },

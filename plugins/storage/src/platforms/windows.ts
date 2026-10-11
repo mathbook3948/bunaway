@@ -1,17 +1,15 @@
 import { dlopen, ptr } from "bun:ffi";
-import { mkdirSync } from "node:fs";
-import { resolve } from "node:path";
+import { win32 } from "node:path";
 import {
   BunawayError,
   type JsonValue,
   type NativeAdapter,
-  type NativeEnvironment,
 } from "@bunaway/plugin";
 import type {
   StorageLocation,
   StorageMetadata,
   StorageWrite,
-} from "./index.ts";
+} from "../contract.ts";
 
 const MAX_STORAGE_PATH_SEGMENT_BYTES = 255;
 const MAX_STORAGE_FILE_BYTES = 4 * 1024 * 1024;
@@ -51,10 +49,8 @@ const DIRECTORY_OPEN_FLAGS =
   FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS;
 
 /** Create the I/O adapter and tie native binding cleanup to its host lifecycle. */
-export function createOperations(
-  environment: NativeEnvironment,
-): NativeAdapter {
-  const storage = new ScopedStorage(environment.dataRoot);
+export function createOperations(): NativeAdapter {
+  const storage = new WindowsStorage();
   return {
     execute(operation: string, input: JsonValue): JsonValue {
       // The host registry has validated this operation's input before dispatch.
@@ -63,109 +59,100 @@ export function createOperations(
         input as StorageLocation | StorageWrite,
       );
     },
-    dispose: disposeStorageBindings,
+    dispose: () => storage.dispose(),
   };
 }
 
 function wide(text: string): Buffer {
   return Buffer.from(`${text}\0`, "utf16le");
 }
-const api = dlopen("kernel32.dll", {
-  CreateFileW: {
-    args: [
-      "ptr",
-      "u32",
-      "u32",
-      "ptr",
-      "u32",
-      "u32",
-      "u64",
-    ],
-    returns: "u64",
-  },
-  CreateDirectoryW: {
-    args: [
-      "ptr",
-      "ptr",
-    ],
-    returns: "i32",
-  },
-  GetLastError: {
-    args: [],
-    returns: "u32",
-  },
-  GetFileInformationByHandle: {
-    args: [
-      "u64",
-      "ptr",
-    ],
-    returns: "i32",
-  },
-  GetFinalPathNameByHandleW: {
-    args: [
-      "u64",
-      "ptr",
-      "u32",
-      "u32",
-    ],
-    returns: "u32",
-  },
-  GetFileSizeEx: {
-    args: [
-      "u64",
-      "ptr",
-    ],
-    returns: "i32",
-  },
-  ReadFile: {
-    args: [
-      "u64",
-      "ptr",
-      "u32",
-      "ptr",
-      "ptr",
-    ],
-    returns: "i32",
-  },
-  WriteFile: {
-    args: [
-      "u64",
-      "ptr",
-      "u32",
-      "ptr",
-      "ptr",
-    ],
-    returns: "i32",
-  },
-  SetEndOfFile: {
-    args: [
-      "u64",
-    ],
-    returns: "i32",
-  },
-  CloseHandle: {
-    args: [
-      "u64",
-    ],
-    returns: "i32",
-  },
-});
+function createBindings() {
+  return dlopen("kernel32.dll", {
+    CreateFileW: {
+      args: [
+        "ptr",
+        "u32",
+        "u32",
+        "ptr",
+        "u32",
+        "u32",
+        "u64",
+      ],
+      returns: "u64",
+    },
+    CreateDirectoryW: {
+      args: [
+        "ptr",
+        "ptr",
+      ],
+      returns: "i32",
+    },
+    GetLastError: {
+      args: [],
+      returns: "u32",
+    },
+    GetFileInformationByHandle: {
+      args: [
+        "u64",
+        "ptr",
+      ],
+      returns: "i32",
+    },
+    GetFinalPathNameByHandleW: {
+      args: [
+        "u64",
+        "ptr",
+        "u32",
+        "u32",
+      ],
+      returns: "u32",
+    },
+    GetFileSizeEx: {
+      args: [
+        "u64",
+        "ptr",
+      ],
+      returns: "i32",
+    },
+    ReadFile: {
+      args: [
+        "u64",
+        "ptr",
+        "u32",
+        "ptr",
+        "ptr",
+      ],
+      returns: "i32",
+    },
+    WriteFile: {
+      args: [
+        "u64",
+        "ptr",
+        "u32",
+        "ptr",
+        "ptr",
+      ],
+      returns: "i32",
+    },
+    SetEndOfFile: {
+      args: [
+        "u64",
+      ],
+      returns: "i32",
+    },
+    CloseHandle: {
+      args: [
+        "u64",
+      ],
+      returns: "i32",
+    },
+  });
+}
 function deny(message: string): never {
   throw new BunawayError({
     code: "PERMISSION_DENIED",
     message,
   });
-}
-function check(value: number | bigint, message: string): void {
-  if (!value) {
-    fail(message);
-  }
-}
-function fail(message: string, code = api.symbols.GetLastError()): never {
-  if (code === ERROR_ACCESS_DENIED) {
-    deny("Storage access denied.");
-  }
-  throw new Error(`${message} (${code})`);
 }
 /** Convert a Win32 FILETIME to epoch milliseconds; zero means unavailable. */
 function fileTimeMs(info: Buffer, offset: number): number | null {
@@ -200,39 +187,38 @@ function metadata(info: Buffer): StorageMetadata {
     ...times,
   };
 }
-export class ScopedStorage {
-  private readonly roots: Record<StorageLocation["scope"], string>;
-
-  /** Create app data and temp roots, rejecting roots that are reparse points. */
-  constructor(dataRoot: string) {
-    const root = (name: string) => {
-      const path = resolve(dataRoot, name);
-      mkdirSync(path, {
-        recursive: true,
+export class WindowsStorage {
+  private readonly api = createBindings();
+  private disposed = false;
+  /** Release this instance's bindings; other storage adapters retain their resources. */
+  dispose(): void {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+    this.api.close();
+  }
+  private check(value: number | bigint, message: string): void {
+    if (!value) {
+      this.fail(message);
+    }
+  }
+  private fail(message: string, code = this.api.symbols.GetLastError()): never {
+    if (code === ERROR_ACCESS_DENIED) {
+      deny("Storage access denied.");
+    }
+    throw new Error(`${message} (${code})`);
+  }
+  private requireOpen(): void {
+    if (this.disposed) {
+      throw new BunawayError({
+        code: "CANCELLED",
+        message: "Storage adapter is disposed.",
       });
-      const handle = this.open(
-        path,
-        0,
-        FILE_SHARE_ALL,
-        OPEN_EXISTING,
-        DIRECTORY_OPEN_FLAGS,
-      );
-      try {
-        if (this.info(handle).readUInt32LE(0) & FILE_ATTRIBUTE_REPARSE_POINT) {
-          deny("Scope root must not be a link.");
-        }
-        return this.canonical(handle);
-      } finally {
-        this.close(handle);
-      }
-    };
-    this.roots = {
-      appData: root("data"),
-      temp: root("temp"),
-    };
+    }
   }
   private close(handle: bigint) {
-    check(api.symbols.CloseHandle(handle), "CloseHandle failed");
+    this.check(this.api.symbols.CloseHandle(handle), "CloseHandle failed");
   }
   private open(
     path: string,
@@ -242,7 +228,7 @@ export class ScopedStorage {
     flags: number,
     allowMissing = false,
   ): bigint {
-    const handle = api.symbols.CreateFileW(
+    const handle = this.api.symbols.CreateFileW(
       ptr(wide(path)),
       access,
       share,
@@ -252,7 +238,7 @@ export class ScopedStorage {
       0n,
     );
     if (handle === 0n || handle === 0xffffffffffffffffn) {
-      const code = api.symbols.GetLastError();
+      const code = this.api.symbols.GetLastError();
       if (code === ERROR_FILE_NOT_FOUND || code === ERROR_PATH_NOT_FOUND) {
         if (allowMissing) {
           return 0n;
@@ -262,28 +248,28 @@ export class ScopedStorage {
           message: "Storage target not found.",
         });
       }
-      fail("Storage open failed", code);
+      this.fail("Storage open failed", code);
     }
     return handle;
   }
   private info(handle: bigint) {
     const info = Buffer.alloc(BY_HANDLE_FILE_INFORMATION_BYTES);
-    check(
-      api.symbols.GetFileInformationByHandle(handle, ptr(info)),
+    this.check(
+      this.api.symbols.GetFileInformationByHandle(handle, ptr(info)),
       "Storage stat failed",
     );
     return info;
   }
   private canonical(handle: bigint) {
     const text = Buffer.alloc(FINAL_PATH_BUFFER_CHARS * WCHAR_BYTES);
-    const length = api.symbols.GetFinalPathNameByHandleW(
+    const length = this.api.symbols.GetFinalPathNameByHandleW(
       handle,
       ptr(text),
       FINAL_PATH_BUFFER_CHARS,
       0,
     );
     if (!length) {
-      fail("Storage path check failed");
+      this.fail("Storage path check failed");
     }
     if (length >= FINAL_PATH_BUFFER_CHARS) {
       throw new Error("Storage path check failed");
@@ -291,11 +277,12 @@ export class ScopedStorage {
     return text.subarray(0, length * WCHAR_BYTES).toString("utf16le");
   }
   /**
-   * Check a relative path against pinned handles before reading or writing it.
+   * Check an application-selected absolute path against pinned handles before I/O.
    * Missing metadata targets return `false` for exists and `null` for stat.
    */
   execute(operation: string, input: StorageLocation | StorageWrite): JsonValue {
-    const { scope, path } = input;
+    this.requireOpen();
+    const path = input.path.replaceAll("/", "\\");
     const queryingMetadata =
       operation === "storage.exists" || operation === "storage.stat";
     const writingText = operation === "storage.writeText";
@@ -312,8 +299,12 @@ export class ScopedStorage {
         message: "Storage text is required.",
       });
     }
-    const segments = path.split("/");
+    const volume = win32.parse(path).root;
+    const segments = path.slice(volume.length).split("\\");
     if (
+      !/^(?:[A-Za-z]:\\|\\\\[^\\]+\\[^\\]+\\)$/.test(volume) ||
+      path.startsWith("\\\\?\\") ||
+      path.startsWith("\\\\.\\") ||
       !segments.length ||
       segments.some(
         (part) =>
@@ -333,24 +324,21 @@ export class ScopedStorage {
         message: "Invalid storage path.",
       });
     }
-    const root = this.roots[scope];
-    if (!root) {
-      deny("Unknown storage scope.");
-    }
     const parents: bigint[] = [];
     let file = 0n;
     try {
-      let dir = root;
+      let root = "";
+      let dir = volume;
       // Attribute-only handles ignore sharing restrictions; directory data access pins parents.
       for (let index = 0; index < segments.length; index++) {
         if (index) {
           dir += `\\${segments[index - 1]}`;
           if (
             text !== undefined &&
-            !api.symbols.CreateDirectoryW(ptr(wide(dir)), null) &&
-            api.symbols.GetLastError() !== ERROR_ALREADY_EXISTS
+            !this.api.symbols.CreateDirectoryW(ptr(wide(dir)), null) &&
+            this.api.symbols.GetLastError() !== ERROR_ALREADY_EXISTS
           ) {
-            fail("Storage directory creation failed");
+            this.fail("Storage directory creation failed");
           }
         }
         const parent = this.open(
@@ -372,8 +360,12 @@ export class ScopedStorage {
         ) {
           deny("Storage path is not a plain directory.");
         }
-        // Bind policy spelling to each pinned directory before creating the next child.
-        if (this.canonical(parent) !== dir) {
+        const canonical = this.canonical(parent);
+        if (index === 0) {
+          root = canonical.replace(/\\$/, "");
+          dir = root;
+          // Bind the requested spelling to each pinned parent before creating the next child.
+        } else if (canonical !== dir) {
           deny("Storage path must use its canonical spelling.");
         }
       }
@@ -404,7 +396,7 @@ export class ScopedStorage {
         (!queryingMetadata && isDirectory) ||
         (!isDirectory && info.readUInt32LE(40) > MAX_FILE_LINK_COUNT)
       ) {
-        deny("Storage target is not a plain in-scope target.");
+        deny("Storage target is not a plain file or directory.");
       }
       const actual = this.canonical(file);
       if (actual !== target) {
@@ -419,8 +411,8 @@ export class ScopedStorage {
         const bytes = Buffer.from(text);
         let offset = 0;
         while (offset < bytes.length) {
-          check(
-            api.symbols.WriteFile(
+          this.check(
+            this.api.symbols.WriteFile(
               file,
               ptr(bytes.subarray(offset)),
               Math.min(bytes.length - offset, MAX_IO_CHUNK_BYTES),
@@ -434,11 +426,17 @@ export class ScopedStorage {
           }
           offset += transferred[0];
         }
-        check(api.symbols.SetEndOfFile(file), "Storage truncate failed");
+        this.check(
+          this.api.symbols.SetEndOfFile(file),
+          "Storage truncate failed",
+        );
         return null;
       }
       const size = new BigInt64Array(1);
-      check(api.symbols.GetFileSizeEx(file, ptr(size)), "Storage size failed");
+      this.check(
+        this.api.symbols.GetFileSizeEx(file, ptr(size)),
+        "Storage size failed",
+      );
       if (
         size[0] === undefined ||
         size[0] < 0n ||
@@ -446,7 +444,7 @@ export class ScopedStorage {
       ) {
         throw new Error("Storage file too large");
       }
-      return readStorageText(file, Number(size[0]));
+      return this.readText(file, Number(size[0]));
     } finally {
       if (file) {
         this.close(file);
@@ -456,42 +454,38 @@ export class ScopedStorage {
       }
     }
   }
-}
-/** Release the module-level Win32 bindings when the storage adapter is disposed. */
-export function disposeStorageBindings() {
-  api.close();
-}
-
-/** Read and strictly decode a bounded UTF-8 file; the caller retains handle ownership. */
-export function readStorageText(file: bigint, size: number): string {
-  if (
-    !Number.isSafeInteger(size) ||
-    size < 0 ||
-    size > MAX_STORAGE_FILE_BYTES
-  ) {
-    throw new Error("Storage file too large");
-  }
-  const bytes = Buffer.alloc(size);
-  const transferred = new Uint32Array(1);
-  let offset = 0;
-  while (offset < bytes.length) {
-    check(
-      api.symbols.ReadFile(
-        file,
-        ptr(bytes.subarray(offset)),
-        bytes.length - offset,
-        ptr(transferred),
-        null,
-      ),
-      "Storage read failed",
-    );
-    if (!transferred[0]) {
-      throw new Error("Storage file changed during read");
+  /** Read and strictly decode a bounded UTF-8 file; the caller retains handle ownership. */
+  readText(file: bigint, size: number): string {
+    this.requireOpen();
+    if (
+      !Number.isSafeInteger(size) ||
+      size < 0 ||
+      size > MAX_STORAGE_FILE_BYTES
+    ) {
+      throw new Error("Storage file too large");
     }
-    offset += transferred[0];
+    const bytes = Buffer.alloc(size);
+    const transferred = new Uint32Array(1);
+    let offset = 0;
+    while (offset < bytes.length) {
+      this.check(
+        this.api.symbols.ReadFile(
+          file,
+          ptr(bytes.subarray(offset)),
+          bytes.length - offset,
+          ptr(transferred),
+          null,
+        ),
+        "Storage read failed",
+      );
+      if (!transferred[0]) {
+        throw new Error("Storage file changed during read");
+      }
+      offset += transferred[0];
+    }
+    return new TextDecoder("utf-8", {
+      fatal: true,
+      ignoreBOM: true,
+    }).decode(bytes);
   }
-  return new TextDecoder("utf-8", {
-    fatal: true,
-    ignoreBOM: true,
-  }).decode(bytes);
 }

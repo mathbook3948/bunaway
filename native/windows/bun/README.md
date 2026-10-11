@@ -142,11 +142,11 @@ SDK는 시작 시의 공통 번들을 재사용하며 계약, 플러그인 객�
 The CLI accepts an `app.windows` catalog with one unique policy view per window.
 상태 변경 `minimize`, `maximize`, `unmaximize`, `restore`, `toggleMaximize`와
 조회 `isMinimized`, `isMaximized`, `isFullscreen`, `isVisible`, `isFocused`도 선택 창 플러그인이
-제공한다. UI Worker의 실제 HWND를 사용하며 조회에도 대상 뷰의 `windows:control` 권한이 필요하다.
+제공한다. UI Worker의 실제 HWND를 사용하며 조회도 해당 operation 이름을 허용해야 한다.
 최소화 전 최대화 복원, 숨긴 창 표시와 전체화면 중 변경 거부는
 [공개 창 계약](../../../docs/site/src/content/docs/reference/host/windows.mdx)을 따른다.
 `startup: false` defers creation until `windows.create`. Window calls execute on
-the UI STA through the explicitly installed and registered `@bunaway/plugin-windows`. The active caller's `windows:list` or scoped `windows:control` permission is checked. The I/O Worker
+the UI STA through the explicitly installed and registered `@bunaway/plugin-windows`. Each operation checks its own name in the active caller's grants. The I/O Worker
 reports registered operations as capabilities. `windows.recreate` reserves the view
 until the old WebView and processes finish, then creates a fresh boundary and
 WebView using the same profile. This also postpones last-window shutdown.

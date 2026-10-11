@@ -105,35 +105,9 @@
                           "permissions": {
                             "type": "array",
                             "items": {
-                              "anyOf": [
-                                {
-                                  "type": "string",
-                                  "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
-                                  "maxLength": 128
-                                },
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "identifier": {
-                                      "type": "string",
-                                      "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
-                                      "maxLength": 128
-                                    },
-                                    "allow": {
-                                      "type": "array",
-                                      "items": {},
-                                      "maxItems": 128
-                                    },
-                                    "deny": {
-                                      "type": "array",
-                                      "items": {},
-                                      "maxItems": 128
-                                    }
-                                  },
-                                  "required": ["identifier"],
-                                  "additionalProperties": false
-                                }
-                              ]
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                              "maxLength": 128
                             },
                             "maxItems": 256
                           }
@@ -152,35 +126,9 @@
                     "permissions": {
                       "type": "array",
                       "items": {
-                        "anyOf": [
-                          {
-                            "type": "string",
-                            "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
-                            "maxLength": 128
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "identifier": {
-                                "type": "string",
-                                "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
-                                "maxLength": 128
-                              },
-                              "allow": {
-                                "type": "array",
-                                "items": {},
-                                "maxItems": 128
-                              },
-                              "deny": {
-                                "type": "array",
-                                "items": {},
-                                "maxItems": 128
-                              }
-                            },
-                            "required": ["identifier"],
-                            "additionalProperties": false
-                          }
-                        ]
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
+                        "maxLength": 128
                       },
                       "maxItems": 256
                     }

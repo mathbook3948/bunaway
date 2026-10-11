@@ -1,26 +1,124 @@
 import { expect, test } from "bun:test";
 import { resolve } from "node:path";
-import { validatePacket } from "#native/windows/bun/channel";
-import { hostResponse } from "#native/host-api/bun/host-response";
 import { bindHostAPI, type CoreServices, createCore } from "@bunaway/core";
 import { defineNativePlugin, s } from "@bunaway/plugin";
+import { storagePlugin } from "@bunaway/plugin-storage";
 import {
   type HostContext,
   MAX_MESSAGE_BYTES,
   NativeRegistry,
   type Policy,
+  parsePolicy,
   type ServerMessage,
   serializeHostResponse,
   serializeMessage,
 } from "@bunaway/protocol";
-import { storagePlugin } from "@bunaway/plugin-storage";
+import { hostResponse } from "#native/host-api/bun/host-response";
+import { validatePacket } from "#native/windows/bun/channel";
 import { contracts } from "../fixtures/host-plugins.ts";
 
 const readText = contracts["storage.readText"];
 const writeText = contracts["storage.writeText"];
-const matches = storagePlugin.matches;
 
-test("short declarations generate strict schemas, qualified names and shared permissions", () => {
+test("platform declarations remain detached from Core platform restrictions and validate support", () => {
+  const operation = {
+    input: s.null(),
+    output: s.null(),
+  };
+  const supported = [
+    "read",
+  ];
+  const create = () => ({
+    execute: () => null,
+    dispose() {},
+  });
+  const definition = {
+    name: "demo",
+    operations: {
+      read: operation,
+    },
+    platforms: {
+      windows: {
+        execution: "io" as const,
+        create,
+        operations: supported,
+      },
+    },
+  };
+  const plugin = defineNativePlugin(definition);
+  expect(plugin.definition.version).toBe("development");
+  expect(Object.hasOwn(plugin.definition, "platforms")).toBe(false);
+  expect(plugin.definition.nativePlatforms.windows?.create).toBe(create);
+  expect(
+    Object.keys(
+      structuredClone(plugin.definition.nativePlatforms).windows ?? {},
+    ),
+  ).toEqual([
+    "execution",
+    "operations",
+  ]);
+  supported.push("missing");
+  expect(plugin.definition.nativePlatforms.windows?.operations).toEqual([
+    "read",
+  ]);
+  expect(Object.isFrozen(plugin.definition.nativePlatforms.windows)).toBe(true);
+  for (const platforms of [
+    {
+      unknown: {
+        execution: "io",
+        create,
+      },
+    },
+    {
+      windows: {
+        execution: "backend",
+        create,
+      },
+    },
+    {
+      windows: {
+        execution: "io",
+        create: undefined,
+      },
+    },
+    {
+      windows: {
+        execution: "io",
+        create: "not a factory",
+      },
+    },
+    {
+      windows: {
+        execution: "io",
+        create,
+        operations: [
+          "missing",
+        ],
+      },
+    },
+    {
+      windows: {
+        execution: "io",
+        create,
+        operations: [
+          "read",
+          "read",
+        ],
+      },
+    },
+  ]) {
+    expect(() =>
+      Reflect.apply(defineNativePlugin, undefined, [
+        {
+          ...definition,
+          platforms,
+        },
+      ]),
+    ).toThrow();
+  }
+});
+
+test("short declarations generate strict schemas and independently granted operations", () => {
   const input = s.object({
     level: s.enum([
       "info",
@@ -43,22 +141,13 @@ test("short declarations generate strict schemas, qualified names and shared per
   const operation = {
     input,
     output: s.null(),
-    permission: "record",
-    osPermission: "not-required" as const,
   };
   const plugin = defineNativePlugin({
     name: "audit",
-    version: "1",
     operations: {
       write: operation,
       repeat: operation,
     },
-    scopes: {
-      record: s.object({
-        prefix: s.string(),
-      }),
-    },
-    matches: () => true,
   });
   const registry = new NativeRegistry([
     plugin.definition,
@@ -87,15 +176,16 @@ test("short declarations generate strict schemas, qualified names and shared per
   expect(
     [
       ...registry.operations.values(),
-    ].map(({ osPermission }) => osPermission),
+    ].map(({ input }) => input),
   ).toEqual([
-    "not-required",
-    "not-required",
+    operation.input,
+    operation.input,
   ]);
   expect([
-    ...registry.permissions.keys(),
+    ...registry.operations.keys(),
   ]).toEqual([
-    "audit:record",
+    "audit.write",
+    "audit.repeat",
   ]);
   expect(
     registry.validateCall({
@@ -171,50 +261,16 @@ test("short declarations generate strict schemas, qualified names and shared per
   expect(
     defineNativePlugin({
       name: "audit",
-      version: "1",
       operations: {
-        write: {
-          ...operation,
-          permission: "toString",
-        },
+        toString: operation,
       },
-      scopes: {},
-    }).definition.native.permissions,
-  ).toEqual([
-    {
-      name: "audit:toString",
-    },
-  ]);
-  expect(() =>
-    defineNativePlugin({
-      name: "audit",
-      version: "1",
-      operations: {
-        write: operation,
-      },
-      scopes: {
-        unused: s.string(),
-      },
-    }),
-  ).toThrow("unused permission");
-  expect(() =>
-    defineNativePlugin({
-      name: "audit",
-      version: "1",
-      operations: {
-        write: operation,
-      },
-      scopes: {
-        record: s.string(),
-      },
-    }),
-  ).toThrow("require matches");
+    }).definition.native.operations[0]?.name,
+  ).toBe("audit.toString");
 });
 
 export function checkShortDeclarationTypes() {
   const plugin = defineNativePlugin({
     name: "example",
-    version: "1",
     operations: {
       write: {
         input: s.object({
@@ -226,7 +282,6 @@ export function checkShortDeclarationTypes() {
           details: s.optional(s.json()),
         }),
         output: s.null(),
-        permission: "write",
       },
     },
   });
@@ -252,14 +307,12 @@ export function checkShortDeclarationTypes() {
   });
   const numeric = defineNativePlugin({
     name: "numbered",
-    version: "1",
     operations: {
       0: {
         input: s.object({
           0: s.string(),
         }),
         output: s.null(),
-        permission: "call",
       },
     },
   });
@@ -278,24 +331,18 @@ const empty: Policy = {
   },
 };
 
-test("plugin patterns use Unicode semantics for input, output and permission scopes", () => {
+test("plugin patterns use Unicode semantics for input and output", () => {
   const letters = s.string({
     pattern: "^\\p{L}+$",
   });
   const plugin = defineNativePlugin({
     name: "unicode",
-    version: "1",
     operations: {
       text: {
         input: letters,
         output: letters,
-        permission: "text",
       },
     },
-    scopes: {
-      text: letters,
-    },
-    matches: (_permission, input, scope) => input === scope,
   });
   const registry = new NativeRegistry([
     plugin.definition,
@@ -315,19 +362,12 @@ test("plugin patterns use Unicode semantics for input, output and permission sco
       ...empty,
       backend: {
         permissions: [
-          {
-            identifier: "unicode:text",
-            allow: [
-              text,
-            ],
-          },
+          "unicode.text",
         ],
       },
     };
     registry.validatePolicy(policy);
-    expect(
-      registry.allowed(policy.backend, call, plugin.definition.matches),
-    ).toBe(true);
+    expect(registry.allowed(policy.backend, call)).toBe(true);
   }
   for (const text of [
     "123",
@@ -340,32 +380,15 @@ test("plugin patterns use Unicode semantics for input, output and permission sco
       }),
     ).toThrow();
     expect(() => registry.validateOutput("unicode.text", text)).toThrow();
-    expect(() =>
-      registry.validatePolicy({
-        ...empty,
-        backend: {
-          permissions: [
-            {
-              identifier: "unicode:text",
-              allow: [
-                text,
-              ],
-            },
-          ],
-        },
-      }),
-    ).toThrow();
   }
   const scalar = defineNativePlugin({
     name: "scalar",
-    version: "1",
     operations: {
       one: {
         input: s.string({
           pattern: "^.$",
         }),
         output: s.null(),
-        permission: "one",
       },
     },
   });
@@ -382,12 +405,10 @@ test("plugin patterns use Unicode semantics for input, output and permission sco
 test("plugin results exceeding the Web envelope return INTERNAL and keep the session usable", async () => {
   const plugin = defineNativePlugin({
     name: "large",
-    version: "1",
     operations: {
       read: {
         input: s.integer(),
         output: s.string(),
-        permission: "read",
       },
     },
   });
@@ -432,7 +453,7 @@ test("plugin results exceeding the Web envelope return INTERNAL and keep the ses
           events: [],
           host: {
             permissions: [
-              "large:read",
+              "large.read",
             ],
           },
         },
@@ -564,7 +585,6 @@ test("an app without native plugins has no host operations or implicit permissio
       services().callHost,
       registry,
     ).call(readText, {
-      scope: "temp",
       path: "a.txt",
     }),
   ).rejects.toMatchObject({
@@ -575,7 +595,7 @@ test("an app without native plugins has no host operations or implicit permissio
       ...empty,
       backend: {
         permissions: [
-          "storage:read-text",
+          "storage.readText",
         ],
       },
     }),
@@ -610,7 +630,7 @@ test("canonical contracts reject caller schema and permission overrides and copy
       {
         ...readText,
         input: {},
-        permission: "log:write",
+        output: s.null(),
       },
       null,
     ),
@@ -619,7 +639,6 @@ test("canonical contracts reject caller schema and permission overrides and copy
   });
   expect(
     await api.call(readText, {
-      scope: "temp",
       path: "a.txt",
     }),
   ).toBe("saved");
@@ -658,7 +677,6 @@ test("runtime registries keep aggregate limits while catalogs accept installed p
         },
         (_, index) => ({
           name: `${name}.call${index}`,
-          permission: `${name}:call`,
           input: {
             const: null,
           },
@@ -667,11 +685,6 @@ test("runtime registries keep aggregate limits while catalogs accept installed p
           },
         }),
       ),
-      permissions: [
-        {
-          name: `${name}:call`,
-        },
-      ],
     },
   }));
 
@@ -685,43 +698,6 @@ test("runtime registries keep aggregate limits while catalogs accept installed p
   ).toBe(258);
   expect(new NativeRegistry(plugins.slice(0, 1)).operations.size).toBe(129);
 
-  const permissionHeavy = [
-    "first",
-    "second",
-  ].map((name) => ({
-    name,
-    version: "1",
-    native: {
-      operations: [
-        {
-          name: `${name}.call`,
-          permission: `${name}:permission0`,
-          input: {
-            const: null,
-          },
-          output: {
-            const: null,
-          },
-        },
-      ],
-      permissions: Array.from(
-        {
-          length: 129,
-        },
-        (_, index) => ({
-          name: `${name}:permission${index}`,
-        }),
-      ),
-    },
-  }));
-  expect(() => new NativeRegistry(permissionHeavy)).toThrow(
-    "Plugin contract limit reached.",
-  );
-  expect(
-    new NativeRegistry(permissionHeavy, {
-      mode: "catalog",
-    }).permissions.size,
-  ).toBe(258);
   expect(
     () =>
       new NativeRegistry(
@@ -730,18 +706,12 @@ test("runtime registries keep aggregate limits while catalogs accept installed p
             name: "too-many",
             version: "1",
             native: {
-              permissions: [
-                {
-                  name: "too-many:call",
-                },
-              ],
               operations: Array.from(
                 {
                   length: 257,
                 },
                 (_, index) => ({
                   name: `too-many.call${index}`,
-                  permission: "too-many:call",
                   input: {
                     const: null,
                   },
@@ -760,44 +730,39 @@ test("runtime registries keep aggregate limits while catalogs accept installed p
   ).toThrow();
 });
 
-test("native operation OS permission metadata is copied only for the supported literal", () => {
-  const operation = {
-    ...readText,
-    osPermission: "not-required" as const,
-  };
-  const native = {
-    ...storagePlugin.native,
-    operations: [
-      operation,
-    ],
-  };
-  const registry = new NativeRegistry([
+test("native operation contracts reject separate permission and OS consent metadata", () => {
+  for (const metadata of [
     {
-      ...storagePlugin,
-      native,
+      permission: "storage:read-text",
     },
-  ]);
-  expect(registry.operation(operation.name).osPermission).toBe("not-required");
-  expect(
-    () =>
-      new NativeRegistry([
-        {
-          ...storagePlugin,
-          native: {
-            ...native,
-            operations: [
-              {
-                ...operation,
-                osPermission: "unrestricted" as never,
-              },
-            ],
+    {
+      osPermission: "not-required",
+    },
+    {
+      scope: s.string(),
+    },
+  ]) {
+    const invalid = {
+      ...storagePlugin,
+      native: {
+        operations: [
+          {
+            ...readText,
+            ...metadata,
           },
-        },
-      ]),
-  ).toThrow();
+        ],
+      },
+    };
+    expect(
+      () =>
+        new NativeRegistry([
+          invalid,
+        ]),
+    ).toThrow();
+  }
 });
 
-test("scoped permissions aggregate allows, deny wins, and invalid scopes fail startup", () => {
+test("operation grants contain names only and apply independently of app resource rules", () => {
   const registry = new NativeRegistry([
     storagePlugin,
   ]);
@@ -805,87 +770,69 @@ test("scoped permissions aggregate allows, deny wins, and invalid scopes fail st
     ...empty,
     backend: {
       permissions: [
-        {
-          identifier: writeText.permission,
-          allow: [
-            {
-              scope: "appData",
-              pathPrefix: "notes",
-            },
-          ],
-        },
-        {
-          identifier: writeText.permission,
-          allow: [
-            {
-              scope: "temp",
-              pathPrefix: "notes",
-            },
-          ],
-          deny: [
-            {
-              scope: "appData",
-              pathPrefix: "notes/private",
-            },
-          ],
-        },
+        writeText.name,
       ],
     },
   };
   registry.validatePolicy(policy);
-  const allowed = (scope: string, path: string) =>
-    registry.allowed(
-      policy.backend,
-      {
-        operation: writeText.name,
-        payload: {
-          scope,
-          path,
-          text: "saved",
-        },
-      },
-      matches,
-    );
-  expect(allowed("appData", "notes/a.txt")).toBe(true);
-  expect(allowed("temp", "notes/a.txt")).toBe(true);
-  expect(allowed("appData", "notes/private/a.txt")).toBe(false);
-  expect(allowed("appData", "notes-other/a.txt")).toBe(false);
-  for (const permissions of [
-    [
-      writeText.permission,
-    ],
-    [
-      {
-        identifier: writeText.permission,
-        allow: [
-          {
-            scope: "appData",
-            pathPrefix: "../escape",
-          },
-        ],
-      },
-    ],
-    [
-      {
-        identifier: writeText.permission,
-        allow: [
-          {
-            scope: "root",
-            pathPrefix: "",
-          },
-        ],
-      },
-    ],
+  for (const path of [
+    "notes/a.txt",
+    "private/a.txt",
   ]) {
-    expect(() =>
-      registry.validatePolicy({
+    const call = registry.validateCall({
+      operation: writeText.name,
+      payload: {
+        path,
+        text: "saved",
+      },
+    });
+    expect(registry.allowed(policy.backend, call)).toBe(true);
+    expect(
+      registry.allowed(
+        {
+          permissions: [],
+        },
+        call,
+      ),
+    ).toBe(false);
+  }
+  expect(
+    registry.allowed(policy.backend, {
+      operation: readText.name,
+      payload: {
+        path: "notes/a.txt",
+      },
+    }),
+  ).toBe(false);
+  expect(() =>
+    parsePolicy(
+      JSON.stringify({
         ...empty,
         backend: {
-          permissions,
+          permissions: [
+            {
+              identifier: writeText.name,
+              allow: [
+                {
+                  pathPrefix: "notes",
+                },
+              ],
+            },
+          ],
         },
       }),
-    ).toThrow();
-  }
+    ),
+  ).toThrow();
+  expect(() =>
+    registry.validatePolicy({
+      ...empty,
+      backend: {
+        permissions: [
+          "storage.missing",
+        ],
+      },
+    }),
+  ).toThrow("unregistered operation");
 });
 
 test("native bridges require view command permission and distinguish missing plugins", async () => {
@@ -1018,11 +965,11 @@ test("unified plugin imports select browser and Bun implementations without leak
       const source = await output.text();
       const inputs = Object.keys(result.metafile.inputs);
       expect(
-        inputs.some((name) => name.endsWith(`plugins/${plugin}/src/index.ts`)),
+        inputs.some((name) => name.endsWith(`plugins/${plugin}/dist/index.js`)),
       ).toBe(true);
       expect(
         inputs.some((name) =>
-          /\/native\/windows\/|\/src\/windows\.ts$/.test(name),
+          /\/native\/windows\/|\/src\/platforms\/|\/dist\/native\//.test(name),
         ),
       ).toBe(false);
       expect(

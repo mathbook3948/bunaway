@@ -12,11 +12,7 @@ import { DiagnosticLog } from "@bunaway/runtime-bun/diagnostic-log";
 import { Channel } from "@bunaway/runtime-bun/worker-channel";
 import { hostResponse } from "../../host-api/bun/host-response.ts";
 import { loadPluginCatalog } from "../../host-api/bun/plugin-catalog.ts";
-import {
-  operations,
-  permissionMatcher,
-  pluginRegistry,
-} from "../../host-api/bun/plugins.ts";
+import { operations, pluginRegistry } from "../../host-api/bun/plugins.ts";
 import { MacosApplication } from "./application.ts";
 import type { MacosConfig } from "./config.ts";
 import { containMacosProcess } from "./process-group.ts";
@@ -50,7 +46,6 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
   let adapters: Awaited<ReturnType<typeof operations>> | undefined;
   let registry: ReturnType<typeof pluginRegistry> | undefined;
   const pendingPlugins: NativeRegistration[] = [];
-  let matches: Awaited<ReturnType<typeof permissionMatcher>> | undefined;
   const requests = new Map<string, HostContext>();
   const cancelled = new Set<string>();
   let shutdownTimer: ReturnType<typeof setTimeout> | undefined;
@@ -145,7 +140,6 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
           const plugins = pendingPlugins.splice(0);
           registry = pluginRegistry(plugins, catalog);
           registry.validatePolicy(config.policy);
-          matches = await permissionMatcher(plugins, catalog);
           if (!ui) {
             throw new Error("Missing window services.");
           }
@@ -186,12 +180,7 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
             !permissions ||
             source !== packet.source ||
             !registry ||
-            !matches ||
-            !registry.allowed(
-              permissions,
-              registry.validateCall(packet.call),
-              matches,
-            )
+            !registry.allowed(permissions, registry.validateCall(packet.call))
           ) {
             throw new BunawayError({
               code: "PERMISSION_DENIED",

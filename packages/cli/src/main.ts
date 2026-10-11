@@ -8,6 +8,7 @@ import {
 import { parseDevArguments } from "./dev.ts";
 import {
   buildProject,
+  buildNativePlugin,
   createProject,
   devProject,
   doctor,
@@ -25,6 +26,7 @@ const help = `bunaway (vanilla / Vite / React / Vue / Svelte)
   build [directory]       Build frontend and app with pinned bundled Bun
   package <channel> [dir] Package a build artifact for a channel [--build]
   doctor [directory]      Check project, runtime version and native tools
+  plugin build [dir]     Build a native plugin package from src/index.ts
   android sync [dir]     Create or refresh the editable Android Studio project
   android build [dir]    Sync and build an experimental Android debug APK on Windows
   android run [dir]      Build, install and start the APK [--serial <device>]
@@ -103,6 +105,14 @@ export async function main(args: string[]): Promise<number> {
   if (command === "dev") {
     const { directory, ...options } = parseDevArguments(rest);
     await devProject(directory, options);
+    return 0;
+  }
+  if (command === "plugin") {
+    const [action, directory, ...extra] = rest;
+    if (action !== "build" || extra.length || directory?.startsWith("--")) {
+      throw new Error("Usage: bunaway plugin build [directory].");
+    }
+    console.log(`Built ${await buildNativePlugin(directory ?? ".")}`);
     return 0;
   }
   if (command === "android") {

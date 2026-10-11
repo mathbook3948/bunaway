@@ -2,8 +2,8 @@ import type { Infer, JsonValue, Schema } from "./validation.ts";
 import { parse, serialize } from "./validation.ts";
 
 /**
- * Declares a host operation's input/output schemas and the permission required
- * before the host executes it.
+ * Declares a host operation's schemas. Policies grant access using its name;
+ * applications own resource access rules and plugins handle OS consent.
  */
 export type HostOperationContract<
   I extends Schema = Schema,
@@ -12,19 +12,10 @@ export type HostOperationContract<
   readonly name: string;
   readonly input: I;
   readonly output: O;
-  readonly permission: string;
-  /** Omit when the platform's OS permission requirements are not known. */
-  readonly osPermission?: "not-required";
 };
-/** Declares a plugin permission and, when needed, the schema for its scope values. */
-export type PermissionContract = {
-  readonly name: string;
-  readonly scope?: Schema;
-};
-/** Collects the host operations and permissions owned by one native plugin. */
+/** Collects the host operations owned by one native plugin. */
 export type NativePluginContract = {
   readonly operations: readonly HostOperationContract[];
-  readonly permissions: readonly PermissionContract[];
 };
 
 /** A host operation name and its JSON input payload. */

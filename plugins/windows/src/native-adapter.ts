@@ -4,15 +4,9 @@ import {
   type WindowIdentity,
   type WindowSizeConstraints,
 } from "@bunaway/plugin-api/native";
-import {
-  BunawayError,
-  type JsonValue,
-  NativeRegistry,
-} from "@bunaway/protocol";
+import { BunawayError, type JsonValue } from "@bunaway/protocol";
 import { validateWindowCall, type WindowCall } from "./contract.ts";
 import { WindowOperations } from "./coordinator.ts";
-import { windowsPlugin } from "./index.ts";
-import { matches } from "./scope.ts";
 import { convertGeometry } from "./window-geometry.ts";
 
 /** Create the UI-worker adapter; throws when window services are unavailable. */
@@ -26,7 +20,6 @@ export function createOperations(
   function applyWindow(
     call: WindowCall,
     viewId: string,
-    grants: readonly string[],
   ): JsonValue | Promise<JsonValue> {
     const window = services.window(viewId);
     switch (call.operation) {
@@ -90,9 +83,9 @@ export function createOperations(
         if (!window.isFocused()) {
           return true;
         }
-        // Configuration order is deterministic; never activate an ungranted or external window.
+        // Configuration order is deterministic; never activate an external window.
         for (const spec of services.specs) {
-          if (spec.view === viewId || !grants.includes(spec.view)) {
+          if (spec.view === viewId) {
             continue;
           }
           const state = services.read(spec.view);
@@ -329,9 +322,6 @@ export function createOperations(
     }
     return null;
   }
-  const registry = new NativeRegistry([
-    windowsPlugin,
-  ]);
   const operations = new WindowOperations(services.specs, {
     ...services,
     apply: applyWindow,
@@ -343,52 +333,24 @@ export function createOperations(
         message: "Window control requires UI execution.",
       });
     },
-    executeUI(operation, input, source, context) {
+    async executeUI(operation, input, source, context) {
       const call = validateWindowCall({
         operation,
         payload: input,
       });
       // Check permission before resolving configuration so unknown views do not bypass denial.
-      const targets =
-        !call.payload || !("view" in call.payload)
-          ? services.specs.map((spec) => spec.view)
-          : [
-              call.payload.view,
-            ];
-      if (call.operation === "windows.blur") {
-        targets.push(
-          ...services.specs
-            .filter((spec) => spec.view !== call.payload.view)
-            .map((spec) => spec.view),
-        );
+      if (!context.permissions.permissions.includes(call.operation)) {
+        throw new BunawayError({
+          code: "PERMISSION_DENIED",
+          message: "Window policy denied.",
+        });
       }
-      if (call.operation === "windows.completeSplashscreen") {
-        targets.push(call.payload.splash);
-      }
-      const grants = targets.filter((view) =>
-        registry.allowed(
-          context.permissions,
-          {
-            operation: "windows.show",
-            payload: {
-              view,
-            },
-          },
-          matches,
-        ),
-      );
       if (
         call.operation === "windows.getById" ||
         call.operation === "windows.getCurrent" ||
         call.operation === "windows.getFocused" ||
         call.operation === "windows.getLastActive"
       ) {
-        if (!registry.allowed(context.permissions, call, matches)) {
-          throw new BunawayError({
-            code: "PERMISSION_DENIED",
-            message: "Window policy denied.",
-          });
-        }
         if (services.stopping() || services.cancelled(context.requestId)) {
           throw new BunawayError({
             code: "CANCELLED",
@@ -424,8 +386,7 @@ export function createOperations(
             // Resolve the authenticated caller, never a view supplied by the web payload.
             if (
               services.read(viewId)?.closed === false &&
-              !operations.replacing.has(viewId) &&
-              grants.includes(viewId)
+              !operations.replacing.has(viewId)
             ) {
               identity = lookup.byView(viewId);
             }
@@ -438,10 +399,10 @@ export function createOperations(
             identity = lookup.lastActive();
             break;
         }
-        // Do not expose IDs for denied, closed or replacing views, and do not fall back to another window.
+        // Closed or replacing views have no live identity; do not substitute another window.
         if (
           !identity ||
-          !grants.includes(identity.viewId) ||
+          !services.specs.some((spec) => spec.view === identity.viewId) ||
           services.read(identity.viewId)?.closed !== false ||
           operations.replacing.has(identity.viewId)
         ) {
@@ -450,15 +411,6 @@ export function createOperations(
         return {
           ...identity,
         };
-      }
-      if (
-        call.operation === "windows.completeSplashscreen" &&
-        grants.length !== targets.length
-      ) {
-        throw new BunawayError({
-          code: "PERMISSION_DENIED",
-          message: "Window policy denied.",
-        });
       }
       if (
         call.operation === "windows.completeSplashscreen" &&
@@ -471,7 +423,7 @@ export function createOperations(
             "Complete the splashscreen handoff from the main window or backend.",
         });
       }
-      return operations.execute(call, grants, context.requestId);
+      return operations.execute(call, context.requestId);
     },
     busy: () => operations.replacing.size !== 0,
     dispose() {},

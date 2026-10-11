@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 import type {
   NativeWindow,
   NativeWindowServices,
@@ -10,7 +11,7 @@ import {
   windowsPlugin,
 } from "@bunaway/plugin-windows";
 import { NativeRegistry, type Policy } from "@bunaway/protocol";
-import { createOperations } from "#plugins/windows/src/windows";
+import { createOperations } from "#plugins/windows/src/platforms/windows";
 
 const names = [
   "showInactive",
@@ -24,7 +25,7 @@ test("inactive display and activation contracts accept only a view and validate 
   ]);
   for (const name of names) {
     const operation = `windows.${name}` as const;
-    expect(registry.operation(operation).permission).toBe("windows:control");
+    expect(registry.operation(operation).name).toBe(operation);
     expect(
       validateWindowCall({
         operation,
@@ -116,27 +117,14 @@ function fixture() {
     views.map((view) => [
       view,
       {
-        visible: true,
+        visible: view !== "private",
         minimized: false,
       },
     ]),
   );
   const grants: Policy["backend"] = {
     permissions: [
-      {
-        identifier: "windows:control",
-        allow: [
-          ...views,
-          "undeclared",
-        ].map((view) => ({
-          view,
-        })),
-        deny: [
-          {
-            view: "private",
-          },
-        ],
-      },
+      ...windowPermissions(),
     ],
   };
   const unused = (): never => {
@@ -250,7 +238,7 @@ function fixture() {
   };
 }
 
-test("blur selects the first granted ready visible non-minimized app window and never an external target", async () => {
+test("blur selects the first ready visible non-minimized app window and never an external target", async () => {
   const f = fixture();
   expect(await f.invoke("blur")).toBe(true);
   expect(f.focused()).toBe("editor");
@@ -294,16 +282,11 @@ test("blur selects the first granted ready visible non-minimized app window and 
     ]);
   }
   const noSuccessor = fixture();
-  noSuccessor.grants.permissions = [
-    {
-      identifier: "windows:control",
-      allow: [
-        {
-          view: "main",
-        },
-      ],
-    },
-  ];
+  for (const [view, display] of noSuccessor.displays) {
+    if (view !== "main") {
+      display.visible = false;
+    }
+  }
   expect(await noSuccessor.invoke("blur")).toBe(false);
   expect(noSuccessor.calls).toEqual([]);
   const denied = fixture();
@@ -315,7 +298,7 @@ test("blur selects the first granted ready visible non-minimized app window and 
   ]);
 });
 
-test("activation rejection is a boolean and every new operation enforces source scope and open lifetime", async () => {
+test("activation rejection is a boolean and every new operation enforces source grants and open lifetime", async () => {
   const f = fixture();
   f.decline();
   expect(await f.invoke("activate", "editor")).toBe(false);
@@ -324,6 +307,7 @@ test("activation rejection is a boolean and every new operation enforces source 
   expect(f.focused()).toBe("main");
   for (const name of names) {
     const scoped = fixture();
+    scoped.grants.permissions = [];
     for (const view of [
       "private",
       "ungranted",
@@ -332,6 +316,7 @@ test("activation rejection is a boolean and every new operation enforces source 
         code: "PERMISSION_DENIED",
       });
     }
+    scoped.grants.permissions = windowPermissions();
     await expect(scoped.invoke(name, "undeclared")).rejects.toMatchObject({
       code: "INVALID_ARGUMENT",
     });
