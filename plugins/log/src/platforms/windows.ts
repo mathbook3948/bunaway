@@ -11,7 +11,7 @@ import type {
   NativeAdapter,
   NativeEnvironment,
 } from "@bunaway/plugin";
-import type { LogInput } from "./index.ts";
+import type { LogInput } from "../contract.ts";
 
 const LOG_ROTATION_THRESHOLD_BYTES = 1024 * 1024;
 

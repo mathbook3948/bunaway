@@ -9,16 +9,19 @@ sidebar: { order: 3 }
 `WindowEvents`는 기존 typed listen의 이벤트 맵 타입입니다. 등록과 구독 권한,
 상태와 물리 bounds 및 수명 규칙은 [창 API](/reference/host/windows/)에서 설명합니다.
 
-기본 구조는 다음과 같습니다. 기능이 커지면 제작자가 필요한 폴더와 파일을 추가합니다.
-파일명은 관례이며 package.json과 plugin.json에 지정한 경로를 사용합니다.
+공식 플러그인은 다음 구조를 사용합니다. 외부 제작자는 내부 파일 구성을 선택할 수 있습니다.
+`src/index.ts`와 `src/platforms/<platform>.ts`는 플러그인 빌드의 진입점과 OS 경계입니다.
 
 ```text
 my-plugin/
   package.json
-  plugin.json
   src/
-    index.ts       기능과 권한 선언, 공개 export
-    windows.ts     Windows 구현
+    index.ts       계약과 플랫폼 선언 조립, 공개 export
+    contract.ts    작업 스키마, 타입과 계약 검증
+    calls.ts       편의 호출 처리, 필요한 기능만 작성
+    platforms/
+      windows.ts   Windows 구현 팩터리
+  dist/            빌드 결과
 ```
 
 현재 네이티브 구현은 Windows를 기준으로 작성합니다. 앱에서 설치하고 등록하는 방법은
@@ -31,17 +34,28 @@ peerDependencies에 지정하고 개발할 때도 같은 버전을 설치합니�
 현재 공통 SDK와 정확한 버전을 맞춥니다.
 `@bunaway/` 범위 밖의 외부 플러그인은 자체 패키지 버전을 사용합니다.
 예를 들어 플러그인 버전이 `1.2.3`이어도 peerDependencies의 `@bunaway/plugin`이
-프레임워크 버전과 정확히 일치하면 사용할 수 있습니다. 선언의 version은 플러그인 패키지 버전과 같아야 합니다.
+프레임워크 버전과 정확히 일치하면 사용할 수 있습니다.
+플러그인 버전은 package.json에만 작성합니다. 빌드가 이 값을 읽어 모든 출력에 기록합니다.
 
 ```json
 {
   "name": "@example/plugin-system",
   "version": "0.0.0",
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
-  "bunaway": { "plugin": "./plugin.json" },
+  "exports": {
+    ".": { "types": "./dist/types/index.d.ts", "default": "./dist/index.js" },
+    "./native/*": { "types": "./dist/types/index.d.ts", "default": "./dist/native/*.js" }
+  },
+  "bunaway": { "plugin": "./dist/index.js" },
+  "files": ["dist"],
+  "scripts": { "build": "bunaway plugin build" },
   "peerDependencies": { "@bunaway/plugin": "0.0.0" },
-  "devDependencies": { "@bunaway/plugin": "0.0.0" }
+  "devDependencies": {
+    "@bunaway/plugin": "0.0.0",
+    "@bunaway/cli": "0.0.0",
+    "@types/bun": "1.4.2",
+    "typescript": "7.0.2"
+  }
 }
 ```
 
@@ -58,34 +72,40 @@ Windows 개발 모드에서는 조건부 루트 `exports`를 사용하는 플러
 추가로 export할 수 있습니다.
 
 ```ts
-import { defineNativePlugin, s } from "@bunaway/plugin";
-import manifest from "../package.json";
+// src/contract.ts
+import { s } from "@bunaway/plugin";
+
+export const systemOperations = {
+  hostname: { input: s.null(), output: s.string() },
+} as const;
+```
+
+```ts
+// src/index.ts
+import { defineNativePlugin } from "@bunaway/plugin";
+import { systemOperations } from "./contract.ts";
+import { createOperations as createWindowsOperations } from "./platforms/windows.ts";
 
 const plugin = defineNativePlugin({
   name: "system",
-  version: manifest.version,
-  operations: {
-    hostname: {
-      input: s.null(),
-      output: s.string(),
-      permission: "hostname",
-    },
+  platforms: {
+    windows: { execution: "io", create: createWindowsOperations },
   },
+  operations: systemOperations,
 });
 
 export default plugin.definition;
 export const system = plugin.api;
 ```
 
-`NativePluginDefinition`의 name과 version은 설치한 manifest와 일치해야 합니다.
+`NativePluginDefinition`에는 version을 작성하지 않습니다. 빌드한 definition의 version은
+플러그인 package.json에서 가져옵니다. 패키지를 빌드하지 않고 원본을 직접 import하면
+version은 `development`이며 앱 배포에는 빌드한 export를 사용합니다.
+name은 패키지 이름과 별개인 플러그인 식별자이며 작업 이름의 접두사로 사용합니다.
 operations의 키는 공개 메서드 이름입니다. 각 `NativeOperationDefinition`에는
-input, output, permission을 작성합니다. 선택 필드 `osPermission`은 현재
-`"not-required"`만 허용하며 해당 작업에 OS 권한이 필요하지 않음을 표시합니다.
-생략하면 기능 조회의 permission 값은 `unknown`입니다. 이 필드는 앱 정책의 Host
-권한을 허용하지 않으며 OS 권한을 요청하거나 조회하지도 않습니다. permission에는
-플러그인 접두사를 붙이지 않습니다.
-SDK가 `system.hostname` 작업과 `system:hostname` 권한을 만들며 같은 권한을 사용하는
-작업들은 하나의 권한을 공유합니다. 선언 오류는 함수를 만들 때 거부합니다.
+input과 output을 작성합니다. SDK가 만드는 `system.hostname`이
+호출 이름과 정책의 권한 식별자입니다. 작업마다 독립적으로 허용하며 별도 permission
+이름이나 권한 묶음을 선언하지 않습니다. 선언 오류는 함수를 만들 때 거부합니다.
 
 `NativePluginAPI`의 메서드 이름은 operations의 키와 같습니다.
 위 예제는 `system.hostname(null): Promise<string>`을 만듭니다.
@@ -98,14 +118,16 @@ SDK가 `system.hostname` 작업과 `system:hostname` 권한을 만들며 같은 
 취소와 기한을 따르며 별도 옵션을 받지 않습니다. 생성 앱은 TypeScript의 browser와 bun
 조건을 각각 적용해 화면과 백엔드 타입을 검사합니다. 직접 구성하는 프로젝트도 customConditions를 환경에 맞춰 지정합니다.
 
-`index.ts`는 플러그인의 정의와 공개 export를 담당합니다. 권한 범위 비교나 편의 함수의
+`index.ts`는 플러그인의 선언 조립과 공개 export를 담당합니다.
+`contract.ts`에는 입력과 출력 스키마, 그 스키마에서 추론한 타입과 계약 검증을 둡니다.
+편의 함수의
 실제 처리는 역할에 맞는 내부 파일로 분리하고 생성한 호출 함수를 전달해서 연결합니다.
-storage의 범위 비교는 scope.ts, log의 수준별 호출은 logger.ts,
+log의 수준별 호출은 logger.ts,
 capabilities의 결과 이름 중복 검사는 query.ts에 둡니다.
-내부 파일에서 index.ts의 타입이 필요하면 import type을 사용합니다.
+내부 파일은 contract.ts에서 계약과 타입을 읽습니다. index.ts를 역으로 import하지 않습니다.
 생성된 api를 그대로 공개하는 기능에는 추가 로직 파일이 필요하지 않습니다.
-최상위 코드에서 파일을 열거나 Windows
-구현을 import하지 않습니다. 선언을 읽는 것만으로 연결이나 플랫폼 자원을 만들지 않습니다.
+플랫폼 구현 팩터리는 직접 import합니다. 선언과 구현의 최상위 코드에서는 파일이나 DLL을 열지 않습니다.
+선언을 읽는 것만으로 연결이나 플랫폼 자원을 만들지 않습니다.
 호출 함수는 설치, 앱 등록이나 권한 부여를 대신하지 않습니다.
 
 ## `s`로 입력과 결과 스키마 정의하기
@@ -139,9 +161,9 @@ JSON 값이어야 합니다. optional은 객체 필드에서만 사용합니다.
 string과 integer의 옵션, array의 두 번째 인자는 생략할 수 있습니다.
 이 함수들은 기존 JSON Schema를 만들며 별도의 검증기를 추가하지 않습니다.
 기존에 지원하는 Schema 객체도 input과 output 또는 s.object의 필드로 직접 사용할 수 있습니다.
-pattern은 선언 검사와 입력, 출력, 권한 범위 검사에서 모두 Unicode 모드(`u`)로 평가합니다.
+pattern은 선언 검사와 입력, 출력 검사에서 모두 Unicode 모드(`u`)로 평가합니다.
 
-## windows.ts에서 구현하기
+## platforms/windows.ts에서 구현하기
 
 ```ts
 import { hostname } from "node:os";
@@ -156,13 +178,16 @@ export function createOperations(_environment: NativeEnvironment): NativeAdapter
 ```
 
 `NativeEnvironment`는 호스트가 정한 dataRoot와 capabilities 목록을 제공합니다.
+`NativeAdapterFactory`는 이 환경을 받아 NativeAdapter를 반환하는 함수 타입입니다.
+DLL, 파일 핸들과 UI 자원은 createOperations 안에서 만들고 반환한 어댑터의 dispose에서 정리합니다.
+초기화가 실패하면 팩터리가 이미 만든 자원도 회수해야 합니다.
 Windows 호스트의 선택적 `app`은 검증한 앱 ID와 개발 또는 배포 실행의 절대 실행 파일,
 프레임워크 부팅 인자를 제공합니다. 자동 실행 어댑터는 이 정보만 등록 경로로 사용하며
 호출자가 실행 파일이나 다른 앱 ID를 선택하지 못합니다. 호스트 실행 정보가 없는 환경은
 해당 기능을 지원한다고 가정하지 않습니다.
-목록에는 앱에 등록된 네이티브 플러그인 작업만 포함합니다. 창 제어도 windowsPlugin을 등록한 경우에만 포함합니다. 각 작업은 해당 패키지의 플랫폼 어댑터 상태와
-`osPermission` 선언을 반영합니다. `support` 값은 `supported`, `experimental`,
-`unsupported`이고 `permission`은 `unknown`, `not-required`입니다.
+목록에는 앱에 등록된 네이티브 플러그인 작업만 포함합니다. 창 제어도 windowsPlugin을
+등록한 경우에만 포함합니다. 각 작업의 `support`는 해당 패키지의 플랫폼 구현에 따라
+`supported`, `experimental`, `unsupported` 중 하나입니다. OS 동의 상태는 포함하지 않습니다.
 `NativeAdapter.execute(operation, input, source)`는 승인된 작업을 동기로 실행하고 JSON
 결과를 반환합니다. source는 호스트가 정한 출처입니다. `dispose()`는 자원을 정리하며
 `void` 또는 `Promise<void>`를 반환합니다. 실패를 호출자에게 전달하려면 공통 `BunawayError`를
@@ -177,51 +202,101 @@ Windows 호스트의 선택적 `app`은 검증한 앱 ID와 개발 또는 배포
 `BUSY`로 거부합니다. 작업 전송이 한도에 도달해도 이미 접수한 작업의 승인과 취소,
 종료를 처리할 용량은 별도로 유지합니다.
 
-## plugin.json에서 연결하기
+## 플랫폼 구현 연결하기
 
-```json
-{
-  "format": 1,
-  "name": "system",
-  "entry": "./src/index.ts",
-  "platforms": {
-    "windows": {
-      "execution": "io",
-      "operations": "./src/windows.ts"
-    }
+```ts
+platforms: {
+  windows: {
+    execution: "io",
+    create: createWindowsOperations,
+  },
+  macos: {
+    execution: "io",
+    create: createMacosOperations,
+    operations: ["hostname"],
   }
 }
 ```
 
-entry는 default export한 선언을 읽을 경로입니다. operations는 createOperations를
-읽을 경로입니다. 모든 경로는 설치 패키지 안에 있어야 합니다.
-execution은 io 또는 ui이며, UI 스레드가 필요한 작업은 ui를 지정합니다.
+package.json의 `bunaway.plugin`은 default export한 등록 객체를 읽는 진입점입니다.
+`platforms`는 defineNativePlugin의 선언 안에 작성하며 별도 plugin.json은 사용하지 않습니다.
+플랫폼 이름은 windows, macos, linux, android, ios입니다. 구현을 제공하는 플랫폼만 선언합니다.
+이 이름을 선언해도 해당 플랫폼의 프레임워크 실행 경로가 새로 생기지는 않습니다.
+
+`create`에는 `src/platforms/<platform>.ts`에서 export한 createOperations를 전달합니다.
+예제의 createMacosOperations도 해당 파일에서 import합니다. 구현 내부의 파일 구성은 자유롭게 나눌 수 있습니다.
+import에서 확장자를 생략해도 빌드는 실제로 해석한 파일 경로를 기준으로 같은 OS 경계를 적용합니다.
+`execution`은 io 또는 ui이며 UI 스레드가 필요한 작업은 ui를 지정합니다.
+각 플랫폼 출력에는 해당 OS 구현만 포함하고 화면 출력에서는 모든 OS 구현을 제외합니다.
+자원 생성은 호스트가 등록된 어댑터의 createOperations를 호출할 때 수행합니다.
+
+일부 작업만 구현한다면 `operations`에 짧은 작업 이름을 나열합니다. 생략하면 전체 작업,
+빈 배열이면 지원하는 작업이 없습니다. 중복 이름과 선언하지 않은 작업 이름은 거부합니다.
+기능 지원 조회와 호출 검사는 같은 목록을 사용합니다. 플랫폼 구현이나 작업이 없으면
+권한 검사 뒤 `UNSUPPORTED`를 반환합니다. 지원 여부는 권한을 부여하지 않습니다.
+
+반환한 definition의 `nativePlatforms`에는 검증한 구현 정보가 들어갑니다.
+create 함수는 열거되지 않는 속성이므로 JSON과 structured clone에는 실행 위치와 지원 작업만 전달합니다.
+일반 앱 플러그인의 `platforms` 배열은 앱 시작을 제한하는 별도 계약이므로 이 맵과 혼용하지 않습니다.
 개발 중 manifest와 정책 형식은 v1입니다.
+
+## 플러그인 빌드와 배포
+
+패키지 루트에서 `bun run build` 또는 `bunaway plugin build [directory]`를 실행합니다.
+`tsconfig.json`은 src를 포함하고 Bun 타입과 JSON import를 허용해야 합니다.
+다음은 최소 설정입니다.
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022", "module": "Preserve", "moduleResolution": "Bundler",
+    "strict": true, "noEmit": true, "allowImportingTsExtensions": true,
+    "resolveJsonModule": true, "types": ["bun"]
+  },
+  "include": ["src/**/*.ts"]
+}
+```
+
+빌드는 `dist/index.js`, `dist/types/`와 선언한 OS의 `dist/native/<platform>.js`를 만듭니다.
+중립 출력의 플랫폼 팩터리는 실행을 거부하는 자리 함수로 대체합니다. 화면과 백엔드,
+CLI는 이 출력에서 동일한 계약과 호출 API를 읽습니다. 호스트는 패키지의 `native/<platform>`
+export를 지연 import한 뒤 등록된 플러그인의 팩터리만 호출합니다. 앱에서 네이티브 export를 직접 호출하지 않습니다.
+SDK 패키지는 외부 의존성으로 유지하므로 앱의 호출 컨텍스트와 오류 타입을 공유합니다.
+파일 asset import는 지원하지 않으며 빌드에서 거부합니다. 타입 검사나 번들 생성이 실패하면 기존 dist를 보존합니다.
+빌드 후 dist를 포함한 패키지를 배포합니다. 앱의 화면 번들러에는 별도 플러그인을 설정할 필요가 없습니다.
+개별 플러그인을 수정한 뒤에는 플러그인부터 다시 빌드합니다.
 
 Windows CLI는 설치된 플러그인의 계약과 실행 위치를 앱 설정, 정책과 함께
 `assets/manifest.json`에 기록합니다. 플러그인 구현을 불러오는 코드는
 CLI의 공통 앱 모듈 생성기가 메모리에서 만들고 번들에 포함합니다. 중간 소스 파일은 쓰지 않습니다.
 개발 빌드에서는 manifest와 번들을 확인할 수 있고, 배포 빌드에서는 EXE에 포함합니다.
-생성 결과를 직접 수정하지 않고 플러그인의 선언이나 `plugin.json`을
-수정한 뒤 다시 빌드합니다.
+생성 결과를 직접 수정하지 않고 원본 계약이나 플랫폼 선언을 수정한 뒤 다시 빌드합니다.
 
-## 리소스 범위가 필요한 기능
+## 앱의 접근 규칙
 
-파일이나 주소의 범위를 제한하는 기능은 scopes에 짧은 permission 이름과 schema를
-작성하고 `matches(permission, input, scope)`를 함께 제공합니다.
+정책은 `storage.readText` 같은 작업 이름만 허용합니다. 작업마다 입력과 출력 schema를 검증하지만,
+파일별 접근이나 특정 창의 제어 같은 앱 규칙은 백엔드 앱 명령에서 검사합니다.
+화면에는 해당 앱 명령만 허용하고 직접 플러그인 명령은 허용하지 않아야 이 검사를 거칩니다.
+뷰에서 시작한 앱 명령도 원래 뷰의 작업 권한을 유지합니다.
 
-```ts
-scopes: {
-  "read-text": s.object({ scope: s.enum(["appData", "temp"]), pathPrefix: s.string() }),
-}
-```
+예를 들어 메모 읽기는 메모 ID를 입력받아 앱에서 접근 가능 여부를 확인하고,
+서버가 정한 저장 경로로 `storage.readText`를 호출합니다. 화면에 임의 파일 경로를 맡길 필요가 없습니다.
+플러그인은 자체 입력 검증과 플랫폼 경로, 파일 링크, 최종 핸들 검사를 담당합니다. 저장 위치와 파일별 접근 규칙은 앱이 정합니다.
 
-matches에는 `storage:read-text`처럼 완전한 권한 이름을 전달합니다.
-operations에서 사용하지 않는 scopes 키는 선언 오류입니다.
-`PermissionMatcher`는 검증된 입력과 scope가 일치하는지 반환하는 순수 함수입니다.
-비교 함수는 scope.ts에 두고 index.ts의 matches에 연결합니다. 범위가 없는 기능에는 matches가 필요 없습니다.
-allow와 deny를 합치고 deny를 우선하는 처리는 프레임워크가 담당합니다.
-파일 링크와 최종 핸들 검사는 실제 플랫폼 구현에서 수행합니다.
+## OS 권한 요청
+
+카메라, 위치 등의 OS 동의 상태 조회와 요청은 해당 기능의 플랫폼 구현이 담당합니다.
+공통 선언에 osPermission 필드를 두거나 capabilities 결과로 동의 상태를 추정하지 않습니다.
+필요하면 기능 플러그인이 별도의 조회와 요청 operation을 공개합니다.
+
+예를 들어 카메라 플러그인을 작성하면 capture 구현 안에서 OS 동의 상태를 확인하고,
+필요할 때 요청한 뒤 촬영할 수 있습니다. 호스트가 먼저 `camera.capture`의 앱 정책을
+검사하므로 정책에 없는 호출은 OS 요청까지 도달하지 않습니다. 사용자가 OS 요청을
+거부하면 `PERMISSION_DENIED`를 반환합니다. 카메라 플러그인은 현재 제공하지 않습니다.
+
+OS 대화상자는 import와 어댑터 등록 중에 표시하지 않습니다. 비동기 요청이 필요한 UI
+구현은 executeUI를 사용하고 signal을 관찰합니다. 취소할 수 없는 OS 요청이 이미 시작됐다면
+승인 뒤 기능 실행을 이어가지 않고, 요청 완료 후 소유한 자원을 정리합니다.
 
 ## 시작과 종료
 

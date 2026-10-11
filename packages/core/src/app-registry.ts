@@ -114,11 +114,7 @@ function orderPlugins(
     if (
       plugin.requiredPermissions?.some(
         (permission) =>
-          !services.policy.backend.permissions.some(
-            (grant) =>
-              (typeof grant === "string" ? grant : grant.identifier) ===
-              permission,
-          ),
+          !services.policy.backend.permissions.includes(permission),
       )
     ) {
       fail(

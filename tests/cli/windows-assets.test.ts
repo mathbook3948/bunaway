@@ -54,6 +54,7 @@ export function createOperations() { return { execute(fail = false) {
   if (fail) throw new BunawayError({ code: "CANCELLED", message: "plugin cancelled" });
   return "plugin result";
 }, dispose() {} }; }
+export default { nativePlatforms: { windows: { create: createOperations } } };
 `,
     );
     await writeFile(
@@ -125,7 +126,6 @@ parentPort.close();
           root,
           native: {
             operations: [],
-            permissions: [],
           },
           targets: {
             windows: {

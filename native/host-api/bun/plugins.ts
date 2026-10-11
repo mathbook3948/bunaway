@@ -4,7 +4,6 @@ import {
   type JsonValue,
   type NativeRegistration,
   NativeRegistry,
-  type PermissionMatcher,
   type Policy,
   validateValue,
 } from "@bunaway/protocol";
@@ -63,28 +62,6 @@ export function pluginRegistry(
   return registry;
 }
 
-/** Build a fail-closed scope matcher from installed, registered plugins. */
-export async function permissionMatcher(
-  plugins: readonly NativeRegistration[],
-  catalog: readonly PackagedPlugin[],
-): Promise<PermissionMatcher> {
-  const matchers = new Map<string, PermissionMatcher>();
-  for (const plugin of catalog) {
-    if (
-      plugin.authorization &&
-      plugin.native.permissions.some((permission) => permission.scope) &&
-      plugins.some(
-        (registered) => registered.name === plugin.name && registered.native,
-      )
-    ) {
-      matchers.set(plugin.name, (await plugin.authorization()).matches);
-    }
-  }
-  return (permission, input, scope) =>
-    matchers.get(permission.split(":")[0] ?? "")?.(permission, input, scope) ===
-    true;
-}
-
 /** Attempt every cleanup in order and report all failures together. */
 export async function disposeAll(
   actions: Iterable<() => void | Promise<void>>,
@@ -112,6 +89,21 @@ export async function operations(
   app?: NativeEnvironment["app"],
 ): Promise<PluginOperations> {
   const registry = pluginRegistry(plugins, catalog);
+  // Capability discovery and dispatch use the same installed platform support contract.
+  const supported = new Set(
+    [
+      ...registry.operations.keys(),
+    ].filter((operation) => {
+      const plugin = catalog.find((entry) =>
+        operation.startsWith(`${entry.name}.`),
+      );
+      return (
+        plugin?.execution !== undefined &&
+        (plugin.supportedOperations === undefined ||
+          plugin.supportedOperations.includes(operation))
+      );
+    }),
+  );
   const adapters = new Map<string, NativeAdapter>();
   const dispose = () =>
     disposeAll(
@@ -139,12 +131,9 @@ export async function operations(
         ...registry.operations.values(),
       ].map((operation) => ({
         name: operation.name,
-        support: catalog.find((plugin) =>
-          operation.name.startsWith(`${plugin.name}.`),
-        )?.execution
+        support: supported.has(operation.name)
           ? ("supported" as const)
           : ("unsupported" as const),
-        permission: operation.osPermission ?? ("unknown" as const),
       })),
     ],
   };
@@ -186,10 +175,10 @@ export async function operations(
         payload: input as never,
       });
       const adapter = adapters.get(operation.split(".")[0] ?? "");
-      if (!adapter) {
+      if (!adapter || !supported.has(operation)) {
         throw new BunawayError({
           code: "UNSUPPORTED",
-          message: "Plugin has no adapter for this platform.",
+          message: "Plugin operation is not supported on this platform.",
         });
       }
       return registry.validateOutput(
@@ -212,10 +201,10 @@ export async function operations(
         payload: input as never,
       });
       const adapter = adapters.get(operation.split(".")[0] ?? "");
-      if (!adapter) {
+      if (!adapter || !supported.has(operation)) {
         throw new BunawayError({
           code: "UNSUPPORTED",
-          message: "Plugin has no adapter for this platform.",
+          message: "Plugin operation is not supported on this platform.",
         });
       }
       const output = adapter.executeUI

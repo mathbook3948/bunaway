@@ -16,7 +16,7 @@ Tauri에서 참고할 부분은 웹 UI, 백엔드 코어, 네이티브 호스트
 
 저장, 앱 로그, 기능 지원 조회 등의 네이티브 기능은 앱이 개별 플러그인 패키지를
 설치하고 등록하는 모델로 전환한다. 설치와 등록은 권한을 부여하지 않으며 필요한
-권한과 리소스 범위는 정책에 별도로 선언한다. 공통 SDK와 호스트는 호출, 권한 검사와
+작업 권한은 정책에 별도로 선언하고 자원별 접근 규칙은 앱 명령이 검사한다. 공통 SDK와 호스트는 호출, 권한 검사와
 수명주기를 제공한다. [ADR 0013](./decisions/0013-optional-native-plugins.md)에 설계를
 확정했으며 Windows의 저장, 로그와 기능 지원 조회는 개별 플러그인으로 이관했다.
 macOS 플러그인 어댑터는 후속 작업이다.
@@ -75,9 +75,9 @@ Bun 자식 프로세스 ── TypeScript 코어 ── 앱 명령, 상태, 플�
 | --- | --- | --- |
 | `protocol` | 메시지 스키마, 오류 코드, 버전 협상, 직렬화 규칙 | 플랫폼, Bun, UI 의존성 없음 |
 | `client-sdk` | `invoke`, `listen`과 구독 해제 함수, 요청 취소, 기본 WebView 연결, 초기화, 정리 | `protocol`, WebView 또는 주입받은 Transport |
-| `plugin-capabilities` | 등록된 네이티브 작업의 플랫폼 지원과 OS 권한 메타데이터 조회 | `plugin-sdk` |
+| `plugin-capabilities` | 등록된 네이티브 작업의 플랫폼 지원 조회 | `plugin-sdk` |
 | `plugin-api` | 앱과 플러그인 공통 타입, 실행 컨텍스트 | `protocol` |
-| `plugin-windows` | 선택 창 제어, 생성과 재생성, 창별 권한 | `plugin-sdk`, 호스트 자원 인터페이스 |
+| `plugin-windows` | 선택 창 제어, 생성과 재생성, 작업별 권한 | `plugin-sdk`, 호스트 자원 인터페이스 |
 | `core` | 명령 레지스트리, 입력 검증, 상태 저장소, 이벤트 라우팅, 플러그인 수명 | `plugin-api`, `protocol`, 추상 Host API, Runtime Services |
 | `runtime-bun` | 자식 프로세스 안의 코어 부팅, Bun 서비스 어댑터, 프로세스 IPC 연결 | `core`, `protocol`, Bun API |
 | `bun-bundle` | 배포할 Bun 실행 파일, 버전, 소스 revision, 해시, 라이선스 고정 | 공식 플랫폼별 Bun 배포물, 필요한 경우 기록된 빌드, 패치 |
@@ -135,11 +135,11 @@ Android Activity 재생성은 백엔드 수명과 분리한다. iOS scene 변경
 
 앱에 포함한 Bun 백엔드와 네이티브 플러그인은 신뢰 코드다. WebView는 XSS나 공급망 문제로 공격받을 수 있다고 가정한다. 이 권한 모델은 WebView가 요청할 수 있는 기능을 제한한다. 악성 백엔드 코드를 샌드박싱하지 않으며 신뢰 백엔드의 직접 Bun API 사용까지 가로막는다고 주장하지 않는다.
 
-1. 권한은 기본 거부다. 앱 manifest에 창/뷰별 허용 명령, 이벤트, 네이티브 기능과 데이터 범위를 선언한다. 와일드카드 전체 허용은 기본 템플릿에 넣지 않는다.
+1. 권한은 기본 거부다. 앱 manifest에 창/뷰별 허용 명령, 이벤트와 네이티브 작업 이름을 선언한다. 자원별 접근 규칙은 앱 명령이 검사하고 화면에는 해당 앱 명령만 허용한다. 와일드카드 전체 허용은 기본 템플릿에 넣지 않는다.
 2. 네이티브 브리지 진입점에서 세션, frame, origin, 명령 권한을 검사한다. Bun 코어는 핸들러 실행 전에 런타임 스키마로 입력을 검증한다. TypeScript 타입만으로 입력을 검증한 것으로 간주하지 않는다.
-3. 각 네이티브 권한 기능을 실행하기 직전에 발신 컨텍스트, 허용 범위, 현재 OS 권한과 대상 자원의 유효성을 재검사한다. 플러그인, 대체 렌더러, 다른 IPC 경로도 같은 검사를 통과한다.
+3. 각 네이티브 권한 기능을 실행하기 직전에 발신 컨텍스트, 작업 권한과 대상 자원의 유효성을 재검사한다. OS 동의가 필요한 기능은 플랫폼 구현이 상태를 확인하고 필요하면 요청한다. 플러그인, 대체 렌더러, 다른 IPC 경로도 같은 검사를 통과한다.
 4. WebView에서 시작한 작업의 호출 컨텍스트는 호스트가 소유한 불투명 핸들로 전달한다. SDK나 payload가 권한을 위조하거나 백엔드 자체 작업으로 승격하지 못하게 한다. 백엔드 자체 작업도 명시적으로 선언한 Host API 범위를 사용한다.
-5. 파일 접근은 앱 데이터, 임시 폴더 등 명명된 범위와 상대 경로로 제한한다. `..`, 심볼릭 링크 탈출, 검사 이후 대상 변경을 막도록 실제 파일을 여는 네이티브 경계에서 검증한다. 파일 선택 결과는 범위가 있는 핸들로 전달한다.
+5. 파일 저장 위치와 파일별 접근 규칙은 앱이 정한다. 저장 플러그인은 경로를 입력으로 받으며 기본 저장 폴더를 지정하지 않는다. 플랫폼 경로 문법, 링크와 검사 이후 대상 변경은 실제 파일을 여는 네이티브 경계에서 검증한다.
 6. 임의 `eval`, shell 실행, 경로 제한 없는 파일 접근, 임의 동적 라이브러리 로딩을 프런트엔드 명령으로 제공하지 않는다. 비밀값, 원본 스택, 환경 변수는 응답과 로그에서 제거한다.
 7. 원격 페이지와 서브프레임에는 기본적으로 브리지를 주입하지 않는다. 탐색과 새 창 생성은 허용 목록으로 제어한다. 탐색이 발생하면 기존 세션 권한과 미완료 요청을 무효화한다.
 8. 개발 모드의 HMR origin과 디버그 브리지는 명시적으로 활성화한다. 프로덕션은 서명된 배포물에 포함된 자산과 정책만 로드하고 CSP를 적용한다. 내부 자산 공급 경로는 순회 공격을 차단하며 공개 localhost 서버를 기본 통신 경로로 삼지 않는다.
@@ -164,7 +164,10 @@ OS 권한 선언과 런타임 사용자 동의는 프레임워크 권한과 별�
 // src-bunaway/app.ts
 import { command, type AppDefinition } from "@bunaway/backend";
 import { storage, storagePlugin } from "@bunaway/plugin-storage";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
+const notesDirectory = join(homedir(), "Documents", "bunaway-notes");
 
 export const app = {
   commands: {
@@ -177,7 +180,7 @@ export const app = {
       },
       output: { type: "string" },
       async handle({ key }) {
-        return storage.readText({ scope: "appData", path: `notes/${key}.txt` });
+        return storage.readText({ path: join(notesDirectory, `${key}.txt`) });
       },
     }),
   },
@@ -198,7 +201,7 @@ async function start(): Promise<void> {
 void start().catch(console.error);
 ```
 
-위 예제를 허용하는 정책에는 해당 뷰의 `notes.read` 명령과 `host.permissions`의 `storage:read-text` 권한을 `appData/notes` 범위로 함께 선언한다. 입력 패턴은 편의 검증이며 네이티브 파일 범위 검사를 대체하지 않는다.
+위 예제를 허용하는 정책에는 해당 뷰의 `notes.read` 명령과 `host.permissions`의 `storage.readText`를 선언한다. 앱 명령이 key를 검증하고 notes 저장 경로를 정한다. 네이티브 구현의 플랫폼 경로와 링크 검사는 유지한다.
 
 플러그인은 이름, 버전, 의존성, 지원 플랫폼, 필요 권한, 명령 스키마, 초기화, 종료 훅을 선언한다. 순수 TypeScript 플러그인과 네이티브 구현이 필요한 플러그인을 구분한다. 네이티브 플러그인은 호스트 계약을 따르며 ABI 호환성을 빌드 시 검사한다. 저장, 로그, 기능 조회는 각각 선택 패키지로 제공하며 Windows 어댑터가 구현돼 있다. 권한, 네이티브 바이너리와 코드 변경을 포함한 플러그인은 앱을 다시 빌드해 배포한다.
 
@@ -224,7 +227,7 @@ void start().catch(console.error);
 | `bun:ffi`, TCC, native addon, `spawn` | 공통 SDK의 필수 기능에서 제외 | 초기 지원 보장 없음. iOS는 우선 비지원 |
 | 창 다중 생성, 메뉴, 트레이 | 데스크톱 확장 API | 자동 모사하지 않고 `UNSUPPORTED` 반환 |
 
-`@bunaway/plugin-capabilities`는 앱에 등록된 네이티브 작업의 지원 여부와 OS 권한 메타데이터를 반환한다. `osPermission: "not-required"`는 해당 작업에 OS 권한이 필요하지 않음을 선언하며, 선언이 없으면 `unknown`이다. 이 메타데이터는 앱 정책의 Host 권한 허용과 별개다. 조회 결과에 없는 플랫폼 기능은 지원 여부가 확인되지 않은 상태로 다룬다.
+`@bunaway/plugin-capabilities`는 앱에 등록된 네이티브 작업의 플랫폼 지원 여부를 반환한다. OS 동의 상태 조회와 요청은 해당 기능 플러그인이 소유한다. 작업 이름으로 허용한 앱 정책은 OS 동의와 별개로 검사한다. 조회 결과에 없는 플랫폼 기능은 지원 여부가 확인되지 않은 상태로 다룬다.
 
 ## 8 개발 도구와 패키징
 

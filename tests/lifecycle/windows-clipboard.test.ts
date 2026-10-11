@@ -77,7 +77,7 @@ test.skipIf(
     ]);
     const permissions = {
       permissions: [
-        ...registry.permissions.keys(),
+        ...registry.operations.keys(),
       ],
     };
     const contextId = "clipboard-native" as HostContext;
@@ -147,7 +147,7 @@ test.skipIf(
       }
       const operationsPath = resolve(
         import.meta.dir,
-        "../../plugins/clipboard/src/windows.ts",
+        "../../plugins/clipboard/src/platforms/windows.ts",
       );
       const disposedPath = resolve(root, "disposed.txt");
       await bundleUIPluginFixture(
@@ -158,7 +158,6 @@ test.skipIf(
             version: clipboardPlugin.version,
             native: clipboardPlugin.native,
             execution: "ui",
-            authorization: false,
           },
         ],
         `

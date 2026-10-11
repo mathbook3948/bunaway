@@ -7,6 +7,7 @@ import { windows, windowsPlugin } from "@bunaway/plugin-windows";
 import type { HostContext, Policy } from "@bunaway/protocol";
 import { runWindowsApp } from "#native/windows/bun/entry";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 const WM_CLOSE = 0x0010;
 const WM_COMMAND = 0x0111;
@@ -140,21 +141,7 @@ if (!process.argv.includes("--child")) {
     "observer",
   ];
   const permissions: Policy["backend"] = {
-    permissions: [
-      "windows:list",
-      {
-        identifier: "windows:control",
-        allow: views.map((view) => ({
-          view,
-        })),
-      },
-      {
-        identifier: "windows:destroy",
-        allow: views.map((view) => ({
-          view,
-        })),
-      },
-    ],
+    permissions: windowPermissions(),
   };
   const policy: Policy = {
     version: 1,

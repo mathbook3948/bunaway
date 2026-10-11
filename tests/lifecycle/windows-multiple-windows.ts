@@ -13,6 +13,7 @@ import {
 } from "@bunaway/protocol";
 import { runWindowsApp } from "#native/windows/bun/entry";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 const TEST_TIMEOUT_MS = 150_000;
 const STATE_TIMEOUT_MS = 40_000;
@@ -299,25 +300,11 @@ if (!process.argv.includes("--child")) {
     "isolated",
     "denied",
   ];
-  const grant = {
-    identifier: "windows:control",
-    allow: roles.map((view) => ({
-      view,
-    })),
-  };
+
   const policy: Policy = {
     version: 1,
     backend: {
-      permissions: [
-        "windows:list",
-        grant,
-        {
-          identifier: "windows:destroy",
-          allow: roles.map((view) => ({
-            view,
-          })),
-        },
-      ],
+      permissions: windowPermissions(),
     },
     views: roles.map((role) => ({
       id: role,
@@ -337,20 +324,7 @@ if (!process.argv.includes("--child")) {
         "windows.changed",
       ],
       host: {
-        permissions:
-          role === "denied"
-            ? []
-            : [
-                "windows:list",
-                {
-                  identifier: "windows:control",
-                  allow: [
-                    {
-                      view: role,
-                    },
-                  ],
-                },
-              ],
+        permissions: role === "denied" ? [] : windowPermissions(),
       },
     })),
   };

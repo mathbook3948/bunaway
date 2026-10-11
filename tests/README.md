@@ -1,5 +1,28 @@
 # Tests
 
+`mise run check`와 플랫폼 검사는 먼저 `plugins:build`를 실행해 중립 공개 출력과 OS별
+호스트 출력을 생성한다. `cli/plugin-build.test.ts`는 화면 출력의 OS 코드 제외,
+확장자를 작성하거나 생략한 플랫폼 import의 동일한 처리, 깨끗한 체크아웃에서 빌드 테스트 폴더 생성,
+대상 OS 선택, package.json 버전 반영과 잘못된 버전 거부, 실패 시 기존 출력 보존을 검사한다. storage 네이티브 검사는 여러
+어댑터의 DLL 소유권과 반복 dispose도 확인한다. 저장 어댑터 생성 시 기본 폴더가 생기지 않는지,
+앱이 지정한 절대 경로의 입출력이 가능한지와 링크, 별칭, ACL 및 파일 교체 검사를 실제 Windows에서 확인한다.
+
+`cli/plugins.test.ts`는 네이티브 export의 실제 경로를 패키지 루트와 비교해 내부 링크는 허용하고
+외부로 연결되는 링크는 거부하는지 검사한다. Windows의 임시 폴더에 남은 짧은 경로도 정규화해
+같은 패키지 안의 모듈을 잘못 거부하지 않는지 확인한다. macOS 네이티브 CI는 호스트 실행 전에
+`plugins:build`를 실행한다.
+
+공식 플러그인은 `src/index.ts`에서 선언을 조립하고 `src/contract.ts`에 계약을 둔다.
+`api/plugin-contracts.test.ts`는 OS 자원 없이 네이티브 입력 검증을 실행해 모르는 작업의
+UNSUPPORTED, 잘못된 입력의 INVALID_ARGUMENT과 입력 스냅샷을 확인한다.
+
+권한 식별자는 operation 이름이며 작업마다 독립적으로 허용한다. API 검사는 저장 메타데이터의
+exists와 stat 분리, 창 조회의 선언된 대상 반환과 다른 조회 및 제어의 거부를 확인한다.
+앱 명령의 접근 검사와 직접 플러그인 호출 거부도 확인하며 범용 자원별 권한 계약은 두지 않는다.
+windows-ui-operations.test.ts는 실제 UI Worker에서 정책 승인 전에 플러그인의 동의 요청이
+실행되지 않는지, 비동기 요청의 승인과 사용자 거부가 전달되는지 검사한다. OS 대화상자는 대체하며
+실제 카메라 권한 검증을 뜻하지 않는다. capabilities는 플랫폼 지원만 반환한다.
+
 `windows-windowless.ts`의 `destroy-recreate-resident`와 `destroy-recreate-tray`는
 마지막 창 재생성의 이전 세션이 폐기된 뒤 destroy를 호출합니다. 새 HWND를 만들지 않고
 재생성을 CANCELLED로 끝내며 keep-alive와 기본 quit 트레이 앱이 beforeQuit 없이
@@ -27,7 +50,7 @@ reply proxy로 한 번만 전환하고 대기 메시지를 순서대로 전달�
 앱 상태, 다른 세션, 새 문서 연결 및 정상 shutdown이 유지되는지 검사한다.
 
 창 준비 계약은 `api/window-readiness.test.ts`, `lifecycle/window-readiness.test.ts`와
-`window-operations.test.ts`에서 설정 검증, 두 대상 창 권한, 단계별 완료와 상태 복구,
+`window-operations.test.ts`에서 설정 검증, 작업 권한, 단계별 완료와 상태 복구,
 새 세대와 늦은 확인 차단, 기한, 생성 취소와 전환 순서를 확인한다.
 `api/client.test.ts`는 협상한 SDK 준비 확인과 이전 호스트 호환, 확인 전송 실패를 검사한다.
 `windows-window-readiness.ts`는 실제 WebView2에서 숨김 생성, 별도 준비 이벤트, 허용된 다른 창의
@@ -70,7 +93,7 @@ Linux와 macOS에서는 기존 추출 트리와 루트의 심볼릭 링크가 �
 
 `api/clipboard.test.ts`는 텍스트 계약, 작업별 권한, SDK 호출 컨텍스트와 브라우저 번들을 검사한다.
 `api/window-activation.test.ts`는 `showInactive`, `blur`, `activate`의 입력과 결과,
-대상 권한과 열린 창 검사, 설정 순서의 후보 선택, 후보 권한 거부와 OS 전환 거부를 검사한다.
+작업 권한과 열린 창 검사, 설정 순서의 후보 선택과 OS 전환 거부를 검사한다.
 `lifecycle/windows-activation.test.ts`는 실제 두 Win32 창과 EDIT 입력 필드를 사용한다.
 일반, 최소화, 최대화와 최대화에서 최소화한 창을 표시하거나 숨긴 뒤 `showInactive`를
 호출해 활성 창과 키보드 입력 포커스 보존, 표시 상태와 이벤트, snapshot의 일치를 확인한다.
@@ -87,7 +110,7 @@ WebView2 경로는 기존 `windows-bun-window-api.ts`와 `windows-window-events.
 WebView2 페이지 실행은 포함하지 않는다. 이전 텍스트만 복원하며 이미지 등 다른 형식은 복원하지 않는다.
 실제 검증 기록과 명령은 [clipboard README](../plugins/clipboard/README.md)에 둔다.
 
-`api/window-lookup.test.ts`는 창 식별자 schema, 목록 권한과 대상 scope, 인증된 출처,
+`api/window-lookup.test.ts`는 창 식별자 schema, 독립적인 조회 권한, 인증된 출처,
 이전 ID와 닫힌 창의 `null`, 취소와 미지원 플랫폼을 검사한다.
 `lifecycle/windows-window-lookup.test.ts`는 실제 HWND로 전경 창, 활성화 이력, 숨김,
 파괴 후 삭제와 새 ID, 조회 중 표시와 포커스 유지를 검사한다.
@@ -98,7 +121,7 @@ OS가 전경 전환 요청을 거부하면 해당 활성화 전환을 `UNTESTED`
 네이티브 입력을 준비한 뒤 `bun --no-env-file tests/lifecycle/windows-bun-window-api.ts`로
 단독 실행하거나 `mise run host:windows`로 전체 Windows 호스트 회귀와 함께 실행한다.
 
-`api/window-creation.test.ts`는 create/recreate의 `{ view, options? }` 계약과 대상 control 권한,
+`api/window-creation.test.ts`는 create/recreate의 `{ view, options? }` 계약과 독립 작업 권한,
 공개 registry 및 직렬화 Host 경계의 허용된 표시 옵션과 잘못된 옵션, URL, 프로필과 임의 ID 거부를 확인한다.
 `cli/windows-config.test.ts`는 숨김 및 지연 창의 중복 뷰 진단, 식별자 개행과 128개 선언
 상한을 검사한다. `lifecycle/window-operations.test.ts`는 열린 뷰의 두 번째 create가
@@ -128,6 +151,10 @@ focus/blur를 발행하는지 확인한다. 실제 OS 전경 전환 검증과는
 
 `cli/app-manifest.test.ts`는 Windows 실행 manifest의 형식과 계약 검증, 플러그인 제거 후
 재생성, 생성 import와 metadata 불일치를 검사한다.
+`cli/plugins.test.ts`는 index.ts 한곳의 선언에서 플랫폼 경로를 찾고 설치만 한 어댑터를
+불러오지 않는지 확인한다. 선언 진입점 기준 경로와 패키지 밖의 링크 거부, I/O와 UI의
+부분 지원 조회 및 UNSUPPORTED 응답도 검사한다. `api/native-plugins.test.ts`는 플랫폼
+선언 검증, 지원 목록 복사와 일반 플러그인의 시작 제한과의 분리를 확인한다.
 manifest 생성과 카탈로그 로딩에서 native 계약의 크기 상한을 그대로 허용하고 초과는 거부하는지도 검사한다.
 정책의 기존 크기와 깊이 상한도 manifest 생성과 읽기에서 유지하며, 상한 초과 입력은 거부하는지 검사한다.
 `cli/windows-assets.test.ts`는
@@ -172,8 +199,10 @@ Windows 이벤트 전송 회귀는 실제 `MessageChannel`과 Core를 연결한�
 Windows 호스트 시나리오는 `lifecycle/windows-host.ts`에 두고 PID 조회, 창 닫기와
 프로세스 종료 감시는 `lifecycle/windows-host-processes.ts`에서 실행한다.
 
-`api/window-relations.test.ts`는 trusted destroy의 백엔드 출처, 별도 권한과 대상 권한,
-관계 양쪽 권한과 식별자 노출, 입력과 출력 경계를 확인한다.
+`api/opener.test.ts`는 HTTP/HTTPS 계약과 파일 API, 절대 경로 입력과 작업별 권한을 확인한다.
+
+`api/window-relations.test.ts`는 trusted destroy의 백엔드 출처와 독립 작업 권한,
+관계 조회와 변경의 작업별 권한, 입력과 출력 경계를 확인한다.
 `lifecycle/windows-window-relations.test.ts`는 실제 HWND의 owner와 enabled,
 여러 모달의 원래 enabled 복원, 순환과 종료된 ID 거부, 네이티브 실패의 변경 취소,
 자식부터의 자원 해제 순서를 검사한다. `lifecycle/windows-owned-modal.ts`는 실제
@@ -183,12 +212,11 @@ WebView2 세션과 UI Worker로 웹의 destroy 거부, 닫기 확인 거절, 모
 `windows-windowless.ts`의 destroy 시나리오는 keep-alive와 트레이 상주 앱에서도
 마지막 창의 trusted destroy가 닫기 확인과 beforeQuit를 우회하고 앱을 정리하는지 검사한다.
 
-`api/opener.test.ts`는 HTTP/HTTPS 계약과 파일 API, 정확한 절대 경로 scope, 작업별 권한과 deny 우선 규칙을 확인한다.
 `lifecycle/windows-opener.test.ts`는 실제 Windows I/O STA, 없는 파일과 디렉터리, 공유 잠금, junction,
 하드 링크, 대소문자 별칭 거부와 파일 핸들 정리를 검사한다. 실제 I/O Worker의 승인 거부와
 대기 작업 취소, 자체 COM 초기화와 종료도 검사한다. `windows-opener-job.test.ts`는 Explorer가 실행한
 프로세스의 Job 분리와 앱 종료 후 생존을 확인한다. `cli/opener.test.ts`는 설치한 `.tgz`의 선언,
-카탈로그, scope evaluator와 브라우저 번들, UI Worker에서 어댑터를 초기화하지 않는지 검사한다. `BUNAWAY_OPENER_FILES_TEST=1`로 실행하면
+카탈로그, 작업 권한과 브라우저 번들, UI Worker에서 어댑터를 초기화하지 않는지 검사한다. `BUNAWAY_OPENER_FILES_TEST=1`로 실행하면
 `cli/windows-opener-files.ts`의 자체 STA를 소유한 compiled I/O 어댑터 프로브로 실행 파일의 기본 동작과 실제 Explorer 선택을 확인한다.
 이 opt-in 검사는 Explorer 데스크톱이 필요하며 사용자 파일 연결을 바꾸지 않고 테스트 폴더의 창만 닫는다.
 일반 문서 편집기의 실행 완료, UNC 공유, MSIX나 Inno 설치 검증은 포함하지 않는다.
@@ -221,9 +249,9 @@ macOS WebContent PID 조회와 종료는 `lifecycle/macos-renderer.ts`가 맡으
 boot 전후 종료와 초기화 중 프로토콜 버전, 런타임 ID 및 세대 불일치 거부를 확인한다.
 다른 플랫폼, 모바일 수명주기의 검증 완료를 뜻하지 않는다.
 
-공개 창 API의 계약, 대상 창 권한, 카탈로그와 개발 URL은 SDK, CLI 테스트에서 확인한다.
+공개 창 API의 계약, 작업 권한, 카탈로그와 개발 URL은 SDK, CLI 테스트에서 확인한다.
 `api/window-geometry.test.ts`는 content, outer와 normal 조회 schema, 공개 SDK 호출 컨텍스트,
-반올림과 정수 범위, 창별 권한 거부 및 닫힌 창을 검사한다.
+반올림과 정수 범위, 작업 권한 거부 및 닫힌 창을 검사한다.
 `lifecycle/windows-geometry.test.ts`는 실제 Win32 창에서 setter 직후 조회, 일반, 숨김,
 최소화, 최대화와 전체화면 bounds, normal 복원과 음수 좌표를 검사한다. DPI 메시지는
 합성 메시지이며 실제 배율이 다른 물리 모니터 사이의 이동 검증과 구분한다.
@@ -231,7 +259,7 @@ boot 전후 종료와 초기화 중 프로토콜 버전, 런타임 ID 및 세대
 일반 및 숨김 적용, 제약 보정, 최소화 및 최대화 중 복원 영역 변경, 전체화면 거부,
 rectangle 경계 오류의 변경 방지와 실제 이벤트 snapshot 일치도 확인한다.
 `api/window-geometry.test.ts`는 새 setter의 단위 기본값, DPI 반올림, 입력과 출력 schema,
-SDK 호출 컨텍스트, 대상 권한, 닫힌 창 및 시작 전 취소를 GUI 없이 검사한다.
+SDK 호출 컨텍스트, 작업 권한, 닫힌 창 및 시작 전 취소를 GUI 없이 검사한다.
 `windows-window-events.ts`는 실제 WebView2, Core와 UI Worker를 연결해 네 setter의
 공개 SDK 호출 및 `setOuterBounds` 결과와 `windows.changed`의 revision, bounds 일치를 확인한다.
 `windows-fullscreen-dpi.fixture.ts`는 DLL 대체로 음수 좌표의 모니터 이동, 작업 영역의
@@ -242,7 +270,7 @@ SDK 호출 컨텍스트, 대상 권한, 닫힌 창 및 시작 전 취소를 GUI 
 복원 모니터 정보의 보존도 검사한다. 전체화면과 DPI 변경도 경계에 걸친 복원 영역을 사용한다.
 최소화, 최대화와 전체화면 중 복원 모니터를 제거해도 normal bounds 조회가 유효 모니터를 다시 선택하고 표시 상태를 유지하는지 검사한다. 대체 모니터도 조회할 수 없으면 공개 `INTERNAL` 오류를 반환해야 한다.
 최소화와 최대화 중 원래 모니터를 다시 연결해도 Windows가 옮긴 복원 위치를 유지하는지 검사한다. 분리 중 조회하는 경우와 한 번도 조회하지 않는 경우를 모두 확인한다. 전체화면에서는 표시와 숨김 상태로 모니터 분리와 재연결을 반복해 원래 복원 모니터의 좌표 보정으로 돌아오는지 확인한다. 재연결 후 핸들이 유지되는 경우와 바뀌는 경우를 모두 검사한다. 이 검사는 DLL 대체이며 실제 물리 모니터의 분리와 재연결 검증은 아니다.
-`api/window-state.test.ts`는 상태 제어와 조회의 입력 및 출력 schema, 뷰별 deny 우선 권한,
+`api/window-state.test.ts`는 상태 제어와 조회의 입력 및 출력 schema, 독립적인 작업 권한,
 전체화면 중 변경 거부, 닫힌 창과 허용된 미선언 뷰의 오류를 검사한다.
 `lifecycle/windows-window-state.test.ts`는 실제 Win32 창에서 최소화 전 최대화 복원과 일반
 복원의 차이, 숨긴 창의 표시, OS에서 직접 바꾼 상태 조회, 크기 제약과 전체화면 복원을 확인한다.

@@ -2,7 +2,6 @@ import {
   MAX_WINDOW_INSTANCES,
   type NativeWindowServices,
   type WindowSpec,
-  type WindowState,
 } from "@bunaway/plugin-api/native";
 import { BunawayError, type JsonValue } from "@bunaway/protocol";
 import type { WindowCall } from "./contract.ts";
@@ -20,20 +19,12 @@ export class WindowOperations {
   constructor(
     private readonly specs: readonly WindowSpec[],
     private readonly hooks: Omit<NativeWindowServices, "specs" | "window"> & {
-      apply(
-        call: WindowCall,
-        key: string,
-        grants: readonly string[],
-      ): JsonValue | Promise<JsonValue>;
+      apply(call: WindowCall, key: string): JsonValue | Promise<JsonValue>;
     },
   ) {}
 
   /** Apply a permitted request, waiting for old cleanup and new readiness when replacing a view. */
-  async execute(
-    call: WindowCall,
-    grants: readonly string[],
-    requestId: string,
-  ): Promise<JsonValue> {
+  async execute(call: WindowCall, requestId: string): Promise<JsonValue> {
     if (
       call.operation === "windows.list" ||
       call.operation === "windows.listInstances"
@@ -51,9 +42,8 @@ export class WindowOperations {
           message: "Window instances are not implemented on this platform.",
         });
       }
-      const permitted = this.specs.filter((spec) => grants.includes(spec.view));
       if (call.operation === "windows.listInstances") {
-        return permitted.flatMap((spec) =>
+        return this.specs.flatMap((spec) =>
           (entries ?? [])
             .filter(
               (entry) =>
@@ -65,7 +55,7 @@ export class WindowOperations {
             })),
         );
       }
-      return permitted.map((spec) => ({
+      return this.specs.map((spec) => ({
         view: spec.view,
         open: entries
           ? entries.some(
@@ -83,12 +73,6 @@ export class WindowOperations {
       });
     }
     const policyView = call.payload.view;
-    if (!grants.includes(policyView)) {
-      throw new BunawayError({
-        code: "PERMISSION_DENIED",
-        message: "Window policy denied.",
-      });
-    }
     const spec = this.specs.find((spec) => spec.view === policyView);
     if (!spec) {
       throw new BunawayError({
@@ -199,7 +183,7 @@ export class WindowOperations {
       }
       // Native support is checked synchronously by the adapter before destruction starts.
       // A rejected unsupported call must leave an existing recreation running.
-      const result = this.hooks.apply(call, viewId, grants);
+      const result = this.hooks.apply(call, viewId);
       if (this.replacing.has(viewId)) {
         this.destroyedReplacements.add(viewId);
       }
@@ -237,7 +221,7 @@ export class WindowOperations {
           message: "Window request cancelled.",
         });
       }
-      return this.hooks.apply(call, viewId, grants);
+      return this.hooks.apply(call, viewId);
     }
     if (
       (call.operation === "windows.create" ||

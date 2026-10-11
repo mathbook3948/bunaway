@@ -62,8 +62,9 @@ export default defineApp({ modules: [], plugins: [autostartPlugin] });
           events: [],
           host: {
             permissions: [
-              "autostart:read",
-              "autostart:configure",
+              "autostart.getStatus",
+              "autostart.enable",
+              "autostart.disable",
             ],
           },
         },
@@ -96,11 +97,11 @@ export default defineApp({ modules: [], plugins: [autostartPlugin] });
     ).default;
     const registry = pluginRegistry(app.plugins ?? [], catalog);
     registry.validatePolicy(valid.policy);
-    expect(registry.operation("autostart.enable").permission).toBe(
-      "autostart:configure",
+    expect(registry.operation("autostart.enable").name).toBe(
+      "autostart.enable",
     );
-    expect(registry.operation("autostart.getStatus").permission).toBe(
-      "autostart:read",
+    expect(registry.operation("autostart.getStatus").name).toBe(
+      "autostart.getStatus",
     );
     const browserEntry = resolve(project, "autostart-browser.ts");
     await writeFile(

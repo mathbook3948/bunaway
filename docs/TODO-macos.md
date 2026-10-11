@@ -315,7 +315,7 @@ Windows의 `beforeQuit`, `onOpen`과 트레이 종료 동작은 현재 macOS 기
 현재 fixture의 메모는 Bun 메모리 상태다. 이전 호스트의 파일 저장 성공 기록은
 현재 `@bunaway/plugin-storage` macOS 어댑터의 검증이 아니다.
 
-- [ ] appData/temp 범위의 UTF-8 읽기와 쓰기, exists/stat 어댑터를 제공한다.
+- [ ] 앱이 지정한 경로의 UTF-8 읽기와 쓰기, exists/stat 어댑터를 제공한다.
 - [ ] 경로 순회, symlink, hardlink와 대상 교체를 막고 파일 핸들의 소유권을 정의한다.
 - [ ] binary/append/open 핸들, 디렉터리 목록과 생성 및 삭제를 제공한다.
 - [ ] copy/rename/move, watch, 원자적 저장과 대용량 stream을 제공한다.

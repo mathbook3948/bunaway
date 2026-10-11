@@ -344,7 +344,6 @@ test("direct event subscriptions dispose independently and capabilities use the 
     {
       name: "storage",
       support: "supported",
-      permission: "not-required",
     },
   ];
   bridge.result(last(bridge, "invoke").id, support);
@@ -459,7 +458,6 @@ test("plugin APIs preserve deadlines and cancellation through the shared connect
     (options) =>
       storage.readText(
         {
-          scope: "temp",
           path: "a.txt",
         },
         options,
@@ -467,7 +465,6 @@ test("plugin APIs preserve deadlines and cancellation through the shared connect
     (options) =>
       storage.writeText(
         {
-          scope: "temp",
           path: "a.txt",
           text: "saved",
         },
@@ -535,15 +532,13 @@ test("shared plugin invocation validates inputs and responses", async () => {
   const bridge = mount().chrome.webview;
   await expect(
     invokePlugin(readText, {
-      scope: "temp",
-      path: "../escape",
+      path: "bad\0path",
     }),
   ).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
   });
   expect(bridge.sent).toHaveLength(0);
   const pending = invokePlugin(readText, {
-    scope: "temp",
     path: "a.txt",
   });
   bridge.hello();

@@ -95,15 +95,13 @@ multiple 뷰를 넣으면 `INVALID_ARGUMENT`이며 임의 인스턴스를 선택
 
 ## 권한과 연결 세션
 
-생성과 제어에는 기존 대상 view의 `windows:control`을 사용하고 deny를 우선한다.
+생성과 제어에는 각 작업의 완전한 operation 이름을 권한으로 사용한다.
 같은 view의 모든 인스턴스는 같은 명령, 이벤트와 Host 정책을 사용한다.
-이 권한은 해당 뷰의 모든 창 제어를 허용한다. 창별로 다른 권한이 필요한 경우에는
-서로 다른 정책 뷰를 선언한다. 생성 요청자의 정책을 새 창에 복사하지 않는다.
+특정 창의 접근 제한은 앱 명령에서 검사한다. 생성 요청자의 정책을 새 창에 복사하지 않는다.
 웹 직접 호출에는 각 새 API의 `plugin.windows.<작업>` 명령 허용도 필요하다.
 
-listInstances는 `windows:list`를 요구하고 결과를 대상 view의 control 권한으로 제한한다.
-기존 네 ID 탐색 API의 list와 control 요구는 유지한다. 특정 창의 getSnapshot과
-getReadiness는 대상 view의 control만 요구한다. 호스트는 입력 형식, view 권한,
+listInstances는 `windows.listInstances` 작업 권한을 요구한다. ID 탐색과 getSnapshot,
+getReadiness도 각 작업 이름으로 독립적으로 허용한다. 호스트는 입력 형식, 작업 권한,
 선언과 ID의 일치 여부를 검사한 뒤에만 창이나 프로필을 변경한다.
 
 각 창은 별도 WebView, ViewBoundary와 연결 컨텍스트를 소유한다. 문서 세대, pending
@@ -115,7 +113,7 @@ UI의 소유 자원과 작업 예약은 창 인스턴스로 관리하고, 라우
 앱 이벤트의 기존 view 대상 발행은 그 view의 구독한 모든 세션에 전달한다.
 명령 응답과 세션 대상 native event는 해당 컨텍스트로만 전달한다.
 windows.changed는 변경된 창의 문서 구독으로만 보내고 windows.readiness는 기존 대상
-control 권한을 가진 구독 세션들에 보낸다. 두 이벤트의 windowId로 같은 view의 창을
+`windows.getReadiness` 권한을 가진 구독 세션들에 보낸다. 두 이벤트의 windowId로 같은 view의 창을
 구분한다. 폐기된 컨텍스트와 이전 문서 세대의 응답 및 이벤트는 차단한다.
 
 ## WebView 프로필과 데이터 수명

@@ -12,6 +12,7 @@ import {
   type UIConfig,
 } from "#native/windows/bun/channel";
 import { writePluginFixture } from "../fixtures/native-worker.ts";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 const timeoutMs = 10_000;
 
@@ -80,20 +81,7 @@ async function startUI(failView?: string) {
         },
       })),
       backend: {
-        permissions: [
-          "windows:list",
-          {
-            identifier: "windows:control",
-            allow: [
-              {
-                view: "main",
-              },
-              {
-                view: "editor",
-              },
-            ],
-          },
-        ],
+        permissions: windowPermissions(),
       },
     },
   };
@@ -105,12 +93,10 @@ async function startUI(failView?: string) {
         version: windowsPlugin.version,
         native: windowsPlugin.native,
         execution: "ui",
-        authorization: true,
       },
     ],
     `export const pluginImports = { windows: {
-      operations: () => import(${JSON.stringify(resolve(import.meta.dir, "../../plugins/windows/src/windows.ts"))}),
-      authorization: () => import(${JSON.stringify(resolve(import.meta.dir, "../../plugins/windows/src/scope.ts"))}),
+      operations: () => import(${JSON.stringify(resolve(import.meta.dir, "../../plugins/windows/src/platforms/windows.ts"))}),
     } };`,
   );
   const bundle = await Bun.build({

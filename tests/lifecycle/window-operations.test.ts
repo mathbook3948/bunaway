@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import assert from "node:assert/strict";
-import type { WindowSpec } from "@bunaway/runtime-bun/window-config";
 import { BunawayError } from "@bunaway/protocol";
+import type { WindowSpec } from "@bunaway/runtime-bun/window-config";
 import {
   WindowOperations,
   type WindowState,
@@ -136,9 +136,6 @@ test("cancelling a newly created hidden window while its controller prepares clo
           view: "main",
         },
       },
-      [
-        "main",
-      ],
       "new",
     ),
   ).rejects.toMatchObject({
@@ -151,11 +148,6 @@ test("cancelling a newly created hidden window while its controller prepares clo
   expect(f.operations.replacing.size).toBe(0);
 });
 
-const grants = [
-  "main",
-  "editor",
-];
-
 test("unsupported destruction leaves an already committed recreation running", async () => {
   const f = fixture(false);
   const target = {
@@ -166,7 +158,6 @@ test("unsupported destruction leaves an already committed recreation running", a
       operation: "windows.create",
       payload: target,
     },
-    grants,
     "initial",
   );
   const original = f.views.get("main");
@@ -183,7 +174,6 @@ test("unsupported destruction leaves an already committed recreation running", a
       operation: "windows.recreate",
       payload: target,
     },
-    grants,
     "replacement",
   );
   await Promise.resolve();
@@ -194,7 +184,6 @@ test("unsupported destruction leaves an already committed recreation running", a
         operation: "windows.destroy",
         payload: target,
       },
-      grants,
       "unsupported",
     ),
   ).rejects.toMatchObject({
@@ -222,7 +211,6 @@ test("trusted destruction interrupts an already committed recreation without res
       operation: "windows.create",
       payload: target,
     },
-    grants,
     "initial",
   );
   const original = f.views.get("main");
@@ -239,7 +227,6 @@ test("trusted destruction interrupts an already committed recreation without res
       operation: "windows.recreate",
       payload: target,
     },
-    grants,
     "replacement",
   );
   await Promise.resolve();
@@ -250,7 +237,6 @@ test("trusted destruction interrupts an already committed recreation without res
         operation: "windows.destroy",
         payload: target,
       },
-      grants,
       "force",
     ),
   ).toBe(true);
@@ -281,7 +267,6 @@ test("failed controller creation uses trusted cleanup even when normal close wou
           view: "main",
         },
       },
-      grants,
       "failed",
     ),
   ).rejects.toMatchObject({
@@ -303,7 +288,6 @@ test("parent termination cancels child recreation but permits a later explicit u
       operation: "windows.create",
       payload: target,
     },
-    grants,
     "initial",
   );
   f.setTick(async () => {
@@ -318,7 +302,6 @@ test("parent termination cancels child recreation but permits a later explicit u
         operation: "windows.recreate",
         payload: target,
       },
-      grants,
       "recreation",
     ),
   ).rejects.toMatchObject({
@@ -332,7 +315,6 @@ test("parent termination cancels child recreation but permits a later explicit u
       operation: "windows.create",
       payload: target,
     },
-    grants,
     "explicit",
   );
   expect(f.created).toEqual([
@@ -355,7 +337,6 @@ test.each([
         operation: "windows.create",
         payload: target,
       },
-      grants,
       "initial",
     );
     const original = f.views.get("main");
@@ -378,7 +359,6 @@ test.each([
           operation: "windows.recreate",
           payload: target,
         },
-        grants,
         "replacement",
       ),
     ).rejects.toMatchObject({
@@ -403,7 +383,6 @@ test("trusted destroy after controller readiness but before recreation resumes r
       operation: "windows.create",
       payload: target,
     },
-    grants,
     "initial",
   );
   const original = f.views.get("main");
@@ -422,7 +401,6 @@ test("trusted destroy after controller readiness but before recreation resumes r
             operation: "windows.destroy",
             payload: target,
           },
-          grants,
           "destroy",
         ),
       ).toBe(true);
@@ -434,7 +412,6 @@ test("trusted destroy after controller readiness but before recreation resumes r
         operation: "windows.recreate",
         payload: target,
       },
-      grants,
       "replacement",
     ),
   ).rejects.toMatchObject({
@@ -444,7 +421,7 @@ test("trusted destroy after controller readiness but before recreation resumes r
   expect(f.operations.replacing.size).toBe(0);
 });
 
-test("window catalog filters grants and cannot open arbitrary or unauthorized views", async () => {
+test("window catalog lists configured views and cannot open arbitrary views", async () => {
   const f = fixture();
   expect(
     await f.operations.execute(
@@ -452,12 +429,13 @@ test("window catalog filters grants and cannot open arbitrary or unauthorized vi
         operation: "windows.list",
         payload: null,
       },
-      [
-        "editor",
-      ],
       "1",
     ),
   ).toEqual([
+    {
+      view: "main",
+      open: false,
+    },
     {
       view: "editor",
       open: false,
@@ -468,29 +446,10 @@ test("window catalog filters grants and cannot open arbitrary or unauthorized vi
       {
         operation: "windows.create",
         payload: {
-          view: "main",
-        },
-      },
-      [
-        "editor",
-      ],
-      "2",
-    ),
-  ).rejects.toMatchObject({
-    code: "PERMISSION_DENIED",
-  });
-  await expect(
-    f.operations.execute(
-      {
-        operation: "windows.create",
-        payload: {
           view: "unknown",
         },
       },
-      [
-        "unknown",
-      ],
-      "3",
+      "2",
     ),
   ).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
@@ -506,11 +465,9 @@ test("a second creation of an open view is BUSY and preserves its window and ses
       view: "main",
     },
   } as const;
-  await f.operations.execute(call, grants, "first");
+  await f.operations.execute(call, "first");
   const original = f.views.get("main");
-  await expect(
-    f.operations.execute(call, grants, "second"),
-  ).rejects.toMatchObject({
+  await expect(f.operations.execute(call, "second")).rejects.toMatchObject({
     code: "BUSY",
     message: expect.stringContaining("Only one window per view is supported"),
   });
@@ -531,7 +488,6 @@ test("recreation reserves the last window through cleanup, rejects competing cre
         view: "main",
       },
     },
-    grants,
     "1",
   );
   const original = f.views.get("main");
@@ -550,7 +506,6 @@ test("recreation reserves the last window through cleanup, rejects competing cre
         view: "main",
       },
     },
-    grants,
     "2",
   );
   expect(original.closed).toBe(true);
@@ -567,7 +522,6 @@ test("recreation reserves the last window through cleanup, rejects competing cre
             view: "main",
           },
         },
-        grants,
         "state",
       ),
     ).rejects.toMatchObject({
@@ -585,7 +539,6 @@ test("recreation reserves the last window through cleanup, rejects competing cre
           view: "main",
         },
       },
-      grants,
       "3",
     ),
   ).rejects.toMatchObject({
@@ -613,7 +566,6 @@ test("close refusal preserves the existing window and recreation releases its re
         view: "main",
       },
     },
-    grants,
     "1",
   );
   f.setClose(false);
@@ -625,7 +577,6 @@ test("close refusal preserves the existing window and recreation releases its re
           view: "main",
         },
       },
-      grants,
       "2",
     ),
   ).toBe(false);
@@ -637,7 +588,6 @@ test("close refusal preserves the existing window and recreation releases its re
           view: "main",
         },
       },
-      grants,
       "3",
     ),
   ).rejects.toMatchObject({
@@ -677,7 +627,6 @@ test("cancelling creation while an already closed window drains prevents a new w
             view: "editor",
           },
         },
-        grants,
         "1",
       ),
     ).rejects.toMatchObject({
@@ -699,7 +648,6 @@ test("shutdown, cancellation before creation and cleanup timeout do not create r
           view: "main",
         },
       },
-      grants,
       "1",
     ),
   ).rejects.toMatchObject({
@@ -718,7 +666,6 @@ test("shutdown, cancellation before creation and cleanup timeout do not create r
           view: "main",
         },
       },
-      grants,
       "1",
     );
     f.setTick(async () => {
@@ -736,7 +683,6 @@ test("shutdown, cancellation before creation and cleanup timeout do not create r
             view: "main",
           },
         },
-        grants,
         "2",
       ),
     ).rejects.toMatchObject({
@@ -772,7 +718,6 @@ test("creation options clamp merged constraints and restore declaration defaults
         },
       },
     },
-    grants,
     "options",
   );
   expect(f.createdSpecs[0]).toMatchObject({
@@ -800,7 +745,6 @@ test("creation options clamp merged constraints and restore declaration defaults
         view: "main",
       },
     },
-    grants,
     "defaults",
   );
   expect(f.createdSpecs[1]).toMatchObject({
@@ -826,7 +770,6 @@ test("invalid merged creation constraints leave the live window and reservation 
         view: "main",
       },
     },
-    grants,
     "initial",
   );
   const original = f.views.get("main");
@@ -843,7 +786,6 @@ test("invalid merged creation constraints leave the live window and reservation 
           },
         },
       },
-      grants,
       "invalid",
     ),
   ).rejects.toMatchObject({
@@ -867,7 +809,6 @@ test("platforms without creation options accept empty options and reject overrid
         options: {},
       },
     },
-    grants,
     "empty",
   );
   await expect(
@@ -881,7 +822,6 @@ test("platforms without creation options accept empty options and reject overrid
           },
         },
       },
-      grants,
       "unsupported",
     ),
   ).rejects.toMatchObject({
@@ -903,7 +843,6 @@ test("creation titles use the same UTF-16 bound as declarations before closing a
         },
       },
     },
-    grants,
     "valid-title",
   );
   await expect(
@@ -917,7 +856,6 @@ test("creation titles use the same UTF-16 bound as declarations before closing a
           },
         },
       },
-      grants,
       "invalid-title",
     ),
   ).rejects.toMatchObject({

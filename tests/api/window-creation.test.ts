@@ -5,7 +5,6 @@ import {
   windowsPlugin,
 } from "@bunaway/plugin-windows";
 import { type JsonValue, NativeRegistry } from "@bunaway/protocol";
-import { matches } from "#plugins/windows/src/scope";
 
 const registry = new NativeRegistry([
   windowsPlugin,
@@ -15,7 +14,7 @@ test.each([
   "windows.create",
   "windows.recreate",
 ])(
-  "%s keeps creation options restricted to presentation and control scoped to its target",
+  "%s keeps creation options restricted to presentation and uses an independent operation grant",
   (operation) => {
     const call = {
       operation,
@@ -25,32 +24,29 @@ test.each([
     };
     expect(validateWindowCall(call)).toEqual(call);
     expect(registry.validateCall(call)).toEqual(call);
-    expect(registry.operation(operation).permission).toBe("windows:control");
+    expect(registry.operation(operation).name).toBe(operation);
     const permissions = {
       permissions: [
-        {
-          identifier: "windows:control",
-          allow: [
-            {
-              view: "editor",
-            },
-          ],
-        },
+        operation,
       ],
     };
-    expect(registry.allowed(permissions, call, matches)).toBe(true);
+    expect(registry.allowed(permissions, call)).toBe(true);
     expect(
       registry.allowed(
-        permissions,
         {
-          ...call,
-          payload: {
-            view: "main",
-          },
+          permissions: [],
         },
-        matches,
+        call,
       ),
     ).toBe(false);
+    expect(
+      registry.allowed(permissions, {
+        ...call,
+        payload: {
+          view: "main",
+        },
+      }),
+    ).toBe(true);
 
     const extras: Record<string, JsonValue>[] = [
       {

@@ -141,16 +141,14 @@ async function run() {
       `expected command denial ${JSON.stringify(r)}`,
     );
   });
-  await test("allowed command denied by read-only storage grant", async () => {
+  await test("write command denied for read-only view", async () => {
     const r = await call("test.writeNote", {
       name: "reader",
       text: "must not be stored",
     });
     assert(
-      r.kind === "result" &&
-        r.payload.ok === false &&
-        r.payload.code === "PERMISSION_DENIED",
-      `expected storage denial ${JSON.stringify(r)}`,
+      r.kind === "error" && r.error.code === "PERMISSION_DENIED",
+      `expected write command denial ${JSON.stringify(r)}`,
     );
   });
   await test("log.write denied for this view", async () => {
@@ -164,7 +162,7 @@ async function run() {
       `expected log denial ${JSON.stringify(r)}`,
     );
   });
-  await test("read grant works within allowed prefix", async () => {
+  await test("read grant works at the app-selected path", async () => {
     const r = await call("test.readNote", {
       name: "public",
     });

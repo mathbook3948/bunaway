@@ -60,6 +60,8 @@ await cp(
 const source = resolve(project, "src-bunaway/app.ts");
 const service = resolve(project, "shared/counter.ts");
 const reports = resolve(project, ".bunaway/reports");
+// The fixture app keeps runtime writes outside the source watcher's rebuild inputs.
+const storagePath = resolve(project, ".bunaway", "reload-storage.txt");
 await mkdir(resolve(project, "shared"));
 await writeFile(
   service,
@@ -88,8 +90,8 @@ export const app = defineApp({ modules: [], plugins: [storagePlugin], state: { c
       throw new BunawayError({ code: "INVALID_ARGUMENT", message: "Expected reload probe error" });
     } }),
     "probe.storage": command({ input: s.null(), output: s.string(), async handle() {
-      await storage.writeText({ scope: "appData", path: "messages/reload.txt", text: "reload storage" });
-      return storage.readText({ scope: "appData", path: "messages/reload.txt" });
+      await storage.writeText({ path: ${JSON.stringify(storagePath)}, text: "reload storage" });
+      return storage.readText({ path: ${JSON.stringify(storagePath)} });
     } }),
     "probe.report": command({ input: s.json(), output: s.null(), async handle(payload) {
       await Bun.write(${JSON.stringify(reports)} + "/" + version + ".json", JSON.stringify(payload));

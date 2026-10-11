@@ -11,9 +11,10 @@ import {
   validateWindowOutput,
   windowsPlugin,
 } from "@bunaway/plugin-windows";
-import { NativeRegistry, type JsonValue } from "@bunaway/protocol";
+import { type JsonValue, NativeRegistry } from "@bunaway/protocol";
 import { WindowOperations } from "#plugins/windows/src/coordinator";
-import { createOperations } from "#plugins/windows/src/windows";
+import { createOperations } from "#plugins/windows/src/platforms/windows";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 /** A native owner fixture keeps old cleanup separate from public identity removal and creation completion. */
 function fixture() {
@@ -132,14 +133,13 @@ function fixture() {
       return null;
     },
   });
-  const grants = specs.map((spec) => spec.view);
+
   const execute = (operation: string, payload: JsonValue) =>
     operations.execute(
       validateWindowCall({
         operation,
         payload,
       }),
-      grants,
       "request",
     );
   return {
@@ -405,21 +405,13 @@ test("getCurrent uses authenticated request ownership rather than the first wind
     capabilities: [],
   });
   const permissions = {
-    permissions: [
-      "windows:list",
-      {
-        identifier: "windows:control",
-        allow: [
-          editor,
-        ],
-      },
-    ],
+    permissions: windowPermissions(),
   };
   const registry = new NativeRegistry([
     windowsPlugin,
   ]);
-  expect(registry.operation("windows.listInstances").permission).toBe(
-    "windows:list",
+  expect(registry.operation("windows.listInstances").name).toBe(
+    "windows.listInstances",
   );
   for (const [key, entry] of f.entries) {
     expect(
@@ -513,22 +505,13 @@ test("listing enforces list permission and getCurrent rejects a forged view sour
     capabilities: [],
     dataRoot: "/tmp/window-instances-unused",
   });
-  const control = {
-    identifier: "windows:control",
-    allow: [
-      editor,
-      {
-        view: "main",
-      },
-    ],
-  };
   await expect(
     Promise.resolve().then(() =>
       adapter.executeUI?.("windows.listInstances", null, "backend", {
         requestId: key,
         permissions: {
           permissions: [
-            control,
+            "windows.getCurrent",
           ],
         },
       }),
@@ -541,10 +524,7 @@ test("listing enforces list permission and getCurrent rejects a forged view sour
       adapter.executeUI?.("windows.getCurrent", null, "view:main", {
         requestId: key,
         permissions: {
-          permissions: [
-            "windows:list",
-            control,
-          ],
+          permissions: windowPermissions(),
         },
       }),
     ),
@@ -556,9 +536,13 @@ test("listing enforces list permission and getCurrent rejects a forged view sour
       requestId: key,
       permissions: {
         permissions: [
-          "windows:list",
+          "windows.listInstances",
         ],
       },
     }),
-  ).toEqual([]);
+  ).toEqual(
+    [
+      ...f.entries.values(),
+    ].map(({ identity }) => identity),
+  );
 });

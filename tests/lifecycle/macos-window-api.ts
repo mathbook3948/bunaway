@@ -7,6 +7,7 @@ import { files, hash, writeJson } from "#cli/files";
 import { compileMacosApp } from "#cli/macos-compile";
 import { installedPlugins } from "#cli/plugins";
 import pin from "../../runtime/build-manifests/darwin-aarch64.json";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 assert.equal(process.platform, "darwin");
 assert.equal(process.arch, "arm64");
@@ -32,7 +33,7 @@ try {
     const documents = new Map();
     export default defineApp({modules: [], plugins: [windowsPlugin, {name:"startup-check",version:"1",async setup(){
       const list = await windows.list();
-      if (list.length !== 1 || list[0].view !== "main" || !list[0].open) throw new Error("Setup host routing or grants failed.");
+      if (list.length !== 3 || !list.some(item => item.view === "main" && item.open) || !list.some(item => item.view === "reader" && item.open) || !list.some(item => item.view === "lazy" && !item.open)) throw new Error("Setup host routing or grants failed.");
       await windows.recreate({view:"main"});
     }}], events: {}, commands: {
       "test.ready": {input:{type:"string"},output:{const:null},run:async(input)=>{documents.set(input,(documents.get(input) ?? 0)+1);return null;}},
@@ -46,14 +47,6 @@ try {
     }});
   `,
   );
-  const control = (view: string) => ({
-    identifier: "windows:control",
-    allow: [
-      {
-        view,
-      },
-    ],
-  });
   const specs = [
     "main",
     "reader",
@@ -72,8 +65,7 @@ try {
     version: 1,
     backend: {
       permissions: [
-        "windows:list",
-        control("main"),
+        ...windowPermissions(),
       ],
     },
     views: specs.map(({ view }) => ({
@@ -109,11 +101,10 @@ try {
       events: [],
       host: {
         permissions: [
-          "windows:list",
           ...(view === "main"
-            ? specs.map(({ view }) => control(view))
+            ? windowPermissions()
             : [
-                control(view),
+                "windows.list",
               ]),
         ],
       },
@@ -144,7 +135,7 @@ try {
       check(await client.invoke("test.echo", name) === name, "view routing");
       if (name !== "main") {
         const list = await windows.list();
-        check(list.length === 1 && list[0].view === name, "filtered catalog");
+        check(list.length === 3 && list.some(item => item.view === name), "declared catalog");
         await error(() => windows.hide({view:"main"}), "PERMISSION_DENIED");
         await error(() => client.invoke("test.phase", null), "PERMISSION_DENIED");
         await client.invoke("test.ready", name);
@@ -154,7 +145,7 @@ try {
           await client.invoke("test.wait", {view:"reader",count:1});
           const list = await windows.list();
           check(list.length === 3 && list.find(item => item.view === "lazy").open === false, "startup false");
-          await error(() => windows.hide({view:"unknown"}), "PERMISSION_DENIED");
+          await error(() => windows.hide({view:"unknown"}), "INVALID_ARGUMENT");
           await windows.hide({view:"reader"});
           check(await windows.isVisible({view:"reader"}) === false, "hide");
           await windows.show({view:"reader"});
@@ -277,7 +268,7 @@ try {
   );
   assert.equal(records.at(-1).failed, false);
   console.log(
-    "PASS compiled macOS multi-window API, scoped policy, repeated creation, fresh sessions and last-window self recreation",
+    "PASS compiled macOS multi-window API, operation grants, repeated creation, fresh sessions and last-window self recreation",
   );
 } catch (error) {
   const log = resolve(

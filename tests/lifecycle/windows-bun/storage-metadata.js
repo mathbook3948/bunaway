@@ -3,20 +3,16 @@ import { storage } from "@bunaway/plugin-storage";
 
 const client = createClient();
 const file = {
-  scope: "appData",
-  path: "notes/한글 folder/현재 draft.txt",
+  path: `${globalThis.storageTestDirectory}/notes/한글 folder/현재 draft.txt`,
 };
 const directory = {
-  scope: "appData",
-  path: "notes/한글 folder",
+  path: `${globalThis.storageTestDirectory}/notes/한글 folder`,
 };
 const missing = {
-  scope: "appData",
-  path: "notes/missing.txt",
+  path: `${globalThis.storageTestDirectory}/notes/missing.txt`,
 };
-const denied = {
-  scope: "appData",
-  path: "private/missing.txt",
+const outsideNotes = {
+  path: `${globalThis.storageTestDirectory}/private/missing.txt`,
 };
 
 function check(value, message) {
@@ -68,21 +64,10 @@ try {
   checkTimes(directoryMetadata);
   check(missingMetadata === null, "Missing path stat did not return null");
 
-  const deniedCodes = [];
-  for (const operation of [
-    () => storage.exists(denied),
-    () => storage.stat(denied),
-  ]) {
-    try {
-      await operation();
-      throw new Error("Denied path unexpectedly returned a value");
-    } catch (error) {
-      if (error?.code !== "PERMISSION_DENIED") {
-        throw error;
-      }
-      deniedCodes.push(error.code);
-    }
-  }
+  const outside = [
+    await storage.exists(outsideNotes),
+    await storage.stat(outsideNotes),
+  ];
   report = {
     pass: true,
     existsFile,
@@ -91,7 +76,7 @@ try {
     file: fileMetadata,
     directory: directoryMetadata,
     missing: missingMetadata,
-    denied: deniedCodes,
+    outside,
   };
 } catch (error) {
   // Send browser-side failures through the same host channel as successful results.

@@ -6,6 +6,7 @@ import type {
 import { BunawayError, type JsonValue } from "@bunaway/protocol";
 import { contracts, plugins } from "../../host-plugins.ts";
 import { memoApp } from "./memo-app.ts";
+import { dataPath, temporaryPath } from "./paths.ts";
 
 let invokeCount = 0;
 const command = (run: CommandDefinition["run"]): CommandDefinition => ({
@@ -89,33 +90,28 @@ const app: AppDefinition = {
     ),
     "test.writeNote": command(async (p, c) =>
       host(c, "storage.writeText", {
-        scope: "appData",
-        path: `notes/${object(p).name}.txt`,
+        path: dataPath(`notes/${object(p).name}.txt`),
         text: object(p).text ?? "",
       }),
     ),
     "test.readNote": command(async (p, c) =>
       host(c, "storage.readText", {
-        scope: "appData",
-        path: `notes/${object(p).name}.txt`,
+        path: dataPath(`notes/${object(p).name}.txt`),
       }),
     ),
     "test.readEscape": command(async (p, c) =>
       host(c, "storage.readText", {
-        scope: "appData",
-        path: String(object(p).path),
+        path: dataPath(String(object(p).path)),
       }),
     ),
     "test.tempRead": command(async (p, c) =>
       host(c, "storage.readText", {
-        scope: "temp",
-        path: String(object(p).path),
+        path: temporaryPath(String(object(p).path)),
       }),
     ),
     "test.tempWrite": command(async (p, c) =>
       host(c, "storage.writeText", {
-        scope: "temp",
-        path: String(object(p).path),
+        path: temporaryPath(String(object(p).path)),
         text: String(object(p).text),
       }),
     ),
@@ -138,14 +134,12 @@ const app: AppDefinition = {
     }),
     "test.hostCancel": command(async (_p, c) =>
       c.host.call(contracts["storage.readText"], {
-        scope: "temp",
-        path: "cancel-me.txt",
+        path: temporaryPath("cancel-me.txt"),
       }),
     ),
     "test.report": command(async (p, c) =>
       host(c, "storage.writeText", {
-        scope: "temp",
-        path: String(object(p).file),
+        path: temporaryPath(String(object(p).file)),
         text: JSON.stringify(object(p).report),
       }),
     ),

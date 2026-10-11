@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { type CommandContext, command } from "@bunaway/backend";
 import type { CoreServices } from "@bunaway/core";
-import { NativeRegistry, type Policy } from "@bunaway/protocol";
+import { NativeRegistry } from "@bunaway/protocol";
 import {
   type StorageMetadata,
   storage,
@@ -10,7 +10,6 @@ import {
 import { bindHostAPI } from "../fixtures/host-plugins.ts";
 
 const location = {
-  scope: "appData",
   path: "notes/한글 memo.txt",
 } as const;
 const fileMetadata: Extract<
@@ -55,7 +54,7 @@ export function checkStorageTypes(): void {
   const exists: Promise<boolean> = storage.exists(location);
   const stat: Promise<StorageMetadata | null> = storage.stat(location);
   const invalidScope = storage.exists({
-    // @ts-expect-error storage scopes are restricted
+    // @ts-expect-error storage has no scope input
     scope: "home",
     path: "memo.txt",
   });
@@ -94,11 +93,11 @@ test("metadata operations validate inputs and file or directory results", () => 
   for (const input of [
     {
       ...location,
-      path: "../memo.txt",
+      path: "memo\u0000.txt",
     },
     {
       ...location,
-      path: "C:/memo.txt",
+      path: "",
     },
   ]) {
     expect(() =>
@@ -130,79 +129,54 @@ test("metadata operations validate inputs and file or directory results", () => 
   }
 });
 
-test("metadata permission is independent and respects scope, prefix, and deny grants", () => {
-  const call = registry.validateCall({
-    operation: "storage.stat",
-    payload: location,
-  });
-  const allowed = (permissions: Policy["backend"]["permissions"]) =>
-    registry.allowed(
-      {
-        permissions,
-      },
-      call,
-      storagePlugin.matches,
-    );
-  const grant = (scope: "appData" | "temp", pathPrefix: string) => ({
-    identifier: "storage:read-metadata",
-    allow: [
-      {
-        scope,
-        pathPrefix,
-      },
-    ],
-  });
-
-  expect(
-    allowed([
-      {
-        identifier: "storage:read-text",
-        allow: [
-          {
-            scope: "appData",
-            pathPrefix: "notes",
-          },
-        ],
-      },
-      {
-        identifier: "storage:write-text",
-        allow: [
-          {
-            scope: "appData",
-            pathPrefix: "notes",
-          },
-        ],
-      },
-    ]),
-  ).toBe(false);
-  expect(
-    allowed([
-      grant("appData", "notes"),
-    ]),
-  ).toBe(true);
-  expect(
-    allowed([
-      grant("appData", "note"),
-    ]),
-  ).toBe(false);
-  expect(
-    allowed([
-      grant("temp", "notes"),
-    ]),
-  ).toBe(false);
-  expect(
-    allowed([
-      {
-        ...grant("appData", "notes"),
-        deny: [
-          {
-            scope: "appData",
-            pathPrefix: "notes",
-          },
-        ],
-      },
-    ]),
-  ).toBe(false);
+test("exists and stat require their own operation grants", () => {
+  for (const operation of [
+    "storage.exists",
+    "storage.stat",
+  ]) {
+    const source = {
+      permissions: [
+        operation,
+      ],
+    };
+    registry.validatePolicy({
+      version: 1,
+      views: [],
+      backend: source,
+    });
+    expect(
+      registry.allowed(source, {
+        operation,
+        payload: location,
+      }),
+    ).toBe(true);
+    for (const other of [
+      "storage.exists",
+      "storage.stat",
+      "storage.readText",
+      "storage.writeText",
+    ]) {
+      if (other !== operation) {
+        expect(
+          registry.allowed(source, {
+            operation: other,
+            payload: location,
+          }),
+        ).toBe(false);
+      }
+    }
+    expect(
+      registry.allowed(
+        {
+          permissions: [],
+        },
+        {
+          operation,
+          payload: location,
+        },
+      ),
+    ).toBe(false);
+  }
 });
 
 function storagePath(payload: unknown): string {

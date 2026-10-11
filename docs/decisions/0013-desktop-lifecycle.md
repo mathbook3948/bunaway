@@ -77,8 +77,8 @@ Windows 배포 EXE는 Bun compile로 생성하며 인자와 작업 디렉터리�
 
 ## 검증
 
-Windows의 공개 `windows.destroy`는 신뢰된 백엔드 출처와 별도 `windows:destroy`,
-대상 `windows:control` 권한을 요구한다. 닫기 확인, 트레이 숨김과 `beforeQuit`를
+Windows의 공개 `windows.destroy`는 신뢰된 백엔드 출처와 `windows.destroy` 작업
+권한을 요구한다. 닫기 확인, 트레이 숨김과 `beforeQuit`를
 우회하며 마지막 창을 파괴하면 정상 자원 정리를 시작한다. 부모 종료는 소유한 자식의
 종료를 포함하고, 일반 close의 마지막 창 판정은 그 자식 집합을 제외한 생존 창으로 한다.
 대기 중인 종료 검사나 자식 재생성은 trusted destroy를 취소하지 못한다.

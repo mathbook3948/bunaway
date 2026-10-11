@@ -706,7 +706,7 @@ for (const phase of [
                 views: [],
                 backend: {
                   permissions: [
-                    "log:write",
+                    "log.write",
                   ],
                 },
               },
@@ -810,7 +810,7 @@ test.each([
               views: [],
               backend: {
                 permissions: [
-                  "log:write",
+                  "log.write",
                 ],
               },
             },
@@ -929,7 +929,7 @@ test.each([
             version: 1,
             backend: {
               permissions: [
-                "log:write",
+                "log.write",
               ],
             },
             views: [
@@ -944,15 +944,7 @@ test.each([
                 events: [],
                 host: {
                   permissions: [
-                    {
-                      identifier: "storage:read-text",
-                      allow: [
-                        {
-                          scope: "appData",
-                          pathPrefix: "notes",
-                        },
-                      ],
-                    },
+                    "storage.readText",
                   ],
                 },
               },

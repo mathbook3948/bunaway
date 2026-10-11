@@ -2,8 +2,6 @@ import {
   type Infer,
   type JsonValue,
   NativeRegistry,
-  type PermissionContract,
-  type PermissionMatcher,
   type Schema,
 } from "@bunaway/protocol";
 import type { NativeInvokeOptions } from "#transport";
@@ -12,7 +10,6 @@ export type {
   Infer,
   JsonValue,
   NativePluginContract,
-  PermissionMatcher,
   Schema,
 } from "@bunaway/protocol";
 export { BunawayError } from "@bunaway/protocol";
@@ -124,11 +121,10 @@ export type NativeEnvironment = {
   windows?: import("@bunaway/plugin-api/native").NativeWindowServices;
   /** Host-owned data directory used for app-scoped files. */
   dataRoot: string;
-  /** Registered capabilities and their support and permission states. */
+  /** Registered operations and their platform support states. */
   capabilities: {
     name: string;
     support: "supported" | "experimental" | "unsupported";
-    permission: "unknown" | "not-required";
   }[];
 };
 /** Operations supplied by a platform adapter and owned by the host lifecycle. */
@@ -153,29 +149,37 @@ export type NativeAdapter = {
   /** Release resources created while preparing this adapter. */
   dispose(): void | Promise<void>;
 };
-/** Input, output, and permission contract for one named native operation. */
+/** Create an adapter on its owning host worker; importing the factory must not initialize OS resources. */
+export type NativeAdapterFactory = (
+  environment: NativeEnvironment,
+) => NativeAdapter;
+/** Input and output schemas for one named native operation. */
 export type NativeOperationDefinition = {
   /** Schema checked for each call's input. */
   readonly input: Schema;
   /** Schema checked for the operation result. */
   readonly output: Schema;
-  /** Short permission name, prefixed with the plugin name during registration. */
-  readonly permission: string;
-  /** Declare that the operation does not require a separate OS permission. */
-  readonly osPermission?: "not-required";
 };
 /** Declarative contract used to register operations and construct their callers. */
 export type NativePluginDefinition = {
   /** Plugin name used as the prefix for operation and permission identifiers. */
   readonly name: string;
-  /** Version recorded in the registered plugin contract. */
-  readonly version: string;
+  /** Platform factories imported from src/platforms/<platform>.ts. Omit unsupported platforms. */
+  readonly platforms?: Readonly<
+    Partial<
+      Record<
+        import("@bunaway/plugin-api").Platform,
+        {
+          readonly execution: "io" | "ui";
+          readonly create: NativeAdapterFactory;
+          /** Short operation names implemented on this platform; omission means all declared operations. */
+          readonly operations?: readonly string[];
+        }
+      >
+    >
+  >;
   /** Operations keyed by the caller-facing method name. */
   readonly operations: Readonly<Record<string, NativeOperationDefinition>>;
-  /** Scope schemas keyed by short permission names used by operations. */
-  readonly scopes?: Readonly<Record<string, Schema>>;
-  /** Pure evaluator for whether an input falls within a granted scope. */
-  readonly matches?: PermissionMatcher;
 };
 /** Promise-based caller shape inferred from a plugin's operation schemas. */
 export type NativePluginAPI<
@@ -189,71 +193,105 @@ export type NativePluginAPI<
 type NativeOperation<D extends NativePluginDefinition> = {
   [K in keyof D["operations"] & (string | number)]: {
     readonly name: `${D["name"]}.${K}`;
-    readonly permission: `${D["name"]}:${D["operations"][K]["permission"]}`;
     readonly input: D["operations"][K]["input"];
     readonly output: D["operations"][K]["output"];
-    readonly osPermission?: Extract<
-      D["operations"][K]["osPermission"],
-      "not-required"
-    >;
   };
 }[keyof D["operations"] & (string | number)];
 
 /**
  * Define operations and return the validated host contract with typed `api`
  * callers.
- * Scope schemas are keyed by short permission names. Every scope must belong to
- * an operation, and scoped permissions require a `matches` evaluator.
+ * Policies grant access by operation name. Applications own resource access
+ * rules. Plugins own OS consent and may request it
+ * inside an explicitly invoked operation; declaration imports never prompt.
  * The declaration is checked immediately, before any caller is created.
+ * Plugin builds record the package.json version; direct source imports use
+ * `development` until the package is built.
  */
 export function defineNativePlugin<const D extends NativePluginDefinition>(
   definition: D,
 ) {
-  const { operations: definitions, scopes, ...metadata } = definition;
-  const permissions = new Map<string, PermissionContract>();
+  const { operations: definitions, platforms = {}, ...metadata } = definition;
+  // Build metadata must not become Core's incompatible-platform startup restriction.
+  const nativePlatforms = Object.fromEntries(
+    Object.entries(platforms).map(([platform, target]) => {
+      if (
+        ![
+          "windows",
+          "macos",
+          "linux",
+          "android",
+          "ios",
+        ].includes(platform) ||
+        !target ||
+        ![
+          "io",
+          "ui",
+        ].includes(target.execution)
+      ) {
+        throw new Error("Invalid native plugin platform declaration.");
+      }
+      if (typeof target.create !== "function") {
+        throw new Error("Native plugin platforms require an adapter factory.");
+      }
+      if (
+        target.operations !== undefined &&
+        (!Array.isArray(target.operations) ||
+          new Set(target.operations).size !== target.operations.length ||
+          target.operations.some(
+            (operation) =>
+              typeof operation !== "string" ||
+              !Object.hasOwn(definitions, operation),
+          ))
+      ) {
+        throw new Error("Invalid native plugin operation support.");
+      }
+      return [
+        platform,
+        Object.freeze(
+          Object.defineProperty(
+            {
+              execution: target.execution,
+              ...(target.operations === undefined
+                ? {}
+                : {
+                    operations: Object.freeze([
+                      ...target.operations,
+                    ]),
+                  }),
+            },
+            "create",
+            {
+              // Factories stay local to each worker; JSON and structured clone carry only metadata.
+              value: target.create,
+            },
+          ),
+        ) as {
+          readonly execution: "io" | "ui";
+          readonly operations?: readonly string[];
+          readonly create: NativeAdapterFactory;
+        },
+      ];
+    }),
+  );
   const operations = Object.entries(definitions).map(([key, operation]) => {
-    const permission = `${definition.name}:${operation.permission}`;
-    const scope =
-      scopes && Object.hasOwn(scopes, operation.permission)
-        ? scopes[operation.permission]
-        : undefined;
-    permissions.set(permission, {
-      name: permission,
-      ...(scope === undefined
-        ? {}
-        : {
-            scope,
-          }),
-    });
     return {
       ...operation,
       name: `${definition.name}.${key}`,
-      permission,
     };
   }) as NativeOperation<D>[];
-  for (const key of Object.keys(scopes ?? {})) {
-    if (!permissions.has(`${definition.name}:${key}`)) {
-      throw new Error("Plugin scope references an unused permission.");
-    }
-  }
   const registration = {
     ...metadata,
+    // Package builds replace this source-only marker with their package.json version.
+    version: "development",
+    nativePlatforms: Object.freeze(nativePlatforms),
     native: {
       operations,
-      permissions: [
-        ...permissions.values(),
-      ],
     },
   };
   const registry = new NativeRegistry([
     registration,
   ]);
-  if (
-    registration.native.permissions.some((permission) => permission.scope) &&
-    typeof definition.matches !== "function"
-  ) {
-    throw new Error("Scoped plugin permissions require matches.");
-  }
   const api = Object.fromEntries(
     [
       ...registry.operations.values(),

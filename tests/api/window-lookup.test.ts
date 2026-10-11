@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 import type {
   NativeWindowServices,
   WindowIdentity,
@@ -10,7 +11,7 @@ import {
   windowsPlugin,
 } from "@bunaway/plugin-windows";
 import { NativeRegistry, type Policy } from "@bunaway/protocol";
-import { createOperations } from "#plugins/windows/src/windows";
+import { createOperations } from "#plugins/windows/src/platforms/windows";
 
 const queries = [
   "getById",
@@ -100,29 +101,7 @@ function fixture({ ready = true }: { ready?: boolean } = {}) {
   };
   const permissions: Policy["backend"] = {
     permissions: [
-      "windows:list",
-      {
-        identifier: "windows:control",
-        allow: [
-          {
-            view: "main",
-          },
-          {
-            view: "private",
-          },
-          {
-            view: "deferred",
-          },
-          {
-            view: "undeclared",
-          },
-        ],
-        deny: [
-          {
-            view: "private",
-          },
-        ],
-      },
+      ...windowPermissions(),
     ],
   };
   const adapter = createOperations({
@@ -165,7 +144,7 @@ function fixture({ ready = true }: { ready?: boolean } = {}) {
 test("lookup schemas use opaque IDs, null selector inputs and nullable identities", () => {
   for (const name of queries) {
     const operation = `windows.${name}` as const;
-    expect(registry.operation(operation).permission).toBe("windows:list");
+    expect(registry.operation(operation).name).toBe(operation);
     expect(windows[name]).toBeFunction();
     validateWindowCall({
       operation,
@@ -264,7 +243,7 @@ test("lookup results cannot mutate native identity tracking", async () => {
   ).toBeNull();
 });
 
-test("lookup hides denied targets and obsolete IDs without substituting another permitted window", async () => {
+test("lookup covers declared targets and hides obsolete IDs without substituting another window", async () => {
   const f = fixture();
   expect(
     await f.invoke("getById", {
@@ -285,11 +264,13 @@ test("lookup hides denied targets and obsolete IDs without substituting another 
     await f.invoke("getById", {
       windowId: privateWindow.windowId,
     }),
-  ).toBeNull();
-  expect(await f.invoke("getCurrent", null, "view:private")).toBeNull();
+  ).toEqual(privateWindow);
+  expect(await f.invoke("getCurrent", null, "view:private")).toEqual(
+    privateWindow,
+  );
   f.activate(privateWindow);
-  expect(await f.invoke("getFocused")).toBeNull();
-  expect(await f.invoke("getLastActive")).toBeNull();
+  expect(await f.invoke("getFocused")).toEqual(privateWindow);
+  expect(await f.invoke("getLastActive")).toEqual(privateWindow);
   f.identities.set("main", {
     windowId: "window-new",
     viewId: "main",
@@ -311,7 +292,7 @@ test("lookup hides denied targets and obsolete IDs without substituting another 
   ).toBeNull();
 });
 
-test("lookup requires list permission, handles cancellation and explicitly rejects unsupported platforms", async () => {
+test("lookup requires its own operation grant, handles cancellation and explicitly rejects unsupported platforms", async () => {
   const f = fixture();
   f.permissions.permissions = [];
   for (const name of queries) {
@@ -328,10 +309,7 @@ test("lookup requires list permission, handles cancellation and explicitly rejec
       code: "PERMISSION_DENIED",
     });
   }
-  f.permissions.permissions = [
-    "windows:list",
-    "windows:control",
-  ];
+  f.permissions.permissions = windowPermissions();
   delete f.services.lookup;
   await expect(f.invoke("getFocused")).rejects.toMatchObject({
     code: "UNSUPPORTED",
@@ -342,7 +320,34 @@ test("lookup requires list permission, handles cancellation and explicitly rejec
   });
 });
 
-test("destroyed handles deferred and closing windows but denies unknown or forbidden views", async () => {
+test("a lookup grant covers declared targets but grants no control or other lookup", async () => {
+  const f = fixture();
+  f.permissions.permissions = [
+    "windows.getById",
+  ];
+  expect(
+    await f.invoke("getById", {
+      windowId: main.windowId,
+    }),
+  ).toEqual(main);
+  expect(
+    await f.invoke("getById", {
+      windowId: privateWindow.windowId,
+    }),
+  ).toEqual(privateWindow);
+  await expect(f.invoke("getCurrent")).rejects.toMatchObject({
+    code: "PERMISSION_DENIED",
+  });
+  await expect(
+    f.invoke("isDestroyed", {
+      view: "main",
+    }),
+  ).rejects.toMatchObject({
+    code: "PERMISSION_DENIED",
+  });
+});
+
+test("destroyed handles deferred and closing windows and rejects unknown views", async () => {
   const f = fixture({
     ready: false,
   });
@@ -363,13 +368,11 @@ test("destroyed handles deferred and closing windows but denies unknown or forbi
       view: "main",
     }),
   ).toBe(true);
-  await expect(
-    f.invoke("isDestroyed", {
+  expect(
+    await f.invoke("isDestroyed", {
       view: "private",
     }),
-  ).rejects.toMatchObject({
-    code: "PERMISSION_DENIED",
-  });
+  ).toBe(false);
   await expect(
     f.invoke("isDestroyed", {
       view: "undeclared",

@@ -14,7 +14,6 @@ import { loadPluginCatalog } from "../../host-api/bun/plugin-catalog.ts";
 import {
   disposeAll,
   operations,
-  permissionMatcher,
   pluginRegistry,
 } from "../../host-api/bun/plugins.ts";
 import {
@@ -47,7 +46,6 @@ const WINDOW_CLEANUP_TIMEOUT_MS = 35_000;
 const packagedPlugins = await loadPluginCatalog(config.assets);
 const registry = pluginRegistry(config.plugins ?? [], packagedPlugins);
 registry.validatePolicy(config.policy);
-const matches = await permissionMatcher(config.plugins ?? [], packagedPlugins);
 assert(parentPort);
 let failure: unknown;
 let stopping = false;
@@ -401,7 +399,7 @@ const channel = new Channel(
           (packet.kind !== "grant" || packet.allowed) &&
           !!permissions &&
           (packet.kind !== "grant" || queued?.source === source) &&
-          registry.allowed(permissions, call, matches);
+          registry.allowed(permissions, call);
       } catch {
         /* Invalid requests fail closed at the host boundary. */
       }
@@ -1105,7 +1103,7 @@ function createWindow(
   }
 }
 
-/** Broadcast preparation only to subscribed live sessions allowed to control the source window. */
+/** Broadcast preparation to subscribed live sessions with getReadiness permission. */
 function publishReadiness(state: WindowReadiness): void {
   if (
     stopping ||
@@ -1118,16 +1116,12 @@ function publishReadiness(state: WindowReadiness): void {
     const route = recipient.boundary.eventRoute("windows.readiness");
     if (
       !route ||
-      !registry.allowed(
-        recipient.boundary.policy.host,
-        {
-          operation: "windows.getReadiness",
-          payload: {
-            view: state.viewId,
-          },
+      !registry.allowed(recipient.boundary.policy.host, {
+        operation: "windows.getReadiness",
+        payload: {
+          view: state.viewId,
         },
-        matches,
-      )
+      })
     ) {
       continue;
     }

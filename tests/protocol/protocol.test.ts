@@ -11,7 +11,6 @@ import {
   serializeMessage,
 } from "@bunaway/protocol";
 import { parseWindowCall } from "@bunaway/plugin-windows";
-import { registry } from "../fixtures/host-plugins.ts";
 
 const protocol = {
   major: 1,
@@ -85,15 +84,7 @@ const validView = {
   ],
   host: {
     permissions: [
-      {
-        identifier: "storage:read-text",
-        allow: [
-          {
-            scope: "appData",
-            pathPrefix: "notes",
-          },
-        ],
-      },
+      "storage.readText",
     ],
   },
 } satisfies Policy["views"][number];
@@ -539,43 +530,32 @@ describe("policy validation", () => {
     expectProtocolError(() => parsePolicy(JSON.stringify(wildcardCommand)));
   });
 
-  test("rejects path traversal in storage prefixes", () => {
-    for (const pathPrefix of [
-      "notes/../private",
-      "notes\n",
-      "/absolute",
-      "notes\\other",
-    ]) {
-      const view = {
-        ...validView,
-        host: {
-          ...validView.host,
-          permissions: [
-            {
-              identifier: "storage:read-text",
-              allow: [
-                {
-                  scope: "appData",
-                  pathPrefix,
-                },
-              ],
-            },
+  test("rejects removed resource grants in policy", () => {
+    const view = {
+      ...validView,
+      host: {
+        permissions: [
+          {
+            identifier: "storage.readText",
+            allow: [
+              {
+                pathPrefix: "notes",
+              },
+            ],
+          },
+        ],
+      },
+    };
+    expectProtocolError(() =>
+      parsePolicy(
+        JSON.stringify({
+          ...validPolicy,
+          views: [
+            view,
           ],
-        },
-      };
-      expect(() =>
-        registry.validatePolicy(
-          parsePolicy(
-            JSON.stringify({
-              ...validPolicy,
-              views: [
-                view,
-              ],
-            }),
-          ),
-        ),
-      ).toThrow();
-    }
+        }),
+      ),
+    );
   });
 
   test("rejects unknown policy fields and trailing newlines", () => {

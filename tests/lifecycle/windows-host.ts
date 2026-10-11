@@ -1,6 +1,6 @@
 // Windows product host integration runner: mise run host:windows builds the package first.
 // Drives the real Bun entrypoint end-to-end: per-view WebView2 windows,
-// per-view policy/storage scope enforcement, session revocation, window-close and
+// per-view policy and native file checks, session revocation, window-close and
 // renderer-failure isolation, and process cleanup.
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
@@ -42,7 +42,7 @@ const results: {
   durationMs: number;
 }[] = [];
 
-/** Recreates storage fixtures, including link targets used by scope checks. */
+/** Recreates app-selected storage fixtures and targets used by native link checks. */
 async function resetData() {
   // Retry folder cleanup if the OS has not released a runtime file lock yet.
   for (let attempt = 0; ; attempt++) {
@@ -68,7 +68,7 @@ async function resetData() {
   });
   await writeFile(
     join(dataRoot, "data", "secrets", "x.txt"),
-    "out-of-scope-secret",
+    "app-selected-secret",
   );
   await symlink(
     join(dataRoot, "data", "secrets"),
@@ -265,7 +265,7 @@ try {
       assertReport(readerReport, [
         "save denied for read-only view",
         "unlisted event listen denied",
-        "allowed command denied by read-only storage grant",
+        "write command denied for read-only view",
         "log.write denied for this view",
       ]);
       // Document loading is independent per view; require every actual session,
@@ -486,7 +486,7 @@ try {
       assert.equal(note, "hello 파일");
       assert.equal(
         await readFile(join(dataRoot, "data", "secrets", "x.txt"), "utf-8"),
-        "out-of-scope-secret",
+        "app-selected-secret",
       );
       const appLogText = await readFile(
         join(dataRoot, "logs", "app.log"),

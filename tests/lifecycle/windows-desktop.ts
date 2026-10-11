@@ -1,4 +1,5 @@
 import { dlopen } from "bun:ffi";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -443,15 +444,7 @@ if (!process.argv.includes("--child")) {
               ],
               host: {
                 permissions: [
-                  "windows:list",
-                  {
-                    identifier: "windows:control",
-                    allow: [
-                      {
-                        view: "main",
-                      },
-                    ],
-                  },
+                  ...windowPermissions(),
                 ],
               },
             },

@@ -13,6 +13,7 @@ import { type HostContext, NativeRegistry } from "@bunaway/protocol";
 import { closeWindowsApp } from "#cli/windows-dev-launch";
 import { runWindowsApp } from "#native/windows/bun/entry";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 assert.equal(process.platform, "win32");
 const root =
@@ -599,23 +600,7 @@ if (!process.argv.includes("--child")) {
           version: 1,
           backend: {
             permissions: [
-              "windows:list",
-              {
-                identifier: "windows:destroy",
-                allow: [
-                  {
-                    view: "main",
-                  },
-                ],
-              },
-              {
-                identifier: "windows:control",
-                allow: [
-                  {
-                    view: "main",
-                  },
-                ],
-              },
+              ...windowPermissions(),
             ],
           },
           views: [

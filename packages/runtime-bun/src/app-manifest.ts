@@ -13,8 +13,8 @@ export type ManifestPlugin = {
   native: NativePluginContract;
   /** Execution thread owning the adapter; omitted when this platform has no implementation. */
   execution?: "io" | "ui";
-  /** Whether a resource-scope matcher is available; this does not grant permission. */
-  authorization: boolean;
+  /** Fully qualified operations implemented by this adapter; omitted means every declared operation. */
+  supportedOperations?: string[];
 };
 
 const manifestSchema = {
@@ -49,15 +49,18 @@ const manifestSchema = {
               "ui",
             ],
           },
-          authorization: {
-            type: "boolean",
+          supportedOperations: {
+            type: "array",
+            items: {
+              type: "string",
+            },
+            uniqueItems: true,
           },
         },
         required: [
           "name",
           "version",
           "native",
-          "authorization",
         ],
         additionalProperties: false,
       },
@@ -131,6 +134,20 @@ export function parseAppManifest(value: unknown): AppManifest {
   new NativeRegistry(plugins, {
     mode: "catalog",
   });
+  for (const plugin of plugins) {
+    if (
+      plugin.supportedOperations !== undefined &&
+      (plugin.execution === undefined ||
+        plugin.supportedOperations.some(
+          (name) =>
+            !plugin.native.operations.some(
+              (operation) => operation.name === name,
+            ),
+        ))
+    ) {
+      throw new Error("Invalid manifest plugin operation support.");
+    }
+  }
   const developmentSdk = Object.fromEntries(
     Object.entries(manifest.developmentSdk).map(([name, entry]) => {
       if (typeof entry !== "string" || !/^sdk[0-9]+\.(?:js|cjs)$/.test(entry)) {

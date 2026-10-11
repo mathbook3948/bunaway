@@ -782,7 +782,7 @@ ${originals["src-bunaway/app.ts"]}`,
   }
 });
 
-test("policy rejects duplicate views, unsafe scope prefixes, unknown permissions and HTTP origins", async () => {
+test("policy rejects duplicate views, unknown permissions, extra fields and HTTP origins", async () => {
   const policy = JSON.parse(originals["src-bunaway/policy.json"] ?? "");
   for (const invalid of [
     {
@@ -807,16 +807,8 @@ test("policy rejects duplicate views, unsafe scope prefixes, unknown permissions
       ...policy,
       backend: {
         permissions: [
-          "log:write",
-          {
-            identifier: "storage:write-text",
-            allow: [
-              {
-                scope: "appData",
-                pathPrefix: "../escape",
-              },
-            ],
-          },
+          "log.write",
+          "storage.writeText",
         ],
       },
     },
@@ -851,7 +843,7 @@ test("generated UI and backend bundle independently; source failures propagate",
     "message.saved",
   );
   expect(await Bun.file(resolve(assets, "backend.js")).text()).toContain(
-    "messages/current.txt",
+    "current.txt",
   );
   for (const name of [
     "src-bunaway/app.ts",

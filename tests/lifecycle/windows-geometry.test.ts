@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 import assert from "node:assert/strict";
 import type {
   NativeWindowServices,
   WindowSnapshot,
 } from "@bunaway/plugin-api/native";
-import { createOperations } from "#plugins/windows/src/windows";
+import { createOperations } from "#plugins/windows/src/platforms/windows";
 
 const SW_HIDE = 0;
 const SW_SHOW = 5;
@@ -110,14 +111,7 @@ test.skipIf(process.platform !== "win32")(
         requestId: "native-geometry",
         permissions: {
           permissions: [
-            {
-              identifier: "windows:control",
-              allow: [
-                {
-                  view: "main",
-                },
-              ],
-            },
+            ...windowPermissions(),
           ],
         },
       };

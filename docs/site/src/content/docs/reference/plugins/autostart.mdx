@@ -112,9 +112,9 @@ opt-in 및 제거 연동과 숨김 시작은 후속 범위입니다.
 
 | 작업 | 입력 | 권한 |
 | --- | --- | --- |
-| `autostart.enable` | `{ args: string[] }` | `autostart:configure` |
-| `autostart.disable` | `null` | `autostart:configure` |
-| `autostart.getStatus` | `null` | `autostart:read` |
+| `autostart.enable` | `{ args: string[] }` | `autostart.enable` |
+| `autostart.disable` | `null` | `autostart.disable` |
+| `autostart.getStatus` | `null` | `autostart.getStatus` |
 
 뷰에서 직접 호출하면 `commands`에 대응하는 `plugin.autostart.enable`,
 `plugin.autostart.disable`, `plugin.autostart.getStatus`를 추가하고 필요한 권한을

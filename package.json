@@ -5,6 +5,7 @@
   "type": "module",
   "license": "UNLICENSED",
   "scripts": {
+    "plugins:build": "bun packages/cli/scripts/build-plugins.ts",
     "docs:dev": "bun run --cwd docs/site dev",
     "docs:build": "bun run --cwd docs/site build",
     "docs:preview": "bun run --cwd docs/site preview",

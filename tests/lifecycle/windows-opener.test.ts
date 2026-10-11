@@ -24,7 +24,7 @@ test.skipIf(process.platform !== "win32")(
     ).href;
     const operationsModule = resolve(
       import.meta.dir,
-      "../../plugins/opener/src/windows.ts",
+      "../../plugins/opener/src/platforms/windows.ts",
     );
     await Bun.write(
       workerPath,
@@ -186,7 +186,7 @@ test.skipIf(process.platform !== "win32")(
     });
     const operationsModule = resolve(
       import.meta.dir,
-      "../../plugins/opener/src/windows.ts",
+      "../../plugins/opener/src/platforms/windows.ts",
     );
     const disposedPath = resolve(dataRoot, "opener-disposed.txt");
     await bundleIOPluginFixture(
@@ -197,7 +197,6 @@ test.skipIf(process.platform !== "win32")(
           version: openerPlugin.version,
           native: openerPlugin.native,
           execution: "io",
-          authorization: true,
         },
       ],
       `import assert from "node:assert/strict";
@@ -210,7 +209,6 @@ const apartment = new Uint32Array(1);
 const qualifier = new Uint32Array(1);
 const apartmentType = () => ole.symbols.CoGetApartmentType(ptr(apartment), ptr(qualifier));
 export const pluginImports = { opener: {
-  authorization: async () => ({ matches: () => false }),
   operations: async () => {
     const { createOperations } = await import(${JSON.stringify(operationsModule)});
     return { createOperations(environment) {

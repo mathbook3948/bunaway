@@ -70,7 +70,7 @@ debug APK 개발 경로를 반영하고 iOS 및 모바일 후속 작업을 분�
 - [x] `isVisible`과 `isFocused`로 실제 창의 표시 상태와 전경 창 여부를 조회한다.
 - [x] `isDestroyed`와 `isNormal`로 창의 destroyed와 normal 상태를 조회한다.
 - [x] 일반 close와 확인을 우회하는 trusted destroy의 계약을 구분한다.
-- [x] 결정 완료: 실행 중 창 생성 옵션은 사전 선언 창의 호출별 제목, 크기와 제약, 표시 및 준비 후 표시로 제한한다. 권한은 대상 뷰의 `windows:control`을 유지한다. [ADR 0016](./decisions/0016-window-creation-contract.md).
+- [x] 결정 완료: 실행 중 창 생성 옵션은 사전 선언 창의 호출별 제목, 크기와 제약, 표시 및 준비 후 표시로 제한한다. 각 생성 작업의 operation 권한을 허용한다. [ADR 0016](./decisions/0016-window-creation-contract.md).
 - [x] Windows create/recreate에 ADR 0016의 선택적 `options`와 생성별 검증, 실패 정리를 구현했다. 실제 네이티브 회귀는 CI의 windows-native에서 수행한다. [#102](https://github.com/mathbook3948/bunaway/issues/102).
 - [x] 결정 완료: 뷰는 화면과 정책의 생성 정의이며 single 기본값과 multiple 선택으로 창 인스턴스를 생성한다. 창별 ID와 세션, 프로필 공유 및 격리, 선언 및 인스턴스 상한은 [ADR 0017](./decisions/0017-multiple-windows-per-view.md)을 따른다. Windows는 이 계약을 구현하며 실제 네이티브 회귀는 CI로 검증한다.
 - [x] Windows의 동일 뷰 다중 창 생성과 ID별 제어, 창별 세션 라우팅, 프로필 소유권과 상한을 구현했다. 실제 WebView2 검증은 CI의 windows-native 작업에서 수행한다. [#104](https://github.com/mathbook3948/bunaway/issues/104).
@@ -176,7 +176,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] `isMinimized`, `isMaximized`, `isFullscreen`으로 최소화, 최대화, 전체화면 상태를 조회한다.
 - [x] 최소화 전 최대화 상태의 복원, 일반 크기 복원과 반복 호출의 동작을 정의한다.
 - [x] 숨긴 창의 상태 변경은 창을 표시하고, 전체화면 중 다섯 상태 변경은 `INVALID_ARGUMENT`로 거부한다.
-- [x] 상태 조회에도 대상 뷰의 `windows:control` 권한을 적용하고 닫힌 창의 오류를 처리한다.
+- [x] 상태 조회에도 해당 operation 권한을 검사하고 닫힌 창의 오류를 처리한다.
 - [ ] 초기 maximized와 fullscreen 옵션을 지원한다.
 - [ ] minimizable, maximizable, closable, fullscreenable을 설정하고 조회한다.
 - [ ] 초기 및 실행 중 focusable을 설정하고 조회한다.
@@ -237,7 +237,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] 모니터 모서리와 중앙, 트레이 아이콘 근처로 창을 배치하는 positioner를 제공한다.
 
 창 이벤트는 대상 창의 정책 뷰에 기존 typed `listen`으로 전달한다. `windows.changed`
-구독에는 이벤트 권한이, `getSnapshot`에는 대상 창의 `windows:control` 권한이 필요하다.
+구독에는 이벤트 권한이, `getSnapshot`에는 windows.getSnapshot 작업 권한이 필요하다.
 초기 이벤트와 과거 이력은 재전송하지 않으며, 같은 값의 반복 관찰은 이벤트를 만들지 않는다.
 창별 windowId와 revision, 구독 수명 및 용량 초과의 `BUSY` 처리 계약은
 [창 API](./site/src/content/docs/reference/host/windows.mdx#창-이벤트)를 따른다.
@@ -343,12 +343,12 @@ Windows의 비활성화 기록을 수정하지 않는다.
 출처: [E-shell], [E-app], [E-window], [T-opener], [T-deep-link].
 
 - [x] 기본 브라우저에서 HTTP/HTTPS URL을 연다.
-  `@bunaway/plugin-opener`의 `openUrl`과 `opener:openUrl`
+  `@bunaway/plugin-opener`의 `openUrl`과 `opener.openUrl`
   권한을 제공한다. Explorer에 실행을 위임하며 성공은 요청 접수를 뜻한다.
   커스텀 스킴과 지정 앱 열기는 지원하지 않는다.
   공개 계약은 [opener 문서](../plugins/opener/README.md)를 따른다.
-- [x] `openFile`로 기본 연결 앱에서 파일을 연다. `opener:openFile`과 정확한 절대 파일 경로 scope를 요구한다.
-- [x] `revealFile`로 Explorer에서 파일을 선택해 표시한다. `opener:revealFile`과 같은 형태의 scope를 요구한다.
+- [x] `openFile`로 기본 연결 앱에서 파일을 연다. `opener.openFile` 권한과 유효한 절대 파일 경로를 요구한다.
+- [x] `revealFile`로 Explorer에서 파일을 선택해 표시한다. `opener.revealFile` 권한과 유효한 절대 파일 경로를 요구한다.
   두 작업은 Unicode와 공백을 보존하며 파일 소실, 접근 거부와 OS 요청 실패를 반환한다.
   성공은 요청 접수이며 실제 앱 실행이나 Explorer 선택 완료를 뜻하지 않는다.
   현재 파일 검사와 셸 요청은 I/O Worker에서 실행한다. 기록된 Windows STA와 compiled EXE
@@ -536,9 +536,9 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [ ] protocol의 MIME, range, CORS, secure origin과 서비스 워커 지원을 정의한다.
 - [ ] protocol과 세션별 정책을 연결하고 origin 검사와 세션 폐기 계약을 유지한다.
 - [ ] 로컬 파일 경로를 WebView 표시용 URL로 변환하는 공개 기능을 제공한다. [T-core-live]의
-  `convertFileSrc`에 대응하며 URL 변환과 파일 접근 허용을 구분한다. 19절의 파일 scope와
+  `convertFileSrc`에 대응하며 URL 변환과 파일 접근 허용을 구분한다. 19절의 파일 접근 규칙과
   17절의 CSP에 연결하고, 허용한 이미지와 미디어 표시, Unicode와 예약 문자 인코딩을 검증한다.
-  범위 밖 경로, 경로 순회, 링크 우회와 scope 철회 후 접근을 차단하는지 테스트한다.
+  앱의 거부 경로, 경로 순회, 링크 우회와 접근 철회 후 호출을 차단하는지 테스트한다.
 - [ ] 세션에 preload 등록, 조회와 해제를 제공한다.
 - [ ] service worker 등록, 실행 상태와 console 이벤트를 제공한다.
 - [ ] service worker와 shared worker 조회, 시작과 IPC의 지원 범위를 결정한다.
@@ -603,12 +603,12 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 우선순위 P1, 데이터베이스와 확장은 P2. 소유자: 공식 기능 플러그인.
 출처: [T-fs], [T-path], [T-store], [T-sql], [T-persisted-scope], [E-app].
 
-- [x] appData/temp 범위의 UTF-8 텍스트 읽기와 쓰기를 제공한다.
-- [x] 저장 경계에서 경로 탈출, junction, hardlink와 대상 교체를 거부한다.
+- [x] 앱이 지정한 절대 경로의 UTF-8 텍스트 읽기와 쓰기를 제공한다.
+- [x] 파일을 여는 경계에서 잘못된 경로, junction, hardlink와 대상 교체를 거부한다.
 - [ ] binary 읽기와 쓰기, append와 open/read/write/seek/close 핸들을 제공한다.
 - [x] 파일과 디렉터리 존재, stat과 metadata를 조회한다.
-  `storage.exists`와 `storage.stat`은 appData/temp 범위에서
-  `storage:read-metadata` 권한과 경로 범위를 검사한다. 없는 대상은 각각 `false`와 `null`이며,
+  `storage.exists`와 `storage.stat`은 앱이 지정한 절대 경로를 받는다.
+  작업마다 독립적으로 허용하고 네이티브 경로와 대상 핸들을 검사한다. 없는 대상은 각각 `false`와 `null`이며,
   접근 거부는 없는 대상으로 숨기지 않는다. 종류, 파일 크기와 생성, 수정, 접근 시각을 제공한다.
   디렉터리 크기는 `null`이고 재귀 용량은 별도 작업이다.
   [exists 계약](./site/src/content/docs/reference/host/storage-exists.mdx)과
@@ -616,8 +616,8 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 - [ ] 파일과 디렉터리의 OS 권한 및 ACL 조회 범위와 공개 계약을 정의한다.
 - [ ] 디렉터리 목록, 재귀 목록과 생성, 삭제를 제공한다.
 - [ ] 파일 크기 조회와 별도로 디렉터리 재귀 용량을 바이트 단위로 계산한다. [T-fs-live]의 `size`를 참고한다.
-  scope 경계, 링크 처리, 접근 거부와 탐색 중 변경의 오류 규칙, 큰 트리의 취소와 비용을 정의한다.
-  빈 디렉터리, 중첩 파일 합계, 범위 밖 링크, 부분 실패와 취소 시 자원 정리를 검증한다.
+  링크 처리, 접근 거부와 탐색 중 변경의 오류 규칙, 큰 트리의 취소와 비용을 정의한다.
+  빈 디렉터리, 중첩 파일 합계, 링크, 부분 실패와 취소 시 자원 정리를 검증한다.
 - [ ] 파일과 디렉터리 copy, rename, move, truncate를 제공한다.
 - [ ] 파일 watch와 recursive watch, 이벤트 구독 해제를 제공한다.
 - [ ] 원자적 저장, 충돌 처리와 대용량 stream I/O를 제공한다.
@@ -649,11 +649,11 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 - [ ] OS 종류, 버전, architecture, hostname과 실행 환경 정보를 제공한다.
 - [ ] locale, country code, preferred languages와 OS 언어를 조회한다.
 - [ ] CPU, 메모리와 프로세스 사용량, PID와 translation 상태 조회를 제공한다.
-- [ ] origin과 URL scope를 적용한 HTTP 요청과 응답을 제공한다.
+- [ ] 앱의 origin과 URL 접근 규칙을 적용한 HTTP 요청과 응답을 제공한다.
 - [ ] HTTP header, body, redirect, proxy와 OS 인증의 지원 범위를 정의한다.
 - [ ] HTTP stream, timeout, 취소와 progress를 제공한다.
 - [ ] WebSocket 연결, 메시지, close, 상태와 backpressure를 공개 계약으로 제공한다.
-- [ ] 허용된 실행 파일과 인자 scope로 command 실행을 제공한다.
+- [ ] 앱이 실행 파일과 인자를 검사하는 command 실행을 제공한다.
 - [ ] shell 문자열 실행과 argv 실행을 구분한다.
 - [ ] spawn, stdout/stderr, stdin, exit code와 signal을 제공한다.
 - [ ] process kill, timeout과 앱 종료 시 process tree 정리를 연결한다.

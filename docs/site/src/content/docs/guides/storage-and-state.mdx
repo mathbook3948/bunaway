@@ -10,7 +10,8 @@ description: 메모리 상태와 영구 저장을 구분하고 Host API 경로�
 | `context.state` | 백엔드 메모리의 앱 데이터 | 초기 정의로 다시 시작 |
 | `storage.writeText(...)` | 파일로 저장할 데이터 | 저장된 파일을 다시 읽을 수 있음 |
 
-`storage`는 앱별 데이터 폴더와 임시 저장 영역을 쉽게 사용하기 위한 선택적 API입니다.
+`storage`는 앱이 지정한 파일 경로의 텍스트와 메타데이터를 다루는 선택적 API입니다.
+저장 위치와 파일별 접근 규칙은 앱에서 정합니다.
 일반 파일 작업에는 백엔드에서 `Bun.file()`과 `Bun.write()`를 직접 사용할 수 있습니다.
 
 여러 뷰가 있으면 같은 앱 백엔드의 상태를 공유합니다.
@@ -21,51 +22,56 @@ description: 메모리 상태와 영구 저장을 구분하고 Host API 경로�
 `message.save` 핸들러는 아래 Host API를 호출합니다.
 
 ```ts
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { storage } from "@bunaway/plugin-storage";
+import settings from "../bunaway.json";
+
+const messagePath = join(
+  process.env.LOCALAPPDATA ?? join(homedir(), ".local", "share"),
+  "bunaway", settings.app.appId, "data", "messages", "current.txt",
+);
 
 await storage.writeText({
-  scope: "appData",
-  path: "messages/current.txt",
+  path: messagePath,
   text,
 });
 ```
 
-`appData`는 호스트가 소유한 앱 데이터 저장 범위입니다.
-`path`는 그 범위 안의 `/`로 구분한 상대 경로입니다.
-`messages/current.txt`가 실제로 어디에 위치할지는 플랫폼 호스트가 결정합니다.
-핸들러에는 사용자별 절대 경로 대신 scope와 상대 경로를 적습니다.
+이 경로 선택은 템플릿의 앱 코드에 있습니다. Windows에서는 사용자 로컬 앱 데이터 폴더 아래에 저장합니다.
+앱은 다른 폴더를 선택할 수 있으며 플러그인은 기본 저장 폴더를 지정하지 않습니다.
+화면에서 받은 값으로 경로를 정한다면 앱 명령에서 허용할 파일을 검사합니다.
+개발 중에는 저장 파일을 소스 변경 감시 대상 밖에 둡니다.
 
 `storage`는 명령의 실행 범위에서 사용합니다. 핸들러가 호출한 서비스 함수도
 `storage`를 import해 호출할 수 있으며 `context.host`를 전달할 필요가 없습니다.
 명령이 끝난 뒤에는 사용할 수 없으므로 저장 완료를 `await`해야 합니다.
 [백엔드 Host API](/reference/backend/host-api/)에서 실행 범위와 오류를 확인하세요.
 
-뷰의 정책은 이 호출에 대응하는 범위를 허용해야 합니다.
+뷰의 정책은 이 호출에 사용할 작업 이름을 허용해야 합니다.
 
 ```json
 {
   "permissions": [
-    { "identifier": "storage:read-text", "allow": [{ "scope": "appData", "pathPrefix": "messages" }] },
-    { "identifier": "storage:write-text", "allow": [{ "scope": "appData", "pathPrefix": "messages" }] }
+    "storage.readText",
+    "storage.writeText"
   ]
 }
 ```
 
-`pathPrefix`는 이름 붙은 디렉터리 범위입니다. `messages/` 아래만 허용합니다.
-빈 문자열은 scope 전체를 허용합니다. 특정 디렉터리에만 접근하려면 그 이름을 적습니다.
-`scope`는 `appData` 또는 `temp`입니다. `temp`는 영구 보관할 데이터에 사용하지 않습니다.
-경로에는 저장된 이름의 대소문자와 긴 파일명을 그대로 사용합니다.
+파일별 접근은 앱 명령에서 검사하고 저장 경로를 정합니다. 화면에는 해당 앱 명령만 허용하면
+직접 플러그인 호출이 앱의 검사를 건너뛰지 않습니다.
+현재 Windows 구현에는 절대 경로를 전달합니다. 경로에는 저장된 이름의 대소문자와 긴 파일명을 그대로 사용합니다.
 다른 대소문자 표기나 8.3 짧은 이름은 `PERMISSION_DENIED`로 실패합니다.
 
-절대 경로, `.` 또는 `..` 경로 요소, 역슬래시를 사용한 경로는 `INVALID_ARGUMENT`로 실패합니다.
-저장 권한이 없거나 허용 범위를 벗어나는 경로와 링크에 접근하면 `PERMISSION_DENIED`로 실패합니다.
+상대 경로, `.` 또는 `..` 경로 요소, NUL과 개행이 든 경로는 `INVALID_ARGUMENT`로 실패합니다.
+작업 권한이나 운영체제 접근 권한이 없거나 링크에 접근하면 `PERMISSION_DENIED`로 실패합니다.
 
 ## 읽기와 첫 실행
 
 ```ts
 const text = await storage.readText({
-  scope: "appData",
-  path: "messages/current.txt",
+  path: messagePath,
 });
 ```
 
@@ -108,4 +114,4 @@ export default {
 UI 명령의 `storage`, `log`, `capabilities`와 `context.host`에는 원래 뷰의 권한이 적용됩니다.
 백엔드 자체 작업은 루트의 `backend` 권한을 사용합니다.
 정책은 Host API 호출에 적용합니다. 신뢰된 백엔드가 직접 호출하는 Bun API는 이 검사 범위 밖입니다.
-`storage`를 사용하는 호출의 범위를 제한하며, 백엔드 전체의 파일 접근을 격리하지 않습니다.
+`storage`의 작업별 호출 권한을 검사하며, 백엔드 전체의 파일 접근을 격리하지 않습니다.

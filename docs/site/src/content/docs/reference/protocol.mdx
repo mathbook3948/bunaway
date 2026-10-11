@@ -67,8 +67,8 @@ const message = parseMessage(text);
 앱 실행과 Host 호출에는 기본 runtime 모드를 사용합니다.
 
 `NativeRegistryOptions`의 `mode`는 `runtime` 또는 `catalog`입니다. `validateCall`과
-`validateOutput`은 등록 schema로 검사하며 `validatePolicy`는 permission 이름과 범위를
-검사합니다. `allowed(source, call, matches)`는 deny 우선으로 allow 범위를 평가합니다.
+`validateOutput`은 등록 schema로 검사하며 `validatePolicy`는 operation 이름을
+검사합니다. `allowed(source, call)`은 출처의 permissions에 작업 이름이 있는지 확인합니다.
 
 공통 프로토콜은 작업 목록을 기본 등록하지 않습니다. 창 제어도 개별 플러그인의 NativePluginContract로 등록하고 검증합니다. 창 제어 계약과 앱에서 사용하는 API는 [windows 레퍼런스](/reference/host/windows/)에 있습니다.
 
@@ -78,13 +78,11 @@ type HostOperationContract<I, O> = {
   name: string;
   input: I;
   output: O;
-  permission: string;
-  osPermission?: "not-required";
 };
 ```
 
-`osPermission: "not-required"`는 OS 권한이 필요 없는 작업을 표시하며, 기능 조회에서
-OS 권한 메타데이터로 전달됩니다.
+작업의 name이 정책 권한 식별자입니다. 자원별 접근 규칙은 앱 명령이 검사합니다.
+OS 동의 상태 조회와 요청은 해당 기능 플러그인의 플랫폼 구현에서 처리합니다.
 
 입력이 잘못되면 `ProtocolError`가 발생합니다. parse는 문자열에서 읽은 JSON 값을 검사해 반환합니다.
 serialize는 입력과 분리된 JSON 스냅샷을 검사한 뒤 직렬화합니다.

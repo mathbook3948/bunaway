@@ -23,7 +23,6 @@ export type {
   Infer,
   JsonValue,
   NativePluginContract,
-  PermissionContract,
   Schema,
 } from "@bunaway/protocol";
 export { defineApp } from "./app.ts";

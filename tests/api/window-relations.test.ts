@@ -9,30 +9,11 @@ import {
   windowsPlugin,
 } from "@bunaway/plugin-windows";
 import { type JsonValue, NativeRegistry, type Policy } from "@bunaway/protocol";
-import { createOperations } from "#plugins/windows/src/windows";
+import { createOperations } from "#plugins/windows/src/platforms/windows";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 const allGrants: Policy["backend"] = {
-  permissions: [
-    {
-      identifier: "windows:control",
-      allow: [
-        {
-          view: "main",
-        },
-        {
-          view: "child",
-        },
-      ],
-    },
-    {
-      identifier: "windows:destroy",
-      allow: [
-        {
-          view: "child",
-        },
-      ],
-    },
-  ],
+  permissions: windowPermissions(),
 };
 
 function fixture() {
@@ -164,15 +145,13 @@ function fixture() {
   };
 }
 
-test("trusted destroy requires authenticated backend origin, dedicated grant and target control", async () => {
+test("trusted destroy requires authenticated backend origin and its own operation grant", async () => {
   const f = fixture();
   const input = {
     view: "child",
   };
-  const [controlPermission, destroyPermission] = allGrants.permissions;
-  if (!controlPermission || !destroyPermission) {
-    throw new Error("Missing test permissions");
-  }
+  const controlPermission = "windows.close";
+  const destroyPermission = "windows.destroy";
   expect(await f.invoke("close", input)).toBe(false);
   expect(await f.invoke("destroy", input)).toBe(true);
   await expect(f.invoke("destroy", input, "view:main")).rejects.toMatchObject({
@@ -187,17 +166,16 @@ test("trusted destroy requires authenticated backend origin, dedicated grant and
   ).rejects.toMatchObject({
     code: "PERMISSION_DENIED",
   });
-  await expect(
-    f.invoke("destroy", input, "backend", {
+  expect(
+    await f.invoke("destroy", input, "backend", {
       permissions: [
         destroyPermission,
       ],
     }),
-  ).rejects.toMatchObject({
-    code: "PERMISSION_DENIED",
-  });
+  ).toBe(true);
   expect(f.calls).toEqual([
     "close",
+    "destroy",
     "destroy",
   ]);
   f.cancel();
@@ -206,18 +184,11 @@ test("trusted destroy requires authenticated backend origin, dedicated grant and
   });
 });
 
-test("ownership requires both target grants, hides denied identities and rejects expired IDs", async () => {
+test("ownership uses independent operation grants and rejects expired IDs", async () => {
   const f = fixture();
-  const childOnly: Policy["backend"] = {
+  const readOnly: Policy["backend"] = {
     permissions: [
-      {
-        identifier: "windows:control",
-        allow: [
-          {
-            view: "child",
-          },
-        ],
-      },
+      "windows.getParent",
     ],
   };
   await expect(
@@ -229,7 +200,7 @@ test("ownership requires both target grants, hides denied identities and rejects
         modal: true,
       },
       "backend",
-      childOnly,
+      readOnly,
     ),
   ).rejects.toMatchObject({
     code: "PERMISSION_DENIED",
@@ -252,7 +223,7 @@ test("ownership requires both target grants, hides denied identities and rejects
         modal: false,
       },
       "backend",
-      childOnly,
+      readOnly,
     ),
   ).rejects.toMatchObject({
     code: "PERMISSION_DENIED",
@@ -264,9 +235,12 @@ test("ownership requires both target grants, hides denied identities and rejects
         view: "child",
       },
       "backend",
-      childOnly,
+      readOnly,
     ),
-  ).toBeNull();
+  ).toEqual({
+    windowId: "window-main",
+    viewId: "main",
+  });
   expect(
     await f.invoke("getOwner", {
       view: "child",
@@ -306,9 +280,7 @@ test("ownership and enabled contracts reject malformed external inputs and outpu
   const registry = new NativeRegistry([
     windowsPlugin,
   ]);
-  expect(registry.operation("windows.destroy").permission).toBe(
-    "windows:destroy",
-  );
+  expect(registry.operation("windows.destroy").name).toBe("windows.destroy");
   for (const input of [
     {
       view: "child",

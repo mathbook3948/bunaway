@@ -193,17 +193,10 @@ test("external generated backend uses actual SDK command/storage/event; revoked 
               expect(
                 (
                   call.payload as {
-                    scope: string;
-                  }
-                ).scope,
-              ).toBe("appData");
-              expect(
-                (
-                  call.payload as {
                     path: string;
                   }
                 ).path,
-              ).toBe("messages/current.txt");
+              ).toMatch(/[\\/]messages[\\/]current\.txt$/);
               stored = (
                 call.payload as {
                   text: string;

@@ -22,7 +22,7 @@ throw new BunawayError({ code: "INVALID_ARGUMENT", message: "이름을 입력하
 | 코드 | 의미 | 처리 방향 |
 | --- | --- | --- |
 | INVALID_ARGUMENT | 입력, 등록, 프로토콜 계약 위반 | payload, 이름, 설정 확인 |
-| PERMISSION_DENIED | 뷰, Host 기능, 파일 범위 거부 | 원래 출처의 정책 확인 |
+| PERMISSION_DENIED | 명령, 네이티브 작업, OS 접근과 앱 접근 규칙 거부 | 원래 출처의 정책과 접근 규칙 확인 |
 | UNSUPPORTED | 프로토콜 major, 플랫폼, 기능 불일치 | 지원 범위 확인 |
 | TIMEOUT | 준비, 요청, 종료 기한 초과 | 실제 부작용 상태 확인 |
 | CANCELLED | 요청, 클라이언트, 컨텍스트 취소 | 작업 수명 종료 처리 |

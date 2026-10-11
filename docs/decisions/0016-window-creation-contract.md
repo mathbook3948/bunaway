@@ -28,7 +28,7 @@ Windows 호출별 생성 옵션을 구현했다. 실제 네이티브 회귀는 C
 | 세션 | UI의 `views` Map은 `viewId`당 한 WebView와 `ViewBoundary`를 소유한다. 연결마다 새 호출 컨텍스트를 발급하고 라우트의 컨텍스트, `viewId`, 문서 세대를 모두 확인한다. 같은 요청 ID도 세션별로 분리한다. |
 | 권한 | 새 창 문서는 대상 뷰의 명령, 이벤트와 Host 정책을 사용한다. 생성을 요청한 뷰의 권한을 새 문서로 복사하지 않는다. 뷰에서 시작한 백엔드 명령도 원래 컨텍스트를 유지한다. |
 | 프로필 | 각 선언 뷰는 독립 WebView2 environment와 controller를 갖는다. 영속 user-data 경로는 앱 데이터의 `webview/<인코딩한 viewId>`이고 기존 단일 창 호환 경로는 유지한다. 재생성은 같은 프로필을 재사용한다. 창 ID를 경로에 쓰지 않는다. |
-| 이벤트 | 앱 이벤트 구독과 응답은 세션 컨텍스트로 전달한다. `windows.changed`는 해당 창의 문서 구독으로 보낸다. `windows.readiness`는 이벤트 구독과 대상 뷰의 control 권한을 가진 문서들에 전달한다. 두 창 이벤트의 payload는 `windowId`, `viewId`, revision을 포함한다. 폐기된 컨텍스트와 문서 세대의 전달은 차단한다. |
+| 이벤트 | 앱 이벤트 구독과 응답은 세션 컨텍스트로 전달한다. `windows.changed`는 해당 창의 문서 구독으로 보낸다. `windows.readiness`는 이벤트 구독과 windows.getReadiness 작업 권한을 가진 문서들에 전달한다. 두 창 이벤트의 payload는 `windowId`, `viewId`, revision을 포함한다. 폐기된 컨텍스트와 문서 세대의 전달은 차단한다. |
 
 앱 백엔드 상태와 Host 저장 범위는 WebView 프로필과 별개다. 서로 다른 뷰라도
 같은 저장 범위 권한을 부여하면 그 범위의 앱 데이터에 접근할 수 있다.
@@ -62,8 +62,8 @@ macOS는 기존 `{ view }`와 빈 `options`를 허용한다. 비어 있지 않�
 
 ## 권한, 생성 순서와 자원 제한
 
-새 생성 권한은 추가하지 않는다. 호출별 옵션도 대상 `view`의
-`windows:control`을 요구하며 deny가 우선한다. 웹 직접 호출에는 해당 뷰의
+호출별 옵션은 `windows.create` 또는 `windows.recreate` 작업 권한을 요구한다.
+특정 창의 접근 제한은 앱 명령에서 검사한다. 웹 직접 호출에는 해당 뷰의
 `commands`에 `plugin.windows.create` 또는 `plugin.windows.recreate`도 필요하다.
 앱 명령을 통한 호출은 그 명령의 허용과 원래 뷰 Host 권한을 따르고, setup은
 `backend.permissions`를 따른다. 생성은 대상 뷰에 선언된 권한을 확대하지 않는다.
@@ -97,9 +97,8 @@ SDK 초기화 완료를 뜻하지 않는다. 생성 뒤 `getById`, 인증된 출
 호출한 뷰와 생성 대상이 다르면 대상 view의 getSnapshot 또는 getReadiness에서 새 ID를
 받는다. getCurrent는 생성 대상이 아니라 호출자 창을 반환하고 getById는 이미 받은 ID를 조회한다.
 목록은 계속 `{ view, open }`이고 snapshot과 readiness에는 `viewId`를 쓴다.
-`getById`, `getCurrent`, `getFocused`, `getLastActive`에는 `windows:list`와
-결과 대상의 `windows:control`이 필요하다. `getSnapshot`과 `getReadiness`에는
-대상 뷰의 `windows:control`만 필요하다.
+`getById`, `getCurrent`, `getFocused`, `getLastActive`, `getSnapshot`과 `getReadiness`는
+각 메서드의 완전한 작업 이름을 권한으로 허용한다. 조회를 허용해도 다른 조회나 제어 권한은 생기지 않는다.
 자신의 HWND를 바꾸지 않은 세션 재연결은 ID를 유지한다. 닫거나 재생성한 이전 ID의
 getById는 `null`이며 다른 창으로 자동 대응하지 않는다. 백엔드의 getCurrent는 `null`이다.
 옵션을 추가해도 ID를 반환하기 위해 create의 기존 결과를 바꾸거나 ID에 권한을 부여하지 않는다.

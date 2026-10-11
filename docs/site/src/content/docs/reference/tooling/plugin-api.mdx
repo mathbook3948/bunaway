@@ -55,7 +55,7 @@ Windows 호스트는 활성화 뒤 양쪽 창의 실제 상태를 관찰해 이�
 두 `close()` 메서드는 동기 또는 비동기로 닫기 수락 여부를 반환합니다.
 
 Windows의 선택적 `NativeWindow.destroy()`는 확인, 트레이 숨김과 종료 취소를 우회합니다.
-플러그인은 백엔드 출처와 `windows:destroy`, 대상 제어 권한을 검사한 뒤 호출합니다.
+플러그인은 백엔드 출처와 `windows.destroy` 작업 권한을 검사한 뒤 호출합니다.
 `setParent(windowId, modal)`, `getParent()`, `getChildren()`는 현재 네이티브 수명으로
 최상위 owner 관계를 설정하거나 조회합니다. `setEnabled(enabled)`와 `isEnabled()`는
 입력 가능 상태를 제어하고 조회합니다. 이 바인딩이 없는 플랫폼은 `UNSUPPORTED`입니다.

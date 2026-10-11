@@ -1,5 +1,5 @@
 import type { JsonValue, NativeInvokeOptions } from "@bunaway/plugin";
-import type { LogInput } from "./index.ts";
+import type { LogInput } from "./contract.ts";
 
 /** Build level-specific helpers around the plugin's typed write operation. */
 export function createLog(

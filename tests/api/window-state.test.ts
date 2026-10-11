@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 import type {
   NativeWindow,
   NativeWindowServices,
@@ -10,8 +11,7 @@ import {
   windowsPlugin,
 } from "@bunaway/plugin-windows";
 import { NativeRegistry, type Policy } from "@bunaway/protocol";
-import { matches } from "#plugins/windows/src/scope";
-import { createOperations } from "#plugins/windows/src/windows";
+import { createOperations } from "#plugins/windows/src/platforms/windows";
 
 const controls = [
   "minimize",
@@ -43,7 +43,7 @@ test("window state schemas accept only a view and validate null or boolean outpu
   ]) {
     const operation = `windows.${name}` as const;
     expect(windowOperations[operation]).toBeDefined();
-    expect(registry.operation(operation).permission).toBe("windows:control");
+    expect(registry.operation(operation).name).toBe(operation);
     expect(
       validateWindowCall({
         operation,
@@ -197,25 +197,7 @@ function fixture() {
   };
   const permissions: Policy["backend"] = {
     permissions: [
-      {
-        identifier: "windows:control",
-        allow: [
-          {
-            view: "main",
-          },
-          {
-            view: "private",
-          },
-          {
-            view: "undeclared",
-          },
-        ],
-        deny: [
-          {
-            view: "private",
-          },
-        ],
-      },
+      ...windowPermissions(),
     ],
   };
   const adapter = createOperations({
@@ -229,6 +211,7 @@ function fixture() {
   }
   return {
     actions,
+    permissions,
     invoke: (
       name: (typeof controls)[number] | (typeof stateQueries)[number],
       view = "main",
@@ -297,12 +280,13 @@ test("state dispatch uses live resource queries and rejects fullscreen changes w
   ]);
 });
 
-test("every state call enforces deny-first target permission and open configured windows", async () => {
+test("every state call enforces operation permission and open configured windows", async () => {
   for (const name of [
     ...controls,
     ...stateQueries,
   ]) {
     const f = fixture();
+    f.permissions.permissions = [];
     for (const view of [
       "private",
       "ungranted",
@@ -310,21 +294,7 @@ test("every state call enforces deny-first target permission and open configured
       expect(
         registry.allowed(
           {
-            permissions: [
-              {
-                identifier: "windows:control",
-                allow: [
-                  {
-                    view,
-                  },
-                ],
-                deny: [
-                  {
-                    view,
-                  },
-                ],
-              },
-            ],
+            permissions: [],
           },
           {
             operation: `windows.${name}`,
@@ -332,13 +302,13 @@ test("every state call enforces deny-first target permission and open configured
               view,
             },
           },
-          matches,
         ),
       ).toBe(false);
       await expect(f.invoke(name, view)).rejects.toMatchObject({
         code: "PERMISSION_DENIED",
       });
     }
+    f.permissions.permissions = windowPermissions();
     await expect(f.invoke(name, "undeclared")).rejects.toMatchObject({
       code: "INVALID_ARGUMENT",
     });

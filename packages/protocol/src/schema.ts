@@ -274,37 +274,12 @@ export const messageSchema = {
   ],
 } as const;
 
-const scopedPermission = {
-  type: "object",
-  properties: {
-    identifier,
-    allow: {
-      type: "array",
-      items: {},
-      maxItems: 128,
-    },
-    deny: {
-      type: "array",
-      items: {},
-      maxItems: 128,
-    },
-  },
-  required: [
-    "identifier",
-  ],
-  additionalProperties: false,
-} as const;
 const hostPermissions = {
   type: "object",
   properties: {
     permissions: {
       type: "array",
-      items: {
-        anyOf: [
-          identifier,
-          scopedPermission,
-        ],
-      },
+      items: identifier,
       maxItems: 256,
     },
   },

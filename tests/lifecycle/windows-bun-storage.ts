@@ -13,17 +13,31 @@ import {
 import { resolve } from "node:path";
 import { Worker } from "node:worker_threads";
 import { BunawayError } from "@bunaway/protocol";
-import {
-  disposeStorageBindings,
-  readStorageText,
-  ScopedStorage,
-} from "#plugins/storage/src/windows";
+import { WindowsStorage } from "#plugins/storage/src/platforms/windows";
 
 const root = resolve(
   import.meta.dir,
   `../../build/windows-bun-storage-${crypto.randomUUID()}`,
 );
-const storage = new ScopedStorage(root);
+const dataPath = (path: string) => `${resolve(root, "data")}/${path}`;
+const temporaryPath = (path: string) => `${resolve(root, "temp")}/${path}`;
+const storage = new WindowsStorage();
+const otherStorage = new WindowsStorage();
+otherStorage.dispose();
+otherStorage.dispose();
+assert.throws(
+  () =>
+    otherStorage.execute("storage.exists", {
+      path: temporaryPath("absent.txt"),
+    }),
+  (error) => error instanceof BunawayError && error.code === "CANCELLED",
+);
+assert.equal(
+  storage.execute("storage.exists", {
+    path: temporaryPath("absent.txt"),
+  }),
+  false,
+);
 const api = dlopen("kernel32.dll", {
   CreateFileW: {
     args: [
@@ -61,21 +75,14 @@ function wide(text: string): Buffer {
   return Buffer.from(`${text}\0`, "utf16le");
 }
 
-function call(
-  operation: string,
-  scope: "appData" | "temp",
-  path: string,
-  text?: string,
-) {
+function call(operation: string, path: string, text?: string) {
   return storage.execute(
     operation,
     text === undefined
       ? {
-          scope,
           path,
         }
       : {
-          scope,
           path,
           text,
         },
@@ -94,7 +101,7 @@ function expectDenied(path: string): void {
     "storage.exists",
     "storage.stat",
   ]) {
-    expectError(() => call(operation, "appData", path), "PERMISSION_DENIED");
+    expectError(() => call(operation, dataPath(path)), "PERMISSION_DENIED");
   }
 }
 
@@ -160,7 +167,30 @@ function duringDelete<T>(action: () => T): T | undefined {
 
 async function main(): Promise<void> {
   try {
-    // Seed valid app-data paths and aliases that point outside the storage root.
+    // Constructing the adapter does not create storage directories or restrict the app's location.
+    await assert.rejects(stat(root), {
+      code: "ENOENT",
+    });
+    const selectedPath = resolve(root, "app-selected", "memo.txt");
+    assert.equal(
+      call("storage.writeText", selectedPath, "chosen by app"),
+      null,
+    );
+    assert.equal(call("storage.readText", selectedPath), "chosen by app");
+    await assert.rejects(stat(resolve(root, "data")), {
+      code: "ENOENT",
+    });
+    await assert.rejects(stat(resolve(root, "temp")), {
+      code: "ENOENT",
+    });
+    for (const path of [
+      "relative.txt",
+      "C:relative.txt",
+      `${root}/../escape.txt`,
+    ]) {
+      expectError(() => call("storage.exists", path), "INVALID_ARGUMENT");
+    }
+    // Seed normal paths and aliases for native handle checks.
     await mkdir(resolve(root, "data/notes/private-directory"), {
       recursive: true,
     });
@@ -204,45 +234,41 @@ async function main(): Promise<void> {
     assert.equal(
       call(
         "storage.writeText",
-        "appData",
-        "notes/new/memo.txt",
+        dataPath("notes/new/memo.txt"),
         "한글 and emoji 🙂",
       ),
       null,
     );
     assert.equal(
-      call("storage.readText", "appData", "notes/new/memo.txt"),
+      call("storage.readText", dataPath("notes/new/memo.txt")),
       "한글 and emoji 🙂",
     );
-    call("storage.writeText", "appData", "notes/new/memo.txt", "x");
-    assert.equal(
-      call("storage.readText", "appData", "notes/new/memo.txt"),
-      "x",
-    );
-    call("storage.writeText", "temp", "empty.txt", "");
-    assert.equal(call("storage.readText", "temp", "empty.txt"), "");
-    assert.equal(call("storage.exists", "temp", "empty.txt"), true);
-    assertMetadata(call("storage.stat", "temp", "empty.txt"), "file", 0);
+    call("storage.writeText", dataPath("notes/new/memo.txt"), "x");
+    assert.equal(call("storage.readText", dataPath("notes/new/memo.txt")), "x");
+    call("storage.writeText", temporaryPath("empty.txt"), "");
+    assert.equal(call("storage.readText", temporaryPath("empty.txt")), "");
+    assert.equal(call("storage.exists", temporaryPath("empty.txt")), true);
+    assertMetadata(call("storage.stat", temporaryPath("empty.txt")), "file", 0);
     for (const text of [
       "\uFEFFhello",
       "\uFEFF",
       "\uFEFF\uFEFF한글",
     ]) {
-      call("storage.writeText", "temp", "bom.txt", text);
-      assert.equal(call("storage.readText", "temp", "bom.txt"), text);
+      call("storage.writeText", temporaryPath("bom.txt"), text);
+      assert.equal(call("storage.readText", temporaryPath("bom.txt")), text);
     }
 
     const unicodeDirectory = "notes/한글 folder";
     const unicodeFile = `${unicodeDirectory}/현재 draft.txt`;
     const unicodeFilePath = resolve(root, "data", unicodeFile);
     const unicodeText = "공백과 한글 경로";
-    call("storage.writeText", "appData", unicodeFile, unicodeText);
+    call("storage.writeText", dataPath(unicodeFile), unicodeText);
     const fixedTime = new Date(1_700_000_000_000);
     await utimes(unicodeFilePath, fixedTime, fixedTime);
-    assert.equal(call("storage.readText", "appData", unicodeFile), unicodeText);
-    assert.equal(call("storage.exists", "appData", unicodeDirectory), true);
-    assert.equal(call("storage.exists", "appData", unicodeFile), true);
-    const unicodeMetadata = call("storage.stat", "appData", unicodeFile);
+    assert.equal(call("storage.readText", dataPath(unicodeFile)), unicodeText);
+    assert.equal(call("storage.exists", dataPath(unicodeDirectory)), true);
+    assert.equal(call("storage.exists", dataPath(unicodeFile)), true);
+    const unicodeMetadata = call("storage.stat", dataPath(unicodeFile));
     assertMetadata(unicodeMetadata, "file", Buffer.byteLength(unicodeText));
     const nativeStat = await stat(unicodeFilePath);
     assert.equal(
@@ -257,24 +283,24 @@ async function main(): Promise<void> {
           Math.floor(nativeStat.mtimeMs),
       true,
     );
-    const directoryMetadata = call("storage.stat", "appData", unicodeDirectory);
+    const directoryMetadata = call("storage.stat", dataPath(unicodeDirectory));
     assertMetadata(directoryMetadata, "directory", null);
 
-    assert.equal(call("storage.exists", "appData", "notes/missing.txt"), false);
-    assert.equal(call("storage.stat", "appData", "notes/missing.txt"), null);
+    assert.equal(call("storage.exists", dataPath("notes/missing.txt")), false);
+    assert.equal(call("storage.stat", dataPath("notes/missing.txt")), null);
     assert.equal(
-      call("storage.exists", "appData", "missing-parent/file.txt"),
+      call("storage.exists", dataPath("missing-parent/file.txt")),
       false,
     );
     assert.equal(
-      call("storage.stat", "appData", "missing-parent/file.txt"),
+      call("storage.stat", dataPath("missing-parent/file.txt")),
       null,
     );
-    assert.equal(call("storage.exists", "temp", "missing.txt"), false);
-    assert.equal(call("storage.stat", "temp", "missing.txt"), null);
+    assert.equal(call("storage.exists", temporaryPath("missing.txt")), false);
+    assert.equal(call("storage.stat", temporaryPath("missing.txt")), null);
 
     const protectedPath = "notes/private-directory/secret-long-name.txt";
-    call("storage.writeText", "appData", protectedPath, "protected");
+    call("storage.writeText", dataPath(protectedPath), "protected");
     const aliases = [
       "notes/PRIVATE-DIRECTORY/secret-long-name.txt",
       "notes/private-directory/SECRET-LONG-NAME.txt",
@@ -303,7 +329,7 @@ async function main(): Promise<void> {
     if (shortParts[0] !== "private-directory") {
       aliases.push(`notes/${shortParts[0]}/secret-long-name.txt`);
     }
-    // Case variants and available 8.3 names must keep the same denied scope.
+    // Case variants and available 8.3 names must fail the native path check.
     for (const path of aliases) {
       expectDenied(path);
       for (const text of [
@@ -314,8 +340,7 @@ async function main(): Promise<void> {
           () =>
             call(
               text === undefined ? "storage.readText" : "storage.writeText",
-              "appData",
-              path,
+              dataPath(path),
               text,
             ),
           "PERMISSION_DENIED",
@@ -327,8 +352,7 @@ async function main(): Promise<void> {
       () =>
         call(
           "storage.writeText",
-          "appData",
-          "notes/PRIVATE-DIRECTORY/new/file.txt",
+          dataPath("notes/PRIVATE-DIRECTORY/new/file.txt"),
           "new",
         ),
       "PERMISSION_DENIED",
@@ -340,18 +364,18 @@ async function main(): Promise<void> {
       false,
     );
     assert.equal(
-      call("storage.readText", "appData", protectedPath),
+      call("storage.readText", dataPath(protectedPath)),
       "protected",
     );
     for (const path of [
       "notes/new/UpperCase.txt",
       "notes/new/한글~이름.txt",
     ]) {
-      call("storage.writeText", "appData", path, "ordinary file");
-      assert.equal(call("storage.readText", "appData", path), "ordinary file");
+      call("storage.writeText", dataPath(path), "ordinary file");
+      assert.equal(call("storage.readText", dataPath(path)), "ordinary file");
     }
 
-    // Junctions and hard links must not expose files outside the storage root.
+    // Native storage rejects junctions and hard links independently of the app's chosen directory.
     for (const path of [
       "notes/junction/secret.txt",
       "notes/final-junction",
@@ -364,11 +388,11 @@ async function main(): Promise<void> {
     ]) {
       expectDenied(path);
       expectError(
-        () => call("storage.readText", "appData", path),
+        () => call("storage.readText", dataPath(path)),
         "PERMISSION_DENIED",
       );
       expectError(
-        () => call("storage.writeText", "appData", path, "overwritten"),
+        () => call("storage.writeText", dataPath(path), "overwritten"),
         "PERMISSION_DENIED",
       );
     }
@@ -379,7 +403,6 @@ async function main(): Promise<void> {
       "notes//x",
       "notes/x:ads",
       "notes/trailing.",
-      "notes/x\\x",
       "notes/\u0000bad",
     ]) {
       for (const operation of [
@@ -387,7 +410,7 @@ async function main(): Promise<void> {
         "storage.exists",
         "storage.stat",
       ]) {
-        expectError(() => call(operation, "appData", path), "INVALID_ARGUMENT");
+        expectError(() => call(operation, dataPath(path)), "INVALID_ARGUMENT");
       }
     }
 
@@ -451,7 +474,7 @@ async function main(): Promise<void> {
       );
       expectDenied("notes/os-denied.txt");
       expectError(
-        () => call("storage.readText", "appData", "notes/os-denied.txt"),
+        () => call("storage.readText", dataPath("notes/os-denied.txt")),
         "PERMISSION_DENIED",
       );
     } finally {
@@ -491,8 +514,8 @@ async function main(): Promise<void> {
     try {
       // Truncate the file after opening it to verify reads recheck the handle.
       await writeFile(target, "short");
-      assert.throws(() => readStorageText(handle, 22), /changed during read/);
-      assert.equal(readStorageText(handle, 0), "");
+      assert.throws(() => storage.readText(handle, 22), /changed during read/);
+      assert.equal(storage.readText(handle, 0), "");
     } finally {
       assert(api.symbols.CloseHandle(handle));
     }
@@ -536,7 +559,7 @@ async function main(): Promise<void> {
       let missingSnapshots = 0;
       for (let index = 0; index < 300; index++) {
         const exists = duringDelete(() =>
-          call("storage.exists", "appData", "notes/race.txt"),
+          call("storage.exists", dataPath("notes/race.txt")),
         );
         assert(exists === undefined || typeof exists === "boolean");
         if (exists === true) {
@@ -546,7 +569,7 @@ async function main(): Promise<void> {
           missingSnapshots++;
         }
         const metadata = duringDelete(() =>
-          call("storage.stat", "appData", "notes/race.txt"),
+          call("storage.stat", dataPath("notes/race.txt")),
         );
         if (metadata !== null) {
           if (metadata === undefined) {
@@ -601,7 +624,7 @@ async function main(): Promise<void> {
   } finally {
     // Release the FFI bindings before deleting the fixture tree.
     api.close();
-    disposeStorageBindings();
+    storage.dispose();
     await rm(root, {
       recursive: true,
       force: true,

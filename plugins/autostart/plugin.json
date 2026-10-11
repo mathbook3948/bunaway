@@ -1,8 +1,0 @@
-{
-  "format": 1,
-  "name": "autostart",
-  "entry": "./src/index.ts",
-  "platforms": {
-    "windows": { "execution": "io", "operations": "./src/windows.ts" }
-  }
-}

@@ -76,7 +76,7 @@ bun run dev
 
 1. 입력 상자에 메시지를 적고 저장 버튼을 누릅니다.
 2. UI가 `message.save` 명령을 호출합니다.
-3. 앱 백엔드가 `appData/messages/current.txt`에 저장합니다.
+3. 앱 백엔드가 `message/module.ts`에서 정한 `messagePath`에 저장합니다.
 4. `message.saved` 이벤트를 받은 UI가 저장 결과를 표시합니다.
 5. 창을 닫고 `bun run dev`로 다시 실행하면 `message.read`로 저장 내용을 복원합니다.
 

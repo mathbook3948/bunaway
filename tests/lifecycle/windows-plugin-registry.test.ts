@@ -3,23 +3,21 @@ import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
-import { Channel, type UIConfig } from "#native/windows/bun/channel";
+import { defineNativePlugin, type NativeEnvironment, s } from "@bunaway/plugin";
+import { capabilitiesPlugin } from "@bunaway/plugin-capabilities";
+import { validateValue } from "@bunaway/protocol";
 import type { PackagedPlugin } from "#native/host-api/bun/plugin-contract";
 import {
   disposeAll,
   operations,
-  permissionMatcher,
   pluginRegistry,
 } from "#native/host-api/bun/plugins";
-import { defineNativePlugin, type NativeEnvironment, s } from "@bunaway/plugin";
-import { validateValue } from "@bunaway/protocol";
-import { capabilitiesPlugin } from "@bunaway/plugin-capabilities";
-import { createOperations as createCapabilities } from "#plugins/capabilities/src/windows";
+import { Channel, type UIConfig } from "#native/windows/bun/channel";
+import { createOperations as createCapabilities } from "#plugins/capabilities/src/platforms/windows";
 import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
 
 const native = {
   operations: [],
-  permissions: [],
 } as const;
 
 test("installed contracts compare by content while changes still fail startup", () => {
@@ -37,7 +35,6 @@ test("installed contracts compare by content while changes still fail startup", 
           name: "test",
           version: "1",
           native: {
-            permissions: [],
             operations: [],
           },
         },
@@ -64,10 +61,11 @@ test("installed contracts compare by content while changes still fail startup", 
           name: "test",
           version: "1",
           native: {
-            operations: [],
-            permissions: [
+            operations: [
               {
-                name: "test:read",
+                name: "test.read",
+                input: s.null(),
+                output: s.null(),
               },
             ],
           },
@@ -91,18 +89,12 @@ test("installed contracts accept validated JSON snapshots without hiding schema 
   );
   const plugin = defineNativePlugin({
     name: "example",
-    version: "1",
     operations: {
       echo: {
         input: schema,
         output: schema,
-        permission: "echo",
       },
     },
-    scopes: {
-      echo: schema,
-    },
-    matches: (_permission, input, scope) => input === scope,
   }).definition;
   const packaged = JSON.parse(JSON.stringify(plugin.native));
   const installed = {
@@ -151,7 +143,6 @@ test("installed contracts accept validated JSON snapshots without hiding schema 
 test("installed contracts normalize negative zero without hiding numeric changes", () => {
   const plugin = defineNativePlugin({
     name: "zero",
-    version: "1",
     operations: {
       echo: {
         input: s.integer({
@@ -160,15 +151,8 @@ test("installed contracts normalize negative zero without hiding numeric changes
         output: {
           const: -0,
         },
-        permission: "echo",
       },
     },
-    scopes: {
-      echo: s.integer({
-        minimum: -0,
-      }),
-    },
-    matches: (_permission, input, scope) => input === scope,
   }).definition;
   const installed = {
     ...plugin,
@@ -278,21 +262,46 @@ test("shutdown and initialization failure clean every prepared adapter in revers
   ]);
 });
 
-test("scopeless and unregistered plugins do not load authorization modules", async () => {
-  const catalog: PackagedPlugin[] = [];
-  let loaded = 0;
-  catalog.push({
-    name: "test",
-    version: "1",
-    native,
-    authorization: async () => {
-      loaded++;
-      return {
-        matches: () => true,
-      };
+test("unregistered native adapters are not imported or initialized", async () => {
+  const native = {
+    operations: [
+      {
+        name: "test.read",
+        input: s.null(),
+        output: s.null(),
+      },
+    ],
+  };
+  let imported = 0;
+  let disposed = 0;
+  const catalog: PackagedPlugin[] = [
+    {
+      name: "test",
+      version: "1",
+      native,
+      execution: "io",
+      operations: async () => {
+        imported++;
+        return {
+          createOperations: () => ({
+            execute: () => null,
+            dispose() {
+              disposed++;
+            },
+          }),
+        };
+      },
     },
-  });
-  const matches = await permissionMatcher(
+  ];
+  const inactive = await operations([], ".", "io", undefined, catalog);
+  expect(imported).toBe(0);
+  expect(() => inactive.execute("test.read", null, "backend")).toThrow(
+    expect.objectContaining({
+      code: "UNSUPPORTED",
+    }),
+  );
+  await inactive.dispose();
+  const active = await operations(
     [
       {
         name: "test",
@@ -300,41 +309,18 @@ test("scopeless and unregistered plugins do not load authorization modules", asy
         native,
       },
     ],
+    ".",
+    "io",
+    undefined,
     catalog,
   );
-  expect(loaded).toBe(0);
-  expect(matches("test:read", null, null)).toBe(false);
-  const plugin = catalog[0];
-  if (!plugin) {
-    throw new Error("Missing test plugin.");
-  }
-  plugin.native = {
-    operations: [],
-    permissions: [
-      {
-        name: "test:read",
-        scope: {
-          type: "string",
-        },
-      },
-    ],
-  };
-  await permissionMatcher([], catalog);
-  expect(loaded).toBe(0);
-  await permissionMatcher(
-    [
-      {
-        name: "test",
-        version: "1",
-        native: plugin.native,
-      },
-    ],
-    catalog,
-  );
-  expect(loaded).toBe(1);
+  expect(imported).toBe(1);
+  expect(active.execute("test.read", null, "backend")).toBeNull();
+  await active.dispose();
+  expect(disposed).toBe(1);
 });
 
-test("capability permission metadata comes from each registered operation contract", async () => {
+test("capabilities report platform support without claiming OS consent", async () => {
   const catalog: PackagedPlugin[] = [];
   const storage = {
     name: "storage",
@@ -349,12 +335,6 @@ test("capability permission metadata comes from each registered operation contra
           output: {
             const: null,
           },
-          permission: "storage:read",
-        },
-      ],
-      permissions: [
-        {
-          name: "storage:read",
         },
       ],
     },
@@ -372,13 +352,6 @@ test("capability permission metadata comes from each registered operation contra
           output: {
             const: null,
           },
-          permission: "files:read",
-          osPermission: "not-required",
-        },
-      ],
-      permissions: [
-        {
-          name: "files:read",
         },
       ],
     },
@@ -422,12 +395,10 @@ test("capability permission metadata comes from each registered operation contra
       {
         name: "storage.read",
         support: "supported",
-        permission: "unknown",
       },
       {
         name: "files.read",
         support: "supported",
-        permission: "not-required",
       },
     ]);
     expect(
@@ -457,14 +428,8 @@ test("capability queries include every operation at the native registry limit", 
           output: {
             const: null,
           },
-          permission: "catalog:call",
         }),
       ),
-      permissions: [
-        {
-          name: "catalog:call",
-        },
-      ],
     },
   } as const;
   catalog.push(plugin, {
@@ -527,7 +492,6 @@ test.skipIf(process.platform !== "win32")(
           version: "1",
           native: native,
           execution: "ui",
-          authorization: false,
         },
       ],
       `import assert from "node:assert/strict";

@@ -16,6 +16,7 @@ import {
 } from "@bunaway/protocol";
 import { runWindowsApp } from "#native/windows/bun/entry";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 const root =
   process.env.BUNAWAY_READINESS_TEST_ROOT ?? resolve(import.meta.dir, "../..");
@@ -68,7 +69,7 @@ if (!process.argv.includes("--child")) {
     const report = JSON.parse(await readFile(reportPath, "utf8"));
     assert.equal(report.pass, true);
     console.log(
-      "PASS WebView2 preparation: native/document/SDK, hidden creation, auto-show, scoped events, navigation, recreation, failures, cancellation, splashscreen handoff and final quit",
+      "PASS WebView2 preparation: native/document/SDK, hidden creation, auto-show, event permissions, navigation, recreation, failures, cancellation, splashscreen handoff and final quit",
       report,
     );
   } finally {
@@ -155,17 +156,12 @@ if (!process.argv.includes("--child")) {
     "cancel",
     "nosdk",
   ];
-  const grant = {
-    identifier: "windows:control",
-    allow: views.map((view) => ({
-      view,
-    })),
-  };
+  const grants = windowPermissions();
   const policy: Policy = {
     version: 1,
     backend: {
       permissions: [
-        grant,
+        ...grants,
       ],
     },
     views: views.map((id) => ({
@@ -191,21 +187,12 @@ if (!process.argv.includes("--child")) {
               "test.action",
             ],
       host: {
-        permissions: [
-          {
-            identifier: "windows:control",
-            allow:
-              id === "splash"
-                ? views.map((view) => ({
-                    view,
-                  }))
-                : [
-                    {
-                      view: id,
-                    },
-                  ],
-          },
-        ],
+        permissions:
+          id === "observer"
+            ? [
+                "windows.getReadiness",
+              ]
+            : windowPermissions(),
       },
     })),
   };
@@ -489,9 +476,11 @@ if (!process.argv.includes("--child")) {
       ),
     );
     assert(
-      !records.some(
+      records.some(
         (record) =>
-          record.recipient === "observer" && record.state.viewId !== "observer",
+          record.recipient === "observer" &&
+          record.state.viewId === "main" &&
+          record.state.sdk === "ready",
       ),
     );
     for (const view of [

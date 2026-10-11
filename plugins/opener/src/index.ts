@@ -1,82 +1,27 @@
-import {
-  defineNativePlugin,
-  type NativeInvokeOptions,
-  s,
-} from "@bunaway/plugin";
-import manifest from "../package.json";
-import { fileInput, normalizeFilePath } from "./path.ts";
-import { matches } from "./scope.ts";
-import { normalizeUrl, urlInput } from "./url.ts";
+import { defineNativePlugin } from "@bunaway/plugin";
+import { createOpener } from "./calls.ts";
+import { openerOperations } from "./contract.ts";
+import { createOperations as createWindowsOperations } from "./platforms/windows.ts";
 
 const plugin = defineNativePlugin({
   name: "opener",
-  version: manifest.version,
-  operations: {
-    openUrl: {
-      input: urlInput,
-      output: s.null(),
-      permission: "openUrl",
-      osPermission: "not-required",
-    },
-    openFile: {
-      input: fileInput,
-      output: s.null(),
-      permission: "openFile",
-      osPermission: "not-required",
-    },
-    revealFile: {
-      input: fileInput,
-      output: s.null(),
-      permission: "revealFile",
-      osPermission: "not-required",
+  platforms: {
+    windows: {
+      execution: "io",
+      create: createWindowsOperations,
     },
   },
-  scopes: {
-    openFile: fileInput,
-    revealFile: fileInput,
-  },
-  matches,
+  operations: openerOperations,
 });
 
-/** Plugin contract for scoped files and validated HTTP and HTTPS URLs. */
+/** Plugin contract for validated files and HTTP and HTTPS URLs. */
 export const openerPlugin = plugin.definition;
 export default openerPlugin;
 
+const calls = createOpener(plugin.api);
 /** Open an absolute HTTP or HTTPS URL. Success means Explorer accepted the request. */
-export async function openUrl(
-  url: string,
-  options?: NativeInvokeOptions,
-): Promise<null> {
-  return plugin.api.openUrl(
-    {
-      url: normalizeUrl(url),
-    },
-    options,
-  );
-}
-
+export const openUrl = calls.openUrl;
 /** Open an existing absolute Windows file with its default app. Success is request acceptance. */
-export async function openFile(
-  path: string,
-  options?: NativeInvokeOptions,
-): Promise<null> {
-  return plugin.api.openFile(
-    {
-      path: normalizeFilePath(path),
-    },
-    options,
-  );
-}
-
+export const openFile = calls.openFile;
 /** Select an existing absolute Windows file in Explorer. Success is request acceptance. */
-export async function revealFile(
-  path: string,
-  options?: NativeInvokeOptions,
-): Promise<null> {
-  return plugin.api.revealFile(
-    {
-      path: normalizeFilePath(path),
-    },
-    options,
-  );
-}
+export const revealFile = calls.revealFile;
