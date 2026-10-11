@@ -171,7 +171,7 @@ export interface BuildArtifact {
   // Root of the channel-neutral build output (dist/<target> for Windows,
   // dist/<target>/<appId>.app for macOS).
   dir: string;
-  // Directory containing manifest.json, assets/, licenses/, runtime/.
+  // Directory containing manifest.json, assets/ and licenses/.
   packageDir: string;
   // Host executable inside the artifact.
   executable: string;

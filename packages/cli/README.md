@@ -277,7 +277,7 @@ macOS 빌드는 `app.windows`를 거부한다.
 교체 실패에 대비한 이전 출력 백업과 임시 보고서는 게시할 파일 옆에 둔다.
 실행 중인 빌드나 패키징이 있다면 `.bunaway/`를 지우지 않는다.
 
-프레임워크의 다운로드 캐시는 `build/cache/` 아래 bun, webview2, nlohmann-json으로 모은다.
+프레임워크의 다운로드 캐시는 `build/cache/` 아래 bun, webview2, android-bun으로 모은다.
 네이티브 빌드, 테스트와 프레임워크 배포 산출물도 기존 `build/`를 사용한다.
 검증용 스키마 스냅샷은 `native/host-api/generated/`에 버전 관리한다.
 앱 원본, 사용자 저장 데이터와 WebView 프로필은 이 정리 대상에 포함하지 않는다.

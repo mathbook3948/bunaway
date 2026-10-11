@@ -309,6 +309,8 @@ Run 값의 등록, 조회, 경로 갱신과 반복 해제를 확인한다. 임�
 `--skip-tests`는 fixture 생성까지만 수행하며, macOS의 `--app`은 ad-hoc 서명 앱
 검증과 `tests/packaging/macos-distribution.test.ts`의 배포 회귀를 추가한다.
 배포 회귀는 `bun:test`로 실제 DMG와 PKG, 실패 시 이전 산출물 보존을 확인한다.
+서명 fixture도 Bun으로 compile하며 C 컴파일러를 사용하지 않는다. 이전 호스트 형식의
+입력은 거부하고, compiled 앱의 서명, JIT와 FFI entitlement, 롤백과 정리를 검증한다.
 macOS의 기본 테스트 실행에도 포함되며, 실제 Bunaway 앱 검증은
 `BUNAWAY_DISTRIBUTION_APP`에 지정한 앱을 사용한다. 다른 OS에서는 건너뛴다.
 Apple 공증 서비스와 도구 실패는 테스트 자식 프로세스의 PATH에만 놓는 Bun fixture로

@@ -1070,7 +1070,6 @@ test("framework validation rejects extra installed inputs but permits designated
       "build",
       "build/cache/bun",
       "build/cache/webview2",
-      "build/cache/nlohmann-json",
       "build/cache/android-bun",
       "build/cache/android-gradle",
     ]) {
@@ -1082,7 +1081,7 @@ test("framework validation rejects extra installed inputs but permits designated
     await validateProject(project);
     for (const name of [
       "native/windows/bun/unexpected.hpp",
-      "native/windows/bun/vendor-extra/json.hpp",
+      "native/windows/bun/vendor-extra/unexpected.hpp",
       "packages/core/src/extra.ts",
       "packages/core/src/node_modules/extra.ts",
     ]) {

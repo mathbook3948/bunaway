@@ -17,11 +17,13 @@
 복사 단계에서 거부하여 서명과 manifest 쓰기가 원본 빌드를 변경하지 않게 한다.
 Windows는 `host.kind=bun-compiled`와 `host.executable`에 지정한 앱 EXE,
 WebView2Loader.dll 및 라이선스를 요구한다. 웹 자산과 설정은 EXE에 내장된다.
-Windows EXE에는 Unix 실행 권한을 요구하지 않는다. macOS 호스트와 번들 Bun은 Unix에서 검사할 때 실행 권한이 필요하다.
+macOS도 `host.kind=bun-compiled`인 앱을 요구하며 이전 별도 호스트 패키지는 거부한다.
+Windows EXE에는 Unix 실행 권한을 요구하지 않는다. macOS compiled 앱은 Unix에서 검사할 때 실행 권한이 필요하다.
 서명 단계는 앱 EXE를 서명한 뒤 `host.packagedSha256`을 기록하며 서명한 EXE를 다시 수정하지 않는다.
 `host.sha256`과 `bun.executableSha256`은 빌드 및 런타임 출처 기록이다.
 이 검사는 빌드에서 패키징으로 전달한 파일을 확인하며, 앱 시작 시 전체 파일 검사는 하지 않는다.
-macOS 번들 Bun은 `bun.packagedSha256`이 있으면 사용하고 없으면 `bun.executableSha256`을 사용한다.
+macOS의 `host.sourceSha256`은 서명 전 출처 기록이다. 최종 호스트 해시가 없는 서명 앱은
+macOS의 코드 서명 검증을 통과해야 하며, 다른 OS에서는 검증을 완료할 수 없다.
 
 `ctx.addArtifact(path, kind, { signed, signingRequired })`의 `signingRequired`는 기본 true다.
 서명이 필요한 배포물이 모두 서명되어야 `submittable:true`이며, `required-to-run`은

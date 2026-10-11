@@ -45,3 +45,6 @@ Developer ID, 공증과 스토어 제출 적합성은 별도 검증이 필요하
 ADR 0001의 macOS 별도 프로세스 구조는 이 결정으로 대체한다.
 POSIX 프로세스 probe와 이전 실행 기록은 실험 자료로 유지하며 제품 실행의 대안으로
 선택하지 않는다. 기존 C/ObjC++ 제품 호스트와 전용 native 테스트는 삭제한다.
+서명과 패키징도 `host.kind=bun-compiled`인 앱만 받는다. 이전 별도 호스트와 Bun
+실행 파일을 포함하는 패키지의 검증, 재배치와 child entitlement 경로는 제거했다.
+배포 회귀의 실행 fixture도 Bun으로 compile하며 C 컴파일러를 요구하지 않는다.

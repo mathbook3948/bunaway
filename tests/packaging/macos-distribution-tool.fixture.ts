@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 // PATH-scoped tool replacements run only inside each distribution test's child process.
 import assert from "node:assert/strict";
-import { appendFile, readFile, writeFile } from "node:fs/promises";
-import { basename, dirname, extname, resolve } from "node:path";
+import { appendFile, writeFile } from "node:fs/promises";
+import { basename, extname, resolve } from "node:path";
 
 const tool = basename(process.argv[1] ?? "");
 const args = process.argv.slice(2);
@@ -82,12 +82,5 @@ if (tool === "xcrun") {
   const code = await child.exited;
   if (code !== 0) {
     process.exit(code);
-  }
-  const path = args.at(-1);
-  if (failure === "manifest" && path?.endsWith("/runtime/bun")) {
-    const manifest = resolve(dirname(dirname(path)), "manifest.json");
-    // Confirm the test reached the real staged manifest before corrupting it.
-    await readFile(manifest);
-    await writeFile(manifest, "invalid");
   }
 }

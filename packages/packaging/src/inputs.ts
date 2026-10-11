@@ -10,7 +10,6 @@ import {
   CODES,
   type Diagnostic,
   type PackageManifest,
-  packagedDigest,
   platformOf,
 } from "./contract.ts";
 import { outputPaths } from "./paths.ts";
@@ -326,14 +325,9 @@ const REQUIRED_ASSETS = {
     "assets/app.json",
     "assets/policy.json",
     "assets/backend.js",
-    "assets/bunfig.toml",
-    "assets/tsconfig.json",
-    "assets/process.schema.json",
-    "assets/message.schema.json",
-    "assets/host-call.schema.json",
-    "assets/policy.schema.json",
+    "assets/manifest.json",
+    "assets/boot.js",
     "licenses/LICENSE.bun",
-    "licenses/LICENSE.nlohmann-json",
   ],
 };
 
@@ -623,6 +617,15 @@ export async function verifyArtifact(args: {
     });
   }
   if (platform === "macos") {
+    if (manifest.host?.kind !== "bun-compiled") {
+      diagnostics.push({
+        stage,
+        code: CODES.INPUT_UNEXPECTED,
+        severity: "error",
+        message: "macOS requires a compiled Bun app; run bunaway build again.",
+        path: manifestPath,
+      });
+    }
     await verifyFile(
       artifact.dir,
       artifact.executable,
@@ -631,28 +634,7 @@ export async function verifyArtifact(args: {
       true,
     );
   }
-  if (platform === "macos" && manifest.host?.kind !== "bun-compiled") {
-    await verifyFile(
-      artifact.packageDir,
-      resolve(artifact.packageDir, "runtime/bun"),
-      "Bundled Bun",
-      packagedDigest(manifest.bun),
-      true,
-    );
-  }
-
-  const required =
-    platform === "macos" && manifest.host?.kind === "bun-compiled"
-      ? [
-          "assets/app.json",
-          "assets/policy.json",
-          "assets/manifest.json",
-          "assets/boot.js",
-          "assets/backend.js",
-          "licenses/LICENSE.bun",
-        ]
-      : REQUIRED_ASSETS[platform];
-  for (const path of required) {
+  for (const path of REQUIRED_ASSETS[platform]) {
     if (!Object.hasOwn(manifest.assets, path)) {
       diagnostics.push({
         stage,
