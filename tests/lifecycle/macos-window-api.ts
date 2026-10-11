@@ -6,8 +6,8 @@ import { bundleMacosHost } from "#cli/assets";
 import { files, hash, writeJson } from "#cli/files";
 import { compileMacosApp } from "#cli/macos-compile";
 import { installedPlugins } from "#cli/plugins";
-import { windowPermissions } from "../fixtures/window-permissions.ts";
 import pin from "../../runtime/build-manifests/darwin-aarch64.json";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 assert.equal(process.platform, "darwin");
 assert.equal(process.arch, "arm64");
@@ -33,7 +33,7 @@ try {
     const documents = new Map();
     export default defineApp({modules: [], plugins: [windowsPlugin, {name:"startup-check",version:"1",async setup(){
       const list = await windows.list();
-      if (list.length !== 1 || list[0].view !== "main" || !list[0].open) throw new Error("Setup host routing or grants failed.");
+      if (list.length !== 3 || !list.some(item => item.view === "main" && item.open) || !list.some(item => item.view === "reader" && item.open) || !list.some(item => item.view === "lazy" && !item.open)) throw new Error("Setup host routing or grants failed.");
       await windows.recreate({view:"main"});
     }}], events: {}, commands: {
       "test.ready": {input:{type:"string"},output:{const:null},run:async(input)=>{documents.set(input,(documents.get(input) ?? 0)+1);return null;}},
