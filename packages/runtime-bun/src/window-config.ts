@@ -2,6 +2,7 @@ import {
   hasValidWindowSizeConstraints,
   isWindowSizeDimension,
   MAX_WINDOW_DIMENSION,
+  MAX_WINDOW_INSTANCES,
   MIN_WINDOW_DIMENSION,
   type WindowSizeConstraints,
   type WindowSpec,
@@ -49,6 +50,9 @@ export function readWindowSpecs(
             "startup",
             "visible",
             "showWhenReady",
+            "instances",
+            "maxInstances",
+            "profile",
           ].includes(key),
       )
     ) {
@@ -64,7 +68,7 @@ export function readWindowSpecs(
     }
     if (seen.has(spec.view)) {
       throw new Error(
-        `Only one window declaration per view is supported (duplicate: ${spec.view}). Use distinct policy view IDs for multiple windows.`,
+        `Only one window declaration per view is supported (duplicate: ${spec.view}). Declare instances: multiple to create multiple windows.`,
       );
     }
     seen.add(spec.view);
@@ -158,9 +162,51 @@ export function readWindowSpecs(
     ) {
       throw new Error("Window showWhenReady must be document or sdk.");
     }
+    if (
+      spec.instances !== undefined &&
+      spec.instances !== "single" &&
+      spec.instances !== "multiple"
+    ) {
+      throw new Error("Window instances must be single or multiple.");
+    }
+    if (
+      (spec.instances === "multiple" && spec.maxInstances === undefined) ||
+      (spec.maxInstances !== undefined &&
+        (typeof spec.maxInstances !== "number" ||
+          !Number.isInteger(spec.maxInstances) ||
+          spec.maxInstances < 1 ||
+          spec.maxInstances > MAX_WINDOW_INSTANCES ||
+          (spec.instances !== "multiple" && spec.maxInstances !== 1)))
+    ) {
+      throw new Error(
+        "Multiple windows require maxInstances from 1 through 128; single permits only 1.",
+      );
+    }
+    if (
+      spec.profile !== undefined &&
+      spec.profile !== "shared" &&
+      spec.profile !== "isolated"
+    ) {
+      throw new Error("Window profile must be shared or isolated.");
+    }
     return {
       view: spec.view,
       title: spec.title,
+      ...(spec.instances === undefined
+        ? {}
+        : {
+            instances: spec.instances,
+          }),
+      ...(spec.maxInstances === undefined
+        ? {}
+        : {
+            maxInstances: Number(spec.maxInstances),
+          }),
+      ...(spec.profile === undefined
+        ? {}
+        : {
+            profile: spec.profile,
+          }),
       home: spec.home,
       ...(spec.visible === undefined
         ? {}

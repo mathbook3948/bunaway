@@ -257,10 +257,9 @@ if (!process.argv.includes("--child")) {
         },
       },
     });
-    assert.deepEqual(await windows.getContentSize(main), {
-      width: 900,
-      height: 500,
-    });
+    const overriddenSize = await windows.getContentSize(main);
+    assert.equal(overriddenSize.width, 900);
+    assert.equal(overriddenSize.height, 500);
     const originalId = (await windows.getReadiness(main)).windowId;
     await assert.rejects(
       windows.recreate({
@@ -318,10 +317,9 @@ if (!process.argv.includes("--child")) {
     await waitFor(() => counts.get("main") === 3);
     await ready("main");
     const recreated = await windows.getReadiness(main);
-    assert.deepEqual(await windows.getContentSize(main), {
-      width: 640,
-      height: 480,
-    });
+    const declaredSize = await windows.getContentSize(main);
+    assert.equal(declaredSize.width, 640);
+    assert.equal(declaredSize.height, 480);
     assert.notEqual(recreated.windowId, partial.windowId);
     assert(recreated.documentGeneration <= navigated.documentGeneration);
     await context.events.emit("test.action", "close-sdk", {

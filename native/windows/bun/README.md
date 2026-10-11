@@ -193,3 +193,23 @@ keep-alive는 마지막 창을 실제로 정리한 뒤에도 백엔드를 유지
 복원하거나 첫 사전 선언 창을 생성한다. 빈 선언 배열이면 창은 만들지 않는다.
 트레이 없는 상주 앱은 숨긴 제어 HWND를 소유해 CLI 종료 메시지를 받고 정상 종료 때 정리한다.
 [데스크톱 수명주기 결정](../../../docs/decisions/0013-desktop-lifecycle.md).
+
+## 같은 뷰의 창 인스턴스
+
+`app.windows`는 뷰마다 생성 정의 하나를 유지한다. single이 기본값이며 multiple은
+maxInstances를 요구한다. UI의 자원 Map, 닫기와 재생성 예약은 내부 인스턴스 키로
+구분하고 네이티브 ID는 HWND 수명마다 발급한다. 서버 응답은 인증된 컨텍스트로
+ViewBoundary를 찾은 뒤 viewId와 문서 세대를 확인한다. viewId만으로 창을 선택하지 않는다.
+
+`webview.ts`의 프로필별 소유자 그룹은 environment 하나와 창별 controller를 관리한다.
+첫 창을 닫아도 남은 controller의 환경을 유지한다. 마지막 controller의 정리만
+브라우저 및 자식 프로세스 종료를 기다리고 그룹의 COM 참조와 DLL을 해제한다.
+`window-profiles.ts`는 영속 shared 경로와 임시 isolated 경로를 소유한다. 격리 경로는
+내부 논리 인스턴스에 연결해 새 HWND로 재생성해도 유지하고 최종 종료 뒤 삭제한다.
+파일 잠금은 제한된 시간만 재시도하며 이전 임시 프로필을 다음 생성에서 복원하지 않는다.
+
+선언과 앱 전체 창 상한은 별도이며 활성, 예약과 정리 중인 자원은 128개 이내다.
+공개 목록은 살아 있는 창만 노출하고 숨김 및 WebView 준비 중인 HWND도 포함한다.
+트레이 열기는 선언 순서와 생성 순서의 첫 살아 있는 창을 복원한다. 창이 없으면
+첫 선언에서 하나만 생성한다. 실제 회귀는 `windows-multiple-windows.ts`를
+`mise run host:windows`와 windows-native CI에서 실행한다.

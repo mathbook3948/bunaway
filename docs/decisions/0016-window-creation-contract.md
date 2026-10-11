@@ -12,14 +12,14 @@ status: accepted
 결정일: 2026-10-11. 검토 기준: main `222998f`.
 Windows 호출별 생성 옵션을 구현했다. 실제 네이티브 회귀는 CI의 windows-native 작업에서 검증한다.
 
-## 배경과 현재 경계
+## 배경과 다중 인스턴스 도입 전 경계
 
 [용어집](../GLOSSARY.md)의 뷰는 UI와 접근 정책의 단위이고 창은 OS 자원의 단위다.
 [ADR 0004](./0004-multi-window-per-view-policy.md)의 뷰별 창 하나 정책을 유지한다.
 [ADR 0002](./0002-host-owned-call-context.md)의 호스트 발급 컨텍스트와
 [ADR 0010](./0010-windows-first-platform-model.md)의 Windows 우선 순서도 유지한다.
 
-현재 구현에서 서로 다른 식별자가 있다고 해서 같은 뷰의 창 여러 개를 지원하지는 않는다.
+당시 구현에서 서로 다른 식별자가 있다고 해서 같은 뷰의 창 여러 개를 지원하지는 않는다.
 
 | 경계 | 현재 구현과 새 요구사항의 관계 |
 | --- | --- |

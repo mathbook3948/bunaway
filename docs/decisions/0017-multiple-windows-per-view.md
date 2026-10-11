@@ -5,7 +5,7 @@ status: accepted
 # 뷰는 화면과 정책을 선언하고 창 인스턴스는 실행 중에 생성한다
 
 결정일: 2026-10-11. 검토 기준: main `49ed0a5`.
-지원 방향과 후속 구현 계약을 정한다. 현재 SDK와 호스트에는 아직 구현하지 않았다.
+Windows SDK와 호스트가 이 계약을 구현한다. 실제 WebView2 검증은 windows-native CI에서 수행한다.
 
 ## 배경과 기존 결정의 변경
 
@@ -22,14 +22,14 @@ status: accepted
 기존 단일 창 동작과 프로필 경로는 기본값으로 보존한다.
 [ADR 0010](./0010-windows-first-platform-model.md)에 따라 Windows에서 먼저 구현하고,
 macOS는 해당 어댑터 구현 전까지 새 계약을 `UNSUPPORTED`로 거부한다.
-현재 스키마가 새 필드를 `INVALID_ARGUMENT`로 거부하는 상태와 구분한다.
+스키마는 새 필드를 검증하며 macOS 네이티브 지원 여부는 그 뒤에 검사한다.
 
 ## 뷰 선언과 생성 모드
 
 `app.windows`에는 계속 뷰마다 생성 정의 하나만 선언한다. 중복 view 선언은 오류다.
-후속 설정에 다음 필드를 추가한다. 아래 표와 예제는 현재 사용할 수 있는 설정이 아니다.
+현재 설정은 다음 필드를 받는다.
 
-| 필드 | 후속 계약 |
+| 필드 | 계약 |
 | --- | --- |
 | `instances` | `"single"` 또는 `"multiple"`. 기본값은 `"single"`. |
 | `maxInstances` | 정수 1–128. multiple에서는 필수이며 single에서는 생략 또는 1만 허용한다. |
@@ -58,9 +58,9 @@ keep-alive 요구는 그대로 유지한다.
 
 기존 create/recreate의 `Promise<null>` 결과는 바꾸지 않는다.
 창 인스턴스를 직접 다루는 API를 추가하고 기존 제어 입력을 선택적으로 확장한다.
-아래 이름과 서명은 후속 구현 계약이며 이번 결정 PR의 공개 API 추가가 아니다.
+현재 SDK는 다음 인스턴스 API와 입력을 제공한다.
 
-| API 또는 입력 | 후속 계약 |
+| API 또는 입력 | 계약 |
 | --- | --- |
 | `create({ view, options? })` | single 전용. 이미 열린 창 또는 생성 예약이 있으면 `BUSY`. 결과는 `null`. |
 | `recreate({ view, options? })` | single 전용. 기존 확인과 정리를 거쳐 재생성하며 결과는 `null`. 닫힌 창도 생성한다. |
@@ -141,7 +141,7 @@ isolated의 영속 복원 키와 호출별 임의 프로필 선택은 이번 범
 ## 동시 작업, 상한과 종료
 
 선언 상한 128개와 살아 있거나 생성 예약 또는 정리 중인 인스턴스 상한을 구분한다.
-후속 호스트는 앱 전체에서 인스턴스 슬롯을 최대 128개 유지하며 뷰별 maxInstances도
+Windows 호스트는 앱 전체에서 인스턴스 슬롯을 최대 128개 유지하며 뷰별 maxInstances도
 동시에 검사한다. single은 1개다. 상한은 성능 보장이 아니며 앱은 더 작은 값을 선언할 수 있다.
 용량이 없으면 새 createInstance는 `BUSY`로 실패한다.
 
@@ -164,7 +164,7 @@ shared environment의 초기화와 참조 수 변경은 프로필 소유 경로�
 ## 구현 이슈와 완료 기준
 
 이 결정 PR은 런타임이나 스키마를 바꾸지 않으며 기존 뷰별 창 하나 검사는 유지한다.
-#102는 single 생성 옵션 구현으로 열어 두고 다중 창은
+#102는 생성 옵션 구현 PR에, 다중 창은
 [Windows 구현 이슈 #104](https://github.com/mathbook3948/bunaway/issues/104)로 관리한다.
 공통 창 작업 이슈 [#78](https://github.com/mathbook3948/bunaway/issues/78)의 macOS 후속
 작업도 Windows 실제 구현과 검증이 끝나기 전에는 완료로 닫지 않는다.

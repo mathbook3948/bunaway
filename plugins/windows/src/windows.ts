@@ -66,7 +66,7 @@ export function createOperations(
         for (
           let parent = window.getParent?.();
           parent;
-          parent = services.window(parent.viewId).getParent?.()
+          parent = services.window(identityKey(parent)).getParent?.()
         ) {
           if (parent.viewId === call.payload.splash) {
             throw new BunawayError({
@@ -111,21 +111,37 @@ export function createOperations(
           return true;
         }
         // Configuration order is deterministic; never activate an ungranted or external window.
-        for (const spec of services.specs) {
-          if (spec.view === viewId || !grants.includes(spec.view)) {
+        const instances = services.instances?.();
+        const candidates = services.specs.flatMap((spec) =>
+          instances
+            ? instances
+                .filter((entry) => entry.identity.viewId === spec.view)
+                .map((entry) => ({
+                  key: entry.key,
+                  viewId: spec.view,
+                }))
+            : [
+                {
+                  key: spec.view,
+                  viewId: spec.view,
+                },
+              ],
+        );
+        for (const candidate of candidates) {
+          if (candidate.key === viewId || !grants.includes(candidate.viewId)) {
             continue;
           }
-          const state = services.read(spec.view);
+          const state = services.read(candidate.key);
           if (
             !state ||
             state.closed ||
             !state.ready ||
             state.failure ||
-            operations.replacing.has(spec.view)
+            operations.replacing.has(candidate.key)
           ) {
             continue;
           }
-          const next = services.window(spec.view);
+          const next = services.window(candidate.key);
           if (next.isVisible() && !next.isMinimized()) {
             next.activate();
             return !window.isFocused();
@@ -154,7 +170,7 @@ export function createOperations(
         const parent = window.getParent();
         return parent &&
           grants.includes(parent.viewId) &&
-          !operations.replacing.has(parent.viewId)
+          !operations.replacing.has(identityKey(parent))
           ? {
               ...parent,
             }
@@ -169,7 +185,7 @@ export function createOperations(
           .filter(
             (child) =>
               grants.includes(child.viewId) &&
-              !operations.replacing.has(child.viewId),
+              !operations.replacing.has(identityKey(child)),
           )
           .map((child) => ({
             ...child,
@@ -406,6 +422,12 @@ export function createOperations(
     ...services,
     apply: applyWindow,
   });
+  function identityKey(identity: WindowIdentity): string {
+    return services.instances
+      ? (operations.resolveKey(identity.viewId, identity.windowId) ??
+          identity.viewId)
+      : identity.viewId;
+  }
   return {
     execute() {
       throw new BunawayError({
@@ -418,6 +440,16 @@ export function createOperations(
         operation,
         payload: input,
       });
+      if (
+        (call.operation === "windows.list" ||
+          call.operation === "windows.listInstances") &&
+        !registry.allowed(context.permissions, call, matches)
+      ) {
+        throw new BunawayError({
+          code: "PERMISSION_DENIED",
+          message: "Window listing permission required.",
+        });
+      }
       if (
         call.operation === "windows.destroy" &&
         (source !== "backend" ||
@@ -466,13 +498,13 @@ export function createOperations(
         call.payload.parent !== null
       ) {
         const parent = services.lookup?.byId(call.payload.parent);
-        if (!parent || services.read(parent.viewId)?.closed !== false) {
+        if (!parent || services.read(identityKey(parent))?.closed !== false) {
           throw new BunawayError({
             code: "INVALID_ARGUMENT",
             message: "Parent window lifetime is not open.",
           });
         }
-        if (operations.replacing.has(parent.viewId)) {
+        if (operations.replacing.has(identityKey(parent))) {
           throw new BunawayError({
             code: "BUSY",
             message: "Parent window is being recreated.",
@@ -480,13 +512,16 @@ export function createOperations(
         }
         targets.push(parent.viewId);
       }
-      if (
-        call.operation === "windows.setParent" &&
-        services.read(call.payload.view)?.closed === false
-      ) {
-        const previous = services.window(call.payload.view).getParent?.();
-        if (previous) {
-          targets.push(previous.viewId);
+      if (call.operation === "windows.setParent") {
+        const key = operations.resolveKey(
+          call.payload.view,
+          call.payload.windowId,
+        );
+        if (key && services.read(key)?.closed === false) {
+          const previous = services.window(key).getParent?.();
+          if (previous) {
+            targets.push(previous.viewId);
+          }
         }
       }
       const grants = targets.filter((view) =>
@@ -554,8 +589,17 @@ export function createOperations(
                 message: "Invalid window call source.",
               });
             }
-            // Resolve the authenticated caller, never a view supplied by the web payload.
-            if (
+            // Host request IDs are mapped to authenticated contexts by the UI owner.
+            if (lookup.byRequest) {
+              identity = lookup.byRequest(context.requestId);
+              if (identity && identity.viewId !== viewId) {
+                throw new BunawayError({
+                  code: "PERMISSION_DENIED",
+                  message:
+                    "Window source does not match its authenticated request.",
+                });
+              }
+            } else if (
               services.read(viewId)?.closed === false &&
               !operations.replacing.has(viewId) &&
               grants.includes(viewId)
@@ -575,8 +619,8 @@ export function createOperations(
         if (
           !identity ||
           !grants.includes(identity.viewId) ||
-          services.read(identity.viewId)?.closed !== false ||
-          operations.replacing.has(identity.viewId)
+          services.read(identityKey(identity))?.closed !== false ||
+          operations.replacing.has(identityKey(identity))
         ) {
           return null;
         }

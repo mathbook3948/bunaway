@@ -1265,6 +1265,11 @@ export class Windows {
       this.setPlacement(window, placement, wasVisible);
       return;
     }
+    // Windows can rewrite normal placement while resizing a hidden maximized HWND.
+    // Capture its restoration rectangle before applying the DPI suggestion.
+    const maximizedPlacement = maximized
+      ? this.getPlacement(window)
+      : undefined;
     assert(
       user.symbols.SetWindowPos(
         window,
@@ -1276,8 +1281,8 @@ export class Windows {
         SWP_NOZORDER | SWP_NOACTIVATE,
       ),
     );
-    if (maximized) {
-      const placement = this.getPlacement(window);
+    if (maximizedPlacement) {
+      const placement = maximizedPlacement;
       this.resizePlacement(
         window,
         placement,

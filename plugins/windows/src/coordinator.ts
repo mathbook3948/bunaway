@@ -1,4 +1,9 @@
-import type { WindowSpec, WindowState } from "@bunaway/plugin-api/native";
+import {
+  MAX_WINDOW_INSTANCES,
+  type NativeWindowServices,
+  type WindowSpec,
+  type WindowState,
+} from "@bunaway/plugin-api/native";
 import { BunawayError, type JsonValue } from "@bunaway/protocol";
 import type { WindowCall } from "./contract.ts";
 import { mergeCreationOptions } from "./creation-options.ts";
@@ -10,24 +15,16 @@ export type { WindowState } from "@bunaway/plugin-api/native";
 /** Coordinates requests without owning HWNDs or COM objects; the UI pump owns cleanup and readiness. */
 export class WindowOperations {
   readonly replacing = new Set<string>();
+  private readonly reservedViews = new Map<string, string>();
   private readonly destroyedReplacements = new Set<string>();
   constructor(
     private readonly specs: readonly WindowSpec[],
-    private readonly hooks: {
-      supportsCreationOptions?: boolean;
-      read(view: string): WindowState | undefined;
-      create(spec: WindowSpec, replacingLiveWindow?: boolean): void;
-      close(view: string): boolean | Promise<boolean>;
-      destroy?(view: string): boolean | Promise<boolean>;
+    private readonly hooks: Omit<NativeWindowServices, "specs" | "window"> & {
       apply(
         call: WindowCall,
-        view: string,
+        key: string,
         grants: readonly string[],
       ): JsonValue | Promise<JsonValue>;
-      stopping(): boolean;
-      cancelled(requestId: string): boolean;
-      now(): number;
-      tick(): Promise<void>;
     },
   ) {}
 
@@ -37,14 +34,47 @@ export class WindowOperations {
     grants: readonly string[],
     requestId: string,
   ): Promise<JsonValue> {
-    if (call.operation === "windows.list") {
-      // A list only reveals views included in the caller's already-computed grants.
-      return this.specs
-        .filter((spec) => grants.includes(spec.view))
-        .map((spec) => ({
-          view: spec.view,
-          open: this.hooks.read(spec.view)?.closed === false,
-        }));
+    if (
+      call.operation === "windows.list" ||
+      call.operation === "windows.listInstances"
+    ) {
+      if (this.hooks.stopping() || this.hooks.cancelled(requestId)) {
+        throw new BunawayError({
+          code: "CANCELLED",
+          message: "Window request cancelled.",
+        });
+      }
+      const entries = this.hooks.instances?.();
+      if (call.operation === "windows.listInstances" && !entries) {
+        throw new BunawayError({
+          code: "UNSUPPORTED",
+          message: "Window instances are not implemented on this platform.",
+        });
+      }
+      const permitted = this.specs.filter((spec) => grants.includes(spec.view));
+      if (call.operation === "windows.listInstances") {
+        return permitted.flatMap((spec) =>
+          (entries ?? [])
+            .filter(
+              (entry) =>
+                entry.identity.viewId === spec.view &&
+                this.hooks.read(entry.key)?.closed === false,
+            )
+            .map((entry) => ({
+              ...entry.identity,
+            })),
+        );
+      }
+      return permitted.map((spec) => ({
+        view: spec.view,
+        open: entries
+          ? entries.some(
+              (entry) =>
+                entry.identity.viewId === spec.view &&
+                this.hooks.read(entry.key)?.closed === false,
+            )
+          : this.hooks.read(spec.view)?.closed === false,
+      }));
     }
     if (!call.payload || !("view" in call.payload)) {
       throw new BunawayError({
@@ -52,19 +82,90 @@ export class WindowOperations {
         message: "Expected a window operation.",
       });
     }
-    const viewId = call.payload.view;
-    if (!grants.includes(viewId)) {
+    const policyView = call.payload.view;
+    if (!grants.includes(policyView)) {
       throw new BunawayError({
         code: "PERMISSION_DENIED",
         message: "Window policy denied.",
       });
     }
-    const spec = this.specs.find((spec) => spec.view === viewId);
+    const spec = this.specs.find((spec) => spec.view === policyView);
     if (!spec) {
       throw new BunawayError({
         code: "INVALID_ARGUMENT",
         message: "Window is not configured.",
       });
+    }
+    const creationSpec =
+      call.operation === "windows.create" ||
+      call.operation === "windows.recreate" ||
+      call.operation === "windows.createInstance" ||
+      call.operation === "windows.recreateInstance"
+        ? mergeCreationOptions(spec, call.payload.options)
+        : undefined;
+    if (
+      creationSpec &&
+      call.payload &&
+      "options" in call.payload &&
+      call.payload.options &&
+      Object.keys(call.payload.options).length !== 0 &&
+      !this.hooks.supportsCreationOptions
+    ) {
+      throw new BunawayError({
+        code: "UNSUPPORTED",
+        message:
+          "Window creation options are not implemented on this platform.",
+      });
+    }
+    const returnsIdentity =
+      call.operation === "windows.createInstance" ||
+      call.operation === "windows.recreateInstance";
+    if (returnsIdentity && !this.hooks.instances) {
+      throw new BunawayError({
+        code: "UNSUPPORTED",
+        message: "Window instances are not implemented on this platform.",
+      });
+    }
+    if (
+      spec.instances === "multiple" &&
+      (call.operation === "windows.create" ||
+        call.operation === "windows.recreate")
+    ) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message:
+          "Multiple-window views require createInstance or recreateInstance.",
+      });
+    }
+    if (
+      call.operation === "windows.completeSplashscreen" &&
+      (spec.instances === "multiple" ||
+        this.specs.find((candidate) => candidate.view === call.payload.splash)
+          ?.instances === "multiple")
+    ) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "Splashscreen handoff requires single-window views.",
+      });
+    }
+    const suppliedId =
+      "windowId" in call.payload ? call.payload.windowId : undefined;
+    let viewId: string;
+    if (
+      call.operation === "windows.createInstance" &&
+      spec.instances === "multiple"
+    ) {
+      viewId = `instance-${crypto.randomUUID()}`;
+    } else {
+      const resolved = this.resolveKey(
+        policyView,
+        suppliedId,
+        call.operation === "windows.isDestroyed",
+      );
+      if (resolved === undefined) {
+        return true;
+      }
+      viewId = resolved;
     }
     if (
       (this.replacing.has(viewId) &&
@@ -115,9 +216,16 @@ export class WindowOperations {
     }
     if (
       call.operation !== "windows.create" &&
-      call.operation !== "windows.recreate"
+      call.operation !== "windows.recreate" &&
+      call.operation !== "windows.createInstance" &&
+      call.operation !== "windows.recreateInstance"
     ) {
-      if (!view || (view.closed && call.operation !== "windows.getReadiness")) {
+      if (
+        !view ||
+        (view.closed &&
+          (call.operation !== "windows.getReadiness" ||
+            suppliedId !== undefined))
+      ) {
         throw new BunawayError({
           code: "INVALID_ARGUMENT",
           message: "Window is not open.",
@@ -131,28 +239,36 @@ export class WindowOperations {
       }
       return this.hooks.apply(call, viewId, grants);
     }
-    if (call.operation === "windows.create" && view && !view.closed) {
+    if (
+      (call.operation === "windows.create" ||
+        call.operation === "windows.createInstance") &&
+      view &&
+      !view.closed
+    ) {
       throw new BunawayError({
         code: "BUSY",
         message:
           "Window is already open. Only one window per view is supported; use show or recreate for the existing window.",
       });
     }
-    // Resolve merged constraints before reservation or closing an existing window.
-    const creationSpec = mergeCreationOptions(spec, call.payload.options);
     if (
-      call.payload.options &&
-      Object.keys(call.payload.options).length !== 0 &&
-      !this.hooks.supportsCreationOptions
+      call.operation === "windows.recreateInstance" &&
+      (!view || view.closed)
     ) {
       throw new BunawayError({
-        code: "UNSUPPORTED",
-        message:
-          "Window creation options are not implemented on this platform.",
+        code: "INVALID_ARGUMENT",
+        message: "Window lifetime is not open.",
       });
+    }
+    if (!view || view.cleaned) {
+      this.checkCapacity(spec, viewId);
+    }
+    if (!creationSpec) {
+      throw new Error("Missing resolved creation configuration.");
     }
     // Serialize create/recreate for this view until readiness or failure.
     this.replacing.add(viewId);
+    this.reservedViews.set(viewId, policyView);
     let creationStarted = false;
     try {
       if (this.hooks.stopping() || this.hooks.cancelled(requestId)) {
@@ -199,7 +315,7 @@ export class WindowOperations {
       }
       // Once close commits, finish replacement even if the old document's context is revoked.
       creationStarted = true;
-      this.hooks.create(creationSpec, closesLiveWindow);
+      this.hooks.create(creationSpec, closesLiveWindow, viewId);
       view = this.hooks.read(viewId);
       // Preserve create's existing completion at controller setup; document and SDK readiness are separate.
       while (true) {
@@ -235,7 +351,18 @@ export class WindowOperations {
         }
         // Readiness and termination can both arrive before this request resumes.
         if (view.ready) {
-          return null;
+          if (!returnsIdentity) {
+            return null;
+          }
+          const identity = this.hooks
+            .instances?.()
+            .find((entry) => entry.key === viewId)?.identity;
+          if (!identity) {
+            throw new Error("Native window identity was not registered.");
+          }
+          return {
+            ...identity,
+          };
         }
         await this.hooks.tick();
         view = this.hooks.read(viewId);
@@ -254,7 +381,94 @@ export class WindowOperations {
       throw error;
     } finally {
       this.replacing.delete(viewId);
+      this.reservedViews.delete(viewId);
       this.destroyedReplacements.delete(viewId);
+      this.hooks.creationSettled?.(viewId);
+    }
+  }
+  /** Resolve an explicit HWND lifetime against its policy view; multiple views never infer a target. */
+  resolveKey(
+    viewId: string,
+    windowId?: string,
+    allowMissing = false,
+  ): string | undefined {
+    const spec = this.specs.find((candidate) => candidate.view === viewId);
+    if (!spec) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "Window is not configured.",
+      });
+    }
+    if (windowId === undefined) {
+      if (spec.instances === "multiple") {
+        throw new BunawayError({
+          code: "INVALID_ARGUMENT",
+          message: "Multiple-window views require windowId.",
+        });
+      }
+      return viewId;
+    }
+    const entry = this.hooks
+      .instances?.()
+      .find((entry) => entry.identity.windowId === windowId);
+    if (entry && entry.identity.viewId !== viewId) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "Window ID does not belong to the requested view.",
+      });
+    }
+    if (entry) {
+      return entry.key;
+    }
+    // Legacy adapters have no catalog and cannot authenticate explicit native IDs.
+    if (!this.hooks.instances) {
+      throw new BunawayError({
+        code: "UNSUPPORTED",
+        message:
+          "Window identity targeting is not implemented on this platform.",
+      });
+    }
+    if (allowMissing) {
+      return undefined;
+    }
+    throw new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message: "Window lifetime is not open.",
+    });
+  }
+
+  /** Count reservations and native resources together before any asynchronous creation work. */
+  private checkCapacity(spec: WindowSpec, key: string): void {
+    const occupied = new Map<string, string>();
+    for (const entry of this.hooks.instances?.() ?? []) {
+      if (!this.hooks.read(entry.key)?.cleaned) {
+        occupied.set(entry.key, entry.identity.viewId);
+      }
+    }
+    // Single-window platforms without a catalog still count all live or cleaning declarations.
+    if (!this.hooks.instances) {
+      for (const definition of this.specs) {
+        const state = this.hooks.read(definition.view);
+        if (state && !state.cleaned) {
+          occupied.set(definition.view, definition.view);
+        }
+      }
+    }
+    for (const reserved of this.replacing) {
+      occupied.set(reserved, this.reservedViews.get(reserved) ?? reserved);
+    }
+    occupied.delete(key);
+    const perView = [
+      ...occupied.values(),
+    ].filter((viewId) => viewId === spec.view).length;
+    if (
+      occupied.size >= MAX_WINDOW_INSTANCES ||
+      perView >= (spec.maxInstances ?? 1)
+    ) {
+      throw new BunawayError({
+        code: "BUSY",
+        message: "Window instance limit reached.",
+      });
     }
   }
 }

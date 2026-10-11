@@ -11,6 +11,15 @@ export function mergeCreationOptions(
   spec: WindowSpec,
   options: WindowInput<"windows.create">["options"],
 ): WindowSpec {
+  const title = options?.title ?? spec.title;
+  // Window declarations bound UTF-16 code units; schema maxLength counts Unicode code points.
+  if (!title || title.length > 1024 || title.includes("\0")) {
+    throw new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message:
+        "Window title must contain 1 to 1024 UTF-16 code units without NUL.",
+    });
+  }
   const window = {
     ...spec.window,
     ...options?.window,
@@ -34,7 +43,7 @@ export function mergeCreationOptions(
       : options.showWhenReady;
   return {
     ...base,
-    title: options?.title ?? spec.title,
+    title,
     ...(options?.visible === undefined
       ? {}
       : {
