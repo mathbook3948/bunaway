@@ -92,7 +92,9 @@ SDK 초기화 완료를 뜻하지 않는다. 생성 뒤 `getById`, 인증된 출
 호출한 뷰와 생성 대상이 다르면 대상 view의 getSnapshot 또는 getReadiness에서 새 ID를
 받는다. getCurrent는 생성 대상이 아니라 호출자 창을 반환하고 getById는 이미 받은 ID를 조회한다.
 목록은 계속 `{ view, open }`이고 snapshot과 readiness에는 `viewId`를 쓴다.
-식별자 조회에는 `windows:list`와 결과 대상의 `windows:control`이 필요하다.
+`getById`, `getCurrent`, `getFocused`, `getLastActive`에는 `windows:list`와
+결과 대상의 `windows:control`이 필요하다. `getSnapshot`과 `getReadiness`에는
+대상 뷰의 `windows:control`만 필요하다.
 자신의 HWND를 바꾸지 않은 세션 재연결은 ID를 유지한다. 닫거나 재생성한 이전 ID의
 getById는 `null`이며 다른 창으로 자동 대응하지 않는다. 백엔드의 getCurrent는 `null`이다.
 옵션을 추가해도 ID를 반환하기 위해 create의 기존 결과를 바꾸거나 ID에 권한을 부여하지 않는다.
