@@ -1,16 +1,16 @@
 import { expect, test } from "bun:test";
-import { bindHostAPI } from "#core/host-api";
+import { resolve } from "node:path";
 import { bindCommandHost } from "@bunaway/plugin-api/host";
 import { clipboard, clipboardPlugin } from "@bunaway/plugin-clipboard";
-import { s } from "@bunaway/plugin";
 import {
   type HostContext,
   NativeRegistry,
   serializeHostResponse,
 } from "@bunaway/protocol";
-import { MAX_TEXT_LENGTH } from "#plugins/clipboard/src/text";
+import { z } from "zod";
 import { installedPlugins } from "#cli/plugins";
-import { resolve } from "node:path";
+import { bindHostAPI } from "#core/host-api";
+import { MAX_TEXT_LENGTH } from "#plugins/clipboard/src/text";
 
 const registry = new NativeRegistry([
   clipboardPlugin,
@@ -93,7 +93,6 @@ test("clipboard has separate read, write and clear permissions with strict Unico
     new NativeRegistry([]).operation("clipboard.readText"),
   ).toThrow();
 });
-
 test("clipboard grants only the requested operation", () => {
   for (const operation of registry.operations.values()) {
     const call = {
@@ -149,7 +148,6 @@ test("clipboard grants only the requested operation", () => {
     }),
   ).not.toThrow();
 });
-
 test("clipboard public functions reuse the active command host and validate before dispatch", async () => {
   const calls: string[] = [];
   const controller = new AbortController();
@@ -168,8 +166,8 @@ test("clipboard public functions reuse the active command host and validate befo
     registry,
   );
   const command = bindCommandHost({
-    input: s.null(),
-    output: s.null(),
+    input: z.null(),
+    output: z.null(),
     async run(
       _input: unknown,
       _context: import("@bunaway/plugin-api").CommandContext,
@@ -207,7 +205,6 @@ test("clipboard public functions reuse the active command host and validate befo
     "clipboard.clear",
   ]);
 });
-
 test("clipboard is independently discoverable as a Windows UI plugin", async () => {
   const plugins = await installedPlugins(
     resolve(import.meta.dir, "../.."),
@@ -227,4 +224,4 @@ test("clipboard is independently discoverable as a Windows UI plugin", async () 
   const source = await result.outputs[0]?.text();
   expect(source).not.toContain("user32.dll");
   expect(source).not.toContain("node:async_hooks");
-}, 20_000);
+}, 20000);

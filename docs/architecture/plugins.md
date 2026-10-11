@@ -241,8 +241,15 @@ JSON에 schema를 다시 복사하지 않는다. 진입점은 부작용 없는 �
 `defineNativePlugin`은 선언을 검증하고 `definition`과 `api`를 반환한다.
 제작자는 operations 객체에 메서드 이름과 input, output을 작성한다.
 SDK가 작업 이름에 플러그인 접두사를 붙인다. 작업마다 독립적으로 권한을 허용한다.
-`s.object`는 필드를 기본 필수로 선언하고 추가 필드를 거부한다. 선택 필드는
-`s.optional`로 표시하며 나머지 s 함수도 기존 Schema를 만든다. 검증기를 복제하지 않는다.
+제작자는 Zod로 입력과 출력을 선언하고 호출 타입은 z.input과 z.output에서 추론한다.
+z.object는 추가 필드를 제거하고 z.strictObject는 거부한다. 선택 필드는 z.exactOptional로 선언한다.
+SDK는 선언을 읽을 때 JSON Schema로 변환하고 z.object의 필드 제거를
+x-bunaway-stripUnknown 키워드로 기록한다. 프로세스와 Worker에는
+직렬화 가능한 계약만 전달하며 기존 JSON 값, 크기와 깊이 제한을 유지한다.
+공통 검증기는 성공한 분기의 필드 제거를 복사본에 적용한다. 실패한 union 분기는
+다른 분기의 입력을 변경하지 않는다. 제거할 필드도 기존 JSON 제한을 먼저 검사한다.
+임의 값 변환, 사용자 정의 검사와 미지원 키워드는 선언 단계에서 거부한다.
+protocol의 JSON Schema 추론과 검증은 메시지와 앱 계약, 전달된 계약의 검증을 위해 유지한다.
 이 작성 형식은 native.operations 배열, 완전한 작업 이름,
 required와 additionalProperties를 반복해서 작성하지 않게 한다.
 api의 메서드 이름은 operations의 키와 같다.
@@ -479,6 +486,23 @@ CLI의 기존 `@bunaway/*` 고정 목록 검사는 manifest 기반 plugin 검사
 5. 아래 검증을 통과한 Windows 결과를 기록한다. 이후 macOS를 같은 공개 계약에
    맞춰 구현한다. 등록한 plugin의 target adapter나 작업 구현이 없으면 호출 시 `UNSUPPORTED`로 실패하고
    기존 내장 기능으로 자동 대체하지 않는다.
+
+## Zod 전환의 번들 비용
+
+2026-10-12에 Bun 1.4.2로 실제 storage와 windows의 src/index.ts를 browser,
+ESM, minify 조건으로 번들했다. 플랫폼 팩터리는 중립 선언 빌드와 같이 실행하지 않는
+대체 export로 처리했다. 전환 전 기준은 4c3f981f12c2c5aacb1c26ed852973dfcf8d21d8이다.
+
+| 선언 번들 | 전환 전 바이트 | 전환 후 바이트 |
+| --- | ---: | ---: |
+| storage | 26,533 | 123,627 |
+| windows | 34,982 | 181,837 |
+
+선언을 읽을 때 스키마를 변환하므로 Zod와 변환 코드가 화면 번들에 포함된다.
+위 수치는 압축 전 전체 export 번들이다. 실제 앱의 tree shaking과 전송 압축,
+시작 시간은 별도로 측정해야 한다. 자체 작성 도구를 제거하고 Zod 문법과 타입 추론을
+사용하는 대신 이 번들 비용을 유지한다. 프로토콜의 JSON 검증은 전송 제한과 전달된
+계약의 검사에 필요하므로 제거하지 않는다.
 
 ## 완료 검증
 

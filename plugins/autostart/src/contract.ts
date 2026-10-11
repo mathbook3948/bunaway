@@ -1,59 +1,45 @@
-import { type Infer, s } from "@bunaway/plugin";
 import { BunawayError, type JsonValue, validateValue } from "@bunaway/protocol";
+import { z } from "zod";
 
-const nullableString = {
-  anyOf: [
-    s.string(),
-    s.null(),
-  ],
-} as const;
-const statusSchema = s.object({
-  registrationName: s.string(),
-  registered: s.boolean(),
+const nullableString = z.union([
+  z.string(),
+  z.null(),
+]);
+const statusSchema = z.strictObject({
+  registrationName: z.string(),
+  registered: z.boolean(),
   commandLine: nullableString,
   executablePath: nullableString,
-  args: {
-    anyOf: [
-      s.array(s.string()),
-      s.null(),
-    ],
-  },
-  startupState: s.enum([
+  args: z.union([
+    z.array(z.string()),
+    z.null(),
+  ]),
+  startupState: z.enum([
     "enabled",
     "disabled",
     "unknown",
   ]),
-  matchesCurrentLaunch: s.boolean(),
+  matchesCurrentLaunch: z.boolean(),
 });
-
 /** App launch registration inputs and observed Windows startup status. */
 export const autostartOperations = {
   enable: {
-    input: s.object({
-      args: s.array(
-        s.string({
-          maxLength: 260,
-        }),
-        {
-          maxItems: 64,
-        },
-      ),
+    input: z.strictObject({
+      args: z.array(z.string().max(260)).max(64),
     }),
     output: statusSchema,
   },
   disable: {
-    input: s.null(),
-    output: s.null(),
+    input: z.null(),
+    output: z.null(),
   },
   getStatus: {
-    input: s.null(),
+    input: z.null(),
     output: statusSchema,
   },
 } as const;
-
 /** Stored launch data and the independently observed Windows startup approval state. */
-export type AutostartStatus = Infer<typeof statusSchema>;
-
+export type AutostartStatus = z.infer<typeof statusSchema>;
 /** Validate a native call, rejecting operations outside this plugin with UNSUPPORTED. */
 export function validateAutostartInput(operation: string, input: JsonValue) {
   switch (operation) {

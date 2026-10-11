@@ -47,6 +47,7 @@ export {
   NativeRegistry,
   type NativeRegistryOptions,
 } from "./native-registry.ts";
+export { toJSONSchema } from "./plugin-schema.ts";
 export {
   bootstrapSchema,
   errorSchema,
@@ -62,6 +63,8 @@ export {
   MAX_MESSAGE_BYTES,
   ProtocolError,
   type Schema,
+  type schemaOutput,
+  type TypedSchema,
   validate as validateValue,
 } from "./validation.ts";
 

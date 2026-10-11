@@ -42,8 +42,8 @@ test.each([
       const entry = resolve(root, "src/index.ts");
       await Bun.write(
         resolve(root, "src/contract.ts"),
-        `import { s } from "@bunaway/plugin";
-export const operations = { read: { input: s.null(), output: s.string() } } as const;`,
+        `import { z } from "zod";
+export const operations = { read: { input: z.null(), output: z.string() } } as const;`,
       );
       const source = `import { defineNativePlugin } from "@bunaway/plugin";
 import { operations } from "./contract.ts";

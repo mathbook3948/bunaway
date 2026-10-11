@@ -1,110 +1,19 @@
 import {
-  type Infer,
   type JsonValue,
   NativeRegistry,
-  type Schema,
+  type TypedSchema,
+  toJSONSchema,
 } from "@bunaway/protocol";
+import type { z } from "zod";
 import type { NativeInvokeOptions } from "#transport";
 
 export type {
-  Infer,
   JsonValue,
   NativePluginContract,
   Schema,
 } from "@bunaway/protocol";
 export { BunawayError } from "@bunaway/protocol";
 export type { NativeInvokeOptions } from "#transport";
-
-const optionalField = Symbol("optional field");
-type OptionalField<S extends Schema> = {
-  readonly [optionalField]: S;
-};
-type Field = Schema | OptionalField<Schema>;
-type ObjectSchema<P extends Record<string, Field>> = {
-  readonly type: "object";
-  readonly properties: {
-    readonly [K in keyof P as K extends string | number
-      ? `${K}`
-      : never]: P[K] extends OptionalField<infer S> ? S : P[K];
-  };
-  readonly required: readonly {
-    [K in keyof P]: P[K] extends OptionalField<Schema>
-      ? never
-      : K extends string | number
-        ? `${K}`
-        : never;
-  }[keyof P][];
-  readonly additionalProperties: false;
-};
-
-/**
- * Build JSON Schema fragments for plugin inputs and outputs. Object fields are
- * required by default, and extra fields are rejected.
- */
-export const s = Object.freeze({
-  object<const P extends Record<string, Field>>(fields: P): ObjectSchema<P> {
-    const entries = Object.entries(fields);
-    return {
-      type: "object",
-      properties: Object.fromEntries(
-        entries.map(([key, field]) => [
-          key,
-          optionalField in field ? field[optionalField] : field,
-        ]),
-      ),
-      required: entries
-        .filter(([, field]) => !(optionalField in field))
-        .map(([key]) => key),
-      additionalProperties: false,
-    } as unknown as ObjectSchema<P>;
-  },
-  /** Mark an object field optional while keeping its schema unchanged. */
-  optional<const S extends Schema>(schema: S): OptionalField<S> {
-    return {
-      [optionalField]: schema,
-    };
-  },
-  string(options: Pick<Schema, "maxLength" | "pattern"> = {}) {
-    return {
-      type: "string",
-      ...options,
-    } as const;
-  },
-  enum<const T extends readonly string[]>(values: T) {
-    return {
-      enum: values,
-    };
-  },
-  array<const S extends Schema>(
-    items: S,
-    options: Pick<Schema, "minItems" | "maxItems" | "uniqueItems"> = {},
-  ) {
-    return {
-      type: "array",
-      items,
-      ...options,
-    } as const;
-  },
-  integer(options: Pick<Schema, "minimum" | "maximum"> = {}) {
-    return {
-      type: "integer",
-      ...options,
-    } as const;
-  },
-  boolean() {
-    return {
-      type: "boolean",
-    } as const;
-  },
-  null() {
-    return {
-      const: null,
-    } as const;
-  },
-  json() {
-    return {};
-  },
-});
 
 /** Host-selected values available when a native adapter is created. */
 export type NativeEnvironment = {
@@ -156,9 +65,9 @@ export type NativeAdapterFactory = (
 /** Input and output schemas for one named native operation. */
 export type NativeOperationDefinition = {
   /** Schema checked for each call's input. */
-  readonly input: Schema;
+  readonly input: z.ZodType;
   /** Schema checked for the operation result. */
-  readonly output: Schema;
+  readonly output: z.ZodType;
 };
 /** Declarative contract used to register operations and construct their callers. */
 export type NativePluginDefinition = {
@@ -186,15 +95,15 @@ export type NativePluginAPI<
   O extends Record<string, NativeOperationDefinition>,
 > = {
   readonly [K in keyof O]: (
-    input: Infer<O[K]["input"]>,
+    input: z.input<O[K]["input"]>,
     options?: NativeInvokeOptions,
-  ) => Promise<Infer<O[K]["output"]>>;
+  ) => Promise<z.output<O[K]["output"]>>;
 };
 type NativeOperation<D extends NativePluginDefinition> = {
   [K in keyof D["operations"] & (string | number)]: {
     readonly name: `${D["name"]}.${K}`;
-    readonly input: D["operations"][K]["input"];
-    readonly output: D["operations"][K]["output"];
+    readonly input: TypedSchema<z.output<D["operations"][K]["input"]>>;
+    readonly output: TypedSchema<z.output<D["operations"][K]["output"]>>;
   };
 }[keyof D["operations"] & (string | number)];
 
@@ -276,7 +185,8 @@ export function defineNativePlugin<const D extends NativePluginDefinition>(
   );
   const operations = Object.entries(definitions).map(([key, operation]) => {
     return {
-      ...operation,
+      input: toJSONSchema(operation.input),
+      output: toJSONSchema(operation.output),
       name: `${definition.name}.${key}`,
     };
   }) as NativeOperation<D>[];
@@ -297,10 +207,7 @@ export function defineNativePlugin<const D extends NativePluginDefinition>(
       ...registry.operations.values(),
     ].map((operation) => [
       operation.name.slice(definition.name.length + 1),
-      async (
-        input: Infer<typeof operation.input>,
-        options?: NativeInvokeOptions,
-      ) => {
+      async (input: JsonValue, options?: NativeInvokeOptions) => {
         // Declaration imports never initialize the backend or a WebView connection.
         const { call } = await import("#transport");
         return call(operation, input, options);

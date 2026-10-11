@@ -11,20 +11,23 @@ description: 지원하는 스키마 키워드와 JSON 값 검증, TypeScript 타
 | 키워드 | 의미 |
 | --- | --- |
 | `$schema` | 스키마 식별 메타데이터 |
-| `type` | object, array, string, integer, boolean |
+| `type` | object, array, string, integer, number, boolean, null과 이 타입들의 배열 |
+| `$ref`, `$defs` | 같은 문서의 JSON Pointer 참조와 재귀 스키마 정의 |
 | `const` | 문자열, 숫자, boolean, null의 정확한 값 |
-| `enum` | 문자열 값 목록 |
+| `enum` | 문자열, 숫자, boolean, null의 값 목록 |
 | `anyOf` | 적어도 한 분기의 제약을 충족 |
 | `properties`, `required` | 객체 필드 스키마, 필수 이름 |
-| `additionalProperties: false` | 선언하지 않은 객체 필드 거부 |
+| `additionalProperties` | false는 추가 필드 거부, true는 허용, 스키마는 추가 값 검증 |
+| `propertyNames` | 객체 필드 이름 검증 |
+| `x-bunaway-stripUnknown` | true인 객체는 검증을 마친 뒤 선언하지 않은 필드를 제거 |
 | `items`, `minItems`, `maxItems` | 배열 원소, 개수 |
 | `uniqueItems` | JSON 구조적 동등성으로 배열 중복 검사 |
 | `minimum`, `maximum` | 숫자 범위 |
-| `maxLength` | 문자열 Unicode code point 개수 |
+| `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf` | 경계 제외와 배수 제약 |
+| `minLength`, `maxLength` | 문자열 Unicode code point 개수 |
 | `pattern` | Unicode 모드(`u`)의 JavaScript 정규식 검사 |
 
-지원하는 키워드는 위 표와 같습니다. `$ref`, `format`, `oneOf`, `allOf`, `minLength`는 지원하지 않습니다.
-현재 공개 Schema 타입에는 `type: "number"`가 없습니다.
+지원하는 키워드는 위 표와 같습니다. 외부 `$ref`, `format`, `oneOf`, `allOf`는 지원하지 않습니다.
 제약 없는 `{}`는 유한한 숫자를 포함한 모든 유효한 JSON 값을 받습니다.
 
 ## 객체와 조합
@@ -63,7 +66,33 @@ const parsed: Input = validateValue(input, { name: "Kim" });
 ```
 
 validateValue는 JSON 값과 스키마를 검증한 뒤 추론한 타입의 복사본을 반환합니다.
+z.object에서 변환한 계약은 복사본에서 추가 필드를 제거하고, z.strictObject의 계약은
+추가 필드를 거부합니다. anyOf는 처음 성공한 분기의 결과를 사용하며 실패한 분기의
+필드 제거는 적용하지 않습니다. 제거할 필드도 JSON 값과 전송 제한을 먼저 검사합니다.
+플러그인이 사용하는 Zod 선언도 받을 수 있으며 같은 JSON 계약으로 변환해서 검사합니다.
 스키마 위반은 ProtocolError입니다. 명령의 입력이 스키마와 다르면 INVALID_ARGUMENT, 출력이 다르면 INTERNAL로 실패합니다.
 명령과 이벤트의 데이터 크기 제한은 [오류와 실행 제한](/reference/errors/)에서 확인하세요.
 
 [타입 연결 가이드](/guides/types-and-validation/)에서 CommandsOf, EventsOf 사용 예시를 확인하세요.
+
+## Zod 계약 변환
+
+`toJSONSchema(schema)`는 지원하는 Zod 선언을 JSON Schema 계약으로 변환합니다.
+검증에는 표준 키워드를 사용하고 z.object의 필드 제거 동작에는 Bunaway 확장 키워드
+`x-bunaway-stripUnknown: true`를 추가합니다. 표준 JSON Schema 검증기는 이 필드 제거를
+수행하지 않으므로 Bunaway 경계에서는 validateValue로 처리합니다.
+결과 `TypedSchema<T>`는 원본 Zod에서 추론한 값 타입을 유지하는 직렬화 가능한 계약입니다.
+`Infer`도 이 타입을 그대로 사용합니다. 공유할 수 없는 검사와 값 변환은 오류로 거부합니다.
+
+```ts
+import { toJSONSchema } from "@bunaway/protocol";
+import { z } from "zod";
+
+const input = toJSONSchema(z.strictObject({ name: z.string() }));
+```
+
+`defineNativePlugin`은 이 변환을 수행하므로 제작자가 직접 호출할 필요가 없습니다.
+앱 명령과 이벤트에 Zod를 사용하려면 변환한 JSON 계약을 등록합니다.
+중첩 계약도 Zod로 먼저 조립한 뒤 전체를 한 번 변환합니다. 변환 결과의 `$ref`는
+해당 JSON 문서의 루트를 기준으로 하므로 재귀 계약의 JSON 결과를 다른 문서에 그대로 넣지 않습니다.
+작성 예시와 지원 범위는 [네이티브 플러그인 작성](/reference/tooling/native-plugins/)에서 확인하세요.

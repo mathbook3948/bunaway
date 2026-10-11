@@ -1,3 +1,7 @@
+import { z } from "zod";
+import { util } from "zod/v4/core";
+import { resolveSchemaReference, toJSONSchema } from "./plugin-schema.ts";
+
 /** JSON data accepted by the protocol, with no JavaScript-only values. */
 export type JsonValue =
   | null
@@ -16,23 +20,48 @@ export type JsonValue =
  */
 export type Schema = {
   readonly $schema?: string;
-  readonly type?: "object" | "array" | "string" | "integer" | "boolean";
+  readonly type?:
+    | "object"
+    | "array"
+    | "string"
+    | "integer"
+    | "number"
+    | "boolean"
+    | "null"
+    | readonly string[];
+  readonly $ref?: string;
+  readonly $defs?: {
+    readonly [key: string]: Schema;
+  };
   readonly const?: string | number | boolean | null;
-  readonly enum?: readonly string[];
+  readonly enum?: readonly (string | number | boolean | null)[];
   readonly anyOf?: readonly Schema[];
   readonly properties?: {
     readonly [key: string]: Schema;
   };
+  readonly propertyNames?: Schema;
   readonly required?: readonly string[];
-  readonly additionalProperties?: false;
+  readonly additionalProperties?: boolean | Schema;
+  /** Zod object parsing removes undeclared fields after validation succeeds. */
+  readonly "x-bunaway-stripUnknown"?: true;
   readonly items?: Schema;
   readonly minimum?: number;
   readonly maximum?: number;
+  readonly exclusiveMinimum?: number;
+  readonly exclusiveMaximum?: number;
+  readonly multipleOf?: number;
   readonly minItems?: number;
   readonly maxItems?: number;
   readonly uniqueItems?: boolean;
   readonly maxLength?: number;
+  readonly minLength?: number;
   readonly pattern?: string;
+};
+
+export declare const schemaOutput: unique symbol;
+/** Serialized contract whose value type is inferred from its source Zod schema. */
+export type TypedSchema<T> = Schema & {
+  readonly [schemaOutput]: T;
 };
 
 type RequiredKeys<S> = S extends {
@@ -92,16 +121,32 @@ type RefineObjects<S, V> = S extends {
     : V;
 
 /** Derives the TypeScript value shape described by a protocol schema. */
-export type Infer<S> = RefineObjects<
-  S,
-  S extends {
-    readonly anyOf: readonly (infer V)[];
-  }
-    ? InferShape<S> & Infer<V>
-    : unknown extends InferShape<S>
-      ? JsonValue
-      : InferShape<S>
->;
+export type Infer<S> = S extends z.ZodType
+  ? z.output<S> extends JsonValue
+    ? z.output<S>
+    : JsonValue
+  : S extends TypedSchema<infer T>
+    ? T extends JsonValue
+      ? T
+      : JsonValue
+    : RefineObjects<
+        S,
+        S extends {
+          readonly anyOf: readonly (infer V)[];
+        }
+          ? InferShape<S> & Infer<V>
+          : unknown extends InferShape<S>
+            ? JsonValue
+            : InferShape<S>
+      >;
+
+type InferTypes<S, T> = T extends string
+  ? Infer<
+      Omit<S, "type"> & {
+        readonly type: T;
+      }
+    >
+  : never;
 
 // Without an outer shape, anyOf contributes only its branch union.
 type InferShape<S> = S extends {
@@ -113,30 +158,38 @@ type InferShape<S> = S extends {
       }
     ? E
     : S extends {
-          readonly type: "string";
+          readonly type: readonly (infer T)[];
         }
-      ? string
+      ? InferTypes<S, T>
       : S extends {
-            readonly type: "integer";
+            readonly type: "string";
           }
-        ? number
+        ? string
         : S extends {
-              readonly type: "boolean";
+              readonly type: "integer" | "number";
             }
-          ? boolean
+          ? number
           : S extends {
-                readonly type: "array";
+                readonly type: "null";
               }
-            ? S extends {
-                readonly items: infer I;
-              }
-              ? Infer<I>[]
-              : JsonValue[]
+            ? null
             : S extends {
-                  readonly type: "object";
+                  readonly type: "boolean";
                 }
-              ? InferObject<S>
-              : unknown;
+              ? boolean
+              : S extends {
+                    readonly type: "array";
+                  }
+                ? S extends {
+                    readonly items: infer I;
+                  }
+                  ? Infer<I>[]
+                  : JsonValue[]
+                : S extends {
+                      readonly type: "object";
+                    }
+                  ? InferObject<S>
+                  : unknown;
 
 /**
  * Maximum UTF-8 size for parsed or serialized JSON text.
@@ -331,18 +384,83 @@ function jsonKey(value: JsonValue): string {
     .join(",")}}`;
 }
 
-/** Applies the supported schema keywords to an already checked JSON snapshot. */
-function matches(schema: Schema, value: JsonValue): boolean {
+type StrippedProperty = {
+  object: {
+    [key: string]: JsonValue;
+  };
+  key: string;
+};
+
+/** Checks keywords and queues removals without changing values seen by other union branches. */
+function matches(
+  schema: Schema,
+  value: JsonValue,
+  root = schema,
+  references?: Set<string>,
+  strippedProperties: StrippedProperty[] = [],
+): boolean {
+  if (schema.$ref) {
+    const target = resolveSchemaReference(schema.$ref, root);
+    references ??= new Set();
+    // A reference cycle must consume a child value before revisiting itself.
+    if (!target || references.has(schema.$ref)) {
+      return false;
+    }
+    references.add(schema.$ref);
+    const accepted = matches(
+      target,
+      value,
+      root,
+      references,
+      strippedProperties,
+    );
+    references.delete(schema.$ref);
+    if (!accepted) {
+      return false;
+    }
+  }
+  if (Array.isArray(schema.type)) {
+    return schema.type.some((type) => {
+      const checkpoint = strippedProperties.length;
+      const accepted = matches(
+        {
+          ...schema,
+          type,
+        },
+        value,
+        root,
+        references,
+        strippedProperties,
+      );
+      if (!accepted) {
+        strippedProperties.length = checkpoint;
+      }
+      return accepted;
+    });
+  }
   if ("const" in schema && value !== schema.const) {
     return false;
   }
-  if (
-    schema.enum &&
-    (typeof value !== "string" || !schema.enum.includes(value))
-  ) {
+  if (schema.enum && !schema.enum.some((candidate) => candidate === value)) {
     return false;
   }
-  if (schema.anyOf && !schema.anyOf.some((option) => matches(option, value))) {
+  if (
+    schema.anyOf &&
+    !schema.anyOf.some((option) => {
+      const checkpoint = strippedProperties.length;
+      const accepted = matches(
+        option,
+        value,
+        root,
+        references,
+        strippedProperties,
+      );
+      if (!accepted) {
+        strippedProperties.length = checkpoint;
+      }
+      return accepted;
+    })
+  ) {
     return false;
   }
   // Keywords also apply without an explicit type (for example enum + maxLength).
@@ -355,14 +473,49 @@ function matches(schema: Schema, value: JsonValue): boolean {
         return false;
       }
       const properties = schema.properties ?? {};
-      return (
+      const accepted =
         (schema.required ?? []).every((key) => Object.hasOwn(value, key)) &&
         Object.entries(value).every(([key, item]) =>
           Object.hasOwn(properties, key)
-            ? matches(properties[key] as Schema, item)
-            : schema.additionalProperties !== false,
-        )
-      );
+            ? matches(
+                properties[key] as Schema,
+                item,
+                root,
+                undefined,
+                strippedProperties,
+              )
+            : typeof schema.additionalProperties === "object"
+              ? matches(
+                  schema.additionalProperties,
+                  item,
+                  root,
+                  undefined,
+                  strippedProperties,
+                )
+              : schema.additionalProperties !== false,
+        ) &&
+        Object.keys(value).every(
+          (key) =>
+            !schema.propertyNames ||
+            matches(
+              schema.propertyNames,
+              key,
+              root,
+              undefined,
+              strippedProperties,
+            ),
+        );
+      if (accepted && schema["x-bunaway-stripUnknown"]) {
+        for (const key of Object.keys(value)) {
+          if (!Object.hasOwn(properties, key)) {
+            strippedProperties.push({
+              object: value,
+              key,
+            });
+          }
+        }
+      }
+      return accepted;
     }
     case "array":
       return (
@@ -371,11 +524,21 @@ function matches(schema: Schema, value: JsonValue): boolean {
         value.length <= (schema.maxItems ?? Infinity) &&
         (!schema.uniqueItems ||
           new Set(value.map(jsonKey)).size === value.length) &&
-        value.every((item) => matches(schema.items ?? {}, item))
+        value.every((item) =>
+          matches(
+            schema.items ?? {},
+            item,
+            root,
+            undefined,
+            strippedProperties,
+          ),
+        )
       );
     case "string":
       return (
         typeof value === "string" &&
+        (schema.minLength === undefined ||
+          !withinStringLimit(value, schema.minLength - 1)) &&
         (schema.maxLength === undefined ||
           withinStringLimit(value, schema.maxLength)) &&
         (!schema.pattern || new RegExp(schema.pattern, "u").test(value))
@@ -386,12 +549,32 @@ function matches(schema: Schema, value: JsonValue): boolean {
         typeof value === "number" &&
         (schema.type !== "integer" || Number.isSafeInteger(value)) &&
         value >= (schema.minimum ?? -Infinity) &&
-        value <= (schema.maximum ?? Infinity)
+        value <= (schema.maximum ?? Infinity) &&
+        (schema.exclusiveMinimum === undefined ||
+          value > schema.exclusiveMinimum) &&
+        (schema.exclusiveMaximum === undefined ||
+          value < schema.exclusiveMaximum) &&
+        (schema.multipleOf === undefined ||
+          // Use the same decimal remainder as Zod without allocating a schema per value.
+          util.floatSafeRemainder(value, schema.multipleOf) === 0)
       );
     case "boolean":
       return typeof value === "boolean";
+    case "null":
+      return value === null;
     default:
       return true;
+  }
+}
+
+/** Apply removals only after a complete match, to the boundary-owned JSON snapshot. */
+function applySchema(schema: Schema, value: JsonValue): void {
+  const strippedProperties: StrippedProperty[] = [];
+  if (!matches(schema, value, schema, undefined, strippedProperties)) {
+    invalid();
+  }
+  for (const { object, key } of strippedProperties) {
+    delete object[key];
   }
 }
 
@@ -409,7 +592,7 @@ function withinStringLimit(value: string, maximum: number): boolean {
   return length <= maximum;
 }
 
-function checkedSnapshot<S extends Schema>(
+function checkedSnapshot<S extends Schema | z.ZodType>(
   schema: S,
   value: unknown,
   mode: "value" | "serialized",
@@ -421,9 +604,10 @@ function checkedSnapshot<S extends Schema>(
       remaining: MAX_MESSAGE_BYTES,
       mode,
     });
-    if (!matches(schema, snapshot)) {
-      invalid();
-    }
+    applySchema(
+      schema instanceof z.ZodType ? toJSONSchema(schema) : schema,
+      snapshot,
+    );
     return snapshot as Infer<S>;
   } catch {
     invalid();
@@ -434,7 +618,7 @@ function checkedSnapshot<S extends Schema>(
  * Validates a value and returns a detached JSON snapshot.
  * @throws {ProtocolError} If the value is invalid or outside protocol limits.
  */
-export function validate<S extends Schema>(
+export function validate<S extends Schema | z.ZodType>(
   schema: S,
   value: unknown,
 ): Infer<S> {
@@ -491,9 +675,7 @@ export function parse<S extends Schema>(schema: S, text: string): Infer<S> {
     // Native JSON parsing cannot produce accessors, proxies, cycles or non-JSON types.
     const value: JsonValue = JSON.parse(text);
     checkParsedJson(value, 0);
-    if (!matches(schema, value)) {
-      invalid();
-    }
+    applySchema(schema, value);
     return value as Infer<S>;
   } catch {
     invalid();

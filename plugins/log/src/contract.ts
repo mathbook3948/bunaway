@@ -1,23 +1,19 @@
-import { type Infer, s } from "@bunaway/plugin";
-
+import { z } from "zod";
 /** Structured log input and completion contract. */
 export const logOperations = {
   write: {
-    input: s.object({
-      level: s.enum([
+    input: z.strictObject({
+      level: z.enum([
         "debug",
         "info",
         "warn",
         "error",
       ]),
-      message: s.string({
-        maxLength: 1024,
-      }),
-      details: s.optional(s.json()),
+      message: z.string().max(1024),
+      details: z.json().exactOptional(),
     }),
-    output: s.null(),
+    output: z.null(),
   },
 } as const;
-
 /** Input accepted by `log.write` and the level-specific helpers. */
-export type LogInput = Infer<typeof logOperations.write.input>;
+export type LogInput = z.infer<typeof logOperations.write.input>;

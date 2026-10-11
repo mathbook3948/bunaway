@@ -1,28 +1,24 @@
-import { s } from "@bunaway/plugin";
 import { BunawayError, type JsonValue, validateValue } from "@bunaway/protocol";
+import { z } from "zod";
 import { textSchema, writeTextSchema } from "./text.ts";
-
 /** Unicode text access and clear-operation contracts. */
 export const clipboardOperations = {
   readText: {
-    input: s.null(),
-    output: {
-      anyOf: [
-        textSchema,
-        s.null(),
-      ],
-    },
+    input: z.null(),
+    output: z.union([
+      textSchema,
+      z.null(),
+    ]),
   },
   writeText: {
     input: writeTextSchema,
-    output: s.null(),
+    output: z.null(),
   },
   clear: {
-    input: s.null(),
-    output: s.null(),
+    input: z.null(),
+    output: z.null(),
   },
 } as const;
-
 /** Validate a native call before checking UI permission or acquiring the clipboard. */
 export function validateClipboardInput(operation: string, input: JsonValue) {
   switch (operation) {

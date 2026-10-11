@@ -87,7 +87,7 @@
       "name": "@bunaway/protocol",
       "source": "packages/protocol/src/index.ts",
       "pages": {
-        "reference/schema": ["validateValue"],
+        "reference/schema": ["validateValue", "toJSONSchema"],
         "reference/errors": [
           "errorSchema",
           "MAX_JSON_DEPTH",
@@ -219,8 +219,7 @@
       "pages": {
         "reference/tooling/native-plugins": [
           "defineNativePlugin",
-          "BunawayError",
-          "s"
+          "BunawayError"
         ]
       }
     },

@@ -1,21 +1,21 @@
 import { expect, test } from "bun:test";
-import { bindHostAPI } from "#core/host-api";
-import { bindCommandHost } from "@bunaway/plugin-api/host";
 import type { CommandContext } from "@bunaway/plugin-api";
+import { bindCommandHost } from "@bunaway/plugin-api/host";
+import {
+  openerPlugin,
+  openFile,
+  openUrl,
+  revealFile,
+} from "@bunaway/plugin-opener";
 import {
   type HostCall,
   type HostContext,
-  NativeRegistry,
   type HostResponse,
+  NativeRegistry,
   type Policy,
 } from "@bunaway/protocol";
-import { s } from "@bunaway/plugin";
-import {
-  openFile,
-  openUrl,
-  openerPlugin,
-  revealFile,
-} from "@bunaway/plugin-opener";
+import { z } from "zod";
+import { bindHostAPI } from "#core/host-api";
 import {
   MAX_FILE_PATH_LENGTH,
   normalizeFilePath,
@@ -30,12 +30,10 @@ const emptyPolicy: Policy = {
     permissions: [],
   },
 };
-
 const registry = new NativeRegistry([
   openerPlugin,
 ]);
 const operation = registry.operation("opener.openUrl");
-
 test("file paths preserve Unicode and spaces and normalize separators and drive letters", () => {
   expect(normalizeFilePath("c:/한글 폴더/😀, 보고서.txt")).toBe(
     "C:\\한글 폴더\\😀, 보고서.txt",
@@ -77,7 +75,6 @@ test("file paths preserve Unicode and spaces and normalize separators and drive 
     );
   }
 });
-
 test("file grants authorize only the selected operation and do not encode app path rules", () => {
   for (const action of [
     "openFile",
@@ -123,7 +120,6 @@ test("file grants authorize only the selected operation and do not encode app pa
     ).toBe(false);
   }
 });
-
 test("public file APIs use caller context and preserve OS failure codes", async () => {
   const calls: HostCall[] = [];
   const path = "C:\\한글 폴더\\공백 값.txt";
@@ -150,8 +146,8 @@ test("public file APIs use caller context and preserve OS failure codes", async 
     registry,
   );
   const command = bindCommandHost({
-    input: s.null(),
-    output: s.null(),
+    input: z.null(),
+    output: z.null(),
     run: async (_payload: unknown, _context: CommandContext) => {
       expect(await openFile(path.replaceAll("\\", "/"))).toBeNull();
       expect(await revealFile(path)).toBeNull();
@@ -194,7 +190,6 @@ test("public file APIs use caller context and preserve OS failure codes", async 
     },
   ]);
 });
-
 test("opener preserves strict inputs and independently granted file operations", () => {
   expect(operation.name).toBe("opener.openUrl");
   expect(
@@ -213,7 +208,8 @@ test("opener preserves strict inputs and independently granted file operations",
     },
   ]);
   expect(operation.output).toEqual({
-    const: null,
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    type: "null",
   });
   expect(
     registry.validateCall({
@@ -253,7 +249,6 @@ test("opener preserves strict inputs and independently granted file operations",
     }),
   ).not.toThrow();
 });
-
 test("URL validation accepts HTTP and HTTPS and preserves parsed Korean query text", () => {
   for (const input of [
     "https://example.com/a path?q=hello world&lang=한글",
@@ -268,7 +263,6 @@ test("URL validation accepts HTTP and HTTPS and preserves parsed Korean query te
     ).toBe(input.includes("lang=") ? "한글" : "검색어");
   }
 });
-
 test("URL validation rejects malformed values and non-HTTP schemes", () => {
   for (const input of [
     null,
@@ -295,12 +289,10 @@ test("URL validation rejects malformed values and non-HTTP schemes", () => {
     });
   }
 });
-
 test("URL length is checked after URL encoding", () => {
   const exactLimit = `https://x/${"a".repeat(MAX_URL_LENGTH - 10)}`;
   expect(exactLimit).toHaveLength(MAX_URL_LENGTH);
   expect(normalizeUrl(exactLimit)).toBe(exactLimit);
-
   const expanded = `https://example.com/${"한".repeat(1000)}`;
   expect(expanded.length).toBeLessThan(MAX_URL_LENGTH);
   let error: unknown;
@@ -313,7 +305,6 @@ test("URL length is checked after URL encoding", () => {
     code: "INVALID_ARGUMENT",
   });
 });
-
 test("openUrl uses the caller host, and the registered permission controls it", async () => {
   const allowedPermissions: Policy["backend"] = {
     permissions: [
@@ -327,7 +318,6 @@ test("openUrl uses the caller host, and the registered permission controls it", 
     ...emptyPolicy,
     backend: allowedPermissions,
   });
-
   const calls: HostCall[] = [];
   const callHost = async (
     _context: HostContext,
@@ -348,7 +338,6 @@ test("openUrl uses the caller host, and the registered permission controls it", 
       payload: null,
     };
   };
-
   const invokeOpenUrl = async (permissions: Policy["backend"], url: string) => {
     const controller = new AbortController();
     const host = bindHostAPI(
@@ -369,8 +358,8 @@ test("openUrl uses the caller host, and the registered permission controls it", 
       registry,
     );
     const command = bindCommandHost({
-      input: s.null(),
-      output: s.null(),
+      input: z.null(),
+      output: z.null(),
       run: async (_payload: unknown, _context: CommandContext) => {
         await openUrl(url);
         return null;
@@ -390,7 +379,6 @@ test("openUrl uses the caller host, and the registered permission controls it", 
     };
     await command.run(null, context);
   };
-
   const url = "https://example.com/한글?q=공백 and value";
   await invokeOpenUrl(allowedPermissions, url);
   expect(calls).toEqual([
@@ -414,7 +402,6 @@ test("openUrl uses the caller host, and the registered permission controls it", 
   });
   expect(calls).toHaveLength(1);
 });
-
 test("openUrl preserves a native host execution failure", async () => {
   const controller = new AbortController();
   const host = bindHostAPI(
@@ -430,8 +417,8 @@ test("openUrl preserves a native host execution failure", async () => {
     registry,
   );
   const command = bindCommandHost({
-    input: s.null(),
-    output: s.null(),
+    input: z.null(),
+    output: z.null(),
     run: async (_payload: unknown, _context: CommandContext) => {
       await openUrl("https://example.com/");
       return null;
@@ -454,7 +441,6 @@ test("openUrl preserves a native host execution failure", async () => {
     message: "Browser launch failed.",
   });
 });
-
 test("Windows adapter disposal is repeatable and blocks later opens", async () => {
   if (process.platform !== "win32") {
     return;

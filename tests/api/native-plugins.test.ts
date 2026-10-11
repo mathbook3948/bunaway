@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { resolve } from "node:path";
 import { bindHostAPI, type CoreServices, createCore } from "@bunaway/core";
-import { defineNativePlugin, s } from "@bunaway/plugin";
+import { defineNativePlugin } from "@bunaway/plugin";
 import { storagePlugin } from "@bunaway/plugin-storage";
 import {
   type HostContext,
@@ -12,18 +12,19 @@ import {
   type ServerMessage,
   serializeHostResponse,
   serializeMessage,
+  toJSONSchema,
 } from "@bunaway/protocol";
+import { z } from "zod";
 import { hostResponse } from "#native/host-api/bun/host-response";
 import { validatePacket } from "#native/windows/bun/channel";
 import { contracts } from "../fixtures/host-plugins.ts";
 
 const readText = contracts["storage.readText"];
 const writeText = contracts["storage.writeText"];
-
 test("platform declarations remain detached from Core platform restrictions and validate support", () => {
   const operation = {
-    input: s.null(),
-    output: s.null(),
+    input: z.null(),
+    output: z.null(),
   };
   const supported = [
     "read",
@@ -117,30 +118,23 @@ test("platform declarations remain detached from Core platform restrictions and 
     ).toThrow();
   }
 });
-
 test("short declarations generate strict schemas and independently granted operations", () => {
-  const input = s.object({
-    level: s.enum([
+  const input = z.strictObject({
+    level: z.enum([
       "info",
       "error",
     ]),
-    message: s.string({
-      maxLength: 4,
-    }),
-    details: s.optional(s.json()),
-    nested: s.object({
-      count: s.integer({
-        minimum: 0,
-      }),
-      enabled: s.boolean(),
-      names: s.array(s.string(), {
-        maxItems: 1,
-      }),
+    message: z.string().max(4),
+    details: z.json().exactOptional(),
+    nested: z.strictObject({
+      count: z.int().min(0),
+      enabled: z.boolean(),
+      names: z.array(z.string()).max(1),
     }),
   });
   const operation = {
     input,
-    output: s.null(),
+    output: z.null(),
   };
   const plugin = defineNativePlugin({
     name: "audit",
@@ -178,8 +172,8 @@ test("short declarations generate strict schemas and independently granted opera
       ...registry.operations.values(),
     ].map(({ input }) => input),
   ).toEqual([
-    operation.input,
-    operation.input,
+    toJSONSchema(operation.input),
+    toJSONSchema(operation.input),
   ]);
   expect([
     ...registry.operations.keys(),
@@ -267,21 +261,20 @@ test("short declarations generate strict schemas and independently granted opera
     }).definition.native.operations[0]?.name,
   ).toBe("audit.toString");
 });
-
 export function checkShortDeclarationTypes() {
   const plugin = defineNativePlugin({
     name: "example",
     operations: {
       write: {
-        input: s.object({
-          level: s.enum([
+        input: z.strictObject({
+          level: z.enum([
             "info",
             "error",
           ]),
-          message: s.string(),
-          details: s.optional(s.json()),
+          message: z.string(),
+          details: z.json().exactOptional(),
         }),
-        output: s.null(),
+        output: z.null(),
       },
     },
   });
@@ -309,10 +302,10 @@ export function checkShortDeclarationTypes() {
     name: "numbered",
     operations: {
       0: {
-        input: s.object({
-          0: s.string(),
+        input: z.strictObject({
+          0: z.string(),
         }),
-        output: s.null(),
+        output: z.null(),
       },
     },
   });
@@ -322,7 +315,6 @@ export function checkShortDeclarationTypes() {
   // @ts-expect-error numeric object keys are required too
   numeric.api[0]({});
 }
-
 const empty: Policy = {
   version: 1,
   views: [],
@@ -330,11 +322,8 @@ const empty: Policy = {
     permissions: [],
   },
 };
-
 test("plugin patterns use Unicode semantics for input and output", () => {
-  const letters = s.string({
-    pattern: "^\\p{L}+$",
-  });
+  const letters = z.string().regex(/^\p{L}+$/u);
   const plugin = defineNativePlugin({
     name: "unicode",
     operations: {
@@ -385,10 +374,8 @@ test("plugin patterns use Unicode semantics for input and output", () => {
     name: "scalar",
     operations: {
       one: {
-        input: s.string({
-          pattern: "^.$",
-        }),
-        output: s.null(),
+        input: z.string().regex(/^.$/u),
+        output: z.null(),
       },
     },
   });
@@ -401,14 +388,13 @@ test("plugin patterns use Unicode semantics for input and output", () => {
     }).payload,
   ).toBe("😀");
 });
-
 test("plugin results exceeding the Web envelope return INTERNAL and keep the session usable", async () => {
   const plugin = defineNativePlugin({
     name: "large",
     operations: {
       read: {
-        input: s.integer(),
-        output: s.string(),
+        input: z.int(),
+        output: z.string(),
       },
     },
   });
@@ -534,7 +520,6 @@ test("plugin results exceeding the Web envelope return INTERNAL and keep the ses
     await core.stop();
   }
 });
-
 function services(policy = empty): CoreServices {
   return {
     policy,
@@ -566,7 +551,6 @@ function services(policy = empty): CoreServices {
     },
   };
 }
-
 test("an app without native plugins has no host operations or implicit permissions", async () => {
   const registry = new NativeRegistry([]);
   expect(registry.operations.size).toBe(0);
@@ -601,6 +585,50 @@ test("an app without native plugins has no host operations or implicit permissio
     }),
   ).toThrow();
 });
+test("backend host calls strip object fields before adapter execution and after its response", async () => {
+  const plugin = defineNativePlugin({
+    name: "example",
+    operations: {
+      echo: {
+        input: z.object({
+          name: z.string(),
+        }),
+        output: z.object({
+          name: z.string(),
+        }),
+      },
+    },
+  });
+  const registry = new NativeRegistry([
+    JSON.parse(JSON.stringify(plugin.definition)),
+  ]);
+  const operation = registry.operation("example.echo");
+  const api = bindHostAPI(
+    "backend" as HostContext,
+    new AbortController().signal,
+    async (_context, call) => {
+      expect(call.payload).toEqual({
+        name: "ok",
+      });
+      return {
+        kind: "result",
+        payload: {
+          name: "ok",
+          extra: true,
+        },
+      };
+    },
+    registry,
+  );
+  const input = {
+    name: "ok",
+    extra: true,
+  };
+  expect(await api.call(operation, input)).toEqual({
+    name: "ok",
+  });
+  expect(input.extra).toBe(true);
+});
 
 test("canonical contracts reject caller schema and permission overrides and copy registration", async () => {
   const plugin = {
@@ -630,7 +658,9 @@ test("canonical contracts reject caller schema and permission overrides and copy
       {
         ...readText,
         input: {},
-        output: s.null(),
+        output: {
+          const: null,
+        },
       },
       null,
     ),
@@ -662,7 +692,6 @@ test("canonical contracts reject caller schema and permission overrides and copy
       ]),
   ).toThrow();
 });
-
 test("runtime registries keep aggregate limits while catalogs accept installed plugin sets", () => {
   const plugins = [
     "first",
@@ -687,7 +716,6 @@ test("runtime registries keep aggregate limits while catalogs accept installed p
       ),
     },
   }));
-
   expect(() => new NativeRegistry(plugins)).toThrow(
     "Plugin contract limit reached.",
   );
@@ -697,7 +725,6 @@ test("runtime registries keep aggregate limits while catalogs accept installed p
     }).operations.size,
   ).toBe(258);
   expect(new NativeRegistry(plugins.slice(0, 1)).operations.size).toBe(129);
-
   expect(
     () =>
       new NativeRegistry(
@@ -729,7 +756,6 @@ test("runtime registries keep aggregate limits while catalogs accept installed p
       ),
   ).toThrow();
 });
-
 test("native operation contracts reject separate permission and OS consent metadata", () => {
   for (const metadata of [
     {
@@ -739,7 +765,7 @@ test("native operation contracts reject separate permission and OS consent metad
       osPermission: "not-required",
     },
     {
-      scope: s.string(),
+      scope: z.string(),
     },
   ]) {
     const invalid = {
@@ -761,7 +787,6 @@ test("native operation contracts reject separate permission and OS consent metad
     ).toThrow();
   }
 });
-
 test("operation grants contain names only and apply independently of app resource rules", () => {
   const registry = new NativeRegistry([
     storagePlugin,
@@ -834,7 +859,6 @@ test("operation grants contain names only and apply independently of app resourc
     }),
   ).toThrow("unregistered operation");
 });
-
 test("native bridges require view command permission and distinguish missing plugins", async () => {
   const replies: ServerMessage[] = [];
   const policy: Policy = {
@@ -906,7 +930,6 @@ test("native bridges require view command permission and distinguish missing plu
   );
   await core.stop();
 });
-
 test("unified plugin imports select browser and Bun implementations without leaking native code", async () => {
   for (const plugin of [
     "windows",

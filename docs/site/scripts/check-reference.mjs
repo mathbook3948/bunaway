@@ -386,7 +386,13 @@ function members(path, typeName) {
     throw new Error(`Cannot inspect ${path}: ${typeName}`);
   }
   return new Set(
-    body.members.map((member) => member.name?.getText()).filter(Boolean),
+    body.members
+      .map((member) =>
+        member.name && ts.isStringLiteral(member.name)
+          ? member.name.text
+          : member.name?.getText(),
+      )
+      .filter(Boolean),
   );
 }
 
@@ -454,7 +460,7 @@ checkNames(
   new Set([
     ...objectPropertyNames(
       "plugins/windows/src/contract.ts",
-      "windowOperations",
+      "operationDefinitions",
     ),
     ...[
       "storage",

@@ -13,7 +13,9 @@ import {
   PROTOCOL_VERSION,
   parseMessage,
   SDK_READY_FEATURE,
+  toJSONSchema,
 } from "@bunaway/protocol";
+import { z } from "zod";
 import type { WebViewBridge } from "#client/webview";
 import { contracts } from "../fixtures/host-plugins.ts";
 
@@ -547,6 +549,39 @@ test("shared plugin invocation validates inputs and responses", async () => {
   await expect(pending).rejects.toMatchObject({
     code: "INTERNAL",
   });
+});
+
+test("shared plugin invocation strips object fields before sending and returning results", async () => {
+  const bridge = mount().chrome.webview;
+  const schema = toJSONSchema(
+    z.object({
+      name: z.string(),
+    }),
+  );
+  const contract = {
+    name: "example.echo",
+    input: schema,
+    output: schema,
+  };
+  const input = {
+    name: "ok",
+    extra: true,
+  };
+  const pending = invokePlugin(contract, input);
+  bridge.hello();
+  await flush();
+  const request = last(bridge, "invoke");
+  expect(request.payload).toEqual({
+    name: "ok",
+  });
+  bridge.result(request.id, {
+    name: "ok",
+    extra: true,
+  });
+  expect(await pending).toEqual({
+    name: "ok",
+  });
+  expect(input.extra).toBe(true);
 });
 
 test("each window gets an independent connection and a new document gets a new session", async () => {

@@ -24,6 +24,7 @@
         "@bunaway/runtime-bun": "workspace:*",
         "@types/bun": "1.4.2",
         "typescript": "7.0.2",
+        "zod": "4.6.5",
       },
     },
     "docs/site": {
@@ -97,11 +98,15 @@
         "@bunaway/client": "workspace:*",
         "@bunaway/plugin-api": "workspace:*",
         "@bunaway/protocol": "workspace:*",
+        "zod": "4.6.5",
       },
     },
     "packages/protocol": {
       "name": "@bunaway/protocol",
       "version": "0.0.0",
+      "dependencies": {
+        "zod": "4.6.5",
+      },
     },
     "packages/runtime-bun": {
       "name": "@bunaway/runtime-bun",
@@ -117,6 +122,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@bunaway/protocol": "workspace:*",
+        "zod": "4.6.5",
       },
       "devDependencies": {
         "@bunaway/plugin": "workspace:*",
@@ -128,6 +134,9 @@
     "plugins/capabilities": {
       "name": "@bunaway/plugin-capabilities",
       "version": "0.0.0",
+      "dependencies": {
+        "zod": "4.6.5",
+      },
       "devDependencies": {
         "@bunaway/plugin": "workspace:*",
       },
@@ -140,6 +149,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@bunaway/protocol": "workspace:*",
+        "zod": "4.6.5",
       },
       "devDependencies": {
         "@bunaway/plugin": "workspace:*",
@@ -151,6 +161,9 @@
     "plugins/log": {
       "name": "@bunaway/plugin-log",
       "version": "0.0.0",
+      "dependencies": {
+        "zod": "4.6.5",
+      },
       "devDependencies": {
         "@bunaway/plugin": "workspace:*",
       },
@@ -163,6 +176,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@bunaway/protocol": "workspace:*",
+        "zod": "4.6.5",
       },
       "devDependencies": {
         "@bunaway/plugin": "workspace:*",
@@ -174,6 +188,9 @@
     "plugins/storage": {
       "name": "@bunaway/plugin-storage",
       "version": "0.0.0",
+      "dependencies": {
+        "zod": "4.6.5",
+      },
       "devDependencies": {
         "@bunaway/plugin": "workspace:*",
       },
@@ -187,6 +204,7 @@
       "dependencies": {
         "@bunaway/plugin-api": "workspace:*",
         "@bunaway/protocol": "workspace:*",
+        "zod": "4.6.5",
       },
       "devDependencies": {
         "@bunaway/plugin": "workspace:*",

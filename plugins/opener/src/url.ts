@@ -1,20 +1,15 @@
-import { BunawayError, s } from "@bunaway/plugin";
-
+import { BunawayError } from "@bunaway/plugin";
+import { z } from "zod";
 export const MAX_URL_LENGTH = 8192;
-
-export const urlInput = s.object({
-  url: s.string({
-    maxLength: MAX_URL_LENGTH,
-  }),
+export const urlInput = z.strictObject({
+  url: z.string().max(MAX_URL_LENGTH),
 });
-
 const invalidUrl = () =>
   new BunawayError({
     code: "INVALID_ARGUMENT",
     message:
       "Expected an absolute HTTP or HTTPS URL of at most 8192 characters.",
   });
-
 /**
  * Validate an untrusted URL and return its canonical URL form.
  * @throws {BunawayError} If the input is not a valid HTTP or HTTPS URL within the length limit.

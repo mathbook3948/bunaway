@@ -9,514 +9,407 @@ import {
   type Infer,
   ProtocolError,
   parseHostCall,
-  type Schema,
+  type TypedSchema,
+  toJSONSchema,
   validateValue as validate,
+  type WireError,
 } from "@bunaway/protocol";
+import { z } from "zod";
 
 export const WINDOW_VIEW_NAME_PATTERN = "^[A-Za-z0-9_.:-]{1,128}$(?![\\s\\S])";
+
 // Win32 geometry uses signed 32-bit components; WM_DPICHANGED carries a 16-bit DPI.
 export const MIN_WINDOW_COORDINATE = -2147483648;
-export const MAX_WINDOW_COORDINATE = 2147483647;
-const MAX_WINDOW_DPI = 65535;
 
-const viewTarget = {
-  type: "object",
-  properties: {
-    view: {
-      type: "string",
-      pattern: WINDOW_VIEW_NAME_PATTERN,
-    },
-  },
-  required: [
-    "view",
-  ],
-  additionalProperties: false,
-} as const;
-const windowTarget = {
-  ...viewTarget,
-  properties: {
-    ...viewTarget.properties,
-    windowId: viewTarget.properties.view,
-  },
-} as const;
+export const MAX_WINDOW_COORDINATE = 2147483647;
+
+const MAX_WINDOW_DPI = 65535;
+const WINDOW_TEXT_PATTERN = "^[^\\u0000]+$(?![\\s\\S])";
+
+// The protocol owns this wire shape. Its open details field is bounded JSON
+// before validation, so the converted schema retains WireError's value type.
+const wireErrorDefinition = z.fromJSONSchema(
+  JSON.parse(JSON.stringify(errorSchema)),
+) as z.ZodType<WireError, WireError>;
+const viewTarget = z.strictObject({
+  view: z.string().regex(new RegExp(WINDOW_VIEW_NAME_PATTERN, "u")),
+});
+
+const windowTarget = z.strictObject({
+  view: viewTarget.shape.view,
+  windowId: viewTarget.shape.view.exactOptional(),
+});
+
 const windowResult = {
   input: windowTarget,
-  output: {
-    const: null,
-  },
-} as const;
+  output: z.null(),
+};
+
 const windowStateResult = {
   input: windowTarget,
-  output: {
-    type: "boolean",
-  },
-} as const;
-const windowIdentitySchema = {
-  type: "object",
-  properties: {
-    windowId: windowTarget.properties.view,
-    viewId: windowTarget.properties.view,
-  },
-  required: [
-    "windowId",
-    "viewId",
-  ],
-  additionalProperties: false,
-} as const;
-const windowLookupOutput = {
-  anyOf: [
-    {
-      const: null,
-    },
-    windowIdentitySchema,
-  ],
-} as const;
-const windowLookup = {
-  input: {
-    const: null,
-  },
-  output: windowLookupOutput,
-} as const;
-const sizeDimension = {
-  anyOf: [
-    {
-      const: null,
-    },
-    {
-      type: "integer",
-      minimum: MIN_WINDOW_DIMENSION,
-      maximum: MAX_WINDOW_DIMENSION,
-    },
-  ],
-} as const;
-const creationDimension = {
-  type: "integer",
-  minimum: MIN_WINDOW_DIMENSION,
-  maximum: MAX_WINDOW_DIMENSION,
-} as const;
-const creationResult = {
-  input: {
-    ...viewTarget,
-    properties: {
-      ...viewTarget.properties,
-      options: {
-        type: "object",
-        properties: {
-          title: {
-            type: "string",
-            maxLength: 1024,
-            pattern: "^[^\\u0000]+$(?![\\s\\S])",
-          },
-          window: {
-            type: "object",
-            properties: {
-              width: creationDimension,
-              height: creationDimension,
-              minWidth: sizeDimension,
-              minHeight: sizeDimension,
-              maxWidth: sizeDimension,
-              maxHeight: sizeDimension,
-            },
-            additionalProperties: false,
-          },
-          visible: {
-            type: "boolean",
-          },
-          showWhenReady: {
-            anyOf: [
-              {
-                enum: [
-                  "document",
-                  "sdk",
-                ],
-              },
-              {
-                const: null,
-              },
-            ],
-          },
-        },
-        additionalProperties: false,
-      },
-    },
-  },
-  output: {
-    const: null,
-  },
-} as const;
-const sizePairOutput = {
-  type: "object",
-  properties: {
-    width: sizeDimension,
-    height: sizeDimension,
-  },
-  required: [
-    "width",
-    "height",
-  ],
-  additionalProperties: false,
-} as const;
-const sizeConstraintsOutput = {
-  type: "object",
-  properties: {
-    minWidth: sizeDimension,
-    minHeight: sizeDimension,
-    maxWidth: sizeDimension,
-    maxHeight: sizeDimension,
-  },
-  required: [
-    "minWidth",
-    "minHeight",
-    "maxWidth",
-    "maxHeight",
-  ],
-  additionalProperties: false,
-} as const;
+  output: z.boolean(),
+};
 
-const coordinate = {
-  type: "integer",
-  minimum: MIN_WINDOW_COORDINATE,
-  maximum: MAX_WINDOW_COORDINATE,
-} as const;
-const dimension = {
-  type: "integer",
-  minimum: 0,
-  maximum: MAX_WINDOW_COORDINATE,
-} as const;
-const dpi = {
-  type: "integer",
-  minimum: 1,
-  maximum: MAX_WINDOW_DPI,
-} as const;
-const positionProperties = {
+const windowIdentitySchema = z.strictObject({
+  windowId: windowTarget.shape.view,
+  viewId: windowTarget.shape.view,
+});
+
+const windowLookupOutput = z.union([
+  z.null(),
+  windowIdentitySchema,
+]);
+
+const windowLookup = {
+  input: z.null(),
+  output: windowLookupOutput,
+};
+
+const sizeDimension = z.union([
+  z.null(),
+  z.int().min(MIN_WINDOW_DIMENSION).max(MAX_WINDOW_DIMENSION),
+]);
+
+const creationDimension = z
+  .int()
+  .min(MIN_WINDOW_DIMENSION)
+  .max(MAX_WINDOW_DIMENSION);
+
+const creationResult = {
+  input: z.strictObject({
+    view: viewTarget.shape.view,
+    options: z
+      .strictObject({
+        title: z
+          .string()
+          .max(1024)
+          .regex(new RegExp(WINDOW_TEXT_PATTERN, "u"))
+          .exactOptional(),
+        window: z
+          .strictObject({
+            width: creationDimension.exactOptional(),
+            height: creationDimension.exactOptional(),
+            minWidth: sizeDimension.exactOptional(),
+            minHeight: sizeDimension.exactOptional(),
+            maxWidth: sizeDimension.exactOptional(),
+            maxHeight: sizeDimension.exactOptional(),
+          })
+          .exactOptional(),
+        visible: z.boolean().exactOptional(),
+        showWhenReady: z
+          .union([
+            z.enum([
+              "document",
+              "sdk",
+            ]),
+            z.null(),
+          ])
+          .exactOptional(),
+      })
+      .exactOptional(),
+  }),
+  output: z.null(),
+};
+
+const sizePairOutput = z.strictObject({
+  width: sizeDimension,
+  height: sizeDimension,
+});
+
+const sizeConstraintsOutput = z.strictObject({
+  minWidth: sizeDimension,
+  minHeight: sizeDimension,
+  maxWidth: sizeDimension,
+  maxHeight: sizeDimension,
+});
+
+const coordinate = z
+  .int()
+  .min(MIN_WINDOW_COORDINATE)
+  .max(MAX_WINDOW_COORDINATE);
+
+const dimension = z.int().min(0).max(MAX_WINDOW_COORDINATE);
+
+const dpi = z.int().min(1).max(MAX_WINDOW_DPI);
+
+const _positionProperties = {
   x: coordinate,
   y: coordinate,
-} as const;
-const sizeProperties = {
+};
+
+const _sizeProperties = {
   width: dimension,
   height: dimension,
-} as const;
-const boundsProperties = {
-  ...positionProperties,
-  ...sizeProperties,
-} as const;
-const geometryTarget = {
-  ...windowTarget,
-  properties: {
-    ...windowTarget.properties,
-    unit: {
-      anyOf: [
-        {
-          const: "physical",
-        },
-        {
-          const: "logical",
-        },
-      ],
-    },
-  },
-} as const;
-const positionOutput = {
-  type: "object",
-  properties: {
-    ...positionProperties,
-    dpi,
-  },
-  required: [
-    "x",
-    "y",
-    "dpi",
-  ],
-  additionalProperties: false,
-} as const;
-const geometryPositionInput = {
-  ...geometryTarget,
-  properties: {
-    ...geometryTarget.properties,
-    ...positionProperties,
-  },
-  required: [
-    "view",
-    "x",
-    "y",
-  ],
-} as const;
-const geometrySizeInput = {
-  ...geometryTarget,
-  properties: {
-    ...geometryTarget.properties,
-    ...sizeProperties,
-  },
-  required: [
-    "view",
-    "width",
-    "height",
-  ],
-} as const;
-const geometryBoundsInput = {
-  ...geometryTarget,
-  properties: {
-    ...geometryTarget.properties,
-    ...boundsProperties,
-  },
-  required: [
-    "view",
-    "x",
-    "y",
-    "width",
-    "height",
-  ],
-} as const;
-const sizeOutput = {
-  type: "object",
-  properties: {
-    ...sizeProperties,
-    dpi,
-  },
-  required: [
-    "width",
-    "height",
-    "dpi",
-  ],
-  additionalProperties: false,
-} as const;
-const boundsOutput = {
-  type: "object",
-  properties: {
-    ...boundsProperties,
-    dpi,
-  },
-  required: [
-    "x",
-    "y",
-    "width",
-    "height",
-    "dpi",
-  ],
-  additionalProperties: false,
-} as const;
+};
+
+const _boundsProperties = {
+  x: coordinate,
+  y: coordinate,
+  width: dimension,
+  height: dimension,
+};
+
+const geometryTarget = z.strictObject({
+  view: viewTarget.shape.view,
+  windowId: viewTarget.shape.view.exactOptional(),
+  unit: z
+    .union([
+      z.literal("physical"),
+      z.literal("logical"),
+    ])
+    .exactOptional(),
+});
+
+const positionOutput = z.strictObject({
+  x: coordinate,
+  y: coordinate,
+  dpi,
+});
+
+const geometryPositionInput = z.strictObject({
+  view: viewTarget.shape.view,
+  windowId: viewTarget.shape.view.exactOptional(),
+  unit: z
+    .union([
+      z.literal("physical"),
+      z.literal("logical"),
+    ])
+    .exactOptional(),
+  x: coordinate,
+  y: coordinate,
+});
+
+const geometrySizeInput = z.strictObject({
+  view: viewTarget.shape.view,
+  windowId: viewTarget.shape.view.exactOptional(),
+  unit: z
+    .union([
+      z.literal("physical"),
+      z.literal("logical"),
+    ])
+    .exactOptional(),
+  width: dimension,
+  height: dimension,
+});
+
+const geometryBoundsInput = z.strictObject({
+  view: viewTarget.shape.view,
+  windowId: viewTarget.shape.view.exactOptional(),
+  unit: z
+    .union([
+      z.literal("physical"),
+      z.literal("logical"),
+    ])
+    .exactOptional(),
+  x: coordinate,
+  y: coordinate,
+  width: dimension,
+  height: dimension,
+});
+
+const sizeOutput = z.strictObject({
+  width: dimension,
+  height: dimension,
+  dpi,
+});
+
+const boundsOutput = z.strictObject({
+  x: coordinate,
+  y: coordinate,
+  width: dimension,
+  height: dimension,
+  dpi,
+});
 
 /** State and bounds shared by native events and snapshot recovery. Bounds are physical outer pixels. */
-export const windowSnapshotSchema = {
-  type: "object",
-  properties: {
-    windowId: windowTarget.properties.view,
-    viewId: windowTarget.properties.view,
-    revision: {
-      type: "integer",
-      minimum: 0,
-      maximum: Number.MAX_SAFE_INTEGER,
-    },
-    state: {
-      type: "object",
-      properties: {
-        visible: {
-          type: "boolean",
-        },
-        focused: {
-          type: "boolean",
-        },
-        minimized: {
-          type: "boolean",
-        },
-        maximized: {
-          type: "boolean",
-        },
-        fullscreen: {
-          type: "boolean",
-        },
-      },
-      required: [
-        "visible",
-        "focused",
-        "minimized",
-        "maximized",
-        "fullscreen",
-      ],
-      additionalProperties: false,
-    },
-    bounds: boundsOutput,
-  },
-  required: [
-    "windowId",
-    "viewId",
-    "revision",
-    "state",
-    "bounds",
-  ],
-  additionalProperties: false,
-} as const;
+const snapshotDefinition = z.strictObject({
+  windowId: windowTarget.shape.view,
+  viewId: windowTarget.shape.view,
+  revision: z.int().min(0).max(Number.MAX_SAFE_INTEGER),
+  state: z.strictObject({
+    visible: z.boolean(),
+    focused: z.boolean(),
+    minimized: z.boolean(),
+    maximized: z.boolean(),
+    fullscreen: z.boolean(),
+  }),
+  bounds: boundsOutput,
+});
+export const windowSnapshotSchema = toJSONSchema(snapshotDefinition);
+
 /** A single ordered subscription observes every committed window transition. */
-const preparationPhase = {
-  enum: [
-    "pending",
-    "ready",
-    "failed",
-    "cancelled",
-  ],
-} as const;
+const preparationPhase = z.enum([
+  "pending",
+  "ready",
+  "failed",
+  "cancelled",
+]);
+
 /** Recoverable preparation snapshot; revisions belong to the existing windowId lifetime. */
-export const windowReadinessSchema = {
-  type: "object",
-  properties: {
-    windowId: windowTarget.properties.view,
-    viewId: windowTarget.properties.view,
-    documentGeneration: windowSnapshotSchema.properties.revision,
-    revision: windowSnapshotSchema.properties.revision,
-    nativeCreated: {
-      type: "boolean",
-    },
-    document: preparationPhase,
-    sdk: preparationPhase,
-    error: {
-      anyOf: [
-        {
-          const: null,
-        },
-        errorSchema,
-      ],
-    },
-  },
-  required: [
-    "windowId",
-    "viewId",
-    "documentGeneration",
-    "revision",
-    "nativeCreated",
-    "document",
-    "sdk",
-    "error",
-  ],
-  additionalProperties: false,
-} as const;
+const readinessDefinition = z.strictObject({
+  windowId: windowTarget.shape.view,
+  viewId: windowTarget.shape.view,
+  documentGeneration: snapshotDefinition.shape.revision,
+  revision: snapshotDefinition.shape.revision,
+  nativeCreated: z.boolean(),
+  document: preparationPhase,
+  sdk: preparationPhase,
+  error: z.union([
+    z.null(),
+    wireErrorDefinition,
+  ]),
+});
+export const windowReadinessSchema = toJSONSchema(readinessDefinition);
+
+const changedDefinition = snapshotDefinition.extend({
+  changes: z
+    .array(
+      z.enum([
+        "shown",
+        "hidden",
+        "focus",
+        "blur",
+        "unmaximize",
+        "minimize",
+        "maximize",
+        "restore",
+        "enterFullscreen",
+        "leaveFullscreen",
+        "move",
+        "resize",
+      ]),
+    )
+    .min(1)
+    .max(12),
+});
+const changedSchema = toJSONSchema(changedDefinition);
 /** Ordered native transitions and preparation snapshots, subject to view event policy. */
-export const windowEvents = {
+export const windowEvents: {
+  "windows.readiness": TypedSchema<z.output<typeof readinessDefinition>>;
+  "windows.changed": TypedSchema<z.output<typeof changedDefinition>>;
+} = {
   "windows.readiness": windowReadinessSchema,
   "windows.changed": {
-    ...windowSnapshotSchema,
+    ...changedSchema,
+    // Uniqueness belongs to the shared event contract, beyond the Zod array shape.
     properties: {
-      ...windowSnapshotSchema.properties,
+      ...changedSchema.properties,
       changes: {
-        type: "array",
-        minItems: 1,
-        maxItems: 12,
+        ...changedSchema.properties?.changes,
         uniqueItems: true,
-        items: {
-          type: "string",
-          enum: [
-            "shown",
-            "hidden",
-            "focus",
-            "blur",
-            "unmaximize",
-            "minimize",
-            "maximize",
-            "restore",
-            "enterFullscreen",
-            "leaveFullscreen",
-            "move",
-            "resize",
-          ],
-        },
       },
     },
-    required: [
-      ...windowSnapshotSchema.required,
-      "changes",
-    ],
   },
-} as const;
+};
+
 /** Native event payloads for typed client subscriptions. */
 export type WindowEvents = {
   [K in keyof typeof windowEvents]: Infer<(typeof windowEvents)[K]>;
 };
 
-const geometryValue = {
-  anyOf: [
-    {
-      type: "object",
-      properties: positionProperties,
-      required: [
-        "x",
-        "y",
-      ],
-      additionalProperties: false,
-    },
-    {
-      type: "object",
-      properties: sizeProperties,
-      required: [
-        "width",
-        "height",
-      ],
-      additionalProperties: false,
-    },
-    {
-      type: "object",
-      properties: boundsProperties,
-      required: [
-        "x",
-        "y",
-        "width",
-        "height",
-      ],
-      additionalProperties: false,
-    },
-  ],
-} as const;
-const conversionOutput = {
-  type: "object",
-  properties: {
-    value: geometryValue,
-    dpi,
-  },
-  required: [
-    "value",
-    "dpi",
-  ],
-  additionalProperties: false,
-} as const;
+const geometryValue = z.union([
+  z.strictObject({
+    x: coordinate,
+    y: coordinate,
+  }),
+  z.strictObject({
+    width: dimension,
+    height: dimension,
+  }),
+  z.strictObject({
+    x: coordinate,
+    y: coordinate,
+    width: dimension,
+    height: dimension,
+  }),
+]);
+
+const conversionOutput = z.strictObject({
+  value: geometryValue,
+  dpi,
+});
 
 /** Schemas for window operations, used to validate calls and their results. */
-export const windowOperations = {
+const operationDefinitions = {
   "windows.createInstance": {
-    ...creationResult,
+    input: z.strictObject({
+      view: viewTarget.shape.view,
+      options: z
+        .strictObject({
+          title: z
+            .string()
+            .max(1024)
+            .regex(new RegExp(WINDOW_TEXT_PATTERN, "u"))
+            .exactOptional(),
+          window: z
+            .strictObject({
+              width: creationDimension.exactOptional(),
+              height: creationDimension.exactOptional(),
+              minWidth: sizeDimension.exactOptional(),
+              minHeight: sizeDimension.exactOptional(),
+              maxWidth: sizeDimension.exactOptional(),
+              maxHeight: sizeDimension.exactOptional(),
+            })
+            .exactOptional(),
+          visible: z.boolean().exactOptional(),
+          showWhenReady: z
+            .union([
+              z.enum([
+                "document",
+                "sdk",
+              ]),
+              z.null(),
+            ])
+            .exactOptional(),
+        })
+        .exactOptional(),
+    }),
     output: windowIdentitySchema,
   },
   "windows.recreateInstance": {
-    input: {
-      ...creationResult.input,
-      properties: {
-        ...creationResult.input.properties,
-        windowId: viewTarget.properties.view,
-      },
-      required: [
-        "view",
-        "windowId",
-      ],
-    },
+    input: z.strictObject({
+      view: viewTarget.shape.view,
+      options: z
+        .strictObject({
+          title: z
+            .string()
+            .max(1024)
+            .regex(new RegExp(WINDOW_TEXT_PATTERN, "u"))
+            .exactOptional(),
+          window: z
+            .strictObject({
+              width: creationDimension.exactOptional(),
+              height: creationDimension.exactOptional(),
+              minWidth: sizeDimension.exactOptional(),
+              minHeight: sizeDimension.exactOptional(),
+              maxWidth: sizeDimension.exactOptional(),
+              maxHeight: sizeDimension.exactOptional(),
+            })
+            .exactOptional(),
+          visible: z.boolean().exactOptional(),
+          showWhenReady: z
+            .union([
+              z.enum([
+                "document",
+                "sdk",
+              ]),
+              z.null(),
+            ])
+            .exactOptional(),
+        })
+        .exactOptional(),
+      windowId: viewTarget.shape.view,
+    }),
     output: windowIdentitySchema,
   },
   "windows.listInstances": {
-    input: {
-      const: null,
-    },
-    output: {
-      type: "array",
-      items: windowIdentitySchema,
-    },
+    input: z.null(),
+    output: z.array(windowIdentitySchema),
   },
   "windows.getById": {
-    input: {
-      type: "object",
-      properties: {
-        windowId: windowTarget.properties.view,
-      },
-      required: [
-        "windowId",
-      ],
-      additionalProperties: false,
-    },
+    input: z.strictObject({
+      windowId: windowTarget.shape.view,
+    }),
     output: windowLookupOutput,
   },
   "windows.getCurrent": windowLookup,
@@ -524,52 +417,30 @@ export const windowOperations = {
   "windows.getLastActive": windowLookup,
   "windows.getReadiness": {
     input: windowTarget,
-    output: windowReadinessSchema,
+    output: readinessDefinition,
   },
   "windows.completeSplashscreen": {
-    input: {
-      ...viewTarget,
-      properties: {
-        ...viewTarget.properties,
-        splash: windowTarget.properties.view,
-      },
-      required: [
-        "view",
-        "splash",
-      ],
-    },
-    output: {
-      type: "boolean",
-    },
+    input: z.strictObject({
+      view: viewTarget.shape.view,
+      splash: windowTarget.shape.view,
+    }),
+    output: z.boolean(),
   },
   "windows.getSnapshot": {
     input: windowTarget,
-    output: windowSnapshotSchema,
+    output: snapshotDefinition,
   },
   "windows.list": {
-    input: {
-      const: null,
-    },
-    output: {
-      type: "array",
-      maxItems: 128,
-      items: {
-        type: "object",
-        properties: {
-          view: windowTarget.properties.view,
-          open: {
-            type: "boolean",
-          },
-        },
-        required: [
-          "view",
-          "open",
-        ],
-        additionalProperties: false,
-      },
-    },
+    input: z.null(),
+    output: z
+      .array(
+        z.strictObject({
+          view: windowTarget.shape.view,
+          open: z.boolean(),
+        }),
+      )
+      .max(128),
   },
-  // Options only change this creation's presentation; view, origin and profile remain declared.
   "windows.create": creationResult,
   "windows.recreate": creationResult,
   "windows.show": windowResult,
@@ -592,37 +463,20 @@ export const windowOperations = {
   "windows.isNormal": windowStateResult,
   "windows.close": {
     input: windowTarget,
-    output: {
-      type: "boolean",
-    },
+    output: z.boolean(),
   },
   "windows.destroy": windowStateResult,
   "windows.setParent": {
-    input: {
-      ...windowTarget,
-      properties: {
-        ...windowTarget.properties,
-        parent: {
-          anyOf: [
-            {
-              const: null,
-            },
-            windowTarget.properties.view,
-          ],
-        },
-        modal: {
-          type: "boolean",
-        },
-      },
-      required: [
-        "view",
-        "parent",
-        "modal",
-      ],
-    },
-    output: {
-      const: null,
-    },
+    input: z.strictObject({
+      view: viewTarget.shape.view,
+      windowId: viewTarget.shape.view.exactOptional(),
+      parent: z.union([
+        z.null(),
+        windowTarget.shape.view,
+      ]),
+      modal: z.boolean(),
+    }),
+    output: z.null(),
   },
   "windows.getParent": {
     input: windowTarget,
@@ -634,56 +488,25 @@ export const windowOperations = {
   },
   "windows.getChildren": {
     input: windowTarget,
-    output: {
-      type: "array",
-      maxItems: 128,
-      items: windowIdentitySchema,
-    },
+    output: z.array(windowIdentitySchema).max(128),
   },
   "windows.setEnabled": {
-    input: {
-      ...windowTarget,
-      properties: {
-        ...windowTarget.properties,
-        enabled: {
-          type: "boolean",
-        },
-      },
-      required: [
-        "view",
-        "enabled",
-      ],
-    },
-    output: {
-      const: null,
-    },
+    input: z.strictObject({
+      view: viewTarget.shape.view,
+      windowId: viewTarget.shape.view.exactOptional(),
+      enabled: z.boolean(),
+    }),
+    output: z.null(),
   },
   "windows.isEnabled": windowStateResult,
   "windows.setSize": {
-    input: {
-      ...windowTarget,
-      properties: {
-        ...windowTarget.properties,
-        width: {
-          type: "integer",
-          minimum: MIN_WINDOW_DIMENSION,
-          maximum: MAX_WINDOW_DIMENSION,
-        },
-        height: {
-          type: "integer",
-          minimum: MIN_WINDOW_DIMENSION,
-          maximum: MAX_WINDOW_DIMENSION,
-        },
-      },
-      required: [
-        "view",
-        "width",
-        "height",
-      ],
-    },
-    output: {
-      const: null,
-    },
+    input: z.strictObject({
+      view: viewTarget.shape.view,
+      windowId: viewTarget.shape.view.exactOptional(),
+      width: z.int().min(MIN_WINDOW_DIMENSION).max(MAX_WINDOW_DIMENSION),
+      height: z.int().min(MIN_WINDOW_DIMENSION).max(MAX_WINDOW_DIMENSION),
+    }),
+    output: z.null(),
   },
   "windows.getContentSize": {
     input: geometryTarget,
@@ -730,31 +553,19 @@ export const windowOperations = {
     output: boundsOutput,
   },
   "windows.toLogical": {
-    input: {
-      ...windowTarget,
-      properties: {
-        ...windowTarget.properties,
-        value: geometryValue,
-      },
-      required: [
-        "view",
-        "value",
-      ],
-    },
+    input: z.strictObject({
+      view: viewTarget.shape.view,
+      windowId: viewTarget.shape.view.exactOptional(),
+      value: geometryValue,
+    }),
     output: conversionOutput,
   },
   "windows.toPhysical": {
-    input: {
-      ...windowTarget,
-      properties: {
-        ...windowTarget.properties,
-        value: geometryValue,
-      },
-      required: [
-        "view",
-        "value",
-      ],
-    },
+    input: z.strictObject({
+      view: viewTarget.shape.view,
+      windowId: viewTarget.shape.view.exactOptional(),
+      value: geometryValue,
+    }),
     output: conversionOutput,
   },
   "windows.getMinSize": {
@@ -766,145 +577,92 @@ export const windowOperations = {
     output: sizePairOutput,
   },
   "windows.setMinSize": {
-    input: {
-      ...windowTarget,
-      properties: {
-        ...windowTarget.properties,
-        width: sizeDimension,
-        height: sizeDimension,
-      },
-      required: [
-        "view",
-        "width",
-        "height",
-      ],
-    },
-    output: {
-      const: null,
-    },
+    input: z.strictObject({
+      view: viewTarget.shape.view,
+      windowId: viewTarget.shape.view.exactOptional(),
+      width: sizeDimension,
+      height: sizeDimension,
+    }),
+    output: z.null(),
   },
   "windows.setMaxSize": {
-    input: {
-      ...windowTarget,
-      properties: {
-        ...windowTarget.properties,
-        width: sizeDimension,
-        height: sizeDimension,
-      },
-      required: [
-        "view",
-        "width",
-        "height",
-      ],
-    },
-    output: {
-      const: null,
-    },
+    input: z.strictObject({
+      view: viewTarget.shape.view,
+      windowId: viewTarget.shape.view.exactOptional(),
+      width: sizeDimension,
+      height: sizeDimension,
+    }),
+    output: z.null(),
   },
   "windows.getSizeConstraints": {
     input: windowTarget,
     output: sizeConstraintsOutput,
   },
   "windows.setSizeConstraints": {
-    input: {
-      ...windowTarget,
-      properties: {
-        ...windowTarget.properties,
-        minWidth: sizeDimension,
-        minHeight: sizeDimension,
-        maxWidth: sizeDimension,
-        maxHeight: sizeDimension,
-      },
-    },
-    output: {
-      const: null,
-    },
+    input: z.strictObject({
+      view: viewTarget.shape.view,
+      windowId: viewTarget.shape.view.exactOptional(),
+      minWidth: sizeDimension.exactOptional(),
+      minHeight: sizeDimension.exactOptional(),
+      maxWidth: sizeDimension.exactOptional(),
+      maxHeight: sizeDimension.exactOptional(),
+    }),
+    output: z.null(),
   },
   "windows.setPosition": {
-    input: {
-      ...windowTarget,
-      properties: {
-        ...windowTarget.properties,
-        x: {
-          type: "integer",
-          minimum: -32768,
-          maximum: 32767,
-        },
-        y: {
-          type: "integer",
-          minimum: -32768,
-          maximum: 32767,
-        },
-      },
-      required: [
-        "view",
-        "x",
-        "y",
-      ],
-    },
-    output: {
-      const: null,
-    },
+    input: z.strictObject({
+      view: viewTarget.shape.view,
+      windowId: viewTarget.shape.view.exactOptional(),
+      x: z.int().min(-32768).max(32767),
+      y: z.int().min(-32768).max(32767),
+    }),
+    output: z.null(),
   },
   "windows.setFullscreen": {
-    input: {
-      ...windowTarget,
-      properties: {
-        ...windowTarget.properties,
-        fullscreen: {
-          type: "boolean",
-        },
-      },
-      required: [
-        "view",
-        "fullscreen",
-      ],
-    },
-    output: {
-      const: null,
-    },
+    input: z.strictObject({
+      view: viewTarget.shape.view,
+      windowId: viewTarget.shape.view.exactOptional(),
+      fullscreen: z.boolean(),
+    }),
+    output: z.null(),
   },
   "windows.setCloseConfirmation": {
-    input: {
-      ...windowTarget,
-      properties: {
-        ...windowTarget.properties,
-        message: {
-          anyOf: [
-            {
-              const: null,
-            },
-            {
-              type: "string",
-              maxLength: 1024,
-              pattern: "^[^\\u0000]+$(?![\\s\\S])",
-            },
-          ],
-        },
-      },
-      required: [
-        "view",
-        "message",
-      ],
-    },
-    output: {
-      const: null,
-    },
+    input: z.strictObject({
+      view: viewTarget.shape.view,
+      windowId: viewTarget.shape.view.exactOptional(),
+      message: z.union([
+        z.null(),
+        z.string().max(1024).regex(new RegExp(WINDOW_TEXT_PATTERN, "u")),
+      ]),
+    }),
+    output: z.null(),
   },
-} as const satisfies Record<
-  string,
-  {
-    input: Schema;
-    output: Schema;
-  }
->;
+};
+type SerializedOperations = {
+  [K in keyof typeof operationDefinitions]: {
+    input: TypedSchema<z.output<(typeof operationDefinitions)[K]["input"]>>;
+    output: TypedSchema<z.output<(typeof operationDefinitions)[K]["output"]>>;
+  };
+};
+// The mapping preserves operation names and converts each source schema pair once.
+export const windowOperations = Object.fromEntries(
+  Object.entries(operationDefinitions).map(([name, operation]) => [
+    name,
+    {
+      input: toJSONSchema(operation.input),
+      output: toJSONSchema(operation.output),
+    },
+  ]),
+) as SerializedOperations;
 
 export type WindowOperation = keyof typeof windowOperations;
-export type WindowInput<K extends WindowOperation> = Infer<
-  (typeof windowOperations)[K]["input"]
+
+export type WindowInput<K extends WindowOperation> = z.input<
+  (typeof operationDefinitions)[K]["input"]
 >;
-export type WindowOutput<K extends WindowOperation> = Infer<
-  (typeof windowOperations)[K]["output"]
+
+export type WindowOutput<K extends WindowOperation> = z.output<
+  (typeof operationDefinitions)[K]["output"]
 >;
 
 /** Discriminated union binding each operation name to its matching input shape. */
@@ -951,15 +709,15 @@ export function validateWindowOutput<K extends WindowOperation>(
   return validate(windowOperations[operation].output, value) as WindowOutput<K>;
 }
 
-/** Caller-facing keys derived from the fully qualified host operation contract. */
+/** Caller keys preserve each operation's source Zod input and output schema. */
 type WindowDefinitions = {
-  readonly [K in keyof typeof windowOperations as K extends `windows.${infer Name}`
+  [K in keyof typeof operationDefinitions as K extends `windows.${infer Name}`
     ? Name
-    : never]: (typeof windowOperations)[K];
+    : never]: (typeof operationDefinitions)[K];
 };
-// Every key in windowOperations has the windows. prefix; stripping it preserves each schema pair.
+// Every operation key has the windows prefix; its removal preserves the schema pair.
 export const windowDefinitions = Object.fromEntries(
-  Object.entries(windowOperations).map(([name, operation]) => [
+  Object.entries(operationDefinitions).map(([name, operation]) => [
     name.slice("windows.".length),
     operation,
   ]),

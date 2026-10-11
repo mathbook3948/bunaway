@@ -4,13 +4,9 @@ import type {
   HostOperationContract,
   NativePluginContract,
 } from "./host-api.ts";
+import { checkPluginSchema } from "./plugin-schema.ts";
 import { policySchema } from "./schema.ts";
-import {
-  type Infer,
-  type JsonValue,
-  type Schema,
-  validate,
-} from "./validation.ts";
+import { type Infer, type JsonValue, validate } from "./validation.ts";
 
 /** Installed plugin metadata and its optional native host contract. */
 export type NativeRegistration = {
@@ -29,145 +25,6 @@ function fail(message: string): never {
     code: "INVALID_ARGUMENT",
     message,
   });
-}
-
-/** Rejects malformed schemas and keywords this validator cannot enforce. */
-function checkSchema(schema: Schema): void {
-  const fields = new Set([
-    "$schema",
-    "type",
-    "const",
-    "enum",
-    "anyOf",
-    "properties",
-    "required",
-    "additionalProperties",
-    "items",
-    "minimum",
-    "maximum",
-    "minItems",
-    "maxItems",
-    "uniqueItems",
-    "maxLength",
-    "pattern",
-  ]);
-  if (
-    !schema ||
-    typeof schema !== "object" ||
-    Array.isArray(schema) ||
-    Object.keys(schema).some((key) => !fields.has(key))
-  ) {
-    fail("Invalid plugin schema.");
-  }
-  if (
-    schema.type !== undefined &&
-    ![
-      "object",
-      "array",
-      "string",
-      "integer",
-      "boolean",
-    ].includes(schema.type)
-  ) {
-    fail("Invalid plugin schema type.");
-  }
-  if (
-    schema.const !== undefined &&
-    schema.const !== null &&
-    ![
-      "string",
-      "number",
-      "boolean",
-    ].includes(typeof schema.const)
-  ) {
-    fail("Invalid plugin schema constant.");
-  }
-  if (schema.$schema !== undefined && typeof schema.$schema !== "string") {
-    fail("Invalid plugin schema identifier.");
-  }
-  if (
-    schema.items !== undefined &&
-    (!schema.items ||
-      typeof schema.items !== "object" ||
-      Array.isArray(schema.items))
-  ) {
-    fail("Invalid plugin item schema.");
-  }
-  if (
-    schema.additionalProperties !== undefined &&
-    schema.additionalProperties !== false
-  ) {
-    fail("Invalid plugin object schema.");
-  }
-  for (const list of [
-    schema.enum,
-    schema.required,
-  ]) {
-    if (
-      list !== undefined &&
-      (!Array.isArray(list) || list.some((value) => typeof value !== "string"))
-    ) {
-      fail("Invalid plugin schema list.");
-    }
-  }
-  for (const count of [
-    schema.minItems,
-    schema.maxItems,
-    schema.maxLength,
-  ]) {
-    if (count !== undefined && (!Number.isSafeInteger(count) || count < 0)) {
-      fail("Invalid plugin schema limit.");
-    }
-  }
-  for (const number of [
-    schema.minimum,
-    schema.maximum,
-  ]) {
-    if (number !== undefined && typeof number !== "number") {
-      fail("Invalid plugin schema bound.");
-    }
-  }
-  if (
-    schema.uniqueItems !== undefined &&
-    typeof schema.uniqueItems !== "boolean"
-  ) {
-    fail("Invalid plugin schema uniqueness.");
-  }
-  if (schema.pattern !== undefined) {
-    if (typeof schema.pattern !== "string") {
-      fail("Invalid plugin schema pattern.");
-    }
-    try {
-      new RegExp(schema.pattern, "u");
-    } catch {
-      fail("Invalid plugin schema pattern.");
-    }
-  }
-  if (
-    schema.properties !== undefined &&
-    (!schema.properties ||
-      typeof schema.properties !== "object" ||
-      Array.isArray(schema.properties))
-  ) {
-    fail("Invalid plugin schema properties.");
-  }
-  if (
-    schema.anyOf !== undefined &&
-    (!Array.isArray(schema.anyOf) || !schema.anyOf.length)
-  ) {
-    fail("Invalid plugin schema alternatives.");
-  }
-  for (const child of [
-    ...Object.values(schema.properties ?? {}),
-    ...(schema.anyOf ?? []),
-    ...(schema.items
-      ? [
-          schema.items,
-        ]
-      : []),
-  ]) {
-    checkSchema(child);
-  }
 }
 
 /** Validates registered native contracts and evaluates their policy grants. */
@@ -246,8 +103,12 @@ export class NativeRegistry {
           fail("Invalid or duplicate plugin operation.");
         }
         this.operations.set(operation.name, operation);
-        checkSchema(operation.input);
-        checkSchema(operation.output);
+        try {
+          checkPluginSchema(operation.input);
+          checkPluginSchema(operation.output);
+        } catch {
+          fail("Invalid plugin schema.");
+        }
       }
     }
     if (mode === "runtime" && this.operations.size > 256) {
