@@ -696,10 +696,18 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 - [x] CPU, 메모리와 프로세스 사용량, PID와 translation 상태 조회를 제공한다.
   `os.usage`는 논리 CPU 개수, 현재 프로세스의 누적 CPU 시간, 메모리 bytes와
   `IsWow64Process2` 결과를 반환한다. CPU 백분율과 임의 PID의 조회는 포함하지 않는다.
-- [ ] 앱의 origin과 URL 접근 규칙을 적용한 HTTP 요청과 응답을 제공한다.
-- [ ] HTTP header, body, redirect, proxy와 OS 인증의 지원 범위를 정의한다.
+- [x] 앱의 origin과 URL 접근 규칙을 적용한 HTTP 요청과 응답을 제공한다.
+  뷰의 작업 권한과 앱 명령의 URL origin 검사를 구분한다. `network.request`는 임의 Origin
+  header를 받지 않고 redirect를 반환하므로 새 대상은 앱이 다시 검사한다.
+  [network 계약](./site/src/content/docs/reference/plugins/network.mdx)의 앱 명령 예제를 따른다.
+- [x] HTTP header, body, redirect, proxy와 OS 인증의 지원 범위를 정의한다.
+  선택 `network.request`는 제한된 header와 base64 body를 제공하고 redirect를 따라가지 않는다.
+  proxy는 Bun의 신뢰된 실행 환경 설정만 사용하며 OS 인증과 WebView cookie 공유는 제공하지 않는다.
 - [ ] HTTP stream, timeout, 취소와 progress를 제공한다.
+  `network.request`의 제한된 응답, timeout과 호출 취소는 구현했다. 공개 stream과 progress는 남아 있다.
 - [ ] WebSocket 연결, 메시지, close, 상태와 backpressure를 공개 계약으로 제공한다.
+  `network.exchange`는 호출 하나에 종속된 제한된 text 송신과 text/binary 수신, close와 send buffer
+  상한을 제공한다. 장기 연결 handle, 독립 send/receive와 상태 이벤트의 세션 소유권은 남아 있다.
 - [x] 앱이 실행 파일과 인자를 검사하는 command 실행을 제공한다.
   선택 `process.run`의 실행 파일과 전체 argv는 앱 명령이 검사한다. 절대 local `.exe`
   경로만 실행하며 PATH, batch 파일과 호출자 env/cwd 설정을 받지 않는다.

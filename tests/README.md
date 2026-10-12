@@ -547,3 +547,8 @@ linear filtering의 투명 edge, crop과 빈 소스 및 quota 오류를 추가�
 호출별 손자 정리나 제삼자 도구의 부수 효과를 검증하지 않는다.
 자식은 PID 파일 쓰기를 완료한 뒤 rename으로 준비를 알린다. 두 생존 검사는 파일 생성과 쓰기 사이의
 경합으로 빈 PID를 읽지 않고, 취소 전에 실제 자식의 Windows process handle을 잡는다.
+
+`api/network.test.ts`는 URL, header, bytes 상한과 독립 작업 권한을 검사한다.
+`lifecycle/windows-network.test.ts`는 생성 Windows 어댑터와 실제 loopback HTTP/WebSocket 서버로
+redirect 거부, binary 보존, timeout, 취소, 폐기와 용량을 검사한다. `host:windows`에 포함되며
+외부 proxy나 OS 인증, 물리 네트워크 설정 검증은 포함하지 않는다.
