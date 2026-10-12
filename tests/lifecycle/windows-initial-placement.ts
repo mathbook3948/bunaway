@@ -1,6 +1,6 @@
-import assert from "node:assert/strict";
 import { dlopen } from "bun:ffi";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import assert from "node:assert/strict";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type DesktopContext, defineApp } from "@bunaway/backend";
@@ -22,9 +22,19 @@ const root =
   process.env.BUNAWAY_PLACEMENT_ROOT ?? resolve(import.meta.dir, "../..");
 const output = resolve(root, "build/windows-initial-placement");
 const assets = resolve(output, "assets");
-const reportPath = resolve(output, "report.json");
+const reportPath = resolve(
+  root,
+  "build/windows-initial-placement-results.json",
+);
 
 if (!process.argv.includes("--child")) {
+  await rm(assets, {
+    recursive: true,
+    force: true,
+  });
+  await rm(reportPath, {
+    force: true,
+  });
   await mkdir(resolve(assets, "web"), {
     recursive: true,
   });
