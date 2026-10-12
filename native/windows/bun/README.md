@@ -43,6 +43,9 @@ DownloadOperation, Deferral을 소유한다. `downloads.ts`는 OS 자원 없는 
 완료하고 args 및 operation 참조를 정리한다. pending 승인의 기한과 기록 상한을 적용하고
 새 탐색은 pending만, 창 종료는 승인된 작업도 취소한다. 이벤트 callback은 구독을 해제한
 뒤 WebView의 기존 STA quiescence와 프로세스 정리 단계까지 유지한다.
+관찰한 browser 프로세스 장애에서는 pending과 활성 COM 참조를 해제하고 완료나 취소를
+죽은 broker에 보내지 않는다. 이 경우의 구독 해제 ERROR_INVALID_STATE만 수용하며
+살아 있는 broker의 같은 오류와 다른 HRESULT는 기존 실패 경로를 유지한다.
 파일 쓰기와 기본 저장 경로는 브라우저가 소유한다. 현재 API에는 임의 경로 입력이나
 사용자 정의 스트림 출력이 없으며 backend 출처 검사로 renderer의 파일 접근을 확대하지 않는다.
 

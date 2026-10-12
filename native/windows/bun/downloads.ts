@@ -13,7 +13,8 @@ export type DownloadResource = {
   cancel(): void;
   pause(): void;
   resume(): void;
-  dispose(): void;
+  /** A failed browser cannot accept deferral completion or cancellation; release references only. */
+  dispose(browserGone?: boolean): void;
 };
 
 type DownloadEntry = {
@@ -238,14 +239,19 @@ export class Downloads implements NativeDownloads {
   }
 
   /** Cancel every owned operation and release every native reference even if one cancellation fails. */
-  dispose(): void {
+  dispose(browserGone = false): void {
     if (this.closed) {
       return;
     }
     const errors: unknown[] = [];
-    for (const id of this.entries.keys()) {
+    for (const [id, entry] of this.entries) {
       try {
-        this.cancel(id);
+        if (browserGone) {
+          entry.pending = false;
+          this.retire(entry, "cancelled", true);
+        } else {
+          this.cancel(id);
+        }
       } catch (error) {
         errors.push(error);
       }
@@ -302,7 +308,11 @@ export class Downloads implements NativeDownloads {
     delete entry.timer;
   }
 
-  private retire(entry: DownloadEntry, state?: "cancelled"): void {
+  private retire(
+    entry: DownloadEntry,
+    state?: "cancelled",
+    browserGone = false,
+  ): void {
     this.clearTimer(entry);
     const resource = entry.resource;
     delete entry.resource;
@@ -314,6 +324,6 @@ export class Downloads implements NativeDownloads {
         paused: false,
       };
     }
-    resource?.dispose();
+    resource?.dispose(browserGone);
   }
 }

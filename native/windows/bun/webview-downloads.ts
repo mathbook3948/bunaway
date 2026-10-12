@@ -129,13 +129,25 @@ function resource(args: Pointer): DownloadResource {
     resume: () => {
       hr(method(operation, 20, [])(), "Resume download");
     },
-    dispose() {
+    dispose(browserGone = false) {
       if (disposed) {
         return;
       }
       disposed = true;
       try {
-        decide(false);
+        if (browserGone) {
+          // The old broker no longer accepts operations. These are owned COM references only.
+          if (deferral) {
+            release(deferral);
+          }
+          if (pendingArgs) {
+            release(pendingArgs);
+          }
+          deferral = undefined;
+          pendingArgs = undefined;
+        } else {
+          decide(false);
+        }
       } finally {
         release(operation);
       }
@@ -205,21 +217,23 @@ export class WebViewDownloads {
   }
 
   /** Remove native interest and retire operations; callback disposal waits for the owning WebView drain. */
-  detach(): void {
+  detach(browserGone = false): void {
     if (this.detached) {
       return;
     }
     this.detached = true;
     try {
-      hr(
-        method(this.webview4, 76, [
-          "i64",
-        ])(this.token),
-        "remove_DownloadStarting",
-      );
+      const result = method(this.webview4, 76, [
+        "i64",
+      ])(this.token);
+      // HRESULT_FROM_WIN32(ERROR_INVALID_STATE) is expected only after observed broker failure.
+      const HRESULT_INVALID_STATE = -2147019873;
+      if (!browserGone || result !== HRESULT_INVALID_STATE) {
+        hr(result, "remove_DownloadStarting");
+      }
     } finally {
       try {
-        this.operations.dispose();
+        this.operations.dispose(browserGone);
       } finally {
         release(this.webview4);
       }

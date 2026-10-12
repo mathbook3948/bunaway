@@ -1,3 +1,4 @@
+import { dlopen } from "bun:ffi";
 import assert from "node:assert/strict";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
@@ -6,6 +7,7 @@ import { defineApp } from "@bunaway/backend";
 import { windows, windowsPlugin } from "@bunaway/plugin-windows";
 import type { HostContext, Policy } from "@bunaway/protocol";
 import { runWindowsApp } from "#native/windows/bun/entry";
+import { kernel } from "#native/windows/bun/win32-bindings";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 
@@ -338,10 +340,67 @@ if (!process.argv.includes("--child")) {
     );
     assert.equal(await Bun.file(navigated.path).exists(), false);
     await waitFor(() => arrivals >= 2, "New document did not reconnect");
+    const crashing = await request("crashing");
+    await windows.approveDownload({
+      ...main,
+      id: crashing.id,
+    });
+    await waitFor(
+      async () => (await item(crashing.id)).state === "inProgress",
+      "Crash item did not start",
+    );
     const closing = await request("closing");
     assert.equal(await Bun.file(closing.path).exists(), false);
-    completed = true;
-    await windows.close(main);
+    const diagnostics: unknown[] = (
+      await readFile(resolve(dataRoot, "logs/host.log"), "utf8")
+    )
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    const browser = diagnostics.find(
+      (
+        entry,
+      ): entry is {
+        browserPid: number;
+      } =>
+        typeof entry === "object" &&
+        entry !== null &&
+        "event" in entry &&
+        entry.event === "webview-ready" &&
+        "view" in entry &&
+        entry.view === "main" &&
+        "browserPid" in entry &&
+        typeof entry.browserPid === "number" &&
+        Number.isInteger(entry.browserPid) &&
+        entry.browserPid > 0 &&
+        entry.browserPid <= 0xffffffff,
+    );
+    assert(browser, "Owned browser process identity was not recorded");
+    const driver = dlopen("kernel32.dll", {
+      TerminateProcess: {
+        args: [
+          "u64",
+          "u32",
+        ],
+        returns: "i32",
+      },
+    });
+    try {
+      const processHandle = kernel.symbols.OpenProcess(
+        1,
+        0,
+        browser.browserPid,
+      );
+      assert(processHandle, "Owned browser process was unavailable");
+      completed = true;
+      try {
+        assert(driver.symbols.TerminateProcess(processHandle, 77));
+      } finally {
+        assert(kernel.symbols.CloseHandle(processHandle));
+      }
+    } finally {
+      driver.close();
+    }
   }
   const grants = windowPermissions();
   const policy: Policy = {
@@ -443,6 +502,7 @@ if (!process.argv.includes("--child")) {
           arrivals,
           approvalExpiry: true,
           nativeCleanup: true,
+          browserCrashCleanup: true,
         },
         null,
         2,

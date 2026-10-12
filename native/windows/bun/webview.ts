@@ -81,6 +81,7 @@ export class WebView {
   private closing = false;
   private detached = false;
   private browserExited = false;
+  private browserFailed = false;
   private finished = false;
   private quiescence:
     | {
@@ -634,10 +635,11 @@ export class WebView {
         kind: kind[0],
       });
       this.hooks.revoke("process-failed");
-      this.downloads?.operations.revokePending();
       if (kind[0] === 0) {
+        this.browserFailed = true;
         this.hooks.close(true);
       } else {
+        this.downloads?.operations.revokePending();
         setTimeout(() => {
           if (!this.closing) {
             this.navigate();
@@ -832,7 +834,12 @@ export class WebView {
       return true;
     }
     this.closedAt = performance.now();
-    this.downloads?.detach();
+    this.downloads?.detach(
+      this.browserFailed ||
+        this.browserExited ||
+        (this.browserHandle !== 0n &&
+          kernel.symbols.WaitForSingleObject(this.browserHandle, 0) === 0),
+    );
     // Capture process handles before controller closure to track WebView2 children.
     if (this.environment) {
       const env8 = query(

@@ -24,6 +24,7 @@ function resource() {
   const decisions: boolean[] = [];
   let disposed = 0;
   let cancelled = 0;
+  let abandoned = false;
   let failure: Error | undefined;
   const native: DownloadResource = {
     read: () => ({
@@ -47,8 +48,9 @@ function resource() {
       state.state = "inProgress";
       state.canResume = false;
     },
-    dispose() {
+    dispose(browserGone = false) {
       disposed++;
+      abandoned = browserGone;
     },
   };
   return {
@@ -60,6 +62,9 @@ function resource() {
     },
     get cancelled() {
       return cancelled;
+    },
+    get abandoned() {
+      return abandoned;
     },
     fail: (error: Error) => {
       failure = error;
@@ -114,6 +119,29 @@ test("downloads deny by default and reject untrusted origins without retaining r
   }
   expect(f.downloads.list()).toEqual([]);
   f.downloads.dispose();
+});
+
+test("observed browser failure releases pending and approved resources without calling a dead broker", () => {
+  const f = fixture();
+  f.downloads.setRequestsEnabled(true);
+  const pending = resource();
+  const active = resource();
+  f.offer(pending);
+  const id = f.offer(active);
+  if (!id) {
+    throw new Error("Missing request");
+  }
+  f.downloads.approve(id);
+  f.downloads.dispose(true);
+  expect(pending.decisions).toEqual([]);
+  expect(active.decisions).toEqual([
+    true,
+  ]);
+  expect(active.cancelled).toBe(0);
+  expect(pending.abandoned).toBe(true);
+  expect(active.abandoned).toBe(true);
+  expect(pending.disposed).toBe(1);
+  expect(active.disposed).toBe(1);
 });
 
 test("individual approval owns progress, pause/resume and terminal snapshots", () => {
