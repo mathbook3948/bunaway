@@ -65,6 +65,7 @@ test.skipIf(process.platform !== "win32")(
         () => {},
         false,
       );
+      native.observe(hwnd, "main", () => {});
       const before = native.getSnapshot(hwnd);
       const monitor = windowMonitor(hwnd);
       const info = Buffer.alloc(104);
