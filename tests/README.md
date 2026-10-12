@@ -162,9 +162,11 @@ manifest 생성과 카탈로그 로딩에서 작업 이름만 전달하며 작�
 `lifecycle/plugin-async-parsing.test.ts`는 실제 I/O Worker에서 권한 거부 시 입력 콜백이
 실행되지 않고, 입력 파싱 뒤 재승인이 거부되면 네이티브 작업도 실행되지 않는지 확인한다.
 중복 승인, 입력 검사 전 취소와 파싱 중 취소, 늦은 검사 실패와 다음 요청의 처리도 검증한다.
-`lifecycle/plugin-output-cancellation.test.ts`는 실제 I/O Worker에서 끝나지 않는 출력 파싱을
-128회 취소해도 승인 용량과 다음 호출이 정상인지 확인한다. 취소된 출력의 늦은 완료와 실패를
-관찰하고 응답을 버리며, 중복 승인으로 다시 실행하지 않고 정상 종료하는지도 검증한다. 실제 Worker와
+`lifecycle/plugin-cancellation.test.ts`는 실제 Windows UI와 I/O Worker에서 입력과 출력 파싱,
+비동기 UI 실행을 한도만큼 취소해도 승인 용량과 다음 호출이 정상인지 확인한다. 컨텍스트 취소,
+늦은 완료와 실패, 중복 승인과 작업 대기 중 종료도 검증한다. `lifecycle/macos-bun.test.ts`는
+네이티브 UI만 대체한 실제 macOS 호스트와 Worker에서 같은 입력, 출력, 실행 취소 경로를 검사한다.
+`lifecycle/native-requests.test.ts`는 취소된 요청의 용량 반환과 이전 완료의 새 요청 간섭 방지를 확인한다. 실제 Worker와
 빌드한 플러그인에서 파서가 로컬로 실행되고 전송 경로가 다시 파싱하지 않는지도 확인한다.
 정책의 기존 크기와 깊이 상한도 manifest 생성과 읽기에서 유지하며, 상한 초과 입력은 거부하는지 검사한다.
 `cli/windows-assets.test.ts`는

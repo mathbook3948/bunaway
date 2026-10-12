@@ -58,7 +58,7 @@ export async function save(text: string): Promise<null> {
 | `@bunaway/plugin-clipboard` | `clipboard`, `clipboardPlugin` | `clipboard` |
 
 텍스트 클립보드 계약과 Windows 자원 소유권은 [clipboard README](../../plugins/clipboard/README.md)에 둔다.
-공통 UI 실행 컨텍스트는 선택적 `signal`을 제공한다. Windows는 요청 취소, 컨텍스트 폐기와 종료 때 이 신호를 중단한다.
+공통 UI 실행 컨텍스트는 선택적 `signal`을 제공한다. Windows와 macOS는 요청 취소, 컨텍스트 폐기와 종료 때 이 신호를 중단한다.
 클립보드 어댑터는 재시도 중에만 비동기로 대기하고 열린 클립보드나 잠긴 메모리는 다음 await까지 유지하지 않는다.
 
 화면과 백엔드는 같은 패키지의 index.ts를 import한다.
@@ -403,9 +403,11 @@ UI Worker는 grant 뒤 현재 호출 문맥과 정책을 확인하고 입력을 
 input-authorized로 응답한다. 허용된 호출만 입력을 파싱하고 완료 후 prepare를 보낸다.
 메인 스레드는 활성 호출에 대해 UI Worker의 실행 승인을 다시 요청한다. 허용 결과를 받은
 메인 스레드가 I/O Worker에 grant를 보내며, I/O Worker는 grant 직후 동기로 실행한다.
-grant 수락 응답은 비동기 결과 파싱을 기다리지 않는다. 결과 파싱 중 취소하면 작업 큐를
-비우며, 아직 끝나지 않은 파싱이 승인 메시지 용량을 차지하지 않는다. 늦은 완료와 실패는
-계속 관찰하되 취소된 호출의 응답은 보내지 않는다.
+Windows UI와 I/O의 grant, macOS의 operation은 수락과 결과 완료를 분리한다.
+수락 응답은 입력 파싱, 비동기 실행과 결과 파싱을 기다리지 않는다. 취소와 컨텍스트 폐기는
+요청 정보와 용량을 즉시 반환한다. Windows UI와 macOS는 공통 NativeRequests로
+요청 수명과 취소 신호를 관리하며 종료 때도 모두 해제한다. 늦은 완료와 실패는 계속
+관찰하되 취소된 호출의 응답을 보내거나 이후 호출의 상태를 변경하지 않는다.
 
 작업 전송과 승인 메시지는 각각 최대 128개의 미확인 메시지를 보관한다. prepare,
 authorize, authorized, grant, authorize-input과 input-authorized는 별도 승인 용량을 사용하므로 작업 전송이 한도에 도달해도
