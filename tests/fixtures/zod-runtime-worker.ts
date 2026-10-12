@@ -40,11 +40,11 @@ const adapter = plugin.definition.nativePlatforms.windows?.create({
 if (!adapter || !parentPort) {
   throw new Error("Missing worker setup");
 }
-parentPort.on("message", (request) => {
+parentPort.on("message", async (request) => {
   const call = registry.validateCall(request);
   const value = registry.validateOutput(
     call.operation,
-    adapter.execute(call.operation, call.payload, "test"),
+    await adapter.execute(call.operation, call.payload, "test"),
   );
   parentPort?.postMessage({
     value,

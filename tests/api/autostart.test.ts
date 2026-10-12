@@ -31,7 +31,7 @@ const app: AppLaunch = {
     args: [],
   },
 };
-test("autostart exposes strict app-scoped read and configure contracts", () => {
+test("autostart exposes strict app-scoped read and configure contracts", async () => {
   expect([
     ...registry.operations.keys(),
   ]).toEqual([
@@ -58,19 +58,19 @@ test("autostart exposes strict app-scoped read and configure contracts", () => {
       ],
     },
   ]) {
-    expect(() =>
+    await expect(
       parsers.validateCall({
         operation: "autostart.enable",
         payload,
       }),
-    ).toThrow();
+    ).rejects.toThrow();
   }
-  expect(() =>
+  await expect(
     parsers.validateCall({
       operation: "autostart.getStatus",
       payload: {},
     }),
-  ).toThrow();
+  ).rejects.toThrow();
   for (const permission of [
     "autostart.enable",
     "autostart.disable",

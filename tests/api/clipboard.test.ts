@@ -17,7 +17,7 @@ const parsers = pluginParsers("clipboard", clipboardOperations);
 const registry = new NativeRegistry([
   clipboardPlugin,
 ]);
-test("clipboard has separate read, write and clear permissions with strict Unicode contracts", () => {
+test("clipboard has separate read, write and clear permissions with strict Unicode contracts", async () => {
   expect([
     ...registry.operations.keys(),
   ]).toEqual([
@@ -31,16 +31,18 @@ test("clipboard has separate read, write and clear permissions with strict Unico
     "😀".repeat(MAX_TEXT_LENGTH),
   ]) {
     expect(
-      parsers.validateCall({
-        operation: "clipboard.writeText",
-        payload: {
-          text,
-        },
-      }).payload,
+      (
+        await parsers.validateCall({
+          operation: "clipboard.writeText",
+          payload: {
+            text,
+          },
+        })
+      ).payload,
     ).toEqual({
       text,
     });
-    expect(parsers.validateOutput("clipboard.readText", text)).toBe(text);
+    expect(await parsers.validateOutput("clipboard.readText", text)).toBe(text);
     // Even the most expensive allowed JSON escaping fits the shared transport.
     serializeHostResponse({
       kind: "result",
@@ -51,7 +53,7 @@ test("clipboard has separate read, write and clear permissions with strict Unico
     kind: "result",
     payload: "\u0001".repeat(MAX_TEXT_LENGTH),
   });
-  expect(parsers.validateOutput("clipboard.readText", null)).toBeNull();
+  expect(await parsers.validateOutput("clipboard.readText", null)).toBeNull();
   for (const payload of [
     {
       text: "a\0b",
@@ -73,23 +75,23 @@ test("clipboard has separate read, write and clear permissions with strict Unico
       text: 12,
     },
   ]) {
-    expect(() =>
+    await expect(
       parsers.validateCall({
         operation: "clipboard.writeText",
         payload,
       }),
-    ).toThrow();
+    ).rejects.toThrow();
   }
   for (const operation of [
     "clipboard.readText",
     "clipboard.clear",
   ]) {
-    expect(() =>
+    await expect(
       parsers.validateCall({
         operation,
         payload: {},
       }),
-    ).toThrow();
+    ).rejects.toThrow();
   }
   expect(() =>
     new NativeRegistry([]).operation("clipboard.readText"),
@@ -159,7 +161,7 @@ test("clipboard public functions reuse the active command host and validate at t
     controller.signal,
     async (context, call) => {
       expect(context).toBe(contextId);
-      parsers.validateCall(call);
+      await parsers.validateCall(call);
       calls.push(call.operation);
       return {
         kind: "result",

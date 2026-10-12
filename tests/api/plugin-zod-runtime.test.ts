@@ -24,7 +24,7 @@ const environment: NativeEnvironment = {
   capabilities: [],
 };
 
-test("Zod owns acceptance and normalized values at both plugin parsing boundaries", () => {
+test("Zod owns acceptance and normalized values at both plugin parsing boundaries", async () => {
   const when = {
     abort: false,
     when: ({ value }: { value: unknown }) => value !== 0,
@@ -214,17 +214,19 @@ test("Zod owns acceptance and normalized values at both plugin parsing boundarie
       const original = structuredClone(value);
       const expected = schema.safeParse(value);
       for (const run of [
-        () =>
-          parsers.validateCall({
-            operation: "test.echo",
-            payload: value,
-          }).payload,
-        () => parsers.validateOutput("test.echo", value),
+        async () =>
+          (
+            await parsers.validateCall({
+              operation: "test.echo",
+              payload: value,
+            })
+          ).payload,
+        async () => await parsers.validateOutput("test.echo", value),
       ]) {
         if (expected.success) {
-          expect(expected.data).toEqual(run());
+          expect(expected.data).toEqual(await run());
         } else {
-          expect(run).toThrow();
+          await expect(run()).rejects.toThrow();
         }
       }
       expect(value).toEqual(original);
@@ -302,10 +304,20 @@ test("host forwarding runs each parser once and adapters receive parsed input", 
     const api = bindHostAPI(
       "backend" as HostContext,
       new AbortController().signal,
-      async (_context, call) =>
-        hostResponse(() =>
-          dispatcher.execute(call.operation, call.payload, "backend"),
-        ),
+      async (_context, call) => {
+        try {
+          const payload = await dispatcher.execute(
+            call.operation,
+            call.payload,
+            "backend",
+          );
+          return hostResponse(() => payload);
+        } catch (error) {
+          return hostResponse(() => {
+            throw error;
+          });
+        }
+      },
       registry,
     );
     expect(await api.call(registry.operation("counter.increment"), 1)).toBe(12);
@@ -417,7 +429,7 @@ test("UI adapters preserve this, cancellation context, lifecycle and safe parser
   });
   const failed =
     invalid.definition.nativePlatforms.windows?.create(environment);
-  expect(() => failed?.execute("bad.echo", "ok", "view")).toThrow(
+  await expect(failed?.execute("bad.echo", "ok", "view")).rejects.toThrow(
     expect.objectContaining({
       code: "INTERNAL",
       message: "Invalid plugin output.",
@@ -425,7 +437,7 @@ test("UI adapters preserve this, cancellation context, lifecycle and safe parser
   );
 });
 
-test("JSON guards run before callbacks and validate transformed values before execution or reply", () => {
+test("JSON guards run before callbacks and validate transformed values before execution or reply", async () => {
   let callbacks = 0;
   const schema = z.unknown().transform((value) => {
     callbacks++;
@@ -460,7 +472,7 @@ test("JSON guards run before callbacks and validate transformed values before ex
     "\ud800",
   ];
   for (const value of invalid) {
-    expect(() => parsers.validateOutput("json.echo", value)).toThrow();
+    await expect(parsers.validateOutput("json.echo", value)).rejects.toThrow();
   }
   expect(callbacks).toBe(0);
   for (const { schema, value } of [
@@ -485,7 +497,7 @@ test("JSON guards run before callbacks and validate transformed values before ex
         output: schema,
       },
     });
-    expect(() => parsers.validateOutput("bad.echo", value)).toThrow();
+    await expect(parsers.validateOutput("bad.echo", value)).rejects.toThrow();
   }
   // A non-JSON transformation result must fail before the adapter is invoked.
   let executions = 0;
@@ -510,11 +522,11 @@ test("JSON guards run before callbacks and validate transformed values before ex
       },
     },
   });
-  expect(() =>
+  await expect(
     plugin.definition.nativePlatforms.windows
       ?.create(environment)
       .execute("bad.echo", "ok", "view"),
-  ).toThrow(
+  ).rejects.toThrow(
     expect.objectContaining({
       code: "INVALID_ARGUMENT",
     }),
@@ -573,28 +585,40 @@ test("a real Worker loads parser code locally while messages contain only JSON",
   }
 });
 
-test("asynchronous schemas fail at the synchronous SDK boundary without executing the adapter", () => {
+test("asynchronous refinements and transforms are awaited once at both boundaries", async () => {
+  let inputCalls = 0;
+  let outputCalls = 0;
   let executions = 0;
-  const asyncSchema = z.string().refine(async () => true);
   const plugin = defineNativePlugin({
     name: "async",
     operations: {
-      input: {
-        input: asyncSchema,
-        output: z.string(),
-      },
-      output: {
-        input: z.string(),
-        output: asyncSchema,
+      echo: {
+        input: z
+          .string()
+          .refine(async (value) => {
+            await Bun.sleep(1);
+            return value !== "bad";
+          })
+          .transform(async (value) => {
+            inputCalls++;
+            await Bun.sleep(1);
+            return value.trim();
+          }),
+        output: z.string().transform(async (value) => {
+          outputCalls++;
+          await Bun.sleep(1);
+          return `${value}!`;
+        }),
       },
     },
     platforms: {
       windows: {
         execution: "io",
         create: () => ({
-          execute() {
+          execute(_name, input) {
             executions++;
-            return "ok";
+            expect(input).toBe("ok");
+            return input;
           },
           dispose() {},
         }),
@@ -607,21 +631,181 @@ test("asynchronous schemas fail at the synchronous SDK boundary without executin
     throw new Error("Missing adapter");
   }
   try {
-    expect(() => adapter.execute("async.input", "ok", "test")).toThrow(
-      expect.objectContaining({
-        code: "INVALID_ARGUMENT",
-      }),
-    );
+    const execute = await adapter.prepare("async.echo", " ok ", "test");
     expect(executions).toBe(0);
-    expect(() => adapter.execute("async.output", "ok", "test")).toThrow(
-      expect.objectContaining({
-        code: "INTERNAL",
-      }),
-    );
-    expect(executions).toBe(1);
+    const result = execute();
+    expect(executions).toBe(1); // Native execution starts synchronously after the host grants it.
+    expect(await result).toBe("ok!");
+    await expect(execute()).rejects.toThrow("already executed");
+    await expect(
+      adapter.execute("async.echo", "bad", "test"),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+    expect([
+      inputCalls,
+      outputCalls,
+      executions,
+    ]).toEqual([
+      1,
+      1,
+      1,
+    ]);
   } finally {
-    void adapter.dispose();
+    await adapter.dispose();
   }
+});
+
+test("failed asynchronous checks do not terminate the Worker or prevent its next request", async () => {
+  const worker = new Worker(
+    new URL("../fixtures/zod-async-worker.ts", import.meta.url),
+  );
+  const exit = new Promise<number>((resolve, reject) => {
+    worker.once("exit", resolve);
+    worker.once("error", reject);
+  });
+  const request = (operation: string) =>
+    Promise.race([
+      new Promise<unknown>((resolve) => {
+        worker.once("message", resolve);
+        worker.postMessage(operation);
+      }),
+      exit.then((code) => {
+        throw new Error(`Worker exited before replying: ${code}`);
+      }),
+    ]);
+  try {
+    for (const mode of [
+      "refine",
+      "promise",
+      "transform",
+      "nested",
+    ]) {
+      for (const boundary of [
+        "input",
+        "output",
+      ]) {
+        for (const execution of [
+          "io",
+          "ui",
+        ]) {
+          expect(await request(`${execution}:${mode}:${boundary}`)).toEqual({
+            kind: "error",
+            error: {
+              code: boundary === "input" ? "INVALID_ARGUMENT" : "INTERNAL",
+              message: `Invalid plugin ${boundary}.`,
+            },
+          });
+          expect(await request("ping")).toEqual({
+            kind: "result",
+            payload: "alive",
+          });
+        }
+      }
+    }
+    worker.postMessage("close");
+    expect(await exit).toBe(0);
+  } finally {
+    await worker.terminate();
+  }
+});
+
+test("UI cancellation or disposal during input parsing prevents native execution", async () => {
+  for (const cancel of [
+    "signal",
+    "dispose",
+    "authority",
+  ]) {
+    const gate = Promise.withResolvers<string>();
+    const started = Promise.withResolvers<void>();
+    let executions = 0;
+    const plugin = defineNativePlugin({
+      name: "cancel",
+      operations: {
+        run: {
+          input: z.string().transform(() => {
+            started.resolve();
+            return gate.promise;
+          }),
+          output: z.string(),
+        },
+      },
+      platforms: {
+        windows: {
+          execution: "ui",
+          create: () => ({
+            execute() {
+              executions++;
+              return "ok";
+            },
+            executeUI() {
+              executions++;
+              return "ok";
+            },
+            dispose() {},
+          }),
+        },
+      },
+    });
+    const adapter =
+      plugin.definition.nativePlatforms.windows?.create(environment);
+    if (!adapter?.executeUI) {
+      throw new Error("Missing adapter");
+    }
+    const controller = new AbortController();
+    let revoked = false;
+    const result = adapter.executeUI("cancel.run", "ok", "test", {
+      requestId: "test",
+      permissions: {
+        permissions: [],
+      },
+      signal: controller.signal,
+      beforeExecute() {
+        if (revoked) {
+          throw new Error("Revoked");
+        }
+      },
+    });
+    await started.promise;
+    if (cancel === "signal") {
+      controller.abort();
+    } else if (cancel === "dispose") {
+      await adapter.dispose();
+    } else {
+      revoked = true;
+    }
+    gate.resolve("ok");
+    await expect(result).rejects.toThrow();
+    expect(executions).toBe(0);
+    if (cancel !== "dispose") {
+      await adapter.dispose();
+    }
+  }
+});
+
+test("pinned Zod string limits count Unicode code points at both boundaries", async () => {
+  const parsers = pluginParsers("unicode", {
+    echo: {
+      input: z.string().max(1),
+      output: z.string().max(1),
+    },
+  });
+  expect(
+    (
+      await parsers.validateCall({
+        operation: "unicode.echo",
+        payload: "😀",
+      })
+    ).payload,
+  ).toBe("😀");
+  expect(await parsers.validateOutput("unicode.echo", "😀")).toBe("😀");
+  await expect(
+    parsers.validateCall({
+      operation: "unicode.echo",
+      payload: "😀a",
+    }),
+  ).rejects.toThrow();
+  await expect(parsers.validateOutput("unicode.echo", "😀a")).rejects.toThrow();
 });
 
 test("native declarations reject serialized schema objects instead of silently accepting unchecked values", () => {

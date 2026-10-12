@@ -150,15 +150,15 @@ const input = z.strictObject({
 `z.strictObject`는 선언하지 않은 필드를 거부하고 `z.object`는 제거합니다.
 `exactOptional()`은 필드 생략을 허용합니다. 호출 인자는 `z.input<typeof input>`,
 반환값은 출력 스키마의 `z.output`에서 추론합니다. 기본값과 변환도 원본 Zod의 결과를 사용합니다.
-Zod 문자열의 `max`는 UTF-16 코드 단위를 셉니다. Unicode 문자 수 제한이 필요하면
-`refine(value => Array.from(value).length <= limit)`처럼 원하는 규칙을 선언합니다.
+고정된 Zod 4.6.5에서 문자열의 `max`는 Unicode 코드 포인트 수를 셉니다.
+예를 들어 `z.string().max(1)`은 `"😀"`를 허용합니다.
 
 ### 실행 흐름
 
 1. 화면이나 백엔드는 작업 이름과 JSON 입력을 보냅니다.
 2. 호스트가 등록과 권한을 확인하고 작업을 담당하는 Worker로 전달합니다.
-3. SDK가 그 Worker에서 `input.parse(payload)`를 실행하고 파싱한 값을 어댑터에 넘깁니다.
-4. 어댑터가 반환하면 SDK가 `output.parse(result)`를 실행합니다.
+3. SDK가 그 Worker에서 `await input.parseAsync(payload)`를 실행하고 파싱한 값을 어댑터에 넘깁니다.
+4. 어댑터가 반환하면 SDK가 `await output.parseAsync(result)`를 실행합니다.
 5. 파싱한 결과를 JSON으로 돌려줍니다. 호출자는 같은 스키마로 다시 파싱하지 않습니다.
 
 스키마와 검사 함수는 설치한 플러그인 코드에 포함합니다. manifest와 Worker 메시지에는
@@ -168,14 +168,16 @@ SDK는 스키마 내부 검사 종류를 해석하거나 JSON Schema로 변환�
 
 입력과 결과는 파싱 전후 모두 프로토콜의 JSON, 크기, 깊이와 Unicode 제한을 지켜야 합니다.
 따라서 Date, bigint, undefined, 비유한 숫자를 전송하거나 변환 결과로 반환할 수 없습니다.
-동기 I/O의 승인 직후 실행 순서를 유지하기 위해 파싱은 동기식입니다.
-비동기 refinement와 transform은 지원하지 않으며 입력에서 실패하면 `INVALID_ARGUMENT`,
-출력에서 실패하면 `INTERNAL`로 처리합니다. `executeUI` 자체의 비동기 실행은 지원합니다.
+동기 및 비동기 refinement와 transform을 지원합니다. 입력 파싱 실패는 `INVALID_ARGUMENT`,
+출력 파싱 실패는 `INTERNAL`로 처리합니다. SDK가 검사 Promise의 완료와 실패를 기다립니다.
+I/O Worker는 입력 파싱을 마친 뒤 승인을 요청하고 승인 직후 네이티브 작업을 동기로 실행합니다.
+입력 파싱 중 취소된 호출은 실제 작업을 실행하지 않습니다.
 검사 함수의 예외나 Zod 오류의 상세 내용은 호출자에게 노출하지 않습니다.
 
 선언할 때는 스키마 객체와 등록 정보를 확인하며 검사 콜백을 실행하지 않습니다.
-실제 값에 대한 검사는 호출 때 이루어집니다. 검사와 변환 콜백에는 OS 자원 접근이나
-비동기 작업을 넣지 마세요. 그런 작업은 어댑터가 수명과 취소를 관리합니다.
+실제 값에 대한 검사는 호출 때 이루어집니다. 검사와 변환 콜백은 입력과 결과를 처리하는 데 사용하세요. OS 자원 접근은
+어댑터에서 수명과 취소를 관리합니다. Zod 콜백 자체는 취소할 수 없으므로,
+호출이 취소되어도 이미 시작한 검사는 끝날 수 있습니다.
 
 ## platforms/windows.ts에서 구현하기
 
@@ -193,6 +195,9 @@ export function createOperations(_environment: NativeEnvironment): NativeAdapter
 
 `NativeEnvironment`는 호스트가 정한 dataRoot와 capabilities 목록을 제공합니다.
 `NativeAdapterFactory`는 이 환경을 받아 NativeAdapter를 반환하는 함수 타입입니다.
+SDK가 감싼 `NativePluginAdapter`의 `execute`는 파싱 완료를 기다리는 Promise를 반환합니다.
+호스트용 `prepare`는 입력을 파싱한 뒤 일회성 실행 함수를 반환하므로 권한 승인 직후
+동기 네이티브 실행을 시작할 수 있습니다. 어댑터 제작자가 이 준비 단계를 구현할 필요는 없습니다.
 DLL, 파일 핸들과 UI 자원은 createOperations 안에서 만들고 반환한 어댑터의 dispose에서 정리합니다.
 초기화가 실패하면 팩터리가 이미 만든 자원도 회수해야 합니다.
 Windows 호스트의 선택적 `app`은 검증한 앱 ID와 개발 또는 배포 실행의 절대 실행 파일,
@@ -330,7 +335,7 @@ defineNativePlugin을 사용하면 Zod 검증, 타입 추론, 공유 연결과 �
 
 `NativeEnvironment.windows`는 UI 실행에만 제공하는 NativeWindowServices입니다. 플러그인은 필요한 저수준 창 자원을 사용하며 공통 호스트는 특정 작업 이름을 분기하지 않습니다.
 
-`NativeAdapter.executeUI`는 UI 작업의 비동기 실행을 지원하며 requestId와 호스트가 확인한 permissions, 선택적 signal을 받습니다. Windows UI 호스트는 요청 취소, 컨텍스트 폐기와 종료 때 signal을 중단합니다. 어댑터는 취소를 관찰하고 소유한 대기와 자원을 정리해야 합니다. 동기 OS 작업은 완료한 변경을 되돌리지 않습니다. `busy`는 진행 중 작업이 있어 자동 종료를 보류해야 하는지 알립니다. I/O의 execute는 권한 확인 뒤 동기 실행 계약을 유지합니다. UI 어댑터는 STA 초기화 뒤 준비하고 역순으로 정리합니다.
+`NativeAdapter.executeUI`는 UI 작업의 비동기 실행을 지원하며 requestId와 호스트가 확인한 permissions, 선택적 signal과 호스트의 실행 직전 재검사 함수 beforeExecute를 받습니다. Windows UI 호스트는 요청 취소, 컨텍스트 폐기와 종료 때 signal을 중단합니다. 어댑터는 취소를 관찰하고 소유한 대기와 자원을 정리해야 합니다. 동기 OS 작업은 완료한 변경을 되돌리지 않습니다. `busy`는 진행 중 작업이 있어 자동 종료를 보류해야 하는지 알립니다. I/O의 execute는 권한 확인 뒤 동기 실행 계약을 유지합니다. UI 어댑터는 STA 초기화 뒤 준비하고 역순으로 정리합니다.
 
 `@bunaway/plugin-windows`의 windowOperations는 Zod 입력과 출력 계약입니다. isWindowOperation은 이름을 확인하며 parseWindowCall과 validateWindowCall은 입력을, validateWindowOutput은 결과를 검사합니다. 이 함수는 선택 패키지 안의 계약 도구이며 공통 프로토콜은 창 작업 목록을 소유하지 않습니다.
 

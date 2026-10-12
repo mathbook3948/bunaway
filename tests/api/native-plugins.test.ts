@@ -146,7 +146,7 @@ test("platform declarations remain detached from Core platform restrictions and 
     ).toThrow();
   }
 });
-test("short declarations generate strict schemas and independently granted operations", () => {
+test("short declarations generate strict schemas and independently granted operations", async () => {
   const input = z.strictObject({
     level: z.enum([
       "info",
@@ -216,24 +216,28 @@ test("short declarations generate strict schemas and independently granted opera
     "audit.repeat",
   ]);
   expect(
-    parsers.validateCall({
-      operation: "audit.write",
-      payload,
-    }).payload,
+    (
+      await parsers.validateCall({
+        operation: "audit.write",
+        payload,
+      })
+    ).payload,
   ).toEqual(payload);
   expect(
-    parsers.validateCall({
-      operation: "audit.write",
-      payload: {
-        ...payload,
-        details: {
-          tags: [
-            null,
-            true,
-          ],
+    (
+      await parsers.validateCall({
+        operation: "audit.write",
+        payload: {
+          ...payload,
+          details: {
+            tags: [
+              null,
+              true,
+            ],
+          },
         },
-      },
-    }).payload,
+      })
+    ).payload,
   ).toHaveProperty("details");
   for (const invalid of [
     {
@@ -277,15 +281,15 @@ test("short declarations generate strict schemas and independently granted opera
       },
     },
   ]) {
-    expect(() =>
+    await expect(
       parsers.validateCall({
         operation: "audit.write",
         payload: invalid,
       }),
-    ).toThrow();
+    ).rejects.toThrow();
   }
-  expect(parsers.validateOutput("audit.write", null)).toBeNull();
-  expect(() => parsers.validateOutput("audit.write", false)).toThrow();
+  expect(await parsers.validateOutput("audit.write", null)).toBeNull();
+  await expect(parsers.validateOutput("audit.write", false)).rejects.toThrow();
   expect(
     defineNativePlugin({
       name: "audit",
@@ -356,7 +360,7 @@ const empty: Policy = {
     permissions: [],
   },
 };
-test("plugin patterns use Unicode semantics for input and output", () => {
+test("plugin patterns use Unicode semantics for input and output", async () => {
   const letters = z.string().regex(/^\p{L}+$/u);
   const plugin = defineNativePlugin({
     name: "unicode",
@@ -378,12 +382,12 @@ test("plugin patterns use Unicode semantics for input and output", () => {
     "한글",
     "𐐀",
   ]) {
-    const call = parsers.validateCall({
+    const call = await parsers.validateCall({
       operation: "unicode.text",
       payload: text,
     });
     expect(call.payload).toBe(text);
-    expect(parsers.validateOutput(call.operation, text)).toBe(text);
+    expect(await parsers.validateOutput(call.operation, text)).toBe(text);
     const policy: Policy = {
       ...empty,
       backend: {
@@ -405,13 +409,15 @@ test("plugin patterns use Unicode semantics for input and output", () => {
     "123",
     "p{L}",
   ]) {
-    expect(() =>
+    await expect(
       parsers.validateCall({
         operation: "unicode.text",
         payload: text,
       }),
-    ).toThrow();
-    expect(() => parsers.validateOutput("unicode.text", text)).toThrow();
+    ).rejects.toThrow();
+    await expect(
+      parsers.validateOutput("unicode.text", text),
+    ).rejects.toThrow();
   }
   const scalar = pluginParsers("scalar", {
     one: {
@@ -420,17 +426,19 @@ test("plugin patterns use Unicode semantics for input and output", () => {
     },
   });
   expect(
-    scalar.validateCall({
-      operation: "scalar.one",
-      payload: "😀",
-    }).payload,
+    (
+      await scalar.validateCall({
+        operation: "scalar.one",
+        payload: "😀",
+      })
+    ).payload,
   ).toBe("😀");
-  expect(() =>
+  await expect(
     scalar.validateCall({
       operation: "scalar.one",
       payload: "ab",
     }),
-  ).toThrow();
+  ).rejects.toThrow();
 });
 test("plugin results exceeding the Web envelope return INTERNAL and keep the session usable", async () => {
   const plugin = defineNativePlugin({
@@ -681,7 +689,7 @@ test("backend host calls strip object fields before adapter execution and after 
       });
       return {
         kind: "result",
-        payload: adapter.execute(call.operation, call.payload, "test"),
+        payload: await adapter.execute(call.operation, call.payload, "test"),
       };
     },
     registry,

@@ -6,7 +6,7 @@ import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("windows", windowDefinitions);
 
-test("window catalog responses accept the definition limit and reject larger lists", () => {
+test("window catalog responses accept the definition limit and reject larger lists", async () => {
   const catalog = Array.from(
     {
       length: MAX_WINDOWS,
@@ -21,7 +21,9 @@ test("window catalog responses accept the definition limit and reject larger lis
     catalog,
   ]) {
     expect(validateWindowOutput("windows.list", output)).toEqual(output);
-    expect(parsers.validateOutput("windows.list", output)).toEqual(output);
+    expect(await parsers.validateOutput("windows.list", output)).toEqual(
+      output,
+    );
   }
   const oversized = [
     ...catalog,
@@ -31,10 +33,12 @@ test("window catalog responses accept the definition limit and reject larger lis
     },
   ];
   expect(() => validateWindowOutput("windows.list", oversized)).toThrow();
-  expect(() => parsers.validateOutput("windows.list", oversized)).toThrow();
+  await expect(
+    parsers.validateOutput("windows.list", oversized),
+  ).rejects.toThrow();
 });
 
-test("child window responses accept the instance limit and reject larger lists", () => {
+test("child window responses accept the instance limit and reject larger lists", async () => {
   const children = Array.from(
     {
       length: MAX_WINDOW_INSTANCES,
@@ -49,7 +53,7 @@ test("child window responses accept the instance limit and reject larger lists",
     children,
   ]) {
     expect(validateWindowOutput("windows.getChildren", output)).toEqual(output);
-    expect(parsers.validateOutput("windows.getChildren", output)).toEqual(
+    expect(await parsers.validateOutput("windows.getChildren", output)).toEqual(
       output,
     );
   }
@@ -63,7 +67,7 @@ test("child window responses accept the instance limit and reject larger lists",
   expect(() =>
     validateWindowOutput("windows.getChildren", oversized),
   ).toThrow();
-  expect(() =>
+  await expect(
     parsers.validateOutput("windows.getChildren", oversized),
-  ).toThrow();
+  ).rejects.toThrow();
 });

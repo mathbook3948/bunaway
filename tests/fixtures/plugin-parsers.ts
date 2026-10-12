@@ -46,13 +46,13 @@ export function pluginParsers(
     throw new Error("Missing fixture adapter.");
   }
   return {
-    validateCall(call: HostCall) {
+    async validateCall(call: HostCall) {
       return {
         ...call,
-        payload: input.execute(call.operation, call.payload, "test"),
+        payload: await input.execute(call.operation, call.payload, "test"),
       };
     },
-    validateOutput(name: string, value: unknown) {
+    async validateOutput(name: string, value: unknown) {
       return output.execute(name, validateValue({}, value), "test");
     },
   };

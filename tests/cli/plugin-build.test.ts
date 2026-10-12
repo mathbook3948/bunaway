@@ -114,7 +114,7 @@ export const createOperations: NativeAdapterFactory = () => ({ execute: () => "$
         [
           process.execPath,
           "-e",
-          `for (const file of ${JSON.stringify(outputs)}) { const { default: plugin } = await import(new URL(file, ${JSON.stringify(`${pathToFileURL(resolve(root, "dist/")).href}/`)})); if (plugin.version !== "1" || !Object.isFrozen(plugin)) throw new Error("Invalid built plugin version"); if (file === "native/linux.js") { const adapter = plugin.nativePlatforms.linux.create({dataRoot:".",capabilities:[]}); try { if (adapter.execute("demo.read", null, "test") !== "LINUX_ONLY_MARKER!") throw new Error("Built parser did not run exactly once"); } finally { adapter.dispose(); } } }`,
+          `for (const file of ${JSON.stringify(outputs)}) { const { default: plugin } = await import(new URL(file, ${JSON.stringify(`${pathToFileURL(resolve(root, "dist/")).href}/`)})); if (plugin.version !== "1" || !Object.isFrozen(plugin)) throw new Error("Invalid built plugin version"); if (file === "native/linux.js") { const adapter = plugin.nativePlatforms.linux.create({dataRoot:".",capabilities:[]}); try { if (await adapter.execute("demo.read", null, "test") !== "LINUX_ONLY_MARKER!") throw new Error("Built parser did not run exactly once"); } finally { adapter.dispose(); } } }`,
         ],
         {
           cwd: root,

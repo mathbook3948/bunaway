@@ -640,29 +640,29 @@ test("Host operations share exact request/result schemas and safe errors", async
       payload: {},
     },
   ]) {
-    expect(() =>
+    await expect(
       validateHostInput(parseHostCall(JSON.stringify(call))),
-    ).toThrow();
+    ).rejects.toThrow();
   }
-  expect(validateHostOutput("storage.writeText", null)).toBeNull();
-  expect(() => validateHostOutput("storage.writeText", true)).toThrow();
+  expect(await validateHostOutput("storage.writeText", null)).toBeNull();
+  await expect(validateHostOutput("storage.writeText", true)).rejects.toThrow();
   expect(
-    validateHostOutput("capabilities.get", [
+    await validateHostOutput("capabilities.get", [
       {
         name: "storage",
         support: "supported",
       },
     ]),
   ).toHaveLength(1);
-  expect(() =>
+  await expect(
     validateHostOutput("capabilities.get", [
       {
         name: "storage",
         support: "yes",
       },
     ]),
-  ).toThrow();
-  expect(() =>
+  ).rejects.toThrow();
+  await expect(
     validateHostOutput("capabilities.get", [
       {
         name: "storage",
@@ -673,7 +673,7 @@ test("Host operations share exact request/result schemas and safe errors", async
         support: "unsupported",
       },
     ]),
-  ).toThrow();
+  ).rejects.toThrow();
   const signal = new AbortController().signal;
   const denied = bindHostAPI(contextId, signal, async () => ({
     kind: "error",
@@ -759,14 +759,14 @@ test("cancelled Host calls cannot start or deliver a late successful result", as
   });
 });
 
-test("storage validates path strings while platform implementations validate native paths", () => {
+test("storage validates path strings while platform implementations validate native paths", async () => {
   for (const path of [
     "",
     "bad\0path",
     "bad\npath",
     "bad\rpath",
   ]) {
-    expect(() =>
+    await expect(
       validateHostInput(
         parseHostCall(
           JSON.stringify({
@@ -777,7 +777,7 @@ test("storage validates path strings while platform implementations validate nat
           }),
         ),
       ),
-    ).toThrow();
+    ).rejects.toThrow();
   }
   const call = {
     operation: "storage.readText",
@@ -860,16 +860,15 @@ test("pending Host calls abort promptly and release their cancellation listener"
   const pending = new Promise<HostResponse>((resolve) => {
     complete = resolve;
   });
-  let started = false;
+  const started = Promise.withResolvers<void>();
   const host = bindHostAPI(contextId, signal, () => {
-    started = true;
+    started.resolve();
     return pending;
   });
   const task = host.call(contracts["storage.readText"], {
     path: "notes/a",
   });
-  await Promise.resolve();
-  expect(started).toBe(true);
+  await started.promise;
   expect(listeners.size).toBe(1);
   controller.abort();
   await expect(task).rejects.toMatchObject({

@@ -4,7 +4,12 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { PLATFORMS } from "@bunaway/plugin-api";
-import { BunawayError, NativeRegistry, type Policy } from "@bunaway/protocol";
+import {
+  BunawayError,
+  NativeRegistry,
+  type Policy,
+  type HostResponse,
+} from "@bunaway/protocol";
 import { pluginImportsSource } from "#cli/app-modules";
 import { writeJson } from "#cli/files";
 import {
@@ -167,7 +172,7 @@ test.each([
       );
       try {
         expect(await Bun.file(marker).exists()).toBe(true);
-        expect(adapter.execute("demo.read", null, "backend")).toEqual([
+        expect(await adapter.execute("demo.read", null, "backend")).toEqual([
           {
             name: "demo.read",
             support: "supported",
@@ -177,7 +182,9 @@ test.each([
             support: "unsupported",
           },
         ]);
-        expect(() => adapter.execute("demo.write", null, "backend")).toThrow(
+        await expect(
+          adapter.execute("demo.write", null, "backend"),
+        ).rejects.toThrow(
           expect.objectContaining({
             code: "UNSUPPORTED",
           }),
@@ -230,9 +237,9 @@ test.each([
         emptyCatalog,
       );
       try {
-        expect(() =>
+        await expect(
           emptyAdapter.execute("demo.read", null, "backend"),
-        ).toThrow(
+        ).rejects.toThrow(
           expect.objectContaining({
             code: "UNSUPPORTED",
           }),
@@ -436,15 +443,25 @@ test("plugins without a Windows adapter check operation grants before returning 
           views: [],
           backend: source,
         });
-        const response = hostResponse(() => {
+        let response: HostResponse;
+        try {
           if (!registry.allowed(source, call)) {
             throw new BunawayError({
               code: "PERMISSION_DENIED",
               message: "Not allowed.",
             });
           }
-          return adapters.execute(call.operation, call.payload, "backend");
-        });
+          const payload = await adapters.execute(
+            call.operation,
+            call.payload,
+            "backend",
+          );
+          response = hostResponse(() => payload);
+        } catch (error) {
+          response = hostResponse(() => {
+            throw error;
+          });
+        }
         expect(response).toMatchObject({
           kind: "error",
           error: {

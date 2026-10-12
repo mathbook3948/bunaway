@@ -823,6 +823,13 @@
           "bounds"
         ]
       }
+    },
+    {
+      "source": "packages/plugin-sdk/src/native-validation.ts",
+      "type": "NativePluginAdapter",
+      "pages": {
+        "reference/tooling/native-plugins": ["prepare", "execute"]
+      }
     }
   ],
   "commands": {

@@ -316,7 +316,7 @@ test("concurrent module services preserve view policy after await and never use 
         context: id,
         call,
       });
-      return allowedHost(id === "granted" ? granted : denied, call)
+      return (await allowedHost(id === "granted" ? granted : denied, call))
         ? {
             kind: "result",
             payload: null,
@@ -869,7 +869,7 @@ test("plugin setup descendants keep their own backend until shutdown, including 
       },
       async send() {},
       async callHost(context, call) {
-        expect(allowedHost(services.policy.backend, call)).toBe(true);
+        expect(await allowedHost(services.policy.backend, call)).toBe(true);
         calls.push(context);
         return {
           kind: "result",

@@ -367,7 +367,7 @@ test("capability queries include every operation at the native registry limit", 
     catalog,
   );
   try {
-    const result = adapters.execute("capabilities.get", null, "backend");
+    const result = await adapters.execute("capabilities.get", null, "backend");
     expect(result).toHaveLength(256);
     expect(
       (

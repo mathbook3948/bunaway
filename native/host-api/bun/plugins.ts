@@ -9,6 +9,7 @@ import {
 } from "@bunaway/protocol";
 import type {
   NativeAdapter,
+  NativePluginAdapter,
   NativeEnvironment,
   PackagedPlugin,
 } from "./plugin-contract.ts";
@@ -19,7 +20,16 @@ const contractJson = (value: unknown) =>
 
 /** The validated dispatcher owned by one host execution thread. */
 type PluginOperations = {
-  execute(operation: string, input: unknown, source: string): JsonValue;
+  prepare(
+    operation: string,
+    input: unknown,
+    source: string,
+  ): Promise<() => Promise<JsonValue>>;
+  execute(
+    operation: string,
+    input: unknown,
+    source: string,
+  ): Promise<JsonValue>;
   executeUI(
     operation: string,
     input: unknown,
@@ -28,6 +38,7 @@ type PluginOperations = {
       requestId: string;
       permissions: Policy["backend"];
       signal?: AbortSignal;
+      beforeExecute?(): void;
     },
   ): Promise<JsonValue>;
   busy(): boolean;
@@ -104,7 +115,7 @@ export async function operations(
       );
     }),
   );
-  const adapters = new Map<string, NativeAdapter>();
+  const adapters = new Map<string, NativeAdapter | NativePluginAdapter>();
   const dispose = () =>
     disposeAll(
       // Adapter resources may depend on earlier adapters, so release them in reverse creation order.
@@ -168,8 +179,8 @@ export async function operations(
     }
     throw error;
   }
-  return {
-    execute(operation: string, input: unknown, source: string) {
+  const dispatcher: PluginOperations = {
+    async prepare(operation: string, input: unknown, source: string) {
       const call = registry.validateCall({
         operation,
         payload: input as never,
@@ -181,10 +192,15 @@ export async function operations(
           message: "Plugin operation is not supported on this platform.",
         });
       }
-      return registry.validateOutput(
-        operation,
-        adapter.execute(operation, call.payload, source),
-      );
+      const execute =
+        "prepare" in adapter
+          ? await adapter.prepare(operation, call.payload, source)
+          : () => adapter.execute(operation, call.payload, source);
+      return async () => registry.validateOutput(operation, await execute());
+    },
+    async execute(operation, input, source) {
+      const execute = await dispatcher.prepare(operation, input, source);
+      return execute();
     },
     async executeUI(
       operation: string,
@@ -194,6 +210,7 @@ export async function operations(
         requestId: string;
         permissions: Policy["backend"];
         signal?: AbortSignal;
+        beforeExecute?(): void;
       },
     ) {
       const call = registry.validateCall({
@@ -207,9 +224,15 @@ export async function operations(
           message: "Plugin operation is not supported on this platform.",
         });
       }
+      const execute =
+        "prepare" in adapter && !adapter.executeUI
+          ? await adapter.prepare(operation, call.payload, source)
+          : () => adapter.execute(operation, call.payload, source);
+      context.signal?.throwIfAborted();
+      context.beforeExecute?.();
       const output = adapter.executeUI
         ? await adapter.executeUI(operation, call.payload, source, context)
-        : adapter.execute(operation, call.payload, source);
+        : await execute();
       return registry.validateOutput(operation, output);
     },
     busy() {
@@ -222,4 +245,5 @@ export async function operations(
     },
     dispose,
   };
+  return dispatcher;
 }

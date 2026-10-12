@@ -59,16 +59,20 @@ function workerHost(
   callHost: CoreServices["callHost"],
 ): CoreServices["callHost"] {
   return async (context, call, signal) => {
-    const response = await callHost(context, validateHostInput(call), signal);
+    const response = await callHost(
+      context,
+      await validateHostInput(call),
+      signal,
+    );
     return response.kind === "result"
       ? {
           ...response,
-          payload: validateHostOutput(call.operation, response.payload),
+          payload: await validateHostOutput(call.operation, response.payload),
         }
       : response;
   };
 }
-export function validateHostInput(call: HostCall): HostCall {
+export async function validateHostInput(call: HostCall): Promise<HostCall> {
   return parser(call.operation).validateCall(registry.validateCall(call));
 }
 // Use contracts from the plugin declarations that build the shared registry.
@@ -120,19 +124,22 @@ export const createCore: CoreFactory = (app, services) =>
     },
   );
 /** Return whether a fixture host call passes the shared registry and policy. */
-export function allowedHost(permissions: Policy["backend"], call: HostCall) {
+export async function allowedHost(
+  permissions: Policy["backend"],
+  call: HostCall,
+) {
   try {
-    return registry.allowed(permissions, validateHostInput(call));
+    return registry.allowed(permissions, await validateHostInput(call));
   } catch {
     return false;
   }
 }
 /** Validate host output and reject duplicate names in capability snapshots. */
-export function validateHostOutput(
+export async function validateHostOutput(
   operation: string,
   value: unknown,
-): JsonValue {
-  const output = parser(operation).validateOutput(operation, value);
+): Promise<JsonValue> {
+  const output = await parser(operation).validateOutput(operation, value);
   if (operation === "capabilities.get") {
     const names = (
       output as {

@@ -77,7 +77,7 @@ test("file paths preserve Unicode and spaces and normalize separators and drive 
     );
   }
 });
-test("file grants authorize only the selected operation and do not encode app path rules", () => {
+test("file grants authorize only the selected operation and do not encode app path rules", async () => {
   for (const action of [
     "openFile",
     "revealFile",
@@ -95,7 +95,7 @@ test("file grants authorize only the selected operation and do not encode app pa
       "C:/한글 폴더/report.txt",
       "C:/other.txt",
     ]) {
-      const call = parsers.validateCall({
+      const call = await parsers.validateCall({
         operation: `opener.${action}`,
         payload: {
           path,
@@ -196,7 +196,7 @@ test("public file APIs use caller context and preserve OS failure codes", async 
     },
   ]);
 });
-test("opener preserves strict inputs and independently granted file operations", () => {
+test("opener preserves strict inputs and independently granted file operations", async () => {
   expect(operation.name).toBe("opener.openUrl");
   expect(
     openerPlugin.native?.operations.map(({ name }) => ({
@@ -217,16 +217,18 @@ test("opener preserves strict inputs and independently granted file operations",
     "name",
   ]);
   expect(
-    parsers.validateCall({
-      operation: operation.name,
-      payload: {
-        url: "https://example.com/",
-      },
-    }).payload,
+    (
+      await parsers.validateCall({
+        operation: operation.name,
+        payload: {
+          url: "https://example.com/",
+        },
+      })
+    ).payload,
   ).toEqual({
     url: "https://example.com/",
   });
-  expect(() =>
+  await expect(
     parsers.validateCall({
       operation: operation.name,
       payload: {
@@ -234,15 +236,15 @@ test("opener preserves strict inputs and independently granted file operations",
         extra: true,
       },
     }),
-  ).toThrow();
-  expect(() =>
+  ).rejects.toThrow();
+  await expect(
     parsers.validateCall({
       operation: operation.name,
       payload: {
         url: 42,
       },
     }),
-  ).toThrow();
+  ).rejects.toThrow();
   expect(() =>
     registry.validatePolicy({
       ...emptyPolicy,

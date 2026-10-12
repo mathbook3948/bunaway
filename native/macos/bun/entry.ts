@@ -197,6 +197,19 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
             {
               requestId: packet.requestId,
               permissions,
+              beforeExecute() {
+                if (
+                  stopping ||
+                  cancelled.has(packet.requestId) ||
+                  (packet.context !== config.backendContext &&
+                    !ui?.boundary(packet.context))
+                ) {
+                  throw new BunawayError({
+                    code: "CANCELLED",
+                    message: "Host call was cancelled.",
+                  });
+                }
+              },
             },
           );
           response = hostResponse(() => payload);

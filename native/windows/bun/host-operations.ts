@@ -5,6 +5,7 @@ import {
   type HostCall,
   type HostContext,
   type HostResponse,
+  type JsonValue,
   type NativeRegistration,
   type RuntimeIdentity,
 } from "@bunaway/protocol";
@@ -35,6 +36,7 @@ const queue = new Map<
     context: HostContext;
     call: HostCall;
     source: string;
+    execute?: () => Promise<JsonValue>;
   }
 >();
 let active: string | undefined;
@@ -48,7 +50,7 @@ const channel = new Channel(
     throw error;
   },
 );
-/** Request UI authorization for the oldest queued operation when the worker is idle. */
+/** Parse the oldest queued input before requesting fresh UI authorization. */
 function startNext() {
   if (stopping || active) {
     return;
@@ -57,19 +59,68 @@ function startNext() {
   if (!next) {
     return;
   }
-  active = next[0];
-  channel.notify({
-    kind: "prepare",
-    requestId: next[0],
-    context: next[1].context,
-    call: next[1].call,
+  const [id, call] = next;
+  active = id;
+  void prepare(id, call).catch((error) => {
+    throw error;
   });
 }
-/** Run an authorized operation and translate adapter failures into a host response. */
-function execute(call: HostCall, source: string): HostResponse {
-  return hostResponse(() =>
-    adapters.execute(call.operation, call.payload, source),
-  );
+
+/** Observe even late parser failures; cancelled calls never reach authorization or execution. */
+async function prepare(
+  id: string,
+  call: NonNullable<ReturnType<typeof queue.get>>,
+) {
+  try {
+    const execute = await adapters.prepare(
+      call.call.operation,
+      call.call.payload,
+      call.source,
+    );
+    if (stopping || queue.get(id) !== call || active !== id) {
+      return;
+    }
+    call.execute = execute;
+    channel.notify({
+      kind: "prepare",
+      requestId: id,
+      context: call.context,
+      call: call.call,
+    });
+  } catch (error) {
+    if (stopping || queue.get(id) !== call || active !== id) {
+      return;
+    }
+    complete(
+      id,
+      call,
+      hostResponse(() => {
+        throw error;
+      }),
+    );
+  }
+}
+
+/** Release this queue slot only if it still belongs to the completing call. */
+function complete(
+  id: string,
+  call: NonNullable<ReturnType<typeof queue.get>>,
+  response: HostResponse,
+) {
+  if (stopping || queue.get(id) !== call) {
+    return;
+  }
+  queue.delete(id);
+  channel.notify({
+    kind: "host-response",
+    context: call.context,
+    requestId: id,
+    response,
+  });
+  if (active === id) {
+    active = undefined;
+  }
+  startNext();
 }
 /** Apply I/O requests and control messages from the main-thread coordinator. */
 async function receive(packet: Packet) {
@@ -89,30 +140,33 @@ async function receive(packet: Packet) {
     startNext();
   } else if (packet.kind === "grant") {
     const call = queue.get(packet.requestId);
-    if (!call || active !== packet.requestId) {
+    if (!call || active !== packet.requestId || !call.execute) {
       return;
     }
     assert(call.context === packet.context);
-    queue.delete(packet.requestId);
-    active = undefined;
-    // UI checks context and policy; host forwards pending requests only.
-    // No await or second queue between STA authorization and the checked-handle operation.
-    const response = packet.allowed
-      ? execute(call.call, call.source)
-      : ({
+    let response: HostResponse;
+    try {
+      if (!packet.allowed) {
+        response = {
           kind: "error",
           error: {
             code: "PERMISSION_DENIED",
             message: "Host context or policy denied.",
           },
-        } as HostResponse);
-    channel.notify({
-      kind: "host-response",
-      context: call.context,
-      requestId: packet.requestId,
-      response,
-    });
-    startNext();
+        };
+      } else {
+        const execute = call.execute;
+        delete call.execute;
+        // The prepared function starts native I/O now, before its first await for output parsing.
+        const payload = await execute();
+        response = hostResponse(() => payload);
+      }
+    } catch (error) {
+      response = hostResponse(() => {
+        throw error;
+      });
+    }
+    complete(packet.requestId, call, response);
   } else if (packet.kind === "cancel") {
     queue.delete(packet.requestId);
     if (active === packet.requestId) {

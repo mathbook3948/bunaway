@@ -2,7 +2,12 @@ import { PLATFORMS } from "@bunaway/plugin-api";
 import { type JsonValue, NativeRegistry } from "@bunaway/protocol";
 import { z } from "zod";
 import type { NativeInvokeOptions } from "#transport";
-import { validatedAdapter } from "./native-validation.ts";
+import {
+  type NativePluginAdapter,
+  validatedAdapter,
+} from "./native-validation.ts";
+
+export type { NativePluginAdapter } from "./native-validation.ts";
 
 export type {
   JsonValue,
@@ -47,6 +52,8 @@ export type NativeAdapter = {
       permissions: import("@bunaway/protocol").Policy["backend"];
       /** Aborted when the UI call is cancelled, its context is revoked, or the host stops. */
       signal?: AbortSignal;
+      /** Host rechecks live authority immediately before entering the native adapter. */
+      beforeExecute?(): void;
     },
   ): JsonValue | Promise<JsonValue>;
   /** Report whether pending adapter work should delay host auto-close. */
@@ -60,9 +67,9 @@ export type NativeAdapterFactory = (
 ) => NativeAdapter;
 /** Input and output schemas for one named native operation. */
 export type NativeOperationDefinition = {
-  /** Synchronously parsed before execution; raw and parsed values must be JSON. */
+  /** Parsed with parseAsync before execution; raw and parsed values must be JSON. */
   readonly input: z.ZodType;
-  /** Synchronously parsed after execution; raw and parsed values must be JSON. */
+  /** Parsed with parseAsync after execution; raw and parsed values must be JSON. */
   readonly output: z.ZodType;
 };
 /** Declarative contract used to register operations and construct their callers. */
@@ -179,7 +186,9 @@ export function defineNativePlugin<const D extends NativePluginDefinition>(
         ) as {
           readonly execution: "io" | "ui";
           readonly operations?: readonly string[];
-          readonly create: NativeAdapterFactory;
+          readonly create: (
+            environment: NativeEnvironment,
+          ) => NativePluginAdapter;
         },
       ];
     }),

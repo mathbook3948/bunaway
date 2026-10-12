@@ -19,7 +19,7 @@ test.each([
   "windows.recreate",
 ])(
   "%s keeps creation options restricted to presentation and uses an independent operation grant",
-  (operation) => {
+  async (operation) => {
     const call = {
       operation,
       payload: {
@@ -27,7 +27,7 @@ test.each([
       },
     };
     expect(validateWindowCall(call)).toEqual(call);
-    expect(parsers.validateCall(call)).toEqual(call);
+    expect(await parsers.validateCall(call)).toEqual(call);
     expect(registry.operation(operation).name).toBe(operation);
     const permissions = {
       permissions: [
@@ -106,7 +106,7 @@ test.each([
           options,
         },
       };
-      expect(parsers.validateCall(valid)).toEqual(valid);
+      expect(await parsers.validateCall(valid)).toEqual(valid);
       expect(parseWindowCall(JSON.stringify(valid))).toEqual(valid);
     }
     for (const options of [
@@ -162,7 +162,7 @@ test.each([
       };
       // Both the SDK adapter and serialized window helper reject extra fields.
       for (const validate of [
-        () => parsers.validateCall(invalid),
+        async () => await parsers.validateCall(invalid),
         () => parseWindowCall(JSON.stringify(invalid)),
       ]) {
         expect(validate).toThrow(

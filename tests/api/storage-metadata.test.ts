@@ -70,13 +70,13 @@ export function checkStorageTypes(): void {
   ];
 }
 
-test("metadata operations validate inputs and file or directory results", () => {
+test("metadata operations validate inputs and file or directory results", async () => {
   for (const operation of [
     "storage.exists",
     "storage.stat",
   ] as const) {
     expect(
-      parsers.validateCall({
+      await parsers.validateCall({
         operation,
         payload: location,
       }),
@@ -85,14 +85,14 @@ test("metadata operations validate inputs and file or directory results", () => 
       payload: location,
     });
   }
-  expect(parsers.validateOutput("storage.exists", false)).toBe(false);
-  expect(parsers.validateOutput("storage.stat", null)).toBeNull();
-  expect(parsers.validateOutput("storage.stat", fileMetadata)).toEqual(
+  expect(await parsers.validateOutput("storage.exists", false)).toBe(false);
+  expect(await parsers.validateOutput("storage.stat", null)).toBeNull();
+  expect(await parsers.validateOutput("storage.stat", fileMetadata)).toEqual(
     fileMetadata,
   );
-  expect(parsers.validateOutput("storage.stat", directoryMetadata)).toEqual(
-    directoryMetadata,
-  );
+  expect(
+    await parsers.validateOutput("storage.stat", directoryMetadata),
+  ).toEqual(directoryMetadata);
 
   for (const input of [
     {
@@ -104,12 +104,12 @@ test("metadata operations validate inputs and file or directory results", () => 
       path: "",
     },
   ]) {
-    expect(() =>
+    await expect(
       parsers.validateCall({
         operation: "storage.stat",
         payload: input,
       }),
-    ).toThrow();
+    ).rejects.toThrow();
   }
   for (const output of [
     {
@@ -129,7 +129,9 @@ test("metadata operations validate inputs and file or directory results", () => 
       sizeBytes: 0,
     },
   ]) {
-    expect(() => parsers.validateOutput("storage.stat", output)).toThrow();
+    await expect(
+      parsers.validateOutput("storage.stat", output),
+    ).rejects.toThrow();
   }
 });
 
