@@ -222,7 +222,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] created, ready, closed, destroyed 이벤트를 제공한다.
 - [x] `windows.changed`로 실제 전경 창 상태의 focus와 blur 전환을 제공한다.
 - [x] move와 resize 전환에 현재 outer bounds와 DPI를 함께 제공한다.
-- [ ] 연속 이동과 크기 변경이 끝난 moved와 resized 이벤트를 제공한다.
+- [x] Windows의 네이티브 이동과 크기 조절 루프가 끝나면 `windows.changed`에 `moved`, `resized`를 제공한다. 시작과 최종 geometry의 실제 차이를 판정하고 최종 bounds와 별도 revision을 전달한다.
 - [ ] will-move와 will-resize의 취소 가능 여부를 정의한다.
 - [x] minimize, maximize, unmaximize와 restore 전환을 제공한다.
 - [x] enterFullscreen과 leaveFullscreen 전환을 제공한다.

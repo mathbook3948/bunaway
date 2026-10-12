@@ -630,6 +630,7 @@ await windows.unmaximize({ view: "editor" });
 추가합니다. 설치와 플러그인 등록만으로 권한이 생기지 않습니다.
 
 payload는 `{ windowId, viewId, revision, state, bounds, changes }`입니다.
+`windowEvents["windows.changed"]`는 `moved`, `resized`를 포함하는 공개 payload schema입니다.
 `windowId`는 네이티브 창 인스턴스마다 새로 발급하는 불투명 식별자이고,
 `viewId`는 설정과 정책의 뷰 ID입니다. HWND를 공개하지 않습니다.
 envelope의 `source`는 `"native"`, `target`은 수신 뷰 ID입니다.
@@ -657,6 +658,8 @@ bounds를 반환합니다. 논리 좌표가 필요하면 기존 변환 API를 �
 | `enterFullscreen`, `leaveFullscreen` | 호스트 전체화면 상태 진입과 해제 |
 | `move` | outer bounds의 x 또는 y 변경 |
 | `resize` | outer bounds의 width, height 또는 DPI 변경 |
+| `moved` | 네이티브 사용자 이동/크기 조절 루프 종료. 시작보다 최종 outer x 또는 y 변경 |
+| `resized` | 같은 루프 종료. 시작보다 최종 outer width, height 또는 DPI 변경 |
 
 API 호출과 사용자 조작은 같은 네이티브 관찰 경로를 사용합니다. 이벤트는 요청의
 시작이 아니라 Windows가 반영한 상태를 알립니다. OS가 포커스 요청을 거부하고
@@ -665,8 +668,12 @@ API 호출과 사용자 조작은 같은 네이티브 관찰 경로를 사용합
 스타일과 placement 중간 상태는 보류하고 전환이 끝난 snapshot을 발행합니다.
 명령 완료 응답과 이벤트 수신의 상대 순서는 보장하지 않습니다.
 
-연속 move/resize는 관찰한 변경마다 FIFO로 전달합니다. debounce, 최종 moved/resized
-이벤트와 손실 없는 OS 입력 이력은 제공하지 않습니다. Windows가 메시지를 합치면
+연속 move/resize는 관찰한 변경마다 FIFO로 전달합니다. Windows의 `WM_ENTERSIZEMOVE`와
+`WM_EXITSIZEMOVE` 사이를 사용자 조작 하나로 추적하며 종료 때 실제 시작/최종 geometry가
+달라진 축의 `moved`, `resized`를 순서대로 전달합니다. 이 최종 알림은 마지막 중간 관찰과
+같은 bounds여도 새 revision을 사용합니다. 이동을 시작했지만 최종 geometry가 시작과 같으면
+최종 알림이 없으며 반복 종료 메시지도 중복 발행하지 않습니다. 루프 밖의 geometry API에는
+기존 move/resize만 발행합니다. debounce와 손실 없는 OS 입력 이력은 제공하지 않습니다. Windows가 메시지를 합치면
 그 중간 좌표까지 복원할 수는 없습니다. 구독별 wire sequence는 1부터 증가하며
 그 구독에서만 의미가 있습니다. `revision`은 창별 관찰 순번이고 재생성하면 0부터
 다시 시작합니다. 여러 changes를 포함한 한 snapshot에는 revision 하나를 사용합니다.

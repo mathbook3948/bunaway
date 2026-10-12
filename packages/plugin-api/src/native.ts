@@ -295,7 +295,7 @@ export type WindowSnapshot = {
   state: WindowDisplayState;
   bounds: WindowBounds;
 };
-/** Changes emitted in the order of a committed snapshot comparison. */
+/** Changes emitted in snapshot-comparison order, followed by native move/resize completion. */
 export type WindowChange =
   | "shown"
   | "hidden"
@@ -308,7 +308,9 @@ export type WindowChange =
   | "enterFullscreen"
   | "leaveFullscreen"
   | "move"
-  | "resize";
+  | "resize"
+  | "moved"
+  | "resized";
 /** UI-thread services used by the native windows plugin. */
 export type NativeWindowServices = {
   /** Whether this UI adapter supports per-creation presentation options; absent means unsupported. */

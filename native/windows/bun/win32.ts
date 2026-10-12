@@ -21,7 +21,7 @@ import {
   APP_WINDOW_CLASS_PREFIX,
 } from "@bunaway/runtime-bun/windows-control";
 import { display, hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
-import { windowChanges } from "./window-events.ts";
+import { completedGeometryChanges, windowChanges } from "./window-events.ts";
 import { initialWindowPlacement, type WorkArea } from "./window-placement.ts";
 import {
   constrainedOuterSize,
@@ -142,6 +142,7 @@ export class Windows {
     }
   >();
   private readonly changingGeometry = new Set<bigint>();
+  private readonly interactiveGeometry = new Map<bigint, WindowBounds>();
   private readonly initialOuterSizes = new Map<
     bigint,
     {
@@ -299,6 +300,16 @@ export class Windows {
           if (message === WM_WINDOWPOSCHANGING) {
             this.constrainMaximizedSize(window, lparam);
           }
+          if (
+            message === WM_ENTERSIZEMOVE &&
+            this.observations.has(window) &&
+            !this.interactiveGeometry.has(window)
+          ) {
+            this.interactiveGeometry.set(
+              window,
+              this.getBounds(window, "outer"),
+            );
+          }
           this.windows.get(window)?.(message, wparam, lparam);
           if (message === WM_CLOSE) {
             return 0n; // defer Close/DestroyWindow past callback
@@ -309,6 +320,13 @@ export class Windows {
             wparam,
             lparam,
           );
+          if (message === WM_EXITSIZEMOVE) {
+            const start = this.interactiveGeometry.get(window);
+            this.interactiveGeometry.delete(window);
+            if (start) {
+              this.observeChanges(window, start);
+            }
+          }
           if (message === WM_WINDOWPOSCHANGED && this.windows.has(window)) {
             this.rememberNormalMonitor(window);
           }
@@ -683,7 +701,7 @@ export class Windows {
   }
 
   /** Commit before calling the observer so nested Win32 callbacks cannot repeat a transition. */
-  private observeChanges(window: bigint): void {
+  private observeChanges(window: bigint, completed?: WindowBounds): void {
     const observation = this.observations.get(window);
     if (!observation || this.changingGeometry.has(window)) {
       return;
@@ -696,6 +714,9 @@ export class Windows {
       previous.revision + 1,
     );
     const changes = windowChanges(previous, current);
+    if (completed) {
+      changes.push(...completedGeometryChanges(completed, current.bounds));
+    }
     if (!changes.length) {
       return;
     }
@@ -1785,6 +1806,7 @@ export class Windows {
     }
     this.observations.delete(window);
     this.changingGeometry.delete(window);
+    this.interactiveGeometry.delete(window);
     assert(user.symbols.DestroyWindow(window));
     this.windows.delete(window);
     this.constraints.delete(window);

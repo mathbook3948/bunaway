@@ -134,6 +134,7 @@ if (workerData) {
   let hwnd = 0n;
   let entered = false;
   let left = false;
+  let completed = false;
   let result = false;
   let received = 0;
   let failure: unknown;
@@ -160,6 +161,16 @@ if (workerData) {
             payload: packet.payload,
           },
         });
+        const payload = packet.payload;
+        if (
+          payload &&
+          typeof payload === "object" &&
+          !Array.isArray(payload) &&
+          Array.isArray(payload.changes) &&
+          payload.changes.includes("moved")
+        ) {
+          completed = true;
+        }
       } else if (packet.kind === "diagnostic") {
         if (packet.event === "window") {
           hwnd = BigInt(String(packet.fields.hwnd));
@@ -236,7 +247,7 @@ if (workerData) {
       await Bun.sleep(MOVE_INTERVAL_MS);
     }
     assert(driver.symbols.PostMessageW(hwnd, WM_CANCELMODE, 0n, 0n));
-    await waitFor(() => left);
+    await waitFor(() => left && completed);
     await channel.drain();
     await channel.send({
       kind: "shutdown",

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { dlopen, ptr } from "bun:ffi";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -223,16 +224,49 @@ if (!process.argv.includes("--child")) {
           assert.equal(activated, await windows.isFocused(target));
           const blurred = await windows.blur(target);
           assert.equal(blurred, !(await windows.isFocused(target)));
-          await windows.setPosition({
-            ...target,
-            x: 50 + documents * 20,
-            y: 60,
+          const driver = dlopen("user32.dll", {
+            FindWindowW: {
+              args: [
+                "ptr",
+                "ptr",
+              ],
+              returns: "u64",
+            },
+            SendMessageW: {
+              args: [
+                "u64",
+                "u32",
+                "u64",
+                "i64",
+              ],
+              returns: "i64",
+            },
           });
-          await windows.setSize({
+          const caption = Buffer.from("Events main\0", "utf16le");
+          const hwnd = driver.symbols.FindWindowW(null, ptr(caption));
+          assert(hwnd);
+          const contentBefore = await windows.getContentSize({
             ...target,
-            width: 650 + documents * 20,
-            height: 500,
+            unit: "logical",
           });
+          try {
+            // Native begin/end messages surround public geometry calls; final events travel
+            // through the actual UI owner, Core session and subscribed WebView document.
+            driver.symbols.SendMessageW(hwnd, 0x0231, 0n, 0n);
+            await windows.setPosition({
+              ...target,
+              x: before.bounds.x + 31,
+              y: before.bounds.y + 29,
+            });
+            await windows.setSize({
+              ...target,
+              width: contentBefore.width + 10,
+              height: contentBefore.height + 10,
+            });
+          } finally {
+            driver.symbols.SendMessageW(hwnd, 0x0232, 0n, 0n);
+            driver.close();
+          }
           // Exercise setters through the public SDK, Core, UI worker and WebView2 events.
           const content = await windows.getContentBounds(target);
           await windows.setContentPosition({
@@ -343,6 +377,8 @@ if (!process.argv.includes("--child")) {
             "shown",
             "move",
             "resize",
+            "moved",
+            "resized",
             "maximize",
             "unmaximize",
             "minimize",
