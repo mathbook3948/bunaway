@@ -8,6 +8,7 @@ import { physicalPixels } from "#native/windows/bun/window-size";
 // Isolate the DLL substitute from tests that load the real Win32 bindings.
 const CW_USEDEFAULT = -2147483648;
 const WM_DPICHANGED = 0x02e0;
+const WM_GETMINMAXINFO = 0x0024;
 const SWP_NOMOVE = 0x2;
 const SWP_NOSIZE = 0x1;
 const FRAME_WIDTH = 16;
@@ -37,6 +38,14 @@ let dpiChanges = 0;
 let positionCalls = 0;
 let destroyedWindows = 0;
 let shownWindows = 0;
+let enforceTrackingLimits = false;
+let ignoreRequestedSize = false;
+const trackingLimits = {
+  minWidth: 112,
+  minHeight: 39,
+  maxWidth: 1936,
+  maxHeight: 1096,
+};
 let rect = {
   x: 0,
   y: 0,
@@ -46,6 +55,27 @@ let rect = {
 
 function data(address: Pointer, size: number) {
   return new DataView(toArrayBuffer(address, 0, size));
+}
+
+/** Ask the real window procedure to override defaults before native size clamping. */
+function readTrackingLimits(window: bigint) {
+  const info = new Int32Array(10);
+  info[6] = trackingLimits.minWidth;
+  info[7] = trackingLimits.minHeight;
+  info[8] = trackingLimits.maxWidth;
+  info[9] = trackingLimits.maxHeight;
+  messages.symbols.windowProcedure(
+    window,
+    WM_GETMINMAXINFO,
+    0n,
+    BigInt(ptr(info)),
+  );
+  return {
+    minWidth: info[6],
+    minHeight: info[7],
+    maxWidth: info[8],
+    maxHeight: info[9],
+  };
 }
 
 /** Match Windows' largest-overlap selection independently of the requested point. */
@@ -156,6 +186,7 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
         return 1;
       },
       GetDpiForWindow: () => windowDpi,
+      DefWindowProcW: () => 0n,
       MonitorFromWindow: (window: bigint) =>
         window ? windowMonitor().handle : 1n,
       MonitorFromPoint(point: bigint) {
@@ -206,6 +237,17 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
         flags: number,
       ) {
         positionCalls++;
+        if (enforceTrackingLimits && !(flags & SWP_NOSIZE)) {
+          const limits = readTrackingLimits(_window);
+          width = Math.max(limits.minWidth, Math.min(limits.maxWidth, width));
+          height = Math.max(
+            limits.minHeight,
+            Math.min(limits.maxHeight, height),
+          );
+        }
+        if (ignoreRequestedSize && !(flags & SWP_NOSIZE)) {
+          width--;
+        }
         rect = {
           x: flags & SWP_NOMOVE ? rect.x : x,
           y: flags & SWP_NOMOVE ? rect.y : y,
@@ -462,6 +504,74 @@ try {
   } finally {
     windows.destroy(centered);
   }
+  assert.equal(windows.failure, undefined);
+
+  // Model a single display's default tracking limits. Initial placement must
+  // preserve oversized requests, while ordinary resizing keeps those defaults.
+  monitors.splice(1);
+  Object.assign(primary, {
+    x: 0,
+    y: 40,
+    width: 1920,
+    height: 1040,
+    dpi: 96,
+  });
+  enforceTrackingLimits = true;
+  for (const useContentSize of [
+    true,
+    false,
+  ]) {
+    const hwnd = create({
+      width: 3000,
+      height: 2000,
+      center: true,
+      useContentSize,
+    });
+    try {
+      const bounds = windows.getBounds(hwnd, "outer");
+      assert.equal(bounds.width, 3000 + (useContentSize ? FRAME_WIDTH : 0));
+      assert.equal(bounds.height, 2000 + (useContentSize ? FRAME_HEIGHT : 0));
+      const center = centerInWorkArea(primary, bounds.width, bounds.height);
+      assert.equal(bounds.x, center.x);
+      assert.equal(bounds.y, center.y);
+      assert.deepEqual(readTrackingLimits(hwnd), trackingLimits);
+    } finally {
+      windows.destroy(hwnd);
+    }
+  }
+
+  // Overflow fitting can produce a valid rectangle smaller than the system's
+  // caption minimum. It must not expand back outside the selected work area.
+  primary.width = 100;
+  const fitted = create({
+    width: 800,
+    height: 600,
+    preventOverflow: true,
+  });
+  try {
+    const bounds = windows.getBounds(fitted, "outer");
+    assert.equal(bounds.width, primary.width);
+    assert.equal(bounds.x, primary.x);
+    assert.deepEqual(readTrackingLimits(fitted), trackingLimits);
+  } finally {
+    windows.destroy(fitted);
+  }
+
+  // A successful SetWindowPos return alone does not prove the rectangle was applied.
+  primary.width = 1920;
+  ignoreRequestedSize = true;
+  const destroyedBeforeMismatch = destroyedWindows;
+  assert.throws(
+    () =>
+      create({
+        width: 600,
+        height: 400,
+        center: true,
+      }),
+    /did not apply the initial window rectangle/,
+  );
+  assert.equal(destroyedWindows, destroyedBeforeMismatch + 1);
+  assert.equal(shownWindows, 0);
   assert.equal(windows.failure, undefined);
 } finally {
   windows.dispose();

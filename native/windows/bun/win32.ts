@@ -142,7 +142,13 @@ export class Windows {
     }
   >();
   private readonly changingGeometry = new Set<bigint>();
-  private readonly placingWindows = new Set<bigint>();
+  private readonly initialOuterSizes = new Map<
+    bigint,
+    {
+      width: number;
+      height: number;
+    }
+  >();
   private lastActiveWindow: bigint | null = null;
   private readonly dpiByWindow = new Map<bigint, number>();
   private readonly normalMonitors = new Map<
@@ -459,7 +465,6 @@ export class Windows {
   /** Own synchronous DPI transitions until initial geometry settles; reject cycles before showing. */
   private applyInitialPlacement(window: bigint, options: WindowSpec["window"]) {
     const attemptedDpis = new Set<number>();
-    this.placingWindows.add(window);
     try {
       for (
         let attempt = 0;
@@ -474,6 +479,9 @@ export class Windows {
         attemptedDpis.add(dpi);
         this.dpiByWindow.set(window, dpi);
         const actual = this.initialPlacement(options, window);
+        // DefWindowProc otherwise clamps to system tracking limits, which can
+        // shrink an oversized rectangle or enlarge an overflow-fitted one.
+        this.initialOuterSizes.set(window, actual.outer);
         assert(
           user.symbols.SetWindowPos(
             window,
@@ -487,6 +495,15 @@ export class Windows {
           "Initial SetWindowPos failed.",
         );
         if (this.readDpi(window) === dpi) {
+          const bounds = this.getBounds(window, "outer");
+          assert(
+            bounds.width === actual.outer.width &&
+              bounds.height === actual.outer.height &&
+              (!actual.position ||
+                (bounds.x === actual.position.x &&
+                  bounds.y === actual.position.y)),
+            "Windows did not apply the initial window rectangle.",
+          );
           return;
         }
       }
@@ -494,7 +511,7 @@ export class Windows {
         "Initial window placement exceeded its DPI adjustment limit.",
       );
     } finally {
-      this.placingWindows.delete(window);
+      this.initialOuterSizes.delete(window);
     }
   }
 
@@ -1250,6 +1267,19 @@ export class Windows {
   }
 
   private applyMinMaxInfo(window: bigint, lparam: bigint) {
+    const initialSize = this.initialOuterSizes.get(window);
+    if (initialSize) {
+      // The placement plan already includes content constraints and overflow
+      // fitting. Pin only this synchronous resize, then restore normal tracking.
+      const info = new DataView(
+        toArrayBuffer(callbackPointer(lparam), 0, MINMAXINFO_SIZE),
+      );
+      info.setInt32(24, initialSize.width, true);
+      info.setInt32(28, initialSize.height, true);
+      info.setInt32(32, initialSize.width, true);
+      info.setInt32(36, initialSize.height, true);
+      return;
+    }
     if (this.fullscreen.has(window)) {
       return;
     }
@@ -1346,7 +1376,7 @@ export class Windows {
     const previousDpi = this.dpiByWindow.get(window) ?? this.readDpi(window);
     // Initial placement owns size and position. Accept the DPI, but do not apply the
     // OS suggestion recursively; its caller recomputes both at the committed DPI.
-    if (this.placingWindows.has(window)) {
+    if (this.initialOuterSizes.has(window)) {
       this.dpiByWindow.set(window, dpi);
       return;
     }

@@ -122,6 +122,50 @@ if (!process.argv.includes("--child")) {
         native.destroy(hwnd);
       }
     }
+    // Exercise native default tracking limits with a rectangle larger than
+    // typical CI displays. Initial content/outer sizing must remain centered.
+    for (const useContentSize of [
+      true,
+      false,
+    ]) {
+      const spec = {
+        width: MAX_WINDOW_DIMENSION,
+        height: MAX_WINDOW_DIMENSION,
+        center: true,
+        useContentSize,
+      };
+      const hwnd = native.create(
+        "Oversized initial placement HWND",
+        spec.width,
+        spec.height,
+        () => {},
+        false,
+        spec,
+      );
+      try {
+        const outer = native.getBounds(hwnd, "outer");
+        const center = centerInWorkArea(area, outer.width, outer.height);
+        assert.equal(outer.x, center.x);
+        assert.equal(outer.y, center.y);
+        const measured = native.getBounds(
+          hwnd,
+          useContentSize ? "content" : "outer",
+        );
+        assert(
+          Math.abs(measured.width - physicalPixels(spec.width, measured.dpi)) <=
+            1,
+        );
+        assert(
+          Math.abs(
+            measured.height - physicalPixels(spec.height, measured.dpi),
+          ) <= 1,
+        );
+        assert.equal(native.isVisible(hwnd), false);
+        assert.equal(native.failure, undefined);
+      } finally {
+        native.destroy(hwnd);
+      }
+    }
     if (minimumFits) {
       assert.doesNotThrow(() => native.validateCreation(minimumWindow));
     } else {
