@@ -391,7 +391,8 @@ Windows의 비활성화 기록을 수정하지 않는다.
 우선순위 P1. 소유자: 공식 notification 플러그인 후보, 외부 활성화 전달은 호스트.
 출처: [E-notification], [T-notification].
 
-- [ ] OS 알림 지원 여부와 필요한 OS 권한 상태를 조회하고 요청한다.
+- [x] Windows toast API 지원 여부와 앱, 사용자, 정책의 알림 차단 상태를 조회한다.
+- [ ] 필요한 OS 권한 요청의 플랫폼별 계약을 제공한다. Windows 데스크톱 경로에는 알림 동의 팝업이 없으며 설정 변경은 사용자에게 맡긴다.
 - [ ] 제목, 본문, 아이콘, 이미지와 소리를 지정해 알림을 표시한다.
 - [ ] show, click, close와 failed 이벤트를 제공한다.
 - [ ] 알림 ID, 그룹과 취소, 교체 동작을 정의한다.
@@ -402,7 +403,16 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [ ] OS에 남은 알림 조회와 개별, 그룹, 전체 제거의 플랫폼별 지원을 결정한다.
 - [ ] 예약 알림과 pending 조회, 취소의 플랫폼별 지원을 제공한다.
 - [ ] 첨부 파일과 클릭 액션 종류를 등록한다.
-- [ ] OS 알림 설정으로 이동하는 흐름과 사용자에 의한 차단 상태를 제공한다.
+- [x] Windows 알림 설정 페이지로 이동하는 요청과 사용자에 의한 차단 상태를 제공한다.
+
+`@bunaway/plugin-notification`은 현재 호스트 앱 ID로 WinRT `ToastNotifier.Setting`을
+조회하며 `notification.getStatus`와 `notification.openSettings` 권한을 분리한다.
+설정 열기는 `ms-settings:notifications` 요청 접수이며 동의나 설정 변경 완료를 뜻하지 않는다.
+알림 표시, shortcut/COM activator 등록과 종료 상태의 activation 전달은 아직 구현하지 않았다.
+시작 메뉴 바로가기를 생성하지 않는 기존 설치 선택도 보존한다. 배포/개발의 동일 ID 조회는
+같은 OS 설정을 읽으며 `enabled`는 toast 표시, 앱 등록이나 activation 가능성을 보장하지 않는다.
+MSIX의 패키지 식별자 연동은 후속 범위다. 공개 계약과 네이티브 검증 범위는
+[notification 문서](../plugins/notification/README.md)를 따른다.
 
 ## 11. 대화상자와 파일 선택
 
