@@ -1,5 +1,10 @@
 # Tests
 
+`windows-initial-placement.fixture.ts`는 모니터 겹침이 바뀌는 `SetWindowPos`에서
+실제 창 프로시저에 `WM_DPICHANGED`를 전달한다. 초기 DPI 보정의 수렴, 중앙 좌표와
+content/outer 크기, DPI 순환 때 숨김 HWND 정리 및 생성 후 OS 권장 배치 처리를 검증한다.
+합성 모니터 검증이며 실제 다중 모니터 실행을 대신하지 않는다.
+
 `mise run check`와 플랫폼 검사는 먼저 `plugins:build`를 실행해 중립 공개 출력과 OS별
 호스트 출력을 생성한다. `cli/plugin-build.test.ts`는 화면 출력의 OS 코드 제외,
 확장자를 작성하거나 생략한 플랫폼 import의 동일한 처리, 깨끗한 체크아웃에서 빌드 테스트 폴더 생성,

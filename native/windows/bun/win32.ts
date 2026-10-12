@@ -2,8 +2,8 @@ import { dlopen, JSCallback, type Pointer, ptr, toArrayBuffer } from "bun:ffi";
 import assert from "node:assert/strict";
 import {
   clampWindowSize,
-  hasValidWindowSizeConstraints,
   hasValidWindowPlacement,
+  hasValidWindowSizeConstraints,
   MAX_WINDOW_DIMENSION,
   MIN_WINDOW_DIMENSION,
   type NativeWindow,
@@ -86,6 +86,7 @@ const WS_MAXIMIZE = 0x01000000n;
 const WS_MINIMIZE = 0x20000000n;
 const IDYES = 6;
 const MAX_MESSAGES_PER_PUMP = 64;
+const MAX_INITIAL_PLACEMENT_ATTEMPTS = 8;
 const MINMAXINFO_SIZE = 40;
 const MONITORINFO_SIZE = 40;
 const RECT_SIZE = 16;
@@ -141,6 +142,7 @@ export class Windows {
     }
   >();
   private readonly changingGeometry = new Set<bigint>();
+  private readonly placingWindows = new Set<bigint>();
   private lastActiveWindow: bigint | null = null;
   private readonly dpiByWindow = new Map<bigint, number>();
   private readonly normalMonitors = new Map<
@@ -454,6 +456,48 @@ export class Windows {
     );
   }
 
+  /** Own synchronous DPI transitions until initial geometry settles; reject cycles before showing. */
+  private applyInitialPlacement(window: bigint, options: WindowSpec["window"]) {
+    const attemptedDpis = new Set<number>();
+    this.placingWindows.add(window);
+    try {
+      for (
+        let attempt = 0;
+        attempt < MAX_INITIAL_PLACEMENT_ATTEMPTS;
+        attempt++
+      ) {
+        const dpi = this.readDpi(window);
+        assert(
+          !attemptedDpis.has(dpi),
+          "Initial window placement cannot settle across monitor DPI changes.",
+        );
+        attemptedDpis.add(dpi);
+        this.dpiByWindow.set(window, dpi);
+        const actual = this.initialPlacement(options, window);
+        assert(
+          user.symbols.SetWindowPos(
+            window,
+            0n,
+            actual.position?.x ?? 0,
+            actual.position?.y ?? 0,
+            actual.outer.width,
+            actual.outer.height,
+            SWP_NOZORDER | SWP_NOACTIVATE | (actual.position ? 0 : SWP_NOMOVE),
+          ),
+          "Initial SetWindowPos failed.",
+        );
+        if (this.readDpi(window) === dpi) {
+          return;
+        }
+      }
+      throw new Error(
+        "Initial window placement exceeded its DPI adjustment limit.",
+      );
+    } finally {
+      this.placingWindows.delete(window);
+    }
+  }
+
   /** Create hidden, apply content constraints and placement, register state, then optionally show. */
   create(
     title: string,
@@ -498,22 +542,9 @@ export class Windows {
     this.windows.set(window, receive);
     this.constraints.set(window, initialConstraints);
     try {
-      this.dpiByWindow.set(window, this.getDpi(window));
       // The HWND's largest monitor overlap can differ from the requested point's monitor.
-      // Recompute sizes and frames at its actual DPI, retaining the selected placement work area.
-      const actual = this.initialPlacement(placement, window);
-      assert(
-        user.symbols.SetWindowPos(
-          window,
-          0n,
-          actual.position?.x ?? 0,
-          actual.position?.y ?? 0,
-          actual.outer.width,
-          actual.outer.height,
-          SWP_NOZORDER | SWP_NOACTIVATE | (actual.position ? 0 : SWP_NOMOVE),
-        ),
-        "Initial SetWindowPos failed.",
-      );
+      // Recompute after every initial DPI transition, retaining the selected placement work area.
+      this.applyInitialPlacement(window, placement);
       this.rememberNormalMonitor(window);
       if (visible) {
         user.symbols.ShowWindow(window, SW_SHOW);
@@ -1313,6 +1344,12 @@ export class Windows {
     const dpi = Number(wparam & 0xffffn);
     assert(dpi, "WM_DPICHANGED supplied an invalid DPI.");
     const previousDpi = this.dpiByWindow.get(window) ?? this.readDpi(window);
+    // Initial placement owns size and position. Accept the DPI, but do not apply the
+    // OS suggestion recursively; its caller recomputes both at the committed DPI.
+    if (this.placingWindows.has(window)) {
+      this.dpiByWindow.set(window, dpi);
+      return;
+    }
     const suggested = new DataView(
       toArrayBuffer(callbackPointer(lparam), 0, RECT_SIZE),
     );

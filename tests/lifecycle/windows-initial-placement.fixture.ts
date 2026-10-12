@@ -1,4 +1,4 @@
-import { type Pointer, ptr, toArrayBuffer } from "bun:ffi";
+import { linkSymbols, type Pointer, ptr, toArrayBuffer } from "bun:ffi";
 import { mock } from "bun:test";
 import assert from "node:assert/strict";
 import type { WindowSpec } from "@bunaway/plugin-api/native";
@@ -7,7 +7,9 @@ import { physicalPixels } from "#native/windows/bun/window-size";
 
 // Isolate the DLL substitute from tests that load the real Win32 bindings.
 const CW_USEDEFAULT = -2147483648;
+const WM_DPICHANGED = 0x02e0;
 const SWP_NOMOVE = 0x2;
+const SWP_NOSIZE = 0x1;
 const FRAME_WIDTH = 16;
 const FRAME_HEIGHT = 39;
 const monitors = [
@@ -30,6 +32,11 @@ const monitors = [
 ];
 let nextWindow = 1n;
 let windowDpi = 96;
+let callbackAddress = 0;
+let dpiChanges = 0;
+let positionCalls = 0;
+let destroyedWindows = 0;
+let shownWindows = 0;
 let rect = {
   x: 0,
   y: 0,
@@ -93,7 +100,10 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
     symbols: {
       LoadIconW: () => 1n,
       SetThreadDpiAwarenessContext: () => -4n,
-      RegisterClassExW: () => 1,
+      RegisterClassExW(address: Pointer) {
+        callbackAddress = Number(data(address, 80).getBigUint64(8, true));
+        return 1;
+      },
       UnregisterClassW: () => 1,
       CreateWindowExW(
         _ex: number,
@@ -115,10 +125,36 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
         windowDpi = windowMonitor().dpi;
         return nextWindow++;
       },
-      DestroyWindow: () => 1,
+      DestroyWindow() {
+        destroyedWindows++;
+        return 1;
+      },
       IsWindow: () => 1,
       IsIconic: () => 0,
       IsZoomed: () => 0,
+      IsWindowVisible: () => 0,
+      ShowWindow(_window: bigint, command: number) {
+        if (command !== 0) {
+          shownWindows++;
+        }
+        return 1;
+      },
+      GetWindowLongPtrW: (_window: bigint, kind: number) =>
+        kind === -16 ? 0x00cf0000n : 0n,
+      GetClientRect(_window: bigint, address: Pointer) {
+        const bounds = data(address, 16);
+        bounds.setInt32(
+          8,
+          rect.width - physicalPixels(FRAME_WIDTH, windowDpi),
+          true,
+        );
+        bounds.setInt32(
+          12,
+          rect.height - physicalPixels(FRAME_HEIGHT, windowDpi),
+          true,
+        );
+        return 1;
+      },
       GetDpiForWindow: () => windowDpi,
       MonitorFromWindow: (window: bigint) =>
         window ? windowMonitor().handle : 1n,
@@ -169,12 +205,31 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
         height: number,
         flags: number,
       ) {
+        positionCalls++;
         rect = {
           x: flags & SWP_NOMOVE ? rect.x : x,
           y: flags & SWP_NOMOVE ? rect.y : y,
-          width,
-          height,
+          width: flags & SWP_NOSIZE ? rect.width : width,
+          height: flags & SWP_NOSIZE ? rect.height : height,
         };
+        const dpi = windowMonitor().dpi;
+        if (dpi !== windowDpi) {
+          const previousDpi = windowDpi;
+          windowDpi = dpi;
+          dpiChanges++;
+          const suggested = new Int32Array([
+            rect.x,
+            rect.y,
+            rect.x + Math.round((rect.width * dpi) / previousDpi),
+            rect.y + Math.round((rect.height * dpi) / previousDpi),
+          ]);
+          messages.symbols.windowProcedure(
+            _window,
+            WM_DPICHANGED,
+            BigInt(dpi),
+            BigInt(ptr(suggested)),
+          );
+        }
         return 1;
       },
       GetWindowRect(_window: bigint, address: Pointer) {
@@ -195,6 +250,18 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
 
 const { Windows } = await import("#native/windows/bun/win32");
 const windows = new Windows(() => {});
+const messages = linkSymbols({
+  windowProcedure: {
+    ptr: BigInt(callbackAddress),
+    args: [
+      "u64",
+      "u32",
+      "u64",
+      "i64",
+    ],
+    returns: "i64",
+  },
+});
 function create(options: WindowSpec["window"]) {
   return windows.create(
     "Mixed DPI placement",
@@ -275,23 +342,122 @@ try {
     windows.destroy(defaultWindow);
   }
 
-  // Oversized centering can overlap secondary most, but must retain primary rcWork.
+  // These centered sizes alternate between the two monitor DPIs indefinitely.
   primary.dpi = 144;
   secondary.dpi = 96;
+  const previousDestroyed = destroyedWindows;
+  const previousCalls = positionCalls;
+  assert.throws(
+    () =>
+      create({
+        width: 4096,
+        height: 400,
+        center: true,
+      }),
+    /cannot settle across monitor DPI changes/,
+  );
+  assert.equal(destroyedWindows, previousDestroyed + 1);
+  assert.equal(positionCalls, previousCalls + 2);
+  assert.equal(shownWindows, 0);
+  assert.equal(windows.failure, undefined);
+
+  // A third monitor makes the next DPI transition converge. Keep primary rcWork
+  // while recalculating requested content/outer sizes at the final HWND DPI.
+  Object.assign(primary, {
+    x: 0,
+    y: 0,
+    width: 800,
+    height: 600,
+    dpi: 96,
+  });
+  Object.assign(secondary, {
+    x: -1920,
+    y: 122,
+    width: 1920,
+    height: 1399,
+    dpi: 120,
+  });
+  monitors.push({
+    handle: 3n,
+    x: 800,
+    y: -132,
+    width: 1920,
+    height: 837,
+    dpi: 144,
+  });
+  for (const useContentSize of [
+    true,
+    false,
+  ]) {
+    const previousChanges = dpiChanges;
+    const hwnd = create({
+      width: 3458,
+      height: 1160,
+      center: true,
+      useContentSize,
+    });
+    try {
+      const bounds = windows.getBounds(hwnd, "outer");
+      assert(dpiChanges > previousChanges);
+      assert.equal(bounds.dpi, 120);
+      assert.equal(bounds.dpi, windowDpi);
+      assert.deepEqual(
+        {
+          x: bounds.x,
+          y: bounds.y,
+        },
+        centerInWorkArea(primary, bounds.width, bounds.height),
+      );
+      assert(
+        Math.abs(
+          bounds.width -
+            (physicalPixels(3458, bounds.dpi) +
+              (useContentSize ? physicalPixels(FRAME_WIDTH, bounds.dpi) : 0)),
+        ) <= 1,
+      );
+      assert(
+        Math.abs(
+          bounds.height -
+            (physicalPixels(1160, bounds.dpi) +
+              (useContentSize ? physicalPixels(FRAME_HEIGHT, bounds.dpi) : 0)),
+        ) <= 1,
+      );
+    } finally {
+      windows.destroy(hwnd);
+    }
+  }
+
+  // A later runtime DPI change follows the OS suggestion, not the creation center.
   const centered = create({
-    width: 4096,
+    width: 600,
     height: 400,
     center: true,
   });
   try {
+    windowDpi = 144;
+    const suggested = new Int32Array([
+      900,
+      100,
+      1200,
+      400,
+    ]);
+    messages.symbols.windowProcedure(
+      centered,
+      WM_DPICHANGED,
+      144n,
+      BigInt(ptr(suggested)),
+    );
     const bounds = windows.getBounds(centered, "outer");
-    assert.equal(bounds.dpi, 96);
+    assert.equal(bounds.dpi, 144);
     assert.deepEqual(
       {
         x: bounds.x,
         y: bounds.y,
       },
-      centerInWorkArea(primary, bounds.width, bounds.height),
+      {
+        x: 900,
+        y: 100,
+      },
     );
   } finally {
     windows.destroy(centered);
@@ -299,4 +465,5 @@ try {
   assert.equal(windows.failure, undefined);
 } finally {
   windows.dispose();
+  messages.close();
 }
