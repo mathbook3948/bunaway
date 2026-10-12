@@ -55,7 +55,8 @@ Bun의 argv 실행을 따릅니다. shell을 시작하거나 shell 문자열을 
 상한을 넘지 않도록 보수적으로 제한합니다. 지정한 프로그램 자체의 인자 해석은 앱이 검사합니다.
 
 `ProcessResult`는 `{ pid, exitCode, signal, stdoutBase64, stderrBase64 }`입니다.
-stdout와 stderr는 binary bytes를 base64로 반환합니다. 종료 코드가 0이 아니어도 정상 완료
+stdout와 stderr는 binary bytes를 base64로 반환합니다. `exitCode`는 Bun이 반환한 값을 보존하며
+Windows status의 unsigned 또는 signed 32-bit 표현을 허용합니다. 종료 코드가 0이 아니어도 정상 완료
 결과로 반환합니다. `signal`은 Bun의 signalCode이며 Windows에서는 POSIX signal 의미를
 가정하지 않습니다. 출력 상한 초과는 결과를 자르지 않고 실패합니다. binary 입력은 한 번
 제공하고 끝냅니다. 장기 process handle, interactive stdin과 출력 stream은 아직 없습니다.

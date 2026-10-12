@@ -122,3 +122,22 @@ test("process contract allows local .exe argv but rejects shell strings, PATH, s
     ),
   ).toBe(false);
 });
+
+test("process completion preserves unsigned and signed Windows status representations", () => {
+  for (const exitCode of [
+    0,
+    17,
+    -1073741510,
+    0xffffffff,
+  ]) {
+    expect(
+      processOperations.run.output.parse({
+        pid: 1,
+        exitCode,
+        signal: null,
+        stdoutBase64: "",
+        stderrBase64: "",
+      }).exitCode,
+    ).toBe(exitCode);
+  }
+});

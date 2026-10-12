@@ -72,7 +72,7 @@ export const processOperations = {
       }, "Arguments exceed the Windows command-line limit."),
     output: z.strictObject({
       pid: z.number().int().positive(),
-      exitCode: z.number().int().min(0).max(0xffffffff),
+      exitCode: z.number().int().min(-0x80000000).max(0xffffffff),
       signal: z.string().max(32).nullable(),
       stdoutBase64: base64,
       stderrBase64: base64,
