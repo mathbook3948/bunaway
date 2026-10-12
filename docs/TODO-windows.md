@@ -726,7 +726,10 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
   `parseArgs`와 앱의 Zod schema로 검사한다. help와 오류는 결과이며 실행과 종료를 제어하지 않는다.
 - [ ] utility process의 독립 실행과 양방향 메시지, 종료와 오류 이벤트를 제공한다.
 - [ ] localhost 자산 서버는 선택 기능으로 지원 여부를 결정한다. 기본 통신 경로는 기존 로컬 자산과 브리지다.
-- [ ] HTTP client-request와 incoming-message의 stream 기능을 Bun 대체 API에 매핑한다.
+- [x] HTTP client-request와 incoming-message의 stream 기능을 Bun 대체 API에 매핑한다.
+  신뢰된 backend는 `fetch`, `RequestInit.body`, `Response`와 `Response.body`를 사용한다.
+  [network 계약](./site/src/content/docs/reference/plugins/network.mdx)의 대응 표와 stream 예제를 따른다.
+  정책 중재 stream은 위의 stream/progress 작업에 남겨 둔다.
 
 ## 21. 암호화 저장과 시스템 인증
 

@@ -70,6 +70,33 @@ Expect와 Sec- 접두사 header는 받지 않습니다. Authorization은 앱이 
 응답 header 상한도 64개와 16 KiB입니다. 응답이 상한을 넘으면 자르지 않고 실패합니다.
 공개 stream과 progress는 아직 제공하지 않습니다.
 
+## 신뢰된 backend의 HTTP stream 대응
+
+Node/Electron stream 이름을 앱의 별도 구현으로 복제하지 않고 Bun의 다음 API를 사용합니다.
+이 경로는 신뢰된 backend의 직접 실행이며 `network.request`의 제한된 정책 중재 응답과 구분합니다.
+
+| 기존 역할 | Bun 대응 |
+| --- | --- |
+| `ClientRequest`의 method, URL, header와 body 작성 | `fetch(url, { method, headers, body, signal })` |
+| `IncomingMessage`의 status와 header | 반환한 `Response.status`, `Response.headers` |
+| `IncomingMessage`의 응답 stream | `Response.body`의 `ReadableStream<Uint8Array>` |
+| 응답 완료까지의 timeout과 취소 | 호출자가 소유한 `AbortController` 또는 `AbortSignal.timeout` |
+| 요청 body stream | `RequestInit.body`에 `ReadableStream` 전달 |
+
+```ts
+async function readChunks(url: string, signal: AbortSignal) {
+  const response = await fetch(url, { signal });
+  if (!response.body) return;
+  for await (const bytes of response.body) {
+    // 앱이 chunk 소비와 저장 위치, 총 bytes 및 progress 처리를 소유합니다.
+    console.log(bytes.byteLength);
+  }
+}
+```
+
+직접 stream은 플러그인의 64 KiB 상한을 적용하지 않습니다. 앱이 대상 접근 규칙, 읽기 상한,
+저장 위치와 취소를 소유합니다. 정책을 중재하는 공개 stream API는 후속 작업입니다.
+
 ## WebSocket 교환
 
 ```ts
