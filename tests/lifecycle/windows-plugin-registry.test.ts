@@ -224,7 +224,7 @@ test("unregistered native adapters are not imported or initialized", async () =>
   ];
   const inactive = await operations([], ".", "io", undefined, catalog);
   expect(imported).toBe(0);
-  expect(() => inactive.execute("test.read", null, "backend")).toThrow(
+  await expect(inactive.execute("test.read", null, "backend")).rejects.toThrow(
     expect.objectContaining({
       code: "UNSUPPORTED",
     }),
@@ -244,7 +244,7 @@ test("unregistered native adapters are not imported or initialized", async () =>
     catalog,
   );
   expect(imported).toBe(1);
-  expect(active.execute("test.read", null, "backend")).toBeNull();
+  expect(await active.execute("test.read", null, "backend")).toBeNull();
   await active.dispose();
   expect(disposed).toBe(1);
 });

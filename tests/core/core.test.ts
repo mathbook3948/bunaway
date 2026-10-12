@@ -1902,6 +1902,17 @@ test("the registered capabilities plugin command calls the host operation", asyn
       };
     },
   });
+  const returned = deferred<void>();
+  const send = services.send;
+  services.send = async (context, message) => {
+    await send(context, message);
+    if (
+      (message.kind === "result" || message.kind === "error") &&
+      message.id === "cap"
+    ) {
+      returned.resolve();
+    }
+  };
   const hostCalls = recorded;
   const { session } = await openSession(services);
   await session.receive({
@@ -1911,7 +1922,7 @@ test("the registered capabilities plugin command calls the host operation", asyn
     command: "plugin.capabilities.get",
     payload: null,
   });
-  await flush();
+  await returned.promise;
   expect(hostCalls).toEqual([
     {
       context: "view-context-1" as HostContext,
@@ -2258,10 +2269,12 @@ test("app commands enforce resource access and direct plugin calls cannot bypass
 
 test("failed startup cancels backend Host calls before reverse cleanup", async () => {
   const clock = createClock();
+  const hostStarted = deferred<void>();
   let hostSignal: Parameters<CoreServices["callHost"]>[2] | undefined;
   const { services } = createServices(clock, {
     callHost: async (_context, _call, signal) => {
       hostSignal = signal;
+      hostStarted.resolve();
       return new Promise(() => {});
     },
   });
@@ -2299,7 +2312,8 @@ test("failed startup cancels backend Host calls before reverse cleanup", async (
           {
             name: "broken",
             version: "1",
-            setup() {
+            async setup() {
+              await hostStarted.promise;
               throw new Error("private details");
             },
           },
