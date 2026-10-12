@@ -458,6 +458,7 @@ checkNames(
     ),
     ...[
       "storage",
+      "path",
       "log",
       "capabilities",
       "opener",

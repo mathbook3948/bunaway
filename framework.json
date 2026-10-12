@@ -24,6 +24,7 @@
   "bun": "1.4.2",
   "plugins": {
     "storage": "@bunaway/plugin-storage",
+    "path": "@bunaway/plugin-path",
     "log": "@bunaway/plugin-log",
     "capabilities": "@bunaway/plugin-capabilities",
     "windows": "@bunaway/plugin-windows",

@@ -3,6 +3,7 @@
   "type": "module",
   "dependencies": {
     "@bunaway/plugin-storage": "workspace:*",
+    "@bunaway/plugin-path": "workspace:*",
     "@bunaway/plugin-log": "workspace:*",
     "@bunaway/plugin-capabilities": "workspace:*",
     "@bunaway/plugin-windows": "workspace:*",

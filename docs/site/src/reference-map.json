@@ -325,6 +325,15 @@
       }
     },
     {
+      "name": "@bunaway/plugin-path",
+      "source": "plugins/path/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": { "reference/plugins/path": ["path", "pathPlugin"] }
+    },
+    {
       "name": "@bunaway/plugin-clipboard",
       "source": "plugins/clipboard/src/index.ts",
       "buildOutputs": {
@@ -974,6 +983,16 @@
       "opener.revealFile",
       "opener.openFileWith",
       "opener.openUrlWith"
+    ],
+    "reference/plugins/path": [
+      "path.getDirectory",
+      "path.join",
+      "path.resolve",
+      "path.normalize",
+      "path.basename",
+      "path.dirname",
+      "path.extname",
+      "path.isAbsolute"
     ],
     "reference/plugins/clipboard": [
       "clipboard.readText",
