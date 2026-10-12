@@ -73,6 +73,7 @@ export const frameworkPaths = [
   "native/host-api/bun/plugin-imports.d.ts",
   "native/windows/bun/host-operations.ts",
   "native/host-api/bun/host-response.ts",
+  "native/host-api/bun/native-requests.ts",
   "native/windows/bun/README.md",
   ...[
     "boot.ts",
