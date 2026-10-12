@@ -1,16 +1,10 @@
+import { expect, test } from "bun:test";
+import { MAX_WINDOW_INSTANCES, MAX_WINDOWS } from "@bunaway/plugin-api/native";
+import { validateWindowOutput } from "@bunaway/plugin-windows";
 import { windowDefinitions } from "../../plugins/windows/src/contract.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("windows", windowDefinitions);
-
-import { expect, test } from "bun:test";
-import { MAX_WINDOW_INSTANCES, MAX_WINDOWS } from "@bunaway/plugin-api/native";
-import { validateWindowOutput, windowsPlugin } from "@bunaway/plugin-windows";
-import { NativeRegistry } from "@bunaway/protocol";
-
-const _registry = new NativeRegistry([
-  windowsPlugin,
-]);
 
 test("window catalog responses accept the definition limit and reject larger lists", () => {
   const catalog = Array.from(

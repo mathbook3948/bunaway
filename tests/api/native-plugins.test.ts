@@ -413,23 +413,24 @@ test("plugin patterns use Unicode semantics for input and output", () => {
     ).toThrow();
     expect(() => parsers.validateOutput("unicode.text", text)).toThrow();
   }
-  const scalar = defineNativePlugin({
-    name: "scalar",
-    operations: {
-      one: {
-        input: z.string().regex(/^.$/u),
-        output: z.null(),
-      },
+  const scalar = pluginParsers("scalar", {
+    one: {
+      input: z.string().regex(/^.$/u),
+      output: z.null(),
     },
   });
   expect(
-    new NativeRegistry([
-      scalar.definition,
-    ]).validateCall({
+    scalar.validateCall({
       operation: "scalar.one",
       payload: "😀",
     }).payload,
   ).toBe("😀");
+  expect(() =>
+    scalar.validateCall({
+      operation: "scalar.one",
+      payload: "ab",
+    }),
+  ).toThrow();
 });
 test("plugin results exceeding the Web envelope return INTERNAL and keep the session usable", async () => {
   const plugin = defineNativePlugin({

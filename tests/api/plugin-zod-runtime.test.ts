@@ -25,8 +25,8 @@ const environment: NativeEnvironment = {
 };
 
 test("Zod owns acceptance and normalized values at both plugin parsing boundaries", () => {
-  const when: Pick<z.core.$ZodCheckDef, "when" | "abort"> = {
-    when: ({ value }) => value !== 0,
+  const when = {
+    when: ({ value }: { value: unknown }) => value !== 0,
   };
   const cases: {
     schema: z.ZodType;

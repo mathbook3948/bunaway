@@ -41,7 +41,6 @@ import {
   serializeProcessFrame,
   type Transport,
   type TransportEvent,
-  validateValue as validateHostResult,
   validateValue,
 } from "@bunaway/protocol";
 import {
@@ -179,7 +178,7 @@ const app = {
       input,
       output,
       handle: async ({ key }, context) =>
-        validateHostResult(
+        validateValue(
           {
             type: "string",
           },

@@ -1,8 +1,3 @@
-import { storageOperations } from "../../plugins/storage/src/contract.ts";
-import { pluginParsers } from "../fixtures/plugin-parsers.ts";
-
-const parsers = pluginParsers("storage", storageOperations);
-
 import { expect, test } from "bun:test";
 import { type CommandContext, command } from "@bunaway/backend";
 import type { CoreServices } from "@bunaway/core";
@@ -12,7 +7,11 @@ import {
   storagePlugin,
 } from "@bunaway/plugin-storage";
 import { NativeRegistry } from "@bunaway/protocol";
+import { storageOperations } from "../../plugins/storage/src/contract.ts";
 import { bindHostAPI } from "../fixtures/host-plugins.ts";
+import { pluginParsers } from "../fixtures/plugin-parsers.ts";
+
+const parsers = pluginParsers("storage", storageOperations);
 
 const location = {
   path: "notes/한글 memo.txt",

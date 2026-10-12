@@ -239,8 +239,8 @@ JSON에 schema를 다시 복사하지 않는다. 진입점은 부작용 없는 �
 `defineNativePlugin`은 선언을 검증하고 `definition`과 `api`를 반환한다.
 제작자는 operations 객체에 메서드 이름과 input, output을 작성한다.
 SDK가 작업 이름에 플러그인 접두사를 붙인다. 작업마다 독립적으로 권한을 허용한다.
-`s.object`는 필드를 기본 필수로 선언하고 추가 필드를 거부한다. 선택 필드는
-`s.optional`로 표시하며 나머지 s 함수도 기존 Schema를 만든다. 검증기를 복제하지 않는다.
+`z.strictObject`는 필드를 기본 필수로 선언하고 추가 필드를 거부한다. 선택 필드는
+`exactOptional()`로 표시한다. 스키마는 JSON Schema로 변환하지 않고 실행 Worker에서 파싱한다.
 이 작성 형식은 native.operations 배열, 완전한 작업 이름,
 required와 additionalProperties를 반복해서 작성하지 않게 한다.
 api의 메서드 이름은 operations의 키와 같다.
@@ -264,7 +264,7 @@ operation 권한을 다시 검사한다. 단순한 기능 등록에는 backend �
 권한 식별자와 operation은 모두 `<plugin-name>.<operation-name>`이다.
 플러그인 이름과 operation의 각 이름은 기존
 명령 식별자 제약에 맞춘다. 등록 목록에도 기존 JSON 깊이, 크기 제한을 적용한다.
-pattern은 등록 검사와 입력, 출력 검사에서 같은 JavaScript Unicode 모드(`u`)를 사용한다.
+정규식은 작성한 Zod 스키마의 원본 플래그로 실행한다. 프레임워크가 플래그를 바꾸지 않는다.
 
 ## 권한 정책 v1의 구조 변경
 
