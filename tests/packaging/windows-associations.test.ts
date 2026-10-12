@@ -242,7 +242,7 @@ test.skipIf(!iscc)(
           "-NoProfile",
           "-NonInteractive",
           "-Command",
-          `$ErrorActionPreference='Stop'; ${body}`,
+          `$ErrorActionPreference='Stop'; $OutputEncoding=[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false); ${body}`,
         ],
         {
           stdout: "pipe",
@@ -355,6 +355,12 @@ test.skipIf(!iscc)(
           scheme,
         ),
       ).toBe(urlProgId);
+      expect(
+        await query(`Software\\Classes\\${urlProgId}`, "URL Protocol"),
+      ).toBe("");
+      expect(
+        await query(`Software\\Classes\\${urlProgId}\\shell\\open\\command`),
+      ).toBe(`"${join(installDir, "앱.exe")}" "%1"`);
       expect(
         await query("Software\\RegisteredApplications", registration),
       ).toBe(`${associationRoot}\\Capabilities`);
