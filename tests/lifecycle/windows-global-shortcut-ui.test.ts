@@ -175,7 +175,13 @@ export const pluginImports = { globalShortcut: { operations: async () => ({ crea
       expect(native.symbols.IsWindow(hwnd)).toBe(1);
       expect(native.symbols.IsWindowVisible(hwnd)).toBe(0);
       expect(await invoke("isRegistered", shortcut)).toBe(true);
-      await expect(invoke("register", shortcut)).rejects.toMatchObject({
+      const rejected = await invoke("register", shortcut).then(
+        () => {
+          throw new Error("Duplicate registration unexpectedly succeeded.");
+        },
+        (error: unknown) => error,
+      );
+      expect(rejected).toMatchObject({
         code: "BUSY",
       });
       await invoke("setSuspended", {

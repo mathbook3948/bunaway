@@ -264,6 +264,20 @@ test.skipIf(process.platform !== "win32")(
       expect(competitorRegistered).toBe(true);
       adapter.dispose();
     } finally {
+      // SendInput can insert only part of a batch on failure. Release every test key during cleanup.
+      const keys = [
+        0x11,
+        0x12,
+        0x10,
+        codes.key,
+      ];
+      const releases = Buffer.alloc(40 * keys.length);
+      for (const [index, key] of keys.entries()) {
+        releases.writeUInt32LE(1, 40 * index);
+        releases.writeUInt16LE(key, 40 * index + 8);
+        releases.writeUInt32LE(2, 40 * index + 12);
+      }
+      native.symbols.SendInput(keys.length, ptr(releases), 40);
       if (competitorRegistered) {
         native.symbols.UnregisterHotKey(competing, 1);
       }
