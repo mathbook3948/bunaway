@@ -370,7 +370,15 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [ ] AppUserModelID와 toast activation 식별자를 설정하고 설치와 일치시킨다.
 - [ ] Recent Documents의 추가, 조회와 삭제를 제공한다.
 - [ ] Jump List와 사용자 task, category, 제거된 항목 조회를 제공한다.
-- [ ] 작업 표시줄 progress와 상태를 설정한다.
+- [x] 작업 표시줄 progress와 상태를 설정한다.
+  `windows.setTaskbarProgress`는 창별 `none`, `indeterminate`, `normal`, `paused`, `error`를
+  적용하며 determinate 상태에는 0~1의 진행률을 요구한다. 작업 권한과 창 수명을 검사하고
+  작업 표시줄 버튼 생성 전에는 `BUSY`, 네이티브 실패에는 `INTERNAL`을 반환한다.
+  Explorer 버튼 재생성 때 마지막 성공 값을 다시 적용하고 HWND 파괴 때 폐기한다.
+  계약 및 수명 검사는 `window-taskbar.test.ts`, `taskbar-progress.test.ts`이며 실제 UI Worker와
+  ITaskbarList3 호출은 기존 `windows-bun-window-api.ts`의 `host:windows` 회귀에 포함한다.
+- [ ] 실제 Windows 작업 표시줄에서 진행률, 상태 색상, 그룹 우선순위와 Explorer 재시작 후 표시를 확인한다.
+  네이티브 호출 회귀와 합성 버튼 재생성 검사를 물리 화면의 표시 검증으로 간주하지 않는다.
 - [ ] overlay icon과 접근성 설명을 설정한다.
 - [ ] thumbnail toolbar 버튼과 클릭 이벤트를 제공한다.
 - [ ] thumbnail clip과 tooltip을 설정한다.

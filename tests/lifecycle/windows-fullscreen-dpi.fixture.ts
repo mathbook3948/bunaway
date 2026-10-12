@@ -122,6 +122,7 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
   user: {
     symbols: {
       LoadIconW: () => 1n,
+      RegisterWindowMessageW: () => 0xc000,
       SetThreadDpiAwarenessContext: () => -4n,
       RegisterClassExW(address: Pointer) {
         callbackAddress = Number(view(address, 80).getBigUint64(8, true));

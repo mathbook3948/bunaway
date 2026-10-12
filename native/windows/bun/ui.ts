@@ -872,6 +872,8 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         setCloseConfirmation(message) {
           view.confirmation = message;
         },
+        setTaskbarProgress: (progress) =>
+          nativeWindows.setTaskbarProgress(hwnd, progress),
       };
     },
   };
