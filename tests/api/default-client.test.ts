@@ -528,25 +528,40 @@ test("plugin APIs preserve deadlines and cancellation through the shared connect
   expect(bridge.requests("hello")).toHaveLength(1);
 });
 
-test("shared plugin invocation validates inputs and responses", async () => {
+test("shared plugin invocation checks JSON and propagates owning-worker validation errors", async () => {
   const bridge = mount().chrome.webview;
-  await expect(
-    invokePlugin(readText, {
-      path: "bad\0path",
-    }),
-  ).rejects.toMatchObject({
+  await expect(invokePlugin(readText, Infinity)).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
   });
   expect(bridge.sent).toHaveLength(0);
-  const pending = invokePlugin(readText, {
-    path: "a.txt",
-  });
-  bridge.hello();
-  await flush();
-  bridge.result(last(bridge, "invoke").id, 123);
-  await expect(pending).rejects.toMatchObject({
-    code: "INTERNAL",
-  });
+  for (const code of [
+    "INVALID_ARGUMENT",
+    "INTERNAL",
+  ] as const) {
+    const pending = invokePlugin(readText, {
+      path: "bad\0path",
+    });
+    if (code === "INVALID_ARGUMENT") {
+      bridge.hello();
+    }
+    await flush();
+    const request = last(bridge, "invoke");
+    expect(request.payload).toEqual({
+      path: "bad\0path",
+    });
+    bridge.emit({
+      kind: "error",
+      protocol: PROTOCOL_VERSION,
+      id: request.id,
+      error: {
+        code,
+        message: "Invalid plugin value.",
+      },
+    });
+    await expect(pending).rejects.toMatchObject({
+      code,
+    });
+  }
 });
 
 test("each window gets an independent connection and a new document gets a new session", async () => {

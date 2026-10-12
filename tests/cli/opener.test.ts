@@ -218,7 +218,7 @@ void revealFile("C:/file.txt");
         packagedPlugins,
       );
       try {
-        expect(() =>
+        await expect(
           adapters.execute(
             "opener.openFile",
             {
@@ -226,7 +226,7 @@ void revealFile("C:/file.txt");
             },
             "backend",
           ),
-        ).toThrow(
+        ).rejects.toThrow(
           expect.objectContaining({
             code: "INVALID_ARGUMENT",
           }),

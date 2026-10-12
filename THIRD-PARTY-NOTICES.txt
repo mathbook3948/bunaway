@@ -31,3 +31,8 @@ The Gradle wrapper 8.14.3 is from https://github.com/gradle/gradle,
 also distributed under the Apache License 2.0. Preserve dependency license metadata.
 The Apache license text is retained in licenses/LICENSE.apache-2.0.txt
 and included in Android APK assets.
+
+Zod 4.6.5 (MIT), https://github.com/colinhacks/zod
+The CLI includes locally modified Promise ownership code from Zod.
+The reviewed patch is patches/zod@4.6.5.patch, and the original MIT license
+is included in packages/cli/vendor/zod/LICENSE in the CLI artifact.

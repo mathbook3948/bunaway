@@ -1,13 +1,19 @@
-import type { NativeAdapter, NativeEnvironment } from "@bunaway/plugin";
+import type {
+  NativeAdapter,
+  NativeEnvironment,
+  NativePluginAdapter,
+} from "@bunaway/plugin";
 import type { ManifestPlugin } from "@bunaway/runtime-bun/app-manifest";
 
-export type { NativeAdapter, NativeEnvironment };
+export type { NativeAdapter, NativeEnvironment, NativePluginAdapter };
 
 /** A plugin's installed contract and the factories available to each host execution thread. */
 export type PackagedPlugin = ManifestPlugin & {
   /** Lazily load the platform adapter after registration and worker selection. */
   operations?: () => Promise<{
-    createOperations(environment: NativeEnvironment): NativeAdapter;
+    createOperations(
+      environment: NativeEnvironment,
+    ): NativeAdapter | NativePluginAdapter;
   }>;
 };
 

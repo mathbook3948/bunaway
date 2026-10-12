@@ -66,7 +66,7 @@ export function createOperations(
         return native.read();
       }
       if (name === "clipboard.writeText") {
-        native.write(validateValue(writeTextSchema, input).text);
+        native.write(writeTextSchema.parse(validateValue({}, input)).text);
       } else {
         native.clear();
       }

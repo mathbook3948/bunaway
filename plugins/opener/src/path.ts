@@ -1,14 +1,16 @@
-import { BunawayError, s } from "@bunaway/plugin";
-
+import { BunawayError } from "@bunaway/plugin";
+import { z } from "zod";
 // Explorer's file operations use ordinary Win32 paths, not extended device paths.
 export const MAX_FILE_PATH_LENGTH = 259;
 const MAX_FILE_NAME_LENGTH = 255;
-export const fileInput = s.object({
-  path: s.string({
-    maxLength: MAX_FILE_PATH_LENGTH,
-  }),
+export const fileInput = z.strictObject({
+  path: z
+    .string()
+    .refine(
+      (value) => Array.from(value).length <= MAX_FILE_PATH_LENGTH,
+      "Text exceeds the Unicode character limit.",
+    ),
 });
-
 /** Validate a fully qualified Windows file path without filesystem access. */
 export function normalizeFilePath(input: unknown): string {
   const invalid = () =>

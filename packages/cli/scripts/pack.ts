@@ -18,8 +18,9 @@ import {
   snapshotHashes,
 } from "../src/distribution.ts";
 import { files, frameworkRoot, writeJson } from "../src/files.ts";
-import { run } from "../src/processes.ts";
 import { buildNativePlugin } from "../src/plugin-build.ts";
+import { run } from "../src/processes.ts";
+import { zodPatchFiles, zodPatchSource } from "../src/zod-patch.ts";
 
 /** Emit package declarations and rewrite internal imports to the staged package layout. */
 async function writeDeclarations(stage: string, info: Release): Promise<void> {
@@ -118,6 +119,20 @@ export async function packFramework(
   });
   try {
     await copyFramework(stage);
+    // Dependency patches in a workspace manifest do not propagate to installed consumers.
+    for (const [file] of zodPatchFiles) {
+      await Bun.write(
+        resolve(stage, "packages/cli/vendor/zod", file),
+        await zodPatchSource(file),
+      );
+    }
+    await cp(
+      resolve(
+        dirname(Bun.resolveSync("zod/package.json", frameworkRoot)),
+        "LICENSE",
+      ),
+      resolve(stage, "packages/cli/vendor/zod/LICENSE"),
+    );
     // SDK packages are ordinary dependencies; native inputs stay in the CLI artifact.
     for (const [directory, name] of [
       ...Object.entries(info.packages),
@@ -241,6 +256,7 @@ export async function packFramework(
       },
       files: [
         "packages",
+        "patches",
         "native",
         "runtime/build-manifests",
         "licenses",

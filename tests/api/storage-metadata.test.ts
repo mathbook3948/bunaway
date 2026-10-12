@@ -1,13 +1,17 @@
 import { expect, test } from "bun:test";
 import { type CommandContext, command } from "@bunaway/backend";
 import type { CoreServices } from "@bunaway/core";
-import { NativeRegistry } from "@bunaway/protocol";
 import {
   type StorageMetadata,
   storage,
   storagePlugin,
 } from "@bunaway/plugin-storage";
+import { NativeRegistry } from "@bunaway/protocol";
+import { storageOperations } from "../../plugins/storage/src/contract.ts";
 import { bindHostAPI } from "../fixtures/host-plugins.ts";
+import { pluginParsers } from "../fixtures/plugin-parsers.ts";
+
+const parsers = pluginParsers("storage", storageOperations);
 
 const location = {
   path: "notes/한글 memo.txt",
@@ -66,13 +70,13 @@ export function checkStorageTypes(): void {
   ];
 }
 
-test("metadata operations validate inputs and file or directory results", () => {
+test("metadata operations validate inputs and file or directory results", async () => {
   for (const operation of [
     "storage.exists",
     "storage.stat",
   ] as const) {
     expect(
-      registry.validateCall({
+      await parsers.validateCall({
         operation,
         payload: location,
       }),
@@ -81,14 +85,14 @@ test("metadata operations validate inputs and file or directory results", () => 
       payload: location,
     });
   }
-  expect(registry.validateOutput("storage.exists", false)).toBe(false);
-  expect(registry.validateOutput("storage.stat", null)).toBeNull();
-  expect(registry.validateOutput("storage.stat", fileMetadata)).toEqual(
+  expect(await parsers.validateOutput("storage.exists", false)).toBe(false);
+  expect(await parsers.validateOutput("storage.stat", null)).toBeNull();
+  expect(await parsers.validateOutput("storage.stat", fileMetadata)).toEqual(
     fileMetadata,
   );
-  expect(registry.validateOutput("storage.stat", directoryMetadata)).toEqual(
-    directoryMetadata,
-  );
+  expect(
+    await parsers.validateOutput("storage.stat", directoryMetadata),
+  ).toEqual(directoryMetadata);
 
   for (const input of [
     {
@@ -100,12 +104,12 @@ test("metadata operations validate inputs and file or directory results", () => 
       path: "",
     },
   ]) {
-    expect(() =>
-      registry.validateCall({
+    await expect(
+      parsers.validateCall({
         operation: "storage.stat",
         payload: input,
       }),
-    ).toThrow();
+    ).rejects.toThrow();
   }
   for (const output of [
     {
@@ -125,7 +129,9 @@ test("metadata operations validate inputs and file or directory results", () => 
       sizeBytes: 0,
     },
   ]) {
-    expect(() => registry.validateOutput("storage.stat", output)).toThrow();
+    await expect(
+      parsers.validateOutput("storage.stat", output),
+    ).rejects.toThrow();
   }
 });
 

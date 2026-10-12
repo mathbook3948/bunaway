@@ -3,10 +3,6 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { loadPluginCatalog } from "#native/host-api/bun/plugin-catalog";
-import { pluginImportsSource } from "#cli/app-modules";
-import { writeJson } from "#cli/files";
-import { writePluginManifest } from "#cli/plugins";
 import {
   type JsonValue,
   MAX_JSON_DEPTH,
@@ -18,6 +14,10 @@ import {
   parseAppManifest,
   readAppManifest,
 } from "@bunaway/runtime-bun/app-manifest";
+import { pluginImportsSource } from "#cli/app-modules";
+import { writeJson } from "#cli/files";
+import { writePluginManifest } from "#cli/plugins";
+import { loadPluginCatalog } from "#native/host-api/bun/plugin-catalog";
 
 test("generated manifest rejects invalid versions, contracts, routing and SDK paths", () => {
   const manifest = {
@@ -297,12 +297,6 @@ test("installed manifest catalogs preserve per-plugin limits without a combined 
         operations: [
           {
             name: `example${index}.read`,
-            input: {
-              const: null,
-            },
-            output: {
-              const: "x".repeat(400000),
-            },
           },
         ],
       },
@@ -319,26 +313,18 @@ test("installed manifest catalogs preserve per-plugin limits without a combined 
   ).toHaveLength(3);
 });
 
-test("manifest generation and catalog loading preserve the native contract size boundary", async () => {
+test("manifest generation and catalog loading preserve the operation registration boundary", async () => {
   const assets = await mkdtemp(resolve(tmpdir(), "bunaway-manifest-boundary-"));
-  const output = {
-    const: "",
-  };
   const native = {
-    operations: [
+    operations: Array.from(
       {
-        name: "example.read",
-        input: {
-          const: null,
-        },
-        output,
+        length: 256,
       },
-    ],
+      (_, index) => ({
+        name: `example.read${index}`,
+      }),
+    ),
   };
-  // Fill the existing native contract budget exactly; manifest metadata must not consume it.
-  output.const = "x".repeat(
-    MAX_MESSAGE_BYTES - Buffer.byteLength(JSON.stringify(native)),
-  );
   const plugin = {
     name: "example",
     version: "1",
@@ -379,7 +365,9 @@ test("manifest generation and catalog loading preserve the native contract size 
         })
       )[0]?.native,
     ).toEqual(native);
-    output.const += "x";
+    native.operations.push({
+      name: "example.overflow",
+    });
     expect(
       () =>
         new NativeRegistry([

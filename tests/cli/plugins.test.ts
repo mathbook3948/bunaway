@@ -3,9 +3,13 @@ import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { hostResponse } from "#native/host-api/bun/host-response";
-import { loadPluginCatalog } from "#native/host-api/bun/plugin-catalog";
-import { operations, pluginRegistry } from "#native/host-api/bun/plugins";
+import { PLATFORMS } from "@bunaway/plugin-api";
+import {
+  BunawayError,
+  NativeRegistry,
+  type Policy,
+  type HostResponse,
+} from "@bunaway/protocol";
 import { pluginImportsSource } from "#cli/app-modules";
 import { writeJson } from "#cli/files";
 import {
@@ -13,8 +17,9 @@ import {
   readPluginDeclaration,
   writePluginManifest,
 } from "#cli/plugins";
-import { PLATFORMS } from "@bunaway/plugin-api";
-import { BunawayError, NativeRegistry, type Policy } from "@bunaway/protocol";
+import { hostResponse } from "#native/host-api/bun/host-response";
+import { loadPluginCatalog } from "#native/host-api/bun/plugin-catalog";
+import { operations, pluginRegistry } from "#native/host-api/bun/plugins";
 
 test("CLI independently accepts known platforms and rejects unknown declarations", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "bunaway-plugin-platforms-"));
@@ -29,7 +34,7 @@ test("CLI independently accepts known platforms and rejects unknown declarations
       const entry = resolve(root, `declaration-${index}.mjs`);
       await Bun.write(
         entry,
-        `export default { name: "demo", version: "1", native: { operations: [{ name: "demo.read", input: { const: null }, output: { const: null } }] }, nativePlatforms: { ${JSON.stringify(platform)}: { execution: "io", create() { throw new Error("Factories must remain lazy."); } } } };`,
+        `export default { name: "demo", version: "1", native: { operations: [{ name: "demo.read" }] }, nativePlatforms: { ${JSON.stringify(platform)}: { execution: "io", create() { throw new Error("Factories must remain lazy."); } } } };`,
       );
       if (PLATFORMS.some((supported) => supported === platform)) {
         const declaration = await readPluginDeclaration(entry, root);
@@ -100,10 +105,6 @@ test.each([
           "write",
         ].map((name) => ({
           name: `demo.${name}`,
-          input: {
-            const: null,
-          },
-          output: {},
         })),
       };
       const entry = resolve(plugin, "src/index.ts");
@@ -171,7 +172,7 @@ test.each([
       );
       try {
         expect(await Bun.file(marker).exists()).toBe(true);
-        expect(adapter.execute("demo.read", null, "backend")).toEqual([
+        expect(await adapter.execute("demo.read", null, "backend")).toEqual([
           {
             name: "demo.read",
             support: "supported",
@@ -181,7 +182,9 @@ test.each([
             support: "unsupported",
           },
         ]);
-        expect(() => adapter.execute("demo.write", null, "backend")).toThrow(
+        await expect(
+          adapter.execute("demo.write", null, "backend"),
+        ).rejects.toThrow(
           expect.objectContaining({
             code: "UNSUPPORTED",
           }),
@@ -234,9 +237,9 @@ test.each([
         emptyCatalog,
       );
       try {
-        expect(() =>
+        await expect(
           emptyAdapter.execute("demo.read", null, "backend"),
-        ).toThrow(
+        ).rejects.toThrow(
           expect.objectContaining({
             code: "UNSUPPORTED",
           }),
@@ -385,7 +388,7 @@ test("plugins without a Windows adapter check operation grants before returning 
       resolve(plugin, "index.ts"),
       `export default {
       name: "files", version: "1.0.0", nativePlatforms: {}, native: {
-        operations: [{ name: "files.read", input: { type: "string" }, output: { type: "string" } }]
+        operations: [{ name: "files.read" }]
       }
     };`,
     );
@@ -440,15 +443,25 @@ test("plugins without a Windows adapter check operation grants before returning 
           views: [],
           backend: source,
         });
-        const response = hostResponse(() => {
+        let response: HostResponse;
+        try {
           if (!registry.allowed(source, call)) {
             throw new BunawayError({
               code: "PERMISSION_DENIED",
               message: "Not allowed.",
             });
           }
-          return adapters.execute(call.operation, call.payload, "backend");
-        });
+          const payload = await adapters.execute(
+            call.operation,
+            call.payload,
+            "backend",
+          );
+          response = hostResponse(() => payload);
+        } catch (error) {
+          response = hostResponse(() => {
+            throw error;
+          });
+        }
         expect(response).toMatchObject({
           kind: "error",
           error: {
@@ -503,7 +516,7 @@ test("external plugins keep their own versions while SDK compatibility stays exa
       resolve(plugin, "index.ts"),
       `export default {
       name: "demo", version: "1.2.3", nativePlatforms: {}, native: {
-        operations: [{ name: "demo.ping", input: { const: null }, output: { const: null } }]
+        operations: [{ name: "demo.ping" }]
       }
     };`,
     );
@@ -628,12 +641,6 @@ test("installed plugin catalog accepts multiple valid packages over the active r
           },
           (_, index) => ({
             name: `${name}.call${index}`,
-            input: {
-              const: null,
-            },
-            output: {
-              const: null,
-            },
           }),
         ),
       };

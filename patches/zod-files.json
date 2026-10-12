@@ -1,0 +1,53 @@
+{
+  "version": "4.6.5",
+  "files": {
+    "src/v4/core/schemas.ts": {
+      "original": "12372f51ba3e437cca064a5c743bea11bb49fc1616e3dc084dac83cc67a91f72",
+      "patched": "656f099cff0e28bf120a4902d38654fe7561d4aae61e45e6eba167b580af9fd6"
+    },
+    "src/v4/core/checks.ts": {
+      "original": "d813140472a55ab36e845f4eaadbb3deae6d0597f90bef6c3f51366ac8dbfd4c",
+      "patched": "f9709697e0124985b4fbf657e0e421b8799b744b4671d048812d1659ce5ac45e"
+    },
+    "src/v4/core/parse.ts": {
+      "original": "855bda0c95d79be1562fb1f48db4eefb7697276675b7debeb389aaba1b61e9e6",
+      "patched": "c19b1720afa10195189f3ea634ce9728c980a8ba742b4e53a99dd261c1564f35"
+    },
+    "src/v4/core/util.ts": {
+      "original": "ee6d6992291b45ca83995c7471c4d0c2182fd9e4113da86c455f1b2074bb4ac6",
+      "patched": "9d647f2ade37957b1dbb211f4e68029472eaebb7308e68d8e31b75436e1b88ed"
+    },
+    "v4/core/schemas.js": {
+      "original": "e632b655441418f0593153abc6809fd81cf3e0782d810622d0a4fa50ef6e182e",
+      "patched": "fb7bb504ceace7802dcdb300d61119574bcb53c3d70eac2ec2dff0f659f5910a"
+    },
+    "v4/core/checks.js": {
+      "original": "bc42543274218aa7ef72192b3218d2a4a399e53df8de240a04d9ff275096f563",
+      "patched": "ea4d564a0f9096dcdbb0bdeed0d4e9ee27fa04b88e6af7dcd04747302a647488"
+    },
+    "v4/core/parse.js": {
+      "original": "fb05b91ec260f3f484f7c00a177b6126ceb8fd1b09dc90b1200afdffd4d98efd",
+      "patched": "f00c4a4a47b7a9d8d5621ce46c4597fedf43b47c27cee6ec2d22a47b60d0034e"
+    },
+    "v4/core/util.js": {
+      "original": "728f52b496620336775eafcdb91c0a574380086e53f215b55c58eedc1422c49c",
+      "patched": "c9bfb3806f58420d27ca657df68a524540a8d20599e5194a85851d3b88278583"
+    },
+    "v4/core/schemas.cjs": {
+      "original": "8fd225b7fb646a96aa3c40fc9f43407d12bce810670a917855bb5a6efa942ea2",
+      "patched": "e89de740bfedd66a8d3c01bb5c2d593286ba97c27598a093466714764697c8fd"
+    },
+    "v4/core/checks.cjs": {
+      "original": "9a2a428602fe9e380ea2a08495a47101a56710d814fe18fb0e6e30f65686a703",
+      "patched": "aa5190a2b10cd8c20633c58e2457487cc8f0709390d13d9b40d81bd963e0e332"
+    },
+    "v4/core/parse.cjs": {
+      "original": "e19bfe843aed1844680a014f9a185d17374fe87bcd1676a2d62ed11177c1caa8",
+      "patched": "649e90fec016222d9a819071d78526c5ae7a71258407963d9cc6305304680c10"
+    },
+    "v4/core/util.cjs": {
+      "original": "fad32af81924e9c0b32479c8bd6525f110062ffc7f57b8f0ca6a782c7227773b",
+      "patched": "4088337f04495a54c26dc272cfca95df3c086192f6a1946af498f24f3cbd8373"
+    }
+  }
+}

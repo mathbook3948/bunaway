@@ -3,9 +3,10 @@ import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
-import { defineNativePlugin, type NativeEnvironment, s } from "@bunaway/plugin";
+import { defineNativePlugin, type NativeEnvironment } from "@bunaway/plugin";
 import { capabilitiesPlugin } from "@bunaway/plugin-capabilities";
 import { validateValue } from "@bunaway/protocol";
+import { z } from "zod";
 import type { PackagedPlugin } from "#native/host-api/bun/plugin-contract";
 import {
   disposeAll,
@@ -19,7 +20,6 @@ import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
 const native = {
   operations: [],
 } as const;
-
 test("installed contracts compare by content while changes still fail startup", () => {
   const catalog: PackagedPlugin[] = [
     {
@@ -64,8 +64,6 @@ test("installed contracts compare by content while changes still fail startup", 
             operations: [
               {
                 name: "test.read",
-                input: s.null(),
-                output: s.null(),
               },
             ],
           },
@@ -75,93 +73,26 @@ test("installed contracts compare by content while changes still fail startup", 
     ),
   ).toThrow();
 });
-
-test("installed contracts accept validated JSON snapshots without hiding schema changes", () => {
-  const schema = validateValue(
-    s.object({
-      type: s.enum([
-        "string",
-      ]),
-    }),
-    {
-      type: "string",
-    },
-  );
+test("installed operation metadata accepts JSON snapshots and rejects changed names", () => {
   const plugin = defineNativePlugin({
     name: "example",
     operations: {
       echo: {
-        input: schema,
-        output: schema,
+        input: z.string(),
+        output: z.string(),
       },
     },
   }).definition;
+  const detached = validateValue({}, plugin.native);
   const packaged = JSON.parse(JSON.stringify(plugin.native));
-  const installed = {
-    name: plugin.name,
-    version: plugin.version,
-    native: packaged,
-  };
   const catalog: PackagedPlugin[] = [
-    installed,
-  ];
-  expect(Object.getPrototypeOf(schema)).toBeNull();
-  expect(() =>
-    pluginRegistry(
-      [
-        plugin,
-      ],
-      catalog,
-    ),
-  ).not.toThrow();
-  installed.native = plugin.native;
-  expect(() =>
-    pluginRegistry(
-      [
-        {
-          ...plugin,
-          native: packaged,
-        },
-      ],
-      catalog,
-    ),
-  ).not.toThrow();
-  packaged.operations[0].input.type = "integer";
-  expect(() =>
-    pluginRegistry(
-      [
-        {
-          ...plugin,
-          native: packaged,
-        },
-      ],
-      catalog,
-    ),
-  ).toThrow();
-});
-
-test("installed contracts normalize negative zero without hiding numeric changes", () => {
-  const plugin = defineNativePlugin({
-    name: "zero",
-    operations: {
-      echo: {
-        input: s.integer({
-          minimum: -0,
-        }),
-        output: {
-          const: -0,
-        },
-      },
+    {
+      name: plugin.name,
+      version: plugin.version,
+      native: packaged,
     },
-  }).definition;
-  const installed = {
-    ...plugin,
-    native: JSON.parse(JSON.stringify(plugin.native)),
-  };
-  const catalog: PackagedPlugin[] = [
-    installed,
   ];
-  expect(Object.is(plugin.native.operations[0]?.input.minimum, -0)).toBe(true);
+  expect(Object.getPrototypeOf(detached)).toBeNull();
   expect(() =>
     pluginRegistry(
       [
@@ -170,7 +101,7 @@ test("installed contracts normalize negative zero without hiding numeric changes
       catalog,
     ),
   ).not.toThrow();
-  installed.native.operations[0].input.minimum = 1;
+  packaged.operations[0].name = "example.other";
   expect(() =>
     pluginRegistry(
       [
@@ -180,6 +111,7 @@ test("installed contracts normalize negative zero without hiding numeric changes
     ),
   ).toThrow("does not match");
 });
+
 test("shutdown and initialization failure clean every prepared adapter in reverse order", async () => {
   const catalog: PackagedPlugin[] = [];
   const cleaned: string[] = [];
@@ -261,14 +193,11 @@ test("shutdown and initialization failure clean every prepared adapter in revers
     "windows",
   ]);
 });
-
 test("unregistered native adapters are not imported or initialized", async () => {
   const native = {
     operations: [
       {
         name: "test.read",
-        input: s.null(),
-        output: s.null(),
       },
     ],
   };
@@ -295,7 +224,7 @@ test("unregistered native adapters are not imported or initialized", async () =>
   ];
   const inactive = await operations([], ".", "io", undefined, catalog);
   expect(imported).toBe(0);
-  expect(() => inactive.execute("test.read", null, "backend")).toThrow(
+  await expect(inactive.execute("test.read", null, "backend")).rejects.toThrow(
     expect.objectContaining({
       code: "UNSUPPORTED",
     }),
@@ -315,11 +244,10 @@ test("unregistered native adapters are not imported or initialized", async () =>
     catalog,
   );
   expect(imported).toBe(1);
-  expect(active.execute("test.read", null, "backend")).toBeNull();
+  expect(await active.execute("test.read", null, "backend")).toBeNull();
   await active.dispose();
   expect(disposed).toBe(1);
 });
-
 test("capabilities report platform support without claiming OS consent", async () => {
   const catalog: PackagedPlugin[] = [];
   const storage = {
@@ -329,12 +257,6 @@ test("capabilities report platform support without claiming OS consent", async (
       operations: [
         {
           name: "storage.read",
-          input: {
-            const: null,
-          },
-          output: {
-            const: null,
-          },
         },
       ],
     },
@@ -346,12 +268,6 @@ test("capabilities report platform support without claiming OS consent", async (
       operations: [
         {
           name: "files.read",
-          input: {
-            const: null,
-          },
-          output: {
-            const: null,
-          },
         },
       ],
     },
@@ -408,7 +324,6 @@ test("capabilities report platform support without claiming OS consent", async (
     await adapters.dispose();
   }
 });
-
 test("capability queries include every operation at the native registry limit", async () => {
   const catalog: PackagedPlugin[] = [];
   const plugin = {
@@ -422,12 +337,6 @@ test("capability queries include every operation at the native registry limit", 
         },
         (_, index) => ({
           name: `catalog.call${index}`,
-          input: {
-            const: null,
-          },
-          output: {
-            const: null,
-          },
         }),
       ),
     },
@@ -458,7 +367,7 @@ test("capability queries include every operation at the native registry limit", 
     catalog,
   );
   try {
-    const result = adapters.execute("capabilities.get", null, "backend");
+    const result = await adapters.execute("capabilities.get", null, "backend");
     expect(result).toHaveLength(256);
     expect(
       (
@@ -473,7 +382,6 @@ test("capability queries include every operation at the native registry limit", 
     await adapters.dispose();
   }
 });
-
 test.skipIf(process.platform !== "win32")(
   "UI adapters initialize and dispose inside the UI Worker's COM apartment",
   async () => {

@@ -20,6 +20,7 @@
   "dependencies": {
     "@bunaway/client": "workspace:*",
     "@bunaway/protocol": "workspace:*",
-    "@bunaway/plugin-api": "workspace:*"
+    "@bunaway/plugin-api": "workspace:*",
+    "zod": "4.6.5"
   }
 }

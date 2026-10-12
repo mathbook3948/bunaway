@@ -61,9 +61,9 @@ options의 signal은 호출 취소 신호이고 deadline은 Unix epoch 밀리초
 ## host.call
 
 공통 SDK는 `host.call(contract, input)`과 `context.host.call(contract, input)`을 제공합니다.
-`HostOperationContract<I, O>`의 name, input과 output으로 작업을 선언하며
-결과는 출력 schema에서 추론합니다. 플러그인 작성자는 등록한 `native.operations` 계약을
-사용합니다. 호출자가 넘긴 다른 schema로 등록한 계약을 바꾸지 못합니다.
+`HostOperationContract`에는 name만 들어가며 이 저수준 함수는 JsonValue를 받고 반환합니다.
+타입 추론이 필요한 앱 코드는 플러그인이 공개한 함수를 사용하세요. 입력과 결과는
+플러그인의 실행 경계에서 검사하며 호출자가 검사 규칙을 바꿀 수 없습니다.
 작업이 등록되지 않았다면 `UNSUPPORTED`, 입력이 잘못됐다면 `INVALID_ARGUMENT`입니다.
 
 ## 실행 범위와 권한

@@ -5,7 +5,8 @@ sidebar: { order: 3 }
 ---
 
 창 플러그인의 `windowEvents`는 `windows.changed`의 payload 스키마를 제공하고,
-`windowSnapshotSchema`는 이벤트와 `windows.getSnapshot`이 공유하는 스키마입니다.
+`windowSnapshotSchema`는 이벤트용 JSON Schema입니다. 작업의 입력과 출력은 Zod로 정의하며,
+snapshot 작업은 같은 이벤트 계약의 검증을 재사용합니다.
 `WindowEvents`는 기존 typed listen의 이벤트 맵 타입입니다. 등록과 구독 권한,
 상태와 물리 bounds 및 수명 규칙은 [창 API](/reference/host/windows/)에서 설명합니다.
 
@@ -48,6 +49,7 @@ peerDependencies에 지정하고 개발할 때도 같은 버전을 설치합니�
   },
   "bunaway": { "plugin": "./dist/index.js" },
   "files": ["dist"],
+  "dependencies": { "zod": "4.6.5" },
   "scripts": { "build": "bunaway plugin build" },
   "peerDependencies": { "@bunaway/plugin": "0.0.0" },
   "devDependencies": {
@@ -73,10 +75,10 @@ Windows 개발 모드에서는 조건부 루트 `exports`를 사용하는 플러
 
 ```ts
 // src/contract.ts
-import { s } from "@bunaway/plugin";
+import { z } from "zod";
 
 export const systemOperations = {
-  hostname: { input: s.null(), output: s.string() },
+  hostname: { input: z.null(), output: z.string() },
 } as const;
 ```
 
@@ -130,38 +132,62 @@ capabilities의 결과 이름 중복 검사는 query.ts에 둡니다.
 선언을 읽는 것만으로 연결이나 플랫폼 자원을 만들지 않습니다.
 호출 함수는 설치, 앱 등록이나 권한 부여를 대신하지 않습니다.
 
-## `s`로 입력과 결과 스키마 정의하기
+## Zod로 입력과 결과 정의하기
+
+`input`과 `output`에는 Zod 4.6.5 스키마를 작성합니다. Zod는 외부 의존성으로 선언하고
+CLI로 플러그인과 앱을 빌드합니다. 다른 Zod 버전은 현재 앱 빌드에서 거부합니다. 기존 `s` 함수와 JSON Schema 객체는
+네이티브 작업 선언에서 사용하지 않습니다. 앱 명령과 이벤트는 기존 Schema 형식을 유지합니다.
 
 ```ts
-input: s.object({
-  level: s.enum(["debug", "info", "warn", "error"]),
-  message: s.string({ maxLength: 1024 }),
-  details: s.optional(s.json()),
-})
+import { z } from "zod";
+
+const input = z.strictObject({
+  level: z.enum(["debug", "info", "warn", "error"]),
+  message: z.string().max(1024),
+  details: z.json().exactOptional(),
+});
 ```
 
-객체 필드는 기본적으로 필수이며 선언하지 않은 필드는 거부합니다.
-선택 필드는 s.optional로 감쌉니다. 위 예제에서 details는 생략할 수 있지만 지정하면
-JSON 값이어야 합니다. optional은 객체 필드에서만 사용합니다.
-제작자가 required 배열, additionalProperties나 as const를 따로 작성하지 않습니다.
-중첩 객체와 배열에도 같은 검증과 타입 추론을 적용합니다.
+`z.strictObject`는 선언하지 않은 필드를 거부하고 `z.object`는 제거합니다.
+`exactOptional()`은 필드 생략을 허용합니다. 호출 인자는 `z.input<typeof input>`,
+반환값은 출력 스키마의 `z.output`에서 추론합니다. 기본값과 변환도 원본 Zod의 결과를 사용합니다.
+고정된 Zod 4.6.5에서 문자열의 `max`는 Unicode 코드 포인트 수를 셉니다.
+예를 들어 `z.string().max(1)`은 `"😀"`를 허용합니다.
 
-| 함수 | 결과와 선택적 제약 |
-| --- | --- |
-| `s.object(fields)` | 필수 필드와 선택 필드가 있는 객체 |
-| `s.optional(schema)` | 생략 가능한 객체 필드 |
-| `s.string({ maxLength?, pattern? })` | 문자열, 최대 문자 수와 정규식 |
-| `s.enum(values)` | 지정한 문자열 중 하나 |
-| `s.array(items, { minItems?, maxItems?, uniqueItems? })` | 배열, 항목 수와 중복 제한 |
-| `s.integer({ minimum?, maximum? })` | 정수와 범위 |
-| `s.boolean()` | 참 또는 거짓 |
-| `s.null()` | null |
-| `s.json()` | 프로토콜 제한 안의 JSON 값 |
+### 실행 흐름
 
-string과 integer의 옵션, array의 두 번째 인자는 생략할 수 있습니다.
-이 함수들은 기존 JSON Schema를 만들며 별도의 검증기를 추가하지 않습니다.
-기존에 지원하는 Schema 객체도 input과 output 또는 s.object의 필드로 직접 사용할 수 있습니다.
-pattern은 선언 검사와 입력, 출력 검사에서 모두 Unicode 모드(`u`)로 평가합니다.
+1. 화면이나 백엔드는 작업 이름과 JSON 입력을 보냅니다.
+2. 호스트가 등록을 확인하고 작업을 담당하는 Worker로 전달합니다. 입력 검사 전에 호출 컨텍스트와 작업 권한을 확인합니다.
+3. 허용된 호출에 대해 SDK가 `await input.parseAsync(payload)`를 실행합니다.
+4. 호스트가 실행 직전에 컨텍스트와 권한을 다시 확인하고 파싱한 값으로 어댑터를 실행합니다.
+5. 어댑터가 반환하면 SDK가 `await output.parseAsync(result)`를 실행합니다.
+6. 파싱한 결과를 JSON으로 돌려줍니다. 호출자는 같은 스키마로 다시 파싱하지 않습니다.
+
+스키마와 검사 함수는 설치한 플러그인 코드에 포함합니다. manifest와 Worker 메시지에는
+플러그인 식별 정보와 작업 이름만 기록하며 스키마나 함수를 직렬화하지 않습니다.
+`refine`, `transform`, `when`과 record의 키 처리는 Zod가 직접 실행합니다.
+SDK는 스키마 내부 검사 종류를 해석하거나 JSON Schema로 변환하지 않습니다.
+
+입력과 결과는 파싱 전후 모두 프로토콜의 JSON, 크기, 깊이와 Unicode 제한을 지켜야 합니다.
+따라서 Date, bigint, undefined, 비유한 숫자를 전송하거나 변환 결과로 반환할 수 없습니다.
+동기 및 비동기 refinement와 transform을 지원합니다. 입력 파싱 실패는 `INVALID_ARGUMENT`,
+출력 파싱 실패는 `INTERNAL`로 처리합니다. SDK가 검사 Promise의 완료와 실패를 기다립니다.
+I/O Worker는 먼저 컨텍스트와 작업 권한을 확인합니다. 거부된 호출은 입력 검사 콜백도 실행하지 않습니다.
+입력 파싱을 마친 뒤 컨텍스트와 권한을 다시 확인하고 최종 승인 직후 네이티브 작업을 동기로 실행합니다.
+Windows UI는 입력 파싱 후 실행 직전에 종료 상태와 호출 컨텍스트를 다시 검사합니다.
+종료가 확정됐으면 취소 패킷을 기다리지 않고 `CANCELLED`로 거부합니다.
+입력 파싱 중 취소된 호출은 실제 작업을 실행하지 않습니다. 결과 파싱 중 취소된 호출의
+늦은 결과는 버립니다. Windows UI와 I/O, macOS 모두 메시지 수락과 작업 완료를 분리합니다.
+취소와 컨텍스트 폐기 시 요청 용량을 반환하므로 입력 검사, 비동기 실행이나 결과 검사가
+끝나지 않아도 다음 호출을 처리할 수 있습니다. 이미 실행한 네이티브 작업은 되돌리지 않습니다.
+검사 콜백이 예외를 던지면 해당 호출을 실패시키고 이미 시작한 다른 검사의 늦은 오류도 처리합니다.
+다른 검사가 끝나지 않아도 확인된 예외를 반환하며 Worker는 다음 요청을 처리합니다.
+검사 함수의 예외나 Zod 오류의 상세 내용은 호출자에게 노출하지 않습니다.
+
+선언할 때는 스키마 객체와 등록 정보를 확인하며 검사 콜백을 실행하지 않습니다.
+실제 값에 대한 검사는 호출 때 이루어집니다. 검사와 변환 콜백은 입력과 결과를 처리하는 데 사용하세요. OS 자원 접근은
+어댑터에서 수명과 취소를 관리합니다. Zod 콜백 자체는 취소할 수 없으므로,
+호출이 취소되어도 이미 시작한 검사는 끝날 수 있습니다.
 
 ## platforms/windows.ts에서 구현하기
 
@@ -179,6 +205,9 @@ export function createOperations(_environment: NativeEnvironment): NativeAdapter
 
 `NativeEnvironment`는 호스트가 정한 dataRoot와 capabilities 목록을 제공합니다.
 `NativeAdapterFactory`는 이 환경을 받아 NativeAdapter를 반환하는 함수 타입입니다.
+SDK가 감싼 `NativePluginAdapter`의 `execute`는 파싱 완료를 기다리는 Promise를 반환합니다.
+호스트용 `prepare`는 입력을 파싱한 뒤 일회성 실행 함수를 반환하므로 권한 승인 직후
+동기 네이티브 실행을 시작할 수 있습니다. 어댑터 제작자가 이 준비 단계를 구현할 필요는 없습니다.
 DLL, 파일 핸들과 UI 자원은 createOperations 안에서 만들고 반환한 어댑터의 dispose에서 정리합니다.
 초기화가 실패하면 팩터리가 이미 만든 자원도 회수해야 합니다.
 Windows 호스트의 선택적 `app`은 검증한 앱 ID와 개발 또는 배포 실행의 절대 실행 파일,
@@ -308,16 +337,17 @@ OS 대화상자는 import와 어댑터 등록 중에 표시하지 않습니다. 
 나머지 구현과 플랫폼 자원 회수를 시도한 뒤 오류를 보고합니다.
 
 공통 `invokePlugin(contract, input, options?)`은 화면 호출의 기반 함수입니다.
-defineNativePlugin을 사용하면 입력과 결과 검증, 공유 연결과 호출 옵션 전달을
+이 함수의 입력과 결과는 JsonValue이며 의미 검사는 실행 Worker가 담당합니다.
+defineNativePlugin을 사용하면 Zod 검증, 타입 추론, 공유 연결과 호출 옵션 전달을
 각 플러그인에서 다시 작성할 필요가 없습니다.
 
 ## 선택 창 제어와 UI 실행
 
 `NativeEnvironment.windows`는 UI 실행에만 제공하는 NativeWindowServices입니다. 플러그인은 필요한 저수준 창 자원을 사용하며 공통 호스트는 특정 작업 이름을 분기하지 않습니다.
 
-`NativeAdapter.executeUI`는 UI 작업의 비동기 실행을 지원하며 requestId와 호스트가 확인한 permissions, 선택적 signal을 받습니다. Windows UI 호스트는 요청 취소, 컨텍스트 폐기와 종료 때 signal을 중단합니다. 어댑터는 취소를 관찰하고 소유한 대기와 자원을 정리해야 합니다. 동기 OS 작업은 완료한 변경을 되돌리지 않습니다. `busy`는 진행 중 작업이 있어 자동 종료를 보류해야 하는지 알립니다. I/O의 execute는 권한 확인 뒤 동기 실행 계약을 유지합니다. UI 어댑터는 STA 초기화 뒤 준비하고 역순으로 정리합니다.
+`NativeAdapter.executeUI`는 UI 작업의 비동기 실행을 지원하며 requestId와 호스트가 확인한 permissions, 선택적 signal과 호스트의 실행 직전 재검사 함수 beforeExecute를 받습니다. Windows UI와 macOS 호스트는 요청 취소, 컨텍스트 폐기와 종료 때 signal을 중단합니다. 어댑터는 취소를 관찰하고 소유한 대기와 자원을 정리해야 합니다. 동기 OS 작업은 완료한 변경을 되돌리지 않습니다. `busy`는 진행 중 작업이 있어 자동 종료를 보류해야 하는지 알립니다. I/O의 execute는 권한 확인 뒤 동기 실행 계약을 유지합니다. UI 어댑터는 STA 초기화 뒤 준비하고 역순으로 정리합니다.
 
-`@bunaway/plugin-windows`의 windowOperations는 입력과 출력 계약입니다. isWindowOperation은 이름을 확인하며 parseWindowCall과 validateWindowCall은 입력을, validateWindowOutput은 결과를 검사합니다. 이 함수는 선택 패키지 안의 계약 도구이며 공통 프로토콜은 창 작업 목록을 소유하지 않습니다.
+`@bunaway/plugin-windows`의 windowOperations는 Zod 입력과 출력 계약입니다. isWindowOperation은 이름을 확인하며 parseWindowCall과 validateWindowCall은 입력을, validateWindowOutput은 결과를 검사합니다. 이 함수는 선택 패키지 안의 계약 도구이며 공통 프로토콜은 창 작업 목록을 소유하지 않습니다.
 
 `windowSnapshotSchema`는 표시와 geometry 관찰, `windowReadinessSchema`는 창, 문서와 SDK 준비 상태의 스키마입니다.
 `windowEvents`는 `windows.changed`와 `windows.readiness`의 선언입니다. 완료 조건, 수신 범위와 상태 복구는

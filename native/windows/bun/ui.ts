@@ -10,6 +10,7 @@ import {
 } from "@bunaway/protocol";
 import { ViewBoundary } from "@bunaway/runtime-bun/view-boundary";
 import { hostResponse } from "../../host-api/bun/host-response.ts";
+import { NativeRequests } from "../../host-api/bun/native-requests.ts";
 import { loadPluginCatalog } from "../../host-api/bun/plugin-catalog.ts";
 import {
   disposeAll,
@@ -272,9 +273,7 @@ function cancelReplacements() {
   }
   replacements.clear();
 }
-const cancelled = new Set<string>();
-const windowRequests = new Map<string, HostContext>();
-const operationControllers = new Map<string, AbortController>();
+const windowRequests = new NativeRequests();
 const approved = new Map<string, HostContext>();
 const uiCalls = new Map<
   string,
@@ -297,12 +296,7 @@ function discardContext(context: HostContext) {
       uiCalls.delete(id);
     }
   }
-  for (const [id, source] of windowRequests) {
-    if (source === context) {
-      cancelled.add(id);
-      operationControllers.get(id)?.abort();
-    }
-  }
+  windowRequests.cancelContext(context);
 }
 const fail = (error: unknown) => {
   failure ??= error;
@@ -327,9 +321,7 @@ const channel = new Channel(
     } else if (packet.kind === "shutdown") {
       stopping = true;
       cancelReplacements();
-      for (const controller of operationControllers.values()) {
-        controller.abort();
-      }
+      windowRequests.cancelAll();
       approved.clear();
       uiCalls.clear();
       for (const view of views.values()) {
@@ -367,7 +359,11 @@ const channel = new Channel(
         requestId: packet.requestId,
         call: packet.call,
       });
-    } else if (packet.kind === "authorize" || packet.kind === "grant") {
+    } else if (
+      packet.kind === "authorize-input" ||
+      packet.kind === "authorize" ||
+      packet.kind === "grant"
+    ) {
       const queued =
         packet.kind === "grant" ? uiCalls.get(packet.requestId) : undefined;
       if (packet.kind === "grant") {
@@ -377,7 +373,7 @@ const channel = new Channel(
         assert(queued.context === packet.context);
         uiCalls.delete(packet.requestId);
       }
-      const operation = packet.kind === "authorize" ? packet : queued;
+      const operation = packet.kind === "grant" ? queued : packet;
       assert(operation);
       const view = [
         ...views.values(),
@@ -410,7 +406,19 @@ const channel = new Channel(
       }
       if (packet.kind === "grant") {
         assert(queued);
-        return executeWindowRequest(queued, allowed, permissions);
+        // Acceptance releases channel capacity; the call owns its asynchronous completion.
+        void executeWindowRequest(queued, allowed, permissions).catch(fail);
+        return;
+      }
+      // Input permission does not reserve a result slot; execution must be authorized again.
+      if (packet.kind === "authorize-input") {
+        channel.notify({
+          kind: "input-authorized",
+          context: packet.context,
+          requestId: packet.requestId,
+          allowed,
+        });
+        return;
       }
       if (allowed) {
         assert(!approved.has(packet.requestId));
@@ -425,10 +433,7 @@ const channel = new Channel(
     } else if (packet.kind === "cancel") {
       approved.delete(packet.requestId);
       uiCalls.delete(packet.requestId);
-      if (windowRequests.has(packet.requestId)) {
-        cancelled.add(packet.requestId);
-        operationControllers.get(packet.requestId)?.abort();
-      }
+      windowRequests.cancel(packet.requestId);
     } else if (packet.kind === "cancel-context") {
       discardContext(packet.context);
     } else if (packet.kind === "host-result") {
@@ -448,7 +453,7 @@ const channel = new Channel(
   fail,
 );
 
-/** Keep asynchronous adapter completion separate so server deliveries can be acknowledged inside a native modal loop. */
+/** Observe plugin completion independently of grant acceptance and discard cancelled results. */
 async function executeWindowRequest(
   queued: Extract<
     Packet,
@@ -460,9 +465,7 @@ async function executeWindowRequest(
   permissions: Policy["backend"] | undefined,
 ): Promise<void> {
   let response: HostResponse;
-  windowRequests.set(queued.requestId, queued.context);
-  const controller = new AbortController();
-  operationControllers.set(queued.requestId, controller);
+  const signal = windowRequests.begin(queued.requestId, queued.context);
   try {
     if (!allowed || !permissions) {
       throw new BunawayError({
@@ -478,7 +481,16 @@ async function executeWindowRequest(
       {
         requestId: queued.requestId,
         permissions,
-        signal: controller.signal,
+        signal,
+        beforeExecute() {
+          // Closing commits locally before the main thread sends cancellation packets.
+          if (closingSent || stopping || !activeContext(queued.context)) {
+            throw new BunawayError({
+              code: "CANCELLED",
+              message: "Host call was cancelled.",
+            });
+          }
+        },
       },
     );
     response = hostResponse(() => payload);
@@ -486,12 +498,9 @@ async function executeWindowRequest(
     response = hostResponse(() => {
       throw error;
     });
-  } finally {
-    windowRequests.delete(queued.requestId);
-    operationControllers.delete(queued.requestId);
   }
-  const wasCancelled = cancelled.delete(queued.requestId);
-  if (stopping || wasCancelled || !activeContext(queued.context)) {
+  const active = windowRequests.finish(queued.requestId, signal);
+  if (stopping || !active || !activeContext(queued.context)) {
     return;
   }
   channel.notify({
@@ -726,7 +735,7 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
       byId: (windowId) => windows?.getById(windowId) ?? null,
       byView: (viewId) => windows?.getByView(viewId) ?? null,
       byRequest: (requestId) => {
-        const context = windowRequests.get(requestId);
+        const context = windowRequests.context(requestId);
         const view = context && viewByContext(context);
         return view
           ? {
@@ -766,7 +775,7 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
       closeWindow(viewId, replacing ? "recreate" : "handoff"),
     destroy: (viewId) => closeWindow(viewId, "force"),
     stopping: () => stopping,
-    cancelled: (id) => cancelled.has(id),
+    cancelled: (id) => windowRequests.context(id) === undefined,
     now: () => Date.now(),
     tick: () => Bun.sleep(5),
 
@@ -1300,9 +1309,7 @@ try {
 } finally {
   stopping = true;
   cancelReplacements();
-  for (const controller of operationControllers.values()) {
-    controller.abort();
-  }
+  windowRequests.cancelAll();
   uiCalls.clear();
   approved.clear();
   for (const view of views.values()) {

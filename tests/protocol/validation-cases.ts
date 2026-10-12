@@ -1,5 +1,4 @@
 import type { JsonValue, Schema } from "@bunaway/protocol";
-import { hostOperations } from "../fixtures/host-plugins.ts";
 
 // The same inputs exercise TypeScript and the actual Windows IPC validator.
 export const validationCases: {
@@ -658,24 +657,3 @@ validationCases.push(
     accepted: false,
   },
 );
-
-for (const path of [
-  "notes\u2028/../escape",
-  "notes\u2029/../escape",
-  "notes\u2028/./escape",
-  "notes\u2029/./escape",
-  "notes/../\u2028escape",
-  "notes/./\u2029escape",
-  "notes\u2028/file.txt",
-  "notes\u2029/file.txt",
-] as const) {
-  validationCases.push({
-    name: `Unicode path ${JSON.stringify(path)}`,
-    schema: hostOperations["storage.readText"].input,
-    value: {
-      path,
-    },
-    // Unicode separators are valid strings; the OS implementation checks path elements.
-    accepted: true,
-  });
-}

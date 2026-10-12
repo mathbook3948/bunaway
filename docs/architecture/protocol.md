@@ -12,6 +12,10 @@ envelope의 payload로 운반하며 호스트 발급 컨텍스트, 수명주기 
 `runtime-bun`의 `readJsonLines`를 구현하고 Windows B 단계에서 실제 파이프로 검증했다.
 [실행 결과](./windows-probe-results.md)를 참고한다.
 
+네이티브 플러그인 작업의 입력과 출력은 플러그인 내부의 Zod로 파싱한다.
+공통 프로토콜은 스키마 함수를 전송하지 않으며 등록 이름과 JSON 경계를 검사한다.
+세부 실행 순서는 [ADR 0018](../decisions/0018-plugin-local-zod-parsing.md)을 따른다.
+
 ## 하나의 스키마 정의
 
 `packages/protocol/src/schema.ts`가 원본이다. TypeScript 타입과 검증기는 이 정의를

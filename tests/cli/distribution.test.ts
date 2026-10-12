@@ -43,6 +43,9 @@ test("installed CLI builds an author's direct factory imports into portable pack
       recursive: true,
     });
     await writeJson(resolve(plugin, "package.json"), {
+      dependencies: {
+        zod: "4.6.5",
+      },
       name: "@example/plugin-built",
       version: "1.2.3",
       type: "module",
@@ -84,9 +87,10 @@ test("installed CLI builds an author's direct factory imports into portable pack
     });
     await Bun.write(
       resolve(plugin, "src/index.ts"),
-      `import { defineNativePlugin, s } from "@bunaway/plugin";
+      `import { z } from "zod";
+import { defineNativePlugin } from "@bunaway/plugin";
 import { createOperations } from "./platforms/windows.ts";
-const plugin = defineNativePlugin({ name: "built", platforms: { windows: { execution: "io", create: createOperations } }, operations: { read: { input: s.null(), output: s.string() } } });
+const plugin = defineNativePlugin({ name: "built", platforms: { windows: { execution: "io", create: createOperations } }, operations: { read: { input: z.null(), output: z.string() } } });
 export default plugin.definition;
 export const built = plugin.api;`,
     );
@@ -1596,6 +1600,7 @@ test("a standalone plugin install does not install Core, Backend SDK or sibling 
     expect(Object.keys(manifest.dependencies).sort()).toEqual([
       "@bunaway/plugin-api",
       "@bunaway/protocol",
+      "zod",
     ]);
     for (const name of [
       "@bunaway/core",
@@ -1632,7 +1637,9 @@ test("a standalone plugin install does not install Core, Backend SDK or sibling 
     const inputs = Object.keys(built.metafile?.inputs ?? {});
     expect(
       inputs.some((name) =>
-        /(?:backend-sdk|core|node:async_hooks|src\/windows\.ts)/.test(name),
+        /(?:@bunaway[\\/](?:backend|core)[\\/]|node:async_hooks|src[\\/]windows\.ts)/.test(
+          name,
+        ),
       ),
     ).toBe(false);
   } finally {
