@@ -61,6 +61,8 @@ export const frameworkPaths = [
   "native/windows/bun/channel.ts",
   "native/windows/bun/ui.ts",
   "native/windows/bun/webview.ts",
+  "native/windows/bun/downloads.ts",
+  "native/windows/bun/webview-downloads.ts",
   "native/windows/bun/view-profile.ts",
   "native/windows/bun/window-profiles.ts",
   "native/windows/bun/web-assets.ts",
