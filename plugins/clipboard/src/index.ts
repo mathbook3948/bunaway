@@ -13,9 +13,9 @@ const plugin = defineNativePlugin({
   operations: clipboardOperations,
 });
 
-/** Optional text clipboard contract; registration does not grant permissions. */
+/** Optional Windows clipboard contract; registration does not grant permissions. */
 export const clipboardPlugin = plugin.definition;
 export default clipboardPlugin;
 
-/** Read Unicode text, replace all formats with text, or clear all clipboard formats. */
+/** Read, replace, discover or clear bounded Windows clipboard formats. */
 export const clipboard = plugin.api;

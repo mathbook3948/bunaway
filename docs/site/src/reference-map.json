@@ -867,7 +867,13 @@
     "reference/plugins/clipboard": [
       "clipboard.readText",
       "clipboard.writeText",
-      "clipboard.clear"
+      "clipboard.clear",
+      "clipboard.readImage",
+      "clipboard.writeImage",
+      "clipboard.getFormats",
+      "clipboard.hasFormat",
+      "clipboard.readFormats",
+      "clipboard.writeFormats"
     ],
     "reference/host/windows": [
       "windows.list",

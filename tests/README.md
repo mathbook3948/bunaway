@@ -430,3 +430,13 @@ CI의 windows-native 작업은 `mise run host:windows`를 통해 이 검사를 �
 `cli/zod-distribution.test.ts`는 새 프로젝트에 원본 Zod와 배포 패키지를 설치하고
 설치된 CLI의 제품 및 개발 앱 번들에서 동일한 SDK 입력과 출력 회귀를 실행한다.
 이 검사는 Win32, WebView2나 WKWebView의 실제 네이티브 실행을 대신하지 않는다.
+
+`api/clipboard-formats.test.ts`와 `lifecycle/clipboard-codecs.test.ts`는 RGBA 상한과
+canonical base64, 다중 형식의 JSON 예산, CF_HTML byte offset과 잘못된 UTF-8,
+DIB의 행 방향과 padding, alpha 및 잘못된 profile, mask, 크기를 확인한다.
+`clipboard-resources.test.ts`는 다중 HGLOBAL의 준비 실패와 부분 등록에서 소유권과
+정리가 유지되는지 격리된 Win32 바인딩으로 확인한다. 실제 `windows-clipboard.test.ts`는
+`mise run host:windows`에 포함되며 공통 SDK와 UI Worker에서 텍스트, HTML, RTF,
+파일 목록과 이미지, 지원 형식 발견을 왕복한다. 테스트는 CI 데스크톱 clipboard를
+변경하고 원래 Unicode 텍스트만 복원한다. WebView2 페이지나 다른 앱의 붙여넣기,
+물리 장치 검증을 뜻하지 않는다.
