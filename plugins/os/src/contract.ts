@@ -19,6 +19,27 @@ export const osOperations = {
       }),
     }),
   },
+  usage: {
+    input: z.null(),
+    output: z.strictObject({
+      pid: z.number().int().positive(),
+      logicalCpuCount: z.number().int().nonnegative(),
+      cpuTime: z.strictObject({
+        userMicros: z.number().int().nonnegative(),
+        systemMicros: z.number().int().nonnegative(),
+      }),
+      memory: z.strictObject({
+        systemTotalBytes: z.number().int().nonnegative(),
+        systemFreeBytes: z.number().int().nonnegative(),
+        processResidentBytes: z.number().int().nonnegative(),
+      }),
+      translation: z.strictObject({
+        active: z.boolean(),
+        processMachine: z.number().int().min(0).max(65535),
+        nativeMachine: z.number().int().min(0).max(65535),
+      }),
+    }),
+  },
   locale: {
     input: z.null(),
     output: z.strictObject({
@@ -33,3 +54,6 @@ export const osOperations = {
 export type OSInfo = z.infer<typeof osOperations.info.output>;
 /** Windows user locale, ordered display languages and system UI language. */
 export type OSLocale = z.infer<typeof osOperations.locale.output>;
+
+/** Process CPU time, memory and Windows architecture translation snapshot. */
+export type OSUsage = z.infer<typeof osOperations.usage.output>;

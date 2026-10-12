@@ -9,10 +9,12 @@ test("OS reads have independent permissions and strict null inputs", () => {
   ]);
   expect(Object.keys(os)).toEqual([
     "info",
+    "usage",
     "locale",
   ]);
   for (const operation of [
     "info",
+    "usage",
     "locale",
   ] as const) {
     expect(osOperations[operation].input.safeParse({}).success).toBe(false);

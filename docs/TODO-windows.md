@@ -676,7 +676,9 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
   선택 `os` 플러그인의 `info`는 실행 중 Bun의 architecture, 버전과 PID를 반환한다.
 - [x] locale, country code, preferred languages와 OS 언어를 조회한다.
   `os.locale`은 Windows 사용자 locale과 지역 코드, 순서 있는 표시 언어와 시스템 UI 언어를 반환한다.
-- [ ] CPU, 메모리와 프로세스 사용량, PID와 translation 상태 조회를 제공한다.
+- [x] CPU, 메모리와 프로세스 사용량, PID와 translation 상태 조회를 제공한다.
+  `os.usage`는 논리 CPU 개수, 현재 프로세스의 누적 CPU 시간, 메모리 bytes와
+  `IsWow64Process2` 결과를 반환한다. CPU 백분율과 임의 PID의 조회는 포함하지 않는다.
 - [ ] 앱의 origin과 URL 접근 규칙을 적용한 HTTP 요청과 응답을 제공한다.
 - [ ] HTTP header, body, redirect, proxy와 OS 인증의 지원 범위를 정의한다.
 - [ ] HTTP stream, timeout, 취소와 progress를 제공한다.

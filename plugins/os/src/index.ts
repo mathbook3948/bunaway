@@ -17,4 +17,4 @@ export const osPlugin = plugin.definition;
 export default osPlugin;
 /** Read OS and bundled Bun metadata. Architecture describes the running process. */
 export const os = plugin.api;
-export type { OSInfo, OSLocale } from "./contract.ts";
+export type { OSInfo, OSLocale, OSUsage } from "./contract.ts";

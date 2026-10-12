@@ -897,7 +897,7 @@
     "reference/api": ["help"]
   },
   "operations": {
-    "reference/plugins/os": ["os.info", "os.locale"],
+    "reference/plugins/os": ["os.info", "os.usage", "os.locale"],
     "reference/plugins/autostart": [
       "autostart.enable",
       "autostart.disable",

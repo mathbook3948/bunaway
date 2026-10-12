@@ -1,5 +1,14 @@
 import { dlopen, ptr } from "bun:ffi";
-import { arch, hostname, release, type, version } from "node:os";
+import {
+  arch,
+  cpus,
+  freemem,
+  hostname,
+  release,
+  totalmem,
+  type,
+  version,
+} from "node:os";
 import type { NativeAdapter, NativeEnvironment } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
 
@@ -20,6 +29,18 @@ export function createOperations(
   _environment: NativeEnvironment,
 ): NativeAdapter {
   const api = dlopen("kernel32.dll", {
+    GetCurrentProcess: {
+      args: [],
+      returns: "u64",
+    },
+    IsWow64Process2: {
+      args: [
+        "u64",
+        "ptr",
+        "ptr",
+      ],
+      returns: "i32",
+    },
     GetUserDefaultLocaleName: {
       args: [
         "ptr",
@@ -158,6 +179,41 @@ export function createOperations(
           code: "CANCELLED",
           message: "OS adapter is disposed.",
         });
+      }
+      if (operation === "os.usage") {
+        const processMachine = new Uint16Array(1);
+        const nativeMachine = new Uint16Array(1);
+        if (
+          !api.symbols.IsWow64Process2(
+            api.symbols.GetCurrentProcess(),
+            ptr(processMachine),
+            ptr(nativeMachine),
+          )
+        ) {
+          throw new BunawayError({
+            code: "INTERNAL",
+            message: "Windows process architecture query failed.",
+          });
+        }
+        const cpu = process.cpuUsage();
+        return {
+          pid: process.pid,
+          logicalCpuCount: cpus().length,
+          cpuTime: {
+            userMicros: cpu.user,
+            systemMicros: cpu.system,
+          },
+          memory: {
+            systemTotalBytes: totalmem(),
+            systemFreeBytes: freemem(),
+            processResidentBytes: process.memoryUsage.rss(),
+          },
+          translation: {
+            active: processMachine[0] !== 0,
+            processMachine: processMachine[0] ?? 0,
+            nativeMachine: nativeMachine[0] ?? 0,
+          },
+        };
       }
       if (operation === "os.locale") {
         return locale();

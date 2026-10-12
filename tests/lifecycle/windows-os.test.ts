@@ -29,6 +29,20 @@ test.skipIf(process.platform !== "win32")(
           pid: process.pid,
         },
       });
+      const usage = osOperations.usage.output.parse(
+        await adapter.execute("os.usage", null, "backend"),
+      );
+      expect(usage.pid).toBe(process.pid);
+      expect(usage.logicalCpuCount).toBeGreaterThan(0);
+      expect(usage.memory.systemTotalBytes).toBeGreaterThan(0);
+      expect(usage.memory.systemFreeBytes).toBeLessThanOrEqual(
+        usage.memory.systemTotalBytes,
+      );
+      expect(usage.memory.processResidentBytes).toBeGreaterThan(0);
+      expect(usage.translation.nativeMachine).toBeGreaterThan(0);
+      expect(usage.translation.active).toBe(
+        usage.translation.processMachine !== 0,
+      );
       const locale = osOperations.locale.output.parse(
         await adapter.execute("os.locale", null, "backend"),
       );
