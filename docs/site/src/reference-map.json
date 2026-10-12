@@ -480,6 +480,7 @@
       "type": "NativeWindow",
       "pages": {
         "reference/tooling/plugin-api": [
+          "showPrintUI",
           "show",
           "showInactive",
           "focus",
@@ -870,6 +871,7 @@
       "clipboard.clear"
     ],
     "reference/host/windows": [
+      "windows.showPrintUI",
       "windows.list",
       "windows.getById",
       "windows.getCurrent",

@@ -190,6 +190,8 @@ export type WindowBounds = {
  * Native failures throw; the UI host converts them to bounded public errors.
  */
 export type NativeWindow = {
+  /** Requests a user-controlled browser or system print dialog; does not report print completion. */
+  showPrintUI?(kind: "browser" | "system"): void;
   /** Reads a versioned state and physical outer-bounds snapshot for recovery after subscribing. */
   getSnapshot(): WindowSnapshot;
   /** Reads the latest preparation outcome, including a retained closed-window outcome. Windows only. */

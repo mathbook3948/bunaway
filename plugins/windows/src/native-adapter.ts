@@ -30,6 +30,16 @@ export function createOperations(
   ): JsonValue | Promise<JsonValue> {
     const window = services.window(viewId);
     switch (call.operation) {
+      case "windows.showPrintUI":
+        if (!window.showPrintUI) {
+          throw new BunawayError({
+            code: "UNSUPPORTED",
+            message:
+              "WebView print dialogs are not implemented on this platform.",
+          });
+        }
+        window.showPrintUI(call.payload.kind ?? "browser");
+        break;
       case "windows.getReadiness":
         return {
           ...window.getReadiness(),

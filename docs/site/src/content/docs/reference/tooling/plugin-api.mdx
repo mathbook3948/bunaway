@@ -58,6 +58,12 @@ splashscreen 최종 종료에는 false를 전달해 임시 프로필과 교체 �
 플러그인은 인증된 출처와 대상 권한을 검증하고 닫혔거나 재생성 중인 창을 결과에서 제외합니다.
 `lookup`이 없으면 식별자 탐색 API는 `UNSUPPORTED`를 반환합니다.
 `NativeWindow`는 `show(visible)`, `focus()`, `close()`, `isFullscreen()`, `getSizeConstraints()`, `setSizeConstraints(constraints)`, `setSize(width, height)`, `setPosition(x, y)`, `setFullscreen(value)`, `setCloseConfirmation(message)`를 제공합니다.
+
+Windows의 선택적 `NativeWindow.showPrintUI(kind)`는 `"browser" | "system"` 인쇄 UI를
+요청합니다. 프린터 선택과 제출은 사용자에게 맡기며 메서드 반환을 인쇄 완료로 해석하지 않습니다.
+닫힌 WebView는 `INVALID_ARGUMENT`, 생성 중에는 `BUSY`, 인쇄 확장 인터페이스가 없는
+WebView2 런타임은 `UNSUPPORTED`입니다. 서비스가 없는 플랫폼도 창 플러그인이
+`UNSUPPORTED`로 처리합니다. 호출 권한은 플러그인이 네이티브 진입 전에 검사합니다.
 `showInactive()`는 현재 일반, 최소화나 최대화 상태와 다른 창의 입력 포커스를 유지하며
 숨김을 해제합니다. `activate()`는 표시된 비최소화 창의 전경 전환을 요청하고 실제
 전경 여부를 boolean으로 반환합니다. 숨김이나 최소화 상태에서는 변경 없이 `false`입니다.

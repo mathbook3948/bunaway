@@ -790,6 +790,7 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
       const nativeWindows = windows;
       const hwnd = view.native.hwnd;
       return {
+        showPrintUI: (kind) => view.native.showPrintUI(kind),
         getSnapshot: () => nativeWindows.getSnapshot(hwnd),
         getReadiness: () => {
           assert(view.readiness);

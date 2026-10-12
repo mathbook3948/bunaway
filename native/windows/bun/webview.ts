@@ -734,6 +734,44 @@ export class WebView {
       );
     }
   }
+  /** Request a print dialog, leaving printer selection and submission to the user. */
+  showPrintUI(kind: "browser" | "system") {
+    if (this.closing) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "WebView is closed.",
+      });
+    }
+    if (!this.webview) {
+      throw new BunawayError({
+        code: "BUSY",
+        message: "WebView is not ready.",
+      });
+    }
+    // ICoreWebView2_16, from pinned SDK 1.0.4129.50. Older runtimes need an explicit capability error.
+    const printing = query(
+      this.webview,
+      "0eb34dc9-9f91-41e1-8639-95cd5943906b",
+      true,
+    );
+    if (!printing) {
+      throw new BunawayError({
+        code: "UNSUPPORTED",
+        message:
+          "The installed WebView2 runtime does not provide print dialogs.",
+      });
+    }
+    try {
+      hr(
+        method(printing, 114, [
+          "i32",
+        ])(kind === "browser" ? 0 : 1),
+        "ShowPrintUI",
+      );
+    } finally {
+      release(printing);
+    }
+  }
   source() {
     return this.webview ? getString(this.webview, 4) : "";
   }

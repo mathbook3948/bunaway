@@ -37,6 +37,11 @@ normal의 WINDOWPLACEMENT 작업 영역 좌표는 화면 좌표로 보정한다.
 `com.ts`는 COM 참조와 콜백을, `webview.ts`는 WebView 생성과 종료를 관리한다.
 `ui.ts`가 이 자원들의 초기화와 정리 순서를 조정한다. DLL은 창과 COM 정리가 끝난 뒤 닫는다.
 
+인쇄 UI 작업은 `NativeWindow.showPrintUI`로 같은 UI 스레드의 ICoreWebView2_16
+ShowPrintUI를 호출한다. optional QueryInterface는 E_NOINTERFACE만 미지원으로 반환하며
+다른 HRESULT 실패는 기존 오류 경로를 유지한다. 현재 작업은 browser 또는 system UI의
+시작 요청만 제공하고 프린터 선택과 실제 제출, 인쇄 완료는 사용자와 브라우저가 소유한다.
+
 창 플러그인을 등록하면 `Windows.observe`가 창별 상태와 물리 outer bounds의 변경을
 비교한다. 활성화 관찰은 `WM_ACTIVATE` 뒤에 게시한 창 메시지에서 전경 HWND를 조회한다.
 동기 활성화 콜백이 끝나기 전에 이전 전경 HWND를 읽어 전환을 놓치는 것을 방지한다.
