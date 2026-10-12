@@ -367,7 +367,11 @@ const channel = new Channel(
         requestId: packet.requestId,
         call: packet.call,
       });
-    } else if (packet.kind === "authorize" || packet.kind === "grant") {
+    } else if (
+      packet.kind === "authorize-input" ||
+      packet.kind === "authorize" ||
+      packet.kind === "grant"
+    ) {
       const queued =
         packet.kind === "grant" ? uiCalls.get(packet.requestId) : undefined;
       if (packet.kind === "grant") {
@@ -377,7 +381,7 @@ const channel = new Channel(
         assert(queued.context === packet.context);
         uiCalls.delete(packet.requestId);
       }
-      const operation = packet.kind === "authorize" ? packet : queued;
+      const operation = packet.kind === "grant" ? queued : packet;
       assert(operation);
       const view = [
         ...views.values(),
@@ -411,6 +415,16 @@ const channel = new Channel(
       if (packet.kind === "grant") {
         assert(queued);
         return executeWindowRequest(queued, allowed, permissions);
+      }
+      // Input permission does not reserve a result slot; execution must be authorized again.
+      if (packet.kind === "authorize-input") {
+        channel.notify({
+          kind: "input-authorized",
+          context: packet.context,
+          requestId: packet.requestId,
+          allowed,
+        });
+        return;
       }
       if (allowed) {
         assert(!approved.has(packet.requestId));

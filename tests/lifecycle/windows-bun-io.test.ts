@@ -3,10 +3,10 @@ import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Worker } from "node:worker_threads";
+import { storagePlugin } from "@bunaway/plugin-storage";
+import { API_LIMITS, type HostContext } from "@bunaway/protocol";
 import { Channel, type Packet } from "#native/windows/bun/channel";
 import { viewDirName } from "#native/windows/bun/view-profile";
-import { API_LIMITS, type HostContext } from "@bunaway/protocol";
-import { storagePlugin } from "@bunaway/plugin-storage";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 
 test.skipIf(process.platform !== "win32")(
@@ -182,7 +182,14 @@ test.skipIf(process.platform !== "win32")(
         if (packet.kind === "ready") {
           return;
         }
-        if (packet.kind === "prepare") {
+        if (packet.kind === "authorize-input") {
+          channel.notify({
+            kind: "input-authorized",
+            requestId: packet.requestId,
+            context: packet.context,
+            allowed: true,
+          });
+        } else if (packet.kind === "prepare") {
           prepares.push(packet);
         } else if (packet.kind === "host-response") {
           replies.push(packet);
@@ -282,6 +289,8 @@ test.skipIf(process.platform !== "win32")(
           }),
         ),
       );
+      // Settle input approvals before filling the entire approval lane with late grants.
+      await channel.drain();
       // Late approvals must not write any of the cancelled files.
       await Promise.all(
         batch.map((requestId) =>

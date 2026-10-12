@@ -600,3 +600,109 @@ test.skipIf(process.platform !== "win32")(
   },
   timeoutMs + 5_000,
 );
+
+test.skipIf(process.platform !== "win32")(
+  "input authorization checks policy and context without consuming execution approval",
+  async () => {
+    const host = await startWorker([
+      "ui-test.ok",
+    ]);
+    const request = {
+      requestId: "preflight",
+      context: host.runtime.backendContext,
+      call: {
+        operation: "ui-test.ok",
+        payload: null,
+      },
+    };
+    try {
+      for (const [requestId, context, operation, allowed] of [
+        [
+          "denied-operation",
+          request.context,
+          "ui-test.wait",
+          false,
+        ],
+        [
+          "stale-context",
+          "expired" as UIConfig["backendContext"],
+          "ui-test.ok",
+          false,
+        ],
+        [
+          request.requestId,
+          request.context,
+          "ui-test.ok",
+          true,
+        ],
+      ] as const) {
+        await host.channel.send({
+          kind: "authorize-input",
+          requestId,
+          context,
+          call: {
+            operation,
+            payload: null,
+          },
+        });
+        await waitFor(
+          "input authorization",
+          () =>
+            host.packets.some(
+              (p) => p.kind === "input-authorized" && p.requestId === requestId,
+            ),
+          host.failed,
+        );
+        expect(
+          host.packets.find(
+            (p) => p.kind === "input-authorized" && p.requestId === requestId,
+          ),
+        ).toMatchObject({
+          allowed,
+        });
+      }
+      // A second input check must not reserve or collide with the final result slot.
+      await host.channel.send({
+        kind: "authorize-input",
+        ...request,
+      });
+      await host.channel.send({
+        kind: "authorize",
+        ...request,
+      });
+      await waitFor(
+        "execution authorization",
+        () =>
+          host.packets.some(
+            (p) => p.kind === "authorized" && p.requestId === request.requestId,
+          ),
+        host.failed,
+      );
+      expect(
+        host.packets.find(
+          (p) => p.kind === "authorized" && p.requestId === request.requestId,
+        ),
+      ).toMatchObject({
+        allowed: true,
+      });
+      await host.channel.send({
+        kind: "host-result",
+        context: request.context,
+        requestId: request.requestId,
+        response: {
+          kind: "result",
+          payload: "done",
+        },
+      });
+      expect((await host.waitForResponse(request.requestId)).response).toEqual({
+        kind: "result",
+        payload: "done",
+      });
+      expect(Atomics.load(host.state, 0)).toBe(0);
+      await host.stop();
+    } finally {
+      await host.close();
+    }
+  },
+  15000,
+);

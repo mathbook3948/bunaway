@@ -36,7 +36,14 @@ const queue = new Map<
     context: HostContext;
     call: HostCall;
     source: string;
-    execute?: () => Promise<JsonValue>;
+    state:
+      | {
+          phase: "input-authorization" | "parsing" | "executing";
+        }
+      | {
+          phase: "execution-authorization";
+          execute: () => Promise<JsonValue>;
+        };
   }
 >();
 let active: string | undefined;
@@ -50,7 +57,7 @@ const channel = new Channel(
     throw error;
   },
 );
-/** Parse the oldest queued input before requesting fresh UI authorization. */
+/** Ask the policy owner before running any plugin input callbacks. */
 function startNext() {
   if (stopping || active) {
     return;
@@ -61,8 +68,11 @@ function startNext() {
   }
   const [id, call] = next;
   active = id;
-  void prepare(id, call).catch((error) => {
-    throw error;
+  channel.notify({
+    kind: "authorize-input",
+    requestId: id,
+    context: call.context,
+    call: call.call,
   });
 }
 
@@ -80,7 +90,10 @@ async function prepare(
     if (stopping || queue.get(id) !== call || active !== id) {
       return;
     }
-    call.execute = execute;
+    call.state = {
+      phase: "execution-authorization",
+      execute,
+    };
     channel.notify({
       kind: "prepare",
       requestId: id,
@@ -122,6 +135,16 @@ function complete(
   }
   startNext();
 }
+function deniedResponse(): HostResponse {
+  return {
+    kind: "error",
+    error: {
+      code: "PERMISSION_DENIED",
+      message: "Host context or policy denied.",
+    },
+  };
+}
+
 /** Apply I/O requests and control messages from the main-thread coordinator. */
 async function receive(packet: Packet) {
   if (packet.kind === "operation") {
@@ -136,27 +159,51 @@ async function receive(packet: Packet) {
       context: packet.context,
       call: packet.call,
       source: packet.source,
+      state: {
+        phase: "input-authorization",
+      },
     });
     startNext();
+  } else if (packet.kind === "input-authorized") {
+    const call = queue.get(packet.requestId);
+    if (
+      !call ||
+      active !== packet.requestId ||
+      call.state.phase !== "input-authorization"
+    ) {
+      return;
+    }
+    assert(call.context === packet.context);
+    if (!packet.allowed) {
+      complete(packet.requestId, call, deniedResponse());
+      return;
+    }
+    call.state = {
+      phase: "parsing",
+    };
+    // Acknowledge permission promptly; cancellation stays live while the parser awaits.
+    void prepare(packet.requestId, call).catch((error) => {
+      throw error;
+    });
   } else if (packet.kind === "grant") {
     const call = queue.get(packet.requestId);
-    if (!call || active !== packet.requestId || !call.execute) {
+    if (
+      !call ||
+      active !== packet.requestId ||
+      call.state.phase !== "execution-authorization"
+    ) {
       return;
     }
     assert(call.context === packet.context);
     let response: HostResponse;
     try {
       if (!packet.allowed) {
-        response = {
-          kind: "error",
-          error: {
-            code: "PERMISSION_DENIED",
-            message: "Host context or policy denied.",
-          },
-        };
+        response = deniedResponse();
       } else {
-        const execute = call.execute;
-        delete call.execute;
+        const execute = call.state.execute;
+        call.state = {
+          phase: "executing",
+        };
         // The prepared function starts native I/O now, before its first await for output parsing.
         const payload = await execute();
         response = hostResponse(() => payload);

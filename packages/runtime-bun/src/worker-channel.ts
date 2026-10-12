@@ -80,6 +80,18 @@ export type Packet =
       error: WireError;
     }
   | {
+      kind: "authorize-input";
+      context: HostContext;
+      requestId: string;
+      call: HostCall;
+    }
+  | {
+      kind: "input-authorized";
+      context: HostContext;
+      requestId: string;
+      allowed: boolean;
+    }
+  | {
       kind: "authorize";
       context: HostContext;
       requestId: string;
@@ -144,6 +156,7 @@ const uiKinds = [
   "closing",
   "quit-request",
   "authorized",
+  "input-authorized",
   "prepare",
   "host-response",
   "cleaned",
@@ -158,6 +171,7 @@ const mainKinds = [
   "server",
   "session-failure",
   "authorize",
+  "authorize-input",
   "grant",
   "cancel",
   "cancel-context",
@@ -165,6 +179,7 @@ const mainKinds = [
   "shutdown",
 ];
 const ioKinds = [
+  "authorize-input",
   "ready",
   "prepare",
   "host-response",
@@ -172,6 +187,7 @@ const ioKinds = [
   "fatal",
 ];
 const ioMainKinds = [
+  "input-authorized",
   "operation",
   "grant",
   "cancel",
@@ -208,6 +224,8 @@ const controlKinds = new Set([
   "ready",
 ]);
 const approvalKinds = new Set([
+  "authorize-input",
+  "input-authorized",
   "prepare",
   "authorize",
   "authorized",
@@ -252,6 +270,16 @@ const requiredFields: Record<Packet["kind"], readonly string[]> = {
   "session-failure": [
     "route",
     "error",
+  ],
+  "authorize-input": [
+    "context",
+    "requestId",
+    "call",
+  ],
+  "input-authorized": [
+    "context",
+    "requestId",
+    "allowed",
   ],
   authorize: [
     "context",
@@ -426,6 +454,8 @@ export function validatePacket(value: unknown, incoming: Side): Packet {
   }
   if (
     [
+      "authorize-input",
+      "input-authorized",
       "authorize",
       "authorized",
       "cancel",
@@ -456,6 +486,7 @@ export function validatePacket(value: unknown, incoming: Side): Packet {
   }
   if (
     [
+      "authorize-input",
       "authorize",
       "operation",
       "prepare",
@@ -465,6 +496,7 @@ export function validatePacket(value: unknown, incoming: Side): Packet {
   }
   if (
     [
+      "input-authorized",
       "authorized",
       "grant",
     ].includes(packet.kind) &&

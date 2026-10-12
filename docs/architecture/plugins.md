@@ -176,16 +176,20 @@ interface HostAPI {
 ```
 
 [ADR 0018](../decisions/0018-plugin-local-zod-parsing.md)에 따라 스키마는 설치한 플러그인
-코드에 남긴다. 작업을 소유하는 Worker의 SDK가 어댑터 실행 직전에 input.parse를,
-성공 직후에 output.parse를 각각 한 번 실행한다. 파싱한 입력이 실제 실행에 쓰이고
+코드에 남긴다. 작업을 소유하는 Worker의 SDK가 어댑터 실행 직전에 input.parseAsync를,
+성공 직후에 output.parseAsync를 각각 한 번 실행하고 완료를 기다린다. 파싱한 입력이 실제 실행에 쓰이고
 파싱한 결과가 호출자에게 전달된다. transport, Core와 NativeRegistry는 Zod를 재실행하지 않는다.
 manifest와 등록 메시지에는 이름과 버전, 지원 플랫폼, 작업 이름만 전달한다.
 
 파싱 전후에는 JSON 값, 크기, 깊이와 Unicode 제한을 검사한다. Zod 검사나 변환 함수는
-전송하지 않는다. 동기 I/O의 승인과 실행 순서를 보존하기 위해 비동기 스키마는 지원하지 않는다.
+전송하지 않는다. 동기 및 비동기 스키마를 지원하며 SDK가 검사 Promise의 완료와 실패를 기다린다.
 입력 파싱 실패는 INVALID_ARGUMENT, 결과 파싱 실패는 INTERNAL로 정리한다.
-플러그인 코드에 정의한 동기 refine, transform, when과 키 정규화는 그대로 실행한다.
+플러그인 코드에 정의한 refine, transform, when과 키 정규화는 그대로 실행한다.
 권한 확인은 파싱보다 먼저 이루어지며 거부된 호출은 검사 콜백도 실행하지 않는다.
+I/O Worker는 authorize-input으로 입력 검사 권한을 확인하고 input-authorized 응답이 허용일 때만
+파싱한다. 파싱이 끝나면 기존 prepare, authorize, authorized, grant 절차로 컨텍스트와
+권한을 다시 확인한다. 최종 승인 직후 await 없이 네이티브 작업을 실행한다.
+검사 중 취소된 호출은 실행하지 않으며 취소할 수 없는 Zod 콜백의 늦은 완료와 실패도 관찰한다.
 
 명령의 성공, 실패, 취소 후에는 해당 호출 범위를 폐기한다. setup에서 시작한 작업은
 앱의 백엔드 취소 신호를 사용한다. 범위가 없으면 `INVALID_ARGUMENT`, 종료된 범위면
@@ -393,13 +397,15 @@ operations 모듈은 지정된 Worker의 기능 실행과 자원 회수를 제�
 프레임워크의 Worker, 메시지 채널, 취소와 승인 절차를 플러그인마다 복제하지 않는다.
 호스트는 manifest의 실행 위치로 작업을 전달한다. `ui` 작업은 UI Worker의 제한된 큐에
 들어간 뒤 메인 스레드에 prepare를 보낸다. 메인 스레드는 호출이 아직 활성일 때만 grant를 보내고,
-UI Worker는 grant 뒤 현재 호출 문맥과 정책을 다시 확인해 실행한다. `io` 작업은 I/O
-Worker의 제한된 큐에 들어간 뒤 메인 스레드에 prepare를 보낸다. 메인 스레드는 호출이 여전히 활성인지
-확인하고 UI Worker에 정책 평가를 요청한다. 허용 결과를 받은 메인 스레드가 I/O Worker에 grant를
-보내며, I/O Worker는 grant 뒤 실행한다.
+UI Worker는 grant 뒤 현재 호출 문맥과 정책을 확인하고 입력을 파싱한 다음 실행 직전에 다시 확인한다.
+`io` 작업은 I/O Worker의 제한된 큐에 들어간 뒤 authorize-input을 보낸다. 메인 스레드는
+활성 호출의 요청을 UI Worker로 전달하며, UI Worker는 현재 컨텍스트와 정책을 검사해
+input-authorized로 응답한다. 허용된 호출만 입력을 파싱하고 완료 후 prepare를 보낸다.
+메인 스레드는 활성 호출에 대해 UI Worker의 실행 승인을 다시 요청한다. 허용 결과를 받은
+메인 스레드가 I/O Worker에 grant를 보내며, I/O Worker는 grant 직후 동기로 실행한다.
 
 작업 전송과 승인 메시지는 각각 최대 128개의 미확인 메시지를 보관한다. prepare,
-authorize, authorized와 grant는 별도 승인 용량을 사용하므로 작업 전송이 한도에 도달해도
+authorize, authorized, grant, authorize-input과 input-authorized는 별도 승인 용량을 사용하므로 작업 전송이 한도에 도달해도
 승인을 계속 처리한다. 취소, 뷰 폐기와 종료 메시지도 각각 예약된 용량을 사용한다.
 새 Host 호출은 진행 중 호출과 아직 확인되지 않은 취소, 승인 메시지가 차지하는 용량을
 확인하고, 여유가 없으면 `BUSY`로 거부한다.
@@ -417,7 +423,8 @@ envelope의 크기 제한을 검사하며, 실패하면 안전한 `INTERNAL` 응
 다음 명령은 계속 실행할 수 있다.
 
 공통 계층은 JSON과 등록 이름을 검증하고 출처의 정책에 작업 이름이 있는지 확인한다.
-실행을 승인한 뒤 SDK가 설치한 플러그인의 Zod 스키마로 입력과 결과를 파싱한다.
+입력 검사 권한을 확인한 뒤 SDK가 입력을 파싱하고, 실행 직전에 권한을 다시 확인한다.
+실행 성공 후에는 SDK가 결과를 파싱한다.
 플랫폼 adapter가 없어도 작업 권한을 먼저 검사하여 허용된 호출에는 `UNSUPPORTED`,
 권한이 없는 호출에는 `PERMISSION_DENIED`를 반환한다.
 

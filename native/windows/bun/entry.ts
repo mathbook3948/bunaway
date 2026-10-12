@@ -191,14 +191,20 @@ export async function runWindowsApp(
         fail(new Error(packet.error.message));
         return;
       }
-      if (packet.kind !== "prepare" && packet.kind !== "host-response") {
+      if (
+        packet.kind !== "authorize-input" &&
+        packet.kind !== "prepare" &&
+        packet.kind !== "host-response"
+      ) {
         throw new Error("Unexpected I/O reply");
       }
       const call = calls.get(packet.requestId);
       if (!call || call.context !== packet.context || stopping) {
         return;
       }
-      if (packet.kind === "prepare") {
+      if (packet.kind === "authorize-input") {
+        await channel.send(packet);
+      } else if (packet.kind === "prepare") {
         await channel.send({
           ...packet,
           kind: "authorize",
@@ -366,6 +372,12 @@ export async function runWindowsApp(
         requestId: packet.requestId,
         allowed: true,
       });
+    } else if (packet.kind === "input-authorized") {
+      const call = calls.get(packet.requestId);
+      if (!call || call.context !== packet.context || call.signal.aborted) {
+        return;
+      }
+      await ioChannel.send(packet);
     } else if (packet.kind === "authorized") {
       const call = calls.get(packet.requestId);
       if (!call || call.context !== packet.context) {

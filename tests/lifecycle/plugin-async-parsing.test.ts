@@ -3,10 +3,14 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import type { HostContext } from "@bunaway/protocol";
-import { Channel, type Packet } from "#native/windows/bun/channel";
+import {
+  Channel,
+  type Packet,
+  validatePacket,
+} from "#native/windows/bun/channel";
 import { bundleIOPluginFixture } from "../fixtures/native-worker.ts";
 
-test("I/O Worker awaits parsing before authorization and discards cancelled parsers", async () => {
+test("I/O Worker authorizes input callbacks, reauthorizes execution and discards cancelled parsers", async () => {
   const assets = resolve(
     import.meta.dir,
     "../../build",
@@ -29,6 +33,7 @@ test("I/O Worker awaits parsing before authorization and discards cancelled pars
     released: 1,
     executions: 2,
     settled: 3,
+    callbacks: 4,
   };
   await bundleIOPluginFixture(
     assets,
@@ -43,6 +48,8 @@ test("I/O Worker awaits parsing before authorization and discards cancelled pars
     const slots = ${JSON.stringify(slots)};
     const plugin = defineNativePlugin({name:"async",operations:{run:{
       input:z.string().transform(async value => {
+        Atomics.add(state,slots.callbacks,1);
+        if (value === "input-error") throw new Error("private input failure");
         if (value.startsWith("blocked")) {
           Atomics.add(state,slots.started,1);
           while (Atomics.load(state,slots.released) === 0) await Bun.sleep(1);
@@ -126,8 +133,58 @@ test("I/O Worker awaits parsing before authorization and discards cancelled pars
         payload,
       },
     });
+  const authorizeInput = async (id: string, allowed = true) => {
+    await waitFor(() =>
+      packets.some((p) => p.kind === "authorize-input" && p.requestId === id),
+    );
+    await channel.send({
+      kind: "input-authorized",
+      requestId: id,
+      context,
+      allowed,
+    });
+  };
+  const responseFor = async (id: string) => {
+    await waitFor(() =>
+      packets.some((p) => p.kind === "host-response" && p.requestId === id),
+    );
+    return packets.find(
+      (p) => p.kind === "host-response" && p.requestId === id,
+    );
+  };
   try {
     await waitFor(() => packets.some((p) => p.kind === "ready"));
+    // Neither a rejecting nor a stalled callback may run before policy approval.
+    for (const payload of [
+      "input-error",
+      "blocked",
+    ]) {
+      await operation(payload, payload);
+      await authorizeInput(payload, false);
+      expect(await responseFor(payload)).toMatchObject({
+        response: {
+          kind: "error",
+          error: {
+            code: "PERMISSION_DENIED",
+          },
+        },
+      });
+      expect(Atomics.load(state, slots.callbacks)).toBe(0);
+    }
+    await operation("cancel-before-input", "blocked");
+    await waitFor(() =>
+      packets.some(
+        (p) =>
+          p.kind === "authorize-input" && p.requestId === "cancel-before-input",
+      ),
+    );
+    await channel.send({
+      kind: "cancel",
+      context,
+      requestId: "cancel-before-input",
+    });
+    await authorizeInput("cancel-before-input");
+    expect(Atomics.load(state, slots.callbacks)).toBe(0);
     for (const [index, kind] of [
       "cancel",
       "cancel-context",
@@ -135,8 +192,11 @@ test("I/O Worker awaits parsing before authorization and discards cancelled pars
       Atomics.store(state, slots.released, 0);
       const id = `cancel-${index}`;
       await operation(id, index === 0 ? "blocked" : "blocked-error");
+      await authorizeInput(id);
+      await authorizeInput(id);
       await waitFor(() => Atomics.load(state, slots.started) === index + 1);
       expect(packets.filter((p) => p.kind === "prepare")).toHaveLength(0);
+      expect(Atomics.load(state, slots.callbacks)).toBe(index + 1);
       await channel.send(
         kind === "cancel"
           ? {
@@ -159,12 +219,43 @@ test("I/O Worker awaits parsing before authorization and discards cancelled pars
       });
     }
     expect(Atomics.load(state, slots.executions)).toBe(0);
+    await operation("revoked", "ok");
+    await authorizeInput("revoked");
+    await waitFor(() =>
+      packets.some((p) => p.kind === "prepare" && p.requestId === "revoked"),
+    );
+    await channel.send({
+      kind: "grant",
+      requestId: "revoked",
+      context,
+      allowed: false,
+    });
+    expect(await responseFor("revoked")).toMatchObject({
+      response: {
+        kind: "error",
+        error: {
+          code: "PERMISSION_DENIED",
+        },
+      },
+    });
+    expect(Atomics.load(state, slots.executions)).toBe(0);
+    await operation("invalid", "input-error");
+    await authorizeInput("invalid");
+    expect(await responseFor("invalid")).toMatchObject({
+      response: {
+        kind: "error",
+        error: {
+          code: "INVALID_ARGUMENT",
+        },
+      },
+    });
     for (const [index, payload] of [
       "output-error",
       "ok",
     ].entries()) {
       const id = `run-${index}`;
       await operation(id, payload);
+      await authorizeInput(id);
       await waitFor(() =>
         packets.some((p) => p.kind === "prepare" && p.requestId === id),
       );
@@ -206,8 +297,8 @@ test("I/O Worker awaits parsing before authorization and discards cancelled pars
       });
     }
     expect(Atomics.load(state, slots.executions)).toBe(2);
-    expect(packets.filter((p) => p.kind === "prepare")).toHaveLength(2);
-    expect(packets.filter((p) => p.kind === "host-response")).toHaveLength(2);
+    expect(packets.filter((p) => p.kind === "prepare")).toHaveLength(3);
+    expect(packets.filter((p) => p.kind === "host-response")).toHaveLength(6);
     await channel.send({
       kind: "shutdown",
     });
@@ -218,3 +309,55 @@ test("I/O Worker awaits parsing before authorization and discards cancelled pars
     await worker.terminate();
   }
 }, 15000);
+
+test("input authorization packets enforce direction and nested contracts", () => {
+  const request: Packet = {
+    kind: "authorize-input",
+    context: "backend" as HostContext,
+    requestId: "call",
+    call: {
+      operation: "async.run",
+      payload: null,
+    },
+  };
+  const response: Packet = {
+    kind: "input-authorized",
+    context: "backend" as HostContext,
+    requestId: "call",
+    allowed: true,
+  };
+  for (const side of [
+    "ui",
+    "main-io",
+  ] as const) {
+    expect(validatePacket(request, side)).toEqual(request);
+    expect(() =>
+      validatePacket(
+        {
+          ...request,
+          call: {
+            operation: "async.run",
+          },
+        },
+        side,
+      ),
+    ).toThrow();
+    expect(() => validatePacket(response, side)).toThrow();
+  }
+  for (const side of [
+    "main",
+    "io",
+  ] as const) {
+    expect(validatePacket(response, side)).toEqual(response);
+    expect(() =>
+      validatePacket(
+        {
+          ...response,
+          allowed: "true",
+        },
+        side,
+      ),
+    ).toThrow();
+    expect(() => validatePacket(request, side)).toThrow();
+  }
+});
