@@ -203,7 +203,7 @@ export type NativeMonitor = {
   };
   dpi: number;
   scaleFactor: number;
-  /** Clockwise degrees, or null when the driver does not report orientation. */
+  /** Counter-clockwise degrees from the natural orientation, or null when the driver does not report orientation. */
   rotation: 0 | 90 | 180 | 270 | null;
   /** Integer hertz reported by DEVMODE, or null for driver default/unknown. */
   refreshRate: number | null;
