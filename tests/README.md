@@ -440,3 +440,11 @@ DIB의 행 방향과 padding, alpha 및 잘못된 profile, mask, 크기를 확�
 파일 목록과 이미지, 지원 형식 발견을 왕복한다. 테스트는 CI 데스크톱 clipboard를
 변경하고 원래 Unicode 텍스트만 복원한다. WebView2 페이지나 다른 앱의 붙여넣기,
 물리 장치 검증을 뜻하지 않는다.
+
+`api/window-monitors.test.ts`는 음수 화면 원점, 32비트 rectangle overflow, 개별 조회 권한,
+취소와 모니터 서비스 미지원 계약을 검사한다. `windows-monitors.test.ts`는 실제 Win32
+디스플레이 열거와 MONITORINFOEXW rectangle, 주 모니터, 점과 rectangle 선택, 최소화 전
+모니터 및 반복 callback 정리를 검사한다. `windows-bun-window-api.ts`는 실제 WebView2의
+명령 컨텍스트에서 같은 조회와 권한 거부를 검사한다. 두 네이티브 검사는
+`mise run host:windows`에 포함한다. CI의 디스플레이 구성에서 실행하며 실제 다중 물리
+모니터의 hotplug, 혼합 DPI와 회전 또는 사용자 커서 조작 검증을 대신하지 않는다.

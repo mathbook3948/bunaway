@@ -1,5 +1,4 @@
 import { dlopen, ptr } from "bun:ffi";
-import { windowPermissions } from "../fixtures/window-permissions.ts";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -11,6 +10,7 @@ import { runWindowsApp } from "#native/windows/bun/entry";
 import { Windows } from "#native/windows/bun/win32";
 import { user } from "#native/windows/bun/win32-bindings";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 assert.equal(process.platform, "win32");
 const root = process.argv.includes("--repo")
@@ -447,6 +447,7 @@ if (!process.argv.includes("--child")) {
             "showInactive",
             "blur",
             "activate",
+            "getMonitor",
           ] as const) {
             await assert.rejects(
               windows[name]({
@@ -461,6 +462,9 @@ if (!process.argv.includes("--child")) {
             windows.getCurrent,
             windows.getFocused,
             windows.getLastActive,
+            windows.getMonitors,
+            windows.getPrimaryMonitor,
+            windows.getCursorPosition,
           ]) {
             await assert.rejects(lookup(), {
               code: "PERMISSION_DENIED",
@@ -512,6 +516,32 @@ if (!process.argv.includes("--child")) {
           const snapshot = await windows.getSnapshot({
             view: "main",
           });
+          const monitors = await windows.getMonitors();
+          assert(monitors.length > 0);
+          const primary = await windows.getPrimaryMonitor();
+          assert(
+            primary.primary &&
+              monitors.some((monitor) => monitor.id === primary.id),
+          );
+          const monitor = await windows.getMonitor({
+            view: "main",
+            windowId: current.windowId,
+          });
+          assert(monitors.some((entry) => entry.id === monitor.id));
+          const point = {
+            x: monitor.bounds.x,
+            y: monitor.bounds.y,
+          };
+          assert.equal(
+            (await windows.getMonitorNearestPoint(point)).id,
+            monitor.id,
+          );
+          assert.equal(
+            (await windows.getMonitorNearestRect(monitor.bounds)).id,
+            monitor.id,
+          );
+          const cursor = await windows.getCursorPosition();
+          assert(Number.isInteger(cursor.x) && Number.isInteger(cursor.y));
           assert.equal(current.windowId, snapshot.windowId);
           assert.deepEqual(
             await windows.getById({

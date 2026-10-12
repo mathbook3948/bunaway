@@ -32,9 +32,14 @@ export function createOperations(
     switch (call.operation) {
       case "windows.getMonitor":
         if (!window.getMonitor) {
-          throw new BunawayError({ code: "UNSUPPORTED", message: "Monitor queries are unavailable." });
+          throw new BunawayError({
+            code: "UNSUPPORTED",
+            message: "Monitor queries are unavailable.",
+          });
         }
-        return { ...window.getMonitor() };
+        return {
+          ...window.getMonitor(),
+        };
       case "windows.getReadiness":
         return {
           ...window.getReadiness(),
@@ -446,21 +451,45 @@ export function createOperations(
         call.operation === "windows.getCursorPosition"
       ) {
         if (!context.permissions.permissions.includes(call.operation)) {
-          throw new BunawayError({ code: "PERMISSION_DENIED", message: "Monitor query permission required." });
+          throw new BunawayError({
+            code: "PERMISSION_DENIED",
+            message: "Monitor query permission required.",
+          });
         }
         if (services.stopping() || services.cancelled(context.requestId)) {
-          throw new BunawayError({ code: "CANCELLED", message: "Monitor query cancelled." });
+          throw new BunawayError({
+            code: "CANCELLED",
+            message: "Monitor query cancelled.",
+          });
         }
         const monitors = services.monitors;
         if (!monitors) {
-          throw new BunawayError({ code: "UNSUPPORTED", message: "Monitor queries are unavailable." });
+          throw new BunawayError({
+            code: "UNSUPPORTED",
+            message: "Monitor queries are unavailable.",
+          });
         }
         switch (call.operation) {
-          case "windows.getMonitors": return monitors.list().map((monitor) => ({ ...monitor }));
-          case "windows.getPrimaryMonitor": return { ...monitors.primary() };
-          case "windows.getMonitorNearestPoint": return { ...monitors.nearestPoint(call.payload) };
-          case "windows.getMonitorNearestRect": return { ...monitors.nearestRect(call.payload) };
-          case "windows.getCursorPosition": return { ...monitors.cursor() };
+          case "windows.getMonitors":
+            return monitors.list().map((monitor) => ({
+              ...monitor,
+            }));
+          case "windows.getPrimaryMonitor":
+            return {
+              ...monitors.primary(),
+            };
+          case "windows.getMonitorNearestPoint":
+            return {
+              ...monitors.nearestPoint(call.payload),
+            };
+          case "windows.getMonitorNearestRect":
+            return {
+              ...monitors.nearestRect(call.payload),
+            };
+          case "windows.getCursorPosition":
+            return {
+              ...monitors.cursor(),
+            };
         }
       }
       if (

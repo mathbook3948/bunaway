@@ -103,10 +103,32 @@ export const display = dlopen("shcore.dll", {
 });
 
 export const user = dlopen("user32.dll", {
-  EnumDisplayMonitors: { args: ["u64", "ptr", "ptr", "i64"], returns: "i32" },
-  EnumDisplaySettingsW: { args: ["ptr", "u32", "ptr"], returns: "i32" },
-  EnumDisplayDevicesW: { args: ["ptr", "u32", "ptr", "u32"], returns: "i32" },
-  GetCursorPos: { args: ["ptr"], returns: "i32" },
+  EnumDisplayMonitors: {
+    args: [
+      "u64",
+      "ptr",
+      "ptr",
+      "i64",
+    ],
+    returns: "i32",
+  },
+  EnumDisplaySettingsW: {
+    args: [
+      "ptr",
+      "u32",
+      "ptr",
+    ],
+    returns: "i32",
+  },
+  EnumDisplayDevicesW: {
+    args: [
+      "ptr",
+      "u32",
+      "ptr",
+      "u32",
+    ],
+    returns: "i32",
+  },
   EnableWindow: {
     args: [
       "u64",

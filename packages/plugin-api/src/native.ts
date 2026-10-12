@@ -189,8 +189,18 @@ export type NativeMonitor = {
   id: string;
   name: string;
   primary: boolean;
-  bounds: { x: number; y: number; width: number; height: number };
-  workArea: { x: number; y: number; width: number; height: number };
+  bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  workArea: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
   dpi: number;
   scaleFactor: number;
   /** Clockwise degrees, or null when the driver does not report orientation. */
@@ -204,8 +214,16 @@ export type NativeMonitorServices = {
   list(): NativeMonitor[];
   primary(): NativeMonitor;
   nearestPoint(point: { x: number; y: number }): NativeMonitor;
-  nearestRect(rect: { x: number; y: number; width: number; height: number }): NativeMonitor;
-  cursor(): { x: number; y: number };
+  nearestRect(rect: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }): NativeMonitor;
+  cursor(): {
+    x: number;
+    y: number;
+  };
 };
 
 /**

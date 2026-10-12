@@ -17,7 +17,11 @@ import {
 } from "@bunaway/protocol";
 import { z } from "zod";
 
-import { monitorPointSchema, monitorRectSchema, monitorSchema } from "./monitor-contract.ts";
+import {
+  monitorPointSchema,
+  monitorRectSchema,
+  monitorSchema,
+} from "./monitor-contract.ts";
 
 export const WINDOW_VIEW_NAME_PATTERN = "^[A-Za-z0-9_.:-]{1,128}$(?![\\s\\S])";
 
@@ -434,12 +438,30 @@ const conversionOutput = z.strictObject({
 
 /** Schemas for window operations, used to validate calls and their results. */
 export const windowOperations = {
-  "windows.getMonitors": { input: z.null(), output: z.array(monitorSchema) },
-  "windows.getPrimaryMonitor": { input: z.null(), output: monitorSchema },
-  "windows.getMonitor": { input: windowTarget, output: monitorSchema },
-  "windows.getMonitorNearestPoint": { input: monitorPointSchema, output: monitorSchema },
-  "windows.getMonitorNearestRect": { input: monitorRectSchema, output: monitorSchema },
-  "windows.getCursorPosition": { input: z.null(), output: monitorPointSchema },
+  "windows.getMonitors": {
+    input: z.null(),
+    output: z.array(monitorSchema),
+  },
+  "windows.getPrimaryMonitor": {
+    input: z.null(),
+    output: monitorSchema,
+  },
+  "windows.getMonitor": {
+    input: windowTarget,
+    output: monitorSchema,
+  },
+  "windows.getMonitorNearestPoint": {
+    input: monitorPointSchema,
+    output: monitorSchema,
+  },
+  "windows.getMonitorNearestRect": {
+    input: monitorRectSchema,
+    output: monitorSchema,
+  },
+  "windows.getCursorPosition": {
+    input: z.null(),
+    output: monitorPointSchema,
+  },
   "windows.createInstance": {
     input: creationResult.input,
     output: windowIdentitySchema,

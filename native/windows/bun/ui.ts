@@ -24,6 +24,7 @@ import {
   type WindowSpec,
 } from "./channel.ts";
 import { callbackCalls, checkCallbacks, disposeCom } from "./com.ts";
+import { monitorServices, windowMonitor } from "./monitors.ts";
 import { Tray } from "./tray.ts";
 import { originOf, WebView } from "./webview.ts";
 import {
@@ -34,7 +35,6 @@ import {
   WM_SIZE,
 } from "./win32.ts";
 import { disposeWin32Bindings, hr, kernel, ole } from "./win32-bindings.ts";
-import { monitorServices, windowMonitor } from "./monitors.ts";
 import { WindowProfiles } from "./window-profiles.ts";
 import { WindowReadinessTracker } from "./window-readiness.ts";
 import {
