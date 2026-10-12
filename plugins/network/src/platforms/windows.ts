@@ -1,5 +1,5 @@
 import type { NativeAdapter, NativeEnvironment } from "@bunaway/plugin";
-import { BunawayError } from "@bunaway/protocol";
+import { BunawayError, type JsonValue } from "@bunaway/protocol";
 import type { z } from "zod";
 import type { networkOperations } from "../contract.ts";
 import { request } from "../http.ts";
@@ -10,7 +10,7 @@ const MAX_ACTIVE_REQUESTS = 16;
 export function createOperations(
   _environment: NativeEnvironment,
 ): NativeAdapter {
-  const active = new Set<AbortController>();
+  const active = new Map<AbortController, Promise<JsonValue>>();
   let disposed = false;
   return {
     execute() {
@@ -47,7 +47,6 @@ export function createOperations(
       }
       context.signal?.throwIfAborted();
       const controller = new AbortController();
-      active.add(controller);
       const signal = AbortSignal.any([
         controller.signal,
         ...(context.signal
@@ -66,10 +65,13 @@ export function createOperations(
           ),
         payload.timeoutMs,
       );
+      const task =
+        "method" in payload
+          ? request(payload, signal)
+          : exchange(payload, signal);
+      active.set(controller, task);
       try {
-        return "method" in payload
-          ? await request(payload, signal)
-          : await exchange(payload, signal);
+        return await task;
       } catch (error) {
         if (signal.aborted) {
           throw signal.reason instanceof BunawayError
@@ -91,10 +93,10 @@ export function createOperations(
         active.delete(controller);
       }
     },
-    dispose() {
+    async dispose() {
       if (!disposed) {
         disposed = true;
-        for (const controller of active) {
+        for (const controller of active.keys()) {
           controller.abort(
             new BunawayError({
               code: "CANCELLED",
@@ -103,6 +105,7 @@ export function createOperations(
           );
         }
       }
+      await Promise.allSettled(active.values());
     },
   };
 }
