@@ -24,6 +24,12 @@ test("I/O Worker awaits parsing before authorization and discards cancelled pars
       ],
     },
   };
+  const slots = {
+    started: 0,
+    released: 1,
+    executions: 2,
+    settled: 3,
+  };
   await bundleIOPluginFixture(
     assets,
     [
@@ -34,12 +40,13 @@ test("I/O Worker awaits parsing before authorization and discards cancelled pars
     import { defineNativePlugin } from ${JSON.stringify(resolve(import.meta.dir, "../../packages/plugin-sdk/src/index.ts"))};
     import { z } from "zod";
     const state = new Int32Array(workerData.state);
+    const slots = ${JSON.stringify(slots)};
     const plugin = defineNativePlugin({name:"async",operations:{run:{
       input:z.string().transform(async value => {
         if (value.startsWith("blocked")) {
-          Atomics.add(state,0,1);
-          while (Atomics.load(state,1) === 0) await Bun.sleep(1);
-          Atomics.add(state,3,1);
+          Atomics.add(state,slots.started,1);
+          while (Atomics.load(state,slots.released) === 0) await Bun.sleep(1);
+          Atomics.add(state,slots.settled,1);
           if (value === "blocked-error") throw new Error("late parser failure");
         }
         return value;
@@ -50,12 +57,16 @@ test("I/O Worker awaits parsing before authorization and discards cancelled pars
         return value + "!";
       }),
     }},platforms:{windows:{execution:"io",create:()=>({
-      execute(_name,input) { Atomics.add(state,2,1); return input; }, dispose(){},
+      execute(_name,input) { Atomics.add(state,slots.executions,1); return input; }, dispose(){},
     })}}});
     export const pluginImports = {async:{operations:async()=>({createOperations:plugin.definition.nativePlatforms.windows.create})}};
   `,
   );
-  const state = new Int32Array(new SharedArrayBuffer(16));
+  const state = new Int32Array(
+    new SharedArrayBuffer(
+      Object.keys(slots).length * Int32Array.BYTES_PER_ELEMENT,
+    ),
+  );
   const runtime = {
     id: "async-io",
     generation: "1",
@@ -121,10 +132,10 @@ test("I/O Worker awaits parsing before authorization and discards cancelled pars
       "cancel",
       "cancel-context",
     ].entries()) {
-      Atomics.store(state, 1, 0);
+      Atomics.store(state, slots.released, 0);
       const id = `cancel-${index}`;
       await operation(id, index === 0 ? "blocked" : "blocked-error");
-      await waitFor(() => Atomics.load(state, 0) === index + 1);
+      await waitFor(() => Atomics.load(state, slots.started) === index + 1);
       expect(packets.filter((p) => p.kind === "prepare")).toHaveLength(0);
       await channel.send(
         kind === "cancel"
@@ -138,8 +149,8 @@ test("I/O Worker awaits parsing before authorization and discards cancelled pars
               context,
             },
       );
-      Atomics.store(state, 1, 1);
-      await waitFor(() => Atomics.load(state, 3) === index + 1);
+      Atomics.store(state, slots.released, 1);
+      await waitFor(() => Atomics.load(state, slots.settled) === index + 1);
       await channel.send({
         kind: "grant",
         requestId: id,
@@ -147,7 +158,7 @@ test("I/O Worker awaits parsing before authorization and discards cancelled pars
         allowed: true,
       });
     }
-    expect(Atomics.load(state, 2)).toBe(0);
+    expect(Atomics.load(state, slots.executions)).toBe(0);
     for (const [index, payload] of [
       "output-error",
       "ok",
@@ -157,7 +168,7 @@ test("I/O Worker awaits parsing before authorization and discards cancelled pars
       await waitFor(() =>
         packets.some((p) => p.kind === "prepare" && p.requestId === id),
       );
-      expect(Atomics.load(state, 2)).toBe(index);
+      expect(Atomics.load(state, slots.executions)).toBe(index);
       // A duplicate grant during asynchronous output parsing must never execute twice.
       await Promise.all(
         [
@@ -194,7 +205,7 @@ test("I/O Worker awaits parsing before authorization and discards cancelled pars
               },
       });
     }
-    expect(Atomics.load(state, 2)).toBe(2);
+    expect(Atomics.load(state, slots.executions)).toBe(2);
     expect(packets.filter((p) => p.kind === "prepare")).toHaveLength(2);
     expect(packets.filter((p) => p.kind === "host-response")).toHaveLength(2);
     await channel.send({

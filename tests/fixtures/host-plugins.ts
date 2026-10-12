@@ -10,6 +10,7 @@ import { logPlugin } from "@bunaway/plugin-log";
 import { storagePlugin } from "@bunaway/plugin-storage";
 import { windowsPlugin } from "@bunaway/plugin-windows";
 import {
+  BunawayError,
   type HostCall,
   type JsonValue,
   NativeRegistry,
@@ -59,11 +60,14 @@ function workerHost(
   callHost: CoreServices["callHost"],
 ): CoreServices["callHost"] {
   return async (context, call, signal) => {
-    const response = await callHost(
-      context,
-      await validateHostInput(call),
-      signal,
-    );
+    const parsed = await validateHostInput(call);
+    if (signal.aborted) {
+      throw new BunawayError({
+        code: "CANCELLED",
+        message: "Host call was cancelled.",
+      });
+    }
+    const response = await callHost(context, parsed, signal);
     return response.kind === "result"
       ? {
           ...response,
