@@ -1228,7 +1228,16 @@ try {
   profiles.collectOrphans();
   for (const spec of config.windows) {
     if (spec.startup !== false) {
-      createWindow(spec);
+      // Keep the catalog defaults for later creation, but prevent initial ready callbacks from showing.
+      const { showWhenReady, ...hiddenSpec } = spec;
+      createWindow(
+        config.desktop?.startHidden
+          ? {
+              ...hiddenSpec,
+              visible: false,
+            }
+          : spec,
+      );
     }
   }
   await channel.send({

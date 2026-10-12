@@ -94,6 +94,9 @@ if (target === "windows-x64") {
     );
     for (const scenario of [
       "hide",
+      "autostart",
+      "autostart-hidden",
+      "autostart-hidden-ready",
       "veto",
       "dev-veto",
       "dev-hide",

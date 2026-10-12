@@ -110,6 +110,8 @@
           "serializeProcessFrame",
           "PROTOCOL_VERSION",
           "SDK_READY_FEATURE",
+          "AUTOSTART_ARGUMENT",
+          "AUTOSTART_HIDDEN_ARGUMENT",
           "parseMessage",
           "serializeMessage",
           "validateMessage",
@@ -793,6 +795,7 @@
       "pages": {
         "reference/backend/app-definition": [
           "source",
+          "launchReason",
           "argv",
           "cwd",
           "urls",

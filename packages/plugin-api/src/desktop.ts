@@ -8,7 +8,9 @@ export type QuitReason = "last-window" | "tray" | "api";
 export type OpenRequest = {
   /** `initial` for the first launch, `second-instance` when an existing app is opened again. */
   readonly source: "initial" | "second-instance";
-  /** App arguments after the executable and Bunaway development switches are removed. */
+  /** Autostart registration marker or ordinary launch. This is not authenticated OS origin. */
+  readonly launchReason: "manual" | "autostart";
+  /** App arguments after the executable, development switches and autostart prefix are removed. */
   readonly argv: readonly string[];
   /** Working directory used to resolve relative file arguments. */
   readonly cwd: string;
