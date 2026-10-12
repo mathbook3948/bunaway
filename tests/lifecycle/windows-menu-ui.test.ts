@@ -37,7 +37,7 @@ test.skipIf(process.platform !== "win32")(
     try {
       const operationPath = resolve(
         import.meta.dir,
-        "../../plugins/menu/src/platforms/windows.ts",
+        "../../plugins/menu/dist/native/windows.js",
       );
       await bundleUIPluginFixture(
         root,
@@ -49,7 +49,9 @@ test.skipIf(process.platform !== "win32")(
             execution: "ui",
           },
         ],
-        `import { createOperations } from ${JSON.stringify(operationPath)}; export const pluginImports = { menu: { operations: async () => ({ createOperations }) } };`,
+        `import plugin from ${JSON.stringify(operationPath)};
+const createOperations = plugin.nativePlatforms.windows.create;
+export const pluginImports = { menu: { operations: async () => ({ createOperations }) } };`,
       );
       const config: UIConfig = {
         runtime: {
@@ -142,7 +144,11 @@ test.skipIf(process.platform !== "win32")(
           const requestId = crypto.randomUUID();
           const timeout = setTimeout(() => {
             pending.delete(requestId);
-            reject(new Error(`Menu call timed out: ${operation}`));
+            reject(
+              new Error(
+                `Menu call timed out: ${operation}; worker failure: ${String(fatal)}`,
+              ),
+            );
           }, 5000);
           pending.set(requestId, (response) => {
             clearTimeout(timeout);

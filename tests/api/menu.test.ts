@@ -514,4 +514,18 @@ test("plugin parser enforces strict menu contracts at the native boundary", asyn
   ).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
   });
+  await expect(
+    parsers.validateCall({
+      operation: "menu.replace",
+      payload: {
+        menuId: "main",
+        items: [
+          item("duplicate"),
+          item("duplicate"),
+        ],
+      },
+    }),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
 });
