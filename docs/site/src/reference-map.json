@@ -317,7 +317,6 @@
           "validateWindowCall",
           "validateWindowOutput",
           "windowOperations",
-          "windowEvents",
           "windowSnapshotSchema",
           "windowReadinessSchema"
         ]
