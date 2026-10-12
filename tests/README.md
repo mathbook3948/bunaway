@@ -123,7 +123,7 @@ OS가 전경 전환 요청을 거부하면 해당 활성화 전환을 `UNTESTED`
 
 `api/window-creation.test.ts`는 create/recreate의 `{ view, options? }` 계약과 독립 작업 권한,
 공개 registry 및 직렬화 Host 경계의 허용된 표시 옵션과 잘못된 옵션, URL, 프로필과 임의 ID 거부를 확인한다.
-`lifecycle/windows-window-placement.test.ts`는 ADR 0018의 작업 영역 배치, content/outer 크기,
+`lifecycle/windows-window-placement.test.ts`는 ADR 0019의 작업 영역 배치, content/outer 크기,
 음수 좌표, DPI 96/120/144/192의 반올림, 최소 크기 충돌과 좌표 범위를 순수 계산으로 검사한다.
 single/multiple 계약 회귀는 병합 오류와 네이티브 배치 검증이 예약 및 기존 창 종료보다 먼저
 실행되고 호출별 옵션이 선언을 바꾸지 않는지 확인한다. macOS 선언의 미지원 오류도 검사한다.
@@ -164,7 +164,22 @@ focus/blur를 발행하는지 확인한다. 실제 OS 전경 전환 검증과는
 불러오지 않는지 확인한다. 선언 진입점 기준 경로와 패키지 밖의 링크 거부, I/O와 UI의
 부분 지원 조회 및 UNSUPPORTED 응답도 검사한다. `api/native-plugins.test.ts`는 플랫폼
 선언 검증, 지원 목록 복사와 일반 플러그인의 시작 제한과의 분리를 확인한다.
-manifest 생성과 카탈로그 로딩에서 native 계약의 크기 상한을 그대로 허용하고 초과는 거부하는지도 검사한다.
+manifest 생성과 카탈로그 로딩에서 작업 이름만 전달하며 작업 개수 상한을 유지하는지도 검사한다.
+`api/plugin-zod-runtime.test.ts`는 원본 Zod와 입력, 결과 파싱을 비교한다. record 키 정규화와
+제거, when, 사용자 검사, 변환 횟수, JSON 제한과 동기 및 비동기 파싱을 검사한다.
+실패하는 비동기 검사 뒤에도 같은 Worker가 다음 호출을 처리하고 종료 코드 0으로 끝나는지,
+`lifecycle/plugin-async-parsing.test.ts`는 실제 I/O Worker에서 권한 거부 시 입력 콜백이
+실행되지 않고, 입력 파싱 뒤 재승인이 거부되면 네이티브 작업도 실행되지 않는지 확인한다.
+중복 승인, 입력 검사 전 취소와 파싱 중 취소, 늦은 검사 실패와 다음 요청의 처리도 검증한다.
+`lifecycle/plugin-cancellation.test.ts`는 실제 Windows UI와 I/O Worker에서 입력과 출력 파싱,
+비동기 UI 실행을 한도만큼 취소해도 승인 용량과 다음 호출이 정상인지 확인한다. 컨텍스트 취소,
+늦은 완료와 실패, 중복 승인과 작업 대기 중 종료도 검증한다. `lifecycle/macos-bun.test.ts`는
+네이티브 UI만 대체한 실제 macOS 호스트와 Worker에서 같은 입력, 출력, 실행 취소 경로를 검사한다.
+`lifecycle/windows-ui-lifecycle.test.ts`는 실제 UI Worker와 대체 Win32 경계에서 마지막 창을
+파괴해 종료를 확정한 뒤 입력 파싱을 재개한다. 취소 패킷 없이도 동기 어댑터와 비동기 UI
+어댑터의 실행을 차단하고 CANCELLED를 반환하는지 확인한다.
+`lifecycle/native-requests.test.ts`는 취소된 요청의 용량 반환과 이전 완료의 새 요청 간섭 방지를 확인한다. 실제 Worker와
+빌드한 플러그인에서 파서가 로컬로 실행되고 전송 경로가 다시 파싱하지 않는지도 확인한다.
 정책의 기존 크기와 깊이 상한도 manifest 생성과 읽기에서 유지하며, 상한 초과 입력은 거부하는지 검사한다.
 `cli/windows-assets.test.ts`는
 원본 소스와 임시 자산을 삭제한 뒤에도 compiled EXE가 manifest와 플러그인 구현을
@@ -398,3 +413,9 @@ Win32와 WebView 콜백 경계는 제어 가능한 fixture로 대체하며 실�
 공유 브라우저 프로세스 장애에서 해당 창의 정리, 격리된 창의 계속 동작과 새 공유 환경 복구도 확인한다.
 실행한 OS, Bun revision과 WebView2 버전은 `build/windows-multiple-windows-results.json`에 기록한다.
 CI의 windows-native 작업은 `mise run host:windows`를 통해 이 검사를 실행한다.
+
+`api/zod-promise.test.ts`는 ESM과 CommonJS의 실제 Worker에서 Zod의 형제 검사 실패,
+끝나지 않는 검사, 정상 변환 횟수와 when, abort 동작을 확인한다.
+`cli/zod-distribution.test.ts`는 새 프로젝트에 원본 Zod와 배포 패키지를 설치하고
+설치된 CLI의 제품 및 개발 앱 번들에서 동일한 SDK 입력과 출력 회귀를 실행한다.
+이 검사는 Win32, WebView2나 WKWebView의 실제 네이티브 실행을 대신하지 않는다.

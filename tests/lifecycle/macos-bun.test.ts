@@ -1,15 +1,10 @@
 import { expect, test } from "bun:test";
-import { windowPermissions } from "../fixtures/window-permissions.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
-import {
-  type HostContext,
-  MAX_MESSAGE_BYTES,
-  PROTOCOL_VERSION,
-} from "@bunaway/protocol";
+import { type HostContext, PROTOCOL_VERSION } from "@bunaway/protocol";
 import {
   Channel,
   type Packet,
@@ -17,7 +12,7 @@ import {
 } from "@bunaway/runtime-bun/worker-channel";
 import { appModules } from "#cli/app-modules";
 import { bundleMacosHost } from "#cli/assets";
-import type { InstalledPlugin } from "#cli/plugins";
+import { type InstalledPlugin, writePluginManifest } from "#cli/plugins";
 import {
   type MacosConfig,
   readMacosWindowSpecs,
@@ -27,6 +22,7 @@ import {
   platformUrl,
   resourceRules,
 } from "#native/macos/bun/urls";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 test("macOS rejects explicitly declared initial placement, including defaults on deferred windows", () => {
   const config = workerConfig("unused");
@@ -635,9 +631,6 @@ test.each([
         },
         (_, index) => {
           const name = `example${index}`;
-          const output = {
-            const: "",
-          };
           const native = {
             operations: Array.from(
               {
@@ -645,20 +638,9 @@ test.each([
               },
               (_, operation) => ({
                 name: `${name}.read${operation}`,
-                input: {
-                  const: null,
-                },
-                output,
               }),
             ),
           };
-          if (mode !== "limit") {
-            output.const = "x".repeat(
-              index === 0
-                ? MAX_MESSAGE_BYTES - Buffer.byteLength(JSON.stringify(native))
-                : 400_000,
-            );
-          }
           return {
             name,
             version: "1",
@@ -680,7 +662,7 @@ test.each([
         `
         const plugins = ${JSON.stringify(registrations)};
         ${mode === "duplicate" ? "plugins[2] = plugins[0];" : ""}
-        ${mode === "mismatch" ? 'plugins[2].native.operations[0].output.const = "changed";' : ""}
+        ${mode === "mismatch" ? 'plugins[2].native.operations[0].name = "example2.changed";' : ""}
         plugins.push({ name:"setup", version:"1", setup:()=>Bun.write(${JSON.stringify(marker)}, "started") });
         export default { commands:{}, events:{}, plugins };
       `,
@@ -732,12 +714,25 @@ test.each([
       }[mode];
       if (mode === "valid") {
         expect(await errors).toBe("");
-        expect(Buffer.byteLength(JSON.stringify(plugins[0]?.native))).toBe(
-          MAX_MESSAGE_BYTES,
+        expect(registrations.map((plugin) => plugin.native.operations)).toEqual(
+          [
+            [
+              {
+                name: "example0.read0",
+              },
+            ],
+            [
+              {
+                name: "example1.read0",
+              },
+            ],
+            [
+              {
+                name: "example2.read0",
+              },
+            ],
+          ],
         );
-        expect(
-          Buffer.byteLength(JSON.stringify(registrations)),
-        ).toBeGreaterThan(MAX_MESSAGE_BYTES + 1024);
         expect(await Bun.file(marker).text()).toBe("started");
       } else {
         expect(await errors).toContain(expectedError);
@@ -1146,3 +1141,172 @@ test("macOS shutdown cancels setup Host calls before waiting for plugin cleanup"
     });
   }
 }, 15000);
+
+test.each([
+  "input",
+  "output",
+  "execution",
+] as const)(
+  "macOS cancelled %s releases request and channel capacity before settlement",
+  async (phase) => {
+    const directory = await mkdtemp(resolve(tmpdir(), "bunaway-macos-cancel-"));
+    try {
+      const marker = resolve(directory, "started.txt");
+      const done = resolve(directory, "done.txt");
+      const operations = resolve(directory, "operations.ts");
+      await Bun.write(
+        operations,
+        `
+        import { writeFileSync } from "node:fs";
+        import { defineNativePlugin } from ${JSON.stringify(resolve(import.meta.dir, "../../packages/plugin-sdk/src/index.ts"))};
+        import { z } from ${JSON.stringify(Bun.resolveSync("zod", import.meta.dir))};
+        const gates = [];
+        const pause = async value => {
+          writeFileSync(${JSON.stringify(marker)}, value);
+          if (value.startsWith("never")) await new Promise(() => {});
+          if (value.startsWith("late")) {
+            await new Promise(resolve => gates.push(resolve));
+            if (value === "late-error") throw new Error("late parser failure");
+          }
+          return value;
+        };
+        const phase = ${JSON.stringify(phase)};
+        const plugin = defineNativePlugin({ name:"parser", operations:{run:{
+          input: phase === "input" ? z.string().transform(pause) : z.string(),
+          output: phase === "output" ? z.string().transform(pause) : z.string(),
+        }}, platforms:{macos:{execution:"ui",create:()=>({
+          async executeUI(_name,input) {
+            if(input === "release") for(const release of gates.splice(0)) release();
+            return phase === "execution" ? pause(input) : input;
+          }, dispose(){},
+        })}}});
+        export default plugin.definition;
+      `,
+      );
+      const native = {
+        operations: [
+          {
+            name: "parser.run",
+          },
+        ],
+      };
+      const plugins: InstalledPlugin[] = [
+        {
+          name: "parser",
+          version: "1",
+          packageName: "parser",
+          root: directory,
+          native,
+          targets: {
+            macos: {
+              execution: "ui",
+              operations,
+            },
+          },
+        },
+      ];
+      await writePluginManifest(directory, plugins, "macos");
+      await bundleTestHost(directory, plugins);
+      await Bun.write(
+        resolve(directory, "webview.ts"),
+        "export class MacosWebview {}",
+      );
+      await Bun.write(
+        resolve(directory, "backend.js"),
+        `
+        import assert from "node:assert/strict";
+        import { readFileSync, writeFileSync } from "node:fs";
+        import { parentPort, workerData } from "node:worker_threads";
+        import { API_LIMITS } from ${JSON.stringify(resolve(import.meta.dir, "../../packages/protocol/src/index.ts"))};
+        import { Channel } from ${JSON.stringify(resolve(import.meta.dir, "../../packages/runtime-bun/src/worker-channel.ts"))};
+        const responses = new Map();
+        const channel = new Channel(parentPort, workerData.runtime, "macos-backend", packet => {
+          if(packet.kind === "host-response") responses.set(packet.requestId,packet.response);
+          else if(packet.kind === "shutdown") void (async()=> {
+            await channel.send({kind:"cleaned"});
+            await channel.drain(); channel.close(); parentPort.close();
+          })().catch(error=>{console.error(error);process.exit(1)});
+        }, error=>{console.error(error);process.exit(1)});
+        const waitFor = async predicate => {
+          const deadline=Date.now()+5000;
+          while(!predicate()) { assert(Date.now()<deadline,"fixture timed out"); await Bun.sleep(1); }
+        };
+        const context = workerData.backendContext;
+        const call = async payload => {
+          await channel.send({kind:"operation",context,source:"backend",requestId:payload,call:{operation:"parser.run",payload}});
+          await waitFor(()=> {try{return readFileSync(${JSON.stringify(marker)},"utf8") === payload;}catch{return false;}});
+        };
+        await channel.send({kind:"native-register",plugins:[{name:"parser",version:"1",native:${JSON.stringify(native)}}],complete:true});
+        await channel.send({kind:"ready"});
+        for(let index=0;index<API_LIMITS.maxPending;index++) {
+          const requestId="never-"+index;
+          await call(requestId);
+          await channel.send({kind:"cancel",context,requestId});
+        }
+        assert(channel.canSend(API_LIMITS.maxPending));
+        for(const requestId of ["late-success","late-error"]) {
+          await call(requestId);
+          await channel.send({kind:"cancel",context,requestId});
+        }
+        await call("release");
+        await waitFor(()=>responses.has("release"));
+        await call("healthy");
+        await waitFor(()=>responses.has("healthy"));
+        assert.deepEqual(responses.get("healthy"),{kind:"result",payload:"healthy"});
+        assert.deepEqual([...responses.keys()],["release","healthy"]);
+        await channel.drain();
+        assert(channel.canSend(API_LIMITS.maxPending));
+        await call("never-shutdown");
+        writeFileSync(${JSON.stringify(done)},"passed");
+      `,
+      );
+      const config = workerConfig(directory);
+      config.windows = [];
+      config.policy.backend.permissions = [
+        "parser.run",
+      ];
+      await Bun.write(
+        resolve(directory, "run.ts"),
+        `
+        import { existsSync } from "node:fs";
+        import { runMacosApp } from "./entry.js";
+        const timer=setInterval(()=> {if(existsSync(${JSON.stringify(done)})) process.emit("SIGTERM","SIGTERM");},10);
+        try {await runMacosApp(${JSON.stringify(config)});}
+        catch(error){console.error(error);process.exitCode=1;}
+        finally {clearInterval(timer);}
+      `,
+      );
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          resolve(directory, "run.ts"),
+        ],
+        {
+          stdout: "ignore",
+          stderr: "pipe",
+          timeout: 20000,
+        },
+      );
+      const errors = new Response(child.stderr).text();
+      expect(await child.exited, await errors).toBe(0);
+      expect(await Bun.file(done).text()).toBe("passed");
+      const records = (
+        await Bun.file(resolve(directory, "logs/host.log")).text()
+      )
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
+      expect(records.at(-1)).toMatchObject({
+        event: "host-stopped",
+        failed: false,
+        forced: false,
+      });
+    } finally {
+      await rm(directory, {
+        recursive: true,
+        force: true,
+      });
+    }
+  },
+  25000,
+);

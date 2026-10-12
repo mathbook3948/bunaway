@@ -15,10 +15,36 @@ import { writePluginFixture } from "../fixtures/native-worker.ts";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 const timeoutMs = 10_000;
+const parserSlots = {
+  started: 0,
+  released: 1,
+  executions: 2,
+};
 
 /** Run the production UI loop and window adapter with controlled Win32/WebView callbacks. */
-async function startUI(failView?: string) {
+async function startUI(failView?: string, parserExecution?: "ui" | "sync") {
   const directory = await mkdtemp(resolve(tmpdir(), "bunaway-ui-lifecycle-"));
+  const parsing = new Int32Array(
+    new SharedArrayBuffer(
+      Object.keys(parserSlots).length * Int32Array.BYTES_PER_ELEMENT,
+    ),
+  );
+  const parserPlugins = parserExecution
+    ? [
+        {
+          name: "parser",
+          version: "1",
+          execution: "ui" as const,
+          native: {
+            operations: [
+              {
+                name: "parser.run",
+              },
+            ],
+          },
+        },
+      ]
+    : [];
   const configuration: UIConfig = {
     runtime: {
       id: "ui-lifecycle",
@@ -40,6 +66,7 @@ async function startUI(failView?: string) {
         version: windowsPlugin.version,
         native: windowsPlugin.native,
       },
+      ...parserPlugins,
     ],
     windows: [
       {
@@ -81,7 +108,14 @@ async function startUI(failView?: string) {
         },
       })),
       backend: {
-        permissions: windowPermissions(),
+        permissions: [
+          ...windowPermissions(),
+          ...(parserExecution
+            ? [
+                "parser.run",
+              ]
+            : []),
+        ],
       },
     },
   };
@@ -94,8 +128,29 @@ async function startUI(failView?: string) {
         native: windowsPlugin.native,
         execution: "ui",
       },
+      ...parserPlugins,
     ],
-    `export const pluginImports = { windows: {
+    `
+    import { workerData } from "node:worker_threads";
+    import { defineNativePlugin } from ${JSON.stringify(resolve(import.meta.dir, "../../packages/plugin-sdk/src/index.ts"))};
+    import { z } from ${JSON.stringify(Bun.resolveSync("zod", import.meta.dir))};
+    const state = new Int32Array(workerData.parsing);
+    const slots = ${JSON.stringify(parserSlots)};
+    const execute = (_name,input) => {Atomics.add(state,slots.executions,1);return input;};
+    const parser = defineNativePlugin({name:"parser",operations:{run:{
+      input:z.string().transform(async value=>{
+        if(value === "wait") {
+          Atomics.store(state,slots.started,1);
+          while(Atomics.load(state,slots.released) === 0) await Bun.sleep(1);
+        }
+        return value;
+      }),output:z.string(),
+    }},platforms:{windows:{execution:"ui",create:()=>({
+      execute,
+      ...(${JSON.stringify(parserExecution)} === "ui" ? {async executeUI(name,input){return execute(name,input);}} : {}),
+      dispose(){},
+    })}}});
+    export const pluginImports = {parser:{operations:async()=>({createOperations:parser.definition.nativePlatforms.windows.create})}, windows: {
       operations: () => import(${JSON.stringify(resolve(import.meta.dir, "../../plugins/windows/src/platforms/windows.ts"))}),
     } };`,
   );
@@ -142,6 +197,7 @@ async function startUI(failView?: string) {
   const worker = new Worker(pathToFileURL(resolve(directory, "ui.js")), {
     workerData: {
       ...configuration,
+      parsing: parsing.buffer,
       ...(failView
         ? {
             failView,
@@ -222,6 +278,7 @@ async function startUI(failView?: string) {
     return packet.response.payload;
   }
   return {
+    parsing,
     channel,
     packets,
     call,
@@ -373,4 +430,71 @@ test(
     }
   },
   timeoutMs + 5_000,
+);
+
+test.each([
+  "ui",
+  "sync",
+] as const)(
+  "UI rejects %s native execution when shutdown commits during input parsing",
+  async (execution) => {
+    const ui = await startUI(undefined, execution);
+    try {
+      await ui.waitFor(() =>
+        ui.packets.some((packet) => packet.kind === "ready"),
+      );
+      expect(await ui.call("parser.run", "healthy")).toBe("healthy");
+      expect(Atomics.load(ui.parsing, parserSlots.executions)).toBe(1);
+      const requestId = crypto.randomUUID();
+      await ui.channel.send({
+        kind: "operation",
+        context: "backend" as UIConfig["backendContext"],
+        source: "backend",
+        requestId,
+        call: {
+          operation: "parser.run",
+          payload: "wait",
+        },
+      });
+      await ui.waitFor(
+        () => Atomics.load(ui.parsing, parserSlots.started) === 1,
+      );
+      // Last-window destruction commits closing locally; deliberately withhold cancel/shutdown packets.
+      await ui.call("windows.destroy", {
+        view: "main",
+      });
+      await ui.waitFor(() =>
+        ui.packets.some((packet) => packet.kind === "closing"),
+      );
+      Atomics.store(ui.parsing, parserSlots.released, 1);
+      await ui.waitFor(() =>
+        ui.packets.some(
+          (packet) =>
+            packet.kind === "host-response" && packet.requestId === requestId,
+        ),
+      );
+      expect(
+        ui.packets.find(
+          (packet) =>
+            packet.kind === "host-response" && packet.requestId === requestId,
+        ),
+      ).toMatchObject({
+        response: {
+          kind: "error",
+          error: {
+            code: "CANCELLED",
+          },
+        },
+      });
+      expect(Atomics.load(ui.parsing, parserSlots.executions)).toBe(1);
+      await ui.channel.send({
+        kind: "shutdown",
+      });
+      expect(await ui.exited).toBe(0);
+      expect(ui.error()).toBeUndefined();
+    } finally {
+      await ui.close();
+    }
+  },
+  timeoutMs + 5000,
 );

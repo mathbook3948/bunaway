@@ -1,23 +1,25 @@
 import { expect, test } from "bun:test";
-import { bindHostAPI } from "#core/host-api";
-import { bindCommandHost } from "@bunaway/plugin-api/host";
 import type { CommandContext } from "@bunaway/plugin-api";
-import { s } from "@bunaway/plugin";
-import { type HostContext, NativeRegistry } from "@bunaway/protocol";
+import { bindCommandHost } from "@bunaway/plugin-api/host";
 import {
   autostartPlugin,
   disableAutostart,
   enableAutostart,
   getAutostartStatus,
 } from "@bunaway/plugin-autostart";
+import { type HostContext, NativeRegistry } from "@bunaway/protocol";
+import { bindHostAPI } from "#core/host-api";
+import { operations } from "#native/host-api/bun/plugins";
+import { autostartOperations } from "#plugins/autostart/src/contract";
 import {
-  commandLine,
   type AppLaunch,
+  commandLine,
   registrationName,
 } from "#plugins/autostart/src/launch";
 import { registryCommand, startupState } from "#plugins/autostart/src/registry";
-import { operations } from "#native/host-api/bun/plugins";
+import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
+const parsers = pluginParsers("autostart", autostartOperations);
 const registry = new NativeRegistry([
   autostartPlugin,
 ]);
@@ -29,8 +31,7 @@ const app: AppLaunch = {
     args: [],
   },
 };
-
-test("autostart exposes strict app-scoped read and configure contracts", () => {
+test("autostart exposes strict app-scoped read and configure contracts", async () => {
   expect([
     ...registry.operations.keys(),
   ]).toEqual([
@@ -57,19 +58,19 @@ test("autostart exposes strict app-scoped read and configure contracts", () => {
       ],
     },
   ]) {
-    expect(() =>
-      registry.validateCall({
+    await expect(
+      parsers.validateCall({
         operation: "autostart.enable",
         payload,
       }),
-    ).toThrow();
+    ).rejects.toThrow();
   }
-  expect(() =>
-    registry.validateCall({
+  await expect(
+    parsers.validateCall({
       operation: "autostart.getStatus",
       payload: {},
     }),
-  ).toThrow();
+  ).rejects.toThrow();
   for (const permission of [
     "autostart.enable",
     "autostart.disable",
@@ -94,7 +95,6 @@ test("autostart exposes strict app-scoped read and configure contracts", () => {
     ).toBe(permission === "autostart.disable");
   }
 });
-
 test("development and packaged registration identities cannot collide", () => {
   expect(registrationName(app)).toBe("bunaway.packaged.com.example.app");
   expect(
@@ -134,7 +134,6 @@ test("development and packaged registration identities cannot collide", () => {
     ).toThrow();
   }
 });
-
 test("Run commands preserve argument boundaries and enforce the complete UTF-16 limit", () => {
   expect(
     commandLine(app, [
@@ -202,7 +201,6 @@ test("Run commands preserve argument boundaries and enforce the complete UTF-16 
     ]),
   ).toThrow();
 });
-
 test("absent, malformed and unknown approval states never claim to be enabled", () => {
   expect(startupState(null)).toBe("unknown");
   for (const [state, expected] of [
@@ -286,7 +284,6 @@ test("absent, malformed and unknown approval states never claim to be enabled", 
     expect(registryCommand(value)).toBeNull();
   }
 });
-
 test("public helpers use caller context and preserve native errors", async () => {
   const calls: string[] = [];
   const controller = new AbortController();
@@ -311,8 +308,12 @@ test("public helpers use caller context and preserve native errors", async () =>
     registry,
   );
   const command = bindCommandHost({
-    input: s.null(),
-    output: s.null(),
+    input: {
+      const: null,
+    },
+    output: {
+      const: null,
+    },
     run: async (_input: unknown, _context: CommandContext) => {
       await disableAutostart();
       await expect(
@@ -346,7 +347,6 @@ test("public helpers use caller context and preserve native errors", async () =>
     "autostart.getStatus",
   ]);
 });
-
 test("host supplies trusted app metadata only to a registered adapter", async () => {
   let observed: unknown;
   const catalog = [
@@ -382,7 +382,6 @@ test("host supplies trusted app metadata only to a registered adapter", async ()
   expect(observed).toEqual(app);
   await registered.dispose();
 });
-
 test("MSIX package identity is unsupported and native DLL disposal is idempotent", () => {
   const registryModule = new URL(
     "../../plugins/autostart/src/registry.ts",

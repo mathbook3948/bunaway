@@ -1,111 +1,20 @@
 import { PLATFORMS } from "@bunaway/plugin-api";
-import {
-  type Infer,
-  type JsonValue,
-  NativeRegistry,
-  type Schema,
-} from "@bunaway/protocol";
+import { type JsonValue, NativeRegistry } from "@bunaway/protocol";
+import { z } from "zod";
 import type { NativeInvokeOptions } from "#transport";
+import {
+  type NativePluginAdapter,
+  validatedAdapter,
+} from "./native-validation.ts";
+
+export type { NativePluginAdapter } from "./native-validation.ts";
 
 export type {
-  Infer,
   JsonValue,
   NativePluginContract,
-  Schema,
 } from "@bunaway/protocol";
 export { BunawayError } from "@bunaway/protocol";
 export type { NativeInvokeOptions } from "#transport";
-
-const optionalField = Symbol("optional field");
-type OptionalField<S extends Schema> = {
-  readonly [optionalField]: S;
-};
-type Field = Schema | OptionalField<Schema>;
-type ObjectSchema<P extends Record<string, Field>> = {
-  readonly type: "object";
-  readonly properties: {
-    readonly [K in keyof P as K extends string | number
-      ? `${K}`
-      : never]: P[K] extends OptionalField<infer S> ? S : P[K];
-  };
-  readonly required: readonly {
-    [K in keyof P]: P[K] extends OptionalField<Schema>
-      ? never
-      : K extends string | number
-        ? `${K}`
-        : never;
-  }[keyof P][];
-  readonly additionalProperties: false;
-};
-
-/**
- * Build JSON Schema fragments for plugin inputs and outputs. Object fields are
- * required by default, and extra fields are rejected.
- */
-export const s = Object.freeze({
-  object<const P extends Record<string, Field>>(fields: P): ObjectSchema<P> {
-    const entries = Object.entries(fields);
-    return {
-      type: "object",
-      properties: Object.fromEntries(
-        entries.map(([key, field]) => [
-          key,
-          optionalField in field ? field[optionalField] : field,
-        ]),
-      ),
-      required: entries
-        .filter(([, field]) => !(optionalField in field))
-        .map(([key]) => key),
-      additionalProperties: false,
-    } as unknown as ObjectSchema<P>;
-  },
-  /** Mark an object field optional while keeping its schema unchanged. */
-  optional<const S extends Schema>(schema: S): OptionalField<S> {
-    return {
-      [optionalField]: schema,
-    };
-  },
-  string(options: Pick<Schema, "maxLength" | "pattern"> = {}) {
-    return {
-      type: "string",
-      ...options,
-    } as const;
-  },
-  enum<const T extends readonly string[]>(values: T) {
-    return {
-      enum: values,
-    };
-  },
-  array<const S extends Schema>(
-    items: S,
-    options: Pick<Schema, "minItems" | "maxItems" | "uniqueItems"> = {},
-  ) {
-    return {
-      type: "array",
-      items,
-      ...options,
-    } as const;
-  },
-  integer(options: Pick<Schema, "minimum" | "maximum"> = {}) {
-    return {
-      type: "integer",
-      ...options,
-    } as const;
-  },
-  boolean() {
-    return {
-      type: "boolean",
-    } as const;
-  },
-  null() {
-    return {
-      const: null,
-    } as const;
-  },
-  json() {
-    return {};
-  },
-});
 
 /** Host-selected values available when a native adapter is created. */
 export type NativeEnvironment = {
@@ -143,6 +52,8 @@ export type NativeAdapter = {
       permissions: import("@bunaway/protocol").Policy["backend"];
       /** Aborted when the UI call is cancelled, its context is revoked, or the host stops. */
       signal?: AbortSignal;
+      /** Host rechecks live authority immediately before entering the native adapter. */
+      beforeExecute?(): void;
     },
   ): JsonValue | Promise<JsonValue>;
   /** Report whether pending adapter work should delay host auto-close. */
@@ -156,10 +67,10 @@ export type NativeAdapterFactory = (
 ) => NativeAdapter;
 /** Input and output schemas for one named native operation. */
 export type NativeOperationDefinition = {
-  /** Schema checked for each call's input. */
-  readonly input: Schema;
-  /** Schema checked for the operation result. */
-  readonly output: Schema;
+  /** Parsed with parseAsync before execution; raw and parsed values must be JSON. */
+  readonly input: z.ZodType;
+  /** Parsed with parseAsync after execution; raw and parsed values must be JSON. */
+  readonly output: z.ZodType;
 };
 /** Declarative contract used to register operations and construct their callers. */
 export type NativePluginDefinition = {
@@ -187,21 +98,13 @@ export type NativePluginAPI<
   O extends Record<string, NativeOperationDefinition>,
 > = {
   readonly [K in keyof O]: (
-    input: Infer<O[K]["input"]>,
+    input: z.input<O[K]["input"]>,
     options?: NativeInvokeOptions,
-  ) => Promise<Infer<O[K]["output"]>>;
+  ) => Promise<z.output<O[K]["output"]>>;
 };
-type NativeOperation<D extends NativePluginDefinition> = {
-  [K in keyof D["operations"] & (string | number)]: {
-    readonly name: `${D["name"]}.${K}`;
-    readonly input: D["operations"][K]["input"];
-    readonly output: D["operations"][K]["output"];
-  };
-}[keyof D["operations"] & (string | number)];
-
 /**
  * Define operations and return the validated host contract with typed `api`
- * callers.
+ * callers. Input and output parsing runs on the owning adapter, never during transport.
  * Policies grant access by operation name. Applications own resource access
  * rules. Plugins own OS consent and may request it
  * inside an explicitly invoked operation; declaration imports never prompt.
@@ -213,6 +116,24 @@ export function defineNativePlugin<const D extends NativePluginDefinition>(
   definition: D,
 ) {
   const { operations: definitions, platforms = {}, ...metadata } = definition;
+  // Keep executable schemas local; copying pairs prevents later declaration replacement.
+  const schemas = new Map(
+    Object.entries(definitions).map(([name, operation]) => {
+      if (
+        !(operation.input instanceof z.ZodType) ||
+        !(operation.output instanceof z.ZodType)
+      ) {
+        throw new Error("Plugin inputs and outputs must be Zod schemas.");
+      }
+      return [
+        `${definition.name}.${name}`,
+        {
+          input: operation.input,
+          output: operation.output,
+        },
+      ] as const;
+    }),
+  );
   // Build metadata must not become Core's incompatible-platform startup restriction.
   const nativePlatforms = Object.fromEntries(
     Object.entries(platforms).map(([platform, target]) => {
@@ -258,23 +179,25 @@ export function defineNativePlugin<const D extends NativePluginDefinition>(
             "create",
             {
               // Factories stay local to each worker; JSON and structured clone carry only metadata.
-              value: target.create,
+              value: (environment: NativeEnvironment) =>
+                validatedAdapter(target.create(environment), schemas),
             },
           ),
         ) as {
           readonly execution: "io" | "ui";
           readonly operations?: readonly string[];
-          readonly create: NativeAdapterFactory;
+          readonly create: (
+            environment: NativeEnvironment,
+          ) => NativePluginAdapter;
         },
       ];
     }),
   );
-  const operations = Object.entries(definitions).map(([key, operation]) => {
-    return {
-      ...operation,
-      name: `${definition.name}.${key}`,
-    };
-  }) as NativeOperation<D>[];
+  const operations = [
+    ...schemas.keys(),
+  ].map((name) => ({
+    name,
+  }));
   const registration = {
     ...metadata,
     // Package builds replace this source-only marker with their package.json version.
@@ -292,10 +215,7 @@ export function defineNativePlugin<const D extends NativePluginDefinition>(
       ...registry.operations.values(),
     ].map((operation) => [
       operation.name.slice(definition.name.length + 1),
-      async (
-        input: Infer<typeof operation.input>,
-        options?: NativeInvokeOptions,
-      ) => {
+      async (input: JsonValue, options?: NativeInvokeOptions) => {
         // Declaration imports never initialize the backend or a WebView connection.
         const { call } = await import("#transport");
         return call(operation, input, options);

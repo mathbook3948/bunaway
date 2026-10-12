@@ -47,6 +47,14 @@ create는 설치를 자동 실행하지 않으며 기존 경로를 덮어쓰지 
 로컬 tarball 묶음은 나중의 깨끗한 재설치를 위해 보관해야 한다. 공개 registry가 생기면
 같은 버전의 패키지를 registry에서 설치하고 bun.lock으로 재현할 수 있다.
 
+## Zod 수정본 배포
+
+CLI 패키지는 Zod 4.6.5의 Promise 소유권 패치와 MIT 라이선스를 포함한다.
+소비자 앱의 패키지 설치만으로 Bun 패치가 전달되지는 않으므로, 설치된 CLI가
+앱과 Worker를 빌드할 때 버전과 파일 체크섬을 확인해 수정본을 포함한다.
+플러그인은 Zod를 외부 의존성으로 유지해야 한다. 상세 범위와 공식 버전으로
+교체할 조건은 [ADR 0018](./decisions/0018-plugin-local-zod-parsing.md)에 기록한다.
+
 ## 설치 구성
 
 개별 네이티브 패키지는 필요할 때 설치하고 AppDefinition.plugins에 등록한다.

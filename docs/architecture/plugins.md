@@ -58,7 +58,7 @@ export async function save(text: string): Promise<null> {
 | `@bunaway/plugin-clipboard` | `clipboard`, `clipboardPlugin` | `clipboard` |
 
 텍스트 클립보드 계약과 Windows 자원 소유권은 [clipboard README](../../plugins/clipboard/README.md)에 둔다.
-공통 UI 실행 컨텍스트는 선택적 `signal`을 제공한다. Windows는 요청 취소, 컨텍스트 폐기와 종료 때 이 신호를 중단한다.
+공통 UI 실행 컨텍스트는 선택적 `signal`을 제공한다. Windows와 macOS는 요청 취소, 컨텍스트 폐기와 종료 때 이 신호를 중단한다.
 클립보드 어댑터는 재시도 중에만 비동기로 대기하고 열린 클립보드나 잠긴 메모리는 다음 await까지 유지하지 않는다.
 
 화면과 백엔드는 같은 패키지의 index.ts를 import한다.
@@ -153,7 +153,7 @@ declare function capabilities(): Promise<Capabilities>;
 
 | 소유자 | 담당 |
 | --- | --- |
-| 공통 protocol | 메시지 형식, JSON 제한, schema 검증, 버전 협상 |
+| 공통 protocol | 메시지 형식, JSON 제한, 앱 명령과 이벤트 schema 검증, 버전 협상 |
 | backend SDK와 core | 앱과 모듈 조립, 명령, 이벤트, 상태, 호출 컨텍스트, 플러그인 등록과 수명 |
 | plugin SDK | 기능 계약 검증, 선언에서 공개 호출 함수 생성, 환경에 맞는 호출 선택 |
 | client SDK | WebView 연결, invoke/listen, 응답, 취소와 페이지 종료 |
@@ -164,30 +164,34 @@ declare function capabilities(): Promise<Capabilities>;
 
 ## 호출 계약
 
-공통 백엔드 호출 API는 `host.call(contract, input)`으로 한다. 플러그인은 입력과
-출력 schema를 가진 계약을 넘기며 결과 타입은 출력 schema에서 추론한다.
-명시적 호출이 필요한 코드에는 `context.host.call(contract, input)`을 제공한다.
-문자열 작업 이름만으로 결과 타입을 정하는 고정 전역 작업 목록은 제거한다.
+공통 백엔드 호출 API는 `host.call(contract, input)`이다. 계약에는 등록한 작업 이름만
+들어가며 입력과 결과는 JsonValue다. 타입을 추론하는 공개 API는 `defineNativePlugin`이
+Zod 입력 스키마의 input 타입과 출력 스키마의 output 타입으로 만든다.
 
 ```ts
-type HostOperationContract<I extends Schema, O extends Schema> = {
-  readonly name: string;
-  readonly input: I;
-  readonly output: O;
-};
-
+type HostOperationContract = { readonly name: string };
 interface HostAPI {
-  call<I extends Schema, O extends Schema>(
-    contract: HostOperationContract<I, O>,
-    input: Infer<I>,
-  ): Promise<Infer<O>>;
+  call(contract: HostOperationContract, input: JsonValue): Promise<JsonValue>;
 }
 ```
 
-계약 객체의 이름은 등록한 작업을 찾는 키다. 호출자가 넘긴 schema로
-등록한 계약을 덮어쓰지 않는다. 입력, 결과, 권한 검사에는 앱에 등록한 플러그인의
-정규 계약을 사용한다. `currentHost`와 AsyncLocalStorage 객체는 플러그인에 공개하지
-않고, 편의 함수는 공통 `host.call`에 위임한다.
+[ADR 0018](../decisions/0018-plugin-local-zod-parsing.md)에 따라 스키마는 설치한 플러그인
+코드에 남긴다. 작업을 소유하는 Worker의 SDK가 어댑터 실행 직전에 input.parseAsync를,
+성공 직후에 output.parseAsync를 각각 한 번 실행하고 완료를 기다린다. 파싱한 입력이 실제 실행에 쓰이고
+파싱한 결과가 호출자에게 전달된다. transport, Core와 NativeRegistry는 Zod를 재실행하지 않는다.
+manifest와 등록 메시지에는 이름과 버전, 지원 플랫폼, 작업 이름만 전달한다.
+
+파싱 전후에는 JSON 값, 크기, 깊이와 Unicode 제한을 검사한다. Zod 검사나 변환 함수는
+전송하지 않는다. 동기 및 비동기 스키마를 지원하며 SDK가 검사 Promise의 완료와 실패를 기다린다.
+Zod의 형제 검사에서 빠져나오는 Promise 실패는 [ADR 0018](../decisions/0018-plugin-local-zod-parsing.md)의
+의존성 패치로 처리한다. 이미 시작한 검사는 관찰하되 예외 반환을 다른 검사의 완료까지 늦추지 않는다.
+입력 파싱 실패는 INVALID_ARGUMENT, 결과 파싱 실패는 INTERNAL로 정리한다.
+플러그인 코드에 정의한 refine, transform, when과 키 정규화는 그대로 실행한다.
+권한 확인은 파싱보다 먼저 이루어지며 거부된 호출은 검사 콜백도 실행하지 않는다.
+I/O Worker는 authorize-input으로 입력 검사 권한을 확인하고 input-authorized 응답이 허용일 때만
+파싱한다. 파싱이 끝나면 기존 prepare, authorize, authorized, grant 절차로 컨텍스트와
+권한을 다시 확인한다. 최종 승인 직후 await 없이 네이티브 작업을 실행한다.
+검사 중 취소된 호출은 실행하지 않으며 취소할 수 없는 Zod 콜백의 늦은 완료와 실패도 관찰한다.
 
 명령의 성공, 실패, 취소 후에는 해당 호출 범위를 폐기한다. setup에서 시작한 작업은
 앱의 백엔드 취소 신호를 사용한다. 범위가 없으면 `INVALID_ARGUMENT`, 종료된 범위면
@@ -203,7 +207,7 @@ StopHook은 타이머, 연결과 자체 자원을 정리한다.
 
 ```ts
 type NativePluginContract = {
-  readonly operations: readonly HostOperationContract<Schema, Schema>[];
+  readonly operations: readonly HostOperationContract[];
 };
 
 // PluginDefinition에 추가하거나 교체하는 필드다.
@@ -213,7 +217,7 @@ type NativePluginFields = {
 };
 ```
 
-operation에는 이름과 입력, 출력 schema가 있다.
+직렬화한 operation에는 이름만 있다. Zod 입력과 출력 스키마는 플러그인 선언에 있다.
 작업 이름 자체가 권한 식별자이며 별도 permission과 osPermission 필드는 없다. 각 이름은 플러그인의
 이름 공간에 속하며 다른 플러그인이나 앱의 등록과 중복되면 시작을 실패시킨다.
 새 네이티브 기능의 선언은 플러그인의 `index.ts`에 작성하며 공통 protocol에
@@ -241,8 +245,8 @@ JSON에 schema를 다시 복사하지 않는다. 진입점은 부작용 없는 �
 `defineNativePlugin`은 선언을 검증하고 `definition`과 `api`를 반환한다.
 제작자는 operations 객체에 메서드 이름과 input, output을 작성한다.
 SDK가 작업 이름에 플러그인 접두사를 붙인다. 작업마다 독립적으로 권한을 허용한다.
-`s.object`는 필드를 기본 필수로 선언하고 추가 필드를 거부한다. 선택 필드는
-`s.optional`로 표시하며 나머지 s 함수도 기존 Schema를 만든다. 검증기를 복제하지 않는다.
+`z.strictObject`는 필드를 기본 필수로 선언하고 추가 필드를 거부한다. 선택 필드는
+`exactOptional()`로 표시한다. 스키마는 JSON Schema로 변환하지 않고 실행 Worker에서 파싱한다.
 이 작성 형식은 native.operations 배열, 완전한 작업 이름,
 required와 additionalProperties를 반복해서 작성하지 않게 한다.
 api의 메서드 이름은 operations의 키와 같다.
@@ -266,7 +270,7 @@ operation 권한을 다시 검사한다. 단순한 기능 등록에는 backend �
 권한 식별자와 operation은 모두 `<plugin-name>.<operation-name>`이다.
 플러그인 이름과 operation의 각 이름은 기존
 명령 식별자 제약에 맞춘다. 등록 목록에도 기존 JSON 깊이, 크기 제한을 적용한다.
-pattern은 등록 검사와 입력, 출력 검사에서 같은 JavaScript Unicode 모드(`u`)를 사용한다.
+정규식은 작성한 Zod 스키마의 원본 플래그로 실행한다. 프레임워크가 플래그를 바꾸지 않는다.
 
 ## 권한 정책 v1의 구조 변경
 
@@ -395,13 +399,22 @@ operations 모듈은 지정된 Worker의 기능 실행과 자원 회수를 제�
 프레임워크의 Worker, 메시지 채널, 취소와 승인 절차를 플러그인마다 복제하지 않는다.
 호스트는 manifest의 실행 위치로 작업을 전달한다. `ui` 작업은 UI Worker의 제한된 큐에
 들어간 뒤 메인 스레드에 prepare를 보낸다. 메인 스레드는 호출이 아직 활성일 때만 grant를 보내고,
-UI Worker는 grant 뒤 현재 호출 문맥과 정책을 다시 확인해 실행한다. `io` 작업은 I/O
-Worker의 제한된 큐에 들어간 뒤 메인 스레드에 prepare를 보낸다. 메인 스레드는 호출이 여전히 활성인지
-확인하고 UI Worker에 정책 평가를 요청한다. 허용 결과를 받은 메인 스레드가 I/O Worker에 grant를
-보내며, I/O Worker는 grant 뒤 실행한다.
+UI Worker는 grant 뒤 현재 호출 문맥과 정책을 확인하고 입력을 파싱한다. 실행 직전에는
+종료 확정, 종료 진행과 컨텍스트 유효성을 다시 검사한다. 종료가 확정되면 메인 스레드의
+취소 패킷이 도착하기 전이라도 대기하던 호출을 CANCELLED로 거부한다.
+`io` 작업은 I/O Worker의 제한된 큐에 들어간 뒤 authorize-input을 보낸다. 메인 스레드는
+활성 호출의 요청을 UI Worker로 전달하며, UI Worker는 현재 컨텍스트와 정책을 검사해
+input-authorized로 응답한다. 허용된 호출만 입력을 파싱하고 완료 후 prepare를 보낸다.
+메인 스레드는 활성 호출에 대해 UI Worker의 실행 승인을 다시 요청한다. 허용 결과를 받은
+메인 스레드가 I/O Worker에 grant를 보내며, I/O Worker는 grant 직후 동기로 실행한다.
+Windows UI와 I/O의 grant, macOS의 operation은 수락과 결과 완료를 분리한다.
+수락 응답은 입력 파싱, 비동기 실행과 결과 파싱을 기다리지 않는다. 취소와 컨텍스트 폐기는
+요청 정보와 용량을 즉시 반환한다. Windows UI와 macOS는 공통 NativeRequests로
+요청 수명과 취소 신호를 관리하며 종료 때도 모두 해제한다. 늦은 완료와 실패는 계속
+관찰하되 취소된 호출의 응답을 보내거나 이후 호출의 상태를 변경하지 않는다.
 
 작업 전송과 승인 메시지는 각각 최대 128개의 미확인 메시지를 보관한다. prepare,
-authorize, authorized와 grant는 별도 승인 용량을 사용하므로 작업 전송이 한도에 도달해도
+authorize, authorized, grant, authorize-input과 input-authorized는 별도 승인 용량을 사용하므로 작업 전송이 한도에 도달해도
 승인을 계속 처리한다. 취소, 뷰 폐기와 종료 메시지도 각각 예약된 용량을 사용한다.
 새 Host 호출은 진행 중 호출과 아직 확인되지 않은 취소, 승인 메시지가 차지하는 용량을
 확인하고, 여유가 없으면 `BUSY`로 거부한다.
@@ -418,7 +431,9 @@ envelope의 크기 제한을 검사하며, 실패하면 안전한 `INTERNAL` 응
 해당 요청에 `INTERNAL`을 반환한다. 전송 채널에 넘기기 전에 처리하므로 같은 세션의
 다음 명령은 계속 실행할 수 있다.
 
-공통 계층은 등록된 schema로 입력을 검증하고 출처의 정책에 작업 이름이 있는지 확인한다.
+공통 계층은 JSON과 등록 이름을 검증하고 출처의 정책에 작업 이름이 있는지 확인한다.
+입력 검사 권한을 확인한 뒤 SDK가 입력을 파싱하고, 실행 직전에 권한을 다시 확인한다.
+실행 성공 후에는 SDK가 결과를 파싱한다.
 플랫폼 adapter가 없어도 작업 권한을 먼저 검사하여 허용된 호출에는 `UNSUPPORTED`,
 권한이 없는 호출에는 `PERMISSION_DENIED`를 반환한다.
 

@@ -21,7 +21,8 @@
   },
   "dependencies": {
     "@bunaway/plugin-api": "workspace:*",
-    "@bunaway/protocol": "workspace:*"
+    "@bunaway/protocol": "workspace:*",
+    "zod": "4.6.5"
   },
   "peerDependencies": {
     "@bunaway/plugin": "0.0.0"

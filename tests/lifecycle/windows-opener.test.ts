@@ -3,9 +3,9 @@ import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
-import { Channel } from "#native/windows/bun/channel";
-import type { HostContext, HostResponse } from "@bunaway/protocol";
 import { openerPlugin } from "@bunaway/plugin-opener";
+import type { HostContext, HostResponse } from "@bunaway/protocol";
+import { Channel } from "#native/windows/bun/channel";
 import { bundleIOPluginFixture } from "../fixtures/native-worker.ts";
 
 test.skipIf(process.platform !== "win32")(
@@ -272,6 +272,13 @@ export const pluginImports = { opener: {
       (packet) => {
         if (packet.kind === "ready") {
           ready = true;
+        } else if (packet.kind === "authorize-input") {
+          channel.notify({
+            kind: "input-authorized",
+            requestId: packet.requestId,
+            context: packet.context,
+            allowed: true,
+          });
         } else if (packet.kind === "prepare") {
           prepares.push(packet.requestId);
         } else if (packet.kind === "host-response") {

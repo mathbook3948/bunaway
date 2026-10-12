@@ -219,8 +219,7 @@
       "pages": {
         "reference/tooling/native-plugins": [
           "defineNativePlugin",
-          "BunawayError",
-          "s"
+          "BunawayError"
         ]
       }
     },
@@ -765,7 +764,7 @@
       "source": "packages/protocol/src/host-api.ts",
       "type": "HostOperationContract",
       "pages": {
-        "reference/protocol": ["name", "input", "output"]
+        "reference/protocol": ["name"]
       }
     },
     {
@@ -827,6 +826,13 @@
           "state",
           "bounds"
         ]
+      }
+    },
+    {
+      "source": "packages/plugin-sdk/src/native-validation.ts",
+      "type": "NativePluginAdapter",
+      "pages": {
+        "reference/tooling/native-plugins": ["prepare", "execute"]
       }
     }
   ],

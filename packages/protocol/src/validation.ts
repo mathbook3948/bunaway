@@ -11,8 +11,8 @@ export type JsonValue =
 
 /**
  * The JSON Schema subset understood by this package and its native consumers.
- * Native consumers also enforce the exported transport limits. Native plugin
- * registration rejects unsupported keywords instead of silently ignoring them.
+ * Native consumers also enforce the exported transport limits. Plugin-specific
+ * data is parsed by Zod in the installed plugin execution code.
  */
 export type Schema = {
   readonly $schema?: string;

@@ -1,0 +1,885 @@
+diff --git a/src/v4/core/checks.ts b/src/v4/core/checks.ts
+index 02383796bfb52e6bf9681a3c52aeadef599d8aab..611e594a533725caf0ed76f9af8a610bf2218792 100644
+--- a/src/v4/core/checks.ts
++++ b/src/v4/core/checks.ts
+@@ -1094,7 +1094,7 @@ export const $ZodCheckProperties: core.$constructor<$ZodCheckProperties> = /*@__
+         const result = schema._zod.run({ value: input[key], issues: [] }, {});
+         if (result instanceof Promise) {
+           proms ??= [];
+-          proms.push(result.then((result) => handleCheckPropertyResult(result, payload, key)));
++          proms.push(util.observe(result.then((result) => handleCheckPropertyResult(result, payload, key))));
+         } else {
+           handleCheckPropertyResult(result, payload, key);
+         }
+diff --git a/src/v4/core/parse.ts b/src/v4/core/parse.ts
+index 8cc0ade97bcf8e6cf90b5dd6dff83aeee871f33e..41a9c60bacee67cf7a8eeae20fe44692eb27ac5c 100644
+--- a/src/v4/core/parse.ts
++++ b/src/v4/core/parse.ts
+@@ -24,6 +24,7 @@ export const _parse: (_Err: $ZodErrorClass) => $Parse = (_Err) => {
+     const ctx: schemas.ParseContextInternal = _ctx ? { ..._ctx, async: false } : { async: false };
+     const result = schema._zod.run({ value, issues: [] }, ctx);
+     if (result instanceof Promise) {
++      util.observe(result);
+       throw new core.$ZodAsyncError();
+     }
+     if (result.issues.length) {
+@@ -72,6 +73,7 @@ export const _safeParse: (_Err: $ZodErrorClass) => $SafeParse = (_Err) => (schem
+   const ctx: schemas.ParseContextInternal = _ctx ? { ..._ctx, async: false } : { async: false };
+   const result = schema._zod.run({ value, issues: [] }, ctx);
+   if (result instanceof Promise) {
++    util.observe(result);
+     throw new core.$ZodAsyncError();
+   }
+ 
+@@ -166,6 +168,7 @@ function validateFallback(
+     result = schema._zod.run({ value, issues: [] }, ctx);
+   }
+   if (result instanceof Promise) {
++    util.observe(result);
+     throw new core.$ZodAsyncError();
+   }
+   return (result as schemas.ParsePayload).issues.length === 0;
+diff --git a/src/v4/core/schemas.ts b/src/v4/core/schemas.ts
+index 63a4391f88205ef0c4f58f67bc84795e2983eebb..fd83e120e1b876354783f506efdf8065d2446e78 100644
+--- a/src/v4/core/schemas.ts
++++ b/src/v4/core/schemas.ts
+@@ -249,19 +249,18 @@ export const $ZodType: core.$constructor<$ZodType> = /*@__PURE__*/ core.$constru
+             continue;
+           }
+           const currLen = payload.issues.length;
+-          const _ = ch._zod.check(payload as any) as any as ParsePayload;
++          const _ = util.observe(ch._zod.check(payload as any) as any as ParsePayload);
+ 
+           if (_ instanceof Promise && ctx?.async === false) {
+             throw new core.$ZodAsyncError();
+           }
+           if (asyncResult || _ instanceof Promise) {
+-            asyncResult = (asyncResult ?? Promise.resolve()).then(async () => {
+-              await _;
++            asyncResult = util.observe(Promise.all([asyncResult, _]).then(() => {
+               const nextLen = payload.issues.length;
+               if (nextLen === currLen) return;
+               util.attachSchema(payload.issues, currLen, inst);
+               if (!isAborted) isAborted = util.aborted(payload, currLen);
+-            });
++            }));
+           } else {
+             const nextLen = payload.issues.length;
+             if (nextLen === currLen) continue;
+@@ -286,7 +285,7 @@ export const $ZodType: core.$constructor<$ZodType> = /*@__PURE__*/ core.$constru
+         }
+ 
+         // run checks first, then
+-        const checkResult = runChecks(payload, checks, ctx);
++        const checkResult = util.observe(runChecks(payload, checks, ctx));
+         if (checkResult instanceof Promise) {
+           if (ctx.async === false) throw new core.$ZodAsyncError();
+           return checkResult.then((checkResult) => inst._zod.parse(checkResult, ctx));
+@@ -300,7 +299,7 @@ export const $ZodType: core.$constructor<$ZodType> = /*@__PURE__*/ core.$constru
+         }
+         if (ctx.direction === "backward") {
+           // run canary initial pass (no checks)
+-          const canary = inst._zod.parse({ value: payload.value, issues: [] }, { ...ctx, skipChecks: true });
++          const canary = util.observe(inst._zod.parse({ value: payload.value, issues: [] }, { ...ctx, skipChecks: true }));
+ 
+           if (canary instanceof Promise) {
+             return canary.then((canary) => {
+@@ -312,7 +311,7 @@ export const $ZodType: core.$constructor<$ZodType> = /*@__PURE__*/ core.$constru
+         }
+ 
+         // forward
+-        const result = inst._zod.parse(payload, ctx);
++        const result = util.observe(inst._zod.parse(payload, ctx));
+         if (result instanceof Promise) {
+           if (ctx.async === false) throw new core.$ZodAsyncError();
+           return result.then((result) => runChecks(result, checks, ctx));
+@@ -1885,7 +1884,7 @@ export const $ZodArray: core.$constructor<$ZodArray> = /*@__PURE__*/ core.$const
+       );
+ 
+       if (result instanceof Promise) {
+-        proms.push(result.then((result) => handleArrayResult(result, payload, i)));
++        proms.push(util.observe(result.then((result) => handleArrayResult(result, payload, i))));
+       } else {
+         handleArrayResult(result, payload, i);
+         // the element's payload is authoritative here, since handleArrayResult forwards every issue; an object's is not, because it drops a failed absent optional
+@@ -2126,7 +2125,7 @@ function handleCatchall(
+     const r = _catchall.run({ value: input[key], issues: [] }, ctx);
+ 
+     if (r instanceof Promise) {
+-      proms.push(r.then((r) => handlePropertyResult(r, payload, key, input, optin, optout)));
++      proms.push(util.observe(r.then((r) => handlePropertyResult(r, payload, key, input, optin, optout))));
+     } else {
+       handlePropertyResult(r, payload, key, input, optin, optout);
+     }
+@@ -2225,7 +2224,7 @@ export const $ZodObject: core.$constructor<$ZodObject> = /*@__PURE__*/ core.$con
+ 
+       const r = el._zod.run({ value: input[key], issues: [] }, ctx);
+       if (r instanceof Promise) {
+-        proms.push(r.then((r) => handlePropertyResult(r, payload, key, input, optin, optout)));
++        proms.push(util.observe(r.then((r) => handlePropertyResult(r, payload, key, input, optin, optout))));
+       } else {
+         handlePropertyResult(r, payload, key, input, optin, optout);
+       }
+@@ -2502,11 +2501,11 @@ export const $ZodUnion: core.$constructor<$ZodUnion> = /*@__PURE__*/ core.$const
+         ctx
+       );
+       if (result instanceof Promise) {
+-        results.push(result);
++        results.push(util.observe(result));
+         async = true;
+       } else {
+         if (result.issues.length === 0) return result;
+-        results.push(result);
++        results.push(util.observe(result));
+       }
+     }
+ 
+@@ -2585,10 +2584,10 @@ export const $ZodXor: core.$constructor<$ZodXor> = /*@__PURE__*/ core.$construct
+         ctx
+       );
+       if (result instanceof Promise) {
+-        results.push(result);
++        results.push(util.observe(result));
+         async = true;
+       } else {
+-        results.push(result);
++        results.push(util.observe(result));
+       }
+     }
+ 
+@@ -2808,7 +2807,7 @@ export const $ZodIntersection: core.$constructor<$ZodIntersection> = /*@__PURE__
+ 
+     inst._zod.parse = (payload, ctx) => {
+       const input = payload.value;
+-      const left = def.left._zod.run({ value: input, issues: [] }, ctx);
++      const left = util.observe(def.left._zod.run({ value: input, issues: [] }, ctx));
+       const right = def.right._zod.run({ value: input, issues: [] }, ctx);
+       const async = left instanceof Promise || right instanceof Promise;
+ 
+@@ -3061,9 +3060,9 @@ export const $ZodTuple: core.$constructor<$ZodTuple> = /*@__PURE__*/ core.$const
+       const r = items[i]._zod.run({ value: input[i], issues: [] }, ctx);
+       if (r instanceof Promise) {
+         proms.push(
+-          r.then((rr) => {
++          util.observe(r.then((rr) => {
+             itemResults[i] = rr;
+-          })
++          }))
+         );
+       } else {
+         itemResults[i] = r;
+@@ -3084,7 +3083,7 @@ export const $ZodTuple: core.$constructor<$ZodTuple> = /*@__PURE__*/ core.$const
+         i++;
+         const result = def.rest._zod.run({ value: el, issues: [] }, ctx);
+         if (result instanceof Promise) {
+-          proms.push(result.then((r) => handleTupleResult(r, payload, i)));
++          proms.push(util.observe(result.then((r) => handleTupleResult(r, payload, i))));
+         } else {
+           handleTupleResult(result, payload, i);
+         }
+@@ -3262,7 +3261,7 @@ export const $ZodRecord: core.$constructor<$ZodRecord> = /*@__PURE__*/ core.$con
+           recordKeys.add(typeof key === "number" ? key.toString() : key);
+           // A declared __proto__ is stripped but is not an unrecognized key.
+           if (key === "__proto__") continue;
+-          const keyResult = def.keyType._zod.run({ value: key, issues: [] }, ctx);
++          const keyResult = util.observe(def.keyType._zod.run({ value: key, issues: [] }, ctx));
+           if (keyResult instanceof Promise) {
+             throw new Error("Async schemas not supported in object keys currently");
+           }
+@@ -3283,12 +3282,12 @@ export const $ZodRecord: core.$constructor<$ZodRecord> = /*@__PURE__*/ core.$con
+ 
+           if (result instanceof Promise) {
+             proms.push(
+-              result.then((result) => {
++              util.observe(result.then((result) => {
+                 if (result.issues.length) {
+                   payload.issues.push(...util.prefixIssues(key, result.issues));
+                 }
+                 payload.value[outKey] = result.value;
+-              })
++              }))
+             );
+           } else {
+             if (result.issues.length) {
+@@ -3330,7 +3329,7 @@ export const $ZodRecord: core.$constructor<$ZodRecord> = /*@__PURE__*/ core.$con
+       for (const key of Reflect.ownKeys(input)) {
+         if (key === "__proto__") continue;
+         if (!Object.prototype.propertyIsEnumerable.call(input, key)) continue;
+-        let keyResult = def.keyType._zod.run({ value: key, issues: [] }, ctx);
++        let keyResult = util.observe(def.keyType._zod.run({ value: key, issues: [] }, ctx));
+         if (keyResult instanceof Promise) {
+           throw new Error("Async schemas not supported in object keys currently");
+         }
+@@ -3338,7 +3337,7 @@ export const $ZodRecord: core.$constructor<$ZodRecord> = /*@__PURE__*/ core.$con
+         // Numeric string fallback: if key is a numeric string and failed, retry with Number(key). This handles z.number(), z.literal([1, 2, 3]), and unions containing numeric literals
+         const checkNumericKey = typeof key === "string" && regexes.number.test(key) && keyResult.issues.length;
+         if (checkNumericKey) {
+-          const retryResult = def.keyType._zod.run({ value: Number(key), issues: [] }, ctx);
++          const retryResult = util.observe(def.keyType._zod.run({ value: Number(key), issues: [] }, ctx));
+           if (retryResult instanceof Promise) {
+             throw new Error("Async schemas not supported in object keys currently");
+           }
+@@ -3376,12 +3375,12 @@ export const $ZodRecord: core.$constructor<$ZodRecord> = /*@__PURE__*/ core.$con
+ 
+         if (result instanceof Promise) {
+           proms.push(
+-            result.then((result) => {
++            util.observe(result.then((result) => {
+               if (result.issues.length) {
+                 payload.issues.push(...util.prefixIssues(key, result.issues));
+               }
+               payload.value[outKey] = result.value;
+-            })
++            }))
+           );
+         } else {
+           if (result.issues.length) {
+@@ -3463,14 +3462,14 @@ export const $ZodMap: core.$constructor<$ZodMap> = /*@__PURE__*/ core.$construct
+         if (util.aborted(payload, seen)) break;
+         seen = payload.issues.length;
+       }
+-      const keyResult = def.keyType._zod.run({ value: key, issues: [] }, ctx);
++      const keyResult = util.observe(def.keyType._zod.run({ value: key, issues: [] }, ctx));
+       const valueResult = def.valueType._zod.run({ value: value, issues: [] }, ctx);
+ 
+       if (keyResult instanceof Promise || valueResult instanceof Promise) {
+         proms.push(
+-          Promise.all([keyResult, valueResult]).then(([keyResult, valueResult]) => {
++          util.observe(Promise.all([keyResult, valueResult]).then(([keyResult, valueResult]) => {
+             handleMapResult(keyResult, valueResult, payload, key, input, inst, ctx);
+-          })
++          }))
+         );
+       } else {
+         handleMapResult(keyResult as ParsePayload, valueResult as ParsePayload, payload, key, input, inst, ctx);
+@@ -3575,7 +3574,7 @@ export const $ZodSet: core.$constructor<$ZodSet> = /*@__PURE__*/ core.$construct
+       }
+       const result = def.valueType._zod.run({ value: item, issues: [] }, ctx);
+       if (result instanceof Promise) {
+-        proms.push(result.then((result) => handleSetResult(result, payload)));
++        proms.push(util.observe(result.then((result) => handleSetResult(result, payload))));
+       } else handleSetResult(result, payload);
+     }
+ 
+@@ -3853,6 +3852,7 @@ export const $ZodTransform: core.$constructor<$ZodTransform> = /*@__PURE__*/ cor
+       }
+ 
+       if (_out instanceof Promise) {
++        util.observe(_out);
+         throw new core.$ZodAsyncError();
+       }
+ 
+diff --git a/src/v4/core/util.ts b/src/v4/core/util.ts
+index b838ef9f8f85db232adc6a07e8dcc48bc43a25dc..99fb97887656dd430fab8a5a488eaf613600e56a 100644
+--- a/src/v4/core/util.ts
++++ b/src/v4/core/util.ts
+@@ -1278,3 +1278,9 @@ export function constantCatch<T>(value: T): () => T {
+   (fn as { [CONSTANT_CATCH]?: boolean })[CONSTANT_CATCH] = true;
+   return fn;
+ }
++
++// A sibling may throw before its parent collects this work. The original Promise still rejects.
++export function observe<T>(value: T): T {
++  if (value instanceof Promise) void value.catch(() => {});
++  return value;
++}
+diff --git a/v4/core/checks.cjs b/v4/core/checks.cjs
+index b457efb619ddea6ca6136482d98d39c8657b581e..c9e88372d7d2e81a6f98dcfd13fb74fc5b6a8929 100644
+--- a/v4/core/checks.cjs
++++ b/v4/core/checks.cjs
+@@ -508,7 +508,7 @@ exports.$ZodCheckProperties = core.$constructor("$ZodCheckProperties", (inst, de
+             const result = schema._zod.run({ value: input[key], issues: [] }, {});
+             if (result instanceof Promise) {
+                 proms ?? (proms = []);
+-                proms.push(result.then((result) => handleCheckPropertyResult(result, payload, key)));
++                proms.push(util.observe(result.then((result) => handleCheckPropertyResult(result, payload, key))));
+             }
+             else {
+                 handleCheckPropertyResult(result, payload, key);
+diff --git a/v4/core/checks.js b/v4/core/checks.js
+index 6bd3531478ce3596bad135f182f54727667dd839..7a502ddd07ff62e017241eb413c589b396020d1c 100644
+--- a/v4/core/checks.js
++++ b/v4/core/checks.js
+@@ -482,7 +482,7 @@ export const $ZodCheckProperties = /*@__PURE__*/ core.$constructor("$ZodCheckPro
+             const result = schema._zod.run({ value: input[key], issues: [] }, {});
+             if (result instanceof Promise) {
+                 proms ?? (proms = []);
+-                proms.push(result.then((result) => handleCheckPropertyResult(result, payload, key)));
++                proms.push(util.observe(result.then((result) => handleCheckPropertyResult(result, payload, key))));
+             }
+             else {
+                 handleCheckPropertyResult(result, payload, key);
+diff --git a/v4/core/parse.cjs b/v4/core/parse.cjs
+index 9271ce0d7205474ca1aee8ce81b2dbcb5a77b6f6..8bb0182c90250ee3f2efd4ba7e0e0d247e31f5c3 100644
+--- a/v4/core/parse.cjs
++++ b/v4/core/parse.cjs
+@@ -36,6 +36,7 @@ const _parse = (_Err) => {
+         const ctx = _ctx ? { ..._ctx, async: false } : { async: false };
+         const result = schema._zod.run({ value, issues: [] }, ctx);
+         if (result instanceof Promise) {
++            util.observe(result);
+             throw new core.$ZodAsyncError();
+         }
+         if (result.issues.length) {
+@@ -70,6 +71,7 @@ const _safeParse = (_Err) => (schema, value, _ctx) => {
+     const ctx = _ctx ? { ..._ctx, async: false } : { async: false };
+     const result = schema._zod.run({ value, issues: [] }, ctx);
+     if (result instanceof Promise) {
++        util.observe(result);
+         throw new core.$ZodAsyncError();
+     }
+     return result.issues.length ? failure(_Err, result.issues, ctx) : { success: true, data: result.value };
+@@ -137,6 +139,7 @@ function validateFallback(schema, value, _ctx) {
+         result = schema._zod.run({ value, issues: [] }, ctx);
+     }
+     if (result instanceof Promise) {
++        util.observe(result);
+         throw new core.$ZodAsyncError();
+     }
+     return result.issues.length === 0;
+diff --git a/v4/core/parse.js b/v4/core/parse.js
+index 240a72d6a8593caa0e3642e2cb2d655fc40160ff..7c299ba15ff8fdc428e13b48921f114147f58f7e 100644
+--- a/v4/core/parse.js
++++ b/v4/core/parse.js
+@@ -10,6 +10,7 @@ export const _parse = (_Err) => {
+         const ctx = _ctx ? { ..._ctx, async: false } : { async: false };
+         const result = schema._zod.run({ value, issues: [] }, ctx);
+         if (result instanceof Promise) {
++            util.observe(result);
+             throw new core.$ZodAsyncError();
+         }
+         if (result.issues.length) {
+@@ -42,6 +43,7 @@ export const _safeParse = (_Err) => (schema, value, _ctx) => {
+     const ctx = _ctx ? { ..._ctx, async: false } : { async: false };
+     const result = schema._zod.run({ value, issues: [] }, ctx);
+     if (result instanceof Promise) {
++        util.observe(result);
+         throw new core.$ZodAsyncError();
+     }
+     return result.issues.length ? failure(_Err, result.issues, ctx) : { success: true, data: result.value };
+@@ -107,6 +109,7 @@ function validateFallback(schema, value, _ctx) {
+         result = schema._zod.run({ value, issues: [] }, ctx);
+     }
+     if (result instanceof Promise) {
++        util.observe(result);
+         throw new core.$ZodAsyncError();
+     }
+     return result.issues.length === 0;
+diff --git a/v4/core/schemas.cjs b/v4/core/schemas.cjs
+index 1f84517de17afe52ec60fb23f1f29d4f5e1ecea9..9f1d75c37a56d5ad6752aef6e31c1462d518072a 100644
+--- a/v4/core/schemas.cjs
++++ b/v4/core/schemas.cjs
+@@ -91,20 +91,19 @@ exports.$ZodType = core.$constructor("$ZodType", (inst, def) => {
+                     continue;
+                 }
+                 const currLen = payload.issues.length;
+-                const _ = ch._zod.check(payload);
++                const _ = util.observe(ch._zod.check(payload));
+                 if (_ instanceof Promise && ctx?.async === false) {
+                     throw new core.$ZodAsyncError();
+                 }
+                 if (asyncResult || _ instanceof Promise) {
+-                    asyncResult = (asyncResult ?? Promise.resolve()).then(async () => {
+-                        await _;
++                    asyncResult = util.observe(Promise.all([asyncResult, _]).then(() => {
+                         const nextLen = payload.issues.length;
+                         if (nextLen === currLen)
+                             return;
+                         util.attachSchema(payload.issues, currLen, inst);
+                         if (!isAborted)
+                             isAborted = util.aborted(payload, currLen);
+-                    });
++                    }));
+                 }
+                 else {
+                     const nextLen = payload.issues.length;
+@@ -129,7 +128,7 @@ exports.$ZodType = core.$constructor("$ZodType", (inst, def) => {
+                 return canary;
+             }
+             // run checks first, then
+-            const checkResult = runChecks(payload, checks, ctx);
++            const checkResult = util.observe(runChecks(payload, checks, ctx));
+             if (checkResult instanceof Promise) {
+                 if (ctx.async === false)
+                     throw new core.$ZodAsyncError();
+@@ -143,7 +142,7 @@ exports.$ZodType = core.$constructor("$ZodType", (inst, def) => {
+             }
+             if (ctx.direction === "backward") {
+                 // run canary initial pass (no checks)
+-                const canary = inst._zod.parse({ value: payload.value, issues: [] }, { ...ctx, skipChecks: true });
++                const canary = util.observe(inst._zod.parse({ value: payload.value, issues: [] }, { ...ctx, skipChecks: true }));
+                 if (canary instanceof Promise) {
+                     return canary.then((canary) => {
+                         return handleCanaryResult(canary, payload, ctx);
+@@ -152,7 +151,7 @@ exports.$ZodType = core.$constructor("$ZodType", (inst, def) => {
+                 return handleCanaryResult(canary, payload, ctx);
+             }
+             // forward
+-            const result = inst._zod.parse(payload, ctx);
++            const result = util.observe(inst._zod.parse(payload, ctx));
+             if (result instanceof Promise) {
+                 if (ctx.async === false)
+                     throw new core.$ZodAsyncError();
+@@ -891,7 +890,7 @@ exports.$ZodArray = core.$constructor("$ZodArray", (inst, def) => {
+                 issues: [],
+             }, ctx);
+             if (result instanceof Promise) {
+-                proms.push(result.then((result) => handleArrayResult(result, payload, i)));
++                proms.push(util.observe(result.then((result) => handleArrayResult(result, payload, i))));
+             }
+             else {
+                 handleArrayResult(result, payload, i);
+@@ -994,7 +993,7 @@ function handleCatchall(proms, input, payload, ctx, def, inst, abortEarly) {
+         }
+         const r = _catchall.run({ value: input[key], issues: [] }, ctx);
+         if (r instanceof Promise) {
+-            proms.push(r.then((r) => handlePropertyResult(r, payload, key, input, optin, optout)));
++            proms.push(util.observe(r.then((r) => handlePropertyResult(r, payload, key, input, optin, optout))));
+         }
+         else {
+             handlePropertyResult(r, payload, key, input, optin, optout);
+@@ -1087,7 +1086,7 @@ exports.$ZodObject = core.$constructor("$ZodObject", (inst, def) => {
+             const optout = el._zod.optout;
+             const r = el._zod.run({ value: input[key], issues: [] }, ctx);
+             if (r instanceof Promise) {
+-                proms.push(r.then((r) => handlePropertyResult(r, payload, key, input, optin, optout)));
++                proms.push(util.observe(r.then((r) => handlePropertyResult(r, payload, key, input, optin, optout))));
+             }
+             else {
+                 handlePropertyResult(r, payload, key, input, optin, optout);
+@@ -1290,13 +1289,13 @@ exports.$ZodUnion = core.$constructor("$ZodUnion", (inst, def) => {
+                 issues: [],
+             }, ctx);
+             if (result instanceof Promise) {
+-                results.push(result);
++                results.push(util.observe(result));
+                 async = true;
+             }
+             else {
+                 if (result.issues.length === 0)
+                     return result;
+-                results.push(result);
++                results.push(util.observe(result));
+             }
+         }
+         if (!async)
+@@ -1354,11 +1353,11 @@ exports.$ZodXor = core.$constructor("$ZodXor", (inst, def) => {
+                 issues: [],
+             }, ctx);
+             if (result instanceof Promise) {
+-                results.push(result);
++                results.push(util.observe(result));
+                 async = true;
+             }
+             else {
+-                results.push(result);
++                results.push(util.observe(result));
+             }
+         }
+         if (!async)
+@@ -1478,7 +1477,7 @@ exports.$ZodIntersection = core.$constructor("$ZodIntersection", (inst, def) =>
+     exports.$ZodType.init(inst, def);
+     inst._zod.parse = (payload, ctx) => {
+         const input = payload.value;
+-        const left = def.left._zod.run({ value: input, issues: [] }, ctx);
++        const left = util.observe(def.left._zod.run({ value: input, issues: [] }, ctx));
+         const right = def.right._zod.run({ value: input, issues: [] }, ctx);
+         const async = left instanceof Promise || right instanceof Promise;
+         if (async) {
+@@ -1645,9 +1644,9 @@ exports.$ZodTuple = core.$constructor("$ZodTuple", (inst, def) => {
+         for (let i = 0; i < items.length; i++) {
+             const r = items[i]._zod.run({ value: input[i], issues: [] }, ctx);
+             if (r instanceof Promise) {
+-                proms.push(r.then((rr) => {
++                proms.push(util.observe(r.then((rr) => {
+                     itemResults[i] = rr;
+-                }));
++                })));
+             }
+             else {
+                 itemResults[i] = r;
+@@ -1669,7 +1668,7 @@ exports.$ZodTuple = core.$constructor("$ZodTuple", (inst, def) => {
+                 i++;
+                 const result = def.rest._zod.run({ value: el, issues: [] }, ctx);
+                 if (result instanceof Promise) {
+-                    proms.push(result.then((r) => handleTupleResult(r, payload, i)));
++                    proms.push(util.observe(result.then((r) => handleTupleResult(r, payload, i))));
+                 }
+                 else {
+                     handleTupleResult(result, payload, i);
+@@ -1759,7 +1758,7 @@ exports.$ZodRecord = core.$constructor("$ZodRecord", (inst, def) => {
+                     // A declared __proto__ is stripped but is not an unrecognized key.
+                     if (key === "__proto__")
+                         continue;
+-                    const keyResult = def.keyType._zod.run({ value: key, issues: [] }, ctx);
++                    const keyResult = util.observe(def.keyType._zod.run({ value: key, issues: [] }, ctx));
+                     if (keyResult instanceof Promise) {
+                         throw new Error("Async schemas not supported in object keys currently");
+                     }
+@@ -1779,12 +1778,12 @@ exports.$ZodRecord = core.$constructor("$ZodRecord", (inst, def) => {
+                         continue;
+                     const result = def.valueType._zod.run({ value: input[key], issues: [] }, ctx);
+                     if (result instanceof Promise) {
+-                        proms.push(result.then((result) => {
++                        proms.push(util.observe(result.then((result) => {
+                             if (result.issues.length) {
+                                 payload.issues.push(...util.prefixIssues(key, result.issues));
+                             }
+                             payload.value[outKey] = result.value;
+-                        }));
++                        })));
+                     }
+                     else {
+                         if (result.issues.length) {
+@@ -1829,14 +1828,14 @@ exports.$ZodRecord = core.$constructor("$ZodRecord", (inst, def) => {
+                     continue;
+                 if (!Object.prototype.propertyIsEnumerable.call(input, key))
+                     continue;
+-                let keyResult = def.keyType._zod.run({ value: key, issues: [] }, ctx);
++                let keyResult = util.observe(def.keyType._zod.run({ value: key, issues: [] }, ctx));
+                 if (keyResult instanceof Promise) {
+                     throw new Error("Async schemas not supported in object keys currently");
+                 }
+                 // Numeric string fallback: if key is a numeric string and failed, retry with Number(key). This handles z.number(), z.literal([1, 2, 3]), and unions containing numeric literals
+                 const checkNumericKey = typeof key === "string" && regexes.number.test(key) && keyResult.issues.length;
+                 if (checkNumericKey) {
+-                    const retryResult = def.keyType._zod.run({ value: Number(key), issues: [] }, ctx);
++                    const retryResult = util.observe(def.keyType._zod.run({ value: Number(key), issues: [] }, ctx));
+                     if (retryResult instanceof Promise) {
+                         throw new Error("Async schemas not supported in object keys currently");
+                     }
+@@ -1872,12 +1871,12 @@ exports.$ZodRecord = core.$constructor("$ZodRecord", (inst, def) => {
+                     continue;
+                 const result = def.valueType._zod.run({ value: input[key], issues: [] }, ctx);
+                 if (result instanceof Promise) {
+-                    proms.push(result.then((result) => {
++                    proms.push(util.observe(result.then((result) => {
+                         if (result.issues.length) {
+                             payload.issues.push(...util.prefixIssues(key, result.issues));
+                         }
+                         payload.value[outKey] = result.value;
+-                    }));
++                    })));
+                 }
+                 else {
+                     if (result.issues.length) {
+@@ -1927,12 +1926,12 @@ exports.$ZodMap = core.$constructor("$ZodMap", (inst, def) => {
+                     break;
+                 seen = payload.issues.length;
+             }
+-            const keyResult = def.keyType._zod.run({ value: key, issues: [] }, ctx);
++            const keyResult = util.observe(def.keyType._zod.run({ value: key, issues: [] }, ctx));
+             const valueResult = def.valueType._zod.run({ value: value, issues: [] }, ctx);
+             if (keyResult instanceof Promise || valueResult instanceof Promise) {
+-                proms.push(Promise.all([keyResult, valueResult]).then(([keyResult, valueResult]) => {
++                proms.push(util.observe(Promise.all([keyResult, valueResult]).then(([keyResult, valueResult]) => {
+                     handleMapResult(keyResult, valueResult, payload, key, input, inst, ctx);
+-                }));
++                })));
+             }
+             else {
+                 handleMapResult(keyResult, valueResult, payload, key, input, inst, ctx);
+@@ -2002,7 +2001,7 @@ exports.$ZodSet = core.$constructor("$ZodSet", (inst, def) => {
+             }
+             const result = def.valueType._zod.run({ value: item, issues: [] }, ctx);
+             if (result instanceof Promise) {
+-                proms.push(result.then((result) => handleSetResult(result, payload)));
++                proms.push(util.observe(result.then((result) => handleSetResult(result, payload))));
+             }
+             else
+                 handleSetResult(result, payload);
+@@ -2102,6 +2101,7 @@ exports.$ZodTransform = core.$constructor("$ZodTransform", (inst, def) => {
+             });
+         }
+         if (_out instanceof Promise) {
++            util.observe(_out);
+             throw new core.$ZodAsyncError();
+         }
+         payload.value = _out;
+diff --git a/v4/core/schemas.js b/v4/core/schemas.js
+index 4bb0d6ddc71bedbde8a9276158a087d960db1acb..ffaa0911066101f3fc01e1a866d939d3f3f89078 100644
+--- a/v4/core/schemas.js
++++ b/v4/core/schemas.js
+@@ -48,20 +48,19 @@ export const $ZodType = /*@__PURE__*/ core.$constructor("$ZodType", (inst, def)
+                     continue;
+                 }
+                 const currLen = payload.issues.length;
+-                const _ = ch._zod.check(payload);
++                const _ = util.observe(ch._zod.check(payload));
+                 if (_ instanceof Promise && ctx?.async === false) {
+                     throw new core.$ZodAsyncError();
+                 }
+                 if (asyncResult || _ instanceof Promise) {
+-                    asyncResult = (asyncResult ?? Promise.resolve()).then(async () => {
+-                        await _;
++                    asyncResult = util.observe(Promise.all([asyncResult, _]).then(() => {
+                         const nextLen = payload.issues.length;
+                         if (nextLen === currLen)
+                             return;
+                         util.attachSchema(payload.issues, currLen, inst);
+                         if (!isAborted)
+                             isAborted = util.aborted(payload, currLen);
+-                    });
++                    }));
+                 }
+                 else {
+                     const nextLen = payload.issues.length;
+@@ -86,7 +85,7 @@ export const $ZodType = /*@__PURE__*/ core.$constructor("$ZodType", (inst, def)
+                 return canary;
+             }
+             // run checks first, then
+-            const checkResult = runChecks(payload, checks, ctx);
++            const checkResult = util.observe(runChecks(payload, checks, ctx));
+             if (checkResult instanceof Promise) {
+                 if (ctx.async === false)
+                     throw new core.$ZodAsyncError();
+@@ -100,7 +99,7 @@ export const $ZodType = /*@__PURE__*/ core.$constructor("$ZodType", (inst, def)
+             }
+             if (ctx.direction === "backward") {
+                 // run canary initial pass (no checks)
+-                const canary = inst._zod.parse({ value: payload.value, issues: [] }, { ...ctx, skipChecks: true });
++                const canary = util.observe(inst._zod.parse({ value: payload.value, issues: [] }, { ...ctx, skipChecks: true }));
+                 if (canary instanceof Promise) {
+                     return canary.then((canary) => {
+                         return handleCanaryResult(canary, payload, ctx);
+@@ -109,7 +108,7 @@ export const $ZodType = /*@__PURE__*/ core.$constructor("$ZodType", (inst, def)
+                 return handleCanaryResult(canary, payload, ctx);
+             }
+             // forward
+-            const result = inst._zod.parse(payload, ctx);
++            const result = util.observe(inst._zod.parse(payload, ctx));
+             if (result instanceof Promise) {
+                 if (ctx.async === false)
+                     throw new core.$ZodAsyncError();
+@@ -847,7 +846,7 @@ export const $ZodArray = /*@__PURE__*/ core.$constructor("$ZodArray", (inst, def
+                 issues: [],
+             }, ctx);
+             if (result instanceof Promise) {
+-                proms.push(result.then((result) => handleArrayResult(result, payload, i)));
++                proms.push(util.observe(result.then((result) => handleArrayResult(result, payload, i))));
+             }
+             else {
+                 handleArrayResult(result, payload, i);
+@@ -950,7 +949,7 @@ function handleCatchall(proms, input, payload, ctx, def, inst, abortEarly) {
+         }
+         const r = _catchall.run({ value: input[key], issues: [] }, ctx);
+         if (r instanceof Promise) {
+-            proms.push(r.then((r) => handlePropertyResult(r, payload, key, input, optin, optout)));
++            proms.push(util.observe(r.then((r) => handlePropertyResult(r, payload, key, input, optin, optout))));
+         }
+         else {
+             handlePropertyResult(r, payload, key, input, optin, optout);
+@@ -1043,7 +1042,7 @@ export const $ZodObject = /*@__PURE__*/ core.$constructor("$ZodObject", (inst, d
+             const optout = el._zod.optout;
+             const r = el._zod.run({ value: input[key], issues: [] }, ctx);
+             if (r instanceof Promise) {
+-                proms.push(r.then((r) => handlePropertyResult(r, payload, key, input, optin, optout)));
++                proms.push(util.observe(r.then((r) => handlePropertyResult(r, payload, key, input, optin, optout))));
+             }
+             else {
+                 handlePropertyResult(r, payload, key, input, optin, optout);
+@@ -1246,13 +1245,13 @@ export const $ZodUnion = /*@__PURE__*/ core.$constructor("$ZodUnion", (inst, def
+                 issues: [],
+             }, ctx);
+             if (result instanceof Promise) {
+-                results.push(result);
++                results.push(util.observe(result));
+                 async = true;
+             }
+             else {
+                 if (result.issues.length === 0)
+                     return result;
+-                results.push(result);
++                results.push(util.observe(result));
+             }
+         }
+         if (!async)
+@@ -1310,11 +1309,11 @@ export const $ZodXor = /*@__PURE__*/ core.$constructor("$ZodXor", (inst, def) =>
+                 issues: [],
+             }, ctx);
+             if (result instanceof Promise) {
+-                results.push(result);
++                results.push(util.observe(result));
+                 async = true;
+             }
+             else {
+-                results.push(result);
++                results.push(util.observe(result));
+             }
+         }
+         if (!async)
+@@ -1434,7 +1433,7 @@ export const $ZodIntersection = /*@__PURE__*/ core.$constructor("$ZodIntersectio
+     $ZodType.init(inst, def);
+     inst._zod.parse = (payload, ctx) => {
+         const input = payload.value;
+-        const left = def.left._zod.run({ value: input, issues: [] }, ctx);
++        const left = util.observe(def.left._zod.run({ value: input, issues: [] }, ctx));
+         const right = def.right._zod.run({ value: input, issues: [] }, ctx);
+         const async = left instanceof Promise || right instanceof Promise;
+         if (async) {
+@@ -1601,9 +1600,9 @@ export const $ZodTuple = /*@__PURE__*/ core.$constructor("$ZodTuple", (inst, def
+         for (let i = 0; i < items.length; i++) {
+             const r = items[i]._zod.run({ value: input[i], issues: [] }, ctx);
+             if (r instanceof Promise) {
+-                proms.push(r.then((rr) => {
++                proms.push(util.observe(r.then((rr) => {
+                     itemResults[i] = rr;
+-                }));
++                })));
+             }
+             else {
+                 itemResults[i] = r;
+@@ -1625,7 +1624,7 @@ export const $ZodTuple = /*@__PURE__*/ core.$constructor("$ZodTuple", (inst, def
+                 i++;
+                 const result = def.rest._zod.run({ value: el, issues: [] }, ctx);
+                 if (result instanceof Promise) {
+-                    proms.push(result.then((r) => handleTupleResult(r, payload, i)));
++                    proms.push(util.observe(result.then((r) => handleTupleResult(r, payload, i))));
+                 }
+                 else {
+                     handleTupleResult(result, payload, i);
+@@ -1715,7 +1714,7 @@ export const $ZodRecord = /*@__PURE__*/ core.$constructor("$ZodRecord", (inst, d
+                     // A declared __proto__ is stripped but is not an unrecognized key.
+                     if (key === "__proto__")
+                         continue;
+-                    const keyResult = def.keyType._zod.run({ value: key, issues: [] }, ctx);
++                    const keyResult = util.observe(def.keyType._zod.run({ value: key, issues: [] }, ctx));
+                     if (keyResult instanceof Promise) {
+                         throw new Error("Async schemas not supported in object keys currently");
+                     }
+@@ -1735,12 +1734,12 @@ export const $ZodRecord = /*@__PURE__*/ core.$constructor("$ZodRecord", (inst, d
+                         continue;
+                     const result = def.valueType._zod.run({ value: input[key], issues: [] }, ctx);
+                     if (result instanceof Promise) {
+-                        proms.push(result.then((result) => {
++                        proms.push(util.observe(result.then((result) => {
+                             if (result.issues.length) {
+                                 payload.issues.push(...util.prefixIssues(key, result.issues));
+                             }
+                             payload.value[outKey] = result.value;
+-                        }));
++                        })));
+                     }
+                     else {
+                         if (result.issues.length) {
+@@ -1785,14 +1784,14 @@ export const $ZodRecord = /*@__PURE__*/ core.$constructor("$ZodRecord", (inst, d
+                     continue;
+                 if (!Object.prototype.propertyIsEnumerable.call(input, key))
+                     continue;
+-                let keyResult = def.keyType._zod.run({ value: key, issues: [] }, ctx);
++                let keyResult = util.observe(def.keyType._zod.run({ value: key, issues: [] }, ctx));
+                 if (keyResult instanceof Promise) {
+                     throw new Error("Async schemas not supported in object keys currently");
+                 }
+                 // Numeric string fallback: if key is a numeric string and failed, retry with Number(key). This handles z.number(), z.literal([1, 2, 3]), and unions containing numeric literals
+                 const checkNumericKey = typeof key === "string" && regexes.number.test(key) && keyResult.issues.length;
+                 if (checkNumericKey) {
+-                    const retryResult = def.keyType._zod.run({ value: Number(key), issues: [] }, ctx);
++                    const retryResult = util.observe(def.keyType._zod.run({ value: Number(key), issues: [] }, ctx));
+                     if (retryResult instanceof Promise) {
+                         throw new Error("Async schemas not supported in object keys currently");
+                     }
+@@ -1828,12 +1827,12 @@ export const $ZodRecord = /*@__PURE__*/ core.$constructor("$ZodRecord", (inst, d
+                     continue;
+                 const result = def.valueType._zod.run({ value: input[key], issues: [] }, ctx);
+                 if (result instanceof Promise) {
+-                    proms.push(result.then((result) => {
++                    proms.push(util.observe(result.then((result) => {
+                         if (result.issues.length) {
+                             payload.issues.push(...util.prefixIssues(key, result.issues));
+                         }
+                         payload.value[outKey] = result.value;
+-                    }));
++                    })));
+                 }
+                 else {
+                     if (result.issues.length) {
+@@ -1883,12 +1882,12 @@ export const $ZodMap = /*@__PURE__*/ core.$constructor("$ZodMap", (inst, def) =>
+                     break;
+                 seen = payload.issues.length;
+             }
+-            const keyResult = def.keyType._zod.run({ value: key, issues: [] }, ctx);
++            const keyResult = util.observe(def.keyType._zod.run({ value: key, issues: [] }, ctx));
+             const valueResult = def.valueType._zod.run({ value: value, issues: [] }, ctx);
+             if (keyResult instanceof Promise || valueResult instanceof Promise) {
+-                proms.push(Promise.all([keyResult, valueResult]).then(([keyResult, valueResult]) => {
++                proms.push(util.observe(Promise.all([keyResult, valueResult]).then(([keyResult, valueResult]) => {
+                     handleMapResult(keyResult, valueResult, payload, key, input, inst, ctx);
+-                }));
++                })));
+             }
+             else {
+                 handleMapResult(keyResult, valueResult, payload, key, input, inst, ctx);
+@@ -1958,7 +1957,7 @@ export const $ZodSet = /*@__PURE__*/ core.$constructor("$ZodSet", (inst, def) =>
+             }
+             const result = def.valueType._zod.run({ value: item, issues: [] }, ctx);
+             if (result instanceof Promise) {
+-                proms.push(result.then((result) => handleSetResult(result, payload)));
++                proms.push(util.observe(result.then((result) => handleSetResult(result, payload))));
+             }
+             else
+                 handleSetResult(result, payload);
+@@ -2058,6 +2057,7 @@ export const $ZodTransform = /*@__PURE__*/ core.$constructor("$ZodTransform", (i
+             });
+         }
+         if (_out instanceof Promise) {
++            util.observe(_out);
+             throw new core.$ZodAsyncError();
+         }
+         payload.value = _out;
+diff --git a/v4/core/util.cjs b/v4/core/util.cjs
+index aeb65e057e1b55dd3967c6ef1b252cf613235f33..28fcff6a4dfa509ec2fc32165384185b664ca54f 100644
+--- a/v4/core/util.cjs
++++ b/v4/core/util.cjs
+@@ -1,6 +1,7 @@
+ "use strict";
+ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.CONSTANT_CATCH = exports.Class = exports.BIGINT_FORMAT_RANGES = exports.NUMBER_FORMAT_RANGES = exports.primitiveTypes = exports.propertyKeyTypes = exports.getParsedType = exports.allowsEval = exports.captureStackTrace = void 0;
++exports.observe = observe;
+ exports.assertEqual = assertEqual;
+ exports.assertNotEqual = assertNotEqual;
+ exports.toZod = toZod;
+@@ -947,3 +948,9 @@ function constantCatch(value) {
+   }
+   Object.freeze(exports);
+ })();
++
++// A sibling may throw before its parent collects this work. The original Promise still rejects.
++function observe(value) {
++  if (value instanceof Promise) void value.catch(() => {});
++  return value;
++}
+diff --git a/v4/core/util.d.cts b/v4/core/util.d.cts
+index b7639556aaa10f909bbc341c2ad92caf46a866b6..dc4553b79caefc52711d98623276abd28bebec63 100644
+--- a/v4/core/util.d.cts
++++ b/v4/core/util.d.cts
+@@ -276,3 +276,5 @@ export declare const CONSTANT_CATCH = "~constantCatch";
+ /** Wraps a constant catch value in a thunk tagged with {@link CONSTANT_CATCH}. */
+ export declare function constantCatch<T>(value: T): () => T;
+ export {};
++
++export declare function observe<T>(value: T): T;
+diff --git a/v4/core/util.d.ts b/v4/core/util.d.ts
+index d9d0ae8907372bc125a9213b0cd7c7d000b562c2..23af64708ea071db3ddea283996d6f09c4c4907c 100644
+--- a/v4/core/util.d.ts
++++ b/v4/core/util.d.ts
+@@ -276,3 +276,5 @@ export declare const CONSTANT_CATCH = "~constantCatch";
+ /** Wraps a constant catch value in a thunk tagged with {@link CONSTANT_CATCH}. */
+ export declare function constantCatch<T>(value: T): () => T;
+ export {};
++
++export declare function observe<T>(value: T): T;
+diff --git a/v4/core/util.js b/v4/core/util.js
+index 7a6e969b9d31455fc9a15f474a1d48dbafe36361..bed70c1711f0f76b7f2a3c11405be395082890fe 100644
+--- a/v4/core/util.js
++++ b/v4/core/util.js
+@@ -857,3 +857,9 @@ export function constantCatch(value) {
+     fn[CONSTANT_CATCH] = true;
+     return fn;
+ }
++
++// A sibling may throw before its parent collects this work. The original Promise still rejects.
++export function observe(value) {
++  if (value instanceof Promise) void value.catch(() => {});
++  return value;
++}

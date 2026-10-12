@@ -1,88 +1,76 @@
-import { type Infer, s } from "@bunaway/plugin";
+import { z } from "zod";
 
+const PATH_PATTERN = "^[^\\u0000\\r\\n]+$(?![\\s\\S])";
 const pathFields = {
   // The application selects the path; native implementations validate OS path syntax.
-  path: s.string({
-    maxLength: 4096,
-    pattern: "^[^\\u0000\\r\\n]+$(?![\\s\\S])",
-  }),
+  path: z
+    .string()
+    .refine(
+      (value) => Array.from(value).length <= 4096,
+      "Text exceeds the Unicode character limit.",
+    )
+    .regex(new RegExp(PATH_PATTERN, "u")),
 };
 const storageTimes = {
-  createdAtMs: {
-    anyOf: [
-      s.integer(),
-      s.null(),
-    ],
-  },
-  modifiedAtMs: {
-    anyOf: [
-      s.integer(),
-      s.null(),
-    ],
-  },
-  accessedAtMs: {
-    anyOf: [
-      s.integer(),
-      s.null(),
-    ],
-  },
+  createdAtMs: z.union([
+    z.int(),
+    z.null(),
+  ]),
+  modifiedAtMs: z.union([
+    z.int(),
+    z.null(),
+  ]),
+  accessedAtMs: z.union([
+    z.int(),
+    z.null(),
+  ]),
 } as const;
-const storageMetadata = {
-  anyOf: [
-    s.object({
-      kind: s.enum([
-        "file",
-      ]),
-      sizeBytes: s.integer({
-        minimum: 0,
-        maximum: Number.MAX_SAFE_INTEGER,
-      }),
-      ...storageTimes,
-    }),
-    s.object({
-      kind: s.enum([
-        "directory",
-      ]),
-      sizeBytes: s.null(),
-      ...storageTimes,
-    }),
-  ],
-} as const;
+const storageMetadata = z.union([
+  z.strictObject({
+    kind: z.enum([
+      "file",
+    ]),
+    sizeBytes: z.int().min(0).max(Number.MAX_SAFE_INTEGER),
+    ...storageTimes,
+  }),
+  z.strictObject({
+    kind: z.enum([
+      "directory",
+    ]),
+    sizeBytes: z.null(),
+    ...storageTimes,
+  }),
+]);
 /** Text and metadata contracts for paths selected by the application. */
 export const storageOperations = {
   readText: {
-    input: s.object(pathFields),
-    output: s.string(),
+    input: z.strictObject(pathFields),
+    output: z.string(),
   },
   writeText: {
-    input: s.object({
+    input: z.strictObject({
       ...pathFields,
-      text: s.string(),
+      text: z.string(),
     }),
-    output: s.null(),
+    output: z.null(),
   },
   exists: {
-    input: s.object(pathFields),
-    output: s.boolean(),
+    input: z.strictObject(pathFields),
+    output: z.boolean(),
   },
   stat: {
-    input: s.object(pathFields),
-    output: {
-      anyOf: [
-        storageMetadata,
-        s.null(),
-      ],
-    },
+    input: z.strictObject(pathFields),
+    output: z.union([
+      storageMetadata,
+      z.null(),
+    ]),
   },
 } as const;
-
 /** Path accepted by read and metadata operations. */
-export type StorageLocation = Infer<typeof storageOperations.readText.input>;
-
+export type StorageLocation = z.infer<typeof storageOperations.readText.input>;
 /** Path and text accepted by `storage.writeText`. */
-export type StorageWrite = Infer<typeof storageOperations.writeText.input>;
-
+export type StorageWrite = z.infer<typeof storageOperations.writeText.input>;
 /** File or directory metadata returned by `storage.stat`. */
 export type StorageMetadata = NonNullable<
-  Infer<typeof storageOperations.stat.output>
+  z.infer<typeof storageOperations.stat.output>
 >;

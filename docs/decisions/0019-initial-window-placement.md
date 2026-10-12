@@ -2,7 +2,7 @@
 status: accepted
 ---
 
-# 초기 창 배치와 중앙 배치의 공통 계약
+# ADR 0019: 초기 창 배치와 중앙 배치의 공통 계약
 
 결정일: 2026-10-12. Windows에서 먼저 구현한다. 런타임 center API와
 resizable, movable은 이 결정의 구현 범위가 아니다.

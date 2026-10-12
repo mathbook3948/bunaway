@@ -16,7 +16,7 @@ import type { CoreServices } from "./index.ts";
 
 /**
  * Binds host calls to one context, cancellation signal, and app registry.
- * The registered operation supplies the trusted schema and permission contract;
+ * The registry resolves operation names and guards JSON; the owning adapter parses schemas.
  * cancellation rejects the wait and is also passed to the host adapter.
  */
 export function bindHostAPI(
@@ -115,7 +115,7 @@ export function bindHostAPI(
   }
 
   return {
-    // The selected registry validates the JSON result before exposing schema-derived types.
+    // Plugin callers infer types from the schemas executed by their owning adapter.
     call: call as HostAPI["call"],
   };
 }

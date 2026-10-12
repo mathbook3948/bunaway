@@ -2,15 +2,14 @@ import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Worker } from "node:worker_threads";
 import {
-  API_LIMITS,
   BunawayError,
-  type HostContext,
   type HostResponse,
   type NativeRegistration,
 } from "@bunaway/protocol";
 import { DiagnosticLog } from "@bunaway/runtime-bun/diagnostic-log";
-import { Channel } from "@bunaway/runtime-bun/worker-channel";
+import { Channel, type Packet } from "@bunaway/runtime-bun/worker-channel";
 import { hostResponse } from "../../host-api/bun/host-response.ts";
+import { NativeRequests } from "../../host-api/bun/native-requests.ts";
 import { loadPluginCatalog } from "../../host-api/bun/plugin-catalog.ts";
 import { operations, pluginRegistry } from "../../host-api/bun/plugins.ts";
 import { MacosApplication } from "./application.ts";
@@ -46,8 +45,7 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
   let adapters: Awaited<ReturnType<typeof operations>> | undefined;
   let registry: ReturnType<typeof pluginRegistry> | undefined;
   const pendingPlugins: NativeRegistration[] = [];
-  const requests = new Map<string, HostContext>();
-  const cancelled = new Set<string>();
+  const requests = new NativeRequests();
   let shutdownTimer: ReturnType<typeof setTimeout> | undefined;
   let forced = false;
   let descendantCleanup: Promise<void> | undefined;
@@ -57,6 +55,7 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
     }
     stopping = true;
     pendingPlugins.length = 0;
+    requests.cancelAll();
     clearTimeout(startup);
     // The deadline also applies when UI setup fails before its event pump starts.
     shutdownTimer = setTimeout(() => {
@@ -154,73 +153,12 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
           fail(error);
         }
       } else if (packet.kind === "cancel") {
-        if (requests.get(packet.requestId) === packet.context) {
-          cancelled.add(packet.requestId);
+        if (requests.context(packet.requestId) === packet.context) {
+          requests.cancel(packet.requestId);
         }
       } else if (packet.kind === "operation") {
-        if (
-          requests.has(packet.requestId) ||
-          requests.size >= API_LIMITS.maxPending
-        ) {
-          throw new Error("Duplicate native request.");
-        }
-        requests.set(packet.requestId, packet.context);
-        let response: HostResponse;
-        try {
-          const permissions =
-            packet.context === config.backendContext
-              ? config.policy.backend
-              : ui?.boundary(packet.context)?.policy.host;
-          const source =
-            packet.context === config.backendContext
-              ? "backend"
-              : `view:${ui?.boundary(packet.context)?.policy.id ?? "invalid"}`;
-          if (
-            stopping ||
-            !permissions ||
-            source !== packet.source ||
-            !registry ||
-            !registry.allowed(permissions, registry.validateCall(packet.call))
-          ) {
-            throw new BunawayError({
-              code: "PERMISSION_DENIED",
-              message: "Host context or policy denied.",
-            });
-          }
-          if (!adapters) {
-            throw new Error("Native adapters are not ready.");
-          }
-          const payload = await adapters.executeUI(
-            packet.call.operation,
-            packet.call.payload,
-            source,
-            {
-              requestId: packet.requestId,
-              permissions,
-            },
-          );
-          response = hostResponse(() => payload);
-        } catch (error) {
-          response = hostResponse(() => {
-            throw error;
-          });
-        } finally {
-          requests.delete(packet.requestId);
-        }
-        const wasCancelled = cancelled.delete(packet.requestId);
-        if (
-          !stopping &&
-          !wasCancelled &&
-          (packet.context === config.backendContext ||
-            ui?.boundary(packet.context))
-        ) {
-          channel?.notify({
-            kind: "host-response",
-            context: packet.context,
-            requestId: packet.requestId,
-            response,
-          });
-        }
+        // The backend needs acceptance even while plugin parsing or execution is pending.
+        void executeRequest(packet).catch(fail);
       } else if (packet.kind === "cleaned") {
         cleaned = true;
         // Referenced subprocesses can keep an otherwise cleaned Worker alive.
@@ -234,6 +172,85 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
     },
     fail,
   );
+  /** Own result settlement separately from operation acceptance, including late parser failures. */
+  async function executeRequest(
+    packet: Extract<
+      Packet,
+      {
+        kind: "operation";
+      }
+    >,
+  ): Promise<void> {
+    const signal = requests.begin(packet.requestId, packet.context);
+    let response: HostResponse;
+    try {
+      const permissions =
+        packet.context === config.backendContext
+          ? config.policy.backend
+          : ui?.boundary(packet.context)?.policy.host;
+      const source =
+        packet.context === config.backendContext
+          ? "backend"
+          : `view:${ui?.boundary(packet.context)?.policy.id ?? "invalid"}`;
+      if (
+        stopping ||
+        !permissions ||
+        source !== packet.source ||
+        !registry ||
+        !registry.allowed(permissions, registry.validateCall(packet.call))
+      ) {
+        throw new BunawayError({
+          code: "PERMISSION_DENIED",
+          message: "Host context or policy denied.",
+        });
+      }
+      if (!adapters) {
+        throw new Error("Native adapters are not ready.");
+      }
+      const payload = await adapters.executeUI(
+        packet.call.operation,
+        packet.call.payload,
+        source,
+        {
+          requestId: packet.requestId,
+          permissions,
+          signal,
+          beforeExecute() {
+            if (
+              stopping ||
+              signal.aborted ||
+              (packet.context !== config.backendContext &&
+                !ui?.boundary(packet.context))
+            ) {
+              throw new BunawayError({
+                code: "CANCELLED",
+                message: "Host call was cancelled.",
+              });
+            }
+          },
+        },
+      );
+      response = hostResponse(() => payload);
+    } catch (error) {
+      response = hostResponse(() => {
+        throw error;
+      });
+    }
+    const active = requests.finish(packet.requestId, signal);
+    if (
+      !stopping &&
+      active &&
+      (packet.context === config.backendContext || ui?.boundary(packet.context))
+    ) {
+      channel?.notify({
+        kind: "host-response",
+        context: packet.context,
+        requestId: packet.requestId,
+        response,
+      });
+    }
+  }
+
   const startup = setTimeout(
     () => fail(new Error("macOS startup timed out.")),
     STARTUP_TIMEOUT_MS,
@@ -259,14 +276,18 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
       stopping: () => stopping,
       busy: () => adapters?.busy() ?? false,
       cancelled: (requestId) => {
-        const context = requests.get(requestId);
+        const context = requests.context(requestId);
         return (
-          cancelled.has(requestId) ||
           !context ||
           (context !== config.backendContext && !ui?.boundary(context))
         );
       },
-      forward: (packet) => channel?.notify(packet),
+      forward: (packet) => {
+        if (packet.kind === "revoke") {
+          requests.cancelContext(packet.route.context);
+        }
+        channel?.notify(packet);
+      },
       capacity: (count, pending) => channel?.canSend(count, pending) ?? false,
       log: diagnostic,
       fail,

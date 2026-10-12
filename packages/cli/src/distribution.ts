@@ -19,6 +19,9 @@ import { templateNames } from "./templates.ts";
 /** Framework-owned files copied into a distributable CLI artifact. */
 export const frameworkPaths = [
   "framework.json",
+  "patches/zod-files.json",
+  "patches/zod@4.6.5.patch",
+  "docs/decisions/0018-plugin-local-zod-parsing.md",
   "FRAMEWORK-LICENSE.txt",
   "THIRD-PARTY-NOTICES.txt",
   "licenses",
@@ -36,7 +39,7 @@ export const frameworkPaths = [
   "docs/decisions/0014-optional-plugin-packages.md",
   "docs/decisions/0015-macos-bun-ffi.md",
   "docs/decisions/0016-windows-autostart.md",
-  "docs/decisions/0018-initial-window-placement.md",
+  "docs/decisions/0019-initial-window-placement.md",
   "docs/architecture/macos-bun-results.md",
   "docs/architecture/plugins.md",
   "docs/development-server.md",
@@ -75,6 +78,7 @@ export const frameworkPaths = [
   "native/host-api/bun/plugin-imports.d.ts",
   "native/windows/bun/host-operations.ts",
   "native/host-api/bun/host-response.ts",
+  "native/host-api/bun/native-requests.ts",
   "native/windows/bun/README.md",
   ...[
     "boot.ts",

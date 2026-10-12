@@ -5,6 +5,10 @@ import {
   windowsPlugin,
 } from "@bunaway/plugin-windows";
 import { type JsonValue, NativeRegistry } from "@bunaway/protocol";
+import { windowDefinitions } from "../../plugins/windows/src/contract.ts";
+import { pluginParsers } from "../fixtures/plugin-parsers.ts";
+
+const parsers = pluginParsers("windows", windowDefinitions);
 
 const registry = new NativeRegistry([
   windowsPlugin,
@@ -15,7 +19,7 @@ test.each([
   "windows.recreate",
 ])(
   "%s keeps creation options restricted to presentation and uses an independent operation grant",
-  (operation) => {
+  async (operation) => {
     const call = {
       operation,
       payload: {
@@ -23,7 +27,7 @@ test.each([
       },
     };
     expect(validateWindowCall(call)).toEqual(call);
-    expect(registry.validateCall(call)).toEqual(call);
+    expect(await parsers.validateCall(call)).toEqual(call);
     expect(registry.operation(operation).name).toBe(operation);
     const permissions = {
       permissions: [
@@ -123,7 +127,7 @@ test.each([
           options,
         },
       };
-      expect(registry.validateCall(valid)).toEqual(valid);
+      expect(await parsers.validateCall(valid)).toEqual(valid);
       expect(parseWindowCall(JSON.stringify(valid))).toEqual(valid);
     }
     for (const options of [
@@ -204,9 +208,9 @@ test.each([
           ...extra,
         },
       };
-      // Both the public native registry and serialized host boundary reject extra fields.
+      // Both the SDK adapter and serialized window helper reject extra fields.
       for (const validate of [
-        () => registry.validateCall(invalid),
+        async () => await parsers.validateCall(invalid),
         () => parseWindowCall(JSON.stringify(invalid)),
       ]) {
         expect(validate).toThrow(
