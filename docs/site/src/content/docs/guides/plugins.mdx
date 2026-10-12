@@ -13,6 +13,11 @@ description: 앱에 플러그인을 연결하고 setup, StopHook, 정책, 명령
 
 Windows 텍스트 클립보드는 [`@bunaway/plugin-clipboard`](/reference/plugins/clipboard/)를 설치하고 `clipboardPlugin`을 등록해 사용합니다. 읽기, 쓰기와 지우기는 각각의 권한을 허용합니다.
 
+Windows 전원과 입력 idle 조회, 절전/화면 유지 요청은
+[`@bunaway/plugin-power`](/reference/plugins/power/)를 설치하고 powerPlugin을 등록해 사용합니다.
+작업별 권한을 허용하며 필요한 작업이 끝나면 받은 ID로 stopBlocker를 호출합니다.
+앱 종료에서는 등록한 native handle을 정리합니다.
+
 ## 최소 플러그인
 
 ```ts

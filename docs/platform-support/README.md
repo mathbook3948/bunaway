@@ -121,3 +121,10 @@ Windows의 앱 정의 `desktop`에 인자, 딥링크, 파일 열기와 종료 �
 실제 WebView2의 hide, veto, dev-veto, dev-hide, dev-pending 시나리오와 PowerShell 5.1 인자 전달을 통과했다.
 Windows 실행기는 같은 시나리오를 실행한다. URL scheme과 파일 연결의 OS 등록은 미구현이다.
 macOS Bun FFI 런타임은 `desktop`을 `UNSUPPORTED`로 거부한다.
+
+
+Windows의 선택 power 플러그인은 AC와 배터리 상태, 호출 세션의 입력 idle 및
+앱 수명의 system/display power request를 제공한다. 다른 플랫폼은 `UNSUPPORTED`다.
+[power 계약](../site/src/content/docs/reference/plugins/power.mdx)을 따르며
+실제 상태 query와 request handle 정리는 Windows native CI에 포함한다.
+물리 배터리 전환, 화면 timeout, idle 절전과 Modern Standby 검증은 수동 작업이다.
