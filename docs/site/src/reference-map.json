@@ -354,6 +354,17 @@
       "pages": {
         "reference/tooling/core-and-runtime": ["DiagnosticLog"]
       }
+    },
+    {
+      "name": "@bunaway/plugin-power",
+      "source": "plugins/power/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/power": ["power", "powerPlugin"]
+      }
     }
   ],
   "members": [
@@ -938,6 +949,15 @@
       "windows.createInstance",
       "windows.recreateInstance",
       "windows.listInstances"
+    ],
+    "reference/plugins/power": [
+      "power.getStatus",
+      "power.getIdleTime",
+      "power.getIdleState",
+      "power.startBlocker",
+      "power.listBlockers",
+      "power.isBlockerActive",
+      "power.stopBlocker"
     ]
   },
   "configuration": {

@@ -29,6 +29,7 @@
     "windows": "@bunaway/plugin-windows",
     "opener": "@bunaway/plugin-opener",
     "autostart": "@bunaway/plugin-autostart",
-    "clipboard": "@bunaway/plugin-clipboard"
+    "clipboard": "@bunaway/plugin-clipboard",
+    "power": "@bunaway/plugin-power"
   }
 }

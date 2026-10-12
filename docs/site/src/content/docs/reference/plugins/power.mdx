@@ -1,0 +1,66 @@
+---
+title: power
+description: Windows 전원과 입력 idle 조회, 앱 수명의 절전 및 화면 유지 요청.
+---
+
+`@bunaway/plugin-power`를 설치하고 `powerPlugin`을 앱의 plugins에 등록합니다.
+Windows I/O 실행을 지원하며 다른 플랫폼은 `UNSUPPORTED`입니다.
+각 작업에는 `power.<작업명>` 권한이 필요합니다. 화면에서 직접 호출하면 해당
+`plugin.power.<작업명>` command도 허용합니다. 등록은 권한을 부여하지 않습니다.
+
+```ts
+import { power, powerPlugin } from "@bunaway/plugin-power";
+// 앱 정의: plugins: [powerPlugin]
+const status = await power.getStatus();
+const request = await power.startBlocker({ type: "display", reason: "미디어 재생 중" });
+try {
+  // 화면과 시스템 idle 절전 방지가 필요한 작업
+} finally {
+  await power.stopBlocker({ id: request.id });
+}
+```
+
+## 전원 상태와 입력 idle
+
+`power.getStatus()`는 현재 GetSystemPowerStatus의 값을 반환합니다.
+source는 ac, battery 또는 unknown입니다. batteryPresent와 charging은 boolean 또는 null,
+batteryPercent는 0–100 또는 null, batterySaver는 boolean입니다.
+remainingSeconds와 fullLifeSeconds는 OS가 추정한 초 또는 null입니다.
+배터리가 없으면 percent와 수명은 null, charging은 false입니다.
+알 수 없는 플래그, 백분율과 수명은 0으로 대체하지 않습니다.
+0%는 알려진 빈 배터리입니다. 조회 사이 OS 상태가 바뀔 수 있습니다.
+
+`power.getIdleTime()`은 현재 Windows 세션의 마지막 입력 이후 초를 내림해 반환합니다.
+GetLastInputInfo와 GetTickCount의 DWORD tick 차이를 사용하므로 약 49.7일마다 순환합니다.
+합성 입력의 tick 값과 세션에 따라 달라지며 다른 로그인 세션의 입력은 포함하지 않습니다.
+`power.getIdleState({ thresholdSeconds })`는 idle 시간이 지정한 정수 초 이상이면 idle,
+미만이면 active를 반환합니다. 기한 범위는 1–4294967초입니다.
+화면 잠금 여부와 절전 상태는 판정하지 않습니다.
+
+## 절전과 화면 유지 요청
+
+`power.startBlocker({ type, reason })`는 `{ id, type }`를 반환합니다.
+type이 system이면 시스템 idle 절전 방지 요청을, display이면 화면 유지와 시스템 idle
+절전 방지 요청을 함께 등록합니다. reason은 사용자에게 설명할 1–512 UTF-16 코드 단위
+문자열이며 NUL을 허용하지 않습니다. Windows의 power request 진단에 표시할 수 있습니다.
+요청 최대 개수는 앱당 128개이고 초과하면 `BUSY`입니다.
+같은 type과 reason을 반복해도 새 ID와 독립 native handle을 만듭니다.
+
+`power.listBlockers()`는 이 앱 어댑터가 등록한 `{ id, type }` 배열을 반환합니다.
+`power.isBlockerActive({ id })`는 이 어댑터에 해당 요청이 등록돼 있는지 반환합니다.
+`power.stopBlocker({ id })`는 해제했다면 true, 없거나 이미 해제한 ID면 false입니다.
+ID는 UUID이며 native handle이 아닙니다. 조회와 stop 권한은 별도이고 같은 앱의
+허용된 호출자들이 요청을 관리합니다. OS의 다른 프로세스 요청은 조회하거나 해제하지 않습니다.
+
+블로커 조회는 앱의 등록 상태를 나타냅니다. OS가 실제로 절전을 막고 있는지 보장하지 않습니다.
+사용자가 선택한 절전과 전원 정책은 유지되며 Modern Standby의 배터리 정책으로 요청이
+종료될 수도 있습니다. OS가 요청 count를 종료해도 stop은 handle을 정리합니다.
+앱 종료와 어댑터 dispose는 모든 handle 해제를 시도합니다. 실패한 handle은 다음 정리
+시도까지 보유합니다. 프로세스 종료에서는 OS가 남은 프로세스 자원을 회수합니다.
+
+권한 거부는 `PERMISSION_DENIED`, 잘못된 입력은 `INVALID_ARGUMENT`, OS 조회와 요청
+생성 또는 정리 실패는 `INTERNAL`입니다. 닫힌 호출 컨텍스트와 종료 후 호출은 `CANCELLED`입니다.
+부분 활성화 실패는 이미 등록한 요청과 handle을 정리하며 public ID를 반환하지 않습니다.
+
+배터리 변경, suspend/resume 및 잠금 이벤트와 실제 하드웨어의 절전/화면 timeout 검증은
+후속 작업입니다. [Windows PowerSetRequest 계약](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-powersetrequest)을 따릅니다.

@@ -440,3 +440,11 @@ DIB의 행 방향과 padding, alpha 및 잘못된 profile, mask, 크기를 확�
 파일 목록과 이미지, 지원 형식 발견을 왕복한다. 테스트는 CI 데스크톱 clipboard를
 변경하고 원래 Unicode 텍스트만 복원한다. WebView2 페이지나 다른 앱의 붙여넣기,
 물리 장치 검증을 뜻하지 않는다.
+
+`api/power.test.ts`는 배터리의 0과 unknown, 배터리 없음, DWORD tick 순환,
+독립 blocker ID와 128개 상한, 부분 활성 실패 및 반복 정리를 검사한다.
+`cli/power.test.ts`는 isolated tarball 설치와 I/O 어댑터 발견, browser의 FFI 제외를 검사한다.
+`windows-power.test.ts`는 실제 GetSystemPowerStatus와 session idle query, PowerCreateRequest,
+system/display 활성 및 GetHandleInformation으로 명시 해제와 종료 시 handle 정리를 확인한다.
+`mise run host:windows`에 포함하며 물리 배터리 전환, 화면 꺼짐과 idle 절전 또는
+Modern Standby 및 사용자 절전 후 요청 종료의 하드웨어 검증을 대신하지 않는다.
