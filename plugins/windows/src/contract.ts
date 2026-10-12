@@ -1,5 +1,7 @@
 import {
   MAX_WINDOW_DIMENSION,
+  MAX_WINDOW_INSTANCES,
+  MAX_WINDOWS,
   MIN_WINDOW_DIMENSION,
 } from "@bunaway/plugin-api/native";
 import {
@@ -552,7 +554,7 @@ export const windowOperations = {
     },
     output: {
       type: "array",
-      maxItems: 128,
+      maxItems: MAX_WINDOWS,
       items: {
         type: "object",
         properties: {
@@ -636,7 +638,7 @@ export const windowOperations = {
     input: windowTarget,
     output: {
       type: "array",
-      maxItems: 128,
+      maxItems: MAX_WINDOW_INSTANCES,
       items: windowIdentitySchema,
     },
   },
