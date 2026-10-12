@@ -114,6 +114,25 @@ async function prepare(
   }
 }
 
+/** Start native I/O synchronously and observe output settlement even after cancellation. */
+async function executeCall(
+  id: string,
+  call: NonNullable<ReturnType<typeof queue.get>>,
+  execute: () => Promise<JsonValue>,
+) {
+  let response: HostResponse;
+  try {
+    // The prepared function starts native I/O now, before its first await for output parsing.
+    const payload = await execute();
+    response = hostResponse(() => payload);
+  } catch (error) {
+    response = hostResponse(() => {
+      throw error;
+    });
+  }
+  complete(id, call, response);
+}
+
 /** Release this queue slot only if it still belongs to the completing call. */
 function complete(
   id: string,
@@ -146,7 +165,7 @@ function deniedResponse(): HostResponse {
 }
 
 /** Apply I/O requests and control messages from the main-thread coordinator. */
-async function receive(packet: Packet) {
+function receive(packet: Packet) {
   if (packet.kind === "operation") {
     assert(
       !stopping &&
@@ -195,25 +214,18 @@ async function receive(packet: Packet) {
       return;
     }
     assert(call.context === packet.context);
-    let response: HostResponse;
-    try {
-      if (!packet.allowed) {
-        response = deniedResponse();
-      } else {
-        const execute = call.state.execute;
-        call.state = {
-          phase: "executing",
-        };
-        // The prepared function starts native I/O now, before its first await for output parsing.
-        const payload = await execute();
-        response = hostResponse(() => payload);
-      }
-    } catch (error) {
-      response = hostResponse(() => {
-        throw error;
-      });
+    if (!packet.allowed) {
+      complete(packet.requestId, call, deniedResponse());
+      return;
     }
-    complete(packet.requestId, call, response);
+    const execute = call.state.execute;
+    call.state = {
+      phase: "executing",
+    };
+    // Accept the grant without holding channel capacity for asynchronous output parsing.
+    void executeCall(packet.requestId, call, execute).catch((error) => {
+      throw error;
+    });
   } else if (packet.kind === "cancel") {
     queue.delete(packet.requestId);
     if (active === packet.requestId) {
