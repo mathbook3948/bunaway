@@ -112,9 +112,10 @@ test("stdout and stderr share a bounded output budget; exact limit and empty out
 
 test("cancellation waits for direct-child death and closes blocked output pipes", async () => {
   const root = await mkdtemp(join(tmpdir(), "bunaway-process-"));
+  const controller = new AbortController();
+  let observed: Promise<unknown> | undefined;
   try {
     const pidFile = join(root, "pid");
-    const controller = new AbortController();
     const pending = runProcess(
       {
         ...defaults,
@@ -126,7 +127,7 @@ test("cancellation waits for direct-child death and closes blocked output pipes"
       },
       controller.signal,
     );
-    const observed = pending.catch((error: unknown) => error);
+    observed = pending.catch((error: unknown) => error);
     const deadline = Date.now() + 2000;
     while (!(await Bun.file(pidFile).exists())) {
       expect(Date.now()).toBeLessThan(deadline);
@@ -151,6 +152,9 @@ test("cancellation waits for direct-child death and closes blocked output pipes"
       probe.dispose();
     }
   } finally {
+    // A setup/assertion failure must still stop the child and observe its owned task.
+    controller.abort();
+    await observed;
     await rm(root, {
       recursive: true,
       force: true,
