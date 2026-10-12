@@ -277,6 +277,10 @@ if (!process.argv.includes("--child")) {
       "Resumed download did not complete",
     );
     const saved = await item(accepted.id);
+    assert(
+      basename(saved.path).startsWith(`bunaway-download-${nonce}-`),
+      "Browser changed the destination to an unowned filename",
+    );
     paths.add(saved.path);
     assert.equal(saved.receivedBytes, content.length);
     assert.deepEqual(await readFile(saved.path), content);
