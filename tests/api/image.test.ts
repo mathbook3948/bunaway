@@ -91,6 +91,7 @@ test("image creation contracts enforce dimensions, canonical base64, data URL MI
   );
   for (const url of [
     "data:image/png;base64,AB==",
+    "data:image/png;base64,AA==\n",
     "data:image/png;base64,====",
     "data:image/gif;base64,AA==",
     "https://example.com/a.png",
@@ -107,6 +108,17 @@ test("image creation contracts enforce dimensions, canonical base64, data URL MI
       code: "INVALID_ARGUMENT",
     });
   }
+  await expect(
+    parsers.validateCall({
+      operation: "image.createBytes",
+      payload: {
+        mime: "image/png",
+        data: "AA==\n",
+      },
+    }),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
   expect(
     validateImageInput("image.createDataURL", {
       url: "data:image/png;base64,AA==",

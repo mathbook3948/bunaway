@@ -31,7 +31,7 @@ export class ImageResources {
       });
     }
   }
-  /** Take ownership of a detached buffer. Cancellation before response delivery discards the allocation. */
+  /** Take ownership of a detached buffer. Cancellation of the pending host operation discards the allocation. */
   create(pixels: Pixels, signal?: AbortSignal) {
     this.assertCapacity();
     if (signal?.aborted) {

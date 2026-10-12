@@ -12,7 +12,9 @@ function base64Schema(maxBytes: number) {
   return z
     .string()
     .max(Math.ceil(maxBytes / 3) * 4)
-    .regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/)
+    .regex(
+      /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$(?![\s\S])/,
+    )
     .refine((value) => {
       let padding = 0;
       if (value.endsWith("==")) {
@@ -59,7 +61,7 @@ export const bytesSchema = z.strictObject({
 export const dataURLSchema = z
   .string()
   .max(Math.ceil(MAX_ENCODED_BYTES / 3) * 4 + 32)
-  .regex(/^data:image\/(?:png|jpeg|bmp);base64,[A-Za-z0-9+/=]+$/)
+  .regex(/^data:image\/(?:png|jpeg|bmp);base64,[A-Za-z0-9+/=]+$(?![\s\S])/)
   .refine(
     (url) =>
       bytesSchema.safeParse({
