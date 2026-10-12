@@ -181,6 +181,17 @@
       }
     },
     {
+      "name": "@bunaway/plugin-os",
+      "source": "plugins/os/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/os": ["os", "osPlugin"]
+      }
+    },
+    {
       "name": "@bunaway/plugin-storage",
       "source": "plugins/storage/src/index.ts",
       "buildOutputs": {
@@ -886,6 +897,7 @@
     "reference/api": ["help"]
   },
   "operations": {
+    "reference/plugins/os": ["os.info", "os.locale"],
     "reference/plugins/autostart": [
       "autostart.enable",
       "autostart.disable",

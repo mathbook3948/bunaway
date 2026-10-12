@@ -1,0 +1,93 @@
+import { expect, test } from "bun:test";
+import { os, osPlugin } from "@bunaway/plugin-os";
+import { NativeRegistry } from "@bunaway/protocol";
+import { osOperations } from "#plugins/os/src/contract";
+
+test("OS reads have independent permissions and strict null inputs", () => {
+  const registry = new NativeRegistry([
+    osPlugin,
+  ]);
+  expect(Object.keys(os)).toEqual([
+    "info",
+    "locale",
+  ]);
+  for (const operation of [
+    "info",
+    "locale",
+  ] as const) {
+    expect(osOperations[operation].input.safeParse({}).success).toBe(false);
+    expect(osOperations[operation].input.parse(null)).toBeNull();
+    const call = {
+      operation: `os.${operation}`,
+      payload: null,
+    };
+    expect(
+      registry.allowed(
+        {
+          permissions: [
+            call.operation,
+          ],
+        },
+        call,
+      ),
+    ).toBe(true);
+    expect(
+      registry.allowed(
+        {
+          permissions: [
+            `os.${operation === "info" ? "locale" : "info"}`,
+          ],
+        },
+        call,
+      ),
+    ).toBe(false);
+    expect(
+      registry.allowed(
+        {
+          permissions: [],
+        },
+        call,
+      ),
+    ).toBe(false);
+  }
+});
+
+test("metadata contracts reject secret-bearing extra fields and invalid locale output", () => {
+  expect(
+    osOperations.info.output.safeParse({
+      platform: "windows",
+      type: "Windows_NT",
+      release: "10",
+      version: "Windows",
+      architecture: "x64",
+      hostname: "host",
+      runtime: {
+        name: "bun",
+        version: "1.4.2",
+        pid: 1,
+      },
+      env: {},
+    }).success,
+  ).toBe(false);
+  expect(
+    osOperations.locale.output.safeParse({
+      locale: "ko-KR",
+      countryCode: "KR",
+      preferredLanguages: [
+        "ko-KR",
+        "en-US",
+      ],
+      systemLanguage: "en-US",
+    }).success,
+  ).toBe(true);
+  expect(
+    osOperations.locale.output.safeParse({
+      locale: "en",
+      countryCode: null,
+      preferredLanguages: [
+        "",
+      ],
+      systemLanguage: "en-US",
+    }).success,
+  ).toBe(false);
+});
