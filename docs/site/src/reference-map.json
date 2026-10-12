@@ -857,6 +857,12 @@
     "reference/host/storage-write-text": ["storage.writeText"],
     "reference/host/storage-exists": ["storage.exists"],
     "reference/host/storage-stat": ["storage.stat"],
+    "reference/host/storage-bytes": [
+      "storage.readBytes",
+      "storage.writeBytes",
+      "storage.appendBytes",
+      "storage.appendText"
+    ],
     "reference/host/log-write": ["log.write"],
     "reference/host/capabilities-get": ["capabilities.get"],
     "reference/plugins/opener": [

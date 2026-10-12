@@ -317,12 +317,12 @@ export class WindowsStorage {
         message: "Storage text is required.",
       });
     }
-    const bytes =
-      writingBytes && "bytes" in input
-        ? Buffer.from(input.bytes, "base64")
-        : text === undefined
-          ? undefined
-          : Buffer.from(text);
+    let bytes: Buffer | undefined;
+    if (writingBytes && "bytes" in input) {
+      bytes = Buffer.from(input.bytes, "base64");
+    } else if (text !== undefined) {
+      bytes = Buffer.from(text);
+    }
     if (writingBytes && bytes === undefined) {
       throw new BunawayError({
         code: "INVALID_ARGUMENT",

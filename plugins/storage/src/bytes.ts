@@ -11,10 +11,19 @@ export const storageBytesSchema = z
     /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$(?![\s\S])/,
   )
   .refine((value) => {
-    const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
+    let padding = 0;
+    if (value.endsWith("==")) {
+      padding = 2;
+    } else if (value.endsWith("=")) {
+      padding = 1;
+    }
     const size = (value.length / 4) * 3 - padding;
-    if (size > MAX_STORAGE_BYTES) return false;
-    if (!padding) return true;
+    if (size > MAX_STORAGE_BYTES) {
+      return false;
+    }
+    if (!padding) {
+      return true;
+    }
     const alphabet =
       "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     const last = alphabet.indexOf(value[value.length - padding - 1] ?? "");
