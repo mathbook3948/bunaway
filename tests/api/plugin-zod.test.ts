@@ -232,6 +232,45 @@ test("Zod declarations and serialized native contracts accept the same JSON valu
       ],
     },
     {
+      schema: z.record(
+        z.lazy(() => z.string().regex(/^[a-z]+$/u)),
+        z.int(),
+      ),
+      values: [
+        {
+          a: 1,
+        },
+        {
+          A: 1,
+        },
+        {
+          a: "bad",
+        },
+      ],
+    },
+    {
+      schema: z.record(
+        z.literal([
+          1,
+          2,
+        ]),
+        z.string().exactOptional(),
+      ),
+      values: [
+        {
+          1: "a",
+          2: "b",
+        },
+        {},
+        {
+          1: "a",
+        },
+        {
+          3: "c",
+        },
+      ],
+    },
+    {
       schema: z.json(),
       values: [
         null,
@@ -386,6 +425,27 @@ test("numeric record key declarations fail before a lossy contract can be regist
       }),
     ),
   ).toThrow("Plugin record keys cannot use numeric schemas.");
+  const wrapped = z.lazy(() =>
+    z.union([
+      z.string(),
+      shared,
+    ]),
+  );
+  // Reuse in a value position must not hide a later numeric record key.
+  for (const schema of [
+    z.strictObject({
+      id: wrapped,
+      values: z.record(wrapped, z.string()),
+    }),
+    z.strictObject({
+      values: z.record(wrapped, z.string()),
+      id: wrapped,
+    }),
+  ]) {
+    expect(() => toJSONSchema(schema)).toThrow(
+      "Plugin record keys cannot use numeric schemas.",
+    );
+  }
 });
 
 test("exhaustive record keys remain required while partial records permit omissions", () => {

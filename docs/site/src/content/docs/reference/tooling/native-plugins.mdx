@@ -159,6 +159,7 @@ record의 키에 z.number나 z.int를 사용하면 선언을 거부합니다. �
 변환할 때 범위와 배수 제약이 사라지기 때문입니다. union이나 lazy 안의 숫자 키도 거부합니다.
 enum이나 literal로 키를 열거한 record는 모든 키가 필수입니다. 값에 exactOptional을
 사용해도 이 규칙을 유지합니다. 일부 키의 생략을 허용하려면 z.partialRecord를 사용합니다.
+고정된 숫자 키는 z.literal([1, 2])처럼 열거할 수 있으며 JSON에서는 "1", "2"로 전달합니다.
 
 SDK는 defineNativePlugin 호출 때 Zod의 JSON Schema로 변환하고 필드 제거 규칙을 함께 기록합니다.
 프로세스와 Worker에는 실행 함수가 없는 JSON 계약을 전달하며 화면, 백엔드와 호스트가

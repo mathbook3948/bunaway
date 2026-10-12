@@ -63,33 +63,17 @@ function checkSharedCheck(check: z.core.$ZodCheck): void {
 }
 
 /** Numeric record keys lose their bounds when Zod rewrites them as property names. */
-function checkRecordKey(
-  schema: z.core.$ZodType,
-  visited = new Set<z.core.$ZodType>(),
-): void {
-  if (visited.has(schema)) {
-    return;
-  }
-  visited.add(schema);
-  if (schema instanceof z.core.$ZodNumber) {
-    throw new Error("Plugin record keys cannot use numeric schemas.");
-  }
-  if (schema instanceof z.core.$ZodUnion) {
-    for (const option of schema._zod.def.options) {
-      checkRecordKey(option, visited);
-    }
-  } else if (schema instanceof z.core.$ZodIntersection) {
-    checkRecordKey(schema._zod.def.left, visited);
-    checkRecordKey(schema._zod.def.right, visited);
-  } else if (schema instanceof z.core.$ZodLazy) {
-    checkRecordKey(schema._zod.innerType, visited);
-  } else if (
-    schema instanceof z.core.$ZodOptional ||
-    schema instanceof z.core.$ZodNullable ||
-    schema instanceof z.core.$ZodNonOptional
-  ) {
-    checkRecordKey(schema._zod.def.innerType, visited);
-  }
+function checkRecordKey(schema: z.core.$ZodType): void {
+  // A separate conversion visits every key branch even if the outer conversion
+  // first encountered a shared schema as an ordinary value. Zod owns traversal.
+  z.toJSONSchema(schema, {
+    metadata: z.registry(),
+    override({ zodSchema }) {
+      if (zodSchema._zod.def.type === "number") {
+        throw new Error("Plugin record keys cannot use numeric schemas.");
+      }
+    },
+  });
 }
 
 /**
@@ -110,7 +94,9 @@ export function toJSONSchema<S extends z.ZodType>(
   }
   const json = z.toJSONSchema(schema, {
     target: "draft-2020-12",
-    io: "input",
+    // Output mode preserves exhaustive record keys. Value transformations are
+    // rejected below, so input and output share the same JSON constraints.
+    io: "output",
     // Annotation metadata must not replace the schema's validation keywords.
     metadata: z.registry(),
     unrepresentable: "throw",
@@ -141,6 +127,8 @@ export function toJSONSchema<S extends z.ZodType>(
       }
       if (definition.type === "object") {
         if (!definition.catchall) {
+          // Ordinary objects strip extra fields instead of rejecting them.
+          delete jsonSchema.additionalProperties;
           Object.assign(jsonSchema, {
             "x-bunaway-stripUnknown": true,
           });
@@ -152,16 +140,6 @@ export function toJSONSchema<S extends z.ZodType>(
       }
       if (definition.type === "record") {
         checkRecordKey(definition.keyType);
-        const keys = definition.keyType._zod.values;
-        if (keys && !definition.partial) {
-          // Exhaustive records parse every value, including missing keys. JSON
-          // cannot carry undefined, so optional values do not make keys omittable.
-          jsonSchema.required = [
-            ...keys,
-          ]
-            .filter((key) => typeof key === "string" || typeof key === "number")
-            .map(String);
-        }
       }
     },
   });
