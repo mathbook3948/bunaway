@@ -219,3 +219,13 @@ splashscreen 전환은 최종 종료이므로 isolated 프로필을 보존하지
 트레이 열기는 선언 순서와 생성 순서의 첫 살아 있는 창을 복원한다. 창이 없으면
 첫 선언에서 하나만 생성한다. 실제 회귀는 `windows-multiple-windows.ts`를
 `mise run host:windows`와 windows-native CI에서 실행한다.
+
+
+## 모니터 조회
+
+`monitors.ts`는 UI Worker의 per-monitor awareness에서 Win32 디스플레이를 조회한다.
+`NativeWindowServices.monitors`와 `NativeWindow.getMonitor`를 창 플러그인에 제공하며
+HMONITOR를 공개하지 않는다. id는 현재 MONITORINFOEXW의 장치명이며 영구 하드웨어 ID가 아니다.
+모든 좌표는 물리 virtual-screen 좌표이고 workArea는 작업 표시줄을 제외한다.
+rotation은 DEVMODE의 시계 반대 방향 각도다. CLI의 명시적 배포 목록에 모듈을 포함한다.
+창 중앙 배치와 상태 저장은 이 조회 구현의 책임이 아니다.

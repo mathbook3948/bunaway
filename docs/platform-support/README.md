@@ -121,3 +121,14 @@ Windows의 앱 정의 `desktop`에 인자, 딥링크, 파일 열기와 종료 �
 실제 WebView2의 hide, veto, dev-veto, dev-hide, dev-pending 시나리오와 PowerShell 5.1 인자 전달을 통과했다.
 Windows 실행기는 같은 시나리오를 실행한다. URL scheme과 파일 연결의 OS 등록은 미구현이다.
 macOS Bun FFI 런타임은 `desktop`을 `UNSUPPORTED`로 거부한다.
+
+
+## Windows 모니터 조회
+
+Windows 창 플러그인은 모니터 열거, 주 모니터와 대상 창의 모니터,
+물리 점과 rectangle의 가장 가까운 모니터 및 커서 화면 좌표를 조회한다.
+현재 장치명 id, 물리 bounds와 workArea, DPI와 배율 및 선택적 드라이버 rotation과
+정수 refresh rate를 반환한다. macOS에서는 새 조회 작업이 `UNSUPPORTED`다.
+[창 API](../site/src/content/docs/reference/host/windows.mdx#모니터와-커서)를 따르며
+실제 HWND와 WebView2 회귀는 Windows native CI에 포함한다.
+물리 다중 모니터의 hotplug, 혼합 DPI와 회전은 수동 검증으로 남긴다.
