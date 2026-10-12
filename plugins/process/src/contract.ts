@@ -1,0 +1,85 @@
+import { z } from "zod";
+
+/** Combined captured stdout/stderr and input limits, before base64 expansion. */
+export const MAX_PROCESS_BYTES = 64 * 1024;
+const MAX_COMMAND_LINE_UNITS = 32766;
+const base64 = z
+  .string()
+  .max(Math.ceil(MAX_PROCESS_BYTES / 3) * 4)
+  .regex(
+    /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$(?![\s\S])/,
+  )
+  .refine(
+    (value) =>
+      (value.length / 4) * 3 -
+        (value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0) <=
+      MAX_PROCESS_BYTES,
+  );
+const argument = z
+  .string()
+  .max(4096)
+  .refine(
+    (value) => !value.includes("\0"),
+    "NUL is not an argument character.",
+  );
+const executablePath = z
+  .string()
+  .min(1)
+  .max(1024)
+  .refine((value) => {
+    // Use an absolute drive path, never PATH lookup, UNC shares, device names or batch scripts.
+    return (
+      /^[A-Za-z]:[\\/]/.test(value) &&
+      /\.exe$/i.test(value) &&
+      !value.slice(2).includes(":") &&
+      !Array.from(value).some(
+        (char) => char.charCodeAt(0) < 0x20 || char === '"',
+      ) &&
+      !value
+        .split(/[\\/]/)
+        .some(
+          (part) =>
+            part === "." ||
+            part === ".." ||
+            part.endsWith(" ") ||
+            part.endsWith("."),
+        )
+    );
+  }, "Expected an absolute local Windows .exe path.");
+/** One bounded foreground invocation. Applications authorize the executable and complete argv. */
+export const processOperations = {
+  run: {
+    input: z
+      .strictObject({
+        executablePath,
+        args: z.array(argument).max(128).default([]),
+        stdinBase64: base64.exactOptional(),
+        maxOutputBytes: z
+          .number()
+          .int()
+          .min(0)
+          .max(MAX_PROCESS_BYTES)
+          .default(MAX_PROCESS_BYTES),
+        timeoutMs: z.number().int().min(1).max(30_000).default(30_000),
+      })
+      .refine((input) => {
+        // A conservative quoted argv bound also allows doubled backslashes before quotes and at the end.
+        const units =
+          input.executablePath.length +
+          2 +
+          input.args.reduce((length, arg) => length + 3 + arg.length * 2, 0);
+        return units <= MAX_COMMAND_LINE_UNITS;
+      }, "Arguments exceed the Windows command-line limit."),
+    output: z.strictObject({
+      pid: z.number().int().positive(),
+      exitCode: z.number().int().min(0).max(0xffffffff),
+      signal: z.string().max(32).nullable(),
+      stdoutBase64: base64,
+      stderrBase64: base64,
+    }),
+  },
+} as const;
+/** Caller input for one foreground process execution. */
+export type ProcessInput = z.input<typeof processOperations.run.input>;
+/** Captured process completion with exact binary stdout and stderr. */
+export type ProcessResult = z.output<typeof processOperations.run.output>;

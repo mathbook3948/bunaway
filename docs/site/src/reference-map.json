@@ -194,6 +194,17 @@
       }
     },
     {
+      "name": "@bunaway/plugin-process",
+      "source": "plugins/process/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/process": ["processes", "processPlugin"]
+      }
+    },
+    {
       "name": "@bunaway/plugin-storage",
       "source": "plugins/storage/src/index.ts",
       "buildOutputs": {
@@ -906,6 +917,7 @@
     "reference/api": ["help"]
   },
   "operations": {
+    "reference/plugins/process": ["process.run"],
     "reference/plugins/os": ["os.info", "os.usage", "os.locale"],
     "reference/plugins/autostart": [
       "autostart.enable",
