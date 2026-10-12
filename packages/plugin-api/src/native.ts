@@ -216,6 +216,10 @@ export type NativeWindow = {
   setEnabled?(enabled: boolean): void;
   /** Reads actual native input availability. Windows only. */
   isEnabled?(): boolean;
+  /** Changes this HWND's title without modifying its declaration or other instances. Windows only. */
+  setTitle?(title: string): void;
+  /** Reads the live native title, bounded to 1024 UTF-16 code units. Windows only. */
+  getTitle?(): string;
   /** Minimizes and displays the window, allowing Windows to activate another window. */
   minimize(): void;
   /** Maximizes and displays the window, requesting activation. */

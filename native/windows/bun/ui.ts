@@ -636,14 +636,10 @@ async function closeWindow(
       log("window-close-confirmation", {
         view: child.viewId,
       });
-      const childSpec = config.windows.find(
-        (candidate) => candidate.view === child.view.boundary.policy.id,
-      );
-      assert(childSpec);
       if (
         !windows.confirmClose(
           child.view.native.hwnd,
-          childSpec.title,
+          windows.getTitle(child.view.native.hwnd),
           child.view.confirmation,
         )
       ) {
@@ -834,6 +830,8 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
           relations.setEnabled(id, enabled);
         },
         isEnabled: () => nativeWindows.isEnabled(hwnd),
+        setTitle: (title) => nativeWindows.setTitle(hwnd, title),
+        getTitle: () => nativeWindows.getTitle(hwnd),
         minimize: () => nativeWindows.minimize(hwnd),
         maximize: () => nativeWindows.maximize(hwnd),
         unmaximize: () => nativeWindows.unmaximize(hwnd),

@@ -231,6 +231,8 @@ await windows.close({ view: "dialog" });
 | `windows.getSizeConstraints` | `{ view, windowId? }` | `Promise<{ minWidth: number \| null; minHeight: number \| null; maxWidth: number \| null; maxHeight: number \| null }>` 네 제약을 한 번에 조회 |
 | `windows.setSizeConstraints` | `{ view, windowId?, minWidth?, minHeight?, maxWidth?, maxHeight? }` | `Promise<null>`. 제약 전체를 교체합니다. 생략하거나 `null`인 축은 제한을 해제합니다 |
 | `windows.setPosition` | `{ view, windowId?, x, y }` | `Promise<null>`. 화면에서 창 바깥쪽 왼쪽 위의 물리 픽셀 위치. 각 값은 정수 -32768–32767 |
+| `windows.setTitle` | `{ view, windowId?, title: string }` | `Promise<null>`. 현재 창의 네이티브 제목 변경. 1–1024 UTF-16 코드 단위, NUL 금지 |
+| `windows.getTitle` | `{ view, windowId? }` | `Promise<string>`. 실제 HWND의 현재 제목 조회. 0–1024 UTF-16 코드 단위 |
 | `windows.setFullscreen` | `{ view, windowId?, fullscreen: boolean }` | `Promise<null>`. 현재 모니터 전체화면. 해제하면 이전 창 위치와 표시 상태 복원 |
 | `windows.setCloseConfirmation` | `{ view, windowId?, message: string \| null }` | `Promise<null>`. 창을 닫기 전에 표시할 확인 메시지 설정. 문자열은 1–1024자, NUL 금지. `null`이면 확인 해제 |
 | `windows.close` | `{ view, windowId? }` | `Promise<boolean>`. 닫기 승인 시 `true`, 확인이나 앱 종료를 취소하거나 트레이로 숨기면 `false`. 정리 완료를 기다리지는 않음 |
@@ -442,6 +444,12 @@ macOS의 준비 조회, 이벤트와 splashscreen 전환은 아직 지원하지 
 
 조회의 `unit`은 `"physical" | "logical"`이며 기본값은 `"physical"`입니다. `dpi`는 해당 조회에 사용한 대상 창의 DPI입니다.
 `setSize`는 계속 내용 영역의 96 DPI 논리 픽셀을 받고, `setPosition`은 창 바깥쪽 왼쪽 위의 화면 물리 픽셀을 받습니다.
+`setTitle`은 지정한 창 수명의 제목만 변경합니다. 선언, 다른 인스턴스와 앱 이름을 바꾸지 않으며
+재생성에서는 선언 또는 해당 생성의 `options.title`로 돌아갑니다. 표시, 크기와 포커스 상태를 유지합니다.
+닫기 확인 대화상자의 caption도 현재 창 제목을 사용합니다. `getTitle`은 캐시 대신 실제 HWND를 읽으며
+신뢰된 네이티브 코드가 빈 제목을 적용하면 빈 문자열을 반환합니다. 외부 코드가 지원 길이를 넘기는
+제목을 적용했거나 OS 조회가 실패하면 `INTERNAL`입니다. 변경과 조회 권한은 각각 `windows.setTitle`,
+`windows.getTitle`이며 닫힌 창은 `INVALID_ARGUMENT`입니다. 실행 중 icon 변경은 아직 제공하지 않습니다.
 따라서 `setSize` 뒤에는 `getContentSize({ view, unit: "logical" })`, `setPosition` 뒤에는 `getOuterPosition({ view })`으로 결과를 확인합니다.
 제약에 따른 크기 보정과 운영체제의 배치 결과를 반환합니다.
 

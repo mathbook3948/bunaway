@@ -16,6 +16,13 @@ function unsupportedRelations() {
   });
 }
 
+function unsupportedTitle() {
+  return new BunawayError({
+    code: "UNSUPPORTED",
+    message: "Window title control is not implemented on this platform.",
+  });
+}
+
 /** Create the UI-worker adapter; throws when window services are unavailable. */
 export function createOperations(
   environment: NativeEnvironment,
@@ -197,6 +204,17 @@ export function createOperations(
           throw unsupportedRelations();
         }
         return window.isEnabled();
+      case "windows.setTitle":
+        if (!window.setTitle) {
+          throw unsupportedTitle();
+        }
+        window.setTitle(call.payload.title);
+        break;
+      case "windows.getTitle":
+        if (!window.getTitle) {
+          throw unsupportedTitle();
+        }
+        return window.getTitle();
       case "windows.getContentSize":
       case "windows.getOuterSize":
       case "windows.getContentPosition":
