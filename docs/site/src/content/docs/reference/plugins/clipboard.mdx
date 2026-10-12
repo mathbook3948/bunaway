@@ -85,7 +85,7 @@ const items = await clipboard.readFormats({ formats: ["text/plain", "text/html"]
 
 HTML은 전체 문서가 아닌 fragment를 받습니다. CF_HTML의 fragment byte offset과 UTF-8을 검사하지만 HTML을 정제하거나 실행하지 않습니다. 표시할 때의 처리 방식은 앱이 결정합니다. RTF도 markup을 해석하지 않으며 Unicode 문자는 `\u` 등의 RTF escape로 전달합니다. HTML과 RTF의 문자열 상한과 Unicode 검사는 일반 텍스트와 같습니다. ASCII 제한은 RTF에만 적용합니다.
 
-파일 목록은 최대 64개이며 각 경로는 UTF-16 code unit 1,024개까지입니다. `C:\folder\file.txt` 또는 `\\server\share\file.txt` 형식의 절대 경로만 받으며 NUL, control character, wildcard와 device 경로는 거부합니다. 경로를 읽거나 복사해도 실제 파일을 열거나 존재 여부를 확인하지 않습니다. 파일 접근 권한은 기존 저장소 정책으로 별도로 허용해야 합니다. bookmark, 임의 binary 형식과 clipboard 변경 이벤트는 지원하지 않습니다.
+파일 목록은 최대 64개이며 각 경로는 읽기와 쓰기 모두 UTF-16 code unit 1,024개까지입니다. 이모지 등 보조 평면 문자는 두 단위로 셉니다. `C:\folder\file.txt` 또는 `\\server\share\file.txt` 형식의 절대 경로만 받으며 NUL, control character, wildcard와 device 경로는 거부합니다. 경로를 읽거나 복사해도 실제 파일을 열거나 존재 여부를 확인하지 않습니다. 파일 접근 권한은 기존 저장소 정책으로 별도로 허용해야 합니다. bookmark, 임의 binary 형식과 clipboard 변경 이벤트는 지원하지 않습니다.
 
 ## 정책과 취소
 

@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { serializeHostResponse } from "@bunaway/protocol";
+import { decodeFiles, encodeFiles } from "#plugins/clipboard/src/codecs";
 import {
   clipboardOperations,
   validateClipboardInput,
@@ -7,6 +8,7 @@ import {
 import {
   imageSchema,
   MAX_IMAGE_BYTES,
+  MAX_PATH_LENGTH,
   writeFormatsSchema,
 } from "#plugins/clipboard/src/formats";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
@@ -17,6 +19,92 @@ const image = {
   height: 1,
   rgba: "AQIDBA==",
 };
+
+test("file-list contracts round-trip Unicode paths at the UTF-16 limit", async () => {
+  for (const character of [
+    "a",
+    "😀",
+  ]) {
+    // Keep each component below Windows' limit while crossing the total path boundary.
+    const prefix = `C:\\${Array.from(
+      {
+        length: 5,
+      },
+      () => character.repeat(200 / character.length),
+    ).join("\\")}\\`;
+    const path = prefix + "x".repeat(MAX_PATH_LENGTH - prefix.length);
+    const items = [
+      {
+        format: "application/x-bunaway-file-list",
+        data: [
+          path,
+        ],
+      },
+    ];
+    expect(path.length).toBe(MAX_PATH_LENGTH);
+    expect(
+      (
+        await parsers.validateCall({
+          operation: "clipboard.writeFormats",
+          payload: {
+            items,
+          },
+        })
+      ).payload,
+    ).toEqual({
+      items,
+    });
+    expect(
+      decodeFiles(
+        encodeFiles([
+          path,
+        ]),
+      ),
+    ).toEqual([
+      path,
+    ]);
+    expect(
+      await parsers.validateOutput("clipboard.readFormats", items),
+    ).toEqual(items);
+
+    const oversized = {
+      items: [
+        {
+          format: "application/x-bunaway-file-list",
+          data: [
+            path + "x",
+          ],
+        },
+      ],
+    };
+    await expect(
+      parsers.validateCall({
+        operation: "clipboard.writeFormats",
+        payload: oversized,
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+    expect(() =>
+      validateClipboardInput("clipboard.writeFormats", oversized),
+    ).toThrow(
+      expect.objectContaining({
+        code: "INVALID_ARGUMENT",
+      }),
+    );
+    expect(() =>
+      decodeFiles(
+        encodeFiles([
+          path + "x",
+        ]),
+      ),
+    ).toThrow(
+      expect.objectContaining({
+        code: "INTERNAL",
+      }),
+    );
+  }
+});
 
 test("clipboard format contracts reject ambiguous, malformed and oversized inputs at the owning adapter", async () => {
   for (const input of [

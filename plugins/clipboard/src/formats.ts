@@ -52,7 +52,10 @@ export type ClipboardImage = z.infer<typeof imageSchema>;
 export const filesSchema = z
   .array(
     textSchema
-      .max(MAX_PATH_LENGTH)
+      .refine(
+        (path) => path.length <= MAX_PATH_LENGTH,
+        "Paths cannot exceed the UTF-16 code unit limit.",
+      )
       .regex(/^(?:[A-Za-z]:\\|\\\\[^\\]+\\[^\\]+(?:\\|$))/u)
       .regex(/^[^<>"|?*]*$/u)
       .refine(
