@@ -320,3 +320,30 @@ test("initial rectangles reject signed coordinate overflow without treating CW_U
     ),
   ).toThrow("coordinate range");
 });
+
+test("an 8K work area at 100 percent scaling accepts the largest content minimum", () => {
+  const area = {
+    x: 0,
+    y: 0,
+    width: 7680,
+    height: 4280,
+  };
+  const plan = initialWindowPlacement(
+    {
+      width: 4096,
+      height: 4096,
+      minWidth: 4096,
+      minHeight: 4096,
+      preventOverflow: true,
+    },
+    96,
+    frame,
+    area,
+  );
+  expect(plan.content).toEqual({
+    width: 4096,
+    height: 4096,
+  });
+  expect(plan.outer.width).toBeLessThanOrEqual(area.width);
+  expect(plan.outer.height).toBeLessThanOrEqual(area.height);
+});

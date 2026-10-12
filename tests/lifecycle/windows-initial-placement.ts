@@ -4,7 +4,10 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type DesktopContext, defineApp } from "@bunaway/backend";
-import type { WindowSpec } from "@bunaway/plugin-api/native";
+import {
+  MAX_WINDOW_DIMENSION,
+  type WindowSpec,
+} from "@bunaway/plugin-api/native";
 import { windows, windowsPlugin } from "@bunaway/plugin-windows";
 import type { HostContext, Policy } from "@bunaway/protocol";
 import { runWindowsApp } from "#native/windows/bun/entry";
@@ -26,6 +29,13 @@ const reportPath = resolve(
   root,
   "build/windows-initial-placement-results.json",
 );
+const minimumWindow = {
+  width: MAX_WINDOW_DIMENSION,
+  height: MAX_WINDOW_DIMENSION,
+  minWidth: MAX_WINDOW_DIMENSION,
+  minHeight: MAX_WINDOW_DIMENSION,
+  preventOverflow: true,
+};
 
 if (!process.argv.includes("--child")) {
   await rm(assets, {
@@ -55,6 +65,7 @@ if (!process.argv.includes("--child")) {
   const SM_CMONITORS = 80;
   const displays = metrics.symbols.GetSystemMetrics(SM_CMONITORS);
   metrics.close();
+  let minimumFits = false;
   try {
     for (const useContentSize of [
       true,
@@ -93,23 +104,31 @@ if (!process.argv.includes("--child")) {
         );
         assert.equal(native.isVisible(hwnd), false);
         assert.equal(native.failure, undefined);
+        if (useContentSize) {
+          // A large work area can fit even the largest supported minimum.
+          // Measure the current DPI and frame instead of assuming rejection.
+          const minimumWidth =
+            physicalPixels(MAX_WINDOW_DIMENSION, measured.dpi) +
+            outer.width -
+            measured.width;
+          const minimumHeight =
+            physicalPixels(MAX_WINDOW_DIMENSION, measured.dpi) +
+            outer.height -
+            measured.height;
+          minimumFits =
+            minimumWidth <= area.width && minimumHeight <= area.height;
+        }
       } finally {
         native.destroy(hwnd);
       }
     }
-    assert.throws(
-      () =>
-        native.validateCreation({
-          width: 4096,
-          height: 4096,
-          minWidth: 4096,
-          minHeight: 4096,
-          preventOverflow: true,
-        }),
-      {
+    if (minimumFits) {
+      assert.doesNotThrow(() => native.validateCreation(minimumWindow));
+    } else {
+      assert.throws(() => native.validateCreation(minimumWindow), {
         code: "INVALID_ARGUMENT",
-      },
-    );
+      });
+    }
   } finally {
     native.dispose();
   }
@@ -118,6 +137,7 @@ if (!process.argv.includes("--child")) {
     JSON.stringify({
       area,
       displays,
+      minimumFits,
     }),
   );
   const entry = await bundleNativeWorker(
@@ -162,9 +182,11 @@ if (!process.argv.includes("--child")) {
   const {
     area,
     displays,
+    minimumFits,
   }: {
     area: WorkArea;
     displays: number;
+    minimumFits: boolean;
   } = JSON.parse(await readFile(resolve(output, "display.json"), "utf8"));
   const specSize = {
     width: 600,
@@ -260,6 +282,21 @@ if (!process.argv.includes("--child")) {
       await Bun.sleep(5);
     }
   }
+  async function checkMinimumContent(target: {
+    view: string;
+    windowId?: string;
+  }) {
+    await waitForDocument(target);
+    const content = await windows.getContentBounds(target);
+    assert.equal(
+      content.width,
+      physicalPixels(MAX_WINDOW_DIMENSION, content.dpi),
+    );
+    assert.equal(
+      content.height,
+      physicalPixels(MAX_WINDOW_DIMENSION, content.dpi),
+    );
+  }
   async function exercise() {
     const deadline = Date.now() + 15_000;
     while (
@@ -316,11 +353,11 @@ if (!process.argv.includes("--child")) {
         x: 1,
         y: 1,
       },
-      {
-        minWidth: 4096,
-        minHeight: 4096,
-        preventOverflow: true,
-      },
+      ...(minimumFits
+        ? []
+        : [
+            minimumWindow,
+          ]),
     ]) {
       await assert.rejects(
         windows.recreate({
@@ -341,6 +378,17 @@ if (!process.argv.includes("--child")) {
         )?.windowId,
         replacement.windowId,
       );
+    }
+    if (minimumFits) {
+      await windows.recreate({
+        view: "single",
+        options: {
+          window: minimumWindow,
+        },
+      });
+      await checkMinimumContent({
+        view: "single",
+      });
     }
     await windows.recreate({
       view: "single",
@@ -386,13 +434,11 @@ if (!process.argv.includes("--child")) {
       {
         x: 0,
       },
-      {
-        width: 4096,
-        height: 4096,
-        minWidth: 4096,
-        minHeight: 4096,
-        preventOverflow: true,
-      },
+      ...(minimumFits
+        ? []
+        : [
+            minimumWindow,
+          ]),
     ]) {
       await assert.rejects(
         windows.recreateInstance({
@@ -414,8 +460,22 @@ if (!process.argv.includes("--child")) {
         target.windowId,
       );
     }
+    let fittingTarget = target;
+    if (minimumFits) {
+      const identity = await windows.recreateInstance({
+        ...target,
+        options: {
+          window: minimumWindow,
+        },
+      });
+      fittingTarget = {
+        ...target,
+        windowId: identity.windowId,
+      };
+      await checkMinimumContent(fittingTarget);
+    }
     const fitted = await windows.recreateInstance({
-      ...target,
+      ...fittingTarget,
       options: {
         window: {
           width: 4096,
@@ -457,6 +517,7 @@ if (!process.argv.includes("--child")) {
       JSON.stringify({
         pass: true,
         displays,
+        minimumFits,
         dpi: bounds.dpi,
         area,
         bounds,

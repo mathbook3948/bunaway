@@ -134,6 +134,8 @@ single/multiple 계약 회귀는 병합 오류와 네이티브 배치 검증이 
 실행되고 호출별 옵션이 선언을 바꾸지 않는지 확인한다. macOS 선언의 미지원 오류도 검사한다.
 `lifecycle/windows-initial-placement.ts`는 실제 HWND와 WebView2에서 초기 선언, single과
 multiple의 생성 및 재생성, 예약 전 거부와 선언 복원을 확인한다. multiple은 isolated 프로필을 쓴다.
+4096 content 최소 크기가 들어가는지는 실제 작업 영역과 측정한 DPI 및 프레임으로 계산한다.
+들어가면 재생성 성공을, 들어가지 않으면 기존 창을 보존하는 거부를 검사한다.
 `mise run host:windows`와 CI의 windows-native에 포함하며 네이티브 입력 준비 후
 `bun --no-env-file tests/lifecycle/windows-initial-placement.ts`로도 실행할 수 있다.
 이 검사는 실행 환경의 모니터와 DPI를 기록하며 다중 물리 모니터 검증을 대신하지 않는다.
