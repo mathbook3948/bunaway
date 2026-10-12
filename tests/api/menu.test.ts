@@ -59,6 +59,12 @@ function fixture(menus?: NativeEnvironment["menus"]) {
 
 test("menu definitions resolve defaults and reject invalid trees before recursive parsing", () => {
   expect(
+    menuOperations.create.input.safeParse({
+      menuId: "trailing\n",
+      items: [],
+    }).success,
+  ).toBe(false);
+  expect(
     menuItemsSchema.parse([
       item("a"),
     ])[0],
@@ -70,6 +76,12 @@ test("menu definitions resolve defaults and reject invalid trees before recursiv
     group: null,
   });
   for (const invalid of [
+    [
+      {
+        id: "trailing\n",
+        type: "separator",
+      },
+    ],
     [
       item("a"),
       {
