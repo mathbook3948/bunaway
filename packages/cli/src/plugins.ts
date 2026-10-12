@@ -1,6 +1,7 @@
 import { mkdir, realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { PLATFORMS } from "@bunaway/plugin-api";
 import { type NativePluginContract, NativeRegistry } from "@bunaway/protocol";
 import { readAppManifest } from "@bunaway/runtime-bun/app-manifest";
 import {
@@ -89,13 +90,7 @@ export async function readPluginDeclaration(
       !target ||
       typeof target !== "object" ||
       Array.isArray(target) ||
-      ![
-        "windows",
-        "macos",
-        "linux",
-        "android",
-        "ios",
-      ].includes(platform) ||
+      !PLATFORMS.some((supported) => supported === platform) ||
       ![
         "io",
         "ui",

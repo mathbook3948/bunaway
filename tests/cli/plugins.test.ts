@@ -8,8 +8,47 @@ import { loadPluginCatalog } from "#native/host-api/bun/plugin-catalog";
 import { operations, pluginRegistry } from "#native/host-api/bun/plugins";
 import { pluginImportsSource } from "#cli/app-modules";
 import { writeJson } from "#cli/files";
-import { installedPlugins, writePluginManifest } from "#cli/plugins";
+import {
+  installedPlugins,
+  readPluginDeclaration,
+  writePluginManifest,
+} from "#cli/plugins";
+import { PLATFORMS } from "@bunaway/plugin-api";
 import { BunawayError, NativeRegistry, type Policy } from "@bunaway/protocol";
+
+test("CLI independently accepts known platforms and rejects unknown declarations", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "bunaway-plugin-platforms-"));
+  try {
+    // Bypass the SDK so its validation cannot conceal a missing CLI check.
+    for (const [index, platform] of [
+      ...PLATFORMS,
+      "unknown",
+      "Windows",
+      "windows-extra",
+    ].entries()) {
+      const entry = resolve(root, `declaration-${index}.mjs`);
+      await Bun.write(
+        entry,
+        `export default { name: "demo", version: "1", native: { operations: [{ name: "demo.read", input: { const: null }, output: { const: null } }] }, nativePlatforms: { ${JSON.stringify(platform)}: { execution: "io", create() { throw new Error("Factories must remain lazy."); } } } };`,
+      );
+      if (PLATFORMS.some((supported) => supported === platform)) {
+        const declaration = await readPluginDeclaration(entry, root);
+        expect(Object.keys(declaration.nativePlatforms)).toEqual([
+          platform,
+        ]);
+      } else {
+        await expect(readPluginDeclaration(entry, root)).rejects.toThrow(
+          "Invalid native plugin target.",
+        );
+      }
+    }
+  } finally {
+    await rm(root, {
+      recursive: true,
+      force: true,
+    });
+  }
+});
 
 test.each([
   "io",

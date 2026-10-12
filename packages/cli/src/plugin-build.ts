@@ -1,11 +1,16 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
+import { PLATFORMS } from "@bunaway/plugin-api";
 import {
   ownedDirectory,
   publishOwnedDirectory,
 } from "../../packaging/src/directories.ts";
 import { readPluginDeclaration } from "./plugins.ts";
 import { run } from "./processes.ts";
+
+const PLATFORM_MODULE_FILTER = new RegExp(
+  String.raw`(?:^|[\\/])platforms[\\/](${PLATFORMS.join("|")})\.ts$`,
+);
 
 /**
  * Build src/index.ts into a browser-safe declaration and one native export per
@@ -84,8 +89,7 @@ export function defineNativePlugin(declaration) {
               );
               builder.onLoad(
                 {
-                  filter:
-                    /(?:^|[\\/])platforms[\\/](windows|macos|linux|android|ios)\.ts$/,
+                  filter: PLATFORM_MODULE_FILTER,
                 },
                 ({ path }) => {
                   // Bun has resolved extensions and aliases before this boundary is checked.
@@ -97,13 +101,7 @@ export function defineNativePlugin(declaration) {
                     return;
                   }
                   if (
-                    ![
-                      "windows",
-                      "macos",
-                      "linux",
-                      "android",
-                      "ios",
-                    ].some(
+                    !PLATFORMS.some(
                       (os) =>
                         imported === resolve(root, "src/platforms", `${os}.ts`),
                     )
