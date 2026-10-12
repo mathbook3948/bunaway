@@ -66,6 +66,7 @@ const SW_RESTORE = 9;
 const SW_SHOW = 5;
 const SW_SHOWMAXIMIZED = 3;
 const SW_SHOWMINIMIZED = 2;
+const SW_SHOWMINNOACTIVE = 7;
 const SW_SHOWNA = 8;
 const SWP_FRAMECHANGED = 0x20;
 const SWP_NOMOVE = 0x2;
@@ -435,7 +436,13 @@ export class Windows {
   }
 
   show(window: bigint, visible: boolean) {
-    user.symbols.ShowWindow(window, visible ? SW_SHOW : SW_HIDE);
+    if (!visible) {
+      user.symbols.ShowWindow(window, SW_HIDE);
+      return;
+    }
+    // Showing an iconic window must not activate and restore it.
+    const command = this.isMinimized(window) ? SW_SHOWMINNOACTIVE : SW_SHOW;
+    user.symbols.ShowWindow(window, command);
   }
 
   /** Show the existing placement without changing activation, even for hidden iconic or zoomed HWNDs. */

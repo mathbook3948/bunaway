@@ -254,6 +254,21 @@ test.skipIf(process.platform !== "win32")(
           checkEvents();
           expect(events).toHaveLength(duplicate);
         }
+        const placement = native.getSnapshot(second);
+        const normalBounds = native.getBounds(second, "normal");
+        for (const hidden of [
+          false,
+          true,
+        ]) {
+          if (hidden) {
+            native.show(second, false);
+          }
+          await invoke("windows.show", "editor");
+          expect(native.isVisible(second)).toBe(true);
+          expect(native.isMinimized(second)).toBe(placement.state.minimized);
+          expect(native.isMaximized(second)).toBe(placement.state.maximized);
+          expect(native.getBounds(second, "normal")).toEqual(normalBounds);
+        }
         if (state === "minimized-from-maximized") {
           native.restore(second);
           expect(native.isMaximized(second)).toBe(true);

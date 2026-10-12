@@ -219,6 +219,8 @@ test.skipIf(process.platform !== "win32")(
         ]) {
           native.unmaximize(hwnd);
           user.symbols.ShowWindow(hwnd, command);
+          expect(native.isMinimized(hwnd)).toBe(command === SW_MINIMIZE);
+          expect(native.isMaximized(hwnd)).toBe(command === SW_MAXIMIZE);
           native.show(hwnd, visible);
           expect(native.isMinimized(hwnd)).toBe(command === SW_MINIMIZE);
           expect(native.isMaximized(hwnd)).toBe(command === SW_MAXIMIZE);
