@@ -33,7 +33,7 @@ export function notificationSetting(value: number): NotificationSetting {
   return settings[value] ?? "unknown";
 }
 
-function check(result: number): void {
+function check(result: number, stage: string): void {
   if (result >= 0) {
     return;
   }
@@ -43,6 +43,7 @@ function check(result: number): void {
     message: "Windows notification operation failed.",
     details: {
       hresult: result >>> 0,
+      stage,
     },
   });
 }
@@ -119,7 +120,7 @@ export function createNotifications(appUserModelId: string) {
   }
   function withRuntime<T>(run: () => T): T {
     active();
-    check(runtime.symbols.RoInitialize(RO_INIT_SINGLETHREADED));
+    check(runtime.symbols.RoInitialize(RO_INIT_SINGLETHREADED), "RoInitialize");
     try {
       return run();
     } finally {
@@ -186,6 +187,7 @@ export function createNotifications(appUserModelId: string) {
               value.length,
               ptr(output),
             ),
+            "WindowsCreateString",
           );
           if (!output[0]) {
             throw new BunawayError({
@@ -230,13 +232,14 @@ export function createNotifications(appUserModelId: string) {
               setting: null,
             };
           }
-          check(result);
+          check(result, "RoGetActivationFactory");
           const manager = ownedObject();
           check(
             method(manager, CREATE_NOTIFIER_WITH_ID_SLOT, [
               "ptr",
               "ptr",
             ])(string(appUserModelId), ptr(output)),
+            "CreateToastNotifierWithId",
           );
           const notifier = ownedObject();
           const setting = new Int32Array(1);
@@ -244,6 +247,7 @@ export function createNotifications(appUserModelId: string) {
             method(notifier, NOTIFIER_SETTING_SLOT, [
               "ptr",
             ])(ptr(setting)),
+            "ToastNotifier.Setting",
           );
           return {
             support: "supported",

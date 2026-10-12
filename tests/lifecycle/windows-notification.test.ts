@@ -79,7 +79,12 @@ export const pluginImports = {
         return async () => {
           assert.equal(apartmentType(), 0); assert([0,3].includes(apartment[0]));
           calls.push(name);
-          const result = await execute();
+          let result;
+          try { result = await execute(); } catch (error) {
+            // The fixture reports trusted native diagnostics before the host strips public error details.
+            console.error("notification-native-failure", JSON.stringify({ operation: name, code: error.code, details: error.details, apartmentResult: apartmentType(), apartment: apartment[0] }));
+            throw error;
+          }
           assert.equal(apartmentType(), 0, "Notification queries must preserve the opener's existing apartment");
           return result;
         };
