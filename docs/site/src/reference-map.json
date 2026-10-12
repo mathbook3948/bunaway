@@ -8,7 +8,7 @@
         "reference/client/transport": ["createWebViewTransport"],
         "reference/client/invoke": ["invoke"],
         "reference/tooling/native-plugins": ["invokePlugin"],
-        "reference/client/listen": ["listen"]
+        "reference/client/listen": ["listen", "once"]
       }
     },
     {
@@ -377,7 +377,7 @@
       "pages": {
         "reference/client/create-client": ["ready"],
         "reference/client/invoke": ["invoke"],
-        "reference/client/listen": ["listen"],
+        "reference/client/listen": ["listen", "once"],
         "reference/client/close": ["close"]
       }
     },
