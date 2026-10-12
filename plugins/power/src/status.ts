@@ -19,8 +19,15 @@ export function powerStatus(data: Uint8Array): PowerStatus {
     const value = view.getUint32(offset, true);
     return noBattery || value === UNKNOWN_SECONDS ? null : value;
   };
+  let source: PowerStatus["source"] = "unknown";
+  if (ac === 0) {
+    source = "battery";
+  }
+  if (ac === 1) {
+    source = "ac";
+  }
   return {
-    source: ac === 0 ? "battery" : ac === 1 ? "ac" : "unknown",
+    source,
     batteryPresent: unknownBattery ? null : !noBattery,
     charging: unknownBattery
       ? null
