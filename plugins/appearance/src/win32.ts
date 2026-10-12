@@ -160,7 +160,10 @@ export function createAppearance() {
       const appsLight = booleanPreference(preference("AppsUseLightTheme"));
       const systemLight = booleanPreference(preference("SystemUsesLightTheme"));
       function theme(light: boolean | null) {
-        return light === null ? null : light ? "light" : "dark";
+        if (light === null) {
+          return null;
+        }
+        return light ? "light" : "dark";
       }
       return {
         appsTheme: theme(appsLight),
