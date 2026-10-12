@@ -97,6 +97,7 @@ export class WebView {
   failure: unknown;
   private navigationId: bigint | undefined;
   private loading = false;
+  private stoppedNavigationId: bigint | undefined;
 
   /** Begin async WebView2 creation; ready fires after configuration, independently of HWND visibility. */
   constructor(
@@ -502,6 +503,7 @@ export class WebView {
         );
         if (this.navigationId !== id[0]) {
           this.navigationId = id[0];
+          this.stoppedNavigationId = undefined;
           this.hooks.revoke("navigation");
         }
       }
@@ -536,6 +538,8 @@ export class WebView {
         return;
       }
       this.loading = false;
+      const stopped = this.stoppedNavigationId === id[0];
+      this.stoppedNavigationId = undefined;
       const success = new Int32Array(1);
       hr(
         method(args, 3, [
@@ -561,7 +565,7 @@ export class WebView {
         });
         error = {
           code:
-            status[0] === WEB_ERROR_OPERATION_CANCELED
+            stopped || status[0] === WEB_ERROR_OPERATION_CANCELED
               ? "CANCELLED"
               : "INTERNAL",
           message: "Document navigation did not complete.",
@@ -799,7 +803,16 @@ export class WebView {
 
   /** Stop completes through the existing NavigationCompleted cancellation path. */
   stop() {
-    hr(method(this.requireWebView(), 43, [])(), "Stop");
+    const webview = this.requireWebView();
+    const previous = this.stoppedNavigationId;
+    // WebView2 can report CONNECTION_ABORTED for Stop. Preserve explicit caller cancellation.
+    this.stoppedNavigationId = this.loading ? this.navigationId : undefined;
+    try {
+      hr(method(webview, 43, [])(), "Stop");
+    } catch (error) {
+      this.stoppedNavigationId = previous;
+      throw error;
+    }
   }
 
   goBack(): boolean {
