@@ -206,23 +206,28 @@ export const pluginImports = { menu: { operations: async () => ({ createOperatio
           },
         ],
       });
-      await expect(
-        invoke("menu.replace", {
-          menuId: "tray",
-          items: [
-            {
-              id: "duplicate",
-              type: "item",
-              label: "A",
-            },
-            {
-              id: "duplicate",
-              type: "item",
-              label: "B",
-            },
-          ],
-        }),
-      ).rejects.toMatchObject({
+      // Await the MessagePort response before entering Bun's rejection matcher on Windows.
+      const rejected = await invoke("menu.replace", {
+        menuId: "tray",
+        items: [
+          {
+            id: "duplicate",
+            type: "item",
+            label: "A",
+          },
+          {
+            id: "duplicate",
+            type: "item",
+            label: "B",
+          },
+        ],
+      }).then(
+        () => {
+          throw new Error("Invalid menu replacement unexpectedly succeeded.");
+        },
+        (error: unknown) => error,
+      );
+      expect(rejected).toMatchObject({
         code: "INVALID_ARGUMENT",
       });
       expect(
