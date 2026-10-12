@@ -1,0 +1,82 @@
+---
+title: Windows 암호화 저장
+description: 현재 Windows 사용자의 DPAPI로 문자열과 바이트를 비동기로 보호하고 복호화합니다.
+---
+
+`@bunaway/plugin-safe-storage`는 Windows의 DPAPI를 사용하는 선택 플러그인입니다.
+`safeStoragePlugin`을 앱에 등록하고 작업별 Host 권한을 허용합니다.
+설치나 등록만으로 권한이 생기지 않습니다. 다른 플랫폼에서는 `UNSUPPORTED`입니다.
+
+```ts
+import { defineApp } from "@bunaway/backend";
+import { safeStoragePlugin } from "@bunaway/plugin-safe-storage";
+
+export default defineApp({ plugins: [safeStoragePlugin] });
+```
+
+## 작업과 권한
+
+```ts
+safeStorage.isAvailable(null): Promise<boolean>
+safeStorage.encryptString({ text }): Promise<string>
+safeStorage.decryptString({ ciphertext }): Promise<string>
+safeStorage.encryptBytes({ bytes }): Promise<string>
+safeStorage.decryptBytes({ ciphertext }): Promise<string>
+```
+
+작업 권한은 순서대로 `safe-storage.isAvailable`, `safe-storage.encryptString`,
+`safe-storage.decryptString`, `safe-storage.encryptBytes`, `safe-storage.decryptBytes`입니다.
+화면에서 직접 호출하려면 해당 이름 앞에 `plugin.`을 붙인 명령 권한도 필요합니다.
+앱 명령과 setup에서 `safeStorage`를 호출하는 실행 범위는 [백엔드 Host API](/reference/backend/host-api/)를 따릅니다.
+화면에는 용도에 맞는 앱 명령을 노출하고 복호화 결과를 받을 수 있는 뷰를 제한하세요.
+
+모든 호출은 Promise를 반환하며 I/O Worker에서 실행합니다. 최초 호출에서 DLL을 열고
+작업마다 Windows API를 호출합니다. `isAvailable`은 작은 비밀이 아닌 값을 암호화한 뒤
+복호화해 현재 실행 환경의 사용 가능 여부를 검사합니다. 실패하면 `false`를 반환합니다.
+이 결과는 후속 작업의 성공을 보장하거나 권한을 부여하지 않으며 다음 호출은 다시 검사합니다.
+
+```ts
+import { safeStorage } from "@bunaway/plugin-safe-storage";
+
+const ciphertext = await safeStorage.encryptString({ text: "보호할 앱 데이터" });
+const text = await safeStorage.decryptString({ ciphertext });
+```
+
+`text`의 상한은 UTF-16 code unit 기준 32,768입니다. 빈 문자열과 NUL, Unicode 및 BOM을 보존합니다.
+문자열은 UTF-8로 암호화하며 문자열 복호화는 잘못된 UTF-8을 거부합니다.
+`bytes`와 `ciphertext`는 canonical padded base64 문자열입니다. 바이트의 상한은 256 KiB,
+암호문의 상한은 384 KiB이며 빈 바이트는 `""`입니다. 빈 암호문은 거부합니다.
+표준 base64 알파벳과 필요한 padding을 사용해야 하며 공백과 URL-safe 표기를 거부합니다.
+두 암호화 작업 모두 원본 DPAPI blob을 base64로 반환하므로 API 형식은 앱에서 일관되게 선택하세요.
+
+## 보호 범위와 파일 저장
+
+플러그인은 `CryptProtectData`와 `CryptUnprotectData`를 current-user 범위에서 호출하며
+`CRYPTPROTECT_UI_FORBIDDEN`으로 대화상자를 금지합니다. machine 범위나 앱 암호, 추가 entropy를
+받지 않으며 Windows가 현재 사용자의 키를 관리합니다. 같은 사용자의 다른 프로세스에서도
+복호화할 수 있으므로 이 기능은 앱별 격리나 Windows Hello 사용자 확인을 제공하지 않습니다.
+보통 같은 사용자와 머신이 필요하지만 Windows roaming profile 등의 예외가 있습니다.
+[Microsoft DPAPI 계약](https://learn.microsoft.com/en-us/windows/win32/api/dpapi/nf-dpapi-cryptprotectdata)을 따릅니다.
+
+플러그인은 파일이나 credential store에 저장하지 않습니다. 암호문을 저장할 위치와 접근 규칙,
+원자적 교체와 백업은 앱이 관리합니다. 일반 store와 텍스트 파일은 평문 저장입니다.
+DPAPI를 사용할 수 없거나 복호화가 실패해도 이 플러그인은 평문 저장으로 전환하지 않습니다.
+신뢰된 백엔드가 Bun 파일 및 SQLite API를 직접 쓰는 경로와 화면의 권한 중재는 별개입니다.
+
+네이티브 중간 버퍼는 반환용 복사 후 지우고 DPAPI 할당을 `LocalFree`로 해제합니다.
+앱 종료에서는 플러그인의 DLL 바인딩을 해제합니다. 반환한 문자열과 JSON 전송 복사본은
+JavaScript 런타임이 관리하므로 메모리 전체의 비밀 제거를 보장하지 않습니다.
+
+## 실패, 취소와 재시도
+
+잘못된 입력과 크기 상한은 `INVALID_ARGUMENT`, 정책 거부는 `PERMISSION_DENIED`,
+처리 전 취소와 폐기된 어댑터는 `CANCELLED`입니다. Windows 암복호화 실패와 손상된 blob,
+다른 사용자나 머신의 데이터, UTF-8 또는 결과 상한 위반은 `INTERNAL`입니다.
+이 오류만으로 손상과 일시적인 사용자 프로필 및 키 문제를 구분할 수 없습니다.
+잠긴 키의 대기와 재시도, `shouldReEncrypt`, credential store와 vault는 후속 계약입니다.
+
+두 번째 인자의 signal과 deadline은 [호출 취소와 기한](/reference/client/invoke/)을 따릅니다.
+동시 요청은 호스트 I/O 큐에서 직렬 처리하며 WebView UI 스레드에서 DPAPI를 실행하지 않습니다.
+실행 전 취소와 종료는 대기 호출을 막습니다. 이미 시작한 동기 Windows API 호출은
+중간에 끊거나 결과를 롤백하지 않습니다. 실패한 복호화에서도 원본 암호문은 바꾸지 않으며
+자동 재시도나 재암호화를 수행하지 않습니다.

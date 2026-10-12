@@ -724,11 +724,16 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 
 우선순위 P2. 소유자: 공식 보안 기능 플러그인 후보. 출처: [E-safe], [T-stronghold], [T-biometric].
 
-- [ ] OS 암호화 저장 지원 여부를 조회한다.
-- [ ] Windows DPAPI를 사용하는 문자열과 bytes 암호화, 복호화를 제공한다.
-- [ ] 보안 저장소의 비동기 사용 가능 여부 조회와 암복호화를 제공한다. [E-safe-live]의
+- [x] Windows DPAPI의 현재 사용 가능 여부를 암복호화 probe로 조회한다. 다른 플랫폼은 미지원이다.
+- [x] Windows DPAPI의 current-user 범위에서 문자열과 bytes 암호화, 복호화를 제공한다.
+  작업별 권한과 크기 제한, prompt 금지와 평문 fallback 금지는
+  [암호화 저장 계약](./site/src/content/docs/reference/plugins/safe-storage.mdx)을 따른다.
+- [x] Windows의 비동기 사용 가능 여부 조회와 암복호화를 I/O Worker에서 제공한다. [E-safe-live]의
   `isAsyncEncryptionAvailable`, `encryptStringAsync`, `decryptStringAsync`를 참고한다.
-  초기화 시점, 동시 요청, 오류와 종료 처리를 정의하고 왕복 복호화와 UI 응답성, 손상 입력을 검증한다.
+  최초 작업에서 DLL을 초기화하고 동시 요청을 I/O 큐에서 처리한다. 처리 전 취소와 종료,
+  시작한 Windows API의 중단 불가, 오류와 원본 보존을 정의한다.
+  실제 Win32 및 WebView2 회귀를 CI에 포함하며 다른 사용자와 머신, roaming profile 및
+  Windows 키 복구는 별도 실행 검증으로 남긴다.
 - [ ] 복호화 결과에 키 교체 등에 따른 재암호화 필요 여부를 제공한다. [E-safe-live]의 `shouldReEncrypt`를 참고한다.
   재암호화와 원자적 저장 절차를 정의하고 이전 키 데이터, 교체 후 재조회, 저장 실패 시 원본 보존을 검증한다.
 - [ ] 키 저장소가 잠기거나 일시적으로 이용 불가할 때 영구 복호화 실패와 구분하고 재시도 계약을 제공한다.
@@ -739,8 +744,11 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 - [ ] vault unlock, lock, save와 암호 변경을 제공한다.
 - [ ] 키 생성과 cryptographic operation을 secret 노출 없이 실행한다.
 - [ ] vault 암호 파생 함수와 salt의 설정, 생성과 보관 방법을 제공한다.
-- [ ] 재설치, 다른 사용자와 다른 머신에서 복호화할 수 없는 경우의 오류를 정의한다.
-- [ ] 일반 평문 store와 암호화 저장을 구분하고 평문 fallback은 명시적으로 선택한다.
+- [x] 복호화 불가를 평문으로 숨기지 않고 `INTERNAL`로 전달한다. 손상과 다른 사용자, 머신,
+  재설치 및 키 일시 문제를 이 코드만으로 구분하지 않는다.
+- [ ] 다른 사용자와 머신, 재설치, roaming profile 및 키 복구 시나리오를 실제로 검증한다.
+- [x] 일반 평문 store와 암호화 변환을 구분하고 이 플러그인의 묵시적 평문 fallback을 금지한다.
+  평문을 저장하려면 앱이 별도 파일 또는 store API를 명시적으로 선택한다.
 - [ ] Windows Hello를 통한 사용자 확인은 추가 기능으로 지원 여부를 결정한다. Tauri 공식 biometric의 모바일 지원과 구분한다.
 
 ## 22. 자동 업데이트와 앱 배포 기능

@@ -547,3 +547,9 @@ linear filtering의 투명 edge, crop과 빈 소스 및 quota 오류를 추가�
 호출별 손자 정리나 제삼자 도구의 부수 효과를 검증하지 않는다.
 자식은 PID 파일 쓰기를 완료한 뒤 rename으로 준비를 알린다. 두 생존 검사는 파일 생성과 쓰기 사이의
 경합으로 빈 PID를 읽지 않고, 취소 전에 실제 자식의 Windows process handle을 잡는다.
+
+`windows-safe-storage.test.ts`는 실제 DPAPI로 Unicode와 임의 바이트, 크기 상한, 손상 입력,
+반복 dispose와 독립 어댑터, 저장된 암호문의 새 프로세스 복호화를 검사한다.
+`windows-safe-storage.ts`는 실제 WebView2와 I/O Worker에서 동시 요청, UI 타이머 진행,
+뷰별 권한 거부와 손상 입력을 확인하며 `mise run host:windows`에 포함한다.
+다른 사용자나 머신, Windows 키 복구 및 물리 입력 검증은 포함하지 않는다.
