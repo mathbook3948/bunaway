@@ -17,7 +17,7 @@ const assets = resolve(output, "assets");
 const reportPath = resolve(root, "build/windows-webview-controls-results.json");
 
 if (!process.argv.includes("--child")) {
-  await mkdir(assets, {
+  await mkdir(resolve(assets, "web"), {
     recursive: true,
   });
   const web = await Bun.build({
