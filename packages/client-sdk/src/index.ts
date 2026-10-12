@@ -10,14 +10,12 @@ import {
   errorSchema,
   type Hello,
   type HostOperationContract,
-  type Infer,
   type JsonValue,
   type Message,
   type NegotiatedProtocol,
   negotiateProtocol,
   ProtocolError,
   parseMessage,
-  type Schema,
   SDK_READY_FEATURE,
   serializeMessage,
   type Transport,
@@ -946,17 +944,17 @@ export async function invoke<T extends JsonValue = JsonValue>(
 /**
  * Invoke a native plugin operation through the document's shared connection.
  *
- * Validates input before sending and validates the host response before returning it.
+ * Checks JSON transport limits; the installed plugin parses input and output on its host worker.
  * @throws {BunawayError} If validation or the command fails.
  */
-export async function invokePlugin<I extends Schema, O extends Schema>(
-  contract: HostOperationContract<I, O>,
-  input: Infer<I>,
+export async function invokePlugin(
+  contract: HostOperationContract,
+  input: JsonValue,
   options?: InvokeOptions,
-): Promise<Infer<O>> {
-  let payload: Infer<I>;
+): Promise<JsonValue> {
+  let payload: JsonValue;
   try {
-    payload = validateValue(contract.input, input);
+    payload = validateValue({}, input);
   } catch {
     throw new BunawayError({
       code: "INVALID_ARGUMENT",
@@ -965,7 +963,7 @@ export async function invokePlugin<I extends Schema, O extends Schema>(
   }
   const output = await invoke(`plugin.${contract.name}`, payload, options);
   try {
-    return validateValue(contract.output, output);
+    return validateValue({}, output);
   } catch {
     throw new BunawayError({
       code: "INTERNAL",

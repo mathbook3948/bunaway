@@ -71,29 +71,29 @@ await writeFile(
   source,
   `
 import { command, defineApp } from "@bunaway/backend";
-import { BunawayError, s } from "@bunaway/plugin";
+import { BunawayError } from "@bunaway/plugin";
 import { storage, storagePlugin } from "@bunaway/plugin-storage";
 import { version, step, called } from "../shared/counter.ts";
 export const app = defineApp({ modules: [], plugins: [storagePlugin], state: { count: 0 },
-  events: { "counter.changed": s.integer(), ...(version === 3 ? { "counter.extra": s.integer() } : {}) },
+  events: { "counter.changed": { type: "integer" } as const, ...(version === 3 ? { "counter.extra": { type: "integer" } as const } : {}) },
   commands: {
-    "counter.read": command({ input: s.null(), output: s.json(), handle(_input, context) {
+    "counter.read": command({ input: { const: null } as const, output: {}, handle(_input, context) {
       return { version, pid: process.pid, count: context.state.get("count") ?? 0 };
     } }),
-    "counter.next": command({ input: s.null(), output: s.json(), async handle(_input, context) {
+    "counter.next": command({ input: { const: null } as const, output: {}, async handle(_input, context) {
       const count = Number(context.state.get("count")) + step;
       context.state.set("count", count);
       await context.events.emit("counter.changed", count, { kind: "broadcast" });
       return { version, pid: process.pid, count, calls: called() };
     } }),
-    "probe.failure": command({ input: s.null(), output: s.null(), handle() {
+    "probe.failure": command({ input: { const: null } as const, output: { const: null } as const, handle() {
       throw new BunawayError({ code: "INVALID_ARGUMENT", message: "Expected reload probe error" });
     } }),
-    "probe.storage": command({ input: s.null(), output: s.string(), async handle() {
+    "probe.storage": command({ input: { const: null } as const, output: { type: "string" } as const, async handle() {
       await storage.writeText({ path: ${JSON.stringify(storagePath)}, text: "reload storage" });
       return storage.readText({ path: ${JSON.stringify(storagePath)} });
     } }),
-    "probe.report": command({ input: s.json(), output: s.null(), async handle(payload) {
+    "probe.report": command({ input: {}, output: { const: null } as const, async handle(payload) {
       await Bun.write(${JSON.stringify(reports)} + "/" + version + ".json", JSON.stringify(payload));
       return null;
     } }),

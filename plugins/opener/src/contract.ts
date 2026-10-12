@@ -1,36 +1,44 @@
-import { s } from "@bunaway/plugin";
 import { BunawayError, type JsonValue, validateValue } from "@bunaway/protocol";
+import { z } from "zod";
 import { fileInput } from "./path.ts";
 import { urlInput } from "./url.ts";
-
 /** File and HTTP or HTTPS request contracts shared by callers and native execution. */
 export const openerOperations = {
   openUrl: {
     input: urlInput,
-    output: s.null(),
+    output: z.null(),
   },
   openFile: {
     input: fileInput,
-    output: s.null(),
+    output: z.null(),
   },
   revealFile: {
     input: fileInput,
-    output: s.null(),
+    output: z.null(),
   },
 } as const;
-
 /** Validate a native call, rejecting operations outside this plugin with UNSUPPORTED. */
 export function validateOpenerInput(operation: string, input: JsonValue) {
-  switch (operation) {
-    case "opener.openUrl":
-      return validateValue(openerOperations.openUrl.input, input);
-    case "opener.openFile":
-    case "opener.revealFile":
-      return validateValue(openerOperations.openFile.input, input);
-    default:
-      throw new BunawayError({
-        code: "UNSUPPORTED",
-        message: "Host operation is not registered.",
-      });
+  try {
+    switch (operation) {
+      case "opener.openUrl":
+        return openerOperations.openUrl.input.parse(validateValue({}, input));
+      case "opener.openFile":
+      case "opener.revealFile":
+        return openerOperations.openFile.input.parse(validateValue({}, input));
+      default:
+        throw new BunawayError({
+          code: "UNSUPPORTED",
+          message: "Host operation is not registered.",
+        });
+    }
+  } catch (error) {
+    if (error instanceof BunawayError) {
+      throw error;
+    }
+    throw new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message: "Invalid plugin input.",
+    });
   }
 }

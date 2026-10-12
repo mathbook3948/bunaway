@@ -1,12 +1,17 @@
+import { storageOperations } from "../../plugins/storage/src/contract.ts";
+import { pluginParsers } from "../fixtures/plugin-parsers.ts";
+
+const parsers = pluginParsers("storage", storageOperations);
+
 import { expect, test } from "bun:test";
 import { type CommandContext, command } from "@bunaway/backend";
 import type { CoreServices } from "@bunaway/core";
-import { NativeRegistry } from "@bunaway/protocol";
 import {
   type StorageMetadata,
   storage,
   storagePlugin,
 } from "@bunaway/plugin-storage";
+import { NativeRegistry } from "@bunaway/protocol";
 import { bindHostAPI } from "../fixtures/host-plugins.ts";
 
 const location = {
@@ -72,7 +77,7 @@ test("metadata operations validate inputs and file or directory results", () => 
     "storage.stat",
   ] as const) {
     expect(
-      registry.validateCall({
+      parsers.validateCall({
         operation,
         payload: location,
       }),
@@ -81,12 +86,12 @@ test("metadata operations validate inputs and file or directory results", () => 
       payload: location,
     });
   }
-  expect(registry.validateOutput("storage.exists", false)).toBe(false);
-  expect(registry.validateOutput("storage.stat", null)).toBeNull();
-  expect(registry.validateOutput("storage.stat", fileMetadata)).toEqual(
+  expect(parsers.validateOutput("storage.exists", false)).toBe(false);
+  expect(parsers.validateOutput("storage.stat", null)).toBeNull();
+  expect(parsers.validateOutput("storage.stat", fileMetadata)).toEqual(
     fileMetadata,
   );
-  expect(registry.validateOutput("storage.stat", directoryMetadata)).toEqual(
+  expect(parsers.validateOutput("storage.stat", directoryMetadata)).toEqual(
     directoryMetadata,
   );
 
@@ -101,7 +106,7 @@ test("metadata operations validate inputs and file or directory results", () => 
     },
   ]) {
     expect(() =>
-      registry.validateCall({
+      parsers.validateCall({
         operation: "storage.stat",
         payload: input,
       }),
@@ -125,7 +130,7 @@ test("metadata operations validate inputs and file or directory results", () => 
       sizeBytes: 0,
     },
   ]) {
-    expect(() => registry.validateOutput("storage.stat", output)).toThrow();
+    expect(() => parsers.validateOutput("storage.stat", output)).toThrow();
   }
 });
 

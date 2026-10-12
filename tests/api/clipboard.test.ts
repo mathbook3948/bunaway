@@ -1,17 +1,19 @@
 import { expect, test } from "bun:test";
-import { bindHostAPI } from "#core/host-api";
+import { resolve } from "node:path";
 import { bindCommandHost } from "@bunaway/plugin-api/host";
 import { clipboard, clipboardPlugin } from "@bunaway/plugin-clipboard";
-import { s } from "@bunaway/plugin";
 import {
   type HostContext,
   NativeRegistry,
   serializeHostResponse,
 } from "@bunaway/protocol";
-import { MAX_TEXT_LENGTH } from "#plugins/clipboard/src/text";
 import { installedPlugins } from "#cli/plugins";
-import { resolve } from "node:path";
+import { bindHostAPI } from "#core/host-api";
+import { clipboardOperations } from "#plugins/clipboard/src/contract";
+import { MAX_TEXT_LENGTH } from "#plugins/clipboard/src/text";
+import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
+const parsers = pluginParsers("clipboard", clipboardOperations);
 const registry = new NativeRegistry([
   clipboardPlugin,
 ]);
@@ -29,7 +31,7 @@ test("clipboard has separate read, write and clear permissions with strict Unico
     "😀".repeat(MAX_TEXT_LENGTH),
   ]) {
     expect(
-      registry.validateCall({
+      parsers.validateCall({
         operation: "clipboard.writeText",
         payload: {
           text,
@@ -38,7 +40,7 @@ test("clipboard has separate read, write and clear permissions with strict Unico
     ).toEqual({
       text,
     });
-    expect(registry.validateOutput("clipboard.readText", text)).toBe(text);
+    expect(parsers.validateOutput("clipboard.readText", text)).toBe(text);
     // Even the most expensive allowed JSON escaping fits the shared transport.
     serializeHostResponse({
       kind: "result",
@@ -49,7 +51,7 @@ test("clipboard has separate read, write and clear permissions with strict Unico
     kind: "result",
     payload: "\u0001".repeat(MAX_TEXT_LENGTH),
   });
-  expect(registry.validateOutput("clipboard.readText", null)).toBeNull();
+  expect(parsers.validateOutput("clipboard.readText", null)).toBeNull();
   for (const payload of [
     {
       text: "a\0b",
@@ -72,7 +74,7 @@ test("clipboard has separate read, write and clear permissions with strict Unico
     },
   ]) {
     expect(() =>
-      registry.validateCall({
+      parsers.validateCall({
         operation: "clipboard.writeText",
         payload,
       }),
@@ -83,7 +85,7 @@ test("clipboard has separate read, write and clear permissions with strict Unico
     "clipboard.clear",
   ]) {
     expect(() =>
-      registry.validateCall({
+      parsers.validateCall({
         operation,
         payload: {},
       }),
@@ -93,7 +95,6 @@ test("clipboard has separate read, write and clear permissions with strict Unico
     new NativeRegistry([]).operation("clipboard.readText"),
   ).toThrow();
 });
-
 test("clipboard grants only the requested operation", () => {
   for (const operation of registry.operations.values()) {
     const call = {
@@ -149,8 +150,7 @@ test("clipboard grants only the requested operation", () => {
     }),
   ).not.toThrow();
 });
-
-test("clipboard public functions reuse the active command host and validate before dispatch", async () => {
+test("clipboard public functions reuse the active command host and validate at the owning adapter", async () => {
   const calls: string[] = [];
   const controller = new AbortController();
   const contextId = "clipboard-context" as HostContext;
@@ -159,6 +159,7 @@ test("clipboard public functions reuse the active command host and validate befo
     controller.signal,
     async (context, call) => {
       expect(context).toBe(contextId);
+      parsers.validateCall(call);
       calls.push(call.operation);
       return {
         kind: "result",
@@ -168,8 +169,12 @@ test("clipboard public functions reuse the active command host and validate befo
     registry,
   );
   const command = bindCommandHost({
-    input: s.null(),
-    output: s.null(),
+    input: {
+      const: null,
+    },
+    output: {
+      const: null,
+    },
     async run(
       _input: unknown,
       _context: import("@bunaway/plugin-api").CommandContext,
@@ -207,7 +212,6 @@ test("clipboard public functions reuse the active command host and validate befo
     "clipboard.clear",
   ]);
 });
-
 test("clipboard is independently discoverable as a Windows UI plugin", async () => {
   const plugins = await installedPlugins(
     resolve(import.meta.dir, "../.."),
@@ -227,4 +231,4 @@ test("clipboard is independently discoverable as a Windows UI plugin", async () 
   const source = await result.outputs[0]?.text();
   expect(source).not.toContain("user32.dll");
   expect(source).not.toContain("node:async_hooks");
-}, 20_000);
+}, 20000);

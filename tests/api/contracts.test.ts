@@ -41,12 +41,13 @@ import {
   serializeProcessFrame,
   type Transport,
   type TransportEvent,
+  validateValue as validateHostResult,
   validateValue,
 } from "@bunaway/protocol";
 import {
   bindHostAPI,
   contracts,
-  registry,
+  validateHostInput,
   validateHostOutput,
 } from "../fixtures/host-plugins.ts";
 import {
@@ -177,10 +178,15 @@ const app = {
     "notes.read": command({
       input,
       output,
-      handle: ({ key }, context) =>
-        context.host.call(contracts["storage.readText"], {
-          path: `notes/${key}.txt`,
-        }),
+      handle: async ({ key }, context) =>
+        validateHostResult(
+          {
+            type: "string",
+          },
+          await context.host.call(contracts["storage.readText"], {
+            path: `notes/${key}.txt`,
+          }),
+        ),
     }),
   },
   events: {
@@ -636,7 +642,7 @@ test("Host operations share exact request/result schemas and safe errors", async
     },
   ]) {
     expect(() =>
-      registry.validateCall(parseHostCall(JSON.stringify(call))),
+      validateHostInput(parseHostCall(JSON.stringify(call))),
     ).toThrow();
   }
   expect(validateHostOutput("storage.writeText", null)).toBeNull();
@@ -707,7 +713,7 @@ test("Host operations share exact request/result schemas and safe errors", async
     }),
   ).rejects.toMatchObject({
     code: "INTERNAL",
-    message: "Invalid host response.",
+    message: "Invalid plugin output.",
   });
   expect(
     new BunawayError({
@@ -762,7 +768,7 @@ test("storage validates path strings while platform implementations validate nat
     "bad\rpath",
   ]) {
     expect(() =>
-      registry.validateCall(
+      validateHostInput(
         parseHostCall(
           JSON.stringify({
             operation: "storage.readText",

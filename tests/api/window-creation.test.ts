@@ -1,3 +1,8 @@
+import { windowDefinitions } from "../../plugins/windows/src/contract.ts";
+import { pluginParsers } from "../fixtures/plugin-parsers.ts";
+
+const parsers = pluginParsers("windows", windowDefinitions);
+
 import { expect, test } from "bun:test";
 import {
   parseWindowCall,
@@ -23,7 +28,7 @@ test.each([
       },
     };
     expect(validateWindowCall(call)).toEqual(call);
-    expect(registry.validateCall(call)).toEqual(call);
+    expect(parsers.validateCall(call)).toEqual(call);
     expect(registry.operation(operation).name).toBe(operation);
     const permissions = {
       permissions: [
@@ -102,7 +107,7 @@ test.each([
           options,
         },
       };
-      expect(registry.validateCall(valid)).toEqual(valid);
+      expect(parsers.validateCall(valid)).toEqual(valid);
       expect(parseWindowCall(JSON.stringify(valid))).toEqual(valid);
     }
     for (const options of [
@@ -156,9 +161,9 @@ test.each([
           ...extra,
         },
       };
-      // Both the public native registry and serialized host boundary reject extra fields.
+      // Both the SDK adapter and serialized window helper reject extra fields.
       for (const validate of [
-        () => registry.validateCall(invalid),
+        () => parsers.validateCall(invalid),
         () => parseWindowCall(JSON.stringify(invalid)),
       ]) {
         expect(validate).toThrow(

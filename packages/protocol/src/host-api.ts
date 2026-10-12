@@ -1,17 +1,9 @@
-import type { Infer, JsonValue, Schema } from "./validation.ts";
+import type { JsonValue } from "./validation.ts";
 import { parse, serialize } from "./validation.ts";
 
-/**
- * Declares a host operation's schemas. Policies grant access using its name;
- * applications own resource access rules and plugins handle OS consent.
- */
-export type HostOperationContract<
-  I extends Schema = Schema,
-  O extends Schema = Schema,
-> = {
+/** Identifies an installed host operation. Its parser stays in the owning plugin code. */
+export type HostOperationContract = {
   readonly name: string;
-  readonly input: I;
-  readonly output: O;
 };
 /** Collects the host operations owned by one native plugin. */
 export type NativePluginContract = {
@@ -59,8 +51,5 @@ export interface HostAPI {
    * Calls a registered operation; rejection uses BunawayError for invalid input,
    * cancellation, permission denial, and host failures.
    */
-  call<I extends Schema, O extends Schema>(
-    contract: HostOperationContract<I, O>,
-    input: Infer<I>,
-  ): Promise<Infer<O>>;
+  call(contract: HostOperationContract, input: JsonValue): Promise<JsonValue>;
 }

@@ -19,6 +19,7 @@ import {
   type Policy,
   type ServerMessage,
   serializeMessage,
+  validateValue as validateHostResult,
   validateValue,
 } from "@bunaway/protocol";
 import { contracts, createCore } from "../fixtures/host-plugins.ts";
@@ -2163,16 +2164,21 @@ test("app commands enforce resource access and direct plugin calls cannot bypass
           output: {
             type: "string",
           },
-          handle({ key }, context) {
+          async handle({ key }, context) {
             if (key !== "welcome") {
               throw new BunawayError({
                 code: "PERMISSION_DENIED",
                 message: "Memo access denied.",
               });
             }
-            return context.host.call(contracts["storage.readText"], {
-              path: "notes/welcome.txt",
-            });
+            return validateHostResult(
+              {
+                type: "string",
+              },
+              await context.host.call(contracts["storage.readText"], {
+                path: "notes/welcome.txt",
+              }),
+            );
           },
         }),
       },

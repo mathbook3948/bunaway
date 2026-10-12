@@ -158,8 +158,8 @@ export function prepareAppRegistry(
   // Generated native commands use the same permission checks as declared commands.
   for (const operation of registry.operations.values()) {
     commands.set(`plugin.${operation.name}`, {
-      input: operation.input,
-      output: operation.output,
+      input: {},
+      output: {},
       async run(input, context) {
         return context.host.call(operation, input as JsonValue);
       },

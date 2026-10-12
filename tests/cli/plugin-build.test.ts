@@ -2,10 +2,10 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { PLATFORMS } from "@bunaway/plugin-api";
 import { frameworkRoot, writeJson } from "#cli/files";
 import { buildNativePlugin } from "#cli/plugin-build";
 import { readPluginDeclaration } from "#cli/plugins";
-import { PLATFORMS } from "@bunaway/plugin-api";
 
 test.each([
   ".ts",
@@ -43,8 +43,8 @@ test.each([
       const entry = resolve(root, "src/index.ts");
       await Bun.write(
         resolve(root, "src/contract.ts"),
-        `import { s } from "@bunaway/plugin";
-export const operations = { read: { input: s.null(), output: s.string() } } as const;`,
+        `import { z } from "zod";
+export const operations = { read: { input: z.null(), output: z.string().transform(value => value + "!") } } as const;`,
       );
       const imports = PLATFORMS.map(
         (platform) =>
@@ -114,7 +114,7 @@ export const createOperations: NativeAdapterFactory = () => ({ execute: () => "$
         [
           process.execPath,
           "-e",
-          `for (const file of ${JSON.stringify(outputs)}) { const { default: plugin } = await import(new URL(file, ${JSON.stringify(`${pathToFileURL(resolve(root, "dist/")).href}/`)})); if (plugin.version !== "1" || !Object.isFrozen(plugin)) throw new Error("Invalid built plugin version"); }`,
+          `for (const file of ${JSON.stringify(outputs)}) { const { default: plugin } = await import(new URL(file, ${JSON.stringify(`${pathToFileURL(resolve(root, "dist/")).href}/`)})); if (plugin.version !== "1" || !Object.isFrozen(plugin)) throw new Error("Invalid built plugin version"); if (file === "native/linux.js") { const adapter = plugin.nativePlatforms.linux.create({dataRoot:".",capabilities:[]}); try { if (adapter.execute("demo.read", null, "test") !== "LINUX_ONLY_MARKER!") throw new Error("Built parser did not run exactly once"); } finally { adapter.dispose(); } } }`,
         ],
         {
           cwd: root,

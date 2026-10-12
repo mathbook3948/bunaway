@@ -226,7 +226,7 @@ export function createClipboard() {
         }
         const text = bytes.subarray(0, end).toString("utf16le");
         try {
-          return validateValue(textSchema, text);
+          return textSchema.parse(validateValue({}, text));
         } catch {
           throw failed();
         }

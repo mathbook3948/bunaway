@@ -3,51 +3,27 @@ import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
+import { API_LIMITS, MAX_MESSAGE_BYTES } from "@bunaway/protocol";
 import {
   Channel,
   type Packet,
   type UIConfig,
 } from "#native/windows/bun/channel";
-import { API_LIMITS, MAX_MESSAGE_BYTES } from "@bunaway/protocol";
 import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
 
 const native = {
   operations: [
     {
       name: "ui-test.consent",
-      input: {
-        const: null,
-      },
-      output: {
-        type: "string",
-      },
     },
     {
       name: "ui-test.wait",
-      input: {
-        const: null,
-      },
-      output: {
-        type: "string",
-      },
     },
     {
       name: "ui-test.large",
-      input: {
-        const: null,
-      },
-      output: {
-        type: "string",
-      },
     },
     {
       name: "ui-test.ok",
-      input: {
-        const: null,
-      },
-      output: {
-        type: "string",
-      },
     },
   ],
 } as const;

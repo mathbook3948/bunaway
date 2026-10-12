@@ -153,7 +153,7 @@ declare function capabilities(): Promise<Capabilities>;
 
 | 소유자 | 담당 |
 | --- | --- |
-| 공통 protocol | 메시지 형식, JSON 제한, schema 검증, 버전 협상 |
+| 공통 protocol | 메시지 형식, JSON 제한, 앱 명령과 이벤트 schema 검증, 버전 협상 |
 | backend SDK와 core | 앱과 모듈 조립, 명령, 이벤트, 상태, 호출 컨텍스트, 플러그인 등록과 수명 |
 | plugin SDK | 기능 계약 검증, 선언에서 공개 호출 함수 생성, 환경에 맞는 호출 선택 |
 | client SDK | WebView 연결, invoke/listen, 응답, 취소와 페이지 종료 |
@@ -164,30 +164,28 @@ declare function capabilities(): Promise<Capabilities>;
 
 ## 호출 계약
 
-공통 백엔드 호출 API는 `host.call(contract, input)`으로 한다. 플러그인은 입력과
-출력 schema를 가진 계약을 넘기며 결과 타입은 출력 schema에서 추론한다.
-명시적 호출이 필요한 코드에는 `context.host.call(contract, input)`을 제공한다.
-문자열 작업 이름만으로 결과 타입을 정하는 고정 전역 작업 목록은 제거한다.
+공통 백엔드 호출 API는 `host.call(contract, input)`이다. 계약에는 등록한 작업 이름만
+들어가며 입력과 결과는 JsonValue다. 타입을 추론하는 공개 API는 `defineNativePlugin`이
+Zod 입력 스키마의 input 타입과 출력 스키마의 output 타입으로 만든다.
 
 ```ts
-type HostOperationContract<I extends Schema, O extends Schema> = {
-  readonly name: string;
-  readonly input: I;
-  readonly output: O;
-};
-
+type HostOperationContract = { readonly name: string };
 interface HostAPI {
-  call<I extends Schema, O extends Schema>(
-    contract: HostOperationContract<I, O>,
-    input: Infer<I>,
-  ): Promise<Infer<O>>;
+  call(contract: HostOperationContract, input: JsonValue): Promise<JsonValue>;
 }
 ```
 
-계약 객체의 이름은 등록한 작업을 찾는 키다. 호출자가 넘긴 schema로
-등록한 계약을 덮어쓰지 않는다. 입력, 결과, 권한 검사에는 앱에 등록한 플러그인의
-정규 계약을 사용한다. `currentHost`와 AsyncLocalStorage 객체는 플러그인에 공개하지
-않고, 편의 함수는 공통 `host.call`에 위임한다.
+[ADR 0018](../decisions/0018-plugin-local-zod-parsing.md)에 따라 스키마는 설치한 플러그인
+코드에 남긴다. 작업을 소유하는 Worker의 SDK가 어댑터 실행 직전에 input.parse를,
+성공 직후에 output.parse를 각각 한 번 실행한다. 파싱한 입력이 실제 실행에 쓰이고
+파싱한 결과가 호출자에게 전달된다. transport, Core와 NativeRegistry는 Zod를 재실행하지 않는다.
+manifest와 등록 메시지에는 이름과 버전, 지원 플랫폼, 작업 이름만 전달한다.
+
+파싱 전후에는 JSON 값, 크기, 깊이와 Unicode 제한을 검사한다. Zod 검사나 변환 함수는
+전송하지 않는다. 동기 I/O의 승인과 실행 순서를 보존하기 위해 비동기 스키마는 지원하지 않는다.
+입력 파싱 실패는 INVALID_ARGUMENT, 결과 파싱 실패는 INTERNAL로 정리한다.
+플러그인 코드에 정의한 동기 refine, transform, when과 키 정규화는 그대로 실행한다.
+권한 확인은 파싱보다 먼저 이루어지며 거부된 호출은 검사 콜백도 실행하지 않는다.
 
 명령의 성공, 실패, 취소 후에는 해당 호출 범위를 폐기한다. setup에서 시작한 작업은
 앱의 백엔드 취소 신호를 사용한다. 범위가 없으면 `INVALID_ARGUMENT`, 종료된 범위면
@@ -203,7 +201,7 @@ StopHook은 타이머, 연결과 자체 자원을 정리한다.
 
 ```ts
 type NativePluginContract = {
-  readonly operations: readonly HostOperationContract<Schema, Schema>[];
+  readonly operations: readonly HostOperationContract[];
 };
 
 // PluginDefinition에 추가하거나 교체하는 필드다.
@@ -213,7 +211,7 @@ type NativePluginFields = {
 };
 ```
 
-operation에는 이름과 입력, 출력 schema가 있다.
+직렬화한 operation에는 이름만 있다. Zod 입력과 출력 스키마는 플러그인 선언에 있다.
 작업 이름 자체가 권한 식별자이며 별도 permission과 osPermission 필드는 없다. 각 이름은 플러그인의
 이름 공간에 속하며 다른 플러그인이나 앱의 등록과 중복되면 시작을 실패시킨다.
 새 네이티브 기능의 선언은 플러그인의 `index.ts`에 작성하며 공통 protocol에
@@ -418,7 +416,8 @@ envelope의 크기 제한을 검사하며, 실패하면 안전한 `INTERNAL` 응
 해당 요청에 `INTERNAL`을 반환한다. 전송 채널에 넘기기 전에 처리하므로 같은 세션의
 다음 명령은 계속 실행할 수 있다.
 
-공통 계층은 등록된 schema로 입력을 검증하고 출처의 정책에 작업 이름이 있는지 확인한다.
+공통 계층은 JSON과 등록 이름을 검증하고 출처의 정책에 작업 이름이 있는지 확인한다.
+실행을 승인한 뒤 SDK가 설치한 플러그인의 Zod 스키마로 입력과 결과를 파싱한다.
 플랫폼 adapter가 없어도 작업 권한을 먼저 검사하여 허용된 호출에는 `UNSUPPORTED`,
 권한이 없는 호출에는 `PERMISSION_DENIED`를 반환한다.
 

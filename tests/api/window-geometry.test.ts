@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { windowPermissions } from "../fixtures/window-permissions.ts";
 import { type CommandContext, command } from "@bunaway/backend";
 import type { NativeWindowServices } from "@bunaway/plugin-api/native";
 import {
@@ -16,6 +15,7 @@ import {
 } from "@bunaway/protocol";
 import { bindHostAPI } from "#core/host-api";
 import { createOperations } from "#plugins/windows/src/platforms/windows";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 const queries = [
   "getContentSize",
@@ -377,7 +377,7 @@ test("geometry schemas reject malformed shapes and out of range inputs and outpu
     }),
   ).toThrow();
   expect(
-    windowOperations["windows.getOuterSize"].output.properties.width.maximum,
+    windowOperations["windows.getOuterSize"].output.shape.width.maxValue,
   ).toBe(2147483647);
 });
 

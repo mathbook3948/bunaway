@@ -19,7 +19,7 @@ Windows FFI 호스트와 macOS의 `runBunApp` 어댑터가 이를 연결한다. 
 | `Client`, `ClientFactory`, `InvokeOptions`, `EventDelivery` | client-sdk | UI, WebView transport |
 | `AppDefinition`, `CommandDefinition`, `CommandContext`, 플러그인, 상태, 이벤트 | core, backend에서 재수출 | 앱, 플러그인, 코어 |
 | `Core`, `CoreSession`, `CoreFactory`, `CoreServices`, `RuntimeServices` | core | runtime-bun |
-| Host operation별 입력, 출력 스키마, `HostAPI`, `HostContext` | protocol | 코어, 플러그인, runtime, 네이티브 |
+| Host operation 이름과 JSON 전달, `HostAPI`, `HostContext` | protocol | 코어, 플러그인, runtime, 네이티브 |
 | `command`, `defineModule`, `defineApp`, `bindHostAPI` | backend, runtime-bun | 앱 정의, Host API 어댑터 |
 
 추가 의존성은 없다. portable 코어는 DOM, Bun, Node 전역 타입 없이 컴파일한다.
@@ -199,9 +199,9 @@ SDK는 취소 또는 시간 초과 후 늦은 응답을 기다리는 구독 요�
 | `log.write` | `{ level: debug/info/warn/error, message, details? }` | null |
 | `capabilities.get` | null | `{ name, support, reason? }[]` |
 
-공통 host-call.schema.json은 작업 이름과 JSON envelope를 검증한다. 입력과 출력 schema는 개별 플러그인의 index.ts에서 정의한다.
+공통 host-call.schema.json은 작업 이름과 JSON envelope를 검증한다. 입력과 출력은 개별 플러그인의 Zod 선언으로 실행 Worker의 SDK에서 파싱한다.
 요청 스키마 검사는 파일 권한 검사가 아니다. 저장 위치와 파일별 접근 규칙은 앱이 정하고
-storage에는 경로를 전달한다. 공통 스키마는 빈 문자열, NUL과 개행을 거부하며 길이를 제한한다.
+storage에는 경로를 전달한다. 저장 플러그인의 스키마는 빈 문자열, NUL과 개행을 거부하며 길이를 제한한다.
 현재 Windows 구현은 드라이브 또는 UNC 공유에서 시작하는 절대 경로를 받는다.
 네이티브 경계에서 플랫폼 경로 문법과 점 경로 요소, 링크, 경로 별칭과 대상 교체를 검사한다.
 U+2028, U+2029가 들어간 경로도 각 경로 요소를 검사한다. 플러그인은 기본 저장 폴더를 선택하지 않는다.

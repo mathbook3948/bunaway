@@ -1,17 +1,11 @@
-import { expect, test } from "bun:test";
 import { dlopen, ptr } from "bun:ffi";
+import { expect, test } from "bun:test";
 import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
-import { Channel, type UIConfig } from "#native/windows/bun/channel";
-import { bindHostAPI } from "#core/host-api";
-import { disposeAll } from "#native/host-api/bun/plugins";
-import { createClipboard } from "#plugins/clipboard/src/win32";
-import { MAX_TEXT_LENGTH } from "#plugins/clipboard/src/text";
 import { bindCommandHost } from "@bunaway/plugin-api/host";
 import { clipboard, clipboardPlugin } from "@bunaway/plugin-clipboard";
-import { s } from "@bunaway/plugin";
 import {
   BunawayError,
   type HostCall,
@@ -19,12 +13,16 @@ import {
   type HostResponse,
   NativeRegistry,
 } from "@bunaway/protocol";
+import { bindHostAPI } from "#core/host-api";
+import { disposeAll } from "#native/host-api/bun/plugins";
+import { Channel, type UIConfig } from "#native/windows/bun/channel";
+import { MAX_TEXT_LENGTH } from "#plugins/clipboard/src/text";
+import { createClipboard } from "#plugins/clipboard/src/win32";
 import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
 
 const PM_REMOVE = 1;
 const GMEM_MOVEABLE = 0x0002;
 const GMEM_ZEROINIT = 0x0040;
-
 // Native writes are opt-in because the clipboard is shared with the user's desktop.
 test.skipIf(
   process.platform !== "win32" || process.env.BUNAWAY_CLIPBOARD_NATIVE !== "1",
@@ -279,11 +277,17 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
           registry,
         );
         const command = bindCommandHost({
-          input: s.null(),
+          input: {
+            const: null,
+          },
           output: {
             anyOf: [
-              s.string(),
-              s.null(),
+              {
+                type: "string",
+              },
+              {
+                const: null,
+              },
             ],
           },
           run: (
@@ -320,7 +324,6 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
       }
       await invoke(() => clipboard.clear(null));
       expect(await invoke(() => clipboard.readText(null))).toBeNull();
-
       // A custom, non-text format must produce null, without clearing its data.
       const user = dlopen("user32.dll", {
         RegisterClipboardFormatW: {
@@ -376,7 +379,6 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
         kernel.close();
         user.close();
       }
-
       await invoke(() =>
         clipboard.writeText({
           text: "keep after cancellation",
@@ -474,5 +476,5 @@ try {
       ]);
     }
   },
-  20_000,
+  20000,
 );
