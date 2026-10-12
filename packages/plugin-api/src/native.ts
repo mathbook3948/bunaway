@@ -184,12 +184,38 @@ export type WindowBounds = {
   dpi: number;
 };
 
+/** A current desktop display snapshot. IDs are device names, not persistent hardware identities. */
+export type NativeMonitor = {
+  id: string;
+  name: string;
+  primary: boolean;
+  bounds: { x: number; y: number; width: number; height: number };
+  workArea: { x: number; y: number; width: number; height: number };
+  dpi: number;
+  scaleFactor: number;
+  /** Clockwise degrees, or null when the driver does not report orientation. */
+  rotation: 0 | 90 | 180 | 270 | null;
+  /** Integer hertz reported by DEVMODE, or null for driver default/unknown. */
+  refreshRate: number | null;
+};
+
+/** Display queries executed on the per-monitor-aware UI thread. No native handles escape. */
+export type NativeMonitorServices = {
+  list(): NativeMonitor[];
+  primary(): NativeMonitor;
+  nearestPoint(point: { x: number; y: number }): NativeMonitor;
+  nearestRect(rect: { x: number; y: number; width: number; height: number }): NativeMonitor;
+  cursor(): { x: number; y: number };
+};
+
 /**
  * Native controls exposed to an installed window plugin.
  * The plugin rejects minimized/maximized transitions during fullscreen before invoking these controls.
  * Native failures throw; the UI host converts them to bounded public errors.
  */
 export type NativeWindow = {
+  /** Largest overlap, or nearest display; minimized windows use their pre-minimize rectangle. */
+  getMonitor?(): NativeMonitor;
   /** Reads a versioned state and physical outer-bounds snapshot for recovery after subscribing. */
   getSnapshot(): WindowSnapshot;
   /** Reads the latest preparation outcome, including a retained closed-window outcome. Windows only. */
@@ -311,6 +337,8 @@ export type WindowChange =
   | "resize";
 /** UI-thread services used by the native windows plugin. */
 export type NativeWindowServices = {
+  /** Live display queries. Absent on platforms without monitor support. */
+  monitors?: NativeMonitorServices;
   /** Whether this UI adapter supports per-creation presentation options; absent means unsupported. */
   supportsCreationOptions?: boolean;
   /** Validate display-dependent placement without acquiring resources, before reservation and close. */

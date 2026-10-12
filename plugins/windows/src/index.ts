@@ -56,3 +56,6 @@ export {
   windowReadinessSchema,
   windowSnapshotSchema,
 } from "./contract.ts";
+
+export type { Monitor } from "./monitor-contract.ts";
+export { monitorSchema } from "./monitor-contract.ts";

@@ -30,6 +30,11 @@ export function createOperations(
   ): JsonValue | Promise<JsonValue> {
     const window = services.window(viewId);
     switch (call.operation) {
+      case "windows.getMonitor":
+        if (!window.getMonitor) {
+          throw new BunawayError({ code: "UNSUPPORTED", message: "Monitor queries are unavailable." });
+        }
+        return { ...window.getMonitor() };
       case "windows.getReadiness":
         return {
           ...window.getReadiness(),
@@ -433,6 +438,31 @@ export function createOperations(
         operation,
         payload: input,
       });
+      if (
+        call.operation === "windows.getMonitors" ||
+        call.operation === "windows.getPrimaryMonitor" ||
+        call.operation === "windows.getMonitorNearestPoint" ||
+        call.operation === "windows.getMonitorNearestRect" ||
+        call.operation === "windows.getCursorPosition"
+      ) {
+        if (!context.permissions.permissions.includes(call.operation)) {
+          throw new BunawayError({ code: "PERMISSION_DENIED", message: "Monitor query permission required." });
+        }
+        if (services.stopping() || services.cancelled(context.requestId)) {
+          throw new BunawayError({ code: "CANCELLED", message: "Monitor query cancelled." });
+        }
+        const monitors = services.monitors;
+        if (!monitors) {
+          throw new BunawayError({ code: "UNSUPPORTED", message: "Monitor queries are unavailable." });
+        }
+        switch (call.operation) {
+          case "windows.getMonitors": return monitors.list().map((monitor) => ({ ...monitor }));
+          case "windows.getPrimaryMonitor": return { ...monitors.primary() };
+          case "windows.getMonitorNearestPoint": return { ...monitors.nearestPoint(call.payload) };
+          case "windows.getMonitorNearestRect": return { ...monitors.nearestRect(call.payload) };
+          case "windows.getCursorPosition": return { ...monitors.cursor() };
+        }
+      }
       if (
         (call.operation === "windows.list" ||
           call.operation === "windows.listInstances") &&

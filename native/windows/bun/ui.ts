@@ -34,6 +34,7 @@ import {
   WM_SIZE,
 } from "./win32.ts";
 import { disposeWin32Bindings, hr, kernel, ole } from "./win32-bindings.ts";
+import { monitorServices, windowMonitor } from "./monitors.ts";
 import { WindowProfiles } from "./window-profiles.ts";
 import { WindowReadinessTracker } from "./window-readiness.ts";
 import {
@@ -720,6 +721,7 @@ function commitClose(viewId: string, view: ViewState) {
 const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices =
   {
     specs: config.windows,
+    monitors: monitorServices,
     supportsCreationOptions: true,
     validateCreation: (spec) => {
       assert(windows);
@@ -790,6 +792,7 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
       const nativeWindows = windows;
       const hwnd = view.native.hwnd;
       return {
+        getMonitor: () => windowMonitor(hwnd),
         getSnapshot: () => nativeWindows.getSnapshot(hwnd),
         getReadiness: () => {
           assert(view.readiness);
