@@ -71,6 +71,17 @@ Inno Setup 스크립트를 생성, 컴파일한다. 앱 바로가기와 설치 �
 - `webView2`: `bootstrap`(기본: 설치 시 런타임이 없으면 Microsoft 공식
   Evergreen 부트스트랩을 무인 실행) 또는 `check`(감지만).
 - `desktopShortcut`(기본 false), `startMenuShortcut`(기본 true).
+- `associations`: 선택적 `files`와 `urlSchemes` 선언으로 설치 작업
+  `fileassociations`, `urlschemes`를 추가한다. 새 설치에서는 선택하지 않으며
+  무인 설치는 `/TASKS="fileassociations,urlschemes"`로 동의한다.
+  파일은 `extension`, `name`, 선택적 `mimeType`, URL은 `scheme`, `name`을 사용한다.
+  앱 EXE를 파일 아이콘과 열기 명령에 사용한다. 설치 범위의 app-owned ProgID,
+  OpenWithProgids와 RegisteredApplications/Capabilities 후보를 등록하며 기존 확장자 기본값,
+  프로토콜 기본값과 UserChoice는 변경하지 않는다. 사용자가 Windows 기본 앱 설정에서 선택한다.
+  실행 파일명 변경과 선언 제거, 작업 선택 해제에서는 이전 등록을 정리하고 현재 선택을 적용한다.
+  제거는 실행 대상이 해당 설치 EXE와 일치하는 후보만 정리한다. 다른 명령으로 바뀐 ProgID와
+  해당 OpenWith 항목은 남긴다. 레지스트리 쓰기 실패와 다른 설치가 소유한 후보 충돌은 설치 오류다.
+  `desktop.onOpen`은 파일과 URL 인자를 받으며 앱이 입력을 검증한다.
 - `uninstall.preserveUserData`(기본 true): 제거해도
   `%LOCALAPPDATA%\bunaway\<appId>`를 지우지 않는다. 업데이트는 상위
   설치(over-install)로 데이터를 유지한다. false는 `perUser`에서만 허용하며,

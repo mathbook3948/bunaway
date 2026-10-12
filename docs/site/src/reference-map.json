@@ -858,6 +858,7 @@
           "webView2",
           "desktopShortcut",
           "startMenuShortcut",
+          "associations",
           "uninstall",
           "packageName",
           "unvirtualizedData",

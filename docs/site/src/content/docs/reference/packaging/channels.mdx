@@ -26,6 +26,7 @@ macOS에서는 네이티브 `.app`을 빌드할 수 있습니다. macOS 배포 �
 | `webView2` | direct: `bootstrap`, Store: `check` | 런타임 준비 방법 |
 | `desktopShortcut` | `false` | 바탕화면 바로가기 생성 |
 | `startMenuShortcut` | `true` | 시작 메뉴 바로가기 생성 |
+| `associations` | 없음 | 사용자 선택으로 파일과 URL 처리 후보 등록 |
 | `uninstall.preserveUserData` | `true` | 제거 시 사용자 데이터 보존 |
 | `signing` | 최상위 설정 | [서명 객체](/reference/packaging/signing/) 전체 대체 |
 
@@ -54,6 +55,44 @@ macOS에서는 네이티브 `.app`을 빌드할 수 있습니다. macOS 배포 �
 설치 때 네트워크가 필요할 수 있습니다.
 `check`는 이미 설치된 WebView2를 검사하며 없는 런타임을 다운로드하지 않습니다.
 Store unpackaged는 설치 중 다운로드를 허용하지 않으므로 `bootstrap` 설정을 거부합니다.
+
+### 파일과 URL 연결
+
+`associations`를 선언하면 설치 프로그램에 선택하지 않은 `fileassociations`와
+`urlschemes` 작업이 나타납니다. 업데이트에서는 Inno가 이전 작업 선택을 유지합니다.
+무인 설치는 `/TASKS="fileassociations,urlschemes"`로 선택하고 `/TASKS=""`로 해제합니다.
+선언하지 않은 종류의 작업은 나타나지 않습니다.
+
+```json
+{
+  "associations": {
+    "files": [{ "extension": ".note", "name": "Notes 문서", "mimeType": "application/x-notes" }],
+    "urlSchemes": [{ "scheme": "notes", "name": "Notes 링크" }]
+  }
+}
+```
+
+각 목록은 1–32개 항목을 받습니다. 이름은 최대 128자이며 개행과 NUL을 허용하지 않습니다.
+확장자는 점과 영숫자로 시작하고 나머지는 영숫자, `_`, `-`만 받습니다. 점 뒤에는 최대 32자입니다.
+scheme은 영문자로 시작하고 나머지는 영숫자, `+`, `.`, `-`만 받으며 최대 32자입니다.
+둘 다 소문자로 정규화하며 중복을 거부합니다. MIME은 최대 128자의 `type/subtype` 형식입니다.
+
+앱 EXE의 아이콘과 별도 ProgID를 등록하고 파일과 URL 인자를 각각 따옴표로 감싼 실행 명령을 만듭니다.
+MIME은 앱의 처리 후보로 등록하며 공유 MIME 데이터베이스나 확장자의 Content Type을 덮어쓰지 않습니다.
+등록은 `scope`에 따라 HKCU 또는 HKLM에 기록합니다. 사용자는 Windows 기본 앱 설정에서 기본 처리 앱을 선택합니다.
+설치와 제거는 확장자, URL scheme의 기존 기본값과 Windows UserChoice를 변경하지 않습니다.
+이미 등록된 기본 앱은 계속 유지됩니다.
+
+업데이트는 이전 등록에서 해당 설치의 실행 명령과 일치하는 후보를 정리하고 현재 선언과 선택을 적용합니다.
+실행 파일명이 바뀌면 후보의 실행 명령과 아이콘도 새 EXE를 사용합니다.
+선언을 제거하거나 작업 선택을 해제하면 해당 후보를 정리합니다. 제거 프로그램도 같은 소유 검사로 정리합니다.
+사용자가 실행 명령을 다른 앱으로 바꾼 ProgID와 해당 OpenWith 항목은 남깁니다.
+레지스트리 쓰기 실패나 다른 설치가 소유한 ProgID와의 충돌은 설치 오류로 반환합니다.
+이 기능은 기존 바로가기 보존 정책을 바꾸지 않습니다.
+
+운영체제가 실행기에 전달한 인자는 [desktop.onOpen](/reference/backend/app-definition/#데스크톱-앱-동작)에서 받습니다.
+앱이 파일과 URL의 형식과 접근 권한을 검증해야 합니다. 런타임 등록 API, 기본 앱 조회와 MSIX 활성화는 아직 지원하지 않습니다.
+Windows 설정에서 후보를 선택한 뒤 실제 파일과 링크를 여는 수동 검증은 별도로 수행하세요.
 
 ### win-direct
 

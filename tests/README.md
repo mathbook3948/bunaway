@@ -121,6 +121,12 @@ getter와 FFI 값을 비교하며 고유 tag/group의 임시 알림은 finally�
 기본 CI는 실제 설정 페이지 표시나 사용자 차단 상태 변경, toast 표시를 검증하지 않는다.
 [notification README](../plugins/notification/README.md)의 실행 명령과 남은 검증 범위를 따른다.
 
+`packaging/windows-associations.test.ts`는 파일과 URL 처리 후보 설정, opt-in 작업과
+실행 명령 계약을 검사한다. Windows에서 Inno Setup이 있으면 실제 설치와 업데이트,
+작업 해제, 선언 제거와 제거 프로그램을 실행한다. 격리된 임의 확장자와 scheme으로
+기존 기본값과 UserChoice 보존, Unicode와 공백, EXE 이름 변경, 변경된 ProgID 보존을 검사한다.
+기본 앱 UI 선택과 실제 링크 클릭은 자동 검사에 포함하지 않는다.
+
 `windows-initial-placement.fixture.ts`는 모니터 겹침이 바뀌는 `SetWindowPos`에서
 실제 창 프로시저에 `WM_DPICHANGED`를 전달한다. 초기 DPI 보정의 수렴, 중앙 좌표와
 content/outer 크기, DPI 순환 때 숨김 HWND 정리 및 생성 후 OS 권장 배치 처리를 검증한다.

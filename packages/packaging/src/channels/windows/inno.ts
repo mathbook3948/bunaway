@@ -1,6 +1,11 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { CODES, type StageContext } from "../../contract.ts";
+import {
+  type ChannelConfig,
+  CODES,
+  type StageContext,
+} from "../../contract.ts";
+import { renderAssociationCode } from "./associations.ts";
 import { findIscc, findWindowsKitTool, must, stableGuid } from "./common.ts";
 import { signingArgs } from "./sign.ts";
 
@@ -37,6 +42,7 @@ export interface InnoOptions {
   executableName?: string;
   signed?: boolean;
   minVersion?: string;
+  associations?: ChannelConfig["associations"];
 }
 
 function issLiteral(value: string, constants = true): string {
@@ -127,6 +133,7 @@ export function renderInnoScript(options: InnoOptions): string {
     // Each installer is a complete snapshot; old data-deletion records must
     // not override the current uninstall policy.
     "UninstallLogMode=overwrite",
+    "ChangesAssociations=yes",
     `UninstallDisplayIcon={app}\\${executable}`,
     `OutputDir=${options.outputDir}`,
     `OutputBaseFilename=${options.outputBaseName}`,
@@ -153,10 +160,21 @@ export function renderInnoScript(options: InnoOptions): string {
     );
   }
 
+  if (options.desktopShortcut || options.associations) {
+    lines.push("", "[Tasks]");
+  }
+  if (options.associations?.files) {
+    lines.push(
+      'Name: "fileassociations"; Description: "파일 열기 앱으로 등록"; GroupDescription: "앱 연결:"; Flags: unchecked',
+    );
+  }
+  if (options.associations?.urlSchemes) {
+    lines.push(
+      'Name: "urlschemes"; Description: "URL 열기 앱으로 등록"; GroupDescription: "앱 연결:"; Flags: unchecked',
+    );
+  }
   if (options.desktopShortcut) {
     lines.push(
-      "",
-      "[Tasks]",
       `Name: "desktopicon"; Description: "${issParameter(`${options.name} 바로가기 만들기`)}"; GroupDescription: "바로가기:"`,
     );
   }
@@ -223,6 +241,13 @@ type
 `,
     "var PreviousExecutableName: String;",
     "    PreviousInstallDir: String;",
+    renderAssociationCode(
+      options.identifier,
+      executableName,
+      options.name,
+      options.associations,
+      options.scope,
+    ),
     "",
     "function IsSafeExecutableName(const Name: String): Boolean;",
     "var I: Integer;",
@@ -368,6 +393,7 @@ end;
     "procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);",
     "begin",
     "  if CurUninstallStep <> usUninstall then Exit;",
+    "  RemoveAssociations(AssociationExecutable);",
     ...[
       menuLink,
       desktopLink,
@@ -413,6 +439,7 @@ end;
     "var Current: TStringList;",
     "begin",
     "  if CurStep <> ssPostInstall then Exit;",
+    "  InstallAssociations;",
     "  if (PreviousExecutableName = '') or (PreviousInstallDir = '') or",
     "     (CompareText(AddBackslash(PreviousInstallDir), AddBackslash(ExpandConstant('{app}'))) <> 0) then",
     "    PreviousExecutableName := '';",
