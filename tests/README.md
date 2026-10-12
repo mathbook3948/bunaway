@@ -453,3 +453,11 @@ CLI의 같은 이름 검사는 로컬 tarball의 isolated 설치, 네이티브 I
 client-area animation, screen reader 설정 플래그 및 시스템 색과 비교하고 두 어댑터의
 DLL 수명과 종료 후 거부를 확인한다. `mise run host:windows`에 포함한다.
 사용자 테마 변경과 실제 보조 기술 또는 WebView 접근성 트리 검증을 대신하지 않는다.
+
+`api/image.test.ts`와 `lifecycle/image-resources.test.ts`는 선택 image 플러그인의
+Zod 계약과 canonical base64, 빈 이미지, operation 권한, ID 해제와 앱 종료,
+count와 메모리 quota 및 생성 취소의 정리를 확인한다. `windows-image.test.ts`는
+`host:windows`에 포함하며 공통 SDK와 실제 UI Worker, WIC에서 PNG와 data URL의
+RGBA alpha 왕복, JPEG와 BMP, 잘못된 encoded 입력과 decode 크기, 최대 PNG,
+정책 거부와 결과 전달 전 취소를 확인한다. 실제 파일 경로 접근, WebView 표시,
+다른 앱의 가져오기, 색상 관리와 최소 Windows 버전 검증은 포함하지 않는다.
