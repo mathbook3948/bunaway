@@ -354,6 +354,17 @@
       "pages": {
         "reference/tooling/core-and-runtime": ["DiagnosticLog"]
       }
+    },
+    {
+      "name": "@bunaway/plugin-appearance",
+      "source": "plugins/appearance/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/appearance": ["appearance", "appearancePlugin"]
+      }
     }
   ],
   "members": [
@@ -938,7 +949,8 @@
       "windows.createInstance",
       "windows.recreateInstance",
       "windows.listInstances"
-    ]
+    ],
+    "reference/plugins/appearance": ["appearance.getPreferences"]
   },
   "configuration": {
     "packages/runtime-bun/src/window-config.ts": ["reference/configuration"],
