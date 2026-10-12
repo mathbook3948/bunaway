@@ -287,6 +287,8 @@
           "openUrl",
           "openFile",
           "revealFile",
+          "openFileWith",
+          "openUrlWith",
           "openerPlugin"
         ]
       }
@@ -880,7 +882,9 @@
     "reference/plugins/opener": [
       "opener.openUrl",
       "opener.openFile",
-      "opener.revealFile"
+      "opener.revealFile",
+      "opener.openFileWith",
+      "opener.openUrlWith"
     ],
     "reference/plugins/clipboard": [
       "clipboard.readText",
