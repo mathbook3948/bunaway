@@ -3,16 +3,14 @@ import {
   isWindowSizeDimension,
   MAX_WINDOW_DIMENSION,
   MAX_WINDOW_INSTANCES,
+  MAX_WINDOWS,
   MIN_WINDOW_DIMENSION,
   type WindowSizeConstraints,
   type WindowSpec,
 } from "@bunaway/plugin-api/native";
 import type { Policy } from "@bunaway/protocol";
 
-export type { WindowSpec } from "@bunaway/plugin-api/native";
-
-/** Maximum number of window definitions accepted at startup. */
-export const MAX_WINDOWS = 128;
+export { MAX_WINDOWS, type WindowSpec } from "@bunaway/plugin-api/native";
 
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -33,7 +31,7 @@ export function readWindowSpecs(
 ): WindowSpec[] {
   if (!Array.isArray(value) || value.length > MAX_WINDOWS) {
     throw new Error(
-      "windows must contain between 0 and 128 window definitions.",
+      `windows must contain between 0 and ${MAX_WINDOWS} window definitions.`,
     );
   }
   const seen = new Set<string>();
@@ -179,7 +177,7 @@ export function readWindowSpecs(
           (spec.instances !== "multiple" && spec.maxInstances !== 1)))
     ) {
       throw new Error(
-        "Multiple windows require maxInstances from 1 through 128; single permits only 1.",
+        `Multiple windows require maxInstances from 1 through ${MAX_WINDOW_INSTANCES}; single permits only 1.`,
       );
     }
     if (
