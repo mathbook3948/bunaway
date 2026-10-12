@@ -148,6 +148,41 @@ try {
     deniedWrite = error.code === "PERMISSION_DENIED";
   }
   check(deniedWrite, "Transfer grants allowed unrestricted text writing");
+
+  const createdDirectory = {
+    path: `${globalThis.storageTestDirectory}/created/한글`,
+  };
+  await storage.createDirectory({
+    ...createdDirectory,
+    recursive: true,
+  });
+  await storage.createDirectory(createdDirectory);
+  const entries = await storage.readDirectory(directory);
+  check(
+    entries.some(
+      (entry) => entry.name === "현재 draft.txt" && entry.kind === "file",
+    ),
+    "Directory enumeration missed its Unicode child",
+  );
+  check(
+    (await storage.readDirectory(createdDirectory)).length === 0,
+    "Created directory was not empty",
+  );
+  await storage.remove(createdDirectory);
+  check(
+    !(await storage.exists(createdDirectory)),
+    "Empty directory was not removed",
+  );
+  let deniedTextWrite = false;
+  try {
+    await storage.writeText({
+      path: `${globalThis.storageTestDirectory}/denied.txt`,
+      text: "denied",
+    });
+  } catch (error) {
+    deniedTextWrite = error.code === "PERMISSION_DENIED";
+  }
+  check(deniedTextWrite, "Directory grants allowed text writing");
   report = {
     pass: true,
     bytes,
@@ -155,6 +190,9 @@ try {
     deniedTextReplacement,
     transfers: true,
     deniedWrite,
+
+    directoryOperations: true,
+    deniedTextWrite,
     existsFile,
     existsDirectory,
     existsMissing,

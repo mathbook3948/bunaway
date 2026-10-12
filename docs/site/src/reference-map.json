@@ -923,6 +923,12 @@
       "storage.appendText"
     ],
     "reference/host/storage-transfers": ["storage.copyFile", "storage.move"],
+
+    "reference/host/storage-directories": [
+      "storage.readDirectory",
+      "storage.createDirectory",
+      "storage.remove"
+    ],
     "reference/host/log-write": ["log.write"],
     "reference/host/capabilities-get": ["capabilities.get"],
     "reference/plugins/opener": [
