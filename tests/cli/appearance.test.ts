@@ -115,7 +115,7 @@ void appearance.getPreferences();
     expect(browser.success).toBe(true);
     expect(
       Object.keys(browser.metafile?.inputs ?? {}).some((path) =>
-        /(?:plugins[\\/]appearance[\\/]src[\\/](?:windows|registry|launch)\.ts|bun:ffi)/.test(
+        /(?:plugins[\\/]appearance[\\/]src[\\/](?:win32|platforms[\\/]windows)\.ts|bun:ffi)/.test(
           path,
         ),
       ),
