@@ -69,6 +69,21 @@ function checkSharedCheck(check: z.core.$ZodCheck, schemaType: string): void {
       `Plugin ${schemaType} schemas cannot serialize ${definition.check} checks.`,
     );
   }
+  if (definition.when !== undefined) {
+    const { when, ...unconditional } = definition;
+    // Use the owning Zod copy's default length guard without running callbacks.
+    const baseline: unknown = LENGTH_CHECKS.has(definition.check)
+      ? Reflect.construct(check.constructor, [
+          unconditional,
+        ])
+      : undefined;
+    if (
+      !(baseline instanceof z.core.$ZodCheck) ||
+      when !== baseline._zod.def.when
+    ) {
+      throw new Error("Plugin schemas cannot contain custom when conditions.");
+    }
+  }
   if (
     definition.check === "string_format" &&
     "fn" in definition &&

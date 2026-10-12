@@ -615,6 +615,149 @@ test("contract validation rejects non-JSON literals before serialization and at 
   }
 });
 
+test("custom when callbacks are rejected without executing them at either declaration boundary", () => {
+  // Factories accept these core options at runtime despite hiding when in their public types.
+  const conditionalOptions: Pick<z.core.$ZodCheckDef, "when" | "abort"> = {
+    when: ({ value }) => value !== 0,
+  };
+  const conditional = z.number().check(z.gte(10, conditionalOptions));
+  expect(conditional.safeParse(0).success).toBe(true);
+  expect(conditional.safeParse(5).success).toBe(false);
+  expect(() => toJSONSchema(conditional)).toThrow("custom when");
+
+  let calls = 0;
+  const options: Pick<z.core.$ZodCheckDef, "when" | "abort"> = {
+    when: () => {
+      calls++;
+      return false;
+    },
+  };
+  const alwaysOptions: Pick<z.core.$ZodCheckDef, "when" | "abort"> = {
+    when: () => true,
+  };
+  for (const schema of [
+    z.number().check(z.gte(10, options)),
+    z.number().check(z.lte(10, options)),
+    z.number().check(z.multipleOf(2, options)),
+    z.int(options),
+    z.string().check(z.minLength(2, options)),
+    z.string().check(z.maxLength(2, options)),
+    z.string().check(z.length(2, options)),
+    z.string().check(z.regex(/^ok$/u, options)),
+    z.array(z.number()).check(z.minLength(1, options)),
+    z.array(z.number()).check(z.maxLength(2, options)),
+    z.array(z.number()).check(z.length(2, options)),
+    z.string().check(z.minLength(2, alwaysOptions)),
+  ]) {
+    const recursive: z.ZodType = z.lazy(() =>
+      z.object({
+        value: schema,
+        children: z.array(recursive),
+      }),
+    );
+    for (const declaration of [
+      schema,
+      z.object({
+        value: schema,
+      }),
+      recursive,
+    ]) {
+      expect(() => toJSONSchema(declaration)).toThrow("custom when");
+      for (const operation of [
+        {
+          input: declaration,
+          output: z.null(),
+        },
+        {
+          input: z.null(),
+          output: declaration,
+        },
+      ]) {
+        expect(() =>
+          defineNativePlugin({
+            name: "invalid",
+            operations: {
+              echo: operation,
+            },
+          }),
+        ).toThrow("custom when");
+      }
+    }
+  }
+  expect(calls).toBe(0);
+});
+
+test("separately bundled Zod keeps default length guards but rejects custom when", async () => {
+  const bundle = await Bun.build({
+    entrypoints: [
+      Bun.resolveSync("zod", import.meta.dir),
+    ],
+    target: "bun",
+  });
+  expect(bundle.success).toBe(true);
+  const entry = bundle.outputs[0];
+  if (!entry) {
+    throw new Error("Missing bundled Zod output.");
+  }
+  const { z: bundledZod }: typeof import("zod") = await import(
+    "data:text/javascript;base64," +
+      Buffer.from(await entry.text()).toString("base64")
+  );
+  expect(bundledZod.minLength(1)._zod.def.when).not.toBe(
+    z.minLength(1)._zod.def.when,
+  );
+  for (const { schema, accepted, rejected } of [
+    {
+      schema: bundledZod.string().min(2).max(3),
+      accepted: "ab",
+      rejected: "a",
+    },
+    {
+      schema: bundledZod.array(bundledZod.number()).length(2),
+      accepted: [
+        1,
+        2,
+      ],
+      rejected: [
+        1,
+      ],
+    },
+  ]) {
+    const plugin = defineNativePlugin({
+      name: "test",
+      operations: {
+        echo: {
+          input: schema,
+          output: schema,
+        },
+      },
+    });
+    const registry = new NativeRegistry([
+      JSON.parse(JSON.stringify(plugin.definition)),
+    ]);
+    expect(
+      registry.validateCall({
+        operation: "test.echo",
+        payload: accepted,
+      }).payload,
+    ).toEqual(accepted);
+    expect(registry.validateOutput("test.echo", accepted)).toEqual(accepted);
+    expect(() =>
+      registry.validateCall({
+        operation: "test.echo",
+        payload: rejected,
+      }),
+    ).toThrow();
+    expect(() => registry.validateOutput("test.echo", rejected)).toThrow();
+  }
+  const options: Pick<z.core.$ZodCheckDef, "when" | "abort"> = {
+    when: () => false,
+  };
+  expect(() => toJSONSchema(bundledZod.string().min(2, options))).toThrow(
+    "custom when",
+  );
+});
+
 test("built-in checks require an owner that serializes their constraints", () => {
   for (const { schema, rejected } of [
     {

@@ -180,6 +180,8 @@ Zod의 JSON Schema로 변환하고 필드 제거 규칙을 함께 기록합니�
 
 transform, pipe, coerce, default, catch, trim 같은 값 변환과 임의 refine,
 superRefine 검사와 함수 기반 z.stringFormat은 선언 단계에서 거부합니다.
+사용자 정의 when 조건도 전송할 수 없으므로 선언 단계에서 함수를 실행하지 않고 거부합니다.
+Zod가 길이 검사에 자동으로 붙이는 기본 조건은 허용합니다.
 정규식 기반 z.stringFormat도 u 플래그와 아래 JSON Schema 지원 범위를 따라야 합니다.
 변환할 수 없는 Date, bigint, Map, Set도
 허용하지 않습니다. format, oneOf와 allOf 같은 미지원 키워드를 만드는 선언도 거부하므로
