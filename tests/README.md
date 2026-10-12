@@ -1,5 +1,10 @@
 # Tests
 
+초기 `maximized`와 `fullscreen`은 `windows-bun-window-api.ts`에서 일반 복원 영역과
+표시 상태를 검사합니다. 이 실행기는 실제 WebView2와 WinEvent를 사용하는 숨김 준비 fixture도
+네 옵션 조합으로 실행하므로 `mise run host:windows`에서 일시적인 표시와 활성화, 포커스를 검사합니다.
+실제 다중 물리 모니터와 혼합 DPI 수동 검증을 대신하지 않습니다.
+
 `windows-initial-placement.fixture.ts`는 모니터 겹침이 바뀌는 `SetWindowPos`에서
 실제 창 프로시저에 `WM_DPICHANGED`를 전달한다. 초기 DPI 보정의 수렴, 중앙 좌표와
 content/outer 크기, DPI 순환 때 숨김 HWND 정리 및 생성 후 OS 권장 배치 처리를 검증한다.

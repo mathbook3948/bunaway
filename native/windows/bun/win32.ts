@@ -169,6 +169,8 @@ export class Windows {
       dpi: number;
       restoreSize: ClientSize;
       visible: boolean;
+      /** Initial fullscreen has no prior display lifetime; exit retains current visibility. */
+      initial?: boolean;
     }
   >();
   private registered = false;
@@ -522,7 +524,9 @@ export class Windows {
     height: number,
     receive: (message: number, wparam: bigint, lparam: bigint) => void,
     visible = true,
-    options: SizeConstraints & WindowPlacement = {},
+    options: SizeConstraints &
+      WindowPlacement &
+      Pick<WindowSpec["window"], "maximized" | "fullscreen"> = {},
   ) {
     const initialConstraints = resolvedConstraints(options);
     const placement = {
@@ -563,6 +567,24 @@ export class Windows {
       // Recompute after every initial DPI transition, retaining the selected placement work area.
       this.applyInitialPlacement(window, placement);
       this.rememberNormalMonitor(window);
+      if (options.maximized) {
+        // Mark the hidden HWND as zoomed, retaining the normal rectangle before sizing its frame.
+        // ShowWindow(SW_SHOWMAXIMIZED) would briefly display/activate deferred-ready windows.
+        const normal = this.getPlacement(window);
+        normal.writeUInt32LE(SW_SHOWMAXIMIZED, WINDOWPLACEMENT_SHOW_CMD_OFFSET);
+        this.setStyle(window, this.windowStyles(window).style | WS_MAXIMIZE);
+        this.setPlacement(window, normal, false, true);
+        assert(
+          this.isMaximized(window),
+          "Initial maximized state was not applied.",
+        );
+      }
+      if (options.fullscreen) {
+        this.setFullscreen(window, true);
+        const saved = this.fullscreen.get(window);
+        assert(saved);
+        saved.initial = true;
+      }
       if (visible) {
         user.symbols.ShowWindow(window, SW_SHOW);
       }
@@ -1726,6 +1748,7 @@ export class Windows {
     } else {
       const saved = this.fullscreen.get(window);
       assert(saved);
+      const visible = saved.initial ? this.isVisible(window) : saved.visible;
       this.setStyle(window, saved.style);
       this.fullscreen.delete(window);
       try {
@@ -1739,7 +1762,7 @@ export class Windows {
           dpi,
           saved.style,
         );
-        this.setPlacement(window, saved.placement, saved.visible, true);
+        this.setPlacement(window, saved.placement, visible, true);
         assert(
           user.symbols.SetWindowPos(
             window,

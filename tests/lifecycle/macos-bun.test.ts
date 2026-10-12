@@ -24,6 +24,41 @@ import {
 } from "#native/macos/bun/urls";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 
+test("macOS rejects declared initial window state rather than ignoring it", () => {
+  const config = workerConfig("unused");
+  const first = config.windows[0];
+  if (!first) {
+    throw new Error("Missing test window.");
+  }
+  for (const state of [
+    {
+      maximized: true,
+    },
+    {
+      fullscreen: true,
+    },
+    {
+      maximized: false,
+      fullscreen: false,
+    },
+  ]) {
+    expect(() =>
+      readMacosWindowSpecs(
+        [
+          {
+            ...first,
+            window: {
+              ...first.window,
+              ...state,
+            },
+          },
+        ],
+        config.policy,
+      ),
+    ).toThrow("Initial window state options are not implemented on macOS");
+  }
+});
+
 test("macOS rejects explicitly declared initial placement, including defaults on deferred windows", () => {
   const config = workerConfig("unused");
   const first = config.windows[0];

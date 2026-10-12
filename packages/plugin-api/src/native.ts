@@ -129,6 +129,10 @@ export type WindowSpec = {
     minHeight?: number | null;
     maxWidth?: number | null;
     maxHeight?: number | null;
+    /** Start maximized, retaining the initial normal placement for restoration. Windows only. */
+    maximized?: boolean;
+    /** Start fullscreen. When combined with maximized, exit restores maximized state. Windows only. */
+    fullscreen?: boolean;
   };
   /** Single by default. Multiple allows explicit ID-addressed instances on Windows. */
   instances?: "single" | "multiple";
