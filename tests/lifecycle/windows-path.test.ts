@@ -55,6 +55,10 @@ test.skipIf(process.platform !== "win32")(
       }
       await adapter.dispose();
       await adapter.dispose();
+      const home = directories.home;
+      if (!home) {
+        throw new Error("The home directory query returned no path.");
+      }
       expect(
         await other.execute(
           "path.getDirectory",
@@ -63,7 +67,7 @@ test.skipIf(process.platform !== "win32")(
           },
           "backend",
         ),
-      ).toBe(directories.home);
+      ).toBe(home);
       await expect(
         adapter.execute(
           "path.getDirectory",
