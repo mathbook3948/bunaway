@@ -212,7 +212,7 @@ export function createTrashProgressSink(verifyIdentity: () => void) {
             "ptr",
           ],
           (_self, flags) => {
-            // Abort permanent-delete callbacks, including a retry after recycling fails.
+            // Veto callbacks without recycle intent, including a retry after failure.
             if (
               ++preDeleteCalls !== 1 ||
               !(flags & TSF_DELETE_RECYCLE_IF_POSSIBLE)
