@@ -712,6 +712,10 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
   {
     specs: config.windows,
     supportsCreationOptions: true,
+    validateCreation: (spec) => {
+      assert(windows);
+      windows.validateCreation(spec.window);
+    },
     instances: () =>
       [
         ...views,
@@ -1176,6 +1180,11 @@ try {
   windows = new Windows(signalClosing, config.icon, config.runtime.id, () =>
     channel.poll(),
   );
+  for (const spec of config.windows) {
+    if (spec.startup !== false) {
+      windows.validateCreation(spec.window);
+    }
+  }
   if (config.desktop?.tray) {
     tray = new Tray(windows, config.desktop.tray.tooltip, (action) => {
       if (action === "show") {

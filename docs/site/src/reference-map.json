@@ -251,6 +251,9 @@
           "MAX_WINDOW_DIMENSION",
           "isWindowSizeDimension",
           "hasValidWindowSizeConstraints",
+          "MIN_WINDOW_COORDINATE",
+          "MAX_WINDOW_COORDINATE",
+          "hasValidWindowPlacement",
           "clampWindowSize",
           "MAX_WINDOWS",
           "MAX_WINDOW_INSTANCES"
@@ -543,6 +546,7 @@
         "reference/tooling/plugin-api": [
           "specs",
           "supportsCreationOptions",
+          "validateCreation",
           "lookup",
           "read",
           "create",

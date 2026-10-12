@@ -2,6 +2,8 @@ import {
   MAX_WINDOW_DIMENSION,
   MAX_WINDOW_INSTANCES,
   MAX_WINDOWS,
+  MAX_WINDOW_COORDINATE,
+  MIN_WINDOW_COORDINATE,
   MIN_WINDOW_DIMENSION,
 } from "@bunaway/plugin-api/native";
 import {
@@ -17,8 +19,10 @@ import {
 
 export const WINDOW_VIEW_NAME_PATTERN = "^[A-Za-z0-9_.:-]{1,128}$(?![\\s\\S])";
 // Win32 geometry uses signed 32-bit components; WM_DPICHANGED carries a 16-bit DPI.
-export const MIN_WINDOW_COORDINATE = -2147483648;
-export const MAX_WINDOW_COORDINATE = 2147483647;
+export {
+  MIN_WINDOW_COORDINATE,
+  MAX_WINDOW_COORDINATE,
+} from "@bunaway/plugin-api/native";
 const MAX_WINDOW_DPI = 65535;
 
 const viewTarget = {
@@ -96,6 +100,18 @@ const creationDimension = {
   minimum: MIN_WINDOW_DIMENSION,
   maximum: MAX_WINDOW_DIMENSION,
 } as const;
+const creationCoordinate = {
+  anyOf: [
+    {
+      const: null,
+    },
+    {
+      type: "integer",
+      minimum: MIN_WINDOW_COORDINATE,
+      maximum: MAX_WINDOW_COORDINATE,
+    },
+  ],
+} as const;
 const creationResult = {
   input: {
     ...viewTarget,
@@ -118,6 +134,17 @@ const creationResult = {
               minHeight: sizeDimension,
               maxWidth: sizeDimension,
               maxHeight: sizeDimension,
+              x: creationCoordinate,
+              y: creationCoordinate,
+              center: {
+                type: "boolean",
+              },
+              useContentSize: {
+                type: "boolean",
+              },
+              preventOverflow: {
+                type: "boolean",
+              },
             },
             additionalProperties: false,
           },

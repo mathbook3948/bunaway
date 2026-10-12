@@ -90,6 +90,18 @@ export const ole = dlopen("ole32.dll", {
     returns: "void",
   },
 });
+export const display = dlopen("shcore.dll", {
+  GetDpiForMonitor: {
+    args: [
+      "u64",
+      "i32",
+      "ptr",
+      "ptr",
+    ],
+    returns: "i32",
+  },
+});
+
 export const user = dlopen("user32.dll", {
   EnableWindow: {
     args: [
@@ -338,6 +350,13 @@ export const user = dlopen("user32.dll", {
     ],
     returns: "u64",
   },
+  MonitorFromPoint: {
+    args: [
+      "u64",
+      "u32",
+    ],
+    returns: "u64",
+  },
   MonitorFromRect: {
     args: [
       "ptr",
@@ -419,6 +438,7 @@ export const user = dlopen("user32.dll", {
 
 /** Close native library handles after releasing the owning resources. */
 export function disposeWin32Bindings() {
+  display.close();
   user.close();
   ole.close();
   kernel.close();

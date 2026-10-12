@@ -3,22 +3,26 @@ import assert from "node:assert/strict";
 import {
   clampWindowSize,
   hasValidWindowSizeConstraints,
+  hasValidWindowPlacement,
   MAX_WINDOW_DIMENSION,
   MIN_WINDOW_DIMENSION,
   type NativeWindow,
   type WindowBounds,
   type WindowChange,
   type WindowIdentity,
+  type WindowPlacement,
   type WindowSizeConstraints,
   type WindowSnapshot,
+  type WindowSpec,
 } from "@bunaway/plugin-api/native";
 import { BunawayError } from "@bunaway/protocol";
 import {
   APP_SHUTDOWN_MESSAGE,
   APP_WINDOW_CLASS_PREFIX,
 } from "@bunaway/runtime-bun/windows-control";
-import { hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
+import { display, hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
 import { windowChanges } from "./window-events.ts";
+import { initialWindowPlacement, type WorkArea } from "./window-placement.ts";
 import {
   constrainedOuterSize,
   DEFAULT_DPI,
@@ -55,6 +59,7 @@ const MB_DEFBUTTON2 = 0x100;
 const MB_ICONQUESTION = 0x20;
 const MB_YESNO = 0x4;
 const MONITOR_DEFAULTTONEAREST = 2;
+const MONITOR_DEFAULTTOPRIMARY = 1;
 const PM_REMOVE = 1;
 const SM_CXSIZEFRAME = 32;
 const SM_CYSIZEFRAME = 33;
@@ -363,27 +368,103 @@ export class Windows {
     this.registered = true;
   }
 
-  /**
-   * Create a window with a clamped logical client size.
-   * Register its state before showing it.
-   */
+  /** Query physical work-area bounds for a native monitor; shared with later runtime placement. */
+  getWorkArea(monitor: bigint): WorkArea {
+    const info = Buffer.alloc(MONITORINFO_SIZE);
+    info.writeUInt32LE(MONITORINFO_SIZE);
+    assert(
+      monitor && user.symbols.GetMonitorInfoW(monitor, ptr(info)),
+      "Window monitor is unavailable.",
+    );
+    return {
+      x: info.readInt32LE(20),
+      y: info.readInt32LE(24),
+      width: info.readInt32LE(28) - info.readInt32LE(20),
+      height: info.readInt32LE(32) - info.readInt32LE(24),
+    };
+  }
+
+  /** Validate display-dependent input before slot reservation, profile acquisition or replacement close. */
+  validateCreation(options: WindowSpec["window"]) {
+    this.initialPlacement(options);
+  }
+
+  /** Explicit physical point selects the nearest monitor; otherwise use the current HWND or primary. */
+  getPlacementMonitor(
+    position?: {
+      x: number;
+      y: number;
+    },
+    window?: bigint,
+  ) {
+    if (!position) {
+      return user.symbols.MonitorFromWindow(
+        window ?? 0n,
+        window ? MONITOR_DEFAULTTONEAREST : MONITOR_DEFAULTTOPRIMARY,
+      );
+    }
+    const point = Buffer.alloc(8);
+    point.writeInt32LE(position.x, 0);
+    point.writeInt32LE(position.y, 4);
+    return user.symbols.MonitorFromPoint(
+      point.readBigUInt64LE(),
+      MONITOR_DEFAULTTONEAREST,
+    );
+  }
+
+  private initialPlacement(options: WindowSpec["window"], window?: bigint) {
+    if (!hasValidWindowPlacement(options)) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "Invalid initial window placement.",
+      });
+    }
+    const position =
+      options.x != null && options.y != null
+        ? {
+            x: options.x,
+            y: options.y,
+          }
+        : undefined;
+    const monitor = this.getPlacementMonitor(position, window);
+    let dpi: number;
+    if (window) {
+      dpi = this.getDpi(window);
+    } else {
+      const x = new Uint32Array(1);
+      const y = new Uint32Array(1);
+      hr(
+        display.symbols.GetDpiForMonitor(monitor, 0, ptr(x), ptr(y)),
+        "GetDpiForMonitor",
+      );
+      dpi = x[0] ?? 0;
+      assert(dpi, "Monitor DPI is unavailable.");
+    }
+    return initialWindowPlacement(
+      options,
+      dpi,
+      this.outerSizeFor(0, 0, dpi, BigInt(WS_OVERLAPPEDWINDOW), 0n),
+      this.getWorkArea(monitor),
+    );
+  }
+
+  /** Create hidden, apply content constraints and placement, register state, then optionally show. */
   create(
     title: string,
     width: number,
     height: number,
     receive: (message: number, wparam: bigint, lparam: bigint) => void,
     visible = true,
-    constraints: SizeConstraints = {},
+    options: SizeConstraints & WindowPlacement = {},
   ) {
-    const initialConstraints = resolvedConstraints(constraints);
-    const initialSize = clampWindowSize(width, height, initialConstraints);
-    const outerSize = this.outerSizeFor(
-      initialSize.width,
-      initialSize.height,
-      DEFAULT_DPI,
-      BigInt(WS_OVERLAPPEDWINDOW),
-      0n,
-    );
+    const initialConstraints = resolvedConstraints(options);
+    const placement = {
+      ...options,
+      width,
+      height,
+      ...initialConstraints,
+    };
+    const planned = this.initialPlacement(placement);
     // WM_GETMINMAXINFO can run before CreateWindowExW returns the HWND.
     this.creatingConstraints = initialConstraints;
     let window: bigint;
@@ -394,10 +475,10 @@ export class Windows {
           ptr(this.name),
           titlePointer,
           WS_OVERLAPPEDWINDOW,
-          CW_USEDEFAULT,
-          CW_USEDEFAULT,
-          outerSize.width,
-          outerSize.height,
+          planned.position?.x ?? CW_USEDEFAULT,
+          planned.position?.y ?? CW_USEDEFAULT,
+          planned.outer.width,
+          planned.outer.height,
           0n,
           0n,
           this.instance,
@@ -412,7 +493,22 @@ export class Windows {
     this.constraints.set(window, initialConstraints);
     try {
       this.dpiByWindow.set(window, this.getDpi(window));
-      this.setSize(window, initialSize.width, initialSize.height);
+      // Legacy OS-default placement may select another DPI; recompute against the actual HWND.
+      const actual = planned.position
+        ? planned
+        : this.initialPlacement(placement, window);
+      assert(
+        user.symbols.SetWindowPos(
+          window,
+          0n,
+          actual.position?.x ?? 0,
+          actual.position?.y ?? 0,
+          actual.outer.width,
+          actual.outer.height,
+          SWP_NOZORDER | SWP_NOACTIVATE | (actual.position ? 0 : SWP_NOMOVE),
+        ),
+        "Initial SetWindowPos failed.",
+      );
       this.rememberNormalMonitor(window);
       if (visible) {
         user.symbols.ShowWindow(window, SW_SHOW);

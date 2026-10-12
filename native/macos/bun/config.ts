@@ -74,6 +74,22 @@ export function readMacosWindowSpecs(
   }
   const specs = readWindowSpecs(declarations, policy, origin);
   if (
+    specs.some((spec) =>
+      [
+        "x",
+        "y",
+        "center",
+        "useContentSize",
+        "preventOverflow",
+      ].some((key) => Object.hasOwn(spec.window, key)),
+    )
+  ) {
+    throw new BunawayError({
+      code: "UNSUPPORTED",
+      message: "Initial window placement options are not implemented on macOS.",
+    });
+  }
+  if (
     specs.some(
       (spec) => spec.instances === "multiple" || spec.profile === "isolated",
     )

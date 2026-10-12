@@ -89,6 +89,27 @@ test.each([
       },
       {
         window: {
+          x: -1920,
+          y: -100,
+          useContentSize: false,
+          preventOverflow: true,
+        },
+      },
+      {
+        window: {
+          x: null,
+          y: null,
+          center: true,
+        },
+      },
+      // A partial position is valid structurally; merging with the declaration validates pairing.
+      {
+        window: {
+          x: 20,
+        },
+      },
+      {
+        window: {
           minWidth: null,
           height: 900,
         },
@@ -127,6 +148,33 @@ test.each([
         visible: "false",
       },
       {
+        window: {
+          x: -2147483649,
+          y: 0,
+        },
+      },
+      {
+        window: {
+          x: 0,
+          y: 2147483648,
+        },
+      },
+      {
+        window: {
+          center: null,
+        },
+      },
+      {
+        window: {
+          preventOverflow: 1,
+        },
+      },
+      {
+        window: {
+          useContentSize: "content",
+        },
+      },
+      {
         showWhenReady: "app",
       },
       {
@@ -137,7 +185,7 @@ test.each([
       },
       {
         window: {
-          x: 20,
+          x: 2.5,
         },
       },
       {

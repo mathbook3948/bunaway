@@ -123,6 +123,15 @@ OS가 전경 전환 요청을 거부하면 해당 활성화 전환을 `UNTESTED`
 
 `api/window-creation.test.ts`는 create/recreate의 `{ view, options? }` 계약과 독립 작업 권한,
 공개 registry 및 직렬화 Host 경계의 허용된 표시 옵션과 잘못된 옵션, URL, 프로필과 임의 ID 거부를 확인한다.
+`lifecycle/windows-window-placement.test.ts`는 ADR 0018의 작업 영역 배치, content/outer 크기,
+음수 좌표, DPI 96/120/144/192의 반올림, 최소 크기 충돌과 좌표 범위를 순수 계산으로 검사한다.
+single/multiple 계약 회귀는 병합 오류와 네이티브 배치 검증이 예약 및 기존 창 종료보다 먼저
+실행되고 호출별 옵션이 선언을 바꾸지 않는지 확인한다. macOS 선언의 미지원 오류도 검사한다.
+`lifecycle/windows-initial-placement.ts`는 실제 HWND와 WebView2에서 초기 선언, single과
+multiple의 생성 및 재생성, 예약 전 거부와 선언 복원을 확인한다. multiple은 isolated 프로필을 쓴다.
+`mise run host:windows`와 CI의 windows-native에 포함하며 네이티브 입력 준비 후
+`bun --no-env-file tests/lifecycle/windows-initial-placement.ts`로도 실행할 수 있다.
+이 검사는 실행 환경의 모니터와 DPI를 기록하며 다중 물리 모니터 검증을 대신하지 않는다.
 `cli/windows-config.test.ts`는 숨김 및 지연 창의 중복 뷰 진단, 식별자 개행과 128개 선언
 상한을 검사한다. `lifecycle/window-operations.test.ts`는 열린 뷰의 두 번째 create가
 BUSY로 실패하고 기존 자원 소유자를 유지하는지 확인한다. 호출별 옵션의 크기 보정,

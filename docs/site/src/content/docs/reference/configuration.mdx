@@ -69,16 +69,20 @@ Ctrl+C나 SIGTERM으로 빌드를 중단하면 실행한 명령과 하위 프로
 | `window.height` | 정수, 200–4096 |
 | `window.minWidth`, `window.minHeight` | 선택적 정수 또는 `null`, 200–4096. 생략하거나 `null`이면 해당 축의 최소 제한 없음 |
 | `window.maxWidth`, `window.maxHeight` | 선택적 정수 또는 `null`, 200–4096. 생략하거나 `null`이면 해당 축의 최대 제한 없음 |
+| `window.x`, `window.y` | Windows 전용. signed 32-bit outer 물리 화면 좌표. 두 축을 함께 지정하며 음수도 허용. 생략하거나 둘 다 `null`이면 위치 미지정 |
+| `window.center` | Windows 전용 boolean, 기본 `false`. 주 모니터 작업 영역의 outer 중앙. x/y와 함께 켜면 오류 |
+| `window.useContentSize` | Windows 전용 boolean, 기본 `true`. `false`이면 width/height를 논리 outer 크기로 해석. min/max는 항상 content 제약 |
+| `window.preventOverflow` | Windows 전용 boolean, 기본 `false`. 선택한 모니터의 작업 영역에 초기 outer 크기와 위치를 보정 |
 
 `home`에는 URL 사용자 정보와 fragment를 넣을 수 없습니다.
-창의 너비와 높이는 96 DPI 기준 논리 픽셀입니다. Windows가 현재 창의 DPI에 맞춰 실제 픽셀로 변환합니다.
+창의 너비와 높이는 96 DPI 기준 논리 픽셀입니다. Windows가 대상 모니터의 DPI에 맞춰 실제 픽셀로 변환합니다.
 `executableName`, `icon`은 Windows 빌드에서 적용합니다. 아이콘 파일이 없거나 잘못된 ICO이면 빌드가 실패합니다.
 Windows에서는 기본 이름 `<appId>.exe`도 같은 파일 이름 검사를 받습니다. 기본 이름이 유효하지 않으면
 `app.executableName`에 다른 이름을 지정하세요.
 `validate`와 프로덕션 `build`는 시작 페이지의 실제 파일을 확인합니다.
 Windows와 macOS에서는 `app.windows` 배열로 여러 창을 정의할 수 있습니다.
 `appId`, `title`은 유지하고 단일 창 필드 `view`, `home`, `window`를 배열과 함께 쓰지 마세요.
-각 항목은 `view`, `title`, `home`, `window.width`, `window.height`, 위 표의 선택적 크기 제약과 `startup`을 받습니다.
+각 항목은 `view`, `title`, `home`, 위 표의 `window` 필드와 `startup`을 받습니다.
 `startup`은 boolean이며 생략하면 `true`입니다. `false`인 창은 API로 생성합니다.
 Windows 창 항목에는 `visible?: boolean`과 `showWhenReady?: "document" | "sdk"`도 지정할 수 있습니다.
 `visible`의 기본값은 `true`입니다. `false`이면 처음부터 숨긴 채 만들며 창을 표시하거나 활성화하지 않습니다.
@@ -88,6 +92,21 @@ Windows 창 항목에는 `visible?: boolean`과 `showWhenReady?: "document" | "s
 완료 조건과 상태 조회는 [창 준비](/reference/host/windows/#창-준비)를 따릅니다.
 설정한 최소값은 최대값보다 클 수 없습니다.
 초기 크기가 제약을 벗어나면 제약 범위로 보정합니다.
+
+초기 좌표가 있으면 해당 점의 모니터, 모니터 밖이면 가장 가까운 모니터를 선택합니다.
+없으면 주 모니터를 사용합니다. 작업 영역은 태스크바를 제외한 `rcWork`입니다.
+`center`와 `preventOverflow` 없이 위치를 생략하면 기존 OS 기본 위치와 그 위치의 DPI를 유지합니다.
+위치 없이 `preventOverflow`만 켜면 주 모니터 작업 영역의 왼쪽 위에서 시작합니다.
+`center`와 `preventOverflow`는 함께 켤 수 있습니다. 크기와 중앙 좌표의 변환은
+`Math.round`를 쓰며 정확한 반은 양의 무한대 방향입니다. x/y는 DPI로 다시 배율하지 않습니다.
+outer 크기 요청은 대상 DPI의 프레임을 뺀 뒤 논리 content 제약으로 보정하므로 프레임과 반올림에 따라 달라질 수 있습니다.
+`preventOverflow`는 content 제약 적용 뒤 크기를 축별로 줄이고 위치를 이동합니다.
+작업 영역에 최소 content 크기와 프레임이 들어가지 않으면 생성 전에 `INVALID_ARGUMENT`입니다.
+min이 없으면 자동 축소 결과는 200보다 작아질 수 있지만 content는 최소 1 논리 픽셀입니다.
+끄면 작업 영역보다 큰 크기와 화면 밖 위치를 허용합니다. 오른쪽과 아래쪽을 포함한
+outer 좌표가 signed 32-bit 범위를 벗어나면 거부합니다. 이후 이동과 크기 조절은 제한하지 않습니다.
+macOS는 새 배치 필드를 명시하면 기본값이나 지연 창에서도 `UNSUPPORTED`입니다.
+런타임 center API, resizable과 movable은 아직 지원하지 않습니다.
 Windows 창 선언은 0–128개이며 뷰 ID는 중복할 수 없고 정책에 해당 뷰와 home origin이 있어야 합니다.
 Windows 창 항목은 `instances: "single" | "multiple"`을 받으며 기본값은 `"single"`입니다.
 multiple에는 정수 1–128의 `maxInstances`를 반드시 지정합니다. single은 생략 또는 1만 허용합니다.
