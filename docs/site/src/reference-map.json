@@ -227,7 +227,9 @@
     {
       "name": "@bunaway/plugin-api",
       "source": "packages/plugin-api/src/index.ts",
-      "pages": {}
+      "pages": {
+        "reference/tooling/plugin-api": ["PLATFORMS"]
+      }
     },
     {
       "name": "@bunaway/plugin-api/host",

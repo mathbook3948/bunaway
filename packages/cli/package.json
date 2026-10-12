@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@bunaway/packaging": "workspace:*",
+    "@bunaway/plugin-api": "workspace:*",
     "@bunaway/protocol": "workspace:*",
     "@bunaway/runtime-bun": "workspace:*"
   },
