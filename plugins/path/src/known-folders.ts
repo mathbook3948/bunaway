@@ -4,16 +4,25 @@ import type { UserDirectory } from "./contract.ts";
 
 const KF_FLAG_DONT_VERIFY = 0x4000;
 const MAX_PATH_WCHAR_BYTES = 32768 * 2;
-// GUID memory uses little endian for Data1, Data2 and Data3 and byte order for Data4.
+// Keep the SDK's readable GUID spelling; convert the first three fields at the ABI boundary.
 const directories: Record<UserDirectory, string> = {
-  home: "8f856c5e220e60479afeea3317b67173",
-  documents: "d09ad3fd8f23af46adb46c85480369c7",
-  downloads: "90e24d373f126545916439c4925e467b",
-  desktop: "3accbfb42cdb4c42b0297fe99a87c641",
-  pictures: "3018e2331e4e7646835a98395c3bc3bb",
-  music: "71d5d84b196dd348be97422220080e43",
-  videos: "1dbb9818b5995b45841cab7c74e4ddfc",
+  home: "5E6C858F-0E22-4760-9AFE-EA3317B67173",
+  documents: "FDD39AD0-238F-46AF-ADB4-6C85480369C7",
+  downloads: "374DE290-123F-4565-9164-39C4925E467B",
+  desktop: "B4BFCC3A-DB2C-424C-B029-7FE99A87C641",
+  pictures: "33E28130-4E1E-4676-835A-98395C3BC3BB",
+  music: "4BD8D571-6D19-48D3-BE97-422220080E43",
+  videos: "18989B1D-99B5-455B-841C-AB7C74E4DDFC",
 };
+
+/** Encode the Windows SDK's GUID into its mixed-endian native memory representation. */
+export function knownFolderId(directory: UserDirectory): Buffer {
+  const id = Buffer.from(directories[directory].replaceAll("-", ""), "hex");
+  id.writeUInt32LE(id.readUInt32BE(0), 0);
+  id.writeUInt16LE(id.readUInt16BE(4), 4);
+  id.writeUInt16LE(id.readUInt16BE(6), 6);
+  return id;
+}
 
 /** Query current-user shell paths, preserving redirection, and own native allocation cleanup. */
 export class WindowsKnownFolders {
@@ -55,7 +64,7 @@ export class WindowsKnownFolders {
         message: "Path adapter is disposed.",
       });
     }
-    const id = Buffer.from(directories[directory], "hex");
+    const id = knownFolderId(directory);
     const output = new BigUint64Array(1);
     try {
       if (

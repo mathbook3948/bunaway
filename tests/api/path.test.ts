@@ -2,9 +2,21 @@ import { expect, test } from "bun:test";
 import { pathPlugin } from "@bunaway/plugin-path/native/windows";
 import { NativeRegistry } from "@bunaway/protocol";
 import { pathOperations } from "../../plugins/path/src/contract.ts";
+import { knownFolderId } from "../../plugins/path/src/known-folders.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("path", pathOperations);
+
+test("Pictures and Videos IDs retain the Windows SDK values through mixed-endian GUID encoding", () => {
+  expect(knownFolderId("pictures").toString("hex")).toBe(
+    "3081e2331e4e7646835a98395c3bc3bb",
+  );
+  expect(knownFolderId("videos").toString("hex")).toBe(
+    "1d9b9818b5995b45841cab7c74e4ddfc",
+  );
+  expect(knownFolderId("downloads").readUInt16LE(4)).toBe(0x123f);
+  expect(knownFolderId("home").readUInt16LE(6)).toBe(0x4760);
+});
 
 test("Windows lexical helpers handle Unicode, drives, UNC, namespace paths and trailing separators", async () => {
   const create = pathPlugin.nativePlatforms.windows?.create;
