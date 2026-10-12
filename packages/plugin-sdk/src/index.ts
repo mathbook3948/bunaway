@@ -30,6 +30,8 @@ export type NativeEnvironment = {
   };
   /** Window services supplied by the host on its native UI thread. */
   windows?: import("@bunaway/plugin-api/native").NativeWindowServices;
+  /** Optional global shortcut message-window and event services on the native UI thread. */
+  shortcuts?: import("@bunaway/plugin-api/native").NativeShortcutServices;
   /** Host-owned data directory used for app-scoped files. */
   dataRoot: string;
   /** Registered operations and their platform support states. */

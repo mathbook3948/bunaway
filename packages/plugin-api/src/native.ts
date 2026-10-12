@@ -1,5 +1,7 @@
 import { MAX_MESSAGE_BYTES } from "@bunaway/protocol";
 
+export type { NativeShortcutServices } from "./native-shortcut.ts";
+
 /** Inclusive accepted dimension range for window sizes. */
 export const MIN_WINDOW_DIMENSION = 200;
 export const MAX_WINDOW_DIMENSION = 4096;

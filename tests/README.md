@@ -609,3 +609,7 @@ redirect 거부, binary 보존, timeout, 취소, 폐기와 용량을 검사한�
 파일의 휴지통 항목만 정리하며 전체 휴지통을 비우지 않는다. 셸이 유지하는 COM Worker가
 다른 초기화 회귀에 영향을 주지 않도록 별도 Bun 프로세스에서 실행한다. `host:windows`에
 포함하며 사용자 설정별 휴지통 비활성화, 용량 초과와 경고 UI는 수동 검증 항목이다.
+
+`api/global-shortcut.test.ts`는 전역 단축키 권한, 등록 rollback, 중지와 재개 및 이전 메시지 폐기를 검사한다.
+`lifecycle/windows-global-shortcut.test.ts`는 실제 RegisterHotKey와 경쟁 HWND, SendInput, 중지와 정리를 확인한다.
+`mise run host:windows`에 포함되며 물리 키보드와 키보드 레이아웃별 검증을 대신하지 않는다.

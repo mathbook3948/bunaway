@@ -463,6 +463,12 @@ checkNames(
       ),
     ].map((operation) => `safe-storage.${operation}`),
     ...[
+      ...objectPropertyNames(
+        "plugins/global-shortcut/src/contract.ts",
+        "globalShortcutOperations",
+      ),
+    ].map((operation) => `globalShortcut.${operation}`),
+    ...[
       "storage",
       "log",
       "capabilities",

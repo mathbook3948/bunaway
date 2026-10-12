@@ -355,3 +355,7 @@ defineNativePlugin을 사용하면 Zod 검증, 타입 추론, 공유 연결과 �
 `windowSnapshotSchema`는 표시와 geometry 관찰, `windowReadinessSchema`는 창, 문서와 SDK 준비 상태의 스키마입니다.
 `windowEvents`는 `windows.changed`와 `windows.readiness`의 선언입니다. 완료 조건, 수신 범위와 상태 복구는
 [창 API](/reference/host/windows/#창-준비)를 따릅니다.
+
+Windows UI 어댑터의 선택적 `NativeEnvironment.shortcuts`는 `NativeShortcutServices`를 제공합니다.
+`createWindow`로 숨긴 메시지 창을 만들고 `destroyWindow`로 해제하며 `emit`은 기존 정책과 구독 확인 경로를 사용합니다.
+전역 단축키 플러그인이 개별 등록과 메시지 창을 소유하고 호스트는 기존 UI 스레드와 앱 실행 유지 정책을 유지합니다.

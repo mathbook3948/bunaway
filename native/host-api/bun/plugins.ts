@@ -98,6 +98,7 @@ export async function operations(
   windows: NativeEnvironment["windows"] | undefined,
   catalog: readonly PackagedPlugin[],
   app?: NativeEnvironment["app"],
+  shortcuts?: NativeEnvironment["shortcuts"],
 ): Promise<PluginOperations> {
   const registry = pluginRegistry(plugins, catalog);
   // Capability discovery and dispatch use the same installed platform support contract.
@@ -127,6 +128,11 @@ export async function operations(
     );
   const environment: NativeEnvironment = {
     dataRoot,
+    ...(shortcuts
+      ? {
+          shortcuts,
+        }
+      : {}),
     ...(app
       ? {
           app,

@@ -17,6 +17,7 @@
         "@bunaway/plugin-autostart": "workspace:*",
         "@bunaway/plugin-capabilities": "workspace:*",
         "@bunaway/plugin-clipboard": "workspace:*",
+        "@bunaway/plugin-global-shortcut": "workspace:*",
         "@bunaway/plugin-image": "workspace:*",
         "@bunaway/plugin-log": "workspace:*",
         "@bunaway/plugin-network": "workspace:*",
@@ -167,6 +168,21 @@
       "name": "@bunaway/plugin-clipboard",
       "version": "0.0.0",
       "dependencies": {
+        "@bunaway/protocol": "workspace:*",
+        "zod": "4.6.5",
+      },
+      "devDependencies": {
+        "@bunaway/plugin": "workspace:*",
+      },
+      "peerDependencies": {
+        "@bunaway/plugin": "0.0.0",
+      },
+    },
+    "plugins/global-shortcut": {
+      "name": "@bunaway/plugin-global-shortcut",
+      "version": "0.0.0",
+      "dependencies": {
+        "@bunaway/plugin-api": "workspace:*",
         "@bunaway/protocol": "workspace:*",
         "zod": "4.6.5",
       },
@@ -435,6 +451,8 @@
     "@bunaway/plugin-capabilities": ["@bunaway/plugin-capabilities@workspace:plugins/capabilities"],
 
     "@bunaway/plugin-clipboard": ["@bunaway/plugin-clipboard@workspace:plugins/clipboard"],
+
+    "@bunaway/plugin-global-shortcut": ["@bunaway/plugin-global-shortcut@workspace:plugins/global-shortcut"],
 
     "@bunaway/plugin-image": ["@bunaway/plugin-image@workspace:plugins/image"],
 

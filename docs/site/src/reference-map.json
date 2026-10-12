@@ -436,6 +436,20 @@
       "pages": {
         "reference/plugins/appearance": ["appearance", "appearancePlugin"]
       }
+    },
+    {
+      "name": "@bunaway/plugin-global-shortcut",
+      "source": "plugins/global-shortcut/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/global-shortcut": [
+          "globalShortcut",
+          "globalShortcutPlugin"
+        ]
+      }
     }
   ],
   "members": [
@@ -889,7 +903,8 @@
           "dataRoot",
           "capabilities",
           "windows",
-          "app"
+          "app",
+          "shortcuts"
         ]
       }
     },
@@ -1168,6 +1183,16 @@
       "image.dispose",
       "image.crop",
       "image.resize"
+    ],
+    "reference/plugins/global-shortcut": [
+      "globalShortcut.register",
+      "globalShortcut.registerMany",
+      "globalShortcut.isRegistered",
+      "globalShortcut.list",
+      "globalShortcut.unregister",
+      "globalShortcut.unregisterAll",
+      "globalShortcut.setSuspended",
+      "globalShortcut.isSuspended"
     ]
   },
   "configuration": {
