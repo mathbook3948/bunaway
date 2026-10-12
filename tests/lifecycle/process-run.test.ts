@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BunawayError } from "@bunaway/protocol";
 import { runProcess } from "#plugins/process/src/run";
+import { processExitProbe } from "../fixtures/process-exit-probe.ts";
 
 const defaults = {
   executablePath: process.execPath,
@@ -132,16 +133,23 @@ test("cancellation waits for direct-child death and closes blocked output pipes"
       await Bun.sleep(2);
     }
     const pid = Number(await readFile(pidFile, "utf8"));
-    controller.abort(
-      new BunawayError({
+    const probe = processExitProbe(pid);
+    try {
+      expect(probe.exited()).toBe(false);
+      controller.abort(
+        new BunawayError({
+          code: "CANCELLED",
+          message: "Test request ended.",
+        }),
+      );
+      expect(await observed).toMatchObject({
         code: "CANCELLED",
-        message: "Test request ended.",
-      }),
-    );
-    expect(await observed).toMatchObject({
-      code: "CANCELLED",
-    });
-    expect(() => process.kill(pid, 0)).toThrow();
+      });
+      // The held Windows handle must already be signaled when runProcess returns, without a grace poll.
+      expect(probe.exited()).toBe(true);
+    } finally {
+      probe.dispose();
+    }
   } finally {
     await rm(root, {
       recursive: true,

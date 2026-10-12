@@ -12,7 +12,8 @@ Per-command descendant termination requires further containment work and is not 
 Desktop restart/exit belongs to the lifecycle implementation.
 
 `tests/lifecycle/process-run.test.ts` spawns real Bun children and verifies exact argv/binary I/O,
-combined output bounds and direct-child death after abort. `tests/lifecycle/windows-process.test.ts`
+combined output bounds and direct-child death after abort. On Windows, a process handle captured before
+abort must already be signaled when the operation returns; PID existence is not treated as liveness. `tests/lifecycle/windows-process.test.ts`
 checks the generated Windows adapter's timeout, capacity and disposal with actual .exe processes.
 Both run under `mise run host:windows`. They do not validate third-party tool behavior, installer-provided
 sidecars or independent descendant cleanup on a per-command timeout.
