@@ -1,5 +1,12 @@
 # Tests
 
+`windows-initial-placement.fixture.ts`는 모니터 겹침이 바뀌는 `SetWindowPos`에서
+실제 창 프로시저에 `WM_DPICHANGED`를 전달한다. 초기 DPI 보정의 수렴, 중앙 좌표와
+content/outer 크기, DPI 순환 때 숨김 HWND 정리 및 생성 후 OS 권장 배치 처리를 검증한다.
+기본 tracking 크기 보정도 재현해 큰 창의 중앙 배치와 작은 작업 영역의 overflow,
+생성 이후 제한 복원 및 실제 rectangle 불일치 때 정리를 확인한다.
+합성 모니터 검증이며 실제 다중 모니터 실행을 대신하지 않는다.
+
 `mise run check`와 플랫폼 검사는 먼저 `plugins:build`를 실행해 중립 공개 출력과 OS별
 호스트 출력을 생성한다. `cli/plugin-build.test.ts`는 화면 출력의 OS 코드 제외,
 확장자를 작성하거나 생략한 플랫폼 import의 동일한 처리, 깨끗한 체크아웃에서 빌드 테스트 폴더 생성,
@@ -123,6 +130,19 @@ OS가 전경 전환 요청을 거부하면 해당 활성화 전환을 `UNTESTED`
 
 `api/window-creation.test.ts`는 create/recreate의 `{ view, options? }` 계약과 독립 작업 권한,
 공개 registry 및 직렬화 Host 경계의 허용된 표시 옵션과 잘못된 옵션, URL, 프로필과 임의 ID 거부를 확인한다.
+`lifecycle/windows-window-placement.test.ts`는 ADR 0019의 작업 영역 배치, content/outer 크기,
+음수 좌표, DPI 96/120/144/192의 반올림, 최소 크기 충돌과 좌표 범위를 순수 계산으로 검사한다.
+single/multiple 계약 회귀는 병합 오류와 네이티브 배치 검증이 예약 및 기존 창 종료보다 먼저
+실행되고 호출별 옵션이 선언을 바꾸지 않는지 확인한다. macOS 선언의 미지원 오류도 검사한다.
+`lifecycle/windows-initial-placement.ts`는 실제 HWND와 WebView2에서 초기 선언, single과
+multiple의 생성 및 재생성, 예약 전 거부와 선언 복원을 확인한다. multiple은 isolated 프로필을 쓴다.
+실제 HWND에서 4096 논리 픽셀의 content 및 outer 요청을 기본 tracking 제한으로 줄이지 않고
+중앙에 배치하는지도 확인한다.
+4096 content 최소 크기가 들어가는지는 실제 작업 영역과 측정한 DPI 및 프레임으로 계산한다.
+들어가면 재생성 성공을, 들어가지 않으면 기존 창을 보존하는 거부를 검사한다.
+`mise run host:windows`와 CI의 windows-native에 포함하며 네이티브 입력 준비 후
+`bun --no-env-file tests/lifecycle/windows-initial-placement.ts`로도 실행할 수 있다.
+이 검사는 실행 환경의 모니터와 DPI를 기록하며 다중 물리 모니터 검증을 대신하지 않는다.
 `cli/windows-config.test.ts`는 숨김 및 지연 창의 중복 뷰 진단, 식별자 개행과 128개 선언
 상한을 검사한다. `lifecycle/window-operations.test.ts`는 열린 뷰의 두 번째 create가
 BUSY로 실패하고 기존 자원 소유자를 유지하는지 확인한다. 호출별 옵션의 크기 보정,

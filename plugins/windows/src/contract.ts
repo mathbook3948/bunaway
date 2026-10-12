@@ -1,7 +1,9 @@
 import {
+  MAX_WINDOW_COORDINATE,
   MAX_WINDOW_DIMENSION,
   MAX_WINDOW_INSTANCES,
   MAX_WINDOWS,
+  MIN_WINDOW_COORDINATE,
   MIN_WINDOW_DIMENSION,
 } from "@bunaway/plugin-api/native";
 import {
@@ -18,9 +20,10 @@ import { z } from "zod";
 export const WINDOW_VIEW_NAME_PATTERN = "^[A-Za-z0-9_.:-]{1,128}$(?![\\s\\S])";
 
 // Win32 geometry uses signed 32-bit components; WM_DPICHANGED carries a 16-bit DPI.
-export const MIN_WINDOW_COORDINATE = -2147483648;
-
-export const MAX_WINDOW_COORDINATE = 2147483647;
+export {
+  MAX_WINDOW_COORDINATE,
+  MIN_WINDOW_COORDINATE,
+} from "@bunaway/plugin-api/native";
 
 const MAX_WINDOW_DPI = 65535;
 const WINDOW_TEXT_PATTERN = "^[^\\u0000]+$(?![\\s\\S])";
@@ -64,6 +67,11 @@ const sizeDimension = z.union([
   z.int().min(MIN_WINDOW_DIMENSION).max(MAX_WINDOW_DIMENSION),
 ]);
 
+const coordinate = z
+  .int()
+  .min(MIN_WINDOW_COORDINATE)
+  .max(MAX_WINDOW_COORDINATE);
+
 const creationDimension = z
   .int()
   .min(MIN_WINDOW_DIMENSION)
@@ -87,6 +95,11 @@ const creationResult = {
             minHeight: sizeDimension.exactOptional(),
             maxWidth: sizeDimension.exactOptional(),
             maxHeight: sizeDimension.exactOptional(),
+            x: coordinate.nullable().exactOptional(),
+            y: coordinate.nullable().exactOptional(),
+            center: z.boolean().exactOptional(),
+            useContentSize: z.boolean().exactOptional(),
+            preventOverflow: z.boolean().exactOptional(),
           })
           .exactOptional(),
         visible: z.boolean().exactOptional(),
@@ -116,11 +129,6 @@ const sizeConstraintsOutput = z.strictObject({
   maxWidth: sizeDimension,
   maxHeight: sizeDimension,
 });
-
-const coordinate = z
-  .int()
-  .min(MIN_WINDOW_COORDINATE)
-  .max(MAX_WINDOW_COORDINATE);
 
 const dimension = z.int().min(0).max(MAX_WINDOW_COORDINATE);
 

@@ -2,6 +2,53 @@
 export const MIN_WINDOW_DIMENSION = 200;
 export const MAX_WINDOW_DIMENSION = 4096;
 
+/** Win32 screen geometry uses signed 32-bit components. */
+export const MIN_WINDOW_COORDINATE = -2147483648;
+export const MAX_WINDOW_COORDINATE = 2147483647;
+
+/** Initial outer screen position and logical size interpretation. Windows only. */
+export type WindowPlacement = {
+  /** Physical outer coordinates. Supply both; null clears a declared position. */
+  x?: number | null;
+  y?: number | null;
+  /** Center the outer rectangle in the primary work area. Conflicts with x/y. */
+  center?: boolean;
+  /** Interpret width/height as content dimensions by default, or outer when false. */
+  useContentSize?: boolean;
+  /** Shrink and move the initial outer rectangle into the selected work area. */
+  preventOverflow?: boolean;
+};
+
+/** Validate merged placement before reserving resources or closing an existing window. */
+export function hasValidWindowPlacement<
+  T extends {
+    x?: unknown;
+    y?: unknown;
+    center?: unknown;
+    useContentSize?: unknown;
+    preventOverflow?: unknown;
+  },
+>(value: T): value is T & WindowPlacement {
+  const coordinate = (position: unknown) =>
+    position === undefined ||
+    position === null ||
+    (typeof position === "number" &&
+      Number.isInteger(position) &&
+      position >= MIN_WINDOW_COORDINATE &&
+      position <= MAX_WINDOW_COORDINATE);
+  return (
+    coordinate(value.x) &&
+    coordinate(value.y) &&
+    (value.x == null) === (value.y == null) &&
+    (value.center !== true || value.x == null) &&
+    [
+      value.center,
+      value.useContentSize,
+      value.preventOverflow,
+    ].every((option) => option === undefined || typeof option === "boolean")
+  );
+}
+
 /** Optional inclusive lower and upper bounds for a window's width and height. */
 export type WindowSizeConstraints = {
   minWidth: number | null;
@@ -74,8 +121,8 @@ export type WindowSpec = {
   home: string;
   /** Native window title. */
   title: string;
-  /** Initial logical dimensions and optional resize limits. */
-  window: {
+  /** Initial 96-DPI logical content dimensions by default; limits always constrain content. */
+  window: WindowPlacement & {
     width: number;
     height: number;
     minWidth?: number | null;
@@ -266,6 +313,8 @@ export type WindowChange =
 export type NativeWindowServices = {
   /** Whether this UI adapter supports per-creation presentation options; absent means unsupported. */
   supportsCreationOptions?: boolean;
+  /** Validate display-dependent placement without acquiring resources, before reservation and close. */
+  validateCreation?(spec: WindowSpec): void;
   /** Configured windows available to the plugin. */
   specs: readonly WindowSpec[];
   /** All native lifetimes, including resources still being cleaned. Keys are host-private logical owners. */

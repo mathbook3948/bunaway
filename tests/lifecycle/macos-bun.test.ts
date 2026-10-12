@@ -24,6 +24,78 @@ import {
 } from "#native/macos/bun/urls";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 
+test("macOS rejects explicitly declared initial placement, including defaults on deferred windows", () => {
+  const config = workerConfig("unused");
+  const first = config.windows[0];
+  if (!first) {
+    throw new Error("Missing test window.");
+  }
+  const policyView = config.policy.views[0];
+  if (!policyView) {
+    throw new Error("Missing policy view.");
+  }
+  for (const placement of [
+    {
+      x: -100,
+      y: 0,
+    },
+    {
+      x: null,
+      y: null,
+    },
+    {
+      center: false,
+    },
+    {
+      useContentSize: true,
+    },
+    {
+      preventOverflow: false,
+    },
+  ]) {
+    expect(() =>
+      readMacosWindowSpecs(
+        [
+          first,
+          {
+            ...first,
+            view: "deferred",
+            startup: false,
+            window: {
+              ...first.window,
+              ...placement,
+            },
+          },
+        ],
+        {
+          ...config.policy,
+          views: [
+            ...config.policy.views,
+            {
+              ...policyView,
+              id: "deferred",
+            },
+          ],
+        },
+      ),
+    ).toThrow("Initial window placement options are not implemented on macOS");
+  }
+  expect(() =>
+    readMacosWindowSpecs(
+      [
+        {
+          ...first,
+          window: {
+            ...first.window,
+            x: 1,
+          },
+        },
+      ],
+      config.policy,
+    ),
+  ).toThrow("Window placement");
+});
+
 /** Minimal validated configuration shared by real Worker lifecycle tests. */
 function workerConfig(directory: string): MacosConfig {
   return {

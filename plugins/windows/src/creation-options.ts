@@ -1,6 +1,7 @@
 import {
   clampWindowSize,
   hasValidWindowSizeConstraints,
+  hasValidWindowPlacement,
   type WindowSpec,
 } from "@bunaway/plugin-api/native";
 import { BunawayError } from "@bunaway/protocol";
@@ -30,6 +31,13 @@ export function mergeCreationOptions(
     maxWidth: window.maxWidth ?? null,
     maxHeight: window.maxHeight ?? null,
   };
+  if (!hasValidWindowPlacement(window)) {
+    throw new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message:
+        "Window placement requires paired x/y and no center/position conflict.",
+    });
+  }
   if (!hasValidWindowSizeConstraints(constraints)) {
     throw new BunawayError({
       code: "INVALID_ARGUMENT",
@@ -56,7 +64,9 @@ export function mergeCreationOptions(
         }),
     window: {
       ...window,
-      ...clampWindowSize(window.width, window.height, constraints),
+      ...(window.useContentSize === false
+        ? {}
+        : clampWindowSize(window.width, window.height, constraints)),
     },
   };
 }

@@ -109,6 +109,16 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
       SetLastError() {},
     },
   },
+  display: {
+    symbols: {
+      GetDpiForMonitor(monitor: bigint, _kind: number, x: Pointer, y: Pointer) {
+        const dpi = monitorInfo(monitor).dpi;
+        view(x, 4).setUint32(0, dpi, true);
+        view(y, 4).setUint32(0, dpi, true);
+        return 0;
+      },
+    },
+  },
   user: {
     symbols: {
       LoadIconW: () => 1n,
@@ -197,7 +207,18 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
         Object.assign(normalRect, windowRect);
         return 1;
       },
-      MonitorFromWindow: () => monitorFor(windowRect),
+      MonitorFromWindow: (window: bigint) =>
+        window ? monitorFor(windowRect) : (monitors[0]?.handle ?? 0n),
+      MonitorFromPoint(point: bigint) {
+        const x = Number(BigInt.asIntN(32, point));
+        const y = Number(BigInt.asIntN(32, point >> 32n));
+        return monitorFor({
+          left: x,
+          top: y,
+          right: x + 1,
+          bottom: y + 1,
+        });
+      },
       MonitorFromRect(address: Pointer) {
         const rect = view(address, 16);
         return monitorFor({
