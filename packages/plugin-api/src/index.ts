@@ -62,8 +62,19 @@ export type CommandDefinition<
 export type CommandRegistry = Readonly<Record<string, CommandDefinition>>;
 /** Named event schemas registered by an app or plugin. */
 export type EventRegistry = Readonly<Record<string, Schema>>;
+/**
+ * Platform names accepted by plugin declarations and native build boundaries.
+ * This immutable list does not describe runtime feature support.
+ */
+export const PLATFORMS = Object.freeze([
+  "windows",
+  "macos",
+  "linux",
+  "android",
+  "ios",
+] as const);
 /** Platform names accepted by plugin compatibility declarations. */
-export type Platform = "windows" | "macos" | "linux" | "android" | "ios";
+export type Platform = (typeof PLATFORMS)[number];
 /** Plugin cleanup run during Core shutdown, in reverse setup order. */
 export type StopHook = () => void | Promise<void>;
 /** Plugin metadata and optional app registrations and lifecycle hooks. */

@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { resolve } from "node:path";
 import { bindHostAPI, type CoreServices, createCore } from "@bunaway/core";
 import { defineNativePlugin } from "@bunaway/plugin";
+import { PLATFORMS } from "@bunaway/plugin-api";
 import { storagePlugin } from "@bunaway/plugin-storage";
 import {
   type HostContext,
@@ -21,6 +22,33 @@ import { contracts } from "../fixtures/host-plugins.ts";
 
 const readText = contracts["storage.readText"];
 const writeText = contracts["storage.writeText"];
+
+test.each([
+  ...PLATFORMS,
+])("SDK accepts the %s platform declaration", (platform) => {
+  const create = () => ({
+    execute: () => null,
+    dispose() {},
+  });
+  const plugin = defineNativePlugin({
+    name: "demo",
+    operations: {
+      read: {
+        input: z.null(),
+        output: z.null(),
+      },
+    },
+    platforms: {
+      [platform]: {
+        execution: "io",
+        create,
+      },
+    },
+  });
+  expect(plugin.definition.nativePlatforms[platform]?.create).toBe(create);
+  expect(Object.isFrozen(PLATFORMS)).toBe(true);
+});
+
 test("platform declarations remain detached from Core platform restrictions and validate support", () => {
   const operation = {
     input: z.null(),

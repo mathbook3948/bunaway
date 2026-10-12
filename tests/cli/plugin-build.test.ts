@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import { frameworkRoot, writeJson } from "#cli/files";
 import { buildNativePlugin } from "#cli/plugin-build";
 import { readPluginDeclaration } from "#cli/plugins";
+import { PLATFORMS } from "@bunaway/plugin-api";
 
 test.each([
   ".ts",
@@ -45,11 +46,17 @@ test.each([
         `import { z } from "zod";
 export const operations = { read: { input: z.null(), output: z.string() } } as const;`,
       );
+      const imports = PLATFORMS.map(
+        (platform) =>
+          `import { createOperations as ${platform} } from "./platforms/${platform}${extension}";`,
+      ).join("\n");
+      const targets = PLATFORMS.map(
+        (platform) => `${platform}: { execution: "io", create: ${platform} }`,
+      ).join(", ");
       const source = `import { defineNativePlugin } from "@bunaway/plugin";
 import { operations } from "./contract.ts";
-import { createOperations as windows } from "./platforms/windows${extension}";
-import { createOperations as macos } from "./platforms/macos${extension}";
-const plugin = defineNativePlugin({ name: "demo", operations, platforms: { windows: { execution: "io", create: windows }, macos: { execution: "io", create: macos } } });
+${imports}
+const plugin = defineNativePlugin({ name: "demo", operations, platforms: { ${targets} } });
 export const api = plugin.api;
 export default plugin.definition;`;
       await Bun.write(entry, source);
@@ -59,11 +66,16 @@ export default plugin.definition;`;
 import type { NativeAdapterFactory } from "@bunaway/plugin";
 export const createOperations: NativeAdapterFactory = () => { const api = dlopen("kernel32.dll", {}); return { execute: () => "WINDOWS_ONLY_MARKER", dispose: () => api.close() }; };`,
       );
-      await Bun.write(
-        resolve(root, "src/platforms/macos.ts"),
-        `import type { NativeAdapterFactory } from "@bunaway/plugin";
-export const createOperations: NativeAdapterFactory = () => ({ execute: () => "MACOS_ONLY_MARKER", dispose() {} });`,
-      );
+      for (const platform of PLATFORMS) {
+        if (platform === "windows") {
+          continue;
+        }
+        await Bun.write(
+          resolve(root, "src/platforms", `${platform}.ts`),
+          `import type { NativeAdapterFactory } from "@bunaway/plugin";
+export const createOperations: NativeAdapterFactory = () => ({ execute: () => "${platform.toUpperCase()}_ONLY_MARKER", dispose() {} });`,
+        );
+      }
       expect(await buildNativePlugin(root)).toBe(resolve(root, "dist"));
       const neutral = await Bun.file(resolve(root, "dist/index.js")).text();
       expect(neutral).not.toContain("bun:ffi");
@@ -77,22 +89,32 @@ export const createOperations: NativeAdapterFactory = () => ({ execute: () => "M
         packages: "external",
       });
       expect(browser.success).toBe(true);
-      const windows = await Bun.file(
-        resolve(root, "dist/native/windows.js"),
-      ).text();
-      expect(windows).toContain("WINDOWS_ONLY_MARKER");
-      expect(windows).not.toContain("MACOS_ONLY_MARKER");
-      const macos = await Bun.file(
-        resolve(root, "dist/native/macos.js"),
-      ).text();
-      expect(macos).toContain("MACOS_ONLY_MARKER");
-      expect(macos).not.toContain("bun:ffi");
+      for (const platform of PLATFORMS) {
+        const bundle = await Bun.file(
+          resolve(root, "dist/native", `${platform}.js`),
+        ).text();
+        for (const other of PLATFORMS) {
+          const marker = `${other.toUpperCase()}_ONLY_MARKER`;
+          if (other === platform) {
+            expect(bundle).toContain(marker);
+          } else {
+            expect(bundle).not.toContain(marker);
+          }
+        }
+        if (platform !== "windows") {
+          expect(bundle).not.toContain("bun:ffi");
+        }
+      }
+      const outputs = [
+        "index.js",
+        ...PLATFORMS.map((platform) => `native/${platform}.js`),
+      ];
       // Importing every output is portable; factories remain untouched until host activation.
       const child = Bun.spawn(
         [
           process.execPath,
           "-e",
-          `for (const file of ["index.js", "native/windows.js", "native/macos.js"]) { const { default: plugin } = await import(new URL(file, ${JSON.stringify(`${pathToFileURL(resolve(root, "dist/")).href}/`)})); if (plugin.version !== "1" || !Object.isFrozen(plugin)) throw new Error("Invalid built plugin version"); }`,
+          `for (const file of ${JSON.stringify(outputs)}) { const { default: plugin } = await import(new URL(file, ${JSON.stringify(`${pathToFileURL(resolve(root, "dist/")).href}/`)})); if (plugin.version !== "1" || !Object.isFrozen(plugin)) throw new Error("Invalid built plugin version"); }`,
         ],
         {
           cwd: root,
@@ -120,11 +142,7 @@ export const createOperations: NativeAdapterFactory = () => ({ execute: () => "M
       await buildNativePlugin(root);
       const updated = await Bun.file(resolve(root, "dist/index.js")).text();
       expect(updated).not.toBe(neutral);
-      for (const file of [
-        "index.js",
-        "native/windows.js",
-        "native/macos.js",
-      ]) {
+      for (const file of outputs) {
         expect(
           (await readPluginDeclaration(resolve(root, "dist", file), root))
             .version,

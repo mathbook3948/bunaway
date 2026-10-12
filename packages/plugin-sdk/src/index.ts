@@ -1,3 +1,4 @@
+import { PLATFORMS } from "@bunaway/plugin-api";
 import {
   type JsonValue,
   NativeRegistry,
@@ -125,13 +126,7 @@ export function defineNativePlugin<const D extends NativePluginDefinition>(
   const nativePlatforms = Object.fromEntries(
     Object.entries(platforms).map(([platform, target]) => {
       if (
-        ![
-          "windows",
-          "macos",
-          "linux",
-          "android",
-          "ios",
-        ].includes(platform) ||
+        !PLATFORMS.some((supported) => supported === platform) ||
         !target ||
         ![
           "io",

@@ -60,6 +60,9 @@ export function clampWindowSize(
   };
 }
 
+/** Maximum number of window definitions accepted at startup, independent of instance capacity. */
+export const MAX_WINDOWS = 128;
+
 /** Maximum active, reserved and cleaning native window instances per app. */
 export const MAX_WINDOW_INSTANCES = 128;
 

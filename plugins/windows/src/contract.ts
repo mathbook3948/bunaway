@@ -1,5 +1,7 @@
 import {
   MAX_WINDOW_DIMENSION,
+  MAX_WINDOW_INSTANCES,
+  MAX_WINDOWS,
   MIN_WINDOW_DIMENSION,
 } from "@bunaway/plugin-api/native";
 import {
@@ -378,7 +380,7 @@ const operationDefinitions = {
           open: z.boolean(),
         }),
       )
-      .max(128),
+      .max(MAX_WINDOWS),
   },
   "windows.create": creationResult,
   "windows.recreate": creationResult,
@@ -427,7 +429,7 @@ const operationDefinitions = {
   },
   "windows.getChildren": {
     input: windowTarget,
-    output: z.array(windowIdentitySchema).max(128),
+    output: z.array(windowIdentitySchema).max(MAX_WINDOW_INSTANCES),
   },
   "windows.setEnabled": {
     input: z.strictObject({

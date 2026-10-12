@@ -239,7 +239,7 @@ platforms: {
 
 package.json의 `bunaway.plugin`은 default export한 등록 객체를 읽는 진입점입니다.
 `platforms`는 defineNativePlugin의 선언 안에 작성하며 별도 plugin.json은 사용하지 않습니다.
-플랫폼 이름은 windows, macos, linux, android, ios입니다. 구현을 제공하는 플랫폼만 선언합니다.
+플랫폼 이름은 [공통 계약의 PLATFORMS](/reference/tooling/plugin-api/#플랫폼-이름)에 정의된 windows, macos, linux, android, ios입니다. SDK와 CLI가 각각 이 목록으로 선언을 검증합니다. 구현을 제공하는 플랫폼만 선언합니다.
 이 이름을 선언해도 해당 플랫폼의 프레임워크 실행 경로가 새로 생기지는 않습니다.
 
 `create`에는 `src/platforms/<platform>.ts`에서 export한 createOperations를 전달합니다.

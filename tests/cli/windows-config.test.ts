@@ -1,11 +1,15 @@
 import { expect, test } from "bun:test";
 import assert from "node:assert/strict";
+import { MAX_WINDOW_INSTANCES, MAX_WINDOWS } from "@bunaway/plugin-api/native";
 import type { Policy } from "@bunaway/protocol";
 import {
   developmentPolicy,
   developmentWindowHome,
 } from "@bunaway/runtime-bun/development";
-import { readWindowSpecs } from "@bunaway/runtime-bun/window-config";
+import {
+  MAX_WINDOWS as runtimeMaxWindows,
+  readWindowSpecs,
+} from "@bunaway/runtime-bun/window-config";
 
 const specs = [
   "main",
@@ -117,17 +121,6 @@ test("window catalogs accept an empty or fully deferred Windows start without we
       policy,
     ),
   ).toThrow("allowed app origin");
-  expect(() =>
-    readWindowSpecs(
-      Array.from(
-        {
-          length: 129,
-        },
-        () => specs[0],
-      ),
-      policy,
-    ),
-  ).toThrow("0 and 128");
 });
 
 test("one-window-per-view declarations reject duplicates even when deferred or hidden", () => {
@@ -167,13 +160,14 @@ test("one-window-per-view declarations reject duplicates even when deferred or h
   ).toThrow("Window view IDs must contain");
 });
 
-test("the window catalog limit includes deferred definitions and accepts 128 distinct views", () => {
+test("the shared window catalog limit includes deferred definitions and rejects larger catalogs", () => {
+  expect(runtimeMaxWindows).toBe(MAX_WINDOWS);
   const baseSpec = specs[0];
   const basePolicy = policy.views[0];
   assert(baseSpec && basePolicy);
   const catalog = Array.from(
     {
-      length: 128,
+      length: MAX_WINDOWS,
     },
     (_, index) => ({
       ...baseSpec,
@@ -200,7 +194,9 @@ test("the window catalog limit includes deferred definitions and accepts 128 dis
       ],
       catalogPolicy,
     ),
-  ).toThrow("0 and 128");
+  ).toThrow(
+    `windows must contain between 0 and ${MAX_WINDOWS} window definitions.`,
+  );
 });
 
 test("window size constraints accept nullable axes and reject invalid or contradictory bounds", () => {
@@ -294,7 +290,7 @@ test("instance configuration validates multiplicity, explicit bounds and fixed p
         {
           ...first,
           instances: "multiple",
-          maxInstances: 128,
+          maxInstances: MAX_WINDOW_INSTANCES,
           profile: "isolated",
         },
       ],
@@ -302,7 +298,7 @@ test("instance configuration validates multiplicity, explicit bounds and fixed p
     )[0],
   ).toMatchObject({
     instances: "multiple",
-    maxInstances: 128,
+    maxInstances: MAX_WINDOW_INSTANCES,
     profile: "isolated",
   });
   expect(
@@ -337,7 +333,7 @@ test("instance configuration validates multiplicity, explicit bounds and fixed p
     },
     {
       instances: "multiple",
-      maxInstances: 129,
+      maxInstances: MAX_WINDOW_INSTANCES + 1,
     },
     {
       instances: "multiple",
@@ -363,4 +359,21 @@ test("instance configuration validates multiplicity, explicit bounds and fixed p
       ),
     ).toThrow();
   }
+});
+
+test("instance configuration errors describe the shared instance limit", () => {
+  expect(() =>
+    readWindowSpecs(
+      [
+        {
+          ...specs[0],
+          instances: "multiple",
+          maxInstances: MAX_WINDOW_INSTANCES + 1,
+        },
+      ],
+      policy,
+    ),
+  ).toThrow(
+    `Multiple windows require maxInstances from 1 through ${MAX_WINDOW_INSTANCES}; single permits only 1.`,
+  );
 });
