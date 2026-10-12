@@ -226,9 +226,11 @@ parentPort.close();
       ],
     });
   } finally {
+    // Windows can retain executable directory handles briefly after process exit.
     await rm(root, {
       recursive: true,
       force: true,
+      maxRetries: 3,
     });
   }
 }, 30000);
