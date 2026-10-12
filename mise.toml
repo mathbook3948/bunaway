@@ -49,6 +49,8 @@ depends = ["lint", "format:check", "format:java:check", "typecheck", "test"]
 
 [tasks.test]
 depends = ["plugins:build"]
+# Packaging tests replace plugin outputs that the concurrent typecheck would read.
+wait_for = ["typecheck"]
 description = "Run contract tests"
 run = "bun test ./tests"
 
