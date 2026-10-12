@@ -341,7 +341,8 @@ test("WebSocket exchanges preserve text and binary, reject redirects and termina
       cancel.signal,
     );
     await waitFor(() => local.sockets() > priorSockets);
-    cancel.abort();
+    // Abort reasons are arbitrary values; a falsy reason must still settle and release the socket.
+    cancel.abort(0);
     await expect(pending).rejects.toMatchObject({
       code: "CANCELLED",
     });

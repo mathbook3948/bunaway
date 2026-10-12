@@ -30,13 +30,13 @@ export function exchange(
       if (socket.readyState !== WebSocket.CLOSED) {
         socket.terminate();
       }
-      if (error) {
-        reject(error);
-      } else if (close) {
+      if (close) {
         resolve({
           messages,
           close,
         });
+      } else {
+        reject(error);
       }
     };
     const abort = () => finish(signal.reason);
