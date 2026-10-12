@@ -49,9 +49,20 @@ test.skipIf(process.platform !== "win32")(
           windowsHide: true,
         },
       );
-      const expected = JSON.parse(output);
-      for (const directory of Object.keys(expected)) {
-        expect(directories[directory]).toBe(expected[directory]);
+      const expected: unknown = JSON.parse(output);
+      if (
+        !expected ||
+        typeof expected !== "object" ||
+        Array.isArray(expected)
+      ) {
+        throw new Error("The OS oracle did not return directory paths.");
+      }
+      for (const [directory, path] of Object.entries(expected)) {
+        const actual = directories[directory];
+        if (typeof path !== "string" || actual === undefined) {
+          throw new Error("The OS oracle returned an invalid directory path.");
+        }
+        expect(actual).toBe(path);
       }
       await adapter.dispose();
       await adapter.dispose();
