@@ -28,25 +28,51 @@ const PLUGIN_SCHEMA_KEYWORDS = new Set([
   "x-bunaway-stripUnknown",
 ]);
 
-const SHARED_SCHEMA_CHECKS = new Set([
-  "greater_than",
-  "less_than",
-  "multiple_of",
-  "number_format",
+const LENGTH_CHECKS = new Set([
   "min_length",
   "max_length",
   "length_equals",
-  "string_format",
+]);
+// The pinned Zod converter reads checks only in these owning schema processors.
+const SHARED_SCHEMA_CHECKS = new Map([
+  [
+    "number",
+    new Set([
+      "greater_than",
+      "less_than",
+      "multiple_of",
+      "number_format",
+    ]),
+  ],
+  [
+    "string",
+    new Set([
+      ...LENGTH_CHECKS,
+      "string_format",
+    ]),
+  ],
+  [
+    "array",
+    LENGTH_CHECKS,
+  ],
+  [
+    "tuple",
+    LENGTH_CHECKS,
+  ],
 ]);
 
 /** Reject checks that cannot be enforced from their serialized constraints. */
-function checkSharedCheck(check: z.core.$ZodCheck): void {
+function checkSharedCheck(check: z.core.$ZodCheck, schemaType: string): void {
   const definition = check._zod.def;
+  if (!SHARED_SCHEMA_CHECKS.get(schemaType)?.has(definition.check)) {
+    throw new Error(
+      `Plugin ${schemaType} schemas cannot serialize ${definition.check} checks.`,
+    );
+  }
   if (
-    !SHARED_SCHEMA_CHECKS.has(definition.check) ||
-    (definition.check === "string_format" &&
-      "fn" in definition &&
-      !("pattern" in definition && definition.pattern instanceof RegExp))
+    definition.check === "string_format" &&
+    "fn" in definition &&
+    !("pattern" in definition && definition.pattern instanceof RegExp)
   ) {
     throw new Error(
       "Plugin schemas cannot transform values or contain custom checks.",
@@ -97,10 +123,10 @@ function checkSourceSchema(root: z.core.$ZodType): void {
       );
     }
     if (schema instanceof z.core.$ZodCheck) {
-      checkSharedCheck(schema);
+      checkSharedCheck(schema, definition.type);
     }
     for (const check of definition.checks ?? []) {
-      checkSharedCheck(check);
+      checkSharedCheck(check, definition.type);
     }
     switch (definition.type) {
       case "number":
@@ -227,13 +253,23 @@ export function toJSONSchema<S extends z.ZodType>(
 }
 
 /** Checks generated or received contracts before their constraints can be trusted. */
-export function checkPluginSchema(
+export function checkPluginSchema(schema: unknown): asserts schema is Schema {
+  checkSchemaNode(schema, schema, new Set());
+}
+
+/** Check each reached schema once, including reference targets and recursive graphs. */
+function checkSchemaNode(
   schema: unknown,
-  root = schema,
+  root: unknown,
+  visited: Set<object>,
 ): asserts schema is Schema {
   if (!schema || typeof schema !== "object" || Array.isArray(schema)) {
     invalidSchema("Invalid plugin schema object.");
   }
+  if (visited.has(schema)) {
+    return;
+  }
+  visited.add(schema);
   // The object boundary is checked; every indexed field remains unknown until validated.
   const contract = schema as Record<string, unknown>;
   if (Object.keys(contract).some((key) => !PLUGIN_SCHEMA_KEYWORDS.has(key))) {
@@ -263,12 +299,15 @@ export function checkPluginSchema(
   ) {
     invalidSchema("Invalid plugin schema type.");
   }
-  if (
-    contract.$ref !== undefined &&
-    (typeof contract.$ref !== "string" ||
-      !resolveSchemaReference(contract.$ref, root))
-  ) {
-    invalidSchema("Invalid plugin schema reference.");
+  if (contract.$ref !== undefined) {
+    const target =
+      typeof contract.$ref === "string"
+        ? resolveSchemaReference(contract.$ref, root)
+        : undefined;
+    if (!target) {
+      invalidSchema("Invalid plugin schema reference.");
+    }
+    checkSchemaNode(target, root, visited);
   }
   if (
     contract["x-bunaway-stripUnknown"] !== undefined &&
@@ -356,7 +395,7 @@ export function checkPluginSchema(
       invalidSchema("Invalid plugin schema properties.");
     }
     for (const child of Object.values(map)) {
-      checkPluginSchema(child, root);
+      checkSchemaNode(child, root, visited);
     }
   }
   if (contract.anyOf !== undefined) {
@@ -364,7 +403,7 @@ export function checkPluginSchema(
       invalidSchema("Invalid plugin schema alternatives.");
     }
     for (const child of contract.anyOf) {
-      checkPluginSchema(child, root);
+      checkSchemaNode(child, root, visited);
     }
   }
   for (const child of [
@@ -372,14 +411,14 @@ export function checkPluginSchema(
     contract.propertyNames,
   ]) {
     if (child !== undefined) {
-      checkPluginSchema(child, root);
+      checkSchemaNode(child, root, visited);
     }
   }
   if (
     contract.additionalProperties !== undefined &&
     typeof contract.additionalProperties !== "boolean"
   ) {
-    checkPluginSchema(contract.additionalProperties, root);
+    checkSchemaNode(contract.additionalProperties, root, visited);
   }
 }
 

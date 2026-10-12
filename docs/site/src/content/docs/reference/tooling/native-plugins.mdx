@@ -154,6 +154,10 @@ z.object는 선언하지 않은 필드를 제거하고, z.strictObject는 추가
 문자열, 유한한 숫자와 안전한 정수, boolean, null, literal, enum, 배열, 객체,
 record, union, nullable과 JSON 값을 선언할 수 있습니다. 문자열 길이, Unicode 정규식,
 숫자 범위와 배수, 배열 길이 제약을 공유합니다. 정규식은 u 플래그만 사용해야 합니다.
+내장 검사도 이를 직렬화하는 스키마에 붙여야 합니다. 문자열 검사에는 z.string(), 숫자
+검사에는 z.number() 또는 z.int(), 배열 길이 검사에는 z.array()를 사용합니다. enum,
+literal, union이나 래퍼 자체에 추가한 검사는 변환 중 누락될 수 있어 선언을 거부합니다.
+예를 들어 z.string().min(2).nullable()처럼 제약을 먼저 선언한 뒤 조합합니다.
 templateLiteral은 조합된 정규식의 플래그를 현재 계약으로 보존할 수 없어 선언을 거부합니다.
 문자열 패턴이 필요하면 z.string().regex(.../u)로 선언합니다. literal과 enum의 숫자도
 유한해야 하며 NaN과 Infinity는 선언 단계에서 거부합니다.

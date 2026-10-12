@@ -44,6 +44,52 @@ test("serialized and source schemas preserve concrete input and output types", (
 test("Zod declarations and serialized native contracts accept the same JSON values", () => {
   const cases = [
     {
+      schema: z.string().check(z.minLength(2), z.maxLength(3)),
+      values: [
+        "a",
+        "ab",
+        "abc",
+        "abcd",
+      ],
+    },
+    {
+      schema: z.string().check(z.length(2)),
+      values: [
+        "a",
+        "ab",
+        "abc",
+      ],
+    },
+    {
+      schema: z.array(z.number()).check(z.minLength(1), z.maxLength(2)),
+      values: [
+        [],
+        [
+          1,
+        ],
+        [
+          1,
+          2,
+        ],
+        [
+          1,
+          2,
+          3,
+        ],
+      ],
+    },
+    {
+      schema: z.number().check(z.gte(1), z.lte(3), z.multipleOf(2)).nullable(),
+      values: [
+        0,
+        1,
+        2,
+        3,
+        4,
+        null,
+      ],
+    },
+    {
       schema: z.string().regex(/^.$/u),
       values: [
         "a",
@@ -567,6 +613,280 @@ test("contract validation rejects non-JSON literals before serialization and at 
       }
     }
   }
+});
+
+test("built-in checks require an owner that serializes their constraints", () => {
+  for (const { schema, rejected } of [
+    {
+      schema: z
+        .enum([
+          "a",
+          "bb",
+        ])
+        .check(z.minLength(2)),
+      rejected: "a",
+    },
+    {
+      schema: z.literal("aa").check(z.maxLength(1)),
+      rejected: "aa",
+    },
+    {
+      schema: z.literal("a").check(z.length(2)),
+      rejected: "a",
+    },
+    {
+      schema: z
+        .enum([
+          "a",
+          "b",
+        ])
+        .check(z.regex(/^b$/u)),
+      rejected: "a",
+    },
+    {
+      schema: z.literal(1).check(z.gte(2)),
+      rejected: 1,
+    },
+    {
+      schema: z
+        .union([
+          z.literal(1),
+          z.literal(3),
+        ])
+        .check(z.lte(2)),
+      rejected: 3,
+    },
+    {
+      schema: z.number().optional().nonoptional().check(z.multipleOf(2)),
+      rejected: 3,
+    },
+    {
+      schema: z.intersection(z.string(), z.string()).check(z.minLength(2)),
+      rejected: "a",
+    },
+    {
+      schema: z.lazy(() => z.string()).check(z.minLength(2)),
+      rejected: "a",
+    },
+  ]) {
+    expect(schema.safeParse(rejected).success).toBe(false);
+    const recursive: z.ZodType = z.lazy(() =>
+      z.object({
+        value: schema,
+        children: z.array(recursive),
+      }),
+    );
+    for (const declaration of [
+      schema,
+      z.object({
+        value: schema,
+      }),
+      recursive,
+    ]) {
+      expect(() => toJSONSchema(declaration)).toThrow();
+      for (const operation of [
+        {
+          input: declaration,
+          output: z.null(),
+        },
+        {
+          input: z.null(),
+          output: declaration,
+        },
+      ]) {
+        expect(() =>
+          defineNativePlugin({
+            name: "invalid",
+            operations: {
+              echo: operation,
+            },
+          }),
+        ).toThrow();
+      }
+    }
+  }
+});
+
+test("reference targets are validated as schemas at both registration boundaries", () => {
+  for (const schema of [
+    {
+      $ref: "#/properties",
+      properties: {
+        type: {
+          type: "number",
+        },
+      },
+    },
+    {
+      $ref: "#/$defs",
+      $defs: {
+        enum: {
+          type: "string",
+        },
+      },
+    },
+    {
+      $ref: "#/$defs/alias",
+      $defs: {
+        alias: {
+          $ref: "#/properties",
+        },
+      },
+      properties: {
+        type: {
+          type: "number",
+        },
+      },
+    },
+    {
+      $ref: "#",
+      properties: {
+        nested: {
+          $ref: "#/properties",
+        },
+      },
+    },
+  ]) {
+    expect(() => checkPluginSchema(schema)).toThrow();
+    for (const operation of [
+      {
+        input: schema,
+        output: {
+          type: "null",
+        },
+      },
+      {
+        input: {
+          type: "null",
+        },
+        output: schema,
+      },
+    ]) {
+      expect(() =>
+        Reflect.construct(NativeRegistry, [
+          [
+            {
+              name: "invalid",
+              version: "1",
+              native: {
+                operations: [
+                  {
+                    name: "invalid.echo",
+                    ...operation,
+                  },
+                ],
+              },
+            },
+          ],
+        ]),
+      ).toThrow();
+    }
+  }
+});
+
+test("validated references preserve mutual recursion, escaped keys and shared constraints", () => {
+  const schema = {
+    $ref: "#/$defs/node",
+    $defs: {
+      node: {
+        anyOf: [
+          {
+            type: "null",
+          },
+          {
+            type: "object",
+            properties: {
+              value: {
+                $ref: "#/$defs/a~1b~0c",
+              },
+              next: {
+                $ref: "#/$defs/link",
+              },
+            },
+            required: [
+              "value",
+              "next",
+            ],
+            additionalProperties: false,
+          },
+        ],
+      },
+      link: {
+        $ref: "#/$defs/node",
+      },
+      "a/b~c": {
+        type: "number",
+        minimum: 1,
+      },
+    },
+  } as const;
+  checkPluginSchema(schema);
+  const registry = new NativeRegistry([
+    {
+      name: "test",
+      version: "1",
+      native: {
+        operations: [
+          {
+            name: "test.echo",
+            input: schema,
+            output: schema,
+          },
+        ],
+      },
+    },
+  ]);
+  for (const value of [
+    null,
+    {
+      value: 1,
+      next: {
+        value: 2,
+        next: null,
+      },
+    },
+  ]) {
+    expect(
+      registry.validateCall({
+        operation: "test.echo",
+        payload: value,
+      }).payload,
+    ).toEqual(value);
+    expect(registry.validateOutput("test.echo", value)).toEqual(value);
+  }
+  for (const value of [
+    "anything",
+    {
+      value: 1,
+      next: {
+        value: 0,
+        next: null,
+      },
+    },
+    {
+      value: 1,
+    },
+  ]) {
+    expect(() =>
+      registry.validateCall({
+        operation: "test.echo",
+        payload: value,
+      }),
+    ).toThrow();
+    expect(() => registry.validateOutput("test.echo", value)).toThrow();
+  }
+  // Revisiting a root must not hide invalid siblings later in the same graph.
+  expect(() =>
+    checkPluginSchema({
+      ...schema,
+      $defs: {
+        ...schema.$defs,
+        invalidSibling: {
+          type: "invalid",
+        },
+      },
+    }),
+  ).toThrow();
 });
 
 test("numeric record key declarations fail before a lossy contract can be registered", () => {
