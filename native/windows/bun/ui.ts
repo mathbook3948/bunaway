@@ -482,6 +482,15 @@ async function executeWindowRequest(
         requestId: queued.requestId,
         permissions,
         signal,
+        beforeExecute() {
+          // Closing commits locally before the main thread sends cancellation packets.
+          if (closingSent || stopping || !activeContext(queued.context)) {
+            throw new BunawayError({
+              code: "CANCELLED",
+              message: "Host call was cancelled.",
+            });
+          }
+        },
       },
     );
     response = hostResponse(() => payload);
