@@ -136,6 +136,9 @@ export function createWIC() {
     },
   });
   const methods = new Map<string, NativeCall>();
+  // Native memory streams borrow their backing arrays. Keep those arrays rooted
+  // until Release, including across later COM calls and any Bun GC they trigger.
+  const storage = new Map<Pointer, Buffer>();
   function invoke(
     object: Pointer,
     slot: number,
@@ -168,6 +171,7 @@ export function createWIC() {
   }
   const release = (object: Pointer) => {
     invoke(object, 2, [], [], "u32");
+    storage.delete(object);
   };
   function acquire(action: (out: Pointer) => number, input = false): Pointer {
     const out = new BigUint64Array(1);
@@ -226,6 +230,7 @@ export function createWIC() {
         ],
       ),
     );
+    storage.set(object, bytes);
     try {
       check(
         invoke(
@@ -493,6 +498,7 @@ export function createWIC() {
           ),
         );
         owned.push(bitmap);
+        storage.set(bitmap, bgra);
         const container = guid(containers[mime]);
         const encoder = acquire((out) =>
           invoke(
@@ -631,6 +637,7 @@ export function createWIC() {
         method.close();
       }
       methods.clear();
+      storage.clear();
       ole.symbols.CoUninitialize();
       ole.close();
     },
