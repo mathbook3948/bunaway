@@ -5,11 +5,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
-import {
-  type HostContext,
-  MAX_MESSAGE_BYTES,
-  PROTOCOL_VERSION,
-} from "@bunaway/protocol";
+import { type HostContext, PROTOCOL_VERSION } from "@bunaway/protocol";
 import {
   Channel,
   type Packet,
@@ -563,9 +559,6 @@ test.each([
         },
         (_, index) => {
           const name = `example${index}`;
-          const output = {
-            const: "",
-          };
           const native = {
             operations: Array.from(
               {
@@ -573,20 +566,9 @@ test.each([
               },
               (_, operation) => ({
                 name: `${name}.read${operation}`,
-                input: {
-                  const: null,
-                },
-                output,
               }),
             ),
           };
-          if (mode !== "limit") {
-            output.const = "x".repeat(
-              index === 0
-                ? MAX_MESSAGE_BYTES - Buffer.byteLength(JSON.stringify(native))
-                : 400_000,
-            );
-          }
           return {
             name,
             version: "1",
@@ -608,7 +590,7 @@ test.each([
         `
         const plugins = ${JSON.stringify(registrations)};
         ${mode === "duplicate" ? "plugins[2] = plugins[0];" : ""}
-        ${mode === "mismatch" ? 'plugins[2].native.operations[0].output.const = "changed";' : ""}
+        ${mode === "mismatch" ? 'plugins[2].native.operations[0].name = "example2.changed";' : ""}
         plugins.push({ name:"setup", version:"1", setup:()=>Bun.write(${JSON.stringify(marker)}, "started") });
         export default { commands:{}, events:{}, plugins };
       `,
@@ -660,12 +642,25 @@ test.each([
       }[mode];
       if (mode === "valid") {
         expect(await errors).toBe("");
-        expect(Buffer.byteLength(JSON.stringify(plugins[0]?.native))).toBe(
-          MAX_MESSAGE_BYTES,
+        expect(registrations.map((plugin) => plugin.native.operations)).toEqual(
+          [
+            [
+              {
+                name: "example0.read0",
+              },
+            ],
+            [
+              {
+                name: "example1.read0",
+              },
+            ],
+            [
+              {
+                name: "example2.read0",
+              },
+            ],
+          ],
         );
-        expect(
-          Buffer.byteLength(JSON.stringify(registrations)),
-        ).toBeGreaterThan(MAX_MESSAGE_BYTES + 1024);
         expect(await Bun.file(marker).text()).toBe("started");
       } else {
         expect(await errors).toContain(expectedError);
