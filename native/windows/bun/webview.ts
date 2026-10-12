@@ -96,6 +96,7 @@ export class WebView {
   private readonly loader;
   failure: unknown;
   private navigationId: bigint | undefined;
+  private loading = false;
 
   /** Begin async WebView2 creation; ready fires after configuration, independently of HWND visibility. */
   constructor(
@@ -491,6 +492,7 @@ export class WebView {
             : {}),
         });
       } else if (!frame) {
+        this.loading = true;
         const id = new BigUint64Array(1);
         hr(
           method(args, 9, [
@@ -533,6 +535,7 @@ export class WebView {
       if (id[0] !== this.navigationId) {
         return;
       }
+      this.loading = false;
       const success = new Int32Array(1);
       hr(
         method(args, 3, [
@@ -721,18 +724,141 @@ export class WebView {
     });
   }
 
+  /** Startup and recovery navigation use the same policy check as public navigation. */
   navigate() {
     const webview = this.webview;
     if (webview && !this.closing) {
-      hr(
-        withWide(this.spec.home, (address) =>
-          method(webview, 5, [
-            "ptr",
-          ])(address),
-        ),
-        "Navigate",
-      );
+      this.navigateTo(this.spec.home);
     }
+  }
+
+  /** Reject before COM access when the controller is unavailable or closing. */
+  private requireWebView(): Pointer {
+    if (this.closing) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "WebView is closed.",
+      });
+    }
+    if (!this.webview || !this.controller) {
+      throw new BunawayError({
+        code: "BUSY",
+        message: "WebView is not ready.",
+      });
+    }
+    return this.webview;
+  }
+
+  /** Start navigation without expanding allowed origins; redirects still pass NavigationStarting. */
+  navigateTo(url: string) {
+    if (!this.origins.includes(originOf(url)) || url.includes("\0")) {
+      throw new BunawayError({
+        code: "PERMISSION_DENIED",
+        message: "WebView navigation origin denied.",
+      });
+    }
+    const webview = this.requireWebView();
+    hr(
+      withWide(url, (address) =>
+        method(webview, 5, [
+          "ptr",
+        ])(address),
+      ),
+      "Navigate",
+    );
+  }
+
+  /** Read actual browser URL, title, history availability and controller zoom. */
+  getState() {
+    const webview = this.requireWebView();
+    return {
+      url: getString(webview, 4),
+      title: getString(webview, 48),
+      loading: this.loading,
+      canGoBack: this.historyAvailable(38),
+      canGoForward: this.historyAvailable(39),
+      zoomFactor: this.zoomFactor(),
+    };
+  }
+
+  private historyAvailable(slot: 38 | 39): boolean {
+    const value = new Int32Array(1);
+    hr(
+      method(this.requireWebView(), slot, [
+        "ptr",
+      ])(ptr(value)),
+      "Read history availability",
+    );
+    return value[0] !== 0;
+  }
+
+  /** Reload revokes the old document when its NavigationStarting event is accepted. */
+  reload() {
+    hr(method(this.requireWebView(), 31, [])(), "Reload");
+  }
+
+  /** Stop completes through the existing NavigationCompleted cancellation path. */
+  stop() {
+    hr(method(this.requireWebView(), 43, [])(), "Stop");
+  }
+
+  goBack(): boolean {
+    if (!this.historyAvailable(38)) {
+      return false;
+    }
+    hr(method(this.requireWebView(), 40, [])(), "GoBack");
+    return true;
+  }
+
+  goForward(): boolean {
+    if (!this.historyAvailable(39)) {
+      return false;
+    }
+    hr(method(this.requireWebView(), 41, [])(), "GoForward");
+    return true;
+  }
+
+  private zoomFactor(): number {
+    this.requireWebView();
+    assert(this.controller);
+    const value = new Float64Array(1);
+    hr(
+      method(this.controller, 7, [
+        "ptr",
+      ])(ptr(value)),
+      "get_ZoomFactor",
+    );
+    return value[0] ?? 1;
+  }
+
+  /** Zoom is controlled through this controller; report browser normalization rather than the input. */
+  setZoomFactor(factor: number): number {
+    if (!Number.isFinite(factor) || factor < 0.25 || factor > 5) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "Zoom factor must be between 0.25 and 5.",
+      });
+    }
+    this.requireWebView();
+    assert(this.controller);
+    hr(
+      method(this.controller, 8, [
+        "f64",
+      ])(factor),
+      "put_ZoomFactor",
+    );
+    return this.zoomFactor();
+  }
+
+  /** A policy grant cannot turn on developer tools in a production host. */
+  openDevTools() {
+    if (!this.devtools) {
+      throw new BunawayError({
+        code: "PERMISSION_DENIED",
+        message: "DevTools are disabled by the host.",
+      });
+    }
+    hr(method(this.requireWebView(), 51, [])(), "OpenDevToolsWindow");
   }
   source() {
     return this.webview ? getString(this.webview, 4) : "";

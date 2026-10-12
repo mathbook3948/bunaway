@@ -190,6 +190,8 @@ export type WindowBounds = {
  * Native failures throw; the UI host converts them to bounded public errors.
  */
 export type NativeWindow = {
+  /** Single host-owned WebView controls. Absent on platforms without this service. */
+  webview?: NativeWebView;
   /** Reads a versioned state and physical outer-bounds snapshot for recovery after subscribing. */
   getSnapshot(): WindowSnapshot;
   /** Reads the latest preparation outcome, including a retained closed-window outcome. Windows only. */
@@ -271,6 +273,32 @@ export type NativeWindow = {
   setFullscreen(value: boolean): void;
   /** Sets or clears the confirmation shown before a user closes the window. */
   setCloseConfirmation(message: string | null): void;
+};
+
+/** Synchronous UI-thread controls; navigation retains the host's origin and session boundary. */
+export type NativeWebView = {
+  /** Reads browser state without changing focus or starting navigation. */
+  getState(): {
+    url: string;
+    title: string;
+    loading: boolean;
+    canGoBack: boolean;
+    canGoForward: boolean;
+    zoomFactor: number;
+  };
+  /** Starts HTTP(S) navigation only to an origin already allowed for this view. */
+  navigate(url: string): void;
+  /** Reloads the current document using normal browser cache behavior. */
+  reload(): void;
+  /** Requests cancellation of pending navigation and resource loads. */
+  stop(): void;
+  /** Starts history navigation; false means that direction has no entry. */
+  goBack(): boolean;
+  goForward(): boolean;
+  /** Sets the controller zoom, returning the actual browser value. */
+  setZoomFactor(factor: number): number;
+  /** Opens the browser's DevTools window only when the host enabled development tools. */
+  openDevTools(): void;
 };
 
 /** Independent display facts, using the same meaning as the window query APIs. */

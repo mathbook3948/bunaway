@@ -58,6 +58,14 @@ splashscreen 최종 종료에는 false를 전달해 임시 프로필과 교체 �
 플러그인은 인증된 출처와 대상 권한을 검증하고 닫혔거나 재생성 중인 창을 결과에서 제외합니다.
 `lookup`이 없으면 식별자 탐색 API는 `UNSUPPORTED`를 반환합니다.
 `NativeWindow`는 `show(visible)`, `focus()`, `close()`, `isFullscreen()`, `getSizeConstraints()`, `setSizeConstraints(constraints)`, `setSize(width, height)`, `setPosition(x, y)`, `setFullscreen(value)`, `setCloseConfirmation(message)`를 제공합니다.
+
+선택적 `NativeWindow.webview`는 Windows UI 스레드의 `NativeWebView` 서비스입니다.
+`getState()`는 URL, 문서 제목, 최상위 loading, history 이동 가능 여부와 controller zoom을
+반환합니다. `navigate(url)`, `reload()`, `stop()`, `goBack()`, `goForward()`,
+`setZoomFactor(factor)`, `openDevTools()`는 현재 창의 WebView만 제어합니다.
+탐색은 기존 origin과 세션 경계를 유지하며 DevTools는 호스트 개발 설정이 필요합니다.
+WebView가 닫히면 `INVALID_ARGUMENT`, 아직 생성 중이면 `BUSY`입니다.
+서비스가 없는 플랫폼에서는 창 플러그인이 `UNSUPPORTED`를 반환합니다.
 `showInactive()`는 현재 일반, 최소화나 최대화 상태와 다른 창의 입력 포커스를 유지하며
 숨김을 해제합니다. `activate()`는 표시된 비최소화 창의 전경 전환을 요청하고 실제
 전경 여부를 boolean으로 반환합니다. 숨김이나 최소화 상태에서는 변경 없이 `false`입니다.

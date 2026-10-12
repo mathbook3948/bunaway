@@ -29,7 +29,38 @@ export function createOperations(
     viewId: string,
   ): JsonValue | Promise<JsonValue> {
     const window = services.window(viewId);
+    const webview = () => {
+      if (!window.webview) {
+        throw new BunawayError({
+          code: "UNSUPPORTED",
+          message: "WebView control is not implemented on this platform.",
+        });
+      }
+      return window.webview;
+    };
     switch (call.operation) {
+      case "windows.getWebViewState":
+        return {
+          ...webview().getState(),
+        };
+      case "windows.navigateWebView":
+        webview().navigate(call.payload.url);
+        break;
+      case "windows.reloadWebView":
+        webview().reload();
+        break;
+      case "windows.stopWebView":
+        webview().stop();
+        break;
+      case "windows.goBack":
+        return webview().goBack();
+      case "windows.goForward":
+        return webview().goForward();
+      case "windows.setZoomFactor":
+        return webview().setZoomFactor(call.payload.factor);
+      case "windows.openDevTools":
+        webview().openDevTools();
+        break;
       case "windows.getReadiness":
         return {
           ...window.getReadiness(),
