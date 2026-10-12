@@ -1,0 +1,96 @@
+---
+title: menu
+description: 메뉴 리소스를 관리하고 Windows 트레이에 연결합니다.
+sidebar: { order: 7 }
+---
+
+`@bunaway/plugin-menu`를 설치하고 앱의 `plugins`에 `menuPlugin`을 등록합니다.
+Windows에서 제공합니다. `menu`는 화면과 앱 백엔드가 함께 사용하는 호출 API입니다.
+트레이 연결에는 앱 정의의 `desktop.tray`가 필요합니다.
+
+```ts
+import { menu } from "@bunaway/plugin-menu";
+
+await menu.create({
+  menuId: "tray-menu",
+  items: [
+    { id: "open", type: "item", label: "열기" },
+    { id: "notifications", type: "checkbox", label: "알림", checked: true },
+    { id: "separator", type: "separator" },
+    { id: "quit", type: "item", label: "종료" },
+  ],
+});
+await menu.setTrayMenu({ menuId: "tray-menu" });
+```
+
+사용자 정의 항목은 선택 이벤트만 전달합니다. `open`이나 `quit`이라는 ID에 호스트 동작을
+자동으로 연결하지 않습니다. 앱 명령이나 백엔드 서비스에서 창 표시와 종료를 처리합니다.
+트레이 왼쪽 클릭의 기존 창 복원과 종료 확인 규칙은 그대로 적용합니다.
+
+## 리소스와 항목
+
+| 함수 | 입력 | 결과 |
+| --- | --- | --- |
+| `menu.create` | `{ menuId, items }` | 생성한 `{ menuId, items }` |
+| `menu.get` | `{ menuId }` | `{ menuId, items }` 또는 없는 ID의 `null` |
+| `menu.list` | `null` | 생성 순서의 메뉴 ID 배열 |
+| `menu.replace` | `{ menuId, items }` | 교체한 리소스 |
+| `menu.remove` | `{ menuId }` | 제거했으면 `true`, 없는 ID이면 `false` |
+| `menu.insert` | `{ menuId, parentId?, index, item }` | 변경한 리소스 |
+| `menu.removeItem` | `{ menuId, itemId }` | 변경한 리소스 |
+| `menu.updateItem` | `{ menuId, itemId, changes }` | 변경한 리소스 |
+| `menu.setTrayMenu` | `{ menuId: string \| null }` | `null` |
+| `menu.getTrayMenu` | `null` | 연결한 메뉴 ID 또는 `null` |
+
+모든 결과는 Promise입니다. 리소스는 앱 수명에 속하며 창이나 화면 재연결에 종속되지 않습니다.
+메뉴 ID는 앱 전체에서, 항목 ID는 한 메뉴의 모든 하위 항목에서 고유합니다.
+ID는 영문자, 숫자, `_`, `.`, `-`로 된 1~128자입니다.
+리소스는 최대 32개, 각 리소스는 하위 항목을 포함해 최대 256개, 깊이는 최대 8단계입니다.
+조회 결과를 수정해도 원래 리소스는 바뀌지 않습니다.
+
+`type`은 `item`, `separator`, `checkbox`, `radio`, `submenu`입니다.
+`visible` 기본값은 `true`입니다. separator를 제외한 항목의 `label`은 필수이고
+`enabled` 기본값은 `true`입니다. label은 1~512 UTF-16 코드 단위이며 NUL, 탭, 줄바꿈과
+잘못된 surrogate를 거부합니다. `&`는 문자로 표시하며 accelerator를 등록하지 않습니다.
+숨긴 항목은 네이티브 메뉴에서 제외합니다.
+
+checkbox와 radio의 `checked` 기본값은 `false`입니다. radio는 `group`을 지정해야 하며
+같은 부모 아래 같은 group에서 checked 항목은 하나만 허용합니다. 다른 유형은 group을
+지정할 수 없습니다. 일반 item의 checked는 `false`여야 합니다. submenu는 `items` 배열을
+가집니다. 선택은 checked 상태를 자동 변경하지 않습니다.
+
+`insert`의 index는 대상 배열의 0부터 길이까지입니다. 0은 prepend, 배열 길이는 append입니다.
+`parentId`를 생략하거나 `null`로 지정하면 최상위에 삽입하고, 지정하면 해당 submenu에 삽입합니다.
+`removeItem`은 submenu의 하위 항목도 제거합니다. `updateItem.changes`는 `label`, `enabled`,
+`visible`, `checked`를 받습니다. separator는 visible만, submenu는 checked를 제외한 변경을 받습니다.
+유형과 ID를 바꾸려면 replace를 사용합니다. 변경 후 전체 트리를 검증하며 실패하면 이전 리소스와
+트레이 연결을 유지합니다.
+
+## 트레이 연결과 이벤트
+
+시작할 때는 기존 Open/Quit 메뉴입니다. 리소스를 연결하면 다음 우클릭부터 사용자 정의 메뉴를
+표시합니다. 연결한 리소스의 변경은 다음 팝업에 반영됩니다. 표시 중인 팝업은 기존 정의를
+유지하고 정의가 교체된 뒤의 이전 선택은 이벤트로 전달하지 않습니다.
+`setTrayMenu({ menuId: null })` 또는 연결한 리소스 제거는 트레이 메뉴를 표시하지 않게 합니다.
+아이콘과 숨긴 HWND는 유지하며 앱 실행 유지 조건도 바꾸지 않습니다.
+`getTrayMenu(null)`의 null은 사용자 정의 리소스가 연결되지 않았다는 뜻입니다.
+앱 종료 때 리소스를 해제합니다.
+
+`menu.clicked`의 payload는 `{ menuId, itemId, source: "tray", windowId: null }`입니다.
+트레이 팝업에는 소유 앱 창이 없으므로 windowId는 null입니다.
+이벤트를 받으려는 뷰에서 `menu.clicked`를 허용하고 구독합니다. 이벤트를 영구 보관하지 않습니다.
+
+## 정책과 오류
+
+각 함수는 같은 이름의 독립 Host 권한을 요구합니다. 예를 들어 생성은 `menu.create`,
+트레이 연결은 `menu.setTrayMenu`입니다. 화면 직접 호출은 `plugin.menu.create` 같은 명령도
+허용해야 합니다. 리소스는 앱 전체에 공유되므로 허용된 작업은 다른 뷰가 만든 메뉴에도 적용됩니다.
+대상별 접근 규칙이 필요하면 앱 명령에서 검사합니다. 등록과 설치가 권한을 부여하지 않습니다.
+
+없는 리소스의 변경, 잘못된 항목이나 삽입 위치는 `INVALID_ARGUMENT`입니다.
+중복 메뉴 ID와 32개 초과는 `BUSY`, 권한 없음은 `PERMISSION_DENIED`입니다.
+미등록 작업, 다른 플랫폼과 트레이 없는 앱의 연결은 `UNSUPPORTED`입니다.
+취소는 `CANCELLED`, 기한 초과는 `TIMEOUT`이며 완료한 동기 변경을 되돌리지 않습니다.
+네이티브 메뉴 생성 오류는 호스트 진단에 기록합니다.
+
+메뉴바, 창 컨텍스트 메뉴, icon, 기본 role, accelerator와 단축키 우선순위는 아직 제공하지 않습니다.

@@ -355,3 +355,8 @@ defineNativePlugin을 사용하면 Zod 검증, 타입 추론, 공유 연결과 �
 `windowSnapshotSchema`는 표시와 geometry 관찰, `windowReadinessSchema`는 창, 문서와 SDK 준비 상태의 스키마입니다.
 `windowEvents`는 `windows.changed`와 `windows.readiness`의 선언입니다. 완료 조건, 수신 범위와 상태 복구는
 [창 API](/reference/host/windows/#창-준비)를 따릅니다.
+
+Windows UI 어댑터의 선택적 `NativeEnvironment.menus`는 `NativeMenuServices`를 제공합니다.
+`NativeMenuItem` 트리를 `setTrayMenu`로 연결하고 `emit`으로 정책과 구독을 확인하는 기존 네이티브 이벤트 경로에 전달합니다.
+null은 트레이 메뉴 숨김이고 undefined는 호스트 기본 Open/Quit 복원입니다.
+트레이가 없으면 연결은 UNSUPPORTED이며 메뉴 정의 자체는 선택 플러그인이 소유합니다.

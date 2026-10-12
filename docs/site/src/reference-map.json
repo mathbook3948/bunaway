@@ -436,6 +436,17 @@
       "pages": {
         "reference/plugins/appearance": ["appearance", "appearancePlugin"]
       }
+    },
+    {
+      "name": "@bunaway/plugin-menu",
+      "source": "plugins/menu/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/menu": ["menu", "menuPlugin"]
+      }
     }
   ],
   "members": [
@@ -889,7 +900,8 @@
           "dataRoot",
           "capabilities",
           "windows",
-          "app"
+          "app",
+          "menus"
         ]
       }
     },
@@ -1168,6 +1180,18 @@
       "image.dispose",
       "image.crop",
       "image.resize"
+    ],
+    "reference/plugins/menu": [
+      "menu.create",
+      "menu.get",
+      "menu.list",
+      "menu.replace",
+      "menu.remove",
+      "menu.insert",
+      "menu.removeItem",
+      "menu.updateItem",
+      "menu.setTrayMenu",
+      "menu.getTrayMenu"
     ]
   },
   "configuration": {

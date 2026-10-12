@@ -1,6 +1,10 @@
 /** An app-scoped menu resource. IDs are unique throughout one resource tree. */
 export type NativeMenuItem =
-  | { id: string; type: "separator"; visible: boolean }
+  | {
+      id: string;
+      type: "separator";
+      visible: boolean;
+    }
   | {
       id: string;
       type: "item" | "checkbox" | "radio";

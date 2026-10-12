@@ -128,7 +128,11 @@ export async function operations(
     );
   const environment: NativeEnvironment = {
     dataRoot,
-    ...(menus ? { menus } : {}),
+    ...(menus
+      ? {
+          menus,
+        }
+      : {}),
     ...(app
       ? {
           app,
