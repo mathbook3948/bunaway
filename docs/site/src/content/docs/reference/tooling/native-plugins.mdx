@@ -154,14 +154,22 @@ z.object는 선언하지 않은 필드를 제거하고, z.strictObject는 추가
 문자열, 유한한 숫자와 안전한 정수, boolean, null, literal, enum, 배열, 객체,
 record, union, nullable과 JSON 값을 선언할 수 있습니다. 문자열 길이, Unicode 정규식,
 숫자 범위와 배수, 배열 길이 제약을 공유합니다. 정규식은 u 플래그만 사용해야 합니다.
+templateLiteral은 조합된 정규식의 플래그를 현재 계약으로 보존할 수 없어 선언을 거부합니다.
+문자열 패턴이 필요하면 z.string().regex(.../u)로 선언합니다. literal과 enum의 숫자도
+유한해야 하며 NaN과 Infinity는 선언 단계에서 거부합니다.
 
 record의 키에 z.number나 z.int를 사용하면 선언을 거부합니다. 숫자 키를 문자열로
 변환할 때 범위와 배수 제약이 사라지기 때문입니다. union이나 lazy 안의 숫자 키도 거부합니다.
 enum이나 literal로 키를 열거한 record는 모든 키가 필수입니다. 값에 exactOptional을
 사용해도 이 규칙을 유지합니다. 일부 키의 생략을 허용하려면 z.partialRecord를 사용합니다.
 고정된 숫자 키는 z.literal([1, 2])처럼 열거할 수 있으며 JSON에서는 "1", "2"로 전달합니다.
+looseRecord는 일치하지 않는 키를 그대로 통과시키는 동작을 현재 계약으로 보존하지 못하므로
+선언을 거부합니다. record와 partialRecord의 지원 범위는 유지합니다.
 
-SDK는 defineNativePlugin 호출 때 Zod의 JSON Schema로 변환하고 필드 제거 규칙을 함께 기록합니다.
+SDK는 defineNativePlugin 호출 때 원본 선언의 종류, 옵션과 검사를 먼저 확인합니다.
+지원 범위 밖의 선언은 중첩 객체, union이나 lazy 안에서도 거부합니다. 이 검사를 통과하면
+Zod의 JSON Schema로 변환하고 필드 제거 규칙을 함께 기록합니다. 생성된 계약도 직렬화 전에
+검사하므로 JSON 변환 과정에서 값이 바뀐 계약을 등록하지 않습니다.
 프로세스와 Worker에는 실행 함수가 없는 JSON 계약을 전달하며 화면, 백엔드와 호스트가
 같은 계약으로 입력과 결과를 처리합니다. 제거할 필드도 먼저 JSON 값과 크기, 깊이 제한을
 검사하므로 undefined나 Date, 순환 참조 등을 추가 필드에 넣으면 오류가 납니다.

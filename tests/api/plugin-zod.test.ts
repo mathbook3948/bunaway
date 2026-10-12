@@ -9,6 +9,7 @@ import {
   validateValue,
 } from "@bunaway/protocol";
 import { z } from "zod";
+import { checkPluginSchema } from "../../packages/protocol/src/plugin-schema.ts";
 import { parse, serialize } from "../../packages/protocol/src/validation.ts";
 
 test("serialized and source schemas preserve concrete input and output types", () => {
@@ -42,6 +43,44 @@ test("serialized and source schemas preserve concrete input and output types", (
 
 test("Zod declarations and serialized native contracts accept the same JSON values", () => {
   const cases = [
+    {
+      schema: z.string().regex(/^.$/u),
+      values: [
+        "a",
+        "😀",
+        "ab",
+        "",
+      ],
+    },
+    {
+      schema: z.literal([
+        null,
+        true,
+        1.5,
+        "😀",
+      ]),
+      values: [
+        null,
+        true,
+        false,
+        1.5,
+        2,
+        "😀",
+      ],
+    },
+    {
+      schema: z.record(z.literal("a"), z.string()),
+      values: [
+        {
+          a: "ok",
+        },
+        {
+          a: "ok",
+          extra: 1,
+        },
+        {},
+      ],
+    },
     {
       schema: z.string().min(1).max(1),
       values: [
@@ -379,6 +418,155 @@ test("shared plugin declarations reject lost checks and value transformations", 
       },
     ]),
   ).toThrow();
+});
+
+test("source policy rejects lossy declarations in either operation boundary and nested graphs", () => {
+  const template = z.templateLiteral([
+    z.string().regex(/^.$/u),
+  ]);
+  const loose = z.looseRecord(z.literal("a"), z.string());
+  const infinite = z.literal([
+    Infinity,
+    true,
+  ]);
+  expect(template.safeParse("😀").success).toBe(false);
+  expect(
+    loose.safeParse({
+      a: "ok",
+      extra: 1,
+    }).success,
+  ).toBe(true);
+  expect(infinite.safeParse(null).success).toBe(false);
+  for (const unsupported of [
+    template,
+    z.templateLiteral([
+      "fixed",
+    ]),
+    loose,
+    z.looseRecord(z.string().regex(/^a$/u), z.string()),
+    infinite,
+    z.literal(-Infinity),
+    z.literal(NaN),
+    z.promise(z.string()),
+    z.string().readonly(),
+  ]) {
+    const shared = z.lazy(() => unsupported);
+    const recursive: z.ZodType = z.lazy(() =>
+      z.object({
+        value: shared,
+        children: z.array(recursive),
+      }),
+    );
+    for (const schema of [
+      unsupported,
+      z.object({
+        value: unsupported.exactOptional(),
+      }),
+      z.array(unsupported),
+      z.union([
+        z.null(),
+        shared,
+      ]),
+      z.object({
+        first: shared,
+        second: shared,
+      }),
+      z.record(z.string(), shared),
+      recursive,
+    ]) {
+      for (const operation of [
+        {
+          input: schema,
+          output: z.null(),
+        },
+        {
+          input: z.null(),
+          output: schema,
+        },
+      ]) {
+        expect(() =>
+          defineNativePlugin({
+            name: "invalid",
+            operations: {
+              echo: operation,
+            },
+          }),
+        ).toThrow();
+      }
+    }
+  }
+});
+
+test("contract validation rejects non-JSON literals before serialization and at registration", () => {
+  for (const value of [
+    Infinity,
+    -Infinity,
+    NaN,
+    undefined,
+  ]) {
+    for (const literal of [
+      {
+        const: value,
+      },
+      {
+        enum: [
+          value,
+          true,
+        ],
+      },
+    ]) {
+      for (const schema of [
+        literal,
+        {
+          type: "array",
+          items: literal,
+        },
+        {
+          $defs: {
+            value: literal,
+          },
+          $ref: "#/$defs/value",
+        },
+      ]) {
+        expect(() => checkPluginSchema(schema)).toThrow(
+          "Plugin schema literals must be finite JSON values.",
+        );
+        for (const operation of [
+          {
+            input: schema,
+            output: {
+              type: "null",
+            },
+          },
+          {
+            input: {
+              type: "null",
+            },
+            output: schema,
+          },
+        ]) {
+          expect(() =>
+            Reflect.construct(NativeRegistry, [
+              [
+                {
+                  name: "invalid",
+                  version: "1",
+                  native: {
+                    operations: [
+                      {
+                        name: "invalid.echo",
+                        ...operation,
+                      },
+                    ],
+                  },
+                },
+              ],
+            ]),
+          ).toThrow();
+        }
+      }
+    }
+  }
 });
 
 test("numeric record key declarations fail before a lossy contract can be registered", () => {

@@ -332,72 +332,11 @@ const conversionOutput = z.strictObject({
 /** Schemas for window operations, used to validate calls and their results. */
 const operationDefinitions = {
   "windows.createInstance": {
-    input: z.strictObject({
-      view: viewTarget.shape.view,
-      options: z
-        .strictObject({
-          title: z
-            .string()
-            .max(1024)
-            .regex(new RegExp(WINDOW_TEXT_PATTERN, "u"))
-            .exactOptional(),
-          window: z
-            .strictObject({
-              width: creationDimension.exactOptional(),
-              height: creationDimension.exactOptional(),
-              minWidth: sizeDimension.exactOptional(),
-              minHeight: sizeDimension.exactOptional(),
-              maxWidth: sizeDimension.exactOptional(),
-              maxHeight: sizeDimension.exactOptional(),
-            })
-            .exactOptional(),
-          visible: z.boolean().exactOptional(),
-          showWhenReady: z
-            .union([
-              z.enum([
-                "document",
-                "sdk",
-              ]),
-              z.null(),
-            ])
-            .exactOptional(),
-        })
-        .exactOptional(),
-    }),
+    input: creationResult.input,
     output: windowIdentitySchema,
   },
   "windows.recreateInstance": {
-    input: z.strictObject({
-      view: viewTarget.shape.view,
-      options: z
-        .strictObject({
-          title: z
-            .string()
-            .max(1024)
-            .regex(new RegExp(WINDOW_TEXT_PATTERN, "u"))
-            .exactOptional(),
-          window: z
-            .strictObject({
-              width: creationDimension.exactOptional(),
-              height: creationDimension.exactOptional(),
-              minWidth: sizeDimension.exactOptional(),
-              minHeight: sizeDimension.exactOptional(),
-              maxWidth: sizeDimension.exactOptional(),
-              maxHeight: sizeDimension.exactOptional(),
-            })
-            .exactOptional(),
-          visible: z.boolean().exactOptional(),
-          showWhenReady: z
-            .union([
-              z.enum([
-                "document",
-                "sdk",
-              ]),
-              z.null(),
-            ])
-            .exactOptional(),
-        })
-        .exactOptional(),
+    input: creationResult.input.extend({
       windowId: viewTarget.shape.view,
     }),
     output: windowIdentitySchema,
