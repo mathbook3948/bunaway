@@ -58,16 +58,16 @@ function downloadState(value: number): WebViewDownload["state"] {
 
 /** Retain a start deferral until one decision, then own its operation through terminal cleanup. */
 function resource(args: Pointer): DownloadResource {
+  // Reject first, including failures while acquiring the operation or its metadata.
+  hr(
+    method(args, 5, [
+      "i32",
+    ])(1),
+    "Hold download approval",
+  );
   const operation = getObject(args, 3);
   let deferral: Pointer | undefined;
   try {
-    // Deny before taking a deferral, so any failed decision keeps the safe outcome.
-    hr(
-      method(args, 5, [
-        "i32",
-      ])(1),
-      "Hold download approval",
-    );
     deferral = getObject(args, 10);
   } catch (error) {
     release(operation);
