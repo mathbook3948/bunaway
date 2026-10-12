@@ -183,6 +183,8 @@ manifest와 등록 메시지에는 이름과 버전, 지원 플랫폼, 작업 �
 
 파싱 전후에는 JSON 값, 크기, 깊이와 Unicode 제한을 검사한다. Zod 검사나 변환 함수는
 전송하지 않는다. 동기 및 비동기 스키마를 지원하며 SDK가 검사 Promise의 완료와 실패를 기다린다.
+Zod의 형제 검사에서 빠져나오는 Promise 실패는 [ADR 0018](../decisions/0018-plugin-local-zod-parsing.md)의
+의존성 패치로 처리한다. 이미 시작한 검사는 관찰하되 예외 반환을 다른 검사의 완료까지 늦추지 않는다.
 입력 파싱 실패는 INVALID_ARGUMENT, 결과 파싱 실패는 INTERNAL로 정리한다.
 플러그인 코드에 정의한 refine, transform, when과 키 정규화는 그대로 실행한다.
 권한 확인은 파싱보다 먼저 이루어지며 거부된 호출은 검사 콜백도 실행하지 않는다.

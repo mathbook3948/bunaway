@@ -404,3 +404,9 @@ Win32와 WebView 콜백 경계는 제어 가능한 fixture로 대체하며 실�
 공유 브라우저 프로세스 장애에서 해당 창의 정리, 격리된 창의 계속 동작과 새 공유 환경 복구도 확인한다.
 실행한 OS, Bun revision과 WebView2 버전은 `build/windows-multiple-windows-results.json`에 기록한다.
 CI의 windows-native 작업은 `mise run host:windows`를 통해 이 검사를 실행한다.
+
+`api/zod-promise.test.ts`는 ESM과 CommonJS의 실제 Worker에서 Zod의 형제 검사 실패,
+끝나지 않는 검사, 정상 변환 횟수와 when, abort 동작을 확인한다.
+`cli/zod-distribution.test.ts`는 새 프로젝트에 원본 Zod와 배포 패키지를 설치하고
+설치된 CLI의 제품 및 개발 앱 번들에서 동일한 SDK 입력과 출력 회귀를 실행한다.
+이 검사는 Win32, WebView2나 WKWebView의 실제 네이티브 실행을 대신하지 않는다.

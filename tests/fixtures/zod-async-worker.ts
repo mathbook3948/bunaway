@@ -14,12 +14,53 @@ const failure = async () => {
   await Bun.sleep(1);
   throw new Error("private callback failure");
 };
+const immediateFailure = () => {
+  throw new Error("immediate callback failure");
+};
+const delayed = z.string().refine(failure);
+const immediate = z.string().refine(immediateFailure);
 const schemas = {
   refine: z.string().refine(async () => {
     throw new Error("private refinement failure");
   }),
   promise: z.string().refine(() => failure()),
   transform: z.string().transform(failure),
+  checks: delayed.refine(immediateFailure),
+  checkChain: z
+    .string()
+    .refine(() => new Promise<boolean>(() => {}))
+    .refine(failure),
+  object: z.object({
+    first: delayed,
+    second: immediate,
+  }),
+  array: z.array(
+    z
+      .string()
+      .refine((value) => (value === "first" ? failure() : immediateFailure())),
+  ),
+  tuple: z.tuple([
+    delayed,
+    immediate,
+  ]),
+  union: z.union([
+    delayed,
+    immediate,
+  ]),
+  intersection: z.intersection(delayed, immediate),
+  record: z.record(
+    z.string(),
+    z
+      .string()
+      .refine((value) => (value === "first" ? failure() : immediateFailure())),
+  ),
+  when: delayed.refine(() => true, {
+    when: immediateFailure,
+  }),
+  never: z.object({
+    first: z.string().refine(() => new Promise<boolean>(() => {})),
+    second: immediate,
+  }),
   nested: z.object({
     value: z.string().refine(failure),
   }),
@@ -73,12 +114,28 @@ parentPort.on("message", async (request: string) => {
   }
   const [execution, mode, boundary] = request.split(":");
   const name = `async.${mode}${boundary === "input" ? "Input" : "Output"}`;
-  const input =
-    mode === "nested"
-      ? {
-          value: "ok",
-        }
-      : "ok";
+  const input = [
+    "object",
+    "record",
+    "never",
+  ].includes(mode ?? "")
+    ? {
+        first: "first",
+        second: "second",
+      }
+    : [
+          "array",
+          "tuple",
+        ].includes(mode ?? "")
+      ? [
+          "first",
+          "second",
+        ]
+      : mode === "nested"
+        ? {
+            value: "ok",
+          }
+        : "ok";
   let response: HostResponse;
   try {
     const value =

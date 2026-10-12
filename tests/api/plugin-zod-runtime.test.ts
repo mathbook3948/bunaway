@@ -17,6 +17,7 @@ import { z } from "zod";
 import { bindHostAPI } from "#core/host-api";
 import { hostResponse } from "#native/host-api/bun/host-response";
 import { operations } from "#native/host-api/bun/plugins";
+import { assertZodWorker } from "../fixtures/assert-zod-worker.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const environment: NativeEnvironment = {
@@ -657,57 +658,9 @@ test("asynchronous refinements and transforms are awaited once at both boundarie
 });
 
 test("failed asynchronous checks do not terminate the Worker or prevent its next request", async () => {
-  const worker = new Worker(
+  await assertZodWorker(
     new URL("../fixtures/zod-async-worker.ts", import.meta.url),
   );
-  const exit = new Promise<number>((resolve, reject) => {
-    worker.once("exit", resolve);
-    worker.once("error", reject);
-  });
-  const request = (operation: string) =>
-    Promise.race([
-      new Promise<unknown>((resolve) => {
-        worker.once("message", resolve);
-        worker.postMessage(operation);
-      }),
-      exit.then((code) => {
-        throw new Error(`Worker exited before replying: ${code}`);
-      }),
-    ]);
-  try {
-    for (const mode of [
-      "refine",
-      "promise",
-      "transform",
-      "nested",
-    ]) {
-      for (const boundary of [
-        "input",
-        "output",
-      ]) {
-        for (const execution of [
-          "io",
-          "ui",
-        ]) {
-          expect(await request(`${execution}:${mode}:${boundary}`)).toEqual({
-            kind: "error",
-            error: {
-              code: boundary === "input" ? "INVALID_ARGUMENT" : "INTERNAL",
-              message: `Invalid plugin ${boundary}.`,
-            },
-          });
-          expect(await request("ping")).toEqual({
-            kind: "result",
-            payload: "alive",
-          });
-        }
-      }
-    }
-    worker.postMessage("close");
-    expect(await exit).toBe(0);
-  } finally {
-    await worker.terminate();
-  }
 });
 
 test("UI cancellation or disposal during input parsing prevents native execution", async () => {

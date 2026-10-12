@@ -19,6 +19,9 @@ import { templateNames } from "./templates.ts";
 /** Framework-owned files copied into a distributable CLI artifact. */
 export const frameworkPaths = [
   "framework.json",
+  "patches/zod-files.json",
+  "patches/zod@4.6.5.patch",
+  "docs/decisions/0018-plugin-local-zod-parsing.md",
   "FRAMEWORK-LICENSE.txt",
   "THIRD-PARTY-NOTICES.txt",
   "licenses",

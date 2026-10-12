@@ -3,6 +3,7 @@ import { dirname, extname, relative, resolve } from "node:path";
 import type { BunPlugin } from "bun";
 import { files, hash, inside, installedPackageRoot, json } from "./files.ts";
 import { type InstalledPlugin, installedPlugins } from "./plugins.ts";
+import { registerZodPatch } from "./zod-patch.ts";
 
 interface SdkReference {
   name: string;
@@ -141,6 +142,7 @@ export async function sdkPlugin(
     entries,
     name: "pinned-bunaway-sdk",
     setup(build) {
+      registerZodPatch(build, root);
       // Direct SDK source imports in the CLI artifact also use the installed
       // SDK, preserving class identity.
       build.onResolve(

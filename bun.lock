@@ -105,9 +105,6 @@
     "packages/protocol": {
       "name": "@bunaway/protocol",
       "version": "0.0.0",
-      "dependencies": {
-        "zod": "4.6.5",
-      },
     },
     "packages/runtime-bun": {
       "name": "@bunaway/runtime-bun",
@@ -227,6 +224,9 @@
         "@bunaway/runtime-bun": "workspace:*",
       },
     },
+  },
+  "patchedDependencies": {
+    "zod@4.6.5": "patches/zod@4.6.5.patch",
   },
   "packages": {
     "@astrojs/astro2tsx": ["@astrojs/astro2tsx@0.1.2", "", { "dependencies": { "@emnapi/core": "1.11.3", "@napi-rs/wasm-runtime": "1.2.4" } }, "sha512-Uj/M9zbrhu5cIZEvWAGTbQJRKSxXWJ/E59BZwt7F+chrKhbfttW+9rkS/l+1QxoJP1KU3UnpM62M7yszfAI0WA=="],
