@@ -95,6 +95,8 @@ Windows 창 항목에는 `visible?: boolean`과 `showWhenReady?: "document" | "s
 
 초기 좌표가 있으면 해당 점의 모니터, 모니터 밖이면 가장 가까운 모니터를 선택합니다.
 없으면 주 모니터를 사용합니다. 작업 영역은 태스크바를 제외한 `rcWork`입니다.
+창 생성 뒤 실제 창의 DPI와 프레임으로 크기를 다시 계산합니다. 혼합 DPI 모니터 경계에서
+창이 다른 모니터에 더 많이 걸쳐도 처음 선택한 작업 영역은 유지합니다.
 `center`와 `preventOverflow` 없이 위치를 생략하면 기존 OS 기본 위치와 그 위치의 DPI를 유지합니다.
 위치 없이 `preventOverflow`만 켜면 주 모니터 작업 영역의 왼쪽 위에서 시작합니다.
 `center`와 `preventOverflow`는 함께 켤 수 있습니다. 크기와 중앙 좌표의 변환은

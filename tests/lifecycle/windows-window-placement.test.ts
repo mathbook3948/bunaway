@@ -24,6 +24,26 @@ const defaults = {
   height: 600,
 };
 
+test("initial HWND placement reconciles mixed DPI without changing the selected work area", async () => {
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      "--no-env-file",
+      `${import.meta.dir}/windows-initial-placement.fixture.ts`,
+    ],
+    {
+      stdout: "ignore",
+      stderr: "pipe",
+    },
+  );
+  const [code, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stderr).text(),
+  ]);
+  expect(stderr).toBe("");
+  expect(code).toBe(0);
+});
+
 test("initial placement preserves OS-default position, signed physical coordinates and outer centering", () => {
   expect(initialWindowPlacement(defaults, 96, frame, work)).toEqual({
     content: defaults,

@@ -426,7 +426,13 @@ export class Windows {
             y: options.y,
           }
         : undefined;
-    const monitor = this.getPlacementMonitor(position, window);
+    // Explicit placement keeps its point/primary work area even when the HWND overlaps another monitor.
+    const usesDefaultPosition =
+      !position && !options.center && !options.preventOverflow;
+    const monitor = this.getPlacementMonitor(
+      position,
+      usesDefaultPosition ? window : undefined,
+    );
     let dpi: number;
     if (window) {
       dpi = this.getDpi(window);
@@ -493,10 +499,9 @@ export class Windows {
     this.constraints.set(window, initialConstraints);
     try {
       this.dpiByWindow.set(window, this.getDpi(window));
-      // Legacy OS-default placement may select another DPI; recompute against the actual HWND.
-      const actual = planned.position
-        ? planned
-        : this.initialPlacement(placement, window);
+      // The HWND's largest monitor overlap can differ from the requested point's monitor.
+      // Recompute sizes and frames at its actual DPI, retaining the selected placement work area.
+      const actual = this.initialPlacement(placement, window);
       assert(
         user.symbols.SetWindowPos(
           window,
