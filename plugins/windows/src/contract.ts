@@ -1,4 +1,5 @@
 import {
+  MAX_WEBVIEW_DOWNLOADS,
   MAX_WINDOW_COORDINATE,
   MAX_WINDOW_DIMENSION,
   MAX_WINDOW_INSTANCES,
@@ -45,6 +46,15 @@ const windowResult = {
 const windowStateResult = {
   input: windowTarget,
   output: z.boolean(),
+};
+
+const downloadTarget = windowTarget.extend({
+  id: z.string().uuid(),
+});
+
+const downloadResult = {
+  input: downloadTarget,
+  output: z.null(),
 };
 
 const windowIdentitySchema = z.strictObject({
@@ -432,6 +442,43 @@ const conversionOutput = z.strictObject({
 
 /** Schemas for window operations, used to validate calls and their results. */
 export const windowOperations = {
+  "windows.setDownloadRequestsEnabled": {
+    input: windowTarget.extend({
+      enabled: z.boolean(),
+    }),
+    output: z.null(),
+  },
+  "windows.getDownloads": {
+    input: windowTarget,
+    output: z
+      .array(
+        z.strictObject({
+          id: z.string().uuid(),
+          url: z.string(),
+          mimeType: z.string(),
+          contentDisposition: z.string(),
+          path: z.string(),
+          totalBytes: z.int().min(0).max(Number.MAX_SAFE_INTEGER).nullable(),
+          receivedBytes: z.int().min(0).max(Number.MAX_SAFE_INTEGER).nullable(),
+          state: z.enum([
+            "pending",
+            "inProgress",
+            "interrupted",
+            "completed",
+            "cancelled",
+          ]),
+          interruptReason: z.int().min(0).nullable(),
+          canResume: z.boolean(),
+          paused: z.boolean(),
+        }),
+      )
+      .max(MAX_WEBVIEW_DOWNLOADS),
+  },
+  "windows.approveDownload": downloadResult,
+  "windows.cancelDownload": downloadResult,
+  "windows.pauseDownload": downloadResult,
+  "windows.resumeDownload": downloadResult,
+  "windows.forgetDownload": downloadResult,
   "windows.createInstance": {
     input: creationResult.input,
     output: windowIdentitySchema,

@@ -585,10 +585,12 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 우선순위 P2. 소유자: WebView 연동은 렌더러 API, 독립 전송과 캡처는 플러그인 후보.
 출처: [E-download], [E-contents], [E-capture], [T-webview-rust], [T-upload].
 
-- [ ] WebView 다운로드의 시작 승인, 거부와 저장 경로 선택을 제공한다.
-- [ ] 다운로드 URL, redirect chain, filename, MIME과 initiator를 조회한다.
-- [ ] total/received bytes, 속도, 진행률과 완료와 실패 이벤트를 제공한다.
-- [ ] pause, resume, cancel과 재개 가능 여부를 제공한다.
+- [x] 신뢰된 backend의 항목별 WebView 다운로드 시작 승인과 거부를 제공한다. 기본 거부, origin 검사, 30초 승인 기한과 창 수명별 자원 정리를 유지한다.
+- [ ] WebView 다운로드의 사용자 지정 저장 경로와 저장 대화상자를 제공한다. WebView2의 경로 기반 쓰기와 덮어쓰기 동작에 맞는 파일 접근 계약이 필요하다. 현재 승인은 브라우저의 기본 경로만 사용한다.
+- [x] `getDownloads`로 URL, MIME, Content-Disposition, 파일명을 포함한 기본 저장 경로, total/received bytes, 상태와 interrupt reason을 조회한다.
+- [ ] redirect chain과 frame별 initiator를 조회한다.
+- [ ] 속도, 진행률과 완료와 실패 이벤트를 제공한다. 현재 진행 및 종료 상태는 snapshot 조회로 확인한다.
+- [x] `pauseDownload`, `resumeDownload`, `cancelDownload`와 `getDownloads`로 pause, resume, cancel과 재개 가능 여부를 제공한다.
 - [ ] 중단 다운로드의 metadata 저장과 재개를 제공한다.
 - [ ] 파일 업로드와 다운로드에 progress, 취소, timeout을 제공한다.
 - [ ] 프린터 목록과 기본 프린터를 조회한다.

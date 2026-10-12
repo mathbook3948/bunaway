@@ -190,6 +190,8 @@ export type WindowBounds = {
  * Native failures throw; the UI host converts them to bounded public errors.
  */
 export type NativeWindow = {
+  /** Trusted-backend download approval and lifetime controls. Windows only. */
+  downloads?: NativeDownloads;
   /** Reads a versioned state and physical outer-bounds snapshot for recovery after subscribing. */
   getSnapshot(): WindowSnapshot;
   /** Reads the latest preparation outcome, including a retained closed-window outcome. Windows only. */
@@ -271,6 +273,45 @@ export type NativeWindow = {
   setFullscreen(value: boolean): void;
   /** Sets or clears the confirmation shown before a user closes the window. */
   setCloseConfirmation(message: string | null): void;
+};
+
+/** Maximum retained pending, active and terminal downloads per WebView. */
+export const MAX_WEBVIEW_DOWNLOADS = 32;
+/** Approval deadline; an undecided download is cancelled without creating its output. */
+export const DOWNLOAD_APPROVAL_TIMEOUT_MS = 30_000;
+
+/** Download state owned by one native WebView lifetime, accessible only to the trusted backend. */
+export type WebViewDownload = {
+  id: string;
+  url: string;
+  mimeType: string;
+  contentDisposition: string;
+  /** WebView2-selected absolute destination; this API does not accept caller-selected paths. */
+  path: string;
+  totalBytes: number | null;
+  receivedBytes: number | null;
+  state: "pending" | "inProgress" | "interrupted" | "completed" | "cancelled";
+  interruptReason: number | null;
+  canResume: boolean;
+  paused: boolean;
+};
+
+/** Every method requires backend origin and its own operation grant before native entry. */
+export type NativeDownloads = {
+  /** Opt into collecting requests, without approving them. Disabling cancels pending requests. */
+  setRequestsEnabled(enabled: boolean): void;
+  /** Return bounded detached snapshots, including pending approvals and terminal records. */
+  list(): WebViewDownload[];
+  /** Approve exactly one pending item using the browser-selected destination and default browser UI. */
+  approve(id: string): void;
+  /** Reject a pending item or cancel an active item; repeat cancellation is safe. */
+  cancel(id: string): void;
+  /** Pause only an active item; actual resumability is reported by list. */
+  pause(id: string): void;
+  /** Resume only when WebView2 reports that the item is resumable. */
+  resume(id: string): void;
+  /** Release a terminal record; forgetting an active or pending item is rejected. */
+  forget(id: string): void;
 };
 
 /** Independent display facts, using the same meaning as the window query APIs. */

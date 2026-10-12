@@ -58,6 +58,17 @@ splashscreen 최종 종료에는 false를 전달해 임시 프로필과 교체 �
 플러그인은 인증된 출처와 대상 권한을 검증하고 닫혔거나 재생성 중인 창을 결과에서 제외합니다.
 `lookup`이 없으면 식별자 탐색 API는 `UNSUPPORTED`를 반환합니다.
 `NativeWindow`는 `show(visible)`, `focus()`, `close()`, `isFullscreen()`, `getSizeConstraints()`, `setSizeConstraints(constraints)`, `setSize(width, height)`, `setPosition(x, y)`, `setFullscreen(value)`, `setCloseConfirmation(message)`를 제공합니다.
+
+선택적 `NativeWindow.downloads`는 Windows의 `NativeDownloads` 서비스입니다.
+`setRequestsEnabled(enabled)`는 요청 수집만 변경하며 `list()`는 WebViewDownload 배열을 반환합니다.
+`approve(id)`, `cancel(id)`, `pause(id)`, `resume(id)`, `forget(id)`는 해당 WebView 수명의
+항목을 제어합니다. 창 플러그인은 작업 권한과 backend 출처를 모두 검사한 뒤 서비스를 호출합니다.
+다운로드 기본값은 거부이며 `DOWNLOAD_APPROVAL_TIMEOUT_MS`는 30초,
+`MAX_WEBVIEW_DOWNLOADS`는 pending, 활성 및 종료된 기록을 합한 32개 상한입니다.
+WebViewDownload는 id, url, mimeType, contentDisposition, path, totalBytes, receivedBytes,
+state, interruptReason, canResume, paused를 제공합니다. byte 수의 null은 알 수 없거나
+안전 정수 범위를 넘는 값입니다. 승인된 항목도 창 종료 시 취소하고 참조를 해제합니다.
+호출자는 저장 경로를 바꾸거나 renderer 출처로 이 서비스를 사용할 수 없습니다.
 `showInactive()`는 현재 일반, 최소화나 최대화 상태와 다른 창의 입력 포커스를 유지하며
 숨김을 해제합니다. `activate()`는 표시된 비최소화 창의 전경 전환을 요청하고 실제
 전경 여부를 boolean으로 반환합니다. 숨김이나 최소화 상태에서는 변경 없이 `false`입니다.

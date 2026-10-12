@@ -1,5 +1,16 @@
 # Tests
 
+`api/webview-downloads.test.ts`는 Zod 계약, 개별 작업 권한과 backend 출처 검사를 확인한다.
+renderer에 모든 다운로드 권한을 허용해도 작업이 실행되지 않으며 호출자가 임의 저장 경로를
+전달할 수 없는지 검사한다. `lifecycle/downloads.test.ts`는 pending 승인 기한, 상한과 슬롯 회수,
+탐색 시 pending 거부, 승인된 작업의 수명, pause/resume과 종료 기록 및 실패 시 자원 정리를 확인한다.
+`lifecycle/windows-webview-downloads.ts`는 `mise run host:windows`에서 실제 UI Worker와
+WebView2 다운로드를 실행한다. 기본 거부, renderer 권한 거부, 항목별 승인과 거부, 실제 파일
+내용과 byte 진행, pause/resume/cancel, 승인 기한, 탐색 및 종료 시 pending 정리를 검증한다.
+테스트가 기록한 고유한 브라우저 기본 경로의 파일만 지운다. 사용자 지정 경로, 물리 다운로드 UI
+조작이나 앱 재실행 후 재개 검증은 포함하지 않는다. 결과는
+`build/windows-webview-downloads-results.json`에 기록한다.
+
 `windows-initial-placement.fixture.ts`는 모니터 겹침이 바뀌는 `SetWindowPos`에서
 실제 창 프로시저에 `WM_DPICHANGED`를 전달한다. 초기 DPI 보정의 수렴, 중앙 좌표와
 content/outer 크기, DPI 순환 때 숨김 HWND 정리 및 생성 후 OS 권장 배치 처리를 검증한다.

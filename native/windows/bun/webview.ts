@@ -17,6 +17,7 @@ import {
 } from "./com.ts";
 import { viewDirName } from "./view-profile.ts";
 import { webAsset } from "./web-assets.ts";
+import { WebViewDownloads } from "./webview-downloads.ts";
 import { hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
 
 const embedded = Bun.embeddedFiles.some(
@@ -96,6 +97,7 @@ export class WebView {
   private readonly loader;
   failure: unknown;
   private navigationId: bigint | undefined;
+  private downloads: WebViewDownloads | undefined;
 
   /** Begin async WebView2 creation; ready fires after configuration, independently of HWND visibility. */
   constructor(
@@ -353,6 +355,23 @@ export class WebView {
   private configure(assets: string) {
     assert(this.webview);
     const webview = this.webview;
+    // Default deny applies even when an app does not register the optional window plugin.
+    this.downloads = new WebViewDownloads(
+      webview,
+      (url, source) =>
+        this.origins.includes(originOf(url)) &&
+        this.origins.includes(originOf(source)),
+      (callback) => this.completions.push(callback),
+      () => !this.closing,
+      (error) => {
+        this.failure = error;
+        this.hooks.close(true);
+      },
+      (url) =>
+        this.hooks.log("download-rejected", {
+          url,
+        }),
+    );
     const settings = getObject(this.webview, 3);
     try {
       for (const [slot, value] of [
@@ -500,6 +519,7 @@ export class WebView {
         );
         if (this.navigationId !== id[0]) {
           this.navigationId = id[0];
+          this.downloads?.operations.revokePending();
           this.hooks.revoke("navigation");
         }
       }
@@ -614,6 +634,7 @@ export class WebView {
         kind: kind[0],
       });
       this.hooks.revoke("process-failed");
+      this.downloads?.operations.revokePending();
       if (kind[0] === 0) {
         this.hooks.close(true);
       } else {
@@ -734,6 +755,22 @@ export class WebView {
       );
     }
   }
+  /** Download service readiness is independent of the document/SDK handshake. */
+  downloadOperations() {
+    if (this.closing) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "WebView is closed.",
+      });
+    }
+    if (!this.downloads) {
+      throw new BunawayError({
+        code: "BUSY",
+        message: "WebView is not ready.",
+      });
+    }
+    return this.downloads.operations;
+  }
   source() {
     return this.webview ? getString(this.webview, 4) : "";
   }
@@ -795,6 +832,7 @@ export class WebView {
       return true;
     }
     this.closedAt = performance.now();
+    this.downloads?.detach();
     // Capture process handles before controller closure to track WebView2 children.
     if (this.environment) {
       const env8 = query(

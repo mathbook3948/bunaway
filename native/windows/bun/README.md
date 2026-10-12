@@ -37,6 +37,15 @@ normal의 WINDOWPLACEMENT 작업 영역 좌표는 화면 좌표로 보정한다.
 `com.ts`는 COM 참조와 콜백을, `webview.ts`는 WebView 생성과 종료를 관리한다.
 `ui.ts`가 이 자원들의 초기화와 정리 순서를 조정한다. DLL은 창과 COM 정리가 끝난 뒤 닫는다.
 
+`webview-downloads.ts`는 고정 SDK 1.0.4129.50의 ICoreWebView2_4 DownloadStarting과
+DownloadOperation, Deferral을 소유한다. `downloads.ts`는 OS 자원 없는 승인과 수명 규칙을
+관리한다. 기본 거부를 먼저 설정하고 deferral을 얻으며, 승인 결과와 무관하게 deferral을
+완료하고 args 및 operation 참조를 정리한다. pending 승인의 기한과 기록 상한을 적용하고
+새 탐색은 pending만, 창 종료는 승인된 작업도 취소한다. 이벤트 callback은 구독을 해제한
+뒤 WebView의 기존 STA quiescence와 프로세스 정리 단계까지 유지한다.
+파일 쓰기와 기본 저장 경로는 브라우저가 소유한다. 현재 API에는 임의 경로 입력이나
+사용자 정의 스트림 출력이 없으며 backend 출처 검사로 renderer의 파일 접근을 확대하지 않는다.
+
 창 플러그인을 등록하면 `Windows.observe`가 창별 상태와 물리 outer bounds의 변경을
 비교한다. 활성화 관찰은 `WM_ACTIVATE` 뒤에 게시한 창 메시지에서 전경 HWND를 조회한다.
 동기 활성화 콜백이 끝나기 전에 이전 전경 HWND를 읽어 전환을 놓치는 것을 방지한다.

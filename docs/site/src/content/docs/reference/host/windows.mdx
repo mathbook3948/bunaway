@@ -110,6 +110,69 @@ macOS는 새 인스턴스 API, multiple과 isolated 선언을 `UNSUPPORTED`로 �
 
 ## 메서드
 
+### WebView 다운로드 승인과 수명
+
+Windows WebView 다운로드는 기본적으로 거부합니다. windowsPlugin을 등록하지 않은 앱에도
+같은 기본값을 적용합니다. 신뢰된 backend setup은 `windows.setDownloadRequestsEnabled`
+작업 권한으로 `{ view, windowId?, enabled: true }`를 호출해 요청 수집을 시작합니다.
+수집은 승인과 다릅니다. 각 항목은 명시적으로 승인하기 전까지 파일을 만들지 않습니다.
+화면에서 호출한 앱 명령도 view 컨텍스트이므로 다운로드 API를 직접 사용할 수 없습니다.
+화면 정책에 작업을 허용해도 모든 다운로드 작업은 `PERMISSION_DENIED`입니다.
+
+| 메서드 | 추가 입력 | 결과 |
+| --- | --- | --- |
+| `windows.setDownloadRequestsEnabled` | `enabled: boolean` | 요청 수집 변경 뒤 `null` |
+| `windows.getDownloads` | 없음 | 현재 WebView 수명의 다운로드 snapshot 배열 |
+| `windows.approveDownload` | `id: string` | 해당 pending 항목 승인 뒤 `null` |
+| `windows.cancelDownload` | `id: string` | pending 거부 또는 활성 다운로드 취소 뒤 `null` |
+| `windows.pauseDownload` | `id: string` | 활성 다운로드 pause 요청 뒤 `null` |
+| `windows.resumeDownload` | `id: string` | 재개 가능한 다운로드 resume 요청 뒤 `null` |
+| `windows.forgetDownload` | `id: string` | 종료된 기록과 네이티브 참조 정리 뒤 `null` |
+
+모든 작업은 별도 `windows.<작업>` 권한과 backend 출처를 요구합니다.
+대상 선택과 닫힌 창, multiple 뷰의 windowId 규칙은 다른 창 작업과 같습니다.
+macOS와 다른 플랫폼은 이 서비스를 제공하지 않으며 `UNSUPPORTED`입니다.
+
+getDownloads는 `{ id, url, mimeType, contentDisposition, path, totalBytes, receivedBytes,
+state, interruptReason, canResume, paused }`를 반환합니다. id는 해당 WebView 수명에만
+유효한 불투명 UUID입니다. URL은 최종 다운로드 URI이며 redirect chain이나 frame별
+initiator 정보가 아닙니다. path는 파일명을 포함한 WebView2의 기본 저장 경로입니다.
+byte 수가 없거나 JavaScript 안전 정수 범위를 넘으면 해당 수치는 null입니다.
+state는 `pending`, `inProgress`, `interrupted`, `completed`, `cancelled` 중 하나입니다.
+interrupted의 interruptReason은 WebView2의 네이티브 코드이며 그 외에는 null입니다.
+
+```ts
+// backend setup에서 설정한 권한과 앱의 자체 승인 규칙으로 실행합니다.
+await windows.setDownloadRequestsEnabled({ view: "main", enabled: true });
+const items = await windows.getDownloads({ view: "main" });
+for (const item of items) {
+  if (item.state === "pending") {
+    // 실제 앱은 URL, MIME, 저장 경로와 사용자 선택을 검사한 뒤 한 항목만 승인합니다.
+    await windows.cancelDownload({ view: "main", id: item.id });
+  }
+}
+```
+
+앱은 setup에서 소유한 비동기 작업으로 상태를 조회하고 사용자 선택이나 접근 규칙을
+검사해 항목별로 승인하거나 거부합니다. API는 앱의 승인 규칙을 대신 정하지 않습니다.
+승인은 WebView2가 선택한 기본 저장 경로와 기본 다운로드 UI를 사용합니다.
+호출자가 path를 전달할 수 없으며 임의 경로, 파일 덮어쓰기 규칙과 저장 대화상자는
+별도 파일 접근 계약이 필요합니다. 승인 뒤 취소는 이미 기록한 파일의 롤백을 보장하지 않습니다.
+
+요청의 문서 origin과 다운로드 URI는 모두 대상 뷰의 기존 HTTP/HTTPS origin 안에
+있어야 합니다. blob/data URI를 추가로 허용하지 않습니다. popup과 redirect, 리소스 및
+OS 권한의 기존 검사는 유지합니다. pending 항목은 30초 뒤, 새 문서 탐색 또는 요청 수집
+비활성화 시 거부합니다. 백엔드가 승인한 다운로드는 문서 탐색 뒤에도 같은 창 수명에
+속하며 창 종료와 재생성에서는 취소하고 참조를 정리합니다.
+
+WebView마다 pending, 활성, 종료된 기록을 합해 최대 32개를 유지합니다.
+상한을 채우면 새 요청은 즉시 거부합니다. 종료된 항목을 forgetDownload로 지우면
+슬롯을 다시 사용할 수 있습니다. 활성 또는 재개 가능한 항목의 forget은 `BUSY`이며
+먼저 취소해야 합니다. 없는 ID와 더 이상 pending이 아닌 ID의 승인은 `INVALID_ARGUMENT`입니다.
+재개할 수 없는 항목의 resume은 `BUSY`입니다. cancel은 반복해도 안전하며 완료된 항목은
+완료 상태를 유지합니다. 진행률과 완료, 실패는 현재 snapshot 조회로 확인합니다.
+별도 이벤트, 속도 계산, 재시작 뒤 중단 파일 복원과 업로드는 아직 제공하지 않습니다.
+
 ### 부모, 모달과 신뢰된 종료
 
 이 API는 Windows에서 지원합니다. `setParent`는 사전 선언된 두 창이 열린 뒤 호출합니다.

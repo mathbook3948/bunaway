@@ -790,6 +790,16 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
       const nativeWindows = windows;
       const hwnd = view.native.hwnd;
       return {
+        downloads: {
+          setRequestsEnabled: (enabled) =>
+            view.native.downloadOperations().setRequestsEnabled(enabled),
+          list: () => view.native.downloadOperations().list(),
+          approve: (id) => view.native.downloadOperations().approve(id),
+          cancel: (id) => view.native.downloadOperations().cancel(id),
+          pause: (id) => view.native.downloadOperations().pause(id),
+          resume: (id) => view.native.downloadOperations().resume(id),
+          forget: (id) => view.native.downloadOperations().forget(id),
+        },
         getSnapshot: () => nativeWindows.getSnapshot(hwnd),
         getReadiness: () => {
           assert(view.readiness);
