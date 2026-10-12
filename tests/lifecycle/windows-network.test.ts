@@ -346,6 +346,8 @@ test("WebSocket exchanges preserve text and binary, reject redirects and termina
     await expect(pending).rejects.toMatchObject({
       code: "CANCELLED",
     });
+    await waitFor(() => local.server.pendingWebSockets === 0);
+    expect(local.server.pendingWebSockets).toBe(0);
   } finally {
     await adapter.dispose();
     local.server.stop(true);
