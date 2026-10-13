@@ -30,6 +30,19 @@ WebView2 문서에 browser 인쇄 UI를 요청하고 반복 요청 및 종료 �
 결과는 `build/windows-webview-print-ui-results.json`에 기록한다.
 system UI 사용자 선택과 물리 프린터 출력은 별도 검증이며 테스트가 인쇄 제출을 하지 않는다.
 
+`lifecycle/macos-log-capabilities.test.ts`는 생성한 macOS export와 실제 임시 파일로
+JSON 줄의 순서와 출처, 새 파일 권한, 반복 회전, 기록과 회전 실패 후 복구,
+입력과 작업 권한, 폐기 및 호스트가 정한 지원 목록을 검사한다.
+`macos-log-capabilities-compiled.test.ts`는 현재 OS에서 macOS 어댑터 probe를 Bun으로
+compile하고 원본 파일을 제거한 뒤 실행한다. 실제 macOS native CI에도 포함하며
+호스트의 전체 실행 경로를 대신하지 않는다.
+`macos-log-capabilities.ts`는 ad-hoc 서명한 compiled 앱과 실제 WKWebView에서 백엔드 및
+뷰 기록, 권한 거부, 쓰기 실패 후 복구, 회전, manifest의 등록한 작업과 기능 목록의 일치
+및 정상 종료를 검사한다. `run-native.ts`에 포함하며 결과와 앱 데이터 진단은
+`build/macos-log-capabilities-results.json`과 `build/macos-log-capabilities-diagnostics/`에 남긴다.
+앱과 화면의 코드는 `fixtures/macos-log-capabilities/`의 타입 검사 대상이며 실행 전
+정책 권한 이름도 실제 설치된 플러그인 계약으로 검사한다.
+
 다운로드 UI-loop regression은 생성된 worker 경계에서 전용 `windows-download-cleanup/ui.ts`를
 번들하고 실제 승인 transfer의 cancel 자원만 일시적으로 실패시킨다. 소유 창을 닫는 동안
 다른 창의 SDK 응답과 세 번째 창의 native cleanup이 진행하고, 소유자의 재시도도 복구되는지
