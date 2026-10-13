@@ -1,5 +1,12 @@
 # Tests
 
+`api/webview-audio.test.ts`는 audio 작업의 개별 권한, 엄격한 boolean 입력, 음소거와 재생의
+독립 상태, 취소와 닫힌 창 및 플랫폼 서비스 부재를 검증한다.
+`lifecycle/windows-webview-audio.ts`는 `mise run host:windows`에서 실제 WebView2의 음소거
+변경과 반복 설정, 문서 탐색 뒤 유지, 준비 전과 종료 후 거부 및 native 자원 정리를 확인한다.
+결과는 `build/windows-webview-audio-results.json`이다. 조용한 문서를 사용하며 재생 중인
+audio와 물리 장치 출력은 별도 수동 검증이다.
+
 `windows-initial-placement.fixture.ts`는 모니터 겹침이 바뀌는 `SetWindowPos`에서
 실제 창 프로시저에 `WM_DPICHANGED`를 전달한다. 초기 DPI 보정의 수렴, 중앙 좌표와
 content/outer 크기, DPI 순환 때 숨김 HWND 정리 및 생성 후 OS 권장 배치 처리를 검증한다.

@@ -29,6 +29,16 @@ export function createOperations(
     viewId: string,
   ): JsonValue | Promise<JsonValue> {
     const window = services.window(viewId);
+    const audio = () => {
+      if (!window.audio) {
+        throw new BunawayError({
+          code: "UNSUPPORTED",
+          message:
+            "WebView audio controls are not implemented on this platform.",
+        });
+      }
+      return window.audio;
+    };
     switch (call.operation) {
       case "windows.getMonitor":
         if (!window.getMonitor) {
@@ -40,6 +50,13 @@ export function createOperations(
         return {
           ...window.getMonitor(),
         };
+      case "windows.getWebViewAudioState":
+        return {
+          ...audio().getState(),
+        };
+      case "windows.setWebViewAudioMuted":
+        audio().setMuted(call.payload.muted);
+        break;
       case "windows.getReadiness":
         return {
           ...window.getReadiness(),
