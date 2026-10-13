@@ -57,12 +57,16 @@ export function keychainFixture() {
   );
   const password = randomBytes(32);
   let reference: Pointer | undefined;
+  let disposed = false;
   const check = (status: number) => {
     if (status) {
       throw new Error(`Disposable Keychain fixture failed: ${status}`);
     }
   };
   const acquire = (path: string, create: boolean) => {
+    if (disposed) {
+      throw new Error("Fixture is disposed");
+    }
     if (reference) {
       throw new Error("Fixture already owns a Keychain");
     }
@@ -112,6 +116,10 @@ export function keychainFixture() {
       );
     },
     dispose(remove: boolean) {
+      if (disposed) {
+        return;
+      }
+      disposed = true;
       try {
         if (reference) {
           if (remove) {

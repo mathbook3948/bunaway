@@ -50,6 +50,12 @@ ad-hoc signing flow, plus restart with the same executable. System UI decisions,
 login Keychain, distribution-certificate upgrades and real credentials are not
 exercised. Windows contracts and tests remain unchanged.
 
-The macOS host dispatch depends on the revised shutdown-cancellation foundation
-in PR164. Feature-specific native tests exercise the isolated adapter; the host
-owner integrates public dispatch and full lifecycle coverage.
+The macOS host dispatch uses the revised shutdown-cancellation foundation in
+PR164. This feature separately propagates the verified package's host-owned app
+identity into the I/O Worker. `tests/lifecycle/macos-safe-storage-host.ts` drives
+the public backend and WKWebView API in shared Bun and ad-hoc compiled hosts,
+with per-operation policy, caller identity rejection, encrypted restart and
+Core-before-native cleanup. Only the internal Keychain provider is replaced to
+select each disposable fixture; production schemas, adapter, crypto, host, SDK
+and actual WKWebView remain in use. Native CI results must be checked for the
+exact head; successful static bundling does not prove native execution.

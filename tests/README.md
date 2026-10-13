@@ -9,7 +9,13 @@ disposable private Keychain을 만들고 공유 Bun과 ad-hoc compiled 실행 �
 기본 Keychain과 search list, trust, ACL이나 signing identity는 바꾸지 않는다.
 사용자의 login Keychain과 실제 credential, 시스템 UI 선택, 다른 서명 빌드로의 이전은
 검증하지 않는다. 기존 macOS native CI에서 별도로 실행하고 로그를 보관한다.
-공개 호스트 I/O와 종료 통합은 PR164의 수정된 foundation에 의존한다.
+`lifecycle/macos-safe-storage-host.ts`는 PR164의 수정된 I/O foundation과 실제 WKWebView,
+공개 backend/client API 및 운영 factory를 공유 Bun과 ad-hoc compiled 호스트에서 사용한다.
+내부 provider만 disposable Keychain으로 지정하며 검증한 패키지의 identity 전달,
+호출자의 appId 거부, 개별 정책, 문자열과 바이트 왕복, 동일 실행 파일의 재시작 복호화와
+Core 정리 뒤 네이티브 정리를 확인한다. 결과는 `build/macos-safe-storage-results.json`이다.
+`macos-bun.test.ts`의 identity 회귀는 실제 Worker와 호스트 수명을 사용하지만 네이티브 UI를
+대체한 계약 검사다. 이 검사나 번들 성공을 macOS 실행 증거로 보고하지 않는다.
 
 `api/webview-print-ui.test.ts`는 인쇄 UI의 개별 권한, browser 기본값과 system 선택,
 경로와 silent 입력 거부, 취소와 닫힌 창 및 플랫폼 서비스 부재를 확인한다.
