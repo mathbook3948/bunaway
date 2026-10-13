@@ -14,6 +14,7 @@ import {
   MAX_IMAGE_BYTES,
 } from "./contract.ts";
 import type { Pixels } from "./resources.ts";
+import { assertResizeDimensions, resizeNearestPixels } from "./resize.ts";
 
 type Argument = number | bigint | null;
 type Abi = FFIType | "ptr" | "i32" | "u32" | "f64";
@@ -26,7 +27,6 @@ const WIC_METADATA_ON_DEMAND = 0;
 const WIC_ENCODER_NO_CACHE = 2;
 const WIC_DITHER_NONE = 0;
 const WIC_PALETTE_CUSTOM = 0;
-const WIC_INTERPOLATION_NEAREST = 0;
 const WIC_INTERPOLATION_LINEAR = 1;
 const containers: Record<ImageMime, string> = {
   "image/png": "1b7cfaf4-713f-473c-bbcd-6137425faeaf",
@@ -524,7 +524,7 @@ export function createWIC() {
         }
       }
     },
-    /** Resize on the STA; linear filtering uses premultiplied channels before returning straight RGBA. */
+    /** Copy nearest pixels exactly; WIC linear filtering uses premultiplied channels on the STA. */
     resize(
       pixels: Pixels,
       width: number,
@@ -532,32 +532,16 @@ export function createWIC() {
       interpolation: ImageInterpolation,
     ): Pixels {
       assertActive();
-      if (
-        pixels.width === 0 ||
-        pixels.height === 0 ||
-        !Number.isInteger(width) ||
-        !Number.isInteger(height) ||
-        width < 1 ||
-        width > 4096 ||
-        height < 1 ||
-        height > 4096 ||
-        width * height * 4 > MAX_IMAGE_BYTES
-      ) {
-        throw new BunawayError({
-          code: "INVALID_ARGUMENT",
-          message:
-            "Resize requires a nonempty source and bounded positive dimensions.",
-        });
+      if (interpolation === "nearest") {
+        return resizeNearestPixels(pixels, width, height);
       }
+      assertResizeDimensions(pixels, width, height);
       const bitmap = bitmapFromPixels(pixels);
       const owned: Pointer[] = [
         bitmap,
       ];
       try {
-        const source =
-          interpolation === "nearest"
-            ? bitmap
-            : convert(bitmap, premultipliedBgraFormat, owned);
+        const source = convert(bitmap, premultipliedBgraFormat, owned);
         const scaler = acquire((out) =>
           invoke(
             factory,
@@ -585,16 +569,11 @@ export function createWIC() {
               source,
               width,
               height,
-              interpolation === "nearest"
-                ? WIC_INTERPOLATION_NEAREST
-                : WIC_INTERPOLATION_LINEAR,
+              WIC_INTERPOLATION_LINEAR,
             ],
           ),
         );
-        const result =
-          interpolation === "nearest"
-            ? scaler
-            : convert(scaler, bgraFormat, owned);
+        const result = convert(scaler, bgraFormat, owned);
         const rgba = Buffer.alloc(width * height * 4);
         check(
           invoke(

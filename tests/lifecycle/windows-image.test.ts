@@ -361,6 +361,38 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
         height: 4,
         rgba: nearestBytes.toString("base64"),
       });
+      const sampled = await invoke(() =>
+        image.resize({
+          id: source.id,
+          width: 3,
+          height: 1,
+          interpolation: "nearest",
+        }),
+      );
+      expect(
+        await invoke(() =>
+          image.getPixels({
+            id: sampled.id,
+          }),
+        ),
+      ).toEqual({
+        width: 3,
+        height: 1,
+        rgba: Buffer.from([
+          0,
+          0,
+          255,
+          0,
+          11,
+          22,
+          33,
+          44,
+          11,
+          22,
+          33,
+          44,
+        ]).toString("base64"),
+      });
       const edge = await invoke(() =>
         image.createRGBA({
           width: 2,
@@ -428,6 +460,7 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
         nearest.id,
         edge.id,
         linear.id,
+        sampled.id,
       ]) {
         expect(
           await invoke(() =>

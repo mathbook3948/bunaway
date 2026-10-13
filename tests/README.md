@@ -491,7 +491,9 @@ RGBA alpha 왕복, JPEG와 BMP, 잘못된 encoded 입력과 decode 크기, 최�
 다른 앱의 가져오기, 색상 관리와 최소 Windows 버전 검증은 포함하지 않는다.
 
 `image-crop.test.ts`는 offset rectangle과 행 복사, alpha, 소스 보존, 잘못된 영역,
-생성 취소와 새 ID를 확인한다. `windows-image.test.ts`는 실제 WIC의 nearest resize,
+생성 취소와 새 ID를 확인한다. `image-resize.test.ts`는 nearest resize의 출력 중심 선택,
+축소와 비정수 비율, 투명 RGB와 반투명 채널의 정확한 복사, 소스 보존과 크기 상한을 확인한다.
+`windows-image.test.ts`는 실제 UI Worker의 nearest resize와 WIC linear resize,
 linear filtering의 투명 edge, crop과 빈 소스 및 quota 오류를 추가로 검사한다.
 이 transform 검사도 `host:windows`에서 실행하며 소스 리소스는 변경하지 않는다.
 

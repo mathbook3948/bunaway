@@ -103,8 +103,9 @@ try {
 
 `resize`의 출력 크기는 각각 1부터 4,096까지이고 RGBA는 524,288바이트까지입니다.
 폭과 높이를 둘 다 지정하며 종횡비를 자동으로 유지하지 않습니다. `interpolation`은
-`nearest` 또는 `linear`이고 생략하면 `linear`입니다. Windows의 WIC scaler를 사용합니다.
-Nearest는 선택한 픽셀 값을 보존합니다. Linear는 premultiplied alpha로 보간한 다음
+`nearest` 또는 `linear`이고 생략하면 `linear`입니다. Nearest는 출력 픽셀 중심을 소스
+좌표로 비례 변환한 뒤 좌표를 내림해 선택합니다. 선택한 RGBA 네 바이트를 직접 복사하므로
+투명 픽셀의 RGB도 보존합니다. Linear는 Windows의 WIC scaler에서 premultiplied alpha로 보간한 다음
 다시 straight RGBA로 변환해 투명 edge의 색 번짐을 방지합니다. 8-bit 변환의 반올림으로
 채널 값이 달라질 수 있고 완전히 투명한 픽셀의 RGB는 0으로 정규화될 수 있습니다.
 빈 이미지와 해제한 ID는 두 transform의 소스로 사용할 수 없습니다.
