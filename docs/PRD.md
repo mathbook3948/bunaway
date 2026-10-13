@@ -4,8 +4,8 @@
 
 ## 1 목표와 범위
 
-개발 순서는 **Windows를 먼저 완성한 뒤 다른 플랫폼을 같은 Bun 기반 개발 모델에
-맞추는 것**이다. macOS도 Bun을 앱 진입점으로 사용하며 직접 FFI와 같은 프로세스의 백엔드 Worker로
+개발 기준은 **Windows의 Bun 기반 개발 모델과 공통 계약을 유지하며 사용자 승인에
+따라 이미 구현한 기능의 macOS 지원을 병행하는 것**이다. macOS도 Bun을 앱 진입점으로 사용하며 직접 FFI와 같은 프로세스의 백엔드 Worker로
 실행한다. 별도 C/ObjC++ 호스트와 Bun 자식 프로세스 구조는 이전 실험 기록이다. 앱 개발자는 공통 앱 정의 하나를 작성하고
 플랫폼별 부팅은 프레임워크가 담당한다. 개발 우선순위와 진입점 결정은
 [ADR 0010](./decisions/0010-windows-first-platform-model.md)을 따른다.
@@ -21,7 +21,7 @@ Tauri에서 참고할 부분은 웹 UI, 백엔드 코어, 네이티브 호스트
 확정했으며 Windows의 저장, 로그와 기능 지원 조회는 개별 플러그인으로 이관했다.
 macOS 플러그인 어댑터는 후속 작업이다.
 
-이 문서는 책임, 인터페이스, 보안 규칙과 단계별 완료 조건을 정한다. A 단계의 계약 구현과 Windows B 단계의 번들 Bun 프로세스, IPC 실험을 완료했다. C 단계에서는 실제 SDK, 코어, Host API와 Windows WebView2 호스트를 연결했다. 세 창의 다중 창/뷰와 뷰별 정책 분리에서 메모 저장, 이벤트, 재실행 후 복원과 오류, 취소, 권한, 렌더러 재생성, 창별 종료를 검증한 기록이 있다([Windows C 실행 결과](./architecture/windows-host-results.md)). macOS arm64의 AppKit, WKWebView 다중 창/뷰와 기본 창 API도 구현돼 있다. 독립 실험 코드는 제거했으며 과거 결과는 설계 기록으로 남긴다. [macOS 실행 기록](./architecture/macos-native-results.md)은 기존 로컬 기록, 이번 재실행과 실제 CI 결과를 구분한다. [Windows B 실행 결과](./architecture/windows-probe-results.md)는 별도 실험 기록이다. macOS Intel, 영속 뷰 프로필, Linux, iOS 호스트와 설치, 배포는 미검증이다. macOS `.app` 생성, ad-hoc 서명은 Developer ID, 공증, 설치 검증이 아니다. Android는 단일 뷰 WebView와 번들 Bun을 연결하고 debug APK 설치, 공통 SDK와 Core, 화면 회전 및 종료를 API 36 x86_64 에뮬레이터에서 검증했다([Android 실행 결과](./architecture/android-host-results.md)). Android arm64 실기기와 모바일 release 배포는 미검증이다. 아래 요구사항 전체를 완료한 것은 아니며, 현재 범위는 [진행 상태](./architecture/progress.md)와 [플랫폼 지원 표](./platform-support/README.md)를 따른다.
+이 문서는 책임, 인터페이스, 보안 규칙과 단계별 완료 조건을 정한다. A 단계의 계약 구현과 Windows B 단계의 번들 Bun 프로세스, IPC 실험을 완료했다. C 단계에서는 실제 SDK, 코어, Host API와 Windows WebView2 호스트를 연결했다. 세 창의 다중 창/뷰와 뷰별 정책 분리에서 메모 저장, 이벤트, 재실행 후 복원과 오류, 취소, 권한, 렌더러 재생성, 창별 종료를 검증한 기록이 있다([Windows C 실행 결과](./architecture/windows-host-results.md)). macOS arm64의 AppKit, WKWebView 다중 창/뷰와 기본 창 API도 구현돼 있다. 독립 실험 코드는 제거했으며 과거 결과는 설계 기록으로 남긴다. [macOS 실행 기록](./architecture/macos-native-results.md)은 기존 로컬 기록, 이번 재실행과 실제 CI 결과를 구분한다. [Windows B 실행 결과](./architecture/windows-probe-results.md)는 별도 실험 기록이다. macOS Intel, 영속 뷰 프로필과 Linux 호스트, 설치와 배포는 미검증이다. iOS arm64는 Swift UIKit, WKWebView와 내장 Bun entry, 백엔드 Worker를 연결했다. Xcode 프로젝트 동기화와 Simulator에서 공통 SDK, Core와 두 번의 Worker 교체를 검증했다. 검증 근거는 [iOS 실행 결과](./architecture/ios-host-results.md)에 기록했다. iOS 실기기와 배포 서명, 스토어 제출은 미검증이다. macOS `.app` 생성, ad-hoc 서명은 Developer ID, 공증, 설치 검증이 아니다. Android는 단일 뷰 WebView와 번들 Bun을 연결하고 debug APK 설치, 공통 SDK와 Core, 화면 회전 및 종료를 API 36 x86_64 에뮬레이터에서 검증했다([Android 실행 결과](./architecture/android-host-results.md)). Android arm64 실기기와 모바일 release 배포는 미검증이다. 아래 요구사항 전체를 완료한 것은 아니며, 현재 범위는 [진행 상태](./architecture/progress.md)와 [플랫폼 지원 표](./platform-support/README.md)를 따른다.
 
 ### 제품 요구사항
 

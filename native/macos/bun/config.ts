@@ -21,6 +21,8 @@ const WINDOWLESS_STARTUP_MESSAGE =
   "macOS requires at least one startup window; windowless desktop apps are only supported on Windows.";
 
 export type MacosConfig = {
+  /** Trusted package identity and host-selected restart command, never supplied by an operation caller. */
+  app?: import("@bunaway/plugin").NativeEnvironment["app"];
   runtime: RuntimeIdentity;
   backendContext: HostContext;
   policy: Policy;
@@ -73,6 +75,12 @@ export function readMacosWindowSpecs(
     origin = home.origin;
   }
   const specs = readWindowSpecs(declarations, policy, origin);
+  if (specs.some((spec) => spec.window.focusable !== undefined)) {
+    throw new BunawayError({
+      code: "UNSUPPORTED",
+      message: "Initial window focusability is not implemented on macOS.",
+    });
+  }
   if (
     specs.some((spec) =>
       [
@@ -190,7 +198,34 @@ export async function verifyMacosPackage(
   ];
   const specs = readMacosWindowSpecs(declarations, policy, developmentUrl);
   assert(process.env.HOME, "HOME is required.");
+  const compiled = Bun.embeddedFiles.some(
+    (file) => (file as File).name === "manifest.json",
+  );
   return {
+    app: {
+      id: app.appId,
+      launch: {
+        mode: compiled ? "packaged" : "development",
+        executablePath: await realpath(process.execPath),
+        args: [
+          ...(compiled
+            ? []
+            : [
+                "--no-env-file",
+                "--no-install",
+                await realpath(resolve(assets, "boot.js")),
+              ]),
+          "--package",
+          root,
+          ...(developmentUrl
+            ? [
+                "--dev-url",
+                developmentUrl,
+              ]
+            : []),
+        ],
+      },
+    },
     runtime: {
       id: app.appId,
       generation: crypto.randomUUID(),

@@ -17,6 +17,13 @@ Win32 메시지와 WinEvent로 숨김 생성 중 순간 표시, 활성화와 포
 이 두 검증과 계약 검사 결과는 [Windows 실행 기록](../architecture/windows-bun-results.md)에 구분한다.
 macOS 준비 API와 숨김 생성 옵션은 아직 지원하지 않는다.
 
+macOS의 single 뷰는 `getWebViewState`, `navigateWebView`, `reloadWebView`,
+`stopWebView`, `goBack`, `goForward`, `setZoomFactor`를 구현한다.
+대상과 개별 작업 권한은 공통 창 계약을 따르며 탐색은 기존 origin을 확장하지 않는다.
+실제 compiled WKWebView 검사는 `tests/lifecycle/macos-webview-controls.ts`이며
+기존 macOS native CI에서 실행한다. `build/macos-webview-controls-results.json`과
+실패 시 진단 로그를 함께 수집한다. DevTools와 다운로드는 이 macOS 구현 범위에 없다.
+
 Windows의 창 없는 시작은 빈 창 선언 또는 모든 `startup: false`로 설정하며
 트레이 또는 `desktop.closeBehavior: "keep-alive"`를 요구한다.
 Windows x64 `10.0.26200.0`, Bun 1.4.2에서 실제 트레이와 WebView2의 지연 생성,
@@ -24,7 +31,12 @@ Windows x64 `10.0.26200.0`, Bun 1.4.2에서 실제 트레이와 WebView2의 지�
 트레이 입력은 실제 HWND의 콜백 메시지로 검사했으며 물리 마우스 클릭은 포함하지 않는다.
 macOS 창 없는 시작은 `UNSUPPORTED`이며 [Windows 실행 기록](../architecture/windows-bun-results.md)의 범위를 따른다.
 
-현재 저장, 로그, 기능 조회, opener와 clipboard 플러그인은 Windows만 지원한다. 창 플러그인의 기본 제어는 macOS에서도 지원한다. 아래 macOS 파일 저장과 네이티브 API 검증 기록은 이관 전 구현의 기록이다. Bun FFI 제품 경로의 명령, 이벤트와 정책, 복구, 종료 검증은 [새 기록](../architecture/macos-bun-results.md)에 둔다.
+현재 저장, opener와 clipboard 플러그인은 Windows만 지원한다. 로그와 기능 조회의 macOS 어댑터는 I/O Worker에 연결했으며 창 플러그인의 기본 제어도 macOS에서 제공한다. 아래 macOS 파일 저장과 네이티브 API 검증 기록은 이관 전 구현의 기록이다. Bun FFI 제품 경로의 명령, 이벤트와 정책, 복구, 종료 검증은 [새 기록](../architecture/macos-bun-results.md)에 둔다.
+
+로그와 기능 조회는 격리 어댑터 검사와 실제 compiled WKWebView 앱 호출 검사를
+구분한다. `macos-log-capabilities.ts`는 기존 entitlement로 ad-hoc 서명한 `.app`에서
+출처와 권한, 쓰기 실패 후 복구, 회전, 등록한 작업의 지원 목록과 정상 종료를 검사한다.
+이 통합 head의 실제 native CI 결과는 확인 전까지 성공으로 기록하지 않는다.
 
 Windows의 선택 [notification 플러그인](../../plugins/notification/README.md)은 unpackaged
 앱 ID의 WinRT 알림 설정 조회와 Windows 알림 설정 열기 요청을 제공한다.
@@ -41,7 +53,7 @@ Windows의 선택 [notification 플러그인](../../plugins/notification/README.
 | macOS Intel | 고정 Bun 배포물, 해시 없음 | 없음. arm64 빌드 스크립트가 명시적으로 거부 | 별도 pin, 빌드, 실제 실행 검증 필요 |
 | Linux | GTK, WebKitGTK 후보, 호스트 미구현 | Ubuntu 공통 검사, 생성 스키마 검사만 있음 | 네이티브 실행, UI, 프로세스 정리, 패키징 |
 | Android | Java Activity, WebView, 번들 Bun과 공통 Core/SDK, Java 프로젝트 sync와 debug APK | API 36 x86_64 에뮬레이터. 명령, 이벤트, 취소, 자산과 프레임 경계, 화면 회전, 종료 | ARM64 실기기, API 29, 네이티브 플러그인, 외부 개발 서버, 백그라운드 복원, release/AAB/Store |
-| iOS | Swift, WKWebView 후보, 호스트 미구현 | 없음 | Bun 실행/JIT, 수명주기, 서명, 스토어 정책 |
+| iOS arm64 | Swift UIKit, WKWebView와 내장 Bun, 백엔드 Worker | 단일 뷰 Xcode 동기화와 Simulator debug 앱 | 기기 실행, 배포 서명, 스토어 제출, 네이티브 플러그인 |
 
 ## macOS CI와 CPU
 
@@ -136,6 +148,12 @@ Windows의 선택 power 플러그인은 AC와 배터리 상태, 호출 세션의
 
 Windows의 선택 appearance 플러그인은 저장된 테마와 transparency 선호, DWM accent,
 시스템 색과 고대비, reduced motion 및 screen reader 설정 플래그를 조회한다.
-다른 플랫폼은 `UNSUPPORTED`이며 [appearance 계약](../site/src/content/docs/reference/plugins/appearance.mdx)을 따른다.
-실제 Win32 query 회귀는 Windows native CI에 포함한다. 테마 지정과 변경 이벤트,
+macOS arm64는 AppKit UI 어댑터로 유효 앱 테마, accent와 sRGB 색,
+NSWorkspace의 Increase Contrast, Reduce Motion, Reduce Transparency와 VoiceOver 플래그를 조회한다.
+별도 systemTheme은 null이며 forcedColors는 false다. Increase Contrast를 강제 색이나
+Accessibility 신뢰 권한을 보조 기술 사용으로 해석하지 않는다. 나머지 플랫폼은
+`UNSUPPORTED`이며 [appearance 계약](../site/src/content/docs/reference/plugins/appearance.mdx)을 따른다.
+실제 Win32 query 회귀는 Windows native CI에 포함한다. macOS native CI는 직접 AppKit
+비교와 ad-hoc 서명한 compiled 앱에서 backend와 뷰 권한, 반복 조회와 종료를 검사한다.
+테마 지정과 변경 이벤트,
 실제 보조 기술 및 WebView 접근성 트리 검증은 후속 작업이다.

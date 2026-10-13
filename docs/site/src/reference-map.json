@@ -149,7 +149,10 @@
           "RestartController",
           "doctor",
           "packageProject",
-          "templateNames"
+          "templateNames",
+          "syncIosProject",
+          "buildIosProject",
+          "runIosProject"
         ]
       }
     },
@@ -620,6 +623,14 @@
           "getChildren",
           "setEnabled",
           "isEnabled",
+          "setFocusable",
+          "isFocusable",
+          "setMinimizable",
+          "isMinimizable",
+          "setMaximizable",
+          "isMaximizable",
+          "setClosable",
+          "isClosable",
           "setTitle",
           "getTitle",
           "setResizable",
@@ -1054,7 +1065,8 @@
     "reference/cli/build": ["build"],
     "reference/cli/package": ["package"],
     "reference/cli/android": ["android"],
-    "reference/api": ["help"]
+    "reference/api": ["help"],
+    "reference/cli/ios": ["ios"]
   },
   "operations": {
     "reference/plugins/network": ["network.request", "network.exchange"],
@@ -1176,6 +1188,14 @@
       "windows.getChildren",
       "windows.setEnabled",
       "windows.isEnabled",
+      "windows.setFocusable",
+      "windows.isFocusable",
+      "windows.setMinimizable",
+      "windows.isMinimizable",
+      "windows.setMaximizable",
+      "windows.isMaximizable",
+      "windows.setClosable",
+      "windows.isClosable",
       "windows.setTitle",
       "windows.getTitle",
       "windows.setResizable",
