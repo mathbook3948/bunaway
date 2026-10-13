@@ -513,6 +513,11 @@ DMG 생성은 DiskImages helper가 pipe 출력에서 멈추는 경우를 피하�
 실제 DMG 검증, 읽기 전용 마운트와 서명된 앱 내용 검사 및 실패 시 이전 산출물 보존은
 기존 `macos-distribution.test.ts`에서 계속 확인한다.
 
+Windows native CI는 전체 호스트 검사 뒤 `windows-geometry.test.ts`를 새 프로세스에서
+세 번 실행한다. 모든 실행이 성공해야 하며 전체 계약 검사의 같은 회귀도 유지한다.
+show state와 fullscreen 복원 실패가 프로세스 내부의 이전 검사 상태에 의존하는지
+확인하기 위한 검사다. 로그는 `build/windows-native-logs/geometry-*.log`에 보관한다.
+
 `api/opener-selected-app.test.ts`는 지정 앱 opener의 strict Zod 입력, 독립 권한,
 호출 컨텍스트와 오류를 확인한다. Windows의 `lifecycle/windows-opener-selected-app.test.ts`는
 실제 앱과 대상 파일 검사, 링크 거부와 핸들 정리를 확인한다. `windows-opener-job.test.ts`는
