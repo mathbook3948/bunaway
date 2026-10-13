@@ -13,8 +13,17 @@ const SW_MINIMIZE = 6;
 const SW_MAXIMIZE = 3;
 const SW_RESTORE = 9;
 const WM_DPICHANGED = 0x02e0;
+const WM_SIZE = 0x0005;
+const WM_ACTIVATE = 0x0006;
+const WM_SHOWWINDOW = 0x0018;
+const WM_SYSCOMMAND = 0x0112;
+const WM_NCCALCSIZE = 0x0083;
+const WM_WINDOWPOSCHANGING = 0x0046;
+const WM_WINDOWPOSCHANGED = 0x0047;
 const GWL_STYLE = -16;
+const GWL_EXSTYLE = -20;
 const WINDOWPLACEMENT_SIZE = 44;
+const MAX_GEOMETRY_MESSAGES = 32;
 const WINDOWPOS_SIZE = 40;
 const STYLESTRUCT_SIZE = 8;
 const MAX_STATE_CHECKPOINTS = 8;
@@ -110,6 +119,23 @@ test.skipIf(process.platform !== "win32")(
     const native = new Windows(() => {});
     let hwnd = 0n;
     let closed = false;
+    let stage = "create";
+    const messages: number[][] = [];
+    const showTransitions: {
+      stage: string;
+      minimized: boolean;
+      maximized: boolean;
+      visible: boolean;
+    }[] = [];
+    // Sample live flags without getSnapshot, which can publish observation changes.
+    const recordShowTransition = () => {
+      showTransitions.push({
+        stage,
+        minimized: native.isMinimized(hwnd),
+        maximized: native.isMaximized(hwnd),
+        visible: native.isVisible(hwnd),
+      });
+    };
     let nativePhase = "create";
     const nativeMessages: {
       phase: string;
@@ -196,6 +222,35 @@ test.skipIf(process.platform !== "win32")(
         600,
         450,
         (message, wparam, lparam) => {
+          if (
+            [
+              WM_SIZE,
+              WM_ACTIVATE,
+              WM_SHOWWINDOW,
+              WM_SYSCOMMAND,
+              WM_NCCALCSIZE,
+              WM_WINDOWPOSCHANGING,
+              WM_WINDOWPOSCHANGED,
+            ].includes(message)
+          ) {
+            // Retain scalar data only; WINDOWPOS/NCCALCSIZE pointers belong to WndProc.
+            messages.push(
+              message === WM_SIZE
+                ? [
+                    message,
+                    Number(wparam),
+                    Number(lparam & 0xffffn),
+                    Number((lparam >> 16n) & 0xffffn),
+                  ]
+                : [
+                    message,
+                    Number(wparam),
+                  ],
+            );
+            if (messages.length > MAX_GEOMETRY_MESSAGES) {
+              messages.shift();
+            }
+          }
           const name = STATE_MESSAGES.get(message);
           if (!name) {
             return;
@@ -330,11 +385,12 @@ test.skipIf(process.platform !== "win32")(
           ],
         },
       };
-      const invoke = (
+      const invoke = async (
         operation: string,
         payload: Record<string, string | number | boolean> = {},
-      ) =>
-        execute(
+      ) => {
+        stage = operation;
+        const result = await execute(
           operation,
           {
             view: "main",
@@ -343,6 +399,14 @@ test.skipIf(process.platform !== "win32")(
           "backend",
           context,
         );
+        // The fixture bypasses the UI pump, which normally surfaces caught WndProc failures.
+        assert.equal(
+          native.failure,
+          undefined,
+          `Native callback failed during ${operation}`,
+        );
+        return result;
+      };
       const events: WindowSnapshot[] = [];
       native.observe(hwnd, "main", (snapshot) => events.push(snapshot));
       // A bounds request commits a single combined move/resize and retains visibility.
@@ -432,16 +496,23 @@ test.skipIf(process.platform !== "win32")(
           true,
           false,
         ]) {
+          showTransitions.length = 0;
+          stage = `unmaximize-before-show-${command}-${visible}`;
           nativePhase = "normal-before-geometry-state";
           native.unmaximize(hwnd);
+          recordShowTransition();
           verifyShowState("after-unmaximize", SW_SHOW, true);
+          stage = `raw-show-${command}-${visible}`;
           nativePhase = "ShowWindow-before-geometry";
           user.symbols.ShowWindow(hwnd, command);
+          recordShowTransition();
           verifyShowState("immediately-after-ShowWindow", command, true);
+          stage = `set-visible-${command}-${visible}`;
           nativePhase = visible
             ? "show-before-geometry"
             : "hide-before-geometry";
           native.show(hwnd, visible);
+          recordShowTransition();
           verifyShowState("immediately-after-show-or-hide", command, visible);
           expect(native.isMinimized(hwnd)).toBe(command === SW_MINIMIZE);
           expect(native.isMaximized(hwnd)).toBe(command === SW_MAXIMIZE);
@@ -508,7 +579,9 @@ test.skipIf(process.platform !== "win32")(
       expect(native.isMaximized(hwnd)).toBe(true);
       native.unmaximize(hwnd);
       expect(native.getBounds(hwnd, "outer")).toEqual(minimizedNormal);
+      stage = "enter-fullscreen";
       native.setFullscreen(hwnd, true);
+      assert.equal(native.failure, undefined);
       const fullscreenSnapshot = native.getSnapshot(hwnd);
       for (const [operation, payload] of [
         [
@@ -549,7 +622,14 @@ test.skipIf(process.platform !== "win32")(
         });
       }
       expect(native.getSnapshot(hwnd)).toEqual(fullscreenSnapshot);
+      stage = "exit-fullscreen";
       native.setFullscreen(hwnd, false);
+      assert.equal(native.failure, undefined);
+      expect(native.getSnapshot(hwnd).state).toMatchObject({
+        minimized: false,
+        maximized: false,
+        fullscreen: false,
+      });
       const beforeInvalid = native.getSnapshot(hwnd);
       for (const payload of [
         {
@@ -598,10 +678,16 @@ test.skipIf(process.platform !== "win32")(
         });
         expect(native.getSnapshot(hwnd)).toEqual(beforeInvalid);
       }
+      stage = "hide-before-size";
       native.show(hwnd, false);
+      assert.equal(native.failure, undefined);
       await invoke("windows.setSize", {
         width: 701,
         height: 503,
+      });
+      expect(native.getBounds(hwnd, "content")).toMatchObject({
+        width: Math.round((701 * native.getDpi(hwnd)) / 96),
+        height: Math.round((503 * native.getDpi(hwnd)) / 96),
       });
       await invoke("windows.setPosition", {
         x: -123,
@@ -782,15 +868,33 @@ test.skipIf(process.platform !== "win32")(
         dpi: native.getDpi(hwnd),
       });
 
+      // Correct normal bounds alone do not establish the live show state.
+      // Check it before hiding so restoration failures retain their first phase.
+      stage = "normal-before-final-fullscreen";
+      expect(native.getSnapshot(hwnd).state).toMatchObject({
+        minimized: false,
+        maximized: false,
+        fullscreen: false,
+      });
+      stage = "hide-before-final-fullscreen";
       nativePhase = "hide-before-constrained-fullscreen";
       native.show(hwnd, false);
+      assert.equal(native.failure, undefined);
       verifyShowState(
         "after-hide-before-constrained-fullscreen",
         SW_SHOW,
         false,
       );
+      expect(native.getSnapshot(hwnd).state).toMatchObject({
+        visible: false,
+        minimized: false,
+        maximized: false,
+        fullscreen: false,
+      });
+      stage = "enter-final-fullscreen";
       nativePhase = "enter-constrained-fullscreen";
       native.setFullscreen(hwnd, true);
+      assert.equal(native.failure, undefined);
       verifyShowState("after-enter-constrained-fullscreen", SW_SHOW, false);
       await invoke("windows.setSizeConstraints", {
         minWidth: 700,
@@ -798,9 +902,17 @@ test.skipIf(process.platform !== "win32")(
       });
       verifyShowState("after-fullscreen-constraints", SW_SHOW, false);
       const fullscreenNormal = native.getBounds(hwnd, "normal");
+      stage = "exit-final-fullscreen";
       nativePhase = "exit-constrained-fullscreen";
       native.setFullscreen(hwnd, false);
+      assert.equal(native.failure, undefined);
       verifyShowState("after-exit-constrained-fullscreen", SW_SHOW, false);
+      expect(native.getSnapshot(hwnd).state).toMatchObject({
+        visible: false,
+        minimized: false,
+        maximized: false,
+        fullscreen: false,
+      });
       try {
         expect(native.getBounds(hwnd, "outer")).toEqual(fullscreenNormal);
       } catch (error) {
@@ -913,6 +1025,58 @@ test.skipIf(process.platform !== "win32")(
       await expect(invoke("windows.getOuterBounds")).rejects.toMatchObject({
         code: "INVALID_ARGUMENT",
       });
+    } catch (error) {
+      if (hwnd) {
+        try {
+          const client = new Int32Array(4);
+          const outer = new Int32Array(4);
+          const placement = Buffer.alloc(WINDOWPLACEMENT_SIZE);
+          placement.writeUInt32LE(WINDOWPLACEMENT_SIZE);
+          const clientAvailable = Boolean(
+            user.symbols.GetClientRect(hwnd, ptr(client)),
+          );
+          const outerAvailable = Boolean(
+            user.symbols.GetWindowRect(hwnd, ptr(outer)),
+          );
+          const placementAvailable = Boolean(
+            user.symbols.GetWindowPlacement(hwnd, ptr(placement)),
+          );
+          console.error(
+            "Windows geometry failure",
+            JSON.stringify({
+              stage,
+              showTransitions,
+              callbackFailure:
+                native.failure === undefined ? null : String(native.failure),
+              visible: native.isVisible(hwnd),
+              minimized: native.isMinimized(hwnd),
+              maximized: native.isMaximized(hwnd),
+              fullscreen: native.isFullscreen(hwnd),
+              style: user.symbols
+                .GetWindowLongPtrW(hwnd, GWL_STYLE)
+                .toString(16),
+              exStyle: user.symbols
+                .GetWindowLongPtrW(hwnd, GWL_EXSTYLE)
+                .toString(16),
+              client: clientAvailable
+                ? [
+                    ...client,
+                  ]
+                : null,
+              outer: outerAvailable
+                ? [
+                    ...outer,
+                  ]
+                : null,
+              placement: placementAvailable ? placement.toString("hex") : null,
+              messages,
+            }),
+          );
+        } catch (diagnosticError) {
+          console.error("Windows geometry diagnostics failed", diagnosticError);
+        }
+      }
+      throw error;
     } finally {
       if (hwnd) {
         native.destroy(hwnd);
