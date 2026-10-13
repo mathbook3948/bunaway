@@ -491,6 +491,7 @@
       "type": "NativeWindow",
       "pages": {
         "reference/tooling/plugin-api": [
+          "audio",
           "show",
           "showInactive",
           "focus",
@@ -525,6 +526,20 @@
           "getSnapshot",
           "getReadiness"
         ]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "NativeWebViewAudio",
+      "pages": {
+        "reference/tooling/plugin-api": ["getState", "setMuted"]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "WebViewAudioState",
+      "pages": {
+        "reference/tooling/plugin-api": ["muted", "playing"]
       }
     },
     {
@@ -894,6 +909,8 @@
       "clipboard.writeFormats"
     ],
     "reference/host/windows": [
+      "windows.getWebViewAudioState",
+      "windows.setWebViewAudioMuted",
       "windows.list",
       "windows.getById",
       "windows.getCurrent",
