@@ -231,6 +231,7 @@ if (target === "windows-x64") {
     await test("macos-clipboard-webview.ts", [], {
       BUNAWAY_CLIPBOARD_NATIVE: "1",
     });
+    await test("macos-storage-host.ts");
     await test("macos-host.ts", [
       "--package",
       output,

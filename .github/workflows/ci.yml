@@ -166,6 +166,16 @@ jobs:
           codesign --force --sign - --entitlements native/macos/bun/entitlements.plist build/macos-image-native
           codesign --verify --strict build/macos-image-native
           build/macos-image-native build/macos-image-results.json 2>&1 | tee build/macos-image-logs/compiled.log
+      - name: Compile and ad-hoc sign the isolated storage fixture
+        run: |
+          mkdir -p build/macos-storage-native
+          mise exec -- bun build --compile tests/lifecycle/macos-storage.ts --outfile build/macos-storage-native/fixture
+          codesign --force --sign - --entitlements native/macos/bun/entitlements.plist build/macos-storage-native/fixture
+          codesign --verify --strict build/macos-storage-native/fixture
+      - name: Execute real storage operations in the signed fixture
+        run: |
+          set -o pipefail
+          build/macos-storage-native/fixture 2>&1 | tee build/macos-storage-native/native.log
       # run-native.ts owns the signed WKWebView image fixture as well as the
       # other host regressions. Do not invoke macos-image-host.ts a second time.
       - name: Build and test real WKWebView host and signed in-place app
@@ -181,6 +191,10 @@ jobs:
             build/macos-image-host-results.json
             build/macos-webview-controls-results.json
             build/macos-webview-controls-diagnostics/
+            build/macos-storage-results.json
+            build/macos-storage-native/native.log
+            build/macos-storage-host-results.json
+            build/macos-storage-host-diagnostics/
             build/macos-io-diagnostics/
             build/macos-safe-storage-results.json
             build/macos-safe-storage-diagnostics/
