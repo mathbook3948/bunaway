@@ -17,6 +17,7 @@ import {
 } from "./com.ts";
 import { viewDirName } from "./view-profile.ts";
 import { webAsset } from "./web-assets.ts";
+import { WebViewDownloads } from "./webview-downloads.ts";
 import { hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
 
 const embedded = Bun.embeddedFiles.some(
@@ -80,6 +81,7 @@ export class WebView {
   private closing = false;
   private detached = false;
   private browserExited = false;
+  private browserFailed = false;
   private finished = false;
   private quiescence:
     | {
@@ -96,6 +98,7 @@ export class WebView {
   private readonly loader;
   failure: unknown;
   private navigationId: bigint | undefined;
+  private downloads: WebViewDownloads | undefined;
   private loading = false;
   private stoppedNavigationId: bigint | undefined;
 
@@ -355,6 +358,23 @@ export class WebView {
   private configure(assets: string) {
     assert(this.webview);
     const webview = this.webview;
+    // Default deny applies even when an app does not register the optional window plugin.
+    this.downloads = new WebViewDownloads(
+      webview,
+      (url, source) =>
+        this.origins.includes(originOf(url)) &&
+        this.origins.includes(originOf(source)),
+      (callback) => this.completions.push(callback),
+      () => !this.closing,
+      (error) => {
+        this.failure = error;
+        this.hooks.close(true);
+      },
+      (url) =>
+        this.hooks.log("download-rejected", {
+          url,
+        }),
+    );
     const settings = getObject(this.webview, 3);
     try {
       for (const [slot, value] of [
@@ -503,6 +523,7 @@ export class WebView {
         );
         if (this.navigationId !== id[0]) {
           this.navigationId = id[0];
+          this.downloads?.operations.revokePending();
           this.stoppedNavigationId = undefined;
           this.hooks.revoke("navigation");
         }
@@ -622,8 +643,10 @@ export class WebView {
       });
       this.hooks.revoke("process-failed");
       if (kind[0] === 0) {
+        this.browserFailed = true;
         this.hooks.close(true);
       } else {
+        this.downloads?.operations.revokePending();
         setTimeout(() => {
           if (!this.closing) {
             this.navigate();
@@ -732,7 +755,14 @@ export class WebView {
   navigate() {
     const webview = this.webview;
     if (webview && !this.closing) {
-      this.navigateTo(this.spec.home);
+      hr(
+        withWide(this.spec.home, (address) =>
+          method(webview, 5, [
+            "ptr",
+          ])(address),
+        ),
+        "Navigate",
+      );
     }
   }
   /** Request a print dialog, leaving printer selection and submission to the user. */
@@ -772,6 +802,23 @@ export class WebView {
     } finally {
       release(printing);
     }
+  }
+
+  /** Download service readiness is independent of the document/SDK handshake. */
+  downloadOperations() {
+    if (this.closing) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "WebView is closed.",
+      });
+    }
+    if (!this.downloads) {
+      throw new BunawayError({
+        code: "BUSY",
+        message: "WebView is not ready.",
+      });
+    }
+    return this.downloads.operations;
   }
 
   /** Reject before COM access when the controller is unavailable or closing. */
@@ -1030,6 +1077,7 @@ export class WebView {
       return true;
     }
     this.closedAt = performance.now();
+    this.downloads?.detach(this.isBrowserUnavailable());
     // Capture process handles before controller closure to track WebView2 children.
     if (this.environment) {
       const env8 = query(
@@ -1134,6 +1182,15 @@ export class WebView {
       this.group.drainer = this;
     }
     return true;
+  }
+  /** Owned process evidence permits releasing failed downloads without calling a dead broker. */
+  isBrowserUnavailable(): boolean {
+    return (
+      this.browserFailed ||
+      this.browserExited ||
+      (this.browserHandle !== 0n &&
+        kernel.symbols.WaitForSingleObject(this.browserHandle, 0) === 0)
+    );
   }
   /** Poll shutdown until children and callbacks drain, returning true after disposal. */
   finish(): boolean {

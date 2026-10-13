@@ -8,6 +8,34 @@ WebView2 문서에 browser 인쇄 UI를 요청하고 반복 요청 및 종료 �
 결과는 `build/windows-webview-print-ui-results.json`에 기록한다.
 system UI 사용자 선택과 물리 프린터 출력은 별도 검증이며 테스트가 인쇄 제출을 하지 않는다.
 
+다운로드 UI-loop regression은 생성된 worker 경계에서 전용 `windows-download-cleanup/ui.ts`를
+번들하고 실제 승인 transfer의 cancel 자원만 일시적으로 실패시킨다. 소유 창을 닫는 동안
+다른 창의 SDK 응답과 세 번째 창의 native cleanup이 진행하고, 소유자의 재시도도 복구되는지
+확인한다. 운영 worker와 다른 테스트 프로세스는 주입하지 않는다. 순수 모델은 조절한 시계로
+재시도 간격과 기한, 자원 보존을 검증하고 cancelled snapshot의 interruptReason을 검사한다.
+
+다운로드의 실패 regression은 metadata 조회 실패와 native Cancel 실패를 독립적으로
+주입해 취소 재시도와 cleanup의 소유권을 확인한다. 브라우저 UI 재개 뒤 paused 상태,
+JSON escape와 UTF-8 metadata 한도, 만료 retained 항목의 aggregate 예산 및 최대 식별자의
+실제 protocol response 직렬화도 검증한다.
+
+`api/webview-downloads.test.ts`는 Zod 계약, 개별 작업 권한과 backend 출처 검사를 확인한다.
+renderer에 모든 다운로드 권한을 허용해도 작업이 실행되지 않으며 호출자가 임의 저장 경로를
+전달할 수 없는지 검사한다. `lifecycle/downloads.test.ts`는 pending 승인 기한, 상한과 슬롯 회수,
+탐색 시 pending 거부, 승인된 작업의 수명, pause/resume과 종료 기록 및 실패 시 자원 정리를 확인한다.
+`lifecycle/windows-webview-downloads.ts`는 `mise run host:windows`에서 실제 UI Worker와
+WebView2 다운로드를 실행한다. 기본 거부, renderer 권한 거부, 항목별 승인과 거부, 실제 파일
+내용과 byte 진행, pause/resume/cancel, 승인 기한, 탐색 및 종료 시 pending 정리를 검증한다.
+승인된 전송과 pending 요청이 함께 있는 브라우저를 종료해 죽은 broker에 작업을 보내지 않고
+COM 참조, timer와 창 자원을 정리하는지도 확인한다.
+기존 multiple-automatic-downloads 권한 거부를 유지하며 제어 시나리오는 새 WebView에서
+첫 다운로드로 실행한다. 마지막 장애 검사는 같은 뷰의 두 창이 공유하는 browser 프로세스에서
+승인된 전송과 pending 요청을 각각 유지한다. 자동 다운로드 권한을 허용하는 검증이 아니다.
+테스트가 기록한 고유한 브라우저 기본 경로의 파일만 지운다. 사용자 지정 경로, 물리 다운로드 UI
+조작이나 앱 재실행 후 재개 검증은 포함하지 않는다. 결과는
+`build/windows-webview-downloads-results.json`에 기록한다.
+
+
 `api/webview-controls.test.ts`는 기본 WebView 제어의 Zod 입력과 출력, 개별 작업 권한,
 닫힌 창과 취소, multiple 뷰의 ID 선택, 플랫폼 서비스 부재 및 네이티브 오류 전파를 검사한다.
 `lifecycle/windows-webview-controls.ts`는 `mise run host:windows`에서 실제 UI Worker와
@@ -545,3 +573,18 @@ linear filtering의 투명 edge, crop과 빈 소스 및 quota 오류를 추가�
 `api/os.test.ts`는 독립 작업 권한과 metadata 계약을 검사한다. `lifecycle/windows-os.test.ts`는
 실제 Kernel32 언어 설정 조회와 Bun 실행 정보를 생성 어댑터에서 검사하며 `host:windows`에 포함된다.
 사용자 언어 설정 변경이나 translation 하드웨어 검증은 포함하지 않는다.
+
+`api/process-plugin.test.ts`는 local `.exe` argv 계약과 독립 실행 권한을 검사한다.
+`lifecycle/process-run.test.ts`는 실제 Bun 자식의 특수 인자, binary stdin/stdout/stderr, 합계
+출력 제한과 내부 실행 작업의 취소 후 직접 자식 종료를 확인한다. `windows-process.test.ts`는 생성 Windows
+어댑터의 timeout, capacity와 폐기를 실제 `.exe`로 확인한다. 실제 core/client 공개 호출에서 취소
+전달을 보류해 공개 Promise 거부 시 자식이 아직 살아 있음을 확인하고, 전달 후 어댑터의 정리와
+자식 종료를 확인한다. 공개 Promise 거부는 종료 완료를 보장하지 않는다. 두 검사는 `host:windows`에 포함되며
+호출별 손자 정리나 제삼자 도구의 부수 효과를 검증하지 않는다.
+자식은 PID 파일 쓰기를 완료한 뒤 rename으로 준비를 알린다. 두 생존 검사는 파일 생성과 쓰기 사이의
+경합으로 빈 PID를 읽지 않고, 취소 전에 실제 자식의 Windows process handle을 잡는다.
+
+`api/network.test.ts`는 URL, header, bytes 상한과 독립 작업 권한을 검사한다.
+`lifecycle/windows-network.test.ts`는 생성 Windows 어댑터와 실제 loopback HTTP/WebSocket 서버로
+redirect 거부, binary 보존, timeout, 취소, 폐기와 용량을 검사한다. `host:windows`에 포함되며
+외부 proxy나 OS 인증, 물리 네트워크 설정 검증은 포함하지 않는다.

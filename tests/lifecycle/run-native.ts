@@ -62,6 +62,7 @@ if (target === "windows-x64") {
     await test("windows-cli-arguments.ts");
     await test("windows-bun-window-api.ts");
     await test("windows-webview-print-ui.ts");
+    await test("windows-webview-downloads.ts");
     await test("windows-webview-controls.ts");
     await test("windows-webview-audio.ts");
     await test("windows-initial-placement.ts");
@@ -98,6 +99,9 @@ if (target === "windows-x64") {
         ...[
           "tests/lifecycle/desktop.test.ts",
           "tests/lifecycle/windows-os.test.ts",
+          "tests/lifecycle/windows-process.test.ts",
+          "tests/lifecycle/process-run.test.ts",
+          "tests/lifecycle/windows-network.test.ts",
           "tests/lifecycle/windows-bun-instance.test.ts",
           "tests/lifecycle/windows-appearance.test.ts",
           "tests/lifecycle/windows-opener.test.ts",

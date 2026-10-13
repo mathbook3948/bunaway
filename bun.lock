@@ -19,8 +19,10 @@
         "@bunaway/plugin-clipboard": "workspace:*",
         "@bunaway/plugin-image": "workspace:*",
         "@bunaway/plugin-log": "workspace:*",
+        "@bunaway/plugin-network": "workspace:*",
         "@bunaway/plugin-opener": "workspace:*",
         "@bunaway/plugin-os": "workspace:*",
+        "@bunaway/plugin-process": "workspace:*",
         "@bunaway/plugin-storage": "workspace:*",
         "@bunaway/plugin-windows": "workspace:*",
         "@bunaway/protocol": "workspace:*",
@@ -201,6 +203,20 @@
         "@bunaway/plugin": "0.0.0",
       },
     },
+    "plugins/network": {
+      "name": "@bunaway/plugin-network",
+      "version": "0.0.0",
+      "dependencies": {
+        "@bunaway/protocol": "workspace:*",
+        "zod": "4.6.5",
+      },
+      "devDependencies": {
+        "@bunaway/plugin": "workspace:*",
+      },
+      "peerDependencies": {
+        "@bunaway/plugin": "0.0.0",
+      },
+    },
     "plugins/opener": {
       "name": "@bunaway/plugin-opener",
       "version": "0.0.0",
@@ -217,6 +233,20 @@
     },
     "plugins/os": {
       "name": "@bunaway/plugin-os",
+      "version": "0.0.0",
+      "dependencies": {
+        "@bunaway/protocol": "workspace:*",
+        "zod": "4.6.5",
+      },
+      "devDependencies": {
+        "@bunaway/plugin": "workspace:*",
+      },
+      "peerDependencies": {
+        "@bunaway/plugin": "0.0.0",
+      },
+    },
+    "plugins/process": {
+      "name": "@bunaway/plugin-process",
       "version": "0.0.0",
       "dependencies": {
         "@bunaway/protocol": "workspace:*",
@@ -395,9 +425,13 @@
 
     "@bunaway/plugin-log": ["@bunaway/plugin-log@workspace:plugins/log"],
 
+    "@bunaway/plugin-network": ["@bunaway/plugin-network@workspace:plugins/network"],
+
     "@bunaway/plugin-opener": ["@bunaway/plugin-opener@workspace:plugins/opener"],
 
     "@bunaway/plugin-os": ["@bunaway/plugin-os@workspace:plugins/os"],
+
+    "@bunaway/plugin-process": ["@bunaway/plugin-process@workspace:plugins/process"],
 
     "@bunaway/plugin-storage": ["@bunaway/plugin-storage@workspace:plugins/storage"],
 
