@@ -1,4 +1,4 @@
-import { dlopen } from "bun:ffi";
+import { dlopen, ptr } from "bun:ffi";
 import assert from "node:assert/strict";
 import { parentPort, Worker, workerData } from "node:worker_threads";
 import {
@@ -22,6 +22,9 @@ const MOVE_INTERVAL_MS = 5;
 const WM_SYSCOMMAND = 0x0112;
 const SC_MOVE = 0xf010n;
 const WM_CANCELMODE = 0x001f;
+const WM_KEYDOWN = 0x0100;
+const VK_RIGHT = 0x27n;
+const VK_RETURN = 0x0dn;
 const SWP_NOSIZE = 0x1;
 const SWP_NOZORDER = 0x4;
 const SWP_NOACTIVATE = 0x10;
@@ -195,6 +198,19 @@ if (workerData) {
     },
   );
   const driver = dlopen("user32.dll", {
+    GetCursorPos: {
+      args: [
+        "ptr",
+      ],
+      returns: "i32",
+    },
+    SetCursorPos: {
+      args: [
+        "i32",
+        "i32",
+      ],
+      returns: "i32",
+    },
     PostMessageW: {
       args: [
         "u64",
@@ -217,6 +233,8 @@ if (workerData) {
       returns: "i32",
     },
   });
+  const cursor = new Int32Array(2);
+  assert(driver.symbols.GetCursorPos(ptr(cursor)));
   const waitFor = async (condition: () => boolean) => {
     const deadline = Date.now() + 10000;
     while (!condition()) {
@@ -246,7 +264,12 @@ if (workerData) {
       );
       await Bun.sleep(MOVE_INTERVAL_MS);
     }
-    assert(driver.symbols.PostMessageW(hwnd, WM_CANCELMODE, 0n, 0n));
+    // Complete an actual keyboard move. Cancellation can restore the initial rectangle,
+    // which correctly has no net `moved` completion event.
+    for (let step = 0; step < 3; step++) {
+      assert(driver.symbols.PostMessageW(hwnd, WM_KEYDOWN, VK_RIGHT, 0n));
+    }
+    assert(driver.symbols.PostMessageW(hwnd, WM_KEYDOWN, VK_RETURN, 0n));
     await waitFor(() => left && completed);
     await channel.drain();
     await channel.send({
@@ -263,6 +286,10 @@ if (workerData) {
     }
     channel.close();
     await worker.terminate();
-    driver.close();
+    try {
+      assert(driver.symbols.SetCursorPos(cursor[0] ?? 0, cursor[1] ?? 0));
+    } finally {
+      driver.close();
+    }
   }
 }
