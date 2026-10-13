@@ -306,6 +306,8 @@ SDK 호출 컨텍스트, 작업 권한, 닫힌 창 및 시작 전 취소를 GUI 
 공개 SDK 호출 및 `setOuterBounds` 결과와 `windows.changed`의 revision, bounds 일치를 확인한다.
 `windows-fullscreen-dpi.fixture.ts`는 DLL 대체로 음수 좌표의 모니터 이동, 작업 영역의
 좌표 보정과 전체화면 중 현재 DPI에 따른 normal bounds 계산을 검사한다.
+같은 fixture는 DPI 120/144/192에서 601×451 물리 content의 resizable 반복 변경을 검사한다.
+일반, 최소화, 최대화와 전체화면 및 표시와 숨김 상태를 구분하며 실제 물리 모니터 검증은 아니다.
 작업 영역 오프셋이 다른 모니터로 최대화 창을 옮기거나 전체화면에 진입해도 원래 일반
 복원 rectangle의 모니터로 좌표를 보정하는지, 조회가 숨김 상태를 유지하는지도 검사한다.
 왼쪽과 위쪽 모니터의 경계에 걸친 일반 창의 위치, 모니터 변경과 최소화, 최대화 중

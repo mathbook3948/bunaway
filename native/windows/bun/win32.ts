@@ -1192,9 +1192,11 @@ export class Windows {
 
   private clientSizeInDips(window: bigint, dpi: number): ClientSize {
     const size = this.clientSize(window);
+    // Preserve fractional DIPs internally so frame changes can recover the exact
+    // physical client pixels. Public logical geometry queries round separately.
     return {
-      width: logicalPixels(size.width, dpi),
-      height: logicalPixels(size.height, dpi),
+      width: (size.width * DEFAULT_DPI) / dpi,
+      height: (size.height * DEFAULT_DPI) / dpi,
     };
   }
 
@@ -1356,8 +1358,8 @@ export class Windows {
     const { exStyle } = this.windowStyles(window);
     const frame = this.outerSizeFor(0, 0, dpi, style, exStyle);
     return {
-      width: logicalPixels(outerWidth - frame.width, dpi),
-      height: logicalPixels(outerHeight - frame.height, dpi),
+      width: ((outerWidth - frame.width) * DEFAULT_DPI) / dpi,
+      height: ((outerHeight - frame.height) * DEFAULT_DPI) / dpi,
     };
   }
 

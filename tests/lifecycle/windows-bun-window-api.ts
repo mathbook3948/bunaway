@@ -157,6 +157,35 @@ if (!process.argv.includes("--child")) {
   });
   const nativeWindows = new Windows(() => {});
   try {
+    const pixelWindow = nativeWindows.create(
+      "Physical client preservation",
+      650,
+      450,
+      () => {},
+      false,
+    );
+    try {
+      nativeWindows.setGeometry(pixelWindow, "content", {
+        width: 601,
+        height: 451,
+      });
+      const foreground = user.symbols.GetForegroundWindow();
+      for (const resizable of [
+        false,
+        true,
+        false,
+        true,
+      ]) {
+        nativeWindows.setResizable(pixelWindow, resizable);
+        const content = nativeWindows.getBounds(pixelWindow, "content");
+        assert.equal(content.width, 601);
+        assert.equal(content.height, 451);
+        assert.equal(nativeWindows.isVisible(pixelWindow), false);
+        assert.equal(user.symbols.GetForegroundWindow(), foreground);
+      }
+    } finally {
+      nativeWindows.destroy(pixelWindow);
+    }
     // Exercise real frame changes and blocked native user commands, including low command bits.
     for (const showCmd of [
       1,
