@@ -363,6 +363,31 @@ if (!process.argv.includes("--child")) {
           assert(driver.symbols.GetWindowRect(hwnd, ptr(frame)));
           const minimized = driver.symbols.IsIconic(hwnd),
             maximized = driver.symbols.IsZoomed(hwnd);
+          const titleForeground = user.symbols.GetForegroundWindow();
+          for (const title of [
+            "창 제목 📝",
+            "📝".repeat(512),
+          ]) {
+            nativeWindows.setTitle(hwnd, title);
+            assert.equal(nativeWindows.getTitle(hwnd), title);
+            assert.equal(driver.symbols.IsWindowVisible(hwnd), Number(visible));
+            assert.equal(driver.symbols.IsIconic(hwnd), minimized);
+            assert.equal(driver.symbols.IsZoomed(hwnd), maximized);
+            assert.equal(user.symbols.GetForegroundWindow(), titleForeground);
+            assert(driver.symbols.GetWindowRect(hwnd, ptr(restored)));
+            assert.deepEqual(
+              [
+                ...restored,
+              ],
+              [
+                ...frame,
+              ],
+            );
+          }
+          // Query the actual HWND caption, including trusted native changes outside the plugin.
+          const externalTitle = Buffer.from("Native caption\0", "utf16le");
+          assert(user.symbols.SetWindowTextW(hwnd, ptr(externalTitle)));
+          assert.equal(nativeWindows.getTitle(hwnd), "Native caption");
           nativeWindows.setFullscreen(hwnd, true);
           nativeWindows.setFullscreen(hwnd, false);
           assert.equal(driver.symbols.IsWindowVisible(hwnd), Number(visible));
@@ -435,7 +460,7 @@ if (!process.argv.includes("--child")) {
   );
   const handles = new Map<string, bigint>();
   const dialogClass = Buffer.from("#32770\0", "utf16le");
-  const dialogTitle = Buffer.from("Window API editor\0", "utf16le");
+  const dialogTitle = Buffer.from("수정된 제목 📝\0", "utf16le");
   let confirmations = 0,
     editorWindows = 0,
     geometry = false,
@@ -872,6 +897,23 @@ if (!process.argv.includes("--child")) {
             assert.equal(await windows.isMinimizable(editor), false);
             assert.equal(await windows.isMaximizable(editor), false);
             assert.equal(await windows.isClosable(editor), false);
+            assert.equal(await windows.getTitle(editor), "Window API editor");
+            await windows.setTitle({
+              ...editor,
+              title: "수정된 제목 📝",
+            });
+            assert.equal(await windows.getTitle(editor), "수정된 제목 📝");
+            await assert.rejects(
+              windows.setTitle({
+                ...editor,
+                title: "invalid\0title",
+              }),
+              {
+                code: "INVALID_ARGUMENT",
+              },
+            );
+            assert.equal(await windows.getTitle(editor), "수정된 제목 📝");
+            // The driver verifies that close confirmation uses this runtime caption.
             const editorSnapshot = await windows.getSnapshot(editor);
             editorWindowId = editorSnapshot.windowId;
             assert.equal(await windows.isDestroyed(editor), false);
@@ -1353,6 +1395,12 @@ if (!process.argv.includes("--child")) {
                 view: "editor",
               }),
               true,
+            );
+            assert.equal(
+              await windows.getTitle({
+                view: "editor",
+              }),
+              "Window API editor",
             );
             editorWindowId = (
               await windows.getSnapshot({

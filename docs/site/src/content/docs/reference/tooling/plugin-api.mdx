@@ -60,6 +60,14 @@ splashscreen 최종 종료에는 false를 전달해 임시 프로필과 교체 �
 `NativeWindow`는 `show(visible)`, `focus()`, `close()`, `isFullscreen()`, `getSizeConstraints()`, `setSizeConstraints(constraints)`, `setSize(width, height)`, `setPosition(x, y)`, `setFullscreen(value)`, `setCloseConfirmation(message)`를 제공합니다.
 Windows의 선택적 `setMinimizable`, `isMinimizable`, `setMaximizable`, `isMaximizable`, `setClosable`, `isClosable`은 네이티브 버튼과 사용자 동작을 제어합니다. 호스트의 API close와 장애 정리는 허용하며 Close 메뉴 자원과 사용자 닫기 설정은 HWND 수명에 종속됩니다.
 
+Windows의 선택적 `setTitle(title)`과 `getTitle()`은 현재 HWND의 UTF-16 제목을 변경하고 조회합니다. 선언을 바꾸지 않으며 조회는 1024 코드 단위로 제한합니다. 네이티브 조회 오류와 길이 초과는 예외로 전달합니다.
+
+Windows의 선택적 `NativeWindow.showPrintUI(kind)`는 `"browser" | "system"` 인쇄 UI를
+요청합니다. 프린터 선택과 제출은 사용자에게 맡기며 메서드 반환을 인쇄 완료로 해석하지 않습니다.
+닫힌 WebView는 `INVALID_ARGUMENT`, 생성 중에는 `BUSY`, 인쇄 확장 인터페이스가 없는
+WebView2 런타임은 `UNSUPPORTED`입니다. 서비스가 없는 플랫폼도 창 플러그인이
+`UNSUPPORTED`로 처리합니다. 호출 권한은 플러그인이 네이티브 진입 전에 검사합니다.
+
 선택적 `NativeWindow.downloads`는 Windows의 `NativeDownloads` 서비스입니다.
 `setRequestsEnabled(enabled)`는 요청 수집만 변경하며 `list()`는 WebViewDownload 배열을 반환합니다.
 `approve(id)`, `cancel(id)`, `pause(id)`, `resume(id)`, `forget(id)`는 해당 WebView 수명의
