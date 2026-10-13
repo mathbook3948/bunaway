@@ -13,7 +13,12 @@ import {
   validateWindowOutput,
   windowsPlugin,
 } from "@bunaway/plugin-windows";
-import { type JsonValue, NativeRegistry } from "@bunaway/protocol";
+import {
+  type JsonValue,
+  MAX_MESSAGE_BYTES,
+  NativeRegistry,
+  serializeHostResponse,
+} from "@bunaway/protocol";
 import { createOperations } from "#plugins/windows/src/platforms/windows";
 
 const names = [
@@ -225,6 +230,27 @@ test("download output contracts reject oversized metadata and aggregate snapshot
   ).toEqual([
     record,
   ]);
+  const withinWireLimit = Array.from(
+    {
+      length: 13,
+    },
+    () => ({
+      ...record,
+      id: crypto.randomUUID(),
+    }),
+  );
+  // This fits the protocol's existing limit, but exceeds the download budget reserved before adoption.
+  expect(
+    new TextEncoder().encode(
+      serializeHostResponse({
+        kind: "result",
+        payload: withinWireLimit,
+      }),
+    ).byteLength,
+  ).toBeLessThan(MAX_MESSAGE_BYTES);
+  expect(() =>
+    validateWindowOutput("windows.getDownloads", withinWireLimit),
+  ).toThrow();
   expect(() =>
     validateWindowOutput(
       "windows.getDownloads",
