@@ -173,10 +173,26 @@ test.skipIf(process.platform !== "darwin")(
             expect(objc.send(app, "appearance")).toBe(appearance);
             const effectiveAppearance = objc.send(app, "effectiveAppearance");
             expect(effectiveAppearance).not.toBeNull();
-            console.log(
-              `AppKit appearance: requested=${name}, effective=${objc.text(objc.send(effectiveAppearance, "name"))}`,
+            const themeNames = objc.send(
+              objc.send(
+                objc.class("NSArray"),
+                "arrayWithObject:",
+                objc.string("NSAppearanceNameAqua"),
+              ),
+              "arrayByAddingObject:",
+              objc.string("NSAppearanceNameDarkAqua"),
+            );
+            const nativeMatch = objc.text(
+              objc.send(
+                effectiveAppearance,
+                "bestMatchFromAppearancesWithNames:",
+                themeNames,
+              ),
             );
             const snapshot = read();
+            console.log(
+              `AppKit appearance: requested=${name}, effective=${objc.text(objc.send(effectiveAppearance, "name"))}, nativeMatch=${nativeMatch}, adapterTheme=${snapshot.appsTheme}`,
+            );
             expect(snapshot.appsTheme).toBe(expected);
             expect(snapshot.systemTheme).toBeNull();
             expect(snapshot.forcedColors).toBe(false);
