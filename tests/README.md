@@ -304,6 +304,12 @@ Windows 호스트 시나리오는 `lifecycle/windows-host.ts`에 두고 PID 조�
 프로세스 종료 감시는 `lifecycle/windows-host-processes.ts`에서 실행한다.
 
 `api/opener.test.ts`는 HTTP/HTTPS 계약과 파일 API, 절대 경로 입력과 작업별 권한을 확인한다.
+`lifecycle/macos-opener.test.ts`는 POSIX 경로와 파일 검사, 작업별 권한과 정리를 검사한다.
+macOS arm64 CI에서는 `BUNAWAY_OPENER_ISOLATED=1`로 `macos-opener-native.test.ts`의
+실제 I/O Worker와 `macos-opener-host.ts`의 compiled WKWebView 호출을 각각 한 번 실행한다.
+고유 문서 타입을 선언한 앱을 등록하고 실제 파일 수신, loopback HTTP/HTTPS 및 Finder의
+요청 접수, 권한 거부, 취소와 종료를 확인한다. 기본 handler 설정은 변경하지 않는다.
+브라우저 페이지 로딩과 Finder 선택 화면은 검사하지 않는다.
 
 `api/window-relations.test.ts`는 trusted destroy의 백엔드 출처와 독립 작업 권한,
 관계 조회와 변경의 작업별 권한, 입력과 출력 경계를 확인한다.

@@ -68,7 +68,11 @@ async function waitForExit(pid: number) {
 
 /** Compile and register a disposable receiver for a unique document type. Browser defaults stay unchanged. */
 export async function createReceiver(root: string) {
-  const app = join(root, "한글 Receiver.app");
+  // Keep the registered application outside the OS temporary tree. The document
+  // still lives in the caller's disposable root and retains its Unicode name.
+  const build = resolve("build");
+  const appRoot = join(build, `opener-receiver-${crypto.randomUUID()}`);
+  const app = join(appRoot, "한글 Receiver.app");
   const resources = join(app, "Contents/Resources");
   const executable = join(app, "Contents/MacOS/receiver");
   const eventPath = join(resources, "events.jsonl");
@@ -83,14 +87,6 @@ export async function createReceiver(root: string) {
         args: [
           "u64",
           "bool",
-        ],
-        returns: "i32",
-      },
-      LSSetDefaultRoleHandlerForContentType: {
-        args: [
-          "u64",
-          "u32",
-          "u64",
         ],
         returns: "i32",
       },
@@ -178,7 +174,7 @@ export async function createReceiver(root: string) {
     });
     await clean(() => services.close());
     await clean(() =>
-      rm(app, {
+      rm(appRoot, {
         recursive: true,
         force: true,
       }),
@@ -256,58 +252,70 @@ export async function createReceiver(root: string) {
       id,
       "Receiver runtime identity must match its registered bundle.",
     );
-    objc.withAutoreleasePool(() => {
-      const status = services.symbols.LSSetDefaultRoleHandlerForContentType(
-        BigInt(objc.string(contentType)),
-        0xffffffff,
-        BigInt(objc.string(id)),
-      );
-      console.info("Unique fixture document association status:", status);
-      assert.equal(status, 0, "Unique fixture document association");
-    });
     const sample = join(root, `한글 값,".${extension}`);
     await writeFile(sample, "controlled file fixture");
-    objc.withAutoreleasePool(() => {
-      const workspace = objc.send(objc.class("NSWorkspace"), "sharedWorkspace");
-      assert(workspace, "Main-thread NSWorkspace must exist.");
-      const url = objc.send(
-        objc.class("NSURL"),
-        "fileURLWithPath:",
-        objc.string(sample),
-      );
-      assert(url, "Controlled file NSURL must exist.");
-      const targetPath = objc.text(objc.send(url, "path"));
-      const targetUrl = objc.text(objc.send(url, "absoluteString"));
-      const type = objc.text(
-        objc.send(workspace, "typeOfFile:error:", objc.string(sample), null),
-      );
-      const registeredApp = objc.send(
-        workspace,
-        "URLForApplicationWithBundleIdentifier:",
-        objc.string(id),
-      );
-      console.info(
-        "Controlled file resolution:",
-        JSON.stringify({
+    const resolveHandler = () =>
+      objc.withAutoreleasePool(() => {
+        const workspace = objc.send(
+          objc.class("NSWorkspace"),
+          "sharedWorkspace",
+        );
+        assert(workspace, "Main-thread NSWorkspace must exist.");
+        const url = objc.send(
+          objc.class("NSURL"),
+          "fileURLWithPath:",
+          objc.string(sample),
+        );
+        assert(url, "Controlled file NSURL must exist.");
+        const targetPath = objc.text(objc.send(url, "path"));
+        const targetUrl = objc.text(objc.send(url, "absoluteString"));
+        const type = objc.text(
+          objc.send(workspace, "typeOfFile:error:", objc.string(sample), null),
+        );
+        const registeredApp = objc.send(
+          workspace,
+          "URLForApplicationWithBundleIdentifier:",
+          objc.string(id),
+        );
+        assert(
+          sameFixtureItem(targetPath, sample),
+          "Controlled NSURL must identify the exact fixture file.",
+        );
+        const handler = objc.send(
+          workspace,
+          "URLForApplicationToOpenURL:",
+          url,
+        );
+        const handlerPath = objc.text(objc.send(handler, "path"));
+        return {
           targetPath,
           targetUrl,
           type,
           contentType,
           registeredApp: objc.text(objc.send(registeredApp, "path")),
-        }),
-      );
-      assert(
-        sameFixtureItem(targetPath, sample),
-        "Controlled NSURL must identify the exact fixture file.",
-      );
-      const handler = objc.send(workspace, "URLForApplicationToOpenURL:", url);
-      const handlerPath = objc.text(objc.send(handler, "path"));
-      console.info("Controlled file handler:", handlerPath);
-      assert(
-        sameFixtureItem(handlerPath, app),
-        "Controlled file handler must resolve to the receiver.",
-      );
-    });
+          handlerPath,
+        };
+      });
+    // Registration is observed through the same lookup used by the product.
+    // Require the actual application and handler, without changing preferences.
+    const registrationDeadline = Date.now() + 10000;
+    let resolution = resolveHandler();
+    while (
+      !sameFixtureItem(resolution.handlerPath, app) &&
+      Date.now() < registrationDeadline
+    ) {
+      await Bun.sleep(50);
+      resolution = resolveHandler();
+    }
+    console.info("Controlled file resolution:", JSON.stringify(resolution));
+    assert(
+      sameFixtureItem(resolution.registeredApp, app),
+      "Registered bundle must resolve to the receiver.",
+    );
+    assert(
+      sameFixtureItem(resolution.handlerPath, app),
+      "Controlled file handler must resolve to the receiver.",
+    );
     return {
       app,
       sample,

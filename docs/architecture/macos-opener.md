@@ -62,10 +62,12 @@ POSIX descriptor는 경로 이름의 rename이나 교체를 막지 않는다. NS
 `BUNAWAY_OPENER_ISOLATED=1`로 실행한다. 기존 entitlement와 ad-hoc 서명으로 Bun fixture
 앱을 만들고 고유 확장자의 파일을 실제 NSWorkspace로 전달해 인자를 기록한다. loopback
 HTTP/HTTPS URL은 runner의 기본 브라우저에 요청하며 NSWorkspace의 접수 결과를 확인한다.
-브라우저의 페이지 로딩은 검사하지 않는다. 고유 문서 타입의 fixture 앱만 연결한다. 기본 브라우저를 바꾸지 않으며 `finally`에서
+브라우저의 페이지 로딩은 검사하지 않는다. 고유 문서 타입을 선언한 fixture 앱을 저장소의
+`build` 아래에 등록하고 기본 handler 설정은 변경하지 않는다. 기본 브라우저를 바꾸지 않으며 `finally`에서
 fixture 앱 종료를 확인하고 등록과 파일을 정리한다. 사용자 파일이나 clipboard는 읽거나
-바꾸지 않는다. 개인 데스크톱에서 실행하지 않는다. 첫 CI에서 기본 handler 변경이 OSStatus
-`-54`로 거부되어 해당 변경을 제거했다. 권한 제한을 우회하지 않는다.
+바꾸지 않는다. 개인 데스크톱에서 실행하지 않는다. 등록 뒤에는 최대 10초 동안 실제 앱과
+문서 handler가 fixture의 파일 identity로 조회되는지 확인한다. 조회되지 않으면 실패하며
+설정 변경으로 우회하지 않는다.
 
 독립 Worker 검사는 NativeRegistry로 작업별 권한과 승인 전 취소를 검사한다.
 `macos-opener-host.ts`는 기존 entitlement로 ad-hoc 서명한 compiled 앱의 실제 WKWebView,
@@ -74,8 +76,8 @@ HTTP/HTTPS를 열고 Finder 요청을 제출한다. 다른 뷰의 권한 거부,
 정상 호스트 종료를 검사하며 receiver의 파일 수신을 별도로 확인한다. Finder 검사는 OS
 요청 접수만 확인하며 실제 선택 UI를 읽지 않는다.
 결과는 `build/macos-opener-results.json`, `build/macos-opener-host-results.json`과 CI 로그에
-기록한다. 별도
-`.github/workflows/macos-opener.yml`이 실제 arm64 검사를 수행하고 기존 CI 작업은 유지한다.
+기록한다. 기존 `.github/workflows/ci.yml`의 macOS arm64 작업에서 독립 Worker 검사와
+`run-native.ts`의 compiled 호스트 검사를 각각 한 번 실행한다. 기존 호스트와 배포 검사도 유지한다.
 
 Linux에서 고정 Bun 1.4.2로 계약 검사를 수행했다. 실제 macOS 결과는 해당 head의 CI에서
 확인해야 한다. 초기 네이티브 검사에서는 기본 앱 요청이 `INTERNAL`로 실패했으며,
