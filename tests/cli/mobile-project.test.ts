@@ -52,14 +52,26 @@ for (const target of [
   test(`${target} cancellation reaches owned work and releases its lock and staging`, async () => {
     const root = await mkdtemp(resolve(tmpdir(), "bunaway-mobile-cancel-"));
     const ready = resolve(root, "ready.json");
+    const cancel = resolve(root, "cancel.txt");
     const script = resolve(root, "cancel.ts");
     let child: ReturnType<typeof Bun.spawn> | undefined;
     try {
       await writeFile(
         script,
         `
+        import { existsSync } from "node:fs";
         import { rename, writeFile } from "node:fs/promises";
         import { withMobileBuild } from ${JSON.stringify(resolve(frameworkRoot, "packages/cli/src/mobile-project.ts"))};
+        // Windows process.kill terminates a process instead of delivering a console
+        // event, so emit the same Node signal event there; POSIX sends a real signal.
+        const timer = process.platform === "win32"
+          ? setInterval(() => {
+              if (existsSync(${JSON.stringify(cancel)})) {
+                clearInterval(timer);
+                process.emit("SIGTERM");
+              }
+            }, 20)
+          : undefined;
         try {
           await withMobileBuild(${JSON.stringify(root)}, ${JSON.stringify(target)}, async (work, signal) => {
             await writeFile(${JSON.stringify(`${ready}.tmp`)}, JSON.stringify(work));
@@ -70,6 +82,8 @@ for (const target of [
         } catch (error) {
           if (error instanceof Error && error.message.endsWith("build cancelled.")) process.exitCode = 41;
           else throw error;
+        } finally {
+          clearInterval(timer);
         }
       `,
       );
@@ -91,7 +105,11 @@ for (const target of [
       if (typeof staging !== "string") {
         throw new Error("Missing owned staging path.");
       }
-      child.kill("SIGTERM");
+      if (process.platform === "win32") {
+        await writeFile(cancel, "");
+      } else {
+        child.kill("SIGTERM");
+      }
       expect(await child.exited).toBe(41);
       await expect(lstat(staging)).rejects.toMatchObject({
         code: "ENOENT",

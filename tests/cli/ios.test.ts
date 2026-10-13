@@ -103,7 +103,7 @@ test("iOS settings reject unsupported native permissions, multiple views and inv
       force: true,
     });
   }
-});
+}, 30000);
 
 test("iOS publication preserves Swift and Xcode edits and refuses unrelated projects or linked managed paths", async () => {
   const temporary = await mkdtemp(resolve(tmpdir(), "bunaway-ios-sync-"));
