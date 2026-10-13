@@ -118,6 +118,8 @@ if (target === "windows-x64") {
           "tests/lifecycle/windows-tray-controls.test.ts",
           "tests/lifecycle/windows-tray-ui.test.ts",
           "tests/lifecycle/windows-bun-instance.test.ts",
+          "tests/lifecycle/windows-power.test.ts",
+          "tests/lifecycle/windows-power-worker.test.ts",
           "tests/lifecycle/windows-appearance.test.ts",
           "tests/lifecycle/windows-opener.test.ts",
           "tests/lifecycle/windows-opener-job.test.ts",
@@ -196,6 +198,7 @@ if (target === "windows-x64") {
   if (!values["skip-tests"]) {
     await test("macos-webview-regressions.ts");
     await test("macos-window-api.ts");
+    await test("macos-network.ts");
     await test("macos-host.ts", [
       "--package",
       output,

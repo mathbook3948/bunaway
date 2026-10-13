@@ -118,6 +118,8 @@ export function readWindowSpecs(
             "center",
             "useContentSize",
             "preventOverflow",
+            "maximized",
+            "fullscreen",
           ].includes(key),
       )
     ) {
@@ -127,6 +129,21 @@ export function readWindowSpecs(
       throw new Error(
         "Window placement requires paired integer x/y, boolean options and no center/position conflict.",
       );
+    }
+    const initialState: Pick<WindowSpec["window"], "maximized" | "fullscreen"> =
+      {};
+    for (const name of [
+      "maximized",
+      "fullscreen",
+    ] as const) {
+      const option = size[name];
+      if (option === undefined) {
+        continue;
+      }
+      if (typeof option !== "boolean") {
+        throw new Error(`Window ${name} must be a boolean.`);
+      }
+      initialState[name] = option;
     }
     for (const dimension of [
       size.width,
@@ -228,6 +245,7 @@ export function readWindowSpecs(
             showWhenReady: spec.showWhenReady,
           }),
       window: {
+        ...initialState,
         ...(size.x === undefined
           ? {}
           : {

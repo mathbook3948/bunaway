@@ -473,6 +473,7 @@ checkNames(
       "menu",
       "tray",
       "autostart",
+      "power",
       "appearance",
       "os",
       "process",

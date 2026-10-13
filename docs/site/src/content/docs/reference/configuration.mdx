@@ -73,6 +73,13 @@ Ctrl+C나 SIGTERM으로 빌드를 중단하면 실행한 명령과 하위 프로
 | `window.center` | Windows 전용 boolean, 기본 `false`. 주 모니터 작업 영역의 outer 중앙. x/y와 함께 켜면 오류 |
 | `window.useContentSize` | Windows 전용 boolean, 기본 `true`. `false`이면 width/height를 논리 outer 크기로 해석. min/max는 항상 content 제약 |
 | `window.preventOverflow` | Windows 전용 boolean, 기본 `false`. 선택한 모니터의 작업 영역에 초기 outer 크기와 위치를 보정 |
+| `window.maximized` | Windows 전용 boolean, 기본 `false`. 초기 최대화. 일반 복원 영역에는 초기 크기와 위치 적용 |
+| `window.fullscreen` | Windows 전용 boolean, 기본 `false`. 초기 전체화면. maximized와 함께 켜면 전체화면 해제 뒤 최대화 복원 |
+
+초기 크기, 위치, center와 preventOverflow는 일반 복원 영역을 정하며 이후 최대화 또는 전체화면을 적용합니다.
+숨김과 `showWhenReady`는 초기 상태와 함께 사용할 수 있습니다. 초기 전체화면을 해제해도 현재 표시 상태를 유지합니다.
+따라서 준비 전에 해제하면 계속 숨겨져 있고 준비 후 표시된 창을 해제하면 계속 표시합니다.
+생성별 `options.window`도 이 두 boolean을 필드별로 병합하며 `false`는 선언한 초기 상태를 해제합니다.
 
 `home`에는 URL 사용자 정보와 fragment를 넣을 수 없습니다.
 창의 너비와 높이는 96 DPI 기준 논리 픽셀입니다. Windows가 대상 모니터의 DPI에 맞춰 실제 픽셀로 변환합니다.
