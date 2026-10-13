@@ -59,10 +59,12 @@ export function validatedAdapter(
     }
     return schema;
   };
-  const prepare: NativePluginAdapter["prepare"] = async (
-    name,
-    input,
-    source,
+  const executeUI = adapter.executeUI?.bind(adapter);
+  const prepare = async (
+    name: string,
+    input: JsonValue,
+    source: string,
+    context?: Parameters<NonNullable<NativeAdapter["executeUI"]>>[3],
   ) => {
     const schema = operation(name);
     const parsed = await parse(schema.input, input, false);
@@ -74,12 +76,20 @@ export function validatedAdapter(
       }
       executed = true;
       // No await before the native call: the host invokes this immediately on authorization.
+      context?.signal?.throwIfAborted();
+      context?.beforeExecute?.();
+      if (context && executeUI) {
+        return parse(
+          schema.output,
+          await executeUI(name, parsed, source, context),
+          true,
+        );
+      }
       return parse(schema.output, adapter.execute(name, parsed, source), true);
     };
   };
-  const executeUI = adapter.executeUI?.bind(adapter);
   const busy = adapter.busy?.bind(adapter);
-  return {
+  const wrapped: NativePluginAdapter = {
     prepare,
     async execute(name, input, source) {
       const execute = await prepare(name, input, source);
@@ -108,4 +118,9 @@ export function validatedAdapter(
       return adapter.dispose();
     },
   };
+  // Host-only preparation keeps contextual I/O parsing before the execution grant.
+  // It is deliberately absent from the public adapter contract and declaration metadata.
+  return Object.defineProperty(wrapped, "prepareUI", {
+    value: prepare,
+  });
 }

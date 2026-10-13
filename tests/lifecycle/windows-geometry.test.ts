@@ -15,6 +15,8 @@ const SW_RESTORE = 9;
 const WM_DPICHANGED = 0x02e0;
 const GWL_STYLE = -16;
 const WINDOWPLACEMENT_SIZE = 44;
+const WINDOWPOS_SIZE = 40;
+const STYLESTRUCT_SIZE = 8;
 const MAX_STATE_CHECKPOINTS = 8;
 const MAX_STATE_MESSAGES = 32;
 const STATE_MESSAGES = new Map([
@@ -51,11 +53,12 @@ const STATE_MESSAGES = new Map([
 test.skipIf(process.platform !== "win32")(
   "real Win32 geometry queries and setters preserve state, screen origins, restoration and DPI",
   async () => {
-    const [{ Windows }, { user, kernel }, { dlopen, ptr }] = await Promise.all([
-      import("#native/windows/bun/win32"),
-      import("#native/windows/bun/win32-bindings"),
-      import("bun:ffi"),
-    ]);
+    const [{ Windows }, { user, kernel }, { dlopen, ptr, toArrayBuffer }] =
+      await Promise.all([
+        import("#native/windows/bun/win32"),
+        import("#native/windows/bun/win32-bindings"),
+        import("bun:ffi"),
+      ]);
     const messaging = dlopen("user32.dll", {
       GetWindowThreadProcessId: {
         args: [
@@ -82,6 +85,22 @@ test.skipIf(process.platform !== "win32")(
       phase: string;
       message: string;
       wparam: string;
+      position?: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        flags: string;
+      };
+      styleChange?: {
+        index: string;
+        before: string;
+        after: string;
+      };
+      activation?: {
+        state: string;
+        minimized: boolean;
+      };
     }[] = [];
     const stateCheckpoints: unknown[] = [];
     /** Record native state without pumping or repairing it, including inside fullscreen transitions. */
@@ -113,6 +132,7 @@ test.skipIf(process.platform !== "win32")(
         minimized: !!user.symbols.IsIconic(hwnd),
         maximized: !!user.symbols.IsZoomed(hwnd),
         fullscreen: native.isFullscreen(hwnd),
+        outer: native.getBounds(hwnd, "outer"),
         callbackFailure:
           native.failure instanceof Error
             ? native.failure.stack
@@ -145,16 +165,63 @@ test.skipIf(process.platform !== "win32")(
         "Window geometry regression",
         600,
         450,
-        (message, wparam) => {
+        (message, wparam, lparam) => {
           const name = STATE_MESSAGES.get(message);
           if (!name) {
             return;
+          }
+          let position: (typeof nativeMessages)[number]["position"];
+          let styleChange: (typeof nativeMessages)[number]["styleChange"];
+          if (message === 0x0046 || message === 0x0047 || message === 0x007d) {
+            // Win64 user-mode pointers fit exact JavaScript integers. Read borrowed
+            // message structs only inside this callback and retain scalar copies.
+            assert(lparam > 0n && lparam <= BigInt(Number.MAX_SAFE_INTEGER));
+            const address = Number(lparam) as import("bun:ffi").Pointer;
+            if (message === 0x007d) {
+              const style = new DataView(
+                toArrayBuffer(address, 0, STYLESTRUCT_SIZE),
+              );
+              styleChange = {
+                index: BigInt.asIntN(64, wparam).toString(),
+                before: style.getUint32(0, true).toString(16),
+                after: style.getUint32(4, true).toString(16),
+              };
+            } else {
+              const bounds = new DataView(
+                toArrayBuffer(address, 0, WINDOWPOS_SIZE),
+              );
+              position = {
+                x: bounds.getInt32(16, true),
+                y: bounds.getInt32(20, true),
+                width: bounds.getInt32(24, true),
+                height: bounds.getInt32(28, true),
+                flags: bounds.getUint32(32, true).toString(16),
+              };
+            }
           }
           // Copy scalar message data only. No borrowed callback pointers or native queries escape.
           nativeMessages.push({
             phase: nativePhase,
             message: name,
             wparam: wparam.toString(),
+            ...(position
+              ? {
+                  position,
+                }
+              : {}),
+            ...(styleChange
+              ? {
+                  styleChange,
+                }
+              : {}),
+            ...(message === 0x0006
+              ? {
+                  activation: {
+                    state: (wparam & 0xffffn).toString(),
+                    minimized: !!(wparam & 0xffff0000n),
+                  },
+                }
+              : {}),
           });
           if (nativeMessages.length > MAX_STATE_MESSAGES) {
             nativeMessages.shift();
@@ -616,6 +683,12 @@ test.skipIf(process.platform !== "win32")(
           false,
         ]) {
           if (!visible) {
+            nativePhase = "before-hide-before-fullscreen";
+            verifyShowState(
+              "immediately-before-hide-before-fullscreen",
+              command,
+              true,
+            );
             nativePhase = "hide-before-fullscreen";
             user.symbols.ShowWindow(hwnd, SW_HIDE);
             verifyShowState(

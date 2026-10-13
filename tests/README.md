@@ -13,6 +13,19 @@ WebView2 문서에 browser 인쇄 UI를 요청하고 반복 요청 및 종료 �
 결과는 `build/windows-webview-print-ui-results.json`에 기록한다.
 system UI 사용자 선택과 물리 프린터 출력은 별도 검증이며 테스트가 인쇄 제출을 하지 않는다.
 
+`lifecycle/macos-log-capabilities.test.ts`는 생성한 macOS export와 실제 임시 파일로
+JSON 줄의 순서와 출처, 새 파일 권한, 반복 회전, 기록과 회전 실패 후 복구,
+입력과 작업 권한, 폐기 및 호스트가 정한 지원 목록을 검사한다.
+`macos-log-capabilities-compiled.test.ts`는 현재 OS에서 macOS 어댑터 probe를 Bun으로
+compile하고 원본 파일을 제거한 뒤 실행한다. 실제 macOS native CI에도 포함하며
+호스트의 전체 실행 경로를 대신하지 않는다.
+`macos-log-capabilities.ts`는 ad-hoc 서명한 compiled 앱과 실제 WKWebView에서 백엔드 및
+뷰 기록, 권한 거부, 쓰기 실패 후 복구, 회전, manifest의 등록한 작업과 기능 목록의 일치
+및 정상 종료를 검사한다. `run-native.ts`에 포함하며 결과와 앱 데이터 진단은
+`build/macos-log-capabilities-results.json`과 `build/macos-log-capabilities-diagnostics/`에 남긴다.
+앱과 화면의 코드는 `fixtures/macos-log-capabilities/`의 타입 검사 대상이며 실행 전
+정책 권한 이름도 실제 설치된 플러그인 계약으로 검사한다.
+
 다운로드 UI-loop regression은 생성된 worker 경계에서 전용 `windows-download-cleanup/ui.ts`를
 번들하고 실제 승인 transfer의 cancel 자원만 일시적으로 실패시킨다. 소유 창을 닫는 동안
 다른 창의 SDK 응답과 세 번째 창의 native cleanup이 진행하고, 소유자의 재시도도 복구되는지
@@ -273,6 +286,11 @@ manifest 생성과 카탈로그 로딩에서 작업 이름만 전달하며 작�
 비동기 UI 실행을 한도만큼 취소해도 승인 용량과 다음 호출이 정상인지 확인한다. 컨텍스트 취소,
 늦은 완료와 실패, 중복 승인과 작업 대기 중 종료도 검증한다. `lifecycle/macos-bun.test.ts`는
 네이티브 UI만 대체한 실제 macOS 호스트와 Worker에서 같은 입력, 출력, 실행 취소 경로를 검사한다.
+`lifecycle/io-response-ownership.test.ts`는 실제 I/O Worker와 `ImageResources`에서 응답 승인 전
+취소, 컨텍스트 폐기와 종료가 전달되지 않은 이미지 자원을 회수하고, 승인된 자원은 유지하는지 확인한다.
+`lifecycle/windows-host-shutdown.test.ts`는 백엔드 I/O 취소가 Core 종료 훅보다 먼저 전달되고
+어댑터 폐기는 훅 이후 실행되는지 확인한다. Windows에서는 실제 Win32 UI Worker와 Job을 사용한
+창 없는 실행도 검사하며 `host:windows`에 포함한다. Linux에서는 UI와 Job 경계를 대체한다.
 `lifecycle/windows-ui-lifecycle.test.ts`는 실제 UI Worker와 대체 Win32 경계에서 마지막 창을
 파괴해 종료를 확정한 뒤 입력 파싱을 재개한다. 취소 패킷 없이도 동기 어댑터와 비동기 UI
 어댑터의 실행을 차단하고 CANCELLED를 반환하는지 확인한다.
@@ -381,7 +399,11 @@ boot 전후 종료와 초기화 중 프로토콜 버전, 런타임 ID 및 세대
 HWND 소유 프로세스와 스레드, style, 원본 WINDOWPLACEMENT와 Win32 상태를 함께 검사한다.
 일반, 최소화와 최대화의 표시 및 숨김 주기는 전체화면 진입 직전과 진입 직후,
 복원 직후 상태도 기록한다. 복원 직후에는 원래 표시 상태를 확인하므로 다음 숨김 전에
-상태가 바뀌었는지 구분한다. 일반 복원 뒤 숨김, 전체화면 진입, 제약 갱신과 종료의
+상태가 바뀌었는지 구분한다. 비동기 일반 영역 조회를 마친 다음 숨김 직전에도 상태를
+확인하여 복원 직후부터 숨김 요청 사이의 변경과 숨김 호출 안의 변경을 구분한다.
+현재 outer 영역과 `WINDOWPOS`의 좌표, 크기 및 flags, style 변경 전후 값과 활성화 메시지의
+최소화 상태도 기록한다. callback 안에서 native struct의 scalar 값만 복사하며 포인터를 보관하지 않는다.
+일반 복원 뒤 숨김, 전체화면 진입, 제약 갱신과 종료의
 마지막 주기도 같은 상태 기록을 남긴다.
 마지막 bounds 불일치는 이 기록을 출력한 뒤 원래 assertion 오류를 그대로 전파한다.
 실패에는 최근 체크포인트와 제한된 상태 메시지 기록, 호스트 callback 오류를 포함한다.
@@ -665,3 +687,15 @@ browser 번들에 Bun 전송 구현이 포함되지 않는지 검사한다. TLS,
 파일의 휴지통 항목만 정리하며 전체 휴지통을 비우지 않는다. 셸이 유지하는 COM Worker가
 다른 초기화 회귀에 영향을 주지 않도록 별도 Bun 프로세스에서 실행한다. `host:windows`에
 포함하며 사용자 설정별 휴지통 비활성화, 용량 초과와 경고 UI는 수동 검증 항목이다.
+
+`lifecycle/macos-io-host.ts`는 `host:macos`의 실제 compiled WKWebView에서 공통
+I/O Worker의 실행, 백엔드 setup과 뷰 출처, 파싱 전 정책 검사, UI/I/O 지원 목록,
+동기 I/O 중 AppKit 왕복, 취소와 문서 폐기, 초기화 실패와 5초 종료 기한을 검사한다.
+테스트 어댑터는 실제 파일을 쓰며 개별 제품 플러그인의 macOS 지원 검증과 구분한다.
+`build/macos-io-results.json`에는 OS, CPU, Bun revision과 시나리오별 종료 결과를 남긴다.
+공통 Worker와 메인 호스트를 사용하는 `macos-bun.test.ts`의 I/O 파싱 취소 검사는
+Linux에서도 실행하며 실제 AppKit은 대체한다.
+
+`macos-bun.test.ts`는 진행 중인 백엔드 I/O의 abort를 기다리는 StopHook도 실제
+Worker로 검사한다. 종료 요청이 I/O 취소를 먼저 전달하고 코어 훅 뒤에 어댑터를
+폐기해 강제 종료 없이 끝나는지 확인한다. 실제 WKWebView fixture도 같은 순서를 검사한다.
