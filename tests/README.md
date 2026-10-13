@@ -35,6 +35,8 @@ system UI 사용자 선택과 물리 프린터 출력은 별도 검증이며 테
 기존 `host:macos`에서 실제 compiled WKWebView와 백엔드 Worker의 공통 SDK를 실행한다.
 문서 상태, origin과 redirect 거부, 서브프레임 신원, history, reload, 느린 탐색 중단,
 문서 교체의 명령 취소와 fragment 세션 유지, 뷰별 zoom 및 닫기와 재생성을 검사한다.
+각 문서의 대기 명령이 백엔드에 등록된 뒤 history 이동과 reload를 시작한다.
+도착 응답과 명령 등록 사이의 경합이 취소 검사를 건너뛰지 않게 하며 기존 횟수와 기한은 유지한다.
 scheme과 hostname을 대문자로 작성한 자산 URL에서도 실제 문서와 SDK 연결을 확인한다.
 `pageshow`와 `pagehide`의 `persisted`, `isTrusted`를 SDK와 독립적으로 기록한다.
 실제 history cache 복원과 합성 persisted 이벤트의 reload 검사를 결과에서 구분한다.
@@ -136,6 +138,54 @@ getter와 FFI 값을 비교하며 고유 tag/group의 임시 알림은 finally�
 생성 실패 뒤 정리도 실패한 경우 오류 객체에 남긴 cleanup으로 복구하는지 확인한다.
 동시 정리의 단일 소유권 및 실제 임시 파일 삭제도 확인한다. fixture는 자신의 파일만 지우고
 디렉터리를 재귀 삭제하지 않는다.
+
+`packaging/windows-associations.test.ts`는 파일과 URL 처리 후보 설정, opt-in 작업과
+실행 명령 계약을 검사한다. Windows에서 Inno Setup이 있으면 실제 설치와 업데이트,
+작업 해제, 선언 제거와 제거 프로그램을 실행한다. 격리된 임의 확장자와 scheme으로
+기존 기본값과 UserChoice 보존, Unicode와 공백, EXE 이름 변경, 변경된 ProgID 보존을 검사한다.
+선택한 ProgID의 외부 명령 충돌은 기존 후보와 파일을 보존한 채 설치를 실패시킨다. 임의 확장자의
+OpenWith 키에만 쓰기 거부 ACL을 적용해 실제 설치 후 쓰기 실패의 종료 코드 1과 외부 값 보존을 확인한다.
+ACL은 `finally`에서 복구하고 테스트 소유 항목만 정리한다.
+별도 복구 회귀는 생성된 테스트 설치 스크립트에만 ACL 설정 호출을 삽입해 실제 첫 DefaultIcon 쓰기와
+Capabilities 매핑 쓰기를 거부한다. 후보 이름 기록과 명령 미기록을 확인하고, ACL 복원 뒤 재시도와
+제거, 외부 명령으로 변경된 후보 보존을 검사한다. 테스트 스크립트에 ACL 준비 호출만 추가하며
+실제 등록과 삭제는 제품의 코드와 레지스트리 API로 수행한다.
+Old.exe에서 New.exe로 바꾸는 업데이트의 OpenWith 삭제를 거부하고, 반복 실패 뒤에도 Inno 복구 소유자
+기록이 Old.exe를 유지하는지 확인한다. 권한 복원 뒤 재시도와 새 제거 프로그램의 이전 후보 정리,
+성공한 복구 기록 삭제와 기존 EXE 정리도 확인한다. 각 회귀는 별도 임시 앱 ID와 키를 사용한다.
+복구 기록은 실제 Inno 제거 키에서 조회하며 기존 AppId의 닫는 괄호 두 개를 유지한다.
+잘못된 별도 제거 키가 생기지 않는지도 검사한다. 기존 prerequisite 회귀의 `Uninstallable=no` 설치는
+연결 작업과 이전 등록이 없을 때 복구 기록 없이 성공해야 하며, 일반 업데이트의 선언 제거와 작업 해제는
+이전 등록 정리를 계속 확인한다.
+기본 앱 UI 선택과 실제 링크 클릭은 자동 검사에 포함하지 않는다.
+등록 변경 뒤 payload 삭제 실패 회귀는 실제 Windows 파일 핸들에서 delete sharing을 제외한다.
+두 번의 실패 후에도 복구 소유자가 이전 EXE를 가리키는지 확인하고, 핸들을 닫은 뒤 재시도나
+새 제거 프로그램이 이전 파일과 현재 파일을 정리하는지 검사한다. dummy EXE의 파일 잠금을
+소유한 검사 프로세스를 Restart Manager가 닫지 않도록 이 설치 fixture만 `CloseApplications=no`로
+실행한다. 별도 제거 회귀는 다른 폴더의 이전 파일과 junction을 통해 접근하는 이전 파일을 보존한다.
+세 이름 회귀는 Old.exe 삭제를 막아 New.exe 업데이트를 실패시킨 뒤 Third.exe 업데이트가 파일과
+이전 설치 데이터를 쓰기 전에 종료 코드 7로 거부되는지 확인한다. 잠금을 닫아도 거부를 유지하고,
+New.exe로 복구한 뒤에만 Third.exe 변경을 허용한다. 같은 New.exe로 설치 폴더만 바꾸는 경우도
+복구 전에는 거부한다. 복구 대신 제거한 경우에도 이전 파일이 남지
+않는지 확인한다. 기존 두 이름 복구와 제거 회귀도 유지한다.
+동시 실행 회귀는 초기화가 끝난 실제 설치 마법사와 제거 진행 콜백을 marker로 일시 정지한다.
+같은 AppId의 다른 설치와 제거가 파일이나 등록을 바꾸지 못하고, 네이티브 종료 후에만 다음 설치가
+진행하는지 확인한다. 별도 이전 버전 fixture는 설치의 잠금 호출과 SetupMutex 선언만 제외한다.
+대기 중인 Third.exe 마법사가 New.exe를 읽은 뒤 이 fixture로 Old.exe, 실패한 New.exe 업데이트를
+실행해 현재 이름은 New.exe지만 복구 소유자는 Old.exe인 상태를 만든다. 대기 마법사가 종료 코드 7로
+거부되고 이전 파일과 복구 기록이 남는지 확인한다. 실제 파일 핸들과 레지스트리, 설치 및 제거를 사용하며
+등록과 삭제 구현은 모방하지 않는다. 모든 marker는 `finally`에서 해제하고 시작한 프로세스의 완료를 관찰한다.
+레지스트리 ACL 회귀는 부분 등록 뒤 외부 명령으로 바뀐 command 키의 `QueryValues`만 거부하고,
+열거와 삭제 권한은 유지한다. 설치와 제거가 읽기 실패를 부재로 처리하지 않고 외부 명령과 등록을
+보존하는지 검사한다. 성공한 ProgID의 `DefaultIcon` 삭제만 거부하는 회귀는 command가 먼저
+삭제된 실제 부분 정리 상태를 확인하고, 복구 기록으로 재시도나 제거가 나머지 키를 정리하는지 검사한다.
+`Capabilities/FileAssociations`의 값 조회만 거부하는 회귀는 선언 없는 New.exe 업데이트와 제거가
+실패해도 등록, ProgID, Old.exe와 복구 소유자가 남고 권한 복구 뒤 정리가 완료되는지 확인한다.
+설치 식별 정보 회귀는 Old.exe 정리가 실패한 New.exe 설치에서 실제 Inno 제거 키의 `QueryValues`만
+거부한다. 설치와 제거의 초기화 및 대기 중인 콜백 뒤의 검증이 실패해도 두 EXE, 이전 등록과 세 식별
+값이 남는지 확인한다. `ExecutableName`, `InstallDir`, `PendingAssociationOwner`를 각각 DWORD로
+바꾼 경우에도 설치와 제거가 빈 값으로 받아들이지 않아야 한다. ACL과 문자열을 복구한 뒤 재시도와
+제거가 이전 파일, 등록과 제거 정보를 정리하는지 확인한다. 기존 값 누락 회귀와 prerequisite도 유지한다.
 
 `windows-initial-placement.fixture.ts`는 모니터 겹침이 바뀌는 `SetWindowPos`에서
 실제 창 프로시저에 `WM_DPICHANGED`를 전달한다. 초기 DPI 보정의 수렴, 중앙 좌표와
@@ -791,6 +841,10 @@ browser 번들에 Bun 전송 구현이 포함되지 않는지 검사한다. TLS,
 파일의 휴지통 항목만 정리하며 전체 휴지통을 비우지 않는다. 셸이 유지하는 COM Worker가
 다른 초기화 회귀에 영향을 주지 않도록 별도 Bun 프로세스에서 실행한다. `host:windows`에
 포함하며 사용자 설정별 휴지통 비활성화, 용량 초과와 경고 UI는 수동 검증 항목이다.
+
+`api/menu.test.ts`는 메뉴 리소스 제한, 트리 검증, 개별 권한과 변경 실패 보존을 검사한다.
+`lifecycle/windows-menu.test.ts`와 `windows-menu-ui.test.ts`는 실제 HMENU 및 UI Worker의 창 없는 트레이와 자원 정리를 확인한다.
+`mise run host:windows`에 포함되며 사용자 클릭과 키보드 메뉴 조작의 수동 검증을 대신하지 않는다.
 
 `lifecycle/macos-io-host.ts`는 `host:macos`의 실제 compiled WKWebView에서 공통
 I/O Worker의 실행, 백엔드 setup과 뷰 출처, 파싱 전 정책 검사, UI/I/O 지원 목록,

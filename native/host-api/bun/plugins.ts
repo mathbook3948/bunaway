@@ -104,6 +104,7 @@ export async function operations(
   windows: NativeEnvironment["windows"] | undefined,
   catalog: readonly PackagedPlugin[],
   app?: NativeEnvironment["app"],
+  uiServices?: Pick<NativeEnvironment, "menus">,
 ): Promise<PluginOperations> {
   const registry = pluginRegistry(plugins, catalog);
   // Capability discovery and dispatch use the same installed platform support contract.
@@ -133,6 +134,7 @@ export async function operations(
     );
   const environment: NativeEnvironment = {
     dataRoot,
+    ...uiServices,
     ...(app
       ? {
           app,
