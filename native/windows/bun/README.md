@@ -37,6 +37,11 @@ normal의 WINDOWPLACEMENT 작업 영역 좌표는 화면 좌표로 보정한다.
 `com.ts`는 COM 참조와 콜백을, `webview.ts`는 WebView 생성과 종료를 관리한다.
 `ui.ts`가 이 자원들의 초기화와 정리 순서를 조정한다. DLL은 창과 COM 정리가 끝난 뒤 닫는다.
 
+WebView audio는 ICoreWebView2_8의 IsMuted와 IsDocumentPlayingAudio를 같은 UI STA에서
+조회하고 음소거를 변경한다. 각 호출이 획득한 COM interface는 성공과 실패 모두에서
+해제한다. controller의 음소거는 문서 탐색을 유지하고 재생 상태는 물리 출력과 구분한다.
+자동 재생과 장치 권한 정책은 기존 동작을 유지하며 상태 이벤트는 아직 제공하지 않는다.
+
 창 플러그인을 등록하면 `Windows.observe`가 창별 상태와 물리 outer bounds의 변경을
 비교한다. 활성화 관찰은 `WM_ACTIVATE` 뒤에 게시한 창 메시지에서 전경 HWND를 조회한다.
 `WM_ENTERSIZEMOVE`와 `WM_EXITSIZEMOVE`는 시작과 최종 geometry를 비교해 별도 revision의

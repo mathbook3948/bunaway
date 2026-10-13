@@ -434,6 +434,19 @@ const conversionOutput = z.strictObject({
 
 /** Schemas for window operations, used to validate calls and their results. */
 export const windowOperations = {
+  "windows.getWebViewAudioState": {
+    input: windowTarget,
+    output: z.strictObject({
+      muted: z.boolean(),
+      playing: z.boolean(),
+    }),
+  },
+  "windows.setWebViewAudioMuted": {
+    input: windowTarget.extend({
+      muted: z.boolean(),
+    }),
+    output: z.null(),
+  },
   "windows.createInstance": {
     input: creationResult.input,
     output: windowIdentitySchema,
