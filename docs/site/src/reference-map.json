@@ -297,7 +297,12 @@
           "hasValidWindowPlacement",
           "clampWindowSize",
           "MAX_WINDOWS",
-          "MAX_WINDOW_INSTANCES"
+          "MAX_WINDOW_INSTANCES",
+          "MAX_WEBVIEW_DOWNLOADS",
+          "MAX_DOWNLOAD_METADATA_BYTES",
+          "MAX_DOWNLOAD_SNAPSHOT_BYTES",
+          "isDownloadSnapshotWithinLimits",
+          "DOWNLOAD_APPROVAL_TIMEOUT_MS"
         ]
       }
     },
@@ -546,6 +551,7 @@
       "type": "NativeWindow",
       "pages": {
         "reference/tooling/plugin-api": [
+          "downloads",
           "webview",
           "audio",
           "show",
@@ -591,6 +597,21 @@
     },
     {
       "source": "packages/plugin-api/src/native.ts",
+      "type": "NativeDownloads",
+      "pages": {
+        "reference/tooling/plugin-api": [
+          "setRequestsEnabled",
+          "list",
+          "approve",
+          "cancel",
+          "pause",
+          "resume",
+          "forget"
+        ]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
       "type": "NativeWebView",
       "pages": {
         "reference/tooling/plugin-api": [
@@ -610,6 +631,25 @@
       "type": "NativeWebViewAudio",
       "pages": {
         "reference/tooling/plugin-api": ["getState", "setMuted"]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "WebViewDownload",
+      "pages": {
+        "reference/tooling/plugin-api": [
+          "id",
+          "url",
+          "mimeType",
+          "contentDisposition",
+          "path",
+          "totalBytes",
+          "receivedBytes",
+          "state",
+          "interruptReason",
+          "canResume",
+          "paused"
+        ]
       }
     },
     {
@@ -999,6 +1039,13 @@
       "clipboard.writeFormats"
     ],
     "reference/host/windows": [
+      "windows.setDownloadRequestsEnabled",
+      "windows.getDownloads",
+      "windows.approveDownload",
+      "windows.cancelDownload",
+      "windows.pauseDownload",
+      "windows.resumeDownload",
+      "windows.forgetDownload",
       "windows.getWebViewState",
       "windows.navigateWebView",
       "windows.reloadWebView",

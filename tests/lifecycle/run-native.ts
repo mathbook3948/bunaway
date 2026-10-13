@@ -61,6 +61,7 @@ if (target === "windows-x64") {
     }
     await test("windows-cli-arguments.ts");
     await test("windows-bun-window-api.ts");
+    await test("windows-webview-downloads.ts");
     await test("windows-webview-controls.ts");
     await test("windows-webview-audio.ts");
     await test("windows-initial-placement.ts");

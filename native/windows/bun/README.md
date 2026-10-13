@@ -43,6 +43,25 @@ normal의 WINDOWPLACEMENT 작업 영역 좌표는 화면 좌표로 보정한다.
 `com.ts`는 COM 참조와 콜백을, `webview.ts`는 WebView 생성과 종료를 관리한다.
 `ui.ts`가 이 자원들의 초기화와 정리 순서를 조정한다. DLL은 창과 COM 정리가 끝난 뒤 닫는다.
 
+DownloadCleanupError는 해당 창의 취소 실패를 나타내며 UI pump의 전체 실패로 전달하지 않는다.
+닫힌 소유자의 controller와 다운로드 참조를 유지하고 50 ms 간격으로 기존 35초 cleanup
+예산 안에서 재시도한다. 다른 창의 메시지와 정리는 계속 처리한다. 기한이 끝나면 소유자를
+정리 대기 상태로 유지하고 진단을 한 번 남긴다. 관찰한 broker 종료나 명시적 앱 종료는
+참조를 안전하게 해제하거나 재시도하는 별도 경로이며 살아 있는 공유 broker를 종료하지 않는다.
+
+`webview-downloads.ts`는 고정 SDK 1.0.4129.50의 ICoreWebView2_4 DownloadStarting과
+DownloadOperation, Deferral을 소유한다. `downloads.ts`는 OS 자원 없는 승인과 수명 규칙을
+관리한다. 기본 거부를 먼저 설정하고 deferral을 얻으며, 승인 결과와 무관하게 deferral을
+완료하고 args 및 operation 참조를 정리한다. pending 승인의 기한과 기록 상한을 적용하고
+새 탐색은 pending만, 창 종료는 승인된 작업도 취소한다. 이벤트 callback은 구독을 해제한
+뒤 WebView의 기존 STA quiescence와 프로세스 정리 단계까지 유지한다.
+관찰한 browser 프로세스 장애에서는 pending과 활성 COM 참조를 해제하고 완료나 취소를
+죽은 broker에 보내지 않는다. 이 경우의 구독 해제 ERROR_INVALID_STATE만 수용하며
+살아 있는 broker의 같은 오류와 다른 HRESULT는 기존 실패 경로를 유지한다.
+파일 쓰기와 기본 저장 경로는 브라우저가 소유한다. 현재 API에는 임의 경로 입력이나
+사용자 정의 스트림 출력이 없으며 backend 출처 검사로 renderer의 파일 접근을 확대하지 않는다.
+
+
 창 플러그인의 기본 WebView 제어는 `NativeWindow.webview`를 통해 같은 UI 스레드의
 controller와 WebView를 사용한다. 공개 URL 탐색도 기존 origin 검사와 NavigationStarting의
 세션 폐기를 유지한다. loading은 현재 탐색 ID의 시작 및 완료에서 갱신하며 다른 탐색의
