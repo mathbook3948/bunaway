@@ -13,6 +13,8 @@ import {
 } from "@bunaway/protocol";
 import {
   type DownloadResource,
+  DownloadCleanupError,
+  DownloadCleanupRetries,
   Downloads,
 } from "#native/windows/bun/downloads";
 
@@ -542,4 +544,59 @@ test("oversized metadata updates never replace a bounded snapshot or lose cancel
     state: "cancelled",
   });
   f.downloads.dispose();
+});
+
+test("cancelled snapshots clear a native USER_CANCELED interruption reason", () => {
+  const f = fixture();
+  f.downloads.setRequestsEnabled(true);
+  const active = resource();
+  const id = f.offer(active);
+  if (!id) {
+    throw new Error("Missing request");
+  }
+  f.downloads.approve(id);
+  f.downloads.pause(id);
+  expect(f.downloads.list()[0]?.interruptReason).toBe(28);
+  f.downloads.cancel(id);
+  expect(active.state.interruptReason).toBe(26);
+  expect(f.downloads.list()[0]).toMatchObject({
+    state: "cancelled",
+    paused: false,
+    interruptReason: null,
+  });
+  f.downloads.dispose();
+});
+
+test("download cleanup failures are typed and rate-limited per closing owner until exhaustion", () => {
+  const owner = fixture();
+  owner.downloads.setRequestsEnabled(true);
+  const active = resource();
+  const id = owner.offer(active);
+  if (!id) {
+    throw new Error("Missing request");
+  }
+  owner.downloads.approve(id);
+  active.failCancel(new Error("Transient Cancel failure"));
+  expect(() => owner.downloads.dispose()).toThrow(DownloadCleanupError);
+  expect(active.disposed).toBe(0);
+  let now = 0;
+  const retries = new DownloadCleanupRetries(100, () => now);
+  const peer = new DownloadCleanupRetries(100, () => now);
+  expect(retries.failed()).toBe("retry");
+  expect(retries.canAttempt()).toBe(false);
+  expect(peer.canAttempt()).toBe(true);
+  now = 49;
+  expect(retries.canAttempt()).toBe(false);
+  now = 50;
+  expect(retries.canAttempt()).toBe(true);
+  expect(retries.failed()).toBeUndefined();
+  now = 100;
+  expect(retries.failed()).toBe("timeout");
+  now = 150;
+  expect(retries.canAttempt()).toBe(false);
+  expect(retries.canAttempt(true)).toBe(true);
+  expect(active.disposed).toBe(0);
+  active.failCancel();
+  owner.downloads.dispose();
+  expect(active.disposed).toBe(1);
 });

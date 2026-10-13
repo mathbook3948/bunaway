@@ -24,6 +24,7 @@ import {
   type WindowSpec,
 } from "./channel.ts";
 import { callbackCalls, checkCallbacks, disposeCom } from "./com.ts";
+import { DownloadCleanupError, DownloadCleanupRetries } from "./downloads.ts";
 import { Tray } from "./tray.ts";
 import { originOf, WebView } from "./webview.ts";
 import {
@@ -156,6 +157,7 @@ type ViewState = {
   forceClose: boolean;
   replacementCancelled: boolean;
   inputRestoreDeadlineMs?: number;
+  downloadCleanupRetries?: DownloadCleanupRetries;
   confirmation: string | null;
   deadline: number;
   documentDeadline: number;
@@ -233,7 +235,44 @@ function cleanupView(view: ViewState) {
   if (!relations.canRelease(windowId)) {
     return;
   }
-  if (!view.detached && view.native.detach()) {
+  if (!view.detached) {
+    if (
+      view.downloadCleanupRetries &&
+      !view.downloadCleanupRetries.canAttempt(
+        stopping || view.native.isBrowserUnavailable(),
+      )
+    ) {
+      return;
+    }
+    try {
+      if (!view.native.detach()) {
+        return;
+      }
+    } catch (error) {
+      if (!(error instanceof DownloadCleanupError)) {
+        throw error;
+      }
+      const retries = (view.downloadCleanupRetries ??=
+        new DownloadCleanupRetries(WINDOW_CLEANUP_TIMEOUT_MS));
+      const phase = retries.failed();
+      if (phase) {
+        log(`download-cleanup-${phase}`, {
+          windowId,
+          attempts: retries.attempts,
+          message: String(error).slice(0, 1024),
+        });
+      }
+      // This closed owner's native references stay owned. Other views and their cleanup keep running.
+      // Exhausted retries remain quarantined until shutdown or observed broker exit.
+      return;
+    }
+    if (view.downloadCleanupRetries) {
+      log("download-cleanup-recovered", {
+        windowId,
+        attempts: view.downloadCleanupRetries.attempts,
+      });
+      delete view.downloadCleanupRetries;
+    }
     windows?.destroy(view.native.hwnd);
     view.detached = true;
   }
@@ -1078,6 +1117,11 @@ function createWindow(
           log(event, {
             view: spec.view,
             ...data,
+            ...(event === "view-cleaned"
+              ? {
+                  windowId: readiness.snapshot().windowId,
+                }
+              : {}),
           }),
       },
       config.legacyProfile,

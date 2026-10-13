@@ -14,6 +14,7 @@ export async function bundleNativeWorker(
   name: string,
   destination: string,
   entrypoint?: string,
+  uiEntrypoint?: string,
 ) {
   const plugins = await installedPlugins(
     resolve(import.meta.dir, "desktop/host"),
@@ -30,7 +31,12 @@ export async function bundleNativeWorker(
               "ui",
               "host-operations",
             ].map((worker) =>
-              resolve(import.meta.dir, `../../native/windows/bun/${worker}.ts`),
+              worker === "ui" && uiEntrypoint
+                ? uiEntrypoint
+                : resolve(
+                    import.meta.dir,
+                    `../../native/windows/bun/${worker}.ts`,
+                  ),
             ),
           ]
         : [

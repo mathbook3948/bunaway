@@ -28,6 +28,49 @@ type DownloadEntry = {
 // COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_USER_PAUSED, pinned SDK 1.0.4129.50.
 const USER_PAUSED = 28;
 
+/** Only recoverable download cancellation failures may defer one controller's cleanup. */
+export class DownloadCleanupError extends AggregateError {
+  constructor(errors: unknown[]) {
+    super(errors, "Download cleanup failed.");
+    this.name = "DownloadCleanupError";
+  }
+}
+
+const DOWNLOAD_CLEANUP_RETRY_DELAY_MS = 50;
+/** Rate-limit one closing window's retries; exhausted owners retain resources without stopping peers. */
+export class DownloadCleanupRetries {
+  private deadlineMs: number | undefined;
+  private nextAttemptMs = 0;
+  private exhausted = false;
+  attempts = 0;
+
+  constructor(
+    private readonly timeoutMs: number,
+    private readonly now = () => performance.now(),
+  ) {}
+
+  /** Shutdown or observed broker exit permits another rate-limited attempt after exhaustion. */
+  canAttempt(finalCleanup = false): boolean {
+    return (
+      this.now() >= this.nextAttemptMs && (!this.exhausted || finalCleanup)
+    );
+  }
+
+  /** Report only the initial retry and first exhaustion, keeping repeated diagnostics bounded. */
+  failed(): "retry" | "timeout" | undefined {
+    const now = this.now();
+    const first = this.deadlineMs === undefined;
+    this.deadlineMs ??= now + this.timeoutMs;
+    this.nextAttemptMs = now + DOWNLOAD_CLEANUP_RETRY_DELAY_MS;
+    this.attempts++;
+    if (now >= this.deadlineMs && !this.exhausted) {
+      this.exhausted = true;
+      return "timeout";
+    }
+    return first ? "retry" : undefined;
+  }
+}
+
 /** Bounded, default-denied approval queue and ownership for a single WebView lifetime. */
 export class Downloads implements NativeDownloads {
   private enabled = false;
@@ -254,7 +297,7 @@ export class Downloads implements NativeDownloads {
     }
     if (errors.length) {
       // Keep failed operations owned. The caller may retry, or release after observed broker exit.
-      throw new AggregateError(errors, "Download cleanup failed.");
+      throw new DownloadCleanupError(errors);
     }
     this.closed = true;
     this.entries.clear();
@@ -341,6 +384,7 @@ export class Downloads implements NativeDownloads {
       entry.snapshot = {
         ...entry.snapshot,
         state,
+        interruptReason: null,
         canResume: false,
         paused: false,
       };

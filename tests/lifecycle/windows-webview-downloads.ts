@@ -40,6 +40,7 @@ if (!process.argv.includes("--child")) {
     "windows-webview-downloads",
     assets,
     fileURLToPath(import.meta.url),
+    resolve(root, "tests/fixtures/windows-download-cleanup/ui.ts"),
   );
   const child = Bun.spawn(
     [
@@ -89,11 +90,12 @@ if (!process.argv.includes("--child")) {
   const actions = new Map<
     string,
     {
-      kind: "download" | "navigate";
+      kind: "download" | "navigate" | "ping";
       url: string;
     }
   >();
   const arrivals = new Map<string, number>();
+  const heartbeats = new Set<string>();
   let completed = false;
   let failure: unknown;
   let exerciseTask: Promise<void> | undefined;
@@ -143,7 +145,13 @@ if (!process.argv.includes("--child")) {
         });
         while (position < content.length && !cancelled) {
           await Bun.sleep(50);
-          if (url.pathname === "/crashing.bin" && position > 0) {
+          if (
+            [
+              "/crashing.bin",
+              "/cleanup-failure.bin",
+            ].includes(url.pathname) &&
+            position > 0
+          ) {
             await crashBody;
           }
           if (cancelled) {
@@ -400,6 +408,99 @@ if (!process.argv.includes("--child")) {
       "New document did not reconnect",
     );
     await freshView();
+    const cleanupOwner = {
+      ...main,
+    };
+    const faulted = await request("cleanup-failure");
+    await windows.approveDownload({
+      ...cleanupOwner,
+      id: faulted.id,
+    });
+    await waitFor(async () => {
+      const state = await item(faulted.id, cleanupOwner);
+      return state.state === "inProgress" && (state.receivedBytes ?? 0) > 0;
+    }, "Cleanup fault transfer did not start");
+    const healthy = await windows.createInstance({
+      view: "main",
+    });
+    const closingPeer = await windows.createInstance({
+      view: "main",
+    });
+    await waitFor(
+      () =>
+        arrivals.has(healthy.windowId) && arrivals.has(closingPeer.windowId),
+      "Peer documents did not connect",
+    );
+    const readCleanupDiagnostics = async (): Promise<
+      Record<string, unknown>[]
+    > =>
+      (await readFile(resolve(dataRoot, "logs/host.log"), "utf8"))
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
+    await windows.close({
+      ...cleanupOwner,
+    });
+    await waitFor(
+      async () =>
+        (await readCleanupDiagnostics()).some(
+          (entry) =>
+            entry.event === "download-cleanup-retry" &&
+            entry.windowId === cleanupOwner.windowId,
+        ),
+      "Closing owner did not retain and retry its failed cancellation",
+    );
+    await windows.close({
+      view: "main",
+      windowId: closingPeer.windowId,
+    });
+    actions.set(healthy.windowId, {
+      kind: "ping",
+      url: "",
+    });
+    await waitFor(
+      () => heartbeats.has(healthy.windowId),
+      "Healthy peer lost its live SDK session after another owner's cleanup failure",
+    );
+    await waitFor(
+      async () =>
+        (await readCleanupDiagnostics()).some(
+          (entry) =>
+            entry.event === "view-cleaned" &&
+            entry.windowId === closingPeer.windowId,
+        ),
+      "Peer cleanup was blocked by the closing owner's retry",
+    );
+    await waitFor(
+      async () =>
+        (await readCleanupDiagnostics()).some(
+          (entry) =>
+            entry.event === "download-cleanup-recovered" &&
+            entry.windowId === cleanupOwner.windowId,
+        ),
+      "Transient cancellation did not recover",
+    );
+    const cleanupRecords = await readCleanupDiagnostics();
+    const peerCleaned = cleanupRecords.findIndex(
+      (entry) =>
+        entry.event === "view-cleaned" &&
+        entry.windowId === closingPeer.windowId,
+    );
+    const ownerRecovered = cleanupRecords.findIndex(
+      (entry) =>
+        entry.event === "download-cleanup-recovered" &&
+        entry.windowId === cleanupOwner.windowId,
+    );
+    assert(
+      peerCleaned >= 0 && ownerRecovered > peerCleaned,
+      "Peer cleanup did not progress while owner cancellation was still failing",
+    );
+    assert.equal(
+      cleanupRecords.some((entry) => entry.event === "ui-failed"),
+      false,
+    );
+    main.windowId = healthy.windowId;
+    await freshView();
     const crashing = await request("crashing");
     await windows.approveDownload({
       ...main,
@@ -491,6 +592,7 @@ if (!process.argv.includes("--child")) {
         events: [],
         commands: [
           "test.arrived",
+          "test.heartbeat",
           "plugin.windows.setDownloadRequestsEnabled",
           "plugin.windows.getDownloads",
         ],
@@ -528,6 +630,20 @@ if (!process.argv.includes("--child")) {
       },
     ],
     commands: {
+      "test.heartbeat": {
+        input: {
+          const: null,
+        },
+        output: {
+          const: null,
+        },
+        async run() {
+          const identity = await windows.getCurrent();
+          assert(identity);
+          heartbeats.add(identity.windowId);
+          return null;
+        },
+      },
       "test.arrived": {
         input: {
           const: null,
@@ -576,7 +692,7 @@ if (!process.argv.includes("--child")) {
         {
           view: "main",
           instances: "multiple",
-          maxInstances: 2,
+          maxInstances: 3,
           title: "Downloads",
           home: `${origin}/index.html`,
           visible: false,
@@ -602,6 +718,8 @@ if (!process.argv.includes("--child")) {
           approvalExpiry: true,
           nativeCleanup: true,
           browserCrashCleanup: true,
+          cancelFailureContained: true,
+          peerCleanupContinued: true,
         },
         null,
         2,

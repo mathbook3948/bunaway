@@ -34,7 +34,9 @@ for (;;) {
     })
   ).json();
   if (action) {
-    if (action.kind === "navigate") {
+    if (action.kind === "ping") {
+      await client.invoke("test.heartbeat", null);
+    } else if (action.kind === "navigate") {
       location.href = action.url;
     } else {
       const link = document.createElement("a");

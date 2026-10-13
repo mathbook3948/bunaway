@@ -892,12 +892,7 @@ export class WebView {
       return true;
     }
     this.closedAt = performance.now();
-    this.downloads?.detach(
-      this.browserFailed ||
-        this.browserExited ||
-        (this.browserHandle !== 0n &&
-          kernel.symbols.WaitForSingleObject(this.browserHandle, 0) === 0),
-    );
+    this.downloads?.detach(this.isBrowserUnavailable());
     // Capture process handles before controller closure to track WebView2 children.
     if (this.environment) {
       const env8 = query(
@@ -1002,6 +997,15 @@ export class WebView {
       this.group.drainer = this;
     }
     return true;
+  }
+  /** Owned process evidence permits releasing failed downloads without calling a dead broker. */
+  isBrowserUnavailable(): boolean {
+    return (
+      this.browserFailed ||
+      this.browserExited ||
+      (this.browserHandle !== 0n &&
+        kernel.symbols.WaitForSingleObject(this.browserHandle, 0) === 0)
+    );
   }
   /** Poll shutdown until children and callbacks drain, returning true after disposal. */
   finish(): boolean {
