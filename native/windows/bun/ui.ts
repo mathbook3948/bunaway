@@ -255,8 +255,10 @@ function cleanupView(view: ViewState) {
       if (!(error instanceof DownloadCleanupError)) {
         throw error;
       }
-      const retries = (view.downloadCleanupRetries ??=
-        new DownloadCleanupRetries(WINDOW_CLEANUP_TIMEOUT_MS));
+      const retries =
+        view.downloadCleanupRetries ??
+        new DownloadCleanupRetries(WINDOW_CLEANUP_TIMEOUT_MS);
+      view.downloadCleanupRetries = retries;
       const phase = retries.failed();
       if (phase) {
         log(`download-cleanup-${phase}`, {

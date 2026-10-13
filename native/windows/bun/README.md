@@ -43,6 +43,12 @@ normal의 WINDOWPLACEMENT 작업 영역 좌표는 화면 좌표로 보정한다.
 `com.ts`는 COM 참조와 콜백을, `webview.ts`는 WebView 생성과 종료를 관리한다.
 `ui.ts`가 이 자원들의 초기화와 정리 순서를 조정한다. DLL은 창과 COM 정리가 끝난 뒤 닫는다.
 
+DownloadCleanupError는 해당 창의 취소 실패를 나타내며 UI pump의 전체 실패로 전달하지 않는다.
+닫힌 소유자의 controller와 다운로드 참조를 유지하고 50 ms 간격으로 기존 35초 cleanup
+예산 안에서 재시도한다. 다른 창의 메시지와 정리는 계속 처리한다. 기한이 끝나면 소유자를
+정리 대기 상태로 유지하고 진단을 한 번 남긴다. 관찰한 broker 종료나 명시적 앱 종료는
+참조를 안전하게 해제하거나 재시도하는 별도 경로이며 살아 있는 공유 broker를 종료하지 않는다.
+
 `webview-downloads.ts`는 고정 SDK 1.0.4129.50의 ICoreWebView2_4 DownloadStarting과
 DownloadOperation, Deferral을 소유한다. `downloads.ts`는 OS 자원 없는 승인과 수명 규칙을
 관리한다. 기본 거부를 먼저 설정하고 deferral을 얻으며, 승인 결과와 무관하게 deferral을

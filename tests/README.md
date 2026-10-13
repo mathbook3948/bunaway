@@ -1,5 +1,11 @@
 # Tests
 
+다운로드 UI-loop regression은 생성된 worker 경계에서 전용 `windows-download-cleanup/ui.ts`를
+번들하고 실제 승인 transfer의 cancel 자원만 일시적으로 실패시킨다. 소유 창을 닫는 동안
+다른 창의 SDK 응답과 세 번째 창의 native cleanup이 진행하고, 소유자의 재시도도 복구되는지
+확인한다. 운영 worker와 다른 테스트 프로세스는 주입하지 않는다. 순수 모델은 조절한 시계로
+재시도 간격과 기한, 자원 보존을 검증하고 cancelled snapshot의 interruptReason을 검사한다.
+
 다운로드의 실패 regression은 metadata 조회 실패와 native Cancel 실패를 독립적으로
 주입해 취소 재시도와 cleanup의 소유권을 확인한다. 브라우저 UI 재개 뒤 paused 상태,
 JSON escape와 UTF-8 metadata 한도, 만료 retained 항목의 aggregate 예산 및 최대 식별자의

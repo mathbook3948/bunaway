@@ -9,6 +9,7 @@ import type { ManifestPlugin } from "@bunaway/runtime-bun/app-manifest";
 /**
  * Bundle native workers with the fixture app's installed plugins.
  * Supplying an entrypoint builds the shared UI and host-operation workers.
+ * An optional UI entrypoint isolates native fault injection in a dedicated fixture worker.
  */
 export async function bundleNativeWorker(
   name: string,

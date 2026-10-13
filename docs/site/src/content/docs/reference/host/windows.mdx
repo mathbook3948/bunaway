@@ -256,6 +256,13 @@ openDevTools는 작업 권한과 호스트의 개발 모드 설정이 모두 필
 프로덕션 호스트는 작업 권한이 있어도 `PERMISSION_DENIED`입니다.
 DevTools 닫기, 열림 상태와 이벤트, dock 설정은 아직 제공하지 않습니다.
 
+창 종료의 native Cancel 실패는 해당 소유자의 참조를 보존하고 UI pump가 50 ms 간격으로
+35초까지 재시도합니다. 다른 창의 메시지와 정리는 계속 처리합니다. 기한이 끝나면
+닫힌 소유자의 native 정리를 보류하고 `download-cleanup-timeout` 진단을 남깁니다.
+관찰한 broker 종료나 앱 종료에서 다시 안전하게 정리하며, 공유 broker를 종료해 정상
+창을 닫거나 실패한 cleanup을 완료로 처리하지 않습니다. 취소된 snapshot의 interruptReason은
+null이며 네이티브 USER_CANCELED reason을 interrupted 상태처럼 유지하지 않습니다.
+
 ### 부모, 모달과 신뢰된 종료
 
 이 API는 Windows에서 지원합니다. `setParent`는 사전 선언된 두 창이 열린 뒤 호출합니다.
