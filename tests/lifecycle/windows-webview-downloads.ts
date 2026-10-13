@@ -277,7 +277,6 @@ if (!process.argv.includes("--child")) {
     await freshView();
     const accepted = await request("approved");
     assert.equal(accepted.mimeType, "application/octet-stream");
-    assert.equal(accepted.totalBytes, content.length);
     await windows.approveDownload({
       ...main,
       id: accepted.id,
@@ -286,6 +285,8 @@ if (!process.argv.includes("--child")) {
       const state = await item(accepted.id);
       return state.state === "inProgress" && (state.receivedBytes ?? 0) > 0;
     }, "Approved download did not report progress");
+    // The deferred DownloadStarting snapshot can precede the runtime's final size metadata.
+    assert.equal((await item(accepted.id)).totalBytes, content.length);
     await windows.pauseDownload({
       ...main,
       id: accepted.id,
