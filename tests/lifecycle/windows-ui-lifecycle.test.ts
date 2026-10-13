@@ -171,7 +171,8 @@ async function startUI(failView?: string, parserExecution?: "ui" | "sync") {
         setup(build) {
           build.onResolve(
             {
-              filter: /^\.\/(com|tray|webview|win32|win32-bindings)\.ts$/,
+              filter:
+                /^\.\/(com|tray|webview|win32|win32-bindings|monitors)\.ts$/,
             },
             () => ({
               path: resolve(

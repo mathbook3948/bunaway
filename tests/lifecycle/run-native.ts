@@ -116,6 +116,7 @@ if (target === "windows-x64") {
           "tests/lifecycle/windows-global-shortcut.test.ts",
           "tests/lifecycle/windows-global-shortcut-ui.test.ts",
           "tests/lifecycle/windows-bun-instance.test.ts",
+          "tests/lifecycle/windows-monitors.test.ts",
           "tests/lifecycle/windows-host-shutdown.test.ts",
           "tests/lifecycle/windows-power.test.ts",
           "tests/lifecycle/windows-power-worker.test.ts",

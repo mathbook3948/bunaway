@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { workerData } from "node:worker_threads";
-import type { WindowSpec } from "@bunaway/plugin-api/native";
+import type {
+  NativeMonitorServices,
+  WindowSpec,
+} from "@bunaway/plugin-api/native";
 
 // Controlled native boundary for the real UI Worker. No HWND, DLL or COM is loaded.
 const controls = workerData as {
@@ -200,3 +203,17 @@ export class WebView {
     return true;
   }
 }
+
+function unexpectedMonitorQuery(): never {
+  throw new Error(
+    "Monitor queries are outside this controlled lifecycle fixture.",
+  );
+}
+export const monitorServices: NativeMonitorServices = {
+  list: unexpectedMonitorQuery,
+  primary: unexpectedMonitorQuery,
+  nearestPoint: unexpectedMonitorQuery,
+  nearestRect: unexpectedMonitorQuery,
+  cursor: unexpectedMonitorQuery,
+};
+export const windowMonitor = unexpectedMonitorQuery;
