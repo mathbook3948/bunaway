@@ -1,5 +1,7 @@
 import { dlopen, ptr } from "bun:ffi";
 import assert from "node:assert/strict";
+import type { NativeMenuItem } from "@bunaway/plugin-api/native";
+import { NativePopupMenu } from "./menu.ts";
 import { type Windows, WM_CLOSE } from "./win32.ts";
 import { user, withWide } from "./win32-bindings.ts";
 
@@ -14,12 +16,9 @@ const NIM_DELETE = 2;
 const NIF_MESSAGE = 0x1;
 const NIF_ICON = 0x2;
 const NIF_TIP = 0x4;
-const MF_STRING = 0;
 const TPM_RIGHTBUTTON = 0x2;
 const TPM_RETURNCMD = 0x100;
 const TRAY_ICON_ID = 1;
-const TRAY_OPEN_COMMAND = 1;
-const TRAY_QUIT_COMMAND = 2;
 const TRAY_TOOLTIP_BYTES = 254;
 
 /** Owns the hidden window and shell icon used for app show and quit actions. */
@@ -36,6 +35,8 @@ export class Tray {
   private readonly data = Buffer.alloc(976); // NOTIFYICONDATAW, Win64
   readonly hwnd: bigint;
   private added = false;
+  private customMenu: readonly NativeMenuItem[] | null | undefined;
+  private selected: ((itemId: string) => void) | undefined;
   /** Registers the icon and releases partial resources if setup fails. */
   constructor(
     private readonly windows: Windows,
@@ -112,34 +113,39 @@ export class Tray {
     this.added = true;
   }
   private menu(receive: (action: "show" | "quit") => void) {
-    const menu = user.symbols.CreatePopupMenu();
-    assert(menu, "Tray menu creation failed");
+    if (this.customMenu === null) {
+      return;
+    }
+    const selected = this.selected;
+    const custom = this.customMenu !== undefined;
+    const menu = new NativePopupMenu(
+      this.customMenu ?? [
+        {
+          id: "open",
+          type: "item",
+          label: "Open",
+          enabled: true,
+          visible: true,
+          checked: false,
+          group: null,
+        },
+        {
+          id: "quit",
+          type: "item",
+          label: "Quit",
+          enabled: true,
+          visible: true,
+          checked: false,
+          group: null,
+        },
+      ],
+    );
     try {
-      assert(
-        withWide("Open", (text) =>
-          user.symbols.AppendMenuW(
-            menu,
-            MF_STRING,
-            BigInt(TRAY_OPEN_COMMAND),
-            text,
-          ),
-        ),
-      );
-      assert(
-        withWide("Quit", (text) =>
-          user.symbols.AppendMenuW(
-            menu,
-            MF_STRING,
-            BigInt(TRAY_QUIT_COMMAND),
-            text,
-          ),
-        ),
-      );
       const point = new Int32Array(2);
       assert(user.symbols.GetCursorPos(ptr(point)));
       user.symbols.SetForegroundWindow(this.hwnd);
       const item = user.symbols.TrackPopupMenuEx(
-        menu,
+        menu.handle,
         TPM_RETURNCMD | TPM_RIGHTBUTTON,
         point[0] ?? 0,
         point[1] ?? 0,
@@ -147,14 +153,26 @@ export class Tray {
         null,
       );
       user.symbols.PostMessageW(this.hwnd, WM_NULL, 0n, 0n);
-      if (item === TRAY_OPEN_COMMAND) {
+      const itemId = menu.selected(item);
+      if (custom && itemId !== null) {
+        selected?.(itemId);
+      } else if (!custom && itemId === "open") {
         receive("show");
-      } else if (item === TRAY_QUIT_COMMAND) {
+      } else if (!custom && itemId === "quit") {
         receive("quit");
       }
     } finally {
-      assert(user.symbols.DestroyMenu(menu));
+      menu.dispose();
     }
+  }
+  /** Replace the next popup's definition without touching the shell icon or owner HWND. */
+  setMenu(
+    items: readonly NativeMenuItem[] | null | undefined,
+    selected?: (itemId: string) => void,
+  ) {
+    this.customMenu =
+      items === undefined || items === null ? items : structuredClone(items);
+    this.selected = selected;
   }
   /**
    * Requests shell icon removal when registered, destroys its window, and closes the shell binding.

@@ -13,6 +13,7 @@ export type {
 } from "@bunaway/protocol";
 export { BunawayError } from "@bunaway/protocol";
 export type { NativeInvokeOptions } from "#transport";
+export { NativeEventWaiters } from "./native-event-waiters.ts";
 export type { NativePluginAdapter } from "./native-validation.ts";
 
 /** Host-selected values available when a native adapter is created. */
@@ -30,6 +31,8 @@ export type NativeEnvironment = {
   };
   /** Window services supplied by the host on its native UI thread. */
   windows?: import("@bunaway/plugin-api/native").NativeWindowServices;
+  /** Optional UI-thread menu integration, absent on platforms without native menus. */
+  menus?: import("@bunaway/plugin-api/native").NativeMenuServices;
   /** Host-owned data directory used for app-scoped files. */
   dataRoot: string;
   /** Registered operations and their platform support states. */

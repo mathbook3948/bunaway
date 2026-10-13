@@ -52,7 +52,8 @@
     "@bunaway/plugin-os": "workspace:*",
     "@bunaway/plugin-process": "workspace:*",
     "@bunaway/plugin-network": "workspace:*",
-    "@bunaway/plugin-notification": "workspace:*"
+    "@bunaway/plugin-notification": "workspace:*",
+    "@bunaway/plugin-menu": "workspace:*"
   },
   "imports": {
     "#cli/*": "./packages/cli/src/*.ts",

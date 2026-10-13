@@ -35,6 +35,8 @@ system UI 사용자 선택과 물리 프린터 출력은 별도 검증이며 테
 기존 `host:macos`에서 실제 compiled WKWebView와 백엔드 Worker의 공통 SDK를 실행한다.
 문서 상태, origin과 redirect 거부, 서브프레임 신원, history, reload, 느린 탐색 중단,
 문서 교체의 명령 취소와 fragment 세션 유지, 뷰별 zoom 및 닫기와 재생성을 검사한다.
+각 문서의 대기 명령이 백엔드에 등록된 뒤 history 이동과 reload를 시작한다.
+도착 응답과 명령 등록 사이의 경합이 취소 검사를 건너뛰지 않게 하며 기존 횟수와 기한은 유지한다.
 scheme과 hostname을 대문자로 작성한 자산 URL에서도 실제 문서와 SDK 연결을 확인한다.
 `pageshow`와 `pagehide`의 `persisted`, `isTrusted`를 SDK와 독립적으로 기록한다.
 실제 history cache 복원과 합성 persisted 이벤트의 reload 검사를 결과에서 구분한다.
@@ -771,6 +773,10 @@ browser 번들에 Bun 전송 구현이 포함되지 않는지 검사한다. TLS,
 파일의 휴지통 항목만 정리하며 전체 휴지통을 비우지 않는다. 셸이 유지하는 COM Worker가
 다른 초기화 회귀에 영향을 주지 않도록 별도 Bun 프로세스에서 실행한다. `host:windows`에
 포함하며 사용자 설정별 휴지통 비활성화, 용량 초과와 경고 UI는 수동 검증 항목이다.
+
+`api/menu.test.ts`는 메뉴 리소스 제한, 트리 검증, 개별 권한과 변경 실패 보존을 검사한다.
+`lifecycle/windows-menu.test.ts`와 `windows-menu-ui.test.ts`는 실제 HMENU 및 UI Worker의 창 없는 트레이와 자원 정리를 확인한다.
+`mise run host:windows`에 포함되며 사용자 클릭과 키보드 메뉴 조작의 수동 검증을 대신하지 않는다.
 
 `lifecycle/macos-io-host.ts`는 `host:macos`의 실제 compiled WKWebView에서 공통
 I/O Worker의 실행, 백엔드 setup과 뷰 출처, 파싱 전 정책 검사, UI/I/O 지원 목록,
