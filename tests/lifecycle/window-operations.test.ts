@@ -10,6 +10,51 @@ import {
 const WINDOW_READY_TIMEOUT_MS = 30_000;
 const CLEANUP_TIMEOUT_ADVANCE_MS = 40_000;
 
+test("initial state overrides are fieldwise and recreation restores declared state", async () => {
+  const f = fixture();
+  const main = f.specs[0];
+  assert(main);
+  main.window = {
+    ...main.window,
+    maximized: true,
+    fullscreen: true,
+  };
+  await f.operations.execute(
+    {
+      operation: "windows.create",
+      payload: {
+        view: "main",
+        options: {
+          window: {
+            fullscreen: false,
+          },
+        },
+      },
+    },
+    "initial-state",
+  );
+  expect(f.createdSpecs[0]?.window).toEqual({
+    ...main.window,
+    fullscreen: false,
+  });
+  const first = f.views.get("main");
+  assert(first);
+  f.setTick(async () => {
+    first.cleaned = true;
+  });
+  await f.operations.execute(
+    {
+      operation: "windows.recreate",
+      payload: {
+        view: "main",
+      },
+    },
+    "declared-state",
+  );
+  expect(f.createdSpecs[1]?.window).toEqual(main.window);
+  expect(main.window.fullscreen).toBe(true);
+});
+
 /** Build a controllable host so tests can pause cleanup and advance deadlines. */
 function fixture(
   supportsDestroy = true,

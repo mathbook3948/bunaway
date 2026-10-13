@@ -181,7 +181,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 최소화 전 최대화 상태의 복원, 일반 크기 복원과 반복 호출의 동작을 정의한다.
 - [x] 숨긴 창의 상태 변경은 창을 표시하고, 전체화면 중 다섯 상태 변경은 `INVALID_ARGUMENT`로 거부한다.
 - [x] 상태 조회에도 해당 operation 권한을 검사하고 닫힌 창의 오류를 처리한다.
-- [ ] 초기 maximized와 fullscreen 옵션을 지원한다.
+- [x] Windows 선언과 생성별 `options.window`의 `maximized`, `fullscreen`을 지원한다. 숨김과 준비 후 표시를 유지하고 두 옵션을 함께 켜면 전체화면 해제 뒤 최대화 상태를 복원한다.
 - [ ] minimizable, maximizable, closable, fullscreenable을 설정하고 조회한다.
 - [ ] 초기 및 실행 중 focusable을 설정하고 조회한다.
 - [x] `setTitle`과 `getTitle`로 Windows 창 title을 실행 중 변경하고 조회한다. 선언과 다른 인스턴스를 변경하지 않으며 닫기 확인 창에도 현재 title을 사용한다.
