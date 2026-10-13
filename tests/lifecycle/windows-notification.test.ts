@@ -8,6 +8,10 @@ import { openerPlugin } from "@bunaway/plugin-opener";
 import type { HostContext, HostResponse } from "@bunaway/protocol";
 import { Channel } from "#native/windows/bun/channel";
 import { bundleIOPluginFixture } from "../fixtures/native-worker.ts";
+import {
+  cleanupFailedNotificationShortcutCreation,
+  NotificationShortcutCreationError,
+} from "../fixtures/notification-shortcut-cleanup.ts";
 import { createNotificationShortcut } from "../fixtures/windows-notification-shortcut.ts";
 
 test.skipIf(process.platform !== "win32")(
@@ -75,8 +79,18 @@ try {
     const appId = `test.${crypto.randomUUID()}`;
     const toastTag = crypto.randomUUID().replaceAll("-", "").slice(0, 12);
     const toastGroup = "bunaway-fixture";
-    const removeShortcut = await createNotificationShortcut(appId);
+    let removeShortcut: (() => Promise<void>) | undefined;
+    let creationFailure: unknown;
     try {
+      try {
+        removeShortcut = await createNotificationShortcut(appId);
+      } catch (error) {
+        if (error instanceof NotificationShortcutCreationError) {
+          removeShortcut = error.cleanup;
+        }
+        creationFailure = error;
+        throw error;
+      }
       // Compare FFI to a strict projected getter. PowerShell's ordinary property syntax can suppress getter failures.
       const probe = Bun.spawnSync(
         [
@@ -432,7 +446,15 @@ export const pluginImports = {
       }
     } finally {
       try {
-        await removeShortcut();
+        if (creationFailure !== undefined && removeShortcut) {
+          // Retry retained ownership while keeping the creation failure and any second cleanup failure observable.
+          await cleanupFailedNotificationShortcutCreation(
+            creationFailure,
+            removeShortcut,
+          );
+        } else {
+          await removeShortcut?.();
+        }
       } finally {
         await rm(root, {
           recursive: true,

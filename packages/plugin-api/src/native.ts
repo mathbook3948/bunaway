@@ -194,12 +194,56 @@ export type WindowBounds = {
   dpi: number;
 };
 
+/** A current desktop display snapshot. IDs are device names, not persistent hardware identities. */
+export type NativeMonitor = {
+  id: string;
+  name: string;
+  primary: boolean;
+  bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  workArea: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  dpi: number;
+  scaleFactor: number;
+  /** Counter-clockwise degrees from the natural orientation, or null when the driver does not report orientation. */
+  rotation: 0 | 90 | 180 | 270 | null;
+  /** Integer hertz reported by DEVMODE, or null for driver default/unknown. */
+  refreshRate: number | null;
+};
+
+/** Display queries executed on the per-monitor-aware UI thread. No native handles escape. */
+export type NativeMonitorServices = {
+  list(): NativeMonitor[];
+  primary(): NativeMonitor;
+  nearestPoint(point: { x: number; y: number }): NativeMonitor;
+  nearestRect(rect: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }): NativeMonitor;
+  cursor(): {
+    x: number;
+    y: number;
+  };
+};
+
 /**
  * Native controls exposed to an installed window plugin.
  * The plugin rejects minimized/maximized transitions during fullscreen before invoking these controls.
  * Native failures throw; the UI host converts them to bounded public errors.
  */
 export type NativeWindow = {
+  /** Largest overlap, or nearest display; minimized windows use their pre-minimize rectangle. */
+  getMonitor?(): NativeMonitor;
   /** Requests a user-controlled browser or system print dialog; does not report print completion. */
   showPrintUI?(kind: "browser" | "system"): void;
   /** Trusted-backend download approval and lifetime controls. Windows only. */
@@ -512,6 +556,8 @@ export type NativeSystemEvents = {
 
 /** UI-thread services used by installed native plugins. */
 export type NativeWindowServices = {
+  /** Live display queries. Absent on platforms without monitor support. */
+  monitors?: NativeMonitorServices;
   /** Optional OS change notifications. Absent on hosts without a native notification window. */
   systemEvents?: NativeSystemEvents;
   /** Whether this UI adapter supports per-creation presentation options; absent means unsupported. */

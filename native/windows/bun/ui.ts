@@ -25,6 +25,7 @@ import {
 } from "./channel.ts";
 import { callbackCalls, checkCallbacks, disposeCom } from "./com.ts";
 import { DownloadCleanupError, DownloadCleanupRetries } from "./downloads.ts";
+import { monitorServices, windowMonitor } from "./monitors.ts";
 import { createSessionNotifications } from "./session-notifications.ts";
 import { publishSystemEvent, SystemEvents } from "./system-events.ts";
 import { Tray } from "./tray.ts";
@@ -760,6 +761,7 @@ function commitClose(viewId: string, view: ViewState) {
 const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices =
   {
     specs: config.windows,
+    monitors: monitorServices,
     supportsCreationOptions: true,
     validateCreation: (spec) => {
       assert(windows);
@@ -830,6 +832,7 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
       const nativeWindows = windows;
       const hwnd = view.native.hwnd;
       return {
+        getMonitor: () => windowMonitor(hwnd),
         showPrintUI: (kind) => view.native.showPrintUI(kind),
         downloads: {
           setRequestsEnabled: (enabled) =>
