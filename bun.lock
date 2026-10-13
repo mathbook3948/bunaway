@@ -22,6 +22,7 @@
         "@bunaway/plugin-opener": "workspace:*",
         "@bunaway/plugin-os": "workspace:*",
         "@bunaway/plugin-power": "workspace:*",
+        "@bunaway/plugin-process": "workspace:*",
         "@bunaway/plugin-storage": "workspace:*",
         "@bunaway/plugin-windows": "workspace:*",
         "@bunaway/protocol": "workspace:*",
@@ -51,6 +52,7 @@
         "@bunaway/core": "workspace:*",
         "@bunaway/plugin-api": "workspace:*",
         "@bunaway/protocol": "workspace:*",
+        "zod": "4.6.5",
       },
     },
     "packages/cli": {
@@ -243,6 +245,20 @@
         "@bunaway/plugin": "0.0.0",
       },
     },
+    "plugins/process": {
+      "name": "@bunaway/plugin-process",
+      "version": "0.0.0",
+      "dependencies": {
+        "@bunaway/protocol": "workspace:*",
+        "zod": "4.6.5",
+      },
+      "devDependencies": {
+        "@bunaway/plugin": "workspace:*",
+      },
+      "peerDependencies": {
+        "@bunaway/plugin": "0.0.0",
+      },
+    },
     "plugins/storage": {
       "name": "@bunaway/plugin-storage",
       "version": "0.0.0",
@@ -414,6 +430,8 @@
     "@bunaway/plugin-os": ["@bunaway/plugin-os@workspace:plugins/os"],
 
     "@bunaway/plugin-power": ["@bunaway/plugin-power@workspace:plugins/power"],
+
+    "@bunaway/plugin-process": ["@bunaway/plugin-process@workspace:plugins/process"],
 
     "@bunaway/plugin-storage": ["@bunaway/plugin-storage@workspace:plugins/storage"],
 

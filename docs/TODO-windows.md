@@ -505,8 +505,10 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] 창 크기 변경에 따른 auto-resize와 콘텐츠 크기 기반 배치를 제공한다.
 - [ ] WebView를 다른 창으로 reparent하는 기능과 새 세션 규칙을 정의한다.
 - [ ] WebView만 닫고 재생성하는 공개 API를 제공한다.
-- [ ] URL과 로컬 파일 로드, reload, cache를 무시한 reload와 stop을 제공한다.
-- [ ] 현재 URL, title, loading, destroyed와 focus 상태를 조회한다.
+- [x] 기존 허용 origin 안의 URL 로드, 일반 reload와 stop을 제공한다. `navigateWebView`, `reloadWebView`, `stopWebView`는 기존 세션 폐기와 origin 검사를 유지한다.
+- [ ] 로컬 파일 로드와 cache를 무시한 reload를 제공한다.
+- [x] `getWebViewState`로 현재 URL, title과 최상위 loading 상태를 조회한다.
+- [ ] WebView의 destroyed와 focus 상태를 조회한다.
 - [ ] 탐색 전 허용와 거부, redirect와 popup 새 창 처리 훅을 제공한다.
 - [ ] 로드 시작, DOM ready, 완료와 실패 이벤트를 제공한다.
 - [ ] 문서, 프레임과 same-document 탐색 이벤트를 제공한다.
@@ -529,9 +531,11 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 
 우선순위 P2. 소유자: 렌더러 API. 출처: [E-contents], [E-history], [E-frame], [E-frame-main], [T-webview-rust].
 
-- [ ] 뒤로, 앞으로, offset과 index 이동 및 가능 여부 조회를 제공한다.
+- [x] `goBack`, `goForward`와 `getWebViewState`로 기본 history 이동과 가능 여부 조회를 제공한다.
+- [ ] history의 offset과 index 이동을 제공한다.
 - [ ] 탐색 history의 조회, 삭제, 전체 초기화와 복원을 제공한다.
-- [ ] zoom factor, level과 visual zoom 최소와 최대 한도를 설정하고 조회한다.
+- [x] `setZoomFactor`와 `getWebViewState`로 controller zoom factor를 설정하고 실제 값을 조회한다.
+- [ ] zoom level과 visual zoom 최소와 최대 한도를 설정하고 조회한다.
 - [ ] 페이지 find, 결과 이벤트와 검색 종료를 제공한다.
 - [ ] undo, redo, cut, copy, paste, plain-text paste와 select-all을 제공한다.
 - [ ] selection 변경, 텍스트 삽입과 교체, scroll-to-top/bottom을 제공한다.
@@ -704,13 +708,22 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 - [ ] HTTP header, body, redirect, proxy와 OS 인증의 지원 범위를 정의한다.
 - [ ] HTTP stream, timeout, 취소와 progress를 제공한다.
 - [ ] WebSocket 연결, 메시지, close, 상태와 backpressure를 공개 계약으로 제공한다.
-- [ ] 앱이 실행 파일과 인자를 검사하는 command 실행을 제공한다.
-- [ ] shell 문자열 실행과 argv 실행을 구분한다.
+- [x] 앱이 실행 파일과 인자를 검사하는 command 실행을 제공한다.
+  선택 `process.run`의 실행 파일과 전체 argv는 앱 명령이 검사한다. 절대 local `.exe`
+  경로만 실행하며 PATH, batch 파일과 호출자 env/cwd 설정을 받지 않는다.
+- [x] shell 문자열 실행과 argv 실행을 구분한다.
+  `process.run`은 Bun argv 실행만 제공하며 shell 문자열 API를 제공하지 않는다.
 - [ ] spawn, stdout/stderr, stdin, exit code와 signal을 제공한다.
+  `process.run`의 제한된 binary stdin, stdout/stderr 캡처, PID와 완료 결과는 구현했다.
+  장기 spawn handle과 interactive stdin, 출력 stream은 남아 있다.
 - [ ] process kill, timeout과 앱 종료 시 process tree 정리를 연결한다.
+  호출 취소, timeout과 어댑터 폐기는 직접 자식을 종료하고 pipe를 닫는다. 앱 종료의
+  descendant 정리는 기존 host Job Object를 따른다. 호출별 process tree 종료는 남아 있다.
 - [ ] 번들 sidecar의 플랫폼 선택, 실행 경로, 라이선스와 패키징을 제공한다.
 - [ ] 앱 restart와 exit를 desktop 수명주기에 연결한다.
-- [ ] CLI argument와 subcommand schema, help, 오류와 match 결과를 제공한다.
+- [x] CLI argument와 subcommand schema, help, 오류와 match 결과를 제공한다.
+  `@bunaway/backend/cli`의 `defineCLI`는 기존 `onOpen` argv를 명시적으로 받아 Bun
+  `parseArgs`와 앱의 Zod schema로 검사한다. help와 오류는 결과이며 실행과 종료를 제어하지 않는다.
 - [ ] utility process의 독립 실행과 양방향 메시지, 종료와 오류 이벤트를 제공한다.
 - [ ] localhost 자산 서버는 선택 기능으로 지원 여부를 결정한다. 기본 통신 경로는 기존 로컬 자산과 브리지다.
 - [ ] HTTP client-request와 incoming-message의 stream 기능을 Bun 대체 API에 매핑한다.
@@ -802,7 +815,8 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 - [x] Windows 개발 모드 DevTools와 `dev --inspect`를 제공한다.
 - [x] UI와 백엔드 소스맵과 원본 명령 오류 스택을 제공한다.
 - [x] 앱 로그와 플러그인 없이 남기는 프레임워크 진단을 구분한다.
-- [ ] DevTools 열기, 닫기, 상태 조회와 이벤트 API를 제공한다.
+- [x] `openDevTools`로 개발 모드에서 DevTools를 연다. 작업 권한으로 프로덕션 설정을 우회할 수 없다.
+- [ ] DevTools 닫기, 상태 조회와 이벤트 API를 제공한다.
 - [ ] 요소, service worker와 shared worker 검사 API의 지원을 결정한다.
 - [ ] DevTools workspace의 추가와 제거, dock 위치, 별도 창과 title을 설정한다.
 - [ ] device emulation의 viewport, 화면 배율과 입력 설정을 제공한다.

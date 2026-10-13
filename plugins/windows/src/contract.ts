@@ -432,6 +432,38 @@ const conversionOutput = z.strictObject({
 
 /** Schemas for window operations, used to validate calls and their results. */
 export const windowOperations = {
+  "windows.getWebViewState": {
+    input: windowTarget,
+    output: z.strictObject({
+      url: z.string(),
+      title: z.string(),
+      loading: z.boolean(),
+      canGoBack: z.boolean(),
+      canGoForward: z.boolean(),
+      zoomFactor: z.number().positive(),
+    }),
+  },
+  "windows.navigateWebView": {
+    input: windowTarget.extend({
+      url: z
+        .string()
+        .min(1)
+        .max(8192)
+        .regex(new RegExp(WINDOW_TEXT_PATTERN, "u")),
+    }),
+    output: z.null(),
+  },
+  "windows.reloadWebView": windowResult,
+  "windows.stopWebView": windowResult,
+  "windows.goBack": windowStateResult,
+  "windows.goForward": windowStateResult,
+  "windows.setZoomFactor": {
+    input: windowTarget.extend({
+      factor: z.number().min(0.25).max(5),
+    }),
+    output: z.number().positive(),
+  },
+  "windows.openDevTools": windowResult,
   "windows.getWebViewAudioState": {
     input: windowTarget,
     output: z.strictObject({

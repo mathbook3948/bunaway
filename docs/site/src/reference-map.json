@@ -23,6 +23,13 @@
       }
     },
     {
+      "name": "@bunaway/backend/cli",
+      "source": "packages/backend-sdk/src/cli.ts",
+      "pages": {
+        "reference/backend/cli": ["defineCLI"]
+      }
+    },
+    {
       "name": "@bunaway/core",
       "source": "packages/core/src/index.ts",
       "pages": {
@@ -191,6 +198,17 @@
       },
       "pages": {
         "reference/plugins/os": ["os", "osPlugin"]
+      }
+    },
+    {
+      "name": "@bunaway/plugin-process",
+      "source": "plugins/process/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/process": ["processes", "processPlugin"]
       }
     },
     {
@@ -528,6 +546,7 @@
       "type": "NativeWindow",
       "pages": {
         "reference/tooling/plugin-api": [
+          "webview",
           "audio",
           "show",
           "showInactive",
@@ -567,6 +586,22 @@
           "setCloseConfirmation",
           "getSnapshot",
           "getReadiness"
+        ]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "NativeWebView",
+      "pages": {
+        "reference/tooling/plugin-api": [
+          "getState",
+          "navigate",
+          "reload",
+          "stop",
+          "goBack",
+          "goForward",
+          "setZoomFactor",
+          "openDevTools"
         ]
       }
     },
@@ -842,7 +877,12 @@
       "type": "DesktopOptions",
       "pages": {
         "guides/windows": ["closeBehavior"],
-        "reference/backend/app-definition": ["tray", "onOpen", "beforeQuit"]
+        "reference/backend/app-definition": [
+          "tray",
+          "openArguments",
+          "onOpen",
+          "beforeQuit"
+        ]
       }
     },
     {
@@ -919,6 +959,7 @@
     "reference/api": ["help"]
   },
   "operations": {
+    "reference/plugins/process": ["process.run"],
     "reference/plugins/os": ["os.info", "os.usage", "os.locale"],
     "reference/plugins/autostart": [
       "autostart.enable",
@@ -957,6 +998,14 @@
       "clipboard.writeFormats"
     ],
     "reference/host/windows": [
+      "windows.getWebViewState",
+      "windows.navigateWebView",
+      "windows.reloadWebView",
+      "windows.stopWebView",
+      "windows.goBack",
+      "windows.goForward",
+      "windows.setZoomFactor",
+      "windows.openDevTools",
       "windows.getWebViewAudioState",
       "windows.setWebViewAudioMuted",
       "windows.list",
