@@ -132,3 +132,9 @@ Windows 창 플러그인은 모니터 열거, 주 모니터와 대상 창의 모
 [창 API](../site/src/content/docs/reference/host/windows.mdx#모니터와-커서)를 따르며
 실제 HWND와 WebView2 회귀는 Windows native CI에 포함한다.
 물리 다중 모니터의 hotplug, 혼합 DPI와 회전은 수동 검증으로 남긴다.
+
+Windows의 선택 appearance 플러그인은 저장된 테마와 transparency 선호, DWM accent,
+시스템 색과 고대비, reduced motion 및 screen reader 설정 플래그를 조회한다.
+다른 플랫폼은 `UNSUPPORTED`이며 [appearance 계약](../site/src/content/docs/reference/plugins/appearance.mdx)을 따른다.
+실제 Win32 query 회귀는 Windows native CI에 포함한다. 테마 지정과 변경 이벤트,
+실제 보조 기술 및 WebView 접근성 트리 검증은 후속 작업이다.

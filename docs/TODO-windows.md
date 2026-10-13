@@ -160,7 +160,8 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] `toLogical`과 `toPhysical`로 대상 창 DPI를 사용해 좌표, 크기와 bounds를 변환한다.
   반올림, 정수 범위와 오류, 대상 창 권한과 닫힌 창의 동작은 창 API 계약을 따른다.
 - [x] 초기 x, y, center와 content-size 기준 옵션을 구현했다. ADR 0019의 필드별 병합과 예약 전 검증을 single/multiple 생성 및 재생성에 적용한다.
-- [ ] 실행 중 창을 현재 또는 지정 모니터의 작업 영역 중앙에 배치한다.
+- [x] `windows.center`로 실행 중 창을 현재 모니터의 작업 영역 중앙에 배치한다. 숨김과 최소화, 최대화 상태를 유지하며 최소화와 최대화 중에는 일반 복원 영역만 배치한다.
+- [ ] 지정 모니터의 작업 영역 중앙 배치를 공개 모니터 ID 계약과 연결한다.
 - [x] 초기 창 위치와 크기를 작업 영역에 맞추는 preventOverflow를 구현했다. 최소 content 크기와 프레임을 유지할 수 없으면 예약 및 기존 창 종료 전에 거부한다.
 - [x] 초기 배치의 순수 계산과 오류 경계 검증을 완료했다. 음수 좌표, signed 32-bit 경계, DPI 96/120/144/192, content/outer, 제약 충돌과 선언 보존을 검사했다.
 - [x] 초기 배치의 실제 HWND 및 WebView2 집중 검증을 완료했다. Windows Server 2022의 모니터 1개와 DPI 96에서 초기 선언 및 single/multiple 생성과 재생성을 확인했다. multiple은 isolated 프로필이다.
@@ -450,9 +451,11 @@ CI의 `mise run host:windows`에서 SDK와 UI Worker, Win32를 연결해 실행�
 - [ ] 모니터별 좌표 변환과 혼합 DPI의 전역 논리 좌표계 지원 범위를 결정한다.
 - [ ] system/light/dark 테마를 앱과 창에 지정하고 조회한다.
 - [ ] 테마, accent color와 시스템 색 변경을 알린다.
-- [ ] 고대비, forced colors, inverted colors 상태를 조회한다.
-- [ ] reduced motion과 transparency 등 접근성 환경설정을 조회한다.
-- [ ] 스크린 리더와 접근성 활성 상태, 변경 이벤트를 제공한다.
+- [x] Windows 고대비와 OS forced colors 플래그, 시스템 색을 조회한다.
+- [ ] inverted colors 상태를 조회한다.
+- [x] Windows client-area animation 기준 reduced motion과 저장된 transparency 선호를 조회한다.
+- [x] Windows SPI_GETSCREENREADER 설정 플래그를 조회한다. 실제 접근성 트리 활성 여부와는 구분한다.
+- [ ] 스크린 리더와 접근성 트리 활성 상태, 변경 이벤트를 제공한다.
 - [ ] 접근성 지원 활성화와 비활성화를 제어하고 지원 기능을 선택, 조회한다. [E-app-live]의
   `setAccessibilitySupportEnabled`, `getAccessibilitySupportFeatures`, `setAccessibilitySupportFeatures`를 참고한다.
   초기 상태, OS 자동 감지와 명시 설정의 관계, 호출 가능 시점, 빈 목록과 잘못된 기능명을 정의한다.
@@ -476,6 +479,13 @@ CI의 `mise run host:windows`에서 SDK와 UI Worker, Win32를 연결해 실행�
 이 합성 입력 검사는 물리 장치의 hotplug 검증을 대신하지 않는다.
 실제 HWND와 WebView2 회귀를 CI에 추가했다. 실제 다중 물리 모니터의 연결과 제거,
 혼합 DPI, 회전 및 사용자 커서 조작 검증은 별도로 남긴다.
+
+`@bunaway/plugin-appearance`의 getPreferences로 저장된 앱 및 시스템 테마 선호,
+DWM accent와 시스템 색, 접근성 플래그를 조회한다. theme와 transparency의 누락 또는
+알 수 없는 DWORD는 null이다. [appearance API](./site/src/content/docs/reference/plugins/appearance.mdx)를 따른다.
+조회 구현과 실제 Windows 회귀를 추가했으며 테마 지정, 변경 이벤트, 접근성 지원 제어와
+WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
+창별 테마 지정은 공유 WebView 프로필의 색 선호와 창별 override 관계를 결정해야 한다.
 
 ## 14. WebView 생성, 배치와 기본 제어
 
@@ -531,7 +541,8 @@ CI의 `mise run host:windows`에서 SDK와 UI Worker, Win32를 연결해 실행�
 - [ ] 파일 drop의 enter, over, leave와 drop 이벤트, 경로와 좌표를 제공한다.
 - [ ] WebView의 File 객체와 OS 파일 경로를 안전하게 연결한다.
 - [ ] 파일을 앱 밖으로 드래그하고 표시할 drag 이미지를 제공한다.
-- [ ] audio muted와 audible 상태를 변경, 조회하고 이벤트를 제공한다.
+- [x] `setWebViewAudioMuted`로 음소거를 변경하고 `getWebViewAudioState`로 음소거와 문서의 audio 재생 상태를 조회한다. 두 상태는 독립이며 탐색은 음소거를 유지한다.
+- [ ] audio muted와 재생 상태의 변경 이벤트를 제공한다. 실제 장치의 출력과 재생 중 음소거는 수동 검증이 필요하다.
 - [ ] caret browsing 활성화, selection 가운데 표시와 image-at-point 복사를 제공한다.
 - [ ] media 시작과 중단, HTML theme-color와 링크 hover URL 이벤트를 제공한다.
 
@@ -628,7 +639,10 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 
 - [x] 앱이 지정한 절대 경로의 UTF-8 텍스트 읽기와 쓰기를 제공한다.
 - [x] 파일을 여는 경계에서 잘못된 경로, junction, hardlink와 대상 교체를 거부한다.
-- [ ] binary 읽기와 쓰기, append와 open/read/write/seek/close 핸들을 제공한다.
+- [x] Windows의 binary 읽기와 쓰기, UTF-8 텍스트와 바이트 append를 제공한다.
+  canonical base64와 256 KiB 바이트 상한, 작업별 권한과 기존 네이티브 경로 검사를 유지한다.
+  [바이너리 계약](./site/src/content/docs/reference/host/storage-bytes.mdx)을 따른다.
+- [ ] open/read/write/seek/close 파일 핸들과 대용량 stream I/O를 제공한다.
 - [x] 파일과 디렉터리 존재, stat과 metadata를 조회한다.
   `storage.exists`와 `storage.stat`은 앱이 지정한 절대 경로를 받는다.
   작업마다 독립적으로 허용하고 네이티브 경로와 대상 핸들을 검사한다. 없는 대상은 각각 `false`와 `null`이며,
@@ -659,7 +673,8 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   기본값이 있는 경우와 없는 경우, 변경 이벤트, autosave 및 명시적 save 후 재실행 결과를 검증한다.
 - [ ] SQLite의 query, execute, transaction과 migration을 제공한다.
 - [ ] Tauri SQL의 다른 backend와 원격 DB 지원 필요성을 결정한다.
-- [ ] Bun 파일, path와 SQLite API를 직접 사용하는 trusted backend 경로와 권한 중재 API를 구분해 문서화한다.
+- [x] Bun 파일, path와 SQLite API를 직접 사용하는 trusted backend 경로와 권한 중재 API를 구분해 문서화한다.
+  [백엔드 Host API](./site/src/content/docs/reference/backend/host-api.mdx)를 따른다.
 
 ## 20. OS 정보, HTTP, WebSocket와 프로세스
 
@@ -749,7 +764,8 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 - [x] 이벤트 구독, 해제, broadcast와 지정 뷰 전달을 제공한다.
 - [x] 권한, 취소, deadline과 종료된 세션의 늦은 응답 처리를 제공한다.
 - [x] 기본 WebView 연결을 공유하고 HMR과 pagehide에서 수명을 관리한다.
-- [ ] once 구독과 대상 창, WebView, backend 이벤트 전달의 공개 계약을 제공한다.
+- [x] `client.once`와 직접 `once`로 첫 유효 이벤트를 한 번만 전달하고 자동 해제한다. 권한, 취소와 오류 계약은 기존 구독을 따른다.
+- [ ] 대상 창, WebView, backend 이벤트 전달의 공개 계약을 제공한다.
 - [x] Windows의 `windows.changed` native 이벤트를 동일한 typed 구독 API로 전달한다.
 - [ ] binary payload와 JSON 외 데이터의 전송 계약을 추가한다.
 - [ ] 연속 결과와 대용량 데이터의 channel 또는 stream 전송을 제공한다.
