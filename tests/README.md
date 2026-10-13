@@ -134,6 +134,9 @@ windows-ui-operations.test.ts는 실제 UI Worker에서 정책 승인 전에 플
 마지막 창 재생성의 이전 세션이 폐기된 뒤 destroy를 호출합니다. 새 HWND를 만들지 않고
 재생성을 CANCELLED로 끝내며 keep-alive와 기본 quit 트레이 앱이 beforeQuit 없이
 StopHook과 네이티브 자원 정리를 완료하는지 확인합니다. `mise run host:windows`에 포함합니다.
+`nonfocusable-resident`와 `nonfocusable-tray`는 실제 UI Worker의 desktop Show와 트레이
+Open으로 숨김 및 최소화 상태를 복원합니다. 전경 활성화를 요청하지 않고 최대화 이력,
+창 ID와 WebView 세션을 유지하는지 확인합니다.
 
 Android의 `FrameDispatcherTest`는 읽기 스레드의 직접 전달이 멈춰도 별도 타이머가
 실행되는지, 유휴 이후에도 기한을 감시하는지와 종료 제어 뒤의 응답 폐기를 검사한다.
@@ -397,6 +400,8 @@ boot 전후 종료와 초기화 중 프로토콜 버전, 런타임 ID 및 세대
 합성 메시지이며 실제 배율이 다른 물리 모니터 사이의 이동 검증과 구분한다.
 최소화 또는 최대화 직후, 표시와 숨김 직후 및 복원 영역 setter 뒤의 체크포인트는
 HWND 소유 프로세스와 스레드, style, 원본 WINDOWPLACEMENT와 Win32 상태를 함께 검사한다.
+일반 복원 뒤 숨김, 전체화면 진입, 제약 갱신과 종료의 마지막 주기도 같은 상태 기록을 남긴다.
+마지막 bounds 불일치는 이 기록을 출력한 뒤 원래 assertion 오류를 그대로 전파한다.
 실패에는 최근 체크포인트와 제한된 상태 메시지 기록, 호스트 callback 오류를 포함한다.
 검사는 상태를 복구하거나 메시지를 pump하지 않으며 기존 geometry 기대값을 유지한다.
 `lifecycle/windows-window-state.test.ts`는 같은 HWND에서 일반, 최소화와 최대화 상태,

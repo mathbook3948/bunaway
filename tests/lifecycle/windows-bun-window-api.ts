@@ -165,6 +165,133 @@ if (!process.argv.includes("--child")) {
   });
   const nativeWindows = new Windows(() => {});
   try {
+    const source = nativeWindows.create(
+      "Focusability source",
+      650,
+      450,
+      () => {},
+    );
+    try {
+      nativeWindows.focus(source);
+      for (const visible of [
+        false,
+        true,
+      ]) {
+        const foreground = user.symbols.GetForegroundWindow();
+        let inactiveCloseRequests = 0;
+        const hwnd = nativeWindows.create(
+          "Nonactivating target",
+          650,
+          450,
+          (message) => {
+            if (message === 0x0010) {
+              inactiveCloseRequests++;
+            }
+          },
+          visible,
+          {
+            focusable: false,
+          },
+        );
+        try {
+          assert.equal(nativeWindows.isFocusable(hwnd), false);
+          assert.equal(nativeWindows.isVisible(hwnd), visible);
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          assert.equal(
+            driver.symbols.SendMessageW(hwnd, 0x0021, hwnd, 0x02010001n),
+            3n,
+          );
+          assert.equal(nativeWindows.focus(hwnd), false);
+          assert.equal(nativeWindows.activate(hwnd), false);
+          assert.equal(nativeWindows.isVisible(hwnd), visible);
+          const original = nativeWindows.getBounds(hwnd, "outer");
+          nativeWindows.setFocusable(hwnd, true);
+          nativeWindows.setFocusable(hwnd, false);
+          assert.deepEqual(nativeWindows.getBounds(hwnd, "outer"), original);
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          nativeWindows.show(hwnd, true);
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          nativeWindows.maximize(hwnd);
+          assert.equal(nativeWindows.isMaximized(hwnd), true);
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          nativeWindows.unmaximize(hwnd);
+          assert.deepEqual(nativeWindows.getBounds(hwnd, "outer"), original);
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          for (const command of [
+            0xf020n,
+            0xf120n,
+            0xf030n,
+            0xf120n,
+          ]) {
+            driver.symbols.SendMessageW(hwnd, 0x0112, command, 0n);
+            assert.equal(nativeWindows.isMinimized(hwnd), command === 0xf020n);
+            assert.equal(nativeWindows.isMaximized(hwnd), command === 0xf030n);
+            assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          }
+          assert.deepEqual(nativeWindows.getBounds(hwnd, "outer"), original);
+          nativeWindows.maximize(hwnd);
+          nativeWindows.minimize(hwnd);
+          nativeWindows.restore(hwnd);
+          assert.equal(nativeWindows.isMaximized(hwnd), true);
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          nativeWindows.unmaximize(hwnd);
+          assert.deepEqual(nativeWindows.getBounds(hwnd, "outer"), original);
+          nativeWindows.setFullscreen(hwnd, true);
+          nativeWindows.setFocusable(hwnd, true);
+          nativeWindows.setFocusable(hwnd, false);
+          nativeWindows.setFullscreen(hwnd, false);
+          assert.equal(nativeWindows.isFocusable(hwnd), false);
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          nativeWindows.show(hwnd, false);
+          nativeWindows.showForDesktop(hwnd);
+          assert.equal(nativeWindows.isVisible(hwnd), true);
+          assert.equal(nativeWindows.isMinimized(hwnd), false);
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          nativeWindows.minimize(hwnd);
+          nativeWindows.showForDesktop(hwnd);
+          assert.equal(nativeWindows.isMinimized(hwnd), false);
+          assert.deepEqual(nativeWindows.getBounds(hwnd, "outer"), original);
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          nativeWindows.maximize(hwnd);
+          nativeWindows.minimize(hwnd);
+          nativeWindows.showForDesktop(hwnd);
+          assert.equal(nativeWindows.isMaximized(hwnd), true);
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          nativeWindows.unmaximize(hwnd);
+          assert.deepEqual(nativeWindows.getBounds(hwnd, "outer"), original);
+          nativeWindows.setMinimizable(hwnd, false);
+          nativeWindows.setMaximizable(hwnd, false);
+          nativeWindows.setClosable(hwnd, false);
+          for (const command of [
+            0xf020n,
+            0xf030n,
+            0xf060n,
+          ]) {
+            driver.symbols.SendMessageW(hwnd, 0x0112, command, 0n);
+          }
+          driver.symbols.SendMessageW(hwnd, 0x0010, 0n, 0n);
+          assert.equal(inactiveCloseRequests, 0);
+          assert.equal(nativeWindows.isMinimized(hwnd), false);
+          assert.equal(nativeWindows.isMaximized(hwnd), false);
+          // Caption restrictions do not block trusted state APIs or desktop restoration.
+          nativeWindows.maximize(hwnd);
+          nativeWindows.minimize(hwnd);
+          nativeWindows.showForDesktop(hwnd);
+          assert.equal(nativeWindows.isMaximized(hwnd), true);
+          assert.equal(nativeWindows.isMinimized(hwnd), false);
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          nativeWindows.unmaximize(hwnd);
+          assert.deepEqual(nativeWindows.getBounds(hwnd, "outer"), original);
+          nativeWindows.setClosable(hwnd, true);
+          driver.symbols.SendMessageW(hwnd, 0x0010, 0n, 0n);
+          assert.equal(inactiveCloseRequests, 1);
+        } finally {
+          nativeWindows.destroy(hwnd);
+        }
+      }
+    } finally {
+      nativeWindows.destroy(source);
+    }
     for (const visible of [
       false,
       true,
@@ -614,6 +741,13 @@ if (!process.argv.includes("--child")) {
             continue;
           }
           const event = JSON.parse(line);
+          if (
+            typeof event.event === "string" &&
+            (event.event.startsWith("window-api-") ||
+              event.event === "window-close-confirmation")
+          ) {
+            console.log(`Window API stage: ${event.event}`);
+          }
           if (event.event === "webview-ready" && event.view === "editor") {
             editorBrowser = event.browserPid;
           }
@@ -929,6 +1063,7 @@ if (!process.argv.includes("--child")) {
               view: "editor",
               options: {
                 window: {
+                  focusable: false,
                   maximized: true,
                   fullscreen: true,
                 },
@@ -985,9 +1120,25 @@ if (!process.argv.includes("--child")) {
             );
             await assertContentSize(500, 600);
             await waitFor(() => holds === 1);
+            console.log(
+              JSON.stringify({
+                event: "window-api-focusability",
+              }),
+            );
             const editor = {
               view: "editor",
             };
+            assert.equal(await windows.isFocusable(editor), false);
+            await windows.setFocusable({
+              ...editor,
+              focusable: true,
+            });
+            assert.equal(await windows.isFocusable(editor), true);
+            await windows.setFocusable({
+              ...editor,
+              focusable: false,
+            });
+            assert.equal(await windows.isFocusable(editor), false);
             await windows.setMinimizable({
               ...editor,
               minimizable: false,
@@ -1041,6 +1192,11 @@ if (!process.argv.includes("--child")) {
             assert.equal(await windows.isVisible(editor), true);
             assert.equal(await windows.isMinimized(editor), false);
             assert.equal(await windows.isMaximized(editor), false);
+            console.log(
+              JSON.stringify({
+                event: "window-api-maximize-history",
+              }),
+            );
             await windows.maximize(editor);
             assert.equal(await windows.isNormal(editor), false);
             assert.equal(await windows.isMaximized(editor), true);
@@ -1459,6 +1615,10 @@ if (!process.argv.includes("--child")) {
               view: "editor",
               message: "Close editor?",
             });
+            await windows.setFocusable({
+              ...editor,
+              focusable: true,
+            });
             assert.equal(
               await windows.close({
                 view: "editor",
@@ -1484,6 +1644,12 @@ if (!process.argv.includes("--child")) {
             );
             await waitFor(() => holds === 2 && cancellations === 1);
           } else if (runs === 2) {
+            assert.equal(
+              await windows.isFocusable({
+                view: "editor",
+              }),
+              true,
+            );
             assert.equal(
               await windows.isMinimizable({
                 view: "editor",

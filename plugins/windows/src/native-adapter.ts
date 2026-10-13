@@ -16,6 +16,13 @@ function unsupportedRelations() {
   });
 }
 
+function unsupportedFocusability() {
+  return new BunawayError({
+    code: "UNSUPPORTED",
+    message: "Window focusability is not implemented on this platform.",
+  });
+}
+
 function unsupportedControls() {
   return new BunawayError({
     code: "UNSUPPORTED",
@@ -250,7 +257,11 @@ export function createOperations(
             continue;
           }
           const next = services.window(candidate.key);
-          if (next.isVisible() && !next.isMinimized()) {
+          if (
+            next.isVisible() &&
+            !next.isMinimized() &&
+            next.isFocusable?.() !== false
+          ) {
             next.activate();
             return !window.isFocused();
           }
@@ -309,6 +320,17 @@ export function createOperations(
           throw unsupportedRelations();
         }
         return window.isEnabled();
+      case "windows.setFocusable":
+        if (!window.setFocusable) {
+          throw unsupportedFocusability();
+        }
+        window.setFocusable(call.payload.focusable);
+        break;
+      case "windows.isFocusable":
+        if (!window.isFocusable) {
+          throw unsupportedFocusability();
+        }
+        return window.isFocusable();
       case "windows.setMinimizable":
         if (!window.setMinimizable) {
           throw unsupportedControls();

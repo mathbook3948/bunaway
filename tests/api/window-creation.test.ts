@@ -89,6 +89,12 @@ test.each([
       {},
       {
         window: {
+          focusable: false,
+        },
+        visible: true,
+      },
+      {
+        window: {
           maximized: true,
           fullscreen: true,
         },
@@ -208,6 +214,11 @@ test.each([
       },
       {
         windowId: "caller-id",
+      },
+      {
+        window: {
+          focusable: null,
+        },
       },
       {
         window: {
