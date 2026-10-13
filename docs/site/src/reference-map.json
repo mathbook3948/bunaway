@@ -23,6 +23,13 @@
       }
     },
     {
+      "name": "@bunaway/backend/cli",
+      "source": "packages/backend-sdk/src/cli.ts",
+      "pages": {
+        "reference/backend/cli": ["defineCLI"]
+      }
+    },
+    {
       "name": "@bunaway/core",
       "source": "packages/core/src/index.ts",
       "pages": {
