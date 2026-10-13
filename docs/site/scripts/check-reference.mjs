@@ -476,6 +476,7 @@ checkNames(
       "os",
       "process",
       "network",
+      "notification",
     ].flatMap((name) =>
       [
         ...objectPropertyNames(
