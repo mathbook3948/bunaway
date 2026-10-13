@@ -69,6 +69,7 @@ export function renderAssociationCode(
 const AssociationHive = ${scope === "perUser" ? "HKCU" : "HKLM"};
       AssociationRoot = '${root}';
       AssociationRegistration = '${literal(`${appName} (${identifier})`)}';
+      AssociationPreviousDataKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{${stableGuid(identifier)}}_is1';
 
 function AssociationExecutable: String;
 begin
@@ -110,15 +111,31 @@ begin
     RaiseException('Could not remove app association key: ' + Key);
 end;
 
+// The journal is written only for absent candidates before any ProgID writes.
+// A present command always wins: recovery never claims a foreign replacement.
+function IsAssociationCandidateOwner(const ProgId, Executable: String): Boolean;
+var Key, Command, PendingOwner, Owner: String;
+begin
+  Key := 'Software\Classes\' + ProgId + '\shell\open\command';
+  if RegQueryStringValue(AssociationHive, Key, '', Command) then begin
+    Result := CompareText(Command, AssociationCommand(Executable)) = 0;
+    Exit;
+  end;
+  Result := not RegValueExists(AssociationHive, Key, '') and
+    RegQueryStringValue(AssociationHive, AssociationRoot + '\PendingCandidates', ProgId, PendingOwner) and
+    (CompareText(PendingOwner, Executable) = 0) and
+    RegQueryStringValue(AssociationHive, AssociationRoot, 'Executable', Owner) and
+    (CompareText(Owner, Executable) = 0);
+end;
+
 procedure RemoveAssociationKind(const Kind, Executable: String);
-var Names: TArrayOfString; I: Integer; ProgId, Command, Key, Extension, Value: String;
+var Names: TArrayOfString; I: Integer; ProgId, Key, Extension, Value: String;
 begin
   Key := AssociationRoot + '\Capabilities\' + Kind;
   if not RegGetValueNames(AssociationHive, Key, Names) then Exit;
   for I := 0 to GetArrayLength(Names) - 1 do begin
     if RegQueryStringValue(AssociationHive, Key, Names[I], ProgId) and IsAssociationProgId(ProgId) and
-       RegQueryStringValue(AssociationHive, 'Software\Classes\' + ProgId + '\shell\open\command', '', Command) and
-       (CompareText(Command, AssociationCommand(Executable)) = 0) then begin
+       IsAssociationCandidateOwner(ProgId, Executable) then begin
       if Kind = 'FileAssociations' then begin
         Extension := Names[I];
         // Values come from the registry, not just the validated config.
@@ -138,6 +155,16 @@ begin
   end;
 end;
 
+procedure RemovePendingAssociationCandidates(const Executable: String);
+var Names: TArrayOfString; I: Integer;
+begin
+  // Registration may fail even before a Capabilities mapping is written.
+  if not RegGetValueNames(AssociationHive, AssociationRoot + '\PendingCandidates', Names) then Exit;
+  for I := 0 to GetArrayLength(Names) - 1 do
+    if IsAssociationProgId(Names[I]) and IsAssociationCandidateOwner(Names[I], Executable) then
+      DeleteAssociationKey('Software\Classes\' + Names[I]);
+end;
+
 procedure RemoveAssociations(const Executable: String);
 var Owner, Registration, RegistrationName: String;
 begin
@@ -145,6 +172,7 @@ begin
      (CompareText(Owner, Executable) <> 0) then Exit;
   RemoveAssociationKind('FileAssociations', Executable);
   RemoveAssociationKind('UrlAssociations', Executable);
+  RemovePendingAssociationCandidates(Executable);
   if RegQueryStringValue(AssociationHive, AssociationRoot, 'RegistrationName', RegistrationName) and
      RegQueryStringValue(AssociationHive, 'Software\RegisteredApplications', RegistrationName, Registration) and
      (Registration = AssociationRoot + '\Capabilities') then
@@ -153,23 +181,26 @@ begin
 end;
 
 // Validate the entire selected snapshot before deleting any prior registration.
-// The old executable is trusted only through this installer's previous-data record.
+// Old and pending executables are trusted only through Inno's previous data.
 function IsAssociationOwner(const Executable: String): Boolean;
 begin
   Result := CompareText(Executable, AssociationExecutable) = 0;
   if not Result and (PreviousInstallDir <> '') and (PreviousExecutableName <> '') then
     Result := CompareText(Executable, AddBackslash(PreviousInstallDir) + PreviousExecutableName) = 0;
+  if not Result and (PendingAssociationInstallDir <> '') and (PendingAssociationExecutableName <> '') then
+    Result := CompareText(Executable, AddBackslash(PendingAssociationInstallDir) + PendingAssociationExecutableName) = 0;
 end;
 
 procedure CheckAssociationCandidate(const ProgId: String);
-var Key, Command: String;
+var Key: String;
 begin
   Key := 'Software\Classes\' + ProgId;
   if not RegKeyExists(AssociationHive, Key) then Exit;
-  if not RegQueryStringValue(AssociationHive, Key + '\shell\open\command', '', Command) or
-     not ((CompareText(Command, AssociationCommand(AssociationExecutable)) = 0) or
+  if not (IsAssociationCandidateOwner(ProgId, AssociationExecutable) or
           ((PreviousInstallDir <> '') and (PreviousExecutableName <> '') and
-           (CompareText(Command, AssociationCommand(AddBackslash(PreviousInstallDir) + PreviousExecutableName)) = 0))) then
+           IsAssociationCandidateOwner(ProgId, AddBackslash(PreviousInstallDir) + PreviousExecutableName)) or
+          ((PendingAssociationInstallDir <> '') and (PendingAssociationExecutableName <> '') and
+           IsAssociationCandidateOwner(ProgId, AddBackslash(PendingAssociationInstallDir) + PendingAssociationExecutableName))) then
     RaiseException('App association is owned by a different command: ' + ProgId);
 end;
 
@@ -188,29 +219,48 @@ ${preflight}
 end;
 
 procedure RegisterAssociation(const Kind, Token, ProgId, Name: String; Protocol: Boolean);
-var Command, Key: String;
+var Key: String;
 begin
   Key := 'Software\Classes\' + ProgId;
   if RegKeyExists(AssociationHive, Key) then begin
-    if not RegQueryStringValue(AssociationHive, Key + '\shell\open\command', '', Command) or
-       (CompareText(Command, AssociationCommand(AssociationExecutable)) <> 0) then
+    if not IsAssociationCandidateOwner(ProgId, AssociationExecutable) then
       RaiseException('App association is owned by a different command: ' + ProgId);
-  end;
+  end else
+    WriteAssociationValue(AssociationRoot + '\PendingCandidates', ProgId, AssociationExecutable);
+  WriteAssociationValue(AssociationRoot + '\Capabilities\' + Kind, Token, ProgId);
   WriteAssociationValue(Key, '', Name);
   WriteAssociationValue(Key + '\DefaultIcon', '', '"' + AssociationExecutable + '",0');
   WriteAssociationValue(Key + '\shell\open\command', '', AssociationCommand(AssociationExecutable));
   if Protocol then WriteAssociationValue(Key, 'URL Protocol', '');
-  WriteAssociationValue(AssociationRoot + '\Capabilities\' + Kind, Token, ProgId);
   if Kind = 'FileAssociations' then
     WriteAssociationValue('Software\Classes\' + Token + '\OpenWithProgids', ProgId, '');
+  DeleteAssociationValue(AssociationRoot + '\PendingCandidates', ProgId);
+end;
+
+procedure RemovePendingAssociationOwner;
+begin
+  if (PendingAssociationInstallDir <> '') and (PendingAssociationExecutableName <> '') then
+    RemoveAssociations(AddBackslash(PendingAssociationInstallDir) + PendingAssociationExecutableName);
+end;
+
+procedure ClearPendingAssociationOwner;
+begin
+  // Inno closes RegisterPreviousData's handle before ssPostInstall. Reopen
+  // this install's own key instead of retaining or reusing that handle.
+  WriteAssociationValue(AssociationPreviousDataKey, 'Inno Setup CodeFile: PendingAssociationOwner', '');
+  PendingAssociationExecutableName := '';
+  PendingAssociationInstallDir := '';
 end;
 
 procedure InstallAssociations;
 var Owner: String;
 begin
   PreflightAssociations;
+  if not PendingAssociationDataSaved then
+    RaiseException('Could not persist pending association owner.');
   // Updates remove the previous snapshot, including declarations no longer
   // present. Ownership checks retain entries changed to another command.
+  RemovePendingAssociationOwner;
   if (PreviousInstallDir <> '') and (PreviousExecutableName <> '') then
     RemoveAssociations(AddBackslash(PreviousInstallDir) + PreviousExecutableName);
   RemoveAssociations(AssociationExecutable);
@@ -242,6 +292,7 @@ ${registration}
   end;`
       : ""
   }
+  ClearPendingAssociationOwner;
 end;
 `;
 }
