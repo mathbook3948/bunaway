@@ -229,6 +229,23 @@ if (!process.argv.includes("--child")) {
           nativeWindows.setFullscreen(hwnd, false);
           assert.equal(nativeWindows.isFocusable(hwnd), false);
           assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          nativeWindows.show(hwnd, false);
+          nativeWindows.showForDesktop(hwnd);
+          assert.equal(nativeWindows.isVisible(hwnd), true);
+          assert.equal(nativeWindows.isMinimized(hwnd), false);
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          nativeWindows.minimize(hwnd);
+          nativeWindows.showForDesktop(hwnd);
+          assert.equal(nativeWindows.isMinimized(hwnd), false);
+          assert.deepEqual(nativeWindows.getBounds(hwnd, "outer"), original);
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          nativeWindows.maximize(hwnd);
+          nativeWindows.minimize(hwnd);
+          nativeWindows.showForDesktop(hwnd);
+          assert.equal(nativeWindows.isMaximized(hwnd), true);
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          nativeWindows.unmaximize(hwnd);
+          assert.deepEqual(nativeWindows.getBounds(hwnd, "outer"), original);
         } finally {
           nativeWindows.destroy(hwnd);
         }

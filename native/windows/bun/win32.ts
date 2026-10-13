@@ -771,6 +771,28 @@ export class Windows {
     return this.activate(window);
   }
 
+  /** Restore a desktop Show request while respecting this HWND's activation policy. */
+  showForDesktop(window: bigint): void {
+    if (this.isFocusable(window)) {
+      this.focus(window);
+      return;
+    }
+    const minimized = this.isMinimized(window);
+    if (minimized && !this.isFullscreen(window)) {
+      // The normal restore API retains maximize history and uses inactive placement.
+      this.restore(window);
+      return;
+    }
+    if (minimized) {
+      // Fullscreen remains owned by its saved placement; restore the native iconic
+      // state without leaving fullscreen or requesting foreground activation.
+      user.symbols.ShowWindow(window, SW_SHOWNOACTIVATE);
+      this.observeChanges(window);
+      return;
+    }
+    this.showInactive(window);
+  }
+
   /** Read live HWND state; invalid handles must not be mistaken for false. */
   isMinimized(window: bigint): boolean {
     assert(user.symbols.IsWindow(window), "Window is no longer valid.");

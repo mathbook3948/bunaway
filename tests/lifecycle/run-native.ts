@@ -146,6 +146,8 @@ if (target === "windows-x64") {
       "resident-empty",
       "tray",
       "tray-empty",
+      "nonfocusable-resident",
+      "nonfocusable-tray",
       "destroy-resident",
       "destroy-resident-tray",
       "destroy-recreate-resident",

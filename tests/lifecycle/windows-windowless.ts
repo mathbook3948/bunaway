@@ -23,6 +23,7 @@ const scenario = process.argv[2] ?? "resident";
 const assets = resolve(output, "assets");
 const dataRoot = resolve(output, `${scenario}-${process.pid}`);
 const hasTray = scenario.includes("tray");
+const nonfocusable = scenario.startsWith("nonfocusable-");
 const empty = scenario.endsWith("empty");
 const registry = new NativeRegistry([
   windowsPlugin,
@@ -392,6 +393,40 @@ if (!process.argv.includes("--child")) {
       });
     }
     await ready();
+    if (nonfocusable) {
+      assert.equal(
+        await call("windows.isFocusable", {
+          view: "main",
+        }),
+        false,
+      );
+      if (!hasTray) {
+        assert.equal(
+          await call("windows.isVisible", {
+            view: "main",
+          }),
+          false,
+        );
+        await desktop.show();
+        await waitFor(() =>
+          call("windows.isVisible", {
+            view: "main",
+          }),
+        );
+      }
+      assert.equal(
+        await call("windows.isVisible", {
+          view: "main",
+        }),
+        true,
+      );
+      assert.equal(
+        await call("windows.isFocused", {
+          view: "main",
+        }),
+        false,
+      );
+    }
     if (scenario.startsWith("destroy-")) {
       let recreation: Promise<void> | undefined;
       if (scenario.startsWith("destroy-recreate-")) {
@@ -478,6 +513,62 @@ if (!process.argv.includes("--child")) {
           !(await call("windows.isMinimized", {
             view: "main",
           })),
+      );
+    } else if (nonfocusable) {
+      await call("windows.minimize", {
+        view: "main",
+      });
+      assert.equal(
+        await call("windows.isMinimized", {
+          view: "main",
+        }),
+        true,
+      );
+      await desktop.show();
+      await waitFor(
+        async () =>
+          !(await call("windows.isMinimized", {
+            view: "main",
+          })),
+      );
+    }
+    if (nonfocusable) {
+      assert.equal(
+        await call("windows.isVisible", {
+          view: "main",
+        }),
+        true,
+      );
+      assert.equal(
+        await call("windows.isMinimized", {
+          view: "main",
+        }),
+        false,
+      );
+      assert.equal(
+        await call("windows.isMaximized", {
+          view: "main",
+        }),
+        true,
+      );
+      assert.equal(
+        await call("windows.isFocused", {
+          view: "main",
+        }),
+        false,
+      );
+      assert.equal(
+        (
+          await call("windows.getSnapshot", {
+            view: "main",
+          })
+        ).windowId,
+        original.windowId,
+      );
+      assert.equal(
+        sessions,
+        1,
+        "inactive restoration must preserve the session",
       );
     }
     emit("native-close-requested");
@@ -627,9 +718,19 @@ if (!process.argv.includes("--child")) {
                 title: "Windowless test",
                 home: "https://app.bunaway.local/index.html",
                 startup: false,
+                ...(nonfocusable
+                  ? {
+                      visible: false,
+                    }
+                  : {}),
                 window: {
                   width: 640,
                   height: 480,
+                  ...(nonfocusable
+                    ? {
+                        focusable: false,
+                      }
+                    : {}),
                 },
               },
             ],

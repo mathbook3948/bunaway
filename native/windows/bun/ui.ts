@@ -119,7 +119,7 @@ function showWindows() {
   );
   if (live.length) {
     for (const view of live) {
-      windows.focus(view.native.hwnd);
+      windows.showForDesktop(view.native.hwnd);
     }
     showRequested = false;
     return;
@@ -142,7 +142,7 @@ function showWindows() {
       (view) => view.boundary.policy.id === first.view && !view.boundary.closed,
     );
     assert(view);
-    windows.focus(view.native.hwnd);
+    windows.showForDesktop(view.native.hwnd);
   }
   showRequested = false;
 }
