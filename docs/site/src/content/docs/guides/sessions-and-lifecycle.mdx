@@ -50,6 +50,9 @@ Windows의 기본 동작은 닫힌 창의 뷰 세션을 폐기하고 마지막 �
 Windows에서 시작 창을 생략하려면 트레이 또는 `desktop.closeBehavior: "keep-alive"`가 필요합니다.
 `"keep-alive"`는 마지막 창의 세션을 폐기해도 앱 백엔드를 유지하며 명시적 종료 요청을 기다립니다.
 트레이 Open 또는 `DesktopContext.show()`는 열린 창이 없으면 첫 사전 선언 창을 새 세션으로 생성합니다.
+[자동 실행](/reference/plugins/autostart/#로그인-실행-구분과-숨김-시작)은 `onOpen`의
+`launchReason`으로 호출 모드를 전달합니다. 숨김 자동 실행은 트레이가 필요하며 초기 SDK
+준비 뒤에도 창을 표시하지 않습니다. 트레이 Open이나 수동 두 번째 실행은 기존 세션을 복원합니다.
 플러그인 StopHook은 역순으로 실행합니다.
 
 종료에는 기한이 있으므로 중요한 데이터는 사용자가 작업하는 동안 저장합니다.

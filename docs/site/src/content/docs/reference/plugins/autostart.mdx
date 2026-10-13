@@ -18,7 +18,7 @@ export default defineApp({ modules: [], plugins: [autostartPlugin] });
 ## 등록, 조회와 해제
 
 ```ts
-enableAutostart(args?: string[], options?: NativeInvokeOptions): Promise<AutostartStatus>
+enableAutostart(settings?: string[] | AutostartOptions, options?: NativeInvokeOptions): Promise<AutostartStatus>
 getAutostartStatus(options?: NativeInvokeOptions): Promise<AutostartStatus>
 disableAutostart(options?: NativeInvokeOptions): Promise<null>
 ```
@@ -38,16 +38,65 @@ if (status.registered && status.startupState === "disabled") {
 await disableAutostart();
 ```
 
-`args`의 기본값은 빈 배열입니다. 최대 64개이며 각 문자열은 최대 260자입니다.
+`AutostartOptions`는 `{ args?: string[], hidden?: boolean }`입니다. 기존 인자 배열도 받습니다.
+`args`의 기본값은 빈 배열이고 `hidden`의 기본값은 `false`입니다. 인자는 최대 64개이며 각 문자열은 최대 260자입니다.
 Windows에 저장하는 전체 명령줄은 **260 UTF-16 코드 단위**를 넘을 수 없습니다.
 경로, 프레임워크 시작 인자, 인자 사이 공백과 따옴표 이스케이프도 이 제한에 포함합니다.
 공백, Unicode, 빈 문자열, 따옴표와 끝의 역슬래시는 원래 인자 그대로 전달합니다.
 NUL과 짝이 없는 UTF-16 surrogate는 거부합니다. `%PATH%`, `&` 등은 문자열이며
 환경 변수 확장이나 셸 실행을 하지 않습니다.
 
-`--login`은 앱이 선택한 일반 인자입니다. 자동 감지 기능이 아니므로 앱의
-`desktop.onOpen`에서 해당 인자를 확인할 수 있지만 수동으로 같은 인자를 전달하면
-구별할 수 없습니다. 숨김 시작이나 트레이 동작을 자동으로 적용하지 않습니다.
+## 로그인 실행 구분과 숨김 시작
+
+등록 명령줄에는 프레임워크 인자 뒤에 예약 시작 인자를 하나 추가합니다. 일반 등록은
+`--bunaway-autostart`, 숨김 등록은 `--bunaway-autostart-hidden`입니다. 두 인자도
+260 UTF-16 코드 단위 제한에 포함합니다. 호스트는 앱 인자의 첫 항목에 있는 예약 인자를
+소비하고 `desktop.onOpen`의 `request.launchReason`에 `"autostart"`를 전달합니다.
+예약 인자가 없는 실행은 `"manual"`입니다. `request.source`는 별도로 최초 실행
+`"initial"`과 이미 실행 중인 앱으로 전달한 `"second-instance"`를 구분합니다.
+`request.argv`, `urls`, `files`에는 소비한 예약 인자를 포함하지 않습니다.
+뒤에 있는 같은 문자열과 `--` 뒤의 문자열은 앱 인자로 유지합니다.
+
+이 값은 실행 인자로 전달한 모드이며 Windows 로그인 실행의 인증 결과가 아닙니다.
+수동 실행도 같은 예약 인자를 전달할 수 있습니다. 권한 승인이나 신뢰된 출처 판단에
+사용하지 마세요. 기존 등록은 명시적으로 재등록하기 전까지 예약 인자가 없을 수 있습니다.
+`--login`과 같은 앱 고유 인자는 계속 그대로 전달합니다.
+
+숨김 등록에는 앱 정의의 `desktop.tray`가 필요합니다. 트레이가 없는 앱의
+`enableAutostart({ hidden: true })`는 `INVALID_ARGUMENT`로 거부하며 Run 값을 변경하지 않습니다.
+숨김 등록 뒤 앱에서 트레이를 제거하면 해당 시작도 UI Worker 생성 전에 실패합니다.
+
+```ts
+import { defineApp } from "@bunaway/backend";
+import { autostartPlugin, enableAutostart } from "@bunaway/plugin-autostart";
+
+export default defineApp({
+  modules: [],
+  plugins: [autostartPlugin],
+  desktop: {
+    tray: { tooltip: "Memo" },
+    closeBehavior: "hide",
+    onOpen(request) {
+      console.log(request.source, request.launchReason, request.argv);
+    },
+  },
+});
+
+// 사용자가 동의한 설정 명령에서 autostart.enable 권한으로 호출합니다.
+// await enableAutostart({ args: ["--sync"], hidden: true });
+```
+
+숨김 로그인 시작은 선언한 시작 창의 HWND와 WebView, SDK 세션을 만들되 표시하거나
+활성화하지 않습니다. 초기 `visible`과 `showWhenReady`의 자동 표시 조건도 이 실행에서는
+적용하지 않습니다. 백엔드와 UI는 준비를 계속하며 트레이 Open, 수동 재실행이나
+`DesktopContext.show()`로 같은 창과 세션을 복원합니다. 이후 창 생성에는 원래 선언의
+표시 설정을 사용합니다. 앱이 `onOpen`에서 `show()`를 호출하거나 직접 창을 표시하면
+숨김 시작 후에도 창이 표시됩니다.
+
+이미 실행 중인 앱에 숨김 자동 실행 요청을 전달하면 현재 표시 상태를 유지하고
+`onOpen`을 호출합니다. 이미 표시한 창을 숨기거나 숨긴 창을 자동으로 복원하지 않습니다.
+일반 자동 실행과 수동 두 번째 실행은 기존 규칙대로 먼저 창 표시를 요청합니다.
+실제 로그아웃, 로그인 실행과 작업 관리자 조작은 별도 대화형 검증입니다.
 
 ## 결과
 
@@ -106,13 +155,13 @@ EXE로 검증하세요. 앱 인자의 첫 항목으로 개발용 `--devtools`, `
 `startupState`가 `disabled`일 수 있습니다. 사용자는 Windows에서 직접 활성화해야 합니다.
 `disableAutostart`는 등록이 없거나 반복 호출해도 성공하며 다른 앱의 값은 지우지 않습니다.
 앱 삭제만으로 Run 값이 정리되지는 않습니다. 제거 전 명시적 해제, 설치 프로그램의
-opt-in 및 제거 연동과 숨김 시작은 후속 범위입니다.
+opt-in 및 제거 연동은 후속 범위입니다.
 
 ## 정책과 오류
 
 | 작업 | 입력 | 권한 |
 | --- | --- | --- |
-| `autostart.enable` | `{ args: string[] }` | `autostart.enable` |
+| `autostart.enable` | `{ args: string[], hidden?: boolean }` | `autostart.enable` |
 | `autostart.disable` | `null` | `autostart.disable` |
 | `autostart.getStatus` | `null` | `autostart.getStatus` |
 
@@ -122,7 +171,7 @@ opt-in 및 제거 연동과 숨김 시작은 후속 범위입니다.
 setup에서는 루트 `backend.permissions`를 사용합니다. 실행 파일이나 다른 앱 ID를
 선택하는 입력과 관리자 범위는 제공하지 않습니다.
 
-- `INVALID_ARGUMENT`: 입력, 인자 인코딩이나 전체 명령줄 길이가 유효하지 않습니다.
+- `INVALID_ARGUMENT`: 입력, 인자 인코딩이나 전체 명령줄 길이가 유효하지 않거나 숨김 등록에 필요한 트레이가 없습니다.
 - `PERMISSION_DENIED`: 정책 권한이나 사용자 레지스트리 접근 권한이 없습니다.
 - `UNSUPPORTED`: Windows 어댑터, 호스트 실행 정보가 없거나 MSIX 패키지로 실행 중입니다.
   MSIX는 manifest StartupTask와 별도의 사용자 동의 계약이 필요합니다.
