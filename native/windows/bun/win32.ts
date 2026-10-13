@@ -22,7 +22,11 @@ import {
 } from "@bunaway/runtime-bun/windows-control";
 import { display, hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
 import { windowChanges } from "./window-events.ts";
-import { initialWindowPlacement, type WorkArea } from "./window-placement.ts";
+import {
+  centerInWorkArea,
+  initialWindowPlacement,
+  type WorkArea,
+} from "./window-placement.ts";
 import {
   constrainedOuterSize,
   DEFAULT_DPI,
@@ -1592,6 +1596,20 @@ export class Windows {
         0,
         SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
       ),
+    );
+  }
+
+  /** Center using physical outer bounds; iconic/zoomed HWNDs keep their display state and size. */
+  center(window: bigint): void {
+    const bounds = this.getBounds(
+      window,
+      this.isMinimized(window) || this.isMaximized(window) ? "normal" : "outer",
+    );
+    const area = this.getWorkArea(this.getPlacementMonitor(undefined, window));
+    this.setGeometry(
+      window,
+      "outer",
+      centerInWorkArea(area, bounds.width, bounds.height),
     );
   }
 

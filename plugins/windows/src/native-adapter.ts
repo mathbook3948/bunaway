@@ -437,6 +437,21 @@ export function createOperations(
         }
         window.setPosition(call.payload.x, call.payload.y);
         break;
+      case "windows.center":
+        if (window.isFullscreen()) {
+          throw new BunawayError({
+            code: "INVALID_ARGUMENT",
+            message: "Exit fullscreen before centering the window.",
+          });
+        }
+        if (!window.center) {
+          throw new BunawayError({
+            code: "UNSUPPORTED",
+            message: "Window centering is not implemented on this platform.",
+          });
+        }
+        window.center();
+        break;
       case "windows.setFullscreen":
         window.setFullscreen(call.payload.fullscreen);
         break;

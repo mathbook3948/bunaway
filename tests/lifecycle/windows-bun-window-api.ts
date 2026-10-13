@@ -279,6 +279,34 @@ if (!process.argv.includes("--child")) {
             ],
             `Fullscreen restore showCmd=${showCmd}, visible=${visible}`,
           );
+          // Runtime centering keeps HWND state and centers normal restoration bounds.
+          const monitor = user.symbols.MonitorFromWindow(hwnd, 2);
+          const info = Buffer.alloc(40);
+          info.writeUInt32LE(40);
+          assert(user.symbols.GetMonitorInfoW(monitor, ptr(info)));
+          const normal = nativeWindows.getBounds(hwnd, "normal");
+          const expected = {
+            ...normal,
+            x: Math.round(
+              info.readInt32LE(20) +
+                (info.readInt32LE(28) - info.readInt32LE(20) - normal.width) /
+                  2,
+            ),
+            y: Math.round(
+              info.readInt32LE(24) +
+                (info.readInt32LE(32) - info.readInt32LE(24) - normal.height) /
+                  2,
+            ),
+          };
+          const foreground = user.symbols.GetForegroundWindow();
+          nativeWindows.center(hwnd);
+          assert.deepEqual(nativeWindows.getBounds(hwnd, "normal"), expected);
+          assert.equal(driver.symbols.IsWindowVisible(hwnd), Number(visible));
+          assert.equal(driver.symbols.IsIconic(hwnd), minimized);
+          assert.equal(driver.symbols.IsZoomed(hwnd), maximized);
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          nativeWindows.center(hwnd);
+          assert.deepEqual(nativeWindows.getBounds(hwnd, "normal"), expected);
         } finally {
           nativeWindows.destroy(hwnd);
         }
@@ -840,6 +868,24 @@ if (!process.argv.includes("--child")) {
             const outer = await windows.getOuterBounds({
               view: "editor",
             });
+            await windows.hide(editor);
+            const centerForeground = user.symbols.GetForegroundWindow();
+            await windows.center(editor);
+            const centered = await windows.getOuterBounds(editor);
+            assert.equal(centered.width, outer.width);
+            assert.equal(centered.height, outer.height);
+            assert.equal(await windows.isVisible(editor), false);
+            assert.equal(user.symbols.GetForegroundWindow(), centerForeground);
+            await windows.center(editor);
+            assert.deepEqual(await windows.getOuterBounds(editor), centered);
+            await windows.setOuterBounds({
+              ...editor,
+              x: outer.x,
+              y: outer.y,
+              width: outer.width,
+              height: outer.height,
+            });
+            await windows.show(editor);
             assert.deepEqual(
               await windows.getNormalBounds({
                 view: "editor",
@@ -1042,6 +1088,7 @@ if (!process.argv.includes("--child")) {
               "unmaximize",
               "restore",
               "toggleMaximize",
+              "center",
             ] as const) {
               await assert.rejects(windows[name](editor), {
                 code: "INVALID_ARGUMENT",

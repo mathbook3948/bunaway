@@ -864,6 +864,7 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
           view.native.resize();
         },
         setPosition: (x, y) => nativeWindows.setPosition(hwnd, x, y),
+        center: () => nativeWindows.center(hwnd),
         setGeometry(area, geometry) {
           nativeWindows.setGeometry(hwnd, area, geometry);
           view.native.resize();
