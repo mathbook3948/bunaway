@@ -179,9 +179,11 @@ export async function createReceiver(root: string) {
 <key>CFBundleName</key><string>Bunaway Opener Fixture</string>
 <key>CFBundleExecutable</key><string>receiver</string>
 <key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+<key>CFBundleVersion</key><string>1</string>
 <key>LSUIElement</key><true/>
 <key>UTExportedTypeDeclarations</key><array><dict><key>UTTypeIdentifier</key><string>${contentType}</string><key>UTTypeConformsTo</key><array><string>public.data</string></array><key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><string>${extension}</string></dict></dict></array>
-<key>CFBundleDocumentTypes</key><array><dict><key>CFBundleTypeRole</key><string>Viewer</string><key>LSHandlerRank</key><string>Owner</string><key>LSItemContentTypes</key><array><string>${contentType}</string></array></dict></array>
+<key>CFBundleDocumentTypes</key><array><dict><key>CFBundleTypeName</key><string>${contentType}</string><key>CFBundleTypeRole</key><string>Viewer</string><key>LSHandlerRank</key><string>Owner</string><key>LSItemContentTypes</key><array><string>${contentType}</string></array></dict></array>
 </dict></plist>`,
     );
     await fixtureCommand([
