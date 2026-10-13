@@ -245,6 +245,7 @@ export class MacosWindows {
         }
         this.closeView(view.boundary.policy.id);
       }
+      view.native?.observeStartup();
       view.boundary.scanDeadlines();
     }
     this.maybeQuit();
