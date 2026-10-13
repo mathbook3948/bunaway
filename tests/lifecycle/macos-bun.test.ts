@@ -599,6 +599,7 @@ test.each([
       await Bun.write(
         resolve(directory, "webview.ts"),
         `export class MacosWebview {
+        observeStartup() {}
         constructor(config, hooks) {
         this.ready = (async () => {
           ${cleanup === "unexpected-exit" ? "return;" : ""}
@@ -742,6 +743,7 @@ test.each([
       await Bun.write(
         resolve(directory, "webview.ts"),
         `export class MacosWebview {
+        observeStartup() {}
         ready = Promise.resolve();
         constructor(config, hooks) { this.hooks = hooks; }
         start() { this.hooks.close(); }
@@ -836,6 +838,7 @@ test("macOS native registration failure acknowledges the backend and exits witho
     await Bun.write(
       resolve(directory, "webview.ts"),
       `export class MacosWebview {
+        observeStartup() {}
         ready = Promise.resolve();
         start() {}
         close() {}
@@ -934,6 +937,7 @@ for (const mode of [
         await Bun.write(
           resolve(directory, "webview.ts"),
           `export class MacosWebview {
+        observeStartup() {}
           ready = Promise.resolve();
           constructor(config, hooks) { this.hooks = hooks; }
           start() { ${mode === "host-killed" ? "" : "setTimeout(() => this.hooks.close(), 100);"} }
@@ -1469,6 +1473,7 @@ test.each([
       await Bun.write(
         resolve(directory, "webview.ts"),
         `export class MacosWebview {
+        observeStartup() {}
         ready = Promise.resolve();
         constructor(config,hooks){this.hooks=hooks;}
         start(){this.hooks.close();}
@@ -1609,6 +1614,7 @@ test("macOS shutdown aborts active backend I/O before Core stop hooks and adapte
     await Bun.write(
       resolve(directory, "webview.ts"),
       `export class MacosWebview {
+        observeStartup() {}
       ready=Promise.resolve(); constructor(config,hooks){this.hooks=hooks;}
       start(){this.hooks.close();} close(){}
     }`,

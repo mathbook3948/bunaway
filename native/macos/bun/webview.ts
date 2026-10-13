@@ -8,6 +8,7 @@ import type { MacosConfig } from "./config.ts";
 import { Objc, type ObjcObject } from "./objc.ts";
 import { macosOrigin, platformUrl, resourceRules } from "./urls.ts";
 import { MacosWebviewControls } from "./webview-controls.ts";
+import { WebviewDiagnostics, webviewError } from "./webview-diagnostics.ts";
 
 const NS_VIEW_WIDTH_SIZABLE = 2;
 const NS_VIEW_HEIGHT_SIZABLE = 16;
@@ -58,6 +59,11 @@ export class MacosWebview {
   private readonly webview: ObjcObject;
   private readonly controller: ObjcObject;
   private readonly retained: ObjcObject[] = [];
+  private readonly diagnostics: WebviewDiagnostics;
+  private firstScriptMessage = false;
+  private firstDelivery = false;
+  private loadStartedAt = 0;
+  private startupCheckpoint = 0;
   private closed = false;
   private rulesReady = false;
   private coreReady = false;
@@ -80,6 +86,7 @@ export class MacosWebview {
     private readonly application: MacosApplication,
   ) {
     const o = this.objc;
+    this.diagnostics = new WebviewDiagnostics(hooks.log);
     runtimeOwners.push(o);
     const required = (value: ObjcObject | null) => {
       if (!value) {
@@ -144,7 +151,7 @@ export class MacosWebview {
           selector: "webView:stopURLSchemeTask:",
           arguments: 2,
           encoding: "v@:@@",
-          call() {},
+          call: () => this.diagnostics.record("asset-stopped"),
         },
       ]);
       this.retained.push(scheme);
@@ -179,6 +186,11 @@ export class MacosWebview {
               this.provisionalNavigation ||
               macosOrigin(frameSource) !== macosOrigin(source)
             ) {
+              this.diagnostics.record(
+                this.provisionalNavigation
+                  ? "provisional-message-ignored"
+                  : "origin-message-ignored",
+              );
               hooks.log("frame-message-ignored");
               return;
             }
@@ -211,6 +223,10 @@ export class MacosWebview {
                   toArrayBuffer(Number(bytes) as Pointer, 0, length),
                 ).toString("utf8")
               : "";
+            if (!this.firstScriptMessage) {
+              this.firstScriptMessage = true;
+              this.diagnostics.record("script-message");
+            }
             hooks.receive(source, raw);
           },
         },
@@ -285,6 +301,9 @@ export class MacosWebview {
             } catch (error) {
               hooks.fail(error);
             }
+            this.diagnostics.record("action-policy", {
+              allowed,
+            });
             o.decide(
               decision ?? null,
               allowed ? WK_NAVIGATION_ALLOW : WK_NAVIGATION_CANCEL,
@@ -318,6 +337,9 @@ export class MacosWebview {
             } catch (error) {
               hooks.fail(error);
             }
+            this.diagnostics.record("response-policy", {
+              allowed,
+            });
             // WebKit need not issue a second action callback for server redirects.
             // Resource rules block denied requests; this final check also prevents document commit.
             o.decide(
@@ -332,6 +354,7 @@ export class MacosWebview {
           encoding: "v@:@@",
           call: (_self, _cmd, _view, navigation) => {
             if (!this.closed) {
+              this.diagnostics.record("provisional");
               this.provisionalNavigation = navigation ?? null;
               // This callback marks a new document. Fragment/history-state changes retain their session.
               hooks.revoke("navigation");
@@ -343,6 +366,7 @@ export class MacosWebview {
           arguments: 2,
           encoding: "v@:@@",
           call: (_self, _cmd, _view, navigation) => {
+            this.diagnostics.record("committed");
             if (navigation === this.provisionalNavigation) {
               this.provisionalNavigation = null;
             }
@@ -360,7 +384,14 @@ export class MacosWebview {
             _cmd: Pointer | null,
             _view: Pointer | null,
             navigation: Pointer | null,
+            error: Pointer | null,
           ) => {
+            this.diagnostics.record(
+              selector === "webView:didFailProvisionalNavigation:withError:"
+                ? "provisional-failed"
+                : "navigation-failed",
+              this.errorDetails(error),
+            );
             if (navigation === this.provisionalNavigation) {
               this.provisionalNavigation = null;
             }
@@ -384,17 +415,20 @@ export class MacosWebview {
           selector: "webView:didFinishNavigation:",
           arguments: 2,
           encoding: "v@:@@",
-          call: () =>
+          call: () => {
+            this.diagnostics.record("finished");
             hooks.log("navigation-completed", {
               success: true,
               source: this.source(),
-            }),
+            });
+          },
         },
         {
           selector: "webViewWebContentProcessDidTerminate:",
           arguments: 1,
           encoding: "v@:@",
           call: () => {
+            this.diagnostics.record("process-terminated");
             hooks.log("webview-process-failed", {
               kind: 1,
             });
@@ -453,6 +487,7 @@ export class MacosWebview {
         },
         viewPolicy.origins,
       );
+      this.diagnostics.record("created");
       this.ready = new Promise<void>((resolveReady, reject) => {
         const completion = o.block(2, (_block, rules, error) => {
           if (this.closed) {
@@ -460,11 +495,13 @@ export class MacosWebview {
             return;
           }
           if (!rules || error) {
+            this.diagnostics.record("rules-failed", this.errorDetails(error));
             reject(new Error("WebKit resource-rule compilation failed."));
             return;
           }
           o.send(this.controller, "addContentRuleList:", rules);
           this.rulesReady = true;
+          this.diagnostics.record("rules-ready");
           hooks.log("webview-ready");
           this.navigateWhenReady();
           resolveReady();
@@ -538,6 +575,10 @@ export class MacosWebview {
     }
   }
   private loadHome(): void {
+    if (!this.loadStartedAt) {
+      this.loadStartedAt = Date.now();
+    }
+    this.diagnostics.record("load-requested");
     const o = this.objc;
     o.withAutoreleasePool(() => {
       const url = o.send(
@@ -545,16 +586,59 @@ export class MacosWebview {
         "URLWithString:",
         o.string(platformUrl(this.config.window.home)),
       );
-      o.send(
+      const navigation = o.send(
         this.webview,
         "loadRequest:",
         o.send(o.class("NSURLRequest"), "requestWithURL:", url),
       );
+      this.diagnostics.record("load-returned", {
+        accepted: !!navigation,
+      });
+    });
+  }
+  private errorDetails(error: ObjcObject | null) {
+    return error
+      ? webviewError(
+          this.objc.text(this.objc.send(error, "domain")),
+          this.objc.integer(error, "code"),
+        )
+      : {};
+  }
+  /** Observe a stalled initial bridge at 5, 10 and 15 seconds without changing its deadline. */
+  observeStartup(): void {
+    if (
+      this.closed ||
+      this.firstScriptMessage ||
+      !this.loadStartedAt ||
+      this.startupCheckpoint >= 3 ||
+      Date.now() - this.loadStartedAt < (this.startupCheckpoint + 1) * 5000
+    ) {
+      return;
+    }
+    this.startupCheckpoint++;
+    this.diagnostics.record("startup-checkpoint", {
+      loading: !!this.objc.send(this.webview, "isLoading"),
+      provisional: !!this.provisionalNavigation,
+      progress: this.objc.double(this.webview, "estimatedProgress"),
     });
   }
   deliver(text: string): void {
     if (this.closed) {
       return;
+    }
+    // Observe only the first delivery. A completion block per response would retain
+    // callbacks for the entire process and distort the workload being diagnosed.
+    let completion: Pointer | null = null;
+    if (!this.firstDelivery) {
+      this.firstDelivery = true;
+      completion = this.objc.block(2, (_block, _result, error) => {
+        if (!this.closed) {
+          this.diagnostics.record("delivery-completed", {
+            accepted: !error,
+            ...this.errorDetails(error),
+          });
+        }
+      });
     }
     // Worker messages arrive outside the native run-loop turn's autorelease pool.
     this.objc.withAutoreleasePool(() =>
@@ -562,11 +646,12 @@ export class MacosWebview {
         this.webview,
         "evaluateJavaScript:completionHandler:",
         this.objc.string(`__bunawayDeliver(${JSON.stringify(text)})`),
-        null,
+        completion,
       ),
     );
   }
   private serve(task: Pointer): void {
+    this.diagnostics.record("asset-started");
     const o = this.objc;
     const url = o.send(o.send(task, "request"), "URL");
     let status = 403;
@@ -634,6 +719,9 @@ export class MacosWebview {
       );
     }
     o.send(task, "didFinish");
+    this.diagnostics.record("asset-finished", {
+      status,
+    });
     o.send(response, "release");
   }
   /** Detach native delegates before releasing objects. Safe after repeated shutdown requests. */
@@ -642,6 +730,7 @@ export class MacosWebview {
       return;
     }
     this.closed = true;
+    this.diagnostics.record("closed");
     const o = this.objc;
     if (this.controller) {
       o.send(

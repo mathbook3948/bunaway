@@ -100,6 +100,7 @@ export const frameworkPaths = [
     "objc.ts",
     "webview.ts",
     "webview-controls.ts",
+    "webview-diagnostics.ts",
     "urls.ts",
     "entitlements.plist",
     "README.md",
