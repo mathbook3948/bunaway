@@ -1068,4 +1068,57 @@ const cursor = await windows.getCursorPosition();
 전역 조회는 열린 창 없이도 사용할 수 있습니다. macOS에서는 이 작업들이 `UNSUPPORTED`입니다.
 OS 조회 실패는 `INTERNAL`이며 구성 변경과 동시에 조회하면 실패할 수 있습니다.
 `monitorSchema`는 같은 결과를 검증하는 공개 Zod 계약입니다.
-디스플레이 변경 이벤트, 물리 모니터 제거와 연결, 혼합 DPI 및 회전의 수동 검증은 후속 작업입니다.
+
+### 모니터 변경 구독과 복구
+
+`windows.getMonitorSnapshot()`은 `{ sourceId, revision, monitors, error }`를 반환합니다.
+`sourceId`는 앱 호스트의 모니터 관찰 수명을 구분하는 UUID이며 창 탐색이나 재생성으로
+바뀌지 않습니다. 초기 `revision`은 0이고 모니터 구성, 지표 또는 조회 오류 상태가 바뀌면
+증가합니다. 같은 id의 배열 순서만 바뀌면 변경으로 처리하지 않습니다.
+`monitorSnapshotSchema`는 결과를 검증하는 공개 Zod 계약입니다.
+`safeParse`와 `safeParseAsync`는 잘못된 `error` 객체도 예외 대신 Zod 오류로 반환합니다.
+
+`windows.monitorsChanged`의 payload는 `{ sourceId, revision, added, removed, changed, error }`입니다.
+revision은 1 이상이며 세 배열은 모니터 id를 담습니다. 추가와 제거, 이름, 주 모니터,
+bounds, workArea, DPI와 배율, rotation 또는 refreshRate 변경을 알립니다.
+`monitorChangeSchema`는 이 payload의 공개 JSON Schema 계약입니다.
+한 번에 관찰한 여러 변경은 하나로 합쳐질 수 있으므로 중간 상태를 모두 전달하지 않습니다.
+
+뷰 정책의 `events`에 `windows.monitorsChanged`, `host.permissions`에
+`windows.getMonitorSnapshot`을 모두 선언해야 해당 뷰에 이벤트가 전달됩니다.
+조회 권한만으로 이벤트 구독이 허용되지 않으며 이벤트 허용만으로 디스플레이 정보를
+받거나 조회할 수 없습니다. 구독할 때 초기 상태나 이전 이벤트를 재전송하지 않습니다.
+구독을 완료한 뒤 snapshot을 조회하고, 이후 이벤트에서는 snapshot을 다시 조회하세요.
+sourceId가 달라지면 기존 revision 비교를 초기화하고, 같은 sourceId에서는 더 오래된
+revision의 응답을 버리세요. 탐색이나 문서 재생성 뒤에도 구독과 조회를 다시 수행합니다.
+
+```ts
+import { createClient } from "@bunaway/client";
+import type { CommandsOf, EventsOf } from "@bunaway/backend";
+import type { app } from "../../src-bunaway/app";
+import { windows, type MonitorSnapshot } from "@bunaway/plugin-windows";
+
+const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
+await client.ready;
+let current: MonitorSnapshot | undefined;
+async function recoverMonitors() {
+  const next = await windows.getMonitorSnapshot();
+  if (!current || current.sourceId !== next.sourceId || next.revision >= current.revision) {
+    current = next;
+    // next.error가 있으면 마지막 유효 목록과 오류 상태를 함께 표시합니다.
+    console.log(next.monitors, next.error);
+  }
+}
+const release = await client.listen("windows.monitorsChanged", () => {
+  void recoverMonitors().catch(console.error);
+}, { onError: console.error });
+await recoverMonitors();
+// 컴포넌트 정리 시 await release()를 호출합니다.
+```
+
+디스플레이 조회가 실패하면 snapshot의 `error`는 `INTERNAL`이고 `monitors`는 마지막
+유효 목록을 유지합니다. 최초 조회부터 실패하면 목록은 비어 있습니다. 오류 진입과
+정상 복구도 revision과 이벤트를 갱신하며 같은 오류 상태의 반복 조회는 이벤트를
+추가하지 않습니다. 오류 원본과 네이티브 핸들은 payload에 노출하지 않습니다.
+변경 이벤트는 Windows 디스플레이와 설정 알림에 따라 관찰하며 주기적으로 조회하지 않습니다.
+물리 모니터 제거와 연결, 혼합 DPI 및 회전의 수동 검증은 별도로 남아 있습니다.

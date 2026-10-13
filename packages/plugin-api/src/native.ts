@@ -230,8 +230,27 @@ export type NativeMonitor = {
   refreshRate: number | null;
 };
 
+/** Last observed display state. An error retains the last known monitors rather than inventing data. */
+export type NativeMonitorSnapshot = {
+  sourceId: string;
+  revision: number;
+  monitors: NativeMonitor[];
+  error: import("@bunaway/protocol").WireError | null;
+};
+/** Lightweight display transition; query the snapshot to recover full metrics. */
+export type NativeMonitorChange = {
+  sourceId: string;
+  revision: number;
+  added: string[];
+  removed: string[];
+  changed: string[];
+  error: import("@bunaway/protocol").WireError | null;
+};
+
 /** Display queries executed on the per-monitor-aware UI thread. No native handles escape. */
 export type NativeMonitorServices = {
+  /** Read a fresh, versioned observation. Absent on older hosts without display events. */
+  snapshot?(): NativeMonitorSnapshot;
   list(): NativeMonitor[];
   primary(): NativeMonitor;
   nearestPoint(point: { x: number; y: number }): NativeMonitor;

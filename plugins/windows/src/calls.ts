@@ -5,6 +5,8 @@ import type { windowDefinitions } from "./contract.ts";
 export function createWindows(api: NativePluginAPI<typeof windowDefinitions>) {
   return Object.freeze({
     ...api,
+    getMonitorSnapshot: (options?: NativeInvokeOptions) =>
+      api.getMonitorSnapshot(null, options),
     getMonitors: (options?: NativeInvokeOptions) =>
       api.getMonitors(null, options),
     getPrimaryMonitor: (options?: NativeInvokeOptions) =>
