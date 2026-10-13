@@ -7,6 +7,10 @@ import { files, hash, writeJson } from "#cli/files";
 import { compileMacosApp } from "#cli/macos-compile";
 import { installedPlugins } from "#cli/plugins";
 import pin from "../../runtime/build-manifests/darwin-aarch64.json";
+import {
+  type NetworkPipeCapture,
+  retainNetworkDiagnostics,
+} from "./fixtures/macos-network-diagnostics.ts";
 import { readNetworkReport } from "./fixtures/macos-network-report.ts";
 
 assert.equal(process.platform, "darwin");
@@ -19,6 +23,14 @@ const dataRoot = resolve(
 );
 const reportPath = resolve(dataRoot, "temp/report.json");
 let child: ReturnType<typeof Bun.spawn> | undefined;
+let capture: NetworkPipeCapture | undefined;
+let phase = "prepare";
+let failure:
+  | {
+      error: unknown;
+    }
+  | undefined;
+const requests: Record<string, number> = {};
 const waits: Record<string, number> = {};
 const sockets: Record<string, number> = {};
 const cancelledReads = new Set<string>();
@@ -30,6 +42,7 @@ const server = Bun.serve({
   port: 0,
   fetch(request, server) {
     const path = new URL(request.url).pathname;
+    requests[path] = (requests[path] ?? 0) + 1;
     if (path === "/stats") {
       return Response.json({
         waits,
@@ -135,6 +148,19 @@ const server = Bun.serve({
   },
 });
 
+function failureDetails(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    };
+  }
+  return {
+    message: String(error),
+  };
+}
+
 /** Wait for observable transport progress while surfacing early host exit. */
 async function waitFor(
   condition: () => boolean | Promise<boolean>,
@@ -149,6 +175,7 @@ async function waitFor(
 }
 
 try {
+  phase = "bundle";
   const assets = resolve(directory, "assets");
   await mkdir(resolve(assets, "web"), {
     recursive: true,
@@ -266,6 +293,7 @@ export default defineNetworkFixture(${JSON.stringify(http)}, ${JSON.stringify(ws
     bun: pin.bun,
     assets: inventory,
   });
+  phase = "host launch";
   const launched = Bun.spawn(
     [
       executable,
@@ -285,6 +313,12 @@ export default defineNetworkFixture(${JSON.stringify(http)}, ${JSON.stringify(ws
   child = launched;
   const output = new Response(launched.stdout).text();
   const errors = new Response(launched.stderr).text();
+  // Observe pipe failures immediately while retaining both streams for diagnostics.
+  capture = Promise.allSettled([
+    output,
+    errors,
+  ]);
+  phase = "WKWebView report";
   let report: unknown;
   await waitFor(async () => {
     report = await readNetworkReport(reportPath);
@@ -301,15 +335,18 @@ export default defineNetworkFixture(${JSON.stringify(http)}, ${JSON.stringify(ws
   assert.equal(deniedRequests, 0, "denied view must not reach the server");
   assert.equal(waits["/wait-shutdown"], 1);
   assert.equal(sockets["/socket-shutdown"], 1);
+  phase = "HTTP abort cleanup";
   await waitFor(
     () =>
       cancelledReads.has("/wait-cancel") && cancelledReads.has("/wait-timeout"),
     "HTTP abort cleanup",
   );
   child.kill("SIGTERM");
+  phase = "host shutdown";
   assert.equal(await child.exited, 0, await errors);
   await output;
   // Wait after process exit without relying on a pending host: TCP close arrives asynchronously.
+  phase = "transport shutdown cleanup";
   const cleanupDeadline = Date.now() + 2000;
   while (
     server.pendingWebSockets !== 0 ||
@@ -321,6 +358,7 @@ export default defineNetworkFixture(${JSON.stringify(http)}, ${JSON.stringify(ws
     );
     await Bun.sleep(10);
   }
+  phase = "host log assertions";
   const records = (await Bun.file(resolve(dataRoot, "logs/host.log")).text())
     .trim()
     .split("\n")
@@ -362,21 +400,67 @@ export default defineNetworkFixture(${JSON.stringify(http)}, ${JSON.stringify(ws
   console.log(
     "PASS compiled macOS WKWebView network SDK, Core, host grants, binary/text, bounds, redirects, handshakes, cancellation, deadlines and in-flight shutdown",
   );
+  phase = "complete";
 } catch (error) {
-  console.error(
-    await Bun.file(resolve(dataRoot, "logs/host.log"))
-      .text()
-      .catch(() => "No host log."),
-  );
-  throw error;
+  failure = {
+    error,
+  };
 } finally {
-  if (child?.exitCode === null) {
-    child.kill("SIGKILL");
+  // Snapshot counters before terminating a failed host or closing server transports.
+  const state = {
+    phase,
+    failure: failure ? failureDetails(failure.error) : null,
+    childExitCodeBeforeCleanup: child?.exitCode ?? null,
+    requests: {
+      ...requests,
+    },
+    waits: {
+      ...waits,
+    },
+    sockets: {
+      ...sockets,
+    },
+    cancelledReads: [
+      ...cancelledReads,
+    ].sort(),
+    closedSockets: [
+      ...closedSockets,
+    ].sort(),
+    redirectedRequests,
+    deniedRequests,
+    pendingWebSockets: server.pendingWebSockets,
+  };
+  try {
+    const diagnostics = await retainNetworkDiagnostics(
+      child,
+      capture,
+      dataRoot,
+      resolve(root, "build/macos-native-logs/network-diagnostics"),
+      state,
+    );
+    if (failure) {
+      console.error(diagnostics.hostLog);
+      console.error(diagnostics.stdout);
+      console.error(diagnostics.stderr);
+    }
+  } catch (diagnosticError) {
+    console.error(
+      "Could not retain network fixture diagnostics",
+      diagnosticError,
+    );
+    // Preserve the original assertion failure, while failing successful runs
+    // whose required diagnostic output could not be retained.
+    failure ??= {
+      error: diagnosticError,
+    };
+  } finally {
+    server.stop(true);
+    await rm(directory, {
+      recursive: true,
+      force: true,
+    });
   }
-  await child?.exited;
-  server.stop(true);
-  await rm(directory, {
-    recursive: true,
-    force: true,
-  });
+}
+if (failure) {
+  throw failure.error;
 }

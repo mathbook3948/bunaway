@@ -821,6 +821,11 @@ redirect 거부, binary 보존, timeout, 취소, 폐기와 용량을 검사한�
 HTTP binary 및 UTF-8, redirect와 WebSocket handshake 거부, decompressed body 상한,
 text/binary 메시지, timeout과 SDK deadline, 취소 뒤 실제 TCP 정리와 종료 중 pending 요청 정리를
 확인한다. 결과는 `build/macos-native-logs/network-results.json`이며 기존 네이티브 CI artifact에 포함된다.
+실패 시 child를 종료하고 pipe를 수집한 뒤 host 로그, stdout/stderr와 요청 및 socket 관측값을
+`build/macos-native-logs/network-diagnostics/`에 보존한다. report가 있으면 미완성 파일도 원본으로
+보존하며 임시 package를 제거하기 전에 기존 macOS native artifact 경로에 기록한다.
+`macos-network-diagnostics.test.ts`는 살아 있는 실제 child의 pipe 수집과 package 제거 뒤
+진단 보존, 실행 전 실패와 이전 report 정리를 검사한다. 기존 assertion과 제한시간은 유지한다.
 `cli/network.test.ts`는 isolated tarball 설치의 두 OS native export에서 실제 HTTP를 실행하고
 browser 번들에 Bun 전송 구현이 포함되지 않는지 검사한다. TLS, 외부 proxy와 OS 인증은 검증하지 않는다.
 
