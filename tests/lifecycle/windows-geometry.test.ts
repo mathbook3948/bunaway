@@ -14,6 +14,9 @@ const SW_MAXIMIZE = 3;
 const SW_RESTORE = 9;
 const WM_DPICHANGED = 0x02e0;
 const WM_SIZE = 0x0005;
+const WM_ACTIVATE = 0x0006;
+const WM_SHOWWINDOW = 0x0018;
+const WM_SYSCOMMAND = 0x0112;
 const WM_NCCALCSIZE = 0x0083;
 const WM_WINDOWPOSCHANGING = 0x0046;
 const WM_WINDOWPOSCHANGED = 0x0047;
@@ -46,6 +49,21 @@ test.skipIf(process.platform !== "win32")(
     let closed = false;
     let stage = "create";
     const messages: number[][] = [];
+    const showTransitions: {
+      stage: string;
+      minimized: boolean;
+      maximized: boolean;
+      visible: boolean;
+    }[] = [];
+    // Sample live flags without getSnapshot, which can publish observation changes.
+    const recordShowTransition = () => {
+      showTransitions.push({
+        stage,
+        minimized: native.isMinimized(hwnd),
+        maximized: native.isMaximized(hwnd),
+        visible: native.isVisible(hwnd),
+      });
+    };
     try {
       hwnd = native.create(
         "Window geometry regression",
@@ -55,6 +73,9 @@ test.skipIf(process.platform !== "win32")(
           if (
             [
               WM_SIZE,
+              WM_ACTIVATE,
+              WM_SHOWWINDOW,
+              WM_SYSCOMMAND,
               WM_NCCALCSIZE,
               WM_WINDOWPOSCHANGING,
               WM_WINDOWPOSCHANGED,
@@ -263,9 +284,17 @@ test.skipIf(process.platform !== "win32")(
           true,
           false,
         ]) {
+          // Keep only this iteration's three immediate native-call checkpoints.
+          showTransitions.length = 0;
+          stage = `unmaximize-before-show-${command}-${visible}`;
           native.unmaximize(hwnd);
+          recordShowTransition();
+          stage = `raw-show-${command}-${visible}`;
           user.symbols.ShowWindow(hwnd, command);
+          recordShowTransition();
+          stage = `set-visible-${command}-${visible}`;
           native.show(hwnd, visible);
+          recordShowTransition();
           expect(native.isMinimized(hwnd)).toBe(command === SW_MINIMIZE);
           expect(native.isMaximized(hwnd)).toBe(command === SW_MAXIMIZE);
           const state = native.getSnapshot(hwnd).state;
@@ -732,6 +761,7 @@ test.skipIf(process.platform !== "win32")(
             "Windows geometry failure",
             JSON.stringify({
               stage,
+              showTransitions,
               callbackFailure:
                 native.failure === undefined ? null : String(native.failure),
               visible: native.isVisible(hwnd),

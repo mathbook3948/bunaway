@@ -11,11 +11,13 @@ import { installedPlugins, writePluginManifest } from "#cli/plugins";
  * Bundle native workers with the fixture app's installed plugins.
  * Supplying an entrypoint builds the shared UI and host-operation workers.
  * Fixture plugins can replace a specific native dependency while retaining the real workers.
+ * An optional UI entrypoint isolates native fault injection in a dedicated fixture worker.
  */
 export async function bundleNativeWorker(
   name: string,
   destination: string,
   entrypoint?: string,
+  uiEntrypoint?: string,
   fixturePlugins: BunPlugin[] = [],
 ) {
   const plugins = await installedPlugins(
@@ -33,7 +35,12 @@ export async function bundleNativeWorker(
               "ui",
               "host-operations",
             ].map((worker) =>
-              resolve(import.meta.dir, `../../native/windows/bun/${worker}.ts`),
+              worker === "ui" && uiEntrypoint
+                ? uiEntrypoint
+                : resolve(
+                    import.meta.dir,
+                    `../../native/windows/bun/${worker}.ts`,
+                  ),
             ),
           ]
         : [

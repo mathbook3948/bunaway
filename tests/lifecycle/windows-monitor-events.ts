@@ -61,6 +61,7 @@ if (!process.argv.includes("--child")) {
     "windows-monitor-events",
     assets,
     fileURLToPath(import.meta.url),
+    undefined,
     [
       {
         name: "controlled-display-metrics",

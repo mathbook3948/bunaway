@@ -33,6 +33,7 @@
     "appearance": "@bunaway/plugin-appearance",
     "image": "@bunaway/plugin-image",
     "os": "@bunaway/plugin-os",
-    "process": "@bunaway/plugin-process"
+    "process": "@bunaway/plugin-process",
+    "network": "@bunaway/plugin-network"
   }
 }
