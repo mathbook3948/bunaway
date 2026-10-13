@@ -545,3 +545,13 @@ linear filtering의 투명 edge, crop과 빈 소스 및 quota 오류를 추가�
 `api/os.test.ts`는 독립 작업 권한과 metadata 계약을 검사한다. `lifecycle/windows-os.test.ts`는
 실제 Kernel32 언어 설정 조회와 Bun 실행 정보를 생성 어댑터에서 검사하며 `host:windows`에 포함된다.
 사용자 언어 설정 변경이나 translation 하드웨어 검증은 포함하지 않는다.
+
+`api/process-plugin.test.ts`는 local `.exe` argv 계약과 독립 실행 권한을 검사한다.
+`lifecycle/process-run.test.ts`는 실제 Bun 자식의 특수 인자, binary stdin/stdout/stderr, 합계
+출력 제한과 내부 실행 작업의 취소 후 직접 자식 종료를 확인한다. `windows-process.test.ts`는 생성 Windows
+어댑터의 timeout, capacity와 폐기를 실제 `.exe`로 확인한다. 실제 core/client 공개 호출에서 취소
+전달을 보류해 공개 Promise 거부 시 자식이 아직 살아 있음을 확인하고, 전달 후 어댑터의 정리와
+자식 종료를 확인한다. 공개 Promise 거부는 종료 완료를 보장하지 않는다. 두 검사는 `host:windows`에 포함되며
+호출별 손자 정리나 제삼자 도구의 부수 효과를 검증하지 않는다.
+자식은 PID 파일 쓰기를 완료한 뒤 rename으로 준비를 알린다. 두 생존 검사는 파일 생성과 쓰기 사이의
+경합으로 빈 PID를 읽지 않고, 취소 전에 실제 자식의 Windows process handle을 잡는다.
