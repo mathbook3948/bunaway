@@ -17,3 +17,8 @@ It is included in `mise run host:windows`; it does not change user language sett
 
 `os.usage` reports cumulative process CPU microseconds, memory bytes, logical CPU count and actual
 IsWow64Process2 machine values. Windows x64 CI does not validate ARM64 translation hardware.
+
+Windows region identifiers can be two-letter codes or three-digit numeric regions such as Caribbean `029`.
+The value remains a string, preserving leading zeros, as documented by Microsoft's
+[LOCALE_SISO constants](https://learn.microsoft.com/en-us/windows/win32/intl/locale-siso-constants).
+The deterministic locale regression uses the same assertion as the actual Windows test and rejects malformed shapes.

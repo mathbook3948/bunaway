@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { arch, hostname, release, version } from "node:os";
 import { osPlugin } from "@bunaway/plugin-os/native/windows";
 import { osOperations } from "#plugins/os/src/contract";
+import { assertWindowsRegionCode } from "../fixtures/windows-region-code.ts";
 
 test.skipIf(process.platform !== "win32")(
   "Windows locale FFI and runtime metadata execute through generated Zod adapters",
@@ -52,9 +53,7 @@ test.skipIf(process.platform !== "win32")(
       expect(new Set(locale.preferredLanguages).size).toBe(
         locale.preferredLanguages.length,
       );
-      if (locale.countryCode !== null) {
-        expect(locale.countryCode).toMatch(/^[A-Z]{2,3}$/);
-      }
+      assertWindowsRegionCode(locale.countryCode);
       await expect(
         adapter.execute("os.locale", {}, "backend"),
       ).rejects.toMatchObject({

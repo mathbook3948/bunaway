@@ -38,7 +38,8 @@ translation은 Windows `IsWow64Process2` 결과입니다. `active`는 WOW transl
 `OSLocale`은 Windows 사용자의 형식 설정인 `locale`, 해당 locale의 ISO 지역 코드인
 `countryCode`, 순서가 있는 사용자 표시 언어 목록 `preferredLanguages`와 시스템 기본 UI
 언어 `systemLanguage`를 반환합니다. 지역 코드가 없으면 `null`입니다. 현재 위치나 IP 기반
-국가를 조회하지 않습니다. 시스템 언어는 Windows의 기본 UI 언어이며 사용자 표시 언어와
+국가를 조회하지 않습니다. 지역 코드는 `US` 같은 두 글자 값 외에 Caribbean의 `029` 같은
+세 자리 숫자 문자열일 수 있으며 앞의 0을 보존합니다. 시스템 언어는 Windows의 기본 UI 언어이며 사용자 표시 언어와
 다를 수 있습니다. 언어 설정은 호출마다 읽고 결과를 캐시하지 않습니다.
 
 화면 직접 호출에는 뷰의 `commands`에 `plugin.os.info`, `plugin.os.usage` 또는 `plugin.os.locale`을,

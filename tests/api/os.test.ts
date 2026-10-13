@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { os, osPlugin } from "@bunaway/plugin-os";
 import { NativeRegistry } from "@bunaway/protocol";
 import { osOperations } from "#plugins/os/src/contract";
+import { assertWindowsRegionCode } from "../fixtures/windows-region-code.ts";
 
 test("OS reads have independent permissions and strict null inputs", () => {
   const registry = new NativeRegistry([
@@ -92,4 +93,39 @@ test("metadata contracts reject secret-bearing extra fields and invalid locale o
       systemLanguage: "en-US",
     }).success,
   ).toBe(false);
+});
+
+test("native locale assertions accept documented numeric regions and preserve leading zeros", () => {
+  for (const countryCode of [
+    "US",
+    "KR",
+    "029",
+    "001",
+    null,
+  ]) {
+    const locale = osOperations.locale.output.parse({
+      locale: countryCode === "029" ? "en-029" : "en-US",
+      countryCode,
+      preferredLanguages: [
+        "en-US",
+      ],
+      systemLanguage: "en-US",
+    });
+    expect(() => assertWindowsRegionCode(locale.countryCode)).not.toThrow();
+    expect(locale.countryCode).toBe(countryCode);
+  }
+  for (const value of [
+    "",
+    "U",
+    "USA",
+    "us",
+    "29",
+    "0029",
+    "A29",
+    "02A",
+    "029\n",
+    "😀",
+  ]) {
+    expect(() => assertWindowsRegionCode(value)).toThrow();
+  }
 });
