@@ -174,7 +174,7 @@ if (!process.argv.includes("--child")) {
           assert(driver.symbols.GetWindowRect(hwnd, ptr(frame)));
           const minimized = driver.symbols.IsIconic(hwnd),
             maximized = driver.symbols.IsZoomed(hwnd);
-          const foreground = user.symbols.GetForegroundWindow();
+          const titleForeground = user.symbols.GetForegroundWindow();
           for (const title of [
             "창 제목 📝",
             "📝".repeat(512),
@@ -184,7 +184,7 @@ if (!process.argv.includes("--child")) {
             assert.equal(driver.symbols.IsWindowVisible(hwnd), Number(visible));
             assert.equal(driver.symbols.IsIconic(hwnd), minimized);
             assert.equal(driver.symbols.IsZoomed(hwnd), maximized);
-            assert.equal(user.symbols.GetForegroundWindow(), foreground);
+            assert.equal(user.symbols.GetForegroundWindow(), titleForeground);
             assert(driver.symbols.GetWindowRect(hwnd, ptr(restored)));
             assert.deepEqual(
               [
