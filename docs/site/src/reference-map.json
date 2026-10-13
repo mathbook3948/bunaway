@@ -456,6 +456,17 @@
       "pages": {
         "reference/plugins/appearance": ["appearance", "appearancePlugin"]
       }
+    },
+    {
+      "name": "@bunaway/plugin-power",
+      "source": "plugins/power/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/power": ["power", "powerPlugin"]
+      }
     }
   ],
   "members": [
@@ -1191,6 +1202,15 @@
       "windows.listInstances"
     ],
     "reference/plugins/appearance": ["appearance.getPreferences"],
+    "reference/plugins/power": [
+      "power.getStatus",
+      "power.getIdleTime",
+      "power.getIdleState",
+      "power.startBlocker",
+      "power.listBlockers",
+      "power.isBlockerActive",
+      "power.stopBlocker"
+    ],
     "reference/plugins/image": [
       "image.createRGBA",
       "image.createBytes",

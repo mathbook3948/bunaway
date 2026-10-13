@@ -601,6 +601,19 @@ DIB의 행 방향과 padding, alpha 및 잘못된 profile, mask, 크기를 확�
 변경하고 원래 Unicode 텍스트만 복원한다. WebView2 페이지나 다른 앱의 붙여넣기,
 물리 장치 검증을 뜻하지 않는다.
 
+`api/power.test.ts`는 배터리의 0과 unknown, 배터리 없음, DWORD tick 순환,
+독립 blocker ID와 128개 상한, 부분 활성 실패 및 반복 정리를 검사한다.
+`power-cleanup.test.ts`는 실제 어댑터와 두 handle 소유자를 번들해 격리된 Win32 바인딩에서
+public 요청 해제와 활성 rollback 해제가 함께 실패해도 모든 handle을 재시도하고,
+미해제 handle이 있는 동안 DLL을 유지하며 두 단계의 오류를 보고하는지 검사한다.
+`cli/power.test.ts`는 isolated tarball 설치와 I/O 어댑터 발견, browser의 FFI 제외를 검사한다.
+`windows-power.test.ts`는 실제 GetSystemPowerStatus와 session idle query, PowerCreateRequest,
+system/display 활성 및 GetHandleInformation으로 명시 해제와 종료 시 handle 정리를 확인한다.
+`windows-power-worker.test.ts`는 빌드한 공개 power API에서 실제 I/O Worker까지 상태와 idle,
+독립 ID, 개별 권한 거부, 명시 해제와 종료 정리를 확인한다.
+`mise run host:windows`에 포함하며 물리 배터리 전환, 화면 꺼짐과 idle 절전 또는
+Modern Standby 및 사용자 절전 후 요청 종료의 하드웨어 검증을 대신하지 않는다.
+
 `appearance.test.ts`는 선호의 null, 색 형식과 개별 operation 권한, 호출 컨텍스트를 확인한다.
 CLI의 같은 이름 검사는 로컬 tarball의 isolated 설치, 네이티브 I/O 어댑터 발견과 browser
 번들의 FFI 제외를 검사한다. `windows-appearance.test.ts`는 실제 Windows 고대비,

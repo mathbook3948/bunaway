@@ -495,11 +495,19 @@ CI의 `mise run host:windows`에서 SDK와 UI Worker, Win32를 연결해 실행�
   대상 WebView에서 설정 후 조회와 실제 접근성 트리를 검증하고 렌더러별 미지원 기능을 명시한다.
 - [ ] WebView 접근성 트리와 사용자 타이틀바의 키보드 탐색을 검증한다.
 - [ ] suspend, resume, 화면 잠금과 잠금 해제 이벤트를 제공한다.
-- [ ] AC와 배터리 상태 조회, 변경 이벤트를 제공한다.
-- [ ] idle 상태와 idle 시간을 조회한다.
-- [ ] 시스템 절전과 화면 꺼짐을 방지하는 blocker를 시작, 조회하고 해제한다.
-- [ ] blocker의 중복 요청과 앱 종료 자동 정리를 처리한다.
+- [x] Windows AC와 배터리, 충전, 잔량, battery saver 및 수명 추정 상태를 조회한다.
+- [ ] AC와 배터리 상태 변경 이벤트를 제공한다.
+- [x] Windows 호출 세션의 입력 idle 시간과 지정 기한의 active/idle 상태를 조회한다. 잠금 여부는 별도 작업이다.
+- [x] Windows 시스템 idle 절전과 화면 꺼짐 방지 요청을 시작, 조회하고 해제한다. 사용자 절전과 OS 전원 정책은 우회하지 않는다.
+- [x] blocker의 반복 요청을 독립 ID로 관리하고 앱 종료 시 native handle을 자동 정리한다.
 - [ ] CPU speed-limit, thermal-state와 종료 이벤트의 플랫폼별 지원을 정의한다.
+
+`@bunaway/plugin-power`는 [power API](./site/src/content/docs/reference/plugins/power.mdx)를 따른다.
+존재하지 않거나 알 수 없는 배터리 측정값은 null이다. PowerCreateRequest와
+PowerSetRequest로 등록하며 display 요청에는 system 요청도 함께 등록한다.
+최대 128개이며 등록 실패의 부분 정리와 종료 정리를 처리한다.
+실제 Windows 네이티브 회귀를 CI에 추가했다. 물리 배터리 전환, idle 절전과 화면 timeout,
+Modern Standby 및 사용자 절전 후 동작은 하드웨어 수동 검증으로 남긴다.
 
 `@bunaway/plugin-appearance`의 getPreferences로 저장된 앱 및 시스템 테마 선호,
 DWM accent와 시스템 색, 접근성 플래그를 조회한다. theme와 transparency의 누락 또는
