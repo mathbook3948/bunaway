@@ -153,6 +153,7 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
     const started = Promise.withResolvers<void>();
     ioWorker = new Worker(new URL("./host-operations.js", import.meta.url), {
       workerData: {
+        app: config.app,
         runtime: config.runtime,
         assets: config.assets,
         dataRoot: config.dataRoot,
