@@ -496,6 +496,8 @@ RGBA alpha 왕복, JPEG와 BMP, 잘못된 encoded 입력과 decode 크기, 최�
 
 `api/process-plugin.test.ts`는 local `.exe` argv 계약과 독립 실행 권한을 검사한다.
 `lifecycle/process-run.test.ts`는 실제 Bun 자식의 특수 인자, binary stdin/stdout/stderr, 합계
-출력 제한과 취소 후 직접 자식 종료를 확인한다. `windows-process.test.ts`는 생성 Windows
-어댑터의 timeout, capacity와 폐기를 실제 `.exe`로 확인한다. 두 검사는 `host:windows`에 포함되며
+출력 제한과 내부 실행 작업의 취소 후 직접 자식 종료를 확인한다. `windows-process.test.ts`는 생성 Windows
+어댑터의 timeout, capacity와 폐기를 실제 `.exe`로 확인한다. 실제 core/client 공개 호출에서 취소
+전달을 보류해 공개 Promise 거부 시 자식이 아직 살아 있음을 확인하고, 전달 후 어댑터의 정리와
+자식 종료를 확인한다. 공개 Promise 거부는 종료 완료를 보장하지 않는다. 두 검사는 `host:windows`에 포함되며
 호출별 손자 정리나 제삼자 도구의 부수 효과를 검증하지 않는다.
