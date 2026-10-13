@@ -18,6 +18,15 @@ import { windowsPlugin } from "@bunaway/plugin-windows";
 export default defineApp({ modules: [], plugins: [windowsPlugin] });
 ```
 
+다운로드 metadata의 URL, MIME, Content-Disposition과 경로는 JSON 인코딩 후 합계 64 KiB까지
+허용합니다. 이스케이프 문자와 UTF-8 크기도 포함합니다. 전체 retained snapshot은 항목별
+상태와 숫자의 최대 크기를 예약해 512 KiB 이내로 제한하며, 만료되거나 취소된 항목도
+`forgetDownload` 전까지 예산을 사용합니다. 초과하는 시작 요청은 승인 핸들을 만들기 전에
+거부합니다. 승인 뒤 metadata가 초과하면 조회는 `INTERNAL`이고 마지막 안전한 snapshot을
+유지합니다. `cancelDownload`는 metadata 읽기와 독립적으로 취소하며 네이티브 Cancel 실패는
+항목을 보존해 재시도할 수 있습니다. `paused`는 현재 interrupted 상태의 USER_PAUSED reason에서
+조회하므로 브라우저 UI로 재개해도 최신 상태를 반영합니다.
+
 ## 설정과 권한
 
 대상 창은 [app.windows](/reference/configuration/)에 정의합니다.

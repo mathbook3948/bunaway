@@ -1,4 +1,5 @@
 import {
+  isDownloadSnapshotWithinLimits,
   MAX_WEBVIEW_DOWNLOADS,
   MAX_WINDOW_COORDINATE,
   MAX_WINDOW_DIMENSION,
@@ -472,7 +473,8 @@ export const windowOperations = {
           paused: z.boolean(),
         }),
       )
-      .max(MAX_WEBVIEW_DOWNLOADS),
+      .max(MAX_WEBVIEW_DOWNLOADS)
+      .refine(isDownloadSnapshotWithinLimits),
   },
   "windows.approveDownload": downloadResult,
   "windows.cancelDownload": downloadResult,

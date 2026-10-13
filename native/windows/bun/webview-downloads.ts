@@ -162,6 +162,7 @@ export class WebViewDownloads {
   private readonly webview4: Pointer;
   private readonly token: bigint;
   private detached = false;
+  private unsubscribed = false;
 
   constructor(
     webview: Pointer,
@@ -221,8 +222,7 @@ export class WebViewDownloads {
     if (this.detached) {
       return;
     }
-    this.detached = true;
-    try {
+    if (!this.unsubscribed) {
       const result = method(this.webview4, 76, [
         "i64",
       ])(this.token);
@@ -231,12 +231,11 @@ export class WebViewDownloads {
       if (!browserGone || result !== HRESULT_INVALID_STATE) {
         hr(result, "remove_DownloadStarting");
       }
-    } finally {
-      try {
-        this.operations.dispose(browserGone);
-      } finally {
-        release(this.webview4);
-      }
+      this.unsubscribed = true;
     }
+    // A failed cancellation retains both the service and interface for a later cleanup attempt.
+    this.operations.dispose(browserGone);
+    this.detached = true;
+    release(this.webview4);
   }
 }

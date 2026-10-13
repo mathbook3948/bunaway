@@ -69,6 +69,13 @@ WebViewDownload는 id, url, mimeType, contentDisposition, path, totalBytes, rece
 state, interruptReason, canResume, paused를 제공합니다. byte 수의 null은 알 수 없거나
 안전 정수 범위를 넘는 값입니다. 승인된 항목도 창 종료 시 취소하고 참조를 해제합니다.
 호출자는 저장 경로를 바꾸거나 renderer 출처로 이 서비스를 사용할 수 없습니다.
+`MAX_DOWNLOAD_METADATA_BYTES`는 JSON UTF-8 metadata 합계 64 KiB,
+`MAX_DOWNLOAD_SNAPSHOT_BYTES`는 protocol 한도의 절반인 512 KiB입니다.
+`isDownloadSnapshotWithinLimits`는 이스케이프와 UTF-8 크기를 계산하고 UUID, 숫자, 상태와
+필드 이름의 최대 크기를 항목별로 예약합니다. 거부와 만료 뒤 retained 항목도 예산에 포함합니다.
+실패한 native Cancel은 항목과 operation을 보존하며, cleanup도 실패한 소유 자원을 남겨
+재시도하거나 관찰한 browser 종료 뒤 해제합니다.
+
 `showInactive()`는 현재 일반, 최소화나 최대화 상태와 다른 창의 입력 포커스를 유지하며
 숨김을 해제합니다. `activate()`는 표시된 비최소화 창의 전경 전환을 요청하고 실제
 전경 여부를 boolean으로 반환합니다. 숨김이나 최소화 상태에서는 변경 없이 `false`입니다.

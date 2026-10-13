@@ -1,8 +1,16 @@
 import { expect, test } from "bun:test";
 import {
+  isDownloadSnapshotWithinLimits,
+  MAX_DOWNLOAD_METADATA_BYTES,
+  MAX_DOWNLOAD_SNAPSHOT_BYTES,
   MAX_WEBVIEW_DOWNLOADS,
   type WebViewDownload,
 } from "@bunaway/plugin-api/native";
+import {
+  MAX_MESSAGE_BYTES,
+  serializeMessage,
+  serializeProcessFrame,
+} from "@bunaway/protocol";
 import {
   type DownloadResource,
   Downloads,
@@ -26,10 +34,17 @@ function resource() {
   let cancelled = 0;
   let abandoned = false;
   let failure: Error | undefined;
+  let readFailure: Error | undefined;
+  let cancelFailure: Error | undefined;
   const native: DownloadResource = {
-    read: () => ({
-      ...state,
-    }),
+    read() {
+      if (readFailure) {
+        throw readFailure;
+      }
+      return {
+        ...state,
+      };
+    },
     decide(allow) {
       decisions.push(allow);
       if (failure) {
@@ -39,14 +54,21 @@ function resource() {
     },
     cancel() {
       cancelled++;
+      if (cancelFailure) {
+        throw cancelFailure;
+      }
+      state.state = "interrupted";
+      state.interruptReason = 26; // USER_CANCELED
     },
     pause() {
       state.state = "interrupted";
       state.canResume = true;
+      state.interruptReason = 28; // USER_PAUSED
     },
     resume() {
       state.state = "inProgress";
       state.canResume = false;
+      state.interruptReason = null;
     },
     dispose(browserGone = false) {
       disposed++;
@@ -68,6 +90,15 @@ function resource() {
     },
     fail: (error: Error) => {
       failure = error;
+    },
+    failRead: (error?: Error) => {
+      readFailure = error;
+    },
+    failCancel: (error?: Error) => {
+      cancelFailure = error;
+    },
+    recoverDecision: () => {
+      failure = undefined;
     },
   };
 }
@@ -286,7 +317,7 @@ test("approval expiry rejects exactly once and cannot approve a stale handle", a
   f.downloads.dispose();
 });
 
-test("failed decisions and cleanup retire every resource and report owned failures", async () => {
+test("failed decisions preserve ownership until a retry and cleanup reports owned failures", async () => {
   const f = fixture(5);
   f.downloads.setRequestsEnabled(true);
   const failed = resource();
@@ -297,6 +328,9 @@ test("failed decisions and cleanup retire every resource and report owned failur
   }
   await Bun.sleep(20);
   expect(f.failures).toHaveLength(1);
+  expect(failed.disposed).toBe(0);
+  expect(() => f.downloads.approve(id)).toThrow();
+  f.downloads.cancel(id);
   expect(failed.disposed).toBe(1);
   const failClose = resource();
   failClose.fail(new Error("Native cancel failed"));
@@ -304,11 +338,211 @@ test("failed decisions and cleanup retire every resource and report owned failur
   f.offer(failClose);
   f.offer(peer);
   expect(() => f.downloads.dispose()).toThrow("Download cleanup failed");
-  expect(failClose.disposed).toBe(1);
+  expect(failClose.disposed).toBe(0);
   expect(peer.decisions).toEqual([
     false,
   ]);
   expect(peer.disposed).toBe(1);
-  expect(() => f.downloads.list()).toThrow();
+  expect(() => f.downloads.list()).not.toThrow();
   expect(() => f.downloads.dispose()).not.toThrow();
+  expect(failClose.disposed).toBe(1);
+  expect(() => f.downloads.list()).toThrow();
+});
+
+test("metadata failures cannot block cancellation and failed Cancel retains retry authority", () => {
+  const f = fixture();
+  f.downloads.setRequestsEnabled(true);
+  const active = resource();
+  const id = f.offer(active);
+  if (!id) {
+    throw new Error("Missing request");
+  }
+  f.downloads.approve(id);
+  active.failRead(new Error("Metadata read failed"));
+  active.failCancel(new Error("Native Cancel failed"));
+  expect(() => f.downloads.cancel(id)).toThrow("Native Cancel failed");
+  expect(active.cancelled).toBe(1);
+  expect(active.disposed).toBe(0);
+  active.failRead();
+  expect(f.downloads.list()[0]?.state).toBe("inProgress");
+  expect(() => f.downloads.forget(id)).toThrow();
+  active.failRead(new Error("Metadata remains unavailable"));
+  active.failCancel();
+  expect(() => f.downloads.cancel(id)).not.toThrow();
+  expect(active.cancelled).toBe(2);
+  expect(active.disposed).toBe(1);
+  expect(f.downloads.list()[0]?.state).toBe("cancelled");
+  f.downloads.forget(id);
+  f.downloads.dispose();
+});
+
+test("failed cancellation during approval or close retains every active resource until retry", () => {
+  const f = fixture();
+  f.downloads.setRequestsEnabled(true);
+  const active = resource();
+  const id = f.offer(active);
+  if (!id) {
+    throw new Error("Missing request");
+  }
+  active.failRead(new Error("Approved metadata failed"));
+  active.failCancel(new Error("Native Cancel failed"));
+  expect(() => f.downloads.approve(id)).toThrow(
+    "Download approval failed during cleanup",
+  );
+  expect(active.decisions).toEqual([
+    true,
+  ]);
+  expect(active.cancelled).toBe(1);
+  expect(active.disposed).toBe(0);
+  const peer = resource();
+  const peerId = f.offer(peer);
+  if (!peerId) {
+    throw new Error("Missing peer");
+  }
+  f.downloads.approve(peerId);
+  expect(() => f.downloads.dispose()).toThrow("Download cleanup failed");
+  expect(active.disposed).toBe(0);
+  expect(peer.disposed).toBe(1);
+  active.failCancel();
+  f.downloads.dispose();
+  expect(active.disposed).toBe(1);
+  expect(() => f.downloads.dispose()).not.toThrow();
+});
+
+test("native UI pause/resume and interruption reasons determine the current paused state", () => {
+  const f = fixture();
+  f.downloads.setRequestsEnabled(true);
+  const active = resource();
+  const id = f.offer(active);
+  if (!id) {
+    throw new Error("Missing request");
+  }
+  f.downloads.approve(id);
+  f.downloads.pause(id);
+  expect(f.downloads.list()[0]?.paused).toBe(true);
+  active.native.resume(); // Browser UI, without calling the backend resume method.
+  expect(f.downloads.list()[0]).toMatchObject({
+    state: "inProgress",
+    paused: false,
+  });
+  f.downloads.pause(id);
+  expect(f.downloads.list()[0]?.paused).toBe(true);
+  active.state.interruptReason = 12; // NETWORK_FAILED, unrelated to a user pause.
+  expect(f.downloads.list()[0]?.paused).toBe(false);
+  active.state.state = "completed";
+  active.state.interruptReason = 28;
+  expect(f.downloads.list()[0]).toMatchObject({
+    state: "completed",
+    paused: false,
+  });
+  f.downloads.dispose();
+});
+
+test("encoded metadata limits include JSON escapes, non-ASCII text and retained expired records", async () => {
+  const f = fixture(0);
+  f.downloads.setRequestsEnabled(true);
+  for (const value of [
+    "\u0000".repeat(MAX_DOWNLOAD_METADATA_BYTES / 6),
+    "😀".repeat(MAX_DOWNLOAD_METADATA_BYTES / 4),
+  ]) {
+    const item = resource();
+    item.state.contentDisposition = value;
+    expect(f.offer(item)).toBeNull();
+    expect(item.decisions).toEqual([
+      false,
+    ]);
+    expect(item.disposed).toBe(1);
+  }
+  const expired: Promise<void>[] = [];
+  for (let i = 0; i < MAX_WEBVIEW_DOWNLOADS; i++) {
+    const item = resource();
+    item.state.contentDisposition = "a".repeat(40 * 1024);
+    const decide = item.native.decide;
+    let decided: () => void = () => {};
+    const completion = new Promise<void>((done) => {
+      decided = done;
+    });
+    item.native.decide = (allow) => {
+      decide(allow);
+      decided();
+    };
+    if (f.offer(item)) {
+      expired.push(completion);
+    } else {
+      expect(item.disposed).toBe(1);
+    }
+  }
+  expect(expired.length).toBeGreaterThan(0);
+  expect(expired.length).toBeLessThan(MAX_WEBVIEW_DOWNLOADS);
+  await Promise.all(expired);
+  const records = f.downloads.list();
+  expect(records.every((item) => item.state === "cancelled")).toBe(true);
+  expect(isDownloadSnapshotWithinLimits(records)).toBe(true);
+  expect(
+    new TextEncoder().encode(JSON.stringify(records)).byteLength,
+  ).toBeLessThan(MAX_DOWNLOAD_SNAPSHOT_BYTES);
+  const identifier = "a".repeat(128);
+  const frame = serializeProcessFrame({
+    ipc: {
+      major: 1,
+      minor: 0,
+    },
+    runtime: {
+      id: identifier,
+      generation: identifier,
+    },
+    kind: "host-response",
+    context: identifier,
+    requestId: identifier,
+    payload: {
+      kind: "result",
+      payload: records,
+    },
+  });
+  const message = serializeMessage({
+    kind: "result",
+    protocol: {
+      major: 1,
+      minor: 0,
+    },
+    id: identifier,
+    payload: records,
+  });
+  expect(new TextEncoder().encode(frame).byteLength).toBeLessThan(
+    MAX_MESSAGE_BYTES,
+  );
+  expect(new TextEncoder().encode(message).byteLength).toBeLessThan(
+    MAX_MESSAGE_BYTES,
+  );
+  const extra = resource();
+  extra.state.contentDisposition = "a".repeat(40 * 1024);
+  expect(f.offer(extra)).toBeNull(); // Expired records still reserve their full metadata budget.
+  f.downloads.forget(records[0]?.id ?? "");
+  expect(f.offer(resource())).not.toBeNull();
+  f.downloads.dispose();
+});
+
+test("oversized metadata updates never replace a bounded snapshot or lose cancellation authority", () => {
+  const f = fixture();
+  f.downloads.setRequestsEnabled(true);
+  const active = resource();
+  const id = f.offer(active);
+  if (!id) {
+    throw new Error("Missing request");
+  }
+  f.downloads.approve(id);
+  const path = active.state.path;
+  active.state.path = "x".repeat(MAX_DOWNLOAD_METADATA_BYTES);
+  expect(() => f.downloads.list()).toThrow(
+    "Download metadata exceeds the snapshot budget",
+  );
+  expect(active.disposed).toBe(0);
+  f.downloads.cancel(id);
+  expect(active.cancelled).toBe(1);
+  expect(active.disposed).toBe(1);
+  expect(f.downloads.list()[0]).toMatchObject({
+    path,
+    state: "cancelled",
+  });
+  f.downloads.dispose();
 });

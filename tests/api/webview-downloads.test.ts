@@ -4,6 +4,11 @@ import type {
   NativeWindowServices,
 } from "@bunaway/plugin-api/native";
 import {
+  MAX_DOWNLOAD_METADATA_BYTES,
+  MAX_WEBVIEW_DOWNLOADS,
+  type WebViewDownload,
+} from "@bunaway/plugin-api/native";
+import {
   validateWindowCall,
   validateWindowOutput,
   windowsPlugin,
@@ -197,6 +202,51 @@ test("renderer-origin download calls are denied even when every operation is gra
     });
   }
   expect(f.actions).toEqual([]);
+});
+
+test("download output contracts reject oversized metadata and aggregate snapshots", () => {
+  const record: WebViewDownload = {
+    id,
+    url: "https://app.bunaway.local/file.txt",
+    mimeType: "text/plain",
+    contentDisposition: "a".repeat(40 * 1024),
+    path: "C:\\Downloads\\file.txt",
+    totalBytes: null,
+    receivedBytes: 0,
+    state: "cancelled",
+    interruptReason: null,
+    canResume: false,
+    paused: false,
+  };
+  expect(
+    validateWindowOutput("windows.getDownloads", [
+      record,
+    ]),
+  ).toEqual([
+    record,
+  ]);
+  expect(() =>
+    validateWindowOutput(
+      "windows.getDownloads",
+      Array.from(
+        {
+          length: MAX_WEBVIEW_DOWNLOADS,
+        },
+        () => ({
+          ...record,
+          id: crypto.randomUUID(),
+        }),
+      ),
+    ),
+  ).toThrow();
+  expect(() =>
+    validateWindowOutput("windows.getDownloads", [
+      {
+        ...record,
+        contentDisposition: "\u0000".repeat(MAX_DOWNLOAD_METADATA_BYTES / 6),
+      },
+    ]),
+  ).toThrow();
 });
 
 test("trusted backend dispatch and missing platform services preserve their contracts", async () => {

@@ -1,3 +1,5 @@
+import { MAX_MESSAGE_BYTES } from "@bunaway/protocol";
+
 /** Inclusive accepted dimension range for window sizes. */
 export const MIN_WINDOW_DIMENSION = 200;
 export const MAX_WINDOW_DIMENSION = 4096;
@@ -277,6 +279,11 @@ export type NativeWindow = {
 
 /** Maximum retained pending, active and terminal downloads per WebView. */
 export const MAX_WEBVIEW_DOWNLOADS = 32;
+/** Maximum UTF-8 JSON bytes for one download's combined URL, MIME, disposition and path. */
+export const MAX_DOWNLOAD_METADATA_BYTES = 64 * 1024;
+/** Snapshot budget including per-record scalar reserves; leaves half the 1 MiB wire limit for envelopes. */
+export const MAX_DOWNLOAD_SNAPSHOT_BYTES = MAX_MESSAGE_BYTES / 2;
+const DOWNLOAD_RECORD_RESERVED_BYTES = 512;
 /** Approval deadline; an undecided download is cancelled without creating its output. */
 export const DOWNLOAD_APPROVAL_TIMEOUT_MS = 30_000;
 
@@ -295,6 +302,37 @@ export type WebViewDownload = {
   canResume: boolean;
   paused: boolean;
 };
+
+/** Bound metadata exactly as JSON encodes it, including escaped controls and non-ASCII text. */
+export function isDownloadSnapshotWithinLimits(
+  records: readonly WebViewDownload[],
+): boolean {
+  if (records.length > MAX_WEBVIEW_DOWNLOADS) {
+    return false;
+  }
+  const encoder = new TextEncoder();
+  let bytes = 2; // Array delimiters; retained terminal records consume the same budget.
+  for (const record of records) {
+    const metadata = encoder.encode(
+      JSON.stringify({
+        url: record.url,
+        mimeType: record.mimeType,
+        contentDisposition: record.contentDisposition,
+        path: record.path,
+      }),
+    ).byteLength;
+    if (metadata > MAX_DOWNLOAD_METADATA_BYTES) {
+      return false;
+    }
+    // UUID, property names, booleans, longest state and safe-integer counters fit in 512 bytes.
+    // Reserve their worst case before approval so progress/expiry never exhaust the budget.
+    bytes += metadata + DOWNLOAD_RECORD_RESERVED_BYTES;
+    if (bytes > MAX_DOWNLOAD_SNAPSHOT_BYTES) {
+      return false;
+    }
+  }
+  return true;
+}
 
 /** Every method requires backend origin and its own operation grant before native entry. */
 export type NativeDownloads = {

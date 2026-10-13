@@ -1,5 +1,6 @@
 import {
   DOWNLOAD_APPROVAL_TIMEOUT_MS,
+  isDownloadSnapshotWithinLimits,
   MAX_WEBVIEW_DOWNLOADS,
   type NativeDownloads,
   type WebViewDownload,
@@ -23,6 +24,9 @@ type DownloadEntry = {
   pending: boolean;
   timer?: ReturnType<typeof setTimeout>;
 };
+
+// COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_USER_PAUSED, pinned SDK 1.0.4129.50.
+const USER_PAUSED = 28;
 
 /** Bounded, default-denied approval queue and ownership for a single WebView lifetime. */
 export class Downloads implements NativeDownloads {
@@ -65,6 +69,11 @@ export class Downloads implements NativeDownloads {
         },
         pending: true,
       };
+      if (!this.fits(entry.snapshot)) {
+        resource.decide(false);
+        this.onDenied(state.url);
+        return null;
+      }
       this.entries.set(id, entry);
       adopted = true;
       entry.timer = setTimeout(() => {
@@ -134,20 +143,15 @@ export class Downloads implements NativeDownloads {
       entry.pending = false;
       this.refresh(entry);
     } catch (error) {
-      // A failed commit must not leave a retained deferral or repeatable approval.
+      // A failed commit cannot be approved again; preserve ownership if cancellation also fails.
       entry.pending = false;
       const errors: unknown[] = [
         error,
       ];
       try {
-        entry.resource?.cancel();
+        this.cancel(id);
       } catch (cancelError) {
         errors.push(cancelError);
-      }
-      try {
-        this.retire(entry, "cancelled");
-      } catch (disposeError) {
-        errors.push(disposeError);
       }
       if (errors.length > 1) {
         throw new AggregateError(
@@ -162,26 +166,25 @@ export class Downloads implements NativeDownloads {
   cancel(id: string): void {
     const entry = this.requireEntry(id);
     this.clearTimer(entry);
-    try {
-      this.refresh(entry);
-      if (!entry.resource) {
-        return;
-      }
-      if (entry.pending) {
-        entry.resource.decide(false);
-      } else if (
-        ![
-          "completed",
-          "cancelled",
-        ].includes(entry.resource.read().state)
-      ) {
-        entry.resource.cancel();
-      }
-    } finally {
+    if (!entry.resource) {
+      return;
+    }
+    if (entry.pending) {
+      // Disarm approval even if the deferral decision fails. A later cancellation can retry.
       entry.pending = false;
-      if (entry.resource) {
-        this.retire(entry, "cancelled");
+      entry.resource.decide(false);
+    } else {
+      // Cancellation authority must not depend on a successful metadata read.
+      // A failed native Cancel retains the operation and its ID for retry or close cleanup.
+      entry.resource.cancel();
+      try {
+        this.refresh(entry);
+      } catch {
+        // Native Cancel succeeded. Final metadata is optional; keep the last bounded snapshot.
       }
+    }
+    if (entry.resource) {
+      this.retire(entry, "cancelled");
     }
   }
 
@@ -202,7 +205,6 @@ export class Downloads implements NativeDownloads {
       });
     }
     entry.resource.pause();
-    entry.snapshot.paused = true;
     this.refresh(entry);
   }
 
@@ -216,7 +218,6 @@ export class Downloads implements NativeDownloads {
       });
     }
     entry.resource.resume();
-    entry.snapshot.paused = false;
     this.refresh(entry);
   }
 
@@ -251,11 +252,12 @@ export class Downloads implements NativeDownloads {
         errors.push(error);
       }
     }
-    this.closed = true;
-    this.entries.clear();
     if (errors.length) {
+      // Keep failed operations owned. The caller may retry, or release after observed broker exit.
       throw new AggregateError(errors, "Download cleanup failed.");
     }
+    this.closed = true;
+    this.entries.clear();
   }
 
   private requireOpen(): void {
@@ -283,15 +285,35 @@ export class Downloads implements NativeDownloads {
     if (!entry.resource || entry.pending) {
       return;
     }
-    entry.snapshot = {
-      ...entry.resource.read(),
+    const state = entry.resource.read();
+    const snapshot: WebViewDownload = {
+      ...state,
       id: entry.snapshot.id,
-      paused: entry.snapshot.paused,
+      paused:
+        state.state === "interrupted" && state.interruptReason === USER_PAUSED,
     };
+    if (!this.fits(snapshot, entry)) {
+      throw new BunawayError({
+        code: "INTERNAL",
+        message: "Download metadata exceeds the snapshot budget.",
+      });
+    }
+    entry.snapshot = snapshot;
     // WebView2 can automatically retry interruptions. Keep authority until completion or cancel.
     if (entry.snapshot.state === "completed") {
       this.retire(entry);
     }
+  }
+
+  private fits(snapshot: WebViewDownload, replacing?: DownloadEntry): boolean {
+    return isDownloadSnapshotWithinLimits([
+      ...[
+        ...this.entries.values(),
+      ]
+        .filter((entry) => entry !== replacing)
+        .map((entry) => entry.snapshot),
+      snapshot,
+    ]);
   }
 
   private clearTimer(entry: DownloadEntry): void {
