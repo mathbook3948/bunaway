@@ -52,7 +52,18 @@ Windows Server 2022의 실제 시작 앱 설정에서 On과 Off 전환 시 0과 
 
 현재 계약과 업데이트, 이동, 제거 규칙은
 [공개 API](../site/src/content/docs/reference/plugins/autostart.mdx)를 따른다.
-숨김 시작, 설치 프로그램 opt-in 및 제거 연동은 후속 작업이다.
+등록 명령에 일반 시작 `--bunaway-autostart` 또는 숨김 시작
+`--bunaway-autostart-hidden` 접두어를 앱 인자의 첫 항목으로 저장한다. 이 인자도 전체
+Run 명령줄 제한에 포함한다. 호스트가 접두어를 소비하고 `onOpen`의 `request.launchReason`을 전달한다.
+이 값은 호출 모드이며 Windows 로그인 출처를 인증하거나 권한을 부여하지 않는다.
+
+숨김 등록은 호스트가 확인한 `desktop.tray`를 요구한다. 트레이 없는 등록은 기존 Run 값을
+변경하기 전에 거부하며 이미 등록한 앱에서 트레이를 제거하면 숨김 시작도 UI Worker 생성
+전에 거부한다. 최초 창 생성은 숨김을 적용하고 `showWhenReady` 자동 표시를 억제하지만
+원래 창 선언은 유지한다. 트레이 Open과 수동 두 번째 실행으로 같은 HWND와 세션을 복원한다.
+숨김 자동 실행의 두 번째 요청은 현재 표시 상태를 유지한다. 이미 표시한 앱을 숨기지 않는다.
+일반 두 번째 실행의 표시와 열기 순서, 앱 코드의 명시적 표시는 기존 desktop 계약을 따른다.
+설치 프로그램 opt-in 및 제거 연동은 후속 작업이다.
 
 ## Windows 공식 자료
 

@@ -22,6 +22,8 @@ export type UIConfig = {
   legacyProfile?: boolean;
   plugins?: NativeRegistration[];
   desktop?: {
+    /** Suppress only initial automatic display for a marked autostart invocation. */
+    startHidden?: boolean;
     closeBehavior: NonNullable<DesktopOptions["closeBehavior"]>;
     tray?: {
       tooltip: string;

@@ -51,6 +51,8 @@ const SC_MINIMIZE = 0xf020n;
 const SC_MAXIMIZE = 0xf030n;
 const SC_RESTORE = 0xf120n;
 const WM_DISPLAYCHANGE = 0x007e;
+const SC_SIZE = 0xf000n;
+const SC_MOVE = 0xf010n;
 export const WM_ENTERSIZEMOVE = 0x0231;
 export const WM_EXITSIZEMOVE = 0x0232;
 const WM_DPICHANGED = 0x02e0;
@@ -98,6 +100,7 @@ const WPF_RESTORETOMAXIMIZED = 0x2;
 const WS_OVERLAPPEDWINDOW = 0x00cf0000;
 const WS_MINIMIZEBOX = 0x00020000n;
 const WS_MAXIMIZEBOX = 0x00010000n;
+const WS_THICKFRAME = 0x00040000n;
 const WS_MAXIMIZE = 0x01000000n;
 const WS_MINIMIZE = 0x20000000n;
 const IDYES = 6;
@@ -158,6 +161,7 @@ export class Windows {
     }
   >();
   private readonly changingGeometry = new Set<bigint>();
+  private readonly immovable = new Set<bigint>();
   private readonly initialOuterSizes = new Map<
     bigint,
     {
@@ -347,6 +351,17 @@ export class Windows {
                   this.restore(window);
                 }
               }
+              return 0n;
+            }
+          }
+
+          if (message === WM_SYSCOMMAND && this.windows.has(window)) {
+            // Caption dragging and keyboard/system-menu commands converge here.
+            const command = wparam & SYSTEM_COMMAND_MASK;
+            if (
+              (command === SC_MOVE && !this.isMovable(window)) ||
+              (command === SC_SIZE && !this.isResizable(window))
+            ) {
               return 0n;
             }
           }
@@ -738,6 +753,105 @@ export class Windows {
           SWP_FRAMECHANGED,
       ),
     );
+  }
+
+  /** Read the resize style restored after fullscreen, rather than the borderless fullscreen style. */
+  isResizable(window: bigint): boolean {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return !!(
+      (this.fullscreen.get(window)?.style ?? this.windowStyles(window).style) &
+      WS_THICKFRAME
+    );
+  }
+
+  /** Change user resizing while retaining normal content size, display state and input focus. */
+  setResizable(window: bigint, resizable: boolean): void {
+    if (this.isResizable(window) === resizable) {
+      return;
+    }
+    const fullscreen = this.fullscreen.get(window);
+    const style = fullscreen?.style ?? this.windowStyles(window).style;
+    const nextStyle = resizable
+      ? style | WS_THICKFRAME
+      : style & ~WS_THICKFRAME;
+    if (fullscreen) {
+      fullscreen.style = nextStyle;
+      this.resizePlacement(
+        window,
+        fullscreen.placement,
+        fullscreen.restoreSize,
+        this.getSizeConstraints(window),
+        fullscreen.dpi,
+        nextStyle,
+      );
+      return;
+    }
+    const dpi = this.getDpi(window);
+    const placement =
+      this.isMinimized(window) || this.isMaximized(window)
+        ? this.getPlacement(window)
+        : undefined;
+    const content = placement
+      ? this.clientSizeFromPlacement(window, placement, dpi, style)
+      : this.clientSizeInDips(window, dpi);
+    this.changingGeometry.add(window);
+    try {
+      this.setStyle(window, nextStyle);
+      assert(
+        user.symbols.SetWindowPos(
+          window,
+          0n,
+          0,
+          0,
+          0,
+          0,
+          SWP_NOSIZE |
+            SWP_NOMOVE |
+            SWP_NOZORDER |
+            SWP_NOACTIVATE |
+            SWP_FRAMECHANGED,
+        ),
+      );
+      if (placement) {
+        this.resizePlacement(
+          window,
+          placement,
+          content,
+          this.getSizeConstraints(window),
+          dpi,
+          nextStyle,
+        );
+        this.setPlacement(window, placement, this.isVisible(window), true);
+      } else {
+        this.setClientSize(
+          window,
+          clampWindowSize(
+            content.width,
+            content.height,
+            this.getSizeConstraints(window),
+          ),
+          dpi,
+        );
+      }
+    } finally {
+      this.changingGeometry.delete(window);
+      this.observeChanges(window);
+    }
+  }
+
+  isMovable(window: bigint): boolean {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return !this.immovable.has(window);
+  }
+
+  /** Block user movement only. Geometry APIs, display changes and fullscreen can still reposition. */
+  setMovable(window: bigint, movable: boolean): void {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    if (movable) {
+      this.immovable.delete(window);
+    } else {
+      this.immovable.add(window);
+    }
   }
 
   /** Own one native observer per window. Its callback ends before HWND destruction. No initial replay. */
@@ -1212,9 +1326,11 @@ export class Windows {
 
   private clientSizeInDips(window: bigint, dpi: number): ClientSize {
     const size = this.clientSize(window);
+    // Preserve fractional DIPs internally so frame changes can recover the exact
+    // physical client pixels. Public logical geometry queries round separately.
     return {
-      width: logicalPixels(size.width, dpi),
-      height: logicalPixels(size.height, dpi),
+      width: (size.width * DEFAULT_DPI) / dpi,
+      height: (size.height * DEFAULT_DPI) / dpi,
     };
   }
 
@@ -1372,8 +1488,8 @@ export class Windows {
     const { exStyle } = this.windowStyles(window);
     const frame = this.outerSizeFor(0, 0, dpi, style, exStyle);
     return {
-      width: logicalPixels(outerWidth - frame.width, dpi),
-      height: logicalPixels(outerHeight - frame.height, dpi),
+      width: ((outerWidth - frame.width) * DEFAULT_DPI) / dpi,
+      height: ((outerHeight - frame.height) * DEFAULT_DPI) / dpi,
     };
   }
 
@@ -1934,6 +2050,7 @@ export class Windows {
     }
     this.observations.delete(window);
     this.changingGeometry.delete(window);
+    this.immovable.delete(window);
     assert(user.symbols.DestroyWindow(window));
     this.windows.delete(window);
     this.constraints.delete(window);

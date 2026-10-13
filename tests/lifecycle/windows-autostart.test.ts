@@ -1,13 +1,17 @@
-import { expect, test } from "bun:test";
 import { dlopen, ptr } from "bun:ffi";
+import { expect, test } from "bun:test";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { resolve } from "node:path";
-import { createOperations } from "#plugins/autostart/src/platforms/windows";
 import {
-  commandLine,
+  AUTOSTART_ARGUMENT,
+  AUTOSTART_HIDDEN_ARGUMENT,
+} from "@bunaway/protocol";
+import {
   type AppLaunch,
+  commandLine,
   registrationName,
 } from "#plugins/autostart/src/launch";
+import { createOperations } from "#plugins/autostart/src/platforms/windows";
 import {
   APPROVAL_KEY,
   createRegistry,
@@ -69,7 +73,10 @@ test.skipIf(process.platform !== "win32")(
       const expected = {
         registered: true,
         executablePath: app.launch.executablePath,
-        args,
+        args: [
+          AUTOSTART_ARGUMENT,
+          ...args,
+        ],
         matchesCurrentLaunch: true,
       };
       expect(
@@ -116,6 +123,47 @@ test.skipIf(process.platform !== "win32")(
         startupState: "disabled",
       });
       expect(registry.read(APPROVAL_KEY, name)).toEqual(before);
+      expect(() =>
+        adapter.execute(
+          "autostart.enable",
+          {
+            args: [],
+            hidden: true,
+          },
+          "backend",
+        ),
+      ).toThrow("desktop.tray");
+      expect(registry.read(APPROVAL_KEY, name)).toEqual(before);
+      const hiddenAdapter = createOperations({
+        dataRoot: ".",
+        capabilities: [],
+        app: {
+          ...app,
+          supportsHiddenStart: true,
+        },
+      });
+      try {
+        expect(
+          hiddenAdapter.execute(
+            "autostart.enable",
+            {
+              args,
+              hidden: true,
+            },
+            "backend",
+          ),
+        ).toMatchObject({
+          registered: true,
+          args: [
+            AUTOSTART_HIDDEN_ARGUMENT,
+            ...args,
+          ],
+          startupState: "disabled",
+        });
+        expect(registry.read(APPROVAL_KEY, name)).toEqual(before);
+      } finally {
+        await hiddenAdapter.dispose();
+      }
       expect(adapter.execute("autostart.disable", null, "backend")).toBeNull();
       expect(adapter.execute("autostart.disable", null, "backend")).toBeNull();
       expect(registry.read(APPROVAL_KEY, name)).toEqual(before);
@@ -325,10 +373,16 @@ test.skipIf(process.platform !== "win32")(
       const command = commandLine(app, args);
       expect(status).toMatchObject({
         commandLine: command,
-        args,
+        args: [
+          AUTOSTART_ARGUMENT,
+          ...args,
+        ],
       });
       launchRaw(command);
-      expect(JSON.parse(await readFile(output, "utf8"))).toEqual(args);
+      expect(JSON.parse(await readFile(output, "utf8"))).toEqual([
+        AUTOSTART_ARGUMENT,
+        ...args,
+      ]);
       await rm(output);
       const dev: AppLaunch = {
         ...app,
@@ -342,7 +396,10 @@ test.skipIf(process.platform !== "win32")(
         },
       };
       launchRaw(commandLine(dev, args));
-      expect(JSON.parse(await readFile(output, "utf8"))).toEqual(args);
+      expect(JSON.parse(await readFile(output, "utf8"))).toEqual([
+        AUTOSTART_ARGUMENT,
+        ...args,
+      ]);
     } finally {
       registry.remove(registrationName(app));
       registry.dispose();
