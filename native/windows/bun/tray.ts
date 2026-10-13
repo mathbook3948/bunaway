@@ -96,6 +96,8 @@ export class Tray {
   private menuOnRightClick = true;
   private tooltip = "";
   private disposed = false;
+  private windowDestroyed = false;
+  private shellClosed = false;
   /** Registers the icon and releases partial resources if setup fails. */
   constructor(
     private readonly windows: Windows,
@@ -139,6 +141,9 @@ export class Tray {
         200,
         200,
         (message, _wparam, lparam) => {
+          if (this.disposed) {
+            return;
+          }
           if (message === taskbarCreated) {
             // Explorer restarts clear notification icons, so add this one back.
             this.added = false;
@@ -368,12 +373,9 @@ export class Tray {
     );
   }
   /**
-   * Requests shell icon removal when registered, destroys its window, and closes the shell binding.
+   * Stop callbacks and release owned resources, retaining failed releases for a later attempt.
    */
   dispose() {
-    if (this.disposed) {
-      return;
-    }
     this.disposed = true;
     const errors: unknown[] = [];
     try {
@@ -381,23 +383,36 @@ export class Tray {
         this.shell.symbols.Shell_NotifyIconW(NIM_DELETE, ptr(this.data));
       }
       this.added = false;
+    } catch (error) {
+      errors.push(error);
+    }
+    if (!this.windowDestroyed) {
       try {
         this.windows.destroy(this.hwnd);
+        this.windowDestroyed = true;
       } catch (error) {
         errors.push(error);
       }
-      if (this.customIcon) {
-        this.retiredIcons.add(this.customIcon);
-      }
+    }
+    if (this.customIcon) {
+      this.retiredIcons.add(this.customIcon);
       this.customIcon = undefined;
-      for (const icon of this.retiredIcons) {
-        if (!user.symbols.DestroyIcon(icon)) {
-          errors.push(new Error("Tray icon cleanup failed."));
-        }
+    }
+    for (const icon of this.retiredIcons) {
+      try {
+        assert(user.symbols.DestroyIcon(icon), "Tray icon cleanup failed.");
+        this.retiredIcons.delete(icon);
+      } catch (error) {
+        errors.push(error);
       }
-      this.retiredIcons.clear();
-    } finally {
-      this.shell.close();
+    }
+    if (!this.shellClosed && !this.added && this.windowDestroyed) {
+      try {
+        this.shell.close();
+        this.shellClosed = true;
+      } catch (error) {
+        errors.push(error);
+      }
     }
     if (errors.length) {
       throw new AggregateError(errors, "Tray resource cleanup failed.");

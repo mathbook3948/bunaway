@@ -4,11 +4,15 @@ import type {
   NativeMonitorServices,
   WindowSpec,
 } from "@bunaway/plugin-api/native";
+import { uiCleanupSlots } from "./windows-ui-cleanup.ts";
 
 // Controlled native boundary for the real UI Worker. No HWND, DLL or COM is loaded.
 const controls = workerData as {
   failView?: string;
+  trayFailures?: number;
+  cleanup: SharedArrayBuffer;
 };
+const cleanup = new Int32Array(controls.cleanup);
 export const WM_CLOSE = 16;
 export const WM_SIZE = 5;
 export const WM_ENTERSIZEMOVE = 561;
@@ -21,23 +25,35 @@ export const kernel = {
 export const ole = {
   symbols: {
     CoInitializeEx: () => 0,
-    CoUninitialize() {},
+    CoUninitialize() {
+      assert.equal(Atomics.load(cleanup, uiCleanupSlots.windows), 1);
+      Atomics.add(cleanup, uiCleanupSlots.apartment, 1);
+    },
   },
 };
 export function hr(result: number): void {
   assert(result >= 0);
 }
-export function disposeWin32Bindings(): void {}
+export function disposeWin32Bindings(): void {
+  assert.equal(Atomics.load(cleanup, uiCleanupSlots.apartment), 1);
+  Atomics.add(cleanup, uiCleanupSlots.bindings, 1);
+}
 export function checkCallbacks(): void {}
 export function callbackCalls(): number[] {
   return [];
 }
 export function disposeCom(): object {
+  Atomics.add(cleanup, uiCleanupSlots.com, 1);
   return {};
 }
 export class Tray {
   readonly hwnd = 999n;
-  dispose(): void {}
+  dispose(): void {
+    const attempt = Atomics.add(cleanup, uiCleanupSlots.tray, 1) + 1;
+    if (attempt <= (controls.trayFailures ?? 0)) {
+      throw new Error("Injected tray icon cleanup failure");
+    }
+  }
 }
 
 /** Model only native identity and visibility used by these lifecycle scenarios. */
@@ -137,6 +153,11 @@ export class Windows {
   pump(): void {}
   dispose(): void {
     assert.equal(this.windows.size, 0, "Fixture window leaked");
+    assert.equal(Atomics.load(cleanup, uiCleanupSlots.com), 1);
+    if (controls.trayFailures !== undefined) {
+      assert.equal(Atomics.load(cleanup, uiCleanupSlots.adapter), 1);
+    }
+    Atomics.add(cleanup, uiCleanupSlots.windows, 1);
   }
 }
 

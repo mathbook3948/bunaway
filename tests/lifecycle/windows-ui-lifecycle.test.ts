@@ -13,6 +13,7 @@ import {
 } from "#native/windows/bun/channel";
 import { writePluginFixture } from "../fixtures/native-worker.ts";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
+import { uiCleanupSlots } from "../fixtures/windows-ui-cleanup.ts";
 
 const timeoutMs = 10_000;
 const parserSlots = {
@@ -22,11 +23,20 @@ const parserSlots = {
 };
 
 /** Run the production UI loop and window adapter with controlled Win32/WebView callbacks. */
-async function startUI(failView?: string, parserExecution?: "ui" | "sync") {
+async function startUI(
+  failView?: string,
+  parserExecution?: "ui" | "sync",
+  trayFailures?: number,
+) {
   const directory = await mkdtemp(resolve(tmpdir(), "bunaway-ui-lifecycle-"));
   const parsing = new Int32Array(
     new SharedArrayBuffer(
       Object.keys(parserSlots).length * Int32Array.BYTES_PER_ELEMENT,
+    ),
+  );
+  const cleanup = new Int32Array(
+    new SharedArrayBuffer(
+      Object.keys(uiCleanupSlots).length * Int32Array.BYTES_PER_ELEMENT,
     ),
   );
   const parserPlugins = parserExecution
@@ -137,6 +147,8 @@ async function startUI(failView?: string, parserExecution?: "ui" | "sync") {
     import { z } from ${JSON.stringify(Bun.resolveSync("zod", import.meta.dir))};
     const state = new Int32Array(workerData.parsing);
     const slots = ${JSON.stringify(parserSlots)};
+    const cleanup = new Int32Array(workerData.cleanup);
+    const cleanupSlots = ${JSON.stringify(uiCleanupSlots)};
     const execute = (_name,input) => {
       Atomics.add(state,slots.executions,1);
       if(input === "user-close" || input === "force-close") requestFixtureClose("main", input === "force-close");
@@ -153,7 +165,7 @@ async function startUI(failView?: string, parserExecution?: "ui" | "sync") {
     }},platforms:{windows:{execution:"ui",create:()=>({
       execute,
       ...(${JSON.stringify(parserExecution)} === "ui" ? {async executeUI(name,input){return execute(name,input);}} : {}),
-      dispose(){},
+      dispose(){Atomics.add(cleanup,cleanupSlots.adapter,1);},
     })}}});
     export const pluginImports = {parser:{operations:async()=>({createOperations:parser.definition.nativePlatforms.windows.create})}, windows: {
       operations: () => import(${JSON.stringify(resolve(import.meta.dir, "../../plugins/windows/src/platforms/windows.ts"))}),
@@ -204,6 +216,8 @@ async function startUI(failView?: string, parserExecution?: "ui" | "sync") {
     workerData: {
       ...configuration,
       parsing: parsing.buffer,
+      cleanup: cleanup.buffer,
+      trayFailures,
       ...(failView
         ? {
             failView,
@@ -285,6 +299,7 @@ async function startUI(failView?: string, parserExecution?: "ui" | "sync") {
   }
   return {
     parsing,
+    cleanup,
     channel,
     packets,
     call,
@@ -301,6 +316,50 @@ async function startUI(failView?: string, parserExecution?: "ui" | "sync") {
     },
   };
 }
+
+test.each([
+  1,
+  2,
+])(
+  "a tray cleanup failure retains its error and continues safe UI cleanup (%i failures)",
+  async (trayFailures) => {
+    const ui = await startUI(undefined, "ui", trayFailures);
+    try {
+      await ui.waitFor(() =>
+        ui.packets.some((packet) => packet.kind === "ready"),
+      );
+      await ui.channel.send({
+        kind: "shutdown",
+      });
+      await ui.exited;
+      // Retrying successfully still reports the original failure rather than a clean shutdown.
+      const error = ui.error();
+      expect(error).toBeInstanceOf(Error);
+      expect(error?.message).toContain("Injected tray icon cleanup failure");
+      expect(Array.from(ui.cleanup)).toEqual([
+        2,
+        1,
+        1,
+        1,
+        1,
+        trayFailures === 1 ? 1 : 0,
+      ]);
+      expect(ui.packets.some((packet) => packet.kind === "cleaned")).toBe(
+        false,
+      );
+      expect(
+        ui.packets.some(
+          (packet) =>
+            packet.kind === "diagnostic" &&
+            packet.event === "callbacks-quiescent",
+        ),
+      ).toBe(true);
+    } finally {
+      await ui.close();
+    }
+  },
+  timeoutMs + 5_000,
+);
 
 test(
   "user-close policy blocks renderer callbacks but forced renderer cleanup retires the HWND",

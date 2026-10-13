@@ -1599,11 +1599,25 @@ try {
       }
       await Bun.sleep(5);
     }
-    tray?.dispose();
-    tray = undefined;
-    if (controlWindow) {
-      windows?.destroy(controlWindow);
-      controlWindow = undefined;
+    const disposeTray = () => {
+      tray?.dispose();
+      tray = undefined;
+    };
+    for (const dispose of [
+      disposeTray,
+      () => {
+        if (controlWindow) {
+          windows?.destroy(controlWindow);
+          controlWindow = undefined;
+        }
+      },
+    ]) {
+      try {
+        dispose();
+      } catch (error) {
+        // A tray release failure must not bypass callback quiescence and other safe cleanup.
+        failure ??= error;
+      }
     }
     const calls = callbackCalls();
     for (let count = 0; count < 10; count++) {
@@ -1616,13 +1630,17 @@ try {
     await disposeAll([
       () => adapters?.dispose(),
       () => systemEvents?.dispose(),
+      // Retry retained tray resources while their Win32 binding is still open.
+      disposeTray,
       () => {
         windows?.dispose();
         if (initialized) {
           ole.symbols.CoUninitialize();
         }
         // Close COM and Win32 DLL handles after releasing their native owners.
-        disposeWin32Bindings();
+        if (!tray) {
+          disposeWin32Bindings();
+        }
       },
     ]);
     await channel.drain();
