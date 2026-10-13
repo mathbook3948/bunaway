@@ -76,6 +76,8 @@ WebView audio는 ICoreWebView2_8의 IsMuted와 IsDocumentPlayingAudio를 같은 
 
 창 플러그인을 등록하면 `Windows.observe`가 창별 상태와 물리 outer bounds의 변경을
 비교한다. 활성화 관찰은 `WM_ACTIVATE` 뒤에 게시한 창 메시지에서 전경 HWND를 조회한다.
+`WM_ENTERSIZEMOVE`와 `WM_EXITSIZEMOVE`는 시작과 최종 geometry를 비교해 별도 revision의
+`moved`, `resized`를 발행한다. 순서와 snapshot 복구는 중간 move/resize와 같은 경로를 따른다.
 동기 활성화 콜백이 끝나기 전에 이전 전경 HWND를 읽어 전환을 놓치는 것을 방지한다.
 `window-events.ts`는 변경 이름과 순서를 결정하며 `ui.ts`는 현재 문서의
 구독 관심과 route를 확인해 `native-event` 패킷을 보낸다. 메인은 동일한 route의

@@ -1,4 +1,27 @@
-import type { WindowChange, WindowSnapshot } from "@bunaway/plugin-api/native";
+import type {
+  WindowBounds,
+  WindowChange,
+  WindowSnapshot,
+} from "@bunaway/plugin-api/native";
+
+/** Report net geometry changes when a native interactive move/resize loop finishes. */
+export function completedGeometryChanges(
+  before: WindowBounds,
+  after: WindowBounds,
+): WindowChange[] {
+  const changes: WindowChange[] = [];
+  if (before.x !== after.x || before.y !== after.y) {
+    changes.push("moved");
+  }
+  if (
+    before.width !== after.width ||
+    before.height !== after.height ||
+    before.dpi !== after.dpi
+  ) {
+    changes.push("resized");
+  }
+  return changes;
+}
 
 /** Compare committed snapshots in a fixed order, suppressing unchanged native messages. */
 export function windowChanges(

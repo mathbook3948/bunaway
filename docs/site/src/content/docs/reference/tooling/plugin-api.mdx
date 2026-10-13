@@ -119,6 +119,7 @@ Windows의 선택적 `NativeWindow.destroy()`는 확인, 트레이 숨김과 종
 `visible`, `focused`, `minimized`, `maximized`, `fullscreen`은 기존 상태 조회와
 같은 의미이고 `WindowBounds`는 기존 물리 outer bounds와 같습니다.
 `WindowChange`는 표시, 포커스, 창 상태, 전체화면 및 geometry 변경 이름의 합집합입니다.
+`moved`, `resized`는 Windows 네이티브 이동/크기 조절 루프 종료의 최종 geometry 알림입니다. 시작과 최종 값이 같으면 발행하지 않으며 중간 관찰 뒤 새 revision을 사용합니다.
 호스트가 창별 관찰을 소유하고 HWND 파괴 전에 해제합니다.
 
 선택적 `NativeWindow.setTaskbarProgress(progress)`는 Windows 작업 표시줄 진행률을 설정합니다.

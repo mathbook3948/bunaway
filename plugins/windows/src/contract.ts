@@ -379,7 +379,7 @@ export const windowEvents = {
       changes: {
         type: "array",
         minItems: 1,
-        maxItems: 12,
+        maxItems: 14,
         uniqueItems: true,
         items: {
           type: "string",
@@ -396,6 +396,8 @@ export const windowEvents = {
             "leaveFullscreen",
             "move",
             "resize",
+            "moved",
+            "resized",
           ],
         },
       },

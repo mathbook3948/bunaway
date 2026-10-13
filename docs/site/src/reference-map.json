@@ -370,14 +370,13 @@
         "./native/*": "./dist/native/*.js"
       },
       "pages": {
-        "reference/host/windows": ["windows", "windowsPlugin"],
+        "reference/host/windows": ["windows", "windowsPlugin", "windowEvents"],
         "reference/tooling/native-plugins": [
           "isWindowOperation",
           "parseWindowCall",
           "validateWindowCall",
           "validateWindowOutput",
           "windowOperations",
-          "windowEvents",
           "windowSnapshotSchema",
           "windowReadinessSchema"
         ]
