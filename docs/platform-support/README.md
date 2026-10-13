@@ -24,7 +24,12 @@ Windows x64 `10.0.26200.0`, Bun 1.4.2에서 실제 트레이와 WebView2의 지�
 트레이 입력은 실제 HWND의 콜백 메시지로 검사했으며 물리 마우스 클릭은 포함하지 않는다.
 macOS 창 없는 시작은 `UNSUPPORTED`이며 [Windows 실행 기록](../architecture/windows-bun-results.md)의 범위를 따른다.
 
-현재 저장, 로그, 기능 조회, opener와 clipboard 플러그인은 Windows만 지원한다. 창 플러그인의 기본 제어는 macOS에서도 지원한다. 아래 macOS 파일 저장과 네이티브 API 검증 기록은 이관 전 구현의 기록이다. Bun FFI 제품 경로의 명령, 이벤트와 정책, 복구, 종료 검증은 [새 기록](../architecture/macos-bun-results.md)에 둔다.
+현재 저장, opener와 clipboard 플러그인은 Windows만 지원한다. 로그와 기능 조회의 macOS 어댑터는 I/O Worker에 연결했으며 창 플러그인의 기본 제어도 macOS에서 제공한다. 아래 macOS 파일 저장과 네이티브 API 검증 기록은 이관 전 구현의 기록이다. Bun FFI 제품 경로의 명령, 이벤트와 정책, 복구, 종료 검증은 [새 기록](../architecture/macos-bun-results.md)에 둔다.
+
+로그와 기능 조회는 격리 어댑터 검사와 실제 compiled WKWebView 앱 호출 검사를
+구분한다. `macos-log-capabilities.ts`는 기존 entitlement로 ad-hoc 서명한 `.app`에서
+출처와 권한, 쓰기 실패 후 복구, 회전, 등록한 작업의 지원 목록과 정상 종료를 검사한다.
+이 통합 head의 실제 native CI 결과는 확인 전까지 성공으로 기록하지 않는다.
 
 Windows의 선택 [notification 플러그인](../../plugins/notification/README.md)은 unpackaged
 앱 ID의 WinRT 알림 설정 조회와 Windows 알림 설정 열기 요청을 제공한다.

@@ -584,6 +584,7 @@ export async function bundleMacosHost(
       entrypoints: [
         resolve(source, "boot.ts"),
         resolve(source, "backend.ts"),
+        resolve(source, "host-operations.ts"),
       ],
       target: "bun",
       packages: "bundle",
