@@ -470,6 +470,7 @@ checkNames(
     ].map((operation) => `globalShortcut.${operation}`),
     ...[
       "storage",
+      "path",
       "log",
       "capabilities",
       "opener",
