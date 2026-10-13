@@ -4,7 +4,7 @@
  */
 export type QuitReason = "last-window" | "tray" | "api";
 
-/** Immutable launch arguments split into URLs and resolved file paths. */
+/** Immutable launch arguments with optional derived URLs and resolved file paths. */
 export type OpenRequest = {
   /** `initial` for the first launch, `second-instance` when an existing app is opened again. */
   readonly source: "initial" | "second-instance";
@@ -14,9 +14,9 @@ export type OpenRequest = {
   readonly argv: readonly string[];
   /** Working directory used to resolve relative file arguments. */
   readonly cwd: string;
-  /** Non-file URL arguments, normalized to absolute URLs. */
+  /** Non-file URL arguments, normalized to absolute URLs. Empty in raw argument mode. */
   readonly urls: readonly string[];
-  /** File arguments and file URLs converted to paths. */
+  /** File arguments and file URLs converted to paths. Empty in raw argument mode. */
   readonly files: readonly string[];
 };
 
@@ -48,6 +48,12 @@ export type DesktopOptions = {
     /** Text shown by the operating system for the tray icon. */
     readonly tooltip: string;
   };
+  /**
+   * `files-and-urls` derives and validates open metadata before onOpen (the default).
+   * `raw` delivers app argv with empty files/urls, for app-owned CLI parsing.
+   * Framework autostart prefix handling and launchReason still apply in either mode.
+   */
+  readonly openArguments?: "files-and-urls" | "raw";
   /** Handles initial launches and requests to open another file or URL in the running app. */
   onOpen?(request: OpenRequest, context: DesktopContext): void | Promise<void>;
   /** Returning `false` vetoes shutdown; a thrown or rejected callback also cancels it. */

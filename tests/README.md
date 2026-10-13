@@ -1,11 +1,28 @@
 # Tests
 
+`api/webview-controls.test.ts`는 기본 WebView 제어의 Zod 입력과 출력, 개별 작업 권한,
+닫힌 창과 취소, multiple 뷰의 ID 선택, 플랫폼 서비스 부재 및 네이티브 오류 전파를 검사한다.
+`lifecycle/windows-webview-controls.ts`는 `mise run host:windows`에서 실제 UI Worker와
+WebView2를 실행한다. URL과 제목, history, reload와 stop, 허용하지 않은 origin 및 redirect,
+탐색에 따른 진행 중 명령 취소, 같은 문서 fragment의 세션 유지, zoom 조회와 적용 및
+개발 모드 DevTools 열기와 프로덕션 거부를 확인한다. DevTools의 물리 조작과 paint,
+실제 모니터 및 하드웨어 검증은 포함하지 않는다. 결과는
+`build/windows-webview-controls-results.json`에 기록한다.
 `api/webview-audio.test.ts`는 audio 작업의 개별 권한, 엄격한 boolean 입력, 음소거와 재생의
 독립 상태, 취소와 닫힌 창 및 플랫폼 서비스 부재를 검증한다.
 `lifecycle/windows-webview-audio.ts`는 `mise run host:windows`에서 실제 WebView2의 음소거
 변경과 반복 설정, 문서 탐색 뒤 유지, 준비 전과 종료 후 거부 및 native 자원 정리를 확인한다.
 결과는 `build/windows-webview-audio-results.json`이다. 조용한 문서를 사용하며 재생 중인
 audio와 물리 장치 출력은 별도 수동 검증이다.
+
+`api/window-taskbar.test.ts`는 작업 표시줄 진행률의 상태별 입력, 출력, SDK 호출 컨텍스트,
+독립 작업 권한, 취소, 닫힌 창과 미지원 플랫폼을 검사한다.
+`lifecycle/taskbar-progress.test.ts`는 버튼 준비, 마지막 성공 값의 복원, 실패 후 재시도,
+서로 다른 HWND와 파괴 후 핸들 재사용을 검사한다. 버튼 재생성은 합성 호출이다.
+`windows-bun-window-api.ts`는 실제 UI Worker와 WebView2에서 공개 SDK를 통해
+ITaskbarList3의 다섯 상태를 설정한다. 네이티브 재생성 뒤 새 HWND에서도 반복한다.
+`mise run host:windows`에 포함하며 실제 작업 표시줄의 색상, 그룹 표시 또는
+Explorer 프로세스 재시작을 육안으로 검증하지 않는다.
 
 `windows-initial-placement.fixture.ts`는 모니터 겹침이 바뀌는 `SetWindowPos`에서
 실제 창 프로시저에 `WM_DPICHANGED`를 전달한다. 초기 DPI 보정의 수렴, 중앙 좌표와
@@ -25,6 +42,15 @@ content/outer 크기, DPI 순환 때 숨김 HWND 정리 및 생성 후 OS 권장
 외부로 연결되는 링크는 거부하는지 검사한다. Windows의 임시 폴더에 남은 짧은 경로도 정규화해
 같은 패키지 안의 모듈을 잘못 거부하지 않는지 확인한다. macOS 네이티브 CI는 호스트 실행 전에
 `plugins:build`를 실행한다.
+
+`api/cli-arguments.test.ts`는 nested subcommand, Bun flag 문법, Zod defaults/transform, help와
+오류 복구, snapshot과 타입 추론을 검사한다. `windows-cli-arguments.ts`는 실제 Windows host의
+windowless UI Worker와 named pipe에서 초기 및 두 번째 실행의 argv를 onOpen에 전달하고
+match, help, 오류 이후 다음 요청 처리를 확인한다. raw 모드에서 `https://`와 `file:relative.txt`도
+원래 인자로 전달한다. `lifecycle/desktop.test.ts`는 초기 및 전달 요청의 URL 모양 string 옵션과
+기존 파일 URL 검증을 함께 확인한다. `host:windows`에 포함하며 WebView 페이지는 만들지 않는다.
+raw 모드와 자동 실행 prefix를 함께 사용해 `launchReason`, 앱 argv와 숨김 전달의 표시 상태가
+유지되는지 확인한다. 실제 Windows CLI 초기 요청에서도 자동 실행 prefix를 제거한 앱 인자를 검사한다.
 
 공식 플러그인은 `src/index.ts`에서 선언을 조립하고 `src/contract.ts`에 계약을 둔다.
 `api/plugin-contracts.test.ts`는 OS 자원 없이 네이티브 입력 검증을 실행해 모르는 작업의
@@ -297,6 +323,9 @@ boot 전후 종료와 초기화 중 프로토콜 버전, 런타임 ID 및 세대
 `lifecycle/windows-geometry.test.ts`는 실제 Win32 창에서 setter 직후 조회, 일반, 숨김,
 최소화, 최대화와 전체화면 bounds, normal 복원과 음수 좌표를 검사한다. DPI 메시지는
 합성 메시지이며 실제 배율이 다른 물리 모니터 사이의 이동 검증과 구분한다.
+`lifecycle/windows-window-state.test.ts`는 같은 HWND에서 일반, 최소화와 최대화 상태,
+표시와 숨김을 반복해 전체화면 해제 후 현재 bounds, normal bounds와 표시 상태를 검사한다.
+프레임 재계산 뒤 일반 배치를 확정하는 순서를 회귀 검사하며 음수 화면 좌표를 유지한다.
 같은 검사는 `setContentPosition`, `setOuterSize`, `setContentBounds`, `setOuterBounds`의
 일반 및 숨김 적용, 제약 보정, 최소화 및 최대화 중 복원 영역 변경, 전체화면 거부,
 rectangle 경계 오류의 변경 방지와 실제 이벤트 snapshot 일치도 확인한다.
@@ -398,6 +427,13 @@ Windows 데스크톱의 dev-veto, dev-hide, dev-pending 시나리오는 CLI 중�
 
 ## 네이티브 빌드와 배포 회귀
 
+`api/opener-selected-app.test.ts`는 지정 앱 opener의 strict Zod 입력, 독립 권한,
+호출 컨텍스트와 오류를 확인한다. Windows의 `lifecycle/windows-opener-selected-app.test.ts`는
+실제 앱과 대상 파일 검사, 링크 거부와 핸들 정리를 확인한다. `windows-opener-job.test.ts`는
+Explorer와 compiled helper로 파일 및 HTTP/HTTPS URL 하나의 argv 보존과 Job 밖의 실행,
+앱 종료 뒤 helper 생존을 확인한다. 두 검사와 기존 opener STA 검사는 `host:windows`에도 포함한다.
+Linux의 계약 검사에서 건너뛴 Windows 테스트를 실제 실행 결과로 판단하지 않는다.
+
 `api/autostart.test.ts`는 로그인 자동 실행 플러그인의 정책, 공개 helper, 앱 ID 분리와
 Windows 명령줄 제한, 숨김 등록의 트레이 요구 조건을 검사한다.
 `windows-desktop.ts`의 autostart 시나리오는 실제 HWND와 WebView2에서 일반 및 숨김
@@ -425,6 +461,13 @@ macOS의 기본 테스트 실행에도 포함되며, 실제 Bunaway 앱 검증�
 `BUNAWAY_DISTRIBUTION_APP`에 지정한 앱을 사용한다. 다른 OS에서는 건너뛴다.
 Apple 공증 서비스와 도구 실패는 테스트 자식 프로세스의 PATH에만 놓는 Bun fixture로
 검증한다. Python이나 별도 셸 실행기는 필요 없다.
+
+`api/storage-transfers.test.ts`는 두 endpoint, 추가 옵션 거부와 독립적인 전송 권한을 검사한다.
+`windows-bun-storage.ts`는 실제 source 및 destination 핸들로 여러 chunk의 임의 바이트,
+빈 파일, 기존 대상 보존, 크기 상한, 링크와 경로 거부 및 같은 parent의 파일과 디렉터리 rename을 확인한다.
+다른 parent 이동은 source를 유지한 채 UNSUPPORTED로 거부하며, 다른 볼륨은 식별 가능한 경우에만 검사한다.
+`windows-storage-metadata.ts`는 실제 WebView2와 I/O Worker에서 copy/move와 원본 및 복사본,
+일반 쓰기 권한 거부를 검사하며 `mise run host:windows`에 포함한다.
 
 `cli/native-build.test.ts`는 한글과 공백이 포함된 캐시 경로에서 Bun ZIP과 SDK의
 압축 해제 위치를 확인하고, 잘못된 ZIP의 실패가 호출자에게 전달되는지 검사한다.
@@ -468,6 +511,14 @@ client-area animation, screen reader 설정 플래그 및 시스템 색과 비�
 DLL 수명과 종료 후 거부를 확인한다. `mise run host:windows`에 포함한다.
 사용자 테마 변경과 실제 보조 기술 또는 WebView 접근성 트리 검증을 대신하지 않는다.
 
+`system-events.test.ts`는 선택 OS 알림 HWND의 지연 생성, 중복 해제, 조회 실패 후 복구,
+WTS 등록 실패, 상태 알림 합치기, lifecycle 순서와 큐 초과를 검증한다. 복귀 뒤 사용자
+활동 알림이 다른 pump 배치 또는 설정 알림 뒤에 도착해도 resume이 중복되지 않는지 검사한다. 조회 권한과
+현재 이벤트 route를 모두 가진 수신자에게만 전달하는 계약도 검사한다.
+`windows-system-events.test.ts`는 실제 Windows 숨김 HWND, 메시지 pump와 WTS 등록을
+사용한다. 메시지는 합성 입력이며 실제 하드웨어 절전이나 사용자 세션 잠금 검증을
+대신하지 않는다. Linux에서는 이 네이티브 회귀를 건너뛴다.
+
 `api/image.test.ts`와 `lifecycle/image-resources.test.ts`는 선택 image 플러그인의
 Zod 계약과 canonical base64, 빈 이미지, operation 권한, ID 해제와 앱 종료,
 count와 메모리 quota 및 생성 취소의 정리를 확인한다. `windows-image.test.ts`는
@@ -475,3 +526,24 @@ count와 메모리 quota 및 생성 취소의 정리를 확인한다. `windows-i
 RGBA alpha 왕복, JPEG와 BMP, 잘못된 encoded 입력과 decode 크기, 최대 PNG,
 정책 거부와 결과 전달 전 취소를 확인한다. 실제 파일 경로 접근, WebView 표시,
 다른 앱의 가져오기, 색상 관리와 최소 Windows 버전 검증은 포함하지 않는다.
+
+`image-crop.test.ts`는 offset rectangle과 행 복사, alpha, 소스 보존, 잘못된 영역,
+생성 취소와 새 ID를 확인한다. `image-resize.test.ts`는 nearest resize의 출력 중심 선택,
+축소와 비정수 비율, 투명 RGB와 반투명 채널의 정확한 복사, 소스 보존과 크기 상한을 확인한다.
+`windows-image.test.ts`는 실제 UI Worker의 nearest resize와 WIC linear resize,
+linear filtering의 투명 edge, crop과 빈 소스 및 quota 오류를 추가로 검사한다.
+이 transform 검사도 `host:windows`에서 실행하며 소스 리소스는 변경하지 않는다.
+
+`api/os.test.ts`는 독립 작업 권한과 metadata 계약을 검사한다. `lifecycle/windows-os.test.ts`는
+실제 Kernel32 언어 설정 조회와 Bun 실행 정보를 생성 어댑터에서 검사하며 `host:windows`에 포함된다.
+사용자 언어 설정 변경이나 translation 하드웨어 검증은 포함하지 않는다.
+
+`api/process-plugin.test.ts`는 local `.exe` argv 계약과 독립 실행 권한을 검사한다.
+`lifecycle/process-run.test.ts`는 실제 Bun 자식의 특수 인자, binary stdin/stdout/stderr, 합계
+출력 제한과 내부 실행 작업의 취소 후 직접 자식 종료를 확인한다. `windows-process.test.ts`는 생성 Windows
+어댑터의 timeout, capacity와 폐기를 실제 `.exe`로 확인한다. 실제 core/client 공개 호출에서 취소
+전달을 보류해 공개 Promise 거부 시 자식이 아직 살아 있음을 확인하고, 전달 후 어댑터의 정리와
+자식 종료를 확인한다. 공개 Promise 거부는 종료 완료를 보장하지 않는다. 두 검사는 `host:windows`에 포함되며
+호출별 손자 정리나 제삼자 도구의 부수 효과를 검증하지 않는다.
+자식은 PID 파일 쓰기를 완료한 뒤 rename으로 준비를 알린다. 두 생존 검사는 파일 생성과 쓰기 사이의
+경합으로 빈 PID를 읽지 않고, 취소 전에 실제 자식의 Windows process handle을 잡는다.

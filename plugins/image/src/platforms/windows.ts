@@ -5,6 +5,7 @@ import {
   imageOperations,
   validateImageInput,
 } from "../contract.ts";
+import { cropPixels } from "../crop.ts";
 import { ImageResources } from "../resources.ts";
 import { createWIC } from "../wic.ts";
 
@@ -98,6 +99,26 @@ export function createOperations(
           return resources.remove(
             imageOperations.dispose.input.parse(input).id,
           );
+        case "image.crop": {
+          const request = imageOperations.crop.input.parse(input);
+          const source = resources.get(request.id);
+          resources.assertCapacity();
+          return resources.create(cropPixels(source, request), context.signal);
+        }
+        case "image.resize": {
+          const request = imageOperations.resize.input.parse(input);
+          const source = resources.get(request.id);
+          resources.assertCapacity();
+          return resources.create(
+            codec.resize(
+              source,
+              request.width,
+              request.height,
+              request.interpolation ?? "linear",
+            ),
+            context.signal,
+          );
+        }
       }
       throw new BunawayError({
         code: "UNSUPPORTED",

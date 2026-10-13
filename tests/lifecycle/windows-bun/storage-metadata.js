@@ -112,11 +112,49 @@ try {
     deniedTextReplacement,
     "Byte write or append grant allowed text replacement",
   );
+  const copied = {
+    path: `${globalThis.storageTestDirectory}/copied 한글.txt`,
+  };
+  const moved = {
+    path: `${globalThis.storageTestDirectory}/moved 한글.txt`,
+  };
+  await storage.copyFile({
+    from: file.path,
+    to: copied.path,
+  });
+  check(
+    (await storage.readText(copied)) === "공백과 한글 경로 🙂",
+    "Copied bytes mismatch",
+  );
+  await storage.move({
+    from: copied.path,
+    to: moved.path,
+  });
+  check(
+    !(await storage.exists(copied)) && (await storage.exists(moved)),
+    "Move did not rename the checked file",
+  );
+  check(
+    (await storage.readText(moved)) === "공백과 한글 경로 🙂",
+    "Moved bytes mismatch",
+  );
+  let deniedWrite = false;
+  try {
+    await storage.writeText({
+      ...moved,
+      text: "denied",
+    });
+  } catch (error) {
+    deniedWrite = error.code === "PERMISSION_DENIED";
+  }
+  check(deniedWrite, "Transfer grants allowed unrestricted text writing");
   report = {
     pass: true,
     bytes,
     appended,
     deniedTextReplacement,
+    transfers: true,
+    deniedWrite,
     existsFile,
     existsDirectory,
     existsMissing,

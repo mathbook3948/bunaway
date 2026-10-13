@@ -43,6 +43,15 @@ export function createOperations(
     viewId: string,
   ): JsonValue | Promise<JsonValue> {
     const window = services.window(viewId);
+    const webview = () => {
+      if (!window.webview) {
+        throw new BunawayError({
+          code: "UNSUPPORTED",
+          message: "WebView control is not implemented on this platform.",
+        });
+      }
+      return window.webview;
+    };
     const audio = () => {
       if (!window.audio) {
         throw new BunawayError({
@@ -54,6 +63,28 @@ export function createOperations(
       return window.audio;
     };
     switch (call.operation) {
+      case "windows.getWebViewState":
+        return {
+          ...webview().getState(),
+        };
+      case "windows.navigateWebView":
+        webview().navigate(call.payload.url);
+        break;
+      case "windows.reloadWebView":
+        webview().reload();
+        break;
+      case "windows.stopWebView":
+        webview().stop();
+        break;
+      case "windows.goBack":
+        return webview().goBack();
+      case "windows.goForward":
+        return webview().goForward();
+      case "windows.setZoomFactor":
+        return webview().setZoomFactor(call.payload.factor);
+      case "windows.openDevTools":
+        webview().openDevTools();
+        break;
       case "windows.getWebViewAudioState":
         return {
           ...audio().getState(),
@@ -500,6 +531,15 @@ export function createOperations(
         break;
       case "windows.setFullscreen":
         window.setFullscreen(call.payload.fullscreen);
+        break;
+      case "windows.setTaskbarProgress":
+        if (!window.setTaskbarProgress) {
+          throw new BunawayError({
+            code: "UNSUPPORTED",
+            message: "Taskbar progress is not implemented on this platform.",
+          });
+        }
+        window.setTaskbarProgress(call.payload);
         break;
       case "windows.setCloseConfirmation":
         window.setCloseConfirmation(call.payload.message);

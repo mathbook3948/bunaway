@@ -59,7 +59,17 @@ splashscreen 최종 종료에는 false를 전달해 임시 프로필과 교체 �
 `lookup`이 없으면 식별자 탐색 API는 `UNSUPPORTED`를 반환합니다.
 `NativeWindow`는 `show(visible)`, `focus()`, `close()`, `isFullscreen()`, `getSizeConstraints()`, `setSizeConstraints(constraints)`, `setSize(width, height)`, `setPosition(x, y)`, `setFullscreen(value)`, `setCloseConfirmation(message)`를 제공합니다.
 Windows의 선택적 `setMinimizable`, `isMinimizable`, `setMaximizable`, `isMaximizable`, `setClosable`, `isClosable`은 네이티브 버튼과 사용자 동작을 제어합니다. 호스트의 API close와 장애 정리는 허용하며 Close 메뉴 자원과 사용자 닫기 설정은 HWND 수명에 종속됩니다.
+
+선택적 `NativeWindow.webview`는 Windows UI 스레드의 `NativeWebView` 서비스입니다.
+`getState()`는 URL, 문서 제목, 최상위 loading, history 이동 가능 여부와 controller zoom을
+반환합니다. `navigate(url)`, `reload()`, `stop()`, `goBack()`, `goForward()`,
+`setZoomFactor(factor)`, `openDevTools()`는 현재 창의 WebView만 제어합니다.
+탐색은 기존 origin과 세션 경계를 유지하며 DevTools는 호스트 개발 설정이 필요합니다.
+WebView가 닫히면 `INVALID_ARGUMENT`, 아직 생성 중이면 `BUSY`입니다.
+서비스가 없는 플랫폼에서는 창 플러그인이 `UNSUPPORTED`를 반환합니다.
+
 Windows의 선택적 `setResizable`, `isResizable`, `setMovable`, `isMovable`은 사용자 조작 허용을 변경하고 조회합니다. 프로그램의 geometry 작업에는 적용하지 않습니다. 전체화면 중의 resizable은 복원할 일반 창의 설정이며 HWND 종료 때 movable 설정을 정리합니다.
+
 선택적 `NativeWindow.audio`는 Windows의 `NativeWebViewAudio` 서비스입니다.
 `getState()`는 `WebViewAudioState`의 `muted`, `playing`을 반환하고 `setMuted(muted)`는
 controller의 음소거를 변경합니다. 문서 탐색은 음소거를 유지하고 controller 재생성은
@@ -93,6 +103,14 @@ Windows의 선택적 `NativeWindow.destroy()`는 확인, 트레이 숨김과 종
 같은 의미이고 `WindowBounds`는 기존 물리 outer bounds와 같습니다.
 `WindowChange`는 표시, 포커스, 창 상태, 전체화면 및 geometry 변경 이름의 합집합입니다.
 호스트가 창별 관찰을 소유하고 HWND 파괴 전에 해제합니다.
+
+선택적 `NativeWindow.setTaskbarProgress(progress)`는 Windows 작업 표시줄 진행률을 설정합니다.
+`{ state: "none" | "indeterminate" }` 또는
+`{ state: "normal" | "paused" | "error", value: number }`를 받으며 value는 0~1입니다.
+플러그인이 작업 권한, 입력과 창 수명을 검사합니다. 바인딩이 없으면 `UNSUPPORTED`,
+작업 표시줄 버튼 생성 전에는 `BUSY`입니다. 호스트는 UI STA에서 동기 COM 호출을 완료한 뒤
+반환하며 네이티브 실패는 UI 경계에서 `INTERNAL`로 변환합니다. 표시와 포커스를 변경하지 않습니다.
+호스트는 버튼 재생성 때 마지막 성공 값을 다시 적용하고 HWND 파괴 때 폐기합니다.
 `NativeWindow.getBounds(area)`는 `"content"`, `"outer"`, `"normal"` 영역의 `WindowBounds`를 반환합니다. normal은 일반 상태 복원용 바깥 영역이며 작업 영역 좌표를 화면 좌표로 보정합니다. 전체화면 중에는 저장된 복원 크기를 현재 DPI와 제약으로 계산합니다.
 선택적 `NativeWindow.center()`는 현재 모니터의 작업 영역에 outer 또는 normal 복원 영역을 중앙 배치합니다. Windows 구현은 표시, 활성화와 크기를 유지하며 전체화면을 거부합니다.
 `getDpi()`는 가장 최근 처리한 DPI 변경을 반영합니다. 조회는 표시 상태를 바꾸지 않으며 네이티브 조회 실패는 호출 경계에서 `INTERNAL`로 처리합니다. 호스트는 플러그인에 자원을 넘기기 전에 대상 권한과 창 수명을 확인합니다.
@@ -132,4 +150,18 @@ identity는 HWND 수명마다 새로 발급합니다. 정리 중인 소유자를
 `lookup.byRequest(requestId)`는 UI 호스트가 관리하는 요청의 인증된 컨텍스트에서 정확한
 호출자 창을 찾습니다. 다중 창 호스트는 view로 대체하지 않습니다.
 `creationSettled(key)`는 생성 성공, 실패와 취소 모두에서 재생성 메타데이터를 해제합니다.
+
+선택적 `NativeWindowServices.systemEvents`는 UI 플러그인에 OS 변경 알림을 제공합니다.
+`NativeSystemEvents.subscribe(receive, { sessionNotifications? })`는 첫 구독 때 숨김 HWND를
+생성하고 마지막 구독 해제 때 정리합니다. 반환된 해제 함수는 반복 호출할 수 있습니다.
+`NativeSystemSignal`은 설정, 테마, 시스템 색, accent와 전원 상태의 무효화 알림 및
+suspend, resume, 현재 Windows 세션의 잠금과 잠금 해제 신호입니다.
+설정과 색 등의 반복 알림은 한 메시지 pump에서 합치며 lifecycle 전환은 순서를 유지합니다.
+resume은 시스템 복귀 알림인 PBT_APMRESUMEAUTOMATIC에만 대응합니다. 이후 사용자 활동을
+알리는 PBT_APMRESUMESUSPEND는 추가 resume을 전달하지 않습니다.
+콜백은 native WndProc 밖에서 실행합니다. 초기 상태 재생이나 이벤트 이력은 제공하지 않습니다.
+세션 알림은 명시적으로 선택하며 WTS 등록 실패는 구독 호출에 전달합니다.
+`publish(event, payload, requiredOperation)`는 수신자의 조회 작업 권한과 현재 이벤트 구독을
+모두 검사하고 기존 native event 채널로 전달합니다. 지원하지 않는 호스트는 이 서비스를
+생략합니다. 이 계약은 물리 절전이나 사용자의 실제 세션 전환 검증 결과가 아닙니다.
 실패 때 보존했던 임시 프로필은 최종 종료 정리로 돌려 보냅니다.

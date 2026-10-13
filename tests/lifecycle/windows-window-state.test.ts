@@ -163,3 +163,89 @@ test.skipIf(process.platform !== "win32")(
     }
   },
 );
+
+test.skipIf(process.platform !== "win32")(
+  "repeated fullscreen restoration commits placement after frame changes for visible and hidden native states",
+  async () => {
+    const [{ Windows }, { user }] = await Promise.all([
+      import("#native/windows/bun/win32"),
+      import("#native/windows/bun/win32-bindings"),
+    ]);
+    const windows = new Windows(() => {});
+    let hwnd = 0n;
+    try {
+      hwnd = windows.create(
+        "Repeated fullscreen restoration",
+        701,
+        503,
+        () => {},
+        false,
+      );
+      windows.setPosition(hwnd, -123, -45);
+      const normal = windows.getBounds(hwnd, "normal");
+      const states = [
+        1,
+        6,
+        3,
+      ];
+      // Reuse one HWND to cover placement left behind by earlier fullscreen exits.
+      for (let pass = 0; pass < 3; pass++) {
+        for (const command of states) {
+          user.symbols.ShowWindow(hwnd, 9);
+          user.symbols.ShowWindow(hwnd, command);
+          for (const visible of [
+            true,
+            false,
+          ]) {
+            windows.show(hwnd, visible);
+            const state = {
+              visible,
+              minimized: windows.isMinimized(hwnd),
+              maximized: windows.isMaximized(hwnd),
+            };
+            const current = windows.getBounds(hwnd, "outer");
+            const context = `pass=${pass}, command=${command}, visible=${visible}`;
+            assert.deepEqual(
+              windows.getBounds(hwnd, "normal"),
+              normal,
+              context,
+            );
+            windows.setFullscreen(hwnd, true);
+            assert.deepEqual(
+              windows.getBounds(hwnd, "normal"),
+              normal,
+              context,
+            );
+            windows.setFullscreen(hwnd, false);
+            windows.pump();
+            assert.deepEqual(
+              {
+                visible: windows.isVisible(hwnd),
+                minimized: windows.isMinimized(hwnd),
+                maximized: windows.isMaximized(hwnd),
+              },
+              state,
+              context,
+            );
+            assert.deepEqual(
+              windows.getBounds(hwnd, "outer"),
+              current,
+              context,
+            );
+            assert.deepEqual(
+              windows.getBounds(hwnd, "normal"),
+              normal,
+              context,
+            );
+            assert.equal(windows.failure, undefined, context);
+          }
+        }
+      }
+    } finally {
+      if (hwnd) {
+        windows.destroy(hwnd);
+      }
+      windows.dispose();
+    }
+  },
+);
