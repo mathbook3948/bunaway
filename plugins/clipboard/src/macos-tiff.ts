@@ -6,6 +6,7 @@ import {
 } from "./formats.ts";
 
 const TIFF_MAGIC = 42;
+const SAMPLE_FORMAT_UNSIGNED = 1;
 const ENTRY_BYTES = 12;
 const HEADER_BYTES = 8;
 const TAG_COUNT = 12;
@@ -124,8 +125,9 @@ export function encodeTIFF(image: ClipboardImage): Buffer {
 
 /**
  * Decode bounded baseline TIFF without invoking an unbounded system image decoder.
- * Accept one RGB/RGBA strip, 8-bit interleaved samples, top-left orientation and
- * unassociated alpha. Compressed, profiled, tiled and multi-page TIFF are rejected.
+ * Accept one RGB/RGBA strip with unsigned 8-bit interleaved samples,
+ * top-left orientation and unassociated alpha. Compressed, profiled, tiled
+ * and multi-page TIFF are rejected.
  */
 export function decodeTIFF(bytes: Buffer): ClipboardImage {
   if (bytes.length < HEADER_BYTES || bytes.length > MAX_TIFF_BYTES) {
@@ -204,6 +206,9 @@ export function decodeTIFF(bytes: Buffer): ClipboardImage {
   const height = scalar(257);
   const samples = scalar(277);
   const bits = tags.get(258);
+  // TIFF defaults to unsigned integers when SampleFormat is absent. Explicit
+  // interpretations must describe every sample, including an alpha channel.
+  const sampleFormat = tags.get(339);
   const offset = scalar(273);
   const byteCount = scalar(279);
   if (
@@ -215,6 +220,9 @@ export function decodeTIFF(bytes: Buffer): ClipboardImage {
     (samples !== 3 && samples !== 4) ||
     bits?.length !== samples ||
     bits.some((value) => value !== 8) ||
+    (sampleFormat !== undefined &&
+      (sampleFormat.length !== samples ||
+        sampleFormat.some((value) => value !== SAMPLE_FORMAT_UNSIGNED))) ||
     scalar(259, 1) !== 1 ||
     scalar(262) !== 2 ||
     scalar(274, 1) !== 1 ||

@@ -110,11 +110,13 @@ macOS는 텍스트, HTML, RTF와 RGBA 이미지 작업을 UI 메인 스레드에
 HTML과 ASCII RTF는 각각 `public.html`과 `public.rtf`를 사용합니다. HTML은
 CF_HTML header가 없는 UTF-8 markup이며 정제하거나 실행하지 않습니다.
 기존 `image/bmp` 작업의 `data`는 같은 RGBA JSON 값이고 실제 클립보드 형식은
-`public.tiff`입니다. 8-bit RGB 또는 unassociated RGBA, top-left orientation,
+`public.tiff`입니다. 부호 없는 8-bit RGB 또는 unassociated RGBA, top-left orientation,
 단일 strip의 비압축 TIFF만 읽습니다. 출력도 같은 RGBA TIFF이며 투명 픽셀의 RGB를
 보존합니다. 압축, 다중 페이지, planar, 회전된 orientation, ICC profile과 다른
 pixel layout은 `INTERNAL`입니다. 외부 TIFF는 528,384바이트까지이며 픽셀 제한은
-공통 계약의 524,288바이트입니다. 다른 앱에서 만든 모든 TIFF의 지원을 뜻하지 않습니다.
+공통 계약의 524,288바이트입니다. `SampleFormat`이 없으면 unsigned integer로 읽습니다.
+있으면 RGB는 3개, RGBA는 4개의 값이 모두 `1`이어야 합니다. signed, floating-point,
+undefined sample과 잘못된 개수는 `INTERNAL`입니다. 다른 앱에서 만든 모든 TIFF의 지원을 뜻하지 않습니다.
 
 파일 목록의 Windows 경로 스키마는 그대로 유지합니다. macOS에서 파일 목록을 포함한
 쓰기는 기존 내용을 지우기 전에 `UNSUPPORTED`로 실패합니다. 발견 목록에는 포함하지

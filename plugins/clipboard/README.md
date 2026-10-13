@@ -43,7 +43,9 @@ setup, 호출 출처 권한, Unicode, 다중 형식과 RGBA를 검사한다. 일
 통과 전에는 구현 범위를 검증 완료로 판단하지 않는다.
 
 macOS 바인딩은 `src/macos-pasteboard.ts`, bounded TIFF codec은 `src/macos-tiff.ts`가
-소유한다. 작업마다 autorelease pool을 해제하고 `NSData`는 길이 검사 뒤 복사한다.
+소유한다. TIFF의 `SampleFormat`은 생략하거나 sample 수만큼 unsigned integer 값 `1`을
+지정해야 하며 signed, floating-point와 다른 해석은 거부한다.
+작업마다 autorelease pool을 해제하고 `NSData`는 길이 검사 뒤 복사한다.
 Objective-C 객체는 tagged pointer까지 보존하는 64-bit 정수로 전달한다. 쓰기는 모든
 형식을 하나의 `NSPasteboardItem`에 준비한 다음 교체하며 종료는 바인딩을 닫는다.
 일반 클립보드의 내용은 앱 종료 뒤에도 남는다. TIFF 지원 범위와 파일 목록 거부는

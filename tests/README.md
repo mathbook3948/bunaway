@@ -35,7 +35,7 @@ COM 참조, timer와 창 자원을 정리하는지도 확인한다.
 조작이나 앱 재실행 후 재개 검증은 포함하지 않는다. 결과는
 `build/windows-webview-downloads-results.json`에 기록한다.
 
-`lifecycle/macos-clipboard-adapter.test.ts`는 RGBA TIFF의 endian, alpha, orientation,
+`lifecycle/macos-clipboard-adapter.test.ts`는 RGBA TIFF의 endian, alpha, orientation과 unsigned SampleFormat,
 크기와 잘못된 외부 데이터 및 네이티브 호출 전 권한과 취소를 검사한다.
 `lifecycle/macos-clipboard-native.test.ts`는 고유 이름의 실제 NSPasteboard에서 Unicode,
 빈 텍스트, 없는 형식, HTML/RTF, RGBA 상한과 자원 정리를 확인한다.

@@ -196,6 +196,7 @@ if (target === "windows-x64") {
         inputs.bun,
         "--no-env-file",
         "test",
+        resolve(root, "tests/lifecycle/macos-clipboard-adapter.test.ts"),
         resolve(root, "tests/lifecycle/macos-clipboard-native.test.ts"),
       ],
       root,
