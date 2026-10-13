@@ -234,6 +234,19 @@ if (target === "windows-x64") {
       BUNAWAY_CLIPBOARD_NATIVE: "1",
     });
     await test("macos-storage-host.ts");
+    if (process.env.BUNAWAY_OPENER_ISOLATED === "1") {
+      await run(
+        [
+          inputs.bun,
+          "--no-env-file",
+          "test",
+          resolve(root, "tests/lifecycle/macos-opener.test.ts"),
+          resolve(root, "tests/lifecycle/macos-opener-native.test.ts"),
+        ],
+        root,
+      );
+      await test("macos-opener-host.ts");
+    }
     await test("macos-host.ts", [
       "--package",
       output,

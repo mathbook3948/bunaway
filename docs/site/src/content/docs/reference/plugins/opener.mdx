@@ -1,6 +1,6 @@
 ---
 title: opener
-description: Windows에서 URL을 기본 브라우저로 열고 파일을 기본 연결 앱으로 열거나 Explorer에서 선택합니다.
+description: Windows와 macOS에서 URL과 파일을 기본 앱으로 열고 파일 관리자에 선택을 요청합니다.
 sidebar: { order: 5 }
 ---
 
@@ -12,7 +12,7 @@ openFileWith(path: string, app: string, options?: NativeInvokeOptions): Promise<
 openUrlWith(url: string, app: string, options?: NativeInvokeOptions): Promise<null>
 ```
 
-`@bunaway/plugin-opener`를 설치하고 앱의 `plugins`에 `openerPlugin`을 등록합니다. 세 함수는 현재 Windows에서 제공됩니다.
+`@bunaway/plugin-opener`를 설치하고 앱의 `plugins`에 `openerPlugin`을 등록합니다. 세 함수는 Windows와 macOS 어댑터를 제공합니다. macOS 네이티브 실행 검증은 현재 진행 중입니다.
 
 ```ts
 import { defineApp } from "@bunaway/backend";
@@ -31,7 +31,7 @@ await openFile("C:/Users/me/Documents/한글 보고서.txt");
 await revealFile("C:/Users/me/Documents/한글 보고서.txt");
 ```
 
-`openFile`은 파일을 기본 연결 앱으로 엽니다. `revealFile`은 부모 폴더에서 해당 파일 하나를 선택하도록 Explorer에 요청합니다. 성공한 `null` 결과는 OS가 요청을 접수했다는 뜻입니다. 브라우저나 기본 앱의 표시와 실행 완료, 파일 읽기 완료 또는 Explorer 선택 완료를 기다리지 않습니다.
+`openFile`은 파일을 기본 연결 앱으로 엽니다. `revealFile`은 부모 폴더에서 해당 파일 하나를 선택하도록 Windows Explorer나 macOS Finder에 요청합니다. 성공한 `null` 결과는 OS가 요청을 접수했다는 뜻입니다. 브라우저나 기본 앱의 표시와 실행 완료, 파일 읽기 완료 또는 Explorer 선택 완료를 기다리지 않습니다.
 
 ## URL 입력
 
@@ -45,11 +45,24 @@ await openUrl("https://example.com/도움말?q=검색어 입력");
 
 ## 파일 입력
 
-`path`는 드라이브부터 지정한 `C:\folder\file.txt` 또는 UNC 공유를 지정한 `\\server\share\file.txt`와 같은 절대 Windows 파일 경로여야 합니다. `/`를 `\`로 바꾸고 드라이브 문자를 대문자로 바꾸며, Unicode, 한글, 파일명 중간의 공백과 쉼표를 보존합니다. 최대 길이는 259 UTF-16 코드 단위이고 각 이름은 최대 255 단위입니다. 파일이 존재해야 하며 디렉터리는 거부합니다.
+Windows의 `path`는 드라이브부터 지정한 `C:\folder\file.txt` 또는 UNC 공유를 지정한 `\\server\share\file.txt`와 같은 절대 Windows 파일 경로여야 합니다. `/`를 `\`로 바꾸고 드라이브 문자를 대문자로 바꾸며, Unicode, 한글, 파일명 중간의 공백과 쉼표를 보존합니다. 최대 길이는 259 UTF-16 코드 단위이고 각 이름은 최대 255 단위입니다. 파일이 존재해야 하며 디렉터리는 거부합니다.
 
 상대 경로, `C:file.txt` 같은 드라이브 상대 경로, `.`과 `..`, 중복 구분자, 제어 문자, 잘못된 Unicode, 예약 장치명, 이름 끝의 점이나 공백, alternate data stream, `\\?\`와 `\\.\` 장치 경로는 거부합니다. 파일과 부모 디렉터리는 파일 시스템의 실제 이름으로 지정해야 합니다. reparse point, junction, 심볼릭 링크, 하드 링크와 8.3 별칭을 통한 접근은 허용하지 않습니다.
 
 권한 확인 뒤 파일을 읽기 접근으로, 부모 디렉터리를 조회 접근으로 검사합니다. 파일이 없으면 `INVALID_ARGUMENT`과 `details.reason: "FILE_NOT_FOUND"`를 반환합니다. 읽기나 조회 권한이 없거나 공유 잠금과 충돌하면 `PERMISSION_DENIED`입니다. OS 요청 제출 중에는 파일과 부모 핸들을 유지해 경로 교체를 막고 성공과 실패 모두에서 해제합니다.
+
+macOS의 `path`는 `/Users/me/Documents/보고서.txt`처럼 절대 POSIX 경로입니다.
+최대 길이는 259 UTF-16 코드 단위, 각 이름은 최대 255 UTF-8 바이트입니다. 상대 경로,
+빈 이름, 중복 `/`, `.`과 `..`, 제어 문자와 잘못된 Unicode를 거부합니다. 읽을 수 있는
+일반 파일이어야 하며 파일과 부모의 심볼릭 링크, 하드 링크를 허용하지 않습니다.
+없는 파일과 접근 거부는 같은 오류 계약을 따릅니다. POSIX descriptor는 rename을 막지
+않으므로 NSWorkspace 요청 직전에 파일 identity를 다시 확인해도 경로 교체 경쟁은 남습니다.
+Windows 핸들의 고정 보장과 구분해야 합니다.
+
+```ts
+await openFile("/Users/me/Documents/한글 보고서.txt");
+await revealFile("/Users/me/Documents/한글 보고서.txt");
+```
 
 ## 휴지통
 
@@ -101,7 +114,7 @@ setup에서 호출할 때는 같은 작업 이름을 루트 `backend.permissions
 
 ## 지정 앱으로 열기
 
-`openFileWith(path, app)`과 `openUrlWith(url, app)`은 지정한 Windows 실행 파일에 대상 하나를 전달합니다. `app`은 절대 `.exe` 경로여야 하며 위의 파일 경로, 실제 이름과 링크 검사 규칙을 따릅니다. 셸 명령, `.cmd`, `.bat`, `.lnk`, 별도 실행 인자는 받지 않습니다. 파일 대상은 `openFile`과 같은 검사를, URL은 `openUrl`과 같은 HTTP/HTTPS 검사를 받습니다.
+지정 앱 함수는 Windows 전용이며 macOS에서는 제공하지 않습니다. `openFileWith(path, app)`과 `openUrlWith(url, app)`은 지정한 Windows 실행 파일에 대상 하나를 전달합니다. `app`은 절대 `.exe` 경로여야 하며 위의 파일 경로, 실제 이름과 링크 검사 규칙을 따릅니다. 셸 명령, `.cmd`, `.bat`, `.lnk`, 별도 실행 인자는 받지 않습니다. 파일 대상은 `openFile`과 같은 검사를, URL은 `openUrl`과 같은 HTTP/HTTPS 검사를 받습니다.
 
 ```ts
 import { openFileWith, openUrlWith } from "@bunaway/plugin-opener";
@@ -123,6 +136,13 @@ await openUrlWith("https://example.com/도움말", "C:/Apps/browser.exe");
 `null`은 Windows Explorer가 브라우저 실행 요청을 접수했음을 나타냅니다. 실행에는 접근 가능한 Explorer 데스크톱이 필요합니다. Explorer가 브라우저를 실행하므로 브라우저는 앱의 종료용 Job을 상속하지 않고, 앱 종료나 개발 재시작 뒤에도 유지됩니다. 브라우저 프로세스나 페이지 상태는 추적하지 않으며 취소된 호출을 되돌리지 않습니다.
 
 `openFile`도 Explorer에 실행을 위임해 기본 연결 앱이 앱의 종료용 Job을 상속하지 않게 합니다. `revealFile`은 경로를 셸 명령 문자열에 붙이지 않고 파일 식별자를 OS에 전달합니다. 접수 이후의 파일 소실, 연결 앱 부재, 앱 내부 실패와 화면 변경은 반환 결과에 포함하지 않습니다. OS 호출을 진행하는 동안 취소나 기한 초과가 발생해도 OS 작업은 반환할 때까지 계속될 수 있습니다. 파일 검사와 셸 요청은 I/O Worker에서 실행하므로 UNC 공유와 셸 확장의 응답이 느려도 이 작업이 UI Worker를 막지 않습니다. I/O Worker의 후속 작업과 정리는 OS 호출이 끝날 때까지 지연될 수 있습니다. 호스트 승인 전에 취소된 대기 작업은 실행하지 않습니다.
+
+macOS는 NSWorkspace에 URL과 파일을 열도록 요청하고 Finder에 선택을 요청합니다.
+참인 접수 결과만 `null`로 반환하며 거부되면 `INTERNAL`입니다. 기본 앱 표시, 파일 읽기,
+URL 페이지 로딩과 Finder의 실제 선택 완료는 기다리지 않습니다. 파일 검사와 NSWorkspace
+호출은 같은 I/O Worker에서 실행하고 각 요청의 autorelease pool을 정리합니다. 앱의 직접
+자식으로 연결 앱을 실행하거나 셸 명령을 만들지 않습니다. 접수한 작업은 취소나 종료로
+되돌리지 않습니다.
 
 Host operation은 `opener.openUrl`, `opener.openFile`, `opener.revealFile`, `opener.trashFile`입니다. 입력은 URL 작업에서 `{ url: string }`, 파일 작업에서 `{ path: string }`이고 모두 `null`을 반환합니다.
 

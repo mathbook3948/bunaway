@@ -30,12 +30,20 @@ function logicalPixels(physicalPixels: number, dpi: number) {
 test.skipIf(process.platform !== "win32")(
   "Windows native callbacks preserve logical size constraints across DPI and fullscreen changes",
   async () => {
-    const [{ Windows }, { user, withBuffer }, { dlopen }] = await Promise.all([
-      import("#native/windows/bun/win32"),
-      import("#native/windows/bun/win32-bindings"),
-      import("bun:ffi"),
-    ]);
+    const [{ Windows }, { user, kernel, withBuffer }, { dlopen, ptr }] =
+      await Promise.all([
+        import("#native/windows/bun/win32"),
+        import("#native/windows/bun/win32-bindings"),
+        import("bun:ffi"),
+      ]);
     const messaging = dlopen("user32.dll", {
+      GetWindowThreadProcessId: {
+        args: [
+          "u64",
+          "ptr",
+        ],
+        returns: "u32",
+      },
       SendMessageW: {
         args: [
           "u64",
@@ -75,6 +83,7 @@ test.skipIf(process.platform !== "win32")(
     let inputWindow = 0n;
     let targetActivations = 0;
     let targetShows = 0;
+    let hiddenShowCommand: number | null = null;
     let failure: unknown;
 
     const clientPhysicalSize = (hwnd: bigint) => {
@@ -191,8 +200,21 @@ test.skipIf(process.platform !== "win32")(
           user.symbols.GetWindowPlacement(window, pointer),
         ),
       );
+      const ownerProcess = new Uint32Array(1);
+      const ownerThread = messaging.symbols.GetWindowThreadProcessId(
+        window,
+        ptr(ownerProcess),
+      );
       return {
         phase,
+        hiddenShowCommand,
+        hwnd: window.toString(),
+        process: process.pid,
+        ownerProcess: ownerProcess[0],
+        ownerThread,
+        currentThread: kernel.symbols.GetCurrentThreadId(),
+        active: messaging.symbols.GetActiveWindow().toString(),
+        focus: messaging.symbols.GetFocus().toString(),
         dpi,
         expectedVisible,
         cachedDpi: windows?.getDpi(window),
@@ -543,6 +565,13 @@ test.skipIf(process.platform !== "win32")(
         messaging.symbols.SetFocus(inputWindow);
         assert.equal(messaging.symbols.GetActiveWindow(), inputWindow);
         assert.equal(messaging.symbols.GetFocus(), inputWindow);
+        if (hiddenShowCommand !== null) {
+          stateDiagnostic(
+            "after-hidden-input-focus",
+            windows?.getDpi(window) ?? originalDpi,
+            false,
+          );
+        }
         targetActivations = 0;
         change();
         assert.equal(targetActivations, 0, "Background window was activated.");
@@ -671,6 +700,7 @@ test.skipIf(process.platform !== "win32")(
         SW_MINIMIZE,
         SW_MAXIMIZE,
       ]) {
+        hiddenShowCommand = showState;
         user.symbols.ShowWindow(window, showState);
         user.symbols.ShowWindow(window, SW_HIDE);
         const minimized = user.symbols.IsIconic(window);
@@ -724,6 +754,17 @@ test.skipIf(process.platform !== "win32")(
       }
     } catch (error) {
       failure = error;
+    }
+
+    if (process.env.BUNAWAY_SIZE_CONSTRAINTS_DIAGNOSTICS === "1") {
+      console.log(
+        JSON.stringify({
+          event: "windows-size-constraints-states",
+          process: process.pid,
+          passed: failure === undefined,
+          states: stateCheckpoints,
+        }),
+      );
     }
 
     const cleanupErrors: unknown[] = [];

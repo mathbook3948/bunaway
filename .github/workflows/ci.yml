@@ -61,7 +61,38 @@ jobs:
       # These two complete image suites run once in macos-native, including the
       # isolated consumer's portable packaging assertions and real macOS codecs.
       - name: Check contracts
+        id: contracts
+        env:
+          BUNAWAY_DMG_DIAGNOSTICS: '1'
+          BUNAWAY_SIZE_CONSTRAINTS_DIAGNOSTICS: '1'
         run: mise run test --path-ignore-patterns '**/macos-image.test.ts' --path-ignore-patterns '**/cli/image.test.ts'
+      # Compare after the unchanged full suite, so the probe cannot initialize
+      # native state before the shared-process regression runs.
+      - name: Compare size constraints in one fresh native process
+        if: always() && runner.os == 'Windows' && (steps.contracts.outcome == 'success' || steps.contracts.outcome == 'failure')
+        env:
+          BUNAWAY_SIZE_CONSTRAINTS_DIAGNOSTICS: '1'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path build/windows-matrix-logs | Out-Null
+          mise exec -- bun --no-env-file test tests/lifecycle/windows-size-constraints.test.ts 2>&1 | Tee-Object -FilePath build/windows-matrix-logs/size-constraints-isolated.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Preserve Windows matrix comparison
+        if: always() && runner.os == 'Windows'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-matrix-diagnostics
+          path: build/windows-matrix-logs/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Preserve fixture DMG diagnostics
+        if: always() && runner.os == 'macOS'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: macos-matrix-packaging-diagnostics
+          path: build/macos-packaging-diagnostics/
+          if-no-files-found: warn
+          retention-days: 7
       - name: Build the documentation site and search index
         if: runner.os == 'Linux'
         run: bun run docs:build
@@ -181,6 +212,9 @@ jobs:
       # run-native.ts owns the signed WKWebView image fixture as well as the
       # other host regressions. Do not invoke macos-image-host.ts a second time.
       - name: Build and test real WKWebView host and signed in-place app
+        env:
+          BUNAWAY_OPENER_ISOLATED: '1'
+          BUNAWAY_DMG_DIAGNOSTICS: '1'
         run: mise exec -- bun --no-env-file tests/lifecycle/run-native.ts --app 2>&1 | tee build/macos-native-logs/host.log
       - name: Upload native test reports and logs
         if: always()
@@ -189,6 +223,7 @@ jobs:
           name: macos-native-diagnostics
           path: |
             build/macos-image-logs/
+            build/macos-packaging-diagnostics/
             build/macos-image-results.json
             build/macos-image-host-results.json
             build/macos-webview-controls-results.json
@@ -201,6 +236,9 @@ jobs:
             build/macos-safe-storage-results.json
             build/macos-safe-storage-diagnostics/
             build/macos-io-results.json
+            build/macos-opener-results.json
+            build/macos-opener-host-results.json
+            build/macos-opener-host-diagnostics/
             build/macos-log-capabilities-results.json
             build/macos-log-capabilities-diagnostics/
             build/macos-host-results.json

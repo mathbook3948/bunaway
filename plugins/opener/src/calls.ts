@@ -1,7 +1,17 @@
 import type { NativeInvokeOptions, NativePluginAPI } from "@bunaway/plugin";
 import type { openerOperations } from "./contract.ts";
+import { normalizeMacosFilePath } from "./macos-path.ts";
 import { normalizeApplicationPath, normalizeFilePath } from "./path.ts";
 import { normalizeUrl } from "./url.ts";
+
+/** Accept either path spelling; the host adapter enforces its own platform. */
+function normalizeOpenerFilePath(input: unknown): string {
+  return typeof input === "string" &&
+    input.startsWith("/") &&
+    !input.startsWith("//")
+    ? normalizeMacosFilePath(input)
+    : normalizeFilePath(input);
+}
 
 /** Build public helpers around the plugin's typed operations. */
 export function createOpener(api: NativePluginAPI<typeof openerOperations>) {
@@ -23,7 +33,7 @@ export function createOpener(api: NativePluginAPI<typeof openerOperations>) {
   ): Promise<null> {
     return api.openFile(
       {
-        path: normalizeFilePath(path),
+        path: normalizeOpenerFilePath(path),
       },
       options,
     );
@@ -35,7 +45,7 @@ export function createOpener(api: NativePluginAPI<typeof openerOperations>) {
   ): Promise<null> {
     return api.revealFile(
       {
-        path: normalizeFilePath(path),
+        path: normalizeOpenerFilePath(path),
       },
       options,
     );

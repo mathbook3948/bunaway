@@ -439,6 +439,12 @@ Windows 호스트 시나리오는 `lifecycle/windows-host.ts`에 두고 PID 조�
 프로세스 종료 감시는 `lifecycle/windows-host-processes.ts`에서 실행한다.
 
 `api/opener.test.ts`는 HTTP/HTTPS 계약과 파일 API, 절대 경로 입력과 작업별 권한을 확인한다.
+`lifecycle/macos-opener.test.ts`는 POSIX 경로와 파일 검사, 작업별 권한과 정리를 검사한다.
+macOS arm64 CI에서는 `BUNAWAY_OPENER_ISOLATED=1`로 `macos-opener-native.test.ts`의
+실제 I/O Worker와 `macos-opener-host.ts`의 compiled WKWebView 호출을 각각 한 번 실행한다.
+고유 문서 타입을 선언한 앱을 등록하고 실제 파일 수신, loopback HTTP/HTTPS 및 Finder의
+요청 접수, 권한 거부, 취소와 종료를 확인한다. 기본 handler 설정은 변경하지 않는다.
+브라우저 페이지 로딩과 Finder 선택 화면은 검사하지 않는다.
 
 `api/window-relations.test.ts`는 trusted destroy의 백엔드 출처와 독립 작업 권한,
 관계 조회와 변경의 작업별 권한, 입력과 출력 경계를 확인한다.
@@ -616,6 +622,11 @@ Windows 데스크톱의 dev-veto, dev-hide, dev-pending 시나리오는 CLI 중�
 `packaging/tool-output.test.ts`는 실제 자식 프로세스의 stdout과 stderr가 일반 파일인지
 확인하고 종료 코드, 진단과 프로세스 생성 실패 뒤 임시 파일 정리를 검사한다.
 DMG 생성은 DiskImages helper가 pipe 출력에서 멈추는 경우를 피하기 위해 이 캡처를 사용한다.
+CI는 `BUNAWAY_DMG_DIAGNOSTICS=1`로 fixture 안에서만 실제 hdiutil을 관찰한다.
+파일 descriptor, 고유 경로, fixture 파일을 연 프로세스, 해당 fixture의 disk image 목록과
+verbose 출력을 `build/macos-packaging-diagnostics/`에 보관한다. 기존 일반 파일 출력을
+상속하고 실제 종료 코드를 전달하며 재시도나 다른 볼륨의 detach는 수행하지 않는다.
+외부 probe는 생성 명령이 끝난 뒤 실행해 DiskImages 서비스를 미리 초기화하지 않는다.
 실제 DMG 검증, 읽기 전용 마운트와 서명된 앱 내용 검사 및 실패 시 이전 산출물 보존은
 기존 `macos-distribution.test.ts`에서 계속 확인한다.
 
@@ -627,6 +638,15 @@ show state와 fullscreen 복원 실패가 프로세스 내부의 이전 검사 �
 자식은 10초 실행 기한을 가지며 이전 검사의 Win32 thread 상태를 상속하지 않는다.
 부모는 자식의 완료와 로그를 수집하고 성공한 종료 코드를 요구한다. 상태를 수리하거나
 메시지를 추가로 pump하지 않으며 geometry와 show-state assertion은 그대로 유지한다.
+
+`windows-size-constraints.test.ts`는 전체 계약 검사의 같은 프로세스에서 계속 실행한다.
+Windows 계약 CI는 전체 검사 뒤 같은 파일을 새 Bun 프로세스에서 한 번 실행해 결과를 비교한다.
+기존 표시, 포커스, DPI, 전체화면 assertion과 30초 기한을 유지하며 재시도하지 않는다.
+`BUNAWAY_SIZE_CONSTRAINTS_DIAGNOSTICS=1`이면 숨김 요청, 입력 창 포커스 지정, 제약 갱신,
+DPI 변경과 전체화면 진입 및 종료 뒤의 마지막 8개 상태를 출력한다. HWND 소유 프로세스와
+스레드, 시작 show command도 기록하며 native 상태를 변경하거나 메시지를 pump하지 않는다.
+전체 검사 결과는 작업 로그에, 단독 실행 로그는 `windows-matrix-diagnostics` artifact에 남긴다.
+단독 통과만으로 전체 검사 실패의 원인이나 제품 수정 완료를 판단하지 않는다.
 
 `api/opener-selected-app.test.ts`는 지정 앱 opener의 strict Zod 입력, 독립 권한,
 호출 컨텍스트와 오류를 확인한다. Windows의 `lifecycle/windows-opener-selected-app.test.ts`는
