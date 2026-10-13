@@ -92,3 +92,11 @@ I/O 기반 회귀 `tests/lifecycle/macos-io-host.ts`는 실제 compiled WKWebVie
 권한과 쓰기 실패 후 복구, 회전, 기능 목록 및 정상 종료를 검사한다.
 개별 image, clipboard, storage와 opener 어댑터와 그 fixture의
 통합은 별도 PR에서 검증한다. 이 기반 변경만으로 해당 기능의 지원을 선언하지 않는다.
+
+초기 WebView 진단은 `webview-stage`로 창마다 최대 64개를 기록한다. 고정 단계와
+허용 여부, HTTP 상태, 알려진 NSError domain 및 signed code만 추가하며 URL, 경로,
+query, 본문, NSError userInfo나 localizedDescription을 새 기록에 넣지 않는다.
+SDK 메시지가 아직 도착하지 않으면 초기 load 요청부터 5, 10, 15초에 loading,
+provisional 상태와 estimatedProgress를 관찰한다. 기존 로그의 URL 필드는 별도이며
+이 진단이 기존 로그 전체의 비밀값 제거를 보장하지 않는다. 관찰은 탐색, 기한이나
+복구 정책을 바꾸지 않는다. 첫 응답의 JavaScript 완료만 관찰해 callback 보관을 제한한다.

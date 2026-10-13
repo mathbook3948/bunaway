@@ -188,6 +188,7 @@ jobs:
             build/macos-log-capabilities-results.json
             build/macos-log-capabilities-diagnostics/
             build/macos-host-results.json
+            build/macos-clipboard-results.json
             build/macos-native-logs/
             build/macos-host-diagnostics/
             build/macos-host-in-place/macos-host-results.json
