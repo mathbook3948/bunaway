@@ -459,6 +459,13 @@ Win32와 WebView 콜백 경계는 제어 가능한 fixture로 대체하며 실�
 실행한 OS, Bun revision과 WebView2 버전은 `build/windows-multiple-windows-results.json`에 기록한다.
 CI의 windows-native 작업은 `mise run host:windows`를 통해 이 검사를 실행한다.
 
+`api/storage-directories.test.ts`는 생성의 기본값, 작업별 권한, 결과 전송 상한과
+네이티브 디렉터리 record의 경계 검사를 확인한다. `windows-bun-storage.ts`는 실제
+검사한 핸들로 여러 batch의 이름과 링크 종류, 재귀 생성, 파일 및 빈 디렉터리 삭제,
+큰 목록 실패와 자원 해제를 확인한다. 링크나 별칭 및 ACL 거부도 유지한다.
+`windows-storage-metadata.ts`는 실제 WebView2와 I/O Worker에서 목록, 생성과 빈 폴더 삭제,
+독립적인 텍스트 쓰기 권한 거부를 검사하며 `mise run host:windows`에 포함한다.
+
 `api/zod-promise.test.ts`는 ESM과 CommonJS의 실제 Worker에서 Zod의 형제 검사 실패,
 끝나지 않는 검사, 정상 변환 횟수와 when, abort 동작을 확인한다.
 `cli/zod-distribution.test.ts`는 새 프로젝트에 원본 Zod와 배포 패키지를 설치하고
@@ -493,10 +500,3 @@ RGBA alpha 왕복, JPEG와 BMP, 잘못된 encoded 입력과 decode 크기, 최�
 `api/os.test.ts`는 독립 작업 권한과 metadata 계약을 검사한다. `lifecycle/windows-os.test.ts`는
 실제 Kernel32 언어 설정 조회와 Bun 실행 정보를 생성 어댑터에서 검사하며 `host:windows`에 포함된다.
 사용자 언어 설정 변경이나 translation 하드웨어 검증은 포함하지 않는다.
-
-`api/storage-directories.test.ts`는 생성의 기본값, 작업별 권한, 결과 전송 상한과
-네이티브 디렉터리 record의 경계 검사를 확인한다. `windows-bun-storage.ts`는 실제
-검사한 핸들로 여러 batch의 이름과 링크 종류, 재귀 생성, 파일 및 빈 디렉터리 삭제,
-큰 목록 실패와 자원 해제를 확인한다. 링크나 별칭 및 ACL 거부도 유지한다.
-`windows-storage-metadata.ts`는 실제 WebView2와 I/O Worker에서 목록, 생성과 빈 폴더 삭제,
-독립적인 텍스트 쓰기 권한 거부를 검사하며 `mise run host:windows`에 포함한다.
