@@ -848,3 +848,10 @@ FFI로 읽는 ABI도 확인하며 기존 macOS native 실행기에 포함한다.
 #170의 raw report, counter와 pipe 보관 작업을 이 변경에 복제하지 않는다.
 기존 19개 assertion과 기한은 유지하며 통과한 단일 실행으로 과거 startup timeout의
 원인이 해결됐다고 판단하지 않는다.
+
+`lifecycle/macos-webview-readiness.test.ts`는 실제 controls 웹 fixture와 SDK를 browser
+번들로 만들고 별도 Bun 자식에서 arrival 응답을 보류한다. arrival과 loading=false만으로
+다음 탐색을 시작하지 않으며, 해당 문서의 held 명령 시작과 loading=false를 모두
+확인하는지 검사한다. 이전 문서의 held 수가 남아 있는 두 번째, 세 번째 연결도 포함한다.
+네이티브 controls fixture는 같은 준비 절차를 사용하고 기존 assertion과 15초 기한을 유지한다.
+이 검사는 fixture의 명령 시작 순서를 검증하며 WKWebView 실행은 기존 native CI에서 확인한다.
