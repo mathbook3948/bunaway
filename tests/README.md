@@ -591,6 +591,14 @@ linear filtering의 투명 edge, crop과 빈 소스 및 quota 오류를 추가�
 경합으로 빈 PID를 읽지 않고, 취소 전에 실제 자식의 Windows process handle을 잡는다.
 
 `api/network.test.ts`는 URL, header, bytes 상한과 독립 작업 권한을 검사한다.
-`lifecycle/windows-network.test.ts`는 생성 Windows 어댑터와 실제 loopback HTTP/WebSocket 서버로
+`lifecycle/windows-network.test.ts`는 생성 Windows와 macOS 어댑터 및 실제 loopback HTTP/WebSocket 서버로
 redirect 거부, binary 보존, timeout, 취소, 폐기와 용량을 검사한다. `host:windows`에 포함되며
 외부 proxy나 OS 인증, 물리 네트워크 설정 검증은 포함하지 않는다.
+
+`lifecycle/macos-network.ts`는 `host:macos`에서 compiled WKWebView, SDK, Core와 async UI
+어댑터를 실제 loopback 서버에 연결한다. 뷰별 grant와 앱 명령의 출처 유지, backend grant,
+HTTP binary 및 UTF-8, redirect와 WebSocket handshake 거부, decompressed body 상한,
+text/binary 메시지, timeout과 SDK deadline, 취소 뒤 실제 TCP 정리와 종료 중 pending 요청 정리를
+확인한다. 결과는 `build/macos-native-logs/network-results.json`이며 기존 네이티브 CI artifact에 포함된다.
+`cli/network.test.ts`는 isolated tarball 설치의 두 OS native export에서 실제 HTTP를 실행하고
+browser 번들에 Bun 전송 구현이 포함되지 않는지 검사한다. TLS, 외부 proxy와 OS 인증은 검증하지 않는다.
