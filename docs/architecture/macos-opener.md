@@ -45,7 +45,7 @@ POSIX descriptor는 경로 이름의 rename이나 교체를 막지 않는다. NS
 `normalizeFilePath`와 `.exe`용 `normalizeApplicationPath`는 그대로 유지한다.
 공개 계약의 필드, 이름과 길이 예산을 바꾸지 않는다.
 
-`tests/lifecycle/run-native.ts`에는 이 기능의 `macos-opener-host.ts` 항목만 추가한다.
+`tests/lifecycle/run-native.ts`에는 이 기능의 독립 Worker 검사와 `macos-opener-host.ts`를 추가한다.
 폐기 가능한 실행 세션에서 호출자가 `BUNAWAY_OPENER_ISOLATED=1`을 지정했을 때만
 실행한다. macOS CI는 이 값을 명시하고 일반 로컬 native 검사에는 자동으로 지정하지 않는다.
 기반 작업은 별도로 독립 검토 중이며 이후 수정은 이 변경에 반영해야 한다.

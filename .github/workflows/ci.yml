@@ -137,12 +137,6 @@ jobs:
         run: mise run install 2>&1 | tee build/macos-native-logs/install.log
       - name: Build native plugin packages
         run: mise run plugins:build
-      - name: Exercise real NSWorkspace in an isolated I/O Worker
-        env:
-          BUNAWAY_OPENER_ISOLATED: '1'
-        run: |
-          mise exec -- bun --no-env-file test tests/lifecycle/macos-opener.test.ts tests/lifecycle/macos-opener-native.test.ts 2>&1 | tee build/macos-native-logs/opener.log
-          test -f build/macos-opener-results.json
       - name: Build and test real WKWebView host and signed in-place app
         env:
           BUNAWAY_OPENER_ISOLATED: '1'

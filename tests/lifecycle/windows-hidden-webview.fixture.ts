@@ -21,6 +21,10 @@ const EVENT_OBJECT_FOCUS = 0x8005;
 const GA_ROOT = 2;
 const COINIT_APARTMENTTHREADED = 0x2;
 const WINEVENT_OUTOFCONTEXT = 0;
+const initialState = {
+  maximized: process.argv.includes("--maximized"),
+  fullscreen: process.argv.includes("--fullscreen"),
+};
 const root = resolve(import.meta.dir, "../..");
 const assets = resolve(root, "build/windows-hidden-webview/assets");
 await mkdir(resolve(assets, "web"), {
@@ -135,6 +139,7 @@ try {
       }
     },
     false,
+    initialState,
   );
   webview = new WebView(
     hidden,

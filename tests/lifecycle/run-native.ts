@@ -196,7 +196,18 @@ if (target === "windows-x64") {
     await test("macos-webview-regressions.ts");
     await test("macos-window-api.ts");
     await test("macos-io-host.ts");
+    await test("macos-network.ts");
     if (process.env.BUNAWAY_OPENER_ISOLATED === "1") {
+      await run(
+        [
+          inputs.bun,
+          "--no-env-file",
+          "test",
+          resolve(root, "tests/lifecycle/macos-opener.test.ts"),
+          resolve(root, "tests/lifecycle/macos-opener-native.test.ts"),
+        ],
+        root,
+      );
       await test("macos-opener-host.ts");
     }
     await test("macos-host.ts", [
