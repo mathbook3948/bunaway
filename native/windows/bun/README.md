@@ -23,6 +23,12 @@ DevTools 옵션은 영속 등록에 포함하지 않는다.
 
 `win32-bindings.ts`는 DLL 함수 바인딩과 FFI 버퍼 보조 함수를 제공하고, `win32.ts`의
 `Windows`는 창 클래스, HWND, 아이콘, 전체 화면 상태와 메시지 처리를 소유한다.
+`taskbar-progress.ts`는 HWND별 작업 표시줄 버튼 준비와 마지막 성공 설정을 관리한다.
+등록한 `TaskbarButtonCreated` 메시지 이후에만 설정을 적용하며 버튼 재생성 때 복원한다.
+복원 실패는 진단으로 기록하며 이후 명시적 호출로 다시 적용할 수 있다.
+`taskbar.ts`는 최초 호출에 ITaskbarList3를 만들고 독립적인 COM 바인딩을 소유한다.
+WebView의 마지막 창 정리와 캐시 해제가 작업 표시줄 바인딩의 수명을 바꾸지 않는다.
+호스트 종료 때 STA 해제 전에 COM reference와 바인딩 및 DLL 핸들을 회수한다.
 `getBounds`는 content, outer와 일반 상태 복원용 normal 영역을 화면 물리 픽셀로 조회한다.
 normal의 WINDOWPLACEMENT 작업 영역 좌표는 화면 좌표로 보정한다. 전체화면 중 조회는
 저장된 placement를 복사해 현재 DPI와 크기 제약을 적용하며 복원 상태를 변경하지 않는다.

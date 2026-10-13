@@ -16,6 +16,18 @@ export const openerOperations = {
     input: fileInput,
     output: z.null(),
   },
+  openFileWith: {
+    input: fileInput.extend({
+      app: fileInput.shape.path,
+    }),
+    output: z.null(),
+  },
+  openUrlWith: {
+    input: urlInput.extend({
+      app: fileInput.shape.path,
+    }),
+    output: z.null(),
+  },
 } as const;
 /** Validate a native call, rejecting operations outside this plugin with UNSUPPORTED. */
 export function validateOpenerInput(operation: string, input: JsonValue) {
@@ -26,6 +38,14 @@ export function validateOpenerInput(operation: string, input: JsonValue) {
       case "opener.openFile":
       case "opener.revealFile":
         return openerOperations.openFile.input.parse(validateValue({}, input));
+      case "opener.openFileWith":
+        return openerOperations.openFileWith.input.parse(
+          validateValue({}, input),
+        );
+      case "opener.openUrlWith":
+        return openerOperations.openUrlWith.input.parse(
+          validateValue({}, input),
+        );
       default:
         throw new BunawayError({
           code: "UNSUPPORTED",

@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runWindowsApp } from "#native/windows/bun/entry";
-import { closeWindowsApp } from "#cli/windows-dev-launch";
-import type { HostContext, Policy } from "@bunaway/protocol";
 import { storagePlugin } from "@bunaway/plugin-storage";
+import type { HostContext, Policy } from "@bunaway/protocol";
+import { closeWindowsApp } from "#cli/windows-dev-launch";
+import { runWindowsApp } from "#native/windows/bun/entry";
 import pin from "../../runtime/build-manifests/windows-x64.json";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 
@@ -60,6 +60,10 @@ const policy: Policy = {
         "plugin.storage.writeBytes",
         "plugin.storage.appendBytes",
         "plugin.storage.appendText",
+        "plugin.storage.copyFile",
+        "plugin.storage.move",
+        "plugin.storage.readText",
+        "plugin.storage.writeText",
         "test.report",
         "test.report-confirmed",
       ],
@@ -73,6 +77,9 @@ const policy: Policy = {
             "storage.writeBytes",
             "storage.appendBytes",
             "storage.appendText",
+            "storage.copyFile",
+            "storage.move",
+            "storage.readText",
           ],
         ],
       },
@@ -87,6 +94,9 @@ const policy: Policy = {
         "storage.writeBytes",
         "storage.appendBytes",
         "storage.appendText",
+        "storage.copyFile",
+        "storage.move",
+        "storage.readText",
       ],
     ],
   },
@@ -207,6 +217,8 @@ if (!process.argv.includes("--child")) {
       assert.equal(report.bytes, "AP+A");
       assert.equal(report.appended, Buffer.from("한글🙂").toString("base64"));
       assert.equal(report.deniedTextReplacement, true);
+      assert.equal(report.transfers, true);
+      assert.equal(report.deniedWrite, true);
       assert.deepEqual(report.outside, [
         false,
         null,

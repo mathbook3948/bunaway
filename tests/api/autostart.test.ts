@@ -7,7 +7,12 @@ import {
   enableAutostart,
   getAutostartStatus,
 } from "@bunaway/plugin-autostart";
-import { type HostContext, NativeRegistry } from "@bunaway/protocol";
+import {
+  AUTOSTART_ARGUMENT,
+  AUTOSTART_HIDDEN_ARGUMENT,
+  type HostContext,
+  NativeRegistry,
+} from "@bunaway/protocol";
 import { bindHostAPI } from "#core/host-api";
 import { operations } from "#native/host-api/bun/plugins";
 import { autostartOperations } from "#plugins/autostart/src/contract";
@@ -51,6 +56,10 @@ test("autostart exposes strict app-scoped read and configure contracts", async (
     },
     {
       args: Array(65).fill(""),
+    },
+    {
+      args: [],
+      hidden: "yes",
     },
     {
       args: [
@@ -143,7 +152,9 @@ test("Run commands preserve argument boundaries and enforce the complete UTF-16 
       "끝\\",
       "& %PATH%",
     ]),
-  ).toBe('"C:\\App Folder\\한글.exe" "" "공백 값" "a\\"b" "끝\\\\" "& %PATH%"');
+  ).toBe(
+    '"C:\\App Folder\\한글.exe" "--bunaway-autostart" "" "공백 값" "a\\"b" "끝\\\\" "& %PATH%"',
+  );
   const prefix = commandLine(app, []).length;
   expect(
     commandLine(app, [
@@ -193,7 +204,9 @@ test("Run commands preserve argument boundaries and enforce the complete UTF-16 
     commandLine(dev, [
       "--login",
     ]),
-  ).toContain('"--no-env-file" "C:\\app\\assets\\boot.js" "--login"');
+  ).toContain(
+    '"--no-env-file" "C:\\app\\assets\\boot.js" "--bunaway-autostart" "--login"',
+  );
   expect(() =>
     commandLine(dev, [
       "--dev-url",
@@ -201,6 +214,105 @@ test("Run commands preserve argument boundaries and enforce the complete UTF-16 
     ]),
   ).toThrow();
 });
+test("hidden registration requires a trusted tray and counts the marker in the Run limit", () => {
+  expect(() => commandLine(app, [], true)).toThrow("desktop.tray");
+  const hiddenApp = {
+    ...app,
+    supportsHiddenStart: true,
+  };
+  expect(commandLine(hiddenApp, [], true)).toContain(
+    `"${AUTOSTART_HIDDEN_ARGUMENT}"`,
+  );
+  expect(
+    commandLine(hiddenApp, [
+      AUTOSTART_HIDDEN_ARGUMENT,
+    ]),
+  ).toContain(`"${AUTOSTART_ARGUMENT}" "${AUTOSTART_HIDDEN_ARGUMENT}"`);
+  const prefix = commandLine(hiddenApp, [], true).length;
+  expect(
+    commandLine(
+      hiddenApp,
+      [
+        "x".repeat(260 - prefix - 3),
+      ],
+      true,
+    ),
+  ).toHaveLength(260);
+  expect(() =>
+    commandLine(
+      hiddenApp,
+      [
+        "x".repeat(261 - prefix - 3),
+      ],
+      true,
+    ),
+  ).toThrow("260");
+});
+
+test("public helper accepts registration settings and preserves native failures", async () => {
+  const { createAutostart } = await import("#plugins/autostart/src/calls");
+  const captured: unknown[] = [];
+  const options = undefined;
+  const calls = createAutostart({
+    async enable(input, transport) {
+      captured.push([
+        input,
+        transport,
+      ]);
+      throw new Error("native failure");
+    },
+    async disable() {
+      return null;
+    },
+    async getStatus() {
+      throw new Error("unused");
+    },
+  });
+  for (const settings of [
+    [],
+    {
+      hidden: true,
+    },
+    {
+      args: [
+        "hello",
+      ],
+      hidden: false,
+    },
+  ] satisfies (
+    | string[]
+    | import("@bunaway/plugin-autostart").AutostartOptions
+  )[]) {
+    await expect(calls.enableAutostart(settings, options)).rejects.toThrow(
+      "native failure",
+    );
+  }
+  expect(captured).toEqual([
+    [
+      {
+        args: [],
+      },
+      options,
+    ],
+    [
+      {
+        args: [],
+        hidden: true,
+      },
+      options,
+    ],
+    [
+      {
+        args: [
+          "hello",
+        ],
+        hidden: false,
+      },
+      options,
+    ],
+  ]);
+});
+
 test("absent, malformed and unknown approval states never claim to be enabled", () => {
   expect(startupState(null)).toBe("unknown");
   for (const [state, expected] of [

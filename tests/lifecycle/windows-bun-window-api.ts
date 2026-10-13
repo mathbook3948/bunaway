@@ -145,9 +145,117 @@ if (!process.argv.includes("--child")) {
       ],
       returns: "i32",
     },
+    SendMessageW: {
+      args: [
+        "u64",
+        "u32",
+        "u64",
+        "i64",
+      ],
+      returns: "i64",
+    },
   });
   const nativeWindows = new Windows(() => {});
   try {
+    const pixelWindow = nativeWindows.create(
+      "Physical client preservation",
+      650,
+      450,
+      () => {},
+      false,
+    );
+    try {
+      nativeWindows.setGeometry(pixelWindow, "content", {
+        width: 601,
+        height: 451,
+      });
+      const foreground = user.symbols.GetForegroundWindow();
+      for (const resizable of [
+        false,
+        true,
+        false,
+        true,
+      ]) {
+        nativeWindows.setResizable(pixelWindow, resizable);
+        const content = nativeWindows.getBounds(pixelWindow, "content");
+        assert.equal(content.width, 601);
+        assert.equal(content.height, 451);
+        assert.equal(nativeWindows.isVisible(pixelWindow), false);
+        assert.equal(user.symbols.GetForegroundWindow(), foreground);
+      }
+    } finally {
+      nativeWindows.destroy(pixelWindow);
+    }
+    // Exercise real frame changes and blocked native user commands, including low command bits.
+    for (const showCmd of [
+      1,
+      2,
+      3,
+    ]) {
+      for (const visible of [
+        true,
+        false,
+      ]) {
+        let modalEnters = 0;
+        const hwnd = nativeWindows.create(
+          "User movement regression",
+          650,
+          450,
+          (message) => {
+            if (message === 0x0231) {
+              modalEnters++;
+            }
+          },
+        );
+        try {
+          user.symbols.ShowWindow(hwnd, showCmd);
+          if (!visible) {
+            nativeWindows.show(hwnd, false);
+          }
+          const foreground = user.symbols.GetForegroundWindow();
+          nativeWindows.setMovable(hwnd, false);
+          nativeWindows.setResizable(hwnd, false);
+          assert.equal(nativeWindows.isResizable(hwnd), false);
+          assert.equal(nativeWindows.isMovable(hwnd), false);
+          assert.equal(driver.symbols.IsWindowVisible(hwnd), Number(visible));
+          assert.equal(driver.symbols.IsIconic(hwnd), Number(showCmd === 2));
+          assert.equal(driver.symbols.IsZoomed(hwnd), Number(showCmd === 3));
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          const frame = nativeWindows.getBounds(hwnd, "outer");
+          for (const command of [
+            0xf001n,
+            0xf012n,
+          ]) {
+            driver.symbols.SendMessageW(hwnd, 0x0112, command, 0n);
+            assert.equal(modalEnters, 0);
+            assert.deepEqual(nativeWindows.getBounds(hwnd, "outer"), frame);
+          }
+          // Fullscreen changes the rendered frame but retains the normal resize policy.
+          nativeWindows.setFullscreen(hwnd, true);
+          nativeWindows.setResizable(hwnd, true);
+          assert.equal(nativeWindows.isResizable(hwnd), true);
+          nativeWindows.setResizable(hwnd, false);
+          nativeWindows.setFullscreen(hwnd, false);
+          assert.equal(nativeWindows.isResizable(hwnd), false);
+          assert.equal(nativeWindows.isMovable(hwnd), false);
+          nativeWindows.setResizable(hwnd, true);
+          nativeWindows.setMovable(hwnd, true);
+          assert.equal(nativeWindows.isResizable(hwnd), true);
+          assert.equal(nativeWindows.isMovable(hwnd), true);
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          assert.equal(driver.symbols.IsWindowVisible(hwnd), Number(visible));
+          assert.equal(driver.symbols.IsIconic(hwnd), Number(showCmd === 2));
+          assert.equal(driver.symbols.IsZoomed(hwnd), Number(showCmd === 3));
+          nativeWindows.unmaximize(hwnd);
+          const content = nativeWindows.getBounds(hwnd, "content");
+          assert.equal(content.width, Math.round((650 * content.dpi) / 96));
+          assert.equal(content.height, Math.round((450 * content.dpi) / 96));
+        } finally {
+          nativeWindows.destroy(hwnd);
+        }
+        assert.throws(() => nativeWindows.isMovable(hwnd));
+      }
+    }
     // Check fullscreen restoration across visibility and show states.
     for (const showCmd of [
       1,
@@ -603,6 +711,50 @@ if (!process.argv.includes("--child")) {
             );
           }
           mainWindowId = current.windowId;
+          // Exercise the public plugin, actual UI STA and ITaskbarList3 on each native lifetime.
+          // Explorer creates buttons asynchronously; WebView readiness does not imply button readiness.
+          await waitFor(async () => {
+            try {
+              await windows.setTaskbarProgress({
+                view: "main",
+                windowId: current.windowId,
+                state: "indeterminate",
+              });
+              return true;
+            } catch (error) {
+              if (
+                error instanceof Error &&
+                "code" in error &&
+                error.code === "BUSY"
+              ) {
+                return false;
+              }
+              throw error;
+            }
+          });
+          for (const state of [
+            "normal",
+            "paused",
+            "error",
+          ] as const) {
+            assert.equal(
+              await windows.setTaskbarProgress({
+                view: "main",
+                windowId: current.windowId,
+                state,
+                value: 0.375,
+              }),
+              null,
+            );
+          }
+          assert.equal(
+            await windows.setTaskbarProgress({
+              view: "main",
+              windowId: current.windowId,
+              state: "none",
+            }),
+            null,
+          );
           // First run covers sizing/fullscreen; later runs cover recreation and renderer recovery.
           if (++runs === 1) {
             assert.equal(
@@ -766,10 +918,36 @@ if (!process.argv.includes("--child")) {
               width: 700,
               height: 550,
             });
+            assert.equal(await windows.isResizable(editor), true);
+            assert.equal(await windows.isMovable(editor), true);
+            await windows.setResizable({
+              ...editor,
+              resizable: false,
+            });
+            await windows.setMovable({
+              ...editor,
+              movable: false,
+            });
+            assert.equal(await windows.isResizable(editor), false);
+            assert.equal(await windows.isMovable(editor), false);
+            // Programmatic geometry remains available while user interactions are disabled.
+            await windows.setSize({
+              ...editor,
+              width: 700,
+              height: 550,
+            });
             await windows.setPosition({
               view: "editor",
               x: 20,
               y: 30,
+            });
+            await windows.setResizable({
+              ...editor,
+              resizable: true,
+            });
+            await windows.setMovable({
+              ...editor,
+              movable: true,
             });
             // Verify the public API through the real core, UI worker and HWND.
             const content = await windows.getContentSize({

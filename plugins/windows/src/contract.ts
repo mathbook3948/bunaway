@@ -475,6 +475,25 @@ export const windowOperations = {
     }),
     output: z.null(),
   },
+  "windows.setTaskbarProgress": {
+    input: z.union([
+      windowTarget.extend({
+        state: z.enum([
+          "none",
+          "indeterminate",
+        ]),
+      }),
+      windowTarget.extend({
+        state: z.enum([
+          "normal",
+          "paused",
+          "error",
+        ]),
+        value: z.number().min(0).max(1),
+      }),
+    ]),
+    output: z.null(),
+  },
   "windows.createInstance": {
     input: creationResult.input,
     output: windowIdentitySchema,
@@ -582,6 +601,20 @@ export const windowOperations = {
     output: z.null(),
   },
   "windows.isEnabled": windowStateResult,
+  "windows.setResizable": {
+    input: windowTarget.extend({
+      resizable: z.boolean(),
+    }),
+    output: z.null(),
+  },
+  "windows.isResizable": windowStateResult,
+  "windows.setMovable": {
+    input: windowTarget.extend({
+      movable: z.boolean(),
+    }),
+    output: z.null(),
+  },
+  "windows.isMovable": windowStateResult,
   "windows.setSize": {
     input: z.strictObject({
       view: viewTarget.shape.view,

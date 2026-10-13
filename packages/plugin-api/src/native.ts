@@ -262,6 +262,14 @@ export type NativeWindow = {
   setEnabled?(enabled: boolean): void;
   /** Reads actual native input availability. Windows only. */
   isEnabled?(): boolean;
+  /** Changes user border/system-menu resizing without restricting programmatic geometry. Windows only. */
+  setResizable?(resizable: boolean): void;
+  /** Reads the normal window's resize policy, including while fullscreen. Windows only. */
+  isResizable?(): boolean;
+  /** Changes user caption/system-menu movement without restricting programmatic positioning. Windows only. */
+  setMovable?(movable: boolean): void;
+  /** Reads the current user movement policy. Windows only. */
+  isMovable?(): boolean;
   /** Minimizes and displays the window, allowing Windows to activate another window. */
   minimize(): void;
   /** Maximizes and displays the window, requesting activation. */
@@ -317,6 +325,17 @@ export type NativeWindow = {
   ): void;
   /** Enters or exits fullscreen mode. */
   setFullscreen(value: boolean): void;
+  /** Set this window's taskbar progress; throws BUSY until its taskbar button exists. Windows only. */
+  setTaskbarProgress?(
+    progress:
+      | {
+          state: "none" | "indeterminate";
+        }
+      | {
+          state: "normal" | "paused" | "error";
+          value: number;
+        },
+  ): void;
   /** Sets or clears the confirmation shown before a user closes the window. */
   setCloseConfirmation(message: string | null): void;
 };
@@ -367,10 +386,41 @@ export type WindowChange =
   | "leaveFullscreen"
   | "move"
   | "resize";
-/** UI-thread services used by the native windows plugin. */
+/** OS invalidations and ordered lifecycle signals. No borrowed native pointers leave the callback. */
+export type NativeSystemSignal =
+  | "settingChanged"
+  | "themeChanged"
+  | "colorsChanged"
+  | "accentChanged"
+  | "powerStatusChanged"
+  | "suspend"
+  | "resume"
+  | "sessionLocked"
+  | "sessionUnlocked";
+
+/** UI-thread OS notifications shared by optional native plugins. */
+export type NativeSystemEvents = {
+  /** Lazily acquire a hidden top-level window. Callbacks run after the pump. State invalidations coalesce; lifecycle edges preserve order. Session notifications are opt-in and registration failure throws. Dispose removes the subscription. */
+  subscribe(
+    receive: (signal: NativeSystemSignal) => void,
+    options?: {
+      sessionNotifications?: boolean;
+    },
+  ): () => void;
+  /** Send to live subscribers with both event policy and the named read-operation grant. Uses the existing bounded native event lane. */
+  publish(
+    event: string,
+    payload: import("@bunaway/protocol").JsonValue,
+    requiredOperation: string,
+  ): void;
+};
+
+/** UI-thread services used by installed native plugins. */
 export type NativeWindowServices = {
   /** Live display queries. Absent on platforms without monitor support. */
   monitors?: NativeMonitorServices;
+  /** Optional OS change notifications. Absent on hosts without a native notification window. */
+  systemEvents?: NativeSystemEvents;
   /** Whether this UI adapter supports per-creation presentation options; absent means unsupported. */
   supportsCreationOptions?: boolean;
   /** Validate display-dependent placement without acquiring resources, before reservation and close. */

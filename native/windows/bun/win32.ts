@@ -20,6 +20,11 @@ import {
   APP_SHUTDOWN_MESSAGE,
   APP_WINDOW_CLASS_PREFIX,
 } from "@bunaway/runtime-bun/windows-control";
+import { Taskbar } from "./taskbar.ts";
+import {
+  type TaskbarProgress,
+  TaskbarProgressController,
+} from "./taskbar-progress.ts";
 import { display, hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
 import { windowChanges } from "./window-events.ts";
 import {
@@ -44,6 +49,10 @@ const WM_GETMINMAXINFO = 0x0024;
 const WM_WINDOWPOSCHANGING = 0x0046;
 const WM_WINDOWPOSCHANGED = 0x0047;
 const WM_DISPLAYCHANGE = 0x007e;
+const WM_SYSCOMMAND = 0x0112;
+const SC_SIZE = 0xf000n;
+const SC_MOVE = 0xf010n;
+const SYSTEM_COMMAND_MASK = 0xfff0n;
 export const WM_ENTERSIZEMOVE = 0x0231;
 export const WM_EXITSIZEMOVE = 0x0232;
 const WM_DPICHANGED = 0x02e0;
@@ -86,6 +95,7 @@ const WINDOWPLACEMENT_FLAGS_OFFSET = 4;
 const WINDOWPLACEMENT_SHOW_CMD_OFFSET = 8;
 const WPF_RESTORETOMAXIMIZED = 0x2;
 const WS_OVERLAPPEDWINDOW = 0x00cf0000;
+const WS_THICKFRAME = 0x00040000n;
 const WS_MAXIMIZE = 0x01000000n;
 const WS_MINIMIZE = 0x20000000n;
 const IDYES = 6;
@@ -127,6 +137,14 @@ function callbackPointer(address: bigint): Pointer {
 
 // One class and one bounded pump per STA, shared by every view.
 export class Windows {
+  private readonly taskbar = new Taskbar();
+  private readonly taskbarProgress = new TaskbarProgressController(
+    (window, progress) => this.taskbar.apply(window, progress),
+  );
+  private readonly taskbarButtonCreated = withWide(
+    "TaskbarButtonCreated",
+    (name) => user.symbols.RegisterWindowMessageW(name),
+  );
   readonly thread = kernel.symbols.GetCurrentThreadId();
   private readonly instance = kernel.symbols.GetModuleHandleW(null);
   private readonly name = wide(
@@ -146,6 +164,7 @@ export class Windows {
     }
   >();
   private readonly changingGeometry = new Set<bigint>();
+  private readonly immovable = new Set<bigint>();
   private readonly initialOuterSizes = new Map<
     bigint,
     {
@@ -188,6 +207,10 @@ export class Windows {
     appId?: string,
     pollMessages?: () => void,
   ) {
+    assert(
+      this.taskbarButtonCreated,
+      "RegisterWindowMessageW(TaskbarButtonCreated) failed",
+    );
     if (appId) {
       const shell = dlopen("shell32.dll", {
         SetCurrentProcessExplicitAppUserModelID: {
@@ -280,6 +303,21 @@ export class Windows {
           assert.equal(kernel.symbols.GetCurrentThreadId(), this.thread);
           // DispatchMessage can remain in a native move/resize loop until the user releases the mouse.
           pollMessages?.();
+          if (
+            message === this.taskbarButtonCreated &&
+            this.windows.has(window)
+          ) {
+            try {
+              this.taskbarProgress.buttonCreated(window);
+            } catch (error) {
+              // Explorer recreation is asynchronous; retain the last accepted setting for a later retry.
+              console.error(
+                "Could not restore taskbar progress after button creation.",
+                error,
+              );
+            }
+            return 0n;
+          }
           if (message === APP_SHUTDOWN_MESSAGE) {
             shutdown();
             return 0n;
@@ -302,6 +340,16 @@ export class Windows {
           }
           if (message === WM_WINDOWPOSCHANGING) {
             this.constrainMaximizedSize(window, lparam);
+          }
+          if (message === WM_SYSCOMMAND && this.windows.has(window)) {
+            // Caption dragging and keyboard/system-menu commands converge here.
+            const command = wparam & SYSTEM_COMMAND_MASK;
+            if (
+              (command === SC_MOVE && !this.isMovable(window)) ||
+              (command === SC_SIZE && !this.isResizable(window))
+            ) {
+              return 0n;
+            }
           }
           this.windows.get(window)?.(message, wparam, lparam);
           if (message === WM_CLOSE) {
@@ -645,6 +693,105 @@ export class Windows {
   isFocused(window: bigint): boolean {
     assert(user.symbols.IsWindow(window), "Window is no longer valid.");
     return user.symbols.GetForegroundWindow() === window;
+  }
+
+  /** Read the resize style restored after fullscreen, rather than the borderless fullscreen style. */
+  isResizable(window: bigint): boolean {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return !!(
+      (this.fullscreen.get(window)?.style ?? this.windowStyles(window).style) &
+      WS_THICKFRAME
+    );
+  }
+
+  /** Change user resizing while retaining normal content size, display state and input focus. */
+  setResizable(window: bigint, resizable: boolean): void {
+    if (this.isResizable(window) === resizable) {
+      return;
+    }
+    const fullscreen = this.fullscreen.get(window);
+    const style = fullscreen?.style ?? this.windowStyles(window).style;
+    const nextStyle = resizable
+      ? style | WS_THICKFRAME
+      : style & ~WS_THICKFRAME;
+    if (fullscreen) {
+      fullscreen.style = nextStyle;
+      this.resizePlacement(
+        window,
+        fullscreen.placement,
+        fullscreen.restoreSize,
+        this.getSizeConstraints(window),
+        fullscreen.dpi,
+        nextStyle,
+      );
+      return;
+    }
+    const dpi = this.getDpi(window);
+    const placement =
+      this.isMinimized(window) || this.isMaximized(window)
+        ? this.getPlacement(window)
+        : undefined;
+    const content = placement
+      ? this.clientSizeFromPlacement(window, placement, dpi, style)
+      : this.clientSizeInDips(window, dpi);
+    this.changingGeometry.add(window);
+    try {
+      this.setStyle(window, nextStyle);
+      assert(
+        user.symbols.SetWindowPos(
+          window,
+          0n,
+          0,
+          0,
+          0,
+          0,
+          SWP_NOSIZE |
+            SWP_NOMOVE |
+            SWP_NOZORDER |
+            SWP_NOACTIVATE |
+            SWP_FRAMECHANGED,
+        ),
+      );
+      if (placement) {
+        this.resizePlacement(
+          window,
+          placement,
+          content,
+          this.getSizeConstraints(window),
+          dpi,
+          nextStyle,
+        );
+        this.setPlacement(window, placement, this.isVisible(window), true);
+      } else {
+        this.setClientSize(
+          window,
+          clampWindowSize(
+            content.width,
+            content.height,
+            this.getSizeConstraints(window),
+          ),
+          dpi,
+        );
+      }
+    } finally {
+      this.changingGeometry.delete(window);
+      this.observeChanges(window);
+    }
+  }
+
+  isMovable(window: bigint): boolean {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return !this.immovable.has(window);
+  }
+
+  /** Block user movement only. Geometry APIs, display changes and fullscreen can still reposition. */
+  setMovable(window: bigint, movable: boolean): void {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    if (movable) {
+      this.immovable.delete(window);
+    } else {
+      this.immovable.add(window);
+    }
   }
 
   /** Own one native observer per window. Its callback ends before HWND destruction. No initial replay. */
@@ -1077,9 +1224,11 @@ export class Windows {
 
   private clientSizeInDips(window: bigint, dpi: number): ClientSize {
     const size = this.clientSize(window);
+    // Preserve fractional DIPs internally so frame changes can recover the exact
+    // physical client pixels. Public logical geometry queries round separately.
     return {
-      width: logicalPixels(size.width, dpi),
-      height: logicalPixels(size.height, dpi),
+      width: (size.width * DEFAULT_DPI) / dpi,
+      height: (size.height * DEFAULT_DPI) / dpi,
     };
   }
 
@@ -1241,8 +1390,8 @@ export class Windows {
     const { exStyle } = this.windowStyles(window);
     const frame = this.outerSizeFor(0, 0, dpi, style, exStyle);
     return {
-      width: logicalPixels(outerWidth - frame.width, dpi),
-      height: logicalPixels(outerHeight - frame.height, dpi),
+      width: ((outerWidth - frame.width) * DEFAULT_DPI) / dpi,
+      height: ((outerHeight - frame.height) * DEFAULT_DPI) / dpi,
     };
   }
 
@@ -1803,7 +1952,9 @@ export class Windows {
     }
     this.observations.delete(window);
     this.changingGeometry.delete(window);
+    this.immovable.delete(window);
     assert(user.symbols.DestroyWindow(window));
+    this.taskbarProgress.forget(window);
     this.windows.delete(window);
     this.constraints.delete(window);
     this.dpiByWindow.delete(window);
@@ -1847,6 +1998,7 @@ export class Windows {
    */
   dispose() {
     assert.equal(this.windows.size, 0);
+    this.taskbar.dispose();
     if (this.registered) {
       assert(user.symbols.UnregisterClassW(ptr(this.name), this.instance));
     }
@@ -1859,5 +2011,11 @@ export class Windows {
       ),
       `SetThreadDpiAwarenessContext: ${kernel.symbols.GetLastError()}`,
     );
+  }
+
+  /** Apply progress to a live HWND without changing visibility, activation or window state. */
+  setTaskbarProgress(window: bigint, progress: TaskbarProgress): void {
+    assert(this.windows.has(window), "Taskbar target is not a live window");
+    this.taskbarProgress.set(window, progress);
   }
 }

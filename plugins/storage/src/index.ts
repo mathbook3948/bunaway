@@ -23,5 +23,6 @@ export type {
   StorageBytesWrite,
   StorageLocation,
   StorageMetadata,
+  StorageTransfer,
   StorageWrite,
 } from "./contract.ts";
