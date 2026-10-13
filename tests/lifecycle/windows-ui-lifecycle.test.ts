@@ -132,11 +132,16 @@ async function startUI(failView?: string, parserExecution?: "ui" | "sync") {
     ],
     `
     import { workerData } from "node:worker_threads";
+    import { requestFixtureClose } from ${JSON.stringify(resolve(import.meta.dir, "../fixtures/windows-ui-platform.ts"))};
     import { defineNativePlugin } from ${JSON.stringify(resolve(import.meta.dir, "../../packages/plugin-sdk/src/index.ts"))};
     import { z } from ${JSON.stringify(Bun.resolveSync("zod", import.meta.dir))};
     const state = new Int32Array(workerData.parsing);
     const slots = ${JSON.stringify(parserSlots)};
-    const execute = (_name,input) => {Atomics.add(state,slots.executions,1);return input;};
+    const execute = (_name,input) => {
+      Atomics.add(state,slots.executions,1);
+      if(input === "user-close" || input === "force-close") requestFixtureClose("main", input === "force-close");
+      return input;
+    };
     const parser = defineNativePlugin({name:"parser",operations:{run:{
       input:z.string().transform(async value=>{
         if(value === "wait") {
@@ -296,6 +301,49 @@ async function startUI(failView?: string, parserExecution?: "ui" | "sync") {
     },
   };
 }
+
+test(
+  "user-close policy blocks renderer callbacks but forced renderer cleanup retires the HWND",
+  async () => {
+    const ui = await startUI(undefined, "ui");
+    const target = {
+      view: "main",
+    };
+    try {
+      await ui.waitFor(() =>
+        ui.packets.some((packet) => packet.kind === "ready"),
+      );
+      await ui.channel.send({
+        kind: "start",
+      });
+      const before = await ui.call("windows.getSnapshot", target);
+      await ui.call("windows.setClosable", {
+        ...target,
+        closable: false,
+      });
+      expect(await ui.call("windows.isClosable", target)).toBe(false);
+      await ui.call("parser.run", "user-close");
+      // Additional queued operations advance the actual UI loop after the close callback.
+      for (let tick = 0; tick < 3; tick++) {
+        expect(await ui.call("windows.isDestroyed", target)).toBe(false);
+      }
+      expect(await ui.call("windows.getSnapshot", target)).toEqual(before);
+      await ui.call("parser.run", "force-close");
+      await ui.waitFor(
+        async () => (await ui.call("windows.isDestroyed", target)) === true,
+      );
+      expect(await ui.call("windows.listInstances", null)).toEqual([]);
+      expect(ui.packets.some((packet) => packet.kind === "fatal")).toBe(false);
+      await ui.channel.send({
+        kind: "shutdown",
+      });
+      expect(await ui.exited).toBe(0);
+    } finally {
+      await ui.close();
+    }
+  },
+  timeoutMs + 5_000,
+);
 
 test(
   "desktop Open restores all live single and multiple windows without creating extra lifetimes",
