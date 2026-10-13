@@ -14,7 +14,7 @@ assert.equal(process.platform, "darwin");
 assert.equal(process.arch, "arm64");
 const root = resolve(import.meta.dir, "../..");
 const directory = await mkdtemp(resolve(tmpdir(), "bunaway-macos-image-host-"));
-const appID = "tests.macos.image";
+const appId = "tests.macos.image";
 let child: ReturnType<typeof Bun.spawn> | undefined;
 try {
   const assets = resolve(directory, "assets");
@@ -94,7 +94,7 @@ export default defineApp({ modules: [], plugins: [imagePlugin], commands: {
   await writeJson(resolve(assets, "manifest.json"), {
     format: 1,
     app: {
-      appId: appID,
+      appId: appId,
       title: "Image host fixture",
       windows: specs,
     },
@@ -187,7 +187,7 @@ try { await client.invoke("test.image", null); } finally { window.close(); }
   await output;
   const dataRoot = resolve(
     directory,
-    `Library/Application Support/bunaway/${appID}`,
+    `Library/Application Support/bunaway/${appId}`,
   );
   const report = await Bun.file(resolve(dataRoot, "temp/report.json")).json();
   assert.deepEqual(report, {
@@ -225,7 +225,7 @@ try { await client.invoke("test.image", null); } finally { window.close(); }
     await Bun.file(
       resolve(
         directory,
-        `Library/Application Support/bunaway/${appID}/logs/host.log`,
+        `Library/Application Support/bunaway/${appId}/logs/host.log`,
       ),
     )
       .text()

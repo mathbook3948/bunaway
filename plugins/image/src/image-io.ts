@@ -107,6 +107,7 @@ export function createImageIO() {
   function image(
     pixels: Pixels,
     own: (object: NativePointer | null) => NativePointer,
+    interpolate = false,
   ): NativePointer {
     assertDimensions(pixels.width, pixels.height);
     if (pixels.rgba.length !== pixels.width * pixels.height * 4) {
@@ -129,7 +130,7 @@ export function createImageIO() {
         BYTE_ORDER_32_BIG | ALPHA_LAST,
         provider,
         null,
-        false,
+        interpolate,
         0,
       ),
     );
@@ -304,7 +305,8 @@ export function createImageIO() {
         return resizeNearestPixels(source, width, height);
       }
       return using((own) => {
-        const input = image(source, own);
+        // Enable the image's interpolation hint as well as the context's bilinear quality.
+        const input = image(source, own, true);
         const rgba = Buffer.alloc(width * height * 4);
         const space = own(cg.CGColorSpaceCreateDeviceRGB());
         const context = own(

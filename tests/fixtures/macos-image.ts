@@ -605,6 +605,78 @@ export async function verifyMacosImage(
         ]).toString("base64"),
       },
     );
+    // A real midpoint must blend. A solid-color test alone cannot distinguish nearest sampling.
+    for (const edgeCase of [
+      {
+        right: [
+          0,
+          0,
+          255,
+          255,
+        ],
+        middle: [
+          128,
+          0,
+          128,
+          255,
+        ],
+      },
+      {
+        right: [
+          0,
+          255,
+          0,
+          0,
+        ],
+        middle: [
+          255,
+          0,
+          0,
+          128,
+        ],
+      },
+    ]) {
+      const edge = await resource("createRGBA", {
+        width: 2,
+        height: 1,
+        rgba: Buffer.from([
+          255,
+          0,
+          0,
+          255,
+          ...edgeCase.right,
+        ]).toString("base64"),
+      });
+      const filtered = await resource("resize", {
+        id: edge,
+        width: 3,
+        height: 1,
+      });
+      const result = await call("getPixels", {
+        id: filtered,
+      });
+      assert(
+        result &&
+          typeof result === "object" &&
+          !Array.isArray(result) &&
+          typeof result.rgba === "string",
+      );
+      const middle = Buffer.from(result.rgba, "base64").subarray(4, 8);
+      for (let channel = 0; channel < 4; channel++) {
+        assert(
+          Math.abs((middle[channel] ?? 0) - (edgeCase.middle[channel] ?? 0)) <=
+            1,
+        );
+      }
+      // Hidden green at alpha zero must not bleed into a visible output pixel.
+      assert.equal(middle[1], 0);
+      await call("dispose", {
+        id: edge,
+      });
+      await call("dispose", {
+        id: filtered,
+      });
+    }
     assert.deepEqual(
       await call("getPixels", {
         id,
