@@ -85,7 +85,18 @@ try {
           "-EncodedCommand",
           Buffer.from(
             `$ErrorActionPreference='Stop'; try {
-        Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class NotificationIdentity { [DllImport("shell32.dll", CharSet=CharSet.Unicode)] public static extern int SetCurrentProcessExplicitAppUserModelID(string id); }';
+        Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class NotificationIdentity {
+          [DllImport("shell32.dll", CharSet=CharSet.Unicode)] public static extern int SetCurrentProcessExplicitAppUserModelID(string id);
+          public static int HistoryCount(object target, System.Reflection.MethodInfo method, string id) {
+            var history = method.Invoke(target, new object[] { id });
+            if (history == null) throw new InvalidOperationException("GetHistory returned null");
+            var items = history as System.Collections.IEnumerable;
+            if (items == null) throw new InvalidOperationException("GetHistory is not a projected collection: " + history.GetType().FullName);
+            int count = 0; foreach (object item in items) { if (item == null) throw new InvalidOperationException("Null notification entry"); count++; }
+            Console.Error.WriteLine("notification-history type=" + history.GetType().FullName + " count=" + count);
+            return count;
+          }
+        }';
         if ([NotificationIdentity]::SetCurrentProcessExplicitAppUserModelID('${appId}') -lt 0) { throw 'Process identity setup failed' }
         $manager=[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType=WindowsRuntime];
         $notifier=$manager::CreateToastNotifier('${appId}');
@@ -93,11 +104,23 @@ try {
         # This disposable fixture alone primes that entry; production getStatus never sends a toast.
         $xml=[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom, ContentType=WindowsRuntime]::new();
         $xml.LoadXml('<toast><visual><binding template="ToastGeneric"><text>Bunaway notification regression fixture</text></binding></visual></toast>');
-        $toast=[Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, ContentType=WindowsRuntime]::new($xml);
-        $toast.SuppressPopup=$true; $toast.Tag='${toastTag}'; $toast.Group='${toastGroup}';
-        $toast.ExpirationTime=[DateTimeOffset]::UtcNow.AddSeconds(15);
+        $toastType=[Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, ContentType=WindowsRuntime];
+        $toast=$toastType::new($xml);
+        $suppression=$toastType.GetProperty('SuppressPopup');
+        $suppression.SetValue($toast,$true,$null);
+        if ($suppression.GetValue($toast,$null) -ne $true) { throw 'Popup suppression was not applied' }
+        foreach ($name in @('Tag','Group')) {
+          $expected=if ($name -eq 'Tag') { '${toastTag}' } else { '${toastGroup}' };
+          $property=$toastType.GetProperty($name); $property.SetValue($toast,$expected,$null);
+          if ($property.GetValue($toast,$null) -cne $expected) { throw "$name was not applied" }
+        }
+        $expiration=[DateTimeOffset]::UtcNow.AddSeconds(15);
+        $expiry=$toastType.GetProperty('ExpirationTime'); $expiry.SetValue($toast,$expiration,$null);
+        if ($null -eq $expiry.GetValue($toast,$null)) { throw 'Expiration was not applied' }
+        $primaryError=$null; $cleanupError=$null; $stage='Show';
         try {
         $notifier.Show($toast);
+        $stage='Setting';
         $notifierType=[Windows.UI.Notifications.ToastNotifier, Windows.UI.Notifications, ContentType=WindowsRuntime];
         $property=$notifierType.GetProperty('Setting');
         if ($null -eq $property) { throw 'Setting property is unavailable' }
@@ -111,11 +134,37 @@ try {
           }
         }
         [Console]::Write([int]$value)
+        } catch {
+          $primaryError=$_.Exception;
+          [Console]::Error.WriteLine("notification-primary stage=$stage " + $primaryError.ToString());
         } finally {
-          $manager::History.Remove('${toastTag}','${toastGroup}','${appId}');
-          if ($manager::History.GetHistory('${appId}').Count -ne 0) { throw 'Disposable notification history cleanup failed' }
+          try {
+            $manager::History.Remove('${toastTag}','${toastGroup}','${appId}');
+            $historyType=[Windows.UI.Notifications.ToastNotificationHistory, Windows.UI.Notifications, ContentType=WindowsRuntime];
+            $getHistory=$historyType.GetMethod('GetHistory',[Type[]]@([string]));
+            if ($null -eq $getHistory) { throw 'Projected GetHistory method is unavailable' }
+            $deadline=[DateTime]::UtcNow.AddSeconds(5);
+            do {
+              # Count inside C# so PowerShell cannot unwrap an empty WinRT collection to null or count its wrapper.
+              $count=[NotificationIdentity]::HistoryCount($manager::History,$getHistory,'${appId}');
+              if ($count -eq 0) { break }; Start-Sleep -Milliseconds 100;
+            } while ([DateTime]::UtcNow -lt $deadline);
+            if ($count -ne 0) { throw "Disposable notification history cleanup failed: count=$count" }
+          } catch {
+            $cleanupError=$_.Exception;
+            [Console]::Error.WriteLine('notification-cleanup ' + $cleanupError.ToString());
+          }
         }
-      } catch { [Console]::Error.Write($_.Exception.ToString()); exit 1 }`,
+        if ($null -ne $primaryError -or $null -ne $cleanupError) { throw 'Notification fixture failed; primary and cleanup diagnostics above' }
+      } catch {
+        [Console]::Error.WriteLine($_.Exception.ToString());
+        try {
+          $services=Get-CimInstance Win32_Service -Filter "Name='WpnService' OR Name LIKE 'WpnUserService%'" | Select-Object Name,State,StartMode;
+          $os=Get-CimInstance Win32_OperatingSystem;
+          [Console]::Error.WriteLine('notification-platform ' + (@{ os=$os.Caption; productType=$os.ProductType; services=@($services) } | ConvertTo-Json -Compress -Depth 3));
+        } catch { [Console]::Error.WriteLine('notification-platform diagnostics unavailable: ' + $_.Exception.Message) }
+        exit 1
+      }`,
             "utf16le",
           ).toString("base64"),
         ],
@@ -123,7 +172,10 @@ try {
           timeout: 20000,
         },
       );
-      expect(probe.exitCode, probe.stderr.toString()).toBe(0);
+      expect(
+        probe.exitCode,
+        `stdout=${probe.stdout.toString()}\n${probe.stderr.toString()}`,
+      ).toBe(0);
       expect(probe.stdout.toString().trim()).toMatch(/^[0-4]$/);
       const settingValue = Number(probe.stdout.toString().trim());
       const settings = [
