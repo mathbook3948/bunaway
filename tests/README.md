@@ -1,5 +1,10 @@
 # Tests
 
+초기 `maximized`와 `fullscreen`은 `windows-bun-window-api.ts`에서 일반 복원 영역과
+표시 상태를 검사합니다. 이 실행기는 실제 WebView2와 WinEvent를 사용하는 숨김 준비 fixture도
+네 옵션 조합으로 실행하므로 `mise run host:windows`에서 일시적인 표시와 활성화, 포커스를 검사합니다.
+실제 다중 물리 모니터와 혼합 DPI 수동 검증을 대신하지 않습니다.
+
 `api/webview-print-ui.test.ts`는 인쇄 UI의 개별 권한, browser 기본값과 system 선택,
 경로와 silent 입력 거부, 취소와 닫힌 창 및 플랫폼 서비스 부재를 확인한다.
 `lifecycle/windows-webview-print-ui.ts`는 `mise run host:windows`에서 실제 Win32와
