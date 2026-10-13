@@ -561,7 +561,6 @@ async function main(): Promise<void> {
     );
     assert.equal((await stat(temporaryPath("empty-copy.txt"))).size, 0);
 
-
     // Exercise the generated native export and Zod defaults as well as the source FFI class.
     const create = builtStorage.nativePlatforms.windows?.create;
     assert(create, "Built Windows storage adapter is missing.");
@@ -595,6 +594,95 @@ async function main(): Promise<void> {
           "backend",
         ),
         [],
+      );
+      // Exercise the generated directory, byte/append and transfer APIs together.
+      const source = `${builtDirectory}/source.bin`;
+      const copied = `${builtDirectory}/copy.bin`;
+      const moved = `${builtDirectory}/moved.bin`;
+      await built.execute(
+        "storage.writeBytes",
+        {
+          path: source,
+          bytes: "AP+A",
+        },
+        "backend",
+      );
+      await built.execute(
+        "storage.copyFile",
+        {
+          from: source,
+          to: copied,
+        },
+        "backend",
+      );
+      await built.execute(
+        "storage.appendBytes",
+        {
+          path: copied,
+          bytes: "AA==",
+        },
+        "backend",
+      );
+      await built.execute(
+        "storage.move",
+        {
+          from: copied,
+          to: moved,
+        },
+        "backend",
+      );
+      assert.equal(
+        await built.execute(
+          "storage.readBytes",
+          {
+            path: source,
+          },
+          "backend",
+        ),
+        "AP+A",
+      );
+      assert.equal(
+        await built.execute(
+          "storage.readBytes",
+          {
+            path: moved,
+          },
+          "backend",
+        ),
+        "AP+AAA==",
+      );
+      assert.deepEqual(
+        await built.execute(
+          "storage.readDirectory",
+          {
+            path: builtDirectory,
+          },
+          "backend",
+        ),
+        [
+          {
+            name: "moved.bin",
+            kind: "file",
+          },
+          {
+            name: "source.bin",
+            kind: "file",
+          },
+        ],
+      );
+      await built.execute(
+        "storage.remove",
+        {
+          path: source,
+        },
+        "backend",
+      );
+      await built.execute(
+        "storage.remove",
+        {
+          path: moved,
+        },
+        "backend",
       );
       await built.execute(
         "storage.remove",
