@@ -121,6 +121,12 @@ getter와 FFI 값을 비교하며 고유 tag/group의 임시 알림은 finally�
 기본 CI는 실제 설정 페이지 표시나 사용자 차단 상태 변경, toast 표시를 검증하지 않는다.
 [notification README](../plugins/notification/README.md)의 실행 명령과 남은 검증 범위를 따른다.
 
+`notification-shortcut-cleanup.test.ts`는 바로가기 정리의 일시적인 EBUSY만 최대 10회,
+100ms 간격으로 재시도하는지 검사한다. 실패한 삭제는 정리 완료로 표시하지 않고 shell DLL을
+유지하며 다음 정리에서 복구할 수 있다. 영구 잠금의 기한, 다른 오류의 즉시 전파와
+동시 정리의 단일 소유권 및 실제 임시 파일 삭제도 확인한다. fixture는 자신의 파일만 지우고
+디렉터리를 재귀 삭제하지 않는다.
+
 `windows-initial-placement.fixture.ts`는 모니터 겹침이 바뀌는 `SetWindowPos`에서
 실제 창 프로시저에 `WM_DPICHANGED`를 전달한다. 초기 DPI 보정의 수렴, 중앙 좌표와
 content/outer 크기, DPI 순환 때 숨김 HWND 정리 및 생성 후 OS 권장 배치 처리를 검증한다.
