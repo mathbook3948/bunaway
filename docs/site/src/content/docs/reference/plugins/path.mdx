@@ -1,0 +1,82 @@
+---
+title: Windows 경로
+description: 현재 사용자의 Windows 표준 폴더를 조회하고 명시적인 기준 경로로 문자열 경로를 처리합니다.
+---
+
+`@bunaway/plugin-path`는 Windows 경로를 다루는 선택 플러그인입니다.
+앱의 plugins에 `pathPlugin`을 등록하고 아래 작업별 Host 권한을 허용합니다.
+화면에서 직접 호출하려면 같은 작업 이름 앞에 `plugin.`을 붙인 명령 권한도 필요합니다.
+다른 플랫폼에서는 `UNSUPPORTED`입니다.
+
+```ts
+import { path, pathPlugin } from "@bunaway/plugin-path";
+
+const documents = await path.getDirectory({ directory: "documents" });
+const file = await path.join({ paths: [documents, "한글", "memo.txt"] });
+```
+
+## 표준 사용자 폴더
+
+```ts
+path.getDirectory({ directory: UserDirectory }): Promise<string>
+```
+
+`UserDirectory`는 `home`, `documents`, `downloads`, `desktop`, `pictures`, `music`, `videos`입니다.
+`path.getDirectory` 권한으로 현재 사용자의 Windows Known Folder 경로를 조회합니다.
+사용자 폴더의 OS 설정과 redirection을 따르며 home 뒤에 영문 폴더 이름을 붙여 추측하지 않습니다.
+`SHGetKnownFolderPath`에 현재 사용자와 `KF_FLAG_DONT_VERIFY`를 전달합니다.
+폴더의 존재를 확인하거나 만들지 않으므로 없는 폴더의 경로도 반환할 수 있습니다.
+관리자나 다른 사용자의 폴더, 임의 GUID, 다른 사용자 token을 입력받지 않습니다.
+[Microsoft Known Folder 계약](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/nf-shlobj_core-shgetknownfolderpath)을 따릅니다.
+
+성공은 fully qualified drive 또는 UNC 경로입니다. Windows 조회 실패는 `INTERNAL`입니다.
+앱별 config, data, cache, logs, temp와 resource 경로는 이 API에 포함하지 않습니다.
+현재 앱의 저장 위치를 선택하는 방법은 [저장소와 앱 상태](/guides/storage-and-state/)를 참고하세요.
+
+## 문자열 경로 처리
+
+| 함수와 권한 | 입력 | 반환 |
+| --- | --- | --- |
+| `path.join` | `{ paths: string[] }` | `Promise<string>` |
+| `path.resolve` | `{ base: string, paths: string[] }` | `Promise<string>` |
+| `path.normalize` | `{ path: string }` | `Promise<string>` |
+| `path.basename` | `{ path: string, suffix?: string }` | `Promise<string>` |
+| `path.dirname` | `{ path: string }` | `Promise<string>` |
+| `path.extname` | `{ path: string }` | `Promise<string>` |
+| `path.isAbsolute` | `{ path: string }` | `Promise<boolean>` |
+
+이 작업은 `node:path.win32`의 문자열 경로 규칙을 사용합니다.
+drive, UNC, namespace 경로와 Unicode를 처리하며 slash와 backslash를 구분해 Windows 규칙대로 정규화합니다.
+빈 join 배열은 `"."`, 빈 normalize 문자열도 `"."`입니다.
+basename의 suffix는 대소문자가 일치하는 끝부분만 제거합니다.
+extname은 마지막 확장자를 반환하며 `.hidden`에는 빈 문자열, `file.`에는 `"."`을 반환합니다.
+
+`resolve`는 필수 `base`를 사용합니다. `base`는 `C:/app` 또는 `\\server\share\app`처럼
+fully qualified 경로여야 합니다. 다른 drive의 절대 경로는 그 위치로 전환할 수 있습니다.
+`C:relative`처럼 drive의 숨은 작업 디렉터리에 의존하는 요소는 거부하며 호스트 cwd를 조회하지 않습니다.
+root-relative `\file`은 base의 drive 또는 UNC root 아래로 해석합니다.
+`isAbsolute("\file")`의 결과는 Windows의 문자열 규칙상 `true`지만 fully qualified base는 아닙니다.
+
+문자열당 상한은 UTF-16 code unit 기준 4,096이며 paths 배열은 64개 이하입니다.
+`🙂` 같은 보충 문자는 두 unit을 사용하므로 단일 입력에는 2,048개까지 허용합니다.
+join과 resolve의 결과에도 같은 상한이 적용되며 구분자와 base도 결과 길이에 포함됩니다.
+NUL, CR과 LF 및 추가 필드는 `INVALID_ARGUMENT`로 거부합니다.
+합성된 출력이 문자열 상한을 넘으면 `INTERNAL`로 실패합니다.
+
+## 파일 접근과 실행 범위
+
+경로 문자열을 만들거나 표준 폴더를 알아도 파일 접근 권한은 생기지 않습니다.
+이 helper는 파일을 열지 않고 링크나 대소문자 별칭을 검사하지 않습니다.
+`..` 정규화나 `isAbsolute` 결과를 저장 접근 검사의 대체로 사용하지 마세요.
+저장 operation은 [storage.readText](/reference/host/storage-read-text/)의
+정규 이름, junction, hardlink와 대상 핸들 검사를 별도로 수행합니다.
+namespace 문자열을 처리할 수 있어도 storage의 extended-length 및 device 경로 거부는 유지됩니다.
+
+앱 명령과 setup에서 `path`를 호출하는 실행 범위는 [백엔드 Host API](/reference/backend/host-api/)를 따릅니다.
+신뢰된 Bun 백엔드는 `node:path`와 파일 API를 직접 사용할 수 있으며 Host 권한으로 격리하지 않습니다.
+화면에는 앱이 정한 경로와 접근 규칙을 가진 명령을 노출하세요.
+대화상자 선택 범위의 허용과 영속화는 이 플러그인이 소유하지 않습니다.
+
+모든 호출은 Promise를 반환하고 I/O Worker에서 실행합니다. 작업별 권한 부족은 `PERMISSION_DENIED`,
+처리 전 취소와 폐기된 어댑터는 `CANCELLED`입니다. 두 번째 인자의 signal과 deadline은
+[호출 취소와 기한](/reference/client/invoke/)을 따릅니다. 이미 시작한 동기 OS 조회는 중간에 중단하지 않습니다.

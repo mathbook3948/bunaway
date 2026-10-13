@@ -342,6 +342,15 @@
       }
     },
     {
+      "name": "@bunaway/plugin-path",
+      "source": "plugins/path/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": { "reference/plugins/path": ["path", "pathPlugin"] }
+    },
+    {
       "name": "@bunaway/plugin-safe-storage",
       "source": "plugins/safe-storage/src/index.ts",
       "buildOutputs": {
@@ -1053,6 +1062,16 @@
       "opener.openFileWith",
       "opener.openUrlWith",
       "opener.trashFile"
+    ],
+    "reference/plugins/path": [
+      "path.getDirectory",
+      "path.join",
+      "path.resolve",
+      "path.normalize",
+      "path.basename",
+      "path.dirname",
+      "path.extname",
+      "path.isAbsolute"
     ],
     "reference/plugins/safe-storage": [
       "safe-storage.isAvailable",
