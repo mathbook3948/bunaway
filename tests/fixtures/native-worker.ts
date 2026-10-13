@@ -9,11 +9,13 @@ import type { ManifestPlugin } from "@bunaway/runtime-bun/app-manifest";
 /**
  * Bundle native workers with the fixture app's installed plugins.
  * Supplying an entrypoint builds the shared UI and host-operation workers.
+ * An optional UI entrypoint isolates native fault injection in a dedicated fixture worker.
  */
 export async function bundleNativeWorker(
   name: string,
   destination: string,
   entrypoint?: string,
+  uiEntrypoint?: string,
 ) {
   const plugins = await installedPlugins(
     resolve(import.meta.dir, "desktop/host"),
@@ -30,7 +32,12 @@ export async function bundleNativeWorker(
               "ui",
               "host-operations",
             ].map((worker) =>
-              resolve(import.meta.dir, `../../native/windows/bun/${worker}.ts`),
+              worker === "ui" && uiEntrypoint
+                ? uiEntrypoint
+                : resolve(
+                    import.meta.dir,
+                    `../../native/windows/bun/${worker}.ts`,
+                  ),
             ),
           ]
         : [
