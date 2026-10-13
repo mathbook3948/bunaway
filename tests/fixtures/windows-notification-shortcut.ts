@@ -10,7 +10,10 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { createNotificationShortcutCleanup } from "./notification-shortcut-cleanup.ts";
+import {
+  cleanupFailedNotificationShortcutCreation,
+  createNotificationShortcutCleanup,
+} from "./notification-shortcut-cleanup.ts";
 
 // Windows SDK GUIDs in the byte order of the COM ABI.
 const CLSID_SHELL_LINK = Buffer.from("0114020000000000c000000000000046", "hex");
@@ -56,6 +59,7 @@ function text(address: Pointer): string {
  * Create one UUID-named current-user Start Menu shortcut with the installer's AppUserModelID property.
  * Run only in a fresh fixture process: the process identity persists until that process exits.
  * The returned cleanup removes only our shortcut; no activator, association or production registration is written.
+ * If creation and cleanup both fail, NotificationShortcutCreationError retains cleanup for the caller to retry.
  */
 export async function createNotificationShortcut(appId: string) {
   assert(
@@ -292,18 +296,7 @@ export async function createNotificationShortcut(appId: string) {
     }
   } catch (error) {
     // Native objects and bindings have already been released before unloading their shell library.
-    try {
-      await cleanup();
-    } catch (cleanupError) {
-      throw new AggregateError(
-        [
-          error,
-          cleanupError,
-        ],
-        "Notification shortcut creation and cleanup failed.",
-      );
-    }
-    throw error;
+    return cleanupFailedNotificationShortcutCreation(error, cleanup);
   }
   return cleanup;
 }
