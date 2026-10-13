@@ -118,6 +118,7 @@ if (target === "windows-x64") {
           "tests/lifecycle/windows-tray-controls.test.ts",
           "tests/lifecycle/windows-tray-ui.test.ts",
           "tests/lifecycle/windows-bun-instance.test.ts",
+          "tests/lifecycle/windows-monitors.test.ts",
           "tests/lifecycle/windows-host-shutdown.test.ts",
           "tests/lifecycle/windows-power.test.ts",
           "tests/lifecycle/windows-power-worker.test.ts",

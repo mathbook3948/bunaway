@@ -132,6 +132,13 @@ getter와 FFI 값을 비교하며 고유 tag/group의 임시 알림은 finally�
 기본 CI는 실제 설정 페이지 표시나 사용자 차단 상태 변경, toast 표시를 검증하지 않는다.
 [notification README](../plugins/notification/README.md)의 실행 명령과 남은 검증 범위를 따른다.
 
+`notification-shortcut-cleanup.test.ts`는 바로가기 정리의 일시적인 EBUSY만 최대 10회,
+100ms 간격으로 재시도하는지 검사한다. 실패한 삭제는 정리 완료로 표시하지 않고 shell DLL을
+유지하며 다음 정리에서 복구할 수 있다. 영구 잠금의 기한과 다른 오류의 즉시 전파를 검사한다.
+생성 실패 뒤 정리도 실패한 경우 오류 객체에 남긴 cleanup으로 복구하는지 확인한다.
+동시 정리의 단일 소유권 및 실제 임시 파일 삭제도 확인한다. fixture는 자신의 파일만 지우고
+디렉터리를 재귀 삭제하지 않는다.
+
 `windows-initial-placement.fixture.ts`는 모니터 겹침이 바뀌는 `SetWindowPos`에서
 실제 창 프로시저에 `WM_DPICHANGED`를 전달한다. 초기 DPI 보정의 수렴, 중앙 좌표와
 content/outer 크기, DPI 순환 때 숨김 HWND 정리 및 생성 후 OS 권장 배치 처리를 검증한다.
@@ -672,6 +679,14 @@ DIB의 행 방향과 padding, alpha 및 잘못된 profile, mask, 크기를 확�
 변경하고 원래 Unicode 텍스트만 복원한다. WebView2 페이지나 다른 앱의 붙여넣기,
 물리 장치 검증을 뜻하지 않는다.
 
+`api/window-monitors.test.ts`는 음수 화면 원점, 32비트 rectangle overflow, 개별 조회 권한,
+취소와 모니터 서비스 미지원 계약을 검사한다. `windows-monitors.test.ts`는 실제 Win32
+디스플레이 열거와 MONITORINFOEXW rectangle, 주 모니터, 점과 rectangle 선택, 최소화 전
+모니터 및 반복 callback 정리를 검사한다. `windows-bun-window-api.ts`는 실제 WebView2의
+명령 컨텍스트에서 같은 조회와 권한 거부를 검사한다. 두 네이티브 검사는
+`mise run host:windows`에 포함한다. CI의 디스플레이 구성에서 실행하며 실제 다중 물리
+모니터의 hotplug, 혼합 DPI와 회전 또는 사용자 커서 조작 검증을 대신하지 않는다.
+
 `api/power.test.ts`는 배터리의 0과 unknown, 배터리 없음, DWORD tick 순환,
 독립 blocker ID와 128개 상한, 부분 활성 실패 및 반복 정리를 검사한다.
 `power-cleanup.test.ts`는 실제 어댑터와 두 handle 소유자를 번들해 격리된 Win32 바인딩에서
@@ -847,3 +862,10 @@ FFI로 읽는 ABI도 확인하며 기존 macOS native 실행기에 포함한다.
 #170의 raw report, counter와 pipe 보관 작업을 이 변경에 복제하지 않는다.
 기존 19개 assertion과 기한은 유지하며 통과한 단일 실행으로 과거 startup timeout의
 원인이 해결됐다고 판단하지 않는다.
+
+`lifecycle/macos-webview-readiness.test.ts`는 실제 controls 웹 fixture와 SDK를 browser
+번들로 만들고 별도 Bun 자식에서 arrival 응답을 보류한다. arrival과 loading=false만으로
+다음 탐색을 시작하지 않으며, 해당 문서의 held 명령 시작과 loading=false를 모두
+확인하는지 검사한다. 이전 문서의 held 수가 남아 있는 두 번째, 세 번째 연결도 포함한다.
+네이티브 controls fixture는 같은 준비 절차를 사용하고 기존 assertion과 15초 기한을 유지한다.
+이 검사는 fixture의 명령 시작 순서를 검증하며 WKWebView 실행은 기존 native CI에서 확인한다.

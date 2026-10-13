@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { type CommandContext, defineApp } from "@bunaway/backend";
 import { windows, windowsPlugin } from "@bunaway/plugin-windows";
 import { BunawayError } from "@bunaway/protocol";
+import { controlsClientReadiness } from "./readiness.ts";
 
 /** Exercise the public SDK from the real backend Worker while WKWebView documents connect. */
 export function controlsApp(origin: string, outside: string) {
@@ -31,16 +32,12 @@ export function controlsApp(origin: string, outside: string) {
       await Bun.sleep(10);
     }
   };
-  const ready = async (path: string, count = 1) => {
-    await waitFor(
-      () => (arrivals.get(path) ?? 0) >= count,
-      `arrival ${path} ${count}`,
-    );
-    await waitFor(
-      async () => !(await windows.getWebViewState(main)).loading,
-      `loaded ${path}`,
-    );
-  };
+  const ready = controlsClientReadiness({
+    arrivals,
+    held,
+    isLoading: async () => (await windows.getWebViewState(main)).loading,
+    waitFor,
+  });
   async function requests(
     kind: "slow" | "redirects" | "syntheticRestores" | "probeLoads",
   ): Promise<number> {
@@ -151,8 +148,6 @@ export function controlsApp(origin: string, outside: string) {
       url: `${origin}/next.html`,
     });
     await ready("/next.html");
-    // Arrival precedes the page's held command. Register it before navigation can revoke the document.
-    await waitFor(() => (held.get("/next.html") ?? 0) >= 1, "next client");
     await waitFor(
       () => (cancelled.get("/index.html") ?? 0) === 1,
       "document revocation",
@@ -164,11 +159,9 @@ export function controlsApp(origin: string, outside: string) {
     assert.equal((await windows.getWebViewState(main)).canGoBack, true);
     assert.equal(await windows.goBack(main), true);
     await ready("/index.html", 2);
-    await waitFor(() => (held.get("/index.html") ?? 0) >= 2, "back client");
     assert.equal((await windows.getWebViewState(main)).canGoForward, true);
     assert.equal(await windows.goForward(main), true);
     await ready("/next.html", 2);
-    await waitFor(() => (held.get("/next.html") ?? 0) >= 2, "forward client");
     await windows.reloadWebView(main);
     await ready("/next.html", 3);
     await waitFor(() => (held.get("/next.html") ?? 0) >= 3, "reload client");
