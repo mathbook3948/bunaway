@@ -103,6 +103,27 @@ export const display = dlopen("shcore.dll", {
 });
 
 export const user = dlopen("user32.dll", {
+  SetWindowTextW: {
+    args: [
+      "u64",
+      "ptr",
+    ],
+    returns: "i32",
+  },
+  GetWindowTextLengthW: {
+    args: [
+      "u64",
+    ],
+    returns: "i32",
+  },
+  GetWindowTextW: {
+    args: [
+      "u64",
+      "ptr",
+      "i32",
+    ],
+    returns: "i32",
+  },
   EnableWindow: {
     args: [
       "u64",

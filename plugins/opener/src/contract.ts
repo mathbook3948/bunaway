@@ -12,6 +12,10 @@ export const openerOperations = {
     input: fileInput,
     output: z.null(),
   },
+  trashFile: {
+    input: fileInput,
+    output: z.null(),
+  },
   revealFile: {
     input: fileInput,
     output: z.null(),
@@ -37,6 +41,7 @@ export function validateOpenerInput(operation: string, input: JsonValue) {
         return openerOperations.openUrl.input.parse(validateValue({}, input));
       case "opener.openFile":
       case "opener.revealFile":
+      case "opener.trashFile":
         return openerOperations.openFile.input.parse(validateValue({}, input));
       case "opener.openFileWith":
         return openerOperations.openFileWith.input.parse(
