@@ -175,6 +175,11 @@ export function installerStages(
           outputBaseName,
           desktopShortcut,
           startMenuShortcut,
+          ...(config.associations
+            ? {
+                associations: config.associations,
+              }
+            : {}),
           webView2,
           appDataDir: `{localappdata}\\bunaway\\${input.manifest.app.id}`,
           preserveUserData,
