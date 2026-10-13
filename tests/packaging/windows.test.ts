@@ -12,20 +12,6 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import * as windowsTools from "#packaging/channels/windows/common";
-import {
-  copyPayload,
-  findIscc,
-  findWindowsKitTool,
-  must,
-} from "#packaging/channels/windows/common";
-import {
-  compileInno,
-  prepareInnoSigning,
-  renderInnoScript,
-} from "#packaging/channels/windows/inno";
-import { renderAppxManifest } from "#packaging/channels/windows/msix";
-import { signingArgs } from "#packaging/channels/windows/sign";
 import {
   type AdapterInput,
   type AdapterStage,
@@ -38,6 +24,21 @@ import {
   type SigningConfig,
   type StageContext,
 } from "@bunaway/packaging";
+import * as windowsTools from "#packaging/channels/windows/common";
+import {
+  copyPayload,
+  findIscc,
+  findWindowsKitTool,
+  must,
+} from "#packaging/channels/windows/common";
+import {
+  compileInno,
+  prepareInnoSigning,
+  renderInnoScript,
+} from "#packaging/channels/windows/inno";
+import { innoIdentity } from "#packaging/channels/windows/inno-identity";
+import { renderAppxManifest } from "#packaging/channels/windows/msix";
+import { signingArgs } from "#packaging/channels/windows/sign";
 
 const metadata: ResolvedPackaging = {
   root: "C:\\proj",
@@ -892,7 +893,7 @@ test.skipIf(!iscc)(
           const executableName = version === 1 ? "Old.exe" : "New.exe";
           await Bun.write(join(staging, "app", executableName), "fixture");
           await mkdir(join(staging, "installer"));
-          let script = renderInnoScript({
+          const script = renderInnoScript({
             name: "App",
             identifier,
             executableName,
@@ -909,18 +910,6 @@ test.skipIf(!iscc)(
             preserveUserData: true,
             assetPaths: [],
           }).replaceAll("{group}", menu);
-          if (version === 1) {
-            script =
-              mode === "missing"
-                ? script.replace(
-                    "SetPreviousData(PreviousDataKey, 'ExecutableName', 'Old.exe');",
-                    "",
-                  )
-                : script.replace(
-                    "SetPreviousData(PreviousDataKey, 'InstallDir', ExpandConstant('{app}'));",
-                    "SetPreviousData(PreviousDataKey, 'InstallDir', ExpandConstant('{app}') + '-other');",
-                  );
-          }
           const setup = await compileInno(
             {
               input: input({}),
@@ -940,6 +929,27 @@ test.skipIf(!iscc)(
           const link = await readFile(join(menu, "App.lnk"));
           if (version === 1) {
             previousLink = link;
+            // Corrupt the actual persisted identity after setup has completed.
+            // Editing generated script text can silently stop injecting this fault.
+            const key = `HKCU\\${innoIdentity(identifier).previousDataKey}`;
+            await must("reg.exe", [
+              mode === "missing" ? "delete" : "add",
+              key,
+              "/v",
+              mode === "missing"
+                ? "Inno Setup CodeFile: ExecutableName"
+                : "Inno Setup CodeFile: InstallDir",
+              ...(mode === "different"
+                ? [
+                    "/t",
+                    "REG_SZ",
+                    "/d",
+                    `${install}-other`,
+                  ]
+                : []),
+              "/f",
+              "/reg:64",
+            ]);
           } else {
             expect(link).toEqual(previousLink);
           }
