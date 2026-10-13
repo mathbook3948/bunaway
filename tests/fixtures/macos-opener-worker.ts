@@ -67,6 +67,7 @@ parentPort?.on(
       parentPort?.postMessage({
         id: packet.id,
         error: error instanceof BunawayError ? error.code : String(error),
+        message: error instanceof Error ? error.message : String(error),
       });
     }
   },

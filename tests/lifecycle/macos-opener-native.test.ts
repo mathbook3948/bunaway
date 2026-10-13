@@ -81,6 +81,14 @@ test.skipIf(!isolated)(
           ],
           returns: "i32",
         },
+        LSSetDefaultRoleHandlerForContentType: {
+          args: [
+            "u64",
+            "u32",
+            "u64",
+          ],
+          returns: "i32",
+        },
       },
     );
     const schemes = [
@@ -185,6 +193,15 @@ test.skipIf(!isolated)(
       ]);
       const receiver = await waitFor((event) => event.kind === "ready");
       expect(receiver.pid).toBeGreaterThan(0);
+      objc.withAutoreleasePool(() => {
+        const status = services.symbols.LSSetDefaultRoleHandlerForContentType(
+          BigInt(objc.string(contentType)),
+          0xffffffff,
+          BigInt(objc.string(id)),
+        );
+        console.info("Unique fixture document association status:", status);
+        expect(status).toBe(0);
+      });
       const sample = join(root, `한글 값,".${extension}`);
       await writeFile(sample, "controlled file fixture");
       worker = new Worker(
@@ -246,7 +263,7 @@ test.skipIf(!isolated)(
           },
           [],
         ),
-      ).toEqual({
+      ).toMatchObject({
         id: 1,
         error: "PERMISSION_DENIED",
       });
@@ -359,19 +376,22 @@ test.skipIf(!isolated)(
             await waitForExit(pid);
           }
         }
-        if (registered) {
-          await command([
-            "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
-            "-u",
-            app,
-          ]);
-        }
       } finally {
-        services.close();
-        await rm(root, {
-          recursive: true,
-          force: true,
-        });
+        try {
+          if (registered) {
+            await command([
+              "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
+              "-u",
+              app,
+            ]);
+          }
+        } finally {
+          services.close();
+          await rm(root, {
+            recursive: true,
+            force: true,
+          });
+        }
       }
     }
   },
