@@ -52,7 +52,6 @@ const ERROR_NOT_SAME_DEVICE = 17;
 const FILE_RENAME_INFO = 3;
 const FILE_DISPOSITION_INFO = 4;
 const FILE_RENAME_INFO_BYTES = 24;
-const FILE_RENAME_PARENT_OFFSET = 8;
 const FILE_RENAME_NAME_LENGTH_OFFSET = 16;
 const FILE_RENAME_NAME_OFFSET = 20;
 const OPEN_EXISTING = 3;
@@ -485,7 +484,7 @@ export class WindowsStorage {
     path: string,
     createParents: boolean,
     allowMissing: boolean,
-    action: (parent: { target: string; parent: bigint; name: string }) => T,
+    action: (parent: { target: string }) => T,
   ): T | null {
     const { volume, segments } = selectedPath(path);
     const parents: bigint[] = [];
@@ -533,14 +532,8 @@ export class WindowsStorage {
         }
       }
       const target = `${root}\\${segments.join("\\")}`;
-      const parent = parents.at(-1);
-      if (!parent) {
-        throw new Error("Storage parent handle is missing.");
-      }
       return action({
         target,
-        parent,
-        name: segments.at(-1) ?? "",
       });
     } finally {
       for (const parent of parents.reverse()) {
@@ -709,7 +702,7 @@ export class WindowsStorage {
     return null;
   }
 
-  /** Rename the checked source into a pinned destination parent, with atomic no-replace semantics. */
+  /** Rename the checked source under pinned destination parents, with atomic no-replace semantics. */
   private move(input: StorageTransfer): null {
     const from = selectedPath(input.from).path;
     const to = selectedPath(input.to).path;
@@ -736,12 +729,10 @@ export class WindowsStorage {
               message: "Move source and destination are the same.",
             });
           }
-          const name = Buffer.from(destination.name, "utf16le");
+          // Win32 rejects the relative RootDirectory form on Windows Server 2022.
+          // All destination parents remain pinned while its handle-derived absolute name is used.
+          const name = Buffer.from(destination.target, "utf16le");
           const rename = Buffer.alloc(FILE_RENAME_INFO_BYTES + name.length);
-          rename.writeBigUInt64LE(
-            destination.parent,
-            FILE_RENAME_PARENT_OFFSET,
-          );
           rename.writeUInt32LE(name.length, FILE_RENAME_NAME_LENGTH_OFFSET);
           name.copy(rename, FILE_RENAME_NAME_OFFSET);
           if (
