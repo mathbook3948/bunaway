@@ -220,7 +220,7 @@ test("clipboard public functions reuse the active command host and validate at t
     "clipboard.clear",
   ]);
 });
-test("clipboard is independently discoverable as a Windows UI plugin", async () => {
+test("clipboard is independently discoverable as a Windows and macOS UI plugin", async () => {
   const plugins = await installedPlugins(
     resolve(import.meta.dir, "../.."),
     "0.0.0",
@@ -228,7 +228,10 @@ test("clipboard is independently discoverable as a Windows UI plugin", async () 
   const plugin = plugins.find(({ name }) => name === "clipboard");
   expect(plugin?.packageName).toBe("@bunaway/plugin-clipboard");
   expect(plugin?.targets.windows?.execution).toBe("ui");
-  expect(plugin?.targets.macos).toBeUndefined();
+  expect(plugin?.targets.macos?.execution).toBe("ui");
+  expect(plugin?.targets.macos?.supportedOperations).toEqual(
+    Object.keys(clipboardOperations).map((name) => `clipboard.${name}`),
+  );
   const result = await Bun.build({
     entrypoints: [
       resolve(import.meta.dir, "../../plugins/clipboard/dist/index.js"),
@@ -238,5 +241,7 @@ test("clipboard is independently discoverable as a Windows UI plugin", async () 
   expect(result.success).toBe(true);
   const source = await result.outputs[0]?.text();
   expect(source).not.toContain("user32.dll");
+  expect(source).not.toContain("AppKit.framework");
+  expect(source).not.toContain("libobjc.A.dylib");
   expect(source).not.toContain("node:async_hooks");
 }, 20000);
