@@ -608,7 +608,8 @@ drawing appearance 복원,
 1,000번 조회와 독립 어댑터의 반복 정리를 확인한다. 사용자 OS 설정은 바꾸지 않는다.
 새 프로세스의 배포 플러그인이 직접 AppKit를 로드하고 독립 어댑터의 수명을 유지하는지도 확인한다.
 `macos-appearance.ts`는 로컬 빌드한 플러그인과 실제 WKWebView, backend Worker를
-ad-hoc 서명 compiled 앱에 연결해 뷰와 backend의 독립 권한 허용 및 거부,
+ad-hoc 서명 compiled 앱에 연결해 plugin setup의 backend 권한과 직접 및 앱 명령을 통한
+뷰 권한의 독립 허용 및 거부,
 엄격한 입력과 색 범위, 네 번의 앱 실행 및 정상 종료를 검사한다.
 `run-native.ts`의 macOS 경로와 기존 macOS native CI에 포함한다.
 사용자 테마 변경과 실제 보조 기술 또는 WebView 접근성 트리 검증을 대신하지 않는다.

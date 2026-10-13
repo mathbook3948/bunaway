@@ -68,6 +68,10 @@ function snapshot(value: unknown) {
 try {
   if (view === "denied") {
     await denied(() => appearance.getPreferences(), "PERMISSION_DENIED");
+    await denied(
+      () => client.invoke("test.inherited", null),
+      "PERMISSION_DENIED",
+    );
   } else {
     for (let index = 0; index < 100; index++) {
       snapshot(await appearance.getPreferences());
@@ -76,6 +80,7 @@ try {
       () => client.invoke("plugin.appearance.getPreferences", {}),
       "INVALID_ARGUMENT",
     );
+    snapshot(await client.invoke("test.inherited", null));
     const backend = await client.invoke("test.backend", null);
     if (new URLSearchParams(location.search).has("backend-denied")) {
       check(

@@ -66,6 +66,7 @@ try {
         ],
         commands: [
           "test.backend",
+          "test.inherited",
           "test.report",
           "plugin.appearance.getPreferences",
           "plugin.windows.close",
