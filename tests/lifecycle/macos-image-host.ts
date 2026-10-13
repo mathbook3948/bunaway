@@ -16,6 +16,7 @@ assert.equal(process.arch, "arm64");
 const root = resolve(import.meta.dir, "../..");
 const directory = await mkdtemp(resolve(tmpdir(), "bunaway-macos-image-host-"));
 const appId = "tests.macos.image";
+const markerPath = resolve(directory, "image-created.json");
 let child: ReturnType<typeof Bun.spawn> | undefined;
 try {
   const assets = resolve(directory, "assets");
@@ -31,7 +32,6 @@ try {
     appEntry,
     `
 import assert from "node:assert/strict";
-import { resolve } from "node:path";
 import { defineApp } from ${JSON.stringify(backend)};
 import { image, imagePlugin } from ${JSON.stringify(image)};
 import { windowsPlugin } from ${JSON.stringify(windows)};
@@ -44,7 +44,7 @@ export default defineApp({ modules: [], plugins: [imagePlugin, windowsPlugin, {
   }
 }], commands: {
   "test.created": { input: { const: null }, output: { type: "string" }, async run(_input, context) {
-    const marker = Bun.file(resolve(process.env.TMPDIR, "..", "image-created.json"));
+    const marker = Bun.file(${JSON.stringify(markerPath)});
     const deadline = Date.now() + 10000;
     while (!await marker.exists()) {
       if (context.signal.aborted) throw new Error("Cancelled creation probe.");
@@ -279,7 +279,6 @@ if (location.pathname === "/reader.html") {
     `
 import definition from ${JSON.stringify(resolve(root, "plugins/image/dist/native/macos.js"))};
 import { writeFileSync } from "node:fs";
-import { resolve } from "node:path";
 export default { ...definition, nativePlatforms: { ...definition.nativePlatforms,
   macos: { execution: "io", create(environment) {
     const adapter = definition.nativePlatforms.macos.create(environment);
@@ -292,7 +291,8 @@ export default { ...definition, nativePlatforms: { ...definition.nativePlatforms
         if (name === "image.createRGBA" && input.rgba === "CAcGBQ==") {
           // The actual image adapter has allocated an ID. Keep the worker synchronously busy
           // while the actual WebView sends cancellation, as a native codec call can do.
-          writeFileSync(resolve(environment.dataRoot, "image-created.json"), JSON.stringify(result));
+          writeFileSync(${JSON.stringify(markerPath)}, JSON.stringify(result));
+          console.log("Held image resource allocated before synchronous result delay");
           Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000);
         }
         return result;
