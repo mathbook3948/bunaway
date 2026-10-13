@@ -115,45 +115,57 @@ function closed(socket: WebSocket): Promise<void> {
   });
 }
 
-test("loopback capabilities require the exact origin, are single-use and die with their document", async () => {
-  const lost: HostContext[] = [];
-  const channel = new LoopbackChannel({
-    receive: async () => {},
-    disconnected: (id) => lost.push(id),
-  });
-  try {
-    const url = channel.grant(context, origin);
-    await expect(connected(url, "https://untrusted.example")).rejects.toThrow(
-      "rejected",
-    );
-    await expect(connected(`${url}?extra=1`)).rejects.toThrow("rejected");
-    const response = await fetch(url.replace("ws:", "http:"), {
-      headers: {
-        Origin: origin,
-      },
+test.each([
+  origin,
+  "bunaway://app.bunaway.local",
+])(
+  "loopback capabilities require %s exactly, are single-use and die with their document",
+  async (origin) => {
+    const lost: HostContext[] = [];
+    const channel = new LoopbackChannel({
+      receive: async () => {},
+      disconnected: (id) => lost.push(id),
     });
-    expect(response.status).toBe(400);
-    // An authenticated request that cannot upgrade consumes the failed grant.
-    expect(channel.owns(context)).toBe(false);
-    expect(lost).toEqual([
-      context,
-    ]);
-    const fresh = channel.grant(context, origin);
-    const socket = await connected(fresh);
-    const ended = closed(socket);
-    await expect(connected(fresh)).rejects.toThrow("rejected");
-    channel.revoke(context);
-    await ended;
-    expect(lost).toEqual([
-      context,
-    ]);
-    await expect(connected(fresh)).rejects.toThrow("rejected");
-    await expect(connected(url)).rejects.toThrow("rejected");
-  } finally {
-    await channel.close();
-    await channel.close();
-  }
-});
+    try {
+      const url = channel.grant(context, origin);
+      await expect(connected(url, "null")).rejects.toThrow("rejected");
+      await expect(connected(url, "http://app.bunaway.local")).rejects.toThrow(
+        "rejected",
+      );
+      await expect(connected(url, "https://untrusted.example")).rejects.toThrow(
+        "rejected",
+      );
+      await expect(connected(`${url}?extra=1`, origin)).rejects.toThrow(
+        "rejected",
+      );
+      const response = await fetch(url.replace("ws:", "http:"), {
+        headers: {
+          Origin: origin,
+        },
+      });
+      expect(response.status).toBe(400);
+      // An authenticated request that cannot upgrade consumes the failed grant.
+      expect(channel.owns(context)).toBe(false);
+      expect(lost).toEqual([
+        context,
+      ]);
+      const fresh = channel.grant(context, origin);
+      const socket = await connected(fresh, origin);
+      const ended = closed(socket);
+      await expect(connected(fresh, origin)).rejects.toThrow("rejected");
+      channel.revoke(context);
+      await ended;
+      expect(lost).toEqual([
+        context,
+      ]);
+      await expect(connected(fresh, origin)).rejects.toThrow("rejected");
+      await expect(connected(url, origin)).rejects.toThrow("rejected");
+    } finally {
+      await channel.close();
+      await channel.close();
+    }
+  },
+);
 
 test("loopback keeps async input ordered, validates both directions and bounds pending input", async () => {
   const seen: string[] = [];

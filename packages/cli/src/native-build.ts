@@ -26,7 +26,9 @@ export async function fetchDependency(
   path: string,
   expected: string,
   verifyOnly = false,
+  signal?: AbortSignal,
 ): Promise<void> {
+  signal?.throwIfAborted();
   if (await Bun.file(path).exists()) {
     await verifyHash(path, expected);
     return;
@@ -41,11 +43,14 @@ export async function fetchDependency(
   });
   const stage = await mkdtemp(`${path}.download-`);
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      signal: signal ?? null,
+    });
     assert(response.ok, `Download failed (${response.status}): ${url}`);
     const temporary = resolve(stage, "download");
     await Bun.write(temporary, response);
     await verifyHash(temporary, expected);
+    signal?.throwIfAborted();
     await rename(temporary, path);
   } finally {
     await rm(stage, {

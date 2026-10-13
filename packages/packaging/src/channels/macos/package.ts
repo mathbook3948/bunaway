@@ -48,16 +48,24 @@ export async function packageApp(options: {
         resolve(contents, basename(app)),
       ]);
       await symlink("/Applications", resolve(contents, "Applications"));
-      await must("hdiutil", [
-        "create",
-        "-srcfolder",
-        contents,
-        "-format",
-        "UDZO",
-        "-volname",
-        name,
-        artifact,
-      ]);
+      // Some DiskImages helpers stall when their inherited output is a pipe.
+      // Regular-file capture also preserves failure diagnostics without waiting on helper pipe EOF.
+      await must(
+        "hdiutil",
+        [
+          "create",
+          "-srcfolder",
+          contents,
+          "-format",
+          "UDZO",
+          "-volname",
+          name,
+          artifact,
+        ],
+        {
+          captureDirectory: stage,
+        },
+      );
     } else {
       const args = [
         "--component",

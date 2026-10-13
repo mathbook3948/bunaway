@@ -120,7 +120,7 @@ function showWindows() {
   );
   if (live.length) {
     for (const view of live) {
-      windows.focus(view.native.hwnd);
+      windows.showForDesktop(view.native.hwnd);
     }
     showRequested = false;
     return;
@@ -143,7 +143,7 @@ function showWindows() {
       (view) => view.boundary.policy.id === first.view && !view.boundary.closed,
     );
     assert(view);
-    windows.focus(view.native.hwnd);
+    windows.showForDesktop(view.native.hwnd);
   }
   showRequested = false;
 }
@@ -902,6 +902,9 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
           relations.setEnabled(id, enabled);
         },
         isEnabled: () => nativeWindows.isEnabled(hwnd),
+        setFocusable: (focusable) =>
+          nativeWindows.setFocusable(hwnd, focusable),
+        isFocusable: () => nativeWindows.isFocusable(hwnd),
         setMinimizable: (minimizable) =>
           nativeWindows.setMinimizable(hwnd, minimizable),
         isMinimizable: () => nativeWindows.isMinimizable(hwnd),

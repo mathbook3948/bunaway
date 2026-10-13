@@ -118,6 +118,7 @@ export function readWindowSpecs(
             "center",
             "useContentSize",
             "preventOverflow",
+            "focusable",
             "maximized",
             "fullscreen",
           ].includes(key),
@@ -129,6 +130,10 @@ export function readWindowSpecs(
       throw new Error(
         "Window placement requires paired integer x/y, boolean options and no center/position conflict.",
       );
+    }
+    const focusable = size.focusable;
+    if (focusable !== undefined && typeof focusable !== "boolean") {
+      throw new Error("Window focusable must be a boolean.");
     }
     const initialState: Pick<WindowSpec["window"], "maximized" | "fullscreen"> =
       {};
@@ -245,6 +250,11 @@ export function readWindowSpecs(
             showWhenReady: spec.showWhenReady,
           }),
       window: {
+        ...(focusable === undefined
+          ? {}
+          : {
+              focusable,
+            }),
         ...initialState,
         ...(size.x === undefined
           ? {}

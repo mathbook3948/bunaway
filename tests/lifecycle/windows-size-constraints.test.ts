@@ -177,9 +177,9 @@ test.skipIf(process.platform !== "win32")(
       assert.equal(windows?.failure, undefined);
     };
 
-    const stateCheckpoints: ReturnType<typeof recordMaximizedState>[] = [];
+    const stateCheckpoints: ReturnType<typeof recordWindowState>[] = [];
     /** Capture live state without publishing a snapshot or changing window placement. */
-    function recordMaximizedState(
+    function recordWindowState(
       phase: string,
       dpi: number,
       expectedVisible: boolean,
@@ -201,6 +201,7 @@ test.skipIf(process.platform !== "win32")(
         visible: user.symbols.IsWindowVisible(window) !== 0,
         minimized: user.symbols.IsIconic(window) !== 0,
         maximized: user.symbols.IsZoomed(window) !== 0,
+        fullscreen: windows?.isFullscreen(window),
         showCmd: placement.readUInt32LE(8),
         flags: placement.readUInt32LE(4),
         normal: Array.from(
@@ -214,7 +215,7 @@ test.skipIf(process.platform !== "win32")(
       dpi: number,
       expectedVisible: boolean,
     ) {
-      stateCheckpoints.push(recordMaximizedState(phase, dpi, expectedVisible));
+      stateCheckpoints.push(recordWindowState(phase, dpi, expectedVisible));
       if (stateCheckpoints.length > MAX_STATE_CHECKPOINTS) {
         stateCheckpoints.shift();
       }
@@ -674,6 +675,15 @@ test.skipIf(process.platform !== "win32")(
         user.symbols.ShowWindow(window, SW_HIDE);
         const minimized = user.symbols.IsIconic(window);
         const maximized = user.symbols.IsZoomed(window);
+        assert.equal(
+          user.symbols.IsWindowVisible(window),
+          0,
+          stateDiagnostic(
+            "after-raw-hide-before-hidden-updates",
+            windows.getDpi(window),
+            false,
+          ),
+        );
         targetShows = 0;
         keepInputFocus(() => {
           windows?.setSizeConstraints(window, {
@@ -682,13 +692,30 @@ test.skipIf(process.platform !== "win32")(
             maxWidth: 650,
             maxHeight: 500,
           });
+          stateDiagnostic(
+            "after-hidden-constraints",
+            windows?.getDpi(window) ?? originalDpi,
+            false,
+          );
           sendDpiChanged(window, doubleDpi);
+          stateDiagnostic("after-hidden-double-DPI", doubleDpi, false);
           sendDpiChanged(window, originalDpi);
+          stateDiagnostic("after-hidden-original-DPI", originalDpi, false);
           windows?.setFullscreen(window, true);
+          stateDiagnostic("after-hidden-fullscreen-entry", originalDpi, false);
           windows?.setFullscreen(window, false);
+          stateDiagnostic("after-hidden-fullscreen-exit", originalDpi, false);
         });
-        assert.equal(targetShows, 0, "Hidden window was briefly shown.");
-        assert.equal(user.symbols.IsWindowVisible(window), 0);
+        assert.equal(
+          targetShows,
+          0,
+          `Hidden window was briefly shown. ${JSON.stringify(stateCheckpoints)}`,
+        );
+        assert.equal(
+          user.symbols.IsWindowVisible(window),
+          0,
+          JSON.stringify(stateCheckpoints),
+        );
         assert.equal(user.symbols.IsIconic(window), minimized);
         assert.equal(user.symbols.IsZoomed(window), maximized);
         assertPlacementLogicalSize(window, originalDpi, 650, 500);

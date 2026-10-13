@@ -11,8 +11,8 @@
 _Avoid_: 설치 프로그램과의 혼용
 
 **번들 런타임 (Bundled runtime)**:
-앱 백엔드를 실행하기 위해 앱 패키지에 함께 배포하는 Bun이다. Windows와 macOS 배포 빌드에서는 앱 호스트 코드와 백엔드를 포함한 compiled 실행 파일에 들어간다.
-_Avoid_: 사용자 전역 Bun, 동일 프로세스 내장 VM이라는 의미의 내장 런타임
+앱 백엔드를 실행하기 위해 앱 패키지에 함께 배포하는 Bun이다. iOS는 embedding API를 제공하는 `Bun.xcframework`를 포함한다. Windows와 macOS 배포 빌드에서는 앱 호스트 코드와 백엔드를 포함한 compiled 실행 파일에 들어간다.
+_Avoid_: 사용자 전역 Bun, 모든 플랫폼이 동일 프로세스 embedding API를 사용한다는 의미
 
 **네이티브 호스트 (Native host)**:
 앱 수명주기와 창, 렌더러, 운영체제 기능 접근을 소유하는 플랫폼 측 구성 요소다.

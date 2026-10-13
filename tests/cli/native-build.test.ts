@@ -187,6 +187,16 @@ test("verify-only and insecure downloads fail without creating cache files", asy
       fetchDependency(
         "https://unused.invalid/dependency",
         path,
+        "unused",
+        false,
+        AbortSignal.abort(new Error("Build cancelled.")),
+      ),
+    ).rejects.toThrow("Build cancelled.");
+    expect(await readdir(root)).toEqual([]);
+    await expect(
+      fetchDependency(
+        "https://unused.invalid/dependency",
+        path,
         "0".repeat(64),
         true,
       ),

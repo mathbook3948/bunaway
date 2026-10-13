@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
-import { windowPermissions } from "../fixtures/window-permissions.ts";
 import assert from "node:assert/strict";
 import type {
   NativeWindowServices,
   WindowSnapshot,
 } from "@bunaway/plugin-api/native";
 import { createOperations } from "#plugins/windows/src/platforms/windows";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 const SW_HIDE = 0;
 const SW_SHOW = 5;
@@ -51,6 +51,36 @@ const STATE_MESSAGES = new Map([
 test.skipIf(process.platform !== "win32")(
   "real Win32 geometry queries and setters preserve state, screen origins, restoration and DPI",
   async () => {
+    if (process.env.BUNAWAY_TEST_GEOMETRY_CHILD !== "1") {
+      // Win32 show state depends on process/thread setup. Three fresh native runs pass,
+      // while preceding full-suite tests alter raw ShowWindow behavior on the same thread.
+      // Keep every native assertion below in an owned process, without pumping or repairing state.
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          "--no-env-file",
+          "test",
+          import.meta.path,
+        ],
+        {
+          env: {
+            ...process.env,
+            BUNAWAY_TEST_GEOMETRY_CHILD: "1",
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+          timeout: 10_000,
+          killSignal: "SIGKILL",
+        },
+      );
+      const [output, errors, code] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      expect(code, `${output}\n${errors}`).toBe(0);
+      return;
+    }
     const [{ Windows }, { user, kernel }, { dlopen, ptr }] = await Promise.all([
       import("#native/windows/bun/win32"),
       import("#native/windows/bun/win32-bindings"),
@@ -112,6 +142,7 @@ test.skipIf(process.platform !== "win32")(
         visible: !!user.symbols.IsWindowVisible(hwnd),
         minimized: !!user.symbols.IsIconic(hwnd),
         maximized: !!user.symbols.IsZoomed(hwnd),
+        fullscreen: native.isFullscreen(hwnd),
         callbackFailure:
           native.failure instanceof Error
             ? native.failure.stack
@@ -649,7 +680,13 @@ test.skipIf(process.platform !== "win32")(
       });
       const resizedNormal = native.getBounds(hwnd, "normal");
       expect(user.symbols.IsZoomed(hwnd)).toBe(1);
+      nativePhase = "restore-before-constrained-fullscreen";
       user.symbols.ShowWindow(hwnd, SW_RESTORE);
+      verifyShowState(
+        "after-restore-before-constrained-fullscreen",
+        SW_RESTORE,
+        true,
+      );
       expect(native.getBounds(hwnd, "outer")).toEqual(resizedNormal);
       expect(
         await invoke("windows.getContentSize", {
@@ -661,15 +698,37 @@ test.skipIf(process.platform !== "win32")(
         dpi: native.getDpi(hwnd),
       });
 
+      nativePhase = "hide-before-constrained-fullscreen";
       native.show(hwnd, false);
+      verifyShowState(
+        "after-hide-before-constrained-fullscreen",
+        SW_SHOW,
+        false,
+      );
+      nativePhase = "enter-constrained-fullscreen";
       native.setFullscreen(hwnd, true);
+      verifyShowState("after-enter-constrained-fullscreen", SW_SHOW, false);
       await invoke("windows.setSizeConstraints", {
         minWidth: 700,
         maxHeight: 450,
       });
+      verifyShowState("after-fullscreen-constraints", SW_SHOW, false);
       const fullscreenNormal = native.getBounds(hwnd, "normal");
+      nativePhase = "exit-constrained-fullscreen";
       native.setFullscreen(hwnd, false);
-      expect(native.getBounds(hwnd, "outer")).toEqual(fullscreenNormal);
+      verifyShowState("after-exit-constrained-fullscreen", SW_SHOW, false);
+      try {
+        expect(native.getBounds(hwnd, "outer")).toEqual(fullscreenNormal);
+      } catch (error) {
+        console.error(
+          "Constrained fullscreen bounds mismatch",
+          JSON.stringify({
+            expected: fullscreenNormal,
+            stateCheckpoints,
+          }),
+        );
+        throw error;
+      }
       expect(user.symbols.IsWindowVisible(hwnd)).toBe(0);
       expect(
         await invoke("windows.getContentSize", {
@@ -778,4 +837,5 @@ test.skipIf(process.platform !== "win32")(
       messaging.close();
     }
   },
+  15_000,
 );

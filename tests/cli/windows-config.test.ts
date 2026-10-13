@@ -46,6 +46,54 @@ const policy: Policy = {
   })),
 };
 
+test("focusability declarations preserve booleans and reject non-boolean native flags", () => {
+  const first = specs[0];
+  assert(first);
+  for (const focusable of [
+    true,
+    false,
+  ]) {
+    const spec = {
+      ...first,
+      window: {
+        ...first.window,
+        focusable,
+      },
+    };
+    expect(
+      readWindowSpecs(
+        [
+          spec,
+        ],
+        policy,
+      ),
+    ).toEqual([
+      spec,
+    ]);
+  }
+  for (const focusable of [
+    null,
+    1,
+    "false",
+    {},
+  ]) {
+    expect(() =>
+      readWindowSpecs(
+        [
+          {
+            ...first,
+            window: {
+              ...first.window,
+              focusable,
+            },
+          },
+        ],
+        policy,
+      ),
+    ).toThrow("Window focusable must be a boolean");
+  }
+});
+
 test("initial maximized and fullscreen declarations accept independent booleans without mutation", () => {
   const first = specs[0];
   assert(first);
