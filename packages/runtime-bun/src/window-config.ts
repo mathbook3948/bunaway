@@ -119,6 +119,8 @@ export function readWindowSpecs(
             "useContentSize",
             "preventOverflow",
             "focusable",
+            "maximized",
+            "fullscreen",
           ].includes(key),
       )
     ) {
@@ -132,6 +134,21 @@ export function readWindowSpecs(
     const focusable = size.focusable;
     if (focusable !== undefined && typeof focusable !== "boolean") {
       throw new Error("Window focusable must be a boolean.");
+    }
+    const initialState: Pick<WindowSpec["window"], "maximized" | "fullscreen"> =
+      {};
+    for (const name of [
+      "maximized",
+      "fullscreen",
+    ] as const) {
+      const option = size[name];
+      if (option === undefined) {
+        continue;
+      }
+      if (typeof option !== "boolean") {
+        throw new Error(`Window ${name} must be a boolean.`);
+      }
+      initialState[name] = option;
     }
     for (const dimension of [
       size.width,
@@ -238,6 +255,7 @@ export function readWindowSpecs(
           : {
               focusable,
             }),
+        ...initialState,
         ...(size.x === undefined
           ? {}
           : {

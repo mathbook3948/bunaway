@@ -114,10 +114,13 @@ if (target === "windows-x64") {
           "tests/lifecycle/process-run.test.ts",
           "tests/lifecycle/windows-network.test.ts",
           "tests/lifecycle/windows-bun-instance.test.ts",
+          "tests/lifecycle/windows-power.test.ts",
+          "tests/lifecycle/windows-power-worker.test.ts",
           "tests/lifecycle/windows-appearance.test.ts",
           "tests/lifecycle/windows-opener.test.ts",
           "tests/lifecycle/windows-opener-job.test.ts",
           "tests/lifecycle/windows-opener-selected-app.test.ts",
+          "tests/lifecycle/windows-notification.test.ts",
           "tests/cli/windows-assets.test.ts",
           "tests/cli/windows-compile.test.ts",
         ].map((name) => resolve(root, name)),
@@ -191,6 +194,7 @@ if (target === "windows-x64") {
   if (!values["skip-tests"]) {
     await test("macos-webview-regressions.ts");
     await test("macos-window-api.ts");
+    await test("macos-network.ts");
     await test("macos-host.ts", [
       "--package",
       output,

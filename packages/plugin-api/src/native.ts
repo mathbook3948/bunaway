@@ -133,6 +133,10 @@ export type WindowSpec = {
     maxHeight?: number | null;
     /** Permit user and host foreground activation, default true. Windows false uses WS_EX_NOACTIVATE. */
     focusable?: boolean;
+    /** Start maximized, retaining the initial normal placement for restoration. Windows only. */
+    maximized?: boolean;
+    /** Start fullscreen. When combined with maximized, exit restores maximized state. Windows only. */
+    fullscreen?: boolean;
   };
   /** Single by default. Multiple allows explicit ID-addressed instances on Windows. */
   instances?: "single" | "multiple";

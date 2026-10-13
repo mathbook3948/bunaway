@@ -66,7 +66,7 @@ test.each([
         visible: false,
       },
       {
-        showWhenReady: "sdk",
+        showWhenReady: "sdk" as const,
       },
       {
         home: "https://app.bunaway.local/other.html",
@@ -92,6 +92,20 @@ test.each([
           focusable: false,
         },
         visible: true,
+      },
+      {
+        window: {
+          maximized: true,
+          fullscreen: true,
+        },
+        visible: false,
+      },
+      {
+        window: {
+          maximized: false,
+          fullscreen: false,
+        },
+        showWhenReady: "sdk" as const,
       },
       {
         title: "Editor",
@@ -204,6 +218,16 @@ test.each([
       {
         window: {
           focusable: null,
+        },
+      },
+      {
+        window: {
+          maximized: 1,
+        },
+      },
+      {
+        window: {
+          fullscreen: null,
         },
       },
     ]) {
