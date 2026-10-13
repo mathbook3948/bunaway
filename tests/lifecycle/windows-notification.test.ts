@@ -211,7 +211,11 @@ try {
 import assert from "node:assert/strict";
 import { dlopen, ptr } from "bun:ffi";
 import { writeFileSync } from "node:fs";
-const ole = dlopen("ole32.dll", { CoGetApartmentType: { args: ["ptr", "ptr"], returns: "i32" } });
+const ole = dlopen("ole32.dll", {
+  CoGetApartmentType: { args: ["ptr", "ptr"], returns: "i32" },
+  CoInitializeEx: { args: ["ptr", "u32"], returns: "i32" },
+  CoUninitialize: { args: [], returns: "void" },
+});
 const calls = [];
 const apartment = new Int32Array(1), qualifier = new Int32Array(1);
 const apartmentType = () => ole.symbols.CoGetApartmentType(ptr(apartment), ptr(qualifier));
@@ -235,9 +239,24 @@ export const pluginImports = {
           return result;
         };
       }, dispose() {
-        adapter.dispose(); adapter.dispose();
-        assert(apartmentType() < 0, "Opener has already released its own COM apartment");
-        writeFileSync(${JSON.stringify(trace)}, JSON.stringify(calls)); ole.close();
+        try {
+          adapter.dispose(); adapter.dispose();
+          const apartmentResult = apartmentType();
+          // WinRT may retain a process-wide implicit MTA. S_OK for a fresh STA proves our thread's initialization was released;
+          // S_FALSE would expose a leaked opener or notification initialization even when its apartment type still looks valid.
+          const initialization = ole.symbols.CoInitializeEx(null, 2);
+          try {
+            assert.equal(initialization, 0, JSON.stringify({ stage: "notification-dispose", apartmentResult, apartment: apartment[0], qualifier: qualifier[0], initialization }));
+          } finally {
+            if (initialization >= 0) ole.symbols.CoUninitialize();
+          }
+          writeFileSync(${JSON.stringify(trace)}, JSON.stringify(calls));
+        } catch (error) {
+          console.error("notification-dispose-failure", error);
+          throw error;
+        } finally {
+          ole.close();
+        }
       }};
     }
   })) },
@@ -394,8 +413,8 @@ export const pluginImports = {
         await channel.send({
           kind: "shutdown",
         });
+        await waitFor(() => cleaned);
         expect(await exited).toBe(0);
-        expect(cleaned).toBe(true);
         expect(failure).toBeUndefined();
         expect(await Bun.file(trace).json()).toEqual([
           "notification.getStatus",
