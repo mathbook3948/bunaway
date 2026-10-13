@@ -1,3 +1,4 @@
+import type { Readable, Writable } from "node:stream";
 import {
   type AppDefinition,
   type Core,
@@ -46,14 +47,28 @@ function currentPlatform(): Platform {
 }
 
 /**
- * Runs an app over the host's stdin/stdout IPC connection.
+ * Runs an app over the host's IPC connection, defaulting to process stdin/stdout.
+ * Embedded Workers supply their own streams and platform. This function closes
+ * the owned input on completion or failure; the caller retains output ownership.
  * Keeps reading while core work waits for host replies.
  * The host sends boot configuration and controls session lifetime and shutdown.
  * The host and runtime exchange hello messages and negotiate the protocol.
  * Rejects malformed or unexpected host frames and unexpected end of control input.
  * Direct document connection failures revoke only their own session.
  */
-export async function runBunApp(app: AppDefinition): Promise<void> {
+export async function runBunApp(
+  app: AppDefinition,
+  connection: {
+    input: Readable;
+    output: Writable;
+    platform: Platform;
+  } = {
+    input: process.stdin,
+    output: process.stdout,
+    platform: currentPlatform(),
+  },
+): Promise<void> {
+  const { input, output, platform } = connection;
   if (app.desktop !== undefined) {
     throw new BunawayError({
       code: "UNSUPPORTED",
@@ -112,7 +127,7 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
     writer = writer.then(
       () =>
         new Promise<void>((resolve, reject) => {
-          process.stdout.write(text, (error) => {
+          output.write(text, (error) => {
             queued--;
             error ? reject(error) : resolve();
           });
@@ -144,7 +159,7 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
     cancelCalls(context);
   };
   try {
-    for await (const line of readJsonLines(process.stdin)) {
+    for await (const line of readJsonLines(input)) {
       const frame = parseProcessFrame(line);
       if (frame.ipc.major !== PROCESS_IPC_VERSION.major) {
         throw new Error("Unsupported IPC version.");
@@ -179,7 +194,7 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
         booting = createCore(app, {
           policy: frame.payload.policy,
           hello,
-          platform: currentPlatform(),
+          platform,
           backendContext: frame.payload.backendContext as HostContext,
           onCommandError: (command, cause) =>
             console.error(`Command ${command} failed:`, cause),
@@ -287,7 +302,7 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
         // Report initialization failures even while the reader waits for hello.
         void booting.catch(() => {
           if (!stopping) {
-            process.stdin.destroy(new Error("Core initialization failed."));
+            input.destroy(new Error("Core initialization failed."));
           }
         });
         continue;
@@ -330,7 +345,7 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
           })
           .catch(() => {
             if (!stopping) {
-              process.stdin.destroy(new Error("Core startup failed."));
+              input.destroy(new Error("Core startup failed."));
             }
           });
         continue;
@@ -388,19 +403,27 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
               disconnected(context) {
                 // Document transport failures revoke that session, not the host control pipe.
                 void closeSession(context).catch(() =>
-                  process.stdin.destroy(new Error("Document cleanup failed.")),
+                  input.destroy(new Error("Document cleanup failed.")),
                 );
               },
             });
           } catch {
-            // Existing Android projects may lack loopback network permission; keep their bridge.
+            // A mobile host can retain its native bridge when the listener is unavailable.
           }
         }
         await send({
           kind: "channel-ready",
           context: frame.context,
           nonce: frame.nonce,
-          url: channel?.grant(frame.context as HostContext, frame.origin) ?? "",
+          // WKWebView serializes the packaged iOS origin with its asset scheme.
+          // Authorization above still uses the shared HTTPS policy origin.
+          url:
+            channel?.grant(
+              frame.context as HostContext,
+              platform === "ios"
+                ? frame.origin.replace(/^https:/, "bunaway:")
+                : frame.origin,
+            ) ?? "",
         });
       } else if (
         frame.kind === "revoke" ||
@@ -453,6 +476,6 @@ export async function runBunApp(app: AppDefinition): Promise<void> {
     throw error;
   } finally {
     await channel?.close();
-    process.stdin.destroy();
+    input.destroy();
   }
 }

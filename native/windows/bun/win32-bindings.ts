@@ -103,6 +103,27 @@ export const display = dlopen("shcore.dll", {
 });
 
 export const user = dlopen("user32.dll", {
+  GetSystemMenu: {
+    args: [
+      "u64",
+      "i32",
+    ],
+    returns: "u64",
+  },
+  EnableMenuItem: {
+    args: [
+      "u64",
+      "u32",
+      "u32",
+    ],
+    returns: "u32",
+  },
+  DrawMenuBar: {
+    args: [
+      "u64",
+    ],
+    returns: "i32",
+  },
   SetWindowTextW: {
     args: [
       "u64",

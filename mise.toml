@@ -18,7 +18,7 @@ run = "bunx --no-install biome check --staged --assist-enabled=false --no-errors
 [tasks.typecheck]
 depends = ["plugins:build"]
 description = "Check all workspace TypeScript types"
-run = ["bun run --workspaces typecheck", "bunx --no-install tsc --project tests/tsconfig.json", "bunx --no-install tsc --project tests/fixtures/android/web/tsconfig.json"]
+run = ["bun run --workspaces typecheck", "bunx --no-install tsc --project tests/tsconfig.json", "bunx --no-install tsc --project tests/fixtures/android/web/tsconfig.json", "bunx --no-install tsc --project tests/fixtures/ios/web/tsconfig.json"]
 
 [tasks.lint]
 description = "Lint source files without changing them"
@@ -76,3 +76,8 @@ run = "bun native/android/run.ts"
 [tasks."plugins:build"]
 description = "Build neutral plugin declarations and per-platform native exports"
 run = "bun run plugins:build"
+
+[tasks."host:ios"]
+depends = ["plugins:build"]
+description = "Build the embedded Bun iOS app and verify SDK, Core and Worker restarts on a booted arm64 Simulator"
+run = "bun --no-env-file native/ios/run.ts"

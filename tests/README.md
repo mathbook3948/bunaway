@@ -1,5 +1,22 @@
 # Tests
 
+`lifecycle/macos-safe-storage.test.ts`는 합성 Keychain으로 lazy 준비, 키 생성 경합,
+접근 실패 뒤 키 보존과 재시도, 작업별 키 지우기, 버전과 namespace 인증, 변조와 크기 상한을
+검사한다. AES-GCM은 Python cryptography로 생성한 고정 벡터와 비교한다.
+`lifecycle/macos-keychain-native.test.ts`는 실제 Security.framework와 합성 데이터로
+disposable private Keychain을 만들고 공유 Bun과 ad-hoc compiled 실행 파일에서 Unicode,
+바이트 상한, 변조, 잠금 상태와 같은 실행 파일의 프로세스 재시작을 확인한 뒤 삭제한다.
+기본 Keychain과 search list, trust, ACL이나 signing identity는 바꾸지 않는다.
+사용자의 login Keychain과 실제 credential, 시스템 UI 선택, 다른 서명 빌드로의 이전은
+검증하지 않는다. 기존 macOS native CI에서 별도로 실행하고 로그를 보관한다.
+`lifecycle/macos-safe-storage-host.ts`는 PR164의 수정된 I/O foundation과 실제 WKWebView,
+공개 backend/client API 및 운영 factory를 공유 Bun과 ad-hoc compiled 호스트에서 사용한다.
+내부 provider만 disposable Keychain으로 지정하며 검증한 패키지의 identity 전달,
+호출자의 appId 거부, 개별 정책, 문자열과 바이트 왕복, 동일 실행 파일의 재시작 복호화와
+Core 정리 뒤 네이티브 정리를 확인한다. 결과는 `build/macos-safe-storage-results.json`이다.
+`macos-bun.test.ts`의 identity 회귀는 실제 Worker와 호스트 수명을 사용하지만 네이티브 UI를
+대체한 계약 검사다. 이 검사나 번들 성공을 macOS 실행 증거로 보고하지 않는다.
+
 초기 `maximized`와 `fullscreen`은 `windows-bun-window-api.ts`에서 일반 복원 영역과
 표시 상태를 검사합니다. 이 실행기는 실제 WebView2와 WinEvent를 사용하는 숨김 준비 fixture도
 네 옵션 조합으로 실행하므로 `mise run host:windows`에서 일시적인 표시와 활성화, 포커스를 검사합니다.
@@ -12,6 +29,32 @@ WebView2 문서에 browser 인쇄 UI를 요청하고 반복 요청 및 종료 �
 확인한다. 실제 COM ABI의 E_NOINTERFACE도 optional 조회와 required 조회로 구분한다.
 결과는 `build/windows-webview-print-ui-results.json`에 기록한다.
 system UI 사용자 선택과 물리 프린터 출력은 별도 검증이며 테스트가 인쇄 제출을 하지 않는다.
+
+`lifecycle/macos-webview-controls.test.ts`는 공개 작업 지원 목록, URL과 zoom 경계,
+생성 중과 닫힌 소유자의 거부를 검사한다. `lifecycle/macos-webview-controls.ts`는
+기존 `host:macos`에서 실제 compiled WKWebView와 백엔드 Worker의 공통 SDK를 실행한다.
+문서 상태, origin과 redirect 거부, 서브프레임 신원, history, reload, 느린 탐색 중단,
+문서 교체의 명령 취소와 fragment 세션 유지, 뷰별 zoom 및 닫기와 재생성을 검사한다.
+scheme과 hostname을 대문자로 작성한 자산 URL에서도 실제 문서와 SDK 연결을 확인한다.
+`pageshow`와 `pagehide`의 `persisted`, `isTrusted`를 SDK와 독립적으로 기록한다.
+실제 history cache 복원과 합성 persisted 이벤트의 reload 검사를 결과에서 구분한다.
+합성 검사는 실제 WKWebView에서 기존 SDK를 닫고 같은 history 항목의 새 문서와 SDK를 요구한다.
+신뢰된 persisted 이벤트가 없으면 실제 history cache 복원의 실행 근거로 사용하지 않는다.
+결과와 실패 로그는 macOS native CI artifact에 포함한다. macOS DevTools, 다운로드,
+창 readiness API와 출시 배포 서명은 이 검사의 범위가 아니다.
+
+`lifecycle/macos-log-capabilities.test.ts`는 생성한 macOS export와 실제 임시 파일로
+JSON 줄의 순서와 출처, 새 파일 권한, 반복 회전, 기록과 회전 실패 후 복구,
+입력과 작업 권한, 폐기 및 호스트가 정한 지원 목록을 검사한다.
+`macos-log-capabilities-compiled.test.ts`는 현재 OS에서 macOS 어댑터 probe를 Bun으로
+compile하고 원본 파일을 제거한 뒤 실행한다. 실제 macOS native CI에도 포함하며
+호스트의 전체 실행 경로를 대신하지 않는다.
+`macos-log-capabilities.ts`는 ad-hoc 서명한 compiled 앱과 실제 WKWebView에서 백엔드 및
+뷰 기록, 권한 거부, 쓰기 실패 후 복구, 회전, manifest의 등록한 작업과 기능 목록의 일치
+및 정상 종료를 검사한다. `run-native.ts`에 포함하며 결과와 앱 데이터 진단은
+`build/macos-log-capabilities-results.json`과 `build/macos-log-capabilities-diagnostics/`에 남긴다.
+앱과 화면의 코드는 `fixtures/macos-log-capabilities/`의 타입 검사 대상이며 실행 전
+정책 권한 이름도 실제 설치된 플러그인 계약으로 검사한다.
 
 다운로드 UI-loop regression은 생성된 worker 경계에서 전용 `windows-download-cleanup/ui.ts`를
 번들하고 실제 승인 transfer의 cancel 자원만 일시적으로 실패시킨다. 소유 창을 닫는 동안
@@ -121,6 +164,9 @@ windows-ui-operations.test.ts는 실제 UI Worker에서 정책 승인 전에 플
 마지막 창 재생성의 이전 세션이 폐기된 뒤 destroy를 호출합니다. 새 HWND를 만들지 않고
 재생성을 CANCELLED로 끝내며 keep-alive와 기본 quit 트레이 앱이 beforeQuit 없이
 StopHook과 네이티브 자원 정리를 완료하는지 확인합니다. `mise run host:windows`에 포함합니다.
+`nonfocusable-resident`와 `nonfocusable-tray`는 실제 UI Worker의 desktop Show와 트레이
+Open으로 숨김 및 최소화 상태를 복원합니다. 전경 활성화를 요청하지 않고 최대화 이력,
+창 ID와 WebView 세션을 유지하는지 확인합니다.
 
 Android의 `FrameDispatcherTest`는 읽기 스레드의 직접 전달이 멈춰도 별도 타이머가
 실행되는지, 유휴 이후에도 기한을 감시하는지와 종료 제어 뒤의 응답 폐기를 검사한다.
@@ -273,6 +319,11 @@ manifest 생성과 카탈로그 로딩에서 작업 이름만 전달하며 작�
 비동기 UI 실행을 한도만큼 취소해도 승인 용량과 다음 호출이 정상인지 확인한다. 컨텍스트 취소,
 늦은 완료와 실패, 중복 승인과 작업 대기 중 종료도 검증한다. `lifecycle/macos-bun.test.ts`는
 네이티브 UI만 대체한 실제 macOS 호스트와 Worker에서 같은 입력, 출력, 실행 취소 경로를 검사한다.
+`lifecycle/io-response-ownership.test.ts`는 실제 I/O Worker와 `ImageResources`에서 응답 승인 전
+취소, 컨텍스트 폐기와 종료가 전달되지 않은 이미지 자원을 회수하고, 승인된 자원은 유지하는지 확인한다.
+`lifecycle/windows-host-shutdown.test.ts`는 백엔드 I/O 취소가 Core 종료 훅보다 먼저 전달되고
+어댑터 폐기는 훅 이후 실행되는지 확인한다. Windows에서는 실제 Win32 UI Worker와 Job을 사용한
+창 없는 실행도 검사하며 `host:windows`에 포함한다. Linux에서는 UI와 Job 경계를 대체한다.
 `lifecycle/windows-ui-lifecycle.test.ts`는 실제 UI Worker와 대체 Win32 경계에서 마지막 창을
 파괴해 종료를 확정한 뒤 입력 파싱을 재개한다. 취소 패킷 없이도 동기 어댑터와 비동기 UI
 어댑터의 실행을 차단하고 CANCELLED를 반환하는지 확인한다.
@@ -363,7 +414,9 @@ macOS WebContent PID 조회와 종료는 `lifecycle/macos-renderer.ts`가 맡으
 다중 창, 저장, 메모 복원, 렌더러 복구, 정상/비정상 종료를 검증한다.
 모달 중 메인의 타이머, Promise, 네트워크와 초기화 중 닫기, 생성 실패, 파일 핸들 경계,
 이동한 독립 CLI 프로젝트도 포함한다. [실행 결과](../docs/architecture/windows-bun-results.md).
-모달 테스트는 진행 중인 HTTP 요청을 완료한 뒤 테스트 서버를 닫는다.
+모달 테스트는 실제 Win32 진입 알림부터 700ms 동안 타이머, Promise와 네트워크 진행을
+관찰한다. 진입 전에 취소 메시지를 예약하지 않으며 종료 시 남은 취소 타이머를 해제한다.
+진행 중인 HTTP 요청을 완료한 뒤 테스트 서버를 닫는다.
 독립 CLI 프로젝트는 테스트용 UI 명령 호출을 추가한 뒤 생성 앱의 타입 검사를 통과해야 빌드와 창 실행을 진행한다.
 공통 앱, 화면 데이터는 `tests/fixtures/desktop/host/`에서 Windows/macOS가 공유한다.
 예전 Windows C++ 호스트/probe와 전용 실행기, 테스트는 삭제했다.
@@ -379,6 +432,8 @@ boot 전후 종료와 초기화 중 프로토콜 버전, 런타임 ID 및 세대
 합성 메시지이며 실제 배율이 다른 물리 모니터 사이의 이동 검증과 구분한다.
 최소화 또는 최대화 직후, 표시와 숨김 직후 및 복원 영역 setter 뒤의 체크포인트는
 HWND 소유 프로세스와 스레드, style, 원본 WINDOWPLACEMENT와 Win32 상태를 함께 검사한다.
+일반 복원 뒤 숨김, 전체화면 진입, 제약 갱신과 종료의 마지막 주기도 같은 상태 기록을 남긴다.
+마지막 bounds 불일치는 이 기록을 출력한 뒤 원래 assertion 오류를 그대로 전파한다.
 실패에는 최근 체크포인트와 제한된 상태 메시지 기록, 호스트 callback 오류를 포함한다.
 검사는 상태를 복구하거나 메시지를 pump하지 않으며 기존 geometry 기대값을 유지한다.
 `lifecycle/windows-window-state.test.ts`는 같은 HWND에서 일반, 최소화와 최대화 상태,
@@ -484,6 +539,21 @@ Windows 데스크톱의 dev-veto, dev-hide, dev-pending 시나리오는 CLI 중�
 트레이 숨김 설정에서는 API로 닫은 뒤에도 같은 요청 컨텍스트로 창을 다시 표시할 수 있어야 한다.
 
 ## 네이티브 빌드와 배포 회귀
+
+`packaging/tool-output.test.ts`는 실제 자식 프로세스의 stdout과 stderr가 일반 파일인지
+확인하고 종료 코드, 진단과 프로세스 생성 실패 뒤 임시 파일 정리를 검사한다.
+DMG 생성은 DiskImages helper가 pipe 출력에서 멈추는 경우를 피하기 위해 이 캡처를 사용한다.
+실제 DMG 검증, 읽기 전용 마운트와 서명된 앱 내용 검사 및 실패 시 이전 산출물 보존은
+기존 `macos-distribution.test.ts`에서 계속 확인한다.
+
+Windows native CI는 전체 호스트 검사 뒤 `windows-geometry.test.ts`를 새 프로세스에서
+세 번 실행한다. 모든 실행이 성공해야 하며 전체 계약 검사의 같은 회귀도 유지한다.
+show state와 fullscreen 복원 실패가 프로세스 내부의 이전 검사 상태에 의존하는지
+확인하기 위한 검사다. 로그는 `build/windows-native-logs/geometry-*.log`에 보관한다.
+전체 계약 검사에서도 같은 native assertion을 소유한 자식 프로세스에서 실행한다.
+자식은 10초 실행 기한을 가지며 이전 검사의 Win32 thread 상태를 상속하지 않는다.
+부모는 자식의 완료와 로그를 수집하고 성공한 종료 코드를 요구한다. 상태를 수리하거나
+메시지를 추가로 pump하지 않으며 geometry와 show-state assertion은 그대로 유지한다.
 
 `api/opener-selected-app.test.ts`는 지정 앱 opener의 strict Zod 입력, 독립 권한,
 호출 컨텍스트와 오류를 확인한다. Windows의 `lifecycle/windows-opener-selected-app.test.ts`는
@@ -602,6 +672,16 @@ CLI의 같은 이름 검사는 로컬 tarball의 isolated 설치, 네이티브 I
 번들의 FFI 제외를 검사한다. `windows-appearance.test.ts`는 실제 Windows 고대비,
 client-area animation, screen reader 설정 플래그 및 시스템 색과 비교하고 두 어댑터의
 DLL 수명과 종료 후 거부를 확인한다. `mise run host:windows`에 포함한다.
+`macos-appearance.test.ts`는 밝고 어두운 일반 및 contrast appearance를 앱에 지정하고
+실제 AppKit의 effectiveAppearance에 대한 best-match 테마와 sRGB 색, NSWorkspace 플래그를 비교한다.
+drawing appearance 복원,
+1,000번 조회와 독립 어댑터의 반복 정리를 확인한다. 사용자 OS 설정은 바꾸지 않는다.
+새 프로세스의 배포 플러그인이 직접 AppKit를 로드하고 독립 어댑터의 수명을 유지하는지도 확인한다.
+`macos-appearance.ts`는 로컬 빌드한 플러그인과 실제 WKWebView, backend Worker를
+ad-hoc 서명 compiled 앱에 연결해 plugin setup의 backend 권한과 직접 및 앱 명령을 통한
+뷰 권한의 독립 허용 및 거부,
+엄격한 입력과 색 범위, 네 번의 앱 실행 및 정상 종료를 검사한다.
+`run-native.ts`의 macOS 경로와 기존 macOS native CI에 포함한다.
 사용자 테마 변경과 실제 보조 기술 또는 WebView 접근성 트리 검증을 대신하지 않는다.
 
 `system-events.test.ts`는 선택 OS 알림 HWND의 지연 생성, 중복 해제, 조회 실패 후 복구,
@@ -664,3 +744,69 @@ browser 번들에 Bun 전송 구현이 포함되지 않는지 검사한다. TLS,
 `api/global-shortcut.test.ts`는 전역 단축키 권한, 등록 rollback, 중지와 재개 및 이전 메시지 폐기를 검사한다.
 `lifecycle/windows-global-shortcut.test.ts`는 실제 RegisterHotKey와 경쟁 HWND, SendInput, 중지와 정리를 확인한다.
 `mise run host:windows`에 포함되며 물리 키보드와 키보드 레이아웃별 검증을 대신하지 않는다.
+
+`lifecycle/macos-io-host.ts`는 `host:macos`의 실제 compiled WKWebView에서 공통
+I/O Worker의 실행, 백엔드 setup과 뷰 출처, 파싱 전 정책 검사, UI/I/O 지원 목록,
+동기 I/O 중 AppKit 왕복, 취소와 문서 폐기, 초기화 실패와 5초 종료 기한을 검사한다.
+테스트 어댑터는 실제 파일을 쓰며 개별 제품 플러그인의 macOS 지원 검증과 구분한다.
+`build/macos-io-results.json`에는 OS, CPU, Bun revision과 시나리오별 종료 결과를 남긴다.
+공통 Worker와 메인 호스트를 사용하는 `macos-bun.test.ts`의 I/O 파싱 취소 검사는
+Linux에서도 실행하며 실제 AppKit은 대체한다.
+
+`macos-bun.test.ts`는 진행 중인 백엔드 I/O의 abort를 기다리는 StopHook도 실제
+Worker로 검사한다. 종료 요청이 I/O 취소를 먼저 전달하고 코어 훅 뒤에 어댑터를
+폐기해 강제 종료 없이 끝나는지 확인한다. 실제 WKWebView fixture도 같은 순서를 검사한다.
+
+`lifecycle/macos-image.test.ts`는 macOS arm64의 실제 ImageIO, CoreGraphics와 vImage로
+PNG alpha 및 투명 RGB 왕복, grayscale과 palette PNG, JPEG/BMP, malformed와 큰 decode 입력,
+transform, 독립 어댑터 ID, quota, 취소와 반복 종료를 검사한다. 다른 OS에서는 건너뛴다.
+`cli/image.test.ts`는 image tarball의 isolated 설치와 플랫폼 출력 분리를 검사하며 macOS arm64에서
+설치된 codec을 실제로 실행한다. `.github/workflows/macos-image.yml`은 이 검사와 기존
+entitlement로 ad-hoc 서명한 compiled fixture를 실행하고 `build/macos-image-results.json`을 보관한다.
+이 단독 codec 검사는 공통 SDK와 실제 호스트 연결, WKWebView 표시나 다른 앱의
+가져오기 검증과 구분한다.
+
+`lifecycle/macos-image-host.ts`는 actual compiled 호스트와 WKWebView 명령에서 공개
+backend SDK의 image I/O 호출과 setup, codec, crop/resize, 동일 ID의 작업별 뷰 권한,
+해제 및 정상 종료를 검사한다. 실제 image 어댑터가 ID를 할당한 뒤 I/O Worker를 동기적으로
+지연시켜, 결과 전달 전 취소가 미전달 ID를 해제하는지 확인한다. 할당 marker는
+매 poll마다 새 `Bun.file()`로 확인해 파일 생성 전의 부재 상태를 재사용하지 않는다.
+`build/macos-image-host-results.json`을 기록하며 성공을 요구한다. `run-native.ts`의
+macOS 실행에 포함하며 실제 contextual I/O dispatch를 사용한다. Native codec CI와
+이 호스트 검증을 구분한다.
+
+## iOS 내장 Bun
+
+`mise run host:ios -- <booted Simulator UUID>`는 macOS arm64와 Xcode에서 설치된 CLI로
+Simulator 앱을 빌드하고 실행한다. 실제 WKWebView의 SDK, Core, 정책, 이벤트, 큰 UTF-8 응답과
+파일 import, 두 번의 백엔드 Worker 교체 및 상태 초기화를 검사한다.
+Swift 로그의 제어 파이프 분리, 문서 오류 회수, 이전 nonce 입력과 없는 자산의 탐색 실패,
+루트 자산 경로 및 Xcode bundle ID 변경도 실제 호스트에서 검사한다.
+현재 provisional 탐색의 실제 취소 후 재연결과 후속 탐색 보존도 검사한다.
+이미 교체된 탐색의 취소와 오류는 새 문서 연결 후 fixture가 delegate 콜백을 직접 전달한다.
+600KB 슬래시 문자열 왕복과 필드, 타입, 크기, 깊이 등을 위반하는 입력 10종을 검사해
+문서만 닫히고 새 문서의 Core 명령이 정상 실행되는지 확인한다.
+해시 할당과 링크, 실제 캐시 복원 후 새 SDK 연결, 느린 WebView로 160개 이벤트의 순서,
+200개 원시 입력으로 문서 쓰기 큐 포화, 없는 home의 복구 제한과 재시도 버튼도 검사한다.
+fixture가 실패한 탐색을 직접 복구하지 않으며 실제 호스트의 복구를 기다린다.
+일반 Simulator 대상의 arm64 빌드도 별도로 실행한다.
+최종 `.app`에 포함된 Bun, libffi 라이선스와 프레임워크 고지 4개 파일을 원본과 바이트 단위로 비교한다.
+기본 HTTPS 포트 `:443`을 명시한 home이 정규화되어 실제 앱이 시작되는지 검사한다.
+`ios-build-cancel.fixture.ts`는 설치된 CLI의 출력 해시 계산 중 실제 SIGINT를 보내
+빌드 실패, 기존 출력 보존, staging 정리와 잠금 재획득을 확인한다.
+`tests/cli/ios.test.ts`는 네이티브 도구 없이 설정과 동기화 보존, Worker 세대 교체를 검사한다.
+`tests/lifecycle/ios-bridge.test.ts`는 실제 bridge와 SDK transport로 nonce 격리, 닫힘과
+캐시 pageshow의 재로드를 검사한다. WebKit 탐색 자체는 Simulator fixture의 범위다.
+`tests/cli/mobile-project.test.ts`는 두 모바일 타깃의 잠금과 staging 정리,
+실제 자식 CLI 프로세스의 SIGTERM 취소 후 잠금 재획득을 검사한다.
+`tests/lifecycle/ios-backend-input.test.ts`는 입력 스트림이 닫힌 뒤 도착한 프레임에
+Worker가 성공 응답을 보내지 않고 오류로 종료하는지 검사한다.
+기기 실행과 배포 서명, 스토어 제출은 별도 검증이 필요하다.
+
+모바일 브리지의 WebSocket 연결과 fallback, 출력 버퍼 제한, 연결 후 재전송 금지는
+`native/mobile/bridge.js`의 같은 구현을 사용한다. `loopback-channel.test.ts`는 HTTPS와
+`bunaway://` 출처 모두에서 정확한 Origin, 일회용 토큰과 문서 회수를 검사한다.
+iOS 실제 호스트 검사는 직접 WebSocket과 최초 연결을 강제로 거부한 Swift fallback을 각각 실행한다.
+각 경로에서 세 Worker 세대와 기존 문서 수명 회귀를 확인하고 Swift를 통과한 SDK hello 수로
+실제 사용 경로를 구분한다. iOS Worker 계약 검사도 정책의 HTTPS와 WebKit의 자산 Origin을
+구분하고 잘못된 출처를 거부한 뒤 정상 연결과 회수를 확인한다.
