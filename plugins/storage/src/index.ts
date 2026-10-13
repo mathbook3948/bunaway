@@ -1,10 +1,27 @@
 import { defineNativePlugin } from "@bunaway/plugin";
 import { storageOperations } from "./contract.ts";
+import { createOperations as createMacosOperations } from "./platforms/macos.ts";
 import { createOperations as createWindowsOperations } from "./platforms/windows.ts";
 
 const plugin = defineNativePlugin({
   name: "storage",
   platforms: {
+    macos: {
+      execution: "io",
+      create: createMacosOperations,
+      // Darwin's name-based rename cannot preserve the checked source identity.
+      operations: [
+        "readText",
+        "writeText",
+        "readBytes",
+        "writeBytes",
+        "appendBytes",
+        "appendText",
+        "copyFile",
+        "exists",
+        "stat",
+      ],
+    },
     windows: {
       execution: "io",
       create: createWindowsOperations,

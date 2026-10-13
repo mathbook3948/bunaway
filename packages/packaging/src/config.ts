@@ -7,6 +7,7 @@ import {
   type ResolvedTarget,
   type SigningConfig,
 } from "./contract.ts";
+import { parseAssociations } from "./windows-associations.ts";
 
 export interface PackagingConfig {
   name?: string;
@@ -49,6 +50,7 @@ const CHANNEL_KEYS: Record<ChannelId, string[]> = {
     "webView2",
     "desktopShortcut",
     "startMenuShortcut",
+    "associations",
     "uninstall",
     "signing",
   ],
@@ -65,6 +67,7 @@ const CHANNEL_KEYS: Record<ChannelId, string[]> = {
     "webView2",
     "desktopShortcut",
     "startMenuShortcut",
+    "associations",
     "uninstall",
     "signing",
   ],
@@ -433,6 +436,16 @@ export function parsePackaging(text: string): PackagingConfig {
       keys(options, CHANNEL_KEYS[channel], `channels.${channel}`);
       const channelConfig: ChannelConfig = {};
       const channelPath = `channels.${channel}`;
+
+      if (options.associations !== undefined) {
+        try {
+          channelConfig.associations = parseAssociations(options.associations);
+        } catch (error) {
+          fail(
+            `bunaway.json.bundle: ${channelPath}.associations: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
 
       if (options.signing !== undefined) {
         const value = signing(options.signing, `${channelPath}.signing`);
