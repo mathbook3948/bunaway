@@ -170,6 +170,12 @@ test.skipIf(process.platform !== "darwin")(
             expect(appearance).not.toBeNull();
             // Only this test process's app appearance changes. User settings stay untouched.
             objc.send(app, "setAppearance:", appearance);
+            expect(objc.send(app, "appearance")).toBe(appearance);
+            const effectiveAppearance = objc.send(app, "effectiveAppearance");
+            expect(effectiveAppearance).not.toBeNull();
+            console.log(
+              `AppKit appearance: requested=${name}, effective=${objc.text(objc.send(effectiveAppearance, "name"))}`,
+            );
             const snapshot = read();
             expect(snapshot.appsTheme).toBe(expected);
             expect(snapshot.systemTheme).toBeNull();
@@ -199,8 +205,10 @@ test.skipIf(process.platform !== "darwin")(
             expect(objc.send(appearanceClass, "currentDrawingAppearance")).toBe(
               previousDrawing,
             );
-            // Use AppKit's scoped drawing API so the oracle observes the requested
-            // appearance. Keep this host binding independent of the plugin binding.
+            // AppKit determines the effective appearance from the override and OS
+            // accessibility settings. Compare that public contract source, rather
+            // than assuming an override is also the effective drawing appearance.
+            // Keep this host binding independent of the plugin binding.
             const colors = [
               [
                 "controlAccentColor",
@@ -265,7 +273,7 @@ test.skipIf(process.platform !== "darwin")(
               }
             });
             driver.symbols.drawing(
-              appearance as import("bun:ffi").Pointer,
+              effectiveAppearance as import("bun:ffi").Pointer,
               objc.selector(
                 "performAsCurrentDrawingAppearance:",
               ) as import("bun:ffi").Pointer,
@@ -277,7 +285,7 @@ test.skipIf(process.platform !== "darwin")(
             expect<import("#native/macos/bun/objc").ObjcObject | null>(
               drawingAppearance,
               name,
-            ).toBe(appearance);
+            ).toBe(effectiveAppearance);
             expect(nativeColors, name).toHaveLength(5);
             for (const [index, [selector, actual]] of colors.entries()) {
               expect<string | undefined>(actual, `${name}: ${selector}`).toBe(
