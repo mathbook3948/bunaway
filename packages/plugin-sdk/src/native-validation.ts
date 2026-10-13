@@ -9,6 +9,7 @@ export interface NativePluginAdapter extends Omit<NativeAdapter, "execute"> {
     operation: string,
     input: JsonValue,
     source: string,
+    context?: Parameters<NonNullable<NativeAdapter["executeUI"]>>[3],
   ): Promise<() => Promise<JsonValue>>;
   /** Parse and execute when the caller does not need a separate authorization step. */
   execute(
@@ -59,6 +60,16 @@ export function validatedAdapter(
     }
     return schema;
   };
+  const assertNotCancelled = (signal: AbortSignal | undefined) => {
+    if (signal?.aborted) {
+      throw signal.reason instanceof BunawayError
+        ? signal.reason
+        : new BunawayError({
+            code: "CANCELLED",
+            message: "Plugin operation cancelled.",
+          });
+    }
+  };
   const executeUI = adapter.executeUI?.bind(adapter);
   const prepare = async (
     name: string,
@@ -76,7 +87,7 @@ export function validatedAdapter(
       }
       executed = true;
       // No await before the native call: the host invokes this immediately on authorization.
-      context?.signal?.throwIfAborted();
+      assertNotCancelled(context?.signal);
       context?.beforeExecute?.();
       if (context && executeUI) {
         return parse(
@@ -98,13 +109,8 @@ export function validatedAdapter(
     ...(executeUI
       ? ({
           async executeUI(name, input, source, context) {
-            const schema = operation(name);
-            const parsed = await parse(schema.input, input, false);
-            assertActive();
-            context.signal?.throwIfAborted();
-            context.beforeExecute?.();
-            const result = await executeUI(name, parsed, source, context);
-            return parse(schema.output, result, true);
+            const execute = await prepare(name, input, source, context);
+            return execute();
           },
         } satisfies Pick<NativeAdapter, "executeUI">)
       : {}),
@@ -118,9 +124,5 @@ export function validatedAdapter(
       return adapter.dispose();
     },
   };
-  // Host-only preparation keeps contextual I/O parsing before the execution grant.
-  // It is deliberately absent from the public adapter contract and declaration metadata.
-  return Object.defineProperty(wrapped, "prepareUI", {
-    value: prepare,
-  });
+  return wrapped;
 }

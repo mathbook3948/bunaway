@@ -403,6 +403,7 @@
         "@bunaway/plugin-path": "workspace:*",
         "@bunaway/plugin-safe-storage": "workspace:*",
         "@bunaway/plugin-storage": "workspace:*",
+        "@bunaway/plugin-tray": "workspace:*",
         "@bunaway/plugin-windows": "workspace:*",
         "@bunaway/protocol": "workspace:*",
         "@bunaway/runtime-bun": "workspace:*",

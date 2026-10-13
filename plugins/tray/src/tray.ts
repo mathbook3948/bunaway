@@ -1,16 +1,21 @@
 import { dlopen, ptr } from "bun:ffi";
 import assert from "node:assert/strict";
+import type { NativeTrayWindowHost } from "@bunaway/plugin-api/native";
 import {
   MAX_TRAY_TOOLTIP_UNITS,
   type NativeMenuItem,
   type NativeTrayEvent,
+  type NativeTrayOwner,
   type NativeTraySnapshot,
 } from "@bunaway/plugin-api/native";
 import { BunawayError } from "@bunaway/protocol";
-import { NativePopupMenu } from "./menu.ts";
+import { NativePopupMenu } from "./popup-menu.ts";
+import { openTrayBindings } from "./tray-bindings.ts";
 import { createTrayIcon } from "./tray-icon.ts";
-import { type Windows, WM_CLOSE } from "./win32.ts";
-import { user, withWide } from "./win32-bindings.ts";
+
+const WM_CLOSE = 0x0010;
+
+import { withWide } from "./windows-buffers.ts";
 
 const TRAY_CALLBACK_MESSAGE = 0x8001;
 const WM_NULL = 0x0000;
@@ -85,6 +90,7 @@ const mouseNotifications: Readonly<
 /** Owns the hidden window and shell icon used for app show and quit actions. */
 export class Tray {
   private readonly shell;
+  private readonly user;
   private readonly data = Buffer.alloc(976); // NOTIFYICONDATAW, Win64
   readonly hwnd: bigint;
   private added = false;
@@ -98,12 +104,14 @@ export class Tray {
   private disposed = false;
   private windowDestroyed = false;
   private shellClosed = false;
+  private userClosed = false;
   /** Registers the icon and releases partial resources if setup fails. */
   constructor(
-    private readonly windows: Windows,
+    private readonly windows: NativeTrayWindowHost,
     tooltip: string,
     receive: (action: "show" | "quit") => void,
     notify?: (event: NativeTrayEvent) => void,
+    retain?: (owner: NativeTrayOwner) => void,
   ) {
     // Validate the whole startup value before acquiring this tray's native resources.
     if (/[\0\uD800-\uDFFF]/u.test(tooltip)) {
@@ -112,27 +120,34 @@ export class Tray {
         message: "Invalid tray tooltip.",
       });
     }
-    this.shell = dlopen("shell32.dll", {
-      Shell_NotifyIconW: {
-        args: [
-          "u32",
-          "ptr",
-        ],
-        returns: "i32",
-      },
-      Shell_NotifyIconGetRect: {
-        args: [
-          "ptr",
-          "ptr",
-        ],
-        returns: "i32",
-      },
-    });
+    this.user = openTrayBindings();
+    try {
+      this.shell = dlopen("shell32.dll", {
+        Shell_NotifyIconW: {
+          args: [
+            "u32",
+            "ptr",
+          ],
+          returns: "i32",
+        },
+        Shell_NotifyIconGetRect: {
+          args: [
+            "ptr",
+            "ptr",
+          ],
+          returns: "i32",
+        },
+      });
+    } catch (error) {
+      this.user.close();
+      throw error;
+    }
     const taskbarCreated = withWide("TaskbarCreated", (name) =>
-      user.symbols.RegisterWindowMessageW(name),
+      this.user.symbols.RegisterWindowMessageW(name),
     );
     if (!taskbarCreated) {
       this.shell.close();
+      this.user.close();
       throw new Error("TaskbarCreated registration failed");
     }
     try {
@@ -154,7 +169,7 @@ export class Tray {
             const input = mouseNotifications[Number(lparam)];
             if (input) {
               const point = new Int32Array(2);
-              const available = user.symbols.GetCursorPos(ptr(point));
+              const available = this.user.symbols.GetCursorPos(ptr(point));
               notify?.({
                 id: "main",
                 ...input,
@@ -185,8 +200,11 @@ export class Tray {
       );
     } catch (error) {
       this.shell.close();
+      this.user.close();
       throw error;
     }
+    // Retain the resource before shell registration so a failed startup release remains retryable.
+    retain?.(this);
     try {
       this.data.writeUInt32LE(this.data.length, 0);
       this.data.writeBigUInt64LE(this.hwnd, 8);
@@ -211,8 +229,17 @@ export class Tray {
       );
       this.add();
     } catch (error) {
-      windows.destroy(this.hwnd);
-      this.shell.close();
+      try {
+        this.dispose();
+      } catch (cleanup) {
+        throw new AggregateError(
+          [
+            error,
+            cleanup,
+          ],
+          "Tray initialization cleanup failed.",
+        );
+      }
       throw error;
     }
   }
@@ -254,9 +281,9 @@ export class Tray {
     );
     try {
       const point = new Int32Array(2);
-      assert(user.symbols.GetCursorPos(ptr(point)));
-      user.symbols.SetForegroundWindow(this.hwnd);
-      const item = user.symbols.TrackPopupMenuEx(
+      assert(this.user.symbols.GetCursorPos(ptr(point)));
+      this.user.symbols.SetForegroundWindow(this.hwnd);
+      const item = this.user.symbols.TrackPopupMenuEx(
         menu.handle,
         TPM_RETURNCMD | TPM_RIGHTBUTTON,
         point[0] ?? 0,
@@ -264,7 +291,7 @@ export class Tray {
         this.hwnd,
         null,
       );
-      user.symbols.PostMessageW(this.hwnd, WM_NULL, 0n, 0n);
+      this.user.symbols.PostMessageW(this.hwnd, WM_NULL, 0n, 0n);
       const itemId = menu.selected(item);
       if (custom && itemId !== null) {
         selected?.(itemId);
@@ -346,7 +373,7 @@ export class Tray {
     this.data.writeBigUInt64LE(next, 32);
     if (!this.shell.symbols.Shell_NotifyIconW(NIM_MODIFY, ptr(this.data))) {
       this.data.writeBigUInt64LE(previous, 32);
-      if (ico !== null && !user.symbols.DestroyIcon(next)) {
+      if (ico !== null && !this.user.symbols.DestroyIcon(next)) {
         this.retiredIcons.add(next);
       }
       throw new BunawayError({
@@ -356,7 +383,7 @@ export class Tray {
     }
     const owned = this.customIcon;
     this.customIcon = ico === null ? undefined : next;
-    if (owned && !user.symbols.DestroyIcon(owned)) {
+    if (owned && !this.user.symbols.DestroyIcon(owned)) {
       this.retiredIcons.add(owned);
       throw new Error("Tray icon cleanup failed.");
     }
@@ -400,7 +427,10 @@ export class Tray {
     }
     for (const icon of this.retiredIcons) {
       try {
-        assert(user.symbols.DestroyIcon(icon), "Tray icon cleanup failed.");
+        assert(
+          this.user.symbols.DestroyIcon(icon),
+          "Tray icon cleanup failed.",
+        );
         this.retiredIcons.delete(icon);
       } catch (error) {
         errors.push(error);
@@ -410,6 +440,14 @@ export class Tray {
       try {
         this.shell.close();
         this.shellClosed = true;
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (this.shellClosed && this.retiredIcons.size === 0 && !this.userClosed) {
+      try {
+        this.user.close();
+        this.userClosed = true;
       } catch (error) {
         errors.push(error);
       }

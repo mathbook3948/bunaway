@@ -1,7 +1,7 @@
 import { dlopen } from "bun:ffi";
 import { BunawayError } from "@bunaway/protocol";
 import { trayIconImage } from "./tray-icon-data.ts";
-import { withBuffer } from "./win32-bindings.ts";
+import { withBuffer } from "./windows-buffers.ts";
 
 /** Create an owned HICON. The caller must DestroyIcon after replacement or final cleanup. */
 export function createTrayIcon(ico: string): bigint {

@@ -4,6 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { CommandContext, DesktopContext } from "@bunaway/core";
+import { trayPlugin } from "@bunaway/plugin-tray";
 import {
   validateWindowOutput,
   type WindowOperation,
@@ -629,6 +630,11 @@ if (!process.argv.includes("--child")) {
         events: {},
         plugins: [
           windowsPlugin,
+          ...(hasTray
+            ? [
+                trayPlugin,
+              ]
+            : []),
           {
             name: "windowless-test",
             version: "1",

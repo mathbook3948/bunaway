@@ -1,16 +1,19 @@
 import { MAX_MESSAGE_BYTES } from "@bunaway/protocol";
 
-export type { NativeShortcutServices } from "./native-shortcut.ts";
 export type { NativeMenuItem, NativeMenuServices } from "./native-menu.ts";
+export type { NativeShortcutServices } from "./native-shortcut.ts";
+export type {
+  NativeTrayEvent,
+  NativeTrayInitialization,
+  NativeTrayOwner,
+  NativeTrayServices,
+  NativeTraySnapshot,
+  NativeTrayWindowHost,
+} from "./native-tray.ts";
 export {
   MAX_TRAY_ICO_BYTES,
   MAX_TRAY_TOOLTIP_UNITS,
   MAX_TRAY_WAITERS,
-} from "./native-tray.ts";
-export type {
-  NativeTrayEvent,
-  NativeTrayServices,
-  NativeTraySnapshot,
 } from "./native-tray.ts";
 
 /** Inclusive accepted dimension range for window sizes. */

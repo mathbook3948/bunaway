@@ -546,3 +546,20 @@ Windows의 [복귀 알림 순서](https://learn.microsoft.com/en-us/windows/win3
 계약, 화면 이벤트 정책과 살아 있는 구독을 다시 확인한다. 큐 초과 시 해당 세션을
 폐기하는 기존 규칙과 문서 세대 검사도 유지한다. 이 서비스는 이벤트 재생을 제공하지
 않으며 각 플러그인이 조회 snapshot과 변경 비교를 소유한다.
+
+
+## 함수 맵과 선택 트레이 구현
+
+메뉴와 트레이 플랫폼은 defineNativeAdapter의 setup, handlers, dispose를 사용한다.
+파싱 결과와 반환값은 operation schema로 추론하고 함수 키가 플랫폼 지원 목록이다.
+빌드는 네이티브 출력을 격리된 프로세스에서 import해 함수 키만 읽는다. setup을 호출하지
+않고 그 목록을 중립 stub에도 기록하므로 browser와 모든 OS export의 지원 정보가 일치한다.
+작업의 입력 파싱과 실행은 권한 승인 사이에서 분리하며 SDK prepare의 명시적인 context로
+I/O와 UI의 취소 및 실행 직전 권한 재검사를 전달한다.
+
+Windows의 트레이와 ICO, 기본 Open/Quit 및 HMENU 구현은 선택 tray 패키지 안에 있다.
+menu 패키지는 메뉴 리소스와 변경, 연결과 이벤트를 소유한다. 기본 메뉴만 필요하면 tray만
+설치하고 등록한다. desktop.tray 설정만으로 구현을 자동 등록하지 않는다.
+호스트는 빌린 app icon과 숨긴 HWND 생성 인터페이스, 기존 이벤트 lane 및 종료 순서를 제공한다.
+부분 초기화 자원을 먼저 retain하므로 shell 등록 실패와 해제 실패가 겹쳐도 정리 소유권을 잃지 않는다.
+기본 DPI와 모니터, 나머지 저수준 어댑터 및 좁은 기능별 호스트 인터페이스는 이번 이관에서 유지한다.

@@ -1,17 +1,18 @@
 import { expect, test } from "bun:test";
+import { defineNativePlugin } from "@bunaway/plugin";
 import type {
   NativeTrayEvent,
   NativeTrayServices,
 } from "@bunaway/plugin-api/native";
 import {
-  MAX_TRAY_TOOLTIP_UNITS,
   MAX_TRAY_ICO_BYTES,
+  MAX_TRAY_TOOLTIP_UNITS,
 } from "@bunaway/plugin-api/native";
 import { trayPlugin } from "@bunaway/plugin-tray";
-import { NativeRegistry, type JsonValue } from "@bunaway/protocol";
-import { trayIconImage } from "#native/windows/bun/tray-icon-data";
+import { type JsonValue, NativeRegistry } from "@bunaway/protocol";
 import { trayOperations } from "#plugins/tray/src/contract";
 import { createOperations } from "#plugins/tray/src/platforms/windows";
+import { trayIconImage } from "#plugins/tray/src/tray-icon-data";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 import { trayIco, trayPngIco } from "../fixtures/tray-icon.ts";
 
@@ -158,11 +159,23 @@ test("tray notifications and controls keep ownership in host services and cancel
       events.push(payload);
     },
   };
-  const adapter = createOperations({
+  const adapter = defineNativePlugin({
+    name: "tray",
+    operations: trayOperations,
+    platforms: {
+      windows: {
+        execution: "ui",
+        create: createOperations,
+      },
+    },
+  }).definition.nativePlatforms.windows?.create({
     dataRoot: "unused",
     capabilities: [],
     tray: services,
   });
+  if (!adapter) {
+    throw new Error("Missing validated adapter");
+  }
   const invoke = async (
     name: keyof typeof trayOperations,
     payload: JsonValue,
@@ -220,6 +233,8 @@ test("tray notifications and controls keep ownership in host services and cancel
   });
   expect(await invoke("focus", null)).toBe(true);
   const waiting = invoke("waitForEvent", null);
+  // Parsing is asynchronous; let the owning adapter install the wait before native input.
+  await Bun.sleep(0);
   const event: NativeTrayEvent = {
     id: "main",
     button: "middle",

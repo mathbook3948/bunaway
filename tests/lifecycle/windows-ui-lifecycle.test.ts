@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
+import { trayPlugin } from "@bunaway/plugin-tray";
 import { validateWindowOutput, windowsPlugin } from "@bunaway/plugin-windows";
 import type { JsonValue } from "@bunaway/protocol";
 import {
@@ -27,6 +28,7 @@ async function startUI(
   failView?: string,
   parserExecution?: "ui" | "sync",
   trayFailures?: number,
+  registerTray = true,
 ) {
   const directory = await mkdtemp(resolve(tmpdir(), "bunaway-ui-lifecycle-"));
   const parsing = new Int32Array(
@@ -76,6 +78,11 @@ async function startUI(
         version: windowsPlugin.version,
         native: windowsPlugin.native,
       },
+      ...(registerTray
+        ? [
+            trayPlugin,
+          ]
+        : []),
       ...parserPlugins,
     ],
     windows: [
@@ -138,11 +145,17 @@ async function startUI(
         native: windowsPlugin.native,
         execution: "ui",
       },
+      {
+        name: trayPlugin.name,
+        version: trayPlugin.version,
+        native: trayPlugin.native,
+        execution: "ui",
+      },
       ...parserPlugins,
     ],
     `
     import { workerData } from "node:worker_threads";
-    import { requestFixtureClose } from ${JSON.stringify(resolve(import.meta.dir, "../fixtures/windows-ui-platform.ts"))};
+    import { Tray, requestFixtureClose } from ${JSON.stringify(resolve(import.meta.dir, "../fixtures/windows-ui-platform.ts"))};
     import { defineNativePlugin } from ${JSON.stringify(resolve(import.meta.dir, "../../packages/plugin-sdk/src/index.ts"))};
     import { z } from ${JSON.stringify(Bun.resolveSync("zod", import.meta.dir))};
     const state = new Int32Array(workerData.parsing);
@@ -167,7 +180,9 @@ async function startUI(
       ...(${JSON.stringify(parserExecution)} === "ui" ? {async executeUI(name,input){return execute(name,input);}} : {}),
       dispose(){Atomics.add(cleanup,cleanupSlots.adapter,1);},
     })}}});
-    export const pluginImports = {parser:{operations:async()=>({createOperations:parser.definition.nativePlatforms.windows.create})}, windows: {
+    export const pluginImports = {tray: {operations: async()=>({createOperations(environment){
+      environment.tray.initialize(()=>new Tray()); return {execute(){throw new Error("Unexpected tray call")},dispose(){}};
+    }})},parser:{operations:async()=>({createOperations:parser.definition.nativePlatforms.windows.create})}, windows: {
       operations: () => import(${JSON.stringify(resolve(import.meta.dir, "../../plugins/windows/src/platforms/windows.ts"))}),
     } };`,
   );
@@ -605,4 +620,33 @@ test.each([
     }
   },
   timeoutMs + 5000,
+);
+
+test(
+  "configured tray without registration rejects startup and still cleans the host",
+  async () => {
+    const ui = await startUI(undefined, undefined, undefined, false);
+    try {
+      await ui.waitFor(() =>
+        ui.packets.some((packet) => packet.kind === "fatal"),
+      );
+      await ui.exited;
+      expect(
+        ui.packets.find((packet) => packet.kind === "fatal"),
+      ).toMatchObject({
+        error: {
+          code: "UNSUPPORTED",
+          message: expect.stringContaining(
+            "installing and registering @bunaway/plugin-tray",
+          ),
+        },
+      });
+      expect(Atomics.load(ui.cleanup, uiCleanupSlots.tray)).toBe(0);
+      expect(Atomics.load(ui.cleanup, uiCleanupSlots.bindings)).toBe(1);
+      expect(ui.packets.some((packet) => packet.kind === "ready")).toBe(false);
+    } finally {
+      await ui.close();
+    }
+  },
+  timeoutMs + 5_000,
 );

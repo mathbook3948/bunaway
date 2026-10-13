@@ -266,41 +266,11 @@ export const user = dlopen("user32.dll", {
     ],
     returns: "i32",
   },
-  CreatePopupMenu: {
-    args: [],
-    returns: "u64",
-  },
-  AppendMenuW: {
-    args: [
-      "u64",
-      "u32",
-      "u64",
-      "ptr",
-    ],
-    returns: "i32",
-  },
-  DestroyMenu: {
-    args: [
-      "u64",
-    ],
-    returns: "i32",
-  },
   GetCursorPos: {
     args: [
       "ptr",
     ],
     returns: "i32",
-  },
-  TrackPopupMenuEx: {
-    args: [
-      "u64",
-      "u32",
-      "i32",
-      "i32",
-      "u64",
-      "ptr",
-    ],
-    returns: "u32",
   },
   ShowWindow: {
     args: [

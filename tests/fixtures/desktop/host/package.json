@@ -2,6 +2,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@bunaway/plugin-tray": "workspace:*",
     "@bunaway/plugin-storage": "workspace:*",
     "@bunaway/plugin-path": "workspace:*",
     "@bunaway/plugin-safe-storage": "workspace:*",

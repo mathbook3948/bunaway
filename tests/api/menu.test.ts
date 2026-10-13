@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
 import type { NativeEnvironment } from "@bunaway/plugin";
+import { defineNativePlugin } from "@bunaway/plugin";
 import type { NativeMenuItem } from "@bunaway/plugin-api/native";
 import { menuPlugin } from "@bunaway/plugin-menu";
-import { NativeRegistry, type JsonValue } from "@bunaway/protocol";
+import { type JsonValue, NativeRegistry } from "@bunaway/protocol";
 import {
   MAX_MENU_DEPTH,
   MAX_MENU_ITEMS,
@@ -19,7 +20,16 @@ const item = (id: string) => ({
   label: `항목 ${id} & 😀`,
 });
 function fixture(menus?: NativeEnvironment["menus"]) {
-  const adapter = createOperations({
+  const adapter = defineNativePlugin({
+    name: "menu",
+    operations: menuOperations,
+    platforms: {
+      windows: {
+        execution: "ui",
+        create: createOperations,
+      },
+    },
+  }).definition.nativePlatforms.windows?.create({
     dataRoot: "unused",
     capabilities: [],
     ...(menus
@@ -28,6 +38,9 @@ function fixture(menus?: NativeEnvironment["menus"]) {
         }
       : {}),
   });
+  if (!adapter) {
+    throw new Error("Missing validated adapter");
+  }
   const invoke = async (
     operation: keyof typeof menuOperations,
     input: JsonValue,
@@ -639,6 +652,8 @@ test("windowless backend click waits are cancellable, bounded and receive no rep
     code: "CANCELLED",
   });
   const waiting = invoke("waitForClick", null);
+  // Parsing is asynchronous; let the owning adapter install the wait before native input.
+  await Bun.sleep(0);
   selected?.("a");
   expect(await waiting).toEqual({
     menuId: "main",

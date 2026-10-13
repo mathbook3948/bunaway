@@ -11,12 +11,10 @@ const plugin = defineNativePlugin({
     },
   },
   operations: menuOperations,
-});
-/** App-scoped menu resources; each operation requires its own policy permission. */
-export const menuPlugin = Object.freeze({
-  ...plugin.definition,
   events: menuEvents,
 });
+/** App-scoped menu resources; each operation requires its own policy permission. */
+export const menuPlugin = plugin.definition;
 export default menuPlugin;
 /** Typed menu resource and tray attachment operations. */
 export const menu = plugin.api;

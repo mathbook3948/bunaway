@@ -1,15 +1,15 @@
 import { dlopen, ptr } from "bun:ffi";
 import { expect, test } from "bun:test";
 import type { NativeTrayEvent } from "@bunaway/plugin-api/native";
-import { trayIco, trayPngIco } from "../fixtures/tray-icon.ts";
-import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 import { trayOperations } from "#plugins/tray/src/contract";
+import { pluginParsers } from "../fixtures/plugin-parsers.ts";
+import { trayIco, trayPngIco } from "../fixtures/tray-icon.ts";
 
 test.skipIf(process.platform !== "win32")(
   "actual tray tooltip/ICO updates, mouse defaults and Explorer re-registration preserve ownership",
   async () => {
     const { Windows } = await import("#native/windows/bun/win32");
-    const { Tray } = await import("#native/windows/bun/tray");
+    const { Tray } = await import("#plugins/tray/src/tray");
     let createdWindows = 0;
     class StartupWindows extends Windows {
       override create(

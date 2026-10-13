@@ -6,7 +6,7 @@
 중립 계약은 `defineNativePlugin`과 Zod로 선언하고 `bun run plugins:build`로 빌드한다.
 플랫폼 어댑터는 UI Worker에서 정의와 연결을 소유한다. 메뉴 조회는 복사본을 반환하고
 변경은 후보 트리 전체 검증 뒤 커밋한다. 트레이가 받는 `NativeMenuItem` 계약은
-`@bunaway/plugin-api/native`에 둔다. 호스트의 `NativePopupMenu`가 HMENU와 모든 하위 메뉴를
+`@bunaway/plugin-api/native`에 둔다. 선택 tray 패키지의 `NativePopupMenu`가 HMENU와 모든 하위 메뉴를
 소유하며 팝업 종료나 생성 실패 때 해제한다. checkbox와 radio 선택은 상태를 자동 변경하지 않는다.
 
 `tests/api/menu.test.ts`는 계약, 제한, 권한, 변경 실패 보존과 이전 선택 폐기를 검사한다.

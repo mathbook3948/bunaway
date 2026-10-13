@@ -82,15 +82,19 @@ CLI는 작성한 설정과 정책을 검사합니다. 호출할 명령의 권한
 
 ## 데스크톱 앱 동작
 
+트레이를 사용하려면 @bunaway/plugin-tray 설치와 trayPlugin 등록이 필요합니다.
+
 현재 Windows Bun 호스트에서 제공합니다. macOS의 현재 런타임에 `desktop`을 지정하면
 `UNSUPPORTED`로 시작에 실패합니다.
 
 ```ts
 import { defineApp } from "@bunaway/backend";
+import { trayPlugin } from "@bunaway/plugin-tray";
 
 let hasUnsavedWork = false;
 export default defineApp({
   modules: [],
+  plugins: [trayPlugin],
   desktop: {
     closeBehavior: "hide",
     tray: { tooltip: "Memo" },

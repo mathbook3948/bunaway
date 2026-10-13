@@ -14,6 +14,12 @@ export type {
 export { BunawayError } from "@bunaway/protocol";
 export type { NativeInvokeOptions } from "#transport";
 export { NativeEventWaiters } from "./native-event-waiters.ts";
+export type {
+  NativeCallContext,
+  NativeHandlerFactory,
+  NativeHandlers,
+} from "./native-handlers.ts";
+export { defineNativeAdapter } from "./native-handlers.ts";
 export type { NativePluginAdapter } from "./native-validation.ts";
 
 /** Host-selected values available when a native adapter is created. */
@@ -98,6 +104,10 @@ export type NativePluginDefinition = {
       >
     >
   >;
+  /** Events declared alongside operations in the same registration. */
+  readonly events?: NonNullable<
+    import("@bunaway/plugin-api").PluginDefinition["events"]
+  >;
   /** Operations keyed by the caller-facing method name. */
   readonly operations: Readonly<Record<string, NativeOperationDefinition>>;
 };
@@ -158,11 +168,22 @@ export function defineNativePlugin<const D extends NativePluginDefinition>(
       if (typeof target.create !== "function") {
         throw new Error("Native plugin platforms require an adapter factory.");
       }
+      const supportedOperations =
+        "operations" in target.create
+          ? (
+              target.create as import("./native-handlers.ts").NativeHandlerFactory
+            ).operations
+          : target.operations;
+      if (target.operations !== undefined && "operations" in target.create) {
+        throw new Error(
+          "Handler maps infer support; omit the platform operations list.",
+        );
+      }
       if (
-        target.operations !== undefined &&
-        (!Array.isArray(target.operations) ||
-          new Set(target.operations).size !== target.operations.length ||
-          target.operations.some(
+        supportedOperations !== undefined &&
+        (!Array.isArray(supportedOperations) ||
+          new Set(supportedOperations).size !== supportedOperations.length ||
+          supportedOperations.some(
             (operation) =>
               typeof operation !== "string" ||
               !Object.hasOwn(definitions, operation),
@@ -176,11 +197,11 @@ export function defineNativePlugin<const D extends NativePluginDefinition>(
           Object.defineProperty(
             {
               execution: target.execution,
-              ...(target.operations === undefined
+              ...(supportedOperations === undefined
                 ? {}
                 : {
                     operations: Object.freeze([
-                      ...target.operations,
+                      ...supportedOperations,
                     ]),
                   }),
             },

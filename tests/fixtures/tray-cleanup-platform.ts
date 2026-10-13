@@ -9,6 +9,7 @@ export const trayCleanup = {
   windowFailures: 0,
   windowAttempts: 0,
   shellFailures: 0,
+  addFailures: 0,
   shellAttempts: 0,
   shellNotifications: [] as number[],
   callback: (_message: number, _wparam: bigint, _lparam: bigint) => {},
@@ -85,6 +86,10 @@ export function dlopen(_library: string) {
       Shell_NotifyIconW(operation: number) {
         assert(!closed, "Tray accessed a closed shell binding");
         trayCleanup.shellNotifications.push(operation);
+        if (operation === 0 && trayCleanup.addFailures > 0) {
+          trayCleanup.addFailures--;
+          return 0;
+        }
         return 1;
       },
     },
@@ -97,5 +102,12 @@ export function dlopen(_library: string) {
       }
       closed = true;
     },
+  };
+}
+
+export function openTrayBindings() {
+  return {
+    ...user,
+    close() {},
   };
 }

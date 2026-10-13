@@ -250,29 +250,27 @@ export const menuOperations = {
 /** Selection reports IDs; checkbox and radio state changes remain explicit app operations. */
 export const menuEvents = {
   "menu.clicked": {
-    payload: {
-      type: "object",
-      properties: {
-        menuId: {
-          type: "string",
-        },
-        itemId: {
-          type: "string",
-        },
-        source: {
-          const: "tray",
-        },
-        windowId: {
-          const: null,
-        },
+    type: "object",
+    properties: {
+      menuId: {
+        type: "string",
       },
-      required: [
-        "menuId",
-        "itemId",
-        "source",
-        "windowId",
-      ],
-      additionalProperties: false,
+      itemId: {
+        type: "string",
+      },
+      source: {
+        const: "tray",
+      },
+      windowId: {
+        const: null,
+      },
     },
+    required: [
+      "menuId",
+      "itemId",
+      "source",
+      "windowId",
+    ],
+    additionalProperties: false,
   },
 } as const;

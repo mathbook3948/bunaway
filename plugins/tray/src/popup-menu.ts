@@ -1,7 +1,7 @@
 import { dlopen, ptr } from "bun:ffi";
 import assert from "node:assert/strict";
 import type { NativeMenuItem } from "@bunaway/plugin-api/native";
-import { withWide } from "./win32-bindings.ts";
+import { withWide } from "./windows-buffers.ts";
 
 const MF_POPUP = 0x10;
 const MF_SEPARATOR = 0x800;

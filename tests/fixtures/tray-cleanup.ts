@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { Tray } from "../../native/windows/bun/tray.ts";
 import { Windows } from "../../native/windows/bun/win32.ts";
+import { Tray } from "../../plugins/tray/src/tray.ts";
 import { TASKBAR_CREATED, trayCleanup } from "./tray-cleanup-platform.ts";
 
 const windows = new Windows(() => {});
@@ -81,4 +81,25 @@ assert(
   !trayCleanup.iconAttempts.includes(1n),
   "Borrowed app icon was destroyed",
 );
+const startupWindows = new Windows(() => {});
+trayCleanup.addFailures = 1;
+trayCleanup.windowFailures = 1;
+let retained: import("@bunaway/plugin-api/native").NativeTrayOwner | undefined;
+assert.throws(
+  () =>
+    new Tray(
+      startupWindows,
+      "Failed registration",
+      () => {},
+      undefined,
+      (owner) => {
+        retained = owner;
+      },
+    ),
+  /Tray initialization cleanup failed/,
+);
+assert(retained, "Partial startup ownership was lost");
+retained.dispose();
+retained.dispose();
+startupWindows.dispose();
 console.log("PASS retryable tray cleanup and callback shutdown");
