@@ -63,6 +63,10 @@ const policy: Policy = {
         "plugin.storage.copyFile",
         "plugin.storage.move",
         "plugin.storage.readText",
+
+        "plugin.storage.readDirectory",
+        "plugin.storage.createDirectory",
+        "plugin.storage.remove",
         "plugin.storage.writeText",
         "test.report",
         "test.report-confirmed",
@@ -80,6 +84,10 @@ const policy: Policy = {
             "storage.copyFile",
             "storage.move",
             "storage.readText",
+
+            "storage.readDirectory",
+            "storage.createDirectory",
+            "storage.remove",
           ],
         ],
       },
@@ -97,6 +105,10 @@ const policy: Policy = {
         "storage.copyFile",
         "storage.move",
         "storage.readText",
+
+        "storage.readDirectory",
+        "storage.createDirectory",
+        "storage.remove",
       ],
     ],
   },
@@ -219,6 +231,9 @@ if (!process.argv.includes("--child")) {
       assert.equal(report.deniedTextReplacement, true);
       assert.equal(report.transfers, true);
       assert.equal(report.deniedWrite, true);
+
+      assert.equal(report.directoryOperations, true);
+      assert.equal(report.deniedTextWrite, true);
       assert.deepEqual(report.outside, [
         false,
         null,

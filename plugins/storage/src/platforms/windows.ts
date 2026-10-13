@@ -8,11 +8,17 @@ import {
 import { MAX_STORAGE_BYTES } from "../bytes.ts";
 import type {
   StorageBytesWrite,
+  StorageDirectoryCreate,
   StorageLocation,
   StorageMetadata,
   StorageTransfer,
   StorageWrite,
 } from "../contract.ts";
+import {
+  directoryEntries,
+  MAX_DIRECTORY_ENTRIES,
+  type StorageDirectoryEntry,
+} from "../directory-entries.ts";
 
 const MAX_STORAGE_PATH_SEGMENT_BYTES = 255;
 const MAX_STORAGE_FILE_BYTES = 4 * 1024 * 1024;
@@ -32,6 +38,11 @@ const ERROR_FILE_NOT_FOUND = 2;
 const ERROR_PATH_NOT_FOUND = 3;
 const ERROR_ACCESS_DENIED = 5;
 const ERROR_ALREADY_EXISTS = 183;
+const ERROR_NO_MORE_FILES = 18;
+const ERROR_DIR_NOT_EMPTY = 145;
+const FILE_ID_BOTH_DIRECTORY_INFO = 10;
+const FILE_ID_BOTH_DIRECTORY_RESTART_INFO = 11;
+const DIRECTORY_BUFFER_BYTES = 64 * 1024;
 const FILE_ATTRIBUTE_DIRECTORY = 0x10;
 const FILE_ATTRIBUTE_REPARSE_POINT = 0x400;
 const MAX_FILE_LINK_COUNT = 1;
@@ -74,6 +85,7 @@ export function createOperations(): NativeAdapter {
           | StorageLocation
           | StorageWrite
           | StorageBytesWrite
+          | StorageDirectoryCreate
           | StorageTransfer,
       );
     },
@@ -113,6 +125,15 @@ function createBindings() {
       args: [
         "u64",
         "ptr",
+      ],
+      returns: "i32",
+    },
+    GetFileInformationByHandleEx: {
+      args: [
+        "u64",
+        "u32",
+        "ptr",
+        "u32",
       ],
       returns: "i32",
     },
@@ -276,6 +297,8 @@ type TargetOptions = {
   allowDirectories: boolean;
   allowMissing: boolean;
   createParents: boolean;
+  /** Create this target under pinned parents before its checked OPEN_EXISTING. */
+  createDirectory?: boolean;
 };
 /** Transfers pin object identity and exclude new writers; destination creation never overwrites. */
 function transferOptions(access: number, disposition: number): TargetOptions {
@@ -389,7 +412,12 @@ export class WindowsStorage {
   /** Check both endpoints under the same path rules; the host grants the named operation once. */
   execute(
     operation: string,
-    input: StorageLocation | StorageWrite | StorageBytesWrite | StorageTransfer,
+    input:
+      | StorageLocation
+      | StorageWrite
+      | StorageBytesWrite
+      | StorageDirectoryCreate
+      | StorageTransfer,
   ): JsonValue {
     this.requireOpen();
     if ("from" in input) {
@@ -414,8 +442,13 @@ export class WindowsStorage {
       operation === "storage.appendText" || operation === "storage.appendBytes";
     const writing = writingText || writingBytes;
     const readingBytes = operation === "storage.readBytes";
+    const listingDirectory = operation === "storage.readDirectory";
+    const creatingDirectory = operation === "storage.createDirectory";
+    const removing = operation === "storage.remove";
+    const directoryOperation = listingDirectory || creatingDirectory;
+    const allowsDirectory = queryingMetadata || directoryOperation || removing;
     if (
-      !queryingMetadata &&
+      !allowsDirectory &&
       !writing &&
       !readingBytes &&
       operation !== "storage.readText"
@@ -445,7 +478,9 @@ export class WindowsStorage {
       });
     }
     let access = GENERIC_READ;
-    if (queryingMetadata) {
+    if (removing) {
+      access = DELETE | FILE_READ_ATTRIBUTES | FILE_READ_DATA;
+    } else if (queryingMetadata || directoryOperation) {
       access = FILE_READ_ATTRIBUTES | FILE_READ_DATA;
     } else if (writing) {
       access = appending
@@ -456,17 +491,59 @@ export class WindowsStorage {
       input.path,
       {
         access,
-        share: queryingMetadata
+        share: allowsDirectory
           ? FILE_SHARE_READ | FILE_SHARE_WRITE
           : FILE_SHARE_ALL,
         disposition: writing ? OPEN_ALWAYS : OPEN_EXISTING,
-        allowDirectories: queryingMetadata,
+        allowDirectories: allowsDirectory,
         allowMissing: queryingMetadata,
-        createParents: writing,
+        createParents:
+          writing ||
+          (creatingDirectory && "recursive" in input && input.recursive),
+        createDirectory: creatingDirectory,
       },
       ({ handle, info }) => {
         if (queryingMetadata) {
           return operation === "storage.exists" ? true : metadata(info);
+        }
+        if (
+          directoryOperation &&
+          !(info.readUInt32LE(0) & FILE_ATTRIBUTE_DIRECTORY)
+        ) {
+          throw new BunawayError({
+            code: "INVALID_ARGUMENT",
+            message: "Storage target is not a directory.",
+          });
+        }
+        if (creatingDirectory) {
+          return null;
+        }
+        if (listingDirectory) {
+          return this.readDirectory(handle);
+        }
+        if (removing) {
+          // Delete only the checked object while its handle and every parent remain pinned.
+          const disposition = new Uint8Array([
+            1,
+          ]);
+          if (
+            !this.api.symbols.SetFileInformationByHandle(
+              handle,
+              FILE_DISPOSITION_INFO,
+              ptr(disposition),
+              disposition.byteLength,
+            )
+          ) {
+            const error = this.api.symbols.GetLastError();
+            if (error === ERROR_DIR_NOT_EMPTY) {
+              throw new BunawayError({
+                code: "INVALID_ARGUMENT",
+                message: "Storage directory is not empty.",
+              });
+            }
+            this.fail("Storage removal failed", error);
+          }
+          return null;
         }
         if (bytes !== undefined) {
           // Append-only handles place each write at EOF; replacement truncates after writing.
@@ -578,6 +655,13 @@ export class WindowsStorage {
       options.createParents,
       options.allowMissing,
       ({ target }) => {
+        if (
+          options.createDirectory &&
+          !this.api.symbols.CreateDirectoryW(ptr(wide(target)), null) &&
+          this.api.symbols.GetLastError() !== ERROR_ALREADY_EXISTS
+        ) {
+          this.fail("Storage directory creation failed");
+        }
         const handle = this.open(
           target,
           options.access,
@@ -822,6 +906,40 @@ export class WindowsStorage {
       },
     );
     return null;
+  }
+  /** Enumerate the already checked directory handle, with no path-based reopening or link following. */
+  private readDirectory(handle: bigint): StorageDirectoryEntry[] {
+    const buffer = Buffer.alloc(DIRECTORY_BUFFER_BYTES);
+    const entries: StorageDirectoryEntry[] = [];
+    let informationClass = FILE_ID_BOTH_DIRECTORY_RESTART_INFO;
+    while (true) {
+      buffer.fill(0);
+      if (
+        !this.api.symbols.GetFileInformationByHandleEx(
+          handle,
+          informationClass,
+          ptr(buffer),
+          buffer.length,
+        )
+      ) {
+        const error = this.api.symbols.GetLastError();
+        if (error === ERROR_NO_MORE_FILES) {
+          return entries.sort((left, right) =>
+            left.name < right.name ? -1 : Number(left.name > right.name),
+          );
+        }
+        this.fail("Storage directory listing failed", error);
+      }
+      informationClass = FILE_ID_BOTH_DIRECTORY_INFO;
+      const batch = directoryEntries(buffer);
+      if (entries.length + batch.length > MAX_DIRECTORY_ENTRIES) {
+        throw new BunawayError({
+          code: "INVALID_ARGUMENT",
+          message: "Storage directory exceeds the entry limit.",
+        });
+      }
+      entries.push(...batch);
+    }
   }
   /** Strictly decode UTF-8 from a caller-owned handle, preserving BOM text. */
   readText(file: bigint, size: number): string {

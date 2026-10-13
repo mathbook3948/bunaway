@@ -22,6 +22,7 @@ import {
   type ServerMessage,
   serializeMessage,
   type TransportEvent,
+  validateValue,
 } from "@bunaway/protocol";
 import {
   Channel,
@@ -29,7 +30,10 @@ import {
   type Route,
   validatePacket,
 } from "@bunaway/runtime-bun/worker-channel";
-import { windowChanges } from "#native/windows/bun/window-events";
+import {
+  completedGeometryChanges,
+  windowChanges,
+} from "#native/windows/bun/window-events";
 
 const snapshot: WindowSnapshot = {
   windowId: "window-original",
@@ -56,6 +60,54 @@ const payload = {
     "move",
   ],
 };
+
+test("interactive geometry completion reports only net position, size or DPI changes", () => {
+  const before = snapshot.bounds;
+  expect(
+    completedGeometryChanges(before, {
+      ...before,
+    }),
+  ).toEqual([]);
+  expect(
+    completedGeometryChanges(before, {
+      ...before,
+      x: before.x - 1,
+    }),
+  ).toEqual([
+    "moved",
+  ]);
+  expect(
+    completedGeometryChanges(before, {
+      ...before,
+      height: before.height + 1,
+    }),
+  ).toEqual([
+    "resized",
+  ]);
+  expect(
+    completedGeometryChanges(before, {
+      ...before,
+      dpi: 192,
+    }),
+  ).toEqual([
+    "resized",
+  ]);
+  const changes = completedGeometryChanges(before, {
+    ...before,
+    y: before.y + 1,
+    width: before.width + 1,
+  });
+  expect(changes).toEqual([
+    "moved",
+    "resized",
+  ]);
+  expect(
+    validateValue(windowEvents["windows.changed"], {
+      ...snapshot,
+      changes,
+    }).changes,
+  ).toEqual(changes);
+});
 const hello = {
   kind: "hello" as const,
   protocol: PROTOCOL_VERSION,

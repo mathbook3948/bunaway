@@ -1,3 +1,5 @@
+import { MAX_MESSAGE_BYTES } from "@bunaway/protocol";
+
 /** Inclusive accepted dimension range for window sizes. */
 export const MIN_WINDOW_DIMENSION = 200;
 export const MAX_WINDOW_DIMENSION = 4096;
@@ -192,6 +194,8 @@ export type WindowBounds = {
  * Native failures throw; the UI host converts them to bounded public errors.
  */
 export type NativeWindow = {
+  /** Trusted-backend download approval and lifetime controls. Windows only. */
+  downloads?: NativeDownloads;
   /** Single host-owned WebView controls. Absent on platforms without this service. */
   webview?: NativeWebView;
   /** Audio controls for this window's WebView controller. Windows only. */
@@ -304,6 +308,81 @@ export type NativeWindow = {
   setCloseConfirmation(message: string | null): void;
 };
 
+/** Maximum retained pending, active and terminal downloads per WebView. */
+export const MAX_WEBVIEW_DOWNLOADS = 32;
+/** Maximum UTF-8 JSON bytes for one download's combined URL, MIME, disposition and path. */
+export const MAX_DOWNLOAD_METADATA_BYTES = 64 * 1024;
+/** Snapshot budget including per-record scalar reserves; leaves half the 1 MiB wire limit for envelopes. */
+export const MAX_DOWNLOAD_SNAPSHOT_BYTES = MAX_MESSAGE_BYTES / 2;
+const DOWNLOAD_RECORD_RESERVED_BYTES = 512;
+/** Approval deadline; an undecided download is cancelled without creating its output. */
+export const DOWNLOAD_APPROVAL_TIMEOUT_MS = 30_000;
+
+/** Download state owned by one native WebView lifetime, accessible only to the trusted backend. */
+export type WebViewDownload = {
+  id: string;
+  url: string;
+  mimeType: string;
+  contentDisposition: string;
+  /** WebView2-selected absolute destination; this API does not accept caller-selected paths. */
+  path: string;
+  totalBytes: number | null;
+  receivedBytes: number | null;
+  state: "pending" | "inProgress" | "interrupted" | "completed" | "cancelled";
+  interruptReason: number | null;
+  canResume: boolean;
+  paused: boolean;
+};
+
+/** Bound metadata exactly as JSON encodes it, including escaped controls and non-ASCII text. */
+export function isDownloadSnapshotWithinLimits(
+  records: readonly WebViewDownload[],
+): boolean {
+  if (records.length > MAX_WEBVIEW_DOWNLOADS) {
+    return false;
+  }
+  const encoder = new TextEncoder();
+  let bytes = 2; // Array delimiters; retained terminal records consume the same budget.
+  for (const record of records) {
+    const metadata = encoder.encode(
+      JSON.stringify({
+        url: record.url,
+        mimeType: record.mimeType,
+        contentDisposition: record.contentDisposition,
+        path: record.path,
+      }),
+    ).byteLength;
+    if (metadata > MAX_DOWNLOAD_METADATA_BYTES) {
+      return false;
+    }
+    // UUID, property names, booleans, longest state and safe-integer counters fit in 512 bytes.
+    // Reserve their worst case before approval so progress/expiry never exhaust the budget.
+    bytes += metadata + DOWNLOAD_RECORD_RESERVED_BYTES;
+    if (bytes > MAX_DOWNLOAD_SNAPSHOT_BYTES) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Every method requires backend origin and its own operation grant before native entry. */
+export type NativeDownloads = {
+  /** Opt into collecting requests, without approving them. Disabling cancels pending requests. */
+  setRequestsEnabled(enabled: boolean): void;
+  /** Return bounded detached snapshots, including pending approvals and terminal records. */
+  list(): WebViewDownload[];
+  /** Approve exactly one pending item using the browser-selected destination and default browser UI. */
+  approve(id: string): void;
+  /** Reject a pending item or cancel an active item; repeat cancellation is safe. */
+  cancel(id: string): void;
+  /** Pause only an active item; actual resumability is reported by list. */
+  pause(id: string): void;
+  /** Resume only when WebView2 reports that the item is resumable. */
+  resume(id: string): void;
+  /** Release a terminal record; forgetting an active or pending item is rejected. */
+  forget(id: string): void;
+};
+
 /** Synchronous UI-thread controls; navigation retains the host's origin and session boundary. */
 export type NativeWebView = {
   /** Reads browser state without changing focus or starting navigation. */
@@ -362,7 +441,7 @@ export type WindowSnapshot = {
   state: WindowDisplayState;
   bounds: WindowBounds;
 };
-/** Changes emitted in the order of a committed snapshot comparison. */
+/** Changes emitted in snapshot-comparison order, followed by native move/resize completion. */
 export type WindowChange =
   | "shown"
   | "hidden"
@@ -375,7 +454,9 @@ export type WindowChange =
   | "enterFullscreen"
   | "leaveFullscreen"
   | "move"
-  | "resize";
+  | "resize"
+  | "moved"
+  | "resized";
 /** OS invalidations and ordered lifecycle signals. No borrowed native pointers leave the callback. */
 export type NativeSystemSignal =
   | "settingChanged"

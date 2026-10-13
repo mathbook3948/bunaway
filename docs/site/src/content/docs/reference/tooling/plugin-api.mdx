@@ -60,6 +60,24 @@ splashscreen 최종 종료에는 false를 전달해 임시 프로필과 교체 �
 `NativeWindow`는 `show(visible)`, `focus()`, `close()`, `isFullscreen()`, `getSizeConstraints()`, `setSizeConstraints(constraints)`, `setSize(width, height)`, `setPosition(x, y)`, `setFullscreen(value)`, `setCloseConfirmation(message)`를 제공합니다.
 Windows의 선택적 `setFocusable`, `isFocusable`과 `WindowSpec.window.focusable`은 전경 활성화 허용을 제어합니다. 현재 실제 포커스와 별도이며 비활성 표시와 blur 후보 선택에도 적용합니다.
 
+선택적 `NativeWindow.downloads`는 Windows의 `NativeDownloads` 서비스입니다.
+`setRequestsEnabled(enabled)`는 요청 수집만 변경하며 `list()`는 WebViewDownload 배열을 반환합니다.
+`approve(id)`, `cancel(id)`, `pause(id)`, `resume(id)`, `forget(id)`는 해당 WebView 수명의
+항목을 제어합니다. 창 플러그인은 작업 권한과 backend 출처를 모두 검사한 뒤 서비스를 호출합니다.
+다운로드 기본값은 거부이며 `DOWNLOAD_APPROVAL_TIMEOUT_MS`는 30초,
+`MAX_WEBVIEW_DOWNLOADS`는 pending, 활성 및 종료된 기록을 합한 32개 상한입니다.
+WebViewDownload는 id, url, mimeType, contentDisposition, path, totalBytes, receivedBytes,
+state, interruptReason, canResume, paused를 제공합니다. byte 수의 null은 알 수 없거나
+안전 정수 범위를 넘는 값입니다. 승인된 항목도 창 종료 시 취소하고 참조를 해제합니다.
+호출자는 저장 경로를 바꾸거나 renderer 출처로 이 서비스를 사용할 수 없습니다.
+`MAX_DOWNLOAD_METADATA_BYTES`는 JSON UTF-8 metadata 합계 64 KiB,
+`MAX_DOWNLOAD_SNAPSHOT_BYTES`는 protocol 한도의 절반인 512 KiB입니다.
+`isDownloadSnapshotWithinLimits`는 이스케이프와 UTF-8 크기를 계산하고 UUID, 숫자, 상태와
+필드 이름의 최대 크기를 항목별로 예약합니다. 거부와 만료 뒤 retained 항목도 예산에 포함합니다.
+실패한 native Cancel은 항목과 operation을 보존하며, cleanup도 실패한 소유 자원을 남겨
+재시도하거나 관찰한 browser 종료 뒤 해제합니다.
+
+
 선택적 `NativeWindow.webview`는 Windows UI 스레드의 `NativeWebView` 서비스입니다.
 `getState()`는 URL, 문서 제목, 최상위 loading, history 이동 가능 여부와 controller zoom을
 반환합니다. `navigate(url)`, `reload()`, `stop()`, `goBack()`, `goForward()`,
@@ -102,6 +120,7 @@ Windows의 선택적 `NativeWindow.destroy()`는 확인, 트레이 숨김과 종
 `visible`, `focused`, `minimized`, `maximized`, `fullscreen`은 기존 상태 조회와
 같은 의미이고 `WindowBounds`는 기존 물리 outer bounds와 같습니다.
 `WindowChange`는 표시, 포커스, 창 상태, 전체화면 및 geometry 변경 이름의 합집합입니다.
+`moved`, `resized`는 Windows 네이티브 이동/크기 조절 루프 종료의 최종 geometry 알림입니다. 시작과 최종 값이 같으면 발행하지 않으며 중간 관찰 뒤 새 revision을 사용합니다.
 호스트가 창별 관찰을 소유하고 HWND 파괴 전에 해제합니다.
 
 선택적 `NativeWindow.setTaskbarProgress(progress)`는 Windows 작업 표시줄 진행률을 설정합니다.
