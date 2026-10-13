@@ -80,6 +80,20 @@ export const storageOperations = {
     }),
     output: z.null(),
   },
+  copyFile: {
+    input: z.strictObject({
+      from: pathFields.path,
+      to: pathFields.path,
+    }),
+    output: z.null(),
+  },
+  move: {
+    input: z.strictObject({
+      from: pathFields.path,
+      to: pathFields.path,
+    }),
+    output: z.null(),
+  },
   exists: {
     input: z.strictObject(pathFields),
     output: z.boolean(),
@@ -105,3 +119,5 @@ export type StorageMetadata = NonNullable<
 export type StorageBytesWrite = z.infer<
   typeof storageOperations.writeBytes.input
 >;
+/** Source and destination selected by the application; transfers never replace existing targets. */
+export type StorageTransfer = z.infer<typeof storageOperations.copyFile.input>;
