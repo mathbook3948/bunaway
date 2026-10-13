@@ -98,22 +98,8 @@ export async function diagnoseDmg(args: string[]): Promise<never> {
   await mkdir(directory, {
     recursive: true,
   });
-  const descriptors = await probe([
-    "/usr/sbin/lsof",
-    "-a",
-    "-p",
-    String(process.pid),
-    "-d",
-    "0,1,2",
-    "-Ffn",
-  ]);
-  const holders = await probe([
-    "/usr/sbin/lsof",
-    "+D",
-    source,
-    "-Fpcfn",
-  ]);
-  const before = await ownedImages(roots);
+  // Run create before any external probe: an info request can warm DiskImages
+  // services or change timing, obscuring the failure we are trying to observe.
   const started = Date.now();
   const executedArgs = [
     args[0] ?? "create",
@@ -132,6 +118,22 @@ export async function diagnoseDmg(args: string[]): Promise<never> {
     },
   );
   const code = await child.exited;
+  const elapsedMs = Date.now() - started;
+  const descriptors = await probe([
+    "/usr/sbin/lsof",
+    "-a",
+    "-p",
+    String(process.pid),
+    "-d",
+    "0,1,2",
+    "-Ffn",
+  ]);
+  const holders = await probe([
+    "/usr/sbin/lsof",
+    "+D",
+    source,
+    "-Fpcfn",
+  ]);
   const after = await ownedImages(roots);
   const output: Record<string, string> = {};
   let fd = "";
@@ -165,10 +167,10 @@ export async function diagnoseDmg(args: string[]): Promise<never> {
         },
         descriptors,
         holders,
-        before,
         after,
+        probeTiming: "after create exited",
         code,
-        elapsedMs: Date.now() - started,
+        elapsedMs,
         ...output,
       },
       null,

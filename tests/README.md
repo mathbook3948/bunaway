@@ -569,6 +569,7 @@ CI는 `BUNAWAY_DMG_DIAGNOSTICS=1`로 fixture 안에서만 실제 hdiutil을 관�
 파일 descriptor, 고유 경로, fixture 파일을 연 프로세스, 해당 fixture의 disk image 목록과
 verbose 출력을 `build/macos-packaging-diagnostics/`에 보관한다. 기존 일반 파일 출력을
 상속하고 실제 종료 코드를 전달하며 재시도나 다른 볼륨의 detach는 수행하지 않는다.
+외부 probe는 생성 명령이 끝난 뒤 실행해 DiskImages 서비스를 미리 초기화하지 않는다.
 실제 DMG 검증, 읽기 전용 마운트와 서명된 앱 내용 검사 및 실패 시 이전 산출물 보존은
 기존 `macos-distribution.test.ts`에서 계속 확인한다.
 
