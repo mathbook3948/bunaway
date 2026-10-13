@@ -62,14 +62,19 @@ export function controlsApp(origin: string, outside: string) {
         held.has("/index.html"),
       "peer and denied clients",
     );
-    assert.deepEqual(await windows.getWebViewState(main), {
-      url: "https://app.bunaway.local/index.html",
-      title: "/index.html",
-      loading: false,
-      canGoBack: false,
-      canGoForward: false,
-      zoomFactor: 1,
-    });
+    assert.deepEqual(
+      {
+        ...(await windows.getWebViewState(main)),
+      },
+      {
+        url: "https://app.bunaway.local/index.html",
+        title: "/index.html",
+        loading: false,
+        canGoBack: false,
+        canGoForward: false,
+        zoomFactor: 1,
+      },
+    );
     assert.equal(await windows.goBack(main), false);
     assert.equal(await windows.goForward(main), false);
     for (const factor of [
