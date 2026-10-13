@@ -1,0 +1,275 @@
+import assert from "node:assert/strict";
+import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { relative, resolve } from "node:path";
+import { bundleMacosHost } from "#cli/assets";
+import { files, hash, writeJson } from "#cli/files";
+import { compileMacosApp } from "#cli/macos-compile";
+import { installedPlugins } from "#cli/plugins";
+import pin from "../../runtime/build-manifests/darwin-aarch64.json";
+
+assert.equal(process.platform, "darwin");
+assert.equal(process.arch, "arm64");
+const root = resolve(import.meta.dir, "../..");
+const directory = await mkdtemp(
+  resolve(tmpdir(), "bunaway-macos-webview-controls-"),
+);
+const result = resolve(root, "build/macos-webview-controls-results.json");
+const dataRoot = resolve(
+  directory,
+  "home/Library/Application Support/bunaway/tests.macos.webview-controls",
+);
+let child: ReturnType<typeof Bun.spawn> | undefined;
+let outsideRequests = 0;
+let redirectRequests = 0;
+let slowRequests = 0;
+const slow = Promise.withResolvers<void>();
+const outside = Bun.serve({
+  hostname: "127.0.0.1",
+  port: 0,
+  fetch() {
+    outsideRequests++;
+    return new Response("Disallowed origin");
+  },
+});
+const assets = resolve(directory, "assets");
+const server = Bun.serve({
+  hostname: "127.0.0.1",
+  port: 0,
+  async fetch(request) {
+    const path = new URL(request.url).pathname;
+    if (path === "/stats") {
+      return Response.json({
+        slow: slowRequests,
+        redirects: redirectRequests,
+      });
+    }
+    if (path === "/redirect.html") {
+      redirectRequests++;
+      return Response.redirect(`${outside.url.origin}/outside.html`);
+    }
+    if (path === "/slow.html") {
+      slowRequests++;
+      await slow.promise;
+    }
+    if (path.endsWith(".js")) {
+      return new Response(Bun.file(resolve(assets, `web${path}`)), {
+        headers: {
+          "Content-Type": "text/javascript",
+        },
+      });
+    }
+    return new Response(html(path), {
+      headers: {
+        "Content-Type": "text/html",
+      },
+    });
+  },
+});
+function html(path: string): string {
+  return `<!doctype html><title>${path}</title><script type="module" src="/${path === "/frame.html" ? "frame" : "web"}.js"></script>${path === "/index.html" ? '<iframe src="/frame.html"></iframe>' : ""}`;
+}
+try {
+  await mkdir(resolve(assets, "web"), {
+    recursive: true,
+  });
+  const operations = [
+    "getWebViewState",
+    "navigateWebView",
+    "reloadWebView",
+    "stopWebView",
+    "goBack",
+    "goForward",
+    "setZoomFactor",
+  ];
+  const specs = [
+    "main",
+    "peer",
+    "denied",
+  ].map((view) => ({
+    view,
+    home: `https://app.bunaway.local/${view === "main" ? "index" : view}.html`,
+    title: view,
+    window: {
+      width: 600,
+      height: 400,
+    },
+  }));
+  await writeJson(resolve(assets, "manifest.json"), {
+    format: 1,
+    app: {
+      appId: "tests.macos.webview-controls",
+      windows: specs,
+    },
+    policy: {
+      version: 1,
+      backend: {
+        permissions: [
+          ...operations,
+          "openDevTools",
+          "close",
+          "recreate",
+        ].map((name) => `windows.${name}`),
+      },
+      views: specs.map(({ view }) => ({
+        id: view,
+        origins: [
+          "https://app.bunaway.local",
+          server.url.origin,
+        ],
+        events: [],
+        commands: [
+          "test.arrived",
+          "test.hold",
+          "test.fragment",
+          "test.spoof",
+          "test.failure",
+          "plugin.windows.getWebViewState",
+          "plugin.windows.reloadWebView",
+        ],
+        host: {
+          permissions:
+            view === "denied"
+              ? []
+              : [
+                  "windows.getWebViewState",
+                ],
+        },
+      })),
+    },
+    plugins: [],
+    developmentSdk: {},
+  });
+  const entry = resolve(directory, "app.ts");
+  await Bun.write(
+    entry,
+    `import {controlsApp} from ${JSON.stringify(resolve(root, "tests/fixtures/macos-webview-controls/app.ts"))}; export default controlsApp(${JSON.stringify(server.url.origin)}, ${JSON.stringify(outside.url.origin)});`,
+  );
+  const installed = (await installedPlugins(root, "0.0.0")).filter(
+    (plugin) => plugin.name === "windows",
+  );
+  const bundled = await bundleMacosHost(
+    resolve(root, "native/macos/bun"),
+    assets,
+    entry,
+    undefined,
+    false,
+    installed,
+  );
+  const web = await Bun.build({
+    entrypoints: [
+      "web.js",
+      "frame.js",
+    ].map((name) =>
+      resolve(root, "tests/fixtures/macos-webview-controls", name),
+    ),
+    target: "browser",
+    outdir: resolve(assets, "web"),
+  });
+  assert(web.success, web.logs.map(String).join("\n"));
+  for (const output of web.outputs) {
+    await Bun.write(output.path, await output.arrayBuffer());
+  }
+  for (const path of [
+    "/index.html",
+    "/peer.html",
+    "/denied.html",
+    "/frame.html",
+  ]) {
+    await Bun.write(resolve(assets, `web${path}`), html(path));
+  }
+  const executable = resolve(directory, "bunaway-host");
+  await compileMacosApp(assets, process.execPath, executable, bundled);
+  const inventory: Record<string, string> = {};
+  for (const file of await files(assets)) {
+    inventory[relative(directory, file)] = await hash(file);
+  }
+  await writeJson(resolve(directory, "manifest.json"), {
+    bun: pin.bun,
+    assets: inventory,
+  });
+  const launched = Bun.spawn(
+    [
+      executable,
+      "--package",
+      directory,
+    ],
+    {
+      env: {
+        ...process.env,
+        HOME: resolve(directory, "home"),
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 90_000,
+    },
+  );
+  child = launched;
+  const stdout = new Response(launched.stdout).text();
+  const stderr = new Response(launched.stderr).text();
+  const exitCode = await launched.exited;
+  await stdout;
+  assert.equal(exitCode, 0, await stderr);
+  const report = await Bun.file(resolve(dataRoot, "temp/report.json")).json();
+  assert.equal(report.pass, true, JSON.stringify(report));
+  assert.equal(outsideRequests, 0, "Denied redirect contacted its destination");
+  const records = (await Bun.file(resolve(dataRoot, "logs/host.log")).text())
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+  assert(records.some((record) => record.event === "frame-message-ignored"));
+  assert.equal(
+    records.filter((record) => record.event === "host-stopped").length,
+    1,
+  );
+  assert.equal(records.at(-1).failed, false);
+  assert(
+    records.filter(
+      (record) => record.event === "session-open" && record.view === "peer",
+    ).length === 2,
+  );
+  await writeJson(result, {
+    platform: process.platform,
+    arch: process.arch,
+    bun: Bun.version,
+    revision: Bun.revision,
+    report,
+    outsideRequests,
+    redirectRequests,
+    slowRequests,
+  });
+  console.log(
+    "PASS real compiled WKWebView controls: public SDK, state, allowed navigation, origin/redirect/main-frame denial, history, reload, stop, fragment/session revocation, zoom and isolated close/recreate",
+    report,
+  );
+} catch (error) {
+  const diagnostics = resolve(root, "build/macos-webview-controls-diagnostics");
+  await mkdir(diagnostics, {
+    recursive: true,
+  });
+  if (await Bun.file(resolve(dataRoot, "logs/host.log")).exists()) {
+    await cp(resolve(dataRoot, "logs"), diagnostics, {
+      recursive: true,
+    });
+  }
+  await writeJson(result, {
+    pass: false,
+    error: String(error),
+    outsideRequests,
+    redirectRequests,
+    slowRequests,
+  });
+  throw error;
+} finally {
+  if (child?.exitCode === null) {
+    child.kill("SIGKILL");
+  }
+  await child?.exited;
+  slow.resolve();
+  await server.stop(true);
+  await outside.stop(true);
+  await rm(directory, {
+    recursive: true,
+    force: true,
+  });
+}

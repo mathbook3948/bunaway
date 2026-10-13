@@ -2,10 +2,12 @@ import { type Pointer, ptr, toArrayBuffer } from "bun:ffi";
 import { readFileSync, realpathSync, statSync } from "node:fs";
 import { extname, resolve } from "node:path";
 import { clampWindowSize } from "@bunaway/plugin-api/native";
+import { BunawayError } from "@bunaway/protocol";
 import type { MacosApplication } from "./application.ts";
 import type { MacosConfig } from "./config.ts";
 import { Objc, type ObjcObject } from "./objc.ts";
 import { macosOrigin, platformUrl, resourceRules } from "./urls.ts";
+import { MacosWebviewControls } from "./webview-controls.ts";
 
 const NS_VIEW_WIDTH_SIZABLE = 2;
 const NS_VIEW_HEIGHT_SIZABLE = 16;
@@ -55,6 +57,8 @@ export class MacosWebview {
   private rulesReady = false;
   private coreReady = false;
   private navigationStarted = false;
+  private provisionalNavigation: ObjcObject | null = null;
+  readonly controls: MacosWebviewControls;
   readonly ready: Promise<void>;
 
   constructor(
@@ -161,6 +165,18 @@ export class MacosWebview {
             }
             // WKWebView supplies frame identity and its live URL; neither is trusted from JSON.
             const source = this.source();
+            const frameSource = o.text(
+              o.send(o.send(o.send(frame, "request"), "URL"), "absoluteString"),
+            );
+            // A provisional document has no usable route. In particular, an old frame cannot
+            // acquire the destination's authority while WebKit is replacing the document.
+            if (
+              this.provisionalNavigation ||
+              macosOrigin(frameSource) !== macosOrigin(source)
+            ) {
+              hooks.log("frame-message-ignored");
+              return;
+            }
             const body = o.send(message, "body");
             // WebKit accepts NSDate and other values that would throw a native
             // exception during JSON serialization, before protocol validation.
@@ -247,7 +263,6 @@ export class MacosWebview {
                 !!view?.origins.includes(macosOrigin(target)) &&
                 !this.closed;
               if (allowed && o.send(frame, "isMainFrame")) {
-                hooks.revoke("navigation");
                 hooks.log("navigation", {
                   uri: target,
                 });
@@ -271,6 +286,85 @@ export class MacosWebview {
             );
           },
         },
+        {
+          selector:
+            "webView:decidePolicyForNavigationResponse:decisionHandler:",
+          arguments: 3,
+          encoding: "v@:@@@?",
+          call: (_self, _cmd, _view, response, decision) => {
+            let allowed = false;
+            try {
+              const target = o.text(
+                o.send(
+                  o.send(o.send(response ?? null, "response"), "URL"),
+                  "absoluteString",
+                ),
+              );
+              allowed =
+                !this.closed &&
+                !!config.policy.views
+                  .find((view) => view.id === config.window.view)
+                  ?.origins.includes(macosOrigin(target));
+              if (!allowed) {
+                hooks.log("navigation-response-blocked", {
+                  uri: target,
+                });
+              }
+            } catch (error) {
+              hooks.fail(error);
+            }
+            // WebKit need not issue a second action callback for server redirects.
+            // Resource rules block denied requests; this final check also prevents document commit.
+            o.decide(
+              decision ?? null,
+              allowed ? WK_NAVIGATION_ALLOW : WK_NAVIGATION_CANCEL,
+            );
+          },
+        },
+        {
+          selector: "webView:didStartProvisionalNavigation:",
+          arguments: 2,
+          encoding: "v@:@@",
+          call: (_self, _cmd, _view, navigation) => {
+            if (!this.closed) {
+              this.provisionalNavigation = navigation ?? null;
+              // This callback marks a new document. Fragment/history-state changes retain their session.
+              hooks.revoke("navigation");
+            }
+          },
+        },
+        {
+          selector: "webView:didCommitNavigation:",
+          arguments: 2,
+          encoding: "v@:@@",
+          call: (_self, _cmd, _view, navigation) => {
+            if (navigation === this.provisionalNavigation) {
+              this.provisionalNavigation = null;
+            }
+          },
+        },
+        ...[
+          "webView:didFailProvisionalNavigation:withError:",
+          "webView:didFailNavigation:withError:",
+        ].map((selector) => ({
+          selector,
+          arguments: 3,
+          encoding: "v@:@@@",
+          call: (
+            _self: Pointer | null,
+            _cmd: Pointer | null,
+            _view: Pointer | null,
+            navigation: Pointer | null,
+          ) => {
+            if (navigation === this.provisionalNavigation) {
+              this.provisionalNavigation = null;
+            }
+            hooks.log("navigation-completed", {
+              success: false,
+              source: this.source(),
+            });
+          },
+        })),
         {
           selector: "webView:navigationAction:didBecomeDownload:",
           arguments: 3,
@@ -335,6 +429,25 @@ export class MacosWebview {
       if (!viewPolicy) {
         throw new Error("Missing view policy.");
       }
+      this.controls = new MacosWebviewControls(
+        o,
+        () => {
+          if (this.closed) {
+            throw new BunawayError({
+              code: "CANCELLED",
+              message: "WebView is closed.",
+            });
+          }
+          if (!this.rulesReady) {
+            throw new BunawayError({
+              code: "BUSY",
+              message: "WebView is not ready.",
+            });
+          }
+          return this.webview;
+        },
+        viewPolicy.origins,
+      );
       this.ready = new Promise<void>((resolveReady, reject) => {
         const completion = o.block(2, (_block, rules, error) => {
           if (this.closed) {

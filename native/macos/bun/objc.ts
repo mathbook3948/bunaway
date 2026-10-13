@@ -167,6 +167,23 @@ export class Objc {
       ],
       returns: "void",
     },
+    double: {
+      ptr: this.messageAddress as Pointer,
+      args: [
+        "ptr",
+        "ptr",
+      ],
+      returns: "f64",
+    },
+    setDouble: {
+      ptr: this.messageAddress as Pointer,
+      args: [
+        "ptr",
+        "ptr",
+        "f64",
+      ],
+      returns: "void",
+    },
     event: {
       ptr: this.messageAddress as Pointer,
       args: [
@@ -484,6 +501,14 @@ export class Objc {
     height: number,
   ): void {
     this.messages.symbols.size(object, this.selector(selector), width, height);
+  }
+  /** Read a scalar double through arm64's floating-point return register. */
+  double(object: ObjcObject, selector: string): number {
+    return this.messages.symbols.double(object, this.selector(selector));
+  }
+  /** Pass a scalar double in arm64's floating-point argument register. */
+  setDouble(object: ObjcObject, selector: string, value: number): void {
+    this.messages.symbols.setDouble(object, this.selector(selector), value);
   }
   nextEvent(app: ObjcObject): ObjcObject | null {
     return pointer(

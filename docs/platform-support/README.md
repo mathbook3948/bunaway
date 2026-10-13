@@ -17,6 +17,13 @@ Win32 메시지와 WinEvent로 숨김 생성 중 순간 표시, 활성화와 포
 이 두 검증과 계약 검사 결과는 [Windows 실행 기록](../architecture/windows-bun-results.md)에 구분한다.
 macOS 준비 API와 숨김 생성 옵션은 아직 지원하지 않는다.
 
+macOS의 single 뷰는 `getWebViewState`, `navigateWebView`, `reloadWebView`,
+`stopWebView`, `goBack`, `goForward`, `setZoomFactor`를 구현한다.
+대상과 개별 작업 권한은 공통 창 계약을 따르며 탐색은 기존 origin을 확장하지 않는다.
+실제 compiled WKWebView 검사는 `tests/lifecycle/macos-webview-controls.ts`이며
+기존 macOS native CI에서 실행한다. `build/macos-webview-controls-results.json`과
+실패 시 진단 로그를 함께 수집한다. DevTools와 다운로드는 이 macOS 구현 범위에 없다.
+
 Windows의 창 없는 시작은 빈 창 선언 또는 모든 `startup: false`로 설정하며
 트레이 또는 `desktop.closeBehavior: "keep-alive"`를 요구한다.
 Windows x64 `10.0.26200.0`, Bun 1.4.2에서 실제 트레이와 WebView2의 지연 생성,

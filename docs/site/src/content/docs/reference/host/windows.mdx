@@ -6,7 +6,8 @@ description: 창 제어와 조회, geometry, 네이티브 창 이벤트 및 구�
 `@bunaway/plugin-windows`를 설치하고 앱의 `plugins`에 windowsPlugin을 등록합니다. 명령 핸들러나 setup은 이 패키지의 `windows`를 호출합니다. 화면에서도 같은 경로를 import하며 해당 뷰의 commands에 `plugin.windows.<작업>`을 허용해야 합니다.
 
 창 제어 플러그인은 Windows와 macOS에서 실행합니다. macOS는 `list`, `create`, `recreate`,
-`show`, `hide`, `focus`, `close`, `isVisible`, `isFocused`를 지원합니다. 그 외 작업은
+`show`, `hide`, `focus`, `close`, `isVisible`, `isFocused`, `isDestroyed`와
+아래 WebView 기본 제어를 지원합니다. `openDevTools`를 포함한 그 외 작업은
 `UNSUPPORTED`입니다. Linux와 모바일은 네이티브 호스트를 지원하지 않습니다.
 플러그인을 등록하지 않은 앱도 설정한 시작 창과 WebView를 사용할 수 있습니다.
 
@@ -232,10 +233,11 @@ false여도 참조를 유지합니다. 없는 ID와 더 이상 pending이 아닌
 
 ### WebView 기본 제어
 
-Windows의 각 창은 WebView 하나를 소유합니다. 아래 작업도 `{ view, windowId? }`로
+Windows와 macOS의 각 창은 WebView 하나를 소유합니다. 아래 작업도 `{ view, windowId? }`로
 대상을 선택하고 작업마다 별도 `windows.<작업>` 권한을 요구합니다. multiple 뷰는
 windowId가 필요합니다. 닫힌 창이나 다른 뷰의 ID는 `INVALID_ARGUMENT`이며,
-WebView 생성 중에는 `BUSY`입니다. macOS의 이 작업들은 `UNSUPPORTED`입니다.
+WebView 생성 중에는 `BUSY`입니다. macOS는 single 뷰의 제어를 지원하며
+`openDevTools`, 창 ID 조회와 readiness API는 `UNSUPPORTED`입니다.
 
 | 메서드 | 추가 입력 | 결과 |
 | --- | --- | --- |
@@ -265,17 +267,23 @@ URL은 1–8192자이며 NUL을 허용하지 않습니다. HTTP/HTTPS URL만 허
 허용한 새 문서의 탐색이 시작되면 이전 SDK 세션과 진행 중 명령을 폐기합니다.
 자기 문서를 바꾸는 화면 호출은 이전 연결에서 결과를 받지 못할 수 있으므로 새 문서에서
 클라이언트를 초기화하세요. 같은 문서의 fragment 이동은 기존 세션과 documentGeneration을
-유지합니다. 완료와 실패는 `getReadiness` 또는 `windows.readiness`로 확인합니다.
+유지합니다. Windows에서는 완료와 실패를 `getReadiness` 또는 `windows.readiness`로 확인합니다.
 `loading`은 허용된 최상위 문서의 탐색 시작부터 해당 탐색 완료까지이며 paint나 SDK 준비를
-뜻하지 않습니다. stop의 취소 완료는 기존 준비 계약의 `cancelled` 상태로 전달합니다.
+뜻하지 않습니다. Windows의 stop 취소 완료는 기존 준비 계약의 `cancelled` 상태로 전달합니다.
+macOS의 `loading`은 WKWebView가 보고한 현재 로딩 상태입니다. 완료, 실패와 중단은 모두
+false가 될 수 있으므로 성공 여부나 SDK 준비를 뜻하지 않습니다. 패키지 자산 URL은
+내부 전송 scheme 대신 선언한 `https://app.bunaway.local` URL로 반환합니다.
 
 factor는 유한한 0.25–5 값입니다. 1은 100%이며 CSS zoom과 visual zoom 한도 설정이
-아닙니다. 설정은 대상 WebView2 controller에 적용하고 실제 값을 반환합니다.
+아닙니다. Windows에서는 대상 WebView2 controller에, macOS에서는 WKWebView의
+공개 `pageZoom`에 적용하고 실제 값을 반환합니다. 창 간 zoom 설정은 독립적이며
+macOS의 새 창이나 재생성한 창은 1로 시작합니다.
 이 API는 origin별 zoom 공유 정책을 추가하지 않습니다. 탐색에 따른 zoom 값 변화는
 WebView2의 동작을 따르므로 현재 값은 다시 조회합니다.
 
-openDevTools는 작업 권한과 호스트의 개발 모드 설정이 모두 필요합니다.
+Windows의 openDevTools는 작업 권한과 호스트의 개발 모드 설정이 모두 필요합니다.
 프로덕션 호스트는 작업 권한이 있어도 `PERMISSION_DENIED`입니다.
+macOS는 공개 DevTools 제어 서비스를 제공하지 않으며 `UNSUPPORTED`입니다.
 DevTools 닫기, 열림 상태와 이벤트, dock 설정은 아직 제공하지 않습니다.
 
 창 종료의 native Cancel 실패는 해당 소유자의 참조를 보존하고 UI pump가 50 ms 간격으로

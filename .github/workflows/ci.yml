@@ -145,6 +145,8 @@ jobs:
         with:
           name: macos-native-diagnostics
           path: |
+            build/macos-webview-controls-results.json
+            build/macos-webview-controls-diagnostics/
             build/macos-host-results.json
             build/macos-native-logs/
             build/macos-host-diagnostics/
