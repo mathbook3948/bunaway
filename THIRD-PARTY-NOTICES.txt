@@ -16,6 +16,10 @@ Generated apps retain these notices. Final app builds include the runtime/native
 dependency license texts through the existing native build pipeline. App authors
 are responsible for their own code and additional dependencies' licenses.
 
+iOS uses the pinned Bun XCFramework archive in runtime/build-manifests/ios-arm64.json.
+Generated iOS apps preserve its LICENSE.md and LICENSE-libffi in full, together
+with FRAMEWORK-LICENSE.txt and this notice, in bunaway-assets/licenses/.
+
 The Vite template frontend is copied from create-vite 9.2.1 (vanilla-ts),
 Copyright (c) 2019-present, VoidZero Inc. and Vite contributors, MIT License.
 Source: https://github.com/vitejs/vite/tree/fea5b21dd9524ed7308632407b996f1fe5942c9c/packages/create-vite/template-vanilla-ts

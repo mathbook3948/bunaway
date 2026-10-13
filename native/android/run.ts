@@ -1,11 +1,11 @@
 import { cp, mkdir } from "node:fs/promises";
 import { basename, resolve } from "node:path";
-import { appModules } from "#cli/app-modules";
+import { parsePolicy } from "@bunaway/protocol";
 import { assembleAndroidApk } from "#cli/android";
-import { writeAndroidBackend } from "#cli/assets";
+import { appModules } from "#cli/app-modules";
+import { writeMobileBackend } from "#cli/assets";
 import { frameworkRoot, writeJson } from "#cli/files";
 import { run } from "#cli/processes";
-import { parsePolicy } from "@bunaway/protocol";
 
 const inputs = resolve(frameworkRoot, "build/android-host");
 const fixture = resolve(frameworkRoot, "tests/fixtures/android");
@@ -50,7 +50,9 @@ const backend = await Bun.build({
 if (!backend.success) {
   throw new Error(`Android backend bundle failed: ${backend.logs.join("\n")}`);
 }
-await writeAndroidBackend(backend.outputs, assets);
+await writeMobileBackend(backend.outputs, assets, [
+  "backend.js",
+]);
 const frontend = await Bun.build({
   entrypoints: [
     resolve(fixture, "web/client.ts"),

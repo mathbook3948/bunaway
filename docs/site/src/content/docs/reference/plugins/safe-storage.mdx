@@ -1,11 +1,11 @@
 ---
-title: Windows 암호화 저장
-description: 현재 Windows 사용자의 DPAPI로 문자열과 바이트를 비동기로 보호하고 복호화합니다.
+title: 암호화 저장
+description: Windows DPAPI와 macOS Keychain 보호 키로 문자열과 바이트를 비동기로 보호하고 복호화합니다.
 ---
 
-`@bunaway/plugin-safe-storage`는 Windows의 DPAPI를 사용하는 선택 플러그인입니다.
+`@bunaway/plugin-safe-storage`는 Windows DPAPI와 macOS Keychain을 사용하는 선택 플러그인입니다.
 `safeStoragePlugin`을 앱에 등록하고 작업별 Host 권한을 허용합니다.
-설치나 등록만으로 권한이 생기지 않습니다. 다른 플랫폼에서는 `UNSUPPORTED`입니다.
+설치나 등록만으로 권한이 생기지 않습니다. Windows와 macOS 외의 플랫폼에서는 `UNSUPPORTED`입니다.
 
 ```ts
 import { defineApp } from "@bunaway/backend";
@@ -30,10 +30,12 @@ safeStorage.decryptBytes({ ciphertext }): Promise<string>
 앱 명령과 setup에서 `safeStorage`를 호출하는 실행 범위는 [백엔드 Host API](/reference/backend/host-api/)를 따릅니다.
 화면에는 용도에 맞는 앱 명령을 노출하고 복호화 결과를 받을 수 있는 뷰를 제한하세요.
 
-모든 호출은 Promise를 반환하며 I/O Worker에서 실행합니다. 최초 호출에서 DLL을 열고
-작업마다 Windows API를 호출합니다. `isAvailable`은 작은 비밀이 아닌 값을 암호화한 뒤
-복호화해 현재 실행 환경의 사용 가능 여부를 검사합니다. 실패하면 `false`를 반환합니다.
-이 결과는 후속 작업의 성공을 보장하거나 권한을 부여하지 않으며 다음 호출은 다시 검사합니다.
+모든 호출은 Promise를 반환하며 I/O Worker에서 실행합니다. 최초 호출에서 OS 바인딩을 엽니다.
+Windows의 `isAvailable`은 비밀이 아닌 작은 값의 DPAPI 왕복을 검사합니다.
+macOS에서는 시스템 UI와 키 생성을 하지 않고 기본 file-based Keychain의 잠금 해제,
+읽기와 쓰기 상태만 조회합니다. 저장된 키의 접근 승인을 검사하는 작업은 아닙니다.
+조회가 실패하면 `false`를 반환합니다. 이 결과는 후속 작업의 성공을 보장하거나 권한을
+부여하지 않습니다. macOS의 실제 암복호화는 호출마다 Keychain에서 키를 다시 읽습니다.
 
 ```ts
 import { safeStorage } from "@bunaway/plugin-safe-storage";
@@ -43,30 +45,33 @@ const text = await safeStorage.decryptString({ ciphertext });
 ```
 
 `text`의 상한은 UTF-16 code unit 기준 32,768입니다. `🙂` 같은 보충 문자는 두 unit을 사용하므로
-16,384개까지 암호화와 복호화할 수 있습니다. 상한을 넘는 입력은 DPAPI 실행 전에 `INVALID_ARGUMENT`로 거부합니다.
+16,384개까지 암호화와 복호화할 수 있습니다. 상한을 넘는 입력은 네이티브 실행 전에 `INVALID_ARGUMENT`로 거부합니다.
 빈 문자열과 NUL, Unicode 및 BOM을 보존합니다.
 문자열은 UTF-8로 암호화하며 문자열 복호화는 잘못된 UTF-8을 거부합니다.
 `bytes`와 `ciphertext`는 canonical padded base64 문자열입니다. 바이트의 상한은 256 KiB,
 암호문의 상한은 384 KiB이며 빈 바이트는 `""`입니다. 빈 암호문은 거부합니다.
 표준 base64 알파벳과 필요한 padding을 사용해야 하며 공백과 URL-safe 표기를 거부합니다.
-두 암호화 작업 모두 원본 DPAPI blob을 base64로 반환하므로 API 형식은 앱에서 일관되게 선택하세요.
+Windows는 원본 DPAPI blob, macOS는 버전이 있는 AES-256-GCM blob을 base64로 반환합니다.
+플랫폼 사이의 암호문은 호환되지 않습니다. API 형식은 앱에서 일관되게 선택하세요.
 
 ## 보호 범위와 파일 저장
 
-플러그인은 `CryptProtectData`와 `CryptUnprotectData`를 current-user 범위에서 호출하며
+Windows에서는 `CryptProtectData`와 `CryptUnprotectData`를 current-user 범위에서 호출하며
 `CRYPTPROTECT_UI_FORBIDDEN`으로 대화상자를 금지합니다. machine 범위나 앱 암호, 추가 entropy를
 받지 않으며 Windows가 현재 사용자의 키를 관리합니다. 같은 사용자의 다른 프로세스에서도
 복호화할 수 있으므로 이 기능은 앱별 격리나 Windows Hello 사용자 확인을 제공하지 않습니다.
 보통 같은 사용자와 머신이 필요하지만 Windows roaming profile 등의 예외가 있습니다.
 [Microsoft DPAPI 계약](https://learn.microsoft.com/en-us/windows/win32/api/dpapi/nf-dpapi-cryptprotectdata)을 따릅니다.
 
-플러그인은 파일이나 credential store에 저장하지 않습니다. 암호문을 저장할 위치와 접근 규칙,
+Windows 플러그인은 credential store에 값을 저장하지 않습니다. macOS는 Keychain에 보호 키
+하나를 저장하며 원문과 암호문을 저장하지 않습니다. 암호문을 저장할 위치와 접근 규칙,
 원자적 교체와 백업은 앱이 관리합니다. 일반 store와 텍스트 파일은 평문 저장입니다.
-DPAPI를 사용할 수 없거나 복호화가 실패해도 이 플러그인은 평문 저장으로 전환하지 않습니다.
+OS 보호 기능을 사용할 수 없거나 복호화가 실패해도 이 플러그인은 평문 저장으로 전환하지 않습니다.
 신뢰된 백엔드가 Bun 파일 및 SQLite API를 직접 쓰는 경로와 화면의 권한 중재는 별개입니다.
 
 네이티브 중간 버퍼는 반환용 복사 후 지우고 DPAPI 할당을 `LocalFree`로 해제합니다.
-앱 종료에서는 플러그인의 DLL 바인딩을 해제합니다. 반환한 문자열과 JSON 전송 복사본은
+앱 종료에서는 플러그인의 OS 바인딩을 해제합니다. macOS의 작업별 키와 중간 바이트도 지웁니다.
+반환한 문자열과 JSON 전송 복사본은
 JavaScript 런타임이 관리하므로 메모리 전체의 비밀 제거를 보장하지 않습니다.
 
 ## 실패, 취소와 재시도
@@ -75,10 +80,46 @@ JavaScript 런타임이 관리하므로 메모리 전체의 비밀 제거를 보
 처리 전 취소와 폐기된 어댑터는 `CANCELLED`입니다. Windows 암복호화 실패와 손상된 blob,
 다른 사용자나 머신의 데이터, UTF-8 또는 결과 상한 위반은 `INTERNAL`입니다.
 이 오류만으로 손상과 일시적인 사용자 프로필 및 키 문제를 구분할 수 없습니다.
-잠긴 키의 대기와 재시도, `shouldReEncrypt`, credential store와 vault는 후속 계약입니다.
+자동 재시도, `shouldReEncrypt`, 범용 credential store와 vault는 제공하지 않습니다.
+
+macOS에서는 사용자가 시스템 UI를 취소하면 `CANCELLED`, 접근 거부나 필요한 시스템
+상호작용을 할 수 없으면 `PERMISSION_DENIED`입니다. Keychain 부재와 제공자 오류,
+키 부재나 잘못된 크기, 인증 실패와 손상된 blob은 `INTERNAL`입니다.
+복호화는 키를 만들지 않습니다. 키가 잠기거나 거부되거나 읽을 수 없는 경우에도
+기존 키를 새 값으로 바꾸지 않습니다. 실패 뒤 사용자가 접근을 복구하면 같은 암호문으로
+다시 호출할 수 있습니다. 자동으로 잠금을 해제할 암호를 받거나 Keychain을 초기화하지 않습니다.
 
 두 번째 인자의 signal과 deadline은 [호출 취소와 기한](/reference/client/invoke/)을 따릅니다.
-동시 요청은 호스트 I/O 큐에서 직렬 처리하며 WebView UI 스레드에서 DPAPI를 실행하지 않습니다.
+동시 요청은 호스트 I/O 큐에서 직렬 처리하며 WebView UI 스레드에서 암복호화를 실행하지 않습니다.
 실행 전 취소와 종료는 대기 호출을 막습니다. 이미 시작한 동기 Windows API 호출은
-중간에 끊거나 결과를 롤백하지 않습니다. 실패한 복호화에서도 원본 암호문은 바꾸지 않으며
+중간에 끊거나 결과를 롤백하지 않습니다. macOS의 동기 Keychain 호출과 시스템 UI도
+호출자의 signal로 중단할 수 없습니다. 호출 취소와 종료에서는 새 요청을 막고 결과 전달을
+중단하지만 이미 시작한 호출의 성공이나 새 키 생성은 취소하지 않습니다. 정상 종료에서는
+호출이 돌아온 뒤 자원을 해제하며, 호스트의 종료 기한 초과는 강제 종료 실패로 보고합니다.
+실패한 복호화에서도 원본 암호문은 바꾸지 않으며
 자동 재시도나 재암호화를 수행하지 않습니다.
+
+## macOS Keychain과 실행 파일 identity
+
+macOS는 현재 사용자의 기본 traditional file-based Keychain에 256-bit 무작위 키를
+generic password로 저장합니다. 명시적인 암복호화 호출에서는 Apple의 접근 승인과
+잠금 해제 UI를 허용합니다. Windows의 `CRYPTPROTECT_UI_FORBIDDEN`을 macOS에 적용하지
+않으며 프로세스 전체의 Keychain UI 설정도 바꾸지 않습니다.
+
+OS가 검사하는 접근 identity는 실제 호스트 실행 파일입니다. 안정적인 `app.id`는
+저장 항목의 이름과 암호문의 인증에 사용하며 OS 보안 주체가 아닙니다. 개발 모드의 공유 Bun
+실행 파일은 여러 JS 앱이 같은 OS identity를 사용하므로 앱별 OS 격리를 제공하지 않습니다.
+compiled 앱은 자체 실행 파일의 기본 Keychain ACL을 사용합니다. unsigned 실행과 ad-hoc
+서명은 배포 인증서 기반의 안정적인 identity를 제공하지 않습니다. 다른 빌드나 경로로
+교체하면 다시 승인이 필요하거나 기존 키 접근이 거부될 수 있습니다. 거부를 해결하려고
+키를 재생성하거나 ACL을 넓히지 않습니다. `app.id` 변경과 키 삭제도 기존 데이터의 복구를
+보장하지 않으므로 앱의 배포 identity와 백업 계획을 유지하세요.
+
+data-protection Keychain과 access-group entitlement를 선택하지 않습니다. 현재 ad-hoc
+호스트에 entitlement를 선언하는 것만으로 사용할 수 있는 접근 그룹을 만들 수 없기 때문입니다.
+traditional Keychain API는 Apple이 macOS 12부터 deprecated로 표시한 경로이며,
+최신 macOS에서의 유지 여부를 네이티브 CI로 확인합니다. Keychain의 기본 ACL 외에
+인증서, signing identity, broad access list나 trust 설정을 만들지 않습니다.
+Apple의 [macOS Keychain 구분](https://developer.apple.com/documentation/technotes/tn3137-on-mac-keychains),
+[Security 구현의 entitlement 구분](https://github.com/apple-oss-distributions/Security/blob/main/OSX/libsecurity_keychain/lib/SecItem.cpp#L4883),
+[generic password 생성 API](https://developer.apple.com/documentation/security/seckeychainaddgenericpassword)를 따릅니다.

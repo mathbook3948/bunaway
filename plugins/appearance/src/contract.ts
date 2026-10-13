@@ -6,7 +6,7 @@ const theme = z.union([
   z.null(),
 ]);
 const color = z.string().regex(/^#[0-9a-f]{6}$/);
-/** Live Windows user preferences and OS color/accessibility indicators. */
+/** Live OS appearance and accessibility indicators. Platform mappings are documented in the appearance reference. */
 export const appearanceOperations = {
   getPreferences: {
     input: z.null(),

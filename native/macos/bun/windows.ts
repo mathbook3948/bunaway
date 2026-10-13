@@ -180,6 +180,7 @@ export class MacosWindows {
       throw new Error("Missing native window.");
     }
     return {
+      webview: native.controls,
       getSnapshot: unsupported,
       getReadiness: unsupported,
       show: (visible) => native.show(visible),
