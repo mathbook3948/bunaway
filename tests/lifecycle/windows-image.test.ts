@@ -6,6 +6,7 @@ import { Worker } from "node:worker_threads";
 import { bindCommandHost } from "@bunaway/plugin-api/host";
 import { image, imagePlugin } from "@bunaway/plugin-image";
 import {
+  BunawayError,
   type HostCall,
   type HostContext,
   type HostResponse,
@@ -247,6 +248,13 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
           },
         });
       }
+      // Await the operation outside Bun's asynchronous matcher so Worker messages
+      // continue to dispatch while Windows completes a native error response.
+      async function expectError(task: Promise<unknown>, code: import("@bunaway/protocol").WireError["code"]) {
+        const error = await task.then(() => undefined, (error: unknown) => error);
+        expect(error).toBeInstanceOf(BunawayError);
+        expect(error).toMatchObject({ code });
+      }
       const pixels = {
         width: 2,
         height: 2,
@@ -333,26 +341,22 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
           }),
         ),
       ).toEqual(pixels);
-      await expect(
+      await expectError(
         invoke(() =>
           image.exportBytes({
             id: source.id,
             format: "image/jpeg",
           }),
         ),
-      ).rejects.toMatchObject({
-        code: "INVALID_ARGUMENT",
-      });
-      await expect(
+      , "INVALID_ARGUMENT");
+      await expectError(
         invoke(() =>
           image.exportBytes({
             id: source.id,
             format: "image/bmp",
           }),
         ),
-      ).rejects.toMatchObject({
-        code: "INVALID_ARGUMENT",
-      });
+      , "INVALID_ARGUMENT");
       const opaque = {
         width: 8,
         height: 8,
@@ -435,31 +439,27 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
         height: 0,
         rgba: "",
       });
-      await expect(
+      await expectError(
         invoke(() =>
           image.exportBytes({
             id: empty.id,
             format: "image/png",
           }),
         ),
-      ).rejects.toMatchObject({
-        code: "INVALID_ARGUMENT",
-      });
+      , "INVALID_ARGUMENT");
       for (const data of [
         "AA==",
         png.data.slice(0, 16),
         Buffer.from("malformed").toString("base64"),
       ]) {
-        await expect(
+        await expectError(
           invoke(() =>
             image.createBytes({
               mime: "image/png",
               data,
             }),
           ),
-        ).rejects.toMatchObject({
-          code: "INVALID_ARGUMENT",
-        });
+        , "INVALID_ARGUMENT");
       }
       // A valid BMP header with excessive decoded dimensions must fail before pixel allocation.
       const oversized = Buffer.alloc(58);
@@ -471,16 +471,14 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
       oversized.writeInt32LE(4096, 22);
       oversized.writeUInt16LE(1, 26);
       oversized.writeUInt16LE(24, 28);
-      await expect(
+      await expectError(
         invoke(() =>
           image.createBytes({
             mime: "image/bmp",
             data: oversized.toString("base64"),
           }),
         ),
-      ).rejects.toMatchObject({
-        code: "INVALID_ARGUMENT",
-      });
+      , "INVALID_ARGUMENT");
       // Fill all rows without exceeding Web Crypto's per-call random byte limit.
       const maximumPixels = Buffer.alloc(MAX_IMAGE_BYTES);
       for (let offset = 0; offset < maximumPixels.length; offset += 65536) {
@@ -512,15 +510,13 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
         rgba: maximumPixels.toString("base64"),
       });
       grantAllowed = false;
-      await expect(
+      await expectError(
         invoke(() =>
           image.getInfo({
             id: source.id,
           }),
         ),
-      ).rejects.toMatchObject({
-        code: "PERMISSION_DENIED",
-      });
+      , "PERMISSION_DENIED");
       grantAllowed = true;
       expect(
         await invoke(() =>
@@ -543,15 +539,13 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
           }),
         ),
       ).toBe(false);
-      await expect(
+      await expectError(
         invoke(() =>
           image.getPixels({
             id: source.id,
           }),
         ),
-      ).rejects.toMatchObject({
-        code: "INVALID_ARGUMENT",
-      });
+      , "INVALID_ARGUMENT");
       for (const id of [
         fromBytes.id,
         fromURL.id,
@@ -586,9 +580,7 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
         await Bun.sleep(5);
       }
       controller.abort();
-      await expect(cancelled).rejects.toMatchObject({
-        code: "CANCELLED",
-      });
+      await expectError(cancelled, "CANCELLED");
       // Filling every slot proves that cancellation removed the undelivered ID.
       for (let count = 0; count < 64; count++) {
         await invoke(() =>
@@ -599,7 +591,7 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
           }),
         );
       }
-      await expect(
+      await expectError(
         invoke(() =>
           image.createRGBA({
             width: 0,
@@ -607,9 +599,7 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
             rgba: "",
           }),
         ),
-      ).rejects.toMatchObject({
-        code: "BUSY",
-      });
+      , "BUSY");
       channel.notify({
         kind: "shutdown",
       });
