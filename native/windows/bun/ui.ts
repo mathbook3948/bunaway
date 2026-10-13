@@ -786,6 +786,10 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
       const nativeWindows = windows;
       const hwnd = view.native.hwnd;
       return {
+        audio: {
+          getState: () => view.native.getAudioState(),
+          setMuted: (muted) => view.native.setAudioMuted(muted),
+        },
         getSnapshot: () => nativeWindows.getSnapshot(hwnd),
         getReadiness: () => {
           assert(view.readiness);
