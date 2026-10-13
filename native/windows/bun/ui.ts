@@ -24,6 +24,8 @@ import {
   type WindowSpec,
 } from "./channel.ts";
 import { callbackCalls, checkCallbacks, disposeCom } from "./com.ts";
+import { createSessionNotifications } from "./session-notifications.ts";
+import { publishSystemEvent, SystemEvents } from "./system-events.ts";
 import { Tray } from "./tray.ts";
 import { originOf, WebView } from "./webview.ts";
 import {
@@ -55,6 +57,7 @@ let startRequested = false;
 let closingSent = false;
 let initialized = false;
 let windows: Windows | undefined;
+let systemEvents: SystemEvents | undefined;
 let adapters: Awaited<ReturnType<typeof operations>> | undefined;
 let tray: Tray | undefined;
 let controlWindow: bigint | undefined;
@@ -1175,19 +1178,87 @@ function sendNativeEvent(
     });
 }
 
+/** Gate each recipient before forwarding plugin events through its current live route. */
+function publishPluginSystemEvent(
+  event: string,
+  payload: import("@bunaway/protocol").JsonValue,
+  requiredOperation: string,
+): void {
+  if (stopping || closingSent) {
+    return;
+  }
+  publishSystemEvent(
+    registry,
+    [
+      ...views.values(),
+    ].map(({ boundary }) => boundary),
+    event,
+    payload,
+    requiredOperation,
+    sendNativeEvent,
+  );
+}
+
 try {
   // Keep window and WebView COM work on this STA through cleanup.
   hr(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
   initialized = true;
+  windows = new Windows(signalClosing, config.icon, config.runtime.id, () =>
+    channel.poll(),
+  );
+  let notificationWindow: bigint | undefined;
+  let sessionNotifications:
+    | ReturnType<typeof createSessionNotifications>
+    | undefined;
+  systemEvents = new SystemEvents({
+    open: (receive) => {
+      assert(windows);
+      const owner = windows;
+      const hwnd = owner.create(
+        "Bunaway system notifications",
+        200,
+        200,
+        receive,
+        false,
+      );
+      notificationWindow = hwnd;
+      return () => {
+        try {
+          sessionNotifications?.dispose();
+        } finally {
+          try {
+            owner.destroy(hwnd);
+          } finally {
+            notificationWindow = undefined;
+            sessionNotifications?.detached();
+            sessionNotifications = undefined;
+          }
+        }
+      };
+    },
+    sessions: (enable) => {
+      if (enable) {
+        assert(notificationWindow);
+        sessionNotifications ??= createSessionNotifications(notificationWindow);
+      } else {
+        sessionNotifications?.dispose();
+        sessionNotifications = undefined;
+      }
+    },
+    publish: publishPluginSystemEvent,
+    report: (error) =>
+      log("system-event-failed", {
+        message: String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      }),
+  });
+  windowServices.systemEvents = systemEvents;
   adapters = await operations(
     config.plugins ?? [],
     config.dataRoot,
     "ui",
     windowServices,
     packagedPlugins,
-  );
-  windows = new Windows(signalClosing, config.icon, config.runtime.id, () =>
-    channel.poll(),
   );
   for (const spec of config.windows) {
     if (spec.startup !== false) {
@@ -1236,6 +1307,7 @@ try {
   while (!stopping) {
     checkCallbacks();
     windows.pump();
+    systemEvents.flush();
     showWindows();
     for (const [viewId, view] of views) {
       // Controller errors also queue a forced close. Report startup failure before
@@ -1362,6 +1434,7 @@ try {
     log("callback-references", disposeCom());
     await disposeAll([
       () => adapters?.dispose(),
+      () => systemEvents?.dispose(),
       () => {
         windows?.dispose();
         if (initialized) {

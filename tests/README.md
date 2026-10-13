@@ -440,3 +440,10 @@ DIB의 행 방향과 padding, alpha 및 잘못된 profile, mask, 크기를 확�
 파일 목록과 이미지, 지원 형식 발견을 왕복한다. 테스트는 CI 데스크톱 clipboard를
 변경하고 원래 Unicode 텍스트만 복원한다. WebView2 페이지나 다른 앱의 붙여넣기,
 물리 장치 검증을 뜻하지 않는다.
+
+`system-events.test.ts`는 선택 OS 알림 HWND의 지연 생성, 중복 해제, 조회 실패 후 복구,
+WTS 등록 실패, 상태 알림 합치기, lifecycle 순서와 큐 초과를 검증한다. 조회 권한과
+현재 이벤트 route를 모두 가진 수신자에게만 전달하는 계약도 검사한다.
+`windows-system-events.test.ts`는 실제 Windows 숨김 HWND, 메시지 pump와 WTS 등록을
+사용한다. 메시지는 합성 입력이며 실제 하드웨어 절전이나 사용자 세션 잠금 검증을
+대신하지 않는다. Linux에서는 이 네이티브 회귀를 건너뛴다.
