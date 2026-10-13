@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import { type CommandContext, defineApp } from "@bunaway/backend";
 import { windows, windowsPlugin } from "@bunaway/plugin-windows";
+import { BunawayError } from "@bunaway/protocol";
 
 /** Exercise the public SDK from the real backend Worker while WKWebView documents connect. */
 export function controlsApp(origin: string, outside: string) {
@@ -277,11 +278,21 @@ export function controlsApp(origin: string, outside: string) {
             for (const view of [
               "peer",
               "denied",
-              "main",
             ]) {
               await windows.close({
                 view,
               });
+            }
+            // The final close retires the backend route before its response can be delivered.
+            try {
+              await windows.close(main);
+            } catch (error) {
+              if (
+                !(error instanceof BunawayError) ||
+                error.code !== "CANCELLED"
+              ) {
+                throw error;
+              }
             }
           })().catch((error) => {
             console.error(error);
