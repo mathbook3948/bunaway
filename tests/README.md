@@ -585,7 +585,7 @@ CLI의 같은 이름 검사는 로컬 tarball의 isolated 설치, 네이티브 I
 client-area animation, screen reader 설정 플래그 및 시스템 색과 비교하고 두 어댑터의
 DLL 수명과 종료 후 거부를 확인한다. `mise run host:windows`에 포함한다.
 `macos-appearance.test.ts`는 밝고 어두운 일반 및 contrast appearance를 앱에 지정하고
-실제 AppKit의 effectiveAppearance에 따른 테마와 sRGB 색, NSWorkspace 플래그를 비교한다.
+실제 AppKit의 effectiveAppearance에 대한 best-match 테마와 sRGB 색, NSWorkspace 플래그를 비교한다.
 drawing appearance 복원,
 1,000번 조회와 독립 어댑터의 반복 정리를 확인한다. 사용자 OS 설정은 바꾸지 않는다.
 새 프로세스의 배포 플러그인이 직접 AppKit를 로드하고 독립 어댑터의 수명을 유지하는지도 확인한다.

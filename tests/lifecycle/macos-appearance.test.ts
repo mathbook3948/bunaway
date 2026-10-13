@@ -193,7 +193,18 @@ test.skipIf(process.platform !== "darwin")(
             console.log(
               `AppKit appearance: requested=${name}, effective=${objc.text(objc.send(effectiveAppearance, "name"))}, nativeMatch=${nativeMatch}, adapterTheme=${snapshot.appsTheme}`,
             );
-            expect(snapshot.appsTheme).toBe(expected);
+            expect(nativeMatch, name).toMatch(/^NSAppearanceName(Dark)?Aqua$/);
+            const nativeTheme =
+              nativeMatch === "NSAppearanceNameDarkAqua" ? "dark" : "light";
+            // AppKit can best-match an explicit contrast override to Aqua, even
+            // when its name contains DarkAqua. Compare the actual native query.
+            expect(snapshot.appsTheme, name).toBe(nativeTheme);
+            if (
+              name === "NSAppearanceNameAqua" ||
+              name === "NSAppearanceNameDarkAqua"
+            ) {
+              expect(snapshot.appsTheme, name).toBe(expected);
+            }
             expect(snapshot.systemTheme).toBeNull();
             expect(snapshot.forcedColors).toBe(false);
             expect(snapshot.highContrast).toBe(
@@ -312,6 +323,18 @@ test.skipIf(process.platform !== "darwin")(
               previousDrawing,
             );
           }
+          // Keep the lifetime stress check on a real dark appearance, independently
+          // of how this OS resolves the artificial contrast overrides above.
+          objc.send(
+            app,
+            "setAppearance:",
+            objc.send(
+              appearanceClass,
+              "appearanceNamed:",
+              objc.string("NSAppearanceNameDarkAqua"),
+            ),
+          );
+          expect(read().appsTheme).toBe("dark");
           Bun.gc(true);
           const initialMemory = process.memoryUsage().rss;
           for (let iteration = 0; iteration < 20; iteration++) {
