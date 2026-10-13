@@ -75,6 +75,16 @@ export interface Client<
     listener: (event: EventDelivery<E[K]>) => void,
     options: ListenOptions,
   ): Promise<AsyncDispose>;
+  /**
+   * Accepts a subscription like listen, then releases it before the first valid
+   * event callback. The disposer waits for remote cleanup; onError also reports
+   * automatic cleanup failures, which close the session.
+   */
+  once<K extends keyof E & string>(
+    event: K,
+    listener: (event: EventDelivery<E[K]>) => void,
+    options: ListenOptions,
+  ): Promise<AsyncDispose>;
   /** Ends the session, rejects pending work, and waits for transport close. Calls share completion. */
   close(): Promise<void>;
 }
@@ -306,10 +316,27 @@ class ClientSession<C extends CommandMap, E extends EventMap>
     ) as Promise<C[K]["output"]>;
   }
 
-  async listen<K extends keyof E & string>(
+  listen<K extends keyof E & string>(
     event: K,
     listener: (event: EventDelivery<E[K]>) => void,
     options: ListenOptions,
+  ): Promise<AsyncDispose> {
+    return this.subscribe(event, listener, options, false);
+  }
+
+  once<K extends keyof E & string>(
+    event: K,
+    listener: (event: EventDelivery<E[K]>) => void,
+    options: ListenOptions,
+  ): Promise<AsyncDispose> {
+    return this.subscribe(event, listener, options, true);
+  }
+
+  private async subscribe<K extends keyof E & string>(
+    event: K,
+    listener: (event: EventDelivery<E[K]>) => void,
+    options: ListenOptions,
+    once: boolean,
   ): Promise<AsyncDispose> {
     if (this.subscriptions.size >= API_LIMITS.maxSubscriptions) {
       throw requestError("BUSY", "Subscription limit reached.");
@@ -330,6 +357,7 @@ class ClientSession<C extends CommandMap, E extends EventMap>
             listener,
             options,
             payload,
+            once,
           );
         },
         onCancelledResult: (payload) => {
@@ -364,12 +392,27 @@ class ClientSession<C extends CommandMap, E extends EventMap>
     listener: (event: EventDelivery<E[K]>) => void,
     options: ListenOptions,
     payload: JsonValue,
+    once: boolean,
   ): AsyncDispose {
     const subscriptionId = this.subscriptionId(payload);
     const subscription: ActiveSubscription = {
       subscriptionId,
       event,
-      listener: (delivery) => listener(delivery as EventDelivery<E[K]>),
+      listener: (delivery) => {
+        if (once) {
+          // Release synchronously before user code or another queued frame can
+          // re-enter delivery, including before subscribe's Promise resolves.
+          void release().catch((cause: unknown) => {
+            this.reportSubscriptionError(
+              subscription,
+              toWireError(cause, CONNECTION_CLOSED),
+            );
+            // Without successful remote cleanup, the session still owns a slot.
+            this.terminate(CONNECTION_CLOSED);
+          });
+        }
+        listener(delivery as EventDelivery<E[K]>);
+      },
       onError: options.onError,
       expectedSequence: 1,
       released: false,
@@ -837,6 +880,13 @@ class ClientSession<C extends CommandMap, E extends EventMap>
     subscription.released = true;
     this.subscriptions.delete(subscription.subscriptionId);
     this.detachSubscription(subscription);
+    this.reportSubscriptionError(subscription, error);
+  }
+
+  private reportSubscriptionError(
+    subscription: ActiveSubscription,
+    error: WireError,
+  ): void {
     try {
       subscription.onError(error);
     } catch {
@@ -984,6 +1034,24 @@ export async function listen<T extends JsonValue = JsonValue>(
   options: ListenOptions,
 ): Promise<AsyncDispose> {
   return createClient().listen(
+    event,
+    listener as (event: EventDelivery<JsonValue>) => void,
+    options,
+  );
+}
+
+/**
+ * Subscribe to the first valid event through the shared connection.
+ *
+ * Uses the same acceptance, cancellation, and error contract as Client.once.
+ * @throws {BunawayError} If the subscription request fails before it is established.
+ */
+export async function once<T extends JsonValue = JsonValue>(
+  event: string,
+  listener: (event: EventDelivery<T>) => void,
+  options: ListenOptions,
+): Promise<AsyncDispose> {
+  return createClient().once(
     event,
     listener as (event: EventDelivery<JsonValue>) => void,
     options,

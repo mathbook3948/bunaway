@@ -134,8 +134,9 @@ if (!process.argv.includes("--child")) {
     assert.equal(report.pass, true);
     assert.equal(report.documents, 3);
     assert.equal(report.denied, true);
+    assert.equal(report.onceDocuments, 3);
     console.log(
-      "PASS WebView2 native events: delivery, permission denial, snapshot recovery, unlisten, navigation, recreation, shutdown",
+      "PASS WebView2 native events: delivery, once, cancellation, permission denial, snapshot recovery, unlisten, navigation, recreation, shutdown",
     );
   } finally {
     clearTimeout(timeout);
@@ -155,6 +156,7 @@ if (!process.argv.includes("--child")) {
   );
   let documents = 0;
   let denied = false;
+  let onceDocuments = 0;
   const ids: string[] = [];
   const records: {
     windowId: string;
@@ -379,8 +381,39 @@ if (!process.argv.includes("--child")) {
         },
       },
       "test.unsubscribed": {
-        ...noInput,
-        async run() {
+        input: {
+          type: "object",
+          properties: {
+            onceCount: {
+              const: 1,
+            },
+            onceSequence: {
+              const: 1,
+            },
+            onceWindowId: {
+              type: "string",
+            },
+            cancelledDeliveries: {
+              const: 0,
+            },
+          },
+          required: [
+            "onceCount",
+            "onceSequence",
+            "onceWindowId",
+            "cancelledDeliveries",
+          ],
+          additionalProperties: false,
+        },
+        output: {
+          const: null,
+        },
+        async run(input: { onceWindowId: string }) {
+          assert.equal(
+            input.onceWindowId,
+            (await windows.getSnapshot(target)).windowId,
+          );
+          onceDocuments++;
           const count = records.length;
           await windows.setPosition({
             ...target,
@@ -419,6 +452,7 @@ if (!process.argv.includes("--child")) {
               pass: true,
               documents,
               denied,
+              onceDocuments,
               records: records.length,
               ids,
             }),
