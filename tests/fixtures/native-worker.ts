@@ -1,14 +1,16 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import type { ManifestPlugin } from "@bunaway/runtime-bun/app-manifest";
+import type { BunPlugin } from "bun";
 import { appModules } from "#cli/app-modules";
 import { writeJson } from "#cli/files";
 import { installedPlugins, writePluginManifest } from "#cli/plugins";
-import type { ManifestPlugin } from "@bunaway/runtime-bun/app-manifest";
 
 /**
  * Bundle native workers with the fixture app's installed plugins.
  * Supplying an entrypoint builds the shared UI and host-operation workers.
+ * Fixture plugins can replace a specific native dependency while retaining the real workers.
  * An optional UI entrypoint isolates native fault injection in a dedicated fixture worker.
  */
 export async function bundleNativeWorker(
@@ -16,6 +18,7 @@ export async function bundleNativeWorker(
   destination: string,
   entrypoint?: string,
   uiEntrypoint?: string,
+  fixturePlugins: BunPlugin[] = [],
 ) {
   const plugins = await installedPlugins(
     resolve(import.meta.dir, "desktop/host"),
@@ -48,6 +51,7 @@ export async function bundleNativeWorker(
     splitting: true,
     naming: "[name].[ext]",
     plugins: [
+      ...fixturePlugins,
       appModules({
         plugins,
       }),

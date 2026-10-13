@@ -669,6 +669,7 @@ export function createOperations(
       });
       if (
         call.operation === "windows.getMonitors" ||
+        call.operation === "windows.getMonitorSnapshot" ||
         call.operation === "windows.getPrimaryMonitor" ||
         call.operation === "windows.getMonitorNearestPoint" ||
         call.operation === "windows.getMonitorNearestRect" ||
@@ -694,6 +695,16 @@ export function createOperations(
           });
         }
         switch (call.operation) {
+          case "windows.getMonitorSnapshot":
+            if (!monitors.snapshot) {
+              throw new BunawayError({
+                code: "UNSUPPORTED",
+                message: "Monitor events are unavailable.",
+              });
+            }
+            return {
+              ...monitors.snapshot(),
+            };
           case "windows.getMonitors":
             return monitors.list().map((monitor) => ({
               ...monitor,

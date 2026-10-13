@@ -409,6 +409,8 @@
           "windows",
           "windowsPlugin",
           "monitorSchema",
+          "monitorSnapshotSchema",
+          "monitorChangeSchema",
           "windowEvents"
         ],
         "reference/tooling/native-plugins": [
@@ -1068,9 +1070,36 @@
     },
     {
       "source": "packages/plugin-api/src/native.ts",
+      "type": "NativeMonitorSnapshot",
+      "pages": {
+        "reference/tooling/plugin-api": [
+          "sourceId",
+          "revision",
+          "monitors",
+          "error"
+        ]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "NativeMonitorChange",
+      "pages": {
+        "reference/tooling/plugin-api": [
+          "sourceId",
+          "revision",
+          "added",
+          "removed",
+          "changed",
+          "error"
+        ]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
       "type": "NativeMonitorServices",
       "pages": {
         "reference/tooling/plugin-api": [
+          "snapshot",
           "list",
           "primary",
           "nearestPoint",
@@ -1258,6 +1287,7 @@
       "windows.recreateInstance",
       "windows.listInstances",
       "windows.getMonitors",
+      "windows.getMonitorSnapshot",
       "windows.getPrimaryMonitor",
       "windows.getMonitor",
       "windows.getMonitorNearestPoint",

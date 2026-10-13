@@ -64,5 +64,9 @@ export {
   windowSnapshotSchema,
 } from "./contract.ts";
 
-export type { Monitor } from "./monitor-contract.ts";
-export { monitorSchema } from "./monitor-contract.ts";
+export type { Monitor, MonitorSnapshot } from "./monitor-contract.ts";
+export {
+  monitorChangeSchema,
+  monitorSchema,
+  monitorSnapshotSchema,
+} from "./monitor-contract.ts";
