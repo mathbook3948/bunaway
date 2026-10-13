@@ -16,7 +16,7 @@ export function normalizeMacosFilePath(input: unknown): string {
           !part ||
           part === "." ||
           part === ".." ||
-          Buffer.byteLength(part) > 255,
+          new TextEncoder().encode(part).byteLength > 255,
       )
   ) {
     throw new BunawayError({

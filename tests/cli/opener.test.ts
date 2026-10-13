@@ -100,6 +100,10 @@ export default defineApp({ modules: [], plugins: [openerPlugin] });
       "@bunaway/plugin-opener",
     ]);
     expect(plugins[0]?.targets.windows?.execution).toBe("io");
+    expect(plugins[0]?.targets.macos?.execution).toBe("io");
+    expect(plugins[0]?.targets.macos?.supportedOperations).toEqual([
+      "opener.openUrl", "opener.openFile", "opener.revealFile",
+    ]);
     expect(valid.nativePlugins?.map(({ name }) => name)).toEqual([
       "opener",
     ]);

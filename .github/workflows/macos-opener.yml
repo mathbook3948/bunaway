@@ -33,12 +33,16 @@ jobs:
           test "$(uname -m)" = arm64
           mise exec -- bun --no-env-file test tests/lifecycle/macos-opener.test.ts tests/lifecycle/macos-opener-native.test.ts 2>&1 | tee build/macos-opener-logs/native.log
           test -f build/macos-opener-results.json
+          mise exec -- bun --no-env-file tests/lifecycle/macos-opener-host.ts 2>&1 | tee build/macos-opener-logs/host.log
+          test -f build/macos-opener-host-results.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: macos-opener-native-diagnostics
           path: |
             build/macos-opener-results.json
+            build/macos-opener-host-results.json
+            build/macos-opener-host-diagnostics/
             build/macos-opener-logs/
           if-no-files-found: warn
           retention-days: 7

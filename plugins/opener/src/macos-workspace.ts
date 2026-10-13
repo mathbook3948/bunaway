@@ -156,7 +156,13 @@ export function createWorkspace(): MacosWorkspace {
     }
     try {
       const workspace = object(type("NSWorkspace"), "sharedWorkspace");
-      if (!workspace || !work(workspace)) {
+      if (!workspace) {
+        throw new BunawayError({
+          code: "INTERNAL",
+          message: "Opener could not obtain NSWorkspace.",
+        });
+      }
+      if (!work(workspace)) {
         throw new BunawayError({
           code: "INTERNAL",
           message: "NSWorkspace did not accept the opener request.",
@@ -170,6 +176,12 @@ export function createWorkspace(): MacosWorkspace {
     openUrl(url) {
       request((workspace) => {
         const target = object(type("NSURL"), "URLWithString:", string(url));
+        if (!target) {
+          throw new BunawayError({
+            code: "INTERNAL",
+            message: "Opener could not create its NSURL.",
+          });
+        }
         return (
           target !== 0n &&
           messages.symbols.boolean(workspace, selector("openURL:"), target, 0n)
@@ -179,6 +191,12 @@ export function createWorkspace(): MacosWorkspace {
     openFile(path) {
       request((workspace) => {
         const target = object(type("NSURL"), "fileURLWithPath:", string(path));
+        if (!target) {
+          throw new BunawayError({
+            code: "INTERNAL",
+            message: "Opener could not create its file NSURL.",
+          });
+        }
         return (
           target !== 0n &&
           messages.symbols.boolean(workspace, selector("openURL:"), target, 0n)
