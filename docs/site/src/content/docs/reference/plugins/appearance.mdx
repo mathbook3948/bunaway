@@ -1,0 +1,38 @@
+---
+title: appearance
+description: Windows 테마 선호, 시스템 색과 접근성 설정 조회.
+---
+
+`@bunaway/plugin-appearance`를 설치하고 `appearancePlugin`을 앱의 plugins에 등록합니다.
+`appearance.getPreferences()`에는 `appearance.getPreferences` 작업 권한이 필요합니다.
+화면에서 직접 호출하면 commands에 `plugin.appearance.getPreferences`도 허용합니다.
+Windows의 I/O 실행을 지원하고 다른 플랫폼은 `UNSUPPORTED`입니다.
+
+```ts
+import { appearance, appearancePlugin } from "@bunaway/plugin-appearance";
+// 앱 정의: plugins: [appearancePlugin]
+const preferences = await appearance.getPreferences();
+```
+
+매 호출에서 현재 값을 읽고 다음 객체를 반환합니다.
+
+| 필드 | 의미 |
+| --- | --- |
+| appsTheme, systemTheme | HKCU Personalize의 AppsUseLightTheme와 SystemUsesLightTheme 선호. light, dark 또는 null |
+| accentColor | DWM colorization의 RGB 부분. #rrggbb |
+| highContrast, forcedColors | Windows 고대비 활성 플래그. OS의 강제 색 적용을 나타냄 |
+| reducedMotion | Windows client-area animation 설정이 비활성인지 여부 |
+| transparencyEnabled | HKCU Personalize의 EnableTransparency 선호. boolean 또는 null |
+| screenReaderEnabled | Windows SPI_GETSCREENREADER 설정 플래그 |
+| colors | GetSysColor의 window, windowText, highlight와 highlightText. #rrggbb |
+
+테마와 transparency는 사용자의 저장된 선호를 조회합니다. 관련 DWORD가 없거나 0과 1이
+아니면 null이며 임의 기본값으로 대체하지 않습니다. 고대비가 적용되면 실제 렌더링 색은
+테마 선호와 다를 수 있습니다. accentColor에는 DWM 알파 값을 포함하지 않습니다.
+플래그는 실제 스크린 리더 프로세스나 WebView 접근성 트리의 활성 여부를 보장하지 않습니다.
+Windows 설정 변경 이벤트를 구독하거나 설정, 창, WebView의 테마를 변경하지 않습니다.
+앱 명령 또는 화면 초기화에서 조회하고 필요한 시점에 다시 조회하세요.
+
+권한 거부는 `PERMISSION_DENIED`, OS 조회 실패는 `INTERNAL`입니다.
+호스트 종료 뒤 호출은 `CANCELLED`입니다. 실제 테마 전환, 고대비 화면 및 보조 기술의
+동작 검증은 사용자 세션의 수동 검증이 필요합니다.
