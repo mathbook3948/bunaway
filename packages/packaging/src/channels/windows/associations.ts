@@ -72,6 +72,82 @@ const AssociationHive = ${scope === "perUser" ? "HKCU" : "HKLM"};
       AssociationRegistration = '${literal(`${appName} (${identifier})`)}';
       AssociationPreviousDataKey = '${innoIdentity(identifier).previousDataKey}';
 
+// Inno's Boolean registry helpers conflate absence with access/I/O failure.
+// Probe native status codes before allowing absence to authorize recovery.
+const ASSOCIATION_REG_SUCCESS = 0;
+      ASSOCIATION_REG_NOT_FOUND = 2;
+      ASSOCIATION_REG_PATH_NOT_FOUND = 3;
+      ASSOCIATION_REG_QUERY_VALUE = 1;
+      ASSOCIATION_REG_VIEW_64 = 256;
+      ASSOCIATION_REG_VIEW_32 = 512;
+
+// Inno 6.7 scripts are 32-bit even in 64-bit installation mode. Registry handles
+// and null pointers use supported 32-bit types; the explicit view matches Inno.
+function OpenAssociationRegistryKey(Hive: LongWord; Key: String; Options, Access: LongWord; var Handle: LongWord): Integer;
+  external 'RegOpenKeyExW@advapi32.dll stdcall';
+function ProbeAssociationRegistryValue(Handle: LongWord; Name: String; Reserved, ValueType, Data: LongWord; var DataBytes: LongWord): Integer;
+  external 'RegQueryValueExW@advapi32.dll stdcall';
+function CloseAssociationRegistryKey(Handle: LongWord): Integer;
+  external 'RegCloseKey@advapi32.dll stdcall';
+
+function OpenAssociationKey(const Key: String; var Handle: LongWord): Integer;
+var View: LongWord;
+begin
+  if Is64BitInstallMode then View := ASSOCIATION_REG_VIEW_64
+  else View := ASSOCIATION_REG_VIEW_32;
+  Result := OpenAssociationRegistryKey(AssociationHive, Key, 0,
+    ASSOCIATION_REG_QUERY_VALUE or View, Handle);
+end;
+
+function IsAbsentAssociationKey(Status: Integer): Boolean;
+begin
+  Result := (Status = ASSOCIATION_REG_NOT_FOUND) or
+    (Status = ASSOCIATION_REG_PATH_NOT_FOUND);
+end;
+
+function AssociationKeyExists(const Key: String): Boolean;
+var Handle: LongWord; Status: Integer;
+begin
+  Status := OpenAssociationKey(Key, Handle);
+  Result := Status = ASSOCIATION_REG_SUCCESS;
+  if Result then CloseAssociationRegistryKey(Handle)
+  else if not IsAbsentAssociationKey(Status) then
+    RaiseException('Could not inspect app association key: ' + Key + ' (error ' + IntToStr(Status) + ')');
+end;
+
+function AssociationValueExists(const Key, Name: String): Boolean;
+var Handle, DataBytes: LongWord; Status: Integer;
+begin
+  Result := False;
+  Status := OpenAssociationKey(Key, Handle);
+  if IsAbsentAssociationKey(Status) then Exit;
+  if Status <> ASSOCIATION_REG_SUCCESS then
+    RaiseException('Could not inspect app association key: ' + Key + ' (error ' + IntToStr(Status) + ')');
+  try
+    DataBytes := 0;
+    Status := ProbeAssociationRegistryValue(Handle, Name, 0, 0, 0, DataBytes);
+    Result := Status = ASSOCIATION_REG_SUCCESS;
+    if not Result and (Status <> ASSOCIATION_REG_NOT_FOUND) then
+      RaiseException('Could not inspect app association value: ' + Key + ' (error ' + IntToStr(Status) + ')');
+  finally
+    CloseAssociationRegistryKey(Handle);
+  end;
+end;
+
+function QueryAssociationValue(const Key, Name: String; var Value: String): Boolean;
+begin
+  Result := AssociationValueExists(Key, Name);
+  if Result and not RegQueryStringValue(AssociationHive, Key, Name, Value) then
+    RaiseException('Could not read app association value: ' + Key);
+end;
+
+function GetAssociationValueNames(const Key: String; var Names: TArrayOfString): Boolean;
+begin
+  Result := RegGetValueNames(AssociationHive, Key, Names);
+  if not Result and AssociationKeyExists(Key) then
+    RaiseException('Could not enumerate app association values: ' + Key);
+end;
+
 function AssociationExecutable: String;
 begin
   Result := ExpandConstant('{app}') + '\' + '${literal(executableName)}';
@@ -100,32 +176,32 @@ end;
 
 procedure DeleteAssociationValue(const Key, Name: String);
 begin
-  if RegValueExists(AssociationHive, Key, Name) and
+  if AssociationValueExists(Key, Name) and
      not RegDeleteValue(AssociationHive, Key, Name) then
     RaiseException('Could not remove app association value: ' + Key);
 end;
 
 procedure DeleteAssociationKey(const Key: String);
 begin
-  if RegKeyExists(AssociationHive, Key) and
+  if AssociationKeyExists(Key) and
      not RegDeleteKeyIncludingSubkeys(AssociationHive, Key) then
     RaiseException('Could not remove app association key: ' + Key);
 end;
 
-// The journal is written only for absent candidates before any ProgID writes.
-// A present command always wins: recovery never claims a foreign replacement.
+// The journal records absent registrations and authenticated candidates before
+// destructive cleanup. A present command always wins over recovery authority.
 function IsAssociationCandidateOwner(const ProgId, Executable: String): Boolean;
 var Key, Command, PendingOwner, Owner: String;
 begin
   Key := 'Software\Classes\' + ProgId + '\shell\open\command';
-  if RegQueryStringValue(AssociationHive, Key, '', Command) then begin
+  if QueryAssociationValue(Key, '', Command) then begin
     Result := CompareText(Command, AssociationCommand(Executable)) = 0;
     Exit;
   end;
-  Result := not RegValueExists(AssociationHive, Key, '') and
-    RegQueryStringValue(AssociationHive, AssociationRoot + '\PendingCandidates', ProgId, PendingOwner) and
+  Result := not AssociationValueExists(Key, '') and
+    QueryAssociationValue(AssociationRoot + '\PendingCandidates', ProgId, PendingOwner) and
     (CompareText(PendingOwner, Executable) = 0) and
-    RegQueryStringValue(AssociationHive, AssociationRoot, 'Executable', Owner) and
+    QueryAssociationValue(AssociationRoot, 'Executable', Owner) and
     (CompareText(Owner, Executable) = 0);
 end;
 
@@ -133,16 +209,18 @@ procedure RemoveAssociationKind(const Kind, Executable: String);
 var Names: TArrayOfString; I: Integer; ProgId, Key, Extension, Value: String;
 begin
   Key := AssociationRoot + '\Capabilities\' + Kind;
-  if not RegGetValueNames(AssociationHive, Key, Names) then Exit;
+  if not GetAssociationValueNames(Key, Names) then Exit;
   for I := 0 to GetArrayLength(Names) - 1 do begin
-    if RegQueryStringValue(AssociationHive, Key, Names[I], ProgId) and IsAssociationProgId(ProgId) and
+    if QueryAssociationValue(Key, Names[I], ProgId) and IsAssociationProgId(ProgId) and
        IsAssociationCandidateOwner(ProgId, Executable) then begin
+      // Persist ownership before recursive deletion can remove its command first.
+      WriteAssociationValue(AssociationRoot + '\PendingCandidates', ProgId, Executable);
       if Kind = 'FileAssociations' then begin
         Extension := Names[I];
         // Values come from the registry, not just the validated config.
         if (Length(Extension) > 1) and (Length(Extension) <= 33) and
            (Extension[1] = '.') and (Pos('\', Extension) = 0) and (Pos('/', Extension) = 0) then begin
-          if RegQueryStringValue(AssociationHive, 'Software\Classes\' + Extension + '\OpenWithProgids', ProgId, Value) and (Value = '') then
+          if QueryAssociationValue('Software\Classes\' + Extension + '\OpenWithProgids', ProgId, Value) and (Value = '') then
             DeleteAssociationValue('Software\Classes\' + Extension + '\OpenWithProgids', ProgId);
           // Shared keys are retained if they contain defaults or other handlers.
           if not RegDeleteKeyIfEmpty(AssociationHive, 'Software\Classes\' + Extension + '\OpenWithProgids') then
@@ -152,6 +230,7 @@ begin
         end;
       end;
       DeleteAssociationKey('Software\Classes\' + ProgId);
+      DeleteAssociationValue(AssociationRoot + '\PendingCandidates', ProgId);
     end;
   end;
 end;
@@ -160,22 +239,26 @@ procedure RemovePendingAssociationCandidates(const Executable: String);
 var Names: TArrayOfString; I: Integer;
 begin
   // Registration may fail even before a Capabilities mapping is written.
-  if not RegGetValueNames(AssociationHive, AssociationRoot + '\PendingCandidates', Names) then Exit;
+  if not GetAssociationValueNames(AssociationRoot + '\PendingCandidates', Names) then Exit;
   for I := 0 to GetArrayLength(Names) - 1 do
-    if IsAssociationProgId(Names[I]) and IsAssociationCandidateOwner(Names[I], Executable) then
+    if IsAssociationProgId(Names[I]) and IsAssociationCandidateOwner(Names[I], Executable) then begin
+      // Retain the journal if any descendant prevents complete recursive deletion.
+      WriteAssociationValue(AssociationRoot + '\PendingCandidates', Names[I], Executable);
       DeleteAssociationKey('Software\Classes\' + Names[I]);
+      DeleteAssociationValue(AssociationRoot + '\PendingCandidates', Names[I]);
+    end;
 end;
 
 procedure RemoveAssociations(const Executable: String);
 var Owner, Registration, RegistrationName: String;
 begin
-  if not RegQueryStringValue(AssociationHive, AssociationRoot, 'Executable', Owner) or
+  if not QueryAssociationValue(AssociationRoot, 'Executable', Owner) or
      (CompareText(Owner, Executable) <> 0) then Exit;
   RemoveAssociationKind('FileAssociations', Executable);
   RemoveAssociationKind('UrlAssociations', Executable);
   RemovePendingAssociationCandidates(Executable);
-  if RegQueryStringValue(AssociationHive, AssociationRoot, 'RegistrationName', RegistrationName) and
-     RegQueryStringValue(AssociationHive, 'Software\RegisteredApplications', RegistrationName, Registration) and
+  if QueryAssociationValue(AssociationRoot, 'RegistrationName', RegistrationName) and
+     QueryAssociationValue('Software\RegisteredApplications', RegistrationName, Registration) and
      (Registration = AssociationRoot + '\Capabilities') then
     DeleteAssociationValue('Software\RegisteredApplications', RegistrationName);
   DeleteAssociationKey(AssociationRoot);
@@ -196,7 +279,7 @@ procedure CheckAssociationCandidate(const ProgId: String);
 var Key: String;
 begin
   Key := 'Software\Classes\' + ProgId;
-  if not RegKeyExists(AssociationHive, Key) then Exit;
+  if not AssociationKeyExists(Key) then Exit;
   if not (IsAssociationCandidateOwner(ProgId, AssociationExecutable) or
           ((PreviousInstallDir <> '') and (PreviousExecutableName <> '') and
            IsAssociationCandidateOwner(ProgId, AddBackslash(PreviousInstallDir) + PreviousExecutableName)) or
@@ -209,11 +292,11 @@ procedure PreflightAssociations;
 var Owner, Registration: String;
 begin
   ${selectedTasks ? `if not (${selectedTasks}) then Exit;` : "Exit;"}
-  if RegKeyExists(AssociationHive, AssociationRoot) and
-     (not RegQueryStringValue(AssociationHive, AssociationRoot, 'Executable', Owner) or
+  if AssociationKeyExists(AssociationRoot) and
+     (not QueryAssociationValue(AssociationRoot, 'Executable', Owner) or
       not IsAssociationOwner(Owner)) then
     RaiseException('App associations belong to another installation.');
-  if RegQueryStringValue(AssociationHive, 'Software\RegisteredApplications', AssociationRegistration, Registration) and
+  if QueryAssociationValue('Software\RegisteredApplications', AssociationRegistration, Registration) and
      (Registration <> AssociationRoot + '\Capabilities') then
     RaiseException('App registration belongs to another installation.');
 ${preflight}
@@ -223,7 +306,7 @@ procedure RegisterAssociation(const Kind, Token, ProgId, Name: String; Protocol:
 var Key: String;
 begin
   Key := 'Software\Classes\' + ProgId;
-  if RegKeyExists(AssociationHive, Key) then begin
+  if AssociationKeyExists(Key) then begin
     if not IsAssociationCandidateOwner(ProgId, AssociationExecutable) then
       RaiseException('App association is owned by a different command: ' + ProgId);
   end else
@@ -260,7 +343,7 @@ begin
   PreflightAssociations;
   // Installers without uninstall info do not run RegisterPreviousData.
   // No selected candidate and no prior snapshot means there is nothing to persist.
-  if ${selectedTasks ? `not (${selectedTasks}) and ` : ""}not RegKeyExists(AssociationHive, AssociationRoot) then Exit;
+  if ${selectedTasks ? `not (${selectedTasks}) and ` : ""}not AssociationKeyExists(AssociationRoot) then Exit;
   if not PendingAssociationDataSaved then
     RaiseException('Could not persist pending association owner.');
   // Updates remove the previous snapshot, including declarations no longer
@@ -283,8 +366,8 @@ begin
               ]
             : []),
         ].join(" or ")} then begin
-    if RegKeyExists(AssociationHive, AssociationRoot) then begin
-      if not RegQueryStringValue(AssociationHive, AssociationRoot, 'Executable', Owner) or
+    if AssociationKeyExists(AssociationRoot) then begin
+      if not QueryAssociationValue(AssociationRoot, 'Executable', Owner) or
          (CompareText(Owner, AssociationExecutable) <> 0) then
         RaiseException('App associations belong to another installation.');
     end;

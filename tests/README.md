@@ -157,6 +157,12 @@ New.exe로 복구한 뒤에만 Third.exe 변경을 허용한다. 같은 New.exe�
 실행해 현재 이름은 New.exe지만 복구 소유자는 Old.exe인 상태를 만든다. 대기 마법사가 종료 코드 7로
 거부되고 이전 파일과 복구 기록이 남는지 확인한다. 실제 파일 핸들과 레지스트리, 설치 및 제거를 사용하며
 등록과 삭제 구현은 모방하지 않는다. 모든 marker는 `finally`에서 해제하고 시작한 프로세스의 완료를 관찰한다.
+레지스트리 ACL 회귀는 부분 등록 뒤 외부 명령으로 바뀐 command 키의 `QueryValues`만 거부하고,
+열거와 삭제 권한은 유지한다. 설치와 제거가 읽기 실패를 부재로 처리하지 않고 외부 명령과 등록을
+보존하는지 검사한다. 성공한 ProgID의 `DefaultIcon` 삭제만 거부하는 회귀는 command가 먼저
+삭제된 실제 부분 정리 상태를 확인하고, 복구 기록으로 재시도나 제거가 나머지 키를 정리하는지 검사한다.
+`Capabilities/FileAssociations`의 값 조회만 거부하는 회귀는 선언 없는 New.exe 업데이트와 제거가
+실패해도 등록, ProgID, Old.exe와 복구 소유자가 남고 권한 복구 뒤 정리가 완료되는지 확인한다.
 
 `windows-initial-placement.fixture.ts`는 모니터 겹침이 바뀌는 `SetWindowPos`에서
 실제 창 프로시저에 `WM_DPICHANGED`를 전달한다. 초기 DPI 보정의 수렴, 중앙 좌표와

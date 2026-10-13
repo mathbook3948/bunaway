@@ -400,7 +400,10 @@ type InstallerFailure =
   | "payload-cleanup"
   | "pending-owner"
   | "busy"
-  | "stale";
+  | "stale"
+  | "read-preflight"
+  | "read"
+  | "key-cleanup";
 
 interface NativeInstallerRequest {
   version: string;
@@ -533,11 +536,23 @@ async function createNativeAssociationFixture(compiler: string) {
     powershell(
       `$key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(${quote(path)},[Microsoft.Win32.RegistryKeyPermissionCheck]::ReadWriteSubTree,[System.Security.AccessControl.RegistryRights]::ChangePermissions); try { $acl=[System.Security.AccessControl.RegistrySecurity]::new(); $acl.SetSecurityDescriptorSddlForm(${quote(descriptor)},[System.Security.AccessControl.AccessControlSections]::Access); $key.SetAccessControl($acl) } finally { $key.Dispose() }`,
     );
-  async function denyValueWrites(path: string) {
+  async function denyRegistryRights(
+    path: string,
+    rights: "SetValue" | "QueryValues" | "Delete",
+  ) {
     const descriptor = await powershell(
-      `$key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(${quote(path)},[Microsoft.Win32.RegistryKeyPermissionCheck]::ReadWriteSubTree,[System.Security.AccessControl.RegistryRights]::ReadPermissions -bor [System.Security.AccessControl.RegistryRights]::ChangePermissions); try { $acl=$key.GetAccessControl([System.Security.AccessControl.AccessControlSections]::Access); $acl.GetSecurityDescriptorSddlForm([System.Security.AccessControl.AccessControlSections]::Access); $rule=[System.Security.AccessControl.RegistryAccessRule]::new([System.Security.Principal.WindowsIdentity]::GetCurrent().User,[System.Security.AccessControl.RegistryRights]::SetValue,[System.Security.AccessControl.AccessControlType]::Deny); $acl.AddAccessRule($rule); $key.SetAccessControl($acl) } finally { $key.Dispose() }`,
+      `$key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(${quote(path)},[Microsoft.Win32.RegistryKeyPermissionCheck]::ReadWriteSubTree,[System.Security.AccessControl.RegistryRights]::ReadPermissions -bor [System.Security.AccessControl.RegistryRights]::ChangePermissions); try { $acl=$key.GetAccessControl([System.Security.AccessControl.AccessControlSections]::Access); $acl.GetSecurityDescriptorSddlForm([System.Security.AccessControl.AccessControlSections]::Access); $rule=[System.Security.AccessControl.RegistryAccessRule]::new([System.Security.Principal.WindowsIdentity]::GetCurrent().User,[System.Security.AccessControl.RegistryRights]::${rights},[System.Security.AccessControl.AccessControlType]::Deny); $acl.AddAccessRule($rule); $key.SetAccessControl($acl) } finally { $key.Dispose() }`,
     );
     return () => restoreAccess(path, descriptor);
+  }
+  const denyValueWrites = (path: string) =>
+    denyRegistryRights(path, "SetValue");
+  async function verifyQueryOnlyDenial(path: string) {
+    // This fixture must still permit recursive enumeration/deletion. Otherwise
+    // a preserved foreign command would not prove reads failed closed.
+    await powershell(
+      `$key=$null; try { $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(${quote(path)},[Microsoft.Win32.RegistryKeyPermissionCheck]::Default,[System.Security.AccessControl.RegistryRights]::QueryValues) } catch [System.UnauthorizedAccessException] {} ; if ($key) { $key.Dispose(); throw 'Fixture QueryValues denial did not apply.' }; $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(${quote(path)},[Microsoft.Win32.RegistryKeyPermissionCheck]::Default,[System.Security.AccessControl.RegistryRights]::EnumerateSubKeys -bor [System.Security.AccessControl.RegistryRights]::Delete); if (-not $key) { throw 'Fixture lost enumeration/deletion access.' }; $key.Dispose()`,
+    );
   }
   async function restoreRegistrationFault(
     version: string,
@@ -655,7 +670,11 @@ async function createNativeAssociationFixture(compiler: string) {
       const log = await Bun.file(logPath).text();
       if (failure) {
         expect(exitCode).not.toBe(0);
-        if (failure === "pending-owner" || failure === "stale") {
+        if (
+          failure === "pending-owner" ||
+          failure === "stale" ||
+          failure === "read-preflight"
+        ) {
           // PrepareToInstall rejects the rename before payload and previous-data writes.
           expect(exitCode).toBe(7);
         } else if (failure === "busy") {
@@ -672,6 +691,9 @@ async function createNativeAssociationFixture(compiler: string) {
           busy: "Another setup or uninstall is maintaining this application",
           stale:
             "Installation state changed while this setup or uninstall was open",
+          "read-preflight": "Could not inspect app association",
+          read: "Could not inspect app association",
+          "key-cleanup": "Could not remove app association key",
         };
         expect(log).toContain(failureMessages[failure]);
       } else if (exitCode !== 0) {
@@ -718,7 +740,7 @@ async function createNativeAssociationFixture(compiler: string) {
     });
     await running.finish();
   }
-  async function startUninstall(failure?: "busy") {
+  async function startUninstall(failure?: "busy" | "read" | "key-cleanup") {
     const executable = join(installDir, "unins000.exe");
     if (!(await Bun.file(executable).exists())) {
       throw new Error("Fixture uninstaller is missing.");
@@ -743,10 +765,26 @@ async function createNativeAssociationFixture(compiler: string) {
       ]);
       if (failure) {
         expect(code).not.toBe(0);
+        const failureMessages = {
+          busy: "Another setup or uninstall is maintaining this application",
+          read: "Could not inspect app association",
+          "key-cleanup": "Could not remove app association key",
+        };
         expect(await Bun.file(logPath).text()).toContain(
-          "Another setup or uninstall is maintaining this application",
+          failureMessages[failure],
         );
-        return;
+        if (failure === "busy") {
+          return; // The deliberately paused competing process still owns it.
+        }
+        // Failed uninstall must finish natively before the fixture changes ACLs
+        // or retries, while leaving the payload and uninstaller available.
+        for (let i = 0; i < 200; i++) {
+          if (await maintenanceAvailable(mutexes.maintenance)) {
+            return;
+          }
+          await Bun.sleep(50);
+        }
+        throw new Error("Failed uninstaller did not finish.");
       }
       if (code !== 0) {
         throw new Error(`Uninstaller failed (${code}): ${stdout} ${stderr}`);
@@ -767,7 +805,7 @@ async function createNativeAssociationFixture(compiler: string) {
       finish,
     };
   }
-  async function uninstall(failure?: "busy") {
+  async function uninstall(failure?: "busy" | "read" | "key-cleanup") {
     if (!(await Bun.file(join(installDir, "unins000.exe")).exists())) {
       return;
     }
@@ -815,6 +853,8 @@ async function createNativeAssociationFixture(compiler: string) {
     registryKeyExists,
     write,
     denyValueWrites,
+    denyRegistryRights,
+    verifyQueryOnlyDenial,
     restoreRegistrationFault,
     install,
     startInstall,
@@ -980,6 +1020,345 @@ for (const fault of [
     120000,
   );
 }
+
+test.skipIf(!iscc)(
+  "native unreadable foreign commands never inherit partial registration ownership",
+  async () => {
+    if (!iscc) {
+      throw new Error("ISCC is required.");
+    }
+    const fixture = await createNativeAssociationFixture(iscc);
+    const {
+      installDir,
+      declarations,
+      fileProgId,
+      associationRoot,
+      registration,
+      query,
+      write,
+      registryKeyExists,
+      denyRegistryRights,
+      verifyQueryOnlyDenial,
+      restoreRegistrationFault,
+      install,
+      uninstall,
+      cleanup,
+    } = fixture;
+    const config = {
+      files: declarations.files,
+    };
+    const candidate = `Software\\Classes\\${fileProgId}`;
+    const command = `${candidate}\\shell\\open\\command`;
+    const foreignCommand = '"foreign-replacement.exe" "%1"';
+    const executable = join(installDir, "New.exe");
+    try {
+      for (const outcome of [
+        "retry",
+        "uninstall",
+      ] as const) {
+        const version = `unreadable-${outcome}`;
+        try {
+          await install(
+            version,
+            "New.exe",
+            config,
+            "fileassociations",
+            "write",
+            "icon",
+          );
+        } finally {
+          await restoreRegistrationFault(version, "icon");
+        }
+        expect(
+          await query(`${associationRoot}\\PendingCandidates`, fileProgId),
+        ).toBe(executable);
+        await write(command, "", foreignCommand);
+        await write(`${candidate}\\DefaultIcon`, "", "foreign-icon");
+        const restore = await denyRegistryRights(command, "QueryValues");
+        try {
+          await verifyQueryOnlyDenial(command);
+          await install(
+            `${version}-selected`,
+            "New.exe",
+            config,
+            "fileassociations",
+            "read-preflight",
+          );
+          if (outcome === "retry") {
+            await install(
+              `${version}-cleanup`,
+              "New.exe",
+              undefined,
+              undefined,
+              "read",
+            );
+          } else {
+            await uninstall("read");
+          }
+          expect(await registryKeyExists(candidate)).toBe(true);
+          expect(await query(associationRoot, "Executable")).toBe(executable);
+          expect(
+            await query(`${associationRoot}\\PendingCandidates`, fileProgId),
+          ).toBe(executable);
+          expect(
+            await query("Software\\RegisteredApplications", registration),
+          ).toBe(`${associationRoot}\\Capabilities`);
+          expect(await Bun.file(executable).exists()).toBe(true);
+          expect(
+            await Bun.file(join(installDir, "unins000.exe")).exists(),
+          ).toBe(true);
+        } finally {
+          await restore();
+        }
+        // Restoring query access reveals that neither failure deleted or replaced foreign data.
+        expect(await query(command)).toBe(foreignCommand);
+        expect(await query(`${candidate}\\DefaultIcon`)).toBe("foreign-icon");
+        if (outcome === "retry") {
+          await install(`${version}-restored`, "New.exe", undefined);
+        }
+        await uninstall();
+        expect(await query(associationRoot, "Executable")).toBe("MISSING");
+        expect(await query(command)).toBe(foreignCommand);
+        expect(await query(`${candidate}\\DefaultIcon`)).toBe("foreign-icon");
+        // The next partial-registration scenario starts from a genuinely absent candidate.
+        await fixture.powershell(
+          `[Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree(${fixture.quote(candidate)},$false)`,
+        );
+      }
+    } finally {
+      await cleanup();
+    }
+  },
+  180000,
+);
+
+test.skipIf(!iscc)(
+  "native partial ProgID deletion retains authenticated cleanup ownership until retry or uninstall",
+  async () => {
+    if (!iscc) {
+      throw new Error("ISCC is required.");
+    }
+    const fixture = await createNativeAssociationFixture(iscc);
+    const {
+      installDir,
+      declarations,
+      fileProgId,
+      associationRoot,
+      previousDataKey,
+      query,
+      registryKeyExists,
+      denyRegistryRights,
+      install,
+      uninstall,
+      cleanup,
+    } = fixture;
+    const config = {
+      files: declarations.files,
+    };
+    const candidate = `Software\\Classes\\${fileProgId}`;
+    const oldExecutable = join(installDir, "Old.exe");
+    const newExecutable = join(installDir, "New.exe");
+    try {
+      for (const outcome of [
+        "retry",
+        "uninstall",
+      ] as const) {
+        await install(
+          `partial-delete-${outcome}-old`,
+          "Old.exe",
+          config,
+          "fileassociations",
+        );
+        expect(
+          await query(`${associationRoot}\\PendingCandidates`, fileProgId),
+        ).toBe("MISSING");
+        const restore = await denyRegistryRights(
+          `${candidate}\\DefaultIcon`,
+          "Delete",
+        );
+        try {
+          await install(
+            `partial-delete-${outcome}-new`,
+            "New.exe",
+            undefined,
+            undefined,
+            "key-cleanup",
+          );
+          // Inno's recursive delete removed the ownership command before its blocked icon child.
+          expect(await query(`${candidate}\\shell\\open\\command`)).toBe(
+            "MISSING",
+          );
+          expect(await query(`${candidate}\\DefaultIcon`)).toBe(
+            `"${oldExecutable}",0`,
+          );
+          expect(await registryKeyExists(candidate)).toBe(true);
+          expect(
+            await query(`${associationRoot}\\PendingCandidates`, fileProgId),
+          ).toBe(oldExecutable);
+          expect(
+            await query(
+              previousDataKey,
+              "Inno Setup CodeFile: PendingAssociationOwner",
+            ),
+          ).toBe(oldExecutable);
+          if (outcome === "retry") {
+            await install(
+              `partial-delete-${outcome}-again`,
+              "New.exe",
+              undefined,
+              undefined,
+              "key-cleanup",
+            );
+          } else {
+            await uninstall("key-cleanup");
+          }
+          expect(
+            await query(`${associationRoot}\\PendingCandidates`, fileProgId),
+          ).toBe(oldExecutable);
+          expect(await query(associationRoot, "Executable")).toBe(
+            oldExecutable,
+          );
+          expect(await Bun.file(oldExecutable).exists()).toBe(true);
+          expect(await Bun.file(newExecutable).exists()).toBe(true);
+        } finally {
+          await restore();
+        }
+        if (outcome === "retry") {
+          await install(
+            `partial-delete-${outcome}-restored`,
+            "New.exe",
+            undefined,
+          );
+          expect(await Bun.file(oldExecutable).exists()).toBe(false);
+          expect(
+            await query(
+              previousDataKey,
+              "Inno Setup CodeFile: PendingAssociationOwner",
+            ),
+          ).toBe("");
+        }
+        await uninstall();
+        expect(await registryKeyExists(candidate)).toBe(false);
+        expect(await query(associationRoot, "Executable")).toBe("MISSING");
+        expect(await Bun.file(oldExecutable).exists()).toBe(false);
+        expect(await Bun.file(newExecutable).exists()).toBe(false);
+      }
+    } finally {
+      await cleanup();
+    }
+  },
+  180000,
+);
+
+test.skipIf(!iscc)(
+  "native association enumeration denial retains registrations and predecessor payload for recovery",
+  async () => {
+    if (!iscc) {
+      throw new Error("ISCC is required.");
+    }
+    const fixture = await createNativeAssociationFixture(iscc);
+    const {
+      installDir,
+      declarations,
+      fileProgId,
+      associationRoot,
+      previousDataKey,
+      registration,
+      query,
+      registryKeyExists,
+      denyRegistryRights,
+      verifyQueryOnlyDenial,
+      install,
+      uninstall,
+      cleanup,
+    } = fixture;
+    const config = {
+      files: declarations.files,
+    };
+    const mapping = `${associationRoot}\\Capabilities\\FileAssociations`;
+    const candidate = `Software\\Classes\\${fileProgId}`;
+    const oldExecutable = join(installDir, "Old.exe");
+    const newExecutable = join(installDir, "New.exe");
+    try {
+      for (const outcome of [
+        "retry",
+        "uninstall",
+      ] as const) {
+        await install(
+          `enumeration-${outcome}-old`,
+          "Old.exe",
+          config,
+          "fileassociations",
+        );
+        const restore = await denyRegistryRights(mapping, "QueryValues");
+        try {
+          await verifyQueryOnlyDenial(mapping);
+          await install(
+            `enumeration-${outcome}-new`,
+            "New.exe",
+            undefined,
+            undefined,
+            "read",
+          );
+          if (outcome === "uninstall") {
+            await uninstall("read");
+          }
+          expect(await query(associationRoot, "Executable")).toBe(
+            oldExecutable,
+          );
+          expect(
+            await query("Software\\RegisteredApplications", registration),
+          ).toBe(`${associationRoot}\\Capabilities`);
+          expect(await registryKeyExists(candidate)).toBe(true);
+          expect(await query(`${candidate}\\shell\\open\\command`)).toBe(
+            `"${oldExecutable}" "%1"`,
+          );
+          expect(
+            await query(previousDataKey, "Inno Setup CodeFile: ExecutableName"),
+          ).toBe("New.exe");
+          expect(
+            await query(
+              previousDataKey,
+              "Inno Setup CodeFile: PendingAssociationOwner",
+            ),
+          ).toBe(oldExecutable);
+          expect(await Bun.file(oldExecutable).exists()).toBe(true);
+          expect(await Bun.file(newExecutable).exists()).toBe(true);
+          expect(
+            await Bun.file(join(installDir, "unins000.exe")).exists(),
+          ).toBe(true);
+        } finally {
+          await restore();
+        }
+        if (outcome === "retry") {
+          await install(
+            `enumeration-${outcome}-restored`,
+            "New.exe",
+            undefined,
+          );
+          expect(await Bun.file(oldExecutable).exists()).toBe(false);
+          expect(
+            await query(
+              previousDataKey,
+              "Inno Setup CodeFile: PendingAssociationOwner",
+            ),
+          ).toBe("");
+        }
+        await uninstall();
+        expect(await registryKeyExists(candidate)).toBe(false);
+        expect(await registryKeyExists(associationRoot)).toBe(false);
+        expect(
+          await query("Software\\RegisteredApplications", registration),
+        ).toBe("MISSING");
+        expect(await Bun.file(oldExecutable).exists()).toBe(false);
+        expect(await Bun.file(newExecutable).exists()).toBe(false);
+      }
+    } finally {
+      await cleanup();
+    }
+  },
+  180000,
+);
 
 test.skipIf(!iscc)(
   "native renamed association cleanup preserves its trusted owner across failures, retry and uninstall",
