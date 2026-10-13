@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -15,6 +16,7 @@ import { Channel } from "#native/windows/bun/channel";
 import { bundleIOPluginFixture } from "../fixtures/native-worker.ts";
 
 const WORKER_TIMEOUT_MS = 10000;
+const MAX_PACKET_TRACE = 16;
 
 test.skipIf(process.platform !== "win32")(
   "compiled public power API crosses the real I/O worker and obeys operation grants",
@@ -38,12 +40,28 @@ test.skipIf(process.platform !== "win32")(
       ],
     };
     const contextId = crypto.randomUUID() as HostContext;
-    const pending = new Map<string, (response: HostResponse) => void>();
+    const pending = new Map<
+      string,
+      {
+        resolve(response: HostResponse): void;
+        reject(error: unknown): void;
+      }
+    >();
+    const packetTrace: string[] = [];
     let worker: Worker | undefined;
     let channel: Channel | undefined;
     let ready = false;
     let cleaned = false;
     let failure: unknown;
+    const fail = (error: unknown) => {
+      failure = error;
+      for (const reply of pending.values()) {
+        reply.reject(error);
+      }
+      pending.clear();
+      // A failed receive callback also prevents send acknowledgements from arriving.
+      channel?.close();
+    };
     try {
       const assets = resolve(root, "worker");
       await bundleIOPluginFixture(
@@ -68,14 +86,21 @@ export const pluginImports = { power: { operations: async () => ({ createOperati
         },
       });
       const exited = new Promise<number>((done) => worker?.once("exit", done));
-      worker.once("error", (error) => {
-        failure = error;
+      worker.once("error", fail);
+      worker.once("exit", (code) => {
+        if (pending.size) {
+          fail(new Error(`Power worker exited before replying: ${code}`));
+        }
       });
       const connection = new Channel(
         worker,
         runtime,
         "main-io",
         (packet) => {
+          packetTrace.push(packet.kind);
+          if (packetTrace.length > MAX_PACKET_TRACE) {
+            packetTrace.shift();
+          }
           if (packet.kind === "ready") {
             ready = true;
           } else if (packet.kind === "authorize-input") {
@@ -95,16 +120,14 @@ export const pluginImports = { power: { operations: async () => ({ createOperati
           } else if (packet.kind === "host-response") {
             const settle = pending.get(packet.requestId);
             pending.delete(packet.requestId);
-            settle?.(packet.response);
+            settle?.resolve(packet.response);
           } else if (packet.kind === "cleaned") {
             cleaned = true;
           } else {
             throw new Error(`Unexpected power worker packet: ${packet.kind}`);
           }
         },
-        (error) => {
-          failure = error;
-        },
+        fail,
       );
       channel = connection;
       const deadline = Date.now() + WORKER_TIMEOUT_MS;
@@ -124,24 +147,43 @@ export const pluginImports = { power: { operations: async () => ({ createOperati
           contextId,
           controller.signal,
           async (_context, call) => {
+            if (failure) {
+              throw failure;
+            }
             const requestId = crypto.randomUUID();
             let timeout: ReturnType<typeof setTimeout> | undefined;
             const response = new Promise<HostResponse>((done, reject) => {
-              pending.set(requestId, done);
-              timeout = setTimeout(
-                () => reject(new Error("Power worker response timed out.")),
-                WORKER_TIMEOUT_MS,
-              );
+              pending.set(requestId, {
+                resolve: done,
+                reject,
+              });
+            });
+            const deadline = new Promise<never>((_done, reject) => {
+              timeout = setTimeout(() => {
+                const error = new Error(
+                  `Power worker ${call.operation} timed out. Packets: ${packetTrace.join(", ")}`,
+                );
+                fail(error);
+                reject(error);
+              }, WORKER_TIMEOUT_MS);
             });
             try {
-              await connection.send({
+              const sent = connection.send({
                 kind: "operation",
                 requestId,
                 context: contextId,
                 source: "backend",
                 call,
               });
-              return await response;
+              // Observe the reply immediately, even while its operation acknowledgement is pending.
+              const exchange = Promise.all([
+                sent,
+                response,
+              ]).then(([, reply]) => reply);
+              return await Promise.race([
+                exchange,
+                deadline,
+              ]);
             } finally {
               clearTimeout(timeout);
               pending.delete(requestId);
@@ -169,14 +211,16 @@ export const pluginImports = { power: { operations: async () => ({ createOperati
           expect((await power.getStatus()).source).toMatch(
             /^(ac|battery|unknown)$/,
           );
-          await expect(
+          // Node's asynchronous assertion keeps Worker authorization delivery live.
+          await assert.rejects(
             power.startBlocker({
               type: "system",
               reason: "denied",
             }),
-          ).rejects.toMatchObject({
-            code: "PERMISSION_DENIED",
-          });
+            {
+              code: "PERMISSION_DENIED",
+            },
+          );
           policy = {
             permissions: powerPlugin.native.operations.map(
               (operation) => operation.name,
@@ -240,6 +284,9 @@ export const pluginImports = { power: { operations: async () => ({ createOperati
       expect(cleaned).toBe(true);
       expect(failure).toBeUndefined();
       expect(pending.size).toBe(0);
+    } catch (error) {
+      // Host API errors are sanitized; retain the original fixture transport failure.
+      throw failure ?? error;
     } finally {
       await worker?.terminate();
       channel?.close();
