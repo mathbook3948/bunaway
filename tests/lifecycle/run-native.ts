@@ -86,6 +86,7 @@ if (target === "windows-x64") {
           "tests/lifecycle/desktop.test.ts",
           "tests/lifecycle/windows-bun-instance.test.ts",
           "tests/lifecycle/windows-power.test.ts",
+          "tests/lifecycle/windows-appearance.test.ts",
           "tests/cli/windows-assets.test.ts",
           "tests/cli/windows-compile.test.ts",
         ].map((name) => resolve(root, name)),

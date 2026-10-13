@@ -8,7 +8,7 @@
         "reference/client/transport": ["createWebViewTransport"],
         "reference/client/invoke": ["invoke"],
         "reference/tooling/native-plugins": ["invokePlugin"],
-        "reference/client/listen": ["listen"]
+        "reference/client/listen": ["listen", "once"]
       }
     },
     {
@@ -356,6 +356,17 @@
       }
     },
     {
+      "name": "@bunaway/plugin-appearance",
+      "source": "plugins/appearance/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/appearance": ["appearance", "appearancePlugin"]
+      }
+    },
+    {
       "name": "@bunaway/plugin-power",
       "source": "plugins/power/src/index.ts",
       "buildOutputs": {
@@ -388,7 +399,7 @@
       "pages": {
         "reference/client/create-client": ["ready"],
         "reference/client/invoke": ["invoke"],
-        "reference/client/listen": ["listen"],
+        "reference/client/listen": ["listen", "once"],
         "reference/client/close": ["close"]
       }
     },
@@ -518,6 +529,7 @@
           "setSizeConstraints",
           "setSize",
           "setPosition",
+          "center",
           "setGeometry",
           "setFullscreen",
           "setCloseConfirmation",
@@ -868,6 +880,12 @@
     "reference/host/storage-write-text": ["storage.writeText"],
     "reference/host/storage-exists": ["storage.exists"],
     "reference/host/storage-stat": ["storage.stat"],
+    "reference/host/storage-bytes": [
+      "storage.readBytes",
+      "storage.writeBytes",
+      "storage.appendBytes",
+      "storage.appendText"
+    ],
     "reference/host/log-write": ["log.write"],
     "reference/host/capabilities-get": ["capabilities.get"],
     "reference/plugins/opener": [
@@ -941,6 +959,7 @@
       "windows.getSizeConstraints",
       "windows.setSizeConstraints",
       "windows.setPosition",
+      "windows.center",
       "windows.setFullscreen",
       "windows.setCloseConfirmation",
       "windows.getSnapshot",
@@ -950,6 +969,7 @@
       "windows.recreateInstance",
       "windows.listInstances"
     ],
+    "reference/plugins/appearance": ["appearance.getPreferences"],
     "reference/plugins/power": [
       "power.getStatus",
       "power.getIdleTime",

@@ -128,3 +128,9 @@ Windows의 선택 power 플러그인은 AC와 배터리 상태, 호출 세션의
 [power 계약](../site/src/content/docs/reference/plugins/power.mdx)을 따르며
 실제 상태 query와 request handle 정리는 Windows native CI에 포함한다.
 물리 배터리 전환, 화면 timeout, idle 절전과 Modern Standby 검증은 수동 작업이다.
+
+Windows의 선택 appearance 플러그인은 저장된 테마와 transparency 선호, DWM accent,
+시스템 색과 고대비, reduced motion 및 screen reader 설정 플래그를 조회한다.
+다른 플랫폼은 `UNSUPPORTED`이며 [appearance 계약](../site/src/content/docs/reference/plugins/appearance.mdx)을 따른다.
+실제 Win32 query 회귀는 Windows native CI에 포함한다. 테마 지정과 변경 이벤트,
+실제 보조 기술 및 WebView 접근성 트리 검증은 후속 작업이다.

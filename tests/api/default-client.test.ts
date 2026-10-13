@@ -5,6 +5,7 @@ import {
   invoke,
   invokePlugin,
   listen,
+  once,
 } from "@bunaway/client";
 import type { Capabilities } from "@bunaway/plugin-capabilities";
 import {
@@ -221,6 +222,13 @@ test("imports are lazy and default calls report an unavailable app bridge", asyn
   ).rejects.toMatchObject({
     code: "UNSUPPORTED",
   });
+  await expect(
+    sdk.once("memo.saved", () => {}, {
+      onError() {},
+    }),
+  ).rejects.toMatchObject({
+    code: "UNSUPPORTED",
+  });
   await expect(capabilities()).rejects.toMatchObject({
     code: "UNSUPPORTED",
   });
@@ -349,6 +357,57 @@ test("direct event subscriptions dispose independently and capabilities use the 
   bridge.result(last(bridge, "invoke").id, support);
   await expect(querying).resolves.toEqual(support);
   expect(bridge.requests("hello")).toHaveLength(1);
+});
+
+test("direct once uses the shared WebView client and waits for automatic cleanup", async () => {
+  const bridge = mount().chrome.webview;
+  const deliveries: string[] = [];
+  const failures: unknown[] = [];
+  const pending = once<string>(
+    "memo.saved",
+    (event) => deliveries.push(event.payload),
+    {
+      onError: (error) => failures.push(error),
+    },
+  );
+  bridge.hello();
+  await flush();
+  bridge.result(last(bridge, "listen").id, {
+    subscriptionId: "sub-once",
+  });
+  const event: Extract<
+    Message,
+    {
+      kind: "event";
+    }
+  > = {
+    kind: "event",
+    protocol: PROTOCOL_VERSION,
+    subscriptionId: "sub-once",
+    source: "backend",
+    target: "main",
+    event: "memo.saved",
+    sequence: 1,
+    payload: "first",
+  };
+  bridge.emit(event);
+  bridge.emit({
+    ...event,
+    sequence: 2,
+    payload: "second",
+  });
+  const release = await pending;
+  const cleanup = release();
+  await flush();
+  expect(bridge.requests("hello")).toHaveLength(1);
+  expect(bridge.requests("unlisten")).toHaveLength(1);
+  bridge.result(last(bridge, "unlisten").id, null);
+  await cleanup;
+  expect(deliveries).toEqual([
+    "first",
+  ]);
+  expect(failures).toEqual([]);
+  expect(bridge.listeners.size).toBe(1);
 });
 
 test("page exit ends pending calls and subscriptions, removes listeners, and never reconnects", async () => {

@@ -57,6 +57,7 @@ export async function save(text: string): Promise<null> {
 | `@bunaway/plugin-capabilities` | `capabilities`, `capabilitiesPlugin` | `capabilities` |
 | `@bunaway/plugin-clipboard` | `clipboard`, `clipboardPlugin` | `clipboard` |
 | `@bunaway/plugin-power` | `power`, `powerPlugin` | `power` |
+| `@bunaway/plugin-appearance` | `appearance`, `appearancePlugin` | `appearance` |
 
 텍스트 클립보드 계약과 Windows 자원 소유권은 [clipboard README](../../plugins/clipboard/README.md)에 둔다.
 공통 UI 실행 컨텍스트는 선택적 `signal`을 제공한다. Windows와 macOS는 요청 취소, 컨텍스트 폐기와 종료 때 이 신호를 중단한다.

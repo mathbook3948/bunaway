@@ -13,6 +13,7 @@
         "@bunaway/packaging": "workspace:*",
         "@bunaway/plugin": "workspace:*",
         "@bunaway/plugin-api": "workspace:*",
+        "@bunaway/plugin-appearance": "workspace:*",
         "@bunaway/plugin-autostart": "workspace:*",
         "@bunaway/plugin-capabilities": "workspace:*",
         "@bunaway/plugin-clipboard": "workspace:*",
@@ -114,6 +115,20 @@
         "@bunaway/core": "workspace:*",
         "@bunaway/plugin-api": "workspace:*",
         "@bunaway/protocol": "workspace:*",
+      },
+    },
+    "plugins/appearance": {
+      "name": "@bunaway/plugin-appearance",
+      "version": "0.0.0",
+      "dependencies": {
+        "@bunaway/protocol": "workspace:*",
+        "zod": "4.6.5",
+      },
+      "devDependencies": {
+        "@bunaway/plugin": "workspace:*",
+      },
+      "peerDependencies": {
+        "@bunaway/plugin": "0.0.0",
       },
     },
     "plugins/autostart": {
@@ -351,6 +366,8 @@
     "@bunaway/plugin": ["@bunaway/plugin@workspace:packages/plugin-sdk"],
 
     "@bunaway/plugin-api": ["@bunaway/plugin-api@workspace:packages/plugin-api"],
+
+    "@bunaway/plugin-appearance": ["@bunaway/plugin-appearance@workspace:plugins/appearance"],
 
     "@bunaway/plugin-autostart": ["@bunaway/plugin-autostart@workspace:plugins/autostart"],
 

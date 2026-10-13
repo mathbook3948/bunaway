@@ -339,6 +339,12 @@ UI 초기화 실패 검사는 UI 의존성만 대체하고 실제 Worker를 사�
 macOS에서는 참조된 하위 프로세스와 `unref()`된 하위 프로세스, 플러그인 종료 기한 초과와
 호스트 SIGKILL을 실제 프로세스로 검사한다. shell의 자식과 감시 프로세스까지 정리되고
 다른 프로세스 그룹은 유지되는지 확인한다. 다른 OS의 시작 회귀는 macOS 그룹 소유권만 대체한다.
+`windows-bun-storage.ts`는 임의 바이트, 빈 파일, 짧은 대체와 append, Unicode 텍스트 append,
+바이트 읽기 상한과 링크 거부를 실제 Win32 핸들로 검사한다.
+`windows-storage-metadata.ts`는 실제 WebView2에서 바이트 대체와 append, UTF-8 append 및
+독립적인 텍스트 대체 권한 거부를 I/O Worker와 함께 검사한다.
+이 검사들은 `mise run host:windows`에 포함하며 Linux 계약 검사와 구분한다.
+
 `tests/lifecycle/run-native.ts`는 패키징과 테스트 실행 순서를 조정한다.
 macOS 전용 설정과 리소스 경계 페이지도 `fixtures/desktop/host/`에 둔다.
 `host:macos`는 C 컴파일 없이 Bun compiled 앱으로 실제 WKWebView 회귀를 실행한다.
@@ -448,3 +454,10 @@ DIB의 행 방향과 padding, alpha 및 잘못된 profile, mask, 크기를 확�
 system/display 활성 및 GetHandleInformation으로 명시 해제와 종료 시 handle 정리를 확인한다.
 `mise run host:windows`에 포함하며 물리 배터리 전환, 화면 꺼짐과 idle 절전 또는
 Modern Standby 및 사용자 절전 후 요청 종료의 하드웨어 검증을 대신하지 않는다.
+
+`appearance.test.ts`는 선호의 null, 색 형식과 개별 operation 권한, 호출 컨텍스트를 확인한다.
+CLI의 같은 이름 검사는 로컬 tarball의 isolated 설치, 네이티브 I/O 어댑터 발견과 browser
+번들의 FFI 제외를 검사한다. `windows-appearance.test.ts`는 실제 Windows 고대비,
+client-area animation, screen reader 설정 플래그 및 시스템 색과 비교하고 두 어댑터의
+DLL 수명과 종료 후 거부를 확인한다. `mise run host:windows`에 포함한다.
+사용자 테마 변경과 실제 보조 기술 또는 WebView 접근성 트리 검증을 대신하지 않는다.

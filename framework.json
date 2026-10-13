@@ -30,6 +30,7 @@
     "opener": "@bunaway/plugin-opener",
     "autostart": "@bunaway/plugin-autostart",
     "clipboard": "@bunaway/plugin-clipboard",
-    "power": "@bunaway/plugin-power"
+    "power": "@bunaway/plugin-power",
+    "appearance": "@bunaway/plugin-appearance"
   }
 }
