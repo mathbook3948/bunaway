@@ -462,6 +462,7 @@ checkNames(
       "capabilities",
       "opener",
       "clipboard",
+      "image",
       "autostart",
       "power",
       "appearance",

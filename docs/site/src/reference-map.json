@@ -303,6 +303,17 @@
       }
     },
     {
+      "name": "@bunaway/plugin-image",
+      "source": "plugins/image/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/image": ["image", "imagePlugin"]
+      }
+    },
+    {
       "name": "@bunaway/plugin-windows",
       "source": "plugins/windows/src/index.ts",
       "buildOutputs": {
@@ -502,6 +513,7 @@
       "type": "NativeWindow",
       "pages": {
         "reference/tooling/plugin-api": [
+          "audio",
           "show",
           "showInactive",
           "focus",
@@ -536,6 +548,20 @@
           "getSnapshot",
           "getReadiness"
         ]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "NativeWebViewAudio",
+      "pages": {
+        "reference/tooling/plugin-api": ["getState", "setMuted"]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "WebViewAudioState",
+      "pages": {
+        "reference/tooling/plugin-api": ["muted", "playing"]
       }
     },
     {
@@ -905,6 +931,8 @@
       "clipboard.writeFormats"
     ],
     "reference/host/windows": [
+      "windows.getWebViewAudioState",
+      "windows.setWebViewAudioMuted",
       "windows.list",
       "windows.getById",
       "windows.getCurrent",
@@ -978,6 +1006,16 @@
       "power.listBlockers",
       "power.isBlockerActive",
       "power.stopBlocker"
+    ],
+    "reference/plugins/image": [
+      "image.createRGBA",
+      "image.createBytes",
+      "image.createDataURL",
+      "image.getInfo",
+      "image.getPixels",
+      "image.exportBytes",
+      "image.exportDataURL",
+      "image.dispose"
     ]
   },
   "configuration": {

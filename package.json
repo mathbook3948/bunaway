@@ -45,7 +45,8 @@
     "@bunaway/plugin-appearance": "workspace:*",
     "@bunaway/plugin-log": "workspace:*",
     "@bunaway/plugin-capabilities": "workspace:*",
-    "zod": "4.6.5"
+    "zod": "4.6.5",
+    "@bunaway/plugin-image": "workspace:*"
   },
   "imports": {
     "#cli/*": "./packages/cli/src/*.ts",

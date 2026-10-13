@@ -1,5 +1,12 @@
 # Tests
 
+`api/webview-audio.test.ts`는 audio 작업의 개별 권한, 엄격한 boolean 입력, 음소거와 재생의
+독립 상태, 취소와 닫힌 창 및 플랫폼 서비스 부재를 검증한다.
+`lifecycle/windows-webview-audio.ts`는 `mise run host:windows`에서 실제 WebView2의 음소거
+변경과 반복 설정, 문서 탐색 뒤 유지, 준비 전과 종료 후 거부 및 native 자원 정리를 확인한다.
+결과는 `build/windows-webview-audio-results.json`이다. 조용한 문서를 사용하며 재생 중인
+audio와 물리 장치 출력은 별도 수동 검증이다.
+
 `windows-initial-placement.fixture.ts`는 모니터 겹침이 바뀌는 `SetWindowPos`에서
 실제 창 프로시저에 `WM_DPICHANGED`를 전달한다. 초기 DPI 보정의 수렴, 중앙 좌표와
 content/outer 크기, DPI 순환 때 숨김 HWND 정리 및 생성 후 OS 권장 배치 처리를 검증한다.
@@ -461,3 +468,11 @@ CLI의 같은 이름 검사는 로컬 tarball의 isolated 설치, 네이티브 I
 client-area animation, screen reader 설정 플래그 및 시스템 색과 비교하고 두 어댑터의
 DLL 수명과 종료 후 거부를 확인한다. `mise run host:windows`에 포함한다.
 사용자 테마 변경과 실제 보조 기술 또는 WebView 접근성 트리 검증을 대신하지 않는다.
+
+`api/image.test.ts`와 `lifecycle/image-resources.test.ts`는 선택 image 플러그인의
+Zod 계약과 canonical base64, 빈 이미지, operation 권한, ID 해제와 앱 종료,
+count와 메모리 quota 및 생성 취소의 정리를 확인한다. `windows-image.test.ts`는
+`host:windows`에 포함하며 공통 SDK와 실제 UI Worker, WIC에서 PNG와 data URL의
+RGBA alpha 왕복, JPEG와 BMP, 잘못된 encoded 입력과 decode 크기, 최대 PNG,
+정책 거부와 결과 전달 전 취소를 확인한다. 실제 파일 경로 접근, WebView 표시,
+다른 앱의 가져오기, 색상 관리와 최소 Windows 버전 검증은 포함하지 않는다.

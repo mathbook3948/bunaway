@@ -31,6 +31,7 @@
     "autostart": "@bunaway/plugin-autostart",
     "clipboard": "@bunaway/plugin-clipboard",
     "power": "@bunaway/plugin-power",
-    "appearance": "@bunaway/plugin-appearance"
+    "appearance": "@bunaway/plugin-appearance",
+    "image": "@bunaway/plugin-image"
   }
 }

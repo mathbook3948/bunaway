@@ -425,12 +425,13 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [x] `readFormats`와 `writeFormats`로 한 번의 clipboard 열기 구간에서 여러 형식을 읽거나 교체한다. 준비 실패는 기존 내용을 보존하며 비우기 이후 부분 등록 실패는 되돌리지 않는다.
 - [ ] 사용자 정의 binary 형식을 읽고 쓰는 범위와 제한을 정의한다.
 - [ ] 클립보드 변경 이벤트의 지원을 결정한다.
-- [ ] 파일, bytes, bitmap, RGBA와 data URL에서 이미지 리소스를 만든다.
-- [ ] 이미지 크기, 빈 이미지 여부와 픽셀 데이터를 조회한다.
-- [ ] PNG, JPEG, bitmap과 data URL로 이미지를 내보낸다.
+- [x] Windows `@bunaway/plugin-image`에서 PNG, JPEG와 BMP bytes, RGBA와 data URL로 앱 소유 이미지 리소스를 만든다.
+- [ ] 파일 경로에서 이미지 리소스를 읽는 API와 저장소 접근 정책을 연결한다.
+- [x] `image.getInfo`와 `image.getPixels`로 크기, 빈 이미지 여부와 RGBA 픽셀 데이터를 조회한다.
+- [x] `image.exportBytes`와 `image.exportDataURL`로 PNG, JPEG, BMP와 data URL을 내보낸다. PNG는 alpha를 보존하고 JPEG와 BMP는 불투명 픽셀만 받는다.
 - [ ] crop, resize와 scale-factor별 이미지 representation을 제공한다.
 - [ ] 파일 아이콘과 이미지 thumbnail을 생성한다.
-- [ ] 이미지 리소스 ID와 명시적 해제, 호출 취소와 앱 종료 정리를 제공한다.
+- [x] 앱 소유 이미지 ID, `image.dispose`, 결과 전달 전 생성 취소와 앱 종료 정리를 제공한다. 작업별 권한과 64개, 8 MiB 상한을 적용한다.
 
 2026-10-12 clipboard 확장은 `defineNativePlugin`과 Zod 계약, 작업별 권한, 입력과 출력 상한,
 빌린 메모리의 복사와 해제, 다중 형식의 부분 실패 정리를 포함한다. 실제 Windows 회귀는
@@ -536,7 +537,8 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] 파일 drop의 enter, over, leave와 drop 이벤트, 경로와 좌표를 제공한다.
 - [ ] WebView의 File 객체와 OS 파일 경로를 안전하게 연결한다.
 - [ ] 파일을 앱 밖으로 드래그하고 표시할 drag 이미지를 제공한다.
-- [ ] audio muted와 audible 상태를 변경, 조회하고 이벤트를 제공한다.
+- [x] `setWebViewAudioMuted`로 음소거를 변경하고 `getWebViewAudioState`로 음소거와 문서의 audio 재생 상태를 조회한다. 두 상태는 독립이며 탐색은 음소거를 유지한다.
+- [ ] audio muted와 재생 상태의 변경 이벤트를 제공한다. 실제 장치의 출력과 재생 중 음소거는 수동 검증이 필요하다.
 - [ ] caret browsing 활성화, selection 가운데 표시와 image-at-point 복사를 제공한다.
 - [ ] media 시작과 중단, HTML theme-color와 링크 hover URL 이벤트를 제공한다.
 
