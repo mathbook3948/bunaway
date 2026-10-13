@@ -97,9 +97,6 @@ function resource() {
     failCancel: (error?: Error) => {
       cancelFailure = error;
     },
-    recoverDecision: () => {
-      failure = undefined;
-    },
   };
 }
 

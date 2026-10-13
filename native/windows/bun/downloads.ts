@@ -292,7 +292,13 @@ export class Downloads implements NativeDownloads {
       paused:
         state.state === "interrupted" && state.interruptReason === USER_PAUSED,
     };
-    if (!this.fits(snapshot, entry)) {
+    const metadataChanged =
+      snapshot.url !== entry.snapshot.url ||
+      snapshot.mimeType !== entry.snapshot.mimeType ||
+      snapshot.contentDisposition !== entry.snapshot.contentDisposition ||
+      snapshot.path !== entry.snapshot.path;
+    // Scalar progress/state updates already have reserved space; remeasure only changed metadata.
+    if (metadataChanged && !this.fits(snapshot, entry)) {
       throw new BunawayError({
         code: "INTERNAL",
         message: "Download metadata exceeds the snapshot budget.",
