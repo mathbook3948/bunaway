@@ -87,6 +87,26 @@ test.skipIf(process.platform !== "win32")(
       expect(events).toHaveLength(beforeDuplicate);
       check("move", () => windows.setPosition(hwnd, 60, 80));
       check("resize", () => windows.setSize(hwnd, 700, 520));
+      const beforeInteractive = events.length;
+      driver.symbols.SendMessageW(hwnd, 0x0231, 0n, 0n);
+      windows.setPosition(hwnd, 80, 100);
+      windows.setSize(hwnd, 720, 540);
+      const beforeEnd = windows.getSnapshot(hwnd);
+      driver.symbols.SendMessageW(hwnd, 0x0232, 0n, 0n);
+      checkObservation("moved", beforeInteractive);
+      checkObservation("resized", beforeInteractive);
+      expect(events.at(-1)?.changes).toEqual([
+        "moved",
+        "resized",
+      ]);
+      expect(windows.getSnapshot(hwnd).revision).toBeGreaterThan(
+        beforeEnd.revision,
+      );
+      const completedCount = events.length;
+      driver.symbols.SendMessageW(hwnd, 0x0232, 0n, 0n);
+      driver.symbols.SendMessageW(hwnd, 0x0231, 0n, 0n);
+      driver.symbols.SendMessageW(hwnd, 0x0232, 0n, 0n);
+      expect(events).toHaveLength(completedCount);
       check("maximize", () => windows.maximize(hwnd));
       check("unmaximize", () => windows.unmaximize(hwnd));
       check("minimize", () => windows.minimize(hwnd));

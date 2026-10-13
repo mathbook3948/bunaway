@@ -1,4 +1,6 @@
 import {
+  isDownloadSnapshotWithinLimits,
+  MAX_WEBVIEW_DOWNLOADS,
   MAX_WINDOW_COORDINATE,
   MAX_WINDOW_DIMENSION,
   MAX_WINDOW_INSTANCES,
@@ -51,6 +53,15 @@ const windowResult = {
 const windowStateResult = {
   input: windowTarget,
   output: z.boolean(),
+};
+
+const downloadTarget = windowTarget.extend({
+  id: z.string().uuid(),
+});
+
+const downloadResult = {
+  input: downloadTarget,
+  output: z.null(),
 };
 
 const windowIdentitySchema = z.strictObject({
@@ -374,7 +385,7 @@ export const windowEvents = {
       changes: {
         type: "array",
         minItems: 1,
-        maxItems: 12,
+        maxItems: 14,
         uniqueItems: true,
         items: {
           type: "string",
@@ -391,6 +402,8 @@ export const windowEvents = {
             "leaveFullscreen",
             "move",
             "resize",
+            "moved",
+            "resized",
           ],
         },
       },
@@ -462,6 +475,44 @@ export const windowOperations = {
     input: z.null(),
     output: monitorPointSchema,
   },
+  "windows.setDownloadRequestsEnabled": {
+    input: windowTarget.extend({
+      enabled: z.boolean(),
+    }),
+    output: z.null(),
+  },
+  "windows.getDownloads": {
+    input: windowTarget,
+    output: z
+      .array(
+        z.strictObject({
+          id: z.string().uuid(),
+          url: z.string(),
+          mimeType: z.string(),
+          contentDisposition: z.string(),
+          path: z.string(),
+          totalBytes: z.int().min(0).max(Number.MAX_SAFE_INTEGER).nullable(),
+          receivedBytes: z.int().min(0).max(Number.MAX_SAFE_INTEGER).nullable(),
+          state: z.enum([
+            "pending",
+            "inProgress",
+            "interrupted",
+            "completed",
+            "cancelled",
+          ]),
+          interruptReason: z.int().min(0).nullable(),
+          canResume: z.boolean(),
+          paused: z.boolean(),
+        }),
+      )
+      .max(MAX_WEBVIEW_DOWNLOADS)
+      .refine(isDownloadSnapshotWithinLimits),
+  },
+  "windows.approveDownload": downloadResult,
+  "windows.cancelDownload": downloadResult,
+  "windows.pauseDownload": downloadResult,
+  "windows.resumeDownload": downloadResult,
+  "windows.forgetDownload": downloadResult,
   "windows.getWebViewState": {
     input: windowTarget,
     output: z.strictObject({
