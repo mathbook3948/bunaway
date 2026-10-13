@@ -750,7 +750,8 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 - [x] 이벤트 구독, 해제, broadcast와 지정 뷰 전달을 제공한다.
 - [x] 권한, 취소, deadline과 종료된 세션의 늦은 응답 처리를 제공한다.
 - [x] 기본 WebView 연결을 공유하고 HMR과 pagehide에서 수명을 관리한다.
-- [ ] once 구독과 대상 창, WebView, backend 이벤트 전달의 공개 계약을 제공한다.
+- [x] `client.once`와 직접 `once`로 첫 유효 이벤트를 한 번만 전달하고 자동 해제한다. 권한, 취소와 오류 계약은 기존 구독을 따른다.
+- [ ] 대상 창, WebView, backend 이벤트 전달의 공개 계약을 제공한다.
 - [x] Windows의 `windows.changed` native 이벤트를 동일한 typed 구독 API로 전달한다.
 - [ ] binary payload와 JSON 외 데이터의 전송 계약을 추가한다.
 - [ ] 연속 결과와 대용량 데이터의 channel 또는 stream 전송을 제공한다.

@@ -77,6 +77,10 @@ import clientSource from '@repo/packages/cli/templates/vanilla/src/client.ts?raw
 
 `listen()`의 `onError`는 필수입니다. 활성 구독의 종료는 이 콜백에서 처리하고, 구독 시작 실패는 `listen()`의 Promise에서 처리합니다.
 `listen()`이 반환한 해제 함수를 보관해 두었다가 컴포넌트를 제거할 때 `await unlisten()`으로 구독을 정리합니다.
+첫 알림만 처리하려면 같은 인자로 `client.once()`를 호출합니다. 반환 Promise는 구독 승인을
+기다리고 첫 유효 이벤트를 받으면 SDK가 자동 해제합니다. 이벤트가 오기 전의 컴포넌트 정리와
+자동 원격 해제의 완료 대기는 반환한 해제 함수를 사용합니다. 자세한 오류와 취소 규칙은
+[listen과 once 참조](/reference/client/listen/)를 따릅니다.
 
 ## 응답과 이벤트는 어떻게 다르나요?
 
