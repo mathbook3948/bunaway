@@ -57,6 +57,60 @@ function fixture(menus?: NativeEnvironment["menus"]) {
   };
 }
 
+test("menu labels accept 512 Unicode code points and reject 513 regardless of UTF-16 width", async () => {
+  const parsers = pluginParsers("menu", menuOperations);
+  for (const label of [
+    "x".repeat(512),
+    "😀".repeat(257),
+    "😀".repeat(512),
+  ]) {
+    const call = await parsers.validateCall({
+      operation: "menu.create",
+      payload: {
+        menuId: "boundary",
+        items: [
+          {
+            id: "item",
+            type: "item",
+            label,
+          },
+        ],
+      },
+    });
+    expect(call.payload).toMatchObject({
+      items: [
+        {
+          label,
+        },
+      ],
+    });
+  }
+  expect("😀".repeat(512).length).toBe(1024);
+  for (const label of [
+    "",
+    "x".repeat(513),
+    "😀".repeat(513),
+  ]) {
+    await expect(
+      parsers.validateCall({
+        operation: "menu.create",
+        payload: {
+          menuId: "boundary",
+          items: [
+            {
+              id: "item",
+              type: "item",
+              label,
+            },
+          ],
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+  }
+});
+
 test("menu definitions resolve defaults and reject invalid trees before recursive parsing", () => {
   expect(
     menuOperations.create.input.safeParse({
