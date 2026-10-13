@@ -1,5 +1,13 @@
 # Tests
 
+`api/webview-print-ui.test.ts`는 인쇄 UI의 개별 권한, browser 기본값과 system 선택,
+경로와 silent 입력 거부, 취소와 닫힌 창 및 플랫폼 서비스 부재를 확인한다.
+`lifecycle/windows-webview-print-ui.ts`는 `mise run host:windows`에서 실제 Win32와
+WebView2 문서에 browser 인쇄 UI를 요청하고 반복 요청 및 종료 뒤 native 자원 정리를
+확인한다. 실제 COM ABI의 E_NOINTERFACE도 optional 조회와 required 조회로 구분한다.
+결과는 `build/windows-webview-print-ui-results.json`에 기록한다.
+system UI 사용자 선택과 물리 프린터 출력은 별도 검증이며 테스트가 인쇄 제출을 하지 않는다.
+
 다운로드 UI-loop regression은 생성된 worker 경계에서 전용 `windows-download-cleanup/ui.ts`를
 번들하고 실제 승인 transfer의 cancel 자원만 일시적으로 실패시킨다. 소유 창을 닫는 동안
 다른 창의 SDK 응답과 세 번째 창의 native cleanup이 진행하고, 소유자의 재시도도 복구되는지
@@ -602,3 +610,10 @@ text/binary 메시지, timeout과 SDK deadline, 취소 뒤 실제 TCP 정리와 
 확인한다. 결과는 `build/macos-native-logs/network-results.json`이며 기존 네이티브 CI artifact에 포함된다.
 `cli/network.test.ts`는 isolated tarball 설치의 두 OS native export에서 실제 HTTP를 실행하고
 browser 번들에 Bun 전송 구현이 포함되지 않는지 검사한다. TLS, 외부 proxy와 OS 인증은 검증하지 않는다.
+
+`lifecycle/windows-trash.test.ts`는 실제 Windows I/O STA에서 파일을 휴지통으로
+보내고 해당 `$I` 메타데이터와 `$R` 파일 내용을 확인한다. HTML 연결 폴더 보존,
+파일 소실, 부모 고정과 삭제 공유 중 파일 교체 거부를 검사한다. 테스트는 해당
+파일의 휴지통 항목만 정리하며 전체 휴지통을 비우지 않는다. 셸이 유지하는 COM Worker가
+다른 초기화 회귀에 영향을 주지 않도록 별도 Bun 프로세스에서 실행한다. `host:windows`에
+포함하며 사용자 설정별 휴지통 비활성화, 용량 초과와 경고 UI는 수동 검증 항목이다.

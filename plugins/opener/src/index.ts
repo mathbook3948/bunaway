@@ -29,3 +29,6 @@ export const revealFile = calls.revealFile;
 export const openFileWith = calls.openFileWith;
 /** Open an HTTP or HTTPS URL with a selected absolute .exe application. Success is request acceptance. */
 export const openUrlWith = calls.openUrlWith;
+
+/** Recycle an existing Windows file. Success means the Shell reported an item in the Recycle Bin. */
+export const trashFile = calls.trashFile;
