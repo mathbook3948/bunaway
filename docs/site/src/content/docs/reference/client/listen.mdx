@@ -1,5 +1,5 @@
 ---
-title: listen
+title: listen과 once
 description: 이벤트를 구독하고 콜백에서 데이터를 받은 뒤 구독을 해제합니다.
 sidebar: { order: 3 }
 ---
@@ -7,11 +7,18 @@ sidebar: { order: 3 }
 ```ts
 client.listen(name, listener, { onError, signal? }): Promise<AsyncDispose>
 listen<T extends JsonValue = JsonValue>(name, listener, { onError, signal? }): Promise<AsyncDispose>
+client.once(name, listener, { onError, signal? }): Promise<AsyncDispose>
+once<T extends JsonValue = JsonValue>(name, listener, { onError, signal? }): Promise<AsyncDispose>
 ```
 
 이벤트를 구독하고 알림이 발생할 때마다 콜백을 실행합니다. 구독이 성공하면 비동기 해제 함수를 반환합니다.
 아래 예제는 [앱 정의의 타입을 지정한 클라이언트](/guides/types-and-validation/)의 `client.listen`으로 구독합니다. 구독은 연결 준비를 기다립니다.
 직접 import한 `listen`도 같은 기본 연결을 사용하는 함수 API로 계속 지원합니다.
+
+`client.once`와 직접 import한 `once`는 첫 유효 이벤트를 한 번만 처리합니다.
+이름, payload 타입 추론, 뷰의 이벤트 권한, 취소와 오류 처리는 `listen`과 같습니다.
+반환 Promise는 이벤트 수신이 아니라 구독 승인을 기다립니다. 승인 직후 이벤트가
+도착하면 Promise를 기다리는 코드가 재개되기 전에 콜백을 실행할 수도 있습니다.
 
 ## 예시
 
@@ -24,6 +31,19 @@ const unlisten = await client.listen(
 );
 // 화면 컴포넌트를 제거할 때
 await unlisten();
+```
+
+첫 알림만 필요하면 `once`를 사용합니다. 이벤트가 오기 전에 컴포넌트를 제거할 때도
+반환한 해제 함수로 정리합니다.
+
+```ts
+const releaseOnce = await client.once(
+  "message.saved",
+  (event) => { console.log("첫 저장:", event.payload); },
+  { onError: (error) => { console.error(error.code, error.message); } },
+);
+// 컴포넌트 정리 때 호출하거나, 첫 이벤트 뒤 원격 해제 완료를 기다립니다.
+await releaseOnce();
 ```
 
 ## 인자
@@ -61,6 +81,11 @@ listener에서 예외가 발생해도 다른 요청과 구독은 계속 처리�
 ## 해제와 취소
 
 해제 함수를 여러 번 호출해도 한 번만 정리합니다. 동시에 호출하면 같은 작업의 완료를 기다리며 해제 뒤에는 이벤트를 전달하지 않습니다.
+`once`는 첫 유효 이벤트의 콜백 실행 전에 로컬 구독을 해제하고 원격 해제를 시작합니다.
+콜백이 예외를 던지거나 다른 이벤트를 동기적으로 발생시켜도 두 번째 이벤트는 전달하지 않습니다.
+반환한 해제 함수는 자동 해제와 같은 완료를 기다립니다. 자동 원격 해제가 실패하면
+`onError`로 오류를 알리고 세션을 닫아 남은 원격 구독과 요청을 정리합니다.
+순서가 잘못된 첫 이벤트는 콜백으로 전달하지 않고 구독 오류로 처리합니다.
 연결이 이미 닫혔어도 해제 함수를 호출할 수 있습니다.
 전달한 signal을 취소하면 구독 시작을 중단하거나 활성 구독을 해제합니다.
 구독 시작을 취소하거나 시간 초과 오류를 받은 뒤에도 SDK는 늦게 생성된 구독을 해제하려고 응답을 기다립니다. 이 정리 대기도 동시 요청 128개 상한에 포함되며, 상한에 도달하면 새 호출은 `BUSY`로 실패합니다. 늦은 구독의 해제가 완료되거나 최종 오류를 받으면 다시 호출할 수 있습니다.
