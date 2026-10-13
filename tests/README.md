@@ -613,3 +613,7 @@ redirect 거부, binary 보존, timeout, 취소, 폐기와 용량을 검사한�
 `api/menu.test.ts`는 메뉴 리소스 제한, 트리 검증, 개별 권한과 변경 실패 보존을 검사한다.
 `lifecycle/windows-menu.test.ts`와 `windows-menu-ui.test.ts`는 실제 HMENU 및 UI Worker의 창 없는 트레이와 자원 정리를 확인한다.
 `mise run host:windows`에 포함되며 사용자 클릭과 키보드 메뉴 조작의 수동 검증을 대신하지 않는다.
+
+`api/tray.test.ts`는 ICO 범위, UTF-16 tooltip, 권한과 입력 대기의 정리를 검사한다.
+`lifecycle/windows-tray-controls.test.ts`와 `windows-tray-ui.test.ts`는 실제 shell 업데이트와 synthetic mouse/TaskbarCreated 메시지, UI Worker와 HWND 정리를 확인한다.
+물리 마우스나 실제 Explorer process 재시작은 별도 검증이다.

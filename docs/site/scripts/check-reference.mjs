@@ -470,6 +470,7 @@ checkNames(
       "clipboard",
       "image",
       "menu",
+      "tray",
       "autostart",
       "appearance",
       "os",

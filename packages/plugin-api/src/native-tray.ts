@@ -17,12 +17,20 @@ export type NativeTrayEvent = {
   id: "main";
   button: "left" | "right" | "middle" | "none";
   state: "down" | "up" | "double-click" | "context-menu";
-  position: { x: number; y: number } | null;
+  position: {
+    x: number;
+    y: number;
+  } | null;
 };
 /** UI-thread controls for the configured tray. They do not create/remove it or change app residency. */
 export type NativeTrayServices = {
   get(): NativeTraySnapshot | null;
-  getBounds(): { x: number; y: number; width: number; height: number } | null;
+  getBounds(): {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null;
   setTooltip(tooltip: string): void;
   /** Base64 ICO data, or null to restore the host-owned app icon. No file paths are accepted. */
   setIcon(ico: string | null): void;

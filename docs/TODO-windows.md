@@ -282,16 +282,21 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 트레이 클릭으로 살아 있는 창을 복원하고 Quit에 앱 종료 확인을 적용한다.
 - [x] Explorer 재시작 후 트레이 아이콘을 다시 등록한다.
 - [ ] 앱 아이콘과 별도로 트레이용 ICO, PNG 또는 이미지 리소스를 지정한다.
-- [ ] 아이콘과 tooltip을 실행 중 변경한다.
+- [x] `tray.setIcon`으로 ICO bytes를 적용하거나 앱 아이콘으로 복원하고 `tray.setTooltip`으로 tooltip을 실행 중 변경한다.
 - [ ] 트레이 생성, 조회, 표시, 숨김, 제거와 제거 여부 조회 API를 제공한다.
 - [ ] 여러 트레이 아이콘과 고유 ID, Windows GUID를 지원한다.
 - [x] 사용자 정의 메뉴와 메뉴의 동적 교체, 제거를 지원한다. `menu.setTrayMenu`로 공유 메뉴 리소스를 연결한다.
-- [ ] 클릭, 더블 클릭, 우클릭, 가운데 클릭과 버튼 상태를 앱 이벤트로 전달한다.
-- [ ] 포인터 위치와 트레이 bounds, mouse enter/leave/move를 제공한다.
-- [ ] 클릭에 따른 메뉴 표시 여부와 창 복원 동작을 설정한다.
-- [ ] 지정 위치의 팝업 메뉴 열기, 닫기와 트레이 포커스를 제공한다.
+- [x] 왼쪽, 오른쪽, 가운데 버튼의 down/up, double-click과 context-menu 알림을 `tray.input` 및 창 없는 백엔드 `waitForEvent`로 전달한다.
+- [x] 처리 시 관측한 포인터 위치와 `tray.getBounds`의 shell 물리 bounds를 제공한다. 조회 실패는 null이다.
+- [ ] 트레이 mouse enter/leave/move를 제공한다.
+- [x] `tray.setClickBehavior`로 오른쪽 메뉴 표시와 왼쪽 창 복원 동작을 설정한다.
+- [x] `tray.focus`로 OS의 트레이 focus 요청 결과를 반환한다.
+- [ ] 지정 위치의 팝업 메뉴 열기와 닫기를 제공한다.
 - [ ] Windows balloon 표시, 제거와 show/click/closed 이벤트의 지원을 결정한다.
 - [ ] 트레이 자원 제거 뒤 숨긴 앱의 실행 유지와 종료 규칙을 정의한다.
+
+실행 중 제어의 입력과 소유권은 [tray API](./site/src/content/docs/reference/plugins/tray.mdx)를 따른다.
+실제 shell 회귀의 합성 입력과 재등록 알림은 물리 마우스와 Explorer process 재시작 검증을 대신하지 않는다.
 
 ## 07. 메뉴와 키보드 단축키
 

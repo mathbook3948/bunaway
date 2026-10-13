@@ -1,8 +1,16 @@
 import { MAX_MESSAGE_BYTES } from "@bunaway/protocol";
 
 export type { NativeMenuItem, NativeMenuServices } from "./native-menu.ts";
-export { MAX_TRAY_ICO_BYTES, MAX_TRAY_TOOLTIP_UNITS, MAX_TRAY_WAITERS } from "./native-tray.ts";
-export type { NativeTrayEvent, NativeTrayServices, NativeTraySnapshot } from "./native-tray.ts";
+export {
+  MAX_TRAY_ICO_BYTES,
+  MAX_TRAY_TOOLTIP_UNITS,
+  MAX_TRAY_WAITERS,
+} from "./native-tray.ts";
+export type {
+  NativeTrayEvent,
+  NativeTrayServices,
+  NativeTraySnapshot,
+} from "./native-tray.ts";
 
 /** Inclusive accepted dimension range for window sizes. */
 export const MIN_WINDOW_DIMENSION = 200;

@@ -61,6 +61,19 @@ let windows: Windows | undefined;
 let systemEvents: SystemEvents | undefined;
 let adapters: Awaited<ReturnType<typeof operations>> | undefined;
 let tray: Tray | undefined;
+const trayListeners = new Set<
+  (event: import("@bunaway/plugin-api/native").NativeTrayEvent) => void
+>();
+/** Resolve the configured host-owned tray without creating an alternate residency path. */
+function requireTray(): Tray {
+  if (!tray) {
+    throw new BunawayError({
+      code: "UNSUPPORTED",
+      message: "The app has no configured tray.",
+    });
+  }
+  return tray;
+}
 let controlWindow: bigint | undefined;
 let showRequested = false;
 let quitPending = false;
@@ -1340,6 +1353,34 @@ try {
     packagedPlugins,
     undefined,
     {
+      tray: {
+        get: () => tray?.get() ?? null,
+        getBounds: () => tray?.getBounds() ?? null,
+        setTooltip(tooltip) {
+          requireTray().setTooltip(tooltip);
+        },
+        setIcon(ico) {
+          requireTray().setIcon(ico);
+        },
+        setClickBehavior(showOnLeftClick, menuOnRightClick) {
+          requireTray().setClickBehavior(showOnLeftClick, menuOnRightClick);
+        },
+        focus: () => requireTray().focus(),
+        subscribe(receive) {
+          trayListeners.add(receive);
+          return () => {
+            trayListeners.delete(receive);
+          };
+        },
+        emit(event, payload) {
+          if (stopping || closingSent) {
+            return;
+          }
+          for (const view of views.values()) {
+            sendNativeEvent(view.boundary, event, payload);
+          }
+        },
+      },
       menus: {
         setTrayMenu(items, selected) {
           if (stopping && items === undefined && !tray) {
@@ -1370,13 +1411,22 @@ try {
     }
   }
   if (config.desktop?.tray) {
-    tray = new Tray(windows, config.desktop.tray.tooltip, (action) => {
-      if (action === "show") {
-        visibility("show");
-      } else {
-        requestQuit("tray");
-      }
-    });
+    tray = new Tray(
+      windows,
+      config.desktop.tray.tooltip,
+      (action) => {
+        if (action === "show") {
+          visibility("show");
+        } else {
+          requestQuit("tray");
+        }
+      },
+      (event) => {
+        for (const receive of trayListeners) {
+          receive(event);
+        }
+      },
+    );
   } else if (config.desktop?.closeBehavior === "keep-alive") {
     // A resident app needs an HWND for the CLI's private shutdown message, even before its first view.
     controlWindow = windows.create(
