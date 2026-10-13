@@ -9,6 +9,9 @@ WebView2 다운로드를 실행한다. 기본 거부, renderer 권한 거부, �
 내용과 byte 진행, pause/resume/cancel, 승인 기한, 탐색 및 종료 시 pending 정리를 검증한다.
 승인된 전송과 pending 요청이 함께 있는 브라우저를 종료해 죽은 broker에 작업을 보내지 않고
 COM 참조, timer와 창 자원을 정리하는지도 확인한다.
+기존 multiple-automatic-downloads 권한 거부를 유지하며 제어 시나리오는 새 WebView에서
+첫 다운로드로 실행한다. 마지막 장애 검사는 같은 뷰의 두 창이 공유하는 browser 프로세스에서
+승인된 전송과 pending 요청을 각각 유지한다. 자동 다운로드 권한을 허용하는 검증이 아니다.
 테스트가 기록한 고유한 브라우저 기본 경로의 파일만 지운다. 사용자 지정 경로, 물리 다운로드 UI
 조작이나 앱 재실행 후 재개 검증은 포함하지 않는다. 결과는
 `build/windows-webview-downloads-results.json`에 기록한다.

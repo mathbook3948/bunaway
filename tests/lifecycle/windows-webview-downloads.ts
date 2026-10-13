@@ -80,11 +80,18 @@ if (!process.argv.includes("--child")) {
   const script = await readFile(resolve(assets, "downloads.js"), "utf8");
   const content = Buffer.alloc(1024 * 1024, 0x5a);
   const paths = new Set<string>();
-  let action: {
-    kind: "download" | "navigate";
-    url: string;
-  } | null = null;
-  let arrivals = 0;
+  let releaseCrashBody: () => void = () => {};
+  const crashBody = new Promise<void>((done) => {
+    releaseCrashBody = done;
+  });
+  const actions = new Map<
+    string,
+    {
+      kind: "download" | "navigate";
+      url: string;
+    }
+  >();
+  const arrivals = new Map<string, number>();
   let completed = false;
   let failure: unknown;
   let exerciseTask: Promise<void> | undefined;
@@ -94,8 +101,9 @@ if (!process.argv.includes("--child")) {
     fetch(request) {
       const url = new URL(request.url);
       if (url.pathname === "/driver") {
-        const next = action;
-        action = null;
+        const id = url.searchParams.get("windowId") ?? "";
+        const next = actions.get(id) ?? null;
+        actions.delete(id);
         return Response.json(next);
       }
       if (url.pathname === "/downloads.js") {
@@ -114,6 +122,9 @@ if (!process.argv.includes("--child")) {
         const body = new ReadableStream<Uint8Array>({
           async pull(controller) {
             await Bun.sleep(50);
+            if (url.pathname === "/crashing.bin" && position > 0) {
+              await crashBody;
+            }
             if (cancelled) {
               return;
             }
@@ -156,6 +167,7 @@ if (!process.argv.includes("--child")) {
   const origin = server.url.origin;
   const main = {
     view: "main",
+    windowId: "",
   };
   const waitFor = async (
     check: () => boolean | Promise<boolean>,
@@ -168,28 +180,40 @@ if (!process.argv.includes("--child")) {
       await Bun.sleep(10);
     }
   };
-  const item = async (id: string) => {
-    const found = (await windows.getDownloads(main)).find(
+  const item = async (id: string, target = main) => {
+    const found = (await windows.getDownloads(target)).find(
       (download) => download.id === id,
     );
     assert(found, "Missing retained download");
     return found;
   };
-  const request = async (name: string) => {
-    action = {
+  const freshView = async () => {
+    const replacement = await windows.recreateInstance(main);
+    main.windowId = replacement.windowId;
+    await waitFor(
+      () => arrivals.has(main.windowId),
+      "Replacement document did not reconnect",
+    );
+    await windows.setDownloadRequestsEnabled({
+      ...main,
+      enabled: true,
+    });
+  };
+  const request = async (name: string, target = main) => {
+    actions.set(target.windowId, {
       kind: "download",
       url: `${origin}/${name}.bin`,
-    };
+    });
     await waitFor(
       async () =>
-        (await windows.getDownloads(main)).some(
+        (await windows.getDownloads(target)).some(
           (download) =>
             download.state === "pending" &&
             download.url.endsWith(`/${name}.bin`),
         ),
       `Missing download request ${name}`,
     );
-    const found = (await windows.getDownloads(main)).find(
+    const found = (await windows.getDownloads(target)).find(
       (download) =>
         download.state === "pending" && download.url.endsWith(`/${name}.bin`),
     );
@@ -203,13 +227,16 @@ if (!process.argv.includes("--child")) {
   };
   async function exercise() {
     await waitFor(
-      () => arrivals >= 1,
+      () => arrivals.size >= 1,
       "Renderer did not verify backend-only authority",
     );
-    action = {
+    const initialId = arrivals.keys().next().value;
+    assert(initialId);
+    main.windowId = initialId;
+    actions.set(main.windowId, {
       kind: "download",
       url: `${origin}/disabled.bin`,
-    };
+    });
     await waitFor(async () => {
       const log = await readFile(resolve(dataRoot, "logs/host.log"), "utf8");
       return (
@@ -218,10 +245,9 @@ if (!process.argv.includes("--child")) {
       );
     }, "Default-denied download was not observed");
     assert.deepEqual(await windows.getDownloads(main), []);
-    await windows.setDownloadRequestsEnabled({
-      ...main,
-      enabled: true,
-    });
+    // The unchanged multiple-automatic-downloads permission stays denied.
+    // A new WebView supplies one fresh browser request for each control scenario.
+    await freshView();
     const denied = await request("denied");
     assert.equal(
       await Bun.file(denied.path).exists(),
@@ -248,6 +274,7 @@ if (!process.argv.includes("--child")) {
       id: denied.id,
     });
 
+    await freshView();
     const accepted = await request("approved");
     assert.equal(accepted.mimeType, "application/octet-stream");
     assert.equal(accepted.totalBytes, content.length);
@@ -289,6 +316,7 @@ if (!process.argv.includes("--child")) {
       id: accepted.id,
     });
 
+    await freshView();
     const interrupted = await request("cancelled");
     await windows.approveDownload({
       ...main,
@@ -312,6 +340,7 @@ if (!process.argv.includes("--child")) {
       id: interrupted.id,
     });
 
+    await freshView();
     const expired = await request("expired");
     await waitFor(
       async () => (await item(expired.id)).state === "cancelled",
@@ -333,35 +362,57 @@ if (!process.argv.includes("--child")) {
       id: expired.id,
     });
 
+    await freshView();
     const navigated = await request("navigated");
-    action = {
+    const beforeNavigation = arrivals.get(main.windowId) ?? 0;
+    actions.set(main.windowId, {
       kind: "navigate",
       url: `${origin}/next.html`,
-    };
+    });
     await waitFor(
       async () => (await item(navigated.id)).state === "cancelled",
       "Navigation retained an undecided download",
     );
     assert.equal(await Bun.file(navigated.path).exists(), false);
-    await waitFor(() => arrivals >= 2, "New document did not reconnect");
+    await waitFor(
+      () => (arrivals.get(main.windowId) ?? 0) > beforeNavigation,
+      "New document did not reconnect",
+    );
+    await freshView();
     const crashing = await request("crashing");
     await windows.approveDownload({
       ...main,
       id: crashing.id,
     });
+    await waitFor(async () => {
+      const state = await item(crashing.id);
+      return state.state === "inProgress" && (state.receivedBytes ?? 0) > 0;
+    }, "Crash item did not start");
+    const pendingWindow = await windows.createInstance({
+      view: "main",
+    });
+    const pendingTarget = {
+      view: "main",
+      windowId: pendingWindow.windowId,
+    };
     await waitFor(
-      async () => (await item(crashing.id)).state === "inProgress",
-      "Crash item did not start",
+      () => arrivals.has(pendingTarget.windowId),
+      "Second shared-profile document did not connect",
     );
-    const closing = await request("closing");
+    await windows.setDownloadRequestsEnabled({
+      ...pendingTarget,
+      enabled: true,
+    });
+    const closing = await request("closing", pendingTarget);
     assert.equal(await Bun.file(closing.path).exists(), false);
+    assert.equal((await item(crashing.id)).state, "inProgress");
     const diagnostics: unknown[] = (
       await readFile(resolve(dataRoot, "logs/host.log"), "utf8")
     )
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line));
-    const browser = diagnostics.find(
+    const browser = diagnostics.reverse().find(
       (
         entry,
       ): entry is {
@@ -371,8 +422,6 @@ if (!process.argv.includes("--child")) {
         entry !== null &&
         "event" in entry &&
         entry.event === "webview-ready" &&
-        "view" in entry &&
-        entry.view === "main" &&
         "browserPid" in entry &&
         typeof entry.browserPid === "number" &&
         Number.isInteger(entry.browserPid) &&
@@ -445,7 +494,14 @@ if (!process.argv.includes("--child")) {
             }
             failure = error;
             console.error(error);
-            await windows.close(main).catch(() => {});
+            for (const identity of await windows.listInstances()) {
+              await windows
+                .close({
+                  view: identity.viewId,
+                  windowId: identity.windowId,
+                })
+                .catch(() => {});
+            }
           });
         },
       },
@@ -456,11 +512,27 @@ if (!process.argv.includes("--child")) {
           const: null,
         },
         output: {
-          const: null,
+          type: "object",
+          properties: {
+            windowId: {
+              type: "string",
+            },
+          },
+          required: [
+            "windowId",
+          ],
+          additionalProperties: false,
         },
         async run() {
-          arrivals++;
-          return null;
+          const identity = await windows.getCurrent();
+          assert(identity && identity.viewId === "main");
+          arrivals.set(
+            identity.windowId,
+            (arrivals.get(identity.windowId) ?? 0) + 1,
+          );
+          return {
+            windowId: identity.windowId,
+          };
         },
       },
     },
@@ -482,6 +554,8 @@ if (!process.argv.includes("--child")) {
       windows: [
         {
           view: "main",
+          instances: "multiple",
+          maxInstances: 2,
           title: "Downloads",
           home: `${origin}/index.html`,
           visible: false,
@@ -503,7 +577,7 @@ if (!process.argv.includes("--child")) {
         {
           pass: true,
           bytes: content.length,
-          arrivals,
+          arrivals: Object.fromEntries(arrivals),
           approvalExpiry: true,
           nativeCleanup: true,
           browserCrashCleanup: true,
@@ -513,6 +587,7 @@ if (!process.argv.includes("--child")) {
       ),
     );
   } finally {
+    releaseCrashBody();
     await server.stop(true);
     // Only delete unique files whose browser-selected path was recorded by this test's own item.
     for (const path of paths) {

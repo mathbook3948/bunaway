@@ -23,13 +23,13 @@ for (const call of [
     }
   }
 }
-await client.invoke("test.arrived", null);
+const identity = await client.invoke("test.arrived", null);
 
 // Attachment navigation can retire the SDK session without replacing the document.
 // The loopback-only fixture driver therefore controls later links independently of that session.
 for (;;) {
   const action = await (
-    await fetch("/driver", {
+    await fetch(`/driver?windowId=${encodeURIComponent(identity.windowId)}`, {
       cache: "no-store",
     })
   ).json();
