@@ -55,6 +55,8 @@ macOS 색은 앱의 현재 유효 appearance에서 평가하고 sRGB로 변환�
 0부터 1 사이로 제한한 뒤 가장 가까운 8-bit 값으로 반올림하며 알파는 포함하지 않습니다.
 조회 중 임시로 선택한 스레드 drawing appearance는 성공과 실패 모두에서 복원합니다.
 appsTheme은 저장된 사용자 선호와 다를 수 있으며 앱의 appearance override를 반영합니다.
+AppKit가 앱 override와 OS 접근성 설정으로 유효 appearance를 결정하므로 지정한
+appearance와 유효 appearance는 다를 수 있습니다.
 Auto 모드는 조회 시점의 유효 light 또는 dark로 반환합니다. 실제 창의 배경색이나
 WebView의 CSS 색을 읽는 기능은 아닙니다.
 screenReaderEnabled는 다른 보조 기술의 사용 여부, Accessibility 신뢰 권한 또는
