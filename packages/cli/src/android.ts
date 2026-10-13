@@ -1,10 +1,6 @@
-import { cp, lstat, mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import {
-  acquireBuildOutputLock,
-  ownedDirectory,
-  publishOwnedDirectory,
-} from "@bunaway/packaging";
+import { ownedDirectory, publishOwnedDirectory } from "@bunaway/packaging";
 import { outputPaths } from "@bunaway/packaging/paths";
 import {
   API_LIMITS,
@@ -19,6 +15,11 @@ import {
 import { frameworkRoot, hash, json, verifyHash, writeJson } from "./files.ts";
 import { buildFrontend } from "./frontend-build.ts";
 import { runManagedCommand } from "./managed-command.ts";
+import {
+  mobileBridge,
+  mobileProjectExists,
+  withMobileBuild,
+} from "./mobile-project.ts";
 import { runWorker } from "./processes.ts";
 
 const ANDROID_APPLICATION_ID_PATTERN =
@@ -116,9 +117,9 @@ async function prepareAndroidInputs(
       resolve(assets, `${name}.schema.json`),
     );
   }
-  await cp(
-    resolve(root, "native/android/bridge.js"),
+  await writeFile(
     resolve(assets, "bridge.js"),
+    await mobileBridge(root, "android"),
   );
   await writeFile(resolve(assets, "bunfig.toml"), "env = false\n");
   await writeJson(resolve(assets, "tsconfig.json"), {});
@@ -283,37 +284,6 @@ async function copyAndroidProject(
   });
 }
 
-/** Reject existing unrelated projects and linked marker files before touching their contents. */
-async function androidProjectExists(root: string): Promise<boolean> {
-  const directory = resolve(root, "android");
-  if (!(await ownedDirectory(root, directory))) {
-    return false;
-  }
-  const marker = resolve(directory, "bunaway-project.json");
-  const entry = await lstat(marker).catch((error: NodeJS.ErrnoException) => {
-    if (error.code !== "ENOENT") {
-      throw error;
-    }
-    return undefined;
-  });
-  if (!entry?.isFile() || entry.isSymbolicLink()) {
-    throw new Error(
-      "Existing android directory is not a bunaway project; refusing to overwrite it.",
-    );
-  }
-  const value = await json(marker);
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    !("format" in value) ||
-    value.format !== 1
-  ) {
-    throw new Error("Unsupported Android project format.");
-  }
-  await ownedDirectory(root, resolve(directory, ".bunaway"));
-  return true;
-}
-
 /** Publish generated assets and host code while preserving every app-owned native source and build setting. */
 export async function publishAndroidProject(
   root: string,
@@ -321,7 +291,7 @@ export async function publishAndroidProject(
   framework = frameworkRoot,
 ): Promise<string> {
   const directory = resolve(root, "android");
-  if (await androidProjectExists(root)) {
+  if (await mobileProjectExists(root, "android")) {
     await publishOwnedDirectory(root, prepared, resolve(directory, ".bunaway"));
   } else {
     const scaffold = resolve(dirname(prepared), "project");
@@ -433,18 +403,10 @@ async function prepareAndroidProject(
 }> {
   const metadata = await readProjectMetadata(directory);
   assertAndroidProject(metadata);
-  await androidProjectExists(metadata.root);
+  await mobileProjectExists(metadata.root, "android");
   const paths = outputPaths(metadata.root, "android");
-  const abort = new AbortController();
-  const interrupted = () => abort.abort(new Error("Android build cancelled."));
-  process.on("SIGINT", interrupted);
-  process.on("SIGTERM", interrupted);
-  let release: (() => Promise<void>) | undefined;
-  const staging = resolve(paths.work, crypto.randomUUID());
-  try {
-    release = await acquireBuildOutputLock(metadata.root, "android");
-    await ownedDirectory(metadata.root, staging, true);
-    await buildFrontend(metadata, abort.signal);
+  return withMobileBuild(metadata.root, "android", async (staging, signal) => {
+    await buildFrontend(metadata, signal);
     const project = await validateProject(metadata.root);
     assertAndroidProject(project);
     const managed = resolve(staging, "managed");
@@ -463,15 +425,10 @@ async function prepareAndroidProject(
       project.root,
       project.frameworkRoot,
     );
-    abort.signal.throwIfAborted();
+    signal.throwIfAborted();
     await copyAndroidHost(project.frameworkRoot, managed);
-    await prepareAndroidInputs(
-      project,
-      inputs,
-      project.frameworkRoot,
-      abort.signal,
-    );
-    abort.signal.throwIfAborted();
+    await prepareAndroidInputs(project, inputs, project.frameworkRoot, signal);
+    signal.throwIfAborted();
     const android = await publishAndroidProject(
       project.root,
       managed,
@@ -489,7 +446,7 @@ async function prepareAndroidProject(
     const built = await buildAndroidApk(
       android,
       gradleOutput,
-      abort.signal,
+      signal,
       project.frameworkRoot,
     );
     const appId = await readAndroidApplicationId(gradleOutput);
@@ -502,32 +459,17 @@ async function prepareAndroidProject(
       kind: "android-debug",
       sha256: await hash(built),
     });
-    abort.signal.throwIfAborted();
+    signal.throwIfAborted();
     await publishOwnedDirectory(project.root, stagedOutput, paths.output);
     if (serial !== undefined) {
-      await installAndroidApk(project.root, apk, appId, serial, abort.signal);
+      await installAndroidApk(project.root, apk, appId, serial, signal);
     }
     return {
       project: android,
       apk,
       appId,
     };
-  } finally {
-    try {
-      await ownedDirectory(metadata.root, staging);
-      await rm(staging, {
-        recursive: true,
-        force: true,
-      });
-    } finally {
-      try {
-        await release?.();
-      } finally {
-        process.off("SIGINT", interrupted);
-        process.off("SIGTERM", interrupted);
-      }
-    }
-  }
+  });
 }
 
 /**

@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "bun": {
+    "version": "1.4.2",
+    "release": "bun-v1.4.2-beta.1",
+    "archiveUrl": "https://github.com/mathbook3948/bun/releases/download/bun-v1.4.2-beta.1/bun-ios-aarch64.zip",
+    "archiveSha256": "f9a5b43abdf815ad2c12cdcf70f112bffb737a45917561cca45cadb92bbce069",
+    "deviceSha256": "205029c3cc62e95da9822f657ab2ef6290ed659fa42dc464e5a75a1291c51e95",
+    "simulatorSha256": "3080e62f0343b4237548c33e1fd01c8cccd0f8cb3bf1a9206cce076a9e369d8d"
+  }
+}

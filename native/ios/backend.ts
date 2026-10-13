@@ -1,0 +1,59 @@
+import { PassThrough, Writable } from "node:stream";
+import { parentPort, workerData } from "node:worker_threads";
+import { parseProcessFrame, type RuntimeIdentity } from "@bunaway/protocol";
+import { runBunApp } from "@bunaway/runtime-bun";
+
+if (!parentPort) {
+  throw new Error("iOS backend requires a Worker.");
+}
+
+// Entry validates the runtime identity before constructing this private Worker.
+const identity = workerData as RuntimeIdentity;
+const port = parentPort;
+const input = new PassThrough();
+let written: (() => void) | undefined;
+// Writable serializes chunks; its callback waits until entry writes the chunk to UIKit's pipe.
+const output = new Writable({
+  write(chunk: Buffer, _encoding, callback) {
+    // runBunApp writes one complete serialized frame and its newline per write.
+    written = () => {
+      written = undefined;
+      callback();
+    };
+    port.postMessage(chunk.toString("utf8").slice(0, -1));
+  },
+});
+
+port.on("message", (message: unknown) => {
+  if (message === "written") {
+    written?.();
+    return;
+  }
+  if (typeof message !== "string") {
+    throw new Error("Invalid iOS host input.");
+  }
+  const frame = parseProcessFrame(message);
+  if (
+    frame.runtime.id !== identity.id ||
+    frame.runtime.generation !== identity.generation
+  ) {
+    throw new Error("Stale iOS host input.");
+  }
+  input.write(`${message}\n`, (error) => {
+    if (error) {
+      throw error;
+    }
+    port.postMessage("consumed");
+  });
+});
+
+// @ts-expect-error app.js is resolved from the common app definition by the bundler.
+const { default: app } = await import("./app.js");
+await runBunApp(app, {
+  input,
+  output,
+  platform: "ios",
+});
+// Core disposal finishes before entry permits another Worker generation to start.
+output.destroy();
+port.close();

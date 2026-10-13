@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Subframe boundary</title></head><body><script>
+webkit.messageHandlers.bunaway.postMessage({
+  nonce: "00000000-0000-4000-8000-000000000000",
+  data: JSON.stringify({ kind: "hello", protocol: { major: 1, minor: 0 }, features: [], buildId: "forged-frame" }),
+});
+document.body.dataset.attempted = "yes";
+</script></body></html>

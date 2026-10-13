@@ -738,3 +738,39 @@ backend SDK의 image I/O 호출과 setup, codec, crop/resize, 동일 ID의 작�
 `build/macos-image-host-results.json`을 기록하며 성공을 요구한다. `run-native.ts`의
 macOS 실행에 포함하며 실제 contextual I/O dispatch를 사용한다. Native codec CI와
 이 호스트 검증을 구분한다.
+
+## iOS 내장 Bun
+
+`mise run host:ios -- <booted Simulator UUID>`는 macOS arm64와 Xcode에서 설치된 CLI로
+Simulator 앱을 빌드하고 실행한다. 실제 WKWebView의 SDK, Core, 정책, 이벤트, 큰 UTF-8 응답과
+파일 import, 두 번의 백엔드 Worker 교체 및 상태 초기화를 검사한다.
+Swift 로그의 제어 파이프 분리, 문서 오류 회수, 이전 nonce 입력과 없는 자산의 탐색 실패,
+루트 자산 경로 및 Xcode bundle ID 변경도 실제 호스트에서 검사한다.
+현재 provisional 탐색의 실제 취소 후 재연결과 후속 탐색 보존도 검사한다.
+이미 교체된 탐색의 취소와 오류는 새 문서 연결 후 fixture가 delegate 콜백을 직접 전달한다.
+600KB 슬래시 문자열 왕복과 필드, 타입, 크기, 깊이 등을 위반하는 입력 10종을 검사해
+문서만 닫히고 새 문서의 Core 명령이 정상 실행되는지 확인한다.
+해시 할당과 링크, 실제 캐시 복원 후 새 SDK 연결, 느린 WebView로 160개 이벤트의 순서,
+200개 원시 입력으로 문서 쓰기 큐 포화, 없는 home의 복구 제한과 재시도 버튼도 검사한다.
+fixture가 실패한 탐색을 직접 복구하지 않으며 실제 호스트의 복구를 기다린다.
+일반 Simulator 대상의 arm64 빌드도 별도로 실행한다.
+최종 `.app`에 포함된 Bun, libffi 라이선스와 프레임워크 고지 4개 파일을 원본과 바이트 단위로 비교한다.
+기본 HTTPS 포트 `:443`을 명시한 home이 정규화되어 실제 앱이 시작되는지 검사한다.
+`ios-build-cancel.fixture.ts`는 설치된 CLI의 출력 해시 계산 중 실제 SIGINT를 보내
+빌드 실패, 기존 출력 보존, staging 정리와 잠금 재획득을 확인한다.
+`tests/cli/ios.test.ts`는 네이티브 도구 없이 설정과 동기화 보존, Worker 세대 교체를 검사한다.
+`tests/lifecycle/ios-bridge.test.ts`는 실제 bridge와 SDK transport로 nonce 격리, 닫힘과
+캐시 pageshow의 재로드를 검사한다. WebKit 탐색 자체는 Simulator fixture의 범위다.
+`tests/cli/mobile-project.test.ts`는 두 모바일 타깃의 잠금과 staging 정리,
+실제 자식 CLI 프로세스의 SIGTERM 취소 후 잠금 재획득을 검사한다.
+`tests/lifecycle/ios-backend-input.test.ts`는 입력 스트림이 닫힌 뒤 도착한 프레임에
+Worker가 성공 응답을 보내지 않고 오류로 종료하는지 검사한다.
+기기 실행과 배포 서명, 스토어 제출은 별도 검증이 필요하다.
+
+모바일 브리지의 WebSocket 연결과 fallback, 출력 버퍼 제한, 연결 후 재전송 금지는
+`native/mobile/bridge.js`의 같은 구현을 사용한다. `loopback-channel.test.ts`는 HTTPS와
+`bunaway://` 출처 모두에서 정확한 Origin, 일회용 토큰과 문서 회수를 검사한다.
+iOS 실제 호스트 검사는 직접 WebSocket과 최초 연결을 강제로 거부한 Swift fallback을 각각 실행한다.
+각 경로에서 세 Worker 세대와 기존 문서 수명 회귀를 확인하고 Swift를 통과한 SDK hello 수로
+실제 사용 경로를 구분한다. iOS Worker 계약 검사도 정책의 HTTPS와 WebKit의 자산 Origin을
+구분하고 잘못된 출처를 거부한 뒤 정상 연결과 회수를 확인한다.

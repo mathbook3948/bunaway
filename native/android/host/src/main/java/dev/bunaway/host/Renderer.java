@@ -165,13 +165,7 @@ final class Renderer {
         WebViewCompat.addDocumentStartJavaScript(
                 view,
                 assets.read("bridge.js")
-                        .replace("__BUNAWAY_PORT_PREFIX__", WebViewChannel.REQUEST_PREFIX)
-                        .replace(
-                                "__BUNAWAY_MAX_PENDING__",
-                                Integer.toString(ProtocolLimits.MAX_PENDING))
-                        .replace(
-                                "__BUNAWAY_MAX_MESSAGE_BYTES__",
-                                Integer.toString(ProtocolLimits.MAX_MESSAGE_BYTES)),
+                        .replace("__BUNAWAY_PORT_PREFIX__", WebViewChannel.REQUEST_PREFIX),
                 Collections.singleton(assets.origin));
         view.setWebChromeClient(
                 new WebChromeClient() {
