@@ -24,6 +24,33 @@ import {
 } from "#native/macos/bun/urls";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 
+test("macOS rejects declared focusability rather than ignoring an unsupported native flag", () => {
+  const config = workerConfig("unused");
+  const first = config.windows[0];
+  if (!first) {
+    throw new Error("Missing test window.");
+  }
+  for (const focusable of [
+    true,
+    false,
+  ]) {
+    expect(() =>
+      readMacosWindowSpecs(
+        [
+          {
+            ...first,
+            window: {
+              ...first.window,
+              focusable,
+            },
+          },
+        ],
+        config.policy,
+      ),
+    ).toThrow("Initial window focusability is not implemented on macOS");
+  }
+});
+
 test("macOS rejects declared initial window state rather than ignoring it", () => {
   const config = workerConfig("unused");
   const first = config.windows[0];
@@ -1628,3 +1655,124 @@ test("macOS shutdown aborts active backend I/O before Core stop hooks and adapte
     });
   }
 }, 20_000);
+
+test("macOS I/O receives only the trusted host app identity and rejects a caller appId", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "bunaway-macos-identity-"));
+  const report = resolve(directory, "identity.json");
+  const native = {
+    operations: [
+      {
+        name: "identity.inspect",
+      },
+    ],
+  };
+  const modulePath = resolve(directory, "identity.ts");
+  const plugins: InstalledPlugin[] = [
+    {
+      name: "identity",
+      version: "1",
+      native,
+      packageName: "fixture-identity",
+      root: directory,
+      targets: {
+        macos: {
+          execution: "io",
+          operations: modulePath,
+        },
+      },
+    },
+  ];
+  try {
+    await Bun.write(
+      modulePath,
+      `
+      import { defineNativePlugin } from ${JSON.stringify(resolve(import.meta.dir, "../../packages/plugin-sdk/src/index.ts"))};
+      import { z } from ${JSON.stringify(Bun.resolveSync("zod", import.meta.dir))};
+      const plugin = defineNativePlugin({name:"identity",operations:{inspect:{input:z.null(),output:z.unknown()}},
+        platforms:{macos:{execution:"io",create(environment){return {
+          execute(){return environment.app ?? null;},dispose(){}
+        };}}}});
+      export default {...plugin.definition,version:"1"};
+    `,
+    );
+    await writePluginManifest(directory, plugins, "macos");
+    await bundleTestHost(directory, plugins);
+    await Bun.write(
+      resolve(directory, "webview.ts"),
+      "export class MacosWebview {}",
+    );
+    await Bun.write(
+      resolve(directory, "backend.js"),
+      `
+      import assert from "node:assert/strict";
+      import { writeFileSync } from "node:fs";
+      import { parentPort, workerData } from "node:worker_threads";
+      import { Channel } from ${JSON.stringify(resolve(import.meta.dir, "../../packages/runtime-bun/src/worker-channel.ts"))};
+      const responses = new Map();
+      const channel = new Channel(parentPort,workerData.runtime,"macos-backend",packet=>{
+        if(packet.kind==="host-response") responses.set(packet.requestId,packet.response);
+        if(packet.kind==="shutdown") void(async()=>{
+          await channel.send({kind:"cleaned"}); await channel.drain(); channel.close(); parentPort.close();
+        })().catch(error=>{console.error(error);process.exit(1)});
+      },error=>{console.error(error);process.exit(1)});
+      await channel.send({kind:"native-register",plugins:[{name:"identity",version:"1",native:${JSON.stringify(native)}}],complete:true});
+      await channel.send({kind:"ready"});
+      const context=workerData.backendContext;
+      for(const [requestId,payload] of [["forged",{appId:"caller-selected"}],["trusted",null]]) {
+        await channel.send({kind:"operation",context,source:"backend",requestId,call:{operation:"identity.inspect",payload}});
+        const deadline=Date.now()+5000;
+        while(!responses.has(requestId)){assert(Date.now()<deadline,"Identity request timed out");await Bun.sleep(1);}
+      }
+      assert.equal(responses.get("forged").error.code,"INVALID_ARGUMENT");
+      writeFileSync(${JSON.stringify(report)},JSON.stringify(responses.get("trusted")));
+    `,
+    );
+    const config = workerConfig(directory);
+    config.windows = [];
+    config.app = {
+      id: "tests.trusted.host",
+      launch: {
+        mode: "development",
+        executablePath: process.execPath,
+        args: [
+          "host-owned.js",
+        ],
+      },
+    };
+    config.policy.backend.permissions = [
+      "identity.inspect",
+    ];
+    await Bun.write(
+      resolve(directory, "run.ts"),
+      `
+      import { existsSync } from "node:fs";
+      import { runMacosApp } from "./entry.js";
+      const timer=setInterval(()=>{if(existsSync(${JSON.stringify(report)})) process.emit("SIGTERM","SIGTERM");},5);
+      try{await runMacosApp(${JSON.stringify(config)});}catch(error){console.error(error);process.exitCode=1;}
+      finally{clearInterval(timer);}
+    `,
+    );
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        resolve(directory, "run.ts"),
+      ],
+      {
+        stdout: "ignore",
+        stderr: "pipe",
+        timeout: 15000,
+      },
+    );
+    const errors = new Response(child.stderr).text();
+    expect(await child.exited, await errors).toBe(0);
+    expect(await Bun.file(report).json()).toEqual({
+      kind: "result",
+      payload: config.app,
+    });
+  } finally {
+    await rm(directory, {
+      recursive: true,
+      force: true,
+    });
+  }
+}, 20000);

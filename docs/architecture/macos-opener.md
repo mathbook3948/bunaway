@@ -1,7 +1,7 @@
 # macOS opener 독립 어댑터
 
 `plugins/opener/src/platforms/macos.ts`는 기존 `openUrl`, `openFile`, `revealFile` 작업을
-구현한다. 공통 I/O 연결은 PR #164의 호스트 기반 작업에 의존한다. Windows 구현과 공개 계약은
+구현한다. 공통 호스트의 I/O Worker를 통해 실행한다. Windows 구현과 공개 계약은
 변경하지 않는다. 지정 앱의 `.exe` 계약과 휴지통 작업은 이 변경에 포함하지 않는다.
 
 ## 실행과 수명
@@ -33,9 +33,7 @@ POSIX descriptor는 경로 이름의 rename이나 교체를 막지 않는다. NS
 
 ## 호스트 기반 작업과 등록
 
-이 변경은 PR #164의 `codex/macos-io-foundation`,
-`93d43cf36af99420b2c3f1057f133a168ef15d67` 위에 쌓는다. 기반 작업의 공유 I/O dispatch를
-복제하지 않는다. 호스트는 실행 직전에 살아 있는 호출 컨텍스트, 해당 작업 권한과 취소를
+공통 호스트의 공유 I/O dispatch를 사용한다. 호스트는 실행 직전에 살아 있는 호출 컨텍스트, 해당 작업 권한과 취소를
 검사한다. NativeAdapter의 동기 `execute`는 권한 token을 받지 않으며 승인된 호출만 받는다.
 파일 검사와 NSWorkspace 호출 사이에는 비동기 대기가 없다.
 
@@ -48,7 +46,6 @@ POSIX descriptor는 경로 이름의 rename이나 교체를 막지 않는다. NS
 `tests/lifecycle/run-native.ts`에는 이 기능의 독립 Worker 검사와 `macos-opener-host.ts`를 추가한다.
 폐기 가능한 실행 세션에서 호출자가 `BUNAWAY_OPENER_ISOLATED=1`을 지정했을 때만
 실행한다. macOS CI는 이 값을 명시하고 일반 로컬 native 검사에는 자동으로 지정하지 않는다.
-기반 작업은 별도로 독립 검토 중이며 이후 수정은 이 변경에 반영해야 한다.
 
 ## 검증 범위
 

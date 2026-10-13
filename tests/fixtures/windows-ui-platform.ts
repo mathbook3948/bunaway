@@ -47,6 +47,7 @@ export class Windows {
     {
       view: string;
       visible: boolean;
+      closable: boolean;
     }
   >();
   create(
@@ -60,6 +61,7 @@ export class Windows {
     this.windows.set(hwnd, {
       view: "",
       visible,
+      closable: true,
     });
     return hwnd;
   }
@@ -112,8 +114,19 @@ export class Windows {
     this.show(hwnd, true);
     return true;
   }
+
+  /** These UI-loop fixtures use the default focusable policy. */
+  showForDesktop(hwnd: bigint): void {
+    this.focus(hwnd);
+  }
   isVisible(hwnd: bigint): boolean {
     return this.read(hwnd).visible;
+  }
+  setClosable(hwnd: bigint, closable: boolean): void {
+    this.read(hwnd).closable = closable;
+  }
+  isClosable(hwnd: bigint): boolean {
+    return this.read(hwnd).closable;
   }
   destroy(hwnd: bigint): void {
     assert(this.windows.delete(hwnd));
@@ -126,6 +139,21 @@ export class Windows {
 
 export function originOf(text: string): string {
   return new URL(text).origin;
+}
+const closeRequests = new Map<
+  bigint,
+  {
+    view: string;
+    close(force?: boolean): void;
+  }
+>();
+/** Deliver a controlled WebView close callback through the real UI owner's lifecycle. */
+export function requestFixtureClose(view: string, force: boolean): void {
+  const targets = [
+    ...closeRequests.values(),
+  ].filter((target) => target.view === view);
+  assert.equal(targets.length, 1, "Fixture close target must be unique.");
+  targets[0]?.close(force);
 }
 /** Match the controller callback's failure plus forced-close notification. */
 export class WebView {
@@ -142,6 +170,10 @@ export class WebView {
       close(force?: boolean): void;
     },
   ) {
+    closeRequests.set(hwnd, {
+      view: spec.view,
+      close: hooks.close,
+    });
     queueMicrotask(() => {
       if (spec.view === controls.failView) {
         this.failure = new Error("Controller completion failed in fixture");
@@ -161,6 +193,7 @@ export class WebView {
     return true;
   }
   finish(): boolean {
+    closeRequests.delete(this.hwnd);
     return true;
   }
   canReuseProfile(): boolean {

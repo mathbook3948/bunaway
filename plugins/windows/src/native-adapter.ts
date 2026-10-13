@@ -16,6 +16,20 @@ function unsupportedRelations() {
   });
 }
 
+function unsupportedFocusability() {
+  return new BunawayError({
+    code: "UNSUPPORTED",
+    message: "Window focusability is not implemented on this platform.",
+  });
+}
+
+function unsupportedControls() {
+  return new BunawayError({
+    code: "UNSUPPORTED",
+    message: "Native caption controls are not implemented on this platform.",
+  });
+}
+
 function unsupportedTitle() {
   return new BunawayError({
     code: "UNSUPPORTED",
@@ -243,7 +257,11 @@ export function createOperations(
             continue;
           }
           const next = services.window(candidate.key);
-          if (next.isVisible() && !next.isMinimized()) {
+          if (
+            next.isVisible() &&
+            !next.isMinimized() &&
+            next.isFocusable?.() !== false
+          ) {
             next.activate();
             return !window.isFocused();
           }
@@ -302,6 +320,50 @@ export function createOperations(
           throw unsupportedRelations();
         }
         return window.isEnabled();
+      case "windows.setFocusable":
+        if (!window.setFocusable) {
+          throw unsupportedFocusability();
+        }
+        window.setFocusable(call.payload.focusable);
+        break;
+      case "windows.isFocusable":
+        if (!window.isFocusable) {
+          throw unsupportedFocusability();
+        }
+        return window.isFocusable();
+      case "windows.setMinimizable":
+        if (!window.setMinimizable) {
+          throw unsupportedControls();
+        }
+        window.setMinimizable(call.payload.minimizable);
+        break;
+      case "windows.isMinimizable":
+        if (!window.isMinimizable) {
+          throw unsupportedControls();
+        }
+        return window.isMinimizable();
+      case "windows.setMaximizable":
+        if (!window.setMaximizable) {
+          throw unsupportedControls();
+        }
+        window.setMaximizable(call.payload.maximizable);
+        break;
+      case "windows.isMaximizable":
+        if (!window.isMaximizable) {
+          throw unsupportedControls();
+        }
+        return window.isMaximizable();
+      case "windows.setClosable":
+        if (!window.setClosable) {
+          throw unsupportedControls();
+        }
+        window.setClosable(call.payload.closable);
+        break;
+      case "windows.isClosable":
+        if (!window.isClosable) {
+          throw unsupportedControls();
+        }
+        return window.isClosable();
       case "windows.setTitle":
         if (!window.setTitle) {
           throw unsupportedTitle();

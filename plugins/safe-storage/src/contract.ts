@@ -32,7 +32,7 @@ const text = z
     "Text exceeds the UTF-16 code unit limit.",
   );
 
-/** Current-user Windows DPAPI operations. Each has a separate policy grant. */
+/** Windows DPAPI and macOS Keychain-protected blob operations. Each has a separate policy grant. */
 export const safeStorageOperations = {
   isAvailable: {
     input: z.null(),
