@@ -23,6 +23,13 @@
       }
     },
     {
+      "name": "@bunaway/backend/cli",
+      "source": "packages/backend-sdk/src/cli.ts",
+      "pages": {
+        "reference/backend/cli": ["defineCLI"]
+      }
+    },
+    {
       "name": "@bunaway/core",
       "source": "packages/core/src/index.ts",
       "pages": {
@@ -110,6 +117,8 @@
           "serializeProcessFrame",
           "PROTOCOL_VERSION",
           "SDK_READY_FEATURE",
+          "AUTOSTART_ARGUMENT",
+          "AUTOSTART_HIDDEN_ARGUMENT",
           "parseMessage",
           "serializeMessage",
           "validateMessage",
@@ -178,6 +187,28 @@
           "packagingReportPath",
           "runPackage"
         ]
+      }
+    },
+    {
+      "name": "@bunaway/plugin-os",
+      "source": "plugins/os/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/os": ["os", "osPlugin"]
+      }
+    },
+    {
+      "name": "@bunaway/plugin-process",
+      "source": "plugins/process/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/process": ["processes", "processPlugin"]
       }
     },
     {
@@ -287,6 +318,8 @@
           "openUrl",
           "openFile",
           "revealFile",
+          "openFileWith",
+          "openUrlWith",
           "openerPlugin"
         ]
       }
@@ -508,6 +541,7 @@
       "type": "NativeWindow",
       "pages": {
         "reference/tooling/plugin-api": [
+          "webview",
           "audio",
           "show",
           "showInactive",
@@ -520,6 +554,10 @@
           "getChildren",
           "setEnabled",
           "isEnabled",
+          "setResizable",
+          "isResizable",
+          "setMovable",
+          "isMovable",
           "minimize",
           "maximize",
           "unmaximize",
@@ -539,10 +577,27 @@
           "center",
           "setGeometry",
           "setFullscreen",
+          "setTaskbarProgress",
           "setCloseConfirmation",
           "getSnapshot",
           "getReadiness",
           "getMonitor"
+        ]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "NativeWebView",
+      "pages": {
+        "reference/tooling/plugin-api": [
+          "getState",
+          "navigate",
+          "reload",
+          "stop",
+          "goBack",
+          "goForward",
+          "setZoomFactor",
+          "openDevTools"
         ]
       }
     },
@@ -588,6 +643,7 @@
       "type": "NativeWindowServices",
       "pages": {
         "reference/tooling/plugin-api": [
+          "systemEvents",
           "specs",
           "supportsCreationOptions",
           "validateCreation",
@@ -818,7 +874,12 @@
       "type": "DesktopOptions",
       "pages": {
         "guides/windows": ["closeBehavior"],
-        "reference/backend/app-definition": ["tray", "onOpen", "beforeQuit"]
+        "reference/backend/app-definition": [
+          "tray",
+          "openArguments",
+          "onOpen",
+          "beforeQuit"
+        ]
       }
     },
     {
@@ -827,6 +888,7 @@
       "pages": {
         "reference/backend/app-definition": [
           "source",
+          "launchReason",
           "argv",
           "cwd",
           "urls",
@@ -951,6 +1013,8 @@
     "reference/api": ["help"]
   },
   "operations": {
+    "reference/plugins/process": ["process.run"],
+    "reference/plugins/os": ["os.info", "os.usage", "os.locale"],
     "reference/plugins/autostart": [
       "autostart.enable",
       "autostart.disable",
@@ -966,12 +1030,15 @@
       "storage.appendBytes",
       "storage.appendText"
     ],
+    "reference/host/storage-transfers": ["storage.copyFile", "storage.move"],
     "reference/host/log-write": ["log.write"],
     "reference/host/capabilities-get": ["capabilities.get"],
     "reference/plugins/opener": [
       "opener.openUrl",
       "opener.openFile",
-      "opener.revealFile"
+      "opener.revealFile",
+      "opener.openFileWith",
+      "opener.openUrlWith"
     ],
     "reference/plugins/clipboard": [
       "clipboard.readText",
@@ -985,6 +1052,14 @@
       "clipboard.writeFormats"
     ],
     "reference/host/windows": [
+      "windows.getWebViewState",
+      "windows.navigateWebView",
+      "windows.reloadWebView",
+      "windows.stopWebView",
+      "windows.goBack",
+      "windows.goForward",
+      "windows.setZoomFactor",
+      "windows.openDevTools",
       "windows.getWebViewAudioState",
       "windows.setWebViewAudioMuted",
       "windows.list",
@@ -1020,6 +1095,10 @@
       "windows.getChildren",
       "windows.setEnabled",
       "windows.isEnabled",
+      "windows.setResizable",
+      "windows.isResizable",
+      "windows.setMovable",
+      "windows.isMovable",
       "windows.setSize",
       "windows.setContentPosition",
       "windows.setOuterSize",
@@ -1043,6 +1122,7 @@
       "windows.setPosition",
       "windows.center",
       "windows.setFullscreen",
+      "windows.setTaskbarProgress",
       "windows.setCloseConfirmation",
       "windows.getSnapshot",
       "windows.getReadiness",
@@ -1067,7 +1147,9 @@
       "image.getPixels",
       "image.exportBytes",
       "image.exportDataURL",
-      "image.dispose"
+      "image.dispose",
+      "image.crop",
+      "image.resize"
     ]
   },
   "configuration": {

@@ -492,6 +492,39 @@ test.skipIf(process.platform !== "win32")(
         assert.equal(native.failure, undefined);
       }
 
+      let previousPlacement: unknown;
+      async function verifyNormal(
+        phase: string,
+        command: number,
+        visible: boolean,
+      ) {
+        const placement = Buffer.alloc(44);
+        placement.writeUInt32LE(44);
+        assert(user.symbols.GetWindowPlacement(hwnd, ptr(placement)));
+        const current = {
+          phase,
+          command,
+          visible,
+          showCmd: placement.readUInt32LE(8),
+          flags: placement.readUInt32LE(4),
+          normal: Array.from(
+            new Int32Array(placement.buffer, placement.byteOffset + 28, 4),
+          ),
+          visibleNow: !!user.symbols.IsWindowVisible(hwnd),
+          minimized: !!user.symbols.IsIconic(hwnd),
+          maximized: !!user.symbols.IsZoomed(hwnd),
+        };
+        assert.deepEqual(
+          await invoke("windows.getNormalBounds"),
+          normal,
+          JSON.stringify({
+            previousPlacement,
+            current,
+          }),
+        );
+        previousPlacement = current;
+      }
+
       for (const command of [
         SW_SHOW,
         SW_MINIMIZE,
@@ -507,13 +540,13 @@ test.skipIf(process.platform !== "win32")(
             user.symbols.ShowWindow(hwnd, SW_HIDE);
           }
           verifyCurrent();
-          expect(await invoke("windows.getNormalBounds")).toEqual(normal);
+          await verifyNormal("before-enter", command, visible);
           native.setFullscreen(hwnd, true);
           verifyCurrent();
-          expect(await invoke("windows.getNormalBounds")).toEqual(normal);
+          await verifyNormal("fullscreen", command, visible);
           native.setFullscreen(hwnd, false);
           verifyCurrent();
-          expect(await invoke("windows.getNormalBounds")).toEqual(normal);
+          await verifyNormal("after-exit", command, visible);
           expect(user.symbols.IsWindowVisible(hwnd)).toBe(Number(visible));
         }
       }

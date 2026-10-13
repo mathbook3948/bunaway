@@ -25,6 +25,7 @@ const statusSchema = z.strictObject({
 export const autostartOperations = {
   enable: {
     input: z.strictObject({
+      hidden: z.boolean().default(false),
       args: z
         .array(
           z
@@ -49,6 +50,11 @@ export const autostartOperations = {
 } as const;
 /** Stored launch data and the independently observed Windows startup approval state. */
 export type AutostartStatus = z.infer<typeof statusSchema>;
+/** App arguments and optional hidden startup. Hidden startup requires desktop.tray. */
+export type AutostartOptions = {
+  args?: string[];
+  hidden?: boolean;
+};
 /** Validate a native call, rejecting operations outside this plugin with UNSUPPORTED. */
 export function validateAutostartInput(operation: string, input: JsonValue) {
   try {

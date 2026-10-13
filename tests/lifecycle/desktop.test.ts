@@ -1,11 +1,18 @@
 import { expect, test } from "bun:test";
 import { createConnection } from "node:net";
 import { defineApp } from "@bunaway/backend";
+import { defineCLI } from "@bunaway/backend/cli";
 import type { DesktopOptions, OpenRequest } from "@bunaway/core";
+import {
+  AUTOSTART_ARGUMENT,
+  AUTOSTART_HIDDEN_ARGUMENT,
+} from "@bunaway/protocol";
 import type { WindowSpec } from "@bunaway/runtime-bun/window-config";
+import { z } from "zod";
 import { validatePacket } from "#native/windows/bun/channel";
 import {
   DesktopLifecycle,
+  desktopLaunch,
   openRequest,
   validateDesktopStartup,
 } from "#native/windows/bun/desktop";
@@ -133,6 +140,12 @@ test("keep-alive preserves explicit quit checks and diagnoses invalid desktop se
     {
       beforeQuit: false,
     },
+    {
+      openArguments: "unknown",
+    },
+    {
+      openArguments: false,
+    },
   ]) {
     // Exercise untyped app definitions at the runtime boundary.
     expect(
@@ -191,6 +204,151 @@ test("open requests preserve arguments and resolve files using the launching dir
   expect(Object.isFrozen(request.argv)).toBe(true);
 });
 
+test("only the leading registration marker supplies launch metadata and hidden startup requires a tray", () => {
+  expect(
+    desktopLaunch([
+      AUTOSTART_HIDDEN_ARGUMENT,
+      "file.txt",
+    ]),
+  ).toEqual({
+    launchReason: "autostart",
+    hidden: true,
+    argv: [
+      "file.txt",
+    ],
+  });
+  const input = {
+    argv: [
+      AUTOSTART_ARGUMENT,
+      AUTOSTART_HIDDEN_ARGUMENT,
+      "notes.txt",
+    ],
+    cwd: "C:\\notes",
+  };
+  for (const source of [
+    "initial",
+    "second-instance",
+  ] as const) {
+    const request = openRequest(input, source);
+    expect(request.launchReason).toBe("autostart");
+    expect(request.argv).toEqual([
+      AUTOSTART_HIDDEN_ARGUMENT,
+      "notes.txt",
+    ]);
+    expect(request.files).toEqual([
+      "C:\\notes\\notes.txt",
+    ]);
+  }
+  for (const argv of [
+    [
+      "--",
+      AUTOSTART_ARGUMENT,
+    ],
+    [
+      "--flag",
+      AUTOSTART_HIDDEN_ARGUMENT,
+    ],
+    [],
+  ]) {
+    expect(desktopLaunch(argv)).toEqual({
+      launchReason: "manual",
+      hidden: false,
+      argv,
+    });
+  }
+  expect(() =>
+    validateDesktopStartup(
+      [],
+      {
+        closeBehavior: "keep-alive",
+      },
+      true,
+    ),
+  ).toThrow("Hidden autostart requires desktop.tray");
+  expect(() =>
+    validateDesktopStartup(
+      [],
+      {
+        tray: {
+          tooltip: "Resident",
+        },
+      },
+      true,
+    ),
+  ).not.toThrow();
+});
+
+test("hidden autostart forwarding preserves visibility while a later manual launch restores the app", async () => {
+  const actions: string[] = [];
+  const requests: OpenRequest[] = [];
+  const lifecycle = new DesktopLifecycle(
+    {
+      tray: {
+        tooltip: "Resident",
+      },
+      onOpen(request) {
+        requests.push(request);
+      },
+    },
+    async (action) => {
+      actions.push(action);
+    },
+    () => {},
+    (error) => {
+      throw error;
+    },
+  );
+  lifecycle.open(
+    {
+      ...launch,
+      argv: [
+        AUTOSTART_HIDDEN_ARGUMENT,
+      ],
+    },
+    "initial",
+  );
+  lifecycle.open(
+    {
+      ...launch,
+      argv: [
+        AUTOSTART_HIDDEN_ARGUMENT,
+        "--background",
+      ],
+    },
+    "second-instance",
+  );
+  lifecycle.open(launch, "second-instance");
+  await tick();
+  expect(actions).toEqual([
+    "show",
+  ]);
+  expect(
+    requests.map((request) => [
+      request.source,
+      request.launchReason,
+      request.argv,
+    ]),
+  ).toEqual([
+    [
+      "initial",
+      "autostart",
+      [],
+    ],
+    [
+      "second-instance",
+      "autostart",
+      [
+        "--background",
+      ],
+    ],
+    [
+      "second-instance",
+      "manual",
+      launch.argv,
+    ],
+  ]);
+});
+
 test("defineApp preserves desktop hooks and context types", () => {
   const app = defineApp({
     modules: [],
@@ -211,6 +369,96 @@ test("defineApp preserves desktop hooks and context types", () => {
   });
   expect(app.desktop?.closeBehavior).toBe("hide");
   expect(app.desktop?.beforeQuit?.("last-window")).toBe(false);
+});
+
+test("raw initial and forwarded opens reach the CLI with URL-like string values unchanged", async () => {
+  const cli = defineCLI({
+    name: "probe",
+    commands: {
+      echo: {
+        options: {
+          label: {
+            type: "string",
+          },
+        },
+        schema: z.strictObject({
+          values: z.strictObject({
+            label: z.string(),
+          }),
+          positionals: z.array(z.string()),
+        }),
+      },
+    },
+  });
+  const requests: OpenRequest[] = [];
+  const results: Awaited<ReturnType<typeof cli.parse>>[] = [];
+  const errors: unknown[] = [];
+  const lifecycle = new DesktopLifecycle(
+    {
+      openArguments: "raw",
+      async onOpen(request) {
+        requests.push(request);
+        results.push(await cli.parse(request.argv));
+      },
+    },
+    async () => {},
+    () => {},
+    (error) => errors.push(error),
+  );
+  try {
+    for (const source of [
+      "initial",
+      "second-instance",
+    ] as const) {
+      for (const value of [
+        "https://",
+        "file:relative.txt",
+      ]) {
+        lifecycle.open(
+          {
+            argv: [
+              "echo",
+              "--label",
+              value,
+            ],
+            cwd: launch.cwd,
+          },
+          source,
+        );
+      }
+    }
+    await tick();
+    expect(errors).toEqual([]);
+    expect(requests.map((request) => request.source)).toEqual([
+      "initial",
+      "initial",
+      "second-instance",
+      "second-instance",
+    ]);
+    for (const [index, request] of requests.entries()) {
+      const value = index % 2 === 0 ? "https://" : "file:relative.txt";
+      expect(request.files).toEqual([]);
+      expect(request.urls).toEqual([]);
+      expect(Object.isFrozen(request.argv)).toBe(true);
+      expect(request.argv).toEqual([
+        "echo",
+        "--label",
+        value,
+      ]);
+      expect(results[index]).toEqual({
+        kind: "match",
+        command: "echo",
+        data: {
+          values: {
+            label: value,
+          },
+          positionals: [],
+        },
+      });
+    }
+  } finally {
+    lifecycle.dispose();
+  }
 });
 
 test("concurrent quit requests share a veto and a later quit can proceed", async () => {
@@ -617,6 +865,121 @@ test("file URLs reject encoded separators, NUL, and paths without a Windows driv
         },
         "initial",
       ),
+    ).toThrow();
+  }
+});
+
+test("raw CLI opens retain autostart metadata and hidden forwarding behavior", async () => {
+  const requests: OpenRequest[] = [];
+  const actions: string[] = [];
+  const lifecycle = new DesktopLifecycle(
+    {
+      openArguments: "raw",
+      tray: {
+        tooltip: "Resident",
+      },
+      onOpen(request) {
+        requests.push(request);
+      },
+    },
+    async (action) => {
+      actions.push(action);
+    },
+    () => {},
+    (error) => {
+      throw error;
+    },
+  );
+  const argv = [
+    "echo",
+    "--label",
+    "https://",
+    "file:relative.txt",
+  ];
+  try {
+    lifecycle.open(
+      {
+        argv: [
+          AUTOSTART_ARGUMENT,
+          ...argv,
+        ],
+        cwd: launch.cwd,
+      },
+      "initial",
+    );
+    lifecycle.open(
+      {
+        argv: [
+          AUTOSTART_HIDDEN_ARGUMENT,
+          ...argv,
+        ],
+        cwd: launch.cwd,
+      },
+      "second-instance",
+    );
+    lifecycle.open(
+      {
+        argv,
+        cwd: launch.cwd,
+      },
+      "second-instance",
+    );
+    await tick();
+    expect(actions).toEqual([
+      "show",
+    ]);
+    expect(requests.map((request) => request.launchReason)).toEqual([
+      "autostart",
+      "autostart",
+      "manual",
+    ]);
+    expect(requests.map((request) => request.source)).toEqual([
+      "initial",
+      "second-instance",
+      "second-instance",
+    ]);
+    for (const request of requests) {
+      expect(request.argv).toEqual(argv);
+      expect(request.urls).toEqual([]);
+      expect(request.files).toEqual([]);
+    }
+    const markerValue = openRequest(
+      {
+        argv: [
+          "echo",
+          "--label",
+          AUTOSTART_ARGUMENT,
+        ],
+        cwd: launch.cwd,
+      },
+      "initial",
+      "raw",
+    );
+    expect(markerValue.launchReason).toBe("manual");
+    expect(markerValue.argv).toEqual([
+      "echo",
+      "--label",
+      AUTOSTART_ARGUMENT,
+    ]);
+  } finally {
+    lifecycle.dispose();
+  }
+});
+
+test("default and explicit files-and-urls modes retain URL metadata validation", () => {
+  for (const value of [
+    "https://",
+    "file:relative.txt",
+  ]) {
+    const input = {
+      argv: [
+        value,
+      ],
+      cwd: launch.cwd,
+    };
+    expect(() => openRequest(input, "initial")).toThrow();
+    expect(() =>
+      openRequest(input, "second-instance", "files-and-urls"),
     ).toThrow();
   }
 });

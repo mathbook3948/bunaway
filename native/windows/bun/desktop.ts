@@ -6,14 +6,35 @@ import type {
   OpenRequest,
   QuitReason,
 } from "@bunaway/core";
+import {
+  AUTOSTART_ARGUMENT,
+  AUTOSTART_HIDDEN_ARGUMENT,
+} from "@bunaway/protocol";
 import type { WindowSpec } from "@bunaway/runtime-bun/window-config";
 import type { LaunchArguments } from "./instance.ts";
+
+/** Consume only the registration prefix; later and positional marker strings remain app input. */
+export function desktopLaunch(argv: readonly string[]) {
+  const hidden = argv[0] === AUTOSTART_HIDDEN_ARGUMENT;
+  const autostart = hidden || argv[0] === AUTOSTART_ARGUMENT;
+  return {
+    launchReason: autostart ? ("autostart" as const) : ("manual" as const),
+    hidden,
+    argv: autostart ? argv.slice(1) : argv,
+  };
+}
 
 /** Reject a windowless start without an explicit lifetime owner before starting native resources. */
 export function validateDesktopStartup(
   windows: readonly WindowSpec[],
   options: DesktopOptions | undefined,
+  hidden = false,
 ): void {
+  if (hidden && !options?.tray) {
+    throw new Error(
+      "Hidden autostart requires desktop.tray in the app definition.",
+    );
+  }
   if (
     !windows.some((spec) => spec.startup !== false) &&
     !options?.tray &&
@@ -27,17 +48,19 @@ export function validateDesktopStartup(
 
 /**
  * Splits launch arguments into an immutable request.
- * Relative files resolve against the launch directory.
- * Arguments after -- are positional.
+ * In files-and-urls mode, relative files resolve against the launch directory
+ * and arguments after -- are positional. Raw mode skips metadata derivation.
  */
 export function openRequest(
   input: LaunchArguments,
   source: OpenRequest["source"],
+  mode: NonNullable<DesktopOptions["openArguments"]> = "files-and-urls",
 ): OpenRequest {
   const urls: string[] = [];
   const files: string[] = [];
+  const launch = desktopLaunch(input.argv);
   let positional = false;
-  for (const arg of input.argv) {
+  for (const arg of mode === "raw" ? [] : launch.argv) {
     if (!positional && arg === "--") {
       positional = true;
       continue;
@@ -65,8 +88,9 @@ export function openRequest(
   }
   return Object.freeze({
     source,
+    launchReason: launch.launchReason,
     argv: Object.freeze([
-      ...input.argv,
+      ...launch.argv,
     ]),
     cwd: input.cwd,
     urls: Object.freeze(urls),
@@ -105,6 +129,13 @@ export class DesktopLifecycle {
       ].includes(options.closeBehavior)
     ) {
       throw new Error("Invalid desktop.closeBehavior");
+    }
+    if (
+      options?.openArguments !== undefined &&
+      options.openArguments !== "files-and-urls" &&
+      options.openArguments !== "raw"
+    ) {
+      throw new Error("Invalid desktop.openArguments");
     }
     if (
       options?.tray !== undefined &&
@@ -155,10 +186,13 @@ export class DesktopLifecycle {
         if (this.stopped) {
           return;
         }
-        if (source === "second-instance") {
+        if (source === "second-instance" && !desktopLaunch(input.argv).hidden) {
           await this.context.show();
         }
-        await this.options?.onOpen?.(openRequest(input, source), this.context);
+        await this.options?.onOpen?.(
+          openRequest(input, source, this.options?.openArguments),
+          this.context,
+        );
       })
       .catch(this.report)
       .finally(() => {

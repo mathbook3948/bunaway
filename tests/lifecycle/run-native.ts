@@ -59,11 +59,22 @@ if (target === "windows-x64") {
     ]) {
       await test("windows-bun.ts", scenario);
     }
+    await test("windows-cli-arguments.ts");
     await test("windows-bun-window-api.ts");
+    await test("windows-webview-controls.ts");
     await test("windows-webview-audio.ts");
     await test("windows-initial-placement.ts");
     await test("windows-window-events.ts");
     await test("windows-monitor-events.ts");
+    await run(
+      [
+        inputs.bun,
+        "--no-env-file",
+        "test",
+        resolve(root, "tests/lifecycle/windows-system-events.test.ts"),
+      ],
+      root,
+    );
     await test("windows-window-readiness.ts");
     await test("windows-multiple-windows.ts");
     await test("windows-owned-modal.ts");
@@ -86,10 +97,16 @@ if (target === "windows-x64") {
         "test",
         ...[
           "tests/lifecycle/desktop.test.ts",
+          "tests/lifecycle/windows-os.test.ts",
+          "tests/lifecycle/windows-process.test.ts",
+          "tests/lifecycle/process-run.test.ts",
           "tests/lifecycle/windows-bun-instance.test.ts",
           "tests/lifecycle/windows-monitors.test.ts",
           "tests/lifecycle/windows-monitor-events.test.ts",
           "tests/lifecycle/windows-appearance.test.ts",
+          "tests/lifecycle/windows-opener.test.ts",
+          "tests/lifecycle/windows-opener-job.test.ts",
+          "tests/lifecycle/windows-opener-selected-app.test.ts",
           "tests/cli/windows-assets.test.ts",
           "tests/cli/windows-compile.test.ts",
         ].map((name) => resolve(root, name)),
@@ -98,6 +115,9 @@ if (target === "windows-x64") {
     );
     for (const scenario of [
       "hide",
+      "autostart",
+      "autostart-hidden",
+      "autostart-hidden-ready",
       "veto",
       "dev-veto",
       "dev-hide",
