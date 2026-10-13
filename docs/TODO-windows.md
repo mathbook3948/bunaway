@@ -655,7 +655,10 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   [exists 계약](./site/src/content/docs/reference/host/storage-exists.mdx)과
   [stat 계약](./site/src/content/docs/reference/host/storage-stat.mdx)을 따른다.
 - [ ] 파일과 디렉터리의 OS 권한 및 ACL 조회 범위와 공개 계약을 정의한다.
-- [ ] 디렉터리 목록, 재귀 목록과 생성, 삭제를 제공한다.
+- [x] Windows의 직접 자식 목록, 선택적인 상위 디렉터리 생성과 파일 및 빈 디렉터리 삭제를 제공한다.
+  검사한 핸들의 bounded enumeration과 삭제, 링크 미추적 및 거부, 작업별 권한을
+  [디렉터리 계약](./site/src/content/docs/reference/host/storage-directories.mdx)에 정의한다.
+- [ ] 재귀 목록, 큰 목록 pagination과 재귀 삭제를 제공한다.
 - [ ] 파일 크기 조회와 별도로 디렉터리 재귀 용량을 바이트 단위로 계산한다. [T-fs-live]의 `size`를 참고한다.
   링크 처리, 접근 거부와 탐색 중 변경의 오류 규칙, 큰 트리의 취소와 비용을 정의한다.
   빈 디렉터리, 중첩 파일 합계, 링크, 부분 실패와 취소 시 자원 정리를 검증한다.
