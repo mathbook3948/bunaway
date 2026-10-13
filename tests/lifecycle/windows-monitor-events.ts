@@ -297,25 +297,34 @@ if (!process.argv.includes("--child")) {
           await waitFor(() => records.length > start);
           const changed = await windows.getMonitorSnapshot();
           assert(changed.revision > before.revision);
-          assert.deepEqual(records.at(-1), {
-            sourceId: changed.sourceId,
-            revision: changed.revision,
-            added: [],
-            removed: [],
-            changed: [
-              changed.monitors[0]?.id,
-            ],
-            error: null,
-          });
+          // Protocol validation deliberately returns objects with a null prototype.
+          assert.deepEqual(
+            records.at(-1),
+            validateValue(monitorChangeSchema, {
+              sourceId: changed.sourceId,
+              revision: changed.revision,
+              added: [],
+              removed: [],
+              changed: [
+                changed.monitors[0]?.id,
+              ],
+              error: null,
+            }),
+          );
           const afterChange = records.length;
           await notify("fail");
           await waitFor(() => records.length > afterChange);
           const failed = await windows.getMonitorSnapshot();
           assert.deepEqual(failed.monitors, changed.monitors);
-          assert.deepEqual(failed.error, {
-            code: "INTERNAL",
-            message: "Display information is unavailable.",
-          });
+          assert.deepEqual(
+            {
+              ...failed.error,
+            },
+            {
+              code: "INTERNAL",
+              message: "Display information is unavailable.",
+            },
+          );
           assert(failed.revision > changed.revision);
           const afterError = records.length;
           await notify(`phase-${documents}`);
