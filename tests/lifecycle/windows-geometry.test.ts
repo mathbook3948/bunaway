@@ -112,6 +112,7 @@ test.skipIf(process.platform !== "win32")(
         visible: !!user.symbols.IsWindowVisible(hwnd),
         minimized: !!user.symbols.IsIconic(hwnd),
         maximized: !!user.symbols.IsZoomed(hwnd),
+        fullscreen: native.isFullscreen(hwnd),
         callbackFailure:
           native.failure instanceof Error
             ? native.failure.stack
@@ -641,7 +642,13 @@ test.skipIf(process.platform !== "win32")(
       });
       const resizedNormal = native.getBounds(hwnd, "normal");
       expect(user.symbols.IsZoomed(hwnd)).toBe(1);
+      nativePhase = "restore-before-constrained-fullscreen";
       user.symbols.ShowWindow(hwnd, SW_RESTORE);
+      verifyShowState(
+        "after-restore-before-constrained-fullscreen",
+        SW_RESTORE,
+        true,
+      );
       expect(native.getBounds(hwnd, "outer")).toEqual(resizedNormal);
       expect(
         await invoke("windows.getContentSize", {
@@ -653,14 +660,25 @@ test.skipIf(process.platform !== "win32")(
         dpi: native.getDpi(hwnd),
       });
 
+      nativePhase = "hide-before-constrained-fullscreen";
       native.show(hwnd, false);
+      verifyShowState(
+        "after-hide-before-constrained-fullscreen",
+        SW_SHOW,
+        false,
+      );
+      nativePhase = "enter-constrained-fullscreen";
       native.setFullscreen(hwnd, true);
+      verifyShowState("after-enter-constrained-fullscreen", SW_SHOW, false);
       await invoke("windows.setSizeConstraints", {
         minWidth: 700,
         maxHeight: 450,
       });
+      verifyShowState("after-fullscreen-constraints", SW_SHOW, false);
       const fullscreenNormal = native.getBounds(hwnd, "normal");
+      nativePhase = "exit-constrained-fullscreen";
       native.setFullscreen(hwnd, false);
+      verifyShowState("after-exit-constrained-fullscreen", SW_SHOW, false);
       expect(native.getBounds(hwnd, "outer")).toEqual(fullscreenNormal);
       expect(user.symbols.IsWindowVisible(hwnd)).toBe(0);
       expect(
