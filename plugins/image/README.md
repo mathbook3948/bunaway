@@ -106,3 +106,9 @@ alpha 및 투명 RGB 왕복, grayscale과 palette PNG, JPEG/BMP, malformed 입�
 분리와 browser FFI 제외를 확인하고 macOS arm64에서 설치된 native adapter를 실행한다.
 `macos-image.yml`은 이 검사와 기존 entitlement로 ad-hoc 서명한 compiled codec fixture를
 실행한다. 이 근거는 실제 shared 호스트 dispatch나 WKWebView 공개 호출 검증과 구분한다.
+
+`tests/lifecycle/macos-image-host.ts`는 실제 compiled 호스트와 WKWebView 명령에서
+공개 backend image SDK를 호출하는 성공 전용 fixture다. RGBA/PNG와 JPEG/BMP, crop/resize,
+해제와 정상 종료를 검사하고 `build/macos-image-host-results.json`을 기록한다.
+현재 main의 UI 전용 dispatch에서는 `UNSUPPORTED`로 실패한다. 호스트 소유자가 contextual
+I/O dispatch를 연결한 뒤 shared runner에서 실행하며 현재 통과한 근거로 사용하지 않는다.

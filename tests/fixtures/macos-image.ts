@@ -158,15 +158,19 @@ export async function verifyMacosImage(
     permissions = grants,
   ) => {
     assert(adapter.executeUI, "Contextual image execution is required");
-    return adapter.executeUI(`image.${name}`, input, "backend", {
-      requestId: crypto.randomUUID(),
-      permissions,
-      ...(signal
-        ? {
-            signal,
-          }
-        : {}),
-    });
+    // Host messages cross structured clone; protocol validation may use null-prototype objects.
+    // Compare the JSON fields and exact bytes after that same boundary, not object prototypes.
+    return structuredClone(
+      await adapter.executeUI(`image.${name}`, input, "backend", {
+        requestId: crypto.randomUUID(),
+        permissions,
+        ...(signal
+          ? {
+              signal,
+            }
+          : {}),
+      }),
+    );
   };
   const resource = async (
     name: string,

@@ -686,3 +686,9 @@ transform, 독립 어댑터 ID, quota, 취소와 반복 종료를 검사한다. 
 entitlement로 ad-hoc 서명한 compiled fixture를 실행하고 `build/macos-image-results.json`을 보관한다.
 공유 macOS I/O dispatch와 `run-native.ts` 연결은 호스트 변경이 담당한다. 이 단독 codec 검사는
 공통 SDK와 실제 호스트 연결, WKWebView 표시나 다른 앱의 가져오기 검증을 대신하지 않는다.
+
+`lifecycle/macos-image-host.ts`는 actual compiled 호스트와 WKWebView 명령에서 공개
+backend SDK의 image I/O 호출과 codec, crop/resize, 해제 및 정상 종료를 검사한다.
+`build/macos-image-host-results.json`을 기록하며 성공을 요구한다. UI 어댑터만 초기화하는
+현재 main에서는 `UNSUPPORTED`로 실패하므로 호스트 소유자가 contextual I/O dispatch를
+연결한 뒤 `run-native.ts`에 등록한다. 현재의 native codec CI와 이 호스트 검증을 구분한다.
