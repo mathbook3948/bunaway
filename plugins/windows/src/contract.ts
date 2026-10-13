@@ -37,6 +37,15 @@ export {
 
 const MAX_WINDOW_DPI = 65535;
 const WINDOW_TEXT_PATTERN = "^[^\\u0000]+$(?![\\s\\S])";
+// Native captions and declarations bound UTF-16 code units; Zod max counts Unicode code points.
+const nativeTitle = z
+  .string()
+  .max(1024)
+  .refine(
+    (title) => title.length <= 1024,
+    "Window titles cannot exceed 1024 UTF-16 code units.",
+  );
+const windowTitle = nativeTitle.regex(new RegExp(WINDOW_TEXT_PATTERN, "u"));
 
 const viewTarget = z.strictObject({
   view: z.string().regex(new RegExp(WINDOW_VIEW_NAME_PATTERN, "u")),
@@ -101,11 +110,7 @@ const creationResult = {
     view: viewTarget.shape.view,
     options: z
       .strictObject({
-        title: z
-          .string()
-          .max(1024)
-          .regex(new RegExp(WINDOW_TEXT_PATTERN, "u"))
-          .exactOptional(),
+        title: windowTitle.exactOptional(),
         window: z
           .strictObject({
             width: creationDimension.exactOptional(),
@@ -482,6 +487,17 @@ export const windowOperations = {
     input: z.null(),
     output: monitorPointSchema,
   },
+  "windows.showPrintUI": {
+    input: windowTarget.extend({
+      kind: z
+        .enum([
+          "browser",
+          "system",
+        ])
+        .exactOptional(),
+    }),
+    output: z.null(),
+  },
   "windows.setDownloadRequestsEnabled": {
     input: windowTarget.extend({
       enabled: z.boolean(),
@@ -691,6 +707,16 @@ export const windowOperations = {
     output: z.null(),
   },
   "windows.isEnabled": windowStateResult,
+  "windows.setTitle": {
+    input: windowTarget.extend({
+      title: windowTitle,
+    }),
+    output: z.null(),
+  },
+  "windows.getTitle": {
+    input: windowTarget,
+    output: nativeTitle,
+  },
   "windows.setResizable": {
     input: windowTarget.extend({
       resizable: z.boolean(),

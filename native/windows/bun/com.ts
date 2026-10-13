@@ -245,17 +245,30 @@ export function getObject(object: Pointer, slot: number): Pointer {
   return Number(out[0]) as Pointer;
 }
 /** Acquire an interface with QueryInterface; the caller must release its reference. */
-export function query(object: Pointer, iid: string): Pointer {
+export function query(object: Pointer, iid: string): Pointer;
+export function query(
+  object: Pointer,
+  iid: string,
+  optional: true,
+): Pointer | undefined;
+export function query(
+  object: Pointer,
+  iid: string,
+  optional = false,
+): Pointer | undefined {
   const out = new BigUint64Array(1);
-  hr(
-    withBuffer(guid(iid), (address) =>
-      method(object, 0, [
-        "ptr",
-        "ptr",
-      ])(address, ptr(out)),
-    ),
-    "QueryInterface",
+  const result = withBuffer(guid(iid), (address) =>
+    method(object, 0, [
+      "ptr",
+      "ptr",
+    ])(address, ptr(out)),
   );
+  // E_NOINTERFACE is an ordinary capability outcome for optional runtime extensions.
+  const E_NOINTERFACE = -2147467262;
+  if (optional && result === E_NOINTERFACE) {
+    return undefined;
+  }
+  hr(result, "QueryInterface");
   assert(out[0], "Null COM interface");
   return Number(out[0]) as Pointer;
 }

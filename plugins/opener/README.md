@@ -16,11 +16,12 @@ export default defineApp({ modules: [], plugins: [openerPlugin] });
 화면과 백엔드에서 다음 함수를 사용합니다.
 
 ```ts
-import { openFile, openUrl, revealFile } from "@bunaway/plugin-opener";
+import { openFile, openUrl, revealFile, trashFile } from "@bunaway/plugin-opener";
 
 await openUrl("https://example.com/search?q=한글 값");
 await openFile("C:/Users/me/Documents/한글 보고서.txt");
 await revealFile("C:/Users/me/Documents/한글 보고서.txt");
+await trashFile("C:/Users/me/Documents/삭제할 파일.txt");
 ```
 
 ## 계약과 구현
@@ -56,7 +57,7 @@ Windows 구현은 I/O Worker에서 자체 COM STA를 초기화하고 Explorer �
 
 세 함수 모두 성공은 요청 접수를 뜻합니다. 기본 앱의 실행 완료, 파일 읽기 완료나 Explorer 화면 표시와 선택 완료를 기다리지 않습니다. OS가 접수한 뒤 발생하는 파일 소실, 연결 앱 부재, 앱 내부 실패와 화면 변경은 결과에 포함되지 않습니다. 취소와 기한 초과는 이미 접수한 요청을 되돌리지 않습니다. 네이티브 호출 중에는 OS가 반환할 때까지 작업이 계속될 수 있으며 UNC 공유나 셸 확장의 응답이 느리면 I/O Worker의 후속 작업과 정리가 지연될 수 있습니다. 창과 WebView를 담당하는 UI Worker는 이 파일 검사나 셸 요청을 실행하지 않습니다. 호스트는 I/O 작업을 시작하기 직전에 현재 호출 컨텍스트와 작업 권한을 검사하며, 승인 전 취소된 작업은 실행하지 않습니다.
 
-현재 어댑터는 Windows만 제공합니다. 커스텀 URL 스킴, 휴지통, 딥링크 등록과 설치 프로그램 변경은 이 패키지의 범위가 아닙니다.
+현재 어댑터는 Windows만 제공합니다. 커스텀 URL 스킴, 딥링크 등록과 설치 프로그램 변경은 이 패키지의 범위가 아닙니다.
 
 ## 지정 앱
 
@@ -85,6 +86,14 @@ Windows의 `tests/lifecycle/windows-opener-selected-app.test.ts`는 실제 파�
 Explorer와 compiled helper로 기존 기본 실행, 지정 앱의 파일과 URL argv, Unicode와 공백,
 URL fragment 따옴표, 앱 Job 밖의 실행과 앱 종료 후 생존을 확인합니다.
 `mise run host:windows`가 이 네이티브 검사를 실행합니다. Linux에서는 네이티브 검사를 건너뜁니다.
+
+## 휴지통
+
+`trashFile(path: string, options?: NativeInvokeOptions): Promise<null>`은 기존 파일을 Windows 휴지통으로 보냅니다. Host operation과 권한은 `opener.trashFile`, 입력은 `{ path: string }`입니다. 화면 직접 호출은 뷰의 `commands`에 `plugin.opener.trashFile`도 허용합니다. 성공한 `null`은 OS가 휴지통의 새 항목을 반환했다는 뜻입니다. 복원 API는 제공하지 않습니다.
+
+기존 파일 경로, 링크, 별칭과 읽기 접근 검사를 적용하며 로컬 고정 드라이브만 지원합니다. UNC 공유와 이동식 드라이브는 `UNSUPPORTED`입니다. I/O STA의 `IFileOperation`으로 파일 하나만 처리하고 HTML 파일의 연결된 `_files` 폴더는 삭제하지 않습니다. `FOFX_RECYCLEONDELETE`로 휴지통 이동을 요청하고 삭제 직전 콜백에 휴지통 플래그가 없으면 거부합니다. 프레임워크는 이동 실패를 일반 삭제로 재시도하지 않습니다. OS 오류, 중단 또는 휴지통 항목을 확인할 수 없는 결과는 실패로 반환합니다. 시스템의 영구 삭제 경고도 유지하므로 OS 설정에 따라 대화 상자가 표시될 수 있습니다. 콜백의 플래그는 가능한 경우 휴지통으로 이동하라는 요청이며 모든 OS 내부 실패 경로의 결과를 사전에 증명하지 않습니다. 휴지통 비활성화, 용량 초과와 경고 UI 동작은 아직 검증하지 않았습니다. 휴지통 항목이 없는 사후 결과를 거부하는 것만으로 이미 발생한 삭제를 복구할 수는 없습니다.
+
+부모 디렉터리 핸들은 경로 교체를 막도록 유지하지만, 파일 핸들은 휴지통 이동을 위해 삭제 공유를 허용합니다. 삭제 직전 콜백에서 파일 ID, 경로와 링크를 다시 검사합니다. Windows 셸은 경로로 작업하므로 마지막 검사 뒤 다른 프로세스가 파일 자체를 교체하는 경쟁까지 막지는 못합니다. 앱의 파일별 승인 검사는 이 API가 파일 ID에 원자적으로 적용된다고 가정하면 안 됩니다. 성공한 휴지통 이동도 취소나 기한 초과로 되돌리지 않습니다.
 
 ## 오류
 

@@ -67,7 +67,19 @@ export function createOpener(api: NativePluginAPI<typeof openerOperations>) {
       options,
     );
   }
+  async function trashFile(
+    path: string,
+    options?: NativeInvokeOptions,
+  ): Promise<null> {
+    return api.trashFile(
+      {
+        path: normalizeFilePath(path),
+      },
+      options,
+    );
+  }
   return {
+    trashFile,
     openUrl,
     openFile,
     revealFile,
