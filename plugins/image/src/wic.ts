@@ -8,11 +8,13 @@ import {
 } from "bun:ffi";
 import { BunawayError } from "@bunaway/protocol";
 import {
+  type ImageInterpolation,
   type ImageMime,
   MAX_ENCODED_BYTES,
   MAX_IMAGE_BYTES,
 } from "./contract.ts";
 import type { Pixels } from "./resources.ts";
+import { assertResizeDimensions, resizeNearestPixels } from "./resize.ts";
 
 type Argument = number | bigint | null;
 type Abi = FFIType | "ptr" | "i32" | "u32" | "f64";
@@ -25,6 +27,7 @@ const WIC_METADATA_ON_DEMAND = 0;
 const WIC_ENCODER_NO_CACHE = 2;
 const WIC_DITHER_NONE = 0;
 const WIC_PALETTE_CUSTOM = 0;
+const WIC_INTERPOLATION_LINEAR = 1;
 const containers: Record<ImageMime, string> = {
   "image/png": "1b7cfaf4-713f-473c-bbcd-6137425faeaf",
   "image/jpeg": "19e4a5aa-5662-4fc5-a0c0-1758028e1057",
@@ -33,6 +36,7 @@ const containers: Record<ImageMime, string> = {
 const factoryClass = "cacaf262-9370-4615-a13b-9f5539da4c0a";
 const factoryInterface = "ec5ec8a9-c395-4314-9c77-54d7a935ff70";
 const bgraFormat = "6fddc324-4e03-4bfe-b185-3d77768dc90f";
+const premultipliedBgraFormat = "6fddc324-4e03-4bfe-b185-3d77768dc910";
 const rgbaFormat = "f5c7ad2d-6a8d-43dd-a7a8-a29935261ae9";
 const bgrFormat = "6fddc324-4e03-4bfe-b185-3d77768dc90c";
 
@@ -252,6 +256,85 @@ export function createWIC() {
       throw error;
     }
   }
+  /** Keep backing BGRA bytes rooted until the native bitmap's Release. */
+  function bitmapFromPixels(pixels: Pixels): Pointer {
+    const bgra = Buffer.from(pixels.rgba);
+    for (let index = 0; index < bgra.length; index += 4) {
+      const red = bgra[index] ?? 0;
+      bgra[index] = bgra[index + 2] ?? 0;
+      bgra[index + 2] = red;
+    }
+    const format = guid(bgraFormat);
+    const bitmap = acquire((out) =>
+      invoke(
+        factory,
+        20,
+        [
+          "u32",
+          "u32",
+          "ptr",
+          "u32",
+          "u32",
+          "ptr",
+          "ptr",
+        ],
+        [
+          pixels.width,
+          pixels.height,
+          ptr(format),
+          pixels.width * 4,
+          bgra.length,
+          ptr(bgra),
+          out,
+        ],
+      ),
+    );
+    storage.set(bitmap, bgra);
+    return bitmap;
+  }
+  function convert(
+    source: Pointer,
+    formatId: string,
+    owned: Pointer[],
+  ): Pointer {
+    const converter = acquire((out) =>
+      invoke(
+        factory,
+        10,
+        [
+          "ptr",
+        ],
+        [
+          out,
+        ],
+      ),
+    );
+    owned.push(converter);
+    const format = guid(formatId);
+    check(
+      invoke(
+        converter,
+        8,
+        [
+          "ptr",
+          "ptr",
+          "u32",
+          "ptr",
+          "f64",
+          "u32",
+        ],
+        [
+          source,
+          ptr(format),
+          WIC_DITHER_NONE,
+          null,
+          0,
+          WIC_PALETTE_CUSTOM,
+        ],
+      ),
+    );
+    return converter;
+  }
   function assertActive(): void {
     if (disposed) {
       throw new BunawayError({
@@ -441,6 +524,91 @@ export function createWIC() {
         }
       }
     },
+    /** Copy nearest pixels exactly; WIC linear filtering uses premultiplied channels on the STA. */
+    resize(
+      pixels: Pixels,
+      width: number,
+      height: number,
+      interpolation: ImageInterpolation,
+    ): Pixels {
+      assertActive();
+      if (interpolation === "nearest") {
+        return resizeNearestPixels(pixels, width, height);
+      }
+      assertResizeDimensions(pixels, width, height);
+      const bitmap = bitmapFromPixels(pixels);
+      const owned: Pointer[] = [
+        bitmap,
+      ];
+      try {
+        const source = convert(bitmap, premultipliedBgraFormat, owned);
+        const scaler = acquire((out) =>
+          invoke(
+            factory,
+            11,
+            [
+              "ptr",
+            ],
+            [
+              out,
+            ],
+          ),
+        );
+        owned.push(scaler);
+        check(
+          invoke(
+            scaler,
+            8,
+            [
+              "ptr",
+              "u32",
+              "u32",
+              "u32",
+            ],
+            [
+              source,
+              width,
+              height,
+              WIC_INTERPOLATION_LINEAR,
+            ],
+          ),
+        );
+        const result = convert(scaler, bgraFormat, owned);
+        const rgba = Buffer.alloc(width * height * 4);
+        check(
+          invoke(
+            result,
+            7,
+            [
+              "ptr",
+              "u32",
+              "u32",
+              "ptr",
+            ],
+            [
+              null,
+              width * 4,
+              rgba.length,
+              ptr(rgba),
+            ],
+          ),
+        );
+        for (let index = 0; index < rgba.length; index += 4) {
+          const blue = rgba[index] ?? 0;
+          rgba[index] = rgba[index + 2] ?? 0;
+          rgba[index + 2] = blue;
+        }
+        return {
+          width,
+          height,
+          rgba,
+        };
+      } finally {
+        for (const object of owned.reverse()) {
+          release(object);
+        }
+      }
+    },
     encode(pixels: Pixels, mime: ImageMime): Buffer {
       assertActive();
       if (pixels.width === 0) {
@@ -460,45 +628,14 @@ export function createWIC() {
           }
         }
       }
-      const bgra = Buffer.from(pixels.rgba);
-      for (let index = 0; index < bgra.length; index += 4) {
-        const red = bgra[index] ?? 0;
-        bgra[index] = bgra[index + 2] ?? 0;
-        bgra[index + 2] = red;
-      }
       const output = Buffer.alloc(MAX_ENCODED_BYTES);
       const target = stream(output);
       const owned: Pointer[] = [
         target,
       ];
       try {
-        const format = guid(bgraFormat);
-        const bitmap = acquire((out) =>
-          invoke(
-            factory,
-            20,
-            [
-              "u32",
-              "u32",
-              "ptr",
-              "u32",
-              "u32",
-              "ptr",
-              "ptr",
-            ],
-            [
-              pixels.width,
-              pixels.height,
-              ptr(format),
-              pixels.width * 4,
-              bgra.length,
-              ptr(bgra),
-              out,
-            ],
-          ),
-        );
+        const bitmap = bitmapFromPixels(pixels);
         owned.push(bitmap);
-        storage.set(bitmap, bgra);
         const container = guid(containers[mime]);
         const encoder = acquire((out) =>
           invoke(

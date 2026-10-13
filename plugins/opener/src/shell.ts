@@ -47,6 +47,11 @@ const IID_DISPATCH = guid("00020400-0000-0000-c000-000000000046");
 const IID_FOLDER_VIEW = guid("e7a1af80-4d96-11cf-960c-0080c7f4ee85");
 const IID_NULL = Buffer.alloc(16);
 
+/** Encode one already validated target using Windows backslash-before-quote rules. */
+function quoteShellTarget(target: string): string {
+  return `"${target.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/g, "$1$1")}"`;
+}
+
 function launchFailed(): BunawayError {
   return new BunawayError({
     code: "INTERNAL",
@@ -133,9 +138,10 @@ export function createShell() {
   return {
     /**
      * Ask Explorer to open a target; all COM work must remain on the creating STA.
+     * An optional validated argument is encoded as one target for a selected executable.
      * Calls after disposal throw a `CANCELLED` error.
      */
-    open(target: string): void {
+    open(target: string, argument?: string): void {
       if (disposed) {
         throw new BunawayError({
           code: "CANCELLED",
@@ -279,25 +285,26 @@ export function createShell() {
           ])(ptr(IID_NULL), ptr(names), 1, 0, ptr(dispatchId)),
         );
         const isUrl = /^https?:\/\//i.test(target);
-        const argumentCount = isUrl ? 5 : 1;
+        const hasParameters = isUrl || argument !== undefined;
+        const argumentCount = hasParameters ? 5 : 1;
         const argumentsBuffer = Buffer.alloc(argumentCount * VARIANT_BYTES);
         let values = [
           string(target),
         ];
-        if (isUrl) {
+        if (hasParameters) {
           argumentsBuffer.writeUInt16LE(VT_I4, 0);
           argumentsBuffer.writeInt32LE(SW_SHOWNORMAL, VARIANT_VALUE_OFFSET);
           const empty = string("");
           values = [
             string("open"),
             empty,
-            empty,
+            string(argument === undefined ? "" : quoteShellTarget(argument)),
             ...values,
           ];
         }
-        // File calls omit optional arguments so the registered default verb is used.
+        // Default file calls omit optional arguments so the registered default verb is used.
         for (const [index, value] of values.entries()) {
-          const offset = (index + (isUrl ? 1 : 0)) * VARIANT_BYTES;
+          const offset = (index + (hasParameters ? 1 : 0)) * VARIANT_BYTES;
           argumentsBuffer.writeUInt16LE(VT_BSTR, offset);
           argumentsBuffer.writeBigUInt64LE(
             BigInt(value),
