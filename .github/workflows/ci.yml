@@ -17,7 +17,9 @@ jobs:
   check:
     name: Check (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    # Real Inno recovery/ACL cases run only on Windows. Keep their assertions and
+    # test deadlines intact while allowing the complete platform check to finish.
+    timeout-minutes: ${{ matrix.os == 'windows-2022' && 20 || 15 }}
     strategy:
       fail-fast: false
       matrix:
