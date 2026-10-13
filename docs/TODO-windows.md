@@ -184,7 +184,8 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] 초기 maximized와 fullscreen 옵션을 지원한다.
 - [ ] minimizable, maximizable, closable, fullscreenable을 설정하고 조회한다.
 - [ ] 초기 및 실행 중 focusable을 설정하고 조회한다.
-- [ ] 창 title과 icon을 실행 중 변경하고 조회한다.
+- [x] `setTitle`과 `getTitle`로 Windows 창 title을 실행 중 변경하고 조회한다. 선언과 다른 인스턴스를 변경하지 않으며 닫기 확인 창에도 현재 title을 사용한다.
+- [ ] 창 icon을 실행 중 변경하고 조회한다. 이미지 입력과 배포 리소스 계약을 정의한다.
 - [ ] decorations와 frame의 초기 설정, 변경과 조회를 제공한다.
 - [ ] 사용자 타이틀바의 drag 영역, no-drag 영역과 resize 영역을 제공한다.
 - [ ] 프로그램에서 창 이동과 방향별 크기 조절을 시작한다.

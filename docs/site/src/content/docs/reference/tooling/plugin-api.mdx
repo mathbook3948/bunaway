@@ -58,6 +58,7 @@ splashscreen 최종 종료에는 false를 전달해 임시 프로필과 교체 �
 플러그인은 인증된 출처와 대상 권한을 검증하고 닫혔거나 재생성 중인 창을 결과에서 제외합니다.
 `lookup`이 없으면 식별자 탐색 API는 `UNSUPPORTED`를 반환합니다.
 `NativeWindow`는 `show(visible)`, `focus()`, `close()`, `isFullscreen()`, `getSizeConstraints()`, `setSizeConstraints(constraints)`, `setSize(width, height)`, `setPosition(x, y)`, `setFullscreen(value)`, `setCloseConfirmation(message)`를 제공합니다.
+Windows의 선택적 `setTitle(title)`과 `getTitle()`은 현재 HWND의 UTF-16 제목을 변경하고 조회합니다. 선언을 바꾸지 않으며 조회는 1024 코드 단위로 제한합니다. 네이티브 조회 오류와 길이 초과는 예외로 전달합니다.
 
 Windows의 선택적 `NativeWindow.showPrintUI(kind)`는 `"browser" | "system"` 인쇄 UI를
 요청합니다. 프린터 선택과 제출은 사용자에게 맡기며 메서드 반환을 인쇄 완료로 해석하지 않습니다.
