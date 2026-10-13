@@ -24,6 +24,12 @@ test("clipboard has separate read, write and clear permissions with strict Unico
     "clipboard.readText",
     "clipboard.writeText",
     "clipboard.clear",
+    "clipboard.readImage",
+    "clipboard.writeImage",
+    "clipboard.getFormats",
+    "clipboard.hasFormat",
+    "clipboard.readFormats",
+    "clipboard.writeFormats",
   ]);
   for (const text of [
     "",

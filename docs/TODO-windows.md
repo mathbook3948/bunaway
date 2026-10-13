@@ -417,10 +417,11 @@ Windows의 비활성화 기록을 수정하지 않는다.
 출처: [E-clipboard], [E-image], [T-clipboard], [T-image].
 
 - [x] 클립보드 텍스트 읽기, 쓰기와 지우기를 제공한다. `@bunaway/plugin-clipboard`의 작업별 권한, Unicode와 크기 제한, 빈 값, 점유와 취소, 소유권 정리를 정의했다. 2026-10-10 Windows x64의 공통 SDK와 실제 UI Worker 왕복, 별도 프로세스 점유와 취소를 검증했다([계약과 검증](../plugins/clipboard/README.md)).
-- [ ] 이미지 읽기와 쓰기를 제공한다.
-- [ ] HTML, RTF, 파일 목록과 bookmark 형식의 지원을 제공한다.
-- [ ] 사용 가능한 MIME 형식과 지정 형식 존재 여부를 조회한다.
-- [ ] 여러 형식을 한 번에 읽고 쓰는 API를 제공한다.
+- [x] Windows clipboard의 `readImage`와 `writeImage`로 bounded RGBA 이미지 읽기와 쓰기를 제공한다. 공통 이미지 리소스 API와 다른 앱의 붙여넣기 검증은 별도 작업이다.
+- [x] Windows clipboard의 HTML fragment, ASCII RTF와 wide 파일 목록 읽기와 쓰기를 제공한다. 파일 목록은 저장소 접근 권한을 추가하지 않는다.
+- [ ] bookmark 형식의 지원을 제공한다.
+- [x] `getFormats`와 `hasFormat`으로 지원하는 다섯 MIME 형식의 가용성을 조회한다. 임의 Windows 등록 형식의 열거는 포함하지 않는다.
+- [x] `readFormats`와 `writeFormats`로 한 번의 clipboard 열기 구간에서 여러 형식을 읽거나 교체한다. 준비 실패는 기존 내용을 보존하며 비우기 이후 부분 등록 실패는 되돌리지 않는다.
 - [ ] 사용자 정의 binary 형식을 읽고 쓰는 범위와 제한을 정의한다.
 - [ ] 클립보드 변경 이벤트의 지원을 결정한다.
 - [ ] 파일, bytes, bitmap, RGBA와 data URL에서 이미지 리소스를 만든다.
@@ -429,6 +430,12 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [ ] crop, resize와 scale-factor별 이미지 representation을 제공한다.
 - [ ] 파일 아이콘과 이미지 thumbnail을 생성한다.
 - [ ] 이미지 리소스 ID와 명시적 해제, 호출 취소와 앱 종료 정리를 제공한다.
+
+2026-10-12 clipboard 확장은 `defineNativePlugin`과 Zod 계약, 작업별 권한, 입력과 출력 상한,
+빌린 메모리의 복사와 해제, 다중 형식의 부분 실패 정리를 포함한다. 실제 Windows 회귀는
+CI의 `mise run host:windows`에서 SDK와 UI Worker, Win32를 연결해 실행하도록 추가했다.
+구현 표시와 검증 결과는 구분하며 정확한 head CI 결과를 확인한다. 다른 앱의 붙여넣기,
+최소 OS와 하드웨어 검증, 공통 이미지 리소스의 생성, 변환과 명시적 해제는 완료하지 않았다.
 
 ## 13. 모니터, 테마, 접근성과 전원
 
