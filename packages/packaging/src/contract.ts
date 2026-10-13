@@ -135,6 +135,19 @@ export interface ChannelConfig {
   webView2?: "check" | "bootstrap";
   desktopShortcut?: boolean;
   startMenuShortcut?: boolean;
+  /** Optional installer tasks register candidates; Windows users choose defaults. */
+  associations?: {
+    files?: {
+      extension: string;
+      name: string;
+      mimeType?: string;
+    }[];
+    urlSchemes?: {
+      /** A 2–32 character scheme; one-letter prefixes are reserved for Windows drive paths. */
+      scheme: string;
+      name: string;
+    }[];
+  };
   uninstall?: {
     preserveUserData?: boolean;
   };

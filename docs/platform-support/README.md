@@ -31,7 +31,7 @@ Windows x64 `10.0.26200.0`, Bun 1.4.2에서 실제 트레이와 WebView2의 지�
 트레이 입력은 실제 HWND의 콜백 메시지로 검사했으며 물리 마우스 클릭은 포함하지 않는다.
 macOS 창 없는 시작은 `UNSUPPORTED`이며 [Windows 실행 기록](../architecture/windows-bun-results.md)의 범위를 따른다.
 
-현재 저장, opener와 clipboard 플러그인은 Windows만 지원한다. 로그와 기능 조회의 macOS 어댑터는 I/O Worker에 연결했으며 창 플러그인의 기본 제어도 macOS에서 제공한다. 아래 macOS 파일 저장과 네이티브 API 검증 기록은 이관 전 구현의 기록이다. Bun FFI 제품 경로의 명령, 이벤트와 정책, 복구, 종료 검증은 [새 기록](../architecture/macos-bun-results.md)에 둔다.
+저장 플러그인은 Windows와 macOS I/O 어댑터를 제공한다. macOS의 아홉 작업은 텍스트와 바이트 읽기 및 쓰기, append, exists/stat와 copyFile이며 move는 미지원이다. 실제 WKWebView와 compiled 호스트의 저장 검증 fixture를 native CI에 포함하며 [저장 어댑터 기록](../architecture/macos-storage-adapter.md)에서 검증 범위와 의존성을 구분한다. 로그와 기능 조회의 macOS 어댑터는 I/O Worker에 연결했으며 창 플러그인의 기본 제어도 macOS에서 제공한다. clipboard는 Windows와 macOS를 지원하며 opener는 이 문서 기준 Windows만 지원한다. 아래 macOS 파일 저장과 네이티브 API 검증 기록은 이관 전 구현의 기록이다. Bun FFI 제품 경로의 명령, 이벤트와 정책, 복구, 종료 검증은 [새 기록](../architecture/macos-bun-results.md)에 둔다.
 
 로그와 기능 조회는 격리 어댑터 검사와 실제 compiled WKWebView 앱 호출 검사를
 구분한다. `macos-log-capabilities.ts`는 기존 entitlement로 ad-hoc 서명한 `.app`에서
@@ -84,7 +84,8 @@ fixture가 범위 제한 Host API 파일에서 복원한 결과는 선택 플러
 - `LSMinimumSystemVersion=14.0`은 생성 plist의 값일 뿐 macOS 14 전체 지원 검증이 아니다.
 - 프로덕션 Developer ID 서명, 실제 공증과 Gatekeeper, 설치 및 App Sandbox의 안정성은 별도 검증이 필요하다.
 - CLI와 vanilla, Vite, React, Vue, Svelte 템플릿, 저장/로그/기능 조회 선택 플러그인 패키지,
-  Windows 네이티브 어댑터는 구현했다. macOS 네이티브 플러그인 어댑터는 미구현이다.
+  Windows 네이티브 어댑터는 구현했다. macOS 저장 어댑터와 공유 I/O dispatch도 구현했다.
+  move는 미지원이며 실제 저장 호출의 검증 범위는 저장 어댑터 기록을 따른다.
   릴리스 자동화와 PRD 전체 출시 기준은 미충족이다.
 
 ## 패키징(공통 계약)

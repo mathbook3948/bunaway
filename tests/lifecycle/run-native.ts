@@ -115,6 +115,8 @@ if (target === "windows-x64") {
           "tests/lifecycle/windows-network.test.ts",
           "tests/lifecycle/windows-global-shortcut.test.ts",
           "tests/lifecycle/windows-global-shortcut-ui.test.ts",
+          "tests/lifecycle/windows-menu.test.ts",
+          "tests/lifecycle/windows-menu-ui.test.ts",
           "tests/lifecycle/windows-bun-instance.test.ts",
           "tests/lifecycle/windows-monitors.test.ts",
           "tests/lifecycle/windows-host-shutdown.test.ts",
@@ -231,6 +233,7 @@ if (target === "windows-x64") {
     await test("macos-clipboard-webview.ts", [], {
       BUNAWAY_CLIPBOARD_NATIVE: "1",
     });
+    await test("macos-storage-host.ts");
     await test("macos-host.ts", [
       "--package",
       output,

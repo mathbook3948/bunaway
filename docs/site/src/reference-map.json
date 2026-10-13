@@ -481,6 +481,17 @@
       }
     },
     {
+      "name": "@bunaway/plugin-menu",
+      "source": "plugins/menu/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/menu": ["menu", "menuPlugin"]
+      }
+    },
+    {
       "name": "@bunaway/plugin-power",
       "source": "plugins/power/src/index.ts",
       "buildOutputs": {
@@ -880,6 +891,7 @@
           "webView2",
           "desktopShortcut",
           "startMenuShortcut",
+          "associations",
           "uninstall",
           "packageName",
           "unvirtualizedData",
@@ -954,7 +966,8 @@
           "capabilities",
           "windows",
           "app",
-          "shortcuts"
+          "shortcuts",
+          "menus"
         ]
       }
     },
@@ -1312,6 +1325,19 @@
       "globalShortcut.setSuspended",
       "globalShortcut.isSuspended",
       "globalShortcut.waitForPress"
+    ],
+    "reference/plugins/menu": [
+      "menu.create",
+      "menu.get",
+      "menu.list",
+      "menu.replace",
+      "menu.remove",
+      "menu.insert",
+      "menu.removeItem",
+      "menu.updateItem",
+      "menu.setTrayMenu",
+      "menu.getTrayMenu",
+      "menu.waitForClick"
     ]
   },
   "configuration": {

@@ -360,6 +360,11 @@ Windows UI 어댑터의 선택적 `NativeEnvironment.shortcuts`는 `NativeShortc
 `createWindow`로 숨긴 메시지 창을 만들고 `destroyWindow`로 해제하며 `emit`은 기존 정책과 구독 확인 경로를 사용합니다.
 전역 단축키 플러그인이 개별 등록과 메시지 창을 소유하고 호스트는 기존 UI 스레드와 앱 실행 유지 정책을 유지합니다.
 
+Windows UI 어댑터의 선택적 `NativeEnvironment.menus`는 `NativeMenuServices`를 제공합니다.
+`NativeMenuItem` 트리를 `setTrayMenu`로 연결하고 `emit`으로 정책과 구독을 확인하는 기존 네이티브 이벤트 경로에 전달합니다.
+null은 트레이 메뉴 숨김이고 undefined는 호스트 기본 Open/Quit 복원입니다.
+트레이가 없으면 연결은 UNSUPPORTED이며 메뉴 정의 자체는 선택 플러그인이 소유합니다.
+
 `NativeEventWaiters<T>`는 UI 어댑터가 소유하는 일회성 알림 대기입니다. 생성자에 최대 대기 수를 지정하고 `wait(signal)`로 다음 알림을 기다립니다.
 `publish(value)`는 현재 대기자에게 각각 복사본을 전달하며 이력을 저장하지 않습니다.
 취소와 `dispose()`는 CANCELLED, 한도 초과는 BUSY이며 어댑터 정리에서 반드시 dispose를 호출합니다.

@@ -476,6 +476,7 @@ checkNames(
       "opener",
       "clipboard",
       "image",
+      "menu",
       "autostart",
       "power",
       "appearance",

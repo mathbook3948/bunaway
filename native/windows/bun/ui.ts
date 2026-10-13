@@ -1376,6 +1376,28 @@ try {
           }
         },
       },
+      menus: {
+        setTrayMenu(items, selected) {
+          if (stopping && items === undefined && !tray) {
+            return;
+          }
+          if (!tray) {
+            throw new BunawayError({
+              code: "UNSUPPORTED",
+              message: "The app has no configured tray.",
+            });
+          }
+          tray.setMenu(items, selected);
+        },
+        emit(event, payload) {
+          if (stopping || closingSent) {
+            return;
+          }
+          for (const view of views.values()) {
+            sendNativeEvent(view.boundary, event, payload);
+          }
+        },
+      },
     },
   );
   for (const spec of config.windows) {

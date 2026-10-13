@@ -20,6 +20,7 @@
         "@bunaway/plugin-global-shortcut": "workspace:*",
         "@bunaway/plugin-image": "workspace:*",
         "@bunaway/plugin-log": "workspace:*",
+        "@bunaway/plugin-menu": "workspace:*",
         "@bunaway/plugin-network": "workspace:*",
         "@bunaway/plugin-notification": "workspace:*",
         "@bunaway/plugin-opener": "workspace:*",
@@ -214,6 +215,21 @@
       "name": "@bunaway/plugin-log",
       "version": "0.0.0",
       "dependencies": {
+        "zod": "4.6.5",
+      },
+      "devDependencies": {
+        "@bunaway/plugin": "workspace:*",
+      },
+      "peerDependencies": {
+        "@bunaway/plugin": "0.0.0",
+      },
+    },
+    "plugins/menu": {
+      "name": "@bunaway/plugin-menu",
+      "version": "0.0.0",
+      "dependencies": {
+        "@bunaway/plugin-api": "workspace:*",
+        "@bunaway/protocol": "workspace:*",
         "zod": "4.6.5",
       },
       "devDependencies": {
@@ -502,6 +518,8 @@
     "@bunaway/plugin-image": ["@bunaway/plugin-image@workspace:plugins/image"],
 
     "@bunaway/plugin-log": ["@bunaway/plugin-log@workspace:plugins/log"],
+
+    "@bunaway/plugin-menu": ["@bunaway/plugin-menu@workspace:plugins/menu"],
 
     "@bunaway/plugin-network": ["@bunaway/plugin-network@workspace:plugins/network"],
 

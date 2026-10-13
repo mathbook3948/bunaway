@@ -1,6 +1,7 @@
 import { MAX_MESSAGE_BYTES } from "@bunaway/protocol";
 
 export type { NativeShortcutServices } from "./native-shortcut.ts";
+export type { NativeMenuItem, NativeMenuServices } from "./native-menu.ts";
 
 /** Inclusive accepted dimension range for window sizes. */
 export const MIN_WINDOW_DIMENSION = 200;

@@ -287,7 +287,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] 아이콘과 tooltip을 실행 중 변경한다.
 - [ ] 트레이 생성, 조회, 표시, 숨김, 제거와 제거 여부 조회 API를 제공한다.
 - [ ] 여러 트레이 아이콘과 고유 ID, Windows GUID를 지원한다.
-- [ ] 사용자 정의 메뉴와 메뉴의 동적 교체, 제거를 지원한다.
+- [x] 사용자 정의 메뉴와 메뉴의 동적 교체, 제거를 지원한다. `menu.setTrayMenu`로 공유 메뉴 리소스를 연결한다.
 - [ ] 클릭, 더블 클릭, 우클릭, 가운데 클릭과 버튼 상태를 앱 이벤트로 전달한다.
 - [ ] 포인터 위치와 트레이 bounds, mouse enter/leave/move를 제공한다.
 - [ ] 클릭에 따른 메뉴 표시 여부와 창 복원 동작을 설정한다.
@@ -303,10 +303,13 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] 앱 메뉴바와 창별 메뉴를 생성, 교체, 조회하고 제거한다.
 - [ ] 메뉴바 visible과 auto-hide를 설정하고 조회한다.
 - [ ] 지정 창과 위치에 컨텍스트 메뉴를 표시하고 닫는다.
-- [ ] 일반, separator, checkbox, radio, icon과 submenu 항목을 제공한다.
-- [ ] 메뉴 ID 조회, append, prepend, insert, remove와 목록 조회를 제공한다.
-- [ ] 항목 label, enabled, visible, checked와 icon을 실행 중 변경한다.
-- [ ] 메뉴 click 이벤트와 소유 창 정보를 전달한다.
+- [x] 공유 메뉴 리소스에서 일반, separator, checkbox, radio와 submenu 항목을 제공한다.
+- [ ] 메뉴 icon 항목을 제공한다.
+- [x] 메뉴 리소스 ID 조회, create, replace, remove와 목록 조회, 항목 insert와 remove를 제공한다. `insert`의 index 0과 배열 길이로 prepend와 append를 처리한다.
+- [x] 메뉴 리소스의 항목 label, enabled, visible와 checked를 실행 중 변경한다. 연결한 트레이의 다음 팝업에 반영한다.
+- [ ] 메뉴 항목 icon을 실행 중 변경한다.
+- [x] 트레이 메뉴 선택을 `menu.clicked`로 전달한다. 앱 창에 속하지 않아 `windowId`는 null이다.
+- [ ] 창 메뉴 click 이벤트와 소유 창 정보를 전달한다.
 - [ ] accelerator, 표시 문자열과 실제 등록 여부를 구분한다.
 - [ ] Undo, Redo, Cut, Copy, Paste, Select All 등 기본 menu role을 제공한다.
 - [ ] About, Quit, 창 전환과 도움말 등 플랫폼 기본 메뉴 항목을 제공한다.
@@ -325,6 +328,10 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 전역 단축키의 입력, 권한, 중지와 실패 복구 계약은 [globalShortcut API](./site/src/content/docs/reference/plugins/global-shortcut.mdx)를 따른다.
 실제 RegisterHotKey와 SendInput 회귀를 Windows CI 실행기에 포함한다.
 물리 키보드와 키보드 레이아웃별 사용자 입력, 다른 플랫폼은 별도 검증과 구현이 남아 있다.
+
+공유 메뉴 계약과 트레이 연결은 [menu API](./site/src/content/docs/reference/plugins/menu.mdx)를 따른다.
+실제 HMENU와 창 없는 UI Worker 회귀를 Windows CI 실행기에 포함한다.
+사용자 포인터와 키보드 메뉴 조작, Explorer 재시작 중 사용자 정의 메뉴는 수동 검증이 남아 있다.
 
 ## 08. 로그인 시 자동 실행
 
@@ -380,8 +387,14 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [ ] Windows 바로가기 생성, 읽기와 변경을 제공한다.
 - [ ] OS beep와 이모지 패널의 지원을 결정한다.
 - [ ] URL scheme을 등록, 해제하고 기본 처리 앱 여부를 조회한다.
-- [ ] 파일 확장자, MIME, 표시 이름과 파일 아이콘을 설치에 등록한다.
-- [ ] 설치와 제거에서 연결을 정리하고 기존 기본 앱 설정을 존중한다.
+  설치의 opt-in 처리 후보 등록과 제거는 구현했다. 런타임 등록 API와 기본 처리 앱 조회는 남아 있다.
+- [x] 파일 확장자, MIME, 표시 이름과 앱 EXE의 파일 아이콘을 설치에 등록한다.
+- [x] 설치와 제거에서 앱이 소유한 처리 후보를 정리하고 기존 기본 앱 설정을 존중한다.
+  Inno `associations` 작업은 새 설치에서 선택하지 않는다. 업데이트의 실행 파일명 변경,
+  선언 제거와 선택 해제는 이전 후보를 정리한다. 기본값과 UserChoice는 쓰지 않는다.
+  선택한 후보의 충돌을 설치와 이전 등록 정리 전에 검사하고 설치 후 레지스트리 실패도
+  0이 아닌 종료 코드로 반환한다. 일부 등록의 자동 롤백은 제공하지 않는다.
+  Windows 기본 앱 설정에서 선택 후 실제 파일과 링크 실행은 별도 수동 검증으로 남긴다.
 - [ ] URL의 연결 앱 이름과 실행 정보를 조회한다.
 - [ ] AppUserModelID와 toast activation 식별자를 설정하고 설치와 일치시킨다.
 - [ ] Recent Documents의 추가, 조회와 삭제를 제공한다.
@@ -825,10 +838,18 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 설치 파일 생성과 출시 검증은 구분한다. 플랫폼별 형식, 코드 서명, 공증과 스토어 배포의
 완료 조건은 28절에서 [PRD](./PRD.md)의 9절과 [플랫폼 지원 표](./platform-support/README.md)에 연결한다.
 
+자동 업데이트 구현은 배포 책임자의 신뢰 및 릴리스 정책 결정 전까지 보류한다.
+신뢰할 서명 키와 루트, 키 교체와 폐기, 메타데이터 서명 및 endpoint 허용 목록,
+버전 선택과 downgrade, 부분 실패와 rollback 규칙, Store 업데이트와 자체 updater의
+채널 구분, 설치와 종료 승인 및 relaunch 계약을 먼저 정해야 한다.
+PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는다. 아래 관련 항목은 미완료이며
+프로덕션 키나 외부 업데이트 호스팅을 구성하지 않는다.
+
 - [x] 고정 Bun으로 앱 코드와 웹 자산, 설정과 정책을 compiled EXE에 포함한 Windows 앱 패키지를 만든다.
 - [x] Inno Setup 기반 direct와 Store unpackaged 채널의 설치 파일 생성 경로가 있다.
 - [x] 앱 이름과 ICO 아이콘을 가진 GUI EXE로 실행하고 시작 실패 대화상자와 로그를 제공한다.
-- [ ] 설치 옵션에 autostart, 파일 연결과 URL scheme의 opt-in을 연결한다.
+- [x] 설치 옵션에 파일 연결과 URL scheme 처리 후보 등록의 opt-in을 연결한다.
+- [ ] 설치 옵션에 autostart의 opt-in을 연결한다.
 - [x] 업데이트에서 기존 설치 폴더, 앱 데이터와 설정된 경로의 바로가기를 유지한다.
   Inno 설치는 기존 설치 폴더와 앱 데이터를 유지하고,
   설정된 경로의 앱 바로가기가 같은 설치의 이전 EXE를 가리킬 때 대상과 기본 아이콘을 갱신한다.
