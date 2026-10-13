@@ -483,6 +483,14 @@ async function main(): Promise<void> {
         force: true,
       });
     }
+    const anotherParent = temporaryPath("another move parent");
+    await mkdir(anotherParent);
+    expectError(
+      () => transfer("storage.move", copied, `${anotherParent}/child.bin`),
+      "UNSUPPORTED",
+    );
+    assert.equal(call("storage.exists", copied), true);
+    assert.equal(call("storage.exists", `${anotherParent}/child.bin`), false);
     const moved = temporaryPath("moved 한글.bin");
     assert.equal(transfer("storage.move", copied, moved), null);
     assert.equal(call("storage.exists", copied), false);

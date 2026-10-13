@@ -46,10 +46,11 @@ const FILE_SHARE_WRITE = 0x2;
 const FILE_SHARE_DELETE = 0x4;
 const FILE_SHARE_ALL = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
 const DELETE = 0x10000;
+const SYNCHRONIZE = 0x100000;
 const CREATE_NEW = 1;
 const ERROR_FILE_EXISTS = 80;
 const ERROR_NOT_SAME_DEVICE = 17;
-const FILE_RENAME_INFO = 3;
+const FILE_RENAME_INFORMATION = 10;
 const FILE_DISPOSITION_INFO = 4;
 const FILE_RENAME_INFO_BYTES = 24;
 const FILE_RENAME_NAME_LENGTH_OFFSET = 16;
@@ -174,6 +175,27 @@ function createBindings() {
     },
   });
 }
+/** Native rename accepts a simple name relative to the source's already opened parent. */
+function createRenameBindings() {
+  return dlopen("ntdll.dll", {
+    NtSetInformationFile: {
+      args: [
+        "u64",
+        "ptr",
+        "ptr",
+        "u32",
+        "u32",
+      ],
+      returns: "i32",
+    },
+    RtlNtStatusToDosError: {
+      args: [
+        "u32",
+      ],
+      returns: "u32",
+    },
+  });
+}
 function deny(message: string): never {
   throw new BunawayError({
     code: "PERMISSION_DENIED",
@@ -269,12 +291,15 @@ function transferOptions(access: number, disposition: number): TargetOptions {
 export class WindowsStorage {
   private readonly api = createBindings();
   private disposed = false;
+  private renameApi: ReturnType<typeof createRenameBindings> | null = null;
   /** Release this instance's bindings; other storage adapters retain their resources. */
   dispose(): void {
     if (this.disposed) {
       return;
     }
     this.disposed = true;
+    this.renameApi?.close();
+    this.renameApi = null;
     this.api.close();
   }
   private check(value: number | bigint, message: string): void {
@@ -702,7 +727,7 @@ export class WindowsStorage {
     return null;
   }
 
-  /** Rename the checked source under pinned destination parents, with atomic no-replace semantics. */
+  /** Rename the checked source in its pinned parent, with atomic no-replace semantics. */
   private move(input: StorageTransfer): null {
     const from = selectedPath(input.from).path;
     const to = selectedPath(input.to).path;
@@ -716,7 +741,7 @@ export class WindowsStorage {
       input.from,
       {
         ...transferOptions(
-          DELETE | FILE_READ_ATTRIBUTES | FILE_READ_DATA,
+          DELETE | SYNCHRONIZE | FILE_READ_ATTRIBUTES | FILE_READ_DATA,
           OPEN_EXISTING,
         ),
         allowDirectories: true,
@@ -727,6 +752,16 @@ export class WindowsStorage {
             throw new BunawayError({
               code: "INVALID_ARGUMENT",
               message: "Move source and destination are the same.",
+            });
+          }
+          if (
+            win32.dirname(source.canonical) !==
+            win32.dirname(destination.target)
+          ) {
+            throw new BunawayError({
+              code: "UNSUPPORTED",
+              message:
+                "Storage move currently requires the same parent directory.",
             });
           }
           // Windows can report a sharing violation before a no-replace name collision.
@@ -749,21 +784,30 @@ export class WindowsStorage {
               message: "Storage destination already exists.",
             });
           }
-          // Win32 rejects the relative RootDirectory form on Windows Server 2022.
-          // All destination parents remain pinned while its handle-derived absolute name is used.
-          const name = Buffer.from(destination.target, "utf16le");
+          // A simple NT name with RootDirectory=NULL renames within the source's parent.
+          // An absolute/cross-directory rename reopens a parent for write, conflicting with
+          // the write-denying data handles that prevent reparse mutation and replacement races.
+          const name = Buffer.from(
+            win32.basename(destination.target),
+            "utf16le",
+          );
           const rename = Buffer.alloc(FILE_RENAME_INFO_BYTES + name.length);
           rename.writeUInt32LE(name.length, FILE_RENAME_NAME_LENGTH_OFFSET);
           name.copy(rename, FILE_RENAME_NAME_OFFSET);
-          if (
-            !this.api.symbols.SetFileInformationByHandle(
-              source.handle,
-              FILE_RENAME_INFO,
-              ptr(rename),
-              rename.length,
-            )
-          ) {
-            const error = this.api.symbols.GetLastError();
+          const statusBlock = Buffer.alloc(16);
+          this.renameApi ??= createRenameBindings();
+          const api = this.renameApi;
+          // CreateFileW without OVERLAPPED creates a synchronous file object. Buffers and all
+          // pins stay alive until NtSetInformationFile has completed the native operation.
+          const status = api.symbols.NtSetInformationFile(
+            source.handle,
+            ptr(statusBlock),
+            ptr(rename),
+            rename.length,
+            FILE_RENAME_INFORMATION,
+          );
+          if (status < 0) {
+            const error = api.symbols.RtlNtStatusToDosError(status >>> 0);
             if (error === ERROR_NOT_SAME_DEVICE) {
               throw new BunawayError({
                 code: "UNSUPPORTED",
