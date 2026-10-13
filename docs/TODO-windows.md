@@ -167,7 +167,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 초기 배치의 실제 HWND 및 WebView2 집중 검증을 완료했다. Windows Server 2022의 모니터 1개와 DPI 96에서 초기 선언 및 single/multiple 생성과 재생성을 확인했다. multiple은 isolated 프로필이다.
 - [ ] 초기 배치를 다중 물리 모니터, 혼합 DPI와 실제 높은 DPI에서 실행 검증한다. 합성 입력과 CI는 이 범위를 대신하지 않는다.
 - [ ] 고정 aspect ratio와 해제 API를 제공한다.
-- [ ] resizable과 movable을 설정하고 조회한다.
+- [x] `setResizable`, `isResizable`, `setMovable`, `isMovable`로 Windows 사용자 크기 조절과 이동을 설정하고 조회한다. 프로그램의 geometry API는 계속 허용하며 전체화면 뒤에도 설정을 유지한다.
 - [ ] 설정과 런타임 크기 제한을 실제 모니터, DPI에 맞게 재검토한다. 현재의 4096 상한을 유지할지 결정한다.
 - [ ] 위치와 크기의 선택적 애니메이션을 지원하거나 플랫폼별 미지원으로 명시한다.
 
@@ -325,8 +325,9 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 로그인 시 실행을 사용자 HKCU Run에 등록하고 해제한다.
 - [x] 등록 여부와 저장된 실제 실행 경로, 인자 상태를 조회한다.
 - [x] 로그인 시작에 전달할 인자를 Windows argv 규칙으로 인코딩한다.
-- [ ] 숨김 시작 옵션과 트레이 수명주기를 연결한다.
-- [ ] 수동 실행과 로그인 실행을 앱에서 구분한다.
+- [x] 숨김 시작 옵션과 트레이 수명주기를 연결한다. 트레이가 없는 등록과 시작은 거부하며 초기 SDK 준비도 창을 표시하지 않는다.
+- [x] `onOpen.launchReason`으로 수동 실행과 자동 실행 호출 모드를 구분한다. 실행 인자 기반 메타데이터이며 Windows 로그인 출처의 인증이 아니다.
+- [ ] 실제 로그아웃과 로그인에서 숨김 시작, 사용자 비활성화와 트레이 복원을 대화형 검증한다. CI의 직접 실행은 이 검증을 대신하지 않는다.
 - [x] 사용자 범위 등록을 기본으로 하고 관리자 범위는 제공하지 않는다.
 - [x] 앱 이동과 업데이트 후 명시적 재등록으로 오래된 경로와 인자를 갱신한다.
 - [ ] 제거 시 현재 ID의 등록을 해제하고 ID 변경 전 등록을 정리하는 설치 계약을 연결한다.
@@ -425,12 +426,13 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [x] `readFormats`와 `writeFormats`로 한 번의 clipboard 열기 구간에서 여러 형식을 읽거나 교체한다. 준비 실패는 기존 내용을 보존하며 비우기 이후 부분 등록 실패는 되돌리지 않는다.
 - [ ] 사용자 정의 binary 형식을 읽고 쓰는 범위와 제한을 정의한다.
 - [ ] 클립보드 변경 이벤트의 지원을 결정한다.
-- [ ] 파일, bytes, bitmap, RGBA와 data URL에서 이미지 리소스를 만든다.
-- [ ] 이미지 크기, 빈 이미지 여부와 픽셀 데이터를 조회한다.
-- [ ] PNG, JPEG, bitmap과 data URL로 이미지를 내보낸다.
+- [x] Windows `@bunaway/plugin-image`에서 PNG, JPEG와 BMP bytes, RGBA와 data URL로 앱 소유 이미지 리소스를 만든다.
+- [ ] 파일 경로에서 이미지 리소스를 읽는 API와 저장소 접근 정책을 연결한다.
+- [x] `image.getInfo`와 `image.getPixels`로 크기, 빈 이미지 여부와 RGBA 픽셀 데이터를 조회한다.
+- [x] `image.exportBytes`와 `image.exportDataURL`로 PNG, JPEG, BMP와 data URL을 내보낸다. PNG는 alpha를 보존하고 JPEG와 BMP는 불투명 픽셀만 받는다.
 - [ ] crop, resize와 scale-factor별 이미지 representation을 제공한다.
 - [ ] 파일 아이콘과 이미지 thumbnail을 생성한다.
-- [ ] 이미지 리소스 ID와 명시적 해제, 호출 취소와 앱 종료 정리를 제공한다.
+- [x] 앱 소유 이미지 ID, `image.dispose`, 결과 전달 전 생성 취소와 앱 종료 정리를 제공한다. 작업별 권한과 64개, 8 MiB 상한을 적용한다.
 
 2026-10-12 clipboard 확장은 `defineNativePlugin`과 Zod 계약, 작업별 권한, 입력과 출력 상한,
 빌린 메모리의 복사와 해제, 다중 형식의 부분 실패 정리를 포함한다. 실제 Windows 회귀는

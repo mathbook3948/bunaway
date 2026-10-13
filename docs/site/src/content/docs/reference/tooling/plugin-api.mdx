@@ -58,6 +58,7 @@ splashscreen 최종 종료에는 false를 전달해 임시 프로필과 교체 �
 플러그인은 인증된 출처와 대상 권한을 검증하고 닫혔거나 재생성 중인 창을 결과에서 제외합니다.
 `lookup`이 없으면 식별자 탐색 API는 `UNSUPPORTED`를 반환합니다.
 `NativeWindow`는 `show(visible)`, `focus()`, `close()`, `isFullscreen()`, `getSizeConstraints()`, `setSizeConstraints(constraints)`, `setSize(width, height)`, `setPosition(x, y)`, `setFullscreen(value)`, `setCloseConfirmation(message)`를 제공합니다.
+Windows의 선택적 `setResizable`, `isResizable`, `setMovable`, `isMovable`은 사용자 조작 허용을 변경하고 조회합니다. 프로그램의 geometry 작업에는 적용하지 않습니다. 전체화면 중의 resizable은 복원할 일반 창의 설정이며 HWND 종료 때 movable 설정을 정리합니다.
 선택적 `NativeWindow.audio`는 Windows의 `NativeWebViewAudio` 서비스입니다.
 `getState()`는 `WebViewAudioState`의 `muted`, `playing`을 반환하고 `setMuted(muted)`는
 controller의 음소거를 변경합니다. 문서 탐색은 음소거를 유지하고 controller 재생성은

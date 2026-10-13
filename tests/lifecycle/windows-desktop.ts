@@ -1,9 +1,17 @@
 import { dlopen } from "bun:ffi";
-import { windowPermissions } from "../fixtures/window-permissions.ts";
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { AppDefinition } from "@bunaway/core";
+import { windowsPlugin } from "@bunaway/plugin-windows";
+import {
+  AUTOSTART_ARGUMENT,
+  AUTOSTART_HIDDEN_ARGUMENT,
+  type HostContext,
+  NativeRegistry,
+} from "@bunaway/protocol";
+import { closeWindowsApp } from "#cli/windows-dev-launch";
 import { runWindowsApp } from "#native/windows/bun/entry";
 import {
   forwardToInstance,
@@ -11,11 +19,8 @@ import {
   listenForInstances,
 } from "#native/windows/bun/instance";
 import { containAppProcess } from "#native/windows/bun/job";
-import { closeWindowsApp } from "#cli/windows-dev-launch";
-import type { AppDefinition } from "@bunaway/core";
-import { type HostContext, NativeRegistry } from "@bunaway/protocol";
-import { windowsPlugin } from "@bunaway/plugin-windows";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 const windowRegistry = new NativeRegistry([
   windowsPlugin,
@@ -54,7 +59,7 @@ export const desktopTestApp = {
         const: null,
       },
       async run(_input, context) {
-        if (scenario === "hide") {
+        if (trayLifecycle) {
           assert.equal(
             await context.host.call(windowRegistry.operation("windows.close"), {
               view: "main",
@@ -83,6 +88,9 @@ export const desktopTestApp = {
 
 // Real Win32/WebView2 gate. Each scenario runs in a fresh Job-owned process.
 const scenario = process.argv[2] ?? "hide";
+const autostart = scenario.startsWith("autostart");
+const hiddenStart = scenario.startsWith("autostart-hidden");
+const trayLifecycle = scenario === "hide" || autostart;
 const devShutdown = scenario.startsWith("dev-");
 const devPending = scenario === "dev-pending";
 const repoRoot = process.argv.includes("--repo")
@@ -213,6 +221,39 @@ if (!process.argv.includes("--child")) {
           }
           if (event.event === "opened" && event.source === "initial") {
             assert(hwnd);
+            assert.equal(
+              event.launchReason,
+              autostart ? "autostart" : "manual",
+            );
+            assert.deepEqual(event.argv, []);
+            if (hiddenStart) {
+              hidden = true;
+              assert(
+                trayWindow,
+                "hidden startup must have a tray restore path",
+              );
+              assert.equal(
+                api.symbols.IsWindowVisible(hwnd),
+                0,
+                "initial SDK readiness must not display hidden startup windows",
+              );
+              // Another login-style launch must preserve the already-running app's visibility.
+              await forwardToInstance(
+                instanceAddress(resolve(root, `data-${child.pid}`)),
+                {
+                  argv: [
+                    AUTOSTART_HIDDEN_ARGUMENT,
+                    "memo://background/42",
+                  ],
+                  cwd: root,
+                },
+              );
+              continue;
+            }
+            assert(
+              api.symbols.IsWindowVisible(hwnd),
+              "ordinary startup should retain declared visibility",
+            );
             if (devShutdown && !devPending) {
               assert.equal(
                 await closeWindowsApp(child.pid),
@@ -220,7 +261,7 @@ if (!process.argv.includes("--child")) {
               );
               continue;
             }
-            if (scenario === "hide") {
+            if (trayLifecycle) {
               api.symbols.ShowWindow(hwnd, 3);
             }
             assert(api.symbols.PostMessageW(hwnd, 0x10, 0n, 0n));
@@ -260,15 +301,39 @@ if (!process.argv.includes("--child")) {
             );
           }
           if (event.event === "opened" && event.source === "second-instance") {
+            if (hiddenStart && event.launchReason === "autostart") {
+              assert.equal(
+                api.symbols.IsWindowVisible(hwnd),
+                0,
+                "hidden forwarding must not restore or replace the window",
+              );
+              assert.deepEqual(event.argv, [
+                "memo://background/42",
+              ]);
+              await forwardToInstance(
+                instanceAddress(resolve(root, `data-${child.pid}`)),
+                {
+                  argv: [
+                    "한글 파일.txt",
+                    "memo://open/42",
+                  ],
+                  cwd: root,
+                },
+              );
+              continue;
+            }
+            assert.equal(event.launchReason, "manual");
             reopened = true;
             assert(api.symbols.IsWindowVisible(hwnd));
             assert.deepEqual(event.urls, [
               "memo://open/42",
             ]);
-            if (scenario === "hide") {
+            if (trayLifecycle) {
               assert(
-                api.symbols.IsZoomed(hwnd),
-                "restoring a hidden window must preserve maximization",
+                hiddenStart
+                  ? !api.symbols.IsZoomed(hwnd)
+                  : api.symbols.IsZoomed(hwnd),
+                "restoring a hidden window must preserve its original maximization state",
               );
               assert.deepEqual(event.files, [
                 resolve(root, "한글 파일.txt"),
@@ -296,7 +361,7 @@ if (!process.argv.includes("--child")) {
       );
     } else {
       assert(reopened);
-      assert(scenario === "hide" ? hidden && trayQuit : vetoed);
+      assert(trayLifecycle ? hidden && trayQuit : vetoed);
     }
     assert.equal(
       sessionCount,
@@ -351,7 +416,7 @@ if (!process.argv.includes("--child")) {
           },
         ],
         desktop: {
-          ...(scenario === "hide" || scenario === "dev-hide"
+          ...(trayLifecycle || scenario === "dev-hide"
             ? ({
                 closeBehavior: "hide",
                 tray: {
@@ -388,7 +453,7 @@ if (!process.argv.includes("--child")) {
           async onOpen(request, context) {
             if (request.source === "initial") {
               await uiReady;
-            } else {
+            } else if (!(hiddenStart && request.launchReason === "autostart")) {
               await Bun.sleep(100);
               assert(ticks > atOpen, "backend stopped while hidden or vetoed");
               await emitReopen();
@@ -398,6 +463,8 @@ if (!process.argv.includes("--child")) {
               JSON.stringify({
                 event: "opened",
                 source: request.source,
+                launchReason: request.launchReason,
+                argv: request.argv,
                 urls: request.urls,
                 files: request.files,
               }),
@@ -455,6 +522,11 @@ if (!process.argv.includes("--child")) {
             view: "main",
             title: "Desktop lifecycle",
             home: "https://app.bunaway.local/index.html",
+            ...(scenario === "autostart-hidden-ready"
+              ? {
+                  showWhenReady: "sdk" as const,
+                }
+              : {}),
             window: {
               width: 640,
               height: 480,
@@ -463,7 +535,11 @@ if (!process.argv.includes("--child")) {
         ],
       },
       {
-        argv: [],
+        argv: autostart
+          ? [
+              hiddenStart ? AUTOSTART_HIDDEN_ARGUMENT : AUTOSTART_ARGUMENT,
+            ]
+          : [],
         cwd: root,
       },
       inbox,

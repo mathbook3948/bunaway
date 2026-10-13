@@ -58,7 +58,7 @@ export function createOperations(
             message: "Invalid autostart arguments.",
           });
         }
-        const command = commandLine(app, payload.args);
+        const command = commandLine(app, payload.args, payload.hidden);
         // Repeating the same request does not rewrite Run, especially during a login launch.
         if (registryCommand(registry.read(RUN_KEY, name)) !== command) {
           registry.write(name, command);

@@ -7,20 +7,21 @@ import {
   validatedAdapter,
 } from "./native-validation.ts";
 
-export type { NativePluginAdapter } from "./native-validation.ts";
-
 export type {
   JsonValue,
   NativePluginContract,
 } from "@bunaway/protocol";
 export { BunawayError } from "@bunaway/protocol";
 export type { NativeInvokeOptions } from "#transport";
+export type { NativePluginAdapter } from "./native-validation.ts";
 
 /** Host-selected values available when a native adapter is created. */
 export type NativeEnvironment = {
   /** Trusted app identity and restart command. Callers cannot select another executable. */
   app?: {
     id: string;
+    /** Validated desktop tray permits hidden startup; absence does not grant support. */
+    supportsHiddenStart?: boolean;
     launch: {
       mode: "development" | "packaged";
       executablePath: string;

@@ -1,0 +1,111 @@
+---
+title: image
+description: Windows에서 앱 소유 이미지 리소스를 생성, 조회, 인코딩하고 해제합니다.
+sidebar: { order: 7 }
+---
+
+`@bunaway/plugin-image`를 설치하고 `imagePlugin`을 앱의 `plugins`에 등록합니다.
+화면과 앱 백엔드는 같은 `image` API를 사용합니다. 현재 Windows에서만 제공합니다.
+
+```ts
+import { defineApp } from "@bunaway/backend";
+import { imagePlugin } from "@bunaway/plugin-image";
+
+export default defineApp({ modules: [], plugins: [imagePlugin] });
+```
+
+## 생성과 조회
+
+| 함수 | 입력 | 결과 | 권한 |
+| --- | --- | --- | --- |
+| `image.createRGBA` | `{ width, height, rgba }` | `{ id, width, height, empty }` | `image.createRGBA` |
+| `image.createBytes` | `{ mime, data }` | `{ id, width, height, empty }` | `image.createBytes` |
+| `image.createDataURL` | `{ url }` | `{ id, width, height, empty }` | `image.createDataURL` |
+| `image.getInfo` | `{ id }` | `{ width, height, empty }` | `image.getInfo` |
+| `image.getPixels` | `{ id }` | `{ width, height, rgba }` | `image.getPixels` |
+
+모든 함수는 Promise를 반환합니다. `id`는 opaque UUID이며 네이티브 pointer나 파일 경로가
+아닙니다. 리소스는 앱 수명에 속하고 권한을 받은 화면이나 백엔드끼리 ID를 전달할 수 있습니다.
+작업별 권한으로 앱 전체의 해당 image operation을 허용하며 특정 ID의 접근 제한은 앱 명령에서
+검사합니다. 등록만으로 권한을 얻지 않습니다.
+
+`width`와 `height`는 0부터 4,096까지의 정수입니다. 빈 이미지는 0×0과 빈 `rgba` 문자열만
+허용합니다. 양수 크기의 `rgba`는 행을 위에서 아래로 이어 붙인 RGBA 8-bit 픽셀의 canonical
+base64이며 한 픽셀은 빨강, 초록, 파랑, alpha 순서의 4바이트입니다. Premultiplied alpha를
+사용하지 않으며 `width * height * 4`는 524,288바이트까지입니다. 예를 들어 512×256 이미지는
+상한에 해당합니다. 사용하지 않는 base64 padding bit도 0이어야 합니다.
+
+```ts
+import { image } from "@bunaway/plugin-image";
+
+const resource = await image.createRGBA({ width: 1, height: 1, rgba: "/wAAgA==" });
+const info = await image.getInfo({ id: resource.id });
+const pixels = await image.getPixels({ id: resource.id });
+```
+
+`mime`은 `image/png`, `image/jpeg` 또는 `image/bmp`입니다. `data`는 해당 이미지 파일의
+canonical base64이며 디코딩한 파일 bytes는 600,000바이트까지입니다. 파일 경로, URI와
+임의의 decoder 이름을 받지 않습니다. `url`은 같은 세 MIME의 `data:<mime>;base64,<data>`
+형식만 받으며 네트워크 요청을 수행하지 않습니다. MIME과 실제 파일 형식이 다르거나 WIC가
+여러 frame으로 판단한 입력, 지원 크기를 벗어난 decode 결과는 거부합니다.
+
+bytes와 data URL은 Windows Imaging Component로 디코딩합니다. 픽셀은 복사해 보유하며
+색상 profile, EXIF metadata와 orientation 처리는 제공하지 않습니다. 파일 bytes의 확보는
+앱이 기존 저장소 권한으로 수행합니다. 이 플러그인은 저장소 scope를 추가하지 않습니다.
+
+## 내보내기와 해제
+
+| 함수 | 입력 | 결과 | 권한 |
+| --- | --- | --- | --- |
+| `image.exportBytes` | `{ id, format }` | `{ mime, data }` | `image.exportBytes` |
+| `image.exportDataURL` | `{ id, format }` | data URL 문자열 | `image.exportDataURL` |
+| `image.dispose` | `{ id }` | 처음 해제하면 `true`, 이미 없으면 `false` | `image.dispose` |
+
+`format`도 `image/png`, `image/jpeg` 또는 `image/bmp`입니다. PNG는 alpha를 보존합니다.
+JPEG와 BMP는 모든 픽셀의 alpha가 255일 때만 내보냅니다. 투명 픽셀에 배경색을 임의로
+적용하지 않습니다. JPEG는 WIC의 기본 품질로 인코딩하며 픽셀 값은 손실될 수 있습니다.
+빈 이미지는 픽셀 조회와 해제는 가능하지만 인코딩할 수 없습니다. encoded 결과도
+600,000바이트까지이며 파일 bytes의 base64 또는 해당 data URL을 반환합니다.
+
+```ts
+try {
+  const png = await image.exportBytes({ id: resource.id, format: "image/png" });
+  const restored = await image.createBytes(png);
+  try {
+    const url = await image.exportDataURL({ id: restored.id, format: "image/png" });
+  } finally {
+    await image.dispose({ id: restored.id });
+  }
+} finally {
+  await image.dispose({ id: resource.id });
+}
+```
+
+앱은 최대 64개 리소스와 합계 8 MiB의 RGBA 픽셀을 보유합니다. 빈 이미지도 슬롯을
+사용합니다. 상한에 도달하면 `BUSY`이며 사용하지 않는 리소스를 해제한 뒤 다시 생성할 수
+있습니다. 해제 뒤 조회나 인코딩은 `INVALID_ARGUMENT`입니다. 새 리소스는 새 ID를 받습니다.
+앱 종료는 모든 픽셀 버퍼와 네이티브 codec 자원을 정리하며 재시작 뒤 이전 ID를 복구하지 않습니다.
+
+## 정책, 취소와 오류
+
+화면 직접 호출은 `commands`의 `plugin.image.<operation>`과 `host.permissions`의
+`image.<operation>`을 각각 허용합니다. 백엔드 명령은 호출 출처의 권한을 유지하고 setup에서의
+호출은 루트 `backend.permissions`를 따릅니다. 생성 권한은 조회, export나 해제를 허용하지 않습니다.
+
+화면의 마지막 인자는 선택적인 `NativeInvokeOptions`이며 `signal`과 절대 `deadline`을 받습니다.
+백엔드는 현재 명령의 취소와 기한을 이어받습니다. 호스트가 생성 작업을 완료하기 전에
+요청이 취소되면 새 ID와 픽셀 버퍼를 버리고 quota를 복원합니다. 완료한 생성은 뒤늦은
+화면 취소로 되돌리지 않습니다. 받은 ID의 수명은 정상 호출 완료와 창 탐색으로 끝나지
+않으며 앱이 명시적으로 해제합니다. WIC의 동기 decode/encode를 중간에 중단하지는 않습니다.
+취소된 결과는 호스트가 폐기하며 이미 실행한 명시적 해제는 되돌리지 않습니다.
+
+| 오류 | 의미 |
+| --- | --- |
+| `INVALID_ARGUMENT` | 잘못된 크기, base64, MIME, encoded 입력, 없는 ID 또는 지원하지 않는 export |
+| `PERMISSION_DENIED` | 해당 operation 권한이 없음 |
+| `UNSUPPORTED` | 등록하지 않은 작업이나 지원하지 않는 플랫폼 |
+| `BUSY` | 리소스 수나 앱 픽셀 메모리 상한에 도달함 |
+| `INTERNAL` | Windows codec이나 COM interface, native 인코딩이 실패함 |
+| `CANCELLED`, `TIMEOUT` | 요청 취소, 기한 초과 또는 앱 종료 |
+
+소유권과 실제 Windows 회귀 범위는 [플러그인 README](https://github.com/mathbook3948/bunaway/tree/main/plugins/image)를 참고하세요.

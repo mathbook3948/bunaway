@@ -57,6 +57,7 @@ test("native contract validators reject unknown operations and invalid input wit
   });
   args.push("--changed");
   expect(snapshot).toEqual({
+    hidden: false,
     args: [
       "--login",
     ],
