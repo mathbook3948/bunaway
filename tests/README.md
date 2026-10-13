@@ -468,3 +468,11 @@ WTS 등록 실패, 상태 알림 합치기, lifecycle 순서와 큐 초과를 �
 `windows-system-events.test.ts`는 실제 Windows 숨김 HWND, 메시지 pump와 WTS 등록을
 사용한다. 메시지는 합성 입력이며 실제 하드웨어 절전이나 사용자 세션 잠금 검증을
 대신하지 않는다. Linux에서는 이 네이티브 회귀를 건너뛴다.
+
+`api/image.test.ts`와 `lifecycle/image-resources.test.ts`는 선택 image 플러그인의
+Zod 계약과 canonical base64, 빈 이미지, operation 권한, ID 해제와 앱 종료,
+count와 메모리 quota 및 생성 취소의 정리를 확인한다. `windows-image.test.ts`는
+`host:windows`에 포함하며 공통 SDK와 실제 UI Worker, WIC에서 PNG와 data URL의
+RGBA alpha 왕복, JPEG와 BMP, 잘못된 encoded 입력과 decode 크기, 최대 PNG,
+정책 거부와 결과 전달 전 취소를 확인한다. 실제 파일 경로 접근, WebView 표시,
+다른 앱의 가져오기, 색상 관리와 최소 Windows 버전 검증은 포함하지 않는다.
