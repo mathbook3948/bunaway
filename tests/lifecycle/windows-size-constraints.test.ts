@@ -17,6 +17,7 @@ const SW_RESTORE = 9;
 const DEFAULT_DPI = 96;
 const MONITORINFO_SIZE = 40;
 const MONITOR_DEFAULTTONEAREST = 2;
+const MAX_STATE_CHECKPOINTS = 8;
 
 function physicalPixels(logicalPixels: number, dpi: number) {
   return Math.round((logicalPixels * dpi) / DEFAULT_DPI);
@@ -175,6 +176,50 @@ test.skipIf(process.platform !== "win32")(
       );
       assert.equal(windows?.failure, undefined);
     };
+
+    const stateCheckpoints: ReturnType<typeof recordMaximizedState>[] = [];
+    /** Capture live state without publishing a snapshot or changing window placement. */
+    function recordMaximizedState(
+      phase: string,
+      dpi: number,
+      expectedVisible: boolean,
+    ) {
+      const placement = Buffer.alloc(WINDOWPLACEMENT_SIZE);
+      placement.writeUInt32LE(WINDOWPLACEMENT_SIZE);
+      assert(
+        withBuffer(placement, (pointer) =>
+          user.symbols.GetWindowPlacement(window, pointer),
+        ),
+      );
+      return {
+        phase,
+        dpi,
+        expectedVisible,
+        cachedDpi: windows?.getDpi(window),
+        nativeDpi: user.symbols.GetDpiForWindow(window),
+        style: windowStyle(window).toString(16),
+        visible: user.symbols.IsWindowVisible(window) !== 0,
+        minimized: user.symbols.IsIconic(window) !== 0,
+        maximized: user.symbols.IsZoomed(window) !== 0,
+        showCmd: placement.readUInt32LE(8),
+        flags: placement.readUInt32LE(4),
+        normal: Array.from(
+          new Int32Array(placement.buffer, placement.byteOffset + 28, 4),
+        ),
+        callbackFailure: String(windows?.failure),
+      };
+    }
+    function stateDiagnostic(
+      phase: string,
+      dpi: number,
+      expectedVisible: boolean,
+    ) {
+      stateCheckpoints.push(recordMaximizedState(phase, dpi, expectedVisible));
+      if (stateCheckpoints.length > MAX_STATE_CHECKPOINTS) {
+        stateCheckpoints.shift();
+      }
+      return JSON.stringify(stateCheckpoints);
+    }
 
     const assertFullscreenMonitorBounds = (hwnd: bigint) => {
       const monitor = Buffer.alloc(MONITORINFO_SIZE);
@@ -423,12 +468,24 @@ test.skipIf(process.platform !== "win32")(
         true,
       ]) {
         user.symbols.ShowWindow(window, visible ? SW_SHOW : SW_HIDE);
+        // Identify state loss during show/hide before attributing it to the DPI callback.
+        assert(
+          user.symbols.IsZoomed(window),
+          stateDiagnostic(
+            "after-show-or-hide",
+            windows.getDpi(window),
+            visible,
+          ),
+        );
         for (const dpi of [
           doubleDpi,
           originalDpi,
         ]) {
           sendDpiChanged(window, dpi);
-          assert(user.symbols.IsZoomed(window));
+          assert(
+            user.symbols.IsZoomed(window),
+            stateDiagnostic("after-DPI", dpi, visible),
+          );
           assert.equal(user.symbols.IsWindowVisible(window) !== 0, visible);
           // A synthetic DPI change keeps the physical monitor unchanged.
           // The suggested 600x450 rect must not become the maximized size.
