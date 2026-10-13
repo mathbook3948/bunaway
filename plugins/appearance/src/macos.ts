@@ -51,7 +51,14 @@ export function createAppearance() {
     if (!system.symbols.pthread_main_np()) {
       failure("macOS appearance queries require the AppKit main thread.");
     }
-    const appkit = dlopen(APPKIT, {});
+    // Bun requires at least one exported symbol to own a library handle. Linking
+    // this public AppKit symbol loads the framework without invoking its initializer.
+    const appkit = dlopen(APPKIT, {
+      NSApplicationLoad: {
+        args: [],
+        returns: "bool",
+      },
+    } as const);
     libraries.push(appkit);
     const stackBlock = system.symbols.dlsym(
       RTLD_DEFAULT,

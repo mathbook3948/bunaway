@@ -2,6 +2,53 @@ import { expect, test } from "bun:test";
 import { appearanceOperations } from "#plugins/appearance/src/contract";
 
 test.skipIf(process.platform !== "darwin")(
+  "packaged appearance adapter loads AppKit in a fresh process and owns its framework lifetime",
+  async () => {
+    const entry = Bun.resolveSync(
+      "@bunaway/plugin-appearance/native/macos",
+      import.meta.dir,
+    );
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "--no-env-file",
+        "-e",
+        `const {appearancePlugin} = await import(${JSON.stringify(entry)});
+const first = appearancePlugin.nativePlatforms.macos.create({dataRoot:".",capabilities:[]});
+const second = appearancePlugin.nativePlatforms.macos.create({dataRoot:".",capabilities:[]});
+try {
+  await first.dispose();
+  await first.dispose();
+  const result = await second.execute("appearance.getPreferences", null, "backend");
+  console.log(JSON.stringify(result));
+} finally {
+  await first.dispose();
+  await second.dispose();
+}`,
+      ],
+      {
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 30_000,
+      },
+    );
+    const [output, errors, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    expect(code, errors).toBe(0);
+    const snapshot = appearanceOperations.getPreferences.output.parse(
+      JSON.parse(output),
+    );
+    expect(snapshot.appsTheme).not.toBeNull();
+    expect(snapshot.systemTheme).toBeNull();
+    expect(snapshot.forcedColors).toBe(false);
+  },
+  30_000,
+);
+
+test.skipIf(process.platform !== "darwin")(
   "real AppKit preferences, sRGB colors, appearance restoration and independent adapter lifetimes",
   async () => {
     const [{ createOperations }, { Objc }, { dlopen, linkSymbols }] =

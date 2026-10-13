@@ -562,6 +562,7 @@ DLL 수명과 종료 후 거부를 확인한다. `mise run host:windows`에 포�
 `macos-appearance.test.ts`는 실제 AppKit의 밝고 어두운 일반 및 contrast appearance에서
 테마와 sRGB 색, NSWorkspace 플래그를 비교하고 drawing appearance 복원,
 1,000번 조회와 독립 어댑터의 반복 정리를 확인한다. 사용자 OS 설정은 바꾸지 않는다.
+새 프로세스의 배포 플러그인이 직접 AppKit를 로드하고 독립 어댑터의 수명을 유지하는지도 확인한다.
 `macos-appearance.ts`는 로컬 빌드한 플러그인과 실제 WKWebView, backend Worker를
 ad-hoc 서명 compiled 앱에 연결해 뷰와 backend의 독립 권한 허용 및 거부,
 엄격한 입력과 색 범위, 네 번의 앱 실행 및 정상 종료를 검사한다.
