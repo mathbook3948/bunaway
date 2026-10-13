@@ -23,6 +23,13 @@
       }
     },
     {
+      "name": "@bunaway/backend/cli",
+      "source": "packages/backend-sdk/src/cli.ts",
+      "pages": {
+        "reference/backend/cli": ["defineCLI"]
+      }
+    },
+    {
       "name": "@bunaway/core",
       "source": "packages/core/src/index.ts",
       "pages": {
@@ -831,7 +838,12 @@
       "type": "DesktopOptions",
       "pages": {
         "guides/windows": ["closeBehavior"],
-        "reference/backend/app-definition": ["tray", "onOpen", "beforeQuit"]
+        "reference/backend/app-definition": [
+          "tray",
+          "openArguments",
+          "onOpen",
+          "beforeQuit"
+        ]
       }
     },
     {

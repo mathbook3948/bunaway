@@ -702,7 +702,9 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 - [ ] process kill, timeout과 앱 종료 시 process tree 정리를 연결한다.
 - [ ] 번들 sidecar의 플랫폼 선택, 실행 경로, 라이선스와 패키징을 제공한다.
 - [ ] 앱 restart와 exit를 desktop 수명주기에 연결한다.
-- [ ] CLI argument와 subcommand schema, help, 오류와 match 결과를 제공한다.
+- [x] CLI argument와 subcommand schema, help, 오류와 match 결과를 제공한다.
+  `@bunaway/backend/cli`의 `defineCLI`는 기존 `onOpen` argv를 명시적으로 받아 Bun
+  `parseArgs`와 앱의 Zod schema로 검사한다. help와 오류는 결과이며 실행과 종료를 제어하지 않는다.
 - [ ] utility process의 독립 실행과 양방향 메시지, 종료와 오류 이벤트를 제공한다.
 - [ ] localhost 자산 서버는 선택 기능으로 지원 여부를 결정한다. 기본 통신 경로는 기존 로컬 자산과 브리지다.
 - [ ] HTTP client-request와 incoming-message의 stream 기능을 Bun 대체 API에 매핑한다.
