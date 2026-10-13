@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const MAX_GLOBAL_SHORTCUTS = 128;
+export const MAX_SHORTCUT_WAITERS = 16;
 export const WM_HOTKEY = 0x0312;
 export const MOD_NOREPEAT = 0x4000;
 export const MAX_HOTKEY_ID = 0xbfff;
@@ -138,6 +139,12 @@ export const globalShortcutOperations = {
   isSuspended: {
     input: z.null(),
     output: z.boolean(),
+  },
+  waitForPress: {
+    input: z.null(),
+    output: z.strictObject({
+      shortcut: shortcutSchema,
+    }),
   },
 };
 export const globalShortcutEvents = {

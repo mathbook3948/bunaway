@@ -177,9 +177,13 @@ test.skipIf(process.platform !== "win32")(
       expect(
         native.symbols.RegisterHotKey(competing, 1, codes.modifiers, codes.key),
       ).toBe(0);
+      const waiting = invoke("waitForPress", null);
       press();
       await pumpUntil(() => events.length === 1);
       expect(events[0]).toEqual({
+        shortcut,
+      });
+      expect(await waiting).toEqual({
         shortcut,
       });
       await invoke("setSuspended", {

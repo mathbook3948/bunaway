@@ -192,6 +192,19 @@ export const pluginImports = { globalShortcut: { operations: async () => ({ crea
       await invoke("setSuspended", {
         suspended: false,
       });
+      await channel.send({
+        kind: "operation",
+        context: config.backendContext,
+        requestId: "pending-press",
+        source: "backend",
+        call: {
+          operation: "globalShortcut.waitForPress",
+          payload: null,
+        },
+      });
+      expect(await invoke("list", null)).toEqual([
+        shortcut,
+      ]);
       channel.notify({
         kind: "shutdown",
       });

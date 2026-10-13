@@ -1,4 +1,4 @@
-import type { NativeAdapter } from "@bunaway/plugin";
+import { NativeEventWaiters, type NativeAdapter } from "@bunaway/plugin";
 import { BunawayError, type JsonValue } from "@bunaway/protocol";
 import {
   type GlobalShortcut,
@@ -6,6 +6,7 @@ import {
   hotkeyCodes,
   MAX_GLOBAL_SHORTCUTS,
   MAX_HOTKEY_ID,
+  MAX_SHORTCUT_WAITERS,
   shortcutId,
 } from "./contract.ts";
 
@@ -44,6 +45,7 @@ export function createShortcutOperations(
   emit: (event: string, payload: JsonValue) => void,
 ): NativeAdapter {
   const registrations = new Map<string, Registration>();
+  const presses = new NativeEventWaiters<JsonValue>(MAX_SHORTCUT_WAITERS);
   let nextId = 1;
   let suspended = false;
   let disposed = false;
@@ -65,9 +67,11 @@ export function createShortcutOperations(
     ) {
       return;
     }
-    emit("globalShortcut.pressed", {
+    const payload = {
       shortcut: structuredClone(entry.shortcut),
-    });
+    };
+    presses.publish(payload);
+    emit("globalShortcut.pressed", payload);
   });
   const acquire = (entry: Registration) => {
     if (nextId > MAX_HOTKEY_ID) {
@@ -271,6 +275,9 @@ export function createShortcutOperations(
         case "globalShortcut.isSuspended":
           parse(() => globalShortcutOperations.isSuspended.input.parse(input));
           return suspended;
+        case "globalShortcut.waitForPress":
+          parse(() => globalShortcutOperations.waitForPress.input.parse(input));
+          return presses.wait(context.signal);
         default:
           return error(
             "UNSUPPORTED",
@@ -283,6 +290,7 @@ export function createShortcutOperations(
         return;
       }
       disposed = true;
+      presses.dispose();
       suspended = true;
       // The driver attempts explicit removal and destroys the HWND even after a native error.
       try {

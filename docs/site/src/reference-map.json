@@ -261,7 +261,8 @@
       "pages": {
         "reference/tooling/native-plugins": [
           "defineNativePlugin",
-          "BunawayError"
+          "BunawayError",
+          "NativeEventWaiters"
         ]
       }
     },
@@ -1192,7 +1193,8 @@
       "globalShortcut.unregister",
       "globalShortcut.unregisterAll",
       "globalShortcut.setSuspended",
-      "globalShortcut.isSuspended"
+      "globalShortcut.isSuspended",
+      "globalShortcut.waitForPress"
     ]
   },
   "configuration": {

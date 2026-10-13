@@ -473,3 +473,83 @@ test("registration capacity is checked before acquiring any part of an oversized
   });
   expect(f.native.size).toBe(128);
 });
+
+test("backend press waits work without a view, survive suspension and release on cancellation", async () => {
+  const f = fixture();
+  await f.invoke("register", shortcut("K"));
+  const id = [
+    ...f.native.keys(),
+  ][0];
+  if (id === undefined) {
+    throw new Error("Missing native ID.");
+  }
+  f.press(id, shortcut("K"));
+  const controller = new AbortController();
+  const waiting = f.invoke(
+    "waitForPress",
+    null,
+    [
+      "globalShortcut.waitForPress",
+    ],
+    controller.signal,
+  );
+  let settled = false;
+  void waiting.then(
+    () => {
+      settled = true;
+    },
+    () => {
+      settled = true;
+    },
+  );
+  await f.invoke("setSuspended", {
+    suspended: true,
+  });
+  f.press(id, shortcut("K"));
+  await Bun.sleep(0);
+  expect(settled).toBe(false);
+  await f.invoke("setSuspended", {
+    suspended: false,
+  });
+  const resumedId = [
+    ...f.native.keys(),
+  ][0];
+  if (resumedId === undefined) {
+    throw new Error("Missing resumed ID.");
+  }
+  f.press(resumedId, shortcut("K"));
+  expect(await waiting).toEqual({
+    shortcut: shortcut("K"),
+  });
+  const cancelled = f.invoke(
+    "waitForPress",
+    null,
+    [
+      "globalShortcut.waitForPress",
+    ],
+    controller.signal,
+  );
+  controller.abort();
+  await expect(cancelled).rejects.toMatchObject({
+    code: "CANCELLED",
+  });
+  const pending = Array.from(
+    {
+      length: 16,
+    },
+    () => f.invoke("waitForPress", null),
+  );
+  const results = Promise.allSettled(pending);
+  await expect(f.invoke("waitForPress", null)).rejects.toMatchObject({
+    code: "BUSY",
+  });
+  f.adapter.dispose();
+  for (const result of await results) {
+    expect(result).toMatchObject({
+      status: "rejected",
+      reason: {
+        code: "CANCELLED",
+      },
+    });
+  }
+});
