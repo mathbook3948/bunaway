@@ -25,6 +25,7 @@
   "plugins": {
     "storage": "@bunaway/plugin-storage",
     "path": "@bunaway/plugin-path",
+    "safe-storage": "@bunaway/plugin-safe-storage",
     "log": "@bunaway/plugin-log",
     "capabilities": "@bunaway/plugin-capabilities",
     "windows": "@bunaway/plugin-windows",
@@ -34,6 +35,7 @@
     "appearance": "@bunaway/plugin-appearance",
     "image": "@bunaway/plugin-image",
     "os": "@bunaway/plugin-os",
-    "process": "@bunaway/plugin-process"
+    "process": "@bunaway/plugin-process",
+    "network": "@bunaway/plugin-network"
   }
 }

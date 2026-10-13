@@ -212,6 +212,17 @@
       }
     },
     {
+      "name": "@bunaway/plugin-network",
+      "source": "plugins/network/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/network": ["network", "networkPlugin"]
+      }
+    },
+    {
       "name": "@bunaway/plugin-storage",
       "source": "plugins/storage/src/index.ts",
       "buildOutputs": {
@@ -286,7 +297,12 @@
           "hasValidWindowPlacement",
           "clampWindowSize",
           "MAX_WINDOWS",
-          "MAX_WINDOW_INSTANCES"
+          "MAX_WINDOW_INSTANCES",
+          "MAX_WEBVIEW_DOWNLOADS",
+          "MAX_DOWNLOAD_METADATA_BYTES",
+          "MAX_DOWNLOAD_SNAPSHOT_BYTES",
+          "isDownloadSnapshotWithinLimits",
+          "DOWNLOAD_APPROVAL_TIMEOUT_MS"
         ]
       }
     },
@@ -334,6 +350,17 @@
       "pages": { "reference/plugins/path": ["path", "pathPlugin"] }
     },
     {
+      "name": "@bunaway/plugin-safe-storage",
+      "source": "plugins/safe-storage/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/safe-storage": ["safeStorage", "safeStoragePlugin"]
+      }
+    },
+    {
       "name": "@bunaway/plugin-clipboard",
       "source": "plugins/clipboard/src/index.ts",
       "buildOutputs": {
@@ -363,14 +390,13 @@
         "./native/*": "./dist/native/*.js"
       },
       "pages": {
-        "reference/host/windows": ["windows", "windowsPlugin"],
+        "reference/host/windows": ["windows", "windowsPlugin", "windowEvents"],
         "reference/tooling/native-plugins": [
           "isWindowOperation",
           "parseWindowCall",
           "validateWindowCall",
           "validateWindowOutput",
           "windowOperations",
-          "windowEvents",
           "windowSnapshotSchema",
           "windowReadinessSchema"
         ]
@@ -544,6 +570,7 @@
       "type": "NativeWindow",
       "pages": {
         "reference/tooling/plugin-api": [
+          "downloads",
           "webview",
           "audio",
           "show",
@@ -589,6 +616,21 @@
     },
     {
       "source": "packages/plugin-api/src/native.ts",
+      "type": "NativeDownloads",
+      "pages": {
+        "reference/tooling/plugin-api": [
+          "setRequestsEnabled",
+          "list",
+          "approve",
+          "cancel",
+          "pause",
+          "resume",
+          "forget"
+        ]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
       "type": "NativeWebView",
       "pages": {
         "reference/tooling/plugin-api": [
@@ -608,6 +650,25 @@
       "type": "NativeWebViewAudio",
       "pages": {
         "reference/tooling/plugin-api": ["getState", "setMuted"]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "WebViewDownload",
+      "pages": {
+        "reference/tooling/plugin-api": [
+          "id",
+          "url",
+          "mimeType",
+          "contentDisposition",
+          "path",
+          "totalBytes",
+          "receivedBytes",
+          "state",
+          "interruptReason",
+          "canResume",
+          "paused"
+        ]
       }
     },
     {
@@ -957,6 +1018,7 @@
     "reference/api": ["help"]
   },
   "operations": {
+    "reference/plugins/network": ["network.request", "network.exchange"],
     "reference/plugins/process": ["process.run"],
     "reference/plugins/os": ["os.info", "os.usage", "os.locale"],
     "reference/plugins/autostart": [
@@ -975,6 +1037,12 @@
       "storage.appendText"
     ],
     "reference/host/storage-transfers": ["storage.copyFile", "storage.move"],
+
+    "reference/host/storage-directories": [
+      "storage.readDirectory",
+      "storage.createDirectory",
+      "storage.remove"
+    ],
     "reference/host/log-write": ["log.write"],
     "reference/host/capabilities-get": ["capabilities.get"],
     "reference/plugins/opener": [
@@ -994,6 +1062,13 @@
       "path.extname",
       "path.isAbsolute"
     ],
+    "reference/plugins/safe-storage": [
+      "safe-storage.isAvailable",
+      "safe-storage.encryptString",
+      "safe-storage.decryptString",
+      "safe-storage.encryptBytes",
+      "safe-storage.decryptBytes"
+    ],
     "reference/plugins/clipboard": [
       "clipboard.readText",
       "clipboard.writeText",
@@ -1006,6 +1081,13 @@
       "clipboard.writeFormats"
     ],
     "reference/host/windows": [
+      "windows.setDownloadRequestsEnabled",
+      "windows.getDownloads",
+      "windows.approveDownload",
+      "windows.cancelDownload",
+      "windows.pauseDownload",
+      "windows.resumeDownload",
+      "windows.forgetDownload",
       "windows.getWebViewState",
       "windows.navigateWebView",
       "windows.reloadWebView",

@@ -39,6 +39,7 @@
     "@bunaway/plugin-windows": "workspace:*",
     "@bunaway/plugin-storage": "workspace:*",
     "@bunaway/plugin-path": "workspace:*",
+    "@bunaway/plugin-safe-storage": "workspace:*",
     "@bunaway/plugin-opener": "workspace:*",
     "@bunaway/plugin-autostart": "workspace:*",
     "@bunaway/plugin-clipboard": "workspace:*",
@@ -48,7 +49,8 @@
     "zod": "4.6.5",
     "@bunaway/plugin-image": "workspace:*",
     "@bunaway/plugin-os": "workspace:*",
-    "@bunaway/plugin-process": "workspace:*"
+    "@bunaway/plugin-process": "workspace:*",
+    "@bunaway/plugin-network": "workspace:*"
   },
   "imports": {
     "#cli/*": "./packages/cli/src/*.ts",
