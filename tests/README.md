@@ -530,6 +530,10 @@ Windows native CI는 전체 호스트 검사 뒤 `windows-geometry.test.ts`를 �
 세 번 실행한다. 모든 실행이 성공해야 하며 전체 계약 검사의 같은 회귀도 유지한다.
 show state와 fullscreen 복원 실패가 프로세스 내부의 이전 검사 상태에 의존하는지
 확인하기 위한 검사다. 로그는 `build/windows-native-logs/geometry-*.log`에 보관한다.
+전체 계약 검사에서도 같은 native assertion을 소유한 자식 프로세스에서 실행한다.
+자식은 10초 실행 기한을 가지며 이전 검사의 Win32 thread 상태를 상속하지 않는다.
+부모는 자식의 완료와 로그를 수집하고 성공한 종료 코드를 요구한다. 상태를 수리하거나
+메시지를 추가로 pump하지 않으며 geometry와 show-state assertion은 그대로 유지한다.
 
 `api/opener-selected-app.test.ts`는 지정 앱 opener의 strict Zod 입력, 독립 권한,
 호출 컨텍스트와 오류를 확인한다. Windows의 `lifecycle/windows-opener-selected-app.test.ts`는
