@@ -124,6 +124,8 @@ const creationResult = {
             center: z.boolean().exactOptional(),
             useContentSize: z.boolean().exactOptional(),
             preventOverflow: z.boolean().exactOptional(),
+            maximized: z.boolean().exactOptional(),
+            fullscreen: z.boolean().exactOptional(),
           })
           .exactOptional(),
         visible: z.boolean().exactOptional(),
