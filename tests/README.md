@@ -306,6 +306,8 @@ SDK 호출 컨텍스트, 작업 권한, 닫힌 창 및 시작 전 취소를 GUI 
 공개 SDK 호출 및 `setOuterBounds` 결과와 `windows.changed`의 revision, bounds 일치를 확인한다.
 `windows-fullscreen-dpi.fixture.ts`는 DLL 대체로 음수 좌표의 모니터 이동, 작업 영역의
 좌표 보정과 전체화면 중 현재 DPI에 따른 normal bounds 계산을 검사한다.
+같은 fixture는 DPI 120/144/192에서 601×451 물리 content의 resizable 반복 변경을 검사한다.
+일반, 최소화, 최대화와 전체화면 및 표시와 숨김 상태를 구분하며 실제 물리 모니터 검증은 아니다.
 작업 영역 오프셋이 다른 모니터로 최대화 창을 옮기거나 전체화면에 진입해도 원래 일반
 복원 rectangle의 모니터로 좌표를 보정하는지, 조회가 숨김 상태를 유지하는지도 검사한다.
 왼쪽과 위쪽 모니터의 경계에 걸친 일반 창의 위치, 모니터 변경과 최소화, 최대화 중
@@ -397,7 +399,12 @@ Windows 데스크톱의 dev-veto, dev-hide, dev-pending 시나리오는 CLI 중�
 ## 네이티브 빌드와 배포 회귀
 
 `api/autostart.test.ts`는 로그인 자동 실행 플러그인의 정책, 공개 helper, 앱 ID 분리와
-Windows 명령줄 제한을 검사한다. `lifecycle/windows-autostart.test.ts`는 실제 사용자
+Windows 명령줄 제한, 숨김 등록의 트레이 요구 조건을 검사한다.
+`windows-desktop.ts`의 autostart 시나리오는 실제 HWND와 WebView2에서 일반 및 숨김
+초기 실행, SDK 준비 뒤 표시 억제, 숨김 두 번째 요청의 표시 상태 유지, 수동 재실행의 복원과
+같은 UI 세션 유지 및 정상 종료 정리를 검사한다. 로그인 실행 출처는 인증하지 않으며
+실제 로그아웃과 로그인, 사용자 시작 앱 UI 조작은 별도 대화형 검증이다.
+`lifecycle/windows-autostart.test.ts`는 실제 사용자
 Run 값의 등록, 조회, 경로 갱신과 반복 해제를 확인한다. 임시 앱 ID에만 승인 테스트 값을
 써서 비활성화 선택을 보존하는지 확인하며 실제 작업 관리자 조작과는 구분한다.
 저장 명령줄을 CreateProcessW로 실행해 compiled EXE와 개발 Bun의 공백, Unicode,
@@ -460,3 +467,11 @@ CLI의 같은 이름 검사는 로컬 tarball의 isolated 설치, 네이티브 I
 client-area animation, screen reader 설정 플래그 및 시스템 색과 비교하고 두 어댑터의
 DLL 수명과 종료 후 거부를 확인한다. `mise run host:windows`에 포함한다.
 사용자 테마 변경과 실제 보조 기술 또는 WebView 접근성 트리 검증을 대신하지 않는다.
+
+`api/image.test.ts`와 `lifecycle/image-resources.test.ts`는 선택 image 플러그인의
+Zod 계약과 canonical base64, 빈 이미지, operation 권한, ID 해제와 앱 종료,
+count와 메모리 quota 및 생성 취소의 정리를 확인한다. `windows-image.test.ts`는
+`host:windows`에 포함하며 공통 SDK와 실제 UI Worker, WIC에서 PNG와 data URL의
+RGBA alpha 왕복, JPEG와 BMP, 잘못된 encoded 입력과 decode 크기, 최대 PNG,
+정책 거부와 결과 전달 전 취소를 확인한다. 실제 파일 경로 접근, WebView 표시,
+다른 앱의 가져오기, 색상 관리와 최소 Windows 버전 검증은 포함하지 않는다.

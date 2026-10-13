@@ -222,6 +222,14 @@ export type NativeWindow = {
   setTitle?(title: string): void;
   /** Reads the live native title, bounded to 1024 UTF-16 code units. Windows only. */
   getTitle?(): string;
+  /** Changes user border/system-menu resizing without restricting programmatic geometry. Windows only. */
+  setResizable?(resizable: boolean): void;
+  /** Reads the normal window's resize policy, including while fullscreen. Windows only. */
+  isResizable?(): boolean;
+  /** Changes user caption/system-menu movement without restricting programmatic positioning. Windows only. */
+  setMovable?(movable: boolean): void;
+  /** Reads the current user movement policy. Windows only. */
+  isMovable?(): boolean;
   /** Minimizes and displays the window, allowing Windows to activate another window. */
   minimize(): void;
   /** Maximizes and displays the window, requesting activation. */

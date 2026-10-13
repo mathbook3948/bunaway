@@ -95,6 +95,9 @@ if (target === "windows-x64") {
     );
     for (const scenario of [
       "hide",
+      "autostart",
+      "autostart-hidden",
+      "autostart-hidden-ready",
       "veto",
       "dev-veto",
       "dev-hide",
@@ -130,6 +133,15 @@ if (target === "windows-x64") {
     ]) {
       await test(name);
     }
+    await run(
+      [
+        inputs.bun,
+        "--no-env-file",
+        "test",
+        resolve(root, "tests/lifecycle/windows-image.test.ts"),
+      ],
+      root,
+    );
     await test("windows-host.ts", [
       "--package",
       output,

@@ -567,6 +567,20 @@ export const windowOperations = {
     input: windowTarget,
     output: nativeTitle,
   },
+  "windows.setResizable": {
+    input: windowTarget.extend({
+      resizable: z.boolean(),
+    }),
+    output: z.null(),
+  },
+  "windows.isResizable": windowStateResult,
+  "windows.setMovable": {
+    input: windowTarget.extend({
+      movable: z.boolean(),
+    }),
+    output: z.null(),
+  },
+  "windows.isMovable": windowStateResult,
   "windows.setSize": {
     input: z.strictObject({
       view: viewTarget.shape.view,

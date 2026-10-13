@@ -23,6 +23,13 @@ function unsupportedTitle() {
   });
 }
 
+function unsupportedMovement() {
+  return new BunawayError({
+    code: "UNSUPPORTED",
+    message: "Window movement controls are not implemented on this platform.",
+  });
+}
+
 /** Create the UI-worker adapter; throws when window services are unavailable. */
 export function createOperations(
   environment: NativeEnvironment,
@@ -232,6 +239,28 @@ export function createOperations(
           throw unsupportedTitle();
         }
         return window.getTitle();
+      case "windows.setResizable":
+        if (!window.setResizable) {
+          throw unsupportedMovement();
+        }
+        window.setResizable(call.payload.resizable);
+        break;
+      case "windows.isResizable":
+        if (!window.isResizable) {
+          throw unsupportedMovement();
+        }
+        return window.isResizable();
+      case "windows.setMovable":
+        if (!window.setMovable) {
+          throw unsupportedMovement();
+        }
+        window.setMovable(call.payload.movable);
+        break;
+      case "windows.isMovable":
+        if (!window.isMovable) {
+          throw unsupportedMovement();
+        }
+        return window.isMovable();
       case "windows.getContentSize":
       case "windows.getOuterSize":
       case "windows.getContentPosition":
