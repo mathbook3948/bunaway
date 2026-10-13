@@ -647,6 +647,10 @@ DPI 변경과 전체화면 진입 및 종료 뒤의 마지막 8개 상태를 출
 스레드, 시작 show command도 기록하며 native 상태를 변경하거나 메시지를 pump하지 않는다.
 전체 검사 결과는 작업 로그에, 단독 실행 로그는 `windows-matrix-diagnostics` artifact에 남긴다.
 단독 통과만으로 전체 검사 실패의 원인이나 제품 수정 완료를 판단하지 않는다.
+이어서 단축키 단독 및 menu, tray 동시 UI Worker 검사와 같은 크기 제약 검사를 한 Bun
+프로세스에서 실행한다. UI 자원 정리 직후의 표시 상태를 비교하며 원래 assertion과
+기한을 유지한다. 결과는 `windows-matrix-diagnostics`의 `ui-services-size-constraints.log`에
+남긴다. 이 비교의 통과도 앞선 전체 검사 실패를 덮어쓰지 않는다.
 
 `api/opener-selected-app.test.ts`는 지정 앱 opener의 strict Zod 입력, 독립 권한,
 호출 컨텍스트와 오류를 확인한다. Windows의 `lifecycle/windows-opener-selected-app.test.ts`는
