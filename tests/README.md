@@ -35,6 +35,8 @@ system UI 사용자 선택과 물리 프린터 출력은 별도 검증이며 테
 기존 `host:macos`에서 실제 compiled WKWebView와 백엔드 Worker의 공통 SDK를 실행한다.
 문서 상태, origin과 redirect 거부, 서브프레임 신원, history, reload, 느린 탐색 중단,
 문서 교체의 명령 취소와 fragment 세션 유지, 뷰별 zoom 및 닫기와 재생성을 검사한다.
+각 문서의 대기 명령이 백엔드에 등록된 뒤 history 이동과 reload를 시작한다.
+도착 응답과 명령 등록 사이의 경합이 취소 검사를 건너뛰지 않게 하며 기존 횟수와 기한은 유지한다.
 scheme과 hostname을 대문자로 작성한 자산 URL에서도 실제 문서와 SDK 연결을 확인한다.
 `pageshow`와 `pagehide`의 `persisted`, `isTrusted`를 SDK와 독립적으로 기록한다.
 실제 history cache 복원과 합성 persisted 이벤트의 reload 검사를 결과에서 구분한다.
