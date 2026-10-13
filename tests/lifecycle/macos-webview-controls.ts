@@ -251,6 +251,8 @@ try {
     await cp(resolve(dataRoot, "logs"), diagnostics, {
       recursive: true,
     });
+    // Keep actionable lifecycle evidence in the job log when artifact downloads are unavailable.
+    console.error(await Bun.file(resolve(dataRoot, "logs/host.log")).text());
   }
   await writeJson(result, {
     pass: false,

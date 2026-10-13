@@ -274,6 +274,12 @@ export function controlsApp(origin: string, outside: string) {
               report = {
                 pass: false,
                 error: String(error),
+                arrivals: Object.fromEntries(arrivals),
+                held: Object.fromEntries(held),
+                cancelled: Object.fromEntries(cancelled),
+                state: await windows.getWebViewState(main).catch((error) => ({
+                  error: String(error),
+                })),
               };
             }
             await Bun.write(

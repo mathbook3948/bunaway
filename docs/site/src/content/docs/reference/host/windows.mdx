@@ -273,6 +273,8 @@ URL은 1–8192자이며 NUL을 허용하지 않습니다. HTTP/HTTPS URL만 허
 macOS의 `loading`은 WKWebView가 보고한 현재 로딩 상태입니다. 완료, 실패와 중단은 모두
 false가 될 수 있으므로 성공 여부나 SDK 준비를 뜻하지 않습니다. 패키지 자산 URL은
 내부 전송 scheme 대신 선언한 `https://app.bunaway.local` URL로 반환합니다.
+WKWebView가 history cache에서 문서를 복원하면 같은 history 항목을 다시 로드해
+새 SDK 세션을 만듭니다. 이전 연결과 요청을 재사용하거나 재전송하지 않습니다.
 
 factor는 유한한 0.25–5 값입니다. 1은 100%이며 CSS zoom과 visual zoom 한도 설정이
 아닙니다. Windows에서는 대상 WebView2 controller에, macOS에서는 WKWebView의

@@ -27,6 +27,11 @@ const BRIDGE = `(() => {
     const data = JSON.parse(text);
     for (const callback of [...listeners]) { try { callback({data}); } catch {} }
   };
+  // WKWebView can restore a cached JS heap after Back/Forward. Its SDK client was
+  // permanently closed by pagehide, so load a fresh document in the same history entry.
+  window.addEventListener('pageshow', event => {
+    if (event.persisted && window === window.top) window.location.reload();
+  });
 })();`;
 const MIME: Record<string, string> = {
   ".html": "text/html",
