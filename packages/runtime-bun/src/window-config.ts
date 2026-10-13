@@ -118,6 +118,7 @@ export function readWindowSpecs(
             "center",
             "useContentSize",
             "preventOverflow",
+            "focusable",
           ].includes(key),
       )
     ) {
@@ -127,6 +128,10 @@ export function readWindowSpecs(
       throw new Error(
         "Window placement requires paired integer x/y, boolean options and no center/position conflict.",
       );
+    }
+    const focusable = size.focusable;
+    if (focusable !== undefined && typeof focusable !== "boolean") {
+      throw new Error("Window focusable must be a boolean.");
     }
     for (const dimension of [
       size.width,
@@ -228,6 +233,11 @@ export function readWindowSpecs(
             showWhenReady: spec.showWhenReady,
           }),
       window: {
+        ...(focusable === undefined
+          ? {}
+          : {
+              focusable,
+            }),
         ...(size.x === undefined
           ? {}
           : {

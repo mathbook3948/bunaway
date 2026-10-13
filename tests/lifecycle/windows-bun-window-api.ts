@@ -145,9 +145,75 @@ if (!process.argv.includes("--child")) {
       ],
       returns: "i32",
     },
+    SendMessageW: {
+      args: [
+        "u64",
+        "u32",
+        "u64",
+        "i64",
+      ],
+      returns: "i64",
+    },
   });
   const nativeWindows = new Windows(() => {});
   try {
+    const source = nativeWindows.create(
+      "Focusability source",
+      650,
+      450,
+      () => {},
+    );
+    try {
+      nativeWindows.focus(source);
+      for (const visible of [
+        false,
+        true,
+      ]) {
+        const foreground = user.symbols.GetForegroundWindow();
+        const hwnd = nativeWindows.create(
+          "Nonactivating target",
+          650,
+          450,
+          () => {},
+          visible,
+          {
+            focusable: false,
+          },
+        );
+        try {
+          assert.equal(nativeWindows.isFocusable(hwnd), false);
+          assert.equal(nativeWindows.isVisible(hwnd), visible);
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          assert.equal(
+            driver.symbols.SendMessageW(hwnd, 0x0021, hwnd, 0x02010001n),
+            3n,
+          );
+          assert.equal(nativeWindows.focus(hwnd), false);
+          assert.equal(nativeWindows.activate(hwnd), false);
+          assert.equal(nativeWindows.isVisible(hwnd), visible);
+          const original = nativeWindows.getBounds(hwnd, "outer");
+          nativeWindows.setFocusable(hwnd, true);
+          nativeWindows.setFocusable(hwnd, false);
+          assert.deepEqual(nativeWindows.getBounds(hwnd, "outer"), original);
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          nativeWindows.show(hwnd, true);
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          nativeWindows.maximize(hwnd);
+          nativeWindows.unmaximize(hwnd);
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          nativeWindows.setFullscreen(hwnd, true);
+          nativeWindows.setFocusable(hwnd, true);
+          nativeWindows.setFocusable(hwnd, false);
+          nativeWindows.setFullscreen(hwnd, false);
+          assert.equal(nativeWindows.isFocusable(hwnd), false);
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+        } finally {
+          nativeWindows.destroy(hwnd);
+        }
+      }
+    } finally {
+      nativeWindows.destroy(source);
+    }
     // Check fullscreen restoration across visibility and show states.
     for (const showCmd of [
       1,
@@ -555,6 +621,11 @@ if (!process.argv.includes("--child")) {
             );
             await windows.create({
               view: "editor",
+              options: {
+                window: {
+                  focusable: false,
+                },
+              },
             });
             assert.deepEqual(
               {
@@ -596,6 +667,17 @@ if (!process.argv.includes("--child")) {
             const editor = {
               view: "editor",
             };
+            assert.equal(await windows.isFocusable(editor), false);
+            await windows.setFocusable({
+              ...editor,
+              focusable: true,
+            });
+            assert.equal(await windows.isFocusable(editor), true);
+            await windows.setFocusable({
+              ...editor,
+              focusable: false,
+            });
+            assert.equal(await windows.isFocusable(editor), false);
             const editorSnapshot = await windows.getSnapshot(editor);
             editorWindowId = editorSnapshot.windowId;
             assert.equal(await windows.isDestroyed(editor), false);
@@ -990,6 +1072,10 @@ if (!process.argv.includes("--child")) {
               view: "editor",
               message: "Close editor?",
             });
+            await windows.setFocusable({
+              ...editor,
+              focusable: true,
+            });
             assert.equal(
               await windows.close({
                 view: "editor",
@@ -1015,6 +1101,12 @@ if (!process.argv.includes("--child")) {
             );
             await waitFor(() => holds === 2 && cancellations === 1);
           } else if (runs === 2) {
+            assert.equal(
+              await windows.isFocusable({
+                view: "editor",
+              }),
+              true,
+            );
             editorWindowId = (
               await windows.getSnapshot({
                 view: "editor",

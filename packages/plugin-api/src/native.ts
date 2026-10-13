@@ -129,6 +129,8 @@ export type WindowSpec = {
     minHeight?: number | null;
     maxWidth?: number | null;
     maxHeight?: number | null;
+    /** Permit user and host foreground activation, default true. Windows false uses WS_EX_NOACTIVATE. */
+    focusable?: boolean;
   };
   /** Single by default. Multiple allows explicit ID-addressed instances on Windows. */
   instances?: "single" | "multiple";
@@ -216,6 +218,10 @@ export type NativeWindow = {
   setEnabled?(enabled: boolean): void;
   /** Reads actual native input availability. Windows only. */
   isEnabled?(): boolean;
+  /** Changes future activation eligibility without transferring current focus. Windows only. */
+  setFocusable?(focusable: boolean): void;
+  /** Reads whether the native window permits activation. Independent of isFocused. Windows only. */
+  isFocusable?(): boolean;
   /** Minimizes and displays the window, allowing Windows to activate another window. */
   minimize(): void;
   /** Maximizes and displays the window, requesting activation. */

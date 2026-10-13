@@ -88,6 +88,12 @@ test.each([
     for (const options of [
       {},
       {
+        window: {
+          focusable: false,
+        },
+        visible: true,
+      },
+      {
         title: "Editor",
         visible: false,
       },
@@ -194,6 +200,11 @@ test.each([
       },
       {
         windowId: "caller-id",
+      },
+      {
+        window: {
+          focusable: null,
+        },
       },
     ]) {
       extras.push({

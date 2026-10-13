@@ -182,7 +182,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 상태 조회에도 해당 operation 권한을 검사하고 닫힌 창의 오류를 처리한다.
 - [ ] 초기 maximized와 fullscreen 옵션을 지원한다.
 - [ ] minimizable, maximizable, closable, fullscreenable을 설정하고 조회한다.
-- [ ] 초기 및 실행 중 focusable을 설정하고 조회한다.
+- [x] Windows 선언과 생성별 `window.focusable`, 실행 중 `setFocusable`와 `isFocusable`을 제공한다. 비활성 표시와 사용자 및 호스트 활성화 차단, 현재 포커스와 별도 조회 및 재생성 기본값을 유지한다.
 - [ ] 창 title과 icon을 실행 중 변경하고 조회한다.
 - [ ] decorations와 frame의 초기 설정, 변경과 조회를 제공한다.
 - [ ] 사용자 타이틀바의 drag 영역, no-drag 영역과 resize 영역을 제공한다.

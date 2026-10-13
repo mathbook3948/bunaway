@@ -39,6 +39,8 @@ export const WM_QUIT = 0x0012;
 const WM_GETMINMAXINFO = 0x0024;
 const WM_WINDOWPOSCHANGING = 0x0046;
 const WM_WINDOWPOSCHANGED = 0x0047;
+const WM_MOUSEACTIVATE = 0x0021;
+const MA_NOACTIVATE = 3n;
 const WM_DISPLAYCHANGE = 0x007e;
 export const WM_ENTERSIZEMOVE = 0x0231;
 export const WM_EXITSIZEMOVE = 0x0232;
@@ -52,6 +54,7 @@ const GWL_EXSTYLE = -20;
 const GWLP_HWNDPARENT = -8;
 const GW_OWNER = 4;
 const WS_EX_TOOLWINDOW = 0x80n;
+const WS_EX_NOACTIVATE = 0x08000000n;
 const IDI_APPLICATION = 32512n;
 const IMAGE_ICON = 1;
 const LR_LOADFROMFILE = 0x10;
@@ -299,6 +302,13 @@ export class Windows {
           if (message === WM_WINDOWPOSCHANGING) {
             this.constrainMaximizedSize(window, lparam);
           }
+          if (
+            message === WM_MOUSEACTIVATE &&
+            this.windows.has(window) &&
+            !this.isFocusable(window)
+          ) {
+            return MA_NOACTIVATE;
+          }
           this.windows.get(window)?.(message, wparam, lparam);
           if (message === WM_CLOSE) {
             return 0n; // defer Close/DestroyWindow past callback
@@ -522,7 +532,10 @@ export class Windows {
     height: number,
     receive: (message: number, wparam: bigint, lparam: bigint) => void,
     visible = true,
-    options: SizeConstraints & WindowPlacement = {},
+    options: SizeConstraints &
+      WindowPlacement & {
+        focusable?: boolean;
+      } = {},
   ) {
     const initialConstraints = resolvedConstraints(options);
     const placement = {
@@ -538,7 +551,7 @@ export class Windows {
     try {
       window = withWide(title, (titlePointer) =>
         user.symbols.CreateWindowExW(
-          0,
+          options.focusable === false ? Number(WS_EX_NOACTIVATE) : 0,
           ptr(this.name),
           titlePointer,
           WS_OVERLAPPEDWINDOW,
@@ -564,7 +577,7 @@ export class Windows {
       this.applyInitialPlacement(window, placement);
       this.rememberNormalMonitor(window);
       if (visible) {
-        user.symbols.ShowWindow(window, SW_SHOW);
+        this.show(window, true);
       }
     } catch (error) {
       try {
@@ -584,6 +597,10 @@ export class Windows {
   }
 
   show(window: bigint, visible: boolean) {
+    if (visible && !this.isFocusable(window)) {
+      this.showInactive(window);
+      return;
+    }
     user.symbols.ShowWindow(window, visible ? SW_SHOW : SW_HIDE);
   }
 
@@ -606,6 +623,9 @@ export class Windows {
     if (!this.isVisible(window) || this.isMinimized(window)) {
       return false;
     }
+    if (!this.isFocusable(window)) {
+      return this.isFocused(window);
+    }
     user.symbols.SetForegroundWindow(window);
     // Synchronous activation callbacks can precede the actual foreground identity change.
     for (const observed of this.observations.keys()) {
@@ -615,6 +635,9 @@ export class Windows {
   }
 
   focus(window: bigint): boolean {
+    if (!this.isFocusable(window)) {
+      return this.isFocused(window);
+    }
     user.symbols.ShowWindow(
       window,
       user.symbols.IsIconic(window) ? SW_RESTORE : SW_SHOW,
@@ -641,6 +664,39 @@ export class Windows {
   isFocused(window: bigint): boolean {
     assert(user.symbols.IsWindow(window), "Window is no longer valid.");
     return user.symbols.GetForegroundWindow() === window;
+  }
+
+  isFocusable(window: bigint): boolean {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return !(this.windowStyles(window).exStyle & WS_EX_NOACTIVATE);
+  }
+
+  /** Set native no-activation style without showing, resizing or transferring existing focus. */
+  setFocusable(window: bigint, focusable: boolean): void {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    const { exStyle } = this.windowStyles(window);
+    const next = focusable
+      ? exStyle & ~WS_EX_NOACTIVATE
+      : exStyle | WS_EX_NOACTIVATE;
+    if (next === exStyle) {
+      return;
+    }
+    this.setStyle(window, next, GWL_EXSTYLE);
+    assert(
+      user.symbols.SetWindowPos(
+        window,
+        0n,
+        0,
+        0,
+        0,
+        0,
+        SWP_NOSIZE |
+          SWP_NOMOVE |
+          SWP_NOZORDER |
+          SWP_NOACTIVATE |
+          SWP_FRAMECHANGED,
+      ),
+    );
   }
 
   /** Own one native observer per window. Its callback ends before HWND destruction. No initial replay. */
@@ -1114,13 +1170,9 @@ export class Windows {
     };
   }
 
-  private setStyle(window: bigint, style: bigint) {
+  private setStyle(window: bigint, style: bigint, index = GWL_STYLE) {
     kernel.symbols.SetLastError(0);
-    const previousStyle = user.symbols.SetWindowLongPtrW(
-      window,
-      GWL_STYLE,
-      style,
-    );
+    const previousStyle = user.symbols.SetWindowLongPtrW(window, index, style);
     const error = kernel.symbols.GetLastError();
     assert(previousStyle !== 0n || error === 0, `SetWindowLongPtrW: ${error}`);
   }

@@ -24,6 +24,33 @@ import {
 } from "#native/macos/bun/urls";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 
+test("macOS rejects declared focusability rather than ignoring an unsupported native flag", () => {
+  const config = workerConfig("unused");
+  const first = config.windows[0];
+  if (!first) {
+    throw new Error("Missing test window.");
+  }
+  for (const focusable of [
+    true,
+    false,
+  ]) {
+    expect(() =>
+      readMacosWindowSpecs(
+        [
+          {
+            ...first,
+            window: {
+              ...first.window,
+              focusable,
+            },
+          },
+        ],
+        config.policy,
+      ),
+    ).toThrow("Initial window focusability is not implemented on macOS");
+  }
+});
+
 test("macOS rejects explicitly declared initial placement, including defaults on deferred windows", () => {
   const config = workerConfig("unused");
   const first = config.windows[0];
