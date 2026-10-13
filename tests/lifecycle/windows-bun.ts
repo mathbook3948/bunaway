@@ -12,6 +12,8 @@ import pin from "../../runtime/build-manifests/windows-x64.json";
 import { contracts } from "../fixtures/host-plugins.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 
+const MODAL_OBSERVATION_MS = 700;
+
 assert.equal(Bun.version, pin.bun.version);
 assert.equal(Bun.revision, pin.bun.sourceRevision);
 const repoRoot = process.argv.includes("--repo")
@@ -110,6 +112,7 @@ if (!process.argv.includes("--child")) {
   let inModal = false;
   let entered = false;
   let left = false;
+  let modalExitTimer: ReturnType<typeof setTimeout> | undefined;
   let latest = {
     ticks: 0,
     promises: 0,
@@ -149,21 +152,23 @@ if (!process.argv.includes("--child")) {
             event.kind === "invoke"
           ) {
             requested = true;
-            // Enter the native move loop, then post a message that lets it exit.
+            // Request the native move loop. Its actual entry starts the observation interval.
             assert(driver.symbols.PostMessageW(hwnd, 0x112, 0xf010n, 0n));
-            setTimeout(
-              () => driver.symbols.PostMessageW(hwnd, 0x1f, 0n, 0n),
-              700,
-            );
           }
           if (event.event === "modal-enter") {
             entered = true;
             inModal = true;
             baseline = latest;
+            // A cancel queued before Win32 enters can end the loop before any backend sample.
+            modalExitTimer = setTimeout(
+              () => driver.symbols.PostMessageW(hwnd, 0x1f, 0n, 0n),
+              MODAL_OBSERVATION_MS,
+            );
           }
           if (event.event === "modal-exit") {
             left = true;
             inModal = false;
+            clearTimeout(modalExitTimer);
           }
           if (event.event === "backend-tick") {
             latest = event;
@@ -180,6 +185,7 @@ if (!process.argv.includes("--child")) {
   const code = await child.exited;
   clearTimeout(timer);
   await stdout;
+  clearTimeout(modalExitTimer);
   driver.close();
   console.log(text);
   console.error(await stderr);
