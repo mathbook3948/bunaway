@@ -551,7 +551,7 @@ async function createNativeAssociationFixture(compiler: string) {
     // This fixture must still permit recursive enumeration/deletion. Otherwise
     // a preserved foreign command would not prove reads failed closed.
     await powershell(
-      `$key=$null; try { $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(${quote(path)},[Microsoft.Win32.RegistryKeyPermissionCheck]::Default,[System.Security.AccessControl.RegistryRights]::QueryValues) } catch [System.UnauthorizedAccessException] {} ; if ($key) { $key.Dispose(); throw 'Fixture QueryValues denial did not apply.' }; $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(${quote(path)},[Microsoft.Win32.RegistryKeyPermissionCheck]::Default,[System.Security.AccessControl.RegistryRights]::EnumerateSubKeys -bor [System.Security.AccessControl.RegistryRights]::Delete); if (-not $key) { throw 'Fixture lost enumeration/deletion access.' }; $key.Dispose()`,
+      `$key=$null; try { $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(${quote(path)},[Microsoft.Win32.RegistryKeyPermissionCheck]::Default,[System.Security.AccessControl.RegistryRights]::QueryValues) } catch [System.Security.SecurityException], [System.UnauthorizedAccessException] {} ; if ($key) { $key.Dispose(); throw 'Fixture QueryValues denial did not apply.' }; $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(${quote(path)},[Microsoft.Win32.RegistryKeyPermissionCheck]::Default,[System.Security.AccessControl.RegistryRights]::EnumerateSubKeys -bor [System.Security.AccessControl.RegistryRights]::Delete); if (-not $key) { throw 'Fixture lost enumeration/deletion access.' }; $key.Dispose()`,
     );
   }
   async function restoreRegistrationFault(
