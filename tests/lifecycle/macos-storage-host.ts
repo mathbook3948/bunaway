@@ -38,6 +38,25 @@ try {
     resolve(storageRoot, "outside"),
     resolve(storageRoot, "symlink"),
   );
+  await mkdir(resolve(storageRoot, "directory-fixture/folder"), {
+    recursive: true,
+  });
+  await Bun.write(
+    resolve(storageRoot, "directory-fixture/한글🙂.txt"),
+    "direct child",
+  );
+  await Bun.write(
+    resolve(storageRoot, "directory-fixture/folder/hidden"),
+    "nested child",
+  );
+  await symlink(
+    resolve(storageRoot, "outside"),
+    resolve(storageRoot, "directory-fixture/link"),
+  );
+  await symlink(
+    resolve(storageRoot, "missing"),
+    resolve(storageRoot, "directory-fixture/dangling"),
+  );
   const operations = [
     "readText",
     "writeText",
@@ -47,6 +66,9 @@ try {
     "appendBytes",
     "copyFile",
     "move",
+    "readDirectory",
+    "createDirectory",
+    "remove",
     "exists",
     "stat",
   ];
@@ -124,6 +146,20 @@ try {
     (storage.targets.macos.supportedOperations ?? []).includes("storage.move"),
     false,
   );
+  assert.equal(
+    (storage.targets.macos.supportedOperations ?? []).includes(
+      "storage.remove",
+    ),
+    false,
+  );
+  for (const operation of [
+    "storage.readDirectory",
+    "storage.createDirectory",
+  ]) {
+    assert(
+      (storage.targets.macos.supportedOperations ?? []).includes(operation),
+    );
+  }
   const bundled = await bundleMacosHost(
     resolve(root, "native/macos/bun"),
     assets,
@@ -260,7 +296,7 @@ try {
     reports,
   });
   console.log(
-    "PASS ad-hoc signed WKWebView -> host -> storage I/O, nine operations, operation grants, view authority, unsupported move, cleanup and restart",
+    "PASS ad-hoc signed WKWebView -> host -> storage I/O, eleven operations, directory contracts, operation grants, view authority, unsupported move/remove, cleanup and restart",
   );
 } catch (error) {
   const diagnostics = resolve(root, "build/macos-storage-host-diagnostics");

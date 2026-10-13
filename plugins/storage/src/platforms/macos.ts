@@ -1,4 +1,4 @@
-import { dlopen, ptr, read } from "bun:ffi";
+import { dlopen, ptr, read, toArrayBuffer } from "bun:ffi";
 import {
   type BigIntStats,
   closeSync,
@@ -17,11 +17,21 @@ import {
 import { MAX_STORAGE_BYTES } from "../bytes.ts";
 import type {
   StorageBytesWrite,
+  StorageDirectoryCreate,
   StorageLocation,
   StorageMetadata,
   StorageTransfer,
   StorageWrite,
 } from "../contract.ts";
+import {
+  MAX_DIRECTORY_ENTRIES,
+  type StorageDirectoryEntry,
+} from "../directory-entries.ts";
+import {
+  DARWIN_DIRENT_HEADER_BYTES,
+  darwinDirectoryEntry,
+  darwinDirectoryRecordLength,
+} from "./macos-directory-entries.ts";
 
 const LIB_SYSTEM = "/usr/lib/libSystem.B.dylib";
 const MAX_PATH_BYTES = 1024;
@@ -29,6 +39,7 @@ const MAX_NAME_BYTES = 255;
 const MAX_FILE_BYTES = 4 * 1024 * 1024;
 const MAX_IO_CHUNK_BYTES = 1 << 20;
 const F_GETPATH = 50;
+const F_DUPFD_CLOEXEC = 67;
 const O_CLOEXEC = 0x1000000;
 const AT_FDCWD = -2;
 const FILE_MODE = 0o600;
@@ -48,6 +59,7 @@ type StorageInput =
   | StorageLocation
   | StorageWrite
   | StorageBytesWrite
+  | StorageDirectoryCreate
   | StorageTransfer;
 type Parent = {
   fd: number;
@@ -102,6 +114,25 @@ function createBindings() {
         "i32",
         "ptr",
         "u32",
+      ],
+      returns: "i32",
+    },
+    fdopendir: {
+      args: [
+        "i32",
+      ],
+      returns: "ptr",
+    },
+    // The supported Darwin arm64 ABI has only 64-bit inodes and unsuffixed symbols.
+    readdir: {
+      args: [
+        "ptr",
+      ],
+      returns: "ptr",
+    },
+    closedir: {
+      args: [
+        "ptr",
       ],
       returns: "i32",
     },
@@ -413,7 +444,7 @@ export class MacosStorage {
     }
   }
 
-  /** Dispatch schema-validated operations without introducing new directory contracts. */
+  /** Dispatch schema-validated operations, retaining the public directory contracts. */
   execute(operation: string, input: StorageInput): JsonValue {
     if (this.disposed) {
       throw new BunawayError({
@@ -431,6 +462,25 @@ export class MacosStorage {
         code: "UNSUPPORTED",
         message: "Unknown storage operation.",
       });
+    }
+    if (operation === "storage.createDirectory") {
+      return this.createDirectory(input);
+    }
+    if (operation === "storage.readDirectory") {
+      return this.withParent(input.path, false, false, (parent) =>
+        this.withTarget(
+          parent,
+          constants.O_RDONLY,
+          false,
+          true,
+          ({ fd, info }) => {
+            if (!info.isDirectory()) {
+              fail("INVALID_ARGUMENT", "Storage target is not a directory.");
+            }
+            return this.readDirectory(fd);
+          },
+        ),
+      );
     }
     const querying =
       operation === "storage.exists" || operation === "storage.stat";
@@ -498,6 +548,105 @@ export class MacosStorage {
       }),
     );
     return result === null && operation === "storage.exists" ? false : result;
+  }
+
+  /** Make missing components relative to checked parents; failures retain created directories. */
+  private createDirectory(
+    input: StorageLocation | StorageDirectoryCreate,
+  ): null {
+    this.withParent(
+      input.path,
+      "recursive" in input && input.recursive,
+      false,
+      (parent) => {
+        if (
+          this.api.symbols.mkdirat(
+            parent.fd,
+            ptr(Buffer.from(`${parent.name}\0`)),
+            DIRECTORY_MODE,
+          ) < 0
+        ) {
+          const code = this.errno();
+          if (code !== EEXIST) {
+            this.nativeFailure("Storage directory creation failed", code);
+          }
+        }
+        return this.withTarget(
+          parent,
+          constants.O_RDONLY,
+          false,
+          true,
+          ({ info }) => {
+            if (!info.isDirectory()) {
+              fail("INVALID_ARGUMENT", "Storage target is not a directory.");
+            }
+            return null;
+          },
+        );
+      },
+    );
+    return null;
+  }
+
+  /** Enumerate the checked object; the stream owns a duplicate while the caller owns fd. */
+  private readDirectory(fd: number): StorageDirectoryEntry[] {
+    // The fixed syscall's third word is zero: choose the lowest unused fd and
+    // set CLOEXEC atomically, including while another worker spawns a process.
+    const duplicate = this.api.symbols.__fcntl(fd, F_DUPFD_CLOEXEC, null);
+    if (duplicate < 0) {
+      this.nativeFailure("Storage directory descriptor duplication failed");
+    }
+    const stream = this.api.symbols.fdopendir(duplicate);
+    if (!stream) {
+      const code = this.errno();
+      closeSync(duplicate);
+      this.nativeFailure("Storage directory stream creation failed", code);
+    }
+    try {
+      const entries: StorageDirectoryEntry[] = [];
+      while (true) {
+        // readdir returns null for both EOF and errors. Clear this worker's errno first.
+        const errno = this.api.symbols.__error();
+        if (!errno) {
+          throw new Error("Storage errno is unavailable.");
+        }
+        new Int32Array(
+          toArrayBuffer(errno, 0, Int32Array.BYTES_PER_ELEMENT),
+        )[0] = 0;
+        const record = this.api.symbols.readdir(stream);
+        if (!record) {
+          const code = this.errno();
+          if (code) {
+            this.nativeFailure("Storage directory listing failed", code);
+          }
+          return entries.sort((left, right) =>
+            left.name < right.name ? -1 : Number(left.name > right.name),
+          );
+        }
+        // The stream owns this variable-sized record until the next readdir call.
+        const header = Buffer.from(
+          toArrayBuffer(record, 0, DARWIN_DIRENT_HEADER_BYTES),
+        );
+        const recordLength = darwinDirectoryRecordLength(header);
+        const entry = darwinDirectoryEntry(
+          Buffer.from(toArrayBuffer(record, 0, recordLength)),
+        );
+        if (entry) {
+          if (entries.length === MAX_DIRECTORY_ENTRIES) {
+            fail(
+              "INVALID_ARGUMENT",
+              "Storage directory exceeds the entry limit.",
+            );
+          }
+          entries.push(entry);
+        }
+      }
+    } finally {
+      // closedir closes only the duplicate. Never close it a second time, including on EINTR.
+      if (this.api.symbols.closedir(stream) < 0) {
+        this.nativeFailure("Storage directory stream cleanup failed");
+      }
+    }
   }
 
   private readBytes(fd: number, size: number): Buffer {

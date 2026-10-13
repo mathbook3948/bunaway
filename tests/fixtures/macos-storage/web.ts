@@ -57,6 +57,18 @@ try {
       client.invoke("test.backendViaView", null),
       "PERMISSION_DENIED",
     );
+    await rejected(
+      storage.readDirectory({
+        path: `${root}/directory-fixture`,
+      }),
+      "PERMISSION_DENIED",
+    );
+    await rejected(
+      storage.createDirectory({
+        path: `${root}/denied-directory`,
+      }),
+      "PERMISSION_DENIED",
+    );
     check(
       (await storage.readText({
         path: `${root}/denied.txt`,
@@ -64,6 +76,98 @@ try {
       "Denied writes changed data.",
     );
   } else {
+    const directory = `${root}/created-directories/parent/child`;
+    await rejected(
+      storage.createDirectory({
+        path: `${root}/missing-default/child`,
+      }),
+      "INVALID_ARGUMENT",
+    );
+    check(
+      !(await storage.exists({
+        path: `${root}/missing-default`,
+      })),
+      "Default recursive must not create parents.",
+    );
+    await storage.createDirectory({
+      path: directory,
+      recursive: true,
+    });
+    await storage.createDirectory({
+      path: directory,
+    });
+    check(
+      (
+        await storage.readDirectory({
+          path: directory,
+        })
+      ).length === 0,
+      "Empty idempotently created directory.",
+    );
+    const entries = await storage.readDirectory({
+      path: `${root}/directory-fixture`,
+    });
+    check(
+      JSON.stringify(entries) ===
+        JSON.stringify([
+          {
+            name: "dangling",
+            kind: "link",
+          },
+          {
+            name: "folder",
+            kind: "directory",
+          },
+          {
+            name: "link",
+            kind: "link",
+          },
+          {
+            name: "한글🙂.txt",
+            kind: "file",
+          },
+        ]),
+      "Direct Unicode names and observed link kinds.",
+    );
+    await rejected(
+      storage.readDirectory({
+        path: `${root}/outside`,
+      }),
+      "INVALID_ARGUMENT",
+    );
+    await rejected(
+      storage.createDirectory({
+        path: `${root}/outside`,
+      }),
+      "INVALID_ARGUMENT",
+    );
+    await rejected(
+      storage.createDirectory({
+        path: `${root}/symlink`,
+      }),
+      "PERMISSION_DENIED",
+    );
+    await rejected(
+      storage.remove({
+        path: `${root}/outside`,
+      }),
+      "UNSUPPORTED",
+    );
+    await rejected(
+      storage.remove({
+        path: directory,
+      }),
+      "UNSUPPORTED",
+    );
+    check(
+      (await storage.readText({
+        path: `${root}/outside`,
+      })) === "outside" &&
+        (await storage.exists({
+          path: directory,
+        })),
+      "Unsupported remove must preserve files and directories.",
+    );
     const text = `${root}/nested/한글 memo.txt`;
     await storage.writeText({
       path: text,

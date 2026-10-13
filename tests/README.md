@@ -711,6 +711,15 @@ CI의 windows-native 작업은 `mise run host:windows`를 통해 이 검사를 �
 `windows-storage-metadata.ts`는 실제 WebView2와 I/O Worker에서 목록, 생성과 빈 폴더 삭제,
 독립적인 텍스트 쓰기 권한 거부를 검사하며 `mise run host:windows`에 포함한다.
 
+`api/macos-directory-entries.test.ts`는 Darwin dirent의 UTF-8 이름, 관찰한 종류,
+record 범위와 공개 이름 상한을 검사한다. `macos-storage-directories.ts`는 실제
+checked fd 기반 목록, UTF-16 정렬, 링크와 hardlink, 256개 경계, recursive 기본값과
+생성 오류 및 미지원 remove의 무변경을 `macos-storage.ts`에서 확인한다.
+기존 native workflow가 source fixture를 compile하고 ad-hoc 서명한 뒤 실행한다.
+`macos-storage-host.ts`와 browser fixture는 실제 packaged WKWebView에서 디렉터리 목록과
+생성, 독립 권한, 미지원 remove와 재시작을 검증하며 `mise run host:macos`에 포함한다.
+Linux에서 Darwin fixture를 건너뛰는 결과는 실제 macOS 실행 근거가 아니다.
+
 `api/zod-promise.test.ts`는 ESM과 CommonJS의 실제 Worker에서 Zod의 형제 검사 실패,
 끝나지 않는 검사, 정상 변환 횟수와 when, abort 동작을 확인한다.
 `cli/zod-distribution.test.ts`는 새 프로젝트에 원본 Zod와 배포 패키지를 설치하고
@@ -812,6 +821,11 @@ redirect 거부, binary 보존, timeout, 취소, 폐기와 용량을 검사한�
 HTTP binary 및 UTF-8, redirect와 WebSocket handshake 거부, decompressed body 상한,
 text/binary 메시지, timeout과 SDK deadline, 취소 뒤 실제 TCP 정리와 종료 중 pending 요청 정리를
 확인한다. 결과는 `build/macos-native-logs/network-results.json`이며 기존 네이티브 CI artifact에 포함된다.
+실패 시 child를 종료하고 pipe를 수집한 뒤 host 로그, stdout/stderr와 요청 및 socket 관측값을
+`build/macos-native-logs/network-diagnostics/`에 보존한다. report가 있으면 미완성 파일도 원본으로
+보존하며 임시 package를 제거하기 전에 기존 macOS native artifact 경로에 기록한다.
+`macos-network-diagnostics.test.ts`는 살아 있는 실제 child의 pipe 수집과 package 제거 뒤
+진단 보존, 실행 전 실패와 이전 report 정리를 검사한다. 기존 assertion과 제한시간은 유지한다.
 `cli/network.test.ts`는 isolated tarball 설치의 두 OS native export에서 실제 HTTP를 실행하고
 browser 번들에 Bun 전송 구현이 포함되지 않는지 검사한다. TLS, 외부 proxy와 OS 인증은 검증하지 않는다.
 

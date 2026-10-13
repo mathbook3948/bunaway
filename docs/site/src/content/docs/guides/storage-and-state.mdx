@@ -67,6 +67,12 @@ await storage.writeText({
 상대 경로, `.` 또는 `..` 경로 요소, NUL과 개행이 든 경로는 `INVALID_ARGUMENT`로 실패합니다.
 작업 권한이나 운영체제 접근 권한이 없거나 링크에 접근하면 `PERMISSION_DENIED`로 실패합니다.
 
+Windows와 macOS에서 `storage.readDirectory`로 직접 자식 이름을 읽고
+`storage.createDirectory`로 디렉터리를 만들 수 있습니다. recursive 기본값은 false이며
+작업별 권한을 각각 허용합니다. macOS에서는 symlink 별칭이 없는 정규 POSIX 절대 경로를
+사용합니다. `storage.remove`는 검사한 객체의 핸들로 삭제할 수 있는 Windows에서만 지원합니다.
+입력, 목록 상한과 실패는 [디렉터리 작업](/reference/host/storage-directories/)을 확인하세요.
+
 ## 읽기와 첫 실행
 
 ```ts

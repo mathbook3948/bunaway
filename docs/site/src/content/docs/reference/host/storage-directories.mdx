@@ -1,6 +1,6 @@
 ---
 title: 디렉터리 목록과 생성, 대상 삭제
-description: 검사한 Windows 핸들로 디렉터리의 이름을 조회하고 폴더를 만들거나 파일과 빈 디렉터리를 삭제합니다.
+description: 검사한 대상에서 디렉터리 이름을 조회하고 폴더를 만듭니다. Windows에서는 파일과 빈 디렉터리를 삭제합니다.
 sidebar: { order: 6 }
 ---
 
@@ -10,26 +10,33 @@ storage.createDirectory({ path, recursive?: boolean }): Promise<null>
 storage.remove({ path }): Promise<null>
 ```
 
-`@bunaway/plugin-storage`의 Windows 작업입니다. `storagePlugin`을 등록하고
+`@bunaway/plugin-storage`의 작업입니다. readDirectory와 createDirectory는 Windows와
+macOS에서 제공하며 remove는 Windows에서만 제공합니다. macOS remove는
+검사한 객체 자체의 삭제를 보장할 수 없어 지원 목록에서 제외되며 UNSUPPORTED로 실패합니다.
+`storagePlugin`을 등록하고
 `storage.readDirectory`, `storage.createDirectory`, `storage.remove` 권한을 각각 허용합니다.
 직접 화면 호출에는 해당 이름 앞에 `plugin.`을 붙인 명령 권한도 필요합니다.
 다른 저장 작업이나 디렉터리 작업의 권한은 서로 허용하지 않습니다.
 
 `path`는 [텍스트 읽기](/reference/host/storage-read-text/)와 같은 앱 지정 절대 경로입니다.
-상위 디렉터리를 고정하고 대상의 정규 이름과 네이티브 핸들을 검사합니다.
-junction, reparse point, hardlink와 별칭 거부는 유지합니다. 경로를 알아도 접근 권한이 생기지 않습니다.
+Windows에서는 상위 디렉터리를 고정하고 대상의 정규 이름과 네이티브 핸들을 검사합니다.
+junction, reparse point, hardlink와 별칭 거부는 유지합니다. macOS에서는 각 부모와 대상을
+열린 descriptor 기준으로 검사하며 symlink와 비정규 경로를 거부합니다.
+macOS 경로는 /private/tmp처럼 symlink 별칭이 없는 정규 POSIX 절대 경로를 사용합니다.
+경로를 알아도 접근 권한이 생기지 않습니다.
 화면의 경로를 그대로 승인하기보다 앱 명령에서 대상과 접근 규칙을 정하세요.
 
 ## 직접 자식 목록
 
 `StorageDirectoryEntry`는 `{ name: string, kind: "file" | "directory" | "link" }`입니다.
 목록은 대상 디렉터리의 직접 자식만 포함하며 이름의 UTF-16 순서로 정렬합니다.
-빈 디렉터리는 `[]`이고 `.`과 `..`는 제외합니다. `link`는 자식의 reparse point를 뜻하며
+빈 디렉터리는 `[]`이고 `.`과 `..`는 제외합니다. `link`는 Windows 자식의 reparse point나
+macOS 자식의 symlink를 뜻하며
 대상을 따라가거나 자식 파일을 열지 않습니다. hardlink의 이름은 `file`로 관찰할 수 있지만
 그 파일에 대한 다른 저장 작업은 기존의 hardlink 검사를 따릅니다.
 
-목록을 구할 때 새로 경로를 열지 않습니다. 검사하고 고정한 디렉터리 핸들에
-`GetFileInformationByHandleEx`를 반복 호출해 여러 네이티브 batch를 읽습니다.
+목록을 구할 때 새로 경로를 열지 않습니다. 검사한 디렉터리 핸들이나 descriptor에서 읽습니다.
+macOS의 FIFO, 장치, socket과 알려지지 않은 종류는 공개 결과로 표현할 수 없어 UNSUPPORTED입니다.
 최대 256개 자식을 반환하며 넘으면 `INVALID_ARGUMENT`로 실패합니다.
 일부 목록을 성공으로 반환하지 않습니다. 이름당 상한은 Windows 파일 이름의 255 UTF-16 code unit입니다.
 이 상한은 JSON escaping을 포함한 결과가 전송 상한 안에 들어가도록 정한 값입니다.
@@ -53,12 +60,14 @@ await storage.createDirectory({ path: "C:/notes/한글", recursive: true });
 const entries = await storage.readDirectory({ path: "C:/notes/한글" });
 ```
 
-이 작업은 파일을 만들거나 ACL을 바꾸지 않습니다. OS가 정한 상속 권한을 사용합니다.
+이 작업은 파일을 만들거나 기존 ACL을 바꾸지 않습니다. Windows는 OS가 정한 상속 권한을 사용합니다.
+macOS의 새 디렉터리는 0700 mode를 요청하며 OS umask와 상속 ACL이 적용됩니다.
 재귀 생성 중 실패하면 이미 만든 디렉터리는 남을 수 있으며 자동으로 지우지 않습니다.
 
 ## 파일과 빈 디렉터리 삭제
 
 `remove`는 검사한 파일 또는 빈 디렉터리의 핸들에 삭제 disposition을 설정하고 핸들을 닫습니다.
+이 작업은 Windows에서만 지원합니다. macOS 호출은 이름을 변경하거나 삭제하기 전에 UNSUPPORTED로 실패합니다.
 검사 후 이름으로 대상을 다시 열지 않으며 검사하는 동안 대상의 이름 변경과 삭제를 막습니다.
 여러 개의 hardlink나 reparse point는 삭제하지 않습니다.
 없거나 비어 있지 않은 대상은 `INVALID_ARGUMENT`입니다. 재귀 삭제와 휴지통 이동은 제공하지 않습니다.

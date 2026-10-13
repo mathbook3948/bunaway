@@ -1,3 +1,4 @@
+import { dlopen, ptr, read } from "bun:ffi";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
@@ -20,6 +21,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { BunawayError } from "@bunaway/plugin";
 import { MacosStorage } from "../../plugins/storage/src/platforms/macos.ts";
+import { verifyMacosDirectories } from "./macos-storage-directories.ts";
 
 const mode = process.argv[2];
 const pathArgument = process.argv[3];
@@ -52,30 +54,79 @@ function runRacer(root: string, kind: string): void {
   const candidate = kind === "parent" ? slot : `${slot}/target`;
   const saved = kind === "parent" ? parked : `${slot}/parked`;
   const destination = kind === "parent" ? outside : `${outside}/target`;
-  writeFileSync(`${root}/ready.new`, "ready");
-  renameSync(`${root}/ready.new`, `${root}/ready`);
-  let swaps = 0;
-  while (!existsSync(`${root}/stop`)) {
-    if (kind === "leaf") {
-      // Atomic replacements avoid a missing-name window in which O_CREAT
-      // could create a fresh file and make the racer's symlink fail.
-      symlinkSync(destination, saved);
-      renameSync(saved, candidate);
-      writeFileSync(saved, "inside");
-      renameSync(saved, candidate);
-    } else {
-      renameSync(candidate, saved);
-      symlinkSync(destination, candidate);
-      unlinkSync(candidate);
-      renameSync(saved, candidate);
+  const swapper =
+    kind === "parent"
+      ? dlopen("/usr/lib/libSystem.B.dylib", {
+          renameatx_np: {
+            args: [
+              "i32",
+              "ptr",
+              "i32",
+              "ptr",
+              "u32",
+            ],
+            returns: "i32",
+          },
+          __error: {
+            args: [],
+            returns: "ptr",
+          },
+        })
+      : undefined;
+  const candidatePath = Buffer.from(`${candidate}\0`);
+  const savedPath = Buffer.from(`${saved}\0`);
+  const AT_FDCWD = -2;
+  const RENAME_SWAP = 2;
+  const swapParent = () => {
+    assert(swapper);
+    if (
+      swapper.symbols.renameatx_np(
+        AT_FDCWD,
+        ptr(candidatePath),
+        AT_FDCWD,
+        ptr(savedPath),
+        RENAME_SWAP,
+      ) < 0
+    ) {
+      const address = swapper.symbols.__error();
+      assert(address, "Racer errno is unavailable.");
+      throw new Error(
+        `Atomic parent replacement failed (${read.i32(address)}).`,
+      );
     }
-    swaps++;
+  };
+  try {
+    if (swapper) {
+      symlinkSync(destination, saved);
+    }
+    writeFileSync(`${root}/ready.new`, "ready");
+    renameSync(`${root}/ready.new`, `${root}/ready`);
+    let swaps = 0;
+    while (!existsSync(`${root}/stop`)) {
+      if (kind === "leaf") {
+        // Atomic replacements avoid a missing-name window in which O_CREAT
+        // could create a fresh file and make the racer's symlink fail.
+        symlinkSync(destination, saved);
+        renameSync(saved, candidate);
+        writeFileSync(saved, "inside");
+        renameSync(saved, candidate);
+      } else {
+        // Exchange the directory with a prepared outside symlink atomically.
+        // No missing-name window lets recursive creation collide with the racer,
+        // and no cleanup needs to remove a concurrently created directory.
+        swapParent();
+        swapParent();
+      }
+      swaps++;
+    }
+    console.log(
+      JSON.stringify({
+        swaps,
+      }),
+    );
+  } finally {
+    swapper?.close();
   }
-  console.log(
-    JSON.stringify({
-      swaps,
-    }),
-  );
 }
 
 if (process.platform !== "darwin") {
@@ -132,6 +183,7 @@ if (mode === "racer") {
     });
   const results: string[] = [];
   try {
+    results.push(...verifyMacosDirectories(storage, root));
     const other = new MacosStorage();
     other.dispose();
     other.dispose();
@@ -405,6 +457,7 @@ if (mode === "racer") {
       mkdirSync(`${raceRoot}/outside`);
       writeFileSync(`${raceRoot}/slot/target`, "inside");
       writeFileSync(`${raceRoot}/outside/target`, "outside");
+      writeFileSync(`${raceRoot}/outside/outside-only`, "outside");
       const racer = Bun.spawn(command("racer", raceRoot, kind), {
         stdout: "pipe",
         stderr: "pipe",
@@ -418,10 +471,32 @@ if (mode === "racer") {
         for (let i = 0; i < 500; i++) {
           try {
             if (kind === "parent") {
-              assert.equal(
-                call("storage.readText", `${raceRoot}/slot/target`),
-                "inside",
-              );
+              if (i % 3 === 0) {
+                const entries = call(
+                  "storage.readDirectory",
+                  `${raceRoot}/slot`,
+                );
+                assert(Array.isArray(entries));
+                assert(
+                  !entries.some(
+                    (entry) =>
+                      entry &&
+                      typeof entry === "object" &&
+                      !Array.isArray(entry) &&
+                      entry.name === "outside-only",
+                  ),
+                );
+              } else if (i % 3 === 1) {
+                storage.execute("storage.createDirectory", {
+                  path: `${raceRoot}/slot/generated`,
+                  recursive: true,
+                });
+              } else {
+                assert.equal(
+                  call("storage.readText", `${raceRoot}/slot/target`),
+                  "inside",
+                );
+              }
             } else {
               call("storage.writeText", `${raceRoot}/slot/target`, "inside");
             }
@@ -447,6 +522,7 @@ if (mode === "racer") {
           readFileSync(`${raceRoot}/outside/target`, "utf8"),
           "outside",
         );
+        assert.equal(existsSync(`${raceRoot}/outside/generated`), false);
       } finally {
         racer.kill();
         await racer.exited;
@@ -489,6 +565,16 @@ if (mode === "racer") {
         final.execute("storage.exists", {
           path: source,
         });
+        final.execute("storage.readDirectory", {
+          path: `${root}/directories`,
+        });
+        expectCode(
+          () =>
+            final.execute("storage.readDirectory", {
+              path: `${root}/entry-limit`,
+            }),
+          "INVALID_ARGUMENT",
+        );
         expectCode(
           () =>
             final.execute("storage.stat", {
