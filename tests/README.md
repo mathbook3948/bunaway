@@ -448,3 +448,18 @@ DIB의 행 방향과 padding, alpha 및 잘못된 profile, mask, 크기를 확�
 명령 컨텍스트에서 같은 조회와 권한 거부를 검사한다. 두 네이티브 검사는
 `mise run host:windows`에 포함한다. CI의 디스플레이 구성에서 실행하며 실제 다중 물리
 모니터의 hotplug, 혼합 DPI와 회전 또는 사용자 커서 조작 검증을 대신하지 않는다.
+
+
+`api/window-monitor-events.test.ts`는 versioned snapshot과 이벤트 스키마, 독립 조회 권한,
+취소와 선택적인 snapshot 서비스 미지원을 검사한다. `lifecycle/windows-monitor-events.test.ts`는
+초기 replay 부재, id별 변경과 알림 병합, 배열 순서 변경 억제, 오류 중 마지막 유효 목록 보존,
+오류 정제와 복구 및 반환 snapshot의 복사 격리를 검사한다. 같은 파일의 Windows 전용 검사는
+실제 숨겨진 HWND에 WM_DISPLAYCHANGE, WM_SETTINGCHANGE와 WM_DEVICECHANGE를 보내고
+제어한 모니터 값으로 메시지 처리 뒤 병합, 변경 억제와 정리를 확인한다.
+
+`lifecycle/windows-monitor-events.ts`는 실제 Win32와 WebView2, UI Worker, Core 및 SDK를
+연결한다. 테스트 번들에서만 실제 디스플레이 열거에 합성 이름 변경과 조회 실패를 추가한다.
+실제 알림 HWND에 합성 메시지를 보내 이벤트 전달, 이벤트 또는 조회 권한 누락, 초기 replay 부재,
+오류 복구, 구독 해제 뒤 snapshot 복구, 탐색과 창 재생성 및 종료 정리를 검사한다.
+두 Windows 전용 검사는 `mise run host:windows`에 포함한다. 실제 모니터 구성이나 OS 설정을
+변경하지 않으며 물리 장치 hotplug, 혼합 DPI, 회전 검증을 대신하지 않는다.

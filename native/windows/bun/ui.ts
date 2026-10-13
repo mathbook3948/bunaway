@@ -24,6 +24,7 @@ import {
   type WindowSpec,
 } from "./channel.ts";
 import { callbackCalls, checkCallbacks, disposeCom } from "./com.ts";
+import { isMonitorChangeMessage, MonitorTracker } from "./monitor-events.ts";
 import { monitorServices, windowMonitor } from "./monitors.ts";
 import { Tray } from "./tray.ts";
 import { originOf, WebView } from "./webview.ts";
@@ -59,6 +60,8 @@ let windows: Windows | undefined;
 let adapters: Awaited<ReturnType<typeof operations>> | undefined;
 let tray: Tray | undefined;
 let controlWindow: bigint | undefined;
+let monitorWindow: bigint | undefined;
+let monitorTracker: MonitorTracker | undefined;
 let showRequested = false;
 let quitPending = false;
 /** Commit app shutdown once, bypassing user quit veto for explicit destruction or host interruption. */
@@ -721,7 +724,13 @@ function commitClose(viewId: string, view: ViewState) {
 const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices =
   {
     specs: config.windows,
-    monitors: monitorServices,
+    monitors: {
+      ...monitorServices,
+      snapshot() {
+        assert(monitorTracker, "Monitor tracking is unavailable.");
+        return monitorTracker.snapshot();
+      },
+    },
     supportsCreationOptions: true,
     validateCreation: (spec) => {
       assert(windows);
@@ -972,6 +981,9 @@ function createWindow(
     spec.window.width,
     spec.window.height,
     (message) => {
+      if (isMonitorChangeMessage(message)) {
+        monitorTracker?.invalidate();
+      }
       if (message === WM_CLOSE) {
         close();
       } else if (message === WM_SIZE) {
@@ -1192,6 +1204,53 @@ try {
   windows = new Windows(signalClosing, config.icon, config.runtime.id, () =>
     channel.poll(),
   );
+  if (registry.operations.has("windows.getMonitorSnapshot")) {
+    monitorTracker = new MonitorTracker(
+      monitorServices.list,
+      (change) => {
+        if (stopping || closingSent) {
+          return;
+        }
+        for (const recipient of views.values()) {
+          if (
+            registry.allowed(recipient.boundary.policy.host, {
+              operation: "windows.getMonitorSnapshot",
+              payload: null,
+            })
+          ) {
+            sendNativeEvent(recipient.boundary, "windows.monitorsChanged", {
+              ...change,
+            });
+          }
+        }
+      },
+      (error) =>
+        log("monitor-query-failed", {
+          message: String(error),
+        }),
+    );
+    // The initial observation is recovery state, never an event or event history.
+    monitorTracker.snapshot();
+    if (
+      config.policy.views.some(
+        (view) =>
+          view.events.includes("windows.monitorsChanged") &&
+          view.host.permissions.includes("windows.getMonitorSnapshot"),
+      )
+    ) {
+      monitorWindow = windows.create(
+        "Bunaway display notifications",
+        200,
+        200,
+        (message) => {
+          if (isMonitorChangeMessage(message)) {
+            monitorTracker?.invalidate();
+          }
+        },
+        false,
+      );
+    }
+  }
   for (const spec of config.windows) {
     if (spec.startup !== false) {
       windows.validateCreation(spec.window);
@@ -1239,6 +1298,7 @@ try {
   while (!stopping) {
     checkCallbacks();
     windows.pump();
+    monitorTracker?.flush();
     showWindows();
     for (const [viewId, view] of views) {
       // Controller errors also queue a forced close. Report startup failure before
@@ -1351,6 +1411,10 @@ try {
     }
     tray?.dispose();
     tray = undefined;
+    if (monitorWindow) {
+      windows?.destroy(monitorWindow);
+      monitorWindow = undefined;
+    }
     if (controlWindow) {
       windows?.destroy(controlWindow);
       controlWindow = undefined;

@@ -18,9 +18,11 @@ import {
 import { z } from "zod";
 
 import {
+  monitorChangeSchema,
   monitorPointSchema,
   monitorRectSchema,
   monitorSchema,
+  monitorSnapshotSchema,
 } from "./monitor-contract.ts";
 
 export const WINDOW_VIEW_NAME_PATTERN = "^[A-Za-z0-9_.:-]{1,128}$(?![\\s\\S])";
@@ -366,6 +368,7 @@ export const windowReadinessSchema = {
 } as const;
 /** Ordered native transitions and preparation snapshots, subject to view event policy. */
 export const windowEvents = {
+  "windows.monitorsChanged": monitorChangeSchema,
   "windows.readiness": windowReadinessSchema,
   "windows.changed": {
     ...windowSnapshotSchema,
@@ -438,6 +441,10 @@ const conversionOutput = z.strictObject({
 
 /** Schemas for window operations, used to validate calls and their results. */
 export const windowOperations = {
+  "windows.getMonitorSnapshot": {
+    input: z.null(),
+    output: monitorSnapshotSchema,
+  },
   "windows.getMonitors": {
     input: z.null(),
     output: z.array(monitorSchema),
