@@ -1,7 +1,11 @@
 import { win32 } from "node:path";
 import { toUSVString } from "node:util";
 import type { NativeEnvironment } from "@bunaway/plugin";
-import { BunawayError } from "@bunaway/protocol";
+import {
+  AUTOSTART_ARGUMENT,
+  AUTOSTART_HIDDEN_ARGUMENT,
+  BunawayError,
+} from "@bunaway/protocol";
 
 /** Run's documented command-line limit, measured in Windows UTF-16 code units. */
 export const MAX_RUN_COMMAND_LENGTH = 260;
@@ -37,11 +41,18 @@ export function registrationName(app: AppLaunch): string {
 }
 
 /** Build a bounded Run command from trusted host paths, never a caller-selected executable. */
-export function commandLine(app: AppLaunch, args: readonly string[]): string {
+export function commandLine(
+  app: AppLaunch,
+  args: readonly string[],
+  hidden = false,
+): string {
   const executable = app.launch.executablePath;
   validateText(executable);
   if (!win32.isAbsolute(executable) || /["\r\n]/.test(executable)) {
     invalid("Autostart requires an absolute Windows executable path.");
+  }
+  if (hidden && app.supportsHiddenStart !== true) {
+    invalid("Hidden autostart requires desktop.tray in the app definition.");
   }
   if (
     app.launch.mode === "development" &&
@@ -55,6 +66,7 @@ export function commandLine(app: AppLaunch, args: readonly string[]): string {
   const result = [
     `"${executable}"`,
     ...app.launch.args.map(quoteArgument),
+    quoteArgument(hidden ? AUTOSTART_HIDDEN_ARGUMENT : AUTOSTART_ARGUMENT),
     ...args.map(quoteArgument),
   ].join(" ");
   if (result.length > MAX_RUN_COMMAND_LENGTH) {

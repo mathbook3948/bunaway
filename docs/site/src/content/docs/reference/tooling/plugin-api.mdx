@@ -77,6 +77,8 @@ state, interruptReason, canResume, paused를 제공합니다. byte 수의 null�
 재시도하거나 관찰한 browser 종료 뒤 해제합니다.
 
 
+Windows의 선택적 `setResizable`, `isResizable`, `setMovable`, `isMovable`은 사용자 조작 허용을 변경하고 조회합니다. 프로그램의 geometry 작업에는 적용하지 않습니다. 전체화면 중의 resizable은 복원할 일반 창의 설정이며 HWND 종료 때 movable 설정을 정리합니다.
+
 선택적 `NativeWindow.audio`는 Windows의 `NativeWebViewAudio` 서비스입니다.
 `getState()`는 `WebViewAudioState`의 `muted`, `playing`을 반환하고 `setMuted(muted)`는
 controller의 음소거를 변경합니다. 문서 탐색은 음소거를 유지하고 controller 재생성은
