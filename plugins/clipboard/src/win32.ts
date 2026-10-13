@@ -1,8 +1,26 @@
 import { dlopen, ptr, toArrayBuffer } from "bun:ffi";
 import { BunawayError, validateValue } from "@bunaway/protocol";
+import {
+  decodeFiles,
+  decodeHTML,
+  decodeImage,
+  decodeRTF,
+  encodeItem,
+  invalidClipboardData,
+  MAX_NATIVE_FORMAT_BYTES,
+} from "./codecs.ts";
+import {
+  type ClipboardFormat,
+  type ClipboardItem,
+  fitsFormatBudget,
+  formatSchema,
+} from "./formats.ts";
 import { MAX_TEXT_LENGTH, textSchema } from "./text.ts";
 
 const CF_UNICODETEXT = 13;
+const CF_DIB = 8;
+const CF_HDROP = 15;
+const CF_DIBV5 = 17;
 const GMEM_MOVEABLE = 0x0002;
 const UTF16_BYTES = 2;
 // Each Unicode scalar can occupy two UTF-16 code units, plus the terminator.
@@ -77,6 +95,12 @@ export function createClipboard() {
         "ptr",
       ],
       returns: "ptr",
+    },
+    RegisterClipboardFormatW: {
+      args: [
+        "ptr",
+      ],
+      returns: "u32",
     },
   });
   const kernel = (() => {
@@ -172,7 +196,53 @@ export function createClipboard() {
       throw failed();
     }
   }
-  return {
+  const registered = new Map<string, number>();
+  function nativeFormat(format: ClipboardFormat): number {
+    switch (format) {
+      case "text/plain":
+        return CF_UNICODETEXT;
+      case "application/x-bunaway-file-list":
+        return CF_HDROP;
+      case "image/bmp":
+        return CF_DIBV5;
+      default: {
+        const name =
+          format === "text/html" ? "HTML Format" : "Rich Text Format";
+        const existing = registered.get(name);
+        if (existing !== undefined) {
+          return existing;
+        }
+        const wideName = Buffer.from(`${name}\0`, "utf16le");
+        const value = api.RegisterClipboardFormatW(ptr(wideName));
+        if (!value) {
+          throw failed();
+        }
+        registered.set(name, value);
+        return value;
+      }
+    }
+  }
+  function copyData(format: number, maxBytes: number): Buffer {
+    const handle = api.GetClipboardData(format);
+    if (!handle) {
+      throw failed();
+    }
+    const size = Number(memory.GlobalSize(handle));
+    if (!Number.isSafeInteger(size) || size < 1 || size > maxBytes) {
+      invalidClipboardData();
+    }
+    const address = memory.GlobalLock(handle);
+    if (!address) {
+      throw failed();
+    }
+    try {
+      // Copy before unlocking; no borrowed Windows pointer survives the open interval.
+      return Buffer.from(new Uint8Array(toArrayBuffer(address, 0, size)));
+    } finally {
+      unlock(handle);
+    }
+  }
+  const clipboard = {
     open() {
       if (disposed) {
         throw new BunawayError({
@@ -235,36 +305,154 @@ export function createClipboard() {
       }
     },
     write(text: string) {
-      const bytes = Buffer.from(`${text}\0`, "utf16le");
-      const handle = memory.GlobalAlloc(GMEM_MOVEABLE, bytes.byteLength);
-      if (!handle) {
-        throw failed();
+      clipboard.writeFormats([
+        {
+          format: "text/plain",
+          data: text,
+        },
+      ]);
+    },
+    /** One open interval snapshots all requested supported formats; missing formats return null. */
+    readFormats(formats: ClipboardFormat[]) {
+      const items = formats.map(
+        (
+          format,
+        ):
+          | ClipboardItem
+          | {
+              format: ClipboardFormat;
+              data: null;
+            } => {
+          if (!clipboard.hasFormat(format)) {
+            return {
+              format,
+              data: null,
+            };
+          }
+          if (format === "text/plain") {
+            return {
+              format,
+              data: clipboard.read(),
+            };
+          }
+          if (format === "image/bmp") {
+            return {
+              format,
+              data: clipboard.readImage(),
+            };
+          }
+          const bytes = copyData(nativeFormat(format), MAX_NATIVE_FORMAT_BYTES);
+          switch (format) {
+            case "text/html":
+              return {
+                format,
+                data: decodeHTML(bytes),
+              };
+            case "text/rtf":
+              return {
+                format,
+                data: decodeRTF(bytes),
+              };
+            case "application/x-bunaway-file-list":
+              return {
+                format,
+                data: decodeFiles(bytes),
+              };
+          }
+          return invalidClipboardData();
+        },
+      );
+      if (!fitsFormatBudget(items)) {
+        invalidClipboardData();
       }
-      let transferred = false;
+      return items;
+    },
+    hasFormat(format: ClipboardFormat): boolean {
+      return (
+        api.IsClipboardFormatAvailable(nativeFormat(format)) ||
+        (format === "image/bmp" && api.IsClipboardFormatAvailable(CF_DIB))
+      );
+    },
+    getFormats(): ClipboardFormat[] {
+      return formatSchema.options.filter((format) =>
+        clipboard.hasFormat(format),
+      );
+    },
+    readImage() {
+      let format = CF_DIBV5;
+      if (!api.IsClipboardFormatAvailable(format)) {
+        format = CF_DIB;
+        if (!api.IsClipboardFormatAvailable(format)) {
+          return null;
+        }
+      }
+      return decodeImage(copyData(format, MAX_NATIVE_FORMAT_BYTES));
+    },
+    /** Prepare every HGLOBAL before clearing; transfer each successfully installed handle once. */
+    writeFormats(items: ClipboardItem[]) {
+      const allocations: {
+        format: number;
+        handle: NonNullable<ReturnType<typeof memory.GlobalAlloc>>;
+        transferred: boolean;
+      }[] = [];
+      const failures: unknown[] = [];
       try {
-        const address = memory.GlobalLock(handle);
-        if (!address) {
-          throw failed();
+        for (const item of items) {
+          const bytes = encodeItem(item);
+          const format = nativeFormat(item.format);
+          const handle = memory.GlobalAlloc(GMEM_MOVEABLE, bytes.byteLength);
+          if (!handle) {
+            throw failed();
+          }
+          allocations.push({
+            format,
+            handle,
+            transferred: false,
+          });
+          const address = memory.GlobalLock(handle);
+          if (!address) {
+            throw failed();
+          }
+          try {
+            new Uint8Array(toArrayBuffer(address, 0, bytes.byteLength)).set(
+              bytes,
+            );
+          } finally {
+            unlock(handle);
+          }
         }
-        try {
-          new Uint8Array(toArrayBuffer(address, 0, bytes.byteLength)).set(
-            bytes,
-          );
-        } finally {
-          unlock(handle);
-        }
-        // Allocate and fill before clearing so allocation failures preserve old data.
         if (!api.EmptyClipboard()) {
           throw failed();
         }
-        if (!api.SetClipboardData(CF_UNICODETEXT, handle)) {
-          throw failed();
+        for (const allocation of allocations) {
+          if (!api.SetClipboardData(allocation.format, allocation.handle)) {
+            throw failed();
+          }
+          allocation.transferred = true;
         }
-        transferred = true;
-      } finally {
-        if (!transferred) {
-          free(handle);
+      } catch (error) {
+        failures.push(error);
+      }
+      // A later registration failure leaves earlier formats installed. Windows
+      // owns them; cleanup must still attempt every untransferred allocation.
+      for (const allocation of allocations) {
+        if (allocation.transferred) {
+          continue;
         }
+        try {
+          free(allocation.handle);
+        } catch (error) {
+          failures.push(error);
+        }
+      }
+      if (failures.length === 1) {
+        throw failures[0];
+      }
+      if (failures.length > 1) {
+        throw new AggregateError(
+          failures,
+          "Clipboard write and cleanup failed.",
+        );
       }
     },
     clear() {
@@ -290,4 +478,5 @@ export function createClipboard() {
       user.close();
     },
   };
+  return clipboard;
 }

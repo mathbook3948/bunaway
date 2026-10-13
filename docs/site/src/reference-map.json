@@ -509,6 +509,7 @@
           "setSizeConstraints",
           "setSize",
           "setPosition",
+          "center",
           "setGeometry",
           "setFullscreen",
           "setCloseConfirmation",
@@ -859,6 +860,12 @@
     "reference/host/storage-write-text": ["storage.writeText"],
     "reference/host/storage-exists": ["storage.exists"],
     "reference/host/storage-stat": ["storage.stat"],
+    "reference/host/storage-bytes": [
+      "storage.readBytes",
+      "storage.writeBytes",
+      "storage.appendBytes",
+      "storage.appendText"
+    ],
     "reference/host/log-write": ["log.write"],
     "reference/host/capabilities-get": ["capabilities.get"],
     "reference/plugins/opener": [
@@ -869,7 +876,13 @@
     "reference/plugins/clipboard": [
       "clipboard.readText",
       "clipboard.writeText",
-      "clipboard.clear"
+      "clipboard.clear",
+      "clipboard.readImage",
+      "clipboard.writeImage",
+      "clipboard.getFormats",
+      "clipboard.hasFormat",
+      "clipboard.readFormats",
+      "clipboard.writeFormats"
     ],
     "reference/host/windows": [
       "windows.list",
@@ -928,6 +941,7 @@
       "windows.getSizeConstraints",
       "windows.setSizeConstraints",
       "windows.setPosition",
+      "windows.center",
       "windows.setFullscreen",
       "windows.setCloseConfirmation",
       "windows.getSnapshot",

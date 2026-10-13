@@ -12,7 +12,7 @@ const plugin = defineNativePlugin({
   },
   operations: storageOperations,
 });
-/** Plugin contract for text and metadata access at application-selected paths. */
+/** Plugin contract for text, bytes and metadata access at application-selected paths. */
 export const storagePlugin = plugin.definition;
 export default storagePlugin;
 
@@ -20,6 +20,7 @@ export default storagePlugin;
 export const storage = plugin.api;
 
 export type {
+  StorageBytesWrite,
   StorageLocation,
   StorageMetadata,
   StorageWrite,
