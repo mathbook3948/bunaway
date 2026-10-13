@@ -210,7 +210,8 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 
 `restore`는 최소화 전의 일반 또는 최대화 상태를 복원하고 `unmaximize`는 일반 크기를
 적용한다. `isVisible`은 다른 창에 가려졌거나 화면 밖에 있는지 판정하지 않는다.
-최소화를 제외한 상태 변경은 활성화를 요청하지만 포커스 획득을 보장하지 않는다.
+기본 `focusable: true`에서는 최소화를 제외한 상태 변경이 활성화를 요청하지만 포커스 획득을 보장하지 않는다.
+`focusable: false`이면 표시와 상태 변경, 네이티브 버튼은 새 활성화를 요청하지 않는다.
 현재 계약과 오류는 [창 API](./site/src/content/docs/reference/host/windows.mdx)를 따른다.
 
 ## 04. 창 이벤트와 상태 저장

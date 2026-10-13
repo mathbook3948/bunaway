@@ -216,6 +216,13 @@ if (!process.argv.includes("--child")) {
             assert.equal(user.symbols.GetForegroundWindow(), foreground);
           }
           assert.deepEqual(nativeWindows.getBounds(hwnd, "outer"), original);
+          nativeWindows.maximize(hwnd);
+          nativeWindows.minimize(hwnd);
+          nativeWindows.restore(hwnd);
+          assert.equal(nativeWindows.isMaximized(hwnd), true);
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          nativeWindows.unmaximize(hwnd);
+          assert.deepEqual(nativeWindows.getBounds(hwnd, "outer"), original);
           nativeWindows.setFullscreen(hwnd, true);
           nativeWindows.setFocusable(hwnd, true);
           nativeWindows.setFocusable(hwnd, false);
@@ -368,8 +375,9 @@ if (!process.argv.includes("--child")) {
           }
           const event = JSON.parse(line);
           if (
-            event.event.startsWith("window-api-") ||
-            event.event === "window-close-confirmation"
+            typeof event.event === "string" &&
+            (event.event.startsWith("window-api-") ||
+              event.event === "window-close-confirmation")
           ) {
             console.log(`Window API stage: ${event.event}`);
           }
@@ -685,6 +693,11 @@ if (!process.argv.includes("--child")) {
             );
             await assertContentSize(500, 600);
             await waitFor(() => holds === 1);
+            console.log(
+              JSON.stringify({
+                event: "window-api-focusability",
+              }),
+            );
             const editor = {
               view: "editor",
             };
@@ -720,6 +733,11 @@ if (!process.argv.includes("--child")) {
             assert.equal(await windows.isVisible(editor), true);
             assert.equal(await windows.isMinimized(editor), false);
             assert.equal(await windows.isMaximized(editor), false);
+            console.log(
+              JSON.stringify({
+                event: "window-api-maximize-history",
+              }),
+            );
             await windows.maximize(editor);
             assert.equal(await windows.isNormal(editor), false);
             assert.equal(await windows.isMaximized(editor), true);

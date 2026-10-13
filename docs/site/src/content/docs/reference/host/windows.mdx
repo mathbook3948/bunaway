@@ -307,6 +307,8 @@ const destroyed = await windows.isDestroyed({ view: "editor" });
 다음은 Windows의 계약입니다. `showInactive`, `blur`, `activate`는 macOS에서
 `UNSUPPORTED`입니다. 여기서 활성 창과 포커스된 창은 `isFocused`와 같은 OS 전경 창을
 뜻합니다. 창 안의 입력 요소로 키보드 포커스를 옮기는 API는 아닙니다.
+API 표의 활성화 요청은 기본 `focusable: true` 기준입니다.
+`false`에서는 [활성화 허용](#활성화-허용)의 비활성 표시와 상태 변경 계약을 적용합니다.
 
 | API | 일반 창 | 숨긴 창 | 최소화한 창 | 최대화한 창 |
 | --- | --- | --- | --- | --- |
@@ -426,7 +428,7 @@ WebView 생성자가 실패해 HWND를 바로 회수한 시도는 생성 호출 
 `showWhenReady: "document"`는 문서가, `"sdk"`는 문서와 SDK가 모두 준비된 뒤 한 번 표시합니다.
 이후 숨기거나 탐색해도 자동으로 다시 표시하지 않습니다. 재생성하면 선언한 옵션을 새 창에 다시 적용합니다.
 명시적 `show`, `focus`와 표시를 동반하는 상태 제어는 준비 전에도 창을 표시할 수 있습니다.
-자동 표시 시점부터는 일반 `show`와 같은 Windows 활성화 동작입니다.
+자동 표시 시점부터는 일반 `show`와 같은 Windows 활성화 동작입니다. `focusable: false`이면 비활성 표시를 사용합니다.
 
 `completeSplashscreen({ view: "main", splash: "splash" })`는 windows.completeSplashscreen 작업 권한을 먼저 검사합니다. 두 창은 앱 설정에 선언해야 합니다.
 주 창이나 백엔드에서 호출해야 합니다. splash 창에서 호출하면 세션이 닫히기 전에 `INVALID_ARGUMENT`를 반환하며 창은 전환하지 않습니다.
@@ -442,10 +444,8 @@ isolated splash의 임시 프로필도 최종 종료로 정리하며 다시 생�
 요청을 실행하기 전 취소하면 전환하지 않습니다. 이미 표시와 닫기를 확정한 뒤에는 그 변경을 되돌리지 않습니다.
 macOS의 준비 조회, 이벤트와 splashscreen 전환은 아직 지원하지 않습니다.
 
-## 조회 단위와 좌표
+## 활성화 허용
 
-조회의 `unit`은 `"physical" | "logical"`이며 기본값은 `"physical"`입니다. `dpi`는 해당 조회에 사용한 대상 창의 DPI입니다.
-`setSize`는 계속 내용 영역의 96 DPI 논리 픽셀을 받고, `setPosition`은 창 바깥쪽 왼쪽 위의 화면 물리 픽셀을 받습니다.
 `focusable: false`는 Windows의 [WS_EX_NOACTIVATE](https://learn.microsoft.com/en-us/windows/win32/winmsg/extended-window-styles)를 사용합니다.
 해당 창은 사용자 클릭으로 활성화되지 않고 `show`는 비활성 표시를 사용합니다. `focus`는 새 활성화나
 복원을 요청하지 않으며 이미 전경 창이면 성공, 아니면 `BUSY`입니다. `activate`도 새 활성화를 요청하지 않고
@@ -457,6 +457,11 @@ Windows 기본 동작상 이 스타일의 창은 작업 표시줄에 나타나�
 표시, 위치와 크기를 유지하며 전체화면에서도 설정을 변경하고 유지합니다. 재생성은 선언 또는 생성 옵션으로 돌아갑니다.
 trusted Win32 코드의 직접 활성화까지 막는 보안 경계는 아닙니다. setter/getter에는 각각의 operation 권한이 필요하며
 닫힌 창은 `INVALID_ARGUMENT`입니다. macOS는 선언된 초기 focusable을 `UNSUPPORTED`로 거부합니다.
+
+## 조회 단위와 좌표
+
+조회의 `unit`은 `"physical" | "logical"`이며 기본값은 `"physical"`입니다. `dpi`는 해당 조회에 사용한 대상 창의 DPI입니다.
+`setSize`는 계속 내용 영역의 96 DPI 논리 픽셀을 받고, `setPosition`은 창 바깥쪽 왼쪽 위의 화면 물리 픽셀을 받습니다.
 따라서 `setSize` 뒤에는 `getContentSize({ view, unit: "logical" })`, `setPosition` 뒤에는 `getOuterPosition({ view })`으로 결과를 확인합니다.
 제약에 따른 크기 보정과 운영체제의 배치 결과를 반환합니다.
 
