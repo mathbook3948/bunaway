@@ -29,7 +29,9 @@ content/outer 크기, DPI 순환 때 숨김 HWND 정리 및 생성 후 OS 권장
 `api/cli-arguments.test.ts`는 nested subcommand, Bun flag 문법, Zod defaults/transform, help와
 오류 복구, snapshot과 타입 추론을 검사한다. `windows-cli-arguments.ts`는 실제 Windows host의
 windowless UI Worker와 named pipe에서 초기 및 두 번째 실행의 argv를 onOpen에 전달하고
-match, help, 오류 이후 다음 요청 처리를 확인한다. `host:windows`에 포함하며 WebView 페이지는 만들지 않는다.
+match, help, 오류 이후 다음 요청 처리를 확인한다. raw 모드에서 `https://`와 `file:relative.txt`도
+원래 인자로 전달한다. `lifecycle/desktop.test.ts`는 초기 및 전달 요청의 URL 모양 string 옵션과
+기존 파일 URL 검증을 함께 확인한다. `host:windows`에 포함하며 WebView 페이지는 만들지 않는다.
 
 공식 플러그인은 `src/index.ts`에서 선언을 조립하고 `src/contract.ts`에 계약을 둔다.
 `api/plugin-contracts.test.ts`는 OS 자원 없이 네이티브 입력 검증을 실행해 모르는 작업의

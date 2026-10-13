@@ -103,9 +103,12 @@ if (!process.argv.includes("--child")) {
         events: {},
         desktop: {
           closeBehavior: "keep-alive",
+          openArguments: "raw",
           async onOpen(request, desktop) {
             try {
               sources.push(request.source);
+              assert.deepEqual(request.files, []);
+              assert.deepEqual(request.urls, []);
               results.push(await cli.parse(request.argv));
               if (request.source === "initial") {
                 await forwardToInstance(address, {
@@ -133,6 +136,8 @@ if (!process.argv.includes("--child")) {
                     "--count=3",
                     "--",
                     "-draft.txt",
+                    "https://",
+                    "file:relative.txt",
                   ],
                   cwd: root,
                 });
@@ -176,6 +181,8 @@ if (!process.argv.includes("--child")) {
           "첫 실행 공백 😀",
           "--",
           "한글 file.txt",
+          "https://",
+          "file:relative.txt",
         ],
         cwd: root,
       },
@@ -200,6 +207,8 @@ if (!process.argv.includes("--child")) {
         },
         positionals: [
           "한글 file.txt",
+          "https://",
+          "file:relative.txt",
         ],
       },
     });
@@ -215,6 +224,8 @@ if (!process.argv.includes("--child")) {
         },
         positionals: [
           "-draft.txt",
+          "https://",
+          "file:relative.txt",
         ],
       },
     });

@@ -1,12 +1,14 @@
 import { expect, test } from "bun:test";
 import { createConnection } from "node:net";
 import { defineApp } from "@bunaway/backend";
+import { defineCLI } from "@bunaway/backend/cli";
 import type { DesktopOptions, OpenRequest } from "@bunaway/core";
 import {
   AUTOSTART_ARGUMENT,
   AUTOSTART_HIDDEN_ARGUMENT,
 } from "@bunaway/protocol";
 import type { WindowSpec } from "@bunaway/runtime-bun/window-config";
+import { z } from "zod";
 import { validatePacket } from "#native/windows/bun/channel";
 import {
   DesktopLifecycle,
@@ -137,6 +139,12 @@ test("keep-alive preserves explicit quit checks and diagnoses invalid desktop se
     },
     {
       beforeQuit: false,
+    },
+    {
+      openArguments: "unknown",
+    },
+    {
+      openArguments: false,
     },
   ]) {
     // Exercise untyped app definitions at the runtime boundary.
@@ -361,6 +369,96 @@ test("defineApp preserves desktop hooks and context types", () => {
   });
   expect(app.desktop?.closeBehavior).toBe("hide");
   expect(app.desktop?.beforeQuit?.("last-window")).toBe(false);
+});
+
+test("raw initial and forwarded opens reach the CLI with URL-like string values unchanged", async () => {
+  const cli = defineCLI({
+    name: "probe",
+    commands: {
+      echo: {
+        options: {
+          label: {
+            type: "string",
+          },
+        },
+        schema: z.strictObject({
+          values: z.strictObject({
+            label: z.string(),
+          }),
+          positionals: z.array(z.string()),
+        }),
+      },
+    },
+  });
+  const requests: OpenRequest[] = [];
+  const results: Awaited<ReturnType<typeof cli.parse>>[] = [];
+  const errors: unknown[] = [];
+  const lifecycle = new DesktopLifecycle(
+    {
+      openArguments: "raw",
+      async onOpen(request) {
+        requests.push(request);
+        results.push(await cli.parse(request.argv));
+      },
+    },
+    async () => {},
+    () => {},
+    (error) => errors.push(error),
+  );
+  try {
+    for (const source of [
+      "initial",
+      "second-instance",
+    ] as const) {
+      for (const value of [
+        "https://",
+        "file:relative.txt",
+      ]) {
+        lifecycle.open(
+          {
+            argv: [
+              "echo",
+              "--label",
+              value,
+            ],
+            cwd: launch.cwd,
+          },
+          source,
+        );
+      }
+    }
+    await tick();
+    expect(errors).toEqual([]);
+    expect(requests.map((request) => request.source)).toEqual([
+      "initial",
+      "initial",
+      "second-instance",
+      "second-instance",
+    ]);
+    for (const [index, request] of requests.entries()) {
+      const value = index % 2 === 0 ? "https://" : "file:relative.txt";
+      expect(request.files).toEqual([]);
+      expect(request.urls).toEqual([]);
+      expect(Object.isFrozen(request.argv)).toBe(true);
+      expect(request.argv).toEqual([
+        "echo",
+        "--label",
+        value,
+      ]);
+      expect(results[index]).toEqual({
+        kind: "match",
+        command: "echo",
+        data: {
+          values: {
+            label: value,
+          },
+          positionals: [],
+        },
+      });
+    }
+  } finally {
+    lifecycle.dispose();
+  }
 });
 
 test("concurrent quit requests share a veto and a later quit can proceed", async () => {
@@ -767,6 +865,24 @@ test("file URLs reject encoded separators, NUL, and paths without a Windows driv
         },
         "initial",
       ),
+    ).toThrow();
+  }
+});
+
+test("default and explicit files-and-urls modes retain URL metadata validation", () => {
+  for (const value of [
+    "https://",
+    "file:relative.txt",
+  ]) {
+    const input = {
+      argv: [
+        value,
+      ],
+      cwd: launch.cwd,
+    };
+    expect(() => openRequest(input, "initial")).toThrow();
+    expect(() =>
+      openRequest(input, "second-instance", "files-and-urls"),
     ).toThrow();
   }
 });
