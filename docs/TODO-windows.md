@@ -160,7 +160,8 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] `toLogical`과 `toPhysical`로 대상 창 DPI를 사용해 좌표, 크기와 bounds를 변환한다.
   반올림, 정수 범위와 오류, 대상 창 권한과 닫힌 창의 동작은 창 API 계약을 따른다.
 - [x] 초기 x, y, center와 content-size 기준 옵션을 구현했다. ADR 0019의 필드별 병합과 예약 전 검증을 single/multiple 생성 및 재생성에 적용한다.
-- [ ] 실행 중 창을 현재 또는 지정 모니터의 작업 영역 중앙에 배치한다.
+- [x] `windows.center`로 실행 중 창을 현재 모니터의 작업 영역 중앙에 배치한다. 숨김과 최소화, 최대화 상태를 유지하며 최소화와 최대화 중에는 일반 복원 영역만 배치한다.
+- [ ] 지정 모니터의 작업 영역 중앙 배치를 공개 모니터 ID 계약과 연결한다.
 - [x] 초기 창 위치와 크기를 작업 영역에 맞추는 preventOverflow를 구현했다. 최소 content 크기와 프레임을 유지할 수 없으면 예약 및 기존 창 종료 전에 거부한다.
 - [x] 초기 배치의 순수 계산과 오류 경계 검증을 완료했다. 음수 좌표, signed 32-bit 경계, DPI 96/120/144/192, content/outer, 제약 충돌과 선언 보존을 검사했다.
 - [x] 초기 배치의 실제 HWND 및 WebView2 집중 검증을 완료했다. Windows Server 2022의 모니터 1개와 DPI 96에서 초기 선언 및 single/multiple 생성과 재생성을 확인했다. multiple은 isolated 프로필이다.
