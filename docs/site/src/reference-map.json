@@ -212,6 +212,17 @@
       }
     },
     {
+      "name": "@bunaway/plugin-network",
+      "source": "plugins/network/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/network": ["network", "networkPlugin"]
+      }
+    },
+    {
       "name": "@bunaway/plugin-storage",
       "source": "plugins/storage/src/index.ts",
       "buildOutputs": {
@@ -948,6 +959,7 @@
     "reference/api": ["help"]
   },
   "operations": {
+    "reference/plugins/network": ["network.request", "network.exchange"],
     "reference/plugins/process": ["process.run"],
     "reference/plugins/os": ["os.info", "os.usage", "os.locale"],
     "reference/plugins/autostart": [
