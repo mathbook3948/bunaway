@@ -354,6 +354,9 @@ export default defineNetworkFixture(${JSON.stringify(http)}, ${JSON.stringify(ws
       ].sort(),
       pendingWebSockets: server.pendingWebSockets,
       shutdown: records.at(-1),
+      webviewStages: records.filter(
+        (record) => record.event === "webview-stage",
+      ),
     },
   );
   console.log(
