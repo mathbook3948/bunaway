@@ -148,6 +148,7 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
         assets: config.assets,
         dataRoot: config.dataRoot,
         plugins,
+        policy: config.policy,
       },
       env: {
         HOME: config.dataRoot,

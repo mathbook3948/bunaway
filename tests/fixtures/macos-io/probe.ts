@@ -95,7 +95,22 @@ export const probe = defineNativePlugin({
         }
         const temporary = resolve(environment.dataRoot, "temp");
         return {
-          execute(operation, value, source) {
+          execute() {
+            throw new BunawayError({
+              code: "UNSUPPORTED",
+              message: "Fixture requires contextual execution.",
+            });
+          },
+          executeUI(operation, value, source, context) {
+            if (
+              !context.requestId ||
+              !context.signal ||
+              !context.permissions.permissions.includes(operation)
+            ) {
+              throw new Error("I/O request context was not preserved.");
+            }
+            context.signal.throwIfAborted();
+            context.beforeExecute?.();
             if (operation === "probe.inspect") {
               return existsSync(
                 resolve(temporary, `${id.parse(value)}-executed`),

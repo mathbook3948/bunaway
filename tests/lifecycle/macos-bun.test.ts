@@ -1197,7 +1197,9 @@ test.each([
             if(input === "release") for(const release of gates.splice(0)) release();
             return input;
           },
-          async executeUI(_name,input) {
+          async executeUI(_name,input,_source,context) {
+            if(!context.signal || !context.permissions.permissions.includes("parser.run")) throw new Error("Missing execution context");
+            if (phase === "execution") context.signal.addEventListener("abort",()=>writeFileSync(${JSON.stringify(resolve(directory, "aborted.txt"))},input),{once:true});
             if(input === "release") for(const release of gates.splice(0)) release();
             return phase === "execution" ? pause(input) : input;
           }, dispose(){},
@@ -1264,6 +1266,7 @@ test.each([
           const requestId="never-"+index;
           await call(requestId);
           await channel.send({kind:"cancel",context,requestId});
+          ${phase === "execution" ? `await waitFor(()=>{try{return readFileSync(${JSON.stringify(resolve(directory, "aborted.txt"))},"utf8")===requestId;}catch{return false;}});` : ""}
         }
         assert(channel.canSend(API_LIMITS.maxPending));
         for(const requestId of ["late-success","late-error"]) {

@@ -173,6 +173,7 @@ export async function runWindowsApp(
         dataRoot: config.dataRoot,
         assets: config.assets,
         plugins,
+        policy: config.policy,
       },
     },
   );

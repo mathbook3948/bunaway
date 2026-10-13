@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { parentPort, workerData } from "node:worker_threads";
 import {
   API_LIMITS,
+  BunawayError,
   type HostCall,
   type HostContext,
   type HostResponse,
   type JsonValue,
   type NativeRegistration,
+  type Policy,
   type RuntimeIdentity,
 } from "@bunaway/protocol";
 import { Channel, type Packet } from "@bunaway/runtime-bun/worker-channel";
@@ -21,6 +23,7 @@ const config = workerData as {
   dataRoot: string;
   assets: string;
   plugins: NativeRegistration[];
+  policy?: Policy;
 };
 const adapters = await operations(
   config.plugins,
@@ -36,6 +39,7 @@ const queue = new Map<
     context: HostContext;
     call: HostCall;
     source: string;
+    controller: AbortController;
     state:
       | {
           phase: "input-authorization" | "parsing" | "executing";
@@ -82,10 +86,35 @@ async function prepare(
   call: NonNullable<ReturnType<typeof queue.get>>,
 ) {
   try {
-    const execute = await adapters.prepare(
+    const permissions =
+      call.source === "backend"
+        ? config.policy?.backend
+        : config.policy?.views.find((view) => call.source === `view:${view.id}`)
+            ?.host;
+    const execute = await adapters.prepareIO(
       call.call.operation,
       call.call.payload,
       call.source,
+      {
+        requestId: id,
+        // Main-thread grants remain authoritative. This snapshot is for adapter resource checks.
+        permissions: permissions ?? {
+          permissions: [],
+        },
+        signal: call.controller.signal,
+        beforeExecute() {
+          if (
+            stopping ||
+            call.controller.signal.aborted ||
+            queue.get(id) !== call
+          ) {
+            throw new BunawayError({
+              code: "CANCELLED",
+              message: "Host call was cancelled.",
+            });
+          }
+        },
+      },
     );
     if (stopping || queue.get(id) !== call || active !== id) {
       return;
@@ -178,6 +207,7 @@ function receive(packet: Packet) {
       context: packet.context,
       call: packet.call,
       source: packet.source,
+      controller: new AbortController(),
       state: {
         phase: "input-authorization",
       },
@@ -227,6 +257,7 @@ function receive(packet: Packet) {
       throw error;
     });
   } else if (packet.kind === "cancel") {
+    queue.get(packet.requestId)?.controller.abort();
     queue.delete(packet.requestId);
     if (active === packet.requestId) {
       active = undefined;
@@ -235,6 +266,7 @@ function receive(packet: Packet) {
   } else if (packet.kind === "cancel-context") {
     for (const [id, call] of queue) {
       if (call.context === packet.context) {
+        call.controller.abort();
         queue.delete(id);
         if (active === id) {
           active = undefined;
@@ -244,6 +276,9 @@ function receive(packet: Packet) {
     startNext();
   } else if (packet.kind === "shutdown") {
     stopping = true;
+    for (const call of queue.values()) {
+      call.controller.abort();
+    }
     queue.clear();
     active = undefined;
     // Acknowledge shutdown acceptance before closing the port.
