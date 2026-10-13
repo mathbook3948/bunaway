@@ -166,7 +166,7 @@ async function checkShutdown(
           writeFileSync(${JSON.stringify(cleaned)},"cleaned");
         };
       }}]});
-      const inbox=${nativeUI || mode === "undelivered" ? `{start(){${nativeUI ? 'process.emit("SIGINT");' : ""}},close(){${mode === "undelivered" ? "return Bun.sleep(250);" : ""}}}` : "undefined"};
+      const inbox=${nativeUI || mode === "undelivered" ? `{start(){${nativeUI ? 'process.emit("SIGINT");' : ""}},async close(){${mode === "undelivered" ? "await Bun.sleep(250);" : ""}}}` : "undefined"};
       try{await runWindowsApp(app,${JSON.stringify(config)},undefined,inbox);}catch(error){console.error(error);process.exitCode=1;}
     `,
     );
