@@ -85,6 +85,7 @@ export async function runWindowsApp(
       resolve(value: HostResponse): void;
       reject(error: unknown): void;
       abort(): void;
+      settled: Promise<void>;
       authorized?: boolean;
     }
   >();
@@ -235,6 +236,9 @@ export async function runWindowsApp(
           ...packet,
           kind: "host-result",
         });
+        // UI acceptance can precede its reply to Core. Retain the I/O Worker's
+        // cancellation owner until Core receives the result or the call is cancelled.
+        await call.settled;
       } else {
         finishCall(packet.requestId, packet.response);
       }
@@ -596,6 +600,7 @@ export async function runWindowsApp(
           );
         }
         return new Promise<HostResponse>((resolveCall, reject) => {
+          const settled = Promise.withResolvers<void>();
           const abort = () => {
             const call = takeCall(requestId);
             if (!call) {
@@ -621,9 +626,16 @@ export async function runWindowsApp(
           calls.set(requestId, {
             context,
             signal,
-            resolve: resolveCall,
-            reject,
+            resolve(value) {
+              resolveCall(value);
+              settled.resolve();
+            },
+            reject(error) {
+              reject(error);
+              settled.resolve();
+            },
             abort,
+            settled: settled.promise,
           });
           signal.addEventListener("abort", abort);
           void (execution === "ui" ? channel : ioChannel)

@@ -114,6 +114,7 @@ if (target === "windows-x64") {
           "tests/lifecycle/process-run.test.ts",
           "tests/lifecycle/windows-network.test.ts",
           "tests/lifecycle/windows-bun-instance.test.ts",
+          "tests/lifecycle/windows-host-shutdown.test.ts",
           "tests/lifecycle/windows-appearance.test.ts",
           "tests/lifecycle/windows-opener.test.ts",
           "tests/lifecycle/windows-opener-job.test.ts",

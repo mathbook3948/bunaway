@@ -2,38 +2,59 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { bundleIOPluginFixture } from "../fixtures/native-worker.ts";
+import {
+  bundleIOPluginFixture,
+  bundleUIPluginFixture,
+} from "../fixtures/native-worker.ts";
 
 test.each([
   "pending",
   "undelivered",
+  "handoff",
 ] as const)(
   "Windows coordinator aborts %s native I/O before Core stop hooks and adapter disposal",
-  async (mode) => {
-    const directory = await mkdtemp(
-      resolve(tmpdir(), "bunaway-windows-io-stop-"),
-    );
-    try {
-      const started = resolve(directory, "started");
-      const aborted = resolve(directory, "aborted");
-      const cleaned = resolve(directory, "core-cleaned");
-      const disposed = resolve(directory, "disposed");
-      const definition = {
-        name: "waiting",
-        version: "development",
-        execution: "io" as const,
-        native: {
-          operations: [
-            {
-              name: "waiting.run",
-            },
-          ],
-        },
-      };
-      const adapter = resolve(directory, "adapter.ts");
-      await Bun.write(
-        adapter,
-        `
+  (mode) => checkShutdown(mode),
+  15_000,
+);
+
+test.skipIf(process.platform !== "win32")(
+  "actual Windows UI Worker aborts backend I/O before Core hooks and native disposal",
+  async () => {
+    await checkShutdown("pending", true);
+    await checkShutdown("undelivered", true);
+  },
+  30_000,
+);
+
+/** Run the production coordinator and I/O Worker, optionally with real Win32 UI and Job ownership. */
+async function checkShutdown(
+  mode: "pending" | "undelivered" | "handoff",
+  nativeUI = false,
+) {
+  const directory = await mkdtemp(
+    resolve(tmpdir(), "bunaway-windows-io-stop-"),
+  );
+  try {
+    const started = resolve(directory, "started");
+    const aborted = resolve(directory, "aborted");
+    const cleaned = resolve(directory, "core-cleaned");
+    const disposed = resolve(directory, "disposed");
+    const definition = {
+      name: "waiting",
+      version: "development",
+      execution: "io" as const,
+      native: {
+        operations: [
+          {
+            name: "waiting.run",
+          },
+        ],
+      },
+    };
+    const adapter = resolve(directory, "adapter.ts");
+    await Bun.write(
+      adapter,
+      `
       import {existsSync,writeFileSync} from "node:fs";
       import {ImageResources} from ${JSON.stringify(resolve(import.meta.dir, "../../plugins/image/src/resources.ts"))};
       import {defineNativePlugin} from ${JSON.stringify(resolve(import.meta.dir, "../../packages/plugin-sdk/src/index.ts"))};
@@ -46,7 +67,7 @@ test.each([
           const resource=resources.create({width:1,height:1,rgba:Buffer.from([1,2,3,255])},context.signal);
           writeFileSync(${JSON.stringify(started)},"started");
           return new Promise(resolveCall=>{
-            ${mode === "undelivered" ? "setTimeout(()=>resolveCall(null),100);" : ""}
+            ${mode !== "pending" ? "setTimeout(()=>resolveCall(null),100);" : ""}
             context.signal.addEventListener("abort",()=>{
             if(existsSync(${JSON.stringify(disposed)})) throw new Error("Disposed before abort");
             let retained=true;try{resources.get(resource.id);}catch{retained=false;}
@@ -60,17 +81,27 @@ test.each([
         }
       })}}});
     `,
-      );
-      await bundleIOPluginFixture(
+    );
+    const imports = `
+      import {plugin} from ${JSON.stringify(adapter)};
+      export const pluginImports={waiting:{operations:async()=>({createOperations:plugin.definition.nativePlatforms.windows.create})}};
+    `;
+    await bundleIOPluginFixture(
+      directory,
+      [
+        definition,
+      ],
+      imports,
+    );
+    if (nativeUI) {
+      await bundleUIPluginFixture(
         directory,
         [
           definition,
         ],
-        `
-      import {plugin} from ${JSON.stringify(adapter)};
-      export const pluginImports={waiting:{operations:async()=>({createOperations:plugin.definition.nativePlatforms.windows.create})}};
-    `,
+        imports,
       );
+    } else {
       await Bun.write(
         resolve(directory, "ui.js"),
         `
@@ -81,7 +112,9 @@ test.each([
           kind:packet.kind==="authorize-input" ? "input-authorized" : "authorized",
           context:packet.context,requestId:packet.requestId,allowed:true
         });
-        else if(packet.kind==="start") channel.notify({kind:"closing"});
+        else if(packet.kind==="start") {${mode === "handoff" ? "" : 'channel.notify({kind:"closing"});'}}
+        // Accept the result into UI ownership, then close before forwarding it to Core.
+        else if(packet.kind==="host-result") setTimeout(()=>channel.notify({kind:"closing"}),100);
         else if(packet.kind==="shutdown") void (async()=>{
           await channel.send({kind:"cleaned"});await channel.drain();channel.close();parentPort.close();
         })().catch(error=>{console.error(error);process.exit(1);});
@@ -90,30 +123,31 @@ test.each([
       channel.notify({kind:"ready"});
     `,
       );
-      const config = {
-        runtime: {
-          id: "windows-shutdown",
-          generation: crypto.randomUUID(),
+    }
+    const config = {
+      runtime: {
+        id: "windows-shutdown",
+        generation: crypto.randomUUID(),
+      },
+      backendContext: "backend",
+      dataRoot: directory,
+      assets: directory,
+      loader: "fixture",
+      windows: [],
+      policy: {
+        version: 1,
+        views: [],
+        backend: {
+          permissions: [
+            "waiting.run",
+          ],
         },
-        backendContext: "backend",
-        dataRoot: directory,
-        assets: directory,
-        loader: "fixture",
-        windows: [],
-        policy: {
-          version: 1,
-          views: [],
-          backend: {
-            permissions: [
-              "waiting.run",
-            ],
-          },
-        },
-      };
-      const source = resolve(directory, "run-source.ts");
-      await Bun.write(
-        source,
-        `
+      },
+    };
+    const source = resolve(directory, "run-source.ts");
+    await Bun.write(
+      source,
+      `
       import {existsSync,writeFileSync} from "node:fs";
       import {defineApp} from ${JSON.stringify(Bun.resolveSync("@bunaway/backend", import.meta.dir))};
       import {runWindowsApp} from ${JSON.stringify(resolve(import.meta.dir, "../../native/windows/bun/entry.ts"))};
@@ -132,21 +166,22 @@ test.each([
           writeFileSync(${JSON.stringify(cleaned)},"cleaned");
         };
       }}]});
-      const inbox=${mode === "undelivered" ? "{start(){},close(){return Bun.sleep(250);}}" : "undefined"};
+      const inbox=${nativeUI || mode === "undelivered" ? `{start(){${nativeUI ? 'process.emit("SIGINT");' : ""}},close(){${mode === "undelivered" ? "return Bun.sleep(250);" : ""}}}` : "undefined"};
       try{await runWindowsApp(app,${JSON.stringify(config)},undefined,inbox);}catch(error){console.error(error);process.exitCode=1;}
     `,
-      );
-      const build = await Bun.build({
-        entrypoints: [
-          source,
-        ],
-        target: "bun",
-        outdir: directory,
-        naming: "run.js",
-        plugins: [
-          {
-            name: "windows-coordinator-platform-fixture",
-            setup(build) {
+    );
+    const build = await Bun.build({
+      entrypoints: [
+        source,
+      ],
+      target: "bun",
+      outdir: directory,
+      naming: "run.js",
+      plugins: [
+        {
+          name: "windows-coordinator-platform-fixture",
+          setup(build) {
+            if (!nativeUI) {
               build.onResolve(
                 {
                   filter: /^\.\/job\.ts$/,
@@ -156,67 +191,64 @@ test.each([
                   namespace: "fixture-job",
                 }),
               );
-              build.onLoad(
-                {
-                  filter: /.*/,
-                  namespace: "fixture-job",
-                },
-                () => ({
-                  contents:
-                    "export function containAppProcess(){} export function activeDescendants(){return 0;}",
-                  loader: "js",
-                }),
-              );
-              build.onResolve(
-                {
-                  filter: /^bunaway:plugin-imports$/,
-                },
-                () => ({
-                  path: resolve(directory, "plugin-imports.js"),
-                }),
-              );
-            },
+            }
+            build.onLoad(
+              {
+                filter: /.*/,
+                namespace: "fixture-job",
+              },
+              () => ({
+                contents:
+                  "export function containAppProcess(){} export function activeDescendants(){return 0;}",
+                loader: "js",
+              }),
+            );
+            build.onResolve(
+              {
+                filter: /^bunaway:plugin-imports$/,
+              },
+              () => ({
+                path: resolve(directory, "plugin-imports.js"),
+              }),
+            );
           },
-        ],
-      });
-      expect(build.success, build.logs.map(String).join("\n")).toBe(true);
-      for (const output of build.outputs) {
-        await Bun.write(output.path, await output.arrayBuffer());
-      }
-      const child = Bun.spawn(
-        [
-          process.execPath,
-          resolve(directory, "run.js"),
-        ],
-        {
-          stdout: "ignore",
-          stderr: "pipe",
-          timeout: 10_000,
         },
-      );
-      const errors = new Response(child.stderr).text();
-      expect(await child.exited, await errors).toBe(0);
-      expect(await Bun.file(aborted).text()).toBe("aborted");
-      expect(await Bun.file(cleaned).text()).toBe("cleaned");
-      expect(await Bun.file(disposed).text()).toBe("disposed");
-      const records = (
-        await Bun.file(resolve(directory, "logs/host.log")).text()
-      )
-        .trim()
-        .split("\n")
-        .map((line) => JSON.parse(line));
-      expect(records.at(-1)).toMatchObject({
-        event: "host-stopped",
-        failed: false,
-        forced: false,
-        activeProcesses: 0,
-      });
-    } finally {
-      await rm(directory, {
-        recursive: true,
-        force: true,
-      });
+      ],
+    });
+    expect(build.success, build.logs.map(String).join("\n")).toBe(true);
+    for (const output of build.outputs) {
+      await Bun.write(output.path, await output.arrayBuffer());
     }
-  },
-  15_000,
-);
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        resolve(directory, "run.js"),
+      ],
+      {
+        stdout: "ignore",
+        stderr: "pipe",
+        timeout: 10_000,
+      },
+    );
+    const errors = new Response(child.stderr).text();
+    expect(await child.exited, await errors).toBe(0);
+    expect(await Bun.file(aborted).text()).toBe("aborted");
+    expect(await Bun.file(cleaned).text()).toBe("cleaned");
+    expect(await Bun.file(disposed).text()).toBe("disposed");
+    const records = (await Bun.file(resolve(directory, "logs/host.log")).text())
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(records.at(-1)).toMatchObject({
+      event: "host-stopped",
+      failed: false,
+      forced: false,
+      activeProcesses: 0,
+    });
+  } finally {
+    await rm(directory, {
+      recursive: true,
+      force: true,
+    });
+  }
+}
