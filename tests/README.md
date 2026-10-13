@@ -617,3 +617,7 @@ I/O Worker의 실행, 백엔드 setup과 뷰 출처, 파싱 전 정책 검사, U
 `build/macos-io-results.json`에는 OS, CPU, Bun revision과 시나리오별 종료 결과를 남긴다.
 공통 Worker와 메인 호스트를 사용하는 `macos-bun.test.ts`의 I/O 파싱 취소 검사는
 Linux에서도 실행하며 실제 AppKit은 대체한다.
+
+`macos-bun.test.ts`는 진행 중인 백엔드 I/O의 abort를 기다리는 StopHook도 실제
+Worker로 검사한다. 종료 요청이 I/O 취소를 먼저 전달하고 코어 훅 뒤에 어댑터를
+폐기해 강제 종료 없이 끝나는지 확인한다. 실제 WKWebView fixture도 같은 순서를 검사한다.

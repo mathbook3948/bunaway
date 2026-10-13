@@ -73,6 +73,15 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
     }
     stopping = true;
     pendingPlugins.length = 0;
+    // Admission reserves one cancellation slot per owned I/O call. Send these
+    // before releasing ownership so Core stop hooks can await native aborts.
+    for (const [requestId, call] of ioCalls) {
+      ioChannel?.notify({
+        kind: "cancel",
+        requestId,
+        context: call.packet.context,
+      });
+    }
     requests.cancelAll();
     ioCalls.clear();
     clearTimeout(startup);

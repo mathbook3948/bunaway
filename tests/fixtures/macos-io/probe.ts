@@ -13,6 +13,7 @@ const input = z
       "block",
       "hold",
       "fail",
+      "wait-abort",
     ]),
   })
   .strict();
@@ -124,6 +125,34 @@ export const probe = defineNativePlugin({
               resolve(temporary, `${request.id}-executing`),
               "started",
             );
+            if (request.mode === "wait-abort") {
+              const signal = context.signal;
+              writeFileSync(resolve(temporary, `${request.id}-source`), source);
+              return new Promise((resolveCall) => {
+                signal.addEventListener(
+                  "abort",
+                  () => {
+                    if (existsSync(resolve(temporary, "io-disposing"))) {
+                      throw new Error(
+                        "Native abort arrived after adapter disposal.",
+                      );
+                    }
+                    writeFileSync(
+                      resolve(temporary, `${request.id}-aborted`),
+                      "aborted",
+                    );
+                    resolveCall({
+                      source,
+                      thread: threadId,
+                      main: isMainThread,
+                    });
+                  },
+                  {
+                    once: true,
+                  },
+                );
+              });
+            }
             if (request.mode === "fail") {
               throw new BunawayError({
                 code: "INVALID_ARGUMENT",

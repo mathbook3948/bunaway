@@ -1458,3 +1458,138 @@ test.each([
   },
   20_000,
 );
+
+test("macOS shutdown aborts active backend I/O before Core stop hooks and adapter disposal", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "bunaway-macos-io-stop-"));
+  try {
+    const started = resolve(directory, "io-started");
+    const aborted = resolve(directory, "io-aborted");
+    const cleaned = resolve(directory, "core-cleaned");
+    const disposed = resolve(directory, "io-disposed");
+    const operations = resolve(directory, "operations.ts");
+    const native = {
+      operations: [
+        {
+          name: "waiting.run",
+        },
+      ],
+    };
+    const plugins: InstalledPlugin[] = [
+      {
+        name: "waiting",
+        version: "1",
+        native,
+        packageName: "fixture-waiting",
+        root: directory,
+        targets: {
+          macos: {
+            execution: "io",
+            operations,
+          },
+        },
+      },
+    ];
+    await Bun.write(
+      operations,
+      `
+      import { existsSync, writeFileSync } from "node:fs";
+      import { defineNativePlugin } from ${JSON.stringify(resolve(import.meta.dir, "../../packages/plugin-sdk/src/index.ts"))};
+      import { z } from ${JSON.stringify(Bun.resolveSync("zod", import.meta.dir))};
+      export const plugin = defineNativePlugin({name:"waiting",operations:{run:{input:z.null(),output:z.null()}},platforms:{macos:{execution:"io",create(){
+        return {
+          execute(){throw new Error("Missing execution context");},
+          executeUI(_operation,_input,source,context){
+            if(source!=="backend") throw new Error("Wrong backend source");
+            context.signal.throwIfAborted();
+            writeFileSync(${JSON.stringify(started)},"started");
+            return new Promise(resolve=>context.signal.addEventListener("abort",()=>{
+              if(existsSync(${JSON.stringify(disposed)})) throw new Error("Adapter disposed before cancellation");
+              writeFileSync(${JSON.stringify(aborted)},"aborted"); resolve(null);
+            },{once:true}));
+          },
+          dispose(){
+            if(!existsSync(${JSON.stringify(cleaned)})) throw new Error("Adapter disposed before Core hooks");
+            writeFileSync(${JSON.stringify(disposed)},"disposed");
+          }
+        };
+      }}}});
+      export default {...plugin.definition,version:"1"};
+    `,
+    );
+    const app = resolve(directory, "app.ts");
+    await Bun.write(
+      app,
+      `
+      import { existsSync, writeFileSync } from "node:fs";
+      import { defineApp } from ${JSON.stringify(Bun.resolveSync("@bunaway/backend", import.meta.dir))};
+      import definition,{plugin} from ${JSON.stringify(operations)};
+      export default defineApp({modules:[],commands:{},events:{},plugins:[definition,{name:"setup",version:"1",async setup(){
+        const pending=plugin.api.run(null).catch(error=>{if(error.code!=="CANCELLED") throw error;});
+        while(!existsSync(${JSON.stringify(started)})) await Bun.sleep(5);
+        return async()=>{
+          await pending;
+          while(!existsSync(${JSON.stringify(aborted)})) await Bun.sleep(5);
+          if(existsSync(${JSON.stringify(disposed)})) throw new Error("Stop hook ran after adapter disposal");
+          writeFileSync(${JSON.stringify(cleaned)},"cleaned");
+        };
+      }}]});
+    `,
+    );
+    await bundleMacosHost(
+      resolve(import.meta.dir, "../../native/macos/bun"),
+      directory,
+      app,
+      undefined,
+      false,
+      plugins,
+    );
+    await bundleTestHost(directory, plugins);
+    await Bun.write(
+      resolve(directory, "webview.ts"),
+      `export class MacosWebview {
+      ready=Promise.resolve(); constructor(config,hooks){this.hooks=hooks;}
+      start(){this.hooks.close();} close(){}
+    }`,
+    );
+    const config = workerConfig(directory);
+    config.policy.backend.permissions = [
+      "waiting.run",
+    ];
+    await Bun.write(
+      resolve(directory, "run.ts"),
+      `import {runMacosApp} from "./entry.js";
+      try{await runMacosApp(${JSON.stringify(config)});}catch(error){console.error(error);process.exitCode=1;}
+    `,
+    );
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        resolve(directory, "run.ts"),
+      ],
+      {
+        stdout: "ignore",
+        stderr: "pipe",
+        timeout: 15_000,
+      },
+    );
+    const errors = new Response(child.stderr).text();
+    expect(await child.exited, await errors).toBe(0);
+    expect(await Bun.file(aborted).text()).toBe("aborted");
+    expect(await Bun.file(cleaned).text()).toBe("cleaned");
+    expect(await Bun.file(disposed).text()).toBe("disposed");
+    const records = (await Bun.file(resolve(directory, "logs/host.log")).text())
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(records.at(-1)).toMatchObject({
+      event: "host-stopped",
+      failed: false,
+      forced: false,
+    });
+  } finally {
+    await rm(directory, {
+      recursive: true,
+      force: true,
+    });
+  }
+}, 20_000);

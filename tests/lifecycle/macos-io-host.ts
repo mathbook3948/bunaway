@@ -27,6 +27,7 @@ try {
     "test.marker",
     "test.release",
     "test.report",
+    "test.startShutdownWork",
     ...[
       "run",
       "inspect",
@@ -225,6 +226,14 @@ try {
       assert.equal(
         await Bun.file(resolve(temporary, "core-cleaned")).text(),
         "done",
+      );
+      assert.equal(
+        await Bun.file(resolve(temporary, "shutdown-source")).text(),
+        "backend",
+      );
+      assert.equal(
+        await Bun.file(resolve(temporary, "shutdown-aborted")).text(),
+        "aborted",
       );
       assert.equal(
         await Bun.file(resolve(temporary, "io-cleaned")).exists(),

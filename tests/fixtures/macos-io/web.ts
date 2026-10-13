@@ -159,6 +159,7 @@ try {
       ok: true,
       phase,
     });
+    await client.invoke("test.startShutdownWork", null);
     await client.invoke("plugin.windows.close", {
       view: "main",
     });

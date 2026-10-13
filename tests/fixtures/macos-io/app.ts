@@ -26,7 +26,41 @@ export default defineApp({
         if (result.source !== "backend" || result.main) {
           throw new Error("Backend I/O route failed.");
         }
-        return () => writeFileSync(resolve(temporary, "core-cleaned"), "done");
+        // This setup-owned timer preserves backend authority when the page asks
+        // to start work whose native cancellation must precede Core stop hooks.
+        let pending: Promise<unknown> | undefined;
+        const watcher = setInterval(() => {
+          if (!existsSync(resolve(temporary, "start-shutdown-work"))) {
+            return;
+          }
+          clearInterval(watcher);
+          pending = probe.api
+            .run({
+              id: "shutdown",
+              mode: "wait-abort",
+            })
+            .catch((error) => {
+              if (error.code !== "CANCELLED") {
+                throw error;
+              }
+            });
+          void pending.catch((error) =>
+            console.error("Shutdown probe failed:", error),
+          );
+        }, 5);
+        return async () => {
+          clearInterval(watcher);
+          if (pending) {
+            await pending;
+            while (!existsSync(resolve(temporary, "shutdown-aborted"))) {
+              await Bun.sleep(5);
+            }
+            if (existsSync(resolve(temporary, "io-disposing"))) {
+              throw new Error("Adapter disposal ran before the stop hook.");
+            }
+          }
+          writeFileSync(resolve(temporary, "core-cleaned"), "done");
+        };
       },
     },
   ],
@@ -58,6 +92,21 @@ export default defineApp({
         const: "pong",
       },
       run: async () => "pong",
+    },
+    "test.startShutdownWork": {
+      input: {
+        const: null,
+      },
+      output: {
+        const: null,
+      },
+      async run() {
+        writeFileSync(resolve(temporary, "start-shutdown-work"), "start");
+        while (!existsSync(resolve(temporary, "shutdown-executing"))) {
+          await Bun.sleep(5);
+        }
+        return null;
+      },
     },
     "test.marker": {
       input: {
