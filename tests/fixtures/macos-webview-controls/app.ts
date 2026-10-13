@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { type CommandContext, defineApp } from "@bunaway/backend";
 import { windows, windowsPlugin } from "@bunaway/plugin-windows";
 import { BunawayError } from "@bunaway/protocol";
+import { controlsClientReadiness } from "./readiness.ts";
 
 /** Exercise the public SDK from the real backend Worker while WKWebView documents connect. */
 export function controlsApp(origin: string, outside: string) {
@@ -31,16 +32,12 @@ export function controlsApp(origin: string, outside: string) {
       await Bun.sleep(10);
     }
   };
-  const ready = async (path: string, count = 1) => {
-    await waitFor(
-      () => (arrivals.get(path) ?? 0) >= count,
-      `arrival ${path} ${count}`,
-    );
-    await waitFor(
-      async () => !(await windows.getWebViewState(main)).loading,
-      `loaded ${path}`,
-    );
-  };
+  const ready = controlsClientReadiness({
+    arrivals,
+    held,
+    isLoading: async () => (await windows.getWebViewState(main)).loading,
+    waitFor,
+  });
   async function requests(
     kind: "slow" | "redirects" | "syntheticRestores" | "probeLoads",
   ): Promise<number> {
