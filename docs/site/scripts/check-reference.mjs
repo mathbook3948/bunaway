@@ -471,6 +471,7 @@ checkNames(
       "clipboard",
       "image",
       "autostart",
+      "power",
       "appearance",
       "os",
       "process",

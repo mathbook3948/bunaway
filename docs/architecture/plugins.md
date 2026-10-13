@@ -56,6 +56,7 @@ export async function save(text: string): Promise<null> {
 | `@bunaway/plugin-log` | `log`, `logPlugin` | `log` |
 | `@bunaway/plugin-capabilities` | `capabilities`, `capabilitiesPlugin` | `capabilities` |
 | `@bunaway/plugin-clipboard` | `clipboard`, `clipboardPlugin` | `clipboard` |
+| `@bunaway/plugin-power` | `power`, `powerPlugin` | `power` |
 | `@bunaway/plugin-appearance` | `appearance`, `appearancePlugin` | `appearance` |
 
 텍스트 클립보드 계약과 Windows 자원 소유권은 [clipboard README](../../plugins/clipboard/README.md)에 둔다.

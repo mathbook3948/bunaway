@@ -59,6 +59,10 @@ macOS는 options 생략과 빈 객체를 허용하고 비어 있지 않은 optio
 `options.window`의 `x`, `y`, `center`, `useContentSize`, `preventOverflow`는
 [초기 창 설정](/reference/configuration/#app)과 같은 단위와 작업 영역 계약을 사용합니다.
 startup, create, recreate, createInstance와 recreateInstance에 모두 적용합니다.
+`maximized`, `fullscreen`도 boolean이며 기본은 `false`입니다. 초기 일반 영역을 설정한 뒤
+최대화, 전체화면 순서로 적용합니다. 둘 다 켜면 전체화면 해제 뒤 최대화 상태로 돌아갑니다.
+`visible: false`와 `showWhenReady`의 숨김 생성도 유지합니다. 초기 전체화면 해제는 현재 표시 상태를
+유지하며 선언이나 다음 생성의 옵션을 바꾸지 않습니다. macOS는 초기 상태 옵션을 `UNSUPPORTED`로 거부합니다.
 필드별로 선언과 병합한 결과에서 x/y가 한 축만 있거나 `center: true`와 좌표가 함께 있으면
 `INVALID_ARGUMENT`입니다. 선언의 한 축만 바꾸는 것은 나머지 축이 선언에 있을 때 허용합니다.
 선언 좌표를 지우려면 `{ x: null, y: null }`, center를 해제하려면 `{ center: false }`로 지정합니다.
