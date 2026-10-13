@@ -137,6 +137,8 @@ jobs:
         run: mise run install 2>&1 | tee build/macos-native-logs/install.log
       - name: Build native plugin packages
         run: mise run plugins:build
+      - name: Verify macOS log and capability adapters and compiled probe
+        run: mise exec -- bun --no-env-file test tests/lifecycle/macos-log-capabilities.test.ts tests/lifecycle/macos-log-capabilities-compiled.test.ts 2>&1 | tee build/macos-native-logs/log-capabilities.log
       - name: Build and test real WKWebView host and signed in-place app
         run: mise exec -- bun --no-env-file tests/lifecycle/run-native.ts --app 2>&1 | tee build/macos-native-logs/host.log
       - name: Upload native test reports and logs
@@ -147,6 +149,8 @@ jobs:
           path: |
             build/macos-io-diagnostics/
             build/macos-io-results.json
+            build/macos-log-capabilities-results.json
+            build/macos-log-capabilities-diagnostics/
             build/macos-host-results.json
             build/macos-native-logs/
             build/macos-host-diagnostics/

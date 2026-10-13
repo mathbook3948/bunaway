@@ -1,11 +1,16 @@
 import { defineNativePlugin } from "@bunaway/plugin";
 import { capabilitiesOperations } from "./contract.ts";
+import { createOperations as createMacosOperations } from "./platforms/macos.ts";
 import { createOperations as createWindowsOperations } from "./platforms/windows.ts";
 import { createCapabilities } from "./query.ts";
 
 const plugin = defineNativePlugin({
   name: "capabilities",
   platforms: {
+    macos: {
+      execution: "io",
+      create: createMacosOperations,
+    },
     windows: {
       execution: "io",
       create: createWindowsOperations,
