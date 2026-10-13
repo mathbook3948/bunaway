@@ -908,6 +908,7 @@
       "storage.appendBytes",
       "storage.appendText"
     ],
+    "reference/host/storage-transfers": ["storage.copyFile", "storage.move"],
     "reference/host/log-write": ["log.write"],
     "reference/host/capabilities-get": ["capabilities.get"],
     "reference/plugins/opener": [

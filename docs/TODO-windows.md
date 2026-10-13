@@ -644,7 +644,10 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 - [ ] 파일 크기 조회와 별도로 디렉터리 재귀 용량을 바이트 단위로 계산한다. [T-fs-live]의 `size`를 참고한다.
   링크 처리, 접근 거부와 탐색 중 변경의 오류 규칙, 큰 트리의 취소와 비용을 정의한다.
   빈 디렉터리, 중첩 파일 합계, 링크, 부분 실패와 취소 시 자원 정리를 검증한다.
-- [ ] 파일과 디렉터리 copy, rename, move, truncate를 제공한다.
+- [x] Windows의 4 MiB 이하 일반 파일 복사와 같은 parent의 파일 및 디렉터리 rename를 제공한다.
+  양쪽 parent와 source 핸들을 고정하고 기존 destination을 대체하지 않는다.
+  [전송 계약](./site/src/content/docs/reference/host/storage-transfers.mdx)을 따른다.
+- [ ] 큰 파일과 디렉터리 재귀 copy, 다른 parent와 볼륨의 move, 덮어쓰기 및 truncate를 제공한다.
 - [ ] 파일 watch와 recursive watch, 이벤트 구독 해제를 제공한다.
 - [ ] 원자적 저장, 충돌 처리와 대용량 stream I/O를 제공한다.
 - [ ] 파일 대화상자로 획득한 범위의 일시 허용과 영속화를 제공한다.
