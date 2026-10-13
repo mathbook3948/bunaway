@@ -221,25 +221,8 @@ test.skipIf(process.platform !== "win32")(
           native.focus(first);
           driver.symbols.SetActiveWindow(first);
           driver.symbols.SetFocus(input);
-          const activeBeforePump = driver.symbols.GetActiveWindow();
-          const focusBeforePump = driver.symbols.GetFocus();
           native.pump();
-          const activeAfterPump = driver.symbols.GetActiveWindow();
-          expect(
-            activeAfterPump,
-            JSON.stringify({
-              state,
-              hidden,
-              first: String(first),
-              second: String(second),
-              input: String(input),
-              activeBeforePump: String(activeBeforePump),
-              activeAfterPump: String(activeAfterPump),
-              focusBeforePump: String(focusBeforePump),
-              focusAfterPump: String(driver.symbols.GetFocus()),
-              foreground: String(driver.symbols.GetForegroundWindow()),
-            }),
-          ).toBe(first);
+          expect(driver.symbols.GetActiveWindow()).toBe(first);
           expect(driver.symbols.GetFocus()).toBe(input);
           const before = native.getSnapshot(second);
           const activationsBefore = targetActivations;
