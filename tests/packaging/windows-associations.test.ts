@@ -265,7 +265,7 @@ test("association installer tasks are unchecked and quote executable and argumen
 const iscc = process.platform === "win32" ? await findIscc() : undefined;
 
 test.skipIf(!iscc)(
-  "native installer registers opt-in candidates, updates declarations and preserves Windows defaults",
+  "native installer preserves opt-in candidates and defaults, preflights collisions and reports registry failures",
   async () => {
     if (!iscc) {
       throw new Error("ISCC is required.");
@@ -338,6 +338,7 @@ test.skipIf(!iscc)(
       executable: string,
       config: ChannelConfig["associations"],
       tasks?: string,
+      failure?: "collision" | "write",
     ) {
       const staging = join(root, version);
       const payload = join(staging, "app");
@@ -356,15 +357,45 @@ test.skipIf(!iscc)(
         "/Q",
         iss,
       ]);
-      await must(join(output, "setup.exe"), [
-        ...silent,
-        `/DIR=${installDir}`,
-        ...(tasks !== undefined
-          ? [
-              `/TASKS=${tasks}`,
-            ]
-          : []),
+      const logPath = join(staging, "install.log");
+      const child = Bun.spawn(
+        [
+          join(output, "setup.exe"),
+          ...silent,
+          `/DIR=${installDir}`,
+          `/LOG=${logPath}`,
+          ...(tasks !== undefined
+            ? [
+                `/TASKS=${tasks}`,
+              ]
+            : []),
+        ],
+        {
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+      const [exitCode, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
       ]);
+      const log = await Bun.file(logPath).text();
+      if (failure) {
+        expect(exitCode).not.toBe(0);
+        if (failure === "write") {
+          expect(exitCode).toBe(1);
+        }
+        expect(log).toContain(
+          failure === "collision"
+            ? "App association is owned by a different command"
+            : "Could not register app association",
+        );
+      } else if (exitCode !== 0) {
+        throw new Error(
+          `Installer failed (${exitCode}): ${stdout} ${stderr}\n${log}`,
+        );
+      }
     }
     async function uninstall() {
       const executable = join(installDir, "unins000.exe");
@@ -433,6 +464,38 @@ test.skipIf(!iscc)(
       expect(
         await query("Software\\RegisteredApplications", registration),
       ).toBe(`${associationRoot}\\Capabilities`);
+      // A selected ProgID collision must fail before payload installation or
+      // deleting the healthy file candidate from the prior snapshot.
+      await write(
+        `Software\\Classes\\${urlProgId}\\shell\\open\\command`,
+        "",
+        '"foreign-collision.exe" "%1"',
+      );
+      await install(
+        "collision",
+        "충돌 앱.exe",
+        declarations,
+        "fileassociations,urlschemes",
+        "collision",
+      );
+      expect(
+        await query(`Software\\Classes\\${fileProgId}\\shell\\open\\command`),
+      ).toBe(`"${join(installDir, "앱.exe")}" "%1"`);
+      expect(
+        await query(`Software\\Classes\\${urlProgId}\\shell\\open\\command`),
+      ).toBe('"foreign-collision.exe" "%1"');
+      expect(await query(associationRoot, "Executable")).toBe(
+        join(installDir, "앱.exe"),
+      );
+      expect(await Bun.file(join(installDir, "충돌 앱.exe")).exists()).toBe(
+        false,
+      );
+      expect(await Bun.file(join(installDir, "앱.exe")).exists()).toBe(true);
+      await write(
+        `Software\\Classes\\${urlProgId}\\shell\\open\\command`,
+        "",
+        `"${join(installDir, "앱.exe")}" "%1"`,
+      );
       await install("renamed", "새 앱.exe", declarations);
       expect(
         await query(`Software\\Classes\\${fileProgId}\\shell\\open\\command`),
@@ -447,6 +510,42 @@ test.skipIf(!iscc)(
       ).toBe("MISSING");
       await install("deselected", "새 앱.exe", declarations, "");
       expect(await query(associationRoot, "Executable")).toBe("MISSING");
+      // Deny writes only to this random fixture's OpenWith key. The earlier
+      // ProgID writes succeed, exercising ssPostInstall failure exit handling.
+      const deniedKey = `Software\\Classes\\${extension}\\OpenWithProgids`;
+      await write(deniedKey, "Foreign.Candidate", "foreign-marker");
+      const descriptor = await powershell(
+        `$key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(${quote(deniedKey)},$true); try { $acl=$key.GetAccessControl(); $acl.GetSecurityDescriptorSddlForm([System.Security.AccessControl.AccessControlSections]::Access); $rule=[System.Security.AccessControl.RegistryAccessRule]::new([System.Security.Principal.WindowsIdentity]::GetCurrent().User,[System.Security.AccessControl.RegistryRights]::SetValue,[System.Security.AccessControl.AccessControlType]::Deny); $acl.AddAccessRule($rule); $key.SetAccessControl($acl) } finally { $key.Dispose() }`,
+      );
+      try {
+        await install(
+          "write-denied",
+          "새 앱.exe",
+          {
+            files: declarations.files,
+          },
+          "fileassociations",
+          "write",
+        );
+        expect(await query(deniedKey, "Foreign.Candidate")).toBe(
+          "foreign-marker",
+        );
+        expect(await query(`Software\\Classes\\${extension}`)).toBe(
+          "Foreign.File",
+        );
+        expect(
+          await query(`Software\\Classes\\${fileProgId}\\shell\\open\\command`),
+        ).toBe(`"${join(installDir, "새 앱.exe")}" "%1"`);
+        expect(await query(deniedKey, fileProgId)).toBe("MISSING");
+      } finally {
+        await powershell(
+          `$key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(${quote(deniedKey)},[Microsoft.Win32.RegistryKeyPermissionCheck]::Default,[System.Security.AccessControl.RegistryRights]::ChangePermissions); try { $acl=[System.Security.AccessControl.RegistrySecurity]::new(); $acl.SetSecurityDescriptorSddlForm(${quote(descriptor)},[System.Security.AccessControl.AccessControlSections]::Access); $key.SetAccessControl($acl) } finally { $key.Dispose() }`,
+        );
+      }
+      await uninstall();
+      expect(await query(deniedKey, "Foreign.Candidate")).toBe(
+        "foreign-marker",
+      );
       await install(
         "reenabled",
         "새 앱.exe",

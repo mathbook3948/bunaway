@@ -38,6 +38,17 @@ export function renderAssociationCode(
       progId: progId("url", entry.scheme),
     })),
   ];
+  const selectedTasks = [
+    ...new Set(entries.map((entry) => entry.task)),
+  ]
+    .map((task) => `WizardIsTaskSelected('${task}')`)
+    .join(" or ");
+  const preflight = entries
+    .map(
+      (entry) => `  if WizardIsTaskSelected('${entry.task}') then
+    CheckAssociationCandidate('${entry.progId}');`,
+    )
+    .join("\n");
   const registration = entries
     .map(
       (entry) => `
@@ -141,6 +152,41 @@ begin
   DeleteAssociationKey(AssociationRoot);
 end;
 
+// Validate the entire selected snapshot before deleting any prior registration.
+// The old executable is trusted only through this installer's previous-data record.
+function IsAssociationOwner(const Executable: String): Boolean;
+begin
+  Result := CompareText(Executable, AssociationExecutable) = 0;
+  if not Result and (PreviousInstallDir <> '') and (PreviousExecutableName <> '') then
+    Result := CompareText(Executable, AddBackslash(PreviousInstallDir) + PreviousExecutableName) = 0;
+end;
+
+procedure CheckAssociationCandidate(const ProgId: String);
+var Key, Command: String;
+begin
+  Key := 'Software\Classes\' + ProgId;
+  if not RegKeyExists(AssociationHive, Key) then Exit;
+  if not RegQueryStringValue(AssociationHive, Key + '\shell\open\command', '', Command) or
+     not ((CompareText(Command, AssociationCommand(AssociationExecutable)) = 0) or
+          ((PreviousInstallDir <> '') and (PreviousExecutableName <> '') and
+           (CompareText(Command, AssociationCommand(AddBackslash(PreviousInstallDir) + PreviousExecutableName)) = 0))) then
+    RaiseException('App association is owned by a different command: ' + ProgId);
+end;
+
+procedure PreflightAssociations;
+var Owner, Registration: String;
+begin
+  ${selectedTasks ? `if not (${selectedTasks}) then Exit;` : "Exit;"}
+  if RegKeyExists(AssociationHive, AssociationRoot) and
+     (not RegQueryStringValue(AssociationHive, AssociationRoot, 'Executable', Owner) or
+      not IsAssociationOwner(Owner)) then
+    RaiseException('App associations belong to another installation.');
+  if RegQueryStringValue(AssociationHive, 'Software\RegisteredApplications', AssociationRegistration, Registration) and
+     (Registration <> AssociationRoot + '\Capabilities') then
+    RaiseException('App registration belongs to another installation.');
+${preflight}
+end;
+
 procedure RegisterAssociation(const Kind, Token, ProgId, Name: String; Protocol: Boolean);
 var Command, Key: String;
 begin
@@ -162,6 +208,7 @@ end;
 procedure InstallAssociations;
 var Owner: String;
 begin
+  PreflightAssociations;
   // Updates remove the previous snapshot, including declarations no longer
   // present. Ownership checks retain entries changed to another command.
   if (PreviousInstallDir <> '') and (PreviousExecutableName <> '') then

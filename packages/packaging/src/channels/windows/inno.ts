@@ -241,6 +241,7 @@ type
 `,
     "var PreviousExecutableName: String;",
     "    PreviousInstallDir: String;",
+    "    PostInstallError: String;",
     renderAssociationCode(
       options.identifier,
       executableName,
@@ -288,24 +289,36 @@ type
     "end;",
     "",
   );
-  if (options.bootstrapperPath) {
-    lines.push(
-      "function PrepareToInstall(var NeedsRestart: Boolean): String;",
-      "var ResultCode: Integer;",
-      "begin",
-      "  Result := '';",
-      "  if HasWebView2Runtime then Exit;",
-      "  ExtractTemporaryFile('MicrosoftEdgeWebview2Setup.exe');",
-      "  if not Exec(ExpandConstant('{tmp}\\MicrosoftEdgeWebview2Setup.exe'), '/silent /install', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then",
-      "    Result := 'Could not start the WebView2 Runtime installer: ' + SysErrorMessage(ResultCode)",
-      "  else if ResultCode <> 0 then",
-      "    Result := 'WebView2 Runtime installation failed (exit code ' + IntToStr(ResultCode) + '). Check your internet connection and retry.'",
-      "  else if not HasWebView2Runtime then",
-      "    Result := 'WebView2 Runtime was not detected after installation. Install the runtime and retry.';",
-      "end;",
-      "",
-    );
-  }
+  lines.push(
+    "function PrepareToInstall(var NeedsRestart: Boolean): String;",
+    ...(options.bootstrapperPath
+      ? [
+          "var ResultCode: Integer;",
+        ]
+      : []),
+    "begin",
+    "  Result := '';",
+    "  try",
+    "    PreflightAssociations;",
+    "  except",
+    "    Result := GetExceptionMessage;",
+    "    Exit;",
+    "  end;",
+    ...(options.bootstrapperPath
+      ? [
+          "  if HasWebView2Runtime then Exit;",
+          "  ExtractTemporaryFile('MicrosoftEdgeWebview2Setup.exe');",
+          "  if not Exec(ExpandConstant('{tmp}\\MicrosoftEdgeWebview2Setup.exe'), '/silent /install', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then",
+          "    Result := 'Could not start the WebView2 Runtime installer: ' + SysErrorMessage(ResultCode)",
+          "  else if ResultCode <> 0 then",
+          "    Result := 'WebView2 Runtime installation failed (exit code ' + IntToStr(ResultCode) + '). Check your internet connection and retry.'",
+          "  else if not HasWebView2Runtime then",
+          "    Result := 'WebView2 Runtime was not detected after installation. Install the runtime and retry.';",
+        ]
+      : []),
+    "end;",
+    "",
+  );
   lines.push(
     "procedure RemovePreviousExecutable;",
     "var Path: String; Entry: TFindRec;",
@@ -435,11 +448,9 @@ end;
     "  end;",
     "end;",
     "",
-    "procedure CurStepChanged(CurStep: TSetupStep);",
+    "procedure CompleteInstallation;",
     "var Current: TStringList;",
     "begin",
-    "  if CurStep <> ssPostInstall then Exit;",
-    "  InstallAssociations;",
     "  if (PreviousExecutableName = '') or (PreviousInstallDir = '') or",
     "     (CompareText(AddBackslash(PreviousInstallDir), AddBackslash(ExpandConstant('{app}'))) <> 0) then",
     "    PreviousExecutableName := '';",
@@ -459,7 +470,7 @@ end;
       (path) =>
         `    UpdateShortcut(ExpandConstant('${path.replace(/'/g, "''")}'));`,
     ),
-    "    RemovePreviousExecutable;",
+    "    if PostInstallError = '' then RemovePreviousExecutable;",
     "  finally",
     "    Current.Free;",
     "  end;",
@@ -467,6 +478,31 @@ end;
     "",
   );
   lines.push(
+    "// Inno catches ssPostInstall exceptions without changing its successful exit code.",
+    "// Keep independent payload cleanup running, then report any failure to both UI and automation.",
+    "procedure CurStepChanged(CurStep: TSetupStep);",
+    "begin",
+    "  if CurStep <> ssPostInstall then Exit;",
+    "  try",
+    "    InstallAssociations;",
+    "  except",
+    "    PostInstallError := GetExceptionMessage;",
+    "    Log(PostInstallError);",
+    "  end;",
+    "  try",
+    "    CompleteInstallation;",
+    "  except",
+    "    if PostInstallError <> '' then PostInstallError := PostInstallError + #13#10;",
+    "    PostInstallError := PostInstallError + GetExceptionMessage;",
+    "  end;",
+    "  if PostInstallError <> '' then RaiseException(PostInstallError);",
+    "end;",
+    "",
+    "function GetCustomSetupExitCode: Integer;",
+    "begin",
+    "  if PostInstallError <> '' then Result := 1 else Result := 0;",
+    "end;",
+    "",
     "procedure RegisterExtraCloseApplicationsResources;",
     "begin",
     "  if (PreviousExecutableName <> '') and (PreviousInstallDir <> '') and",

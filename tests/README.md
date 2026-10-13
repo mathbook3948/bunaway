@@ -125,6 +125,9 @@ getter와 FFI 값을 비교하며 고유 tag/group의 임시 알림은 finally�
 실행 명령 계약을 검사한다. Windows에서 Inno Setup이 있으면 실제 설치와 업데이트,
 작업 해제, 선언 제거와 제거 프로그램을 실행한다. 격리된 임의 확장자와 scheme으로
 기존 기본값과 UserChoice 보존, Unicode와 공백, EXE 이름 변경, 변경된 ProgID 보존을 검사한다.
+선택한 ProgID의 외부 명령 충돌은 기존 후보와 파일을 보존한 채 설치를 실패시킨다. 임의 확장자의
+OpenWith 키에만 쓰기 거부 ACL을 적용해 실제 설치 후 쓰기 실패의 종료 코드 1과 외부 값 보존을 확인한다.
+ACL은 `finally`에서 복구하고 테스트 소유 항목만 정리한다.
 기본 앱 UI 선택과 실제 링크 클릭은 자동 검사에 포함하지 않는다.
 
 `windows-initial-placement.fixture.ts`는 모니터 겹침이 바뀌는 `SetWindowPos`에서
