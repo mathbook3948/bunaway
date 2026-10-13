@@ -1,17 +1,28 @@
 import type { NativeInvokeOptions, NativePluginAPI } from "@bunaway/plugin";
-import type { AutostartStatus, autostartOperations } from "./contract.ts";
+import type {
+  AutostartOptions,
+  AutostartStatus,
+  autostartOperations,
+} from "./contract.ts";
 
 /** Build public helpers around the plugin's typed operations. */
 export function createAutostart(
   api: NativePluginAPI<typeof autostartOperations>,
 ) {
   function enableAutostart(
-    args: string[] = [],
+    settings: string[] | AutostartOptions = [],
     options?: NativeInvokeOptions,
   ): Promise<AutostartStatus> {
     return api.enable(
       {
-        args,
+        ...(Array.isArray(settings)
+          ? {
+              args: settings,
+            }
+          : {
+              args: [],
+              ...settings,
+            }),
       },
       options,
     );
