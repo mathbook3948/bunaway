@@ -163,6 +163,7 @@ if (target === "windows-x64") {
     for (const name of [
       "windows-bun-storage.ts",
       "windows-storage-metadata.ts",
+      "windows-path.ts",
       "windows-safe-storage.ts",
       "windows-bun-cli.ts",
       "windows-app-reload.ts",
