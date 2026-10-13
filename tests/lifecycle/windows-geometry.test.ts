@@ -138,6 +138,7 @@ test.skipIf(process.platform !== "win32")(
         visible: !!user.symbols.IsWindowVisible(hwnd),
         minimized: !!user.symbols.IsIconic(hwnd),
         maximized: !!user.symbols.IsZoomed(hwnd),
+        fullscreen: native.isFullscreen(hwnd),
         callbackFailure:
           native.failure instanceof Error
             ? native.failure.stack
@@ -734,7 +735,13 @@ test.skipIf(process.platform !== "win32")(
       });
       const resizedNormal = native.getBounds(hwnd, "normal");
       expect(user.symbols.IsZoomed(hwnd)).toBe(1);
+      nativePhase = "restore-before-constrained-fullscreen";
       user.symbols.ShowWindow(hwnd, SW_RESTORE);
+      verifyShowState(
+        "after-restore-before-constrained-fullscreen",
+        SW_RESTORE,
+        true,
+      );
       expect(native.getBounds(hwnd, "outer")).toEqual(resizedNormal);
       expect(
         await invoke("windows.getContentSize", {
@@ -755,8 +762,14 @@ test.skipIf(process.platform !== "win32")(
         fullscreen: false,
       });
       stage = "hide-before-final-fullscreen";
+      nativePhase = "hide-before-constrained-fullscreen";
       native.show(hwnd, false);
       assert.equal(native.failure, undefined);
+      verifyShowState(
+        "after-hide-before-constrained-fullscreen",
+        SW_SHOW,
+        false,
+      );
       expect(native.getSnapshot(hwnd).state).toMatchObject({
         visible: false,
         minimized: false,
@@ -764,23 +777,39 @@ test.skipIf(process.platform !== "win32")(
         fullscreen: false,
       });
       stage = "enter-final-fullscreen";
+      nativePhase = "enter-constrained-fullscreen";
       native.setFullscreen(hwnd, true);
       assert.equal(native.failure, undefined);
+      verifyShowState("after-enter-constrained-fullscreen", SW_SHOW, false);
       await invoke("windows.setSizeConstraints", {
         minWidth: 700,
         maxHeight: 450,
       });
+      verifyShowState("after-fullscreen-constraints", SW_SHOW, false);
       const fullscreenNormal = native.getBounds(hwnd, "normal");
       stage = "exit-final-fullscreen";
+      nativePhase = "exit-constrained-fullscreen";
       native.setFullscreen(hwnd, false);
       assert.equal(native.failure, undefined);
+      verifyShowState("after-exit-constrained-fullscreen", SW_SHOW, false);
       expect(native.getSnapshot(hwnd).state).toMatchObject({
         visible: false,
         minimized: false,
         maximized: false,
         fullscreen: false,
       });
-      expect(native.getBounds(hwnd, "outer")).toEqual(fullscreenNormal);
+      try {
+        expect(native.getBounds(hwnd, "outer")).toEqual(fullscreenNormal);
+      } catch (error) {
+        console.error(
+          "Constrained fullscreen bounds mismatch",
+          JSON.stringify({
+            expected: fullscreenNormal,
+            stateCheckpoints,
+          }),
+        );
+        throw error;
+      }
       expect(user.symbols.IsWindowVisible(hwnd)).toBe(0);
       expect(
         await invoke("windows.getContentSize", {

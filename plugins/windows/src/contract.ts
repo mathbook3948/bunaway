@@ -124,6 +124,7 @@ const creationResult = {
             center: z.boolean().exactOptional(),
             useContentSize: z.boolean().exactOptional(),
             preventOverflow: z.boolean().exactOptional(),
+            focusable: z.boolean().exactOptional(),
             maximized: z.boolean().exactOptional(),
             fullscreen: z.boolean().exactOptional(),
           })
@@ -709,6 +710,13 @@ export const windowOperations = {
     output: z.null(),
   },
   "windows.isEnabled": windowStateResult,
+  "windows.setFocusable": {
+    input: windowTarget.extend({
+      focusable: z.boolean(),
+    }),
+    output: z.null(),
+  },
+  "windows.isFocusable": windowStateResult,
   "windows.setMinimizable": {
     input: windowTarget.extend({
       minimizable: z.boolean(),

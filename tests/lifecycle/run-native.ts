@@ -150,6 +150,8 @@ if (target === "windows-x64") {
       "resident-empty",
       "tray",
       "tray-empty",
+      "nonfocusable-resident",
+      "nonfocusable-tray",
       "destroy-resident",
       "destroy-resident-tray",
       "destroy-recreate-resident",
@@ -196,8 +198,10 @@ if (target === "windows-x64") {
     await buildSignedFixture(output);
   }
   if (!values["skip-tests"]) {
+    await test("macos-appearance.ts");
     await test("macos-webview-regressions.ts");
     await test("macos-window-api.ts");
+    await test("macos-webview-controls.ts");
     await test("macos-io-host.ts");
     await test("macos-image-host.ts");
     await test("macos-network.ts");

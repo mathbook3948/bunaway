@@ -14,7 +14,7 @@ const plugin = defineNativePlugin({
     macos: {
       execution: "ui",
       create: createMacosOperations,
-      // macOS supplies basic window services; geometry, identity and readiness are not implemented.
+      // macOS supplies basic window and WebView services; geometry, identity and readiness remain unsupported.
       operations: [
         "list",
         "create",
@@ -26,6 +26,13 @@ const plugin = defineNativePlugin({
         "isVisible",
         "isFocused",
         "isDestroyed",
+        "getWebViewState",
+        "navigateWebView",
+        "reloadWebView",
+        "stopWebView",
+        "goBack",
+        "goForward",
+        "setZoomFactor",
       ],
     },
   },

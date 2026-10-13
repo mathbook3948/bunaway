@@ -91,6 +91,7 @@ test("inactive display and activation contracts accept only a view and validate 
 
 /** Keep native outcomes explicit while exercising the real adapter, permissions and lifecycle. */
 function fixture() {
+  const nonfocusable = new Set<string>();
   const views = [
     "main",
     "private",
@@ -155,6 +156,7 @@ function fixture() {
       },
       isVisible: () => display.visible,
       isMinimized: () => display.minimized,
+      isFocusable: () => !nonfocusable.has(view),
       isFocused: () => focused === view,
       focus: unused,
       show: unused,
@@ -207,6 +209,7 @@ function fixture() {
     throw new Error("Missing UI adapter");
   }
   return {
+    nonfocusable,
     calls,
     states,
     displays,
@@ -253,6 +256,7 @@ test("blur selects the first ready visible non-minimized app window and never an
     "closed",
     "not-ready",
     "failed",
+    "nonfocusable",
   ] as const) {
     const next = fixture();
     const display = next.displays.get("editor");
@@ -274,6 +278,9 @@ test("blur selects the first ready visible non-minimized app window and never an
     }
     if (excluded === "failed") {
       state.failure = new Error("Failed setup");
+    }
+    if (excluded === "nonfocusable") {
+      next.nonfocusable.add("editor");
     }
     expect(await next.invoke("blur")).toBe(true);
     expect(next.focused()).toBe("reader");

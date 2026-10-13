@@ -17,6 +17,13 @@ Win32 메시지와 WinEvent로 숨김 생성 중 순간 표시, 활성화와 포
 이 두 검증과 계약 검사 결과는 [Windows 실행 기록](../architecture/windows-bun-results.md)에 구분한다.
 macOS 준비 API와 숨김 생성 옵션은 아직 지원하지 않는다.
 
+macOS의 single 뷰는 `getWebViewState`, `navigateWebView`, `reloadWebView`,
+`stopWebView`, `goBack`, `goForward`, `setZoomFactor`를 구현한다.
+대상과 개별 작업 권한은 공통 창 계약을 따르며 탐색은 기존 origin을 확장하지 않는다.
+실제 compiled WKWebView 검사는 `tests/lifecycle/macos-webview-controls.ts`이며
+기존 macOS native CI에서 실행한다. `build/macos-webview-controls-results.json`과
+실패 시 진단 로그를 함께 수집한다. DevTools와 다운로드는 이 macOS 구현 범위에 없다.
+
 Windows의 창 없는 시작은 빈 창 선언 또는 모든 `startup: false`로 설정하며
 트레이 또는 `desktop.closeBehavior: "keep-alive"`를 요구한다.
 Windows x64 `10.0.26200.0`, Bun 1.4.2에서 실제 트레이와 WebView2의 지연 생성,
@@ -151,6 +158,12 @@ Windows의 선택 power 플러그인은 AC와 배터리 상태, 호출 세션의
 
 Windows의 선택 appearance 플러그인은 저장된 테마와 transparency 선호, DWM accent,
 시스템 색과 고대비, reduced motion 및 screen reader 설정 플래그를 조회한다.
-다른 플랫폼은 `UNSUPPORTED`이며 [appearance 계약](../site/src/content/docs/reference/plugins/appearance.mdx)을 따른다.
-실제 Win32 query 회귀는 Windows native CI에 포함한다. 테마 지정과 변경 이벤트,
+macOS arm64는 AppKit UI 어댑터로 유효 앱 테마, accent와 sRGB 색,
+NSWorkspace의 Increase Contrast, Reduce Motion, Reduce Transparency와 VoiceOver 플래그를 조회한다.
+별도 systemTheme은 null이며 forcedColors는 false다. Increase Contrast를 강제 색이나
+Accessibility 신뢰 권한을 보조 기술 사용으로 해석하지 않는다. 나머지 플랫폼은
+`UNSUPPORTED`이며 [appearance 계약](../site/src/content/docs/reference/plugins/appearance.mdx)을 따른다.
+실제 Win32 query 회귀는 Windows native CI에 포함한다. macOS native CI는 직접 AppKit
+비교와 ad-hoc 서명한 compiled 앱에서 backend와 뷰 권한, 반복 조회와 종료를 검사한다.
+테마 지정과 변경 이벤트,
 실제 보조 기술 및 WebView 접근성 트리 검증은 후속 작업이다.

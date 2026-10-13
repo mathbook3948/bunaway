@@ -73,6 +73,12 @@ export function readMacosWindowSpecs(
     origin = home.origin;
   }
   const specs = readWindowSpecs(declarations, policy, origin);
+  if (specs.some((spec) => spec.window.focusable !== undefined)) {
+    throw new BunawayError({
+      code: "UNSUPPORTED",
+      message: "Initial window focusability is not implemented on macOS.",
+    });
+  }
   if (
     specs.some((spec) =>
       [
