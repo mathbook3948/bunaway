@@ -32,6 +32,7 @@ test("data protection requires independent operation grants and reports platform
   }
   expect(safeStoragePlugin.nativePlatforms.windows?.execution).toBe("io");
   expect(Object.keys(safeStoragePlugin.nativePlatforms)).toEqual([
+    "macos",
     "windows",
   ]);
   expect(() =>

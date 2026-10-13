@@ -1,5 +1,22 @@
 # Tests
 
+`lifecycle/macos-safe-storage.test.ts`는 합성 Keychain으로 lazy 준비, 키 생성 경합,
+접근 실패 뒤 키 보존과 재시도, 작업별 키 지우기, 버전과 namespace 인증, 변조와 크기 상한을
+검사한다. AES-GCM은 Python cryptography로 생성한 고정 벡터와 비교한다.
+`lifecycle/macos-keychain-native.test.ts`는 실제 Security.framework와 합성 데이터로
+disposable private Keychain을 만들고 공유 Bun과 ad-hoc compiled 실행 파일에서 Unicode,
+바이트 상한, 변조, 잠금 상태와 같은 실행 파일의 프로세스 재시작을 확인한 뒤 삭제한다.
+기본 Keychain과 search list, trust, ACL이나 signing identity는 바꾸지 않는다.
+사용자의 login Keychain과 실제 credential, 시스템 UI 선택, 다른 서명 빌드로의 이전은
+검증하지 않는다. 기존 macOS native CI에서 별도로 실행하고 로그를 보관한다.
+`lifecycle/macos-safe-storage-host.ts`는 PR164의 수정된 I/O foundation과 실제 WKWebView,
+공개 backend/client API 및 운영 factory를 공유 Bun과 ad-hoc compiled 호스트에서 사용한다.
+내부 provider만 disposable Keychain으로 지정하며 검증한 패키지의 identity 전달,
+호출자의 appId 거부, 개별 정책, 문자열과 바이트 왕복, 동일 실행 파일의 재시작 복호화와
+Core 정리 뒤 네이티브 정리를 확인한다. 결과는 `build/macos-safe-storage-results.json`이다.
+`macos-bun.test.ts`의 identity 회귀는 실제 Worker와 호스트 수명을 사용하지만 네이티브 UI를
+대체한 계약 검사다. 이 검사나 번들 성공을 macOS 실행 증거로 보고하지 않는다.
+
 초기 `maximized`와 `fullscreen`은 `windows-bun-window-api.ts`에서 일반 복원 영역과
 표시 상태를 검사합니다. 이 실행기는 실제 WebView2와 WinEvent를 사용하는 숨김 준비 fixture도
 네 옵션 조합으로 실행하므로 `mise run host:windows`에서 일시적인 표시와 활성화, 포커스를 검사합니다.
@@ -522,6 +539,21 @@ Windows 데스크톱의 dev-veto, dev-hide, dev-pending 시나리오는 CLI 중�
 트레이 숨김 설정에서는 API로 닫은 뒤에도 같은 요청 컨텍스트로 창을 다시 표시할 수 있어야 한다.
 
 ## 네이티브 빌드와 배포 회귀
+
+`packaging/tool-output.test.ts`는 실제 자식 프로세스의 stdout과 stderr가 일반 파일인지
+확인하고 종료 코드, 진단과 프로세스 생성 실패 뒤 임시 파일 정리를 검사한다.
+DMG 생성은 DiskImages helper가 pipe 출력에서 멈추는 경우를 피하기 위해 이 캡처를 사용한다.
+실제 DMG 검증, 읽기 전용 마운트와 서명된 앱 내용 검사 및 실패 시 이전 산출물 보존은
+기존 `macos-distribution.test.ts`에서 계속 확인한다.
+
+Windows native CI는 전체 호스트 검사 뒤 `windows-geometry.test.ts`를 새 프로세스에서
+세 번 실행한다. 모든 실행이 성공해야 하며 전체 계약 검사의 같은 회귀도 유지한다.
+show state와 fullscreen 복원 실패가 프로세스 내부의 이전 검사 상태에 의존하는지
+확인하기 위한 검사다. 로그는 `build/windows-native-logs/geometry-*.log`에 보관한다.
+전체 계약 검사에서도 같은 native assertion을 소유한 자식 프로세스에서 실행한다.
+자식은 10초 실행 기한을 가지며 이전 검사의 Win32 thread 상태를 상속하지 않는다.
+부모는 자식의 완료와 로그를 수집하고 성공한 종료 코드를 요구한다. 상태를 수리하거나
+메시지를 추가로 pump하지 않으며 geometry와 show-state assertion은 그대로 유지한다.
 
 `api/opener-selected-app.test.ts`는 지정 앱 opener의 strict Zod 입력, 독립 권한,
 호출 컨텍스트와 오류를 확인한다. Windows의 `lifecycle/windows-opener-selected-app.test.ts`는
