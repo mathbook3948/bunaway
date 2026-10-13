@@ -1,0 +1,83 @@
+---
+title: tray
+description: 기존 Windows 트레이 아이콘을 변경하고 입력을 받습니다.
+sidebar: { order: 8 }
+---
+
+`@bunaway/plugin-tray`를 설치하고 앱의 `plugins`에 `trayPlugin`을 등록합니다.
+Windows에서 제공합니다. 앱 정의의 `desktop.tray`로 만든 아이콘 하나를 `tray`로 제어합니다.
+이 API는 트레이나 앱 창을 새로 만들거나 제거하지 않으며 기존 실행 유지와 종료 규칙을 따릅니다.
+
+```ts
+import { tray } from "@bunaway/plugin-tray";
+
+await tray.setTooltip({ tooltip: "백그라운드에서 실행 중" });
+await tray.setClickBehavior({ showOnLeftClick: false, menuOnRightClick: true });
+const snapshot = await tray.get(null);
+const input = await tray.waitForEvent(null);
+```
+
+## 입력과 결과
+
+| 함수 | 입력 | 결과 |
+| --- | --- | --- |
+| `tray.get` | `null` | snapshot 또는 설정된 트레이가 없으면 `null` |
+| `tray.getBounds` | `null` | 물리 화면 좌표의 `{ x, y, width, height }` 또는 `null` |
+| `tray.setTooltip` | `{ tooltip: string }` | `null` |
+| `tray.setIcon` | `{ ico: string \| null }` | `null` |
+| `tray.setClickBehavior` | `{ showOnLeftClick, menuOnRightClick }` | `null` |
+| `tray.focus` | `null` | OS가 요청을 수락하면 `true`, 거절하면 `false` |
+| `tray.waitForEvent` | `null` | 다음 입력 payload |
+
+모든 결과는 Promise입니다. snapshot은 `{ id: "main", tooltip, icon, showOnLeftClick,
+menuOnRightClick }`입니다. icon은 앱 아이콘이면 `"app"`, 실행 중 지정한 ICO이면 `"custom"`입니다.
+이미지 bytes나 내부 HWND를 반환하지 않습니다. snapshot은 OS 설정이나 작업 표시줄에 보이는지를
+판정하지 않으며 앱이 선택한 설정을 나타냅니다. shell의 bounds를 얻을 수 없으면 null입니다.
+
+tooltip은 빈 문자열을 허용하며 최대 127 UTF-16 코드 단위입니다. 이모지는 일반적으로 두 단위를
+사용합니다. NUL과 잘못된 surrogate는 거부합니다. 실행 중 setter는 길이를 잘라 적용하지 않습니다.
+시작 설정도 NUL과 잘못된 surrogate를 native 자원 생성 전에 거부합니다.
+native 길이 보정에서는 surrogate를 나누지 않습니다.
+
+ico는 canonical base64로 인코딩한 ICO 파일 bytes입니다. 파일 경로와 URL을 받지 않습니다.
+전체 파일은 최대 65,536 bytes, 프레임은 최대 32개입니다. ICO 안의 PNG 또는 40-byte
+BITMAPINFOHEADER와 uncompressed DIB 프레임을 받습니다. DIB는 1, 4, 8, 16, 24, 32 bits와
+완전한 색상 데이터 및 AND mask를 요구합니다. 프레임 크기는 최대 256×256이며 디렉터리와
+내부 이미지 크기가 같아야 합니다. 가장 큰 해상도의 프레임을 사용하고 Windows가 지원하지 않는
+이미지는 거부합니다. `ico: null`은 앱 아이콘으로 복원합니다. 바뀐 이미지는 Explorer 복구 재등록에도 유지합니다.
+
+## 클릭 동작과 입력
+
+두 click behavior의 시작 기본값은 true입니다. showOnLeftClick은 왼쪽 release와 double-click에서
+기존 창 복원을 요청하는지를 정합니다. menuOnRightClick은 오른쪽 release와 context-menu
+알림에서 메뉴를 여는지를 정합니다. 메뉴 내용은 [menu](/reference/plugins/menu/) API로 관리합니다.
+동작을 꺼도 입력 알림은 계속 전달합니다. Quit과 `beforeQuit`, 창 없는 실행 유지 조건을 바꾸지 않습니다.
+
+`tray.input`의 payload는 `{ id: "main", button, state, position }`입니다.
+button은 left, right, middle, none이며 state는 down, up, double-click, context-menu입니다.
+keyboard에서도 발생할 수 있는 context-menu는 button none으로 구분합니다.
+position은 알림 처리 시 관측한 물리 포인터 좌표 `{ x, y }`이고 조회 실패는 null입니다.
+double-click은 두 번째 down 메시지를 나타내며 down과 up 알림이 함께 올 수 있습니다.
+연결한 뷰의 events에 tray.input을 허용하고 구독해야 화면에 전달합니다.
+
+창 없는 백엔드는 waitForEvent를 사용합니다. 현재 대기자에게만 다음 알림을 전달하고 이전 입력은
+재생하지 않습니다. 대기는 최대 16개이며 초과하면 BUSY입니다. 호출 취소, 컨텍스트 폐기와 앱 종료는
+CANCELLED로 끝냅니다. setup에서 시작한 장기 대기는 setup을 먼저 반환하고 실패를 관찰해야 합니다.
+대기 자체는 앱 실행 유지 조건을 바꾸지 않습니다.
+
+## 권한, 실패와 정리
+
+각 함수는 같은 이름의 독립 Host 권한을 요구합니다. 화면 직접 호출에는
+`plugin.tray.setTooltip` 같은 명령도 허용해야 합니다. 등록이나 설치가 권한을 부여하지 않습니다.
+권한은 앱 전체의 설정된 트레이에 적용되므로 대상별 접근 규칙은 앱 명령에서 검사합니다.
+
+잘못된 입력과 지원하지 않는 ICO는 INVALID_ARGUMENT, 권한 없음은 PERMISSION_DENIED입니다.
+다른 플랫폼, 미등록 작업이나 설정된 트레이가 없는 앱의 변경 및 focus는 UNSUPPORTED입니다.
+native shell 변경 실패는 INTERNAL이며 이전 tooltip과 이미지 설정을 유지합니다.
+새 icon 적용 뒤 이전 HICON 정리에 실패해도 INTERNAL일 수 있습니다. 이 경우 새 icon 설정은
+이미 적용되어 있고 남은 이전 자원을 종료 정리에서 다시 해제합니다.
+완료한 동기 변경을 취소로 되돌리지 않습니다. 대기 기한 초과는 TIMEOUT입니다.
+
+호스트가 custom HICON을 소유하고 교체와 종료 때 해제하며 앱 아이콘은 빌린 핸들로 유지합니다.
+플러그인 종료는 입력 구독과 대기자를 정리합니다. 여러 아이콘과 GUID, 초기 독립 이미지 옵션,
+생성/표시/숨김/제거 API와 제거 뒤 상주 정책, balloon과 enter/leave/move는 후속 작업입니다.

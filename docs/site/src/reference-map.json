@@ -307,6 +307,11 @@
           "MAX_DOWNLOAD_SNAPSHOT_BYTES",
           "isDownloadSnapshotWithinLimits",
           "DOWNLOAD_APPROVAL_TIMEOUT_MS"
+        ],
+        "reference/tooling/native-plugins": [
+          "MAX_TRAY_ICO_BYTES",
+          "MAX_TRAY_TOOLTIP_UNITS",
+          "MAX_TRAY_WAITERS"
         ]
       }
     },
@@ -475,6 +480,17 @@
       },
       "pages": {
         "reference/plugins/menu": ["menu", "menuPlugin"]
+      }
+    },
+    {
+      "name": "@bunaway/plugin-tray",
+      "source": "plugins/tray/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/tray": ["tray", "trayPlugin"]
       }
     },
     {
@@ -952,7 +968,8 @@
           "capabilities",
           "windows",
           "app",
-          "menus"
+          "menus",
+          "tray"
         ]
       }
     },
@@ -1312,6 +1329,15 @@
       "menu.setTrayMenu",
       "menu.getTrayMenu",
       "menu.waitForClick"
+    ],
+    "reference/plugins/tray": [
+      "tray.get",
+      "tray.getBounds",
+      "tray.setTooltip",
+      "tray.setIcon",
+      "tray.setClickBehavior",
+      "tray.focus",
+      "tray.waitForEvent"
     ]
   },
   "configuration": {

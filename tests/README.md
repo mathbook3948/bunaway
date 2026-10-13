@@ -826,6 +826,15 @@ browser 번들에 Bun 전송 구현이 포함되지 않는지 검사한다. TLS,
 `lifecycle/windows-menu.test.ts`와 `windows-menu-ui.test.ts`는 실제 HMENU 및 UI Worker의 창 없는 트레이와 자원 정리를 확인한다.
 `mise run host:windows`에 포함되며 사용자 클릭과 키보드 메뉴 조작의 수동 검증을 대신하지 않는다.
 
+`api/tray.test.ts`는 ICO 범위, UTF-16 tooltip, 권한과 입력 대기의 정리를 검사한다.
+`lifecycle/windows-tray-controls.test.ts`와 `windows-tray-ui.test.ts`는 실제 shell 업데이트와 synthetic mouse/TaskbarCreated 메시지, UI Worker와 HWND 정리를 확인한다.
+물리 마우스나 실제 Explorer process 재시작은 별도 검증이다.
+`lifecycle/tray-cleanup.test.ts`는 실제 Tray 소유자를 별도 프로세스에 번들하고 Win32
+해제 실패를 주입해 핸들 소유권, 재시도와 종료 중 콜백 차단을 확인한다.
+`windows-ui-lifecycle.test.ts`는 실제 UI Worker에 트레이 해제 실패를 주입해 원래 오류가
+유지되고 어댑터, COM, 창과 apartment 정리가 계속 실행되는지 확인한다. 실패한 트레이
+자원이 남아 있으면 DLL 바인딩을 닫지 않는다. 이 실패 검사는 모의 네이티브 경계를 사용한다.
+
 `lifecycle/macos-io-host.ts`는 `host:macos`의 실제 compiled WKWebView에서 공통
 I/O Worker의 실행, 백엔드 setup과 뷰 출처, 파싱 전 정책 검사, UI/I/O 지원 목록,
 동기 I/O 중 AppKit 왕복, 취소와 문서 폐기, 초기화 실패와 5초 종료 기한을 검사한다.
