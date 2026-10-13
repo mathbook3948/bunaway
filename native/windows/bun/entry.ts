@@ -27,7 +27,11 @@ import {
   type UIConfig,
   validatePacket,
 } from "./channel.ts";
-import { DesktopLifecycle, validateDesktopStartup } from "./desktop.ts";
+import {
+  DesktopLifecycle,
+  desktopLaunch,
+  validateDesktopStartup,
+} from "./desktop.ts";
 import { DevelopmentApp } from "./development-app.ts";
 import type { LaunchArguments, listenForInstances } from "./instance.ts";
 import { activeDescendants, containAppProcess } from "./job.ts";
@@ -124,10 +128,20 @@ export async function runWindowsApp(
         .catch(() => {});
     },
   );
-  validateDesktopStartup(config.windows, app.desktop);
+  const startHidden = desktopLaunch(launch?.argv ?? []).hidden;
+  validateDesktopStartup(config.windows, app.desktop, startHidden);
   config = {
     ...config,
+    ...(config.app
+      ? {
+          app: {
+            ...config.app,
+            supportsHiddenStart: !!app.desktop?.tray,
+          },
+        }
+      : {}),
     desktop: {
+      startHidden,
       closeBehavior: app.desktop?.closeBehavior ?? "quit",
       ...(app.desktop?.tray
         ? {

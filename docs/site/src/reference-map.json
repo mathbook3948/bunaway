@@ -110,6 +110,8 @@
           "serializeProcessFrame",
           "PROTOCOL_VERSION",
           "SDK_READY_FEATURE",
+          "AUTOSTART_ARGUMENT",
+          "AUTOSTART_HIDDEN_ARGUMENT",
           "parseMessage",
           "serializeMessage",
           "validateMessage",
@@ -178,6 +180,17 @@
           "packagingReportPath",
           "runPackage"
         ]
+      }
+    },
+    {
+      "name": "@bunaway/plugin-os",
+      "source": "plugins/os/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/os": ["os", "osPlugin"]
       }
     },
     {
@@ -287,6 +300,8 @@
           "openUrl",
           "openFile",
           "revealFile",
+          "openFileWith",
+          "openUrlWith",
           "openerPlugin"
         ]
       }
@@ -525,6 +540,10 @@
           "getChildren",
           "setEnabled",
           "isEnabled",
+          "setResizable",
+          "isResizable",
+          "setMovable",
+          "isMovable",
           "minimize",
           "maximize",
           "unmaximize",
@@ -830,6 +849,7 @@
       "pages": {
         "reference/backend/app-definition": [
           "source",
+          "launchReason",
           "argv",
           "cwd",
           "urls",
@@ -897,6 +917,7 @@
     "reference/api": ["help"]
   },
   "operations": {
+    "reference/plugins/os": ["os.info", "os.usage", "os.locale"],
     "reference/plugins/autostart": [
       "autostart.enable",
       "autostart.disable",
@@ -912,12 +933,15 @@
       "storage.appendBytes",
       "storage.appendText"
     ],
+    "reference/host/storage-transfers": ["storage.copyFile", "storage.move"],
     "reference/host/log-write": ["log.write"],
     "reference/host/capabilities-get": ["capabilities.get"],
     "reference/plugins/opener": [
       "opener.openUrl",
       "opener.openFile",
-      "opener.revealFile"
+      "opener.revealFile",
+      "opener.openFileWith",
+      "opener.openUrlWith"
     ],
     "reference/plugins/clipboard": [
       "clipboard.readText",
@@ -966,6 +990,10 @@
       "windows.getChildren",
       "windows.setEnabled",
       "windows.isEnabled",
+      "windows.setResizable",
+      "windows.isResizable",
+      "windows.setMovable",
+      "windows.isMovable",
       "windows.setSize",
       "windows.setContentPosition",
       "windows.setOuterSize",

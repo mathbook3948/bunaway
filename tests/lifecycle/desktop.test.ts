@@ -2,10 +2,15 @@ import { expect, test } from "bun:test";
 import { createConnection } from "node:net";
 import { defineApp } from "@bunaway/backend";
 import type { DesktopOptions, OpenRequest } from "@bunaway/core";
+import {
+  AUTOSTART_ARGUMENT,
+  AUTOSTART_HIDDEN_ARGUMENT,
+} from "@bunaway/protocol";
 import type { WindowSpec } from "@bunaway/runtime-bun/window-config";
 import { validatePacket } from "#native/windows/bun/channel";
 import {
   DesktopLifecycle,
+  desktopLaunch,
   openRequest,
   validateDesktopStartup,
 } from "#native/windows/bun/desktop";
@@ -189,6 +194,151 @@ test("open requests preserve arguments and resolve files using the launching dir
     "C:\\사용자\\문서\\-draft.txt",
   ]);
   expect(Object.isFrozen(request.argv)).toBe(true);
+});
+
+test("only the leading registration marker supplies launch metadata and hidden startup requires a tray", () => {
+  expect(
+    desktopLaunch([
+      AUTOSTART_HIDDEN_ARGUMENT,
+      "file.txt",
+    ]),
+  ).toEqual({
+    launchReason: "autostart",
+    hidden: true,
+    argv: [
+      "file.txt",
+    ],
+  });
+  const input = {
+    argv: [
+      AUTOSTART_ARGUMENT,
+      AUTOSTART_HIDDEN_ARGUMENT,
+      "notes.txt",
+    ],
+    cwd: "C:\\notes",
+  };
+  for (const source of [
+    "initial",
+    "second-instance",
+  ] as const) {
+    const request = openRequest(input, source);
+    expect(request.launchReason).toBe("autostart");
+    expect(request.argv).toEqual([
+      AUTOSTART_HIDDEN_ARGUMENT,
+      "notes.txt",
+    ]);
+    expect(request.files).toEqual([
+      "C:\\notes\\notes.txt",
+    ]);
+  }
+  for (const argv of [
+    [
+      "--",
+      AUTOSTART_ARGUMENT,
+    ],
+    [
+      "--flag",
+      AUTOSTART_HIDDEN_ARGUMENT,
+    ],
+    [],
+  ]) {
+    expect(desktopLaunch(argv)).toEqual({
+      launchReason: "manual",
+      hidden: false,
+      argv,
+    });
+  }
+  expect(() =>
+    validateDesktopStartup(
+      [],
+      {
+        closeBehavior: "keep-alive",
+      },
+      true,
+    ),
+  ).toThrow("Hidden autostart requires desktop.tray");
+  expect(() =>
+    validateDesktopStartup(
+      [],
+      {
+        tray: {
+          tooltip: "Resident",
+        },
+      },
+      true,
+    ),
+  ).not.toThrow();
+});
+
+test("hidden autostart forwarding preserves visibility while a later manual launch restores the app", async () => {
+  const actions: string[] = [];
+  const requests: OpenRequest[] = [];
+  const lifecycle = new DesktopLifecycle(
+    {
+      tray: {
+        tooltip: "Resident",
+      },
+      onOpen(request) {
+        requests.push(request);
+      },
+    },
+    async (action) => {
+      actions.push(action);
+    },
+    () => {},
+    (error) => {
+      throw error;
+    },
+  );
+  lifecycle.open(
+    {
+      ...launch,
+      argv: [
+        AUTOSTART_HIDDEN_ARGUMENT,
+      ],
+    },
+    "initial",
+  );
+  lifecycle.open(
+    {
+      ...launch,
+      argv: [
+        AUTOSTART_HIDDEN_ARGUMENT,
+        "--background",
+      ],
+    },
+    "second-instance",
+  );
+  lifecycle.open(launch, "second-instance");
+  await tick();
+  expect(actions).toEqual([
+    "show",
+  ]);
+  expect(
+    requests.map((request) => [
+      request.source,
+      request.launchReason,
+      request.argv,
+    ]),
+  ).toEqual([
+    [
+      "initial",
+      "autostart",
+      [],
+    ],
+    [
+      "second-instance",
+      "autostart",
+      [
+        "--background",
+      ],
+    ],
+    [
+      "second-instance",
+      "manual",
+      launch.argv,
+    ],
+  ]);
 });
 
 test("defineApp preserves desktop hooks and context types", () => {

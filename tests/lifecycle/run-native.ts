@@ -85,9 +85,13 @@ if (target === "windows-x64") {
         "test",
         ...[
           "tests/lifecycle/desktop.test.ts",
+          "tests/lifecycle/windows-os.test.ts",
           "tests/lifecycle/windows-bun-instance.test.ts",
           "tests/lifecycle/windows-power.test.ts",
           "tests/lifecycle/windows-appearance.test.ts",
+          "tests/lifecycle/windows-opener.test.ts",
+          "tests/lifecycle/windows-opener-job.test.ts",
+          "tests/lifecycle/windows-opener-selected-app.test.ts",
           "tests/cli/windows-assets.test.ts",
           "tests/cli/windows-compile.test.ts",
         ].map((name) => resolve(root, name)),
@@ -96,6 +100,9 @@ if (target === "windows-x64") {
     );
     for (const scenario of [
       "hide",
+      "autostart",
+      "autostart-hidden",
+      "autostart-hidden-ready",
       "veto",
       "dev-veto",
       "dev-hide",

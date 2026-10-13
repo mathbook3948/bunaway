@@ -18,11 +18,12 @@ const plugin = defineNativePlugin({
 export const autostartPlugin = plugin.definition;
 export default autostartPlugin;
 
-export type { AutostartStatus } from "./contract.ts";
+export type { AutostartOptions, AutostartStatus } from "./contract.ts";
 
 const calls = createAutostart(plugin.api);
 /**
  * Replace this app's Run value with the host-selected launch and these app arguments.
+ * Adds invocation metadata and optionally starts hidden when desktop.tray is configured.
  * Preserves Windows startup approval, including the user's disabled choice.
  * Rejects a complete encoded command line longer than 260 UTF-16 code units.
  */
