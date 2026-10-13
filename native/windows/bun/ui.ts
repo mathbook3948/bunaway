@@ -793,6 +793,16 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
       const nativeWindows = windows;
       const hwnd = view.native.hwnd;
       return {
+        webview: {
+          getState: () => view.native.getState(),
+          navigate: (url) => view.native.navigateTo(url),
+          reload: () => view.native.reload(),
+          stop: () => view.native.stop(),
+          goBack: () => view.native.goBack(),
+          goForward: () => view.native.goForward(),
+          setZoomFactor: (factor) => view.native.setZoomFactor(factor),
+          openDevTools: () => view.native.openDevTools(),
+        },
         audio: {
           getState: () => view.native.getAudioState(),
           setMuted: (muted) => view.native.setAudioMuted(muted),

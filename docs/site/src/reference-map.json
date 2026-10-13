@@ -524,6 +524,7 @@
       "type": "NativeWindow",
       "pages": {
         "reference/tooling/plugin-api": [
+          "webview",
           "audio",
           "show",
           "showInactive",
@@ -563,6 +564,22 @@
           "setCloseConfirmation",
           "getSnapshot",
           "getReadiness"
+        ]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "NativeWebView",
+      "pages": {
+        "reference/tooling/plugin-api": [
+          "getState",
+          "navigate",
+          "reload",
+          "stop",
+          "goBack",
+          "goForward",
+          "setZoomFactor",
+          "openDevTools"
         ]
       }
     },
@@ -958,6 +975,14 @@
       "clipboard.writeFormats"
     ],
     "reference/host/windows": [
+      "windows.getWebViewState",
+      "windows.navigateWebView",
+      "windows.reloadWebView",
+      "windows.stopWebView",
+      "windows.goBack",
+      "windows.goForward",
+      "windows.setZoomFactor",
+      "windows.openDevTools",
       "windows.getWebViewAudioState",
       "windows.setWebViewAudioMuted",
       "windows.list",

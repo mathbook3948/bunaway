@@ -1,5 +1,13 @@
 # Tests
 
+`api/webview-controls.test.ts`는 기본 WebView 제어의 Zod 입력과 출력, 개별 작업 권한,
+닫힌 창과 취소, multiple 뷰의 ID 선택, 플랫폼 서비스 부재 및 네이티브 오류 전파를 검사한다.
+`lifecycle/windows-webview-controls.ts`는 `mise run host:windows`에서 실제 UI Worker와
+WebView2를 실행한다. URL과 제목, history, reload와 stop, 허용하지 않은 origin 및 redirect,
+탐색에 따른 진행 중 명령 취소, 같은 문서 fragment의 세션 유지, zoom 조회와 적용 및
+개발 모드 DevTools 열기와 프로덕션 거부를 확인한다. DevTools의 물리 조작과 paint,
+실제 모니터 및 하드웨어 검증은 포함하지 않는다. 결과는
+`build/windows-webview-controls-results.json`에 기록한다.
 `api/webview-audio.test.ts`는 audio 작업의 개별 권한, 엄격한 boolean 입력, 음소거와 재생의
 독립 상태, 취소와 닫힌 창 및 플랫폼 서비스 부재를 검증한다.
 `lifecycle/windows-webview-audio.ts`는 `mise run host:windows`에서 실제 WebView2의 음소거

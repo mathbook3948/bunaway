@@ -43,6 +43,13 @@ normal의 WINDOWPLACEMENT 작업 영역 좌표는 화면 좌표로 보정한다.
 `com.ts`는 COM 참조와 콜백을, `webview.ts`는 WebView 생성과 종료를 관리한다.
 `ui.ts`가 이 자원들의 초기화와 정리 순서를 조정한다. DLL은 창과 COM 정리가 끝난 뒤 닫는다.
 
+창 플러그인의 기본 WebView 제어는 `NativeWindow.webview`를 통해 같은 UI 스레드의
+controller와 WebView를 사용한다. 공개 URL 탐색도 기존 origin 검사와 NavigationStarting의
+세션 폐기를 유지한다. loading은 현재 탐색 ID의 시작 및 완료에서 갱신하며 다른 탐색의
+늦은 완료는 무시한다. history, reload와 stop은 ICoreWebView2의 기본 메서드,
+zoom은 ICoreWebView2Controller의 double ABI를 사용한다. COM 슬롯은
+고정 WebView2 SDK 1.0.4129.50의 WebView2.h를 따른다. DevTools 설정은 생성 시 호스트가
+선택하며 작업 호출이 설정을 변경하지 않는다.
 WebView audio는 ICoreWebView2_8의 IsMuted와 IsDocumentPlayingAudio를 같은 UI STA에서
 조회하고 음소거를 변경한다. 각 호출이 획득한 COM interface는 성공과 실패 모두에서
 해제한다. controller의 음소거는 문서 탐색을 유지하고 재생 상태는 물리 출력과 구분한다.
