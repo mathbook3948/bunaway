@@ -33,6 +33,8 @@ export type NativeEnvironment = {
   windows?: import("@bunaway/plugin-api/native").NativeWindowServices;
   /** Optional UI-thread menu integration, absent on platforms without native menus. */
   menus?: import("@bunaway/plugin-api/native").NativeMenuServices;
+  /** Optional UI-thread controls for the app's existing configured tray icon. */
+  tray?: import("@bunaway/plugin-api/native").NativeTrayServices;
   /** Host-owned data directory used for app-scoped files. */
   dataRoot: string;
   /** Registered operations and their platform support states. */

@@ -50,7 +50,8 @@
     "@bunaway/plugin-os": "workspace:*",
     "@bunaway/plugin-process": "workspace:*",
     "@bunaway/plugin-network": "workspace:*",
-    "@bunaway/plugin-menu": "workspace:*"
+    "@bunaway/plugin-menu": "workspace:*",
+    "@bunaway/plugin-tray": "workspace:*"
   },
   "imports": {
     "#cli/*": "./packages/cli/src/*.ts",
