@@ -48,11 +48,20 @@ export const WM_QUIT = 0x0012;
 const WM_GETMINMAXINFO = 0x0024;
 const WM_WINDOWPOSCHANGING = 0x0046;
 const WM_WINDOWPOSCHANGED = 0x0047;
-const WM_DISPLAYCHANGE = 0x007e;
+const WM_MOUSEACTIVATE = 0x0021;
+const MA_NOACTIVATE = 3n;
 const WM_SYSCOMMAND = 0x0112;
+const SYSTEM_COMMAND_MASK = 0xfff0n;
+const SC_MINIMIZE = 0xf020n;
+const SC_MAXIMIZE = 0xf030n;
+const SC_RESTORE = 0xf120n;
+const WM_DISPLAYCHANGE = 0x007e;
+const SC_CLOSE = 0xf060;
+const MF_ENABLED = 0;
+const MF_GRAYED = 1;
+const MENU_ITEM_ERROR = 0xffffffff;
 const SC_SIZE = 0xf000n;
 const SC_MOVE = 0xf010n;
-const SYSTEM_COMMAND_MASK = 0xfff0n;
 export const WM_ENTERSIZEMOVE = 0x0231;
 export const WM_EXITSIZEMOVE = 0x0232;
 const WM_DPICHANGED = 0x02e0;
@@ -65,6 +74,7 @@ const GWL_EXSTYLE = -20;
 const GWLP_HWNDPARENT = -8;
 const GW_OWNER = 4;
 const WS_EX_TOOLWINDOW = 0x80n;
+const WS_EX_NOACTIVATE = 0x08000000n;
 const IDI_APPLICATION = 32512n;
 const IMAGE_ICON = 1;
 const LR_LOADFROMFILE = 0x10;
@@ -79,11 +89,13 @@ const SM_CYSIZEFRAME = 33;
 const SM_CXPADDEDBORDER = 92;
 const SW_HIDE = 0;
 const SW_SHOWNORMAL = 1;
+const SW_SHOWNOACTIVATE = 4;
 const SW_MINIMIZE = 6;
 const SW_RESTORE = 9;
 const SW_SHOW = 5;
 const SW_SHOWMAXIMIZED = 3;
 const SW_SHOWMINIMIZED = 2;
+const SW_SHOWMINNOACTIVE = 7;
 const SW_SHOWNA = 8;
 const SWP_FRAMECHANGED = 0x20;
 const SWP_NOMOVE = 0x2;
@@ -95,6 +107,8 @@ const WINDOWPLACEMENT_FLAGS_OFFSET = 4;
 const WINDOWPLACEMENT_SHOW_CMD_OFFSET = 8;
 const WPF_RESTORETOMAXIMIZED = 0x2;
 const WS_OVERLAPPEDWINDOW = 0x00cf0000;
+const WS_MINIMIZEBOX = 0x00020000n;
+const WS_MAXIMIZEBOX = 0x00010000n;
 const WS_THICKFRAME = 0x00040000n;
 const WS_MAXIMIZE = 0x01000000n;
 const WS_MINIMIZE = 0x20000000n;
@@ -165,6 +179,7 @@ export class Windows {
     }
   >();
   private readonly changingGeometry = new Set<bigint>();
+  private readonly closeControls = new Map<bigint, boolean>();
   private readonly interactiveGeometry = new Map<bigint, WindowBounds>();
   private readonly immovable = new Set<bigint>();
   private readonly initialOuterSizes = new Map<
@@ -344,6 +359,56 @@ export class Windows {
           }
           if (message === WM_WINDOWPOSCHANGING) {
             this.constrainMaximizedSize(window, lparam);
+          }
+          if (this.windows.has(window)) {
+            if (message === WM_CLOSE && !this.isClosable(window)) {
+              return 0n;
+            }
+            if (message === WM_SYSCOMMAND) {
+              const command = wparam & SYSTEM_COMMAND_MASK;
+              if (
+                (command === SC_MINIMIZE && !this.isMinimizable(window)) ||
+                (command === SC_MAXIMIZE && !this.isMaximizable(window)) ||
+                (command === BigInt(SC_CLOSE) && !this.isClosable(window))
+              ) {
+                return 0n;
+              }
+            }
+          }
+          if (
+            message === WM_MOUSEACTIVATE &&
+            this.windows.has(window) &&
+            !this.isFocusable(window)
+          ) {
+            return MA_NOACTIVATE;
+          }
+          if (
+            message === WM_SYSCOMMAND &&
+            this.windows.has(window) &&
+            !this.isFocusable(window)
+          ) {
+            const command = wparam & SYSTEM_COMMAND_MASK;
+            if (
+              command === SC_MINIMIZE ||
+              command === SC_MAXIMIZE ||
+              command === SC_RESTORE
+            ) {
+              // Default caption commands use activating ShowWindow modes even with NOACTIVATE.
+              // Keep native button restrictions and leave fullscreen state changes to its API.
+              if (!this.isFullscreen(window)) {
+                const { style } = this.windowStyles(window);
+                if (command === SC_MINIMIZE && style & WS_MINIMIZEBOX) {
+                  this.minimize(window);
+                }
+                if (command === SC_MAXIMIZE && style & WS_MAXIMIZEBOX) {
+                  this.maximize(window);
+                }
+                if (command === SC_RESTORE) {
+                  this.restore(window);
+                }
+              }
+              return 0n;
+            }
           }
           if (
             message === WM_ENTERSIZEMOVE &&
@@ -598,7 +663,7 @@ export class Windows {
     visible = true,
     options: SizeConstraints &
       WindowPlacement &
-      Pick<WindowSpec["window"], "maximized" | "fullscreen"> = {},
+      Pick<WindowSpec["window"], "maximized" | "fullscreen" | "focusable"> = {},
   ) {
     const initialConstraints = resolvedConstraints(options);
     const placement = {
@@ -614,7 +679,7 @@ export class Windows {
     try {
       window = withWide(title, (titlePointer) =>
         user.symbols.CreateWindowExW(
-          0,
+          options.focusable === false ? Number(WS_EX_NOACTIVATE) : 0,
           ptr(this.name),
           titlePointer,
           WS_OVERLAPPEDWINDOW,
@@ -658,7 +723,7 @@ export class Windows {
         saved.initial = true;
       }
       if (visible) {
-        user.symbols.ShowWindow(window, SW_SHOW);
+        this.show(window, true);
       }
     } catch (error) {
       try {
@@ -678,6 +743,10 @@ export class Windows {
   }
 
   show(window: bigint, visible: boolean) {
+    if (visible && !this.isFocusable(window)) {
+      this.showInactive(window);
+      return;
+    }
     user.symbols.ShowWindow(window, visible ? SW_SHOW : SW_HIDE);
   }
 
@@ -700,6 +769,9 @@ export class Windows {
     if (!this.isVisible(window) || this.isMinimized(window)) {
       return false;
     }
+    if (!this.isFocusable(window)) {
+      return this.isFocused(window);
+    }
     user.symbols.SetForegroundWindow(window);
     // Synchronous activation callbacks can precede the actual foreground identity change.
     for (const observed of this.observations.keys()) {
@@ -709,11 +781,36 @@ export class Windows {
   }
 
   focus(window: bigint): boolean {
+    if (!this.isFocusable(window)) {
+      return this.isFocused(window);
+    }
     user.symbols.ShowWindow(
       window,
       user.symbols.IsIconic(window) ? SW_RESTORE : SW_SHOW,
     );
     return this.activate(window);
+  }
+
+  /** Restore a desktop Show request while respecting this HWND's activation policy. */
+  showForDesktop(window: bigint): void {
+    if (this.isFocusable(window)) {
+      this.focus(window);
+      return;
+    }
+    const minimized = this.isMinimized(window);
+    if (minimized && !this.isFullscreen(window)) {
+      // The normal restore API retains maximize history and uses inactive placement.
+      this.restore(window);
+      return;
+    }
+    if (minimized) {
+      // Fullscreen remains owned by its saved placement; restore the native iconic
+      // state without leaving fullscreen or requesting foreground activation.
+      user.symbols.ShowWindow(window, SW_SHOWNOACTIVATE);
+      this.observeChanges(window);
+      return;
+    }
+    this.showInactive(window);
   }
 
   /** Read live HWND state; invalid handles must not be mistaken for false. */
@@ -735,6 +832,123 @@ export class Windows {
   isFocused(window: bigint): boolean {
     assert(user.symbols.IsWindow(window), "Window is no longer valid.");
     return user.symbols.GetForegroundWindow() === window;
+  }
+
+  isFocusable(window: bigint): boolean {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return !(this.windowStyles(window).exStyle & WS_EX_NOACTIVATE);
+  }
+
+  /** Set native no-activation style without showing, resizing or transferring existing focus. */
+  setFocusable(window: bigint, focusable: boolean): void {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    const { exStyle } = this.windowStyles(window);
+    const next = focusable
+      ? exStyle & ~WS_EX_NOACTIVATE
+      : exStyle | WS_EX_NOACTIVATE;
+    if (next === exStyle) {
+      return;
+    }
+    this.setStyle(window, next, GWL_EXSTYLE);
+    assert(
+      user.symbols.SetWindowPos(
+        window,
+        0n,
+        0,
+        0,
+        0,
+        0,
+        SWP_NOSIZE |
+          SWP_NOMOVE |
+          SWP_NOZORDER |
+          SWP_NOACTIVATE |
+          SWP_FRAMECHANGED,
+      ),
+    );
+  }
+
+  private normalStyle(window: bigint): bigint {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return (
+      this.fullscreen.get(window)?.style ?? this.windowStyles(window).style
+    );
+  }
+
+  /** Update caption-button styles without changing geometry, activation or the fullscreen frame. */
+  private setCaptionButton(
+    window: bigint,
+    flag: bigint,
+    enabled: boolean,
+  ): void {
+    const style = this.normalStyle(window);
+    const next = enabled ? style | flag : style & ~flag;
+    if (next === style) {
+      return;
+    }
+    const fullscreen = this.fullscreen.get(window);
+    if (fullscreen) {
+      fullscreen.style = next;
+      return;
+    }
+    this.setStyle(window, next);
+    assert(
+      user.symbols.SetWindowPos(
+        window,
+        0n,
+        0,
+        0,
+        0,
+        0,
+        SWP_NOSIZE |
+          SWP_NOMOVE |
+          SWP_NOZORDER |
+          SWP_NOACTIVATE |
+          SWP_FRAMECHANGED,
+      ),
+    );
+  }
+
+  isMinimizable(window: bigint): boolean {
+    return !!(this.normalStyle(window) & WS_MINIMIZEBOX);
+  }
+  setMinimizable(window: bigint, minimizable: boolean): void {
+    this.setCaptionButton(window, WS_MINIMIZEBOX, minimizable);
+  }
+  isMaximizable(window: bigint): boolean {
+    return !!(this.normalStyle(window) & WS_MAXIMIZEBOX);
+  }
+  setMaximizable(window: bigint, maximizable: boolean): void {
+    this.setCaptionButton(window, WS_MAXIMIZEBOX, maximizable);
+  }
+  isClosable(window: bigint): boolean {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return this.closeControls.get(window) ?? true;
+  }
+
+  /** Store user closing policy and keep the native Close command/button in sync. */
+  setClosable(window: bigint, closable: boolean): void {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    this.closeControls.set(window, closable);
+    if (!this.isFullscreen(window)) {
+      this.applyCloseButton(window);
+    }
+  }
+
+  private applyCloseButton(window: bigint): void {
+    const menu = user.symbols.GetSystemMenu(window, 0);
+    assert(menu, "Native system menu is unavailable.");
+    assert(
+      user.symbols.EnableMenuItem(
+        menu,
+        SC_CLOSE,
+        this.isClosable(window) ? MF_ENABLED : MF_GRAYED,
+      ) !== MENU_ITEM_ERROR,
+      "Native close control could not be updated.",
+    );
+    assert(
+      user.symbols.DrawMenuBar(window),
+      "Native caption could not be redrawn.",
+    );
   }
 
   /** Apply a UTF-16 native caption without activating, showing or resizing the window. */
@@ -1034,7 +1248,49 @@ export class Windows {
       !this.isFullscreen(window),
       "Exit fullscreen before changing window state.",
     );
-    user.symbols.ShowWindow(window, command);
+    if (this.isFocusable(window)) {
+      user.symbols.ShowWindow(window, command);
+    } else {
+      this.changingGeometry.add(window);
+      try {
+        if (minimized) {
+          user.symbols.ShowWindow(window, SW_SHOWMINNOACTIVE);
+        } else {
+          const placement = this.getPlacement(window);
+          // SHOWNA preserves the native iconic state even after its style bit is
+          // cleared. Restore that state without activation before zooming again.
+          if (
+            this.isMinimized(window) ||
+            (!maximized && this.isMaximized(window))
+          ) {
+            user.symbols.ShowWindow(window, SW_SHOWNOACTIVATE);
+          }
+          const { style } = this.windowStyles(window);
+          this.setStyle(
+            window,
+            (style & ~WS_MINIMIZE & ~WS_MAXIMIZE) |
+              (maximized ? WS_MAXIMIZE : 0n),
+          );
+          placement.writeUInt32LE(
+            maximized ? SW_SHOWMAXIMIZED : SW_SHOWNOACTIVATE,
+            WINDOWPLACEMENT_SHOW_CMD_OFFSET,
+          );
+          if (!maximized) {
+            placement.writeUInt32LE(
+              placement.readUInt32LE(WINDOWPLACEMENT_FLAGS_OFFSET) &
+                ~WPF_RESTORETOMAXIMIZED,
+              WINDOWPLACEMENT_FLAGS_OFFSET,
+            );
+          }
+          // A zoomed HWND uses SHOWNA plus an explicit work-area resize. Normal restoration
+          // uses SHOWNOACTIVATE so neither transition calls the OS foreground activator.
+          this.setPlacement(window, placement, true, maximized);
+        }
+      } finally {
+        this.changingGeometry.delete(window);
+        this.observeChanges(window);
+      }
+    }
     assert(
       this.isVisible(window) &&
         this.isMinimized(window) === minimized &&
@@ -1352,13 +1608,9 @@ export class Windows {
     };
   }
 
-  private setStyle(window: bigint, style: bigint) {
+  private setStyle(window: bigint, style: bigint, index = GWL_STYLE) {
     kernel.symbols.SetLastError(0);
-    const previousStyle = user.symbols.SetWindowLongPtrW(
-      window,
-      GWL_STYLE,
-      style,
-    );
+    const previousStyle = user.symbols.SetWindowLongPtrW(window, index, style);
     const error = kernel.symbols.GetLastError();
     assert(previousStyle !== 0n || error === 0, `SetWindowLongPtrW: ${error}`);
   }
@@ -2011,6 +2263,9 @@ export class Windows {
           saved.style,
         );
         this.setPlacement(window, saved.placement, visible, true);
+        if (this.closeControls.has(window)) {
+          this.applyCloseButton(window);
+        }
       } catch (error) {
         this.fullscreen.set(window, saved);
         throw error;
@@ -2041,6 +2296,7 @@ export class Windows {
     }
     this.observations.delete(window);
     this.changingGeometry.delete(window);
+    this.closeControls.delete(window);
     this.interactiveGeometry.delete(window);
     this.immovable.delete(window);
     assert(user.symbols.DestroyWindow(window));

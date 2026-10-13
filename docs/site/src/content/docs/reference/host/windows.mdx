@@ -6,7 +6,8 @@ description: 창 제어와 조회, geometry, 네이티브 창 이벤트 및 구�
 `@bunaway/plugin-windows`를 설치하고 앱의 `plugins`에 windowsPlugin을 등록합니다. 명령 핸들러나 setup은 이 패키지의 `windows`를 호출합니다. 화면에서도 같은 경로를 import하며 해당 뷰의 commands에 `plugin.windows.<작업>`을 허용해야 합니다.
 
 창 제어 플러그인은 Windows와 macOS에서 실행합니다. macOS는 `list`, `create`, `recreate`,
-`show`, `hide`, `focus`, `close`, `isVisible`, `isFocused`를 지원합니다. 그 외 작업은
+`show`, `hide`, `focus`, `close`, `isVisible`, `isFocused`, `isDestroyed`와
+아래 WebView 기본 제어를 지원합니다. `openDevTools`를 포함한 그 외 작업은
 `UNSUPPORTED`입니다. Linux와 모바일은 네이티브 호스트를 지원하지 않습니다.
 플러그인을 등록하지 않은 앱도 설정한 시작 창과 WebView를 사용할 수 있습니다.
 
@@ -58,6 +59,9 @@ macOS는 options 생략과 빈 객체를 허용하고 비어 있지 않은 optio
 `options.window`의 `x`, `y`, `center`, `useContentSize`, `preventOverflow`는
 [초기 창 설정](/reference/configuration/#app)과 같은 단위와 작업 영역 계약을 사용합니다.
 startup, create, recreate, createInstance와 recreateInstance에 모두 적용합니다.
+`options.window.focusable`도 선언과 병합하는 boolean이며 기본은 `true`입니다.
+`false`인 Windows 창은 활성화 없이 표시하고 사용자 클릭 및 호스트의 새 전경 활성화 요청을 차단합니다.
+
 `maximized`, `fullscreen`도 boolean이며 기본은 `false`입니다. 초기 일반 영역을 설정한 뒤
 최대화, 전체화면 순서로 적용합니다. 둘 다 켜면 전체화면 해제 뒤 최대화 상태로 돌아갑니다.
 `visible: false`와 `showWhenReady`의 숨김 생성도 유지합니다. 초기 전체화면 해제는 현재 표시 상태를
@@ -236,10 +240,11 @@ false여도 참조를 유지합니다. 없는 ID와 더 이상 pending이 아닌
 
 ### WebView 기본 제어
 
-Windows의 각 창은 WebView 하나를 소유합니다. 아래 작업도 `{ view, windowId? }`로
+Windows와 macOS의 각 창은 WebView 하나를 소유합니다. 아래 작업도 `{ view, windowId? }`로
 대상을 선택하고 작업마다 별도 `windows.<작업>` 권한을 요구합니다. multiple 뷰는
 windowId가 필요합니다. 닫힌 창이나 다른 뷰의 ID는 `INVALID_ARGUMENT`이며,
-WebView 생성 중에는 `BUSY`입니다. macOS의 이 작업들은 `UNSUPPORTED`입니다.
+WebView 생성 중에는 `BUSY`입니다. macOS는 single 뷰의 제어를 지원하며
+`openDevTools`, 창 ID 조회와 readiness API는 `UNSUPPORTED`입니다.
 
 | 메서드 | 추가 입력 | 결과 |
 | --- | --- | --- |
@@ -269,17 +274,27 @@ URL은 1–8192자이며 NUL을 허용하지 않습니다. HTTP/HTTPS URL만 허
 허용한 새 문서의 탐색이 시작되면 이전 SDK 세션과 진행 중 명령을 폐기합니다.
 자기 문서를 바꾸는 화면 호출은 이전 연결에서 결과를 받지 못할 수 있으므로 새 문서에서
 클라이언트를 초기화하세요. 같은 문서의 fragment 이동은 기존 세션과 documentGeneration을
-유지합니다. 완료와 실패는 `getReadiness` 또는 `windows.readiness`로 확인합니다.
+유지합니다. Windows에서는 완료와 실패를 `getReadiness` 또는 `windows.readiness`로 확인합니다.
 `loading`은 허용된 최상위 문서의 탐색 시작부터 해당 탐색 완료까지이며 paint나 SDK 준비를
-뜻하지 않습니다. stop의 취소 완료는 기존 준비 계약의 `cancelled` 상태로 전달합니다.
+뜻하지 않습니다. Windows의 stop 취소 완료는 기존 준비 계약의 `cancelled` 상태로 전달합니다.
+macOS의 `loading`은 WKWebView가 보고한 현재 로딩 상태입니다. 완료, 실패와 중단은 모두
+false가 될 수 있으므로 성공 여부나 SDK 준비를 뜻하지 않습니다. 패키지 자산 URL은
+내부 전송 scheme 대신 선언한 `https://app.bunaway.local` URL로 반환합니다.
+macOS는 허용한 URL의 scheme과 hostname을 정규화한 뒤 패키지 자산 경로로 변환합니다.
+대문자로 작성한 scheme이나 hostname도 같은 자산을 열며 query와 fragment는 유지합니다.
+WKWebView가 history cache에서 문서를 복원하면 같은 history 항목을 다시 로드해
+새 SDK 세션을 만듭니다. 이전 연결과 요청을 재사용하거나 재전송하지 않습니다.
 
 factor는 유한한 0.25–5 값입니다. 1은 100%이며 CSS zoom과 visual zoom 한도 설정이
-아닙니다. 설정은 대상 WebView2 controller에 적용하고 실제 값을 반환합니다.
+아닙니다. Windows에서는 대상 WebView2 controller에, macOS에서는 WKWebView의
+공개 `pageZoom`에 적용하고 실제 값을 반환합니다. 창 간 zoom 설정은 독립적이며
+macOS의 새 창이나 재생성한 창은 1로 시작합니다.
 이 API는 origin별 zoom 공유 정책을 추가하지 않습니다. 탐색에 따른 zoom 값 변화는
 WebView2의 동작을 따르므로 현재 값은 다시 조회합니다.
 
-openDevTools는 작업 권한과 호스트의 개발 모드 설정이 모두 필요합니다.
+Windows의 openDevTools는 작업 권한과 호스트의 개발 모드 설정이 모두 필요합니다.
 프로덕션 호스트는 작업 권한이 있어도 `PERMISSION_DENIED`입니다.
+macOS는 공개 DevTools 제어 서비스를 제공하지 않으며 `UNSUPPORTED`입니다.
 DevTools 닫기, 열림 상태와 이벤트, dock 설정은 아직 제공하지 않습니다.
 
 창 종료의 native Cancel 실패는 해당 소유자의 참조를 보존하고 UI pump가 50 ms 간격으로
@@ -410,6 +425,14 @@ await windows.close({ view: "dialog" });
 | `windows.getSizeConstraints` | `{ view, windowId? }` | `Promise<{ minWidth: number \| null; minHeight: number \| null; maxWidth: number \| null; maxHeight: number \| null }>` 네 제약을 한 번에 조회 |
 | `windows.setSizeConstraints` | `{ view, windowId?, minWidth?, minHeight?, maxWidth?, maxHeight? }` | `Promise<null>`. 제약 전체를 교체합니다. 생략하거나 `null`인 축은 제한을 해제합니다 |
 | `windows.setPosition` | `{ view, windowId?, x, y }` | `Promise<null>`. 화면에서 창 바깥쪽 왼쪽 위의 물리 픽셀 위치. 각 값은 정수 -32768–32767 |
+| `windows.setMinimizable` | `{ view, windowId?, minimizable: boolean }` | `Promise<null>`. 네이티브 최소화 버튼과 사용자 최소화 허용 변경 |
+| `windows.isMinimizable` | `{ view, windowId? }` | `Promise<boolean>`. 일반 창의 사용자 최소화 허용 여부 |
+| `windows.setMaximizable` | `{ view, windowId?, maximizable: boolean }` | `Promise<null>`. 네이티브 최대화 버튼과 사용자 최대화 허용 변경 |
+| `windows.isMaximizable` | `{ view, windowId? }` | `Promise<boolean>`. 일반 창의 사용자 최대화 허용 여부 |
+| `windows.setClosable` | `{ view, windowId?, closable: boolean }` | `Promise<null>`. 네이티브 닫기 버튼과 사용자 닫기 허용 변경 |
+| `windows.isClosable` | `{ view, windowId? }` | `Promise<boolean>`. 이 창 수명의 사용자 닫기 설정 조회 |
+| `windows.setFocusable` | `{ view, windowId?, focusable: boolean }` | `Promise<null>`. 이후 활성화 허용 변경. 현재 포커스를 다른 창으로 옮기지는 않음 |
+| `windows.isFocusable` | `{ view, windowId? }` | `Promise<boolean>`. 네이티브 활성화 허용 여부. 실제 `isFocused`와 별도 |
 | `windows.setTitle` | `{ view, windowId?, title: string }` | `Promise<null>`. 현재 창의 네이티브 제목 변경. 1–1024 UTF-16 코드 단위, NUL 금지 |
 | `windows.getTitle` | `{ view, windowId? }` | `Promise<string>`. 실제 HWND의 현재 제목 조회. 0–1024 UTF-16 코드 단위 |
 | `windows.setResizable` | `{ view, windowId?, resizable: boolean }` | `Promise<null>`. 사용자 테두리와 시스템 메뉴 크기 조절 허용 변경 |
@@ -489,6 +512,8 @@ const destroyed = await windows.isDestroyed({ view: "editor" });
 다음은 Windows의 계약입니다. `showInactive`, `blur`, `activate`는 macOS에서
 `UNSUPPORTED`입니다. 여기서 활성 창과 포커스된 창은 `isFocused`와 같은 OS 전경 창을
 뜻합니다. 창 안의 입력 요소로 키보드 포커스를 옮기는 API는 아닙니다.
+API 표의 활성화 요청은 기본 `focusable: true` 기준입니다.
+`false`에서는 [활성화 허용](#활성화-허용)의 비활성 표시와 상태 변경 계약을 적용합니다.
 
 | API | 일반 창 | 숨긴 창 | 최소화한 창 | 최대화한 창 |
 | --- | --- | --- | --- | --- |
@@ -608,7 +633,7 @@ WebView 생성자가 실패해 HWND를 바로 회수한 시도는 생성 호출 
 `showWhenReady: "document"`는 문서가, `"sdk"`는 문서와 SDK가 모두 준비된 뒤 한 번 표시합니다.
 이후 숨기거나 탐색해도 자동으로 다시 표시하지 않습니다. 재생성하면 선언한 옵션을 새 창에 다시 적용합니다.
 명시적 `show`, `focus`와 표시를 동반하는 상태 제어는 준비 전에도 창을 표시할 수 있습니다.
-자동 표시 시점부터는 일반 `show`와 같은 Windows 활성화 동작입니다.
+자동 표시 시점부터는 일반 `show`와 같은 Windows 활성화 동작입니다. `focusable: false`이면 비활성 표시를 사용합니다.
 
 `completeSplashscreen({ view: "main", splash: "splash" })`는 windows.completeSplashscreen 작업 권한을 먼저 검사합니다. 두 창은 앱 설정에 선언해야 합니다.
 주 창이나 백엔드에서 호출해야 합니다. splash 창에서 호출하면 세션이 닫히기 전에 `INVALID_ARGUMENT`를 반환하며 창은 전환하지 않습니다.
@@ -624,10 +649,36 @@ isolated splash의 임시 프로필도 최종 종료로 정리하며 다시 생�
 요청을 실행하기 전 취소하면 전환하지 않습니다. 이미 표시와 닫기를 확정한 뒤에는 그 변경을 되돌리지 않습니다.
 macOS의 준비 조회, 이벤트와 splashscreen 전환은 아직 지원하지 않습니다.
 
+## 활성화 허용
+
+`focusable: false`는 Windows의 [WS_EX_NOACTIVATE](https://learn.microsoft.com/en-us/windows/win32/winmsg/extended-window-styles)를 사용합니다.
+해당 창은 사용자 클릭으로 활성화되지 않고 `show`는 비활성 표시를 사용합니다. `focus`는 새 활성화나
+복원을 요청하지 않으며 이미 전경 창이면 성공, 아니면 `BUSY`입니다. `activate`도 새 활성화를 요청하지 않고
+현재 전경 여부를 반환합니다. `blur` 후보에서는 이 창을 제외합니다. 설정 변경은 현재 전경 창을 강제로
+비활성화하지 않으므로 `isFocusable: false`와 `isFocused: true`가 함께 관찰될 수 있습니다.
+최소화, 최대화와 복원 API 및 해당 네이티브 버튼도 활성화를 요청하지 않습니다.
+`desktop.show()`와 트레이 Open, 두 번째 실행의 표시 요청은 숨긴 창을 표시하고 최소화된 창을
+복원합니다. `focusable: false`이면 전경 활성화를 요청하지 않으며 최소화 전 최대화 상태도 유지합니다.
+이미 전경 창인 창을 최소화하면 OS는 다른 창으로 전경을 옮길 수 있습니다.
+Windows 기본 동작상 이 스타일의 창은 작업 표시줄에 나타나지 않습니다. 작업 표시줄 강제 표시 옵션은 아직 없습니다.
+표시, 위치와 크기를 유지하며 전체화면에서도 설정을 변경하고 유지합니다. 재생성은 선언 또는 생성 옵션으로 돌아갑니다.
+trusted Win32 코드의 직접 활성화까지 막는 보안 경계는 아닙니다. setter/getter에는 각각의 operation 권한이 필요하며
+닫힌 창은 `INVALID_ARGUMENT`입니다. macOS는 선언된 초기 focusable을 `UNSUPPORTED`로 거부합니다.
+
 ## 조회 단위와 좌표
 
 조회의 `unit`은 `"physical" | "logical"`이며 기본값은 `"physical"`입니다. `dpi`는 해당 조회에 사용한 대상 창의 DPI입니다.
 `setSize`는 계속 내용 영역의 96 DPI 논리 픽셀을 받고, `setPosition`은 창 바깥쪽 왼쪽 위의 화면 물리 픽셀을 받습니다.
+`minimizable`, `maximizable`, `closable`의 기본값은 `true`입니다. 각 setter와 getter는 해당 이름의
+operation 권한을 따로 요구하며 닫힌 창은 `INVALID_ARGUMENT`입니다. 최소화와 최대화 버튼 설정은
+실제 일반 창 스타일을 조회하고 전체화면 중에는 복원할 스타일을 변경합니다.
+`closable: false`는 닫기 버튼을 비활성화하고 시스템 메뉴, Alt+F4, WM_CLOSE와 렌더러의 닫기 요청을
+막습니다. `isClosable`은 이 호스트 설정을 반환합니다. 전체화면 중의 변경도 유지하고 해제할 때
+닫기 버튼에 반영합니다. 표시, 위치, 크기와 포커스를 유지하며 재생성하면 기본값으로 돌아갑니다.
+프로그램의 `minimize`, `maximize`, `close`, `recreate`와 trusted `destroy`는 계속 사용할 수 있고
+일반 close의 확인, 종료 취소와 부모 순서도 유지합니다. 렌더러 실패와 강제 호스트 정리는 이 설정으로 막지 않습니다.
+이 설정은 프로그램의 권한이나 창 종료 정책을 대체하지 않습니다. fullscreenable은 아직 제공하지 않습니다.
+
 `setTitle`은 지정한 창 수명의 제목만 변경합니다. 선언, 다른 인스턴스와 앱 이름을 바꾸지 않으며
 재생성에서는 선언 또는 해당 생성의 `options.title`로 돌아갑니다. 표시, 크기와 포커스 상태를 유지합니다.
 닫기 확인 대화상자의 caption도 현재 창 제목을 사용합니다. `getTitle`은 캐시 대신 실제 HWND를 읽으며

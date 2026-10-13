@@ -10,6 +10,9 @@ AppKit 이벤트를 처리하고 Bun 이벤트 루프에 제어를 돌려준다.
 Windows와 같은 검증, 수신 확인, 용량 제한을 사용한다.
 등록한 `execution: "io"` 어댑터는 별도 I/O Worker에서 초기화하고 실행한다. `executeUI`가 있는 I/O 어댑터에도 같은 요청 ID, 권한,
 취소 신호와 실행 직전 검사를 전달한다. SDK 파싱은 한 번만 수행한다.
+`config.ts`가 검증한 패키지의 `appId`와 실제 호스트 실행 파일, 재시작 인자를
+`NativeEnvironment.app`으로 I/O Worker에 전달한다. 작업 입력으로 identity를 바꾸지 않는다.
+`app.id`는 앱 namespace이며 Keychain의 OS 접근 identity는 실제 실행 파일이다.
 메인 스레드는 파싱 전과 실행 직전의 정책과 살아 있는 문서를 확인한다.
 취소와 문서 폐기는 큐와 대기 중 파서를 해제하고 늦은 응답을 버린다.
 이미 시작한 동기 I/O의 부수 효과는 되돌리지 않는다. 기능 지원 목록은 등록 계약과
@@ -42,8 +45,8 @@ WebView를 위한 추가 네이티브 바이너리는 필요하지 않다.
 현재 대상은 macOS arm64다. 다중 창, 명령과 이벤트, 뷰별 정책과 세션, 사용자 지정
 자산 스킴, 렌더러 복구와 종료를 제공한다. `app.windows`와 `startup: false`를 지원한다.
 `@bunaway/plugin-windows`는 목록, 생성과 재생성, show/hide/focus/close 및 표시와
-포커스 조회를 제공한다. 다른 창 작업은 `UNSUPPORTED`다. `desktop`, 저장, 로그와
-opener 어댑터는 지원하지 않는다.
+포커스 조회를 제공한다. 다른 창 작업은 `UNSUPPORTED`다. 로그와 기능 조회는
+등록한 I/O 어댑터로 실행한다. `desktop`, 저장과 opener 어댑터는 지원하지 않는다.
 
 창마다 임시 `WKWebsiteDataStore`를 따로 만들고 같은 뷰의 재생성에서 유지한다.
 앱 실행이 끝나면 데이터는 남기지 않는다. 보조 창을 닫으면 해당 세션과 창만 정리하며,
@@ -85,5 +88,7 @@ I/O 기반 회귀 `tests/lifecycle/macos-io-host.ts`는 실제 compiled WKWebVie
 백엔드 setup과 웹 호출의 출처, 정책 거부, 기능 지원 목록, 동기 작업 중 UI 왕복,
 입력 파싱 취소와 문서 폐기, 초기화 실패 및 종료 기한을 검사한다.
 `run-native.ts`에서 실행하며 CI는 `build/macos-io-results.json`을 보관한다.
-개별 image, clipboard, storage, log/capabilities와 opener 어댑터와 그 fixture의
+`tests/lifecycle/macos-log-capabilities.ts`는 실제 서명한 compiled 앱에서 로그의 출처,
+권한과 쓰기 실패 후 복구, 회전, 기능 목록 및 정상 종료를 검사한다.
+개별 image, clipboard, storage와 opener 어댑터와 그 fixture의
 통합은 별도 PR에서 검증한다. 이 기반 변경만으로 해당 기능의 지원을 선언하지 않는다.

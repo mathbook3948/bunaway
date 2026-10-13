@@ -161,7 +161,19 @@ export class LoopbackChannel {
       throw new Error("Document channel limit reached.");
     }
     const parsed = new URL(origin);
-    if (parsed.protocol !== "https:" || parsed.origin !== origin) {
+    // Packaged WKWebView documents use an explicit custom-scheme origin, never "null".
+    const serializedOrigin =
+      parsed.protocol === "bunaway:"
+        ? `bunaway://${parsed.host}`
+        : parsed.origin;
+    if (
+      !parsed.hostname ||
+      ![
+        "https:",
+        "bunaway:",
+      ].includes(parsed.protocol) ||
+      serializedOrigin !== origin
+    ) {
       throw new Error("Invalid document origin.");
     }
     const token = crypto.randomUUID();
