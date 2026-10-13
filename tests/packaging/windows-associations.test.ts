@@ -403,7 +403,9 @@ type InstallerFailure =
   | "stale"
   | "read-preflight"
   | "read"
-  | "key-cleanup";
+  | "key-cleanup"
+  | "metadata"
+  | "metadata-preflight";
 
 interface NativeInstallerRequest {
   version: string;
@@ -673,7 +675,8 @@ async function createNativeAssociationFixture(compiler: string) {
         if (
           failure === "pending-owner" ||
           failure === "stale" ||
-          failure === "read-preflight"
+          failure === "read-preflight" ||
+          failure === "metadata-preflight"
         ) {
           // PrepareToInstall rejects the rename before payload and previous-data writes.
           expect(exitCode).toBe(7);
@@ -694,6 +697,8 @@ async function createNativeAssociationFixture(compiler: string) {
           "read-preflight": "Could not inspect app association",
           read: "Could not inspect app association",
           "key-cleanup": "Could not remove app association key",
+          metadata: "Could not read installation identity",
+          "metadata-preflight": "Could not read installation identity",
         };
         expect(log).toContain(failureMessages[failure]);
       } else if (exitCode !== 0) {
@@ -740,7 +745,9 @@ async function createNativeAssociationFixture(compiler: string) {
     });
     await running.finish();
   }
-  async function startUninstall(failure?: "busy" | "read" | "key-cleanup") {
+  async function startUninstall(
+    failure?: "busy" | "read" | "key-cleanup" | "metadata",
+  ) {
     const executable = join(installDir, "unins000.exe");
     if (!(await Bun.file(executable).exists())) {
       throw new Error("Fixture uninstaller is missing.");
@@ -769,6 +776,7 @@ async function createNativeAssociationFixture(compiler: string) {
           busy: "Another setup or uninstall is maintaining this application",
           read: "Could not inspect app association",
           "key-cleanup": "Could not remove app association key",
+          metadata: "Could not read installation identity",
         };
         expect(await Bun.file(logPath).text()).toContain(
           failureMessages[failure],
@@ -802,10 +810,13 @@ async function createNativeAssociationFixture(compiler: string) {
     }
     return {
       child,
+      logPath,
       finish,
     };
   }
-  async function uninstall(failure?: "busy" | "read" | "key-cleanup") {
+  async function uninstall(
+    failure?: "busy" | "read" | "key-cleanup" | "metadata",
+  ) {
     if (!(await Bun.file(join(installDir, "unins000.exe")).exists())) {
       return;
     }
@@ -1358,6 +1369,234 @@ test.skipIf(!iscc)(
     }
   },
   180000,
+);
+
+test.skipIf(!iscc)(
+  "native installation identity reads reject denied and malformed metadata before retirement",
+  async () => {
+    if (!iscc) {
+      throw new Error("ISCC is required.");
+    }
+    const fixture = await createNativeAssociationFixture(iscc);
+    const {
+      root,
+      installDir,
+      declarations,
+      fileProgId,
+      extension,
+      associationRoot,
+      previousDataKey,
+      registration,
+      quote,
+      powershell,
+      query,
+      denyValueWrites,
+      denyRegistryRights,
+      verifyQueryOnlyDenial,
+      startInstall,
+      install,
+      startUninstall,
+      uninstall,
+      cleanup,
+    } = fixture;
+    const config = {
+      files: declarations.files,
+    };
+    const oldExecutable = join(installDir, "Old.exe");
+    const newExecutable = join(installDir, "New.exe");
+    const thirdExecutable = join(installDir, "Third.exe");
+    const openWith = `Software\\Classes\\${extension}\\OpenWithProgids`;
+    const command = `Software\\Classes\\${fileProgId}\\shell\\open\\command`;
+    const identity = [
+      [
+        "ExecutableName",
+        "New.exe",
+      ],
+      [
+        "InstallDir",
+        installDir,
+      ],
+      [
+        "PendingAssociationOwner",
+        oldExecutable,
+      ],
+    ] as const;
+    const gates: NativeGate[] = [];
+    async function assertRecoveryState() {
+      expect(await Bun.file(oldExecutable).exists()).toBe(true);
+      expect(await Bun.file(newExecutable).exists()).toBe(true);
+      expect(await Bun.file(thirdExecutable).exists()).toBe(false);
+      expect(await Bun.file(join(installDir, "unins000.exe")).exists()).toBe(
+        true,
+      );
+      expect(await query(associationRoot, "Executable")).toBe(oldExecutable);
+      expect(await query(command)).toBe(`"${oldExecutable}" "%1"`);
+      expect(
+        await query("Software\\RegisteredApplications", registration),
+      ).toBe(`${associationRoot}\\Capabilities`);
+      for (const [name, value] of identity) {
+        expect(
+          await query(previousDataKey, `Inno Setup CodeFile: ${name}`),
+        ).toBe(value);
+      }
+    }
+    async function denyMetadataWhileGated(
+      running: {
+        finish(): Promise<void>;
+      },
+      gate: NativeGate,
+    ) {
+      let restore: (() => Promise<string>) | undefined;
+      try {
+        await whileGated(running, gate, async () => {
+          restore = await denyRegistryRights(previousDataKey, "QueryValues");
+          await verifyQueryOnlyDenial(previousDataKey);
+        });
+      } finally {
+        if (restore) {
+          await restore();
+        }
+      }
+    }
+    try {
+      for (const outcome of [
+        "retry",
+        "uninstall",
+      ] as const) {
+        const setupGate = {
+          ready: join(root, `identity-${outcome}-setup-ready`),
+          release: join(root, `identity-${outcome}-setup-release`),
+        };
+        const uninstallGate = {
+          ready: join(root, `identity-${outcome}-uninstall-ready`),
+          release: join(root, `identity-${outcome}-uninstall-release`),
+        };
+        gates.push(setupGate, uninstallGate);
+        await install(
+          `identity-${outcome}-old`,
+          "Old.exe",
+          config,
+          "fileassociations",
+        );
+        const restoreAssociation = await denyValueWrites(openWith);
+        try {
+          // Retain a real predecessor with current New.exe metadata before the metadata ACL fault.
+          const update = await startInstall({
+            version: `identity-${outcome}-new`,
+            executable: "New.exe",
+            config,
+            tasks: "fileassociations",
+            failure: "cleanup",
+            uninstallGate,
+          });
+          await update.finish();
+        } finally {
+          await restoreAssociation();
+        }
+        await assertRecoveryState();
+        const restoreMetadata = await denyRegistryRights(
+          previousDataKey,
+          "QueryValues",
+        );
+        try {
+          await verifyQueryOnlyDenial(previousDataKey);
+          // These must abort in initialization, before either caller can read an empty snapshot.
+          await install(
+            `identity-${outcome}-blocked`,
+            "Third.exe",
+            undefined,
+            undefined,
+            "metadata",
+          );
+          await uninstall("metadata");
+          expect(await Bun.file(oldExecutable).exists()).toBe(true);
+          expect(await Bun.file(newExecutable).exists()).toBe(true);
+          expect(await Bun.file(thirdExecutable).exists()).toBe(false);
+          expect(await query(associationRoot, "Executable")).toBe(
+            oldExecutable,
+          );
+          expect(await query(command)).toBe(`"${oldExecutable}" "%1"`);
+        } finally {
+          await restoreMetadata();
+        }
+        await assertRecoveryState();
+        if (outcome === "retry") {
+          // A present non-string value is also a failed identity read, not an absent field.
+          // Exercise each of the three fields through both setup and uninstall initialization.
+          for (const [name, value] of identity) {
+            const field = `Inno Setup CodeFile: ${name}`;
+            await powershell(
+              `$key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(${quote(previousDataKey)},$true); try { $key.SetValue(${quote(field)},0,[Microsoft.Win32.RegistryValueKind]::DWord) } finally { $key.Dispose() }`,
+            );
+            try {
+              const blocked = await startInstall({
+                version: `identity-malformed-${name}`,
+                executable: "Third.exe",
+                config: undefined,
+                failure: "metadata",
+              });
+              await blocked.finish();
+              expect(await Bun.file(blocked.logPath).text()).toContain(
+                `Could not read installation identity: ${name}`,
+              );
+              const removal = await startUninstall("metadata");
+              await removal.finish();
+              expect(await Bun.file(removal.logPath).text()).toContain(
+                `Could not read installation identity: ${name}`,
+              );
+              expect(await Bun.file(oldExecutable).exists()).toBe(true);
+              expect(await Bun.file(newExecutable).exists()).toBe(true);
+              expect(await Bun.file(thirdExecutable).exists()).toBe(false);
+            } finally {
+              await fixture.write(previousDataKey, field, value);
+            }
+          }
+          await assertRecoveryState();
+        }
+        // Capture succeeded in these processes. Denial introduced at the real callbacks
+        // must still abort the shared validation reader before payload or metadata retirement.
+        const delayed = await startInstall({
+          version: `identity-${outcome}-delayed`,
+          executable: "Third.exe",
+          config: undefined,
+          failure: "metadata-preflight",
+          setupGate,
+        });
+        await denyMetadataWhileGated(delayed, setupGate);
+        await assertRecoveryState();
+        const removal = await startUninstall("metadata");
+        await denyMetadataWhileGated(removal, uninstallGate);
+        await assertRecoveryState();
+        if (outcome === "retry") {
+          await install(`identity-${outcome}-recovered`, "New.exe", undefined);
+          expect(await Bun.file(oldExecutable).exists()).toBe(false);
+          expect(
+            await query(
+              previousDataKey,
+              "Inno Setup CodeFile: PendingAssociationOwner",
+            ),
+          ).toBe("");
+        }
+        await uninstall();
+        expect(await Bun.file(oldExecutable).exists()).toBe(false);
+        expect(await Bun.file(newExecutable).exists()).toBe(false);
+        expect(await query(command)).toBe("MISSING");
+        expect(await query(associationRoot, "Executable")).toBe("MISSING");
+        expect(
+          await query("Software\\RegisteredApplications", registration),
+        ).toBe("MISSING");
+        expect(
+          await query(previousDataKey, "Inno Setup CodeFile: ExecutableName"),
+        ).toBe("MISSING");
+      }
+    } finally {
+      for (const gate of gates) {
+        await Bun.write(gate.release, "release");
+      }
+      await cleanup();
+    }
+  },
+  240000,
 );
 
 test.skipIf(!iscc)(

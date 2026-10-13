@@ -9,7 +9,10 @@ export function installationMutexNames(identifier: string) {
   };
 }
 
-/** Emits process-owned setup/uninstall coordination and one previous-data snapshot. */
+/**
+ * Emits process-owned setup/uninstall coordination and one previous-data snapshot.
+ * Emit procedures after association code to reuse its checked registry reader.
+ */
 export function renderInstallationStateCode(identifier: string) {
   const names = installationMutexNames(identifier);
   return {
@@ -65,11 +68,24 @@ begin
   end;
 end;
 
+function ReadInstallationIdentityValue(const Name: String): String;
+begin
+  Result := '';
+  try
+    // Use the same status-aware reader as association ownership. Inno's
+    // GetPreviousData silently returns its default on access or type failures.
+    // The shipped key, hive, view and CodeFile prefix match Inno's lookup.
+    QueryAssociationValue(AssociationPreviousDataKey, 'Inno Setup CodeFile: ' + Name, Result);
+  except
+    RaiseException('Could not read installation identity: ' + Name + '. ' + GetExceptionMessage);
+  end;
+end;
+
 function ReadInstallationSnapshot: TInstallationSnapshot;
 begin
-  Result.ExecutableName := GetPreviousData('ExecutableName', '');
-  Result.InstallDir := GetPreviousData('InstallDir', '');
-  Result.PendingOwner := GetPreviousData('PendingAssociationOwner', '');
+  Result.ExecutableName := ReadInstallationIdentityValue('ExecutableName');
+  Result.InstallDir := ReadInstallationIdentityValue('InstallDir');
+  Result.PendingOwner := ReadInstallationIdentityValue('PendingAssociationOwner');
 end;
 
 procedure CaptureInstallationSnapshot;

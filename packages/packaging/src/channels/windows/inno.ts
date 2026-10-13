@@ -250,7 +250,7 @@ type
     "    PendingAssociationInstallDir: String;",
     "    PendingAssociationDataSaved: Boolean;",
     "    PostInstallError: String;",
-    installationState.procedures,
+    // Identity capture and validation reuse the checked registry reader below.
     renderAssociationCode(
       options.identifier,
       executableName,
@@ -258,6 +258,7 @@ type
       options.associations,
       options.scope,
     ),
+    installationState.procedures,
     "",
     "function IsSafeExecutableName(const Name: String): Boolean;",
     "var I: Integer;",

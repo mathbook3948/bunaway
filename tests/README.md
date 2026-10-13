@@ -179,6 +179,11 @@ New.exe로 복구한 뒤에만 Third.exe 변경을 허용한다. 같은 New.exe�
 삭제된 실제 부분 정리 상태를 확인하고, 복구 기록으로 재시도나 제거가 나머지 키를 정리하는지 검사한다.
 `Capabilities/FileAssociations`의 값 조회만 거부하는 회귀는 선언 없는 New.exe 업데이트와 제거가
 실패해도 등록, ProgID, Old.exe와 복구 소유자가 남고 권한 복구 뒤 정리가 완료되는지 확인한다.
+설치 식별 정보 회귀는 Old.exe 정리가 실패한 New.exe 설치에서 실제 Inno 제거 키의 `QueryValues`만
+거부한다. 설치와 제거의 초기화 및 대기 중인 콜백 뒤의 검증이 실패해도 두 EXE, 이전 등록과 세 식별
+값이 남는지 확인한다. `ExecutableName`, `InstallDir`, `PendingAssociationOwner`를 각각 DWORD로
+바꾼 경우에도 설치와 제거가 빈 값으로 받아들이지 않아야 한다. ACL과 문자열을 복구한 뒤 재시도와
+제거가 이전 파일, 등록과 제거 정보를 정리하는지 확인한다. 기존 값 누락 회귀와 prerequisite도 유지한다.
 
 `windows-initial-placement.fixture.ts`는 모니터 겹침이 바뀌는 `SetWindowPos`에서
 실제 창 프로시저에 `WM_DPICHANGED`를 전달한다. 초기 DPI 보정의 수렴, 중앙 좌표와
