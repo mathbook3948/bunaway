@@ -115,6 +115,7 @@ if (target === "windows-x64") {
           "tests/lifecycle/windows-network.test.ts",
           "tests/lifecycle/windows-bun-instance.test.ts",
           "tests/lifecycle/windows-monitors.test.ts",
+          "tests/lifecycle/windows-host-shutdown.test.ts",
           "tests/lifecycle/windows-power.test.ts",
           "tests/lifecycle/windows-power-worker.test.ts",
           "tests/lifecycle/windows-appearance.test.ts",
@@ -195,6 +196,7 @@ if (target === "windows-x64") {
   if (!values["skip-tests"]) {
     await test("macos-webview-regressions.ts");
     await test("macos-window-api.ts");
+    await test("macos-io-host.ts");
     await test("macos-network.ts");
     await test("macos-host.ts", [
       "--package",

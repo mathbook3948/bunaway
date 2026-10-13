@@ -87,11 +87,13 @@ export const frameworkPaths = [
   "native/windows/bun/host-operations.ts",
   "native/host-api/bun/host-response.ts",
   "native/host-api/bun/native-requests.ts",
+  "native/host-api/bun/io-worker.ts",
   "native/windows/bun/README.md",
   ...[
     "boot.ts",
     "entry.ts",
     "backend.ts",
+    "host-operations.ts",
     "config.ts",
     "process-group.ts",
     "application.ts",
