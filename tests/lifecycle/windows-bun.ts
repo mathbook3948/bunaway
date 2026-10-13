@@ -184,9 +184,12 @@ if (!process.argv.includes("--child")) {
   const timer = setTimeout(() => child.kill(), 60000);
   const code = await child.exited;
   clearTimeout(timer);
-  await stdout;
-  clearTimeout(modalExitTimer);
-  driver.close();
+  try {
+    await stdout;
+  } finally {
+    clearTimeout(modalExitTimer);
+    driver.close();
+  }
   console.log(text);
   console.error(await stderr);
   assert.equal(code, creationFailure ? 1 : 0);
