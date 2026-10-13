@@ -549,6 +549,7 @@ linear filtering의 투명 edge, crop과 빈 소스 및 quota 오류를 추가�
 경합으로 빈 PID를 읽지 않고, 취소 전에 실제 자식의 Windows process handle을 잡는다.
 
 `api/path.test.ts`는 Windows 문자열 경로 규칙과 명시적 base, per-drive 상대 경로 거부를 검사한다.
+보충 문자의 UTF-16 입력과 합성 출력 상한을 확인하며 실제 WebView2에도 같은 경계 회귀를 적용한다.
 `windows-path.test.ts`는 실제 current-user Known Folder를 조회하고 .NET의 독립적인
 표준 폴더 조회 결과 및 여러 어댑터의 DLL 수명과 비교한다.
 `windows-path.ts`는 실제 WebView2와 I/O Worker에서 폴더 조회, 문자열 helper와

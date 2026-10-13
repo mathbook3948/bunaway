@@ -58,6 +58,8 @@ root-relative `\file`은 base의 drive 또는 UNC root 아래로 해석합니다
 `isAbsolute("\file")`의 결과는 Windows의 문자열 규칙상 `true`지만 fully qualified base는 아닙니다.
 
 문자열당 상한은 UTF-16 code unit 기준 4,096이며 paths 배열은 64개 이하입니다.
+`🙂` 같은 보충 문자는 두 unit을 사용하므로 단일 입력에는 2,048개까지 허용합니다.
+join과 resolve의 결과에도 같은 상한이 적용되며 구분자와 base도 결과 길이에 포함됩니다.
 NUL, CR과 LF 및 추가 필드는 `INVALID_ARGUMENT`로 거부합니다.
 합성된 출력이 문자열 상한을 넘으면 `INTERNAL`로 실패합니다.
 

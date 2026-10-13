@@ -238,3 +238,89 @@ test("path helper permissions neither imply each other nor grant storage access"
     }
   }
 });
+
+test("path input bounds count supplementary Unicode as UTF-16 units", async () => {
+  const create = pathPlugin.nativePlatforms.windows?.create;
+  if (!create) {
+    throw new Error("Windows path adapter is missing.");
+  }
+  const adapter = create({
+    dataRoot: "unused",
+    capabilities: [],
+  });
+  try {
+    const exactLimit = "🙂".repeat(2048);
+    expect(exactLimit.length).toBe(4096);
+    expect(
+      await adapter.execute(
+        "path.normalize",
+        {
+          path: exactLimit,
+        },
+        "backend",
+      ),
+    ).toBe(exactLimit);
+    await expect(
+      adapter.execute(
+        "path.normalize",
+        {
+          path: "🙂".repeat(2049),
+        },
+        "backend",
+      ),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+  } finally {
+    await adapter.dispose();
+  }
+});
+
+test("path output bounds count supplementary Unicode after joining", async () => {
+  const create = pathPlugin.nativePlatforms.windows?.create;
+  if (!create) {
+    throw new Error("Windows path adapter is missing.");
+  }
+  const adapter = create({
+    dataRoot: "unused",
+    capabilities: [],
+  });
+  try {
+    const paths = [
+      "🙂".repeat(1024),
+      `${"🙂".repeat(1023)}x`,
+    ];
+    const expected = paths.join("\\");
+    expect(expected.length).toBe(4096);
+    expect(
+      await adapter.execute(
+        "path.join",
+        {
+          paths,
+        },
+        "backend",
+      ),
+    ).toBe(expected);
+    await expect(
+      adapter.execute(
+        "path.join",
+        {
+          paths: [
+            "🙂".repeat(1500),
+            "🙂".repeat(1500),
+          ],
+        },
+        "backend",
+      ),
+    ).rejects.toMatchObject({
+      code: "INTERNAL",
+    });
+    await expect(
+      parsers.validateOutput("path.getDirectory", `C:/${"🙂".repeat(2047)}`),
+    ).rejects.toMatchObject({
+      code: "INTERNAL",
+    });
+  } finally {
+    await adapter.dispose();
+  }
+});

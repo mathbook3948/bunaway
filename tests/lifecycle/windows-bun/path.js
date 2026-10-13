@@ -64,6 +64,54 @@ try {
   if (!lexical) {
     throw new Error("Windows lexical helper results mismatch.");
   }
+  const exactLimit = "🙂".repeat(2048);
+  if (
+    (await path.normalize({
+      path: exactLimit,
+    })) !== exactLimit
+  ) {
+    throw new Error("UTF-16 input boundary mismatch.");
+  }
+  const boundaryPaths = [
+    "🙂".repeat(1024),
+    `${"🙂".repeat(1023)}x`,
+  ];
+  if (
+    (await path.join({
+      paths: boundaryPaths,
+    })) !== boundaryPaths.join("\\")
+  ) {
+    throw new Error("UTF-16 output boundary mismatch.");
+  }
+  for (const { call, code } of [
+    {
+      call: () =>
+        path.normalize({
+          path: "🙂".repeat(2049),
+        }),
+      code: "INVALID_ARGUMENT",
+    },
+    {
+      call: () =>
+        path.join({
+          paths: [
+            "🙂".repeat(1500),
+            "🙂".repeat(1500),
+          ],
+        }),
+      code: "INTERNAL",
+    },
+  ]) {
+    let rejected = false;
+    try {
+      await call();
+    } catch (error) {
+      rejected = error.code === code;
+    }
+    if (!rejected) {
+      throw new Error(`UTF-16 path bound did not reject with ${code}.`);
+    }
+  }
   let denied = false;
   try {
     await path.dirname({

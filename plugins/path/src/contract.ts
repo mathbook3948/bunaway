@@ -1,8 +1,17 @@
 import { z } from "zod";
 
+const MAX_PATH_CODE_UNITS = 4096;
 const PATH_PATTERN = "^[^\\u0000\\r\\n]*$(?![\\s\\S])";
 /** Strings are lexical paths; only resolve's base must be fully qualified. */
-const pathText = z.string().max(4096).regex(new RegExp(PATH_PATTERN, "u"));
+// Zod max counts code points; JavaScript length enforces the documented UTF-16 bound.
+const pathText = z
+  .string()
+  .max(MAX_PATH_CODE_UNITS)
+  .refine(
+    (value) => value.length <= MAX_PATH_CODE_UNITS,
+    "Path exceeds the UTF-16 code unit limit.",
+  )
+  .regex(new RegExp(PATH_PATTERN, "u"));
 const paths = z.array(pathText).max(64);
 const qualifiedPath = pathText
   .min(1)
