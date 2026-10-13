@@ -257,6 +257,9 @@
           "MAX_WINDOWS",
           "MAX_WINDOW_INSTANCES",
           "MAX_WEBVIEW_DOWNLOADS",
+          "MAX_DOWNLOAD_METADATA_BYTES",
+          "MAX_DOWNLOAD_SNAPSHOT_BYTES",
+          "isDownloadSnapshotWithinLimits",
           "DOWNLOAD_APPROVAL_TIMEOUT_MS"
         ]
       }
