@@ -521,3 +521,27 @@ CLI의 기존 `@bunaway/*` 고정 목록 검사는 manifest 기반 plugin 검사
 [ADR 0014](../decisions/0014-optional-plugin-packages.md)에 따라 창 제어도 @bunaway/plugin-windows로 설치하고 등록한다. 각 windows operation 이름을 허용하며 작업은 앱에 선언된 창을 대상으로 한다. 시작 창, WebView, 앱 종료와 진단은 플랫폼 자원 수명 관리로 유지한다.
 
 플러그인 작성 SDK는 Backend SDK와 Core를 의존하지 않는다. @bunaway/plugin-api가 앱 계약과 실행 컨텍스트를 소유하고 Core와 Backend SDK가 이를 사용한다. /host 하위 경로는 Bun 전용 컨텍스트이며 루트의 공통 타입을 브라우저와 portable Core에서 읽어도 Bun 자원을 가져오지 않는다.
+
+## Windows OS 변경 이벤트
+
+UI 어댑터는 선택적인 `NativeWindowServices.systemEvents`를 사용할 수 있다.
+`subscribe(receive, { sessionNotifications: true })`는 현재 사용자 세션의 WTS 알림도
+요청하며 반환한 함수를 어댑터 종료 때 호출한다. 첫 구독이 숨겨진 top-level HWND를
+만들고 마지막 구독이 해제한다. 등록하지 않은 플러그인은 이 자원을 초기화하지 않는다.
+WTS DLL은 세션 알림을 요청할 때만 열며 등록 실패는 어댑터 생성 실패로 전달한다.
+
+WndProc는 메시지 번호와 scalar wparam만 기록한다. WM_SETTINGCHANGE의 lparam은
+역참조하거나 보관하지 않는다. 테마, 시스템 색, accent와 전원 상태 변경은 pump
+배치에서 중복을 합치고 suspend/resume 및 lock/unlock은 순서를 유지한다. resume은
+PBT_APMRESUMEAUTOMATIC에서만 전달한다. 이후 사용자 활동을 알리는
+PBT_APMRESUMESUSPEND는 새 resume으로 전달하지 않는다. 두 알림이 서로 다른 pump
+배치에 도착하거나 중간에 설정 알림이 들어와도 resume을 중복 전달하지 않는다.
+Windows의 [복귀 알림 순서](https://learn.microsoft.com/en-us/windows/win32/power/pbt-apmresumesuspend)를 따른다. 큐는
+128개로 제한하며 초과는 다음 flush에서 UI 실패로 보고한다. 구독 콜백의 조회 실패는
+진단 로그에 남기고 구독을 유지하여 다음 알림으로 복구할 수 있다.
+
+`publish(event, payload, requiredOperation)`는 등록된 조회 작업의 권한과 수신 화면의
+현재 `eventRoute`를 모두 확인한 뒤 기존 native-event lane에 전달한다. Core는 이벤트
+계약, 화면 이벤트 정책과 살아 있는 구독을 다시 확인한다. 큐 초과 시 해당 세션을
+폐기하는 기존 규칙과 문서 세대 검사도 유지한다. 이 서비스는 이벤트 재생을 제공하지
+않으며 각 플러그인이 조회 snapshot과 변경 비교를 소유한다.

@@ -212,6 +212,12 @@ test("opener preserves strict inputs and independently granted file operations",
     {
       name: "opener.revealFile",
     },
+    {
+      name: "opener.openFileWith",
+    },
+    {
+      name: "opener.openUrlWith",
+    },
   ]);
   expect(Object.keys(operation)).toEqual([
     "name",

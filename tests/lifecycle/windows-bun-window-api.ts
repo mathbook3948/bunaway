@@ -1,5 +1,4 @@
 import { dlopen, ptr } from "bun:ffi";
-import { windowPermissions } from "../fixtures/window-permissions.ts";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -11,6 +10,7 @@ import { runWindowsApp } from "#native/windows/bun/entry";
 import { Windows } from "#native/windows/bun/win32";
 import { user } from "#native/windows/bun/win32-bindings";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 assert.equal(process.platform, "win32");
 const root = process.argv.includes("--repo")
@@ -767,6 +767,50 @@ if (!process.argv.includes("--child")) {
             );
           }
           mainWindowId = current.windowId;
+          // Exercise the public plugin, actual UI STA and ITaskbarList3 on each native lifetime.
+          // Explorer creates buttons asynchronously; WebView readiness does not imply button readiness.
+          await waitFor(async () => {
+            try {
+              await windows.setTaskbarProgress({
+                view: "main",
+                windowId: current.windowId,
+                state: "indeterminate",
+              });
+              return true;
+            } catch (error) {
+              if (
+                error instanceof Error &&
+                "code" in error &&
+                error.code === "BUSY"
+              ) {
+                return false;
+              }
+              throw error;
+            }
+          });
+          for (const state of [
+            "normal",
+            "paused",
+            "error",
+          ] as const) {
+            assert.equal(
+              await windows.setTaskbarProgress({
+                view: "main",
+                windowId: current.windowId,
+                state,
+                value: 0.375,
+              }),
+              null,
+            );
+          }
+          assert.equal(
+            await windows.setTaskbarProgress({
+              view: "main",
+              windowId: current.windowId,
+              state: "none",
+            }),
+            null,
+          );
           // First run covers sizing/fullscreen; later runs cover recreation and renderer recovery.
           if (++runs === 1) {
             assert.equal(
