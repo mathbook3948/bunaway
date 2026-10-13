@@ -303,6 +303,17 @@
       }
     },
     {
+      "name": "@bunaway/plugin-image",
+      "source": "plugins/image/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/image": ["image", "imagePlugin"]
+      }
+    },
+    {
       "name": "@bunaway/plugin-windows",
       "source": "plugins/windows/src/index.ts",
       "buildOutputs": {
@@ -1047,7 +1058,17 @@
       "windows.getMonitorNearestRect",
       "windows.getCursorPosition"
     ],
-    "reference/plugins/appearance": ["appearance.getPreferences"]
+    "reference/plugins/appearance": ["appearance.getPreferences"],
+    "reference/plugins/image": [
+      "image.createRGBA",
+      "image.createBytes",
+      "image.createDataURL",
+      "image.getInfo",
+      "image.getPixels",
+      "image.exportBytes",
+      "image.exportDataURL",
+      "image.dispose"
+    ]
   },
   "configuration": {
     "packages/runtime-bun/src/window-config.ts": ["reference/configuration"],

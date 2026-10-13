@@ -425,12 +425,13 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [x] `readFormats`와 `writeFormats`로 한 번의 clipboard 열기 구간에서 여러 형식을 읽거나 교체한다. 준비 실패는 기존 내용을 보존하며 비우기 이후 부분 등록 실패는 되돌리지 않는다.
 - [ ] 사용자 정의 binary 형식을 읽고 쓰는 범위와 제한을 정의한다.
 - [ ] 클립보드 변경 이벤트의 지원을 결정한다.
-- [ ] 파일, bytes, bitmap, RGBA와 data URL에서 이미지 리소스를 만든다.
-- [ ] 이미지 크기, 빈 이미지 여부와 픽셀 데이터를 조회한다.
-- [ ] PNG, JPEG, bitmap과 data URL로 이미지를 내보낸다.
+- [x] Windows `@bunaway/plugin-image`에서 PNG, JPEG와 BMP bytes, RGBA와 data URL로 앱 소유 이미지 리소스를 만든다.
+- [ ] 파일 경로에서 이미지 리소스를 읽는 API와 저장소 접근 정책을 연결한다.
+- [x] `image.getInfo`와 `image.getPixels`로 크기, 빈 이미지 여부와 RGBA 픽셀 데이터를 조회한다.
+- [x] `image.exportBytes`와 `image.exportDataURL`로 PNG, JPEG, BMP와 data URL을 내보낸다. PNG는 alpha를 보존하고 JPEG와 BMP는 불투명 픽셀만 받는다.
 - [ ] crop, resize와 scale-factor별 이미지 representation을 제공한다.
 - [ ] 파일 아이콘과 이미지 thumbnail을 생성한다.
-- [ ] 이미지 리소스 ID와 명시적 해제, 호출 취소와 앱 종료 정리를 제공한다.
+- [x] 앱 소유 이미지 ID, `image.dispose`, 결과 전달 전 생성 취소와 앱 종료 정리를 제공한다. 작업별 권한과 64개, 8 MiB 상한을 적용한다.
 
 2026-10-12 clipboard 확장은 `defineNativePlugin`과 Zod 계약, 작업별 권한, 입력과 출력 상한,
 빌린 메모리의 복사와 해제, 다중 형식의 부분 실패 정리를 포함한다. 실제 Windows 회귀는
