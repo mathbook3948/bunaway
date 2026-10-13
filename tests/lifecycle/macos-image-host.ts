@@ -31,6 +31,7 @@ try {
     appEntry,
     `
 import assert from "node:assert/strict";
+import { resolve } from "node:path";
 import { defineApp } from ${JSON.stringify(backend)};
 import { image, imagePlugin } from ${JSON.stringify(image)};
 import { windowsPlugin } from ${JSON.stringify(windows)};
@@ -43,7 +44,7 @@ export default defineApp({ modules: [], plugins: [imagePlugin, windowsPlugin, {
   }
 }], commands: {
   "test.created": { input: { const: null }, output: { type: "string" }, async run(_input, context) {
-    const marker = Bun.file(process.env.TMPDIR + "/../image-created.json");
+    const marker = Bun.file(resolve(process.env.TMPDIR, "..", "image-created.json"));
     const deadline = Date.now() + 10000;
     while (!await marker.exists()) {
       if (context.signal.aborted) throw new Error("Cancelled creation probe.");
@@ -380,12 +381,27 @@ export default { ...definition, nativePlatforms: { ...definition.nativePlatforms
     elapsedMs < 25000,
     "Native windows must close and stop the host before the subprocess timeout sends SIGTERM.",
   );
-  await output;
+  const stdout = await output;
+  if (stdout.trim()) {
+    console.log(stdout);
+  }
   const dataRoot = resolve(
     directory,
     `Library/Application Support/bunaway/${appId}`,
   );
   const report = await Bun.file(resolve(dataRoot, "temp/report.json")).json();
+  // Retain failed phase evidence as well as successful results in the CI artifact.
+  await mkdir(resolve(root, "build"), {
+    recursive: true,
+  });
+  await writeJson(resolve(root, "build/macos-image-host-results.json"), {
+    ...report,
+    elapsedMs,
+    platform: process.platform,
+    architecture: process.arch,
+    bun: Bun.version,
+    revision: Bun.revision,
+  });
   assert.deepEqual(report, {
     ok: true,
     permissionDenied: true,
@@ -412,21 +428,6 @@ export default { ...definition, nativePlatforms: { ...definition.nativePlatforms
     1,
   );
   assert.equal(records.at(-1).failed, false);
-  const evidence = {
-    ...report,
-    elapsedMs,
-    platform: process.platform,
-    architecture: process.arch,
-    bun: Bun.version,
-    revision: Bun.revision,
-  };
-  await mkdir(resolve(root, "build"), {
-    recursive: true,
-  });
-  await writeJson(
-    resolve(root, "build/macos-image-host-results.json"),
-    evidence,
-  );
   console.log(
     "PASS compiled macOS host, WKWebView command, backend SDK, image I/O routing, codecs, transforms and shutdown",
   );
