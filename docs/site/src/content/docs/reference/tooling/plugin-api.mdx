@@ -123,4 +123,16 @@ identity는 HWND 수명마다 새로 발급합니다. 정리 중인 소유자를
 `lookup.byRequest(requestId)`는 UI 호스트가 관리하는 요청의 인증된 컨텍스트에서 정확한
 호출자 창을 찾습니다. 다중 창 호스트는 view로 대체하지 않습니다.
 `creationSettled(key)`는 생성 성공, 실패와 취소 모두에서 재생성 메타데이터를 해제합니다.
+
+선택적 `NativeWindowServices.systemEvents`는 UI 플러그인에 OS 변경 알림을 제공합니다.
+`NativeSystemEvents.subscribe(receive, { sessionNotifications? })`는 첫 구독 때 숨김 HWND를
+생성하고 마지막 구독 해제 때 정리합니다. 반환된 해제 함수는 반복 호출할 수 있습니다.
+`NativeSystemSignal`은 설정, 테마, 시스템 색, accent와 전원 상태의 무효화 알림 및
+suspend, resume, 현재 Windows 세션의 잠금과 잠금 해제 신호입니다.
+설정과 색 등의 반복 알림은 한 메시지 pump에서 합치며 lifecycle 전환은 순서를 유지합니다.
+콜백은 native WndProc 밖에서 실행합니다. 초기 상태 재생이나 이벤트 이력은 제공하지 않습니다.
+세션 알림은 명시적으로 선택하며 WTS 등록 실패는 구독 호출에 전달합니다.
+`publish(event, payload, requiredOperation)`는 수신자의 조회 작업 권한과 현재 이벤트 구독을
+모두 검사하고 기존 native event 채널로 전달합니다. 지원하지 않는 호스트는 이 서비스를
+생략합니다. 이 계약은 물리 절전이나 사용자의 실제 세션 전환 검증 결과가 아닙니다.
 실패 때 보존했던 임시 프로필은 최종 종료 정리로 돌려 보냅니다.

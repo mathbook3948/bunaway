@@ -38,6 +38,18 @@ export function publishSystemEvent<
 
 // These broadcasts reach top-level windows, including hidden windows, but not message-only windows.
 const MAX_PENDING_SIGNALS = 128;
+const WM_SETTINGCHANGE = 0x001a;
+const WM_THEMECHANGED = 0x031a;
+const WM_SYSCOLORCHANGE = 0x0015;
+const WM_DWMCOLORIZATIONCOLORCHANGED = 0x0320;
+const WM_POWERBROADCAST = 0x0218;
+const WM_WTSSESSION_CHANGE = 0x02b1;
+const PBT_APMPOWERSTATUSCHANGE = 0x000an;
+const PBT_APMSUSPEND = 0x0004n;
+const PBT_APMRESUMEAUTOMATIC = 0x0012n;
+const PBT_APMRESUMESUSPEND = 0x0007n;
+const WTS_SESSION_LOCK = 7n;
+const WTS_SESSION_UNLOCK = 8n;
 const lifecycleSignals = new Set<NativeSystemSignal>([
   "suspend",
   "resume",
@@ -47,21 +59,21 @@ const lifecycleSignals = new Set<NativeSystemSignal>([
 
 const signals = new Map<number, NativeSystemSignal>([
   [
-    0x001a,
+    WM_SETTINGCHANGE,
     "settingChanged",
-  ], // WM_SETTINGCHANGE
+  ],
   [
-    0x031a,
+    WM_THEMECHANGED,
     "themeChanged",
-  ], // WM_THEMECHANGED
+  ],
   [
-    0x0015,
+    WM_SYSCOLORCHANGE,
     "colorsChanged",
-  ], // WM_SYSCOLORCHANGE
+  ],
   [
-    0x0320,
+    WM_DWMCOLORIZATIONCOLORCHANGED,
     "accentChanged",
-  ], // WM_DWMCOLORIZATIONCOLORCHANGED
+  ],
 ]);
 
 /** Owns a lazily acquired notification window and bounded post-pump invalidations. */
@@ -104,20 +116,26 @@ export class SystemEvents implements NativeSystemEvents {
         return;
       }
       let signal = signals.get(message);
-      if (message === 0x0218) {
+      if (message === WM_POWERBROADCAST) {
         // WM_POWERBROADCAST, scalar event code only.
-        if (wparam === 0x000an) {
+        if (wparam === PBT_APMPOWERSTATUSCHANGE) {
           signal = "powerStatusChanged";
-        } else if (wparam === 0x0004n) {
+        } else if (wparam === PBT_APMSUSPEND) {
           signal = "suspend";
-        } else if (wparam === 0x0012n || wparam === 0x0007n) {
+        } else if (
+          wparam === PBT_APMRESUMEAUTOMATIC ||
+          wparam === PBT_APMRESUMESUSPEND
+        ) {
           signal = "resume";
         }
-      } else if (message === 0x02b1 && this.sessionSubscribers > 0) {
+      } else if (
+        message === WM_WTSSESSION_CHANGE &&
+        this.sessionSubscribers > 0
+      ) {
         // WM_WTSSESSION_CHANGE
-        if (wparam === 7n) {
+        if (wparam === WTS_SESSION_LOCK) {
           signal = "sessionLocked";
-        } else if (wparam === 8n) {
+        } else if (wparam === WTS_SESSION_UNLOCK) {
           signal = "sessionUnlocked";
         }
       }

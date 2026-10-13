@@ -1,6 +1,8 @@
 import { dlopen } from "bun:ffi";
 import assert from "node:assert/strict";
 
+const NOTIFY_FOR_THIS_SESSION = 0;
+
 /** Owns opt-in WTS notifications for the hidden HWND, restricted to the current session. */
 export function createSessionNotifications(hwnd: bigint) {
   const native = dlopen("wtsapi32.dll", {
@@ -21,7 +23,10 @@ export function createSessionNotifications(hwnd: bigint) {
   let registered = false;
   try {
     assert(
-      native.symbols.WTSRegisterSessionNotification(hwnd, 0),
+      native.symbols.WTSRegisterSessionNotification(
+        hwnd,
+        NOTIFY_FOR_THIS_SESSION,
+      ),
       "WTS session registration failed.",
     );
     registered = true;
