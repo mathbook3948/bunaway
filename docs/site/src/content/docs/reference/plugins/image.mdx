@@ -1,13 +1,11 @@
 ---
 title: image
-description: Windows에서 앱 소유 이미지 리소스를 생성, 조회, 인코딩하고 해제합니다.
+description: Windows와 macOS arm64에서 앱 소유 이미지 리소스를 생성, 조회, 인코딩하고 해제합니다.
 sidebar: { order: 7 }
 ---
 
 `@bunaway/plugin-image`를 설치하고 `imagePlugin`을 앱의 `plugins`에 등록합니다.
-화면과 앱 백엔드는 같은 `image` API를 사용합니다. 현재 앱 호스트의 공개 호출은 Windows에서 제공합니다. 패키지의 macOS arm64 어댑터는
-ImageIO와 CoreGraphics codec, crop과 resize를 구현하며 공통 macOS I/O 호스트 연결은
-별도 작업입니다. 어댑터 단독 검증을 앱 호스트의 공개 호출 지원으로 간주하지 않습니다.
+화면과 앱 백엔드는 같은 `image` API를 사용합니다. Windows와 macOS arm64에서 제공합니다. macOS Intel은 지원하지 않습니다.
 
 ```ts
 import { defineApp } from "@bunaway/backend";
@@ -48,10 +46,10 @@ const pixels = await image.getPixels({ id: resource.id });
 `mime`은 `image/png`, `image/jpeg` 또는 `image/bmp`입니다. `data`는 해당 이미지 파일의
 canonical base64이며 디코딩한 파일 bytes는 600,000바이트까지입니다. 파일 경로, URI와
 임의의 decoder 이름을 받지 않습니다. `url`은 같은 세 MIME의 `data:<mime>;base64,<data>`
-형식만 받으며 네트워크 요청을 수행하지 않습니다. MIME과 실제 파일 형식이 다르거나 WIC가
+형식만 받으며 네트워크 요청을 수행하지 않습니다. MIME과 실제 파일 형식이 다르거나 네이티브 codec이
 여러 frame으로 판단한 입력, 지원 크기를 벗어난 decode 결과는 거부합니다.
 
-bytes와 data URL은 Windows Imaging Component로 디코딩합니다. 픽셀은 복사해 보유하며
+bytes와 data URL은 Windows의 Windows Imaging Component 또는 macOS의 ImageIO로 디코딩합니다. 픽셀은 복사해 보유하며
 색상 profile, EXIF metadata와 orientation 처리는 제공하지 않습니다. 파일 bytes의 확보는
 앱이 기존 저장소 권한으로 수행합니다. 이 플러그인은 저장소 scope를 추가하지 않습니다.
 
@@ -65,7 +63,7 @@ bytes와 data URL은 Windows Imaging Component로 디코딩합니다. 픽셀은 
 
 `format`도 `image/png`, `image/jpeg` 또는 `image/bmp`입니다. PNG는 alpha를 보존합니다.
 JPEG와 BMP는 모든 픽셀의 alpha가 255일 때만 내보냅니다. 투명 픽셀에 배경색을 임의로
-적용하지 않습니다. JPEG는 WIC의 기본 품질로 인코딩하며 픽셀 값은 손실될 수 있습니다.
+적용하지 않습니다. JPEG는 플랫폼 codec의 기본 품질로 인코딩하며 픽셀 값은 손실될 수 있습니다.
 빈 이미지는 픽셀 조회와 해제는 가능하지만 인코딩할 수 없습니다. encoded 결과도
 600,000바이트까지이며 파일 bytes의 base64 또는 해당 data URL을 반환합니다.
 
@@ -107,7 +105,7 @@ try {
 폭과 높이를 둘 다 지정하며 종횡비를 자동으로 유지하지 않습니다. `interpolation`은
 `nearest` 또는 `linear`이고 생략하면 `linear`입니다. Nearest는 출력 픽셀 중심을 소스
 좌표로 비례 변환한 뒤 좌표를 내림해 선택합니다. 선택한 RGBA 네 바이트를 직접 복사하므로
-투명 픽셀의 RGB도 보존합니다. Linear는 Windows의 WIC scaler에서 premultiplied alpha로 보간한 다음
+투명 픽셀의 RGB도 보존합니다. Linear는 Windows의 WIC scaler 또는 macOS의 CoreGraphics에서 premultiplied alpha로 보간한 다음
 다시 straight RGBA로 변환해 투명 edge의 색 번짐을 방지합니다. 8-bit 변환의 반올림으로
 채널 값이 달라질 수 있고 완전히 투명한 픽셀의 RGB는 0으로 정규화될 수 있습니다.
 빈 이미지와 해제한 ID는 두 transform의 소스로 사용할 수 없습니다.
@@ -139,7 +137,7 @@ try {
 백엔드는 현재 명령의 취소와 기한을 이어받습니다. 호스트가 생성 작업을 완료하기 전에
 요청이 취소되면 새 ID와 픽셀 버퍼를 버리고 quota를 복원합니다. 완료한 생성은 뒤늦은
 화면 취소로 되돌리지 않습니다. 받은 ID의 수명은 정상 호출 완료와 창 탐색으로 끝나지
-않으며 앱이 명시적으로 해제합니다. WIC의 동기 decode/encode를 중간에 중단하지는 않습니다.
+않으며 앱이 명시적으로 해제합니다. 네이티브 codec의 동기 decode/encode를 중간에 중단하지는 않습니다.
 취소된 결과는 호스트가 폐기하며 이미 실행한 명시적 해제는 되돌리지 않습니다.
 
 | 오류 | 의미 |
@@ -148,7 +146,7 @@ try {
 | `PERMISSION_DENIED` | 해당 operation 권한이 없음 |
 | `UNSUPPORTED` | 등록하지 않은 작업이나 지원하지 않는 플랫폼 |
 | `BUSY` | 리소스 수나 앱 픽셀 메모리 상한에 도달함 |
-| `INTERNAL` | Windows codec이나 COM interface, native 인코딩이 실패함 |
+| `INTERNAL` | 플랫폼 codec의 native 리소스 처리나 인코딩이 실패함 |
 | `CANCELLED`, `TIMEOUT` | 요청 취소, 기한 초과 또는 앱 종료 |
 
-소유권과 실제 Windows 회귀 범위는 [플러그인 README](https://github.com/mathbook3948/bunaway/tree/main/plugins/image)를 참고하세요.
+소유권과 실제 플랫폼 회귀 범위는 [플러그인 README](https://github.com/mathbook3948/bunaway/tree/main/plugins/image)를 참고하세요.

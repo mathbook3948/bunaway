@@ -6,10 +6,11 @@ import { bundleMacosHost } from "#cli/assets";
 import { files, hash, writeJson } from "#cli/files";
 import { compileMacosApp } from "#cli/macos-compile";
 import { installedPlugins } from "#cli/plugins";
+import { run } from "#cli/processes";
 import pin from "../../runtime/build-manifests/darwin-aarch64.json";
 
-// The host owner wires this success-only fixture into run-native.ts after contextual I/O dispatch.
-// It intentionally fails on the UI-only host rather than treating unsupported execution as success.
+// Verify the packaged WKWebView -> backend SDK -> contextual I/O worker path.
+// Native adapter probes remain separate from this public host-routing regression.
 assert.equal(process.platform, "darwin");
 assert.equal(process.arch, "arm64");
 const root = resolve(import.meta.dir, "../..");
@@ -31,11 +32,33 @@ try {
 import assert from "node:assert/strict";
 import { defineApp } from ${JSON.stringify(backend)};
 import { image, imagePlugin } from ${JSON.stringify(image)};
-export default defineApp({ modules: [], plugins: [imagePlugin], commands: {
+let setupId;
+let sharedId;
+let deniedResult;
+export default defineApp({ modules: [], plugins: [imagePlugin, {
+  name: "image-setup", version: "1", async setup() {
+    setupId = (await image.createRGBA({ width: 0, height: 0, rgba: "" })).id;
+  }
+}], commands: {
+  "test.id": { input: { const: null }, output: { type: "string" }, async run(_input, context) {
+    const deadline = Date.now() + 10000;
+    while (!sharedId) {
+      if (context.signal.aborted) throw new Error("Image caller was cancelled.");
+      if (Date.now() > deadline) throw new Error("Image creation did not reach the I/O worker.");
+      await Bun.sleep(5);
+    }
+    return sharedId;
+  } },
+  "test.denial": { input: { type: "boolean" }, output: { const: null }, run(value) { deniedResult = value; return null; } },
   "test.image": { input: { const: null }, output: { const: true }, async run() {
     try {
+      assert(setupId, "Backend setup must create resources through the I/O worker.");
+      assert.deepEqual({ ...await image.getInfo({ id: setupId }) }, { width: 0, height: 0, empty: true });
+      assert.equal(await image.dispose({ id: setupId }), true);
+      await assert.rejects(image.createBytes({ mime: "image/png", data: "AA==" }), { code: "INVALID_ARGUMENT" });
       const pixels = { width: 2, height: 1, rgba: Buffer.from([255,0,0,128,17,31,63,0]).toString("base64") };
       const source = await image.createRGBA(pixels);
+      sharedId = source.id;
       assert.deepEqual({ ...await image.getPixels({ id: source.id }) }, pixels);
       const png = await image.exportBytes({ id: source.id, format: "image/png" });
       const restored = await image.createBytes(png);
@@ -54,11 +77,17 @@ export default defineApp({ modules: [], plugins: [imagePlugin], commands: {
         assert.deepEqual({ ...await image.getInfo({ id: decoded.id }) }, { width: 1, height: 1, empty: false });
         await image.dispose({ id: decoded.id });
       }
+      const deniedDeadline = Date.now() + 10000;
+      while (deniedResult === undefined) {
+        if (Date.now() > deniedDeadline) throw new Error("Read-only view did not complete its permission checks.");
+        await Bun.sleep(5);
+      }
+      assert.equal(deniedResult, true, "Read-only view must allow getInfo and deny getPixels for the same app-owned ID.");
       for (const resource of [source, restored, cropped, nearest, solid, linear, opaque]) {
         assert.equal(await image.dispose({ id: resource.id }), true);
         assert.equal(await image.dispose({ id: resource.id }), false);
       }
-      await Bun.write(process.env.TMPDIR + "/report.json", JSON.stringify({ ok: true }));
+      await Bun.write(process.env.TMPDIR + "/report.json", JSON.stringify({ ok: true, permissionDenied: true, setup: true }));
       return true;
     } catch (error) {
       await Bun.write(process.env.TMPDIR + "/report.json", JSON.stringify({ ok: false, error: String(error), code: error?.code }));
@@ -90,11 +119,20 @@ export default defineApp({ modules: [], plugins: [imagePlugin], commands: {
         height: 300,
       },
     },
+    {
+      view: "reader",
+      home: "https://app.bunaway.local/reader.html",
+      title: "Read-only image view",
+      window: {
+        width: 300,
+        height: 200,
+      },
+    },
   ];
   await writeJson(resolve(assets, "manifest.json"), {
     format: 1,
     app: {
-      appId: appId,
+      appId,
       title: "Image host fixture",
       windows: specs,
     },
@@ -117,6 +155,24 @@ export default defineApp({ modules: [], plugins: [imagePlugin], commands: {
             permissions: operations.map((name) => `image.${name}`),
           },
         },
+        {
+          id: "reader",
+          origins: [
+            "https://app.bunaway.local",
+          ],
+          commands: [
+            "test.id",
+            "test.denial",
+            "plugin.image.getInfo",
+            "plugin.image.getPixels",
+          ],
+          events: [],
+          host: {
+            permissions: [
+              "image.getInfo",
+            ],
+          },
+        },
       ],
     },
     plugins: [],
@@ -126,8 +182,22 @@ export default defineApp({ modules: [], plugins: [imagePlugin], commands: {
   await Bun.write(
     source,
     `import { createClient } from ${JSON.stringify(client)};
+import { image } from ${JSON.stringify(image)};
 const client = createClient();
-try { await client.invoke("test.image", null); } finally { window.close(); }
+if (location.pathname === "/reader.html") {
+  let ok = false;
+  try {
+    const id = await client.invoke("test.id", null);
+    let denied = false;
+    try { await image.getPixels({ id }); } catch (error) { denied = error?.code === "PERMISSION_DENIED"; }
+    if (!denied) throw new Error("Read-only getPixels permission was not enforced.");
+    const info = await image.getInfo({ id });
+    if (info.width !== 2 || info.height !== 1 || info.empty) throw new Error("Read-only getInfo cannot see the app-owned ID.");
+    ok = true;
+  } finally { await client.invoke("test.denial", ok); window.close(); }
+} else {
+  try { await client.invoke("test.image", null); } finally { window.close(); }
+}
 `,
   );
   const web = await Bun.build({
@@ -141,10 +211,12 @@ try { await client.invoke("test.image", null); } finally { window.close(); }
   for (const output of web.outputs) {
     await Bun.write(output.path, await output.arrayBuffer());
   }
-  await Bun.write(
-    resolve(assets, "web/main.html"),
-    '<!doctype html><title>Image host fixture</title><script type="module" src="web.js"></script>',
-  );
+  for (const spec of specs) {
+    await Bun.write(
+      resolve(assets, "web", `${spec.view}.html`),
+      '<!doctype html><title>Image host fixture</title><script type="module" src="web.js"></script>',
+    );
+  }
   const installed = await installedPlugins(root, "0.0.0");
   const bundled = await bundleMacosHost(
     resolve(root, "native/macos/bun"),
@@ -156,6 +228,27 @@ try { await client.invoke("test.image", null); } finally { window.close(); }
   );
   const executable = resolve(directory, "bunaway-host");
   await compileMacosApp(assets, process.execPath, executable, bundled);
+  await run(
+    [
+      "codesign",
+      "--force",
+      "--sign",
+      "-",
+      "--entitlements",
+      resolve(root, "native/macos/bun/entitlements.plist"),
+      executable,
+    ],
+    root,
+  );
+  await run(
+    [
+      "codesign",
+      "--verify",
+      "--strict",
+      executable,
+    ],
+    root,
+  );
   const inventory: Record<string, string> = {};
   for (const file of await files(assets)) {
     inventory[relative(directory, file)] = await hash(file);
@@ -192,6 +285,8 @@ try { await client.invoke("test.image", null); } finally { window.close(); }
   const report = await Bun.file(resolve(dataRoot, "temp/report.json")).json();
   assert.deepEqual(report, {
     ok: true,
+    permissionDenied: true,
+    setup: true,
   });
   const log = await Bun.file(resolve(dataRoot, "logs/host.log")).text();
   const records = log

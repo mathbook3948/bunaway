@@ -46,6 +46,10 @@ jobs:
           codesign --force --sign - --entitlements native/macos/bun/entitlements.plist build/macos-image-native
           codesign --verify --strict build/macos-image-native
           build/macos-image-native build/macos-image-results.json 2>&1 | tee build/macos-image-logs/compiled.log
+      - name: Execute the signed packaged WKWebView image host
+        run: |
+          set -euo pipefail
+          mise exec -- bun --no-env-file tests/lifecycle/macos-image-host.ts 2>&1 | tee build/macos-image-logs/host.log
       - name: Upload codec evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -54,5 +58,6 @@ jobs:
           path: |
             build/macos-image-logs/
             build/macos-image-results.json
+            build/macos-image-host-results.json
           if-no-files-found: warn
           retention-days: 7

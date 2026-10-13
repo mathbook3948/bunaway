@@ -1,6 +1,6 @@
 # @bunaway/plugin-image
 
-Windows의 선택 이미지 플러그인이다. `defineNativePlugin`과 Zod 계약으로 RGBA,
+Windows와 macOS arm64의 선택 이미지 플러그인이다. `defineNativePlugin`과 Zod 계약으로 RGBA,
 PNG, JPEG와 BMP bytes, data URL에서 앱 소유 이미지 리소스를 만들고 조회, 인코딩과
 해제를 제공한다. 설치와 등록, 각 operation 권한은 별도로 필요하다.
 
@@ -79,8 +79,8 @@ CGRect를 네 개의 double로 전달하는 ABI는 arm64 전용이며 x64는 `UN
 어댑터 실행 위치는 `io`이며 호스트가 요청 권한, signal과 `beforeExecute`를 보유한
 `executeUI` contextual hook으로 호출해야 한다. 이름과 달리 이 hook은 AppKit나
 UI 스레드에 의존하지 않는다. context 없이 호출하는 `execute`는 `UNSUPPORTED`다.
-macOS 호스트의 공통 I/O dispatch와 등록은 별도 변경에서 연결해야 하며 이 어댑터 추가만으로
-현재 앱의 macOS 공개 호출이 지원된다고 선언하지 않는다.
+macOS 호스트의 공통 I/O Worker가 등록한 image 어댑터만 초기화하고 이 hook으로
+권한과 취소를 전달한다. 앱 종료는 I/O Worker에서 모든 이미지와 codec binding을 정리한다.
 
 ## 검증
 
@@ -105,10 +105,11 @@ alpha 및 투명 RGB 왕복, grayscale과 palette PNG, JPEG/BMP, malformed 입�
 `tests/cli/image.test.ts`는 tarball을 isolated 설치해 neutral, Windows와 macOS 출력의
 분리와 browser FFI 제외를 확인하고 macOS arm64에서 설치된 native adapter를 실행한다.
 `macos-image.yml`은 이 검사와 기존 entitlement로 ad-hoc 서명한 compiled codec fixture를
-실행한다. 이 근거는 실제 shared 호스트 dispatch나 WKWebView 공개 호출 검증과 구분한다.
+실행한다. 실제 shared 호스트 dispatch와 WKWebView 공개 호출은 아래 호스트 fixture에서 검증한다.
 
 `tests/lifecycle/macos-image-host.ts`는 실제 compiled 호스트와 WKWebView 명령에서
-공개 backend image SDK를 호출하는 성공 전용 fixture다. RGBA/PNG와 JPEG/BMP, crop/resize,
-해제와 정상 종료를 검사하고 `build/macos-image-host-results.json`을 기록한다.
-현재 main의 UI 전용 dispatch에서는 `UNSUPPORTED`로 실패한다. 호스트 소유자가 contextual
-I/O dispatch를 연결한 뒤 shared runner에서 실행하며 현재 통과한 근거로 사용하지 않는다.
+공개 backend image SDK를 호출하는 성공 전용 fixture다. Backend setup과 뷰 명령,
+RGBA/PNG와 JPEG/BMP, crop/resize, 동일 ID의 작업별 권한, 해제와 정상 종료를 검사하고 `build/macos-image-host-results.json`을 기록한다.
+`host:macos`의 shared runner에 포함되며 contextual I/O dispatch를 실제로 사용한다.
+호스트 기반은 [PR #164](https://github.com/mathbook3948/bunaway/pull/164)의 별도 변경에 둔다.
+각 head의 실행 결과는 PR의 native CI에서 확인한다.
