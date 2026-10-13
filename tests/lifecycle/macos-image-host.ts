@@ -40,6 +40,24 @@ export default defineApp({ modules: [], plugins: [imagePlugin, {
     setupId = (await image.createRGBA({ width: 0, height: 0, rgba: "" })).id;
   }
 }], commands: {
+  "test.created": { input: { const: null }, output: { type: "string" }, async run(_input, context) {
+    const marker = Bun.file(process.env.TMPDIR + "/../image-created.json");
+    const deadline = Date.now() + 10000;
+    while (!await marker.exists()) {
+      if (context.signal.aborted) throw new Error("Cancelled creation probe.");
+      if (Date.now() > deadline) throw new Error("Image creation did not reach the held result boundary.");
+      await Bun.sleep(5);
+    }
+    return (await marker.json()).id;
+  } },
+  "test.complete": { input: { const: null }, output: { const: null }, async run() {
+    await Bun.write(process.env.TMPDIR + "/report.json", JSON.stringify({ ok: true, permissionDenied: true, setup: true, cancellation: true }));
+    return null;
+  } },
+  "test.failure": { input: { type: "string" }, output: { const: null }, async run(error) {
+    await Bun.write(process.env.TMPDIR + "/report.json", JSON.stringify({ ok: false, error }));
+    return null;
+  } },
   "test.id": { input: { const: null }, output: { type: "string" }, async run(_input, context) {
     const deadline = Date.now() + 10000;
     while (!sharedId) {
@@ -87,7 +105,7 @@ export default defineApp({ modules: [], plugins: [imagePlugin, {
         assert.equal(await image.dispose({ id: resource.id }), true);
         assert.equal(await image.dispose({ id: resource.id }), false);
       }
-      await Bun.write(process.env.TMPDIR + "/report.json", JSON.stringify({ ok: true, permissionDenied: true, setup: true }));
+      console.log("PASS real host image setup, codecs, transforms, independent view grants and disposal");
       return true;
     } catch (error) {
       await Bun.write(process.env.TMPDIR + "/report.json", JSON.stringify({ ok: false, error: String(error), code: error?.code }));
@@ -149,6 +167,11 @@ export default defineApp({ modules: [], plugins: [imagePlugin, {
           ],
           commands: [
             "test.image",
+            "test.created",
+            "test.failure",
+            "test.complete",
+            "plugin.image.createRGBA",
+            "plugin.image.getInfo",
           ],
           events: [],
           host: {
@@ -196,7 +219,21 @@ if (location.pathname === "/reader.html") {
     ok = true;
   } finally { await client.invoke("test.denial", ok); window.close(); }
 } else {
-  try { await client.invoke("test.image", null); } finally { window.close(); }
+  try {
+    await client.invoke("test.image", null);
+    const controller = new AbortController();
+    const pending = image.createRGBA({ width: 1, height: 1, rgba: "CAcGBQ==" }, { signal: controller.signal }).then(
+      () => false, (error) => error?.code === "CANCELLED"
+    );
+    const id = await client.invoke("test.created", null);
+    controller.abort();
+    if (!await pending) throw new Error("Held image creation was not cancelled.");
+    let discarded = false;
+    try { await image.getInfo({ id }); } catch (error) { discarded = error?.code === "INVALID_ARGUMENT"; }
+    if (!discarded) throw new Error("Undelivered image resource survived cancellation during synchronous I/O.");
+    await client.invoke("test.complete", null);
+  } catch (error) { await client.invoke("test.failure", String(error)); }
+  finally { window.close(); }
 }
 `,
   );
@@ -218,13 +255,59 @@ if (location.pathname === "/reader.html") {
     );
   }
   const installed = await installedPlugins(root, "0.0.0");
+  const imageEntry = installed.find((plugin) => plugin.name === "image");
+  assert(imageEntry?.targets.macos, "Installed image I/O adapter must exist.");
+  const imageTarget = imageEntry.targets.macos;
+  const heldEntry = resolve(directory, "held-image.ts");
+  await Bun.write(
+    heldEntry,
+    `
+import definition from ${JSON.stringify(resolve(root, "plugins/image/dist/native/macos.js"))};
+import { writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+export default { ...definition, nativePlatforms: { ...definition.nativePlatforms,
+  macos: { execution: "io", create(environment) {
+    const adapter = definition.nativePlatforms.macos.create(environment);
+    const prepare = Reflect.get(adapter, "prepareUI");
+    if (typeof prepare !== "function") throw new Error("SDK contextual preparation must exist.");
+    return Object.defineProperty({ ...adapter }, "prepareUI", { value: async (name, input, source, context) => {
+      const execute = await prepare(name, input, source, context);
+      return async () => {
+        const result = await execute();
+        if (name === "image.createRGBA" && input.rgba === "CAcGBQ==") {
+          // The actual image adapter has allocated an ID. Keep the worker synchronously busy
+          // while the actual WebView sends cancellation, as a native codec call can do.
+          writeFileSync(resolve(environment.dataRoot, "image-created.json"), JSON.stringify(result));
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000);
+        }
+        return result;
+      };
+    } });
+  } }
+} };
+`,
+  );
+  const fixturePlugins = installed.map((plugin) =>
+    plugin === imageEntry
+      ? {
+          ...plugin,
+          targets: {
+            ...plugin.targets,
+            macos: {
+              ...imageTarget,
+              operations: heldEntry,
+            },
+          },
+        }
+      : plugin,
+  );
   const bundled = await bundleMacosHost(
     resolve(root, "native/macos/bun"),
     assets,
     appEntry,
     undefined,
     false,
-    installed,
+    fixturePlugins,
   );
   const executable = resolve(directory, "bunaway-host");
   await compileMacosApp(assets, process.execPath, executable, bundled);
@@ -287,6 +370,7 @@ if (location.pathname === "/reader.html") {
     ok: true,
     permissionDenied: true,
     setup: true,
+    cancellation: true,
   });
   const log = await Bun.file(resolve(dataRoot, "logs/host.log")).text();
   const records = log

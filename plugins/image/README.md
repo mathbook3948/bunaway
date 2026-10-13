@@ -113,3 +113,8 @@ RGBA/PNG와 JPEG/BMP, crop/resize, 동일 ID의 작업별 권한, 해제와 정�
 `host:macos`의 shared runner에 포함되며 contextual I/O dispatch를 실제로 사용한다.
 호스트 기반은 [PR #164](https://github.com/mathbook3948/bunaway/pull/164)의 별도 변경에 둔다.
 각 head의 실행 결과는 PR의 native CI에서 확인한다.
+
+호스트 fixture의 취소 회귀는 실제 설치 어댑터의 contextual preparation을 그대로 사용하고,
+새 ID를 만든 뒤 결과 전달만 1초간 동기적으로 지연하는 테스트 wrapper를 둔다.
+실제 WebView에서 이 구간에 취소한 뒤 ID가 남지 않는지 확인한다. Native codec 자체의
+성능이나 취소를 측정하는 지연이 아니며 I/O 요청 완료와 취소 전달 사이의 수명 경계를 검증한다.
