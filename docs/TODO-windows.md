@@ -182,7 +182,8 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 숨긴 창의 상태 변경은 창을 표시하고, 전체화면 중 다섯 상태 변경은 `INVALID_ARGUMENT`로 거부한다.
 - [x] 상태 조회에도 해당 operation 권한을 검사하고 닫힌 창의 오류를 처리한다.
 - [x] Windows 선언과 생성별 `options.window`의 `maximized`, `fullscreen`을 지원한다. 숨김과 준비 후 표시를 유지하고 두 옵션을 함께 켜면 전체화면 해제 뒤 최대화 상태를 복원한다.
-- [ ] minimizable, maximizable, closable, fullscreenable을 설정하고 조회한다.
+- [x] Windows `setMinimizable`/`isMinimizable`, `setMaximizable`/`isMaximizable`, `setClosable`/`isClosable`로 네이티브 버튼과 사용자 동작을 설정하고 조회한다. 프로그램의 상태 및 close API는 유지한다.
+- [ ] fullscreenable의 설정과 조회, 현재 전체화면 중 변경의 계약을 정의하고 구현한다.
 - [x] Windows 선언과 생성별 `window.focusable`, 실행 중 `setFocusable`와 `isFocusable`을 제공한다. 비활성 표시와 사용자 및 호스트 활성화 차단, 현재 포커스와 별도 조회 및 재생성 기본값을 유지한다.
 - [x] `setTitle`과 `getTitle`로 Windows 창 title을 실행 중 변경하고 조회한다. 선언과 다른 인스턴스를 변경하지 않으며 닫기 확인 창에도 현재 title을 사용한다.
 - [ ] 창 icon을 실행 중 변경하고 조회한다. 이미지 입력과 배포 리소스 계약을 정의한다.

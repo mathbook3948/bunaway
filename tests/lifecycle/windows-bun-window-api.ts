@@ -154,6 +154,14 @@ if (!process.argv.includes("--child")) {
       ],
       returns: "i64",
     },
+    GetMenuState: {
+      args: [
+        "u64",
+        "u32",
+        "u32",
+      ],
+      returns: "u32",
+    },
   });
   const nativeWindows = new Windows(() => {});
   try {
@@ -170,11 +178,16 @@ if (!process.argv.includes("--child")) {
         true,
       ]) {
         const foreground = user.symbols.GetForegroundWindow();
+        let inactiveCloseRequests = 0;
         const hwnd = nativeWindows.create(
           "Nonactivating target",
           650,
           450,
-          () => {},
+          (message) => {
+            if (message === 0x0010) {
+              inactiveCloseRequests++;
+            }
+          },
           visible,
           {
             focusable: false,
@@ -246,12 +259,111 @@ if (!process.argv.includes("--child")) {
           assert.equal(user.symbols.GetForegroundWindow(), foreground);
           nativeWindows.unmaximize(hwnd);
           assert.deepEqual(nativeWindows.getBounds(hwnd, "outer"), original);
+          nativeWindows.setMinimizable(hwnd, false);
+          nativeWindows.setMaximizable(hwnd, false);
+          nativeWindows.setClosable(hwnd, false);
+          for (const command of [
+            0xf020n,
+            0xf030n,
+            0xf060n,
+          ]) {
+            driver.symbols.SendMessageW(hwnd, 0x0112, command, 0n);
+          }
+          driver.symbols.SendMessageW(hwnd, 0x0010, 0n, 0n);
+          assert.equal(inactiveCloseRequests, 0);
+          assert.equal(nativeWindows.isMinimized(hwnd), false);
+          assert.equal(nativeWindows.isMaximized(hwnd), false);
+          // Caption restrictions do not block trusted state APIs or desktop restoration.
+          nativeWindows.maximize(hwnd);
+          nativeWindows.minimize(hwnd);
+          nativeWindows.showForDesktop(hwnd);
+          assert.equal(nativeWindows.isMaximized(hwnd), true);
+          assert.equal(nativeWindows.isMinimized(hwnd), false);
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          nativeWindows.unmaximize(hwnd);
+          assert.deepEqual(nativeWindows.getBounds(hwnd, "outer"), original);
+          nativeWindows.setClosable(hwnd, true);
+          driver.symbols.SendMessageW(hwnd, 0x0010, 0n, 0n);
+          assert.equal(inactiveCloseRequests, 1);
         } finally {
           nativeWindows.destroy(hwnd);
         }
       }
     } finally {
       nativeWindows.destroy(source);
+    }
+    for (const visible of [
+      false,
+      true,
+    ]) {
+      let closeRequests = 0;
+      const hwnd = nativeWindows.create(
+        "Caption control regression",
+        650,
+        450,
+        (message) => {
+          if (message === 0x0010) {
+            closeRequests++;
+          }
+        },
+        visible,
+      );
+      try {
+        const original = nativeWindows.getBounds(hwnd, "outer");
+        const foreground = user.symbols.GetForegroundWindow();
+        nativeWindows.setMinimizable(hwnd, false);
+        nativeWindows.setMaximizable(hwnd, false);
+        nativeWindows.setClosable(hwnd, false);
+        assert.equal(nativeWindows.isMinimizable(hwnd), false);
+        assert.equal(nativeWindows.isMaximizable(hwnd), false);
+        assert.equal(nativeWindows.isClosable(hwnd), false);
+        assert(
+          driver.symbols.GetMenuState(
+            user.symbols.GetSystemMenu(hwnd, 0),
+            0xf060,
+            0,
+          ) & 1,
+        );
+        for (const command of [
+          0xf020n,
+          0xf030n,
+          0xf060n,
+        ]) {
+          driver.symbols.SendMessageW(hwnd, 0x0112, command, 0n);
+        }
+        driver.symbols.SendMessageW(hwnd, 0x0010, 0n, 0n);
+        assert.equal(closeRequests, 0);
+        assert.equal(nativeWindows.isMinimized(hwnd), false);
+        assert.equal(nativeWindows.isMaximized(hwnd), false);
+        assert.equal(nativeWindows.isVisible(hwnd), visible);
+        assert.equal(user.symbols.GetForegroundWindow(), foreground);
+        assert.deepEqual(nativeWindows.getBounds(hwnd, "outer"), original);
+        nativeWindows.setFullscreen(hwnd, true);
+        nativeWindows.setClosable(hwnd, true);
+        nativeWindows.setClosable(hwnd, false);
+        nativeWindows.setMinimizable(hwnd, true);
+        nativeWindows.setMaximizable(hwnd, true);
+        nativeWindows.setFullscreen(hwnd, false);
+        assert.equal(nativeWindows.isMinimizable(hwnd), true);
+        assert.equal(nativeWindows.isMaximizable(hwnd), true);
+        assert.equal(nativeWindows.isClosable(hwnd), false);
+        nativeWindows.setClosable(hwnd, true);
+        assert.equal(
+          driver.symbols.GetMenuState(
+            user.symbols.GetSystemMenu(hwnd, 0),
+            0xf060,
+            0,
+          ) & 3,
+          0,
+        );
+        driver.symbols.SendMessageW(hwnd, 0x0010, 0n, 0n);
+        assert.equal(closeRequests, 1);
+        assert.equal(nativeWindows.isVisible(hwnd), visible);
+        assert.deepEqual(nativeWindows.getBounds(hwnd, "outer"), original);
+      } finally {
+        nativeWindows.destroy(hwnd);
+      }
+      assert.throws(() => nativeWindows.isClosable(hwnd));
     }
     for (const maximized of [
       false,
@@ -1027,6 +1139,21 @@ if (!process.argv.includes("--child")) {
               focusable: false,
             });
             assert.equal(await windows.isFocusable(editor), false);
+            await windows.setMinimizable({
+              ...editor,
+              minimizable: false,
+            });
+            await windows.setMaximizable({
+              ...editor,
+              maximizable: false,
+            });
+            await windows.setClosable({
+              ...editor,
+              closable: false,
+            });
+            assert.equal(await windows.isMinimizable(editor), false);
+            assert.equal(await windows.isMaximizable(editor), false);
+            assert.equal(await windows.isClosable(editor), false);
             assert.equal(await windows.getTitle(editor), "Window API editor");
             await windows.setTitle({
               ...editor,
@@ -1519,6 +1646,24 @@ if (!process.argv.includes("--child")) {
           } else if (runs === 2) {
             assert.equal(
               await windows.isFocusable({
+                view: "editor",
+              }),
+              true,
+            );
+            assert.equal(
+              await windows.isMinimizable({
+                view: "editor",
+              }),
+              true,
+            );
+            assert.equal(
+              await windows.isMaximizable({
+                view: "editor",
+              }),
+              true,
+            );
+            assert.equal(
+              await windows.isClosable({
                 view: "editor",
               }),
               true,
