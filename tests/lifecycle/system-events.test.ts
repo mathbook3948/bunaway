@@ -178,6 +178,76 @@ test("power and session lifecycle edges retain order while status notifications 
   service.dispose();
 });
 
+test("automatic resume emits once across pump batches and interleaved user-presence notifications", () => {
+  const WM_POWERBROADCAST = 0x0218;
+  const WM_SETTINGCHANGE = 0x001a;
+  const WM_SYSCOLORCHANGE = 0x0015;
+  const PBT_APMSUSPEND = 4n;
+  const PBT_APMRESUMEAUTOMATIC = 0x12n;
+  const PBT_APMRESUMESUSPEND = 7n;
+  let receive: ((message: number, wparam: bigint) => void) | undefined;
+  const service = new SystemEvents({
+    open(callback) {
+      receive = callback;
+      return () => {};
+    },
+    sessions() {},
+    publish() {},
+    report() {},
+  });
+  const seen: string[] = [];
+  service.subscribe((signal) => seen.push(signal));
+  try {
+    // Unattended wake resumes first; user activity can arrive in a later pump batch.
+    receive?.(WM_POWERBROADCAST, PBT_APMSUSPEND);
+    receive?.(WM_POWERBROADCAST, PBT_APMRESUMEAUTOMATIC);
+    service.flush();
+    expect(seen).toEqual([
+      "suspend",
+      "resume",
+    ]);
+    receive?.(WM_POWERBROADCAST, PBT_APMRESUMESUSPEND);
+    service.flush();
+    expect(seen).toEqual([
+      "suspend",
+      "resume",
+    ]);
+    // An unrelated setting between the two native resume messages also cannot duplicate a wake.
+    receive?.(WM_POWERBROADCAST, PBT_APMSUSPEND);
+    receive?.(WM_POWERBROADCAST, PBT_APMRESUMEAUTOMATIC);
+    receive?.(WM_SETTINGCHANGE, 0n);
+    receive?.(WM_POWERBROADCAST, PBT_APMRESUMESUSPEND);
+    service.flush();
+    expect(seen).toEqual([
+      "suspend",
+      "resume",
+      "suspend",
+      "resume",
+      "settingChanged",
+    ]);
+    // Preserve later real cycles, including a wake with no user-presence follow-up.
+    receive?.(WM_POWERBROADCAST, PBT_APMSUSPEND);
+    service.flush();
+    receive?.(WM_POWERBROADCAST, PBT_APMRESUMEAUTOMATIC);
+    receive?.(WM_SYSCOLORCHANGE, 0n);
+    service.flush();
+    receive?.(WM_POWERBROADCAST, PBT_APMRESUMESUSPEND);
+    service.flush();
+    expect(seen).toEqual([
+      "suspend",
+      "resume",
+      "suspend",
+      "resume",
+      "settingChanged",
+      "suspend",
+      "resume",
+      "colorsChanged",
+    ]);
+  } finally {
+    service.dispose();
+  }
+});
+
 test("session registration failure unwinds the notification window and lifecycle overflow is explicit", () => {
   let closed = 0;
   let receive: ((message: number, wparam: bigint) => void) | undefined;

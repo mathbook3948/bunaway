@@ -56,6 +56,7 @@ export async function save(text: string): Promise<null> {
 | `@bunaway/plugin-log` | `log`, `logPlugin` | `log` |
 | `@bunaway/plugin-capabilities` | `capabilities`, `capabilitiesPlugin` | `capabilities` |
 | `@bunaway/plugin-clipboard` | `clipboard`, `clipboardPlugin` | `clipboard` |
+| `@bunaway/plugin-appearance` | `appearance`, `appearancePlugin` | `appearance` |
 
 텍스트 클립보드 계약과 Windows 자원 소유권은 [clipboard README](../../plugins/clipboard/README.md)에 둔다.
 공통 UI 실행 컨텍스트는 선택적 `signal`을 제공한다. Windows와 macOS는 요청 취소, 컨텍스트 폐기와 종료 때 이 신호를 중단한다.
@@ -531,7 +532,11 @@ WTS DLL은 세션 알림을 요청할 때만 열며 등록 실패는 어댑터 �
 
 WndProc는 메시지 번호와 scalar wparam만 기록한다. WM_SETTINGCHANGE의 lparam은
 역참조하거나 보관하지 않는다. 테마, 시스템 색, accent와 전원 상태 변경은 pump
-배치에서 중복을 합치고 suspend/resume 및 lock/unlock은 순서를 유지한다. 큐는
+배치에서 중복을 합치고 suspend/resume 및 lock/unlock은 순서를 유지한다. resume은
+PBT_APMRESUMEAUTOMATIC에서만 전달한다. 이후 사용자 활동을 알리는
+PBT_APMRESUMESUSPEND는 새 resume으로 전달하지 않는다. 두 알림이 서로 다른 pump
+배치에 도착하거나 중간에 설정 알림이 들어와도 resume을 중복 전달하지 않는다.
+Windows의 [복귀 알림 순서](https://learn.microsoft.com/en-us/windows/win32/power/pbt-apmresumesuspend)를 따른다. 큐는
 128개로 제한하며 초과는 다음 flush에서 UI 실패로 보고한다. 구독 콜백의 조회 실패는
 진단 로그에 남기고 구독을 유지하여 다음 알림으로 복구할 수 있다.
 

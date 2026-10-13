@@ -47,7 +47,6 @@ const WM_WTSSESSION_CHANGE = 0x02b1;
 const PBT_APMPOWERSTATUSCHANGE = 0x000an;
 const PBT_APMSUSPEND = 0x0004n;
 const PBT_APMRESUMEAUTOMATIC = 0x0012n;
-const PBT_APMRESUMESUSPEND = 0x0007n;
 const WTS_SESSION_LOCK = 7n;
 const WTS_SESSION_UNLOCK = 8n;
 const lifecycleSignals = new Set<NativeSystemSignal>([
@@ -122,10 +121,9 @@ export class SystemEvents implements NativeSystemEvents {
           signal = "powerStatusChanged";
         } else if (wparam === PBT_APMSUSPEND) {
           signal = "suspend";
-        } else if (
-          wparam === PBT_APMRESUMEAUTOMATIC ||
-          wparam === PBT_APMRESUMESUSPEND
-        ) {
+        } else if (wparam === PBT_APMRESUMEAUTOMATIC) {
+          // AUTOMATIC identifies the wake. RESUMESUSPEND only announces later user activity,
+          // so counting it as another resume would duplicate wakes across pump batches.
           signal = "resume";
         }
       } else if (

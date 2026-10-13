@@ -60,6 +60,7 @@ if (target === "windows-x64") {
       await test("windows-bun.ts", scenario);
     }
     await test("windows-bun-window-api.ts");
+    await test("windows-webview-audio.ts");
     await test("windows-initial-placement.ts");
     await test("windows-window-events.ts");
     await run(
@@ -94,6 +95,7 @@ if (target === "windows-x64") {
         ...[
           "tests/lifecycle/desktop.test.ts",
           "tests/lifecycle/windows-bun-instance.test.ts",
+          "tests/lifecycle/windows-appearance.test.ts",
           "tests/cli/windows-assets.test.ts",
           "tests/cli/windows-compile.test.ts",
         ].map((name) => resolve(root, name)),

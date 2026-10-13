@@ -123,6 +123,11 @@ test.skipIf(process.platform !== "win32")(
         "sessionLocked",
         "sessionUnlocked",
       ]);
+      // The user-presence follow-up may arrive after a pump flush. It is not another wake.
+      driver.symbols.SendMessageW(driverWindow, 0x0218, 7n, 0n);
+      windows.pump();
+      service.flush();
+      expect(seen.filter((signal) => signal === "resume")).toHaveLength(1);
       release();
       expect(hwnd).toBeUndefined();
       expect(failures).toEqual([]);

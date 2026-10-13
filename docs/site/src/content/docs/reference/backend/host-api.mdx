@@ -93,6 +93,11 @@ SDK의 `command()`와 `defineApp()`을 사용하지 않는 객체형 정의에�
 
 정책은 이 API로 요청하는 작업에 적용합니다. 신뢰된 백엔드가 직접 호출하는 Bun API는 이 정책으로 제한하지 않습니다.
 `storage`는 백엔드 전체의 파일 접근을 격리하는 샌드박스가 아닙니다.
+신뢰된 백엔드는 `Bun.file`, `Bun.write`, `node:path`와 `bun:sqlite`를 직접 사용할 수 있습니다.
+이 경로는 앱 코드가 접근과 수명주기를 관리합니다. 화면에는 이 런타임 API를 노출하지 않고,
+앱 명령과 작업별 Host 권한으로 접근을 중재하세요. SQLite의 query, transaction과 migration을
+화면에 중재하는 공식 플러그인은 아직 없습니다.
+바이트와 append 작업은 [바이너리 저장과 append](/reference/host/storage-bytes/)를 따릅니다.
 
 ## 창
 
