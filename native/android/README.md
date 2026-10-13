@@ -17,7 +17,8 @@ Java Activity와 Android WebView, APK에 포함한 Bun 1.4.2를 연결한다.
 | `AppAssets.java`, `Protocol.java` | APK 입력과 생성된 스키마 검증 |
 | `BackendAssets.java` | 시작 전 백엔드 추출 트리 교체와 이전 APK 파일 정리 |
 | `app/` | 사용자가 수정하는 Java Activity, Manifest와 Gradle 초기 템플릿 |
-| `bridge.js` | 기존 기본 Client SDK가 사용하는 WebViewBridge 구현 |
+| `bridge.js` | 출처가 제한된 Java 객체를 공통 모바일 브리지에 연결 |
+| `../mobile/bridge.js` | iOS와 공유하는 직접 WebSocket, fallback, 큐 제한과 SDK 전달 |
 | `../../packages/runtime-bun/src/loopback-channel.ts` | 일회용 문서 연결, 입력 검증과 순서, 크기 제한 및 회수 |
 | `host/src/main/res/xml/bunaway_network_security.xml` | IPv4 loopback 연결만 cleartext 허용 |
 | `../../packages/cli/src/native-build.ts` | 공통 Bun 도구로 Android x64, arm64 아카이브, 실행 파일과 라이선스 해시 검증 |

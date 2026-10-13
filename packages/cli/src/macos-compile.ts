@@ -2,7 +2,7 @@ import { frameworkRoot } from "./files.ts";
 import { runManagedCommand } from "./managed-command.ts";
 import { run } from "./processes.ts";
 
-/** Compile the main entry, backend Worker and file imports; web resources stay external. */
+/** Compile the main entry, backend and I/O Workers and file imports; web resources stay external. */
 export async function compileMacosApp(
   assets: string,
   bun: string,
@@ -25,6 +25,7 @@ export async function compileMacosApp(
     `--outfile=${executable}`,
     "./boot.js",
     "./backend.js",
+    "./host-operations.js",
   ];
   if (signal) {
     await runManagedCommand(args, assets, {}, signal, framework);

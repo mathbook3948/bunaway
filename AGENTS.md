@@ -150,7 +150,7 @@ Direct function APIs remain supported and must still be covered by SDK tests.
 ### Development priority
 
 Read `docs/decisions/0010-windows-first-platform-model.md` before runtime, CLI,
-template, or platform design work. Complete Windows first, then adapt other
-platforms to the same Bun-based app model. A single app definition is the target;
+template, or platform design work. Preserve the Windows Bun-based app model
+and public contracts while adapting macOS in parallel under the approved rollout. A single app definition is the target;
 the current macOS child-process implementation must not dictate separate
 developer entrypoints or delay Windows work.

@@ -5,6 +5,7 @@ import { BUILD_TARGETS } from "./contract.ts";
 export const OUTPUT_TARGETS = [
   ...BUILD_TARGETS,
   "android",
+  "ios",
 ] as const;
 export type OutputTarget = (typeof OUTPUT_TARGETS)[number];
 

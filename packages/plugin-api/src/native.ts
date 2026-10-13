@@ -143,6 +143,8 @@ export type WindowSpec = {
     minHeight?: number | null;
     maxWidth?: number | null;
     maxHeight?: number | null;
+    /** Permit user and host foreground activation, default true. Windows false uses WS_EX_NOACTIVATE. */
+    focusable?: boolean;
     /** Start maximized, retaining the initial normal placement for restoration. Windows only. */
     maximized?: boolean;
     /** Start fullscreen. When combined with maximized, exit restores maximized state. Windows only. */
@@ -242,6 +244,22 @@ export type NativeWindow = {
   setEnabled?(enabled: boolean): void;
   /** Reads actual native input availability. Windows only. */
   isEnabled?(): boolean;
+  /** Changes future activation eligibility without transferring current focus. Windows only. */
+  setFocusable?(focusable: boolean): void;
+  /** Reads whether the native window permits activation. Independent of isFocused. Windows only. */
+  isFocusable?(): boolean;
+  /** Changes the native minimize button and user system commands. Programmatic minimize remains available. Windows only. */
+  setMinimizable?(minimizable: boolean): void;
+  /** Reads the normal window's native minimize-button setting. Windows only. */
+  isMinimizable?(): boolean;
+  /** Changes the native maximize button and user system commands. Programmatic maximize remains available. Windows only. */
+  setMaximizable?(maximizable: boolean): void;
+  /** Reads the normal window's native maximize-button setting. Windows only. */
+  isMaximizable?(): boolean;
+  /** Changes user caption, system-menu and renderer closing. Backend/API closing remains available. Windows only. */
+  setClosable?(closable: boolean): void;
+  /** Reads the host's user-close setting for this HWND. Windows only. */
+  isClosable?(): boolean;
   /** Changes this HWND's title without modifying its declaration or other instances. Windows only. */
   setTitle?(title: string): void;
   /** Reads the live native title, bounded to 1024 UTF-16 code units. Windows only. */

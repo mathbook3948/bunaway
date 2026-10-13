@@ -122,3 +122,12 @@ reload는 비동기 준비 후 isCurrent()가 true일 때만 변경을 적용해
 빌드 중 새 변경이 오면 오래된 결과는 시작하지 않고 최신 변경을 다시 적용합니다.
 실패하면 error 훅을 호출합니다. 이후 change 호출은 계속 처리할 수 있습니다.
 `close()`는 변경 대기를 취소하고 진행 중 작업을 기다려 정리하며 이후 change는 재시작하지 않습니다.
+
+## iOS 프로젝트
+
+`syncIosProject(directory): Promise<string>`은 공통 앱 정의와 웹 UI를 번들하고 Xcode 프로젝트 경로를 반환합니다.
+`buildIosProject(directory): Promise<{ app: string; appId: string }>`은 동기화 후 Simulator debug 앱을 빌드합니다.
+`runIosProject(directory, device): Promise<void>`는 부팅된 Simulator UUID를 받아 빌드, 설치와 시작을 수행합니다.
+세 함수는 macOS arm64와 고정된 Bun, Xcode를 사용합니다. 지원하지 않는 설정, 런타임 해시 불일치와
+도구 실패는 throw합니다. 동기화는 앱 소유 파일을 보존하며 빌드 실패 시 이전 배포 출력을 유지합니다.
+입력과 제한은 [iOS CLI](/reference/cli/ios/)를 따릅니다.

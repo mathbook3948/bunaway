@@ -7,14 +7,15 @@ import {
 } from "./android.ts";
 import { parseDevArguments } from "./dev.ts";
 import {
-  buildProject,
   buildNativePlugin,
+  buildProject,
   createProject,
   devProject,
   doctor,
   packageProject,
   validateProject,
 } from "./index.ts";
+import { buildIosProject, runIosProject, syncIosProject } from "./ios.ts";
 import { isTemplate, type Template, templateNames } from "./templates.ts";
 
 const help = `bunaway (vanilla / Vite / React / Vue / Svelte)
@@ -30,7 +31,10 @@ const help = `bunaway (vanilla / Vite / React / Vue / Svelte)
   android sync [dir]     Create or refresh the editable Android Studio project
   android build [dir]    Sync and build an experimental Android debug APK on Windows
   android run [dir]      Build, install and start the APK [--serial <device>]
-Desktop builds: Windows x64 / macOS arm64. Android debug APK builds: Windows.`;
+  ios sync [dir]         Create or refresh the editable Xcode project
+  ios build [dir]        Sync and build an experimental arm64 Simulator app
+  ios run [dir]          Build, install and start on a booted Simulator --device <UUID>
+Desktop builds: Windows x64 / macOS arm64. Android debug APK builds: Windows. iOS Simulator builds: macOS arm64.`;
 
 /** Run a CLI command and return its process exit code. */
 export async function main(args: string[]): Promise<number> {
@@ -148,6 +152,42 @@ export async function main(args: string[]): Promise<number> {
         throw new Error(usage);
       }
       await runAndroidProject(directory, serial);
+    }
+    return 0;
+  }
+  if (command === "ios") {
+    const [action, ...options] = rest;
+    const usage =
+      "Usage: bunaway ios sync [directory] | ios build [directory] | ios run [directory] --device <Simulator UUID>.";
+    let directory = ".";
+    let directorySeen = false;
+    let device: string | undefined;
+    if (action !== "sync" && action !== "build" && action !== "run") {
+      throw new Error(usage);
+    }
+    for (let index = 0; index < options.length; index++) {
+      const option = options[index];
+      if (option === "--device" && action === "run" && device === undefined) {
+        device = options[++index];
+        if (!device) {
+          throw new Error(usage);
+        }
+      } else if (option && !option.startsWith("--") && !directorySeen) {
+        directory = option;
+        directorySeen = true;
+      } else {
+        throw new Error(usage);
+      }
+    }
+    if (action === "sync") {
+      console.log(`Synced ${await syncIosProject(directory)}`);
+    } else if (action === "build") {
+      console.log(`Built ${(await buildIosProject(directory)).app}`);
+    } else {
+      if (!device) {
+        throw new Error(usage);
+      }
+      await runIosProject(directory, device);
     }
     return 0;
   }
