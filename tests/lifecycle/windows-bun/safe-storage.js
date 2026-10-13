@@ -52,6 +52,28 @@ if (location.pathname === "/denied.html") {
     if (!concurrent) {
       throw new Error("Concurrent Unicode round trips were mixed.");
     }
+    const exactLimit = "🙂".repeat(16384);
+    const boundaryCiphertext = await safeStorage.encryptString({
+      text: exactLimit,
+    });
+    if (
+      (await safeStorage.decryptString({
+        ciphertext: boundaryCiphertext,
+      })) !== exactLimit
+    ) {
+      throw new Error("UTF-16 boundary round trip failed.");
+    }
+    let aboveLimitRejected = false;
+    try {
+      await safeStorage.encryptString({
+        text: "🙂".repeat(16385),
+      });
+    } catch (error) {
+      aboveLimitRejected = error.code === "INVALID_ARGUMENT";
+    }
+    if (!aboveLimitRejected) {
+      throw new Error("Text beyond the UTF-16 limit reached DPAPI.");
+    }
     for (const bytes of [
       "",
       "AP+A",

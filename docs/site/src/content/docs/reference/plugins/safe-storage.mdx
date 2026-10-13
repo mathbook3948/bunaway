@@ -42,7 +42,9 @@ const ciphertext = await safeStorage.encryptString({ text: "보호할 앱 데이
 const text = await safeStorage.decryptString({ ciphertext });
 ```
 
-`text`의 상한은 UTF-16 code unit 기준 32,768입니다. 빈 문자열과 NUL, Unicode 및 BOM을 보존합니다.
+`text`의 상한은 UTF-16 code unit 기준 32,768입니다. `🙂` 같은 보충 문자는 두 unit을 사용하므로
+16,384개까지 암호화와 복호화할 수 있습니다. 상한을 넘는 입력은 DPAPI 실행 전에 `INVALID_ARGUMENT`로 거부합니다.
+빈 문자열과 NUL, Unicode 및 BOM을 보존합니다.
 문자열은 UTF-8로 암호화하며 문자열 복호화는 잘못된 UTF-8을 거부합니다.
 `bytes`와 `ciphertext`는 canonical padded base64 문자열입니다. 바이트의 상한은 256 KiB,
 암호문의 상한은 384 KiB이며 빈 바이트는 `""`입니다. 빈 암호문은 거부합니다.

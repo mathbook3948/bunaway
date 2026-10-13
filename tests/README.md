@@ -549,6 +549,7 @@ linear filtering의 투명 edge, crop과 빈 소스 및 quota 오류를 추가�
 경합으로 빈 PID를 읽지 않고, 취소 전에 실제 자식의 Windows process handle을 잡는다.
 
 `windows-safe-storage.test.ts`는 실제 DPAPI로 Unicode와 임의 바이트, 크기 상한, 손상 입력,
+보충 문자의 UTF-16 상한 왕복과 초과 입력 거부,
 반복 dispose와 독립 어댑터, 저장된 암호문의 새 프로세스 복호화를 검사한다.
 `windows-safe-storage.ts`는 실제 WebView2와 I/O Worker에서 동시 요청, UI 타이머 진행,
 뷰별 권한 거부와 손상 입력을 확인하며 `mise run host:windows`에 포함한다.

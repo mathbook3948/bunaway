@@ -22,8 +22,15 @@ function base64(maxBytes: number) {
 
 const plaintext = base64(MAX_PLAINTEXT_BYTES);
 const ciphertext = base64(MAX_CIPHERTEXT_BYTES).min(4);
-// The text bound covers UTF-8 and even worst-case JSON escaping in the host transport.
-const text = z.string().max(MAX_TEXT_CHARACTERS);
+// The transport bound is in UTF-16 units. Zod string max counts code points,
+// so retain its coarse bound and enforce JavaScript string length for both directions.
+const text = z
+  .string()
+  .max(MAX_TEXT_CHARACTERS)
+  .refine(
+    (value) => value.length <= MAX_TEXT_CHARACTERS,
+    "Text exceeds the UTF-16 code unit limit.",
+  );
 
 /** Current-user Windows DPAPI operations. Each has a separate policy grant. */
 export const safeStorageOperations = {

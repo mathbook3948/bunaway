@@ -29,6 +29,7 @@ test.skipIf(process.platform !== "win32")(
         "",
         "\uFEFF한글\u0000🙂",
         "x".repeat(32768),
+        "🙂".repeat(16384),
       ]) {
         const ciphertext = await adapter.execute(
           "safe-storage.encryptString",
@@ -49,6 +50,17 @@ test.skipIf(process.platform !== "win32")(
           ),
         ).toBe(text);
       }
+      await expect(
+        adapter.execute(
+          "safe-storage.encryptString",
+          {
+            text: "🙂".repeat(16385),
+          },
+          "backend",
+        ),
+      ).rejects.toMatchObject({
+        code: "INVALID_ARGUMENT",
+      });
       for (const bytes of [
         "",
         Buffer.from(

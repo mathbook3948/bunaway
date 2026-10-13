@@ -185,3 +185,40 @@ test("data protection rejects noncanonical, oversized and unexpected inputs befo
     }),
   ).rejects.toThrow();
 });
+
+test("data protection measures supplementary Unicode at the UTF-16 boundary", async () => {
+  const exactLimit = "🙂".repeat(16384);
+  const aboveLimit = "🙂".repeat(16385);
+  expect(exactLimit.length).toBe(32768);
+  expect(aboveLimit.length).toBe(32770);
+  expect(
+    (
+      await parsers.validateCall({
+        operation: "safe-storage.encryptString",
+        payload: {
+          text: exactLimit,
+        },
+      })
+    ).payload,
+  ).toEqual({
+    text: exactLimit,
+  });
+  expect(
+    await parsers.validateOutput("safe-storage.decryptString", exactLimit),
+  ).toBe(exactLimit);
+  await expect(
+    parsers.validateCall({
+      operation: "safe-storage.encryptString",
+      payload: {
+        text: aboveLimit,
+      },
+    }),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  await expect(
+    parsers.validateOutput("safe-storage.decryptString", aboveLimit),
+  ).rejects.toMatchObject({
+    code: "INTERNAL",
+  });
+});
