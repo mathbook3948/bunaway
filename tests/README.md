@@ -362,6 +362,7 @@ boot 전후 종료와 초기화 중 프로토콜 버전, 런타임 ID 및 세대
 최소화 또는 최대화 직후, 표시와 숨김 직후 및 복원 영역 setter 뒤의 체크포인트는
 HWND 소유 프로세스와 스레드, style, 원본 WINDOWPLACEMENT와 Win32 상태를 함께 검사한다.
 일반 복원 뒤 숨김, 전체화면 진입, 제약 갱신과 종료의 마지막 주기도 같은 상태 기록을 남긴다.
+마지막 bounds 불일치는 이 기록을 출력한 뒤 원래 assertion 오류를 그대로 전파한다.
 실패에는 최근 체크포인트와 제한된 상태 메시지 기록, 호스트 callback 오류를 포함한다.
 검사는 상태를 복구하거나 메시지를 pump하지 않으며 기존 geometry 기대값을 유지한다.
 `lifecycle/windows-window-state.test.ts`는 같은 HWND에서 일반, 최소화와 최대화 상태,
