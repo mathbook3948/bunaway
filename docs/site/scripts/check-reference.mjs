@@ -472,6 +472,7 @@ checkNames(
       "image",
       "menu",
       "autostart",
+      "power",
       "appearance",
       "os",
       "process",
