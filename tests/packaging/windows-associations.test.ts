@@ -6,6 +6,7 @@ import { type ChannelConfig, parsePackaging } from "@bunaway/packaging";
 import { openRequest } from "#native/windows/bun/desktop";
 import { findIscc, must, stableGuid } from "#packaging/channels/windows/common";
 import { renderInnoScript } from "#packaging/channels/windows/inno";
+import { innoIdentity } from "#packaging/channels/windows/inno-identity";
 
 const associations = {
   files: [
@@ -256,6 +257,12 @@ test("association installer tasks are unchecked and quote executable and argumen
   );
   expect(rendered).toContain("Result := '\"' + Executable + '\" \"%1\"';");
   expect(rendered).toContain("ChangesAssociations=yes");
+  // The existing escaped identity expands to two closing braces. This exact
+  // value is the installer/update boundary, including for previous-data recovery.
+  expect(rendered).toContain("AppId={{82a2d7f4-507d-81d4-0c9e-1e149663006b}}");
+  expect(rendered).toContain(
+    "Uninstall\\{82a2d7f4-507d-81d4-0c9e-1e149663006b}}_is1';",
+  );
   expect(rendered).toContain("Notes 파일 {문서}");
   expect(rendered).not.toContain(
     "WriteAssociationValue('Software\\Classes\\notes'",
@@ -271,7 +278,8 @@ async function createNativeAssociationFixture(compiler: string) {
   const extension = `.b${suffix.slice(0, 20)}`;
   const scheme = `b${suffix.slice(0, 20)}`;
   const associationRoot = `Software\\Bunaway\\Associations\\${stableGuid(identifier)}`;
-  const previousDataKey = `Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{${stableGuid(identifier)}}_is1`;
+  const previousDataKey = innoIdentity(identifier).previousDataKey;
+  const unexpectedPreviousDataKey = previousDataKey.replace("}}_is1", "}_is1");
   const registration = `연결 App {문서} (${identifier})`;
   const fileProgId = `BW.${stableGuid(`${identifier}:file:${extension}`).replaceAll("-", "")}`;
   const urlProgId = `BW.${stableGuid(`${identifier}:url:${scheme}`).replaceAll("-", "")}`;
@@ -326,6 +334,10 @@ async function createNativeAssociationFixture(compiler: string) {
     powershell(
       `$key=[Microsoft.Win32.Registry]::CurrentUser.CreateSubKey(${quote(path)}); try { $key.SetValue(${quote(name)},${quote(value)}) } finally { $key.Dispose() }`,
     );
+  const registryKeyExists = async (path: string) =>
+    (await powershell(
+      `$key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(${quote(path)}); $exists=$null -ne $key; if ($key) { $key.Dispose() }; $exists.ToString().ToLowerInvariant()`,
+    )) === "true";
   const restoreAccess = (path: string, descriptor: string) =>
     powershell(
       `$key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(${quote(path)},[Microsoft.Win32.RegistryKeyPermissionCheck]::ReadWriteSubTree,[System.Security.AccessControl.RegistryRights]::ChangePermissions); try { $acl=[System.Security.AccessControl.RegistrySecurity]::new(); $acl.SetSecurityDescriptorSddlForm(${quote(descriptor)},[System.Security.AccessControl.AccessControlSections]::Access); $key.SetAccessControl($acl) } finally { $key.Dispose() }`,
@@ -457,6 +469,7 @@ async function createNativeAssociationFixture(compiler: string) {
     await uninstall();
     for (const key of [
       associationRoot,
+      unexpectedPreviousDataKey,
       `Software\\Classes\\${extension}`,
       `Software\\Classes\\${scheme}`,
       `Software\\Classes\\${fileProgId}`,
@@ -480,6 +493,7 @@ async function createNativeAssociationFixture(compiler: string) {
     scheme,
     associationRoot,
     previousDataKey,
+    unexpectedPreviousDataKey,
     registration,
     fileProgId,
     urlProgId,
@@ -488,6 +502,7 @@ async function createNativeAssociationFixture(compiler: string) {
     quote,
     powershell,
     query,
+    registryKeyExists,
     write,
     denyValueWrites,
     restoreRegistrationFault,
@@ -665,11 +680,13 @@ test.skipIf(!iscc)(
       extension,
       associationRoot,
       previousDataKey,
+      unexpectedPreviousDataKey,
       fileProgId,
       urlProgId,
       installDir,
       declarations,
       query,
+      registryKeyExists,
       write,
       denyValueWrites,
       install,
@@ -690,6 +707,8 @@ test.skipIf(!iscc)(
           declarations,
           "fileassociations,urlschemes",
         );
+        expect(await registryKeyExists(previousDataKey)).toBe(true);
+        expect(await registryKeyExists(unexpectedPreviousDataKey)).toBe(false);
         const restore = await denyValueWrites(openWithKey);
         try {
           for (const attempt of [
@@ -723,6 +742,9 @@ test.skipIf(!iscc)(
                 "Inno Setup CodeFile: PendingAssociationOwner",
               ),
             ).toBe(join(installDir, "Old.exe"));
+            expect(await registryKeyExists(unexpectedPreviousDataKey)).toBe(
+              false,
+            );
             expect(await Bun.file(join(installDir, "Old.exe")).exists()).toBe(
               true,
             );
@@ -751,6 +773,9 @@ test.skipIf(!iscc)(
               "Inno Setup CodeFile: PendingAssociationOwner",
             ),
           ).toBe("");
+          expect(await registryKeyExists(unexpectedPreviousDataKey)).toBe(
+            false,
+          );
           expect(await Bun.file(join(installDir, "Old.exe")).exists()).toBe(
             false,
           );
@@ -982,6 +1007,26 @@ test.skipIf(!iscc)(
           "ProgId",
         ),
       ).toBe("Foreign.File");
+      // An installer with no new association declaration must still retire
+      // the owned snapshot. It must not take the empty-work early return.
+      await install(
+        "no-config-enabled",
+        "새 앱.exe",
+        declarations,
+        "fileassociations,urlschemes",
+      );
+      await install("no-config-retired", "새 앱.exe", undefined);
+      expect(await query(associationRoot, "Executable")).toBe("MISSING");
+      expect(
+        await query(`Software\\Classes\\${fileProgId}\\shell\\open\\command`),
+      ).toBe("MISSING");
+      expect(
+        await query(`Software\\Classes\\${urlProgId}\\shell\\open\\command`),
+      ).toBe("MISSING");
+      expect(
+        await query("Software\\RegisteredApplications", registration),
+      ).toBe("MISSING");
+      await uninstall();
       await install(
         "foreign-command",
         "앱.exe",

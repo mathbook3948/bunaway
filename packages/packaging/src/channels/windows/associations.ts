@@ -1,6 +1,7 @@
 import type { ChannelConfig } from "../../contract.ts";
 import { parseAssociations } from "../../windows-associations.ts";
 import { stableGuid } from "./common.ts";
+import { innoIdentity } from "./inno-identity.ts";
 
 /** Renders app-owned registration and cleanup without assigning Windows defaults. */
 export function renderAssociationCode(
@@ -69,7 +70,7 @@ export function renderAssociationCode(
 const AssociationHive = ${scope === "perUser" ? "HKCU" : "HKLM"};
       AssociationRoot = '${root}';
       AssociationRegistration = '${literal(`${appName} (${identifier})`)}';
-      AssociationPreviousDataKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{${stableGuid(identifier)}}_is1';
+      AssociationPreviousDataKey = '${innoIdentity(identifier).previousDataKey}';
 
 function AssociationExecutable: String;
 begin
@@ -256,6 +257,12 @@ procedure InstallAssociations;
 var Owner: String;
 begin
   PreflightAssociations;
+  // Installers without uninstall info do not run RegisterPreviousData.
+  // No selected candidate and no prior snapshot means there is nothing to persist.
+  if ${selectedTasks ? `not (${selectedTasks}) and ` : ""}not RegKeyExists(AssociationHive, AssociationRoot) then begin
+    if PendingAssociationDataSaved then ClearPendingAssociationOwner;
+    Exit;
+  end;
   if not PendingAssociationDataSaved then
     RaiseException('Could not persist pending association owner.');
   // Updates remove the previous snapshot, including declarations no longer
