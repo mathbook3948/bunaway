@@ -54,8 +54,12 @@ jobs:
           if (-not (Test-Path -LiteralPath "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
             throw 'Inno Setup compiler is required for Windows installer regression tests.'
           }
-      - name: Check formatting, lint, types and contracts
-        run: mise run check
+      - name: Check formatting, lint and types
+        run: 'mise run lint ::: format:check ::: format:java:check ::: typecheck'
+      # These two complete image suites run once in macos-native, including the
+      # isolated consumer's portable packaging assertions and real macOS codecs.
+      - name: Check contracts
+        run: mise run test --path-ignore-patterns '**/macos-image.test.ts' --path-ignore-patterns '**/cli/image.test.ts'
       - name: Build the documentation site and search index
         if: runner.os == 'Linux'
         run: bun run docs:build
@@ -150,6 +154,20 @@ jobs:
         run: mise exec -- bun --no-env-file tests/lifecycle/macos-safe-storage-host.ts 2>&1 | tee build/macos-native-logs/safe-storage-host.log
       - name: Verify macOS log and capability adapters and compiled probe
         run: mise exec -- bun --no-env-file test tests/lifecycle/macos-log-capabilities.test.ts tests/lifecycle/macos-log-capabilities-compiled.test.ts 2>&1 | tee build/macos-native-logs/log-capabilities.log
+      - name: Execute real image codecs and an isolated installed consumer
+        run: |
+          set -euo pipefail
+          mkdir -p build/macos-image-logs
+          mise exec -- bun --no-env-file test tests/lifecycle/macos-image.test.ts tests/cli/image.test.ts 2>&1 | tee build/macos-image-logs/native.log
+      - name: Compile, ad-hoc sign and execute the packaged codec fixture
+        run: |
+          set -euo pipefail
+          mise exec -- bun build --compile tests/fixtures/macos-image-native.ts --outfile build/macos-image-native
+          codesign --force --sign - --entitlements native/macos/bun/entitlements.plist build/macos-image-native
+          codesign --verify --strict build/macos-image-native
+          build/macos-image-native build/macos-image-results.json 2>&1 | tee build/macos-image-logs/compiled.log
+      # run-native.ts owns the signed WKWebView image fixture as well as the
+      # other host regressions. Do not invoke macos-image-host.ts a second time.
       - name: Build and test real WKWebView host and signed in-place app
         env:
           BUNAWAY_OPENER_ISOLATED: '1'
@@ -160,6 +178,9 @@ jobs:
         with:
           name: macos-native-diagnostics
           path: |
+            build/macos-image-logs/
+            build/macos-image-results.json
+            build/macos-image-host-results.json
             build/macos-webview-controls-results.json
             build/macos-webview-controls-diagnostics/
             build/macos-io-diagnostics/
