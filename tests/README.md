@@ -18,6 +18,11 @@ system UI 사용자 선택과 물리 프린터 출력은 별도 검증이며 테
 기존 `host:macos`에서 실제 compiled WKWebView와 백엔드 Worker의 공통 SDK를 실행한다.
 문서 상태, origin과 redirect 거부, 서브프레임 신원, history, reload, 느린 탐색 중단,
 문서 교체의 명령 취소와 fragment 세션 유지, 뷰별 zoom 및 닫기와 재생성을 검사한다.
+scheme과 hostname을 대문자로 작성한 자산 URL에서도 실제 문서와 SDK 연결을 확인한다.
+`pageshow`와 `pagehide`의 `persisted`, `isTrusted`를 SDK와 독립적으로 기록한다.
+실제 history cache 복원과 합성 persisted 이벤트의 reload 검사를 결과에서 구분한다.
+합성 검사는 실제 WKWebView에서 기존 SDK를 닫고 같은 history 항목의 새 문서와 SDK를 요구한다.
+신뢰된 persisted 이벤트가 없으면 실제 history cache 복원의 실행 근거로 사용하지 않는다.
 결과와 실패 로그는 macOS native CI artifact에 포함한다. macOS DevTools, 다운로드,
 창 readiness API와 출시 배포 서명은 이 검사의 범위가 아니다.
 

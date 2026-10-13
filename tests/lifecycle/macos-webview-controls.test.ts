@@ -112,6 +112,8 @@ test("navigation preserves the exact HTTP origins and maps packaged assets witho
   for (const url of [
     "bunaway://app.bunaway.local/",
     "https://app.bunaway.local.evil/",
+    "HTTPS://APP.BUNAWAY.LOCAL.EVIL/",
+    "HTTPS://user:pass@APP.BUNAWAY.LOCAL/",
     "http://127.0.0.1:8124/",
     "http://user:pass@127.0.0.1:8123/",
     "file:///etc/passwd",
@@ -128,8 +130,14 @@ test("navigation preserves the exact HTTP origins and maps packaged assets witho
   }
   expect(f.mutations).toEqual([]);
   f.controls.navigate("https://app.bunaway.local/next.html?x=1#hash");
+  f.controls.navigate("HTTPS://app.bunaway.local/next.html?x=1#hash");
+  f.controls.navigate("https://APP.BUNAWAY.LOCAL/next.html?x=1#hash");
+  f.controls.navigate("HTTPS://APP.BUNAWAY.LOCAL:443/next.html?x=1#hash");
   f.controls.navigate("http://127.0.0.1:8123/next.html");
   expect(f.mutations).toEqual([
+    "bunaway://app.bunaway.local/next.html?x=1#hash",
+    "bunaway://app.bunaway.local/next.html?x=1#hash",
+    "bunaway://app.bunaway.local/next.html?x=1#hash",
     "bunaway://app.bunaway.local/next.html?x=1#hash",
     "http://127.0.0.1:8123/next.html",
   ]);

@@ -41,13 +41,17 @@ export function controlsApp(origin: string, outside: string) {
       `loaded ${path}`,
     );
   };
-  async function requests(kind: "slow" | "redirects"): Promise<number> {
+  async function requests(
+    kind: "slow" | "redirects" | "syntheticRestores" | "probeLoads",
+  ): Promise<number> {
     const stats = await (await fetch(`${origin}/stats`)).json();
     assert(
       stats &&
         typeof stats === "object" &&
         "slow" in stats &&
-        "redirects" in stats,
+        "redirects" in stats &&
+        "syntheticRestores" in stats &&
+        "probeLoads" in stats,
     );
     const count: unknown = stats[kind];
     assert.equal(typeof count, "number");
@@ -226,6 +230,54 @@ export function controlsApp(origin: string, outside: string) {
       0,
       "subframe message acquired a main-frame route",
     );
+    for (const [url, path] of [
+      [
+        "HTTPS://app.bunaway.local/upper-scheme.html?case=scheme#asset",
+        "/upper-scheme.html",
+      ],
+      [
+        "https://APP.BUNAWAY.LOCAL/upper-host.html?case=host#asset",
+        "/upper-host.html",
+      ],
+    ]) {
+      assert(url && path);
+      await windows.navigateWebView({
+        ...main,
+        url,
+      });
+      await ready(path);
+      assert.equal(
+        (await windows.getWebViewState(main)).url,
+        new URL(url).href,
+      );
+      assert.equal((await windows.getWebViewState(main)).title, path);
+    }
+    await windows.navigateWebView({
+      ...main,
+      url: `${origin}/cache-probe.html`,
+    });
+    await ready("/cache-probe.html", 2);
+    await waitFor(
+      () => (held.get("/cache-probe.html") ?? 0) === 2,
+      "fresh SDK after synthetic persisted restore",
+    );
+    await waitFor(
+      () => (cancelled.get("/cache-probe.html") ?? 0) === 1,
+      "synthetic pagehide cancellation",
+    );
+    await waitFor(
+      async () => (await requests("syntheticRestores")) === 1,
+      "persisted pageshow branch evidence",
+    );
+    await waitFor(
+      async () => (await requests("probeLoads")) === 2,
+      "completed reload after synthetic persisted restore",
+    );
+    await windows.navigateWebView({
+      ...main,
+      url: `${origin}/final.html`,
+    });
+    await ready("/final.html", 2);
     await windows.close(peer);
     await assert.rejects(windows.getWebViewState(peer), {
       code: "INVALID_ARGUMENT",

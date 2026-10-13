@@ -70,6 +70,33 @@ try {
   await client.invoke("test.arrived", location.pathname);
   if (view === "main") {
     void client.invoke("test.hold", location.pathname).catch(() => {});
+    if (
+      document.querySelector('meta[name="closed-client-probe"]')?.content ===
+      "true"
+    ) {
+      // This acknowledgment follows the held command before pagehide closes the shared client.
+      await windows.getWebViewState({
+        view,
+      });
+      addEventListener(
+        "pageshow",
+        () => {
+          dispatchEvent(
+            new PageTransitionEvent("pagehide", {
+              persisted: true,
+            }),
+          );
+          dispatchEvent(
+            new PageTransitionEvent("pageshow", {
+              persisted: true,
+            }),
+          );
+        },
+        {
+          once: true,
+        },
+      );
+    }
   }
 } catch (error) {
   void client.invoke("test.failure", String(error));

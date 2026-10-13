@@ -42,17 +42,18 @@ export class MacosWebviewControls implements NativeWebView {
   }
 
   navigate(url: string): void {
-    let allowed = false;
+    let parsed: URL | undefined;
     try {
-      const parsed = new URL(url);
-      allowed =
-        (parsed.protocol === "http:" || parsed.protocol === "https:") &&
-        !url.includes("\0") &&
-        this.origins.includes(macosOrigin(url));
+      parsed = new URL(url);
     } catch {
       /* Malformed URLs share the origin-denied result. */
     }
-    if (!allowed) {
+    if (
+      !parsed ||
+      (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+      url.includes("\0") ||
+      !this.origins.includes(macosOrigin(parsed.href))
+    ) {
       throw new BunawayError({
         code: "PERMISSION_DENIED",
         message: "WebView navigation origin denied.",
@@ -64,7 +65,7 @@ export class MacosWebviewControls implements NativeWebView {
       const address = o.send(
         o.class("NSURL"),
         "URLWithString:",
-        o.string(platformUrl(url)),
+        o.string(platformUrl(parsed.href)),
       );
       if (!address) {
         throw new BunawayError({

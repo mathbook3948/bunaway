@@ -23,6 +23,14 @@ let child: ReturnType<typeof Bun.spawn> | undefined;
 let outsideRequests = 0;
 let redirectRequests = 0;
 let slowRequests = 0;
+let cacheProbeDocuments = 0;
+const pageLifecycle: {
+  type: "pageshow" | "pagehide";
+  path: string;
+  persisted: boolean;
+  trusted: boolean;
+  historyLength: number;
+}[] = [];
 const slow = Promise.withResolvers<void>();
 const outside = Bun.serve({
   hostname: "127.0.0.1",
@@ -37,11 +45,43 @@ const server = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
   async fetch(request) {
-    const path = new URL(request.url).pathname;
+    const url = new URL(request.url);
+    const path = url.pathname;
+    if (path === "/lifecycle") {
+      const type = url.searchParams.get("type");
+      const persisted = url.searchParams.get("persisted");
+      const trusted = url.searchParams.get("trusted");
+      const historyLength = Number(url.searchParams.get("historyLength"));
+      assert(type === "pageshow" || type === "pagehide");
+      assert(persisted === "true" || persisted === "false");
+      assert(trusted === "true" || trusted === "false");
+      assert(Number.isInteger(historyLength) && historyLength > 0);
+      pageLifecycle.push({
+        type,
+        path: url.searchParams.get("path") ?? "",
+        persisted: persisted === "true",
+        trusted: trusted === "true",
+        historyLength,
+      });
+      return new Response(null, {
+        status: 204,
+      });
+    }
     if (path === "/stats") {
       return Response.json({
         slow: slowRequests,
         redirects: redirectRequests,
+        syntheticRestores: pageLifecycle.filter(
+          (event) =>
+            event.type === "pageshow" && event.persisted && !event.trusted,
+        ).length,
+        probeLoads: pageLifecycle.filter(
+          (event) =>
+            event.type === "pageshow" &&
+            event.trusted &&
+            !event.persisted &&
+            event.path === "/cache-probe.html",
+        ).length,
       });
     }
     if (path === "/redirect.html") {
@@ -59,15 +99,30 @@ const server = Bun.serve({
         },
       });
     }
-    return new Response(html(path), {
+    const closedClientProbe =
+      path === "/cache-probe.html" && ++cacheProbeDocuments === 1;
+    return new Response(html(path, closedClientProbe), {
       headers: {
         "Content-Type": "text/html",
+        ...(path === "/cache-probe.html"
+          ? {
+              "Cache-Control": "no-store",
+            }
+          : {}),
       },
     });
   },
 });
-function html(path: string): string {
-  return `<!doctype html><title>${path}</title><script type="module" src="/${path === "/frame.html" ? "frame" : "web"}.js"></script>${path === "/index.html" ? '<iframe src="/frame.html"></iframe>' : ""}`;
+function html(path: string, closedClientProbe = false): string {
+  // Keep lifecycle evidence independent of the SDK, which pagehide closes before a cached restore.
+  return `<!doctype html><title>${path}</title><meta name="closed-client-probe" content="${closedClientProbe}"><script>
+    for (const type of ['pageshow', 'pagehide']) addEventListener(type, event => {
+      if (window !== window.top) return;
+      const target = new URL(${JSON.stringify(`${server.url.origin}/lifecycle`)});
+      target.search = new URLSearchParams({type, path: location.pathname, persisted: String(event.persisted), trusted: String(event.isTrusted), historyLength: String(history.length)});
+      navigator.sendBeacon(target.href);
+    });
+  </script><script type="module" src="/${path === "/frame.html" ? "frame" : "web"}.js"></script>${path === "/index.html" ? '<iframe src="/frame.html"></iframe>' : ""}`;
 }
 try {
   await mkdir(resolve(assets, "web"), {
@@ -175,6 +230,8 @@ try {
     "/peer.html",
     "/denied.html",
     "/frame.html",
+    "/upper-scheme.html",
+    "/upper-host.html",
   ]) {
     await Bun.write(resolve(assets, `web${path}`), html(path));
   }
@@ -212,6 +269,44 @@ try {
   assert.equal(exitCode, 0, await stderr);
   const report = await Bun.file(resolve(dataRoot, "temp/report.json")).json();
   assert.equal(report.pass, true, JSON.stringify(report));
+  assert(
+    pageLifecycle.some(
+      (event) =>
+        event.type === "pageshow" &&
+        event.trusted &&
+        !event.persisted &&
+        event.path === "/index.html",
+    ),
+  );
+  const cachedRestores = pageLifecycle.filter(
+    (event) => event.type === "pageshow" && event.persisted && event.trusted,
+  );
+  const syntheticRestores = pageLifecycle.filter(
+    (event) => event.type === "pageshow" && event.persisted && !event.trusted,
+  );
+  assert.equal(syntheticRestores.length, 1);
+  const probeLoads = pageLifecycle.filter(
+    (event) =>
+      event.type === "pageshow" &&
+      event.trusted &&
+      !event.persisted &&
+      event.path === "/cache-probe.html",
+  );
+  assert.equal(
+    probeLoads.length,
+    2,
+    "Both probe documents must complete a trusted pageshow",
+  );
+  assert.equal(
+    probeLoads[0]?.historyLength,
+    probeLoads[1]?.historyLength,
+    "Persisted recovery added a history entry",
+  );
+  assert.equal(
+    cacheProbeDocuments,
+    2,
+    "Persisted pageshow did not reload the closed SDK document",
+  );
   assert.equal(outsideRequests, 0, "Denied redirect contacted its destination");
   const records = (await Bun.file(resolve(dataRoot, "logs/host.log")).text())
     .trim()
@@ -237,10 +332,19 @@ try {
     outsideRequests,
     redirectRequests,
     slowRequests,
+    pageLifecycle,
+    cachedRestores,
+    syntheticRestores,
+    cacheProbeDocuments,
   });
   console.log(
     "PASS real compiled WKWebView controls: public SDK, state, allowed navigation, origin/redirect/main-frame denial, history, reload, stop, fragment/session revocation, zoom and isolated close/recreate",
     report,
+    {
+      cachedRestores,
+      syntheticRestores,
+      cacheProbeDocuments,
+    },
   );
 } catch (error) {
   const diagnostics = resolve(root, "build/macos-webview-controls-diagnostics");
@@ -260,6 +364,8 @@ try {
     outsideRequests,
     redirectRequests,
     slowRequests,
+    pageLifecycle,
+    cacheProbeDocuments,
   });
   throw error;
 } finally {
