@@ -59,6 +59,12 @@ Windows 구현은 I/O Worker에서 자체 COM STA를 초기화하고 Explorer �
 
 현재 어댑터는 Windows만 제공합니다. 커스텀 URL 스킴, 딥링크 등록과 설치 프로그램 변경은 이 패키지의 범위가 아닙니다.
 
+macOS의 독립 구현은 `src/platforms/macos.ts`에 있습니다. NSWorkspace와 Finder의 요청 접수,
+POSIX 파일 검사와 자원 정리를 제공하지만 공개 플랫폼 등록과 호스트 I/O 연결은 아직 하지
+않았습니다. 공개 파일 helper는 기존 Windows 경로 계약을 유지합니다. 연결 조건과 실제
+네이티브 fixture 범위는 [macOS opener 구현 기록](../../docs/architecture/macos-opener.md)을
+참고하세요. 독립 구현이 있다는 이유로 공개 macOS 지원을 선언하지 않습니다.
+
 ## 지정 앱
 
 `openFileWith(path: string, app: string, options?: NativeInvokeOptions): Promise<null>`과
