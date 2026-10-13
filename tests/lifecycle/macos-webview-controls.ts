@@ -347,6 +347,10 @@ try {
     },
   );
 } catch (error) {
+  console.error({
+    pageLifecycle,
+    cacheProbeDocuments,
+  });
   const diagnostics = resolve(root, "build/macos-webview-controls-diagnostics");
   await mkdir(diagnostics, {
     recursive: true,

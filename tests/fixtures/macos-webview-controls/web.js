@@ -1,6 +1,15 @@
 import { createClient } from "@bunaway/client";
 import { windows } from "@bunaway/plugin-windows";
 
+// WebKit can finish pageshow while the module is awaiting its SDK handshake.
+const pageShown =
+  document.readyState === "complete"
+    ? Promise.resolve()
+    : new Promise((resolve) =>
+        addEventListener("pageshow", resolve, {
+          once: true,
+        }),
+      );
 const client = createClient();
 const view =
   location.pathname === "/peer.html"
@@ -78,23 +87,16 @@ try {
       await windows.getWebViewState({
         view,
       });
-      addEventListener(
-        "pageshow",
-        () => {
-          dispatchEvent(
-            new PageTransitionEvent("pagehide", {
-              persisted: true,
-            }),
-          );
-          dispatchEvent(
-            new PageTransitionEvent("pageshow", {
-              persisted: true,
-            }),
-          );
-        },
-        {
-          once: true,
-        },
+      await pageShown;
+      dispatchEvent(
+        new PageTransitionEvent("pagehide", {
+          persisted: true,
+        }),
+      );
+      dispatchEvent(
+        new PageTransitionEvent("pageshow", {
+          persisted: true,
+        }),
       );
     }
   }
