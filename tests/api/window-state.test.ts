@@ -32,6 +32,9 @@ const registry = new NativeRegistry([
 ]);
 const stateQueries = [
   ...queries,
+  "isMinimizable",
+  "isMaximizable",
+  "isClosable",
   "isResizable",
   "isMovable",
   "isNormal",
@@ -118,6 +121,9 @@ function fixture() {
     isMaximized: false,
     isVisible: false,
     isFocused: false,
+    isMinimizable: true,
+    isMaximizable: true,
+    isClosable: true,
     isResizable: true,
     isMovable: true,
   };
@@ -162,6 +168,21 @@ function fixture() {
     setSizeConstraints() {},
     setSize() {},
     setPosition() {},
+    setMinimizable(value) {
+      apply("setMinimizable");
+      observed.isMinimizable = value;
+    },
+    isMinimizable: () => observed.isMinimizable,
+    setMaximizable(value) {
+      apply("setMaximizable");
+      observed.isMaximizable = value;
+    },
+    isMaximizable: () => observed.isMaximizable,
+    setClosable(value) {
+      apply("setClosable");
+      observed.isClosable = value;
+    },
+    isClosable: () => observed.isClosable,
     setTitle(value) {
       apply("setTitle");
       title = value;
@@ -237,12 +258,18 @@ function fixture() {
       name:
         | (typeof controls)[number]
         | (typeof stateQueries)[number]
+        | "setMinimizable"
+        | "setMaximizable"
+        | "setClosable"
         | "getTitle"
         | "setTitle"
         | "setResizable"
         | "setMovable",
       view = "main",
       payload: {
+        minimizable?: boolean;
+        maximizable?: boolean;
+        closable?: boolean;
         title?: string;
         resizable?: boolean;
         movable?: boolean;
@@ -276,6 +303,128 @@ function fixture() {
     },
   };
 }
+
+test("caption controls validate booleans, retain independent operation grants and reject closed targets", async () => {
+  for (const [setter, getter, field] of [
+    [
+      "setMinimizable",
+      "isMinimizable",
+      "minimizable",
+    ],
+    [
+      "setMaximizable",
+      "isMaximizable",
+      "maximizable",
+    ],
+    [
+      "setClosable",
+      "isClosable",
+      "closable",
+    ],
+  ] as const) {
+    const f = fixture();
+    expect(await f.invoke(getter)).toBe(true);
+    for (const value of [
+      false,
+      true,
+      false,
+    ]) {
+      const payload = {
+        [field]: value,
+      };
+      expect(
+        validateWindowCall({
+          operation: `windows.${setter}`,
+          payload: {
+            view: "main",
+            windowId: "window-1",
+            ...payload,
+          },
+        }).operation,
+      ).toBe(`windows.${setter}`);
+      expect(await f.invoke(setter, "main", payload)).toBeNull();
+      expect(await f.invoke(getter)).toBe(value);
+    }
+    for (const payload of [
+      {},
+      {
+        [field]: null,
+      },
+      {
+        [field]: 1,
+      },
+      {
+        [field]: "false",
+      },
+      {
+        [field]: true,
+        extra: true,
+      },
+    ]) {
+      expect(() =>
+        validateWindowCall({
+          operation: `windows.${setter}`,
+          payload: {
+            view: "main",
+            ...payload,
+          },
+        }),
+      ).toThrow();
+    }
+    expect(validateWindowOutput(`windows.${setter}`, null)).toBeNull();
+    expect(() => validateWindowOutput(`windows.${setter}`, true)).toThrow();
+    f.permissions.permissions = [
+      `windows.${getter}`,
+    ];
+    await expect(
+      f.invoke(setter, "main", {
+        [field]: true,
+      }),
+    ).rejects.toMatchObject({
+      code: "PERMISSION_DENIED",
+    });
+    f.permissions.permissions = windowPermissions();
+    await expect(
+      f.invoke(setter, "missing", {
+        [field]: true,
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+    f.setClosed();
+    await expect(
+      f.invoke(setter, "main", {
+        [field]: true,
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+    expect(f.actions).toHaveLength(3);
+    const unsupported = fixture();
+    delete unsupported.native[setter];
+    await expect(
+      unsupported.invoke(setter, "main", {
+        [field]: true,
+      }),
+    ).rejects.toMatchObject({
+      code: "UNSUPPORTED",
+    });
+    const failed = fixture();
+    failed.setFailure(new Error("Caption control failed"));
+    await expect(
+      failed.invoke(setter, "main", {
+        [field]: false,
+      }),
+    ).rejects.toThrow("Caption control failed");
+    // These properties control user operations, independently of backend state APIs.
+    const controlled = fixture();
+    await controlled.invoke(setter, "main", {
+      [field]: false,
+    });
+    expect(await controlled.invoke("minimize")).toBeNull();
+    expect(await controlled.invoke("maximize")).toBeNull();
+  }
+});
 
 test("title operations preserve Unicode, enforce bounded input, individual permissions and window lifetime", async () => {
   const f = fixture();
