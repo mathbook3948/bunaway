@@ -9,7 +9,7 @@ const plugin = defineNativePlugin({
     macos: {
       execution: "io",
       create: createMacosOperations,
-      // Darwin's name-based rename cannot preserve the checked source identity.
+      // Darwin's name-based rename and delete cannot preserve the checked source identity.
       operations: [
         "readText",
         "writeText",
@@ -18,6 +18,8 @@ const plugin = defineNativePlugin({
         "appendBytes",
         "appendText",
         "copyFile",
+        "readDirectory",
+        "createDirectory",
         "exists",
         "stat",
       ],

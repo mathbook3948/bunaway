@@ -13,6 +13,22 @@ const location = {
   path: "C:/notes/한글",
 };
 
+test("macOS supports directory reads and creation while checked-object removal remains Windows-only", () => {
+  const targets = storagePlugin.nativePlatforms;
+  for (const operation of [
+    "storage.readDirectory",
+    "storage.createDirectory",
+  ]) {
+    expect(targets.macos?.execution).toBe("io");
+    expect(targets.macos?.operations).toContain(
+      operation.slice("storage.".length),
+    );
+  }
+  expect(targets.macos?.operations).not.toContain("remove");
+  expect(targets.windows?.execution).toBe("io");
+  expect(targets.windows?.operations).toBeUndefined();
+});
+
 test("directory operations resolve recursive defaults, bound output and retain independent permissions", async () => {
   expect(
     (

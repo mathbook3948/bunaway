@@ -1,16 +1,17 @@
 # macOS 저장 어댑터
 
 `plugins/storage/src/platforms/macos.ts`는 read/write text/bytes, append,
-exists/stat와 copyFile의 아홉 작업을 구현한다. 공개 계약과 Windows 코드는
-변경하지 않으며 디렉터리 API는 이 PR 범위에 포함하지 않는다.
-`storage.move`는 source 객체 고정 보장을 충족할 수 없어 macOS에서 `UNSUPPORTED`다.
+exists/stat와 copyFile, readDirectory와 createDirectory의 열한 작업을 구현한다.
+공개 계약과 Windows 코드는 변경하지 않는다.
+`storage.move`와 `storage.remove`는 source 객체 고정 보장을 충족할 수 없어
+macOS에서 `UNSUPPORTED`다.
 
 ## 호스트 통합
 
 이 변경은 PR #164의 macOS I/O Worker foundation에 명시적으로 쌓는다.
 그 foundation의 요청 검증, 작업별 권한 재검사, 실행 큐, 취소와 종료 및 dispose를
 재사용하며 구현을 복제하지 않는다. storage를 `execution: "io"`로 등록하고
-지원 목록에서 move를 제외한다. AppKit 메인 스레드에서 동기 파일 작업을 실행하지 않는다.
+지원 목록에서 move와 remove를 제외한다. AppKit 메인 스레드에서 동기 파일 작업을 실행하지 않는다.
 `tests/lifecycle/macos-storage-host.ts`를 공유 native runner에 추가하며 실제
 ad-hoc 서명 compiled 앱의 WKWebView와 공통 SDK에서 호출한다.
 
@@ -55,6 +56,29 @@ copyFile은 4 MiB 이하 원본을 열린 descriptor에서 먼저 읽고 대상�
 쓰기 실패 시 일부 대상이 남을 수 있다. POSIX에는 열린 descriptor 자체를 unlink하는
 API가 없으므로 다른 프로세스가 바꾼 경로를 다시 찾아 삭제하지 않는다.
 
+## 디렉터리 목록과 생성
+
+readDirectory는 검사한 디렉터리 fd를 F_DUPFD_CLOEXEC로 복제하고 fdopendir에 넘긴다.
+성공한 stream은 duplicate fd를 소유하며 closedir가 해제한다. fdopendir 실패에서는
+호출자가 duplicate를 닫는다. 원래 대상 fd와 부모 fd는 기존 호출 수명주기가 해제한다.
+다시 경로를 열거나 자식 경로를 조회하지 않는다. readdir의 EOF와 오류는 errno로 구분한다.
+Darwin arm64는 64-bit inode ABI만 제공하므로 fdopendir와 readdir의 일반 symbol을 사용한다.
+개별 dirent의 record와 이름 범위, NUL terminator 및 UTF-8을 검사하고 다음 native 호출 전에
+이름을 복사한다. Apple의 [dirent 구조체](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/dirent.h),
+[symbol ABI](https://github.com/apple-oss-distributions/Libc/blob/main/include/sys/cdefs.h)와
+[fdopendir 소유권](https://github.com/apple-oss-distributions/Libc/blob/main/gen/FreeBSD/opendir.c)을 따른다.
+
+직접 자식 최대 256개를 UTF-16 순서로 정렬하며 초과는 INVALID_ARGUMENT다.
+일반 파일, 디렉터리와 symlink의 관찰한 종류만 반환한다. dangling symlink도 link이며
+hardlink는 file로 관찰한다. FIFO, 장치, socket이나 알려지지 않은 종류는 공개 schema로
+표현할 수 없으므로 UNSUPPORTED다. 목록의 원자적 스냅샷은 제공하지 않는다.
+
+createDirectory는 기존 recursive 기본값 false를 유지한다. false에서 없는 부모는
+INVALID_ARGUMENT며 부모를 만들지 않는다. true에서는 검사한 부모 fd 기준으로
+mkdirat를 실행한 뒤 다음 디렉터리를 연다. 새 디렉터리 mode는 0700을 요청한다.
+이미 있는 일반 디렉터리는 성공하며 기존 파일은 INVALID_ARGUMENT, 링크와 잘못된 부모는
+PERMISSION_DENIED다. 실패 전에 만든 디렉터리는 남을 수 있으며 이름으로 찾아 지우지 않는다.
+
 ## 기존 계약과 경합 검토
 
 writeText와 바이트 작업의 기존 문서는 부분 쓰기, 실패 및 시작한 작업의 취소를
@@ -70,6 +94,16 @@ Windows move는 검사한 source 핸들 자체에 이름 변경을 적용한다.
 이 제한은 기능 동등성을 완료했다는 뜻이 아니다. descriptor 기준으로 source 객체를
 고정하는 안전한 구현이 확보되기 전까지 macOS move는 미지원이다.
 
+Windows remove도 검사한 target 핸들에 FILE_DISPOSITION_INFO를 적용한다.
+Darwin unlinkat는 열린 부모 fd를 받아도 target 이름을 다시 조회한다.
+허용 flags에는 열린 target 객체를 지정하는 기능이 없으며 rmdir와 Carbon delete도
+이름을 조회한다. fstat로 identity를 다시 비교해도 비교와 unlink 사이의 교체를 막지 못한다.
+[Apple unlinkat 구현과 허용 flags](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/vfs/vfs_syscalls.c)를
+검토했으며 기존 ad-hoc 서명에서 사용할 unprivileged handle-bound 삭제를 확보하지 못했다.
+따라서 remove를 구현하거나 지원 목록에 넣지 않는다. 파일, 빈 디렉터리, 링크와 없는 경로에
+대한 호출 모두 UNSUPPORTED로 실패하고 어떤 이름도 삭제하지 않는다. 이 제한은
+macOS 디렉터리 동등성의 남은 blocker이며 Windows remove의 강한 보장은 유지한다.
+
 Darwin의 `fsetattrlist`는 파일 이름 변경을 지원하지 않는다. 디렉터리 lease는
 `com.apple.private.vfs.file-leases` entitlement를 요구하므로 기존 ad-hoc 서명 범위에서 사용하지 않는다.
 [Apple setattrlist의 허용 속성](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/vfs/vfs_attrlist.c)과
@@ -84,7 +118,9 @@ Darwin의 `fsetattrlist`는 파일 이름 변경을 지원하지 않는다. 디�
 `tests/lifecycle/macos-storage.test.ts`는 Darwin에서만 독립 자식 fixture를 실행한다.
 `tests/lifecycle/macos-storage.ts`는 실제 descriptor와 chmod, 링크, FIFO,
 여러 chunk의 복사, 무덮어쓰기, 미지원 move의 무변경, 교체 경합, 독립 프로세스 재시작과 fd 정리를 검사한다.
-parent 교체는 읽기, leaf 교체는 쓰기로 검사한다. Linux의 skip은 네이티브 통과 근거가 아니다.
+`macos-storage-directories.ts`는 목록, UTF-16 정렬, 링크와 hardlink 관찰, 정확한 256개 경계,
+생성 계약과 미지원 remove의 무변경을 추가한다. parent 교체는 읽기, 목록과 생성,
+leaf 교체는 쓰기로 검사한다. Linux의 skip은 네이티브 통과 근거가 아니다.
 
 `.github/workflows/ci.yml`의 기존 macOS native integration 작업에서 동일 fixture를
 Bun으로 compile하고 기존 entitlement와 ad-hoc 서명을 적용해 한 번 실행한다.
@@ -92,5 +128,6 @@ packaged storage host fixture도 공유 native runner에서 한 번 실행한다
 이름과 coverage를 유지하며 별도 작업을 추가하지 않는다. 결과와 실패 진단은 기존
 macos-native-diagnostics artifact에 포함한다. Developer ID, 공증이나
 signing account는 사용하거나 변경하지 않는다. 추가 host fixture는 backend setup, 두 뷰의 독립 작업 권한, 뷰 출처를 유지하는 명령,
-아홉 작업의 공개 SDK 호출, 미지원 move의 무변경과 실제 앱 재시작 및 cleanup을 검증한다.
+열한 작업의 공개 SDK 호출과 디렉터리별 권한, 미지원 move와 remove의 무변경,
+실제 앱 재시작 및 cleanup을 검증한다.
 공유 foundation fixture의 AppKit 응답성과 취소 및 폐기 검증도 기존 native runner에서 유지한다.
