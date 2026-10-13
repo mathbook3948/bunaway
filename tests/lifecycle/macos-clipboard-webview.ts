@@ -8,6 +8,7 @@ import { compileMacosApp } from "#cli/macos-compile";
 import { installedPlugins } from "#cli/plugins";
 import { run } from "#cli/processes";
 import { clipboardOperations } from "#plugins/clipboard/src/contract";
+import { MAX_IMAGE_BYTES } from "#plugins/clipboard/src/formats";
 import { createPasteboard } from "#plugins/clipboard/src/macos-pasteboard";
 import pin from "../../runtime/build-manifests/darwin-aarch64.json";
 
@@ -144,7 +145,13 @@ try {
       same(await clipboard.readText(null), null, "missing text");
       same(await clipboard.readFormats({formats:["text/html","application/x-bunaway-file-list"]}), [{format:"text/html",data:null},{format:"application/x-bunaway-file-list",data:null}], "missing formats");
       same(await clipboard.hasFormat({format:"application/x-bunaway-file-list"}), false, "no file-list support");
-      await client.invoke("test.report", {ok:true, unicode:true, formats:true, rgba:true, grants:true});
+      const maximum = {width:512,height:256,rgba:btoa(String.fromCharCode(17).repeat(${MAX_IMAGE_BYTES}))};
+      await clipboard.writeImage(maximum);
+      same(await clipboard.readImage(null), maximum, "maximum RGBA across WKWebView");
+      const oversized = {width:513,height:256,rgba:btoa(String.fromCharCode(17).repeat(513 * 256 * 4))};
+      await fails(() => clipboard.writeImage(oversized), "INVALID_ARGUMENT");
+      same(await clipboard.readImage(null), maximum, "image limit before mutation");
+      await client.invoke("test.report", {ok:true, unicode:true, formats:true, rgba:true, grants:true, limits:true});
     } catch(error) {
       await client.invoke("test.report", {ok:false,message:error.message,code:error.code ?? null});
     } finally {try {await windows.close({view:"main"});} catch(error) {if(error.code !== "CANCELLED") throw error;}}
@@ -234,6 +241,7 @@ try {
     formats: true,
     rgba: true,
     grants: true,
+    limits: true,
   });
   const records = (await Bun.file(resolve(dataRoot, "logs/host.log")).text())
     .trim()
@@ -260,7 +268,7 @@ try {
     cleanup: true,
   });
   console.log(
-    "PASS compiled macOS clipboard SDK, WKWebView, backend setup, command context, policy and cleanup",
+    "PASS compiled macOS clipboard SDK, WKWebView, backend setup, command context, policy, image limits and cleanup",
   );
 } catch (error) {
   console.error(
