@@ -686,10 +686,14 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 - [ ] 파일 watch와 recursive watch, 이벤트 구독 해제를 제공한다.
 - [ ] 원자적 저장, 충돌 처리와 대용량 stream I/O를 제공한다.
 - [ ] 파일 대화상자로 획득한 범위의 일시 허용과 영속화를 제공한다.
-- [ ] home, documents, downloads, desktop, pictures, music과 video 경로를 제공한다.
+- [x] Windows current-user Known Folder로 home, documents, downloads, desktop, pictures, music과 videos 경로를 조회한다.
+  OS redirection을 따르며 폴더 생성과 파일 접근 권한을 부여하지 않는다.
+  [경로 계약](./site/src/content/docs/reference/plugins/path.mdx)을 따른다.
 - [ ] appConfig, appData, appLocalData, cache, logs, temp와 resource 경로를 제공한다.
-- [ ] path join, resolve, normalize, basename, dirname, extname과 isAbsolute를 제공한다.
-- [ ] Windows drive, UNC, extended-length와 Unicode 경로 동작을 정의한다.
+- [x] Windows path join, resolve, normalize, basename, dirname, extname과 isAbsolute를 제공한다.
+  resolve는 명시적인 fully qualified base를 요구하며 host cwd와 per-drive cwd를 사용하지 않는다.
+- [x] 문자열 경로 helper의 Windows drive, UNC, extended-length와 Unicode 동작을 정의한다.
+  파일 접근과 분리하며 storage의 링크, 별칭, extended-length 및 device 경로 거부는 유지한다.
 - [ ] key-value store의 load, get, set, delete, clear와 목록 조회를 제공한다.
 - [ ] store 변경 이벤트, save, reload와 autosave를 제공한다.
 - [ ] Store `defaults`와 저장된 값의 병합 우선순위, 중첩 객체 처리, 기본값 무시 옵션을 정의한다.

@@ -464,6 +464,7 @@ checkNames(
     ].map((operation) => `safe-storage.${operation}`),
     ...[
       "storage",
+      "path",
       "log",
       "capabilities",
       "opener",
