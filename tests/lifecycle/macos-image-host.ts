@@ -24,6 +24,7 @@ try {
   });
   const image = Bun.resolveSync("@bunaway/plugin-image", root);
   const backend = Bun.resolveSync("@bunaway/backend", root);
+  const windows = Bun.resolveSync("@bunaway/plugin-windows", root);
   const client = Bun.resolveSync("@bunaway/client", root);
   const appEntry = resolve(directory, "app.ts");
   await Bun.write(
@@ -32,10 +33,11 @@ try {
 import assert from "node:assert/strict";
 import { defineApp } from ${JSON.stringify(backend)};
 import { image, imagePlugin } from ${JSON.stringify(image)};
+import { windowsPlugin } from ${JSON.stringify(windows)};
 let setupId;
 let sharedId;
 let deniedResult;
-export default defineApp({ modules: [], plugins: [imagePlugin, {
+export default defineApp({ modules: [], plugins: [imagePlugin, windowsPlugin, {
   name: "image-setup", version: "1", async setup() {
     setupId = (await image.createRGBA({ width: 0, height: 0, rgba: "" })).id;
   }
@@ -172,10 +174,14 @@ export default defineApp({ modules: [], plugins: [imagePlugin, {
             "test.complete",
             "plugin.image.createRGBA",
             "plugin.image.getInfo",
+            "plugin.windows.close",
           ],
           events: [],
           host: {
-            permissions: operations.map((name) => `image.${name}`),
+            permissions: [
+              ...operations.map((name) => `image.${name}`),
+              "windows.close",
+            ],
           },
         },
         {
@@ -188,11 +194,13 @@ export default defineApp({ modules: [], plugins: [imagePlugin, {
             "test.denial",
             "plugin.image.getInfo",
             "plugin.image.getPixels",
+            "plugin.windows.close",
           ],
           events: [],
           host: {
             permissions: [
               "image.getInfo",
+              "windows.close",
             ],
           },
         },
@@ -206,6 +214,12 @@ export default defineApp({ modules: [], plugins: [imagePlugin, {
     source,
     `import { createClient } from ${JSON.stringify(client)};
 import { image } from ${JSON.stringify(image)};
+import { windows } from ${JSON.stringify(windows)};
+const close = async (view) => {
+  try { await windows.close({ view }); } catch (error) {
+    if (error?.code !== "CANCELLED") throw error;
+  }
+};
 const client = createClient();
 if (location.pathname === "/reader.html") {
   let ok = false;
@@ -217,7 +231,7 @@ if (location.pathname === "/reader.html") {
     const info = await image.getInfo({ id });
     if (info.width !== 2 || info.height !== 1 || info.empty) throw new Error("Read-only getInfo cannot see the app-owned ID.");
     ok = true;
-  } finally { await client.invoke("test.denial", ok); window.close(); }
+  } finally { await client.invoke("test.denial", ok); await close("reader"); }
 } else {
   try {
     await client.invoke("test.image", null);
@@ -233,7 +247,7 @@ if (location.pathname === "/reader.html") {
     if (!discarded) throw new Error("Undelivered image resource survived cancellation during synchronous I/O.");
     await client.invoke("test.complete", null);
   } catch (error) { await client.invoke("test.failure", String(error)); }
-  finally { window.close(); }
+  finally { await close("main"); }
 }
 `,
   );
@@ -340,6 +354,7 @@ export default { ...definition, nativePlatforms: { ...definition.nativePlatforms
     bun: pin.bun,
     assets: inventory,
   });
+  const startedAt = performance.now();
   const launched = Bun.spawn(
     [
       executable,
@@ -360,6 +375,11 @@ export default { ...definition, nativePlatforms: { ...definition.nativePlatforms
   const output = new Response(launched.stdout).text();
   const errors = new Response(launched.stderr).text();
   assert.equal(await launched.exited, 0, await errors);
+  const elapsedMs = performance.now() - startedAt;
+  assert(
+    elapsedMs < 25000,
+    "Native windows must close and stop the host before the subprocess timeout sends SIGTERM.",
+  );
   await output;
   const dataRoot = resolve(
     directory,
@@ -377,6 +397,16 @@ export default { ...definition, nativePlatforms: { ...definition.nativePlatforms
     .trim()
     .split("\n")
     .map((line) => JSON.parse(line));
+  assert.deepEqual(
+    records
+      .filter((record) => record.event === "window-closed")
+      .map((record) => record.view)
+      .sort(),
+    [
+      "main",
+      "reader",
+    ],
+  );
   assert.equal(
     records.filter((record) => record.event === "host-stopped").length,
     1,
@@ -384,6 +414,7 @@ export default { ...definition, nativePlatforms: { ...definition.nativePlatforms
   assert.equal(records.at(-1).failed, false);
   const evidence = {
     ...report,
+    elapsedMs,
     platform: process.platform,
     architecture: process.arch,
     bun: Bun.version,
