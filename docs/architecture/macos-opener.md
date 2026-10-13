@@ -34,7 +34,7 @@ POSIX descriptor는 경로 이름의 rename이나 교체를 막지 않는다. NS
 ## 호스트 기반 작업과 등록
 
 이 변경은 PR #164의 `codex/macos-io-foundation`,
-`6749173cf25ff41f1c8135b789b13bd8bdd2a791` 위에 쌓는다. 기반 작업의 공유 I/O dispatch를
+`93d43cf36af99420b2c3f1057f133a168ef15d67` 위에 쌓는다. 기반 작업의 공유 I/O dispatch를
 복제하지 않는다. 호스트는 실행 직전에 살아 있는 호출 컨텍스트, 해당 작업 권한과 취소를
 검사한다. NativeAdapter의 동기 `execute`는 권한 token을 받지 않으며 승인된 호출만 받는다.
 파일 검사와 NSWorkspace 호출 사이에는 비동기 대기가 없다.

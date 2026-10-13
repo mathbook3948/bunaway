@@ -154,6 +154,13 @@ test("isolated macOS opener preserves validation, acceptance, ownership and unsu
       "UNSUPPORTED",
     ],
     [
+      "opener.trashFile",
+      {
+        path,
+      },
+      "UNSUPPORTED",
+    ],
+    [
       "opener.missing",
       {
         path,

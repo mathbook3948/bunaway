@@ -225,7 +225,13 @@ export async function createReceiver(root: string) {
       "-n",
       app,
     ]);
-    await waitFor((event) => event.kind === "ready");
+    const ready = await waitFor((event) => event.kind === "ready");
+    console.info("Receiver runtime bundle identity:", ready.target);
+    assert.equal(
+      ready.target,
+      id,
+      "Receiver runtime identity must match its registered bundle.",
+    );
     objc.withAutoreleasePool(() => {
       const status = services.symbols.LSSetDefaultRoleHandlerForContentType(
         BigInt(objc.string(contentType)),
@@ -239,10 +245,37 @@ export async function createReceiver(root: string) {
     await writeFile(sample, "controlled file fixture");
     objc.withAutoreleasePool(() => {
       const workspace = objc.send(objc.class("NSWorkspace"), "sharedWorkspace");
+      assert(workspace, "Main-thread NSWorkspace must exist.");
       const url = objc.send(
         objc.class("NSURL"),
         "fileURLWithPath:",
         objc.string(sample),
+      );
+      assert(url, "Controlled file NSURL must exist.");
+      const targetPath = objc.text(objc.send(url, "path"));
+      const targetUrl = objc.text(objc.send(url, "absoluteString"));
+      const type = objc.text(
+        objc.send(workspace, "typeOfFile:error:", objc.string(sample), null),
+      );
+      const registeredApp = objc.send(
+        workspace,
+        "URLForApplicationWithBundleIdentifier:",
+        objc.string(id),
+      );
+      console.info(
+        "Controlled file resolution:",
+        JSON.stringify({
+          targetPath,
+          targetUrl,
+          type,
+          contentType,
+          registeredApp: objc.text(objc.send(registeredApp, "path")),
+        }),
+      );
+      assert.equal(
+        targetPath,
+        sample,
+        "Controlled NSURL must preserve the file path.",
       );
       const handler = objc.send(workspace, "URLForApplicationToOpenURL:", url);
       const handlerPath = objc.text(objc.send(handler, "path"));

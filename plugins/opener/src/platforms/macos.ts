@@ -24,13 +24,17 @@ export function createAdapter(
           message: "Opener has been disposed.",
         });
       }
-      const payload = validateOpenerInput(name, input);
-      if ("app" in payload) {
+      if (
+        name !== "opener.openUrl" &&
+        name !== "opener.openFile" &&
+        name !== "opener.revealFile"
+      ) {
         throw new BunawayError({
           code: "UNSUPPORTED",
-          message: "Selected .exe applications are only supported on Windows.",
+          message: "Opener operation is not supported on macOS.",
         });
       }
+      const payload = validateOpenerInput(name, input);
       if ("url" in payload) {
         workspace.openUrl(normalizeUrl(payload.url));
       } else {

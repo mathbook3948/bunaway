@@ -62,7 +62,9 @@ const delegate = objc.delegate([
 objc.send(app, "setActivationPolicy:", 2);
 objc.send(app, "setDelegate:", delegate);
 objc.send(app, "finishLaunching");
-record("ready", "");
+const bundle = objc.send(objc.class("NSBundle"), "mainBundle");
+record("ready", objc.text(objc.send(bundle, "bundleIdentifier")));
+record("bundle", objc.text(objc.send(bundle, "bundlePath")));
 const deadline = Date.now() + 60000;
 setInterval(() => {
   if (existsSync(stop) || Date.now() > deadline) {
