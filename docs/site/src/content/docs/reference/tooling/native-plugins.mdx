@@ -204,6 +204,9 @@ export function createOperations(_environment: NativeEnvironment): NativeAdapter
 ```
 
 `NativeEnvironment`는 호스트가 정한 dataRoot와 capabilities 목록을 제공합니다.
+Windows의 `app`은 검증한 앱 ID와 재실행 경로, 인자를 제공하며 `app.supportsHiddenStart`는
+검증한 desktop 트레이 설정이 숨김 시작을 허용하는지 나타냅니다. 호출자가 지정할 수 없고
+값이 없으면 숨김 자동 실행 등록을 허용하지 않습니다.
 `NativeAdapterFactory`는 이 환경을 받아 NativeAdapter를 반환하는 함수 타입입니다.
 SDK가 감싼 `NativePluginAdapter`의 `execute`는 파싱 완료를 기다리는 Promise를 반환합니다.
 호스트용 `prepare`는 입력을 파싱한 뒤 일회성 실행 함수를 반환하므로 권한 승인 직후

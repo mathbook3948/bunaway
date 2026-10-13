@@ -25,7 +25,12 @@ HKCU Run에 REG_SZ를 쓰고 작업 관리자의 활성 상태는 별도로 읽�
 
 [공개 계약, 경로와 갱신 규칙](../../docs/site/src/content/docs/reference/plugins/autostart.mdx),
 [등록 방식 결정](../../docs/decisions/0016-windows-autostart.md)을 참고하세요.
-숨김 시작과 설치 프로그램 opt-in은 후속 작업입니다.
+`enableAutostart({ args: ["--sync"], hidden: true })`는 앱 정의에 `desktop.tray`가
+있을 때 초기 창을 숨긴 상태로 시작하도록 등록합니다. `desktop.onOpen`의
+`launchReason`은 `"autostart"`와 `"manual"`을 구분하며 `source`와 별개입니다.
+이는 예약 실행 인자를 읽은 결과이며 Windows가 시작했다는 인증이나 권한이 아닙니다.
+초기 SDK 준비도 숨김 창을 표시하지 않으며 트레이 Open과 수동 재실행으로 기존 세션을
+복원합니다. 설치 프로그램 opt-in은 후속 작업입니다.
 
 ## 검증
 
@@ -38,5 +43,8 @@ mise exec bun@1.4.2 --command "bun test tests/lifecycle/windows-autostart.test.t
 만든 임시 앱 ID의 실제 사용자 Run 값을 등록, 조회, 갱신하고 해제합니다. 인자 검증은
 저장 명령줄을 CreateProcessW에 그대로 전달해 compiled EXE와 개발 Bun의 실제 argv를
 확인합니다. 비활성화 보존 검사는 임시 ID에만 StartupApproved 테스트 값을 씁니다.
-실제 작업 관리자 조작과 사용자 로그아웃, 로그인 실행 검증은 별도 대화형 검증입니다.
+`mise run host:windows`의 desktop 시나리오는 실제 WebView2에서 초기 숨김,
+SDK 준비 뒤 표시 억제, 숨김 두 번째 실행 뒤 상태 유지, 수동 재실행의 복원과 세션 유지,
+백엔드 타이머와 종료 정리를 검사합니다. CI 통과는 실제 작업 관리자 조작과 사용자
+로그아웃, 로그인 실행 검증을 대신하지 않습니다.
 테스트 종료 시 임시 등록, 승인 테스트 값과 실행 파일을 삭제합니다.
