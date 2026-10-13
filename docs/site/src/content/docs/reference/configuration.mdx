@@ -118,8 +118,10 @@ min이 없으면 자동 축소 결과는 200보다 작아질 수 있지만 conte
 끄면 작업 영역보다 큰 크기와 화면 밖 위치를 허용합니다. 오른쪽과 아래쪽을 포함한
 outer 좌표가 signed 32-bit 범위를 벗어나면 거부합니다. 이후 이동과 크기 조절은 제한하지 않습니다.
 macOS는 새 배치 필드를 명시하면 기본값이나 지연 창에서도 `UNSUPPORTED`입니다.
-실행 중 현재 모니터 중앙 배치는 [창 API](/reference/host/windows/)의 `windows.center`로 제공합니다.
-지정 모니터 선택과 resizable, movable은 아직 지원하지 않습니다.
+실행 중 사용자 크기 조절과 이동 허용은 [창 API](/reference/host/windows/)의
+`setResizable`, `isResizable`, `setMovable`, `isMovable`로 제공합니다.
+실행 중 현재 모니터 중앙 배치는 같은 창 API의 `windows.center`로 제공합니다.
+지정 모니터 선택은 아직 지원하지 않습니다.
 Windows 창 선언은 0–128개이며 뷰 ID는 중복할 수 없고 정책에 해당 뷰와 home origin이 있어야 합니다.
 Windows 창 항목은 `instances: "single" | "multiple"`을 받으며 기본값은 `"single"`입니다.
 multiple에는 정수 1–128의 `maxInstances`를 반드시 지정합니다. single은 생략 또는 1만 허용합니다.

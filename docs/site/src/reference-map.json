@@ -110,6 +110,8 @@
           "serializeProcessFrame",
           "PROTOCOL_VERSION",
           "SDK_READY_FEATURE",
+          "AUTOSTART_ARGUMENT",
+          "AUTOSTART_HIDDEN_ARGUMENT",
           "parseMessage",
           "serializeMessage",
           "validateMessage",
@@ -300,6 +302,17 @@
       },
       "pages": {
         "reference/plugins/clipboard": ["clipboard", "clipboardPlugin"]
+      }
+    },
+    {
+      "name": "@bunaway/plugin-image",
+      "source": "plugins/image/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/image": ["image", "imagePlugin"]
       }
     },
     {
@@ -503,6 +516,10 @@
           "getChildren",
           "setEnabled",
           "isEnabled",
+          "setResizable",
+          "isResizable",
+          "setMovable",
+          "isMovable",
           "minimize",
           "maximize",
           "unmaximize",
@@ -808,6 +825,7 @@
       "pages": {
         "reference/backend/app-definition": [
           "source",
+          "launchReason",
           "argv",
           "cwd",
           "urls",
@@ -944,6 +962,10 @@
       "windows.getChildren",
       "windows.setEnabled",
       "windows.isEnabled",
+      "windows.setResizable",
+      "windows.isResizable",
+      "windows.setMovable",
+      "windows.isMovable",
       "windows.setSize",
       "windows.setContentPosition",
       "windows.setOuterSize",
@@ -975,7 +997,17 @@
       "windows.recreateInstance",
       "windows.listInstances"
     ],
-    "reference/plugins/appearance": ["appearance.getPreferences"]
+    "reference/plugins/appearance": ["appearance.getPreferences"],
+    "reference/plugins/image": [
+      "image.createRGBA",
+      "image.createBytes",
+      "image.createDataURL",
+      "image.getInfo",
+      "image.getPixels",
+      "image.exportBytes",
+      "image.exportDataURL",
+      "image.dispose"
+    ]
   },
   "configuration": {
     "packages/runtime-bun/src/window-config.ts": [
