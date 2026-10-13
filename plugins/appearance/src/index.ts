@@ -1,10 +1,15 @@
 import { defineNativePlugin } from "@bunaway/plugin";
 import { appearanceOperations } from "./contract.ts";
+import { createOperations as createMacosOperations } from "./platforms/macos.ts";
 import { createOperations } from "./platforms/windows.ts";
 
 const plugin = defineNativePlugin({
   name: "appearance",
   platforms: {
+    macos: {
+      execution: "ui",
+      create: createMacosOperations,
+    },
     windows: {
       execution: "io",
       create: createOperations,
@@ -12,7 +17,7 @@ const plugin = defineNativePlugin({
   },
   operations: appearanceOperations,
 });
-/** Read Windows appearance and accessibility preferences with an independent operation grant. */
+/** Read OS appearance and accessibility preferences with an independent operation grant. */
 export const appearancePlugin = plugin.definition;
 export default appearancePlugin;
 /** Query preferences. Theme overrides and accessibility support control are separate host features. */

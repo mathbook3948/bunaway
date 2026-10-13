@@ -125,6 +125,12 @@ macOS Bun FFI 런타임은 `desktop`을 `UNSUPPORTED`로 거부한다.
 
 Windows의 선택 appearance 플러그인은 저장된 테마와 transparency 선호, DWM accent,
 시스템 색과 고대비, reduced motion 및 screen reader 설정 플래그를 조회한다.
-다른 플랫폼은 `UNSUPPORTED`이며 [appearance 계약](../site/src/content/docs/reference/plugins/appearance.mdx)을 따른다.
-실제 Win32 query 회귀는 Windows native CI에 포함한다. 테마 지정과 변경 이벤트,
+macOS arm64는 AppKit UI 어댑터로 유효 앱 테마, accent와 sRGB 색,
+NSWorkspace의 Increase Contrast, Reduce Motion, Reduce Transparency와 VoiceOver 플래그를 조회한다.
+별도 systemTheme은 null이며 forcedColors는 false다. Increase Contrast를 강제 색이나
+Accessibility 신뢰 권한을 보조 기술 사용으로 해석하지 않는다. 나머지 플랫폼은
+`UNSUPPORTED`이며 [appearance 계약](../site/src/content/docs/reference/plugins/appearance.mdx)을 따른다.
+실제 Win32 query 회귀는 Windows native CI에 포함한다. macOS native CI는 직접 AppKit
+비교와 ad-hoc 서명한 compiled 앱에서 backend와 뷰 권한, 반복 조회와 종료를 검사한다.
+테마 지정과 변경 이벤트,
 실제 보조 기술 및 WebView 접근성 트리 검증은 후속 작업이다.

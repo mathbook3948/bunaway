@@ -1,12 +1,13 @@
 ---
 title: appearance
-description: Windows 테마 선호, 시스템 색과 접근성 설정 조회.
+description: Windows와 macOS의 테마, 시스템 색과 접근성 설정 조회.
 ---
 
 `@bunaway/plugin-appearance`를 설치하고 `appearancePlugin`을 앱의 plugins에 등록합니다.
 `appearance.getPreferences()`에는 `appearance.getPreferences` 작업 권한이 필요합니다.
 화면에서 직접 호출하면 commands에 `plugin.appearance.getPreferences`도 허용합니다.
-Windows의 I/O 실행을 지원하고 다른 플랫폼은 `UNSUPPORTED`입니다.
+Windows의 I/O 실행과 macOS arm64의 UI 실행을 지원합니다. macOS 조회는 AppKit의
+메인 스레드에서 처리하며 다른 플랫폼은 `UNSUPPORTED`입니다.
 
 ```ts
 import { appearance, appearancePlugin } from "@bunaway/plugin-appearance";
@@ -14,7 +15,7 @@ import { appearance, appearancePlugin } from "@bunaway/plugin-appearance";
 const preferences = await appearance.getPreferences();
 ```
 
-매 호출에서 현재 값을 읽고 다음 객체를 반환합니다.
+매 호출에서 현재 값을 읽고 다음 객체를 반환합니다. Windows 매핑은 다음과 같습니다.
 
 | 필드 | 의미 |
 | --- | --- |
@@ -33,6 +34,33 @@ const preferences = await appearance.getPreferences();
 Windows 설정 변경 이벤트를 구독하거나 설정, 창, WebView의 테마를 변경하지 않습니다.
 앱 명령 또는 화면 초기화에서 조회하고 필요한 시점에 다시 조회하세요.
 
+macOS 매핑은 다음과 같습니다.
+
+| 필드 | 의미 |
+| --- | --- |
+| appsTheme | NSApplication.effectiveAppearance를 Aqua와 DarkAqua에 best-match한 light 또는 dark. 일치하지 않으면 null |
+| systemTheme | null. Windows의 별도 시스템 셸 테마에 대응하는 값을 제공하지 않음 |
+| accentColor | NSColor.controlAccentColor를 sRGB로 변환한 #rrggbb |
+| highContrast | NSWorkspace.accessibilityDisplayShouldIncreaseContrast |
+| forcedColors | false. Increase Contrast는 Windows의 강제 색 팔레트와 다름 |
+| reducedMotion | NSWorkspace.accessibilityDisplayShouldReduceMotion |
+| transparencyEnabled | NSWorkspace.accessibilityDisplayShouldReduceTransparency의 반대 값 |
+| screenReaderEnabled | NSWorkspace.isVoiceOverEnabled. VoiceOver의 활성 플래그만 조회 |
+| colors.window | NSColor.windowBackgroundColor |
+| colors.windowText | NSColor.textColor |
+| colors.highlight | NSColor.selectedTextBackgroundColor |
+| colors.highlightText | NSColor.selectedTextColor |
+
+macOS 색은 앱의 현재 유효 appearance에서 평가하고 sRGB로 변환합니다. RGB 성분을
+0부터 1 사이로 제한한 뒤 가장 가까운 8-bit 값으로 반올림하며 알파는 포함하지 않습니다.
+조회 중 임시로 선택한 스레드 drawing appearance는 성공과 실패 모두에서 복원합니다.
+appsTheme은 저장된 사용자 선호와 다를 수 있으며 앱의 appearance override를 반영합니다.
+Auto 모드는 조회 시점의 유효 light 또는 dark로 반환합니다. 실제 창의 배경색이나
+WebView의 CSS 색을 읽는 기능은 아닙니다.
+screenReaderEnabled는 다른 보조 기술의 사용 여부, Accessibility 신뢰 권한 또는
+WebView 접근성 트리의 활성 여부를 나타내지 않습니다. 설정을 바꾸거나 Accessibility
+신뢰 권한을 요청하지 않으며 변경 알림은 구독하지 않습니다.
+
 권한 거부는 `PERMISSION_DENIED`, OS 조회 실패는 `INTERNAL`입니다.
-호스트 종료 뒤 호출은 `CANCELLED`입니다. 실제 테마 전환, 고대비 화면 및 보조 기술의
+호스트 종료 뒤 호출은 `CANCELLED`입니다. 실제 사용자 테마 전환, 고대비 화면 및 보조 기술의
 동작 검증은 사용자 세션의 수동 검증이 필요합니다.
