@@ -10,7 +10,7 @@ import { hr, kernel, ole, withBuffer, withWide } from "./win32-bindings.ts";
 
 const thread = kernel.symbols.GetCurrentThreadId();
 export type Arg = number | bigint | null;
-export type Abi = FFIType | "ptr" | "i32" | "u32" | "i64" | "u64";
+export type Abi = FFIType | "ptr" | "i32" | "u32" | "i64" | "u64" | "f64";
 type NativeCall = ((...values: Arg[]) => number) & {
   close(): void;
 };
