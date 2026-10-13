@@ -1,0 +1,103 @@
+---
+title: notification
+description: Windows 알림 지원과 OS 차단 상태를 조회하고 알림 설정 페이지를 엽니다.
+sidebar: { order: 8 }
+---
+
+`@bunaway/plugin-notification`은 Windows 알림 상태 조회와 설정 페이지 열기를 제공합니다.
+패키지를 설치하고 `notificationPlugin`을 등록한 다음 작업별 정책 권한을 허용하세요.
+
+```ts
+import { defineApp } from "@bunaway/backend";
+import { notificationPlugin } from "@bunaway/plugin-notification";
+
+export default defineApp({ modules: [], plugins: [notificationPlugin] });
+```
+
+## 상태 조회와 설정 열기
+
+```ts
+notification.getStatus(options?: NativeInvokeOptions): Promise<NotificationStatus>
+notification.openSettings(options?: NativeInvokeOptions): Promise<null>
+```
+
+앱 명령이나 플러그인 setup에서 호출하면 현재 호출 컨텍스트의 권한과 취소를 사용합니다.
+백엔드 호출은 별도 취소 signal이나 기한을 받지 않으며 현재 명령의 설정을 상속합니다.
+
+```ts
+import { notification } from "@bunaway/plugin-notification";
+
+const status = await notification.getStatus();
+if (status.support === "supported" && status.setting === "disabledForApplication") {
+  // 사용자가 설정 열기를 선택했을 때 호출합니다.
+  await notification.openSettings();
+}
+```
+
+`getStatus`는 신뢰된 호스트 설정의 앱 ID를 사용합니다. 호출자가 다른 앱 ID를
+선택할 수 없습니다. 상태 조회에는 이 ID로 등록된 시작 메뉴 바로가기와 같은 process
+AppUserModelID가 필요합니다. Windows 호스트와 설치 바로가기는 이 ID를 사용합니다.
+기존 알림 상태가 있는 같은 ID를 개발과 배포에서 쓰면 같은 Windows 설정을 조회합니다.
+바로가기만으로 알림 상태가 초기화되지는 않습니다. 아직 알림을 보내지 않은 앱이나 등록이 없는
+개발 실행, 바로가기를 만들지 않는 설치에서는 Windows가 `UNSUPPORTED`를 반환할 수 있습니다.
+조회는 바로가기, toast activator나 앱 등록을 만들지 않습니다.
+상태를 초기화하기 위한 알림도 보내지 않습니다. 첫 알림의 초기화 정책은 후속 표시 기능 범위입니다.
+
+## 결과와 OS 권한
+
+`NotificationStatus`는 `support`, `appUserModelId`, `setting`을 반환합니다.
+`support`는 toast API를 사용할 수 있으면 `supported`, 해당 WinRT 클래스나 인터페이스가
+없으면 `unsupported`입니다. `unsupported`일 때 `setting`은 `null`입니다.
+네이티브 기능 조회 플러그인의 지원 목록은 등록된 작업의 플랫폼 구현을 나타내며
+사용자 차단 상태를 대신하지 않습니다.
+
+`NotificationSetting`은 Windows가 직접 반환한 설정을 다음 값으로 나타냅니다.
+
+| `setting` | 의미 |
+| --- | --- |
+| `enabled` | 조회한 Windows 설정에서 알림을 허용함 |
+| `disabledForApplication` | 사용자가 이 앱의 알림을 끔 |
+| `disabledForUser` | 사용자 또는 관리자가 현재 사용자의 모든 알림을 끔 |
+| `disabledByGroupPolicy` | 그룹 정책이 알림을 차단함 |
+| `disabledByManifest` | Windows가 앱 manifest의 toast 사용 선언 부족을 보고함 |
+| `unknown` | 현재 구현이 모르는 Windows 설정 값 |
+
+여러 차단이 있으면 Windows가 우선순위에 따라 하나를 반환합니다. 이 결과로 더 좁은
+범위의 사용자 설정을 추정하지 마세요. 조회 실패는 오류이며 `enabled`로 바꾸지 않습니다.
+`enabled`는 실제 알림 표시나 클릭 후 activation 성공을 보장하지 않습니다.
+집중 지원과 일시적인 화면 표시 억제 상태도 이 API로 판별하지 않습니다.
+
+현재 Windows 데스크톱 경로에는 알림 동의 팝업을 요청하는 API가 없습니다.
+사용자는 Windows 설정에서 직접 허용 상태를 바꿉니다. 플러그인은 사용자 선택이나
+그룹 정책을 변경하지 않습니다.
+
+`openSettings`는 고정된 `ms-settings:notifications` 페이지를 열도록 OS에 요청합니다.
+임의 URI나 앱별 설정 경로를 받지 않습니다. 성공은 요청 접수이며 페이지가 보였거나
+권한을 허용했다는 뜻이 아닙니다. 설정 화면에서 돌아오면 `getStatus`를 다시 호출하세요.
+OS에 해당 페이지나 처리 앱이 없거나 요청이 거부되면 오류를 반환합니다.
+
+## 정책과 오류
+
+| 작업 | 입력 | 권한 |
+| --- | --- | --- |
+| `notification.getStatus` | `null` | `notification.getStatus` |
+| `notification.openSettings` | `null` | `notification.openSettings` |
+
+뷰에서 직접 호출하려면 `commands`에 `plugin.notification.getStatus` 또는
+`plugin.notification.openSettings`를 추가하고 `host.permissions`에 해당 작업을 허용합니다.
+명령 핸들러는 원래 뷰의 권한을 사용하며 setup은 루트 `backend.permissions`를 사용합니다.
+설정 열기 권한은 상태 조회 권한과 독립입니다.
+
+- `INVALID_ARGUMENT`: `null` 외의 입력이나 유효하지 않은 호스트 앱 ID입니다.
+- `PERMISSION_DENIED`: 앱 정책, Windows 상태 조회나 설정 실행 권한이 없습니다.
+- `UNSUPPORTED`: 플랫폼 어댑터나 호스트 앱 정보가 없거나 Windows가 상태 조회에 필요한
+  앱의 OS 알림 상태를 찾지 못했거나 MSIX에서 상태를 조회했습니다. 바로가기 등록 후에도
+  첫 알림 전에는 상태가 없을 수 있습니다. 플러그인은 상태를 자동으로 만들지 않습니다.
+  MSIX 앱의 패키지 식별자 연동은 아직 제공하지 않습니다.
+- `INTERNAL`: WinRT 초기화, 상태 조회나 설정 열기 요청이 실패했습니다.
+- `CANCELLED`, `TIMEOUT`, `BUSY`: 기존 Host API의 취소, 기한과 대기열 제한입니다.
+
+현재 Windows x64의 unpackaged 데스크톱 상태 조회를 지원합니다. macOS, Linux와 모바일
+어댑터는 없습니다. 알림 표시, 소리, 클릭 이벤트, 알림 기록, 예약과 앱 종료 상태의
+toast activation은 후속 범위입니다. 기존 설치의 시작 메뉴 바로가기 선택은 유지합니다.
+
