@@ -409,8 +409,11 @@ Windows의 비활성화 기록을 수정하지 않는다.
 조회하며 `notification.getStatus`와 `notification.openSettings` 권한을 분리한다.
 설정 열기는 `ms-settings:notifications` 요청 접수이며 동의나 설정 변경 완료를 뜻하지 않는다.
 알림 표시, shortcut/COM activator 등록과 종료 상태의 activation 전달은 아직 구현하지 않았다.
-시작 메뉴 바로가기를 생성하지 않는 기존 설치 선택도 보존한다. 배포/개발의 동일 ID 조회는
-같은 OS 설정을 읽으며 `enabled`는 toast 표시, 앱 등록이나 activation 가능성을 보장하지 않는다.
+시작 메뉴 바로가기를 생성하지 않는 기존 설치 선택도 보존한다. 조회에는 설치 바로가기의
+AppUserModelID 등록과 같은 process AppUserModelID가 필요하며 Windows가 앱 등록을 찾지
+못하면 `UNSUPPORTED`로 거부한다. 등록된 배포/개발의 동일 ID 조회는 같은 OS 설정을 읽으며
+`enabled`는 toast 표시나 activation 가능성을 보장하지 않는다. 네이티브 회귀는 격리된
+프로세스의 임시 UUID 시작 메뉴 바로가기로 실제 등록 상태를 조회하고 실패 때도 정리한다.
 MSIX의 패키지 식별자 연동은 후속 범위다. 공개 계약과 네이티브 검증 범위는
 [notification 문서](../plugins/notification/README.md)를 따른다.
 

@@ -5,6 +5,7 @@ import type { NotificationSetting, NotificationStatus } from "./contract.ts";
 const POINTER_BYTES = 8;
 const RO_INIT_SINGLETHREADED = 0;
 const HRESULT_ACCESS_DENIED = 0x80070005;
+const HRESULT_ELEMENT_NOT_FOUND = 0x80070490;
 const REGDB_E_CLASSNOTREG = 0x80040154;
 const CLASS_E_CLASSNOTAVAILABLE = 0x80040111;
 const E_NOINTERFACE = 0x80004002;
@@ -37,14 +38,27 @@ function check(result: number, stage: string): void {
   if (result >= 0) {
     return;
   }
+  const details = {
+    hresult: result >>> 0,
+    stage,
+  };
+  if (
+    stage === "ToastNotifier.Setting" &&
+    details.hresult === HRESULT_ELEMENT_NOT_FOUND
+  ) {
+    throw new BunawayError({
+      code: "UNSUPPORTED",
+      message: "Windows notification app identity is unavailable.",
+      details,
+    });
+  }
   throw new BunawayError({
     code:
-      result >>> 0 === HRESULT_ACCESS_DENIED ? "PERMISSION_DENIED" : "INTERNAL",
+      details.hresult === HRESULT_ACCESS_DENIED
+        ? "PERMISSION_DENIED"
+        : "INTERNAL",
     message: "Windows notification operation failed.",
-    details: {
-      hresult: result >>> 0,
-      stage,
-    },
+    details,
   });
 }
 

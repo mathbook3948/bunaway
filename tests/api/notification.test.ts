@@ -267,6 +267,9 @@ factoryResult = -2147467259; assert.throws(() => native.getStatus(), {code:"INTE
 factoryResult = 0;
 notifierResult = -2147467259; assert.throws(() => native.getStatus(), {code:"INTERNAL"}); notifierResult = 0;
 settingResult = -2147024891; assert.throws(() => native.getStatus(), {code:"PERMISSION_DENIED"}); settingResult = 0;
+settingResult = -2147023728;
+assert.throws(() => native.getStatus(), error => error.code === "UNSUPPORTED" && error.details.hresult === 0x80070490 && error.details.stage === "ToastNotifier.Setting");
+settingResult = 0;
 packageResult = 122; assert.throws(() => native.getStatus(), {code:"UNSUPPORTED"}); packageResult = 15700;
 packageResult = 5; assert.throws(() => native.getStatus(), {code:"PERMISSION_DENIED"}); packageResult = 15700;
 assert.equal(native.openSettings(), null);
