@@ -21,6 +21,13 @@ COM 참조, timer와 창 자원을 정리하는지도 확인한다.
 조작이나 앱 재실행 후 재개 검증은 포함하지 않는다. 결과는
 `build/windows-webview-downloads-results.json`에 기록한다.
 
+`api/webview-audio.test.ts`는 audio 작업의 개별 권한, 엄격한 boolean 입력, 음소거와 재생의
+독립 상태, 취소와 닫힌 창 및 플랫폼 서비스 부재를 검증한다.
+`lifecycle/windows-webview-audio.ts`는 `mise run host:windows`에서 실제 WebView2의 음소거
+변경과 반복 설정, 문서 탐색 뒤 유지, 준비 전과 종료 후 거부 및 native 자원 정리를 확인한다.
+결과는 `build/windows-webview-audio-results.json`이다. 조용한 문서를 사용하며 재생 중인
+audio와 물리 장치 출력은 별도 수동 검증이다.
+
 `windows-initial-placement.fixture.ts`는 모니터 겹침이 바뀌는 `SetWindowPos`에서
 실제 창 프로시저에 `WM_DPICHANGED`를 전달한다. 초기 DPI 보정의 수렴, 중앙 좌표와
 content/outer 크기, DPI 순환 때 숨김 HWND 정리 및 생성 후 OS 권장 배치 처리를 검증한다.
@@ -360,6 +367,12 @@ UI 초기화 실패 검사는 UI 의존성만 대체하고 실제 Worker를 사�
 macOS에서는 참조된 하위 프로세스와 `unref()`된 하위 프로세스, 플러그인 종료 기한 초과와
 호스트 SIGKILL을 실제 프로세스로 검사한다. shell의 자식과 감시 프로세스까지 정리되고
 다른 프로세스 그룹은 유지되는지 확인한다. 다른 OS의 시작 회귀는 macOS 그룹 소유권만 대체한다.
+`windows-bun-storage.ts`는 임의 바이트, 빈 파일, 짧은 대체와 append, Unicode 텍스트 append,
+바이트 읽기 상한과 링크 거부를 실제 Win32 핸들로 검사한다.
+`windows-storage-metadata.ts`는 실제 WebView2에서 바이트 대체와 append, UTF-8 append 및
+독립적인 텍스트 대체 권한 거부를 I/O Worker와 함께 검사한다.
+이 검사들은 `mise run host:windows`에 포함하며 Linux 계약 검사와 구분한다.
+
 `tests/lifecycle/run-native.ts`는 패키징과 테스트 실행 순서를 조정한다.
 macOS 전용 설정과 리소스 경계 페이지도 `fixtures/desktop/host/`에 둔다.
 `host:macos`는 C 컴파일 없이 Bun compiled 앱으로 실제 WKWebView 회귀를 실행한다.
@@ -451,3 +464,20 @@ CI의 windows-native 작업은 `mise run host:windows`를 통해 이 검사를 �
 `cli/zod-distribution.test.ts`는 새 프로젝트에 원본 Zod와 배포 패키지를 설치하고
 설치된 CLI의 제품 및 개발 앱 번들에서 동일한 SDK 입력과 출력 회귀를 실행한다.
 이 검사는 Win32, WebView2나 WKWebView의 실제 네이티브 실행을 대신하지 않는다.
+
+`api/clipboard-formats.test.ts`와 `lifecycle/clipboard-codecs.test.ts`는 RGBA 상한과
+canonical base64, 다중 형식의 JSON 예산, CF_HTML byte offset과 잘못된 UTF-8,
+DIB의 행 방향과 padding, alpha 및 잘못된 profile, mask, 크기를 확인한다.
+`clipboard-resources.test.ts`는 다중 HGLOBAL의 준비 실패와 부분 등록에서 소유권과
+정리가 유지되는지 격리된 Win32 바인딩으로 확인한다. 실제 `windows-clipboard.test.ts`는
+`mise run host:windows`에 포함되며 공통 SDK와 UI Worker에서 텍스트, HTML, RTF,
+파일 목록과 이미지, 지원 형식 발견을 왕복한다. 테스트는 CI 데스크톱 clipboard를
+변경하고 원래 Unicode 텍스트만 복원한다. WebView2 페이지나 다른 앱의 붙여넣기,
+물리 장치 검증을 뜻하지 않는다.
+
+`appearance.test.ts`는 선호의 null, 색 형식과 개별 operation 권한, 호출 컨텍스트를 확인한다.
+CLI의 같은 이름 검사는 로컬 tarball의 isolated 설치, 네이티브 I/O 어댑터 발견과 browser
+번들의 FFI 제외를 검사한다. `windows-appearance.test.ts`는 실제 Windows 고대비,
+client-area animation, screen reader 설정 플래그 및 시스템 색과 비교하고 두 어댑터의
+DLL 수명과 종료 후 거부를 확인한다. `mise run host:windows`에 포함한다.
+사용자 테마 변경과 실제 보조 기술 또는 WebView 접근성 트리 검증을 대신하지 않는다.

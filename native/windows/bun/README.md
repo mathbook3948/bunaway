@@ -49,6 +49,11 @@ DownloadOperation, Deferral을 소유한다. `downloads.ts`는 OS 자원 없는 
 파일 쓰기와 기본 저장 경로는 브라우저가 소유한다. 현재 API에는 임의 경로 입력이나
 사용자 정의 스트림 출력이 없으며 backend 출처 검사로 renderer의 파일 접근을 확대하지 않는다.
 
+WebView audio는 ICoreWebView2_8의 IsMuted와 IsDocumentPlayingAudio를 같은 UI STA에서
+조회하고 음소거를 변경한다. 각 호출이 획득한 COM interface는 성공과 실패 모두에서
+해제한다. controller의 음소거는 문서 탐색을 유지하고 재생 상태는 물리 출력과 구분한다.
+자동 재생과 장치 권한 정책은 기존 동작을 유지하며 상태 이벤트는 아직 제공하지 않는다.
+
 창 플러그인을 등록하면 `Windows.observe`가 창별 상태와 물리 outer bounds의 변경을
 비교한다. 활성화 관찰은 `WM_ACTIVATE` 뒤에 게시한 창 메시지에서 전경 HWND를 조회한다.
 동기 활성화 콜백이 끝나기 전에 이전 전경 HWND를 읽어 전환을 놓치는 것을 방지한다.

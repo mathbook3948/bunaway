@@ -1493,32 +1493,38 @@ test.each([
   },
 );
 
-test("aborting an established subscription releases it", async () => {
-  const { transport, client } = await connected();
-  const controller = new AbortController();
-  const errors: WireError[] = [];
-  const released = client.listen("notes.changed", () => {}, {
-    signal: controller.signal,
-    onError: (error) => errors.push(error),
-  });
-  await flush();
-  const request = must(transport.requests("listen").at(-1));
-  transport.emit(
-    serverResult(request.id, {
+test.each([
+  "listen",
+  "once",
+] as const)(
+  "aborting an established %s subscription releases it",
+  async (method) => {
+    const { transport, client } = await connected();
+    const controller = new AbortController();
+    const errors: WireError[] = [];
+    const released = client[method]("notes.changed", () => {}, {
+      signal: controller.signal,
+      onError: (error) => errors.push(error),
+    });
+    await flush();
+    const request = must(transport.requests("listen").at(-1));
+    transport.emit(
+      serverResult(request.id, {
+        subscriptionId: "sub-1",
+      }),
+    );
+    await released;
+    controller.abort();
+    await flush();
+    const unlistens = transport.requests("unlisten");
+    expect(unlistens).toHaveLength(1);
+    expect(unlistens[0]).toMatchObject({
       subscriptionId: "sub-1",
-    }),
-  );
-  await released;
-  controller.abort();
-  await flush();
-  const unlistens = transport.requests("unlisten");
-  expect(unlistens).toHaveLength(1);
-  expect(unlistens[0]).toMatchObject({
-    subscriptionId: "sub-1",
-  });
-  // An abort-driven release is a normal end, not a subscription failure.
-  expect(errors).toHaveLength(0);
-});
+    });
+    // An abort-driven release is a normal end, not a subscription failure.
+    expect(errors).toHaveLength(0);
+  },
+);
 
 test("listen registers before the next frame in the same receive batch", async () => {
   const { transport, client } = await connected();
@@ -1590,13 +1596,27 @@ test("listen observes subscription-error in the same receive batch", async () =>
 });
 
 test.each([
-  "abort",
-  "timeout",
-])("%s listen cleans up late results once", async (mode) => {
+  [
+    "listen",
+    "abort",
+  ],
+  [
+    "listen",
+    "timeout",
+  ],
+  [
+    "once",
+    "abort",
+  ],
+  [
+    "once",
+    "timeout",
+  ],
+] as const)("%s cleans up late results after %s once", async (method, mode) => {
   const { transport, client } = await connected();
   const controller = new AbortController();
   const deliveries: number[] = [];
-  const pending = client.listen(
+  const pending = client[method](
     "notes.changed",
     (event) => deliveries.push(event.sequence),
     {
@@ -1814,34 +1834,40 @@ test.each([
   expect(transport.requests("unlisten")).toHaveLength(0);
 });
 
-test("listen error responses keep the session open", async () => {
-  const { transport, client } = await connected();
-  const errors: WireError[] = [];
-  const pending = client.listen("notes.changed", () => {}, {
-    onError: (error) => errors.push(error),
-  });
-  await flush();
-  const request = must(transport.requests("listen").at(-1));
-  transport.emit(
-    serverError(request.id, {
+test.each([
+  "listen",
+  "once",
+] as const)(
+  "%s permission error responses keep the session open",
+  async (method) => {
+    const { transport, client } = await connected();
+    const errors: WireError[] = [];
+    const pending = client[method]("notes.changed", () => {}, {
+      onError: (error) => errors.push(error),
+    });
+    await flush();
+    const request = must(transport.requests("listen").at(-1));
+    transport.emit(
+      serverError(request.id, {
+        code: "PERMISSION_DENIED",
+        message: "Event denied.",
+      }),
+    );
+    await expect(pending).rejects.toMatchObject({
       code: "PERMISSION_DENIED",
       message: "Event denied.",
-    }),
-  );
-  await expect(pending).rejects.toMatchObject({
-    code: "PERMISSION_DENIED",
-    message: "Event denied.",
-  });
-  expect(errors).toEqual([]);
-  expect(transport.closed).toBe(false);
-  const invoke = client.invoke("notes.read", {
-    key: "after",
-  });
-  await flush();
-  transport.emit(serverResult(invokeMessage(transport).id, "still-open"));
-  await expect(invoke).resolves.toBe("still-open");
-  await client.close();
-});
+    });
+    expect(errors).toEqual([]);
+    expect(transport.closed).toBe(false);
+    const invoke = client.invoke("notes.read", {
+      key: "after",
+    });
+    await flush();
+    transport.emit(serverResult(invokeMessage(transport).id, "still-open"));
+    await expect(invoke).resolves.toBe("still-open");
+    await client.close();
+  },
+);
 
 test("release retries a rejected send and concurrent releases await the same result", async () => {
   const { transport, client } = await connected();
@@ -1922,5 +1948,235 @@ test("failed cleanup of a cancelled listen closes the session", async () => {
   );
   await flush();
   expect(transport.closed).toBe(true);
+  await client.close();
+});
+
+test.each([
+  false,
+  true,
+])(
+  "once releases before same-batch and reentrant events, with listener throw %s",
+  async (throws) => {
+    const { transport, client } = await connected();
+    const deliveries: string[] = [];
+    const errors: WireError[] = [];
+    const controller = new AbortController();
+    const pending = client.once(
+      "notes.changed",
+      (event) => {
+        deliveries.push(event.payload.key);
+        transport.emit(
+          eventMessage("sub-once", 2, {
+            key: "reentrant",
+          }),
+        );
+        if (throws) {
+          throw new Error("Listener failed.");
+        }
+      },
+      {
+        signal: controller.signal,
+        onError: (error) => errors.push(error),
+      },
+    );
+    await flush();
+    transport.emit(
+      serverResult(must(transport.requests("listen").at(-1)).id, {
+        subscriptionId: "sub-once",
+      }),
+    );
+    const detach = jest.spyOn(controller.signal, "removeEventListener");
+    // No Promise continuation has run between acceptance and these frames.
+    transport.emit(
+      eventMessage("sub-once", 1, {
+        key: "first",
+      }),
+    );
+    transport.emit(
+      eventMessage("sub-once", 2, {
+        key: "queued",
+      }),
+    );
+    const release = await pending;
+    expect(deliveries).toEqual([
+      "first",
+    ]);
+    expect(detach).toHaveBeenCalledTimes(1);
+    controller.abort();
+    const cleanup = release();
+    const concurrent = release();
+    expect(concurrent).toBe(cleanup);
+    let completed = false;
+    void cleanup.then(() => {
+      completed = true;
+    });
+    await flush();
+    expect(completed).toBe(false);
+    expect(transport.requests("unlisten")).toHaveLength(1);
+    transport.emit(
+      serverResult(must(transport.requests("unlisten")[0]).id, null),
+    );
+    await cleanup;
+    await release();
+    expect(errors).toEqual([]);
+    expect(transport.closed).toBe(false);
+    await client.close();
+  },
+);
+
+test("disposing once before its first event prevents delivery", async () => {
+  const { transport, client } = await connected();
+  const deliveries: string[] = [];
+  const pending = client.once(
+    "notes.changed",
+    (event) => deliveries.push(event.payload.key),
+    {
+      onError: () => {},
+    },
+  );
+  await flush();
+  transport.emit(
+    serverResult(must(transport.requests("listen").at(-1)).id, {
+      subscriptionId: "sub-once",
+    }),
+  );
+  const release = await pending;
+  const cleanup = release();
+  transport.emit(
+    eventMessage("sub-once", 1, {
+      key: "late",
+    }),
+  );
+  await flush();
+  transport.emit(
+    serverResult(must(transport.requests("unlisten")[0]).id, null),
+  );
+  await cleanup;
+  expect(deliveries).toEqual([]);
+  await client.close();
+});
+
+test.each([
+  "reject",
+  "throw",
+  "host",
+] as const)(
+  "automatic once cleanup failure from %s reports the error and closes the session",
+  async (mode) => {
+    const { transport, client } = await connected();
+    const errors: WireError[] = [];
+    const otherErrors: WireError[] = [];
+    const deliveries: string[] = [];
+    const other = client.listen("notes.changed", () => {}, {
+      onError: (error) => otherErrors.push(error),
+    });
+    const pending = client.once(
+      "notes.changed",
+      (event) => deliveries.push(event.payload.key),
+      {
+        onError: (error) => {
+          errors.push(error);
+          throw new Error("Error callback failed.");
+        },
+      },
+    );
+    await flush();
+    transport.emit(
+      serverResult(must(transport.requests("listen")[0]).id, {
+        subscriptionId: "other",
+      }),
+    );
+    transport.emit(
+      serverResult(must(transport.requests("listen")[1]).id, {
+        subscriptionId: "sub-once",
+      }),
+    );
+    await other;
+    const release = await pending;
+    const failure: WireError = {
+      code: "BUSY",
+      message: "Cleanup failed.",
+    };
+    const send = transport.send.bind(transport);
+    if (mode !== "host") {
+      transport.send = (text) => {
+        if (parseMessage(text).kind !== "unlisten") {
+          return send(text);
+        }
+        if (mode === "throw") {
+          throw failure;
+        }
+        return Promise.reject(failure);
+      };
+    }
+    transport.emit(
+      eventMessage("sub-once", 1, {
+        key: "first",
+      }),
+    );
+    await flush();
+    if (mode === "host") {
+      transport.emit(
+        serverError(must(transport.requests("unlisten")[0]).id, failure),
+      );
+      await flush();
+    }
+    expect(deliveries).toEqual([
+      "first",
+    ]);
+    expect(errors).toEqual([
+      failure,
+    ]);
+    expect(otherErrors).toEqual([
+      {
+        code: "INTERNAL",
+        message: "Connection closed.",
+      },
+    ]);
+    expect(transport.closed).toBe(true);
+    await release();
+  },
+);
+
+test("once rejects an invalid first event sequence without invoking the listener", async () => {
+  const { transport, client } = await connected();
+  const deliveries: number[] = [];
+  const errors: WireError[] = [];
+  const pending = client.once(
+    "notes.changed",
+    (event) => deliveries.push(event.sequence),
+    {
+      onError: (error) => errors.push(error),
+    },
+  );
+  await flush();
+  transport.emit(
+    serverResult(must(transport.requests("listen")[0]).id, {
+      subscriptionId: "sub-once",
+    }),
+  );
+  await pending;
+  transport.emit(
+    eventMessage("sub-once", 2, {
+      key: "out-of-order",
+    }),
+  );
+  transport.emit(
+    eventMessage("sub-once", 1, {
+      key: "late",
+    }),
+  );
+  await flush();
+  expect(deliveries).toEqual([]);
+  expect(errors).toEqual([
+    {
+      code: "INTERNAL",
+      message: "Event sequence violated.",
+    },
+  ]);
+  expect(transport.requests("unlisten")).toHaveLength(1);
+  transport.emit(
+    serverResult(must(transport.requests("unlisten")[0]).id, null),
+  );
   await client.close();
 });

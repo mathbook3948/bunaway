@@ -27,6 +27,26 @@ export default defineApp({ modules: [], plugins: [windowsPlugin] });
 항목을 보존해 재시도할 수 있습니다. `paused`는 현재 interrupted 상태의 USER_PAUSED reason에서
 조회하므로 브라우저 UI로 재개해도 최신 상태를 반영합니다.
 
+## WebView audio
+
+Windows의 `getWebViewAudioState({ view, windowId? })`는 현재 창의 WebView에서
+`{ muted, playing }`을 조회합니다. `setWebViewAudioMuted({ view, windowId?, muted })`는
+음소거를 설정하고 null을 반환합니다. `muted`는 boolean이며 자동 재생이나 장치 권한을
+변경하지 않습니다. `playing`은 WebView2가 보고한 문서의 audio 재생 상태입니다.
+음소거된 문서도 재생 중일 수 있으며 이 값은 물리 장치의 출력 여부를 확인하지 않습니다.
+
+```ts
+await windows.setWebViewAudioMuted({ view: "main", muted: true });
+const { muted, playing } = await windows.getWebViewAudioState({ view: "main" });
+```
+
+권한은 각각 `windows.getWebViewAudioState`와 `windows.setWebViewAudioMuted`이며 화면은
+해당 command 권한도 필요합니다. 기존 창 대상 선택과 windowId 수명 검사를 유지합니다.
+음소거는 해당 WebView controller의 설정으로, 문서 탐색은 유지하고 창 재생성은 초기화합니다.
+닫힌 창은 `INVALID_ARGUMENT`, 생성 중인 WebView는 `BUSY`, 서비스가 없는 플랫폼은
+`UNSUPPORTED`입니다. 네이티브 읽기와 쓰기 실패는 `INTERNAL`입니다.
+상태 변경 이벤트와 실제 audio 장치의 재생 검증은 아직 제공하지 않습니다.
+
 ## 설정과 권한
 
 대상 창은 [app.windows](/reference/configuration/)에 정의합니다.
@@ -309,6 +329,7 @@ await windows.close({ view: "dialog" });
 | `windows.getSizeConstraints` | `{ view, windowId? }` | `Promise<{ minWidth: number \| null; minHeight: number \| null; maxWidth: number \| null; maxHeight: number \| null }>` 네 제약을 한 번에 조회 |
 | `windows.setSizeConstraints` | `{ view, windowId?, minWidth?, minHeight?, maxWidth?, maxHeight? }` | `Promise<null>`. 제약 전체를 교체합니다. 생략하거나 `null`인 축은 제한을 해제합니다 |
 | `windows.setPosition` | `{ view, windowId?, x, y }` | `Promise<null>`. 화면에서 창 바깥쪽 왼쪽 위의 물리 픽셀 위치. 각 값은 정수 -32768–32767 |
+| `windows.center` | `{ view, windowId? }` | `Promise<null>`. 현재 모니터의 작업 영역 중앙에 창 바깥 영역 배치. 최소화와 최대화 중에는 일반 복원 영역 배치 |
 | `windows.setFullscreen` | `{ view, windowId?, fullscreen: boolean }` | `Promise<null>`. 현재 모니터 전체화면. 해제하면 이전 창 위치와 표시 상태 복원 |
 | `windows.setCloseConfirmation` | `{ view, windowId?, message: string \| null }` | `Promise<null>`. 창을 닫기 전에 표시할 확인 메시지 설정. 문자열은 1–1024자, NUL 금지. `null`이면 확인 해제 |
 | `windows.close` | `{ view, windowId? }` | `Promise<boolean>`. 닫기 승인 시 `true`, 확인이나 앱 종료를 취소하거나 트레이로 숨기면 `false`. 정리 완료를 기다리지는 않음 |
@@ -520,6 +541,10 @@ macOS의 준비 조회, 이벤트와 splashscreen 전환은 아직 지원하지 
 
 조회의 `unit`은 `"physical" | "logical"`이며 기본값은 `"physical"`입니다. `dpi`는 해당 조회에 사용한 대상 창의 DPI입니다.
 `setSize`는 계속 내용 영역의 96 DPI 논리 픽셀을 받고, `setPosition`은 창 바깥쪽 왼쪽 위의 화면 물리 픽셀을 받습니다.
+`center`는 현재 창에 가장 가까운 모니터의 작업 영역을 사용하며 작업 표시줄 영역을 제외합니다.
+창 크기, 표시, 최소화, 최대화와 포커스 상태를 유지합니다. 최소화나 최대화 중에는 복원할 일반 창의 위치만 바꿉니다.
+작업 영역보다 큰 창도 크기를 바꾸지 않고 중앙에 배치합니다. 전체화면에서는 `INVALID_ARGUMENT`입니다.
+권한은 `windows.center`이며 지정 모니터 선택은 아직 제공하지 않습니다.
 따라서 `setSize` 뒤에는 `getContentSize({ view, unit: "logical" })`, `setPosition` 뒤에는 `getOuterPosition({ view })`으로 결과를 확인합니다.
 제약에 따른 크기 보정과 운영체제의 배치 결과를 반환합니다.
 
