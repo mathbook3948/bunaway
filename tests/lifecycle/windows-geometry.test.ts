@@ -737,6 +737,12 @@ test.skipIf(process.platform !== "win32")(
           await verifyNormal("fullscreen", command, visible);
           nativePhase = "exit-fullscreen-cycle";
           native.setFullscreen(hwnd, false);
+          // Check restoration before a subsequent hide can obscure its first failure.
+          verifyShowState(
+            "immediately-after-exit-fullscreen",
+            command,
+            visible,
+          );
           verifyShowState("after-fullscreen-exit", command, visible);
           verifyCurrent();
           await verifyNormal("after-exit", command, visible);

@@ -485,11 +485,12 @@ CI의 `mise run host:windows`에서 SDK와 UI Worker, Win32를 연결해 실행�
 우선순위 P1, 전원 고급 기능은 P2. 소유자: 창에 연결된 기능은 호스트, 독립 OS 기능은 플러그인 후보.
 출처: [T-window], [E-screen], [E-theme], [E-system], [E-power], [E-power-blocker].
 
-- [ ] 전체, 주, 현재 모니터를 조회한다.
-- [ ] 점과 사각형에 가장 가까운 모니터를 조회한다.
-- [ ] 모니터 이름, bounds, work area, 배율, rotation과 refresh rate를 조회한다.
+- [x] Windows에서 전체, 주, 대상 창의 현재 모니터를 조회한다.
+- [x] Windows에서 물리 점과 사각형에 가장 가까운 모니터를 조회한다.
+- [x] Windows에서 모니터 장치명과 이름, bounds, work area, DPI와 배율, 드라이버가 제공하는 rotation과 정수 refresh rate를 조회한다.
 - [ ] 모니터 추가, 제거와 display metrics 변경 이벤트를 제공한다.
-- [ ] 커서의 화면 좌표와 physical/logical 좌표 변환을 제공한다.
+- [x] Windows 커서의 물리 화면 좌표를 조회한다. 창 기준 physical/logical 변환은 기존 toLogical과 toPhysical을 사용한다.
+- [ ] 모니터별 좌표 변환과 혼합 DPI의 전역 논리 좌표계 지원 범위를 결정한다.
 - [ ] system/light/dark 테마를 앱과 창에 지정하고 조회한다.
 - [ ] 테마, accent color와 시스템 색 변경을 알린다.
 - [x] Windows 고대비와 OS forced colors 플래그, 시스템 색을 조회한다.
@@ -509,6 +510,11 @@ CI의 `mise run host:windows`에서 SDK와 UI Worker, Win32를 연결해 실행�
 - [x] Windows 시스템 idle 절전과 화면 꺼짐 방지 요청을 시작, 조회하고 해제한다. 사용자 절전과 OS 전원 정책은 우회하지 않는다.
 - [x] blocker의 반복 요청을 독립 ID로 관리하고 앱 종료 시 native handle을 자동 정리한다.
 - [ ] CPU speed-limit, thermal-state와 종료 이벤트의 플랫폼별 지원을 정의한다.
+
+모니터 id는 현재 Windows 디스플레이 장치명이며 영구 하드웨어 식별자가 아니다.
+조회 API는 [창 API](./site/src/content/docs/reference/host/windows.mdx#모니터와-커서)를 따른다.
+실제 HWND와 WebView2 회귀를 CI에 추가했다. 실제 다중 물리 모니터의 연결과 제거,
+혼합 DPI, 회전 및 사용자 커서 조작 검증은 별도로 남긴다.
 
 `@bunaway/plugin-power`는 [power API](./site/src/content/docs/reference/plugins/power.mdx)를 따른다.
 존재하지 않거나 알 수 없는 배터리 측정값은 null이다. PowerCreateRequest와
