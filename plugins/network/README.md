@@ -1,6 +1,6 @@
 # Bounded network plugin
 
-Register `networkPlugin` to use `network.request` and `network.exchange` on Windows.
+Register `networkPlugin` to use `network.request` and `network.exchange` on Windows and macOS.
 Each operation has an independent permission. Applications own URL access rules in backend commands;
 operation grants do not contain resource allowlists. Trusted backend code can use Bun fetch and WebSocket directly.
 See the [public contract](../../docs/site/src/content/docs/reference/plugins/network.mdx) for limits and access-rule examples.
@@ -11,7 +11,13 @@ receive bounded text/binary messages. Persistent handles are intentionally defer
 ownership and revocation can be expressed by the public adapter contract.
 
 The existing async host adapter context propagates cancellation and disposal; no host/SDK changes are needed.
-`tests/lifecycle/windows-network.test.ts` uses the generated Windows adapter and real loopback HTTP/WebSocket
+`tests/lifecycle/windows-network.test.ts` uses both generated Windows and macOS adapters and real loopback HTTP/WebSocket
 servers, including redirect refusal, binary preservation, bounds, deadlines, abort and disposal. It runs under
 `mise run host:windows` and the cross-platform contract suite using pinned Bun 1.4.2.
+`tests/lifecycle/macos-network.ts` runs the compiled WKWebView, SDK, Core and async host adapter
+against real loopback servers under `mise run host:macos`. It checks view and backend grants,
+HTTP bytes and redirects, WebSocket text and binary, malformed handshakes, bounds, deadlines,
+client cancellation, continued UI responses and shutdown with requests in flight.
+`tests/cli/network.test.ts` installs the packed plugin with isolated dependencies and checks both
+native exports and exclusion of Bun network implementation from the browser bundle.
 These checks do not validate external proxies, OS authentication, TLS certificates or manual network setups.

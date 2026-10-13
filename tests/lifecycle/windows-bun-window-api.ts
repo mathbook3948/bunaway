@@ -157,6 +157,56 @@ if (!process.argv.includes("--child")) {
   });
   const nativeWindows = new Windows(() => {});
   try {
+    for (const maximized of [
+      false,
+      true,
+    ]) {
+      for (const fullscreen of [
+        false,
+        true,
+      ]) {
+        for (const visible of [
+          false,
+          true,
+        ]) {
+          const hwnd = nativeWindows.create(
+            "Initial state regression",
+            650,
+            450,
+            () => {},
+            visible,
+            {
+              maximized,
+              fullscreen,
+              x: 80,
+              y: 100,
+            },
+          );
+          try {
+            assert.equal(nativeWindows.isMaximized(hwnd), maximized);
+            assert.equal(nativeWindows.isFullscreen(hwnd), fullscreen);
+            assert.equal(nativeWindows.isVisible(hwnd), visible);
+            const normal = nativeWindows.getBounds(hwnd, "normal");
+            assert.equal(normal.x, 80);
+            assert.equal(normal.y, 100);
+            if (fullscreen) {
+              nativeWindows.setFullscreen(hwnd, false);
+              assert.equal(nativeWindows.isVisible(hwnd), visible);
+              assert.equal(nativeWindows.isMaximized(hwnd), maximized);
+              assert.deepEqual(nativeWindows.getBounds(hwnd, "normal"), normal);
+            }
+            if (maximized) {
+              nativeWindows.unmaximize(hwnd);
+            }
+            const content = nativeWindows.getBounds(hwnd, "content");
+            assert.equal(content.width, Math.round((650 * content.dpi) / 96));
+            assert.equal(content.height, Math.round((450 * content.dpi) / 96));
+          } finally {
+            nativeWindows.destroy(hwnd);
+          }
+        }
+      }
+    }
     const pixelWindow = nativeWindows.create(
       "Physical client preservation",
       650,
@@ -357,6 +407,42 @@ if (!process.argv.includes("--child")) {
     }
   } finally {
     nativeWindows.dispose();
+  }
+  // Keep transient hidden-state checks in host:windows even when the general test suite
+  // runs before WebView2 inputs are prepared and skips its platform-specific coverage.
+  for (const state of [
+    [],
+    [
+      "--maximized",
+    ],
+    [
+      "--fullscreen",
+    ],
+    [
+      "--maximized",
+      "--fullscreen",
+    ],
+  ]) {
+    const hidden = Bun.spawn(
+      [
+        process.execPath,
+        "--no-env-file",
+        resolve(root, "tests/lifecycle/windows-hidden-webview.fixture.ts"),
+        ...state,
+      ],
+      {
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 65_000,
+      },
+    );
+    const [code, stdout, stderr] = await Promise.all([
+      hidden.exited,
+      new Response(hidden.stdout).text(),
+      new Response(hidden.stderr).text(),
+    ]);
+    assert.equal(code, 0, `${state.join(" ")}: ${stderr}\n${stdout}`);
+    assert(stdout.includes("zero show/activation/focus messages or WinEvents"));
   }
   const childEntry = await bundleNativeWorker(
     "windows-bun-window-api",
@@ -760,7 +846,27 @@ if (!process.argv.includes("--child")) {
             );
             await windows.create({
               view: "editor",
+              options: {
+                window: {
+                  maximized: true,
+                  fullscreen: true,
+                },
+                visible: false,
+              },
             });
+            const initiallyFullscreen = {
+              view: "editor",
+            };
+            assert.equal(await windows.isFullscreen(initiallyFullscreen), true);
+            assert.equal(await windows.isMaximized(initiallyFullscreen), true);
+            assert.equal(await windows.isVisible(initiallyFullscreen), false);
+            await windows.setFullscreen({
+              ...initiallyFullscreen,
+              fullscreen: false,
+            });
+            assert.equal(await windows.isMaximized(initiallyFullscreen), true);
+            assert.equal(await windows.isVisible(initiallyFullscreen), false);
+            await windows.unmaximize(initiallyFullscreen);
             assert.deepEqual(
               {
                 ...(await windows.getSizeConstraints({
