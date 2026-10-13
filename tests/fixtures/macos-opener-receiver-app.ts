@@ -1,5 +1,6 @@
 import { dlopen } from "bun:ffi";
 import assert from "node:assert/strict";
+import { statSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,6 +11,29 @@ export type ReceiverEvent = {
   target: string;
   pid: number;
 };
+
+/** Cocoa can decompose Unicode paths; require the same filesystem object. */
+function sameFixtureItem(actual: string, expected: string): boolean {
+  if (!actual) {
+    return false;
+  }
+  try {
+    const actualItem = statSync(actual, {
+      bigint: true,
+    });
+    const expectedItem = statSync(expected, {
+      bigint: true,
+    });
+    return (
+      actualItem.dev === expectedItem.dev && actualItem.ino === expectedItem.ino
+    );
+  } catch (error) {
+    if (error instanceof Error && Reflect.get(error, "code") === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+}
 
 /** Run only fixture-owned tools and capture failures before their pipes close. */
 export async function fixtureCommand(args: string[]): Promise<void> {
@@ -272,23 +296,30 @@ export async function createReceiver(root: string) {
           registeredApp: objc.text(objc.send(registeredApp, "path")),
         }),
       );
-      assert.equal(
-        targetPath,
-        sample,
-        "Controlled NSURL must preserve the file path.",
+      assert(
+        sameFixtureItem(targetPath, sample),
+        "Controlled NSURL must identify the exact fixture file.",
       );
       const handler = objc.send(workspace, "URLForApplicationToOpenURL:", url);
       const handlerPath = objc.text(objc.send(handler, "path"));
       console.info("Controlled file handler:", handlerPath);
-      assert.equal(
-        handlerPath,
-        app,
+      assert(
+        sameFixtureItem(handlerPath, app),
         "Controlled file handler must resolve to the receiver.",
       );
     });
     return {
       app,
       sample,
+      received(event: ReceiverEvent) {
+        if (event.kind === "file") {
+          return sameFixtureItem(event.target, sample);
+        }
+        if (event.kind === "url" && event.target.startsWith("file:")) {
+          return sameFixtureItem(fileURLToPath(event.target), sample);
+        }
+        return false;
+      },
       readEvents,
       waitFor,
       dispose,

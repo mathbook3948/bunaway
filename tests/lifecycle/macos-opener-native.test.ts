@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
 import type { JsonValue } from "@bunaway/protocol";
 import { createReceiver } from "../fixtures/macos-opener-receiver-app.ts";
@@ -104,13 +103,7 @@ test.skipIf(!isolated)(
       ).toMatchObject({
         result: null,
       });
-      await receiver.waitFor(
-        (event) =>
-          (event.kind === "file" && event.target === receiver?.sample) ||
-          (event.kind === "url" &&
-            event.target.startsWith("file:") &&
-            fileURLToPath(event.target) === receiver?.sample),
-      );
+      await receiver.waitFor(receiver.received);
       for (const scheme of [
         "http",
         "https",

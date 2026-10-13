@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { cp, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { bundleMacosHost } from "#cli/assets";
 import { files, hash, writeJson } from "#cli/files";
 import { compileMacosApp } from "#cli/macos-compile";
@@ -203,13 +202,7 @@ try {
     unsupported: "openFileWith",
     cancelled: true,
   });
-  await receiver.waitFor(
-    (event) =>
-      (event.kind === "file" && event.target === receiver?.sample) ||
-      (event.kind === "url" &&
-        event.target.startsWith("file:") &&
-        fileURLToPath(event.target) === receiver?.sample),
-  );
+  await receiver.waitFor(receiver.received);
   const records = (await Bun.file(resolve(dataRoot, "logs/host.log")).text())
     .trim()
     .split("\n")
