@@ -589,6 +589,15 @@ show state와 fullscreen 복원 실패가 프로세스 내부의 이전 검사 �
 부모는 자식의 완료와 로그를 수집하고 성공한 종료 코드를 요구한다. 상태를 수리하거나
 메시지를 추가로 pump하지 않으며 geometry와 show-state assertion은 그대로 유지한다.
 
+`windows-size-constraints.test.ts`는 전체 계약 검사의 같은 프로세스에서 계속 실행한다.
+Windows 계약 CI는 전체 검사 뒤 같은 파일을 새 Bun 프로세스에서 한 번 실행해 결과를 비교한다.
+기존 표시, 포커스, DPI, 전체화면 assertion과 30초 기한을 유지하며 재시도하지 않는다.
+`BUNAWAY_SIZE_CONSTRAINTS_DIAGNOSTICS=1`이면 숨김 요청, 입력 창 포커스 지정, 제약 갱신,
+DPI 변경과 전체화면 진입 및 종료 뒤의 마지막 8개 상태를 출력한다. HWND 소유 프로세스와
+스레드, 시작 show command도 기록하며 native 상태를 변경하거나 메시지를 pump하지 않는다.
+전체 검사 결과는 작업 로그에, 단독 실행 로그는 `windows-matrix-diagnostics` artifact에 남긴다.
+단독 통과만으로 전체 검사 실패의 원인이나 제품 수정 완료를 판단하지 않는다.
+
 `api/opener-selected-app.test.ts`는 지정 앱 opener의 strict Zod 입력, 독립 권한,
 호출 컨텍스트와 오류를 확인한다. Windows의 `lifecycle/windows-opener-selected-app.test.ts`는
 실제 앱과 대상 파일 검사, 링크 거부와 핸들 정리를 확인한다. `windows-opener-job.test.ts`는
