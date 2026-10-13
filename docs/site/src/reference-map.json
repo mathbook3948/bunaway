@@ -149,7 +149,10 @@
           "RestartController",
           "doctor",
           "packageProject",
-          "templateNames"
+          "templateNames",
+          "syncIosProject",
+          "buildIosProject",
+          "runIosProject"
         ]
       }
     },
@@ -1115,7 +1118,8 @@
     "reference/cli/build": ["build"],
     "reference/cli/package": ["package"],
     "reference/cli/android": ["android"],
-    "reference/api": ["help"]
+    "reference/api": ["help"],
+    "reference/cli/ios": ["ios"]
   },
   "operations": {
     "reference/plugins/network": ["network.request", "network.exchange"],

@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { createNotificationShortcutCleanup } from "./notification-shortcut-cleanup.ts";
 
 // Windows SDK GUIDs in the byte order of the COM ABI.
 const CLSID_SHELL_LINK = Buffer.from("0114020000000000c000000000000046", "hex");
@@ -181,16 +182,16 @@ export async function createNotificationShortcut(appId: string) {
       }
     }
   };
-  let closed = false;
-  const cleanup = async () => {
-    if (closed) {
-      return;
-    }
-    try {
+  const cleanup = createNotificationShortcutCleanup({
+    async removeShortcut() {
       if (path) {
         await rm(path, {
           force: true,
         });
+      }
+    },
+    notifyRemoval() {
+      if (path) {
         shell.symbols.SHChangeNotify(
           SHCNE_DELETE,
           SHCNF_PATHW,
@@ -199,11 +200,9 @@ export async function createNotificationShortcut(appId: string) {
         );
         path = undefined;
       }
-    } finally {
-      closed = true;
-      shell.close();
-    }
-  };
+    },
+    closeShell: () => shell.close(),
+  });
   try {
     try {
       // The real UI host sets this before UI ready and backend setup. Assign the same ID in this isolated process.
@@ -293,7 +292,17 @@ export async function createNotificationShortcut(appId: string) {
     }
   } catch (error) {
     // Native objects and bindings have already been released before unloading their shell library.
-    await cleanup();
+    try {
+      await cleanup();
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [
+          error,
+          cleanupError,
+        ],
+        "Notification shortcut creation and cleanup failed.",
+      );
+    }
     throw error;
   }
   return cleanup;

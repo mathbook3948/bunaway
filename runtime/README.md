@@ -27,3 +27,7 @@ macOS arm64 공식 배포물은 [darwin-aarch64 manifest](./build-manifests/darw
 `bun-embed/vendor/` 소스와 이전 실험 도구는 제품 의존성으로 사용하지 않는다.
 현재 제품의 검증된 런타임 다운로드는 `build/cache/bun/`에서 관리한다.
 [B 단계 계획](../docs/architecture/runtime-feasibility.md)을 따른다.
+
+iOS는 실행 파일 대신 Bun iOS beta.1의 `Bun.xcframework`를 앱에 Embed & Sign으로 넣는다.
+ZIP과 기기, Simulator dylib 해시는 `build-manifests/ios-arm64.json`에 고정한다.
+Bun entry는 앱 수명 동안 유지하며 백엔드는 Worker 교체로 재시작한다.

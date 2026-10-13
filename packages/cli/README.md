@@ -4,6 +4,12 @@ CLI로 앱을 만들고 개발 서버를 실행하거나 네이티브 앱을 빌
 SDK와 정책, Host API는 프레임워크의 네이티브 호스트에 연결된다.
 앱 런타임과 개발 및 빌드에는 Bun 1.4.2를 사용한다. 공개 npm에는 아직 배포하지 않았다.
 
+iOS는 `bunaway ios sync [directory]`로 앱 소유 Xcode 프로젝트를 만들고 이후 `.bunaway/`만 교체한다.
+`sync`, `build`, `run` 모두 macOS arm64에서 실행하며, `ios build`와
+`ios run --device <Simulator UUID>`는 Xcode로 Simulator 앱을 빌드하고 실행한다.
+앱 진입점은 공통 `app.ts`이며 UIKit 호스트가 내장 Bun entry와 백엔드 Worker를 연결한다.
+입력과 제한은 [iOS 문서](../../docs/site/src/content/docs/reference/cli/ios.mdx)를 따른다.
+
 Android는 `bunaway android sync [directory]`로 앱의 `android/`에 Android Studio용 Java
 프로젝트를 만든다. 이후 동기화는 `android/.bunaway/`만 교체하고 앱 코드와 Gradle 설정을 보존한다.
 Windows 빌드 머신에서 `bunaway android build [directory]`와

@@ -145,6 +145,11 @@ WebView 앱 실행에는 WebView2 Evergreen 런타임이 필요하다.
 
 macOS는 Bun 직접 FFI를 사용한다. Apple Silicon과 GUI 세션, codesign이 필요하며 C 컴파일러는 필요하지 않다.
 `mise run host:macos`로 제품 호스트를 빌드하고 실제 WKWebView 회귀를 실행한다.
+
+iOS는 macOS arm64와 Xcode에서 `mise run host:ios -- <booted Simulator UUID>`로
+내장 Bun, 실제 WKWebView의 SDK와 Core 및 백엔드 Worker 교체를 검증한다.
+앱 개발은 `bunaway ios sync`, `ios build`, `ios run --device <Simulator UUID>`를 사용하며
+설정과 제한은 [iOS CLI 문서](./docs/site/src/content/docs/reference/cli/ios.mdx)를 따른다.
 `mise run host:macos -- --app`은 회귀 앱의 `.app` 생성과 ad-hoc 서명을 추가한다.
 [메모 예제](examples/memo/README.md)는 CLI 생성 앱과 같은 구조이며 예제 폴더에서 `bun run dev`로 실행한다. `bun run build`는 웹 UI와 앱을 함께 빌드한다.
 

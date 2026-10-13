@@ -119,9 +119,20 @@ export const frameworkPaths = [
   "native/android/gradle/wrapper",
   "native/android/host/build.gradle",
   "native/android/host/src",
+  "native/mobile/bridge.js",
   "native/android/bridge.js",
   "native/android/README.md",
+  ...[
+    "entry.ts",
+    "backend.ts",
+    "bridge.js",
+    "project.pbxproj",
+    "host/BunawayViewController.swift",
+    "app/AppDelegate.swift",
+    "README.md",
+  ].map((name) => `native/ios/${name}`),
   "docs/decisions/0015-android-bundled-process-host.md",
+  "docs/decisions/0018-ios-embedded-bun-worker.md",
   "runtime/build-manifests",
 ] as const;
 
@@ -233,6 +244,7 @@ export async function release(root = frameworkRoot): Promise<Release> {
     "darwin-aarch64",
     "android-x64",
     "android-arm64",
+    "ios-arm64",
   ]) {
     const pin = (await json(
       resolve(root, `runtime/build-manifests/${target}.json`),
@@ -459,6 +471,7 @@ function requiredFrameworkFiles(): string[] {
     "runtime/build-manifests/darwin-aarch64.json",
     "runtime/build-manifests/android-x64.json",
     "runtime/build-manifests/android-arm64.json",
+    "runtime/build-manifests/ios-arm64.json",
     "native/android/gradle/wrapper/gradle-wrapper.jar",
     "native/android/gradle/wrapper/gradle-wrapper.properties",
     "native/android/host/src/main/AndroidManifest.xml",
