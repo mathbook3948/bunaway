@@ -28,16 +28,19 @@ var MaintenanceMutexHandle: THandle;
 const MaintenanceMutexName = '${names.maintenance}';
       MUTEX_WAIT_ACQUIRED = 0;
       MUTEX_WAIT_ABANDONED = 128;
+      MUTEX_WAIT_TIMEOUT = 258;
 
-function CreateMaintenanceMutex(SecurityAttributes: ULONG_PTR; InitialOwner: BOOL; Name: String): THandle;
+// Inno 6.7's script process is 32-bit even in 64-bit installation mode. Use its
+// supported LongWord/LongBool types for the null pointer, DWORD and Win32 BOOL.
+function CreateMaintenanceMutex(SecurityAttributes: LongWord; InitialOwner: LongBool; Name: String): THandle;
   external 'CreateMutexW@kernel32.dll stdcall';
-function WaitMaintenanceMutex(Handle: THandle; Milliseconds: DWORD): DWORD;
+function WaitMaintenanceMutex(Handle: THandle; Milliseconds: LongWord): LongWord;
   external 'WaitForSingleObject@kernel32.dll stdcall';
-function CloseMaintenanceMutex(Handle: THandle): BOOL;
+function CloseMaintenanceMutex(Handle: THandle): LongBool;
   external 'CloseHandle@kernel32.dll stdcall';
 
 function AcquireInstallationMaintenance: Boolean;
-var Status: DWORD;
+var Status: LongWord;
 begin
   Result := False;
   MaintenanceMutexHandle := CreateMaintenanceMutex(0, False, MaintenanceMutexName);
@@ -55,7 +58,10 @@ begin
   if not Result then begin
     CloseMaintenanceMutex(MaintenanceMutexHandle);
     MaintenanceMutexHandle := 0;
-    Log('Another setup or uninstall is maintaining this application.');
+    if Status = MUTEX_WAIT_TIMEOUT then
+      Log('Another setup or uninstall is maintaining this application.')
+    else
+      Log('Could not acquire installation maintenance mutex: ' + IntToStr(Status));
   end;
 end;
 
