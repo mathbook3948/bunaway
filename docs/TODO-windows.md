@@ -360,7 +360,7 @@ Windows의 비활성화 기록을 수정하지 않는다.
   실행 결과는 초기 UI Worker 구현의 근거이며, 이관 후 구현의 실행 근거로 확대하지 않는다.
   계약 검사와 초기 실행 결과, 이관 후 검증 범위는
   [실행 기록](./architecture/windows-bun-results.md#2026-10-10-opener-파일-작업)에 구분한다.
-- [ ] 지정 앱으로 파일과 URL을 연다.
+- [x] `openFileWith`와 `openUrlWith`로 지정한 절대 `.exe` 앱에 파일과 HTTP/HTTPS URL 하나를 전달한다. 작업별 권한과 앱 및 파일 검사, Windows argv 인코딩을 제공하고 Explorer에 실행을 위임한다. 기본 연결은 변경하지 않는다. 실제 Windows 회귀는 CI의 `mise run host:windows`에서 수행하며 앱 표시와 수동 검증 완료를 뜻하지 않는다.
 - [ ] 파일을 휴지통으로 보내고 실패를 반환한다.
 - [ ] Windows 바로가기 생성, 읽기와 변경을 제공한다.
 - [ ] OS beep와 이모지 패널의 지원을 결정한다.

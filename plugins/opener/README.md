@@ -56,7 +56,35 @@ Windows 구현은 I/O Worker에서 자체 COM STA를 초기화하고 Explorer �
 
 세 함수 모두 성공은 요청 접수를 뜻합니다. 기본 앱의 실행 완료, 파일 읽기 완료나 Explorer 화면 표시와 선택 완료를 기다리지 않습니다. OS가 접수한 뒤 발생하는 파일 소실, 연결 앱 부재, 앱 내부 실패와 화면 변경은 결과에 포함되지 않습니다. 취소와 기한 초과는 이미 접수한 요청을 되돌리지 않습니다. 네이티브 호출 중에는 OS가 반환할 때까지 작업이 계속될 수 있으며 UNC 공유나 셸 확장의 응답이 느리면 I/O Worker의 후속 작업과 정리가 지연될 수 있습니다. 창과 WebView를 담당하는 UI Worker는 이 파일 검사나 셸 요청을 실행하지 않습니다. 호스트는 I/O 작업을 시작하기 직전에 현재 호출 컨텍스트와 작업 권한을 검사하며, 승인 전 취소된 작업은 실행하지 않습니다.
 
-현재 어댑터는 Windows만 제공합니다. 지정 앱 열기, 커스텀 URL 스킴, 휴지통, 딥링크 등록과 설치 프로그램 변경은 이 패키지의 범위가 아닙니다.
+현재 어댑터는 Windows만 제공합니다. 커스텀 URL 스킴, 휴지통, 딥링크 등록과 설치 프로그램 변경은 이 패키지의 범위가 아닙니다.
+
+## 지정 앱
+
+`openFileWith(path: string, app: string, options?: NativeInvokeOptions): Promise<null>`과
+`openUrlWith(url: string, app: string, options?: NativeInvokeOptions): Promise<null>`은
+절대 `.exe` 앱 경로와 대상 하나를 받습니다. Host operation과 권한은 각각
+`opener.openFileWith`, `opener.openUrlWith`입니다. 화면의 직접 호출에는
+`plugin.opener.openFileWith`, `plugin.opener.openUrlWith` 명령도 허용합니다.
+입력은 각각 `{ path, app }`, `{ url, app }`이고 출력은 `null`입니다.
+기존 `openFile`, `openUrl`과 `revealFile` 권한은 이 작업을 허용하지 않습니다.
+
+실행 파일은 존재해야 하며 기존 파일 작업의 절대 경로, 실제 이름과 링크 검사를 따릅니다.
+`.cmd`, `.bat`, `.lnk`, 셸 명령과 추가 실행 인자는 받지 않습니다. 파일 대상도 같은 검사를
+거치고 URL은 HTTP/HTTPS 규칙을 따릅니다. 앱과 파일 대상은 요청 접수까지 함께 고정합니다.
+Explorer에 앱 경로와 단일 대상 인자를 별도로 전달하고 대상은 Windows argv 규칙으로
+인코딩합니다. 연결 앱이나 기본 브라우저 설정은 변경하지 않습니다.
+
+이 권한은 임의 실행 파일을 선택할 수 있으므로 앱 명령이 허용할 실행 파일과 대상을 정합니다.
+실행 파일이 대상을 처리하는 방식은 해당 앱의 계약입니다. 성공은 Explorer의 요청 접수이며
+프로세스 실행이나 표시 완료를 보장하지 않습니다. 지정 앱은 앱 종료용 Job을 상속하지 않습니다.
+경로 검사, 실패와 취소는 기존 작업과 같은 계약을 사용합니다.
+
+`tests/api/opener-selected-app.test.ts`는 입력, 작업별 권한, 호출 컨텍스트와 오류를 검사합니다.
+Windows의 `tests/lifecycle/windows-opener-selected-app.test.ts`는 실제 파일과 앱 검사,
+하드 링크 거부, 실패 뒤 핸들 정리를 확인합니다. `windows-opener-job.test.ts`는 실제
+Explorer와 compiled helper로 기존 기본 실행, 지정 앱의 파일과 URL argv, Unicode와 공백,
+URL fragment 따옴표, 앱 Job 밖의 실행과 앱 종료 후 생존을 확인합니다.
+`mise run host:windows`가 이 네이티브 검사를 실행합니다. Linux에서는 네이티브 검사를 건너뜁니다.
 
 ## 오류
 

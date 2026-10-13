@@ -398,6 +398,13 @@ Windows 데스크톱의 dev-veto, dev-hide, dev-pending 시나리오는 CLI 중�
 
 ## 네이티브 빌드와 배포 회귀
 
+`api/opener-selected-app.test.ts`는 지정 앱 opener의 strict Zod 입력, 독립 권한,
+호출 컨텍스트와 오류를 확인한다. Windows의 `lifecycle/windows-opener-selected-app.test.ts`는
+실제 앱과 대상 파일 검사, 링크 거부와 핸들 정리를 확인한다. `windows-opener-job.test.ts`는
+Explorer와 compiled helper로 파일 및 HTTP/HTTPS URL 하나의 argv 보존과 Job 밖의 실행,
+앱 종료 뒤 helper 생존을 확인한다. 두 검사와 기존 opener STA 검사는 `host:windows`에도 포함한다.
+Linux의 계약 검사에서 건너뛴 Windows 테스트를 실제 실행 결과로 판단하지 않는다.
+
 `api/autostart.test.ts`는 로그인 자동 실행 플러그인의 정책, 공개 helper, 앱 ID 분리와
 Windows 명령줄 제한, 숨김 등록의 트레이 요구 조건을 검사한다.
 `windows-desktop.ts`의 autostart 시나리오는 실제 HWND와 WebView2에서 일반 및 숨김
