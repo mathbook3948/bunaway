@@ -279,6 +279,7 @@ await windows.close({ view: "dialog" });
 | `windows.getSizeConstraints` | `{ view, windowId? }` | `Promise<{ minWidth: number \| null; minHeight: number \| null; maxWidth: number \| null; maxHeight: number \| null }>` 네 제약을 한 번에 조회 |
 | `windows.setSizeConstraints` | `{ view, windowId?, minWidth?, minHeight?, maxWidth?, maxHeight? }` | `Promise<null>`. 제약 전체를 교체합니다. 생략하거나 `null`인 축은 제한을 해제합니다 |
 | `windows.setPosition` | `{ view, windowId?, x, y }` | `Promise<null>`. 화면에서 창 바깥쪽 왼쪽 위의 물리 픽셀 위치. 각 값은 정수 -32768–32767 |
+| `windows.center` | `{ view, windowId? }` | `Promise<null>`. 현재 모니터의 작업 영역 중앙에 창 바깥 영역 배치. 최소화와 최대화 중에는 일반 복원 영역 배치 |
 | `windows.setFullscreen` | `{ view, windowId?, fullscreen: boolean }` | `Promise<null>`. 현재 모니터 전체화면. 해제하면 이전 창 위치와 표시 상태 복원 |
 | `windows.setCloseConfirmation` | `{ view, windowId?, message: string \| null }` | `Promise<null>`. 창을 닫기 전에 표시할 확인 메시지 설정. 문자열은 1–1024자, NUL 금지. `null`이면 확인 해제 |
 | `windows.close` | `{ view, windowId? }` | `Promise<boolean>`. 닫기 승인 시 `true`, 확인이나 앱 종료를 취소하거나 트레이로 숨기면 `false`. 정리 완료를 기다리지는 않음 |
@@ -490,6 +491,10 @@ macOS의 준비 조회, 이벤트와 splashscreen 전환은 아직 지원하지 
 
 조회의 `unit`은 `"physical" | "logical"`이며 기본값은 `"physical"`입니다. `dpi`는 해당 조회에 사용한 대상 창의 DPI입니다.
 `setSize`는 계속 내용 영역의 96 DPI 논리 픽셀을 받고, `setPosition`은 창 바깥쪽 왼쪽 위의 화면 물리 픽셀을 받습니다.
+`center`는 현재 창에 가장 가까운 모니터의 작업 영역을 사용하며 작업 표시줄 영역을 제외합니다.
+창 크기, 표시, 최소화, 최대화와 포커스 상태를 유지합니다. 최소화나 최대화 중에는 복원할 일반 창의 위치만 바꿉니다.
+작업 영역보다 큰 창도 크기를 바꾸지 않고 중앙에 배치합니다. 전체화면에서는 `INVALID_ARGUMENT`입니다.
+권한은 `windows.center`이며 지정 모니터 선택은 아직 제공하지 않습니다.
 따라서 `setSize` 뒤에는 `getContentSize({ view, unit: "logical" })`, `setPosition` 뒤에는 `getOuterPosition({ view })`으로 결과를 확인합니다.
 제약에 따른 크기 보정과 운영체제의 배치 결과를 반환합니다.
 

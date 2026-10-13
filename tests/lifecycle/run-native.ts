@@ -71,9 +71,22 @@ if (target === "windows-x64") {
         inputs.bun,
         "--no-env-file",
         "test",
+        resolve(root, "tests/lifecycle/windows-clipboard.test.ts"),
+      ],
+      root,
+      {
+        BUNAWAY_CLIPBOARD_NATIVE: "1",
+      },
+    );
+    await run(
+      [
+        inputs.bun,
+        "--no-env-file",
+        "test",
         ...[
           "tests/lifecycle/desktop.test.ts",
           "tests/lifecycle/windows-bun-instance.test.ts",
+          "tests/lifecycle/windows-appearance.test.ts",
           "tests/cli/windows-assets.test.ts",
           "tests/cli/windows-compile.test.ts",
         ].map((name) => resolve(root, name)),

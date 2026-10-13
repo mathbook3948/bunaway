@@ -1,4 +1,9 @@
 import assert from "node:assert/strict";
+import type { JsonValue } from "@bunaway/protocol";
+import {
+  encodeHTML,
+  MAX_NATIVE_FORMAT_BYTES,
+} from "#plugins/clipboard/src/codecs";
 import { createOperations } from "#plugins/clipboard/src/platforms/windows";
 import { createClipboard } from "#plugins/clipboard/src/win32";
 import { state } from "./clipboard-ffi.ts";
@@ -14,6 +19,12 @@ const context = {
       "clipboard.readText",
       "clipboard.writeText",
       "clipboard.clear",
+      "clipboard.readImage",
+      "clipboard.writeImage",
+      "clipboard.getFormats",
+      "clipboard.hasFormat",
+      "clipboard.readFormats",
+      "clipboard.writeFormats",
     ],
   },
 };
@@ -42,13 +53,7 @@ assert.equal(state.windows, 0);
 assert.equal(state.libraries, 0);
 const adapter = createOperations(environment);
 assert(adapter.executeUI);
-const execute = (
-  name: string,
-  input: null | {
-    text: string;
-  } = null,
-  signal?: AbortSignal,
-) =>
+const execute = (name: string, input: JsonValue = null, signal?: AbortSignal) =>
   adapter.executeUI?.(`clipboard.${name}`, input, "backend", {
     ...context,
     ...(signal
@@ -145,6 +150,163 @@ for (const failure of [
   assert.equal(state.opened, false);
 }
 state.fail = "";
+state.fail = "register";
+await assert.rejects(
+  async () =>
+    execute("hasFormat", {
+      format: "text/html",
+    }),
+  hasCode("INTERNAL"),
+);
+state.fail = "";
+const image = {
+  width: 1,
+  height: 1,
+  rgba: "AQIDBA==",
+};
+const items = [
+  {
+    format: "text/plain",
+    data: "fallback 한글",
+  },
+  {
+    format: "text/html",
+    data: "<b>한글 😀</b>",
+  },
+  {
+    format: "text/rtf",
+    data: "{\\rtf1 \\u54620?}",
+  },
+  {
+    format: "application/x-bunaway-file-list",
+    data: [
+      "C:\\한글\\memo.txt",
+    ],
+  },
+  {
+    format: "image/bmp",
+    data: image,
+  },
+];
+await execute("writeFormats", {
+  items,
+});
+assert.deepEqual(
+  await execute("getFormats"),
+  items.map((item) => item.format),
+);
+assert.deepEqual(
+  await execute("readFormats", {
+    formats: items.map((item) => item.format),
+  }),
+  items,
+);
+assert.deepEqual(await execute("readImage"), image);
+assert.equal(
+  await execute("hasFormat", {
+    format: "text/html",
+  }),
+  true,
+);
+assert.equal(state.opened, false);
+assert.equal(state.locks, 0);
+assert.equal(state.allocations.size, 0);
+await execute("writeImage", image);
+assert.equal(await execute("readText"), null);
+assert.equal(
+  await execute("hasFormat", {
+    format: "text/html",
+  }),
+  false,
+);
+assert.deepEqual(
+  await execute("readFormats", {
+    formats: [
+      "text/html",
+      "image/bmp",
+    ],
+  }),
+  [
+    {
+      format: "text/html",
+      data: null,
+    },
+    {
+      format: "image/bmp",
+      data: image,
+    },
+  ],
+);
+// Partial preparation must preserve existing image data and free the first allocation.
+state.failAtAllocation = state.allocationCalls + 2;
+const beforePrepare = state.clears;
+await assert.rejects(
+  async () =>
+    execute("writeFormats", {
+      items,
+    }),
+  hasCode("INTERNAL"),
+);
+assert.equal(state.clears, beforePrepare);
+assert.equal(state.allocations.size, 0);
+assert.deepEqual(await execute("readImage"), image);
+state.failAtAllocation = 0;
+// A failure after the first transfer preserves that Windows-owned format and frees the rest.
+state.failAtSet = state.setCalls + 2;
+const beforeTransfer = state.transferred;
+const beforeFree = state.frees;
+await assert.rejects(
+  async () =>
+    execute("writeFormats", {
+      items,
+    }),
+  hasCode("INTERNAL"),
+);
+assert.equal(state.transferred, beforeTransfer + 1);
+assert.equal(state.frees, beforeFree + 4);
+assert.equal(state.allocations.size, 0);
+assert.equal(await execute("readText"), items[0]?.data);
+assert.equal(await execute("readImage"), null);
+state.failAtSet = 0;
+// Borrowed custom-format blocks must be copied, bounded and unlocked on decode failure.
+const htmlId = state.registered.get("HTML Format");
+assert(htmlId !== undefined);
+for (const bytes of [
+  Buffer.from("malformed"),
+  Buffer.alloc(MAX_NATIVE_FORMAT_BYTES + 1),
+]) {
+  state.formats.set(htmlId, bytes);
+  await assert.rejects(
+    async () =>
+      execute("readFormats", {
+        formats: [
+          "text/html",
+        ],
+      }),
+    hasCode("INTERNAL"),
+  );
+  assert.equal(state.locks, 0);
+  assert.equal(state.opened, false);
+}
+const external = encodeHTML("<b>external</b>");
+state.formats.set(htmlId, external);
+assert.deepEqual(
+  await execute("readFormats", {
+    formats: [
+      "text/html",
+    ],
+  }),
+  [
+    {
+      format: "text/html",
+      data: "<b>external</b>",
+    },
+  ],
+);
+external.fill(0);
+await execute("writeText", {
+  text: "old",
+});
 state.occupied = true;
 await assert.rejects(async () => execute("clear"), hasCode("BUSY"));
 const clears = state.clears;

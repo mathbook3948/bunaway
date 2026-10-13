@@ -250,6 +250,8 @@ export type NativeWindow = {
   setSize(width: number, height: number): void;
   /** Positions the outer top-left in physical pixels from the primary screen origin. */
   setPosition(x: number, y: number): void;
+  /** Centers outer/normal restoration bounds in the current monitor work area, preserving state. Windows only. */
+  center?(): void;
   /**
    * Applies physical content or outer geometry without showing or activating the window.
    * While minimized/maximized, edits normal restoration bounds. Rejects fullscreen and
