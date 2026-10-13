@@ -432,7 +432,14 @@ boot 전후 종료와 초기화 중 프로토콜 버전, 런타임 ID 및 세대
 합성 메시지이며 실제 배율이 다른 물리 모니터 사이의 이동 검증과 구분한다.
 최소화 또는 최대화 직후, 표시와 숨김 직후 및 복원 영역 setter 뒤의 체크포인트는
 HWND 소유 프로세스와 스레드, style, 원본 WINDOWPLACEMENT와 Win32 상태를 함께 검사한다.
-일반 복원 뒤 숨김, 전체화면 진입, 제약 갱신과 종료의 마지막 주기도 같은 상태 기록을 남긴다.
+일반, 최소화와 최대화의 표시 및 숨김 주기는 전체화면 진입 직전과 진입 직후,
+복원 직후 상태도 기록한다. 복원 직후에는 원래 표시 상태를 확인하므로 다음 숨김 전에
+상태가 바뀌었는지 구분한다. 비동기 일반 영역 조회를 마친 다음 숨김 직전에도 상태를
+확인하여 복원 직후부터 숨김 요청 사이의 변경과 숨김 호출 안의 변경을 구분한다.
+현재 outer 영역과 `WINDOWPOS`의 좌표, 크기 및 flags, style 변경 전후 값과 활성화 메시지의
+최소화 상태도 기록한다. callback 안에서 native struct의 scalar 값만 복사하며 포인터를 보관하지 않는다.
+일반 복원 뒤 숨김, 전체화면 진입, 제약 갱신과 종료의
+마지막 주기도 같은 상태 기록을 남긴다.
 마지막 bounds 불일치는 이 기록을 출력한 뒤 원래 assertion 오류를 그대로 전파한다.
 실패에는 최근 체크포인트와 제한된 상태 메시지 기록, 호스트 callback 오류를 포함한다.
 검사는 상태를 복구하거나 메시지를 pump하지 않으며 기존 geometry 기대값을 유지한다.
@@ -765,8 +772,12 @@ Worker로 검사한다. 종료 요청이 I/O 취소를 먼저 전달하고 코�
 PNG alpha 및 투명 RGB 왕복, grayscale과 palette PNG, JPEG/BMP, malformed와 큰 decode 입력,
 transform, 독립 어댑터 ID, quota, 취소와 반복 종료를 검사한다. 다른 OS에서는 건너뛴다.
 `cli/image.test.ts`는 image tarball의 isolated 설치와 플랫폼 출력 분리를 검사하며 macOS arm64에서
-설치된 codec을 실제로 실행한다. `.github/workflows/macos-image.yml`은 이 검사와 기존
-entitlement로 ad-hoc 서명한 compiled fixture를 실행하고 `build/macos-image-results.json`을 보관한다.
+설치된 codec을 실제로 실행한다. `.github/workflows/ci.yml`의 `macos-native` 작업은 이 두 파일과
+기존 entitlement로 ad-hoc 서명하고 strict 검증한 compiled codec fixture를 각각 한 번 실행한다.
+CI의 공통 계약 작업은 두 파일을 제외하며, 로컬 `mise run check`는 계속 전체 계약을 실행한다.
+세 OS의 계약 작업과 Windows, macOS 네이티브 작업을 합쳐 CI 작업 수는 다섯 개다.
+`macos-native-diagnostics` artifact는 `build/macos-image-logs/`의 native 및 compiled 로그와
+`build/macos-image-results.json`을 7일간 보관하며 실패한 작업에서도 업로드한다.
 이 단독 codec 검사는 공통 SDK와 실제 호스트 연결, WKWebView 표시나 다른 앱의
 가져오기 검증과 구분한다.
 
@@ -776,8 +787,10 @@ backend SDK의 image I/O 호출과 setup, codec, crop/resize, 동일 ID의 작�
 지연시켜, 결과 전달 전 취소가 미전달 ID를 해제하는지 확인한다. 할당 marker는
 매 poll마다 새 `Bun.file()`로 확인해 파일 생성 전의 부재 상태를 재사용하지 않는다.
 `build/macos-image-host-results.json`을 기록하며 성공을 요구한다. `run-native.ts`의
-macOS 실행에 포함하며 실제 contextual I/O dispatch를 사용한다. Native codec CI와
-이 호스트 검증을 구분한다.
+macOS 실행에 포함하며 실제 contextual I/O dispatch를 사용한다. 같은 `macos-native` 작업에서
+`run-native.ts --app`이 이 호스트 검증을 한 번 실행한다. 결과 JSON과
+`build/macos-native-logs/host.log`도 같은 artifact에 보관한다.
+단독 compiled codec과 signed WKWebView 호스트는 서로 다른 실행 경로를 검사한다.
 
 ## iOS 내장 Bun
 
