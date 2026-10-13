@@ -41,6 +41,7 @@ await menu.setTrayMenu({ menuId: "tray-menu" });
 | `menu.updateItem` | `{ menuId, itemId, changes }` | 변경한 리소스 |
 | `menu.setTrayMenu` | `{ menuId: string \| null }` | `null` |
 | `menu.getTrayMenu` | `null` | 연결한 메뉴 ID 또는 `null` |
+| `menu.waitForClick` | `null` | 다음 `{ menuId, itemId, source, windowId }` |
 
 모든 결과는 Promise입니다. 리소스는 앱 수명에 속하며 창이나 화면 재연결에 종속되지 않습니다.
 메뉴 ID는 앱 전체에서, 항목 ID는 한 메뉴의 모든 하위 항목에서 고유합니다.
@@ -79,6 +80,12 @@ checkbox와 radio의 `checked` 기본값은 `false`입니다. radio는 `group`�
 `menu.clicked`의 payload는 `{ menuId, itemId, source: "tray", windowId: null }`입니다.
 트레이 팝업에는 소유 앱 창이 없으므로 windowId는 null입니다.
 이벤트를 받으려는 뷰에서 `menu.clicked`를 허용하고 구독합니다. 이벤트를 영구 보관하지 않습니다.
+
+창이 없는 앱의 백엔드는 `await menu.waitForClick(null)`로 다음 사용자 정의 메뉴 선택을 받습니다.
+현재 대기자에게만 전달하며 이전 선택은 재생하지 않습니다. 대기는 최대 16개이고 초과하면 BUSY입니다.
+호출 취소, 컨텍스트 폐기와 앱 종료는 대기를 CANCELLED로 끝냅니다. 완료한 대기 결과는 복사본입니다.
+백엔드에는 `menu.waitForClick` 권한, 화면 직접 호출에는 해당 명령과 Host 권한이 필요합니다.
+대기가 앱 실행 유지 조건을 바꾸지는 않습니다. setup에서 시작한 장기 작업은 setup을 먼저 반환하고 실패를 관찰해야 합니다.
 
 ## 정책과 오류
 

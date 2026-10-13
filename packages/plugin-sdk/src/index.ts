@@ -13,6 +13,7 @@ export type {
 } from "@bunaway/protocol";
 export { BunawayError } from "@bunaway/protocol";
 export type { NativeInvokeOptions } from "#transport";
+export { NativeEventWaiters } from "./native-event-waiters.ts";
 export type { NativePluginAdapter } from "./native-validation.ts";
 
 /** Host-selected values available when a native adapter is created. */

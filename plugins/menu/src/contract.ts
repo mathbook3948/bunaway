@@ -4,6 +4,7 @@ import { z } from "zod";
 export const MAX_MENU_RESOURCES = 32;
 export const MAX_MENU_ITEMS = 256;
 export const MAX_MENU_DEPTH = 8;
+export const MAX_MENU_WAITERS = 16;
 const id = z
   .string()
   .min(1)
@@ -160,6 +161,12 @@ const resource = z.strictObject({
 const target = z.strictObject({
   menuId: id,
 });
+const clicked = z.strictObject({
+  menuId: id,
+  itemId: id,
+  source: z.literal("tray"),
+  windowId: z.null(),
+});
 const insertedItem = z
   .custom<MenuItemInput>((value) => value !== null && typeof value === "object")
   .superRefine((value, context) => {
@@ -234,6 +241,10 @@ export const menuOperations = {
   getTrayMenu: {
     input: z.null(),
     output: id.nullable(),
+  },
+  waitForClick: {
+    input: z.null(),
+    output: clicked,
   },
 };
 /** Selection reports IDs; checkbox and radio state changes remain explicit app operations. */

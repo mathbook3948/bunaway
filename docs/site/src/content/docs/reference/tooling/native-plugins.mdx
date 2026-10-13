@@ -360,3 +360,8 @@ Windows UI 어댑터의 선택적 `NativeEnvironment.menus`는 `NativeMenuServic
 `NativeMenuItem` 트리를 `setTrayMenu`로 연결하고 `emit`으로 정책과 구독을 확인하는 기존 네이티브 이벤트 경로에 전달합니다.
 null은 트레이 메뉴 숨김이고 undefined는 호스트 기본 Open/Quit 복원입니다.
 트레이가 없으면 연결은 UNSUPPORTED이며 메뉴 정의 자체는 선택 플러그인이 소유합니다.
+
+`NativeEventWaiters<T>`는 UI 어댑터가 소유하는 일회성 알림 대기입니다. 생성자에 최대 대기 수를 지정하고 `wait(signal)`로 다음 알림을 기다립니다.
+`publish(value)`는 현재 대기자에게 각각 복사본을 전달하며 이력을 저장하지 않습니다.
+취소와 `dispose()`는 CANCELLED, 한도 초과는 BUSY이며 어댑터 정리에서 반드시 dispose를 호출합니다.
+대기 자체는 앱 실행 유지 조건을 바꾸지 않습니다. 창이 없는 앱의 백엔드는 플러그인의 wait 작업을 사용할 수 있습니다.

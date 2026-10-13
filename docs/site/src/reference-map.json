@@ -261,7 +261,8 @@
       "pages": {
         "reference/tooling/native-plugins": [
           "defineNativePlugin",
-          "BunawayError"
+          "BunawayError",
+          "NativeEventWaiters"
         ]
       }
     },
@@ -1191,7 +1192,8 @@
       "menu.removeItem",
       "menu.updateItem",
       "menu.setTrayMenu",
-      "menu.getTrayMenu"
+      "menu.getTrayMenu",
+      "menu.waitForClick"
     ]
   },
   "configuration": {

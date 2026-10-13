@@ -249,6 +249,17 @@ export const pluginImports = { menu: { operations: async () => ({ createOperatio
       expect(await invoke("menu.getTrayMenu", null)).toBeNull();
       expect(native.symbols.IsWindow(trayHwnd)).toBe(1);
       expect(native.symbols.IsWindowVisible(trayHwnd)).toBe(0);
+      await channel.send({
+        kind: "operation",
+        context: config.backendContext,
+        requestId: "pending-click",
+        source: "backend",
+        call: {
+          operation: "menu.waitForClick",
+          payload: null,
+        },
+      });
+      expect(await invoke("menu.list", null)).toEqual([]);
       channel.notify({
         kind: "shutdown",
       });

@@ -1,8 +1,13 @@
-import type { NativeAdapter, NativeEnvironment } from "@bunaway/plugin";
+import {
+  NativeEventWaiters,
+  type NativeAdapter,
+  type NativeEnvironment,
+} from "@bunaway/plugin";
 import type { NativeMenuItem } from "@bunaway/plugin-api/native";
-import { BunawayError, validateValue } from "@bunaway/protocol";
+import { BunawayError, type JsonValue, validateValue } from "@bunaway/protocol";
 import {
   MAX_MENU_RESOURCES,
+  MAX_MENU_WAITERS,
   menuItemsSchema,
   menuOperations,
 } from "../contract.ts";
@@ -45,6 +50,7 @@ export function createOperations(
   environment: NativeEnvironment,
 ): NativeAdapter {
   const resources = new Map<string, NativeMenuItem[]>();
+  const clicks = new NativeEventWaiters<JsonValue>(MAX_MENU_WAITERS);
   let attached: string | null = null;
   let changed = false;
   let revision = 0;
@@ -74,12 +80,14 @@ export function createOperations(
         if (disposed || revision !== nextRevision || menuId === null) {
           return;
         }
-        environment.menus?.emit("menu.clicked", {
+        const payload = {
           menuId,
           itemId,
-          source: "tray",
+          source: "tray" as const,
           windowId: null,
-        });
+        };
+        clicks.publish(payload);
+        environment.menus?.emit("menu.clicked", payload);
       },
     );
     revision = nextRevision;
@@ -242,6 +250,9 @@ export function createOperations(
         case "menu.getTrayMenu":
           parse(() => menuOperations.getTrayMenu.input.parse(input));
           return attached;
+        case "menu.waitForClick":
+          parse(() => menuOperations.waitForClick.input.parse(input));
+          return clicks.wait(context.signal);
         default:
           throw new BunawayError({
             code: "UNSUPPORTED",
@@ -254,6 +265,7 @@ export function createOperations(
         return;
       }
       disposed = true;
+      clicks.dispose();
       revision++;
       resources.clear();
       if (changed) {

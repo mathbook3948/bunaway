@@ -541,3 +541,74 @@ test("plugin parser enforces strict menu contracts at the native boundary", asyn
     code: "INVALID_ARGUMENT",
   });
 });
+
+test("windowless backend click waits are cancellable, bounded and receive no replay", async () => {
+  let selected: ((id: string) => void) | undefined;
+  const { invoke, adapter } = fixture({
+    setTrayMenu(_items, receive) {
+      selected = receive;
+    },
+    emit() {},
+  });
+  await invoke("create", {
+    menuId: "main",
+    items: [
+      item("a"),
+    ],
+  });
+  await invoke("setTrayMenu", {
+    menuId: "main",
+  });
+  selected?.("a");
+  const controller = new AbortController();
+  const first = invoke(
+    "waitForClick",
+    null,
+    [
+      "menu.waitForClick",
+    ],
+    controller.signal,
+  );
+  let settled = false;
+  void first.then(
+    () => {
+      settled = true;
+    },
+    () => {
+      settled = true;
+    },
+  );
+  await Bun.sleep(0);
+  expect(settled).toBe(false);
+  controller.abort();
+  await expect(first).rejects.toMatchObject({
+    code: "CANCELLED",
+  });
+  const waiting = invoke("waitForClick", null);
+  selected?.("a");
+  expect(await waiting).toEqual({
+    menuId: "main",
+    itemId: "a",
+    source: "tray",
+    windowId: null,
+  });
+  const pending = Array.from(
+    {
+      length: 16,
+    },
+    () => invoke("waitForClick", null),
+  );
+  const results = Promise.allSettled(pending);
+  await expect(invoke("waitForClick", null)).rejects.toMatchObject({
+    code: "BUSY",
+  });
+  adapter.dispose();
+  for (const result of await results) {
+    expect(result).toMatchObject({
+      status: "rejected",
+      reason: {
+        code: "CANCELLED",
+      },
+    });
+  }
+});
