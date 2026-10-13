@@ -58,6 +58,30 @@ ABI와 GUID는 Microsoft의 [WIC SDK header](https://github.com/microsoft/win32m
 [encoding 계약](https://learn.microsoft.com/en-us/windows/win32/wic/-wic-creating-encoder)을 따른다.
 Linear resize는 [WIC scaler](https://learn.microsoft.com/en-us/windows/win32/api/wincodec/nf-wincodec-iwicbitmapscaler-initialize)를 사용한다.
 
+## macOS arm64 어댑터
+
+`native/macos` 출력은 ImageIO로 PNG, JPEG와 BMP를 디코딩하고 인코딩한다.
+CoreGraphics와 Accelerate의 시스템 framework만 Bun FFI로 호출하며 별도 dylib,
+C 컴파일러와 clipboard 접근을 요구하지 않는다. native 리소스와 framework binding은
+codec이 소유하고 각 호출의 Create/Copy reference를 역순으로 해제한다.
+호출 사이에는 공통 `ImageResources`가 분리된 straight RGBA 버퍼만 보유한다.
+
+입력 MIME과 실제 UTI, 단일 frame과 완전한 데이터 상태를 확인한다. ImageIO metadata의
+크기를 먼저 검사하고 cache를 끈 채 이미지를 생성한다. vImage는 상한 안에서 할당한
+RGBA 버퍼에 직접 변환하므로 PNG의 alpha와 투명 RGB를 premultiplied 변환으로 잃지 않는다.
+JPEG와 BMP의 불투명 입력 제한, 빈 이미지와 quota는 Windows와 같은 계약을 따른다.
+ImageIO 기본 품질로 JPEG를 인코딩하며 native 출력은 복사 전에 encoded 상한을 확인한다.
+
+Crop과 nearest는 공통 픽셀 복사를 사용한다. Linear는 CoreGraphics의 low interpolation과
+premultiplied RGBA context를 사용하고 결과를 straight RGBA로 변환한다.
+CGRect를 네 개의 double로 전달하는 ABI는 arm64 전용이며 x64는 `UNSUPPORTED`다.
+
+어댑터 실행 위치는 `io`이며 호스트가 요청 권한, signal과 `beforeExecute`를 보유한
+`executeUI` contextual hook으로 호출해야 한다. 이름과 달리 이 hook은 AppKit나
+UI 스레드에 의존하지 않는다. context 없이 호출하는 `execute`는 `UNSUPPORTED`다.
+macOS 호스트의 공통 I/O dispatch와 등록은 별도 변경에서 연결해야 하며 이 어댑터 추가만으로
+현재 앱의 macOS 공개 호출이 지원된다고 선언하지 않는다.
+
 ## 검증
 
 ```powershell
@@ -74,3 +98,11 @@ JPEG와 BMP 인코딩, 잘못된 입력과 decode 크기, 최대 크기의 PNG, 
 결과 전달 전 취소와 앱 종료를 검사하며 `host:windows`에 포함한다.
 WebView 페이지 표시, 다른 앱의 가져오기, 색상 관리, 하드웨어나 최소 Windows 버전의
 검증을 뜻하지 않는다. 정확한 head CI 결과는 해당 PR에서 확인한다.
+
+macOS 전용 `tests/lifecycle/macos-image.test.ts`는 실제 framework로 RGBA와 PNG의
+alpha 및 투명 RGB 왕복, grayscale과 palette PNG, JPEG/BMP, malformed 입력과 decode
+크기, crop/resize, 앱별 ID, 권한, quota, 생성 취소와 반복 종료를 검사한다.
+`tests/cli/image.test.ts`는 tarball을 isolated 설치해 neutral, Windows와 macOS 출력의
+분리와 browser FFI 제외를 확인하고 macOS arm64에서 설치된 native adapter를 실행한다.
+`macos-image.yml`은 이 검사와 기존 entitlement로 ad-hoc 서명한 compiled codec fixture를
+실행한다. 이 근거는 실제 shared 호스트 dispatch나 WKWebView 공개 호출 검증과 구분한다.
