@@ -7,6 +7,7 @@ import { files, hash, writeJson } from "#cli/files";
 import { compileMacosApp } from "#cli/macos-compile";
 import { installedPlugins } from "#cli/plugins";
 import pin from "../../runtime/build-manifests/darwin-aarch64.json";
+import { readNetworkReport } from "./fixtures/macos-network-report.ts";
 
 assert.equal(process.platform, "darwin");
 assert.equal(process.arch, "arm64");
@@ -16,7 +17,7 @@ const dataRoot = resolve(
   directory,
   "Library/Application Support/bunaway/tests.macos.network",
 );
-const reportFile = Bun.file(resolve(dataRoot, "temp/report.json"));
+const reportPath = resolve(dataRoot, "temp/report.json");
 let child: ReturnType<typeof Bun.spawn> | undefined;
 const waits: Record<string, number> = {};
 const sockets: Record<string, number> = {};
@@ -284,8 +285,12 @@ export default defineNetworkFixture(${JSON.stringify(http)}, ${JSON.stringify(ws
   child = launched;
   const output = new Response(launched.stdout).text();
   const errors = new Response(launched.stderr).text();
-  await waitFor(() => reportFile.exists(), "WKWebView report");
-  assert.deepEqual(await reportFile.json(), {
+  let report: unknown;
+  await waitFor(async () => {
+    report = await readNetworkReport(reportPath);
+    return report !== undefined;
+  }, "WKWebView report");
+  assert.deepEqual(report, {
     ok: true,
   });
   assert.equal(
