@@ -1222,17 +1222,19 @@ try {
         false,
       );
       notificationWindow = hwnd;
+      let destroyed = false;
       return () => {
+        if (destroyed) {
+          return;
+        }
         try {
           sessionNotifications?.dispose();
         } finally {
-          try {
-            owner.destroy(hwnd);
-          } finally {
-            notificationWindow = undefined;
-            sessionNotifications?.detached();
-            sessionNotifications = undefined;
-          }
+          owner.destroy(hwnd);
+          destroyed = true;
+          notificationWindow = undefined;
+          sessionNotifications?.detached();
+          sessionNotifications = undefined;
         }
       };
     },

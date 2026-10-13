@@ -100,6 +100,9 @@ export class SystemEvents implements NativeSystemEvents {
       throw new Error("System event service is disposed.");
     }
     this.releaseWindow ??= this.hooks.open((message, wparam) => {
+      if (this.disposed) {
+        return;
+      }
       let signal = signals.get(message);
       if (message === 0x0218) {
         // WM_POWERBROADCAST, scalar event code only.
@@ -155,26 +158,22 @@ export class SystemEvents implements NativeSystemEvents {
     // Each registration owns its lifetime, even when callers pass the same callback twice.
     const subscriber = (signal: NativeSystemSignal) => receive(signal);
     this.subscribers.add(subscriber);
+    let removed = false;
     return () => {
-      if (!this.subscribers.delete(subscriber)) {
-        return;
-      }
-      if (sessions && --this.sessionSubscribers === 0) {
-        try {
+      if (!removed) {
+        if (sessions && this.sessionSubscribers === 1) {
+          // Commit removal only after unregister succeeds, so the same disposer can retry.
           this.hooks.sessions(false);
-        } catch (error) {
-          // The window owner also retries unregister during destruction.
-          if (this.subscribers.size === 0) {
-            this.release();
-          }
-          throw error;
         }
+        if (this.subscribers.delete(subscriber) && sessions) {
+          this.sessionSubscribers--;
+        }
+        removed = true;
       }
       if (this.subscribers.size === 0) {
         this.pending.length = 0;
         this.invalidations.clear();
-        this.releaseWindow?.();
-        this.releaseWindow = undefined;
+        this.release();
       }
     };
   }
@@ -211,15 +210,12 @@ export class SystemEvents implements NativeSystemEvents {
 
   private release(): void {
     const release = this.releaseWindow;
-    this.releaseWindow = undefined;
     release?.();
+    this.releaseWindow = undefined;
   }
 
   /** Release before Windows disposes its class and callback. Safe after partial adapter initialization. */
   dispose(): void {
-    if (this.disposed) {
-      return;
-    }
     this.disposed = true;
     this.pending.length = 0;
     this.invalidations.clear();

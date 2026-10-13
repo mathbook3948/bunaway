@@ -303,3 +303,34 @@ test("publication requires a registered read operation, a current event route an
     "allowed",
   ]);
 });
+
+test("failed WTS unregister and native destruction remain retryable through their owning disposer", () => {
+  let unregisters = 0;
+  let destroys = 0;
+  const service = new SystemEvents({
+    open: () => () => {
+      if (++destroys === 1) {
+        throw new Error("destroy failed");
+      }
+    },
+    sessions: (enable) => {
+      if (!enable && ++unregisters === 1) {
+        throw new Error("unregister failed");
+      }
+    },
+    publish: () => {},
+    report: () => {},
+  });
+  const appearance = service.subscribe(() => {});
+  const power = service.subscribe(() => {}, {
+    sessionNotifications: true,
+  });
+  expect(() => power()).toThrow("unregister failed");
+  power();
+  expect(unregisters).toBe(2);
+  expect(() => appearance()).toThrow("destroy failed");
+  appearance();
+  appearance();
+  expect(destroys).toBe(2);
+  service.dispose();
+});
