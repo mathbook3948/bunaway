@@ -6,10 +6,12 @@ import {
   type NativeAdapter,
 } from "@bunaway/plugin";
 import type {
+  StorageBytesWrite,
   StorageLocation,
   StorageMetadata,
   StorageWrite,
 } from "../contract.ts";
+import { MAX_STORAGE_BYTES } from "../bytes.ts";
 
 const MAX_STORAGE_PATH_SEGMENT_BYTES = 255;
 const MAX_STORAGE_FILE_BYTES = 4 * 1024 * 1024;
@@ -34,6 +36,7 @@ const FILE_ATTRIBUTE_REPARSE_POINT = 0x400;
 const MAX_FILE_LINK_COUNT = 1;
 const GENERIC_READ = 0x80000000;
 const GENERIC_WRITE = 0x40000000;
+const FILE_APPEND_DATA = 0x4;
 const FILE_READ_ATTRIBUTES = 0x80;
 const FILE_READ_DATA = 0x1;
 const FILE_LIST_DIRECTORY = 0x1;
@@ -56,7 +59,7 @@ export function createOperations(): NativeAdapter {
       // The host registry has validated this operation's input before dispatch.
       return storage.execute(
         operation,
-        input as StorageLocation | StorageWrite,
+        input as StorageLocation | StorageWrite | StorageBytesWrite,
       );
     },
     dispose: () => storage.dispose(),
@@ -280,13 +283,28 @@ export class WindowsStorage {
    * Check an application-selected absolute path against pinned handles before I/O.
    * Missing metadata targets return `false` for exists and `null` for stat.
    */
-  execute(operation: string, input: StorageLocation | StorageWrite): JsonValue {
+  execute(
+    operation: string,
+    input: StorageLocation | StorageWrite | StorageBytesWrite,
+  ): JsonValue {
     this.requireOpen();
     const path = input.path.replaceAll("/", "\\");
     const queryingMetadata =
       operation === "storage.exists" || operation === "storage.stat";
-    const writingText = operation === "storage.writeText";
-    if (!queryingMetadata && !writingText && operation !== "storage.readText") {
+    const writingText =
+      operation === "storage.writeText" || operation === "storage.appendText";
+    const writingBytes =
+      operation === "storage.writeBytes" || operation === "storage.appendBytes";
+    const appending =
+      operation === "storage.appendText" || operation === "storage.appendBytes";
+    const writing = writingText || writingBytes;
+    const readingBytes = operation === "storage.readBytes";
+    if (
+      !queryingMetadata &&
+      !writing &&
+      !readingBytes &&
+      operation !== "storage.readText"
+    ) {
       throw new BunawayError({
         code: "UNSUPPORTED",
         message: "Unknown storage operation.",
@@ -297,6 +315,18 @@ export class WindowsStorage {
       throw new BunawayError({
         code: "INVALID_ARGUMENT",
         message: "Storage text is required.",
+      });
+    }
+    let bytes: Buffer | undefined;
+    if (writingBytes && "bytes" in input) {
+      bytes = Buffer.from(input.bytes, "base64");
+    } else if (text !== undefined) {
+      bytes = Buffer.from(text);
+    }
+    if (writingBytes && bytes === undefined) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "Storage bytes are required.",
       });
     }
     const volume = win32.parse(path).root;
@@ -334,7 +364,7 @@ export class WindowsStorage {
         if (index) {
           dir += `\\${segments[index - 1]}`;
           if (
-            text !== undefined &&
+            writing &&
             !this.api.symbols.CreateDirectoryW(ptr(wide(dir)), null) &&
             this.api.symbols.GetLastError() !== ERROR_ALREADY_EXISTS
           ) {
@@ -373,15 +403,17 @@ export class WindowsStorage {
       let access = GENERIC_READ;
       if (queryingMetadata) {
         access = FILE_READ_ATTRIBUTES | FILE_READ_DATA;
-      } else if (writingText) {
-        access = GENERIC_WRITE;
+      } else if (writing) {
+        access = appending
+          ? FILE_APPEND_DATA | FILE_READ_ATTRIBUTES
+          : GENERIC_WRITE;
       }
       // Queries pin the target against deletion until its metadata and path are checked.
       file = this.open(
         target,
         access,
         queryingMetadata ? FILE_SHARE_READ | FILE_SHARE_WRITE : FILE_SHARE_ALL,
-        writingText ? OPEN_ALWAYS : OPEN_EXISTING,
+        writing ? OPEN_ALWAYS : OPEN_EXISTING,
         queryingMetadata ? DIRECTORY_OPEN_FLAGS : FILE_FLAG_OPEN_REPARSE_POINT,
         queryingMetadata,
       );
@@ -406,9 +438,8 @@ export class WindowsStorage {
         return operation === "storage.exists" ? true : metadata(info);
       }
       const transferred = new Uint32Array(1);
-      if (text !== undefined) {
-        // Write in bounded chunks, then truncate so a shorter replacement leaves no old tail.
-        const bytes = Buffer.from(text);
+      if (bytes !== undefined) {
+        // Append-only handles place each native write at EOF. Replacement truncates only after writing.
         let offset = 0;
         while (offset < bytes.length) {
           this.check(
@@ -426,10 +457,12 @@ export class WindowsStorage {
           }
           offset += transferred[0];
         }
-        this.check(
-          this.api.symbols.SetEndOfFile(file),
-          "Storage truncate failed",
-        );
+        if (!appending) {
+          this.check(
+            this.api.symbols.SetEndOfFile(file),
+            "Storage truncate failed",
+          );
+        }
         return null;
       }
       const size = new BigInt64Array(1);
@@ -440,11 +473,18 @@ export class WindowsStorage {
       if (
         size[0] === undefined ||
         size[0] < 0n ||
-        size[0] > BigInt(MAX_STORAGE_FILE_BYTES)
+        size[0] >
+          BigInt(readingBytes ? MAX_STORAGE_BYTES : MAX_STORAGE_FILE_BYTES)
       ) {
         throw new Error("Storage file too large");
       }
-      return this.readText(file, Number(size[0]));
+      const result = this.readBytes(file, Number(size[0]));
+      return readingBytes
+        ? result.toString("base64")
+        : new TextDecoder("utf-8", {
+            fatal: true,
+            ignoreBOM: true,
+          }).decode(result);
     } finally {
       if (file) {
         this.close(file);
@@ -454,8 +494,15 @@ export class WindowsStorage {
       }
     }
   }
-  /** Read and strictly decode a bounded UTF-8 file; the caller retains handle ownership. */
+  /** Strictly decode UTF-8 from a caller-owned handle, preserving BOM text. */
   readText(file: bigint, size: number): string {
+    return new TextDecoder("utf-8", {
+      fatal: true,
+      ignoreBOM: true,
+    }).decode(this.readBytes(file, size));
+  }
+  /** Read bounded bytes; the caller retains handle ownership. */
+  private readBytes(file: bigint, size: number): Buffer {
     this.requireOpen();
     if (
       !Number.isSafeInteger(size) ||
@@ -483,9 +530,6 @@ export class WindowsStorage {
       }
       offset += transferred[0];
     }
-    return new TextDecoder("utf-8", {
-      fatal: true,
-      ignoreBOM: true,
-    }).decode(bytes);
+    return bytes;
   }
 }
