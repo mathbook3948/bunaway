@@ -12,7 +12,8 @@
     "../native/host-api/bun/*.ts",
     "../native/windows/bun/*.ts",
     "../native/macos/bun/*.ts",
-    "../native/android/*.ts"
+    "../native/android/*.ts",
+    "../native/ios/*.ts"
   ],
-  "exclude": ["fixtures/android/web"]
+  "exclude": ["fixtures/android/web", "fixtures/ios/web"]
 }

@@ -7,6 +7,8 @@ import {
   PROTOCOL_VERSION,
   parseMessage,
 } from "@bunaway/protocol";
+import { frameworkRoot } from "#cli/files";
+import { mobileBridge } from "#cli/mobile-project";
 
 const portPrefix = "@test-port:";
 const nonce = "a611b10a-a5c2-444e-a694-fc17c5f884b4";
@@ -125,14 +127,10 @@ test.each([
 );
 
 async function bridgeSource() {
-  return (
-    await Bun.file(
-      new URL("../../native/android/bridge.js", import.meta.url),
-    ).text()
-  )
-    .replaceAll("__BUNAWAY_PORT_PREFIX__", portPrefix)
-    .replaceAll("__BUNAWAY_MAX_PENDING__", String(API_LIMITS.maxPending))
-    .replaceAll("__BUNAWAY_MAX_MESSAGE_BYTES__", String(MAX_MESSAGE_BYTES));
+  return (await mobileBridge(frameworkRoot, "android")).replaceAll(
+    "__BUNAWAY_PORT_PREFIX__",
+    portPrefix,
+  );
 }
 
 test.each([

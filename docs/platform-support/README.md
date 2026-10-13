@@ -36,7 +36,7 @@ macOS 창 없는 시작은 `UNSUPPORTED`이며 [Windows 실행 기록](../archit
 | macOS Intel | 고정 Bun 배포물, 해시 없음 | 없음. arm64 빌드 스크립트가 명시적으로 거부 | 별도 pin, 빌드, 실제 실행 검증 필요 |
 | Linux | GTK, WebKitGTK 후보, 호스트 미구현 | Ubuntu 공통 검사, 생성 스키마 검사만 있음 | 네이티브 실행, UI, 프로세스 정리, 패키징 |
 | Android | Java Activity, WebView, 번들 Bun과 공통 Core/SDK, Java 프로젝트 sync와 debug APK | API 36 x86_64 에뮬레이터. 명령, 이벤트, 취소, 자산과 프레임 경계, 화면 회전, 종료 | ARM64 실기기, API 29, 네이티브 플러그인, 외부 개발 서버, 백그라운드 복원, release/AAB/Store |
-| iOS | Swift, WKWebView 후보, 호스트 미구현 | 없음 | Bun 실행/JIT, 수명주기, 서명, 스토어 정책 |
+| iOS arm64 | Swift UIKit, WKWebView와 내장 Bun, 백엔드 Worker | 단일 뷰 Xcode 동기화와 Simulator debug 앱 | 기기 실행, 배포 서명, 스토어 제출, 네이티브 플러그인 |
 
 ## macOS CI와 CPU
 

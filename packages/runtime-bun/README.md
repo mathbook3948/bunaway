@@ -29,3 +29,10 @@ WebView에는 기존 `INTERNAL: Command failed.` 응답만 전달한다.
 부팅 전, 플러그인 초기화 중 종료도 처리한다. 잘못된 방향, 세대, 프레임, 예상 밖 EOF는
 실패로 종료한다. [런타임 API](../../docs/site/src/content/docs/reference/tooling/core-and-runtime.mdx)와
 [macOS 실행 기록](../../docs/architecture/macos-native-results.md)을 참고한다.
+
+iOS 내장 Bun의 백엔드 Worker는 `runBunApp(app, { input, output, platform: "ios" })`를 사용한다.
+입력은 런타임이 종료하고 출력 스트림은 호출자가 소유한다. Bun entry는 Worker 종료 뒤에도 유지된다.
+
+Android와 iOS의 직접 문서 연결은 같은 `LoopbackChannel`을 사용한다.
+HTTPS 정책 출처의 권한을 확인하고, iOS에서는 자산 scheme에 대응하는 `bunaway://` Origin으로
+연결을 검사한다. Host 검사와 일회용 토큰, 입력 검증, 큐 제한 및 세션 회수는 공통이다.

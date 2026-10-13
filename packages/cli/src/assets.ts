@@ -504,30 +504,81 @@ export async function bundleAndroidAssets(
       },
     },
   );
-  await writeAndroidBackend(backend, assets);
+  await writeMobileBackend(backend, assets, [
+    "backend.js",
+  ]);
 }
 
-/** Preserve the backend entry and file imports together for extraction from the APK. */
-export async function writeAndroidBackend(
-  outputs: readonly Bun.BuildArtifact[],
+/** Bundle the long-lived iOS entry and its replaceable backend Worker from app.ts. */
+export async function bundleIosAssets(
+  project: Project,
   assets: string,
 ): Promise<void> {
+  await assertAppDefinitionExport(project.appEntry);
+  const sdk = await sdkPlugin(project.root, [], project.nativePlugins);
+  await webAssets(project, resolve(assets, "web"), sdk, false);
+  const source = resolve(project.frameworkRoot, "native/ios");
+  const outputs = await buildWithSdk(
+    {
+      entrypoints: [
+        resolve(source, "entry.ts"),
+        resolve(source, "backend.ts"),
+      ],
+      target: "bun",
+      packages: "bundle",
+      splitting: false,
+      naming: {
+        entry: "[name].js",
+        asset: "backend-assets/[name]-[hash].[ext]",
+      },
+    },
+    {
+      name: "ios-app-entry",
+      setup(build) {
+        sdk.setup(build);
+        build.onResolve(
+          {
+            filter: /^\.\/app\.js$/,
+          },
+          ({ importer }) =>
+            resolve(importer) === resolve(source, "backend.ts")
+              ? {
+                  path: project.appEntry,
+                }
+              : undefined,
+        );
+      },
+    },
+  );
+  await writeMobileBackend(outputs, assets, [
+    "entry.js",
+    "backend.js",
+  ]);
+}
+
+/** Preserve mobile backend entries and file imports together in their relative layout. */
+export async function writeMobileBackend(
+  outputs: readonly Bun.BuildArtifact[],
+  assets: string,
+  expectedEntries: readonly string[],
+): Promise<void> {
   const entries = outputs.filter((output) => output.kind === "entry-point");
+  const names = entries.map((output) => basename(output.path));
   if (
-    entries.length !== 1 ||
-    basename(entries[0]?.path ?? "") !== "backend.js"
+    names.length !== expectedEntries.length ||
+    expectedEntries.some((name) => !names.includes(name))
   ) {
-    throw new Error("Missing Android backend bundle.");
+    throw new Error("Missing mobile backend bundle.");
   }
   const destination = resolve(assets, "backend");
   for (const output of outputs) {
     if (output.kind !== "entry-point" && output.kind !== "asset") {
-      throw new Error(`Unexpected Android backend output: ${output.kind}`);
+      throw new Error(`Unexpected mobile backend output: ${output.kind}`);
     }
     const path = resolve(destination, output.path);
     if (!inside(destination, path)) {
       throw new Error(
-        `Android backend output escapes destination: ${output.path}`,
+        `Mobile backend output escapes destination: ${output.path}`,
       );
     }
     await mkdir(dirname(path), {

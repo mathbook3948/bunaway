@@ -57,7 +57,6 @@ for (const name of [
   "native/android/host/build.gradle",
   "native/android/app.gradle",
   "native/android/host-settings.gradle",
-  "native/android/bridge.js",
   "FRAMEWORK-LICENSE.txt",
   "THIRD-PARTY-NOTICES.txt",
   "licenses/LICENSE.apache-2.0.txt",
@@ -67,6 +66,15 @@ for (const name of [
   "build/cache/android-bun/x64/LICENSE.bun",
 ]) {
   await Bun.write(resolve(framework, name), "fixture input");
+}
+for (const name of [
+  "native/mobile/bridge.js",
+  "native/android/bridge.js",
+]) {
+  await Bun.write(
+    resolve(framework, name),
+    Bun.file(new URL(`../../${name}`, import.meta.url)),
+  );
 }
 for (const target of [
   "x64",
