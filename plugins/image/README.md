@@ -17,8 +17,14 @@ try {
 ```
 
 공개 입력, 반환값, 권한과 오류는 [API 레퍼런스](../../docs/site/src/content/docs/reference/plugins/image.mdx)에 둔다.
-파일 경로 읽기와 저장소 scope 추가, crop, resize, scale representation과 파일 아이콘은
+파일 경로 읽기와 저장소 scope 추가, scale representation 그룹과 파일 아이콘은
 제공하지 않는다. 파일 bytes의 확보와 저장은 앱이 기존 저장소 계약에서 수행한다.
+
+`image.crop`은 양수 크기의 in-bounds rectangle을 복사하고 `image.resize`는 WIC의
+nearest 또는 linear filtering으로 새 리소스를 만든다. 소스는 변경하지 않으며 새 ID도
+기존 quota, 생성 취소와 명시적 해제 규칙을 따른다. Linear는 BGRA를 PBGRA로 변환한
+뒤 보간하고 다시 straight RGBA로 복사해 투명 edge의 색 번짐을 방지한다. 8-bit 변환의
+반올림과 완전히 투명한 픽셀의 RGB 정규화는 API 레퍼런스에서 설명한다.
 
 ## 소유권과 Windows 구현
 
@@ -49,11 +55,13 @@ container 종료 위치를 확인해 padding을 제거한 복사본만 반환한
 ABI와 GUID는 Microsoft의 [WIC SDK header](https://github.com/microsoft/win32metadata/blob/main/generation/WinSDK/RecompiledIdlHeaders/um/wincodec.h),
 [native pixel format](https://learn.microsoft.com/en-us/windows/win32/wic/-wic-codec-native-pixel-formats)과
 [encoding 계약](https://learn.microsoft.com/en-us/windows/win32/wic/-wic-creating-encoder)을 따른다.
+Resize는 [WIC scaler](https://learn.microsoft.com/en-us/windows/win32/api/wincodec/nf-wincodec-iwicbitmapscaler-initialize)를 사용한다.
 
 ## 검증
 
 ```powershell
 mise exec -- bun test tests/api/image.test.ts tests/lifecycle/image-resources.test.ts
+mise exec -- bun test tests/lifecycle/image-crop.test.ts
 mise exec -- bun test tests/lifecycle/windows-image.test.ts
 mise run host:windows
 ```

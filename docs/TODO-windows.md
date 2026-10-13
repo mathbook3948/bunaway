@@ -430,7 +430,8 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [ ] 파일 경로에서 이미지 리소스를 읽는 API와 저장소 접근 정책을 연결한다.
 - [x] `image.getInfo`와 `image.getPixels`로 크기, 빈 이미지 여부와 RGBA 픽셀 데이터를 조회한다.
 - [x] `image.exportBytes`와 `image.exportDataURL`로 PNG, JPEG, BMP와 data URL을 내보낸다. PNG는 alpha를 보존하고 JPEG와 BMP는 불투명 픽셀만 받는다.
-- [ ] crop, resize와 scale-factor별 이미지 representation을 제공한다.
+- [x] `image.crop`과 `image.resize`로 소스와 분리된 새 이미지 리소스를 만든다. Windows resize는 nearest와 alpha를 고려한 linear filtering을 제공한다.
+- [ ] 한 이미지 ID의 scale-factor별 representation 그룹과 선택 API를 제공한다.
 - [ ] 파일 아이콘과 이미지 thumbnail을 생성한다.
 - [x] 앱 소유 이미지 ID, `image.dispose`, 결과 전달 전 생성 취소와 앱 종료 정리를 제공한다. 작업별 권한과 64개, 8 MiB 상한을 적용한다.
 

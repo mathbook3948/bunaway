@@ -303,3 +303,135 @@ test("image is independently discoverable and browser declaration excludes WIC r
   expect(result.success).toBe(true);
   expect(await result.outputs[0]?.text()).not.toContain("ole32.dll");
 });
+
+test("image transform contracts require positive bounded dimensions and independent operation grants", async () => {
+  const invalidCrops = [
+    {
+      id,
+      x: -1,
+      y: 0,
+      width: 1,
+      height: 1,
+    },
+    {
+      id,
+      x: 0,
+      y: 0,
+      width: 0,
+      height: 1,
+    },
+    {
+      id,
+      x: 0,
+      y: 0,
+      width: 4096,
+      height: 4096,
+    },
+    {
+      id,
+      x: 0.5,
+      y: 0,
+      width: 1,
+      height: 1,
+    },
+    {
+      id,
+      x: 0,
+      y: 0,
+      width: 1,
+      height: 1,
+      extra: true,
+    },
+  ];
+  for (const payload of invalidCrops) {
+    await expect(
+      parsers.validateCall({
+        operation: "image.crop",
+        payload,
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+  }
+  for (const payload of [
+    {
+      id,
+      width: 1,
+      height: 0,
+    },
+    {
+      id,
+      width: 4096,
+      height: 4096,
+    },
+    {
+      id,
+      width: 1,
+      height: 1,
+      interpolation: "unknown",
+    },
+    {
+      id,
+      width: 1.5,
+      height: 1,
+    },
+  ]) {
+    await expect(
+      parsers.validateCall({
+        operation: "image.resize",
+        payload,
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+  }
+  for (const interpolation of [
+    "nearest",
+    "linear",
+  ] as const) {
+    expect(
+      (
+        await parsers.validateCall({
+          operation: "image.resize",
+          payload: {
+            id,
+            width: 2,
+            height: 2,
+            interpolation,
+          },
+        })
+      ).payload,
+    ).toEqual({
+      id,
+      width: 2,
+      height: 2,
+      interpolation,
+    });
+  }
+  expect(
+    registry.allowed(
+      {
+        permissions: [
+          "image.createRGBA",
+        ],
+      },
+      {
+        operation: "image.crop",
+        payload: null,
+      },
+    ),
+  ).toBe(false);
+  expect(
+    registry.allowed(
+      {
+        permissions: [
+          "image.crop",
+        ],
+      },
+      {
+        operation: "image.resize",
+        payload: null,
+      },
+    ),
+  ).toBe(false);
+});

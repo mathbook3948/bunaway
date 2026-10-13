@@ -86,6 +86,46 @@ try {
 있습니다. 해제 뒤 조회나 인코딩은 `INVALID_ARGUMENT`입니다. 새 리소스는 새 ID를 받습니다.
 앱 종료는 모든 픽셀 버퍼와 네이티브 codec 자원을 정리하며 재시작 뒤 이전 ID를 복구하지 않습니다.
 
+## Crop과 resize
+
+| 함수 | 입력 | 결과 | 권한 |
+| --- | --- | --- | --- |
+| `image.crop` | `{ id, x, y, width, height }` | 새 `{ id, width, height, empty }` | `image.crop` |
+| `image.resize` | `{ id, width, height, interpolation? }` | 새 `{ id, width, height, empty }` | `image.resize` |
+
+두 함수는 Promise를 반환하며 소스 이미지와 분리된 새 리소스를 만듭니다. 소스의 크기,
+픽셀과 ID는 바꾸지 않습니다. 결과 ID는 다른 생성과 같은 64개, 8 MiB quota를 사용하고
+앱이 명시적으로 해제합니다. 요청 취소와 앱 종료의 정리도 생성과 같습니다.
+
+`crop`의 `x`, `y`는 왼쪽 위부터 센 0 이상의 정수 픽셀 좌표이며 `width`, `height`는
+1 이상의 정수입니다. 영역 전체가 소스 안에 있어야 합니다. 범위를 벗어나면
+`INVALID_ARGUMENT`이며 영역을 자동으로 줄이지 않습니다. Alpha와 픽셀 값을 그대로 복사합니다.
+
+`resize`의 출력 크기는 각각 1부터 4,096까지이고 RGBA는 524,288바이트까지입니다.
+폭과 높이를 둘 다 지정하며 종횡비를 자동으로 유지하지 않습니다. `interpolation`은
+`nearest` 또는 `linear`이고 생략하면 `linear`입니다. Windows의 WIC scaler를 사용합니다.
+Nearest는 선택한 픽셀 값을 보존합니다. Linear는 premultiplied alpha로 보간한 다음
+다시 straight RGBA로 변환해 투명 edge의 색 번짐을 방지합니다. 8-bit 변환의 반올림으로
+채널 값이 달라질 수 있고 완전히 투명한 픽셀의 RGB는 0으로 정규화될 수 있습니다.
+빈 이미지와 해제한 ID는 두 transform의 소스로 사용할 수 없습니다.
+
+```ts
+const cropped = await image.crop({ id: resource.id, x: 0, y: 0, width: 1, height: 1 });
+try {
+  const resized = await image.resize({ id: cropped.id, width: 2, height: 2, interpolation: "nearest" });
+  try {
+    const pixels = await image.getPixels({ id: resized.id });
+  } finally {
+    await image.dispose({ id: resized.id });
+  }
+} finally {
+  await image.dispose({ id: cropped.id });
+}
+```
+
+동일 이미지 ID에 여러 scale-factor representation을 붙이거나 자동 선택하는 API는 아직
+제공하지 않습니다. Transform은 픽셀 크기가 고정된 독립 리소스를 반환합니다.
+
 ## 정책, 취소와 오류
 
 화면 직접 호출은 `commands`의 `plugin.image.<operation>`과 `host.permissions`의

@@ -1023,7 +1023,9 @@
       "image.getPixels",
       "image.exportBytes",
       "image.exportDataURL",
-      "image.dispose"
+      "image.dispose",
+      "image.crop",
+      "image.resize"
     ]
   },
   "configuration": {

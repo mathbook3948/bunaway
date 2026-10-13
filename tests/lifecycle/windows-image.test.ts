@@ -304,6 +304,139 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
           }),
         ),
       ).toEqual(pixels);
+      const cropped = await invoke(() =>
+        image.crop({
+          id: source.id,
+          x: 1,
+          y: 0,
+          width: 1,
+          height: 2,
+        }),
+      );
+      expect(cropped.id).not.toBe(source.id);
+      expect(
+        await invoke(() =>
+          image.getPixels({
+            id: cropped.id,
+          }),
+        ),
+      ).toEqual({
+        width: 1,
+        height: 2,
+        rgba: Buffer.from([
+          0,
+          255,
+          0,
+          255,
+          11,
+          22,
+          33,
+          44,
+        ]).toString("base64"),
+      });
+      const nearest = await invoke(() =>
+        image.resize({
+          id: source.id,
+          width: 4,
+          height: 4,
+          interpolation: "nearest",
+        }),
+      );
+      const originalBytes = Buffer.from(pixels.rgba, "base64");
+      const nearestBytes = Buffer.alloc(64);
+      for (let y = 0; y < 4; y++) {
+        for (let x = 0; x < 4; x++) {
+          const offset = (Math.floor(y / 2) * 2 + Math.floor(x / 2)) * 4;
+          originalBytes.copy(nearestBytes, (y * 4 + x) * 4, offset, offset + 4);
+        }
+      }
+      expect(
+        await invoke(() =>
+          image.getPixels({
+            id: nearest.id,
+          }),
+        ),
+      ).toEqual({
+        width: 4,
+        height: 4,
+        rgba: nearestBytes.toString("base64"),
+      });
+      const edge = await invoke(() =>
+        image.createRGBA({
+          width: 2,
+          height: 1,
+          rgba: Buffer.from([
+            255,
+            0,
+            0,
+            255,
+            0,
+            0,
+            255,
+            0,
+          ]).toString("base64"),
+        }),
+      );
+      const linear = await invoke(() =>
+        image.resize({
+          id: edge.id,
+          width: 3,
+          height: 1,
+        }),
+      );
+      const linearPixels = await invoke(() =>
+        image.getPixels({
+          id: linear.id,
+        }),
+      );
+      const linearBytes = Buffer.from(linearPixels.rgba, "base64");
+      expect(linearBytes[4]).toBeGreaterThan(245);
+      expect(linearBytes[6]).toBeLessThan(10);
+      expect(linearBytes[7]).toBeGreaterThan(110);
+      expect(linearBytes[7]).toBeLessThan(145);
+      expect(
+        await invoke(() =>
+          image.getPixels({
+            id: source.id,
+          }),
+        ),
+      ).toEqual(pixels);
+      await expectError(
+        invoke(() =>
+          image.crop({
+            id: source.id,
+            x: 1,
+            y: 1,
+            width: 2,
+            height: 1,
+          }),
+        ),
+        "INVALID_ARGUMENT",
+      );
+      await expectError(
+        invoke(() =>
+          image.resize({
+            id: source.id,
+            width: 4096,
+            height: 4096,
+          }),
+        ),
+        "INVALID_ARGUMENT",
+      );
+      for (const id of [
+        cropped.id,
+        nearest.id,
+        edge.id,
+        linear.id,
+      ]) {
+        expect(
+          await invoke(() =>
+            image.dispose({
+              id,
+            }),
+          ),
+        ).toBe(true);
+      }
       const png = await invoke(() =>
         image.exportBytes({
           id: source.id,
@@ -458,6 +591,28 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
         ),
         "INVALID_ARGUMENT",
       );
+      await expectError(
+        invoke(() =>
+          image.crop({
+            id: empty.id,
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+          }),
+        ),
+        "INVALID_ARGUMENT",
+      );
+      await expectError(
+        invoke(() =>
+          image.resize({
+            id: empty.id,
+            width: 1,
+            height: 1,
+          }),
+        ),
+        "INVALID_ARGUMENT",
+      );
       for (const data of [
         "AA==",
         png.data.slice(0, 16),
@@ -597,7 +752,8 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
       controller.abort();
       await expectError(cancelled, "CANCELLED");
       // Filling every slot proves that cancellation removed the undelivered ID.
-      for (let count = 0; count < 64; count++) {
+      const quotaSource = await invoke(() => image.createRGBA(pixels));
+      for (let count = 0; count < 63; count++) {
         await invoke(() =>
           image.createRGBA({
             width: 0,
@@ -612,6 +768,28 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
             width: 0,
             height: 0,
             rgba: "",
+          }),
+        ),
+        "BUSY",
+      );
+      await expectError(
+        invoke(() =>
+          image.crop({
+            id: quotaSource.id,
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+          }),
+        ),
+        "BUSY",
+      );
+      await expectError(
+        invoke(() =>
+          image.resize({
+            id: quotaSource.id,
+            width: 1,
+            height: 1,
           }),
         ),
         "BUSY",
