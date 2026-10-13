@@ -37,9 +37,11 @@ if (status.support === "supported" && status.setting === "disabledForApplication
 `getStatus`는 신뢰된 호스트 설정의 앱 ID를 사용합니다. 호출자가 다른 앱 ID를
 선택할 수 없습니다. 상태 조회에는 이 ID로 등록된 시작 메뉴 바로가기와 같은 process
 AppUserModelID가 필요합니다. Windows 호스트와 설치 바로가기는 이 ID를 사용합니다.
-등록된 같은 ID를 개발과 배포에서 쓰면 같은 Windows 설정을 조회합니다. 등록이 없는 개발
-실행이나 바로가기를 만들지 않는 설치에서는 Windows가 `UNSUPPORTED`를 반환할 수 있습니다.
+기존 알림 상태가 있는 같은 ID를 개발과 배포에서 쓰면 같은 Windows 설정을 조회합니다.
+바로가기만으로 알림 상태가 초기화되지는 않습니다. 아직 알림을 보내지 않은 앱이나 등록이 없는
+개발 실행, 바로가기를 만들지 않는 설치에서는 Windows가 `UNSUPPORTED`를 반환할 수 있습니다.
 조회는 바로가기, toast activator나 앱 등록을 만들지 않습니다.
+상태를 초기화하기 위한 알림도 보내지 않습니다. 첫 알림의 초기화 정책은 후속 표시 기능 범위입니다.
 
 ## 결과와 OS 권한
 
@@ -89,7 +91,8 @@ OS에 해당 페이지나 처리 앱이 없거나 요청이 거부되면 오류�
 - `INVALID_ARGUMENT`: `null` 외의 입력이나 유효하지 않은 호스트 앱 ID입니다.
 - `PERMISSION_DENIED`: 앱 정책, Windows 상태 조회나 설정 실행 권한이 없습니다.
 - `UNSUPPORTED`: 플랫폼 어댑터나 호스트 앱 정보가 없거나 Windows가 상태 조회에 필요한
-  앱 등록을 찾지 못했거나 MSIX에서 상태를 조회했습니다. 플러그인은 등록을 자동으로 만들지 않습니다.
+  앱의 OS 알림 상태를 찾지 못했거나 MSIX에서 상태를 조회했습니다. 바로가기 등록 후에도
+  첫 알림 전에는 상태가 없을 수 있습니다. 플러그인은 상태를 자동으로 만들지 않습니다.
   MSIX 앱의 패키지 식별자 연동은 아직 제공하지 않습니다.
 - `INTERNAL`: WinRT 초기화, 상태 조회나 설정 열기 요청이 실패했습니다.
 - `CANCELLED`, `TIMEOUT`, `BUSY`: 기존 Host API의 취소, 기한과 대기열 제한입니다.

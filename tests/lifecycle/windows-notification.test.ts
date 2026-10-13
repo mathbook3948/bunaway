@@ -73,6 +73,8 @@ try {
       recursive: true,
     });
     const appId = `test.${crypto.randomUUID()}`;
+    const toastTag = crypto.randomUUID().replaceAll("-", "").slice(0, 12);
+    const toastGroup = "bunaway-fixture";
     const removeShortcut = await createNotificationShortcut(appId);
     try {
       // Compare FFI to a strict projected getter. PowerShell's ordinary property syntax can suppress getter failures.
@@ -87,6 +89,15 @@ try {
         if ([NotificationIdentity]::SetCurrentProcessExplicitAppUserModelID('${appId}') -lt 0) { throw 'Process identity setup failed' }
         $manager=[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType=WindowsRuntime];
         $notifier=$manager::CreateToastNotifier('${appId}');
+        # Unpackaged settings need an existing notification database entry (Microsoft Toolkit's PreRegisterIdentityLessApp).
+        # This disposable fixture alone primes that entry; production getStatus never sends a toast.
+        $xml=[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom, ContentType=WindowsRuntime]::new();
+        $xml.LoadXml('<toast><visual><binding template="ToastGeneric"><text>Bunaway notification regression fixture</text></binding></visual></toast>');
+        $toast=[Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, ContentType=WindowsRuntime]::new($xml);
+        $toast.SuppressPopup=$true; $toast.Tag='${toastTag}'; $toast.Group='${toastGroup}';
+        $toast.ExpirationTime=[DateTimeOffset]::UtcNow.AddSeconds(15);
+        try {
+        $notifier.Show($toast);
         $notifierType=[Windows.UI.Notifications.ToastNotifier, Windows.UI.Notifications, ContentType=WindowsRuntime];
         $property=$notifierType.GetProperty('Setting');
         if ($null -eq $property) { throw 'Setting property is unavailable' }
@@ -100,6 +111,10 @@ try {
           }
         }
         [Console]::Write([int]$value)
+        } finally {
+          $manager::History.Remove('${toastTag}','${toastGroup}','${appId}');
+          if ($manager::History.GetHistory('${appId}').Count -ne 0) { throw 'Disposable notification history cleanup failed' }
+        }
       } catch { [Console]::Error.Write($_.Exception.ToString()); exit 1 }`,
             "utf16le",
           ).toString("base64"),

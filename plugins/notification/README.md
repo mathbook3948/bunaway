@@ -10,16 +10,18 @@
 [notification API](../../docs/site/src/content/docs/reference/plugins/notification.mdx)를 따른다.
 현재 unpackaged Windows x64의 호스트 앱 ID를 사용한다. MSIX 상태 조회는 패키지 식별자
 연동 전까지 `UNSUPPORTED`로 거부한다. 상태 조회에는 이 ID로 등록된 시작 메뉴 바로가기와
-같은 process AppUserModelID가 필요하다. 등록 없이 실행하는 개발 환경이나 바로가기를
-생성하지 않은 설치에서는 `UNSUPPORTED`를 반환할 수 있다. 등록된 같은 ID는 같은 OS 설정을 읽는다.
+같은 process AppUserModelID가 필요하다. 바로가기만으로 OS 알림 상태가 초기화되지는 않으며
+아직 알림을 보낸 적 없는 앱도 `UNSUPPORTED`를 반환할 수 있다. 등록 없이 실행하는 개발
+환경이나 바로가기를 생성하지 않은 설치에도 적용된다. 기존 상태의 같은 ID는 같은 OS 설정을 읽는다.
 
 ## 네이티브 동작
 
 상태 조회는 Windows Runtime의 `ToastNotificationManager.CreateToastNotifier(appId)`와
 `ToastNotifier.Setting`을 직접 호출한다. WinRT 클래스나 인터페이스가 없으면
 `support: "unsupported", setting: null`이다. Windows가 반환하는 사용자, 앱, 그룹 정책과
-manifest 차단을 구분하며 모르는 값은 `unknown`이다. Windows가 현재 앱 식별자를 찾지
-못하면 `UNSUPPORTED`이며 다른 실제 조회 실패도 오류로 반환한다. `enabled`는 실제 toast
+manifest 차단을 구분하며 모르는 값은 `unknown`이다. Windows가 현재 앱의 알림 상태를 찾지
+못하면 `UNSUPPORTED`이며 다른 실제 조회 실패도 오류로 반환한다. 조회를 위해 알림을 보내거나
+상태를 자동 생성하지 않는다. 첫 알림과 상태 초기화 정책은 후속 표시 기능의 범위다. `enabled`는 실제 toast
 표시나 activation 가능성을 보장하지 않는다.
 
 각 동기 요청은 I/O Worker에서 STA WinRT 초기화, HSTRING과 COM 참조를 정리한다.
@@ -39,6 +41,7 @@ DLL을 정리하며 반복 종료는 안전하다. 정책과 취소 검사는 �
 기준 API: [CreateToastNotifier](https://learn.microsoft.com/en-us/uwp/api/windows.ui.notifications.toastnotificationmanager.createtoastnotifier),
 [Setting](https://learn.microsoft.com/en-us/uwp/api/windows.ui.notifications.toastnotifier.setting),
 [NotificationSetting](https://learn.microsoft.com/en-us/uwp/api/windows.ui.notifications.notificationsetting),
+[unpackaged 앱의 첫 알림 전 상태 조회 제약](https://github.com/CommunityToolkit/WindowsCommunityToolkit/blob/main/Microsoft.Toolkit.Uwp.Notifications/Toasts/Compat/ToastNotifierCompat.cs),
 [Windows 설정 URI](https://learn.microsoft.com/en-us/windows/apps/develop/launch/launch-settings-app).
 
 ## 검증 범위
@@ -49,8 +52,10 @@ DLL을 정리하며 반복 종료는 안전하다. 정책과 취소 검사는 �
 - `bun --no-env-file test tests/lifecycle/windows-notification.test.ts`: Windows에서 실제
   별도 프로세스에서 누락된 앱 등록의 오류를 확인한다. 등록된 조회는 격리된 프로세스와
   UUID 시작 메뉴 바로가기를 만들고 엄격한 WinRT projection getter와 FFI 값을 비교한다.
-  실제 I/O Worker의 승인, 거부, 취소와 opener STA 공존 및 종료도 검사한다. 바로가기는
-  실패 때도 정리하며 사용자 알림 설정이나 production 바로가기를 변경하지 않는다.
+  fixture는 고유 tag/group의 popup을 억제한 15초 만료 알림으로 OS 상태를 초기화한 뒤
+  성공과 실패 모두 history에서 제거하고 비었는지 확인한다. 실제 I/O Worker의 승인, 거부,
+  취소와 opener STA 공존 및 종료도 검사한다. 바로가기도 실패 때 정리하며 사용자 알림
+  설정이나 production 바로가기를 변경하지 않는다. 이 준비는 공개 알림 표시 API의 검증이 아니다.
   `mise run host:windows`에도 포함한다. 다른 OS에서는 해당 네이티브 검사를 건너뛴다.
 - `BUNAWAY_NOTIFICATION_SETTINGS_NATIVE=1 bun --no-env-file test tests/lifecycle/windows-notification.test.ts`:
   폐기 가능한 Windows 데스크톱에서만 실행한다. 실제 알림 설정 열기 요청 접수를 추가로

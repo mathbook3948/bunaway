@@ -56,8 +56,10 @@ Explorer 프로세스 재시작을 육안으로 검증하지 않는다.
 Zod 계약, SDK 컨텍스트와 취소, WinRT 실패 경계와 자원 정리를 검사한다.
 `lifecycle/windows-notification.test.ts`는 별도 프로세스에서 누락된 앱 등록 오류를 확인한다.
 등록된 조회는 격리된 프로세스에 UUID 시작 메뉴 바로가기와 process AppUserModelID를 설정한
-뒤 엄격한 WinRT projection getter와 FFI의 상태 값을 비교한다. 임시 바로가기는 실패 때도
-정리한다. 실제 I/O Worker의 승인, 거부, 취소, opener STA 공존과 종료도 확인한다.
+뒤 fixture 전용 popup 억제/15초 만료 알림으로 OS 상태를 초기화한다. 엄격한 WinRT projection
+getter와 FFI 값을 비교하며 고유 tag/group의 임시 알림은 finally에서 history 제거와 빈 상태를
+검사한다. 바로가기도 실패 때 정리한다. 실제 I/O Worker의 승인, 거부, 취소, opener STA 공존과
+종료도 확인한다. 공개 getStatus는 이런 알림을 보내거나 상태를 초기화하지 않는다.
 상태 조회 회귀는 `mise run host:windows`에도 포함한다. Windows 설정 열기 접수는
 폐기 가능한 데스크톱에서 `BUNAWAY_NOTIFICATION_SETTINGS_NATIVE=1`을 지정한 선택 검사다.
 기본 CI는 실제 설정 페이지 표시나 사용자 차단 상태 변경, toast 표시를 검증하지 않는다.

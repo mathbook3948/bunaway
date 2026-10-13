@@ -48,7 +48,7 @@ function check(result: number, stage: string): void {
   ) {
     throw new BunawayError({
       code: "UNSUPPORTED",
-      message: "Windows notification app identity is unavailable.",
+      message: "Windows notification settings are unavailable for this app.",
       details,
     });
   }
