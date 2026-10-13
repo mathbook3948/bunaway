@@ -160,6 +160,8 @@ test("public file APIs use caller context and preserve OS failure codes", async 
       expect(await openFile(path.replaceAll("\\", "/"))).toBeNull();
       expect(await revealFile(path)).toBeNull();
       expect(await trashFile(path)).toBeNull();
+      expect(await openFile('/private/tmp/한글 값,".txt')).toBeNull();
+      expect(await revealFile('/private/tmp/한글 값,".txt')).toBeNull();
       denied = true;
       await expect(openFile(path)).rejects.toMatchObject({
         code: "PERMISSION_DENIED",
@@ -193,6 +195,8 @@ test("public file APIs use caller context and preserve OS failure codes", async 
     "opener.revealFile",
     "opener.trashFile",
     "opener.openFile",
+    "opener.revealFile",
+    "opener.openFile",
     "opener.trashFile",
   ]);
   expect(calls.map((call) => call.payload)).toEqual([
@@ -204,6 +208,12 @@ test("public file APIs use caller context and preserve OS failure codes", async 
     },
     {
       path,
+    },
+    {
+      path: '/private/tmp/한글 값,".txt',
+    },
+    {
+      path: '/private/tmp/한글 값,".txt',
     },
     {
       path,

@@ -369,3 +369,10 @@ null은 트레이 메뉴 숨김이고 undefined는 호스트 기본 Open/Quit �
 `publish(value)`는 현재 대기자에게 각각 복사본을 전달하며 이력을 저장하지 않습니다.
 취소와 `dispose()`는 CANCELLED, 한도 초과는 BUSY이며 어댑터 정리에서 반드시 dispose를 호출합니다.
 대기 자체는 앱 실행 유지 조건을 바꾸지 않습니다. 창이 없는 앱의 백엔드는 플러그인의 wait 작업을 사용할 수 있습니다.
+
+`NativeEnvironment.tray`는 호스트가 설정한 단일 아이콘의 NativeTrayServices입니다.
+get과 getBounds, setTooltip과 setIcon, setClickBehavior, focus와 subscribe를 제공하며 플러그인이 HWND나 상주 정책을 소유하지 않습니다.
+입력은 기존 emit 경로 또는 NativeEventWaiters를 통해 전달합니다.
+
+공유 트레이 제한은 MAX_TRAY_TOOLTIP_UNITS(UTF-16 127개), MAX_TRAY_ICO_BYTES(65,536 bytes), MAX_TRAY_WAITERS(16개)로 선언합니다.
+계약과 native 자원 소유자가 같은 제한을 사용합니다.

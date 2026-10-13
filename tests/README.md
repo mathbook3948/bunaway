@@ -439,6 +439,12 @@ Windows 호스트 시나리오는 `lifecycle/windows-host.ts`에 두고 PID 조�
 프로세스 종료 감시는 `lifecycle/windows-host-processes.ts`에서 실행한다.
 
 `api/opener.test.ts`는 HTTP/HTTPS 계약과 파일 API, 절대 경로 입력과 작업별 권한을 확인한다.
+`lifecycle/macos-opener.test.ts`는 POSIX 경로와 파일 검사, 작업별 권한과 정리를 검사한다.
+macOS arm64 CI에서는 `BUNAWAY_OPENER_ISOLATED=1`로 `macos-opener-native.test.ts`의
+실제 I/O Worker와 `macos-opener-host.ts`의 compiled WKWebView 호출을 각각 한 번 실행한다.
+고유 문서 타입을 선언한 앱을 등록하고 실제 파일 수신, loopback HTTP/HTTPS 및 Finder의
+요청 접수, 권한 거부, 취소와 종료를 확인한다. 기본 handler 설정은 변경하지 않는다.
+브라우저 페이지 로딩과 Finder 선택 화면은 검사하지 않는다.
 
 `api/window-relations.test.ts`는 trusted destroy의 백엔드 출처와 독립 작업 권한,
 관계 조회와 변경의 작업별 권한, 입력과 출력 경계를 확인한다.
@@ -616,6 +622,11 @@ Windows 데스크톱의 dev-veto, dev-hide, dev-pending 시나리오는 CLI 중�
 `packaging/tool-output.test.ts`는 실제 자식 프로세스의 stdout과 stderr가 일반 파일인지
 확인하고 종료 코드, 진단과 프로세스 생성 실패 뒤 임시 파일 정리를 검사한다.
 DMG 생성은 DiskImages helper가 pipe 출력에서 멈추는 경우를 피하기 위해 이 캡처를 사용한다.
+CI는 `BUNAWAY_DMG_DIAGNOSTICS=1`로 fixture 안에서만 실제 hdiutil을 관찰한다.
+파일 descriptor, 고유 경로, fixture 파일을 연 프로세스, 해당 fixture의 disk image 목록과
+verbose 출력을 `build/macos-packaging-diagnostics/`에 보관한다. 기존 일반 파일 출력을
+상속하고 실제 종료 코드를 전달하며 재시도나 다른 볼륨의 detach는 수행하지 않는다.
+외부 probe는 생성 명령이 끝난 뒤 실행해 DiskImages 서비스를 미리 초기화하지 않는다.
 실제 DMG 검증, 읽기 전용 마운트와 서명된 앱 내용 검사 및 실패 시 이전 산출물 보존은
 기존 `macos-distribution.test.ts`에서 계속 확인한다.
 
@@ -627,6 +638,15 @@ show state와 fullscreen 복원 실패가 프로세스 내부의 이전 검사 �
 자식은 10초 실행 기한을 가지며 이전 검사의 Win32 thread 상태를 상속하지 않는다.
 부모는 자식의 완료와 로그를 수집하고 성공한 종료 코드를 요구한다. 상태를 수리하거나
 메시지를 추가로 pump하지 않으며 geometry와 show-state assertion은 그대로 유지한다.
+
+`windows-size-constraints.test.ts`는 전체 계약 검사의 같은 프로세스에서 계속 실행한다.
+Windows 계약 CI는 전체 검사 뒤 같은 파일을 새 Bun 프로세스에서 한 번 실행해 결과를 비교한다.
+기존 표시, 포커스, DPI, 전체화면 assertion과 30초 기한을 유지하며 재시도하지 않는다.
+`BUNAWAY_SIZE_CONSTRAINTS_DIAGNOSTICS=1`이면 숨김 요청, 입력 창 포커스 지정, 제약 갱신,
+DPI 변경과 전체화면 진입 및 종료 뒤의 마지막 8개 상태를 출력한다. HWND 소유 프로세스와
+스레드, 시작 show command도 기록하며 native 상태를 변경하거나 메시지를 pump하지 않는다.
+전체 검사 결과는 작업 로그에, 단독 실행 로그는 `windows-matrix-diagnostics` artifact에 남긴다.
+단독 통과만으로 전체 검사 실패의 원인이나 제품 수정 완료를 판단하지 않는다.
 
 `api/opener-selected-app.test.ts`는 지정 앱 opener의 strict Zod 입력, 독립 권한,
 호출 컨텍스트와 오류를 확인한다. Windows의 `lifecycle/windows-opener-selected-app.test.ts`는
@@ -710,6 +730,15 @@ CI의 windows-native 작업은 `mise run host:windows`를 통해 이 검사를 �
 큰 목록 실패와 자원 해제를 확인한다. 링크나 별칭 및 ACL 거부도 유지한다.
 `windows-storage-metadata.ts`는 실제 WebView2와 I/O Worker에서 목록, 생성과 빈 폴더 삭제,
 독립적인 텍스트 쓰기 권한 거부를 검사하며 `mise run host:windows`에 포함한다.
+
+`api/macos-directory-entries.test.ts`는 Darwin dirent의 UTF-8 이름, 관찰한 종류,
+record 범위와 공개 이름 상한을 검사한다. `macos-storage-directories.ts`는 실제
+checked fd 기반 목록, UTF-16 정렬, 링크와 hardlink, 256개 경계, recursive 기본값과
+생성 오류 및 미지원 remove의 무변경을 `macos-storage.ts`에서 확인한다.
+기존 native workflow가 source fixture를 compile하고 ad-hoc 서명한 뒤 실행한다.
+`macos-storage-host.ts`와 browser fixture는 실제 packaged WKWebView에서 디렉터리 목록과
+생성, 독립 권한, 미지원 remove와 재시작을 검증하며 `mise run host:macos`에 포함한다.
+Linux에서 Darwin fixture를 건너뛰는 결과는 실제 macOS 실행 근거가 아니다.
 
 `api/zod-promise.test.ts`는 ESM과 CommonJS의 실제 Worker에서 Zod의 형제 검사 실패,
 끝나지 않는 검사, 정상 변환 횟수와 when, abort 동작을 확인한다.
@@ -812,6 +841,11 @@ redirect 거부, binary 보존, timeout, 취소, 폐기와 용량을 검사한�
 HTTP binary 및 UTF-8, redirect와 WebSocket handshake 거부, decompressed body 상한,
 text/binary 메시지, timeout과 SDK deadline, 취소 뒤 실제 TCP 정리와 종료 중 pending 요청 정리를
 확인한다. 결과는 `build/macos-native-logs/network-results.json`이며 기존 네이티브 CI artifact에 포함된다.
+실패 시 child를 종료하고 pipe를 수집한 뒤 host 로그, stdout/stderr와 요청 및 socket 관측값을
+`build/macos-native-logs/network-diagnostics/`에 보존한다. report가 있으면 미완성 파일도 원본으로
+보존하며 임시 package를 제거하기 전에 기존 macOS native artifact 경로에 기록한다.
+`macos-network-diagnostics.test.ts`는 살아 있는 실제 child의 pipe 수집과 package 제거 뒤
+진단 보존, 실행 전 실패와 이전 report 정리를 검사한다. 기존 assertion과 제한시간은 유지한다.
 `cli/network.test.ts`는 isolated tarball 설치의 두 OS native export에서 실제 HTTP를 실행하고
 browser 번들에 Bun 전송 구현이 포함되지 않는지 검사한다. TLS, 외부 proxy와 OS 인증은 검증하지 않는다.
 
@@ -824,11 +858,23 @@ browser 번들에 Bun 전송 구현이 포함되지 않는지 검사한다. TLS,
 
 `api/global-shortcut.test.ts`는 전역 단축키 권한, 등록 rollback, 중지와 재개 및 이전 메시지 폐기를 검사한다.
 `lifecycle/windows-global-shortcut.test.ts`는 실제 RegisterHotKey와 경쟁 HWND, SendInput, 중지와 정리를 확인한다.
+`windows-global-shortcut-ui.test.ts`는 단축키 단독 실행과 menu, tray 동시 실행을 실제 UI
+Worker에서 검사한다. 메뉴, 사용자 정의 아이콘, 단축키와 입력 대기가 함께 살아 있는 상태에서
+종료하고 단축키 및 트레이 HWND가 모두 해제되는지 확인한다.
 `mise run host:windows`에 포함되며 물리 키보드와 키보드 레이아웃별 검증을 대신하지 않는다.
 
 `api/menu.test.ts`는 메뉴 리소스 제한, 트리 검증, 개별 권한과 변경 실패 보존을 검사한다.
 `lifecycle/windows-menu.test.ts`와 `windows-menu-ui.test.ts`는 실제 HMENU 및 UI Worker의 창 없는 트레이와 자원 정리를 확인한다.
 `mise run host:windows`에 포함되며 사용자 클릭과 키보드 메뉴 조작의 수동 검증을 대신하지 않는다.
+
+`api/tray.test.ts`는 ICO 범위, UTF-16 tooltip, 권한과 입력 대기의 정리를 검사한다.
+`lifecycle/windows-tray-controls.test.ts`와 `windows-tray-ui.test.ts`는 실제 shell 업데이트와 synthetic mouse/TaskbarCreated 메시지, UI Worker와 HWND 정리를 확인한다.
+물리 마우스나 실제 Explorer process 재시작은 별도 검증이다.
+`lifecycle/tray-cleanup.test.ts`는 실제 Tray 소유자를 별도 프로세스에 번들하고 Win32
+해제 실패를 주입해 핸들 소유권, 재시도와 종료 중 콜백 차단을 확인한다.
+`windows-ui-lifecycle.test.ts`는 실제 UI Worker에 트레이 해제 실패를 주입해 원래 오류가
+유지되고 어댑터, COM, 창과 apartment 정리가 계속 실행되는지 확인한다. 실패한 트레이
+자원이 남아 있으면 DLL 바인딩을 닫지 않는다. 이 실패 검사는 모의 네이티브 경계를 사용한다.
 
 `lifecycle/macos-io-host.ts`는 `host:macos`의 실제 compiled WKWebView에서 공통
 I/O Worker의 실행, 백엔드 setup과 뷰 출처, 파싱 전 정책 검사, UI/I/O 지원 목록,

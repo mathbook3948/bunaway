@@ -83,6 +83,44 @@ test("windowless startup requires a tray or explicit keep-alive, even with open 
   ).not.toThrow();
 });
 
+test("startup rejects malformed tray Unicode while accepting complete emoji at the WCHAR boundary", () => {
+  for (const tooltip of [
+    "😀".slice(0, 1),
+    "😀".slice(1),
+    "prefix\ud800suffix",
+    "prefix\udfffsuffix",
+    "a\0b",
+  ]) {
+    expect(
+      () =>
+        new DesktopLifecycle(
+          {
+            tray: {
+              tooltip,
+            },
+          },
+          async () => {},
+          () => {},
+          () => {},
+        ),
+    ).toThrow("Invalid desktop.tray.tooltip");
+  }
+  const tooltip = `${"😀".repeat(63)}x`;
+  expect(tooltip.length).toBe(127);
+  const lifecycle = new DesktopLifecycle(
+    {
+      tray: {
+        tooltip,
+      },
+    },
+    async () => {},
+    () => {},
+    () => {},
+  );
+  expect(lifecycle.options?.tray?.tooltip).toBe(tooltip);
+  expect(() => validateDesktopStartup([], lifecycle.options)).not.toThrow();
+});
+
 test("keep-alive preserves explicit quit checks and diagnoses invalid desktop settings", async () => {
   for (const options of [
     null,

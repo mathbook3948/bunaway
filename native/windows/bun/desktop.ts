@@ -145,7 +145,7 @@ export class DesktopLifecycle {
         typeof options.tray.tooltip !== "string" ||
         !options.tray.tooltip ||
         options.tray.tooltip.length > 127 ||
-        options.tray.tooltip.includes("\0"))
+        /[\0\uD800-\uDFFF]/u.test(options.tray.tooltip))
     ) {
       throw new Error("Invalid desktop.tray.tooltip");
     }

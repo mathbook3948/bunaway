@@ -40,6 +40,7 @@
     "network": "@bunaway/plugin-network",
     "notification": "@bunaway/plugin-notification",
     "global-shortcut": "@bunaway/plugin-global-shortcut",
-    "menu": "@bunaway/plugin-menu"
+    "menu": "@bunaway/plugin-menu",
+    "tray": "@bunaway/plugin-tray"
   }
 }
