@@ -60,6 +60,19 @@ ITaskbarList3의 다섯 상태를 설정한다. 네이티브 재생성 뒤 새 H
 `mise run host:windows`에 포함하며 실제 작업 표시줄의 색상, 그룹 표시 또는
 Explorer 프로세스 재시작을 육안으로 검증하지 않는다.
 
+`api/notification.test.ts`는 알림 상태 조회와 Windows 설정 열기의 독립 권한,
+Zod 계약, SDK 컨텍스트와 취소, WinRT 실패 경계와 자원 정리를 검사한다.
+`lifecycle/windows-notification.test.ts`는 별도 프로세스에서 누락된 앱 등록 오류를 확인한다.
+등록된 조회는 격리된 프로세스에 UUID 시작 메뉴 바로가기와 process AppUserModelID를 설정한
+뒤 fixture 전용 popup 억제/15초 만료 알림으로 OS 상태를 초기화한다. 엄격한 WinRT projection
+getter와 FFI 값을 비교하며 고유 tag/group의 임시 알림은 finally에서 history 제거와 빈 상태를
+검사한다. 바로가기도 실패 때 정리한다. 실제 I/O Worker의 승인, 거부, 취소, opener STA 공존과
+종료도 확인한다. 공개 getStatus는 이런 알림을 보내거나 상태를 초기화하지 않는다.
+상태 조회 회귀는 `mise run host:windows`에도 포함한다. Windows 설정 열기 접수는
+폐기 가능한 데스크톱에서 `BUNAWAY_NOTIFICATION_SETTINGS_NATIVE=1`을 지정한 선택 검사다.
+기본 CI는 실제 설정 페이지 표시나 사용자 차단 상태 변경, toast 표시를 검증하지 않는다.
+[notification README](../plugins/notification/README.md)의 실행 명령과 남은 검증 범위를 따른다.
+
 `windows-initial-placement.fixture.ts`는 모니터 겹침이 바뀌는 `SetWindowPos`에서
 실제 창 프로시저에 `WM_DPICHANGED`를 전달한다. 초기 DPI 보정의 수렴, 중앙 좌표와
 content/outer 크기, DPI 순환 때 숨김 HWND 정리 및 생성 후 OS 권장 배치 처리를 검증한다.
@@ -573,6 +586,19 @@ DIB의 행 방향과 padding, alpha 및 잘못된 profile, mask, 크기를 확�
 명령 컨텍스트에서 같은 조회와 권한 거부를 검사한다. 두 네이티브 검사는
 `mise run host:windows`에 포함한다. CI의 디스플레이 구성에서 실행하며 실제 다중 물리
 모니터의 hotplug, 혼합 DPI와 회전 또는 사용자 커서 조작 검증을 대신하지 않는다.
+
+`api/power.test.ts`는 배터리의 0과 unknown, 배터리 없음, DWORD tick 순환,
+독립 blocker ID와 128개 상한, 부분 활성 실패 및 반복 정리를 검사한다.
+`power-cleanup.test.ts`는 실제 어댑터와 두 handle 소유자를 번들해 격리된 Win32 바인딩에서
+public 요청 해제와 활성 rollback 해제가 함께 실패해도 모든 handle을 재시도하고,
+미해제 handle이 있는 동안 DLL을 유지하며 두 단계의 오류를 보고하는지 검사한다.
+`cli/power.test.ts`는 isolated tarball 설치와 I/O 어댑터 발견, browser의 FFI 제외를 검사한다.
+`windows-power.test.ts`는 실제 GetSystemPowerStatus와 session idle query, PowerCreateRequest,
+system/display 활성 및 GetHandleInformation으로 명시 해제와 종료 시 handle 정리를 확인한다.
+`windows-power-worker.test.ts`는 빌드한 공개 power API에서 실제 I/O Worker까지 상태와 idle,
+독립 ID, 개별 권한 거부, 명시 해제와 종료 정리를 확인한다.
+`mise run host:windows`에 포함하며 물리 배터리 전환, 화면 꺼짐과 idle 절전 또는
+Modern Standby 및 사용자 절전 후 요청 종료의 하드웨어 검증을 대신하지 않는다.
 
 `appearance.test.ts`는 선호의 null, 색 형식과 개별 operation 권한, 호출 컨텍스트를 확인한다.
 CLI의 같은 이름 검사는 로컬 tarball의 isolated 설치, 네이티브 I/O 어댑터 발견과 browser

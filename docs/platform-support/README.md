@@ -26,6 +26,11 @@ macOS 창 없는 시작은 `UNSUPPORTED`이며 [Windows 실행 기록](../archit
 
 현재 저장, 로그, 기능 조회, opener와 clipboard 플러그인은 Windows만 지원한다. 창 플러그인의 기본 제어는 macOS에서도 지원한다. 아래 macOS 파일 저장과 네이티브 API 검증 기록은 이관 전 구현의 기록이다. Bun FFI 제품 경로의 명령, 이벤트와 정책, 복구, 종료 검증은 [새 기록](../architecture/macos-bun-results.md)에 둔다.
 
+Windows의 선택 [notification 플러그인](../../plugins/notification/README.md)은 unpackaged
+앱 ID의 WinRT 알림 설정 조회와 Windows 알림 설정 열기 요청을 제공한다.
+알림 표시와 toast activation은 아직 제공하지 않으며 기존 설치 바로가기 선택은 유지한다.
+설정 페이지 실제 표시와 사용자 차단 상태 변경은 기본 CI 검증 범위에 포함하지 않는다.
+
 기준일: 2026-10-10. “구현”은 출시 지원 보장이 아니다. 실제 OS, CPU와 테스트 범위를
 기록하며, 공통 TypeScript 검사의 성공을 네이티브 호스트 성공으로 확대하지 않는다.
 
@@ -132,6 +137,12 @@ Windows 창 플러그인은 모니터 열거, 주 모니터와 대상 창의 모
 [창 API](../site/src/content/docs/reference/host/windows.mdx#모니터와-커서)를 따르며
 실제 HWND와 WebView2 회귀는 Windows native CI에 포함한다.
 물리 다중 모니터의 hotplug, 혼합 DPI와 회전은 수동 검증으로 남긴다.
+
+Windows의 선택 power 플러그인은 AC와 배터리 상태, 호출 세션의 입력 idle 및
+앱 수명의 system/display power request를 제공한다. 다른 플랫폼은 `UNSUPPORTED`다.
+[power 계약](../site/src/content/docs/reference/plugins/power.mdx)을 따르며
+실제 상태 query와 request handle 정리는 Windows native CI에 포함한다.
+물리 배터리 전환, 화면 timeout, idle 절전과 Modern Standby 검증은 수동 작업이다.
 
 Windows의 선택 appearance 플러그인은 저장된 테마와 transparency 선호, DWM accent,
 시스템 색과 고대비, reduced motion 및 screen reader 설정 플래그를 조회한다.
