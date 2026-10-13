@@ -23,6 +23,12 @@ DevTools 옵션은 영속 등록에 포함하지 않는다.
 
 `win32-bindings.ts`는 DLL 함수 바인딩과 FFI 버퍼 보조 함수를 제공하고, `win32.ts`의
 `Windows`는 창 클래스, HWND, 아이콘, 전체 화면 상태와 메시지 처리를 소유한다.
+`taskbar-progress.ts`는 HWND별 작업 표시줄 버튼 준비와 마지막 성공 설정을 관리한다.
+등록한 `TaskbarButtonCreated` 메시지 이후에만 설정을 적용하며 버튼 재생성 때 복원한다.
+복원 실패는 진단으로 기록하며 이후 명시적 호출로 다시 적용할 수 있다.
+`taskbar.ts`는 최초 호출에 ITaskbarList3를 만들고 독립적인 COM 바인딩을 소유한다.
+WebView의 마지막 창 정리와 캐시 해제가 작업 표시줄 바인딩의 수명을 바꾸지 않는다.
+호스트 종료 때 STA 해제 전에 COM reference와 바인딩 및 DLL 핸들을 회수한다.
 `getBounds`는 content, outer와 일반 상태 복원용 normal 영역을 화면 물리 픽셀로 조회한다.
 normal의 WINDOWPLACEMENT 작업 영역 좌표는 화면 좌표로 보정한다. 전체화면 중 조회는
 저장된 placement를 복사해 현재 DPI와 크기 제약을 적용하며 복원 상태를 변경하지 않는다.
@@ -41,6 +47,14 @@ normal의 WINDOWPLACEMENT 작업 영역 좌표는 화면 좌표로 보정한다.
 ShowPrintUI를 호출한다. optional QueryInterface는 E_NOINTERFACE만 미지원으로 반환하며
 다른 HRESULT 실패는 기존 오류 경로를 유지한다. 현재 작업은 browser 또는 system UI의
 시작 요청만 제공하고 프린터 선택과 실제 제출, 인쇄 완료는 사용자와 브라우저가 소유한다.
+
+창 플러그인의 기본 WebView 제어는 `NativeWindow.webview`를 통해 같은 UI 스레드의
+controller와 WebView를 사용한다. 공개 URL 탐색도 기존 origin 검사와 NavigationStarting의
+세션 폐기를 유지한다. loading은 현재 탐색 ID의 시작 및 완료에서 갱신하며 다른 탐색의
+늦은 완료는 무시한다. history, reload와 stop은 ICoreWebView2의 기본 메서드,
+zoom은 ICoreWebView2Controller의 double ABI를 사용한다. COM 슬롯은
+고정 WebView2 SDK 1.0.4129.50의 WebView2.h를 따른다. DevTools 설정은 생성 시 호스트가
+선택하며 작업 호출이 설정을 변경하지 않는다.
 WebView audio는 ICoreWebView2_8의 IsMuted와 IsDocumentPlayingAudio를 같은 UI STA에서
 조회하고 음소거를 변경한다. 각 호출이 획득한 COM interface는 성공과 실패 모두에서
 해제한다. controller의 음소거는 문서 탐색을 유지하고 재생 상태는 물리 출력과 구분한다.

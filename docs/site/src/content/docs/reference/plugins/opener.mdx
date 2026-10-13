@@ -8,6 +8,8 @@ sidebar: { order: 5 }
 openUrl(url: string, options?: NativeInvokeOptions): Promise<null>
 openFile(path: string, options?: NativeInvokeOptions): Promise<null>
 revealFile(path: string, options?: NativeInvokeOptions): Promise<null>
+openFileWith(path: string, app: string, options?: NativeInvokeOptions): Promise<null>
+openUrlWith(url: string, app: string, options?: NativeInvokeOptions): Promise<null>
 ```
 
 `@bunaway/plugin-opener`를 설치하고 앱의 `plugins`에 `openerPlugin`을 등록합니다. 세 함수는 현재 Windows에서 제공됩니다.
@@ -83,7 +85,24 @@ await openUrl("https://example.com/도움말?q=검색어 입력");
 
 setup에서 호출할 때는 같은 작업 이름을 루트 `backend.permissions`에 둡니다. 파일별 접근 제한은 앱 명령에서 검사하고 화면에는 그 명령만 허용합니다. `opener.openUrl`은 파일 권한을 부여하지 않습니다.
 
-작업 권한은 유효한 파일 경로 전체에 적용하며 연결 앱의 동작을 격리하지 않습니다. 실행 파일과 셸 바로가기도 기본 동작으로 실행될 수 있으므로 앱 명령에서 신뢰하는 파일을 정합니다. 지정 앱 열기와 기본 연결 변경은 지원하지 않습니다.
+작업 권한은 유효한 파일 경로 전체에 적용하며 연결 앱의 동작을 격리하지 않습니다. 실행 파일과 셸 바로가기도 기본 동작으로 실행될 수 있으므로 앱 명령에서 신뢰하는 파일을 정합니다. 기본 연결 변경은 지원하지 않습니다.
+
+## 지정 앱으로 열기
+
+`openFileWith(path, app)`과 `openUrlWith(url, app)`은 지정한 Windows 실행 파일에 대상 하나를 전달합니다. `app`은 절대 `.exe` 경로여야 하며 위의 파일 경로, 실제 이름과 링크 검사 규칙을 따릅니다. 셸 명령, `.cmd`, `.bat`, `.lnk`, 별도 실행 인자는 받지 않습니다. 파일 대상은 `openFile`과 같은 검사를, URL은 `openUrl`과 같은 HTTP/HTTPS 검사를 받습니다.
+
+```ts
+import { openFileWith, openUrlWith } from "@bunaway/plugin-opener";
+
+await openFileWith("C:/Documents/한글 보고서.txt", "C:/Apps/editor.exe");
+await openUrlWith("https://example.com/도움말", "C:/Apps/browser.exe");
+```
+
+각각 `opener.openFileWith`, `opener.openUrlWith` 권한이 필요합니다. 화면에서 직접 호출하면 뷰의 `commands`에도 `plugin.opener.openFileWith`, `plugin.opener.openUrlWith`를 허용합니다. 기존 opener 권한은 두 작업을 허용하지 않습니다. 입력은 각각 `{ path, app }`, `{ url, app }`이고 결과는 `null`입니다.
+
+지정 앱 경로도 현재 호출자의 권한으로 검사합니다. 파일 작업은 앱과 대상의 핸들을 함께 유지하고, URL 작업은 앱의 핸들을 유지한 채 Explorer에 요청합니다. 대상은 Windows argv 규칙으로 인코딩한 단일 인자이므로 공백, 한글과 URL fragment의 따옴표를 보존합니다. 임의 실행 파일을 지정할 수 있는 권한이므로 앱 명령에서 허용할 실행 파일과 대상을 검사하세요. 지정 앱이 대상 인자를 어떻게 처리할지는 그 앱이 결정합니다.
+
+성공은 Explorer의 실행 요청 접수이며 지정 앱의 실행, 대상 표시나 읽기 완료를 보장하지 않습니다. 실행은 Explorer에 위임하므로 앱의 종료용 Job을 상속하지 않습니다. 기존 기본 연결은 변경하지 않으며, 이미 접수한 요청은 취소로 되돌리지 않습니다. 경로 검사와 동기 OS 오류는 아래의 공통 오류 계약을 따릅니다.
 
 화면 호출은 `signal`과 절대 시각 `deadline`을 `options`로 전달할 수 있습니다. 호출 취소와 기한은 [invoke](/reference/client/invoke/) 규칙을 따릅니다. 백엔드 호출은 현재 명령의 취소와 기한을 이어받으며 별도 `options`를 받지 않습니다.
 
