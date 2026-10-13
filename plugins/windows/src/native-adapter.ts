@@ -65,6 +65,16 @@ export function createOperations(
       return window.audio;
     };
     switch (call.operation) {
+      case "windows.showPrintUI":
+        if (!window.showPrintUI) {
+          throw new BunawayError({
+            code: "UNSUPPORTED",
+            message:
+              "WebView print dialogs are not implemented on this platform.",
+          });
+        }
+        window.showPrintUI(call.payload.kind ?? "browser");
+        break;
       case "windows.setDownloadRequestsEnabled":
         downloads().setRequestsEnabled(call.payload.enabled);
         break;

@@ -445,6 +445,17 @@ const conversionOutput = z.strictObject({
 
 /** Schemas for window operations, used to validate calls and their results. */
 export const windowOperations = {
+  "windows.showPrintUI": {
+    input: windowTarget.extend({
+      kind: z
+        .enum([
+          "browser",
+          "system",
+        ])
+        .exactOptional(),
+    }),
+    output: z.null(),
+  },
   "windows.setDownloadRequestsEnabled": {
     input: windowTarget.extend({
       enabled: z.boolean(),

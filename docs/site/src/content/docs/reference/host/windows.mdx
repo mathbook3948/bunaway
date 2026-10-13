@@ -130,6 +130,28 @@ macOS는 새 인스턴스 API, multiple과 isolated 선언을 `UNSUPPORTED`로 �
 
 ## 메서드
 
+### 인쇄 대화상자
+
+Windows의 `windows.showPrintUI({ view, windowId?, kind? })`는 현재 WebView 문서의
+인쇄 대화상자를 엽니다. kind는 기본값 `"browser"` 또는 `"system"`입니다.
+browser는 WebView2의 미리보기와 선택 UI, system은 OS 인쇄 선택 UI를 요청합니다.
+사용자가 프린터와 설정을 선택하고 인쇄를 실행합니다. 이 작업은 프린터를 지정하거나
+자동으로 인쇄하지 않으며 파일 경로, silent 옵션이나 PDF 내보내기 설정을 받지 않습니다.
+
+```ts
+await windows.showPrintUI({ view: "main" });
+await windows.showPrintUI({ view: "main", kind: "system" });
+```
+
+작업 권한은 `windows.showPrintUI`입니다. 화면 호출은 해당 뷰의 command 권한도
+요구합니다. 창과 windowId의 기존 대상 선택 및 접근 규칙을 사용합니다.
+반환값 null은 대화상자 요청이 받아들여졌다는 뜻이며 사용자의 선택, 취소 또는 인쇄
+완료를 뜻하지 않습니다. 이미 인쇄 대화상자가 열렸다면 WebView2가 기존 UI를 유지합니다.
+닫힌 창은 `INVALID_ARGUMENT`, WebView 생성 중에는 `BUSY`이며,
+인쇄 인터페이스가 없는 이전 WebView2 런타임과 다른 플랫폼은 `UNSUPPORTED`입니다.
+지원 여부는 설치된 WebView2의 인쇄 인터페이스를 조회해 확인합니다.
+인쇄 완료 이벤트, 프린터 목록, silent print와 PDF 내보내기는 아직 제공하지 않습니다.
+
 ### WebView 다운로드 승인과 수명
 
 Windows WebView 다운로드는 기본적으로 거부합니다. windowsPlugin을 등록하지 않은 앱에도

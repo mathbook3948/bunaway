@@ -192,6 +192,8 @@ export type WindowBounds = {
  * Native failures throw; the UI host converts them to bounded public errors.
  */
 export type NativeWindow = {
+  /** Requests a user-controlled browser or system print dialog; does not report print completion. */
+  showPrintUI?(kind: "browser" | "system"): void;
   /** Trusted-backend download approval and lifetime controls. Windows only. */
   downloads?: NativeDownloads;
   /** Single host-owned WebView controls. Absent on platforms without this service. */

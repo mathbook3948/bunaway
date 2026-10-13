@@ -561,6 +561,7 @@
       "type": "NativeWindow",
       "pages": {
         "reference/tooling/plugin-api": [
+          "showPrintUI",
           "downloads",
           "webview",
           "audio",
@@ -1062,6 +1063,7 @@
       "clipboard.writeFormats"
     ],
     "reference/host/windows": [
+      "windows.showPrintUI",
       "windows.setDownloadRequestsEnabled",
       "windows.getDownloads",
       "windows.approveDownload",
