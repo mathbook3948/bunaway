@@ -899,6 +899,14 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
           relations.setEnabled(id, enabled);
         },
         isEnabled: () => nativeWindows.isEnabled(hwnd),
+        setMinimizable: (minimizable) =>
+          nativeWindows.setMinimizable(hwnd, minimizable),
+        isMinimizable: () => nativeWindows.isMinimizable(hwnd),
+        setMaximizable: (maximizable) =>
+          nativeWindows.setMaximizable(hwnd, maximizable),
+        isMaximizable: () => nativeWindows.isMaximizable(hwnd),
+        setClosable: (closable) => nativeWindows.setClosable(hwnd, closable),
+        isClosable: () => nativeWindows.isClosable(hwnd),
         setTitle: (title) => nativeWindows.setTitle(hwnd, title),
         getTitle: () => nativeWindows.getTitle(hwnd),
         setResizable: (resizable) =>
@@ -1030,6 +1038,10 @@ function createWindow(
   const close = (force = false) => {
     const view = views.get(instanceKey);
     if (view && !view.boundary.closed) {
+      // Native caption and WebView-requested closes share user policy; renderer failure still retires resources.
+      if (!force && windows && !windows.isClosable(view.native.hwnd)) {
+        return;
+      }
       if (!force && hasPendingClose(view)) {
         return;
       }
