@@ -13,6 +13,19 @@ WebView2 문서에 browser 인쇄 UI를 요청하고 반복 요청 및 종료 �
 결과는 `build/windows-webview-print-ui-results.json`에 기록한다.
 system UI 사용자 선택과 물리 프린터 출력은 별도 검증이며 테스트가 인쇄 제출을 하지 않는다.
 
+`lifecycle/macos-webview-controls.test.ts`는 공개 작업 지원 목록, URL과 zoom 경계,
+생성 중과 닫힌 소유자의 거부를 검사한다. `lifecycle/macos-webview-controls.ts`는
+기존 `host:macos`에서 실제 compiled WKWebView와 백엔드 Worker의 공통 SDK를 실행한다.
+문서 상태, origin과 redirect 거부, 서브프레임 신원, history, reload, 느린 탐색 중단,
+문서 교체의 명령 취소와 fragment 세션 유지, 뷰별 zoom 및 닫기와 재생성을 검사한다.
+scheme과 hostname을 대문자로 작성한 자산 URL에서도 실제 문서와 SDK 연결을 확인한다.
+`pageshow`와 `pagehide`의 `persisted`, `isTrusted`를 SDK와 독립적으로 기록한다.
+실제 history cache 복원과 합성 persisted 이벤트의 reload 검사를 결과에서 구분한다.
+합성 검사는 실제 WKWebView에서 기존 SDK를 닫고 같은 history 항목의 새 문서와 SDK를 요구한다.
+신뢰된 persisted 이벤트가 없으면 실제 history cache 복원의 실행 근거로 사용하지 않는다.
+결과와 실패 로그는 macOS native CI artifact에 포함한다. macOS DevTools, 다운로드,
+창 readiness API와 출시 배포 서명은 이 검사의 범위가 아니다.
+
 `lifecycle/macos-log-capabilities.test.ts`는 생성한 macOS export와 실제 임시 파일로
 JSON 줄의 순서와 출처, 새 파일 권한, 반복 회전, 기록과 회전 실패 후 복구,
 입력과 작업 권한, 폐기 및 호스트가 정한 지원 목록을 검사한다.
@@ -384,7 +397,9 @@ macOS WebContent PID 조회와 종료는 `lifecycle/macos-renderer.ts`가 맡으
 다중 창, 저장, 메모 복원, 렌더러 복구, 정상/비정상 종료를 검증한다.
 모달 중 메인의 타이머, Promise, 네트워크와 초기화 중 닫기, 생성 실패, 파일 핸들 경계,
 이동한 독립 CLI 프로젝트도 포함한다. [실행 결과](../docs/architecture/windows-bun-results.md).
-모달 테스트는 진행 중인 HTTP 요청을 완료한 뒤 테스트 서버를 닫는다.
+모달 테스트는 실제 Win32 진입 알림부터 700ms 동안 타이머, Promise와 네트워크 진행을
+관찰한다. 진입 전에 취소 메시지를 예약하지 않으며 종료 시 남은 취소 타이머를 해제한다.
+진행 중인 HTTP 요청을 완료한 뒤 테스트 서버를 닫는다.
 독립 CLI 프로젝트는 테스트용 UI 명령 호출을 추가한 뒤 생성 앱의 타입 검사를 통과해야 빌드와 창 실행을 진행한다.
 공통 앱, 화면 데이터는 `tests/fixtures/desktop/host/`에서 Windows/macOS가 공유한다.
 예전 Windows C++ 호스트/probe와 전용 실행기, 테스트는 삭제했다.
