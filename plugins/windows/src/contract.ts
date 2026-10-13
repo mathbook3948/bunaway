@@ -443,6 +443,19 @@ export const windowOperations = {
     }),
     output: z.null(),
   },
+  "windows.getWebViewAudioState": {
+    input: windowTarget,
+    output: z.strictObject({
+      muted: z.boolean(),
+      playing: z.boolean(),
+    }),
+  },
+  "windows.setWebViewAudioMuted": {
+    input: windowTarget.extend({
+      muted: z.boolean(),
+    }),
+    output: z.null(),
+  },
   "windows.createInstance": {
     input: creationResult.input,
     output: windowIdentitySchema,
@@ -669,6 +682,7 @@ export const windowOperations = {
     }),
     output: z.null(),
   },
+  "windows.center": windowResult,
   "windows.setFullscreen": {
     input: z.strictObject({
       view: viewTarget.shape.view,

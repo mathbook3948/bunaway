@@ -98,6 +98,13 @@ WebView 전송은 close 메시지로 호스트에 종료를 알리며 호스트�
 해제 함수는 연결이 이미 닫혔으면 네트워크 호출 없이 완료한다.
 사용자 콜백의 예외로 다른 요청이나 transport 수신 루프를 중단하지 않는다.
 
+`client.once`와 직접 import한 `once`는 같은 listen 요청과 구독 등록을 사용한다.
+권한, 취소, 세션과 순서 검사를 그대로 적용하며 반환 Promise는 구독 승인을 기다린다.
+첫 유효 이벤트에서 콜백 실행 전에 로컬 구독과 취소 listener를 제거하고 원격 unlisten을 시작한다.
+승인과 이벤트를 연속 수신하거나 사용자 콜백이 재진입해도 한 번만 전달한다.
+반환한 해제 함수로 자동 원격 해제의 완료를 기다릴 수 있다. 자동 해제가 실패하면
+해당 구독의 onError에 오류를 전달하고 연결을 닫아 원격 자원을 정리한다.
+
 기능 조회는 @bunaway/plugin-capabilities의 capabilities()가 담당한다.
 화면은 plugin.capabilities.get 명령과 capabilities.get 권한을 허용해야 한다.
 기능 조회는 플랫폼 지원을 반환한다. OS 동의 상태 조회와 요청은 해당 기능 플러그인이 소유한다. 같은 capability 이름은 중복할 수 없다.

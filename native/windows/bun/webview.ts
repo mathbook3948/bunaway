@@ -772,6 +772,64 @@ export class WebView {
       release(printing);
     }
   }
+
+  /** Acquire the audio extension only for an open, initialized controller. */
+  private audioInterface() {
+    if (this.closing) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "WebView is closed.",
+      });
+    }
+    if (!this.webview) {
+      throw new BunawayError({
+        code: "BUSY",
+        message: "WebView is not ready.",
+      });
+    }
+    // ICoreWebView2_8, SDK 1.0.4129.50; required by the supported WebView2 runtime.
+    return query(this.webview, "e9632730-6e1e-43ab-b7b8-7b2c9e62e094");
+  }
+  /** Report actual browser playback independently of its controller's mute setting. */
+  getAudioState() {
+    const audio = this.audioInterface();
+    try {
+      const muted = new Int32Array(1);
+      const playing = new Int32Array(1);
+      hr(
+        method(audio, 83, [
+          "ptr",
+        ])(ptr(muted)),
+        "get_IsMuted",
+      );
+      hr(
+        method(audio, 87, [
+          "ptr",
+        ])(ptr(playing)),
+        "get_IsDocumentPlayingAudio",
+      );
+      return {
+        muted: muted[0] !== 0,
+        playing: playing[0] !== 0,
+      };
+    } finally {
+      release(audio);
+    }
+  }
+  /** Mute this controller without changing the document or its media permission policy. */
+  setAudioMuted(muted: boolean) {
+    const audio = this.audioInterface();
+    try {
+      hr(
+        method(audio, 84, [
+          "i32",
+        ])(muted ? 1 : 0),
+        "put_IsMuted",
+      );
+    } finally {
+      release(audio);
+    }
+  }
   source() {
     return this.webview ? getString(this.webview, 4) : "";
   }

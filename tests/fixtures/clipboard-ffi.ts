@@ -1,4 +1,5 @@
 import { ptr, toArrayBuffer } from "bun:ffi";
+
 export { ptr, toArrayBuffer };
 
 // Process-local Win32 replacement. Real native allocations are represented by
@@ -17,6 +18,12 @@ export const state = {
   format: true,
   data: initialData,
   allocations: new Map<number, Buffer>(),
+  formats: new Map<number, Buffer>(),
+  registered: new Map<string, number>(),
+  failAtAllocation: 0,
+  allocationCalls: 0,
+  failAtSet: 0,
+  setCalls: 0,
 };
 const succeeds = (name: string) => state.fail !== name;
 export function dlopen(name: string) {
@@ -62,33 +69,73 @@ export function dlopen(name: string) {
       }
       state.clears++;
       state.format = false;
+      state.formats.clear();
       return true;
     },
-    IsClipboardFormatAvailable() {
-      return state.format;
+    IsClipboardFormatAvailable(format: number) {
+      return format === 13 ? state.format : state.formats.has(format);
     },
-    GetClipboardData() {
-      return succeeds("get") ? ptr(state.data) : null;
+    GetClipboardData(format: number) {
+      const bytes = format === 13 ? state.data : state.formats.get(format);
+      return succeeds("get") && bytes ? ptr(bytes) : null;
     },
-    SetClipboardData(_format: number, handle: number) {
-      if (!succeeds("set")) {
+    SetClipboardData(format: number, handle: number) {
+      state.setCalls++;
+      if (!succeeds("set") || state.setCalls === state.failAtSet) {
         return null;
       }
       const data = state.allocations.get(handle);
       if (!data) {
         throw new Error("Unknown allocation");
       }
-      state.data = data;
+      if (format === 13) {
+        state.data = data;
+        state.format = true;
+      } else {
+        state.formats.set(format, data);
+      }
       state.allocations.delete(handle);
       state.transferred++;
-      state.format = true;
       return handle;
     },
-    GlobalSize() {
-      return state.data.byteLength;
+    RegisterClipboardFormatW(address: number) {
+      if (!succeeds("register")) {
+        return 0;
+      }
+      const bytes: number[] = [];
+      for (let offset = 0; ; offset += 2) {
+        const pair = new Uint8Array(toArrayBuffer(address, offset, 2));
+        if (pair[0] === 0 && pair[1] === 0) {
+          break;
+        }
+        bytes.push(pair[0] ?? 0, pair[1] ?? 0);
+      }
+      const key = Buffer.from(bytes).toString("utf16le");
+      const existing = state.registered.get(key);
+      if (existing !== undefined) {
+        return existing;
+      }
+      const format = 0xc000 + state.registered.size;
+      state.registered.set(key, format);
+      return format;
+    },
+    GlobalSize(handle: number) {
+      const bytes = [
+        ...state.formats.values(),
+        ...state.allocations.values(),
+        state.data,
+      ].find((value) => ptr(value) === handle);
+      if (!bytes) {
+        throw new Error("Unknown borrowed handle");
+      }
+      return bytes.byteLength;
     },
     GlobalAlloc(_flags: number, size: number) {
-      if (!succeeds("alloc")) {
+      state.allocationCalls++;
+      if (
+        !succeeds("alloc") ||
+        state.allocationCalls === state.failAtAllocation
+      ) {
         return null;
       }
       const data = Buffer.alloc(size);

@@ -29,6 +29,16 @@ export function createOperations(
     viewId: string,
   ): JsonValue | Promise<JsonValue> {
     const window = services.window(viewId);
+    const audio = () => {
+      if (!window.audio) {
+        throw new BunawayError({
+          code: "UNSUPPORTED",
+          message:
+            "WebView audio controls are not implemented on this platform.",
+        });
+      }
+      return window.audio;
+    };
     switch (call.operation) {
       case "windows.showPrintUI":
         if (!window.showPrintUI) {
@@ -39,6 +49,13 @@ export function createOperations(
           });
         }
         window.showPrintUI(call.payload.kind ?? "browser");
+        break;
+      case "windows.getWebViewAudioState":
+        return {
+          ...audio().getState(),
+        };
+      case "windows.setWebViewAudioMuted":
+        audio().setMuted(call.payload.muted);
         break;
       case "windows.getReadiness":
         return {
@@ -406,6 +423,21 @@ export function createOperations(
           });
         }
         window.setPosition(call.payload.x, call.payload.y);
+        break;
+      case "windows.center":
+        if (window.isFullscreen()) {
+          throw new BunawayError({
+            code: "INVALID_ARGUMENT",
+            message: "Exit fullscreen before centering the window.",
+          });
+        }
+        if (!window.center) {
+          throw new BunawayError({
+            code: "UNSUPPORTED",
+            message: "Window centering is not implemented on this platform.",
+          });
+        }
+        window.center();
         break;
       case "windows.setFullscreen":
         window.setFullscreen(call.payload.fullscreen);
