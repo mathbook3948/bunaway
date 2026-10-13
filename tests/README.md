@@ -145,6 +145,11 @@ Old.exe에서 New.exe로 바꾸는 업데이트의 OpenWith 삭제를 거부하�
 새 제거 프로그램이 이전 파일과 현재 파일을 정리하는지 검사한다. dummy EXE의 파일 잠금을
 소유한 검사 프로세스를 Restart Manager가 닫지 않도록 이 설치 fixture만 `CloseApplications=no`로
 실행한다. 별도 제거 회귀는 다른 폴더의 이전 파일과 junction을 통해 접근하는 이전 파일을 보존한다.
+세 이름 회귀는 Old.exe 삭제를 막아 New.exe 업데이트를 실패시킨 뒤 Third.exe 업데이트가 파일과
+이전 설치 데이터를 쓰기 전에 종료 코드 7로 거부되는지 확인한다. 잠금을 닫아도 거부를 유지하고,
+New.exe로 복구한 뒤에만 Third.exe 변경을 허용한다. 같은 New.exe로 설치 폴더만 바꾸는 경우도
+복구 전에는 거부한다. 복구 대신 제거한 경우에도 이전 파일이 남지
+않는지 확인한다. 기존 두 이름 복구와 제거 회귀도 유지한다.
 
 `windows-initial-placement.fixture.ts`는 모니터 겹침이 바뀌는 `SetWindowPos`에서
 실제 창 프로시저에 `WM_DPICHANGED`를 전달한다. 초기 DPI 보정의 수렴, 중앙 좌표와

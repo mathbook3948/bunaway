@@ -422,8 +422,14 @@ async function createNativeAssociationFixture(compiler: string) {
     executable: string,
     config: ChannelConfig["associations"],
     tasks?: string,
-    failure?: "collision" | "write" | "cleanup" | "payload-cleanup",
+    failure?:
+      | "collision"
+      | "write"
+      | "cleanup"
+      | "payload-cleanup"
+      | "pending-owner",
     fault?: "icon" | "mapping",
+    destination = installDir,
   ) {
     const staging = join(root, version);
     const payload = join(staging, "app");
@@ -435,7 +441,7 @@ async function createNativeAssociationFixture(compiler: string) {
     await Bun.write(join(payload, executable), "installer payload fixture");
     const iss = join(staging, "setup.iss");
     let rendered = script(identifier, payload, output, executable, config);
-    if (failure === "payload-cleanup") {
+    if (failure === "payload-cleanup" || failure === "pending-owner") {
       // The dummy EXE cannot run. Keep Restart Manager from closing the test
       // process that owns the deliberate no-delete-sharing handle.
       rendered = rendered.replace(
@@ -479,7 +485,7 @@ async function createNativeAssociationFixture(compiler: string) {
       [
         join(output, "setup.exe"),
         ...silent,
-        `/DIR=${installDir}`,
+        `/DIR=${destination}`,
         `/LOG=${logPath}`,
         ...(tasks !== undefined
           ? [
@@ -500,18 +506,20 @@ async function createNativeAssociationFixture(compiler: string) {
     const log = await Bun.file(logPath).text();
     if (failure) {
       expect(exitCode).not.toBe(0);
-      if (failure !== "collision") {
+      if (failure === "pending-owner") {
+        // PrepareToInstall rejects the rename before payload and previous-data writes.
+        expect(exitCode).toBe(7);
+      } else if (failure !== "collision") {
         expect(exitCode).toBe(1);
       }
-      expect(log).toContain(
-        failure === "collision"
-          ? "App association is owned by a different command"
-          : failure === "cleanup"
-            ? "Could not remove app association value"
-            : failure === "payload-cleanup"
-              ? "Could not remove previous app executable"
-              : "Could not register app association",
-      );
+      const failureMessages = {
+        collision: "App association is owned by a different command",
+        write: "Could not register app association",
+        cleanup: "Could not remove app association value",
+        "payload-cleanup": "Could not remove previous app executable",
+        "pending-owner": "Complete the previous executable cleanup",
+      };
+      expect(log).toContain(failureMessages[failure]);
     } else if (exitCode !== 0) {
       throw new Error(
         `Installer failed (${exitCode}): ${stdout} ${stderr}\n${log}`,
@@ -980,6 +988,136 @@ test.skipIf(!iscc)(
         expect(await Bun.file(join(installDir, "New.exe")).exists()).toBe(
           false,
         );
+        expect(await query(associationRoot, "Executable")).toBe("MISSING");
+      }
+    } finally {
+      await cleanup();
+    }
+  },
+  120000,
+);
+
+test.skipIf(!iscc)(
+  "native unresolved predecessor rejects a third executable before installing payload",
+  async () => {
+    if (!iscc) {
+      throw new Error("ISCC is required.");
+    }
+    const fixture = await createNativeAssociationFixture(iscc);
+    const {
+      installDir,
+      declarations,
+      associationRoot,
+      previousDataKey,
+      fileProgId,
+      query,
+      install,
+      uninstall,
+      cleanup,
+    } = fixture;
+    const oldExecutable = join(installDir, "Old.exe");
+    const newExecutable = join(installDir, "New.exe");
+    const thirdExecutable = join(installDir, "Third.exe");
+    async function rejectThird(version: string) {
+      await install(
+        version,
+        "Third.exe",
+        declarations,
+        "fileassociations,urlschemes",
+        "pending-owner",
+      );
+      expect(await Bun.file(thirdExecutable).exists()).toBe(false);
+      expect(await Bun.file(oldExecutable).exists()).toBe(true);
+      expect(await Bun.file(newExecutable).exists()).toBe(true);
+      expect(await query(associationRoot, "Executable")).toBe(newExecutable);
+      expect(
+        await query(`Software\\Classes\\${fileProgId}\\shell\\open\\command`),
+      ).toBe(`"${newExecutable}" "%1"`);
+      expect(
+        await query(previousDataKey, "Inno Setup CodeFile: ExecutableName"),
+      ).toBe("New.exe");
+      expect(
+        await query(
+          previousDataKey,
+          "Inno Setup CodeFile: PendingAssociationOwner",
+        ),
+      ).toBe(oldExecutable);
+    }
+    try {
+      for (const outcome of [
+        "retry",
+        "uninstall",
+      ] as const) {
+        await install(
+          `three-old-${outcome}`,
+          "Old.exe",
+          declarations,
+          "fileassociations,urlschemes",
+        );
+        const release = await preventFileDeletion(oldExecutable);
+        try {
+          await install(
+            `three-new-${outcome}`,
+            "New.exe",
+            declarations,
+            "fileassociations,urlschemes",
+            "payload-cleanup",
+          );
+          await rejectThird(`three-third-${outcome}-locked`);
+        } finally {
+          release();
+        }
+        // Releasing the lock alone does not reconcile persisted ownership.
+        await rejectThird(`three-third-${outcome}-released`);
+        const otherDirectory = join(dirname(installDir), `other-${outcome}`);
+        await install(
+          `three-directory-${outcome}`,
+          "New.exe",
+          declarations,
+          "fileassociations,urlschemes",
+          "pending-owner",
+          undefined,
+          otherDirectory,
+        );
+        expect(await Bun.file(join(otherDirectory, "New.exe")).exists()).toBe(
+          false,
+        );
+        expect(
+          await query(
+            previousDataKey,
+            "Inno Setup CodeFile: PendingAssociationOwner",
+          ),
+        ).toBe(oldExecutable);
+        if (outcome === "retry") {
+          await install(
+            "three-new-recovered",
+            "New.exe",
+            declarations,
+            "fileassociations,urlschemes",
+          );
+          expect(await Bun.file(oldExecutable).exists()).toBe(false);
+          expect(
+            await query(
+              previousDataKey,
+              "Inno Setup CodeFile: PendingAssociationOwner",
+            ),
+          ).toBe("");
+          await install(
+            "three-third-allowed",
+            "Third.exe",
+            declarations,
+            "fileassociations,urlschemes",
+          );
+          expect(await Bun.file(newExecutable).exists()).toBe(false);
+          expect(await Bun.file(thirdExecutable).exists()).toBe(true);
+          expect(await query(associationRoot, "Executable")).toBe(
+            thirdExecutable,
+          );
+        }
+        await uninstall();
+        expect(await Bun.file(oldExecutable).exists()).toBe(false);
+        expect(await Bun.file(newExecutable).exists()).toBe(false);
+        expect(await Bun.file(thirdExecutable).exists()).toBe(false);
         expect(await query(associationRoot, "Executable")).toBe("MISSING");
       }
     } finally {
