@@ -31,6 +31,7 @@ try {
     ...[
       "run",
       "inspect",
+      "resourceState",
       "snapshot",
       "unsupported",
       "denied",
@@ -57,6 +58,7 @@ try {
           permissions: [
             "probe.run",
             "probe.inspect",
+            "probe.resourceState",
             "probe.snapshot",
             "probe.unsupported",
             "windows.recreate",
@@ -104,6 +106,7 @@ try {
           supportedOperations: [
             "probe.run",
             "probe.inspect",
+            "probe.resourceState",
             "probe.snapshot",
             "probe.denied",
           ],

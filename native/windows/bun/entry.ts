@@ -214,7 +214,13 @@ export async function runWindowsApp(
         throw new Error("Unexpected I/O reply");
       }
       const call = calls.get(packet.requestId);
-      if (!call || call.context !== packet.context || stopping) {
+      if (!call || call.context !== packet.context) {
+        return;
+      }
+      if (stopping) {
+        // Inbox cleanup may still be pending. Abort before acknowledging a
+        // dropped I/O result so its undelivered resources remain cancellable.
+        call.abort();
         return;
       }
       if (packet.kind === "authorize-input") {
@@ -271,6 +277,12 @@ export async function runWindowsApp(
   function cancelCalls(context?: HostContext) {
     for (const [id, call] of calls) {
       if (context !== undefined && call.context !== context) {
+        continue;
+      }
+      if (context === undefined) {
+        // Shutdown must notify both native Workers before Core hooks can wait
+        // for their abort handlers; rejecting the backend promise alone is insufficient.
+        call.abort();
         continue;
       }
       takeCall(id)?.reject(
