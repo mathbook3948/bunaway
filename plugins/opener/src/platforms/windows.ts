@@ -6,6 +6,7 @@ import { normalizeApplicationPath, normalizeFilePath } from "../path.ts";
 import { createShell } from "../shell.ts";
 import { normalizeUrl } from "../url.ts";
 import { createFiles } from "../windows-file.ts";
+import { trashWindowsFile, validateTrashDrive } from "../windows-trash.ts";
 
 const COINIT_APARTMENTTHREADED = 0x2;
 
@@ -90,6 +91,13 @@ export function createOperations(
         shell.open(normalizeUrl(payload.url));
       } else {
         const path = normalizeFilePath(payload.path);
+        if (name === "opener.trashFile") {
+          validateTrashDrive(path);
+          files.withTrashFile(path, (verifyIdentity) =>
+            trashWindowsFile(path, verifyIdentity),
+          );
+          return null;
+        }
         files.withFile(path, () => {
           if (name === "opener.openFile") {
             shell.open(path);

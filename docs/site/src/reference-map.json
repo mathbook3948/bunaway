@@ -336,6 +336,7 @@
           "revealFile",
           "openFileWith",
           "openUrlWith",
+          "trashFile",
           "openerPlugin"
         ]
       }
@@ -1042,7 +1043,8 @@
       "opener.openFile",
       "opener.revealFile",
       "opener.openFileWith",
-      "opener.openUrlWith"
+      "opener.openUrlWith",
+      "opener.trashFile"
     ],
     "reference/plugins/safe-storage": [
       "safe-storage.isAvailable",
