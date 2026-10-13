@@ -222,6 +222,30 @@ test("navigation and disabling cancel pending approvals without cancelling backe
   f.downloads.dispose();
 });
 
+test("an interrupted transfer retains cancellation authority across a native automatic retry", () => {
+  const f = fixture();
+  f.downloads.setRequestsEnabled(true);
+  const active = resource();
+  const id = f.offer(active);
+  if (!id) {
+    throw new Error("Missing request");
+  }
+  f.downloads.approve(id);
+  active.state.state = "interrupted";
+  active.state.canResume = false;
+  expect(f.downloads.list()[0]?.state).toBe("interrupted");
+  expect(active.disposed).toBe(0);
+  expect(() => f.downloads.forget(id)).toThrow();
+  active.state.state = "inProgress";
+  active.state.receivedBytes = 50;
+  expect(f.downloads.list()[0]?.receivedBytes).toBe(50);
+  f.downloads.cancel(id);
+  expect(active.cancelled).toBe(1);
+  expect(active.disposed).toBe(1);
+  f.downloads.forget(id);
+  f.downloads.dispose();
+});
+
 test("bounded retention denies overflow and terminal removal releases capacity", () => {
   const f = fixture();
   f.downloads.setRequestsEnabled(true);

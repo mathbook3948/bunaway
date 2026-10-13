@@ -170,8 +170,9 @@ pending 항목은 30초 뒤, 새 문서 탐색 또는 요청 수집 비활성화
 
 WebView마다 pending, 활성, 종료된 기록을 합해 최대 32개를 유지합니다.
 상한을 채우면 새 요청은 즉시 거부합니다. 종료된 항목을 forgetDownload로 지우면
-슬롯을 다시 사용할 수 있습니다. 활성 또는 재개 가능한 항목의 forget은 `BUSY`이며
-먼저 취소해야 합니다. 없는 ID와 더 이상 pending이 아닌 ID의 승인은 `INVALID_ARGUMENT`입니다.
+슬롯을 다시 사용할 수 있습니다. 완료나 명시적 취소 전의 항목은 forget이 `BUSY`이며
+먼저 취소해야 합니다. WebView2가 중단된 다운로드를 자동 재개할 수 있어 현재 canResume이
+false여도 참조를 유지합니다. 없는 ID와 더 이상 pending이 아닌 ID의 승인은 `INVALID_ARGUMENT`입니다.
 재개할 수 없는 항목의 resume은 `BUSY`입니다. cancel은 반복해도 안전하며 완료된 항목은
 완료 상태를 유지합니다. 진행률과 완료, 실패는 현재 snapshot 조회로 확인합니다.
 별도 이벤트, 속도 계산, 재시작 뒤 중단 파일 복원과 업로드는 아직 제공하지 않습니다.

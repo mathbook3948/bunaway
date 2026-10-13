@@ -223,15 +223,10 @@ export class Downloads implements NativeDownloads {
   forget(id: string): void {
     const entry = this.requireEntry(id);
     this.refresh(entry);
-    if (
-      entry.resource &&
-      (entry.pending ||
-        entry.snapshot.state === "inProgress" ||
-        entry.snapshot.canResume)
-    ) {
+    if (entry.resource) {
       throw new BunawayError({
         code: "BUSY",
-        message: "Cancel an active or resumable download before forgetting it.",
+        message: "Cancel an unfinished download before forgetting it.",
       });
     }
     this.retire(entry);
@@ -293,10 +288,8 @@ export class Downloads implements NativeDownloads {
       id: entry.snapshot.id,
       paused: entry.snapshot.paused,
     };
-    if (
-      entry.snapshot.state === "completed" ||
-      (entry.snapshot.state === "interrupted" && !entry.snapshot.canResume)
-    ) {
+    // WebView2 can automatically retry interruptions. Keep authority until completion or cancel.
+    if (entry.snapshot.state === "completed") {
       this.retire(entry);
     }
   }
