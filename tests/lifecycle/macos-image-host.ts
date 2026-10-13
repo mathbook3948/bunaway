@@ -44,14 +44,15 @@ export default defineApp({ modules: [], plugins: [imagePlugin, windowsPlugin, {
   }
 }], commands: {
   "test.created": { input: { const: null }, output: { type: "string" }, async run(_input, context) {
-    const marker = Bun.file(${JSON.stringify(markerPath)});
+    const markerPath = ${JSON.stringify(markerPath)};
     const deadline = Date.now() + 10000;
-    while (!await marker.exists()) {
+    // A BunFile caches a missing file, so each poll must observe a fresh handle.
+    while (!await Bun.file(markerPath).exists()) {
       if (context.signal.aborted) throw new Error("Cancelled creation probe.");
       if (Date.now() > deadline) throw new Error("Image creation did not reach the held result boundary.");
       await Bun.sleep(5);
     }
-    return (await marker.json()).id;
+    return (await Bun.file(markerPath).json()).id;
   } },
   "test.complete": { input: { const: null }, output: { const: null }, async run() {
     await Bun.write(process.env.TMPDIR + "/report.json", JSON.stringify({ ok: true, permissionDenied: true, setup: true, cancellation: true }));

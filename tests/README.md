@@ -689,7 +689,9 @@ entitlement로 ad-hoc 서명한 compiled fixture를 실행하고 `build/macos-im
 
 `lifecycle/macos-image-host.ts`는 actual compiled 호스트와 WKWebView 명령에서 공개
 backend SDK의 image I/O 호출과 setup, codec, crop/resize, 동일 ID의 작업별 뷰 권한,
-해제 및 정상 종료를 검사한다.
+해제 및 정상 종료를 검사한다. 실제 image 어댑터가 ID를 할당한 뒤 I/O Worker를 동기적으로
+지연시켜, 결과 전달 전 취소가 미전달 ID를 해제하는지 확인한다. 할당 marker는
+매 poll마다 새 `Bun.file()`로 확인해 파일 생성 전의 부재 상태를 재사용하지 않는다.
 `build/macos-image-host-results.json`을 기록하며 성공을 요구한다. `run-native.ts`의
 macOS 실행에 포함하며 실제 contextual I/O dispatch를 사용한다. Native codec CI와
 이 호스트 검증을 구분한다.
