@@ -130,6 +130,84 @@ macOS는 새 인스턴스 API, multiple과 isolated 선언을 `UNSUPPORTED`로 �
 
 ## 메서드
 
+### WebView 다운로드 승인과 수명
+
+Windows WebView 다운로드는 기본적으로 거부합니다. windowsPlugin을 등록하지 않은 앱에도
+같은 기본값을 적용합니다. 신뢰된 backend setup은 `windows.setDownloadRequestsEnabled`
+작업 권한으로 `{ view, windowId?, enabled: true }`를 호출해 요청 수집을 시작합니다.
+수집은 승인과 다릅니다. 각 항목은 명시적으로 승인하기 전까지 파일을 만들지 않습니다.
+화면에서 호출한 앱 명령도 view 컨텍스트이므로 다운로드 API를 직접 사용할 수 없습니다.
+화면 정책에 작업을 허용해도 모든 다운로드 작업은 `PERMISSION_DENIED`입니다.
+
+| 메서드 | 추가 입력 | 결과 |
+| --- | --- | --- |
+| `windows.setDownloadRequestsEnabled` | `enabled: boolean` | 요청 수집 변경 뒤 `null` |
+| `windows.getDownloads` | 없음 | 현재 WebView 수명의 다운로드 snapshot 배열 |
+| `windows.approveDownload` | `id: string` | 해당 pending 항목 승인 뒤 `null` |
+| `windows.cancelDownload` | `id: string` | pending 거부 또는 활성 다운로드 취소 뒤 `null` |
+| `windows.pauseDownload` | `id: string` | 활성 다운로드 pause 요청 뒤 `null` |
+| `windows.resumeDownload` | `id: string` | 재개 가능한 다운로드 resume 요청 뒤 `null` |
+| `windows.forgetDownload` | `id: string` | 종료된 기록과 네이티브 참조 정리 뒤 `null` |
+
+모든 작업은 별도 `windows.<작업>` 권한과 backend 출처를 요구합니다.
+대상 선택과 닫힌 창, multiple 뷰의 windowId 규칙은 다른 창 작업과 같습니다.
+macOS와 다른 플랫폼은 이 서비스를 제공하지 않으며 `UNSUPPORTED`입니다.
+
+getDownloads는 `{ id, url, mimeType, contentDisposition, path, totalBytes, receivedBytes,
+state, interruptReason, canResume, paused }`를 반환합니다. id는 해당 WebView 수명에만
+유효한 불투명 UUID입니다. URL은 최종 다운로드 URI이며 redirect chain이나 frame별
+initiator 정보가 아닙니다. path는 파일명을 포함한 WebView2의 기본 저장 경로입니다.
+byte 수가 없거나 JavaScript 안전 정수 범위를 넘으면 해당 수치는 null입니다.
+state는 `pending`, `inProgress`, `interrupted`, `completed`, `cancelled` 중 하나입니다.
+interrupted의 interruptReason은 WebView2의 네이티브 코드이며 그 외에는 null입니다.
+
+```ts
+// backend setup에서 설정한 권한과 앱의 자체 승인 규칙으로 실행합니다.
+await windows.setDownloadRequestsEnabled({ view: "main", enabled: true });
+const items = await windows.getDownloads({ view: "main" });
+for (const item of items) {
+  if (item.state === "pending") {
+    // 실제 앱은 URL, MIME, 저장 경로와 사용자 선택을 검사한 뒤 한 항목만 승인합니다.
+    await windows.cancelDownload({ view: "main", id: item.id });
+  }
+}
+```
+
+앱은 setup에서 소유한 비동기 작업으로 상태를 조회하고 사용자 선택이나 접근 규칙을
+검사해 항목별로 승인하거나 거부합니다. API는 앱의 승인 규칙을 대신 정하지 않습니다.
+승인은 WebView2가 선택한 기본 저장 경로와 기본 다운로드 UI를 사용합니다.
+호출자가 path를 전달할 수 없으며 임의 경로, 파일 덮어쓰기 규칙과 저장 대화상자는
+별도 파일 접근 계약이 필요합니다. 승인 뒤 취소는 이미 기록한 파일의 롤백을 보장하지 않습니다.
+
+요청의 문서 origin과 다운로드 URI는 모두 대상 뷰의 기존 HTTP/HTTPS origin 안에
+있어야 합니다. blob/data URI를 추가로 허용하지 않습니다. popup과 redirect, 리소스 및
+OS 권한의 기존 검사는 유지합니다.
+multiple-automatic-downloads 권한도 계속 거부하므로 같은 페이지에서 반복한 자동 다운로드는
+승인 큐에 들어오기 전에 브라우저가 차단할 수 있습니다. 이 권한의 중재는 별도 후속 작업입니다.
+다운로드를 시작하는 최상위 탐색에도 기존 세션 폐기 계약을 적용합니다. 문서 교체가 없어도
+SDK 연결이 종료될 수 있으므로 화면은 클라이언트를 다시 초기화해야 할 수 있습니다.
+pending 항목은 30초 뒤, 새 문서 탐색 또는 요청 수집 비활성화 시 거부합니다.
+백엔드가 승인한 다운로드는 문서 탐색 뒤에도 같은 창 수명에
+속하며 창 종료와 재생성에서는 취소하고 참조를 정리합니다.
+
+WebView마다 pending, 활성, 종료된 기록을 합해 최대 32개를 유지합니다.
+상한을 채우면 새 요청은 즉시 거부합니다. 종료된 항목을 forgetDownload로 지우면
+슬롯을 다시 사용할 수 있습니다. 완료나 명시적 취소 전의 항목은 forget이 `BUSY`이며
+먼저 취소해야 합니다. WebView2가 중단된 다운로드를 자동 재개할 수 있어 현재 canResume이
+false여도 참조를 유지합니다. 없는 ID와 더 이상 pending이 아닌 ID의 승인은 `INVALID_ARGUMENT`입니다.
+재개할 수 없는 항목의 resume은 `BUSY`입니다. cancel은 반복해도 안전하며 완료된 항목은
+완료 상태를 유지합니다. 진행률과 완료, 실패는 현재 snapshot 조회로 확인합니다.
+별도 이벤트, 속도 계산, 재시작 뒤 중단 파일 복원과 업로드는 아직 제공하지 않습니다.
+
+다운로드 metadata의 URL, MIME, Content-Disposition과 경로는 JSON 인코딩 후 합계 64 KiB까지
+허용합니다. 이스케이프 문자와 UTF-8 크기도 포함합니다. 전체 retained snapshot은 항목별
+상태와 숫자의 최대 크기를 예약해 512 KiB 이내로 제한하며, 만료되거나 취소된 항목도
+`forgetDownload` 전까지 예산을 사용합니다. 초과하는 시작 요청은 승인 핸들을 만들기 전에
+거부합니다. 승인 뒤 metadata가 초과하면 조회는 `INTERNAL`이고 마지막 안전한 snapshot을
+유지합니다. `cancelDownload`는 metadata 읽기와 독립적으로 취소하며 네이티브 Cancel 실패는
+항목을 보존해 재시도할 수 있습니다. `paused`는 현재 interrupted 상태의 USER_PAUSED reason에서
+조회하므로 브라우저 UI로 재개해도 최신 상태를 반영합니다.
+
 ### WebView 기본 제어
 
 Windows의 각 창은 WebView 하나를 소유합니다. 아래 작업도 `{ view, windowId? }`로
@@ -177,6 +255,13 @@ WebView2의 동작을 따르므로 현재 값은 다시 조회합니다.
 openDevTools는 작업 권한과 호스트의 개발 모드 설정이 모두 필요합니다.
 프로덕션 호스트는 작업 권한이 있어도 `PERMISSION_DENIED`입니다.
 DevTools 닫기, 열림 상태와 이벤트, dock 설정은 아직 제공하지 않습니다.
+
+창 종료의 native Cancel 실패는 해당 소유자의 참조를 보존하고 UI pump가 50 ms 간격으로
+35초까지 재시도합니다. 다른 창의 메시지와 정리는 계속 처리합니다. 기한이 끝나면
+닫힌 소유자의 native 정리를 보류하고 `download-cleanup-timeout` 진단을 남깁니다.
+관찰한 broker 종료나 앱 종료에서 다시 안전하게 정리하며, 공유 broker를 종료해 정상
+창을 닫거나 실패한 cleanup을 완료로 처리하지 않습니다. 취소된 snapshot의 interruptReason은
+null이며 네이티브 USER_CANCELED reason을 interrupted 상태처럼 유지하지 않습니다.
 
 ### 부모, 모달과 신뢰된 종료
 
@@ -715,6 +800,7 @@ await windows.unmaximize({ view: "editor" });
 추가합니다. 설치와 플러그인 등록만으로 권한이 생기지 않습니다.
 
 payload는 `{ windowId, viewId, revision, state, bounds, changes }`입니다.
+`windowEvents["windows.changed"]`는 `moved`, `resized`를 포함하는 공개 payload schema입니다.
 `windowId`는 네이티브 창 인스턴스마다 새로 발급하는 불투명 식별자이고,
 `viewId`는 설정과 정책의 뷰 ID입니다. HWND를 공개하지 않습니다.
 envelope의 `source`는 `"native"`, `target`은 수신 뷰 ID입니다.
@@ -742,6 +828,8 @@ bounds를 반환합니다. 논리 좌표가 필요하면 기존 변환 API를 �
 | `enterFullscreen`, `leaveFullscreen` | 호스트 전체화면 상태 진입과 해제 |
 | `move` | outer bounds의 x 또는 y 변경 |
 | `resize` | outer bounds의 width, height 또는 DPI 변경 |
+| `moved` | 네이티브 사용자 이동/크기 조절 루프 종료. 시작보다 최종 outer x 또는 y 변경 |
+| `resized` | 같은 루프 종료. 시작보다 최종 outer width, height 또는 DPI 변경 |
 
 API 호출과 사용자 조작은 같은 네이티브 관찰 경로를 사용합니다. 이벤트는 요청의
 시작이 아니라 Windows가 반영한 상태를 알립니다. OS가 포커스 요청을 거부하고
@@ -750,8 +838,12 @@ API 호출과 사용자 조작은 같은 네이티브 관찰 경로를 사용합
 스타일과 placement 중간 상태는 보류하고 전환이 끝난 snapshot을 발행합니다.
 명령 완료 응답과 이벤트 수신의 상대 순서는 보장하지 않습니다.
 
-연속 move/resize는 관찰한 변경마다 FIFO로 전달합니다. debounce, 최종 moved/resized
-이벤트와 손실 없는 OS 입력 이력은 제공하지 않습니다. Windows가 메시지를 합치면
+연속 move/resize는 관찰한 변경마다 FIFO로 전달합니다. Windows의 `WM_ENTERSIZEMOVE`와
+`WM_EXITSIZEMOVE` 사이를 사용자 조작 하나로 추적하며 종료 때 실제 시작/최종 geometry가
+달라진 축의 `moved`, `resized`를 순서대로 전달합니다. 이 최종 알림은 마지막 중간 관찰과
+같은 bounds여도 새 revision을 사용합니다. 이동을 시작했지만 최종 geometry가 시작과 같으면
+최종 알림이 없으며 반복 종료 메시지도 중복 발행하지 않습니다. 루프 밖의 geometry API에는
+기존 move/resize만 발행합니다. debounce와 손실 없는 OS 입력 이력은 제공하지 않습니다. Windows가 메시지를 합치면
 그 중간 좌표까지 복원할 수는 없습니다. 구독별 wire sequence는 1부터 증가하며
 그 구독에서만 의미가 있습니다. `revision`은 창별 관찰 순번이고 재생성하면 0부터
 다시 시작합니다. 여러 changes를 포함한 한 snapshot에는 revision 하나를 사용합니다.

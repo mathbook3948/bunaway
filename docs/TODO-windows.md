@@ -223,7 +223,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] created, ready, closed, destroyed 이벤트를 제공한다.
 - [x] `windows.changed`로 실제 전경 창 상태의 focus와 blur 전환을 제공한다.
 - [x] move와 resize 전환에 현재 outer bounds와 DPI를 함께 제공한다.
-- [ ] 연속 이동과 크기 변경이 끝난 moved와 resized 이벤트를 제공한다.
+- [x] Windows의 네이티브 이동과 크기 조절 루프가 끝나면 `windows.changed`에 `moved`, `resized`를 제공한다. 시작과 최종 geometry의 실제 차이를 판정하고 최종 bounds와 별도 revision을 전달한다.
 - [ ] will-move와 will-resize의 취소 가능 여부를 정의한다.
 - [x] minimize, maximize, unmaximize와 restore 전환을 제공한다.
 - [x] enterFullscreen과 leaveFullscreen 전환을 제공한다.
@@ -626,10 +626,12 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 우선순위 P2. 소유자: WebView 연동은 렌더러 API, 독립 전송과 캡처는 플러그인 후보.
 출처: [E-download], [E-contents], [E-capture], [T-webview-rust], [T-upload].
 
-- [ ] WebView 다운로드의 시작 승인, 거부와 저장 경로 선택을 제공한다.
-- [ ] 다운로드 URL, redirect chain, filename, MIME과 initiator를 조회한다.
-- [ ] total/received bytes, 속도, 진행률과 완료와 실패 이벤트를 제공한다.
-- [ ] pause, resume, cancel과 재개 가능 여부를 제공한다.
+- [x] 신뢰된 backend의 항목별 WebView 다운로드 시작 승인과 거부를 제공한다. 기본 거부, origin 검사, 30초 승인 기한과 창 수명별 자원 정리를 유지한다.
+- [ ] WebView 다운로드의 사용자 지정 저장 경로와 저장 대화상자를 제공한다. WebView2의 경로 기반 쓰기와 덮어쓰기 동작에 맞는 파일 접근 계약이 필요하다. 현재 승인은 브라우저의 기본 경로만 사용한다.
+- [x] `getDownloads`로 URL, MIME, Content-Disposition, 파일명을 포함한 기본 저장 경로, total/received bytes, 상태와 interrupt reason을 조회한다.
+- [ ] redirect chain과 frame별 initiator를 조회한다.
+- [ ] 속도, 진행률과 완료와 실패 이벤트를 제공한다. 현재 진행 및 종료 상태는 snapshot 조회로 확인한다.
+- [x] `pauseDownload`, `resumeDownload`, `cancelDownload`와 `getDownloads`로 pause, resume, cancel과 재개 가능 여부를 제공한다.
 - [ ] 중단 다운로드의 metadata 저장과 재개를 제공한다.
 - [ ] 파일 업로드와 다운로드에 progress, 취소, timeout을 제공한다.
 - [ ] 프린터 목록과 기본 프린터를 조회한다.
@@ -661,7 +663,10 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   [exists 계약](./site/src/content/docs/reference/host/storage-exists.mdx)과
   [stat 계약](./site/src/content/docs/reference/host/storage-stat.mdx)을 따른다.
 - [ ] 파일과 디렉터리의 OS 권한 및 ACL 조회 범위와 공개 계약을 정의한다.
-- [ ] 디렉터리 목록, 재귀 목록과 생성, 삭제를 제공한다.
+- [x] Windows의 직접 자식 목록, 선택적인 상위 디렉터리 생성과 파일 및 빈 디렉터리 삭제를 제공한다.
+  검사한 핸들의 bounded enumeration과 삭제, 링크 미추적 및 거부, 작업별 권한을
+  [디렉터리 계약](./site/src/content/docs/reference/host/storage-directories.mdx)에 정의한다.
+- [ ] 재귀 목록, 큰 목록 pagination과 재귀 삭제를 제공한다.
 - [ ] 파일 크기 조회와 별도로 디렉터리 재귀 용량을 바이트 단위로 계산한다. [T-fs-live]의 `size`를 참고한다.
   링크 처리, 접근 거부와 탐색 중 변경의 오류 규칙, 큰 트리의 취소와 비용을 정의한다.
   빈 디렉터리, 중첩 파일 합계, 링크, 부분 실패와 취소 시 자원 정리를 검증한다.
@@ -704,10 +709,18 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 - [x] CPU, 메모리와 프로세스 사용량, PID와 translation 상태 조회를 제공한다.
   `os.usage`는 논리 CPU 개수, 현재 프로세스의 누적 CPU 시간, 메모리 bytes와
   `IsWow64Process2` 결과를 반환한다. CPU 백분율과 임의 PID의 조회는 포함하지 않는다.
-- [ ] 앱의 origin과 URL 접근 규칙을 적용한 HTTP 요청과 응답을 제공한다.
-- [ ] HTTP header, body, redirect, proxy와 OS 인증의 지원 범위를 정의한다.
+- [x] 앱의 origin과 URL 접근 규칙을 적용한 HTTP 요청과 응답을 제공한다.
+  뷰의 작업 권한과 앱 명령의 URL origin 검사를 구분한다. `network.request`는 임의 Origin
+  header를 받지 않고 redirect를 반환하므로 새 대상은 앱이 다시 검사한다.
+  [network 계약](./site/src/content/docs/reference/plugins/network.mdx)의 앱 명령 예제를 따른다.
+- [x] HTTP header, body, redirect, proxy와 OS 인증의 지원 범위를 정의한다.
+  선택 `network.request`는 제한된 header와 base64 body를 제공하고 redirect를 따라가지 않는다.
+  proxy는 Bun의 신뢰된 실행 환경 설정만 사용하며 OS 인증과 WebView cookie 공유는 제공하지 않는다.
 - [ ] HTTP stream, timeout, 취소와 progress를 제공한다.
+  `network.request`의 제한된 응답, timeout과 호출 취소는 구현했다. 공개 stream과 progress는 남아 있다.
 - [ ] WebSocket 연결, 메시지, close, 상태와 backpressure를 공개 계약으로 제공한다.
+  `network.exchange`는 호출 하나에 종속된 제한된 text 송신과 text/binary 수신, close와 send buffer
+  상한을 제공한다. 장기 연결 handle, 독립 send/receive와 상태 이벤트의 세션 소유권은 남아 있다.
 - [x] 앱이 실행 파일과 인자를 검사하는 command 실행을 제공한다.
   선택 `process.run`의 실행 파일과 전체 argv는 앱 명령이 검사한다. 절대 local `.exe`
   경로만 실행하며 PATH, batch 파일과 호출자 env/cwd 설정을 받지 않는다.
@@ -726,7 +739,10 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
   `parseArgs`와 앱의 Zod schema로 검사한다. help와 오류는 결과이며 실행과 종료를 제어하지 않는다.
 - [ ] utility process의 독립 실행과 양방향 메시지, 종료와 오류 이벤트를 제공한다.
 - [ ] localhost 자산 서버는 선택 기능으로 지원 여부를 결정한다. 기본 통신 경로는 기존 로컬 자산과 브리지다.
-- [ ] HTTP client-request와 incoming-message의 stream 기능을 Bun 대체 API에 매핑한다.
+- [x] HTTP client-request와 incoming-message의 stream 기능을 Bun 대체 API에 매핑한다.
+  신뢰된 backend는 `fetch`, `RequestInit.body`, `Response`와 `Response.body`를 사용한다.
+  [network 계약](./site/src/content/docs/reference/plugins/network.mdx)의 대응 표와 stream 예제를 따른다.
+  정책 중재 stream은 위의 stream/progress 작업에 남겨 둔다.
 
 ## 21. 암호화 저장과 시스템 인증
 

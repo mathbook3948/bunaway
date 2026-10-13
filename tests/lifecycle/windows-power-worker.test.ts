@@ -1,0 +1,253 @@
+import { expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { resolve } from "node:path";
+import { Worker } from "node:worker_threads";
+import { type CommandContext, command } from "@bunaway/backend";
+import { bindHostAPI } from "@bunaway/core";
+import { power, powerPlugin } from "@bunaway/plugin-power";
+import {
+  type HostContext,
+  type HostResponse,
+  NativeRegistry,
+} from "@bunaway/protocol";
+import { Channel } from "#native/windows/bun/channel";
+import { bundleIOPluginFixture } from "../fixtures/native-worker.ts";
+
+const WORKER_TIMEOUT_MS = 10000;
+
+test.skipIf(process.platform !== "win32")(
+  "compiled public power API crosses the real I/O worker and obeys operation grants",
+  async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "bunaway-power-worker-"));
+    const runtime = {
+      id: "power-worker",
+      generation: crypto.randomUUID(),
+    };
+    const registration = {
+      name: powerPlugin.name,
+      version: powerPlugin.version,
+      native: powerPlugin.native,
+    };
+    const registry = new NativeRegistry([
+      registration,
+    ]);
+    let policy = {
+      permissions: [
+        "power.getStatus",
+      ],
+    };
+    const contextId = crypto.randomUUID() as HostContext;
+    const pending = new Map<string, (response: HostResponse) => void>();
+    let worker: Worker | undefined;
+    let channel: Channel | undefined;
+    let ready = false;
+    let cleaned = false;
+    let failure: unknown;
+    try {
+      const assets = resolve(root, "worker");
+      await bundleIOPluginFixture(
+        assets,
+        [
+          {
+            ...registration,
+            execution: "io",
+          },
+        ],
+        `import { powerPlugin } from ${JSON.stringify(resolve(import.meta.dir, "../../plugins/power/dist/native/windows.js"))};
+export const pluginImports = { power: { operations: async () => ({ createOperations: powerPlugin.nativePlatforms.windows.create }) } };`,
+      );
+      worker = new Worker(resolve(assets, "host-operations.js"), {
+        workerData: {
+          runtime,
+          dataRoot: root,
+          assets,
+          plugins: [
+            registration,
+          ],
+        },
+      });
+      const exited = new Promise<number>((done) => worker?.once("exit", done));
+      worker.once("error", (error) => {
+        failure = error;
+      });
+      const connection = new Channel(
+        worker,
+        runtime,
+        "main-io",
+        (packet) => {
+          if (packet.kind === "ready") {
+            ready = true;
+          } else if (packet.kind === "authorize-input") {
+            connection.notify({
+              kind: "input-authorized",
+              requestId: packet.requestId,
+              context: packet.context,
+              allowed: registry.allowed(policy, packet.call),
+            });
+          } else if (packet.kind === "prepare") {
+            connection.notify({
+              kind: "grant",
+              requestId: packet.requestId,
+              context: packet.context,
+              allowed: registry.allowed(policy, packet.call),
+            });
+          } else if (packet.kind === "host-response") {
+            const settle = pending.get(packet.requestId);
+            pending.delete(packet.requestId);
+            settle?.(packet.response);
+          } else if (packet.kind === "cleaned") {
+            cleaned = true;
+          } else {
+            throw new Error(`Unexpected power worker packet: ${packet.kind}`);
+          }
+        },
+        (error) => {
+          failure = error;
+        },
+      );
+      channel = connection;
+      const deadline = Date.now() + WORKER_TIMEOUT_MS;
+      while (!ready) {
+        if (failure) {
+          throw failure;
+        }
+        if (Date.now() >= deadline) {
+          throw new Error("Power worker startup timed out.");
+        }
+        await Bun.sleep(1);
+      }
+      const controller = new AbortController();
+      const context: CommandContext = {
+        signal: controller.signal,
+        host: bindHostAPI(
+          contextId,
+          controller.signal,
+          async (_context, call) => {
+            const requestId = crypto.randomUUID();
+            let timeout: ReturnType<typeof setTimeout> | undefined;
+            const response = new Promise<HostResponse>((done, reject) => {
+              pending.set(requestId, done);
+              timeout = setTimeout(
+                () => reject(new Error("Power worker response timed out.")),
+                WORKER_TIMEOUT_MS,
+              );
+            });
+            try {
+              await connection.send({
+                kind: "operation",
+                requestId,
+                context: contextId,
+                source: "backend",
+                call,
+              });
+              return await response;
+            } finally {
+              clearTimeout(timeout);
+              pending.delete(requestId);
+            }
+          },
+          registry,
+        ),
+        state: {
+          get: () => undefined,
+          set() {},
+          delete: () => false,
+        },
+        events: {
+          async emit() {},
+        },
+      };
+      const exercise = command({
+        input: {
+          const: null,
+        },
+        output: {
+          const: null,
+        },
+        async handle() {
+          expect((await power.getStatus()).source).toMatch(
+            /^(ac|battery|unknown)$/,
+          );
+          await expect(
+            power.startBlocker({
+              type: "system",
+              reason: "denied",
+            }),
+          ).rejects.toMatchObject({
+            code: "PERMISSION_DENIED",
+          });
+          policy = {
+            permissions: powerPlugin.native.operations.map(
+              (operation) => operation.name,
+            ),
+          };
+          expect(await power.listBlockers()).toEqual([]);
+          expect(await power.getIdleTime()).toBeGreaterThanOrEqual(0);
+          expect([
+            "active",
+            "idle",
+          ]).toContain(
+            await power.getIdleState({
+              thresholdSeconds: 1,
+            }),
+          );
+          const first = await power.startBlocker({
+            type: "system",
+            reason: "public worker",
+          });
+          const second = await power.startBlocker({
+            type: "system",
+            reason: "public worker",
+          });
+          expect(first.id).not.toBe(second.id);
+          expect(
+            await power.isBlockerActive({
+              id: first.id,
+            }),
+          ).toBe(true);
+          expect(
+            await power.stopBlocker({
+              id: first.id,
+            }),
+          ).toBe(true);
+          expect(
+            await power.stopBlocker({
+              id: first.id,
+            }),
+          ).toBe(false);
+          expect(await power.listBlockers()).toEqual([
+            second,
+          ]);
+          const display = await power.startBlocker({
+            type: "display",
+            reason: "display worker",
+          });
+          expect(
+            await power.stopBlocker({
+              id: display.id,
+            }),
+          ).toBe(true);
+          // Leave the second owned request for the production worker's shutdown cleanup.
+          return null;
+        },
+      });
+      await exercise.run(null, context);
+      await connection.send({
+        kind: "shutdown",
+      });
+      expect(await exited).toBe(0);
+      expect(cleaned).toBe(true);
+      expect(failure).toBeUndefined();
+      expect(pending.size).toBe(0);
+    } finally {
+      await worker?.terminate();
+      channel?.close();
+      await rm(root, {
+        recursive: true,
+        force: true,
+      });
+    }
+  },
+  20000,
+);

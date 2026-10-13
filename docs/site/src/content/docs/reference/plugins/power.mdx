@@ -56,8 +56,10 @@ ID는 UUID이며 native handle이 아닙니다. 조회와 stop 권한은 별도�
 블로커 조회는 앱의 등록 상태를 나타냅니다. OS가 실제로 절전을 막고 있는지 보장하지 않습니다.
 사용자가 선택한 절전과 전원 정책은 유지되며 Modern Standby의 배터리 정책으로 요청이
 종료될 수도 있습니다. OS가 요청 count를 종료해도 stop은 handle을 정리합니다.
-앱 종료와 어댑터 dispose는 모든 handle 해제를 시도합니다. 실패한 handle은 다음 정리
-시도까지 보유합니다. 프로세스 종료에서는 OS가 남은 프로세스 자원을 회수합니다.
+앱 종료와 어댑터 dispose는 모든 handle 해제를 시도합니다. public ID가 있는 요청의 해제가
+실패해도 부분 활성화에서 남은 handle 정리를 함께 시도합니다. 실패를 모아 보고하고 실패한
+handle은 다음 정리 시도까지 보유합니다. 남은 handle이 있으면 DLL을 닫지 않습니다.
+프로세스 종료에서는 OS가 남은 프로세스 자원을 회수합니다.
 
 권한 거부는 `PERMISSION_DENIED`, 잘못된 입력은 `INVALID_ARGUMENT`, OS 조회와 요청
 생성 또는 정리 실패는 `INTERNAL`입니다. 닫힌 호출 컨텍스트와 종료 후 호출은 `CANCELLED`입니다.

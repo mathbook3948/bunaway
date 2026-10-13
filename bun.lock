@@ -19,6 +19,7 @@
         "@bunaway/plugin-clipboard": "workspace:*",
         "@bunaway/plugin-image": "workspace:*",
         "@bunaway/plugin-log": "workspace:*",
+        "@bunaway/plugin-network": "workspace:*",
         "@bunaway/plugin-opener": "workspace:*",
         "@bunaway/plugin-os": "workspace:*",
         "@bunaway/plugin-power": "workspace:*",
@@ -194,6 +195,20 @@
       "name": "@bunaway/plugin-log",
       "version": "0.0.0",
       "dependencies": {
+        "zod": "4.6.5",
+      },
+      "devDependencies": {
+        "@bunaway/plugin": "workspace:*",
+      },
+      "peerDependencies": {
+        "@bunaway/plugin": "0.0.0",
+      },
+    },
+    "plugins/network": {
+      "name": "@bunaway/plugin-network",
+      "version": "0.0.0",
+      "dependencies": {
+        "@bunaway/protocol": "workspace:*",
         "zod": "4.6.5",
       },
       "devDependencies": {
@@ -424,6 +439,8 @@
     "@bunaway/plugin-image": ["@bunaway/plugin-image@workspace:plugins/image"],
 
     "@bunaway/plugin-log": ["@bunaway/plugin-log@workspace:plugins/log"],
+
+    "@bunaway/plugin-network": ["@bunaway/plugin-network@workspace:plugins/network"],
 
     "@bunaway/plugin-opener": ["@bunaway/plugin-opener@workspace:plugins/opener"],
 

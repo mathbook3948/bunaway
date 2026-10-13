@@ -66,9 +66,22 @@ export function createOperations(
     },
     dispose() {
       disposed = true;
-      // Retain live DLL bindings after failure so the host can retry releasing handles.
-      blockers.dispose();
-      native.dispose();
+      const errors: unknown[] = [];
+      try {
+        blockers.dispose();
+      } catch (error) {
+        errors.push(error);
+      }
+      try {
+        // Also retry handles retained by failed activation without a public blocker ID.
+        // The native owner keeps DLLs loaded while any request handle remains open.
+        native.dispose();
+      } catch (error) {
+        errors.push(error);
+      }
+      if (errors.length) {
+        throw new AggregateError(errors, "Power adapter cleanup failed.");
+      }
     },
   };
 }
