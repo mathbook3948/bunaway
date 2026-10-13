@@ -679,7 +679,18 @@ test.skipIf(process.platform !== "win32")(
       nativePhase = "exit-constrained-fullscreen";
       native.setFullscreen(hwnd, false);
       verifyShowState("after-exit-constrained-fullscreen", SW_SHOW, false);
-      expect(native.getBounds(hwnd, "outer")).toEqual(fullscreenNormal);
+      try {
+        expect(native.getBounds(hwnd, "outer")).toEqual(fullscreenNormal);
+      } catch (error) {
+        console.error(
+          "Constrained fullscreen bounds mismatch",
+          JSON.stringify({
+            expected: fullscreenNormal,
+            stateCheckpoints,
+          }),
+        );
+        throw error;
+      }
       expect(user.symbols.IsWindowVisible(hwnd)).toBe(0);
       expect(
         await invoke("windows.getContentSize", {
