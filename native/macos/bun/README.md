@@ -8,9 +8,15 @@ AppKit는 메인 스레드에서 실행하고 앱 정의는 같은 프로세스�
 실행한다. UI 스레드는 5ms마다 비차단 CoreFoundation 이벤트와 최대 64개의
 AppKit 이벤트를 처리하고 Bun 이벤트 루프에 제어를 돌려준다. Worker 연결은
 Windows와 같은 검증, 수신 확인, 용량 제한을 사용한다.
+등록한 `execution: "io"` 어댑터는 별도 I/O Worker에서 초기화하고 실행한다.
+메인 스레드는 파싱 전과 실행 직전의 정책과 살아 있는 문서를 확인한다.
+취소와 문서 폐기는 큐와 대기 중 파서를 해제하고 늦은 응답을 버린다.
+이미 시작한 동기 I/O의 부수 효과는 되돌리지 않는다. 기능 지원 목록은 등록 계약과
+패키지의 해당 플랫폼 작업 목록을 사용하며 지원과 정책 허용을 구분한다.
 UI 초기화가 실패해도 백엔드에 종료를 요청하고 플러그인 정리와 Worker 종료를 기다린다.
 시작 중 종료하면 대기 중인 Host API 호출을 `CANCELLED`로 끝내고, 완료된 setup의 정리 훅을 실행한다.
-UI 이벤트 처리 여부와 관계없이 종료 요청부터 5초가 지나면 Worker를 강제 종료한다.
+코어 정리 훅 뒤에 I/O 어댑터를 폐기하고 두 Worker의 실제 종료를 기다린다.
+UI 이벤트 처리 여부와 관계없이 종료 요청부터 5초가 지나면 두 Worker를 강제 종료한다.
 호스트는 전용 프로세스 그룹과 시스템 `/bin/sh` 감시 프로세스로 하위 프로세스를 소유한다.
 플러그인 정리 후 남은 하위 프로세스를 종료하고, 호스트가 강제 종료되면 pipe EOF로
 그룹 전체를 정리한다. `unref()`는 그룹에서 분리하지 않으므로 같은 정리 대상이다.
@@ -45,7 +51,8 @@ opener 어댑터는 지원하지 않는다.
 ## 파일별 책임
 
 `boot.ts`는 실행 인자를 읽고, `config.ts`는 패키지 설정과 정책을 검증한다.
-`entry.ts`는 UI, Host API와 백엔드 Worker의 시작과 종료를 조정하고, `backend.ts`는 앱과 코어를 실행한다.
+`entry.ts`는 UI, Host API와 백엔드 및 I/O Worker의 시작과 종료를 조정하고, `backend.ts`는 앱과 코어를 실행한다.
+`host-operations.ts`는 Windows와 공유하는 `native/host-api/bun/io-worker.ts`의 큐와 어댑터 수명을 사용한다.
 `windows.ts`는 창별 세션 경계와 지연 생성, 재생성 및 개별 정리를 소유한다.
 `process-group.ts`는 하위 프로세스의 종료와 호스트 비정상 종료 감시를 소유한다.
 `application.ts`는 앱 delegate와 모든 창이 공유하는 이벤트 루프를 소유한다.
@@ -71,3 +78,10 @@ Xcode CLT와 C 컴파일러는 필요하지 않다. 독립 POSIX 프로세스 pr
 
 현재 결과와 제약은 [Bun FFI 실행 기록](../../../docs/architecture/macos-bun-results.md)과
 [지원 표](../../../docs/platform-support/README.md)를 따른다.
+
+I/O 기반 회귀 `tests/lifecycle/macos-io-host.ts`는 실제 compiled WKWebView 앱에서
+백엔드 setup과 웹 호출의 출처, 정책 거부, 기능 지원 목록, 동기 작업 중 UI 왕복,
+입력 파싱 취소와 문서 폐기, 초기화 실패 및 종료 기한을 검사한다.
+`run-native.ts`에서 실행하며 CI는 `build/macos-io-results.json`을 보관한다.
+개별 image, clipboard, storage, log/capabilities와 opener 어댑터와 그 fixture의
+통합은 별도 PR에서 검증한다. 이 기반 변경만으로 해당 기능의 지원을 선언하지 않는다.

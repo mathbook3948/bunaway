@@ -1332,3 +1332,126 @@ test.each([
   },
   25000,
 );
+
+test.each([
+  "initialization",
+  "cleanup",
+] as const)(
+  "macOS I/O %s failure remains owned by host shutdown",
+  async (phase) => {
+    const directory = await mkdtemp(
+      resolve(tmpdir(), "bunaway-macos-io-failure-"),
+    );
+    try {
+      const operations = resolve(directory, "operations.ts");
+      const native = {
+        operations: [
+          {
+            name: "failure.run",
+          },
+        ],
+      };
+      const plugins: InstalledPlugin[] = [
+        {
+          name: "failure",
+          version: "1",
+          native,
+          packageName: "fixture-failure",
+          root: directory,
+          targets: {
+            macos: {
+              execution: "io",
+              operations,
+            },
+          },
+        },
+      ];
+      const cleaned = resolve(directory, "core-cleaned");
+      const disposing = resolve(directory, "io-disposing");
+      await Bun.write(
+        operations,
+        `
+        import { isMainThread } from "node:worker_threads";
+        import { existsSync, writeFileSync } from "node:fs";
+        export default {nativePlatforms:{macos:{create() {
+          if (isMainThread) throw new Error("Wrong adapter owner");
+          ${phase === "initialization" ? 'throw new Error("Fixture I/O initialization failed");' : ""}
+          return {execute(){return null}, dispose(){
+            if (!existsSync(${JSON.stringify(cleaned)})) throw new Error("Core cleanup order failed");
+            writeFileSync(${JSON.stringify(disposing)}, "started");
+            while(true) {}
+          }};
+        }}}};
+      `,
+      );
+      const app = resolve(directory, "app.ts");
+      await Bun.write(
+        app,
+        `export default {commands:{},events:{},plugins:[
+        {name:"failure",version:"1",native:${JSON.stringify(native)}},
+        {name:"setup",version:"1",setup(){return ()=>Bun.write(${JSON.stringify(cleaned)},"done");}}
+      ]};`,
+      );
+      await bundleMacosHost(
+        resolve(import.meta.dir, "../../native/macos/bun"),
+        directory,
+        app,
+        undefined,
+        false,
+        plugins,
+      );
+      await bundleTestHost(directory, plugins);
+      await Bun.write(
+        resolve(directory, "webview.ts"),
+        `export class MacosWebview {
+        ready = Promise.resolve();
+        constructor(config,hooks){this.hooks=hooks;}
+        start(){this.hooks.close();}
+        close(){}
+      }`,
+      );
+      await Bun.write(
+        resolve(directory, "run.ts"),
+        `import {runMacosApp} from "./entry.js";
+        try{await runMacosApp(${JSON.stringify(workerConfig(directory))});}
+        catch(error){console.error(error);process.exitCode=1;}
+      `,
+      );
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          resolve(directory, "run.ts"),
+        ],
+        {
+          stdout: "ignore",
+          stderr: "pipe",
+          timeout: 15_000,
+        },
+      );
+      const errors = new Response(child.stderr).text();
+      expect(await child.exited, await errors).toBe(1);
+      expect(await Bun.file(cleaned).exists()).toBe(phase === "cleanup");
+      expect(await Bun.file(disposing).exists()).toBe(phase === "cleanup");
+      const records = (
+        await Bun.file(resolve(directory, "logs/host.log")).text()
+      )
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
+      expect(records.at(-1)).toMatchObject({
+        event: "host-stopped",
+        failed: true,
+        forced: phase === "cleanup",
+      });
+      if (phase === "initialization") {
+        expect(await errors).toContain("Fixture I/O initialization failed");
+      }
+    } finally {
+      await rm(directory, {
+        recursive: true,
+        force: true,
+      });
+    }
+  },
+  20_000,
+);
