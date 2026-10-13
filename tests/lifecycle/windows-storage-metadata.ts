@@ -56,6 +56,10 @@ const policy: Policy = {
       commands: [
         "plugin.storage.exists",
         "plugin.storage.stat",
+        "plugin.storage.readBytes",
+        "plugin.storage.writeBytes",
+        "plugin.storage.appendBytes",
+        "plugin.storage.appendText",
         "test.report",
         "test.report-confirmed",
       ],
@@ -65,6 +69,10 @@ const policy: Policy = {
           ...[
             "storage.exists",
             "storage.stat",
+            "storage.readBytes",
+            "storage.writeBytes",
+            "storage.appendBytes",
+            "storage.appendText",
           ],
         ],
       },
@@ -75,6 +83,10 @@ const policy: Policy = {
       ...[
         "storage.exists",
         "storage.stat",
+        "storage.readBytes",
+        "storage.writeBytes",
+        "storage.appendBytes",
+        "storage.appendText",
       ],
     ],
   },
@@ -192,6 +204,9 @@ if (!process.argv.includes("--child")) {
       assert.equal(report.directory.kind, "directory");
       assert.equal(report.directory.sizeBytes, null);
       assert.equal(report.missing, null);
+      assert.equal(report.bytes, "AP+A");
+      assert.equal(report.appended, Buffer.from("한글🙂").toString("base64"));
+      assert.equal(report.deniedTextReplacement, true);
       assert.deepEqual(report.outside, [
         false,
         null,

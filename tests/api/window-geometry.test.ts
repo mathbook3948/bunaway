@@ -116,7 +116,10 @@ test("window geometry helpers preserve context, shapes, DPI and default units", 
             dpi: 144,
           };
         }
-        if (call.operation.startsWith("windows.set")) {
+        if (
+          call.operation.startsWith("windows.set") ||
+          call.operation === "windows.center"
+        ) {
           payload = null;
         }
         return {
@@ -166,6 +169,11 @@ test("window geometry helpers preserve context, shapes, DPI and default units", 
           y: 20,
         },
       });
+      expect(
+        await windows.center({
+          view: "main",
+        }),
+      ).toBeNull();
       for (const { name, geometry } of setters) {
         switch (name) {
           case "setContentPosition":
@@ -205,7 +213,7 @@ test("window geometry helpers preserve context, shapes, DPI and default units", 
       return null;
     },
   }).run(null, context);
-  expect(calls).toBe(13);
+  expect(calls).toBe(14);
 });
 
 test("geometry schemas reject malformed shapes and out of range inputs and outputs", () => {
@@ -392,6 +400,7 @@ test("geometry adapter selects the area, converts at current DPI, and enforces o
     geometry: JsonValue;
   }[] = [];
   const areas: string[] = [];
+  let centerCalls = 0;
   const services: NativeWindowServices = {
     specs: [
       {
@@ -459,6 +468,9 @@ test("geometry adapter selects the area, converts at current DPI, and enforces o
       setSizeConstraints() {},
       setSize() {},
       setPosition() {},
+      center() {
+        centerCalls++;
+      },
       setGeometry(area, geometry) {
         applied.push({
           area,
@@ -486,6 +498,76 @@ test("geometry adapter selects the area, converts at current DPI, and enforces o
       ],
     },
   };
+  expect(
+    await execute(
+      "windows.center",
+      {
+        view: "main",
+      },
+      "backend",
+      context,
+    ),
+  ).toBeNull();
+  expect(centerCalls).toBe(1);
+  for (const state of [
+    "fullscreen",
+    "closed",
+    "cancelled",
+    "stopping",
+  ] as const) {
+    fullscreen = state === "fullscreen";
+    closed = state === "closed";
+    cancelled = state === "cancelled";
+    stopping = state === "stopping";
+    await expect(
+      execute(
+        "windows.center",
+        {
+          view: "main",
+        },
+        "backend",
+        context,
+      ),
+    ).rejects.toMatchObject({
+      code:
+        state === "cancelled" || state === "stopping"
+          ? "CANCELLED"
+          : "INVALID_ARGUMENT",
+    });
+  }
+  fullscreen = closed = cancelled = stopping = false;
+  await expect(
+    execute(
+      "windows.center",
+      {
+        view: "main",
+      },
+      "backend",
+      {
+        ...context,
+        permissions: {
+          permissions: [
+            "windows.setPosition",
+          ],
+        },
+      },
+    ),
+  ).rejects.toMatchObject({
+    code: "PERMISSION_DENIED",
+  });
+  await expect(
+    execute(
+      "windows.center",
+      {
+        view: "missing",
+      },
+      "backend",
+      context,
+    ),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  expect(centerCalls).toBe(1);
   for (const { name, geometry } of setters) {
     const operation = `windows.${name}`;
     const payload = {
@@ -773,4 +855,47 @@ test("geometry adapter selects the area, converts at current DPI, and enforces o
     });
     closed = false;
   }
+});
+
+test("centering accepts only authenticated window targets and null results", () => {
+  expect(
+    validateWindowCall({
+      operation: "windows.center",
+      payload: {
+        view: "main",
+        windowId: "window-1",
+      },
+    }).payload,
+  ).toEqual({
+    view: "main",
+    windowId: "window-1",
+  });
+  for (const payload of [
+    null,
+    {},
+    {
+      view: "",
+    },
+    {
+      view: "main",
+      monitor: "primary",
+    },
+    {
+      view: "main",
+      x: 1,
+    },
+    {
+      view: "main",
+      windowId: 1,
+    },
+  ]) {
+    expect(() =>
+      validateWindowCall({
+        operation: "windows.center",
+        payload,
+      }),
+    ).toThrow();
+  }
+  expect(validateWindowOutput("windows.center", null)).toBeNull();
+  expect(() => validateWindowOutput("windows.center", true)).toThrow();
 });

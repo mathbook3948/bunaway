@@ -258,6 +258,91 @@ async function main(): Promise<void> {
       assert.equal(call("storage.readText", temporaryPath("bom.txt")), text);
     }
 
+    // Byte access preserves invalid UTF-8 and embedded zeroes, including replacement tails.
+    const binaryPath = temporaryPath("한글/binary.bin");
+    const rawBytes = Buffer.from(
+      Array.from(
+        {
+          length: 256,
+        },
+        (_, index) => index,
+      ),
+    );
+    const binary = (operation: string, bytes?: Buffer) =>
+      storage.execute(
+        operation,
+        bytes === undefined
+          ? {
+              path: binaryPath,
+            }
+          : {
+              path: binaryPath,
+              bytes: bytes.toString("base64"),
+            },
+      );
+    binary("storage.writeBytes", rawBytes);
+    assert.equal(binary("storage.readBytes"), rawBytes.toString("base64"));
+    assert.throws(() => call("storage.readText", binaryPath));
+    binary(
+      "storage.writeBytes",
+      Buffer.from([
+        255,
+      ]),
+    );
+    assert.equal(binary("storage.readBytes"), "/w==");
+    binary(
+      "storage.appendBytes",
+      Buffer.from([
+        0,
+        128,
+      ]),
+    );
+    assert.equal(
+      binary("storage.readBytes"),
+      Buffer.from([
+        255,
+        0,
+        128,
+      ]).toString("base64"),
+    );
+    binary("storage.appendBytes", Buffer.alloc(0));
+    assert.equal(
+      binary("storage.readBytes"),
+      Buffer.from([
+        255,
+        0,
+        128,
+      ]).toString("base64"),
+    );
+    binary("storage.writeBytes", Buffer.alloc(0));
+    assert.equal(binary("storage.readBytes"), "");
+    await rm(binaryPath);
+    binary("storage.appendBytes", rawBytes);
+    assert.equal(binary("storage.readBytes"), rawBytes.toString("base64"));
+    call("storage.appendText", temporaryPath("append/new.txt"), "한글");
+    call("storage.appendText", temporaryPath("append/new.txt"), "\u0000🙂");
+    call("storage.appendText", temporaryPath("append/new.txt"), "");
+    assert.equal(
+      call("storage.readText", temporaryPath("append/new.txt")),
+      "한글\u0000🙂",
+    );
+    binary("storage.writeBytes", Buffer.alloc(256 * 1024, 255));
+    assert.equal(
+      binary("storage.readBytes"),
+      Buffer.alloc(256 * 1024, 255).toString("base64"),
+    );
+    binary(
+      "storage.appendBytes",
+      Buffer.from([
+        1,
+      ]),
+    );
+    assert.throws(() => binary("storage.readBytes"), /too large/);
+    expectError(
+      () => call("storage.readBytes", temporaryPath("missing.bin")),
+      "INVALID_ARGUMENT",
+    );
+
     const unicodeDirectory = "notes/한글 folder";
     const unicodeFile = `${unicodeDirectory}/현재 draft.txt`;
     const unicodeFilePath = resolve(root, "data", unicodeFile);
@@ -395,6 +480,24 @@ async function main(): Promise<void> {
         () => call("storage.writeText", dataPath(path), "overwritten"),
         "PERMISSION_DENIED",
       );
+      for (const operation of [
+        "storage.readBytes",
+        "storage.writeBytes",
+        "storage.appendBytes",
+      ]) {
+        expectError(
+          () =>
+            storage.execute(operation, {
+              path: dataPath(path),
+              bytes: "AA==",
+            }),
+          "PERMISSION_DENIED",
+        );
+      }
+      expectError(
+        () => call("storage.appendText", dataPath(path), "appended"),
+        "PERMISSION_DENIED",
+      );
     }
 
     // Reject unsafe Windows path forms before they reach filesystem operations.
@@ -407,6 +510,7 @@ async function main(): Promise<void> {
     ]) {
       for (const operation of [
         "storage.readText",
+        "storage.readBytes",
         "storage.exists",
         "storage.stat",
       ]) {

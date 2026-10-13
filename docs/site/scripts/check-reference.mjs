@@ -463,6 +463,7 @@ checkNames(
       "opener",
       "clipboard",
       "autostart",
+      "appearance",
     ].flatMap((name) =>
       [
         ...objectPropertyNames(
