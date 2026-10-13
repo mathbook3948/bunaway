@@ -8,7 +8,7 @@
         "reference/client/transport": ["createWebViewTransport"],
         "reference/client/invoke": ["invoke"],
         "reference/tooling/native-plugins": ["invokePlugin"],
-        "reference/client/listen": ["listen"]
+        "reference/client/listen": ["listen", "once"]
       }
     },
     {
@@ -388,7 +388,7 @@
       "pages": {
         "reference/client/create-client": ["ready"],
         "reference/client/invoke": ["invoke"],
-        "reference/client/listen": ["listen"],
+        "reference/client/listen": ["listen", "once"],
         "reference/client/close": ["close"]
       }
     },
@@ -492,6 +492,7 @@
       "pages": {
         "reference/tooling/plugin-api": [
           "webview",
+          "audio",
           "show",
           "showInactive",
           "focus",
@@ -542,6 +543,20 @@
           "setZoomFactor",
           "openDevTools"
         ]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "NativeWebViewAudio",
+      "pages": {
+        "reference/tooling/plugin-api": ["getState", "setMuted"]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "WebViewAudioState",
+      "pages": {
+        "reference/tooling/plugin-api": ["muted", "playing"]
       }
     },
     {
@@ -919,6 +934,8 @@
       "windows.goForward",
       "windows.setZoomFactor",
       "windows.openDevTools",
+      "windows.getWebViewAudioState",
+      "windows.setWebViewAudioMuted",
       "windows.list",
       "windows.getById",
       "windows.getCurrent",

@@ -800,6 +800,10 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
           setZoomFactor: (factor) => view.native.setZoomFactor(factor),
           openDevTools: () => view.native.openDevTools(),
         },
+        audio: {
+          getState: () => view.native.getAudioState(),
+          setMuted: (muted) => view.native.setAudioMuted(muted),
+        },
         getSnapshot: () => nativeWindows.getSnapshot(hwnd),
         getReadiness: () => {
           assert(view.readiness);

@@ -44,6 +44,10 @@ controller와 WebView를 사용한다. 공개 URL 탐색도 기존 origin 검사
 zoom은 ICoreWebView2Controller의 double ABI를 사용한다. COM 슬롯은
 고정 WebView2 SDK 1.0.4129.50의 WebView2.h를 따른다. DevTools 설정은 생성 시 호스트가
 선택하며 작업 호출이 설정을 변경하지 않는다.
+WebView audio는 ICoreWebView2_8의 IsMuted와 IsDocumentPlayingAudio를 같은 UI STA에서
+조회하고 음소거를 변경한다. 각 호출이 획득한 COM interface는 성공과 실패 모두에서
+해제한다. controller의 음소거는 문서 탐색을 유지하고 재생 상태는 물리 출력과 구분한다.
+자동 재생과 장치 권한 정책은 기존 동작을 유지하며 상태 이벤트는 아직 제공하지 않는다.
 
 창 플러그인을 등록하면 `Windows.observe`가 창별 상태와 물리 outer bounds의 변경을
 비교한다. 활성화 관찰은 `WM_ACTIVATE` 뒤에 게시한 창 메시지에서 전경 HWND를 조회한다.

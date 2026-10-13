@@ -532,7 +532,8 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] 파일 drop의 enter, over, leave와 drop 이벤트, 경로와 좌표를 제공한다.
 - [ ] WebView의 File 객체와 OS 파일 경로를 안전하게 연결한다.
 - [ ] 파일을 앱 밖으로 드래그하고 표시할 drag 이미지를 제공한다.
-- [ ] audio muted와 audible 상태를 변경, 조회하고 이벤트를 제공한다.
+- [x] `setWebViewAudioMuted`로 음소거를 변경하고 `getWebViewAudioState`로 음소거와 문서의 audio 재생 상태를 조회한다. 두 상태는 독립이며 탐색은 음소거를 유지한다.
+- [ ] audio muted와 재생 상태의 변경 이벤트를 제공한다. 실제 장치의 출력과 재생 중 음소거는 수동 검증이 필요하다.
 - [ ] caret browsing 활성화, selection 가운데 표시와 image-at-point 복사를 제공한다.
 - [ ] media 시작과 중단, HTML theme-color와 링크 hover URL 이벤트를 제공한다.
 
@@ -754,7 +755,8 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 - [x] 이벤트 구독, 해제, broadcast와 지정 뷰 전달을 제공한다.
 - [x] 권한, 취소, deadline과 종료된 세션의 늦은 응답 처리를 제공한다.
 - [x] 기본 WebView 연결을 공유하고 HMR과 pagehide에서 수명을 관리한다.
-- [ ] once 구독과 대상 창, WebView, backend 이벤트 전달의 공개 계약을 제공한다.
+- [x] `client.once`와 직접 `once`로 첫 유효 이벤트를 한 번만 전달하고 자동 해제한다. 권한, 취소와 오류 계약은 기존 구독을 따른다.
+- [ ] 대상 창, WebView, backend 이벤트 전달의 공개 계약을 제공한다.
 - [x] Windows의 `windows.changed` native 이벤트를 동일한 typed 구독 API로 전달한다.
 - [ ] binary payload와 JSON 외 데이터의 전송 계약을 추가한다.
 - [ ] 연속 결과와 대용량 데이터의 channel 또는 stream 전송을 제공한다.
