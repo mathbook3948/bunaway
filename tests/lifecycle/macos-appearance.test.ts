@@ -85,6 +85,15 @@ test.skipIf(process.platform !== "darwin")(
         ],
         returns: "f64",
       },
+      drawing: {
+        ptr: address as import("bun:ffi").Pointer,
+        args: [
+          "ptr",
+          "ptr",
+          "ptr",
+        ],
+        returns: "void",
+      },
     } as const);
     const first = createOperations({
       dataRoot: ".",
@@ -190,59 +199,94 @@ test.skipIf(process.platform !== "darwin")(
             expect(objc.send(appearanceClass, "currentDrawingAppearance")).toBe(
               previousDrawing,
             );
-            objc.send(appearanceClass, "setCurrentAppearance:", appearance);
-            try {
-              for (const [selector, actual] of [
-                [
-                  "controlAccentColor",
-                  snapshot.accentColor,
-                ],
-                [
-                  "windowBackgroundColor",
-                  snapshot.colors.window,
-                ],
-                [
-                  "textColor",
-                  snapshot.colors.windowText,
-                ],
-                [
-                  "selectedTextBackgroundColor",
-                  snapshot.colors.highlight,
-                ],
-                [
-                  "selectedTextColor",
-                  snapshot.colors.highlightText,
-                ],
-              ] as const) {
-                const native = objc.send(objc.class("NSColor"), selector);
-                const rgb = objc.send(
-                  native,
-                  "colorUsingColorSpace:",
-                  objc.send(objc.class("NSColorSpace"), "sRGBColorSpace"),
+            // Use AppKit's scoped drawing API so the oracle observes the requested
+            // appearance. Keep this host binding independent of the plugin binding.
+            const colors = [
+              [
+                "controlAccentColor",
+                snapshot.accentColor,
+              ],
+              [
+                "windowBackgroundColor",
+                snapshot.colors.window,
+              ],
+              [
+                "textColor",
+                snapshot.colors.windowText,
+              ],
+              [
+                "selectedTextBackgroundColor",
+                snapshot.colors.highlight,
+              ],
+              [
+                "selectedTextColor",
+                snapshot.colors.highlightText,
+              ],
+            ] as const;
+            const nativeColors: string[] = [];
+            let drawingAppearance:
+              | import("#native/macos/bun/objc").ObjcObject
+              | null = null;
+            let oracleFailed = false;
+            let oracleError: unknown;
+            const oracle = objc.block(0, () => {
+              try {
+                drawingAppearance = objc.send(
+                  appearanceClass,
+                  "currentDrawingAppearance",
                 );
-                const components = [
-                  "redComponent",
-                  "greenComponent",
-                  "blueComponent",
-                ].map((component) => {
-                  // Objc objects may be tagged; only this FFI argument boundary needs the assertion.
-                  const value = driver.symbols.component(
-                    rgb as import("bun:ffi").Pointer,
-                    objc.selector(component) as import("bun:ffi").Pointer,
+                for (const [selector] of colors) {
+                  const native = objc.send(objc.class("NSColor"), selector);
+                  const rgb = objc.send(
+                    native,
+                    "colorUsingColorSpace:",
+                    objc.send(objc.class("NSColorSpace"), "sRGBColorSpace"),
                   );
-                  return Math.round(Math.max(0, Math.min(1, value)) * 255)
-                    .toString(16)
-                    .padStart(2, "0");
-                });
-                expect(actual).toBe(`#${components.join("")}`);
+                  const components = [
+                    "redComponent",
+                    "greenComponent",
+                    "blueComponent",
+                  ].map((component) => {
+                    // Objc objects may be tagged; only this FFI argument boundary needs the assertion.
+                    const value = driver.symbols.component(
+                      rgb as import("bun:ffi").Pointer,
+                      objc.selector(component) as import("bun:ffi").Pointer,
+                    );
+                    return Math.round(Math.max(0, Math.min(1, value)) * 255)
+                      .toString(16)
+                      .padStart(2, "0");
+                  });
+                  nativeColors.push(`#${components.join("")}`);
+                }
+              } catch (error) {
+                // Assertions and JS failures must never unwind through AppKit.
+                oracleFailed = true;
+                oracleError = error;
               }
-            } finally {
-              objc.send(
-                appearanceClass,
-                "setCurrentAppearance:",
-                previousDrawing,
+            });
+            driver.symbols.drawing(
+              appearance as import("bun:ffi").Pointer,
+              objc.selector(
+                "performAsCurrentDrawingAppearance:",
+              ) as import("bun:ffi").Pointer,
+              oracle,
+            );
+            if (oracleFailed) {
+              throw oracleError;
+            }
+            expect<import("#native/macos/bun/objc").ObjcObject | null>(
+              drawingAppearance,
+              name,
+            ).toBe(appearance);
+            expect(nativeColors, name).toHaveLength(5);
+            for (const [index, [selector, actual]] of colors.entries()) {
+              expect<string | undefined>(actual, `${name}: ${selector}`).toBe(
+                nativeColors[index],
               );
             }
+            expect(objc.send(appearanceClass, "currentDrawingAppearance")).toBe(
+              previousDrawing,
+            );
           }
           Bun.gc(true);
           const initialMemory = process.memoryUsage().rss;
@@ -279,6 +323,7 @@ test.skipIf(process.platform !== "darwin")(
     } finally {
       await first.dispose();
       await second.dispose();
+      objc.releaseCallbacks();
       driver.close();
       runtime.close();
     }
