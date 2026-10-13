@@ -13,6 +13,10 @@ description: 앱에 플러그인을 연결하고 setup, StopHook, 정책, 명령
 
 Windows 텍스트 클립보드는 [`@bunaway/plugin-clipboard`](/reference/plugins/clipboard/)를 설치하고 `clipboardPlugin`을 등록해 사용합니다. 읽기, 쓰기와 지우기는 각각의 권한을 허용합니다.
 
+Windows 테마와 접근성 환경설정은 [`@bunaway/plugin-appearance`](/reference/plugins/appearance/)를
+설치하고 appearancePlugin을 등록해 조회합니다. appearance.getPreferences 권한을 허용합니다.
+저장된 선호와 OS 플래그이며 실제 보조 기술의 실행 여부는 별도로 확인합니다.
+
 ## 최소 플러그인
 
 ```ts

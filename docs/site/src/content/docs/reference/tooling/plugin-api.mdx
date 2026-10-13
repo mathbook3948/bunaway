@@ -86,6 +86,7 @@ Windows의 선택적 `NativeWindow.destroy()`는 확인, 트레이 숨김과 종
 `WindowChange`는 표시, 포커스, 창 상태, 전체화면 및 geometry 변경 이름의 합집합입니다.
 호스트가 창별 관찰을 소유하고 HWND 파괴 전에 해제합니다.
 `NativeWindow.getBounds(area)`는 `"content"`, `"outer"`, `"normal"` 영역의 `WindowBounds`를 반환합니다. normal은 일반 상태 복원용 바깥 영역이며 작업 영역 좌표를 화면 좌표로 보정합니다. 전체화면 중에는 저장된 복원 크기를 현재 DPI와 제약으로 계산합니다.
+선택적 `NativeWindow.center()`는 현재 모니터의 작업 영역에 outer 또는 normal 복원 영역을 중앙 배치합니다. Windows 구현은 표시, 활성화와 크기를 유지하며 전체화면을 거부합니다.
 `getDpi()`는 가장 최근 처리한 DPI 변경을 반영합니다. 조회는 표시 상태를 바꾸지 않으며 네이티브 조회 실패는 호출 경계에서 `INTERNAL`로 처리합니다. 호스트는 플러그인에 자원을 넘기기 전에 대상 권한과 창 수명을 확인합니다.
 
 `NativeWindow.setGeometry(area, geometry)`는 `"content" | "outer"` 영역에 물리 픽셀의
