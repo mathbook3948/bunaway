@@ -1727,19 +1727,10 @@ export class Windows {
       const saved = this.fullscreen.get(window);
       assert(saved);
       this.setStyle(window, saved.style);
-      this.fullscreen.delete(window);
       try {
-        const dpi = this.readDpi(window);
-        this.dpiByWindow.set(window, dpi);
-        this.resizePlacement(
-          window,
-          saved.placement,
-          saved.restoreSize,
-          this.getSizeConstraints(window),
-          dpi,
-          saved.style,
-        );
-        this.setPlacement(window, saved.placement, saved.visible, true);
+        // Recalculate the restored frame before committing normal placement. The
+        // frame update can otherwise rewrite that placement or reshow an iconic HWND.
+        // Retain fullscreen suppression until its intermediate bounds are discarded.
         assert(
           user.symbols.SetWindowPos(
             window,
@@ -1755,6 +1746,18 @@ export class Windows {
               SWP_FRAMECHANGED,
           ),
         );
+        this.fullscreen.delete(window);
+        const dpi = this.readDpi(window);
+        this.dpiByWindow.set(window, dpi);
+        this.resizePlacement(
+          window,
+          saved.placement,
+          saved.restoreSize,
+          this.getSizeConstraints(window),
+          dpi,
+          saved.style,
+        );
+        this.setPlacement(window, saved.placement, saved.visible, true);
       } catch (error) {
         this.fullscreen.set(window, saved);
         throw error;
