@@ -85,6 +85,7 @@ export async function runWindowsApp(
       resolve(value: HostResponse): void;
       reject(error: unknown): void;
       abort(): void;
+      settled: Promise<void>;
       authorized?: boolean;
     }
   >();
@@ -214,7 +215,13 @@ export async function runWindowsApp(
         throw new Error("Unexpected I/O reply");
       }
       const call = calls.get(packet.requestId);
-      if (!call || call.context !== packet.context || stopping) {
+      if (!call || call.context !== packet.context) {
+        return;
+      }
+      if (stopping) {
+        // Inbox cleanup may still be pending. Abort before acknowledging a
+        // dropped I/O result so its undelivered resources remain cancellable.
+        call.abort();
         return;
       }
       if (packet.kind === "authorize-input") {
@@ -229,6 +236,9 @@ export async function runWindowsApp(
           ...packet,
           kind: "host-result",
         });
+        // UI acceptance can precede its reply to Core. Retain the I/O Worker's
+        // cancellation owner until Core receives the result or the call is cancelled.
+        await call.settled;
       } else {
         finishCall(packet.requestId, packet.response);
       }
@@ -271,6 +281,12 @@ export async function runWindowsApp(
   function cancelCalls(context?: HostContext) {
     for (const [id, call] of calls) {
       if (context !== undefined && call.context !== context) {
+        continue;
+      }
+      if (context === undefined) {
+        // Shutdown must notify both native Workers before Core hooks can wait
+        // for their abort handlers; rejecting the backend promise alone is insufficient.
+        call.abort();
         continue;
       }
       takeCall(id)?.reject(
@@ -584,6 +600,7 @@ export async function runWindowsApp(
           );
         }
         return new Promise<HostResponse>((resolveCall, reject) => {
+          const settled = Promise.withResolvers<void>();
           const abort = () => {
             const call = takeCall(requestId);
             if (!call) {
@@ -609,9 +626,16 @@ export async function runWindowsApp(
           calls.set(requestId, {
             context,
             signal,
-            resolve: resolveCall,
-            reject,
+            resolve(value) {
+              resolveCall(value);
+              settled.resolve();
+            },
+            reject(error) {
+              reject(error);
+              settled.resolve();
+            },
             abort,
+            settled: settled.promise,
           });
           signal.addEventListener("abort", abort);
           void (execution === "ui" ? channel : ioChannel)

@@ -107,6 +107,40 @@ try {
     );
     await blocking;
 
+    // Cancellation is queued while the native Worker is synchronously blocked
+    // after allocating a real image resource. The result must remain owned until accepted.
+    const resourceController = new AbortController();
+    const resourceCall = rejected(
+      client.invoke(
+        "plugin.probe.run",
+        {
+          id: "resource",
+          mode: "resource",
+        },
+        {
+          signal: resourceController.signal,
+        },
+      ),
+      "CANCELLED",
+    );
+    await client.invoke("test.marker", "resource-allocated");
+    resourceController.abort();
+    await resourceCall;
+    await client.invoke("test.release", "resource");
+    const resourceState = await client.invoke(
+      "plugin.probe.resourceState",
+      null,
+    );
+    check(
+      resourceState &&
+        typeof resourceState === "object" &&
+        "retained" in resourceState &&
+        "aborted" in resourceState &&
+        resourceState.retained === false &&
+        resourceState.aborted === true,
+      "Undelivered image resource is reclaimed on cancellation",
+    );
+
     const controller = new AbortController();
     const cancelled = rejected(
       client.invoke(
