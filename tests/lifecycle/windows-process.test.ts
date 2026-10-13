@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { defineApp, defineModule } from "@bunaway/backend";
 import { createClient } from "@bunaway/client";
 import { type CoreServices, createCore } from "@bunaway/core";
@@ -138,8 +138,7 @@ test.skipIf(process.platform !== "win32")(
         await processes.run({
           executablePath: process.execPath,
           args: [
-            "-e",
-            "await Bun.write(process.argv[1], String(process.pid)); setInterval(() => {}, 1000);",
+            resolve(import.meta.dir, "../fixtures/process-ready.ts"),
             pidFile,
           ],
         });

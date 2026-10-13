@@ -501,3 +501,5 @@ RGBA alpha 왕복, JPEG와 BMP, 잘못된 encoded 입력과 decode 크기, 최�
 전달을 보류해 공개 Promise 거부 시 자식이 아직 살아 있음을 확인하고, 전달 후 어댑터의 정리와
 자식 종료를 확인한다. 공개 Promise 거부는 종료 완료를 보장하지 않는다. 두 검사는 `host:windows`에 포함되며
 호출별 손자 정리나 제삼자 도구의 부수 효과를 검증하지 않는다.
+자식은 PID 파일 쓰기를 완료한 뒤 rename으로 준비를 알린다. 두 생존 검사는 파일 생성과 쓰기 사이의
+경합으로 빈 PID를 읽지 않고, 취소 전에 실제 자식의 Windows process handle을 잡는다.

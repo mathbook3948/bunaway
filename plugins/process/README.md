@@ -21,5 +21,7 @@ as liveness. `tests/lifecycle/windows-process.test.ts` checks the generated Wind
 capacity and disposal with actual .exe processes. Its real core/client cancellation regression gates
 bridge cancellation delivery, observes prompt public rejection while the child is still alive, then
 releases delivery and verifies eventual adapter settlement, child death and disposal.
+Both liveness tests wait for the child to publish its complete PID file by rename before capturing its
+process identity; an opened but still empty file is not a readiness signal.
 Both run under `mise run host:windows`. They do not validate third-party tool behavior, installer-provided
 sidecars or independent descendant cleanup on a per-command timeout.

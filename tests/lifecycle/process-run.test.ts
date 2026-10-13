@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { BunawayError } from "@bunaway/protocol";
 import { runProcess } from "#plugins/process/src/run";
 import { processExitProbe } from "../fixtures/process-exit-probe.ts";
@@ -120,8 +120,7 @@ test("cancellation waits for direct-child death and closes blocked output pipes"
       {
         ...defaults,
         args: [
-          "-e",
-          "await Bun.write(process.argv[1], String(process.pid)); setInterval(() => {}, 1000);",
+          resolve(import.meta.dir, "../fixtures/process-ready.ts"),
           pidFile,
         ],
       },
