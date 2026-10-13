@@ -36,7 +36,8 @@ menuOnRightClick }`입니다. icon은 앱 아이콘이면 `"app"`, 실행 중 �
 
 tooltip은 빈 문자열을 허용하며 최대 127 UTF-16 코드 단위입니다. 이모지는 일반적으로 두 단위를
 사용합니다. NUL과 잘못된 surrogate는 거부합니다. 실행 중 setter는 길이를 잘라 적용하지 않습니다.
-기존 시작 설정의 native 길이 보정에서는 surrogate를 나누지 않습니다.
+시작 설정도 NUL과 잘못된 surrogate를 native 자원 생성 전에 거부합니다.
+native 길이 보정에서는 surrogate를 나누지 않습니다.
 
 ico는 canonical base64로 인코딩한 ICO 파일 bytes입니다. 파일 경로와 URL을 받지 않습니다.
 전체 파일은 최대 65,536 bytes, 프레임은 최대 32개입니다. ICO 안의 PNG 또는 40-byte

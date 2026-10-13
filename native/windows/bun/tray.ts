@@ -84,22 +84,7 @@ const mouseNotifications: Readonly<
 
 /** Owns the hidden window and shell icon used for app show and quit actions. */
 export class Tray {
-  private readonly shell = dlopen("shell32.dll", {
-    Shell_NotifyIconW: {
-      args: [
-        "u32",
-        "ptr",
-      ],
-      returns: "i32",
-    },
-    Shell_NotifyIconGetRect: {
-      args: [
-        "ptr",
-        "ptr",
-      ],
-      returns: "i32",
-    },
-  });
+  private readonly shell;
   private readonly data = Buffer.alloc(976); // NOTIFYICONDATAW, Win64
   readonly hwnd: bigint;
   private added = false;
@@ -118,6 +103,29 @@ export class Tray {
     receive: (action: "show" | "quit") => void,
     notify?: (event: NativeTrayEvent) => void,
   ) {
+    // Validate the whole startup value before acquiring this tray's native resources.
+    if (/[\0\uD800-\uDFFF]/u.test(tooltip)) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "Invalid tray tooltip.",
+      });
+    }
+    this.shell = dlopen("shell32.dll", {
+      Shell_NotifyIconW: {
+        args: [
+          "u32",
+          "ptr",
+        ],
+        returns: "i32",
+      },
+      Shell_NotifyIconGetRect: {
+        args: [
+          "ptr",
+          "ptr",
+        ],
+        returns: "i32",
+      },
+    });
     const taskbarCreated = withWide("TaskbarCreated", (name) =>
       user.symbols.RegisterWindowMessageW(name),
     );

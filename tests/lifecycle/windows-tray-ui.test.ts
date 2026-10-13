@@ -74,7 +74,7 @@ test.skipIf(process.platform !== "win32")(
         desktop: {
           closeBehavior: "keep-alive",
           tray: {
-            tooltip: "Initial",
+            tooltip: `${"😀".repeat(63)}x`,
           },
         },
         plugins: [
@@ -170,6 +170,10 @@ test.skipIf(process.platform !== "win32")(
             },
           });
         });
+      expect(await invoke("get", null)).toMatchObject({
+        id: "main",
+        tooltip: `${"😀".repeat(63)}x`,
+      });
       await invoke("setTooltip", {
         tooltip: "한글 😀",
       });

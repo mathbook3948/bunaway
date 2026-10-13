@@ -2,18 +2,42 @@ import { dlopen, ptr } from "bun:ffi";
 import { expect, test } from "bun:test";
 import type { NativeTrayEvent } from "@bunaway/plugin-api/native";
 import { trayIco, trayPngIco } from "../fixtures/tray-icon.ts";
+import { pluginParsers } from "../fixtures/plugin-parsers.ts";
+import { trayOperations } from "#plugins/tray/src/contract";
 
 test.skipIf(process.platform !== "win32")(
   "actual tray tooltip/ICO updates, mouse defaults and Explorer re-registration preserve ownership",
   async () => {
     const { Windows } = await import("#native/windows/bun/win32");
     const { Tray } = await import("#native/windows/bun/tray");
-    const windows = new Windows(() => {});
+    let createdWindows = 0;
+    class StartupWindows extends Windows {
+      override create(
+        ...args: Parameters<InstanceType<typeof Windows>["create"]>
+      ) {
+        createdWindows++;
+        return super.create(...args);
+      }
+    }
+    const windows = new StartupWindows(() => {});
+    for (const tooltip of [
+      "😀".slice(0, 1),
+      "😀".slice(1),
+      "x\ud800",
+      "x\udfff",
+      "x\0y",
+    ]) {
+      expect(() => new Tray(windows, tooltip, () => {})).toThrow(
+        "Invalid tray tooltip.",
+      );
+    }
+    expect(createdWindows).toBe(0);
+    const initialTooltip = `${"😀".repeat(63)}x`;
     const actions: string[] = [];
     const events: NativeTrayEvent[] = [];
     const tray = new Tray(
       windows,
-      "Initial",
+      initialTooltip,
       (action) => actions.push(action),
       (event) => events.push(event),
     );
@@ -75,6 +99,15 @@ test.skipIf(process.platform !== "win32")(
       windows.pump();
     };
     try {
+      const snapshot = await pluginParsers(
+        "tray",
+        trayOperations,
+      ).validateOutput("tray.get", tray.get());
+      expect(snapshot).toMatchObject({
+        id: "main",
+        tooltip: initialTooltip,
+      });
+      expect(createdWindows).toBe(1);
       expect(native.symbols.IsWindowVisible(tray.hwnd)).toBe(0);
       tray.setTooltip("한글 😀 changed");
       expect(tray.get().tooltip).toBe("한글 😀 changed");
