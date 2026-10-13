@@ -85,6 +85,7 @@ if (target === "windows-x64") {
         "test",
         ...[
           "tests/lifecycle/desktop.test.ts",
+          "tests/lifecycle/windows-os.test.ts",
           "tests/lifecycle/windows-bun-instance.test.ts",
           "tests/lifecycle/windows-appearance.test.ts",
           "tests/cli/windows-assets.test.ts",

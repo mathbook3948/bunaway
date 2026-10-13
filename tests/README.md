@@ -482,3 +482,7 @@ count와 메모리 quota 및 생성 취소의 정리를 확인한다. `windows-i
 RGBA alpha 왕복, JPEG와 BMP, 잘못된 encoded 입력과 decode 크기, 최대 PNG,
 정책 거부와 결과 전달 전 취소를 확인한다. 실제 파일 경로 접근, WebView 표시,
 다른 앱의 가져오기, 색상 관리와 최소 Windows 버전 검증은 포함하지 않는다.
+
+`api/os.test.ts`는 독립 작업 권한과 metadata 계약을 검사한다. `lifecycle/windows-os.test.ts`는
+실제 Kernel32 언어 설정 조회와 Bun 실행 정보를 생성 어댑터에서 검사하며 `host:windows`에 포함된다.
+사용자 언어 설정 변경이나 translation 하드웨어 검증은 포함하지 않는다.
