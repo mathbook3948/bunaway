@@ -363,6 +363,17 @@
       }
     },
     {
+      "name": "@bunaway/plugin-notification",
+      "source": "plugins/notification/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/notification": ["notification", "notificationPlugin"]
+      }
+    },
+    {
       "name": "@bunaway/plugin-clipboard",
       "source": "plugins/clipboard/src/index.ts",
       "buildOutputs": {
@@ -1041,6 +1052,10 @@
     "reference/plugins/network": ["network.request", "network.exchange"],
     "reference/plugins/process": ["process.run"],
     "reference/plugins/os": ["os.info", "os.usage", "os.locale"],
+    "reference/plugins/notification": [
+      "notification.getStatus",
+      "notification.openSettings"
+    ],
     "reference/plugins/autostart": [
       "autostart.enable",
       "autostart.disable",
