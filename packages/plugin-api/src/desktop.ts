@@ -50,7 +50,8 @@ export type DesktopOptions = {
   };
   /**
    * `files-and-urls` derives and validates open metadata before onOpen (the default).
-   * `raw` delivers argv unchanged with empty files/urls, for app-owned CLI parsing.
+   * `raw` delivers app argv with empty files/urls, for app-owned CLI parsing.
+   * Framework autostart prefix handling and launchReason still apply in either mode.
    */
   readonly openArguments?: "files-and-urls" | "raw";
   /** Handles initial launches and requests to open another file or URL in the running app. */

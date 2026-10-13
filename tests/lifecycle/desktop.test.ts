@@ -869,6 +869,103 @@ test("file URLs reject encoded separators, NUL, and paths without a Windows driv
   }
 });
 
+test("raw CLI opens retain autostart metadata and hidden forwarding behavior", async () => {
+  const requests: OpenRequest[] = [];
+  const actions: string[] = [];
+  const lifecycle = new DesktopLifecycle(
+    {
+      openArguments: "raw",
+      tray: {
+        tooltip: "Resident",
+      },
+      onOpen(request) {
+        requests.push(request);
+      },
+    },
+    async (action) => {
+      actions.push(action);
+    },
+    () => {},
+    (error) => {
+      throw error;
+    },
+  );
+  const argv = [
+    "echo",
+    "--label",
+    "https://",
+    "file:relative.txt",
+  ];
+  try {
+    lifecycle.open(
+      {
+        argv: [
+          AUTOSTART_ARGUMENT,
+          ...argv,
+        ],
+        cwd: launch.cwd,
+      },
+      "initial",
+    );
+    lifecycle.open(
+      {
+        argv: [
+          AUTOSTART_HIDDEN_ARGUMENT,
+          ...argv,
+        ],
+        cwd: launch.cwd,
+      },
+      "second-instance",
+    );
+    lifecycle.open(
+      {
+        argv,
+        cwd: launch.cwd,
+      },
+      "second-instance",
+    );
+    await tick();
+    expect(actions).toEqual([
+      "show",
+    ]);
+    expect(requests.map((request) => request.launchReason)).toEqual([
+      "autostart",
+      "autostart",
+      "manual",
+    ]);
+    expect(requests.map((request) => request.source)).toEqual([
+      "initial",
+      "second-instance",
+      "second-instance",
+    ]);
+    for (const request of requests) {
+      expect(request.argv).toEqual(argv);
+      expect(request.urls).toEqual([]);
+      expect(request.files).toEqual([]);
+    }
+    const markerValue = openRequest(
+      {
+        argv: [
+          "echo",
+          "--label",
+          AUTOSTART_ARGUMENT,
+        ],
+        cwd: launch.cwd,
+      },
+      "initial",
+      "raw",
+    );
+    expect(markerValue.launchReason).toBe("manual");
+    expect(markerValue.argv).toEqual([
+      "echo",
+      "--label",
+      AUTOSTART_ARGUMENT,
+    ]);
+  } finally {
+    lifecycle.dispose();
+  }
+});
+
 test("default and explicit files-and-urls modes retain URL metadata validation", () => {
   for (const value of [
     "https://",

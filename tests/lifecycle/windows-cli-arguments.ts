@@ -3,7 +3,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineCLI } from "@bunaway/backend/cli";
-import type { HostContext } from "@bunaway/protocol";
+import { AUTOSTART_ARGUMENT, type HostContext } from "@bunaway/protocol";
 import { z } from "zod";
 import { runWindowsApp } from "#native/windows/bun/entry";
 import {
@@ -107,6 +107,10 @@ if (!process.argv.includes("--child")) {
           async onOpen(request, desktop) {
             try {
               sources.push(request.source);
+              assert.equal(
+                request.launchReason,
+                request.source === "initial" ? "autostart" : "manual",
+              );
               assert.deepEqual(request.files, []);
               assert.deepEqual(request.urls, []);
               results.push(await cli.parse(request.argv));
@@ -175,6 +179,7 @@ if (!process.argv.includes("--child")) {
       },
       {
         argv: [
+          AUTOSTART_ARGUMENT,
           "docs",
           "export",
           "--title",

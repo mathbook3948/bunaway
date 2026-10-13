@@ -50,13 +50,14 @@ export default defineApp({
 });
 ```
 
-Windows의 기존 `desktop.onOpen`은 실행 파일과 Bunaway 개발 스위치를 제거한
+Windows의 `desktop.onOpen`은 실행 파일, Bunaway 개발 스위치와 선행 자동 실행 prefix를 제거한
 `OpenRequest.argv`를 초기 실행과 second-instance 모두에 제공합니다. CLI 앱은
 `desktop.openArguments: "raw"`로 파일/URL 메타데이터 해석을 건너뜁니다. 이 모드에서는
 `https://`나 `file:relative.txt`도 원래 argv 문자열로 훅에 도달하며 `files`와 `urls`는 빈 배열입니다.
 앱의 Zod schema가 실제로 URL이나 파일 입력을 요구하는지 검사합니다. `request.files`나
 `request.urls`로 CLI 옵션을 해석하지 않습니다. 파서는 자동으로 `process.argv`를 읽지 않습니다.
 순수 parser는 다른 Bun backend에서도 명시적인 argv와 함께 사용할 수 있습니다.
+raw 모드에서도 `launchReason`과 숨김 자동 실행의 표시 상태 규칙은 유지합니다.
 
 ## 선언과 help
 
