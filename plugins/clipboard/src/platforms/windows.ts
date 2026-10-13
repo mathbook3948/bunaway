@@ -1,7 +1,7 @@
 import { setTimeout as delay } from "node:timers/promises";
 import type { NativeAdapter, NativeEnvironment } from "@bunaway/plugin";
 import { BunawayError, type JsonValue, validateValue } from "@bunaway/protocol";
-import { validateClipboardInput } from "../contract.ts";
+import { clipboardOperations, validateClipboardInput } from "../contract.ts";
 import { writeTextSchema } from "../text.ts";
 import { createClipboard } from "../win32.ts";
 
@@ -15,10 +15,14 @@ export function createOperations(
 ): NativeAdapter {
   const native = createClipboard();
   const lifetime = new AbortController();
-  const pending = new Set<Promise<string | null>>();
+  const pending = new Set<Promise<JsonValue>>();
   let disposal: Promise<void> | undefined;
 
-  async function run(name: string, input: JsonValue, context: UIContext) {
+  async function run(
+    name: string,
+    input: JsonValue,
+    context: UIContext,
+  ): Promise<JsonValue> {
     validateClipboardInput(name, input);
     if (!context.permissions.permissions.includes(name)) {
       throw new BunawayError({
@@ -65,10 +69,38 @@ export function createOperations(
       if (name === "clipboard.readText") {
         return native.read();
       }
-      if (name === "clipboard.writeText") {
-        native.write(writeTextSchema.parse(validateValue({}, input)).text);
-      } else {
-        native.clear();
+      switch (name) {
+        case "clipboard.writeText":
+          native.write(writeTextSchema.parse(validateValue({}, input)).text);
+          break;
+        case "clipboard.clear":
+          native.clear();
+          break;
+        case "clipboard.readImage":
+          return native.readImage();
+        case "clipboard.writeImage":
+          native.writeFormats([
+            {
+              format: "image/bmp",
+              data: clipboardOperations.writeImage.input.parse(input),
+            },
+          ]);
+          break;
+        case "clipboard.getFormats":
+          return native.getFormats();
+        case "clipboard.hasFormat":
+          return native.hasFormat(
+            clipboardOperations.hasFormat.input.parse(input).format,
+          );
+        case "clipboard.readFormats":
+          return native.readFormats(
+            clipboardOperations.readFormats.input.parse(input).formats,
+          );
+        case "clipboard.writeFormats":
+          native.writeFormats(
+            clipboardOperations.writeFormats.input.parse(input).items,
+          );
+          break;
       }
       return null;
     } finally {
