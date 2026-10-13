@@ -434,6 +434,14 @@ Explorer와 compiled helper로 파일 및 HTTP/HTTPS URL 하나의 argv 보존�
 앱 종료 뒤 helper 생존을 확인한다. 두 검사와 기존 opener STA 검사는 `host:windows`에도 포함한다.
 Linux의 계약 검사에서 건너뛴 Windows 테스트를 실제 실행 결과로 판단하지 않는다.
 
+`api/path.test.ts`는 Windows 문자열 경로 규칙과 명시적 base, per-drive 상대 경로 거부를 검사한다.
+보충 문자의 UTF-16 입력과 합성 출력 상한을 확인하며 실제 WebView2에도 같은 경계 회귀를 적용한다.
+`windows-path.test.ts`는 실제 current-user Known Folder를 조회하고 .NET의 독립적인
+표준 폴더 조회 결과 및 여러 어댑터의 DLL 수명과 비교한다.
+`windows-path.ts`는 실제 WebView2와 I/O Worker에서 폴더 조회, 문자열 helper와
+작업별 권한 거부를 확인하며 `mise run host:windows`에 포함한다.
+실제 사용자 폴더 redirection 설정 변경과 다른 사용자, 머신 검증은 포함하지 않는다.
+
 `api/autostart.test.ts`는 로그인 자동 실행 플러그인의 정책, 공개 helper, 앱 ID 분리와
 Windows 명령줄 제한, 숨김 등록의 트레이 요구 조건을 검사한다.
 `windows-desktop.ts`의 autostart 시나리오는 실제 HWND와 WebView2에서 일반 및 숨김
@@ -547,11 +555,3 @@ linear filtering의 투명 edge, crop과 빈 소스 및 quota 오류를 추가�
 호출별 손자 정리나 제삼자 도구의 부수 효과를 검증하지 않는다.
 자식은 PID 파일 쓰기를 완료한 뒤 rename으로 준비를 알린다. 두 생존 검사는 파일 생성과 쓰기 사이의
 경합으로 빈 PID를 읽지 않고, 취소 전에 실제 자식의 Windows process handle을 잡는다.
-
-`api/path.test.ts`는 Windows 문자열 경로 규칙과 명시적 base, per-drive 상대 경로 거부를 검사한다.
-보충 문자의 UTF-16 입력과 합성 출력 상한을 확인하며 실제 WebView2에도 같은 경계 회귀를 적용한다.
-`windows-path.test.ts`는 실제 current-user Known Folder를 조회하고 .NET의 독립적인
-표준 폴더 조회 결과 및 여러 어댑터의 DLL 수명과 비교한다.
-`windows-path.ts`는 실제 WebView2와 I/O Worker에서 폴더 조회, 문자열 helper와
-작업별 권한 거부를 확인하며 `mise run host:windows`에 포함한다.
-실제 사용자 폴더 redirection 설정 변경과 다른 사용자, 머신 검증은 포함하지 않는다.
