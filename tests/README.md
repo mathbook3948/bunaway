@@ -477,6 +477,13 @@ Run 값의 등록, 조회, 경로 갱신과 반복 해제를 확인한다. 임�
 `cli/autostart.test.ts`는 로컬 tarball의 isolated 설치, manifest와 I/O 어댑터 발견,
 정책 승인과 browser 번들에서 FFI가 제외되는지도 확인한다.
 
+`windows-safe-storage.test.ts`는 실제 DPAPI로 Unicode와 임의 바이트, 크기 상한, 손상 입력,
+보충 문자의 UTF-16 상한 왕복과 초과 입력 거부,
+반복 dispose와 독립 어댑터, 저장된 암호문의 새 프로세스 복호화를 검사한다.
+`windows-safe-storage.ts`는 실제 WebView2와 I/O Worker에서 동시 요청, UI 타이머 진행,
+뷰별 권한 거부와 손상 입력을 확인하며 `mise run host:windows`에 포함한다.
+다른 사용자나 머신, Windows 키 복구 및 물리 입력 검증은 포함하지 않는다.
+
 `mise run host:windows`와 `mise run host:macos`는 Bun으로
 `tests/lifecycle/run-native.ts`를 실행한다. CLI의 의존성 준비와 네이티브 빌드를
 거친 뒤 플랫폼별 실제 호스트 fixture를 만들고 검증한다.

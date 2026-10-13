@@ -341,6 +341,17 @@
       }
     },
     {
+      "name": "@bunaway/plugin-safe-storage",
+      "source": "plugins/safe-storage/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/safe-storage": ["safeStorage", "safeStoragePlugin"]
+      }
+    },
+    {
       "name": "@bunaway/plugin-clipboard",
       "source": "plugins/clipboard/src/index.ts",
       "buildOutputs": {
@@ -1031,6 +1042,13 @@
       "opener.revealFile",
       "opener.openFileWith",
       "opener.openUrlWith"
+    ],
+    "reference/plugins/safe-storage": [
+      "safe-storage.isAvailable",
+      "safe-storage.encryptString",
+      "safe-storage.decryptString",
+      "safe-storage.encryptBytes",
+      "safe-storage.decryptBytes"
     ],
     "reference/plugins/clipboard": [
       "clipboard.readText",
