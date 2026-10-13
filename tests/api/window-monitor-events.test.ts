@@ -35,6 +35,45 @@ const change = {
   error: null,
 };
 
+test("monitor snapshot safe parsing reports malformed protocol errors without throwing", async () => {
+  for (const error of [
+    {
+      code: "INTERNAL",
+    },
+    {
+      code: "NOT_A_WIRE_CODE",
+      message: "Invalid code",
+    },
+  ]) {
+    const input = {
+      ...snapshot,
+      error,
+    };
+    const result = monitorSnapshotSchema.safeParse(input);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues).toContainEqual(
+        expect.objectContaining({
+          path: [
+            "error",
+          ],
+        }),
+      );
+    }
+    const asyncResult = await monitorSnapshotSchema.safeParseAsync(input);
+    expect(asyncResult.success).toBe(false);
+    if (!asyncResult.success) {
+      expect(asyncResult.error.issues).toContainEqual(
+        expect.objectContaining({
+          path: [
+            "error",
+          ],
+        }),
+      );
+    }
+  }
+});
+
 test("monitor snapshot and event public contracts validate revisions, metrics, errors and unknown fields", () => {
   // Public Zod declarations and native host contracts must agree, including nullable error details.
   const publicSnapshot: MonitorSnapshot = snapshot;

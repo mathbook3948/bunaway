@@ -468,7 +468,8 @@ DIB의 행 방향과 padding, alpha 및 잘못된 profile, mask, 크기를 확�
 
 
 `api/window-monitor-events.test.ts`는 versioned snapshot과 이벤트 스키마, 독립 조회 권한,
-취소와 선택적인 snapshot 서비스 미지원을 검사한다. `lifecycle/windows-monitor-events.test.ts`는
+취소와 선택적인 snapshot 서비스 미지원을 검사한다. 잘못된 protocol error가 포함된 snapshot은
+`safeParse`와 `safeParseAsync`에서 예외 대신 Zod 오류를 반환하는지도 확인한다. `lifecycle/windows-monitor-events.test.ts`는
 초기 replay 부재, id별 변경과 알림 병합, 배열 순서 변경 억제, 오류 중 마지막 유효 목록 보존,
 오류 정제와 복구 및 반환 snapshot의 복사 격리를 검사한다. 같은 파일의 Windows 전용 검사는
 실제 숨겨진 HWND에 WM_DISPLAYCHANGE, WM_SETTINGCHANGE와 WM_DEVICECHANGE를 보내고

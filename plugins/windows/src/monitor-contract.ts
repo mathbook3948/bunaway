@@ -61,7 +61,18 @@ const monitorErrorSchema: z.ZodType<
   Omit<WireError, "details"> & {
     details?: JsonValue;
   }
-> = z.unknown().transform((value) => validateValue(errorSchema, value));
+> = z.unknown().transform((value, context) => {
+  try {
+    return validateValue(errorSchema, value);
+  } catch {
+    // Protocol validation throws; Zod safe parsing must report an issue instead.
+    context.addIssue({
+      code: "custom",
+      message: "Invalid monitor error.",
+    });
+    return z.NEVER;
+  }
+});
 
 /** Fresh observation used to recover after subscribing, navigation or a failed native query. */
 export const monitorSnapshotSchema = z.strictObject({
