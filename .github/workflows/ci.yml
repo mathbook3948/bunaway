@@ -59,7 +59,17 @@ jobs:
       # These two complete image suites run once in macos-native, including the
       # isolated consumer's portable packaging assertions and real macOS codecs.
       - name: Check contracts
+        env:
+          BUNAWAY_DMG_DIAGNOSTICS: '1'
         run: mise run test --path-ignore-patterns '**/macos-image.test.ts' --path-ignore-patterns '**/cli/image.test.ts'
+      - name: Preserve fixture DMG diagnostics
+        if: always() && runner.os == 'macOS'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: macos-matrix-packaging-diagnostics
+          path: build/macos-packaging-diagnostics/
+          if-no-files-found: warn
+          retention-days: 7
       - name: Build the documentation site and search index
         if: runner.os == 'Linux'
         run: bun run docs:build
@@ -171,6 +181,7 @@ jobs:
       - name: Build and test real WKWebView host and signed in-place app
         env:
           BUNAWAY_OPENER_ISOLATED: '1'
+          BUNAWAY_DMG_DIAGNOSTICS: '1'
         run: mise exec -- bun --no-env-file tests/lifecycle/run-native.ts --app 2>&1 | tee build/macos-native-logs/host.log
       - name: Upload native test reports and logs
         if: always()
@@ -179,6 +190,7 @@ jobs:
           name: macos-native-diagnostics
           path: |
             build/macos-image-logs/
+            build/macos-packaging-diagnostics/
             build/macos-image-results.json
             build/macos-image-host-results.json
             build/macos-webview-controls-results.json

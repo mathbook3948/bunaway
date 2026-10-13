@@ -47,6 +47,19 @@ async function command(
     new Response(child.stderr).text(),
     child.exited,
   ]);
+  const diagnostics = env.BUNAWAY_DMG_DIAGNOSTICS_DIR;
+  if (diagnostics && args[2] === driver && args[3] === "package") {
+    for await (const path of new Bun.Glob("*/result.json").scan(diagnostics)) {
+      const report: unknown = await Bun.file(resolve(diagnostics, path)).json();
+      if (
+        report &&
+        typeof report === "object" &&
+        Reflect.get(report, "temporary") === env.TMPDIR
+      ) {
+        console.info("DMG_DIAGNOSTICS", JSON.stringify(report));
+      }
+    }
+  }
   expect(code, `${args[0]}\n${output}\n${errors}`).toBe(expected);
   return output;
 }
@@ -175,6 +188,20 @@ describe
         TMPDIR: stage,
         PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
       };
+      if (process.env.BUNAWAY_DMG_DIAGNOSTICS === "1") {
+        await cp(
+          resolve(import.meta.dir, "macos-dmg-diagnostics.fixture.ts"),
+          resolve(bin, "macos-dmg-diagnostics.fixture.ts"),
+        );
+        env.BUNAWAY_DMG_DIAGNOSTICS_DIR = resolve(
+          repository,
+          "build/macos-packaging-diagnostics",
+        );
+        await mkdir(env.BUNAWAY_DMG_DIAGNOSTICS_DIR, {
+          recursive: true,
+        });
+        await replaceTool("hdiutil", "diagnostic");
+      }
     });
     afterEach(async () => {
       if (root) {

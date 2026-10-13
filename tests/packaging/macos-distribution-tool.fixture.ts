@@ -40,6 +40,10 @@ if (tool === "xcrun") {
     }
   }
 } else if (tool === "hdiutil") {
+  if (failure === "diagnostic") {
+    const { diagnoseDmg } = await import("./macos-dmg-diagnostics.fixture.ts");
+    await diagnoseDmg(args);
+  }
   assert(
     fstatSync(1).isFile() && fstatSync(2).isFile(),
     "hdiutil output must use regular files",
