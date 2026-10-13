@@ -104,8 +104,13 @@ alpha 및 투명 RGB 왕복, grayscale과 palette PNG, JPEG/BMP, malformed 입�
 크기, crop/resize, 앱별 ID, 권한, quota, 생성 취소와 반복 종료를 검사한다.
 `tests/cli/image.test.ts`는 tarball을 isolated 설치해 neutral, Windows와 macOS 출력의
 분리와 browser FFI 제외를 확인하고 macOS arm64에서 설치된 native adapter를 실행한다.
-`macos-image.yml`은 이 검사와 기존 entitlement로 ad-hoc 서명한 compiled codec fixture를
-실행한다. 실제 shared 호스트 dispatch와 WKWebView 공개 호출은 아래 호스트 fixture에서 검증한다.
+`.github/workflows/ci.yml`의 기존 `macos-native` 작업은 이 두 검사와 기존 entitlement로
+ad-hoc 서명하고 strict 검증한 compiled codec fixture를 각각 한 번 실행한다.
+공통 계약 CI에서는 두 파일을 제외하고, 로컬 `mise run check`는 전체 계약을 실행한다.
+실제 shared 호스트 dispatch와 WKWebView 공개 호출은 같은 작업의 shared runner에서
+아래 호스트 fixture를 한 번 실행해 검증한다. Image 결과 JSON과 codec 로그,
+`build/macos-native-logs/host.log`는 `macos-native-diagnostics` artifact에 7일간 보관하며
+실패한 작업에서도 업로드한다.
 
 `tests/lifecycle/macos-image-host.ts`는 실제 compiled 호스트와 WKWebView 명령에서
 공개 backend image SDK를 호출하는 성공 전용 fixture다. Backend setup과 뷰 명령,
