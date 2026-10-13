@@ -343,6 +343,120 @@ async function main(): Promise<void> {
       "INVALID_ARGUMENT",
     );
 
+    const transfer = (operation: string, from: string, to: string) =>
+      storage.execute(operation, {
+        from,
+        to,
+      });
+    const copySource = temporaryPath("copy source.bin");
+    const copied = temporaryPath("copied 한글.bin");
+    const bytes = Buffer.alloc(1024 * 1024 + 257);
+    for (let index = 0; index < bytes.length; index++) {
+      bytes[index] = index % 256;
+    }
+    await writeFile(copySource, bytes);
+    assert.equal(transfer("storage.copyFile", copySource, copied), null);
+    assert.deepEqual(Buffer.from(await Bun.file(copied).arrayBuffer()), bytes);
+    assert.deepEqual(
+      Buffer.from(await Bun.file(copySource).arrayBuffer()),
+      bytes,
+    );
+    for (const operation of [
+      "storage.copyFile",
+      "storage.move",
+    ]) {
+      expectError(
+        () => transfer(operation, copySource, copied),
+        "INVALID_ARGUMENT",
+      );
+      assert.deepEqual(
+        Buffer.from(await Bun.file(copied).arrayBuffer()),
+        bytes,
+      );
+      assert.equal(call("storage.exists", copySource), true);
+      expectError(
+        () =>
+          transfer(
+            operation,
+            dataPath("notes/hard.txt"),
+            temporaryPath("link transfer.bin"),
+          ),
+        "PERMISSION_DENIED",
+      );
+      expectError(
+        () =>
+          transfer(
+            operation,
+            copySource,
+            dataPath("notes/junction/escaped.bin"),
+          ),
+        "PERMISSION_DENIED",
+      );
+      expectError(
+        () => transfer(operation, "relative.txt", copied),
+        "INVALID_ARGUMENT",
+      );
+      expectError(
+        () => transfer(operation, copySource, temporaryPath("bad:ads")),
+        "INVALID_ARGUMENT",
+      );
+    }
+    assert.equal(
+      await Bun.file(resolve(root, "outside/escaped.bin")).exists(),
+      false,
+    );
+    const oversized = temporaryPath("oversized.bin");
+    await writeFile(oversized, Buffer.alloc(4 * 1024 * 1024 + 1));
+    expectError(
+      () =>
+        transfer(
+          "storage.copyFile",
+          oversized,
+          temporaryPath("oversized-copy.bin"),
+        ),
+      "INVALID_ARGUMENT",
+    );
+    assert.equal(
+      call("storage.exists", temporaryPath("oversized-copy.bin")),
+      false,
+    );
+    const moved = temporaryPath("moved 한글.bin");
+    assert.equal(transfer("storage.move", copied, moved), null);
+    assert.equal(call("storage.exists", copied), false);
+    assert.deepEqual(Buffer.from(await Bun.file(moved).arrayBuffer()), bytes);
+    expectError(
+      () => transfer("storage.move", moved, moved),
+      "INVALID_ARGUMENT",
+    );
+    const sourceDirectory = temporaryPath("move directory");
+    await mkdir(sourceDirectory);
+    await writeFile(`${sourceDirectory}/한글.txt`, "directory child");
+    expectError(
+      () =>
+        transfer("storage.move", sourceDirectory, `${sourceDirectory}/child`),
+      "INVALID_ARGUMENT",
+    );
+    const movedDirectory = temporaryPath("renamed directory");
+    assert.equal(
+      transfer("storage.move", sourceDirectory, movedDirectory),
+      null,
+    );
+    assert.equal(call("storage.exists", sourceDirectory), false);
+    assert.equal(
+      await Bun.file(`${movedDirectory}/한글.txt`).text(),
+      "directory child",
+    );
+    call("storage.writeText", temporaryPath("empty-source.txt"), "");
+    assert.equal(
+      transfer(
+        "storage.copyFile",
+        temporaryPath("empty-source.txt"),
+        temporaryPath("empty-copy.txt"),
+      ),
+      null,
+    );
+    assert.equal((await stat(temporaryPath("empty-copy.txt"))).size, 0);
+
     const unicodeDirectory = "notes/한글 folder";
     const unicodeFile = `${unicodeDirectory}/현재 draft.txt`;
     const unicodeFilePath = resolve(root, "data", unicodeFile);

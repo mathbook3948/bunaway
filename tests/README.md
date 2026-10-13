@@ -468,3 +468,9 @@ count와 메모리 quota 및 생성 취소의 정리를 확인한다. `windows-i
 RGBA alpha 왕복, JPEG와 BMP, 잘못된 encoded 입력과 decode 크기, 최대 PNG,
 정책 거부와 결과 전달 전 취소를 확인한다. 실제 파일 경로 접근, WebView 표시,
 다른 앱의 가져오기, 색상 관리와 최소 Windows 버전 검증은 포함하지 않는다.
+
+`api/storage-transfers.test.ts`는 두 endpoint, 추가 옵션 거부와 독립적인 전송 권한을 검사한다.
+`windows-bun-storage.ts`는 실제 source 및 destination 핸들로 여러 chunk의 임의 바이트,
+빈 파일, 기존 대상 보존, 크기 상한, 링크와 경로 거부 및 파일과 디렉터리 rename을 확인한다.
+`windows-storage-metadata.ts`는 실제 WebView2와 I/O Worker에서 copy/move와 원본 및 복사본,
+일반 쓰기 권한 거부를 검사하며 `mise run host:windows`에 포함한다.
