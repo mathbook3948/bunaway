@@ -84,8 +84,8 @@ test.skipIf(process.platform !== "win32")(
       wparam: string;
     }[] = [];
     const stateCheckpoints: unknown[] = [];
-    /** Read native ownership and placement at the failing transition, without pumping or repairing state. */
-    function verifyShowState(phase: string, command: number, visible: boolean) {
+    /** Record native state without pumping or repairing it, including inside fullscreen transitions. */
+    function recordShowState(phase: string, command: number, visible: boolean) {
       const placement = Buffer.alloc(WINDOWPLACEMENT_SIZE);
       placement.writeUInt32LE(WINDOWPLACEMENT_SIZE);
       assert(user.symbols.GetWindowPlacement(hwnd, ptr(placement)));
@@ -124,8 +124,16 @@ test.skipIf(process.platform !== "win32")(
         stateCheckpoints.shift();
       }
       const diagnostic = JSON.stringify(stateCheckpoints);
+      return {
+        current,
+        diagnostic,
+      };
+    }
+    /** Verify the commanded state and HWND ownership after a completed native transition. */
+    function verifyShowState(phase: string, command: number, visible: boolean) {
+      const { current, diagnostic } = recordShowState(phase, command, visible);
       assert.equal(current.ownerProcess, process.pid, diagnostic);
-      assert.equal(ownerThread, native.thread, diagnostic);
+      assert.equal(current.ownerThread, native.thread, diagnostic);
       assert.equal(current.currentThread, native.thread, diagnostic);
       assert.equal(native.failure, undefined, diagnostic);
       assert.equal(current.minimized, command === SW_MINIMIZE, diagnostic);
@@ -618,10 +626,15 @@ test.skipIf(process.platform !== "win32")(
           }
           verifyCurrent();
           await verifyNormal("before-enter", command, visible);
+          verifyShowState("before-fullscreen-entry", command, visible);
+          nativePhase = "enter-fullscreen-cycle";
           native.setFullscreen(hwnd, true);
+          recordShowState("after-fullscreen-entry", command, visible);
           verifyCurrent();
           await verifyNormal("fullscreen", command, visible);
+          nativePhase = "exit-fullscreen-cycle";
           native.setFullscreen(hwnd, false);
+          verifyShowState("after-fullscreen-exit", command, visible);
           verifyCurrent();
           await verifyNormal("after-exit", command, visible);
           expect(user.symbols.IsWindowVisible(hwnd)).toBe(Number(visible));
