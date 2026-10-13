@@ -50,7 +50,7 @@ try {
       "test.report": {input:{},output:{const:null},run:async(input)=>{
         await Bun.write(process.env.TMPDIR + "/clipboard-report.json", JSON.stringify(input)); return null;
       }}
-    });
+    }});
   `,
   );
   const permissions = Object.keys(clipboardOperations).map(
@@ -146,7 +146,7 @@ try {
       same(await clipboard.hasFormat({format:"application/x-bunaway-file-list"}), false, "no file-list support");
       await client.invoke("test.report", {ok:true, unicode:true, formats:true, rgba:true, grants:true});
     } catch(error) {
-      await client.invoke("test.report", {ok:false,message:error.message,code:error.code});
+      await client.invoke("test.report", {ok:false,message:error.message,code:error.code ?? null});
     } finally {try {await windows.close({view:"main"});} catch(error) {if(error.code !== "CANCELLED") throw error;}}
   `,
   );
