@@ -250,10 +250,18 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
       }
       // Await the operation outside Bun's asynchronous matcher so Worker messages
       // continue to dispatch while Windows completes a native error response.
-      async function expectError(task: Promise<unknown>, code: import("@bunaway/protocol").WireError["code"]) {
-        const error = await task.then(() => undefined, (error: unknown) => error);
+      async function expectError(
+        task: Promise<unknown>,
+        code: import("@bunaway/protocol").WireError["code"],
+      ) {
+        const error = await task.then(
+          () => undefined,
+          (error: unknown) => error,
+        );
         expect(error).toBeInstanceOf(BunawayError);
-        expect(error).toMatchObject({ code });
+        expect(error).toMatchObject({
+          code,
+        });
       }
       const pixels = {
         width: 2,
@@ -348,7 +356,8 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
             format: "image/jpeg",
           }),
         ),
-      , "INVALID_ARGUMENT");
+        "INVALID_ARGUMENT",
+      );
       await expectError(
         invoke(() =>
           image.exportBytes({
@@ -356,7 +365,8 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
             format: "image/bmp",
           }),
         ),
-      , "INVALID_ARGUMENT");
+        "INVALID_ARGUMENT",
+      );
       const opaque = {
         width: 8,
         height: 8,
@@ -446,7 +456,8 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
             format: "image/png",
           }),
         ),
-      , "INVALID_ARGUMENT");
+        "INVALID_ARGUMENT",
+      );
       for (const data of [
         "AA==",
         png.data.slice(0, 16),
@@ -459,7 +470,8 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
               data,
             }),
           ),
-        , "INVALID_ARGUMENT");
+          "INVALID_ARGUMENT",
+        );
       }
       // A valid BMP header with excessive decoded dimensions must fail before pixel allocation.
       const oversized = Buffer.alloc(58);
@@ -478,7 +490,8 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
             data: oversized.toString("base64"),
           }),
         ),
-      , "INVALID_ARGUMENT");
+        "INVALID_ARGUMENT",
+      );
       // Fill all rows without exceeding Web Crypto's per-call random byte limit.
       const maximumPixels = Buffer.alloc(MAX_IMAGE_BYTES);
       for (let offset = 0; offset < maximumPixels.length; offset += 65536) {
@@ -516,7 +529,8 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
             id: source.id,
           }),
         ),
-      , "PERMISSION_DENIED");
+        "PERMISSION_DENIED",
+      );
       grantAllowed = true;
       expect(
         await invoke(() =>
@@ -545,7 +559,8 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
             id: source.id,
           }),
         ),
-      , "INVALID_ARGUMENT");
+        "INVALID_ARGUMENT",
+      );
       for (const id of [
         fromBytes.id,
         fromURL.id,
@@ -599,7 +614,8 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
             rgba: "",
           }),
         ),
-      , "BUSY");
+        "BUSY",
+      );
       channel.notify({
         kind: "shutdown",
       });
