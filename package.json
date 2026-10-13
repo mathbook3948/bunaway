@@ -43,6 +43,7 @@
     "@bunaway/plugin-opener": "workspace:*",
     "@bunaway/plugin-autostart": "workspace:*",
     "@bunaway/plugin-clipboard": "workspace:*",
+    "@bunaway/plugin-power": "workspace:*",
     "@bunaway/plugin-appearance": "workspace:*",
     "@bunaway/plugin-log": "workspace:*",
     "@bunaway/plugin-capabilities": "workspace:*",
@@ -50,7 +51,8 @@
     "@bunaway/plugin-image": "workspace:*",
     "@bunaway/plugin-os": "workspace:*",
     "@bunaway/plugin-process": "workspace:*",
-    "@bunaway/plugin-network": "workspace:*"
+    "@bunaway/plugin-network": "workspace:*",
+    "@bunaway/plugin-notification": "workspace:*"
   },
   "imports": {
     "#cli/*": "./packages/cli/src/*.ts",
