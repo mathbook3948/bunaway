@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type ChannelConfig, parsePackaging } from "@bunaway/packaging";
+import { openRequest } from "#native/windows/bun/desktop";
 import { findIscc, must, stableGuid } from "#packaging/channels/windows/common";
 import { renderInnoScript } from "#packaging/channels/windows/inno";
 
@@ -136,6 +137,74 @@ test("installer association config normalizes keys and rejects unsafe or ambiguo
     expect(() => parse(value)).toThrow();
   }
   expect(() => parse(associations, "win-store-msix")).toThrow("unknown field");
+});
+
+test("installer URL schemes preserve desktop drive parsing and reach onOpen as URLs", () => {
+  for (const channel of [
+    "win-direct",
+    "win-store-unpackaged",
+  ] as const) {
+    const parse = (scheme: string) =>
+      parsePackaging(
+        JSON.stringify({
+          channels: {
+            [channel]: {
+              associations: {
+                urlSchemes: [
+                  {
+                    scheme,
+                    name: "Test links",
+                  },
+                ],
+              },
+            },
+          },
+        }),
+      ).channels?.[channel]?.associations?.urlSchemes?.[0]?.scheme;
+    for (const scheme of "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") {
+      expect(() => parse(scheme)).toThrow("Invalid scheme");
+    }
+    for (const scheme of [
+      "x1",
+      "NoTeS",
+      "notes+item",
+      "n".repeat(32),
+    ]) {
+      const normalized = parse(scheme);
+      expect(normalized).toBe(scheme.toLowerCase());
+      const request = openRequest(
+        {
+          argv: [
+            `${normalized}://host/item`,
+          ],
+          cwd: "X:\\launch",
+        },
+        "initial",
+      );
+      expect(request.urls).toEqual([
+        `${normalized}://host/item`,
+      ]);
+      expect(request.files).toEqual([]);
+    }
+    expect(() => parse("n".repeat(33))).toThrow("Invalid scheme");
+  }
+  const request = openRequest(
+    {
+      argv: [
+        "x://host/item",
+        "X:\\notes.txt",
+        "X:notes.txt",
+      ],
+      cwd: "X:\\launch",
+    },
+    "initial",
+  );
+  expect(request.urls).toEqual([]);
+  expect(request.files).toEqual([
+    "x:\\host\\item",
+    "X:\\notes.txt",
+    "X:\\launch\\notes.txt",
+  ]);
 });
 
 const script = (

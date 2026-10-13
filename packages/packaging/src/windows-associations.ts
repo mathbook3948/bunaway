@@ -84,10 +84,11 @@ export function parseAssociations(value: unknown): Associations {
         "scheme",
         "name",
       ]);
+      // desktop.onOpen reserves one-letter prefixes for Windows drive paths.
       const scheme = text(
         raw.scheme,
         "scheme",
-        /^[a-zA-Z][a-zA-Z0-9+.-]{0,31}$/,
+        /^[a-zA-Z][a-zA-Z0-9+.-]{1,31}$/,
       ).toLowerCase();
       if (seen.has(scheme)) {
         throw new Error(`Duplicate scheme ${scheme}.`);

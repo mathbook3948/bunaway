@@ -75,6 +75,8 @@ Inno Setup 스크립트를 생성, 컴파일한다. 앱 바로가기와 설치 �
   `fileassociations`, `urlschemes`를 추가한다. 새 설치에서는 선택하지 않으며
   무인 설치는 `/TASKS="fileassociations,urlschemes"`로 동의한다.
   파일은 `extension`, `name`, 선택적 `mimeType`, URL은 `scheme`, `name`을 사용한다.
+  scheme은 2~32자이며 영문자로 시작하고 나머지는 영숫자, `+`, `.`, `-`만 받는다.
+  영문자 한 개의 scheme은 `desktop.onOpen`이 Windows 드라이브 경로로 해석하므로 거부한다.
   앱 EXE를 파일 아이콘과 열기 명령에 사용한다. 설치 범위의 app-owned ProgID,
   OpenWithProgids와 RegisteredApplications/Capabilities 후보를 등록하며 기존 확장자 기본값,
   프로토콜 기본값과 UserChoice는 변경하지 않는다. 사용자가 Windows 기본 앱 설정에서 선택한다.

@@ -143,6 +143,7 @@ export interface ChannelConfig {
       mimeType?: string;
     }[];
     urlSchemes?: {
+      /** A 2–32 character scheme; one-letter prefixes are reserved for Windows drive paths. */
       scheme: string;
       name: string;
     }[];
