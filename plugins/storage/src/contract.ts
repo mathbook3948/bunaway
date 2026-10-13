@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { storageBytesSchema } from "./bytes.ts";
+import {
+  directoryEntrySchema,
+  MAX_DIRECTORY_ENTRIES,
+} from "./directory-entries.ts";
 
 const PATH_PATTERN = "^[^\\u0000\\r\\n]+$(?![\\s\\S])";
 const pathFields = {
@@ -94,6 +98,21 @@ export const storageOperations = {
     }),
     output: z.null(),
   },
+  readDirectory: {
+    input: z.strictObject(pathFields),
+    output: z.array(directoryEntrySchema).max(MAX_DIRECTORY_ENTRIES),
+  },
+  createDirectory: {
+    input: z.strictObject({
+      ...pathFields,
+      recursive: z.boolean().default(false),
+    }),
+    output: z.null(),
+  },
+  remove: {
+    input: z.strictObject(pathFields),
+    output: z.null(),
+  },
   exists: {
     input: z.strictObject(pathFields),
     output: z.boolean(),
@@ -121,3 +140,8 @@ export type StorageBytesWrite = z.infer<
 >;
 /** Source and destination selected by the application; transfers never replace existing targets. */
 export type StorageTransfer = z.infer<typeof storageOperations.copyFile.input>;
+
+/** Directory creation input after recursive defaults are resolved. */
+export type StorageDirectoryCreate = z.infer<
+  typeof storageOperations.createDirectory.input
+>;
