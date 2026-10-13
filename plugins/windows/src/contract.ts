@@ -481,6 +481,38 @@ export const windowOperations = {
   "windows.pauseDownload": downloadResult,
   "windows.resumeDownload": downloadResult,
   "windows.forgetDownload": downloadResult,
+  "windows.getWebViewState": {
+    input: windowTarget,
+    output: z.strictObject({
+      url: z.string(),
+      title: z.string(),
+      loading: z.boolean(),
+      canGoBack: z.boolean(),
+      canGoForward: z.boolean(),
+      zoomFactor: z.number().positive(),
+    }),
+  },
+  "windows.navigateWebView": {
+    input: windowTarget.extend({
+      url: z
+        .string()
+        .min(1)
+        .max(8192)
+        .regex(new RegExp(WINDOW_TEXT_PATTERN, "u")),
+    }),
+    output: z.null(),
+  },
+  "windows.reloadWebView": windowResult,
+  "windows.stopWebView": windowResult,
+  "windows.goBack": windowStateResult,
+  "windows.goForward": windowStateResult,
+  "windows.setZoomFactor": {
+    input: windowTarget.extend({
+      factor: z.number().min(0.25).max(5),
+    }),
+    output: z.number().positive(),
+  },
+  "windows.openDevTools": windowResult,
   "windows.getWebViewAudioState": {
     input: windowTarget,
     output: z.strictObject({
@@ -492,6 +524,25 @@ export const windowOperations = {
     input: windowTarget.extend({
       muted: z.boolean(),
     }),
+    output: z.null(),
+  },
+  "windows.setTaskbarProgress": {
+    input: z.union([
+      windowTarget.extend({
+        state: z.enum([
+          "none",
+          "indeterminate",
+        ]),
+      }),
+      windowTarget.extend({
+        state: z.enum([
+          "normal",
+          "paused",
+          "error",
+        ]),
+        value: z.number().min(0).max(1),
+      }),
+    ]),
     output: z.null(),
   },
   "windows.createInstance": {

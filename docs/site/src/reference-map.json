@@ -23,6 +23,13 @@
       }
     },
     {
+      "name": "@bunaway/backend/cli",
+      "source": "packages/backend-sdk/src/cli.ts",
+      "pages": {
+        "reference/backend/cli": ["defineCLI"]
+      }
+    },
+    {
       "name": "@bunaway/core",
       "source": "packages/core/src/index.ts",
       "pages": {
@@ -183,6 +190,17 @@
       }
     },
     {
+      "name": "@bunaway/plugin-os",
+      "source": "plugins/os/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/os": ["os", "osPlugin"]
+      }
+    },
+    {
       "name": "@bunaway/plugin-storage",
       "source": "plugins/storage/src/index.ts",
       "buildOutputs": {
@@ -294,6 +312,8 @@
           "openUrl",
           "openFile",
           "revealFile",
+          "openFileWith",
+          "openUrlWith",
           "openerPlugin"
         ]
       }
@@ -510,6 +530,7 @@
       "pages": {
         "reference/tooling/plugin-api": [
           "downloads",
+          "webview",
           "audio",
           "show",
           "showInactive",
@@ -545,6 +566,7 @@
           "center",
           "setGeometry",
           "setFullscreen",
+          "setTaskbarProgress",
           "setCloseConfirmation",
           "getSnapshot",
           "getReadiness"
@@ -563,6 +585,22 @@
           "pause",
           "resume",
           "forget"
+        ]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "NativeWebView",
+      "pages": {
+        "reference/tooling/plugin-api": [
+          "getState",
+          "navigate",
+          "reload",
+          "stop",
+          "goBack",
+          "goForward",
+          "setZoomFactor",
+          "openDevTools"
         ]
       }
     },
@@ -627,6 +665,7 @@
       "type": "NativeWindowServices",
       "pages": {
         "reference/tooling/plugin-api": [
+          "systemEvents",
           "specs",
           "supportsCreationOptions",
           "validateCreation",
@@ -856,7 +895,12 @@
       "type": "DesktopOptions",
       "pages": {
         "guides/windows": ["closeBehavior"],
-        "reference/backend/app-definition": ["tray", "onOpen", "beforeQuit"]
+        "reference/backend/app-definition": [
+          "tray",
+          "openArguments",
+          "onOpen",
+          "beforeQuit"
+        ]
       }
     },
     {
@@ -933,6 +977,7 @@
     "reference/api": ["help"]
   },
   "operations": {
+    "reference/plugins/os": ["os.info", "os.usage", "os.locale"],
     "reference/plugins/autostart": [
       "autostart.enable",
       "autostart.disable",
@@ -948,12 +993,15 @@
       "storage.appendBytes",
       "storage.appendText"
     ],
+    "reference/host/storage-transfers": ["storage.copyFile", "storage.move"],
     "reference/host/log-write": ["log.write"],
     "reference/host/capabilities-get": ["capabilities.get"],
     "reference/plugins/opener": [
       "opener.openUrl",
       "opener.openFile",
-      "opener.revealFile"
+      "opener.revealFile",
+      "opener.openFileWith",
+      "opener.openUrlWith"
     ],
     "reference/plugins/clipboard": [
       "clipboard.readText",
@@ -974,6 +1022,14 @@
       "windows.pauseDownload",
       "windows.resumeDownload",
       "windows.forgetDownload",
+      "windows.getWebViewState",
+      "windows.navigateWebView",
+      "windows.reloadWebView",
+      "windows.stopWebView",
+      "windows.goBack",
+      "windows.goForward",
+      "windows.setZoomFactor",
+      "windows.openDevTools",
       "windows.getWebViewAudioState",
       "windows.setWebViewAudioMuted",
       "windows.list",
@@ -1036,6 +1092,7 @@
       "windows.setPosition",
       "windows.center",
       "windows.setFullscreen",
+      "windows.setTaskbarProgress",
       "windows.setCloseConfirmation",
       "windows.getSnapshot",
       "windows.getReadiness",
@@ -1053,7 +1110,9 @@
       "image.getPixels",
       "image.exportBytes",
       "image.exportDataURL",
-      "image.dispose"
+      "image.dispose",
+      "image.crop",
+      "image.resize"
     ]
   },
   "configuration": {
