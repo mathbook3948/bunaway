@@ -78,6 +78,19 @@ export function readMacosWindowSpecs(
   if (
     specs.some((spec) =>
       [
+        "maximized",
+        "fullscreen",
+      ].some((key) => Object.hasOwn(spec.window, key)),
+    )
+  ) {
+    throw new BunawayError({
+      code: "UNSUPPORTED",
+      message: "Initial window state options are not implemented on macOS.",
+    });
+  }
+  if (
+    specs.some((spec) =>
+      [
         "x",
         "y",
         "center",
