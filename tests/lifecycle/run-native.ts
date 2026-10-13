@@ -113,6 +113,8 @@ if (target === "windows-x64") {
           "tests/lifecycle/windows-process.test.ts",
           "tests/lifecycle/process-run.test.ts",
           "tests/lifecycle/windows-network.test.ts",
+          "tests/lifecycle/windows-global-shortcut.test.ts",
+          "tests/lifecycle/windows-global-shortcut-ui.test.ts",
           "tests/lifecycle/windows-menu.test.ts",
           "tests/lifecycle/windows-menu-ui.test.ts",
           "tests/lifecycle/windows-tray-controls.test.ts",

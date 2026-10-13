@@ -1371,6 +1371,24 @@ try {
     packagedPlugins,
     undefined,
     {
+      shortcuts: {
+        createWindow(receive) {
+          assert(windows);
+          return windows.create(config.runtime.id, 200, 200, receive, false);
+        },
+        destroyWindow(hwnd) {
+          assert(windows);
+          windows.destroy(hwnd);
+        },
+        emit(event, payload) {
+          if (stopping || closingSent) {
+            return;
+          }
+          for (const view of views.values()) {
+            sendNativeEvent(view.boundary, event, payload);
+          }
+        },
+      },
       tray: {
         get: () => tray?.get() ?? null,
         getBounds: () => tray?.getBounds() ?? null,

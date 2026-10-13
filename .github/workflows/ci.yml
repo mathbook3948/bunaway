@@ -77,6 +77,11 @@ jobs:
           New-Item -ItemType Directory -Force -Path build/windows-matrix-logs | Out-Null
           mise exec -- bun --no-env-file test tests/lifecycle/windows-size-constraints.test.ts 2>&1 | Tee-Object -FilePath build/windows-matrix-logs/size-constraints-isolated.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # Compare the shortcut-only and combined UI lifetimes immediately before
+          # the unchanged raw show-state probe, in one owned process after the full suite.
+          $env:BUNAWAY_UI_SERVICE_SIZE_PAIR = '1'
+          mise exec -- bun --no-env-file test tests/fixtures/ui-services-size-constraints.test.ts 2>&1 | Tee-Object -FilePath build/windows-matrix-logs/ui-services-size-constraints.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Preserve Windows matrix comparison
         if: always() && runner.os == 'Windows'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

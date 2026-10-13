@@ -31,6 +31,8 @@ export type NativeEnvironment = {
   };
   /** Window services supplied by the host on its native UI thread. */
   windows?: import("@bunaway/plugin-api/native").NativeWindowServices;
+  /** Optional global shortcut message-window and event services on the native UI thread. */
+  shortcuts?: import("@bunaway/plugin-api/native").NativeShortcutServices;
   /** Optional UI-thread menu integration, absent on platforms without native menus. */
   menus?: import("@bunaway/plugin-api/native").NativeMenuServices;
   /** Optional UI-thread controls for the app's existing configured tray icon. */

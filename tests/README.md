@@ -647,6 +647,10 @@ DPI 변경과 전체화면 진입 및 종료 뒤의 마지막 8개 상태를 출
 스레드, 시작 show command도 기록하며 native 상태를 변경하거나 메시지를 pump하지 않는다.
 전체 검사 결과는 작업 로그에, 단독 실행 로그는 `windows-matrix-diagnostics` artifact에 남긴다.
 단독 통과만으로 전체 검사 실패의 원인이나 제품 수정 완료를 판단하지 않는다.
+이어서 단축키 단독 및 menu, tray 동시 UI Worker 검사와 같은 크기 제약 검사를 한 Bun
+프로세스에서 실행한다. UI 자원 정리 직후의 표시 상태를 비교하며 원래 assertion과
+기한을 유지한다. 결과는 `windows-matrix-diagnostics`의 `ui-services-size-constraints.log`에
+남긴다. 이 비교의 통과도 앞선 전체 검사 실패를 덮어쓰지 않는다.
 
 `api/opener-selected-app.test.ts`는 지정 앱 opener의 strict Zod 입력, 독립 권한,
 호출 컨텍스트와 오류를 확인한다. Windows의 `lifecycle/windows-opener-selected-app.test.ts`는
@@ -855,6 +859,13 @@ browser 번들에 Bun 전송 구현이 포함되지 않는지 검사한다. TLS,
 파일의 휴지통 항목만 정리하며 전체 휴지통을 비우지 않는다. 셸이 유지하는 COM Worker가
 다른 초기화 회귀에 영향을 주지 않도록 별도 Bun 프로세스에서 실행한다. `host:windows`에
 포함하며 사용자 설정별 휴지통 비활성화, 용량 초과와 경고 UI는 수동 검증 항목이다.
+
+`api/global-shortcut.test.ts`는 전역 단축키 권한, 등록 rollback, 중지와 재개 및 이전 메시지 폐기를 검사한다.
+`lifecycle/windows-global-shortcut.test.ts`는 실제 RegisterHotKey와 경쟁 HWND, SendInput, 중지와 정리를 확인한다.
+`windows-global-shortcut-ui.test.ts`는 단축키 단독 실행과 menu, tray 동시 실행을 실제 UI
+Worker에서 검사한다. 메뉴, 사용자 정의 아이콘, 단축키와 입력 대기가 함께 살아 있는 상태에서
+종료하고 단축키 및 트레이 HWND가 모두 해제되는지 확인한다.
+`mise run host:windows`에 포함되며 물리 키보드와 키보드 레이아웃별 검증을 대신하지 않는다.
 
 `api/menu.test.ts`는 메뉴 리소스 제한, 트리 검증, 개별 권한과 변경 실패 보존을 검사한다.
 `lifecycle/windows-menu.test.ts`와 `windows-menu-ui.test.ts`는 실제 HMENU 및 UI Worker의 창 없는 트레이와 자원 정리를 확인한다.

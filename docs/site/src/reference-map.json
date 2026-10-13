@@ -472,6 +472,20 @@
       }
     },
     {
+      "name": "@bunaway/plugin-global-shortcut",
+      "source": "plugins/global-shortcut/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/global-shortcut": [
+          "globalShortcut",
+          "globalShortcutPlugin"
+        ]
+      }
+    },
+    {
       "name": "@bunaway/plugin-menu",
       "source": "plugins/menu/src/index.ts",
       "buildOutputs": {
@@ -968,6 +982,7 @@
           "capabilities",
           "windows",
           "app",
+          "shortcuts",
           "menus",
           "tray"
         ]
@@ -1316,6 +1331,17 @@
       "image.dispose",
       "image.crop",
       "image.resize"
+    ],
+    "reference/plugins/global-shortcut": [
+      "globalShortcut.register",
+      "globalShortcut.registerMany",
+      "globalShortcut.isRegistered",
+      "globalShortcut.list",
+      "globalShortcut.unregister",
+      "globalShortcut.unregisterAll",
+      "globalShortcut.setSuspended",
+      "globalShortcut.isSuspended",
+      "globalShortcut.waitForPress"
     ],
     "reference/plugins/menu": [
       "menu.create",

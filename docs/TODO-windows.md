@@ -319,15 +319,20 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] Undo, Redo, Cut, Copy, Paste, Select All 등 기본 menu role을 제공한다.
 - [ ] About, Quit, 창 전환과 도움말 등 플랫폼 기본 메뉴 항목을 제공한다.
 - [ ] 메뉴 sublabel과 접근성 label의 플랫폼별 지원을 결정한다.
-- [ ] 전역 단축키를 하나 또는 여러 개 등록한다.
-- [ ] 전역 단축키의 등록 상태 조회, 개별 해제와 전체 해제를 제공한다.
-- [ ] 등록 목록을 유지한 채 전역 단축키 처리를 일시중지, 재개하고 중지 상태를 조회한다.
+- [x] Windows 전역 단축키를 하나 또는 여러 개 등록한다. `globalShortcut.register`와 `registerMany`를 제공한다.
+- [x] Windows 전역 단축키의 등록 상태 조회, 목록, 개별 해제와 전체 해제를 제공한다.
+- [x] Windows에서 등록 목록을 유지한 채 전역 단축키 처리를 일시중지, 재개하고 중지 상태를 조회한다.
   [E-shortcut-live]의 `setSuspended`와 `isSuspended`는 최신 문서상 Electron 42.0.0 이상이다.
   중지 중 입력 미전달, 신규 등록 실패, 기존 등록 상태 유지, 재개 후 입력 전달과 반복 호출을 검증한다.
   플랫폼별 구현 가능 범위와 종료 시 등록 해제도 확인한다.
-- [ ] 전역 단축키의 pressed/released 이벤트와 키 조합을 제공한다.
-- [ ] 단축키 충돌, 예약 키, 중복 등록과 종료 정리를 처리한다.
+- [x] Windows 전역 단축키의 `globalShortcut.pressed` 이벤트와 명시적 key/modifiers 조합을 제공한다.
+- [ ] 전역 단축키의 released 이벤트를 제공한다. RegisterHotKey 구현은 키 해제를 알리지 않는다.
+- [x] Windows 단축키 충돌, F12와 OS 예약 키, 중복 등록, batch rollback과 종료 정리를 처리한다.
 - [ ] WebView 포커스 시 메뉴 단축키와 UI 입력의 우선순위를 정의한다.
+
+전역 단축키의 입력, 권한, 중지와 실패 복구 계약은 [globalShortcut API](./site/src/content/docs/reference/plugins/global-shortcut.mdx)를 따른다.
+실제 RegisterHotKey와 SendInput 회귀를 Windows CI 실행기에 포함한다.
+물리 키보드와 키보드 레이아웃별 사용자 입력, 다른 플랫폼은 별도 검증과 구현이 남아 있다.
 
 공유 메뉴 계약과 트레이 연결은 [menu API](./site/src/content/docs/reference/plugins/menu.mdx)를 따른다.
 실제 HMENU와 창 없는 UI Worker 회귀를 Windows CI 실행기에 포함한다.
