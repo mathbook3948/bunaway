@@ -2,6 +2,7 @@ import { dlopen } from "bun:ffi";
 import assert from "node:assert/strict";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
+import type { Socket } from "node:net";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineApp } from "@bunaway/backend";
@@ -97,6 +98,7 @@ if (!process.argv.includes("--child")) {
   let failure: unknown;
   let exerciseTask: Promise<void> | undefined;
   const responses = new Set<Promise<void>>();
+  const sockets = new Set<Socket>();
   // Bun's streaming Response replaces Content-Length with chunked encoding. Use HTTP's
   // actual fixed-length framing so native total-byte and Range assertions test known metadata.
   const server = createServer((request, response) => {
@@ -168,6 +170,10 @@ if (!process.argv.includes("--child")) {
       })
       .finally(() => responses.delete(task));
     responses.add(task);
+  });
+  server.on("connection", (socket) => {
+    sockets.add(socket);
+    socket.once("close", () => sockets.delete(socket));
   });
   await new Promise<void>((done, reject) => {
     server.once("error", reject);
@@ -603,10 +609,14 @@ if (!process.argv.includes("--child")) {
     );
   } finally {
     releaseCrashBody();
-    server.closeAllConnections();
-    await new Promise<void>((done, reject) =>
+    // Bun's closeAllConnections also stops the listener. Close once and drain owned sockets.
+    const stopped = new Promise<void>((done, reject) =>
       server.close((error) => (error ? reject(error) : done())),
     );
+    for (const socket of sockets) {
+      socket.destroy();
+    }
+    await stopped;
     await Promise.all(responses);
     // Only delete unique files whose browser-selected path was recorded by this test's own item.
     for (const path of paths) {
