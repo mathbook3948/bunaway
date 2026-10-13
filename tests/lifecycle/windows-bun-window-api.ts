@@ -909,6 +909,7 @@ if (!process.argv.includes("--child")) {
             "showInactive",
             "blur",
             "activate",
+            "getMonitor",
           ] as const) {
             await assert.rejects(
               windows[name]({
@@ -923,6 +924,9 @@ if (!process.argv.includes("--child")) {
             windows.getCurrent,
             windows.getFocused,
             windows.getLastActive,
+            windows.getMonitors,
+            windows.getPrimaryMonitor,
+            windows.getCursorPosition,
           ]) {
             await assert.rejects(lookup(), {
               code: "PERMISSION_DENIED",
@@ -974,6 +978,32 @@ if (!process.argv.includes("--child")) {
           const snapshot = await windows.getSnapshot({
             view: "main",
           });
+          const monitors = await windows.getMonitors();
+          assert(monitors.length > 0);
+          const primary = await windows.getPrimaryMonitor();
+          assert(
+            primary.primary &&
+              monitors.some((monitor) => monitor.id === primary.id),
+          );
+          const monitor = await windows.getMonitor({
+            view: "main",
+            windowId: current.windowId,
+          });
+          assert(monitors.some((entry) => entry.id === monitor.id));
+          const point = {
+            x: monitor.bounds.x,
+            y: monitor.bounds.y,
+          };
+          assert.equal(
+            (await windows.getMonitorNearestPoint(point)).id,
+            monitor.id,
+          );
+          assert.equal(
+            (await windows.getMonitorNearestRect(monitor.bounds)).id,
+            monitor.id,
+          );
+          const cursor = await windows.getCursorPosition();
+          assert(Number.isInteger(cursor.x) && Number.isInteger(cursor.y));
           assert.equal(current.windowId, snapshot.windowId);
           assert.deepEqual(
             await windows.getById({

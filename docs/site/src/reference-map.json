@@ -405,7 +405,12 @@
         "./native/*": "./dist/native/*.js"
       },
       "pages": {
-        "reference/host/windows": ["windows", "windowsPlugin", "windowEvents"],
+        "reference/host/windows": [
+          "windows",
+          "windowsPlugin",
+          "monitorSchema",
+          "windowEvents"
+        ],
         "reference/tooling/native-plugins": [
           "isWindowOperation",
           "parseWindowCall",
@@ -647,7 +652,8 @@
           "setTaskbarProgress",
           "setCloseConfirmation",
           "getSnapshot",
-          "getReadiness"
+          "getReadiness",
+          "getMonitor"
         ]
       }
     },
@@ -758,7 +764,8 @@
           "now",
           "tick",
           "instances",
-          "creationSettled"
+          "creationSettled",
+          "monitors"
         ]
       }
     },
@@ -1041,6 +1048,36 @@
       "pages": {
         "reference/tooling/native-plugins": ["prepare", "execute"]
       }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "NativeMonitor",
+      "pages": {
+        "reference/tooling/plugin-api": [
+          "id",
+          "name",
+          "primary",
+          "bounds",
+          "workArea",
+          "dpi",
+          "scaleFactor",
+          "rotation",
+          "refreshRate"
+        ]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "NativeMonitorServices",
+      "pages": {
+        "reference/tooling/plugin-api": [
+          "list",
+          "primary",
+          "nearestPoint",
+          "nearestRect",
+          "cursor"
+        ]
+      }
     }
   ],
   "commands": {
@@ -1219,7 +1256,13 @@
       "windows.completeSplashscreen",
       "windows.createInstance",
       "windows.recreateInstance",
-      "windows.listInstances"
+      "windows.listInstances",
+      "windows.getMonitors",
+      "windows.getPrimaryMonitor",
+      "windows.getMonitor",
+      "windows.getMonitorNearestPoint",
+      "windows.getMonitorNearestRect",
+      "windows.getCursorPosition"
     ],
     "reference/plugins/appearance": ["appearance.getPreferences"],
     "reference/plugins/power": [
