@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { relative, resolve } from "node:path";
 import { bundleMacosHost } from "#cli/assets";
@@ -14,6 +14,7 @@ assert.equal(process.arch, "arm64");
 const root = resolve(import.meta.dir, "../..");
 const directory = await mkdtemp(resolve(tmpdir(), "bunaway-macos-io-"));
 let child: ReturnType<typeof Bun.spawn> | undefined;
+const reports: object[] = [];
 try {
   const assets = resolve(directory, "assets");
   await mkdir(resolve(assets, "web"), {
@@ -142,7 +143,7 @@ try {
     bun: pin.bun,
     assets: inventory,
   });
-  const reports: object[] = [];
+
   for (const scenario of [
     "normal",
     "init-failure",
@@ -250,6 +251,36 @@ try {
   console.log(
     "PASS compiled WKWebView -> host -> I/O Worker, source, policy, support, nonblocking AppKit, cancellation, revocation, initialization failure and shutdown deadline",
   );
+} catch (error) {
+  const diagnostics = resolve(root, "build/macos-io-diagnostics");
+  await mkdir(diagnostics, {
+    recursive: true,
+  });
+  for (const scenario of [
+    "normal",
+    "init-failure",
+    "block-cleanup",
+  ]) {
+    const logs = resolve(
+      directory,
+      scenario,
+      "Library/Application Support/bunaway/tests.macos.io/logs",
+    );
+    if (await Bun.file(resolve(logs, "host.log")).exists()) {
+      await cp(logs, resolve(diagnostics, scenario), {
+        recursive: true,
+      });
+    }
+  }
+  await writeJson(resolve(root, "build/macos-io-results.json"), {
+    platform: process.platform,
+    arch: process.arch,
+    bun: Bun.version,
+    revision: Bun.revision,
+    reports,
+    failure: error instanceof Error ? error.message : String(error),
+  });
+  throw error;
 } finally {
   if (child?.exitCode === null) {
     child.kill("SIGKILL");

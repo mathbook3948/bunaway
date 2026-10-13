@@ -145,6 +145,7 @@ jobs:
         with:
           name: macos-native-diagnostics
           path: |
+            build/macos-io-diagnostics/
             build/macos-io-results.json
             build/macos-host-results.json
             build/macos-native-logs/
