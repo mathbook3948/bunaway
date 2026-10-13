@@ -11,11 +11,13 @@ import {
   type HostCall,
   type HostContext,
   type HostResponse,
+  type JsonValue,
   NativeRegistry,
 } from "@bunaway/protocol";
 import { bindHostAPI } from "#core/host-api";
 import { disposeAll } from "#native/host-api/bun/plugins";
 import { Channel, type UIConfig } from "#native/windows/bun/channel";
+import type { ClipboardItem } from "#plugins/clipboard/src/formats";
 import { MAX_TEXT_LENGTH } from "#plugins/clipboard/src/text";
 import { createClipboard } from "#plugins/clipboard/src/win32";
 import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
@@ -267,7 +269,7 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
           });
         });
       const invoke = async (
-        run: () => Promise<string | null>,
+        run: () => Promise<JsonValue>,
         controller = new AbortController(),
       ) => {
         const host = bindHostAPI(
@@ -280,16 +282,8 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
           input: {
             const: null,
           },
-          output: {
-            anyOf: [
-              {
-                type: "string",
-              },
-              {
-                const: null,
-              },
-            ],
-          },
+          // The real clipboard plugin validates each distinct result schema.
+          output: {},
           run: (
             _input: unknown,
             _context: import("@bunaway/plugin-api").CommandContext,
@@ -324,6 +318,103 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
       }
       await invoke(() => clipboard.clear(null));
       expect(await invoke(() => clipboard.readText(null))).toBeNull();
+      const image = {
+        width: 2,
+        height: 1,
+        rgba: Buffer.from([
+          255,
+          0,
+          0,
+          128,
+          0,
+          255,
+          0,
+          255,
+        ]).toString("base64"),
+      };
+      const items: ClipboardItem[] = [
+        {
+          format: "text/plain",
+          data: "fallback 한글 😀",
+        },
+        {
+          format: "text/html",
+          data: "<p>한글 😀</p>",
+        },
+        {
+          format: "text/rtf",
+          data: "{\\rtf1 \\u54620?}",
+        },
+        {
+          format: "application/x-bunaway-file-list",
+          data: [
+            "C:\\한글\\memo.txt",
+            "\\\\server\\share\\memo.txt",
+          ],
+        },
+        {
+          format: "image/bmp",
+          data: image,
+        },
+      ];
+      await invoke(() =>
+        clipboard.writeFormats({
+          items,
+        }),
+      );
+      expect(
+        await invoke(() =>
+          clipboard.readFormats({
+            formats: items.map((item) => item.format),
+          }),
+        ),
+      ).toEqual(items);
+      expect(await invoke(() => clipboard.getFormats(null))).toEqual(
+        items.map((item) => item.format),
+      );
+      expect(
+        await invoke(() =>
+          clipboard.hasFormat({
+            format: "text/html",
+          }),
+        ),
+      ).toBe(true);
+      expect(await invoke(() => clipboard.readImage(null))).toEqual(image);
+      await acquire();
+      try {
+        expect(owner.readImage()).toEqual(image);
+        expect(owner.read()).toBe("fallback 한글 😀");
+      } finally {
+        owner.close();
+      }
+      await invoke(() => clipboard.writeImage(image));
+      expect(await invoke(() => clipboard.readText(null))).toBeNull();
+      expect(
+        await invoke(() =>
+          clipboard.hasFormat({
+            format: "text/html",
+          }),
+        ),
+      ).toBe(false);
+      expect(
+        await invoke(() =>
+          clipboard.readFormats({
+            formats: [
+              "text/html",
+              "image/bmp",
+            ],
+          }),
+        ),
+      ).toEqual([
+        {
+          format: "text/html",
+          data: null,
+        },
+        {
+          format: "image/bmp",
+          data: image,
+        },
+      ]);
       // A custom, non-text format must produce null, without clearing its data.
       const user = dlopen("user32.dll", {
         RegisterClipboardFormatW: {

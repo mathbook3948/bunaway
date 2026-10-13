@@ -660,6 +660,7 @@ export const windowOperations = {
     }),
     output: z.null(),
   },
+  "windows.center": windowResult,
   "windows.setFullscreen": {
     input: z.strictObject({
       view: viewTarget.shape.view,
