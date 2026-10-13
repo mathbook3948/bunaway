@@ -190,6 +190,8 @@ export type WindowBounds = {
  * Native failures throw; the UI host converts them to bounded public errors.
  */
 export type NativeWindow = {
+  /** Audio controls for this window's WebView controller. Windows only. */
+  audio?: NativeWebViewAudio;
   /** Reads a versioned state and physical outer-bounds snapshot for recovery after subscribing. */
   getSnapshot(): WindowSnapshot;
   /** Reads the latest preparation outcome, including a retained closed-window outcome. Windows only. */
@@ -248,6 +250,8 @@ export type NativeWindow = {
   setSize(width: number, height: number): void;
   /** Positions the outer top-left in physical pixels from the primary screen origin. */
   setPosition(x: number, y: number): void;
+  /** Centers outer/normal restoration bounds in the current monitor work area, preserving state. Windows only. */
+  center?(): void;
   /**
    * Applies physical content or outer geometry without showing or activating the window.
    * While minimized/maximized, edits normal restoration bounds. Rejects fullscreen and
@@ -280,6 +284,16 @@ export type WindowDisplayState = {
   minimized: boolean;
   maximized: boolean;
   fullscreen: boolean;
+};
+/** Browser playback and mute are independent; playing can remain true while muted. */
+export type WebViewAudioState = {
+  muted: boolean;
+  playing: boolean;
+};
+/** Window-owned WebView audio settings; navigation preserves mute and recreation resets it. */
+export type NativeWebViewAudio = {
+  getState(): WebViewAudioState;
+  setMuted(muted: boolean): void;
 };
 /** Identifies one native window lifetime separately from its policy view. */
 export type WindowIdentity = {

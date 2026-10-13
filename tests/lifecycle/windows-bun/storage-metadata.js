@@ -68,8 +68,55 @@ try {
     await storage.exists(outsideNotes),
     await storage.stat(outsideNotes),
   ];
+  const binaryFile = {
+    path: `${globalThis.storageTestDirectory}/bytes/한글.bin`,
+  };
+  await storage.writeBytes({
+    ...binaryFile,
+    bytes: "AP8=",
+  });
+  await storage.appendBytes({
+    ...binaryFile,
+    bytes: "gA==",
+  });
+  const bytes = await storage.readBytes(binaryFile);
+  check(bytes === "AP+A", "Byte round trip or append mismatch");
+  await storage.writeBytes({
+    ...binaryFile,
+    bytes: "",
+  });
+  await storage.appendText({
+    ...binaryFile,
+    text: "한글",
+  });
+  await storage.appendText({
+    ...binaryFile,
+    text: "🙂",
+  });
+  const appended = await storage.readBytes(binaryFile);
+  check(
+    atob(appended) ===
+      String.fromCharCode(...new TextEncoder().encode("한글🙂")),
+    "UTF-8 append mismatch",
+  );
+  let deniedTextReplacement = false;
+  try {
+    await storage.writeText({
+      ...binaryFile,
+      text: "denied",
+    });
+  } catch (error) {
+    deniedTextReplacement = error.code === "PERMISSION_DENIED";
+  }
+  check(
+    deniedTextReplacement,
+    "Byte write or append grant allowed text replacement",
+  );
   report = {
     pass: true,
+    bytes,
+    appended,
+    deniedTextReplacement,
     existsFile,
     existsDirectory,
     existsMissing,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { storageBytesSchema } from "./bytes.ts";
 
 const PATH_PATTERN = "^[^\\u0000\\r\\n]+$(?![\\s\\S])";
 const pathFields = {
@@ -41,13 +42,38 @@ const storageMetadata = z.union([
     ...storageTimes,
   }),
 ]);
-/** Text and metadata contracts for paths selected by the application. */
+/** Text, bytes and metadata contracts for paths selected by the application. */
 export const storageOperations = {
   readText: {
     input: z.strictObject(pathFields),
     output: z.string(),
   },
   writeText: {
+    input: z.strictObject({
+      ...pathFields,
+      text: z.string(),
+    }),
+    output: z.null(),
+  },
+  readBytes: {
+    input: z.strictObject(pathFields),
+    output: storageBytesSchema,
+  },
+  writeBytes: {
+    input: z.strictObject({
+      ...pathFields,
+      bytes: storageBytesSchema,
+    }),
+    output: z.null(),
+  },
+  appendBytes: {
+    input: z.strictObject({
+      ...pathFields,
+      bytes: storageBytesSchema,
+    }),
+    output: z.null(),
+  },
+  appendText: {
     input: z.strictObject({
       ...pathFields,
       text: z.string(),
@@ -73,4 +99,9 @@ export type StorageWrite = z.infer<typeof storageOperations.writeText.input>;
 /** File or directory metadata returned by `storage.stat`. */
 export type StorageMetadata = NonNullable<
   z.infer<typeof storageOperations.stat.output>
+>;
+
+/** Path and canonical base64 accepted by byte writes and appends. */
+export type StorageBytesWrite = z.infer<
+  typeof storageOperations.writeBytes.input
 >;
