@@ -1,11 +1,22 @@
 import { expect, test } from "bun:test";
 import assert from "node:assert/strict";
-import { networkPlugin } from "@bunaway/plugin-network/native/windows";
+import { networkPlugin as macosNetworkPlugin } from "@bunaway/plugin-network/native/macos";
+import { networkPlugin as windowsNetworkPlugin } from "@bunaway/plugin-network/native/windows";
 import type { JsonValue } from "@bunaway/protocol";
 import { networkOperations } from "#plugins/network/src/contract";
 
-function createAdapter() {
-  const platform = networkPlugin.nativePlatforms.windows;
+const platforms = [
+  [
+    "windows",
+    windowsNetworkPlugin.nativePlatforms.windows,
+  ],
+  [
+    "macos",
+    macosNetworkPlugin.nativePlatforms.macos,
+  ],
+] as const;
+
+function createAdapter(platform: (typeof platforms)[number][1]) {
   assert(platform);
   const adapter = platform.create({
     dataRoot: ".",
@@ -139,217 +150,226 @@ function server() {
   };
 }
 
-test("generated network adapter preserves binary bodies and never follows HTTP redirects", async () => {
-  const local = server();
-  const { adapter, call } = createAdapter();
-  try {
-    const bodyBase64 = Buffer.from([
-      0,
-      255,
-      10,
-      65,
-    ]).toString("base64");
-    const echo = networkOperations.request.output.parse(
-      await call("network.request", {
-        url: `${local.url}/echo`,
-        method: "POST",
-        bodyBase64,
-      }),
-    );
-    expect(echo.status).toBe(201);
-    expect(echo.bodyBase64).toBe(bodyBase64);
-    const redirect = networkOperations.request.output.parse(
-      await call("network.request", {
-        url: `${local.url}/redirect`,
-      }),
-    );
-    expect(redirect.status).toBe(302);
-    expect(local.targets()).toBe(0);
-    const head = networkOperations.request.output.parse(
-      await call("network.request", {
-        url: local.url,
-        method: "HEAD",
-        maxResponseBytes: 0,
-      }),
-    );
-    expect(head.bodyBase64).toBe("");
-    await expect(
-      call("network.request", {
-        url: `${local.url}/large`,
-      }),
-    ).rejects.toMatchObject({
-      code: "INTERNAL",
-    });
-    await expect(
-      call("network.request", {
-        url: local.url,
-        maxResponseBytes: 1,
-      }),
-    ).rejects.toMatchObject({
-      code: "INTERNAL",
-    });
-  } finally {
-    await adapter.dispose();
-    local.server.stop(true);
-  }
-});
+test.each(platforms)(
+  "generated %s network adapter preserves binary bodies and never follows HTTP redirects",
+  async (_name, platform) => {
+    const local = server();
+    const { adapter, call } = createAdapter(platform);
+    try {
+      const bodyBase64 = Buffer.from([
+        0,
+        255,
+        10,
+        65,
+      ]).toString("base64");
+      const echo = networkOperations.request.output.parse(
+        await call("network.request", {
+          url: `${local.url}/echo`,
+          method: "POST",
+          bodyBase64,
+        }),
+      );
+      expect(echo.status).toBe(201);
+      expect(echo.bodyBase64).toBe(bodyBase64);
+      const redirect = networkOperations.request.output.parse(
+        await call("network.request", {
+          url: `${local.url}/redirect`,
+        }),
+      );
+      expect(redirect.status).toBe(302);
+      expect(local.targets()).toBe(0);
+      const head = networkOperations.request.output.parse(
+        await call("network.request", {
+          url: local.url,
+          method: "HEAD",
+          maxResponseBytes: 0,
+        }),
+      );
+      expect(head.bodyBase64).toBe("");
+      await expect(
+        call("network.request", {
+          url: `${local.url}/large`,
+        }),
+      ).rejects.toMatchObject({
+        code: "INTERNAL",
+      });
+      await expect(
+        call("network.request", {
+          url: local.url,
+          maxResponseBytes: 1,
+        }),
+      ).rejects.toMatchObject({
+        code: "INTERNAL",
+      });
+    } finally {
+      await adapter.dispose();
+      local.server.stop(true);
+    }
+  },
+);
 
-test("timeout, cancellation, adapter disposal and concurrency bounds release blocked HTTP reads", async () => {
-  const local = server();
-  const { adapter, call } = createAdapter();
-  try {
-    await expect(
-      call("network.request", {
-        url: `${local.url}/wait`,
-        timeoutMs: 30,
-      }),
-    ).rejects.toMatchObject({
-      code: "TIMEOUT",
-    });
-    const cancelled = new AbortController();
-    const pending = call(
-      "network.request",
-      {
-        url: `${local.url}/wait`,
-      },
-      cancelled.signal,
-    );
-    await waitFor(() => local.waits() === 2);
-    cancelled.abort();
-    await expect(pending).rejects.toMatchObject({
-      code: "CANCELLED",
-    });
-    const waits = Array.from(
-      {
-        length: 16,
-      },
-      () =>
+test.each(platforms)(
+  "%s timeout, cancellation, adapter disposal and concurrency bounds release blocked HTTP reads",
+  async (_name, platform) => {
+    const local = server();
+    const { adapter, call } = createAdapter(platform);
+    try {
+      await expect(
         call("network.request", {
           url: `${local.url}/wait`,
+          timeoutMs: 30,
         }),
-    );
-    const observed = Promise.allSettled(waits);
-    await Bun.sleep(20);
-    await expect(
-      call("network.request", {
-        url: local.url,
-      }),
-    ).rejects.toMatchObject({
-      code: "BUSY",
-    });
-    await adapter.dispose();
-    await adapter.dispose();
-    expect(
-      (await observed).every(
-        (result) =>
-          result.status === "rejected" && result.reason.code === "CANCELLED",
-      ),
-    ).toBe(true);
-    await expect(
-      call("network.request", {
-        url: local.url,
-      }),
-    ).rejects.toMatchObject({
-      code: "CANCELLED",
-    });
-  } finally {
-    await adapter.dispose();
-    local.server.stop(true);
-  }
-});
+      ).rejects.toMatchObject({
+        code: "TIMEOUT",
+      });
+      const cancelled = new AbortController();
+      const pending = call(
+        "network.request",
+        {
+          url: `${local.url}/wait`,
+        },
+        cancelled.signal,
+      );
+      await waitFor(() => local.waits() === 2);
+      cancelled.abort();
+      await expect(pending).rejects.toMatchObject({
+        code: "CANCELLED",
+      });
+      const waits = Array.from(
+        {
+          length: 16,
+        },
+        () =>
+          call("network.request", {
+            url: `${local.url}/wait`,
+          }),
+      );
+      const observed = Promise.allSettled(waits);
+      await Bun.sleep(20);
+      await expect(
+        call("network.request", {
+          url: local.url,
+        }),
+      ).rejects.toMatchObject({
+        code: "BUSY",
+      });
+      await adapter.dispose();
+      await adapter.dispose();
+      expect(
+        (await observed).every(
+          (result) =>
+            result.status === "rejected" && result.reason.code === "CANCELLED",
+        ),
+      ).toBe(true);
+      await expect(
+        call("network.request", {
+          url: local.url,
+        }),
+      ).rejects.toMatchObject({
+        code: "CANCELLED",
+      });
+    } finally {
+      await adapter.dispose();
+      local.server.stop(true);
+    }
+  },
+);
 
-test("WebSocket exchanges preserve text and binary, reject redirects and terminate on bounds or cancellation", async () => {
-  const local = server();
-  const { adapter, call } = createAdapter();
-  try {
-    const echo = networkOperations.exchange.output.parse(
-      await call("network.exchange", {
-        url: `${local.ws}/socket`,
-        messages: [
-          "한글 😀",
-          "a & b",
-        ],
-        receiveCount: 2,
-      }),
-    );
-    expect(echo.messages).toEqual([
-      {
-        kind: "text",
-        text: "한글 😀",
-      },
-      {
-        kind: "text",
-        text: "a & b",
-      },
-    ]);
-    expect(echo.close).toMatchObject({
-      code: 1000,
-      wasClean: true,
-    });
-    const binary = networkOperations.exchange.output.parse(
-      await call("network.exchange", {
-        url: `${local.ws}/binary`,
-        messages: [],
-        receiveCount: 1,
-      }),
-    );
-    expect(binary.messages).toEqual([
-      {
-        kind: "binary",
-        base64: "AP8B",
-      },
-    ]);
-    await expect(
-      call("network.exchange", {
-        url: `${local.ws}/redirect`,
-        messages: [],
-        receiveCount: 1,
-        timeoutMs: 100,
-      }),
-    ).rejects.toMatchObject({
-      code: "INTERNAL",
-    });
-    expect(local.targets()).toBe(0);
-    await expect(
-      call("network.exchange", {
-        url: `${local.ws}/socket-large`,
-        messages: [],
-        receiveCount: 1,
-      }),
-    ).rejects.toMatchObject({
-      code: "INTERNAL",
-    });
-    await expect(
-      call("network.exchange", {
-        url: `${local.ws}/socket`,
-        messages: [],
-        receiveCount: 1,
-        timeoutMs: 30,
-      }),
-    ).rejects.toMatchObject({
-      code: "TIMEOUT",
-    });
-    const priorSockets = local.sockets();
-    const cancel = new AbortController();
-    const pending = call(
-      "network.exchange",
-      {
-        url: `${local.ws}/socket`,
-        messages: [],
-        receiveCount: 1,
-      },
-      cancel.signal,
-    );
-    await waitFor(() => local.sockets() > priorSockets);
-    // Abort reasons are arbitrary values; a falsy reason must still settle and release the socket.
-    cancel.abort(0);
-    await expect(pending).rejects.toMatchObject({
-      code: "CANCELLED",
-    });
-    await waitFor(() => local.server.pendingWebSockets === 0);
-    expect(local.server.pendingWebSockets).toBe(0);
-  } finally {
-    await adapter.dispose();
-    local.server.stop(true);
-  }
-});
+test.each(platforms)(
+  "%s WebSocket exchanges preserve text and binary, reject redirects and terminate on bounds or cancellation",
+  async (_name, platform) => {
+    const local = server();
+    const { adapter, call } = createAdapter(platform);
+    try {
+      const echo = networkOperations.exchange.output.parse(
+        await call("network.exchange", {
+          url: `${local.ws}/socket`,
+          messages: [
+            "한글 😀",
+            "a & b",
+          ],
+          receiveCount: 2,
+        }),
+      );
+      expect(echo.messages).toEqual([
+        {
+          kind: "text",
+          text: "한글 😀",
+        },
+        {
+          kind: "text",
+          text: "a & b",
+        },
+      ]);
+      expect(echo.close).toMatchObject({
+        code: 1000,
+        wasClean: true,
+      });
+      const binary = networkOperations.exchange.output.parse(
+        await call("network.exchange", {
+          url: `${local.ws}/binary`,
+          messages: [],
+          receiveCount: 1,
+        }),
+      );
+      expect(binary.messages).toEqual([
+        {
+          kind: "binary",
+          base64: "AP8B",
+        },
+      ]);
+      await expect(
+        call("network.exchange", {
+          url: `${local.ws}/redirect`,
+          messages: [],
+          receiveCount: 1,
+          timeoutMs: 100,
+        }),
+      ).rejects.toMatchObject({
+        code: "INTERNAL",
+      });
+      expect(local.targets()).toBe(0);
+      await expect(
+        call("network.exchange", {
+          url: `${local.ws}/socket-large`,
+          messages: [],
+          receiveCount: 1,
+        }),
+      ).rejects.toMatchObject({
+        code: "INTERNAL",
+      });
+      await expect(
+        call("network.exchange", {
+          url: `${local.ws}/socket`,
+          messages: [],
+          receiveCount: 1,
+          timeoutMs: 30,
+        }),
+      ).rejects.toMatchObject({
+        code: "TIMEOUT",
+      });
+      const priorSockets = local.sockets();
+      const cancel = new AbortController();
+      const pending = call(
+        "network.exchange",
+        {
+          url: `${local.ws}/socket`,
+          messages: [],
+          receiveCount: 1,
+        },
+        cancel.signal,
+      );
+      await waitFor(() => local.sockets() > priorSockets);
+      // Abort reasons are arbitrary values; a falsy reason must still settle and release the socket.
+      cancel.abort(0);
+      await expect(pending).rejects.toMatchObject({
+        code: "CANCELLED",
+      });
+      await waitFor(() => local.server.pendingWebSockets === 0);
+      expect(local.server.pendingWebSockets).toBe(0);
+    } finally {
+      await adapter.dispose();
+      local.server.stop(true);
+    }
+  },
+);
