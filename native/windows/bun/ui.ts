@@ -846,6 +846,11 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         isMaximizable: () => nativeWindows.isMaximizable(hwnd),
         setClosable: (closable) => nativeWindows.setClosable(hwnd, closable),
         isClosable: () => nativeWindows.isClosable(hwnd),
+        setResizable: (resizable) =>
+          nativeWindows.setResizable(hwnd, resizable),
+        isResizable: () => nativeWindows.isResizable(hwnd),
+        setMovable: (movable) => nativeWindows.setMovable(hwnd, movable),
+        isMovable: () => nativeWindows.isMovable(hwnd),
         minimize: () => nativeWindows.minimize(hwnd),
         maximize: () => nativeWindows.maximize(hwnd),
         unmaximize: () => nativeWindows.unmaximize(hwnd),
@@ -1244,7 +1249,16 @@ try {
   profiles.collectOrphans();
   for (const spec of config.windows) {
     if (spec.startup !== false) {
-      createWindow(spec);
+      // Keep the catalog defaults for later creation, but prevent initial ready callbacks from showing.
+      const { showWhenReady, ...hiddenSpec } = spec;
+      createWindow(
+        config.desktop?.startHidden
+          ? {
+              ...hiddenSpec,
+              visible: false,
+            }
+          : spec,
+      );
     }
   }
   await channel.send({

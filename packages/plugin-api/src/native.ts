@@ -230,6 +230,14 @@ export type NativeWindow = {
   setClosable?(closable: boolean): void;
   /** Reads the host's user-close setting for this HWND. Windows only. */
   isClosable?(): boolean;
+  /** Changes user border/system-menu resizing without restricting programmatic geometry. Windows only. */
+  setResizable?(resizable: boolean): void;
+  /** Reads the normal window's resize policy, including while fullscreen. Windows only. */
+  isResizable?(): boolean;
+  /** Changes user caption/system-menu movement without restricting programmatic positioning. Windows only. */
+  setMovable?(movable: boolean): void;
+  /** Reads the current user movement policy. Windows only. */
+  isMovable?(): boolean;
   /** Minimizes and displays the window, allowing Windows to activate another window. */
   minimize(): void;
   /** Maximizes and displays the window, requesting activation. */

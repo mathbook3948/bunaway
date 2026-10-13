@@ -35,6 +35,8 @@ const stateQueries = [
   "isMinimizable",
   "isMaximizable",
   "isClosable",
+  "isResizable",
+  "isMovable",
   "isNormal",
   "isDestroyed",
 ] as const;
@@ -122,6 +124,8 @@ function fixture() {
     isMinimizable: true,
     isMaximizable: true,
     isClosable: true,
+    isResizable: true,
+    isMovable: true,
   };
   let failure: Error | undefined;
   const native: NativeWindow = {
@@ -178,6 +182,16 @@ function fixture() {
       observed.isClosable = value;
     },
     isClosable: () => observed.isClosable,
+    setResizable(resizable) {
+      apply("setResizable");
+      observed.isResizable = resizable;
+    },
+    isResizable: () => observed.isResizable,
+    setMovable(movable) {
+      apply("setMovable");
+      observed.isMovable = movable;
+    },
+    isMovable: () => observed.isMovable,
     setGeometry() {},
     setFullscreen() {},
     setCloseConfirmation() {},
@@ -240,12 +254,16 @@ function fixture() {
         | (typeof stateQueries)[number]
         | "setMinimizable"
         | "setMaximizable"
-        | "setClosable",
+        | "setClosable"
+        | "setResizable"
+        | "setMovable",
       view = "main",
       payload: {
         minimizable?: boolean;
         maximizable?: boolean;
         closable?: boolean;
+        resizable?: boolean;
+        movable?: boolean;
       } = {},
     ) =>
       Promise.resolve().then(() =>
@@ -396,6 +414,116 @@ test("caption controls validate booleans, retain independent operation grants an
     });
     expect(await controlled.invoke("minimize")).toBeNull();
     expect(await controlled.invoke("maximize")).toBeNull();
+  }
+});
+
+test("user movement controls validate booleans and keep per-operation grants and lifetime checks", async () => {
+  for (const [setter, getter, field] of [
+    [
+      "setResizable",
+      "isResizable",
+      "resizable",
+    ],
+    [
+      "setMovable",
+      "isMovable",
+      "movable",
+    ],
+  ] as const) {
+    const f = fixture();
+    expect(await f.invoke(getter)).toBe(true);
+    for (const value of [
+      false,
+      true,
+      false,
+    ]) {
+      const payload = {
+        [field]: value,
+      };
+      expect(
+        validateWindowCall({
+          operation: `windows.${setter}`,
+          payload: {
+            view: "main",
+            windowId: "window-1",
+            ...payload,
+          },
+        }).operation,
+      ).toBe(`windows.${setter}`);
+      expect(await f.invoke(setter, "main", payload)).toBeNull();
+      expect(await f.invoke(getter)).toBe(value);
+    }
+    for (const payload of [
+      {},
+      {
+        [field]: null,
+      },
+      {
+        [field]: 1,
+      },
+      {
+        [field]: "false",
+      },
+      {
+        [field]: true,
+        extra: true,
+      },
+    ]) {
+      expect(() =>
+        validateWindowCall({
+          operation: `windows.${setter}`,
+          payload: {
+            view: "main",
+            ...payload,
+          },
+        }),
+      ).toThrow();
+    }
+    expect(validateWindowOutput(`windows.${setter}`, null)).toBeNull();
+    expect(() => validateWindowOutput(`windows.${setter}`, true)).toThrow();
+    f.permissions.permissions = [
+      `windows.${getter}`,
+    ];
+    await expect(
+      f.invoke(setter, "main", {
+        [field]: true,
+      }),
+    ).rejects.toMatchObject({
+      code: "PERMISSION_DENIED",
+    });
+    f.permissions.permissions = windowPermissions();
+    await expect(
+      f.invoke(setter, "missing", {
+        [field]: true,
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+    f.setClosed();
+    await expect(
+      f.invoke(setter, "main", {
+        [field]: true,
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+    expect(f.actions).toHaveLength(3);
+    const unsupported = fixture();
+    delete unsupported.native[setter];
+    await expect(
+      unsupported.invoke(setter, "main", {
+        [field]: true,
+      }),
+    ).rejects.toMatchObject({
+      code: "UNSUPPORTED",
+    });
+    const failed = fixture();
+    failed.setFailure(new Error("Movement failed"));
+    await expect(
+      failed.invoke(setter, "main", {
+        [field]: false,
+      }),
+    ).rejects.toThrow("Movement failed");
   }
 });
 

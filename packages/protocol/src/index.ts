@@ -16,6 +16,11 @@ import {
 } from "./validation.ts";
 
 export {
+  AUTOSTART_ARGUMENT,
+  AUTOSTART_HIDDEN_ARGUMENT,
+} from "./autostart-launch.ts";
+
+export {
   API_LIMITS,
   type AsyncDispose,
   BunawayError,
