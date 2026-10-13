@@ -1,5 +1,16 @@
 # Tests
 
+`lifecycle/macos-safe-storage.test.ts`는 합성 Keychain으로 lazy 준비, 키 생성 경합,
+접근 실패 뒤 키 보존과 재시도, 작업별 키 지우기, 버전과 namespace 인증, 변조와 크기 상한을
+검사한다. AES-GCM은 Python cryptography로 생성한 고정 벡터와 비교한다.
+`lifecycle/macos-keychain-native.test.ts`는 실제 Security.framework와 합성 데이터로
+disposable private Keychain을 만들고 공유 Bun과 ad-hoc compiled 실행 파일에서 Unicode,
+바이트 상한, 변조, 잠금 상태와 같은 실행 파일의 프로세스 재시작을 확인한 뒤 삭제한다.
+기본 Keychain과 search list, trust, ACL이나 signing identity는 바꾸지 않는다.
+사용자의 login Keychain과 실제 credential, 시스템 UI 선택, 다른 서명 빌드로의 이전은
+검증하지 않는다. 기존 macOS native CI에서 별도로 실행하고 로그를 보관한다.
+공개 호스트 I/O와 종료 통합은 PR164의 수정된 foundation에 의존한다.
+
 `api/webview-print-ui.test.ts`는 인쇄 UI의 개별 권한, browser 기본값과 system 선택,
 경로와 silent 입력 거부, 취소와 닫힌 창 및 플랫폼 서비스 부재를 확인한다.
 `lifecycle/windows-webview-print-ui.ts`는 `mise run host:windows`에서 실제 Win32와
