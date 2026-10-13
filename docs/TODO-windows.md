@@ -615,7 +615,10 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 
 - [x] 앱이 지정한 절대 경로의 UTF-8 텍스트 읽기와 쓰기를 제공한다.
 - [x] 파일을 여는 경계에서 잘못된 경로, junction, hardlink와 대상 교체를 거부한다.
-- [ ] binary 읽기와 쓰기, append와 open/read/write/seek/close 핸들을 제공한다.
+- [x] Windows의 binary 읽기와 쓰기, UTF-8 텍스트와 바이트 append를 제공한다.
+  canonical base64와 256 KiB 바이트 상한, 작업별 권한과 기존 네이티브 경로 검사를 유지한다.
+  [바이너리 계약](./site/src/content/docs/reference/host/storage-bytes.mdx)을 따른다.
+- [ ] open/read/write/seek/close 파일 핸들과 대용량 stream I/O를 제공한다.
 - [x] 파일과 디렉터리 존재, stat과 metadata를 조회한다.
   `storage.exists`와 `storage.stat`은 앱이 지정한 절대 경로를 받는다.
   작업마다 독립적으로 허용하고 네이티브 경로와 대상 핸들을 검사한다. 없는 대상은 각각 `false`와 `null`이며,
@@ -646,7 +649,8 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   기본값이 있는 경우와 없는 경우, 변경 이벤트, autosave 및 명시적 save 후 재실행 결과를 검증한다.
 - [ ] SQLite의 query, execute, transaction과 migration을 제공한다.
 - [ ] Tauri SQL의 다른 backend와 원격 DB 지원 필요성을 결정한다.
-- [ ] Bun 파일, path와 SQLite API를 직접 사용하는 trusted backend 경로와 권한 중재 API를 구분해 문서화한다.
+- [x] Bun 파일, path와 SQLite API를 직접 사용하는 trusted backend 경로와 권한 중재 API를 구분해 문서화한다.
+  [백엔드 Host API](./site/src/content/docs/reference/backend/host-api.mdx)를 따른다.
 
 ## 20. OS 정보, HTTP, WebSocket와 프로세스
 
