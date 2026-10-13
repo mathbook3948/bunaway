@@ -58,6 +58,9 @@ macOS는 options 생략과 빈 객체를 허용하고 비어 있지 않은 optio
 `options.window`의 `x`, `y`, `center`, `useContentSize`, `preventOverflow`는
 [초기 창 설정](/reference/configuration/#app)과 같은 단위와 작업 영역 계약을 사용합니다.
 startup, create, recreate, createInstance와 recreateInstance에 모두 적용합니다.
+`options.window.focusable`도 선언과 병합하는 boolean이며 기본은 `true`입니다.
+`false`인 Windows 창은 활성화 없이 표시하고 사용자 클릭 및 호스트의 새 전경 활성화 요청을 차단합니다.
+
 `maximized`, `fullscreen`도 boolean이며 기본은 `false`입니다. 초기 일반 영역을 설정한 뒤
 최대화, 전체화면 순서로 적용합니다. 둘 다 켜면 전체화면 해제 뒤 최대화 상태로 돌아갑니다.
 `visible: false`와 `showWhenReady`의 숨김 생성도 유지합니다. 초기 전체화면 해제는 현재 표시 상태를
@@ -416,7 +419,8 @@ await windows.close({ view: "dialog" });
 | `windows.isMaximizable` | `{ view, windowId? }` | `Promise<boolean>`. 일반 창의 사용자 최대화 허용 여부 |
 | `windows.setClosable` | `{ view, windowId?, closable: boolean }` | `Promise<null>`. 네이티브 닫기 버튼과 사용자 닫기 허용 변경 |
 | `windows.isClosable` | `{ view, windowId? }` | `Promise<boolean>`. 이 창 수명의 사용자 닫기 설정 조회 |
-
+| `windows.setFocusable` | `{ view, windowId?, focusable: boolean }` | `Promise<null>`. 이후 활성화 허용 변경. 현재 포커스를 다른 창으로 옮기지는 않음 |
+| `windows.isFocusable` | `{ view, windowId? }` | `Promise<boolean>`. 네이티브 활성화 허용 여부. 실제 `isFocused`와 별도 |
 | `windows.setTitle` | `{ view, windowId?, title: string }` | `Promise<null>`. 현재 창의 네이티브 제목 변경. 1–1024 UTF-16 코드 단위, NUL 금지 |
 | `windows.getTitle` | `{ view, windowId? }` | `Promise<string>`. 실제 HWND의 현재 제목 조회. 0–1024 UTF-16 코드 단위 |
 | `windows.setResizable` | `{ view, windowId?, resizable: boolean }` | `Promise<null>`. 사용자 테두리와 시스템 메뉴 크기 조절 허용 변경 |
@@ -496,6 +500,8 @@ const destroyed = await windows.isDestroyed({ view: "editor" });
 다음은 Windows의 계약입니다. `showInactive`, `blur`, `activate`는 macOS에서
 `UNSUPPORTED`입니다. 여기서 활성 창과 포커스된 창은 `isFocused`와 같은 OS 전경 창을
 뜻합니다. 창 안의 입력 요소로 키보드 포커스를 옮기는 API는 아닙니다.
+API 표의 활성화 요청은 기본 `focusable: true` 기준입니다.
+`false`에서는 [활성화 허용](#활성화-허용)의 비활성 표시와 상태 변경 계약을 적용합니다.
 
 | API | 일반 창 | 숨긴 창 | 최소화한 창 | 최대화한 창 |
 | --- | --- | --- | --- | --- |
@@ -615,7 +621,7 @@ WebView 생성자가 실패해 HWND를 바로 회수한 시도는 생성 호출 
 `showWhenReady: "document"`는 문서가, `"sdk"`는 문서와 SDK가 모두 준비된 뒤 한 번 표시합니다.
 이후 숨기거나 탐색해도 자동으로 다시 표시하지 않습니다. 재생성하면 선언한 옵션을 새 창에 다시 적용합니다.
 명시적 `show`, `focus`와 표시를 동반하는 상태 제어는 준비 전에도 창을 표시할 수 있습니다.
-자동 표시 시점부터는 일반 `show`와 같은 Windows 활성화 동작입니다.
+자동 표시 시점부터는 일반 `show`와 같은 Windows 활성화 동작입니다. `focusable: false`이면 비활성 표시를 사용합니다.
 
 `completeSplashscreen({ view: "main", splash: "splash" })`는 windows.completeSplashscreen 작업 권한을 먼저 검사합니다. 두 창은 앱 설정에 선언해야 합니다.
 주 창이나 백엔드에서 호출해야 합니다. splash 창에서 호출하면 세션이 닫히기 전에 `INVALID_ARGUMENT`를 반환하며 창은 전환하지 않습니다.
@@ -630,6 +636,22 @@ isolated splash의 임시 프로필도 최종 종료로 정리하며 다시 생�
 그 뒤 마지막 주 창의 일반 닫기는 기존 종료 취소와 트레이 규칙을 따릅니다.
 요청을 실행하기 전 취소하면 전환하지 않습니다. 이미 표시와 닫기를 확정한 뒤에는 그 변경을 되돌리지 않습니다.
 macOS의 준비 조회, 이벤트와 splashscreen 전환은 아직 지원하지 않습니다.
+
+## 활성화 허용
+
+`focusable: false`는 Windows의 [WS_EX_NOACTIVATE](https://learn.microsoft.com/en-us/windows/win32/winmsg/extended-window-styles)를 사용합니다.
+해당 창은 사용자 클릭으로 활성화되지 않고 `show`는 비활성 표시를 사용합니다. `focus`는 새 활성화나
+복원을 요청하지 않으며 이미 전경 창이면 성공, 아니면 `BUSY`입니다. `activate`도 새 활성화를 요청하지 않고
+현재 전경 여부를 반환합니다. `blur` 후보에서는 이 창을 제외합니다. 설정 변경은 현재 전경 창을 강제로
+비활성화하지 않으므로 `isFocusable: false`와 `isFocused: true`가 함께 관찰될 수 있습니다.
+최소화, 최대화와 복원 API 및 해당 네이티브 버튼도 활성화를 요청하지 않습니다.
+`desktop.show()`와 트레이 Open, 두 번째 실행의 표시 요청은 숨긴 창을 표시하고 최소화된 창을
+복원합니다. `focusable: false`이면 전경 활성화를 요청하지 않으며 최소화 전 최대화 상태도 유지합니다.
+이미 전경 창인 창을 최소화하면 OS는 다른 창으로 전경을 옮길 수 있습니다.
+Windows 기본 동작상 이 스타일의 창은 작업 표시줄에 나타나지 않습니다. 작업 표시줄 강제 표시 옵션은 아직 없습니다.
+표시, 위치와 크기를 유지하며 전체화면에서도 설정을 변경하고 유지합니다. 재생성은 선언 또는 생성 옵션으로 돌아갑니다.
+trusted Win32 코드의 직접 활성화까지 막는 보안 경계는 아닙니다. setter/getter에는 각각의 operation 권한이 필요하며
+닫힌 창은 `INVALID_ARGUMENT`입니다. macOS는 선언된 초기 focusable을 `UNSUPPORTED`로 거부합니다.
 
 ## 조회 단위와 좌표
 

@@ -114,6 +114,11 @@ export class Windows {
     this.show(hwnd, true);
     return true;
   }
+
+  /** These UI-loop fixtures use the default focusable policy. */
+  showForDesktop(hwnd: bigint): void {
+    this.focus(hwnd);
+  }
   isVisible(hwnd: bigint): boolean {
     return this.read(hwnd).visible;
   }

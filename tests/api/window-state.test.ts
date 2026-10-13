@@ -32,6 +32,7 @@ const registry = new NativeRegistry([
 ]);
 const stateQueries = [
   ...queries,
+  "isFocusable",
   "isMinimizable",
   "isMaximizable",
   "isClosable",
@@ -121,6 +122,7 @@ function fixture() {
     isMaximized: false,
     isVisible: false,
     isFocused: false,
+    isFocusable: true,
     isMinimizable: true,
     isMaximizable: true,
     isClosable: true,
@@ -168,6 +170,11 @@ function fixture() {
     setSizeConstraints() {},
     setSize() {},
     setPosition() {},
+    setFocusable(value) {
+      apply("setFocusable");
+      observed.isFocusable = value;
+    },
+    isFocusable: () => observed.isFocusable,
     setMinimizable(value) {
       apply("setMinimizable");
       observed.isMinimizable = value;
@@ -258,6 +265,7 @@ function fixture() {
       name:
         | (typeof controls)[number]
         | (typeof stateQueries)[number]
+        | "setFocusable"
         | "setMinimizable"
         | "setMaximizable"
         | "setClosable"
@@ -267,6 +275,7 @@ function fixture() {
         | "setMovable",
       view = "main",
       payload: {
+        focusable?: boolean;
         minimizable?: boolean;
         maximizable?: boolean;
         closable?: boolean;
@@ -303,6 +312,95 @@ function fixture() {
     },
   };
 }
+
+test("focusability validates booleans and keeps activation policy separate from observed focus and operation grants", async () => {
+  const f = fixture();
+  expect(await f.invoke("isFocusable")).toBe(true);
+  for (const focusable of [
+    false,
+    true,
+    false,
+  ]) {
+    const payload = {
+      focusable,
+    };
+    expect(
+      validateWindowCall({
+        operation: "windows.setFocusable",
+        payload: {
+          view: "main",
+          windowId: "window-1",
+          ...payload,
+        },
+      }).operation,
+    ).toBe("windows.setFocusable");
+    expect(await f.invoke("setFocusable", "main", payload)).toBeNull();
+    expect(await f.invoke("isFocusable")).toBe(focusable);
+    expect(await f.invoke("isFocused")).toBe(false);
+  }
+  for (const payload of [
+    {},
+    {
+      focusable: null,
+    },
+    {
+      focusable: 1,
+    },
+    {
+      focusable: "false",
+    },
+    {
+      focusable: true,
+      extra: true,
+    },
+  ]) {
+    expect(() =>
+      validateWindowCall({
+        operation: "windows.setFocusable",
+        payload: {
+          view: "main",
+          ...payload,
+        },
+      }),
+    ).toThrow();
+  }
+  f.permissions.permissions = [
+    "windows.isFocusable",
+  ];
+  await expect(
+    f.invoke("setFocusable", "main", {
+      focusable: true,
+    }),
+  ).rejects.toMatchObject({
+    code: "PERMISSION_DENIED",
+  });
+  f.permissions.permissions = windowPermissions();
+  await expect(
+    f.invoke("setFocusable", "missing", {
+      focusable: true,
+    }),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  f.setClosed();
+  await expect(
+    f.invoke("setFocusable", "main", {
+      focusable: true,
+    }),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  expect(f.actions).toHaveLength(3);
+  const unsupported = fixture();
+  delete unsupported.native.setFocusable;
+  await expect(
+    unsupported.invoke("setFocusable", "main", {
+      focusable: true,
+    }),
+  ).rejects.toMatchObject({
+    code: "UNSUPPORTED",
+  });
+});
 
 test("caption controls validate booleans, retain independent operation grants and reject closed targets", async () => {
   for (const [setter, getter, field] of [
