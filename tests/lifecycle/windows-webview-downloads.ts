@@ -1,6 +1,7 @@
 import { dlopen } from "bun:ffi";
 import assert from "node:assert/strict";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineApp } from "@bunaway/backend";
@@ -95,76 +96,89 @@ if (!process.argv.includes("--child")) {
   let completed = false;
   let failure: unknown;
   let exerciseTask: Promise<void> | undefined;
-  const server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    fetch(request) {
-      const url = new URL(request.url);
+  const responses = new Set<Promise<void>>();
+  // Bun's streaming Response replaces Content-Length with chunked encoding. Use HTTP's
+  // actual fixed-length framing so native total-byte and Range assertions test known metadata.
+  const server = createServer((request, response) => {
+    const respond = async () => {
+      const url = new URL(request.url ?? "/", "http://127.0.0.1");
       if (url.pathname === "/driver") {
         const id = url.searchParams.get("windowId") ?? "";
         const next = actions.get(id) ?? null;
         actions.delete(id);
-        return Response.json(next);
+        response.writeHead(200, {
+          "Content-Type": "application/json",
+        });
+        response.end(JSON.stringify(next));
+        return;
       }
       if (url.pathname === "/downloads.js") {
-        return new Response(script, {
-          headers: {
-            "Content-Type": "text/javascript",
-          },
+        response.writeHead(200, {
+          "Content-Type": "text/javascript",
         });
+        response.end(script);
+        return;
       }
       if (url.pathname.endsWith(".bin")) {
         const offset = Number(
-          request.headers.get("Range")?.match(/^bytes=(\d+)-$/)?.[1] ?? 0,
+          request.headers.range?.match(/^bytes=(\d+)-$/)?.[1] ?? 0,
         );
         let position = offset;
         let cancelled = false;
-        const body = new ReadableStream<Uint8Array>({
-          async pull(controller) {
-            await Bun.sleep(50);
-            if (url.pathname === "/crashing.bin" && position > 0) {
-              await crashBody;
-            }
-            if (cancelled) {
-              return;
-            }
-            const end = Math.min(position + 64 * 1024, content.length);
-            controller.enqueue(content.subarray(position, end));
-            position = end;
-            if (position >= content.length) {
-              controller.close();
-            }
-          },
-          cancel() {
-            cancelled = true;
-          },
+        response.on("close", () => {
+          cancelled = true;
         });
-        return new Response(body, {
-          status: offset ? 206 : 200,
-          headers: {
-            "Content-Type": "application/octet-stream",
-            "Content-Disposition": `attachment; filename="bunaway-download-${nonce}-${url.pathname.slice(1)}"`,
-            "Content-Length": String(content.length - offset),
-            "Accept-Ranges": "bytes",
-            ...(offset
-              ? {
-                  "Content-Range": `bytes ${offset}-${content.length - 1}/${content.length}`,
-                }
-              : {}),
-          },
+        response.writeHead(offset ? 206 : 200, {
+          "Content-Type": "application/octet-stream",
+          "Content-Disposition": `attachment; filename="bunaway-download-${nonce}-${url.pathname.slice(1)}"`,
+          "Content-Length": String(content.length - offset),
+          "Accept-Ranges": "bytes",
+          ...(offset
+            ? {
+                "Content-Range": `bytes ${offset}-${content.length - 1}/${content.length}`,
+              }
+            : {}),
         });
+        while (position < content.length && !cancelled) {
+          await Bun.sleep(50);
+          if (url.pathname === "/crashing.bin" && position > 0) {
+            await crashBody;
+          }
+          if (cancelled) {
+            return;
+          }
+          const end = Math.min(position + 64 * 1024, content.length);
+          response.write(content.subarray(position, end));
+          position = end;
+        }
+        response.end();
+        return;
       }
-      return new Response(
+      response.writeHead(200, {
+        "Content-Type": "text/html",
+      });
+      response.end(
         '<!doctype html><body><script type="module" src="/downloads.js"></script>',
-        {
-          headers: {
-            "Content-Type": "text/html",
-          },
-        },
       );
-    },
+    };
+    const task = respond()
+      .catch((error) => {
+        failure ??= error;
+        response.destroy();
+      })
+      .finally(() => responses.delete(task));
+    responses.add(task);
   });
-  const origin = server.url.origin;
+  await new Promise<void>((done, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.removeListener("error", reject);
+      done();
+    });
+  });
+  const address = server.address();
+  assert(address && typeof address === "object");
+  const origin = `http://127.0.0.1:${address.port}`;
   const main = {
     view: "main",
     windowId: "",
@@ -589,7 +603,11 @@ if (!process.argv.includes("--child")) {
     );
   } finally {
     releaseCrashBody();
-    await server.stop(true);
+    server.closeAllConnections();
+    await new Promise<void>((done, reject) =>
+      server.close((error) => (error ? reject(error) : done())),
+    );
+    await Promise.all(responses);
     // Only delete unique files whose browser-selected path was recorded by this test's own item.
     for (const path of paths) {
       await rm(path, {
