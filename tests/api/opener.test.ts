@@ -6,6 +6,7 @@ import {
   openFile,
   openUrl,
   revealFile,
+  trashFile,
 } from "@bunaway/plugin-opener";
 import {
   type HostCall,
@@ -81,6 +82,7 @@ test("file grants authorize only the selected operation and do not encode app pa
   for (const action of [
     "openFile",
     "revealFile",
+    "trashFile",
   ]) {
     const source = {
       permissions: [
@@ -157,11 +159,18 @@ test("public file APIs use caller context and preserve OS failure codes", async 
     run: async (_payload: unknown, _context: CommandContext) => {
       expect(await openFile(path.replaceAll("\\", "/"))).toBeNull();
       expect(await revealFile(path)).toBeNull();
+      expect(await trashFile(path)).toBeNull();
       denied = true;
       await expect(openFile(path)).rejects.toMatchObject({
         code: "PERMISSION_DENIED",
       });
+      await expect(trashFile(path)).rejects.toMatchObject({
+        code: "PERMISSION_DENIED",
+      });
       await expect(revealFile("relative.txt")).rejects.toMatchObject({
+        code: "INVALID_ARGUMENT",
+      });
+      await expect(trashFile("relative.txt")).rejects.toMatchObject({
         code: "INVALID_ARGUMENT",
       });
       return null;
@@ -182,9 +191,17 @@ test("public file APIs use caller context and preserve OS failure codes", async 
   expect(calls.map((call) => call.operation)).toEqual([
     "opener.openFile",
     "opener.revealFile",
+    "opener.trashFile",
     "opener.openFile",
+    "opener.trashFile",
   ]);
   expect(calls.map((call) => call.payload)).toEqual([
+    {
+      path,
+    },
+    {
+      path,
+    },
     {
       path,
     },
@@ -210,7 +227,16 @@ test("opener preserves strict inputs and independently granted file operations",
       name: "opener.openFile",
     },
     {
+      name: "opener.trashFile",
+    },
+    {
       name: "opener.revealFile",
+    },
+    {
+      name: "opener.openFileWith",
+    },
+    {
+      name: "opener.openUrlWith",
     },
   ]);
   expect(Object.keys(operation)).toEqual([

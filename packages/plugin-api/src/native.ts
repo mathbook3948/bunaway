@@ -1,6 +1,55 @@
+import { MAX_MESSAGE_BYTES } from "@bunaway/protocol";
+
 /** Inclusive accepted dimension range for window sizes. */
 export const MIN_WINDOW_DIMENSION = 200;
 export const MAX_WINDOW_DIMENSION = 4096;
+
+/** Win32 screen geometry uses signed 32-bit components. */
+export const MIN_WINDOW_COORDINATE = -2147483648;
+export const MAX_WINDOW_COORDINATE = 2147483647;
+
+/** Initial outer screen position and logical size interpretation. Windows only. */
+export type WindowPlacement = {
+  /** Physical outer coordinates. Supply both; null clears a declared position. */
+  x?: number | null;
+  y?: number | null;
+  /** Center the outer rectangle in the primary work area. Conflicts with x/y. */
+  center?: boolean;
+  /** Interpret width/height as content dimensions by default, or outer when false. */
+  useContentSize?: boolean;
+  /** Shrink and move the initial outer rectangle into the selected work area. */
+  preventOverflow?: boolean;
+};
+
+/** Validate merged placement before reserving resources or closing an existing window. */
+export function hasValidWindowPlacement<
+  T extends {
+    x?: unknown;
+    y?: unknown;
+    center?: unknown;
+    useContentSize?: unknown;
+    preventOverflow?: unknown;
+  },
+>(value: T): value is T & WindowPlacement {
+  const coordinate = (position: unknown) =>
+    position === undefined ||
+    position === null ||
+    (typeof position === "number" &&
+      Number.isInteger(position) &&
+      position >= MIN_WINDOW_COORDINATE &&
+      position <= MAX_WINDOW_COORDINATE);
+  return (
+    coordinate(value.x) &&
+    coordinate(value.y) &&
+    (value.x == null) === (value.y == null) &&
+    (value.center !== true || value.x == null) &&
+    [
+      value.center,
+      value.useContentSize,
+      value.preventOverflow,
+    ].every((option) => option === undefined || typeof option === "boolean")
+  );
+}
 
 /** Optional inclusive lower and upper bounds for a window's width and height. */
 export type WindowSizeConstraints = {
@@ -74,8 +123,8 @@ export type WindowSpec = {
   home: string;
   /** Native window title. */
   title: string;
-  /** Initial logical dimensions and optional resize limits. */
-  window: {
+  /** Initial 96-DPI logical content dimensions by default; limits always constrain content. */
+  window: WindowPlacement & {
     width: number;
     height: number;
     minWidth?: number | null;
@@ -143,6 +192,14 @@ export type WindowBounds = {
  * Native failures throw; the UI host converts them to bounded public errors.
  */
 export type NativeWindow = {
+  /** Requests a user-controlled browser or system print dialog; does not report print completion. */
+  showPrintUI?(kind: "browser" | "system"): void;
+  /** Trusted-backend download approval and lifetime controls. Windows only. */
+  downloads?: NativeDownloads;
+  /** Single host-owned WebView controls. Absent on platforms without this service. */
+  webview?: NativeWebView;
+  /** Audio controls for this window's WebView controller. Windows only. */
+  audio?: NativeWebViewAudio;
   /** Reads a versioned state and physical outer-bounds snapshot for recovery after subscribing. */
   getSnapshot(): WindowSnapshot;
   /** Reads the latest preparation outcome, including a retained closed-window outcome. Windows only. */
@@ -169,6 +226,18 @@ export type NativeWindow = {
   setEnabled?(enabled: boolean): void;
   /** Reads actual native input availability. Windows only. */
   isEnabled?(): boolean;
+  /** Changes this HWND's title without modifying its declaration or other instances. Windows only. */
+  setTitle?(title: string): void;
+  /** Reads the live native title, bounded to 1024 UTF-16 code units. Windows only. */
+  getTitle?(): string;
+  /** Changes user border/system-menu resizing without restricting programmatic geometry. Windows only. */
+  setResizable?(resizable: boolean): void;
+  /** Reads the normal window's resize policy, including while fullscreen. Windows only. */
+  isResizable?(): boolean;
+  /** Changes user caption/system-menu movement without restricting programmatic positioning. Windows only. */
+  setMovable?(movable: boolean): void;
+  /** Reads the current user movement policy. Windows only. */
+  isMovable?(): boolean;
   /** Minimizes and displays the window, allowing Windows to activate another window. */
   minimize(): void;
   /** Maximizes and displays the window, requesting activation. */
@@ -201,6 +270,8 @@ export type NativeWindow = {
   setSize(width: number, height: number): void;
   /** Positions the outer top-left in physical pixels from the primary screen origin. */
   setPosition(x: number, y: number): void;
+  /** Centers outer/normal restoration bounds in the current monitor work area, preserving state. Windows only. */
+  center?(): void;
   /**
    * Applies physical content or outer geometry without showing or activating the window.
    * While minimized/maximized, edits normal restoration bounds. Rejects fullscreen and
@@ -222,8 +293,120 @@ export type NativeWindow = {
   ): void;
   /** Enters or exits fullscreen mode. */
   setFullscreen(value: boolean): void;
+  /** Set this window's taskbar progress; throws BUSY until its taskbar button exists. Windows only. */
+  setTaskbarProgress?(
+    progress:
+      | {
+          state: "none" | "indeterminate";
+        }
+      | {
+          state: "normal" | "paused" | "error";
+          value: number;
+        },
+  ): void;
   /** Sets or clears the confirmation shown before a user closes the window. */
   setCloseConfirmation(message: string | null): void;
+};
+
+/** Maximum retained pending, active and terminal downloads per WebView. */
+export const MAX_WEBVIEW_DOWNLOADS = 32;
+/** Maximum UTF-8 JSON bytes for one download's combined URL, MIME, disposition and path. */
+export const MAX_DOWNLOAD_METADATA_BYTES = 64 * 1024;
+/** Snapshot budget including per-record scalar reserves; leaves half the 1 MiB wire limit for envelopes. */
+export const MAX_DOWNLOAD_SNAPSHOT_BYTES = MAX_MESSAGE_BYTES / 2;
+const DOWNLOAD_RECORD_RESERVED_BYTES = 512;
+/** Approval deadline; an undecided download is cancelled without creating its output. */
+export const DOWNLOAD_APPROVAL_TIMEOUT_MS = 30_000;
+
+/** Download state owned by one native WebView lifetime, accessible only to the trusted backend. */
+export type WebViewDownload = {
+  id: string;
+  url: string;
+  mimeType: string;
+  contentDisposition: string;
+  /** WebView2-selected absolute destination; this API does not accept caller-selected paths. */
+  path: string;
+  totalBytes: number | null;
+  receivedBytes: number | null;
+  state: "pending" | "inProgress" | "interrupted" | "completed" | "cancelled";
+  interruptReason: number | null;
+  canResume: boolean;
+  paused: boolean;
+};
+
+/** Bound metadata exactly as JSON encodes it, including escaped controls and non-ASCII text. */
+export function isDownloadSnapshotWithinLimits(
+  records: readonly WebViewDownload[],
+): boolean {
+  if (records.length > MAX_WEBVIEW_DOWNLOADS) {
+    return false;
+  }
+  const encoder = new TextEncoder();
+  let bytes = 2; // Array delimiters; retained terminal records consume the same budget.
+  for (const record of records) {
+    const metadata = encoder.encode(
+      JSON.stringify({
+        url: record.url,
+        mimeType: record.mimeType,
+        contentDisposition: record.contentDisposition,
+        path: record.path,
+      }),
+    ).byteLength;
+    if (metadata > MAX_DOWNLOAD_METADATA_BYTES) {
+      return false;
+    }
+    // UUID, property names, booleans, longest state and safe-integer counters fit in 512 bytes.
+    // Reserve their worst case before approval so progress/expiry never exhaust the budget.
+    bytes += metadata + DOWNLOAD_RECORD_RESERVED_BYTES;
+    if (bytes > MAX_DOWNLOAD_SNAPSHOT_BYTES) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Every method requires backend origin and its own operation grant before native entry. */
+export type NativeDownloads = {
+  /** Opt into collecting requests, without approving them. Disabling cancels pending requests. */
+  setRequestsEnabled(enabled: boolean): void;
+  /** Return bounded detached snapshots, including pending approvals and terminal records. */
+  list(): WebViewDownload[];
+  /** Approve exactly one pending item using the browser-selected destination and default browser UI. */
+  approve(id: string): void;
+  /** Reject a pending item or cancel an active item; repeat cancellation is safe. */
+  cancel(id: string): void;
+  /** Pause only an active item; actual resumability is reported by list. */
+  pause(id: string): void;
+  /** Resume only when WebView2 reports that the item is resumable. */
+  resume(id: string): void;
+  /** Release a terminal record; forgetting an active or pending item is rejected. */
+  forget(id: string): void;
+};
+
+/** Synchronous UI-thread controls; navigation retains the host's origin and session boundary. */
+export type NativeWebView = {
+  /** Reads browser state without changing focus or starting navigation. */
+  getState(): {
+    url: string;
+    title: string;
+    loading: boolean;
+    canGoBack: boolean;
+    canGoForward: boolean;
+    zoomFactor: number;
+  };
+  /** Starts HTTP(S) navigation only to an origin already allowed for this view. */
+  navigate(url: string): void;
+  /** Reloads the current document using normal browser cache behavior. */
+  reload(): void;
+  /** Requests cancellation of pending navigation and resource loads. */
+  stop(): void;
+  /** Starts history navigation; false means that direction has no entry. */
+  goBack(): boolean;
+  goForward(): boolean;
+  /** Sets the controller zoom, returning the actual browser value. */
+  setZoomFactor(factor: number): number;
+  /** Opens the browser's DevTools window only when the host enabled development tools. */
+  openDevTools(): void;
 };
 
 /** Independent display facts, using the same meaning as the window query APIs. */
@@ -233,6 +416,16 @@ export type WindowDisplayState = {
   minimized: boolean;
   maximized: boolean;
   fullscreen: boolean;
+};
+/** Browser playback and mute are independent; playing can remain true while muted. */
+export type WebViewAudioState = {
+  muted: boolean;
+  playing: boolean;
+};
+/** Window-owned WebView audio settings; navigation preserves mute and recreation resets it. */
+export type NativeWebViewAudio = {
+  getState(): WebViewAudioState;
+  setMuted(muted: boolean): void;
 };
 /** Identifies one native window lifetime separately from its policy view. */
 export type WindowIdentity = {
@@ -248,7 +441,7 @@ export type WindowSnapshot = {
   state: WindowDisplayState;
   bounds: WindowBounds;
 };
-/** Changes emitted in the order of a committed snapshot comparison. */
+/** Changes emitted in snapshot-comparison order, followed by native move/resize completion. */
 export type WindowChange =
   | "shown"
   | "hidden"
@@ -261,11 +454,46 @@ export type WindowChange =
   | "enterFullscreen"
   | "leaveFullscreen"
   | "move"
-  | "resize";
-/** UI-thread services used by the native windows plugin. */
+  | "resize"
+  | "moved"
+  | "resized";
+/** OS invalidations and ordered lifecycle signals. No borrowed native pointers leave the callback. */
+export type NativeSystemSignal =
+  | "settingChanged"
+  | "themeChanged"
+  | "colorsChanged"
+  | "accentChanged"
+  | "powerStatusChanged"
+  | "suspend"
+  | "resume"
+  | "sessionLocked"
+  | "sessionUnlocked";
+
+/** UI-thread OS notifications shared by optional native plugins. */
+export type NativeSystemEvents = {
+  /** Lazily acquire a hidden top-level window. Callbacks run after the pump. State invalidations coalesce; lifecycle edges preserve order. Session notifications are opt-in and registration failure throws. Dispose removes the subscription. */
+  subscribe(
+    receive: (signal: NativeSystemSignal) => void,
+    options?: {
+      sessionNotifications?: boolean;
+    },
+  ): () => void;
+  /** Send to live subscribers with both event policy and the named read-operation grant. Uses the existing bounded native event lane. */
+  publish(
+    event: string,
+    payload: import("@bunaway/protocol").JsonValue,
+    requiredOperation: string,
+  ): void;
+};
+
+/** UI-thread services used by installed native plugins. */
 export type NativeWindowServices = {
+  /** Optional OS change notifications. Absent on hosts without a native notification window. */
+  systemEvents?: NativeSystemEvents;
   /** Whether this UI adapter supports per-creation presentation options; absent means unsupported. */
   supportsCreationOptions?: boolean;
+  /** Validate display-dependent placement without acquiring resources, before reservation and close. */
+  validateCreation?(spec: WindowSpec): void;
   /** Configured windows available to the plugin. */
   specs: readonly WindowSpec[];
   /** All native lifetimes, including resources still being cleaned. Keys are host-private logical owners. */

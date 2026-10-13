@@ -16,6 +16,20 @@ function unsupportedRelations() {
   });
 }
 
+function unsupportedTitle() {
+  return new BunawayError({
+    code: "UNSUPPORTED",
+    message: "Window title control is not implemented on this platform.",
+  });
+}
+
+function unsupportedMovement() {
+  return new BunawayError({
+    code: "UNSUPPORTED",
+    message: "Window movement controls are not implemented on this platform.",
+  });
+}
+
 /** Create the UI-worker adapter; throws when window services are unavailable. */
 export function createOperations(
   environment: NativeEnvironment,
@@ -29,7 +43,98 @@ export function createOperations(
     viewId: string,
   ): JsonValue | Promise<JsonValue> {
     const window = services.window(viewId);
+    const downloads = () => {
+      if (!window.downloads) {
+        throw new BunawayError({
+          code: "UNSUPPORTED",
+          message: "WebView downloads are not implemented on this platform.",
+        });
+      }
+      return window.downloads;
+    };
+    const webview = () => {
+      if (!window.webview) {
+        throw new BunawayError({
+          code: "UNSUPPORTED",
+          message: "WebView control is not implemented on this platform.",
+        });
+      }
+      return window.webview;
+    };
+    const audio = () => {
+      if (!window.audio) {
+        throw new BunawayError({
+          code: "UNSUPPORTED",
+          message:
+            "WebView audio controls are not implemented on this platform.",
+        });
+      }
+      return window.audio;
+    };
     switch (call.operation) {
+      case "windows.showPrintUI":
+        if (!window.showPrintUI) {
+          throw new BunawayError({
+            code: "UNSUPPORTED",
+            message:
+              "WebView print dialogs are not implemented on this platform.",
+          });
+        }
+        window.showPrintUI(call.payload.kind ?? "browser");
+        break;
+      case "windows.setDownloadRequestsEnabled":
+        downloads().setRequestsEnabled(call.payload.enabled);
+        break;
+      case "windows.getDownloads":
+        return downloads()
+          .list()
+          .map((download) => ({
+            ...download,
+          }));
+      case "windows.approveDownload":
+        downloads().approve(call.payload.id);
+        break;
+      case "windows.cancelDownload":
+        downloads().cancel(call.payload.id);
+        break;
+      case "windows.pauseDownload":
+        downloads().pause(call.payload.id);
+        break;
+      case "windows.resumeDownload":
+        downloads().resume(call.payload.id);
+        break;
+      case "windows.forgetDownload":
+        downloads().forget(call.payload.id);
+        break;
+      case "windows.getWebViewState":
+        return {
+          ...webview().getState(),
+        };
+      case "windows.navigateWebView":
+        webview().navigate(call.payload.url);
+        break;
+      case "windows.reloadWebView":
+        webview().reload();
+        break;
+      case "windows.stopWebView":
+        webview().stop();
+        break;
+      case "windows.goBack":
+        return webview().goBack();
+      case "windows.goForward":
+        return webview().goForward();
+      case "windows.setZoomFactor":
+        return webview().setZoomFactor(call.payload.factor);
+      case "windows.openDevTools":
+        webview().openDevTools();
+        break;
+      case "windows.getWebViewAudioState":
+        return {
+          ...audio().getState(),
+        };
+      case "windows.setWebViewAudioMuted":
+        audio().setMuted(call.payload.muted);
+        break;
       case "windows.getReadiness":
         return {
           ...window.getReadiness(),
@@ -197,6 +302,39 @@ export function createOperations(
           throw unsupportedRelations();
         }
         return window.isEnabled();
+      case "windows.setTitle":
+        if (!window.setTitle) {
+          throw unsupportedTitle();
+        }
+        window.setTitle(call.payload.title);
+        break;
+      case "windows.getTitle":
+        if (!window.getTitle) {
+          throw unsupportedTitle();
+        }
+        return window.getTitle();
+      case "windows.setResizable":
+        if (!window.setResizable) {
+          throw unsupportedMovement();
+        }
+        window.setResizable(call.payload.resizable);
+        break;
+      case "windows.isResizable":
+        if (!window.isResizable) {
+          throw unsupportedMovement();
+        }
+        return window.isResizable();
+      case "windows.setMovable":
+        if (!window.setMovable) {
+          throw unsupportedMovement();
+        }
+        window.setMovable(call.payload.movable);
+        break;
+      case "windows.isMovable":
+        if (!window.isMovable) {
+          throw unsupportedMovement();
+        }
+        return window.isMovable();
       case "windows.getContentSize":
       case "windows.getOuterSize":
       case "windows.getContentPosition":
@@ -397,8 +535,32 @@ export function createOperations(
         }
         window.setPosition(call.payload.x, call.payload.y);
         break;
+      case "windows.center":
+        if (window.isFullscreen()) {
+          throw new BunawayError({
+            code: "INVALID_ARGUMENT",
+            message: "Exit fullscreen before centering the window.",
+          });
+        }
+        if (!window.center) {
+          throw new BunawayError({
+            code: "UNSUPPORTED",
+            message: "Window centering is not implemented on this platform.",
+          });
+        }
+        window.center();
+        break;
       case "windows.setFullscreen":
         window.setFullscreen(call.payload.fullscreen);
+        break;
+      case "windows.setTaskbarProgress":
+        if (!window.setTaskbarProgress) {
+          throw new BunawayError({
+            code: "UNSUPPORTED",
+            message: "Taskbar progress is not implemented on this platform.",
+          });
+        }
+        window.setTaskbarProgress(call.payload);
         break;
       case "windows.setCloseConfirmation":
         window.setCloseConfirmation(call.payload.message);
@@ -433,6 +595,23 @@ export function createOperations(
         operation,
         payload: input,
       });
+      if (
+        [
+          "windows.setDownloadRequestsEnabled",
+          "windows.getDownloads",
+          "windows.approveDownload",
+          "windows.cancelDownload",
+          "windows.pauseDownload",
+          "windows.resumeDownload",
+          "windows.forgetDownload",
+        ].includes(call.operation) &&
+        source !== "backend"
+      ) {
+        throw new BunawayError({
+          code: "PERMISSION_DENIED",
+          message: "WebView downloads require a trusted backend context.",
+        });
+      }
       if (
         (call.operation === "windows.list" ||
           call.operation === "windows.listInstances") &&

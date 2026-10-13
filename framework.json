@@ -24,11 +24,18 @@
   "bun": "1.4.2",
   "plugins": {
     "storage": "@bunaway/plugin-storage",
+    "path": "@bunaway/plugin-path",
+    "safe-storage": "@bunaway/plugin-safe-storage",
     "log": "@bunaway/plugin-log",
     "capabilities": "@bunaway/plugin-capabilities",
     "windows": "@bunaway/plugin-windows",
     "opener": "@bunaway/plugin-opener",
     "autostart": "@bunaway/plugin-autostart",
-    "clipboard": "@bunaway/plugin-clipboard"
+    "clipboard": "@bunaway/plugin-clipboard",
+    "appearance": "@bunaway/plugin-appearance",
+    "image": "@bunaway/plugin-image",
+    "os": "@bunaway/plugin-os",
+    "process": "@bunaway/plugin-process",
+    "network": "@bunaway/plugin-network"
   }
 }

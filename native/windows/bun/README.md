@@ -23,6 +23,12 @@ DevTools 옵션은 영속 등록에 포함하지 않는다.
 
 `win32-bindings.ts`는 DLL 함수 바인딩과 FFI 버퍼 보조 함수를 제공하고, `win32.ts`의
 `Windows`는 창 클래스, HWND, 아이콘, 전체 화면 상태와 메시지 처리를 소유한다.
+`taskbar-progress.ts`는 HWND별 작업 표시줄 버튼 준비와 마지막 성공 설정을 관리한다.
+등록한 `TaskbarButtonCreated` 메시지 이후에만 설정을 적용하며 버튼 재생성 때 복원한다.
+복원 실패는 진단으로 기록하며 이후 명시적 호출로 다시 적용할 수 있다.
+`taskbar.ts`는 최초 호출에 ITaskbarList3를 만들고 독립적인 COM 바인딩을 소유한다.
+WebView의 마지막 창 정리와 캐시 해제가 작업 표시줄 바인딩의 수명을 바꾸지 않는다.
+호스트 종료 때 STA 해제 전에 COM reference와 바인딩 및 DLL 핸들을 회수한다.
 `getBounds`는 content, outer와 일반 상태 복원용 normal 영역을 화면 물리 픽셀로 조회한다.
 normal의 WINDOWPLACEMENT 작업 영역 좌표는 화면 좌표로 보정한다. 전체화면 중 조회는
 저장된 placement를 복사해 현재 DPI와 크기 제약을 적용하며 복원 상태를 변경하지 않는다.
@@ -37,8 +43,46 @@ normal의 WINDOWPLACEMENT 작업 영역 좌표는 화면 좌표로 보정한다.
 `com.ts`는 COM 참조와 콜백을, `webview.ts`는 WebView 생성과 종료를 관리한다.
 `ui.ts`가 이 자원들의 초기화와 정리 순서를 조정한다. DLL은 창과 COM 정리가 끝난 뒤 닫는다.
 
+인쇄 UI 작업은 `NativeWindow.showPrintUI`로 같은 UI 스레드의 ICoreWebView2_16
+ShowPrintUI를 호출한다. optional QueryInterface는 E_NOINTERFACE만 미지원으로 반환하며
+다른 HRESULT 실패는 기존 오류 경로를 유지한다. 현재 작업은 browser 또는 system UI의
+시작 요청만 제공하고 프린터 선택과 실제 제출, 인쇄 완료는 사용자와 브라우저가 소유한다.
+
+DownloadCleanupError는 해당 창의 취소 실패를 나타내며 UI pump의 전체 실패로 전달하지 않는다.
+닫힌 소유자의 controller와 다운로드 참조를 유지하고 50 ms 간격으로 기존 35초 cleanup
+예산 안에서 재시도한다. 다른 창의 메시지와 정리는 계속 처리한다. 기한이 끝나면 소유자를
+정리 대기 상태로 유지하고 진단을 한 번 남긴다. 관찰한 broker 종료나 명시적 앱 종료는
+참조를 안전하게 해제하거나 재시도하는 별도 경로이며 살아 있는 공유 broker를 종료하지 않는다.
+
+`webview-downloads.ts`는 고정 SDK 1.0.4129.50의 ICoreWebView2_4 DownloadStarting과
+DownloadOperation, Deferral을 소유한다. `downloads.ts`는 OS 자원 없는 승인과 수명 규칙을
+관리한다. 기본 거부를 먼저 설정하고 deferral을 얻으며, 승인 결과와 무관하게 deferral을
+완료하고 args 및 operation 참조를 정리한다. pending 승인의 기한과 기록 상한을 적용하고
+새 탐색은 pending만, 창 종료는 승인된 작업도 취소한다. 이벤트 callback은 구독을 해제한
+뒤 WebView의 기존 STA quiescence와 프로세스 정리 단계까지 유지한다.
+관찰한 browser 프로세스 장애에서는 pending과 활성 COM 참조를 해제하고 완료나 취소를
+죽은 broker에 보내지 않는다. 이 경우의 구독 해제 ERROR_INVALID_STATE만 수용하며
+살아 있는 broker의 같은 오류와 다른 HRESULT는 기존 실패 경로를 유지한다.
+파일 쓰기와 기본 저장 경로는 브라우저가 소유한다. 현재 API에는 임의 경로 입력이나
+사용자 정의 스트림 출력이 없으며 backend 출처 검사로 renderer의 파일 접근을 확대하지 않는다.
+
+
+창 플러그인의 기본 WebView 제어는 `NativeWindow.webview`를 통해 같은 UI 스레드의
+controller와 WebView를 사용한다. 공개 URL 탐색도 기존 origin 검사와 NavigationStarting의
+세션 폐기를 유지한다. loading은 현재 탐색 ID의 시작 및 완료에서 갱신하며 다른 탐색의
+늦은 완료는 무시한다. history, reload와 stop은 ICoreWebView2의 기본 메서드,
+zoom은 ICoreWebView2Controller의 double ABI를 사용한다. COM 슬롯은
+고정 WebView2 SDK 1.0.4129.50의 WebView2.h를 따른다. DevTools 설정은 생성 시 호스트가
+선택하며 작업 호출이 설정을 변경하지 않는다.
+WebView audio는 ICoreWebView2_8의 IsMuted와 IsDocumentPlayingAudio를 같은 UI STA에서
+조회하고 음소거를 변경한다. 각 호출이 획득한 COM interface는 성공과 실패 모두에서
+해제한다. controller의 음소거는 문서 탐색을 유지하고 재생 상태는 물리 출력과 구분한다.
+자동 재생과 장치 권한 정책은 기존 동작을 유지하며 상태 이벤트는 아직 제공하지 않는다.
+
 창 플러그인을 등록하면 `Windows.observe`가 창별 상태와 물리 outer bounds의 변경을
 비교한다. 활성화 관찰은 `WM_ACTIVATE` 뒤에 게시한 창 메시지에서 전경 HWND를 조회한다.
+`WM_ENTERSIZEMOVE`와 `WM_EXITSIZEMOVE`는 시작과 최종 geometry를 비교해 별도 revision의
+`moved`, `resized`를 발행한다. 순서와 snapshot 복구는 중간 move/resize와 같은 경로를 따른다.
 동기 활성화 콜백이 끝나기 전에 이전 전경 HWND를 읽어 전환을 놓치는 것을 방지한다.
 `window-events.ts`는 변경 이름과 순서를 결정하며 `ui.ts`는 현재 문서의
 구독 관심과 route를 확인해 `native-event` 패킷을 보낸다. 메인은 동일한 route의

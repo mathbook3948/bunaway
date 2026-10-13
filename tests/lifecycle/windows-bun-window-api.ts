@@ -1,5 +1,4 @@
 import { dlopen, ptr } from "bun:ffi";
-import { windowPermissions } from "../fixtures/window-permissions.ts";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -11,6 +10,7 @@ import { runWindowsApp } from "#native/windows/bun/entry";
 import { Windows } from "#native/windows/bun/win32";
 import { user } from "#native/windows/bun/win32-bindings";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 assert.equal(process.platform, "win32");
 const root = process.argv.includes("--repo")
@@ -145,9 +145,117 @@ if (!process.argv.includes("--child")) {
       ],
       returns: "i32",
     },
+    SendMessageW: {
+      args: [
+        "u64",
+        "u32",
+        "u64",
+        "i64",
+      ],
+      returns: "i64",
+    },
   });
   const nativeWindows = new Windows(() => {});
   try {
+    const pixelWindow = nativeWindows.create(
+      "Physical client preservation",
+      650,
+      450,
+      () => {},
+      false,
+    );
+    try {
+      nativeWindows.setGeometry(pixelWindow, "content", {
+        width: 601,
+        height: 451,
+      });
+      const foreground = user.symbols.GetForegroundWindow();
+      for (const resizable of [
+        false,
+        true,
+        false,
+        true,
+      ]) {
+        nativeWindows.setResizable(pixelWindow, resizable);
+        const content = nativeWindows.getBounds(pixelWindow, "content");
+        assert.equal(content.width, 601);
+        assert.equal(content.height, 451);
+        assert.equal(nativeWindows.isVisible(pixelWindow), false);
+        assert.equal(user.symbols.GetForegroundWindow(), foreground);
+      }
+    } finally {
+      nativeWindows.destroy(pixelWindow);
+    }
+    // Exercise real frame changes and blocked native user commands, including low command bits.
+    for (const showCmd of [
+      1,
+      2,
+      3,
+    ]) {
+      for (const visible of [
+        true,
+        false,
+      ]) {
+        let modalEnters = 0;
+        const hwnd = nativeWindows.create(
+          "User movement regression",
+          650,
+          450,
+          (message) => {
+            if (message === 0x0231) {
+              modalEnters++;
+            }
+          },
+        );
+        try {
+          user.symbols.ShowWindow(hwnd, showCmd);
+          if (!visible) {
+            nativeWindows.show(hwnd, false);
+          }
+          const foreground = user.symbols.GetForegroundWindow();
+          nativeWindows.setMovable(hwnd, false);
+          nativeWindows.setResizable(hwnd, false);
+          assert.equal(nativeWindows.isResizable(hwnd), false);
+          assert.equal(nativeWindows.isMovable(hwnd), false);
+          assert.equal(driver.symbols.IsWindowVisible(hwnd), Number(visible));
+          assert.equal(driver.symbols.IsIconic(hwnd), Number(showCmd === 2));
+          assert.equal(driver.symbols.IsZoomed(hwnd), Number(showCmd === 3));
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          const frame = nativeWindows.getBounds(hwnd, "outer");
+          for (const command of [
+            0xf001n,
+            0xf012n,
+          ]) {
+            driver.symbols.SendMessageW(hwnd, 0x0112, command, 0n);
+            assert.equal(modalEnters, 0);
+            assert.deepEqual(nativeWindows.getBounds(hwnd, "outer"), frame);
+          }
+          // Fullscreen changes the rendered frame but retains the normal resize policy.
+          nativeWindows.setFullscreen(hwnd, true);
+          nativeWindows.setResizable(hwnd, true);
+          assert.equal(nativeWindows.isResizable(hwnd), true);
+          nativeWindows.setResizable(hwnd, false);
+          nativeWindows.setFullscreen(hwnd, false);
+          assert.equal(nativeWindows.isResizable(hwnd), false);
+          assert.equal(nativeWindows.isMovable(hwnd), false);
+          nativeWindows.setResizable(hwnd, true);
+          nativeWindows.setMovable(hwnd, true);
+          assert.equal(nativeWindows.isResizable(hwnd), true);
+          assert.equal(nativeWindows.isMovable(hwnd), true);
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          assert.equal(driver.symbols.IsWindowVisible(hwnd), Number(visible));
+          assert.equal(driver.symbols.IsIconic(hwnd), Number(showCmd === 2));
+          assert.equal(driver.symbols.IsZoomed(hwnd), Number(showCmd === 3));
+          nativeWindows.unmaximize(hwnd);
+          const content = nativeWindows.getBounds(hwnd, "content");
+          assert.equal(content.width, Math.round((650 * content.dpi) / 96));
+          assert.equal(content.height, Math.round((450 * content.dpi) / 96));
+        } finally {
+          nativeWindows.destroy(hwnd);
+        }
+        assert.throws(() => nativeWindows.isMovable(hwnd));
+      }
+    }
     // Check fullscreen restoration across visibility and show states.
     for (const showCmd of [
       1,
@@ -174,6 +282,31 @@ if (!process.argv.includes("--child")) {
           assert(driver.symbols.GetWindowRect(hwnd, ptr(frame)));
           const minimized = driver.symbols.IsIconic(hwnd),
             maximized = driver.symbols.IsZoomed(hwnd);
+          const titleForeground = user.symbols.GetForegroundWindow();
+          for (const title of [
+            "창 제목 📝",
+            "📝".repeat(512),
+          ]) {
+            nativeWindows.setTitle(hwnd, title);
+            assert.equal(nativeWindows.getTitle(hwnd), title);
+            assert.equal(driver.symbols.IsWindowVisible(hwnd), Number(visible));
+            assert.equal(driver.symbols.IsIconic(hwnd), minimized);
+            assert.equal(driver.symbols.IsZoomed(hwnd), maximized);
+            assert.equal(user.symbols.GetForegroundWindow(), titleForeground);
+            assert(driver.symbols.GetWindowRect(hwnd, ptr(restored)));
+            assert.deepEqual(
+              [
+                ...restored,
+              ],
+              [
+                ...frame,
+              ],
+            );
+          }
+          // Query the actual HWND caption, including trusted native changes outside the plugin.
+          const externalTitle = Buffer.from("Native caption\0", "utf16le");
+          assert(user.symbols.SetWindowTextW(hwnd, ptr(externalTitle)));
+          assert.equal(nativeWindows.getTitle(hwnd), "Native caption");
           nativeWindows.setFullscreen(hwnd, true);
           nativeWindows.setFullscreen(hwnd, false);
           assert.equal(driver.symbols.IsWindowVisible(hwnd), Number(visible));
@@ -189,6 +322,34 @@ if (!process.argv.includes("--child")) {
             ],
             `Fullscreen restore showCmd=${showCmd}, visible=${visible}`,
           );
+          // Runtime centering keeps HWND state and centers normal restoration bounds.
+          const monitor = user.symbols.MonitorFromWindow(hwnd, 2);
+          const info = Buffer.alloc(40);
+          info.writeUInt32LE(40);
+          assert(user.symbols.GetMonitorInfoW(monitor, ptr(info)));
+          const normal = nativeWindows.getBounds(hwnd, "normal");
+          const expected = {
+            ...normal,
+            x: Math.round(
+              info.readInt32LE(20) +
+                (info.readInt32LE(28) - info.readInt32LE(20) - normal.width) /
+                  2,
+            ),
+            y: Math.round(
+              info.readInt32LE(24) +
+                (info.readInt32LE(32) - info.readInt32LE(24) - normal.height) /
+                  2,
+            ),
+          };
+          const foreground = user.symbols.GetForegroundWindow();
+          nativeWindows.center(hwnd);
+          assert.deepEqual(nativeWindows.getBounds(hwnd, "normal"), expected);
+          assert.equal(driver.symbols.IsWindowVisible(hwnd), Number(visible));
+          assert.equal(driver.symbols.IsIconic(hwnd), minimized);
+          assert.equal(driver.symbols.IsZoomed(hwnd), maximized);
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          nativeWindows.center(hwnd);
+          assert.deepEqual(nativeWindows.getBounds(hwnd, "normal"), expected);
         } finally {
           nativeWindows.destroy(hwnd);
         }
@@ -218,7 +379,7 @@ if (!process.argv.includes("--child")) {
   );
   const handles = new Map<string, bigint>();
   const dialogClass = Buffer.from("#32770\0", "utf16le");
-  const dialogTitle = Buffer.from("Window API editor\0", "utf16le");
+  const dialogTitle = Buffer.from("수정된 제목 📝\0", "utf16le");
   let confirmations = 0,
     editorWindows = 0,
     geometry = false,
@@ -545,6 +706,50 @@ if (!process.argv.includes("--child")) {
             );
           }
           mainWindowId = current.windowId;
+          // Exercise the public plugin, actual UI STA and ITaskbarList3 on each native lifetime.
+          // Explorer creates buttons asynchronously; WebView readiness does not imply button readiness.
+          await waitFor(async () => {
+            try {
+              await windows.setTaskbarProgress({
+                view: "main",
+                windowId: current.windowId,
+                state: "indeterminate",
+              });
+              return true;
+            } catch (error) {
+              if (
+                error instanceof Error &&
+                "code" in error &&
+                error.code === "BUSY"
+              ) {
+                return false;
+              }
+              throw error;
+            }
+          });
+          for (const state of [
+            "normal",
+            "paused",
+            "error",
+          ] as const) {
+            assert.equal(
+              await windows.setTaskbarProgress({
+                view: "main",
+                windowId: current.windowId,
+                state,
+                value: 0.375,
+              }),
+              null,
+            );
+          }
+          assert.equal(
+            await windows.setTaskbarProgress({
+              view: "main",
+              windowId: current.windowId,
+              state: "none",
+            }),
+            null,
+          );
           // First run covers sizing/fullscreen; later runs cover recreation and renderer recovery.
           if (++runs === 1) {
             assert.equal(
@@ -596,6 +801,23 @@ if (!process.argv.includes("--child")) {
             const editor = {
               view: "editor",
             };
+            assert.equal(await windows.getTitle(editor), "Window API editor");
+            await windows.setTitle({
+              ...editor,
+              title: "수정된 제목 📝",
+            });
+            assert.equal(await windows.getTitle(editor), "수정된 제목 📝");
+            await assert.rejects(
+              windows.setTitle({
+                ...editor,
+                title: "invalid\0title",
+              }),
+              {
+                code: "INVALID_ARGUMENT",
+              },
+            );
+            assert.equal(await windows.getTitle(editor), "수정된 제목 📝");
+            // The driver verifies that close confirmation uses this runtime caption.
             const editorSnapshot = await windows.getSnapshot(editor);
             editorWindowId = editorSnapshot.windowId;
             assert.equal(await windows.isDestroyed(editor), false);
@@ -708,10 +930,36 @@ if (!process.argv.includes("--child")) {
               width: 700,
               height: 550,
             });
+            assert.equal(await windows.isResizable(editor), true);
+            assert.equal(await windows.isMovable(editor), true);
+            await windows.setResizable({
+              ...editor,
+              resizable: false,
+            });
+            await windows.setMovable({
+              ...editor,
+              movable: false,
+            });
+            assert.equal(await windows.isResizable(editor), false);
+            assert.equal(await windows.isMovable(editor), false);
+            // Programmatic geometry remains available while user interactions are disabled.
+            await windows.setSize({
+              ...editor,
+              width: 700,
+              height: 550,
+            });
             await windows.setPosition({
               view: "editor",
               x: 20,
               y: 30,
+            });
+            await windows.setResizable({
+              ...editor,
+              resizable: true,
+            });
+            await windows.setMovable({
+              ...editor,
+              movable: true,
             });
             // Verify the public API through the real core, UI worker and HWND.
             const content = await windows.getContentSize({
@@ -735,6 +983,24 @@ if (!process.argv.includes("--child")) {
             const outer = await windows.getOuterBounds({
               view: "editor",
             });
+            await windows.hide(editor);
+            const centerForeground = user.symbols.GetForegroundWindow();
+            await windows.center(editor);
+            const centered = await windows.getOuterBounds(editor);
+            assert.equal(centered.width, outer.width);
+            assert.equal(centered.height, outer.height);
+            assert.equal(await windows.isVisible(editor), false);
+            assert.equal(user.symbols.GetForegroundWindow(), centerForeground);
+            await windows.center(editor);
+            assert.deepEqual(await windows.getOuterBounds(editor), centered);
+            await windows.setOuterBounds({
+              ...editor,
+              x: outer.x,
+              y: outer.y,
+              width: outer.width,
+              height: outer.height,
+            });
+            await windows.show(editor);
             assert.deepEqual(
               await windows.getNormalBounds({
                 view: "editor",
@@ -937,6 +1203,7 @@ if (!process.argv.includes("--child")) {
               "unmaximize",
               "restore",
               "toggleMaximize",
+              "center",
             ] as const) {
               await assert.rejects(windows[name](editor), {
                 code: "INVALID_ARGUMENT",
@@ -1015,6 +1282,12 @@ if (!process.argv.includes("--child")) {
             );
             await waitFor(() => holds === 2 && cancellations === 1);
           } else if (runs === 2) {
+            assert.equal(
+              await windows.getTitle({
+                view: "editor",
+              }),
+              "Window API editor",
+            );
             editorWindowId = (
               await windows.getSnapshot({
                 view: "editor",

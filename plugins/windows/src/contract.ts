@@ -1,7 +1,11 @@
 import {
+  isDownloadSnapshotWithinLimits,
+  MAX_WEBVIEW_DOWNLOADS,
+  MAX_WINDOW_COORDINATE,
   MAX_WINDOW_DIMENSION,
   MAX_WINDOW_INSTANCES,
   MAX_WINDOWS,
+  MIN_WINDOW_COORDINATE,
   MIN_WINDOW_DIMENSION,
 } from "@bunaway/plugin-api/native";
 import {
@@ -18,12 +22,22 @@ import { z } from "zod";
 export const WINDOW_VIEW_NAME_PATTERN = "^[A-Za-z0-9_.:-]{1,128}$(?![\\s\\S])";
 
 // Win32 geometry uses signed 32-bit components; WM_DPICHANGED carries a 16-bit DPI.
-export const MIN_WINDOW_COORDINATE = -2147483648;
-
-export const MAX_WINDOW_COORDINATE = 2147483647;
+export {
+  MAX_WINDOW_COORDINATE,
+  MIN_WINDOW_COORDINATE,
+} from "@bunaway/plugin-api/native";
 
 const MAX_WINDOW_DPI = 65535;
 const WINDOW_TEXT_PATTERN = "^[^\\u0000]+$(?![\\s\\S])";
+// Native captions and declarations bound UTF-16 code units; Zod max counts Unicode code points.
+const nativeTitle = z
+  .string()
+  .max(1024)
+  .refine(
+    (title) => title.length <= 1024,
+    "Window titles cannot exceed 1024 UTF-16 code units.",
+  );
+const windowTitle = nativeTitle.regex(new RegExp(WINDOW_TEXT_PATTERN, "u"));
 
 const viewTarget = z.strictObject({
   view: z.string().regex(new RegExp(WINDOW_VIEW_NAME_PATTERN, "u")),
@@ -42,6 +56,15 @@ const windowResult = {
 const windowStateResult = {
   input: windowTarget,
   output: z.boolean(),
+};
+
+const downloadTarget = windowTarget.extend({
+  id: z.string().uuid(),
+});
+
+const downloadResult = {
+  input: downloadTarget,
+  output: z.null(),
 };
 
 const windowIdentitySchema = z.strictObject({
@@ -64,6 +87,11 @@ const sizeDimension = z.union([
   z.int().min(MIN_WINDOW_DIMENSION).max(MAX_WINDOW_DIMENSION),
 ]);
 
+const coordinate = z
+  .int()
+  .min(MIN_WINDOW_COORDINATE)
+  .max(MAX_WINDOW_COORDINATE);
+
 const creationDimension = z
   .int()
   .min(MIN_WINDOW_DIMENSION)
@@ -74,11 +102,7 @@ const creationResult = {
     view: viewTarget.shape.view,
     options: z
       .strictObject({
-        title: z
-          .string()
-          .max(1024)
-          .regex(new RegExp(WINDOW_TEXT_PATTERN, "u"))
-          .exactOptional(),
+        title: windowTitle.exactOptional(),
         window: z
           .strictObject({
             width: creationDimension.exactOptional(),
@@ -87,6 +111,11 @@ const creationResult = {
             minHeight: sizeDimension.exactOptional(),
             maxWidth: sizeDimension.exactOptional(),
             maxHeight: sizeDimension.exactOptional(),
+            x: coordinate.nullable().exactOptional(),
+            y: coordinate.nullable().exactOptional(),
+            center: z.boolean().exactOptional(),
+            useContentSize: z.boolean().exactOptional(),
+            preventOverflow: z.boolean().exactOptional(),
           })
           .exactOptional(),
         visible: z.boolean().exactOptional(),
@@ -116,11 +145,6 @@ const sizeConstraintsOutput = z.strictObject({
   maxWidth: sizeDimension,
   maxHeight: sizeDimension,
 });
-
-const coordinate = z
-  .int()
-  .min(MIN_WINDOW_COORDINATE)
-  .max(MAX_WINDOW_COORDINATE);
 
 const dimension = z.int().min(0).max(MAX_WINDOW_COORDINATE);
 
@@ -360,7 +384,7 @@ export const windowEvents = {
       changes: {
         type: "array",
         minItems: 1,
-        maxItems: 12,
+        maxItems: 14,
         uniqueItems: true,
         items: {
           type: "string",
@@ -377,6 +401,8 @@ export const windowEvents = {
             "leaveFullscreen",
             "move",
             "resize",
+            "moved",
+            "resized",
           ],
         },
       },
@@ -424,6 +450,119 @@ const conversionOutput = z.strictObject({
 
 /** Schemas for window operations, used to validate calls and their results. */
 export const windowOperations = {
+  "windows.showPrintUI": {
+    input: windowTarget.extend({
+      kind: z
+        .enum([
+          "browser",
+          "system",
+        ])
+        .exactOptional(),
+    }),
+    output: z.null(),
+  },
+  "windows.setDownloadRequestsEnabled": {
+    input: windowTarget.extend({
+      enabled: z.boolean(),
+    }),
+    output: z.null(),
+  },
+  "windows.getDownloads": {
+    input: windowTarget,
+    output: z
+      .array(
+        z.strictObject({
+          id: z.string().uuid(),
+          url: z.string(),
+          mimeType: z.string(),
+          contentDisposition: z.string(),
+          path: z.string(),
+          totalBytes: z.int().min(0).max(Number.MAX_SAFE_INTEGER).nullable(),
+          receivedBytes: z.int().min(0).max(Number.MAX_SAFE_INTEGER).nullable(),
+          state: z.enum([
+            "pending",
+            "inProgress",
+            "interrupted",
+            "completed",
+            "cancelled",
+          ]),
+          interruptReason: z.int().min(0).nullable(),
+          canResume: z.boolean(),
+          paused: z.boolean(),
+        }),
+      )
+      .max(MAX_WEBVIEW_DOWNLOADS)
+      .refine(isDownloadSnapshotWithinLimits),
+  },
+  "windows.approveDownload": downloadResult,
+  "windows.cancelDownload": downloadResult,
+  "windows.pauseDownload": downloadResult,
+  "windows.resumeDownload": downloadResult,
+  "windows.forgetDownload": downloadResult,
+  "windows.getWebViewState": {
+    input: windowTarget,
+    output: z.strictObject({
+      url: z.string(),
+      title: z.string(),
+      loading: z.boolean(),
+      canGoBack: z.boolean(),
+      canGoForward: z.boolean(),
+      zoomFactor: z.number().positive(),
+    }),
+  },
+  "windows.navigateWebView": {
+    input: windowTarget.extend({
+      url: z
+        .string()
+        .min(1)
+        .max(8192)
+        .regex(new RegExp(WINDOW_TEXT_PATTERN, "u")),
+    }),
+    output: z.null(),
+  },
+  "windows.reloadWebView": windowResult,
+  "windows.stopWebView": windowResult,
+  "windows.goBack": windowStateResult,
+  "windows.goForward": windowStateResult,
+  "windows.setZoomFactor": {
+    input: windowTarget.extend({
+      factor: z.number().min(0.25).max(5),
+    }),
+    output: z.number().positive(),
+  },
+  "windows.openDevTools": windowResult,
+  "windows.getWebViewAudioState": {
+    input: windowTarget,
+    output: z.strictObject({
+      muted: z.boolean(),
+      playing: z.boolean(),
+    }),
+  },
+  "windows.setWebViewAudioMuted": {
+    input: windowTarget.extend({
+      muted: z.boolean(),
+    }),
+    output: z.null(),
+  },
+  "windows.setTaskbarProgress": {
+    input: z.union([
+      windowTarget.extend({
+        state: z.enum([
+          "none",
+          "indeterminate",
+        ]),
+      }),
+      windowTarget.extend({
+        state: z.enum([
+          "normal",
+          "paused",
+          "error",
+        ]),
+        value: z.number().min(0).max(1),
+      }),
+    ]),
+    output: z.null(),
+  },
   "windows.createInstance": {
     input: creationResult.input,
     output: windowIdentitySchema,
@@ -531,6 +670,30 @@ export const windowOperations = {
     output: z.null(),
   },
   "windows.isEnabled": windowStateResult,
+  "windows.setTitle": {
+    input: windowTarget.extend({
+      title: windowTitle,
+    }),
+    output: z.null(),
+  },
+  "windows.getTitle": {
+    input: windowTarget,
+    output: nativeTitle,
+  },
+  "windows.setResizable": {
+    input: windowTarget.extend({
+      resizable: z.boolean(),
+    }),
+    output: z.null(),
+  },
+  "windows.isResizable": windowStateResult,
+  "windows.setMovable": {
+    input: windowTarget.extend({
+      movable: z.boolean(),
+    }),
+    output: z.null(),
+  },
+  "windows.isMovable": windowStateResult,
   "windows.setSize": {
     input: z.strictObject({
       view: viewTarget.shape.view,
@@ -650,6 +813,7 @@ export const windowOperations = {
     }),
     output: z.null(),
   },
+  "windows.center": windowResult,
   "windows.setFullscreen": {
     input: z.strictObject({
       view: viewTarget.shape.view,

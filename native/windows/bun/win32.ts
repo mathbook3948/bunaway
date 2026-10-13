@@ -2,6 +2,7 @@ import { dlopen, JSCallback, type Pointer, ptr, toArrayBuffer } from "bun:ffi";
 import assert from "node:assert/strict";
 import {
   clampWindowSize,
+  hasValidWindowPlacement,
   hasValidWindowSizeConstraints,
   MAX_WINDOW_DIMENSION,
   MIN_WINDOW_DIMENSION,
@@ -9,16 +10,28 @@ import {
   type WindowBounds,
   type WindowChange,
   type WindowIdentity,
+  type WindowPlacement,
   type WindowSizeConstraints,
   type WindowSnapshot,
+  type WindowSpec,
 } from "@bunaway/plugin-api/native";
 import { BunawayError } from "@bunaway/protocol";
 import {
   APP_SHUTDOWN_MESSAGE,
   APP_WINDOW_CLASS_PREFIX,
 } from "@bunaway/runtime-bun/windows-control";
-import { hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
-import { windowChanges } from "./window-events.ts";
+import { Taskbar } from "./taskbar.ts";
+import {
+  type TaskbarProgress,
+  TaskbarProgressController,
+} from "./taskbar-progress.ts";
+import { display, hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
+import { completedGeometryChanges, windowChanges } from "./window-events.ts";
+import {
+  centerInWorkArea,
+  initialWindowPlacement,
+  type WorkArea,
+} from "./window-placement.ts";
 import {
   constrainedOuterSize,
   DEFAULT_DPI,
@@ -36,6 +49,10 @@ const WM_GETMINMAXINFO = 0x0024;
 const WM_WINDOWPOSCHANGING = 0x0046;
 const WM_WINDOWPOSCHANGED = 0x0047;
 const WM_DISPLAYCHANGE = 0x007e;
+const WM_SYSCOMMAND = 0x0112;
+const SC_SIZE = 0xf000n;
+const SC_MOVE = 0xf010n;
+const SYSTEM_COMMAND_MASK = 0xfff0n;
 export const WM_ENTERSIZEMOVE = 0x0231;
 export const WM_EXITSIZEMOVE = 0x0232;
 const WM_DPICHANGED = 0x02e0;
@@ -55,6 +72,7 @@ const MB_DEFBUTTON2 = 0x100;
 const MB_ICONQUESTION = 0x20;
 const MB_YESNO = 0x4;
 const MONITOR_DEFAULTTONEAREST = 2;
+const MONITOR_DEFAULTTOPRIMARY = 1;
 const PM_REMOVE = 1;
 const SM_CXSIZEFRAME = 32;
 const SM_CYSIZEFRAME = 33;
@@ -77,15 +95,18 @@ const WINDOWPLACEMENT_FLAGS_OFFSET = 4;
 const WINDOWPLACEMENT_SHOW_CMD_OFFSET = 8;
 const WPF_RESTORETOMAXIMIZED = 0x2;
 const WS_OVERLAPPEDWINDOW = 0x00cf0000;
+const WS_THICKFRAME = 0x00040000n;
 const WS_MAXIMIZE = 0x01000000n;
 const WS_MINIMIZE = 0x20000000n;
 const IDYES = 6;
 const MAX_MESSAGES_PER_PUMP = 64;
+const MAX_INITIAL_PLACEMENT_ATTEMPTS = 8;
 const MINMAXINFO_SIZE = 40;
 const MONITORINFO_SIZE = 40;
 const RECT_SIZE = 16;
 const WINDOWPLACEMENT_SIZE = 44;
 const WINDOWPOS_SIZE = 40;
+const MAX_WINDOW_TITLE_LENGTH = 1024;
 
 type SizeConstraints = Partial<WindowSizeConstraints>;
 type ClientSize = {
@@ -117,6 +138,14 @@ function callbackPointer(address: bigint): Pointer {
 
 // One class and one bounded pump per STA, shared by every view.
 export class Windows {
+  private readonly taskbar = new Taskbar();
+  private readonly taskbarProgress = new TaskbarProgressController(
+    (window, progress) => this.taskbar.apply(window, progress),
+  );
+  private readonly taskbarButtonCreated = withWide(
+    "TaskbarButtonCreated",
+    (name) => user.symbols.RegisterWindowMessageW(name),
+  );
   readonly thread = kernel.symbols.GetCurrentThreadId();
   private readonly instance = kernel.symbols.GetModuleHandleW(null);
   private readonly name = wide(
@@ -136,6 +165,15 @@ export class Windows {
     }
   >();
   private readonly changingGeometry = new Set<bigint>();
+  private readonly interactiveGeometry = new Map<bigint, WindowBounds>();
+  private readonly immovable = new Set<bigint>();
+  private readonly initialOuterSizes = new Map<
+    bigint,
+    {
+      width: number;
+      height: number;
+    }
+  >();
   private lastActiveWindow: bigint | null = null;
   private readonly dpiByWindow = new Map<bigint, number>();
   private readonly normalMonitors = new Map<
@@ -171,6 +209,10 @@ export class Windows {
     appId?: string,
     pollMessages?: () => void,
   ) {
+    assert(
+      this.taskbarButtonCreated,
+      "RegisterWindowMessageW(TaskbarButtonCreated) failed",
+    );
     if (appId) {
       const shell = dlopen("shell32.dll", {
         SetCurrentProcessExplicitAppUserModelID: {
@@ -263,6 +305,21 @@ export class Windows {
           assert.equal(kernel.symbols.GetCurrentThreadId(), this.thread);
           // DispatchMessage can remain in a native move/resize loop until the user releases the mouse.
           pollMessages?.();
+          if (
+            message === this.taskbarButtonCreated &&
+            this.windows.has(window)
+          ) {
+            try {
+              this.taskbarProgress.buttonCreated(window);
+            } catch (error) {
+              // Explorer recreation is asynchronous; retain the last accepted setting for a later retry.
+              console.error(
+                "Could not restore taskbar progress after button creation.",
+                error,
+              );
+            }
+            return 0n;
+          }
           if (message === APP_SHUTDOWN_MESSAGE) {
             shutdown();
             return 0n;
@@ -286,6 +343,27 @@ export class Windows {
           if (message === WM_WINDOWPOSCHANGING) {
             this.constrainMaximizedSize(window, lparam);
           }
+          if (
+            message === WM_ENTERSIZEMOVE &&
+            this.observations.has(window) &&
+            !this.interactiveGeometry.has(window)
+          ) {
+            this.interactiveGeometry.set(
+              window,
+              this.getBounds(window, "outer"),
+            );
+          }
+
+          if (message === WM_SYSCOMMAND && this.windows.has(window)) {
+            // Caption dragging and keyboard/system-menu commands converge here.
+            const command = wparam & SYSTEM_COMMAND_MASK;
+            if (
+              (command === SC_MOVE && !this.isMovable(window)) ||
+              (command === SC_SIZE && !this.isResizable(window))
+            ) {
+              return 0n;
+            }
+          }
           this.windows.get(window)?.(message, wparam, lparam);
           if (message === WM_CLOSE) {
             return 0n; // defer Close/DestroyWindow past callback
@@ -296,6 +374,13 @@ export class Windows {
             wparam,
             lparam,
           );
+          if (message === WM_EXITSIZEMOVE) {
+            const start = this.interactiveGeometry.get(window);
+            this.interactiveGeometry.delete(window);
+            if (start) {
+              this.observeChanges(window, start);
+            }
+          }
           if (message === WM_WINDOWPOSCHANGED && this.windows.has(window)) {
             this.rememberNormalMonitor(window);
           }
@@ -363,27 +448,162 @@ export class Windows {
     this.registered = true;
   }
 
-  /**
-   * Create a window with a clamped logical client size.
-   * Register its state before showing it.
-   */
+  /** Query physical work-area bounds for a native monitor; shared with later runtime placement. */
+  getWorkArea(monitor: bigint): WorkArea {
+    const info = Buffer.alloc(MONITORINFO_SIZE);
+    info.writeUInt32LE(MONITORINFO_SIZE);
+    assert(
+      monitor && user.symbols.GetMonitorInfoW(monitor, ptr(info)),
+      "Window monitor is unavailable.",
+    );
+    return {
+      x: info.readInt32LE(20),
+      y: info.readInt32LE(24),
+      width: info.readInt32LE(28) - info.readInt32LE(20),
+      height: info.readInt32LE(32) - info.readInt32LE(24),
+    };
+  }
+
+  /** Validate display-dependent input before slot reservation, profile acquisition or replacement close. */
+  validateCreation(options: WindowSpec["window"]) {
+    this.initialPlacement(options);
+  }
+
+  /** Explicit physical point selects the nearest monitor; otherwise use the current HWND or primary. */
+  getPlacementMonitor(
+    position?: {
+      x: number;
+      y: number;
+    },
+    window?: bigint,
+  ) {
+    if (!position) {
+      return user.symbols.MonitorFromWindow(
+        window ?? 0n,
+        window ? MONITOR_DEFAULTTONEAREST : MONITOR_DEFAULTTOPRIMARY,
+      );
+    }
+    const point = Buffer.alloc(8);
+    point.writeInt32LE(position.x, 0);
+    point.writeInt32LE(position.y, 4);
+    return user.symbols.MonitorFromPoint(
+      point.readBigUInt64LE(),
+      MONITOR_DEFAULTTONEAREST,
+    );
+  }
+
+  private initialPlacement(options: WindowSpec["window"], window?: bigint) {
+    if (!hasValidWindowPlacement(options)) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "Invalid initial window placement.",
+      });
+    }
+    const position =
+      options.x != null && options.y != null
+        ? {
+            x: options.x,
+            y: options.y,
+          }
+        : undefined;
+    // Explicit placement keeps its point/primary work area even when the HWND overlaps another monitor.
+    const usesDefaultPosition =
+      !position && !options.center && !options.preventOverflow;
+    const monitor = this.getPlacementMonitor(
+      position,
+      usesDefaultPosition ? window : undefined,
+    );
+    let dpi: number;
+    if (window) {
+      dpi = this.getDpi(window);
+    } else {
+      const x = new Uint32Array(1);
+      const y = new Uint32Array(1);
+      hr(
+        display.symbols.GetDpiForMonitor(monitor, 0, ptr(x), ptr(y)),
+        "GetDpiForMonitor",
+      );
+      dpi = x[0] ?? 0;
+      assert(dpi, "Monitor DPI is unavailable.");
+    }
+    return initialWindowPlacement(
+      options,
+      dpi,
+      this.outerSizeFor(0, 0, dpi, BigInt(WS_OVERLAPPEDWINDOW), 0n),
+      this.getWorkArea(monitor),
+    );
+  }
+
+  /** Own synchronous DPI transitions until initial geometry settles; reject cycles before showing. */
+  private applyInitialPlacement(window: bigint, options: WindowSpec["window"]) {
+    const attemptedDpis = new Set<number>();
+    try {
+      for (
+        let attempt = 0;
+        attempt < MAX_INITIAL_PLACEMENT_ATTEMPTS;
+        attempt++
+      ) {
+        const dpi = this.readDpi(window);
+        assert(
+          !attemptedDpis.has(dpi),
+          "Initial window placement cannot settle across monitor DPI changes.",
+        );
+        attemptedDpis.add(dpi);
+        this.dpiByWindow.set(window, dpi);
+        const actual = this.initialPlacement(options, window);
+        // DefWindowProc otherwise clamps to system tracking limits, which can
+        // shrink an oversized rectangle or enlarge an overflow-fitted one.
+        this.initialOuterSizes.set(window, actual.outer);
+        assert(
+          user.symbols.SetWindowPos(
+            window,
+            0n,
+            actual.position?.x ?? 0,
+            actual.position?.y ?? 0,
+            actual.outer.width,
+            actual.outer.height,
+            SWP_NOZORDER | SWP_NOACTIVATE | (actual.position ? 0 : SWP_NOMOVE),
+          ),
+          "Initial SetWindowPos failed.",
+        );
+        if (this.readDpi(window) === dpi) {
+          const bounds = this.getBounds(window, "outer");
+          assert(
+            bounds.width === actual.outer.width &&
+              bounds.height === actual.outer.height &&
+              (!actual.position ||
+                (bounds.x === actual.position.x &&
+                  bounds.y === actual.position.y)),
+            "Windows did not apply the initial window rectangle.",
+          );
+          return;
+        }
+      }
+      throw new Error(
+        "Initial window placement exceeded its DPI adjustment limit.",
+      );
+    } finally {
+      this.initialOuterSizes.delete(window);
+    }
+  }
+
+  /** Create hidden, apply content constraints and placement, register state, then optionally show. */
   create(
     title: string,
     width: number,
     height: number,
     receive: (message: number, wparam: bigint, lparam: bigint) => void,
     visible = true,
-    constraints: SizeConstraints = {},
+    options: SizeConstraints & WindowPlacement = {},
   ) {
-    const initialConstraints = resolvedConstraints(constraints);
-    const initialSize = clampWindowSize(width, height, initialConstraints);
-    const outerSize = this.outerSizeFor(
-      initialSize.width,
-      initialSize.height,
-      DEFAULT_DPI,
-      BigInt(WS_OVERLAPPEDWINDOW),
-      0n,
-    );
+    const initialConstraints = resolvedConstraints(options);
+    const placement = {
+      ...options,
+      width,
+      height,
+      ...initialConstraints,
+    };
+    const planned = this.initialPlacement(placement);
     // WM_GETMINMAXINFO can run before CreateWindowExW returns the HWND.
     this.creatingConstraints = initialConstraints;
     let window: bigint;
@@ -394,10 +614,10 @@ export class Windows {
           ptr(this.name),
           titlePointer,
           WS_OVERLAPPEDWINDOW,
-          CW_USEDEFAULT,
-          CW_USEDEFAULT,
-          outerSize.width,
-          outerSize.height,
+          planned.position?.x ?? CW_USEDEFAULT,
+          planned.position?.y ?? CW_USEDEFAULT,
+          planned.outer.width,
+          planned.outer.height,
           0n,
           0n,
           this.instance,
@@ -411,8 +631,9 @@ export class Windows {
     this.windows.set(window, receive);
     this.constraints.set(window, initialConstraints);
     try {
-      this.dpiByWindow.set(window, this.getDpi(window));
-      this.setSize(window, initialSize.width, initialSize.height);
+      // The HWND's largest monitor overlap can differ from the requested point's monitor.
+      // Recompute after every initial DPI transition, retaining the selected placement work area.
+      this.applyInitialPlacement(window, placement);
       this.rememberNormalMonitor(window);
       if (visible) {
         user.symbols.ShowWindow(window, SW_SHOW);
@@ -494,6 +715,145 @@ export class Windows {
     return user.symbols.GetForegroundWindow() === window;
   }
 
+  /** Apply a UTF-16 native caption without activating, showing or resizing the window. */
+  setTitle(window: bigint, title: string): void {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    assert(
+      withWide(title, (text) => user.symbols.SetWindowTextW(window, text)),
+      `SetWindowTextW: ${kernel.symbols.GetLastError()}`,
+    );
+  }
+
+  /** Read live native text with a fixed bound; empty captions are valid native query results. */
+  getTitle(window: bigint): string {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    kernel.symbols.SetLastError(0);
+    const length = user.symbols.GetWindowTextLengthW(window);
+    const lengthError = kernel.symbols.GetLastError();
+    assert(
+      length !== 0 || lengthError === 0,
+      `GetWindowTextLengthW: ${lengthError}`,
+    );
+    assert(
+      length <= MAX_WINDOW_TITLE_LENGTH,
+      "Native window title exceeds the supported length.",
+    );
+    // One extra code unit detects a caption growing between the length query and copy.
+    const text = Buffer.alloc((MAX_WINDOW_TITLE_LENGTH + 2) * 2);
+    kernel.symbols.SetLastError(0);
+    const copied = user.symbols.GetWindowTextW(
+      window,
+      ptr(text),
+      MAX_WINDOW_TITLE_LENGTH + 2,
+    );
+    const error = kernel.symbols.GetLastError();
+    assert(copied !== 0 || error === 0, `GetWindowTextW: ${error}`);
+    assert(
+      copied <= MAX_WINDOW_TITLE_LENGTH,
+      "Native window title exceeds the supported length.",
+    );
+    return text.toString("utf16le", 0, copied * 2);
+  }
+
+  /** Read the resize style restored after fullscreen, rather than the borderless fullscreen style. */
+  isResizable(window: bigint): boolean {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return !!(
+      (this.fullscreen.get(window)?.style ?? this.windowStyles(window).style) &
+      WS_THICKFRAME
+    );
+  }
+
+  /** Change user resizing while retaining normal content size, display state and input focus. */
+  setResizable(window: bigint, resizable: boolean): void {
+    if (this.isResizable(window) === resizable) {
+      return;
+    }
+    const fullscreen = this.fullscreen.get(window);
+    const style = fullscreen?.style ?? this.windowStyles(window).style;
+    const nextStyle = resizable
+      ? style | WS_THICKFRAME
+      : style & ~WS_THICKFRAME;
+    if (fullscreen) {
+      fullscreen.style = nextStyle;
+      this.resizePlacement(
+        window,
+        fullscreen.placement,
+        fullscreen.restoreSize,
+        this.getSizeConstraints(window),
+        fullscreen.dpi,
+        nextStyle,
+      );
+      return;
+    }
+    const dpi = this.getDpi(window);
+    const placement =
+      this.isMinimized(window) || this.isMaximized(window)
+        ? this.getPlacement(window)
+        : undefined;
+    const content = placement
+      ? this.clientSizeFromPlacement(window, placement, dpi, style)
+      : this.clientSizeInDips(window, dpi);
+    this.changingGeometry.add(window);
+    try {
+      this.setStyle(window, nextStyle);
+      assert(
+        user.symbols.SetWindowPos(
+          window,
+          0n,
+          0,
+          0,
+          0,
+          0,
+          SWP_NOSIZE |
+            SWP_NOMOVE |
+            SWP_NOZORDER |
+            SWP_NOACTIVATE |
+            SWP_FRAMECHANGED,
+        ),
+      );
+      if (placement) {
+        this.resizePlacement(
+          window,
+          placement,
+          content,
+          this.getSizeConstraints(window),
+          dpi,
+          nextStyle,
+        );
+        this.setPlacement(window, placement, this.isVisible(window), true);
+      } else {
+        this.setClientSize(
+          window,
+          clampWindowSize(
+            content.width,
+            content.height,
+            this.getSizeConstraints(window),
+          ),
+          dpi,
+        );
+      }
+    } finally {
+      this.changingGeometry.delete(window);
+      this.observeChanges(window);
+    }
+  }
+
+  isMovable(window: bigint): boolean {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return !this.immovable.has(window);
+  }
+
+  /** Block user movement only. Geometry APIs, display changes and fullscreen can still reposition. */
+  setMovable(window: bigint, movable: boolean): void {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    if (movable) {
+      this.immovable.delete(window);
+    } else {
+      this.immovable.add(window);
+    }
+  }
+
   /** Own one native observer per window. Its callback ends before HWND destruction. No initial replay. */
   observe(
     window: bigint,
@@ -534,7 +894,7 @@ export class Windows {
   }
 
   /** Commit before calling the observer so nested Win32 callbacks cannot repeat a transition. */
-  private observeChanges(window: bigint): void {
+  private observeChanges(window: bigint, completed?: WindowBounds): void {
     const observation = this.observations.get(window);
     if (!observation || this.changingGeometry.has(window)) {
       return;
@@ -547,6 +907,9 @@ export class Windows {
       previous.revision + 1,
     );
     const changes = windowChanges(previous, current);
+    if (completed) {
+      changes.push(...completedGeometryChanges(completed, current.bounds));
+    }
     if (!changes.length) {
       return;
     }
@@ -924,9 +1287,11 @@ export class Windows {
 
   private clientSizeInDips(window: bigint, dpi: number): ClientSize {
     const size = this.clientSize(window);
+    // Preserve fractional DIPs internally so frame changes can recover the exact
+    // physical client pixels. Public logical geometry queries round separately.
     return {
-      width: logicalPixels(size.width, dpi),
-      height: logicalPixels(size.height, dpi),
+      width: (size.width * DEFAULT_DPI) / dpi,
+      height: (size.height * DEFAULT_DPI) / dpi,
     };
   }
 
@@ -1088,8 +1453,8 @@ export class Windows {
     const { exStyle } = this.windowStyles(window);
     const frame = this.outerSizeFor(0, 0, dpi, style, exStyle);
     return {
-      width: logicalPixels(outerWidth - frame.width, dpi),
-      height: logicalPixels(outerHeight - frame.height, dpi),
+      width: ((outerWidth - frame.width) * DEFAULT_DPI) / dpi,
+      height: ((outerHeight - frame.height) * DEFAULT_DPI) / dpi,
     };
   }
 
@@ -1118,6 +1483,19 @@ export class Windows {
   }
 
   private applyMinMaxInfo(window: bigint, lparam: bigint) {
+    const initialSize = this.initialOuterSizes.get(window);
+    if (initialSize) {
+      // The placement plan already includes content constraints and overflow
+      // fitting. Pin only this synchronous resize, then restore normal tracking.
+      const info = new DataView(
+        toArrayBuffer(callbackPointer(lparam), 0, MINMAXINFO_SIZE),
+      );
+      info.setInt32(24, initialSize.width, true);
+      info.setInt32(28, initialSize.height, true);
+      info.setInt32(32, initialSize.width, true);
+      info.setInt32(36, initialSize.height, true);
+      return;
+    }
     if (this.fullscreen.has(window)) {
       return;
     }
@@ -1212,6 +1590,12 @@ export class Windows {
     const dpi = Number(wparam & 0xffffn);
     assert(dpi, "WM_DPICHANGED supplied an invalid DPI.");
     const previousDpi = this.dpiByWindow.get(window) ?? this.readDpi(window);
+    // Initial placement owns size and position. Accept the DPI, but do not apply the
+    // OS suggestion recursively; its caller recomputes both at the committed DPI.
+    if (this.initialOuterSizes.has(window)) {
+      this.dpiByWindow.set(window, dpi);
+      return;
+    }
     const suggested = new DataView(
       toArrayBuffer(callbackPointer(lparam), 0, RECT_SIZE),
     );
@@ -1314,6 +1698,20 @@ export class Windows {
         0,
         SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
       ),
+    );
+  }
+
+  /** Center using physical outer bounds; iconic/zoomed HWNDs keep their display state and size. */
+  center(window: bigint): void {
+    const bounds = this.getBounds(
+      window,
+      this.isMinimized(window) || this.isMaximized(window) ? "normal" : "outer",
+    );
+    const area = this.getWorkArea(this.getPlacementMonitor(undefined, window));
+    this.setGeometry(
+      window,
+      "outer",
+      centerInWorkArea(area, bounds.width, bounds.height),
     );
   }
 
@@ -1559,19 +1957,10 @@ export class Windows {
       const saved = this.fullscreen.get(window);
       assert(saved);
       this.setStyle(window, saved.style);
-      this.fullscreen.delete(window);
       try {
-        const dpi = this.readDpi(window);
-        this.dpiByWindow.set(window, dpi);
-        this.resizePlacement(
-          window,
-          saved.placement,
-          saved.restoreSize,
-          this.getSizeConstraints(window),
-          dpi,
-          saved.style,
-        );
-        this.setPlacement(window, saved.placement, saved.visible, true);
+        // Recalculate the restored frame before committing normal placement. The
+        // frame update can otherwise rewrite that placement or reshow an iconic HWND.
+        // Retain fullscreen suppression until its intermediate bounds are discarded.
         assert(
           user.symbols.SetWindowPos(
             window,
@@ -1587,6 +1976,18 @@ export class Windows {
               SWP_FRAMECHANGED,
           ),
         );
+        this.fullscreen.delete(window);
+        const dpi = this.readDpi(window);
+        this.dpiByWindow.set(window, dpi);
+        this.resizePlacement(
+          window,
+          saved.placement,
+          saved.restoreSize,
+          this.getSizeConstraints(window),
+          dpi,
+          saved.style,
+        );
+        this.setPlacement(window, saved.placement, saved.visible, true);
       } catch (error) {
         this.fullscreen.set(window, saved);
         throw error;
@@ -1617,7 +2018,10 @@ export class Windows {
     }
     this.observations.delete(window);
     this.changingGeometry.delete(window);
+    this.interactiveGeometry.delete(window);
+    this.immovable.delete(window);
     assert(user.symbols.DestroyWindow(window));
+    this.taskbarProgress.forget(window);
     this.windows.delete(window);
     this.constraints.delete(window);
     this.dpiByWindow.delete(window);
@@ -1661,6 +2065,7 @@ export class Windows {
    */
   dispose() {
     assert.equal(this.windows.size, 0);
+    this.taskbar.dispose();
     if (this.registered) {
       assert(user.symbols.UnregisterClassW(ptr(this.name), this.instance));
     }
@@ -1673,5 +2078,11 @@ export class Windows {
       ),
       `SetThreadDpiAwarenessContext: ${kernel.symbols.GetLastError()}`,
     );
+  }
+
+  /** Apply progress to a live HWND without changing visibility, activation or window state. */
+  setTaskbarProgress(window: bigint, progress: TaskbarProgress): void {
+    assert(this.windows.has(window), "Taskbar target is not a live window");
+    this.taskbarProgress.set(window, progress);
   }
 }

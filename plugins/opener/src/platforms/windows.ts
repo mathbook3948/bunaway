@@ -2,10 +2,11 @@ import { dlopen } from "bun:ffi";
 import type { NativeAdapter, NativeEnvironment } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
 import { validateOpenerInput } from "../contract.ts";
-import { normalizeFilePath } from "../path.ts";
+import { normalizeApplicationPath, normalizeFilePath } from "../path.ts";
 import { createShell } from "../shell.ts";
 import { normalizeUrl } from "../url.ts";
 import { createFiles } from "../windows-file.ts";
+import { trashWindowsFile, validateTrashDrive } from "../windows-trash.ts";
 
 const COINIT_APARTMENTTHREADED = 0x2;
 
@@ -76,10 +77,27 @@ export function createOperations(
       // The host authorizes the current context and operation immediately before
       // dispatch to this I/O worker. There is no async gap before pinning the path.
       const payload = validateOpenerInput(name, input);
-      if ("url" in payload) {
+      if ("app" in payload) {
+        const app = normalizeApplicationPath(payload.app);
+        files.withFile(app, () => {
+          if ("url" in payload) {
+            shell.open(app, normalizeUrl(payload.url));
+          } else {
+            const path = normalizeFilePath(payload.path);
+            files.withFile(path, () => shell.open(app, path));
+          }
+        });
+      } else if ("url" in payload) {
         shell.open(normalizeUrl(payload.url));
       } else {
         const path = normalizeFilePath(payload.path);
+        if (name === "opener.trashFile") {
+          validateTrashDrive(path);
+          files.withTrashFile(path, (verifyIdentity) =>
+            trashWindowsFile(path, verifyIdentity),
+          );
+          return null;
+        }
         files.withFile(path, () => {
           if (name === "opener.openFile") {
             shell.open(path);

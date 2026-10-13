@@ -1,4 +1,5 @@
 import {
+  hasValidWindowPlacement,
   hasValidWindowSizeConstraints,
   isWindowSizeDimension,
   MAX_WINDOW_DIMENSION,
@@ -112,10 +113,20 @@ export function readWindowSpecs(
             "minHeight",
             "maxWidth",
             "maxHeight",
+            "x",
+            "y",
+            "center",
+            "useContentSize",
+            "preventOverflow",
           ].includes(key),
       )
     ) {
       throw new Error("Unknown window size field.");
+    }
+    if (!hasValidWindowPlacement(size)) {
+      throw new Error(
+        "Window placement requires paired integer x/y, boolean options and no center/position conflict.",
+      );
     }
     for (const dimension of [
       size.width,
@@ -217,6 +228,31 @@ export function readWindowSpecs(
             showWhenReady: spec.showWhenReady,
           }),
       window: {
+        ...(size.x === undefined
+          ? {}
+          : {
+              x: size.x,
+            }),
+        ...(size.y === undefined
+          ? {}
+          : {
+              y: size.y,
+            }),
+        ...(size.center === undefined
+          ? {}
+          : {
+              center: size.center,
+            }),
+        ...(size.useContentSize === undefined
+          ? {}
+          : {
+              useContentSize: size.useContentSize,
+            }),
+        ...(size.preventOverflow === undefined
+          ? {}
+          : {
+              preventOverflow: size.preventOverflow,
+            }),
         width: Number(size.width),
         height: Number(size.height),
         ...(minWidth === undefined

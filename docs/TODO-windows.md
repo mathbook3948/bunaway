@@ -159,11 +159,15 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] `getNormalBounds`로 최소화, 최대화와 전체화면에서 복원할 일반 창의 outer bounds를 조회한다.
 - [x] `toLogical`과 `toPhysical`로 대상 창 DPI를 사용해 좌표, 크기와 bounds를 변환한다.
   반올림, 정수 범위와 오류, 대상 창 권한과 닫힌 창의 동작은 창 API 계약을 따른다.
-- [ ] 초기 x, y, center와 content-size 기준 옵션을 지원한다.
-- [ ] 실행 중 창을 현재 또는 지정 모니터의 작업 영역 중앙에 배치한다.
-- [ ] 초기 창 위치와 크기가 작업 영역을 넘지 않게 하는 prevent-overflow 옵션을 제공한다.
+- [x] 초기 x, y, center와 content-size 기준 옵션을 구현했다. ADR 0019의 필드별 병합과 예약 전 검증을 single/multiple 생성 및 재생성에 적용한다.
+- [x] `windows.center`로 실행 중 창을 현재 모니터의 작업 영역 중앙에 배치한다. 숨김과 최소화, 최대화 상태를 유지하며 최소화와 최대화 중에는 일반 복원 영역만 배치한다.
+- [ ] 지정 모니터의 작업 영역 중앙 배치를 공개 모니터 ID 계약과 연결한다.
+- [x] 초기 창 위치와 크기를 작업 영역에 맞추는 preventOverflow를 구현했다. 최소 content 크기와 프레임을 유지할 수 없으면 예약 및 기존 창 종료 전에 거부한다.
+- [x] 초기 배치의 순수 계산과 오류 경계 검증을 완료했다. 음수 좌표, signed 32-bit 경계, DPI 96/120/144/192, content/outer, 제약 충돌과 선언 보존을 검사했다.
+- [x] 초기 배치의 실제 HWND 및 WebView2 집중 검증을 완료했다. Windows Server 2022의 모니터 1개와 DPI 96에서 초기 선언 및 single/multiple 생성과 재생성을 확인했다. multiple은 isolated 프로필이다.
+- [ ] 초기 배치를 다중 물리 모니터, 혼합 DPI와 실제 높은 DPI에서 실행 검증한다. 합성 입력과 CI는 이 범위를 대신하지 않는다.
 - [ ] 고정 aspect ratio와 해제 API를 제공한다.
-- [ ] resizable과 movable을 설정하고 조회한다.
+- [x] `setResizable`, `isResizable`, `setMovable`, `isMovable`로 Windows 사용자 크기 조절과 이동을 설정하고 조회한다. 프로그램의 geometry API는 계속 허용하며 전체화면 뒤에도 설정을 유지한다.
 - [ ] 설정과 런타임 크기 제한을 실제 모니터, DPI에 맞게 재검토한다. 현재의 4096 상한을 유지할지 결정한다.
 - [ ] 위치와 크기의 선택적 애니메이션을 지원하거나 플랫폼별 미지원으로 명시한다.
 
@@ -180,7 +184,8 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] 초기 maximized와 fullscreen 옵션을 지원한다.
 - [ ] minimizable, maximizable, closable, fullscreenable을 설정하고 조회한다.
 - [ ] 초기 및 실행 중 focusable을 설정하고 조회한다.
-- [ ] 창 title과 icon을 실행 중 변경하고 조회한다.
+- [x] `setTitle`과 `getTitle`로 Windows 창 title을 실행 중 변경하고 조회한다. 선언과 다른 인스턴스를 변경하지 않으며 닫기 확인 창에도 현재 title을 사용한다.
+- [ ] 창 icon을 실행 중 변경하고 조회한다. 이미지 입력과 배포 리소스 계약을 정의한다.
 - [ ] decorations와 frame의 초기 설정, 변경과 조회를 제공한다.
 - [ ] 사용자 타이틀바의 drag 영역, no-drag 영역과 resize 영역을 제공한다.
 - [ ] 프로그램에서 창 이동과 방향별 크기 조절을 시작한다.
@@ -219,7 +224,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] created, ready, closed, destroyed 이벤트를 제공한다.
 - [x] `windows.changed`로 실제 전경 창 상태의 focus와 blur 전환을 제공한다.
 - [x] move와 resize 전환에 현재 outer bounds와 DPI를 함께 제공한다.
-- [ ] 연속 이동과 크기 변경이 끝난 moved와 resized 이벤트를 제공한다.
+- [x] Windows의 네이티브 이동과 크기 조절 루프가 끝나면 `windows.changed`에 `moved`, `resized`를 제공한다. 시작과 최종 geometry의 실제 차이를 판정하고 최종 bounds와 별도 revision을 전달한다.
 - [ ] will-move와 will-resize의 취소 가능 여부를 정의한다.
 - [x] minimize, maximize, unmaximize와 restore 전환을 제공한다.
 - [x] enterFullscreen과 leaveFullscreen 전환을 제공한다.
@@ -321,8 +326,9 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 로그인 시 실행을 사용자 HKCU Run에 등록하고 해제한다.
 - [x] 등록 여부와 저장된 실제 실행 경로, 인자 상태를 조회한다.
 - [x] 로그인 시작에 전달할 인자를 Windows argv 규칙으로 인코딩한다.
-- [ ] 숨김 시작 옵션과 트레이 수명주기를 연결한다.
-- [ ] 수동 실행과 로그인 실행을 앱에서 구분한다.
+- [x] 숨김 시작 옵션과 트레이 수명주기를 연결한다. 트레이가 없는 등록과 시작은 거부하며 초기 SDK 준비도 창을 표시하지 않는다.
+- [x] `onOpen.launchReason`으로 수동 실행과 자동 실행 호출 모드를 구분한다. 실행 인자 기반 메타데이터이며 Windows 로그인 출처의 인증이 아니다.
+- [ ] 실제 로그아웃과 로그인에서 숨김 시작, 사용자 비활성화와 트레이 복원을 대화형 검증한다. CI의 직접 실행은 이 검증을 대신하지 않는다.
 - [x] 사용자 범위 등록을 기본으로 하고 관리자 범위는 제공하지 않는다.
 - [x] 앱 이동과 업데이트 후 명시적 재등록으로 오래된 경로와 인자를 갱신한다.
 - [ ] 제거 시 현재 ID의 등록을 해제하고 ID 변경 전 등록을 정리하는 설치 계약을 연결한다.
@@ -355,8 +361,15 @@ Windows의 비활성화 기록을 수정하지 않는다.
   실행 결과는 초기 UI Worker 구현의 근거이며, 이관 후 구현의 실행 근거로 확대하지 않는다.
   계약 검사와 초기 실행 결과, 이관 후 검증 범위는
   [실행 기록](./architecture/windows-bun-results.md#2026-10-10-opener-파일-작업)에 구분한다.
-- [ ] 지정 앱으로 파일과 URL을 연다.
-- [ ] 파일을 휴지통으로 보내고 실패를 반환한다.
+- [x] `openFileWith`와 `openUrlWith`로 지정한 절대 `.exe` 앱에 파일과 HTTP/HTTPS URL 하나를 전달한다. 작업별 권한과 앱 및 파일 검사, Windows argv 인코딩을 제공하고 Explorer에 실행을 위임한다. 기본 연결은 변경하지 않는다. 실제 Windows 회귀는 CI의 `mise run host:windows`에서 수행하며 앱 표시와 수동 검증 완료를 뜻하지 않는다.
+- [x] `trashFile`로 로컬 고정 드라이브의 파일을 휴지통으로 보내고 실패를 반환한다.
+  `opener.trashFile` 권한과 기존 파일 검사를 적용한다. 휴지통 플래그가 없는 삭제 직전 콜백은 거부하고
+  휴지통 이동 실패를 일반 삭제로 재시도하지 않는다. 성공은 OS가 휴지통 항목을
+  반환했음을 뜻한다. UNC, 이동식 드라이브와 디렉터리는 지원하지 않는다.
+  부모를 고정하고 삭제 직전 파일 ID를 다시 확인하지만 마지막 검사 이후의
+  파일 자체 교체 경쟁은 남는다. Windows 네이티브 회귀는 `host:windows`에 포함한다.
+  실제 Windows 실행 결과와 휴지통 비활성화, 용량 초과 및 경고 UI 수동 검증은 별도 확인이 필요하다.
+- [ ] 휴지통 비활성화, 용량 초과와 영구 삭제 경고 UI의 동작을 실제 Windows에서 검증한다.
 - [ ] Windows 바로가기 생성, 읽기와 변경을 제공한다.
 - [ ] OS beep와 이모지 패널의 지원을 결정한다.
 - [ ] URL scheme을 등록, 해제하고 기본 처리 앱 여부를 조회한다.
@@ -366,7 +379,15 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [ ] AppUserModelID와 toast activation 식별자를 설정하고 설치와 일치시킨다.
 - [ ] Recent Documents의 추가, 조회와 삭제를 제공한다.
 - [ ] Jump List와 사용자 task, category, 제거된 항목 조회를 제공한다.
-- [ ] 작업 표시줄 progress와 상태를 설정한다.
+- [x] 작업 표시줄 progress와 상태를 설정한다.
+  `windows.setTaskbarProgress`는 창별 `none`, `indeterminate`, `normal`, `paused`, `error`를
+  적용하며 determinate 상태에는 0~1의 진행률을 요구한다. 작업 권한과 창 수명을 검사하고
+  작업 표시줄 버튼 생성 전에는 `BUSY`, 네이티브 실패에는 `INTERNAL`을 반환한다.
+  Explorer 버튼 재생성 때 마지막 성공 값을 다시 적용하고 HWND 파괴 때 폐기한다.
+  계약 및 수명 검사는 `window-taskbar.test.ts`, `taskbar-progress.test.ts`이며 실제 UI Worker와
+  ITaskbarList3 호출은 기존 `windows-bun-window-api.ts`의 `host:windows` 회귀에 포함한다.
+- [ ] 실제 Windows 작업 표시줄에서 진행률, 상태 색상, 그룹 우선순위와 Explorer 재시작 후 표시를 확인한다.
+  네이티브 호출 회귀와 합성 버튼 재생성 검사를 물리 화면의 표시 검증으로 간주하지 않는다.
 - [ ] overlay icon과 접근성 설명을 설정한다.
 - [ ] thumbnail toolbar 버튼과 클릭 이벤트를 제공한다.
 - [ ] thumbnail clip과 tooltip을 설정한다.
@@ -414,18 +435,27 @@ Windows의 비활성화 기록을 수정하지 않는다.
 출처: [E-clipboard], [E-image], [T-clipboard], [T-image].
 
 - [x] 클립보드 텍스트 읽기, 쓰기와 지우기를 제공한다. `@bunaway/plugin-clipboard`의 작업별 권한, Unicode와 크기 제한, 빈 값, 점유와 취소, 소유권 정리를 정의했다. 2026-10-10 Windows x64의 공통 SDK와 실제 UI Worker 왕복, 별도 프로세스 점유와 취소를 검증했다([계약과 검증](../plugins/clipboard/README.md)).
-- [ ] 이미지 읽기와 쓰기를 제공한다.
-- [ ] HTML, RTF, 파일 목록과 bookmark 형식의 지원을 제공한다.
-- [ ] 사용 가능한 MIME 형식과 지정 형식 존재 여부를 조회한다.
-- [ ] 여러 형식을 한 번에 읽고 쓰는 API를 제공한다.
+- [x] Windows clipboard의 `readImage`와 `writeImage`로 bounded RGBA 이미지 읽기와 쓰기를 제공한다. 공통 이미지 리소스 API와 다른 앱의 붙여넣기 검증은 별도 작업이다.
+- [x] Windows clipboard의 HTML fragment, ASCII RTF와 wide 파일 목록 읽기와 쓰기를 제공한다. 파일 목록은 저장소 접근 권한을 추가하지 않는다.
+- [ ] bookmark 형식의 지원을 제공한다.
+- [x] `getFormats`와 `hasFormat`으로 지원하는 다섯 MIME 형식의 가용성을 조회한다. 임의 Windows 등록 형식의 열거는 포함하지 않는다.
+- [x] `readFormats`와 `writeFormats`로 한 번의 clipboard 열기 구간에서 여러 형식을 읽거나 교체한다. 준비 실패는 기존 내용을 보존하며 비우기 이후 부분 등록 실패는 되돌리지 않는다.
 - [ ] 사용자 정의 binary 형식을 읽고 쓰는 범위와 제한을 정의한다.
 - [ ] 클립보드 변경 이벤트의 지원을 결정한다.
-- [ ] 파일, bytes, bitmap, RGBA와 data URL에서 이미지 리소스를 만든다.
-- [ ] 이미지 크기, 빈 이미지 여부와 픽셀 데이터를 조회한다.
-- [ ] PNG, JPEG, bitmap과 data URL로 이미지를 내보낸다.
-- [ ] crop, resize와 scale-factor별 이미지 representation을 제공한다.
+- [x] Windows `@bunaway/plugin-image`에서 PNG, JPEG와 BMP bytes, RGBA와 data URL로 앱 소유 이미지 리소스를 만든다.
+- [ ] 파일 경로에서 이미지 리소스를 읽는 API와 저장소 접근 정책을 연결한다.
+- [x] `image.getInfo`와 `image.getPixels`로 크기, 빈 이미지 여부와 RGBA 픽셀 데이터를 조회한다.
+- [x] `image.exportBytes`와 `image.exportDataURL`로 PNG, JPEG, BMP와 data URL을 내보낸다. PNG는 alpha를 보존하고 JPEG와 BMP는 불투명 픽셀만 받는다.
+- [x] `image.crop`과 `image.resize`로 소스와 분리된 새 이미지 리소스를 만든다. Windows resize는 nearest와 alpha를 고려한 linear filtering을 제공한다.
+- [ ] 한 이미지 ID의 scale-factor별 representation 그룹과 선택 API를 제공한다.
 - [ ] 파일 아이콘과 이미지 thumbnail을 생성한다.
-- [ ] 이미지 리소스 ID와 명시적 해제, 호출 취소와 앱 종료 정리를 제공한다.
+- [x] 앱 소유 이미지 ID, `image.dispose`, 결과 전달 전 생성 취소와 앱 종료 정리를 제공한다. 작업별 권한과 64개, 8 MiB 상한을 적용한다.
+
+2026-10-12 clipboard 확장은 `defineNativePlugin`과 Zod 계약, 작업별 권한, 입력과 출력 상한,
+빌린 메모리의 복사와 해제, 다중 형식의 부분 실패 정리를 포함한다. 실제 Windows 회귀는
+CI의 `mise run host:windows`에서 SDK와 UI Worker, Win32를 연결해 실행하도록 추가했다.
+구현 표시와 검증 결과는 구분하며 정확한 head CI 결과를 확인한다. 다른 앱의 붙여넣기,
+최소 OS와 하드웨어 검증, 공통 이미지 리소스의 생성, 변환과 명시적 해제는 완료하지 않았다.
 
 ## 13. 모니터, 테마, 접근성과 전원
 
@@ -439,9 +469,11 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [ ] 커서의 화면 좌표와 physical/logical 좌표 변환을 제공한다.
 - [ ] system/light/dark 테마를 앱과 창에 지정하고 조회한다.
 - [ ] 테마, accent color와 시스템 색 변경을 알린다.
-- [ ] 고대비, forced colors, inverted colors 상태를 조회한다.
-- [ ] reduced motion과 transparency 등 접근성 환경설정을 조회한다.
-- [ ] 스크린 리더와 접근성 활성 상태, 변경 이벤트를 제공한다.
+- [x] Windows 고대비와 OS forced colors 플래그, 시스템 색을 조회한다.
+- [ ] inverted colors 상태를 조회한다.
+- [x] Windows client-area animation 기준 reduced motion과 저장된 transparency 선호를 조회한다.
+- [x] Windows SPI_GETSCREENREADER 설정 플래그를 조회한다. 실제 접근성 트리 활성 여부와는 구분한다.
+- [ ] 스크린 리더와 접근성 트리 활성 상태, 변경 이벤트를 제공한다.
 - [ ] 접근성 지원 활성화와 비활성화를 제어하고 지원 기능을 선택, 조회한다. [E-app-live]의
   `setAccessibilitySupportEnabled`, `getAccessibilitySupportFeatures`, `setAccessibilitySupportFeatures`를 참고한다.
   초기 상태, OS 자동 감지와 명시 설정의 관계, 호출 가능 시점, 빈 목록과 잘못된 기능명을 정의한다.
@@ -453,6 +485,13 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [ ] 시스템 절전과 화면 꺼짐을 방지하는 blocker를 시작, 조회하고 해제한다.
 - [ ] blocker의 중복 요청과 앱 종료 자동 정리를 처리한다.
 - [ ] CPU speed-limit, thermal-state와 종료 이벤트의 플랫폼별 지원을 정의한다.
+
+`@bunaway/plugin-appearance`의 getPreferences로 저장된 앱 및 시스템 테마 선호,
+DWM accent와 시스템 색, 접근성 플래그를 조회한다. theme와 transparency의 누락 또는
+알 수 없는 DWORD는 null이다. [appearance API](./site/src/content/docs/reference/plugins/appearance.mdx)를 따른다.
+조회 구현과 실제 Windows 회귀를 추가했으며 테마 지정, 변경 이벤트, 접근성 지원 제어와
+WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
+창별 테마 지정은 공유 WebView 프로필의 색 선호와 창별 override 관계를 결정해야 한다.
 
 ## 14. WebView 생성, 배치와 기본 제어
 
@@ -466,8 +505,10 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [ ] 창 크기 변경에 따른 auto-resize와 콘텐츠 크기 기반 배치를 제공한다.
 - [ ] WebView를 다른 창으로 reparent하는 기능과 새 세션 규칙을 정의한다.
 - [ ] WebView만 닫고 재생성하는 공개 API를 제공한다.
-- [ ] URL과 로컬 파일 로드, reload, cache를 무시한 reload와 stop을 제공한다.
-- [ ] 현재 URL, title, loading, destroyed와 focus 상태를 조회한다.
+- [x] 기존 허용 origin 안의 URL 로드, 일반 reload와 stop을 제공한다. `navigateWebView`, `reloadWebView`, `stopWebView`는 기존 세션 폐기와 origin 검사를 유지한다.
+- [ ] 로컬 파일 로드와 cache를 무시한 reload를 제공한다.
+- [x] `getWebViewState`로 현재 URL, title과 최상위 loading 상태를 조회한다.
+- [ ] WebView의 destroyed와 focus 상태를 조회한다.
 - [ ] 탐색 전 허용와 거부, redirect와 popup 새 창 처리 훅을 제공한다.
 - [ ] 로드 시작, DOM ready, 완료와 실패 이벤트를 제공한다.
 - [ ] 문서, 프레임과 same-document 탐색 이벤트를 제공한다.
@@ -490,9 +531,11 @@ Windows의 비활성화 기록을 수정하지 않는다.
 
 우선순위 P2. 소유자: 렌더러 API. 출처: [E-contents], [E-history], [E-frame], [E-frame-main], [T-webview-rust].
 
-- [ ] 뒤로, 앞으로, offset과 index 이동 및 가능 여부 조회를 제공한다.
+- [x] `goBack`, `goForward`와 `getWebViewState`로 기본 history 이동과 가능 여부 조회를 제공한다.
+- [ ] history의 offset과 index 이동을 제공한다.
 - [ ] 탐색 history의 조회, 삭제, 전체 초기화와 복원을 제공한다.
-- [ ] zoom factor, level과 visual zoom 최소와 최대 한도를 설정하고 조회한다.
+- [x] `setZoomFactor`와 `getWebViewState`로 controller zoom factor를 설정하고 실제 값을 조회한다.
+- [ ] zoom level과 visual zoom 최소와 최대 한도를 설정하고 조회한다.
 - [ ] 페이지 find, 결과 이벤트와 검색 종료를 제공한다.
 - [ ] undo, redo, cut, copy, paste, plain-text paste와 select-all을 제공한다.
 - [ ] selection 변경, 텍스트 삽입과 교체, scroll-to-top/bottom을 제공한다.
@@ -508,7 +551,8 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [ ] 파일 drop의 enter, over, leave와 drop 이벤트, 경로와 좌표를 제공한다.
 - [ ] WebView의 File 객체와 OS 파일 경로를 안전하게 연결한다.
 - [ ] 파일을 앱 밖으로 드래그하고 표시할 drag 이미지를 제공한다.
-- [ ] audio muted와 audible 상태를 변경, 조회하고 이벤트를 제공한다.
+- [x] `setWebViewAudioMuted`로 음소거를 변경하고 `getWebViewAudioState`로 음소거와 문서의 audio 재생 상태를 조회한다. 두 상태는 독립이며 탐색은 음소거를 유지한다.
+- [ ] audio muted와 재생 상태의 변경 이벤트를 제공한다. 실제 장치의 출력과 재생 중 음소거는 수동 검증이 필요하다.
 - [ ] caret browsing 활성화, selection 가운데 표시와 image-at-point 복사를 제공한다.
 - [ ] media 시작과 중단, HTML theme-color와 링크 hover URL 이벤트를 제공한다.
 
@@ -582,14 +626,18 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 우선순위 P2. 소유자: WebView 연동은 렌더러 API, 독립 전송과 캡처는 플러그인 후보.
 출처: [E-download], [E-contents], [E-capture], [T-webview-rust], [T-upload].
 
-- [ ] WebView 다운로드의 시작 승인, 거부와 저장 경로 선택을 제공한다.
-- [ ] 다운로드 URL, redirect chain, filename, MIME과 initiator를 조회한다.
-- [ ] total/received bytes, 속도, 진행률과 완료와 실패 이벤트를 제공한다.
-- [ ] pause, resume, cancel과 재개 가능 여부를 제공한다.
+- [x] 신뢰된 backend의 항목별 WebView 다운로드 시작 승인과 거부를 제공한다. 기본 거부, origin 검사, 30초 승인 기한과 창 수명별 자원 정리를 유지한다.
+- [ ] WebView 다운로드의 사용자 지정 저장 경로와 저장 대화상자를 제공한다. WebView2의 경로 기반 쓰기와 덮어쓰기 동작에 맞는 파일 접근 계약이 필요하다. 현재 승인은 브라우저의 기본 경로만 사용한다.
+- [x] `getDownloads`로 URL, MIME, Content-Disposition, 파일명을 포함한 기본 저장 경로, total/received bytes, 상태와 interrupt reason을 조회한다.
+- [ ] redirect chain과 frame별 initiator를 조회한다.
+- [ ] 속도, 진행률과 완료와 실패 이벤트를 제공한다. 현재 진행 및 종료 상태는 snapshot 조회로 확인한다.
+- [x] `pauseDownload`, `resumeDownload`, `cancelDownload`와 `getDownloads`로 pause, resume, cancel과 재개 가능 여부를 제공한다.
 - [ ] 중단 다운로드의 metadata 저장과 재개를 제공한다.
 - [ ] 파일 업로드와 다운로드에 progress, 취소, timeout을 제공한다.
 - [ ] 프린터 목록과 기본 프린터를 조회한다.
-- [ ] 인쇄 대화상자, silent print와 인쇄 옵션을 제공한다.
+- [x] `showPrintUI`로 WebView2 browser 또는 system 인쇄 대화상자를 요청한다. 반환은 인쇄 완료가 아니며 사용자가 프린터와 제출을 선택한다.
+- [ ] silent print와 프로그램에서 지정하는 프린터 및 인쇄 옵션을 제공한다.
+- [ ] system 인쇄 대화상자의 실제 사용자 선택과 취소, 프린터의 실제 출력을 검증한다. CI의 browser UI 요청과 자원 정리는 물리 인쇄 검증이 아니다.
 - [ ] PDF 내보내기와 용지, 방향, 여백, 페이지 범위, 배경 옵션을 제공한다.
 - [ ] 페이지 이미지 capture와 지정 영역 capture를 제공한다.
 - [ ] 페이지를 HTML 또는 리소스를 포함한 형태로 저장한다.
@@ -605,7 +653,10 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 
 - [x] 앱이 지정한 절대 경로의 UTF-8 텍스트 읽기와 쓰기를 제공한다.
 - [x] 파일을 여는 경계에서 잘못된 경로, junction, hardlink와 대상 교체를 거부한다.
-- [ ] binary 읽기와 쓰기, append와 open/read/write/seek/close 핸들을 제공한다.
+- [x] Windows의 binary 읽기와 쓰기, UTF-8 텍스트와 바이트 append를 제공한다.
+  canonical base64와 256 KiB 바이트 상한, 작업별 권한과 기존 네이티브 경로 검사를 유지한다.
+  [바이너리 계약](./site/src/content/docs/reference/host/storage-bytes.mdx)을 따른다.
+- [ ] open/read/write/seek/close 파일 핸들과 대용량 stream I/O를 제공한다.
 - [x] 파일과 디렉터리 존재, stat과 metadata를 조회한다.
   `storage.exists`와 `storage.stat`은 앱이 지정한 절대 경로를 받는다.
   작업마다 독립적으로 허용하고 네이티브 경로와 대상 핸들을 검사한다. 없는 대상은 각각 `false`와 `null`이며,
@@ -614,18 +665,28 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   [exists 계약](./site/src/content/docs/reference/host/storage-exists.mdx)과
   [stat 계약](./site/src/content/docs/reference/host/storage-stat.mdx)을 따른다.
 - [ ] 파일과 디렉터리의 OS 권한 및 ACL 조회 범위와 공개 계약을 정의한다.
-- [ ] 디렉터리 목록, 재귀 목록과 생성, 삭제를 제공한다.
+- [x] Windows의 직접 자식 목록, 선택적인 상위 디렉터리 생성과 파일 및 빈 디렉터리 삭제를 제공한다.
+  검사한 핸들의 bounded enumeration과 삭제, 링크 미추적 및 거부, 작업별 권한을
+  [디렉터리 계약](./site/src/content/docs/reference/host/storage-directories.mdx)에 정의한다.
+- [ ] 재귀 목록, 큰 목록 pagination과 재귀 삭제를 제공한다.
 - [ ] 파일 크기 조회와 별도로 디렉터리 재귀 용량을 바이트 단위로 계산한다. [T-fs-live]의 `size`를 참고한다.
   링크 처리, 접근 거부와 탐색 중 변경의 오류 규칙, 큰 트리의 취소와 비용을 정의한다.
   빈 디렉터리, 중첩 파일 합계, 링크, 부분 실패와 취소 시 자원 정리를 검증한다.
-- [ ] 파일과 디렉터리 copy, rename, move, truncate를 제공한다.
+- [x] Windows의 4 MiB 이하 일반 파일 복사와 같은 parent의 파일 및 디렉터리 rename를 제공한다.
+  양쪽 parent와 source 핸들을 고정하고 기존 destination을 대체하지 않는다.
+  [전송 계약](./site/src/content/docs/reference/host/storage-transfers.mdx)을 따른다.
+- [ ] 큰 파일과 디렉터리 재귀 copy, 다른 parent와 볼륨의 move, 덮어쓰기 및 truncate를 제공한다.
 - [ ] 파일 watch와 recursive watch, 이벤트 구독 해제를 제공한다.
 - [ ] 원자적 저장, 충돌 처리와 대용량 stream I/O를 제공한다.
 - [ ] 파일 대화상자로 획득한 범위의 일시 허용과 영속화를 제공한다.
-- [ ] home, documents, downloads, desktop, pictures, music과 video 경로를 제공한다.
+- [x] Windows current-user Known Folder로 home, documents, downloads, desktop, pictures, music과 videos 경로를 조회한다.
+  OS redirection을 따르며 폴더 생성과 파일 접근 권한을 부여하지 않는다.
+  [경로 계약](./site/src/content/docs/reference/plugins/path.mdx)을 따른다.
 - [ ] appConfig, appData, appLocalData, cache, logs, temp와 resource 경로를 제공한다.
-- [ ] path join, resolve, normalize, basename, dirname, extname과 isAbsolute를 제공한다.
-- [ ] Windows drive, UNC, extended-length와 Unicode 경로 동작을 정의한다.
+- [x] Windows path join, resolve, normalize, basename, dirname, extname과 isAbsolute를 제공한다.
+  resolve는 명시적인 fully qualified base를 요구하며 host cwd와 per-drive cwd를 사용하지 않는다.
+- [x] 문자열 경로 helper의 Windows drive, UNC, extended-length와 Unicode 동작을 정의한다.
+  파일 접근과 분리하며 storage의 링크, 별칭, extended-length 및 device 경로 거부는 유지한다.
 - [ ] key-value store의 load, get, set, delete, clear와 목록 조회를 제공한다.
 - [ ] store 변경 이벤트, save, reload와 autosave를 제공한다.
 - [ ] Store `defaults`와 저장된 값의 병합 우선순위, 중첩 객체 처리, 기본값 무시 옵션을 정의한다.
@@ -636,7 +697,8 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   기본값이 있는 경우와 없는 경우, 변경 이벤트, autosave 및 명시적 save 후 재실행 결과를 검증한다.
 - [ ] SQLite의 query, execute, transaction과 migration을 제공한다.
 - [ ] Tauri SQL의 다른 backend와 원격 DB 지원 필요성을 결정한다.
-- [ ] Bun 파일, path와 SQLite API를 직접 사용하는 trusted backend 경로와 권한 중재 API를 구분해 문서화한다.
+- [x] Bun 파일, path와 SQLite API를 직접 사용하는 trusted backend 경로와 권한 중재 API를 구분해 문서화한다.
+  [백엔드 Host API](./site/src/content/docs/reference/backend/host-api.mdx)를 따른다.
 
 ## 20. OS 정보, HTTP, WebSocket와 프로세스
 
@@ -646,33 +708,62 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로세스 API를 사용할 수 있다.
 아래는 이를 없던 기능으로 다시 구현하는 작업이 아니라 정책을 적용한 공개 기능과 OS 연동의 작업이다.
 
-- [ ] OS 종류, 버전, architecture, hostname과 실행 환경 정보를 제공한다.
-- [ ] locale, country code, preferred languages와 OS 언어를 조회한다.
-- [ ] CPU, 메모리와 프로세스 사용량, PID와 translation 상태 조회를 제공한다.
-- [ ] 앱의 origin과 URL 접근 규칙을 적용한 HTTP 요청과 응답을 제공한다.
-- [ ] HTTP header, body, redirect, proxy와 OS 인증의 지원 범위를 정의한다.
+- [x] OS 종류, 버전, architecture, hostname과 실행 환경 정보를 제공한다.
+  선택 `os` 플러그인의 `info`는 실행 중 Bun의 architecture, 버전과 PID를 반환한다.
+- [x] locale, country code, preferred languages와 OS 언어를 조회한다.
+  `os.locale`은 Windows 사용자 locale과 지역 코드, 순서 있는 표시 언어와 시스템 UI 언어를 반환한다.
+- [x] CPU, 메모리와 프로세스 사용량, PID와 translation 상태 조회를 제공한다.
+  `os.usage`는 논리 CPU 개수, 현재 프로세스의 누적 CPU 시간, 메모리 bytes와
+  `IsWow64Process2` 결과를 반환한다. CPU 백분율과 임의 PID의 조회는 포함하지 않는다.
+- [x] 앱의 origin과 URL 접근 규칙을 적용한 HTTP 요청과 응답을 제공한다.
+  뷰의 작업 권한과 앱 명령의 URL origin 검사를 구분한다. `network.request`는 임의 Origin
+  header를 받지 않고 redirect를 반환하므로 새 대상은 앱이 다시 검사한다.
+  [network 계약](./site/src/content/docs/reference/plugins/network.mdx)의 앱 명령 예제를 따른다.
+- [x] HTTP header, body, redirect, proxy와 OS 인증의 지원 범위를 정의한다.
+  선택 `network.request`는 제한된 header와 base64 body를 제공하고 redirect를 따라가지 않는다.
+  proxy는 Bun의 신뢰된 실행 환경 설정만 사용하며 OS 인증과 WebView cookie 공유는 제공하지 않는다.
 - [ ] HTTP stream, timeout, 취소와 progress를 제공한다.
+  `network.request`의 제한된 응답, timeout과 호출 취소는 구현했다. 공개 stream과 progress는 남아 있다.
 - [ ] WebSocket 연결, 메시지, close, 상태와 backpressure를 공개 계약으로 제공한다.
-- [ ] 앱이 실행 파일과 인자를 검사하는 command 실행을 제공한다.
-- [ ] shell 문자열 실행과 argv 실행을 구분한다.
+  `network.exchange`는 호출 하나에 종속된 제한된 text 송신과 text/binary 수신, close와 send buffer
+  상한을 제공한다. 장기 연결 handle, 독립 send/receive와 상태 이벤트의 세션 소유권은 남아 있다.
+- [x] 앱이 실행 파일과 인자를 검사하는 command 실행을 제공한다.
+  선택 `process.run`의 실행 파일과 전체 argv는 앱 명령이 검사한다. 절대 local `.exe`
+  경로만 실행하며 PATH, batch 파일과 호출자 env/cwd 설정을 받지 않는다.
+- [x] shell 문자열 실행과 argv 실행을 구분한다.
+  `process.run`은 Bun argv 실행만 제공하며 shell 문자열 API를 제공하지 않는다.
 - [ ] spawn, stdout/stderr, stdin, exit code와 signal을 제공한다.
+  `process.run`의 제한된 binary stdin, stdout/stderr 캡처, PID와 완료 결과는 구현했다.
+  장기 spawn handle과 interactive stdin, 출력 stream은 남아 있다.
 - [ ] process kill, timeout과 앱 종료 시 process tree 정리를 연결한다.
+  호출 취소, timeout과 어댑터 폐기는 직접 자식을 종료하고 pipe를 닫는다. 앱 종료의
+  descendant 정리는 기존 host Job Object를 따른다. 호출별 process tree 종료는 남아 있다.
 - [ ] 번들 sidecar의 플랫폼 선택, 실행 경로, 라이선스와 패키징을 제공한다.
 - [ ] 앱 restart와 exit를 desktop 수명주기에 연결한다.
-- [ ] CLI argument와 subcommand schema, help, 오류와 match 결과를 제공한다.
+- [x] CLI argument와 subcommand schema, help, 오류와 match 결과를 제공한다.
+  `@bunaway/backend/cli`의 `defineCLI`는 기존 `onOpen` argv를 명시적으로 받아 Bun
+  `parseArgs`와 앱의 Zod schema로 검사한다. help와 오류는 결과이며 실행과 종료를 제어하지 않는다.
 - [ ] utility process의 독립 실행과 양방향 메시지, 종료와 오류 이벤트를 제공한다.
 - [ ] localhost 자산 서버는 선택 기능으로 지원 여부를 결정한다. 기본 통신 경로는 기존 로컬 자산과 브리지다.
-- [ ] HTTP client-request와 incoming-message의 stream 기능을 Bun 대체 API에 매핑한다.
+- [x] HTTP client-request와 incoming-message의 stream 기능을 Bun 대체 API에 매핑한다.
+  신뢰된 backend는 `fetch`, `RequestInit.body`, `Response`와 `Response.body`를 사용한다.
+  [network 계약](./site/src/content/docs/reference/plugins/network.mdx)의 대응 표와 stream 예제를 따른다.
+  정책 중재 stream은 위의 stream/progress 작업에 남겨 둔다.
 
 ## 21. 암호화 저장과 시스템 인증
 
 우선순위 P2. 소유자: 공식 보안 기능 플러그인 후보. 출처: [E-safe], [T-stronghold], [T-biometric].
 
-- [ ] OS 암호화 저장 지원 여부를 조회한다.
-- [ ] Windows DPAPI를 사용하는 문자열과 bytes 암호화, 복호화를 제공한다.
-- [ ] 보안 저장소의 비동기 사용 가능 여부 조회와 암복호화를 제공한다. [E-safe-live]의
+- [x] Windows DPAPI의 현재 사용 가능 여부를 암복호화 probe로 조회한다. 다른 플랫폼은 미지원이다.
+- [x] Windows DPAPI의 current-user 범위에서 문자열과 bytes 암호화, 복호화를 제공한다.
+  작업별 권한과 크기 제한, prompt 금지와 평문 fallback 금지는
+  [암호화 저장 계약](./site/src/content/docs/reference/plugins/safe-storage.mdx)을 따른다.
+- [x] Windows의 비동기 사용 가능 여부 조회와 암복호화를 I/O Worker에서 제공한다. [E-safe-live]의
   `isAsyncEncryptionAvailable`, `encryptStringAsync`, `decryptStringAsync`를 참고한다.
-  초기화 시점, 동시 요청, 오류와 종료 처리를 정의하고 왕복 복호화와 UI 응답성, 손상 입력을 검증한다.
+  최초 작업에서 DLL을 초기화하고 동시 요청을 I/O 큐에서 처리한다. 처리 전 취소와 종료,
+  시작한 Windows API의 중단 불가, 오류와 원본 보존을 정의한다.
+  실제 Win32 및 WebView2 회귀를 CI에 포함하며 다른 사용자와 머신, roaming profile 및
+  Windows 키 복구는 별도 실행 검증으로 남긴다.
 - [ ] 복호화 결과에 키 교체 등에 따른 재암호화 필요 여부를 제공한다. [E-safe-live]의 `shouldReEncrypt`를 참고한다.
   재암호화와 원자적 저장 절차를 정의하고 이전 키 데이터, 교체 후 재조회, 저장 실패 시 원본 보존을 검증한다.
 - [ ] 키 저장소가 잠기거나 일시적으로 이용 불가할 때 영구 복호화 실패와 구분하고 재시도 계약을 제공한다.
@@ -683,8 +774,11 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 - [ ] vault unlock, lock, save와 암호 변경을 제공한다.
 - [ ] 키 생성과 cryptographic operation을 secret 노출 없이 실행한다.
 - [ ] vault 암호 파생 함수와 salt의 설정, 생성과 보관 방법을 제공한다.
-- [ ] 재설치, 다른 사용자와 다른 머신에서 복호화할 수 없는 경우의 오류를 정의한다.
-- [ ] 일반 평문 store와 암호화 저장을 구분하고 평문 fallback은 명시적으로 선택한다.
+- [x] 복호화 불가를 평문으로 숨기지 않고 `INTERNAL`로 전달한다. 손상과 다른 사용자, 머신,
+  재설치 및 키 일시 문제를 이 코드만으로 구분하지 않는다.
+- [ ] 다른 사용자와 머신, 재설치, roaming profile 및 키 복구 시나리오를 실제로 검증한다.
+- [x] 일반 평문 store와 암호화 변환을 구분하고 이 플러그인의 묵시적 평문 fallback을 금지한다.
+  평문을 저장하려면 앱이 별도 파일 또는 store API를 명시적으로 선택한다.
 - [ ] Windows Hello를 통한 사용자 확인은 추가 기능으로 지원 여부를 결정한다. Tauri 공식 biometric의 모바일 지원과 구분한다.
 
 ## 22. 자동 업데이트와 앱 배포 기능
@@ -726,7 +820,8 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 - [x] 이벤트 구독, 해제, broadcast와 지정 뷰 전달을 제공한다.
 - [x] 권한, 취소, deadline과 종료된 세션의 늦은 응답 처리를 제공한다.
 - [x] 기본 WebView 연결을 공유하고 HMR과 pagehide에서 수명을 관리한다.
-- [ ] once 구독과 대상 창, WebView, backend 이벤트 전달의 공개 계약을 제공한다.
+- [x] `client.once`와 직접 `once`로 첫 유효 이벤트를 한 번만 전달하고 자동 해제한다. 권한, 취소와 오류 계약은 기존 구독을 따른다.
+- [ ] 대상 창, WebView, backend 이벤트 전달의 공개 계약을 제공한다.
 - [x] Windows의 `windows.changed` native 이벤트를 동일한 typed 구독 API로 전달한다.
 - [ ] binary payload와 JSON 외 데이터의 전송 계약을 추가한다.
 - [ ] 연속 결과와 대용량 데이터의 channel 또는 stream 전송을 제공한다.
@@ -750,7 +845,8 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 - [x] Windows 개발 모드 DevTools와 `dev --inspect`를 제공한다.
 - [x] UI와 백엔드 소스맵과 원본 명령 오류 스택을 제공한다.
 - [x] 앱 로그와 플러그인 없이 남기는 프레임워크 진단을 구분한다.
-- [ ] DevTools 열기, 닫기, 상태 조회와 이벤트 API를 제공한다.
+- [x] `openDevTools`로 개발 모드에서 DevTools를 연다. 작업 권한으로 프로덕션 설정을 우회할 수 없다.
+- [ ] DevTools 닫기, 상태 조회와 이벤트 API를 제공한다.
 - [ ] 요소, service worker와 shared worker 검사 API의 지원을 결정한다.
 - [ ] DevTools workspace의 추가와 제거, dock 위치, 별도 창과 title을 설정한다.
 - [ ] device emulation의 viewport, 화면 배율과 입력 설정을 제공한다.

@@ -17,6 +17,7 @@ import {
 } from "./com.ts";
 import { viewDirName } from "./view-profile.ts";
 import { webAsset } from "./web-assets.ts";
+import { WebViewDownloads } from "./webview-downloads.ts";
 import { hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
 
 const embedded = Bun.embeddedFiles.some(
@@ -80,6 +81,7 @@ export class WebView {
   private closing = false;
   private detached = false;
   private browserExited = false;
+  private browserFailed = false;
   private finished = false;
   private quiescence:
     | {
@@ -96,6 +98,9 @@ export class WebView {
   private readonly loader;
   failure: unknown;
   private navigationId: bigint | undefined;
+  private downloads: WebViewDownloads | undefined;
+  private loading = false;
+  private stoppedNavigationId: bigint | undefined;
 
   /** Begin async WebView2 creation; ready fires after configuration, independently of HWND visibility. */
   constructor(
@@ -353,6 +358,23 @@ export class WebView {
   private configure(assets: string) {
     assert(this.webview);
     const webview = this.webview;
+    // Default deny applies even when an app does not register the optional window plugin.
+    this.downloads = new WebViewDownloads(
+      webview,
+      (url, source) =>
+        this.origins.includes(originOf(url)) &&
+        this.origins.includes(originOf(source)),
+      (callback) => this.completions.push(callback),
+      () => !this.closing,
+      (error) => {
+        this.failure = error;
+        this.hooks.close(true);
+      },
+      (url) =>
+        this.hooks.log("download-rejected", {
+          url,
+        }),
+    );
     const settings = getObject(this.webview, 3);
     try {
       for (const [slot, value] of [
@@ -491,6 +513,7 @@ export class WebView {
             : {}),
         });
       } else if (!frame) {
+        this.loading = true;
         const id = new BigUint64Array(1);
         hr(
           method(args, 9, [
@@ -500,6 +523,8 @@ export class WebView {
         );
         if (this.navigationId !== id[0]) {
           this.navigationId = id[0];
+          this.downloads?.operations.revokePending();
+          this.stoppedNavigationId = undefined;
           this.hooks.revoke("navigation");
         }
       }
@@ -533,6 +558,9 @@ export class WebView {
       if (id[0] !== this.navigationId) {
         return;
       }
+      this.loading = false;
+      const stopped = this.stoppedNavigationId === id[0];
+      this.stoppedNavigationId = undefined;
       const success = new Int32Array(1);
       hr(
         method(args, 3, [
@@ -558,7 +586,7 @@ export class WebView {
         });
         error = {
           code:
-            status[0] === WEB_ERROR_OPERATION_CANCELED
+            stopped || status[0] === WEB_ERROR_OPERATION_CANCELED
               ? "CANCELLED"
               : "INTERNAL",
           message: "Document navigation did not complete.",
@@ -615,8 +643,10 @@ export class WebView {
       });
       this.hooks.revoke("process-failed");
       if (kind[0] === 0) {
+        this.browserFailed = true;
         this.hooks.close(true);
       } else {
+        this.downloads?.operations.revokePending();
         setTimeout(() => {
           if (!this.closing) {
             this.navigate();
@@ -721,6 +751,7 @@ export class WebView {
     });
   }
 
+  /** Startup and recovery navigation use the same policy check as public navigation. */
   navigate() {
     const webview = this.webview;
     if (webview && !this.closing) {
@@ -732,6 +763,257 @@ export class WebView {
         ),
         "Navigate",
       );
+    }
+  }
+  /** Request a print dialog, leaving printer selection and submission to the user. */
+  showPrintUI(kind: "browser" | "system") {
+    if (this.closing) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "WebView is closed.",
+      });
+    }
+    if (!this.webview) {
+      throw new BunawayError({
+        code: "BUSY",
+        message: "WebView is not ready.",
+      });
+    }
+    // ICoreWebView2_16, from pinned SDK 1.0.4129.50. Older runtimes need an explicit capability error.
+    const printing = query(
+      this.webview,
+      "0eb34dc9-9f91-41e1-8639-95cd5943906b",
+      true,
+    );
+    if (!printing) {
+      throw new BunawayError({
+        code: "UNSUPPORTED",
+        message:
+          "The installed WebView2 runtime does not provide print dialogs.",
+      });
+    }
+    try {
+      hr(
+        method(printing, 114, [
+          "i32",
+        ])(kind === "browser" ? 0 : 1),
+        "ShowPrintUI",
+      );
+    } finally {
+      release(printing);
+    }
+  }
+
+  /** Download service readiness is independent of the document/SDK handshake. */
+  downloadOperations() {
+    if (this.closing) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "WebView is closed.",
+      });
+    }
+    if (!this.downloads) {
+      throw new BunawayError({
+        code: "BUSY",
+        message: "WebView is not ready.",
+      });
+    }
+    return this.downloads.operations;
+  }
+
+  /** Reject before COM access when the controller is unavailable or closing. */
+  private requireWebView(): Pointer {
+    if (this.closing) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "WebView is closed.",
+      });
+    }
+    if (!this.webview || !this.controller) {
+      throw new BunawayError({
+        code: "BUSY",
+        message: "WebView is not ready.",
+      });
+    }
+    return this.webview;
+  }
+
+  /** Start navigation without expanding allowed origins; redirects still pass NavigationStarting. */
+  navigateTo(url: string) {
+    if (!this.origins.includes(originOf(url)) || url.includes("\0")) {
+      throw new BunawayError({
+        code: "PERMISSION_DENIED",
+        message: "WebView navigation origin denied.",
+      });
+    }
+    const webview = this.requireWebView();
+    hr(
+      withWide(url, (address) =>
+        method(webview, 5, [
+          "ptr",
+        ])(address),
+      ),
+      "Navigate",
+    );
+  }
+
+  /** Read actual browser URL, title, history availability and controller zoom. */
+  getState() {
+    const webview = this.requireWebView();
+    return {
+      url: getString(webview, 4),
+      title: getString(webview, 48),
+      loading: this.loading,
+      canGoBack: this.historyAvailable(38),
+      canGoForward: this.historyAvailable(39),
+      zoomFactor: this.zoomFactor(),
+    };
+  }
+
+  private historyAvailable(slot: 38 | 39): boolean {
+    const value = new Int32Array(1);
+    hr(
+      method(this.requireWebView(), slot, [
+        "ptr",
+      ])(ptr(value)),
+      "Read history availability",
+    );
+    return value[0] !== 0;
+  }
+
+  /** Reload revokes the old document when its NavigationStarting event is accepted. */
+  reload() {
+    hr(method(this.requireWebView(), 31, [])(), "Reload");
+  }
+
+  /** Stop completes through the existing NavigationCompleted cancellation path. */
+  stop() {
+    const webview = this.requireWebView();
+    const previous = this.stoppedNavigationId;
+    // WebView2 can report CONNECTION_ABORTED for Stop. Preserve explicit caller cancellation.
+    this.stoppedNavigationId = this.loading ? this.navigationId : undefined;
+    try {
+      hr(method(webview, 43, [])(), "Stop");
+    } catch (error) {
+      this.stoppedNavigationId = previous;
+      throw error;
+    }
+  }
+
+  goBack(): boolean {
+    if (!this.historyAvailable(38)) {
+      return false;
+    }
+    hr(method(this.requireWebView(), 40, [])(), "GoBack");
+    return true;
+  }
+
+  goForward(): boolean {
+    if (!this.historyAvailable(39)) {
+      return false;
+    }
+    hr(method(this.requireWebView(), 41, [])(), "GoForward");
+    return true;
+  }
+
+  private zoomFactor(): number {
+    this.requireWebView();
+    assert(this.controller);
+    const value = new Float64Array(1);
+    hr(
+      method(this.controller, 7, [
+        "ptr",
+      ])(ptr(value)),
+      "get_ZoomFactor",
+    );
+    return value[0] ?? 1;
+  }
+
+  /** Zoom is controlled through this controller; report browser normalization rather than the input. */
+  setZoomFactor(factor: number): number {
+    if (!Number.isFinite(factor) || factor < 0.25 || factor > 5) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "Zoom factor must be between 0.25 and 5.",
+      });
+    }
+    this.requireWebView();
+    assert(this.controller);
+    hr(
+      method(this.controller, 8, [
+        "f64",
+      ])(factor),
+      "put_ZoomFactor",
+    );
+    return this.zoomFactor();
+  }
+
+  /** A policy grant cannot turn on developer tools in a production host. */
+  openDevTools() {
+    if (!this.devtools) {
+      throw new BunawayError({
+        code: "PERMISSION_DENIED",
+        message: "DevTools are disabled by the host.",
+      });
+    }
+    hr(method(this.requireWebView(), 51, [])(), "OpenDevToolsWindow");
+  }
+
+  /** Acquire the audio extension only for an open, initialized controller. */
+  private audioInterface() {
+    if (this.closing) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "WebView is closed.",
+      });
+    }
+    if (!this.webview) {
+      throw new BunawayError({
+        code: "BUSY",
+        message: "WebView is not ready.",
+      });
+    }
+    // ICoreWebView2_8, SDK 1.0.4129.50; required by the supported WebView2 runtime.
+    return query(this.webview, "e9632730-6e1e-43ab-b7b8-7b2c9e62e094");
+  }
+  /** Report actual browser playback independently of its controller's mute setting. */
+  getAudioState() {
+    const audio = this.audioInterface();
+    try {
+      const muted = new Int32Array(1);
+      const playing = new Int32Array(1);
+      hr(
+        method(audio, 83, [
+          "ptr",
+        ])(ptr(muted)),
+        "get_IsMuted",
+      );
+      hr(
+        method(audio, 87, [
+          "ptr",
+        ])(ptr(playing)),
+        "get_IsDocumentPlayingAudio",
+      );
+      return {
+        muted: muted[0] !== 0,
+        playing: playing[0] !== 0,
+      };
+    } finally {
+      release(audio);
+    }
+  }
+  /** Mute this controller without changing the document or its media permission policy. */
+  setAudioMuted(muted: boolean) {
+    const audio = this.audioInterface();
+    try {
+      hr(
+        method(audio, 84, [
+          "i32",
+        ])(muted ? 1 : 0),
+        "put_IsMuted",
+      );
+    } finally {
+      release(audio);
     }
   }
   source() {
@@ -795,6 +1077,7 @@ export class WebView {
       return true;
     }
     this.closedAt = performance.now();
+    this.downloads?.detach(this.isBrowserUnavailable());
     // Capture process handles before controller closure to track WebView2 children.
     if (this.environment) {
       const env8 = query(
@@ -899,6 +1182,15 @@ export class WebView {
       this.group.drainer = this;
     }
     return true;
+  }
+  /** Owned process evidence permits releasing failed downloads without calling a dead broker. */
+  isBrowserUnavailable(): boolean {
+    return (
+      this.browserFailed ||
+      this.browserExited ||
+      (this.browserHandle !== 0n &&
+        kernel.symbols.WaitForSingleObject(this.browserHandle, 0) === 0)
+    );
   }
   /** Poll shutdown until children and callbacks drain, returning true after disposal. */
   finish(): boolean {

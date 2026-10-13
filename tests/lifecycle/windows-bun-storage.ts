@@ -4,14 +4,19 @@ import { execFileSync } from "node:child_process";
 import {
   link,
   mkdir,
+  mkdtemp,
+  realpath,
+  rename,
   rm,
   stat,
   symlink,
   utimes,
   writeFile,
 } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { Worker } from "node:worker_threads";
+import { storagePlugin as builtStorage } from "@bunaway/plugin-storage/native/windows";
 import { BunawayError } from "@bunaway/protocol";
 import { WindowsStorage } from "#plugins/storage/src/platforms/windows";
 
@@ -258,6 +263,561 @@ async function main(): Promise<void> {
       assert.equal(call("storage.readText", temporaryPath("bom.txt")), text);
     }
 
+    // Byte access preserves invalid UTF-8 and embedded zeroes, including replacement tails.
+    const binaryPath = temporaryPath("한글/binary.bin");
+    const rawBytes = Buffer.from(
+      Array.from(
+        {
+          length: 256,
+        },
+        (_, index) => index,
+      ),
+    );
+    const binary = (operation: string, bytes?: Buffer) =>
+      storage.execute(
+        operation,
+        bytes === undefined
+          ? {
+              path: binaryPath,
+            }
+          : {
+              path: binaryPath,
+              bytes: bytes.toString("base64"),
+            },
+      );
+    binary("storage.writeBytes", rawBytes);
+    assert.equal(binary("storage.readBytes"), rawBytes.toString("base64"));
+    assert.throws(() => call("storage.readText", binaryPath));
+    binary(
+      "storage.writeBytes",
+      Buffer.from([
+        255,
+      ]),
+    );
+    assert.equal(binary("storage.readBytes"), "/w==");
+    binary(
+      "storage.appendBytes",
+      Buffer.from([
+        0,
+        128,
+      ]),
+    );
+    assert.equal(
+      binary("storage.readBytes"),
+      Buffer.from([
+        255,
+        0,
+        128,
+      ]).toString("base64"),
+    );
+    binary("storage.appendBytes", Buffer.alloc(0));
+    assert.equal(
+      binary("storage.readBytes"),
+      Buffer.from([
+        255,
+        0,
+        128,
+      ]).toString("base64"),
+    );
+    binary("storage.writeBytes", Buffer.alloc(0));
+    assert.equal(binary("storage.readBytes"), "");
+    await rm(binaryPath);
+    binary("storage.appendBytes", rawBytes);
+    assert.equal(binary("storage.readBytes"), rawBytes.toString("base64"));
+    call("storage.appendText", temporaryPath("append/new.txt"), "한글");
+    call("storage.appendText", temporaryPath("append/new.txt"), "\u0000🙂");
+    call("storage.appendText", temporaryPath("append/new.txt"), "");
+    assert.equal(
+      call("storage.readText", temporaryPath("append/new.txt")),
+      "한글\u0000🙂",
+    );
+    binary("storage.writeBytes", Buffer.alloc(256 * 1024, 255));
+    assert.equal(
+      binary("storage.readBytes"),
+      Buffer.alloc(256 * 1024, 255).toString("base64"),
+    );
+    binary(
+      "storage.appendBytes",
+      Buffer.from([
+        1,
+      ]),
+    );
+    assert.throws(() => binary("storage.readBytes"), /too large/);
+    expectError(
+      () => call("storage.readBytes", temporaryPath("missing.bin")),
+      "INVALID_ARGUMENT",
+    );
+
+    const transfer = (operation: string, from: string, to: string) =>
+      storage.execute(operation, {
+        from,
+        to,
+      });
+    // Merged byte/append operations and transfers share the same checked-handle adapter.
+    const byteSource = temporaryPath("byte transfer source.bin");
+    const byteCopy = temporaryPath("byte transfer copy.bin");
+    const byteMoved = temporaryPath("byte transfer renamed.bin");
+    assert.equal(
+      storage.execute("storage.writeBytes", {
+        path: byteSource,
+        bytes: "AP+A",
+      }),
+      null,
+    );
+    assert.equal(transfer("storage.copyFile", byteSource, byteCopy), null);
+    assert.equal(
+      storage.execute("storage.appendBytes", {
+        path: byteCopy,
+        bytes: "AA==",
+      }),
+      null,
+    );
+    assert.equal(transfer("storage.move", byteCopy, byteMoved), null);
+    assert.equal(call("storage.readBytes", byteSource), "AP+A");
+    assert.equal(
+      call("storage.readBytes", byteMoved),
+      Buffer.from([
+        0,
+        255,
+        128,
+        0,
+      ]).toString("base64"),
+    );
+    assert.equal(call("storage.exists", byteCopy), false);
+    const copySource = temporaryPath("copy source.bin");
+    const copied = temporaryPath("copied 한글.bin");
+    const bytes = Buffer.alloc(1024 * 1024 + 257);
+    for (let index = 0; index < bytes.length; index++) {
+      bytes[index] = index % 256;
+    }
+    await writeFile(copySource, bytes);
+    assert.equal(transfer("storage.copyFile", copySource, copied), null);
+    assert.deepEqual(Buffer.from(await Bun.file(copied).arrayBuffer()), bytes);
+    assert.deepEqual(
+      Buffer.from(await Bun.file(copySource).arrayBuffer()),
+      bytes,
+    );
+    for (const operation of [
+      "storage.copyFile",
+      "storage.move",
+    ]) {
+      expectError(
+        () => transfer(operation, copySource, copied),
+        "INVALID_ARGUMENT",
+      );
+      assert.deepEqual(
+        Buffer.from(await Bun.file(copied).arrayBuffer()),
+        bytes,
+      );
+      assert.equal(call("storage.exists", copySource), true);
+      expectError(
+        () =>
+          transfer(
+            operation,
+            dataPath("notes/hard.txt"),
+            temporaryPath("link transfer.bin"),
+          ),
+        "PERMISSION_DENIED",
+      );
+      expectError(
+        () =>
+          transfer(
+            operation,
+            copySource,
+            dataPath("notes/junction/escaped.bin"),
+          ),
+        "PERMISSION_DENIED",
+      );
+      expectError(
+        () => transfer(operation, "relative.txt", copied),
+        "INVALID_ARGUMENT",
+      );
+      expectError(
+        () => transfer(operation, copySource, temporaryPath("bad:ads")),
+        "INVALID_ARGUMENT",
+      );
+    }
+    assert.equal(
+      await Bun.file(resolve(root, "outside/escaped.bin")).exists(),
+      false,
+    );
+    const occupied = api.symbols.CreateFileW(
+      ptr(wide(copySource)),
+      0x40000000,
+      7,
+      null,
+      3,
+      0,
+      0n,
+    );
+    assert(occupied && occupied !== 0xffffffffffffffffn);
+    try {
+      // A real competing writer is a sharing failure, not an existing-destination error.
+      assert.throws(
+        () =>
+          transfer(
+            "storage.copyFile",
+            copySource,
+            temporaryPath("busy-copy.bin"),
+          ),
+        /\(32\)$/,
+      );
+      assert.equal(
+        call("storage.exists", temporaryPath("busy-copy.bin")),
+        false,
+      );
+    } finally {
+      assert(api.symbols.CloseHandle(occupied));
+    }
+    const oversized = temporaryPath("oversized.bin");
+    await writeFile(oversized, Buffer.alloc(4 * 1024 * 1024 + 1));
+    expectError(
+      () =>
+        transfer(
+          "storage.copyFile",
+          oversized,
+          temporaryPath("oversized-copy.bin"),
+        ),
+      "INVALID_ARGUMENT",
+    );
+    assert.equal(
+      call("storage.exists", temporaryPath("oversized-copy.bin")),
+      false,
+    );
+    const secondVolumeRoot = await realpath(
+      await mkdtemp(resolve(tmpdir(), "bunaway-move-volume-")),
+    );
+    try {
+      if ((await stat(copySource)).dev !== (await stat(secondVolumeRoot)).dev) {
+        expectError(
+          () =>
+            transfer(
+              "storage.move",
+              copySource,
+              resolve(secondVolumeRoot, "cross-volume.bin"),
+            ),
+          "UNSUPPORTED",
+        );
+        assert.equal(call("storage.exists", copySource), true);
+        assert.equal(
+          await Bun.file(
+            resolve(secondVolumeRoot, "cross-volume.bin"),
+          ).exists(),
+          false,
+        );
+      } else {
+        console.log(
+          "SKIP cross-volume move check: a second filesystem volume was not identified",
+        );
+      }
+    } finally {
+      await rm(secondVolumeRoot, {
+        recursive: true,
+        force: true,
+      });
+    }
+    const anotherParent = temporaryPath("another move parent");
+    await mkdir(anotherParent);
+    expectError(
+      () => transfer("storage.move", copied, `${anotherParent}/child.bin`),
+      "UNSUPPORTED",
+    );
+    assert.equal(call("storage.exists", copied), true);
+    assert.equal(call("storage.exists", `${anotherParent}/child.bin`), false);
+    const moved = temporaryPath("moved 한글.bin");
+    assert.equal(transfer("storage.move", copied, moved), null);
+    assert.equal(call("storage.exists", copied), false);
+    assert.deepEqual(Buffer.from(await Bun.file(moved).arrayBuffer()), bytes);
+    expectError(
+      () => transfer("storage.move", moved, moved),
+      "INVALID_ARGUMENT",
+    );
+    const sourceDirectory = temporaryPath("move directory");
+    await mkdir(sourceDirectory);
+    await writeFile(`${sourceDirectory}/한글.txt`, "directory child");
+    expectError(
+      () =>
+        transfer("storage.move", sourceDirectory, `${sourceDirectory}/child`),
+      "INVALID_ARGUMENT",
+    );
+    const movedDirectory = temporaryPath("renamed directory");
+    assert.equal(
+      transfer("storage.move", sourceDirectory, movedDirectory),
+      null,
+    );
+    assert.equal(call("storage.exists", sourceDirectory), false);
+    assert.equal(
+      await Bun.file(`${movedDirectory}/한글.txt`).text(),
+      "directory child",
+    );
+    call("storage.writeText", temporaryPath("empty-source.txt"), "");
+    assert.equal(
+      transfer(
+        "storage.copyFile",
+        temporaryPath("empty-source.txt"),
+        temporaryPath("empty-copy.txt"),
+      ),
+      null,
+    );
+    assert.equal((await stat(temporaryPath("empty-copy.txt"))).size, 0);
+
+    // Exercise the generated native export and Zod defaults as well as the source FFI class.
+    const create = builtStorage.nativePlatforms.windows?.create;
+    assert(create, "Built Windows storage adapter is missing.");
+    const built = create({
+      dataRoot: root,
+      capabilities: [],
+    });
+    const builtDirectory = temporaryPath("built adapter/한글");
+    try {
+      await built.execute(
+        "storage.createDirectory",
+        {
+          path: builtDirectory,
+          recursive: true,
+        },
+        "backend",
+      );
+      await built.execute(
+        "storage.createDirectory",
+        {
+          path: builtDirectory,
+        },
+        "backend",
+      );
+      assert.deepEqual(
+        await built.execute(
+          "storage.readDirectory",
+          {
+            path: builtDirectory,
+          },
+          "backend",
+        ),
+        [],
+      );
+      // Exercise the generated directory, byte/append and transfer APIs together.
+      const source = `${builtDirectory}/source.bin`;
+      const copied = `${builtDirectory}/copy.bin`;
+      const moved = `${builtDirectory}/moved.bin`;
+      await built.execute(
+        "storage.writeBytes",
+        {
+          path: source,
+          bytes: "AP+A",
+        },
+        "backend",
+      );
+      await built.execute(
+        "storage.copyFile",
+        {
+          from: source,
+          to: copied,
+        },
+        "backend",
+      );
+      await built.execute(
+        "storage.appendBytes",
+        {
+          path: copied,
+          bytes: "AA==",
+        },
+        "backend",
+      );
+      await built.execute(
+        "storage.move",
+        {
+          from: copied,
+          to: moved,
+        },
+        "backend",
+      );
+      assert.equal(
+        await built.execute(
+          "storage.readBytes",
+          {
+            path: source,
+          },
+          "backend",
+        ),
+        "AP+A",
+      );
+      assert.equal(
+        await built.execute(
+          "storage.readBytes",
+          {
+            path: moved,
+          },
+          "backend",
+        ),
+        "AP+AAA==",
+      );
+      assert.deepEqual(
+        // The SDK returns JSON objects with null prototypes; compare their complete wire values.
+        JSON.parse(
+          JSON.stringify(
+            await built.execute(
+              "storage.readDirectory",
+              {
+                path: builtDirectory,
+              },
+              "backend",
+            ),
+          ),
+        ),
+        [
+          {
+            name: "moved.bin",
+            kind: "file",
+          },
+          {
+            name: "source.bin",
+            kind: "file",
+          },
+        ],
+      );
+      await built.execute(
+        "storage.remove",
+        {
+          path: source,
+        },
+        "backend",
+      );
+      await built.execute(
+        "storage.remove",
+        {
+          path: moved,
+        },
+        "backend",
+      );
+      await built.execute(
+        "storage.remove",
+        {
+          path: builtDirectory,
+        },
+        "backend",
+      );
+      assert.equal(
+        await built.execute(
+          "storage.exists",
+          {
+            path: builtDirectory,
+          },
+          "backend",
+        ),
+        false,
+      );
+    } finally {
+      await built.dispose();
+    }
+    const directoryPath = temporaryPath("directory API/한글");
+    const createDirectory = (path: string, recursive = false) =>
+      storage.execute("storage.createDirectory", {
+        path,
+        recursive,
+      });
+    expectError(() => createDirectory(directoryPath), "INVALID_ARGUMENT");
+    assert.equal(await Bun.file(directoryPath).exists(), false);
+    assert.equal(createDirectory(directoryPath, true), null);
+    assert.equal(createDirectory(directoryPath), null);
+    assert.deepEqual(call("storage.readDirectory", directoryPath), []);
+    const nestedDirectory = `${directoryPath}/nested`;
+    createDirectory(nestedDirectory);
+    call("storage.writeText", `${directoryPath}/한글🙂.txt`, "child");
+    await symlink(
+      resolve(root, "outside"),
+      `${directoryPath}/junction`,
+      "junction",
+    );
+    await link(
+      resolve(root, "outside/secret.txt"),
+      `${directoryPath}/hard.txt`,
+    );
+    assert.deepEqual(call("storage.readDirectory", directoryPath), [
+      {
+        name: "hard.txt",
+        kind: "file",
+      },
+      {
+        name: "junction",
+        kind: "link",
+      },
+      {
+        name: "nested",
+        kind: "directory",
+      },
+      {
+        name: "한글🙂.txt",
+        kind: "file",
+      },
+    ]);
+    expectError(
+      () => call("storage.remove", directoryPath),
+      "INVALID_ARGUMENT",
+    );
+    expectError(
+      () => call("storage.readDirectory", `${directoryPath}/한글🙂.txt`),
+      "INVALID_ARGUMENT",
+    );
+    expectError(
+      () => createDirectory(`${directoryPath}/한글🙂.txt`),
+      "INVALID_ARGUMENT",
+    );
+    for (const target of [
+      `${directoryPath}/hard.txt`,
+      `${directoryPath}/junction`,
+      `${directoryPath}/junction/new`,
+    ]) {
+      for (const operation of [
+        "storage.readDirectory",
+        "storage.createDirectory",
+        "storage.remove",
+      ]) {
+        expectError(
+          () =>
+            storage.execute(operation, {
+              path: target,
+              recursive: true,
+            }),
+          "PERMISSION_DENIED",
+        );
+      }
+    }
+    const deniedFile = await Bun.file(
+      resolve(root, "outside/secret.txt"),
+    ).text();
+    assert.equal(deniedFile, "secret");
+    assert.equal(await Bun.file(resolve(root, "outside/new")).exists(), false);
+    assert.equal(call("storage.remove", `${directoryPath}/한글🙂.txt`), null);
+    assert.equal(call("storage.exists", `${directoryPath}/한글🙂.txt`), false);
+    assert.equal(call("storage.remove", nestedDirectory), null);
+    assert.equal(call("storage.exists", nestedDirectory), false);
+    const batched = temporaryPath("batched");
+    createDirectory(batched);
+    const expectedNames: string[] = [];
+    for (let index = 0; index < 180; index++) {
+      const name = `${String(index).padStart(3, "0")}-${"x".repeat(200)}.txt`;
+      expectedNames.push(name);
+      await writeFile(`${batched}/${name}`, "");
+    }
+    assert.deepEqual(
+      call("storage.readDirectory", batched),
+      expectedNames.map((name) => ({
+        name,
+        kind: "file",
+      })),
+    );
+    const crowded = temporaryPath("crowded");
+    createDirectory(crowded);
+    for (let index = 0; index < 257; index++) {
+      await writeFile(`${crowded}/${index}.txt`, "");
+    }
+    expectError(
+      () => call("storage.readDirectory", crowded),
+      "INVALID_ARGUMENT",
+    );
+    // A failed listing leaves no pinned native handles: the original directory can be renamed.
+    await rename(crowded, `${crowded}-renamed`);
+
     const unicodeDirectory = "notes/한글 folder";
     const unicodeFile = `${unicodeDirectory}/현재 draft.txt`;
     const unicodeFilePath = resolve(root, "data", unicodeFile);
@@ -332,6 +892,13 @@ async function main(): Promise<void> {
     // Case variants and available 8.3 names must fail the native path check.
     for (const path of aliases) {
       expectDenied(path);
+      for (const operation of [
+        "storage.readDirectory",
+        "storage.createDirectory",
+        "storage.remove",
+      ]) {
+        expectError(() => call(operation, dataPath(path)), "PERMISSION_DENIED");
+      }
       for (const text of [
         undefined,
         "overwritten",
@@ -395,6 +962,24 @@ async function main(): Promise<void> {
         () => call("storage.writeText", dataPath(path), "overwritten"),
         "PERMISSION_DENIED",
       );
+      for (const operation of [
+        "storage.readBytes",
+        "storage.writeBytes",
+        "storage.appendBytes",
+      ]) {
+        expectError(
+          () =>
+            storage.execute(operation, {
+              path: dataPath(path),
+              bytes: "AA==",
+            }),
+          "PERMISSION_DENIED",
+        );
+      }
+      expectError(
+        () => call("storage.appendText", dataPath(path), "appended"),
+        "PERMISSION_DENIED",
+      );
     }
 
     // Reject unsafe Windows path forms before they reach filesystem operations.
@@ -407,6 +992,11 @@ async function main(): Promise<void> {
     ]) {
       for (const operation of [
         "storage.readText",
+        "storage.readBytes",
+
+        "storage.readDirectory",
+        "storage.createDirectory",
+        "storage.remove",
         "storage.exists",
         "storage.stat",
       ]) {
@@ -473,6 +1063,15 @@ async function main(): Promise<void> {
         "ACL fixture did not produce ERROR_ACCESS_DENIED",
       );
       expectDenied("notes/os-denied.txt");
+      for (const operation of [
+        "storage.readDirectory",
+        "storage.remove",
+      ]) {
+        expectError(
+          () => call(operation, dataPath("notes/os-denied.txt")),
+          "PERMISSION_DENIED",
+        );
+      }
       expectError(
         () => call("storage.readText", dataPath("notes/os-denied.txt")),
         "PERMISSION_DENIED",

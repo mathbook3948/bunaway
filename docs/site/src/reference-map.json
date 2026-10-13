@@ -8,7 +8,7 @@
         "reference/client/transport": ["createWebViewTransport"],
         "reference/client/invoke": ["invoke"],
         "reference/tooling/native-plugins": ["invokePlugin"],
-        "reference/client/listen": ["listen"]
+        "reference/client/listen": ["listen", "once"]
       }
     },
     {
@@ -20,6 +20,13 @@
         "reference/backend/module": ["defineModule"],
         "reference/backend/host-api": ["host"],
         "reference/tooling/core-and-runtime": ["createCore"]
+      }
+    },
+    {
+      "name": "@bunaway/backend/cli",
+      "source": "packages/backend-sdk/src/cli.ts",
+      "pages": {
+        "reference/backend/cli": ["defineCLI"]
       }
     },
     {
@@ -110,6 +117,8 @@
           "serializeProcessFrame",
           "PROTOCOL_VERSION",
           "SDK_READY_FEATURE",
+          "AUTOSTART_ARGUMENT",
+          "AUTOSTART_HIDDEN_ARGUMENT",
           "parseMessage",
           "serializeMessage",
           "validateMessage",
@@ -184,6 +193,39 @@
       }
     },
     {
+      "name": "@bunaway/plugin-os",
+      "source": "plugins/os/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/os": ["os", "osPlugin"]
+      }
+    },
+    {
+      "name": "@bunaway/plugin-process",
+      "source": "plugins/process/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/process": ["processes", "processPlugin"]
+      }
+    },
+    {
+      "name": "@bunaway/plugin-network",
+      "source": "plugins/network/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/network": ["network", "networkPlugin"]
+      }
+    },
+    {
       "name": "@bunaway/plugin-storage",
       "source": "plugins/storage/src/index.ts",
       "buildOutputs": {
@@ -253,9 +295,17 @@
           "MAX_WINDOW_DIMENSION",
           "isWindowSizeDimension",
           "hasValidWindowSizeConstraints",
+          "MIN_WINDOW_COORDINATE",
+          "MAX_WINDOW_COORDINATE",
+          "hasValidWindowPlacement",
           "clampWindowSize",
           "MAX_WINDOWS",
-          "MAX_WINDOW_INSTANCES"
+          "MAX_WINDOW_INSTANCES",
+          "MAX_WEBVIEW_DOWNLOADS",
+          "MAX_DOWNLOAD_METADATA_BYTES",
+          "MAX_DOWNLOAD_SNAPSHOT_BYTES",
+          "isDownloadSnapshotWithinLimits",
+          "DOWNLOAD_APPROVAL_TIMEOUT_MS"
         ]
       }
     },
@@ -287,8 +337,31 @@
           "openUrl",
           "openFile",
           "revealFile",
+          "openFileWith",
+          "openUrlWith",
+          "trashFile",
           "openerPlugin"
         ]
+      }
+    },
+    {
+      "name": "@bunaway/plugin-path",
+      "source": "plugins/path/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": { "reference/plugins/path": ["path", "pathPlugin"] }
+    },
+    {
+      "name": "@bunaway/plugin-safe-storage",
+      "source": "plugins/safe-storage/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/safe-storage": ["safeStorage", "safeStoragePlugin"]
       }
     },
     {
@@ -303,6 +376,17 @@
       }
     },
     {
+      "name": "@bunaway/plugin-image",
+      "source": "plugins/image/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/image": ["image", "imagePlugin"]
+      }
+    },
+    {
       "name": "@bunaway/plugin-windows",
       "source": "plugins/windows/src/index.ts",
       "buildOutputs": {
@@ -310,14 +394,13 @@
         "./native/*": "./dist/native/*.js"
       },
       "pages": {
-        "reference/host/windows": ["windows", "windowsPlugin"],
+        "reference/host/windows": ["windows", "windowsPlugin", "windowEvents"],
         "reference/tooling/native-plugins": [
           "isWindowOperation",
           "parseWindowCall",
           "validateWindowCall",
           "validateWindowOutput",
           "windowOperations",
-          "windowEvents",
           "windowSnapshotSchema",
           "windowReadinessSchema"
         ]
@@ -354,6 +437,17 @@
       "pages": {
         "reference/tooling/core-and-runtime": ["DiagnosticLog"]
       }
+    },
+    {
+      "name": "@bunaway/plugin-appearance",
+      "source": "plugins/appearance/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/appearance": ["appearance", "appearancePlugin"]
+      }
     }
   ],
   "members": [
@@ -377,7 +471,7 @@
       "pages": {
         "reference/client/create-client": ["ready"],
         "reference/client/invoke": ["invoke"],
-        "reference/client/listen": ["listen"],
+        "reference/client/listen": ["listen", "once"],
         "reference/client/close": ["close"]
       }
     },
@@ -480,6 +574,10 @@
       "type": "NativeWindow",
       "pages": {
         "reference/tooling/plugin-api": [
+          "showPrintUI",
+          "downloads",
+          "webview",
+          "audio",
           "show",
           "showInactive",
           "focus",
@@ -491,6 +589,12 @@
           "getChildren",
           "setEnabled",
           "isEnabled",
+          "setTitle",
+          "getTitle",
+          "setResizable",
+          "isResizable",
+          "setMovable",
+          "isMovable",
           "minimize",
           "maximize",
           "unmaximize",
@@ -507,12 +611,78 @@
           "setSizeConstraints",
           "setSize",
           "setPosition",
+          "center",
           "setGeometry",
           "setFullscreen",
+          "setTaskbarProgress",
           "setCloseConfirmation",
           "getSnapshot",
           "getReadiness"
         ]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "NativeDownloads",
+      "pages": {
+        "reference/tooling/plugin-api": [
+          "setRequestsEnabled",
+          "list",
+          "approve",
+          "cancel",
+          "pause",
+          "resume",
+          "forget"
+        ]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "NativeWebView",
+      "pages": {
+        "reference/tooling/plugin-api": [
+          "getState",
+          "navigate",
+          "reload",
+          "stop",
+          "goBack",
+          "goForward",
+          "setZoomFactor",
+          "openDevTools"
+        ]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "NativeWebViewAudio",
+      "pages": {
+        "reference/tooling/plugin-api": ["getState", "setMuted"]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "WebViewDownload",
+      "pages": {
+        "reference/tooling/plugin-api": [
+          "id",
+          "url",
+          "mimeType",
+          "contentDisposition",
+          "path",
+          "totalBytes",
+          "receivedBytes",
+          "state",
+          "interruptReason",
+          "canResume",
+          "paused"
+        ]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "WebViewAudioState",
+      "pages": {
+        "reference/tooling/plugin-api": ["muted", "playing"]
       }
     },
     {
@@ -543,8 +713,10 @@
       "type": "NativeWindowServices",
       "pages": {
         "reference/tooling/plugin-api": [
+          "systemEvents",
           "specs",
           "supportsCreationOptions",
+          "validateCreation",
           "lookup",
           "read",
           "create",
@@ -771,7 +943,12 @@
       "type": "DesktopOptions",
       "pages": {
         "guides/windows": ["closeBehavior"],
-        "reference/backend/app-definition": ["tray", "onOpen", "beforeQuit"]
+        "reference/backend/app-definition": [
+          "tray",
+          "openArguments",
+          "onOpen",
+          "beforeQuit"
+        ]
       }
     },
     {
@@ -780,6 +957,7 @@
       "pages": {
         "reference/backend/app-definition": [
           "source",
+          "launchReason",
           "argv",
           "cwd",
           "urls",
@@ -848,6 +1026,9 @@
     "reference/cli/ios": ["ios"]
   },
   "operations": {
+    "reference/plugins/network": ["network.request", "network.exchange"],
+    "reference/plugins/process": ["process.run"],
+    "reference/plugins/os": ["os.info", "os.usage", "os.locale"],
     "reference/plugins/autostart": [
       "autostart.enable",
       "autostart.disable",
@@ -857,19 +1038,76 @@
     "reference/host/storage-write-text": ["storage.writeText"],
     "reference/host/storage-exists": ["storage.exists"],
     "reference/host/storage-stat": ["storage.stat"],
+    "reference/host/storage-bytes": [
+      "storage.readBytes",
+      "storage.writeBytes",
+      "storage.appendBytes",
+      "storage.appendText"
+    ],
+    "reference/host/storage-transfers": ["storage.copyFile", "storage.move"],
+
+    "reference/host/storage-directories": [
+      "storage.readDirectory",
+      "storage.createDirectory",
+      "storage.remove"
+    ],
     "reference/host/log-write": ["log.write"],
     "reference/host/capabilities-get": ["capabilities.get"],
     "reference/plugins/opener": [
       "opener.openUrl",
       "opener.openFile",
-      "opener.revealFile"
+      "opener.revealFile",
+      "opener.openFileWith",
+      "opener.openUrlWith",
+      "opener.trashFile"
+    ],
+    "reference/plugins/path": [
+      "path.getDirectory",
+      "path.join",
+      "path.resolve",
+      "path.normalize",
+      "path.basename",
+      "path.dirname",
+      "path.extname",
+      "path.isAbsolute"
+    ],
+    "reference/plugins/safe-storage": [
+      "safe-storage.isAvailable",
+      "safe-storage.encryptString",
+      "safe-storage.decryptString",
+      "safe-storage.encryptBytes",
+      "safe-storage.decryptBytes"
     ],
     "reference/plugins/clipboard": [
       "clipboard.readText",
       "clipboard.writeText",
-      "clipboard.clear"
+      "clipboard.clear",
+      "clipboard.readImage",
+      "clipboard.writeImage",
+      "clipboard.getFormats",
+      "clipboard.hasFormat",
+      "clipboard.readFormats",
+      "clipboard.writeFormats"
     ],
     "reference/host/windows": [
+      "windows.showPrintUI",
+      "windows.setDownloadRequestsEnabled",
+      "windows.getDownloads",
+      "windows.approveDownload",
+      "windows.cancelDownload",
+      "windows.pauseDownload",
+      "windows.resumeDownload",
+      "windows.forgetDownload",
+      "windows.getWebViewState",
+      "windows.navigateWebView",
+      "windows.reloadWebView",
+      "windows.stopWebView",
+      "windows.goBack",
+      "windows.goForward",
+      "windows.setZoomFactor",
+      "windows.openDevTools",
+      "windows.getWebViewAudioState",
+      "windows.setWebViewAudioMuted",
       "windows.list",
       "windows.getById",
       "windows.getCurrent",
@@ -903,6 +1141,12 @@
       "windows.getChildren",
       "windows.setEnabled",
       "windows.isEnabled",
+      "windows.setTitle",
+      "windows.getTitle",
+      "windows.setResizable",
+      "windows.isResizable",
+      "windows.setMovable",
+      "windows.isMovable",
       "windows.setSize",
       "windows.setContentPosition",
       "windows.setOuterSize",
@@ -924,7 +1168,9 @@
       "windows.getSizeConstraints",
       "windows.setSizeConstraints",
       "windows.setPosition",
+      "windows.center",
       "windows.setFullscreen",
+      "windows.setTaskbarProgress",
       "windows.setCloseConfirmation",
       "windows.getSnapshot",
       "windows.getReadiness",
@@ -932,6 +1178,19 @@
       "windows.createInstance",
       "windows.recreateInstance",
       "windows.listInstances"
+    ],
+    "reference/plugins/appearance": ["appearance.getPreferences"],
+    "reference/plugins/image": [
+      "image.createRGBA",
+      "image.createBytes",
+      "image.createDataURL",
+      "image.getInfo",
+      "image.getPixels",
+      "image.exportBytes",
+      "image.exportDataURL",
+      "image.dispose",
+      "image.crop",
+      "image.resize"
     ]
   },
   "configuration": {

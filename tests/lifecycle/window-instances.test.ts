@@ -11,13 +11,17 @@ import {
   validateWindowOutput,
   windowsPlugin,
 } from "@bunaway/plugin-windows";
-import { type JsonValue, NativeRegistry } from "@bunaway/protocol";
+import {
+  BunawayError,
+  type JsonValue,
+  NativeRegistry,
+} from "@bunaway/protocol";
 import { WindowOperations } from "#plugins/windows/src/coordinator";
 import { createOperations } from "#plugins/windows/src/platforms/windows";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 /** A native owner fixture keeps old cleanup separate from public identity removal and creation completion. */
-function fixture() {
+function fixture(validateCreation?: (spec: WindowSpec) => void) {
   const specs: WindowSpec[] = (
     [
       {
@@ -64,6 +68,11 @@ function fixture() {
   const services: NativeWindowServices = {
     specs,
     supportsCreationOptions: true,
+    ...(validateCreation
+      ? {
+          validateCreation,
+        }
+      : {}),
     instances: () =>
       [
         ...entries,
@@ -160,6 +169,84 @@ function fixture() {
 const editor = {
   view: "editor",
 };
+
+test("instance placement preflight rejects before close or reservation and restores declaration defaults", async () => {
+  const f = fixture((spec) => {
+    if (spec.window.preventOverflow) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "Minimum cannot fit.",
+      });
+    }
+  });
+  const options = {
+    window: {
+      x: -800,
+      y: -100,
+      useContentSize: false,
+    },
+  };
+  const first = validateWindowOutput(
+    "windows.createInstance",
+    await f.execute("windows.createInstance", {
+      ...editor,
+      options,
+    }),
+  );
+  const key = [
+    ...f.entries,
+  ].find(([, entry]) => entry.identity.windowId === first.windowId)?.[0];
+  assert(key);
+  expect(f.entries.get(key)?.spec.window).toMatchObject(options.window);
+  for (const payload of [
+    {
+      ...editor,
+      options: {
+        window: {
+          x: 0,
+        },
+      },
+    },
+    {
+      ...editor,
+      options: {
+        window: {
+          preventOverflow: true,
+        },
+      },
+    },
+  ]) {
+    await expect(
+      f.execute("windows.createInstance", payload),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+    await expect(
+      f.execute("windows.recreateInstance", {
+        ...payload,
+        windowId: first.windowId,
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+    expect(f.operations.replacing.size).toBe(0);
+    expect(f.entries.get(key)?.state.closed).toBe(false);
+    expect(f.calls).toEqual([]);
+    expect(f.entries.size).toBe(1);
+  }
+  const next = validateWindowOutput(
+    "windows.recreateInstance",
+    await f.execute("windows.recreateInstance", {
+      ...editor,
+      windowId: first.windowId,
+    }),
+  );
+  expect(next.windowId).not.toBe(first.windowId);
+  expect(f.entries.get(key)?.spec.window).toEqual({
+    width: 800,
+    height: 600,
+  });
+});
 test("multiple instances return distinct IDs and require an explicit matching target even with one window", async () => {
   const f = fixture();
   const first = await f.execute("windows.createInstance", editor);

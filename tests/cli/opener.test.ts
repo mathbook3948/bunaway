@@ -83,6 +83,8 @@ export default defineApp({ modules: [], plugins: [openerPlugin] });
               "opener.openUrl",
               "opener.openFile",
               "opener.revealFile",
+              "opener.openFileWith",
+              "opener.openUrlWith",
             ],
           },
         },
@@ -155,10 +157,12 @@ export default defineApp({ modules: [], plugins: [openerPlugin] });
     const browserEntry = resolve(project, "opener-browser.ts");
     await writeFile(
       browserEntry,
-      `import { openFile, openUrl, revealFile } from "@bunaway/plugin-opener";
+      `import { openFile, openUrl, revealFile, openFileWith, openUrlWith } from "@bunaway/plugin-opener";
 void openUrl("https://example.com/");
 void openFile("C:/file.txt");
 void revealFile("C:/file.txt");
+void openFileWith("C:/file.txt", "C:/editor.exe");
+void openUrlWith("https://example.com/", "C:/browser.exe");
 `,
     );
     const browser = await Bun.build({

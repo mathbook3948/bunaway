@@ -250,6 +250,7 @@ export class WindowOperations {
     if (!creationSpec) {
       throw new Error("Missing resolved creation configuration.");
     }
+    this.hooks.validateCreation?.(creationSpec);
     // Serialize create/recreate for this view until readiness or failure.
     this.replacing.add(viewId);
     this.reservedViews.set(viewId, policyView);

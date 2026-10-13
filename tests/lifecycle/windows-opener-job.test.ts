@@ -26,9 +26,13 @@ function hasExplorerDesktop(): boolean {
   }
 }
 
-test.skipIf(!hasExplorerDesktop())(
-  "Explorer launches outside the app Job and the launched process survives app exit",
-  async () => {
+test.skipIf(!hasExplorerDesktop()).each([
+  "openFile",
+  "openFileWith",
+  "openUrlWith",
+])(
+  "Explorer %s launches outside the app Job and the launched process survives app exit",
+  async (action) => {
     const root = resolve(
       import.meta.dir,
       `../../build/windows-opener-job-${crypto.randomUUID()}`,
@@ -43,6 +47,43 @@ test.skipIf(!hasExplorerDesktop())(
     const ready = resolve(root, "ready");
     const release = resolve(root, "release");
     const launcherPath = resolve(root, "launcher.ts");
+    const targetFile = resolve(root, "선택할 공백, 😀.txt");
+    const targetUrl = new URL(
+      'https://example.com/한글?q=공백 값&literal=%22#"',
+    ).href;
+    await Bun.write(targetFile, "selected target");
+    let payload:
+      | {
+          path: string;
+          app?: string;
+        }
+      | {
+          url: string;
+          app: string;
+        };
+    let expectedArgs: string[];
+    if (action === "openFile") {
+      payload = {
+        path: executable,
+      };
+      expectedArgs = [];
+    } else if (action === "openFileWith") {
+      payload = {
+        path: targetFile,
+        app: executable,
+      };
+      expectedArgs = [
+        targetFile,
+      ];
+    } else {
+      payload = {
+        url: targetUrl,
+        app: executable,
+      };
+      expectedArgs = [
+        targetUrl,
+      ];
+    }
     const operationsModule = pathToFileURL(
       resolve(import.meta.dir, "../../plugins/opener/src/platforms/windows.ts"),
     ).href;
@@ -88,7 +129,7 @@ test.skipIf(!hasExplorerDesktop())(
         source,
         `
 import { rename } from "node:fs/promises";
-await Bun.write(${JSON.stringify(`${marker}.tmp`)}, JSON.stringify({ pid: process.pid }));
+await Bun.write(${JSON.stringify(`${marker}.tmp`)}, JSON.stringify({ pid: process.pid, args: process.argv.slice(2) }));
 await rename(${JSON.stringify(`${marker}.tmp`)}, ${JSON.stringify(marker)});
 const deadline = Date.now() + 30000;
 while (!(await Bun.file(${JSON.stringify(stop)}).exists())) {
@@ -131,7 +172,7 @@ import { activeDescendants, containAppProcess } from ${JSON.stringify(jobModule)
 containAppProcess(${JSON.stringify(resolve(root, "app-data"))});
 const adapter = createOperations({ dataRoot: ${JSON.stringify(root)}, capabilities: [] });
 try {
-  adapter.execute("opener.openFile", { path: ${JSON.stringify(executable)} }, "backend");
+  adapter.execute(${JSON.stringify(`opener.${action}`)}, ${JSON.stringify(payload)}, "backend");
   const deadline = Date.now() + 15000;
   while (!(await Bun.file(${JSON.stringify(marker)}).exists())) {
     assert(Date.now() < deadline, "Explorer did not start the helper");
@@ -177,7 +218,9 @@ process.exit(0);
       }
       const helper = (await Bun.file(marker).json()) as {
         pid: number;
+        args: string[];
       };
+      expect(helper.args).toEqual(expectedArgs);
       handle = kernel.symbols.OpenProcess(
         PROCESS_TERMINATE | SYNCHRONIZE,
         0,

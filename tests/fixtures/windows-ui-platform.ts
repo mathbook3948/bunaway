@@ -39,6 +39,8 @@ export class Tray {
 
 /** Model only native identity and visibility used by these lifecycle scenarios. */
 export class Windows {
+  validateCreation() {}
+
   private sequence = 0n;
   private readonly windows = new Map<
     bigint,

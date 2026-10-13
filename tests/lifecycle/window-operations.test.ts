@@ -11,7 +11,11 @@ const WINDOW_READY_TIMEOUT_MS = 30_000;
 const CLEANUP_TIMEOUT_ADVANCE_MS = 40_000;
 
 /** Build a controllable host so tests can pause cleanup and advance deadlines. */
-function fixture(supportsDestroy = true, supportsCreationOptions = true) {
+function fixture(
+  supportsDestroy = true,
+  supportsCreationOptions = true,
+  validateCreation?: (spec: WindowSpec) => void,
+) {
   const specs: WindowSpec[] = [
     "main",
     "editor",
@@ -46,6 +50,11 @@ function fixture(supportsDestroy = true, supportsCreationOptions = true) {
   };
   const operations = new WindowOperations(specs, {
     supportsCreationOptions,
+    ...(validateCreation
+      ? {
+          validateCreation,
+        }
+      : {}),
     read: (id) => views.get(id),
     create: (spec) => {
       created.push(spec.view);
@@ -120,6 +129,202 @@ function fixture(supportsDestroy = true, supportsCreationOptions = true) {
     },
   };
 }
+
+test("merged placement errors preserve the existing HWND and do not reserve a replacement", async () => {
+  const f = fixture();
+  await f.operations.execute(
+    {
+      operation: "windows.create",
+      payload: {
+        view: "main",
+      },
+    },
+    "initial",
+  );
+  const original = f.views.get("main");
+  for (const window of [
+    {
+      x: 10,
+    },
+    {
+      x: 10,
+      y: 20,
+      center: true,
+    },
+    {
+      x: null,
+      y: 20,
+    },
+  ]) {
+    await expect(
+      f.operations.execute(
+        {
+          operation: "windows.recreate",
+          payload: {
+            view: "main",
+            options: {
+              window,
+            },
+          },
+        },
+        "invalid",
+      ),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+    expect(f.views.get("main")).toBe(original);
+    expect(original?.closed).toBe(false);
+    expect(f.operations.replacing.size).toBe(0);
+    expect(f.created).toEqual([
+      "main",
+    ]);
+  }
+});
+
+test("display-dependent validation fails before reservation and close and leaves capacity usable", async () => {
+  const f = fixture(true, true, (spec) => {
+    expect(f.operations.replacing.size).toBe(0);
+    if (spec.window.preventOverflow) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "Minimum cannot fit.",
+      });
+    }
+  });
+  await f.operations.execute(
+    {
+      operation: "windows.create",
+      payload: {
+        view: "main",
+      },
+    },
+    "initial",
+  );
+  for (const [operation, view] of [
+    [
+      "windows.create",
+      "editor",
+    ],
+    [
+      "windows.recreate",
+      "main",
+    ],
+  ] as const) {
+    await expect(
+      f.operations.execute(
+        {
+          operation,
+          payload: {
+            view,
+            options: {
+              window: {
+                preventOverflow: true,
+              },
+            },
+          },
+        },
+        "invalid",
+      ),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+    expect(f.views.get("main")?.closed).toBe(false);
+    expect(f.operations.replacing.size).toBe(0);
+    expect(f.created).toEqual([
+      "main",
+    ]);
+  }
+  await f.operations.execute(
+    {
+      operation: "windows.create",
+      payload: {
+        view: "editor",
+      },
+    },
+    "valid",
+  );
+  expect(f.created).toEqual([
+    "main",
+    "editor",
+  ]);
+});
+
+test("per-call placement merges axes and clears declared coordinates without changing declarations", async () => {
+  const f = fixture();
+  const spec = f.specs[0];
+  assert(spec);
+  spec.window = {
+    ...spec.window,
+    x: -800,
+    y: -100,
+  };
+  await f.operations.execute(
+    {
+      operation: "windows.create",
+      payload: {
+        view: "main",
+        options: {
+          window: {
+            x: -600,
+            useContentSize: false,
+            width: 400,
+            minWidth: 800,
+          },
+        },
+      },
+    },
+    "initial",
+  );
+  expect(f.createdSpecs[0]?.window).toMatchObject({
+    x: -600,
+    y: -100,
+    width: 400,
+    useContentSize: false,
+  });
+  const first = f.views.get("main");
+  assert(first);
+  first.cleaned = true;
+  await f.operations.execute(
+    {
+      operation: "windows.recreate",
+      payload: {
+        view: "main",
+        options: {
+          window: {
+            x: null,
+            y: null,
+            center: true,
+          },
+        },
+      },
+    },
+    "center",
+  );
+  expect(f.createdSpecs[1]?.window).toMatchObject({
+    x: null,
+    y: null,
+    center: true,
+  });
+  const centered = f.views.get("main");
+  assert(centered);
+  centered.cleaned = true;
+  await f.operations.execute(
+    {
+      operation: "windows.recreate",
+      payload: {
+        view: "main",
+      },
+    },
+    "restore",
+  );
+  expect(f.createdSpecs[2]?.window).toEqual(spec.window);
+  expect(spec.window).toEqual({
+    width: 800,
+    height: 600,
+    x: -800,
+    y: -100,
+  });
+});
 
 test("cancelling a newly created hidden window while its controller prepares closes the owned window", async () => {
   const f = fixture();

@@ -2,11 +2,15 @@ import type { FFIType, Pointer } from "bun:ffi";
 import { CFunction, JSCallback, ptr, read, toArrayBuffer } from "bun:ffi";
 import assert from "node:assert/strict";
 import { MAX_MESSAGE_BYTES } from "@bunaway/protocol";
+import { guid } from "./guid.ts";
+
+export { guid } from "./guid.ts";
+
 import { hr, kernel, ole, withBuffer, withWide } from "./win32-bindings.ts";
 
 const thread = kernel.symbols.GetCurrentThreadId();
 export type Arg = number | bigint | null;
-export type Abi = FFIType | "ptr" | "i32" | "u32" | "i64" | "u64";
+export type Abi = FFIType | "ptr" | "i32" | "u32" | "i64" | "u64" | "f64";
 type NativeCall = ((...values: Arg[]) => number) & {
   close(): void;
 };
@@ -71,14 +75,6 @@ export function getString(object: Pointer, slot: number, name?: string) {
   } finally {
     ole.symbols.CoTaskMemFree(address);
   }
-}
-/** Convert GUID text to the byte order used by the Windows COM ABI. */
-export function guid(value: string) {
-  const result = Buffer.from(value.replaceAll("-", ""), "hex");
-  result.subarray(0, 4).reverse();
-  result.subarray(4, 6).reverse();
-  result.subarray(6, 8).reverse();
-  return result;
 }
 const unknown = guid("00000000-0000-0000-c000-000000000046");
 let callbackDepth = 0;
@@ -249,17 +245,30 @@ export function getObject(object: Pointer, slot: number): Pointer {
   return Number(out[0]) as Pointer;
 }
 /** Acquire an interface with QueryInterface; the caller must release its reference. */
-export function query(object: Pointer, iid: string): Pointer {
+export function query(object: Pointer, iid: string): Pointer;
+export function query(
+  object: Pointer,
+  iid: string,
+  optional: true,
+): Pointer | undefined;
+export function query(
+  object: Pointer,
+  iid: string,
+  optional = false,
+): Pointer | undefined {
   const out = new BigUint64Array(1);
-  hr(
-    withBuffer(guid(iid), (address) =>
-      method(object, 0, [
-        "ptr",
-        "ptr",
-      ])(address, ptr(out)),
-    ),
-    "QueryInterface",
+  const result = withBuffer(guid(iid), (address) =>
+    method(object, 0, [
+      "ptr",
+      "ptr",
+    ])(address, ptr(out)),
   );
+  // E_NOINTERFACE is an ordinary capability outcome for optional runtime extensions.
+  const E_NOINTERFACE = -2147467262;
+  if (optional && result === E_NOINTERFACE) {
+    return undefined;
+  }
+  hr(result, "QueryInterface");
   assert(out[0], "Null COM interface");
   return Number(out[0]) as Pointer;
 }

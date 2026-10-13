@@ -24,6 +24,9 @@ import {
   type WindowSpec,
 } from "./channel.ts";
 import { callbackCalls, checkCallbacks, disposeCom } from "./com.ts";
+import { DownloadCleanupError, DownloadCleanupRetries } from "./downloads.ts";
+import { createSessionNotifications } from "./session-notifications.ts";
+import { publishSystemEvent, SystemEvents } from "./system-events.ts";
 import { Tray } from "./tray.ts";
 import { originOf, WebView } from "./webview.ts";
 import {
@@ -55,6 +58,7 @@ let startRequested = false;
 let closingSent = false;
 let initialized = false;
 let windows: Windows | undefined;
+let systemEvents: SystemEvents | undefined;
 let adapters: Awaited<ReturnType<typeof operations>> | undefined;
 let tray: Tray | undefined;
 let controlWindow: bigint | undefined;
@@ -156,6 +160,7 @@ type ViewState = {
   forceClose: boolean;
   replacementCancelled: boolean;
   inputRestoreDeadlineMs?: number;
+  downloadCleanupRetries?: DownloadCleanupRetries;
   confirmation: string | null;
   deadline: number;
   documentDeadline: number;
@@ -233,7 +238,46 @@ function cleanupView(view: ViewState) {
   if (!relations.canRelease(windowId)) {
     return;
   }
-  if (!view.detached && view.native.detach()) {
+  if (!view.detached) {
+    if (
+      view.downloadCleanupRetries &&
+      !view.downloadCleanupRetries.canAttempt(
+        stopping || view.native.isBrowserUnavailable(),
+      )
+    ) {
+      return;
+    }
+    try {
+      if (!view.native.detach()) {
+        return;
+      }
+    } catch (error) {
+      if (!(error instanceof DownloadCleanupError)) {
+        throw error;
+      }
+      const retries =
+        view.downloadCleanupRetries ??
+        new DownloadCleanupRetries(WINDOW_CLEANUP_TIMEOUT_MS);
+      view.downloadCleanupRetries = retries;
+      const phase = retries.failed();
+      if (phase) {
+        log(`download-cleanup-${phase}`, {
+          windowId,
+          attempts: retries.attempts,
+          message: String(error).slice(0, 1024),
+        });
+      }
+      // This closed owner's native references stay owned. Other views and their cleanup keep running.
+      // Exhausted retries remain quarantined until shutdown or observed broker exit.
+      return;
+    }
+    if (view.downloadCleanupRetries) {
+      log("download-cleanup-recovered", {
+        windowId,
+        attempts: view.downloadCleanupRetries.attempts,
+      });
+      delete view.downloadCleanupRetries;
+    }
     windows?.destroy(view.native.hwnd);
     view.detached = true;
   }
@@ -636,14 +680,10 @@ async function closeWindow(
       log("window-close-confirmation", {
         view: child.viewId,
       });
-      const childSpec = config.windows.find(
-        (candidate) => candidate.view === child.view.boundary.policy.id,
-      );
-      assert(childSpec);
       if (
         !windows.confirmClose(
           child.view.native.hwnd,
-          childSpec.title,
+          windows.getTitle(child.view.native.hwnd),
           child.view.confirmation,
         )
       ) {
@@ -721,6 +761,10 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
   {
     specs: config.windows,
     supportsCreationOptions: true,
+    validateCreation: (spec) => {
+      assert(windows);
+      windows.validateCreation(spec.window);
+    },
     instances: () =>
       [
         ...views,
@@ -786,6 +830,31 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
       const nativeWindows = windows;
       const hwnd = view.native.hwnd;
       return {
+        showPrintUI: (kind) => view.native.showPrintUI(kind),
+        downloads: {
+          setRequestsEnabled: (enabled) =>
+            view.native.downloadOperations().setRequestsEnabled(enabled),
+          list: () => view.native.downloadOperations().list(),
+          approve: (id) => view.native.downloadOperations().approve(id),
+          cancel: (id) => view.native.downloadOperations().cancel(id),
+          pause: (id) => view.native.downloadOperations().pause(id),
+          resume: (id) => view.native.downloadOperations().resume(id),
+          forget: (id) => view.native.downloadOperations().forget(id),
+        },
+        webview: {
+          getState: () => view.native.getState(),
+          navigate: (url) => view.native.navigateTo(url),
+          reload: () => view.native.reload(),
+          stop: () => view.native.stop(),
+          goBack: () => view.native.goBack(),
+          goForward: () => view.native.goForward(),
+          setZoomFactor: (factor) => view.native.setZoomFactor(factor),
+          openDevTools: () => view.native.openDevTools(),
+        },
+        audio: {
+          getState: () => view.native.getAudioState(),
+          setMuted: (muted) => view.native.setAudioMuted(muted),
+        },
         getSnapshot: () => nativeWindows.getSnapshot(hwnd),
         getReadiness: () => {
           assert(view.readiness);
@@ -830,6 +899,13 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
           relations.setEnabled(id, enabled);
         },
         isEnabled: () => nativeWindows.isEnabled(hwnd),
+        setTitle: (title) => nativeWindows.setTitle(hwnd, title),
+        getTitle: () => nativeWindows.getTitle(hwnd),
+        setResizable: (resizable) =>
+          nativeWindows.setResizable(hwnd, resizable),
+        isResizable: () => nativeWindows.isResizable(hwnd),
+        setMovable: (movable) => nativeWindows.setMovable(hwnd, movable),
+        isMovable: () => nativeWindows.isMovable(hwnd),
         minimize: () => nativeWindows.minimize(hwnd),
         maximize: () => nativeWindows.maximize(hwnd),
         unmaximize: () => nativeWindows.unmaximize(hwnd),
@@ -852,6 +928,7 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
           view.native.resize();
         },
         setPosition: (x, y) => nativeWindows.setPosition(hwnd, x, y),
+        center: () => nativeWindows.center(hwnd),
         setGeometry(area, geometry) {
           nativeWindows.setGeometry(hwnd, area, geometry);
           view.native.resize();
@@ -863,6 +940,8 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         setCloseConfirmation(message) {
           view.confirmation = message;
         },
+        setTaskbarProgress: (progress) =>
+          nativeWindows.setTaskbarProgress(hwnd, progress),
       };
     },
   };
@@ -1054,6 +1133,11 @@ function createWindow(
           log(event, {
             view: spec.view,
             ...data,
+            ...(event === "view-cleaned"
+              ? {
+                  windowId: readiness.snapshot().windowId,
+                }
+              : {}),
           }),
       },
       config.legacyProfile,
@@ -1171,10 +1255,83 @@ function sendNativeEvent(
     });
 }
 
+/** Gate each recipient before forwarding plugin events through its current live route. */
+function publishPluginSystemEvent(
+  event: string,
+  payload: import("@bunaway/protocol").JsonValue,
+  requiredOperation: string,
+): void {
+  if (stopping || closingSent) {
+    return;
+  }
+  publishSystemEvent(
+    registry,
+    [
+      ...views.values(),
+    ].map(({ boundary }) => boundary),
+    event,
+    payload,
+    requiredOperation,
+    sendNativeEvent,
+  );
+}
+
 try {
   // Keep window and WebView COM work on this STA through cleanup.
   hr(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
   initialized = true;
+  windows = new Windows(signalClosing, config.icon, config.runtime.id, () =>
+    channel.poll(),
+  );
+  let notificationWindow: bigint | undefined;
+  let sessionNotifications:
+    | ReturnType<typeof createSessionNotifications>
+    | undefined;
+  systemEvents = new SystemEvents({
+    open: (receive) => {
+      assert(windows);
+      const owner = windows;
+      const hwnd = owner.create(
+        "Bunaway system notifications",
+        200,
+        200,
+        receive,
+        false,
+      );
+      notificationWindow = hwnd;
+      let destroyed = false;
+      return () => {
+        if (destroyed) {
+          return;
+        }
+        try {
+          sessionNotifications?.dispose();
+        } finally {
+          owner.destroy(hwnd);
+          destroyed = true;
+          notificationWindow = undefined;
+          sessionNotifications?.detached();
+          sessionNotifications = undefined;
+        }
+      };
+    },
+    sessions: (enable) => {
+      if (enable) {
+        assert(notificationWindow);
+        sessionNotifications ??= createSessionNotifications(notificationWindow);
+      } else {
+        sessionNotifications?.dispose();
+        sessionNotifications = undefined;
+      }
+    },
+    publish: publishPluginSystemEvent,
+    report: (error) =>
+      log("system-event-failed", {
+        message: String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      }),
+  });
+  windowServices.systemEvents = systemEvents;
   adapters = await operations(
     config.plugins ?? [],
     config.dataRoot,
@@ -1182,9 +1339,11 @@ try {
     windowServices,
     packagedPlugins,
   );
-  windows = new Windows(signalClosing, config.icon, config.runtime.id, () =>
-    channel.poll(),
-  );
+  for (const spec of config.windows) {
+    if (spec.startup !== false) {
+      windows.validateCreation(spec.window);
+    }
+  }
   if (config.desktop?.tray) {
     tray = new Tray(windows, config.desktop.tray.tooltip, (action) => {
       if (action === "show") {
@@ -1218,7 +1377,16 @@ try {
   profiles.collectOrphans();
   for (const spec of config.windows) {
     if (spec.startup !== false) {
-      createWindow(spec);
+      // Keep the catalog defaults for later creation, but prevent initial ready callbacks from showing.
+      const { showWhenReady, ...hiddenSpec } = spec;
+      createWindow(
+        config.desktop?.startHidden
+          ? {
+              ...hiddenSpec,
+              visible: false,
+            }
+          : spec,
+      );
     }
   }
   await channel.send({
@@ -1227,6 +1395,7 @@ try {
   while (!stopping) {
     checkCallbacks();
     windows.pump();
+    systemEvents.flush();
     showWindows();
     for (const [viewId, view] of views) {
       // Controller errors also queue a forced close. Report startup failure before
@@ -1353,6 +1522,7 @@ try {
     log("callback-references", disposeCom());
     await disposeAll([
       () => adapters?.dispose(),
+      () => systemEvents?.dispose(),
       () => {
         windows?.dispose();
         if (initialized) {

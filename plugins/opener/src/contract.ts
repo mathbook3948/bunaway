@@ -12,8 +12,24 @@ export const openerOperations = {
     input: fileInput,
     output: z.null(),
   },
+  trashFile: {
+    input: fileInput,
+    output: z.null(),
+  },
   revealFile: {
     input: fileInput,
+    output: z.null(),
+  },
+  openFileWith: {
+    input: fileInput.extend({
+      app: fileInput.shape.path,
+    }),
+    output: z.null(),
+  },
+  openUrlWith: {
+    input: urlInput.extend({
+      app: fileInput.shape.path,
+    }),
     output: z.null(),
   },
 } as const;
@@ -25,7 +41,16 @@ export function validateOpenerInput(operation: string, input: JsonValue) {
         return openerOperations.openUrl.input.parse(validateValue({}, input));
       case "opener.openFile":
       case "opener.revealFile":
+      case "opener.trashFile":
         return openerOperations.openFile.input.parse(validateValue({}, input));
+      case "opener.openFileWith":
+        return openerOperations.openFileWith.input.parse(
+          validateValue({}, input),
+        );
+      case "opener.openUrlWith":
+        return openerOperations.openUrlWith.input.parse(
+          validateValue({}, input),
+        );
       default:
         throw new BunawayError({
           code: "UNSUPPORTED",

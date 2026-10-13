@@ -46,6 +46,105 @@ const policy: Policy = {
   })),
 };
 
+test("window placement declarations validate paired physical coordinates and exclusive center before startup", () => {
+  const first = specs[0];
+  assert(first);
+  for (const placement of [
+    {
+      x: -1920,
+      y: -100,
+      useContentSize: false,
+      preventOverflow: true,
+    },
+    {
+      x: null,
+      y: null,
+      center: true,
+    },
+    {
+      center: false,
+      useContentSize: true,
+      preventOverflow: false,
+    },
+    {
+      x: -2147483648,
+      y: 2147483647,
+    },
+  ]) {
+    const spec = {
+      ...first,
+      window: {
+        ...first.window,
+        ...placement,
+      },
+    };
+    expect(
+      readWindowSpecs(
+        [
+          spec,
+        ],
+        policy,
+      ),
+    ).toEqual([
+      spec,
+    ]);
+  }
+  for (const placement of [
+    {
+      x: 0,
+    },
+    {
+      y: 0,
+    },
+    {
+      x: 0,
+      y: null,
+    },
+    {
+      x: 0,
+      y: 0,
+      center: true,
+    },
+    {
+      x: 0.5,
+      y: 0,
+    },
+    {
+      x: 0,
+      y: 2147483648,
+    },
+    {
+      x: Number.NaN,
+      y: 0,
+    },
+    {
+      center: "true",
+    },
+    {
+      useContentSize: null,
+    },
+    {
+      preventOverflow: 1,
+    },
+  ]) {
+    expect(() =>
+      readWindowSpecs(
+        [
+          {
+            ...first,
+            startup: false,
+            window: {
+              ...first.window,
+              ...placement,
+            },
+          },
+        ],
+        policy,
+      ),
+    ).toThrow("Window placement");
+  }
+});
+
 test("window settings preserve deferred startup and require unique policy-backed views", () => {
   expect(readWindowSpecs(specs, policy)).toEqual(specs);
   for (const invalid of [

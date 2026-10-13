@@ -11,6 +11,17 @@ export const fileInput = z.strictObject({
       "Text exceeds the Unicode character limit.",
     ),
 });
+/** A selected application is a native executable, not a shell command or shortcut. */
+export function normalizeApplicationPath(input: unknown): string {
+  const path = normalizeFilePath(input);
+  if (!/\.exe$/i.test(path)) {
+    throw new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message: "Expected an absolute Windows .exe application path.",
+    });
+  }
+  return path;
+}
 /** Validate a fully qualified Windows file path without filesystem access. */
 export function normalizeFilePath(input: unknown): string {
   const invalid = () =>

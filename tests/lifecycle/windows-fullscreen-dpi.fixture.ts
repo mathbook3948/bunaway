@@ -10,11 +10,13 @@ const WM_WINDOWPOSCHANGED = 0x0047;
 const WM_DISPLAYCHANGE = 0x007e;
 const WS_OVERLAPPEDWINDOW = 0x00cf0000;
 const WS_VISIBLE = 0x10000000n;
+const WS_THICKFRAME = 0x00040000;
 const GWL_STYLE = -16;
 const SW_HIDE = 0;
 const SW_SHOWNORMAL = 1;
 const SW_SHOWMAXIMIZED = 3;
 const SW_SHOWMINIMIZED = 2;
+const SW_SHOWNA = 8;
 const SWP_NOSIZE = 0x1;
 const WPF_RESTORETOMAXIMIZED = 0x2;
 const SWP_NOMOVE = 0x2;
@@ -59,7 +61,26 @@ let foregroundRequestApplied = false;
 let foregroundRequestReported = 0;
 let foregroundRequests = 0;
 let nextWindow = 1n;
+let expectedPlacementShowCommand = SW_HIDE;
 const postedMessages: number[] = [];
+
+function frameFor(requestedStyle: number) {
+  if (!(requestedStyle & WS_OVERLAPPEDWINDOW)) {
+    return {
+      width: 0,
+      height: 0,
+    };
+  }
+  return requestedStyle & WS_THICKFRAME
+    ? {
+        width: FRAME_WIDTH,
+        height: FRAME_HEIGHT,
+      }
+    : {
+        width: 8,
+        height: 31,
+      };
+}
 
 function view(address: Pointer, size: number) {
   return new DataView(toArrayBuffer(address, 0, size));
@@ -109,9 +130,20 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
       SetLastError() {},
     },
   },
+  display: {
+    symbols: {
+      GetDpiForMonitor(monitor: bigint, _kind: number, x: Pointer, y: Pointer) {
+        const dpi = monitorInfo(monitor).dpi;
+        view(x, 4).setUint32(0, dpi, true);
+        view(y, 4).setUint32(0, dpi, true);
+        return 0;
+      },
+    },
+  },
   user: {
     symbols: {
       LoadIconW: () => 1n,
+      RegisterWindowMessageW: () => 0xc000,
       SetThreadDpiAwarenessContext: () => -4n,
       RegisterClassExW(address: Pointer) {
         callbackAddress = Number(view(address, 80).getBigUint64(8, true));
@@ -152,12 +184,27 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
       },
       AdjustWindowRectExForDpi(address: Pointer, requestedStyle: number) {
         const rect = view(address, 16);
-        if (requestedStyle & WS_OVERLAPPEDWINDOW) {
-          rect.setInt32(8, rect.getInt32(8, true) + FRAME_WIDTH, true);
-          rect.setInt32(12, rect.getInt32(12, true) + FRAME_HEIGHT, true);
-        }
+        const frame = frameFor(requestedStyle);
+        rect.setInt32(8, rect.getInt32(8, true) + frame.width, true);
+        rect.setInt32(12, rect.getInt32(12, true) + frame.height, true);
         return 1;
       },
+      GetClientRect(_window: bigint, address: Pointer) {
+        const rect = view(address, 16);
+        const frame = frameFor(Number(style));
+        rect.setInt32(
+          8,
+          windowRect.right - windowRect.left - frame.width,
+          true,
+        );
+        rect.setInt32(
+          12,
+          windowRect.bottom - windowRect.top - frame.height,
+          true,
+        );
+        return 1;
+      },
+      GetSystemMetricsForDpi: (metric: number) => (metric === 92 ? 0 : 4),
       GetWindowPlacement(_window: bigint, address: Pointer) {
         const placement = view(address, 44);
         // Windows can retain maximize history after returning to a normal window.
@@ -187,7 +234,10 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
           placement.getUint32(4, true) & WPF_RESTORETOMAXIMIZED,
           minimized ? WPF_RESTORETOMAXIMIZED : 0,
         );
-        assert.equal(placement.getUint32(8, true), SW_HIDE);
+        assert.equal(
+          placement.getUint32(8, true),
+          expectedPlacementShowCommand,
+        );
         // WINDOWPLACEMENT uses workspace coordinates; the mock HWND uses screen coordinates.
         const primary = monitorFor(normalRect) === monitors[0]?.handle;
         windowRect.left = placement.getInt32(28, true) + (primary ? 24 : 0);
@@ -197,7 +247,18 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
         Object.assign(normalRect, windowRect);
         return 1;
       },
-      MonitorFromWindow: () => monitorFor(windowRect),
+      MonitorFromWindow: (window: bigint) =>
+        window ? monitorFor(windowRect) : (monitors[0]?.handle ?? 0n),
+      MonitorFromPoint(point: bigint) {
+        const x = Number(BigInt.asIntN(32, point));
+        const y = Number(BigInt.asIntN(32, point >> 32n));
+        return monitorFor({
+          left: x,
+          top: y,
+          right: x + 1,
+          bottom: y + 1,
+        });
+      },
       MonitorFromRect(address: Pointer) {
         const rect = view(address, 16);
         return monitorFor({
@@ -717,6 +778,108 @@ try {
     assert.equal(windows.failure, undefined);
   } finally {
     windows.destroy(second);
+  }
+  // Odd physical dimensions at fractional scale must survive frame toggles,
+  // including saved normal placement and changes deferred during fullscreen.
+  expectedPlacementShowCommand = SW_SHOWNA;
+  windows.setFullscreen(window, false);
+  minimized = false;
+  maximized = false;
+  windows.setSizeConstraints(window, {
+    minWidth: null,
+    minHeight: null,
+    maxWidth: null,
+    maxHeight: null,
+  });
+  for (const dpi of [
+    120,
+    144,
+    192,
+  ]) {
+    secondary.dpi = dpi;
+    for (const state of [
+      "normal",
+      "minimized",
+      "maximized",
+      "fullscreen",
+    ]) {
+      for (const visible of [
+        false,
+        true,
+      ]) {
+        minimized = false;
+        maximized = false;
+        style = BigInt(WS_OVERLAPPEDWINDOW) | (visible ? WS_VISIBLE : 0n);
+        Object.assign(windowRect, {
+          left: -1000,
+          top: 100,
+          right: -383,
+          bottom: 590,
+        });
+        Object.assign(normalRect, windowRect);
+        const suggested = new Int32Array([
+          -1000,
+          100,
+          -383,
+          590,
+        ]);
+        messages.symbols.windowProcedure(
+          window,
+          WM_DPICHANGED,
+          BigInt(dpi),
+          BigInt(ptr(suggested)),
+        );
+        minimized = state === "minimized";
+        maximized = state === "maximized";
+        expectedPlacementShowCommand = SW_HIDE;
+        if (visible) {
+          expectedPlacementShowCommand = SW_SHOWNORMAL;
+          if (minimized) {
+            expectedPlacementShowCommand = SW_SHOWMINIMIZED;
+          }
+          if (maximized) {
+            expectedPlacementShowCommand = SW_SHOWNA;
+          }
+        }
+        if (state === "fullscreen") {
+          windows.setFullscreen(window, true);
+        }
+        const foreground = foregroundWindow;
+        for (const resizable of [
+          false,
+          true,
+          false,
+          true,
+        ]) {
+          windows.setResizable(window, resizable);
+          const bounds = windows.getBounds(window, "normal");
+          const frame = frameFor(
+            resizable
+              ? WS_OVERLAPPEDWINDOW
+              : WS_OVERLAPPEDWINDOW & ~WS_THICKFRAME,
+          );
+          assert.deepEqual(
+            {
+              width: bounds.width - frame.width,
+              height: bounds.height - frame.height,
+            },
+            {
+              width: 601,
+              height: 451,
+            },
+            `dpi=${dpi}, state=${state}, visible=${visible}, resizable=${resizable}`,
+          );
+          assert.equal(windows.isVisible(window), visible);
+          assert.equal(windows.isMinimized(window), state === "minimized");
+          assert.equal(windows.isMaximized(window), state === "maximized");
+          assert.equal(foregroundWindow, foreground);
+        }
+        if (state === "fullscreen") {
+          windows.setFullscreen(window, false);
+        }
+        assert.equal(windows.failure, undefined);
+      }
+    }
   }
 } finally {
   messages.close();

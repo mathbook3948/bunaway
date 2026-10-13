@@ -59,8 +59,23 @@ if (target === "windows-x64") {
     ]) {
       await test("windows-bun.ts", scenario);
     }
+    await test("windows-cli-arguments.ts");
     await test("windows-bun-window-api.ts");
+    await test("windows-webview-print-ui.ts");
+    await test("windows-webview-downloads.ts");
+    await test("windows-webview-controls.ts");
+    await test("windows-webview-audio.ts");
+    await test("windows-initial-placement.ts");
     await test("windows-window-events.ts");
+    await run(
+      [
+        inputs.bun,
+        "--no-env-file",
+        "test",
+        resolve(root, "tests/lifecycle/windows-system-events.test.ts"),
+      ],
+      root,
+    );
     await test("windows-window-readiness.ts");
     await test("windows-multiple-windows.ts");
     await test("windows-owned-modal.ts");
@@ -69,9 +84,40 @@ if (target === "windows-x64") {
         inputs.bun,
         "--no-env-file",
         "test",
+        resolve(root, "tests/lifecycle/windows-clipboard.test.ts"),
+      ],
+      root,
+      {
+        BUNAWAY_CLIPBOARD_NATIVE: "1",
+      },
+    );
+    // Shell recycling can retain process-wide COM workers after STA disposal.
+    // Isolate its native test so opener probes keep their fresh-process invariant.
+    await run(
+      [
+        inputs.bun,
+        "--no-env-file",
+        "test",
+        resolve(root, "tests/lifecycle/windows-trash.test.ts"),
+      ],
+      root,
+    );
+    await run(
+      [
+        inputs.bun,
+        "--no-env-file",
+        "test",
         ...[
           "tests/lifecycle/desktop.test.ts",
+          "tests/lifecycle/windows-os.test.ts",
+          "tests/lifecycle/windows-process.test.ts",
+          "tests/lifecycle/process-run.test.ts",
+          "tests/lifecycle/windows-network.test.ts",
           "tests/lifecycle/windows-bun-instance.test.ts",
+          "tests/lifecycle/windows-appearance.test.ts",
+          "tests/lifecycle/windows-opener.test.ts",
+          "tests/lifecycle/windows-opener-job.test.ts",
+          "tests/lifecycle/windows-opener-selected-app.test.ts",
           "tests/cli/windows-assets.test.ts",
           "tests/cli/windows-compile.test.ts",
         ].map((name) => resolve(root, name)),
@@ -80,6 +126,9 @@ if (target === "windows-x64") {
     );
     for (const scenario of [
       "hide",
+      "autostart",
+      "autostart-hidden",
+      "autostart-hidden-ready",
       "veto",
       "dev-veto",
       "dev-hide",
@@ -110,11 +159,22 @@ if (target === "windows-x64") {
     for (const name of [
       "windows-bun-storage.ts",
       "windows-storage-metadata.ts",
+      "windows-path.ts",
+      "windows-safe-storage.ts",
       "windows-bun-cli.ts",
       "windows-app-reload.ts",
     ]) {
       await test(name);
     }
+    await run(
+      [
+        inputs.bun,
+        "--no-env-file",
+        "test",
+        resolve(root, "tests/lifecycle/windows-image.test.ts"),
+      ],
+      root,
+    );
     await test("windows-host.ts", [
       "--package",
       output,
