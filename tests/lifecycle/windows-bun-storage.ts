@@ -351,6 +351,37 @@ async function main(): Promise<void> {
         from,
         to,
       });
+    // Merged byte/append operations and transfers share the same checked-handle adapter.
+    const byteSource = temporaryPath("byte transfer source.bin");
+    const byteCopy = temporaryPath("byte transfer copy.bin");
+    const byteMoved = temporaryPath("byte transfer renamed.bin");
+    assert.equal(
+      storage.execute("storage.writeBytes", {
+        path: byteSource,
+        bytes: "AP+A",
+      }),
+      null,
+    );
+    assert.equal(transfer("storage.copyFile", byteSource, byteCopy), null);
+    assert.equal(
+      storage.execute("storage.appendBytes", {
+        path: byteCopy,
+        bytes: "AA==",
+      }),
+      null,
+    );
+    assert.equal(transfer("storage.move", byteCopy, byteMoved), null);
+    assert.equal(call("storage.readBytes", byteSource), "AP+A");
+    assert.equal(
+      call("storage.readBytes", byteMoved),
+      Buffer.from([
+        0,
+        255,
+        128,
+        0,
+      ]).toString("base64"),
+    );
+    assert.equal(call("storage.exists", byteCopy), false);
     const copySource = temporaryPath("copy source.bin");
     const copied = temporaryPath("copied 한글.bin");
     const bytes = Buffer.alloc(1024 * 1024 + 257);
