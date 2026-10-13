@@ -301,8 +301,9 @@ boot 전후 종료와 초기화 중 프로토콜 버전, 런타임 ID 및 세대
 일반 및 숨김 적용, 제약 보정, 최소화 및 최대화 중 복원 영역 변경, 전체화면 거부,
 rectangle 경계 오류의 변경 방지와 실제 이벤트 snapshot 일치도 확인한다.
 각 성공한 작업 뒤 WndProc 오류도 확인하고, 숨김 크기를 위치 변경 전후에 각각 검사한다.
+마지막 전체화면 검사에서는 진입 전 일반 상태, 숨김 직후 상태와 종료 뒤 일반 상태도 확인한다.
 실패 때 native style, placement와 client/outer rectangle 및 최대 32개 scalar 메시지를
-출력해 빈 client rectangle이 생긴 단계를 구분한다. native pointer는 보관하지 않는다.
+출력해 크기와 표시 상태가 실패한 단계를 구분한다. native pointer는 보관하지 않는다.
 `api/window-geometry.test.ts`는 새 setter의 단위 기본값, DPI 반올림, 입력과 출력 schema,
 SDK 호출 컨텍스트, 작업 권한, 닫힌 창 및 시작 전 취소를 GUI 없이 검사한다.
 `windows-window-events.ts`는 실제 WebView2, Core와 UI Worker를 연결해 네 setter의

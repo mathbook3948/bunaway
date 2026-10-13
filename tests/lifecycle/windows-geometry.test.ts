@@ -544,14 +544,40 @@ test.skipIf(process.platform !== "win32")(
         dpi: native.getDpi(hwnd),
       });
 
+      // Correct normal bounds alone do not establish the live show state.
+      // Check it before hiding so restoration failures retain their first phase.
+      stage = "normal-before-final-fullscreen";
+      expect(native.getSnapshot(hwnd).state).toMatchObject({
+        minimized: false,
+        maximized: false,
+        fullscreen: false,
+      });
+      stage = "hide-before-final-fullscreen";
       native.show(hwnd, false);
+      assert.equal(native.failure, undefined);
+      expect(native.getSnapshot(hwnd).state).toMatchObject({
+        visible: false,
+        minimized: false,
+        maximized: false,
+        fullscreen: false,
+      });
+      stage = "enter-final-fullscreen";
       native.setFullscreen(hwnd, true);
+      assert.equal(native.failure, undefined);
       await invoke("windows.setSizeConstraints", {
         minWidth: 700,
         maxHeight: 450,
       });
       const fullscreenNormal = native.getBounds(hwnd, "normal");
+      stage = "exit-final-fullscreen";
       native.setFullscreen(hwnd, false);
+      assert.equal(native.failure, undefined);
+      expect(native.getSnapshot(hwnd).state).toMatchObject({
+        visible: false,
+        minimized: false,
+        maximized: false,
+        fullscreen: false,
+      });
       expect(native.getBounds(hwnd, "outer")).toEqual(fullscreenNormal);
       expect(user.symbols.IsWindowVisible(hwnd)).toBe(0);
       expect(
