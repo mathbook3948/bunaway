@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 // PATH-scoped tool replacements run only inside each distribution test's child process.
 import assert from "node:assert/strict";
+import { fstatSync } from "node:fs";
 import { appendFile, writeFile } from "node:fs/promises";
 import { basename, extname, resolve } from "node:path";
 
@@ -39,6 +40,10 @@ if (tool === "xcrun") {
     }
   }
 } else if (tool === "hdiutil") {
+  assert(
+    fstatSync(1).isFile() && fstatSync(2).isFile(),
+    "hdiutil output must use regular files",
+  );
   assert(failure === "dmg", "Unexpected hdiutil replacement");
   process.exit(47);
 } else if (tool === "mv") {
