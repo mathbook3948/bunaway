@@ -77,6 +77,19 @@ ITaskbarList3의 다섯 상태를 설정한다. 네이티브 재생성 뒤 새 H
 `mise run host:windows`에 포함하며 실제 작업 표시줄의 색상, 그룹 표시 또는
 Explorer 프로세스 재시작을 육안으로 검증하지 않는다.
 
+`api/notification.test.ts`는 알림 상태 조회와 Windows 설정 열기의 독립 권한,
+Zod 계약, SDK 컨텍스트와 취소, WinRT 실패 경계와 자원 정리를 검사한다.
+`lifecycle/windows-notification.test.ts`는 별도 프로세스에서 누락된 앱 등록 오류를 확인한다.
+등록된 조회는 격리된 프로세스에 UUID 시작 메뉴 바로가기와 process AppUserModelID를 설정한
+뒤 fixture 전용 popup 억제/15초 만료 알림으로 OS 상태를 초기화한다. 엄격한 WinRT projection
+getter와 FFI 값을 비교하며 고유 tag/group의 임시 알림은 finally에서 history 제거와 빈 상태를
+검사한다. 바로가기도 실패 때 정리한다. 실제 I/O Worker의 승인, 거부, 취소, opener STA 공존과
+종료도 확인한다. 공개 getStatus는 이런 알림을 보내거나 상태를 초기화하지 않는다.
+상태 조회 회귀는 `mise run host:windows`에도 포함한다. Windows 설정 열기 접수는
+폐기 가능한 데스크톱에서 `BUNAWAY_NOTIFICATION_SETTINGS_NATIVE=1`을 지정한 선택 검사다.
+기본 CI는 실제 설정 페이지 표시나 사용자 차단 상태 변경, toast 표시를 검증하지 않는다.
+[notification README](../plugins/notification/README.md)의 실행 명령과 남은 검증 범위를 따른다.
+
 `windows-initial-placement.fixture.ts`는 모니터 겹침이 바뀌는 `SetWindowPos`에서
 실제 창 프로시저에 `WM_DPICHANGED`를 전달한다. 초기 DPI 보정의 수렴, 중앙 좌표와
 content/outer 크기, DPI 순환 때 숨김 HWND 정리 및 생성 후 OS 권장 배치 처리를 검증한다.
