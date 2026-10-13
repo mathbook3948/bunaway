@@ -371,7 +371,15 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [ ] AppUserModelID와 toast activation 식별자를 설정하고 설치와 일치시킨다.
 - [ ] Recent Documents의 추가, 조회와 삭제를 제공한다.
 - [ ] Jump List와 사용자 task, category, 제거된 항목 조회를 제공한다.
-- [ ] 작업 표시줄 progress와 상태를 설정한다.
+- [x] 작업 표시줄 progress와 상태를 설정한다.
+  `windows.setTaskbarProgress`는 창별 `none`, `indeterminate`, `normal`, `paused`, `error`를
+  적용하며 determinate 상태에는 0~1의 진행률을 요구한다. 작업 권한과 창 수명을 검사하고
+  작업 표시줄 버튼 생성 전에는 `BUSY`, 네이티브 실패에는 `INTERNAL`을 반환한다.
+  Explorer 버튼 재생성 때 마지막 성공 값을 다시 적용하고 HWND 파괴 때 폐기한다.
+  계약 및 수명 검사는 `window-taskbar.test.ts`, `taskbar-progress.test.ts`이며 실제 UI Worker와
+  ITaskbarList3 호출은 기존 `windows-bun-window-api.ts`의 `host:windows` 회귀에 포함한다.
+- [ ] 실제 Windows 작업 표시줄에서 진행률, 상태 색상, 그룹 우선순위와 Explorer 재시작 후 표시를 확인한다.
+  네이티브 호출 회귀와 합성 버튼 재생성 검사를 물리 화면의 표시 검증으로 간주하지 않는다.
 - [ ] overlay icon과 접근성 설명을 설정한다.
 - [ ] thumbnail toolbar 버튼과 클릭 이벤트를 제공한다.
 - [ ] thumbnail clip과 tooltip을 설정한다.
@@ -430,7 +438,8 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [ ] 파일 경로에서 이미지 리소스를 읽는 API와 저장소 접근 정책을 연결한다.
 - [x] `image.getInfo`와 `image.getPixels`로 크기, 빈 이미지 여부와 RGBA 픽셀 데이터를 조회한다.
 - [x] `image.exportBytes`와 `image.exportDataURL`로 PNG, JPEG, BMP와 data URL을 내보낸다. PNG는 alpha를 보존하고 JPEG와 BMP는 불투명 픽셀만 받는다.
-- [ ] crop, resize와 scale-factor별 이미지 representation을 제공한다.
+- [x] `image.crop`과 `image.resize`로 소스와 분리된 새 이미지 리소스를 만든다. Windows resize는 nearest와 alpha를 고려한 linear filtering을 제공한다.
+- [ ] 한 이미지 ID의 scale-factor별 representation 그룹과 선택 API를 제공한다.
 - [ ] 파일 아이콘과 이미지 thumbnail을 생성한다.
 - [x] 앱 소유 이미지 ID, `image.dispose`, 결과 전달 전 생성 취소와 앱 종료 정리를 제공한다. 작업별 권한과 64개, 8 MiB 상한을 적용한다.
 

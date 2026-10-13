@@ -7,6 +7,15 @@
 결과는 `build/windows-webview-audio-results.json`이다. 조용한 문서를 사용하며 재생 중인
 audio와 물리 장치 출력은 별도 수동 검증이다.
 
+`api/window-taskbar.test.ts`는 작업 표시줄 진행률의 상태별 입력, 출력, SDK 호출 컨텍스트,
+독립 작업 권한, 취소, 닫힌 창과 미지원 플랫폼을 검사한다.
+`lifecycle/taskbar-progress.test.ts`는 버튼 준비, 마지막 성공 값의 복원, 실패 후 재시도,
+서로 다른 HWND와 파괴 후 핸들 재사용을 검사한다. 버튼 재생성은 합성 호출이다.
+`windows-bun-window-api.ts`는 실제 UI Worker와 WebView2에서 공개 SDK를 통해
+ITaskbarList3의 다섯 상태를 설정한다. 네이티브 재생성 뒤 새 HWND에서도 반복한다.
+`mise run host:windows`에 포함하며 실제 작업 표시줄의 색상, 그룹 표시 또는
+Explorer 프로세스 재시작을 육안으로 검증하지 않는다.
+
 `windows-initial-placement.fixture.ts`는 모니터 겹침이 바뀌는 `SetWindowPos`에서
 실제 창 프로시저에 `WM_DPICHANGED`를 전달한다. 초기 DPI 보정의 수렴, 중앙 좌표와
 content/outer 크기, DPI 순환 때 숨김 HWND 정리 및 생성 후 OS 권장 배치 처리를 검증한다.
@@ -490,6 +499,14 @@ client-area animation, screen reader 설정 플래그 및 시스템 색과 비�
 DLL 수명과 종료 후 거부를 확인한다. `mise run host:windows`에 포함한다.
 사용자 테마 변경과 실제 보조 기술 또는 WebView 접근성 트리 검증을 대신하지 않는다.
 
+`system-events.test.ts`는 선택 OS 알림 HWND의 지연 생성, 중복 해제, 조회 실패 후 복구,
+WTS 등록 실패, 상태 알림 합치기, lifecycle 순서와 큐 초과를 검증한다. 복귀 뒤 사용자
+활동 알림이 다른 pump 배치 또는 설정 알림 뒤에 도착해도 resume이 중복되지 않는지 검사한다. 조회 권한과
+현재 이벤트 route를 모두 가진 수신자에게만 전달하는 계약도 검사한다.
+`windows-system-events.test.ts`는 실제 Windows 숨김 HWND, 메시지 pump와 WTS 등록을
+사용한다. 메시지는 합성 입력이며 실제 하드웨어 절전이나 사용자 세션 잠금 검증을
+대신하지 않는다. Linux에서는 이 네이티브 회귀를 건너뛴다.
+
 `api/image.test.ts`와 `lifecycle/image-resources.test.ts`는 선택 image 플러그인의
 Zod 계약과 canonical base64, 빈 이미지, operation 권한, ID 해제와 앱 종료,
 count와 메모리 quota 및 생성 취소의 정리를 확인한다. `windows-image.test.ts`는
@@ -497,6 +514,13 @@ count와 메모리 quota 및 생성 취소의 정리를 확인한다. `windows-i
 RGBA alpha 왕복, JPEG와 BMP, 잘못된 encoded 입력과 decode 크기, 최대 PNG,
 정책 거부와 결과 전달 전 취소를 확인한다. 실제 파일 경로 접근, WebView 표시,
 다른 앱의 가져오기, 색상 관리와 최소 Windows 버전 검증은 포함하지 않는다.
+
+`image-crop.test.ts`는 offset rectangle과 행 복사, alpha, 소스 보존, 잘못된 영역,
+생성 취소와 새 ID를 확인한다. `image-resize.test.ts`는 nearest resize의 출력 중심 선택,
+축소와 비정수 비율, 투명 RGB와 반투명 채널의 정확한 복사, 소스 보존과 크기 상한을 확인한다.
+`windows-image.test.ts`는 실제 UI Worker의 nearest resize와 WIC linear resize,
+linear filtering의 투명 edge, crop과 빈 소스 및 quota 오류를 추가로 검사한다.
+이 transform 검사도 `host:windows`에서 실행하며 소스 리소스는 변경하지 않는다.
 
 `api/os.test.ts`는 독립 작업 권한과 metadata 계약을 검사한다. `lifecycle/windows-os.test.ts`는
 실제 Kernel32 언어 설정 조회와 Bun 실행 정보를 생성 어댑터에서 검사하며 `host:windows`에 포함된다.

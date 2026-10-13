@@ -63,6 +63,15 @@ if (target === "windows-x64") {
     await test("windows-webview-audio.ts");
     await test("windows-initial-placement.ts");
     await test("windows-window-events.ts");
+    await run(
+      [
+        inputs.bun,
+        "--no-env-file",
+        "test",
+        resolve(root, "tests/lifecycle/windows-system-events.test.ts"),
+      ],
+      root,
+    );
     await test("windows-window-readiness.ts");
     await test("windows-multiple-windows.ts");
     await test("windows-owned-modal.ts");
