@@ -356,7 +356,7 @@ test.skipIf(process.platform !== "darwin")(
 );
 
 test.skipIf(process.platform !== "darwin")(
-  "real NSWorkspace initialization, malformed requests and repeated disposal",
+  "real macOS workspace binding load, malformed requests and repeated disposal",
   () => {
     const adapter = createOperations({
       dataRoot: "/private/tmp",

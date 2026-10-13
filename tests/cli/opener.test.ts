@@ -3,13 +3,13 @@ import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { loadPluginCatalog } from "#native/host-api/bun/plugin-catalog";
-import { operations, pluginRegistry } from "#native/host-api/bun/plugins";
 import { pluginImportsSource } from "#cli/app-modules";
 import { validateProject } from "#cli/config";
 import { packageFilename } from "#cli/distribution";
 import { writeJson } from "#cli/files";
 import { installedPlugins, writePluginManifest } from "#cli/plugins";
+import { loadPluginCatalog } from "#native/host-api/bun/plugin-catalog";
+import { operations, pluginRegistry } from "#native/host-api/bun/plugins";
 import { createProject, packageDirectory } from "./project.ts";
 import { verifyWindowsOpenerFiles } from "./windows-opener-files.ts";
 
@@ -102,7 +102,9 @@ export default defineApp({ modules: [], plugins: [openerPlugin] });
     expect(plugins[0]?.targets.windows?.execution).toBe("io");
     expect(plugins[0]?.targets.macos?.execution).toBe("io");
     expect(plugins[0]?.targets.macos?.supportedOperations).toEqual([
-      "opener.openUrl", "opener.openFile", "opener.revealFile",
+      "opener.openUrl",
+      "opener.openFile",
+      "opener.revealFile",
     ]);
     expect(valid.nativePlugins?.map(({ name }) => name)).toEqual([
       "opener",

@@ -191,9 +191,9 @@ if (target === "windows-x64") {
     await test("macos-webview-regressions.ts");
     await test("macos-window-api.ts");
     await test("macos-io-host.ts");
-    await test("macos-opener-host.ts", [], {
-      BUNAWAY_OPENER_ISOLATED: "1",
-    });
+    if (process.env.BUNAWAY_OPENER_ISOLATED === "1") {
+      await test("macos-opener-host.ts");
+    }
     await test("macos-host.ts", [
       "--package",
       output,

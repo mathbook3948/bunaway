@@ -6,7 +6,9 @@ import { normalizeUrl } from "./url.ts";
 
 /** Accept either path spelling; the host adapter enforces its own platform. */
 function normalizeOpenerFilePath(input: unknown): string {
-  return typeof input === "string" && input.startsWith("/") && !input.startsWith("//")
+  return typeof input === "string" &&
+    input.startsWith("/") &&
+    !input.startsWith("//")
     ? normalizeMacosFilePath(input)
     : normalizeFilePath(input);
 }

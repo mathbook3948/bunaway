@@ -4,7 +4,7 @@
 `src/contract.ts`는 작업 스키마와 네이티브 호출 검증, `src/calls.ts`는 편의 호출을 담당합니다.
 플랫폼 구현은 계약을 직접 읽으며 공개 진입점을 역으로 import하지 않습니다.
 
-`@bunaway/plugin-opener`는 HTTP 또는 HTTPS 주소를 Windows 기본 브라우저로 열고, 파일을 기본 연결 앱으로 열거나 Explorer에서 선택해 표시합니다. 앱에 패키지를 설치하고 `openerPlugin`을 등록한 다음, 호출 출처에 작업별 권한을 허용해야 합니다.
+`@bunaway/plugin-opener`는 HTTP 또는 HTTPS 주소를 기본 브라우저로 열고, Windows와 macOS에서 파일을 기본 연결 앱으로 열거나 Explorer와 Finder에 선택을 요청합니다. 앱에 패키지를 설치하고 `openerPlugin`을 등록한 다음, 호출 출처에 작업별 권한을 허용해야 합니다.
 
 ```ts
 import { defineApp } from "@bunaway/backend";
@@ -57,13 +57,19 @@ Windows 구현은 I/O Worker에서 자체 COM STA를 초기화하고 Explorer �
 
 세 함수 모두 성공은 요청 접수를 뜻합니다. 기본 앱의 실행 완료, 파일 읽기 완료나 Explorer 화면 표시와 선택 완료를 기다리지 않습니다. OS가 접수한 뒤 발생하는 파일 소실, 연결 앱 부재, 앱 내부 실패와 화면 변경은 결과에 포함되지 않습니다. 취소와 기한 초과는 이미 접수한 요청을 되돌리지 않습니다. 네이티브 호출 중에는 OS가 반환할 때까지 작업이 계속될 수 있으며 UNC 공유나 셸 확장의 응답이 느리면 I/O Worker의 후속 작업과 정리가 지연될 수 있습니다. 창과 WebView를 담당하는 UI Worker는 이 파일 검사나 셸 요청을 실행하지 않습니다. 호스트는 I/O 작업을 시작하기 직전에 현재 호출 컨텍스트와 작업 권한을 검사하며, 승인 전 취소된 작업은 실행하지 않습니다.
 
-현재 어댑터는 Windows만 제공합니다. 커스텀 URL 스킴, 딥링크 등록과 설치 프로그램 변경은 이 패키지의 범위가 아닙니다.
+macOS 구현은 NSWorkspace로 파일과 URL을 열고 Finder 선택을 요청합니다. 파일은 절대
+POSIX 경로이며 기존 259 UTF-16 코드 단위 예산과 이름별 255 UTF-8 바이트 제한을
+따릅니다. 상대 경로, 중복 구분자, `.`과 `..`, 제어 문자와 잘못된 Unicode는 거부합니다.
+부모의 링크를 따라가지 않고 읽을 수 있는 일반 파일만 허용하며 심볼릭 링크와 하드 링크는
+거부합니다. macOS descriptor는 rename을 막지 않으므로 요청 직전 identity 확인 뒤에도
+NSWorkspace의 pathname 소비 시점에 경로 교체 경쟁이 남습니다.
 
-macOS의 독립 구현은 `src/platforms/macos.ts`에 있습니다. NSWorkspace와 Finder의 요청 접수,
-POSIX 파일 검사와 자원 정리를 제공하지만 공개 플랫폼 등록과 호스트 I/O 연결은 아직 하지
-않았습니다. 공개 파일 helper는 기존 Windows 경로 계약을 유지합니다. 연결 조건과 실제
-네이티브 fixture 범위는 [macOS opener 구현 기록](../../docs/architecture/macos-opener.md)을
-참고하세요. 독립 구현이 있다는 이유로 공개 macOS 지원을 선언하지 않습니다.
+공개 기본 파일 helper는 POSIX와 Windows 표기를 받으며 해당 OS 어댑터가 최종 검증합니다.
+지정 `.exe` 앱은 Windows 전용이고 macOS 지원 목록에 포함하지 않습니다. macOS의 공통
+I/O 연결은 PR #164에 의존합니다. 플랫폼별 바인딩과 네이티브 검증 범위는
+[macOS opener 구현 기록](../../docs/architecture/macos-opener.md)을 참고하세요. 초기
+macOS 요청 실패는 아직 조사 중이며 네이티브 CI 통과 전에는 실행 검증 완료로 보지 않습니다.
+macOS 휴지통은 제공하지 않습니다. 커스텀 URL 스킴, 딥링크 등록과 설치 프로그램 변경은 이 패키지의 범위가 아닙니다.
 
 ## 지정 앱
 

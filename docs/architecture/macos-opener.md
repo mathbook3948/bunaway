@@ -1,7 +1,7 @@
 # macOS opener 독립 어댑터
 
 `plugins/opener/src/platforms/macos.ts`는 기존 `openUrl`, `openFile`, `revealFile` 작업을
-구현한다. 호스트의 공통 I/O 연결과 공개 등록은 별도 작업이다. Windows 구현과 공개 계약은
+구현한다. 공통 I/O 연결은 PR #164의 호스트 기반 작업에 의존한다. Windows 구현과 공개 계약은
 변경하지 않는다. 지정 앱의 `.exe` 계약과 휴지통 작업은 이 변경에 포함하지 않는다.
 
 ## 실행과 수명
@@ -31,41 +31,53 @@ POSIX descriptor는 경로 이름의 rename이나 교체를 막지 않는다. NS
 다시 읽는 시점의 경쟁은 남아 있다. Windows의 삭제 공유를 금지한 핸들 고정과 같은 보장을
 하지 않는다. OS가 요청을 접수한 뒤 파일 소실이나 연결 앱 실패도 결과에 포함하지 않는다.
 
-## 호스트 소유자의 연결 조건
+## 호스트 기반 작업과 등록
 
-1. 공통 macOS I/O dispatch는 어댑터 실행 직전에 살아 있는 호출 컨텍스트, 해당 작업 권한과
-   취소를 검사해야 한다. 현재 NativeAdapter의 `execute`는 권한이나 취소 token을 받지 않는다.
-   파일 검사와 NSWorkspace 호출 사이에는 비동기 대기가 없다.
-2. opener의 `src/index.ts`에 macOS `execution: "io"`, `createOperations`와 작업 목록
-   `["openUrl", "openFile", "revealFile"]`만 등록해야 한다. `openFileWith`와 `openUrlWith`는
-   macOS 지원 목록에서 제외한다. 현재 독립 어댑터도 두 작업을 `UNSUPPORTED`로 거부한다.
-3. 공개 `openFile`과 `revealFile` helper의 POSIX 입력 경로를 연결해야 한다. 기존
-   `normalizeFilePath`와 `.exe`용 `normalizeApplicationPath`는 Windows 계약 그대로다.
-   그 계약이나 선택 앱의 의미를 조용히 바꾸지 않고 플랫폼별 검증 경계를 정해야 한다.
-4. 실제 호스트 fixture와 `tests/lifecycle/run-native.ts`에 작업 권한 거부, 승인 전 취소,
-   컨텍스트 폐기와 I/O Worker 종료 회귀를 연결해야 한다. 이 변경은 공유 호스트 파일을
-   수정하지 않는다. 연결 전에는 설치된 공개 패키지가 macOS opener를 제공하지 않는다.
+이 변경은 PR #164의 `codex/macos-io-foundation`,
+`6749173cf25ff41f1c8135b789b13bd8bdd2a791` 위에 쌓는다. 기반 작업의 공유 I/O dispatch를
+복제하지 않는다. 호스트는 실행 직전에 살아 있는 호출 컨텍스트, 해당 작업 권한과 취소를
+검사한다. NativeAdapter의 동기 `execute`는 권한 token을 받지 않으며 승인된 호출만 받는다.
+파일 검사와 NSWorkspace 호출 사이에는 비동기 대기가 없다.
+
+`src/index.ts`는 macOS `execution: "io"`에 `openUrl`, `openFile`, `revealFile`만 등록한다.
+지정 앱 두 작업은 macOS 지원 목록에서 제외한다. 공개 기본 파일 helper는 POSIX와 Windows
+경로 표기를 받으며 해당 OS 어댑터가 플랫폼 검증을 수행한다. 기존 Windows
+`normalizeFilePath`와 `.exe`용 `normalizeApplicationPath`는 그대로 유지한다.
+공개 계약의 필드, 이름과 길이 예산을 바꾸지 않는다.
+
+`tests/lifecycle/run-native.ts`에는 이 기능의 `macos-opener-host.ts` 항목만 추가한다.
+폐기 가능한 실행 세션에서 호출자가 `BUNAWAY_OPENER_ISOLATED=1`을 지정했을 때만
+실행한다. macOS CI는 이 값을 명시하고 일반 로컬 native 검사에는 자동으로 지정하지 않는다.
+기반 작업은 별도로 독립 검토 중이며 이후 수정은 이 변경에 반영해야 한다.
 
 ## 검증 범위
 
 `tests/lifecycle/macos-opener.test.ts`는 POSIX 문법, 기존 작업별 권한, 선택 앱 미지원,
 요청 접수와 반복 정리를 검사한다. macOS에서는 실제 descriptor와 NSWorkspace 초기화,
-읽기 거부, 링크와 파일 소실도 검사한다. 다른 OS에서 건너뛴 검사는 네이티브 결과가 아니다.
+읽기 거부, 링크와 파일 소실도 검사한다. workspace 검사의 초기화는 라이브러리와 symbol
+로드를 뜻하며 실제 요청 접수는 다음 네이티브 fixture에서 검사한다. 다른 OS에서 건너뛴
+검사는 네이티브 결과가 아니다.
 
 `macos-opener-native.test.ts`는 폐기 가능한 macOS CI 세션에서만
 `BUNAWAY_OPENER_ISOLATED=1`로 실행한다. 기존 entitlement와 ad-hoc 서명으로 Bun fixture
 앱을 만들고 고유 확장자의 파일을 실제 NSWorkspace로 전달해 인자를 기록한다. loopback
 HTTP/HTTPS URL은 runner의 기본 브라우저에 요청하며 NSWorkspace의 접수 결과를 확인한다.
-브라우저의 페이지 로딩은 검사하지 않는다. 기본 브라우저를 바꾸지 않으며 `finally`에서
+브라우저의 페이지 로딩은 검사하지 않는다. 고유 문서 타입의 fixture 앱만 연결한다. 기본 브라우저를 바꾸지 않으며 `finally`에서
 fixture 앱 종료를 확인하고 등록과 파일을 정리한다. 사용자 파일이나 clipboard는 읽거나
 바꾸지 않는다. 개인 데스크톱에서 실행하지 않는다. 첫 CI에서 기본 handler 변경이 OSStatus
 `-54`로 거부되어 해당 변경을 제거했다. 권한 제한을 우회하지 않는다.
 
-실제 어댑터는 독립 Worker에서 실행하고 fixture dispatcher가 기존 NativeRegistry로
-작업별 권한과 승인 전 취소를 검사한다. 이것은 아직 연결하지 않은 제품 호스트의 검증을
-대신하지 않는다. Finder 검사는 OS 요청 접수만 확인하며 실제 선택 UI를 읽지 않는다.
-결과는 `build/macos-opener-results.json`과 CI 로그에 기록한다. 별도
+독립 Worker 검사는 NativeRegistry로 작업별 권한과 승인 전 취소를 검사한다.
+`macos-opener-host.ts`는 기존 entitlement로 ad-hoc 서명한 compiled 앱의 실제 WKWebView,
+Core, macOS 호스트와 설치된 opener I/O 어댑터를 연결한다. 공개 POSIX helper로 파일과
+HTTP/HTTPS를 열고 Finder 요청을 제출한다. 다른 뷰의 권한 거부, 지정 앱 미지원, 취소와
+정상 호스트 종료를 검사하며 receiver의 파일 수신을 별도로 확인한다. Finder 검사는 OS
+요청 접수만 확인하며 실제 선택 UI를 읽지 않는다.
+결과는 `build/macos-opener-results.json`, `build/macos-opener-host-results.json`과 CI 로그에
+기록한다. 별도
 `.github/workflows/macos-opener.yml`이 실제 arm64 검사를 수행하고 기존 CI 작업은 유지한다.
 
 Linux에서 고정 Bun 1.4.2로 계약 검사를 수행했다. 실제 macOS 결과는 해당 head의 CI에서
-확인해야 하며, 공개 호스트 연결과 사용자 화면 검증은 별도 근거가 필요하다.
+확인해야 한다. 초기 네이티브 검사에서는 기본 앱 요청이 `INTERNAL`로 실패했으며,
+독립 handler 조회와 세부 오류로 원인을 검사한다. 성공 assertion을 유지하며 실패한
+네이티브 검사를 지원 근거로 보지 않는다. 사용자 화면 검증도 별도 근거가 필요하다.

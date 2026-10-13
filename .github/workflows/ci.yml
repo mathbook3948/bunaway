@@ -138,6 +138,8 @@ jobs:
       - name: Build native plugin packages
         run: mise run plugins:build
       - name: Build and test real WKWebView host and signed in-place app
+        env:
+          BUNAWAY_OPENER_ISOLATED: '1'
         run: mise exec -- bun --no-env-file tests/lifecycle/run-native.ts --app 2>&1 | tee build/macos-native-logs/host.log
       - name: Upload native test reports and logs
         if: always()
@@ -147,6 +149,8 @@ jobs:
           path: |
             build/macos-io-diagnostics/
             build/macos-io-results.json
+            build/macos-opener-host-results.json
+            build/macos-opener-host-diagnostics/
             build/macos-host-results.json
             build/macos-native-logs/
             build/macos-host-diagnostics/

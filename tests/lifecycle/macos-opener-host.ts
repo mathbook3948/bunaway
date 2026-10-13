@@ -188,8 +188,8 @@ try {
   const code = await launched.exited;
   await output;
   stderr = await errors;
+  assert.equal(code, 0, stderr);
   const report = await Bun.file(resolve(dataRoot, "temp/report.json")).json();
-  assert.equal(code, 0, `${stderr}\n${JSON.stringify(report)}`);
   assert.deepEqual(report, {
     ok: true,
     file: receiver.sample,

@@ -126,10 +126,16 @@ export function createWorkspace(): MacosWorkspace {
   const type = (name: string) =>
     runtime.symbols.objc_getClass(ptr(Buffer.from(`${name}\0`)));
   const string = (value: string) => {
-    const result = object(
-      type("NSString"),
-      "stringWithUTF8String:",
-      BigInt(ptr(Buffer.from(`${value}\0`))),
+    // Resolve metadata before borrowing bytes. Keep the backing buffer in this
+    // frame through the consuming call, rather than passing a raw address to a
+    // helper that allocates/registers another selector first.
+    const receiver = type("NSString");
+    const method = selector("stringWithUTF8String:");
+    const bytes = Buffer.from(`${value}\0`);
+    const result = messages.symbols.object(
+      receiver,
+      method,
+      BigInt(ptr(bytes)),
     );
     if (!result) {
       throw new BunawayError({
