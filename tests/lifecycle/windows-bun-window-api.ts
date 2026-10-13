@@ -367,6 +367,12 @@ if (!process.argv.includes("--child")) {
             continue;
           }
           const event = JSON.parse(line);
+          if (
+            event.event.startsWith("window-api-") ||
+            event.event === "window-close-confirmation"
+          ) {
+            console.log(`Window API stage: ${event.event}`);
+          }
           if (event.event === "webview-ready" && event.view === "editor") {
             editorBrowser = event.browserPid;
           }
