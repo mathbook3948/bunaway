@@ -8,12 +8,25 @@ test.skipIf(process.platform !== "win32")(
       { Windows },
       { user, disposeWin32Bindings },
       { createSessionNotifications },
+      { dlopen },
     ] = await Promise.all([
       import("#native/windows/bun/win32"),
       import("#native/windows/bun/win32-bindings"),
       import("#native/windows/bun/session-notifications"),
+      import("bun:ffi"),
     ]);
     const windows = new Windows(() => {});
+    const driver = dlopen("user32.dll", {
+      SendMessageW: {
+        args: [
+          "u64",
+          "u32",
+          "u64",
+          "i64",
+        ],
+        returns: "i64",
+      },
+    });
     let hwnd: bigint | undefined;
     let sessions: ReturnType<typeof createSessionNotifications> | undefined;
     const failures: unknown[] = [];
@@ -93,9 +106,9 @@ test.skipIf(process.platform !== "win32")(
           8n,
         ],
       ] as const) {
-        expect(
-          user.symbols.PostMessageW(driverWindow, message, parameter, 0n),
-        ).not.toBe(0);
+        // WM_SETTINGCHANGE carries a borrowed pointer in normal use, so Win32 forbids posting it.
+        // Send synchronously with null lparam; plugin callbacks still wait for the post-pump flush.
+        driver.symbols.SendMessageW(driverWindow, message, parameter, 0n);
       }
       windows.pump();
       expect(seen).toEqual([]);
@@ -116,6 +129,7 @@ test.skipIf(process.platform !== "win32")(
     } finally {
       service.dispose();
       windows.dispose();
+      driver.close();
       disposeWin32Bindings();
     }
   },
