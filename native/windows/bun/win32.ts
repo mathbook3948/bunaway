@@ -41,6 +41,11 @@ const WM_WINDOWPOSCHANGING = 0x0046;
 const WM_WINDOWPOSCHANGED = 0x0047;
 const WM_MOUSEACTIVATE = 0x0021;
 const MA_NOACTIVATE = 3n;
+const WM_SYSCOMMAND = 0x0112;
+const SYSTEM_COMMAND_MASK = 0xfff0n;
+const SC_MINIMIZE = 0xf020n;
+const SC_MAXIMIZE = 0xf030n;
+const SC_RESTORE = 0xf120n;
 const WM_DISPLAYCHANGE = 0x007e;
 export const WM_ENTERSIZEMOVE = 0x0231;
 export const WM_EXITSIZEMOVE = 0x0232;
@@ -69,11 +74,13 @@ const SM_CYSIZEFRAME = 33;
 const SM_CXPADDEDBORDER = 92;
 const SW_HIDE = 0;
 const SW_SHOWNORMAL = 1;
+const SW_SHOWNOACTIVATE = 4;
 const SW_MINIMIZE = 6;
 const SW_RESTORE = 9;
 const SW_SHOW = 5;
 const SW_SHOWMAXIMIZED = 3;
 const SW_SHOWMINIMIZED = 2;
+const SW_SHOWMINNOACTIVE = 7;
 const SW_SHOWNA = 8;
 const SWP_FRAMECHANGED = 0x20;
 const SWP_NOMOVE = 0x2;
@@ -85,6 +92,8 @@ const WINDOWPLACEMENT_FLAGS_OFFSET = 4;
 const WINDOWPLACEMENT_SHOW_CMD_OFFSET = 8;
 const WPF_RESTORETOMAXIMIZED = 0x2;
 const WS_OVERLAPPEDWINDOW = 0x00cf0000;
+const WS_MINIMIZEBOX = 0x00020000n;
+const WS_MAXIMIZEBOX = 0x00010000n;
 const WS_MAXIMIZE = 0x01000000n;
 const WS_MINIMIZE = 0x20000000n;
 const IDYES = 6;
@@ -308,6 +317,34 @@ export class Windows {
             !this.isFocusable(window)
           ) {
             return MA_NOACTIVATE;
+          }
+          if (
+            message === WM_SYSCOMMAND &&
+            this.windows.has(window) &&
+            !this.isFocusable(window)
+          ) {
+            const command = wparam & SYSTEM_COMMAND_MASK;
+            if (
+              command === SC_MINIMIZE ||
+              command === SC_MAXIMIZE ||
+              command === SC_RESTORE
+            ) {
+              // Default caption commands use activating ShowWindow modes even with NOACTIVATE.
+              // Keep native button restrictions and leave fullscreen state changes to its API.
+              if (!this.isFullscreen(window)) {
+                const { style } = this.windowStyles(window);
+                if (command === SC_MINIMIZE && style & WS_MINIMIZEBOX) {
+                  this.minimize(window);
+                }
+                if (command === SC_MAXIMIZE && style & WS_MAXIMIZEBOX) {
+                  this.maximize(window);
+                }
+                if (command === SC_RESTORE) {
+                  this.restore(window);
+                }
+              }
+              return 0n;
+            }
           }
           this.windows.get(window)?.(message, wparam, lparam);
           if (message === WM_CLOSE) {
@@ -854,7 +891,41 @@ export class Windows {
       !this.isFullscreen(window),
       "Exit fullscreen before changing window state.",
     );
-    user.symbols.ShowWindow(window, command);
+    if (this.isFocusable(window)) {
+      user.symbols.ShowWindow(window, command);
+    } else {
+      this.changingGeometry.add(window);
+      try {
+        if (minimized) {
+          user.symbols.ShowWindow(window, SW_SHOWMINNOACTIVE);
+        } else {
+          const placement = this.getPlacement(window);
+          const { style } = this.windowStyles(window);
+          this.setStyle(
+            window,
+            (style & ~WS_MINIMIZE & ~WS_MAXIMIZE) |
+              (maximized ? WS_MAXIMIZE : 0n),
+          );
+          placement.writeUInt32LE(
+            maximized ? SW_SHOWMAXIMIZED : SW_SHOWNOACTIVATE,
+            WINDOWPLACEMENT_SHOW_CMD_OFFSET,
+          );
+          if (!maximized) {
+            placement.writeUInt32LE(
+              placement.readUInt32LE(WINDOWPLACEMENT_FLAGS_OFFSET) &
+                ~WPF_RESTORETOMAXIMIZED,
+              WINDOWPLACEMENT_FLAGS_OFFSET,
+            );
+          }
+          // A zoomed HWND uses SHOWNA plus an explicit work-area resize. Normal restoration
+          // uses SHOWNOACTIVATE so neither transition calls the OS foreground activator.
+          this.setPlacement(window, placement, true, maximized);
+        }
+      } finally {
+        this.changingGeometry.delete(window);
+        this.observeChanges(window);
+      }
+    }
     assert(
       this.isVisible(window) &&
         this.isMinimized(window) === minimized &&

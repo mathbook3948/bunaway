@@ -199,8 +199,23 @@ if (!process.argv.includes("--child")) {
           nativeWindows.show(hwnd, true);
           assert.equal(user.symbols.GetForegroundWindow(), foreground);
           nativeWindows.maximize(hwnd);
-          nativeWindows.unmaximize(hwnd);
+          assert.equal(nativeWindows.isMaximized(hwnd), true);
           assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          nativeWindows.unmaximize(hwnd);
+          assert.deepEqual(nativeWindows.getBounds(hwnd, "outer"), original);
+          assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          for (const command of [
+            0xf020n,
+            0xf120n,
+            0xf030n,
+            0xf120n,
+          ]) {
+            driver.symbols.SendMessageW(hwnd, 0x0112, command, 0n);
+            assert.equal(nativeWindows.isMinimized(hwnd), command === 0xf020n);
+            assert.equal(nativeWindows.isMaximized(hwnd), command === 0xf030n);
+            assert.equal(user.symbols.GetForegroundWindow(), foreground);
+          }
+          assert.deepEqual(nativeWindows.getBounds(hwnd, "outer"), original);
           nativeWindows.setFullscreen(hwnd, true);
           nativeWindows.setFocusable(hwnd, true);
           nativeWindows.setFocusable(hwnd, false);
