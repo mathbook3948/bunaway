@@ -46,6 +46,7 @@ const { default: app } = await import("./app.js");
 parentPort.postMessage(await app.read());
 parentPort.close();`,
       );
+      await Bun.write(resolve(host, "host-operations.ts"), "export {};\n");
       const text = "backend 한글 😀";
       const binary = Buffer.from([
         0,

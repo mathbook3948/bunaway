@@ -150,6 +150,7 @@ async function bundleTestHost(
   const build = await Bun.build({
     entrypoints: [
       resolve(import.meta.dir, "../../native/macos/bun/entry.ts"),
+      resolve(import.meta.dir, "../../native/macos/bun/host-operations.ts"),
     ],
     target: "bun",
     outdir: directory,
@@ -1143,12 +1144,29 @@ test("macOS shutdown cancels setup Host calls before waiting for plugin cleanup"
 }, 15000);
 
 test.each([
-  "input",
-  "output",
-  "execution",
+  {
+    execution: "ui",
+    phase: "input",
+  },
+  {
+    execution: "ui",
+    phase: "output",
+  },
+  {
+    execution: "ui",
+    phase: "execution",
+  },
+  {
+    execution: "io",
+    phase: "input",
+  },
+  {
+    execution: "io",
+    phase: "output",
+  },
 ] as const)(
-  "macOS cancelled %s releases request and channel capacity before settlement",
-  async (phase) => {
+  "macOS cancelled $execution $phase releases request and channel capacity before settlement",
+  async ({ execution, phase }) => {
     const directory = await mkdtemp(resolve(tmpdir(), "bunaway-macos-cancel-"));
     try {
       const marker = resolve(directory, "started.txt");
@@ -1174,7 +1192,11 @@ test.each([
         const plugin = defineNativePlugin({ name:"parser", operations:{run:{
           input: phase === "input" ? z.string().transform(pause) : z.string(),
           output: phase === "output" ? z.string().transform(pause) : z.string(),
-        }}, platforms:{macos:{execution:"ui",create:()=>({
+        }}, platforms:{macos:{execution:${JSON.stringify(execution)},create:()=>({
+          execute(_name,input) {
+            if(input === "release") for(const release of gates.splice(0)) release();
+            return input;
+          },
           async executeUI(_name,input) {
             if(input === "release") for(const release of gates.splice(0)) release();
             return phase === "execution" ? pause(input) : input;
@@ -1199,7 +1221,7 @@ test.each([
           native,
           targets: {
             macos: {
-              execution: "ui",
+              execution,
               operations,
             },
           },
