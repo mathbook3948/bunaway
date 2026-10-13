@@ -82,7 +82,11 @@ import { writeFileSync } from "node:fs";
 export const pluginImports = { image: { operations: async () => ({ createOperations(environment) {
   const adapter = imageDefinition.nativePlatforms.windows.create(environment);
   return { ...adapter, busy: () => true, async executeUI(name, input, source, context) {
-    const result = await adapter.executeUI(name, input, source, context);
+    console.log(JSON.stringify({ event: "image-test-operation", name, phase: "begin" }));
+    let result;
+    try { result = await adapter.executeUI(name, input, source, context); }
+    catch (error) { console.log(JSON.stringify({ event: "image-test-operation", name, phase: "error", error: String(error) })); throw error; }
+    console.log(JSON.stringify({ event: "image-test-operation", name, phase: "done" }));
     // Hold one allocated result so the real host can cancel before delivery.
     if (name === "image.createRGBA" && input.rgba === "CAcGBQ==") {
       writeFileSync(${JSON.stringify(createdPath)}, "created");
@@ -99,9 +103,26 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
       worker = new Worker(pathToFileURL(resolve(root, "ui.js")), {
         workerData: config,
       });
+      function failPending(error: unknown) {
+        fatal = error;
+        for (const finish of [
+          ...pending.values(),
+        ]) {
+          finish({
+            kind: "error",
+            error: {
+              code: "INTERNAL",
+              message: String(error).slice(0, 500),
+            },
+          });
+        }
+      }
       const exited = new Promise<number>((done, fail) => {
         worker?.once("exit", done);
-        worker?.once("error", fail);
+        worker?.once("error", (error) => {
+          failPending(error);
+          fail(error);
+        });
       });
       let readyResolve = () => {};
       const ready = new Promise<void>((done) => {
@@ -127,12 +148,12 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
           } else if (packet.kind === "cleaned") {
             cleaned = true;
           } else if (packet.kind === "fatal") {
-            fatal = packet.error;
+            failPending(packet.error);
             readyResolve();
           }
         },
         (error) => {
-          fatal = error;
+          failPending(error);
           readyResolve();
         },
       );
