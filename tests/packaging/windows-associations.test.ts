@@ -596,6 +596,10 @@ test.skipIf(!iscc)(
           fileProgId,
         ),
       ).toBe("");
+    } catch (error) {
+      // Retain the actual assertion or installer failure if fixture cleanup also fails.
+      console.error(error);
+      throw error;
     } finally {
       await uninstall();
       for (const key of [
@@ -607,7 +611,7 @@ test.skipIf(!iscc)(
         `Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\${extension}`,
       ]) {
         await powershell(
-          `[Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree(${quote(key)},$false)`,
+          `$key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(${quote(key)}); if ($key) { $key.Dispose(); [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree(${quote(key)},$false) }`,
         );
       }
       await powershell(
