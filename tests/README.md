@@ -718,3 +718,21 @@ Linux에서도 실행하며 실제 AppKit은 대체한다.
 `macos-bun.test.ts`는 진행 중인 백엔드 I/O의 abort를 기다리는 StopHook도 실제
 Worker로 검사한다. 종료 요청이 I/O 취소를 먼저 전달하고 코어 훅 뒤에 어댑터를
 폐기해 강제 종료 없이 끝나는지 확인한다. 실제 WKWebView fixture도 같은 순서를 검사한다.
+
+`lifecycle/macos-image.test.ts`는 macOS arm64의 실제 ImageIO, CoreGraphics와 vImage로
+PNG alpha 및 투명 RGB 왕복, grayscale과 palette PNG, JPEG/BMP, malformed와 큰 decode 입력,
+transform, 독립 어댑터 ID, quota, 취소와 반복 종료를 검사한다. 다른 OS에서는 건너뛴다.
+`cli/image.test.ts`는 image tarball의 isolated 설치와 플랫폼 출력 분리를 검사하며 macOS arm64에서
+설치된 codec을 실제로 실행한다. `.github/workflows/macos-image.yml`은 이 검사와 기존
+entitlement로 ad-hoc 서명한 compiled fixture를 실행하고 `build/macos-image-results.json`을 보관한다.
+이 단독 codec 검사는 공통 SDK와 실제 호스트 연결, WKWebView 표시나 다른 앱의
+가져오기 검증과 구분한다.
+
+`lifecycle/macos-image-host.ts`는 actual compiled 호스트와 WKWebView 명령에서 공개
+backend SDK의 image I/O 호출과 setup, codec, crop/resize, 동일 ID의 작업별 뷰 권한,
+해제 및 정상 종료를 검사한다. 실제 image 어댑터가 ID를 할당한 뒤 I/O Worker를 동기적으로
+지연시켜, 결과 전달 전 취소가 미전달 ID를 해제하는지 확인한다. 할당 marker는
+매 poll마다 새 `Bun.file()`로 확인해 파일 생성 전의 부재 상태를 재사용하지 않는다.
+`build/macos-image-host-results.json`을 기록하며 성공을 요구한다. `run-native.ts`의
+macOS 실행에 포함하며 실제 contextual I/O dispatch를 사용한다. Native codec CI와
+이 호스트 검증을 구분한다.
