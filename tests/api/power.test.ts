@@ -181,6 +181,44 @@ test("power operations validate blocker inputs and grant queries independently o
   });
 });
 
+test("power blocker reason boundaries count Unicode code points, including supplementary and combining characters", async () => {
+  for (const reason of [
+    "😀",
+    "x".repeat(512),
+    "😀".repeat(512),
+    "e\u0301".repeat(256),
+  ]) {
+    const payload = {
+      type: "system",
+      reason,
+    };
+    expect(
+      (
+        await parsers.validateCall({
+          operation: "power.startBlocker",
+          payload,
+        })
+      ).payload,
+    ).toEqual(payload);
+  }
+  for (const reason of [
+    "😀".repeat(513),
+    `${"e\u0301".repeat(256)}😀`,
+  ]) {
+    await expect(
+      parsers.validateCall({
+        operation: "power.startBlocker",
+        payload: {
+          type: "system",
+          reason,
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+  }
+});
+
 test("duplicate blocker starts remain independent; capacity, failed activation and retryable cleanup preserve ownership", () => {
   let sequence = 0n;
   let failStart = false;
