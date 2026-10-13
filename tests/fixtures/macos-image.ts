@@ -605,6 +605,84 @@ export async function verifyMacosImage(
         ]).toString("base64"),
       },
     );
+    // Distinct rows and columns verify that native drawing preserves the top-to-bottom RGBA order.
+    const cornerBytes = Buffer.from([
+      255,
+      0,
+      0,
+      255,
+      0,
+      255,
+      0,
+      255,
+      0,
+      0,
+      255,
+      255,
+      255,
+      255,
+      0,
+      255,
+    ]);
+    const corners = await resource("createRGBA", {
+      width: 2,
+      height: 2,
+      rgba: cornerBytes.toString("base64"),
+    });
+    const larger = await resource("resize", {
+      id: corners,
+      width: 4,
+      height: 4,
+    });
+    const largerPixels = await call("getPixels", {
+      id: larger,
+    });
+    assert(
+      largerPixels &&
+        typeof largerPixels === "object" &&
+        !Array.isArray(largerPixels) &&
+        typeof largerPixels.rgba === "string",
+    );
+    const largerBytes = Buffer.from(largerPixels.rgba, "base64");
+    for (const [outputOffset, sourceOffset] of [
+      [
+        0,
+        0,
+      ],
+      [
+        12,
+        4,
+      ],
+      [
+        48,
+        8,
+      ],
+      [
+        60,
+        12,
+      ],
+    ]) {
+      assert.deepEqual(
+        largerBytes.subarray(outputOffset, (outputOffset ?? 0) + 4),
+        cornerBytes.subarray(sourceOffset, (sourceOffset ?? 0) + 4),
+      );
+    }
+    assert.deepEqual(
+      await call("getPixels", {
+        id: corners,
+      }),
+      {
+        width: 2,
+        height: 2,
+        rgba: cornerBytes.toString("base64"),
+      },
+    );
+    await call("dispose", {
+      id: corners,
+    });
+    await call("dispose", {
+      id: larger,
+    });
     // A real midpoint must blend. A solid-color test alone cannot distinguish nearest sampling.
     for (const edgeCase of [
       {
