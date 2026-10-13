@@ -450,9 +450,11 @@ CI의 `mise run host:windows`에서 SDK와 UI Worker, Win32를 연결해 실행�
 - [ ] 커서의 화면 좌표와 physical/logical 좌표 변환을 제공한다.
 - [ ] system/light/dark 테마를 앱과 창에 지정하고 조회한다.
 - [ ] 테마, accent color와 시스템 색 변경을 알린다.
-- [ ] 고대비, forced colors, inverted colors 상태를 조회한다.
-- [ ] reduced motion과 transparency 등 접근성 환경설정을 조회한다.
-- [ ] 스크린 리더와 접근성 활성 상태, 변경 이벤트를 제공한다.
+- [x] Windows 고대비와 OS forced colors 플래그, 시스템 색을 조회한다.
+- [ ] inverted colors 상태를 조회한다.
+- [x] Windows client-area animation 기준 reduced motion과 저장된 transparency 선호를 조회한다.
+- [x] Windows SPI_GETSCREENREADER 설정 플래그를 조회한다. 실제 접근성 트리 활성 여부와는 구분한다.
+- [ ] 스크린 리더와 접근성 트리 활성 상태, 변경 이벤트를 제공한다.
 - [ ] 접근성 지원 활성화와 비활성화를 제어하고 지원 기능을 선택, 조회한다. [E-app-live]의
   `setAccessibilitySupportEnabled`, `getAccessibilitySupportFeatures`, `setAccessibilitySupportFeatures`를 참고한다.
   초기 상태, OS 자동 감지와 명시 설정의 관계, 호출 가능 시점, 빈 목록과 잘못된 기능명을 정의한다.
@@ -464,6 +466,13 @@ CI의 `mise run host:windows`에서 SDK와 UI Worker, Win32를 연결해 실행�
 - [ ] 시스템 절전과 화면 꺼짐을 방지하는 blocker를 시작, 조회하고 해제한다.
 - [ ] blocker의 중복 요청과 앱 종료 자동 정리를 처리한다.
 - [ ] CPU speed-limit, thermal-state와 종료 이벤트의 플랫폼별 지원을 정의한다.
+
+`@bunaway/plugin-appearance`의 getPreferences로 저장된 앱 및 시스템 테마 선호,
+DWM accent와 시스템 색, 접근성 플래그를 조회한다. theme와 transparency의 누락 또는
+알 수 없는 DWORD는 null이다. [appearance API](./site/src/content/docs/reference/plugins/appearance.mdx)를 따른다.
+조회 구현과 실제 Windows 회귀를 추가했으며 테마 지정, 변경 이벤트, 접근성 지원 제어와
+WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
+창별 테마 지정은 공유 WebView 프로필의 색 선호와 창별 override 관계를 결정해야 한다.
 
 ## 14. WebView 생성, 배치와 기본 제어
 
@@ -741,7 +750,8 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 - [x] 이벤트 구독, 해제, broadcast와 지정 뷰 전달을 제공한다.
 - [x] 권한, 취소, deadline과 종료된 세션의 늦은 응답 처리를 제공한다.
 - [x] 기본 WebView 연결을 공유하고 HMR과 pagehide에서 수명을 관리한다.
-- [ ] once 구독과 대상 창, WebView, backend 이벤트 전달의 공개 계약을 제공한다.
+- [x] `client.once`와 직접 `once`로 첫 유효 이벤트를 한 번만 전달하고 자동 해제한다. 권한, 취소와 오류 계약은 기존 구독을 따른다.
+- [ ] 대상 창, WebView, backend 이벤트 전달의 공개 계약을 제공한다.
 - [x] Windows의 `windows.changed` native 이벤트를 동일한 typed 구독 API로 전달한다.
 - [ ] binary payload와 JSON 외 데이터의 전송 계약을 추가한다.
 - [ ] 연속 결과와 대용량 데이터의 channel 또는 stream 전송을 제공한다.
