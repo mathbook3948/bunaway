@@ -408,6 +408,34 @@ async function main(): Promise<void> {
       await Bun.file(resolve(root, "outside/escaped.bin")).exists(),
       false,
     );
+    const occupied = api.symbols.CreateFileW(
+      ptr(wide(copySource)),
+      0x40000000,
+      7,
+      null,
+      3,
+      0,
+      0n,
+    );
+    assert(occupied && occupied !== 0xffffffffffffffffn);
+    try {
+      // A real competing writer is a sharing failure, not an existing-destination error.
+      assert.throws(
+        () =>
+          transfer(
+            "storage.copyFile",
+            copySource,
+            temporaryPath("busy-copy.bin"),
+          ),
+        /\(32\)$/,
+      );
+      assert.equal(
+        call("storage.exists", temporaryPath("busy-copy.bin")),
+        false,
+      );
+    } finally {
+      assert(api.symbols.CloseHandle(occupied));
+    }
     const oversized = temporaryPath("oversized.bin");
     await writeFile(oversized, Buffer.alloc(4 * 1024 * 1024 + 1));
     expectError(

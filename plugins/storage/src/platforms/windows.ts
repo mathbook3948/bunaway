@@ -729,6 +729,26 @@ export class WindowsStorage {
               message: "Move source and destination are the same.",
             });
           }
+          // Windows can report a sharing violation before a no-replace name collision.
+          // Recognize a checked existing target explicitly; a later race still cannot replace it.
+          const exists = this.withFile(
+            input.to,
+            {
+              access: FILE_READ_ATTRIBUTES | FILE_READ_DATA,
+              share: FILE_SHARE_READ | FILE_SHARE_WRITE,
+              disposition: OPEN_EXISTING,
+              allowDirectories: true,
+              allowMissing: true,
+              createParents: false,
+            },
+            () => true,
+          );
+          if (exists) {
+            throw new BunawayError({
+              code: "INVALID_ARGUMENT",
+              message: "Storage destination already exists.",
+            });
+          }
           // Win32 rejects the relative RootDirectory form on Windows Server 2022.
           // All destination parents remain pinned while its handle-derived absolute name is used.
           const name = Buffer.from(destination.target, "utf16le");
