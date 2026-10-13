@@ -191,6 +191,21 @@ if (target === "windows-x64") {
     await test("macos-webview-regressions.ts");
     await test("macos-window-api.ts");
     await test("macos-io-host.ts");
+    await run(
+      [
+        inputs.bun,
+        "--no-env-file",
+        "test",
+        resolve(root, "tests/lifecycle/macos-clipboard-native.test.ts"),
+      ],
+      root,
+      {
+        BUNAWAY_CLIPBOARD_NATIVE: "1",
+      },
+    );
+    await test("macos-clipboard-webview.ts", [], {
+      BUNAWAY_CLIPBOARD_NATIVE: "1",
+    });
     await test("macos-host.ts", [
       "--package",
       output,
