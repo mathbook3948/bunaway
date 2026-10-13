@@ -140,6 +140,11 @@ Old.exe에서 New.exe로 바꾸는 업데이트의 OpenWith 삭제를 거부하�
 연결 작업과 이전 등록이 없을 때 복구 기록 없이 성공해야 하며, 일반 업데이트의 선언 제거와 작업 해제는
 이전 등록 정리를 계속 확인한다.
 기본 앱 UI 선택과 실제 링크 클릭은 자동 검사에 포함하지 않는다.
+등록 변경 뒤 payload 삭제 실패 회귀는 실제 Windows 파일 핸들에서 delete sharing을 제외한다.
+두 번의 실패 후에도 복구 소유자가 이전 EXE를 가리키는지 확인하고, 핸들을 닫은 뒤 재시도나
+새 제거 프로그램이 이전 파일과 현재 파일을 정리하는지 검사한다. dummy EXE의 파일 잠금을
+소유한 검사 프로세스를 Restart Manager가 닫지 않도록 이 설치 fixture만 `CloseApplications=no`로
+실행한다. 별도 제거 회귀는 다른 폴더의 이전 파일과 junction을 통해 접근하는 이전 파일을 보존한다.
 
 `windows-initial-placement.fixture.ts`는 모니터 겹침이 바뀌는 `SetWindowPos`에서
 실제 창 프로시저에 `WM_DPICHANGED`를 전달한다. 초기 DPI 보정의 수렴, 중앙 좌표와

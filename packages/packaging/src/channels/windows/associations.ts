@@ -259,10 +259,7 @@ begin
   PreflightAssociations;
   // Installers without uninstall info do not run RegisterPreviousData.
   // No selected candidate and no prior snapshot means there is nothing to persist.
-  if ${selectedTasks ? `not (${selectedTasks}) and ` : ""}not RegKeyExists(AssociationHive, AssociationRoot) then begin
-    if PendingAssociationDataSaved then ClearPendingAssociationOwner;
-    Exit;
-  end;
+  if ${selectedTasks ? `not (${selectedTasks}) and ` : ""}not RegKeyExists(AssociationHive, AssociationRoot) then Exit;
   if not PendingAssociationDataSaved then
     RaiseException('Could not persist pending association owner.');
   // Updates remove the previous snapshot, including declarations no longer
@@ -299,7 +296,6 @@ ${registration}
   end;`
       : ""
   }
-  ClearPendingAssociationOwner;
 end;
 `;
 }

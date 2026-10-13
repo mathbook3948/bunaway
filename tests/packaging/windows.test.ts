@@ -1236,7 +1236,9 @@ test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data pol
   expect(perUser).toContain(
     "RaiseException('Could not remove previous app executable: ' + Path);",
   );
-  expect(perUser).toContain("RemovePreviousExecutable;");
+  expect(perUser).toContain(
+    "RemovePreviousExecutable(PreviousExecutableName, PreviousInstallDir);",
+  );
   expect(perUser).toContain("Arguments := Link.Arguments;");
   expect(perUser).toContain("Link.Arguments := Arguments;");
   expect(perUser).not.toContain("PruneShortcuts");

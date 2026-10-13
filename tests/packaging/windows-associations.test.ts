@@ -1,7 +1,14 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  realpath,
+  rename,
+  rm,
+  symlink,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { type ChannelConfig, parsePackaging } from "@bunaway/packaging";
 import { openRequest } from "#native/windows/bun/desktop";
 import { findIscc, must, stableGuid } from "#packaging/channels/windows/common";
@@ -269,6 +276,56 @@ test("association installer tasks are unchecked and quote executable and argumen
   );
 });
 
+/** Hold a real Windows handle without delete sharing until the caller releases it. */
+async function preventFileDeletion(path: string) {
+  const { dlopen, ptr } = await import("bun:ffi");
+  const GENERIC_READ = 0x80000000;
+  const FILE_SHARE_READ_WRITE = 0x3;
+  const OPEN_EXISTING = 3;
+  const INVALID_HANDLE_VALUE = 0xffffffffffffffffn;
+  const library = dlopen("kernel32.dll", {
+    CreateFileW: {
+      args: [
+        "ptr",
+        "u32",
+        "u32",
+        "ptr",
+        "u32",
+        "u32",
+        "u64",
+      ],
+      returns: "u64",
+    },
+    CloseHandle: {
+      args: [
+        "u64",
+      ],
+      returns: "i32",
+    },
+  });
+  const filename = Buffer.from(`${path}\0`, "utf16le");
+  const handle = library.symbols.CreateFileW(
+    ptr(filename),
+    GENERIC_READ,
+    FILE_SHARE_READ_WRITE,
+    null,
+    OPEN_EXISTING,
+    0,
+    0n,
+  );
+  if (handle === 0n || handle === INVALID_HANDLE_VALUE) {
+    library.close();
+    throw new Error(`Could not lock fixture against deletion: ${path}`);
+  }
+  return () => {
+    try {
+      expect(library.symbols.CloseHandle(handle)).not.toBe(0);
+    } finally {
+      library.close();
+    }
+  };
+}
+
 async function createNativeAssociationFixture(compiler: string) {
   const root = await realpath(
     await mkdtemp(join(tmpdir(), "bunaway-associations-")),
@@ -365,7 +422,7 @@ async function createNativeAssociationFixture(compiler: string) {
     executable: string,
     config: ChannelConfig["associations"],
     tasks?: string,
-    failure?: "collision" | "write" | "cleanup",
+    failure?: "collision" | "write" | "cleanup" | "payload-cleanup",
     fault?: "icon" | "mapping",
   ) {
     const staging = join(root, version);
@@ -378,6 +435,14 @@ async function createNativeAssociationFixture(compiler: string) {
     await Bun.write(join(payload, executable), "installer payload fixture");
     const iss = join(staging, "setup.iss");
     let rendered = script(identifier, payload, output, executable, config);
+    if (failure === "payload-cleanup") {
+      // The dummy EXE cannot run. Keep Restart Manager from closing the test
+      // process that owns the deliberate no-delete-sharing handle.
+      rendered = rendered.replace(
+        "CloseApplications=yes",
+        "CloseApplications=no",
+      );
+    }
     if (fault) {
       // Test-only injection creates a real ACL denial at the precise native
       // write boundary, after preflight. No production binding is mocked.
@@ -443,7 +508,9 @@ async function createNativeAssociationFixture(compiler: string) {
           ? "App association is owned by a different command"
           : failure === "cleanup"
             ? "Could not remove app association value"
-            : "Could not register app association",
+            : failure === "payload-cleanup"
+              ? "Could not remove previous app executable"
+              : "Could not register app association",
       );
     } else if (exitCode !== 0) {
       throw new Error(
@@ -789,6 +856,12 @@ test.skipIf(!iscc)(
           );
         }
         await uninstall();
+        expect(await Bun.file(join(installDir, "Old.exe")).exists()).toBe(
+          false,
+        );
+        expect(await Bun.file(join(installDir, "New.exe")).exists()).toBe(
+          false,
+        );
         expect(await query(associationRoot, "Executable")).toBe("MISSING");
         expect(
           await query(`Software\\Classes\\${fileProgId}\\shell\\open\\command`),
@@ -813,6 +886,180 @@ test.skipIf(!iscc)(
       throw error;
     } finally {
       await cleanup();
+    }
+  },
+  120000,
+);
+
+test.skipIf(!iscc)(
+  "native payload cleanup retains its predecessor after reconciliation until retry or uninstall",
+  async () => {
+    if (!iscc) {
+      throw new Error("ISCC is required.");
+    }
+    const fixture = await createNativeAssociationFixture(iscc);
+    const {
+      installDir,
+      declarations,
+      associationRoot,
+      previousDataKey,
+      fileProgId,
+      query,
+      install,
+      uninstall,
+      cleanup,
+    } = fixture;
+    try {
+      for (const outcome of [
+        "retry",
+        "uninstall",
+      ] as const) {
+        await install(
+          `old-payload-${outcome}`,
+          "Old.exe",
+          declarations,
+          "fileassociations,urlschemes",
+        );
+        const oldExecutable = join(installDir, "Old.exe");
+        const release = await preventFileDeletion(oldExecutable);
+        try {
+          for (const attempt of [
+            "first",
+            "again",
+          ] as const) {
+            await install(
+              `new-payload-${outcome}-${attempt}`,
+              "New.exe",
+              declarations,
+              "fileassociations,urlschemes",
+              "payload-cleanup",
+            );
+            // Registry reconciliation really completed before the native delete failed.
+            expect(await query(associationRoot, "Executable")).toBe(
+              join(installDir, "New.exe"),
+            );
+            expect(
+              await query(
+                `Software\\Classes\\${fileProgId}\\shell\\open\\command`,
+              ),
+            ).toBe(`"${join(installDir, "New.exe")}" "%1"`);
+            expect(
+              await query(
+                previousDataKey,
+                "Inno Setup CodeFile: ExecutableName",
+              ),
+            ).toBe("New.exe");
+            expect(
+              await query(
+                previousDataKey,
+                "Inno Setup CodeFile: PendingAssociationOwner",
+              ),
+            ).toBe(oldExecutable);
+            expect(await Bun.file(oldExecutable).exists()).toBe(true);
+          }
+        } finally {
+          release();
+        }
+        if (outcome === "retry") {
+          await install(
+            "new-payload-restored",
+            "New.exe",
+            declarations,
+            "fileassociations,urlschemes",
+          );
+          expect(
+            await query(
+              previousDataKey,
+              "Inno Setup CodeFile: PendingAssociationOwner",
+            ),
+          ).toBe("");
+          expect(await Bun.file(oldExecutable).exists()).toBe(false);
+        }
+        await uninstall();
+        expect(await Bun.file(oldExecutable).exists()).toBe(false);
+        expect(await Bun.file(join(installDir, "New.exe")).exists()).toBe(
+          false,
+        );
+        expect(await query(associationRoot, "Executable")).toBe("MISSING");
+      }
+    } finally {
+      await cleanup();
+    }
+  },
+  120000,
+);
+
+test.skipIf(!iscc)(
+  "native uninstall preserves predecessor paths outside its directory or through a junction",
+  async () => {
+    if (!iscc) {
+      throw new Error("ISCC is required.");
+    }
+    for (const protection of [
+      "other-directory",
+      "junction",
+    ] as const) {
+      const fixture = await createNativeAssociationFixture(iscc);
+      const {
+        installDir,
+        declarations,
+        previousDataKey,
+        query,
+        write,
+        install,
+        uninstall,
+        cleanup,
+      } = fixture;
+      try {
+        await install(
+          "old-protected",
+          "Old.exe",
+          declarations,
+          "fileassociations,urlschemes",
+        );
+        const oldExecutable = join(installDir, "Old.exe");
+        const release = await preventFileDeletion(oldExecutable);
+        try {
+          await install(
+            "new-protected",
+            "New.exe",
+            declarations,
+            "fileassociations,urlschemes",
+            "payload-cleanup",
+          );
+          expect(
+            await query(
+              previousDataKey,
+              "Inno Setup CodeFile: PendingAssociationOwner",
+            ),
+          ).toBe(oldExecutable);
+        } finally {
+          release();
+        }
+        let protectedExecutable: string;
+        if (protection === "other-directory") {
+          protectedExecutable = join(dirname(installDir), "foreign", "Old.exe");
+          await Bun.write(protectedExecutable, "foreign payload");
+          await write(
+            previousDataKey,
+            "Inno Setup CodeFile: PendingAssociationOwner",
+            protectedExecutable,
+          );
+        } else {
+          const redirectedDir = join(dirname(installDir), "redirected");
+          await rename(installDir, redirectedDir);
+          await symlink(redirectedDir, installDir, "junction");
+          protectedExecutable = join(redirectedDir, "Old.exe");
+        }
+        await uninstall();
+        expect(await Bun.file(protectedExecutable).text()).toBe(
+          protection === "other-directory"
+            ? "foreign payload"
+            : "installer payload fixture",
+        );
+      } finally {
+        await cleanup();
+      }
     }
   },
   120000,
