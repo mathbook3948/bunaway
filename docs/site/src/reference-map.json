@@ -336,8 +336,20 @@
           "revealFile",
           "openFileWith",
           "openUrlWith",
+          "trashFile",
           "openerPlugin"
         ]
+      }
+    },
+    {
+      "name": "@bunaway/plugin-safe-storage",
+      "source": "plugins/safe-storage/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/safe-storage": ["safeStorage", "safeStoragePlugin"]
       }
     },
     {
@@ -550,6 +562,7 @@
       "type": "NativeWindow",
       "pages": {
         "reference/tooling/plugin-api": [
+          "showPrintUI",
           "downloads",
           "webview",
           "audio",
@@ -566,6 +579,8 @@
           "isEnabled",
           "setFocusable",
           "isFocusable",
+          "setTitle",
+          "getTitle",
           "setResizable",
           "isResizable",
           "setMovable",
@@ -1032,7 +1047,15 @@
       "opener.openFile",
       "opener.revealFile",
       "opener.openFileWith",
-      "opener.openUrlWith"
+      "opener.openUrlWith",
+      "opener.trashFile"
+    ],
+    "reference/plugins/safe-storage": [
+      "safe-storage.isAvailable",
+      "safe-storage.encryptString",
+      "safe-storage.decryptString",
+      "safe-storage.encryptBytes",
+      "safe-storage.decryptBytes"
     ],
     "reference/plugins/clipboard": [
       "clipboard.readText",
@@ -1046,6 +1069,7 @@
       "clipboard.writeFormats"
     ],
     "reference/host/windows": [
+      "windows.showPrintUI",
       "windows.setDownloadRequestsEnabled",
       "windows.getDownloads",
       "windows.approveDownload",
@@ -1098,6 +1122,8 @@
       "windows.isEnabled",
       "windows.setFocusable",
       "windows.isFocusable",
+      "windows.setTitle",
+      "windows.getTitle",
       "windows.setResizable",
       "windows.isResizable",
       "windows.setMovable",

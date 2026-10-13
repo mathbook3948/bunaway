@@ -116,6 +116,7 @@ const MONITORINFO_SIZE = 40;
 const RECT_SIZE = 16;
 const WINDOWPLACEMENT_SIZE = 44;
 const WINDOWPOS_SIZE = 40;
+const MAX_WINDOW_TITLE_LENGTH = 1024;
 
 type SizeConstraints = Partial<WindowSizeConstraints>;
 type ClientSize = {
@@ -803,6 +804,46 @@ export class Windows {
           SWP_FRAMECHANGED,
       ),
     );
+  }
+
+  /** Apply a UTF-16 native caption without activating, showing or resizing the window. */
+  setTitle(window: bigint, title: string): void {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    assert(
+      withWide(title, (text) => user.symbols.SetWindowTextW(window, text)),
+      `SetWindowTextW: ${kernel.symbols.GetLastError()}`,
+    );
+  }
+
+  /** Read live native text with a fixed bound; empty captions are valid native query results. */
+  getTitle(window: bigint): string {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    kernel.symbols.SetLastError(0);
+    const length = user.symbols.GetWindowTextLengthW(window);
+    const lengthError = kernel.symbols.GetLastError();
+    assert(
+      length !== 0 || lengthError === 0,
+      `GetWindowTextLengthW: ${lengthError}`,
+    );
+    assert(
+      length <= MAX_WINDOW_TITLE_LENGTH,
+      "Native window title exceeds the supported length.",
+    );
+    // One extra code unit detects a caption growing between the length query and copy.
+    const text = Buffer.alloc((MAX_WINDOW_TITLE_LENGTH + 2) * 2);
+    kernel.symbols.SetLastError(0);
+    const copied = user.symbols.GetWindowTextW(
+      window,
+      ptr(text),
+      MAX_WINDOW_TITLE_LENGTH + 2,
+    );
+    const error = kernel.symbols.GetLastError();
+    assert(copied !== 0 || error === 0, `GetWindowTextW: ${error}`);
+    assert(
+      copied <= MAX_WINDOW_TITLE_LENGTH,
+      "Native window title exceeds the supported length.",
+    );
+    return text.toString("utf16le", 0, copied * 2);
   }
 
   /** Read the resize style restored after fullscreen, rather than the borderless fullscreen style. */

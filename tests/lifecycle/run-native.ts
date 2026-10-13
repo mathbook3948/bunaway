@@ -61,6 +61,7 @@ if (target === "windows-x64") {
     }
     await test("windows-cli-arguments.ts");
     await test("windows-bun-window-api.ts");
+    await test("windows-webview-print-ui.ts");
     await test("windows-webview-downloads.ts");
     await test("windows-webview-controls.ts");
     await test("windows-webview-audio.ts");
@@ -89,6 +90,17 @@ if (target === "windows-x64") {
       {
         BUNAWAY_CLIPBOARD_NATIVE: "1",
       },
+    );
+    // Shell recycling can retain process-wide COM workers after STA disposal.
+    // Isolate its native test so opener probes keep their fresh-process invariant.
+    await run(
+      [
+        inputs.bun,
+        "--no-env-file",
+        "test",
+        resolve(root, "tests/lifecycle/windows-trash.test.ts"),
+      ],
+      root,
     );
     await run(
       [
@@ -147,6 +159,7 @@ if (target === "windows-x64") {
     for (const name of [
       "windows-bun-storage.ts",
       "windows-storage-metadata.ts",
+      "windows-safe-storage.ts",
       "windows-bun-cli.ts",
       "windows-app-reload.ts",
     ]) {

@@ -43,6 +43,11 @@ normal의 WINDOWPLACEMENT 작업 영역 좌표는 화면 좌표로 보정한다.
 `com.ts`는 COM 참조와 콜백을, `webview.ts`는 WebView 생성과 종료를 관리한다.
 `ui.ts`가 이 자원들의 초기화와 정리 순서를 조정한다. DLL은 창과 COM 정리가 끝난 뒤 닫는다.
 
+인쇄 UI 작업은 `NativeWindow.showPrintUI`로 같은 UI 스레드의 ICoreWebView2_16
+ShowPrintUI를 호출한다. optional QueryInterface는 E_NOINTERFACE만 미지원으로 반환하며
+다른 HRESULT 실패는 기존 오류 경로를 유지한다. 현재 작업은 browser 또는 system UI의
+시작 요청만 제공하고 프린터 선택과 실제 제출, 인쇄 완료는 사용자와 브라우저가 소유한다.
+
 DownloadCleanupError는 해당 창의 취소 실패를 나타내며 UI pump의 전체 실패로 전달하지 않는다.
 닫힌 소유자의 controller와 다운로드 참조를 유지하고 50 ms 간격으로 기존 35초 cleanup
 예산 안에서 재시도한다. 다른 창의 메시지와 정리는 계속 처리한다. 기한이 끝나면 소유자를

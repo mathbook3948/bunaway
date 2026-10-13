@@ -194,6 +194,8 @@ export type WindowBounds = {
  * Native failures throw; the UI host converts them to bounded public errors.
  */
 export type NativeWindow = {
+  /** Requests a user-controlled browser or system print dialog; does not report print completion. */
+  showPrintUI?(kind: "browser" | "system"): void;
   /** Trusted-backend download approval and lifetime controls. Windows only. */
   downloads?: NativeDownloads;
   /** Single host-owned WebView controls. Absent on platforms without this service. */
@@ -230,6 +232,10 @@ export type NativeWindow = {
   setFocusable?(focusable: boolean): void;
   /** Reads whether the native window permits activation. Independent of isFocused. Windows only. */
   isFocusable?(): boolean;
+  /** Changes this HWND's title without modifying its declaration or other instances. Windows only. */
+  setTitle?(title: string): void;
+  /** Reads the live native title, bounded to 1024 UTF-16 code units. Windows only. */
+  getTitle?(): string;
   /** Changes user border/system-menu resizing without restricting programmatic geometry. Windows only. */
   setResizable?(resizable: boolean): void;
   /** Reads the normal window's resize policy, including while fullscreen. Windows only. */

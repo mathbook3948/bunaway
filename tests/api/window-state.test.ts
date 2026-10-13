@@ -124,6 +124,7 @@ function fixture() {
     isMovable: true,
   };
   let failure: Error | undefined;
+  let title = "Declared title";
   const native: NativeWindow = {
     getReadiness() {
       throw new Error("Readiness is not used in this state test.");
@@ -168,6 +169,11 @@ function fixture() {
       observed.isFocusable = value;
     },
     isFocusable: () => observed.isFocusable,
+    setTitle(value) {
+      apply("setTitle");
+      title = value;
+    },
+    getTitle: () => title,
     setResizable(resizable) {
       apply("setResizable");
       observed.isResizable = resizable;
@@ -239,11 +245,14 @@ function fixture() {
         | (typeof controls)[number]
         | (typeof stateQueries)[number]
         | "setFocusable"
+        | "getTitle"
+        | "setTitle"
         | "setResizable"
         | "setMovable",
       view = "main",
       payload: {
         focusable?: boolean;
+        title?: string;
         resizable?: boolean;
         movable?: boolean;
       } = {},
@@ -364,6 +373,144 @@ test("focusability validates booleans and keeps activation policy separate from 
   ).rejects.toMatchObject({
     code: "UNSUPPORTED",
   });
+});
+
+test("title operations preserve Unicode, enforce bounded input, individual permissions and window lifetime", async () => {
+  const f = fixture();
+  expect(await f.invoke("getTitle")).toBe("Declared title");
+  for (const title of [
+    "새 문서 📝",
+    "x".repeat(1024),
+    "📝".repeat(512),
+  ]) {
+    expect(
+      validateWindowCall({
+        operation: "windows.setTitle",
+        payload: {
+          view: "main",
+          windowId: "window-1",
+          title,
+        },
+      }).payload,
+    ).toEqual({
+      view: "main",
+      windowId: "window-1",
+      title,
+    });
+    expect(
+      await f.invoke("setTitle", "main", {
+        title,
+      }),
+    ).toBeNull();
+    expect(await f.invoke("getTitle")).toBe(title);
+    expect(validateWindowOutput("windows.getTitle", title)).toBe(title);
+  }
+  for (const title of [
+    "",
+    "bad\0title",
+    "x".repeat(1025),
+    "📝".repeat(513),
+    42,
+    null,
+  ]) {
+    expect(() =>
+      validateWindowCall({
+        operation: "windows.setTitle",
+        payload: {
+          view: "main",
+          title,
+        },
+      }),
+    ).toThrow();
+  }
+  expect(() =>
+    validateWindowCall({
+      operation: "windows.getTitle",
+      payload: {
+        view: "main",
+        title: "extra",
+      },
+    }),
+  ).toThrow();
+  expect(() =>
+    validateWindowOutput("windows.getTitle", "x".repeat(1025)),
+  ).toThrow();
+  expect(() => validateWindowOutput("windows.getTitle", null)).toThrow();
+  expect(validateWindowOutput("windows.getTitle", "")).toBe("");
+  expect(validateWindowOutput("windows.setTitle", null)).toBeNull();
+  expect(() => validateWindowOutput("windows.setTitle", true)).toThrow();
+  f.permissions.permissions = [
+    "windows.getTitle",
+  ];
+  await expect(
+    f.invoke("setTitle", "main", {
+      title: "Denied",
+    }),
+  ).rejects.toMatchObject({
+    code: "PERMISSION_DENIED",
+  });
+  f.permissions.permissions = [
+    "windows.setTitle",
+  ];
+  await expect(f.invoke("getTitle")).rejects.toMatchObject({
+    code: "PERMISSION_DENIED",
+  });
+  f.permissions.permissions = windowPermissions();
+  await expect(
+    f.invoke("setTitle", "missing", {
+      title: "Missing",
+    }),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  f.setClosed();
+  for (const operation of [
+    "setTitle",
+    "getTitle",
+  ] as const) {
+    await expect(
+      f.invoke(
+        operation,
+        "main",
+        operation === "setTitle"
+          ? {
+              title: "Closed",
+            }
+          : {},
+      ),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+  }
+  expect(f.actions).toHaveLength(3);
+  for (const operation of [
+    "setTitle",
+    "getTitle",
+  ] as const) {
+    const unsupported = fixture();
+    delete unsupported.native[operation];
+    await expect(
+      unsupported.invoke(
+        operation,
+        "main",
+        operation === "setTitle"
+          ? {
+              title: "Unsupported",
+            }
+          : {},
+      ),
+    ).rejects.toMatchObject({
+      code: "UNSUPPORTED",
+    });
+  }
+  const failed = fixture();
+  failed.setFailure(new Error("Title change failed"));
+  await expect(
+    failed.invoke("setTitle", "main", {
+      title: "Failed",
+    }),
+  ).rejects.toThrow("Title change failed");
+  expect(await failed.invoke("getTitle")).toBe("Declared title");
 });
 
 test("user movement controls validate booleans and keep per-operation grants and lifetime checks", async () => {

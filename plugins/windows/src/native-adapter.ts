@@ -23,6 +23,13 @@ function unsupportedFocusability() {
   });
 }
 
+function unsupportedTitle() {
+  return new BunawayError({
+    code: "UNSUPPORTED",
+    message: "Window title control is not implemented on this platform.",
+  });
+}
+
 function unsupportedMovement() {
   return new BunawayError({
     code: "UNSUPPORTED",
@@ -72,6 +79,16 @@ export function createOperations(
       return window.audio;
     };
     switch (call.operation) {
+      case "windows.showPrintUI":
+        if (!window.showPrintUI) {
+          throw new BunawayError({
+            code: "UNSUPPORTED",
+            message:
+              "WebView print dialogs are not implemented on this platform.",
+          });
+        }
+        window.showPrintUI(call.payload.kind ?? "browser");
+        break;
       case "windows.setDownloadRequestsEnabled":
         downloads().setRequestsEnabled(call.payload.enabled);
         break;
@@ -307,6 +324,17 @@ export function createOperations(
           throw unsupportedFocusability();
         }
         return window.isFocusable();
+      case "windows.setTitle":
+        if (!window.setTitle) {
+          throw unsupportedTitle();
+        }
+        window.setTitle(call.payload.title);
+        break;
+      case "windows.getTitle":
+        if (!window.getTitle) {
+          throw unsupportedTitle();
+        }
+        return window.getTitle();
       case "windows.setResizable":
         if (!window.setResizable) {
           throw unsupportedMovement();
