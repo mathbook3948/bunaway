@@ -652,12 +652,17 @@ async function main(): Promise<void> {
         "AP+AAA==",
       );
       assert.deepEqual(
-        await built.execute(
-          "storage.readDirectory",
-          {
-            path: builtDirectory,
-          },
-          "backend",
+        // The SDK returns JSON objects with null prototypes; compare their complete wire values.
+        JSON.parse(
+          JSON.stringify(
+            await built.execute(
+              "storage.readDirectory",
+              {
+                path: builtDirectory,
+              },
+              "backend",
+            ),
+          ),
         ),
         [
           {
