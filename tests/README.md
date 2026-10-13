@@ -491,6 +491,14 @@ client-area animation, screen reader 설정 플래그 및 시스템 색과 비�
 DLL 수명과 종료 후 거부를 확인한다. `mise run host:windows`에 포함한다.
 사용자 테마 변경과 실제 보조 기술 또는 WebView 접근성 트리 검증을 대신하지 않는다.
 
+`system-events.test.ts`는 선택 OS 알림 HWND의 지연 생성, 중복 해제, 조회 실패 후 복구,
+WTS 등록 실패, 상태 알림 합치기, lifecycle 순서와 큐 초과를 검증한다. 복귀 뒤 사용자
+활동 알림이 다른 pump 배치 또는 설정 알림 뒤에 도착해도 resume이 중복되지 않는지 검사한다. 조회 권한과
+현재 이벤트 route를 모두 가진 수신자에게만 전달하는 계약도 검사한다.
+`windows-system-events.test.ts`는 실제 Windows 숨김 HWND, 메시지 pump와 WTS 등록을
+사용한다. 메시지는 합성 입력이며 실제 하드웨어 절전이나 사용자 세션 잠금 검증을
+대신하지 않는다. Linux에서는 이 네이티브 회귀를 건너뛴다.
+
 `api/image.test.ts`와 `lifecycle/image-resources.test.ts`는 선택 image 플러그인의
 Zod 계약과 canonical base64, 빈 이미지, operation 권한, ID 해제와 앱 종료,
 count와 메모리 quota 및 생성 취소의 정리를 확인한다. `windows-image.test.ts`는

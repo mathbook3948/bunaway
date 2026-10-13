@@ -601,6 +601,7 @@
       "type": "NativeWindowServices",
       "pages": {
         "reference/tooling/plugin-api": [
+          "systemEvents",
           "specs",
           "supportsCreationOptions",
           "validateCreation",
