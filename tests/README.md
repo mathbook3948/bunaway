@@ -272,6 +272,11 @@ manifest 생성과 카탈로그 로딩에서 작업 이름만 전달하며 작�
 비동기 UI 실행을 한도만큼 취소해도 승인 용량과 다음 호출이 정상인지 확인한다. 컨텍스트 취소,
 늦은 완료와 실패, 중복 승인과 작업 대기 중 종료도 검증한다. `lifecycle/macos-bun.test.ts`는
 네이티브 UI만 대체한 실제 macOS 호스트와 Worker에서 같은 입력, 출력, 실행 취소 경로를 검사한다.
+`lifecycle/io-response-ownership.test.ts`는 실제 I/O Worker와 `ImageResources`에서 응답 승인 전
+취소, 컨텍스트 폐기와 종료가 전달되지 않은 이미지 자원을 회수하고, 승인된 자원은 유지하는지 확인한다.
+`lifecycle/windows-host-shutdown.test.ts`는 백엔드 I/O 취소가 Core 종료 훅보다 먼저 전달되고
+어댑터 폐기는 훅 이후 실행되는지 확인한다. Windows에서는 실제 Win32 UI Worker와 Job을 사용한
+창 없는 실행도 검사하며 `host:windows`에 포함한다. Linux에서는 UI와 Job 경계를 대체한다.
 `lifecycle/windows-ui-lifecycle.test.ts`는 실제 UI Worker와 대체 Win32 경계에서 마지막 창을
 파괴해 종료를 확정한 뒤 입력 파싱을 재개한다. 취소 패킷 없이도 동기 어댑터와 비동기 UI
 어댑터의 실행을 차단하고 CANCELLED를 반환하는지 확인한다.

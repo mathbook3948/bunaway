@@ -222,10 +222,14 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
           if (call.packet.context !== packet.context) {
             throw new Error("Invalid I/O response context.");
           }
-          ioCalls.delete(packet.requestId);
-          const active = requests.finish(packet.requestId, call.signal);
-          if (!stopping && active && authority(packet.context)) {
-            channel?.notify(packet);
+          // The I/O Worker retains resource cancellation until this callback is
+          // acknowledged. Hand off to the backend before releasing main ownership.
+          if (!stopping && !call.signal.aborted && authority(packet.context)) {
+            await channel?.send(packet);
+          }
+          if (ioCalls.get(packet.requestId) === call) {
+            ioCalls.delete(packet.requestId);
+            requests.finish(packet.requestId, call.signal);
           }
         } else if (packet.kind === "cleaned") {
           ioCleaned = true;

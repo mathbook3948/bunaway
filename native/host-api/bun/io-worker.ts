@@ -50,6 +50,9 @@ const queue = new Map<
         };
   }
 >();
+// Channel permits one full unacknowledged data lane and one full completion backlog.
+const MAX_RESPONSE_OWNERS = 2 * API_LIMITS.maxPending;
+const responses = new Map<string, NonNullable<ReturnType<typeof queue.get>>>();
 let active: string | undefined;
 let stopping = false;
 const channel = new Channel(
@@ -162,7 +165,7 @@ async function executeCall(
   complete(id, call, response);
 }
 
-/** Release this queue slot only if it still belongs to the completing call. */
+/** Release execution capacity while retaining cancellation ownership until response acceptance. */
 function complete(
   id: string,
   call: NonNullable<ReturnType<typeof queue.get>>,
@@ -172,11 +175,30 @@ function complete(
     return;
   }
   queue.delete(id);
-  channel.notify({
-    kind: "host-response",
-    context: call.context,
-    requestId: id,
-    response,
+  assert(
+    responses.size < MAX_RESPONSE_OWNERS,
+    "I/O response owner limit reached",
+  );
+  responses.set(id, call);
+  void (async () => {
+    try {
+      await channel.send({
+        kind: "host-response",
+        context: call.context,
+        requestId: id,
+        response,
+      });
+    } catch (error) {
+      // A resource whose result could not be handed off still belongs to this call.
+      call.controller.abort();
+      throw error;
+    } finally {
+      if (responses.get(id) === call) {
+        responses.delete(id);
+      }
+    }
+  })().catch((error) => {
+    throw error;
   });
   if (active === id) {
     active = undefined;
@@ -199,6 +221,7 @@ function receive(packet: Packet) {
     assert(
       !stopping &&
         !queue.has(packet.requestId) &&
+        !responses.has(packet.requestId) &&
         queue.size < API_LIMITS.maxPending,
       "Invalid I/O queue request",
     );
@@ -257,8 +280,13 @@ function receive(packet: Packet) {
       throw error;
     });
   } else if (packet.kind === "cancel") {
-    queue.get(packet.requestId)?.controller.abort();
+    const call = queue.get(packet.requestId) ?? responses.get(packet.requestId);
+    if (call && call.context !== packet.context) {
+      throw new Error("Invalid I/O cancellation context");
+    }
+    call?.controller.abort();
     queue.delete(packet.requestId);
+    responses.delete(packet.requestId);
     if (active === packet.requestId) {
       active = undefined;
     }
@@ -273,13 +301,23 @@ function receive(packet: Packet) {
         }
       }
     }
+    for (const [id, call] of responses) {
+      if (call.context === packet.context) {
+        call.controller.abort();
+        responses.delete(id);
+      }
+    }
     startNext();
   } else if (packet.kind === "shutdown") {
     stopping = true;
     for (const call of queue.values()) {
       call.controller.abort();
     }
+    for (const call of responses.values()) {
+      call.controller.abort();
+    }
     queue.clear();
+    responses.clear();
     active = undefined;
     // Acknowledge shutdown acceptance before closing the port.
     setTimeout(() => {
