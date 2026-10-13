@@ -83,6 +83,15 @@ COM 참조, timer와 창 자원을 정리하는지도 확인한다.
 조작이나 앱 재실행 후 재개 검증은 포함하지 않는다. 결과는
 `build/windows-webview-downloads-results.json`에 기록한다.
 
+`lifecycle/macos-clipboard-adapter.test.ts`는 RGBA TIFF의 endian, alpha, orientation과 unsigned SampleFormat,
+크기와 잘못된 외부 데이터 및 네이티브 호출 전 권한과 취소를 검사한다.
+`lifecycle/macos-clipboard-native.test.ts`는 고유 이름의 실제 NSPasteboard에서 Unicode,
+빈 텍스트, 없는 형식, HTML/RTF, RGBA 상한과 자원 정리를 확인한다.
+`lifecycle/macos-clipboard-webview.ts`는 compiled macOS host, WKWebView와 공개 SDK에서
+backend setup과 뷰 명령의 권한 보존, 다중 형식, 파일 목록 거부와 종료를 확인한다.
+macOS native CI에서 `BUNAWAY_CLIPBOARD_NATIVE=1`로 실행한다. WKWebView 검사는 CI
+데스크톱의 일반 클립보드를 변경하고 종료 시 fixture 내용을 지우므로 개인 데스크톱에서
+실행하려면 이 동작을 먼저 확인한다. 결과는 `build/macos-clipboard-results.json`이다.
 
 `api/webview-controls.test.ts`는 기본 WebView 제어의 Zod 입력과 출력, 개별 작업 권한,
 닫힌 창과 취소, multiple 뷰의 ID 선택, 플랫폼 서비스 부재 및 네이티브 오류 전파를 검사한다.
@@ -123,7 +132,8 @@ getter와 FFI 값을 비교하며 고유 tag/group의 임시 알림은 finally�
 
 `notification-shortcut-cleanup.test.ts`는 바로가기 정리의 일시적인 EBUSY만 최대 10회,
 100ms 간격으로 재시도하는지 검사한다. 실패한 삭제는 정리 완료로 표시하지 않고 shell DLL을
-유지하며 다음 정리에서 복구할 수 있다. 영구 잠금의 기한, 다른 오류의 즉시 전파와
+유지하며 다음 정리에서 복구할 수 있다. 영구 잠금의 기한과 다른 오류의 즉시 전파를 검사한다.
+생성 실패 뒤 정리도 실패한 경우 오류 객체에 남긴 cleanup으로 복구하는지 확인한다.
 동시 정리의 단일 소유권 및 실제 임시 파일 삭제도 확인한다. fixture는 자신의 파일만 지우고
 디렉터리를 재귀 삭제하지 않는다.
 
@@ -853,3 +863,12 @@ iOS 실제 호스트 검사는 직접 WebSocket과 최초 연결을 강제로 �
 각 경로에서 세 Worker 세대와 기존 문서 수명 회귀를 확인하고 Swift를 통과한 SDK hello 수로
 실제 사용 경로를 구분한다. iOS Worker 계약 검사도 정책의 HTTPS와 WebKit의 자산 Origin을
 구분하고 잘못된 출처를 거부한 뒤 정상 연결과 회수를 확인한다.
+
+`lifecycle/macos-webview-diagnostics.test.ts`는 창별 64개 기록 상한과 미등록 NSError
+domain 제거, signed code를 검사한다. 실제 macOS arm64에서는 NSError의 -999 code를
+FFI로 읽는 ABI도 확인하며 기존 macOS native 실행기에 포함한다.
+`macos-network.ts`의 성공 결과에는 고정 WebView 단계 기록을 함께 보관한다.
+실패한 실행은 기존 catch가 출력한 호스트 로그를 기존 CI artifact의 host.log에서 확인한다.
+#170의 raw report, counter와 pipe 보관 작업을 이 변경에 복제하지 않는다.
+기존 19개 assertion과 기한은 유지하며 통과한 단일 실행으로 과거 startup timeout의
+원인이 해결됐다고 판단하지 않는다.

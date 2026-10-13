@@ -167,6 +167,14 @@ export class Objc {
       ],
       returns: "void",
     },
+    integer: {
+      ptr: this.messageAddress as Pointer,
+      args: [
+        "ptr",
+        "ptr",
+      ],
+      returns: "i64",
+    },
     double: {
       ptr: this.messageAddress as Pointer,
       args: [
@@ -501,6 +509,10 @@ export class Objc {
     height: number,
   ): void {
     this.messages.symbols.size(object, this.selector(selector), width, height);
+  }
+  /** Read signed NSInteger values without interpreting negative codes as object pointers. */
+  integer(object: ObjcObject, selector: string): number | bigint {
+    return this.messages.symbols.integer(object, this.selector(selector));
   }
   /** Read a scalar double through arm64's floating-point return register. */
   double(object: ObjcObject, selector: string): number {

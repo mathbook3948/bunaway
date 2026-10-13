@@ -204,8 +204,33 @@ if (target === "windows-x64") {
     await test("macos-webview-controls.ts");
     await test("macos-io-host.ts");
     await test("macos-image-host.ts");
+    await run(
+      [
+        inputs.bun,
+        "--no-env-file",
+        "test",
+        resolve(root, "tests/lifecycle/macos-webview-diagnostics.test.ts"),
+      ],
+      root,
+    );
     await test("macos-network.ts");
     await test("macos-log-capabilities.ts");
+    await run(
+      [
+        inputs.bun,
+        "--no-env-file",
+        "test",
+        resolve(root, "tests/lifecycle/macos-clipboard-adapter.test.ts"),
+        resolve(root, "tests/lifecycle/macos-clipboard-native.test.ts"),
+      ],
+      root,
+      {
+        BUNAWAY_CLIPBOARD_NATIVE: "1",
+      },
+    );
+    await test("macos-clipboard-webview.ts", [], {
+      BUNAWAY_CLIPBOARD_NATIVE: "1",
+    });
     await test("macos-host.ts", [
       "--package",
       output,
