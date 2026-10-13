@@ -1201,10 +1201,10 @@ test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data pol
   expect(perUser).toContain("Current.Add('WebView2Loader.dll')");
   expect(perUser).toContain("if CurStep <> ssPostInstall then Exit");
   expect(perUser).toContain(
-    "PreviousExecutableName := GetPreviousData('ExecutableName', '')",
+    "PreviousExecutableName := InstallationSnapshot.ExecutableName",
   );
   expect(perUser).toContain(
-    "PreviousInstallDir := GetPreviousData('InstallDir', '')",
+    "PreviousInstallDir := InstallationSnapshot.InstallDir",
   );
   expect(perUser).toContain(
     "if not IsSafeExecutableName(PreviousExecutableName) then",

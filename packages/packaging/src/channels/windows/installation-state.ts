@@ -1,0 +1,92 @@
+import { stableGuid } from "./common.ts";
+
+/** Keeps setup and maintenance names stable across installer versions and channels. */
+export function installationMutexNames(identifier: string) {
+  const id = stableGuid(identifier);
+  return {
+    setup: `Global\\Bunaway.Setup.${id}`,
+    maintenance: `Global\\Bunaway.Maintenance.${id}`,
+  };
+}
+
+/** Emits process-owned setup/uninstall coordination and one previous-data snapshot. */
+export function renderInstallationStateCode(identifier: string) {
+  const names = installationMutexNames(identifier);
+  return {
+    setupMutex: names.setup,
+    declarations: `
+type TInstallationSnapshot = record
+  ExecutableName: String;
+  InstallDir: String;
+  PendingOwner: String;
+end;
+var MaintenanceMutexHandle: THandle;
+    InstallationSnapshot: TInstallationSnapshot;
+    InstallationSnapshotLoaded: Boolean;
+`,
+    procedures: `
+const MaintenanceMutexName = '${names.maintenance}';
+      MUTEX_WAIT_ACQUIRED = 0;
+      MUTEX_WAIT_ABANDONED = 128;
+
+function CreateMaintenanceMutex(SecurityAttributes: ULONG_PTR; InitialOwner: BOOL; Name: String): THandle;
+  external 'CreateMutexW@kernel32.dll stdcall';
+function WaitMaintenanceMutex(Handle: THandle; Milliseconds: DWORD): DWORD;
+  external 'WaitForSingleObject@kernel32.dll stdcall';
+function CloseMaintenanceMutex(Handle: THandle): BOOL;
+  external 'CloseHandle@kernel32.dll stdcall';
+
+function AcquireInstallationMaintenance: Boolean;
+var Status: DWORD;
+begin
+  Result := False;
+  MaintenanceMutexHandle := CreateMaintenanceMutex(0, False, MaintenanceMutexName);
+  if MaintenanceMutexHandle = 0 then begin
+    Log('Could not create installation maintenance mutex.');
+    Exit;
+  end;
+  // Waiting, rather than check-then-create, atomically owns the mutex. An
+  // abandoned owner is recoverable; its previous-data snapshot still needs validation.
+  Status := WaitMaintenanceMutex(MaintenanceMutexHandle, 0);
+  Result := (Status = MUTEX_WAIT_ACQUIRED) or (Status = MUTEX_WAIT_ABANDONED);
+  // Successful ownership lasts until Windows terminates this process. Script
+  // Deinitialize events precede native final bookkeeping and uninstaller self-deletion.
+  // Releasing there would let another setup overwrite files still being cleaned up.
+  if not Result then begin
+    CloseMaintenanceMutex(MaintenanceMutexHandle);
+    MaintenanceMutexHandle := 0;
+    Log('Another setup or uninstall is maintaining this application.');
+  end;
+end;
+
+function ReadInstallationSnapshot: TInstallationSnapshot;
+begin
+  Result.ExecutableName := GetPreviousData('ExecutableName', '');
+  Result.InstallDir := GetPreviousData('InstallDir', '');
+  Result.PendingOwner := GetPreviousData('PendingAssociationOwner', '');
+end;
+
+procedure CaptureInstallationSnapshot;
+begin
+  // Cooperating setup/uninstall processes hold the maintenance mutex for their
+  // entire lifetime, so the three fields form one consistent identity snapshot.
+  InstallationSnapshot := ReadInstallationSnapshot;
+  InstallationSnapshotLoaded := True;
+end;
+
+procedure ValidateInstallationSnapshot;
+var Current: TInstallationSnapshot;
+begin
+  if not InstallationSnapshotLoaded then
+    RaiseException('Installation identity snapshot is unavailable.');
+  Current := ReadInstallationSnapshot;
+  // Detect legacy installers and external changes during a delayed wizard too.
+  // Do not refresh only one field and combine it with a cached pending identity.
+  if (Current.ExecutableName <> InstallationSnapshot.ExecutableName) or
+     (Current.InstallDir <> InstallationSnapshot.InstallDir) or
+     (Current.PendingOwner <> InstallationSnapshot.PendingOwner) then
+    RaiseException('Installation state changed while this setup or uninstall was open. Close it and start again.');
+end;
+`,
+  };
+}

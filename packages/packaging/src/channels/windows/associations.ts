@@ -249,6 +249,7 @@ begin
   // Inno closes RegisterPreviousData's handle before ssPostInstall. Reopen
   // this install's own key instead of retaining or reusing that handle.
   WriteAssociationValue(AssociationPreviousDataKey, 'Inno Setup CodeFile: PendingAssociationOwner', '');
+  InstallationSnapshot.PendingOwner := '';
   PendingAssociationExecutableName := '';
   PendingAssociationInstallDir := '';
 end;

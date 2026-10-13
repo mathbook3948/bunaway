@@ -14,6 +14,7 @@ import { openRequest } from "#native/windows/bun/desktop";
 import { findIscc, must, stableGuid } from "#packaging/channels/windows/common";
 import { renderInnoScript } from "#packaging/channels/windows/inno";
 import { innoIdentity } from "#packaging/channels/windows/inno-identity";
+import { installationMutexNames } from "#packaging/channels/windows/installation-state";
 
 const associations = {
   files: [
@@ -326,6 +327,133 @@ async function preventFileDeletion(path: string) {
   };
 }
 
+/** Probe real ownership and release the probe, including an abandoned previous process. */
+async function maintenanceAvailable(name: string) {
+  const { dlopen, ptr } = await import("bun:ffi");
+  const WAIT_ACQUIRED = 0;
+  const WAIT_ABANDONED = 128;
+  const WAIT_TIMEOUT = 258;
+  const api = dlopen("kernel32.dll", {
+    CreateMutexW: {
+      args: [
+        "ptr",
+        "i32",
+        "ptr",
+      ],
+      returns: "u64",
+    },
+    WaitForSingleObject: {
+      args: [
+        "u64",
+        "u32",
+      ],
+      returns: "u32",
+    },
+    ReleaseMutex: {
+      args: [
+        "u64",
+      ],
+      returns: "i32",
+    },
+    CloseHandle: {
+      args: [
+        "u64",
+      ],
+      returns: "i32",
+    },
+  });
+  const handle = api.symbols.CreateMutexW(
+    null,
+    0,
+    ptr(Buffer.from(`${name}\0`, "utf16le")),
+  );
+  if (handle === 0n) {
+    api.close();
+    throw new Error("Could not create the fixture maintenance probe.");
+  }
+  try {
+    const status = api.symbols.WaitForSingleObject(handle, 0);
+    if (status === WAIT_TIMEOUT) {
+      return false;
+    }
+    expect([
+      WAIT_ACQUIRED,
+      WAIT_ABANDONED,
+    ]).toContain(status);
+    expect(api.symbols.ReleaseMutex(handle)).not.toBe(0);
+    return true;
+  } finally {
+    expect(api.symbols.CloseHandle(handle)).not.toBe(0);
+    api.close();
+  }
+}
+
+interface NativeGate {
+  ready: string;
+  release: string;
+}
+
+type InstallerFailure =
+  | "collision"
+  | "write"
+  | "cleanup"
+  | "payload-cleanup"
+  | "pending-owner"
+  | "busy"
+  | "stale";
+
+interface NativeInstallerRequest {
+  version: string;
+  executable: string;
+  config: ChannelConfig["associations"];
+  tasks?: string;
+  failure?: InstallerFailure;
+  fault?: "icon" | "mapping";
+  destination?: string;
+  setupGate?: NativeGate;
+  uninstallGate?: NativeGate;
+  legacySetup?: boolean;
+}
+
+/** Wait for an actual paused native callback, without guessing installer timing. */
+async function waitForGate(gate: NativeGate) {
+  const deadline = Date.now() + 30000;
+  while (Date.now() < deadline) {
+    if (await Bun.file(gate.ready).exists()) {
+      return;
+    }
+    await Bun.sleep(50);
+  }
+  throw new Error(`Native installer did not reach fixture gate: ${gate.ready}`);
+}
+
+/** Observe completion while a callback is paused, and always release/wait without hiding assertion failures. */
+async function whileGated(
+  running: {
+    finish(): Promise<void>;
+  },
+  gate: NativeGate,
+  action: () => Promise<void>,
+) {
+  const completion = Promise.allSettled([
+    running.finish(),
+  ]);
+  let completionResult: PromiseSettledResult<void> | undefined;
+  try {
+    await waitForGate(gate);
+    await action();
+  } finally {
+    await Bun.write(gate.release, "release");
+    [completionResult] = await completion;
+    if (completionResult.status === "rejected") {
+      console.error(completionResult.reason);
+    }
+  }
+  if (completionResult?.status === "rejected") {
+    throw completionResult.reason;
+  }
+}
+
 async function createNativeAssociationFixture(compiler: string) {
   const root = await realpath(
     await mkdtemp(join(tmpdir(), "bunaway-associations-")),
@@ -362,6 +490,12 @@ async function createNativeAssociationFixture(compiler: string) {
     "/NORESTART",
   ];
   const quote = (value: string) => `'${value.replaceAll("'", "''")}'`;
+  const mutexes = installationMutexNames(identifier);
+  function renderGate(event: string, gate: NativeGate) {
+    const ready = gate.ready.replaceAll("'", "''");
+    const release = gate.release.replaceAll("'", "''");
+    return `\n// Test-only pause after initialization, before any native mutation.\nprocedure ${event};\nvar I: Integer;\nbegin\n  if not SaveStringToFile('${ready}', 'ready', False) then RaiseException('Fixture gate marker failed.');\n  for I := 1 to 1800 do begin\n    if FileExists('${release}') then Exit;\n    Sleep(50);\n  end;\n  RaiseException('Fixture gate timed out.');\nend;\n`;
+  }
   async function powershell(body: string) {
     const child = Bun.spawn(
       [
@@ -417,20 +551,16 @@ async function createNativeAssociationFixture(compiler: string) {
       descriptor.trim(),
     );
   }
-  async function install(
-    version: string,
-    executable: string,
-    config: ChannelConfig["associations"],
-    tasks?: string,
-    failure?:
-      | "collision"
-      | "write"
-      | "cleanup"
-      | "payload-cleanup"
-      | "pending-owner",
-    fault?: "icon" | "mapping",
-    destination = installDir,
-  ) {
+  async function startInstall(request: NativeInstallerRequest) {
+    const {
+      version,
+      executable,
+      config,
+      tasks,
+      failure,
+      fault,
+      destination = installDir,
+    } = request;
     const staging = join(root, version);
     const payload = join(staging, "app");
     const output = join(staging, "installer");
@@ -441,6 +571,24 @@ async function createNativeAssociationFixture(compiler: string) {
     await Bun.write(join(payload, executable), "installer payload fixture");
     const iss = join(staging, "setup.iss");
     let rendered = script(identifier, payload, output, executable, config);
+    if (request.legacySetup) {
+      // Model a previous installer which did not participate in coordination.
+      // Registry/payload operations and snapshot validation still execute natively.
+      const acquisition =
+        "  Result := AcquireInstallationMaintenance;\n  if not Result then Exit;\n";
+      expect(rendered).toContain(acquisition);
+      rendered = rendered.replace(acquisition, "  Result := True;\n");
+      rendered = rendered.replace(`SetupMutex=${mutexes.setup}\n`, "");
+    }
+    if (request.setupGate) {
+      rendered += renderGate("InitializeWizard", request.setupGate);
+    }
+    if (request.uninstallGate) {
+      rendered += renderGate(
+        "InitializeUninstallProgressForm",
+        request.uninstallGate,
+      );
+    }
     if (failure === "payload-cleanup" || failure === "pending-owner") {
       // The dummy EXE cannot run. Keep Restart Manager from closing the test
       // process that owns the deliberate no-delete-sharing handle.
@@ -498,47 +646,133 @@ async function createNativeAssociationFixture(compiler: string) {
         stderr: "pipe",
       },
     );
-    const [exitCode, stdout, stderr] = await Promise.all([
-      child.exited,
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
-    const log = await Bun.file(logPath).text();
-    if (failure) {
-      expect(exitCode).not.toBe(0);
-      if (failure === "pending-owner") {
-        // PrepareToInstall rejects the rename before payload and previous-data writes.
-        expect(exitCode).toBe(7);
-      } else if (failure !== "collision") {
-        expect(exitCode).toBe(1);
+    async function finish() {
+      const [exitCode, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      const log = await Bun.file(logPath).text();
+      if (failure) {
+        expect(exitCode).not.toBe(0);
+        if (failure === "pending-owner" || failure === "stale") {
+          // PrepareToInstall rejects the rename before payload and previous-data writes.
+          expect(exitCode).toBe(7);
+        } else if (failure === "busy") {
+          expect(exitCode).toBe(1);
+        } else if (failure !== "collision") {
+          expect(exitCode).toBe(1);
+        }
+        const failureMessages = {
+          collision: "App association is owned by a different command",
+          write: "Could not register app association",
+          cleanup: "Could not remove app association value",
+          "payload-cleanup": "Could not remove previous app executable",
+          "pending-owner": "Complete the previous executable cleanup",
+          busy: "Another setup or uninstall is maintaining this application",
+          stale:
+            "Installation state changed while this setup or uninstall was open",
+        };
+        expect(log).toContain(failureMessages[failure]);
+      } else if (exitCode !== 0) {
+        throw new Error(
+          `Installer failed (${exitCode}): ${stdout} ${stderr}\n${log}`,
+        );
       }
-      const failureMessages = {
-        collision: "App association is owned by a different command",
-        write: "Could not register app association",
-        cleanup: "Could not remove app association value",
-        "payload-cleanup": "Could not remove previous app executable",
-        "pending-owner": "Complete the previous executable cleanup",
-      };
-      expect(log).toContain(failureMessages[failure]);
-    } else if (exitCode !== 0) {
-      throw new Error(
-        `Installer failed (${exitCode}): ${stdout} ${stderr}\n${log}`,
-      );
     }
+    return {
+      child,
+      logPath,
+      finish,
+    };
   }
-  async function uninstall() {
+  async function install(
+    version: string,
+    executable: string,
+    config: ChannelConfig["associations"],
+    tasks?: string,
+    failure?: InstallerFailure,
+    fault?: "icon" | "mapping",
+    destination = installDir,
+  ) {
+    const running = await startInstall({
+      version,
+      executable,
+      config,
+      destination,
+      ...(tasks !== undefined
+        ? {
+            tasks,
+          }
+        : {}),
+      ...(failure !== undefined
+        ? {
+            failure,
+          }
+        : {}),
+      ...(fault !== undefined
+        ? {
+            fault,
+          }
+        : {}),
+    });
+    await running.finish();
+  }
+  async function startUninstall(failure?: "busy") {
     const executable = join(installDir, "unins000.exe");
     if (!(await Bun.file(executable).exists())) {
-      return;
+      throw new Error("Fixture uninstaller is missing.");
     }
-    await must(executable, silent);
-    for (let i = 0; i < 200; i++) {
-      if (!(await Bun.file(executable).exists())) {
+    const logPath = join(root, `uninstall-${crypto.randomUUID()}.log`);
+    const child = Bun.spawn(
+      [
+        executable,
+        ...silent,
+        `/LOG=${logPath}`,
+      ],
+      {
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    async function finish() {
+      const [code, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      if (failure) {
+        expect(code).not.toBe(0);
+        expect(await Bun.file(logPath).text()).toContain(
+          "Another setup or uninstall is maintaining this application",
+        );
         return;
       }
-      await Bun.sleep(50);
+      if (code !== 0) {
+        throw new Error(`Uninstaller failed (${code}): ${stdout} ${stderr}`);
+      }
+      for (let i = 0; i < 200; i++) {
+        if (
+          !(await Bun.file(executable).exists()) &&
+          (await maintenanceAvailable(mutexes.maintenance))
+        ) {
+          return;
+        }
+        await Bun.sleep(50);
+      }
+      throw new Error("Uninstaller did not finish.");
     }
-    throw new Error("Uninstaller did not finish.");
+    return {
+      child,
+      finish,
+    };
+  }
+  async function uninstall(failure?: "busy") {
+    if (!(await Bun.file(join(installDir, "unins000.exe")).exists())) {
+      return;
+    }
+    const running = await startUninstall(failure);
+    await running.finish();
   }
   async function cleanup() {
     await uninstall();
@@ -564,6 +798,7 @@ async function createNativeAssociationFixture(compiler: string) {
     });
   }
   return {
+    root,
     extension,
     scheme,
     associationRoot,
@@ -582,7 +817,9 @@ async function createNativeAssociationFixture(compiler: string) {
     denyValueWrites,
     restoreRegistrationFault,
     install,
+    startInstall,
     uninstall,
+    startUninstall,
     cleanup,
   };
 }
@@ -1125,6 +1362,216 @@ test.skipIf(!iscc)(
     }
   },
   120000,
+);
+
+test.skipIf(!iscc)(
+  "native maintenance ownership serializes delayed setup and uninstall through completion",
+  async () => {
+    if (!iscc) {
+      throw new Error("ISCC is required.");
+    }
+    const fixture = await createNativeAssociationFixture(iscc);
+    const {
+      root,
+      installDir,
+      declarations,
+      associationRoot,
+      previousDataKey,
+      startInstall,
+      install,
+      startUninstall,
+      uninstall,
+      query,
+      cleanup,
+    } = fixture;
+    const setupGate = {
+      ready: join(root, "setup-ready"),
+      release: join(root, "setup-release"),
+    };
+    const uninstallGate = {
+      ready: join(root, "uninstall-ready"),
+      release: join(root, "uninstall-release"),
+    };
+    const newExecutable = join(installDir, "New.exe");
+    try {
+      await install(
+        "serial-initial",
+        "New.exe",
+        declarations,
+        "fileassociations,urlschemes",
+      );
+      const setup = await startInstall({
+        version: "serial-delayed",
+        executable: "New.exe",
+        config: declarations,
+        tasks: "fileassociations,urlschemes",
+        setupGate,
+        uninstallGate,
+      });
+      await whileGated(setup, setupGate, async () => {
+        // There is no distinct predecessor: this must be blocked by ownership, not the three-name guard.
+        await install(
+          "serial-other",
+          "Other.exe",
+          declarations,
+          "fileassociations,urlschemes",
+          "busy",
+        );
+        await uninstall("busy");
+        expect(await Bun.file(join(installDir, "Other.exe")).exists()).toBe(
+          false,
+        );
+        expect(await Bun.file(newExecutable).exists()).toBe(true);
+        expect(await query(associationRoot, "Executable")).toBe(newExecutable);
+        expect(
+          await query(previousDataKey, "Inno Setup CodeFile: ExecutableName"),
+        ).toBe("New.exe");
+      });
+      const removal = await startUninstall();
+      await whileGated(removal, uninstallGate, async () => {
+        await install(
+          "serial-during-uninstall",
+          "Third.exe",
+          declarations,
+          "fileassociations,urlschemes",
+          "busy",
+        );
+        expect(await Bun.file(join(installDir, "Third.exe")).exists()).toBe(
+          false,
+        );
+        expect(await Bun.file(newExecutable).exists()).toBe(true);
+        expect(await query(associationRoot, "Executable")).toBe(newExecutable);
+      });
+      expect(await Bun.file(newExecutable).exists()).toBe(false);
+      expect(await query(associationRoot, "Executable")).toBe("MISSING");
+      await install(
+        "serial-after-exit",
+        "Third.exe",
+        declarations,
+        "fileassociations,urlschemes",
+      );
+      expect(await Bun.file(join(installDir, "Third.exe")).exists()).toBe(true);
+      await uninstall();
+    } finally {
+      await Bun.write(setupGate.release, "release");
+      await Bun.write(uninstallGate.release, "release");
+      await cleanup();
+    }
+  },
+  180000,
+);
+
+test.skipIf(!iscc)(
+  "native delayed wizard rejects live pending changes from non-cooperating legacy setups",
+  async () => {
+    if (!iscc) {
+      throw new Error("ISCC is required.");
+    }
+    const fixture = await createNativeAssociationFixture(iscc);
+    const {
+      root,
+      installDir,
+      declarations,
+      associationRoot,
+      previousDataKey,
+      fileProgId,
+      startInstall,
+      install,
+      uninstall,
+      query,
+      cleanup,
+    } = fixture;
+    const gate = {
+      ready: join(root, "legacy-ready"),
+      release: join(root, "legacy-release"),
+    };
+    const oldExecutable = join(installDir, "Old.exe");
+    const newExecutable = join(installDir, "New.exe");
+    try {
+      await install(
+        "stale-initial",
+        "New.exe",
+        declarations,
+        "fileassociations,urlschemes",
+      );
+      const delayed = await startInstall({
+        version: "stale-third",
+        executable: "Third.exe",
+        config: declarations,
+        tasks: "fileassociations,urlschemes",
+        failure: "stale",
+        setupGate: gate,
+      });
+      await whileGated(delayed, gate, async () => {
+        const old = await startInstall({
+          version: "legacy-old",
+          executable: "Old.exe",
+          config: declarations,
+          tasks: "fileassociations,urlschemes",
+          legacySetup: true,
+        });
+        await old.finish();
+        const release = await preventFileDeletion(oldExecutable);
+        try {
+          const replacement = await startInstall({
+            version: "legacy-new",
+            executable: "New.exe",
+            config: declarations,
+            tasks: "fileassociations,urlschemes",
+            failure: "payload-cleanup",
+            legacySetup: true,
+          });
+          await replacement.finish();
+        } finally {
+          release();
+        }
+        // The current identity equals the delayed wizard's initial identity;
+        // only its pending predecessor differs. Comparing current names alone is insufficient.
+        expect(
+          await query(previousDataKey, "Inno Setup CodeFile: ExecutableName"),
+        ).toBe("New.exe");
+        expect(
+          await query(
+            previousDataKey,
+            "Inno Setup CodeFile: PendingAssociationOwner",
+          ),
+        ).toBe(oldExecutable);
+      });
+      expect(await Bun.file(join(installDir, "Third.exe")).exists()).toBe(
+        false,
+      );
+      expect(await Bun.file(oldExecutable).exists()).toBe(true);
+      expect(await Bun.file(newExecutable).exists()).toBe(true);
+      expect(await query(associationRoot, "Executable")).toBe(newExecutable);
+      expect(
+        await query(`Software\\Classes\\${fileProgId}\\shell\\open\\command`),
+      ).toBe(`"${newExecutable}" "%1"`);
+      expect(
+        await query(
+          previousDataKey,
+          "Inno Setup CodeFile: PendingAssociationOwner",
+        ),
+      ).toBe(oldExecutable);
+      await install(
+        "stale-recovered",
+        "New.exe",
+        declarations,
+        "fileassociations,urlschemes",
+      );
+      expect(await Bun.file(oldExecutable).exists()).toBe(false);
+      expect(
+        await query(
+          previousDataKey,
+          "Inno Setup CodeFile: PendingAssociationOwner",
+        ),
+      ).toBe("");
+      await uninstall();
+    } finally {
+      await Bun.write(gate.release, "release");
+      await cleanup();
+    }
+  },
+  180000,
 );
 
 test.skipIf(!iscc)(
