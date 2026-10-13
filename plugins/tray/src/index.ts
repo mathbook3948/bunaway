@@ -11,12 +11,10 @@ const plugin = defineNativePlugin({
     },
   },
   operations: trayOperations,
-});
-/** Optional controls and notifications for the app's configured Windows tray. */
-export const trayPlugin = Object.freeze({
-  ...plugin.definition,
   events: trayEvents,
 });
+/** Optional controls and notifications for the app's configured Windows tray. */
+export const trayPlugin = plugin.definition;
 export default trayPlugin;
 /** Query/update the configured tray and wait for input without requiring a view. */
 export const tray = plugin.api;

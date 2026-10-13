@@ -37,6 +37,7 @@ export async function buildNativePlugin(directory = "."): Promise<string> {
   await ownedDirectory(root, resolve(root, "dist"));
   const stage = await mkdtemp(resolve(root, ".plugin-build-"));
   try {
+    const inferredSupport = new Map<string, readonly string[]>();
     const build = async (platform?: string) => {
       const output = platform
         ? resolve(stage, "native", `${platform}.js`)
@@ -78,7 +79,7 @@ export async function buildNativePlugin(directory = "."): Promise<string> {
                 },
                 () => ({
                   // Bun 1.4.2 drops external star re-exports from virtual modules.
-                  contents: `export { BunawayError, NativeEventWaiters } from "./bunaway-plugin-sdk-external";
+                  contents: `export { BunawayError, NativeEventWaiters, defineNativeAdapter } from "./bunaway-plugin-sdk-external";
 import { defineNativePlugin as define } from "./bunaway-plugin-sdk-external";
 export function defineNativePlugin(declaration) {
   const plugin = define(declaration);
@@ -110,9 +111,13 @@ export function defineNativePlugin(declaration) {
                       "Native platform modules must be in src/platforms/<platform>.ts.",
                     );
                   }
+                  const os = PLATFORMS.find(
+                    (os) =>
+                      imported === resolve(root, "src/platforms", `${os}.ts`),
+                  );
+                  const support = os && inferredSupport.get(os);
                   return {
-                    contents:
-                      'export function createOperations() { throw new Error("Load the plugin native/<platform> export on its owning host."); }',
+                    contents: `export function createOperations() { throw new Error("Load the plugin native/<platform> export on its owning host."); }${support ? `Object.defineProperty(createOperations, "operations", {value:${JSON.stringify(support)}});` : ""}`,
                     loader: "js",
                   };
                 },
@@ -145,6 +150,25 @@ export function defineNativePlugin(declaration) {
     );
     for (const platform of Object.keys(declaration.nativePlatforms)) {
       await build(platform);
+      // Imports are portable by contract: inspect keys without invoking setup or initializing OS resources.
+      const native = await readPluginDeclaration(
+        resolve(stage, "native", `${platform}.js`),
+        root,
+      );
+      const support = native.nativePlatforms[platform]?.operations;
+      if (
+        support !== undefined &&
+        declaration.nativePlatforms[platform]?.operations === undefined
+      ) {
+        inferredSupport.set(platform, support);
+      }
+    }
+    if (inferredSupport.size) {
+      // Recreate safe stubs with the inferred keys, preserving support in browser and all native exports.
+      await build();
+      for (const platform of Object.keys(declaration.nativePlatforms)) {
+        await build(platform);
+      }
     }
     await run(
       [

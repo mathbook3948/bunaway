@@ -178,3 +178,91 @@ export const createOperations: NativeAdapterFactory = () => ({ execute: () => "$
   },
   30000,
 );
+
+test("handler map support survives neutral and opposite-platform exports without running setup", async () => {
+  const root = await mkdtemp(resolve(frameworkRoot, "build/plugin-handlers-"));
+  try {
+    await mkdir(resolve(root, "src/platforms"), {
+      recursive: true,
+    });
+    await writeJson(resolve(root, "package.json"), {
+      name: "handler-plugin",
+      version: "1",
+      type: "module",
+    });
+    await writeJson(resolve(root, "tsconfig.json"), {
+      extends: resolve(frameworkRoot, "tsconfig.base.json"),
+      compilerOptions: {
+        types: [
+          "bun",
+        ],
+      },
+      include: [
+        "src/**/*.ts",
+      ],
+    });
+    await Bun.write(
+      resolve(root, "src/contract.ts"),
+      `import {z} from "zod"; export const operations = {
+      read:{input:z.string(),output:z.string()},write:{input:z.string(),output:z.number()}
+    };`,
+    );
+    await Bun.write(
+      resolve(root, "src/index.ts"),
+      `import {defineNativePlugin} from "@bunaway/plugin";
+      import {operations} from "./contract.ts";
+      import {createOperations as windows} from "./platforms/windows.ts";
+      import {createOperations as macos} from "./platforms/macos.ts";
+      export default defineNativePlugin({name:"demo",operations,platforms:{windows:{execution:"ui",create:windows},macos:{execution:"io",create:macos}}}).definition;`,
+    );
+    for (const [platform, key, result] of [
+      [
+        "windows",
+        "read",
+        'input+"WINDOWS_ONLY"',
+      ],
+      [
+        "macos",
+        "write",
+        "input.length",
+      ],
+    ]) {
+      await Bun.write(
+        resolve(root, "src/platforms", `${platform}.ts`),
+        `import {defineNativeAdapter} from "@bunaway/plugin";
+        import {operations} from "../contract.ts";
+        export const createOperations = defineNativeAdapter(operations,{
+          setup(){throw new Error("Setup must not run during declaration inspection");},
+          handlers:{${key}(input){return ${result};}},dispose(){}
+        });`,
+      );
+    }
+    await buildNativePlugin(root);
+    for (const entry of [
+      "index.js",
+      "native/windows.js",
+      "native/macos.js",
+    ]) {
+      const declaration = await readPluginDeclaration(
+        resolve(root, "dist", entry),
+        root,
+      );
+      expect(declaration.nativePlatforms.windows?.operations).toEqual([
+        "read",
+      ]);
+      expect(declaration.nativePlatforms.macos?.operations).toEqual([
+        "write",
+      ]);
+    }
+    const neutral = await Bun.file(resolve(root, "dist/index.js")).text();
+    expect(neutral).not.toContain("WINDOWS_ONLY");
+    expect(neutral).not.toContain("Setup must not run");
+    const native = await Bun.file(resolve(root, "dist/native/macos.js")).text();
+    expect(native).not.toContain("WINDOWS_ONLY");
+  } finally {
+    await rm(root, {
+      recursive: true,
+      force: true,
+    });
+  }
+});

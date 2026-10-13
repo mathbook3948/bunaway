@@ -265,7 +265,8 @@
         "reference/tooling/native-plugins": [
           "defineNativePlugin",
           "BunawayError",
-          "NativeEventWaiters"
+          "NativeEventWaiters",
+          "defineNativeAdapter"
         ]
       }
     },
@@ -357,7 +358,9 @@
         ".": "./dist/index.js",
         "./native/*": "./dist/native/*.js"
       },
-      "pages": { "reference/plugins/path": ["path", "pathPlugin"] }
+      "pages": {
+        "reference/plugins/path": ["path", "pathPlugin"]
+      }
     },
     {
       "name": "@bunaway/plugin-safe-storage",
@@ -972,7 +975,12 @@
       "source": "packages/plugin-sdk/src/index.ts",
       "type": "NativePluginDefinition",
       "pages": {
-        "reference/tooling/native-plugins": ["name", "platforms", "operations"]
+        "reference/tooling/native-plugins": [
+          "name",
+          "platforms",
+          "operations",
+          "events"
+        ]
       }
     },
     {
@@ -1191,7 +1199,6 @@
       "storage.appendText"
     ],
     "reference/host/storage-transfers": ["storage.copyFile", "storage.move"],
-
     "reference/host/storage-directories": [
       "storage.readDirectory",
       "storage.createDirectory",

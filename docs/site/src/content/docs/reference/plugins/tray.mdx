@@ -5,7 +5,7 @@ sidebar: { order: 8 }
 ---
 
 `@bunaway/plugin-tray`를 설치하고 앱의 `plugins`에 `trayPlugin`을 등록합니다.
-Windows에서 제공합니다. 앱 정의의 `desktop.tray`로 만든 아이콘 하나를 `tray`로 제어합니다.
+Windows에서 제공합니다. 등록한 플러그인이 앱 정의의 `desktop.tray` 설정으로 아이콘을 만들고 `tray`로 제어합니다.
 이 API는 트레이나 앱 창을 새로 만들거나 제거하지 않으며 기존 실행 유지와 종료 규칙을 따릅니다.
 
 ```ts
@@ -81,3 +81,20 @@ native shell 변경 실패는 INTERNAL이며 이전 tooltip과 이미지 설정�
 호스트가 custom HICON을 소유하고 교체와 종료 때 해제하며 앱 아이콘은 빌린 핸들로 유지합니다.
 플러그인 종료는 입력 구독과 대기자를 정리합니다. 여러 아이콘과 GUID, 초기 독립 이미지 옵션,
 생성/표시/숨김/제거 API와 제거 뒤 상주 정책, balloon과 enter/leave/move는 후속 작업입니다.
+
+## 이전 앱 정의에서 옮기기
+
+이전에는 desktop.tray 설정만으로 호스트가 아이콘을 만들었습니다. 이제 패키지를 설치하고
+같은 app.ts에 trayPlugin을 등록합니다. 설정과 Open/Quit, 숨김 시작 및 종료 규칙은 유지합니다.
+등록이 없으면 시작을 UNSUPPORTED로 거부합니다. 메뉴를 바꾸지 않는 앱에는 menuPlugin이 필요 없습니다.
+
+```ts
+import { defineApp } from "@bunaway/backend";
+import { trayPlugin } from "@bunaway/plugin-tray";
+
+export default defineApp({
+  modules: [],
+  plugins: [trayPlugin],
+  desktop: { tray: { tooltip: "Notes" }, closeBehavior: "hide" },
+});
+```

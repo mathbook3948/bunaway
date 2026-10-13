@@ -22,8 +22,12 @@ export type NativeTrayEvent = {
     y: number;
   } | null;
 };
-/** UI-thread controls for the configured tray. They do not create/remove it or change app residency. */
+/** Host integration for the selected tray implementation. Controls preserve configured app residency. */
 export type NativeTrayServices = {
+  /** Called only by the registered tray adapter. Host owns the returned resource until cleanup completes. */
+  initialize?(
+    create: (initialization: NativeTrayInitialization) => NativeTrayOwner,
+  ): void;
   get(): NativeTraySnapshot | null;
   getBounds(): {
     x: number;
@@ -39,4 +43,43 @@ export type NativeTrayServices = {
   /** The adapter must release this subscription during disposal. */
   subscribe(receive: (event: NativeTrayEvent) => void): () => void;
   emit(event: string, payload: import("@bunaway/protocol").JsonValue): void;
+};
+
+/** Narrow borrowed window facilities. The tray owns its hidden HWND and custom icons. */
+export type NativeTrayWindowHost = {
+  readonly icon: bigint | undefined;
+  create(
+    title: string,
+    width: number,
+    height: number,
+    receive: (message: number, wparam: bigint, lparam: bigint) => void,
+    visible: false,
+  ): bigint;
+  destroy(hwnd: bigint): void;
+};
+
+/** Resource retained by the host until native callback quiescence and retryable cleanup. */
+export type NativeTrayOwner = Pick<
+  NativeTrayServices,
+  "get" | "getBounds" | "setTooltip" | "setIcon" | "setClickBehavior" | "focus"
+> & {
+  readonly hwnd: bigint;
+  setMenu(
+    items:
+      | readonly import("./native-menu.ts").NativeMenuItem[]
+      | null
+      | undefined,
+    selected?: (itemId: string) => void,
+  ): void;
+  dispose(): void;
+};
+
+/** Supplies validated residency configuration to the optional tray implementation. */
+export type NativeTrayInitialization = {
+  windows: NativeTrayWindowHost;
+  tooltip: string;
+  receive(action: "show" | "quit"): void;
+  notify(event: NativeTrayEvent): void;
+  /** Retain partial ownership before shell registration; failed startup releases remain retryable. */
+  retain(owner: NativeTrayOwner): void;
 };

@@ -5,7 +5,7 @@ import { menuItemsSchema } from "#plugins/menu/src/contract";
 test.skipIf(process.platform !== "win32")(
   "actual HMENU preserves item state, nested order and literal Unicode labels",
   async () => {
-    const { NativePopupMenu } = await import("#native/windows/bun/menu");
+    const { NativePopupMenu } = await import("#plugins/tray/src/popup-menu");
     const native = dlopen("user32.dll", {
       GetMenuItemCount: {
         args: [

@@ -95,61 +95,59 @@ export const trayOperations = {
 };
 export const trayEvents = {
   "tray.input": {
-    payload: {
-      type: "object",
-      properties: {
-        id: {
-          const: "main",
-        },
-        button: {
-          type: "string",
-          enum: [
-            "left",
-            "right",
-            "middle",
-            "none",
-          ],
-        },
-        state: {
-          type: "string",
-          enum: [
-            "down",
-            "up",
-            "double-click",
-            "context-menu",
-          ],
-        },
-        position: {
-          anyOf: [
-            {
-              const: null,
-            },
-            {
-              type: "object",
-              properties: {
-                x: {
-                  type: "integer",
-                },
-                y: {
-                  type: "integer",
-                },
-              },
-              required: [
-                "x",
-                "y",
-              ],
-              additionalProperties: false,
-            },
-          ],
-        },
+    type: "object",
+    properties: {
+      id: {
+        const: "main",
       },
-      required: [
-        "id",
-        "button",
-        "state",
-        "position",
-      ],
-      additionalProperties: false,
+      button: {
+        type: "string",
+        enum: [
+          "left",
+          "right",
+          "middle",
+          "none",
+        ],
+      },
+      state: {
+        type: "string",
+        enum: [
+          "down",
+          "up",
+          "double-click",
+          "context-menu",
+        ],
+      },
+      position: {
+        anyOf: [
+          {
+            const: null,
+          },
+          {
+            type: "object",
+            properties: {
+              x: {
+                type: "integer",
+              },
+              y: {
+                type: "integer",
+              },
+            },
+            required: [
+              "x",
+              "y",
+            ],
+            additionalProperties: false,
+          },
+        ],
+      },
     },
+    required: [
+      "id",
+      "button",
+      "state",
+      "position",
+    ],
+    additionalProperties: false,
   },
 } as const;

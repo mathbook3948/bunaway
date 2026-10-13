@@ -4,6 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AppDefinition } from "@bunaway/core";
+import { trayPlugin } from "@bunaway/plugin-tray";
 import { windowsPlugin } from "@bunaway/plugin-windows";
 import {
   AUTOSTART_ARGUMENT,
@@ -398,6 +399,11 @@ if (!process.argv.includes("--child")) {
         ...desktopTestApp,
         plugins: [
           ...desktopTestApp.plugins,
+          ...(trayLifecycle || scenario === "dev-hide"
+            ? [
+                trayPlugin,
+              ]
+            : []),
           {
             name: "desktop-test",
             version: "1",

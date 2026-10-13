@@ -283,9 +283,8 @@ import { writeFileSync } from "node:fs";
 export default { ...definition, nativePlatforms: { ...definition.nativePlatforms,
   macos: { execution: "io", create(environment) {
     const adapter = definition.nativePlatforms.macos.create(environment);
-    const prepare = Reflect.get(adapter, "prepareUI");
-    if (typeof prepare !== "function") throw new Error("SDK contextual preparation must exist.");
-    return Object.defineProperty({ ...adapter }, "prepareUI", { value: async (name, input, source, context) => {
+    const prepare = adapter.prepare.bind(adapter);
+    return { ...adapter, async prepare(name, input, source, context) {
       const execute = await prepare(name, input, source, context);
       return async () => {
         const result = await execute();
@@ -298,7 +297,7 @@ export default { ...definition, nativePlatforms: { ...definition.nativePlatforms
         }
         return result;
       };
-    } });
+    } };
   } }
 } };
 `,

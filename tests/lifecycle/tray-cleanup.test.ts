@@ -21,7 +21,8 @@ test("compiled Tray retains failed native releases and stops callbacks during re
           setup(build) {
             build.onResolve(
               {
-                filter: /(win32|win32-bindings|tray-icon|menu)\.ts$/,
+                filter:
+                  /(win32|tray-bindings|windows-buffers|tray-icon|popup-menu)\.ts$/,
               },
               () => ({
                 path: platform,
@@ -29,7 +30,7 @@ test("compiled Tray retains failed native releases and stops callbacks during re
             );
             build.onLoad(
               {
-                filter: /[\\/]native[\\/]windows[\\/]bun[\\/]tray\.ts$/,
+                filter: /[\\/]plugins[\\/]tray[\\/]src[\\/]tray\.ts$/,
               },
               async (args) => ({
                 // Replace only the native binding import; compile the actual resource owner unchanged.

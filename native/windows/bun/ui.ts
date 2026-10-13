@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { parentPort, workerData } from "node:worker_threads";
-import type { WindowReadiness } from "@bunaway/plugin-api/native";
+import type {
+  NativeTrayOwner,
+  WindowReadiness,
+} from "@bunaway/plugin-api/native";
 import {
   API_LIMITS,
   BunawayError,
@@ -29,7 +32,6 @@ import { isMonitorChangeMessage, MonitorTracker } from "./monitor-events.ts";
 import { monitorServices, windowMonitor } from "./monitors.ts";
 import { createSessionNotifications } from "./session-notifications.ts";
 import { publishSystemEvent, SystemEvents } from "./system-events.ts";
-import { Tray } from "./tray.ts";
 import { originOf, WebView } from "./webview.ts";
 import {
   Windows,
@@ -62,12 +64,12 @@ let initialized = false;
 let windows: Windows | undefined;
 let systemEvents: SystemEvents | undefined;
 let adapters: Awaited<ReturnType<typeof operations>> | undefined;
-let tray: Tray | undefined;
+let tray: NativeTrayOwner | undefined;
 const trayListeners = new Set<
   (event: import("@bunaway/plugin-api/native").NativeTrayEvent) => void
 >();
 /** Resolve the configured host-owned tray without creating an alternate residency path. */
-function requireTray(): Tray {
+function requireTray(): NativeTrayOwner {
   if (!tray) {
     throw new BunawayError({
       code: "UNSUPPORTED",
@@ -1402,6 +1404,38 @@ try {
         },
       },
       tray: {
+        initialize(create) {
+          if (!config.desktop?.tray) {
+            return;
+          }
+          assert(windows);
+          assert(!tray, "Tray initialized twice");
+          const nativeWindows = windows;
+          tray = create({
+            windows: {
+              icon: nativeWindows.icon,
+              create: (title, width, height, receive) =>
+                nativeWindows.create(title, width, height, receive, false),
+              destroy: (hwnd) => nativeWindows.destroy(hwnd),
+            },
+            tooltip: config.desktop.tray.tooltip,
+            retain(owner) {
+              tray = owner;
+            },
+            receive(action) {
+              if (action === "show") {
+                visibility("show");
+              } else {
+                requestQuit("tray");
+              }
+            },
+            notify(event) {
+              for (const receive of trayListeners) {
+                receive(event);
+              }
+            },
+          });
+        },
         get: () => tray?.get() ?? null,
         getBounds: () => tray?.getBounds() ?? null,
         setTooltip(tooltip) {
@@ -1505,24 +1539,14 @@ try {
       windows.validateCreation(spec.window);
     }
   }
-  if (config.desktop?.tray) {
-    tray = new Tray(
-      windows,
-      config.desktop.tray.tooltip,
-      (action) => {
-        if (action === "show") {
-          visibility("show");
-        } else {
-          requestQuit("tray");
-        }
-      },
-      (event) => {
-        for (const receive of trayListeners) {
-          receive(event);
-        }
-      },
-    );
-  } else if (config.desktop?.closeBehavior === "keep-alive") {
+  if (config.desktop?.tray && !tray) {
+    throw new BunawayError({
+      code: "UNSUPPORTED",
+      message:
+        "desktop.tray requires installing and registering @bunaway/plugin-tray.",
+    });
+  }
+  if (!config.desktop?.tray && config.desktop?.closeBehavior === "keep-alive") {
     // A resident app needs an HWND for the CLI's private shutdown message, even before its first view.
     controlWindow = windows.create(
       config.runtime.id,
@@ -1641,10 +1665,16 @@ try {
   });
   channel.notify({
     kind: "fatal",
-    error: {
-      code: "INTERNAL",
-      message: `Windows UI failed: ${String(error).slice(0, 1024)}`,
-    },
+    error:
+      error instanceof BunawayError
+        ? {
+            code: error.code,
+            message: error.message.slice(0, 1024),
+          }
+        : {
+            code: "INTERNAL",
+            message: `Windows UI failed: ${String(error).slice(0, 1024)}`,
+          },
   });
 } finally {
   stopping = true;
