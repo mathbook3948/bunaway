@@ -20,6 +20,11 @@ import {
   APP_SHUTDOWN_MESSAGE,
   APP_WINDOW_CLASS_PREFIX,
 } from "@bunaway/runtime-bun/windows-control";
+import { Taskbar } from "./taskbar.ts";
+import {
+  type TaskbarProgress,
+  TaskbarProgressController,
+} from "./taskbar-progress.ts";
 import { display, hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
 import { windowChanges } from "./window-events.ts";
 import {
@@ -132,6 +137,14 @@ function callbackPointer(address: bigint): Pointer {
 
 // One class and one bounded pump per STA, shared by every view.
 export class Windows {
+  private readonly taskbar = new Taskbar();
+  private readonly taskbarProgress = new TaskbarProgressController(
+    (window, progress) => this.taskbar.apply(window, progress),
+  );
+  private readonly taskbarButtonCreated = withWide(
+    "TaskbarButtonCreated",
+    (name) => user.symbols.RegisterWindowMessageW(name),
+  );
   readonly thread = kernel.symbols.GetCurrentThreadId();
   private readonly instance = kernel.symbols.GetModuleHandleW(null);
   private readonly name = wide(
@@ -194,6 +207,10 @@ export class Windows {
     appId?: string,
     pollMessages?: () => void,
   ) {
+    assert(
+      this.taskbarButtonCreated,
+      "RegisterWindowMessageW(TaskbarButtonCreated) failed",
+    );
     if (appId) {
       const shell = dlopen("shell32.dll", {
         SetCurrentProcessExplicitAppUserModelID: {
@@ -286,6 +303,21 @@ export class Windows {
           assert.equal(kernel.symbols.GetCurrentThreadId(), this.thread);
           // DispatchMessage can remain in a native move/resize loop until the user releases the mouse.
           pollMessages?.();
+          if (
+            message === this.taskbarButtonCreated &&
+            this.windows.has(window)
+          ) {
+            try {
+              this.taskbarProgress.buttonCreated(window);
+            } catch (error) {
+              // Explorer recreation is asynchronous; retain the last accepted setting for a later retry.
+              console.error(
+                "Could not restore taskbar progress after button creation.",
+                error,
+              );
+            }
+            return 0n;
+          }
           if (message === APP_SHUTDOWN_MESSAGE) {
             shutdown();
             return 0n;
@@ -1922,6 +1954,7 @@ export class Windows {
     this.changingGeometry.delete(window);
     this.immovable.delete(window);
     assert(user.symbols.DestroyWindow(window));
+    this.taskbarProgress.forget(window);
     this.windows.delete(window);
     this.constraints.delete(window);
     this.dpiByWindow.delete(window);
@@ -1965,6 +1998,7 @@ export class Windows {
    */
   dispose() {
     assert.equal(this.windows.size, 0);
+    this.taskbar.dispose();
     if (this.registered) {
       assert(user.symbols.UnregisterClassW(ptr(this.name), this.instance));
     }
@@ -1977,5 +2011,11 @@ export class Windows {
       ),
       `SetThreadDpiAwarenessContext: ${kernel.symbols.GetLastError()}`,
     );
+  }
+
+  /** Apply progress to a live HWND without changing visibility, activation or window state. */
+  setTaskbarProgress(window: bigint, progress: TaskbarProgress): void {
+    assert(this.windows.has(window), "Taskbar target is not a live window");
+    this.taskbarProgress.set(window, progress);
   }
 }

@@ -445,6 +445,25 @@ export const windowOperations = {
     }),
     output: z.null(),
   },
+  "windows.setTaskbarProgress": {
+    input: z.union([
+      windowTarget.extend({
+        state: z.enum([
+          "none",
+          "indeterminate",
+        ]),
+      }),
+      windowTarget.extend({
+        state: z.enum([
+          "normal",
+          "paused",
+          "error",
+        ]),
+        value: z.number().min(0).max(1),
+      }),
+    ]),
+    output: z.null(),
+  },
   "windows.createInstance": {
     input: creationResult.input,
     output: windowIdentitySchema,

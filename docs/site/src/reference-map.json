@@ -552,6 +552,7 @@
           "center",
           "setGeometry",
           "setFullscreen",
+          "setTaskbarProgress",
           "setCloseConfirmation",
           "getSnapshot",
           "getReadiness"
@@ -1006,6 +1007,7 @@
       "windows.setPosition",
       "windows.center",
       "windows.setFullscreen",
+      "windows.setTaskbarProgress",
       "windows.setCloseConfirmation",
       "windows.getSnapshot",
       "windows.getReadiness",

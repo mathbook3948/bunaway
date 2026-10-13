@@ -281,6 +281,17 @@ export type NativeWindow = {
   ): void;
   /** Enters or exits fullscreen mode. */
   setFullscreen(value: boolean): void;
+  /** Set this window's taskbar progress; throws BUSY until its taskbar button exists. Windows only. */
+  setTaskbarProgress?(
+    progress:
+      | {
+          state: "none" | "indeterminate";
+        }
+      | {
+          state: "normal" | "paused" | "error";
+          value: number;
+        },
+  ): void;
   /** Sets or clears the confirmation shown before a user closes the window. */
   setCloseConfirmation(message: string | null): void;
 };

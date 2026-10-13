@@ -461,6 +461,15 @@ export function createOperations(
       case "windows.setFullscreen":
         window.setFullscreen(call.payload.fullscreen);
         break;
+      case "windows.setTaskbarProgress":
+        if (!window.setTaskbarProgress) {
+          throw new BunawayError({
+            code: "UNSUPPORTED",
+            message: "Taskbar progress is not implemented on this platform.",
+          });
+        }
+        window.setTaskbarProgress(call.payload);
+        break;
       case "windows.setCloseConfirmation":
         window.setCloseConfirmation(call.payload.message);
         break;

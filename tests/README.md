@@ -7,6 +7,15 @@
 결과는 `build/windows-webview-audio-results.json`이다. 조용한 문서를 사용하며 재생 중인
 audio와 물리 장치 출력은 별도 수동 검증이다.
 
+`api/window-taskbar.test.ts`는 작업 표시줄 진행률의 상태별 입력, 출력, SDK 호출 컨텍스트,
+독립 작업 권한, 취소, 닫힌 창과 미지원 플랫폼을 검사한다.
+`lifecycle/taskbar-progress.test.ts`는 버튼 준비, 마지막 성공 값의 복원, 실패 후 재시도,
+서로 다른 HWND와 파괴 후 핸들 재사용을 검사한다. 버튼 재생성은 합성 호출이다.
+`windows-bun-window-api.ts`는 실제 UI Worker와 WebView2에서 공개 SDK를 통해
+ITaskbarList3의 다섯 상태를 설정한다. 네이티브 재생성 뒤 새 HWND에서도 반복한다.
+`mise run host:windows`에 포함하며 실제 작업 표시줄의 색상, 그룹 표시 또는
+Explorer 프로세스 재시작을 육안으로 검증하지 않는다.
+
 `windows-initial-placement.fixture.ts`는 모니터 겹침이 바뀌는 `SetWindowPos`에서
 실제 창 프로시저에 `WM_DPICHANGED`를 전달한다. 초기 DPI 보정의 수렴, 중앙 좌표와
 content/outer 크기, DPI 순환 때 숨김 HWND 정리 및 생성 후 OS 권장 배치 처리를 검증한다.
