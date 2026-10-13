@@ -86,9 +86,11 @@ Darwin의 `fsetattrlist`는 파일 이름 변경을 지원하지 않는다. 디�
 여러 chunk의 복사, 무덮어쓰기, 미지원 move의 무변경, 교체 경합, 독립 프로세스 재시작과 fd 정리를 검사한다.
 parent 교체는 읽기, leaf 교체는 쓰기로 검사한다. Linux의 skip은 네이티브 통과 근거가 아니다.
 
-`.github/workflows/macos-storage.yml`은 기존 CI 작업을 보존한 별도 macOS arm64 작업이다.
-동일 fixture를 Bun으로 compile하고 기존 entitlement와 ad-hoc 서명을 적용해 실제로 실행한다.
-결과는 `build/macos-storage-results.json`과 로그 artifact다. Developer ID, 공증이나
+`.github/workflows/ci.yml`의 기존 macOS native integration 작업에서 동일 fixture를
+Bun으로 compile하고 기존 entitlement와 ad-hoc 서명을 적용해 한 번 실행한다.
+packaged storage host fixture도 공유 native runner에서 한 번 실행한다. 기존 다섯 CI 작업의
+이름과 coverage를 유지하며 별도 작업을 추가하지 않는다. 결과와 실패 진단은 기존
+macos-native-diagnostics artifact에 포함한다. Developer ID, 공증이나
 signing account는 사용하거나 변경하지 않는다. 추가 host fixture는 backend setup, 두 뷰의 독립 작업 권한, 뷰 출처를 유지하는 명령,
 아홉 작업의 공개 SDK 호출, 미지원 move의 무변경과 실제 앱 재시작 및 cleanup을 검증한다.
 공유 foundation fixture의 AppKit 응답성과 취소 및 폐기 검증도 기존 native runner에서 유지한다.
