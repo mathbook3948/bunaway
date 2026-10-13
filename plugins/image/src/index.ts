@@ -1,10 +1,15 @@
 import { defineNativePlugin } from "@bunaway/plugin";
 import { imageOperations } from "./contract.ts";
+import { createOperations as createMacosOperations } from "./platforms/macos.ts";
 import { createOperations as createWindowsOperations } from "./platforms/windows.ts";
 
 const plugin = defineNativePlugin({
   name: "image",
   platforms: {
+    macos: {
+      execution: "io",
+      create: createMacosOperations,
+    },
     windows: {
       execution: "ui",
       create: createWindowsOperations,
