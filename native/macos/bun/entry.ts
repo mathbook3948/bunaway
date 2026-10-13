@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { Worker } from "node:worker_threads";
 import {
   BunawayError,
+  type HostContext,
   type HostResponse,
   type NativeRegistration,
 } from "@bunaway/protocol";
@@ -41,11 +42,28 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
   let ui: MacosWindows | undefined;
   let application: MacosApplication | undefined;
   let channel: Channel | undefined;
+  let ioWorker: Worker | undefined;
+  let ioChannel: Channel | undefined;
+  let ioExited: Promise<number> | undefined;
+  let ioCleaned = false;
+  let ioShutdownRequested = false;
   const catalog = await loadPluginCatalog(config.assets);
   let adapters: Awaited<ReturnType<typeof operations>> | undefined;
   let registry: ReturnType<typeof pluginRegistry> | undefined;
   const pendingPlugins: NativeRegistration[] = [];
   const requests = new NativeRequests();
+  const ioCalls = new Map<
+    string,
+    {
+      packet: Extract<
+        Packet,
+        {
+          kind: "operation";
+        }
+      >;
+      signal: AbortSignal;
+    }
+  >();
   let shutdownTimer: ReturnType<typeof setTimeout> | undefined;
   let forced = false;
   let descendantCleanup: Promise<void> | undefined;
@@ -55,13 +73,26 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
     }
     stopping = true;
     pendingPlugins.length = 0;
+    // Admission reserves one cancellation slot per owned I/O call. Send these
+    // before releasing ownership so Core stop hooks can await native aborts.
+    for (const [requestId, call] of ioCalls) {
+      ioChannel?.notify({
+        kind: "cancel",
+        requestId,
+        context: call.packet.context,
+      });
+    }
     requests.cancelAll();
+    ioCalls.clear();
     clearTimeout(startup);
     // The deadline also applies when UI setup fails before its event pump starts.
     shutdownTimer = setTimeout(() => {
       forced = true;
       failure ??= new Error("macOS backend cleanup timed out.");
       void worker.terminate().catch((error) => {
+        failure ??= error;
+      });
+      void ioWorker?.terminate().catch((error) => {
         failure ??= error;
       });
     }, SHUTDOWN_TIMEOUT_MS);
@@ -76,6 +107,142 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
     quit();
   };
   const coreReady = Promise.withResolvers<void>();
+  /** Keep shutdown idempotent when backend completion and failure both request it. */
+  function stopIO() {
+    if (ioChannel && !ioShutdownRequested) {
+      ioShutdownRequested = true;
+      ioChannel.notify({
+        kind: "shutdown",
+      });
+    }
+  }
+  /** Resolve authority from the current document, never from adapter-supplied source fields. */
+  function authority(context: HostContext) {
+    if (context === config.backendContext) {
+      return {
+        permissions: config.policy.backend,
+        source: "backend",
+      };
+    }
+    const boundary = ui?.boundary(context);
+    return boundary
+      ? {
+          permissions: boundary.policy.host,
+          source: `view:${boundary.policy.id}`,
+        }
+      : undefined;
+  }
+  /** Keep descendants until both Core hooks and native adapter cleanup have completed. */
+  function stopDescendants() {
+    if (cleaned && (!ioWorker || ioCleaned)) {
+      descendantCleanup ??= group.stopDescendants();
+    }
+    return descendantCleanup;
+  }
+  /** Start the same bounded I/O queue as Windows, with macOS-specific adapter imports. */
+  async function startIO(plugins: NativeRegistration[]) {
+    if (
+      !catalog.some(
+        (entry) =>
+          entry.execution === "io" &&
+          plugins.some((plugin) => plugin.name === entry.name),
+      )
+    ) {
+      return;
+    }
+    const started = Promise.withResolvers<void>();
+    ioWorker = new Worker(new URL("./host-operations.js", import.meta.url), {
+      workerData: {
+        runtime: config.runtime,
+        assets: config.assets,
+        dataRoot: config.dataRoot,
+        plugins,
+        policy: config.policy,
+      },
+      env: {
+        HOME: config.dataRoot,
+        TMPDIR: resolve(config.dataRoot, "temp"),
+        PATH: "/usr/bin:/bin",
+        BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0",
+        DO_NOT_TRACK: "1",
+      },
+    });
+    ioExited = new Promise<number>((done) => ioWorker?.once("exit", done));
+    ioWorker.on("error", (error) => {
+      started.reject(error);
+      fail(error);
+    });
+    ioWorker.on("exit", (code) => {
+      if (!stopping || !ioCleaned || code !== 0) {
+        const error = new Error(
+          `macOS I/O worker exited without cleanup (${code}).`,
+        );
+        started.reject(error);
+        fail(error);
+      }
+    });
+    ioChannel = new Channel(
+      ioWorker,
+      config.runtime,
+      "main-io",
+      async (packet) => {
+        if (packet.kind === "ready") {
+          started.resolve();
+        } else if (
+          packet.kind === "authorize-input" ||
+          packet.kind === "prepare"
+        ) {
+          const call = ioCalls.get(packet.requestId);
+          const access = authority(packet.context);
+          const allowed =
+            !!call &&
+            call.packet.context === packet.context &&
+            !stopping &&
+            !call.signal.aborted &&
+            !!access &&
+            call.packet.source === access.source &&
+            !!registry &&
+            registry.allowed(
+              access.permissions,
+              registry.validateCall(call.packet.call),
+            );
+          await ioChannel?.send({
+            kind:
+              packet.kind === "authorize-input" ? "input-authorized" : "grant",
+            context: packet.context,
+            requestId: packet.requestId,
+            allowed,
+          });
+        } else if (packet.kind === "host-response") {
+          const call = ioCalls.get(packet.requestId);
+          if (!call) {
+            return;
+          }
+          if (call.packet.context !== packet.context) {
+            throw new Error("Invalid I/O response context.");
+          }
+          ioCalls.delete(packet.requestId);
+          const active = requests.finish(packet.requestId, call.signal);
+          if (!stopping && active && authority(packet.context)) {
+            channel?.notify(packet);
+          }
+        } else if (packet.kind === "cleaned") {
+          ioCleaned = true;
+          await stopDescendants();
+        } else if (packet.kind === "fatal") {
+          fail(new Error(packet.error.message));
+        } else {
+          throw new Error("Unexpected macOS I/O packet.");
+        }
+      },
+      fail,
+    );
+    await started.promise;
+    // Shutdown may have arrived while adapter imports were initializing.
+    if (stopping) {
+      stopIO();
+    }
+  }
   const group = await containMacosProcess((error) => {
     failure ??= error;
     if (channel) {
@@ -149,21 +316,25 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
             ui.services,
             catalog,
           );
+          if (!stopping) {
+            await startIO(plugins);
+          }
         } catch (error) {
           fail(error);
         }
       } else if (packet.kind === "cancel") {
         if (requests.context(packet.requestId) === packet.context) {
           requests.cancel(packet.requestId);
+          ioCalls.delete(packet.requestId);
+          ioChannel?.notify(packet);
         }
       } else if (packet.kind === "operation") {
         // The backend needs acceptance even while plugin parsing or execution is pending.
         void executeRequest(packet).catch(fail);
       } else if (packet.kind === "cleaned") {
         cleaned = true;
-        // Referenced subprocesses can keep an otherwise cleaned Worker alive.
-        descendantCleanup = group.stopDescendants();
-        await descendantCleanup;
+        stopIO();
+        await stopDescendants();
       } else if (packet.kind === "fatal") {
         fail(new Error(packet.error.message));
       } else {
@@ -184,20 +355,16 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
     const signal = requests.begin(packet.requestId, packet.context);
     let response: HostResponse;
     try {
-      const permissions =
-        packet.context === config.backendContext
-          ? config.policy.backend
-          : ui?.boundary(packet.context)?.policy.host;
-      const source =
-        packet.context === config.backendContext
-          ? "backend"
-          : `view:${ui?.boundary(packet.context)?.policy.id ?? "invalid"}`;
+      const access = authority(packet.context);
       if (
         stopping ||
-        !permissions ||
-        source !== packet.source ||
+        !access ||
+        access.source !== packet.source ||
         !registry ||
-        !registry.allowed(permissions, registry.validateCall(packet.call))
+        !registry.allowed(
+          access.permissions,
+          registry.validateCall(packet.call),
+        )
       ) {
         throw new BunawayError({
           code: "PERMISSION_DENIED",
@@ -207,13 +374,31 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
       if (!adapters) {
         throw new Error("Native adapters are not ready.");
       }
+      const execution = catalog.find((plugin) =>
+        packet.call.operation.startsWith(`${plugin.name}.`),
+      )?.execution;
+      if (execution === "io") {
+        if (!ioChannel?.canSend(1, ioCalls.size)) {
+          throw new BunawayError({
+            code: "BUSY",
+            message: "Host request limit reached.",
+          });
+        }
+        ioCalls.set(packet.requestId, {
+          packet,
+          signal,
+        });
+        await ioChannel.send(packet);
+        // The I/O channel owns settlement; acceptance must leave cancellation live.
+        return;
+      }
       const payload = await adapters.executeUI(
         packet.call.operation,
         packet.call.payload,
-        source,
+        access.source,
         {
           requestId: packet.requestId,
-          permissions,
+          permissions: access.permissions,
           signal,
           beforeExecute() {
             if (
@@ -232,6 +417,7 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
       );
       response = hostResponse(() => payload);
     } catch (error) {
+      ioCalls.delete(packet.requestId);
       response = hostResponse(() => {
         throw error;
       });
@@ -285,6 +471,15 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
       forward: (packet) => {
         if (packet.kind === "revoke") {
           requests.cancelContext(packet.route.context);
+          for (const [id, call] of ioCalls) {
+            if (call.packet.context === packet.route.context) {
+              ioCalls.delete(id);
+            }
+          }
+          ioChannel?.notify({
+            kind: "cancel-context",
+            context: packet.route.context,
+          });
         }
         channel?.notify(packet);
       },
@@ -317,6 +512,9 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
     quit();
     // Keep acknowledgements alive until plugin cleanup and actual Worker exit.
     await exited;
+    // Failed backend startup may never report cleaned; still dispose native adapters.
+    stopIO();
+    await ioExited;
     if (shutdownTimer) {
       clearTimeout(shutdownTimer);
     }
@@ -330,6 +528,7 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
     ui?.close();
     application?.close();
     channel.close();
+    ioChannel?.close();
     let activeProcesses: number | null = null;
     try {
       await descendantCleanup?.catch((error) => {

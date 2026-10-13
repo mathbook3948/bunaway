@@ -9,8 +9,8 @@ import {
 } from "@bunaway/protocol";
 import type {
   NativeAdapter,
-  NativePluginAdapter,
   NativeEnvironment,
+  NativePluginAdapter,
   PackagedPlugin,
 } from "./plugin-contract.ts";
 
@@ -24,6 +24,12 @@ type PluginOperations = {
     operation: string,
     input: unknown,
     source: string,
+  ): Promise<() => Promise<JsonValue>>;
+  prepareIO(
+    operation: string,
+    input: unknown,
+    source: string,
+    context: Parameters<NonNullable<NativeAdapter["executeUI"]>>[3],
   ): Promise<() => Promise<JsonValue>>;
   execute(
     operation: string,
@@ -196,6 +202,36 @@ export async function operations(
         "prepare" in adapter
           ? await adapter.prepare(operation, call.payload, source)
           : () => adapter.execute(operation, call.payload, source);
+      return async () => registry.validateOutput(operation, await execute());
+    },
+    async prepareIO(operation, input, source, context) {
+      const adapter = adapters.get(operation.split(".")[0] ?? "");
+      if (!adapter?.executeUI) {
+        return dispatcher.prepare(operation, input, source);
+      }
+      const call = registry.validateCall({
+        operation,
+        payload: input as never,
+      });
+      if (!supported.has(operation)) {
+        throw new BunawayError({
+          code: "UNSUPPORTED",
+          message: "Plugin operation is not supported on this platform.",
+        });
+      }
+      const prepareUI: unknown = Reflect.get(adapter, "prepareUI");
+      if (typeof prepareUI !== "function") {
+        throw new Error("Contextual I/O requires an SDK-validated adapter.");
+      }
+      // SDK wrappers supply this private method; the public NativeAdapter contract stays unchanged.
+      const execute = await (
+        prepareUI as (
+          name: string,
+          input: JsonValue,
+          source: string,
+          context: Parameters<NonNullable<NativeAdapter["executeUI"]>>[3],
+        ) => Promise<() => Promise<JsonValue>>
+      )(operation, call.payload, source, context);
       return async () => registry.validateOutput(operation, await execute());
     },
     async execute(operation, input, source) {
