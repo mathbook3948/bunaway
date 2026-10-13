@@ -58,7 +58,7 @@ async function waitForExit(pid: number) {
 }
 
 test.skipIf(!isolated)(
-  "real I/O Worker NSWorkspace delivers controlled files and HTTP/HTTPS URLs to a signed fixture app",
+  "real I/O Worker NSWorkspace delivers a controlled file and accepts loopback HTTP/HTTPS requests",
   async () => {
     const root = await realpath(
       await mkdtemp(join(tmpdir(), "bunaway-opener-native-")),
@@ -81,45 +81,12 @@ test.skipIf(!isolated)(
           ],
           returns: "i32",
         },
-        LSCopyDefaultHandlerForURLScheme: {
-          args: [
-            "u64",
-          ],
-          returns: "u64",
-        },
-        LSSetDefaultHandlerForURLScheme: {
-          args: [
-            "u64",
-            "u64",
-          ],
-          returns: "i32",
-        },
-        LSSetDefaultRoleHandlerForContentType: {
-          args: [
-            "u64",
-            "u32",
-            "u64",
-          ],
-          returns: "i32",
-        },
-      },
-    );
-    const foundation = dlopen(
-      "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation",
-      {
-        CFRelease: {
-          args: [
-            "u64",
-          ],
-          returns: "void",
-        },
       },
     );
     const schemes = [
       "http",
       "https",
     ];
-    const originals = new Map<string, string>();
     let worker: Worker | undefined;
     let registered = false;
     let events: Event[] = [];
@@ -169,7 +136,6 @@ test.skipIf(!isolated)(
 <key>CFBundleExecutable</key><string>receiver</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>LSUIElement</key><true/>
-<key>CFBundleURLTypes</key><array><dict><key>CFBundleURLSchemes</key><array><string>http</string><string>https</string></array></dict></array>
 <key>UTExportedTypeDeclarations</key><array><dict><key>UTTypeIdentifier</key><string>${contentType}</string><key>UTTypeConformsTo</key><array><string>public.data</string></array><key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><string>${extension}</string></dict></dict></array>
 <key>CFBundleDocumentTypes</key><array><dict><key>CFBundleTypeRole</key><string>Viewer</string><key>LSHandlerRank</key><string>Owner</string><key>LSItemContentTypes</key><array><string>${contentType}</string></array></dict></array>
 </dict></plist>`,
@@ -200,17 +166,6 @@ test.skipIf(!isolated)(
         app,
       ]);
       objc.withAutoreleasePool(() => {
-        for (const scheme of schemes) {
-          const handler = services.symbols.LSCopyDefaultHandlerForURLScheme(
-            BigInt(objc.string(scheme)),
-          );
-          expect(handler).not.toBe(0n);
-          try {
-            originals.set(scheme, objc.text(handler));
-          } finally {
-            foundation.symbols.CFRelease(handler);
-          }
-        }
         const appUrl = objc.send(
           objc.class("NSURL"),
           "fileURLWithPath:",
@@ -221,29 +176,6 @@ test.skipIf(!isolated)(
           0,
         );
         registered = true;
-        expect(
-          services.symbols.LSSetDefaultRoleHandlerForContentType(
-            BigInt(objc.string(contentType)),
-            0xffffffff,
-            BigInt(objc.string(id)),
-          ),
-        ).toBe(0);
-        for (const scheme of schemes) {
-          expect(
-            services.symbols.LSSetDefaultHandlerForURLScheme(
-              BigInt(objc.string(scheme)),
-              BigInt(objc.string(id)),
-            ),
-          ).toBe(0);
-          const handler = services.symbols.LSCopyDefaultHandlerForURLScheme(
-            BigInt(objc.string(scheme)),
-          );
-          try {
-            expect(objc.text(handler)).toBe(id);
-          } finally {
-            foundation.symbols.CFRelease(handler);
-          }
-        }
       });
       await command([
         "/usr/bin/open",
@@ -357,7 +289,6 @@ test.skipIf(!isolated)(
         ).toMatchObject({
           result: null,
         });
-        await waitFor((event) => event.kind === "url" && event.target === url);
       }
       expect(
         await request(
@@ -408,6 +339,7 @@ test.skipIf(!isolated)(
             revision: Bun.revision,
             execution: "isolated I/O Worker fixture",
             events,
+            urls: "Native request acceptance for loopback HTTP/HTTPS; page loading not inspected",
             reveal:
               "NSWorkspace request acceptance; selection UI not inspected",
             hostIntegration:
@@ -419,42 +351,27 @@ test.skipIf(!isolated)(
       );
     } finally {
       await worker?.terminate();
-      // Restore the disposable runner's defaults before stopping or deleting its receiver.
       try {
-        objc.withAutoreleasePool(() => {
-          for (const [scheme, handler] of originals) {
-            expect(
-              services.symbols.LSSetDefaultHandlerForURLScheme(
-                BigInt(objc.string(scheme)),
-                BigInt(objc.string(handler)),
-              ),
-            ).toBe(0);
+        if (events.some((event) => event.kind === "ready")) {
+          await writeFile(join(resources, "stop"), "stop");
+          const pid = events.find((event) => event.kind === "ready")?.pid;
+          if (pid) {
+            await waitForExit(pid);
           }
-        });
-      } finally {
-        try {
-          if (events.some((event) => event.kind === "ready")) {
-            await writeFile(join(resources, "stop"), "stop");
-            const pid = events.find((event) => event.kind === "ready")?.pid;
-            if (pid) {
-              await waitForExit(pid);
-            }
-          }
-          if (registered) {
-            await command([
-              "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
-              "-u",
-              app,
-            ]);
-          }
-        } finally {
-          services.close();
-          foundation.close();
-          await rm(root, {
-            recursive: true,
-            force: true,
-          });
         }
+        if (registered) {
+          await command([
+            "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
+            "-u",
+            app,
+          ]);
+        }
+      } finally {
+        services.close();
+        await rm(root, {
+          recursive: true,
+          force: true,
+        });
       }
     }
   },

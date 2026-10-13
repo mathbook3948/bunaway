@@ -54,10 +54,12 @@ POSIX descriptor는 경로 이름의 rename이나 교체를 막지 않는다. NS
 
 `macos-opener-native.test.ts`는 폐기 가능한 macOS CI 세션에서만
 `BUNAWAY_OPENER_ISOLATED=1`로 실행한다. 기존 entitlement와 ad-hoc 서명으로 Bun fixture
-앱을 만들고 고유 확장자와 loopback HTTP/HTTPS URL을 실제 NSWorkspace에 전달한다.
-fixture 앱은 전달받은 인자를 기록하며 URL을 요청하지 않는다. 테스트 중 기본 HTTP/HTTPS
-handler를 fixture로 바꾸고 `finally`에서 원래 handler를 복원한 뒤 앱 등록과 파일을 정리한다.
-사용자 파일이나 clipboard는 읽거나 바꾸지 않는다. 개인 데스크톱에서 실행하지 않는다.
+앱을 만들고 고유 확장자의 파일을 실제 NSWorkspace로 전달해 인자를 기록한다. loopback
+HTTP/HTTPS URL은 runner의 기본 브라우저에 요청하며 NSWorkspace의 접수 결과를 확인한다.
+브라우저의 페이지 로딩은 검사하지 않는다. 기본 브라우저를 바꾸지 않으며 `finally`에서
+fixture 앱 종료를 확인하고 등록과 파일을 정리한다. 사용자 파일이나 clipboard는 읽거나
+바꾸지 않는다. 개인 데스크톱에서 실행하지 않는다. 첫 CI에서 기본 handler 변경이 OSStatus
+`-54`로 거부되어 해당 변경을 제거했다. 권한 제한을 우회하지 않는다.
 
 실제 어댑터는 독립 Worker에서 실행하고 fixture dispatcher가 기존 NativeRegistry로
 작업별 권한과 승인 전 취소를 검사한다. 이것은 아직 연결하지 않은 제품 호스트의 검증을
