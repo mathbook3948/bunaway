@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { NativeAdapter } from "@bunaway/plugin";
 import { MacosKeychain } from "../../../plugins/safe-storage/src/macos-keychain.ts";
 import { macosOperations } from "../../../plugins/safe-storage/src/macos-operations.ts";
 import { keychainFixture } from "./macos-keychain.ts";
@@ -12,13 +13,15 @@ const [mode, path, ciphertextPath] = process.argv.slice(2);
 const fixture = keychainFixture();
 
 if (mode === "decrypt") {
-  assert(path && ciphertextPath);
-  const reference = fixture.open(path);
-  const adapter = macosOperations(
-    APP_ID,
-    () => new MacosKeychain(APP_ID, reference),
-  );
+  let ownedAdapter: NativeAdapter | undefined;
   try {
+    assert(path && ciphertextPath);
+    const reference = fixture.open(path);
+    ownedAdapter = macosOperations(
+      APP_ID,
+      () => new MacosKeychain(APP_ID, reference),
+    );
+    const adapter = ownedAdapter;
     const ciphertext = await Bun.file(ciphertextPath).text();
     assert.equal(
       adapter.execute(
@@ -32,22 +35,26 @@ if (mode === "decrypt") {
     );
     console.log("synthetic-restart-ok");
   } finally {
-    await adapter.dispose();
+    await ownedAdapter?.dispose();
     fixture.dispose(false);
   }
 } else {
   const root = await mkdtemp(join(tmpdir(), "bunaway-keychain-"));
   const keychainPath = join(root, "synthetic.keychain");
-  const reference = fixture.create(keychainPath);
-  const adapter = macosOperations(
-    APP_ID,
-    () => new MacosKeychain(APP_ID, reference),
-  );
-  const other = macosOperations(
-    APP_ID,
-    () => new MacosKeychain(APP_ID, reference),
-  );
+  let ownedAdapter: NativeAdapter | undefined;
+  let ownedOther: NativeAdapter | undefined;
   try {
+    const reference = fixture.create(keychainPath);
+    ownedAdapter = macosOperations(
+      APP_ID,
+      () => new MacosKeychain(APP_ID, reference),
+    );
+    const adapter = ownedAdapter;
+    ownedOther = macosOperations(
+      APP_ID,
+      () => new MacosKeychain(APP_ID, reference),
+    );
+    const other = ownedOther;
     assert.equal(
       adapter.execute("safe-storage.isAvailable", null, "backend"),
       true,
@@ -195,12 +202,15 @@ if (mode === "decrypt") {
       }),
     );
   } finally {
-    await adapter.dispose();
-    await other.dispose();
-    fixture.dispose(true);
-    await rm(root, {
-      recursive: true,
-      force: true,
-    });
+    await ownedAdapter?.dispose();
+    await ownedOther?.dispose();
+    try {
+      fixture.dispose(true);
+    } finally {
+      await rm(root, {
+        recursive: true,
+        force: true,
+      });
+    }
   }
 }
