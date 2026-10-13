@@ -234,7 +234,7 @@ export class Downloads implements NativeDownloads {
     this.entries.delete(id);
   }
 
-  /** Cancel every owned operation and release every native reference even if one cancellation fails. */
+  /** Try every cancellation; retain failed resources for retry or observed broker-exit cleanup. */
   dispose(browserGone = false): void {
     if (this.closed) {
       return;
