@@ -1,10 +1,10 @@
 ---
 title: clipboard
-description: Windows 텍스트, 이미지와 다중 형식 클립보드를 읽고 쓰거나 지웁니다.
+description: Windows와 macOS의 텍스트, 이미지와 다중 형식 클립보드를 읽고 쓰거나 지웁니다.
 sidebar: { order: 6 }
 ---
 
-`@bunaway/plugin-clipboard`를 설치하고 앱의 `plugins`에 `clipboardPlugin`을 등록합니다. 현재 Windows에서만 제공합니다.
+`@bunaway/plugin-clipboard`를 설치하고 앱의 `plugins`에 `clipboardPlugin`을 등록합니다. Windows와 macOS 어댑터를 제공합니다. 파일 목록은 Windows에서만 제공합니다.
 
 ```ts
 import { defineApp } from "@bunaway/backend";
@@ -37,9 +37,9 @@ await clipboard.clear(null);
 | `clipboard.readFormats` | `{ formats: format[] }` | `Promise<Array<{ format, data }>>` | `clipboard.readFormats` |
 | `clipboard.writeFormats` | `{ items: Array<{ format, data }> }` | `Promise<null>` | `clipboard.writeFormats` |
 
-빈 클립보드나 Windows에서 Unicode 텍스트 형식을 제공하지 않는 클립보드는 `null`입니다. 텍스트 형식이 있고 내용만 비어 있으면 `""`입니다. Windows가 일반 텍스트를 Unicode 텍스트로 변환해 제공하는 경우도 읽습니다.
+빈 클립보드나 지원하는 텍스트 형식이 없는 클립보드는 `null`입니다. 텍스트 형식이 있고 내용만 비어 있으면 `""`입니다. Windows가 일반 텍스트를 Unicode 텍스트로 변환해 제공하는 경우도 읽습니다. macOS는 `public.utf8-plain-text`를 읽고 씁니다.
 
-읽기와 쓰기의 텍스트는 Unicode 문자 16,384개까지입니다. 이모지 등 보조 평면 문자는 하나로 셉니다. NUL과 짝이 맞지 않는 UTF-16 surrogate는 거부합니다. 줄바꿈, 한글과 이모지는 변환 없이 보존합니다. 외부 클립보드의 메모리 블록은 종료 NUL을 포함해 최대 65,538바이트이며, 더 큰 블록이나 잘못된 텍스트는 읽기에 실패합니다. 긴 내용을 잘라 반환하지 않습니다.
+읽기와 쓰기의 텍스트는 Unicode 문자 16,384개까지입니다. 이모지 등 보조 평면 문자는 하나로 셉니다. NUL과 짝이 맞지 않는 UTF-16 surrogate는 거부합니다. 줄바꿈, 한글과 이모지는 변환 없이 보존합니다. Windows의 외부 텍스트 메모리 블록은 종료 NUL을 포함해 최대 65,538바이트입니다. macOS의 UTF-8 텍스트와 HTML은 최대 65,536바이트이며 RTF는 최대 16,384바이트입니다. 더 큰 데이터나 잘못된 텍스트는 읽기에 실패합니다. 긴 내용을 잘라 반환하지 않습니다.
 
 쓰기는 기존의 모든 클립보드 형식을 텍스트로 교체합니다. `clear`는 이미지와 사용자 정의 형식까지 모두 지웁니다. 두 작업의 성공 결과는 `null`입니다. 텍스트 쓰기 권한으로 지우기나 읽기를 허용하지 않습니다.
 
@@ -53,7 +53,7 @@ const image = await clipboard.readImage(null);
 if (image) console.log(image.width, image.height, image.rgba);
 ```
 
-쓰기에는 sRGB `CF_DIBV5`와 명시적인 BGRA/alpha mask를 사용합니다. 읽기는 `CF_DIBV5`를 우선하고 없으면 `CF_DIB`를 사용합니다. 24/32-bit `BI_RGB`, 또는 표준 BGRA mask의 32-bit `BI_BITFIELDS`를 지원합니다. Legacy `BI_RGB`의 사용하지 않는 네 번째 바이트는 alpha가 아니며 불투명 픽셀로 반환합니다. 다른 compression, mask, color profile 또는 지원 크기를 벗어난 외부 이미지는 `INTERNAL`입니다. 지원 bitmap 형식이 없으면 `null`입니다. PNG, JPEG, 파일 경로와 data URL은 이 API의 입력이 아닙니다.
+Windows 쓰기에는 sRGB `CF_DIBV5`와 명시적인 BGRA/alpha mask를 사용합니다. 읽기는 `CF_DIBV5`를 우선하고 없으면 `CF_DIB`를 사용합니다. 24/32-bit `BI_RGB`, 또는 표준 BGRA mask의 32-bit `BI_BITFIELDS`를 지원합니다. Legacy `BI_RGB`의 사용하지 않는 네 번째 바이트는 alpha가 아니며 불투명 픽셀로 반환합니다. 다른 compression, mask, color profile 또는 지원 크기를 벗어난 외부 이미지는 `INTERNAL`입니다. 지원 bitmap 형식이 없으면 `null`입니다. PNG, JPEG, 파일 경로와 data URL은 이 API의 입력이 아닙니다.
 
 이미지 값은 복사된 JSON 데이터입니다. 네이티브 이미지 리소스 ID를 발급하지 않으며 별도 release 호출이 필요하지 않습니다. 읽은 HGLOBAL을 빌리거나 앱 종료 뒤 네이티브 픽셀 포인터를 보관하지 않습니다.
 
@@ -69,7 +69,7 @@ if (image) console.log(image.width, image.height, image.rgba);
 | `application/x-bunaway-file-list` | 절대 Windows 경로의 문자열 배열 | wide `CF_HDROP` |
 | `image/bmp` | `{ width, height, rgba }` 이미지 값 | `CF_DIBV5` 또는 `CF_DIB` |
 
-`image/bmp`는 이 API의 Windows bitmap 식별자이며 `data`는 BMP 파일 bytes가 아닌 위 RGBA 값입니다. `getFormats`는 이 다섯 형식 중 현재 읽을 수 있는 형식을 반환합니다. Windows가 변환해 제공할 수 있는 형식도 포함하며 임의의 등록 이름이나 모든 Windows 형식을 열거하지 않습니다. `hasFormat`도 지원 형식만 받습니다. 가용성은 데이터가 크기와 codec 제한을 통과한다는 보장이 아닙니다.
+`image/bmp`는 기존 bitmap 작업 식별자이며 `data`는 BMP 파일 bytes가 아닌 위 RGBA 값입니다. `getFormats`는 이 다섯 형식 중 현재 읽을 수 있는 형식을 반환합니다. Windows가 변환해 제공할 수 있는 형식도 포함하며 임의의 등록 이름이나 모든 Windows 형식을 열거하지 않습니다. `hasFormat`도 지원 형식만 받습니다. 가용성은 데이터가 크기와 codec 제한을 통과한다는 보장이 아닙니다.
 
 ```ts
 await clipboard.writeFormats({ items: [
@@ -102,7 +102,30 @@ HTML은 전체 문서가 아닌 fragment를 받습니다. CF_HTML의 fragment by
 
 화면 함수의 마지막 인자는 선택적인 `NativeInvokeOptions`입니다. `signal`로 취소하고 `deadline`으로 Unix epoch 밀리초의 절대 기한을 지정합니다. 백엔드는 현재 명령의 취소와 기한을 이어받고 별도 옵션을 받지 않습니다. 자세한 규칙은 [invoke](/reference/client/invoke/)를 따릅니다.
 
-다른 프로그램이 클립보드를 점유하면 10ms 간격으로 재시도합니다. 250ms가 지난 뒤에도 열 수 없으면 `BUSY`입니다. 대기 중 취소, 호출 컨텍스트 폐기나 앱 종료는 남은 재시도를 중단합니다. OS 호출 자체는 동기 실행이므로 이미 시작한 읽기나 변경을 중단하거나 완료한 변경을 되돌리지 않습니다. 외부 프로그램의 지연 렌더링 때문에 OS 호출이 오래 걸릴 수 있습니다.
+Windows에서 다른 프로그램이 클립보드를 점유하면 10ms 간격으로 재시도합니다. 250ms가 지난 뒤에도 열 수 없으면 `BUSY`입니다. 대기 중 취소, 호출 컨텍스트 폐기나 앱 종료는 남은 재시도를 중단합니다. OS 호출 자체는 동기 실행이므로 이미 시작한 읽기나 변경을 중단하거나 완료한 변경을 되돌리지 않습니다. 외부 프로그램의 지연 렌더링 때문에 OS 호출이 오래 걸릴 수 있습니다.
+
+## macOS 형식과 제한
+
+macOS는 텍스트, HTML, RTF와 RGBA 이미지 작업을 UI 메인 스레드에서 실행합니다.
+HTML과 ASCII RTF는 각각 `public.html`과 `public.rtf`를 사용합니다. HTML은
+CF_HTML header가 없는 UTF-8 markup이며 정제하거나 실행하지 않습니다.
+기존 `image/bmp` 작업의 `data`는 같은 RGBA JSON 값이고 실제 클립보드 형식은
+`public.tiff`입니다. 8-bit RGB 또는 unassociated RGBA, top-left orientation,
+단일 strip의 비압축 TIFF만 읽습니다. 출력도 같은 RGBA TIFF이며 투명 픽셀의 RGB를
+보존합니다. 압축, 다중 페이지, planar, 회전된 orientation, ICC profile과 다른
+pixel layout은 `INTERNAL`입니다. 외부 TIFF는 528,384바이트까지이며 픽셀 제한은
+공통 계약의 524,288바이트입니다. 다른 앱에서 만든 모든 TIFF의 지원을 뜻하지 않습니다.
+
+파일 목록의 Windows 경로 스키마는 그대로 유지합니다. macOS에서 파일 목록을 포함한
+쓰기는 기존 내용을 지우기 전에 `UNSUPPORTED`로 실패합니다. 발견 목록에는 포함하지
+않고 `hasFormat`은 `false`, `readFormats`의 해당 결과는 `null`입니다.
+
+macOS 쓰기는 모든 형식을 하나의 `NSPasteboardItem`에 준비한 뒤 기존 내용을
+교체합니다. 준비 실패는 기존 내용을 보존하고 교체 실패는 `INTERNAL`이며 롤백하지
+않습니다. 동기 OS 호출이 시작한 뒤의 취소는 완료한 변경을 되돌리지 않습니다.
+읽은 데이터는 복사해서 반환하고 native 포인터를 보관하지 않습니다. 다중 형식 읽기 중 다른 프로그램이 내용을 바꾸면 `BUSY`로 실패하며 서로 다른 시점의 데이터를 섞어 반환하지 않습니다.
+실제 macOS arm64 CI의 실행 근거와 검증 범위는
+[플러그인 README](https://github.com/mathbook3948/bunaway/tree/main/plugins/clipboard)를 참고하세요.
 
 ## 오류
 
@@ -111,8 +134,8 @@ HTML은 전체 문서가 아닌 fragment를 받습니다. CF_HTML의 fragment by
 | `INVALID_ARGUMENT` | 잘못된 입력 형식, 길이와 JSON 예산 초과, 잘못된 RGBA/base64, 경로, RTF 또는 Unicode 텍스트 |
 | `PERMISSION_DENIED` | 호출 출처에 해당 작업 권한이 없음 |
 | `UNSUPPORTED` | 등록하지 않은 작업이거나 플랫폼 어댑터가 없음 |
-| `BUSY` | 정해진 시간 동안 클립보드를 열지 못함 |
-| `INTERNAL` | 외부 데이터가 크기, JSON 예산 또는 codec 제한을 벗어나거나 Windows 메모리, 클립보드 작업이 실패함 |
+| `BUSY` | Windows 클립보드를 정해진 시간 동안 열지 못하거나 macOS 다중 형식 읽기 중 내용이 변경됨 |
+| `INTERNAL` | 외부 데이터가 크기, JSON 예산 또는 codec 제한을 벗어나거나 네이티브 메모리, 클립보드 작업이 실패함 |
 | `CANCELLED`, `TIMEOUT` | 취소되거나 호출 기한을 넘김 |
 
 메모리 준비에 실패하면 기존 내용은 유지합니다. Windows가 기존 내용을 비운 다음 등록에 실패하면 `INTERNAL`이고 이전 내용은 복원하지 않습니다. 다중 형식 쓰기에서 일부 등록에 실패하면 성공한 형식은 남을 수 있습니다. 미등록 핸들은 해제하고 이미 Windows에 이전한 핸들은 다시 해제하지 않습니다. 자세한 소유권과 실제 Windows 검증은 [플러그인 README](https://github.com/mathbook3948/bunaway/tree/main/plugins/clipboard)를 참고하세요.

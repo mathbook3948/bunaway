@@ -4,7 +4,7 @@
 `src/contract.ts`는 작업 스키마와 네이티브 호출 검증을 소유하며 텍스트 제한은 `src/text.ts`에서 공유한다.
 플랫폼 구현은 계약을 직접 읽으며 공개 진입점을 역으로 import하지 않는다.
 
-Windows 텍스트, HTML, RTF, 파일 목록과 bitmap 클립보드를 제공하는 선택 패키지다. 설치 후 `clipboardPlugin`을 앱의 `plugins`에 등록하고 호출 출처에 작업별 권한을 허용한다. 화면과 백엔드 모두 같은 `clipboard`를 사용한다.
+Windows와 macOS의 텍스트, HTML, RTF와 RGBA 이미지 클립보드를 제공하는 선택 패키지다. 파일 목록은 Windows에서만 제공한다. 설치 후 `clipboardPlugin`을 앱의 `plugins`에 등록하고 호출 출처에 작업별 권한을 허용한다. 화면과 백엔드 모두 같은 `clipboard`를 사용한다.
 
 ```ts
 import { clipboard, clipboardPlugin } from "@bunaway/plugin-clipboard";
@@ -15,7 +15,7 @@ const text = await clipboard.readText(null);
 await clipboard.clear(null);
 ```
 
-공개 입력, 반환값, 권한, 오류와 취소 규칙은 [API 레퍼런스](../../docs/site/src/content/docs/reference/plugins/clipboard.mdx)에 둔다. Windows 이외의 어댑터, bookmark, 임의 binary 형식과 변경 이벤트는 제공하지 않는다.
+공개 입력, 반환값, 권한, 오류와 취소 규칙은 [API 레퍼런스](../../docs/site/src/content/docs/reference/plugins/clipboard.mdx)에 둔다. bookmark, 임의 binary 형식과 변경 이벤트는 제공하지 않는다.
 
 `readImage`와 `writeImage`는 크기와 base64 RGBA 픽셀을 전달한다. `readFormats`와 `writeFormats`는 지원 형식을 한 번의 열기 구간에서 읽거나 교체하며 `getFormats`와 `hasFormat`은 지원 형식의 가용성을 조회한다. 발견 결과에는 Windows가 변환해 제공할 수 있는 형식도 포함된다. 네이티브 이미지 ID나 별도 이미지 저장소는 만들지 않는다.
 
@@ -34,6 +34,25 @@ await clipboard.clear(null);
 Microsoft의 [SetClipboardData 소유권 규칙](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setclipboarddata), [클립보드 메모리 규칙](https://learn.microsoft.com/en-us/windows/win32/dataxchg/clipboard-operations), [HTML 형식](https://learn.microsoft.com/en-us/windows/win32/dataxchg/html-clipboard-format)과 [BITMAPV5HEADER](https://learn.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-bitmapv5header)를 따른다.
 
 ## 검증
+
+`macos-clipboard-native.test.ts`는 고유 이름의 NSPasteboard로 fixture를 격리한다.
+`macos-clipboard-webview.ts`는 실제 compiled host, WKWebView와 공개 SDK로 backend
+setup, 호출 출처 권한, Unicode, 다중 형식과 RGBA를 검사한다. 일반 클립보드를 변경하므로
+`BUNAWAY_CLIPBOARD_NATIVE=1`로 명시한 CI 데스크톱에서만 실행하고 종료 시 fixture
+내용을 지운다. 결과는 `build/macos-clipboard-results.json`에 기록한다. macOS arm64 CI
+통과 전에는 구현 범위를 검증 완료로 판단하지 않는다.
+
+macOS 바인딩은 `src/macos-pasteboard.ts`, bounded TIFF codec은 `src/macos-tiff.ts`가
+소유한다. 작업마다 autorelease pool을 해제하고 `NSData`는 길이 검사 뒤 복사한다.
+Objective-C 객체는 tagged pointer까지 보존하는 64-bit 정수로 전달한다. 쓰기는 모든
+형식을 하나의 `NSPasteboardItem`에 준비한 다음 교체하며 종료는 바인딩을 닫는다.
+일반 클립보드의 내용은 앱 종료 뒤에도 남는다. TIFF 지원 범위와 파일 목록 거부는
+API 레퍼런스의 macOS 형식과 제한을 따른다.
+
+```sh
+BUNAWAY_CLIPBOARD_NATIVE=1 mise exec -- bun --no-env-file test tests/lifecycle/macos-clipboard-native.test.ts
+BUNAWAY_CLIPBOARD_NATIVE=1 mise exec -- bun --no-env-file tests/lifecycle/macos-clipboard-webview.ts
+```
 
 ```powershell
 mise exec -- bun test tests/api/clipboard.test.ts tests/lifecycle/clipboard-resources.test.ts
