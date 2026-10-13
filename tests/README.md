@@ -1,5 +1,10 @@
 # Tests
 
+초기 `maximized`와 `fullscreen`은 `windows-bun-window-api.ts`에서 일반 복원 영역과
+표시 상태를 검사합니다. 이 실행기는 실제 WebView2와 WinEvent를 사용하는 숨김 준비 fixture도
+네 옵션 조합으로 실행하므로 `mise run host:windows`에서 일시적인 표시와 활성화, 포커스를 검사합니다.
+실제 다중 물리 모니터와 혼합 DPI 수동 검증을 대신하지 않습니다.
+
 `api/webview-print-ui.test.ts`는 인쇄 UI의 개별 권한, browser 기본값과 system 선택,
 경로와 silent 입력 거부, 취소와 닫힌 창 및 플랫폼 서비스 부재를 확인한다.
 `lifecycle/windows-webview-print-ui.ts`는 `mise run host:windows`에서 실제 Win32와
@@ -593,6 +598,19 @@ DIB의 행 방향과 padding, alpha 및 잘못된 profile, mask, 크기를 확�
 변경하고 원래 Unicode 텍스트만 복원한다. WebView2 페이지나 다른 앱의 붙여넣기,
 물리 장치 검증을 뜻하지 않는다.
 
+`api/power.test.ts`는 배터리의 0과 unknown, 배터리 없음, DWORD tick 순환,
+독립 blocker ID와 128개 상한, 부분 활성 실패 및 반복 정리를 검사한다.
+`power-cleanup.test.ts`는 실제 어댑터와 두 handle 소유자를 번들해 격리된 Win32 바인딩에서
+public 요청 해제와 활성 rollback 해제가 함께 실패해도 모든 handle을 재시도하고,
+미해제 handle이 있는 동안 DLL을 유지하며 두 단계의 오류를 보고하는지 검사한다.
+`cli/power.test.ts`는 isolated tarball 설치와 I/O 어댑터 발견, browser의 FFI 제외를 검사한다.
+`windows-power.test.ts`는 실제 GetSystemPowerStatus와 session idle query, PowerCreateRequest,
+system/display 활성 및 GetHandleInformation으로 명시 해제와 종료 시 handle 정리를 확인한다.
+`windows-power-worker.test.ts`는 빌드한 공개 power API에서 실제 I/O Worker까지 상태와 idle,
+독립 ID, 개별 권한 거부, 명시 해제와 종료 정리를 확인한다.
+`mise run host:windows`에 포함하며 물리 배터리 전환, 화면 꺼짐과 idle 절전 또는
+Modern Standby 및 사용자 절전 후 요청 종료의 하드웨어 검증을 대신하지 않는다.
+
 `appearance.test.ts`는 선호의 null, 색 형식과 개별 operation 권한, 호출 컨텍스트를 확인한다.
 CLI의 같은 이름 검사는 로컬 tarball의 isolated 설치, 네이티브 I/O 어댑터 발견과 browser
 번들의 FFI 제외를 검사한다. `windows-appearance.test.ts`는 실제 Windows 고대비,
@@ -638,9 +656,17 @@ linear filtering의 투명 edge, crop과 빈 소스 및 quota 오류를 추가�
 경합으로 빈 PID를 읽지 않고, 취소 전에 실제 자식의 Windows process handle을 잡는다.
 
 `api/network.test.ts`는 URL, header, bytes 상한과 독립 작업 권한을 검사한다.
-`lifecycle/windows-network.test.ts`는 생성 Windows 어댑터와 실제 loopback HTTP/WebSocket 서버로
+`lifecycle/windows-network.test.ts`는 생성 Windows와 macOS 어댑터 및 실제 loopback HTTP/WebSocket 서버로
 redirect 거부, binary 보존, timeout, 취소, 폐기와 용량을 검사한다. `host:windows`에 포함되며
 외부 proxy나 OS 인증, 물리 네트워크 설정 검증은 포함하지 않는다.
+
+`lifecycle/macos-network.ts`는 `host:macos`에서 compiled WKWebView, SDK, Core와 async UI
+어댑터를 실제 loopback 서버에 연결한다. 뷰별 grant와 앱 명령의 출처 유지, backend grant,
+HTTP binary 및 UTF-8, redirect와 WebSocket handshake 거부, decompressed body 상한,
+text/binary 메시지, timeout과 SDK deadline, 취소 뒤 실제 TCP 정리와 종료 중 pending 요청 정리를
+확인한다. 결과는 `build/macos-native-logs/network-results.json`이며 기존 네이티브 CI artifact에 포함된다.
+`cli/network.test.ts`는 isolated tarball 설치의 두 OS native export에서 실제 HTTP를 실행하고
+browser 번들에 Bun 전송 구현이 포함되지 않는지 검사한다. TLS, 외부 proxy와 OS 인증은 검증하지 않는다.
 
 `lifecycle/windows-trash.test.ts`는 실제 Windows I/O STA에서 파일을 휴지통으로
 보내고 해당 `$I` 메타데이터와 `$R` 파일 내용을 확인한다. HTML 연결 폴더 보존,

@@ -66,7 +66,7 @@ test.each([
         visible: false,
       },
       {
-        showWhenReady: "sdk",
+        showWhenReady: "sdk" as const,
       },
       {
         home: "https://app.bunaway.local/other.html",
@@ -87,6 +87,20 @@ test.each([
     ];
     for (const options of [
       {},
+      {
+        window: {
+          maximized: true,
+          fullscreen: true,
+        },
+        visible: false,
+      },
+      {
+        window: {
+          maximized: false,
+          fullscreen: false,
+        },
+        showWhenReady: "sdk" as const,
+      },
       {
         title: "Editor",
         visible: false,
@@ -194,6 +208,16 @@ test.each([
       },
       {
         windowId: "caller-id",
+      },
+      {
+        window: {
+          maximized: 1,
+        },
+      },
+      {
+        window: {
+          fullscreen: null,
+        },
       },
     ]) {
       extras.push({
