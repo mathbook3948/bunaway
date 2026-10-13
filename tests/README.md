@@ -620,6 +620,16 @@ CLI의 같은 이름 검사는 로컬 tarball의 isolated 설치, 네이티브 I
 번들의 FFI 제외를 검사한다. `windows-appearance.test.ts`는 실제 Windows 고대비,
 client-area animation, screen reader 설정 플래그 및 시스템 색과 비교하고 두 어댑터의
 DLL 수명과 종료 후 거부를 확인한다. `mise run host:windows`에 포함한다.
+`macos-appearance.test.ts`는 밝고 어두운 일반 및 contrast appearance를 앱에 지정하고
+실제 AppKit의 effectiveAppearance에 대한 best-match 테마와 sRGB 색, NSWorkspace 플래그를 비교한다.
+drawing appearance 복원,
+1,000번 조회와 독립 어댑터의 반복 정리를 확인한다. 사용자 OS 설정은 바꾸지 않는다.
+새 프로세스의 배포 플러그인이 직접 AppKit를 로드하고 독립 어댑터의 수명을 유지하는지도 확인한다.
+`macos-appearance.ts`는 로컬 빌드한 플러그인과 실제 WKWebView, backend Worker를
+ad-hoc 서명 compiled 앱에 연결해 plugin setup의 backend 권한과 직접 및 앱 명령을 통한
+뷰 권한의 독립 허용 및 거부,
+엄격한 입력과 색 범위, 네 번의 앱 실행 및 정상 종료를 검사한다.
+`run-native.ts`의 macOS 경로와 기존 macOS native CI에 포함한다.
 사용자 테마 변경과 실제 보조 기술 또는 WebView 접근성 트리 검증을 대신하지 않는다.
 
 `system-events.test.ts`는 선택 OS 알림 HWND의 지연 생성, 중복 해제, 조회 실패 후 복구,
