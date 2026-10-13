@@ -16,6 +16,7 @@ import {
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { Worker } from "node:worker_threads";
+import { storagePlugin as builtStorage } from "@bunaway/plugin-storage/native/windows";
 import { BunawayError } from "@bunaway/protocol";
 import { WindowsStorage } from "#plugins/storage/src/platforms/windows";
 
@@ -560,6 +561,61 @@ async function main(): Promise<void> {
     );
     assert.equal((await stat(temporaryPath("empty-copy.txt"))).size, 0);
 
+
+    // Exercise the generated native export and Zod defaults as well as the source FFI class.
+    const create = builtStorage.nativePlatforms.windows?.create;
+    assert(create, "Built Windows storage adapter is missing.");
+    const built = create({
+      dataRoot: root,
+      capabilities: [],
+    });
+    const builtDirectory = temporaryPath("built adapter/한글");
+    try {
+      await built.execute(
+        "storage.createDirectory",
+        {
+          path: builtDirectory,
+          recursive: true,
+        },
+        "backend",
+      );
+      await built.execute(
+        "storage.createDirectory",
+        {
+          path: builtDirectory,
+        },
+        "backend",
+      );
+      assert.deepEqual(
+        await built.execute(
+          "storage.readDirectory",
+          {
+            path: builtDirectory,
+          },
+          "backend",
+        ),
+        [],
+      );
+      await built.execute(
+        "storage.remove",
+        {
+          path: builtDirectory,
+        },
+        "backend",
+      );
+      assert.equal(
+        await built.execute(
+          "storage.exists",
+          {
+            path: builtDirectory,
+          },
+          "backend",
+        ),
+        false,
+      );
+    } finally {
+      await built.dispose();
+    }
     const directoryPath = temporaryPath("directory API/한글");
     const createDirectory = (path: string, recursive = false) =>
       storage.execute("storage.createDirectory", {

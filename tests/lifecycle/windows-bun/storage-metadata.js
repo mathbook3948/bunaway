@@ -37,6 +37,7 @@ function checkTimes(metadata) {
 let report = {
   pass: false,
 };
+let stage = "metadata";
 // Exercise the metadata API from WebView and return both success and failure over the host channel.
 try {
   await client.ready;
@@ -152,11 +153,14 @@ try {
   const createdDirectory = {
     path: `${globalThis.storageTestDirectory}/created/한글`,
   };
+  stage = "recursive directory creation";
   await storage.createDirectory({
     ...createdDirectory,
     recursive: true,
   });
+  stage = "existing directory creation";
   await storage.createDirectory(createdDirectory);
+  stage = "Unicode directory listing";
   const entries = await storage.readDirectory(directory);
   check(
     entries.some(
@@ -164,16 +168,20 @@ try {
     ),
     "Directory enumeration missed its Unicode child",
   );
+  stage = "empty directory listing";
   check(
     (await storage.readDirectory(createdDirectory)).length === 0,
     "Created directory was not empty",
   );
+  stage = "empty directory removal";
   await storage.remove(createdDirectory);
+  stage = "removed directory existence";
   check(
     !(await storage.exists(createdDirectory)),
     "Empty directory was not removed",
   );
   let deniedTextWrite = false;
+  stage = "text-write permission denial";
   try {
     await storage.writeText({
       path: `${globalThis.storageTestDirectory}/denied.txt`,
@@ -205,7 +213,7 @@ try {
   // Send browser-side failures through the same host channel as successful results.
   report = {
     pass: false,
-    error: error instanceof Error ? error.message : String(error),
+    error: `${stage}: ${error instanceof Error ? error.message : String(error)}`,
   };
 }
 
