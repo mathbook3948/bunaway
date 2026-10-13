@@ -900,6 +900,14 @@ export class Windows {
           user.symbols.ShowWindow(window, SW_SHOWMINNOACTIVE);
         } else {
           const placement = this.getPlacement(window);
+          // SHOWNA preserves the native iconic state even after its style bit is
+          // cleared. Restore that state without activation before zooming again.
+          if (
+            this.isMinimized(window) ||
+            (!maximized && this.isMaximized(window))
+          ) {
+            user.symbols.ShowWindow(window, SW_SHOWNOACTIVATE);
+          }
           const { style } = this.windowStyles(window);
           this.setStyle(
             window,
