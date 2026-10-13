@@ -94,6 +94,29 @@ const exportSchema = z.strictObject({
   id: idSchema,
   format: mimeSchema,
 });
+export const interpolationSchema = z.enum([
+  "nearest",
+  "linear",
+]);
+export type ImageInterpolation = z.infer<typeof interpolationSchema>;
+const transformSizeSchema = z
+  .strictObject({
+    width: z.number().int().min(1).max(4096),
+    height: z.number().int().min(1).max(4096),
+  })
+  .refine(
+    (value) => value.width * value.height * 4 <= MAX_IMAGE_BYTES,
+    "Transform output exceeds the pixel limit.",
+  );
+export const cropSchema = transformSizeSchema.safeExtend({
+  id: idSchema,
+  x: z.number().int().min(0).max(4096),
+  y: z.number().int().min(0).max(4096),
+});
+export const resizeSchema = transformSizeSchema.safeExtend({
+  id: idSchema,
+  interpolation: interpolationSchema.optional(),
+});
 /** App-owned resource IDs require the corresponding operation permission on every call. */
 export const imageOperations = {
   createRGBA: {
@@ -129,6 +152,14 @@ export const imageOperations = {
   dispose: {
     input: referenceSchema,
     output: z.boolean(),
+  },
+  crop: {
+    input: cropSchema,
+    output: resourceSchema,
+  },
+  resize: {
+    input: resizeSchema,
+    output: resourceSchema,
   },
 } as const;
 

@@ -48,18 +48,19 @@ export function validateDesktopStartup(
 
 /**
  * Splits launch arguments into an immutable request.
- * Relative files resolve against the launch directory.
- * Arguments after -- are positional.
+ * In files-and-urls mode, relative files resolve against the launch directory
+ * and arguments after -- are positional. Raw mode skips metadata derivation.
  */
 export function openRequest(
   input: LaunchArguments,
   source: OpenRequest["source"],
+  mode: NonNullable<DesktopOptions["openArguments"]> = "files-and-urls",
 ): OpenRequest {
   const urls: string[] = [];
   const files: string[] = [];
   const launch = desktopLaunch(input.argv);
   let positional = false;
-  for (const arg of launch.argv) {
+  for (const arg of mode === "raw" ? [] : launch.argv) {
     if (!positional && arg === "--") {
       positional = true;
       continue;
@@ -130,6 +131,13 @@ export class DesktopLifecycle {
       throw new Error("Invalid desktop.closeBehavior");
     }
     if (
+      options?.openArguments !== undefined &&
+      options.openArguments !== "files-and-urls" &&
+      options.openArguments !== "raw"
+    ) {
+      throw new Error("Invalid desktop.openArguments");
+    }
+    if (
       options?.tray !== undefined &&
       (!options.tray ||
         typeof options.tray !== "object" ||
@@ -181,7 +189,10 @@ export class DesktopLifecycle {
         if (source === "second-instance" && !desktopLaunch(input.argv).hidden) {
           await this.context.show();
         }
-        await this.options?.onOpen?.(openRequest(input, source), this.context);
+        await this.options?.onOpen?.(
+          openRequest(input, source, this.options?.openArguments),
+          this.context,
+        );
       })
       .catch(this.report)
       .finally(() => {

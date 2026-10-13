@@ -112,6 +112,7 @@ export default defineApp({
 | --- | --- | --- |
 | `closeBehavior` | `"quit"` | 마지막 창 닫기로 종료를 요청합니다. `"hide"`는 해당 창을 숨기며 트레이가 필요합니다. `"keep-alive"`는 마지막 창을 실제로 닫아도 앱을 유지합니다 |
 | `tray` | 없음 | `{ tooltip: string }`. tooltip은 1~127자의 NUL 없는 문자열입니다 |
+| `openArguments` | `"files-and-urls"` | `"raw"`는 파일/URL 메타데이터 해석 없이 원래 argv를 전달하며 `files`와 `urls`는 빈 배열입니다 |
 | `onOpen` | 없음 | `(request: OpenRequest, context: DesktopContext) => void \| Promise<void>` |
 | `beforeQuit` | 없음 | `(reason: QuitReason) => boolean \| void \| Promise<boolean \| void>` |
 
@@ -133,6 +134,10 @@ export default defineApp({
 URL과 파일은 앱이 검증할 입력입니다. 전달받은 경로는 Host API의 저장 권한을 추가하지 않습니다.
 파일 URL은 Windows의 절대 경로를 가리켜야 합니다. 인코딩된 경로 구분자나 NUL을 포함한
 파일 URL은 열기 요청 처리에 실패하며, 진단을 남긴 뒤 다음 요청을 처리합니다.
+CLI 옵션과 subcommand를 처리하는 앱은 `desktop.openArguments: "raw"`를 설정하고
+[앱 CLI 인자](/reference/backend/cli/)의 `defineCLI`로 `request.argv`를 검사합니다.
+기본 `"files-and-urls"` 모드의 URL 오류는 훅 호출 전에 요청을 실패시킵니다. raw 모드는
+파일 열기나 URL 검증을 수행하지 않으며 문자열의 의미는 앱의 parser와 schema가 결정합니다.
 `onOpen`은 초기 실행을 먼저 처리하고 이후 요청을 순서대로 처리합니다.
 열기 훅이 실패하면 진단을 남기고 다음 요청을 처리합니다.
 훅이 완료되지 않으면 뒤의 요청도 대기하므로 앱에서 오래 걸리는 작업의 수명을 관리합니다.

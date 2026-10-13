@@ -25,3 +25,7 @@ export const openUrl = calls.openUrl;
 export const openFile = calls.openFile;
 /** Select an existing absolute Windows file in Explorer. Success is request acceptance. */
 export const revealFile = calls.revealFile;
+/** Open an existing file with a selected absolute .exe application. Success is request acceptance. */
+export const openFileWith = calls.openFileWith;
+/** Open an HTTP or HTTPS URL with a selected absolute .exe application. Success is request acceptance. */
+export const openUrlWith = calls.openUrlWith;

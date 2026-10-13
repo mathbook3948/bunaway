@@ -190,6 +190,8 @@ export type WindowBounds = {
  * Native failures throw; the UI host converts them to bounded public errors.
  */
 export type NativeWindow = {
+  /** Single host-owned WebView controls. Absent on platforms without this service. */
+  webview?: NativeWebView;
   /** Audio controls for this window's WebView controller. Windows only. */
   audio?: NativeWebViewAudio;
   /** Reads a versioned state and physical outer-bounds snapshot for recovery after subscribing. */
@@ -285,8 +287,45 @@ export type NativeWindow = {
   ): void;
   /** Enters or exits fullscreen mode. */
   setFullscreen(value: boolean): void;
+  /** Set this window's taskbar progress; throws BUSY until its taskbar button exists. Windows only. */
+  setTaskbarProgress?(
+    progress:
+      | {
+          state: "none" | "indeterminate";
+        }
+      | {
+          state: "normal" | "paused" | "error";
+          value: number;
+        },
+  ): void;
   /** Sets or clears the confirmation shown before a user closes the window. */
   setCloseConfirmation(message: string | null): void;
+};
+
+/** Synchronous UI-thread controls; navigation retains the host's origin and session boundary. */
+export type NativeWebView = {
+  /** Reads browser state without changing focus or starting navigation. */
+  getState(): {
+    url: string;
+    title: string;
+    loading: boolean;
+    canGoBack: boolean;
+    canGoForward: boolean;
+    zoomFactor: number;
+  };
+  /** Starts HTTP(S) navigation only to an origin already allowed for this view. */
+  navigate(url: string): void;
+  /** Reloads the current document using normal browser cache behavior. */
+  reload(): void;
+  /** Requests cancellation of pending navigation and resource loads. */
+  stop(): void;
+  /** Starts history navigation; false means that direction has no entry. */
+  goBack(): boolean;
+  goForward(): boolean;
+  /** Sets the controller zoom, returning the actual browser value. */
+  setZoomFactor(factor: number): number;
+  /** Opens the browser's DevTools window only when the host enabled development tools. */
+  openDevTools(): void;
 };
 
 /** Independent display facts, using the same meaning as the window query APIs. */
@@ -335,8 +374,39 @@ export type WindowChange =
   | "leaveFullscreen"
   | "move"
   | "resize";
-/** UI-thread services used by the native windows plugin. */
+/** OS invalidations and ordered lifecycle signals. No borrowed native pointers leave the callback. */
+export type NativeSystemSignal =
+  | "settingChanged"
+  | "themeChanged"
+  | "colorsChanged"
+  | "accentChanged"
+  | "powerStatusChanged"
+  | "suspend"
+  | "resume"
+  | "sessionLocked"
+  | "sessionUnlocked";
+
+/** UI-thread OS notifications shared by optional native plugins. */
+export type NativeSystemEvents = {
+  /** Lazily acquire a hidden top-level window. Callbacks run after the pump. State invalidations coalesce; lifecycle edges preserve order. Session notifications are opt-in and registration failure throws. Dispose removes the subscription. */
+  subscribe(
+    receive: (signal: NativeSystemSignal) => void,
+    options?: {
+      sessionNotifications?: boolean;
+    },
+  ): () => void;
+  /** Send to live subscribers with both event policy and the named read-operation grant. Uses the existing bounded native event lane. */
+  publish(
+    event: string,
+    payload: import("@bunaway/protocol").JsonValue,
+    requiredOperation: string,
+  ): void;
+};
+
+/** UI-thread services used by installed native plugins. */
 export type NativeWindowServices = {
+  /** Optional OS change notifications. Absent on hosts without a native notification window. */
+  systemEvents?: NativeSystemEvents;
   /** Whether this UI adapter supports per-creation presentation options; absent means unsupported. */
   supportsCreationOptions?: boolean;
   /** Validate display-dependent placement without acquiring resources, before reservation and close. */
