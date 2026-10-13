@@ -324,6 +324,9 @@ export const pluginImports = { globalShortcut: { operations: async () => ({ crea
       expect(native.symbols.IsWindow(hwnd)).toBe(0);
       if (combined) {
         expect(native.symbols.IsWindow(trayHwnd)).toBe(0);
+        console.log(
+          "PASS real UI Worker menu/tray/shortcut coexistence, live resources, pending waits and HWND cleanup",
+        );
       }
     } finally {
       channel?.close();
