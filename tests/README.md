@@ -1,5 +1,10 @@
 # Tests
 
+초기 `maximized`와 `fullscreen`은 `windows-bun-window-api.ts`에서 일반 복원 영역과
+표시 상태를 검사합니다. 이 실행기는 실제 WebView2와 WinEvent를 사용하는 숨김 준비 fixture도
+네 옵션 조합으로 실행하므로 `mise run host:windows`에서 일시적인 표시와 활성화, 포커스를 검사합니다.
+실제 다중 물리 모니터와 혼합 DPI 수동 검증을 대신하지 않습니다.
+
 `api/webview-print-ui.test.ts`는 인쇄 UI의 개별 권한, browser 기본값과 system 선택,
 경로와 silent 입력 거부, 취소와 닫힌 창 및 플랫폼 서비스 부재를 확인한다.
 `lifecycle/windows-webview-print-ui.ts`는 `mise run host:windows`에서 실제 Win32와
@@ -7,6 +12,19 @@ WebView2 문서에 browser 인쇄 UI를 요청하고 반복 요청 및 종료 �
 확인한다. 실제 COM ABI의 E_NOINTERFACE도 optional 조회와 required 조회로 구분한다.
 결과는 `build/windows-webview-print-ui-results.json`에 기록한다.
 system UI 사용자 선택과 물리 프린터 출력은 별도 검증이며 테스트가 인쇄 제출을 하지 않는다.
+
+`lifecycle/macos-log-capabilities.test.ts`는 생성한 macOS export와 실제 임시 파일로
+JSON 줄의 순서와 출처, 새 파일 권한, 반복 회전, 기록과 회전 실패 후 복구,
+입력과 작업 권한, 폐기 및 호스트가 정한 지원 목록을 검사한다.
+`macos-log-capabilities-compiled.test.ts`는 현재 OS에서 macOS 어댑터 probe를 Bun으로
+compile하고 원본 파일을 제거한 뒤 실행한다. 실제 macOS native CI에도 포함하며
+호스트의 전체 실행 경로를 대신하지 않는다.
+`macos-log-capabilities.ts`는 ad-hoc 서명한 compiled 앱과 실제 WKWebView에서 백엔드 및
+뷰 기록, 권한 거부, 쓰기 실패 후 복구, 회전, manifest의 등록한 작업과 기능 목록의 일치
+및 정상 종료를 검사한다. `run-native.ts`에 포함하며 결과와 앱 데이터 진단은
+`build/macos-log-capabilities-results.json`과 `build/macos-log-capabilities-diagnostics/`에 남긴다.
+앱과 화면의 코드는 `fixtures/macos-log-capabilities/`의 타입 검사 대상이며 실행 전
+정책 권한 이름도 실제 설치된 플러그인 계약으로 검사한다.
 
 다운로드 UI-loop regression은 생성된 worker 경계에서 전용 `windows-download-cleanup/ui.ts`를
 번들하고 실제 승인 transfer의 cancel 자원만 일시적으로 실패시킨다. 소유 창을 닫는 동안
@@ -59,6 +77,19 @@ audio와 물리 장치 출력은 별도 수동 검증이다.
 ITaskbarList3의 다섯 상태를 설정한다. 네이티브 재생성 뒤 새 HWND에서도 반복한다.
 `mise run host:windows`에 포함하며 실제 작업 표시줄의 색상, 그룹 표시 또는
 Explorer 프로세스 재시작을 육안으로 검증하지 않는다.
+
+`api/notification.test.ts`는 알림 상태 조회와 Windows 설정 열기의 독립 권한,
+Zod 계약, SDK 컨텍스트와 취소, WinRT 실패 경계와 자원 정리를 검사한다.
+`lifecycle/windows-notification.test.ts`는 별도 프로세스에서 누락된 앱 등록 오류를 확인한다.
+등록된 조회는 격리된 프로세스에 UUID 시작 메뉴 바로가기와 process AppUserModelID를 설정한
+뒤 fixture 전용 popup 억제/15초 만료 알림으로 OS 상태를 초기화한다. 엄격한 WinRT projection
+getter와 FFI 값을 비교하며 고유 tag/group의 임시 알림은 finally에서 history 제거와 빈 상태를
+검사한다. 바로가기도 실패 때 정리한다. 실제 I/O Worker의 승인, 거부, 취소, opener STA 공존과
+종료도 확인한다. 공개 getStatus는 이런 알림을 보내거나 상태를 초기화하지 않는다.
+상태 조회 회귀는 `mise run host:windows`에도 포함한다. Windows 설정 열기 접수는
+폐기 가능한 데스크톱에서 `BUNAWAY_NOTIFICATION_SETTINGS_NATIVE=1`을 지정한 선택 검사다.
+기본 CI는 실제 설정 페이지 표시나 사용자 차단 상태 변경, toast 표시를 검증하지 않는다.
+[notification README](../plugins/notification/README.md)의 실행 명령과 남은 검증 범위를 따른다.
 
 `windows-initial-placement.fixture.ts`는 모니터 겹침이 바뀌는 `SetWindowPos`에서
 실제 창 프로시저에 `WM_DPICHANGED`를 전달한다. 초기 DPI 보정의 수렴, 중앙 좌표와
@@ -255,6 +286,11 @@ manifest 생성과 카탈로그 로딩에서 작업 이름만 전달하며 작�
 비동기 UI 실행을 한도만큼 취소해도 승인 용량과 다음 호출이 정상인지 확인한다. 컨텍스트 취소,
 늦은 완료와 실패, 중복 승인과 작업 대기 중 종료도 검증한다. `lifecycle/macos-bun.test.ts`는
 네이티브 UI만 대체한 실제 macOS 호스트와 Worker에서 같은 입력, 출력, 실행 취소 경로를 검사한다.
+`lifecycle/io-response-ownership.test.ts`는 실제 I/O Worker와 `ImageResources`에서 응답 승인 전
+취소, 컨텍스트 폐기와 종료가 전달되지 않은 이미지 자원을 회수하고, 승인된 자원은 유지하는지 확인한다.
+`lifecycle/windows-host-shutdown.test.ts`는 백엔드 I/O 취소가 Core 종료 훅보다 먼저 전달되고
+어댑터 폐기는 훅 이후 실행되는지 확인한다. Windows에서는 실제 Win32 UI Worker와 Job을 사용한
+창 없는 실행도 검사하며 `host:windows`에 포함한다. Linux에서는 UI와 Job 경계를 대체한다.
 `lifecycle/windows-ui-lifecycle.test.ts`는 실제 UI Worker와 대체 Win32 경계에서 마지막 창을
 파괴해 종료를 확정한 뒤 입력 파싱을 재개한다. 취소 패킷 없이도 동기 어댑터와 비동기 UI
 어댑터의 실행을 차단하고 CANCELLED를 반환하는지 확인한다.
@@ -566,11 +602,34 @@ DIB의 행 방향과 padding, alpha 및 잘못된 profile, mask, 크기를 확�
 변경하고 원래 Unicode 텍스트만 복원한다. WebView2 페이지나 다른 앱의 붙여넣기,
 물리 장치 검증을 뜻하지 않는다.
 
+`api/power.test.ts`는 배터리의 0과 unknown, 배터리 없음, DWORD tick 순환,
+독립 blocker ID와 128개 상한, 부분 활성 실패 및 반복 정리를 검사한다.
+`power-cleanup.test.ts`는 실제 어댑터와 두 handle 소유자를 번들해 격리된 Win32 바인딩에서
+public 요청 해제와 활성 rollback 해제가 함께 실패해도 모든 handle을 재시도하고,
+미해제 handle이 있는 동안 DLL을 유지하며 두 단계의 오류를 보고하는지 검사한다.
+`cli/power.test.ts`는 isolated tarball 설치와 I/O 어댑터 발견, browser의 FFI 제외를 검사한다.
+`windows-power.test.ts`는 실제 GetSystemPowerStatus와 session idle query, PowerCreateRequest,
+system/display 활성 및 GetHandleInformation으로 명시 해제와 종료 시 handle 정리를 확인한다.
+`windows-power-worker.test.ts`는 빌드한 공개 power API에서 실제 I/O Worker까지 상태와 idle,
+독립 ID, 개별 권한 거부, 명시 해제와 종료 정리를 확인한다.
+`mise run host:windows`에 포함하며 물리 배터리 전환, 화면 꺼짐과 idle 절전 또는
+Modern Standby 및 사용자 절전 후 요청 종료의 하드웨어 검증을 대신하지 않는다.
+
 `appearance.test.ts`는 선호의 null, 색 형식과 개별 operation 권한, 호출 컨텍스트를 확인한다.
 CLI의 같은 이름 검사는 로컬 tarball의 isolated 설치, 네이티브 I/O 어댑터 발견과 browser
 번들의 FFI 제외를 검사한다. `windows-appearance.test.ts`는 실제 Windows 고대비,
 client-area animation, screen reader 설정 플래그 및 시스템 색과 비교하고 두 어댑터의
 DLL 수명과 종료 후 거부를 확인한다. `mise run host:windows`에 포함한다.
+`macos-appearance.test.ts`는 밝고 어두운 일반 및 contrast appearance를 앱에 지정하고
+실제 AppKit의 effectiveAppearance에 대한 best-match 테마와 sRGB 색, NSWorkspace 플래그를 비교한다.
+drawing appearance 복원,
+1,000번 조회와 독립 어댑터의 반복 정리를 확인한다. 사용자 OS 설정은 바꾸지 않는다.
+새 프로세스의 배포 플러그인이 직접 AppKit를 로드하고 독립 어댑터의 수명을 유지하는지도 확인한다.
+`macos-appearance.ts`는 로컬 빌드한 플러그인과 실제 WKWebView, backend Worker를
+ad-hoc 서명 compiled 앱에 연결해 plugin setup의 backend 권한과 직접 및 앱 명령을 통한
+뷰 권한의 독립 허용 및 거부,
+엄격한 입력과 색 범위, 네 번의 앱 실행 및 정상 종료를 검사한다.
+`run-native.ts`의 macOS 경로와 기존 macOS native CI에 포함한다.
 사용자 테마 변경과 실제 보조 기술 또는 WebView 접근성 트리 검증을 대신하지 않는다.
 
 `system-events.test.ts`는 선택 OS 알림 HWND의 지연 생성, 중복 해제, 조회 실패 후 복구,
@@ -611,9 +670,17 @@ linear filtering의 투명 edge, crop과 빈 소스 및 quota 오류를 추가�
 경합으로 빈 PID를 읽지 않고, 취소 전에 실제 자식의 Windows process handle을 잡는다.
 
 `api/network.test.ts`는 URL, header, bytes 상한과 독립 작업 권한을 검사한다.
-`lifecycle/windows-network.test.ts`는 생성 Windows 어댑터와 실제 loopback HTTP/WebSocket 서버로
+`lifecycle/windows-network.test.ts`는 생성 Windows와 macOS 어댑터 및 실제 loopback HTTP/WebSocket 서버로
 redirect 거부, binary 보존, timeout, 취소, 폐기와 용량을 검사한다. `host:windows`에 포함되며
 외부 proxy나 OS 인증, 물리 네트워크 설정 검증은 포함하지 않는다.
+
+`lifecycle/macos-network.ts`는 `host:macos`에서 compiled WKWebView, SDK, Core와 async UI
+어댑터를 실제 loopback 서버에 연결한다. 뷰별 grant와 앱 명령의 출처 유지, backend grant,
+HTTP binary 및 UTF-8, redirect와 WebSocket handshake 거부, decompressed body 상한,
+text/binary 메시지, timeout과 SDK deadline, 취소 뒤 실제 TCP 정리와 종료 중 pending 요청 정리를
+확인한다. 결과는 `build/macos-native-logs/network-results.json`이며 기존 네이티브 CI artifact에 포함된다.
+`cli/network.test.ts`는 isolated tarball 설치의 두 OS native export에서 실제 HTTP를 실행하고
+browser 번들에 Bun 전송 구현이 포함되지 않는지 검사한다. TLS, 외부 proxy와 OS 인증은 검증하지 않는다.
 
 `lifecycle/windows-trash.test.ts`는 실제 Windows I/O STA에서 파일을 휴지통으로
 보내고 해당 `$I` 메타데이터와 `$R` 파일 내용을 확인한다. HTML 연결 폴더 보존,
@@ -621,6 +688,36 @@ redirect 거부, binary 보존, timeout, 취소, 폐기와 용량을 검사한�
 파일의 휴지통 항목만 정리하며 전체 휴지통을 비우지 않는다. 셸이 유지하는 COM Worker가
 다른 초기화 회귀에 영향을 주지 않도록 별도 Bun 프로세스에서 실행한다. `host:windows`에
 포함하며 사용자 설정별 휴지통 비활성화, 용량 초과와 경고 UI는 수동 검증 항목이다.
+
+`lifecycle/macos-io-host.ts`는 `host:macos`의 실제 compiled WKWebView에서 공통
+I/O Worker의 실행, 백엔드 setup과 뷰 출처, 파싱 전 정책 검사, UI/I/O 지원 목록,
+동기 I/O 중 AppKit 왕복, 취소와 문서 폐기, 초기화 실패와 5초 종료 기한을 검사한다.
+테스트 어댑터는 실제 파일을 쓰며 개별 제품 플러그인의 macOS 지원 검증과 구분한다.
+`build/macos-io-results.json`에는 OS, CPU, Bun revision과 시나리오별 종료 결과를 남긴다.
+공통 Worker와 메인 호스트를 사용하는 `macos-bun.test.ts`의 I/O 파싱 취소 검사는
+Linux에서도 실행하며 실제 AppKit은 대체한다.
+
+`macos-bun.test.ts`는 진행 중인 백엔드 I/O의 abort를 기다리는 StopHook도 실제
+Worker로 검사한다. 종료 요청이 I/O 취소를 먼저 전달하고 코어 훅 뒤에 어댑터를
+폐기해 강제 종료 없이 끝나는지 확인한다. 실제 WKWebView fixture도 같은 순서를 검사한다.
+
+`lifecycle/macos-image.test.ts`는 macOS arm64의 실제 ImageIO, CoreGraphics와 vImage로
+PNG alpha 및 투명 RGB 왕복, grayscale과 palette PNG, JPEG/BMP, malformed와 큰 decode 입력,
+transform, 독립 어댑터 ID, quota, 취소와 반복 종료를 검사한다. 다른 OS에서는 건너뛴다.
+`cli/image.test.ts`는 image tarball의 isolated 설치와 플랫폼 출력 분리를 검사하며 macOS arm64에서
+설치된 codec을 실제로 실행한다. `.github/workflows/macos-image.yml`은 이 검사와 기존
+entitlement로 ad-hoc 서명한 compiled fixture를 실행하고 `build/macos-image-results.json`을 보관한다.
+이 단독 codec 검사는 공통 SDK와 실제 호스트 연결, WKWebView 표시나 다른 앱의
+가져오기 검증과 구분한다.
+
+`lifecycle/macos-image-host.ts`는 actual compiled 호스트와 WKWebView 명령에서 공개
+backend SDK의 image I/O 호출과 setup, codec, crop/resize, 동일 ID의 작업별 뷰 권한,
+해제 및 정상 종료를 검사한다. 실제 image 어댑터가 ID를 할당한 뒤 I/O Worker를 동기적으로
+지연시켜, 결과 전달 전 취소가 미전달 ID를 해제하는지 확인한다. 할당 marker는
+매 poll마다 새 `Bun.file()`로 확인해 파일 생성 전의 부재 상태를 재사용하지 않는다.
+`build/macos-image-host-results.json`을 기록하며 성공을 요구한다. `run-native.ts`의
+macOS 실행에 포함하며 실제 contextual I/O dispatch를 사용한다. Native codec CI와
+이 호스트 검증을 구분한다.
 
 ## iOS 내장 Bun
 

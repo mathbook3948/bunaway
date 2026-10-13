@@ -471,10 +471,12 @@ checkNames(
       "clipboard",
       "image",
       "autostart",
+      "power",
       "appearance",
       "os",
       "process",
       "network",
+      "notification",
     ].flatMap((name) =>
       [
         ...objectPropertyNames(

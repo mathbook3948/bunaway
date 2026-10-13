@@ -365,6 +365,17 @@
       }
     },
     {
+      "name": "@bunaway/plugin-notification",
+      "source": "plugins/notification/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/notification": ["notification", "notificationPlugin"]
+      }
+    },
+    {
       "name": "@bunaway/plugin-clipboard",
       "source": "plugins/clipboard/src/index.ts",
       "buildOutputs": {
@@ -447,6 +458,17 @@
       },
       "pages": {
         "reference/plugins/appearance": ["appearance", "appearancePlugin"]
+      }
+    },
+    {
+      "name": "@bunaway/plugin-power",
+      "source": "plugins/power/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/power": ["power", "powerPlugin"]
       }
     }
   ],
@@ -589,6 +611,12 @@
           "getChildren",
           "setEnabled",
           "isEnabled",
+          "setMinimizable",
+          "isMinimizable",
+          "setMaximizable",
+          "isMaximizable",
+          "setClosable",
+          "isClosable",
           "setTitle",
           "getTitle",
           "setResizable",
@@ -1029,6 +1057,10 @@
     "reference/plugins/network": ["network.request", "network.exchange"],
     "reference/plugins/process": ["process.run"],
     "reference/plugins/os": ["os.info", "os.usage", "os.locale"],
+    "reference/plugins/notification": [
+      "notification.getStatus",
+      "notification.openSettings"
+    ],
     "reference/plugins/autostart": [
       "autostart.enable",
       "autostart.disable",
@@ -1141,6 +1173,12 @@
       "windows.getChildren",
       "windows.setEnabled",
       "windows.isEnabled",
+      "windows.setMinimizable",
+      "windows.isMinimizable",
+      "windows.setMaximizable",
+      "windows.isMaximizable",
+      "windows.setClosable",
+      "windows.isClosable",
       "windows.setTitle",
       "windows.getTitle",
       "windows.setResizable",
@@ -1180,6 +1218,15 @@
       "windows.listInstances"
     ],
     "reference/plugins/appearance": ["appearance.getPreferences"],
+    "reference/plugins/power": [
+      "power.getStatus",
+      "power.getIdleTime",
+      "power.getIdleState",
+      "power.startBlocker",
+      "power.listBlockers",
+      "power.isBlockerActive",
+      "power.stopBlocker"
+    ],
     "reference/plugins/image": [
       "image.createRGBA",
       "image.createBytes",
@@ -1194,7 +1241,10 @@
     ]
   },
   "configuration": {
-    "packages/runtime-bun/src/window-config.ts": ["reference/configuration"],
+    "packages/runtime-bun/src/window-config.ts": [
+      "reference/configuration",
+      "reference/host/windows"
+    ],
     "packages/cli/src/config.ts": [
       "reference/configuration",
       "guides/build-and-package"

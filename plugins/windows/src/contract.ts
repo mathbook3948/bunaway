@@ -116,6 +116,8 @@ const creationResult = {
             center: z.boolean().exactOptional(),
             useContentSize: z.boolean().exactOptional(),
             preventOverflow: z.boolean().exactOptional(),
+            maximized: z.boolean().exactOptional(),
+            fullscreen: z.boolean().exactOptional(),
           })
           .exactOptional(),
         visible: z.boolean().exactOptional(),
@@ -670,6 +672,27 @@ export const windowOperations = {
     output: z.null(),
   },
   "windows.isEnabled": windowStateResult,
+  "windows.setMinimizable": {
+    input: windowTarget.extend({
+      minimizable: z.boolean(),
+    }),
+    output: z.null(),
+  },
+  "windows.isMinimizable": windowStateResult,
+  "windows.setMaximizable": {
+    input: windowTarget.extend({
+      maximizable: z.boolean(),
+    }),
+    output: z.null(),
+  },
+  "windows.isMaximizable": windowStateResult,
+  "windows.setClosable": {
+    input: windowTarget.extend({
+      closable: z.boolean(),
+    }),
+    output: z.null(),
+  },
+  "windows.isClosable": windowStateResult,
   "windows.setTitle": {
     input: windowTarget.extend({
       title: windowTitle,

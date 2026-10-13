@@ -181,8 +181,9 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 최소화 전 최대화 상태의 복원, 일반 크기 복원과 반복 호출의 동작을 정의한다.
 - [x] 숨긴 창의 상태 변경은 창을 표시하고, 전체화면 중 다섯 상태 변경은 `INVALID_ARGUMENT`로 거부한다.
 - [x] 상태 조회에도 해당 operation 권한을 검사하고 닫힌 창의 오류를 처리한다.
-- [ ] 초기 maximized와 fullscreen 옵션을 지원한다.
-- [ ] minimizable, maximizable, closable, fullscreenable을 설정하고 조회한다.
+- [x] Windows 선언과 생성별 `options.window`의 `maximized`, `fullscreen`을 지원한다. 숨김과 준비 후 표시를 유지하고 두 옵션을 함께 켜면 전체화면 해제 뒤 최대화 상태를 복원한다.
+- [x] Windows `setMinimizable`/`isMinimizable`, `setMaximizable`/`isMaximizable`, `setClosable`/`isClosable`로 네이티브 버튼과 사용자 동작을 설정하고 조회한다. 프로그램의 상태 및 close API는 유지한다.
+- [ ] fullscreenable의 설정과 조회, 현재 전체화면 중 변경의 계약을 정의하고 구현한다.
 - [ ] 초기 및 실행 중 focusable을 설정하고 조회한다.
 - [x] `setTitle`과 `getTitle`로 Windows 창 title을 실행 중 변경하고 조회한다. 선언과 다른 인스턴스를 변경하지 않으며 닫기 확인 창에도 현재 title을 사용한다.
 - [ ] 창 icon을 실행 중 변경하고 조회한다. 이미지 입력과 배포 리소스 계약을 정의한다.
@@ -399,7 +400,8 @@ Windows의 비활성화 기록을 수정하지 않는다.
 우선순위 P1. 소유자: 공식 notification 플러그인 후보, 외부 활성화 전달은 호스트.
 출처: [E-notification], [T-notification].
 
-- [ ] OS 알림 지원 여부와 필요한 OS 권한 상태를 조회하고 요청한다.
+- [x] Windows toast API 지원 여부와 앱, 사용자, 정책의 알림 차단 상태를 조회한다.
+- [ ] 필요한 OS 권한 요청의 플랫폼별 계약을 제공한다. Windows 데스크톱 경로에는 알림 동의 팝업이 없으며 설정 변경은 사용자에게 맡긴다.
 - [ ] 제목, 본문, 아이콘, 이미지와 소리를 지정해 알림을 표시한다.
 - [ ] show, click, close와 failed 이벤트를 제공한다.
 - [ ] 알림 ID, 그룹과 취소, 교체 동작을 정의한다.
@@ -410,7 +412,21 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [ ] OS에 남은 알림 조회와 개별, 그룹, 전체 제거의 플랫폼별 지원을 결정한다.
 - [ ] 예약 알림과 pending 조회, 취소의 플랫폼별 지원을 제공한다.
 - [ ] 첨부 파일과 클릭 액션 종류를 등록한다.
-- [ ] OS 알림 설정으로 이동하는 흐름과 사용자에 의한 차단 상태를 제공한다.
+- [x] Windows 알림 설정 페이지로 이동하는 요청과 사용자에 의한 차단 상태를 제공한다.
+
+`@bunaway/plugin-notification`은 현재 호스트 앱 ID로 WinRT `ToastNotifier.Setting`을
+조회하며 `notification.getStatus`와 `notification.openSettings` 권한을 분리한다.
+설정 열기는 `ms-settings:notifications` 요청 접수이며 동의나 설정 변경 완료를 뜻하지 않는다.
+알림 표시, shortcut/COM activator 등록과 종료 상태의 activation 전달은 아직 구현하지 않았다.
+시작 메뉴 바로가기를 생성하지 않는 기존 설치 선택도 보존한다. 조회에는 설치 바로가기의
+AppUserModelID 등록과 같은 process AppUserModelID가 필요하며 첫 알림 전에는 OS 알림 상태도
+없을 수 있다. Windows가 상태를 찾지 못하면 `UNSUPPORTED`로 거부하며 조회는 알림을 보내거나
+상태를 초기화하지 않는다. 기존 상태의 배포/개발 동일 ID 조회는 같은 OS 설정을 읽으며
+`enabled`는 toast 표시나 activation 가능성을 보장하지 않는다. 네이티브 회귀는 격리된
+프로세스의 임시 UUID 시작 메뉴 바로가기와 popup 억제/15초 만료 알림으로 실제 상태를 준비한
+뒤 조회한다. 임시 알림은 성공과 실패 모두 history에서 제거하며 바로가기도 정리한다.
+MSIX의 패키지 식별자 연동은 후속 범위다. 공개 계약과 네이티브 검증 범위는
+[notification 문서](../plugins/notification/README.md)를 따른다.
 
 ## 11. 대화상자와 파일 선택
 
@@ -480,11 +496,19 @@ CI의 `mise run host:windows`에서 SDK와 UI Worker, Win32를 연결해 실행�
   대상 WebView에서 설정 후 조회와 실제 접근성 트리를 검증하고 렌더러별 미지원 기능을 명시한다.
 - [ ] WebView 접근성 트리와 사용자 타이틀바의 키보드 탐색을 검증한다.
 - [ ] suspend, resume, 화면 잠금과 잠금 해제 이벤트를 제공한다.
-- [ ] AC와 배터리 상태 조회, 변경 이벤트를 제공한다.
-- [ ] idle 상태와 idle 시간을 조회한다.
-- [ ] 시스템 절전과 화면 꺼짐을 방지하는 blocker를 시작, 조회하고 해제한다.
-- [ ] blocker의 중복 요청과 앱 종료 자동 정리를 처리한다.
+- [x] Windows AC와 배터리, 충전, 잔량, battery saver 및 수명 추정 상태를 조회한다.
+- [ ] AC와 배터리 상태 변경 이벤트를 제공한다.
+- [x] Windows 호출 세션의 입력 idle 시간과 지정 기한의 active/idle 상태를 조회한다. 잠금 여부는 별도 작업이다.
+- [x] Windows 시스템 idle 절전과 화면 꺼짐 방지 요청을 시작, 조회하고 해제한다. 사용자 절전과 OS 전원 정책은 우회하지 않는다.
+- [x] blocker의 반복 요청을 독립 ID로 관리하고 앱 종료 시 native handle을 자동 정리한다.
 - [ ] CPU speed-limit, thermal-state와 종료 이벤트의 플랫폼별 지원을 정의한다.
+
+`@bunaway/plugin-power`는 [power API](./site/src/content/docs/reference/plugins/power.mdx)를 따른다.
+존재하지 않거나 알 수 없는 배터리 측정값은 null이다. PowerCreateRequest와
+PowerSetRequest로 등록하며 display 요청에는 system 요청도 함께 등록한다.
+최대 128개이며 등록 실패의 부분 정리와 종료 정리를 처리한다.
+실제 Windows 네이티브 회귀를 CI에 추가했다. 물리 배터리 전환, idle 절전과 화면 timeout,
+Modern Standby 및 사용자 절전 후 동작은 하드웨어 수동 검증으로 남긴다.
 
 `@bunaway/plugin-appearance`의 getPreferences로 저장된 앱 및 시스템 테마 선호,
 DWM accent와 시스템 색, 접근성 플래그를 조회한다. theme와 transparency의 누락 또는

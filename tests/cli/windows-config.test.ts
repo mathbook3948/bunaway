@@ -46,6 +46,72 @@ const policy: Policy = {
   })),
 };
 
+test("initial maximized and fullscreen declarations accept independent booleans without mutation", () => {
+  const first = specs[0];
+  assert(first);
+  for (const maximized of [
+    false,
+    true,
+  ]) {
+    for (const fullscreen of [
+      false,
+      true,
+    ]) {
+      const spec = {
+        ...first,
+        visible: false,
+        showWhenReady: "sdk" as const,
+        window: {
+          ...first.window,
+          maximized,
+          fullscreen,
+        },
+      };
+      expect(
+        readWindowSpecs(
+          [
+            spec,
+          ],
+          policy,
+        ),
+      ).toEqual([
+        spec,
+      ]);
+      expect(spec.window).toEqual({
+        ...first.window,
+        maximized,
+        fullscreen,
+      });
+    }
+  }
+  for (const field of [
+    "maximized",
+    "fullscreen",
+  ]) {
+    for (const value of [
+      null,
+      1,
+      "true",
+      {},
+    ]) {
+      expect(() =>
+        readWindowSpecs(
+          [
+            {
+              ...first,
+              window: {
+                ...first.window,
+                [field]: value,
+              },
+            },
+          ],
+          policy,
+        ),
+      ).toThrow(`Window ${field} must be a boolean`);
+    }
+  }
+});
+
 test("window placement declarations validate paired physical coordinates and exclusive center before startup", () => {
   const first = specs[0];
   assert(first);
