@@ -16,6 +16,13 @@ function unsupportedRelations() {
   });
 }
 
+function unsupportedControls() {
+  return new BunawayError({
+    code: "UNSUPPORTED",
+    message: "Native caption controls are not implemented on this platform.",
+  });
+}
+
 /** Create the UI-worker adapter; throws when window services are unavailable. */
 export function createOperations(
   environment: NativeEnvironment,
@@ -197,6 +204,39 @@ export function createOperations(
           throw unsupportedRelations();
         }
         return window.isEnabled();
+      case "windows.setMinimizable":
+        if (!window.setMinimizable) {
+          throw unsupportedControls();
+        }
+        window.setMinimizable(call.payload.minimizable);
+        break;
+      case "windows.isMinimizable":
+        if (!window.isMinimizable) {
+          throw unsupportedControls();
+        }
+        return window.isMinimizable();
+      case "windows.setMaximizable":
+        if (!window.setMaximizable) {
+          throw unsupportedControls();
+        }
+        window.setMaximizable(call.payload.maximizable);
+        break;
+      case "windows.isMaximizable":
+        if (!window.isMaximizable) {
+          throw unsupportedControls();
+        }
+        return window.isMaximizable();
+      case "windows.setClosable":
+        if (!window.setClosable) {
+          throw unsupportedControls();
+        }
+        window.setClosable(call.payload.closable);
+        break;
+      case "windows.isClosable":
+        if (!window.isClosable) {
+          throw unsupportedControls();
+        }
+        return window.isClosable();
       case "windows.getContentSize":
       case "windows.getOuterSize":
       case "windows.getContentPosition":

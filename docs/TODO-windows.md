@@ -181,7 +181,8 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 숨긴 창의 상태 변경은 창을 표시하고, 전체화면 중 다섯 상태 변경은 `INVALID_ARGUMENT`로 거부한다.
 - [x] 상태 조회에도 해당 operation 권한을 검사하고 닫힌 창의 오류를 처리한다.
 - [ ] 초기 maximized와 fullscreen 옵션을 지원한다.
-- [ ] minimizable, maximizable, closable, fullscreenable을 설정하고 조회한다.
+- [x] Windows `setMinimizable`/`isMinimizable`, `setMaximizable`/`isMaximizable`, `setClosable`/`isClosable`로 네이티브 버튼과 사용자 동작을 설정하고 조회한다. 프로그램의 상태 및 close API는 유지한다.
+- [ ] fullscreenable의 설정과 조회, 현재 전체화면 중 변경의 계약을 정의하고 구현한다.
 - [ ] 초기 및 실행 중 focusable을 설정하고 조회한다.
 - [ ] 창 title과 icon을 실행 중 변경하고 조회한다.
 - [ ] decorations와 frame의 초기 설정, 변경과 조회를 제공한다.

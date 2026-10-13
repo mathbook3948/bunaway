@@ -539,6 +539,27 @@ export const windowOperations = {
     output: z.null(),
   },
   "windows.isEnabled": windowStateResult,
+  "windows.setMinimizable": {
+    input: windowTarget.extend({
+      minimizable: z.boolean(),
+    }),
+    output: z.null(),
+  },
+  "windows.isMinimizable": windowStateResult,
+  "windows.setMaximizable": {
+    input: windowTarget.extend({
+      maximizable: z.boolean(),
+    }),
+    output: z.null(),
+  },
+  "windows.isMaximizable": windowStateResult,
+  "windows.setClosable": {
+    input: windowTarget.extend({
+      closable: z.boolean(),
+    }),
+    output: z.null(),
+  },
+  "windows.isClosable": windowStateResult,
   "windows.setSize": {
     input: z.strictObject({
       view: viewTarget.shape.view,

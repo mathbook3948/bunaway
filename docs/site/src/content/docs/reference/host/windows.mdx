@@ -231,6 +231,12 @@ await windows.close({ view: "dialog" });
 | `windows.getSizeConstraints` | `{ view, windowId? }` | `Promise<{ minWidth: number \| null; minHeight: number \| null; maxWidth: number \| null; maxHeight: number \| null }>` 네 제약을 한 번에 조회 |
 | `windows.setSizeConstraints` | `{ view, windowId?, minWidth?, minHeight?, maxWidth?, maxHeight? }` | `Promise<null>`. 제약 전체를 교체합니다. 생략하거나 `null`인 축은 제한을 해제합니다 |
 | `windows.setPosition` | `{ view, windowId?, x, y }` | `Promise<null>`. 화면에서 창 바깥쪽 왼쪽 위의 물리 픽셀 위치. 각 값은 정수 -32768–32767 |
+| `windows.setMinimizable` | `{ view, windowId?, minimizable: boolean }` | `Promise<null>`. 네이티브 최소화 버튼과 사용자 최소화 허용 변경 |
+| `windows.isMinimizable` | `{ view, windowId? }` | `Promise<boolean>`. 일반 창의 사용자 최소화 허용 여부 |
+| `windows.setMaximizable` | `{ view, windowId?, maximizable: boolean }` | `Promise<null>`. 네이티브 최대화 버튼과 사용자 최대화 허용 변경 |
+| `windows.isMaximizable` | `{ view, windowId? }` | `Promise<boolean>`. 일반 창의 사용자 최대화 허용 여부 |
+| `windows.setClosable` | `{ view, windowId?, closable: boolean }` | `Promise<null>`. 네이티브 닫기 버튼과 사용자 닫기 허용 변경 |
+| `windows.isClosable` | `{ view, windowId? }` | `Promise<boolean>`. 이 창 수명의 사용자 닫기 설정 조회 |
 | `windows.setFullscreen` | `{ view, windowId?, fullscreen: boolean }` | `Promise<null>`. 현재 모니터 전체화면. 해제하면 이전 창 위치와 표시 상태 복원 |
 | `windows.setCloseConfirmation` | `{ view, windowId?, message: string \| null }` | `Promise<null>`. 창을 닫기 전에 표시할 확인 메시지 설정. 문자열은 1–1024자, NUL 금지. `null`이면 확인 해제 |
 | `windows.close` | `{ view, windowId? }` | `Promise<boolean>`. 닫기 승인 시 `true`, 확인이나 앱 종료를 취소하거나 트레이로 숨기면 `false`. 정리 완료를 기다리지는 않음 |
@@ -442,6 +448,15 @@ macOS의 준비 조회, 이벤트와 splashscreen 전환은 아직 지원하지 
 
 조회의 `unit`은 `"physical" | "logical"`이며 기본값은 `"physical"`입니다. `dpi`는 해당 조회에 사용한 대상 창의 DPI입니다.
 `setSize`는 계속 내용 영역의 96 DPI 논리 픽셀을 받고, `setPosition`은 창 바깥쪽 왼쪽 위의 화면 물리 픽셀을 받습니다.
+`minimizable`, `maximizable`, `closable`의 기본값은 `true`입니다. 각 setter와 getter는 해당 이름의
+operation 권한을 따로 요구하며 닫힌 창은 `INVALID_ARGUMENT`입니다. 최소화와 최대화 버튼 설정은
+실제 일반 창 스타일을 조회하고 전체화면 중에는 복원할 스타일을 변경합니다.
+`closable: false`는 닫기 버튼을 비활성화하고 시스템 메뉴, Alt+F4, WM_CLOSE와 렌더러의 닫기 요청을
+막습니다. `isClosable`은 이 호스트 설정을 반환합니다. 전체화면 중의 변경도 유지하고 해제할 때
+닫기 버튼에 반영합니다. 표시, 위치, 크기와 포커스를 유지하며 재생성하면 기본값으로 돌아갑니다.
+프로그램의 `minimize`, `maximize`, `close`, `recreate`와 trusted `destroy`는 계속 사용할 수 있고
+일반 close의 확인, 종료 취소와 부모 순서도 유지합니다. 렌더러 실패와 강제 호스트 정리는 이 설정으로 막지 않습니다.
+이 설정은 프로그램의 권한이나 창 종료 정책을 대체하지 않습니다. fullscreenable은 아직 제공하지 않습니다.
 따라서 `setSize` 뒤에는 `getContentSize({ view, unit: "logical" })`, `setPosition` 뒤에는 `getOuterPosition({ view })`으로 결과를 확인합니다.
 제약에 따른 크기 보정과 운영체제의 배치 결과를 반환합니다.
 

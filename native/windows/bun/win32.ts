@@ -40,6 +40,14 @@ const WM_GETMINMAXINFO = 0x0024;
 const WM_WINDOWPOSCHANGING = 0x0046;
 const WM_WINDOWPOSCHANGED = 0x0047;
 const WM_DISPLAYCHANGE = 0x007e;
+const WM_SYSCOMMAND = 0x0112;
+const SYSTEM_COMMAND_MASK = 0xfff0n;
+const SC_MINIMIZE = 0xf020n;
+const SC_MAXIMIZE = 0xf030n;
+const SC_CLOSE = 0xf060;
+const MF_ENABLED = 0;
+const MF_GRAYED = 1;
+const MENU_ITEM_ERROR = 0xffffffff;
 export const WM_ENTERSIZEMOVE = 0x0231;
 export const WM_EXITSIZEMOVE = 0x0232;
 const WM_DPICHANGED = 0x02e0;
@@ -82,6 +90,8 @@ const WINDOWPLACEMENT_FLAGS_OFFSET = 4;
 const WINDOWPLACEMENT_SHOW_CMD_OFFSET = 8;
 const WPF_RESTORETOMAXIMIZED = 0x2;
 const WS_OVERLAPPEDWINDOW = 0x00cf0000;
+const WS_MINIMIZEBOX = 0x00020000n;
+const WS_MAXIMIZEBOX = 0x00010000n;
 const WS_MAXIMIZE = 0x01000000n;
 const WS_MINIMIZE = 0x20000000n;
 const IDYES = 6;
@@ -142,6 +152,7 @@ export class Windows {
     }
   >();
   private readonly changingGeometry = new Set<bigint>();
+  private readonly closeControls = new Map<bigint, boolean>();
   private readonly initialOuterSizes = new Map<
     bigint,
     {
@@ -298,6 +309,21 @@ export class Windows {
           }
           if (message === WM_WINDOWPOSCHANGING) {
             this.constrainMaximizedSize(window, lparam);
+          }
+          if (this.windows.has(window)) {
+            if (message === WM_CLOSE && !this.isClosable(window)) {
+              return 0n;
+            }
+            if (message === WM_SYSCOMMAND) {
+              const command = wparam & SYSTEM_COMMAND_MASK;
+              if (
+                (command === SC_MINIMIZE && !this.isMinimizable(window)) ||
+                (command === SC_MAXIMIZE && !this.isMaximizable(window)) ||
+                (command === BigInt(SC_CLOSE) && !this.isClosable(window))
+              ) {
+                return 0n;
+              }
+            }
           }
           this.windows.get(window)?.(message, wparam, lparam);
           if (message === WM_CLOSE) {
@@ -641,6 +667,90 @@ export class Windows {
   isFocused(window: bigint): boolean {
     assert(user.symbols.IsWindow(window), "Window is no longer valid.");
     return user.symbols.GetForegroundWindow() === window;
+  }
+
+  private normalStyle(window: bigint): bigint {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return (
+      this.fullscreen.get(window)?.style ?? this.windowStyles(window).style
+    );
+  }
+
+  /** Update caption-button styles without changing geometry, activation or the fullscreen frame. */
+  private setCaptionButton(
+    window: bigint,
+    flag: bigint,
+    enabled: boolean,
+  ): void {
+    const style = this.normalStyle(window);
+    const next = enabled ? style | flag : style & ~flag;
+    if (next === style) {
+      return;
+    }
+    const fullscreen = this.fullscreen.get(window);
+    if (fullscreen) {
+      fullscreen.style = next;
+      return;
+    }
+    this.setStyle(window, next);
+    assert(
+      user.symbols.SetWindowPos(
+        window,
+        0n,
+        0,
+        0,
+        0,
+        0,
+        SWP_NOSIZE |
+          SWP_NOMOVE |
+          SWP_NOZORDER |
+          SWP_NOACTIVATE |
+          SWP_FRAMECHANGED,
+      ),
+    );
+  }
+
+  isMinimizable(window: bigint): boolean {
+    return !!(this.normalStyle(window) & WS_MINIMIZEBOX);
+  }
+  setMinimizable(window: bigint, minimizable: boolean): void {
+    this.setCaptionButton(window, WS_MINIMIZEBOX, minimizable);
+  }
+  isMaximizable(window: bigint): boolean {
+    return !!(this.normalStyle(window) & WS_MAXIMIZEBOX);
+  }
+  setMaximizable(window: bigint, maximizable: boolean): void {
+    this.setCaptionButton(window, WS_MAXIMIZEBOX, maximizable);
+  }
+  isClosable(window: bigint): boolean {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return this.closeControls.get(window) ?? true;
+  }
+
+  /** Store user closing policy and keep the native Close command/button in sync. */
+  setClosable(window: bigint, closable: boolean): void {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    this.closeControls.set(window, closable);
+    if (!this.isFullscreen(window)) {
+      this.applyCloseButton(window);
+    }
+  }
+
+  private applyCloseButton(window: bigint): void {
+    const menu = user.symbols.GetSystemMenu(window, 0);
+    assert(menu, "Native system menu is unavailable.");
+    assert(
+      user.symbols.EnableMenuItem(
+        menu,
+        SC_CLOSE,
+        this.isClosable(window) ? MF_ENABLED : MF_GRAYED,
+      ) !== MENU_ITEM_ERROR,
+      "Native close control could not be updated.",
+    );
+    assert(
+      user.symbols.DrawMenuBar(window),
+      "Native caption could not be redrawn.",
+    );
   }
 
   /** Own one native observer per window. Its callback ends before HWND destruction. No initial replay. */
@@ -1740,6 +1850,9 @@ export class Windows {
           saved.style,
         );
         this.setPlacement(window, saved.placement, saved.visible, true);
+        if (this.closeControls.has(window)) {
+          this.applyCloseButton(window);
+        }
         assert(
           user.symbols.SetWindowPos(
             window,
@@ -1785,6 +1898,7 @@ export class Windows {
     }
     this.observations.delete(window);
     this.changingGeometry.delete(window);
+    this.closeControls.delete(window);
     assert(user.symbols.DestroyWindow(window));
     this.windows.delete(window);
     this.constraints.delete(window);
