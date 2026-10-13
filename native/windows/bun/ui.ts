@@ -838,6 +838,11 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
           relations.setEnabled(id, enabled);
         },
         isEnabled: () => nativeWindows.isEnabled(hwnd),
+        setResizable: (resizable) =>
+          nativeWindows.setResizable(hwnd, resizable),
+        isResizable: () => nativeWindows.isResizable(hwnd),
+        setMovable: (movable) => nativeWindows.setMovable(hwnd, movable),
+        isMovable: () => nativeWindows.isMovable(hwnd),
         minimize: () => nativeWindows.minimize(hwnd),
         maximize: () => nativeWindows.maximize(hwnd),
         unmaximize: () => nativeWindows.unmaximize(hwnd),
