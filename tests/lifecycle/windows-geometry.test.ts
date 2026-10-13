@@ -220,7 +220,17 @@ test.skipIf(process.platform !== "win32")(
           native.unmaximize(hwnd);
           user.symbols.ShowWindow(hwnd, command);
           native.show(hwnd, visible);
-          expect(native.isMinimized(hwnd)).toBe(command === SW_MINIMIZE);
+          const minimized = native.isMinimized(hwnd);
+          expect(
+            minimized,
+            JSON.stringify({
+              phase: "geometry state setup",
+              command,
+              visible,
+              hwnd: String(hwnd),
+              snapshot: native.getSnapshot(hwnd),
+            }),
+          ).toBe(command === SW_MINIMIZE);
           expect(native.isMaximized(hwnd)).toBe(command === SW_MAXIMIZE);
           const state = native.getSnapshot(hwnd).state;
           const before = native.getBounds(hwnd, "outer");
