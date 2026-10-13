@@ -1,5 +1,13 @@
 # Tests
 
+`api/webview-print-ui.test.ts`는 인쇄 UI의 개별 권한, browser 기본값과 system 선택,
+경로와 silent 입력 거부, 취소와 닫힌 창 및 플랫폼 서비스 부재를 확인한다.
+`lifecycle/windows-webview-print-ui.ts`는 `mise run host:windows`에서 실제 Win32와
+WebView2 문서에 browser 인쇄 UI를 요청하고 반복 요청 및 종료 뒤 native 자원 정리를
+확인한다. 실제 COM ABI의 E_NOINTERFACE도 optional 조회와 required 조회로 구분한다.
+결과는 `build/windows-webview-print-ui-results.json`에 기록한다.
+system UI 사용자 선택과 물리 프린터 출력은 별도 검증이며 테스트가 인쇄 제출을 하지 않는다.
+
 다운로드 UI-loop regression은 생성된 worker 경계에서 전용 `windows-download-cleanup/ui.ts`를
 번들하고 실제 승인 transfer의 cancel 자원만 일시적으로 실패시킨다. 소유 창을 닫는 동안
 다른 창의 SDK 응답과 세 번째 창의 native cleanup이 진행하고, 소유자의 재시도도 복구되는지
@@ -351,6 +359,10 @@ boot 전후 종료와 초기화 중 프로토콜 버전, 런타임 ID 및 세대
 `lifecycle/windows-geometry.test.ts`는 실제 Win32 창에서 setter 직후 조회, 일반, 숨김,
 최소화, 최대화와 전체화면 bounds, normal 복원과 음수 좌표를 검사한다. DPI 메시지는
 합성 메시지이며 실제 배율이 다른 물리 모니터 사이의 이동 검증과 구분한다.
+최소화 또는 최대화 직후, 표시와 숨김 직후 및 복원 영역 setter 뒤의 체크포인트는
+HWND 소유 프로세스와 스레드, style, 원본 WINDOWPLACEMENT와 Win32 상태를 함께 검사한다.
+실패에는 최근 체크포인트와 제한된 상태 메시지 기록, 호스트 callback 오류를 포함한다.
+검사는 상태를 복구하거나 메시지를 pump하지 않으며 기존 geometry 기대값을 유지한다.
 `lifecycle/windows-window-state.test.ts`는 같은 HWND에서 일반, 최소화와 최대화 상태,
 표시와 숨김을 반복해 전체화면 해제 후 현재 bounds, normal bounds와 표시 상태를 검사한다.
 프레임 재계산 뒤 일반 배치를 확정하는 순서를 회귀 검사하며 음수 화면 좌표를 유지한다.
@@ -462,6 +474,14 @@ Explorer와 compiled helper로 파일 및 HTTP/HTTPS URL 하나의 argv 보존�
 앱 종료 뒤 helper 생존을 확인한다. 두 검사와 기존 opener STA 검사는 `host:windows`에도 포함한다.
 Linux의 계약 검사에서 건너뛴 Windows 테스트를 실제 실행 결과로 판단하지 않는다.
 
+`api/path.test.ts`는 Windows 문자열 경로 규칙과 명시적 base, per-drive 상대 경로 거부를 검사한다.
+보충 문자의 UTF-16 입력과 합성 출력 상한을 확인하며 실제 WebView2에도 같은 경계 회귀를 적용한다.
+`windows-path.test.ts`는 실제 current-user Known Folder를 조회하고 .NET의 독립적인
+표준 폴더 조회 결과 및 여러 어댑터의 DLL 수명과 비교한다.
+`windows-path.ts`는 실제 WebView2와 I/O Worker에서 폴더 조회, 문자열 helper와
+작업별 권한 거부를 확인하며 `mise run host:windows`에 포함한다.
+실제 사용자 폴더 redirection 설정 변경과 다른 사용자, 머신 검증은 포함하지 않는다.
+
 `api/autostart.test.ts`는 로그인 자동 실행 플러그인의 정책, 공개 helper, 앱 ID 분리와
 Windows 명령줄 제한, 숨김 등록의 트레이 요구 조건을 검사한다.
 `windows-desktop.ts`의 autostart 시나리오는 실제 HWND와 WebView2에서 일반 및 숨김
@@ -476,6 +496,13 @@ Run 값의 등록, 조회, 경로 갱신과 반복 해제를 확인한다. 임�
 대화형 로그인 검증이 필요하다. 테스트는 다른 앱의 등록을 변경하지 않는다.
 `cli/autostart.test.ts`는 로컬 tarball의 isolated 설치, manifest와 I/O 어댑터 발견,
 정책 승인과 browser 번들에서 FFI가 제외되는지도 확인한다.
+
+`windows-safe-storage.test.ts`는 실제 DPAPI로 Unicode와 임의 바이트, 크기 상한, 손상 입력,
+보충 문자의 UTF-16 상한 왕복과 초과 입력 거부,
+반복 dispose와 독립 어댑터, 저장된 암호문의 새 프로세스 복호화를 검사한다.
+`windows-safe-storage.ts`는 실제 WebView2와 I/O Worker에서 동시 요청, UI 타이머 진행,
+뷰별 권한 거부와 손상 입력을 확인하며 `mise run host:windows`에 포함한다.
+다른 사용자나 머신, Windows 키 복구 및 물리 입력 검증은 포함하지 않는다.
 
 `mise run host:windows`와 `mise run host:macos`는 Bun으로
 `tests/lifecycle/run-native.ts`를 실행한다. CLI의 의존성 준비와 네이티브 빌드를
@@ -600,3 +627,10 @@ linear filtering의 투명 edge, crop과 빈 소스 및 quota 오류를 추가�
 `lifecycle/windows-network.test.ts`는 생성 Windows 어댑터와 실제 loopback HTTP/WebSocket 서버로
 redirect 거부, binary 보존, timeout, 취소, 폐기와 용량을 검사한다. `host:windows`에 포함되며
 외부 proxy나 OS 인증, 물리 네트워크 설정 검증은 포함하지 않는다.
+
+`lifecycle/windows-trash.test.ts`는 실제 Windows I/O STA에서 파일을 휴지통으로
+보내고 해당 `$I` 메타데이터와 `$R` 파일 내용을 확인한다. HTML 연결 폴더 보존,
+파일 소실, 부모 고정과 삭제 공유 중 파일 교체 거부를 검사한다. 테스트는 해당
+파일의 휴지통 항목만 정리하며 전체 휴지통을 비우지 않는다. 셸이 유지하는 COM Worker가
+다른 초기화 회귀에 영향을 주지 않도록 별도 Bun 프로세스에서 실행한다. `host:windows`에
+포함하며 사용자 설정별 휴지통 비활성화, 용량 초과와 경고 UI는 수동 검증 항목이다.

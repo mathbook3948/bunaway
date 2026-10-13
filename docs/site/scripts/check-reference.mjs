@@ -457,7 +457,14 @@ checkNames(
       "windowOperations",
     ),
     ...[
+      ...objectPropertyNames(
+        "plugins/safe-storage/src/contract.ts",
+        "safeStorageOperations",
+      ),
+    ].map((operation) => `safe-storage.${operation}`),
+    ...[
       "storage",
+      "path",
       "log",
       "capabilities",
       "opener",
