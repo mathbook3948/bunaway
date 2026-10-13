@@ -617,10 +617,18 @@ test.skipIf(process.platform !== "win32")(
           }
           verifyCurrent();
           await verifyNormal("before-enter", command, visible);
+          nativePhase = "enter-fullscreen";
           native.setFullscreen(hwnd, true);
           verifyCurrent();
           await verifyNormal("fullscreen", command, visible);
+          nativePhase = "exit-fullscreen";
           native.setFullscreen(hwnd, false);
+          // Check restoration before a subsequent hide can obscure its first failure.
+          verifyShowState(
+            "immediately-after-exit-fullscreen",
+            command,
+            visible,
+          );
           verifyCurrent();
           await verifyNormal("after-exit", command, visible);
           expect(user.symbols.IsWindowVisible(hwnd)).toBe(Number(visible));
