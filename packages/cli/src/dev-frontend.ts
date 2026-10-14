@@ -33,12 +33,24 @@ export class DevFrontend {
     if (!project.dev) {
       return;
     }
-    const current = await this.start(
-      project.dev,
-      project.root,
-      this.signal,
-      project.frameworkRoot,
-    );
+    // Development cancellation owns startup only. Once ready, the frontend remains
+    // available to app cleanup and is stopped explicitly by close() afterward.
+    const startup = new AbortController();
+    const cancelStartup = () => startup.abort(this.signal.reason);
+    this.signal.addEventListener("abort", cancelStartup, {
+      once: true,
+    });
+    let current: DevServer;
+    try {
+      current = await this.start(
+        project.dev,
+        project.root,
+        startup.signal,
+        project.frameworkRoot,
+      );
+    } finally {
+      this.signal.removeEventListener("abort", cancelStartup);
+    }
     // A starter that finishes after cancellation must still transfer its resource for cleanup.
     if (this.signal.aborted || this.closing) {
       await current.stop();

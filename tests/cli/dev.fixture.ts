@@ -35,6 +35,8 @@ await Bun.write(
 );
 const failureMode = process.argv[3];
 let buildAttempts = 0;
+let startupRepaired = failureMode !== "process-start-failure";
+const repairStartup = Promise.withResolvers<void>();
 mock.module(import.meta.resolve("#cli/build"), () => ({
   ...build,
   prepareNative: async () => ({
@@ -43,17 +45,24 @@ mock.module(import.meta.resolve("#cli/build"), () => ({
     bun: process.execPath,
     licenses: {},
   }),
-  buildProject: async () => ({
-    output: root,
-    package: root,
-    executable:
-      failureMode === "process-start-failure" && buildAttempts++ === 0
-        ? resolve(root, ".bunaway/missing-host")
-        : process.execPath,
-    arguments: [
-      host,
-    ],
-  }),
+  buildProject: async () => {
+    buildAttempts += 1;
+    // Startup notifications may discard a build before it ever launches. Keep the bad
+    // executable until a launch actually fails, then wait for the fixture's repair save.
+    if (failureMode === "process-start-failure" && buildFailed) {
+      await repairStartup.promise;
+    }
+    return {
+      output: root,
+      package: root,
+      executable: startupRepaired
+        ? process.execPath
+        : resolve(root, ".bunaway/missing-host"),
+      arguments: [
+        host,
+      ],
+    };
+  },
 }));
 mock.module(import.meta.resolve("#cli/windows-dev-launch"), () => ({
   ...windowsDevLaunch,
@@ -81,10 +90,12 @@ const brokenStart = [
 ].includes(failureMode ?? "");
 const originalError = console.error;
 let buildFailed = false;
+let failureReports = 0;
 let buildFailureMessage: string | undefined;
 console.error = (...args: unknown[]) => {
   if (String(args[0]).includes("Dev build failed")) {
     buildFailed = true;
+    failureReports += 1;
     buildFailureMessage = String(args[0]);
   }
   originalError(...args);
@@ -175,7 +186,7 @@ try {
     if (failureMode === "process-start-failure") {
       expect(buildFailureMessage).toContain("ENOENT");
       expect(buildFailureMessage).toContain("missing-host");
-      expect(buildAttempts).toBe(1);
+      expect(failureReports).toBe(1);
       expect((await fetch(first.url)).ok).toBe(true);
     } else {
       await expect(fetch(first.url)).rejects.toThrow();
@@ -185,6 +196,8 @@ try {
     } else {
       await Bun.write(shared, 'console.error("repaired shared dependency");\n');
     }
+    startupRepaired = true;
+    repairStartup.resolve();
   }
   await waitFor(
     "initial/recovered app launch",
@@ -234,13 +247,17 @@ try {
   console.error(message);
   throw error;
 } finally {
-  // This generated project is shared by later tests, so restore every edited input.
+  // Notify the installed dev handler directly: Windows self-signalling can terminate
+  // the fixture before its owners clean up and edited inputs are restored.
+  if (running && !finished) {
+    process.emit("SIGINT");
+  }
+  // Release the controlled build only after cancellation, then await all owned cleanup.
+  repairStartup.resolve();
   if (running) {
-    if (!finished) {
-      process.kill(process.pid, "SIGINT");
-    }
     await running.catch(() => {});
   }
+  // This generated project is shared by later tests, so restore every edited input.
   await Bun.write(configPath, configText);
   await Bun.write(ui, uiText);
   await Bun.write(backend, backendText);

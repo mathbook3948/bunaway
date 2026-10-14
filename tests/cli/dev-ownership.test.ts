@@ -404,3 +404,71 @@ test("watcher invalidates pending changes synchronously and follows recovery and
     "shared/missing.ts",
   ]);
 });
+
+test("development cancellation keeps the ready frontend available until its owner closes", async () => {
+  const calls: string[] = [];
+  const ready = frontendProcess(calls, "ready");
+  const abort = new AbortController();
+  const frontend = new DevFrontend(
+    abort.signal,
+    (error) => {
+      throw error;
+    },
+    async (_config, _root, signal) => {
+      signal.addEventListener(
+        "abort",
+        () => {
+          calls.push("server-aborted");
+        },
+        {
+          once: true,
+        },
+      );
+      return ready.server;
+    },
+  );
+  await frontend.sync(project);
+  abort.abort();
+  expect(calls).toEqual([]);
+  const closing = frontend.close();
+  expect(frontend.close()).toBe(closing);
+  expect(calls).toEqual([
+    "stop-ready",
+  ]);
+  ready.stopped();
+  ready.exit(0);
+  await closing;
+});
+
+test("development cancellation reaches an in-flight frontend startup", async () => {
+  const entered = Promise.withResolvers<void>();
+  const abort = new AbortController();
+  const reason = new Error("Development cancelled");
+  let observed = false;
+  const frontend = new DevFrontend(
+    abort.signal,
+    (error) => {
+      throw error;
+    },
+    (_config, _root, signal) =>
+      new Promise((_resolve, reject) => {
+        signal.addEventListener(
+          "abort",
+          () => {
+            observed = true;
+            reject(signal.reason);
+          },
+          {
+            once: true,
+          },
+        );
+        entered.resolve();
+      }),
+  );
+  const starting = frontend.sync(project);
+  await entered.promise;
+  abort.abort(reason);
+  await expect(starting).rejects.toBe(reason);
+  expect(observed).toBe(true);
+  await frontend.close();
+});

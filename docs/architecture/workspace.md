@@ -69,7 +69,7 @@ CLI의 `windows-compile.ts`는 실행 파일 컴파일을, `windows-dev-launch.t
 `dev-frontend.ts`는 개발 서버의 준비와 교체, `dev-app.ts`는 앱 프로세스와 코드 교체 채널,
 `dev-watcher.ts`는 파일 감시와 미반영 경로를 소유한다. `restart-controller.ts`는 변경 revision과
 저장 대기를 관리해 오래된 결과를 시작하지 않으며 종료 때 진행 중인 작업을 기다린다.
-앱의 네이티브 정리가 끝난 뒤 개발 서버를 정리한다.
+서버 시작 중 취소는 즉시 전달한다. 준비된 서버는 앱의 네이티브 정리가 끝난 뒤 정리한다.
 CLI와 Windows 호스트는 `@bunaway/runtime-bun/windows-control`의 종료 메시지와 창 클래스
 접두어를 공유한다. 이 계약을 가져올 때 네이티브 자원을 초기화하지 않는다.
 

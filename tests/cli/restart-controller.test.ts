@@ -424,3 +424,57 @@ test("an edit as a restart pass completes still runs a new pass", async () => {
   expect(starts).toBe(2);
   await controller.close();
 });
+
+test("discarding the initial build still reports the first attempted launch failure", async () => {
+  const entered = Promise.withResolvers<void>();
+  const finished = Promise.withResolvers<void>();
+  const failure = new Error("Missing executable");
+  const errors: unknown[] = [];
+  let builds = 0;
+  let launches = 0;
+  let repaired = false;
+  const controller = new RestartController({
+    async stop() {},
+    async build() {
+      builds += 1;
+      if (builds === 1) {
+        entered.resolve();
+        await finished.promise;
+      }
+      return repaired;
+    },
+    async start(available) {
+      launches += 1;
+      if (!available) {
+        throw failure;
+      }
+    },
+    error(error) {
+      errors.push(error);
+    },
+  });
+  try {
+    const initial = controller.change();
+    await entered.promise;
+    const newer = controller.change();
+    finished.resolve();
+    await Promise.all([
+      initial,
+      newer,
+    ]);
+    expect(builds).toBe(2);
+    expect(launches).toBe(1);
+    expect(errors).toEqual([
+      failure,
+    ]);
+    repaired = true;
+    await controller.change();
+    expect(launches).toBe(2);
+    expect(errors).toEqual([
+      failure,
+    ]);
+  } finally {
+    finished.resolve();
+    await controller.close();
+  }
+});
