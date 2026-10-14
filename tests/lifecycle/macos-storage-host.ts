@@ -9,6 +9,11 @@ import { installedPlugins } from "#cli/plugins";
 import { run } from "#cli/processes";
 import pin from "../../runtime/build-manifests/darwin-aarch64.json";
 
+import {
+  captureNativeChild,
+  printNativeChildDiagnostics,
+} from "../fixtures/native-child-diagnostics.ts";
+
 assert.equal(process.platform, "darwin");
 assert.equal(process.arch, "arm64");
 const root = resolve(import.meta.dir, "../..");
@@ -17,6 +22,8 @@ const directory = await realpath(
 );
 let child: ReturnType<typeof Bun.spawn> | undefined;
 const reports: object[] = [];
+let launchDiagnostics: string | undefined;
+const diagnostics = resolve(root, "build/macos-storage-host-diagnostics");
 try {
   const assets = resolve(directory, "assets");
   const home = resolve(directory, "home");
@@ -251,12 +258,13 @@ try {
       },
     );
     child = launched;
-    const [exitCode, output, errors] = await Promise.all([
-      launched.exited,
-      new Response(launched.stdout).text(),
-      new Response(launched.stderr).text(),
-    ]);
-    assert.equal(exitCode, 0, `${output}\n${errors}`);
+    launchDiagnostics = resolve(diagnostics, restarted ? "restart" : "initial");
+    const { exitCode, stdout, stderr } = await captureNativeChild(
+      launched,
+      launchDiagnostics,
+      restarted ? "storage restart" : "storage initial",
+    );
+    assert.equal(exitCode, 0, `${stdout}\n${stderr}`);
     for (const view of [
       "main",
       "denied",
@@ -299,7 +307,15 @@ try {
     "PASS ad-hoc signed WKWebView -> host -> storage I/O, eleven operations, directory contracts, operation grants, view authority, unsupported move/remove, cleanup and restart",
   );
 } catch (error) {
-  const diagnostics = resolve(root, "build/macos-storage-host-diagnostics");
+  if (launchDiagnostics) {
+    await printNativeChildDiagnostics(
+      launchDiagnostics,
+      resolve(
+        directory,
+        "home/Library/Application Support/bunaway/tests.macos.storage",
+      ),
+    );
+  }
   await mkdir(diagnostics, {
     recursive: true,
   });

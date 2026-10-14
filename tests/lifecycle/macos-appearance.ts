@@ -9,6 +9,11 @@ import { installedPlugins } from "#cli/plugins";
 import { run } from "#cli/processes";
 import pin from "../../runtime/build-manifests/darwin-aarch64.json";
 
+import {
+  captureNativeChild,
+  printNativeChildDiagnostics,
+} from "../fixtures/native-child-diagnostics.ts";
+
 assert.equal(process.platform, "darwin");
 assert.equal(process.arch, "arm64");
 const root = resolve(import.meta.dir, "../..");
@@ -24,6 +29,9 @@ await run(
 const directory = await mkdtemp(resolve(tmpdir(), "bunaway-macos-appearance-"));
 let child: ReturnType<typeof Bun.spawn> | undefined;
 const results: object[] = [];
+let launchDiagnostics: string | undefined;
+let launchDataRoot: string | undefined;
+const diagnostics = resolve(root, "build/macos-appearance-diagnostics");
 try {
   for (const backendAllowed of [
     true,
@@ -210,17 +218,25 @@ try {
         },
       );
       child = launched;
-      const stdout = new Response(launched.stdout).text();
-      const stderr = new Response(launched.stderr).text();
-      const code = await launched.exited;
       const dataRoot = resolve(
         home,
         "Library/Application Support/bunaway/tests.macos.appearance",
       );
+      launchDataRoot = dataRoot;
+      launchDiagnostics = resolve(
+        diagnostics,
+        backendAllowed ? "allowed" : "denied",
+        `launch-${launch}`,
+      );
+      const { exitCode: code, stdout, stderr } = await captureNativeChild(
+        launched,
+        launchDiagnostics,
+        `appearance ${backendAllowed ? "allowed" : "denied"} launch ${launch}`,
+      );
       const log = await Bun.file(resolve(dataRoot, "logs/host.log"))
         .text()
         .catch(() => "No host log.");
-      assert.equal(code, 0, `${await stdout}\n${await stderr}\n${log}`);
+      assert.equal(code, 0, `${stdout}\n${stderr}\n${log}`);
       const report = await Bun.file(
         resolve(dataRoot, "temp/report.json"),
       ).json();
@@ -271,6 +287,17 @@ try {
   console.log(
     "PASS signed compiled macOS appearance: repeated AppKit reads, backend/view grants and denials, strict input, bounded colors, adapter lifetimes and repeated host shutdown",
   );
+} catch (error) {
+  if (launchDiagnostics && launchDataRoot) {
+    await printNativeChildDiagnostics(launchDiagnostics, launchDataRoot);
+    const logs = resolve(launchDataRoot, "logs");
+    if (await Bun.file(resolve(logs, "host.log")).exists()) {
+      await cp(logs, resolve(launchDiagnostics, "host-logs"), {
+        recursive: true,
+      });
+    }
+  }
+  throw error;
 } finally {
   if (child?.exitCode === null) {
     child.kill("SIGKILL");

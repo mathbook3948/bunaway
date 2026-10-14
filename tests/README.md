@@ -1,5 +1,15 @@
 # Tests
 
+`fixtures/native-child-diagnostics.ts`는 실제 자식 프로세스의 stdout과 stderr를 동시에 읽고
+원본 바이트와 종료 코드, signal, 실행 단계와 경과 시간을 보관한다.
+macOS storage, appearance와 WebView controls 실행기는 보고서가 없거나 검사에 실패하면
+보관한 출력과 호스트 로그를 CI 로그에도 출력한다. 재시작과 권한 시나리오는 서로 다른
+진단 디렉터리를 사용한다. 종료 코드가 0이어도 기존 보고서 검사를 모두 통과해야 한다.
+`lifecycle/native-child-diagnostics.test.ts`는 실제 프로세스에서 성공과 실패, 큰 출력과
+CLIXML 및 UTF-8이 아닌 바이트의 보존을 검사한다. Windows native CI의 호스트 단계는
+cmd 파일 리다이렉션으로 출력을 보관하고 원래 종료 코드를 반환하므로 중첩 PowerShell
+진단이 XML 파서 오류로 바뀌지 않는다.
+
 계약 테스트는 `bun test ./tests`처럼 저장소의 실제 테스트 경로에 `./`를 붙여 실행한다.
 경로 접두사가 없는 `bun test tests/api`는 파일명 필터로 해석해 build 디렉터리의 과거
 테스트 복사본까지 실행할 수 있다. 집중 검사에도 `bun test ./tests/api`를 사용한다.
