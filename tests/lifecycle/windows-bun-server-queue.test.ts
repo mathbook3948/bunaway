@@ -124,7 +124,12 @@ test("server backlog is bounded while Host results and failure controls retain c
     },
     (_, index) => harness.sender.send(server(index)),
   );
-  const hostResults: Packet[] = Array.from(
+  const hostResults: Extract<
+    Packet,
+    {
+      kind: "host-result";
+    }
+  >[] = Array.from(
     {
       length: API_LIMITS.maxPending,
     },

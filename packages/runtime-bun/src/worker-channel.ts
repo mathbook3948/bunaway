@@ -11,7 +11,9 @@ import {
   type HostCall,
   type HostContext,
   type HostResponse,
+  type JsonValue,
   MAX_MESSAGE_BYTES,
+  type NativeRegistration,
   NativeRegistry,
   parseHostCall,
   parseHostResponse,
@@ -33,504 +35,8 @@ export {
   MAX_WINDOWS,
   type WindowSpec,
 } from "./window-config.ts";
-export type Packet =
-  | {
-      kind: "native-register";
-      plugins: import("@bunaway/protocol").NativeRegistration[];
-      /** Final batch commits the complete registry before backend setup can run. */
-      complete: boolean;
-    }
-  | {
-      kind: "ready" | "start" | "shutdown" | "closing" | "cleaned";
-    }
-  | {
-      kind: "desktop-control";
-      action: "show" | "hide";
-    }
-  | {
-      kind: "quit-request";
-      reason: "last-window" | "tray";
-    }
-  | {
-      kind: "quit-cancelled";
-    }
-  | {
-      kind: "session-open" | "revoke";
-      route: Route;
-    }
-  | {
-      kind: "client";
-      route: Route;
-      message: ClientMessage;
-    }
-  | {
-      kind: "native-event";
-      route: Route;
-      event: string;
-      payload: import("@bunaway/protocol").JsonValue;
-    }
-  | {
-      kind: "server";
-      route: Route;
-      message: ServerMessage;
-    }
-  | {
-      kind: "session-failure";
-      route: Route;
-      error: WireError;
-    }
-  | {
-      kind: "authorize-input";
-      context: HostContext;
-      requestId: string;
-      call: HostCall;
-    }
-  | {
-      kind: "input-authorized";
-      context: HostContext;
-      requestId: string;
-      allowed: boolean;
-    }
-  | {
-      kind: "authorize";
-      context: HostContext;
-      requestId: string;
-      call: HostCall;
-    }
-  | {
-      kind: "prepare";
-      context: HostContext;
-      requestId: string;
-      call: HostCall;
-    }
-  | {
-      kind: "operation";
-      context: HostContext;
-      requestId: string;
-      call: HostCall;
-      source: string;
-    }
-  | {
-      kind: "grant";
-      context: HostContext;
-      requestId: string;
-      allowed: boolean;
-    }
-  | {
-      kind: "authorized";
-      context: HostContext;
-      requestId: string;
-      allowed: boolean;
-    }
-  | {
-      kind: "cancel";
-      context: HostContext;
-      requestId: string;
-    }
-  | {
-      kind: "cancel-context";
-      context: HostContext;
-    }
-  | {
-      kind: "host-result" | "host-response";
-      context: HostContext;
-      requestId: string;
-      response: HostResponse;
-    }
-  | {
-      kind: "diagnostic";
-      event: string;
-      fields: Record<string, unknown>;
-    }
-  | {
-      kind: "fatal";
-      error: WireError;
-    };
 
-const uiKinds = [
-  "native-event",
-  "ready",
-  "session-open",
-  "revoke",
-  "client",
-  "closing",
-  "quit-request",
-  "authorized",
-  "input-authorized",
-  "prepare",
-  "host-response",
-  "cleaned",
-  "fatal",
-  "diagnostic",
-];
-const mainKinds = [
-  "operation",
-  "desktop-control",
-  "quit-cancelled",
-  "start",
-  "server",
-  "session-failure",
-  "authorize",
-  "authorize-input",
-  "grant",
-  "cancel",
-  "cancel-context",
-  "host-result",
-  "shutdown",
-];
-const ioKinds = [
-  "authorize-input",
-  "ready",
-  "prepare",
-  "host-response",
-  "cleaned",
-  "fatal",
-];
-const ioMainKinds = [
-  "input-authorized",
-  "operation",
-  "grant",
-  "cancel",
-  "cancel-context",
-  "shutdown",
-];
 type Side = "main" | "ui" | "io" | "main-io" | "macos-main" | "macos-backend";
-const macosMainKinds = [
-  "native-register",
-  "operation",
-  "cancel",
-  "ready",
-  "cleaned",
-  "server",
-  "fatal",
-];
-const macosBackendKinds = [
-  "host-response",
-  "session-open",
-  "revoke",
-  "client",
-  "shutdown",
-];
-const controlKinds = new Set([
-  "native-register",
-  "desktop-control",
-  "quit-cancelled",
-  "quit-request",
-  "start",
-  "shutdown",
-  "closing",
-  "cleaned",
-  "fatal",
-  "ready",
-]);
-const approvalKinds = new Set([
-  "authorize-input",
-  "input-authorized",
-  "prepare",
-  "authorize",
-  "authorized",
-  "grant",
-]);
-const requiredFields: Record<Packet["kind"], readonly string[]> = {
-  "native-event": [
-    "route",
-    "event",
-    "payload",
-  ],
-  "native-register": [
-    "plugins",
-    "complete",
-  ],
-  "desktop-control": [
-    "action",
-  ],
-  "quit-request": [
-    "reason",
-  ],
-  "quit-cancelled": [],
-  ready: [],
-  start: [],
-  shutdown: [],
-  closing: [],
-  cleaned: [],
-  "session-open": [
-    "route",
-  ],
-  revoke: [
-    "route",
-  ],
-  client: [
-    "route",
-    "message",
-  ],
-  server: [
-    "route",
-    "message",
-  ],
-  "session-failure": [
-    "route",
-    "error",
-  ],
-  "authorize-input": [
-    "context",
-    "requestId",
-    "call",
-  ],
-  "input-authorized": [
-    "context",
-    "requestId",
-    "allowed",
-  ],
-  authorize: [
-    "context",
-    "requestId",
-    "call",
-  ],
-  prepare: [
-    "context",
-    "requestId",
-    "call",
-  ],
-  operation: [
-    "context",
-    "requestId",
-    "call",
-    "source",
-  ],
-  authorized: [
-    "context",
-    "requestId",
-    "allowed",
-  ],
-  grant: [
-    "context",
-    "requestId",
-    "allowed",
-  ],
-  cancel: [
-    "context",
-    "requestId",
-  ],
-  "cancel-context": [
-    "context",
-  ],
-  "host-result": [
-    "context",
-    "requestId",
-    "response",
-  ],
-  "host-response": [
-    "context",
-    "requestId",
-    "response",
-  ],
-  diagnostic: [
-    "event",
-    "fields",
-  ],
-  fatal: [
-    "error",
-  ],
-};
-function record(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("Invalid Worker packet");
-  }
-  return value as Record<string, unknown>;
-}
-function packetKind(value: unknown): value is Packet["kind"] {
-  return typeof value === "string" && Object.hasOwn(requiredFields, value);
-}
-function identifier(value: unknown) {
-  if (typeof value !== "string" || !/^[A-Za-z0-9_.:-]{1,128}$/.test(value)) {
-    throw new Error("Invalid Worker identifier");
-  }
-}
-
-/** Validates a cloned packet against the receiving side, exact fields, size bound and nested protocol contracts; throws on rejection. */
-export function validatePacket(value: unknown, incoming: Side): Packet {
-  const packet = record(value);
-  const allowed = {
-    main: uiKinds,
-    ui: mainKinds,
-    io: ioMainKinds,
-    "main-io": ioKinds,
-    "macos-main": macosMainKinds,
-    "macos-backend": macosBackendKinds,
-  }[incoming];
-  if (!packetKind(packet.kind) || !allowed.includes(packet.kind)) {
-    throw new Error("Invalid Worker direction");
-  }
-  // Worker envelopes add bounded transport metadata beyond the canonical protocol message.
-  const text = JSON.stringify(value);
-  if (Buffer.byteLength(text) > MAX_MESSAGE_BYTES + 1024) {
-    throw new Error("Worker packet too large");
-  }
-  const required = requiredFields[packet.kind];
-  if (
-    !required ||
-    required.some((key) => !Object.hasOwn(packet, key)) ||
-    Object.keys(packet).some((key) => key !== "kind" && !required.includes(key))
-  ) {
-    throw new Error("Invalid Worker fields");
-  }
-  if (
-    packet.kind === "desktop-control" &&
-    (typeof packet.action !== "string" ||
-      ![
-        "show",
-        "hide",
-      ].includes(packet.action))
-  ) {
-    throw new Error("Invalid desktop action");
-  }
-  if (
-    packet.kind === "quit-request" &&
-    (typeof packet.reason !== "string" ||
-      ![
-        "last-window",
-        "tray",
-      ].includes(packet.reason))
-  ) {
-    throw new Error("Invalid quit reason");
-  }
-  if (packet.kind === "native-register") {
-    if (
-      !Array.isArray(packet.plugins) ||
-      packet.plugins.length > 1 ||
-      typeof packet.complete !== "boolean" ||
-      (!packet.complete && packet.plugins.length === 0)
-    ) {
-      throw new Error("Invalid native registrations");
-    }
-    for (const plugin of packet.plugins) {
-      const registration = record(plugin);
-      if (
-        Object.keys(registration).length !== 3 ||
-        typeof registration.name !== "string" ||
-        typeof registration.version !== "string" ||
-        !registration.native
-      ) {
-        throw new Error("Invalid native registration fields");
-      }
-    }
-    new NativeRegistry(packet.plugins);
-  }
-  if (packet.route !== undefined) {
-    const route = record(packet.route);
-    if (Object.keys(route).length !== 3) {
-      throw new Error("Invalid route fields");
-    }
-    identifier(route.viewId);
-    identifier(route.context);
-    if (
-      !Number.isSafeInteger(route.documentGeneration) ||
-      Number(route.documentGeneration) < 0
-    ) {
-      throw new Error("Invalid document generation");
-    }
-  }
-  if (
-    [
-      "session-open",
-      "revoke",
-      "client",
-      "server",
-      "session-failure",
-      "native-event",
-    ].includes(packet.kind) &&
-    !packet.route
-  ) {
-    throw new Error("Missing route");
-  }
-  if (packet.context !== undefined) {
-    identifier(packet.context);
-  }
-  if (packet.kind === "cancel-context") {
-    identifier(packet.context);
-  }
-  if (packet.requestId !== undefined) {
-    identifier(packet.requestId);
-  }
-  if (
-    [
-      "authorize-input",
-      "input-authorized",
-      "authorize",
-      "authorized",
-      "cancel",
-      "host-result",
-      "host-response",
-      "operation",
-      "prepare",
-      "grant",
-    ].includes(packet.kind)
-  ) {
-    identifier(packet.context);
-    identifier(packet.requestId);
-  }
-  if (packet.kind === "client" || packet.kind === "server") {
-    const message = parseMessage(JSON.stringify(packet.message));
-    const client = [
-      "hello",
-      "sdk-ready",
-      "invoke",
-      "listen",
-      "unlisten",
-      "cancel",
-      "close",
-    ].includes(message.kind);
-    if (client !== (packet.kind === "client") && message.kind !== "hello") {
-      throw new Error("Invalid Web direction");
-    }
-  }
-  if (
-    [
-      "authorize-input",
-      "authorize",
-      "operation",
-      "prepare",
-    ].includes(packet.kind)
-  ) {
-    parseHostCall(JSON.stringify(packet.call));
-  }
-  if (
-    [
-      "input-authorized",
-      "authorized",
-      "grant",
-    ].includes(packet.kind) &&
-    typeof packet.allowed !== "boolean"
-  ) {
-    throw new Error("Invalid authorization");
-  }
-  if (
-    packet.kind === "operation" &&
-    (typeof packet.source !== "string" ||
-      !/^(backend|view:[A-Za-z0-9_.:-]{1,128})$/.test(packet.source))
-  ) {
-    throw new Error("Invalid operation source");
-  }
-  if (packet.kind === "host-result" || packet.kind === "host-response") {
-    parseHostResponse(JSON.stringify(packet.response));
-  }
-  if (packet.kind === "diagnostic") {
-    identifier(packet.event);
-    record(packet.fields);
-  }
-  if (packet.kind === "native-event") {
-    identifier(packet.event);
-    validateValue({}, packet.payload);
-  }
-  if (packet.kind === "fatal" || packet.kind === "session-failure") {
-    validateValue(errorSchema, packet.error);
-  }
-  return packet as Packet;
-}
-
-// A broadcast can have one active send per subscription in every window.
-// This is a bounded backlog policy, separate from unacknowledged data capacity.
-const SERVER_QUEUE_LIMIT = MAX_WINDOWS * API_LIMITS.maxSubscriptions;
 type Lane =
   | "native-event"
   | "data"
@@ -540,6 +46,475 @@ type Lane =
   | "control"
   | "diagnostic"
   | "session-failure";
+type FieldValidator<T> = (
+  value: unknown,
+  packet: Record<string, unknown>,
+) => asserts value is T;
+
+function record(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Invalid Worker packet");
+  }
+  return value as Record<string, unknown>;
+}
+function identifier(value: unknown): asserts value is string {
+  if (typeof value !== "string" || !/^[A-Za-z0-9_.:-]{1,128}$/.test(value)) {
+    throw new Error("Invalid Worker identifier");
+  }
+}
+function context(value: unknown): asserts value is HostContext {
+  identifier(value);
+}
+function route(value: unknown): asserts value is Route {
+  if (value === undefined) {
+    throw new Error("Missing route");
+  }
+  const fields = record(value);
+  if (Object.keys(fields).length !== 3) {
+    throw new Error("Invalid route fields");
+  }
+  identifier(fields.viewId);
+  context(fields.context);
+  if (
+    !Number.isSafeInteger(fields.documentGeneration) ||
+    Number(fields.documentGeneration) < 0
+  ) {
+    throw new Error("Invalid document generation");
+  }
+}
+function hostCall(value: unknown): asserts value is HostCall {
+  parseHostCall(JSON.stringify(value));
+}
+function hostResponse(value: unknown): asserts value is HostResponse {
+  parseHostResponse(JSON.stringify(value));
+}
+function authorization(value: unknown): asserts value is boolean {
+  if (typeof value !== "boolean") {
+    throw new Error("Invalid authorization");
+  }
+}
+function operationSource(value: unknown): asserts value is string {
+  if (
+    typeof value !== "string" ||
+    !/^(backend|view:[A-Za-z0-9_.:-]{1,128})$/.test(value)
+  ) {
+    throw new Error("Invalid operation source");
+  }
+}
+function desktopAction(value: unknown): asserts value is "show" | "hide" {
+  if (value !== "show" && value !== "hide") {
+    throw new Error("Invalid desktop action");
+  }
+}
+function quitReason(value: unknown): asserts value is "last-window" | "tray" {
+  if (value !== "last-window" && value !== "tray") {
+    throw new Error("Invalid quit reason");
+  }
+}
+function wireError(value: unknown): asserts value is WireError {
+  validateValue(errorSchema, value);
+}
+function jsonValue(value: unknown): asserts value is JsonValue {
+  validateValue({}, value);
+}
+function diagnosticFields(
+  value: unknown,
+): asserts value is Record<string, unknown> {
+  record(value);
+}
+
+/** Checks the nested Web contract without letting Worker direction substitute for Web direction. */
+function webMessage(value: unknown, client: boolean): void {
+  const message = parseMessage(JSON.stringify(value));
+  const isClient = [
+    "hello",
+    "sdk-ready",
+    "invoke",
+    "listen",
+    "unlisten",
+    "cancel",
+    "close",
+  ].includes(message.kind);
+  if (isClient !== client && message.kind !== "hello") {
+    throw new Error("Invalid Web direction");
+  }
+}
+function clientMessage(value: unknown): asserts value is ClientMessage {
+  webMessage(value, true);
+}
+function serverMessage(value: unknown): asserts value is ServerMessage {
+  webMessage(value, false);
+}
+
+/** Validates a bounded registration batch, allowing an empty batch only at completion. */
+function nativeRegistrations(
+  value: unknown,
+  packet: Record<string, unknown>,
+): asserts value is NativeRegistration[] {
+  if (
+    !Array.isArray(value) ||
+    value.length > 1 ||
+    typeof packet.complete !== "boolean" ||
+    (!packet.complete && value.length === 0)
+  ) {
+    throw new Error("Invalid native registrations");
+  }
+  for (const plugin of value) {
+    const registration = record(plugin);
+    if (
+      Object.keys(registration).length !== 3 ||
+      typeof registration.name !== "string" ||
+      typeof registration.version !== "string" ||
+      !registration.native
+    ) {
+      throw new Error("Invalid native registration fields");
+    }
+  }
+  new NativeRegistry(value);
+}
+function registrationComplete(value: unknown): asserts value is boolean {
+  if (typeof value !== "boolean") {
+    throw new Error("Invalid native registrations");
+  }
+}
+
+function definePacket<Fields extends Record<string, FieldValidator<unknown>>>(
+  fields: Fields,
+  incoming: readonly Side[],
+  lane: Lane,
+) {
+  return {
+    fields,
+    validators: Object.entries(fields),
+    incoming,
+    lane,
+  };
+}
+const routedFields = {
+  route,
+};
+const requestFields = {
+  context,
+  requestId: identifier,
+};
+const callFields = {
+  ...requestFields,
+  call: hostCall,
+};
+const approvalFields = {
+  ...requestFields,
+  allowed: authorization,
+};
+const responseFields = {
+  ...requestFields,
+  response: hostResponse,
+};
+
+/** Authoritative Worker contract: required fields and their types/validators, receiving sides, and queue lanes. */
+const packetDefinitions = {
+  "native-register": definePacket(
+    {
+      plugins: nativeRegistrations,
+      /** Final batch commits the complete registry before backend setup can run. */
+      complete: registrationComplete,
+    },
+    [
+      "macos-main",
+    ],
+    "control",
+  ),
+  ready: definePacket(
+    {},
+    [
+      "main",
+      "main-io",
+      "macos-main",
+    ],
+    "control",
+  ),
+  start: definePacket(
+    {},
+    [
+      "ui",
+    ],
+    "control",
+  ),
+  shutdown: definePacket(
+    {},
+    [
+      "ui",
+      "io",
+      "macos-backend",
+    ],
+    "control",
+  ),
+  closing: definePacket(
+    {},
+    [
+      "main",
+    ],
+    "control",
+  ),
+  cleaned: definePacket(
+    {},
+    [
+      "main",
+      "main-io",
+      "macos-main",
+    ],
+    "control",
+  ),
+  "desktop-control": definePacket(
+    {
+      action: desktopAction,
+    },
+    [
+      "ui",
+    ],
+    "control",
+  ),
+  "quit-request": definePacket(
+    {
+      reason: quitReason,
+    },
+    [
+      "main",
+    ],
+    "control",
+  ),
+  "quit-cancelled": definePacket(
+    {},
+    [
+      "ui",
+    ],
+    "control",
+  ),
+  "session-open": definePacket(
+    routedFields,
+    [
+      "main",
+      "macos-backend",
+    ],
+    "data",
+  ),
+  revoke: definePacket(
+    routedFields,
+    [
+      "main",
+      "macos-backend",
+    ],
+    "revoke",
+  ),
+  client: definePacket(
+    {
+      ...routedFields,
+      message: clientMessage,
+    },
+    [
+      "main",
+      "macos-backend",
+    ],
+    "data",
+  ),
+  "native-event": definePacket(
+    {
+      ...routedFields,
+      event: identifier,
+      payload: jsonValue,
+    },
+    [
+      "main",
+    ],
+    "native-event",
+  ),
+  server: definePacket(
+    {
+      ...routedFields,
+      message: serverMessage,
+    },
+    [
+      "ui",
+      "macos-main",
+    ],
+    "data",
+  ),
+  "session-failure": definePacket(
+    {
+      ...routedFields,
+      error: wireError,
+    },
+    [
+      "ui",
+    ],
+    "session-failure",
+  ),
+  "authorize-input": definePacket(
+    callFields,
+    [
+      "ui",
+      "main-io",
+    ],
+    "approval",
+  ),
+  "input-authorized": definePacket(
+    approvalFields,
+    [
+      "main",
+      "io",
+    ],
+    "approval",
+  ),
+  authorize: definePacket(
+    callFields,
+    [
+      "ui",
+    ],
+    "approval",
+  ),
+  prepare: definePacket(
+    callFields,
+    [
+      "main",
+      "main-io",
+    ],
+    "approval",
+  ),
+  operation: definePacket(
+    {
+      ...callFields,
+      source: operationSource,
+    },
+    [
+      "ui",
+      "io",
+      "macos-main",
+    ],
+    "data",
+  ),
+  grant: definePacket(
+    approvalFields,
+    [
+      "ui",
+      "io",
+    ],
+    "approval",
+  ),
+  authorized: definePacket(
+    approvalFields,
+    [
+      "main",
+    ],
+    "approval",
+  ),
+  cancel: definePacket(
+    requestFields,
+    [
+      "ui",
+      "io",
+      "macos-main",
+    ],
+    "cancel",
+  ),
+  "cancel-context": definePacket(
+    {
+      context,
+    },
+    [
+      "ui",
+      "io",
+    ],
+    "revoke",
+  ),
+  "host-result": definePacket(
+    responseFields,
+    [
+      "ui",
+    ],
+    "data",
+  ),
+  "host-response": definePacket(
+    responseFields,
+    [
+      "main",
+      "main-io",
+      "macos-backend",
+    ],
+    "data",
+  ),
+  diagnostic: definePacket(
+    {
+      event: identifier,
+      fields: diagnosticFields,
+    },
+    [
+      "main",
+    ],
+    "diagnostic",
+  ),
+  fatal: definePacket(
+    {
+      error: wireError,
+    },
+    [
+      "main",
+      "main-io",
+      "macos-main",
+    ],
+    "control",
+  ),
+};
+type PacketDefinitions = typeof packetDefinitions;
+type FieldValue<Validator> =
+  Validator extends FieldValidator<infer Value> ? Value : never;
+export type Packet = {
+  [Kind in keyof PacketDefinitions]: {
+    kind: Kind;
+  } & {
+    [Field in keyof PacketDefinitions[Kind]["fields"]]: FieldValue<
+      PacketDefinitions[Kind]["fields"][Field]
+    >;
+  };
+}[keyof PacketDefinitions];
+
+function packetKind(value: unknown): value is Packet["kind"] {
+  return typeof value === "string" && Object.hasOwn(packetDefinitions, value);
+}
+
+/** Validates a cloned packet against the receiving side, exact fields, size bound and nested protocol contracts; throws on rejection. */
+export function validatePacket(value: unknown, incoming: Side): Packet {
+  const packet = record(value);
+  if (!packetKind(packet.kind)) {
+    throw new Error("Invalid Worker direction");
+  }
+  const definition = packetDefinitions[packet.kind];
+  if (!definition.incoming.includes(incoming)) {
+    throw new Error("Invalid Worker direction");
+  }
+  // Worker envelopes add bounded transport metadata beyond the canonical protocol message.
+  const text = JSON.stringify(value);
+  if (Buffer.byteLength(text) > MAX_MESSAGE_BYTES + 1024) {
+    throw new Error("Worker packet too large");
+  }
+  const fields = definition.validators;
+  if (
+    fields.some(([key]) => !Object.hasOwn(packet, key)) ||
+    Object.keys(packet).some(
+      (key) => key !== "kind" && !Object.hasOwn(definition.fields, key),
+    )
+  ) {
+    throw new Error("Invalid Worker fields");
+  }
+  for (const [key, validate] of fields) {
+    const validateField: FieldValidator<unknown> = validate;
+    validateField(packet[key], packet);
+  }
+  // Every required field passed its validator, and the discriminator selects the inferred payload type.
+  return packet as Packet;
+}
+
+// A broadcast can have one active send per subscription in every window.
+// This is a bounded backlog policy, separate from unacknowledged data capacity.
+const SERVER_QUEUE_LIMIT = MAX_WINDOWS * API_LIMITS.maxSubscriptions;
 type QueuedData = {
   packet: Extract<
     Packet,
@@ -686,24 +661,13 @@ export class Channel {
         "macos-main": "macos-backend",
         "macos-backend": "macos-main",
       }[this.side] as Side;
-      let lane: Lane =
-        packet.kind === "diagnostic"
-          ? "diagnostic"
-          : packet.kind === "session-failure"
-            ? "session-failure"
-            : packet.kind === "cancel" ||
-                (packet.kind === "client" && packet.message.kind === "cancel")
-              ? "cancel"
-              : packet.kind === "revoke" || packet.kind === "cancel-context"
-                ? "revoke"
-                : approvalKinds.has(packet.kind)
-                  ? "approval"
-                  : controlKinds.has(packet.kind)
-                    ? "control"
-                    : "data";
-      if (packet.kind === "native-event") {
-        lane = "native-event";
+      if (!packetKind(packet.kind)) {
+        throw new Error("Invalid Worker direction");
       }
+      const lane: Lane =
+        packet.kind === "client" && packet.message.kind === "cancel"
+          ? "cancel"
+          : packetDefinitions[packet.kind].lane;
       const count = [
         ...this.pending.values(),
       ].filter((item) => item.lane === lane).length;
