@@ -105,23 +105,23 @@ test.skipIf(process.platform !== "win32")(
         await dispose(state);
       }
     `;
+    const state = initialize();
     try {
-      const child = Bun.spawn(
-        [
-          process.execPath,
+      // Bun.spawn gives this console fixture its own lazily started conhost,
+      // which joins the app Job after the baseline count. Use the real runner's
+      // CREATE_NO_WINDOW launch so the exact 2 -> 1 -> 0 invocation counts apply.
+      const result = await run(state, {
+        executablePath: process.execPath,
+        args: [
           "-e",
           script,
         ],
-        {
-          stdout: "pipe",
-          stderr: "pipe",
-        },
-      );
-      const [exitCode, output, error] = await Promise.all([
-        child.exited,
-        new Response(child.stdout).text(),
-        new Response(child.stderr).text(),
-      ]);
+        maxOutputBytes: 65536,
+        timeoutMs: 5000,
+      });
+      const exitCode = result.exitCode;
+      const output = Buffer.from(result.stdoutBase64, "base64").toString();
+      const error = Buffer.from(result.stderrBase64, "base64").toString();
       expect({
         exitCode,
         error,
@@ -131,6 +131,7 @@ test.skipIf(process.platform !== "win32")(
       });
       expect(output).toBe("contained");
     } finally {
+      await dispose(state);
       await rm(root, {
         recursive: true,
         force: true,

@@ -43,6 +43,20 @@ test("argv invocation inherits Bun dotenv values without loading dotenv in the c
       const { runProcess } = await import(${JSON.stringify(runnerModule)});
       assert.equal(process.env[${JSON.stringify(key)}], ${JSON.stringify(value)});
       assert.equal(process.env[${JSON.stringify(emptyKey)}], "");
+      if (process.platform === "win32") {
+        const { dlopen, ptr } = await import("bun:ffi");
+        const api = dlopen("kernel32.dll", {
+          GetEnvironmentVariableW: { args: ["ptr", "ptr", "u32"], returns: "u32" },
+          GetLastError: { args: [], returns: "u32" },
+        });
+        try {
+          const name = Buffer.from(${JSON.stringify(`${key}\0`)}, "utf16le");
+          assert.equal(api.symbols.GetEnvironmentVariableW(ptr(name), null, 0), 0);
+          assert.equal(api.symbols.GetLastError(), 203); // ERROR_ENVVAR_NOT_FOUND
+        } finally {
+          api.close();
+        }
+      }
       const result = await runProcess({
         executablePath: process.execPath,
         args: ["--no-env-file", "-e", ${JSON.stringify(`process.stdout.write(JSON.stringify([process.env[${JSON.stringify(key)}], process.env[${JSON.stringify(emptyKey)}]]));`)}],
