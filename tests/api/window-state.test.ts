@@ -1,17 +1,16 @@
 import { expect, test } from "bun:test";
-import { windowPermissions } from "../fixtures/window-permissions.ts";
 import type {
   NativeWindow,
   NativeWindowServices,
 } from "@bunaway/plugin-api/native";
-import {
+import windows, {
   validateWindowCall,
   validateWindowOutput,
   windowOperations,
-  windowsPlugin,
 } from "@bunaway/plugin-windows";
 import { NativeRegistry, type Policy } from "@bunaway/protocol";
 import { createOperations } from "#plugins/windows/src/platforms/windows";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 const controls = [
   "minimize",
@@ -28,7 +27,7 @@ const queries = [
   "isFocused",
 ] as const;
 const registry = new NativeRegistry([
-  windowsPlugin,
+  windows._definition,
 ]);
 const stateQueries = [
   ...queries,

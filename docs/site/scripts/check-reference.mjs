@@ -276,7 +276,9 @@ function runtimeExports(path, visited = new Set()) {
   visited.add(path);
   const names = new Set();
   for (const node of source(path).statements) {
-    if (ts.isExportDeclaration(node) && !node.isTypeOnly) {
+    if (ts.isExportAssignment(node) && !node.isExportEquals) {
+      names.add("default");
+    } else if (ts.isExportDeclaration(node) && !node.isTypeOnly) {
       if (node.exportClause && ts.isNamedExports(node.exportClause)) {
         for (const element of node.exportClause.elements) {
           if (!element.isTypeOnly) {
@@ -293,7 +295,10 @@ function runtimeExports(path, visited = new Set()) {
             resolve(dirname(path), module),
             visited,
           )) {
-            names.add(name);
+            // ES star exports omit the source module's default export.
+            if (name !== "default") {
+              names.add(name);
+            }
           }
         } else {
           failures.push(`Unsupported star export: ${path} -> ${module}`);

@@ -136,7 +136,7 @@ startup이 true인 multiple 선언도 시작할 때는 창 하나만 만듭니�
 이번 생성에만 바꿀 수 있습니다. 다중 창은 [createInstance](/reference/host/windows/)로 생성합니다.
 `app.windows: []` 또는 모든 창의 `startup: false`로 창 없이 시작할 수 있습니다.
 앱 정의의 `desktop.tray` 또는 `desktop.closeBehavior: "keep-alive"`가 필요합니다.
-트레이를 쓰려면 @bunaway/plugin-tray 설치와 trayPlugin 등록도 필요합니다.
+트레이를 쓰려면 @bunaway/plugin-tray 설치와 tray 등록도 필요합니다.
 CLI는 창 선언을 검사하고, 호스트는 앱 정의를 읽은 뒤 이 실행 유지 조건을 검사합니다.
 조건을 충족하지 않으면 `app.windows has no startup window` 진단과 필요한 desktop 설정을 알리고 시작에 실패합니다.
 macOS는 시작 창 하나 이상이 필요하며 창 없는 시작은 `UNSUPPORTED`로 거부합니다.

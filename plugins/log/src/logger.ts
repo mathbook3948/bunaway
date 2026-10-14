@@ -25,7 +25,7 @@ export function createLog(
       options,
     );
 
-  return Object.freeze({
+  return {
     write,
     debug(message: string, details?: JsonValue, options?: NativeInvokeOptions) {
       return writeLog("debug", message, details, options);
@@ -39,5 +39,5 @@ export function createLog(
     error(message: string, details?: JsonValue, options?: NativeInvokeOptions) {
       return writeLog("error", message, details, options);
     },
-  });
+  };
 }

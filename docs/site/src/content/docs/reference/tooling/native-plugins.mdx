@@ -18,13 +18,13 @@ my-plugin/
   package.json
   src/
     index.ts       계약과 플랫폼 선언 조립, 공개 export
-    contract.ts    재사용할 값 스키마, 타입과 계약 검증
-    operations.ts  input, output, handler를 갖춘 작업 목록
-    calls.ts       편의 호출 처리, 필요한 기능만 작성
     platforms/
       windows.ts   Windows 구현 팩터리
   dist/            빌드 결과
 ```
+
+공유 스키마가 생기면 contract.ts에, 공유 작업이 생기면 operations.ts에 분리할 수 있습니다.
+별도 파일 분리는 필수가 아닙니다.
 
 현재 네이티브 구현은 Windows를 기준으로 작성합니다. 앱에서 설치하고 등록하는 방법은
 [플러그인 API](/reference/backend/host-api/)를 참고하세요.
@@ -69,10 +69,9 @@ Windows 개발 모드에서는 조건부 루트 `exports`를 사용하는 플러
 
 ## index.ts에서 한 번 선언하기
 
-`defineNativePlugin(definition)`은 등록할 `definition`과 호출 함수 객체 `api`를 반환합니다.
-입력과 결과의 타입은 schema에서 추론합니다. 선언을 default export하고 호출 함수를
-원하는 이름으로 export합니다. 앱 등록에 이름 있는 export가 필요하면 같은 definition을
-추가로 export할 수 있습니다.
+`defineNativePlugin(definition, calls?)`은 등록과 호출에 함께 쓰는 플러그인을 반환합니다.
+반환값을 바로 default export합니다. 앱은 같은 값을 plugins에 등록하고 메서드를 호출합니다.
+입력과 결과의 타입은 스키마에서 추론하며 별도 등록 객체나 호출 객체를 꺼내지 않습니다.
 
 ```ts
 // src/platforms/windows.ts
@@ -93,15 +92,12 @@ export const windowsOperations = {
 import { defineNativePlugin } from "@bunaway/plugin";
 import { windowsOperations } from "./platforms/windows.ts";
 
-const plugin = defineNativePlugin({
+export default defineNativePlugin({
   name: "system",
   platforms: {
     windows: { operations: windowsOperations },
   },
 });
-
-export default plugin.definition;
-export const system = plugin.api;
 ```
 
 `NativePluginDefinition`에는 version을 작성하지 않습니다. 빌드한 definition의 version은
@@ -119,6 +115,24 @@ operations의 키는 공개 메서드 이름입니다. 각 작업에는 input, o
 
 `NativePluginAPI`의 메서드 이름은 operations의 키와 같습니다.
 위 예제는 `system.hostname(null): Promise<string>`을 만듭니다.
+
+```ts
+import { defineApp } from "@bunaway/backend";
+import system from "@example/plugin-system";
+
+export default defineApp({ modules: [], plugins: [system] });
+```
+
+화면의 이벤트 핸들러나 백엔드 명령 안에서 같은 export를 호출합니다.
+
+```ts
+import system from "@example/plugin-system";
+
+async function readHostname() {
+  return system.hostname(null);
+}
+```
+
 화면과 백엔드는 같은 index.ts와 같은 함수를 사용합니다. 화면에서는 WebView로 호출하고,
 백엔드에서는 현재 명령이나 setup의 호출 권한을 유지합니다.
 화면용 함수와 백엔드용 함수를 따로 작성하지 않습니다.
@@ -143,7 +157,7 @@ capabilities의 결과 이름 중복 검사는 query.ts에 둡니다.
 이름 변경과 `export *`, default 재내보내기도 지원합니다. 빌드는 별도 Bun 프로세스에서
 export 형태를 읽지만 initialize와 handler는 호출하지 않습니다. 네이티브 자원 인스턴스는 initialize에서 만듭니다.
 중립 출력과 다른 OS 출력에는 작업 키와 선언 형태만 남기고, 실제 스키마와 구현은 해당 OS 출력에 보존합니다.
-공개 api의 타입 선언에는 호출 인자, 결과와 옵션만 포함하며 내부 상태와 handler 타입은 노출하지 않습니다.
+호출 메서드의 타입 선언에는 인자, 결과와 옵션만 포함하며 내부 상태와 handler 타입은 노출하지 않습니다.
 호출 함수는 설치, 앱 등록이나 권한 부여를 대신하지 않습니다.
 
 ## Zod로 입력과 결과 정의하기
@@ -203,6 +217,27 @@ Windows UI는 입력 파싱 후 실행 직전에 종료 상태와 호출 컨텍�
 어댑터에서 수명과 취소를 관리합니다. Zod 콜백 자체는 취소할 수 없으므로,
 호출이 취소되어도 이미 시작한 검사는 끝날 수 있습니다.
 
+## 편의 호출이 필요한 경우
+
+기본 메서드를 그대로 사용하면 두 번째 인자는 생략합니다. 인자 없는 조회나 수준별 로그처럼
+호출 형태를 바꾸려면 `calls`에 생성된 작업 함수를 받는 조립 함수를 전달합니다.
+조립 함수는 새 객체 또는 호출 가능한 함수를 반환합니다. SDK가 내부 등록 정보를 붙이고
+반환값을 동결하므로 조립 함수에서 먼저 동결하지 않습니다. import 중에는 OS 자원을 만들지 않습니다.
+
+```ts
+export default defineNativePlugin({
+  name: "system",
+  platforms: { windows: { operations: windowsOperations } },
+}, (operations) => ({
+  hostname: () => operations.hostname(null),
+}));
+```
+
+이 플러그인도 같은 값을 등록하고 `system.hostname()`으로 호출합니다.
+공식 플러그인의 기존 편의 함수도 이 경로를 사용하며 호출 권한과 취소 처리는 생성된 작업 함수가 유지합니다.
+`_definition`, `then`, `toJSON`은 내부 등록, Promise와 JSON 처리에 사용하는 예약 이름입니다.
+작업 이름이나 편의 호출 결과에 이 속성이 있으면 선언을 거부합니다.
+
 ## platforms/windows.ts에서 구현하기
 
 ### 플랫폼별 operations로 선언하는 storage 샘플
@@ -236,7 +271,7 @@ import { defineNativePlugin } from "@bunaway/plugin";
 import { windowsOperations } from "./platforms/windows.ts";
 import { createStorage, disposeStorage } from "./platforms/windows.ts";
 
-const plugin = defineNativePlugin({
+export default defineNativePlugin({
   name: "storage",
   platforms: {
     windows: {
@@ -257,8 +292,8 @@ index.ts는 각 작업 목록과 플랫폼별 초기화, 정리를 연결합니�
 `src/platforms/<platform>.ts`에 두므로 중립 출력과 다른 OS 출력에서 제외됩니다.
 플랫폼별 operations와 기존 create 어댑터를 한 플랫폼에 혼합하면 선언 오류가 납니다.
 
-공개 `Storage` 인터페이스는 작성자가 정의합니다. `export const storage: Storage = plugin.api`로
-호출 API의 타입을 확인합니다. SDK는 모든 플랫폼에 선언한 작업 이름을 모아 api를 만들며,
+공개 `Storage` 인터페이스는 작성자가 정의합니다. `defineNativePlugin()` 결과의 메서드는 스키마에서 추론합니다.
+별도의 공개 타입이 필요하면 타입 export를 추가합니다. SDK는 모든 플랫폼에 선언한 작업 이름을 모아 api를 만들며,
 같은 이름의 입력이나 결과 타입이 다르면 호출 타입에는 그 합집합을 반영합니다.
 실제 입력과 출력 검증은 실행할 플랫폼의 스키마만 사용합니다.
 handler 입력은 input 스키마의 `z.output`, 반환값은 output 스키마의 `z.input`입니다.
@@ -316,7 +351,7 @@ Windows 호스트의 선택적 `app`은 검증한 앱 ID와 개발 또는 배포
 프레임워크 부팅 인자를 제공합니다. 자동 실행 어댑터는 이 정보만 등록 경로로 사용하며
 호출자가 실행 파일이나 다른 앱 ID를 선택하지 못합니다. 호스트 실행 정보가 없는 환경은
 해당 기능을 지원한다고 가정하지 않습니다.
-목록에는 앱에 등록된 네이티브 플러그인 작업만 포함합니다. 창 제어도 windowsPlugin을
+목록에는 앱에 등록된 네이티브 플러그인 작업만 포함합니다. 창 제어도 `windows`를
 등록한 경우에만 포함합니다. 각 작업의 `support`는 해당 패키지의 플랫폼 구현에 따라
 `supported`, `experimental`, `unsupported` 중 하나입니다. OS 동의 상태는 포함하지 않습니다.
 `NativeAdapter.execute(operation, input, source)`는 승인된 작업을 동기로 실행하고 JSON
@@ -354,7 +389,7 @@ platforms의 operations 배열을 함께 지정하면 거부합니다. `NativeHa
 
 defineNativePlugin의 events에는 기존 이벤트 JSON Schema를 작업과 함께 선언합니다.
 예를 들어 `events: { "system.changed": { type: "string" } }`를 지정합니다.
-반환한 definition을 다시 펼쳐 events를 추가할 필요가 없습니다.
+`defineApp()`은 플러그인의 이벤트를 등록하고 `EventsOf`에 같은 스키마를 반영합니다.
 
 ## 플랫폼 구현 연결하기
 
@@ -369,7 +404,7 @@ platforms: {
 }
 ```
 
-package.json의 `bunaway.plugin`은 default export한 등록 객체를 읽는 진입점입니다.
+package.json의 `bunaway.plugin`은 default export한 플러그인을 읽는 진입점입니다.
 `platforms`는 defineNativePlugin의 선언 안에 작성하며 별도 plugin.json은 사용하지 않습니다.
 플랫폼 이름은 [공통 계약의 PLATFORMS](/reference/tooling/plugin-api/#플랫폼-이름)에 정의된 windows, macos, linux, android, ios입니다. SDK와 CLI가 각각 이 목록으로 선언을 검증합니다. 구현을 제공하는 플랫폼만 선언합니다.
 이 이름을 선언해도 해당 플랫폼의 프레임워크 실행 경로가 새로 생기지는 않습니다.
@@ -388,7 +423,8 @@ import에서 확장자를 생략해도 빌드는 실제로 해석한 파일 경�
 기능 지원 조회와 호출 검사는 같은 목록을 사용합니다. 플랫폼 구현이나 작업이 없으면
 권한 검사 뒤 `UNSUPPORTED`를 반환합니다. 지원 여부는 권한을 부여하지 않습니다.
 
-반환한 definition의 `nativePlatforms`에는 검증한 구현 정보가 들어갑니다.
+내부 `_definition.nativePlatforms`에는 검증한 구현 정보가 들어갑니다.
+`_definition`은 열거되지 않는 읽기 전용 속성입니다. CLI와 앱 조립이 읽으며 앱 코드에서 꺼내 등록하지 않습니다.
 SDK가 만든 create 함수는 열거되지 않는 속성이므로 JSON과 structured clone에는 실행 위치와 지원 작업만 전달합니다.
 일반 앱 플러그인의 `platforms` 배열은 앱 시작을 제한하는 별도 계약이므로 이 맵과 혼용하지 않습니다.
 개발 중 manifest와 정책 형식은 v1입니다.
@@ -483,7 +519,7 @@ Windows UI 어댑터의 선택적 `NativeEnvironment.shortcuts`는 `NativeShortc
 
 Windows UI 어댑터의 선택적 `NativeEnvironment.menus`는 `NativeMenuServices`를 제공합니다.
 `NativeMenuItem` 트리를 `setTrayMenu`로 연결하고 `emit`으로 정책과 구독을 확인하는 기존 네이티브 이벤트 경로에 전달합니다.
-null은 트레이 메뉴 숨김이고 undefined는 trayPlugin 기본 Open/Quit 복원입니다.
+null은 트레이 메뉴 숨김이고 undefined는 tray 기본 Open/Quit 복원입니다.
 트레이가 없으면 연결은 UNSUPPORTED이며 메뉴 정의 자체는 선택 플러그인이 소유합니다.
 
 `NativeEventWaiters<T>`는 UI 어댑터가 소유하는 일회성 알림 대기입니다. 생성자에 최대 대기 수를 지정하고 `wait(signal)`로 다음 알림을 기다립니다.

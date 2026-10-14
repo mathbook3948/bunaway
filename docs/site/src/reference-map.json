@@ -200,7 +200,7 @@
         "./native/*": "./dist/native/*.js"
       },
       "pages": {
-        "reference/plugins/os": ["os", "osPlugin"]
+        "reference/plugins/os": ["default"]
       }
     },
     {
@@ -211,7 +211,7 @@
         "./native/*": "./dist/native/*.js"
       },
       "pages": {
-        "reference/plugins/process": ["processes", "processPlugin"]
+        "reference/plugins/process": ["default"]
       }
     },
     {
@@ -222,7 +222,7 @@
         "./native/*": "./dist/native/*.js"
       },
       "pages": {
-        "reference/plugins/network": ["network", "networkPlugin"]
+        "reference/plugins/network": ["default"]
       }
     },
     {
@@ -233,7 +233,7 @@
         "./native/*": "./dist/native/*.js"
       },
       "pages": {
-        "reference/backend/host-api": ["storage", "storagePlugin"]
+        "reference/backend/host-api": ["default"]
       }
     },
     {
@@ -244,7 +244,7 @@
         "./native/*": "./dist/native/*.js"
       },
       "pages": {
-        "reference/backend/host-api": ["log", "logPlugin"]
+        "reference/backend/host-api": ["default"]
       }
     },
     {
@@ -255,7 +255,7 @@
         "./native/*": "./dist/native/*.js"
       },
       "pages": {
-        "reference/backend/host-api": ["capabilities", "capabilitiesPlugin"]
+        "reference/backend/host-api": ["default"]
       }
     },
     {
@@ -325,12 +325,7 @@
         "./native/*": "./dist/native/*.js"
       },
       "pages": {
-        "reference/plugins/autostart": [
-          "autostartPlugin",
-          "enableAutostart",
-          "disableAutostart",
-          "getAutostartStatus"
-        ]
+        "reference/plugins/autostart": ["default"]
       }
     },
     {
@@ -341,15 +336,7 @@
         "./native/*": "./dist/native/*.js"
       },
       "pages": {
-        "reference/plugins/opener": [
-          "openUrl",
-          "openFile",
-          "revealFile",
-          "openFileWith",
-          "openUrlWith",
-          "trashFile",
-          "openerPlugin"
-        ]
+        "reference/plugins/opener": ["default"]
       }
     },
     {
@@ -360,7 +347,7 @@
         "./native/*": "./dist/native/*.js"
       },
       "pages": {
-        "reference/plugins/path": ["path", "pathPlugin"]
+        "reference/plugins/path": ["default"]
       }
     },
     {
@@ -371,7 +358,7 @@
         "./native/*": "./dist/native/*.js"
       },
       "pages": {
-        "reference/plugins/safe-storage": ["safeStorage", "safeStoragePlugin"]
+        "reference/plugins/safe-storage": ["default"]
       }
     },
     {
@@ -382,7 +369,7 @@
         "./native/*": "./dist/native/*.js"
       },
       "pages": {
-        "reference/plugins/notification": ["notification", "notificationPlugin"]
+        "reference/plugins/notification": ["default"]
       }
     },
     {
@@ -393,7 +380,7 @@
         "./native/*": "./dist/native/*.js"
       },
       "pages": {
-        "reference/plugins/clipboard": ["clipboard", "clipboardPlugin"]
+        "reference/plugins/clipboard": ["default"]
       }
     },
     {
@@ -404,7 +391,7 @@
         "./native/*": "./dist/native/*.js"
       },
       "pages": {
-        "reference/plugins/image": ["image", "imagePlugin"]
+        "reference/plugins/image": ["default"]
       }
     },
     {
@@ -416,8 +403,7 @@
       },
       "pages": {
         "reference/host/windows": [
-          "windows",
-          "windowsPlugin",
+          "default",
           "monitorSchema",
           "monitorSnapshotSchema",
           "monitorChangeSchema",
@@ -474,7 +460,7 @@
         "./native/*": "./dist/native/*.js"
       },
       "pages": {
-        "reference/plugins/appearance": ["appearance", "appearancePlugin"]
+        "reference/plugins/appearance": ["default"]
       }
     },
     {
@@ -485,10 +471,7 @@
         "./native/*": "./dist/native/*.js"
       },
       "pages": {
-        "reference/plugins/global-shortcut": [
-          "globalShortcut",
-          "globalShortcutPlugin"
-        ]
+        "reference/plugins/global-shortcut": ["default"]
       }
     },
     {
@@ -499,7 +482,7 @@
         "./native/*": "./dist/native/*.js"
       },
       "pages": {
-        "reference/plugins/menu": ["menu", "menuPlugin"]
+        "reference/plugins/menu": ["default"]
       }
     },
     {
@@ -510,7 +493,7 @@
         "./native/*": "./dist/native/*.js"
       },
       "pages": {
-        "reference/plugins/tray": ["tray", "trayPlugin"]
+        "reference/plugins/tray": ["default"]
       }
     },
     {
@@ -521,7 +504,7 @@
         "./native/*": "./dist/native/*.js"
       },
       "pages": {
-        "reference/plugins/power": ["power", "powerPlugin"]
+        "reference/plugins/power": ["default"]
       }
     }
   ],

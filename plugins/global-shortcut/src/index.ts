@@ -3,7 +3,12 @@ import { globalShortcutEvents } from "./contract.ts";
 import { globalShortcutOperations } from "./operations.ts";
 import { dispose, initialize } from "./platforms/windows.ts";
 
-const plugin = defineNativePlugin({
+/** Register, inspect, remove and suspend app-owned Windows global shortcuts. */
+export default defineNativePlugin({
+  events: {
+    "globalShortcut.pressed":
+      globalShortcutEvents["globalShortcut.pressed"].payload,
+  },
   name: "globalShortcut",
   platforms: {
     windows: {
@@ -14,12 +19,5 @@ const plugin = defineNativePlugin({
     },
   },
 });
-/** Optional global shortcuts; registration grants no operation or event permissions. */
-export const globalShortcutPlugin = Object.freeze({
-  ...plugin.definition,
-  events: globalShortcutEvents,
-});
-export default globalShortcutPlugin;
-/** Register, inspect, remove and suspend app-owned Windows global shortcuts. */
-export const globalShortcut = plugin.api;
+
 export type { GlobalShortcut } from "./contract.ts";

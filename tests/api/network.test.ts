@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { network, networkPlugin } from "@bunaway/plugin-network";
+import network from "@bunaway/plugin-network";
 import { NativeRegistry } from "@bunaway/protocol";
 import { MAX_BODY_BYTES } from "#plugins/network/src/contract";
 import { windowsOperations as networkOperations } from "#plugins/network/src/operations";
@@ -133,7 +133,7 @@ test("network schemas reject credential URLs, unsafe headers, unsupported option
 
 test("network operations require independent grants and expose no persistent socket handle", () => {
   const registry = new NativeRegistry([
-    networkPlugin,
+    network._definition,
   ]);
   expect(Object.keys(network)).toEqual([
     "request",

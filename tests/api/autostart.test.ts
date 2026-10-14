@@ -1,12 +1,7 @@
 import { expect, test } from "bun:test";
 import type { CommandContext } from "@bunaway/plugin-api";
 import { bindCommandHost } from "@bunaway/plugin-api/host";
-import {
-  autostartPlugin,
-  disableAutostart,
-  enableAutostart,
-  getAutostartStatus,
-} from "@bunaway/plugin-autostart";
+import autostart from "@bunaway/plugin-autostart";
 import {
   AUTOSTART_ARGUMENT,
   AUTOSTART_HIDDEN_ARGUMENT,
@@ -26,7 +21,7 @@ import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("autostart", autostartOperations);
 const registry = new NativeRegistry([
-  autostartPlugin,
+  autostart._definition,
 ]);
 const app: AppLaunch = {
   id: "com.example.app",
@@ -427,15 +422,15 @@ test("public helpers use caller context and preserve native errors", async () =>
       const: null,
     },
     run: async (_input: unknown, _context: CommandContext) => {
-      await disableAutostart();
+      await autostart.disableAutostart();
       await expect(
-        enableAutostart([
+        autostart.enableAutostart([
           "--login",
         ]),
       ).rejects.toMatchObject({
         code: "PERMISSION_DENIED",
       });
-      await expect(getAutostartStatus()).rejects.toMatchObject({
+      await expect(autostart.getAutostartStatus()).rejects.toMatchObject({
         code: "PERMISSION_DENIED",
       });
       return null;
@@ -463,7 +458,7 @@ test("host supplies trusted app metadata only to a registered adapter", async ()
   let observed: unknown;
   const catalog = [
     {
-      ...autostartPlugin,
+      ...autostart._definition,
       thread: "worker" as const,
       operations: async () => ({
         createOperations: (
@@ -490,7 +485,7 @@ test("host supplies trusted app metadata only to a registered adapter", async ()
   await unregistered.dispose();
   const registered = await operations(
     [
-      autostartPlugin,
+      autostart._definition,
     ],
     ".",
     "worker",

@@ -1,12 +1,10 @@
 import { expect, test } from "bun:test";
 import { type CommandContext, command } from "@bunaway/backend";
 import type { NativeWindowServices } from "@bunaway/plugin-api/native";
-import {
+import windows, {
   validateWindowCall,
   validateWindowOutput,
   windowOperations,
-  windows,
-  windowsPlugin,
 } from "@bunaway/plugin-windows";
 import {
   type HostContext,
@@ -63,7 +61,7 @@ const setters = [
 
 test("window geometry helpers preserve context, shapes, DPI and default units", async () => {
   const registry = new NativeRegistry([
-    windowsPlugin,
+    windows._definition,
   ]);
   const signal = new AbortController().signal;
   let calls = 0;

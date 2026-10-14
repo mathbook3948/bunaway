@@ -84,7 +84,7 @@ async function checkShutdown(
     );
     const imports = `
       import {plugin} from ${JSON.stringify(adapter)};
-      export const pluginImports={waiting:{operations:async()=>({createOperations:plugin.definition.nativePlatforms.windows.create})}};
+      export const pluginImports={waiting:{operations:async()=>({createOperations:plugin._definition.nativePlatforms.windows.create})}};
     `;
     await bundleIOPluginFixture(
       directory,
@@ -152,8 +152,8 @@ async function checkShutdown(
       import {defineApp} from ${JSON.stringify(Bun.resolveSync("@bunaway/backend", import.meta.dir))};
       import {runWindowsApp} from ${JSON.stringify(resolve(import.meta.dir, "../../native/windows/bun/entry.ts"))};
       import {plugin} from ${JSON.stringify(adapter)};
-      const app=defineApp({modules:[],commands:{},events:{},desktop:{closeBehavior:"keep-alive"},plugins:[plugin.definition,{name:"setup",version:"1",async setup(){
-        const pending=plugin.api.run(null).catch(error=>{if(error.code!=="CANCELLED") throw error;});
+      const app=defineApp({modules:[],commands:{},events:{},desktop:{closeBehavior:"keep-alive"},plugins:[plugin._definition,{name:"setup",version:"1",async setup(){
+        const pending=plugin.run(null).catch(error=>{if(error.code!=="CANCELLED") throw error;});
         while(!existsSync(${JSON.stringify(started)})) await Bun.sleep(5);
         return async()=>{
           await pending;

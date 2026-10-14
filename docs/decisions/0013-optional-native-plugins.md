@@ -46,9 +46,12 @@ status: accepted
    SDK는 외부 의존성으로 유지한다. 설치 패키지 밖으로 연결되는 export는 거부한다. 일부 작업만 구현한다면 operations에
    짧은 작업 이름을 지정한다. 생략하면 전체 작업을 지원한다. 이 목록은 지원 조회와
    호출 검사에 함께 사용하며 미지원 작업은 권한 검사 뒤 UNSUPPORTED를 반환한다.
-   반환한 definition의 nativePlatforms는 실행 위치, 지원 작업과 열거되지 않는 create 함수를 제공한다.
+   내부 _definition의 nativePlatforms는 실행 위치, 지원 작업과 열거되지 않는 create 함수를 제공한다.
    함수는 JSON과 structured clone에 포함하지 않는다. 일반 앱 플러그인의 platforms
-   배열이 가진 앱 시작 제한과 구분하고 기존 definition과 api 반환 형태는 유지한다.
+   배열이 가진 앱 시작 제한과 구분한다.
+   2026-10-14부터 반환값 하나를 default export하고 앱 등록과 호출에 함께 사용한다.
+   내부 등록 정보는 열거되지 않는 읽기 전용 _definition에 둔다. defineApp과 CLI가 읽고
+   Core에는 기존 등록 계약을 전달한다. 편의 호출은 선택적인 calls 조립 함수로 유지한다.
    화면 번들에 백엔드 컨텍스트와 네이티브 구현을 포함하지 않으며 선언을 읽는 것만으로
    연결과 플랫폼 자원을 초기화하지 않는다. 생성 앱은 환경별 타입을 각각 검사한다.
    제작자는 operations에 input과 output을 선언하고 공식 플러그인은 contract.ts에서 가져온다.

@@ -9,10 +9,9 @@ import {
 import { type Client, createClient } from "@bunaway/client";
 import { type CoreSession, createCore } from "@bunaway/core";
 import type { WindowSnapshot } from "@bunaway/plugin-api/native";
-import {
+import windows, {
   validateWindowOutput,
   windowEvents,
-  windowsPlugin,
 } from "@bunaway/plugin-windows";
 import {
   API_LIMITS,
@@ -117,7 +116,7 @@ const hello = {
 const app = defineApp({
   modules: [],
   plugins: [
-    windowsPlugin,
+    windows,
   ],
 });
 
@@ -125,7 +124,7 @@ const objectApp = {
   commands: {},
   events: {},
   plugins: [
-    windowsPlugin,
+    windows._definition,
   ] as const,
 } satisfies AppDefinition;
 

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
-import { trayPlugin } from "@bunaway/plugin-tray";
+import tray from "@bunaway/plugin-tray";
 import type { HostResponse, JsonValue } from "@bunaway/protocol";
 import { Channel, type UIConfig } from "#native/windows/bun/channel";
 import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
@@ -53,13 +53,13 @@ test.skipIf(process.platform !== "win32")(
         root,
         [
           {
-            name: trayPlugin.name,
-            version: trayPlugin.version,
-            native: trayPlugin.native,
+            name: tray._definition.name,
+            version: tray._definition.version,
+            native: tray._definition.native,
             thread: "ui",
           },
         ],
-        `import plugin from ${JSON.stringify(entrypoint)}; export const pluginImports = { tray: { operations: async () => ({ createOperations: plugin.nativePlatforms.windows.create }) } };`,
+        `import plugin from ${JSON.stringify(entrypoint)}; export const pluginImports = { tray: { operations: async () => ({ createOperations: plugin._definition.nativePlatforms.windows.create }) } };`,
       );
       const config: UIConfig = {
         runtime: {
@@ -78,13 +78,13 @@ test.skipIf(process.platform !== "win32")(
           },
         },
         plugins: [
-          trayPlugin,
+          tray._definition,
         ],
         policy: {
           version: 1,
           views: [],
           backend: {
-            permissions: trayPlugin.native.operations.map(
+            permissions: tray._definition.native.operations.map(
               (operation) => operation.name,
             ),
           },

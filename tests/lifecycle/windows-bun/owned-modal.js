@@ -1,5 +1,5 @@
 import { createClient } from "@bunaway/client";
-import { windows } from "@bunaway/plugin-windows";
+import windows from "@bunaway/plugin-windows";
 
 const view = location.pathname.slice(1, -5);
 const client = createClient();

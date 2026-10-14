@@ -91,8 +91,8 @@ test("installed CLI builds an author's direct factory imports into portable pack
 import { defineNativePlugin } from "@bunaway/plugin";
 import { createOperations } from "./platforms/windows.ts";
 const plugin = defineNativePlugin({ name: "built", platforms: { windows: { thread: "worker", create: createOperations } }, operations: { read: { input: z.null(), output: z.string() } } });
-export default plugin.definition;
-export const built = plugin.api;`,
+export default plugin;
+export const built = plugin;`,
     );
     await Bun.write(
       resolve(plugin, "src/platforms/windows.ts"),
@@ -190,7 +190,7 @@ test("CommonJS plugin default and named exports retain their identity across app
       const pluginEntry = `./plugin.${extension}`;
       await writeFile(
         resolve(pluginRoot, pluginEntry),
-        'const plugin = require("./dist/index.js").default; module.exports = { ...plugin }; module.exports.identity = module.exports;',
+        'const plugin = require("./dist/index.js").default; module.exports = { ...plugin, _definition: plugin._definition }; module.exports.identity = module.exports;',
       );
       await writeJson(manifestPath, {
         ...manifest,
@@ -205,7 +205,7 @@ test("CommonJS plugin default and named exports retain their identity across app
       });
       const appEntry = resolve(project, "src-bunaway/app.ts");
       const source = `import plugin, { identity } from "@bunaway/plugin-storage";
-export default { commands: { read: { input: { const: null }, output: {}, async run() { return { value: "before", samePlugin: plugin === identity }; } } }, events: {}, plugins: [plugin] };`;
+export default { commands: { read: { input: { const: null }, output: {}, async run() { return { value: "before", samePlugin: plugin === identity }; } } }, events: {}, plugins: [plugin._definition] };`;
       await writeFile(appEntry, source);
       const valid = await validateProject(project, {
         development: true,
@@ -279,7 +279,7 @@ test.each([
       if (mode === "setup") {
         await writeFile(
           resolve(pluginRoot, "setup.ts"),
-          'import plugin from "./dist/index.js"; export default { ...plugin, setup() {} };',
+          'import plugin from "./dist/index.js"; export default { _definition: { ...plugin._definition, setup() {} } };',
         );
       }
       await writeJson(manifestPath, {
@@ -393,7 +393,7 @@ test.each([
       }
       await writeFile(
         resolve(pluginRoot, "import.ts"),
-        'export { default, storagePlugin } from "./dist/index.js"; export const marker = "import";',
+        'export { default } from "./dist/index.js"; export const marker = "import";',
       );
       await writeFile(
         resolve(pluginRoot, "require.cjs"),
@@ -415,8 +415,8 @@ test.each([
           ? 'import { marker as imported } from "@bunaway/plugin-storage";'
           : "const imported = null;";
       const source = `${importSource}
-const { storagePlugin, marker } = require("@bunaway/plugin-storage");
-export default { commands: { read: { input: { const: null }, output: {}, async run() { return { value: "before", marker, imported }; } } }, events: {}, plugins: [storagePlugin] };`;
+const { default: storage, marker } = require("@bunaway/plugin-storage");
+export default { commands: { read: { input: { const: null }, output: {}, async run() { return { value: "before", marker, imported }; } } }, events: {}, plugins: [storage._definition] };`;
       await writeFile(appEntry, source);
       const valid = await validateProject(project, {
         development: true,
@@ -508,7 +508,7 @@ console.log(metadata.name);
     );
     await writeFile(
       resolve(project, "src/main.ts"),
-      'import { storage } from "@bunaway/plugin-storage"; document.body.onclick = () => { void storage.readText({ path: "memo.txt" }, { signal: new AbortController().signal }); };',
+      'import storage from "@bunaway/plugin-storage"; document.body.onclick = () => { void storage.readText({ path: "memo.txt" }, { signal: new AbortController().signal }); };',
     );
     const typedClient = resolve(project, "src/client-contracts.ts");
     await writeFile(
@@ -541,7 +541,7 @@ console.log(metadata.name);
     const invalidBackend = resolve(project, "src-bunaway/type-error.ts");
     await writeFile(
       invalidBackend,
-      'import { storage } from "@bunaway/plugin-storage"; storage.readText({ path: "memo.txt" }, { deadline: 0 });',
+      'import storage from "@bunaway/plugin-storage"; storage.readText({ path: "memo.txt" }, { deadline: 0 });',
     );
     try {
       await expect(
@@ -868,8 +868,8 @@ test("upgrading the complete installed release preserves app sources and changes
             await writeFile(
               file,
               (await readFile(file, "utf8")).replaceAll(
-                'version: "0.0.0"',
-                'version: "0.0.1"',
+                'return define(declaration, calls, "0.0.0");',
+                'return define(declaration, calls, "0.0.1");',
               ),
             );
           }
@@ -1621,7 +1621,7 @@ test("a standalone plugin install does not install Core, Backend SDK or sibling 
     const entry = resolve(home, "app.ts");
     await writeFile(
       entry,
-      'import { windowsPlugin } from "@bunaway/plugin-windows"; if (windowsPlugin.name !== "windows") throw new Error("Missing window plugin");',
+      'import windows from "@bunaway/plugin-windows"; if (windows._definition.name !== "windows") throw new Error("Missing window plugin");',
     );
     await command(home, [
       entry,

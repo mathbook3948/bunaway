@@ -11,12 +11,13 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NativeRegistry } from "@bunaway/protocol";
-import { openerPlugin } from "../../plugins/opener/src/index.ts";
+import opener from "../../plugins/opener/src/index.ts";
 import { createFiles } from "../../plugins/opener/src/macos-file.ts";
 import { normalizeMacosFilePath } from "../../plugins/opener/src/macos-path.ts";
 import { createOpenerAdapter as createAdapter } from "../fixtures/injected-native-plugins.ts";
 import { nativeFactory } from "../fixtures/native-platform.ts";
-const createOperations = nativeFactory(openerPlugin, "macos");
+
+const createOperations = nativeFactory(opener, "macos");
 
 test("macOS file syntax preserves POSIX names without changing Windows helpers", () => {
   for (const path of [
@@ -199,7 +200,7 @@ test("isolated macOS opener preserves validation, acceptance, ownership and unsu
 
 test("each macOS opener operation keeps its independent host permission", () => {
   const registry = new NativeRegistry([
-    openerPlugin,
+    opener._definition,
   ]);
   for (const operation of [
     "opener.openUrl",

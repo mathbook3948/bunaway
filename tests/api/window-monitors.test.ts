@@ -3,11 +3,10 @@ import type {
   NativeMonitor,
   NativeWindowServices,
 } from "@bunaway/plugin-api/native";
-import {
+import windows, {
   monitorSchema,
   validateWindowCall,
   validateWindowOutput,
-  windowsPlugin,
 } from "@bunaway/plugin-windows";
 import { NativeRegistry } from "@bunaway/protocol";
 import { createOperations } from "#plugins/windows/src/platforms/windows";
@@ -116,7 +115,7 @@ test("monitor contracts accept negative origins and reject truncated or overflow
     }).refreshRate,
   ).toBeNull();
   const registry = new NativeRegistry([
-    windowsPlugin,
+    windows._definition,
   ]);
   for (const operation of [
     "getMonitors",

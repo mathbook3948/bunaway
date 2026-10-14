@@ -3,10 +3,9 @@ import type {
   NativeWindow,
   NativeWindowServices,
 } from "@bunaway/plugin-api/native";
-import {
+import windows, {
   validateWindowCall,
   validateWindowOutput,
-  windowsPlugin,
 } from "@bunaway/plugin-windows";
 import type { JsonValue } from "@bunaway/protocol";
 import { NativeRegistry } from "@bunaway/protocol";
@@ -170,7 +169,7 @@ function fixture(multiple = false) {
 
 test("WebView operations use strict Zod contracts and individual registered permissions", () => {
   const registry = new NativeRegistry([
-    windowsPlugin,
+    windows._definition,
   ]);
   for (const name of names) {
     expect(registry.operation(`windows.${name}`).name).toBe(`windows.${name}`);

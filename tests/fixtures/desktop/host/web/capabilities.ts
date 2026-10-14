@@ -1,14 +1,14 @@
+import capabilities from "@bunaway/plugin-capabilities";
+import log from "@bunaway/plugin-log";
+import storage from "@bunaway/plugin-storage";
+import windows from "@bunaway/plugin-windows";
 import { NativeRegistry } from "@bunaway/protocol";
-import { capabilitiesPlugin } from "@bunaway/plugin-capabilities";
-import { logPlugin } from "@bunaway/plugin-log";
-import { storagePlugin } from "@bunaway/plugin-storage";
-import { windowsPlugin } from "@bunaway/plugin-windows";
 
 const nativePlugins = new NativeRegistry([
-  storagePlugin,
-  logPlugin,
-  capabilitiesPlugin,
-  windowsPlugin,
+  storage._definition,
+  log._definition,
+  capabilities._definition,
+  windows._definition,
 ]);
 export const expectedCapabilityNames = [
   ...nativePlugins.operations.keys(),

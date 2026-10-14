@@ -1,16 +1,16 @@
 import { resolve } from "node:path";
 import { defineApp } from "@bunaway/backend";
 import type { CommandContext } from "@bunaway/core";
-import { openerPlugin } from "@bunaway/plugin-opener";
-import { windowsPlugin } from "@bunaway/plugin-windows";
+import opener from "@bunaway/plugin-opener";
+import windows from "@bunaway/plugin-windows";
 
 let deniedReady = false;
 
 export default defineApp({
   modules: [],
   plugins: [
-    openerPlugin,
-    windowsPlugin,
+    opener,
+    windows,
   ],
   events: {},
   commands: {

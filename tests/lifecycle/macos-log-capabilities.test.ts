@@ -11,18 +11,21 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { capabilitiesPlugin } from "@bunaway/plugin-capabilities/native/macos";
-import { logPlugin } from "@bunaway/plugin-log/native/macos";
+import capabilities from "@bunaway/plugin-capabilities/native/macos";
+import log from "@bunaway/plugin-log/native/macos";
 import { NativeRegistry } from "@bunaway/protocol";
 import { hostResponse } from "#native/host-api/bun/host-response";
 import { operations } from "#native/host-api/bun/plugins";
-import { capabilitiesOperations } from "#plugins/capabilities/src/operations";
 import capabilitiesDefinition from "#plugins/capabilities/src/index";
-import { nativeFactory } from "../fixtures/native-platform.ts";
+import { capabilitiesOperations } from "#plugins/capabilities/src/operations";
+import createLogDefinition from "#plugins/log/src/index";
 
 import { macosOperations as logOperations } from "#plugins/log/src/operations";
-import createLogDefinition from "#plugins/log/src/index";
-import { nativeFactory as createLogFactory } from "../fixtures/native-platform.ts";
+import {
+  nativeFactory as createLogFactory,
+  nativeFactory,
+} from "../fixtures/native-platform.ts";
+
 const createCapabilities = nativeFactory(capabilitiesDefinition, "macos");
 const createLog = createLogFactory(createLogDefinition, "macos");
 
@@ -63,7 +66,7 @@ async function withLog(
 test("macOS log lazily uses host dataRoot, preserves attribution and JSONL order", async () => {
   await withLog(async ({ root, path, adapter }) => {
     expect(readdirSync(root)).toEqual([]);
-    const platform = logPlugin.nativePlatforms.macos;
+    const platform = log._definition.nativePlatforms.macos;
     expect(platform?.thread).toBe("worker");
     if (!platform) {
       throw new Error("Missing macOS log adapter.");
@@ -214,7 +217,7 @@ test.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
 
 test("macOS SDK rejects forged attribution and invalid input before touching disk", async () => {
   await withLog(async ({ root }) => {
-    const platform = logPlugin.nativePlatforms.macos;
+    const platform = log._definition.nativePlatforms.macos;
     if (!platform) {
       throw new Error("Missing macOS log adapter.");
     }
@@ -244,8 +247,8 @@ test("macOS SDK rejects forged attribution and invalid input before touching dis
       }
       expect(readdirSync(root)).toEqual([]);
       const registry = new NativeRegistry([
-        logPlugin,
-        capabilitiesPlugin,
+        log._definition,
+        capabilities._definition,
       ]);
       const call = registry.validateCall({
         operation: "log.write",
@@ -288,7 +291,7 @@ test("macOS SDK rejects forged attribution and invalid input before touching dis
 
 test("macOS log disposal is repeatable, completes accepted writes and rejects later calls", async () => {
   await withLog(async ({ root, path, adapter }) => {
-    const platform = logPlugin.nativePlatforms.macos;
+    const platform = log._definition.nativePlatforms.macos;
     if (!platform) {
       throw new Error("Missing macOS log adapter.");
     }
@@ -363,9 +366,9 @@ test("macOS capabilities preserve the host snapshot including unsupported and ex
 
 test("macOS capability discovery uses installed executable operations and includes only registered plugins", async () => {
   const plugins = [
-    logPlugin,
-    capabilitiesPlugin,
-  ];
+    log,
+    capabilities,
+  ].map((plugin) => plugin._definition);
   const catalog = plugins.map((plugin) => {
     const platform = plugin.nativePlatforms.macos;
     if (!platform) {

@@ -11,7 +11,7 @@ log.write({ level, message, details? }): Promise<null>
 호스트가 관리하는 앱 로그에 기록합니다. `console.log`나 백엔드 stdout을 사용하는 출력은 따로 처리합니다.
 
 ```ts
-import { log } from "@bunaway/plugin-log";
+import log from "@bunaway/plugin-log";
 
 await log.write({
   level: "info", message: "메시지를 저장했습니다", details: { length: text.length },
@@ -38,7 +38,7 @@ await log.write({
 
 ## 정책과 결과
 
-logPlugin을 등록하고 호출 출처의 permissions에 `log.write`를 허용합니다. 화면의 로그 함수에는 commands의 `plugin.log.write` 허용도 필요합니다.
+`log`를 등록하고 호출 출처의 permissions에 `log.write`를 허용합니다. 화면의 로그 함수에는 commands의 `plugin.log.write` 허용도 필요합니다.
 기본 템플릿은 로그를 설치하거나 허용하지 않습니다. 로그 패키지와 권한을 사용하는 앱에 추가하세요.
 플러그인에 `requiredPermissions: ["log.write"]`를 선언하면 시작할 때 backend.permissions에 권한이 명시됐는지 검사합니다.
 성공 결과는 `null`입니다.

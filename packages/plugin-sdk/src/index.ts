@@ -160,8 +160,9 @@ export function defineNativeOperation<Instance>() {
     readonly handler: Handler;
   }) => operation;
 }
-type NativePluginResult<Metadata, API> = {
-  readonly definition: Readonly<
+type NativePluginResult<Metadata, API> = API & {
+  /** @internal Registration metadata for app composition, CLI discovery and native hosts. */
+  readonly _definition: Readonly<
     Metadata & {
       version: string;
       native: {
@@ -185,7 +186,6 @@ type NativePluginResult<Metadata, API> = {
       >;
     }
   >;
-  readonly api: API;
 };
 type PlatformInstance<Target> = Target extends {
   initialize: (environment: NativeEnvironment) => infer Instance;
@@ -253,12 +253,16 @@ type CheckedPlatform<Target extends NativePlatformDefinition> = {
  * Initialization, parsing, execution and cleanup stay on the owning host thread.
  * Support and caller names come from operation keys; schemas remain local to each platform.
  * Imports never initialize native resources or request OS consent.
+ * The result can be default-exported, registered in defineApp and called directly.
+ * Optional calls maps the generated operations to a fresh public API or callable function.
+ * The SDK freezes that API and attaches non-enumerable internal registration metadata.
  */
 export function defineNativePlugin<
   const Metadata extends NativePluginMetadata,
   const Platforms extends Partial<
     Record<import("@bunaway/plugin-api").Platform, NativePlatformDefinition>
   >,
+  API extends object = PlatformAPI<Platforms>,
 >(
   definition: Metadata & {
     readonly platforms: Platforms & {
@@ -267,11 +271,13 @@ export function defineNativePlugin<
         : never;
     };
   },
-): NativePluginResult<PluginMetadata<Metadata>, PlatformAPI<Platforms>>;
+  calls?: (operations: PlatformAPI<Platforms>) => API,
+): NativePluginResult<PluginMetadata<Metadata>, API>;
 /** Existing low-level adapters and defineNativeAdapter keep their schema declaration. */
 export function defineNativePlugin<
   const Metadata extends NativePluginMetadata,
   const O extends Record<string, NativeOperationDefinition>,
+  API extends object = NativePluginAPI<O>,
 >(
   definition: Metadata & {
     readonly operations: O;
@@ -281,9 +287,13 @@ export function defineNativePlugin<
       >
     >;
   },
-): NativePluginResult<PluginMetadata<Metadata>, NativePluginAPI<O>>;
+  calls?: (operations: NativePluginAPI<O>) => API,
+): NativePluginResult<PluginMetadata<Metadata>, API>;
 export function defineNativePlugin(
   definition: NativePluginDefinition,
+  calls?: (operations: never) => object,
+  // The plugin builder supplies the package version; source imports use development.
+  version = "development",
 ): unknown {
   const legacyDefinitions =
     "operations" in definition ? definition.operations : undefined;
@@ -302,6 +312,15 @@ export function defineNativePlugin(
   ) =>
     new Map(
       Object.entries(definitions).map(([name, operation]) => {
+        if (
+          [
+            "_definition",
+            "then",
+            "toJSON",
+          ].includes(name)
+        ) {
+          throw new Error(`Reserved native plugin operation name: ${name}.`);
+        }
         if (
           !operation ||
           !(operation.input instanceof z.ZodType) ||
@@ -445,7 +464,7 @@ export function defineNativePlugin(
   );
   const registration = {
     ...metadata,
-    version: "development",
+    version,
     nativePlatforms: Object.freeze(nativePlatforms),
     native: {
       operations: [
@@ -469,8 +488,25 @@ export function defineNativePlugin(
       },
     ]),
   );
-  return {
-    definition: Object.freeze(registration),
-    api: Object.freeze(api),
-  };
+  // Overloads preserve each operation's schema types; the implementation erases them at this call.
+  const publicAPI = calls ? calls(Object.freeze(api) as never) : api;
+  if (
+    !publicAPI ||
+    (typeof publicAPI !== "object" && typeof publicAPI !== "function") ||
+    [
+      "_definition",
+      "then",
+      "toJSON",
+    ].some((name) => name in publicAPI) ||
+    !Object.isExtensible(publicAPI)
+  ) {
+    throw new Error(
+      "Native plugin calls must return an extensible API without reserved properties.",
+    );
+  }
+  return Object.freeze(
+    Object.defineProperty(publicAPI, "_definition", {
+      value: Object.freeze(registration),
+    }),
+  );
 }

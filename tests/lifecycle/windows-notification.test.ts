@@ -1,13 +1,13 @@
-import { nativeFactory } from "../fixtures/native-platform.ts";
 import { expect, test } from "bun:test";
 import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
-import { notificationPlugin } from "@bunaway/plugin-notification";
-import { openerPlugin } from "@bunaway/plugin-opener";
+import notification from "@bunaway/plugin-notification";
+import opener from "@bunaway/plugin-opener";
 import type { HostContext, HostResponse } from "@bunaway/protocol";
 import { Channel } from "#native/windows/bun/channel";
+import { nativeFactory } from "../fixtures/native-platform.ts";
 import { bundleIOPluginFixture } from "../fixtures/native-worker.ts";
 import {
   cleanupFailedNotificationShortcutCreation,
@@ -207,9 +207,9 @@ try {
       }
       const trace = resolve(root, "trace.json");
       const manifest = [
-        notificationPlugin,
-        openerPlugin,
-      ].map(({ name, version, native }) => ({
+        notification,
+        opener,
+      ].map(({ _definition: { name, version, native } }) => ({
         name,
         version,
         native,
@@ -238,7 +238,7 @@ export const pluginImports = {
   notification: { operations: () => import(${JSON.stringify(notificationModule)}).then(({default: plugin}) => ({
     createOperations(environment) {
       assert.equal(environment.app.id, ${JSON.stringify(appId)});
-      const adapter = plugin.nativePlatforms.windows.create(environment);
+      const adapter = plugin._definition.nativePlatforms.windows.create(environment);
       return { ...adapter, async prepare(name, input, source) {
         const execute = await adapter.prepare(name, input, source);
         return async () => {
@@ -275,7 +275,7 @@ export const pluginImports = {
       }};
     }
   })) },
-  opener: { operations: () => import(${JSON.stringify(openerModule)}).then(({default: plugin}) => ({createOperations: plugin.nativePlatforms.windows.create})) },
+  opener: { operations: () => import(${JSON.stringify(openerModule)}).then(({default: plugin}) => ({createOperations: plugin._definition.nativePlatforms.windows.create})) },
 };
 `,
       );
@@ -292,9 +292,9 @@ export const pluginImports = {
             dataRoot: root,
             assets: root,
             plugins: [
-              notificationPlugin,
-              openerPlugin,
-            ].map(({ name, version, native }) => ({
+              notification,
+              opener,
+            ].map(({ _definition: { name, version, native } }) => ({
               name,
               version,
               native,

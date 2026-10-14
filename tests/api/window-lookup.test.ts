@@ -1,17 +1,15 @@
 import { expect, test } from "bun:test";
-import { windowPermissions } from "../fixtures/window-permissions.ts";
 import type {
   NativeWindowServices,
   WindowIdentity,
 } from "@bunaway/plugin-api/native";
-import {
+import windows, {
   validateWindowCall,
   validateWindowOutput,
-  windows,
-  windowsPlugin,
 } from "@bunaway/plugin-windows";
 import { NativeRegistry, type Policy } from "@bunaway/protocol";
 import { createOperations } from "#plugins/windows/src/platforms/windows";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 const queries = [
   "getById",
@@ -20,7 +18,7 @@ const queries = [
   "getLastActive",
 ] as const;
 const registry = new NativeRegistry([
-  windowsPlugin,
+  windows._definition,
 ]);
 const main = {
   windowId: "window-main",

@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import { defineNativePlugin, type NativeEnvironment } from "@bunaway/plugin";
-import { capabilitiesPlugin } from "@bunaway/plugin-capabilities";
+import capabilities from "@bunaway/plugin-capabilities";
 import { validateValue } from "@bunaway/protocol";
 import { z } from "zod";
 import type { PackagedPlugin } from "#native/host-api/bun/plugin-contract";
@@ -18,6 +18,7 @@ import capabilitiesDefinition from "#plugins/capabilities/src/index";
 import { nativeFactory } from "../fixtures/native-platform.ts";
 
 import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
+
 const createCapabilities = nativeFactory(capabilitiesDefinition, "windows");
 
 const native = {
@@ -85,7 +86,7 @@ test("installed operation metadata accepts JSON snapshots and rejects changed na
         output: z.string(),
       },
     },
-  }).definition;
+  })._definition;
   const detached = validateValue({}, plugin.native);
   const packaged = JSON.parse(JSON.stringify(plugin.native));
   const catalog: PackagedPlugin[] = [
@@ -349,7 +350,7 @@ test("capability queries include every operation at the native registry limit", 
     },
   } as const;
   catalog.push(plugin, {
-    ...capabilitiesPlugin,
+    ...capabilities._definition,
     thread: "worker",
     operations: async () => ({
       createOperations: createCapabilities,
@@ -358,7 +359,7 @@ test("capability queries include every operation at the native registry limit", 
   const registry = pluginRegistry(
     [
       plugin,
-      capabilitiesPlugin,
+      capabilities._definition,
     ],
     catalog,
   );
@@ -366,7 +367,7 @@ test("capability queries include every operation at the native registry limit", 
   const adapters = await operations(
     [
       plugin,
-      capabilitiesPlugin,
+      capabilities._definition,
     ],
     ".",
     "worker",

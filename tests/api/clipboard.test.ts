@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { resolve } from "node:path";
 import { bindCommandHost } from "@bunaway/plugin-api/host";
-import { clipboard, clipboardPlugin } from "@bunaway/plugin-clipboard";
+import clipboard from "@bunaway/plugin-clipboard";
 import {
   type HostContext,
   NativeRegistry,
@@ -15,7 +15,7 @@ import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("clipboard", clipboardOperations);
 const registry = new NativeRegistry([
-  clipboardPlugin,
+  clipboard._definition,
 ]);
 test("clipboard has separate read, write and clear permissions with strict Unicode contracts", async () => {
   expect([

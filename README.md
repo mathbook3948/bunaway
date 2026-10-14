@@ -20,7 +20,7 @@ Windows 앱 실행에는 WebView2 런타임이 필요하다.
 예를 들어 명령이 호출한 서비스 함수에서 다음처럼 파일을 저장한다.
 
 ```ts
-import { storage } from "@bunaway/plugin-storage";
+import storage from "@bunaway/plugin-storage";
 
 export async function save(text: string) {
   return storage.writeText({ path: "C:/Users/me/Documents/notes/memo.txt", text });
@@ -211,4 +211,4 @@ Bun 변경 시 `mise.toml`의 `tools.bun`과 `package.json`의
 앱 패키지에 포함하는 Windows/macOS Bun 실행 파일의 버전, 소스 revision, 해시는
 [runtime](./runtime/README.md)의 manifest로 별도 고정한다.
 
-선택 플러그인은 Core와 Backend SDK를 의존하지 않는다. 공통 타입과 실행 컨텍스트는 `@bunaway/plugin-api`에 두며 창 제어도 `windowsPlugin`을 명시적으로 등록한다. [분리 결정](docs/decisions/0014-optional-plugin-packages.md)을 참고한다.
+선택 플러그인은 Core와 Backend SDK를 의존하지 않는다. 공통 타입과 실행 컨텍스트는 `@bunaway/plugin-api`에 두며 창 제어도 `windows`를 명시적으로 등록한다. [분리 결정](docs/decisions/0014-optional-plugin-packages.md)을 참고한다.

@@ -13,7 +13,7 @@ storage.remove({ path }): Promise<null>
 `@bunaway/plugin-storage`의 작업입니다. readDirectory와 createDirectory는 Windows와
 macOS에서 제공하며 remove는 Windows에서만 제공합니다. macOS remove는
 검사한 객체 자체의 삭제를 보장할 수 없어 지원 목록에서 제외되며 UNSUPPORTED로 실패합니다.
-`storagePlugin`을 등록하고
+`storage`를 등록하고
 `storage.readDirectory`, `storage.createDirectory`, `storage.remove` 권한을 각각 허용합니다.
 직접 화면 호출에는 해당 이름 앞에 `plugin.`을 붙인 명령 권한도 필요합니다.
 다른 저장 작업이나 디렉터리 작업의 권한은 서로 허용하지 않습니다.
@@ -54,7 +54,7 @@ macOS의 FIFO, 장치, socket과 알려지지 않은 종류는 공개 결과로 
 파일이 있으면 `INVALID_ARGUMENT`, 링크나 정규 이름 거부는 `PERMISSION_DENIED`입니다.
 
 ```ts
-import { storage } from "@bunaway/plugin-storage";
+import storage from "@bunaway/plugin-storage";
 
 await storage.createDirectory({ path: "C:/notes/한글", recursive: true });
 const entries = await storage.readDirectory({ path: "C:/notes/한글" });

@@ -7,6 +7,9 @@
 fixture도 운영 작업 목록과 자원 소유자를 재사용하며 별도 dispatch 구현을 만들지 않는다.
 `cli/plugin-build.test.ts`는 재내보내기와 operation 객체, 네이티브 스키마 변환 보존 및 공개 선언에서 내부 타입 제외를 검사한다.
 
+`api/native-plugin-object.test.ts`는 기본 export를 직접 호출하고 `defineApp`에 등록하는 계약,
+이벤트 타입 추론, 숨겨진 등록 메타데이터와 예약 이름의 충돌 거부를 검사한다.
+
 공식 플러그인 fixture는 스키마만 있는 공통 계약 목록 대신 완성된 작업 선언의 스키마를 사용한다.
 `api/native-handler-platform.test.ts`는 동기 handler의 반환 타입도 보존하는지 검사한다.
 동시 정리의 공유, 실패 후 재시도와 성공 후 반복 방지, 비동기 초기화의 타입 및 런타임 거부,

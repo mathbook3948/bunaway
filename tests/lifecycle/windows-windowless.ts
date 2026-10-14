@@ -4,11 +4,10 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { CommandContext, DesktopContext } from "@bunaway/core";
-import { trayPlugin } from "@bunaway/plugin-tray";
-import {
+import tray from "@bunaway/plugin-tray";
+import windows, {
   validateWindowOutput,
   type WindowOperation,
-  windowsPlugin,
 } from "@bunaway/plugin-windows";
 import { type HostContext, NativeRegistry } from "@bunaway/protocol";
 import { closeWindowsApp } from "#cli/windows-dev-launch";
@@ -27,7 +26,7 @@ const hasTray = scenario.includes("tray");
 const nonfocusable = scenario.startsWith("nonfocusable-");
 const empty = scenario.endsWith("empty");
 const registry = new NativeRegistry([
-  windowsPlugin,
+  windows._definition,
 ]);
 const emit = (event: string, fields: Record<string, unknown> = {}) =>
   console.log(
@@ -629,10 +628,10 @@ if (!process.argv.includes("--child")) {
         },
         events: {},
         plugins: [
-          windowsPlugin,
+          windows._definition,
           ...(hasTray
             ? [
-                trayPlugin,
+                tray._definition,
               ]
             : []),
           {

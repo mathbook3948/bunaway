@@ -1,5 +1,5 @@
 import { createClient } from "@bunaway/client";
-import { windows } from "@bunaway/plugin-windows";
+import windows from "@bunaway/plugin-windows";
 
 // WebKit can finish pageshow while the module is awaiting its SDK handshake.
 const pageShown =

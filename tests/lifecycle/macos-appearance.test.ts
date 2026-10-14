@@ -1,6 +1,6 @@
-import { nativeFactory } from "../fixtures/native-platform.ts";
 import { expect, test } from "bun:test";
 import { appearanceOperations } from "#plugins/appearance/src/operations";
+import { nativeFactory } from "../fixtures/native-platform.ts";
 
 test.skipIf(process.platform !== "darwin")(
   "packaged appearance adapter loads AppKit in a fresh process and owns its framework lifetime",
@@ -14,9 +14,9 @@ test.skipIf(process.platform !== "darwin")(
         process.execPath,
         "--no-env-file",
         "-e",
-        `const {appearancePlugin} = await import(${JSON.stringify(entry)});
-const first = appearancePlugin.nativePlatforms.macos.create({dataRoot:".",capabilities:[]});
-const second = appearancePlugin.nativePlatforms.macos.create({dataRoot:".",capabilities:[]});
+        `const { default: appearance } = await import(${JSON.stringify(entry)});
+const first = appearance._definition.nativePlatforms.macos.create({dataRoot:".",capabilities:[]});
+const second = appearance._definition.nativePlatforms.macos.create({dataRoot:".",capabilities:[]});
 try {
   await first.dispose();
   await first.dispose();

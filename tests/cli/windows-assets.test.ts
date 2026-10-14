@@ -54,7 +54,7 @@ export function createOperations() { return { execute(fail = false) {
   if (fail) throw new BunawayError({ code: "CANCELLED", message: "plugin cancelled" });
   return "plugin result";
 }, dispose() {} }; }
-export default { nativePlatforms: { windows: { create: createOperations } } };
+export default { _definition: { nativePlatforms: { windows: { create: createOperations } } } };
 `,
     );
     await writeFile(

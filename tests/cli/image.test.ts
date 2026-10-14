@@ -46,8 +46,8 @@ test("isolated image package ships the I/O adapter but keeps FFI out of the brow
     await writeFile(
       resolve(project, "src-bunaway/app.ts"),
       `import { defineApp } from "@bunaway/backend";
-import { imagePlugin } from "@bunaway/plugin-image";
-export default defineApp({ modules: [], plugins: [imagePlugin] });
+import image from "@bunaway/plugin-image";
+export default defineApp({ modules: [], plugins: [image] });
 `,
     );
     await writeJson(resolve(project, "src-bunaway/policy.json"), {
@@ -120,9 +120,9 @@ export default defineApp({ modules: [], plugins: [imagePlugin] });
       const consumer = resolve(project, "native-consumer.ts");
       await writeFile(
         consumer,
-        `import imagePlugin from "@bunaway/plugin-image/native/macos";
+        `import image from "@bunaway/plugin-image/native/macos";
 import { verifyMacosImage } from ${JSON.stringify(resolve(import.meta.dir, "../fixtures/macos-image.ts"))};
-await verifyMacosImage(imagePlugin.nativePlatforms.macos.create);
+await verifyMacosImage(image._definition.nativePlatforms.macos.create);
 `,
       );
       const child = Bun.spawn(
@@ -146,7 +146,7 @@ await verifyMacosImage(imagePlugin.nativePlatforms.macos.create);
     const browserEntry = resolve(project, "image-browser.ts");
     await writeFile(
       browserEntry,
-      `import { image } from "@bunaway/plugin-image";
+      `import image from "@bunaway/plugin-image";
 void image.getInfo({ id: "00000000-0000-4000-8000-000000000000" });
 `,
     );

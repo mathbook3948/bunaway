@@ -3,11 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineApp } from "@bunaway/backend";
-import {
-  monitorChangeSchema,
-  windows,
-  windowsPlugin,
-} from "@bunaway/plugin-windows";
+import windows, { monitorChangeSchema } from "@bunaway/plugin-windows";
 import {
   type HostContext,
   type Policy,
@@ -229,7 +225,7 @@ if (!process.argv.includes("--child")) {
   const app = defineApp({
     modules: [],
     plugins: [
-      windowsPlugin,
+      windows,
     ],
     commands: {
       "test.record": {

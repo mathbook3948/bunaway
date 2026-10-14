@@ -18,20 +18,20 @@ CLI와 공통 SDK의 설치가 선택 플러그인의 설치를 대신하지 않
 // src-bunaway/app.ts
 import { defineApp } from "@bunaway/backend";
 
-import { storagePlugin } from "@bunaway/plugin-storage";
-import { logPlugin } from "@bunaway/plugin-log";
+import storage from "@bunaway/plugin-storage";
+import log from "@bunaway/plugin-log";
 import { memo } from "./memo/module.ts";
 
 export default defineApp({
   modules: [memo],
-  plugins: [storagePlugin, logPlugin],
+  plugins: [storage, log],
 });
 ```
 
 ```ts
 // src-bunaway/memo/service.ts
-import { storage } from "@bunaway/plugin-storage";
-import { log } from "@bunaway/plugin-log";
+import storage from "@bunaway/plugin-storage";
+import log from "@bunaway/plugin-log";
 
 export async function save(text: string): Promise<null> {
   await storage.writeText({ path: "C:/Users/me/Documents/notes/memo.txt", text });
@@ -40,7 +40,7 @@ export async function save(text: string): Promise<null> {
 }
 ```
 
-`storagePlugin`, `logPlugin`, `capabilitiesPlugin`, `windowsPlugin`은 옵션 없는 플러그인 정의 객체다.
+`storage`, `log`, `capabilities`, `windows`는 각 패키지의 기본 export이며 앱 등록과 호출에 함께 쓴다.
 현재 필요한 설정은 정책에 작성하므로 별도의 `init()`이나 설정 factory를 요구하지
 않는다. 사용자 정의 명령, 상태와 이벤트는 기존 모듈 조립 방식을 유지한다.
 
@@ -80,22 +80,21 @@ dispatcher에 연결한다. 권한 검사, 비동기 입력 파싱 뒤 실행 �
 공통 계약과 handler 선언은 중립 출력에도 남고 OS 자원
 구현만 플랫폼 빌드 경계에서 제외한다.
 
-| 패키지 | 공통 공개 export | 화면에서 사용하는 함수 |
-| --- | --- | --- |
-| `@bunaway/plugin-storage` | `storage`, `storagePlugin` | `storage` |
-| `@bunaway/plugin-log` | `log`, `logPlugin` | `log` |
-| `@bunaway/plugin-capabilities` | `capabilities`, `capabilitiesPlugin` | `capabilities` |
-| `@bunaway/plugin-clipboard` | `clipboard`, `clipboardPlugin` | `clipboard` |
-| `@bunaway/plugin-power` | `power`, `powerPlugin` | `power` |
-| `@bunaway/plugin-appearance` | `appearance`, `appearancePlugin` | `appearance` |
+| 패키지 | 등록과 호출에 쓰는 기본 import |
+| --- | --- |
+| `@bunaway/plugin-storage` | `storage` |
+| `@bunaway/plugin-log` | `log` |
+| `@bunaway/plugin-capabilities` | `capabilities` |
+| `@bunaway/plugin-clipboard` | `clipboard` |
+| `@bunaway/plugin-power` | `power` |
+| `@bunaway/plugin-appearance` | `appearance` |
 
 텍스트 클립보드 계약과 Windows 자원 소유권은 [clipboard README](../../plugins/clipboard/README.md)에 둔다.
 공통 UI 실행 컨텍스트는 선택적 `signal`을 제공한다. Windows와 macOS는 요청 취소, 컨텍스트 폐기와 종료 때 이 신호를 중단한다.
 클립보드 어댑터는 재시도 중에만 비동기로 대기하고 열린 클립보드나 잠긴 메모리는 다음 await까지 유지하지 않는다.
 
 화면과 백엔드는 같은 패키지의 index.ts를 import한다.
-공통 작성 SDK인 `@bunaway/plugin`의 defineNativePlugin은 선언에서 등록 객체와
-호출 함수를 만든다. 화면과 백엔드의 호출 구현은 SDK 내부의 browser, bun 조건으로
+공통 작성 SDK인 `@bunaway/plugin`의 defineNativePlugin은 선언에서 등록과 호출에 함께 쓰는 플러그인을 만든다. 화면과 백엔드의 호출 구현은 SDK 내부의 browser, bun 조건으로
 선택한다. 플랫폼별 호출 전송은 SDK가 소유하며 플러그인마다 다시 작성하지 않는다.
 SDK의 호출 함수는 연결, handshake, 취소, pagehide 정리와 기존 호출 컨텍스트를
 재사용한다. 최상위 선언에서는 플랫폼 자원을 열거나 앱 setup을 실행하지 않는다.
@@ -140,8 +139,8 @@ thread는 worker 또는 ui이며 생략하면 worker다. bunaway plugin build는
 OS별 출력에서는 해당 OS의 구현만 포함한다. 공통 SDK는 외부 의존성으로 유지한다.
 지원 작업은 각 플랫폼 operations의 키에서 얻는다. 지원 조회와 호출 검사에 같은 목록을 사용하며,
 미지원 작업도 작업 권한을 먼저 검사한 뒤 UNSUPPORTED를 반환한다.
-반환한 definition의 nativePlatforms는 CLI가 읽는 구현 정보이며 일반 앱 플러그인의
-platforms 배열이 가진 시작 제한과 구분한다. 등록 객체와 호출 API의 공개 이름은 유지한다.
+내부 _definition의 nativePlatforms는 CLI가 읽는 구현 정보이며 일반 앱 플러그인의
+platforms 배열이 가진 시작 제한과 구분한다. 공식 플러그인은 `export default defineNativePlugin(...)`으로 선언하고 기본 import로 사용한다.
 CLI는 중립 선언을 읽고 패키지의 native/<platform> export에 대한 지연 import를 생성한다.
 링크를 포함한 실제 파일은 설치 패키지 안에 있어야 한다. SDK가 만든 create는 열거되지 않는 속성으로
 등록 객체의 JSON과 structured clone에서 제외한다. DLL과 파일 핸들은 initialize에서만 연다.
@@ -152,8 +151,8 @@ bun 조건으로 백엔드를 검사한다. typecheck는 두 검사를 모두 �
 백엔드 함수는 명령 또는 setup의 호출 범위를 따르며 별도 옵션을 받지 않는다.
 index.ts는 선언 조립과 공개 export를 담당한다. contract.ts는 OS 자원이나 공개 진입점에 의존하지 않는다.
 알고리즘과 편의 호출은 역할에 맞는 내부 파일로 분리한다.
-`logger.ts`의 수준별 로그 함수는 `plugin.api.write`를 받아 만들고, `query.ts`는
-`plugin.api.get` 결과의 이름 중복을 검사한다.
+`logger.ts`의 수준별 로그 함수는 생성된 `write`를 받아 만들고, `query.ts`는
+생성된 `get` 결과의 이름 중복을 검사한다.
 내부 파일은 contract.ts에서 계약과 타입을 읽으며 index.ts를 역으로 import하지 않는다.
 추가 처리가 없는 plugin은 생성한 api를 바로 공개하며 내부 처리 파일을 요구하지 않는다.
 
@@ -260,7 +259,7 @@ type NativePluginFields = {
 새 네이티브 기능의 선언은 플러그인의 `index.ts`에 작성하며 공통 protocol에
 개별 작업을 추가하지 않는다.
 
-패키지는 `package.json`의 `bunaway.plugin`에 default 등록 객체를 export하는 선언 진입점을 지정한다.
+패키지는 `package.json`의 `bunaway.plugin`에 플러그인을 default export하는 선언 진입점을 지정한다.
 패키지 메타데이터는 다음과 같다.
 
 ```json
@@ -274,12 +273,13 @@ type NativePluginFields = {
 index.ts의 defineNativePlugin 선언은 작업과 권한, 플랫폼 어댑터를 함께 정의한다.
 버전은 package.json에만 작성하며 플러그인 빌드가 중립 출력과 OS별 출력에 기록한다.
 원본 선언을 직접 import한 등록 객체는 development 버전을 사용한다.
-선언의 default export는 등록 객체이며 native와 nativePlatforms를 제공한다.
+선언의 default export는 호출 API다. 열거되지 않는 읽기 전용 _definition에
+등록 정보와 native, nativePlatforms를 두며 defineApp과 CLI가 읽는다.
 CLI는 버전을 package.json과 대조하고 플러그인 식별자, native 계약과 플랫폼 선언을 검증한다.
 플러그인 식별자는 패키지 이름과 별개이며 작업 이름의 접두사로 사용한다.
 JSON에 schema를 다시 복사하지 않는다. 진입점은 부작용 없는 선언이며 CLI가 앱
 진입점이나 plugin setup을 실행하지 않고 읽을 수 있어야 한다.
-`defineNativePlugin`은 선언을 검증하고 `definition`과 `api`를 반환한다.
+`defineNativePlugin`은 선언을 검증하고 등록과 호출에 함께 쓰는 객체를 반환한다.
 제작자는 플랫폼별 operations 객체에 메서드 이름과 input, output, handler를 작성한다.
 SDK가 작업 이름에 플러그인 접두사를 붙인다. 작업마다 독립적으로 권한을 허용한다.
 `z.strictObject`는 필드를 기본 필수로 선언하고 추가 필드를 거부한다. 선택 필드는
@@ -287,8 +287,10 @@ SDK가 작업 이름에 플러그인 접두사를 붙인다. 작업마다 독립
 이 작성 형식은 native.operations 배열, 완전한 작업 이름,
 required와 additionalProperties를 반복해서 작성하지 않게 한다.
 api의 메서드 이름은 operations의 키와 같다.
-입력과 결과의 타입은 schema에서 추론한다. 등록 객체는 default export하며 공개 함수는
-api를 원하는 이름으로 export한다. 기존 공식 plugin의 이름 있는 등록 export도 유지한다.
+입력과 결과의 타입은 schema에서 추론한다. 반환값을 바로 default export하며
+앱은 같은 값을 등록하고 호출한다. 별도의 등록용 이름은 두지 않는다.
+편의 함수가 필요한 플러그인은 선택적인 calls 조립 함수로 생성된 작업 함수를 감싼다.
+defineApp은 내부 등록 정보를 추출해 기존 Core 수명주기에 전달한다.
 
 `thread`는 `worker` 또는 `ui`이며 생략하면 `worker`다. 저장, 앱 로그와 지원 조회는
 기본 Worker에서 실행한다. UI 스레드가 필요한 플러그인은 `ui`를 선언하고 호스트의 UI Worker에
@@ -373,7 +375,7 @@ Windows 저장 adapter는 각 상위 디렉터리의 고정된 핸들과 최종 
 backend와 화면 함수는 같은 플러그인 계약을 사용한다.
 조회에는 `capabilities.get` 권한이 필요하며 다른 permission을 부여하지 않는다.
 
-조회 결과는 최대 256개의 등록된 네이티브 작업을 포함한다. 창 작업도 windowsPlugin을 등록한 경우에만 포함한다.
+조회 결과는 최대 256개의 등록된 네이티브 작업을 포함한다. 창 작업도 `windows`를 등록한 경우에만 포함한다.
 결과 전체에는 기존 JSON 깊이와 1 MiB 메시지 제한을 적용한다.
 조회 결과는 앱에 등록된 작업과 플랫폼 adapter의 지원 정보로 만든다. 설치했더라도 앱에
 등록하지 않은 작업은 결과에 넣지 않는다. OS 동의 상태는 기능 조회에 포함하지 않는다. protocol handshake의

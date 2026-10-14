@@ -90,7 +90,7 @@ const plugin = defineNativePlugin({
     },
   },
 });
-const adapter = plugin.definition.nativePlatforms.windows?.create({
+const adapter = plugin._definition.nativePlatforms.windows?.create({
   dataRoot: ".",
   capabilities: [],
 });

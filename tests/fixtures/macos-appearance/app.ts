@@ -1,10 +1,8 @@
 import { defineApp } from "@bunaway/backend";
-import {
+import appearance, {
   type AppearancePreferences,
-  appearance,
-  appearancePlugin,
 } from "@bunaway/plugin-appearance";
-import { windowsPlugin } from "@bunaway/plugin-windows";
+import windows from "@bunaway/plugin-windows";
 
 const reports: unknown[] = [];
 let backendResult:
@@ -16,8 +14,8 @@ let backendResult:
 export default defineApp({
   modules: [],
   plugins: [
-    appearancePlugin,
-    windowsPlugin,
+    appearance,
+    windows,
     {
       name: "backend-appearance-check",
       version: "1",

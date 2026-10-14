@@ -11,7 +11,7 @@ storage.stat({ path }): Promise<StorageMetadata | null>
 `@bunaway/plugin-storage`의 `storage.stat`은 파일이나 디렉터리의 메타데이터를 반환합니다. 대상이 실제로 없으면 `null`입니다. 네이티브 구현은 Windows와 macOS에서 지원합니다.
 
 ```ts
-import { storage } from "@bunaway/plugin-storage";
+import storage from "@bunaway/plugin-storage";
 
 const metadata = await storage.stat({
   path: "C:/Users/me/Documents/messages/한글 memo.txt",
@@ -53,10 +53,10 @@ Windows의 FILETIME 값이 0이면 해당 시각은 사용할 수 없으므로 `
 }
 ```
 
-앱에 `storagePlugin`을 등록해야 합니다. 뷰에서 시작한 백엔드 명령은 해당 뷰의 `host.permissions`를 사용합니다. 플러그인 setup과 setup에서 시작한 작업은 `backend.permissions`를 사용합니다. 화면용 함수의 두 번째 인자는 `InvokeOptions`이고 `signal`과 `deadline`은 [호출 취소와 기한](/reference/client/invoke/)의 의미를 따릅니다.
+앱에 `storage`를 등록해야 합니다. 뷰에서 시작한 백엔드 명령은 해당 뷰의 `host.permissions`를 사용합니다. 플러그인 setup과 setup에서 시작한 작업은 `backend.permissions`를 사용합니다. 화면용 함수의 두 번째 인자는 `InvokeOptions`이고 `signal`과 `deadline`은 [호출 취소와 기한](/reference/client/invoke/)의 의미를 따릅니다.
 
 ```ts
-import { storage } from "@bunaway/plugin-storage";
+import storage from "@bunaway/plugin-storage";
 
 const abortController = new AbortController();
 const metadata = await storage.stat(

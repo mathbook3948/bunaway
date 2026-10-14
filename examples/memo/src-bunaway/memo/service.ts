@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { storage } from "@bunaway/plugin-storage";
+import storage from "@bunaway/plugin-storage";
 import settings from "../bunaway.json";
 
 // The memo app chooses its storage directory and accepts only memo content from UI.

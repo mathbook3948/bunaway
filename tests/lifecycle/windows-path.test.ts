@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import { win32 } from "node:path";
-import { pathPlugin } from "@bunaway/plugin-path/native/windows";
+import path from "@bunaway/plugin-path/native/windows";
 import { userDirectorySchema } from "../../plugins/path/src/contract.ts";
 
 test.skipIf(process.platform !== "win32")(
   "Windows current-user known folders agree with the OS, preserve native DLL ownership and return fully qualified paths",
   async () => {
-    const create = pathPlugin.nativePlatforms.windows?.create;
+    const create = path._definition.nativePlatforms.windows?.create;
     if (!create) {
       throw new Error("Windows path adapter is missing.");
     }

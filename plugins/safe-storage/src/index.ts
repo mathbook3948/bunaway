@@ -9,7 +9,8 @@ import {
   initialize as initializeWindows,
 } from "./platforms/windows.ts";
 
-const plugin = defineNativePlugin({
+/** Promise-based encryption/decryption on the I/O Worker; never falls back to plaintext. */
+export default defineNativePlugin({
   name: "safe-storage",
   platforms: {
     macos: {
@@ -24,10 +25,3 @@ const plugin = defineNativePlugin({
     },
   },
 });
-
-/** Optional Windows DPAPI and macOS Keychain protection. Registration does not grant access. */
-export const safeStoragePlugin = plugin.definition;
-export default safeStoragePlugin;
-
-/** Promise-based encryption/decryption on the I/O Worker; never falls back to plaintext. */
-export const safeStorage = plugin.api;

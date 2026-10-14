@@ -1,20 +1,21 @@
 # @bunaway/plugin-autostart
 
-`src/index.ts`는 계약과 플랫폼 선언을 조립하고 공개 함수를 export합니다.
+`src/index.ts`는 계약과 플랫폼 선언을 조립하고 `defineNativePlugin` 결과를 바로 default export합니다.
 `src/contract.ts`는 작업 스키마와 타입, 네이티브 호출 검증을 소유하고 `src/calls.ts`는 편의 호출을 담당합니다.
 플랫폼 구현은 계약을 직접 읽으며 공개 진입점을 역으로 import하지 않습니다.
 
 Windows 사용자별 로그인 자동 실행을 제공하는 선택 네이티브 플러그인입니다.
-앱에 패키지를 설치하고 `autostartPlugin`을 등록합니다. 등록 변경에는
+앱에 패키지를 설치하고 `autostart`을 등록합니다. 등록 변경에는
 `autostart.enable`, `autostart.disable`, 조회에는 `autostart.getStatus` 권한이 필요합니다.
 
 ```ts
-import { autostartPlugin, enableAutostart, getAutostartStatus, disableAutostart } from "@bunaway/plugin-autostart";
+import autostart from "@bunaway/plugin-autostart";
+import autostart from "@bunaway/plugin-autostart";
 
-// defineApp({ modules: [], plugins: [autostartPlugin] })으로 등록합니다.
-await enableAutostart(["--login", "한글 값", '인용"값']);
-const status = await getAutostartStatus();
-await disableAutostart();
+// defineApp({ modules: [], plugins: [autostart] })으로 등록합니다.
+await autostart.enableAutostart(["--login", "한글 값", '인용"값']);
+const status = await autostart.getAutostartStatus();
+await autostart.disableAutostart();
 ```
 
 자동 실행 경로는 호스트가 정하며 호출자가 다른 실행 파일을 등록할 수 없습니다.
@@ -25,7 +26,7 @@ HKCU Run에 REG_SZ를 쓰고 작업 관리자의 활성 상태는 별도로 읽�
 
 [공개 계약, 경로와 갱신 규칙](../../docs/site/src/content/docs/reference/plugins/autostart.mdx),
 [등록 방식 결정](../../docs/decisions/0016-windows-autostart.md)을 참고하세요.
-`enableAutostart({ args: ["--sync"], hidden: true })`는 앱 정의에 `desktop.tray`가
+`autostart.enableAutostart({ args: ["--sync"], hidden: true })`는 앱 정의에 `desktop.tray`가
 있을 때 초기 창을 숨긴 상태로 시작하도록 등록합니다. `desktop.onOpen`의
 `launchReason`은 `"autostart"`와 `"manual"`을 구분하며 `source`와 별개입니다.
 이는 예약 실행 인자를 읽은 결과이며 Windows가 시작했다는 인증이나 권한이 아닙니다.

@@ -3,7 +3,7 @@ import type {
   NativeWindow,
   NativeWindowServices,
 } from "@bunaway/plugin-api/native";
-import { validateWindowCall, windowsPlugin } from "@bunaway/plugin-windows";
+import windows, { validateWindowCall } from "@bunaway/plugin-windows";
 import { type JsonValue, NativeRegistry } from "@bunaway/protocol";
 import { createOperations } from "#plugins/windows/src/platforms/windows";
 
@@ -122,7 +122,7 @@ function fixture() {
 
 test("audio operations have individual grants and strict target/mute contracts", () => {
   const registry = new NativeRegistry([
-    windowsPlugin,
+    windows._definition,
   ]);
   expect(registry.operation("windows.getWebViewAudioState").name).toBe(
     "windows.getWebViewAudioState",

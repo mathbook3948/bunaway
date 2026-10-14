@@ -4,14 +4,16 @@ description: Windows 알림 지원과 OS 차단 상태를 조회하고 알림 �
 sidebar: { order: 8 }
 ---
 
+기본 export(`default`)를 `notification`로 가져와 앱에 등록하고 호출합니다.
+
 `@bunaway/plugin-notification`은 Windows 알림 상태 조회와 설정 페이지 열기를 제공합니다.
-패키지를 설치하고 `notificationPlugin`을 등록한 다음 작업별 정책 권한을 허용하세요.
+패키지를 설치하고 `notification`를 등록한 다음 작업별 정책 권한을 허용하세요.
 
 ```ts
 import { defineApp } from "@bunaway/backend";
-import { notificationPlugin } from "@bunaway/plugin-notification";
+import notification from "@bunaway/plugin-notification";
 
-export default defineApp({ modules: [], plugins: [notificationPlugin] });
+export default defineApp({ modules: [], plugins: [notification] });
 ```
 
 ## 상태 조회와 설정 열기
@@ -25,7 +27,7 @@ notification.openSettings(options?: NativeInvokeOptions): Promise<null>
 백엔드 호출은 별도 취소 signal이나 기한을 받지 않으며 현재 명령의 설정을 상속합니다.
 
 ```ts
-import { notification } from "@bunaway/plugin-notification";
+import notification from "@bunaway/plugin-notification";
 
 const status = await notification.getStatus();
 if (status.support === "supported" && status.setting === "disabledForApplication") {

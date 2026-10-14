@@ -98,34 +98,32 @@ function busy(instance: NativeAdapter): boolean {
   return instance.busy?.() ?? false;
 }
 
-const plugin = defineNativePlugin({
-  name: "windows",
-  platforms: {
-    windows: {
-      thread: "ui",
-      initialize: createWindowsOperations,
-      dispose,
-      busy,
-      operations: windowsOperations,
-    },
-    macos: {
-      thread: "ui",
-      initialize: createMacosOperations,
-      dispose,
-      busy,
-      // macOS supplies basic window and WebView services; geometry, identity and readiness remain unsupported.
-      operations: macosOperations,
+/** Typed helpers for invoking the registered window operations. */
+export default defineNativePlugin(
+  {
+    events: windowEvents,
+    name: "windows",
+    platforms: {
+      windows: {
+        thread: "ui",
+        initialize: createWindowsOperations,
+        dispose,
+        busy,
+        operations: windowsOperations,
+      },
+      macos: {
+        thread: "ui",
+        initialize: createMacosOperations,
+        dispose,
+        busy,
+        // macOS supplies basic window and WebView services; geometry, identity and readiness remain unsupported.
+        operations: macosOperations,
+      },
     },
   },
-});
-/** Individually granted window operations for the app's declared windows. */
-export const windowsPlugin = Object.freeze({
-  ...plugin.definition,
-  events: windowEvents,
-});
-export default windowsPlugin;
-/** Typed helpers for invoking the registered window operations. */
-export const windows = createWindows(plugin.api);
+  createWindows,
+);
+
 export type {
   WindowCall,
   WindowEvents,

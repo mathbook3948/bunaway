@@ -58,12 +58,14 @@ test("isolated network package ships both async adapters and keeps Bun transport
       if (!target?.operations) {
         throw new Error("Missing native network export");
       }
-      const declaration = (await import(pathToFileURL(target.operations).href))
+      const nativePlugin = (await import(pathToFileURL(target.operations).href))
         .default;
-      const adapter = declaration.nativePlatforms[platform].create({
-        dataRoot: home,
-        capabilities: [],
-      });
+      const adapter = nativePlugin._definition.nativePlatforms[platform].create(
+        {
+          dataRoot: home,
+          capabilities: [],
+        },
+      );
       try {
         expect(adapter.executeUI).toBeFunction();
         const response = await adapter.executeUI(
@@ -104,7 +106,7 @@ test("isolated network package ships both async adapters and keeps Bun transport
     const browserEntry = resolve(project, "network-browser.ts");
     await Bun.write(
       browserEntry,
-      'import {network} from "@bunaway/plugin-network"; void network.request({url:"https://example.com"});',
+      'import network from "@bunaway/plugin-network"; void network.request({url:"https://example.com"});',
     );
     const browser = await Bun.build({
       entrypoints: [

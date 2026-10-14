@@ -168,7 +168,7 @@ while (!(await Bun.file(${JSON.stringify(stop)}).exists())) {
         `
 import assert from "node:assert/strict";
 import definition from ${JSON.stringify(operationsModule)};
-const createOperations = definition.nativePlatforms.windows.create;
+const createOperations = definition._definition.nativePlatforms.windows.create;
 import { activeDescendants, containAppProcess } from ${JSON.stringify(jobModule)};
 containAppProcess(${JSON.stringify(resolve(root, "app-data"))});
 const adapter = createOperations({ dataRoot: ${JSON.stringify(root)}, capabilities: [] });

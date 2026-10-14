@@ -1,5 +1,4 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import type { Storage } from "./contract.ts";
 import { storageOperations } from "./operations.ts";
 import {
   createStorage as createMacosStorage,
@@ -8,7 +7,8 @@ import {
 import { createStorage, disposeStorage } from "./platforms/windows.ts";
 import { windowsOperations } from "./platforms/windows-operations.ts";
 
-const plugin = defineNativePlugin({
+/** Typed storage operations; the application chooses paths and access rules. */
+export default defineNativePlugin({
   name: "storage",
   platforms: {
     windows: {
@@ -24,12 +24,6 @@ const plugin = defineNativePlugin({
     },
   },
 });
-/** Plugin contract for text, bytes, metadata and directory access at application-selected paths. */
-export const storagePlugin = plugin.definition;
-export default storagePlugin;
-
-/** Typed storage operations; the application chooses paths and access rules. */
-export const storage: Storage = plugin.api;
 
 export type {
   Storage,

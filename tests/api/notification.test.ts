@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { CommandContext } from "@bunaway/plugin-api";
 import { bindCommandHost } from "@bunaway/plugin-api/host";
-import { notification, notificationPlugin } from "@bunaway/plugin-notification";
+import notification from "@bunaway/plugin-notification";
 import { type HostContext, NativeRegistry } from "@bunaway/protocol";
 import { bindHostAPI } from "#core/host-api";
 import { validateNotificationInput } from "#plugins/notification/src/contract";
@@ -10,7 +10,7 @@ import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("notification", notificationOperations);
 const registry = new NativeRegistry([
-  notificationPlugin,
+  notification._definition,
 ]);
 
 test("notification status and Settings require separate permissions and null-only inputs", async () => {

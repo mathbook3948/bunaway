@@ -10,9 +10,9 @@ import {
 } from "@bunaway/backend";
 import { createClient } from "@bunaway/client";
 import type { CoreServices } from "@bunaway/core";
-import { capabilities } from "@bunaway/plugin-capabilities";
-import { log } from "@bunaway/plugin-log";
-import { storage } from "@bunaway/plugin-storage";
+import capabilities from "@bunaway/plugin-capabilities";
+import log from "@bunaway/plugin-log";
+import storage from "@bunaway/plugin-storage";
 import {
   type ClientMessage,
   type HostCall,
@@ -1004,7 +1004,7 @@ export function checkHostTypes() {
 }
 
 test("window state helpers retain context, validate results and honor pre-call cancellation", async () => {
-  const { windows } = await import("@bunaway/plugin-windows");
+  const { default: windows } = await import("@bunaway/plugin-windows");
   const controls = [
     "minimize",
     "maximize",
@@ -1091,7 +1091,7 @@ test("window state helpers retain context, validate results and honor pre-call c
 });
 
 test("window helpers preserve the command context and typed operation payloads", async () => {
-  const { windows } = await import("@bunaway/plugin-windows");
+  const { default: windows } = await import("@bunaway/plugin-windows");
   await expect(windows.list()).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
   });

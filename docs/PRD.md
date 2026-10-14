@@ -163,7 +163,7 @@ OS 권한 선언과 런타임 사용자 동의는 프레임워크 권한과 별�
 ```ts
 // src-bunaway/app.ts
 import { command, type AppDefinition } from "@bunaway/backend";
-import { storage, storagePlugin } from "@bunaway/plugin-storage";
+import storage from "@bunaway/plugin-storage";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -184,7 +184,7 @@ export const app = {
       },
     }),
   },
-  plugins: [storagePlugin],
+  plugins: [storage],
   events: {},
 } satisfies AppDefinition;
 export default app;

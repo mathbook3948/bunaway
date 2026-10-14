@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { storagePlugin } from "@bunaway/plugin-storage";
+import storage from "@bunaway/plugin-storage";
 import { NativeRegistry } from "@bunaway/protocol";
 import { windowsOperations } from "../../plugins/storage/src/platforms/windows-operations.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
@@ -58,7 +58,7 @@ test("file transfers require two explicit endpoints and reject implicit overwrit
 
 test("copy and move grants do not imply one another or general read/write", () => {
   const registry = new NativeRegistry([
-    storagePlugin,
+    storage._definition,
   ]);
   for (const operation of [
     "storage.copyFile",

@@ -1,8 +1,8 @@
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { defineApp } from "@bunaway/backend";
-import { storage, storagePlugin } from "@bunaway/plugin-storage";
-import { windowsPlugin } from "@bunaway/plugin-windows";
+import storage from "@bunaway/plugin-storage";
+import windows from "@bunaway/plugin-windows";
 
 const directory = process.env.HOME;
 if (!directory) {
@@ -14,8 +14,8 @@ let restarted = false;
 export default defineApp({
   modules: [],
   plugins: [
-    storagePlugin,
-    windowsPlugin,
+    storage,
+    windows,
     {
       name: "storage-fixture",
       version: "1",

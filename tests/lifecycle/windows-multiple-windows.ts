@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type CommandContext, defineApp } from "@bunaway/backend";
 import type { WindowIdentity, WindowSpec } from "@bunaway/plugin-api/native";
-import { windows, windowsPlugin } from "@bunaway/plugin-windows";
+import windows from "@bunaway/plugin-windows";
 import {
   type HostContext,
   type Policy,
@@ -751,7 +751,7 @@ if (!process.argv.includes("--child")) {
       closeBehavior: "keep-alive",
     },
     plugins: [
-      windowsPlugin,
+      windows,
       {
         name: "instances-test",
         version: "1.0.0",

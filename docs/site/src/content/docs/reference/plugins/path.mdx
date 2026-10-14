@@ -3,13 +3,15 @@ title: Windows 경로
 description: 현재 사용자의 Windows 표준 폴더를 조회하고 명시적인 기준 경로로 문자열 경로를 처리합니다.
 ---
 
+기본 export(`default`)를 `path`로 가져와 앱에 등록하고 호출합니다.
+
 `@bunaway/plugin-path`는 Windows 경로를 다루는 선택 플러그인입니다.
-앱의 plugins에 `pathPlugin`을 등록하고 아래 작업별 Host 권한을 허용합니다.
+앱의 plugins에 `path`을 등록하고 아래 작업별 Host 권한을 허용합니다.
 화면에서 직접 호출하려면 같은 작업 이름 앞에 `plugin.`을 붙인 명령 권한도 필요합니다.
 다른 플랫폼에서는 `UNSUPPORTED`입니다.
 
 ```ts
-import { path, pathPlugin } from "@bunaway/plugin-path";
+import path from "@bunaway/plugin-path";
 
 const documents = await path.getDirectory({ directory: "documents" });
 const file = await path.join({ paths: [documents, "한글", "memo.txt"] });

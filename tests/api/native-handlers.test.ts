@@ -78,11 +78,11 @@ test("handler keys infer immutable support and typed parsing without dispatch sw
     "length",
   ]);
   expect(Object.isFrozen(factory.operations)).toBe(true);
-  expect(plugin.definition.nativePlatforms.windows?.operations).toEqual([
+  expect(plugin._definition.nativePlatforms.windows?.operations).toEqual([
     "length",
   ]);
   const adapter =
-    plugin.definition.nativePlatforms.windows?.create(environment);
+    plugin._definition.nativePlatforms.windows?.create(environment);
   if (!adapter?.executeUI) {
     throw new Error("Missing mapped adapter");
   }
@@ -156,7 +156,7 @@ test("contextual preparation parses once and rechecks cancellation and authority
     },
   });
   const adapter =
-    plugin.definition.nativePlatforms.windows?.create(environment);
+    plugin._definition.nativePlatforms.windows?.create(environment);
   if (!adapter) {
     throw new Error("Missing adapter");
   }
@@ -237,7 +237,7 @@ test("mapped adapters clean earlier resources after later setup fails", async ()
           create,
         },
       },
-    }).definition;
+    })._definition;
   });
   const catalog = plugins.map((plugin) => ({
     name: plugin.name,

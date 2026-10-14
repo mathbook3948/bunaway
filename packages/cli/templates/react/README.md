@@ -49,7 +49,7 @@ from `@bunaway/plugin-storage`, `@bunaway/plugin-log`, and `@bunaway/plugin-capa
 and cancellation signal, without passing `context.host` through service arguments.
 Await Host operations before the command returns. Calls outside an execution context
 or after command completion are rejected. The starter allows storage under `appData/messages`;
-app logging requires installing `@bunaway/plugin-log`, registering `logPlugin` and allowing `log.write` in the calling view permissions.
+app logging requires installing `@bunaway/plugin-log`, registering `log` and allowing `log.write` in the calling view permissions.
 
 ## Build
 

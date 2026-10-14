@@ -2,8 +2,8 @@ import { defineNativePlugin } from "@bunaway/plugin";
 import type { Pasteboard } from "../../plugins/clipboard/src/macos-pasteboard.ts";
 import { macosOperations as clipboardOperations } from "../../plugins/clipboard/src/operations.ts";
 import {
-  MacosClipboard,
   dispose as disposeClipboard,
+  MacosClipboard,
 } from "../../plugins/clipboard/src/platforms/macos.ts";
 import { globalShortcutOperations } from "../../plugins/global-shortcut/src/operations.ts";
 import { initializeShortcutOperations } from "../../plugins/global-shortcut/src/shortcut-adapter.ts";
@@ -33,7 +33,7 @@ export function pasteboardOperations(native: Pasteboard) {
           operations: clipboardOperations,
         },
       },
-    }).definition,
+    }),
     "macos",
   )(environment);
 }
@@ -52,7 +52,7 @@ export function createOpenerAdapter(
           operations: openerOperations,
         },
       },
-    }).definition,
+    }),
     "macos",
   )(environment);
 }
@@ -73,7 +73,7 @@ export function createShortcutOperations(
           operations: globalShortcutOperations,
         },
       },
-    }).definition,
+    }),
     "windows",
   )(environment);
 }
@@ -92,7 +92,7 @@ export function macosSafeStorageOperations(
           operations: safeStorageOperations,
         },
       },
-    }).definition,
+    }),
     "macos",
   )(environment);
 }

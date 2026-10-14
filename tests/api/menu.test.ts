@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { NativeEnvironment } from "@bunaway/plugin";
 import type { NativeMenuItem } from "@bunaway/plugin-api/native";
-import { menuPlugin } from "@bunaway/plugin-menu";
+import menu from "@bunaway/plugin-menu";
 import { type JsonValue, NativeRegistry } from "@bunaway/protocol";
 import {
   MAX_MENU_DEPTH,
@@ -9,11 +9,12 @@ import {
   MAX_MENU_RESOURCES,
   menuItemsSchema,
 } from "#plugins/menu/src/contract";
-import { menuOperations } from "#plugins/menu/src/operations";
 import createOperationsDefinition from "#plugins/menu/src/index";
+import { menuOperations } from "#plugins/menu/src/operations";
 import { nativeFactory as createOperationsFactory } from "../fixtures/native-platform.ts";
 
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
+
 const createOperations = createOperationsFactory(
   createOperationsDefinition,
   "windows",
@@ -245,7 +246,7 @@ test("menu operations use separate permissions and preserve resource snapshots",
   const { invoke, adapter } = fixture();
   expect([
     ...new NativeRegistry([
-      menuPlugin,
+      menu._definition,
     ]).operations.keys(),
   ]).toEqual(Object.keys(menuOperations).map((name) => `menu.${name}`));
   await expect(

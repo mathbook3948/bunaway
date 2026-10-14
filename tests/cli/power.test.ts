@@ -46,8 +46,8 @@ test("isolated power package ships the I/O adapter but keeps FFI out of the brow
     await writeFile(
       resolve(project, "src-bunaway/app.ts"),
       `import { defineApp } from "@bunaway/backend";
-import { powerPlugin } from "@bunaway/plugin-power";
-export default defineApp({ modules: [], plugins: [powerPlugin] });
+import power from "@bunaway/plugin-power";
+export default defineApp({ modules: [], plugins: [power] });
 `,
     );
     await writeJson(resolve(project, "src-bunaway/policy.json"), {
@@ -99,7 +99,7 @@ export default defineApp({ modules: [], plugins: [powerPlugin] });
     const browserEntry = resolve(project, "power-browser.ts");
     await writeFile(
       browserEntry,
-      `import { power } from "@bunaway/plugin-power";
+      `import power from "@bunaway/plugin-power";
 void power.getStatus();
 `,
     );

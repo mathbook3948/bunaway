@@ -36,7 +36,7 @@ export function pluginParsers(
           create,
         },
       },
-    }).definition.nativePlatforms.windows?.create({
+    })._definition.nativePlatforms.windows?.create({
       dataRoot: ".",
       capabilities: [],
     });

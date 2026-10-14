@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { globalShortcutPlugin } from "@bunaway/plugin-global-shortcut";
+import globalShortcut from "@bunaway/plugin-global-shortcut";
 import type { JsonValue } from "@bunaway/protocol";
 import { NativeRegistry } from "@bunaway/protocol";
 import {
@@ -169,7 +169,7 @@ test("global shortcut schemas normalize modifier order and reject invalid/reserv
   expect(hotkeyCodes(shortcut("Escape")).key).toBe(0x1b);
   expect([
     ...new NativeRegistry([
-      globalShortcutPlugin,
+      globalShortcut._definition,
     ]).operations.keys(),
   ]).toEqual(
     Object.keys(globalShortcutOperations).map(

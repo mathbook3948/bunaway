@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { resolve } from "node:path";
 import { bindCommandHost } from "@bunaway/plugin-api/host";
-import { image, imagePlugin } from "@bunaway/plugin-image";
+import image from "@bunaway/plugin-image";
 import {
   type HostContext,
   NativeRegistry,
@@ -21,7 +21,7 @@ import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("image", imageOperations);
 const registry = new NativeRegistry([
-  imagePlugin,
+  image._definition,
 ]);
 const pixels = {
   width: 1,

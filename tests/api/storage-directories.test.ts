@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { storagePlugin } from "@bunaway/plugin-storage";
+import storage from "@bunaway/plugin-storage";
 import { NativeRegistry, serializeHostResponse } from "@bunaway/protocol";
 import {
   directoryEntries,
@@ -14,7 +14,7 @@ const location = {
 };
 
 test("macOS supports directory reads and creation while checked-object removal remains Windows-only", () => {
-  const targets = storagePlugin.nativePlatforms;
+  const targets = storage._definition.nativePlatforms;
   for (const operation of [
     "storage.readDirectory",
     "storage.createDirectory",
@@ -125,7 +125,7 @@ test("directory operations resolve recursive defaults, bound output and retain i
     ).rejects.toThrow();
   }
   const registry = new NativeRegistry([
-    storagePlugin,
+    storage._definition,
   ]);
   for (const operation of [
     "storage.readDirectory",

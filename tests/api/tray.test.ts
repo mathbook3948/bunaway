@@ -7,15 +7,15 @@ import {
   MAX_TRAY_ICO_BYTES,
   MAX_TRAY_TOOLTIP_UNITS,
 } from "@bunaway/plugin-api/native";
-import { trayPlugin } from "@bunaway/plugin-tray";
+import tray from "@bunaway/plugin-tray";
 import { type JsonValue, NativeRegistry } from "@bunaway/protocol";
-import { trayOperations } from "#plugins/tray/src/operations";
 import createOperationsDefinition from "#plugins/tray/src/index";
-import { nativeFactory as createOperationsFactory } from "../fixtures/native-platform.ts";
-
+import { trayOperations } from "#plugins/tray/src/operations";
 import { trayIconImage } from "#plugins/tray/src/tray-icon-data";
+import { nativeFactory as createOperationsFactory } from "../fixtures/native-platform.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 import { trayIco, trayPngIco } from "../fixtures/tray-icon.ts";
+
 const createOperations = createOperationsFactory(
   createOperationsDefinition,
   "windows",
@@ -25,7 +25,7 @@ test("tray inputs are strict, bounded and grant each operation independently", a
   const parsers = pluginParsers("tray", trayOperations);
   expect([
     ...new NativeRegistry([
-      trayPlugin,
+      tray._definition,
     ]).operations.keys(),
   ]).toEqual(Object.keys(trayOperations).map((name) => `tray.${name}`));
   for (const tooltip of [

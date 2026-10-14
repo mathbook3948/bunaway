@@ -104,6 +104,13 @@ export type PluginDefinition = {
   ): void | StopHook | Promise<StopHook | undefined> | Promise<void>;
 };
 
+/** App composition accepts ordinary definitions and callable native plugin objects. */
+export type PluginRegistration =
+  | PluginDefinition
+  | {
+      readonly _definition: PluginDefinition;
+    };
+
 export type {
   DesktopContext,
   DesktopOptions,

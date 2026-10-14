@@ -16,7 +16,7 @@ import {
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { Worker } from "node:worker_threads";
-import { storagePlugin as builtStorage } from "@bunaway/plugin-storage/native/windows";
+import builtStorage from "@bunaway/plugin-storage/native/windows";
 import { BunawayError, type JsonValue } from "@bunaway/protocol";
 import { WindowsStorage } from "#plugins/storage/src/platforms/windows";
 import { windowsOperations } from "../../plugins/storage/src/platforms/windows-operations.ts";
@@ -586,7 +586,7 @@ async function main(): Promise<void> {
     assert.equal((await stat(temporaryPath("empty-copy.txt"))).size, 0);
 
     // Exercise the generated native export and Zod defaults as well as the source FFI class.
-    const create = builtStorage.nativePlatforms.windows?.create;
+    const create = builtStorage._definition.nativePlatforms.windows?.create;
     assert(create, "Built Windows storage adapter is missing.");
     const built = create({
       dataRoot: root,

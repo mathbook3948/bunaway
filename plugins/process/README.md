@@ -1,6 +1,6 @@
 # Foreground argv process plugin
 
-Register `processPlugin` to use `processes.run` on Windows. Grant `process.run` independently.
+Register `processes` to use `processes.run` on Windows. Grant `process.run` independently.
 Applications validate the selected executable and all arguments in backend commands. Trusted backend
 code can use Bun.spawn directly. See the [public contract](../../docs/site/src/content/docs/reference/plugins/process.mdx).
 

@@ -4,12 +4,13 @@
 `src/contract.ts`는 작업 스키마와 네이티브 호출 검증을 소유하며 텍스트 제한은 `src/text.ts`에서 공유한다.
 플랫폼 구현은 계약을 직접 읽으며 공개 진입점을 역으로 import하지 않는다.
 
-Windows와 macOS의 텍스트, HTML, RTF와 RGBA 이미지 클립보드를 제공하는 선택 패키지다. 파일 목록은 Windows에서만 제공한다. 설치 후 `clipboardPlugin`을 앱의 `plugins`에 등록하고 호출 출처에 작업별 권한을 허용한다. 화면과 백엔드 모두 같은 `clipboard`를 사용한다.
+Windows와 macOS의 텍스트, HTML, RTF와 RGBA 이미지 클립보드를 제공하는 선택 패키지다. 파일 목록은 Windows에서만 제공한다. 설치 후 `clipboard`를 앱의 `plugins`에 등록하고 호출 출처에 작업별 권한을 허용한다. 화면과 백엔드 모두 같은 `clipboard`를 사용한다.
 
 ```ts
-import { clipboard, clipboardPlugin } from "@bunaway/plugin-clipboard";
+import clipboard from "@bunaway/plugin-clipboard";
+import clipboard from "@bunaway/plugin-clipboard";
 
-// 앱 정의의 plugins: [clipboardPlugin]
+// 앱 정의의 plugins: [clipboard]
 await clipboard.writeText({ text: "한글 😀" });
 const text = await clipboard.readText(null);
 await clipboard.clear(null);

@@ -4,14 +4,16 @@ description: Windows와 macOS arm64에서 앱 소유 이미지 리소스를 생�
 sidebar: { order: 7 }
 ---
 
-`@bunaway/plugin-image`를 설치하고 `imagePlugin`을 앱의 `plugins`에 등록합니다.
+기본 export(`default`)를 `image`로 가져와 앱에 등록하고 호출합니다.
+
+`@bunaway/plugin-image`를 설치하고 `image`를 앱의 `plugins`에 등록합니다.
 화면과 앱 백엔드는 같은 `image` API를 사용합니다. Windows와 macOS arm64에서 제공합니다. macOS Intel은 지원하지 않습니다.
 
 ```ts
 import { defineApp } from "@bunaway/backend";
-import { imagePlugin } from "@bunaway/plugin-image";
+import image from "@bunaway/plugin-image";
 
-export default defineApp({ modules: [], plugins: [imagePlugin] });
+export default defineApp({ modules: [], plugins: [image] });
 ```
 
 ## 생성과 조회
@@ -36,7 +38,7 @@ base64이며 한 픽셀은 빨강, 초록, 파랑, alpha 순서의 4바이트입
 상한에 해당합니다. 사용하지 않는 base64 padding bit도 0이어야 합니다.
 
 ```ts
-import { image } from "@bunaway/plugin-image";
+import image from "@bunaway/plugin-image";
 
 const resource = await image.createRGBA({ width: 1, height: 1, rgba: "/wAAgA==" });
 const info = await image.getInfo({ id: resource.id });

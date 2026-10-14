@@ -3,7 +3,9 @@ title: windows
 description: 창 제어와 조회, geometry, 네이티브 창 이벤트 및 구독 수명 계약.
 ---
 
-`@bunaway/plugin-windows`를 설치하고 앱의 `plugins`에 windowsPlugin을 등록합니다. 명령 핸들러나 setup은 이 패키지의 `windows`를 호출합니다. 화면에서도 같은 경로를 import하며 해당 뷰의 commands에 `plugin.windows.<작업>`을 허용해야 합니다.
+기본 export(`default`)를 `windows`로 가져와 앱에 등록하고 호출합니다.
+
+`@bunaway/plugin-windows`를 설치하고 앱의 `plugins`에 `windows`를 등록합니다. 명령 핸들러나 setup은 이 패키지의 `windows`를 호출합니다. 화면에서도 같은 경로를 import하며 해당 뷰의 commands에 `plugin.windows.<작업>`을 허용해야 합니다.
 
 창 제어 플러그인은 Windows와 macOS에서 실행합니다. macOS는 `list`, `create`, `recreate`,
 `show`, `hide`, `focus`, `close`, `isVisible`, `isFocused`, `isDestroyed`와
@@ -15,8 +17,8 @@ description: 창 제어와 조회, geometry, 네이티브 창 이벤트 및 구�
 
 ```ts
 import { defineApp } from "@bunaway/backend";
-import { windowsPlugin } from "@bunaway/plugin-windows";
-export default defineApp({ modules: [], plugins: [windowsPlugin] });
+import windows from "@bunaway/plugin-windows";
+export default defineApp({ modules: [], plugins: [windows] });
 ```
 
 ## WebView audio
@@ -162,7 +164,7 @@ await windows.showPrintUI({ view: "main", kind: "system" });
 
 ### WebView 다운로드 승인과 수명
 
-Windows WebView 다운로드는 기본적으로 거부합니다. windowsPlugin을 등록하지 않은 앱에도
+Windows WebView 다운로드는 기본적으로 거부합니다. `windows`를 등록하지 않은 앱에도
 같은 기본값을 적용합니다. 신뢰된 backend setup은 `windows.setDownloadRequestsEnabled`
 작업 권한으로 `{ view, windowId?, enabled: true }`를 호출해 요청 수집을 시작합니다.
 수집은 승인과 다릅니다. 각 항목은 명시적으로 승인하기 전까지 파일을 만들지 않습니다.
@@ -733,7 +735,7 @@ operation 권한을 따로 요구하며 닫힌 창은 `INVALID_ARGUMENT`입니�
 명령 핸들러나 setup 안에서 다음과 같이 조회합니다.
 
 ```ts
-import { windows } from "@bunaway/plugin-windows";
+import windows from "@bunaway/plugin-windows";
 
 // 아래 호출은 명령 핸들러 또는 setup 내부에 둡니다.
 const content = await windows.getContentSize({ view: "editor", unit: "logical" });
@@ -873,7 +875,7 @@ await windows.unmaximize({ view: "editor" });
 
 `windows.changed`와 `windows.getSnapshot`은 현재 Windows에서 지원합니다.
 
-`windowsPlugin`은 `windows.changed`와 `windows.readiness`를 등록합니다. 기존 `client.listen`과 직접 함수
+`windows`는 `windows.changed`와 `windows.readiness`를 등록합니다. 기존 `client.listen`과 직접 함수
 `listen`으로 구독하며, 이벤트 payload 타입은 앱의 `EventsOf`에서 추론합니다.
 `windows.changed`는 생성한 창의 정책 뷰에만 전달합니다. 다른 창을 제어하도록 허용해도
 그 창의 changed 이벤트가 호출한 뷰로 전달되지는 않습니다. `windows.readiness`의 수신 대상은
@@ -950,7 +952,7 @@ API 호출과 사용자 조작은 같은 네이티브 관찰 경로를 사용합
 
 ```ts
 import { createClient } from "@bunaway/client";
-import { windows, type WindowOutput } from "@bunaway/plugin-windows";
+import windows, { type WindowOutput } from "@bunaway/plugin-windows";
 import type { CommandsOf, EventsOf } from "@bunaway/backend";
 import type app from "../../src-bunaway/app";
 
@@ -1096,7 +1098,7 @@ revision의 응답을 버리세요. 탐색이나 문서 재생성 뒤에도 구�
 import { createClient } from "@bunaway/client";
 import type { CommandsOf, EventsOf } from "@bunaway/backend";
 import type { app } from "../../src-bunaway/app";
-import { windows, type MonitorSnapshot } from "@bunaway/plugin-windows";
+import windows, { type MonitorSnapshot } from "@bunaway/plugin-windows";
 
 const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
 await client.ready;

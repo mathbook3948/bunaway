@@ -3,7 +3,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
-import { openerPlugin } from "@bunaway/plugin-opener";
+import opener from "@bunaway/plugin-opener";
 import type { HostContext, HostResponse } from "@bunaway/protocol";
 import { Channel } from "#native/windows/bun/channel";
 import { bundleIOPluginFixture } from "../fixtures/native-worker.ts";
@@ -33,7 +33,7 @@ import { dlopen, ptr } from "bun:ffi";
 import { parentPort } from "node:worker_threads";
 import { createShell } from ${JSON.stringify(shellModule)};
 import definition from ${JSON.stringify(operationsModule)};
-const createOperations = definition.nativePlatforms.windows.create;
+const createOperations = definition._definition.nativePlatforms.windows.create;
 import { createFiles } from ${JSON.stringify(resolve("plugins/opener/src/windows-file.ts"))};
 import { writeFileSync, mkdirSync, linkSync, symlinkSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
@@ -198,8 +198,8 @@ test.skipIf(process.platform !== "win32")(
       [
         {
           name: "opener",
-          version: openerPlugin.version,
-          native: openerPlugin.native,
+          version: opener._definition.version,
+          native: opener._definition.native,
           thread: "worker",
         },
       ],
@@ -215,7 +215,7 @@ const apartmentType = () => ole.symbols.CoGetApartmentType(ptr(apartment), ptr(q
 export const pluginImports = { opener: {
   operations: async () => {
     const { default: definition } = await import(${JSON.stringify(operationsModule)});
-    const createOperations = definition.nativePlatforms.windows.create;
+    const createOperations = definition._definition.nativePlatforms.windows.create;
     return { createOperations(environment) {
       assert(apartmentType() < 0, "I/O worker must start without COM initialization");
       const adapter = createOperations(environment);
@@ -247,9 +247,9 @@ export const pluginImports = { opener: {
           assets: dataRoot,
           plugins: [
             {
-              name: openerPlugin.name,
-              version: openerPlugin.version,
-              native: openerPlugin.native,
+              name: opener._definition.name,
+              version: opener._definition.version,
+              native: opener._definition.native,
             },
           ],
         },

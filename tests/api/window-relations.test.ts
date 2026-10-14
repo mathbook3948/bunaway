@@ -3,10 +3,9 @@ import type {
   NativeWindow,
   NativeWindowServices,
 } from "@bunaway/plugin-api/native";
-import {
+import windows, {
   validateWindowCall,
   validateWindowOutput,
-  windowsPlugin,
 } from "@bunaway/plugin-windows";
 import { type JsonValue, NativeRegistry, type Policy } from "@bunaway/protocol";
 import { createOperations } from "#plugins/windows/src/platforms/windows";
@@ -278,7 +277,7 @@ test("ownership uses independent operation grants and rejects expired IDs", asyn
 
 test("ownership and enabled contracts reject malformed external inputs and outputs", () => {
   const registry = new NativeRegistry([
-    windowsPlugin,
+    windows._definition,
   ]);
   expect(registry.operation("windows.destroy").name).toBe("windows.destroy");
   for (const input of [

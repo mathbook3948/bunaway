@@ -4,11 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type CommandContext, defineApp } from "@bunaway/backend";
 import type { WindowReadiness } from "@bunaway/plugin-api/native";
-import {
-  windowReadinessSchema,
-  windows,
-  windowsPlugin,
-} from "@bunaway/plugin-windows";
+import windows, { windowReadinessSchema } from "@bunaway/plugin-windows";
 import {
   type HostContext,
   type Policy,
@@ -519,7 +515,7 @@ if (!process.argv.includes("--child")) {
   const app = defineApp({
     modules: [],
     plugins: [
-      windowsPlugin,
+      windows,
       {
         name: "readiness-test",
         version: "1.0.0",

@@ -6,6 +6,12 @@ import type { autostartOperations } from "./operations.ts";
 export function createAutostart(
   api: NativePluginAPI<typeof autostartOperations>,
 ) {
+  /**
+   * Replace this app's Run value with the host-selected launch and these app arguments.
+   * Adds invocation metadata and optionally starts hidden when desktop.tray is configured.
+   * Preserves Windows startup approval, including the user's disabled choice.
+   * Rejects a complete encoded command line longer than 260 UTF-16 code units.
+   */
   function enableAutostart(
     settings: string[] | AutostartOptions = [],
     options?: NativeInvokeOptions,
@@ -25,10 +31,12 @@ export function createAutostart(
     );
   }
 
+  /** Delete only this app's Run value. Repeated removal succeeds; approval is not changed. */
   function disableAutostart(options?: NativeInvokeOptions): Promise<null> {
     return api.disable(null, options);
   }
 
+  /** Read the real stored path and arguments without repairing or enabling the registration. */
   function getAutostartStatus(
     options?: NativeInvokeOptions,
   ): Promise<AutostartStatus> {

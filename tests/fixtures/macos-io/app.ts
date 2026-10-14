@@ -2,7 +2,7 @@ import { existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineApp } from "@bunaway/backend";
 import type { CommandContext } from "@bunaway/core";
-import { windowsPlugin } from "@bunaway/plugin-windows";
+import windows from "@bunaway/plugin-windows";
 import { probe } from "./probe.ts";
 
 let phase = 0;
@@ -13,13 +13,13 @@ if (!temporary) {
 export default defineApp({
   modules: [],
   plugins: [
-    probe.definition,
-    windowsPlugin,
+    probe._definition,
+    windows,
     {
       name: "setup-probe",
       version: "1",
       async setup() {
-        const result = await probe.api.run({
+        const result = await probe.run({
           id: "setup",
           mode: "normal",
         });
@@ -34,7 +34,7 @@ export default defineApp({
             return;
           }
           clearInterval(watcher);
-          pending = probe.api
+          pending = probe
             .run({
               id: "shutdown",
               mode: "wait-abort",

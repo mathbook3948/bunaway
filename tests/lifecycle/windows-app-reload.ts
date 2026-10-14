@@ -72,9 +72,9 @@ await writeFile(
   `
 import { command, defineApp } from "@bunaway/backend";
 import { BunawayError } from "@bunaway/plugin";
-import { storage, storagePlugin } from "@bunaway/plugin-storage";
+import storage from "@bunaway/plugin-storage";
 import { version, step, called } from "../shared/counter.ts";
-export const app = defineApp({ modules: [], plugins: [storagePlugin], state: { count: 0 },
+export const app = defineApp({ modules: [], plugins: [storage], state: { count: 0 },
   events: { "counter.changed": { type: "integer" } as const, ...(version === 3 ? { "counter.extra": { type: "integer" } as const } : {}) },
   commands: {
     "counter.read": command({ input: { const: null } as const, output: {}, handle(_input, context) {

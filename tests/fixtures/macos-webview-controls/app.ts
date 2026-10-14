@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import { type CommandContext, defineApp } from "@bunaway/backend";
-import { windows, windowsPlugin } from "@bunaway/plugin-windows";
+import windows from "@bunaway/plugin-windows";
 import { BunawayError } from "@bunaway/protocol";
 import { controlsClientReadiness } from "./readiness.ts";
 
@@ -308,7 +308,7 @@ export function controlsApp(origin: string, outside: string) {
     modules: [],
     events: {},
     plugins: [
-      windowsPlugin,
+      windows,
       {
         name: "controls-fixture",
         version: "1.0.0",

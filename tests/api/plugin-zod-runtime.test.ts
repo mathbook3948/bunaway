@@ -271,13 +271,13 @@ test("host forwarding runs each parser once and adapters receive parsed input", 
     },
   });
   expect(inputCalls + outputCalls + executions).toBe(0);
-  const registration = JSON.parse(JSON.stringify(plugin.definition));
+  const registration = JSON.parse(JSON.stringify(plugin._definition));
   expect(registration.native.operations).toEqual([
     {
       name: "counter.increment",
     },
   ]);
-  const target = plugin.definition.nativePlatforms.windows;
+  const target = plugin._definition.nativePlatforms.windows;
   if (!target) {
     throw new Error("Missing platform");
   }
@@ -382,7 +382,7 @@ test("UI adapters preserve this, cancellation context, lifecycle and safe parser
     },
   });
   const adapter =
-    plugin.definition.nativePlatforms.windows?.create(environment);
+    plugin._definition.nativePlatforms.windows?.create(environment);
   if (!adapter?.executeUI) {
     throw new Error("Missing UI adapter");
   }
@@ -429,7 +429,7 @@ test("UI adapters preserve this, cancellation context, lifecycle and safe parser
     },
   });
   const failed =
-    invalid.definition.nativePlatforms.windows?.create(environment);
+    invalid._definition.nativePlatforms.windows?.create(environment);
   await expect(failed?.execute("bad.echo", "ok", "view")).rejects.toThrow(
     expect.objectContaining({
       code: "INTERNAL",
@@ -524,7 +524,7 @@ test("JSON guards run before callbacks and validate transformed values before ex
     },
   });
   await expect(
-    plugin.definition.nativePlatforms.windows
+    plugin._definition.nativePlatforms.windows
       ?.create(environment)
       .execute("bad.echo", "ok", "view"),
   ).rejects.toThrow(
@@ -547,11 +547,11 @@ test("plugin caller types follow original input and parsed output", () => {
       },
     },
   });
-  expectTypeOf<Parameters<typeof plugin.api.run>[0]>().toEqualTypeOf<{
+  expectTypeOf<Parameters<typeof plugin.run>[0]>().toEqualTypeOf<{
     name?: string | undefined;
   }>();
   expectTypeOf<
-    Awaited<ReturnType<typeof plugin.api.run>>
+    Awaited<ReturnType<typeof plugin.run>>
   >().toEqualTypeOf<string>();
 });
 
@@ -627,7 +627,7 @@ test("asynchronous refinements and transforms are awaited once at both boundarie
     },
   });
   const adapter =
-    plugin.definition.nativePlatforms.windows?.create(environment);
+    plugin._definition.nativePlatforms.windows?.create(environment);
   if (!adapter) {
     throw new Error("Missing adapter");
   }
@@ -701,7 +701,7 @@ test("UI cancellation or disposal during input parsing prevents native execution
       },
     });
     const adapter =
-      plugin.definition.nativePlatforms.windows?.create(environment);
+      plugin._definition.nativePlatforms.windows?.create(environment);
     if (!adapter?.executeUI) {
       throw new Error("Missing adapter");
     }

@@ -4,16 +4,17 @@ import {
   type JsonValue,
   NativeRegistry,
 } from "@bunaway/protocol";
-import { openerPlugin } from "../../plugins/opener/src/index.ts";
 import createOperationsDefinition from "../../plugins/opener/src/index.ts";
+import opener from "../../plugins/opener/src/index.ts";
 import { nativeFactory as createOperationsFactory } from "./native-platform.ts";
+
 const createOperations = createOperationsFactory(
   createOperationsDefinition,
   "macos",
 );
 
 const registry = new NativeRegistry([
-  openerPlugin,
+  opener._definition,
 ]);
 const adapter = createOperations({
   dataRoot: "/private/tmp",

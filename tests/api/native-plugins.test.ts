@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { bindHostAPI, type CoreServices, createCore } from "@bunaway/core";
 import { defineNativePlugin } from "@bunaway/plugin";
 import { PLATFORMS } from "@bunaway/plugin-api";
-import { storagePlugin } from "@bunaway/plugin-storage";
+import storage from "@bunaway/plugin-storage";
 import {
   type HostContext,
   MAX_MESSAGE_BYTES,
@@ -44,8 +44,8 @@ test.each([
       },
     },
   });
-  expect(plugin.definition.nativePlatforms[platform]?.create).not.toBe(create);
-  expect(plugin.definition.nativePlatforms[platform]?.thread).toBe("worker");
+  expect(plugin._definition.nativePlatforms[platform]?.create).not.toBe(create);
+  expect(plugin._definition.nativePlatforms[platform]?.thread).toBe("worker");
   expect(Object.isFrozen(PLATFORMS)).toBe(true);
 });
 
@@ -75,22 +75,24 @@ test("platform declarations remain detached from Core platform restrictions and 
     },
   };
   const plugin = defineNativePlugin(definition);
-  expect(plugin.definition.version).toBe("development");
-  expect(Object.hasOwn(plugin.definition, "platforms")).toBe(false);
-  expect(plugin.definition.nativePlatforms.windows?.create).not.toBe(create);
+  expect(plugin._definition.version).toBe("development");
+  expect(Object.hasOwn(plugin._definition, "platforms")).toBe(false);
+  expect(plugin._definition.nativePlatforms.windows?.create).not.toBe(create);
   expect(
     Object.keys(
-      structuredClone(plugin.definition.nativePlatforms).windows ?? {},
+      structuredClone(plugin._definition.nativePlatforms).windows ?? {},
     ),
   ).toEqual([
     "thread",
     "operations",
   ]);
   supported.push("missing");
-  expect(plugin.definition.nativePlatforms.windows?.operations).toEqual([
+  expect(plugin._definition.nativePlatforms.windows?.operations).toEqual([
     "read",
   ]);
-  expect(Object.isFrozen(plugin.definition.nativePlatforms.windows)).toBe(true);
+  expect(Object.isFrozen(plugin._definition.nativePlatforms.windows)).toBe(
+    true,
+  );
   for (const platforms of [
     {
       windows: [],
@@ -200,9 +202,9 @@ test("short declarations generate strict schemas and independently granted opera
     repeat: operation,
   });
   const registry = new NativeRegistry([
-    plugin.definition,
+    plugin._definition,
   ]);
-  const payload: Parameters<typeof plugin.api.write>[0] = {
+  const payload: Parameters<typeof plugin.write>[0] = {
     level: "info",
     message: "ok",
     nested: {
@@ -213,7 +215,7 @@ test("short declarations generate strict schemas and independently granted opera
       ],
     },
   };
-  expect(Object.keys(plugin.api)).toEqual([
+  expect(Object.keys(plugin)).toEqual([
     "write",
     "repeat",
   ]);
@@ -320,7 +322,7 @@ test("short declarations generate strict schemas and independently granted opera
       operations: {
         toString: operation,
       },
-    }).definition.native.operations[0]?.name,
+    })._definition.native.operations[0]?.name,
   ).toBe("audit.toString");
 });
 export function checkShortDeclarationTypes() {
@@ -340,21 +342,21 @@ export function checkShortDeclarationTypes() {
       },
     },
   });
-  const result: Promise<null> = plugin.api.write({
+  const result: Promise<null> = plugin.write({
     level: "info",
     message: "ok",
   });
   void result;
   // @ts-expect-error required fields remain required
-  plugin.api.write({
+  plugin.write({
     level: "info",
   });
-  plugin.api.write({
+  plugin.write({
     // @ts-expect-error enum literals remain restricted
     level: "debug",
     message: "ok",
   });
-  plugin.api.write({
+  plugin.write({
     level: "info",
     message: "ok",
     // @ts-expect-error optional fields must still be JSON
@@ -371,11 +373,11 @@ export function checkShortDeclarationTypes() {
       },
     },
   });
-  void numeric.api[0]({
+  void numeric[0]({
     0: "ok",
   });
   // @ts-expect-error numeric object keys are required too
-  numeric.api[0]({});
+  numeric[0]({});
 }
 const empty: Policy = {
   version: 1,
@@ -421,11 +423,11 @@ test("plugin patterns use Unicode semantics for input and output", async () => {
       },
     };
     new NativeRegistry([
-      plugin.definition,
+      plugin._definition,
     ]).validatePolicy(policy);
     expect(
       new NativeRegistry([
-        plugin.definition,
+        plugin._definition,
       ]).allowed(policy.backend, call),
     ).toBe(true);
   }
@@ -555,7 +557,7 @@ test("plugin results exceeding the Web envelope return INTERNAL and keep the ses
       commands: {},
       events: {},
       plugins: [
-        plugin.definition,
+        plugin._definition,
       ],
     },
     adapter,
@@ -693,10 +695,10 @@ test("backend host calls strip object fields before adapter execution and after 
     },
   });
   const registry = new NativeRegistry([
-    JSON.parse(JSON.stringify(plugin.definition)),
+    JSON.parse(JSON.stringify(plugin._definition)),
   ]);
   const operation = registry.operation("example.echo");
-  const adapter = plugin.definition.nativePlatforms.windows?.create({
+  const adapter = plugin._definition.nativePlatforms.windows?.create({
     dataRoot: ".",
     capabilities: [],
   });
@@ -730,8 +732,8 @@ test("backend host calls strip object fields before adapter execution and after 
 
 test("operation registration snapshots names and rejects schema or permission overrides", async () => {
   const plugin = {
-    ...storagePlugin,
-    native: structuredClone(storagePlugin.native),
+    ...storage._definition,
+    native: structuredClone(storage._definition.native),
   };
   const registry = new NativeRegistry([
     plugin,
@@ -763,7 +765,7 @@ test("operation registration snapshots names and rejects schema or permission ov
       () =>
         new NativeRegistry([
           {
-            ...storagePlugin,
+            ...storage._definition,
             native: {
               operations: [
                 operation,
@@ -851,7 +853,7 @@ test("native operation contracts reject separate permission and OS consent metad
     },
   ]) {
     const invalid = {
-      ...storagePlugin,
+      ...storage._definition,
       native: {
         operations: [
           {
@@ -871,7 +873,7 @@ test("native operation contracts reject separate permission and OS consent metad
 });
 test("operation grants contain names only and apply independently of app resource rules", () => {
   const registry = new NativeRegistry([
-    storagePlugin,
+    storage._definition,
   ]);
   const policy: Policy = {
     ...empty,

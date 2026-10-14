@@ -91,4 +91,4 @@ Windows 저장 위치는 `%LOCALAPPDATA%/bunaway/examples.bunaway.memo/data/note
 
 여러 창, 읽기 전용 권한, 자동 저장, 재실행 시나리오는 `tests/fixtures/desktop/host/`에 분리되어 있다.
 
-이 예제는 @bunaway/plugin-storage를 별도 설치하고 app.ts의 plugins에 storagePlugin을 등록한다. policy v1의 permissions에서 storage.readText와 storage.writeText를 허용하고 앱 명령이 notes 저장 경로를 정한다. 현재 네이티브 실행은 Windows에서 검증했다.
+이 예제는 @bunaway/plugin-storage를 별도 설치하고 app.ts의 plugins에 `storage`를 등록한다. policy v1의 permissions에서 storage.readText와 storage.writeText를 허용하고 앱 명령이 notes 저장 경로를 정한다. 현재 네이티브 실행은 Windows에서 검증했다.

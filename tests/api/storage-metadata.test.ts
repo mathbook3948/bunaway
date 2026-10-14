@@ -1,11 +1,7 @@
 import { expect, test } from "bun:test";
 import { type CommandContext, command } from "@bunaway/backend";
 import type { CoreServices } from "@bunaway/core";
-import {
-  type StorageMetadata,
-  storage,
-  storagePlugin,
-} from "@bunaway/plugin-storage";
+import storage, { type StorageMetadata } from "@bunaway/plugin-storage";
 import { NativeRegistry } from "@bunaway/protocol";
 import { windowsOperations } from "../../plugins/storage/src/platforms/windows-operations.ts";
 import { bindHostAPI } from "../fixtures/host-plugins.ts";
@@ -41,7 +37,7 @@ const directoryMetadata: Extract<
   accessedAtMs: null,
 };
 const registry = new NativeRegistry([
-  storagePlugin,
+  storage._definition,
 ]);
 
 function checkMetadataNarrowing(value: StorageMetadata | null): void {

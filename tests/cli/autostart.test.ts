@@ -46,8 +46,8 @@ test("isolated autostart package ships the I/O adapter but keeps FFI out of the 
     await writeFile(
       resolve(project, "src-bunaway/app.ts"),
       `import { defineApp } from "@bunaway/backend";
-import { autostartPlugin } from "@bunaway/plugin-autostart";
-export default defineApp({ modules: [], plugins: [autostartPlugin] });
+import autostart from "@bunaway/plugin-autostart";
+export default defineApp({ modules: [], plugins: [autostart] });
 `,
     );
     await writeJson(resolve(project, "src-bunaway/policy.json"), {
@@ -106,8 +106,8 @@ export default defineApp({ modules: [], plugins: [autostartPlugin] });
     const browserEntry = resolve(project, "autostart-browser.ts");
     await writeFile(
       browserEntry,
-      `import { getAutostartStatus } from "@bunaway/plugin-autostart";
-void getAutostartStatus();
+      `import autostart from "@bunaway/plugin-autostart";
+void autostart.getAutostartStatus();
 `,
     );
     const browser = await Bun.build({

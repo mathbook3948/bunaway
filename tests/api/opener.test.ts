@@ -1,13 +1,7 @@
 import { expect, test } from "bun:test";
 import type { CommandContext } from "@bunaway/plugin-api";
 import { bindCommandHost } from "@bunaway/plugin-api/host";
-import {
-  openerPlugin,
-  openFile,
-  openUrl,
-  revealFile,
-  trashFile,
-} from "@bunaway/plugin-opener";
+import opener from "@bunaway/plugin-opener";
 import {
   type HostCall,
   type HostContext,
@@ -16,16 +10,16 @@ import {
   type Policy,
 } from "@bunaway/protocol";
 import { bindHostAPI } from "#core/host-api";
+import createOperationsDefinition from "#plugins/opener/src/index";
 import { windowsOperations as openerOperations } from "#plugins/opener/src/operations";
 import {
   MAX_FILE_PATH_LENGTH,
   normalizeFilePath,
 } from "#plugins/opener/src/path";
-import createOperationsDefinition from "#plugins/opener/src/index";
-import { nativeFactory as createOperationsFactory } from "../fixtures/native-platform.ts";
-
 import { MAX_URL_LENGTH, normalizeUrl } from "#plugins/opener/src/url";
+import { nativeFactory as createOperationsFactory } from "../fixtures/native-platform.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
+
 const createOperations = createOperationsFactory(
   createOperationsDefinition,
   "windows",
@@ -40,7 +34,7 @@ const emptyPolicy: Policy = {
 };
 const parsers = pluginParsers("opener", openerOperations);
 const registry = new NativeRegistry([
-  openerPlugin,
+  opener._definition,
 ]);
 const operation = registry.operation("opener.openUrl");
 test("file paths preserve Unicode and spaces and normalize separators and drive letters", () => {
@@ -163,22 +157,22 @@ test("public file APIs use caller context and preserve OS failure codes", async 
       const: null,
     },
     run: async (_payload: unknown, _context: CommandContext) => {
-      expect(await openFile(path.replaceAll("\\", "/"))).toBeNull();
-      expect(await revealFile(path)).toBeNull();
-      expect(await trashFile(path)).toBeNull();
-      expect(await openFile('/private/tmp/한글 값,".txt')).toBeNull();
-      expect(await revealFile('/private/tmp/한글 값,".txt')).toBeNull();
+      expect(await opener.openFile(path.replaceAll("\\", "/"))).toBeNull();
+      expect(await opener.revealFile(path)).toBeNull();
+      expect(await opener.trashFile(path)).toBeNull();
+      expect(await opener.openFile('/private/tmp/한글 값,".txt')).toBeNull();
+      expect(await opener.revealFile('/private/tmp/한글 값,".txt')).toBeNull();
       denied = true;
-      await expect(openFile(path)).rejects.toMatchObject({
+      await expect(opener.openFile(path)).rejects.toMatchObject({
         code: "PERMISSION_DENIED",
       });
-      await expect(trashFile(path)).rejects.toMatchObject({
+      await expect(opener.trashFile(path)).rejects.toMatchObject({
         code: "PERMISSION_DENIED",
       });
-      await expect(revealFile("relative.txt")).rejects.toMatchObject({
+      await expect(opener.revealFile("relative.txt")).rejects.toMatchObject({
         code: "INVALID_ARGUMENT",
       });
-      await expect(trashFile("relative.txt")).rejects.toMatchObject({
+      await expect(opener.trashFile("relative.txt")).rejects.toMatchObject({
         code: "INVALID_ARGUMENT",
       });
       return null;
@@ -232,7 +226,7 @@ test("public file APIs use caller context and preserve OS failure codes", async 
 test("opener preserves strict inputs and independently granted file operations", async () => {
   expect(operation.name).toBe("opener.openUrl");
   expect(
-    openerPlugin.native?.operations.map(({ name }) => ({
+    opener._definition.native?.operations.map(({ name }) => ({
       name,
     })),
   ).toEqual([
@@ -414,7 +408,7 @@ test("openUrl uses the caller host, and the registered permission controls it", 
         const: null,
       },
       run: async (_payload: unknown, _context: CommandContext) => {
-        await openUrl(url);
+        await opener.openUrl(url);
         return null;
       },
     });
@@ -477,7 +471,7 @@ test("openUrl preserves a native host execution failure", async () => {
       const: null,
     },
     run: async (_payload: unknown, _context: CommandContext) => {
-      await openUrl("https://example.com/");
+      await opener.openUrl("https://example.com/");
       return null;
     },
   });

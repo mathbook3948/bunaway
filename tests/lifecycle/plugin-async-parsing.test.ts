@@ -80,7 +80,7 @@ test.each([
           return execute(input);
         }}}}}})
       : defineNativePlugin({name:"async", operations:definitions,platforms:{windows:{thread:"worker",create}}});
-    export const pluginImports = {async:{operations:async()=>({createOperations:plugin.definition.nativePlatforms.windows.create})}};
+    export const pluginImports = {async:{operations:async()=>({createOperations:plugin._definition.nativePlatforms.windows.create})}};
   `,
     );
     const state = new Int32Array(

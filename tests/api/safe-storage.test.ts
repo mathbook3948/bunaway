@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { safeStoragePlugin } from "@bunaway/plugin-safe-storage";
+import safeStorage from "@bunaway/plugin-safe-storage";
 import { NativeRegistry, serializeHostResponse } from "@bunaway/protocol";
 import { safeStorageLimits } from "../../plugins/safe-storage/src/contract.ts";
 import { safeStorageOperations } from "../../plugins/safe-storage/src/operations.ts";
@@ -9,7 +9,7 @@ const parsers = pluginParsers("safe-storage", safeStorageOperations);
 
 test("data protection requires independent operation grants and reports platform support", () => {
   const registry = new NativeRegistry([
-    safeStoragePlugin,
+    safeStorage._definition,
   ]);
   for (const name of registry.operations.keys()) {
     for (const allowed of registry.operations.keys()) {
@@ -28,15 +28,17 @@ test("data protection requires independent operation grants and reports platform
       ).toBe(name === allowed);
     }
   }
-  expect(safeStoragePlugin.nativePlatforms.windows?.thread).toBe("worker");
-  expect(Object.keys(safeStoragePlugin.nativePlatforms)).toEqual([
+  expect(safeStorage._definition.nativePlatforms.windows?.thread).toBe(
+    "worker",
+  );
+  expect(Object.keys(safeStorage._definition.nativePlatforms)).toEqual([
     "macos",
     "windows",
   ]);
-  expect(safeStoragePlugin.nativePlatforms.macos?.operations).toEqual(
+  expect(safeStorage._definition.nativePlatforms.macos?.operations).toEqual(
     Object.keys(safeStorageOperations),
   );
-  expect(safeStoragePlugin.nativePlatforms.windows?.operations).toEqual(
+  expect(safeStorage._definition.nativePlatforms.windows?.operations).toEqual(
     Object.keys(safeStorageOperations),
   );
   expect(() =>

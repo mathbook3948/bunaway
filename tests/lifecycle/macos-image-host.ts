@@ -33,12 +33,12 @@ try {
     `
 import assert from "node:assert/strict";
 import { defineApp } from ${JSON.stringify(backend)};
-import { image, imagePlugin } from ${JSON.stringify(image)};
-import { windowsPlugin } from ${JSON.stringify(windows)};
+import image from ${JSON.stringify(image)};
+import windows from ${JSON.stringify(windows)};
 let setupId;
 let sharedId;
 let deniedResult;
-export default defineApp({ modules: [], plugins: [imagePlugin, windowsPlugin, {
+export default defineApp({ modules: [], plugins: [image, windows, {
   name: "image-setup", version: "1", async setup() {
     setupId = (await image.createRGBA({ width: 0, height: 0, rgba: "" })).id;
   }
@@ -215,8 +215,8 @@ export default defineApp({ modules: [], plugins: [imagePlugin, windowsPlugin, {
   await Bun.write(
     source,
     `import { createClient } from ${JSON.stringify(client)};
-import { image } from ${JSON.stringify(image)};
-import { windows } from ${JSON.stringify(windows)};
+import image from ${JSON.stringify(image)};
+import windows from ${JSON.stringify(windows)};
 const close = async (view) => {
   try { await windows.close({ view }); } catch (error) {
     if (error?.code !== "CANCELLED") throw error;
@@ -278,9 +278,10 @@ if (location.pathname === "/reader.html") {
   await Bun.write(
     heldEntry,
     `
-import definition from ${JSON.stringify(resolve(root, "plugins/image/dist/native/macos.js"))};
+import plugin from ${JSON.stringify(resolve(root, "plugins/image/dist/native/macos.js"))};
+const definition = plugin._definition;
 import { writeFileSync } from "node:fs";
-export default { ...definition, nativePlatforms: { ...definition.nativePlatforms,
+export default { _definition: { ...definition, nativePlatforms: { ...definition.nativePlatforms,
   macos: { thread: "worker", create(environment) {
     const adapter = definition.nativePlatforms.macos.create(environment);
     const prepare = adapter.prepare.bind(adapter);
@@ -299,7 +300,7 @@ export default { ...definition, nativePlatforms: { ...definition.nativePlatforms
       };
     } };
   } }
-} };
+} } };
 `,
   );
   const fixturePlugins = installed.map((plugin) =>

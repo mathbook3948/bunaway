@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { windowsPlugin } from "@bunaway/plugin-windows";
+import windows from "@bunaway/plugin-windows";
 import { BunawayError } from "@bunaway/protocol";
 import { MacosWebviewControls } from "#native/macos/bun/webview-controls";
 
@@ -92,7 +92,7 @@ function fixture() {
 }
 
 test("macOS registers only implemented public WebView controls", () => {
-  const operations = windowsPlugin.nativePlatforms.macos?.operations;
+  const operations = windows._definition.nativePlatforms.macos?.operations;
   for (const name of [
     "getWebViewState",
     "navigateWebView",

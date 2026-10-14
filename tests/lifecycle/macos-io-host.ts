@@ -94,11 +94,11 @@ try {
       (plugin) => plugin.name === "windows",
     ),
     {
-      name: probe.definition.name,
-      version: probe.definition.version,
+      name: probe._definition.name,
+      version: probe._definition.version,
       packageName: "fixture-probe",
       root,
-      native: probe.definition.native,
+      native: probe._definition.native,
       targets: {
         macos: {
           thread: "worker",

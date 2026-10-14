@@ -1,5 +1,5 @@
-import { storagePlugin } from "@bunaway/plugin-storage";
 import type { AppDefinition } from "@bunaway/core";
+import storage from "@bunaway/plugin-storage";
 import { contracts } from "../../host-plugins.ts";
 import { dataPath } from "./paths.ts";
 
@@ -12,7 +12,7 @@ export const memoApp = {
     },
   },
   plugins: [
-    storagePlugin,
+    storage._definition,
   ],
   commands: {
     "memo.save": {

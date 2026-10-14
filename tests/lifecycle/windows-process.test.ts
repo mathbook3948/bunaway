@@ -6,11 +6,8 @@ import { join, resolve } from "node:path";
 import { defineApp, defineModule } from "@bunaway/backend";
 import { createClient } from "@bunaway/client";
 import { type CoreServices, createCore } from "@bunaway/core";
-import {
-  processPlugin as processDefinition,
-  processes,
-} from "@bunaway/plugin-process";
-import { processPlugin } from "@bunaway/plugin-process/native/windows";
+import processes from "@bunaway/plugin-process";
+import nativeProcesses from "@bunaway/plugin-process/native/windows";
 import {
   BunawayError,
   type ClientMessage,
@@ -27,7 +24,7 @@ test.skipIf(process.platform !== "win32")(
   async () => {
     const root = await mkdtemp(join(tmpdir(), "bunaway-public-process-"));
     const pidFile = join(root, "pid");
-    const platform = processPlugin.nativePlatforms.windows;
+    const platform = nativeProcesses._definition.nativePlatforms.windows;
     assert(platform);
     const adapter = platform.create({
       dataRoot: root,
@@ -148,7 +145,7 @@ test.skipIf(process.platform !== "win32")(
     const core = await createCore(
       defineApp({
         plugins: [
-          processDefinition,
+          processes,
         ],
         modules: [
           module,
@@ -219,7 +216,7 @@ test.skipIf(process.platform !== "win32")(
 test.skipIf(process.platform !== "win32")(
   "generated Windows argv adapter handles completion, timeout, capacity and repeated disposal",
   async () => {
-    const platform = processPlugin.nativePlatforms.windows;
+    const platform = nativeProcesses._definition.nativePlatforms.windows;
     assert(platform);
     const adapter = platform.create({
       dataRoot: ".",

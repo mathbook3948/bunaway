@@ -85,21 +85,21 @@ test("platform operations infer caller schemas, state and event literals", async
       },
     },
   });
-  expectTypeOf<Parameters<typeof plugin.api.run>[0]>().toEqualTypeOf<string>();
+  expectTypeOf<Parameters<typeof plugin.run>[0]>().toEqualTypeOf<string>();
   expectTypeOf<
-    Awaited<ReturnType<typeof plugin.api.run>>
+    Awaited<ReturnType<typeof plugin.run>>
   >().toEqualTypeOf<string>();
-  expectTypeOf<typeof plugin.definition.name>().toEqualTypeOf<"typed">();
+  expectTypeOf<typeof plugin._definition.name>().toEqualTypeOf<"typed">();
   expectTypeOf<
-    (typeof plugin.definition.events)["typed.changed"]["type"]
+    (typeof plugin._definition.events)["typed.changed"]["type"]
   >().toEqualTypeOf<"string">();
-  expect(plugin.definition.nativePlatforms.windows?.thread).toBe("worker");
-  expect(plugin.definition.nativePlatforms.macos?.thread).toBe("ui");
+  expect(plugin._definition.nativePlatforms.windows?.thread).toBe("worker");
+  expect(plugin._definition.nativePlatforms.macos?.thread).toBe("ui");
   for (const os of [
     "windows",
     "macos",
   ] as const) {
-    const target = plugin.definition.nativePlatforms[os];
+    const target = plugin._definition.nativePlatforms[os];
     assert(target);
     expect(target.operations).toEqual([
       "run",
@@ -116,7 +116,7 @@ test("platform operations infer caller schemas, state and event literals", async
 });
 
 test("each platform parses its own schemas and the public API collects operation names", async () => {
-  const { definition, api } = defineNativePlugin({
+  const api = defineNativePlugin({
     name: "local",
     platforms: {
       windows: {
@@ -154,8 +154,8 @@ test("each platform parses its own schemas and the public API collects operation
     "run",
     "macOnly",
   ]);
-  const windows = definition.nativePlatforms.windows?.create(environment);
-  const macos = definition.nativePlatforms.macos?.create(environment);
+  const windows = api._definition.nativePlatforms.windows?.create(environment);
+  const macos = api._definition.nativePlatforms.macos?.create(environment);
   assert(windows && macos);
   try {
     expect(await windows.execute("local.run", "hello", "backend")).toBe(
@@ -228,7 +228,7 @@ test("support is static and per-instance parsing, context and cleanup run once",
       ) => instance.count,
     },
   };
-  const { definition } = defineNativePlugin({
+  const { _definition: definition } = defineNativePlugin({
     name: "demo",
     platforms: {
       windows: {
@@ -293,7 +293,7 @@ test("support is static and per-instance parsing, context and cleanup run once",
 });
 
 test("stateless operations retain safe input and output errors", async () => {
-  const { definition } = defineNativePlugin({
+  const { _definition: definition } = defineNativePlugin({
     name: "stateless",
     platforms: {
       windows: {
@@ -421,7 +421,7 @@ test("invalid platform operations and mixed authoring styles fail before initial
 
 test("synchronous cleanup failures remain observable and retryable", async () => {
   let cleanups = 0;
-  const { definition } = defineNativePlugin({
+  const { _definition: definition } = defineNativePlugin({
     name: "cleanup",
     platforms: {
       windows: {
@@ -449,7 +449,7 @@ test("synchronous cleanup failures remain observable and retryable", async () =>
 test("concurrent cleanup shares pending work, retries rejection and retains success", async () => {
   let cleanups = 0;
   const firstAttempt = Promise.withResolvers<void>();
-  const { definition } = defineNativePlugin({
+  const { _definition: definition } = defineNativePlugin({
     name: "retry",
     platforms: {
       windows: {
@@ -532,7 +532,7 @@ test.each([
       },
     };
     // @ts-expect-error asynchronous initializers cannot satisfy the synchronous activation contract.
-    const { definition } = defineNativePlugin(declaration);
+    const { _definition: definition } = defineNativePlugin(declaration);
     const platform = definition.nativePlatforms.windows;
     assert(platform);
     expect(() => platform.create(environment)).toThrow(
@@ -579,7 +579,7 @@ test.each([
         },
       };
       // @ts-expect-error rejected promises must not escape through a typed initializer either.
-      const { definition } = defineNativePlugin(declaration);
+      const { _definition: definition } = defineNativePlugin(declaration);
       const platform = definition.nativePlatforms.windows;
       assert(platform);
       expect(() => platform.create(environment)).toThrow(
@@ -593,7 +593,7 @@ test.each([
 );
 
 test("platform busy state follows its own instance", async () => {
-  const { definition } = defineNativePlugin({
+  const { _definition: definition } = defineNativePlugin({
     name: "busy",
     platforms: {
       windows: {

@@ -9,7 +9,8 @@ import {
   initialize as initializeWindows,
 } from "./platforms/windows.ts";
 
-const plugin = defineNativePlugin({
+/** Create, query, encode and explicitly dispose app-owned image resources. */
+export default defineNativePlugin({
   name: "image",
   platforms: {
     macos: {
@@ -25,8 +26,3 @@ const plugin = defineNativePlugin({
     },
   },
 });
-/** Optional image resources; registration grants no operations or filesystem access. */
-export const imagePlugin = plugin.definition;
-export default imagePlugin;
-/** Create, query, encode and explicitly dispose app-owned image resources. */
-export const image = plugin.api;

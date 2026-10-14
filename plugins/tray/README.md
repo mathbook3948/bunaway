@@ -2,7 +2,7 @@
 
 `@bunaway/plugin-tray`는 `desktop.tray`로 설정한 Windows 아이콘 하나를 제어한다.
 계약은 [tray API](../../docs/site/src/content/docs/reference/plugins/tray.mdx)를 따른다.
-트레이의 Shell, ICO와 팝업 메뉴 구현은 이 선택 패키지가 소유한다. desktop.tray 사용에는 설치와 trayPlugin 등록이 필요하다. 호스트는 실행 유지와 종료 순서, 실패한 네이티브 해제의 재시도를 소유한다.
+트레이의 Shell, ICO와 팝업 메뉴 구현은 이 선택 패키지가 소유한다. desktop.tray 사용에는 설치와 tray 등록이 필요하다. 호스트는 실행 유지와 종료 순서, 실패한 네이티브 해제의 재시도를 소유한다.
 
 `NativeEnvironment.tray`의 이름 있는 UI 서비스를 사용하며 icon은 ICO bytes로 받는다.
 file loading을 추가하지 않는다. 플러그인은 borrowed app icon과 owned custom HICON을 구분하며

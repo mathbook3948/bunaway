@@ -1,5 +1,5 @@
 import { createClient } from "@bunaway/client";
-import { safeStorage } from "@bunaway/plugin-safe-storage";
+import safeStorage from "@bunaway/plugin-safe-storage";
 
 const client = createClient();
 await client.ready;

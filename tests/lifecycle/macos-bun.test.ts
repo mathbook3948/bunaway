@@ -1139,11 +1139,11 @@ test("macOS shutdown cancels setup Host calls before waiting for plugin cleanup"
     const plugin = Bun.resolveSync("@bunaway/plugin-windows", import.meta.dir);
     await Bun.write(
       app,
-      `import {windowsPlugin} from ${JSON.stringify(plugin)};
-      export default {commands: {}, events: {}, plugins: [windowsPlugin,
+      `import windows from ${JSON.stringify(plugin)};
+      export default {commands: {}, events: {}, plugins: [windows._definition,
         {name:"cleanup",version:"1.0.0",setup(){return () => Bun.write(${JSON.stringify(marker)},"stopped").then(() => {});}},
         {name:"close",version:"1.0.0",async setup(context){
-          const operation = windowsPlugin.native.operations.find(operation => operation.name === "windows.close");
+          const operation = windows._definition.native.operations.find(operation => operation.name === "windows.close");
           try { await context.host.call(operation, {view:"main"}); }
           catch (error) { await Bun.write(${JSON.stringify(cancelled)}, error.code); throw error; }
         }}
@@ -1270,7 +1270,7 @@ test.each([
             return phase === "execution" ? pause(input) : input;
           }, dispose(){},
         })}}});
-        export default plugin.definition;
+        export default plugin;
       `,
       );
       const native = {
@@ -1442,7 +1442,7 @@ test.each([
         `
         import { isMainThread } from "node:worker_threads";
         import { existsSync, writeFileSync } from "node:fs";
-        export default {nativePlatforms:{macos:{create() {
+        export default {_definition:{nativePlatforms:{macos:{create() {
           if (isMainThread) throw new Error("Wrong adapter owner");
           ${phase === "initialization" ? 'throw new Error("Fixture I/O initialization failed");' : ""}
           return {execute(){return null}, dispose(){
@@ -1450,7 +1450,7 @@ test.each([
             writeFileSync(${JSON.stringify(disposing)}, "started");
             while(true) {}
           }};
-        }}}};
+        }}}}};
       `,
       );
       const app = resolve(directory, "app.ts");
@@ -1580,7 +1580,7 @@ test("macOS shutdown aborts active backend I/O before Core stop hooks and adapte
           }
         };
       }}}});
-      export default {...plugin.definition,version:"1"};
+      export default {_definition:{...plugin._definition,version:"1"}};
     `,
     );
     const app = resolve(directory, "app.ts");
@@ -1591,7 +1591,7 @@ test("macOS shutdown aborts active backend I/O before Core stop hooks and adapte
       import { defineApp } from ${JSON.stringify(Bun.resolveSync("@bunaway/backend", import.meta.dir))};
       import definition,{plugin} from ${JSON.stringify(operations)};
       export default defineApp({modules:[],commands:{},events:{},plugins:[definition,{name:"setup",version:"1",async setup(){
-        const pending=plugin.api.run(null).catch(error=>{if(error.code!=="CANCELLED") throw error;});
+        const pending=plugin.run(null).catch(error=>{if(error.code!=="CANCELLED") throw error;});
         while(!existsSync(${JSON.stringify(started)})) await Bun.sleep(5);
         return async()=>{
           await pending;
@@ -1698,7 +1698,7 @@ test("macOS I/O receives only the trusted host app identity and rejects a caller
         platforms:{macos:{thread:"worker",create(environment){return {
           execute(){return environment.app ?? null;},dispose(){}
         };}}}});
-      export default {...plugin.definition,version:"1"};
+      export default {_definition:{...plugin._definition,version:"1"}};
     `,
     );
     await writePluginManifest(directory, plugins, "macos");

@@ -1,5 +1,5 @@
 import { createClient } from "@bunaway/client";
-import { network } from "@bunaway/plugin-network";
+import network from "@bunaway/plugin-network";
 
 const client = createClient();
 

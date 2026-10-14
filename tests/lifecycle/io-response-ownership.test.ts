@@ -83,7 +83,7 @@ test.each([
           },
           dispose(){resources.dispose();Atomics.store(state,slots.disposed,1);}
         })}}});
-        export const pluginImports={owned:{operations:async()=>({createOperations:plugin.definition.nativePlatforms.windows.create})}};
+        export const pluginImports={owned:{operations:async()=>({createOperations:plugin._definition.nativePlatforms.windows.create})}};
       `,
       );
       const runtime = {

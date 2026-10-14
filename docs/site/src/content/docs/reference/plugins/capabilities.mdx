@@ -13,9 +13,9 @@ capabilities(options?: InvokeOptions): Promise<Capabilities>
 options에 signal 또는 deadline을 전달할 수 있습니다.
 [invoke의 취소와 기한](/reference/client/invoke/)과 같은 규칙을 적용합니다.
 
-먼저 `@bunaway/plugin-capabilities`를 설치하고 앱에 capabilitiesPlugin을 등록합니다.
+먼저 `@bunaway/plugin-capabilities`를 설치하고 앱에 `capabilities`를 등록합니다.
 조회 결과에는 앱에 등록한 네이티브 플러그인 작업이 포함됩니다.
-창 제어 작업도 windowsPlugin을 등록한 경우에만 조회 결과에 포함됩니다.
+창 제어 작업도 `windows`를 등록한 경우에만 조회 결과에 포함됩니다.
 
 ## 정책과 사용법
 
@@ -26,7 +26,7 @@ options에 signal 또는 deadline을 전달할 수 있습니다.
 ```
 
 ```ts
-import { capabilities } from "@bunaway/plugin-capabilities";
+import capabilities from "@bunaway/plugin-capabilities";
 
 const features = await capabilities();
 const read = features.find((feature) => feature.name === "storage.readText");

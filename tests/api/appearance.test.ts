@@ -1,10 +1,8 @@
 import { expect, test } from "bun:test";
 import type { CommandContext } from "@bunaway/plugin-api";
 import { bindCommandHost } from "@bunaway/plugin-api/host";
-import {
+import appearance, {
   type AppearancePreferences,
-  appearance,
-  appearancePlugin,
 } from "@bunaway/plugin-appearance";
 import { type HostContext, NativeRegistry } from "@bunaway/protocol";
 import { bindHostAPI } from "#core/host-api";
@@ -33,7 +31,7 @@ const snapshot: AppearancePreferences = {
 };
 const parsers = pluginParsers("appearance", appearanceOperations);
 const registry = new NativeRegistry([
-  appearancePlugin,
+  appearance._definition,
 ]);
 
 test("appearance validates strict input and preserves unknown theme/transparency values", async () => {

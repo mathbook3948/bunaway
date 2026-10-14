@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineApp } from "@bunaway/backend";
-import { safeStorage } from "@bunaway/plugin-safe-storage";
-import { windowsPlugin } from "@bunaway/plugin-windows";
+import safeStorage from "@bunaway/plugin-safe-storage";
+import windows from "@bunaway/plugin-windows";
 import { fixturePlugin } from "./plugin.ts";
 
 const temporary = process.env.TMPDIR;
@@ -13,8 +13,8 @@ let restarted = false;
 export default defineApp({
   modules: [],
   plugins: [
-    fixturePlugin.definition,
-    windowsPlugin,
+    fixturePlugin,
+    windows,
     {
       name: "safe-storage-test",
       version: "1",

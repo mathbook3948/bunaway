@@ -7,22 +7,22 @@ description: 앱에 플러그인을 연결하고 setup, StopHook, 정책, 명령
 명령과 이벤트를 재사용하거나 앱 시작과 종료 때 작업을 실행하려면 PluginDefinition으로 묶습니다.
 
 저장 등 설치한 네이티브 플러그인은 화면과 백엔드에서 같은 경로로 import합니다.
-예를 들어 둘 다 `import { storage } from "@bunaway/plugin-storage"`를 사용합니다.
+예를 들어 둘 다 `import storage from "@bunaway/plugin-storage"`를 사용합니다.
 화면에서는 WebView 호출을, 백엔드에서는 현재 명령이나 setup의 Host API 호출을 사용합니다.
 사용할 패키지의 등록과 권한은 [플러그인 API](/reference/backend/host-api/)에서 확인하세요.
 
-Windows 텍스트 클립보드는 [`@bunaway/plugin-clipboard`](/reference/plugins/clipboard/)를 설치하고 `clipboardPlugin`을 등록해 사용합니다. 읽기, 쓰기와 지우기는 각각의 권한을 허용합니다.
+Windows 텍스트 클립보드는 [`@bunaway/plugin-clipboard`](/reference/plugins/clipboard/)를 설치하고 `clipboard`를 등록해 사용합니다. 읽기, 쓰기와 지우기는 각각의 권한을 허용합니다.
 
 Windows 전원과 입력 idle 조회, 절전/화면 유지 요청은
-[`@bunaway/plugin-power`](/reference/plugins/power/)를 설치하고 powerPlugin을 등록해 사용합니다.
+[`@bunaway/plugin-power`](/reference/plugins/power/)를 설치하고 `power`를 등록해 사용합니다.
 작업별 권한을 허용하며 필요한 작업이 끝나면 받은 ID로 stopBlocker를 호출합니다.
 앱 종료에서는 등록한 native handle을 정리합니다.
 
 Windows 테마와 접근성 환경설정은 [`@bunaway/plugin-appearance`](/reference/plugins/appearance/)를
-설치하고 appearancePlugin을 등록해 조회합니다. appearance.getPreferences 권한을 허용합니다.
+설치하고 `appearance`를 등록해 조회합니다. appearance.getPreferences 권한을 허용합니다.
 저장된 선호와 OS 플래그이며 실제 보조 기술의 실행 여부는 별도로 확인합니다.
 
-Windows 알림 상태 조회와 설정 페이지 열기는 [`@bunaway/plugin-notification`](/reference/plugins/notification/)을 설치하고 `notificationPlugin`을 등록해 사용합니다. 조회와 설정 열기의 권한은 독립이며 알림 표시는 아직 제공하지 않습니다.
+Windows 알림 상태 조회와 설정 페이지 열기는 [`@bunaway/plugin-notification`](/reference/plugins/notification/)을 설치하고 `notification`를 등록해 사용합니다. 조회와 설정 열기의 권한은 독립이며 알림 표시는 아직 제공하지 않습니다.
 
 ## 최소 플러그인
 
@@ -53,14 +53,14 @@ setup에서 반환한 함수는 종료 시 실행할 StopHook입니다.
 ## Host API를 사용하는 초기화
 
 setup의 context.host는 `policy.backend` 권한을 사용합니다.
-로그 패키지를 설치하고 logPlugin을 등록합니다. requiredPermissions에 `log.write`를 선언하고 backend.permissions에도 같은 식별자를 허용합니다.
+로그 패키지를 설치하고 `log`를 등록합니다. requiredPermissions에 `log.write`를 선언하고 backend.permissions에도 같은 식별자를 허용합니다.
 
 `defineApp()`으로 플러그인을 연결하면 setup에서도 `storage`, `log`, `capabilities`를
 import해 직접 호출할 수 있습니다.
 
 ```ts
 import { defineApp, type PluginDefinition } from "@bunaway/backend";
-import { log, logPlugin } from "@bunaway/plugin-log";
+import log from "@bunaway/plugin-log";
 
 const startup = {
   name: "startup",
@@ -71,7 +71,7 @@ const startup = {
   },
 } satisfies PluginDefinition;
 
-export default defineApp({ modules: [], plugins: [logPlugin, startup] });
+export default defineApp({ modules: [], plugins: [log, startup] });
 ```
 
 이 예제는 `policy.backend.permissions: ["log.write"]`가 필요합니다.

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { storagePlugin } from "@bunaway/plugin-storage";
+import storage from "@bunaway/plugin-storage";
 import type { HostContext, Policy } from "@bunaway/protocol";
 import { closeWindowsApp } from "#cli/windows-dev-launch";
 import { runWindowsApp } from "#native/windows/bun/entry";
@@ -259,7 +259,7 @@ if (!process.argv.includes("--child")) {
   const app = {
     events: {},
     plugins: [
-      storagePlugin,
+      storage._definition,
     ],
     commands: {
       "test.report": {

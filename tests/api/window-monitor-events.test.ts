@@ -3,14 +3,13 @@ import type {
   NativeMonitorSnapshot,
   NativeWindowServices,
 } from "@bunaway/plugin-api/native";
-import {
+import windows, {
   type MonitorSnapshot,
   monitorChangeSchema,
   monitorSnapshotSchema,
   validateWindowCall,
   validateWindowOutput,
   windowEvents,
-  windowsPlugin,
 } from "@bunaway/plugin-windows";
 import { NativeRegistry, validateValue } from "@bunaway/protocol";
 import { createOperations } from "#plugins/windows/src/platforms/windows";
@@ -195,7 +194,7 @@ test("monitor snapshot and event public contracts validate revisions, metrics, e
   }
   expect(
     new NativeRegistry([
-      windowsPlugin,
+      windows._definition,
     ]).operation("windows.getMonitorSnapshot"),
   ).toBeDefined();
   expect(

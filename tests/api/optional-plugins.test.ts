@@ -1,19 +1,19 @@
 import { expect, test } from "bun:test";
-import { windowPermissions } from "../fixtures/window-permissions.ts";
 import { resolve } from "node:path";
 import type {
   NativeWindowServices,
   WindowSizeConstraints,
 } from "@bunaway/plugin-api/native";
-import { windowsPlugin } from "@bunaway/plugin-windows";
+import windows from "@bunaway/plugin-windows";
 import type { HostContext, JsonValue, Policy } from "@bunaway/protocol";
 import { NativeRegistry } from "@bunaway/protocol";
 import { appModules } from "#cli/app-modules";
 import { bindHostAPI } from "#core/host-api";
-import { windowsPlugin as windowsSourcePlugin } from "#plugins/windows/src/index";
+import windowsSourcePlugin from "#plugins/windows/src/index";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 const registry = new NativeRegistry([
-  windowsPlugin,
+  windows._definition,
 ]);
 const operation = registry.operation("windows.show");
 test("an empty plugin registry exposes no built-in window or feature calls", async () => {
@@ -134,11 +134,12 @@ test("window operations use name grants and list all configured windows", async 
     now: Date.now,
     tick: async () => {},
   };
-  const adapter = windowsSourcePlugin.nativePlatforms.windows?.create({
-    dataRoot: ".",
-    capabilities: [],
-    windows: services,
-  });
+  const adapter =
+    windowsSourcePlugin._definition.nativePlatforms.windows?.create({
+      dataRoot: ".",
+      capabilities: [],
+      windows: services,
+    });
   if (!adapter) {
     throw new Error("Missing Windows plugin adapter");
   }

@@ -3,15 +3,17 @@ title: 암호화 저장
 description: Windows DPAPI와 macOS Keychain 보호 키로 문자열과 바이트를 비동기로 보호하고 복호화합니다.
 ---
 
+기본 export(`default`)를 `safeStorage`로 가져와 앱에 등록하고 호출합니다.
+
 `@bunaway/plugin-safe-storage`는 Windows DPAPI와 macOS Keychain을 사용하는 선택 플러그인입니다.
-`safeStoragePlugin`을 앱에 등록하고 작업별 Host 권한을 허용합니다.
+`safeStorage`를 앱에 등록하고 작업별 Host 권한을 허용합니다.
 설치나 등록만으로 권한이 생기지 않습니다. Windows와 macOS 외의 플랫폼에서는 `UNSUPPORTED`입니다.
 
 ```ts
 import { defineApp } from "@bunaway/backend";
-import { safeStoragePlugin } from "@bunaway/plugin-safe-storage";
+import safeStorage from "@bunaway/plugin-safe-storage";
 
-export default defineApp({ plugins: [safeStoragePlugin] });
+export default defineApp({ plugins: [safeStorage] });
 ```
 
 ## 작업과 권한
@@ -38,7 +40,7 @@ macOS에서는 시스템 UI와 키 생성을 하지 않고 기본 file-based Key
 부여하지 않습니다. macOS의 실제 암복호화는 호출마다 Keychain에서 키를 다시 읽습니다.
 
 ```ts
-import { safeStorage } from "@bunaway/plugin-safe-storage";
+import safeStorage from "@bunaway/plugin-safe-storage";
 
 const ciphertext = await safeStorage.encryptString({ text: "보호할 앱 데이터" });
 const text = await safeStorage.decryptString({ ciphertext });

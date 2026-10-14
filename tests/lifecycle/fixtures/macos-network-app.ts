@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { type AppDefinition, defineApp } from "@bunaway/backend";
-import { network, networkPlugin } from "@bunaway/plugin-network";
+import network from "@bunaway/plugin-network";
 import { validateValue } from "@bunaway/protocol";
 
 /** App commands deliberately retain the calling view's authority through Core. */
@@ -9,7 +9,7 @@ export function defineNetworkFixture(http: string, ws: string) {
   return defineApp({
     modules: [],
     plugins: [
-      networkPlugin,
+      network,
       {
         name: "backend-network-check",
         version: "1",

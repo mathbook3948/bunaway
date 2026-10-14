@@ -1,7 +1,7 @@
-import imagePlugin from "@bunaway/plugin-image/native/macos";
+import image from "@bunaway/plugin-image/native/macos";
 import { verifyMacosImage } from "./macos-image.ts";
 
-const factory = imagePlugin.nativePlatforms?.macos?.create;
+const factory = image._definition.nativePlatforms?.macos?.create;
 if (!factory) {
   throw new Error("Packaged macOS image adapter is missing.");
 }

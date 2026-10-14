@@ -35,7 +35,7 @@ editor에는 필요한 명령과 이벤트, 저장 권한만 선언할 수 있�
 
 ```ts
 import { defineApp, defineModule } from "@bunaway/backend";
-import { windows, windowsPlugin } from "@bunaway/plugin-windows";
+import windows from "@bunaway/plugin-windows";
 
 const editor = defineModule("editor")
   .command("open", { input: { const: null }, output: { const: null } }, async () => {
@@ -51,7 +51,7 @@ const editor = defineModule("editor")
     return null;
   });
 
-export default defineApp({ modules: [editor], plugins: [windowsPlugin] });
+export default defineApp({ modules: [editor], plugins: [windows] });
 ```
 
 프런트엔드는 초기화한 클라이언트로 창을 연 뒤 닫기 확인을 설정합니다.
@@ -86,11 +86,11 @@ Windows에서는 모든 창에 `startup: false`를 지정하거나 `app.windows`
 
 ```ts
 import { defineApp } from "@bunaway/backend";
-import { trayPlugin } from "@bunaway/plugin-tray";
+import tray from "@bunaway/plugin-tray";
 
 export default defineApp({
   modules: [],
-  plugins: [trayPlugin],
+  plugins: [tray],
   desktop: {
     closeBehavior: "keep-alive",
     tray: { tooltip: "Notes" },
@@ -193,7 +193,7 @@ main 정책의 `commands`에 `plugin.windows.getReadiness`, `plugin.windows.comp
 ```ts
 import { createClient } from "@bunaway/client";
 import type { CommandsOf, EventsOf } from "@bunaway/backend";
-import { windows, type WindowOutput } from "@bunaway/plugin-windows";
+import windows, { type WindowOutput } from "@bunaway/plugin-windows";
 import type { app } from "../src-bunaway/app.ts";
 
 // UI 초기화 함수에서 실행합니다. initializeUi는 앱이 소유한 데이터와 화면 초기화 작업입니다.

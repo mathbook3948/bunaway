@@ -10,7 +10,8 @@ import {
   initialize as initializeWindows,
 } from "./platforms/windows.ts";
 
-const plugin = defineNativePlugin({
+/** Read, replace, discover or clear bounded platform clipboard formats. */
+export default defineNativePlugin({
   name: "clipboard",
   platforms: {
     macos: {
@@ -28,8 +29,3 @@ const plugin = defineNativePlugin({
     },
   },
 });
-/** Optional clipboard contract; registration does not grant permissions. */
-export const clipboardPlugin = plugin.definition;
-export default clipboardPlugin;
-/** Read, replace, discover or clear bounded platform clipboard formats. */
-export const clipboard = plugin.api;

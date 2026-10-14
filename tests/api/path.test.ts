@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { pathPlugin } from "@bunaway/plugin-path/native/windows";
+import path from "@bunaway/plugin-path/native/windows";
 import { NativeRegistry } from "@bunaway/protocol";
 import { knownFolderId } from "../../plugins/path/src/known-folders.ts";
 import { pathOperations } from "../../plugins/path/src/operations.ts";
@@ -19,7 +19,7 @@ test("Pictures and Videos IDs retain the Windows SDK values through mixed-endian
 });
 
 test("Windows lexical helpers handle Unicode, drives, UNC, namespace paths and trailing separators", async () => {
-  const create = pathPlugin.nativePlatforms.windows?.create;
+  const create = path._definition.nativePlatforms.windows?.create;
   if (!create) {
     throw new Error("Windows path adapter is missing.");
   }
@@ -218,7 +218,7 @@ test("path resolution never accepts an implicit host or per-drive working direct
 
 test("path helper permissions neither imply each other nor grant storage access", () => {
   const registry = new NativeRegistry([
-    pathPlugin,
+    path._definition,
   ]);
   for (const operation of registry.operations.keys()) {
     for (const target of registry.operations.keys()) {
@@ -240,7 +240,7 @@ test("path helper permissions neither imply each other nor grant storage access"
 });
 
 test("path input bounds count supplementary Unicode as UTF-16 units", async () => {
-  const create = pathPlugin.nativePlatforms.windows?.create;
+  const create = path._definition.nativePlatforms.windows?.create;
   if (!create) {
     throw new Error("Windows path adapter is missing.");
   }
@@ -277,7 +277,7 @@ test("path input bounds count supplementary Unicode as UTF-16 units", async () =
 });
 
 test("path output bounds count supplementary Unicode after joining", async () => {
-  const create = pathPlugin.nativePlatforms.windows?.create;
+  const create = path._definition.nativePlatforms.windows?.create;
   if (!create) {
     throw new Error("Windows path adapter is missing.");
   }

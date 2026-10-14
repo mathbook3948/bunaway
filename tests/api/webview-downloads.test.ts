@@ -8,10 +8,9 @@ import {
   MAX_WEBVIEW_DOWNLOADS,
   type WebViewDownload,
 } from "@bunaway/plugin-api/native";
-import {
+import windows, {
   validateWindowCall,
   validateWindowOutput,
-  windowsPlugin,
 } from "@bunaway/plugin-windows";
 import {
   type JsonValue,
@@ -156,7 +155,7 @@ function fixture() {
 
 test("download contracts register individual grants and forbid caller-selected paths", () => {
   const registry = new NativeRegistry([
-    windowsPlugin,
+    windows._definition,
   ]);
   for (const name of names) {
     expect(registry.operation(`windows.${name}`).name).toBe(`windows.${name}`);

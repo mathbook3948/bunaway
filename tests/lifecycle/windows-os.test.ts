@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test";
 import assert from "node:assert/strict";
 import { arch, hostname, release, version } from "node:os";
-import { osPlugin } from "@bunaway/plugin-os/native/windows";
+import os from "@bunaway/plugin-os/native/windows";
 import { osOperations } from "#plugins/os/src/operations";
 import { assertWindowsRegionCode } from "../fixtures/windows-region-code.ts";
 
 test.skipIf(process.platform !== "win32")(
   "Windows locale FFI and runtime metadata execute through generated Zod adapters",
   async () => {
-    const platform = osPlugin.nativePlatforms.windows;
+    const platform = os._definition.nativePlatforms.windows;
     assert(platform);
     const adapter = platform.create({
       dataRoot: ".",

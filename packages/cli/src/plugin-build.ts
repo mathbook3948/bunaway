@@ -82,9 +82,8 @@ export async function buildNativePlugin(directory = "."): Promise<string> {
                   // Bun 1.4.2 drops external star re-exports from virtual modules.
                   contents: `export { BunawayError, NativeEventWaiters, defineNativeAdapter, defineNativeOperation } from "./bunaway-plugin-sdk-external";
 import { defineNativePlugin as define } from "./bunaway-plugin-sdk-external";
-export function defineNativePlugin(declaration) {
-  const plugin = define(declaration);
-  return { ...plugin, definition: Object.freeze({ ...plugin.definition, version: ${JSON.stringify(version)} }) };
+export function defineNativePlugin(declaration, calls) {
+  return define(declaration, calls, ${JSON.stringify(version)});
 }`,
                   loader: "js",
                 }),

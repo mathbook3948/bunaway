@@ -4,7 +4,9 @@ description: 작업 권한을 적용한 제한된 HTTP 요청과 WebSocket 교�
 sidebar: { order: 8 }
 ---
 
-`@bunaway/plugin-network`를 설치하고 앱의 `plugins`에 `networkPlugin`을 등록합니다.
+기본 export(`default`)를 `network`로 가져와 앱에 등록하고 호출합니다.
+
+`@bunaway/plugin-network`를 설치하고 앱의 `plugins`에 `network`를 등록합니다.
 현재 Windows와 macOS에서 제공합니다. 화면과 백엔드는 `network`를 사용합니다.
 
 ## 권한과 앱의 URL 규칙
@@ -17,7 +19,7 @@ CORS 제한을 적용하지 않습니다. 승인한 Origin 목록은 앱이 작�
 예를 들어 앱 명령의 입력에서 URL을 받은 경우 다음처럼 검사한 뒤 요청합니다.
 
 ```ts
-import { network, networkPlugin } from "@bunaway/plugin-network";
+import network from "@bunaway/plugin-network";
 import { BunawayError } from "@bunaway/protocol";
 
 async function readReport(urlText: string) {

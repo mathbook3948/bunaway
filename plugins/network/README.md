@@ -1,6 +1,6 @@
 # Bounded network plugin
 
-Register `networkPlugin` to use `network.request` and `network.exchange` on Windows and macOS.
+Register `network` to use `network.request` and `network.exchange` on Windows and macOS.
 Each operation has an independent permission. Applications own URL access rules in backend commands;
 operation grants do not contain resource allowlists. Trusted backend code can use Bun fetch and WebSocket directly.
 See the [public contract](../../docs/site/src/content/docs/reference/plugins/network.mdx) for limits and access-rule examples.

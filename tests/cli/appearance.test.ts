@@ -46,8 +46,8 @@ test("isolated appearance package ships Windows I/O and macOS UI adapters but ke
     await writeFile(
       resolve(project, "src-bunaway/app.ts"),
       `import { defineApp } from "@bunaway/backend";
-import { appearancePlugin } from "@bunaway/plugin-appearance";
-export default defineApp({ modules: [], plugins: [appearancePlugin] });
+import appearance from "@bunaway/plugin-appearance";
+export default defineApp({ modules: [], plugins: [appearance] });
 `,
     );
     await writeJson(resolve(project, "src-bunaway/policy.json"), {
@@ -102,7 +102,7 @@ export default defineApp({ modules: [], plugins: [appearancePlugin] });
     const browserEntry = resolve(project, "appearance-browser.ts");
     await writeFile(
       browserEntry,
-      `import { appearance } from "@bunaway/plugin-appearance";
+      `import appearance from "@bunaway/plugin-appearance";
 void appearance.getPreferences();
 `,
     );

@@ -5,20 +5,22 @@ import { BunawayError } from "@bunaway/protocol";
 
 /** Select the same SDK-validated factory used by packaged hosts, without loading an instance yet. */
 export function nativeFactory(
-  definition: {
-    nativePlatforms: Partial<
-      Record<
-        Platform,
-        {
-          operations?: readonly string[];
-          create(environment: NativeEnvironment): NativePluginAdapter;
-        }
-      >
-    >;
+  plugin: {
+    _definition: {
+      nativePlatforms: Partial<
+        Record<
+          Platform,
+          {
+            operations?: readonly string[];
+            create(environment: NativeEnvironment): NativePluginAdapter;
+          }
+        >
+      >;
+    };
   },
   platform: Platform,
 ) {
-  const target = definition.nativePlatforms[platform];
+  const target = plugin._definition.nativePlatforms[platform];
   assert(target, `Missing ${platform} test platform`);
   return (environment: NativeEnvironment): NativePluginAdapter => {
     const adapter = target.create(environment);

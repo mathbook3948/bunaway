@@ -9,7 +9,8 @@ import {
   initialize as initializeWindows,
 } from "./platforms/windows.ts";
 
-const plugin = defineNativePlugin({
+/** Bounded HTTP requests and WebSocket exchanges. Cancellation releases in-flight resources. */
+export default defineNativePlugin({
   name: "network",
   platforms: {
     macos: {
@@ -26,9 +27,5 @@ const plugin = defineNativePlugin({
     },
   },
 });
-/** Optional network plugin. Applications authorize URLs in their own commands. */
-export const networkPlugin = plugin.definition;
-export default networkPlugin;
-/** Bounded HTTP requests and WebSocket exchanges. Cancellation releases in-flight resources. */
-export const network = plugin.api;
+
 export type { NetworkRequest, NetworkResponse } from "./contract.ts";

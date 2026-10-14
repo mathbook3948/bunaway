@@ -18,10 +18,10 @@ test("compiled macOS adapter probe reports executable support and writes through
       source,
       `
 import assert from "node:assert/strict";
-import { capabilitiesPlugin } from ${JSON.stringify(Bun.resolveSync("@bunaway/plugin-capabilities/native/macos", root))};
-import { logPlugin } from ${JSON.stringify(Bun.resolveSync("@bunaway/plugin-log/native/macos", root))};
+import capabilities from ${JSON.stringify(Bun.resolveSync("@bunaway/plugin-capabilities/native/macos", root))};
+import log from ${JSON.stringify(Bun.resolveSync("@bunaway/plugin-log/native/macos", root))};
 import { operations } from ${JSON.stringify(resolve(root, "native/host-api/bun/plugins.ts"))};
-const plugins = [logPlugin, capabilitiesPlugin];
+const plugins = [log._definition, capabilities._definition];
 const catalog = plugins.map(plugin => {
   const platform = plugin.nativePlatforms.macos;
   assert(platform?.thread === "worker");

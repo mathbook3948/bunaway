@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { powerPlugin } from "@bunaway/plugin-power";
+import power from "@bunaway/plugin-power";
 import { NativeRegistry } from "@bunaway/protocol";
 import { MAX_POWER_BLOCKERS, PowerBlockers } from "#plugins/power/src/blockers";
 import { powerOperations } from "#plugins/power/src/operations";
@@ -80,7 +80,7 @@ test("power status preserves unknown battery measurements, absent batteries and 
 
 test("power operations validate blocker inputs and grant queries independently of request control", async () => {
   const registry = new NativeRegistry([
-    powerPlugin,
+    power._definition,
   ]);
   for (const input of [
     {

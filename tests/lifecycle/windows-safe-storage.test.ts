@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { safeStoragePlugin } from "@bunaway/plugin-safe-storage/native/windows";
+import safeStorage from "@bunaway/plugin-safe-storage/native/windows";
 
 const environment = {
   dataRoot: "unused",
@@ -11,7 +11,7 @@ const environment = {
 test.skipIf(process.platform !== "win32")(
   "real DPAPI round trips bytes and Unicode, rejects tampering, and survives adapter disposal and process restart",
   async () => {
-    const create = safeStoragePlugin.nativePlatforms.windows?.create;
+    const create = safeStorage._definition.nativePlatforms.windows?.create;
     if (!create) {
       throw new Error("Windows data protection adapter is missing.");
     }

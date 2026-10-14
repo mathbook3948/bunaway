@@ -61,8 +61,8 @@ export const operations = { read: { input: z.null(), output: z.string().transfor
 import { operations } from "./contract.ts";
 ${imports}
 const plugin = defineNativePlugin({ name: "demo", ${unified ? "" : "operations,"} platforms: { ${targets} } });
-export const api = plugin.api;
-export default plugin.definition;`;
+export const api = plugin;
+export default plugin;`;
       await Bun.write(entry, source);
       await Bun.write(
         resolve(root, "src/platforms/windows.ts"),
@@ -125,7 +125,7 @@ export const createOperations: NativeAdapterFactory = () => ({ execute: () => "$
         [
           process.execPath,
           "-e",
-          `for (const file of ${JSON.stringify(outputs)}) { const { default: plugin } = await import(new URL(file, ${JSON.stringify(`${pathToFileURL(resolve(root, "dist/")).href}/`)})); if (plugin.version !== "1" || !Object.isFrozen(plugin)) throw new Error("Invalid built plugin version"); if (file === "native/linux.js") { const adapter = plugin.nativePlatforms.linux.create({dataRoot:".",capabilities:[]}); try { if (await adapter.execute("demo.read", null, "test") !== "LINUX_ONLY_MARKER!") throw new Error("Built parser did not run exactly once"); } finally { adapter.dispose(); } } }`,
+          `for (const file of ${JSON.stringify(outputs)}) { const { default: plugin } = await import(new URL(file, ${JSON.stringify(`${pathToFileURL(resolve(root, "dist/")).href}/`)})); if (plugin._definition.version !== "1" || !Object.isFrozen(plugin)) throw new Error("Invalid built plugin version"); if (file === "native/linux.js") { const adapter = plugin._definition.nativePlatforms.linux.create({dataRoot:".",capabilities:[]}); try { if (await adapter.execute("demo.read", null, "test") !== "LINUX_ONLY_MARKER!") throw new Error("Built parser did not run exactly once"); } finally { adapter.dispose(); } } }`,
         ],
         {
           cwd: root,
@@ -235,7 +235,7 @@ test("handler map support survives neutral and opposite-platform exports without
       import {operations} from "./contract.ts";
       import {createOperations as windows} from "./platforms/windows.ts";
       import {createOperations as macos} from "./platforms/macos.ts";
-      export default defineNativePlugin({name:"demo",operations,platforms:{windows:{thread:"ui",create:windows},macos:{thread:"worker",create:macos}}}).definition;`,
+      export default defineNativePlugin({name:"demo",operations,platforms:{windows:{thread:"ui",create:windows},macos:{thread:"worker",create:macos}}});`,
     );
     for (const [platform, key, result] of [
       [
@@ -338,8 +338,8 @@ export default operations;
 import {defineNativePlugin} from "@bunaway/plugin";
 import operations, {initialize as start} from "./platforms/windows.ts";
 const plugin = defineNativePlugin({name:"demo",platforms:{windows:{initialize:start,operations}}});
-export const api = plugin.api;
-export default plugin.definition;
+export const api = plugin;
+export default plugin;
 `,
     );
     await buildNativePlugin(root);
@@ -368,7 +368,7 @@ export default plugin.definition;
     const { default: plugin } = await import(
       pathToFileURL(resolve(root, "dist/native/windows.js")).href
     );
-    const adapter = plugin.nativePlatforms.windows.create({
+    const adapter = plugin._definition.nativePlatforms.windows.create({
       dataRoot: root,
       capabilities: [],
     });

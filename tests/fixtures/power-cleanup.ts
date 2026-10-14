@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { powerPlugin } from "../../plugins/power/src/index.ts";
+import power from "../../plugins/power/src/index.ts";
 import { powerCleanup } from "./power-cleanup-ffi.ts";
 
 for (const failures of [
@@ -12,7 +12,7 @@ for (const failures of [
   powerCleanup.libraries.length = 0;
   powerCleanup.registeredCloseFailures = failures;
   powerCleanup.rollbackCloseFailed = false;
-  const platform = powerPlugin.nativePlatforms.windows;
+  const platform = power._definition.nativePlatforms.windows;
   assert(platform);
   const adapter = platform.create({
     dataRoot: ".",

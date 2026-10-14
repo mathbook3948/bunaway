@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import { bindCommandHost } from "@bunaway/plugin-api/host";
-import { clipboard, clipboardPlugin } from "@bunaway/plugin-clipboard";
+import clipboard from "@bunaway/plugin-clipboard";
 import {
   BunawayError,
   type HostCall,
@@ -73,7 +73,7 @@ test.skipIf(
       }
     }, 5);
     const registry = new NativeRegistry([
-      clipboardPlugin,
+      clipboard._definition,
     ]);
     const permissions = {
       permissions: [
@@ -97,7 +97,7 @@ test.skipIf(
       dataRoot: root,
       loader: "",
       plugins: [
-        clipboardPlugin,
+        clipboard._definition,
       ],
     };
     const pending = new Map<string, (response: HostResponse) => void>();
@@ -155,14 +155,14 @@ test.skipIf(
         [
           {
             name: "clipboard",
-            version: clipboardPlugin.version,
-            native: clipboardPlugin.native,
+            version: clipboard._definition.version,
+            native: clipboard._definition.native,
             thread: "ui",
           },
         ],
         `
 import definition from ${JSON.stringify(operationsPath)};
-const createOperations = definition.nativePlatforms.windows.create;
+const createOperations = definition._definition.nativePlatforms.windows.create;
 import { writeFileSync } from "node:fs";
 export const pluginImports = { clipboard: { operations: async () => ({ createOperations(environment) {
   const adapter = createOperations(environment);

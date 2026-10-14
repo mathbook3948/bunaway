@@ -69,4 +69,4 @@ export const fixturePlugin = defineNativePlugin({
   },
 });
 
-export default fixturePlugin.definition;
+export default fixturePlugin;

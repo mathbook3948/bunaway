@@ -40,7 +40,7 @@ export async function readPluginDeclaration(
     [
       process.execPath,
       "-e",
-      `const { default: plugin } = await import(${JSON.stringify(pathToFileURL(entry).href)}); const packageName = ${JSON.stringify(packageName ?? null)}; process.stdout.write(JSON.stringify({ name: plugin.name, version: plugin.version, native: plugin.native, nativePlatforms: plugin.nativePlatforms && Object.fromEntries(Object.entries(plugin.nativePlatforms).map(([os, target]) => [os, { ...target, create: typeof target.create === "function", ...(packageName ? { module: Bun.resolveSync(packageName + "/native/" + os, ${JSON.stringify(directory)}) } : {}) }])) }));`,
+      `const { default: exported } = await import(${JSON.stringify(pathToFileURL(entry).href)}); const plugin = exported?._definition; if (!plugin || typeof plugin !== "object") throw new Error("Native plugin default export must be a defineNativePlugin result."); const packageName = ${JSON.stringify(packageName ?? null)}; process.stdout.write(JSON.stringify({ name: plugin.name, version: plugin.version, native: plugin.native, nativePlatforms: plugin.nativePlatforms && Object.fromEntries(Object.entries(plugin.nativePlatforms).map(([os, target]) => [os, { ...target, create: typeof target.create === "function", ...(packageName ? { module: Bun.resolveSync(packageName + "/native/" + os, ${JSON.stringify(directory)}) } : {}) }])) }));`,
     ],
     {
       cwd: directory,

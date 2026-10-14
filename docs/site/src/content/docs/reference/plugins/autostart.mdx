@@ -4,38 +4,36 @@ description: Windows 사용자 로그인 자동 실행을 등록, 조회하고 �
 sidebar: { order: 6 }
 ---
 
+기본 export(`default`)를 `autostart`로 가져와 앱에 등록하고 호출합니다.
+
 `@bunaway/plugin-autostart`는 현재 사용자의 Windows 로그인 자동 실행을 제공합니다.
-패키지를 설치하고 `autostartPlugin`을 등록해야 합니다. 설치와 등록만으로 자동 실행이
+패키지를 설치하고 `autostart`를 등록해야 합니다. 설치와 등록만으로 자동 실행이
 켜지지 않습니다. 사용자가 동의한 설정 변경에서 `enableAutostart`를 호출하세요.
 
 ```ts
 import { defineApp } from "@bunaway/backend";
-import { autostartPlugin } from "@bunaway/plugin-autostart";
+import autostart from "@bunaway/plugin-autostart";
 
-export default defineApp({ modules: [], plugins: [autostartPlugin] });
+export default defineApp({ modules: [], plugins: [autostart] });
 ```
 
 ## 등록, 조회와 해제
 
 ```ts
-enableAutostart(settings?: string[] | AutostartOptions, options?: NativeInvokeOptions): Promise<AutostartStatus>
-getAutostartStatus(options?: NativeInvokeOptions): Promise<AutostartStatus>
-disableAutostart(options?: NativeInvokeOptions): Promise<null>
+autostart.enableAutostart(settings?: string[] | AutostartOptions, options?: NativeInvokeOptions): Promise<AutostartStatus>
+autostart.getAutostartStatus(options?: NativeInvokeOptions): Promise<AutostartStatus>
+autostart.disableAutostart(options?: NativeInvokeOptions): Promise<null>
 ```
 
 ```ts
-import {
-  enableAutostart,
-  getAutostartStatus,
-  disableAutostart,
-} from "@bunaway/plugin-autostart";
+import autostart from "@bunaway/plugin-autostart";
 
-await enableAutostart(["--login", "한글 값", '인용"값', ""]);
-const status = await getAutostartStatus();
+await autostart.enableAutostart(["--login", "한글 값", '인용"값', ""]);
+const status = await autostart.getAutostartStatus();
 if (status.registered && status.startupState === "disabled") {
   // Windows 설정이나 작업 관리자에서 사용자가 다시 활성화하도록 안내합니다.
 }
-await disableAutostart();
+await autostart.disableAutostart();
 ```
 
 `AutostartOptions`는 `{ args?: string[], hidden?: boolean }`입니다. 기존 인자 배열도 받습니다.
@@ -63,16 +61,16 @@ NUL과 짝이 없는 UTF-16 surrogate는 거부합니다. `%PATH%`, `&` 등은 �
 `--login`과 같은 앱 고유 인자는 계속 그대로 전달합니다.
 
 숨김 등록에는 앱 정의의 `desktop.tray`가 필요합니다. 트레이가 없는 앱의
-`enableAutostart({ hidden: true })`는 `INVALID_ARGUMENT`로 거부하며 Run 값을 변경하지 않습니다.
+`autostart.enableAutostart({ hidden: true })`는 `INVALID_ARGUMENT`로 거부하며 Run 값을 변경하지 않습니다.
 숨김 등록 뒤 앱에서 트레이를 제거하면 해당 시작도 UI Worker 생성 전에 실패합니다.
 
 ```ts
 import { defineApp } from "@bunaway/backend";
-import { autostartPlugin, enableAutostart } from "@bunaway/plugin-autostart";
+import autostart from "@bunaway/plugin-autostart";
 
 export default defineApp({
   modules: [],
-  plugins: [autostartPlugin],
+  plugins: [autostart],
   desktop: {
     tray: { tooltip: "Memo" },
     closeBehavior: "hide",
@@ -83,7 +81,7 @@ export default defineApp({
 });
 
 // 사용자가 동의한 설정 명령에서 autostart.enable 권한으로 호출합니다.
-// await enableAutostart({ args: ["--sync"], hidden: true });
+// await autostart.enableAutostart({ args: ["--sync"], hidden: true });
 ```
 
 숨김 로그인 시작은 선언한 시작 창의 HWND와 WebView, SDK 세션을 만들되 표시하거나

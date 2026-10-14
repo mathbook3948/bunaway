@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { defineModule } from "@bunaway/backend";
-import { storage } from "@bunaway/plugin-storage";
+import storage from "@bunaway/plugin-storage";
 import settings from "../bunaway.json";
 
 /** Validates message input and events against the 10,000-character limit. */

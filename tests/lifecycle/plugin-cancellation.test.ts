@@ -93,7 +93,7 @@ for (const [workerKind, phase] of [
       ...( ${JSON.stringify(workerKind)} === "ui" ? {async executeUI(_name,input) { Atomics.add(state,slots.executions,1); return phase === "execution" ? pause(input) : input; }} : {}),
       dispose(){},
     })}}});
-    export const pluginImports = {output:{operations:async()=>({createOperations:plugin.definition.nativePlatforms.windows.create})}};
+    export const pluginImports = {output:{operations:async()=>({createOperations:plugin._definition.nativePlatforms.windows.create})}};
   `,
       );
       const state = new Int32Array(
