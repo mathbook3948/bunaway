@@ -10,7 +10,8 @@ macOS storage, appearance와 WebView controls 실행기는 보고서가 없거�
 CLIXML 및 UTF-8이 아닌 바이트의 보존과 POSIX 기한 초과 종료 뒤 0 반환의 거부를 검사한다.
 Windows native CI의 호스트 단계는
 cmd 파일 리다이렉션으로 출력을 보관하고 원래 종료 코드를 반환하므로 중첩 PowerShell
-진단이 XML 파서 오류로 바뀌지 않는다.
+진단이 XML 파서 오류로 바뀌지 않는다. notification의 PowerShell probe도 같은 실행기를
+사용하며 기존 20초 기한, 단계별 경과 시간과 원본 출력을 Windows native 로그에 보관한다.
 
 계약 테스트는 `bun test ./tests`처럼 저장소의 실제 테스트 경로에 `./`를 붙여 실행한다.
 경로 접두사가 없는 `bun test tests/api`는 파일명 필터로 해석해 build 디렉터리의 과거
