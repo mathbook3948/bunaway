@@ -66,7 +66,9 @@ export async function printNativeChildDiagnostics(
     try {
       const file = Bun.file(path);
       if (await file.exists()) {
-        console.error(`Native fixture diagnostics: ${path}\n${await file.text()}`);
+        console.error(
+          `Native fixture diagnostics: ${path}\n${await file.text()}`,
+        );
       }
     } catch (error) {
       console.error(`Could not read native fixture diagnostics: ${path}`, error);

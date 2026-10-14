@@ -228,7 +228,11 @@ try {
         backendAllowed ? "allowed" : "denied",
         `launch-${launch}`,
       );
-      const { exitCode: code, stdout, stderr } = await captureNativeChild(
+      const {
+        exitCode: code,
+        stdout,
+        stderr,
+      } = await captureNativeChild(
         launched,
         launchDiagnostics,
         `appearance ${backendAllowed ? "allowed" : "denied"} launch ${launch}`,
