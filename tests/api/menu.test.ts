@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
 import type { NativeEnvironment } from "@bunaway/plugin";
-import { defineNativePlugin } from "@bunaway/plugin";
 import type { NativeMenuItem } from "@bunaway/plugin-api/native";
 import { menuPlugin } from "@bunaway/plugin-menu";
 import { type JsonValue, NativeRegistry } from "@bunaway/protocol";
@@ -9,10 +8,16 @@ import {
   MAX_MENU_ITEMS,
   MAX_MENU_RESOURCES,
   menuItemsSchema,
-  menuOperations,
 } from "#plugins/menu/src/contract";
-import { createOperations } from "#plugins/menu/src/platforms/windows";
+import { menuOperations } from "#plugins/menu/src/operations";
+import createOperationsDefinition from "#plugins/menu/src/index";
+import { nativeFactory as createOperationsFactory } from "../fixtures/native-platform.ts";
+
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
+const createOperations = createOperationsFactory(
+  createOperationsDefinition,
+  "windows",
+);
 
 const item = (id: string) => ({
   id,
@@ -20,16 +25,7 @@ const item = (id: string) => ({
   label: `항목 ${id} & 😀`,
 });
 function fixture(menus?: NativeEnvironment["menus"]) {
-  const adapter = defineNativePlugin({
-    name: "menu",
-    operations: menuOperations,
-    platforms: {
-      windows: {
-        execution: "ui",
-        create: createOperations,
-      },
-    },
-  }).definition.nativePlatforms.windows?.create({
+  const adapter = createOperations({
     dataRoot: "unused",
     capabilities: [],
     ...(menus
@@ -310,11 +306,11 @@ test("menu operations use separate permissions and preserve resource snapshots",
       menuId: "absent",
     }),
   ).toBe(false);
-  adapter.dispose();
+  await adapter.dispose();
   await expect(invoke("list", null)).rejects.toMatchObject({
     code: "CANCELLED",
   });
-  adapter.dispose();
+  await adapter.dispose();
 });
 
 test("nested insertion, updates and removal commit only valid candidates", async () => {
@@ -513,7 +509,7 @@ test("tray attachment follows updates, rejects stale clicks and suppresses remov
   expect(snapshots.at(-1)).toBeNull();
   clicks[1]?.("b");
   expect(events).toHaveLength(2);
-  adapter.dispose();
+  await adapter.dispose();
   expect(snapshots.at(-1)).toBeUndefined();
 });
 
@@ -671,7 +667,7 @@ test("windowless backend click waits are cancellable, bounded and receive no rep
   await expect(invoke("waitForClick", null)).rejects.toMatchObject({
     code: "BUSY",
   });
-  adapter.dispose();
+  await adapter.dispose();
   for (const result of await results) {
     expect(result).toMatchObject({
       status: "rejected",

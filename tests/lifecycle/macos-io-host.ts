@@ -101,7 +101,7 @@ try {
       native: probe.definition.native,
       targets: {
         macos: {
-          execution: "io",
+          thread: "worker",
           operations: resolve(root, "tests/fixtures/macos-io/native.ts"),
           supportedOperations: [
             "probe.run",

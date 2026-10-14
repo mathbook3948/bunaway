@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -8,9 +9,9 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { execFileSync } from "node:child_process";
 import { BunawayError } from "@bunaway/plugin";
 import type { MacosStorage } from "../../plugins/storage/src/platforms/macos.ts";
+import { executeMacosStorage } from "../fixtures/macos-storage-operations.ts";
 
 /** Exercise real directory descriptors and creation contracts in the caller's owned temporary root. */
 export function verifyMacosDirectories(
@@ -18,20 +19,13 @@ export function verifyMacosDirectories(
   root: string,
 ): string[] {
   const directory = `${root}/directories`;
-  const create = (path: string, recursive?: boolean) =>
-    storage.execute(
-      "storage.createDirectory",
-      recursive === undefined
-        ? {
-            path,
-          }
-        : {
-            path,
-            recursive,
-          },
-    );
+  const create = (path: string, recursive = false) =>
+    storage.createDirectory({
+      path,
+      recursive,
+    });
   const list = (path: string) =>
-    storage.execute("storage.readDirectory", {
+    executeMacosStorage(storage, "storage.readDirectory", {
       path,
     });
   const denied = (action: () => unknown, code: string) =>
@@ -146,7 +140,7 @@ export function verifyMacosDirectories(
   ]) {
     denied(
       () =>
-        storage.execute("storage.remove", {
+        executeMacosStorage(storage, "storage.remove", {
           path,
         }),
       "UNSUPPORTED",

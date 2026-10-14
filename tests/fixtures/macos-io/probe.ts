@@ -91,7 +91,7 @@ export const probe = defineNativePlugin({
   },
   platforms: {
     macos: {
-      execution: "io",
+      thread: "worker",
       operations: [
         "run",
         "inspect",

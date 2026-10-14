@@ -8,7 +8,7 @@ import {
 } from "@bunaway/plugin-appearance";
 import { type HostContext, NativeRegistry } from "@bunaway/protocol";
 import { bindHostAPI } from "#core/host-api";
-import { appearanceOperations } from "#plugins/appearance/src/contract";
+import { appearanceOperations } from "#plugins/appearance/src/operations";
 import {
   booleanPreference,
   colorRef,

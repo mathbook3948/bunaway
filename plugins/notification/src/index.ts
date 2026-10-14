@@ -1,16 +1,16 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { notificationOperations } from "./contract.ts";
-import { createOperations as createWindowsOperations } from "./platforms/windows.ts";
+import { notificationOperations } from "./operations.ts";
+import { dispose, initialize } from "./platforms/windows.ts";
 
 const plugin = defineNativePlugin({
   name: "notification",
   platforms: {
     windows: {
-      execution: "io",
-      create: createWindowsOperations,
+      initialize,
+      dispose,
+      operations: notificationOperations,
     },
   },
-  operations: notificationOperations,
 });
 
 /** Optional Windows notification status and Settings access. Registration does not enable notifications. */

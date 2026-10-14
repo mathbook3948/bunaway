@@ -144,7 +144,7 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
     if (
       !catalog.some(
         (entry) =>
-          entry.execution === "io" &&
+          entry.thread === "worker" &&
           plugins.some((plugin) => plugin.name === entry.name),
       )
     ) {
@@ -379,10 +379,10 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
       if (!adapters) {
         throw new Error("Native adapters are not ready.");
       }
-      const execution = catalog.find((plugin) =>
+      const thread = catalog.find((plugin) =>
         packet.call.operation.startsWith(`${plugin.name}.`),
-      )?.execution;
-      if (execution === "io") {
+      )?.thread;
+      if (thread === "worker") {
         if (!ioChannel?.canSend(1, ioCalls.size)) {
           throw new BunawayError({
             code: "BUSY",

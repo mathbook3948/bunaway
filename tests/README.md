@@ -1,5 +1,28 @@
 # Tests
 
+계약 테스트는 `bun test ./tests`처럼 저장소의 실제 테스트 경로에 `./`를 붙여 실행한다.
+경로 접두사가 없는 `bun test tests/api`는 파일명 필터로 해석해 build 디렉터리의 과거
+테스트 복사본까지 실행할 수 있다. 집중 검사에도 `bun test ./tests/api`를 사용한다.
+`fixtures/native-platform.ts`는 실제 플러그인 정의의 SDK factory를 사용한다. 네이티브 드라이버를 주입하는
+fixture도 운영 작업 목록과 자원 소유자를 재사용하며 별도 dispatch 구현을 만들지 않는다.
+`cli/plugin-build.test.ts`는 재내보내기와 operation 객체, 네이티브 스키마 변환 보존 및 공개 선언에서 내부 타입 제외를 검사한다.
+
+공식 플러그인 fixture는 스키마만 있는 공통 계약 목록 대신 완성된 작업 선언의 스키마를 사용한다.
+`api/native-handler-platform.test.ts`는 동기 handler의 반환 타입도 보존하는지 검사한다.
+동시 정리의 공유, 실패 후 재시도와 성공 후 반복 방지, 비동기 초기화의 타입 및 런타임 거부,
+늦게 반환된 인스턴스 회수와 초기화 및 회수 실패의 진단도 검사한다.
+
+`api/native-handler-platform.test.ts`는 플랫폼별 operations 키에서 지원 정보 생성, 인스턴스별 초기화와
+정리, 기본 worker 스레드와 명시적인 ui 스레드, 동기 및 비동기 반환, 입력과 출력 변환 횟수,
+미지원 작업과 안전한 오류, 동일 작업의 플랫폼별 스키마 선택을 검사한다. `api/native-plugins.test.ts`와 `cli/plugins.test.ts`는
+이전 execution 설정과 잘못된 thread 값의 거부도 검사한다.
+`lifecycle/plugin-async-parsing.test.ts`는 실제 I/O Worker에서 handler 실행 context 전달과
+입력 콜백의 권한 승인, 실행 재승인 및 취소된 파서의 늦은 완료를 검사한다.
+storage의 플랫폼별 작업 샘플은 기존 `windows-bun-storage.ts`의 실제 Win32 핸들 검사와
+`windows-storage-metadata.ts`의 WebView, I/O Worker 호출을 함께 사용한다.
+macOS는 `macos-storage.ts`와 `macos-storage-directories.ts`에서 기존 descriptor 검사를
+유지하며 `macos-storage-host.ts`에서 실제 SDK와 I/O Worker 호출을 검증한다.
+
 `lifecycle/macos-safe-storage.test.ts`는 합성 Keychain으로 lazy 준비, 키 생성 경합,
 접근 실패 뒤 키 보존과 재시도, 작업별 키 지우기, 버전과 namespace 인증, 변조와 크기 상한을
 검사한다. AES-GCM은 Python cryptography로 생성한 고정 벡터와 비교한다.
@@ -790,7 +813,7 @@ DIB의 행 방향과 padding, alpha 및 잘못된 profile, mask, 크기를 확�
 
 `api/power.test.ts`는 배터리의 0과 unknown, 배터리 없음, DWORD tick 순환,
 독립 blocker ID와 128개 상한, 부분 활성 실패 및 반복 정리를 검사한다.
-`power-cleanup.test.ts`는 실제 어댑터와 두 handle 소유자를 번들해 격리된 Win32 바인딩에서
+`power-cleanup.test.ts`는 플러그인 정의의 SDK factory와 실제 어댑터, 두 handle 소유자를 번들해 격리된 Win32 바인딩에서
 public 요청 해제와 활성 rollback 해제가 함께 실패해도 모든 handle을 재시도하고,
 미해제 handle이 있는 동안 DLL을 유지하며 두 단계의 오류를 보고하는지 검사한다.
 `cli/power.test.ts`는 isolated tarball 설치와 I/O 어댑터 발견, browser의 FFI 제외를 검사한다.

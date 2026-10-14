@@ -1,22 +1,21 @@
-import { defineNativePlugin } from "@bunaway/plugin";
-import { capabilitiesOperations } from "./contract.ts";
-import { createOperations as createMacosOperations } from "./platforms/macos.ts";
-import { createOperations as createWindowsOperations } from "./platforms/windows.ts";
+import { defineNativePlugin, type NativeEnvironment } from "@bunaway/plugin";
+import { capabilitiesOperations } from "./operations.ts";
 import { createCapabilities } from "./query.ts";
+
+const snapshot = (environment: NativeEnvironment) => environment.capabilities;
 
 const plugin = defineNativePlugin({
   name: "capabilities",
   platforms: {
     macos: {
-      execution: "io",
-      create: createMacosOperations,
+      initialize: snapshot,
+      operations: capabilitiesOperations,
     },
     windows: {
-      execution: "io",
-      create: createWindowsOperations,
+      initialize: snapshot,
+      operations: capabilitiesOperations,
     },
   },
-  operations: capabilitiesOperations,
 });
 /** Plugin contract for reading the host's registered capability states. */
 export const capabilitiesPlugin = plugin.definition;

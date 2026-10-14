@@ -256,7 +256,7 @@ test("host forwarding runs each parser once and adapters receive parsed input", 
     },
     platforms: {
       windows: {
-        execution: "io",
+        thread: "worker",
         create: () => ({
           execute(_name, input) {
             executions++;
@@ -286,12 +286,12 @@ test("host forwarding runs each parser once and adapters receive parsed input", 
       registration,
     ],
     ".",
-    "io",
+    "worker",
     undefined,
     [
       {
         ...registration,
-        execution: "io",
+        thread: "worker",
         operations: async () => ({
           createOperations: target.create,
         }),
@@ -376,7 +376,7 @@ test("UI adapters preserve this, cancellation context, lifecycle and safe parser
     },
     platforms: {
       windows: {
-        execution: "ui",
+        thread: "ui",
         create: () => raw,
       },
     },
@@ -420,7 +420,7 @@ test("UI adapters preserve this, cancellation context, lifecycle and safe parser
     },
     platforms: {
       windows: {
-        execution: "io",
+        thread: "worker",
         create: () => ({
           execute: () => "ok",
           dispose() {},
@@ -512,7 +512,7 @@ test("JSON guards run before callbacks and validate transformed values before ex
     },
     platforms: {
       windows: {
-        execution: "io",
+        thread: "worker",
         create: () => ({
           execute() {
             executions++;
@@ -614,7 +614,7 @@ test("asynchronous refinements and transforms are awaited once at both boundarie
     },
     platforms: {
       windows: {
-        execution: "io",
+        thread: "worker",
         create: () => ({
           execute(_name, input) {
             executions++;
@@ -685,7 +685,7 @@ test("UI cancellation or disposal during input parsing prevents native execution
       },
       platforms: {
         windows: {
-          execution: "ui",
+          thread: "ui",
           create: () => ({
             execute() {
               executions++;

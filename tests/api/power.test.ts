@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { powerPlugin } from "@bunaway/plugin-power";
 import { NativeRegistry } from "@bunaway/protocol";
 import { MAX_POWER_BLOCKERS, PowerBlockers } from "#plugins/power/src/blockers";
-import { powerOperations } from "#plugins/power/src/contract";
+import { powerOperations } from "#plugins/power/src/operations";
 import { idleSeconds, powerStatus } from "#plugins/power/src/status";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 

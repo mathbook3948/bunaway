@@ -69,7 +69,7 @@ tray: { operations: async () => ({ createOperations: tray.nativePlatforms.window
           name: plugin.name,
           version: plugin.version,
           native: plugin.native,
-          execution: "ui",
+          thread: "ui",
         })),
         `
 import plugin from ${JSON.stringify(entrypoint)};

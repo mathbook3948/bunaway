@@ -1,16 +1,14 @@
 import { expect, test } from "bun:test";
 import { serializeHostResponse } from "@bunaway/protocol";
 import { decodeFiles, encodeFiles } from "#plugins/clipboard/src/codecs";
-import {
-  clipboardOperations,
-  validateClipboardInput,
-} from "#plugins/clipboard/src/contract";
+import { validateClipboardInput } from "#plugins/clipboard/src/contract";
 import {
   imageSchema,
   MAX_IMAGE_BYTES,
   MAX_PATH_LENGTH,
   writeFormatsSchema,
 } from "#plugins/clipboard/src/formats";
+import { windowsOperations as clipboardOperations } from "#plugins/clipboard/src/operations";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("clipboard", clipboardOperations);

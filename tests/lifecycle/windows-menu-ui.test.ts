@@ -47,13 +47,13 @@ test.skipIf(process.platform !== "win32")(
             name: trayPlugin.name,
             version: trayPlugin.version,
             native: trayPlugin.native,
-            execution: "ui",
+            thread: "ui",
           },
           {
             name: menuPlugin.name,
             version: menuPlugin.version,
             native: menuPlugin.native,
-            execution: "ui",
+            thread: "ui",
           },
         ],
         `import tray from ${JSON.stringify(resolve(import.meta.dir, "../../plugins/tray/dist/native/windows.js"))};

@@ -14,8 +14,11 @@ import {
   pluginRegistry,
 } from "#native/host-api/bun/plugins";
 import { Channel, type UIConfig } from "#native/windows/bun/channel";
-import { createOperations as createCapabilities } from "#plugins/capabilities/src/platforms/windows";
+import capabilitiesDefinition from "#plugins/capabilities/src/index";
+import { nativeFactory } from "../fixtures/native-platform.ts";
+
 import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
+const createCapabilities = nativeFactory(capabilitiesDefinition, "windows");
 
 const native = {
   operations: [],
@@ -124,7 +127,7 @@ test("shutdown and initialization failure clean every prepared adapter in revers
       name,
       version: "1",
       native,
-      execution: "io",
+      thread: "worker",
       operations: async () => ({
         createOperations: () => ({
           execute: () => null,
@@ -148,7 +151,7 @@ test("shutdown and initialization failure clean every prepared adapter in revers
   const adapters = await operations(
     registrations(),
     ".",
-    "io",
+    "worker",
     undefined,
     catalog,
   );
@@ -163,13 +166,13 @@ test("shutdown and initialization failure clean every prepared adapter in revers
     name: "third",
     version: "1",
     native,
-    execution: "io",
+    thread: "worker",
     operations: async () => {
       throw initialization;
     },
   });
   try {
-    await operations(registrations(), ".", "io", undefined, catalog);
+    await operations(registrations(), ".", "worker", undefined, catalog);
     throw new Error("Initialization unexpectedly succeeded.");
   } catch (error) {
     expect((error as AggregateError).errors[0]).toBe(initialization);
@@ -208,7 +211,7 @@ test("unregistered native adapters are not imported or initialized", async () =>
       name: "test",
       version: "1",
       native,
-      execution: "io",
+      thread: "worker",
       operations: async () => {
         imported++;
         return {
@@ -222,7 +225,7 @@ test("unregistered native adapters are not imported or initialized", async () =>
       },
     },
   ];
-  const inactive = await operations([], ".", "io", undefined, catalog);
+  const inactive = await operations([], ".", "worker", undefined, catalog);
   expect(imported).toBe(0);
   await expect(inactive.execute("test.read", null, "backend")).rejects.toThrow(
     expect.objectContaining({
@@ -239,7 +242,7 @@ test("unregistered native adapters are not imported or initialized", async () =>
       },
     ],
     ".",
-    "io",
+    "worker",
     undefined,
     catalog,
   );
@@ -279,7 +282,7 @@ test("capabilities report platform support without claiming OS consent", async (
   ]) {
     catalog.push({
       ...plugin,
-      execution: "io",
+      thread: "worker",
       operations: async () => ({
         createOperations(environment) {
           observed = environment;
@@ -298,7 +301,7 @@ test("capabilities report platform support without claiming OS consent", async (
   const adapters = await operations(
     registrations,
     ".",
-    "io",
+    "worker",
     undefined,
     catalog,
   );
@@ -318,7 +321,11 @@ test("capabilities report platform support without claiming OS consent", async (
       },
     ]);
     expect(
-      createCapabilities(observed).execute("capabilities.get", null, "backend"),
+      await createCapabilities(observed).execute(
+        "capabilities.get",
+        null,
+        "backend",
+      ),
     ).toEqual(observed.capabilities);
   } finally {
     await adapters.dispose();
@@ -343,7 +350,7 @@ test("capability queries include every operation at the native registry limit", 
   } as const;
   catalog.push(plugin, {
     ...capabilitiesPlugin,
-    execution: "io",
+    thread: "worker",
     operations: async () => ({
       createOperations: createCapabilities,
     }),
@@ -362,7 +369,7 @@ test("capability queries include every operation at the native registry limit", 
       capabilitiesPlugin,
     ],
     ".",
-    "io",
+    "worker",
     undefined,
     catalog,
   );
@@ -399,7 +406,7 @@ test.skipIf(process.platform !== "win32")(
           name: "sta-test",
           version: "1",
           native: native,
-          execution: "ui",
+          thread: "ui",
         },
       ],
       `import assert from "node:assert/strict";

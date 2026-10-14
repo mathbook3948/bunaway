@@ -264,6 +264,7 @@
       "pages": {
         "reference/tooling/native-plugins": [
           "defineNativePlugin",
+          "defineNativeOperation",
           "BunawayError",
           "NativeEventWaiters",
           "defineNativeAdapter"
@@ -999,6 +1000,19 @@
       }
     },
     {
+      "source": "packages/plugin-sdk/src/native-platform.ts",
+      "type": "NativeHandlerContext",
+      "pages": {
+        "reference/tooling/native-plugins": [
+          "instance",
+          "source",
+          "requestId",
+          "permissions",
+          "signal"
+        ]
+      }
+    },
+    {
       "source": "packages/plugin-sdk/src/index.ts",
       "type": "NativeAdapter",
       "pages": {
@@ -1159,6 +1173,28 @@
           "nearestPoint",
           "nearestRect",
           "cursor"
+        ]
+      }
+    },
+    {
+      "source": "plugins/storage/src/contract.ts",
+      "type": "Storage",
+      "pages": {
+        "reference/host/storage-read-text": ["readText"],
+        "reference/host/storage-write-text": ["writeText"],
+        "reference/host/storage-exists": ["exists"],
+        "reference/host/storage-stat": ["stat"],
+        "reference/host/storage-bytes": [
+          "readBytes",
+          "writeBytes",
+          "appendBytes",
+          "appendText"
+        ],
+        "reference/host/storage-transfers": ["copyFile", "move"],
+        "reference/host/storage-directories": [
+          "readDirectory",
+          "createDirectory",
+          "remove"
         ]
       }
     }

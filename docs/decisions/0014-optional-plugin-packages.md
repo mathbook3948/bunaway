@@ -68,7 +68,7 @@ export default defineApp({
 이전에는 지원 목록과 dispatch를 함께 유지하고 다시 파싱해 타입을 좁혔다.
 
 ```ts
-platforms: { windows: { execution: "ui", create, operations: ["read"] } }
+platforms: { windows: { thread: "ui", create, operations: ["read"] } }
 // create 내부
 executeUI(name, input) {
   switch (name) {
@@ -92,5 +92,12 @@ const create = defineNativeAdapter(operations, {
   dispose() {},
 });
 // index.ts
-platforms: { windows: { execution: "ui", create } }
+platforms: { windows: { thread: "ui", create } }
 ```
+
+## 2026-10-14: 플랫폼별 작업 선언
+
+위 함수 맵 예시는 당시 이관 단계를 기록한다. 현재 공식 플러그인은
+[ADR 0013](./0013-optional-native-plugins.md)의 플랫폼별 operations에 작업마다
+input, output과 handler를 선언한다. 공유 상태가 필요하면 플랫폼의 initialize와
+dispose를 사용한다. 기존 create 어댑터는 외부 플러그인 호환을 위해 유지한다.

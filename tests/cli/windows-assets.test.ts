@@ -129,7 +129,7 @@ parentPort.close();
           },
           targets: {
             windows: {
-              execution: "io",
+              thread: "worker",
               operations: resolve(root, "plugin.ts"),
             },
           },

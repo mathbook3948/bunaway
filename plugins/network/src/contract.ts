@@ -97,93 +97,87 @@ const timeoutMs = z
   .max(MAX_NETWORK_TIMEOUT_MS)
   .default(MAX_NETWORK_TIMEOUT_MS);
 /** Bounded network calls owned by one cancellable host invocation, without persistent handles. */
-export const networkOperations = {
-  request: {
-    input: z
-      .strictObject({
-        url: urlFor([
-          "http:",
-          "https:",
-        ]),
-        method: z
-          .enum([
-            "GET",
-            "HEAD",
-            "POST",
-            "PUT",
-            "PATCH",
-            "DELETE",
-            "OPTIONS",
-          ])
-          .default("GET"),
-        headers: requestHeaders.default([]),
-        bodyBase64: base64.exactOptional(),
-        maxResponseBytes: z
-          .number()
-          .int()
-          .min(0)
-          .max(MAX_BODY_BYTES)
-          .default(MAX_BODY_BYTES),
-        timeoutMs,
-      })
-      .refine(
-        (input) =>
-          input.bodyBase64 === undefined ||
-          ![
-            "GET",
-            "HEAD",
-          ].includes(input.method),
-        "GET and HEAD cannot have a body.",
-      ),
-    output: z.strictObject({
-      status: z.number().int().min(100).max(599),
-      headers,
-      bodyBase64: base64,
-    }),
-  },
-  exchange: {
-    input: z.strictObject({
-      url: urlFor([
-        "ws:",
-        "wss:",
+export const requestInputSchema = z
+  .strictObject({
+    url: urlFor([
+      "http:",
+      "https:",
+    ]),
+    method: z
+      .enum([
+        "GET",
+        "HEAD",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "OPTIONS",
+      ])
+      .default("GET"),
+    headers: requestHeaders.default([]),
+    bodyBase64: base64.exactOptional(),
+    maxResponseBytes: z
+      .number()
+      .int()
+      .min(0)
+      .max(MAX_BODY_BYTES)
+      .default(MAX_BODY_BYTES),
+    timeoutMs,
+  })
+  .refine(
+    (input) =>
+      input.bodyBase64 === undefined ||
+      ![
+        "GET",
+        "HEAD",
+      ].includes(input.method),
+    "GET and HEAD cannot have a body.",
+  );
+export const responseSchema = z.strictObject({
+  status: z.number().int().min(100).max(599),
+  headers,
+  bodyBase64: base64,
+});
+export const exchangeInputSchema = z.strictObject({
+  url: urlFor([
+    "ws:",
+    "wss:",
+  ]),
+  messages: z
+    .array(z.string().max(MAX_BODY_BYTES))
+    .max(64)
+    .refine(
+      (values) =>
+        values.reduce(
+          (bytes, value) => bytes + new TextEncoder().encode(value).length,
+          0,
+        ) <= MAX_BODY_BYTES,
+      "Messages exceed the byte limit.",
+    ),
+  receiveCount: z.number().int().min(1).max(64),
+  timeoutMs,
+});
+export const exchangeResultSchema = z.strictObject({
+  messages: z
+    .array(
+      z.discriminatedUnion("kind", [
+        z.strictObject({
+          kind: z.literal("text"),
+          text: z.string().max(MAX_BODY_BYTES),
+        }),
+        z.strictObject({
+          kind: z.literal("binary"),
+          base64,
+        }),
       ]),
-      messages: z
-        .array(z.string().max(MAX_BODY_BYTES))
-        .max(64)
-        .refine(
-          (values) =>
-            values.reduce(
-              (bytes, value) => bytes + new TextEncoder().encode(value).length,
-              0,
-            ) <= MAX_BODY_BYTES,
-          "Messages exceed the byte limit.",
-        ),
-      receiveCount: z.number().int().min(1).max(64),
-      timeoutMs,
-    }),
-    output: z.strictObject({
-      messages: z
-        .array(
-          z.discriminatedUnion("kind", [
-            z.strictObject({
-              kind: z.literal("text"),
-              text: z.string().max(MAX_BODY_BYTES),
-            }),
-            z.strictObject({
-              kind: z.literal("binary"),
-              base64,
-            }),
-          ]),
-        )
-        .max(64),
-      close: z.strictObject({
-        code: z.number().int().min(0).max(4999),
-        reason: z.string().max(123),
-        wasClean: z.boolean(),
-      }),
-    }),
-  },
-} as const;
+    )
+    .max(64),
+  close: z.strictObject({
+    code: z.number().int().min(0).max(4999),
+    reason: z.string().max(123),
+    wasClean: z.boolean(),
+  }),
+});
 /** HTTP request and response types inferred from the validated transport contract. */
-export type NetworkRequest = z.input<typeof networkOperations.request.input>;
-export type NetworkResponse = z.output<typeof networkOperations.request.output>;
+export type NetworkRequest = z.input<typeof requestInputSchema>;
+export type NetworkResponse = z.output<typeof responseSchema>;

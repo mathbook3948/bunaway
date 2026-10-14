@@ -1,17 +1,17 @@
 import { defineNativePlugin } from "@bunaway/plugin";
 import { createAutostart } from "./calls.ts";
-import { autostartOperations } from "./contract.ts";
-import { createOperations as createWindowsOperations } from "./platforms/windows.ts";
+import { autostartOperations } from "./operations.ts";
+import { dispose, initialize } from "./platforms/windows.ts";
 
 const plugin = defineNativePlugin({
   name: "autostart",
   platforms: {
     windows: {
-      execution: "io",
-      create: createWindowsOperations,
+      initialize,
+      dispose,
+      operations: autostartOperations,
     },
   },
-  operations: autostartOperations,
 });
 
 /** Optional user-scoped Windows login registration. Importing does not register the app. */

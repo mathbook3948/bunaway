@@ -1,21 +1,29 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { appearanceOperations } from "./contract.ts";
-import { createOperations as createMacosOperations } from "./platforms/macos.ts";
-import { createOperations } from "./platforms/windows.ts";
+import { appearanceOperations } from "./operations.ts";
+import {
+  dispose as disposeMacos,
+  initialize as initializeMacos,
+} from "./platforms/macos.ts";
+import {
+  dispose as disposeWindows,
+  initialize as initializeWindows,
+} from "./platforms/windows.ts";
 
 const plugin = defineNativePlugin({
   name: "appearance",
   platforms: {
     macos: {
-      execution: "ui",
-      create: createMacosOperations,
+      thread: "ui",
+      initialize: initializeMacos,
+      dispose: disposeMacos,
+      operations: appearanceOperations,
     },
     windows: {
-      execution: "io",
-      create: createOperations,
+      initialize: initializeWindows,
+      dispose: disposeWindows,
+      operations: appearanceOperations,
     },
   },
-  operations: appearanceOperations,
 });
 /** Read OS appearance and accessibility preferences with an independent operation grant. */
 export const appearancePlugin = plugin.definition;

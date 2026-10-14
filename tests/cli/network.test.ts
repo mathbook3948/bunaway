@@ -53,7 +53,7 @@ test("isolated network package ships both async adapters and keeps Bun transport
       "macos",
     ] as const) {
       const target = plugin?.targets[platform];
-      expect(target?.execution).toBe("ui");
+      expect(target?.thread).toBe("ui");
       expect(target?.operations).toBeDefined();
       if (!target?.operations) {
         throw new Error("Missing native network export");
@@ -85,17 +85,18 @@ test("isolated network package ships both async adapters and keeps Bun transport
         expect(Buffer.from(response.bodyBase64, "base64").toString()).toBe(
           "isolated network",
         );
-        await expect(
-          adapter.execute(
-            "network.request",
-            {
-              url: "http://127.0.0.1",
-            },
-            "backend",
-          ),
-        ).rejects.toMatchObject({
-          code: "UNSUPPORTED",
-        });
+        // Complete operation handlers support trusted direct adapter calls as well as contextual dispatch.
+        const direct = await adapter.execute(
+          "network.request",
+          {
+            url: server.url.href,
+          },
+          "backend",
+        );
+        expect(direct.status).toBe(200);
+        expect(Buffer.from(direct.bodyBase64, "base64").toString()).toBe(
+          "isolated network",
+        );
       } finally {
         await adapter.dispose();
       }

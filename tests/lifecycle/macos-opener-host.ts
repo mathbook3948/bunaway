@@ -101,8 +101,8 @@ try {
     ({ name }) => name === "opener" || name === "windows",
   );
   assert.equal(
-    installed.find(({ name }) => name === "opener")?.targets.macos?.execution,
-    "io",
+    installed.find(({ name }) => name === "opener")?.targets.macos?.thread,
+    "worker",
   );
   const bundled = await bundleMacosHost(
     resolve(root, "native/macos/bun"),

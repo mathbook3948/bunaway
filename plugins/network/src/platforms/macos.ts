@@ -1,1 +1,6 @@
-export { createOperations } from "../bun-adapter.ts";
+export {
+  dispose,
+  initialize,
+  runExchange,
+  runRequest,
+} from "../bun-adapter.ts";

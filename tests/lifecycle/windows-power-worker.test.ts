@@ -69,7 +69,7 @@ test.skipIf(process.platform !== "win32")(
         [
           {
             ...registration,
-            execution: "io",
+            thread: "worker",
           },
         ],
         `import { powerPlugin } from ${JSON.stringify(resolve(import.meta.dir, "../../plugins/power/dist/native/windows.js"))};

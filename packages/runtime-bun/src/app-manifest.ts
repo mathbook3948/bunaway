@@ -12,7 +12,7 @@ export type ManifestPlugin = {
   version: string;
   native: NativePluginContract;
   /** Execution thread owning the adapter; omitted when this platform has no implementation. */
-  execution?: "io" | "ui";
+  thread?: "worker" | "ui";
   /** Fully qualified operations implemented by this adapter; omitted means every declared operation. */
   supportedOperations?: string[];
 };
@@ -43,9 +43,9 @@ const manifestSchema = {
           native: {
             type: "object",
           },
-          execution: {
+          thread: {
             enum: [
-              "io",
+              "worker",
               "ui",
             ],
           },
@@ -137,7 +137,7 @@ export function parseAppManifest(value: unknown): AppManifest {
   for (const plugin of plugins) {
     if (
       plugin.supportedOperations !== undefined &&
-      (plugin.execution === undefined ||
+      (plugin.thread === undefined ||
         plugin.supportedOperations.some(
           (name) =>
             !plugin.native.operations.some(

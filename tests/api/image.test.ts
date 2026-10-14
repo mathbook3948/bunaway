@@ -10,11 +10,13 @@ import {
 import { installedPlugins } from "#cli/plugins";
 import { bindHostAPI } from "#core/host-api";
 import {
-  imageOperations,
   MAX_ENCODED_BYTES,
   MAX_IMAGE_BYTES,
-  validateImageInput,
 } from "#plugins/image/src/contract";
+import {
+  imageOperations,
+  validateImageInput,
+} from "#plugins/image/src/operations";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("image", imageOperations);
@@ -293,7 +295,7 @@ test("image is independently discoverable and browser declaration excludes WIC r
   );
   const plugin = plugins.find((item) => item.name === "image");
   expect(plugin?.packageName).toBe("@bunaway/plugin-image");
-  expect(plugin?.targets.windows?.execution).toBe("ui");
+  expect(plugin?.targets.windows?.thread).toBe("ui");
   const result = await Bun.build({
     entrypoints: [
       resolve(import.meta.dir, "../../plugins/image/dist/index.js"),

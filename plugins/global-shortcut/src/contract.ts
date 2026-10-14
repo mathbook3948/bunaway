@@ -103,50 +103,6 @@ export const shortcutSchema = z.strictObject({
     ),
 });
 export type GlobalShortcut = z.output<typeof shortcutSchema>;
-export const globalShortcutOperations = {
-  register: {
-    input: shortcutSchema,
-    output: z.null(),
-  },
-  registerMany: {
-    input: z.strictObject({
-      shortcuts: z.array(shortcutSchema).min(1).max(MAX_GLOBAL_SHORTCUTS),
-    }),
-    output: z.null(),
-  },
-  isRegistered: {
-    input: shortcutSchema,
-    output: z.boolean(),
-  },
-  list: {
-    input: z.null(),
-    output: z.array(shortcutSchema).max(MAX_GLOBAL_SHORTCUTS),
-  },
-  unregister: {
-    input: shortcutSchema,
-    output: z.boolean(),
-  },
-  unregisterAll: {
-    input: z.null(),
-    output: z.null(),
-  },
-  setSuspended: {
-    input: z.strictObject({
-      suspended: z.boolean(),
-    }),
-    output: z.null(),
-  },
-  isSuspended: {
-    input: z.null(),
-    output: z.boolean(),
-  },
-  waitForPress: {
-    input: z.null(),
-    output: z.strictObject({
-      shortcut: shortcutSchema,
-    }),
-  },
-};
 export const globalShortcutEvents = {
   "globalShortcut.pressed": {
     payload: {

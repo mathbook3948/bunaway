@@ -6,14 +6,14 @@ import type { ClipboardItem } from "#plugins/clipboard/src/formats";
 import { MAX_IMAGE_BYTES } from "#plugins/clipboard/src/formats";
 import { createPasteboard } from "#plugins/clipboard/src/macos-pasteboard";
 import { encodeTIFF, MAX_TIFF_BYTES } from "#plugins/clipboard/src/macos-tiff";
-import { pasteboardOperations } from "#plugins/clipboard/src/platforms/macos";
+import { pasteboardOperations } from "../fixtures/injected-native-plugins.ts";
 import { MAX_TEXT_LENGTH } from "#plugins/clipboard/src/text";
 
 test.skipIf(
   process.platform !== "darwin" || process.env.BUNAWAY_CLIPBOARD_NATIVE !== "1",
 )(
   "real NSPasteboard Unicode, multi-format, bounded RGBA and cleanup on a unique fixture board",
-  () => {
+  async () => {
     const name = `tests.bunaway.clipboard.${crypto.randomUUID()}`;
     const native = createPasteboard(name);
     const observer = createPasteboard(name);
@@ -60,19 +60,19 @@ test.skipIf(
       });
     try {
       native.clear();
-      expect(invoke("clipboard.readText", null)).toBeNull();
-      expect(invoke("clipboard.getFormats", null)).toEqual([]);
+      expect(await invoke("clipboard.readText", null)).toBeNull();
+      expect(await invoke("clipboard.getFormats", null)).toEqual([]);
       for (const text of [
         "",
         "한글 😀\n\r\n",
         "😀".repeat(MAX_TEXT_LENGTH),
       ]) {
         expect(
-          invoke("clipboard.writeText", {
+          await invoke("clipboard.writeText", {
             text,
           }),
         ).toBeNull();
-        expect(invoke("clipboard.readText", null)).toBe(text);
+        expect(await invoke("clipboard.readText", null)).toBe(text);
         expect(observer.read("text/plain").data).toBe(text);
       }
       const image = {
@@ -115,14 +115,14 @@ test.skipIf(
           data: image,
         },
       ];
-      invoke("clipboard.writeFormats", {
+      await invoke("clipboard.writeFormats", {
         items,
       });
-      expect(invoke("clipboard.getFormats", null)).toEqual(
+      expect(await invoke("clipboard.getFormats", null)).toEqual(
         items.map((item) => item.format),
       );
       expect(
-        invoke("clipboard.readFormats", {
+        await invoke("clipboard.readFormats", {
           formats: items.map((item) => item.format),
         }),
       ).toEqual(items);
@@ -140,13 +140,13 @@ test.skipIf(
         expect(Number(objc.send(rep, "bitsPerSample"))).toBe(8);
         expect(Number(objc.send(rep, "samplesPerPixel"))).toBe(4);
       });
-      expect(() => invoke("clipboard.clear", null, [])).toThrow(
+      await expect(invoke("clipboard.clear", null, [])).rejects.toThrow(
         expect.objectContaining({
           code: "PERMISSION_DENIED",
         }),
       );
       expect(observer.read("text/plain").data).toBe("fallback 한글 😀");
-      expect(() =>
+      await expect(
         invoke("clipboard.writeFormats", {
           items: [
             {
@@ -157,19 +157,19 @@ test.skipIf(
             },
           ],
         }),
-      ).toThrow(
+      ).rejects.toThrow(
         expect.objectContaining({
           code: "UNSUPPORTED",
         }),
       );
       expect(observer.read("text/plain").data).toBe("fallback 한글 😀");
       expect(
-        invoke("clipboard.hasFormat", {
+        await invoke("clipboard.hasFormat", {
           format: "application/x-bunaway-file-list",
         }),
       ).toBe(false);
       expect(
-        invoke("clipboard.readFormats", {
+        await invoke("clipboard.readFormats", {
           formats: [
             "application/x-bunaway-file-list",
           ],
@@ -185,16 +185,16 @@ test.skipIf(
         height: 256,
         rgba: Buffer.alloc(MAX_IMAGE_BYTES, 17).toString("base64"),
       };
-      invoke("clipboard.writeImage", maximum);
-      expect(invoke("clipboard.readImage", null)).toEqual(maximum);
-      expect(invoke("clipboard.readText", null)).toBeNull();
+      await invoke("clipboard.writeImage", maximum);
+      expect(await invoke("clipboard.readImage", null)).toEqual(maximum);
+      expect(await invoke("clipboard.readText", null)).toBeNull();
       expect(
-        invoke("clipboard.hasFormat", {
+        await invoke("clipboard.hasFormat", {
           format: "text/html",
         }),
       ).toBe(false);
       expect(
-        invoke("clipboard.readFormats", {
+        await invoke("clipboard.readFormats", {
           formats: [
             "text/plain",
             "text/html",
@@ -211,18 +211,18 @@ test.skipIf(
           data: null,
         })),
       );
-      expect(() =>
+      await expect(
         invoke("clipboard.writeText", {
           text: "x".repeat(MAX_TEXT_LENGTH + 1),
         }),
-      ).toThrow(
+      ).rejects.toThrow(
         expect.objectContaining({
           code: "INVALID_ARGUMENT",
         }),
       );
-      expect(invoke("clipboard.readImage", null)).toEqual(maximum);
-      invoke("clipboard.clear", null);
-      expect(invoke("clipboard.readImage", null)).toBeNull();
+      expect(await invoke("clipboard.readImage", null)).toEqual(maximum);
+      await invoke("clipboard.clear", null);
+      expect(await invoke("clipboard.readImage", null)).toBeNull();
       for (const [type, bytes, operation] of [
         [
           "public.utf8-plain-text",
@@ -254,24 +254,24 @@ test.skipIf(
         ],
       ] as const) {
         installExternal(type, bytes);
-        expect(() => invoke(operation, null)).toThrow(
+        await expect(invoke(operation, null)).rejects.toThrow(
           expect.objectContaining({
             code: "INTERNAL",
           }),
         );
       }
       installExternal("tests.bunaway.unknown", Buffer.from("unknown data"));
-      expect(invoke("clipboard.readText", null)).toBeNull();
-      expect(invoke("clipboard.getFormats", null)).toEqual([]);
-      adapter.dispose();
-      adapter.dispose();
-      expect(() => invoke("clipboard.clear", null)).toThrow(
+      expect(await invoke("clipboard.readText", null)).toBeNull();
+      expect(await invoke("clipboard.getFormats", null)).toEqual([]);
+      await adapter.dispose();
+      await adapter.dispose();
+      await expect(invoke("clipboard.clear", null)).rejects.toThrow(
         expect.objectContaining({
           code: "CANCELLED",
         }),
       );
     } finally {
-      adapter.dispose();
+      await adapter.dispose();
       observer.dispose();
     }
   },

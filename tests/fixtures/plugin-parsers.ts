@@ -32,7 +32,7 @@ export function pluginParsers(
       ),
       platforms: {
         windows: {
-          execution: "io",
+          thread: "worker",
           create,
         },
       },

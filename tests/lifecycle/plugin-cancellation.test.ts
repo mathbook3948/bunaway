@@ -46,7 +46,7 @@ for (const [workerKind, phase] of [
       const plugin = {
         name: "output",
         version: "development",
-        execution: workerKind,
+        thread: workerKind === "io" ? ("worker" as const) : ("ui" as const),
         native: {
           operations: [
             {
@@ -88,7 +88,7 @@ for (const [workerKind, phase] of [
     const plugin = defineNativePlugin({name:"output",operations:{run:{
       input:phase === "input" ? z.string().transform(pause) : z.string(),
       output:phase === "output" ? z.string().transform(pause) : z.string(),
-    }},platforms:{windows:{execution:${JSON.stringify(workerKind)},create:()=>({
+    }},platforms:{windows:{thread:${JSON.stringify(workerKind === "io" ? "worker" : "ui")},create:()=>({
       execute(_name,input) { Atomics.add(state,slots.executions,1); return input; },
       ...( ${JSON.stringify(workerKind)} === "ui" ? {async executeUI(_name,input) { Atomics.add(state,slots.executions,1); return phase === "execution" ? pause(input) : input; }} : {}),
       dispose(){},

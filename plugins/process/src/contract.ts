@@ -47,39 +47,35 @@ const executablePath = z
     );
   }, "Expected an absolute local Windows .exe path.");
 /** One bounded foreground invocation. Applications authorize the executable and complete argv. */
-export const processOperations = {
-  run: {
-    input: z
-      .strictObject({
-        executablePath,
-        args: z.array(argument).max(128).default([]),
-        stdinBase64: base64.exactOptional(),
-        maxOutputBytes: z
-          .number()
-          .int()
-          .min(0)
-          .max(MAX_PROCESS_BYTES)
-          .default(MAX_PROCESS_BYTES),
-        timeoutMs: z.number().int().min(1).max(30_000).default(30_000),
-      })
-      .refine((input) => {
-        // A conservative quoted argv bound also allows doubled backslashes before quotes and at the end.
-        const units =
-          input.executablePath.length +
-          2 +
-          input.args.reduce((length, arg) => length + 3 + arg.length * 2, 0);
-        return units <= MAX_COMMAND_LINE_UNITS;
-      }, "Arguments exceed the Windows command-line limit."),
-    output: z.strictObject({
-      pid: z.number().int().positive(),
-      exitCode: z.number().int().min(-0x80000000).max(0xffffffff),
-      signal: z.string().max(32).nullable(),
-      stdoutBase64: base64,
-      stderrBase64: base64,
-    }),
-  },
-} as const;
+export const processInputSchema = z
+  .strictObject({
+    executablePath,
+    args: z.array(argument).max(128).default([]),
+    stdinBase64: base64.exactOptional(),
+    maxOutputBytes: z
+      .number()
+      .int()
+      .min(0)
+      .max(MAX_PROCESS_BYTES)
+      .default(MAX_PROCESS_BYTES),
+    timeoutMs: z.number().int().min(1).max(30_000).default(30_000),
+  })
+  .refine((input) => {
+    // A conservative quoted argv bound also allows doubled backslashes before quotes and at the end.
+    const units =
+      input.executablePath.length +
+      2 +
+      input.args.reduce((length, arg) => length + 3 + arg.length * 2, 0);
+    return units <= MAX_COMMAND_LINE_UNITS;
+  }, "Arguments exceed the Windows command-line limit.");
+export const processResultSchema = z.strictObject({
+  pid: z.number().int().positive(),
+  exitCode: z.number().int().min(-0x80000000).max(0xffffffff),
+  signal: z.string().max(32).nullable(),
+  stdoutBase64: base64,
+  stderrBase64: base64,
+});
 /** Caller input for one foreground process execution. */
-export type ProcessInput = z.input<typeof processOperations.run.input>;
+export type ProcessInput = z.input<typeof processInputSchema>;
 /** Captured process completion with exact binary stdout and stderr. */
-export type ProcessResult = z.output<typeof processOperations.run.output>;
+export type ProcessResult = z.output<typeof processResultSchema>;

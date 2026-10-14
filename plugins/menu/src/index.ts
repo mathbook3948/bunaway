@@ -1,16 +1,18 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { menuEvents, menuOperations } from "./contract.ts";
-import { createOperations } from "./platforms/windows.ts";
+import { menuEvents } from "./contract.ts";
+import { menuOperations } from "./operations.ts";
+import { dispose, initialize } from "./platforms/windows.ts";
 
 const plugin = defineNativePlugin({
   name: "menu",
   platforms: {
     windows: {
-      execution: "ui",
-      create: createOperations,
+      thread: "ui",
+      initialize,
+      dispose,
+      operations: menuOperations,
     },
   },
-  operations: menuOperations,
   events: menuEvents,
 });
 /** App-scoped menu resources; each operation requires its own policy permission. */

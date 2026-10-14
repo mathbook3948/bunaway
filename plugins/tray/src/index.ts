@@ -1,16 +1,18 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { trayEvents, trayOperations } from "./contract.ts";
-import { createOperations } from "./platforms/windows.ts";
+import { trayEvents } from "./contract.ts";
+import { trayOperations } from "./operations.ts";
+import { dispose, initialize } from "./platforms/windows.ts";
 
 const plugin = defineNativePlugin({
   name: "tray",
   platforms: {
     windows: {
-      execution: "ui",
-      create: createOperations,
+      thread: "ui",
+      initialize,
+      dispose,
+      operations: trayOperations,
     },
   },
-  operations: trayOperations,
   events: trayEvents,
 });
 /** Optional controls and notifications for the app's configured Windows tray. */

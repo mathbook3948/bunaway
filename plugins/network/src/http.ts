@@ -1,10 +1,10 @@
 import { BunawayError } from "@bunaway/protocol";
 import type { z } from "zod";
-import { MAX_HEADER_BYTES, type networkOperations } from "./contract.ts";
+import { MAX_HEADER_BYTES, type requestInputSchema } from "./contract.ts";
 
 /** Read a bounded, decompressed response. Redirects are returned to the app for a new access check. */
 export async function request(
-  input: z.output<typeof networkOperations.request.input>,
+  input: z.output<typeof requestInputSchema>,
   signal: AbortSignal,
 ) {
   const response = await fetch(input.url, {

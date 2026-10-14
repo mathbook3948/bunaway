@@ -7,9 +7,9 @@ import { files, hash, writeJson } from "#cli/files";
 import { compileMacosApp } from "#cli/macos-compile";
 import { installedPlugins } from "#cli/plugins";
 import { run } from "#cli/processes";
-import { clipboardOperations } from "#plugins/clipboard/src/contract";
 import { MAX_IMAGE_BYTES } from "#plugins/clipboard/src/formats";
 import { createPasteboard } from "#plugins/clipboard/src/macos-pasteboard";
+import { macosOperations as clipboardOperations } from "#plugins/clipboard/src/operations";
 import pin from "../../runtime/build-manifests/darwin-aarch64.json";
 
 // The general pasteboard is shared with the desktop. Run this fixture only on

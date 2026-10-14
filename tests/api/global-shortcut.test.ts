@@ -1,17 +1,15 @@
 import { expect, test } from "bun:test";
-import type { JsonValue } from "@bunaway/protocol";
 import { globalShortcutPlugin } from "@bunaway/plugin-global-shortcut";
+import type { JsonValue } from "@bunaway/protocol";
 import { NativeRegistry } from "@bunaway/protocol";
 import {
   type GlobalShortcut,
-  globalShortcutOperations,
   hotkeyCodes,
   shortcutSchema,
 } from "#plugins/global-shortcut/src/contract";
-import {
-  createShortcutOperations,
-  type ShortcutDriver,
-} from "#plugins/global-shortcut/src/shortcut-adapter";
+import { globalShortcutOperations } from "#plugins/global-shortcut/src/operations";
+import type { ShortcutDriver } from "#plugins/global-shortcut/src/shortcut-adapter";
+import { createShortcutOperations } from "../fixtures/injected-native-plugins.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const shortcut = (key: GlobalShortcut["key"]): GlobalShortcut => ({
@@ -229,8 +227,8 @@ test("registration, queries and removal keep independent permissions and lifetim
       shortcut: shortcut("K"),
     },
   ]);
-  f.adapter.dispose();
-  f.adapter.dispose();
+  await f.adapter.dispose();
+  await f.adapter.dispose();
   expect(f.disposed()).toBe(1);
   expect(f.native.size).toBe(0);
   f.press(id, shortcut("K"));
@@ -543,7 +541,7 @@ test("backend press waits work without a view, survive suspension and release on
   await expect(f.invoke("waitForPress", null)).rejects.toMatchObject({
     code: "BUSY",
   });
-  f.adapter.dispose();
+  await f.adapter.dispose();
   for (const result of await results) {
     expect(result).toMatchObject({
       status: "rejected",

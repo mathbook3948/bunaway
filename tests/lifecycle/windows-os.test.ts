@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import assert from "node:assert/strict";
 import { arch, hostname, release, version } from "node:os";
 import { osPlugin } from "@bunaway/plugin-os/native/windows";
-import { osOperations } from "#plugins/os/src/contract";
+import { osOperations } from "#plugins/os/src/operations";
 import { assertWindowsRegionCode } from "../fixtures/windows-region-code.ts";
 
 test.skipIf(process.platform !== "win32")(

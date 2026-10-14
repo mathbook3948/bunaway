@@ -1,87 +1,89 @@
-import type { NativeAdapter, NativeEnvironment } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
+import type { z } from "zod";
 import { PowerBlockers } from "../blockers.ts";
-import { powerOperations } from "../contract.ts";
+import type { blockerInputSchema } from "../contract.ts";
 import { createPower } from "../win32.ts";
 
-/** Own DLLs and power request handles in the host I/O worker. The host checks operation grants. */
-export function createOperations(
-  _environment: NativeEnvironment,
-): NativeAdapter {
-  const native = createPower();
-  const blockers = new PowerBlockers(native);
-  let disposed = false;
-  return {
-    execute(operation, input) {
-      if (disposed) {
-        throw new BunawayError({
-          code: "CANCELLED",
-          message: "Power adapter is disposed.",
-        });
-      }
-      function parse<T>(schema: import("zod").z.ZodType<T>): T {
-        const result = schema.safeParse(input);
-        if (!result.success) {
-          throw new BunawayError({
-            code: "INVALID_ARGUMENT",
-            message: "Invalid power plugin input.",
-          });
-        }
-        return result.data;
-      }
-      switch (operation) {
-        case "power.getStatus":
-          parse(powerOperations.getStatus.input);
-          return {
-            ...native.status(),
-          };
-        case "power.getIdleTime":
-          parse(powerOperations.getIdleTime.input);
-          return native.idle();
-        case "power.getIdleState": {
-          const payload = parse(powerOperations.getIdleState.input);
-          return native.idle() >= payload.thresholdSeconds ? "idle" : "active";
-        }
-        case "power.startBlocker": {
-          const payload = parse(powerOperations.startBlocker.input);
-          return {
-            ...blockers.start(payload.type, payload.reason),
-          };
-        }
-        case "power.listBlockers":
-          parse(powerOperations.listBlockers.input);
-          return blockers.list();
-        case "power.isBlockerActive":
-          return blockers.active(
-            parse(powerOperations.isBlockerActive.input).id,
-          );
-        case "power.stopBlocker":
-          return blockers.stop(parse(powerOperations.stopBlocker.input).id);
-        default:
-          throw new BunawayError({
-            code: "UNSUPPORTED",
-            message: "Host operation is not registered.",
-          });
-      }
-    },
-    dispose() {
-      disposed = true;
-      const errors: unknown[] = [];
-      try {
-        blockers.dispose();
-      } catch (error) {
-        errors.push(error);
-      }
-      try {
-        // Also retry handles retained by failed activation without a public blocker ID.
-        // The native owner keeps DLLs loaded while any request handle remains open.
-        native.dispose();
-      } catch (error) {
-        errors.push(error);
-      }
-      if (errors.length) {
-        throw new AggregateError(errors, "Power adapter cleanup failed.");
-      }
-    },
-  };
+/** Own DLLs and power request handles on the host I/O worker. */
+export class WindowsPower {
+  private readonly native = createPower();
+  private readonly blockers = new PowerBlockers(this.native);
+  private disposed = false;
+
+  private active(): void {
+    if (this.disposed) {
+      throw new BunawayError({
+        code: "CANCELLED",
+        message: "Power adapter is disposed.",
+      });
+    }
+  }
+
+  getStatus() {
+    this.active();
+    return {
+      ...this.native.status(),
+    };
+  }
+
+  getIdleTime() {
+    this.active();
+    return this.native.idle();
+  }
+
+  getIdleState(thresholdSeconds: number) {
+    return this.getIdleTime() >= thresholdSeconds
+      ? ("idle" as const)
+      : ("active" as const);
+  }
+
+  startBlocker(input: z.output<typeof blockerInputSchema>) {
+    this.active();
+    return {
+      ...this.blockers.start(input.type, input.reason),
+    };
+  }
+
+  listBlockers() {
+    this.active();
+    return this.blockers.list();
+  }
+
+  isBlockerActive(id: string) {
+    this.active();
+    return this.blockers.active(id);
+  }
+
+  stopBlocker(id: string) {
+    this.active();
+    return this.blockers.stop(id);
+  }
+
+  /** Retry both owners independently so one failed close does not skip the other. */
+  dispose(): void {
+    this.disposed = true;
+    const errors: unknown[] = [];
+    try {
+      this.blockers.dispose();
+    } catch (error) {
+      errors.push(error);
+    }
+    try {
+      // Failed activation can retain a native handle without a public blocker ID.
+      this.native.dispose();
+    } catch (error) {
+      errors.push(error);
+    }
+    if (errors.length) {
+      throw new AggregateError(errors, "Power adapter cleanup failed.");
+    }
+  }
+}
+
+export function initialize(): WindowsPower {
+  return new WindowsPower();
+}
+
+export function dispose(instance: WindowsPower): void {
+  instance.dispose();
 }

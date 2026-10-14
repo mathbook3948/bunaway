@@ -50,6 +50,36 @@ export async function save(text: string): Promise<null> {
 
 ## 패키지와 진입점
 
+### storage의 플랫폼별 작업 선언
+
+storage는 각 플랫폼의 operations에 입력과 출력 스키마, handler를 함께 선언한다.
+최상위 공통 작업 맵은 없으며 `src/index.ts`는 실행 위치, 인스턴스 수명과 작업 맵을 조립한다.
+두 플랫폼의 공통 작업은 자원을 만들지 않는 operations.ts에 한 번 선언한다.
+windows-operations.ts는 공통 목록에 Windows 전용 move와 remove를 추가한다.
+OS 자원 구현은 기존 `src/platforms/<platform>.ts`에 있어 중립 출력과 다른 OS 출력에서 제외된다.
+지원 여부는 각 작업 맵의 키로 판단한다. macOS에는 move와 remove를 선언하지 않는다.
+공개 Storage 인터페이스와 재사용할 값 스키마는 플러그인 작성자가 정한다.
+SDK는 플랫폼별 스키마에서 호출 API를 추론하며 실제 검증에는 해당 플랫폼의 스키마만 사용한다. handler는
+검증된 입력과 호스트 실행 context를 받아 동기 값이나 Promise를 반환한다.
+`defineNativeOperation<Instance>()`은 플랫폼의 작업 선언에서 스키마와 인스턴스 타입으로
+handler 인자를 추론한다. 실행 시에는 선언한 작업 객체를 그대로 반환한다.
+
+initialize가 각 플랫폼 모듈의 WindowsStorage 또는 MacosStorage를 실행 Worker마다 만들고,
+dispose가 해당 인스턴스의 네이티브 바인딩을 정리한다. 선언 import와 지원 조회는 자원을
+만들지 않는다. 네이티브 구현은 작업 이름으로 분기하지 않고 기능별 메서드와 공통
+핸들 검사 절차를 사용한다. 경로, 링크와 최종 핸들 검사는 유지한다.
+
+initialize는 동기 반환만 허용한다. Promise나 thenable을 반환하면 어댑터 생성을 거부하고,
+늦게 완료한 인스턴스는 dispose로 회수한다. 잘못된 비동기 초기화와 회수 실패는 호스트 진단에 기록한다.
+dispose는 진행 중인 정리와 성공 결과를 공유한다. 실패한 정리는 다음 호출에서 재시도하며
+그동안 작업 실행은 계속 거부한다.
+
+작성 SDK는 플랫폼별 operations 키에서 기존 manifest의 지원 목록을 생성하고 기존 호스트
+dispatcher에 연결한다. 권한 검사, 비동기 입력 파싱 뒤 실행 승인, 취소와 출력 검증
+순서는 유지한다. 공식 플러그인도 같은 플랫폼별 작업 선언을 사용한다.
+공통 계약과 handler 선언은 중립 출력에도 남고 OS 자원
+구현만 플랫폼 빌드 경계에서 제외한다.
+
 | 패키지 | 공통 공개 export | 화면에서 사용하는 함수 |
 | --- | --- | --- |
 | `@bunaway/plugin-storage` | `storage`, `storagePlugin` | `storage` |
@@ -73,7 +103,11 @@ SDK의 호출 함수는 연결, handshake, 취소, pagehide 정리와 기존 호
 
 공식 플러그인의 기본 구조는 다음과 같다. 기능이 커지면 역할에 맞는 내부 파일을 추가한다.
 src/index.ts와 src/platforms/<platform>.ts는 빌드 경계다. package.json의 exports와 bunaway.plugin은 빌드 출력을 가리킨다.
-index.ts의 defineNativePlugin 선언은 contract.ts의 작업 계약과 플랫폼 구현 정보를 조립한다.
+index.ts의 defineNativePlugin 선언은 완성된 작업 목록과 플랫폼별 수명을 연결한다.
+각 작업은 input, output과 handler를 함께 선언한다. 두 플랫폼의 스키마와 handler가 같으면
+목록을 공유할 수 있으며 initialize, dispose와 thread는 플랫폼마다 달라도 된다.
+작업이나 handler가 다르면 플랫폼별 목록을 선언한다. contract.ts에는 재사용할 값 스키마와
+타입, 필요한 검증을 두며 스키마만 모은 공통 작업 목록을 플랫폼에서 펼치지 않는다.
 별도의 plugin.json이나 환경별 호출 전송 파일은 두지 않는다. 외부 제작자는 내부 파일 구성을 선택할 수 있다.
 
 Windows 개발 번들은 `package.json`의 조건부 루트 `exports`도 공유 모듈로 처리한다.
@@ -88,7 +122,8 @@ plugins/<name>/
   package.json
   src/
     index.ts                 계약과 플랫폼 선언 조립, 공개 export
-    contract.ts              작업 스키마, 타입과 계약 검증
+    contract.ts              재사용할 값 스키마, 타입과 계약 검증
+    operations.ts            input, output, handler를 갖춘 작업 목록
     calls.ts                 편의 호출 처리, 필요한 기능만 작성
     platforms/
       windows.ts             Windows 실행 팩터리와 자원 회수
@@ -99,17 +134,17 @@ plugins/<name>/
 ```
 
 저장, 로그와 기능 조회의 Windows 구현은 각각 src/platforms/windows.ts에 둔다.
-platforms에는 구현을 제공하는 OS만 작성한다. create에는 직접 import한 createOperations를 전달한다.
-execution은 io 또는 ui다. bunaway plugin build는 중립 출력에서 플랫폼 모듈을 자리 함수로 대체하고
+platforms에는 구현을 제공하는 OS만 작성하고 각 플랫폼의 operations에 스키마와 handler를 함께 선언한다.
+상태가 필요한 플랫폼은 initialize와 dispose로 인스턴스를 관리한다.
+thread는 worker 또는 ui이며 생략하면 worker다. bunaway plugin build는 중립 출력에서 플랫폼 모듈을 자리 함수로 대체하고
 OS별 출력에서는 해당 OS의 구현만 포함한다. 공통 SDK는 외부 의존성으로 유지한다.
-일부 작업만 지원하는 플랫폼은 operations에 짧은 작업 이름을 나열한다. 생략하면 전체 작업,
-빈 배열이면 지원하는 작업이 없다. 지원 조회와 호출 검사에 같은 목록을 사용하며,
+지원 작업은 각 플랫폼 operations의 키에서 얻는다. 지원 조회와 호출 검사에 같은 목록을 사용하며,
 미지원 작업도 작업 권한을 먼저 검사한 뒤 UNSUPPORTED를 반환한다.
 반환한 definition의 nativePlatforms는 CLI가 읽는 구현 정보이며 일반 앱 플러그인의
 platforms 배열이 가진 시작 제한과 구분한다. 등록 객체와 호출 API의 공개 이름은 유지한다.
 CLI는 중립 선언을 읽고 패키지의 native/<platform> export에 대한 지연 import를 생성한다.
-링크를 포함한 실제 파일은 설치 패키지 안에 있어야 한다. create는 열거되지 않는 속성으로
-등록 객체의 JSON과 structured clone에서 제외한다. DLL과 파일 핸들은 팩터리 호출에서만 연다.
+링크를 포함한 실제 파일은 설치 패키지 안에 있어야 한다. SDK가 만든 create는 열거되지 않는 속성으로
+등록 객체의 JSON과 structured clone에서 제외한다. DLL과 파일 핸들은 initialize에서만 연다.
 storage의 DLL 바인딩은 어댑터 인스턴스가 소유하며 초기화 실패와 dispose 때 회수한다.
 생성 앱의 tsconfig.json은 browser 조건으로 화면을 검사하고 src-bunaway/tsconfig.json은
 bun 조건으로 백엔드를 검사한다. typecheck는 두 검사를 모두 실행한다.
@@ -245,7 +280,7 @@ CLI는 버전을 package.json과 대조하고 플러그인 식별자, native 계
 JSON에 schema를 다시 복사하지 않는다. 진입점은 부작용 없는 선언이며 CLI가 앱
 진입점이나 plugin setup을 실행하지 않고 읽을 수 있어야 한다.
 `defineNativePlugin`은 선언을 검증하고 `definition`과 `api`를 반환한다.
-제작자는 operations 객체에 메서드 이름과 input, output을 작성한다.
+제작자는 플랫폼별 operations 객체에 메서드 이름과 input, output, handler를 작성한다.
 SDK가 작업 이름에 플러그인 접두사를 붙인다. 작업마다 독립적으로 권한을 허용한다.
 `z.strictObject`는 필드를 기본 필수로 선언하고 추가 필드를 거부한다. 선택 필드는
 `exactOptional()`로 표시한다. 스키마는 JSON Schema로 변환하지 않고 실행 Worker에서 파싱한다.
@@ -255,8 +290,8 @@ api의 메서드 이름은 operations의 키와 같다.
 입력과 결과의 타입은 schema에서 추론한다. 등록 객체는 default export하며 공개 함수는
 api를 원하는 이름으로 export한다. 기존 공식 plugin의 이름 있는 등록 export도 유지한다.
 
-Windows의 `execution`은 `io` 또는 `ui`다. 현재 이관하는 저장, 앱 로그와 지원 조회는
-`io`를 사용한다. UI 스레드가 필요한 플러그인은 `ui`를 선언하고 호스트의 UI Worker에
+`thread`는 `worker` 또는 `ui`이며 생략하면 `worker`다. 저장, 앱 로그와 지원 조회는
+기본 Worker에서 실행한다. UI 스레드가 필요한 플러그인은 `ui`를 선언하고 호스트의 UI Worker에
 실행을 맡긴다. 플러그인의 공개 함수가 실행 Worker를 직접 만들거나 선택하지 않는다.
 
 경로는 패키지 내부 상대 경로만 허용하고 실제 경로가 설치 패키지를 벗어나면 빌드를
@@ -364,7 +399,8 @@ SDK 검증, 정책 검사와 번들에서 재사용한다. 다음 검증이나 �
 Windows의 앱별 생성 데이터는 `assets/manifest.json`에 모은다. `format: 1` 아래에
 해석된 앱 설정 `app`, 권한 정책 `policy`, 설치된 플러그인 계약 `plugins`, 개발 중
 공유하는 SDK 모듈 목록 `developmentSdk`를 기록한다. plugins의 각 항목에는 이름,
-버전, native 계약과 선택적 execution이 들어간다.
+버전, native 계약과 선택적 thread가 들어간다. 선언의 기본값은 SDK가 worker로 확정하며,
+manifest에서 thread가 없으면 해당 플랫폼의 구현이 없다는 뜻이다.
 앱 개발자가 작성하는 설정과 정책은 계속 `src-bunaway/`에 두며 이 manifest는 CLI가
 빌드마다 생성한다. 이전 `app.json`, `policy.json`, `development-sdk.json`을 Windows
 실행 자산에 중복 생성하지 않는다. macOS도 실행 manifest와 생성 import 모듈을 사용한다.
@@ -445,10 +481,9 @@ OS 동의가 필요한 기능은 작업 실행 안에서 상태를 확인하고 
 비동기 UI 요청은 executeUI의 signal을 관찰한다. 이미 시작한 OS 요청을 취소할 수 없으면
 취소 후 기능 실행을 이어가지 않고 요청 완료 뒤 자원을 정리한다.
 
-operations 진입점은 `createOperations(environment)`를 export한다. 환경은 호스트가
-정한 데이터 루트와 등록된 작업의 지원 정보를 제공하며 호출자가 선택할 수 없다.
-반환 객체의 `execute(operation, input, source)`는 승인된 작업을 실행하고
-`dispose()`는 준비한 자원을 회수한다. `source`도 호스트가 정한 view/backend 출처다.
+플랫폼의 initialize는 호스트가 정한 데이터 루트와 등록된 작업의 지원 정보를 받고
+인스턴스를 만든다. 호출자는 이 환경을 선택할 수 없다. 각 handler는 검증된 입력과
+호스트가 정한 view/backend 출처, 인스턴스를 받아 실행한다. dispose는 준비한 자원을 회수한다.
 I/O Worker에서는 기존 파일 작업처럼 승인과 실행 사이에 await나 두 번째 큐를 두지
 않는다. 결과와 안전한 오류는 등록된 계약과 공통 HostResponse 형식으로 검증한다.
 
@@ -550,10 +585,11 @@ Windows의 [복귀 알림 순서](https://learn.microsoft.com/en-us/windows/win3
 
 ## 함수 맵과 선택 트레이 구현
 
-메뉴와 트레이 플랫폼은 defineNativeAdapter의 setup, handlers, dispose를 사용한다.
-파싱 결과와 반환값은 operation schema로 추론하고 함수 키가 플랫폼 지원 목록이다.
-빌드는 네이티브 출력을 격리된 프로세스에서 import해 함수 키만 읽는다. setup을 호출하지
-않고 그 목록을 중립 stub에도 기록하므로 browser와 모든 OS export의 지원 정보가 일치한다.
+메뉴와 트레이 플랫폼은 operations의 handler와 선택적인 initialize, dispose를 사용한다.
+파싱 결과와 반환값은 operation schema로 추론하고 operations의 키가 플랫폼 지원 목록이다.
+빌드는 플랫폼 경계 모듈을 격리된 Bun 프로세스에서 import해 재내보내기를 포함한 export 형태를 읽는다.
+initialize와 handler는 호출하지 않는다. 중립 stub에는 작업 키와 함수의 지원 메타데이터를 보존하고
+스키마는 자리표시자로 바꾼다. 해당 OS 출력은 실제 스키마와 구현을 유지한다.
 작업의 입력 파싱과 실행은 권한 승인 사이에서 분리하며 SDK prepare의 명시적인 context로
 I/O와 UI의 취소 및 실행 직전 권한 재검사를 전달한다.
 

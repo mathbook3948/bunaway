@@ -1,16 +1,16 @@
 import { defineNativePlugin, type NativeInvokeOptions } from "@bunaway/plugin";
-import { powerOperations } from "./contract.ts";
-import { createOperations } from "./platforms/windows.ts";
+import { powerOperations } from "./operations.ts";
+import { dispose, initialize } from "./platforms/windows.ts";
 
 const plugin = defineNativePlugin({
   name: "power",
   platforms: {
     windows: {
-      execution: "io",
-      create: createOperations,
+      initialize,
+      dispose,
+      operations: powerOperations,
     },
   },
-  operations: powerOperations,
 });
 /** Optional Windows power and idle queries, and app-owned sleep/display requests. */
 export const powerPlugin = plugin.definition;

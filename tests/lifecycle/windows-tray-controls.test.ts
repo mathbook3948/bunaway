@@ -1,7 +1,7 @@
 import { dlopen, ptr } from "bun:ffi";
 import { expect, test } from "bun:test";
 import type { NativeTrayEvent } from "@bunaway/plugin-api/native";
-import { trayOperations } from "#plugins/tray/src/contract";
+import { trayOperations } from "#plugins/tray/src/operations";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 import { trayIco, trayPngIco } from "../fixtures/tray-icon.ts";
 

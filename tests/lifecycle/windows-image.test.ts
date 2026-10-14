@@ -74,7 +74,7 @@ test.skipIf(process.platform !== "win32")(
             name: "image",
             version: imagePlugin.version,
             native: imagePlugin.native,
-            execution: "ui",
+            thread: "ui",
           },
         ],
         `

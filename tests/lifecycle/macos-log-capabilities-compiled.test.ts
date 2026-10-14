@@ -24,11 +24,11 @@ import { operations } from ${JSON.stringify(resolve(root, "native/host-api/bun/p
 const plugins = [logPlugin, capabilitiesPlugin];
 const catalog = plugins.map(plugin => {
   const platform = plugin.nativePlatforms.macos;
-  assert(platform?.execution === "io");
+  assert(platform?.thread === "worker");
   return {name:plugin.name,version:plugin.version,native:plugin.native,
-    execution:platform.execution,operations:async()=>({createOperations:platform.create})};
+    thread:platform.thread,operations:async()=>({createOperations:platform.create})};
 });
-const dispatcher = await operations(plugins, process.argv[2], "io", undefined, catalog);
+const dispatcher = await operations(plugins, process.argv[2], "worker", undefined, catalog);
 try {
   const support = await dispatcher.execute("capabilities.get", null, "backend");
   assert.deepEqual(JSON.parse(JSON.stringify(support)), [{name:"log.write",support:"supported"},{name:"capabilities.get",support:"supported"}]);
@@ -38,7 +38,7 @@ try {
   }
   await Promise.all(Array.from({length:32},(_,index)=>dispatcher.execute("log.write",{level:"info",message:"ordered",details:{index}},"view:main")));
 } finally { await dispatcher.dispose(); }
-const partial = await operations(plugins, process.argv[2], "io", undefined, catalog.map(plugin=>({...plugin,supportedOperations:plugin.name === "log" ? [] : ["capabilities.get"]})));
+const partial = await operations(plugins, process.argv[2], "worker", undefined, catalog.map(plugin=>({...plugin,supportedOperations:plugin.name === "log" ? [] : ["capabilities.get"]})));
 try {
   assert.deepEqual(JSON.parse(JSON.stringify(await partial.execute("capabilities.get",null,"backend"))),[{name:"log.write",support:"unsupported"},{name:"capabilities.get",support:"supported"}]);
   await assert.rejects(partial.execute("log.write",{level:"info",message:"unsupported"},"backend"),{code:"UNSUPPORTED"});

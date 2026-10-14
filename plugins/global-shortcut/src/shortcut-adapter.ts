@@ -1,13 +1,13 @@
-import { NativeEventWaiters, type NativeAdapter } from "@bunaway/plugin";
+import { NativeEventWaiters } from "@bunaway/plugin";
 import { BunawayError, type JsonValue } from "@bunaway/protocol";
 import {
   type GlobalShortcut,
-  globalShortcutOperations,
   hotkeyCodes,
   MAX_GLOBAL_SHORTCUTS,
   MAX_HOTKEY_ID,
   MAX_SHORTCUT_WAITERS,
   shortcutId,
+  type shortcutSchema,
 } from "./contract.ts";
 
 /** Native registration and hidden-window ownership boundary, shared by runtime and focused tests. */
@@ -40,12 +40,14 @@ function error(
 }
 
 /** Owns logical registrations through suspension and native failures. Every native ID is used once. */
-export function createShortcutOperations(
+export function initializeShortcutOperations(
   driver: ShortcutDriver,
   emit: (event: string, payload: JsonValue) => void,
-): NativeAdapter {
+) {
   const registrations = new Map<string, Registration>();
-  const presses = new NativeEventWaiters<JsonValue>(MAX_SHORTCUT_WAITERS);
+  const presses = new NativeEventWaiters<{
+    shortcut: ReturnType<typeof shortcutSchema.parse>;
+  }>(MAX_SHORTCUT_WAITERS);
   let nextId = 1;
   let suspended = false;
   let disposed = false;
@@ -193,97 +195,53 @@ export function createShortcutOperations(
     return null;
   };
   return {
-    execute() {
-      return error("UNSUPPORTED", "Global shortcuts require UI execution.");
+    register(shortcut: GlobalShortcut) {
+      return registerMany([
+        shortcut,
+      ]);
     },
-    executeUI(name, input, _source, context) {
-      if (disposed || context.signal?.aborted) {
-        return error("CANCELLED", "Global shortcut operation cancelled.");
+    registerMany,
+    isRegistered(shortcut: GlobalShortcut) {
+      return registrations.has(shortcutId(shortcut));
+    },
+    list() {
+      return [
+        ...registrations.values(),
+      ].map((entry) => structuredClone(entry.shortcut));
+    },
+    unregister(shortcut: GlobalShortcut) {
+      const id = shortcutId(shortcut);
+      const entry = registrations.get(id);
+      if (!entry) {
+        return false;
       }
-      if (!context.permissions.permissions.includes(name)) {
-        return error("PERMISSION_DENIED", "Global shortcut permission denied.");
-      }
-      const parse = <T>(run: () => T): T => {
+      release(entry);
+      return registrations.delete(id);
+    },
+    unregisterAll() {
+      let failed = false;
+      for (const [id, entry] of registrations) {
         try {
-          return run();
-        } catch {
-          return error("INVALID_ARGUMENT", "Invalid global shortcut input.");
-        }
-      };
-      switch (name) {
-        case "globalShortcut.register":
-          return registerMany([
-            parse(() => globalShortcutOperations.register.input.parse(input)),
-          ]);
-        case "globalShortcut.registerMany":
-          return registerMany(
-            parse(() =>
-              globalShortcutOperations.registerMany.input.parse(input),
-            ).shortcuts,
-          );
-        case "globalShortcut.isRegistered":
-          return registrations.has(
-            shortcutId(
-              parse(() =>
-                globalShortcutOperations.isRegistered.input.parse(input),
-              ),
-            ),
-          );
-        case "globalShortcut.list":
-          parse(() => globalShortcutOperations.list.input.parse(input));
-          return [
-            ...registrations.values(),
-          ].map((entry) => structuredClone(entry.shortcut));
-        case "globalShortcut.unregister": {
-          const id = shortcutId(
-            parse(() => globalShortcutOperations.unregister.input.parse(input)),
-          );
-          const entry = registrations.get(id);
-          if (!entry) {
-            return false;
-          }
           release(entry);
-          return registrations.delete(id);
+          registrations.delete(id);
+        } catch {
+          failed = true;
         }
-        case "globalShortcut.unregisterAll": {
-          parse(() =>
-            globalShortcutOperations.unregisterAll.input.parse(input),
-          );
-          let failed = false;
-          for (const [id, entry] of registrations) {
-            try {
-              release(entry);
-              registrations.delete(id);
-            } catch {
-              failed = true;
-            }
-          }
-          if (failed) {
-            return error(
-              "INTERNAL",
-              "Some Windows global shortcuts remain registered.",
-            );
-          }
-          return null;
-        }
-        case "globalShortcut.setSuspended":
-          return setSuspended(
-            parse(() =>
-              globalShortcutOperations.setSuspended.input.parse(input),
-            ).suspended,
-          );
-        case "globalShortcut.isSuspended":
-          parse(() => globalShortcutOperations.isSuspended.input.parse(input));
-          return suspended;
-        case "globalShortcut.waitForPress":
-          parse(() => globalShortcutOperations.waitForPress.input.parse(input));
-          return presses.wait(context.signal);
-        default:
-          return error(
-            "UNSUPPORTED",
-            "Global shortcut operation is not registered.",
-          );
       }
+      if (failed) {
+        return error(
+          "INTERNAL",
+          "Some Windows global shortcuts remain registered.",
+        );
+      }
+      return null;
+    },
+    setSuspended,
+    isSuspended() {
+      return suspended;
+    },
+    waitForPress(signal?: AbortSignal) {
+      return presses.wait(signal);
     },
     dispose() {
       if (disposed) {

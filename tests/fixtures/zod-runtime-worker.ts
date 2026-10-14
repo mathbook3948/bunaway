@@ -21,7 +21,7 @@ const plugin = defineNativePlugin({
   },
   platforms: {
     windows: {
-      execution: "io",
+      thread: "worker",
       create: () => ({
         execute: (_name, input) => input,
         dispose() {},

@@ -1,3 +1,4 @@
+import { nativeFactory } from "../fixtures/native-platform.ts";
 import { expect, test } from "bun:test";
 import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -212,7 +213,7 @@ try {
         name,
         version,
         native,
-        execution: "io" as const,
+        thread: "worker" as const,
       }));
       const notificationModule = resolve(
         "plugins/notification/dist/native/windows.js",
@@ -472,9 +473,10 @@ test.skipIf(
 )(
   "disposable desktop accepts the fixed Windows notification Settings request",
   async () => {
-    const { createOperations } = await import(
-      "#plugins/notification/src/platforms/windows"
+    const { default: nativeDefinition } = await import(
+      "#plugins/notification/src/index"
     );
+    const createOperations = nativeFactory(nativeDefinition, "windows");
     const adapter = createOperations({
       dataRoot: ".",
       capabilities: [],
@@ -489,7 +491,7 @@ test.skipIf(
     });
     try {
       expect(
-        adapter.execute("notification.openSettings", null, "backend"),
+        await adapter.execute("notification.openSettings", null, "backend"),
       ).toBeNull();
     } finally {
       await adapter.dispose();

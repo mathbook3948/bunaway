@@ -85,7 +85,7 @@ test.skipIf(!hasExplorerDesktop()).each([
       ];
     }
     const operationsModule = pathToFileURL(
-      resolve(import.meta.dir, "../../plugins/opener/src/platforms/windows.ts"),
+      resolve(import.meta.dir, "../../plugins/opener/src/index.ts"),
     ).href;
     const jobModule = pathToFileURL(
       resolve(import.meta.dir, "../../native/windows/bun/job.ts"),
@@ -167,12 +167,13 @@ while (!(await Bun.file(${JSON.stringify(stop)}).exists())) {
         launcherPath,
         `
 import assert from "node:assert/strict";
-import { createOperations } from ${JSON.stringify(operationsModule)};
+import definition from ${JSON.stringify(operationsModule)};
+const createOperations = definition.nativePlatforms.windows.create;
 import { activeDescendants, containAppProcess } from ${JSON.stringify(jobModule)};
 containAppProcess(${JSON.stringify(resolve(root, "app-data"))});
 const adapter = createOperations({ dataRoot: ${JSON.stringify(root)}, capabilities: [] });
 try {
-  adapter.execute(${JSON.stringify(`opener.${action}`)}, ${JSON.stringify(payload)}, "backend");
+  await adapter.execute(${JSON.stringify(`opener.${action}`)}, ${JSON.stringify(payload)}, "backend");
   const deadline = Date.now() + 15000;
   while (!(await Bun.file(${JSON.stringify(marker)}).exists())) {
     assert(Date.now() < deadline, "Explorer did not start the helper");
@@ -185,8 +186,8 @@ try {
     await Bun.sleep(20);
   }
 } finally {
-  adapter.dispose();
-  adapter.dispose();
+  await adapter.dispose();
+  await adapter.dispose();
 }
 process.exit(0);
 `,

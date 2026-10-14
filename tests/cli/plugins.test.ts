@@ -34,7 +34,7 @@ test("CLI independently accepts known platforms and rejects unknown declarations
       const entry = resolve(root, `declaration-${index}.mjs`);
       await Bun.write(
         entry,
-        `export default { name: "demo", version: "1", native: { operations: [{ name: "demo.read" }] }, nativePlatforms: { ${JSON.stringify(platform)}: { execution: "io", create() { throw new Error("Factories must remain lazy."); } } } };`,
+        `export default { name: "demo", version: "1", native: { operations: [{ name: "demo.read" }] }, nativePlatforms: { ${JSON.stringify(platform)}: { thread: "worker", create() { throw new Error("Factories must remain lazy."); } } } };`,
       );
       if (PLATFORMS.some((supported) => supported === platform)) {
         const declaration = await readPluginDeclaration(entry, root);
@@ -56,11 +56,11 @@ test("CLI independently accepts known platforms and rejects unknown declarations
 });
 
 test.each([
-  "io",
+  "worker",
   "ui",
 ] as const)(
   "single-entry discovery preserves lazy %s adapters and partial support",
-  async (execution) => {
+  async (thread) => {
     const root = await mkdtemp(
       resolve(tmpdir(), "bunaway-plugin-declaration-"),
     );
@@ -114,7 +114,7 @@ test.each([
         native,
         nativePlatforms: {
           windows: {
-            execution,
+            thread,
             create: "factory",
             operations: [
               "read",
@@ -154,19 +154,13 @@ test.each([
         (await import(pathToFileURL(resolve(root, "imports.js")).href))
           .pluginImports,
       );
-      const inactive = await operations(
-        [],
-        root,
-        execution,
-        undefined,
-        catalog,
-      );
+      const inactive = await operations([], root, thread, undefined, catalog);
       await inactive.dispose();
       expect(await Bun.file(marker).exists()).toBe(false);
       const adapter = await operations(
         installed,
         root,
-        execution,
+        thread,
         undefined,
         catalog,
       );
@@ -210,7 +204,7 @@ test.each([
             ...declaration,
             nativePlatforms: {
               windows: {
-                execution,
+                thread,
                 create: "factory",
                 operations: [],
               },
@@ -232,7 +226,7 @@ test.each([
       const emptyAdapter = await operations(
         empty,
         root,
-        execution,
+        thread,
         undefined,
         emptyCatalog,
       );
@@ -271,22 +265,30 @@ test.each([
 
       for (const target of [
         {
-          execution: "other",
+          execution: "ui",
           create: "factory",
         },
         {
-          execution,
+          thread: "io",
+          create: "factory",
+        },
+        {
+          thread: "other",
+          create: "factory",
+        },
+        {
+          thread,
           create: null,
         },
         {
-          execution,
+          thread,
           create: "factory",
           operations: [
             "missing",
           ],
         },
         {
-          execution,
+          thread,
           create: "factory",
           operations: [
             "read",
@@ -325,7 +327,7 @@ test.each([
             ...declaration,
             nativePlatforms: {
               windows: {
-                execution,
+                thread,
                 create: "factory",
               },
             },
@@ -403,13 +405,13 @@ test("plugins without a Windows adapter check operation grants before returning 
       (await import(pathToFileURL(resolve(root, "plugin-imports.js")).href))
         .pluginImports,
     );
-    expect(catalog[0]?.execution).toBeUndefined();
+    expect(catalog[0]?.thread).toBeUndefined();
     expect(catalog[0]?.operations).toBeUndefined();
     const registry = pluginRegistry(installed, catalog);
     const adapters = await operations(
       installed,
       root,
-      "io",
+      "worker",
       undefined,
       catalog,
     );

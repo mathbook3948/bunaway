@@ -1,10 +1,6 @@
 import { dlopen, ptr } from "bun:ffi";
 import { win32 } from "node:path";
-import {
-  BunawayError,
-  type JsonValue,
-  type NativeAdapter,
-} from "@bunaway/plugin";
+import { BunawayError } from "@bunaway/plugin";
 import { MAX_STORAGE_BYTES } from "../bytes.ts";
 import type {
   StorageBytesWrite,
@@ -73,26 +69,15 @@ const FILE_FLAG_BACKUP_SEMANTICS = 0x02000000;
 const DIRECTORY_OPEN_FLAGS =
   FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS;
 
-/** Create the I/O adapter and tie native binding cleanup to its host lifecycle. */
-export function createOperations(): NativeAdapter {
-  const storage = new WindowsStorage();
-  return {
-    execute(operation: string, input: JsonValue): JsonValue {
-      // The host registry has validated this operation's input before dispatch.
-      return storage.execute(
-        operation,
-        input as
-          | StorageLocation
-          | StorageWrite
-          | StorageBytesWrite
-          | StorageDirectoryCreate
-          | StorageTransfer,
-      );
-    },
-    dispose: () => storage.dispose(),
-  };
+/** Initialize bindings only when the host activates this platform instance. */
+export function createStorage(): WindowsStorage {
+  return new WindowsStorage();
 }
 
+/** Release the bindings owned by one host instance. */
+export function disposeStorage(storage: WindowsStorage): void {
+  storage.dispose();
+}
 function wide(text: string): Buffer {
   return Buffer.from(`${text}\0`, "utf16le");
 }
@@ -300,6 +285,14 @@ type TargetOptions = {
   /** Create this target under pinned parents before its checked OPEN_EXISTING. */
   createDirectory?: boolean;
 };
+const METADATA_TARGET_OPTIONS: TargetOptions = {
+  access: FILE_READ_ATTRIBUTES | FILE_READ_DATA,
+  share: FILE_SHARE_READ | FILE_SHARE_WRITE,
+  disposition: OPEN_EXISTING,
+  allowDirectories: true,
+  allowMissing: true,
+  createParents: false,
+};
 /** Transfers pin object identity and exclude new writers; destination creation never overwrites. */
 function transferOptions(access: number, disposition: number): TargetOptions {
   return {
@@ -409,153 +402,152 @@ export class WindowsStorage {
     }
     return text.subarray(0, length * WCHAR_BYTES).toString("utf16le");
   }
-  /** Check both endpoints under the same path rules; the host grants the named operation once. */
-  execute(
-    operation: string,
-    input:
-      | StorageLocation
-      | StorageWrite
-      | StorageBytesWrite
-      | StorageDirectoryCreate
-      | StorageTransfer,
-  ): JsonValue {
-    this.requireOpen();
-    if ("from" in input) {
-      if (operation === "storage.copyFile") {
-        return this.copyFile(input);
-      }
-      if (operation === "storage.move") {
-        return this.move(input);
-      }
-      throw new BunawayError({
-        code: "UNSUPPORTED",
-        message: "Unknown storage operation.",
-      });
-    }
-    const queryingMetadata =
-      operation === "storage.exists" || operation === "storage.stat";
-    const writingText =
-      operation === "storage.writeText" || operation === "storage.appendText";
-    const writingBytes =
-      operation === "storage.writeBytes" || operation === "storage.appendBytes";
-    const appending =
-      operation === "storage.appendText" || operation === "storage.appendBytes";
-    const writing = writingText || writingBytes;
-    const readingBytes = operation === "storage.readBytes";
-    const listingDirectory = operation === "storage.readDirectory";
-    const creatingDirectory = operation === "storage.createDirectory";
-    const removing = operation === "storage.remove";
-    const directoryOperation = listingDirectory || creatingDirectory;
-    const allowsDirectory = queryingMetadata || directoryOperation || removing;
-    if (
-      !allowsDirectory &&
-      !writing &&
-      !readingBytes &&
-      operation !== "storage.readText"
-    ) {
-      throw new BunawayError({
-        code: "UNSUPPORTED",
-        message: "Unknown storage operation.",
-      });
-    }
-    const text = writingText && "text" in input ? input.text : undefined;
-    if (writingText && text === undefined) {
-      throw new BunawayError({
-        code: "INVALID_ARGUMENT",
-        message: "Storage text is required.",
-      });
-    }
-    let bytes: Buffer | undefined;
-    if (writingBytes && "bytes" in input) {
-      bytes = Buffer.from(input.bytes, "base64");
-    } else if (text !== undefined) {
-      bytes = Buffer.from(text);
-    }
-    if (writingBytes && bytes === undefined) {
-      throw new BunawayError({
-        code: "INVALID_ARGUMENT",
-        message: "Storage bytes are required.",
-      });
-    }
-    let access = GENERIC_READ;
-    if (removing) {
-      access = DELETE | FILE_READ_ATTRIBUTES | FILE_READ_DATA;
-    } else if (queryingMetadata || directoryOperation) {
-      access = FILE_READ_ATTRIBUTES | FILE_READ_DATA;
-    } else if (writing) {
-      access = appending
-        ? FILE_APPEND_DATA | FILE_READ_ATTRIBUTES
-        : GENERIC_WRITE;
-    }
+  /** Read bounded UTF-8 text from a checked, pinned file. */
+  readText(input: StorageLocation): string {
+    return new TextDecoder("utf-8", {
+      fatal: true,
+      ignoreBOM: true,
+    }).decode(this.readFile(input.path, MAX_STORAGE_FILE_BYTES));
+  }
+
+  /** Read bounded file bytes as canonical base64. */
+  readBytes(input: StorageLocation): string {
+    return this.readFile(input.path, MAX_STORAGE_BYTES).toString("base64");
+  }
+
+  /** Replace text and truncate any previous tail after writing. */
+  writeText(input: StorageWrite): null {
+    return this.writeFile(input.path, Buffer.from(input.text), false);
+  }
+
+  /** Append UTF-8 text using an append-only native handle. */
+  appendText(input: StorageWrite): null {
+    return this.writeFile(input.path, Buffer.from(input.text), true);
+  }
+
+  /** Replace bytes and truncate any previous tail after writing. */
+  writeBytes(input: StorageBytesWrite): null {
+    return this.writeFile(
+      input.path,
+      Buffer.from(input.bytes, "base64"),
+      false,
+    );
+  }
+
+  /** Append bytes using an append-only native handle. */
+  appendBytes(input: StorageBytesWrite): null {
+    return this.writeFile(input.path, Buffer.from(input.bytes, "base64"), true);
+  }
+
+  /** Missing targets return false; invalid paths and access failures still throw. */
+  exists(input: StorageLocation): boolean {
+    return (
+      this.withFile(input.path, METADATA_TARGET_OPTIONS, () => true) !== null
+    );
+  }
+
+  /** Missing targets return null; metadata is read from the checked handle. */
+  stat(input: StorageLocation): StorageMetadata | null {
+    return this.withFile(input.path, METADATA_TARGET_OPTIONS, ({ info }) =>
+      metadata(info),
+    );
+  }
+
+  /** List one checked directory without following links or reopening it by name. */
+  readDirectory(input: StorageLocation): StorageDirectoryEntry[] {
     const result = this.withFile(
       input.path,
       {
-        access,
-        share: allowsDirectory
-          ? FILE_SHARE_READ | FILE_SHARE_WRITE
-          : FILE_SHARE_ALL,
-        disposition: writing ? OPEN_ALWAYS : OPEN_EXISTING,
-        allowDirectories: allowsDirectory,
-        allowMissing: queryingMetadata,
-        createParents:
-          writing ||
-          (creatingDirectory && "recursive" in input && input.recursive),
-        createDirectory: creatingDirectory,
+        ...METADATA_TARGET_OPTIONS,
+        allowMissing: false,
       },
       ({ handle, info }) => {
-        if (queryingMetadata) {
-          return operation === "storage.exists" ? true : metadata(info);
-        }
+        this.requireDirectory(info);
+        return this.listEntries(handle);
+      },
+    );
+    if (result === null) {
+      throw new Error("Storage directory was not opened.");
+    }
+    return result;
+  }
+
+  /** Create the selected directory, optionally preparing its parents under pinned handles. */
+  createDirectory(input: StorageDirectoryCreate): null {
+    this.withFile(
+      input.path,
+      {
+        ...METADATA_TARGET_OPTIONS,
+        allowMissing: false,
+        createParents: input.recursive,
+        createDirectory: true,
+      },
+      ({ info }) => {
+        this.requireDirectory(info);
+        return null;
+      },
+    );
+    return null;
+  }
+
+  /** Delete only the checked object; nonempty directories remain intact. */
+  remove(input: StorageLocation): null {
+    this.withFile(
+      input.path,
+      {
+        ...METADATA_TARGET_OPTIONS,
+        access: DELETE | FILE_READ_ATTRIBUTES | FILE_READ_DATA,
+        allowMissing: false,
+      },
+      ({ handle }) => {
+        const disposition = new Uint8Array([
+          1,
+        ]);
         if (
-          directoryOperation &&
-          !(info.readUInt32LE(0) & FILE_ATTRIBUTE_DIRECTORY)
+          !this.api.symbols.SetFileInformationByHandle(
+            handle,
+            FILE_DISPOSITION_INFO,
+            ptr(disposition),
+            disposition.byteLength,
+          )
         ) {
-          throw new BunawayError({
-            code: "INVALID_ARGUMENT",
-            message: "Storage target is not a directory.",
-          });
-        }
-        if (creatingDirectory) {
-          return null;
-        }
-        if (listingDirectory) {
-          return this.readDirectory(handle);
-        }
-        if (removing) {
-          // Delete only the checked object while its handle and every parent remain pinned.
-          const disposition = new Uint8Array([
-            1,
-          ]);
-          if (
-            !this.api.symbols.SetFileInformationByHandle(
-              handle,
-              FILE_DISPOSITION_INFO,
-              ptr(disposition),
-              disposition.byteLength,
-            )
-          ) {
-            const error = this.api.symbols.GetLastError();
-            if (error === ERROR_DIR_NOT_EMPTY) {
-              throw new BunawayError({
-                code: "INVALID_ARGUMENT",
-                message: "Storage directory is not empty.",
-              });
-            }
-            this.fail("Storage removal failed", error);
+          const error = this.api.symbols.GetLastError();
+          if (error === ERROR_DIR_NOT_EMPTY) {
+            throw new BunawayError({
+              code: "INVALID_ARGUMENT",
+              message: "Storage directory is not empty.",
+            });
           }
-          return null;
+          this.fail("Storage removal failed", error);
         }
-        if (bytes !== undefined) {
-          // Append-only handles place each write at EOF; replacement truncates after writing.
-          this.writeBytes(handle, bytes);
-          if (!appending) {
-            this.check(
-              this.api.symbols.SetEndOfFile(handle),
-              "Storage truncate failed",
-            );
-          }
-          return null;
-        }
+        return null;
+      },
+    );
+    return null;
+  }
+
+  private requireDirectory(info: Buffer): void {
+    if (!(info.readUInt32LE(0) & FILE_ATTRIBUTE_DIRECTORY)) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "Storage target is not a directory.",
+      });
+    }
+  }
+
+  /** Open and bound the file before reading; all handles stay pinned until completion. */
+  private readFile(path: string, maxBytes: number): Buffer {
+    const result = this.withFile(
+      path,
+      {
+        access: GENERIC_READ,
+        share: FILE_SHARE_ALL,
+        disposition: OPEN_EXISTING,
+        allowDirectories: false,
+        allowMissing: false,
+        createParents: false,
+      },
+      ({ handle }) => {
         const size = new BigInt64Array(1);
         this.check(
           this.api.symbols.GetFileSizeEx(handle, ptr(size)),
@@ -564,30 +556,54 @@ export class WindowsStorage {
         if (
           size[0] === undefined ||
           size[0] < 0n ||
-          size[0] >
-            BigInt(readingBytes ? MAX_STORAGE_BYTES : MAX_STORAGE_FILE_BYTES)
+          size[0] > BigInt(maxBytes)
         ) {
           throw new Error("Storage file too large");
         }
-        const result = this.readBytes(handle, Number(size[0]));
-        return readingBytes
-          ? result.toString("base64")
-          : new TextDecoder("utf-8", {
-              fatal: true,
-              ignoreBOM: true,
-            }).decode(result);
+        return this.readFileBytes(handle, Number(size[0]));
       },
     );
-    return result === null && operation === "storage.exists" ? false : result;
+    if (result === null) {
+      throw new Error("Storage file was not opened.");
+    }
+    return result;
   }
 
+  /** Share checked-handle writes while preserving append and replacement semantics. */
+  private writeFile(path: string, bytes: Buffer, append: boolean): null {
+    this.withFile(
+      path,
+      {
+        access: append
+          ? FILE_APPEND_DATA | FILE_READ_ATTRIBUTES
+          : GENERIC_WRITE,
+        share: FILE_SHARE_ALL,
+        disposition: OPEN_ALWAYS,
+        allowDirectories: false,
+        allowMissing: false,
+        createParents: true,
+      },
+      ({ handle }) => {
+        this.writeFileBytes(handle, bytes);
+        if (!append) {
+          this.check(
+            this.api.symbols.SetEndOfFile(handle),
+            "Storage truncate failed",
+          );
+        }
+        return null;
+      },
+    );
+    return null;
+  }
   /** Pin and inspect every parent, including the volume, until the owned action finishes. */
-  private withParent<T extends JsonValue>(
+  private withParent<T>(
     path: string,
     createParents: boolean,
     allowMissing: boolean,
     action: (parent: { target: string }) => T,
   ): T | null {
+    this.requireOpen();
     const { volume, segments } = selectedPath(path);
     const parents: bigint[] = [];
     try {
@@ -645,7 +661,7 @@ export class WindowsStorage {
   }
 
   /** Open, pin and validate one target under pinned parents, then close it before releasing them. */
-  private withFile<T extends JsonValue>(
+  private withFile<T>(
     path: string,
     options: TargetOptions,
     action: (target: { handle: bigint; canonical: string; info: Buffer }) => T,
@@ -722,7 +738,7 @@ export class WindowsStorage {
   }
 
   /** Make progress on partial native writes, reusing the same checked target handle. */
-  private writeBytes(handle: bigint, bytes: Buffer): void {
+  private writeFileBytes(handle: bigint, bytes: Buffer): void {
     const transferred = new Uint32Array(1);
     let offset = 0;
     while (offset < bytes.length) {
@@ -744,7 +760,7 @@ export class WindowsStorage {
   }
 
   /** Copy a bounded file without overwriting or reopening either checked object by name. */
-  private copyFile(input: StorageTransfer): null {
+  copyFile(input: StorageTransfer): null {
     this.withFile(
       input.from,
       transferOptions(GENERIC_READ, OPEN_EXISTING),
@@ -775,7 +791,7 @@ export class WindowsStorage {
                 if (!transferred[0]) {
                   throw new Error("Storage file changed during copy");
                 }
-                this.writeBytes(
+                this.writeFileBytes(
                   destination.handle,
                   buffer.subarray(0, transferred[0]),
                 );
@@ -812,7 +828,7 @@ export class WindowsStorage {
   }
 
   /** Rename the checked source in its pinned parent, with atomic no-replace semantics. */
-  private move(input: StorageTransfer): null {
+  move(input: StorageTransfer): null {
     const from = selectedPath(input.from).path;
     const to = selectedPath(input.to).path;
     if (to.toUpperCase().startsWith(`${from.toUpperCase()}\\`)) {
@@ -908,7 +924,7 @@ export class WindowsStorage {
     return null;
   }
   /** Enumerate the already checked directory handle, with no path-based reopening or link following. */
-  private readDirectory(handle: bigint): StorageDirectoryEntry[] {
+  private listEntries(handle: bigint): StorageDirectoryEntry[] {
     const buffer = Buffer.alloc(DIRECTORY_BUFFER_BYTES);
     const entries: StorageDirectoryEntry[] = [];
     let informationClass = FILE_ID_BOTH_DIRECTORY_RESTART_INFO;
@@ -942,14 +958,14 @@ export class WindowsStorage {
     }
   }
   /** Strictly decode UTF-8 from a caller-owned handle, preserving BOM text. */
-  readText(file: bigint, size: number): string {
+  readTextFromHandle(file: bigint, size: number): string {
     return new TextDecoder("utf-8", {
       fatal: true,
       ignoreBOM: true,
-    }).decode(this.readBytes(file, size));
+    }).decode(this.readFileBytes(file, size));
   }
   /** Read bounded bytes; the caller retains handle ownership. */
-  private readBytes(file: bigint, size: number): Buffer {
+  private readFileBytes(file: bigint, size: number): Buffer {
     this.requireOpen();
     if (
       !Number.isSafeInteger(size) ||

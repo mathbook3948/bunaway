@@ -16,10 +16,15 @@ import { logPlugin } from "@bunaway/plugin-log/native/macos";
 import { NativeRegistry } from "@bunaway/protocol";
 import { hostResponse } from "#native/host-api/bun/host-response";
 import { operations } from "#native/host-api/bun/plugins";
-import { capabilitiesOperations } from "#plugins/capabilities/src/contract";
-import { createOperations as createCapabilities } from "#plugins/capabilities/src/platforms/macos";
-import { logOperations } from "#plugins/log/src/contract";
-import { createOperations as createLog } from "#plugins/log/src/platforms/macos";
+import { capabilitiesOperations } from "#plugins/capabilities/src/operations";
+import capabilitiesDefinition from "#plugins/capabilities/src/index";
+import { nativeFactory } from "../fixtures/native-platform.ts";
+
+import { macosOperations as logOperations } from "#plugins/log/src/operations";
+import createLogDefinition from "#plugins/log/src/index";
+import { nativeFactory as createLogFactory } from "../fixtures/native-platform.ts";
+const createCapabilities = nativeFactory(capabilitiesDefinition, "macos");
+const createLog = createLogFactory(createLogDefinition, "macos");
 
 const record = {
   level: "info",
@@ -59,7 +64,7 @@ test("macOS log lazily uses host dataRoot, preserves attribution and JSONL order
   await withLog(async ({ root, path, adapter }) => {
     expect(readdirSync(root)).toEqual([]);
     const platform = logPlugin.nativePlatforms.macos;
-    expect(platform?.execution).toBe("io");
+    expect(platform?.thread).toBe("worker");
     if (!platform) {
       throw new Error("Missing macOS log adapter.");
     }
@@ -73,8 +78,8 @@ test("macOS log lazily uses host dataRoot, preserves attribution and JSONL order
           {
             length: 64,
           },
-          (_, index) =>
-            validated.execute(
+          async (_, index) =>
+            await validated.execute(
               "log.write",
               {
                 ...record,
@@ -103,7 +108,7 @@ test("macOS log lazily uses host dataRoot, preserves attribution and JSONL order
           },
         });
       }
-      expect(adapter.execute("log.write", record, "backend")).toBeNull();
+      expect(await adapter.execute("log.write", record, "backend")).toBeNull();
       expect((await Bun.file(path).text()).endsWith("\n")).toBe(true);
     } finally {
       await validated.dispose();
@@ -116,16 +121,16 @@ test("macOS log retains one archive, rotates on the next write and bounds repeat
     mkdirSync(resolve(root, "logs"));
     const first = "a".repeat(thresholdBytes);
     writeFileSync(path, first);
-    adapter.execute("log.write", record, "backend");
+    await adapter.execute("log.write", record, "backend");
     expect(await Bun.file(`${path}.1`).exists()).toBe(false);
     const previous = await Bun.file(path).text();
-    adapter.execute("log.write", record, "view:main");
+    await adapter.execute("log.write", record, "view:main");
     expect(await Bun.file(`${path}.1`).text()).toBe(previous);
     expect(statSync(path).size).toBeLessThan(512);
     for (let index = 0; index < 3; index++) {
       appendFileSync(path, "b".repeat(thresholdBytes));
       const archive = await Bun.file(path).text();
-      adapter.execute("log.write", record, "backend");
+      await adapter.execute("log.write", record, "backend");
       expect(await Bun.file(`${path}.1`).text()).toBe(archive);
       expect(statSync(`${path}.1`).size).toBeLessThan(thresholdBytes + 512);
       expect(readdirSync(resolve(root, "logs")).sort()).toEqual([
@@ -141,8 +146,12 @@ test("macOS log exposes append and rotation errors and recovers on the next call
     mkdirSync(path, {
       recursive: true,
     });
-    const append = hostResponse(() =>
-      adapter.execute("log.write", record, "backend"),
+    const append = await adapter.execute("log.write", record, "backend").then(
+      (value) => hostResponse(() => value),
+      (error) =>
+        hostResponse(() => {
+          throw error;
+        }),
     );
     expect(append).toEqual({
       kind: "error",
@@ -156,12 +165,14 @@ test("macOS log exposes append and rotation errors and recovers on the next call
     });
     writeFileSync(path, "a".repeat(thresholdBytes + 1));
     mkdirSync(`${path}.1`);
-    expect(() => adapter.execute("log.write", record, "backend")).toThrow();
+    await expect(
+      adapter.execute("log.write", record, "backend"),
+    ).rejects.toThrow();
     expect(statSync(path).size).toBe(thresholdBytes + 1);
     rmSync(`${path}.1`, {
       recursive: true,
     });
-    expect(adapter.execute("log.write", record, "backend")).toBeNull();
+    expect(await adapter.execute("log.write", record, "backend")).toBeNull();
     expect(JSON.parse((await Bun.file(path).text()).trim()).message).toBe(
       record.message,
     );
@@ -171,8 +182,8 @@ test("macOS log exposes append and rotation errors and recovers on the next call
 test.skipIf(process.platform === "win32")(
   "macOS log creates private directories and files",
   async () => {
-    await withLog(({ root, path, adapter }) => {
-      adapter.execute("log.write", record, "backend");
+    await withLog(async ({ root, path, adapter }) => {
+      await adapter.execute("log.write", record, "backend");
       expect(statSync(resolve(root, "logs")).mode & 0o077).toBe(0);
       expect(statSync(path).mode & 0o077).toBe(0);
     });
@@ -182,11 +193,13 @@ test.skipIf(process.platform === "win32")(
 test.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
   "macOS log propagates filesystem write denial and recovers after access is restored",
   async () => {
-    await withLog(({ path, adapter }) => {
-      adapter.execute("log.write", record, "backend");
+    await withLog(async ({ path, adapter }) => {
+      await adapter.execute("log.write", record, "backend");
       chmodSync(path, 0o400);
       try {
-        expect(() => adapter.execute("log.write", record, "backend")).toThrow(
+        await expect(
+          adapter.execute("log.write", record, "backend"),
+        ).rejects.toThrow(
           expect.objectContaining({
             code: "EACCES",
           }),
@@ -194,7 +207,7 @@ test.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
       } finally {
         chmodSync(path, 0o600);
       }
-      expect(adapter.execute("log.write", record, "backend")).toBeNull();
+      expect(await adapter.execute("log.write", record, "backend")).toBeNull();
     });
   },
 );
@@ -221,8 +234,9 @@ test("macOS SDK rejects forged attribution and invalid input before touching dis
         },
       ]) {
         await expect(
-          Promise.resolve().then(() =>
-            validated.execute("log.write", input, "view:main"),
+          Promise.resolve().then(
+            async () =>
+              await validated.execute("log.write", input, "view:main"),
           ),
         ).rejects.toMatchObject({
           code: "INVALID_ARGUMENT",
@@ -282,7 +296,7 @@ test("macOS log disposal is repeatable, completes accepted writes and rejects la
       dataRoot: root,
       capabilities: [],
     });
-    const accepted = validated.execute("log.write", record, "backend");
+    const accepted = await validated.execute("log.write", record, "backend");
     await accepted;
     const prepared =
       "prepare" in validated
@@ -298,7 +312,9 @@ test("macOS log disposal is repeatable, completes accepted writes and rejects la
     await adapter.dispose();
     await adapter.dispose();
     const text = await Bun.file(path).text();
-    expect(() => adapter.execute("log.write", record, "backend")).toThrow(
+    await expect(
+      adapter.execute("log.write", record, "backend"),
+    ).rejects.toThrow(
       expect.objectContaining({
         code: "CANCELLED",
       }),
@@ -307,7 +323,7 @@ test("macOS log disposal is repeatable, completes accepted writes and rejects la
   });
 });
 
-test("macOS capabilities preserve the host snapshot including unsupported and experimental states", () => {
+test("macOS capabilities preserve the host snapshot including unsupported and experimental states", async () => {
   const capabilities = [
     {
       name: "log.write",
@@ -331,12 +347,14 @@ test("macOS capabilities preserve the host snapshot including unsupported and ex
   });
   expect(
     capabilitiesOperations.get.output.parse(
-      adapter.execute("capabilities.get", null, "view:main"),
+      await adapter.execute("capabilities.get", null, "view:main"),
     ),
   ).toEqual(snapshot);
-  adapter.dispose();
-  adapter.dispose();
-  expect(() => adapter.execute("capabilities.get", null, "backend")).toThrow(
+  await adapter.dispose();
+  await adapter.dispose();
+  await expect(
+    adapter.execute("capabilities.get", null, "backend"),
+  ).rejects.toThrow(
     expect.objectContaining({
       code: "CANCELLED",
     }),
@@ -357,7 +375,7 @@ test("macOS capability discovery uses installed executable operations and includ
       name: plugin.name,
       version: plugin.version,
       native: plugin.native,
-      execution: "io" as const,
+      thread: "worker" as const,
       supportedOperations:
         plugin.name === "log"
           ? []
@@ -369,7 +387,13 @@ test("macOS capability discovery uses installed executable operations and includ
       }),
     };
   });
-  const dispatcher = await operations(plugins, ".", "io", undefined, catalog);
+  const dispatcher = await operations(
+    plugins,
+    ".",
+    "worker",
+    undefined,
+    catalog,
+  );
   try {
     expect(
       await dispatcher.execute("capabilities.get", null, "backend"),

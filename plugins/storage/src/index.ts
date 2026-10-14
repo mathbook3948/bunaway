@@ -1,44 +1,38 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { storageOperations } from "./contract.ts";
-import { createOperations as createMacosOperations } from "./platforms/macos.ts";
-import { createOperations as createWindowsOperations } from "./platforms/windows.ts";
+import type { Storage } from "./contract.ts";
+import { storageOperations } from "./operations.ts";
+import {
+  createStorage as createMacosStorage,
+  disposeStorage as disposeMacosStorage,
+} from "./platforms/macos.ts";
+import { createStorage, disposeStorage } from "./platforms/windows.ts";
+import { windowsOperations } from "./platforms/windows-operations.ts";
 
 const plugin = defineNativePlugin({
   name: "storage",
   platforms: {
-    macos: {
-      execution: "io",
-      create: createMacosOperations,
-      // Darwin's name-based rename and delete cannot preserve the checked source identity.
-      operations: [
-        "readText",
-        "writeText",
-        "readBytes",
-        "writeBytes",
-        "appendBytes",
-        "appendText",
-        "copyFile",
-        "readDirectory",
-        "createDirectory",
-        "exists",
-        "stat",
-      ],
-    },
     windows: {
-      execution: "io",
-      create: createWindowsOperations,
+      initialize: createStorage,
+      dispose: disposeStorage,
+      operations: windowsOperations,
+    },
+    macos: {
+      initialize: createMacosStorage,
+      dispose: disposeMacosStorage,
+      // Darwin rename/delete cannot preserve the checked object's identity.
+      operations: storageOperations,
     },
   },
-  operations: storageOperations,
 });
 /** Plugin contract for text, bytes, metadata and directory access at application-selected paths. */
 export const storagePlugin = plugin.definition;
 export default storagePlugin;
 
 /** Typed storage operations; the application chooses paths and access rules. */
-export const storage = plugin.api;
+export const storage: Storage = plugin.api;
 
 export type {
+  Storage,
   StorageBytesWrite,
   StorageDirectoryCreate,
   StorageLocation,

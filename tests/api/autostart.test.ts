@@ -15,12 +15,12 @@ import {
 } from "@bunaway/protocol";
 import { bindHostAPI } from "#core/host-api";
 import { operations } from "#native/host-api/bun/plugins";
-import { autostartOperations } from "#plugins/autostart/src/contract";
 import {
   type AppLaunch,
   commandLine,
   registrationName,
 } from "#plugins/autostart/src/launch";
+import { autostartOperations } from "#plugins/autostart/src/operations";
 import { registryCommand, startupState } from "#plugins/autostart/src/registry";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
@@ -464,7 +464,7 @@ test("host supplies trusted app metadata only to a registered adapter", async ()
   const catalog = [
     {
       ...autostartPlugin,
-      execution: "io" as const,
+      thread: "worker" as const,
       operations: async () => ({
         createOperations: (
           environment: import("@bunaway/plugin").NativeEnvironment,
@@ -478,7 +478,14 @@ test("host supplies trusted app metadata only to a registered adapter", async ()
       }),
     },
   ];
-  const unregistered = await operations([], ".", "io", undefined, catalog, app);
+  const unregistered = await operations(
+    [],
+    ".",
+    "worker",
+    undefined,
+    catalog,
+    app,
+  );
   expect(observed).toBeUndefined();
   await unregistered.dispose();
   const registered = await operations(
@@ -486,7 +493,7 @@ test("host supplies trusted app metadata only to a registered adapter", async ()
       autostartPlugin,
     ],
     ".",
-    "io",
+    "worker",
     undefined,
     catalog,
     app,

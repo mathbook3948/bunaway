@@ -76,8 +76,8 @@ export default defineApp({ modules: [], plugins: [imagePlugin] });
     expect(plugins.map(({ packageName }) => packageName)).toEqual([
       "@bunaway/plugin-image",
     ]);
-    expect(plugins[0]?.targets.windows?.execution).toBe("ui");
-    expect(plugins[0]?.targets.macos?.execution).toBe("io");
+    expect(plugins[0]?.targets.windows?.thread).toBe("ui");
+    expect(plugins[0]?.targets.macos?.thread).toBe("worker");
     expect(valid.nativePlugins?.map(({ name }) => name)).toEqual([
       "image",
     ]);

@@ -13,6 +13,7 @@ import { bundleIOPluginFixture } from "../fixtures/native-worker.ts";
 test.each([
   "legacy",
   "handlers",
+  "platform",
 ])(
   "I/O Worker authorizes %s input callbacks, reauthorizes execution and discards cancelled parsers",
   async (authoring) => {
@@ -24,7 +25,7 @@ test.each([
     const plugin = {
       name: "async",
       version: "development",
-      execution: "io" as const,
+      thread: "worker" as const,
       native: {
         operations: [
           {
@@ -73,7 +74,12 @@ test.each([
     const create = ${JSON.stringify(authoring)} === "handlers"
       ? defineNativeAdapter(definitions, {setup:()=>null,handlers:{run:execute},dispose(){}})
       : ()=>({execute:(_name,input)=>execute(input),dispose(){}});
-    const plugin = defineNativePlugin({name:"async", operations:definitions,platforms:{windows:{execution:"io",create}}});
+    const plugin = ${JSON.stringify(authoring)} === "platform"
+      ? defineNativePlugin({name:"async",platforms:{windows:{operations:{run:{...definitions.run,handler(input,context) {
+          if (context.source !== "backend" || !context.requestId || !context.signal) throw new Error("Missing execution context");
+          return execute(input);
+        }}}}}})
+      : defineNativePlugin({name:"async", operations:definitions,platforms:{windows:{thread:"worker",create}}});
     export const pluginImports = {async:{operations:async()=>({createOperations:plugin.definition.nativePlatforms.windows.create})}};
   `,
     );

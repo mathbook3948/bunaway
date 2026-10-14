@@ -1,15 +1,17 @@
+import { nativeFactory } from "../fixtures/native-platform.ts";
 import { expect, test } from "bun:test";
-import { powerOperations } from "#plugins/power/src/contract";
+import { powerOperations } from "#plugins/power/src/operations";
 
 test.skipIf(process.platform !== "win32")(
   "real Windows power status, session idle and power request handle lifecycle",
   async () => {
-    const [{ createPower }, { createOperations }, { dlopen, ptr }] =
+    const [{ createPower }, { default: nativeDefinition }, { dlopen, ptr }] =
       await Promise.all([
         import("#plugins/power/src/win32"),
-        import("#plugins/power/src/platforms/windows"),
+        import("#plugins/power/src/index"),
         import("bun:ffi"),
       ]);
+    const createOperations = nativeFactory(nativeDefinition, "windows");
     const driver = dlopen("kernel32.dll", {
       GetSystemPowerStatus: {
         args: [
@@ -40,7 +42,7 @@ test.skipIf(process.platform !== "win32")(
       const raw = Buffer.alloc(12);
       expect(driver.symbols.GetSystemPowerStatus(ptr(raw))).not.toBe(0);
       const status = powerOperations.getStatus.output.parse(
-        adapter.execute("power.getStatus", null, "backend"),
+        await adapter.execute("power.getStatus", null, "backend"),
       );
       expect(status.source).toBe(
         raw[0] === 1 ? "ac" : raw[0] === 0 ? "battery" : "unknown",
@@ -56,7 +58,7 @@ test.skipIf(process.platform !== "win32")(
         "idle",
       ]).toContain(
         powerOperations.getIdleState.output.parse(
-          adapter.execute(
+          await adapter.execute(
             "power.getIdleState",
             {
               thresholdSeconds: 1,
@@ -81,7 +83,7 @@ test.skipIf(process.platform !== "win32")(
         }),
       );
       const first = powerOperations.startBlocker.output.parse(
-        adapter.execute(
+        await adapter.execute(
           "power.startBlocker",
           {
             type: "system",
@@ -91,7 +93,7 @@ test.skipIf(process.platform !== "win32")(
         ),
       );
       const second = powerOperations.startBlocker.output.parse(
-        adapter.execute(
+        await adapter.execute(
           "power.startBlocker",
           {
             type: "system",
@@ -102,7 +104,7 @@ test.skipIf(process.platform !== "win32")(
       );
       expect(first.id).not.toBe(second.id);
       expect(
-        adapter.execute(
+        await adapter.execute(
           "power.isBlockerActive",
           {
             id: first.id,
@@ -111,7 +113,7 @@ test.skipIf(process.platform !== "win32")(
         ),
       ).toBe(true);
       expect(
-        adapter.execute(
+        await adapter.execute(
           "power.stopBlocker",
           {
             id: first.id,
@@ -120,7 +122,7 @@ test.skipIf(process.platform !== "win32")(
         ),
       ).toBe(true);
       expect(
-        adapter.execute(
+        await adapter.execute(
           "power.stopBlocker",
           {
             id: first.id,
@@ -128,14 +130,16 @@ test.skipIf(process.platform !== "win32")(
           "backend",
         ),
       ).toBe(false);
-      expect(adapter.execute("power.listBlockers", null, "backend")).toEqual([
+      expect(
+        await adapter.execute("power.listBlockers", null, "backend"),
+      ).toEqual([
         second,
       ]);
       await adapter.dispose();
       await adapter.dispose();
-      expect(() =>
+      await expect(
         adapter.execute("power.listBlockers", null, "backend"),
-      ).toThrow(
+      ).rejects.toThrow(
         expect.objectContaining({
           code: "CANCELLED",
         }),

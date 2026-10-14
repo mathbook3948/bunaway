@@ -9,7 +9,6 @@ import {
   type,
   version,
 } from "node:os";
-import type { NativeAdapter, NativeEnvironment } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
 
 const LOCALE_NAME_MAX_LENGTH = 85;
@@ -25,9 +24,7 @@ function failure(): never {
 }
 
 /** Own locale DLL bindings on the host I/O worker and close them on host shutdown. */
-export function createOperations(
-  _environment: NativeEnvironment,
-): NativeAdapter {
+export function initialize() {
   const api = dlopen("kernel32.dll", {
     GetCurrentProcess: {
       args: [],
@@ -81,6 +78,14 @@ export function createOperations(
     },
   });
   let disposed = false;
+  const assertActive = () => {
+    if (disposed) {
+      throw new BunawayError({
+        code: "CANCELLED",
+        message: "OS adapter is disposed.",
+      });
+    }
+  };
   const readText = (buffer: Buffer, chars: number) => {
     if (
       chars < 1 ||
@@ -173,70 +178,61 @@ export function createOperations(
     };
   }
   return {
-    execute(operation) {
-      if (disposed) {
+    usage() {
+      assertActive();
+      const processMachine = new Uint16Array(1);
+      const nativeMachine = new Uint16Array(1);
+      if (
+        !api.symbols.IsWow64Process2(
+          api.symbols.GetCurrentProcess(),
+          ptr(processMachine),
+          ptr(nativeMachine),
+        )
+      ) {
         throw new BunawayError({
-          code: "CANCELLED",
-          message: "OS adapter is disposed.",
+          code: "INTERNAL",
+          message: "Windows process architecture query failed.",
         });
       }
-      if (operation === "os.usage") {
-        const processMachine = new Uint16Array(1);
-        const nativeMachine = new Uint16Array(1);
-        if (
-          !api.symbols.IsWow64Process2(
-            api.symbols.GetCurrentProcess(),
-            ptr(processMachine),
-            ptr(nativeMachine),
-          )
-        ) {
-          throw new BunawayError({
-            code: "INTERNAL",
-            message: "Windows process architecture query failed.",
-          });
-        }
-        const cpu = process.cpuUsage();
-        return {
+      const cpu = process.cpuUsage();
+      return {
+        pid: process.pid,
+        logicalCpuCount: cpus().length,
+        cpuTime: {
+          userMicros: cpu.user,
+          systemMicros: cpu.system,
+        },
+        memory: {
+          systemTotalBytes: totalmem(),
+          systemFreeBytes: freemem(),
+          processResidentBytes: process.memoryUsage.rss(),
+        },
+        translation: {
+          active: processMachine[0] !== 0,
+          processMachine: processMachine[0] ?? 0,
+          nativeMachine: nativeMachine[0] ?? 0,
+        },
+      };
+    },
+    locale() {
+      assertActive();
+      return locale();
+    },
+    info() {
+      assertActive();
+      return {
+        platform: "windows" as const,
+        type: type(),
+        release: release(),
+        version: version(),
+        architecture: arch(),
+        hostname: hostname(),
+        runtime: {
+          name: "bun" as const,
+          version: Bun.version,
           pid: process.pid,
-          logicalCpuCount: cpus().length,
-          cpuTime: {
-            userMicros: cpu.user,
-            systemMicros: cpu.system,
-          },
-          memory: {
-            systemTotalBytes: totalmem(),
-            systemFreeBytes: freemem(),
-            processResidentBytes: process.memoryUsage.rss(),
-          },
-          translation: {
-            active: processMachine[0] !== 0,
-            processMachine: processMachine[0] ?? 0,
-            nativeMachine: nativeMachine[0] ?? 0,
-          },
-        };
-      }
-      if (operation === "os.locale") {
-        return locale();
-      }
-      if (operation === "os.info") {
-        return {
-          platform: "windows",
-          type: type(),
-          release: release(),
-          version: version(),
-          architecture: arch(),
-          hostname: hostname(),
-          runtime: {
-            name: "bun",
-            version: Bun.version,
-            pid: process.pid,
-          },
-        };
-      }
-      throw new BunawayError({
-        code: "UNSUPPORTED",
-        message: "Host operation is not registered.",
-      });
+        },
+      };
     },
     dispose() {
       if (!disposed) {
@@ -245,4 +241,8 @@ export function createOperations(
       }
     },
   };
+}
+
+export function dispose(instance: ReturnType<typeof initialize>) {
+  instance.dispose();
 }

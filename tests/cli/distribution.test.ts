@@ -90,7 +90,7 @@ test("installed CLI builds an author's direct factory imports into portable pack
       `import { z } from "zod";
 import { defineNativePlugin } from "@bunaway/plugin";
 import { createOperations } from "./platforms/windows.ts";
-const plugin = defineNativePlugin({ name: "built", platforms: { windows: { execution: "io", create: createOperations } }, operations: { read: { input: z.null(), output: z.string() } } });
+const plugin = defineNativePlugin({ name: "built", platforms: { windows: { thread: "worker", create: createOperations } }, operations: { read: { input: z.null(), output: z.string() } } });
 export default plugin.definition;
 export const built = plugin.api;`,
     );

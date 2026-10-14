@@ -1,22 +1,21 @@
-import { defineNativePlugin } from "@bunaway/plugin";
-import { logOperations } from "./contract.ts";
+import { defineNativePlugin, type NativeEnvironment } from "@bunaway/plugin";
 import { createLog } from "./logger.ts";
-import { createOperations as createMacosOperations } from "./platforms/macos.ts";
-import { createOperations as createWindowsOperations } from "./platforms/windows.ts";
+import { macosOperations, windowsOperations } from "./operations.ts";
+
+const dataRoot = (environment: NativeEnvironment) => environment.dataRoot;
 
 const plugin = defineNativePlugin({
   name: "log",
   platforms: {
     macos: {
-      execution: "io",
-      create: createMacosOperations,
+      initialize: dataRoot,
+      operations: macosOperations,
     },
     windows: {
-      execution: "io",
-      create: createWindowsOperations,
+      initialize: dataRoot,
+      operations: windowsOperations,
     },
   },
-  operations: logOperations,
 });
 /** Plugin contract for app log writes. */
 export const logPlugin = plugin.definition;

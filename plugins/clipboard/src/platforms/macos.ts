@@ -1,7 +1,12 @@
-import type { NativeAdapter, NativeEnvironment } from "@bunaway/plugin";
-import { BunawayError, type JsonValue } from "@bunaway/protocol";
-import { clipboardOperations, validateClipboardInput } from "../contract.ts";
-import { type ClipboardFormat, fitsFormatBudget } from "../formats.ts";
+import { BunawayError } from "@bunaway/protocol";
+import type { z } from "zod";
+import { nullableTextSchema } from "../contract.ts";
+import {
+  type ClipboardFormat,
+  fitsFormatBudget,
+  imageSchema,
+  type writeFormatsSchema,
+} from "../formats.ts";
 import { createPasteboard, type Pasteboard } from "../macos-pasteboard.ts";
 import { invalidPasteboardData } from "../macos-tiff.ts";
 
@@ -12,91 +17,102 @@ const formats: ClipboardFormat[] = [
   "image/bmp",
 ];
 
-/** Own a synchronous main-thread pasteboard adapter, with an explicit fixture dependency. */
-export function pasteboardOperations(native: Pasteboard): NativeAdapter {
-  let disposed = false;
-  return {
-    execute() {
+/** Own one main-thread pasteboard binding and its synchronous commits. */
+export class MacosClipboard {
+  private disposed = false;
+
+  constructor(private readonly native: Pasteboard) {}
+
+  private active(): void {
+    if (this.disposed) {
       throw new BunawayError({
-        code: "UNSUPPORTED",
-        message: "Clipboard requires UI execution.",
+        code: "CANCELLED",
+        message: "Clipboard operation cancelled.",
       });
-    },
-    executeUI(name, input, _source, context): JsonValue {
-      validateClipboardInput(name, input);
-      if (!context.permissions.permissions.includes(name)) {
-        throw new BunawayError({
-          code: "PERMISSION_DENIED",
-          message: "Clipboard permission denied.",
-        });
-      }
-      if (disposed || context.signal?.aborted) {
-        throw new BunawayError({
-          code: "CANCELLED",
-          message: "Clipboard operation cancelled.",
-        });
-      }
-      // A synchronous commit cannot be cancelled or rolled back after it starts.
-      switch (name) {
-        case "clipboard.readText":
-          return native.read("text/plain").data;
-        case "clipboard.writeText":
-          native.write([
-            {
-              format: "text/plain",
-              data: clipboardOperations.writeText.input.parse(input).text,
-            },
-          ]);
-          break;
-        case "clipboard.clear":
-          native.clear();
-          break;
-        case "clipboard.readImage":
-          return native.read("image/bmp").data;
-        case "clipboard.writeImage":
-          native.write([
-            {
-              format: "image/bmp",
-              data: clipboardOperations.writeImage.input.parse(input),
-            },
-          ]);
-          break;
-        case "clipboard.getFormats":
-          return formats.filter((format) => native.has(format));
-        case "clipboard.hasFormat":
-          return native.has(
-            clipboardOperations.hasFormat.input.parse(input).format,
-          );
-        case "clipboard.readFormats": {
-          const result = native.readMany(
-            clipboardOperations.readFormats.input.parse(input).formats,
-          );
-          if (!fitsFormatBudget(result)) {
-            invalidPasteboardData();
-          }
-          return result;
-        }
-        case "clipboard.writeFormats":
-          native.write(
-            clipboardOperations.writeFormats.input.parse(input).items,
-          );
-          break;
-      }
-      return null;
-    },
-    busy: () => false,
-    dispose() {
-      if (!disposed) {
-        disposed = true;
-        native.dispose();
-      }
-    },
-  };
+    }
+  }
+
+  readText() {
+    this.active();
+    const result = nullableTextSchema.safeParse(
+      this.native.read("text/plain").data,
+    );
+    return result.success ? result.data : invalidPasteboardData();
+  }
+
+  writeText(text: string): null {
+    this.active();
+    this.native.write([
+      {
+        format: "text/plain",
+        data: text,
+      },
+    ]);
+    return null;
+  }
+
+  clear(): null {
+    this.active();
+    this.native.clear();
+    return null;
+  }
+
+  readImage() {
+    this.active();
+    const result = imageSchema
+      .nullable()
+      .safeParse(this.native.read("image/bmp").data);
+    return result.success ? result.data : invalidPasteboardData();
+  }
+
+  writeImage(image: z.output<typeof imageSchema>): null {
+    this.active();
+    this.native.write([
+      {
+        format: "image/bmp",
+        data: image,
+      },
+    ]);
+    return null;
+  }
+
+  getFormats() {
+    this.active();
+    return formats.filter((format) => this.native.has(format));
+  }
+
+  hasFormat(format: ClipboardFormat): boolean {
+    this.active();
+    return this.native.has(format);
+  }
+
+  readFormats(formats: ClipboardFormat[]) {
+    this.active();
+    const result = this.native.readMany(formats);
+    if (!fitsFormatBudget(result)) {
+      invalidPasteboardData();
+    }
+    return result;
+  }
+
+  writeFormats(items: z.output<typeof writeFormatsSchema>["items"]): null {
+    this.active();
+    this.native.write(items);
+    return null;
+  }
+
+  dispose(): void {
+    if (!this.disposed) {
+      this.disposed = true;
+      this.native.dispose();
+    }
+  }
 }
 
-/** Registering the declaration allocates nothing; the owning UI host creates bindings. */
-export function createOperations(
-  _environment: NativeEnvironment,
-): NativeAdapter {
-  return pasteboardOperations(createPasteboard());
+export function initialize(): MacosClipboard {
+  return new MacosClipboard(createPasteboard());
+}
+
+export function dispose(instance: MacosClipboard): void {
+  instance.dispose();
 }

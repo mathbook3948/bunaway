@@ -141,7 +141,7 @@ try {
     ].includes(plugin.name),
   );
   const storage = installed.find((plugin) => plugin.name === "storage");
-  assert.equal(storage?.targets.macos?.execution, "io");
+  assert.equal(storage?.targets.macos?.thread, "worker");
   assert.equal(
     (storage.targets.macos.supportedOperations ?? []).includes("storage.move"),
     false,

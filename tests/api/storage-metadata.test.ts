@@ -7,11 +7,11 @@ import {
   storagePlugin,
 } from "@bunaway/plugin-storage";
 import { NativeRegistry } from "@bunaway/protocol";
-import { storageOperations } from "../../plugins/storage/src/contract.ts";
+import { windowsOperations } from "../../plugins/storage/src/platforms/windows-operations.ts";
 import { bindHostAPI } from "../fixtures/host-plugins.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
-const parsers = pluginParsers("storage", storageOperations);
+const parsers = pluginParsers("storage", windowsOperations);
 
 const location = {
   path: "notes/한글 memo.txt",

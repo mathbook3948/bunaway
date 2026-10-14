@@ -116,7 +116,7 @@ async function startWorker(permissions: string[], consentGranted = true) {
         name: "ui-test",
         version: "1",
         native: native,
-        execution: "ui",
+        thread: "ui",
       },
     ],
     `import { workerData } from "node:worker_threads";

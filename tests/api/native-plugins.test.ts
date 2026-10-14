@@ -40,12 +40,12 @@ test.each([
     },
     platforms: {
       [platform]: {
-        execution: "io",
         create,
       },
     },
   });
   expect(plugin.definition.nativePlatforms[platform]?.create).not.toBe(create);
+  expect(plugin.definition.nativePlatforms[platform]?.thread).toBe("worker");
   expect(Object.isFrozen(PLATFORMS)).toBe(true);
 });
 
@@ -68,7 +68,7 @@ test("platform declarations remain detached from Core platform restrictions and 
     },
     platforms: {
       windows: {
-        execution: "io" as const,
+        thread: "worker" as const,
         create,
         operations: supported,
       },
@@ -83,7 +83,7 @@ test("platform declarations remain detached from Core platform restrictions and 
       structuredClone(plugin.definition.nativePlatforms).windows ?? {},
     ),
   ).toEqual([
-    "execution",
+    "thread",
     "operations",
   ]);
   supported.push("missing");
@@ -93,32 +93,56 @@ test("platform declarations remain detached from Core platform restrictions and 
   expect(Object.isFrozen(plugin.definition.nativePlatforms.windows)).toBe(true);
   for (const platforms of [
     {
+      windows: [],
+    },
+    {
+      windows: "worker",
+    },
+    {
+      windows: {
+        execution: "ui",
+        create,
+      },
+    },
+    {
+      windows: {
+        thread: null,
+        create,
+      },
+    },
+    {
+      windows: {
+        thread: "io",
+        create,
+      },
+    },
+    {
       unknown: {
-        execution: "io",
+        thread: "worker",
         create,
       },
     },
     {
       windows: {
-        execution: "backend",
+        thread: "backend",
         create,
       },
     },
     {
       windows: {
-        execution: "io",
+        thread: "worker",
         create: undefined,
       },
     },
     {
       windows: {
-        execution: "io",
+        thread: "worker",
         create: "not a factory",
       },
     },
     {
       windows: {
-        execution: "io",
+        thread: "worker",
         create,
         operations: [
           "missing",
@@ -127,7 +151,7 @@ test("platform declarations remain detached from Core platform restrictions and 
     },
     {
       windows: {
-        execution: "io",
+        thread: "worker",
         create,
         operations: [
           "read",
@@ -642,7 +666,7 @@ test("backend host calls strip object fields before adapter execution and after 
     name: "example",
     platforms: {
       windows: {
-        execution: "io",
+        thread: "worker",
         create: () => ({
           execute(_operation, input) {
             expect(input).toEqual({

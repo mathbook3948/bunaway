@@ -49,7 +49,7 @@ test("handler keys infer immutable support and typed parsing without dispatch sw
     operations: schemas,
     platforms: {
       windows: {
-        execution: "io",
+        thread: "worker",
         create: factory,
       },
     },
@@ -65,7 +65,7 @@ test("handler keys infer immutable support and typed parsing without dispatch sw
       operations: schemas,
       platforms: {
         windows: {
-          execution: "io",
+          thread: "worker",
           create: factory,
           operations: [
             "length",
@@ -150,7 +150,7 @@ test("contextual preparation parses once and rechecks cancellation and authority
     operations,
     platforms: {
       windows: {
-        execution: "io",
+        thread: "worker",
         create: factory,
       },
     },
@@ -233,7 +233,7 @@ test("mapped adapters clean earlier resources after later setup fails", async ()
       },
       platforms: {
         windows: {
-          execution: "ui",
+          thread: "ui",
           create,
         },
       },
@@ -243,7 +243,7 @@ test("mapped adapters clean earlier resources after later setup fails", async ()
     name: plugin.name,
     version: plugin.version,
     native: plugin.native,
-    execution: "ui" as const,
+    thread: "ui" as const,
     supportedOperations: [
       `${plugin.name}.run`,
     ],

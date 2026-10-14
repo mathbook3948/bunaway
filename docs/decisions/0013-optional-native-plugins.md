@@ -40,7 +40,7 @@ status: accepted
    defineNativePlugin의 선언 한곳에 두고 별도 plugin.json은 사용하지 않는다.
    플러그인 버전은 package.json에만 작성한다. 빌드가 읽어 모든 등록 출력에 기록하며
    원본을 직접 import한 등록 객체의 버전은 development다.
-   platforms에는 직접 import한 구현 팩터리 create와 io 또는 ui 실행 위치를 작성한다.
+   platforms에는 직접 import한 구현 팩터리 create와 선택적인 thread를 작성한다. thread는 worker 또는 ui이며 기본값은 worker다.
    src/platforms/<platform>.ts를 빌드 경계로 사용해 중립 출력에서는 모든 OS 구현을 제외하고
    native/<platform> 출력에는 대상 OS 구현만 포함한다. 호스트는 이 패키지 export를 지연 import한다.
    SDK는 외부 의존성으로 유지한다. 설치 패키지 밖으로 연결되는 export는 거부한다. 일부 작업만 구현한다면 operations에
@@ -75,6 +75,25 @@ status: accepted
    계약에 맞춘다. macOS의 기존 자식 프로세스 구현 때문에 별도 앱 진입점을 만들지 않는다.
 
 ## 기존 결정과 이관
+
+2026-10-14의 공식 플러그인 이관은 플랫폼별 operations에 작업마다 input, output 스키마와
+handler를 선언한다. 최상위 공통 작업 맵과 작업별 플랫폼 handlers를 대체한다.
+platforms에는 operations와 선택적인 thread, initialize, dispose를 둔다.
+지원 작업은 플랫폼별 operations 키에서 파생하며 검증에도 해당 플랫폼의 스키마를 사용한다.
+공개 인터페이스와 값 스키마의 재사용은 플러그인 작성자가 정한다.
+두 플랫폼의 input, output과 handler가 같으면 완성된 작업 목록 하나를 공유할 수 있다.
+초기화와 정리, 실행 스레드는 목록을 공유해도 플랫폼마다 지정한다.
+스키마만 있는 공통 작업 목록을 펼쳐 handler를 덧붙이는 형식은 사용하지 않는다.
+기능 함수는 해당 작업에서 파싱한 입력과 호스트 context를 받는다. 작성 SDK가 기존
+플랫폼 등록과 실행 경계에 연결하며 별도 지원 목록과 execute, executeUI를 작성하지
+않는다. Windows 창 제어의 기존 coordinator는 창 수명과 권한 검사를 유지하며 각 handler가 호출한다. 설치, 등록, 권한과
+플랫폼 자원 초기화 경계, ADR 0018의 파싱과 실행 승인 순서는 바꾸지 않는다.
+플랫폼 작업을 별도 모듈에 둘 때는 `defineNativeOperation<Instance>()`으로 각 작업의
+스키마에서 handler 입력과 반환 타입을 추론할 수 있다. 실행 계약은 같다.
+
+2026-10-14부터 실행 위치 설정은 `thread?: "worker" | "ui"`로 작성한다. 기본값은
+`worker`이며 UI 스레드가 필요한 구현만 `ui`를 지정한다. 초기화, 작업 실행과 정리는
+지정한 스레드에서 수행한다. 이전 execution과 io 설정은 새 선언과 manifest에서 사용하지 않는다.
 
 [ADR 0002](./0002-host-owned-call-context.md)의 호출 출처와 신뢰 모델,
 [ADR 0006](./0006-windows-bun-ui-worker.md)의 Windows 실행 책임,

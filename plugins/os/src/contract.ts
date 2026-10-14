@@ -2,58 +2,47 @@ import { z } from "zod";
 
 const text = z.string().max(1024);
 /** Read-only Windows and bundled-runtime metadata; no paths or environment variables are exposed. */
-export const osOperations = {
-  info: {
-    input: z.null(),
-    output: z.strictObject({
-      platform: z.literal("windows"),
-      type: text,
-      release: text,
-      version: text,
-      architecture: text,
-      hostname: text,
-      runtime: z.strictObject({
-        name: z.literal("bun"),
-        version: text,
-        pid: z.number().int().positive(),
-      }),
-    }),
-  },
-  usage: {
-    input: z.null(),
-    output: z.strictObject({
-      pid: z.number().int().positive(),
-      logicalCpuCount: z.number().int().nonnegative(),
-      cpuTime: z.strictObject({
-        userMicros: z.number().int().nonnegative(),
-        systemMicros: z.number().int().nonnegative(),
-      }),
-      memory: z.strictObject({
-        systemTotalBytes: z.number().int().nonnegative(),
-        systemFreeBytes: z.number().int().nonnegative(),
-        processResidentBytes: z.number().int().nonnegative(),
-      }),
-      translation: z.strictObject({
-        active: z.boolean(),
-        processMachine: z.number().int().min(0).max(65535),
-        nativeMachine: z.number().int().min(0).max(65535),
-      }),
-    }),
-  },
-  locale: {
-    input: z.null(),
-    output: z.strictObject({
-      locale: z.string().max(85),
-      countryCode: z.string().max(3).nullable(),
-      preferredLanguages: z.array(z.string().min(1).max(85)).max(128),
-      systemLanguage: z.string().max(85),
-    }),
-  },
-} as const;
+export const infoSchema = z.strictObject({
+  platform: z.literal("windows"),
+  type: text,
+  release: text,
+  version: text,
+  architecture: text,
+  hostname: text,
+  runtime: z.strictObject({
+    name: z.literal("bun"),
+    version: text,
+    pid: z.number().int().positive(),
+  }),
+});
+export const usageSchema = z.strictObject({
+  pid: z.number().int().positive(),
+  logicalCpuCount: z.number().int().nonnegative(),
+  cpuTime: z.strictObject({
+    userMicros: z.number().int().nonnegative(),
+    systemMicros: z.number().int().nonnegative(),
+  }),
+  memory: z.strictObject({
+    systemTotalBytes: z.number().int().nonnegative(),
+    systemFreeBytes: z.number().int().nonnegative(),
+    processResidentBytes: z.number().int().nonnegative(),
+  }),
+  translation: z.strictObject({
+    active: z.boolean(),
+    processMachine: z.number().int().min(0).max(65535),
+    nativeMachine: z.number().int().min(0).max(65535),
+  }),
+});
+export const localeSchema = z.strictObject({
+  locale: z.string().max(85),
+  countryCode: z.string().max(3).nullable(),
+  preferredLanguages: z.array(z.string().min(1).max(85)).max(128),
+  systemLanguage: z.string().max(85),
+});
 /** OS and runtime snapshot returned by os.info. */
-export type OSInfo = z.infer<typeof osOperations.info.output>;
+export type OSInfo = z.infer<typeof infoSchema>;
 /** Windows user locale, ordered display languages and system UI language. */
-export type OSLocale = z.infer<typeof osOperations.locale.output>;
+export type OSLocale = z.infer<typeof localeSchema>;
 
 /** Process CPU time, memory and Windows architecture translation snapshot. */
-export type OSUsage = z.infer<typeof osOperations.usage.output>;
+export type OSUsage = z.infer<typeof usageSchema>;

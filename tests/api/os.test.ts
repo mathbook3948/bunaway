@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { os, osPlugin } from "@bunaway/plugin-os";
 import { NativeRegistry } from "@bunaway/protocol";
-import { osOperations } from "#plugins/os/src/contract";
+import { osOperations } from "#plugins/os/src/operations";
 import { assertWindowsRegionCode } from "../fixtures/windows-region-code.ts";
 
 test("OS reads have independent permissions and strict null inputs", () => {

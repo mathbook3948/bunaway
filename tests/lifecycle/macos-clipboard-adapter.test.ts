@@ -8,7 +8,7 @@ import {
   encodeTIFF,
   MAX_TIFF_BYTES,
 } from "#plugins/clipboard/src/macos-tiff";
-import { pasteboardOperations } from "#plugins/clipboard/src/platforms/macos";
+import { pasteboardOperations } from "../fixtures/injected-native-plugins.ts";
 
 const image = {
   width: 2,
@@ -298,7 +298,7 @@ test("TIFF accepts default or explicit unsigned samples and rejects other Sample
   );
 });
 
-test("macOS clipboard validates permission and cancellation before touching native state", () => {
+test("macOS clipboard validates permission and cancellation before touching native state", async () => {
   const calls: string[] = [];
   let items: ClipboardItem[] = [];
   const native: Pasteboard = {
@@ -385,22 +385,22 @@ test("macOS clipboard validates permission and cancellation before touching nati
     ],
   ];
   for (const [operation, input] of deniedCalls) {
-    expect(() => invoke(operation, input, [])).toThrow(
+    await expect(invoke(operation, input, [])).rejects.toThrow(
       expect.objectContaining({
         code: "PERMISSION_DENIED",
       }),
     );
   }
-  expect(() =>
+  await expect(
     invoke("clipboard.writeText", {
       text: "\ud800",
     }),
-  ).toThrow(
+  ).rejects.toThrow(
     expect.objectContaining({
       code: "INVALID_ARGUMENT",
     }),
   );
-  expect(() =>
+  await expect(
     invoke(
       "clipboard.clear",
       null,
@@ -409,20 +409,20 @@ test("macOS clipboard validates permission and cancellation before touching nati
       ],
       AbortSignal.abort(),
     ),
-  ).toThrow(
+  ).rejects.toThrow(
     expect.objectContaining({
       code: "CANCELLED",
     }),
   );
   expect(calls).toEqual([]);
   expect(
-    invoke("clipboard.writeText", {
+    await invoke("clipboard.writeText", {
       text: "한글 😀\r\n",
     }),
   ).toBeNull();
-  expect(invoke("clipboard.readText", null)).toBe("한글 😀\r\n");
+  expect(await invoke("clipboard.readText", null)).toBe("한글 😀\r\n");
   expect(
-    invoke("clipboard.readFormats", {
+    await invoke("clipboard.readFormats", {
       formats: [
         "text/html",
         "text/plain",
@@ -438,10 +438,10 @@ test("macOS clipboard validates permission and cancellation before touching nati
       data: "한글 😀\r\n",
     },
   ]);
-  adapter.dispose();
-  adapter.dispose();
+  await adapter.dispose();
+  await adapter.dispose();
   expect(calls.filter((call) => call === "dispose")).toHaveLength(1);
-  expect(() => invoke("clipboard.clear", null)).toThrow(
+  await expect(invoke("clipboard.clear", null)).rejects.toThrow(
     expect.objectContaining({
       code: "CANCELLED",
     }),

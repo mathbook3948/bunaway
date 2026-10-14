@@ -575,9 +575,9 @@ export async function runWindowsApp(
           );
         }
         const requestId = `host-${++sequence}`;
-        const execution = packagedPlugins.find((plugin) =>
+        const thread = packagedPlugins.find((plugin) =>
           call.operation.startsWith(`${plugin.name}.`),
-        )?.execution;
+        )?.thread;
         const source =
           context === config.backendContext
             ? "backend"
@@ -590,7 +590,7 @@ export async function runWindowsApp(
           source,
         } as const;
         try {
-          validatePacket(packet, execution === "ui" ? "ui" : "io");
+          validatePacket(packet, thread === "ui" ? "ui" : "io");
         } catch {
           return Promise.reject(
             new BunawayError({
@@ -638,7 +638,7 @@ export async function runWindowsApp(
             settled: settled.promise,
           });
           signal.addEventListener("abort", abort);
-          void (execution === "ui" ? channel : ioChannel)
+          void (thread === "ui" ? channel : ioChannel)
             .send(packet)
             .catch((error) => {
               abort();

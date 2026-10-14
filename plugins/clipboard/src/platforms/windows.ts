@@ -1,41 +1,44 @@
 import { setTimeout as delay } from "node:timers/promises";
-import type { NativeAdapter, NativeEnvironment } from "@bunaway/plugin";
-import { BunawayError, type JsonValue, validateValue } from "@bunaway/protocol";
-import { clipboardOperations, validateClipboardInput } from "../contract.ts";
-import { writeTextSchema } from "../text.ts";
+import { BunawayError } from "@bunaway/protocol";
+import type { z } from "zod";
+import type {
+  ClipboardFormat,
+  imageSchema,
+  writeFormatsSchema,
+} from "../formats.ts";
 import { createClipboard } from "../win32.ts";
 
 const OPEN_TIMEOUT_MS = 250;
 const OPEN_RETRY_MS = 10;
-type UIContext = Parameters<NonNullable<NativeAdapter["executeUI"]>>[3];
 
-/** Run bounded, cancellable acquisition on the UI thread without holding a handle across awaits. */
-export function createOperations(
-  _environment: NativeEnvironment,
-): NativeAdapter {
-  const native = createClipboard();
-  const lifetime = new AbortController();
-  const pending = new Set<Promise<JsonValue>>();
-  let disposal: Promise<void> | undefined;
+/** Own bounded, cancellable clipboard acquisition on the UI thread. */
+export class WindowsClipboard {
+  private readonly native = createClipboard();
+  private readonly lifetime = new AbortController();
+  private readonly pending = new Set<Promise<unknown>>();
+  private disposal: Promise<void> | undefined;
 
-  async function run(
-    name: string,
-    input: JsonValue,
-    context: UIContext,
-  ): Promise<JsonValue> {
-    validateClipboardInput(name, input);
-    if (!context.permissions.permissions.includes(name)) {
-      throw new BunawayError({
-        code: "PERMISSION_DENIED",
-        message: "Clipboard permission denied.",
-      });
-    }
-    const signal = context.signal
+  private run<T>(execute: () => T, requestSignal?: AbortSignal): Promise<T> {
+    const task = this.withOpen(execute, requestSignal);
+    this.pending.add(task);
+    // Both outcomes release the busy marker; the caller observes the error.
+    void task.then(
+      () => this.pending.delete(task),
+      () => this.pending.delete(task),
+    );
+    return task;
+  }
+
+  private async withOpen<T>(
+    execute: () => T,
+    requestSignal?: AbortSignal,
+  ): Promise<T> {
+    const signal = requestSignal
       ? AbortSignal.any([
-          lifetime.signal,
-          context.signal,
+          this.lifetime.signal,
+          requestSignal,
         ])
-      : lifetime.signal;
+      : this.lifetime.signal;
     const deadline = performance.now() + OPEN_TIMEOUT_MS;
     while (true) {
       if (signal.aborted) {
@@ -44,7 +47,7 @@ export function createOperations(
           message: "Clipboard operation cancelled.",
         });
       }
-      if (native.open()) {
+      if (this.native.open()) {
         break;
       }
       if (performance.now() >= deadline) {
@@ -64,76 +67,94 @@ export function createOperations(
         });
       }
     }
-    // The synchronous commit cannot be interrupted. Cancellation never rolls it back.
+    // A synchronous commit cannot be cancelled or rolled back after it starts.
     try {
-      if (name === "clipboard.readText") {
-        return native.read();
-      }
-      switch (name) {
-        case "clipboard.writeText":
-          native.write(writeTextSchema.parse(validateValue({}, input)).text);
-          break;
-        case "clipboard.clear":
-          native.clear();
-          break;
-        case "clipboard.readImage":
-          return native.readImage();
-        case "clipboard.writeImage":
-          native.writeFormats([
-            {
-              format: "image/bmp",
-              data: clipboardOperations.writeImage.input.parse(input),
-            },
-          ]);
-          break;
-        case "clipboard.getFormats":
-          return native.getFormats();
-        case "clipboard.hasFormat":
-          return native.hasFormat(
-            clipboardOperations.hasFormat.input.parse(input).format,
-          );
-        case "clipboard.readFormats":
-          return native.readFormats(
-            clipboardOperations.readFormats.input.parse(input).formats,
-          );
-        case "clipboard.writeFormats":
-          native.writeFormats(
-            clipboardOperations.writeFormats.input.parse(input).items,
-          );
-          break;
-      }
-      return null;
+      return execute();
     } finally {
-      native.close();
+      this.native.close();
     }
   }
-  return {
-    execute() {
-      throw new BunawayError({
-        code: "UNSUPPORTED",
-        message: "Clipboard requires UI execution.",
-      });
-    },
-    executeUI(name, input, _source, context) {
-      const task = run(name, input, context);
-      pending.add(task);
-      // Both outcomes release the busy marker; the caller owns the operation error.
-      void task.then(
-        () => pending.delete(task),
-        () => pending.delete(task),
-      );
-      return task;
-    },
-    busy: () => pending.size > 0,
-    dispose() {
-      disposal ??= (async () => {
-        lifetime.abort();
-        await Promise.allSettled([
-          ...pending,
-        ]);
-        native.dispose();
-      })();
-      return disposal;
-    },
-  };
+
+  readText(signal?: AbortSignal) {
+    return this.run(() => this.native.read(), signal);
+  }
+
+  writeText(text: string, signal?: AbortSignal) {
+    return this.run(() => {
+      this.native.write(text);
+      return null;
+    }, signal);
+  }
+
+  clear(signal?: AbortSignal) {
+    return this.run(() => {
+      this.native.clear();
+      return null;
+    }, signal);
+  }
+
+  readImage(signal?: AbortSignal) {
+    return this.run(() => this.native.readImage(), signal);
+  }
+
+  writeImage(image: z.output<typeof imageSchema>, signal?: AbortSignal) {
+    return this.run(() => {
+      this.native.writeFormats([
+        {
+          format: "image/bmp",
+          data: image,
+        },
+      ]);
+      return null;
+    }, signal);
+  }
+
+  getFormats(signal?: AbortSignal) {
+    return this.run(() => this.native.getFormats(), signal);
+  }
+
+  hasFormat(format: ClipboardFormat, signal?: AbortSignal) {
+    return this.run(() => this.native.hasFormat(format), signal);
+  }
+
+  readFormats(formats: ClipboardFormat[], signal?: AbortSignal) {
+    return this.run(() => this.native.readFormats(formats), signal);
+  }
+
+  writeFormats(
+    items: z.output<typeof writeFormatsSchema>["items"],
+    signal?: AbortSignal,
+  ) {
+    return this.run(() => {
+      this.native.writeFormats(items);
+      return null;
+    }, signal);
+  }
+
+  busy(): boolean {
+    return this.pending.size > 0;
+  }
+
+  dispose(): Promise<void> {
+    this.disposal ??= (async () => {
+      this.lifetime.abort();
+      await Promise.allSettled([
+        ...this.pending,
+      ]);
+      this.native.dispose();
+    })();
+    return this.disposal;
+  }
+}
+
+export function initialize(): WindowsClipboard {
+  return new WindowsClipboard();
+}
+
+export function dispose(instance: WindowsClipboard): Promise<void> {
+  return instance.dispose();
+}
+
+export function busy(instance: WindowsClipboard): boolean {
+  return instance.busy();
 }

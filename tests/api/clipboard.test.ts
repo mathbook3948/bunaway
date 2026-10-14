@@ -9,7 +9,7 @@ import {
 } from "@bunaway/protocol";
 import { installedPlugins } from "#cli/plugins";
 import { bindHostAPI } from "#core/host-api";
-import { clipboardOperations } from "#plugins/clipboard/src/contract";
+import { windowsOperations as clipboardOperations } from "#plugins/clipboard/src/operations";
 import { MAX_TEXT_LENGTH } from "#plugins/clipboard/src/text";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
@@ -227,8 +227,8 @@ test("clipboard is independently discoverable as a Windows and macOS UI plugin",
   );
   const plugin = plugins.find(({ name }) => name === "clipboard");
   expect(plugin?.packageName).toBe("@bunaway/plugin-clipboard");
-  expect(plugin?.targets.windows?.execution).toBe("ui");
-  expect(plugin?.targets.macos?.execution).toBe("ui");
+  expect(plugin?.targets.windows?.thread).toBe("ui");
+  expect(plugin?.targets.macos?.thread).toBe("ui");
   expect(plugin?.targets.macos?.supportedOperations).toEqual(
     Object.keys(clipboardOperations).map((name) => `clipboard.${name}`),
   );

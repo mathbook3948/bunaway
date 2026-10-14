@@ -9,7 +9,7 @@ const settingSchema = z.enum([
   "disabledByManifest",
   "unknown",
 ]);
-const statusSchema = z.discriminatedUnion("support", [
+export const statusSchema = z.discriminatedUnion("support", [
   z.strictObject({
     support: z.literal("supported"),
     appUserModelId: z.string(),
@@ -21,18 +21,6 @@ const statusSchema = z.discriminatedUnion("support", [
     setting: z.null(),
   }),
 ]);
-
-/** Separate availability of the toast API from Windows' app, user and policy setting. */
-export const notificationOperations = {
-  getStatus: {
-    input: z.null(),
-    output: statusSchema,
-  },
-  openSettings: {
-    input: z.null(),
-    output: z.null(),
-  },
-} as const;
 
 export type NotificationSetting = z.infer<typeof settingSchema>;
 export type NotificationStatus = z.infer<typeof statusSchema>;

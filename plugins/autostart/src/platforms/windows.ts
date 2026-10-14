@@ -1,7 +1,8 @@
 import { win32 } from "node:path";
-import type { NativeAdapter, NativeEnvironment } from "@bunaway/plugin";
+import type { NativeEnvironment } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
-import { type AutostartStatus, validateAutostartInput } from "../contract.ts";
+import type { z } from "zod";
+import type { AutostartStatus, enableSchema } from "../contract.ts";
 import { commandLine, matchesLaunch, registrationName } from "../launch.ts";
 import {
   APPROVAL_KEY,
@@ -11,10 +12,10 @@ import {
   startupState,
 } from "../registry.ts";
 
-/** Own one user's app-scoped Run value. I/O-worker authorization precedes every operation. */
-export function createOperations(
-  environment: NativeEnvironment,
-): NativeAdapter {
+type EnableInput = z.output<typeof enableSchema>;
+
+/** Own one user's app-scoped Run value on the host I/O worker. */
+export function initialize(environment: NativeEnvironment) {
   const app = environment.app;
   if (!app) {
     throw new BunawayError({
@@ -22,55 +23,60 @@ export function createOperations(
       message: "Autostart requires a host-selected app launch.",
     });
   }
-  const name = registrationName(app);
-  const registry = createRegistry();
-  const getStatus = (): AutostartStatus => {
-    const value = registry.read(RUN_KEY, name);
-    const command = registryCommand(value);
-    const parsed = command ? registry.parse(command) : [];
-    const executable = parsed[0];
-    // Unquoted paths with spaces can select a different executable in CreateProcessW.
-    const valid =
-      !!command?.startsWith('"') &&
-      !!executable &&
-      win32.isAbsolute(executable) &&
-      !/["\r\n]/.test(executable);
-    const args = valid ? parsed.slice(1) : null;
-    return {
-      registrationName: name,
-      registered: value !== null,
-      commandLine: command,
-      executablePath: valid ? executable : null,
-      args,
-      startupState: startupState(registry.read(APPROVAL_KEY, name)),
-      matchesCurrentLaunch:
-        valid && args !== null && matchesLaunch(app, executable, args),
-    };
-  };
   return {
-    execute(operation, input) {
-      const payload = validateAutostartInput(operation, input);
-      registry.unpackaged();
-      if (operation === "autostart.enable") {
-        if (!payload) {
-          throw new BunawayError({
-            code: "INVALID_ARGUMENT",
-            message: "Invalid autostart arguments.",
-          });
-        }
-        const command = commandLine(app, payload.args, payload.hidden);
-        // Repeating the same request does not rewrite Run, especially during a login launch.
-        if (registryCommand(registry.read(RUN_KEY, name)) !== command) {
-          registry.write(name, command);
-        }
-        return getStatus();
-      }
-      if (operation === "autostart.disable") {
-        registry.remove(name);
-        return null;
-      }
-      return getStatus();
-    },
-    dispose: () => registry.dispose(),
+    app,
+    name: registrationName(app),
+    registry: createRegistry(),
   };
+}
+
+/** Read both Run registration and the user's separate startup approval state. */
+export function getStatus(
+  state: ReturnType<typeof initialize>,
+): AutostartStatus {
+  state.registry.unpackaged();
+  const value = state.registry.read(RUN_KEY, state.name);
+  const command = registryCommand(value);
+  const parsed = command ? state.registry.parse(command) : [];
+  const executable = parsed[0];
+  // Unquoted paths with spaces can select a different executable in CreateProcessW.
+  const valid =
+    !!command?.startsWith('"') &&
+    !!executable &&
+    win32.isAbsolute(executable) &&
+    !/["\r\n]/.test(executable);
+  const args = valid ? parsed.slice(1) : null;
+  return {
+    registrationName: state.name,
+    registered: value !== null,
+    commandLine: command,
+    executablePath: valid ? executable : null,
+    args,
+    startupState: startupState(state.registry.read(APPROVAL_KEY, state.name)),
+    matchesCurrentLaunch:
+      valid && args !== null && matchesLaunch(state.app, executable, args),
+  };
+}
+
+export function enable(
+  state: ReturnType<typeof initialize>,
+  input: EnableInput,
+) {
+  state.registry.unpackaged();
+  const command = commandLine(state.app, input.args, input.hidden);
+  // Repeating the request must not rewrite Run during a login launch.
+  if (registryCommand(state.registry.read(RUN_KEY, state.name)) !== command) {
+    state.registry.write(state.name, command);
+  }
+  return getStatus(state);
+}
+
+export function disable(state: ReturnType<typeof initialize>): null {
+  state.registry.unpackaged();
+  state.registry.remove(state.name);
+  return null;
+}
+
+export function dispose(state: ReturnType<typeof initialize>) {
+  state.registry.dispose();
 }

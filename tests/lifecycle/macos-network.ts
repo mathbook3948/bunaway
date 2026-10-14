@@ -274,7 +274,7 @@ export default defineNetworkFixture(${JSON.stringify(http)}, ${JSON.stringify(ws
     (plugin) => plugin.name === "network",
   );
   assert.equal(installed.length, 1);
-  assert.equal(installed[0]?.targets.macos?.execution, "ui");
+  assert.equal(installed[0]?.targets.macos?.thread, "ui");
   const bundled = await bundleMacosHost(
     resolve(root, "native/macos/bun"),
     assets,

@@ -76,8 +76,8 @@ export default defineApp({ modules: [], plugins: [appearancePlugin] });
     expect(plugins.map(({ packageName }) => packageName)).toEqual([
       "@bunaway/plugin-appearance",
     ]);
-    expect(plugins[0]?.targets.windows?.execution).toBe("io");
-    expect(plugins[0]?.targets.macos?.execution).toBe("ui");
+    expect(plugins[0]?.targets.windows?.thread).toBe("worker");
+    expect(plugins[0]?.targets.macos?.thread).toBe("ui");
     expect(valid.nativePlugins?.map(({ name }) => name)).toEqual([
       "appearance",
     ]);

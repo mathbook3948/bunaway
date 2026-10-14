@@ -1,4 +1,3 @@
-import { BunawayError, type JsonValue, validateValue } from "@bunaway/protocol";
 import { z } from "zod";
 
 export const MAX_IMAGE_BYTES = 524_288;
@@ -71,10 +70,10 @@ export const dataURLSchema = z
     "Data URL must contain canonical bounded base64 image bytes.",
   );
 export const idSchema = z.string().uuid();
-const referenceSchema = z.strictObject({
+export const referenceSchema = z.strictObject({
   id: idSchema,
 });
-const infoSchema = z
+export const infoSchema = z
   .strictObject({
     width: z.number().int().min(0).max(4096),
     height: z.number().int().min(0).max(4096),
@@ -87,10 +86,10 @@ const infoSchema = z
       value.empty === (value.width === 0),
     "Image metadata must match bounded dimensions and empty state.",
   );
-const resourceSchema = infoSchema.safeExtend({
+export const resourceSchema = infoSchema.safeExtend({
   id: idSchema,
 });
-const exportSchema = z.strictObject({
+export const exportSchema = z.strictObject({
   id: idSchema,
   format: mimeSchema,
 });
@@ -117,72 +116,3 @@ export const resizeSchema = transformSizeSchema.safeExtend({
   id: idSchema,
   interpolation: interpolationSchema.optional(),
 });
-/** App-owned resource IDs require the corresponding operation permission on every call. */
-export const imageOperations = {
-  createRGBA: {
-    input: rgbaSchema,
-    output: resourceSchema,
-  },
-  createBytes: {
-    input: bytesSchema,
-    output: resourceSchema,
-  },
-  createDataURL: {
-    input: z.strictObject({
-      url: dataURLSchema,
-    }),
-    output: resourceSchema,
-  },
-  getInfo: {
-    input: referenceSchema,
-    output: infoSchema,
-  },
-  getPixels: {
-    input: referenceSchema,
-    output: rgbaSchema,
-  },
-  exportBytes: {
-    input: exportSchema,
-    output: bytesSchema,
-  },
-  exportDataURL: {
-    input: exportSchema,
-    output: dataURLSchema,
-  },
-  dispose: {
-    input: referenceSchema,
-    output: z.boolean(),
-  },
-  crop: {
-    input: cropSchema,
-    output: resourceSchema,
-  },
-  resize: {
-    input: resizeSchema,
-    output: resourceSchema,
-  },
-} as const;
-
-/** Reject unknown operations and detach JSON inputs before native resources are acquired. */
-export function validateImageInput(operation: string, input: JsonValue) {
-  const name = operation.slice("image.".length);
-  if (
-    !operation.startsWith("image.") ||
-    !Object.hasOwn(imageOperations, name)
-  ) {
-    throw new BunawayError({
-      code: "UNSUPPORTED",
-      message: "Image operation is not registered.",
-    });
-  }
-  // Object.hasOwn restricts this dynamic operation key to the declared contract.
-  const schema = imageOperations[name as keyof typeof imageOperations].input;
-  try {
-    return schema.parse(validateValue({}, input));
-  } catch {
-    throw new BunawayError({
-      code: "INVALID_ARGUMENT",
-      message: "Invalid image input.",
-    });
-  }
-}

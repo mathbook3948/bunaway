@@ -10,7 +10,7 @@ import type { HostContext, JsonValue, Policy } from "@bunaway/protocol";
 import { NativeRegistry } from "@bunaway/protocol";
 import { appModules } from "#cli/app-modules";
 import { bindHostAPI } from "#core/host-api";
-import { createOperations } from "#plugins/windows/src/platforms/windows";
+import { windowsPlugin as windowsSourcePlugin } from "#plugins/windows/src/index";
 
 const registry = new NativeRegistry([
   windowsPlugin,
@@ -134,11 +134,14 @@ test("window operations use name grants and list all configured windows", async 
     now: Date.now,
     tick: async () => {},
   };
-  const adapter = createOperations({
+  const adapter = windowsSourcePlugin.nativePlatforms.windows?.create({
     dataRoot: ".",
     capabilities: [],
     windows: services,
   });
+  if (!adapter) {
+    throw new Error("Missing Windows plugin adapter");
+  }
   const execute = adapter.executeUI;
   if (!execute) {
     throw new Error("Missing UI adapter");

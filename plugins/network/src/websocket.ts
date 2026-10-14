@@ -1,11 +1,15 @@
 import { BunawayError } from "@bunaway/protocol";
 import type { z } from "zod";
-import { MAX_BODY_BYTES, type networkOperations } from "./contract.ts";
+import {
+  type exchangeInputSchema,
+  type exchangeResultSchema,
+  MAX_BODY_BYTES,
+} from "./contract.ts";
 
-type ExchangeResult = z.output<typeof networkOperations.exchange.output>;
+type ExchangeResult = z.output<typeof exchangeResultSchema>;
 /** Own a socket until its close event, abort, error or bounded receive completion. */
 export function exchange(
-  input: z.output<typeof networkOperations.exchange.input>,
+  input: z.output<typeof exchangeInputSchema>,
   signal: AbortSignal,
 ): Promise<ExchangeResult> {
   return new Promise((resolve, reject) => {

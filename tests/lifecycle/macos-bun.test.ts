@@ -1211,28 +1211,28 @@ test("macOS shutdown cancels setup Host calls before waiting for plugin cleanup"
 
 test.each([
   {
-    execution: "ui",
+    thread: "ui",
     phase: "input",
   },
   {
-    execution: "ui",
+    thread: "ui",
     phase: "output",
   },
   {
-    execution: "ui",
+    thread: "ui",
     phase: "execution",
   },
   {
-    execution: "io",
+    thread: "worker",
     phase: "input",
   },
   {
-    execution: "io",
+    thread: "worker",
     phase: "output",
   },
 ] as const)(
-  "macOS cancelled $execution $phase releases request and channel capacity before settlement",
-  async ({ execution, phase }) => {
+  "macOS cancelled $thread $phase releases request and channel capacity before settlement",
+  async ({ thread, phase }) => {
     const directory = await mkdtemp(resolve(tmpdir(), "bunaway-macos-cancel-"));
     try {
       const marker = resolve(directory, "started.txt");
@@ -1258,7 +1258,7 @@ test.each([
         const plugin = defineNativePlugin({ name:"parser", operations:{run:{
           input: phase === "input" ? z.string().transform(pause) : z.string(),
           output: phase === "output" ? z.string().transform(pause) : z.string(),
-        }}, platforms:{macos:{execution:${JSON.stringify(execution)},create:()=>({
+        }}, platforms:{macos:{thread:${JSON.stringify(thread)},create:()=>({
           execute(_name,input) {
             if(input === "release") for(const release of gates.splice(0)) release();
             return input;
@@ -1289,7 +1289,7 @@ test.each([
           native,
           targets: {
             macos: {
-              execution,
+              thread,
               operations,
             },
           },
@@ -1429,7 +1429,7 @@ test.each([
           root: directory,
           targets: {
             macos: {
-              execution: "io",
+              thread: "worker",
               operations,
             },
           },
@@ -1550,7 +1550,7 @@ test("macOS shutdown aborts active backend I/O before Core stop hooks and adapte
         root: directory,
         targets: {
           macos: {
-            execution: "io",
+            thread: "worker",
             operations,
           },
         },
@@ -1562,7 +1562,7 @@ test("macOS shutdown aborts active backend I/O before Core stop hooks and adapte
       import { existsSync, writeFileSync } from "node:fs";
       import { defineNativePlugin } from ${JSON.stringify(resolve(import.meta.dir, "../../packages/plugin-sdk/src/index.ts"))};
       import { z } from ${JSON.stringify(Bun.resolveSync("zod", import.meta.dir))};
-      export const plugin = defineNativePlugin({name:"waiting",operations:{run:{input:z.null(),output:z.null()}},platforms:{macos:{execution:"io",create(){
+      export const plugin = defineNativePlugin({name:"waiting",operations:{run:{input:z.null(),output:z.null()}},platforms:{macos:{thread:"worker",create(){
         return {
           execute(){throw new Error("Missing execution context");},
           executeUI(_operation,_input,source,context){
@@ -1682,7 +1682,7 @@ test("macOS I/O receives only the trusted host app identity and rejects a caller
       root: directory,
       targets: {
         macos: {
-          execution: "io",
+          thread: "worker",
           operations: modulePath,
         },
       },
@@ -1695,7 +1695,7 @@ test("macOS I/O receives only the trusted host app identity and rejects a caller
       import { defineNativePlugin } from ${JSON.stringify(resolve(import.meta.dir, "../../packages/plugin-sdk/src/index.ts"))};
       import { z } from ${JSON.stringify(Bun.resolveSync("zod", import.meta.dir))};
       const plugin = defineNativePlugin({name:"identity",operations:{inspect:{input:z.null(),output:z.unknown()}},
-        platforms:{macos:{execution:"io",create(environment){return {
+        platforms:{macos:{thread:"worker",create(environment){return {
           execute(){return environment.app ?? null;},dispose(){}
         };}}}});
       export default {...plugin.definition,version:"1"};

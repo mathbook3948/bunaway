@@ -8,7 +8,7 @@ AppKit는 메인 스레드에서 실행하고 앱 정의는 같은 프로세스�
 실행한다. UI 스레드는 5ms마다 비차단 CoreFoundation 이벤트와 최대 64개의
 AppKit 이벤트를 처리하고 Bun 이벤트 루프에 제어를 돌려준다. Worker 연결은
 Windows와 같은 검증, 수신 확인, 용량 제한을 사용한다.
-등록한 `execution: "io"` 어댑터는 별도 I/O Worker에서 초기화하고 실행한다. `executeUI`가 있는 I/O 어댑터에도 같은 요청 ID, 권한,
+등록한 `thread: "worker"` 어댑터는 별도 I/O Worker에서 초기화하고 실행한다. `executeUI`가 있는 I/O 어댑터에도 같은 요청 ID, 권한,
 취소 신호와 실행 직전 검사를 전달한다. SDK 파싱은 한 번만 수행한다.
 `config.ts`가 검증한 패키지의 `appId`와 실제 호스트 실행 파일, 재시작 인자를
 `NativeEnvironment.app`으로 I/O Worker에 전달한다. 작업 입력으로 identity를 바꾸지 않는다.

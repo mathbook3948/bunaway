@@ -46,23 +46,31 @@ test.each([
         `import { z } from "zod";
 export const operations = { read: { input: z.null(), output: z.string().transform(value => value + "!") } } as const;`,
       );
-      const imports = PLATFORMS.map(
-        (platform) =>
-          `import { createOperations as ${platform} } from "./platforms/${platform}${extension}";`,
+      const unified = extension === ".ts";
+      const imports = PLATFORMS.map((platform) =>
+        unified
+          ? `import { initialize as ${platform}, dispose as ${platform}Dispose } from "./platforms/${platform}${extension}";`
+          : `import { createOperations as ${platform} } from "./platforms/${platform}${extension}";`,
       ).join("\n");
-      const targets = PLATFORMS.map(
-        (platform) => `${platform}: { execution: "io", create: ${platform} }`,
+      const targets = PLATFORMS.map((platform) =>
+        unified
+          ? `${platform}: { initialize: ${platform}, dispose: ${platform}Dispose, operations: {read: defineNativeOperation<ReturnType<typeof ${platform}>>()({...operations.read, handler: (_input, {instance}) => instance.value})} }`
+          : `${platform}: { thread: "worker", create: ${platform} }`,
       ).join(", ");
-      const source = `import { defineNativePlugin } from "@bunaway/plugin";
+      const source = `import { defineNativeOperation, defineNativePlugin } from "@bunaway/plugin";
 import { operations } from "./contract.ts";
 ${imports}
-const plugin = defineNativePlugin({ name: "demo", operations, platforms: { ${targets} } });
+const plugin = defineNativePlugin({ name: "demo", ${unified ? "" : "operations,"} platforms: { ${targets} } });
 export const api = plugin.api;
 export default plugin.definition;`;
       await Bun.write(entry, source);
       await Bun.write(
         resolve(root, "src/platforms/windows.ts"),
-        `import { dlopen } from "bun:ffi";
+        unified
+          ? `import { dlopen } from "bun:ffi";
+export function initialize() { const api = dlopen("kernel32.dll", {}); return { value: "WINDOWS_ONLY_MARKER", api }; }
+export function dispose(instance: ReturnType<typeof initialize>) { instance.api.close(); }`
+          : `import { dlopen } from "bun:ffi";
 import type { NativeAdapterFactory } from "@bunaway/plugin";
 export const createOperations: NativeAdapterFactory = () => { const api = dlopen("kernel32.dll", {}); return { execute: () => "WINDOWS_ONLY_MARKER", dispose: () => api.close() }; };`,
       );
@@ -72,7 +80,10 @@ export const createOperations: NativeAdapterFactory = () => { const api = dlopen
         }
         await Bun.write(
           resolve(root, "src/platforms", `${platform}.ts`),
-          `import type { NativeAdapterFactory } from "@bunaway/plugin";
+          unified
+            ? `export function initialize() { return {value:"${platform.toUpperCase()}_ONLY_MARKER"}; }
+export function dispose(_instance: ReturnType<typeof initialize>) {}`
+            : `import type { NativeAdapterFactory } from "@bunaway/plugin";
 export const createOperations: NativeAdapterFactory = () => ({ execute: () => "${platform.toUpperCase()}_ONLY_MARKER", dispose() {} });`,
         );
       }
@@ -134,6 +145,17 @@ export const createOperations: NativeAdapterFactory = () => ({ execute: () => "$
         neutral,
       );
       await Bun.write(entry, source);
+      if (unified) {
+        await Bun.write(
+          entry,
+          source.replaceAll("=> instance.value", "=> 123"),
+        );
+        await expect(buildNativePlugin(root)).rejects.toThrow("failed");
+        expect(await Bun.file(resolve(root, "dist/index.js")).text()).toBe(
+          neutral,
+        );
+        await Bun.write(entry, source);
+      }
       await writeJson(resolve(root, "package.json"), {
         name: "test-plugin",
         version: "2",
@@ -213,7 +235,7 @@ test("handler map support survives neutral and opposite-platform exports without
       import {operations} from "./contract.ts";
       import {createOperations as windows} from "./platforms/windows.ts";
       import {createOperations as macos} from "./platforms/macos.ts";
-      export default defineNativePlugin({name:"demo",operations,platforms:{windows:{execution:"ui",create:windows},macos:{execution:"io",create:macos}}}).definition;`,
+      export default defineNativePlugin({name:"demo",operations,platforms:{windows:{thread:"ui",create:windows},macos:{thread:"worker",create:macos}}}).definition;`,
     );
     for (const [platform, key, result] of [
       [
@@ -266,3 +288,112 @@ test("handler map support survives neutral and opposite-platform exports without
     });
   }
 });
+
+test("platform objects and re-exports preserve native schemas without leaking implementation types", async () => {
+  const root = await mkdtemp(resolve(frameworkRoot, "build/plugin-exports-"));
+  try {
+    await mkdir(resolve(root, "src/platforms"), {
+      recursive: true,
+    });
+    await writeJson(resolve(root, "package.json"), {
+      name: "exports-plugin",
+      version: "1",
+      type: "module",
+    });
+    await writeJson(resolve(root, "tsconfig.json"), {
+      extends: resolve(frameworkRoot, "tsconfig.base.json"),
+      compilerOptions: {
+        types: [
+          "bun",
+        ],
+      },
+      include: [
+        "src/**/*.ts",
+      ],
+    });
+    await Bun.write(
+      resolve(root, "src/platforms/implementation.ts"),
+      `
+import { defineNativeOperation } from "@bunaway/plugin";
+import { z } from "zod";
+class PrivateNativeState { read(value: string) { return value + "NATIVE_IMPLEMENTATION"; } }
+export function initialize() { return new PrivateNativeState(); }
+export const operations = {
+  read: defineNativeOperation<PrivateNativeState>()({
+    input: z.string().transform(async value => value + "INPUT_TRANSFORM"),
+    output: z.string().transform(async value => value + "OUTPUT_TRANSFORM"),
+    handler: (input, {instance}) => instance.read(input),
+  }),
+};
+export default operations;
+`,
+    );
+    await Bun.write(
+      resolve(root, "src/platforms/windows.ts"),
+      'export * from "./implementation.ts"; export {default} from "./implementation.ts";',
+    );
+    await Bun.write(
+      resolve(root, "src/index.ts"),
+      `
+import {defineNativePlugin} from "@bunaway/plugin";
+import operations, {initialize as start} from "./platforms/windows.ts";
+const plugin = defineNativePlugin({name:"demo",platforms:{windows:{initialize:start,operations}}});
+export const api = plugin.api;
+export default plugin.definition;
+`,
+    );
+    await buildNativePlugin(root);
+    const neutral = await Bun.file(resolve(root, "dist/index.js")).text();
+    for (const marker of [
+      "NATIVE_IMPLEMENTATION",
+      "INPUT_TRANSFORM",
+      "OUTPUT_TRANSFORM",
+    ]) {
+      expect(neutral).not.toContain(marker);
+    }
+    const declaration = await Bun.file(
+      resolve(root, "dist/types/index.d.ts"),
+    ).text();
+    for (const marker of [
+      "PrivateNativeState",
+      "initialize",
+      "handler",
+      "Zod",
+      "platforms/",
+    ]) {
+      expect(declaration).not.toContain(marker);
+    }
+    expect(declaration).toContain("input: string");
+    expect(declaration).toContain("Promise<string>");
+    const { default: plugin } = await import(
+      pathToFileURL(resolve(root, "dist/native/windows.js")).href
+    );
+    const adapter = plugin.nativePlatforms.windows.create({
+      dataRoot: root,
+      capabilities: [],
+    });
+    try {
+      expect(await adapter.execute("demo.read", "start", "backend")).toBe(
+        "startINPUT_TRANSFORMNATIVE_IMPLEMENTATIONOUTPUT_TRANSFORM",
+      );
+      await expect(
+        adapter.execute("demo.read", 42, "backend"),
+      ).rejects.toMatchObject({
+        code: "INVALID_ARGUMENT",
+      });
+    } finally {
+      await adapter.dispose();
+    }
+    await Bun.write(
+      resolve(root, "src/platforms/windows.ts"),
+      'export * from "./implementation.ts"; export {default} from "./implementation.ts"; export const invalid = new Map();',
+    );
+    await expect(buildNativePlugin(root)).rejects.toThrow();
+    expect(await Bun.file(resolve(root, "dist/index.js")).text()).toBe(neutral);
+  } finally {
+    await rm(root, {
+      recursive: true,
+      force: true,
+    });
+  }
+}, 30000);

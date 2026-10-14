@@ -1,13 +1,15 @@
+import { nativeFactory } from "../fixtures/native-platform.ts";
 import { expect, test } from "bun:test";
-import { appearanceOperations } from "#plugins/appearance/src/contract";
+import { appearanceOperations } from "#plugins/appearance/src/operations";
 
 test.skipIf(process.platform !== "win32")(
   "real Windows appearance queries match native accessibility and colors, retain DLL ownership and reject use after disposal",
   async () => {
-    const [{ createOperations }, { dlopen, ptr }] = await Promise.all([
-      import("#plugins/appearance/src/platforms/windows"),
+    const [{ default: nativeDefinition }, { dlopen, ptr }] = await Promise.all([
+      import("#plugins/appearance/src/index"),
       import("bun:ffi"),
     ]);
+    const createOperations = nativeFactory(nativeDefinition, "windows");
     const driver = dlopen("user32.dll", {
       SystemParametersInfoW: {
         args: [
@@ -36,15 +38,15 @@ test.skipIf(process.platform !== "win32")(
     try {
       await first.dispose();
       await first.dispose();
-      expect(() =>
+      await expect(
         first.execute("appearance.getPreferences", null, "backend"),
-      ).toThrow(
+      ).rejects.toThrow(
         expect.objectContaining({
           code: "CANCELLED",
         }),
       );
       const preferences = appearanceOperations.getPreferences.output.parse(
-        second.execute("appearance.getPreferences", null, "backend"),
+        await second.execute("appearance.getPreferences", null, "backend"),
       );
       const info = Buffer.alloc(16);
       info.writeUInt32LE(16);
@@ -77,16 +79,16 @@ test.skipIf(process.platform !== "win32")(
       expect(preferences.colors.window).toBe(
         `#${(color & 255).toString(16).padStart(2, "0")}${((color >>> 8) & 255).toString(16).padStart(2, "0")}${((color >>> 16) & 255).toString(16).padStart(2, "0")}`,
       );
-      expect(() =>
+      await expect(
         second.execute("appearance.unknown", null, "backend"),
-      ).toThrow(
+      ).rejects.toThrow(
         expect.objectContaining({
           code: "UNSUPPORTED",
         }),
       );
-      expect(() =>
+      await expect(
         second.execute("appearance.getPreferences", {}, "backend"),
-      ).toThrow(
+      ).rejects.toThrow(
         expect.objectContaining({
           code: "INVALID_ARGUMENT",
         }),
@@ -94,7 +96,7 @@ test.skipIf(process.platform !== "win32")(
       for (let index = 0; index < 10; index++) {
         expect(
           appearanceOperations.getPreferences.output.safeParse(
-            second.execute("appearance.getPreferences", null, "backend"),
+            await second.execute("appearance.getPreferences", null, "backend"),
           ).success,
         ).toBe(true);
       }

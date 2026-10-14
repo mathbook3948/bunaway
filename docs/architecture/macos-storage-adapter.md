@@ -2,7 +2,7 @@
 
 `plugins/storage/src/platforms/macos.ts`는 read/write text/bytes, append,
 exists/stat와 copyFile, readDirectory와 createDirectory의 열한 작업을 구현한다.
-공개 계약과 Windows 코드는 변경하지 않는다.
+공개 작업, 권한과 오류 계약은 유지한다.
 `storage.move`와 `storage.remove`는 source 객체 고정 보장을 충족할 수 없어
 macOS에서 `UNSUPPORTED`다.
 
@@ -10,8 +10,12 @@ macOS에서 `UNSUPPORTED`다.
 
 이 변경은 PR #164의 macOS I/O Worker foundation에 명시적으로 쌓는다.
 그 foundation의 요청 검증, 작업별 권한 재검사, 실행 큐, 취소와 종료 및 dispose를
-재사용하며 구현을 복제하지 않는다. storage를 `execution: "io"`로 등록하고
-지원 목록에서 move와 remove를 제외한다. AppKit 메인 스레드에서 동기 파일 작업을 실행하지 않는다.
+재사용하며 구현을 복제하지 않는다. storage를 기본 Worker에 등록하고
+`src/operations.ts`의 입력과 출력 스키마 및 handler를 Windows와 공유한다.
+platforms.macos는 operations, initialize와 dispose를 지정하며 SDK가 작업 키에서 지원 정보를 만든다.
+최상위 공통 작업 맵은 없으며 공개 Storage 인터페이스는 플러그인 작성자가 정한다.
+기능 메서드는 검증된 입력을 받고 이름별 execute 분기 없이 결과를 반환한다.
+move와 remove에는 handler가 없다. AppKit 메인 스레드에서 동기 파일 작업을 실행하지 않는다.
 `tests/lifecycle/macos-storage-host.ts`를 공유 native runner에 추가하며 실제
 ad-hoc 서명 compiled 앱의 WKWebView와 공통 SDK에서 호출한다.
 
@@ -89,7 +93,7 @@ writeText와 바이트 작업의 기존 문서는 부분 쓰기, 실패 및 시�
 Windows move는 검사한 source 핸들 자체에 이름 변경을 적용한다.
 이전 macOS 구현의 `renameatx_np`는 source 이름을 다시 조회하므로 검사와 변경 사이에
 교체된 다른 객체를 이동할 수 있었다. 기존 source 고정 보장을 충족하지 못하므로
-그 구현을 제거하고 macOS 지원 목록에서 move를 제외했다. 호출은 파일이나 이름을
+그 구현을 제거하고 move의 macOS handler를 선언하지 않는다. 호출은 파일이나 이름을
 바꾸기 전에 `UNSUPPORTED`로 실패한다. Windows move의 계약과 구현은 그대로다.
 이 제한은 기능 동등성을 완료했다는 뜻이 아니다. descriptor 기준으로 source 객체를
 고정하는 안전한 구현이 확보되기 전까지 macOS move는 미지원이다.
@@ -100,7 +104,7 @@ Darwin unlinkat는 열린 부모 fd를 받아도 target 이름을 다시 조회�
 이름을 조회한다. fstat로 identity를 다시 비교해도 비교와 unlink 사이의 교체를 막지 못한다.
 [Apple unlinkat 구현과 허용 flags](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/vfs/vfs_syscalls.c)를
 검토했으며 기존 ad-hoc 서명에서 사용할 unprivileged handle-bound 삭제를 확보하지 못했다.
-따라서 remove를 구현하거나 지원 목록에 넣지 않는다. 파일, 빈 디렉터리, 링크와 없는 경로에
+따라서 remove의 macOS 메서드나 handler를 구현하지 않는다. 파일, 빈 디렉터리, 링크와 없는 경로에
 대한 호출 모두 UNSUPPORTED로 실패하고 어떤 이름도 삭제하지 않는다. 이 제한은
 macOS 디렉터리 동등성의 남은 blocker이며 Windows remove의 강한 보장은 유지한다.
 

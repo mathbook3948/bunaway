@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test";
 import { storagePlugin } from "@bunaway/plugin-storage";
 import { NativeRegistry, serializeHostResponse } from "@bunaway/protocol";
-import { storageOperations } from "../../plugins/storage/src/contract.ts";
 import {
   directoryEntries,
   MAX_DIRECTORY_ENTRIES,
 } from "../../plugins/storage/src/directory-entries.ts";
+import { windowsOperations } from "../../plugins/storage/src/platforms/windows-operations.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
-const parsers = pluginParsers("storage", storageOperations);
+const parsers = pluginParsers("storage", windowsOperations);
 const location = {
   path: "C:/notes/한글",
 };
@@ -19,14 +19,16 @@ test("macOS supports directory reads and creation while checked-object removal r
     "storage.readDirectory",
     "storage.createDirectory",
   ]) {
-    expect(targets.macos?.execution).toBe("io");
+    expect(targets.macos?.thread).toBe("worker");
     expect(targets.macos?.operations).toContain(
       operation.slice("storage.".length),
     );
   }
   expect(targets.macos?.operations).not.toContain("remove");
-  expect(targets.windows?.execution).toBe("io");
-  expect(targets.windows?.operations).toBeUndefined();
+  expect(targets.macos?.operations).not.toContain("move");
+  expect(targets.macos?.operations).toHaveLength(11);
+  expect(targets.windows?.thread).toBe("worker");
+  expect(targets.windows?.operations).toEqual(Object.keys(windowsOperations));
 });
 
 test("directory operations resolve recursive defaults, bound output and retain independent permissions", async () => {

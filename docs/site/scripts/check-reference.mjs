@@ -371,7 +371,8 @@ for (const entry of catalog.packages) {
 }
 
 function members(path, typeName) {
-  const declaration = source(resolve(root, path)).statements.find(
+  const statements = source(resolve(root, path)).statements;
+  const declaration = statements.find(
     (node) =>
       (ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) &&
       node.name.text === typeName,
@@ -382,12 +383,43 @@ function members(path, typeName) {
   const body = ts.isTypeAliasDeclaration(declaration)
     ? declaration.type
     : declaration;
-  if (!body?.members) {
+  // Accepted declaration shapes can compose local metadata with a union of inputs.
+  const inspect = (node, visited = new Set()) => {
+    if (node.members) {
+      return node.members
+        .map((member) => member.name?.getText())
+        .filter(Boolean);
+    }
+    if (ts.isParenthesizedTypeNode(node)) {
+      return inspect(node.type, visited);
+    }
+    if (ts.isUnionTypeNode(node) || ts.isIntersectionTypeNode(node)) {
+      return node.types.flatMap((type) => inspect(type, visited));
+    }
+    if (
+      ts.isTypeReferenceNode(node) &&
+      ts.isIdentifier(node.typeName) &&
+      !visited.has(node.typeName.text)
+    ) {
+      const referenced = statements.find(
+        (statement) =>
+          (ts.isTypeAliasDeclaration(statement) ||
+            ts.isInterfaceDeclaration(statement)) &&
+          statement.name.text === node.typeName.text,
+      );
+      if (referenced) {
+        return inspect(
+          ts.isTypeAliasDeclaration(referenced) ? referenced.type : referenced,
+          new Set([
+            ...visited,
+            node.typeName.text,
+          ]),
+        );
+      }
+    }
     throw new Error(`Cannot inspect ${path}: ${typeName}`);
-  }
-  return new Set(
-    body.members.map((member) => member.name?.getText()).filter(Boolean),
-  );
+  };
+  return new Set(inspect(body));
 }
 
 for (const entry of catalog.members) {
@@ -458,23 +490,29 @@ checkNames(
     ),
     ...[
       ...objectPropertyNames(
-        "plugins/safe-storage/src/contract.ts",
+        "plugins/safe-storage/src/operations.ts",
         "safeStorageOperations",
       ),
     ].map((operation) => `safe-storage.${operation}`),
     ...[
       ...objectPropertyNames(
-        "plugins/global-shortcut/src/contract.ts",
+        "plugins/global-shortcut/src/operations.ts",
         "globalShortcutOperations",
       ),
     ].map((operation) => `globalShortcut.${operation}`),
     ...[
-      "storage",
+      ...objectPropertyNames(
+        "plugins/storage/src/operations.ts",
+        "storageOperations",
+      ),
+      ...objectPropertyNames(
+        "plugins/storage/src/platforms/windows-operations.ts",
+        "windowsOperations",
+      ),
+    ].map((operation) => `storage.${operation}`),
+    ...[
       "path",
-      "log",
       "capabilities",
-      "opener",
-      "clipboard",
       "image",
       "menu",
       "tray",
@@ -483,15 +521,32 @@ checkNames(
       "appearance",
       "os",
       "process",
-      "network",
       "notification",
     ].flatMap((name) =>
       [
         ...objectPropertyNames(
-          `plugins/${name}/src/contract.ts`,
+          `plugins/${name}/src/operations.ts`,
           `${name}Operations`,
         ),
       ].map((operation) => `${name}.${operation}`),
+    ),
+    ...[
+      "log",
+      "opener",
+      "clipboard",
+      "network",
+    ].flatMap((name) =>
+      [
+        "windows",
+        "macos",
+      ].flatMap((platform) =>
+        [
+          ...objectPropertyNames(
+            `plugins/${name}/src/operations.ts`,
+            `${platform}Operations`,
+          ),
+        ].map((operation) => `${name}.${operation}`),
+      ),
     ),
   ]),
   catalog.operations,

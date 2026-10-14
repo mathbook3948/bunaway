@@ -78,7 +78,7 @@ export default defineApp({ modules: [], plugins: [autostartPlugin] });
     expect(plugins.map(({ packageName }) => packageName)).toEqual([
       "@bunaway/plugin-autostart",
     ]);
-    expect(plugins[0]?.targets.windows?.execution).toBe("io");
+    expect(plugins[0]?.targets.windows?.thread).toBe("worker");
     expect(valid.nativePlugins?.map(({ name }) => name)).toEqual([
       "autostart",
     ]);

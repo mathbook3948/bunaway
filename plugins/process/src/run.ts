@@ -1,8 +1,8 @@
 import { BunawayError } from "@bunaway/protocol";
 import type { z } from "zod";
-import type { ProcessResult, processOperations } from "./contract.ts";
+import type { ProcessResult, processInputSchema } from "./contract.ts";
 
-type RunInput = z.output<typeof processOperations.run.input>;
+type RunInput = z.output<typeof processInputSchema>;
 
 /** Capture one pipe while sharing a total byte budget and observing cancellation during blocked reads. */
 async function capture(

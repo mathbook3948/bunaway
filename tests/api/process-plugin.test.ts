@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { processes, processPlugin } from "@bunaway/plugin-process";
 import { NativeRegistry } from "@bunaway/protocol";
-import { processOperations } from "#plugins/process/src/contract";
+import { processOperations } from "#plugins/process/src/operations";
 
 test("process contract allows local .exe argv but rejects shell strings, PATH, shares, env/cwd and excessive input", () => {
   const schema = processOperations.run.input;

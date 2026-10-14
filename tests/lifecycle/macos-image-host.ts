@@ -281,7 +281,7 @@ if (location.pathname === "/reader.html") {
 import definition from ${JSON.stringify(resolve(root, "plugins/image/dist/native/macos.js"))};
 import { writeFileSync } from "node:fs";
 export default { ...definition, nativePlatforms: { ...definition.nativePlatforms,
-  macos: { execution: "io", create(environment) {
+  macos: { thread: "worker", create(environment) {
     const adapter = definition.nativePlatforms.macos.create(environment);
     const prepare = adapter.prepare.bind(adapter);
     return { ...adapter, async prepare(name, input, source, context) {

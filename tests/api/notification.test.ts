@@ -4,10 +4,8 @@ import { bindCommandHost } from "@bunaway/plugin-api/host";
 import { notification, notificationPlugin } from "@bunaway/plugin-notification";
 import { type HostContext, NativeRegistry } from "@bunaway/protocol";
 import { bindHostAPI } from "#core/host-api";
-import {
-  notificationOperations,
-  validateNotificationInput,
-} from "#plugins/notification/src/contract";
+import { validateNotificationInput } from "#plugins/notification/src/contract";
+import { notificationOperations } from "#plugins/notification/src/operations";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("notification", notificationOperations);

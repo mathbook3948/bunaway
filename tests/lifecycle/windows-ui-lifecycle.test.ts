@@ -46,7 +46,7 @@ async function startUI(
         {
           name: "parser",
           version: "1",
-          execution: "ui" as const,
+          thread: "ui" as const,
           native: {
             operations: [
               {
@@ -143,13 +143,13 @@ async function startUI(
         name: windowsPlugin.name,
         version: windowsPlugin.version,
         native: windowsPlugin.native,
-        execution: "ui",
+        thread: "ui",
       },
       {
         name: trayPlugin.name,
         version: trayPlugin.version,
         native: trayPlugin.native,
-        execution: "ui",
+        thread: "ui",
       },
       ...parserPlugins,
     ],
@@ -175,7 +175,7 @@ async function startUI(
         }
         return value;
       }),output:z.string(),
-    }},platforms:{windows:{execution:"ui",create:()=>({
+    }},platforms:{windows:{thread:"ui",create:()=>({
       execute,
       ...(${JSON.stringify(parserExecution)} === "ui" ? {async executeUI(name,input){return execute(name,input);}} : {}),
       dispose(){Atomics.add(cleanup,cleanupSlots.adapter,1);},

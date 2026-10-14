@@ -1,14 +1,15 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { processOperations } from "./contract.ts";
-import { createOperations } from "./platforms/windows.ts";
+import { processOperations } from "./operations.ts";
+import { dispose, initialize } from "./platforms/windows.ts";
 
 const plugin = defineNativePlugin({
   name: "process",
-  operations: processOperations,
   platforms: {
     windows: {
-      execution: "ui",
-      create: createOperations,
+      thread: "ui",
+      initialize,
+      dispose,
+      operations: processOperations,
     },
   },
 });

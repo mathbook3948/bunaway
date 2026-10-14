@@ -12,7 +12,7 @@ import {
   NativeRegistry,
 } from "@bunaway/protocol";
 import { bindHostAPI } from "#core/host-api";
-import { openerOperations } from "#plugins/opener/src/contract";
+import { windowsOperations as openerOperations } from "#plugins/opener/src/operations";
 import { normalizeApplicationPath } from "#plugins/opener/src/path";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 

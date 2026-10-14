@@ -10,8 +10,14 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join, parse, resolve } from "node:path";
-import { createOperations } from "#plugins/opener/src/platforms/windows";
+import createOperationsDefinition from "#plugins/opener/src/index";
+import { nativeFactory as createOperationsFactory } from "../fixtures/native-platform.ts";
+
 import { createFiles } from "#plugins/opener/src/windows-file";
+const createOperations = createOperationsFactory(
+  createOperationsDefinition,
+  "windows",
+);
 
 /** Find only this test's recycle metadata; never empty or change another user's bin. */
 async function recycledItem(path: string): Promise<
@@ -75,27 +81,27 @@ test.skipIf(process.platform !== "win32")(
       capabilities: [],
     });
     try {
-      const call = (path: string) =>
-        adapter.execute(
+      const call = async (path: string) =>
+        await adapter.execute(
           "opener.trashFile",
           {
             path,
           },
           "backend",
         );
-      expect(() => call(root)).toThrow(
+      await expect(call(root)).rejects.toThrow(
         expect.objectContaining({
           code: "INVALID_ARGUMENT",
         }),
       );
-      expect(() => call("\\\\server\\share\\file.txt")).toThrow(
+      await expect(call("\\\\server\\share\\file.txt")).rejects.toThrow(
         expect.objectContaining({
           code: "UNSUPPORTED",
         }),
       );
       const hardlink = `${sample}.link`;
       await link(sample, hardlink);
-      expect(() => call(sample)).toThrow(
+      await expect(call(sample)).rejects.toThrow(
         expect.objectContaining({
           code: "PERMISSION_DENIED",
         }),
@@ -103,13 +109,13 @@ test.skipIf(process.platform !== "win32")(
       await unlink(hardlink);
       const alias = join(root, "alias");
       await symlink(companion, alias, "junction");
-      expect(() => call(join(alias, "image.txt"))).toThrow(
+      await expect(call(join(alias, "image.txt"))).rejects.toThrow(
         expect.objectContaining({
           code: "PERMISSION_DENIED",
         }),
       );
       expect(
-        adapter.execute(
+        await adapter.execute(
           "opener.trashFile",
           {
             path: sample,
@@ -127,7 +133,7 @@ test.skipIf(process.platform !== "win32")(
       expect(await readFile(join(companion, "image.txt"), "utf8")).toBe(
         "companion must survive",
       );
-      expect(() =>
+      await expect(
         adapter.execute(
           "opener.trashFile",
           {
@@ -135,7 +141,7 @@ test.skipIf(process.platform !== "win32")(
           },
           "backend",
         ),
-      ).toThrow(
+      ).rejects.toThrow(
         expect.objectContaining({
           code: "INVALID_ARGUMENT",
           details: {

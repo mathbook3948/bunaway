@@ -16,9 +16,9 @@ import {
   NativeRegistry,
   type Policy,
 } from "@bunaway/protocol";
-import { capabilitiesOperations } from "../../plugins/capabilities/src/contract.ts";
-import { logOperations } from "../../plugins/log/src/contract.ts";
-import { storageOperations } from "../../plugins/storage/src/contract.ts";
+import { capabilitiesOperations } from "../../plugins/capabilities/src/operations.ts";
+import { windowsOperations as logOperations } from "../../plugins/log/src/operations.ts";
+import { windowsOperations } from "../../plugins/storage/src/platforms/windows-operations.ts";
 import { windowDefinitions } from "../../plugins/windows/src/contract.ts";
 import { pluginParsers } from "./plugin-parsers.ts";
 
@@ -37,7 +37,7 @@ export const registry = new NativeRegistry(plugins);
 const parsers = new Map([
   [
     "storage",
-    pluginParsers("storage", storageOperations),
+    pluginParsers("storage", windowsOperations),
   ],
   [
     "log",

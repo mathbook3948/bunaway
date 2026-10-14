@@ -147,7 +147,7 @@ test.skipIf(
       }
       const operationsPath = resolve(
         import.meta.dir,
-        "../../plugins/clipboard/src/platforms/windows.ts",
+        "../../plugins/clipboard/src/index.ts",
       );
       const disposedPath = resolve(root, "disposed.txt");
       await bundleUIPluginFixture(
@@ -157,11 +157,12 @@ test.skipIf(
             name: "clipboard",
             version: clipboardPlugin.version,
             native: clipboardPlugin.native,
-            execution: "ui",
+            thread: "ui",
           },
         ],
         `
-import { createOperations } from ${JSON.stringify(operationsPath)};
+import definition from ${JSON.stringify(operationsPath)};
+const createOperations = definition.nativePlatforms.windows.create;
 import { writeFileSync } from "node:fs";
 export const pluginImports = { clipboard: { operations: async () => ({ createOperations(environment) {
   const adapter = createOperations(environment);

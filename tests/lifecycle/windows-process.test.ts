@@ -19,7 +19,7 @@ import {
   parseMessage,
   type TransportEvent,
 } from "@bunaway/protocol";
-import { processOperations } from "#plugins/process/src/contract";
+import { processOperations } from "#plugins/process/src/operations";
 import { processExitProbe } from "../fixtures/process-exit-probe.ts";
 
 test.skipIf(process.platform !== "win32")(

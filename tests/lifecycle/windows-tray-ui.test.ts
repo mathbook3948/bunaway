@@ -56,7 +56,7 @@ test.skipIf(process.platform !== "win32")(
             name: trayPlugin.name,
             version: trayPlugin.version,
             native: trayPlugin.native,
-            execution: "ui",
+            thread: "ui",
           },
         ],
         `import plugin from ${JSON.stringify(entrypoint)}; export const pluginImports = { tray: { operations: async () => ({ createOperations: plugin.nativePlatforms.windows.create }) } };`,

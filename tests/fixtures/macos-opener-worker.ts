@@ -5,7 +5,12 @@ import {
   NativeRegistry,
 } from "@bunaway/protocol";
 import { openerPlugin } from "../../plugins/opener/src/index.ts";
-import { createOperations } from "../../plugins/opener/src/platforms/macos.ts";
+import createOperationsDefinition from "../../plugins/opener/src/index.ts";
+import { nativeFactory as createOperationsFactory } from "./native-platform.ts";
+const createOperations = createOperationsFactory(
+  createOperationsDefinition,
+  "macos",
+);
 
 const registry = new NativeRegistry([
   openerPlugin,
@@ -16,7 +21,7 @@ const adapter = createOperations({
 });
 parentPort?.on(
   "message",
-  (packet: {
+  async (packet: {
     id: number;
     operation: string;
     payload: JsonValue;
@@ -25,8 +30,8 @@ parentPort?.on(
   }) => {
     try {
       if (packet.operation === "dispose") {
-        adapter.dispose();
-        adapter.dispose();
+        await adapter.dispose();
+        await adapter.dispose();
         parentPort?.postMessage({
           id: packet.id,
           result: null,
@@ -61,7 +66,7 @@ parentPort?.on(
       }
       parentPort?.postMessage({
         id: packet.id,
-        result: adapter.execute(call.operation, call.payload, "backend"),
+        result: await adapter.execute(call.operation, call.payload, "backend"),
       });
     } catch (error) {
       parentPort?.postMessage({

@@ -145,7 +145,7 @@ CLI와 호스트가 개발 실행 설정을 공유할 때 사용하는 `@bunaway
 
 CLI와 Windows 호스트는 `@bunaway/runtime-bun/app-manifest`로 생성 데이터의 계약을 공유합니다.
 `AppManifest`는 `format: 1`, `app`, `policy`, `plugins`, `developmentSdk`를 담습니다.
-`ManifestPlugin`은 이름, 버전, native 계약과 선택적 `execution: "io" | "ui"`를 담습니다.
+`ManifestPlugin`은 이름, 버전, native 계약과 선택적 `thread: "worker" | "ui"`를 담습니다.
 선택적 `supportedOperations`는 대상 플랫폼이 구현한 완전한 작업 이름 목록입니다.
 생략하면 해당 어댑터의 전체 작업을 지원합니다. 실행 위치가 없는 목록, 중복 이름과
 native 계약에 없는 작업은 거부합니다. 호스트는 이 목록으로 지원 조회와 호출 검사를 맞춥니다.

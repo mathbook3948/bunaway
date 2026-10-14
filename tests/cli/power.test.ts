@@ -76,7 +76,7 @@ export default defineApp({ modules: [], plugins: [powerPlugin] });
     expect(plugins.map(({ packageName }) => packageName)).toEqual([
       "@bunaway/plugin-power",
     ]);
-    expect(plugins[0]?.targets.windows?.execution).toBe("io");
+    expect(plugins[0]?.targets.windows?.thread).toBe("worker");
     expect(valid.nativePlugins?.map(({ name }) => name)).toEqual([
       "power",
     ]);

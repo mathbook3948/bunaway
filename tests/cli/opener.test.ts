@@ -99,8 +99,8 @@ export default defineApp({ modules: [], plugins: [openerPlugin] });
     expect(plugins.map(({ packageName }) => packageName)).toEqual([
       "@bunaway/plugin-opener",
     ]);
-    expect(plugins[0]?.targets.windows?.execution).toBe("io");
-    expect(plugins[0]?.targets.macos?.execution).toBe("io");
+    expect(plugins[0]?.targets.windows?.thread).toBe("worker");
+    expect(plugins[0]?.targets.macos?.thread).toBe("worker");
     expect(plugins[0]?.targets.macos?.supportedOperations).toEqual([
       "opener.openUrl",
       "opener.openFile",
@@ -223,7 +223,7 @@ void openUrlWith("https://example.com/", "C:/browser.exe");
       const adapters = await operations(
         appPlugins,
         project,
-        "io",
+        "worker",
         undefined,
         packagedPlugins,
       );

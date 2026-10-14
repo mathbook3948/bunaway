@@ -1,14 +1,14 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { osOperations } from "./contract.ts";
-import { createOperations } from "./platforms/windows.ts";
+import { osOperations } from "./operations.ts";
+import { dispose, initialize } from "./platforms/windows.ts";
 
 const plugin = defineNativePlugin({
   name: "os",
-  operations: osOperations,
   platforms: {
     windows: {
-      execution: "io",
-      create: createOperations,
+      initialize,
+      dispose,
+      operations: osOperations,
     },
   },
 });

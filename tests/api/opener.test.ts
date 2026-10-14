@@ -16,14 +16,20 @@ import {
   type Policy,
 } from "@bunaway/protocol";
 import { bindHostAPI } from "#core/host-api";
-import { openerOperations } from "#plugins/opener/src/contract";
+import { windowsOperations as openerOperations } from "#plugins/opener/src/operations";
 import {
   MAX_FILE_PATH_LENGTH,
   normalizeFilePath,
 } from "#plugins/opener/src/path";
-import { createOperations } from "#plugins/opener/src/platforms/windows";
+import createOperationsDefinition from "#plugins/opener/src/index";
+import { nativeFactory as createOperationsFactory } from "../fixtures/native-platform.ts";
+
 import { MAX_URL_LENGTH, normalizeUrl } from "#plugins/opener/src/url";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
+const createOperations = createOperationsFactory(
+  createOperationsDefinition,
+  "windows",
+);
 
 const emptyPolicy: Policy = {
   version: 1,
@@ -503,14 +509,15 @@ test("Windows adapter disposal is repeatable and blocks later opens", async () =
   await adapter.dispose();
   await adapter.dispose();
   await expect(
-    Promise.resolve().then(() =>
-      adapter.execute(
-        "opener.openUrl",
-        {
-          url: "https://example.com/",
-        },
-        "backend",
-      ),
+    Promise.resolve().then(
+      async () =>
+        await adapter.execute(
+          "opener.openUrl",
+          {
+            url: "https://example.com/",
+          },
+          "backend",
+        ),
     ),
   ).rejects.toMatchObject({
     code: "CANCELLED",

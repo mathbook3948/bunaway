@@ -35,7 +35,7 @@ test.each([
       const plugin = {
         name: "owned",
         version: "development",
-        execution: "io" as const,
+        thread: "worker" as const,
         native: {
           operations: [
             {
@@ -66,7 +66,7 @@ test.each([
         const plugin=defineNativePlugin({name:"owned",operations:{
           create:{input:z.null(),output:z.object({id:z.string()}).strict()},
           inspect:{input:z.null(),output:z.object({retained:z.boolean(),aborted:z.boolean()}).strict()},
-        },platforms:{windows:{execution:"io",create:()=>({
+        },platforms:{windows:{thread:"worker",create:()=>({
           execute(){throw new Error("Context required");},
           executeUI(name,_input,_source,context){
             if(name==="owned.inspect") return {retained:retained(),aborted:creationSignal.aborted};

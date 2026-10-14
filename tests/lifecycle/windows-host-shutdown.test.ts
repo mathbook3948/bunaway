@@ -42,7 +42,7 @@ async function checkShutdown(
     const definition = {
       name: "waiting",
       version: "development",
-      execution: "io" as const,
+      thread: "worker" as const,
       native: {
         operations: [
           {
@@ -60,7 +60,7 @@ async function checkShutdown(
       import {defineNativePlugin} from ${JSON.stringify(resolve(import.meta.dir, "../../packages/plugin-sdk/src/index.ts"))};
       import {z} from ${JSON.stringify(Bun.resolveSync("zod", import.meta.dir))};
       const resources=new ImageResources();
-      export const plugin=defineNativePlugin({name:"waiting",operations:{run:{input:z.null(),output:z.null()}},platforms:{windows:{execution:"io",create:()=>({
+      export const plugin=defineNativePlugin({name:"waiting",operations:{run:{input:z.null(),output:z.null()}},platforms:{windows:{thread:"worker",create:()=>({
         execute(){throw new Error("Context required");},
         executeUI(_name,_input,source,context){
           if(source!=="backend") throw new Error("Wrong source");

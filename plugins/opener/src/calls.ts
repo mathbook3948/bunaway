@@ -1,6 +1,6 @@
 import type { NativeInvokeOptions, NativePluginAPI } from "@bunaway/plugin";
-import type { openerOperations } from "./contract.ts";
 import { normalizeMacosFilePath } from "./macos-path.ts";
+import type { windowsOperations } from "./operations.ts";
 import { normalizeApplicationPath, normalizeFilePath } from "./path.ts";
 import { normalizeUrl } from "./url.ts";
 
@@ -14,7 +14,7 @@ function normalizeOpenerFilePath(input: unknown): string {
 }
 
 /** Build public helpers around the plugin's typed operations. */
-export function createOpener(api: NativePluginAPI<typeof openerOperations>) {
+export function createOpener(api: NativePluginAPI<typeof windowsOperations>) {
   async function openUrl(
     url: string,
     options?: NativeInvokeOptions,

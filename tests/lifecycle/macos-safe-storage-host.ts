@@ -121,7 +121,7 @@ try {
       native: fixturePlugin.definition.native,
       targets: {
         macos: {
-          execution: "io",
+          thread: "worker",
           operations: resolve(
             root,
             "tests/fixtures/macos-safe-storage/plugin.ts",

@@ -2,10 +2,10 @@ import { expect, test } from "bun:test";
 import { storagePlugin } from "@bunaway/plugin-storage";
 import { NativeRegistry } from "@bunaway/protocol";
 import { MAX_STORAGE_BYTES } from "../../plugins/storage/src/bytes.ts";
-import { storageOperations } from "../../plugins/storage/src/contract.ts";
+import { windowsOperations } from "../../plugins/storage/src/platforms/windows-operations.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
-const parsers = pluginParsers("storage", storageOperations);
+const parsers = pluginParsers("storage", windowsOperations);
 const path = "C:/notes/한글.bin";
 const operations = [
   "storage.readBytes",

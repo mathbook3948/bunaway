@@ -7,30 +7,23 @@ const theme = z.union([
 ]);
 const color = z.string().regex(/^#[0-9a-f]{6}$/);
 /** Live OS appearance and accessibility indicators. Platform mappings are documented in the appearance reference. */
-export const appearanceOperations = {
-  getPreferences: {
-    input: z.null(),
-    output: z.strictObject({
-      appsTheme: theme,
-      systemTheme: theme,
-      accentColor: color,
-      highContrast: z.boolean(),
-      forcedColors: z.boolean(),
-      reducedMotion: z.boolean(),
-      transparencyEnabled: z.union([
-        z.boolean(),
-        z.null(),
-      ]),
-      screenReaderEnabled: z.boolean(),
-      colors: z.strictObject({
-        window: color,
-        windowText: color,
-        highlight: color,
-        highlightText: color,
-      }),
-    }),
-  },
-} as const;
-export type AppearancePreferences = z.output<
-  typeof appearanceOperations.getPreferences.output
->;
+export const preferencesSchema = z.strictObject({
+  appsTheme: theme,
+  systemTheme: theme,
+  accentColor: color,
+  highContrast: z.boolean(),
+  forcedColors: z.boolean(),
+  reducedMotion: z.boolean(),
+  transparencyEnabled: z.union([
+    z.boolean(),
+    z.null(),
+  ]),
+  screenReaderEnabled: z.boolean(),
+  colors: z.strictObject({
+    window: color,
+    windowText: color,
+    highlight: color,
+    highlightText: color,
+  }),
+});
+export type AppearancePreferences = z.output<typeof preferencesSchema>;
