@@ -896,6 +896,7 @@
           "webView2",
           "desktopShortcut",
           "startMenuShortcut",
+          "autostart",
           "associations",
           "uninstall",
           "packageName",
