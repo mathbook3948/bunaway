@@ -343,6 +343,21 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
           },
         });
       };
+      async function rejectionOf(
+        promise: Promise<JsonValue>,
+      ): Promise<unknown> {
+        // Bun 1.4.2's synchronous .rejects matcher can strand Worker replies
+        // when entered from the previous reply (oven-sh/bun#37189). Await the
+        // outcome normally, then assert rejection without changing its deadline.
+        const [result] = await Promise.allSettled([
+          promise,
+        ]);
+        expect(result?.status).toBe("rejected");
+        if (result?.status !== "rejected") {
+          throw new Error("Expected the clipboard operation to reject.");
+        }
+        return result.reason;
+      }
       for (const text of [
         "한글 😀\nsecond\r\nthird",
         "",
@@ -560,24 +575,26 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
         `${maximumBookmarkURL}x`,
         `${bookmarkPrefix}${"😀".repeat(1024)}`,
       ]) {
-        await expect(
-          invoke(() =>
-            clipboard.writeFormats({
-              items: [
-                {
-                  format: "text/plain",
-                  data: "must not replace the bookmark",
-                },
-                {
-                  format: "application/x-bunaway-bookmark",
-                  data: {
-                    url,
+        expect(
+          await rejectionOf(
+            invoke(() =>
+              clipboard.writeFormats({
+                items: [
+                  {
+                    format: "text/plain",
+                    data: "must not replace the bookmark",
                   },
-                },
-              ],
-            }),
+                  {
+                    format: "application/x-bunaway-bookmark",
+                    data: {
+                      url,
+                    },
+                  },
+                ],
+              }),
+            ),
           ),
-        ).rejects.toMatchObject({
+        ).toMatchObject({
           code: "INVALID_ARGUMENT",
         });
         expect(
@@ -794,18 +811,20 @@ try {
         const lock = await reader.read();
         reader.releaseLock();
         expect(new TextDecoder().decode(lock.value)).toContain("locked");
-        await expect(invoke(() => clipboard.clear(null))).rejects.toMatchObject(
-          {
-            code: "BUSY",
-          },
-        );
-        await expect(
-          invoke(() =>
-            clipboard.writeFormats({
-              items: extended,
-            }),
+        expect(
+          await rejectionOf(invoke(() => clipboard.clear(null))),
+        ).toMatchObject({
+          code: "BUSY",
+        });
+        expect(
+          await rejectionOf(
+            invoke(() =>
+              clipboard.writeFormats({
+                items: extended,
+              }),
+            ),
           ),
-        ).rejects.toMatchObject({
+        ).toMatchObject({
           code: "BUSY",
         });
         const binaryController = new AbortController();
@@ -818,14 +837,14 @@ try {
         );
         await Bun.sleep(40);
         binaryController.abort();
-        await expect(binaryCancelled).rejects.toMatchObject({
+        expect(await rejectionOf(binaryCancelled)).toMatchObject({
           code: "CANCELLED",
         });
         const controller = new AbortController();
         const cancelled = invoke(() => clipboard.clear(null), controller);
         await Bun.sleep(40);
         controller.abort();
-        await expect(cancelled).rejects.toBeInstanceOf(BunawayError);
+        expect(await rejectionOf(cancelled)).toBeInstanceOf(BunawayError);
         await Bun.sleep(40);
         // Context revocation must also stop an already granted retry, even
         // without an individual cancel packet or a caller waiting for its result.
