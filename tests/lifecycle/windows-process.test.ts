@@ -1,3 +1,4 @@
+import { dlopen, ptr } from "bun:ffi";
 import { expect, test } from "bun:test";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -17,7 +18,284 @@ import {
   type TransportEvent,
 } from "@bunaway/protocol";
 import { processOperations } from "#plugins/process/src/operations";
+import {
+  dispose,
+  initialize,
+  run,
+} from "#plugins/process/src/platforms/windows";
 import { processExitProbe } from "../fixtures/process-exit-probe.ts";
+
+test.skipIf(process.platform !== "win32")(
+  "invocation Jobs preserve intended PID membership, cancellation isolation and complete host shutdown",
+  async () => {
+    const root = await mkdtemp(join(tmpdir(), "bunaway-process-host-job-"));
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "--no-env-file",
+        resolve(import.meta.dir, "../fixtures/process-host-job.ts"),
+        root,
+      ],
+      {
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 10000,
+      },
+    );
+    const output = new Response(child.stdout).text();
+    const errors = new Response(child.stderr).text();
+    const probes: ReturnType<typeof processExitProbe>[] = [];
+    const readiness = new AbortController();
+    let ready: Promise<void> | undefined;
+    try {
+      const inventoryFile = join(root, "members.json");
+      ready = (async () => {
+        const deadline = Date.now() + 3000;
+        while (!(await Bun.file(inventoryFile).exists())) {
+          readiness.signal.throwIfAborted();
+          expect(Date.now()).toBeLessThan(deadline);
+          await Bun.sleep(2);
+        }
+      })();
+      await Promise.race([
+        ready,
+        child.exited.then(async (exitCode) => {
+          throw new Error(
+            `Host fixture exited before readiness (${exitCode}): ${await errors}`,
+          );
+        }),
+      ]);
+      const inventory = JSON.parse(await readFile(inventoryFile, "utf8")) as {
+        pids: number[];
+        consolePids: number[];
+      };
+      for (const pid of inventory.pids) {
+        const probe = processExitProbe(pid);
+        probes.push(probe);
+        expect(probe.exited()).toBe(false);
+      }
+      await Bun.write(join(root, "release"), "release");
+      const [exitCode, stdout, stderr] = await Promise.all([
+        child.exited,
+        output,
+        errors,
+      ]);
+      expect({
+        exitCode,
+        error: stderr,
+      }).toEqual({
+        exitCode: 0,
+        error: "",
+      });
+      expect(stdout).toBe("contained");
+      expect(probes.every((probe) => probe.exited())).toBe(true);
+    } finally {
+      readiness.abort();
+      child.kill();
+      await Promise.allSettled([
+        ready,
+        child.exited,
+        output,
+        errors,
+      ]);
+      for (const probe of probes) {
+        probe.dispose();
+      }
+      await rm(root, {
+        recursive: true,
+        force: true,
+      });
+    }
+  },
+  15000,
+);
+
+test.skipIf(process.platform !== "win32")(
+  "private JOB_LIST preserves explicit parent membership and reports startup failures",
+  async () => {
+    const root = await mkdtemp(
+      join(tmpdir(), "bunaway-process-job-membership-"),
+    );
+    const runnerModule = resolve(
+      import.meta.dir,
+      "../../plugins/process/src/platforms/windows-process.ts",
+    );
+    const pidFile = join(root, "pid");
+    const script = `
+      import { dlopen, ptr } from "bun:ffi";
+      const { runProcess } = await import(${JSON.stringify(runnerModule)});
+      const api = dlopen("kernel32.dll", {
+        CreateJobObjectW: { args: ["ptr", "ptr"], returns: "u64" },
+        GetCurrentProcess: { args: [], returns: "u64" },
+        SetInformationJobObject: { args: ["u64", "i32", "ptr", "u32"], returns: "i32" },
+        AssignProcessToJobObject: { args: ["u64", "u64"], returns: "i32" },
+        IsProcessInJob: { args: ["u64", "u64", "ptr"], returns: "i32" },
+        OpenProcess: { args: ["u32", "i32", "u32"], returns: "u64" },
+        CloseHandle: { args: ["u64"], returns: "i32" },
+        GetLastError: { args: [], returns: "u32" },
+      });
+      const check = (result, operation) => {
+        if (!result) throw new Error(operation + " failed: " + api.symbols.GetLastError());
+      };
+      const host = api.symbols.CreateJobObjectW(null, null);
+      check(host, "CreateJobObjectW");
+      const limits = Buffer.alloc(144);
+      limits.writeUInt32LE(0x2000, 16);
+      check(api.symbols.SetInformationJobObject(host, 9, ptr(limits), limits.length), "SetInformationJobObject");
+      check(api.symbols.AssignProcessToJobObject(host, api.symbols.GetCurrentProcess()), "AssignProcessToJobObject");
+      const member = Buffer.alloc(4);
+      check(api.symbols.IsProcessInJob(api.symbols.GetCurrentProcess(), host, ptr(member)), "parent IsProcessInJob");
+      if (member.readUInt32LE() !== 1) throw new Error("Parent is not in the host Job");
+      const controller = new AbortController();
+      const task = runProcess({
+        executablePath: process.execPath,
+        args: [${JSON.stringify(resolve(import.meta.dir, "../fixtures/process-ready.ts"))}, ${JSON.stringify(pidFile)}],
+        maxOutputBytes: 65536, timeoutMs: 30000,
+      }, controller.signal);
+      const outcome = task.catch(error => ({ code: error.code, cause: error.cause?.message }));
+      let child = 0n;
+      try {
+        const ready = (async () => {
+          const deadline = Date.now() + 2000;
+          while (!(await Bun.file(${JSON.stringify(pidFile)}).exists())) {
+            if (Date.now() >= deadline) throw new Error("Child did not publish its PID");
+            await Bun.sleep(2);
+          }
+        })();
+        await Promise.race([ready, outcome.then(result => { throw new Error("Process startup failed: " + JSON.stringify(result)); })]);
+        const pid = Number(await Bun.file(${JSON.stringify(pidFile)}).text());
+        child = api.symbols.OpenProcess(0x00101000, 0, pid);
+        check(child, "OpenProcess");
+        check(api.symbols.IsProcessInJob(child, host, ptr(member)), "child IsProcessInJob");
+        if (member.readUInt32LE() !== 1) throw new Error("Private JOB_LIST lost parent Job membership");
+        process.stdout.write("parent-and-child-contained");
+      } finally {
+        controller.abort();
+        await outcome;
+        if (child) check(api.symbols.CloseHandle(child), "CloseHandle");
+        api.close();
+        // The host is itself in the kill-on-close Job. Its handle belongs to
+        // process exit, exactly like containAppProcess, rather than this block.
+      }
+    `;
+    try {
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          "-e",
+          script,
+        ],
+        {
+          stdout: "pipe",
+          stderr: "pipe",
+          timeout: 5000,
+        },
+      );
+      const [exitCode, output, error] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect({
+        exitCode,
+        error,
+      }).toEqual({
+        exitCode: 0,
+        error: "",
+      });
+      expect(output).toBe("parent-and-child-contained");
+    } finally {
+      await rm(root, {
+        recursive: true,
+        force: true,
+      });
+    }
+  },
+);
+
+test.skipIf(process.platform !== "win32")(
+  "repeated success, cancellation and startup failure close native invocation handles",
+  async () => {
+    const api = dlopen("kernel32.dll", {
+      GetCurrentProcess: {
+        args: [],
+        returns: "u64",
+      },
+      GetProcessHandleCount: {
+        args: [
+          "u64",
+          "ptr",
+        ],
+        returns: "i32",
+      },
+    });
+    const count = () => {
+      const value = Buffer.alloc(4);
+      assert(
+        api.symbols.GetProcessHandleCount(
+          api.symbols.GetCurrentProcess(),
+          ptr(value),
+        ),
+      );
+      return value.readUInt32LE();
+    };
+    const state = initialize();
+    const input = {
+      executablePath: process.execPath,
+      args: [
+        "-e",
+        "void 0;",
+      ],
+      stdinBase64: "",
+      maxOutputBytes: 65536,
+      timeoutMs: 30000,
+    };
+    try {
+      // Warm the runtime's process/FFI paths before comparing native handle ownership.
+      await run(state, input);
+      const cancelledInput = {
+        ...input,
+        args: [
+          "-e",
+          "setInterval(() => {}, 1000)",
+        ],
+        stdinBase64: Buffer.alloc(65536, 255).toString("base64"),
+      };
+      const cancel = async () => {
+        const controller = new AbortController();
+        const observed = run(state, cancelledInput, controller.signal).catch(
+          (error: unknown) => error,
+        );
+        // Creation and overlapped input start before run yields to the caller.
+        controller.abort();
+        expect(await observed).toMatchObject({
+          code: "CANCELLED",
+        });
+      };
+      await cancel();
+      const before = count();
+      for (let attempt = 0; attempt < 12; attempt++) {
+        expect((await run(state, input)).exitCode).toBe(0);
+        await cancel();
+        await expect(
+          run(state, {
+            ...input,
+            executablePath:
+              "C:/bunaway-nonexistent-process-fixture/missing.exe",
+          }),
+        ).rejects.toMatchObject({
+          code: "INTERNAL",
+        });
+      }
+      expect(count()).toBe(before);
+      expect(state.active.size).toBe(0);
+    } finally {
+      await dispose(state);
+      api.close();
+    }
+  },
+  15000,
+);
 
 test.skipIf(process.platform !== "win32")(
   "public process cancellation rejects before delayed bridge delivery and retains eventual child cleanup",

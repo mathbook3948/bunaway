@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
 
 const site = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -451,112 +452,47 @@ function visitCommands(node) {
 visitCommands(source(resolve(root, "packages/cli/src/main.ts")));
 checkNames(commands, catalog.commands, "CLI commands");
 
-function objectPropertyNames(path, constantName) {
-  const file = source(resolve(root, path));
-  for (const statement of file.statements) {
-    if (!ts.isVariableStatement(statement)) {
-      continue;
-    }
-    for (const declaration of statement.declarationList.declarations) {
-      if (declaration.name.getText() !== constantName) {
-        continue;
-      }
-      let initializer = declaration.initializer;
-      // Unwrap TypeScript modifiers before reading literal object keys.
-      while (
-        initializer &&
-        (ts.isAsExpression(initializer) ||
-          ts.isSatisfiesExpression(initializer) ||
-          ts.isParenthesizedExpression(initializer))
-      ) {
-        initializer = initializer.expression;
-      }
-      if (!initializer || !ts.isObjectLiteralExpression(initializer)) {
-        throw new Error(
-          `Cannot inspect ${path}: ${constantName} must be an object literal.`,
-        );
-      }
-      return new Set(
-        initializer.properties
-          .filter(ts.isPropertyAssignment)
-          .map((property) => property.name)
-          .filter((name) => ts.isIdentifier(name) || ts.isStringLiteral(name))
-          .map((name) => name.text),
-      );
-    }
-  }
-  throw new Error(`Cannot inspect ${path}: missing ${constantName}.`);
+/** Read the SDK's complete operation inventory without calling native factories. */
+function hostOperations() {
+  const framework = JSON.parse(
+    readFileSync(resolve(root, "framework.json"), "utf8"),
+  );
+  const reader = pathToFileURL(
+    resolve(root, "packages/cli/src/plugins.ts"),
+  ).href;
+  // Source declarations are portable by contract. Inspect in Bun, like the CLI,
+  // so spreads, imported constants and every platform use normal module resolution.
+  // Read source rather than generated dist files to catch changes before a build.
+  const inspection = spawnSync(
+    "bun",
+    [
+      "--no-env-file",
+      "--eval",
+      `import { readPluginDeclaration } from ${JSON.stringify(reader)};
+const operations = new Set();
+for (const entry of ${JSON.stringify(Object.keys(framework.plugins).map((directory) => resolve(root, "plugins", directory, "src/index.ts")))}) {
+  const declaration = await readPluginDeclaration(entry, ${JSON.stringify(root)});
+  for (const operation of declaration.native.operations) operations.add(operation.name);
 }
-checkNames(
-  new Set([
-    ...objectPropertyNames(
-      "plugins/windows/src/contract.ts",
-      "windowOperations",
-    ),
-    ...[
-      ...objectPropertyNames(
-        "plugins/safe-storage/src/operations.ts",
-        "safeStorageOperations",
-      ),
-    ].map((operation) => `safe-storage.${operation}`),
-    ...[
-      ...objectPropertyNames(
-        "plugins/global-shortcut/src/operations.ts",
-        "globalShortcutOperations",
-      ),
-    ].map((operation) => `globalShortcut.${operation}`),
-    ...[
-      ...objectPropertyNames(
-        "plugins/storage/src/operations.ts",
-        "storageOperations",
-      ),
-      ...objectPropertyNames(
-        "plugins/storage/src/platforms/windows-operations.ts",
-        "windowsOperations",
-      ),
-    ].map((operation) => `storage.${operation}`),
-    ...[
-      "path",
-      "capabilities",
-      "image",
-      "menu",
-      "tray",
-      "autostart",
-      "power",
-      "appearance",
-      "os",
-      "process",
-      "notification",
-    ].flatMap((name) =>
-      [
-        ...objectPropertyNames(
-          `plugins/${name}/src/operations.ts`,
-          `${name}Operations`,
-        ),
-      ].map((operation) => `${name}.${operation}`),
-    ),
-    ...[
-      "log",
-      "opener",
-      "clipboard",
-      "network",
-    ].flatMap((name) =>
-      [
-        "windows",
-        "macos",
-      ].flatMap((platform) =>
-        [
-          ...objectPropertyNames(
-            `plugins/${name}/src/operations.ts`,
-            `${platform}Operations`,
-          ),
-        ].map((operation) => `${name}.${operation}`),
-      ),
-    ),
-  ]),
-  catalog.operations,
-  "Host operations",
-);
+process.stdout.write(JSON.stringify([...operations]));`,
+    ],
+    {
+      cwd: root,
+      encoding: "utf8",
+    },
+  );
+  if (inspection.error || inspection.status !== 0) {
+    throw new Error(
+      `Cannot inspect host operations: ${inspection.error?.message ?? inspection.stderr}`,
+      {
+        cause: inspection.error,
+      },
+    );
+  }
+  return new Set(JSON.parse(inspection.stdout));
+}
+
+checkNames(hostOperations(), catalog.operations, "Host operations");
 
 function checkFields(fields, slugs, label) {
   const text = slugs.map(pageText).join("\n");

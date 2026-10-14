@@ -1,30 +1,18 @@
-import { watch } from "node:fs";
-import { dirname, relative, resolve } from "node:path";
-import { isDeepStrictEqual } from "node:util";
-import type { AppReloadResult } from "@bunaway/runtime-bun/development";
-import { bundleWindowsReload } from "./assets.ts";
 import {
   type BuiltPackage,
   buildProject,
   type NativeInputs,
   prepareNative,
 } from "./build.ts";
-import {
-  type Project,
-  readProjectConfiguration,
-  validateProject,
-} from "./config.ts";
-import { type DevServer, startDevServer } from "./dev-server.ts";
-import { inside } from "./files.ts";
-import { WindowsAppReload } from "./windows-app-reload.ts";
-import {
-  closeWindowsApp,
-  verifyWindowsLaunch,
-  windowsInspectorArgument,
-  windowsLaunchEnvironment,
-} from "./windows-dev-launch.ts";
+import { readProjectConfiguration, validateProject } from "./config.ts";
+import { DevApp } from "./dev-app.ts";
+import { DevFrontend } from "./dev-frontend.ts";
+import { DevWatcher } from "./dev-watcher.ts";
+import { RestartController } from "./restart-controller.ts";
+import { windowsInspectorArgument } from "./windows-dev-launch.ts";
 
-const SOURCE_DEBOUNCE_MS = 150;
+export { isAppCodeChange, shouldRestartHost } from "./dev-watcher.ts";
+export { RestartController } from "./restart-controller.ts";
 
 /** Parses a project directory and an optional loopback backend inspector port. */
 export function parseDevArguments(args: string[]): {
@@ -61,200 +49,6 @@ export function parseDevArguments(args: string[]): {
   };
 }
 
-/** Serializes app reloads and host rebuilds triggered by project changes.
- * Tries compatible reloads first and ignores work made stale by a newer edit.
- */
-export class RestartController<T> {
-  private revision = 0;
-  private stopped = false;
-  private running: Promise<void> | undefined;
-  private debounce:
-    | {
-        ready: Promise<void>;
-        cancel(): void;
-      }
-    | undefined;
-  constructor(
-    private readonly hooks: {
-      stop(): Promise<void>;
-      build(): Promise<T>;
-      start(value: T): Promise<void>;
-      error(error: unknown): void;
-      reload?(isCurrent: () => boolean): Promise<boolean>;
-    },
-  ) {}
-
-  /** Queues a change; a positive delay coalesces saves while callers share the active pass. */
-  change(delayMs = 0): Promise<void> {
-    if (this.stopped) {
-      return Promise.resolve();
-    }
-    this.revision += 1;
-    this.debounce?.cancel();
-    this.debounce = undefined;
-    if (delayMs > 0) {
-      const { promise, resolve } = Promise.withResolvers<void>();
-      const timer = setTimeout(() => {
-        this.debounce = undefined;
-        resolve();
-      }, delayMs);
-      this.debounce = {
-        ready: promise,
-        cancel() {
-          clearTimeout(timer);
-          resolve();
-        },
-      };
-    }
-    if (!this.running) {
-      this.running = this.restart().finally(() => {
-        this.running = undefined;
-      });
-    }
-    return this.running;
-  }
-
-  private async restart(): Promise<void> {
-    let applied = 0;
-    while (!this.stopped && applied !== this.revision) {
-      while (!this.stopped && this.debounce) {
-        await this.debounce.ready;
-      }
-      if (this.stopped) {
-        break;
-      }
-      applied = this.revision;
-      try {
-        if (
-          await this.hooks.reload?.(
-            () => !this.stopped && applied === this.revision,
-          )
-        ) {
-          continue;
-        }
-        if (this.stopped || applied !== this.revision) {
-          continue;
-        }
-        await this.hooks.stop();
-        if (this.stopped) {
-          break;
-        }
-        const result = await this.hooks.build();
-        if (!this.stopped && applied === this.revision) {
-          await this.hooks.start(result);
-        }
-      } catch (error) {
-        this.hooks.error(error);
-      }
-    }
-  }
-
-  /** Cancels pending work, waits for the active pass, and stops the current host. */
-  async close(): Promise<void> {
-    this.stopped = true;
-    this.debounce?.cancel();
-    this.debounce = undefined;
-    await this.running;
-    await this.hooks.stop();
-  }
-}
-
-function launchSettings(project: Project) {
-  return {
-    appEntry: project.appEntry,
-    frontend: project.frontend,
-    app: project.app,
-    policy: project.policy,
-    dev: project.dev,
-    nativePlugins: project.nativePlugins,
-    buildCommand: project.buildCommand,
-  };
-}
-
-/** Classifies whether a changed project path can use a compatible app-code reload. */
-export function isAppCodeChange(project: Project, name: string): boolean {
-  const path = name.replaceAll("\\", "/");
-  if (
-    !project.dev &&
-    (inside(project.frontend, resolve(project.root, path)) ||
-      project.frontendDependencies?.includes(path))
-  ) {
-    return false;
-  }
-  if (
-    [
-      "package.json",
-      "bun.lock",
-      "tsconfig.json",
-    ].includes(path)
-  ) {
-    return false;
-  }
-  if (
-    !/\.[cm]?[jt]sx?$/.test(path) &&
-    !project.backendDependencies?.includes(path)
-  ) {
-    return false;
-  }
-  const directory = relative(
-    project.root,
-    dirname(project.appEntry),
-  ).replaceAll("\\", "/");
-  return (
-    project.backendDependencies?.includes(path) === true ||
-    (directory ? path.startsWith(`${directory}/`) : !path.includes("/"))
-  );
-}
-
-/** Classifies watcher changes that enter the host reload or rebuild cycle. */
-export function shouldRestartHost(
-  project: Project,
-  name: string,
-  recovering = false,
-): boolean {
-  const path = name.replaceAll("\\", "/");
-  if (
-    /^(node_modules|vendor|dist|\.bunaway|\.git|\.next|\.turbo)(\/|$)/.test(
-      path,
-    )
-  ) {
-    return false;
-  }
-  if (!project.dev || recovering) {
-    return true;
-  }
-  // Frontend files and dev-server outputs belong to that server's watcher.
-  const backendDirectories = [
-    project.appEntry,
-  ].map((entry) =>
-    relative(project.root, dirname(entry)).replaceAll("\\", "/"),
-  );
-  const icon = project.app.icon
-    ? relative(project.root, resolve(project.root, project.app.icon))
-        .replaceAll("\\", "/")
-        .toLowerCase()
-    : undefined;
-  return (
-    (icon !== undefined &&
-      (icon === path.toLowerCase() ||
-        icon.startsWith(`${path.toLowerCase()}/`))) ||
-    project.backendDependencies?.some(
-      (dependency) => dependency === path || dependency.startsWith(`${path}/`),
-    ) ||
-    [
-      "package.json",
-      "bun.lock",
-      "tsconfig.json",
-    ].includes(path) ||
-    path.startsWith("src-bunaway/") ||
-    backendDirectories.some((directory) =>
-      directory
-        ? path === directory || path.startsWith(`${directory}/`)
-        : !path.includes("/"),
-    )
-  );
-}
-
 /** Runs the watched development lifecycle until a signal or owned process exits.
  * Windows app-code edits try an in-place reload; launch-setting changes need a fresh host.
  * Failed source builds leave the watcher active for another save.
@@ -276,171 +70,73 @@ export async function devProject(
       : windowsInspectorArgument(options.inspect);
   let project = await readProjectConfiguration(directory);
   let recovering = true;
-  const abort = new AbortController();
   let native: NativeInputs;
-  let server: DevServer | undefined;
-  let serverSettings: string | undefined;
-  let child: ReturnType<typeof Bun.spawn> | undefined;
-  let reloadConnection: WindowsAppReload | undefined;
-  let runningBuild: BuiltPackage | undefined;
-  let runningSettings: ReturnType<typeof launchSettings> | undefined;
-  const changedFiles = new Set<string>();
-  let restarting = false;
   let fatal: Error | undefined;
-  let resolveExit: (() => void) | undefined;
-  const done = new Promise<void>((resolveDone) => {
-    resolveExit = resolveDone;
-  });
+  const abort = new AbortController();
+  const done = Promise.withResolvers<void>();
   const onSignal = () => {
     abort.abort();
-    resolveExit?.();
+    done.resolve();
   };
-  process.on("SIGINT", onSignal);
-  process.on("SIGTERM", onSignal);
-
-  async function syncServer(next: Project) {
-    const settings = next.dev ? JSON.stringify(next.dev) : undefined;
-    if (settings === serverSettings) {
-      return;
-    }
-    const previous = server;
-    server = undefined;
-    serverSettings = undefined;
-    // Stop the previous owner first so its process tree releases the port before replacement starts.
-    await previous?.stop();
-    if (next.dev) {
-      const current = await startDevServer(
-        next.dev,
-        next.root,
-        abort.signal,
-        next.frameworkRoot,
-      );
-      server = current;
-      serverSettings = settings;
-      void current.exited.then((code) => {
-        if (server === current && !abort.signal.aborted) {
-          fatal = new Error(
-            `Frontend development server exited (exit ${code}). Restart bunaway dev.`,
-          );
-          abort.abort();
-          resolveExit?.();
-        }
-      });
-    }
-  }
-
+  const frontend = new DevFrontend(abort.signal, (error) => {
+    fatal = error;
+    onSignal();
+  });
+  const app = new DevApp(
+    abort.signal,
+    (code) => {
+      console.log(`Host exited (${code}).`);
+      if (code !== 0) {
+        fatal = new Error(`Native host exited (exit ${code}).`);
+      }
+      done.resolve();
+    },
+    inspector,
+    options.inspect,
+  );
+  const sources = new DevWatcher(
+    {
+      project: () => project,
+      recovering: () => recovering,
+    },
+    abort.signal,
+    (delayMs) => {
+      void controller.change(delayMs);
+    },
+  );
   const controller = new RestartController<BuiltPackage>({
     async reload(isCurrent) {
-      if (
-        process.platform !== "win32" ||
-        !child ||
-        !reloadConnection ||
-        !runningBuild
-      ) {
-        return false;
-      }
-      if (
-        !(await Bun.file(
-          resolve(runningBuild.package, "assets/manifest.json"),
-        ).exists())
-      ) {
+      if (!(await app.canReload())) {
         return false;
       }
       const next = await validateProject(project.root, {
         development: true,
       });
-      if (
-        [
-          ...changedFiles,
-        ].some((name) => !isAppCodeChange(next, name))
-      ) {
+      if (!(await app.reload(next, sources.pendingChanges, isCurrent))) {
         return false;
       }
-      if (!isDeepStrictEqual(runningSettings, launchSettings(next))) {
-        return false;
-      }
-      // Compatible reload keeps the running host only while its launch contract is unchanged.
-      const id = crypto.randomUUID();
-      const sha256 = await bundleWindowsReload(
-        next,
-        resolve(runningBuild.package, "assets"),
-        id,
-      );
-      if (!isCurrent()) {
-        return true;
-      }
-      let result: AppReloadResult;
-      try {
-        result = await reloadConnection.reload({
-          kind: "bunaway:reload-app",
-          id,
-          sha256,
-        });
-      } catch (error) {
-        console.error("App reload connection failed; restarting host:", error);
-        return false;
-      }
-      if (result.status === "restart") {
-        return false;
-      }
-      if (result.status === "failed") {
-        throw new Error(result.message ?? "App reload failed.");
-      }
-      project = next;
-      recovering = false;
       if (isCurrent()) {
-        changedFiles.clear();
+        project = next;
+        recovering = false;
+        sources.clear();
+        console.log(
+          "App code reloaded; windows, state, sessions and subscriptions retained.",
+        );
       }
-      console.log(
-        "App code reloaded; windows, state, sessions and subscriptions retained.",
-      );
       return true;
     },
-    async stop() {
-      if (!child) {
-        return;
-      }
-      restarting = true;
-      const previous = child;
-      child = undefined;
-      reloadConnection?.close();
-      reloadConnection = undefined;
-      runningBuild = undefined;
-      try {
-        if (process.platform === "win32") {
-          const deadline = Date.now() + 40000;
-          let posted = false;
-          while (previous.exitCode === null && Date.now() < deadline) {
-            if (!posted) {
-              // Let the Windows message loop tear down before force-killing on timeout.
-              posted = (await closeWindowsApp(previous.pid)) > 0;
-            }
-            await Bun.sleep(20);
-          }
-          if (previous.exitCode === null) {
-            previous.kill();
-            await previous.exited;
-            throw new Error("Windows app cleanup timed out; restart stopped.");
-          }
-        } else {
-          previous.kill();
-        }
-        await previous.exited;
-      } finally {
-        restarting = false;
-      }
-    },
+    stop: () => app.stop(),
     async build() {
       abort.signal.throwIfAborted();
       const next = await validateProject(project.root, {
         development: true,
       });
       try {
-        await syncServer(next);
+        await frontend.sync(next);
       } catch (error) {
         if (!abort.signal.aborted) {
           fatal = error instanceof Error ? error : new Error(String(error));
-          resolveExit?.();
+          done.resolve();
         }
         throw error;
       }
@@ -453,115 +149,29 @@ export async function devProject(
       recovering = false;
       return built;
     },
-    async start(built) {
-      changedFiles.clear();
-      if (abort.signal.aborted) {
-        return;
+    async start(built, isCurrent) {
+      await app.start(project, built, isCurrent);
+      if (app.running && isCurrent()) {
+        sources.clear();
       }
-      if (process.platform === "win32") {
-        await verifyWindowsLaunch(built.package);
-      }
-      if (abort.signal.aborted) {
-        return;
-      }
-      console.log(
-        project.dev
-          ? "Starting native host; frontend updates use the development server's HMR."
-          : "Starting a fresh host/runtime/session; pending requests are not replayed.",
-      );
-      const environment =
-        process.platform === "win32"
-          ? windowsLaunchEnvironment()
-          : {
-              HOME: process.env.HOME,
-              TMPDIR: process.env.TMPDIR,
-              PATH: "/usr/bin:/bin",
-              BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0",
-              DO_NOT_TRACK: "1",
-            };
-      if (process.platform === "win32") {
-        console.log(
-          "UI DevTools: focus the WebView and press F12 or Ctrl+Shift+I.",
-        );
-      }
-      if (inspector) {
-        console.log(
-          `Backend inspector: ws://127.0.0.1:${options.inspect}/bunaway (Bun/WebKit inspector protocol). Reconnect after a backend restart.`,
-        );
-      }
-      const connection =
-        process.platform === "win32" ? new WindowsAppReload() : undefined;
-      const current = Bun.spawn(
-        [
-          built.executable,
-          ...(inspector
-            ? [
-                inspector,
-              ]
-            : []),
-          ...built.arguments,
-        ],
-        {
-          cwd: built.package,
-          env: environment,
-          stdin: "ignore",
-          stdout: "inherit",
-          stderr: "inherit",
-          ...(process.platform === "win32"
-            ? {
-                ipc: (message) => connection?.receive(message),
-              }
-            : {}),
-        },
-      );
-      child = current;
-      connection?.attach(current);
-      reloadConnection = connection;
-      runningBuild = built;
-      runningSettings = launchSettings(project);
-      void current.exited.then((code) => {
-        if (!restarting && child === current) {
-          console.log(`Host exited (${code}).`);
-          if (code !== 0) {
-            fatal = new Error(`Native host exited (exit ${code}).`);
-          }
-          resolveExit?.();
-        }
-      });
     },
     error(error) {
       recovering = true;
       if (!abort.signal.aborted) {
         console.error(
-          `Dev build failed${child ? "; running app retained" : ""}; fix sources and save to retry: ${String(error)}`,
+          `Dev build failed${app.running ? "; running app retained" : ""}; fix sources and save to retry: ${String(error)}`,
         );
       }
     },
   });
-  let sourceWatcher: ReturnType<typeof watch> | undefined;
+  process.on("SIGINT", onSignal);
+  process.on("SIGTERM", onSignal);
   try {
     native = await prepareNative(undefined, project.frameworkRoot);
     abort.signal.throwIfAborted();
-    sourceWatcher = watch(
-      project.root,
-      {
-        recursive: true,
-      },
-      (_event, name) => {
-        if (
-          !name ||
-          !shouldRestartHost(project, String(name), recovering) ||
-          abort.signal.aborted
-        ) {
-          return;
-        }
-        changedFiles.add(String(name));
-        // Invalidate immediately, before a reload can clear these pending changes.
-        void controller.change(SOURCE_DEBOUNCE_MS);
-      },
-    );
+    sources.start();
     await controller.change();
-    await done;
+    await done.promise;
     if (fatal) {
       throw fatal;
     }
@@ -570,17 +180,15 @@ export async function devProject(
       throw error;
     }
   } finally {
-    sourceWatcher?.close();
+    sources.close();
     process.off("SIGINT", onSignal);
     process.off("SIGTERM", onSignal);
     abort.abort();
     try {
       await controller.close();
     } finally {
-      // Keep the frontend available until the app window has stopped.
-      const previous = server;
-      server = undefined;
-      await previous?.stop();
+      // Keep the frontend available until native app cleanup finishes.
+      await frontend.close();
     }
   }
 }
