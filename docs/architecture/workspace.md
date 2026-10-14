@@ -65,6 +65,11 @@ Core 내부의 `app-registry.ts`는 앱과 플러그인의 등록 검증 및 조
 CLI의 `windows-compile.ts`는 실행 파일 컴파일을, `windows-dev-launch.ts`는 개발 호스트의
 실행 검증, 환경과 종료 요청을 담당한다. 파일 경로, JSON과 해시는 `files.ts`,
 자식 명령 및 worker 실행은 `processes.ts`가 맡는다.
+개발 명령의 `dev.ts`는 프로젝트 검증, 빌드와 종료 순서를 연결한다.
+`dev-frontend.ts`는 개발 서버의 준비와 교체, `dev-app.ts`는 앱 프로세스와 코드 교체 채널,
+`dev-watcher.ts`는 파일 감시와 미반영 경로를 소유한다. `restart-controller.ts`는 변경 revision과
+저장 대기를 관리해 오래된 결과를 시작하지 않으며 종료 때 진행 중인 작업을 기다린다.
+서버 시작 중 취소는 즉시 전달한다. 준비된 서버는 앱의 네이티브 정리가 끝난 뒤 정리한다.
 CLI와 Windows 호스트는 `@bunaway/runtime-bun/windows-control`의 종료 메시지와 창 클래스
 접두어를 공유한다. 이 계약을 가져올 때 네이티브 자원을 초기화하지 않는다.
 
