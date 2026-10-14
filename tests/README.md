@@ -1059,9 +1059,20 @@ FFI로 읽는 ABI도 확인하며 기존 macOS native 실행기에 포함한다.
 기존 19개 assertion과 기한은 유지하며 통과한 단일 실행으로 과거 startup timeout의
 원인이 해결됐다고 판단하지 않는다.
 
+Windows 호스트의 `webview-creation`은 환경 요청, 반환과 완료, 각 창의 환경 수신,
+컨트롤러 요청, 반환과 완료 및 설정 완료를 기록한다. 창 ID, 단조 시계의 전체 및 현재
+단계 경과 시간과 대기 중인 생성 수로 지연 구간을 구분한다. `webview-creation-timeout`은
+기존 30초 준비 기한을 넘긴 시점의 단계와 UI 준비, 시작 요청, 창 수명 상태를 기록한다.
+`webview-ready`는 컨트롤러 획득 시의 기존 기록이며 설정 완료나 SDK 준비를 뜻하지 않는다.
+콜백, 메시지 pump, 기한과 준비 완료 조건은 변경하지 않는다.
+
 `lifecycle/macos-webview-readiness.test.ts`는 실제 controls 웹 fixture와 SDK를 browser
 번들로 만들고 별도 Bun 자식에서 arrival 응답을 보류한다. arrival과 loading=false만으로
 다음 탐색을 시작하지 않으며, 해당 문서의 held 명령 시작과 loading=false를 모두
 확인하는지 검사한다. 이전 문서의 held 수가 남아 있는 두 번째, 세 번째 연결도 포함한다.
 네이티브 controls fixture는 같은 준비 절차를 사용하고 기존 assertion과 15초 기한을 유지한다.
 이 검사는 fixture의 명령 시작 순서를 검증하며 WKWebView 실행은 기존 native CI에서 확인한다.
+실패 artifact의 `controls-progress.json`은 backend Worker가 동기식으로 교체한 마지막
+준비 대기 단계와 arrival, held, cancelled 수를 보관한다. 대소문자 URL 탐색의 호출 전후,
+실패 후 진단 상태 조회의 전후도 기록하므로 UI 로그가 멈춰도 대기 지점을 구분할 수 있다.
+이 기록만으로 네이티브 호출이 멈췄다고 판단하지 않는다.

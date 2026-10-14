@@ -362,6 +362,12 @@ try {
   await mkdir(diagnostics, {
     recursive: true,
   });
+  const progress = Bun.file(resolve(dataRoot, "temp/controls-progress.json"));
+  if (await progress.exists()) {
+    const contents = await progress.text();
+    await Bun.write(resolve(diagnostics, "controls-progress.json"), contents);
+    console.error(`Backend controls progress: ${contents}`);
+  }
   if (await Bun.file(resolve(dataRoot, "logs/host.log")).exists()) {
     await cp(resolve(dataRoot, "logs"), diagnostics, {
       recursive: true,

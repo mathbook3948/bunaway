@@ -1174,12 +1174,8 @@ function createWindow(
         log: (event, data) =>
           log(event, {
             view: spec.view,
+            windowId: readiness.snapshot().windowId,
             ...data,
-            ...(event === "view-cleaned"
-              ? {
-                  windowId: readiness.snapshot().windowId,
-                }
-              : {}),
           }),
       },
       config.legacyProfile,
@@ -1609,6 +1605,16 @@ try {
         ).catch(fail);
       }
       if (!view.ready && !view.lifecycle.closed && Date.now() > view.deadline) {
+        log("webview-creation-timeout", {
+          view: view.boundary.policy.id,
+          windowId: view.readiness?.snapshot().windowId,
+          ...view.native.creationSnapshot(),
+          ready: view.ready,
+          startRequested,
+          startup: view.startup,
+          lifecycle: view.lifecycle.phase,
+          deadlineLateMs: Date.now() - view.deadline,
+        });
         view.readiness?.terminate({
           code: "TIMEOUT",
           message: "WebView creation timed out.",
