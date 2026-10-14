@@ -550,6 +550,8 @@ test("plugin APIs preserve deadlines and cancellation through the shared connect
         log[level]("saved", undefined, options),
     ),
     (options) => capabilities(options),
+    (options) => log.configure({}, options),
+    (options) => log.flush(options),
   ];
   for (const call of calls) {
     const controller = new AbortController();

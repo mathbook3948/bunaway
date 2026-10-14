@@ -1223,7 +1223,7 @@
       "storage.createDirectory",
       "storage.remove"
     ],
-    "reference/host/log-write": ["log.write"],
+    "reference/host/log-write": ["log.write", "log.configure", "log.flush"],
     "reference/host/capabilities-get": ["capabilities.get"],
     "reference/plugins/opener": [
       "opener.openUrl",

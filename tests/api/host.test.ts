@@ -89,12 +89,50 @@ test("Host helpers reject outside an execution context without synchronous throw
     () => log.info("message"),
     () => log.warn("message"),
     () => log.error("message"),
+    () => log.configure({}),
+    () => log.flush(),
     () => capabilities(),
   ]) {
     await expect(call()).rejects.toMatchObject({
       code: "INVALID_ARGUMENT",
     });
   }
+});
+
+test("app log configuration and flush preserve typed Host payloads", async () => {
+  const calls: HostCall[] = [];
+  const ctx = context("backend", async (_context, call) => {
+    calls.push(call);
+    return {
+      kind: "result",
+      payload: null,
+    };
+  });
+  const input = {
+    minimumLevel: "warn",
+    target: "appData",
+    maxFileBytes: 4096,
+    maxArchives: 2,
+  } as const;
+  const definition = command({
+    ...nullContract,
+    async handle() {
+      expect(await log.configure(input)).toBeNull();
+      expect(await log.flush()).toBeNull();
+      return null;
+    },
+  });
+  await definition.run(null, ctx);
+  expect(calls).toEqual([
+    {
+      operation: "log.configure",
+      payload: input,
+    },
+    {
+      operation: "log.flush",
+      payload: null,
+    },
+  ]);
 });
 
 test("Host helpers keep the existing typed operation inputs, outputs and explicit API", async () => {
