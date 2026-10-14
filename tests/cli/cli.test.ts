@@ -1410,8 +1410,11 @@ test("external development orchestrates UI updates, backend restarts and server 
   const errors = new Response(child.stderr).text();
   const timer = setTimeout(() => child.kill(), 25000);
   try {
-    expect(await child.exited, await errors).toBe(0);
-    expect(await output).toContain("PASS frontend HMR ownership");
+    const code = await child.exited;
+    const stdout = await output;
+    const stderr = await errors;
+    expect(code, `${stdout}\n${stderr}`).toBe(0);
+    expect(stdout).toContain("PASS frontend HMR ownership");
   } finally {
     clearTimeout(timer);
     if (child.exitCode === null) {
@@ -1445,11 +1448,12 @@ for (const failureMode of [
     try {
       const code = await child.exited;
       const stderr = await errors;
-      expect(code, stderr).toBe(0);
+      const stdout = await output;
+      expect(code, `${stdout}\n${stderr}`).toBe(0);
       expect(stderr).toContain(
         "Dev build failed; fix sources and save to retry",
       );
-      expect(await output).toContain("PASS frontend HMR ownership");
+      expect(stdout).toContain("PASS frontend HMR ownership");
     } finally {
       clearTimeout(timer);
       if (child.exitCode === null) {
