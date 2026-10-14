@@ -277,6 +277,7 @@ test.skipIf(!iscc)(
         "C:\\trailing\\",
       ];
       await writeRegistry(runKey, name, app(firstDir, args, true));
+      expect(await registryValue(runKey, name)).toBe(app(firstDir, args, true));
       expect((await f.install(firstDir)).code).toBe(0);
       expect(await registryValue(runKey, name)).toBe(app(firstDir, args, true));
       expect(await startupState()).toBe(disabled);
@@ -509,7 +510,7 @@ const state = initialize({ dataRoot: '.', capabilities: [], app: {
   id: ${JSON.stringify(f.id)}, launch: { mode: 'packaged', executablePath: 'C:\\\\Foreign\\\\App.exe', args: [] }
 } });
 try {
-  enable(state, { args: ['--replacement'] });
+  enable(state, { args: ['--replacement'], hidden: false });
   console.log('UPDATED');
 } catch (error) {
   if (error?.code !== 'BUSY') throw error;

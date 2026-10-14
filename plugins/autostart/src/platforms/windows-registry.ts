@@ -1,10 +1,6 @@
 import { dlopen, type Pointer, ptr, read, toArrayBuffer } from "bun:ffi";
 import { toUSVString } from "node:util";
-import {
-  AUTOSTART_MUTEX_PREFIX,
-  AUTOSTART_MUTEX_WAIT_MS,
-  BunawayError,
-} from "@bunaway/protocol";
+import { AUTOSTART_MUTEX_PREFIX, BunawayError } from "@bunaway/protocol";
 export const RUN_KEY = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 export const APPROVAL_KEY =
   "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run";
@@ -179,10 +175,9 @@ export function createRegistry() {
     }
     let owned = false;
     try {
-      const result = kernel.symbols.WaitForSingleObject(
-        handle,
-        AUTOSTART_MUTEX_WAIT_MS,
-      );
+      // Keep cancellation and unrelated I/O operations responsive. Contention
+      // returns BUSY immediately; only installers wait for another writer.
+      const result = kernel.symbols.WaitForSingleObject(handle, 0);
       if (result === WAIT_TIMEOUT) {
         throw new BunawayError({
           code: "BUSY",

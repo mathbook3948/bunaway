@@ -24,6 +24,15 @@ var PreviousAutostartOwner, PendingAutostartOwner: TAutostartOwner;
 
 ${renderAutostartLockCode()}
 
+// Inno's generic Copy can narrow Unicode results to ANSI in concatenation.
+// Keep slicing in String variables, preserving paths and the encoded argv tail.
+function AutostartSubstring(const Text: String; First, Count: Integer): String;
+begin
+  Result := Text;
+  Delete(Result, 1, First - 1);
+  if Count < Length(Result) then Delete(Result, Count + 1, MaxInt);
+end;
+
 function IsAutostartAppId(const Id: String): Boolean;
 var I: Integer;
 begin
@@ -77,8 +86,8 @@ begin
   end;
   Separator := Pos('|', InstallationSnapshot.PendingAutostartOwner);
   if Separator > 0 then begin
-    PendingAutostartOwner.AppId := Copy(InstallationSnapshot.PendingAutostartOwner, 1, Separator - 1);
-    PendingAutostartOwner.Executable := Copy(InstallationSnapshot.PendingAutostartOwner, Separator + 1, MaxInt);
+    PendingAutostartOwner.AppId := AutostartSubstring(InstallationSnapshot.PendingAutostartOwner, 1, Separator - 1);
+    PendingAutostartOwner.Executable := AutostartSubstring(InstallationSnapshot.PendingAutostartOwner, Separator + 1, MaxInt);
   end;
   if (InstallationSnapshot.PendingAutostartOwner <> '') and not ValidAutostartOwner(PendingAutostartOwner) then
     RaiseException('Could not validate pending autostart owner.');
@@ -120,9 +129,9 @@ begin
   Result := False;
   if not ValidAutostartOwner(Owner) then Exit;
   Prefix := '"' + Owner.Executable + '"';
-  if CompareText(Copy(Command, 1, Length(Prefix)), Prefix) <> 0 then Exit;
+  if CompareText(AutostartSubstring(Command, 1, Length(Prefix)), Prefix) <> 0 then Exit;
   Result := (Length(Command) = Length(Prefix)) or
-    (Copy(Command, Length(Prefix) + 1, 1) = ' ');
+    (AutostartSubstring(Command, Length(Prefix) + 1, 1) = ' ');
 end;
 
 function IsKnownAutostartCommand(const Id, Command: String): Boolean;
@@ -152,7 +161,7 @@ begin
     else Owner := PendingAutostartOwner;
     if (Owner.AppId = AutostartAppId) and ValidAutostartOwner(Owner) and
        QueryAutostartCommand(Owner.AppId, Command) and IsAutostartCommandOwner(Command, Owner) then begin
-      Result := '"' + AssociationExecutable + '"' + Copy(Command, Length(Owner.Executable) + 3, MaxInt);
+      Result := '"' + AssociationExecutable + '"' + AutostartSubstring(Command, Length(Owner.Executable) + 3, MaxInt);
       Break;
     end;
   end;
