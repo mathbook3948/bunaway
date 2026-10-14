@@ -425,9 +425,10 @@ export class WindowsStorage {
       // CreateFileW's u64 result is boxed by Bun before JS can read GetLastError.
       // That allocation (or a cold error-reader thunk) can overwrite the error.
       // Receive the handle in caller-owned memory and use the returned NTSTATUS.
+      // CreateFileW also requests attribute reads and synchronization, including for write-only opens.
       status = api.symbols.NtCreateFile(
         handle,
-        access | SYNCHRONIZE,
+        access | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
         attributes,
         statusBlock,
         null,
