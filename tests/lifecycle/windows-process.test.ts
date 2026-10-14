@@ -26,118 +26,88 @@ import {
 import { processExitProbe } from "../fixtures/process-exit-probe.ts";
 
 test.skipIf(process.platform !== "win32")(
-  "invocation Jobs preserve the inherited host Job and isolate concurrent invocations",
+  "invocation Jobs preserve intended PID membership, cancellation isolation and complete host shutdown",
   async () => {
     const root = await mkdtemp(join(tmpdir(), "bunaway-process-host-job-"));
-    const jobModule = resolve(
-      import.meta.dir,
-      "../../native/windows/bun/job.ts",
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "--no-env-file",
+        resolve(import.meta.dir, "../fixtures/process-host-job.ts"),
+        root,
+      ],
+      {
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 10000,
+      },
     );
-    const runnerModule = resolve(
-      import.meta.dir,
-      "../../plugins/process/src/platforms/windows.ts",
-    );
-    const script = `
-      const { containAppProcess, activeDescendants } = await import(${JSON.stringify(jobModule)});
-      const { initialize, run, dispose } = await import(${JSON.stringify(runnerModule)});
-      containAppProcess(${JSON.stringify(root)});
-      const state = initialize();
-      const first = new AbortController();
-      const second = new AbortController();
-      const input = { executablePath: process.execPath, args: ["-e", "setInterval(() => {}, 1000)"], maxOutputBytes: 65536, timeoutMs: 30000 };
-      const descendantsBeforeCreation = activeDescendants();
-      const outcomes = [];
-      const observe = (label, task) => task.catch(error => {
-        const outcome = { label, code: error.code, cause: error.cause?.message };
-        outcomes.push(outcome);
-        return error.code;
-      });
-      const a = observe("first", run(state, input, first.signal));
-      const b = observe("second", run(state, input, second.signal));
-      try {
-        const descendantsAtCreation = activeDescendants();
-        if (descendantsAtCreation !== 2) {
-          // Drain synchronous startup failures before cancellation can replace
-          // their errors. This retains the immediate count assertion above.
-          await Bun.sleep(0);
-          const { dlopen, ptr } = await import("bun:ffi");
-          const inventory = dlopen("kernel32.dll", {
-            QueryInformationJobObject: { args: ["u64", "i32", "ptr", "u32", "ptr"], returns: "i32" },
-            OpenProcess: { args: ["u32", "i32", "u32"], returns: "u64" },
-            QueryFullProcessImageNameW: { args: ["u64", "u32", "ptr", "ptr"], returns: "i32" },
-            CloseHandle: { args: ["u64"], returns: "i32" },
-          });
-          const processes = [];
-          try {
-            const ids = Buffer.alloc(8 + 8 * 128);
-            if (!inventory.symbols.QueryInformationJobObject(0n, 3, ptr(ids), ids.length, null)) throw new Error("Host Job inventory query failed");
-            for (let index = 0; index < ids.readUInt32LE(4); index++) {
-              const pid = Number(ids.readBigUInt64LE(8 + index * 8));
-              const handle = inventory.symbols.OpenProcess(0x1000, 0, pid);
-              let image;
-              if (handle) {
-                try {
-                  const name = Buffer.alloc(8192);
-                  const size = Buffer.alloc(4);
-                  size.writeUInt32LE(name.length / 2);
-                  if (inventory.symbols.QueryFullProcessImageNameW(handle, 0, ptr(name), ptr(size))) image = name.subarray(0, size.readUInt32LE() * 2).toString("utf16le");
-                } finally {
-                  inventory.symbols.CloseHandle(handle);
-                }
-              }
-              processes.push({ pid, image });
-            }
-          } finally {
-            inventory.close();
-          }
-          throw new Error("Host Job lost its descendants: " + JSON.stringify({ hostPid: process.pid, descendantsBeforeCreation, descendantsAtCreation, outcomes, processes }));
-        }
-        first.abort();
-        if (await a !== "CANCELLED") throw new Error("First invocation did not cancel");
-        if (activeDescendants() !== 1 || state.active.size !== 1) throw new Error("Cancellation crossed invocation ownership");
-        second.abort();
-        if (await b !== "CANCELLED") throw new Error("Second invocation did not cancel");
-        if (activeDescendants() !== 0) throw new Error("Host Job still owns descendants");
-        process.stdout.write("contained");
-      } finally {
-        first.abort(); second.abort();
-        await Promise.allSettled([a, b]);
-        await dispose(state);
-      }
-    `;
-    const state = initialize();
+    const output = new Response(child.stdout).text();
+    const errors = new Response(child.stderr).text();
+    const probes: ReturnType<typeof processExitProbe>[] = [];
+    const readiness = new AbortController();
+    let ready: Promise<void> | undefined;
     try {
-      // Bun.spawn gives this console fixture its own lazily started conhost,
-      // which joins the app Job after the baseline count. Use the real runner's
-      // CREATE_NO_WINDOW launch so the exact 2 -> 1 -> 0 invocation counts apply.
-      const result = await run(state, {
-        executablePath: process.execPath,
-        args: [
-          "-e",
-          script,
-        ],
-        maxOutputBytes: 65536,
-        timeoutMs: 5000,
-      });
-      const exitCode = result.exitCode;
-      const output = Buffer.from(result.stdoutBase64, "base64").toString();
-      const error = Buffer.from(result.stderrBase64, "base64").toString();
+      const inventoryFile = join(root, "members.json");
+      ready = (async () => {
+        const deadline = Date.now() + 3000;
+        while (!(await Bun.file(inventoryFile).exists())) {
+          readiness.signal.throwIfAborted();
+          expect(Date.now()).toBeLessThan(deadline);
+          await Bun.sleep(2);
+        }
+      })();
+      await Promise.race([
+        ready,
+        child.exited.then(async (exitCode) => {
+          throw new Error(
+            `Host fixture exited before readiness (${exitCode}): ${await errors}`,
+          );
+        }),
+      ]);
+      const inventory = JSON.parse(await readFile(inventoryFile, "utf8")) as {
+        pids: number[];
+        consolePids: number[];
+      };
+      for (const pid of inventory.pids) {
+        const probe = processExitProbe(pid);
+        probes.push(probe);
+        expect(probe.exited()).toBe(false);
+      }
+      await Bun.write(join(root, "release"), "release");
+      const [exitCode, stdout, stderr] = await Promise.all([
+        child.exited,
+        output,
+        errors,
+      ]);
       expect({
         exitCode,
-        error,
+        error: stderr,
       }).toEqual({
         exitCode: 0,
         error: "",
       });
-      expect(output).toBe("contained");
+      expect(stdout).toBe("contained");
+      expect(probes.every((probe) => probe.exited())).toBe(true);
     } finally {
-      await dispose(state);
+      readiness.abort();
+      child.kill();
+      await Promise.allSettled([
+        ready,
+        child.exited,
+        output,
+        errors,
+      ]);
+      for (const probe of probes) {
+        probe.dispose();
+      }
       await rm(root, {
         recursive: true,
         force: true,
       });
     }
   },
+  15000,
 );
 
 test.skipIf(process.platform !== "win32")(
