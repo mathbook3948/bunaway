@@ -45,6 +45,7 @@ test.skipIf(process.platform !== "win32")(
       const first = new AbortController();
       const second = new AbortController();
       const input = { executablePath: process.execPath, args: ["-e", "setInterval(() => {}, 1000)"], maxOutputBytes: 65536, timeoutMs: 30000 };
+      const descendantsBeforeCreation = activeDescendants();
       const outcomes = [];
       const observe = (label, task) => task.catch(error => {
         const outcome = { label, code: error.code, cause: error.cause?.message };
@@ -59,7 +60,37 @@ test.skipIf(process.platform !== "win32")(
           // Drain synchronous startup failures before cancellation can replace
           // their errors. This retains the immediate count assertion above.
           await Bun.sleep(0);
-          throw new Error("Host Job lost its descendants: " + JSON.stringify({ descendantsAtCreation, outcomes }));
+          const { dlopen, ptr } = await import("bun:ffi");
+          const inventory = dlopen("kernel32.dll", {
+            QueryInformationJobObject: { args: ["u64", "i32", "ptr", "u32", "ptr"], returns: "i32" },
+            OpenProcess: { args: ["u32", "i32", "u32"], returns: "u64" },
+            QueryFullProcessImageNameW: { args: ["u64", "u32", "ptr", "ptr"], returns: "i32" },
+            CloseHandle: { args: ["u64"], returns: "i32" },
+          });
+          const processes = [];
+          try {
+            const ids = Buffer.alloc(8 + 8 * 128);
+            if (!inventory.symbols.QueryInformationJobObject(0n, 3, ptr(ids), ids.length, null)) throw new Error("Host Job inventory query failed");
+            for (let index = 0; index < ids.readUInt32LE(4); index++) {
+              const pid = Number(ids.readBigUInt64LE(8 + index * 8));
+              const handle = inventory.symbols.OpenProcess(0x1000, 0, pid);
+              let image;
+              if (handle) {
+                try {
+                  const name = Buffer.alloc(8192);
+                  const size = Buffer.alloc(4);
+                  size.writeUInt32LE(name.length / 2);
+                  if (inventory.symbols.QueryFullProcessImageNameW(handle, 0, ptr(name), ptr(size))) image = name.subarray(0, size.readUInt32LE() * 2).toString("utf16le");
+                } finally {
+                  inventory.symbols.CloseHandle(handle);
+                }
+              }
+              processes.push({ pid, image });
+            }
+          } finally {
+            inventory.close();
+          }
+          throw new Error("Host Job lost its descendants: " + JSON.stringify({ hostPid: process.pid, descendantsBeforeCreation, descendantsAtCreation, outcomes, processes }));
         }
         first.abort();
         if (await a !== "CANCELLED") throw new Error("First invocation did not cancel");
