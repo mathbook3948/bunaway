@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 /**
  * Drain both child pipes and retain their exact bytes before callers inspect exit or reports.
  * Each launch owns a separate directory so restart failures cannot replace earlier evidence.
+ * Reject an externally terminated child even if its graceful shutdown returned zero.
  * The caller retains ownership of deadlines, termination and native resources.
  */
 export async function captureNativeChild(
@@ -44,6 +45,10 @@ export async function captureNativeChild(
       null,
       2,
     )}\n`,
+  );
+  assert(
+    !child.killed,
+    `Native fixture was terminated before completion: ${phase} (exit ${exitCode}).`,
   );
   return {
     exitCode,

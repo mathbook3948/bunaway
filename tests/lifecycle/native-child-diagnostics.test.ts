@@ -63,3 +63,54 @@ test("native child diagnostics drain both large pipes and preserve a failing exi
   // A child waiting on a full pipe must not prevent collection of the other stream or exit.
   await launch(7, 128 * 1024);
 });
+
+test.skipIf(process.platform === "win32")(
+  "native child diagnostics reject signal termination even after a graceful zero exit",
+  async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "bunaway-child-termination-"));
+    roots.push(root);
+    const ready = resolve(root, "ready");
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "--no-env-file",
+        "-e",
+        `process.on("SIGTERM", () => process.exit(0)); setInterval(() => {}, 1000); await Bun.write(${JSON.stringify(ready)}, "ready");`,
+      ],
+      {
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 4000,
+      },
+    );
+    // Observe rejection immediately, including if startup fails before the readiness marker.
+    const result = captureNativeChild(child, root, "report pending").then(
+      () => null,
+      (error: unknown) => error,
+    );
+    try {
+      while (!(await Bun.file(ready).exists())) {
+        expect(child.exitCode).toBeNull();
+        await Bun.sleep(5);
+      }
+      child.kill("SIGTERM");
+      const error = await result;
+      expect(error).toBeInstanceOf(Error);
+      expect(String(error)).toContain(
+        "Native fixture was terminated before completion: report pending",
+      );
+      expect(await child.exited).toBe(0);
+      expect(await Bun.file(resolve(root, "child.json")).json()).toMatchObject({
+        phase: "report pending",
+        exitCode: 0,
+        killed: true,
+      });
+    } finally {
+      if (child.exitCode === null) {
+        child.kill("SIGKILL");
+      }
+      await child.exited;
+      await result;
+    }
+  },
+);
